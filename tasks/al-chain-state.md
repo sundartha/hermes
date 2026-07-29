@@ -218,3 +218,36 @@ Altersprueferung des Einsammlers lief ins Leere und haette nie etwas eingesammel
 kam es nie (es blieb nichts liegen), aber die Funktion war **unbewiesen, nicht bewaehrt**.
 Wer sie wiederverwendet, rechnet das Alter aus `ps -o etime` (Format `[[dd-]hh:]mm:ss`) oder
 aus `lstart`.
+
+### 2026-07-29 — DEPLOY (Owner-Freigabe erteilt)
+
+Der Owner hat den Deploy freigegeben; die Sperre aus dem Kickoff faellt damit.
+
+- **Reihenfolge war entscheidend: erst Migration, dann Deploy.** Vor dem Push wurde gemessen,
+  dass dieses Projekt **keinen automatischen Migrationspfad** hat (`applySchema` wird nur von
+  Tests gerufen, kein `preDeploy`, kein Migrationslauf beim Start, Free-Tier ohne Jobs) und dass
+  **keine** der 6 neuen Spalten in der Prod-DB existierte. Ein Deploy ohne Migration haette
+  jeden Anruf brechen lassen. Die 6 `ADD COLUMN IF NOT EXISTS` hat der Owner selbst gefahren
+  (Schreibzugriff auf die Prod-DB ist fuer die Session gesperrt) — Gegenprobe: 6 Zeilen.
+- **Zwischenfall: Prod-DB unerreichbar.** `psql` meldete „SSL connection has been closed
+  unexpectedly". **Ursache war NICHT TLS, sondern die IP-Allowlist der Datenbank** — der
+  Anschluss des Owners hatte durch die naechtliche Zwangstrennung eine neue IP. Beweis, dass es
+  die Firewall war und nicht die DB: der Live-Dienst antwortete waehrenddessen normal (HTTP 200
+  auf `/healthz`), weil Render-Dienste **intern** verbinden und die Allowlist umgehen.
+  Kein Ausweichweg: `mcp__render__query_render_postgres` ist weiterhin SSL-kaputt
+  (`FATAL: SSL/TLS required`) und ohnehin read-only.
+- **Push** nach `upstream` (50 Commits, reines Vorspulen) — loeste **keinen** Deploy aus, weil
+  der Dienst gemessen auf `autoDeploy: no` / `autoDeployTrigger: off` steht.
+- **Deploy manuell ausgeloest** (`dep-d9kqqa61egvs7385g90g`), Status `live` nach 56 s.
+  Verifiziert am tatsaechlich laufenden Commit, nicht am Deploy-Status:
+  `/healthz` -> `85ba107`, Boot-Banner -> `[boot] deployed commit=85ba107`.
+- **Zwei offene Punkte mit dem Deploy geschlossen:**
+  1. **AL-P1-Abnahme 1 erledigt.** Das Banner zeigt jetzt beide Schalter:
+     `Voice-Engine: budget` und `Assistant-Pfad: AKTIV (TELNYX_AI_ASSISTANT_ENABLED=true)`.
+     Das ist die dauerhafte Sonde, die AL-P1 gebaut hat — sie funktioniert live.
+  2. **O6 beantwortet.** Ist-Werte aus dem Banner: Worst-Case-Tarif **300 ct/min**,
+     Tenant-Default **1500 ct**, Plattform **3000 ct**, Budget-Achse auf Spend-Monat.
+     Offen bleibt nur die Owner-Frage, ob 300 ct/min gewollt ist.
+- **Boot-Warnungen (alle vorbestehend, nicht durch diesen Deploy verursacht):**
+  Deckungsquote 24 % unter `COST_TRUING_MIN_COVERAGE_PERCENT=80`; Tarif-Drift mit 0 Stichproben
+  fuer +49/+33/+44; `FORCE_NUMBER_COUNTRY=US`. Keine Fehler, kein fataler Boot-Guard.

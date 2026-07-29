@@ -19,7 +19,11 @@ bleiben AUS. **Ihr Anschalten IST die Abnahme.**
 3. **O6 — Auslands-Tarif:** Ist-Werte von `VOICE_TARIFF_DEFAULT_CENTS`,
    `DEFAULT_TENANT_BUDGET_CENTS` und der Max-Gespraechsdauer im Dashboard nachlesen. Der
    Boot-Guard `worst_case_unaffordable` feuerte am 23./25.07., seit dem 27.07. nicht mehr.
-   Ausserhalb der Kette, aber **vor** einer Freigabe von AL-P9 zu klaeren.
+   **Ist-Werte am 2026-07-29 aus dem Boot-Banner gelesen (Deploy `85ba107`):**
+   Worst-Case-Tarif **300 ct/min**, Tenant-Default **1500 ct**, Plattform **3000 ct**,
+   Budget-Achse auf **Spend-Monat** (`BUDGET_MONTH_ENABLED=true`, beide Ebenen).
+   Der Boot-Guard schweigt weiterhin. Damit ist O6 fuer AL-P9 beantwortet — was fehlt,
+   ist nur noch die Owner-Entscheidung, ob 300 ct/min der gewollte Wert ist.
 
 ## Offene Abnahmen je Phase
 
@@ -30,6 +34,7 @@ bleiben AUS. **Ihr Anschalten IST die Abnahme.**
 | AL-P1 | Latenz-Tabelle fuer EINEN echten Anruf: `node scripts/telnyx-call-latency.mjs --call <call_id>` | Fusszeile `status=ok` (unaccounted-Median <= 300 ms). `status=unknown_component` = wichtigster Einzelbefund, **blockiert AL-P7** | offen |
 | AL-P1 | Baseline aus **>= 5** gescripteten Anrufen: Median `roundtrips`/Turn, Turns/Anruf, Tokens/Anruf | `turn_ok`-Zeilen im Render-Log tragen `roundtrips`/`toolNames`/`chars`/`speechEmpty`; Mediane notiert | offen |
 | AL-P1 | Eroeffnungsfenster aus **>= 3 echten Aufnahmen** (Annahme bis `speak.ended`) | gemessene Sekunden notiert — Basislinie fuer AL-P5, **nicht** hochgerechnet | offen |
+| ~~AL-P1~~ | ~~Beide Schalter je Richtung schriftlich + Assistant-Flag im Boot-Banner~~ | **ERLEDIGT 2026-07-29 mit dem Deploy `85ba107`:** Banner zeigt `Voice-Engine: budget` und `Assistant-Pfad: AKTIV (TELNYX_AI_ASSISTANT_ENABLED=true)` | **erledigt** |
 | AL-P1 | Feldnamen-Verifikation `conversation_id` | im Render-Log erscheint `conversation_created (call=…) -> UUID gespeichert`. Erscheint stattdessen `… OHNE conversation_id … payload_keys=…`, ist der Feldname falsch -> Ein-Zeilen-Fix aus den geloggten Schluesseln | offen |
 | AL-P3 | **Basislinie ZUERST** (vor dem Provisioner-Lauf): `start_speaking_plan_extra_wait_duration_ms`-Median aus >= 5 echten Anrufen | Median notiert. Telnyx' interner Default bei `start_speaking_plan=null` ist unbekannt — ohne Basislinie ist „sinkt um >= 200 ms" nicht entscheidbar, und ein **Anstieg** waere unsichtbar | offen |
 | AL-P3 | Provisioner-Lauf `node scripts/telnyx-assistant-provision.mjs` mit **explizit gesetzten** `TELNYX_ASSISTANT_ID` + `TELNYX_ELEVENLABS_MODEL` | `smokePass=true`. `K1/K2-Verifikation fehlgeschlagen: … start_speaking_wait_seconds …` = Telnyx hat still verworfen -> Schema-Slot per GET erneut pruefen | offen |
