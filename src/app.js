@@ -220,6 +220,7 @@ export async function buildApp(deps) {
     voiceRender,
     costTruing,
     messaging,
+    consultDelivery,
   } = deps;
 
   const app = express();
@@ -321,7 +322,11 @@ export async function buildApp(deps) {
         armMaxDurationTimer: lifecycle.armMaxDurationTimer,
         armReserveReleaseTimer: lifecycle.armReserveReleaseTimer,
       },
-      tenant: { requestTenant, tenantOwnsCall },
+      tenant: { requestTenant, requireTenant, tenantOwnsCall },
+      // AL-P13: die EINE Consult-Zustell-Instanz (INV-7, in server.js konstruiert) -
+      // Poll-Zaehler und Drain-Flag leben in ihrem Closure-Scope; eine zweite Instanz
+      // haette zweite Zaehler und damit keine Obergrenze.
+      consultDelivery,
       internalIdentity,
       OWNER_ID,
     }),

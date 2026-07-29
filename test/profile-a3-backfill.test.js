@@ -57,7 +57,7 @@ test("Dry-Run listet die Aenderung, schreibt aber kein Profil", async () => {
 });
 
 // --- Apply schreibt den vollen Tier-Snapshot (inkl. maxCallsPerHour=null) auf die tenantId ---
-test("Apply provisioniert das Tier-Profil auf die tenantId (alle 6 Felder)", async () => {
+test("Apply provisioniert das Tier-Profil auf die tenantId (alle 7 Felder)", async () => {
   const s = makeDefaultState();
   seedSubscriber(s, "t_a", { planSlug: "starter" });
   const r = await backfillPlanProfiles({ store: storeOn(s), apply: true });

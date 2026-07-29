@@ -268,6 +268,27 @@ export const MANDATE_OUT_OF_SCOPE = Object.freeze({
   ACCEPT_BEST: "accept_best",
 });
 export const MANDATE_OUT_OF_SCOPE_VALUES = Object.freeze(Object.values(MANDATE_OUT_OF_SCOPE));
+
+// P3/AL-P13: Deckel des key_facts-Arrays. EINE Quelle (G5) fuer die HTTP-Kante
+// (routes/_validation.js re-exportiert, Muster E164) UND den Consult-Merge
+// (state-ops.mergeConsultFacts) - sonst driften zwei Deckel auf demselben Feld.
+export const KEY_FACTS_LIMITS = Object.freeze({ maxItems: 10, maxLen: 200 });
+
+// AL-P13: Lebenszyklus eines Consults am Call.
+export const CONSULT_STATUS = Object.freeze({
+  OPEN: "open",
+  ANSWERED: "answered",
+  EXPIRED: "expired",
+});
+
+// AL-P13: Ergebnis von answerConsult - maschinenlesbar, damit die Route den HTTP-Status
+// ableitet, ohne Zeichenketten zu vergleichen (Bestandsmuster GLOBAL_CAP_REASON).
+export const CONSULT_ANSWER = Object.freeze({
+  ACCEPTED: "accepted",
+  UNKNOWN_EVENT: "unknown_event",
+  ALREADY_ANSWERED: "already_answered",
+  CALL_ENDED: "call_ended",
+});
 // Konservativster der drei Wege: ohne ausdrueckliche Angabe gibt der Agent ein Angebot
 // ausserhalb seines Spielraums als Nachricht weiter, statt ab- oder zuzusagen.
 export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;
@@ -532,6 +553,7 @@ export const PROFILE_FIELDS = {
   allowedCountryCodes: "string[]", // engt das globale Land-Gate weiter ein (nie auf)
   unrestricted: "boolean", // erfuellt das Verifikations-Gate (Pfad 1; nur dieses Gate, kein hartes Gate)
   allowCalendar: "boolean", // get_calendar-MCP-Tool
+  allowConsult: "boolean", // AL-P13: await_call_event/answer_consult + Consult-Routen
   allowBooking: "boolean", // POST /api/calendar
   // number ODER null: null = keine Profil-Senkung (effektiv der Pro-Tenant-Default
   // config.safety.maxCallsPerHour, telephony/outbound-gates tenantHourReached). Muss als
@@ -829,6 +851,7 @@ const OWNER_PROFILE = {
   allowedCountryCodes: [],
   unrestricted: false,
   allowCalendar: true,
+  allowConsult: true, // AL-P13: Consult-Kanal ist zunaechst eine Owner-Faehigkeit
   allowBooking: true,
   maxCallsPerHour: null,
 };
@@ -840,6 +863,7 @@ const DEFAULT_PROFILE = {
   allowedCountryCodes: [],
   unrestricted: false,
   allowCalendar: false,
+  allowConsult: false, // AL-P13: fail-closed wie allowCalendar/allowBooking
   allowBooking: false,
   maxCallsPerHour: DEFAULT_PROFILE_MAX_CALLS_PER_HOUR,
 };

@@ -48,7 +48,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   telephony: 9,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
-  tenancy: 6,
+  // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
+  tenancy: 7,
   // P1 (i18n-Fix): deployedCommit ergaenzt (Deploy-Commit fuer /healthz + Boot-Banner) -> 8.
   server: 8,
   store: 3,
@@ -60,9 +61,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // im Pre-Call-Briefing, src/research/) - eigene Namespace-Zeile.
   research: 3,
 };
-const EXPECTED_TOTAL_KEYS = 133;
+const EXPECTED_TOTAL_KEYS = 134;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (133 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (134 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -145,7 +146,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // AL-P10: researchEnabled/researchMaxUses/researchSearchFeeCents sind alle drei
   // primitiv (Boolean/Zahl/Zahl, kein Array/nested Objekt) -> 123.
   // AL-P11: evidenceRetentionDays ist primitiv (Zahl, kein Array/nested Objekt) -> 124.
-  assert.equal(checked, 124, "alle primitiven Blaetter (133 - 4 Arrays - 5 nested Objekte) geprueft");
+  // AL-P13: consultEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 125.
+  assert.equal(checked, 125, "alle primitiven Blaetter (134 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

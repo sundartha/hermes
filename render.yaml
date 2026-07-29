@@ -297,6 +297,10 @@ services:
         value: "false"
       - key: RESEARCH_SEARCH_FEE_CENTS
         value: "1"
+      # ---- Consult-Kanal am Call (AL-P13) ---- Default AUS (fail-closed): keine
+      # Consult-Routen, keine await_call_event/answer_consult-Tools.
+      - key: CONSULT_ENABLED
+        value: "false"
       # P7: 30 statt 8. 8 (=800 ct) war nicht startfaehig - die abgeleitete Business-Decke
       # (900 ct) haette den Plattform-Cap uebersprungen (plan_cap_inert, exit 1). 30 ist
       # zugleich der live gemessene Wert (test/prod-env.js LIVE_MEASURED), der Blueprint

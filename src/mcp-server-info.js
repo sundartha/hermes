@@ -22,6 +22,7 @@
 // (DASHBOARD_PASSWORD gesetzt) wirkungslos.
 import { config } from "./config.js";
 import { HERMES_ICON_DATA_URI, HERMES_ICON_SIZE } from "./brand-icon-data.js";
+import { uiServerExtension } from "./ui/contract.js";
 
 // Pfad-Praefix fuer selbst gehostete Marken-Assets unter public/ (kein Magic-String,
 // G25) - server.js braucht denselben Wert fuer die Basic-Auth-Ausnahme.
@@ -64,3 +65,27 @@ export const HERMES_SERVER_INFO = {
     },
   ],
 };
+
+// AL-P13: Server-Instruktionen fuer den MCP-Host. ACHTUNG: `instructions` ist ein Feld
+// von ServerOptions, NICHT von Implementation - in HERMES_SERVER_INFO gesetzt wuerde es
+// still verworfen. Deshalb liegt hier NUR der Text plus der Options-Bauer; eingesetzt
+// wird er in routes/mcp.js.
+// EINSPRACHIG ENGLISCH (O14): nur das Client-Modell liest ihn, nie der Tenant.
+export const MCP_CONSULT_INSTRUCTIONS =
+  "While a call placed with place_call is running, keep calling await_call_event with " +
+  "that call_id, again and again, until it returns event=\"done\". " +
+  "When it returns event=\"consult\", answer the questions briefly and factually with " +
+  "answer_consult - if you do not know an answer, ask the user first rather than " +
+  "inventing one. " +
+  "Staying in that loop pays off: the final \"done\" answer carries the summary of the " +
+  "call and whether the objective was achieved.";
+
+// serverOptions traegt inzwischen ZWEI Dinge (UI-Capabilities + instructions). Byte-
+// identisch zum Bestand, solange beide Schalter aus sind: undefined. Nur so bleibt das
+// Verhalten bei ausgeschaltetem Flag unveraendert.
+export function mcpServerOptions({ uiEnabled, consultLoop }) {
+  const options = {};
+  if (uiEnabled) options.capabilities = { extensions: uiServerExtension() };
+  if (consultLoop) options.instructions = MCP_CONSULT_INSTRUCTIONS;
+  return Object.keys(options).length ? options : undefined;
+}

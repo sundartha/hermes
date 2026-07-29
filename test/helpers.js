@@ -253,6 +253,10 @@ export const BASE_ENV = {
   // Code liest ihn in dieser Phase, er ist keine config-Variable.
   RESEARCH_ENABLED: "false",
   RESEARCH_SEARCH_FEE_CENTS: "1",
+  // AL-P13: Consult-Kanal in Spawn-Tests neutral AUS (Default). Ohne diese Zeile leakt
+  // eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);
+  // al-p13-consult-channel.test.js setzt es explizit auf "true".
+  CONSULT_ENABLED: "false",
   // ---- Payment/Billing (P6b1) ----
   // Neutral + fail-closed: kein Hold/Capture. Ohne diese Zeilen leakt eine lokale
   // .env mit PAYMENT_ENABLED=true via dotenv in Spawn-Tests -> Baseline-Drift.

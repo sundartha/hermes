@@ -233,7 +233,10 @@ CREATE TABLE IF NOT EXISTS call (
   -- next_step/facts (+ optional evidence) als JSONB. Additiv NULLABLE: gesetzt erst in
   -- summarizeCall, sonst NULL -> Bestand byte-identisch. evidence faellt unabhaengig vom
   -- Record ueber die KURZE Frist EVIDENCE_RETENTION_DAYS (state-ops).
-  result JSONB
+  result JSONB,
+  -- AL-P13: Consult-Kette am Call (A2: Zustand am Call, NICHT in einem Prozess-Broker -
+  -- ueberlebt Deploy/Instanzwechsel und faellt automatisch unter Erase/Export/Retention).
+  consults JSONB
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -292,6 +295,10 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS caller_turns INTEGER NOT NULL DEFAULT 
 -- AL-P11: Ergebnis-Karte auf Bestands-call-Tabellen nachziehen (Muster context/mandate).
 -- Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS result JSONB;
+
+-- AL-P13: Consult-Kette auf Bestands-call-Tabellen nachziehen (Muster context/mandate/result).
+-- Idempotent; frische DB = No-op.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS consults JSONB;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

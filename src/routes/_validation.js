@@ -12,8 +12,12 @@
 // store/defaults.js neben normNum (EINE Quelle, G5 - F2 brauchte denselben Regex im
 // private-number-Setter; statt einer zweiten Kopie re-exportieren wir hier). Die
 // bestehenden Konsumenten (server.js /api/calls) importieren E164 unveraendert von hier.
-import { MANDATE_OUT_OF_SCOPE_VALUES } from "../store/defaults.js";
+import { KEY_FACTS_LIMITS, MANDATE_OUT_OF_SCOPE_VALUES } from "../store/defaults.js";
 export { E164 } from "../store/defaults.js";
+// P3-Deckel des key_facts-Arrays: liegt seit AL-P13 in store/defaults.js (EINE Quelle
+// fuer HTTP-Kante und Consult-Merge, Muster E164) und wird hier fuer die Konsumenten
+// dieser Datei re-exportiert. Werte unveraendert -> Verhalten byte-identisch.
+export { KEY_FACTS_LIMITS } from "../store/defaults.js";
 export const TEXT_LIMITS = {
   objective: 500,
   briefing: 2000,
@@ -29,11 +33,6 @@ export const TEXT_LIMITS = {
   "mandate.decide_freely": 1000,
   "mandate.fallback_order": 500,
 };
-
-// P3: key_facts ist ein laengenbegrenztes String-Array. Die beiden Deckel reisen als EIN
-// Limit-Objekt (F1: <=3 Args). Benannte Konstanten statt nackter Zahlen (G25); Hoehe =
-// Kosten-/DoS-Deckel analog TEXT_LIMITS, im Review justierbar.
-const KEY_FACTS_LIMITS = { maxItems: 10, maxLen: 200 };
 
 // AL-P9: open_questions ("was ich nicht klaeren konnte", Eingabe fuer Phase 13). Gleiche
 // Klasse wie key_facts, deshalb dieselbe Item-Zahl; maxLen groesser, weil eine Frage

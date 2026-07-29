@@ -286,6 +286,25 @@ export function makePgStore(runner) {
       if (changed) save();
       return call ? call.callerTurns : 0;
     },
+    // AL-P13: Consult-Kette. emit/answer/expire saven (es gibt eine Spalte, der Flush
+    // schreibt sie aus dem Spiegel); pendingConsult ist ein reiner Leser (kein save).
+    emitConsult(callId, questions) {
+      const { call, changed } = ops.emitConsult(requireState(), callId, questions);
+      if (changed) save();
+      return call;
+    },
+    answerConsult(callId, input) {
+      const result = ops.answerConsult(requireState(), callId, input);
+      if (result.changed) save();
+      return result;
+    },
+    expireOpenConsults(callId) {
+      const { call, changed } = ops.expireOpenConsults(requireState(), callId);
+      if (changed) save();
+      return call;
+    },
+    pendingConsult: (callId, afterEventId) =>
+      ops.pendingConsult(requireState(), callId, afterEventId),
     // P3.2: ephemerer No-Speech-Streak - Wrapper-Paritaet zu json.js. KEIN save(): es gibt
     // keine Spalte (Muster releaseOutboundReserve), der Flush-Spaltenblock bleibt unberuehrt.
     countNoSpeechTurn: (callId) => ops.countNoSpeechTurn(requireState(), callId),
@@ -1062,6 +1081,10 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
     // JSONB kommt vom Treiber bereits geparst (Muster context/mandate). NULL -> null.
     result: r.result ?? null,
+    // AL-P13: Consult-Kette mit-hydrieren. Ohne diese Zeile ginge sie beim Restart
+    // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
+    // JSONB kommt vom Treiber bereits geparst (Muster context/mandate/result). NULL -> null.
+    consults: r.consults ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -1356,8 +1379,9 @@ async function flushCalls(client, tenantId, calls) {
           summary_sms_sent_at, context, failure_reason, billed_at,
           call_control_id, assistant_id, diagnostic, mandate,
           estimated_cost_cents, actual_cost_micro_cents, cost_trued_at,
-          cost_trued_source, cost_truing_attempts, telnyx_conversation_id, caller_turns, result)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37)
+          cost_trued_source, cost_truing_attempts, telnyx_conversation_id, caller_turns, result,
+          consults)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1370,7 +1394,8 @@ async function flushCalls(client, tenantId, calls) {
          cost_trued_at=EXCLUDED.cost_trued_at, cost_trued_source=EXCLUDED.cost_trued_source,
          cost_truing_attempts=EXCLUDED.cost_truing_attempts,
          telnyx_conversation_id=EXCLUDED.telnyx_conversation_id,
-         caller_turns=EXCLUDED.caller_turns, result=EXCLUDED.result`,
+         caller_turns=EXCLUDED.caller_turns, result=EXCLUDED.result,
+         consults=EXCLUDED.consults, context=EXCLUDED.context`,
       [
         c.id,
         tenantId,
@@ -1395,8 +1420,10 @@ async function flushCalls(client, tenantId, calls) {
         c.provider || DEFAULT_PROVIDER,
         c.summarySmsSentAt ?? null,
         // P3: Per-Call-Kontext als JSONB (Muster profile.data: Objekt -> JSON.stringify,
-        // sonst NULL). NICHT im ON CONFLICT DO UPDATE SET - wie goal/briefing/constraints
-        // bei Create gesetzt und danach unveraenderlich.
+        // sonst NULL). SEIT AL-P13 IM ON CONFLICT DO UPDATE SET: der Kontext ist NICHT
+        // mehr nach dem Create unveraenderlich - answerConsult merged die Antwort einer
+        // Rueckfrage in context.key_facts. Ohne den UPDATE-Eintrag faellt jede beantwortete
+        // Rueckfrage beim naechsten Flush lautlos auf den Create-Zustand zurueck.
         c.context ? JSON.stringify(c.context) : null,
         // CDF1: Fehlergrund-Token ($24). IM ON CONFLICT DO UPDATE SET (anders als context),
         // weil er NACH dem Create im /voice/status-Callback gesetzt wird.
@@ -1438,6 +1465,11 @@ async function flushCalls(client, tenantId, calls) {
         // in summarizeCall, also NACH dem Create. Fehlte sie im UPDATE-SET, faellt sie beim
         // naechsten Flush auf NULL zurueck und der Evidence-Purge haette nie etwas zu tun.
         c.result ? JSON.stringify(c.result) : null,
+        // AL-P13 ($38): JSONB (Muster result). IM ON CONFLICT DO UPDATE SET - die
+        // Kette entsteht/mutiert NACH dem Create (emit beim Waehlen, answer beim
+        // Poll). Fehlte sie im UPDATE-SET, faellt sie beim naechsten Flush auf NULL
+        // zurueck und jede beantwortete Rueckfrage waere nach dem Flush weg.
+        c.consults ? JSON.stringify(c.consults) : null,
       ],
     );
     await flushTranscript(client, tenantId, c);
