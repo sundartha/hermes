@@ -116,7 +116,8 @@ CREATE TABLE IF NOT EXISTS settings (
   -- = Bestandsverhalten; entkoppelt "keine SMS" vom Loeschen der privaten Nummer.
   sms_summary_opt_in  BOOLEAN NOT NULL DEFAULT TRUE,
   language            TEXT,
-  agent_style         TEXT
+  agent_style         TEXT,
+  allow_research      BOOLEAN NOT NULL DEFAULT FALSE
 );
 -- F1 Geo-Location: Gespraechssprache pro Tenant als OPTIONALES Override (Entscheidung #8).
 -- Phase 1 legte die Spalte NOT NULL DEFAULT 'de' an; Phase 4 macht sie NULLABLE, weil 'de'
@@ -135,6 +136,11 @@ ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_summary_opt_in BOOLEAN NOT NUL
 -- byte-identisch. Additiv NULLABLE + Code-Fallback in rowToSettings (Muster language/I8);
 -- Bestands-Zeilen bleiben NULL (kein Backfill) -> kein stiller Stil-Wechsel beim Migrate.
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS agent_style TEXT;
+-- AL-P10 (PLAN-ASSISTANT-LEAP.md Phase 10) - allow_research: Per-Tenant-Freigabe der
+-- Vorab-Web-Recherche. NOT NULL DEFAULT FALSE backfillt Bestands-Tenants mit "aus"
+-- (Muster sms_summary_opt_in, nur umgekehrte Richtung) -> kein stiller Egress von
+-- Auftragsmaterial beim Migrate. Idempotent.
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS allow_research BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- call: alle heutigen Felder AUSSER transcript[] (-> transcript_segment) + tenant_id.
 -- id = app-generierte TEXT-PK (newId-Format bleibt). seq nur fuer stabile

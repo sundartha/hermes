@@ -350,6 +350,13 @@ export function makePgStore(runner) {
       save();
       return usage;
     },
+    // AL-P10: Suchgebuehr (Wrapper-Paritaet zu json.js). flushUsage persistiert den
+    // costCents-Bucket (als cost_eur-Spalte) - keine neue Spalte noetig.
+    addResearchFeeCostCents(tenantId, costCents) {
+      const usage = ops.addResearchFeeCostCents(requireState(), tenantId, costCents, new Date().toISOString());
+      save();
+      return usage;
+    },
     // LCT P4: Korrekturbuchung (Wrapper-Parity zu json.js) - save NUR bei booked. flushUsage
     // persistiert cost_correction_micro_cents_rem - ohne den Spalten-Eintrag im ON CONFLICT
     // DO UPDATE SET fiele der Rest beim naechsten Flush auf 0 zurueck, und der Uebertrag
@@ -945,6 +952,10 @@ function rowToSettings(r) {
     smsSummaryOptIn: r.sms_summary_opt_in ?? true,
     allowPersonalData: r.allow_personal_data,
     allowBankData: r.allow_bank_data,
+    // AL-P10: Per-Tenant-Freigabe der Vorab-Web-Recherche. ?? false = Bestands-Zeilen
+    // vor dem Migrate (Spalte fehlte) fallen auf "aus" zurueck - kein stiller Egress
+    // von Auftragsmaterial (Muster sms_summary_opt_in, umgekehrte Fallback-Richtung).
+    allowResearch: r.allow_research ?? false,
     // F1 Phase 4: optionales Override, Spalte NULLABLE. NULL -> null (nicht gesetzt);
     // die Praezedenz (resolveCallLanguage) faellt dann auf number/tenant/'de' durch.
     language: r.language ?? null,
@@ -1246,14 +1257,15 @@ async function flushSettings(client, tenantId, settings) {
     `INSERT INTO settings
        (tenant_id, agent_name, greeting, allow_calendar, allow_booking,
         allow_summaries, allow_personal_data, allow_bank_data, sms_summary_opt_in, language,
-        agent_style)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        agent_style, allow_research)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      ON CONFLICT (tenant_id) DO UPDATE SET
        agent_name=EXCLUDED.agent_name, greeting=EXCLUDED.greeting,
        allow_calendar=EXCLUDED.allow_calendar, allow_booking=EXCLUDED.allow_booking,
        allow_summaries=EXCLUDED.allow_summaries, allow_personal_data=EXCLUDED.allow_personal_data,
        allow_bank_data=EXCLUDED.allow_bank_data, sms_summary_opt_in=EXCLUDED.sms_summary_opt_in,
-       language=EXCLUDED.language, agent_style=EXCLUDED.agent_style`,
+       language=EXCLUDED.language, agent_style=EXCLUDED.agent_style,
+       allow_research=EXCLUDED.allow_research`,
     [
       tenantId,
       settings.agentName,
@@ -1266,6 +1278,7 @@ async function flushSettings(client, tenantId, settings) {
       settings.smsSummaryOptIn,
       settings.language,
       settings.agentStyle ?? null,
+      settings.allowResearch ?? false,
     ],
   );
 }

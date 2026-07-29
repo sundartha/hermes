@@ -574,6 +574,13 @@ export function addVoiceUsageCostCents(tenantId, costCents) {
   return usage;
 }
 
+// AL-P10: Suchgebuehr - Mutation -> save (wie addVoiceUsageCostCents/trackUsage).
+export function addResearchFeeCostCents(tenantId, costCents) {
+  const usage = ops.addResearchFeeCostCents(load(), tenantId, costCents, new Date().toISOString());
+  save();
+  return usage;
+}
+
 // LCT P4: Korrekturbuchung - save NUR bei booked (Muster recordCallCostTruingResult). Ein
 // verworfener Lauf mutiert nichts, auch nicht den Rest -> kein save.
 export function applyCostCorrectionCents(tenantId, input) {

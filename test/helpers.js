@@ -244,6 +244,12 @@ export const BASE_ENV = {
   PRECALL_BRIEFING_ENABLED: "false",
   PRECALL_BRIEFING_MODEL: "claude-sonnet-5",
   PRECALL_BRIEFING_TIMEOUT_MS: "6000",
+  // AL-P10: Vorab-Recherche in Spawn-Tests neutral AUS + Gebuehr auf den Code-Default
+  // gepinnt. Ohne diese Zeilen leckt eine lokale .env via dotenv in die Spawn-Tests
+  // (Lehre test-base-env-drift). BRAVE_SEARCH_API_KEY steht hier bewusst NICHT: kein
+  // Code liest ihn in dieser Phase, er ist keine config-Variable.
+  RESEARCH_ENABLED: "false",
+  RESEARCH_SEARCH_FEE_CENTS: "1",
   // ---- Payment/Billing (P6b1) ----
   // Neutral + fail-closed: kein Hold/Capture. Ohne diese Zeilen leakt eine lokale
   // .env mit PAYMENT_ENABLED=true via dotenv in Spawn-Tests -> Baseline-Drift.
@@ -374,6 +380,7 @@ export function seedState({
       allowSummaries: true,
       allowPersonalData: false,
       allowBankData: false,
+      allowResearch: false,
       ...settings,
     },
     calls,

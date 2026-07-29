@@ -403,6 +403,14 @@ export function defaultSettings() {
     smsSummaryOptIn: true,
     allowPersonalData: false,
     allowBankData: false,
+    // AL-P10: Per-Tenant-Freigabe der Vorab-Web-Recherche. DEFAULT AUS (fail-closed):
+    // mit dem Auftragsmaterial wandert Inhalt an einen Suchindex - das ist eine
+    // Entscheidung, die dem Tenant gehoert, nicht dem globalen Schalter allein. Der
+    // Adapter liest die SCHNITTMENGE aus config.research.researchEnabled und diesem
+    // Feld (src/research/registry.js). Kein PII (Boolean) -> ueber /api/state
+    // unkritisch; schreibbar ueber die POST /api/settings-Whitelist (updateSettings),
+    // NICHT ueber Self-Service (Geldpfad, Owner-Gate O3).
+    allowResearch: false,
     // Gespraechssprache pro Tenant als OPTIONALES Override (F1 Phase 4, Entscheidung #8):
     // null = "nicht gesetzt" -> die Aufloesungs-Praezedenz (resolveCallLanguage) faellt
     // auf number.language -> tenant.defaultLanguage -> DEFAULT_LANGUAGE (Weltdefault, P10)

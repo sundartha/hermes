@@ -235,6 +235,30 @@ const rawConfig = {
     min: 1,
   }),
 
+  // ---- Vorab-Recherche (AL-P10, src/research/) ----
+  // Master-Schalter fuer die Web-Recherche IM Pre-Call-Briefing. DEFAULT AUS
+  // (fail-closed): das Such-Werkzeug erscheint gar nicht erst im tools-Array, der
+  // Briefing-Aufruf ist byte-identisch zum Bestand, es entsteht keine Gebuehr.
+  // Wirkt NUR als Schnittmenge mit dem Per-Tenant-Setting allowResearch
+  // (store/defaults.js): "global an" darf nicht heissen, dass das Auftragsmaterial
+  // JEDES Tenants an einen Suchindex geht.
+  researchEnabled: boolEnv("RESEARCH_ENABLED", process.env.RESEARCH_ENABLED, { fallback: false }),
+  // HART 1, bewusst KEINE Env-Var (Praezedenz modelPricesUsd: fester Wert im
+  // Namespace). Die Gebuehrenbuchung (researchSearchFeeCents) ist auf genau eine
+  // Suche je Briefing kalibriert; eine stille Erhoehung waere ein unsichtbarer
+  // Kosten-Hebel am Budget-Gate (Regel 1).
+  researchMaxUses: 1,
+  // Preis EINER serverseitigen Suche in GANZZAHL Cents auf derselben Achse wie alle
+  // anderen Kosten (usage.costCents). Serverseitige Suchen tauchen in
+  // input_tokens/output_tokens NICHT auf - ohne diesen Posten waere das Budget-Gate
+  // an dieser Stelle blind. Aufrunden ist die etablierte Fehlerrichtung
+  // (Ueberbuchung, nie 0). VOR dem Anschalten von RESEARCH_ENABLED gegen die
+  // aktuelle Anbieter-Preisliste pruefen - der Fallback ist ein Startwert, kein Beleg.
+  researchSearchFeeCents: numEnv("RESEARCH_SEARCH_FEE_CENTS", process.env.RESEARCH_SEARCH_FEE_CENTS, {
+    fallback: 1,
+    min: 0,
+  }),
+
   // ---- Mess-Instrumentierung (L0, src/metrics.js) ----
   // Master-Schalter fuer PII-freie Latenz-/Loop-/STT-Gap-Logs. DEFAULT AUS
   // (byte-identisch, auch stdout): Konsumenten no-oppen. Zum Live-Messen (Datengrundlage
@@ -1140,7 +1164,7 @@ const rawConfig = {
 // Properties, die die Plattform selbst abfragt. Modul-Konstante (keine Config-Flaeche).
 const SAFE_DUCK_TYPING_PROPS = new Set(["then", "toJSON"]);
 
-// PA-20 (Flip): Die flache Oberflaeche ist entfernt - die 13 Namespaces sind die EINZIGE
+// PA-20 (Flip): Die flache Oberflaeche ist entfernt - die 14 Namespaces sind die EINZIGE
 // Zugriffs-Oberflaeche. Der Proxy bewacht `get` UND `set`: ein Read auf einen entfernten
 // flachen Key wirft (fail-closed statt still-undefined); ein Write auf einen unbekannten
 // (flachen/vertippten) Key wirft ebenfalls, statt still eine Stray-Property anzulegen, die
@@ -1173,7 +1197,7 @@ function guardedConfig(target, path = "config") {
 }
 
 // ---- PA-12 (config-Hub-Entschaerfung) + PA-20 (Flip): verschachtelte Zugriffs-Oberflaeche ----
-// 13 Namespaces sind seit PA-20 die EINZIGE oeffentliche Oberflaeche (die vormals
+// 14 Namespaces sind seit PA-20 die EINZIGE oeffentliche Oberflaeche (die vormals
 // zusaetzlich erhaltenen Flach-Aliase sind entfernt). Jedes Blatt ist Getter+Setter auf
 // DENSELBEN rawConfig-Speicherort (kein zweiter numEnv/boolEnv, keine Wert-Kopie): ein
 // Override ueber config.<ns>.<key> = v schreibt rawConfig[key] und schlaegt damit auf
@@ -1195,6 +1219,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
   privacy: ["retentionDays", "diagnosticRetentionDays"],
+  research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents"],
 });
 
 // EINE Gruppen-Fabrik (G5) fuer beide Oberflaechen: jedes Blatt ist Getter+Setter auf
@@ -1228,7 +1253,7 @@ export function attachNamespaces(target, namespaces) {
   }
 }
 
-// PA-20 (Flip): eigene Oberflaeche mit NUR den 13 Namespaces (enumerable), Blaetter delegieren
+// PA-20 (Flip): eigene Oberflaeche mit NUR den 14 Namespaces (enumerable), Blaetter delegieren
 // an den internen rawConfig-Speicher. configurable:true ist PFLICHT: guardedConfig gibt fuer
 // Objekt-Blaetter/-Gruppen eine FRISCHE Wrapper-Proxy zurueck; bei einer non-configurable-
 // Data-Property verlangt die Proxy-[[Get]]-Invariante den EXAKTEN Zielwert -> sonst TypeError

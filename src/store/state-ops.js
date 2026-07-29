@@ -1988,6 +1988,19 @@ export function trackUsage(s, tenantId, tokens, cfg, nowIso) {
   return usage;
 }
 
+// AL-P10: gemeinsamer Kern BEIDER Ganzzahl-Cent-Buchungen (G5) - derselbe
+// Korruptions-Riegel, dieselbe EINE Buchungsstelle (bookCents). `quelle` traegt
+// ausschliesslich das Diagnose-Label: zwei Sachverhalte teilen sich keine Log-Zeile
+// (teuer gelernte Repo-Lehre). Privat, kein Export. Optionsobjekt statt fuenftem
+// Positionsargument (F1).
+function addUsageCostCents(s, { tenantId, costCents, nowIso, quelle }) {
+  const usage = usageFor(s, tenantId);
+  if (!isBookableCents(costCents))
+    return discardCorruptWrite(usage, `${quelle} tenant:${tenantId}`, costCents);
+  bookCents(usage, costCents, nowIso);
+  return usage;
+}
+
 // Bucht die IST-Voice-Minutenkosten (GANZZAHL Cents) eines beendeten Outbound-Calls in den
 // LIVE-usage-Bucket des Tenants (outbound-p1c Reconcile, D1). Ganze Cents, exakt (keine
 // Mikro-Cent-Bruecke noetig - der Voice-Tarif ist bereits Ganzzahl Cents/Minute). So sieht
@@ -1995,11 +2008,15 @@ export function trackUsage(s, tenantId, tokens, cfg, nowIso) {
 // nowIso (P4, optional): s. trackUsage.
 // Nebeneffekt im Namen (N7). Reine Mutation, kein IO (Wrapper saved).
 export function addVoiceUsageCostCents(s, tenantId, costCents, nowIso) {
-  const usage = usageFor(s, tenantId);
-  if (!isBookableCents(costCents))
-    return discardCorruptWrite(usage, `addVoiceUsageCostCents tenant:${tenantId}`, costCents);
-  bookCents(usage, costCents, nowIso);
-  return usage;
+  return addUsageCostCents(s, { tenantId, costCents, nowIso, quelle: "addVoiceUsageCostCents" });
+}
+
+// AL-P10: Gebuehr der serverseitigen Vorab-Recherche (GANZZAHL Cents). Eigene
+// benannte Buchung neben der Token-Achse, WEIL serverseitige Suchen in
+// input_tokens/output_tokens nicht erscheinen - sie waeren fuer das Budget-Gate
+// sonst unsichtbar. Landet auf demselben Live-Budget-Bucket wie alles andere.
+export function addResearchFeeCostCents(s, tenantId, costCents, nowIso) {
+  return addUsageCostCents(s, { tenantId, costCents, nowIso, quelle: "addResearchFeeCostCents" });
 }
 
 // LCT P4: Divisor der Korrektur-Formel. ZUSAMMENGESETZT aus den zwei vorhandenen

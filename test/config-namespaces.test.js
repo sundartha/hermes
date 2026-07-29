@@ -1,7 +1,7 @@
 // PA-12 (config-Hub-Entschaerfung): Unit-Test fuer die verschachtelte Zugriffs-Oberflaeche
 // (CONFIG_NAMESPACES + attachNamespaces in src/config.js). Reiner Unit-Test, offline, kein
 // Server-Spawn (Muster config-shape.test.js).
-// PA-20 (Flip): die 13 Namespaces sind die EINZIGE Oberflaeche - kein dual-read mehr. Die
+// PA-20 (Flip): die 14 Namespaces sind die EINZIGE Oberflaeche - kein dual-read mehr. Die
 // alte Alias-Gleichheit/PM-1-Flach-Override-Tests entfallen (der Flach-Pfad existiert nicht
 // mehr); an ihre Stelle tritt der Setter-Durchschlag-Test ueber makeConfigOverrides(config)
 // und eine TypeError-Regression fuer entfernte flache Keys (Read UND Write).
@@ -55,10 +55,13 @@ const EXPECTED_NAMESPACE_COUNTS = {
   metrics: 1,
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
   privacy: 2,
+  // AL-P10: researchEnabled + researchMaxUses + researchSearchFeeCents (Vorab-Recherche
+  // im Pre-Call-Briefing, src/research/) - eigene Namespace-Zeile.
+  research: 3,
 };
-const EXPECTED_TOTAL_KEYS = 129;
+const EXPECTED_TOTAL_KEYS = 132;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkte Blaetter (129 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (132 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -79,7 +82,7 @@ test("Struktur: CONFIG_NAMESPACES hat genau die 13 gepinnten Counts und disjunkt
   );
 });
 
-test("Oberflaeche: config traegt GENAU die 13 Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
+test("Oberflaeche: config traegt GENAU die 14 Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
   assert.equal(new Set(Object.keys(config)).size, Object.keys(CONFIG_NAMESPACES).length);
   assert.deepEqual(Object.keys(config).sort(), Object.keys(CONFIG_NAMESPACES).sort());
   for (const namespace of Object.keys(CONFIG_NAMESPACES)) {
@@ -138,7 +141,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // bleibt 117, nur die Nested-Objekt-Zahl in der Assertion unten steigt.
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider sind primitiv (String) -> 119.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ist primitiv (Boolean) -> 120.
-  assert.equal(checked, 120, "alle primitiven Blaetter (129 - 4 Arrays - 5 nested Objekte) geprueft");
+  // AL-P10: researchEnabled/researchMaxUses/researchSearchFeeCents sind alle drei
+  // primitiv (Boolean/Zahl/Zahl, kein Array/nested Objekt) -> 123.
+  assert.equal(checked, 123, "alle primitiven Blaetter (132 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

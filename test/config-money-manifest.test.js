@@ -35,6 +35,9 @@ const MONEY_CONFIG_KEYS = Object.freeze([
   // erfasst) und wird deshalb bewusst zusaetzlich manuell eingetragen: reine Anzeige-
   // Fixkosten in GANZZAHL EUR-Cent, dasselbe Geld-Feld-Muster wie die Cents-Suffix-Felder.
   "platformFixedCostCentsPerMonth",
+  // AL-P10: Preis EINER serverseitigen Vorab-Suche (Ganzzahl EUR-Cent, Muster
+  // smsCostCents) - Geld-Feld der Vorab-Recherche im Pre-Call-Briefing.
+  "researchSearchFeeCents",
 ]);
 
 const MONEY_NAME_PATTERN = /(Cents|Eur|Usd)$/;
