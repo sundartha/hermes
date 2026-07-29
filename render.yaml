@@ -297,10 +297,6 @@ services:
         value: "false"
       - key: RESEARCH_SEARCH_FEE_CENTS
         value: "1"
-      # Reserviert fuer AL-P10b (look_up). In dieser Phase liest KEIN Code den Wert;
-      # leer = fail-closed inaktiv. sync:false = Secret, nur im Dashboard.
-      - key: BRAVE_SEARCH_API_KEY
-        sync: false
       # P7: 30 statt 8. 8 (=800 ct) war nicht startfaehig - die abgeleitete Business-Decke
       # (900 ct) haette den Plattform-Cap uebersprungen (plan_cap_inert, exit 1). 30 ist
       # zugleich der live gemessene Wert (test/prod-env.js LIVE_MEASURED), der Blueprint
