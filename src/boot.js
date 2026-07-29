@@ -486,6 +486,7 @@ export async function bootServer({
   provisioning,
   costTruing,
   messaging,
+  consultDelivery,
 }) {
   // S1-4: json.js wirft aus load(), wenn ein korrupter Store NICHT forensisch gesichert
   // werden konnte (statt ihn still mit Defaults zu ueberschreiben). Ohne dieses explizite
@@ -563,7 +564,15 @@ export async function bootServer({
   // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)
   attachMediaBridge(httpServer, callFinish.finishCall);
 
-  const gracefulShutdown = makeGracefulShutdown({ httpServer, store, config });
+  // AL-P13: offene Consult-Polls werden VOR httpServer.close() aufgeloest. Ohne das
+  // haelt ein 22-s-Poll den Drain auf, der Watchdog kappt mit exit(0) - und der
+  // finale Store-Flush faellt aus (Datenverlust bei jedem Deploy).
+  const gracefulShutdown = makeGracefulShutdown({
+    httpServer,
+    store,
+    config,
+    releaseLongPolls: consultDelivery.releaseOpenPolls,
+  });
   process.once("SIGTERM", gracefulShutdown);
   process.once("SIGINT", gracefulShutdown);
 }
@@ -583,6 +592,10 @@ export function makeGracefulShutdown({
   httpServer,
   store,
   config,
+  // AL-P13: loest offene Consult-Long-Polls auf. Default No-op haelt jeden Bestands-
+  // Aufrufer (u. a. test/graceful-shutdown.test.js) byte-identisch; die echte Freigabe
+  // injiziert bootServer.
+  releaseLongPolls = () => {},
   exit = process.exit,
   log = console.log,
   logError = console.error,
@@ -593,6 +606,7 @@ export function makeGracefulShutdown({
     shuttingDown = true;
     log(`[shutdown] Signal ${signal} - draine in-flight Requests, dann finaler Store-Flush`);
     const watchdog = setTimeout(() => exit(0), config.server.shutdownDrainTimeoutMs).unref();
+    releaseLongPolls(); // VOR close(): sonst wartet close auf die Polls (AL-P13)
     const closed = new Promise((resolve) => httpServer.close(resolve));
     if (typeof httpServer.closeIdleConnections === "function") httpServer.closeIdleConnections();
     await closed;

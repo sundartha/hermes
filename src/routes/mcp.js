@@ -14,16 +14,16 @@
 // INV-3); mcpAuth (src/auth.js: Legacy-Bearer-Token, statisches Token oder OAuth 2.1)
 // ist die EINZIGE Absicherung auf POST und bleibt fail-closed (Default nur localhost).
 // GET/DELETE tragen KEINE Auth (nur 405). Die stateless/pure Bausteine (McpServer,
-// Transport, registerTools, uiServerExtension, HERMES_SERVER_INFO, mcpAuth, hashEmail,
-// ANON_IDENTITY) kommen direkt aus ihren Quellmodulen (eine Quelle, G5 - wie
+// Transport, registerTools, HERMES_SERVER_INFO, mcpServerOptions, consultAllowedFor,
+// mcpAuth, hashEmail, ANON_IDENTITY) kommen direkt aus ihren Quellmodulen (G5 - wie
 // normNum/localeFor in makeVoiceRoutes); nur config/store und der EINE requestTenant-
 // Resolver (INV-7) werden injiziert.
 import { Router } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { registerTools } from "../mcp-tools.js";
-import { uiServerExtension } from "../ui/contract.js";
-import { HERMES_SERVER_INFO } from "../mcp-server-info.js";
+import { HERMES_SERVER_INFO, mcpServerOptions } from "../mcp-server-info.js";
+import { consultAllowedFor } from "../consult/gate.js";
 import { mcpAuth } from "../auth.js";
 import { hashEmail } from "../util.js";
 import { ANON_IDENTITY } from "../request-tenant.js";
@@ -32,6 +32,16 @@ import { tenantLanguage } from "../store/views.js";
 // deps: { config, store, requestTenant }. config = globales Config-Objekt (mcpUiEnabled).
 // store traegt resolveProfile. requestTenant = die EINE Wurzel-Instanz (INV-7; loest den
 // Tenant EINMAL aus dem verifizierten JWT auf und reicht ihn als X-Internal-Tenant weiter).
+// AL-P13: Diagnose-Label eines /mcp-Requests. Bis hierher stand nur die METHODE im Log -
+// bei tools/call also 60-mal dasselbe Wort. Die Abnahme dieser Phase zaehlt, wie oft das
+// Client-Modell await_call_event zieht; ohne den Werkzeugnamen ist sie nicht messbar.
+// Ein Werkzeugname ist kein Geheimnis und keine PII (Regel 4); Argumente bleiben draussen.
+export function mcpRequestLabel(body) {
+  const method = body?.method || "";
+  const toolName = method === "tools/call" ? body?.params?.name : null;
+  return typeof toolName === "string" && toolName ? `${method} ${toolName}` : method;
+}
+
 export function makeMcpRoutes({ config, store, requestTenant }) {
   const router = Router();
 
@@ -55,7 +65,7 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
         "[mcp]",
         req.auth.email ? hashEmail(req.auth.email) : "anonym",
         `tenant=${scopedTenant}`,
-        req.body?.method || "",
+        mcpRequestLabel(req.body),
       );
     // Identitaet aus dem verifizierten JWT (req.auth). email bevorzugt, sonst sub. Sie wird
     // als X-Internal-Identity an die In-Process-Tools gereicht (Audit/requestedBy) - NICHT
@@ -76,9 +86,14 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
       // NICHT, auch bei korrektem Tool-_meta). Nur bei aktivem Master-Schalter; aus ->
       // keine Extension -> byte-identisch. Auto-registrierte tools/resources werden vom SDK
       // dazugemerged (verdraengen die Extension nicht).
-      const serverOptions = config.tenancy.mcpUiEnabled
-        ? { capabilities: { extensions: uiServerExtension() } }
-        : undefined;
+      // AL-P13: serverOptions traegt jetzt ZWEI Dinge (Capabilities + instructions) und
+      // ist deshalb aus dem mcpUiEnabled-Ternary herausgeloest. Beide Schalter aus ->
+      // undefined, byte-identisch zum Bestand.
+      const consultLoop = consultAllowedFor(profile);
+      const serverOptions = mcpServerOptions({
+        uiEnabled: config.tenancy.mcpUiEnabled,
+        consultLoop,
+      });
       const server = new McpServer(HERMES_SERVER_INFO, serverOptions);
       // Rich-UI-Host-Hinweis: gegated NUR durch den Master-Schalter config.tenancy.mcpUiEnabled
       // (aus -> uiHost.enabled=false -> Stufe-0-only, byte-identisch). Der MCP-native
@@ -92,6 +107,7 @@ export function makeMcpRoutes({ config, store, requestTenant }) {
         identity,
         scopedTenant,
         allowCalendar: profile.allowCalendar,
+        consultAllowed: consultLoop,
         uiHost,
         language,
       });

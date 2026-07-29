@@ -46,6 +46,15 @@ export const MCP_TEXTS = Object.freeze({
     emptyCalendar: "Kalender ist leer.",
     callStillRunning:
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
+    // AL-P13: Consult-Kanal. TENANT-sichtbarer Text (er erscheint im Chat), deshalb
+    // sprachabhaengig - anders als die Tool-Beschreibungen (einsprachig englisch, O14).
+    consultPermissionHint:
+      "Hinweis: Falls waehrend des Anrufs keine Live-Rueckfragen ankommen, muss die " +
+      "Werkzeug-Berechtigung des Connectors auf 'Zulassen' stehen.",
+    consultAnswerAccepted: (n) => `${n} Angabe(n) an den Anruf uebergeben.`,
+    consultAnswerRejected:
+      "Antwort verworfen (Format oder Laenge). Die Rueckfrage bleibt offen - bitte kuerzer antworten.",
+    consultNoLongerOpen: "Diese Rueckfrage ist nicht mehr offen (beantwortet oder Anruf vorbei).",
     // Stufe-0-Zeilenbausteine (P10/MCP-14): tenant-sichtbarer Text von list_action_items
     // und get_calendar. Sie standen bis hierher als deutsche Literale in mcp-tools.js -
     // in einer Oberflaeche, deren Weltdefault "en" ist. DE bleibt byte-identisch zum
@@ -93,6 +102,13 @@ export const MCP_TEXTS = Object.freeze({
     emptyCalls: "No calls yet.",
     emptyCalendar: "Calendar is empty.",
     callStillRunning: "Call is still running. Please poll get_call_status and try again later.",
+    consultPermissionHint:
+      "Note: if no live questions arrive during the call, the connector's tool permission " +
+      "needs to be set to 'Allow'.",
+    consultAnswerAccepted: (n) => `${n} detail(s) passed on to the call.`,
+    consultAnswerRejected:
+      "Answer rejected (format or length). The question stays open - please answer more briefly.",
+    consultNoLongerOpen: "This question is no longer open (already answered or the call ended).",
     emptyActionItems: "No open action items.",
     appointmentPrefix: "(Appointment) ",
     calendarLine: ({ title, start, end }) => `${title}: ${start} to ${end}`,
@@ -129,6 +145,14 @@ export const MCP_TEXTS = Object.freeze({
     emptyCalendar: "L'agenda est vide.",
     callStillRunning:
       "L'appel est encore en cours. Veuillez interroger get_call_status et réessayer plus tard.",
+    consultPermissionHint:
+      "Remarque : si aucune question en direct n'arrive pendant l'appel, l'autorisation " +
+      "d'outil du connecteur doit être réglée sur « Autoriser ».",
+    consultAnswerAccepted: (n) => `${n} information(s) transmise(s) à l'appel.`,
+    consultAnswerRejected:
+      "Réponse rejetée (format ou longueur). La question reste ouverte - veuillez répondre plus brièvement.",
+    consultNoLongerOpen:
+      "Cette question n'est plus ouverte (déjà répondue ou appel terminé).",
     emptyActionItems: "Aucune action en attente.",
     appointmentPrefix: "(Rendez-vous) ",
     calendarLine: ({ title, start, end }) => `${title} : ${start} à ${end}`,

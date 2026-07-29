@@ -21,7 +21,12 @@ import {
   WIDGET_CALENDAR,
   WIDGET_CALL,
 } from "./ui/widget-catalog.js";
-import { MAX_CALL_DURATION_CAP_S, MANDATE_OUT_OF_SCOPE_VALUES } from "./store/defaults.js";
+import {
+  MAX_CALL_DURATION_CAP_S,
+  MANDATE_OUT_OF_SCOPE_VALUES,
+  KEY_FACTS_LIMITS,
+} from "./store/defaults.js";
+import { CONSULT_EVENT, CONSULT_POLL_ABORT_MS } from "./consult/delivery.js";
 import { config, resolveGatewayUrl } from "./config.js";
 import { localeFor } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
@@ -36,7 +41,12 @@ const LAST_TRANSCRIPT_LINES = 6;
 // X-Internal-Tenant gereicht (ebenfalls nur localhost akzeptiert). Das Rechteprofil laeuft
 // seit Phase S ueber diese Tenant-Achse (resolveProfile(scopedTenant)). Ohne scopedTenant
 // -> Owner/Bootstrap.
-async function api(method, path, body, identity, scopedTenant) {
+// timeoutMs (AL-P13): explizite Frist fuer den EINEN Aufruf, der bewusst lange haelt
+// (await_call_event). Ohne sie bindet ein 22-s-Long-Poll den zweiten, prozessinternen
+// Socket unbegrenzt, falls der Gateway-Handler haengt. Ohne timeoutMs byte-identisch
+// zum Bestand (kein signal -> fetch-Default). EIN Objekt-Argument statt sechs
+// Positionen (F1). AbortSignal.timeout ist ab Node 17.3 verfuegbar (package.json: >=22).
+async function api({ method, path, body, identity, scopedTenant, timeoutMs = null }) {
   const headers = { "Content-Type": "application/json" };
   if (identity) headers["X-Internal-Identity"] = identity;
   if (scopedTenant) headers["X-Internal-Tenant"] = scopedTenant;
@@ -45,9 +55,17 @@ async function api(method, path, body, identity, scopedTenant) {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(json.error || `HTTP ${res.status}`);
+    // AL-P13: der Status reist additiv mit (Message unveraendert) - answer_consult muss
+    // "verworfen" (400) von "nicht mehr offen" (409) unterscheiden, ohne den Fehlertext
+    // zu parsen (Zeichenketten-Vergleich waere ein zweites, brechendes Format).
+    err.httpStatus = res.status;
+    throw err;
+  }
   return json;
 }
 
@@ -194,6 +212,63 @@ const TRANSCRIPT_OUTPUT = {
   objective_achieved: z.union([z.boolean(), z.string()]),
   ...RESULT_CARD_OUTPUT,
 };
+
+// AL-P13: outputSchema von await_call_event. Die Ergebnis-Felder sind NUR bei
+// event="done" befuellt (der Payoff, der das Dranbleiben lohnt) - sonst null bzw. leer.
+const AWAIT_EVENT_OUTPUT = {
+  event: z.string(),
+  event_id: z.string().nullable(),
+  questions: z.array(z.string()),
+  result_summary: z.string().nullable(),
+  objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
+  ...RESULT_CARD_OUTPUT,
+};
+
+// AL-P13: EIN Bauplan der await_call_event-Antwort. Der Payoff kommt aus der BESTEHENDEN
+// Whitelist (pickTranscript/resultCardView) - KEINE zweite Ergebnis-Sicht (G5), das
+// Roh-Transkript ist strukturell nicht erreichbar (Regel 5). finished = der Call-Record
+// bei event="done", sonst null.
+function awaitEventView(callId, event, finished) {
+  const done = finished ? pickTranscript(callId, finished) : null;
+  return {
+    event: event.event,
+    event_id: event.eventId ?? null,
+    questions: Array.isArray(event.questions) ? event.questions : [],
+    result_summary: done?.result_summary ?? null,
+    objective_achieved: done?.objective_achieved ?? null,
+    ...resultCardView(finished?.result),
+  };
+}
+
+// AL-P13: outputSchema von answer_consult. Reine Quittung - KEIN Inhalt zurueck.
+const ANSWER_CONSULT_OUTPUT = {
+  accepted: z.boolean(),
+  merged_facts: z.number(),
+};
+
+// HTTP-Status, die answer_consult in einen normalen (nicht-Fehler) Hinweistext uebersetzt:
+// beide sind erwartbare Zustaende der Schleife, kein Werkzeugfehler (G25, keine nackten
+// Zahlen im Handler).
+const CONSULT_ANSWER_REJECTED_STATUS = 400;
+const CONSULT_ANSWER_CONFLICT_STATUS = 409;
+
+// Ein Zeitablauf ist das NORMALE Ergebnis eines Long-Polls. AbortSignal.timeout wirft je
+// nach Runtime-Pfad TimeoutError oder AbortError - beide sind hier dasselbe Ereignis.
+const ABORT_ERROR_NAMES = new Set(["AbortError", "TimeoutError"]);
+const isAbortError = (err) => ABORT_ERROR_NAMES.has(err?.name);
+
+const NO_CONSULT_EVENT = Object.freeze({
+  event: CONSULT_EVENT.NONE,
+  eventId: null,
+  questions: [],
+});
+
+// Nicht angenommene Antwort: Hinweistext PLUS schema-konformes structuredContent (das
+// Tool deklariert ein outputSchema - ohne strukturierten Teil lehnte das SDK die Antwort ab).
+const notAccepted = (message) => ({
+  content: [{ type: "text", text: message }],
+  structuredContent: { accepted: false, merged_facts: 0 },
+});
 
 // I10 (call-quality Impl-1): additives Meta, WAS vom optionalen place_call-context
 // tatsaechlich beim Gateway ankam - NUR bool/count, NIE der Kontext-Inhalt selbst
@@ -356,6 +431,22 @@ const CALENDAR_ENTRY = z.object({
 });
 const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 
+// Bestands-Beschreibung von place_call, byte-identisch aus dem Tool-Deskriptor
+// herausgeloest (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
+const PLACE_CALL_DESCRIPTION =
+  "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately and shows a live card that updates itself (status, duration, transcript, result). You do NOT need to poll - if no live update arrives, get_call_status remains available as a fallback.";
+
+// AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
+// enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
+// aber eine Anweisung auf ein Werkzeug, das gar nicht registriert ist, waere eine Luege.
+const PLACE_CALL_CONSULT_LOOP =
+  "Right after this call returns, start calling await_call_event with the returned call_id and keep calling it until it returns event=\"done\" - while the phone is still ringing the agent may ask you questions you can answer for free.";
+
+// Zusammensetzung per filter(Boolean) (Muster briefingSystem in precall-briefing.js):
+// Kanal aus -> byte-identisch zum Bestand (test-gepinnt).
+const placeCallDescription = (consultLoop) =>
+  [PLACE_CALL_DESCRIPTION, consultLoop ? PLACE_CALL_CONSULT_LOOP : null].filter(Boolean).join(" ");
+
 // ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
 // an jeden REST-Aufruf gehaengt (X-Internal-Identity); scopedTenant (AM6) ebenso als
 // X-Internal-Tenant (am /mcp-Gateway aufgeloest). allowCalendar steuert, ob das
@@ -366,11 +457,39 @@ const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 // -> resolveCallLanguage) - hier gibt es KEINE zweite Aufloesungsregel. Fehlt sie
 // (stdio-Transport, der keinen Store hat), faellt localeFor() fail-safe auf den
 // Weltdefault zurueck (R7) - derselbe eine Fallback wie ueberall sonst.
+// consultAllowed (AL-P13) defaultet auf FALSE (nicht wie allowCalendar auf true): der
+// stdio-Transport hat kein Client-Modell, das pollt, und ein Default-an wuerde die
+// byte-gepinnte Beschreibungs-Inventur ohne Not verschieben.
 export function registerTools(
   server,
-  { identity = null, scopedTenant = null, allowCalendar = true, uiHost = null, language = null } = {},
+  {
+    identity = null,
+    scopedTenant = null,
+    allowCalendar = true,
+    consultAllowed = false,
+    uiHost = null,
+    language = null,
+  } = {},
 ) {
-  const call = (method, path, body) => api(method, path, body, identity, scopedTenant);
+  const call = (method, path, body) => api({ method, path, body, identity, scopedTenant });
+  // Eigener, benannter Zugang fuer den EINEN lange haltenden Aufruf (kein viertes
+  // Positions-Argument an call(), keine zweite fetch-Implementierung). Ein Zeitablauf
+  // ist das NORMALE Ergebnis eines Long-Polls und wird deshalb GEZIELT zu event="none" -
+  // wrapHandler machte daraus sonst ein isError und braeche die Schleife ab.
+  const pollConsult = async (path) => {
+    try {
+      return await api({
+        method: "GET",
+        path,
+        identity,
+        scopedTenant,
+        timeoutMs: CONSULT_POLL_ABORT_MS,
+      });
+    } catch (err) {
+      if (isAbortError(err)) return NO_CONSULT_EVENT;
+      throw err;
+    }
+  };
   const loc = localeFor(language); // Namensgleich zu claude.js promptInputs
   const formatDate = makeDateFormatter(loc.dateLocale);
   const uiRenderer = uiRendererFor(uiHost); // null = Stufe-0-only (fail-closed)
@@ -435,8 +554,7 @@ export function registerTools(
   uiTool(
     "place_call",
     {
-      description:
-        "Starts a real phone call by the AI agent to a phone number, pursuing the given objective. Which destinations are allowed is decided by the server through its safety gates (permission profile/allowlist, denylist, country, limits) - just call it; disallowed destinations are refused by the server with a clear message. Returns a call_id immediately and shows a live card that updates itself (status, duration, transcript, result). You do NOT need to poll - if no live update arrives, get_call_status remains available as a fallback.",
+      description: placeCallDescription(consultAllowed),
       inputSchema: {
         to: z
           .string()
@@ -556,14 +674,105 @@ export function registerTools(
         objective_achieved: null,
         context_received: normalizeContextReceived(r.context_received), // I10
       };
+      // AL-P13: der Berechtigungs-Hinweis haengt EINMAL JE ANRUF am place_call-Ergebnis,
+      // NICHT an jedem Poll - ein einmaliger Einrichtungs-Schritt ist zumutbar, ein Klick
+      // pro Rueckfrage nicht. Kanal aus -> Textblock byte-identisch zum Bestand.
+      const started = JSON.stringify({ call_id: data.call_id, status: data.status }, null, 2);
       return {
         content: [
-          { type: "text", text: JSON.stringify({ call_id: data.call_id, status: data.status }, null, 2) },
+          {
+            type: "text",
+            text: consultAllowed ? `${started}\n${loc.mcp.consultPermissionHint}` : started,
+          },
         ],
         structuredContent: data,
       };
     },
   );
+
+  // AL-P13: die zwei Werkzeuge des Consult-Kanals - NUR bei freigegebener Faehigkeit
+  // (Schnittmenge Master-Schalter x Kontext-Kanal x Tenant, consult/gate.js). Nicht
+  // freigegeben -> gar nicht erst registriert (fail-closed, Bestand byte-identisch).
+  if (consultAllowed) {
+    uiTool(
+      "await_call_event",
+      {
+        description:
+          "Waits briefly (up to ~20 seconds) for the next event of a running call and returns " +
+          "either a question from the agent, the final result, or nothing. Call this REPEATEDLY " +
+          "right after place_call and keep going until it returns event=\"done\" - that final " +
+          "answer carries the complete result (summary and whether the objective was achieved), " +
+          "so there is no need to call get_transcript separately. event=\"none\" simply means " +
+          "nothing happened yet: call it again. This tool NEVER returns audio.",
+        inputSchema: {
+          call_id: z.string().describe("The call_id from place_call"),
+          after_event_id: z
+            .string()
+            .optional()
+            .describe(
+              "The event_id you last handled. Pass it so you do not receive the same question twice.",
+            ),
+        },
+        outputSchema: AWAIT_EVENT_OUTPUT,
+      },
+      async ({ call_id, after_event_id }) => {
+        const query = after_event_id ? `?after=${encodeURIComponent(after_event_id)}` : "";
+        const event = await pollConsult(`/api/calls/${call_id}/consult${query}`);
+        const finished =
+          event.event === CONSULT_EVENT.DONE ? await call("GET", `/api/calls/${call_id}`) : null;
+        const data = awaitEventView(call_id, event, finished);
+        return {
+          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+          structuredContent: data,
+        };
+      },
+    );
+
+    uiTool(
+      "answer_consult",
+      {
+        description:
+          "Answers a question the phone agent asked during a running call. Give SHORT factual " +
+          "answers - one entry per question, each at most " +
+          KEY_FACTS_LIMITS.maxLen +
+          " characters; longer answers are REJECTED and the question stays open. Do NOT invent " +
+          "facts: if you do not know, ask the user FIRST. Answers reach the agent as background " +
+          "information only.",
+        inputSchema: {
+          call_id: z.string().describe("The call_id from place_call"),
+          event_id: z.string().describe("The event_id from await_call_event"),
+          answers: z
+            .array(z.string())
+            .describe("One short answer per open question, in the order the questions were given."),
+        },
+        outputSchema: ANSWER_CONSULT_OUTPUT,
+      },
+      async ({ call_id, event_id, answers }) => {
+        try {
+          const r = await call("POST", `/api/calls/${call_id}/consult/answer`, {
+            event_id,
+            answers,
+          });
+          const mergedFacts = typeof r?.merged_facts === "number" ? r.merged_facts : 0;
+          return {
+            content: [{ type: "text", text: loc.mcp.consultAnswerAccepted(mergedFacts) }],
+            structuredContent: { accepted: true, merged_facts: mergedFacts },
+          };
+        } catch (err) {
+          // Beide Faelle sind erwartbare Zustaende der Schleife, KEIN Werkzeugfehler:
+          // das Modell soll weiterpollen statt abzubrechen. structuredContent bleibt
+          // Pflicht (das Tool deklariert ein outputSchema) - accepted=false ist die
+          // ehrliche Quittung. Alles andere bleibt der gemeinsamen Fehlerhuelle
+          // (wrapHandler) ueberlassen.
+          if (err?.httpStatus === CONSULT_ANSWER_REJECTED_STATUS)
+            return notAccepted(loc.mcp.consultAnswerRejected);
+          if (err?.httpStatus === CONSULT_ANSWER_CONFLICT_STATUS)
+            return notAccepted(loc.mcp.consultNoLongerOpen);
+          throw err;
+        }
+      },
+    );
+  }
 
   // Stufe-0-Sicht (Text + structuredContent) eines Calls nach dem get_call_status-
   // Datenkontrakt. Whitelist (pickCallStatus) sitzt VOR Text + structuredContent.

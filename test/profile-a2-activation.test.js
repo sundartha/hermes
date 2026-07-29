@@ -71,7 +71,7 @@ test("profileAuditDetail mappt ok/skip/none auf das Audit-Fragment", () => {
 });
 
 // --- Direkter Pfad: voller Tier-Snapshot inkl. null, auf die tenantId ---
-test("activatePaidTenant provisioniert das Tier-Profil auf die tenantId (alle 6 Felder)", async () => {
+test("activatePaidTenant provisioniert das Tier-Profil auf die tenantId (alle 7 Felder)", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});
   setTenantSubscription(s, "t_a", { planSlug: "starter" });
@@ -85,12 +85,13 @@ test("activatePaidTenant provisioniert das Tier-Profil auf die tenantId (alle 6 
 
   assert.deepEqual(s.profiles["t_a"], planProfileFor("starter")); // inkl. maxCallsPerHour:null
   assert.equal(s.profiles["t_a"].maxCallsPerHour, null);
-  assert.deepEqual(r.profile, { provisioned: true, reason: null, keys: 6 });
+  // AL-P13: PROFILE_FIELDS traegt seit dem Consult-Kanal 7 Felder (allowConsult).
+  assert.deepEqual(r.profile, { provisioned: true, reason: null, keys: 7 });
   assert.deepEqual(acc.calls.setStatus, [["t_a", "active"]]);
   assert.equal(kycReached(s, "t_a", KYC_OUTBOUND_MIN), true);
 });
 
-// --- Toll-Fraud-Downgrade: Merge==Replace (voller 6-Felder-Snapshot ueberschreibt) ---
+// --- Toll-Fraud-Downgrade: Merge==Replace (voller 7-Felder-Snapshot ueberschreibt) ---
 test("vorbestehendes unrestricted=true + allowedNumbers -> nach Aktivierung false/[]", async () => {
   const s = makeDefaultState();
   registerTenant(s, "t_a", {});

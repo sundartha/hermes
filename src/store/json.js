@@ -196,6 +196,8 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   callerTurns: 0,
   // AL-P11: Ergebnis-Karte (json<->pg-Parity, rowToCall liefert null).
   result: null,
+  // AL-P13: Consult-Kette (json<->pg-Parity, rowToCall liefert null).
+  consults: null,
 });
 
 function migrateCallFields(calls) {
@@ -452,6 +454,30 @@ export function countCallerTurn(callId) {
   const { call, changed } = ops.countCallerTurn(load(), callId);
   if (changed) save();
   return call ? call.callerTurns : 0;
+}
+
+// AL-P13: Consult-Kette - Wrapper-Paritaet zu pg.js. emit/answer/expire saven (das Feld
+// liegt persistent auf Platte); pendingConsult ist ein reiner Leser (kein save).
+export function emitConsult(callId, questions) {
+  const { call, changed } = ops.emitConsult(load(), callId, questions);
+  if (changed) save();
+  return call;
+}
+
+export function answerConsult(callId, input) {
+  const result = ops.answerConsult(load(), callId, input);
+  if (result.changed) save();
+  return result;
+}
+
+export function expireOpenConsults(callId) {
+  const { call, changed } = ops.expireOpenConsults(load(), callId);
+  if (changed) save();
+  return call;
+}
+
+export function pendingConsult(callId, afterEventId) {
+  return ops.pendingConsult(load(), callId, afterEventId);
 }
 
 // P3.2: ephemerer No-Speech-Streak - KEIN save() (das Feld ist wie reserveCents nicht

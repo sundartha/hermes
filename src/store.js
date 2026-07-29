@@ -102,6 +102,12 @@ export const {
   // bzw. agentTurn wuerfen zur Laufzeit einen TypeError.
   recordTelnyxConversationId,
   countCallerTurn,
+  // AL-P13: Consult-Kette. OHNE diese Re-Exports waeren sie auf der Fassade undefined
+  // -> die Consult-Routen wuerfen zur Laufzeit einen TypeError (Muster countCallerTurn).
+  emitConsult,
+  answerConsult,
+  expireOpenConsults,
+  pendingConsult,
   // P3.2: No-Speech-Staffel-Zaehler (ephemer). OHNE diese Re-Exports waeren sie auf der
   // Fassade undefined -> /voice/turn wuerfe zur Laufzeit einen TypeError.
   countNoSpeechTurn,

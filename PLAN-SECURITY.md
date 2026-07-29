@@ -1030,3 +1030,58 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > Dritter) und die uebrigen Kartenfelder gehen NICHT in den Prompt.
 >
 > Kein MCP-Transportweg: `facts` bleibt ausserhalb der `get_transcript`-Whitelist (AL-P11 E2).
+
+## AL-P13 — Consult-Kanal am Call (2026-07-29)
+
+> Zwei neue Endpunkte, beide vollstaendig **innerhalb** von `/api/*` und damit hinter der
+> bestehenden Auth-Kante (Regel 3, KEINE neue Auth-Ausnahme, kein eigener Pfad-Praefix):
+> `GET /api/calls/:id/consult` (kurzer, client-gezogener Long-Poll) und
+> `POST /api/calls/:id/consult/answer`. Lesepfad Read-404, Schreibpfad Write-403 bei
+> `TENANT_REJECT` - dieselbe Praezedenz wie `GET /api/calls/:id` bzw. `POST /api/calendar`.
+> Ein spaeterer Gate-Wechsel (PLAN-AUTH-GATE) tauscht die Middleware vor `/api/*` aus und
+> bricht diese Routen strukturell nicht. Keiner der beiden Endpunkte loest Calls, SMS oder
+> Geld aus - die Outbound-Gate-Kette, der Budget-Guard, der Offenlegungssatz und die
+> Provider-Signaturpruefung sind in dieser Phase nicht angefasst.
+>
+> **Faehigkeits-Gate:** `consultAllowedFor` (`src/consult/gate.js`) ist die EINE
+> Schnittmenge aus Master-Schalter `CONSULT_ENABLED` (Default AUS), Kontext-Kanal
+> `ASSISTANT_CONTEXT_ENABLED` und dem Per-Tenant-Recht `allowConsult` (Default AUS in
+> `DEFAULT_PROFILE` **und** im Plan-Profil - der Kanal bleibt bis zur Abnahme eine
+> Owner-Faehigkeit). Fehlt eine Bedingung: kein Consult emittiert, Lesepfad 404 (die
+> Existenz des Kanals ist selbst eine Information), Schreibpfad 403, MCP-Werkzeuge gar
+> nicht erst registriert.
+>
+> **Fremdtext hat genau EINE Tuer:** die Antwort des Client-Modells laeuft durch dieselbe
+> `validateAssistantContext`-Kante wie das Briefing und landet ausschliesslich in
+> `call.context.key_facts` -> HINTERGRUND-Block. Eine zweite, eigene Laengenpruefung waere
+> eine zweite, schwaechere Tuer in den Systemprompt. Verstoss -> 400, Antwort verworfen,
+> Rueckfrage bleibt offen. Ein Injektions-Fixture pinnt, dass `disclosureSentence`,
+> `call.to`, `call.goal` und `call.mandate` unveraendert bleiben.
+>
+> **Kein Audio, kein Transkript ueber den Kanal** (Regel 5): der Lesepfad liefert nur
+> Ereignis, Kennung und Fragen; das MCP-Werkzeug `await_call_event` komponiert den
+> Abschluss ueber die BESTEHENDE `pickTranscript`-Whitelist (keine zweite Ergebnis-Sicht).
+>
+> **Ressourcen-Riegel ohne Env-Knopf:** `MAX_OPEN_POLLS_PER_CALL=2` /
+> `MAX_OPEN_POLLS_PER_TENANT=4` als benannte Konstanten in `src/consult/delivery.js`;
+> Freigabe im `finally`, NICHT auf ein Socket-Ereignis hin (in `routes/mcp.js` schliesst
+> `res.on("close")` Transport und Server, waehrend ein Handler weiterlaufen kann).
+> `releaseOpenPolls()` laeuft im Shutdown VOR `httpServer.close()`, damit ein haltender
+> Poll den Drain nicht in den 8-s-Watchdog laufen laesst - sonst fiele der finale
+> Store-Flush aus (Datenverlust bei jedem Deploy).
+>
+> **Datenschutz:** `call.consults` haengt am Call-Record und faellt damit automatisch unter
+> Erase/Export/Retention (per Test nachgewiesen, inkl. Cross-Tenant-Gegenprobe). Der
+> Antworttext lebt NUR in `context.key_facts` - der Consult-Datensatz traegt lediglich
+> einen Zaehler (`answeredFacts`), also kein zweiter Loeschpfad und keine zweite
+> Leak-Flaeche. Die Fragen stammen in dieser Phase ausschliesslich aus
+> `context.open_questions` (aus dem Auftrag des Nutzers), NIE aus fremder Rede - **diese
+> Grenze ist in AL-P14 neu zu bewerten**, sobald Fragen aus dem laufenden Gespraech
+> entstehen. Die Audit-Ereignisse `consult_emitted`/`consult_answered` tragen nur Zaehler
+> und Kennungen, nie Freitext (Regel 4).
+>
+> **Persistenz-Nebenwirkung (bewusst, dokumentiert):** `call.context` ist ab dieser Phase
+> NICHT mehr nach dem Create unveraenderlich und steht deshalb im
+> `ON CONFLICT DO UPDATE SET` von `flushCalls` (`src/store/pg.js`). Ohne diesen Eintrag
+> fiele jede beantwortete Rueckfrage im pg-Backend beim naechsten Flush lautlos zurueck -
+> ein stiller Datenverlust, der im json-Backend unsichtbar geblieben waere.

@@ -40,6 +40,7 @@ import {
   OWNER_ID,
   TENANT_REJECT,
 } from "./request-tenant.js";
+import { makeConsultDelivery } from "./consult/delivery.js";
 import { buildApp } from "./app.js";
 import { bootServer } from "./boot.js";
 
@@ -185,6 +186,12 @@ function onTtsQuotaWarning(warning) {
 // Callback oben - injiziert statt im Modul konstruiert (DIP/P15).
 const directiveSynth = makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning: onTtsQuotaWarning });
 
+// AL-P13: Consult-Zustellung (Stufe 0: kurzer, client-gezogener Long-Poll). EINMAL beim
+// Boot verdrahtet (Naht wie ttsStore/conversationWatchdog, INV-7): Poll-Zaehler und
+// Drain-Flag leben im Factory-Scope = EINE Obergrenze pro Prozess. Geht an buildApp
+// (Consult-Routen) UND an bootServer (Shutdown-Drain loest offene Polls auf).
+const consultDelivery = makeConsultDelivery({ store });
+
 // Voice-Render-Helfer (Server-Slim P3): EINE Instanz (INV-7), config wird geschlossen.
 // Geht als Dep an makeVoiceRoutes (P11); die Render-Funktionen werden dort destrukturiert.
 const voiceRender = makeVoiceRender({ config });
@@ -213,6 +220,7 @@ const deps = {
   voiceRender,
   costTruing,
   messaging,
+  consultDelivery,
 };
 const { app } = await buildApp(deps);
 await bootServer({ app, ...deps });

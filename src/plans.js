@@ -86,6 +86,8 @@ export function findPlan(slug) {
 //   allowedCountryCodes=[]   - kein per-Profil-Land-Freibrief; globales Land-Gate bleibt
 //                              Schnittmenge (so restriktiv wie heute)
 //   allowCalendar/Booking=false - Funktion bewusst verworfen
+//   allowConsult=false       - AL-P13: der Consult-Kanal bleibt eine Owner-Faehigkeit,
+//                              bis die Abnahme durch ist (kein Plan-Freibrief)
 //   maxCallsPerHour=null     - keine Profil-Senkung; faellt auf den Pro-Tenant-Default
 //                              config.safety.maxCallsPerHour (telephony/outbound-gates.js
 //                              tenantHourReached). Minuten-Quota (GAP B) + Budget sind die
@@ -103,6 +105,9 @@ const PAID_PLAN_PROFILE = Object.freeze({
   allowedCountryCodes: Object.freeze([]),
   unrestricted: false,
   allowCalendar: false,
+  // AL-P13: Consult-Kanal ist eine Owner-Faehigkeit bis die Abnahme (10 echte
+  // place_call aus claude.ai + 5 aus ChatGPT, O9) durch ist - kein Plan-Freibrief.
+  allowConsult: false,
   allowBooking: false,
   maxCallsPerHour: null,
 });

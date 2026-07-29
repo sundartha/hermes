@@ -21,7 +21,9 @@
 // injiziert (EINE Quelle, INV-7).
 import { Router } from "express";
 import { VOICE_ENGINE } from "../config.js";
-import { normNum, PROVIDER } from "../store/defaults.js";
+import { normNum, PROVIDER, CONSULT_ANSWER } from "../store/defaults.js";
+import { validateAssistantContext } from "./_validation.js";
+import { consultAllowedFor } from "../consult/gate.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
@@ -45,7 +47,10 @@ function contextReceivedMeta(context, config) {
 
 // deps: siehe Modul-Doc. arm = { armMaxDurationTimer, armReserveReleaseTimer } aus der EINEN
 // lifecycle-Instanz (Cap-/Reserve-Backstop, INV-7); finishCall = callFinish.finishCall (bare,
-// EINE Referenz wie in call-lifecycle.js); tenant = { requestTenant, tenantOwnsCall }.
+// EINE Referenz wie in call-lifecycle.js); tenant = { requestTenant, requireTenant,
+// tenantOwnsCall } (die EINEN Wurzel-Resolver, kein zweiter); consultDelivery = die EINE
+// Consult-Zustell-Instanz (AL-P13, in server.js konstruiert - Poll-Zaehler und Drain-Flag
+// leben in ihrem Closure-Scope, eine zweite Instanz haette keine Obergrenze).
 export function makeCallRoutes({
   store,
   config,
@@ -58,7 +63,8 @@ export function makeCallRoutes({
   billThunk,
   finishCall,
   arm: { armMaxDurationTimer, armReserveReleaseTimer },
-  tenant: { requestTenant, tenantOwnsCall },
+  tenant: { requestTenant, requireTenant, tenantOwnsCall },
+  consultDelivery,
   internalIdentity,
   OWNER_ID,
 }) {
@@ -75,6 +81,25 @@ export function makeCallRoutes({
   function denialDimensions(grund, tenantId) {
     const { country, defaultLanguage } = store.tenantGeo(tenantId);
     return { grund, country, language: defaultLanguage };
+  }
+
+  // L5/I5: EINE Sichtbarkeits-Regel fuer alle Call-Routen dieser Datei (G5) - fremder
+  // Tenant -> der Aufrufer antwortet 404 (kein Existenz-Leck, NICHT 403). Hinter dem
+  // Flag: aus -> ungefiltert wie im Bestand (byte-identisch, auch fuer Calls ohne
+  // tenantId). !call short-circuitet vor dem tenantOwnsCall-Zugriff.
+  function callVisibleTo(call, tenantId) {
+    return Boolean(call) && (!config.tenancy.multiTenant || tenantOwnsCall(call, tenantId));
+  }
+
+  // AL-P13: Consult #0. Keine Fragen ODER Faehigkeit nicht freigegeben -> No-op (kein
+  // Datensatz, call.consults bleibt null). Rein additiv: der Anruf laeuft davon voellig
+  // unberuehrt. Das Audit traegt NUR Zaehler, nie den Fragetext (Regel 4).
+  function emitOpeningConsult({ req, call, context, tenantId }) {
+    if (!consultAllowedFor(store.resolveProfile(tenantId))) return;
+    const questions = Array.isArray(context?.open_questions) ? context.open_questions : [];
+    if (!questions.length) return;
+    store.emitConsult(call.id, questions);
+    audit("consult_emitted", req, `call=${call.id} fragen=${questions.length}`);
   }
 
   // Outbound-Call starten (Vertrag laut Brief: objective/briefing/constraints/...)
@@ -171,6 +196,13 @@ export function makeCallRoutes({
       `to=${ctx.to} call=${call.id} provider=${ctx.outboundProvider} requestedBy=${ctx.requestedBy}`,
     );
 
+    // AL-P13 (Sprosse 3 der Fakten-Leiter): die offenen Fragen des Briefings werden
+    // beantwortet, WAEHREND das Telefon klingelt - 0 ms Gespraechslatenz. Bewusst KEIN
+    // Gate in der outboundGates-Kette (Praezedenz diagnostic/Briefing): es lehnt nie ab
+    // und haette die reihenfolge-gepinnte Safety-Kette nur verbreitert. Position NACH
+    // jedem Gate: es entsteht kein Consult fuer einen Call, den ein Gate ohnehin ablehnt.
+    emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
+
     try {
       // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
       // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
@@ -260,14 +292,69 @@ export function makeCallRoutes({
     }
   });
 
+  // AL-P13: kurzer Long-Poll auf das naechste Consult-Ereignis. HINTER der bestehenden
+  // /api/*-Basic-Auth (Regel 3, keine neue Auth-Ausnahme), plus callVisibleTo wie
+  // GET /api/calls/:id: fremder Call -> 404 (kein Existenz-Leck, NICHT 403). Fehlende
+  // Faehigkeit -> ebenfalls 404: die Existenz des Kanals ist selbst eine Information.
+  // Liefert NIE Transkript/Audio - nur Ereignis, Kennung und Fragen (Regel 5).
+  //
+  // KEIN req.on("close")-Abbruch: ein abgebrochener Host-Request darf den Slot NICHT
+  // ueber das Socket-Ereignis freigeben (genau dort schliesst routes/mcp.js Transport
+  // und Server, waehrend der Handler weiterlaeuft). Der Slot faellt im finally von
+  // waitForEvent, spaetestens nach der Haltezeit.
+  router.get("/api/calls/:id/consult", async (req, res) => {
+    const call = store.getCall(req.params.id);
+    const tenantId = requestTenant(req);
+    if (!callVisibleTo(call, tenantId)) return res.status(404).json({ error: "not found" });
+    if (!consultAllowedFor(store.resolveProfile(tenantId)))
+      return res.status(404).json({ error: "not found" });
+    const event = await consultDelivery.waitForEvent({
+      callId: call.id,
+      tenantId: call.tenantId,
+      afterEventId: typeof req.query.after === "string" ? req.query.after : null,
+      signal: null,
+    });
+    res.json(event);
+  });
+
+  // AL-P13: Antwort einspeisen. Reihenfolge bindend (Safety vor Eingabefehler, Muster
+  // POST /api/calendar): Tenant-Aufloesung -> Ownership -> Faehigkeit -> Validierung.
+  // Die Antwort ist FREMDBESTIMMTER Text ueber einen SCHREIBENDEN Endpunkt und laeuft
+  // deshalb durch DIESELBE validateAssistantContext-Kante wie das Briefing - eine
+  // zweite, eigene Laengenpruefung waere eine zweite, schwaechere Tuer in den
+  // Systemprompt. Verstoss -> 400, Antwort verworfen, Consult bleibt unbeantwortet.
+  router.post("/api/calls/:id/consult/answer", (req, res) => {
+    const tenantId = requireTenant(req, res); // REJECT -> 403 (Write-403, I-Kette)
+    if (!tenantId) return;
+    const call = store.getCall(req.params.id);
+    if (!callVisibleTo(call, tenantId)) return res.status(404).json({ error: "not found" });
+    if (!consultAllowedFor(store.resolveProfile(tenantId)))
+      return res
+        .status(403)
+        .json({ error: "Consult-Kanal ist fuer diesen Tenant nicht freigegeben." });
+    const { event_id: eventId, answers } = req.body || {};
+    if (typeof eventId !== "string" || !eventId)
+      return res.status(400).json({ error: "event_id ist Pflicht" });
+    const validated = validateAssistantContext({ key_facts: answers });
+    if (validated.error || !validated.value)
+      return res.status(400).json({ error: validated.error || "answers ist Pflicht" });
+    const { outcome, mergedFacts } = store.answerConsult(call.id, {
+      eventId,
+      facts: validated.value.key_facts,
+    });
+    audit(
+      "consult_answered",
+      req,
+      `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${mergedFacts}`,
+    );
+    if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
+    res.json({ accepted: true, merged_facts: mergedFacts });
+  });
+
   // Laufenden Anruf sauber abbrechen
   router.post("/api/calls/:id/cancel", async (req, res) => {
     const call = store.getCall(req.params.id);
-    // L5: fremder Tenant -> 404 (kein Existenz-Leck, NICHT 403). Hinter dem Flag:
-    // aus -> ungefiltert wie heute (byte-identisch, auch fuer Calls ohne tenantId).
-    // Nutzt I5's gemeinsamen tenantOwnsCall-Helper (eine Quelle der Ownership-Regel,
-    // wie GET /api/calls/:id); !call short-circuitet vor dem tenantOwnsCall-Zugriff.
-    if (!call || (config.tenancy.multiTenant && !tenantOwnsCall(call, requestTenant(req))))
+    if (!callVisibleTo(call, requestTenant(req)))
       return res.status(404).json({ error: "not found" });
     if (call.status !== "active") return res.json({ status: call.status });
     const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar

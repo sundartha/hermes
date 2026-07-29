@@ -68,7 +68,7 @@ export async function backfillPlanProfiles({ store, apply = false, resolvePlanSl
       continue;
     }
     report.changes.push({ id, hadExisting: !!existing });
-    if (apply) store.setProfile(id, tier); // Merge==Replace: voller 6-Felder-Snapshot
+    if (apply) store.setProfile(id, tier); // Merge==Replace: voller Tier-Snapshot (alle PROFILE_FIELDS)
   }
   return report;
 }

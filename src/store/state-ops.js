@@ -34,6 +34,9 @@ import {
   allowedPrivateNumberCodes,
   NUMBER_STATUS,
   NUMBER_TRANSITIONS,
+  KEY_FACTS_LIMITS,
+  CONSULT_STATUS,
+  CONSULT_ANSWER,
   GLOBAL_CAP_REASON,
   REQUEST_NUMBER_REASON,
   TENANT_STATUS,
@@ -220,6 +223,9 @@ export function createCall(
     // summarizeCall. Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
     // json<->pg-Shape-Drift.
     result: null,
+    // AL-P13: Consult-Kette (A2: Zustand am Call). Initial null - byte-identisch zur
+    // pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
+    consults: null,
     // F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit nach erfolgreichem
     // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
     // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
@@ -381,6 +387,9 @@ export function eraseTenantData(s, tenantId) {
 // publicCall, um streamToken nicht zu leaken). Die UNMASKIERTE Nummer erreicht nur den
 // auth-gegateten, tenant-gescopten Art.-15-Export (/api/tenant-data/export); die
 // /api/self-service/state-Sicht liest sie NICHT hieraus, sondern maskiert separat (P6, H4).
+// AL-P13: die Consult-Kette geht bewusst mit - sie haengt am Call-Record, und der
+// Auskunftsanspruch umfasst die eigenen Rueckfragen (spiegelbildlich zum Erase, das sie
+// mit dem Call entfernt).
 export function exportTenantData(s, tenantId) {
   const { calls, callIds } = tenantCallScope(s, tenantId);
   return {
@@ -426,6 +435,10 @@ export function setCallEndedAt(s, callId, status, endedAtIso) {
     call.status = status;
     call.endedAt = endedAtIso;
     changed = true;
+    // AL-P13: ein Anruf, der vorbei ist, hat keine offenen Rueckfragen mehr. HIER, weil
+    // dies der EINE Punkt ist, an dem ein Call terminal wird (endCallRecord delegiert
+    // hierher) - ein zweiter Ablauf-Sweep waere eine zweite Wahrheit (G5).
+    expireOpenConsults(s, callId);
   }
   return { call, changed };
 }
@@ -577,6 +590,118 @@ export function countCallerTurn(s, callId) {
   if (!call) return { call: null, changed: false };
   call.callerTurns = (Number.isSafeInteger(call.callerTurns) ? call.callerTurns : 0) + 1;
   return { call, changed: true };
+}
+
+// ---- AL-P13: Consult-Kette am Call --------------------------------------------
+// Ein Consult ist EIN Rueckfrage-Ereignis mit 1..n Fragen. Consult #0 traegt die
+// open_questions des Briefings (AL-P9) und wird beim Waehlen emittiert - die
+// Klingelzeit ist die billigste Sprosse der Fakten-Leiter (0 ms Gespraechslatenz).
+// Die Kennung ist "c<seq>": stabil, geordnet, ohne Parsing vergleichbar, und im
+// Export/Log lesbar (anders als eine Zufalls-ID).
+
+const CONSULT_ID_PREFIX = "c";
+const CONSULT_ID_PATTERN = /^c(\d+)$/;
+const consultIdOf = (seq) => `${CONSULT_ID_PREFIX}${seq}`;
+
+// "c3" -> 3. Alles andere (fehlend, fremd, manipuliert) -> null = KEIN Filter: ein
+// Client, der seinen Stand verloren hat, bekommt die Frage erneut statt gar nichts
+// (beantworten kann sie ohnehin nur er selbst).
+function consultSeqOf(eventId) {
+  const match = typeof eventId === "string" ? eventId.match(CONSULT_ID_PATTERN) : null;
+  return match ? Number(match[1]) : null;
+}
+
+// Nicht-leere Textfragen dieser Emission. Alles andere faellt weg (Storage-Deckel,
+// kein Ereignis ohne beantwortbare Frage).
+function cleanQuestions(questions) {
+  return Array.isArray(questions) ? questions.filter((q) => typeof q === "string" && q) : [];
+}
+
+// Emission (Nebeneffekt im Namen, N7). Leere Fragenliste -> No-op: eine Rueckfrage
+// ohne Frage waere ein Ereignis, das der Client nie beantworten kann - call.consults
+// bleibt dann null (Bestandsform, kein Shape-Drift).
+export function emitConsult(s, callId, questions) {
+  const call = getCall(s, callId);
+  const asked = cleanQuestions(questions);
+  if (!call || !asked.length) return { call: call || null, changed: false, consult: null };
+  const chain = (call.consults ||= []);
+  const consult = {
+    id: consultIdOf(chain.length),
+    seq: chain.length,
+    questions: asked,
+    status: CONSULT_STATUS.OPEN,
+    askedAt: new Date().toISOString(),
+    answeredAt: null,
+    // Zahl, KEIN Text: der Antworttext lebt ausschliesslich in call.context.key_facts.
+    // Ein zweiter Speicherort desselben Freitexts waere ein zweiter Loeschpfad fuer
+    // Erase/Export (G5) und eine zweite Chance zu leaken.
+    answeredFacts: 0,
+  };
+  chain.push(consult);
+  return { call, changed: true, consult };
+}
+
+// Reiner Leser: der aelteste OFFENE Consult mit seq > seq(afterEventId), sonst null.
+// Die Kette ist push-geordnet, find() liefert damit den aeltesten Treffer.
+export function pendingConsult(s, callId, afterEventId) {
+  const call = getCall(s, callId);
+  if (!call || !Array.isArray(call.consults)) return null;
+  const afterSeq = consultSeqOf(afterEventId);
+  return (
+    call.consults.find(
+      (c) => c.status === CONSULT_STATUS.OPEN && (afterSeq === null || c.seq > afterSeq),
+    ) ?? null
+  );
+}
+
+// Merge in call.context.key_facts - die EINZIGE Stelle, an der eine Consult-Antwort den
+// Prompt erreicht. Bestand gewinnt (Owner-/Briefing-Fakten stehen vorn), der Ueberhang
+// faellt am GETEILTEN Deckel KEY_FACTS_LIMITS.maxItems; zurueck kommt die tatsaechlich
+// uebernommene Zahl, damit die Route sie melden kann und nichts still verschwindet.
+function mergeConsultFacts(call, facts) {
+  const incoming = Array.isArray(facts) ? facts : [];
+  if (!incoming.length) return 0;
+  const context = (call.context ||= {});
+  const existing = Array.isArray(context.key_facts) ? context.key_facts : [];
+  const room = KEY_FACTS_LIMITS.maxItems - existing.length;
+  if (room <= 0) return 0;
+  const taken = incoming.slice(0, room);
+  context.key_facts = [...existing, ...taken];
+  return taken.length;
+}
+
+// Antwort einspeisen. facts sind BEREITS validiert (validateAssistantContext an der
+// Route) - diese Ebene kennt keine Validierung, sie fuehrt Buch (G30/G34: eine
+// Abstraktionsebene). Reihenfolge der Ablehnungen ist bindend: Call vorbei ->
+// unbekanntes Ereignis -> schon beantwortet.
+export function answerConsult(s, callId, { eventId, facts }) {
+  const call = getCall(s, callId);
+  const reject = (outcome) => ({ call: call || null, changed: false, outcome, mergedFacts: 0 });
+  if (!call || call.status !== "active") return reject(CONSULT_ANSWER.CALL_ENDED);
+  const consult = Array.isArray(call.consults)
+    ? call.consults.find((c) => c.id === eventId)
+    : null;
+  if (!consult) return reject(CONSULT_ANSWER.UNKNOWN_EVENT);
+  if (consult.status !== CONSULT_STATUS.OPEN) return reject(CONSULT_ANSWER.ALREADY_ANSWERED);
+  const mergedFacts = mergeConsultFacts(call, facts);
+  consult.status = CONSULT_STATUS.ANSWERED;
+  consult.answeredAt = new Date().toISOString();
+  consult.answeredFacts = mergedFacts;
+  return { call, changed: true, outcome: CONSULT_ANSWER.ACCEPTED, mergedFacts };
+}
+
+// Offene Consults schliessen (Call terminal / Drain). Idempotent: ein zweiter Aufruf
+// findet nichts Offenes mehr und meldet changed=false.
+export function expireOpenConsults(s, callId) {
+  const call = getCall(s, callId);
+  if (!call || !Array.isArray(call.consults)) return { call: call || null, changed: false };
+  let changed = false;
+  for (const consult of call.consults) {
+    if (consult.status !== CONSULT_STATUS.OPEN) continue;
+    consult.status = CONSULT_STATUS.EXPIRED;
+    changed = true;
+  }
+  return { call, changed };
 }
 
 // P3.2: konsekutiven Leer-Gather-Turn mitzaehlen und den NEUEN Streak liefern (Nebeneffekt

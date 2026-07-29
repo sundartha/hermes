@@ -860,6 +860,13 @@ const rawConfig = {
   precallBriefingEnabled: boolEnv("PRECALL_BRIEFING_ENABLED", process.env.PRECALL_BRIEFING_ENABLED, {
     fallback: false,
   }),
+  // AL-P13: Consult-Kanal am Call (Rueckfrage waehrend der Klingelzeit + MCP-Schleife).
+  // DEFAULT AUS (fail-closed): aus -> kein Consult wird emittiert, /api/calls/:id/consult*
+  // sind nicht erreichbar (404), await_call_event/answer_consult werden nicht registriert,
+  // call.consults bleibt null -> Verhalten byte-identisch. Wirkt NUR als Schnittmenge mit
+  // ASSISTANT_CONTEXT_ENABLED und dem Per-Tenant-Recht allowConsult (src/consult/gate.js) -
+  // dieselbe Kopplung wie precallBriefingEnabled.
+  consultEnabled: boolEnv("CONSULT_ENABLED", process.env.CONSULT_ENABLED, { fallback: false }),
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
   // Routen sind nicht erreichbar (404), die getrennte Seite bleibt hinter Basic-Auth
@@ -1227,7 +1234,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap"],
   telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge", "machineDetection"],
-  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled"],
+  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],

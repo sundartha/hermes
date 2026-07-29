@@ -35,7 +35,7 @@ function capsMarkersOf(text) {
 }
 
 // Alle Beschreibungen als Pfad -> Text: "<tool>", "<tool>.<feld>", "<tool>.<feld>.<unterfeld>".
-function captureDescriptions() {
+function captureDescriptions(ctx = {}) {
   const descriptions = new Map();
   const collect = (name, description, schema) => {
     descriptions.set(name, description || "");
@@ -54,7 +54,7 @@ function captureDescriptions() {
     registerTool: (name, config) => collect(name, config.description, config.inputSchema),
     registerResource() {},
   };
-  registerTools(fakeServer, {});
+  registerTools(fakeServer, ctx);
   return descriptions;
 }
 
@@ -147,4 +147,37 @@ test("O14: die Systemgrenze Modellsprache != Nutzersprache ist im Code dokumenti
 // place_call.language zugleich aus EXPECTED_MARKERS oben (mitziehen).
 test("LANG-15 (SOLL, rot) - das MCP-Schema bietet keinen wirkungslosen place_call.language-Parameter mehr", () => {
   assert.ok(!captureDescriptions().has("place_call.language"));
+});
+
+// AL-P13: der Consult-Kanal registriert zwei WEITERE Werkzeuge - aber NUR bei
+// freigegebener Faehigkeit. Der Bestands-Lauf oben (registerTools(fakeServer, {}))
+// bleibt deshalb unveraendert; hier laeuft ein ZWEITER Capture mit consultAllowed:true.
+// Die Stopwortliste wird NICHT angefasst - dieselbe Liste, derselbe Massstab.
+const EXPECTED_CONSULT_MARKERS = {
+  await_call_event: ["REPEATEDLY", "NEVER"],
+  "await_call_event.call_id": [],
+  "await_call_event.after_event_id": [],
+  answer_consult: ["SHORT", "REJECTED", "NOT", "FIRST"],
+  "answer_consult.call_id": [],
+  "answer_consult.event_id": [],
+  "answer_consult.answers": [],
+};
+
+test("O14/AL-P13: die Consult-Werkzeuge erscheinen nur mit Faehigkeit - und sind englisch", () => {
+  const withConsult = captureDescriptions({ consultAllowed: true });
+  for (const pathName of Object.keys(EXPECTED_CONSULT_MARKERS)) {
+    assert.ok(!captureDescriptions().has(pathName), `${pathName} fehlt ohne Faehigkeit`);
+    assert.ok(withConsult.has(pathName), `${pathName} erscheint mit Faehigkeit`);
+    assert.doesNotMatch(withConsult.get(pathName), GERMAN_STOPWORDS, `${pathName} ist englisch`);
+  }
+});
+
+test("O14/AL-P13: die Emphase der Consult-Werkzeuge ist nach Anzahl UND Reihenfolge gepinnt", () => {
+  const withConsult = captureDescriptions({ consultAllowed: true });
+  for (const [pathName, expected] of Object.entries(EXPECTED_CONSULT_MARKERS))
+    assert.deepEqual(capsMarkersOf(withConsult.get(pathName)), expected, pathName);
+  // Der Schleifen-Hinweis haengt sich an place_call an, OHNE dessen Emphase zu
+  // verschieben (der Bestandstext bleibt vorn und unveraendert).
+  assert.deepEqual(capsMarkersOf(withConsult.get("place_call")), EXPECTED_MARKERS.place_call);
+  assert.ok(withConsult.get("place_call").startsWith(captureDescriptions().get("place_call")));
 });
