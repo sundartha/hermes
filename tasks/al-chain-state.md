@@ -209,7 +209,7 @@ blockiert — nicht aus Zeitmangel, sondern weil ihr Bauplan von AL-P2s Urteil a
 (AL-P7 wird bei „rot" ersatzlos gestrichen, AL-P7b nimmt Weg A oder Weg B).
 Ein Bauen „auf Verdacht" waere geraten statt gewusst.
 
-**Endstand: 10 von 17 Phasen gemergt und gruen, 7 blockiert hinter EINER Owner-Entscheidung.**
+**Endstand: 11 von 17 Phasen gemergt und gruen, 6 blockiert hinter EINER Owner-Entscheidung.**
 
 **Lastbilanz der Kette:** 458 Messpunkte, Mittel Load1 = **4,4**, Maximum **32,4** (die eine
 Ueberlast-Episode), 3 Alarme, **null** verwaiste Testserver ueber die gesamte Laufzeit.
