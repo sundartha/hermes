@@ -57,7 +57,7 @@ export function load() {
     state.reservations ||= {}; // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
     state.subIndex ||= {}; // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
     state.platformTtsUsage ||= emptyPlatformTtsUsage(); // LCT P7: Bestands-store.json ohne die Zeile nachziehen
-    state.calls = migrateCallDiagnosticFields(migrateCallCostFields(state.calls || []));
+    state.calls = migrateCallFields(state.calls || []);
   } catch {
     // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3): erst
     // forensisch nach .corrupt-<ts> sichern. NUR wenn die Sicherung GELINGT, darf der Store mit
@@ -180,30 +180,27 @@ function migrateCalendarToMap(calendar) {
   return map;
 }
 
-// LCT P2: Bestands-store.json traegt die fuenf Kosten-Felder nicht. undefined ist hier
-// gefaehrlich und nicht bloss unsauber: der persistierte Zaehler wird in P3 inkrementiert,
-// und undefined + 1 ist NaN - ein Abbruch-Riegel, der nie greift. "fehlt" heisst deshalb
-// strukturell null bzw. 0, nicht per Konvention (G27). Idempotent: ??= laesst gesetzte
-// Werte - auch die 0 - unangetastet.
-function migrateCallCostFields(calls) {
-  for (const c of calls) {
-    c.estimatedCostCents ??= null;
-    c.actualCostMicroCents ??= null;
-    c.costTruedAt ??= null;
-    c.costTruedSource ??= null;
-    c.costTruingAttempts ??= 0;
-  }
-  return calls;
-}
+// "Feld fehlt in einem Bestands-store.json" ist EINE Frage mit EINER Antwort - bisher
+// stand sie in zwei strukturgleichen Schleifen (LCT P2, AL-P1), AL-P11 haette die dritte
+// gebracht (G5/S2). undefined ist hier gefaehrlich und nicht bloss unsauber: costTruingAttempts
+// und callerTurns werden inkrementiert, und undefined + 1 ist NaN - ein Riegel, der nie
+// greift. "fehlt" heisst deshalb strukturell null bzw. 0 (G27). Idempotent: ??= laesst
+// gesetzte Werte - auch die 0 - unangetastet.
+const CALL_FIELD_DEFAULTS = Object.freeze({
+  estimatedCostCents: null,
+  actualCostMicroCents: null,
+  costTruedAt: null,
+  costTruedSource: null,
+  costTruingAttempts: 0,
+  telnyxConversationId: null,
+  callerTurns: 0,
+  // AL-P11: Ergebnis-Karte (json<->pg-Parity, rowToCall liefert null).
+  result: null,
+});
 
-// AL-P1: Bestands-store.json traegt die beiden neuen Felder nicht. undefined ist hier
-// gefaehrlich und nicht bloss unsauber: callerTurns wird inkrementiert, und undefined + 1
-// waere NaN - die Abbruch-Achse maesse dauerhaft nichts. "fehlt" heisst deshalb strukturell
-// null bzw. 0 (G27). Idempotent: ??= laesst gesetzte Werte - auch die 0 - unangetastet.
-function migrateCallDiagnosticFields(calls) {
-  for (const c of calls) {
-    c.telnyxConversationId ??= null;
-    c.callerTurns ??= 0;
+function migrateCallFields(calls) {
+  for (const call of calls) {
+    for (const [field, fallback] of Object.entries(CALL_FIELD_DEFAULTS)) call[field] ??= fallback;
   }
   return calls;
 }
@@ -845,13 +842,16 @@ export function bootstrapTenant(e164, tenantId, provider) {
 // P2b: zweite, strengere Frist fuer Diagnose-Transkripte. Positionaler Bestandsvertrag
 // bleibt (Tests/Produktion rufen no-arg bzw. mit einer Zahl); die Defaults kommen wie
 // bisher aus config.privacy.
+// AL-P11: dritte, kuerzeste Frist (Zitate).
 export function pruneOldData(
   days = config.privacy.retentionDays,
   diagnosticDays = config.privacy.diagnosticRetentionDays,
+  evidenceDays = config.privacy.evidenceRetentionDays,
 ) {
   const removed = ops.pruneOldData(load(), {
     retentionDays: days,
     diagnosticRetentionDays: diagnosticDays,
+    evidenceRetentionDays: evidenceDays,
   });
   if (ops.hasPrunedSomething(removed)) save();
   return removed;

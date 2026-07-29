@@ -18,6 +18,9 @@ import { findTenant, resolveCallLanguage } from "./state-ops.js";
 // Anzeige-Vertrag, kein Nutzer wartet darauf. Haelt /api/state + die Self-Service-
 // Antwort BYTE-IDENTISCH zum Bestand; Sichtbarkeit entscheidet spaeter eine Phase, die
 // sie braucht, nicht diese Messphase.
+// AL-P11: `result` wird BEWUSST NICHT gestrippt - die Ergebnis-Karte ist genau das,
+// was Dashboard und Art.-15-Export zeigen sollen. Der PII-empfindliche Teil (evidence)
+// haengt an der kurzen Frist, nicht an dieser Sicht.
 export function publicCall({
   streamToken,
   _finished,

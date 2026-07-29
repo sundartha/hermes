@@ -150,6 +150,21 @@ const CALL_STATUS_OUTPUT = {
 // (c.transcript: role/text/t) wird NIE durchgereicht - es wird serverseitig nach der
 // Summary gepurged (P8a) und faellt hier per Whitelist (nicht Blacklist) ohnehin raus.
 // EIN Filter, VOR jeder Sicht (Pre-Mortem #1).
+// AL-P11: die handlungsrelevanten Felder der Ergebnis-Karte. BEWUSST OHNE `facts`
+// (reine Eingabe des serverseitigen Gedaechtnisses, AL-P12 - kein MCP-Konsument) und
+// OHNE `evidence` (woertliche Aeusserungen eines Dritten, der nie eingewilligt hat -
+// ein zweiter Transportweg dafuer waere die Umkehrung der Minimierung aus P2b).
+// EINE Quelle fuer Sicht + Schema (G5).
+function resultCardView(result) {
+  return {
+    outcome: result?.outcome ?? null,
+    commitments: result?.commitments ?? [],
+    counterparty_commitments: result?.counterpartyCommitments ?? [],
+    open_points: result?.openPoints ?? [],
+    next_step: result?.nextStep ?? null,
+  };
+}
+
 function pickTranscript(callId, c) {
   return {
     call_id: callId,
@@ -157,8 +172,19 @@ function pickTranscript(callId, c) {
       c.summary ||
       "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)",
     objective_achieved: c.objectiveAchieved ?? "unclear",
+    ...resultCardView(c.result),
   };
 }
+
+// AL-P11: die fuenf Karten-Felder als eigenes Schema-Fragment - von TRANSCRIPT_OUTPUT
+// gespreadet (G5), damit Sicht (resultCardView) und Schema nie auseinanderlaufen.
+const RESULT_CARD_OUTPUT = {
+  outcome: z.string().nullable(),
+  commitments: z.array(z.string()),
+  counterparty_commitments: z.array(z.string()),
+  open_points: z.array(z.string()),
+  next_step: z.string().nullable(),
+};
 
 // outputSchema fuer get_transcript: validiert GENAU die Whitelist. objective_achieved
 // ist true|false|"unclear" (Bool oder String), daher union.
@@ -166,6 +192,7 @@ const TRANSCRIPT_OUTPUT = {
   call_id: z.string(),
   result_summary: z.string(),
   objective_achieved: z.union([z.boolean(), z.string()]),
+  ...RESULT_CARD_OUTPUT,
 };
 
 // I10 (call-quality Impl-1): additives Meta, WAS vom optionalen place_call-context
@@ -609,7 +636,11 @@ export function registerTools(
           {
             type: "text",
             text: JSON.stringify(
-              { result_summary: data.result_summary, objective_achieved: data.objective_achieved },
+              {
+                result_summary: data.result_summary,
+                objective_achieved: data.objective_achieved,
+                ...resultCardView(c.result),
+              },
               null,
               2,
             ),

@@ -125,6 +125,8 @@ function extractStoreSnapshot(store, tenantId, callId) {
   return {
     summary: call?.summary ?? null,
     objectiveAchieved: call?.objectiveAchieved ?? null,
+    // AL-P11: die strukturierte Ergebnis-Karte fuer den result_slots_present-Check.
+    result: call?.result ?? null,
     actionItems: (store.actionItems || []).filter((a) => a.callId === callId),
     calendarNewEvents: store.calendar?.[tenantId] || [],
   };
@@ -296,6 +298,7 @@ export async function runScenarioRepeat({
         objective_achieved: storeSnapshot.objectiveAchieved,
         action_items: storeSnapshot.actionItems,
         calendar_new_events: storeSnapshot.calendarNewEvents,
+        result: storeSnapshot.result,
       },
       checks,
       judge,

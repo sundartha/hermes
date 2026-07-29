@@ -308,7 +308,8 @@ test("P2b-30: pruneOldData komponiert beide Durchgaenge (diagnosticTranscripts=1
       }),
     ],
   });
-  const removed = pruneOldData(s, { retentionDays: 30, diagnosticRetentionDays: 7 });
+  // AL-P11: evidenceRetentionDays explizit (kein Default in state-ops.pruneOldData).
+  const removed = pruneOldData(s, { retentionDays: 30, diagnosticRetentionDays: 7, evidenceRetentionDays: 0 });
   assert.equal(removed.diagnosticTranscripts, 1);
   assert.ok(s.calls.some((c) => c.id === "call_diag_old"), "Call-Record bleibt (nur die lange Frist entfernt ihn)");
 });
@@ -325,7 +326,8 @@ test("P2b-31: retentionDays=0 schaltet die Diagnose-Frist NICHT mit ab", () => {
       }),
     ],
   });
-  const removed = pruneOldData(s, { retentionDays: 0, diagnosticRetentionDays: 7 });
+  // AL-P11: evidenceRetentionDays explizit (kein Default in state-ops.pruneOldData).
+  const removed = pruneOldData(s, { retentionDays: 0, diagnosticRetentionDays: 7, evidenceRetentionDays: 0 });
   assert.equal(removed.diagnosticTranscripts, 1);
 });
 

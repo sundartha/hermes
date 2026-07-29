@@ -61,7 +61,13 @@ before(async () => {
 
 test("pruneOldData loescht nur Altes und Beendetes", () => {
   const removed = store.pruneOldData(RETENTION_DAYS);
-  assert.deepEqual(removed, { calls: 1, notifications: 1, actionItems: 1, diagnosticTranscripts: 0 });
+  assert.deepEqual(removed, {
+    calls: 1,
+    notifications: 1,
+    actionItems: 1,
+    diagnosticTranscripts: 0,
+    resultEvidence: 0,
+  });
 
   const s = store.load();
   const callIds = s.calls.map((c) => c.id);
@@ -92,6 +98,7 @@ test("RETENTION_DAYS=0 schaltet die Retention ab", () => {
     notifications: 0,
     actionItems: 0,
     diagnosticTranscripts: 0,
+    resultEvidence: 0,
   });
   assert.equal(store.load().calls.length, countsBefore);
 });

@@ -980,3 +980,27 @@ den Hermes-Kontext betreffen, nicht den ganzen Provider-Account.
 **Akzeptanz:** Inventar oben stimmt mit der gesetzten Render-Env ueberein; fuer jedes Secret ist
 die Rotations-Besonderheit verstanden; Twilio-Subaccount + Telnyx-Scoped-Key sind mit Spend-Limit
 aktiv und Master-Credentials nirgends in der Hermes-Env.
+
+## AL-P11 — Ergebnis-Karte statt Prosa (2026-07-29)
+
+> `summarizeCall` persistiert zusaetzlich zur Prosa-Summary ein neues nullable Call-Feld
+> `call.result` (outcome/commitments/counterparty_commitments/open_points/next_step/facts,
+> normalisiert und laengen-/mengengekappt in `src/call-result.js`). Optional darin: `evidence`
+> (hoechstens 2 woertliche Zitate Dritter), gesteuert von EINER neuen Env-Variable
+> `EVIDENCE_RETENTION_DAYS` (Default 0 = aus), die zugleich Schalter UND Frist ist - Muster
+> `DIAGNOSTIC_RETENTION_DAYS` (P2B-DIAG oben). BEWUSST NICHT `DIAGNOSTIC_RETENTION_DAYS`
+> wiederverwendet: zwei Sachverhalte auf einem Label liessen eine zu Debug-Zwecken hochgedrehte
+> Diagnose-Frist still auch die Aufbewahrung woertlicher Drittzitate verlaengern. `evidence`
+> faellt ueber einen DRITTEN, eigenen Retention-Durchgang (`purgeExpiredResultEvidence`, im
+> selben Sweep wie `purgeExpiredDiagnosticTranscripts`), NICHT ueber `RETENTION_DAYS`.
+>
+> **MCP-Whitelist (E2):** `get_transcript` gibt nur die fuenf handlungsrelevanten Felder nach
+> aussen (`outcome`, `commitments`, `counterparty_commitments`, `open_points`, `next_step`).
+> `evidence` (woertliche Aeusserungen eines Dritten, der nie eingewilligt hat) und `facts`
+> (reine Eingabe fuer das kuenftige serverseitige Beziehungsgedaechtnis, AL-P12) haben KEINEN
+> MCP-Konsumenten - ein zweiter Transportweg dafuer waere die Umkehrung der
+> Datenminimierungs-Entscheidung aus P2B-DIAG.
+>
+> **Deploy-Kopplung (Reihenfolge, kein Code-Gate):** In Produktion steht
+> `EVIDENCE_RETENTION_DAYS=0`, bis die Datenschutzerklaerung (`apps/web`) woertliche Zitate
+> Dritter und ihre Frist nennt.

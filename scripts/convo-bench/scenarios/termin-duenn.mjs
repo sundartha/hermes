@@ -24,6 +24,8 @@ export default {
   // das aufgreifen (Muster mustNotPromiseSubstrings, gefaltete Wendungen).
   recapSubstrings: ["17 uhr", "siebzehn uhr"],
   maxOpeningChars: BENCH_MAX_OPENING_CHARS,
+  // AL-P11: die Ergebnis-Karte muss die genannte Uhrzeit tragen.
+  expectedResult: [{ slot: "time", any: ["17 uhr", "17:00", "siebzehn"] }],
   checks: [
     ...MEASUREMENT_CHECKS,
     "no_raw_iso_date_spoken",
@@ -31,6 +33,7 @@ export default {
     "no_verbatim_question_repeat",
     "no_transliterated_umlauts_de",
     "recap_present",
+    "result_slots_present",
   ],
   // Heuristik-Flag (Spec §9): NICHT Hard-Gate. Der Judge (judgeFocus) ist das
   // primaere, verlaessliche Signal fuer die eigentliche Frage (Kohaerenz).

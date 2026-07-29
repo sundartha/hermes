@@ -54,14 +54,15 @@ const EXPECTED_NAMESPACE_COUNTS = {
   store: 3,
   metrics: 1,
   // P2b: diagnosticRetentionDays ergaenzt (Diagnose-Retention-Frist, eigene Namespace-Zeile).
-  privacy: 2,
+  // AL-P11: evidenceRetentionDays ergaenzt (kurze Frist der Ergebnis-Karten-Zitate) -> 3.
+  privacy: 3,
   // AL-P10: researchEnabled + researchMaxUses + researchSearchFeeCents (Vorab-Recherche
   // im Pre-Call-Briefing, src/research/) - eigene Namespace-Zeile.
   research: 3,
 };
-const EXPECTED_TOTAL_KEYS = 132;
+const EXPECTED_TOTAL_KEYS = 133;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (132 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (133 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -143,7 +144,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ist primitiv (Boolean) -> 120.
   // AL-P10: researchEnabled/researchMaxUses/researchSearchFeeCents sind alle drei
   // primitiv (Boolean/Zahl/Zahl, kein Array/nested Objekt) -> 123.
-  assert.equal(checked, 123, "alle primitiven Blaetter (132 - 4 Arrays - 5 nested Objekte) geprueft");
+  // AL-P11: evidenceRetentionDays ist primitiv (Zahl, kein Array/nested Objekt) -> 124.
+  assert.equal(checked, 124, "alle primitiven Blaetter (133 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

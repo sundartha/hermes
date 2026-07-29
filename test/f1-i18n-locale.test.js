@@ -29,7 +29,7 @@ const DE_SPEECH_CLAUSE = "Nur natürlich gesprochenes Deutsch."; // P5: Umlaut (
 // I11 (call-quality Impl-1): Klausel "nenne konkrete Ergebnisse ..." ergaenzt (S2 aus
 // tasks/call-quality-findings.md: Summary war zu allgemein).
 const DE_SUMMARY =
-  'Du fasst ein Telefonat des KI-Assistenten von Jonas Beispiel zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear"}. Nenne in der summary konkrete Ergebnisse (vereinbartes Datum/Uhrzeit, Preis, Name der Kontaktperson), sofern im Transkript vorhanden, statt allgemeiner Umschreibungen. objective_achieved bewertet AUSSCHLIESSLICH den unter "Auftrag" genannten urspruenglichen Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Vom Assistenten oder Angerufenen selbst eroeffnete Nebenthemen (z.B. ein angebotener oder abgebrochener Termin-Folgeschritt) sind fuer diese Bewertung IRRELEVANT. true = der Auftrag wurde genug beantwortet, auch wenn der Anruf mitten in einem Folgeschritt endete; false = der Auftrag wurde klar nicht erreicht; "unclear" = aus dem Auftrag heraus echt nicht beurteilbar. Action Items nur, wenn Jonas Beispiel wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item.';
+  'Du fasst ein Telefonat des KI-Assistenten von Jonas Beispiel zusammen. Antworte NUR mit validem JSON: {"summary": "2-3 Saetze auf Deutsch", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 Satz", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. Nenne in der summary konkrete Ergebnisse (vereinbartes Datum/Uhrzeit, Preis, Name der Kontaktperson), sofern im Transkript vorhanden, statt allgemeiner Umschreibungen. objective_achieved bewertet AUSSCHLIESSLICH den unter "Auftrag" genannten urspruenglichen Auftrag (bei Inbound-Calls: ob das Anliegen des Anrufers geloest wurde). Vom Assistenten oder Angerufenen selbst eroeffnete Nebenthemen (z.B. ein angebotener oder abgebrochener Termin-Folgeschritt) sind fuer diese Bewertung IRRELEVANT. true = der Auftrag wurde genug beantwortet, auch wenn der Anruf mitten in einem Folgeschritt endete; false = der Auftrag wurde klar nicht erreicht; "unclear" = aus dem Auftrag heraus echt nicht beurteilbar. Action Items nur, wenn Jonas Beispiel wirklich etwas tun muss (max. 3). Bereits fest gebuchte Termine sind KEIN Action Item. Ergebnis-Karte: outcome ist EIN Satz mit dem konkreten Ergebnis (vereinbartes Datum/Uhrzeit, Preis, Name) oder - wenn nichts erreicht wurde - woran es lag. commitments sind Zusagen, die der Assistent im Namen von Jonas Beispiel gemacht hat; counterparty_commitments sind Zusagen der Gegenstelle. open_points sind Fragen, die offen blieben. next_step ist der EINE naechste Schritt fuer Jonas Beispiel, sonst null. facts sind dauerhaft nuetzliche Angaben ueber die Gegenstelle (Oeffnungszeiten, Ansprechpartner, Preise). Jede Liste hoechstens 3 Eintraege, jeder Eintrag hoechstens 200 Zeichen. Erfinde nichts: fehlt eine Angabe im Transkript, bleibt die Liste leer bzw. das Feld null.';
 
 // ---- (A) Resolver + Bundle-Vertrag ----
 
@@ -101,7 +101,19 @@ test("Bundle: DE-Summary-Prompt ist byte-identisch zum Bestand; FR ist franzoesi
   const fr = LOCALES.fr.summarySystem(OWNER_NAME);
   assert.ok(fr.includes("2-3 phrases en français"), `FR-Summary muss franzoesisch sein: ${fr}`);
   // JSON-Keys bleiben sprachunabhaengig (werden geparst) - in BEIDEN Sprachen identisch.
-  for (const key of ['"summary"', '"actionItems"', '"objective_achieved"']) {
+  // AL-P11: die sechs neuen Ergebnis-Karten-Keys gehoeren dazu (evidence NICHT - das
+  // Feld existiert nur in der Prompt-KLAUSEL, nicht im Basis-JSON-Literal).
+  for (const key of [
+    '"summary"',
+    '"actionItems"',
+    '"objective_achieved"',
+    '"outcome"',
+    '"commitments"',
+    '"counterparty_commitments"',
+    '"open_points"',
+    '"next_step"',
+    '"facts"',
+  ]) {
     assert.ok(LOCALES.de.summarySystem(OWNER_NAME).includes(key), `DE-Key ${key} fehlt`);
     assert.ok(fr.includes(key), `FR-Key ${key} fehlt`);
   }
@@ -183,7 +195,17 @@ test("EN-Bundle: kuratierte EN-Offenlegung (R8, nur ownerName gebunden) + EN-Sum
   );
   const sum = LOCALES.en.summarySystem(OWNER_NAME);
   assert.ok(sum.includes("2-3 sentences in English"), `EN-Summary muss englisch sein: ${sum}`);
-  for (const key of ['"summary"', '"actionItems"', '"objective_achieved"']) {
+  for (const key of [
+    '"summary"',
+    '"actionItems"',
+    '"objective_achieved"',
+    '"outcome"',
+    '"commitments"',
+    '"counterparty_commitments"',
+    '"open_points"',
+    '"next_step"',
+    '"facts"',
+  ]) {
     assert.ok(sum.includes(key), `EN-Key ${key} fehlt`);
   }
 });

@@ -31,6 +31,12 @@ export default {
   // der Zusage zusammenfassen (Muster mustNotPromiseSubstrings, gefaltete Wendungen).
   recapSubstrings: ["dienstag", "14 uhr", "55 euro"],
   maxOpeningChars: BENCH_MAX_OPENING_CHARS,
+  // AL-P11: die Ergebnis-Karte muss Tag/Uhrzeit/Preis des zugesagten Termins tragen.
+  expectedResult: [
+    { slot: "day", any: ["dienstag"] },
+    { slot: "time", any: ["14", "zwei"] },
+    { slot: "price", any: ["55"] },
+  ],
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",
@@ -40,6 +46,7 @@ export default {
     "turn_count_within_budget",
     "no_transliterated_umlauts_de",
     "recap_present",
+    "result_slots_present",
   ],
   mustNotAskSubstrings: [],
   mustNotPromiseSubstrings: [

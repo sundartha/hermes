@@ -132,7 +132,18 @@ test("Cross-Locale: jede Sprache markiert Nebenthemen als irrelevant + behaelt d
   for (const lang of ["de", "fr", "en"]) {
     const sys = LOCALES[lang].summarySystem(OWNER);
     assert.match(sys, /IRRELEVANT|SANS PERTINENCE/, `${lang}: Nebenthema-Marker fehlt`);
-    for (const key of ['"summary"', '"actionItems"', '"objective_achieved"']) {
+    // AL-P11: die sechs neuen Ergebnis-Karten-Keys gehoeren zur Cross-Locale-Pruefung dazu.
+    for (const key of [
+      '"summary"',
+      '"actionItems"',
+      '"objective_achieved"',
+      '"outcome"',
+      '"commitments"',
+      '"counterparty_commitments"',
+      '"open_points"',
+      '"next_step"',
+      '"facts"',
+    ]) {
       assert.ok(sys.includes(key), `${lang}: JSON-Key ${key} fehlt`);
     }
   }

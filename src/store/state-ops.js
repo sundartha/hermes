@@ -61,6 +61,8 @@ import { hasInboundNotice } from "../i18n/inbound-notice.js";
 // P8/FMT-11: Denylist des Ziel-Gates der privaten Summary-Nummer, geteilt mit der
 // Outbound-Gate-Kette (D3, G5) - siehe number-denylist.js fuer die Begruendung.
 import { isDenied } from "../telephony/number-denylist.js";
+// AL-P11: EINE Mutationsquelle fuer das Entfernen der Ergebnis-Karten-Zitate (G5).
+import { stripResultEvidence } from "../call-result.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_SECOND = 1000;
@@ -209,6 +211,11 @@ export function createCall(
     transcript: [],
     summary: null,
     objectiveAchieved: null,
+    // AL-P11: strukturierte Ergebnis-Karte (outcome/commitments/counterparty_commitments/
+    // open_points/next_step/facts, optional evidence). Additiv NULLABLE, gesetzt erst in
+    // summarizeCall. Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
+    // json<->pg-Shape-Drift.
+    result: null,
     // F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit nach erfolgreichem
     // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
     // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
@@ -2761,17 +2768,38 @@ export function purgeExpiredDiagnosticTranscripts(s, days) {
   return purged;
 }
 
+// DRITTER Retention-Durchgang (AL-P11/O5): entfernt die woertlichen Zitate
+// (result.evidence) beendeter Calls, die aelter als `days` sind. Der Rest der Karte
+// (outcome/facts/...) BLEIBT stehen - genau das ist der Unterschied zu einem
+// Record-Purge: die Karte ist die Notiz, die Zitate sind der Beleg mit der kurzen Frist.
+// Gleiche bewusste Asymmetrie wie purgeExpiredDiagnosticTranscripts: 0 heisst hier
+// "Feature aus" (cutoff = jetzt -> jedes Zitat eines beendeten Calls faellt), NICHT
+// "Retention aus". Nur diese Richtung ist fail-closed. Das Entfernen selbst laeuft ueber
+// stripResultEvidence (EINE Mutationsquelle, G5).
+export function purgeExpiredResultEvidence(s, days) {
+  const cutoff = new Date(Date.now() - Math.max(days, 0) * MS_PER_DAY).toISOString();
+  let purged = 0;
+  for (const call of s.calls) {
+    if (!call.endedAt || call.endedAt >= cutoff) continue;
+    if (stripResultEvidence(call)) purged++;
+  }
+  return purged;
+}
+
 // Die EINE Retention-Fassade beider Backends: Record-Durchgang (lange Frist) plus
-// Diagnose-Transkript-Durchgang (kurze Frist). Benannte Optionen statt zweier
-// gleichartiger Zahlen-Positionen - 30 und 7 nebeneinander sind nicht
-// verwechselungssicher (F1/G25).
-export function pruneOldData(s, { retentionDays, diagnosticRetentionDays }) {
+// Diagnose-Transkript-Durchgang (kurze Frist) plus Ergebnis-Zitate-Durchgang (kuerzeste
+// Frist). Benannte Optionen statt mehrerer gleichartiger Zahlen-Positionen - nebeneinander
+// nicht verwechselungssicher (F1/G25).
+export function pruneOldData(s, { retentionDays, diagnosticRetentionDays, evidenceRetentionDays }) {
   const removed = pruneExpiredRecords(s, retentionDays);
   // Laeuft UNABHAENGIG von retentionDays: eine abgeschaltete Record-Retention
   // (RETENTION_DAYS=0, u.a. der Test-Default in BASE_ENV) darf die kuerzere
   // Diagnose-Frist NICHT mit abschalten - sonst laege genau das Roh-Transkript am
   // laengsten, das am kuerzesten liegen soll.
   removed.diagnosticTranscripts = purgeExpiredDiagnosticTranscripts(s, diagnosticRetentionDays);
+  // Laeuft ebenfalls UNABHAENGIG von retentionDays (gleiche Begruendung wie oben):
+  // eine abgeschaltete Record-Retention darf die kuerzeste Frist nicht mit abschalten.
+  removed.resultEvidence = purgeExpiredResultEvidence(s, evidenceRetentionDays);
   return removed;
 }
 

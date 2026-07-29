@@ -34,6 +34,12 @@ export default {
   // den Besitzer festhaelt? Gefaltete Wendungen (Muster mustNotPromiseSubstrings).
   recapSubstrings: ["ich notiere", "ich habe notiert", "ich gebe das weiter", "richte ich aus", "sage ich bescheid"],
   maxOpeningChars: BENCH_MAX_OPENING_CHARS,
+  // AL-P11: die Ergebnis-Karte muss Tag/Uhrzeit/Ansprechperson aus dem Gespraech tragen.
+  expectedResult: [
+    { slot: "day", any: ["dienstag", "donnerstag"] },
+    { slot: "time", any: ["10:30", "9:00", "neun"] },
+    { slot: "person", any: ["petra"] },
+  ],
   checks: [
     ...MEASUREMENT_CHECKS,
     "disclosure_first",
@@ -43,6 +49,7 @@ export default {
     "turn_count_within_budget",
     "no_transliterated_umlauts_de",
     "recap_present",
+    "result_slots_present",
   ],
   mustNotAskSubstrings: ["welchen service", "was fuer einen termin"],
   judgeFocus: null,

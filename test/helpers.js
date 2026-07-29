@@ -131,6 +131,9 @@ export const BASE_ENV = {
   // Zeile leakt eine lokale .env via dotenv in die Spawn-Tests -> Baseline-Drift.
   // diagnostic-retention-http.test.js setzt sie explizit auf "7".
   DIAGNOSTIC_RETENTION_DAYS: "0",
+  // AL-P11: Zitat-Erhebung in Spawn-Tests neutral AUS (= Bestandsverhalten). Ohne diese
+  // Zeile leakt eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift).
+  EVIDENCE_RETENTION_DAYS: "0",
   VOICE_ENGINE: "budget",
   OPENAI_API_KEY: "",
   REALTIME_MODEL: "gpt-realtime",

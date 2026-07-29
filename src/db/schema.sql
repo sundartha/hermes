@@ -222,7 +222,12 @@ CREATE TABLE IF NOT EXISTS call (
   -- leert call.transcript nach der Summary, "null Anrufer-Zeilen" traefe danach auf
   -- JEDEN Call zu. NOT NULL DEFAULT 0 fuellt Bestandszeilen ohne Backfill; RUECKWIRKEND
   -- ist die Zahl nicht erhebbar, sie misst ab Deploy vorwaerts.
-  caller_turns INTEGER NOT NULL DEFAULT 0
+  caller_turns INTEGER NOT NULL DEFAULT 0,
+  -- AL-P11 (Ergebnis-Karte): outcome/commitments/counterparty_commitments/open_points/
+  -- next_step/facts (+ optional evidence) als JSONB. Additiv NULLABLE: gesetzt erst in
+  -- summarizeCall, sonst NULL -> Bestand byte-identisch. evidence faellt unabhaengig vom
+  -- Record ueber die KURZE Frist EVIDENCE_RETENTION_DAYS (state-ops).
+  result JSONB
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -277,6 +282,10 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_truing_attempts INTEGER NOT NULL 
 -- FORCE-RLS ohnehin nur die Bootstrap-Zeilen).
 ALTER TABLE call ADD COLUMN IF NOT EXISTS telnyx_conversation_id TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS caller_turns INTEGER NOT NULL DEFAULT 0;
+
+-- AL-P11: Ergebnis-Karte auf Bestands-call-Tabellen nachziehen (Muster context/mandate).
+-- Idempotent; frische DB = No-op.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS result JSONB;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

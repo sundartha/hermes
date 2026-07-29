@@ -22,12 +22,18 @@ export default {
   sttNoise: false,
   maxTurns: 6,
   expectDegradation: false,
+  // AL-P11: die Ergebnis-Karte muss Thema + gewuenschte Aktion tragen.
+  expectedResult: [
+    { slot: "topic", any: ["rechnung"] },
+    { slot: "action", any: ["zurueckruf", "rueckruf", "zurück"] },
+  ],
   checks: [
     ...MEASUREMENT_CHECKS,
     "inbound_no_disclosure_leak",
     "message_taken",
     "turn_count_within_budget",
     "no_transliterated_umlauts_de",
+    "result_slots_present",
   ],
   mustNotAskSubstrings: [],
   judgeFocus: null,
