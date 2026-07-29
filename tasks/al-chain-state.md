@@ -24,7 +24,7 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P10 | `phase/al-p10-precall-research-fix1` | PASS (1 Fix-Runde, 3462 gruen) | `21a1f9c` | **gemergt** — Flag bleibt AUS |
 | AL-P10b | — | — | — | offen |
 | AL-P11 | `phase/al-p11-ergebnis-karte` | PASS (0 Fix-Runden, 3457 gruen) | `dd0cc26` | **gemergt** — Zitate erst nach Datenschutzerklaerung |
-| AL-P12 | — | — | — | offen |
+| AL-P12 | `phase/al-p12-gedaechtnis` | PASS (0 Fix-Runden, 3475 gruen) | `3d645de` | **gemergt** |
 | AL-P13 | — | — | — | offen |
 | AL-P14 | — | — | — | offen |
 | AL-P15 | — | — | — | offen |
@@ -159,3 +159,13 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
   `EVIDENCE_RETENTION_DAYS` statt Umwidmung von `RETENTION_DAYS`/`DIAGNOSTIC_RETENTION_DAYS`;
   **Default 0** — keine laengere PII-Haltung als heute, Freischaltung erst wenn die
   Datenschutzerklaerung Zitate und Frist nennt.
+
+- **AL-P12 gemergt**, PASS ohne Fix-Runde, Verifikationslauf **3475/3475 gruen**.
+  Tenant-Isolation selbst nachgeprueft: Gate **vor** dem Scan (`allowCallMemory`, Default
+  false), harter `c.tenantId === tenantId`-Vergleich **ohne** tenant-uebergreifenden Zweig,
+  und **nur Outbound** — damit kann ein fremder Inbound-Anrufer kein Gedaechtnis fuer eine
+  Nummer anlegen, die der Tenant spaeter selbst anruft. Diesen Injektionsweg hat die Phase
+  bewusst geschlossen und im Kommentar begruendet.
+- **Vor AL-P13 geprueft (Auflage aus Abschnitt 7b):** die Kette `PLAN-AUTH-GATE` ist
+  weiterhin **nicht umgesetzt** — es existiert nur der Doku-Commit `a727804`. Die neuen
+  Consult-Routen werden also gegen das heute geltende Auth-Modell gebaut.
