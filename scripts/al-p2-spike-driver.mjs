@@ -29,7 +29,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { config } from "../src/config.js";
-import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
+import { telnyxRequest } from "../src/telephony/adapters/telnyx/http-client.js";
 import { sleepMs } from "../src/utils/timer.js";
 import { SPIKE_SILENCE_PATH } from "../src/routes/voice-spike.js";
 import {
@@ -186,50 +186,45 @@ function refuse(reason) {
 }
 
 // ---- Telnyx-IO (je eine Aufgabe, <=1 Objekt-Argument) -------------------------------
+// telnyxRequest kommt aus dem geteilten Baustein (src/telephony/adapters/telnyx/http-
+// client.js, AL-P2b-Fix1/S2-1) - dieselbe Fetch-/Fehlerstelle wie telnyx-call-latency.mjs
+// und telnyx-assistant-provision.mjs, kein eigener Bearer-Header/fetch mehr hier.
 
-function telnyxHeaders() {
-  return {
-    Authorization: `Bearer ${config.telephony.telnyxApiKey}`,
-    "Content-Type": "application/json",
-  };
-}
-
-// EINE Fetch-/Fehlerstelle (G5): assertTelnyxOk als einziger Parser, {data}-Envelope-Unwrap
-// wie in telnyx-call-latency.mjs. Der Bearer-Header wird gebaut, nie gedruckt.
-async function telnyxRequest({ method, path: apiPath, body }) {
-  const res = await fetch(`${config.telephony.telnyxApiBase}${apiPath}`, {
-    method,
-    headers: telnyxHeaders(),
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  await assertTelnyxOk(res, `spikeDriver ${method} ${apiPath}`, { attachStatus: true });
-  const json = await res.json().catch(() => ({}));
-  return json.data ?? json;
+function spikeDriverOp(method, apiPath) {
+  return `spikeDriver ${method} ${apiPath}`;
 }
 
 async function numberResource(e164) {
   const query = new URLSearchParams({ "filter[phone_number]": e164 });
-  const data = await telnyxRequest({ method: "GET", path: `${NUMBERS_PATH}?${query}` });
+  const data = await telnyxRequest({
+    method: "GET",
+    path: `${NUMBERS_PATH}?${query}`,
+    op: spikeDriverOp("GET", `${NUMBERS_PATH}?${query}`),
+  });
   const found = (Array.isArray(data) ? data : []).find((d) => d && d.phone_number === e164);
   if (!found) throw new Error(`Telnyx kennt die Nummer ${e164} nicht (kein phone_number-Record)`);
   return { e164, id: found.id, connectionId: String(found.connection_id ?? "") };
 }
 
 async function assistantExternalLlm(assistantId) {
-  const data = await telnyxRequest({ method: "GET", path: `${ASSISTANTS_PATH}/${assistantId}` });
+  const path = `${ASSISTANTS_PATH}/${assistantId}`;
+  const data = await telnyxRequest({ method: "GET", path, op: spikeDriverOp("GET", path) });
   return data?.external_llm ?? null;
 }
 
 async function texmlAppVoiceUrl(texmlAppId) {
-  const data = await telnyxRequest({ method: "GET", path: `${TEXML_APPS_PATH}/${texmlAppId}` });
+  const path = `${TEXML_APPS_PATH}/${texmlAppId}`;
+  const data = await telnyxRequest({ method: "GET", path, op: spikeDriverOp("GET", path) });
   return data?.voice_url ?? null;
 }
 
 async function setNumberConnection({ numberId, connectionId }) {
+  const path = `${NUMBERS_PATH}/${numberId}`;
   await telnyxRequest({
     method: "PATCH",
-    path: `${NUMBERS_PATH}/${numberId}`,
+    path,
     body: { connection_id: connectionId },
+    op: spikeDriverOp("PATCH", path),
   });
 }
 
@@ -237,9 +232,10 @@ async function setNumberConnection({ numberId, connectionId }) {
 // unbestaetigt (dokumentierte Repo-Lehre: nur der Objekt-GET zaehlt), ein Teil-Objekt
 // waere kein sicherer Weg.
 async function setAssistantExternalLlm({ assistantId, baseUrl }) {
+  const path = `${ASSISTANTS_PATH}/${assistantId}`;
   await telnyxRequest({
     method: "POST",
-    path: `${ASSISTANTS_PATH}/${assistantId}`,
+    path,
     body: {
       external_llm: {
         base_url: baseUrl,
@@ -248,6 +244,7 @@ async function setAssistantExternalLlm({ assistantId, baseUrl }) {
         forward_metadata: true,
       },
     },
+    op: spikeDriverOp("POST", path),
   });
 }
 

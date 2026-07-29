@@ -25,7 +25,7 @@
 // UUID am Call gespeichert hat.
 import { fileURLToPath } from "url";
 import { config } from "../src/config.js";
-import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
+import { telnyxRequest } from "../src/telephony/adapters/telnyx/http-client.js";
 
 const AI_CONVERSATIONS_PATH = "/v2/ai/conversations";
 const ASSISTANT_ROLE = "assistant";
@@ -60,17 +60,11 @@ const UNACCOUNTED_COLUMN = "unaccounted";
 const NO_VALUE = "-"; // Platzhalter fuer fehlende Metadaten-Felder in der Tabelle/Konsole
 const COLUMN_WIDTH = 12; // feste Spaltenbreite (kein Table-Package, keine neue Dependency)
 
-function headers() {
-  return { Authorization: `Bearer ${config.telephony.telnyxApiKey}` };
-}
-
-// GET-only Fetch-Wrapper: EINE Fehlerstelle (G5), gleiche Konvention wie
-// telnyx-assistant-provision.mjs (assertTelnyxOk, {data}-Envelope-Unwrap).
+// GET-only Wrapper um den geteilten Telnyx-HTTP-Baustein (AL-P2b-Fix1/S2-1,
+// src/telephony/adapters/telnyx/http-client.js) - EINE Fehlerstelle (G5), dieselbe
+// Konvention wie scripts/telnyx-assistant-provision.mjs und scripts/al-p2-spike-driver.mjs.
 async function getJson(path, op) {
-  const res = await fetch(`${config.telephony.telnyxApiBase}${path}`, { method: "GET", headers: headers() });
-  await assertTelnyxOk(res, op, { attachStatus: true });
-  const json = await res.json().catch(() => ({}));
-  return json.data ?? json;
+  return telnyxRequest({ method: "GET", path, op });
 }
 
 // Conversation-Metadaten (Kopfzeile) - best-effort: wirft NICHT, wenn die Ressource fehlt

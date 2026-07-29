@@ -22,7 +22,7 @@
 // call_control_id in den Request-Body).
 import { fileURLToPath } from "url";
 import { config } from "../src/config.js";
-import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
+import { telnyxRequest } from "../src/telephony/adapters/telnyx/http-client.js";
 import { elevenLabsVoiceName } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
 
 // Shim-Route: dieselbe wie die Registrierung in server.js (POST /v1/chat/completions).
@@ -118,7 +118,6 @@ const ASSISTANT_INSTRUCTIONS =
   "Die Gespraechslogik, Sprache und Pflicht-Offenlegung steuert ausschliesslich das externe LLM " +
   "(Hermes Brain-Shim via external_llm). Dieses von Telnyx verlangte Pflichtfeld wird im BYO-Betrieb " +
   "nicht als Prompt verwendet.";
-const JSON_HEADERS_TYPE = "application/json";
 const ASSISTANT_ID_ENV = "TELNYX_ASSISTANT_ID"; // direkt aus process.env (Env-Doku = P10)
 
 // Sicherheits-/Konfigurationsfelder, die woanders verwaltet werden (Telnyx-Portal bzw.
@@ -285,14 +284,6 @@ export function buildAssistantConfig({
   };
 }
 
-// Bearer-Header + Content-Type. Eine Stelle (G5), analog voice.js headers().
-function headers() {
-  return {
-    Authorization: `Bearer ${config.telephony.telnyxApiKey}`,
-    "Content-Type": JSON_HEADERS_TYPE,
-  };
-}
-
 // Voraussetzungen fuer den Live-Lauf. Fehlt etwas -> smokePass=false. KEINE
 // Secrets loggen: nur ob gesetzt, nie der Wert (Regel 4/5).
 const REQUIRED = Object.freeze([
@@ -327,16 +318,11 @@ export function assistantRequest(existingId) {
 }
 
 // GET des aktuellen Assistant-Zustands - NUR fuer den Merge-Sicherheits-Check in
-// sendAssistantConfig gebraucht (kein genereller Read-Pfad). Gleiche Fehler-/Envelope-
-// Konvention wie sendAssistantConfig (assertTelnyxOk, {data}-Wrapper Muster voice.js).
+// sendAssistantConfig gebraucht (kein genereller Read-Pfad). Nutzt den geteilten Telnyx-
+// HTTP-Baustein (AL-P2b-Fix1/S2-1, src/telephony/adapters/telnyx/http-client.js) - gleiche
+// Fehler-/Envelope-Konvention wie sendAssistantConfig.
 async function fetchAssistant(id) {
-  const res = await fetch(`${config.telephony.telnyxApiBase}${AI_ASSISTANTS_PATH}/${id}`, {
-    method: "GET",
-    headers: headers(),
-  });
-  await assertTelnyxOk(res, "fetchAssistant", { attachStatus: true });
-  const json = await res.json().catch(() => ({}));
-  return json.data || json;
+  return telnyxRequest({ path: `${AI_ASSISTANTS_PATH}/${id}`, op: "fetchAssistant" });
 }
 
 // Snapshot NUR der PRESERVED_SAFETY_FIELDS, die im Assistant tatsaechlich gesetzt sind
@@ -362,9 +348,10 @@ export function fieldsLostOnUpdate(before, after) {
 }
 
 // Versendet die gebaute Config an die Telnyx-Assistant-API. Create (POST auf die Collection)
-// wenn keine bestehende ID uebergeben, sonst Update (POST /{id}, s. assistantRequest).
-// assertTelnyxOk = EINE Fehler-Parse-Stelle (G5), allowlisted, kein Roh-Body/Key-Leak
-// (Regel 4/5). Gibt die assistant_id zurueck.
+// wenn keine bestehende ID uebergeben, sonst Update (POST /{id}, s. assistantRequest). Nutzt
+// den geteilten Telnyx-HTTP-Baustein (AL-P2b-Fix1/S2-1) - assertTelnyxOk bleibt darin die
+// EINE Fehler-Parse-Stelle (G5), allowlisted, kein Roh-Body/Key-Leak (Regel 4/5). Gibt die
+// assistant_id zurueck.
 //
 // Beim Update (existingId gesetzt) wird PRESERVED_SAFETY_FIELDS aktiv per GET vor UND nach
 // dem Update verglichen (afix-p1) - die Deep-Merge-Annahme ist live UNBESTAETIGT (s. Kommentar
@@ -388,14 +375,7 @@ export function fieldsLostOnUpdate(before, after) {
 export async function sendAssistantConfig(assistantConfig, existingId) {
   const before = existingId ? preservedFieldSnapshot(await fetchAssistant(existingId)) : {};
   const { method, url } = assistantRequest(existingId);
-  const res = await fetch(url, {
-    method,
-    headers: headers(),
-    body: JSON.stringify(assistantConfig),
-  });
-  await assertTelnyxOk(res, "provisionAssistant", { attachStatus: true });
-  const json = await res.json().catch(() => ({}));
-  const data = json.data || json; // Telnyx-v2 wrappt teils in {data} (Muster voice.js)
+  const data = await telnyxRequest({ method, url, body: assistantConfig, op: "provisionAssistant" });
   const id = data.id || data.assistant_id || existingId;
 
   // GET-nach-Update/-Create: EIN Fetch deckt beide Pruefungen unten ab (kein zweiter Netz-
