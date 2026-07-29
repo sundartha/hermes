@@ -27,6 +27,13 @@ const postTo = (srv, to, headers = {}) =>
     body: new URLSearchParams({ To: to }).toString(),
   });
 
+// Fremde IP fuer AL-P2b-4: isTrustedLocalCaller() in src/routes/_tenant.js laesst JEDEN
+// Aufrufer ohne X-Forwarded-For durch, egal ob /voice oder nicht (der Test-Client ist
+// selbst 127.0.0.1). Ohne diesen Header beweist ein 200 auf /voice/spike-silence nur
+// "der lokale Aufrufer darf sowieso", nicht die /voice-Ausnahme. Mit dem Header greift
+// nur noch die /voice-Ausnahme, ein Fremd-Pfad muss weiterhin 401en (Gegenprobe unten).
+const FOREIGN_XFF = { "X-Forwarded-For": "203.0.113.7" };
+
 test("AL-P2b-1: ohne TELNYX_SSE_SPIKE_CALLEE ist die Route inaktiv (404)", async () => {
   const srv = await startServer({ env: { TELNYX_SSE_SPIKE_CALLEE: "" } });
   try {
@@ -75,9 +82,17 @@ test("AL-P2b-4: keine Basic-Auth vor der Route (Telnyx sendet keine Credentials)
     env: { DASHBOARD_PASSWORD: "geheim", TELNYX_SSE_SPIKE_CALLEE: SPIKE_CALLEE },
   });
   try {
-    const res = await postTo(srv, SPIKE_CALLEE);
+    const res = await postTo(srv, SPIKE_CALLEE, FOREIGN_XFF);
     assert.equal(res.status, 200, "die /voice-Exemption muss greifen, sonst 401");
     assert.equal(await res.text(), SILENCE_XML);
+
+    // Gegenprobe: unter denselben Bedingungen (gleicher Aufrufer, gleiche X-Forwarded-For)
+    // muss ein Nicht-/voice-Pfad 401en. Ohne diese Gegenprobe belegt das obige 200 nur,
+    // dass ueberhaupt geantwortet wird - nicht, dass die /voice-Ausnahme greift.
+    const foreignPathRes = await fetch(`${srv.localUrl}/nicht-vorhanden`, {
+      headers: { ...FOREIGN_XFF },
+    });
+    assert.equal(foreignPathRes.status, 401, "Nicht-/voice-Pfad muss ohne Credentials 401en");
   } finally {
     await srv.stop();
   }

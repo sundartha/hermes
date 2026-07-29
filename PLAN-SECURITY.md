@@ -948,7 +948,11 @@ Provider-Signaturpruefung (ungueltige Signatur -> 403 + `[voice-signature]`-Zeil
 Handler laeuft) und die bestehende `/voice`-Basic-Auth-Exemption. **Keine neue Exemption,
 keine neue Zeile in der eingefrorenen Exemption-Reihenfolge (INV-3).** Diese Mount-Reihenfolge
 ist die Sicherung und wird per Spawn-Test gepinnt (`test/al-p2b-silence-route.test.js`,
-AL-P2b-3/AL-P2b-4), nicht per Kommentar behauptet. Das Treiber-Skript
+AL-P2b-3/AL-P2b-4), nicht per Kommentar behauptet. AL-P2b-4 schickt dafuer eine fremde
+`X-Forwarded-For`, damit der Testaufruf nicht ueber `isTrustedLocalCaller()` (Loopback ohne
+Proxy-Weiterleitung) durchrutscht, sondern echt durch die `/voice`-Exemption laeuft, und
+verifiziert per Gegenprobe im selben Test, dass ein Nicht-`/voice`-Pfad unter denselben
+Bedingungen weiterhin 401t. Das Treiber-Skript
 (`scripts/al-p2-spike-driver.mjs`) ist read-mostly mit `--dry-run`-Default, verweigert den
 Dienst, sobald die Live-DID `+17067101188` oder der Live-Assistant-Praefix
 `assistant-dcf48d08` in **irgendeinem** Argument auftaucht, benutzt und veraendert
