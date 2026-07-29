@@ -251,3 +251,21 @@ Der Owner hat den Deploy freigegeben; die Sperre aus dem Kickoff faellt damit.
 - **Boot-Warnungen (alle vorbestehend, nicht durch diesen Deploy verursacht):**
   Deckungsquote 24 % unter `COST_TRUING_MIN_COVERAGE_PERCENT=80`; Tarif-Drift mit 0 Stichproben
   fuer +49/+33/+44; `FORCE_NUMBER_COUNTRY=US`. Keine Fehler, kein fataler Boot-Guard.
+
+- **AL-P2, Teil 1 (Code) fertig:** Branch `phase/al-p2-sse-spike`, Gate PASS ohne Fix-Runde,
+  3545 Tests gruen. **BEWUSST NICHT nach master gemergt** — der Branch traegt den befristeten
+  Verzoegerungs-Schalter, und der gehoert laut Plan nach der Messung ersatzlos entfernt.
+  Die Umsetzung ist fail-closed konstruiert und damit sicherer als der Plan verlangte:
+  `sseSpikeDelayMsFor` liefert 0, solange nicht **Verzoegerung UND Zielnummer** gesetzt sind
+  **und** `call.to === callee`; eine Verzoegerung ohne Zielnummer ist ein **Boot-Refusal**
+  (`productionFootguns`). Dazu Boot-Banner-Zeile und `sse_spike_delay`-Logzeile bei jeder
+  Anwendung. Die vier Notaus-Pfade (Rate-Gate, Budget-Kill, Loop-Guard, Degradations-Catch)
+  uebergeben ausdruecklich keine Pause.
+- **Owner-Entscheidung 2026-07-29:** der Spike laeuft auf einem **eigenen Wegwerf-Dienst** auf
+  Render, nicht auf dem Live-Dienst und nicht ueber einen Tunnel. Der Live-Dienst bekommt den
+  Schalter nie zu sehen.
+- **Offen: Freigabe zum Umhaengen der zwei ungenutzten DIDs.** Ohne sie kann der Spike nicht
+  fahren. Die Frage „kann ich meine eigene Nummer nehmen?" wurde beantwortet: das wuerde den
+  Spike **nicht-autonom** machen (der Owner muesste bei jedem Durchgang abnehmen und schweigen)
+  und ein bekanntes Risiko einbauen (US-DID -> DE-Mobil ist sporadisch nicht zustellbar; ein
+  Fehlschlag saehe aus wie ein rotes SSE-Ergebnis, waere aber ein Routing-Problem).
