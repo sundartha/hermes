@@ -611,6 +611,14 @@ function consultSeqOf(eventId) {
   return match ? Number(match[1]) : null;
 }
 
+// Format-Wache fuer die Route (POST /api/calls/:id/consult/answer): event_id ist
+// Client-Freitext, bevor er in Audit-Log oder answerConsult einlaeuft, muss er dem
+// serverseitig erzeugten Format "c<seq>" entsprechen - EINE Quelle mit consultSeqOf/
+// CONSULT_ID_PATTERN (G5), sonst driften Log- und Store-Pruefung auseinander.
+export function isConsultEventId(eventId) {
+  return typeof eventId === "string" && CONSULT_ID_PATTERN.test(eventId);
+}
+
 // Nicht-leere Textfragen dieser Emission. Alles andere faellt weg (Storage-Deckel,
 // kein Ereignis ohne beantwortbare Frage).
 function cleanQuestions(questions) {

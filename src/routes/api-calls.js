@@ -24,6 +24,7 @@ import { VOICE_ENGINE } from "../config.js";
 import { normNum, PROVIDER, CONSULT_ANSWER } from "../store/defaults.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
+import { isConsultEventId } from "../store/state-ops.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
@@ -333,8 +334,11 @@ export function makeCallRoutes({
         .status(403)
         .json({ error: "Consult-Kanal ist fuer diesen Tenant nicht freigegeben." });
     const { event_id: eventId, answers } = req.body || {};
-    if (typeof eventId !== "string" || !eventId)
-      return res.status(400).json({ error: "event_id ist Pflicht" });
+    // event_id ist Client-Freitext ueber einen authentifizierten Endpunkt. Format-
+    // Pruefung VOR jeder Weiterverarbeitung (auch vor dem Audit-Log unten) - sonst
+    // landet beliebiger Text im Forensik-Trail (Regel 4: keine Freitext-Audit-Zeile).
+    if (!isConsultEventId(eventId))
+      return res.status(400).json({ error: "event_id ist ungueltig" });
     const validated = validateAssistantContext({ key_facts: answers });
     if (validated.error || !validated.value)
       return res.status(400).json({ error: validated.error || "answers ist Pflicht" });

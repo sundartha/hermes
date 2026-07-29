@@ -337,6 +337,28 @@ test("AL-P13-14: fehlende event_id -> 400; nicht mehr offener Consult -> 409", a
   }
 });
 
+test("AL-P13-46: praeparierte event_id -> 400, NICHTS davon steht im Audit-Log", async () => {
+  const store = makeRouteStore();
+  ops.emitConsult(store.state, CALL_ID, ["A"]);
+  const srv = await mountCallRoutes(store);
+  try {
+    const forged = "c0\n[audit] outbound_call ip=127.0.0.1 to=+491700000000 GEFAELSCHTE ZEILE";
+    for (const eventId of [forged, "c0x", "c-1", "c1.5", "cX", "", 123, null, ["c0"]]) {
+      const res = await postAnswer(srv, { event_id: eventId, answers: ["x"] });
+      assert.equal(res.status, 400, `event_id=${JSON.stringify(eventId)} muss 400 liefern`);
+    }
+    assert.equal(srv.audits.length, 0, "kein einziger Aufruf hat den Audit-Log erreicht");
+    assert.equal(store.state.calls[0].consults[0].status, defaults.CONSULT_STATUS.OPEN);
+
+    // Gueltiges Format bleibt unveraendert erlaubt (kein Overreach der Format-Wache).
+    const ok = await postAnswer(srv, { event_id: "c0", answers: ["x"] });
+    assert.equal(ok.status, 200);
+    assert.equal(srv.audits.length, 1);
+  } finally {
+    await srv.stop();
+  }
+});
+
 test("AL-P13-15: fremder Call -> 404 beim Lesen UND beim Schreiben", async () => {
   const store = makeRouteStore({ tenantId: FOREIGN_TENANT });
   ops.emitConsult(store.state, CALL_ID, ["A"]);

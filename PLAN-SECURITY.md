@@ -1078,7 +1078,11 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > `context.open_questions` (aus dem Auftrag des Nutzers), NIE aus fremder Rede - **diese
 > Grenze ist in AL-P14 neu zu bewerten**, sobald Fragen aus dem laufenden Gespraech
 > entstehen. Die Audit-Ereignisse `consult_emitted`/`consult_answered` tragen nur Zaehler
-> und Kennungen, nie Freitext (Regel 4).
+> und Kennungen, nie Freitext (Regel 4). Die Kennung selbst ist Client-Eingabe -
+> `POST /api/calls/:id/consult/answer` prueft `event_id` deshalb VOR jeder
+> Weiterverarbeitung (auch vor dem Audit-Aufruf) gegen das serverseitig erzeugte Format
+> `c<seq>` (`isConsultEventId`, `src/store/state-ops.js`) und lehnt Abweichungen mit 400
+> ab - sonst waere die Kennung selbst der Freitext-Kanal, den dieser Absatz ausschliesst.
 >
 > **Persistenz-Nebenwirkung (bewusst, dokumentiert):** `call.context` ist ab dieser Phase
 > NICHT mehr nach dem Create unveraenderlich und steht deshalb im
