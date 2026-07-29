@@ -269,3 +269,28 @@ Der Owner hat den Deploy freigegeben; die Sperre aus dem Kickoff faellt damit.
   Spike **nicht-autonom** machen (der Owner muesste bei jedem Durchgang abnehmen und schweigen)
   und ein bekanntes Risiko einbauen (US-DID -> DE-Mobil ist sporadisch nicht zustellbar; ein
   Fehlschlag saehe aus wie ein rotes SSE-Ergebnis, waere aber ein Routing-Problem).
+
+### 2026-07-29 — Spike-Umgebung aufgebaut (AL-P2b)
+
+- **AL-P2b war BLOCKED** und wurde in einem gezielten Nachlauf geloest. Der Befund war ein
+  **Vakuumtest**: AL-P2b-4 schickte seine Anfrage von `127.0.0.1` ohne `X-Forwarded-For`, und
+  das Auth-Gate laesst lokale Aufrufer ohnehin durch — der Test konnte seinen eigenen
+  Fehlerfall nicht erzeugen. `PLAN-SECURITY.md` berief sich aber auf ihn als Nachweis einer
+  Sicherung. Behoben auf `phase/al-p2b-spike-betrieb-fix3` (`6a879f8`).
+  **Mit Mutationsproben bewiesen** (nicht behauptet): unter „`/voice`-Ausnahme entfernt" wird
+  der Test jetzt ROT, waehrend die vorherige Fassung desselben Tests unter derselben Mutation
+  GRUEN blieb. Drei weitere Mutationen (Mount-Reihenfolge, Gate global aus, Vertrauensgrenze
+  aufgeweicht) zeigen, dass er mehrere unabhaengige Todesarten hat. 3583/3583 gruen.
+  Offen und notiert, aber kein Blocker: die Doku ordnet AL-P2b-4 der Mount-Reihenfolge zu —
+  die pinnt in Wahrheit AL-P2b-3.
+- **Wegwerf-Dienst angelegt:** `hermes-spike-al-p2` (`srv-d9kt9bm1egvs738asd0g`),
+  `https://hermes-spike-al-p2.onrender.com`, Branch `phase/al-p2b-spike-betrieb-fix3`,
+  Free-Tier, Frankfurt, **autoDeploy aus**. Bewusst mit **`STORE_BACKEND=json`** — dadurch
+  autark, ohne jeden Zugriff auf die Produktionsdatenbank.
+- **Wegwerf-TeXML-Anwendung angelegt:** `AL-P2 Spike Silence (WEGWERF)`
+  (`3014656686179747728`) -> `https://hermes-spike-al-p2.onrender.com/voice/spike-silence`.
+- **Vorher-Zustand gesichert:** alle drei DIDs haengen an der TeXML-App `Hermes`
+  (`2982643896460248193`). Rohdaten im Scratchpad (`telnyx-numbers-before.json`).
+- **BLOCKIERT: 4 Werte muss der Owner im Dashboard des Wegwerf-Dienstes setzen.**
+  Regel 4 verbietet, Secrets durch Werkzeugaufrufe und Protokolle zu schleusen — deshalb
+  konnte die Session sie nicht selbst setzen.
