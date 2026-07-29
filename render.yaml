@@ -120,6 +120,15 @@ services:
       # Default false; Owner flippt im Dashboard nur fuer den EINEN Diagnose-Call auf true.
       - key: TELNYX_SHIM_DEBUG_SHAPE
         value: "false"
+      # AL-P2 SSE-Spike (BEFRISTET - nach der Messung ersatzlos entfernen): haelt die
+      # restlichen SSE-Chunks EINER Antwort zurueck, um Telnyx' Pufferverhalten zu messen.
+      # Safe-Default 0 = aus. > 0 OHNE TELNYX_SSE_SPIKE_CALLEE ist hier ein Boot-Refusal.
+      - key: TELNYX_SSE_SPIKE_DELAY_MS
+        value: "0"
+      # Die EINE Wegwerf-Zielnummer (E.164) des Spikes - eine Rufnummer gehoert nicht ins
+      # Repo, daher Dashboard-only.
+      - key: TELNYX_SSE_SPIKE_CALLEE
+        sync: false
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,

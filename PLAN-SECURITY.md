@@ -892,6 +892,42 @@ Denylist/Land-Gate/Stundenlimit/Max-Gespraechsdauer/Provider-Signaturpruefung.
 
 ---
 
+## AL-P2-SSESPIKE — befristete SSE-Verzoegerung im Antwortpfad (2026-07-29)
+
+**Das Loch.** Ob Telnyx unseren SSE-Strom **inkrementell** konsumiert oder bis `data:[DONE]`
+puffert, war unbelegt — an dieser einen Tatsache haengen fuenf spaetere Phasen der AL-Kette
+(AL-P7, AL-P7b, AL-P10b, AL-P14, AL-P15). Messbar ist sie nur am laufenden, oeffentlich
+erreichbaren Shim: eine kuenstliche Verzoegerung zwischen dem ersten Sprech-Chunk und dem
+Rest EINER Antwort, gemessen an `audio_first_token_duration_ms` plus Aufnahme.
+
+**Der Fix.** Der Schalter (`sseSpikeDelayMsFor` in `src/telnyx-llm-shim.js`) ist die EINE
+Stelle, die ueber Betroffenheit entscheidet, und er ist dreifach eingegrenzt: er greift nur,
+wenn `TELNYX_SSE_SPIKE_DELAY_MS > 0` **und** `TELNYX_SSE_SPIKE_CALLEE` gesetzt ist **und**
+`call.to` exakt dieser Wegwerf-Nummer entspricht — jede andere Konstellation liefert 0 und
+damit die byte-identische Bestands-Chunk-Sequenz. Die Notaus-Pfade (Rate-Gate, Budget-Kill,
+Loop-Guard, Degradations-Catch) uebergeben ausdruecklich **keine** Pause und bleiben sofortig.
+Drei unabhaengige Sonden verhindern, dass der Schalter unbemerkt weiterlaeuft: ein
+`productionFootguns`-Boot-Refusal (Verzoegerung ohne Zielnummer ist im Hosting fatal), eine
+Boot-Banner-Zeile bei jedem Start und eine `sse_spike_delay`-Logzeile bei JEDER verzoegerten
+Antwort. Banner, Log und Konfig-Diagnose nennen nur Var-Namen und `delayMs`, nie die
+Rufnummer (PII). `TELNYX_SSE_SPIKE_CALLEE` wird ueber `e164Env` validiert: gesetzt, aber
+kein E.164 -> Boot-Refusal statt eines lautlos nie greifenden Schalters.
+
+**Benannte Folge (bewusst akzeptiert).** Ein Diagnose-Schalter bleibt bis zur Messung im
+Produktiv-Antwortpfad stehen — die Messung braucht Infrastruktur und den Owner und war
+dieser Phase untersagt. Im Hosting ist er ohne Zielnummer fail-closed gesperrt, ohne gesetzte
+Env-Vars vollstaendig inert. Der **ersatzlose Rueckbau** (Schalter, beide Env-Vars, Footgun,
+Banner-Zeile, Log-Kanal, Tests) ist Teil der Abnahme und steht als Schritt 6 in
+`tasks/al-testcall-checklist.md`.
+
+**Ausdruecklich NICHT geaendert:** alle Safety-Gates (Denylist/Land-Gate/Stundenlimit/
+Budget-Guard/Max-Gespraechsdauer/Provider-Signaturpruefung), der Offenlegungssatz, jede
+Auth-Kante (Existenz-Gate, Bearer-Pruefung, ccid-Korrelation, Call-Resolve — der Schalter
+sitzt hinter allen vieren), die Budget-Achsen und `latencyMs` in der `turn_ok`-Zeile (misst
+weiterhin nur `agentTurn`, die Verzoegerung faelscht die Zahl nicht).
+
+---
+
 ## SECRETS-HYGIENE — Inventar, Rotation, Provider-Minimalrechte (begleitend, kein Einmal-Gate)
 
 > Hierher gezogen aus `docs/RUNBOOK-OPERATOR.md` Gate 7 (2026-07-28), als das Operator-Runbook
