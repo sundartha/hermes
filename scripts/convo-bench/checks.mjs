@@ -356,6 +356,23 @@ function checkRecapPresent(runResult, scenario) {
   return { id, pass: present, detail: present ? "ok" : "kein Recap im letzten Agenten-Turn", value: present };
 }
 
+// AL-P12: hat der Agent einen Fakt aus einem FRUEHEREN Anruf genannt, den er nur aus dem
+// Beziehungsgedaechtnis haben kann? Deklarativ ueber scenario.expectedMemoryPhrases
+// (Muster recapSubstrings/mustNotPromiseSubstrings); geprueft ueber ALLE frei generierten
+// Turns, gefaltet (foldedHits, G5).
+function checkMemoryFactRecalled(runResult, scenario) {
+  const id = "memory_fact_recalled";
+  const phrases = scenario.expectedMemoryPhrases || [];
+  if (!phrases.length) return { id, pass: true, detail: "n/a (keine expectedMemoryPhrases)", value: null };
+  const hits = foldedHits(freeAgentTurnTexts(runResult), phrases);
+  return {
+    id,
+    pass: hits.length > 0,
+    detail: hits.length ? `Treffer: ${hits.join(", ")}` : "kein Fakt aus Call 1 genannt",
+    value: hits.length,
+  };
+}
+
 // AL-P8: Turns, in denen der Agent mehr als eine Frage stellt (>= 2 Fragezeichen).
 // Deterministisch und sprachunabhaengig - keine Phrasenliste. Schwelle optional
 // (scenario.maxMultiQuestionTurns) - ohne sie ist es eine reine Messung.
@@ -440,6 +457,7 @@ const CHECKS = {
   one_question_per_turn: checkOneQuestionPerTurn,
   roundtrips_per_turn: checkRoundtripsPerTurn,
   result_slots_present: checkResultSlotsPresent,
+  memory_fact_recalled: checkMemoryFactRecalled,
 };
 
 // Nur die vom Szenario deklarierten Check-IDs laufen lassen (scenario.checks: string[]).

@@ -101,6 +101,37 @@ test("AL-P8-5 recap_present trifft nur im LETZTEN frei generierten Agenten-Turn"
   assert.equal(passResult.value, true);
 });
 
+// AL-P12: memory_fact_recalled (Muster recap_present/AL-P8-5/6 - Deklaration UEBER ALLE
+// frei generierten Turns statt nur den letzten, weil ein genannter Fakt frueh im
+// Gespraech genauso zaehlt wie im Abschluss).
+test("AL-P12-B1 memory_fact_recalled ist n/a ohne scenario.expectedMemoryPhrases", () => {
+  const result = only("memory_fact_recalled", runResult({ agentSays: ["Danke, tschuess."] }), scenario());
+  assert.equal(result.pass, true);
+  assert.equal(result.value, null);
+  assert.equal(result.detail, "n/a (keine expectedMemoryPhrases)");
+});
+
+test("AL-P12-B2 memory_fact_recalled: Treffer/kein Treffer ueber ALLE frei generierten Turns", () => {
+  const rr = runResult({
+    agentSays: ["Ich sehe hier Reklamationsnummer 4711.", "Danke, auf Wiederhören."],
+  });
+  const passResult = only(
+    "memory_fact_recalled",
+    rr,
+    scenario({ expectedMemoryPhrases: ["4711"] }),
+  );
+  assert.equal(passResult.pass, true, passResult.detail);
+  assert.equal(passResult.value, 1);
+
+  const failResult = only(
+    "memory_fact_recalled",
+    rr,
+    scenario({ expectedMemoryPhrases: ["reklamationsnummer 9999"] }),
+  );
+  assert.equal(failResult.pass, false, failResult.detail);
+  assert.equal(failResult.value, 0);
+});
+
 test("AL-P8-6 recap_present ist n/a ohne scenario.recapSubstrings", () => {
   const result = only("recap_present", runResult({ agentSays: ["Danke, tschuess."] }), scenario());
   assert.equal(result.pass, true);

@@ -411,6 +411,17 @@ export function defaultSettings() {
     // unkritisch; schreibbar ueber die POST /api/settings-Whitelist (updateSettings),
     // NICHT ueber Self-Service (Geldpfad, Owner-Gate O3).
     allowResearch: false,
+    // AL-P12: Beziehungsgedaechtnis - darf der Agent beim naechsten Anruf an dieselbe
+    // Nummer die Ergebnisse/Fakten seiner frueheren Anrufe dorthin im Prompt sehen?
+    // DEFAULT AUS - und das ist eine bewusste Umkehr des urspruenglichen Plans: das
+    // Argument "es sind die eigenen Daten des Tenants" traegt fuer den Tenant, NICHT fuer
+    // die Gegenstelle. Getragen werden Fakten ueber den Angerufenen, ueber Anrufe hinweg,
+    // in kuenftige Prompts injiziert - ein neuer Verarbeitungszweck ueber Drittdaten, der
+    // fuer Bestands-Tenants nicht still scharf geschaltet wird (Muster allowResearch /
+    // PRECALL_BRIEFING_ENABLED: Faehigkeit vorhanden, Schalter aus). Kein PII (Boolean);
+    // schreibbar ueber die POST /api/settings-Whitelist (updateSettings), NICHT ueber
+    // Self-Service.
+    allowCallMemory: false,
     // Gespraechssprache pro Tenant als OPTIONALES Override (F1 Phase 4, Entscheidung #8):
     // null = "nicht gesetzt" -> die Aufloesungs-Praezedenz (resolveCallLanguage) faellt
     // auf number.language -> tenant.defaultLanguage -> DEFAULT_LANGUAGE (Weltdefault, P10)

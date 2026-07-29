@@ -89,6 +89,25 @@ function buildCallSeed({ scenario, provider, extra }) {
   });
 }
 
+// AL-P12: Vor-Anrufe desselben Ziels + optionale Tenant-Settings. Ohne beides ist der
+// Seed byte-identisch zum Bestand (scenario.priorCalls/settings sind undefined).
+function buildSeed({ scenario, call, isInbound }) {
+  const priors = (scenario.priorCalls || []).map((prior, i) =>
+    seedCall({
+      id: `${BENCH_CALL_ID_PREFIX}_${scenario.id}_prior${i}`,
+      tenantId: BOOTSTRAP_TENANT_ID,
+      direction: "outbound",
+      status: "completed",
+      endedAt: new Date().toISOString(),
+      ...prior,
+    }),
+  );
+  return seedState({
+    calls: isInbound ? [] : [call, ...priors],
+    ...(scenario.settings ? { settings: scenario.settings } : {}),
+  });
+}
+
 // P4: ein stiller Callee-Turn geht als LEERES SpeechResult raus; im Transkript steht
 // dafuer dieser Marker - Persona-Spiegelung und Judge duerfen keinen leeren Text-Block
 // sehen (die Anthropic-API lehnt ihn ab), und "der Angerufene sagt nichts" ist fuer den
@@ -190,7 +209,7 @@ export async function runScenarioRepeat({
   const transport = await DRIVERS[driverId].create({ scenario, provider });
   const call = isInbound ? null : buildCallSeed({ scenario, provider, extra: transport.seedOverrides });
   const env = buildEnv({ apiKey, scenario, driverEnv: transport.env });
-  const seed = isInbound ? seedState({}) : seedState({ calls: [call] });
+  const seed = buildSeed({ scenario, call, isInbound });
 
   const transcript = [];
   const agentSamples = [];

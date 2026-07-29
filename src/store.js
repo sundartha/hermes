@@ -107,6 +107,9 @@ export const {
   countNoSpeechTurn,
   clearNoSpeechStreak,
   countOutboundCallsSince,
+  // AL-P12: Beziehungsgedaechtnis. OHNE diesen Re-Export waere store.counterpartyMemory
+  // undefined -> systemPrompt wuerfe zur Laufzeit einen TypeError (Muster countCallerTurn).
+  counterpartyMemory,
   findTenantByNumber,
   numberRecordByE164,
   resolveCallLanguage,

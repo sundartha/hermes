@@ -468,6 +468,11 @@ export function countOutboundCallsSince(sinceIso, filters = {}) {
   return ops.countOutboundCallsSince(load(), sinceIso, filters);
 }
 
+// AL-P12: reiner Leser (kein save) - Wrapper-Paritaet zu pg.js.
+export function counterpartyMemory(tenantId, e164) {
+  return ops.counterpartyMemory(load(), tenantId, e164);
+}
+
 // ---- Inbound-Routing: E.164 -> Tenant (P3c) ----
 export function findTenantByNumber(e164) {
   return ops.findTenantByNumber(load(), e164);
