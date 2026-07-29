@@ -539,10 +539,16 @@ export function makePgStore(runner) {
     // Produktiv-Caller (server.js) ruft no-arg. Ohne diesen Default waere die
     // DSGVO-Retention unter STORE_BACKEND=pg still abgeschaltet (Absolute Regel).
     // P2b: zweite, strengere Frist fuer Diagnose-Transkripte (diagnosticDays).
-    pruneOldData(days = config.privacy.retentionDays, diagnosticDays = config.privacy.diagnosticRetentionDays) {
+    // AL-P11: dritte, kuerzeste Frist (evidenceDays).
+    pruneOldData(
+      days = config.privacy.retentionDays,
+      diagnosticDays = config.privacy.diagnosticRetentionDays,
+      evidenceDays = config.privacy.evidenceRetentionDays,
+    ) {
       const removed = ops.pruneOldData(requireState(), {
         retentionDays: days,
         diagnosticRetentionDays: diagnosticDays,
+        evidenceRetentionDays: evidenceDays,
       });
       if (ops.hasPrunedSomething(removed)) save();
       return removed;
@@ -1046,6 +1052,10 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // Bestandszeile ohne Wert -> null bzw. 0 (json-Parity zu createCall).
     telnyxConversationId: r.telnyx_conversation_id ?? null,
     callerTurns: r.caller_turns ?? 0,
+    // AL-P11: Ergebnis-Karte mit-hydrieren. Ohne diese Zeile ginge sie beim Restart
+    // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
+    // JSONB kommt vom Treiber bereits geparst (Muster context/mandate). NULL -> null.
+    result: r.result ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -1339,8 +1349,8 @@ async function flushCalls(client, tenantId, calls) {
           summary_sms_sent_at, context, failure_reason, billed_at,
           call_control_id, assistant_id, diagnostic, mandate,
           estimated_cost_cents, actual_cost_micro_cents, cost_trued_at,
-          cost_trued_source, cost_truing_attempts, telnyx_conversation_id, caller_turns)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
+          cost_trued_source, cost_truing_attempts, telnyx_conversation_id, caller_turns, result)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1353,7 +1363,7 @@ async function flushCalls(client, tenantId, calls) {
          cost_trued_at=EXCLUDED.cost_trued_at, cost_trued_source=EXCLUDED.cost_trued_source,
          cost_truing_attempts=EXCLUDED.cost_truing_attempts,
          telnyx_conversation_id=EXCLUDED.telnyx_conversation_id,
-         caller_turns=EXCLUDED.caller_turns`,
+         caller_turns=EXCLUDED.caller_turns, result=EXCLUDED.result`,
       [
         c.id,
         tenantId,
@@ -1416,6 +1426,11 @@ async function flushCalls(client, tenantId, calls) {
         // den Create-Zustand zurueck und die ganze Achse maesse dauerhaft 0.
         c.telnyxConversationId ?? null,
         c.callerTurns ?? 0,
+        // AL-P11 ($37): JSONB (Muster context/mandate: Objekt -> JSON.stringify, sonst NULL).
+        // ANDERS als context/mandate IM ON CONFLICT DO UPDATE SET: die Karte entsteht erst
+        // in summarizeCall, also NACH dem Create. Fehlte sie im UPDATE-SET, faellt sie beim
+        // naechsten Flush auf NULL zurueck und der Evidence-Purge haette nie etwas zu tun.
+        c.result ? JSON.stringify(c.result) : null,
       ],
     );
     await flushTranscript(client, tenantId, c);

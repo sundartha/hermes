@@ -62,7 +62,8 @@ function runRetention(store, config) {
   console.log(
     `[retention] geloescht: ${removed.calls} Calls, ${removed.notifications} Notifications, ` +
       `${removed.actionItems} erledigte Action Items (aelter als ${config.privacy.retentionDays} Tage), ` +
-      `${removed.diagnosticTranscripts} Diagnose-Transkripte (aelter als ${config.privacy.diagnosticRetentionDays} Tage)`,
+      `${removed.diagnosticTranscripts} Diagnose-Transkripte (aelter als ${config.privacy.diagnosticRetentionDays} Tage), ` +
+      `${removed.resultEvidence} Ergebnis-Zitate (aelter als ${config.privacy.evidenceRetentionDays} Tage)`,
   );
 }
 

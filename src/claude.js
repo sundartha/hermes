@@ -9,6 +9,7 @@ import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
 import { blockingBudgetAxis } from "./budget-gate.js";
+import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.js";
 
 // Resilienter LLM-Seam (src/llm.js): EINE Stelle fuer Timeout/
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top, Fachcode ruft nur
@@ -698,6 +699,10 @@ export async function agentTurn(call, callerText) {
 }
 
 // ---------- Summary + Action Items nach dem Call ----------
+// AL-P11: Kopf-Budget der Zusammenfassung. 500 trug Summary + Action Items; die
+// Ergebnis-Karte kommt mit ~250 Output-Token dazu.
+const SUMMARY_MAX_TOKENS = 800;
+
 export async function summarizeCall(call) {
   const ctx = store.tenantContext(call.tenantId);
   const s = ctx.settings;
@@ -708,18 +713,24 @@ export async function summarizeCall(call) {
   // P11: die Rollen-/Feld-Labels des Zusammenfassungs-Inputs sind sprachabhaengig
   // (loc.prompt.summaryInput, DE byte-identisch); die JSON-Keys der Modell-Antwort
   // (summarySystem oben) bleiben sprachunabhaengig.
-  const si = localeFor(call.language).prompt.summaryInput;
+  const loc = localeFor(call.language);
+  const si = loc.prompt.summaryInput;
   const convo = call.transcript
     .map((t) => `${t.role === "agent" ? si.agentRole : si.callerRole}: ${t.text}`)
     .join("\n");
 
   const model = config.llm.claudeModel;
+  // O5: die Zitat-Aufforderung existiert nur, wenn die kurze Frist scharf ist. Sonst
+  // steht sie nicht einmal im Prompt (kein Zitat, das man verwerfen muesste).
+  const evidenceAllowed = evidenceRetentionEnabled(config.privacy);
   const resp = await llm.complete({
     model,
-    max_tokens: 500,
+    // AL-P11: die Karte kostet ~250 zusaetzliche Output-Token an einer Anfrage, die
+    // ohnehin laeuft - 500 reichten dafuer nicht mehr zuverlaessig.
+    max_tokens: SUMMARY_MAX_TOKENS,
     // Zusammenfassungs-Prompt sprachabhaengig (F1 Phase 2): die Summary entsteht in der
     // Gespraechssprache (de byte-identisch); die JSON-Keys bleiben sprachunabhaengig.
-    system: localeFor(call.language).summarySystem(owner),
+    system: loc.summarySystem(owner) + (evidenceAllowed ? loc.summaryEvidenceClause : ""),
     messages: [
       {
         role: "user",
@@ -740,6 +751,11 @@ export async function summarizeCall(call) {
 
   call.summary = parsed.summary || null;
   call.objectiveAchieved = parsed.objective_achieved ?? "unclear";
+  // AL-P11: die strukturierte Ergebnis-Karte. normalizeCallResult klemmt fremde
+  // Modell-Ausgabe auf eine feste Form und liefert null, wenn das Modell die neuen
+  // Felder ignoriert hat - dann bleibt result null und die Persistenz ist
+  // byte-identisch zum Bestand.
+  call.result = normalizeCallResult(parsed, { evidenceAllowed });
   store.save();
   for (const item of parsed.actionItems || []) store.addActionItem(call.id, item, "todo");
   return parsed;

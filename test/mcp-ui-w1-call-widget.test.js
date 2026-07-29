@@ -21,6 +21,9 @@ const SLOT_NAMES = [
   "last_transcript_lines",
   "call_id",
   "result_summary",
+  // AL-P11: die beiden skalaren Ergebnis-Karten-Felder (outcome/next_step).
+  "outcome",
+  "next_step",
 ];
 const DISPLAY_SELECTORS = [
   "[data-duration-display]",
@@ -28,7 +31,7 @@ const DISPLAY_SELECTORS = [
   "[data-objective-display]",
 ];
 const REMOVED_SLOT_NAMES = ["duration_s", "failure_reason", "objective_achieved", "bridge_format", "last_update"];
-const ROW_NAMES = ["lines", "failure", "summary", "objective"];
+const ROW_NAMES = ["lines", "failure", "summary", "objective", "outcome", "next_step"];
 
 // Minimal-Fake eines DOM-Elements: textContent (Setter leert Kinder wie echtes DOM),
 // style.display, disabled, Kind-Verwaltung, addEventListener/click - genau die

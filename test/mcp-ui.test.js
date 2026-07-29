@@ -380,6 +380,12 @@ const transcriptOutput = z.object({
   call_id: z.string(),
   result_summary: z.string(),
   objective_achieved: z.union([z.boolean(), z.string()]),
+  // AL-P11: die fuenf handlungsrelevanten Ergebnis-Karten-Felder (Whitelist).
+  outcome: z.string().nullable(),
+  commitments: z.array(z.string()),
+  counterparty_commitments: z.array(z.string()),
+  open_points: z.array(z.string()),
+  next_step: z.string().nullable(),
 });
 
 test("T-P2-UI-AC1: Stufe 0 additiv - Textblock (Summary/Ziel) + schema-validiertes structuredContent", async () => {
@@ -393,14 +399,27 @@ test("T-P2-UI-AC1: Stufe 0 additiv - Textblock (Summary/Ziel) + schema-validiert
     const textObj = JSON.parse(result.content[0].text);
     assert.deepEqual(
       Object.keys(textObj).sort(),
-      ["objective_achieved", "result_summary"],
-      "Textblock: Summary/Ziel-Sicht ohne call_id (kein Roh-Transkript)",
+      [
+        "commitments",
+        "counterparty_commitments",
+        "next_step",
+        "objective_achieved",
+        "open_points",
+        "outcome",
+        "result_summary",
+      ],
+      "Textblock: Summary/Ziel/Ergebnis-Karte ohne call_id (kein Roh-Transkript)",
     );
 
     assert.ok(result.structuredContent, "structuredContent vorhanden");
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
       "call_id",
+      "commitments",
+      "counterparty_commitments",
+      "next_step",
       "objective_achieved",
+      "open_points",
+      "outcome",
       "result_summary",
     ]);
     assert.equal(result.structuredContent.call_id, "call_1");
@@ -458,7 +477,12 @@ test("T-P2-UI-AC4: Whitelist (DSGVO) - Roh-Transkript NIE in structuredContent/T
     }
     assert.deepEqual(Object.keys(result.structuredContent).sort(), [
       "call_id",
+      "commitments",
+      "counterparty_commitments",
+      "next_step",
       "objective_achieved",
+      "open_points",
+      "outcome",
       "result_summary",
     ]);
   });

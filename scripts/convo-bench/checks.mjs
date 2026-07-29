@@ -380,6 +380,43 @@ function checkRoundtripsPerTurn(runResult) {
   return { id, pass: true, detail: `Mittelwert ${mean} ueber ${values.length} Turns`, value: mean };
 }
 
+// AL-P11: Mindest-Trefferquote der Ergebnis-Karte (Plan Phase 11: >= 80 % ueber 5 Repeats).
+const RESULT_SLOT_MIN_HIT_RATE = 0.8;
+
+// Alle Freitext-Felder der Ergebnis-Karte zu EINEM Suchtext zusammengefasst - in welchem
+// Feld ein Wert landet, ist Modell-Ermessen, DASS er in der Karte steht, nicht.
+function resultCardText(result) {
+  if (!result) return "";
+  const parts = [
+    result.outcome,
+    result.nextStep,
+    ...(result.commitments || []),
+    ...(result.counterpartyCommitments || []),
+    ...(result.openPoints || []),
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
+// AL-P11: Traegt die Ergebnis-Karte die Angaben, die im Gespraech gefallen sind?
+// Deklarativ ueber scenario.expectedResult ([{slot, any:[...]}]) - die Deklaration IST
+// die Anwendbarkeitsentscheidung (Muster message_taken/recap_present). Gesucht wird ueber
+// die GESAMTE Karte (outcome + Listen + next_step), gefaltet (foldForPhraseMatch, G5):
+// in welchem Feld ein Wert landet, ist Modell-Ermessen, DASS er in der Karte steht, nicht.
+function checkResultSlotsPresent(runResult, scenario) {
+  const id = "result_slots_present";
+  const expected = scenario.expectedResult || [];
+  if (!expected.length) return { id, pass: true, detail: "n/a (kein expectedResult)", value: null };
+  const cardText = foldForPhraseMatch(resultCardText(runResult.storeSnapshot.result));
+  const hits = expected.filter((slot) => (slot.any || []).some((alt) => cardText.includes(foldForPhraseMatch(alt))));
+  const rate = Math.round((hits.length / expected.length) * VALUE_ROUNDING) / VALUE_ROUNDING;
+  return {
+    id,
+    pass: rate >= RESULT_SLOT_MIN_HIT_RATE,
+    detail: `${hits.length}/${expected.length} Slots in der Ergebnis-Karte (${hits.map((s) => s.slot).join(", ") || "keine"})`,
+    value: rate,
+  };
+}
+
 // EIN Registry-Objekt statt verstreuter switch/if-Ketten (G23) - jede Check-Funktion
 // entscheidet selbst per n/a-Pass, ob sie fuer Richtung/Szenario ueberhaupt zutrifft.
 const CHECKS = {
@@ -402,6 +439,7 @@ const CHECKS = {
   recap_present: checkRecapPresent,
   one_question_per_turn: checkOneQuestionPerTurn,
   roundtrips_per_turn: checkRoundtripsPerTurn,
+  result_slots_present: checkResultSlotsPresent,
 };
 
 // Nur die vom Szenario deklarierten Check-IDs laufen lassen (scenario.checks: string[]).

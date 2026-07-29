@@ -1024,6 +1024,19 @@ const rawConfig = {
     process.env.DIAGNOSTIC_RETENTION_DAYS,
     { fallback: 7, min: 0 },
   ),
+  // AL-P11 (O5): eigene, KURZE Frist fuer die woertlichen Zitate (result.evidence) der
+  // Ergebnis-Karte. BEWUSST NICHT diagnosticRetentionDays wiederverwendet - zwei
+  // Sachverhalte auf einem Label liessen eine hochgedrehte Diagnose-Frist still auch
+  // die Aufbewahrung von Drittzitaten verlaengern. 0 = Feature AUS (Default): es wird
+  // kein Zitat erhoben UND jedes Alt-Zitat faellt beim naechsten Sweep - fail-closed in
+  // die Loesch-Richtung, Muster diagnosticRetentionDays. NIE ueber retentionDays
+  // fuehren: das waere die Umkehrung der Minimierungsentscheidung aus P2b.
+  // In Produktion erst auf >0, wenn die Datenschutzerklaerung (apps/web) woertliche
+  // Zitate und ihre Frist nennt.
+  evidenceRetentionDays: numEnv("EVIDENCE_RETENTION_DAYS", process.env.EVIDENCE_RETENTION_DAYS, {
+    fallback: 0,
+    min: 0,
+  }),
 
   // ---- MCP ueber HTTP ----
   // Optionales statisches Bearer-Token fuer /mcp (Prototyp-Abweichung von OAuth, s. README)
@@ -1218,7 +1231,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
-  privacy: ["retentionDays", "diagnosticRetentionDays"],
+  privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
   research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents"],
 });
 

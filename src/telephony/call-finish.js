@@ -94,8 +94,12 @@ export function makeCallFinish({
       // Body kommt aus derselben in-memory tenantContext-Quelle.
       const plan = planSummarySms(store, config, call);
       if (plan.send) {
+        // AL-P11: in der SMS steht zuerst das ERGEBNIS, nicht die Umschreibung.
+        // call.result.outcome ist der normalisierte Ein-Satz-Befund (call-result.js);
+        // fehlt er (Modell ohne Karte, Alt-Call), bleibt die Summary der Bestandstext.
+        const resultLine = call.result?.outcome || result.summary;
         const sms =
-          `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${result.summary}` +
+          `[${store.tenantContext(call.tenantId).settings.agentName}] ${who}\n\n${resultLine}` +
           (aiCount
             ? `\n\n${t.actionItemsHeading}\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
             : "");

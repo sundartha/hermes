@@ -295,7 +295,13 @@ test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", asy
   await store.save();
 
   const removed = store.pruneOldData(30);
-  assert.deepEqual(removed, { calls: 1, notifications: 1, actionItems: 1, diagnosticTranscripts: 0 });
+  assert.deepEqual(removed, {
+    calls: 1,
+    notifications: 1,
+    actionItems: 1,
+    diagnosticTranscripts: 0,
+    resultEvidence: 0,
+  });
   const ids = store.load().calls.map((c) => c.id);
   assert.ok(ids.includes(active.id), "aktiver Call bleibt");
   assert.ok(!ids.includes(doneOld.id), "alter beendeter Call weg");
