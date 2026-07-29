@@ -17,8 +17,12 @@
 //   - Die live genutzte DID +17067101188 wird NIE angefasst: taucht sie in IRGENDEINEM
 //     Argument auf, verweigert das Skript vor jedem Netzzugriff den Dienst.
 //   - Kein Schreibzugriff auf den Live-Assistant (Praefix assistant-dcf48d08).
-//   - scripts/telnyx-assistant-provision.mjs wird weder importiert noch veraendert (es
-//     schriebe die GANZE Live-Config aus der lokalen .env).
+//   - scripts/telnyx-assistant-provision.mjs wird von DIESEM Treiber weder importiert noch
+//     zur Laufzeit angefasst (es schriebe die GANZE Live-Config aus der lokalen .env). Der
+//     Fix-Commit AL-P2b-Fix1/S2-1 hat dort NUR den Bearer-Header+fetch+assertTelnyxOk-Block
+//     durch den geteilten Baustein telnyxRequest() ersetzt (kein Verhaltensunterschied,
+//     s. PLAN-SECURITY.md Abschnitt AL-P2b-SPIKEENV) - das ist eine Dedup-Aenderung IN der
+//     Datei, kein Import DURCH diesen Treiber.
 //   - Secrets werden gebaut, aber NIE gedruckt (Regel 4/5); assertTelnyxOk bleibt der
 //     EINE Fehler-Parser (allowlisted code/title). Rufnummern/IDs/URLs duerfen laut Spec
 //     im Klartext stehen - es sind unsere eigenen.

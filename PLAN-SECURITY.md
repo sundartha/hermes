@@ -973,8 +973,23 @@ Testanruf stumm.
 **Ausdruecklich NICHT geaendert:** alle Safety-Gates (Denylist/Land-Gate/Stundenlimit/
 Budget-Guard/Max-Gespraechsdauer/Provider-Signaturpruefung), der Offenlegungssatz, jede
 bestehende `/voice/*`-Route, die Exemption-Liste in `src/wiring/auth-gate.js`, `/api/*`,
-`scripts/telnyx-assistant-provision.mjs`, `.env.example`/`render.yaml` (keine neue
-Env-Variable — der Spike nutzt `TELNYX_SSE_SPIKE_CALLEE` aus AL-P2).
+`.env.example`/`render.yaml` (keine neue Env-Variable — der Spike nutzt
+`TELNYX_SSE_SPIKE_CALLEE` aus AL-P2).
+
+**Korrektur (Review-Runde 2, Fix-Commit AL-P2b-Fix2):** die vorherige Fassung nannte hier
+zusaetzlich `scripts/telnyx-assistant-provision.mjs` als unveraendert. Das stimmte fuer den
+urspruenglichen Spike-Commit, nicht mehr fuer den Fix-Commit AL-P2b-Fix1/S2-1: der zog den
+geteilten Telnyx-HTTP-Baustein (`src/telephony/adapters/telnyx/http-client.js`) auch in
+diese Datei, um die dritte Kopie von Bearer-Header+fetch+assertTelnyxOk+`{data}`-Envelope-
+Unwrap zu dedupllizieren (`headers()`, `fetchAssistant`, `sendAssistantConfig`). Das ist eine
+reine Extraktion ohne Verhaltensunterschied — gleiche URL, gleiche Header, gleicher
+Fehler-Parser `assertTelnyxOk`, gepinnt durch `test/telnyx-http-client.test.js` und die
+weiterhin gruene Bestandssuite fuer `telnyx-assistant-provision.mjs` — aber es ist eine
+Aenderung an genau dem Skript mit der dokumentierten Env-Falle (schreibt die GANZE
+Live-Assistant-Config aus der lokalen `.env`), und die Behauptung "nicht geaendert" war
+deshalb falsch. `scripts/al-p2-spike-driver.mjs` importiert/veraendert
+`telnyx-assistant-provision.mjs` weiterhin nicht — das bleibt bestehen und ist die eigentliche
+harte Grenze der Phase.
 
 ---
 
