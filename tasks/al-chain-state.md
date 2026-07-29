@@ -23,7 +23,7 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P9 | `phase/al-p9-briefing-impl` (NICHT der gemeldete) | PASS (0 Fix-Runden, 3426 gruen) | `479721e` | **gemergt** — Flag bleibt AUS |
 | AL-P10 | `phase/al-p10-precall-research-fix1` | PASS (1 Fix-Runde, 3462 gruen) | `21a1f9c` | **gemergt** — Flag bleibt AUS |
 | AL-P10b | — | — | — | offen |
-| AL-P11 | — | — | — | offen |
+| AL-P11 | `phase/al-p11-ergebnis-karte` | PASS (0 Fix-Runden, 3457 gruen) | `dd0cc26` | **gemergt** — Zitate erst nach Datenschutzerklaerung |
 | AL-P12 | — | — | — | offen |
 | AL-P13 | — | — | — | offen |
 | AL-P14 | — | — | — | offen |
@@ -151,3 +151,11 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
   Vier-Stellen-Pflicht fuer die neuen Variablen `RESEARCH_ENABLED` und
   `RESEARCH_SEARCH_FEE_CENTS` vollstaendig erfuellt (`config.js`, `.env.example`, `render.yaml`,
   `BASE_ENV` in `test/helpers.js`) — nachgeprueft, keine Drift.
+
+- **AL-P11 gemergt**, PASS ohne Fix-Runde, Verifikationslauf **3457/3457 gruen**.
+  O5 selbst nachgeprueft (nicht dem Gate ueberlassen, weil es um PII-Haltung geht):
+  hoechstens **2** woertliche Zitate (`RESULT_EVIDENCE_MAX_ITEMS`, in DE/FR/EN im Prompt UND
+  serverseitig durchgesetzt; der Test speist absichtlich 4 ein); **eigene** Frist
+  `EVIDENCE_RETENTION_DAYS` statt Umwidmung von `RETENTION_DAYS`/`DIAGNOSTIC_RETENTION_DAYS`;
+  **Default 0** — keine laengere PII-Haltung als heute, Freischaltung erst wenn die
+  Datenschutzerklaerung Zitate und Frist nennt.
