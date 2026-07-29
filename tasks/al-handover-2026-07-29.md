@@ -43,9 +43,36 @@ Pfad ueberhaupt noch".** Moegliche Richtungen, alle ungeprueft:
   `Budget-Achse: Tenant Spend-Monat (BUDGET_MONTH_ENABLED=true) | Plattform Spend-Monat`.
 - Ein alter Reserve-Pfad wurde bei der Umstellung nicht mit entfernt.
 
-**Unbewiesener Verdacht, ausdruecklich als solcher zu behandeln:** AL-P6 ging am 29.07. live
-und fasst genau diesen Pfad an (Budgetpruefung pro Tool-Loop-Runde). Ob der Fehler von dort
-kommt oder aelter ist, wurde **nicht** festgestellt. Erst reproduzieren, dann zuordnen.
+### Der konkreteste Verdacht: der Perioden-Anker fehlt in den DATEN
+
+Die Umstellung, die der Owner meint, ist per `git log` datierbar:
+```
+2026-07-26  feat(budget): GAP-01 - Budget-Gate misst die laufende Abrechnungsperiode
+2026-07-26  fix(i18n-p7): Kosten-Decken kohaerent machen (GAP-32/GAP-33)
+2026-07-27  feat(billing): GAP-08 - ein gepflegter USD/EUR-Kurs fuer beide Kosten-Achsen
+```
+(Das Live-Kosten-Tracking selbst — LCT-Kette — war schon am 21.07. Seit dem 27.07. wurde an
+der Kostenlogik **nichts** mehr geaendert ausser AL-P6.)
+
+**In der `usage`-Zeile des anrufenden Tenants `owner` steht aber:**
+
+| Feld | Wert |
+|---|---|
+| `budget_period_key` | **leer** |
+| `budget_period_baseline_cents` | **0** |
+| `spend_month_key` | **leer** |
+
+**Hypothese (NICHT verifiziert):** der Code ist auf die Perioden-Achse umgestellt, die **Daten**
+sind es fuer diesen Tenant nicht — der Perioden-Anker wurde nie gesetzt. Ein Gate, das gegen
+einen undefinierten Periodenstart rechnet, erklaert das Symptom „Ablehnung mit **negativem**
+Fehlbetrag" zwanglos: bei sauberen Werten kann diese Zahl nicht entstehen.
+**Erster Pruefschritt:** wer setzt `budget_period_key`/`budget_period_baseline_cents`, und warum
+ist das fuer `owner` nie passiert? (Bestandsdaten ohne Backfill sind in diesem Repo ein
+wiederkehrendes Muster — vgl. `did-miete-ohne-preis.md`.)
+
+**Zweiter, schwaecherer Verdacht:** AL-P6 ging am 29.07. live und fasst denselben Pfad an
+(Budgetpruefung pro Tool-Loop-Runde). Ob der Fehler von dort kommt oder aelter ist, wurde
+**nicht** festgestellt. Erst reproduzieren, dann zuordnen.
 
 **Vorrang:** Wenn das Geld-Gate falsch sperrt, sind moeglicherweise ALLE Outbound-Anrufe live
 blockiert. Das schlaegt jede offene Phase.
