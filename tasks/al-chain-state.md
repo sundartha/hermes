@@ -294,3 +294,30 @@ Der Owner hat den Deploy freigegeben; die Sperre aus dem Kickoff faellt damit.
 - **BLOCKIERT: 4 Werte muss der Owner im Dashboard des Wegwerf-Dienstes setzen.**
   Regel 4 verbietet, Secrets durch Werkzeugaufrufe und Protokolle zu schleusen — deshalb
   konnte die Session sie nicht selbst setzen.
+
+### 2026-07-29 — AL-P2 Messversuch OHNE Ergebnis, Umgebung vollstaendig zurueckgebaut
+
+- **Owner-Entscheidung revidiert:** der Wegwerf-Dienst scheiterte am Boot-Guard
+  (`STORE_BACKEND` != `pg` ist im Hosting fatal — json-Store auf fluechtigem Dateisystem).
+  Eine zweite vollstaendige Hermes-Installation samt eigener Postgres waere fuer eine
+  einstuendige Messung unverhaeltnismaessig gewesen. Der Owner waehlte deshalb den
+  Live-Dienst mit dem auf EINE Nummer begrenzten Schalter.
+- **Spike-Umgebung war kurzzeitig live** (`fab4eff`): Schalter + Schweige-Route, Zielnummer
+  `+15739090177` (stillgelegt), Verzoegerung 8000 ms.
+- **Messung fehlgeschlagen — kein Urteil.** Anruf `call_ms6165ncegeb`
+  (`+18643028341` -> `+15739090177`, ueber die regulaere `POST /api/calls`, alle Gates liefen)
+  wurde **nie angenommen**: `answered_at` NULL, `telnyx_conversation_id` NULL, nach 31 s
+  beendet. Die Schweige-Route hat also nicht abgenommen. Hypothesen (keine verifiziert) stehen
+  in `tasks/al-handover-2026-07-29.md` §4.
+- **VOLLSTAENDIG ZURUECKGEBAUT, jeweils verifiziert statt behauptet:**
+  - alle drei DIDs wieder auf der TeXML-App `Hermes` (`2982643896460248193`) — per direkter
+    Telnyx-Abfrage geprueft, nicht aus dem Skript-Rueckgabewert geschlossen;
+  - Merge `fab4eff` revertiert (`6fb0030`), `grep` auf `sseSpikeDelayMsFor`/`SPIKE_SILENCE_PATH`
+    in `src/` ist leer, 3525 Tests gruen;
+  - `TELNYX_SSE_SPIKE_DELAY_MS=0`, `TELNYX_SSE_SPIKE_CALLEE=""` im Live-Dienst;
+  - Live-Commit ist `6fb0030` (an `/healthz` geprueft).
+- **Reste, die noch aufgeraeumt werden koennen:** Render-Dienst `hermes-spike-al-p2`
+  (`srv-d9kt9bm1egvs738asd0g`, bootet nicht) und die Telnyx-TeXML-App
+  `AL-P2 Spike Silence (WEGWERF)` (`3014656686179747728`). Beide kostenlos und ungefaehrlich,
+  aber ueberfluessig, sobald der Spike anders geloest wird.
+- **Uebergabe geschrieben:** `tasks/al-handover-2026-07-29.md`.
