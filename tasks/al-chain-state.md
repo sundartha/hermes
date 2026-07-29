@@ -178,3 +178,43 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
   authentifizierter Tenant haette gefaelschte `[audit]`-Zeilen und Log-Spam schreiben koennen.
   Das ist der zweite Fall in dieser Kette, in dem der Review einen echten Defekt fand statt
   Stilfragen (der erste: die empirisch falsche Begruendung in AL-P5).
+
+### 2026-07-29 — Ende des autonom moeglichen Teils
+
+**AL-P2 ist BLOCKIERT — und zwar aus einem Grund, den die Uebergabe nicht vorhergesehen hat.**
+
+Die Uebergabe hielt AL-P2 fuer autonom machbar („der Spike braucht keinen Menschen"). Das
+stimmt fuer den *Anruf* — aber nicht fuer den *Messaufbau*:
+
+- Telnyx erreicht unseren Custom-LLM-Shim ueber `base_url = <oeffentliche URL>/v1`
+  (`scripts/telnyx-assistant-provision.mjs`, `app.js:140`).
+- AL-P2 misst, ob Telnyx **unseren** SSE-Strom inkrementell konsumiert. Dazu muss der
+  **Verzoegerungs-Schalter im Shim** dort laufen, wo Telnyx ihn erreicht — also **deployed**.
+- **Deployen ist dieser Session ausdruecklich untersagt** (kein Push nach `upstream`, kein
+  Deploy ausloesen; der Owner entscheidet, wann etwas live geht).
+
+Die einzige Umgehung waere, die Wegwerf-Connection auf einen **Tunnel zu diesem Rechner**
+zeigen zu lassen. Das ist etwas qualitativ anderes als „eine Telnyx-App anlegen": es haengt
+einen lokalen Entwicklungsserver mit Live-Zugangsdaten ans oeffentliche Netz. Davon ist in der
+Owner-Freigabe nichts gedeckt — **also nicht getan.**
+
+**Der Verzoegerungs-Schalter wurde bewusst NICHT auf Vorrat gebaut.** Ohne die Messung hat er
+keinen Wert, und er ist genau die Sorte Schalter, die der Plan selbst als gefaehrlich benennt:
+er haelt SSE-Chunks 8-30 s zurueck und kann damit einen Live-Anruf haengen lassen, ohne dass
+ein Gate ihn sieht — die Kategorie „neue abgeschaltete Sicherung", die CLAUDE.md verbietet.
+
+**Folge fuer die Kette** (so steht es auch in Abschnitt 4): solange AL-P2 offen ist, endet
+Bahn A nach AL-P5. Damit sind **AL-P7, AL-P7b, AL-P10b, AL-P14 und AL-P15** ebenfalls
+blockiert — nicht aus Zeitmangel, sondern weil ihr Bauplan von AL-P2s Urteil abhaengt
+(AL-P7 wird bei „rot" ersatzlos gestrichen, AL-P7b nimmt Weg A oder Weg B).
+Ein Bauen „auf Verdacht" waere geraten statt gewusst.
+
+**Endstand: 10 von 17 Phasen gemergt und gruen, 7 blockiert hinter EINER Owner-Entscheidung.**
+
+**Lastbilanz der Kette:** 458 Messpunkte, Mittel Load1 = **4,4**, Maximum **32,4** (die eine
+Ueberlast-Episode), 3 Alarme, **null** verwaiste Testserver ueber die gesamte Laufzeit.
+**Zweiter Messfehler im Waechter, ehrlich vermerkt:** macOS kennt `ps -o etimes` nicht — die
+Altersprueferung des Einsammlers lief ins Leere und haette nie etwas eingesammelt. Zum Tragen
+kam es nie (es blieb nichts liegen), aber die Funktion war **unbewiesen, nicht bewaehrt**.
+Wer sie wiederverwendet, rechnet das Alter aus `ps -o etime` (Format `[[dd-]hh:]mm:ss`) oder
+aus `lstart`.
