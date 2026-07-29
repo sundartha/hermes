@@ -309,6 +309,49 @@ tragen darum exakt diese IDs.
 - **Ergebnis ist ein Urteil:** gruen (~1 s) -> AL-P7 gerechtfertigt. rot (~8 s) -> AL-P7 wird
   ersatzlos gestrichen. Der gemessene Telnyx-Turn-Timeout wird als Zahl protokolliert.
 
+### AL-P2b — Betriebsumgebung fuer den Spike (Wegwerf, nie nach master)
+
+**Diese Phase baut NUR auf dem Branch `phase/al-p2-sse-spike` und wird NIE nach `master`
+gemergt.** Sie liefert die zwei Bausteine, die AL-P2 ausdruecklich ausgeklammert hat, damit der
+Spike ohne Menschen laufen kann. `baseBranch` ist deshalb der Spike-Branch, nicht `master`.
+
+**Kontext, gemessen am 2026-07-29 ueber die Telnyx-API (read-only):**
+- Alle drei DIDs haengen an der **TeXML-Anwendung** `Hermes` (`2982643896460248193`),
+  deren `voice_url` auf `https://app.sundartha.com/voice/incoming` zeigt.
+- Daneben existiert die Call-Control-Anwendung `Hermes Call Control` (`3000979485014098987`)
+  und je eine automatisch erzeugte TeXML-App pro AI-Assistant.
+- Live genutzt: `+17067101188`. Ungenutzt: `+18643028341` (Absender) und `+15739090177` (Ziel).
+
+**1. Eine Route, die abnimmt und schweigt.**
+Der Spike braucht ein Gegenueber, das den Anruf annimmt und **nichts sagt** — sonst ist in der
+Aufnahme nicht zu trennen, wann *unser* Assistant zu sprechen beginnt.
+- Neue Route, die ein minimales TeXML-Dokument liefert: annehmen, dann eine lange Pause.
+- **Sie ist ausschliesslich fuer den Wegwerf-Dienst gedacht** und gehoert hinter denselben
+  Schutz wie der Verzoegerungs-Schalter: ohne gesetzte Spike-Zielnummer ist sie **inaktiv**
+  (404), damit sie auf einem versehentlich damit deployten Dienst nichts beantwortet.
+- Kein Eingriff in `/voice/*`-Bestandsrouten, keine neue Auth-Ausnahme fuer `/api/*`.
+  Begruende die Auth-Entscheidung im Code-Kommentar (Regel 3): Telnyx ruft sie unauthentifiziert,
+  also gilt dasselbe Muster wie fuer die bestehenden Provider-Webhooks.
+
+**2. Ein Treiber-Skript, das die Messung fuehrt.**
+`scripts/` — read-mostly, idempotent, mit `--dry-run` als Default:
+- liest den Ist-Zustand der beteiligten Telnyx-Objekte und **schreibt ihn als Datei weg**
+  (Vorher-Zustand ist die Grundlage des Rueckbaus, nicht Gedaechtnis),
+- setzt den Wegwerf-Assistant auf `api_base` des Wegwerf-Dienstes,
+- haengt die zwei DIDs auf die Wegwerf-Anwendung um,
+- loest den Anruf aus, wartet, holt `audio_first_token_duration_ms` aus dem
+  Conversation-Record und faellt das Urteil ueber die in AL-P2 gebaute Urteils-Funktion,
+- **`--restore` haengt beides zurueck und verifiziert per Objekt-GET**, dass wieder
+  `2982643896460248193` eingetragen ist — behauptet es nicht, sondern prueft es.
+
+**Harte Grenzen:**
+- **`+17067101188` wird NIE angefasst.** Das Skript verweigert den Dienst, wenn diese Nummer
+  in irgendeinem Argument auftaucht.
+- **Kein Schreibzugriff auf den Live-Assistant** `assistant-dcf48d08-…`; auch hier eine
+  Verweigerung im Skript, nicht nur ein Kommentar.
+- **`scripts/telnyx-assistant-provision.mjs` wird nicht benutzt und nicht veraendert.**
+- Secrets nie loggen; die Rufnummern duerfen im Klartext stehen (es sind unsere eigenen).
+
 ### AL-P3 — Endpointing konfigurieren
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 3`.
