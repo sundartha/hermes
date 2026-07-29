@@ -25,7 +25,7 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P10b | — | — | — | offen |
 | AL-P11 | `phase/al-p11-ergebnis-karte` | PASS (0 Fix-Runden, 3457 gruen) | `dd0cc26` | **gemergt** — Zitate erst nach Datenschutzerklaerung |
 | AL-P12 | `phase/al-p12-gedaechtnis` | PASS (0 Fix-Runden, 3475 gruen) | `3d645de` | **gemergt** |
-| AL-P13 | — | — | — | offen |
+| AL-P13 | `phase/al-p13-consult-kanal-fix1` | PASS (1 Fix-Runde, highStakes, 3524 gruen) | `a090dbd` | **gemergt** — Bahn B KOMPLETT |
 | AL-P14 | — | — | — | offen |
 | AL-P15 | — | — | — | offen |
 
@@ -169,3 +169,12 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 - **Vor AL-P13 geprueft (Auflage aus Abschnitt 7b):** die Kette `PLAN-AUTH-GATE` ist
   weiterhin **nicht umgesetzt** — es existiert nur der Doku-Commit `a727804`. Die neuen
   Consult-Routen werden also gegen das heute geltende Auth-Modell gebaut.
+
+- **AL-P13 gemergt**, PASS nach 1 Fix-Runde, Verifikationslauf **3525/3525 gruen**.
+  **Damit ist Bahn B vollstaendig** (AL-P3, P8, P9, P10, P11, P12, P13).
+  Regel 3 selbst nachgeprueft: beide neuen Routen liegen unter `/api/*`, also hinter der
+  bestehenden Auth — **keine** neue Ausnahme, zusaetzlich ein Profil-Gate.
+  Die Fix-Runde fing einen echten **S1**: `event_id` ging ungeprueft in die Audit-Zeile, ein
+  authentifizierter Tenant haette gefaelschte `[audit]`-Zeilen und Log-Spam schreiben koennen.
+  Das ist der zweite Fall in dieser Kette, in dem der Review einen echten Defekt fand statt
+  Stilfragen (der erste: die empirisch falsche Begruendung in AL-P5).
