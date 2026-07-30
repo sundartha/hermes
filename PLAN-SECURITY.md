@@ -1197,3 +1197,55 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > **Bewusst getragenes Restrisiko.** Fuer Starter-Kunden bleibt die zu enge Plan-Decke
 > (300 ct) bestehen. KS-P9 verschaerft sie nicht, hebt sie aber auch nicht auf — sie ist
 > Gegenstand von KS-P5a.
+
+---
+
+## KS-P5a — Plan-Decke und Buchung teilen sich einen Satz (2026-07-30, E5/E5a)
+
+> **Was sich aendert.** `planCapCents` (`src/billing/plan-caps.js`) rechnet ab dieser Phase
+> mit `cfg.voiceTariffDefaultCents` — demselben Satz, mit dem der Verbrauch gebucht wird
+> (`tariffCentsPerMin`, Worst-Case-Zweig). Der zweite Deckel-Basissatz
+> `voiceCapRateCentsPerMin` / `VOICE_CAP_RATE_CENTS_PER_MIN` entfaellt **ersatzlos**:
+> config-Eintrag, `CONFIG_NAMESPACES.billing`, `.env.example` und `render.yaml`. Kein
+> Alias, keine Bruecke, kein Deprecation-Schalter. Grund: zwei Zahlen fuer dieselbe Sache
+> sind auseinandergelaufen — der Starter-Kunde konnte statt seiner verkauften 30 Minuten
+> nur rund 10 telefonieren, danach sperrte die eigene Decke.
+>
+> **Zahlen (Herleitung).** Kopffreiheit unveraendert Starter 5/3, Business 5/4. Damit gilt
+> fuer jeden ganzzahligen Satz T: Starter `30·T·5/3 = 50T`, Business `120·T·5/4 = 150T` —
+> immer ganzzahlig, nie aus einer Rundung. Bei T=30 (live): **1500 / 4500 ct**; bei T=300
+> (heutiger Code-Fallback): **15000 / 45000 ct**. Die tragende Invariante ist
+> `M·T + 5·T ≤ M·T·num/den` (der letzte Anruf mit seiner Worst-Case-Reserve
+> `T · ceil(MAX_CALL_DURATION_CAP_S/60) = 5T` muss noch hineinpassen); sie fordert
+> `M ≥ 7,5` (Starter) bzw. `M ≥ 20` (Business) und haelt bei jedem T > 0. Der Katalog liegt
+> mit 30 bzw. 120 verkauften Minuten darueber.
+>
+> **Absolute Regel 1 unberuehrt.** Die Tenant-Kostendecke wird **angehoben, nicht
+> abgeschafft**: `budgetExceeded`, `reserveExceedsBudget`, `effectiveCapCents`,
+> `tryReserveOutboundBudget` und der `isBookableCents`-Riegel (D7) sind byte-identisch.
+> Ebenso unberuehrt: Abo+KYC als Outbound-Permit, `OUTBOUND_FROZEN`, Denylist, Land-Gate,
+> Stundenlimit, Per-Target-Cap, Max-Gespraechsdauer, Provider-Signaturpruefung. **Kein
+> Boot-Guard wurde abgesenkt** (kein `fatal: true → false`). Nachgemessen: mit den neuen
+> Decken feuert keiner — `spendCapCoherence` rechnet ausschliesslich
+> `voiceTariffDefaultCents · ceil(300/60)` gegen `defaultTenantBudgetCents` (300·5 = 1500 ≤
+> 1500; 30·5 = 150 ≤ 1500), `planCapUnderivableFindings` prueft nur Ableitbarkeit. Der Boot
+> ist bei T=300 UND bei T=30 gruen (beide Male lokal gefahren, `/healthz` 200).
+>
+> **Neuer fail-closed Pfad.** `voiceTariffDefaultCents` ist per `min: 0` abschaltbar (die
+> gesamte Spawn-Suite faehrt `VOICE_TARIFF_DEFAULT_CENTS=0`). Ein Satz von 0 ergaebe eine
+> 0-Decke — das waere kein strengeres Gate, sondern Telefonie-Totalausfall fuer den Tenant
+> (`effectiveCapCents` liefert die Zeile, `budgetExceeded` ist ab dem ersten Cent true).
+> `deriveTenantBudgetFromPlan` (`src/store/state-ops.js`) behandelt das an der
+> Schreibkante: abgeleitete Decke ≤ 0 → **No-op + laute WARN `grund=tarif_null`**, die
+> bestehende Decke bindet weiter. Eigenes Grund-Label, getrennt von `grund=slug_unbekannt`.
+> Ein 0-Cap-Tenant kann strukturell nicht mehr entstehen (gleiche Entscheidung wie
+> `seedTenantDefaultBudget`).
+>
+> **Bewusst getragenes Restrisiko.** `MAX_BUDGET_EUR` = 30 € liegt unter der Summe der
+> verkauften Decken, sobald zwei Starter- oder ein Business-Kunde abschliessen (Decken-
+> Lesart bei T=30: Starter 15 €, Business 45 €). Seit KS-P9/E10 sperrt diese Achse nicht
+> mehr — die Folge ist also keine Blockade, sondern eine dauerhaft feuernde
+> 80-%-Warnschwelle, die damit zu Rauschen wird. Die Zahl anzupassen ist Owner-Entscheidung
+> **E9**; die vollstaendige Aufstellung (welcher Satz gebucht wird, welche Decke je Plan
+> folgt, welches N ein gegebener Plattform-Wert traegt) steht in
+> `tasks/ks-p5a-report.md`.

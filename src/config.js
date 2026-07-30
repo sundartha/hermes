@@ -570,7 +570,13 @@ const rawConfig = {
   // Voice-Minuten-Tarif (GANZZAHL Cents/min, G26). EINE Kosten-Quelle (G5): speist die
   // Vorab-Reservierung (Worst-Case vor dem Dial), den Budget-Reconcile (Ist bei Call-Ende)
   // UND den Stripe-Voice-Meter (recordVoiceMinuteMeter) - loest das fruehere
-  // voiceMinuteCostCents auf. Inland = DIESELBE dieser Vorwahlen (voiceTariffDomesticPrefixes)
+  // voiceMinuteCostCents auf. KS-P5a/E5a: seit dieser Phase leitet DERSELBE Satz auch die
+  // Plan-Kostendecke ab (billing/plan-caps.js) - der fruehere zweite Deckel-Basissatz
+  // VOICE_CAP_RATE_CENTS_PER_MIN ist ersatzlos entfallen, weil zwei Zahlen fuer dieselbe
+  // Sache auseinanderliefen (Starter bekam 10 statt 30 verkaufter Minuten). Ein Satz von 0
+  // schaltet die Kosten-Achse ab; die Decken-Ableitung ist dann ein No-op (s.
+  // deriveTenantBudgetFromPlan), NIE eine 0-Decke.
+  // Inland = DIESELBE dieser Vorwahlen (voiceTariffDomesticPrefixes)
   // an Ziel UND Absender; alles andere Worst-Case-Default. Konservativ gesetzt; live mit
   // dem Provider-Tarif abgleichen.
   voiceTariffDomesticCents: numEnv("VOICE_TARIFF_DOMESTIC_CENTS", process.env.VOICE_TARIFF_DOMESTIC_CENTS, {
@@ -602,15 +608,6 @@ const rawConfig = {
     { fallback: 10, min: 0 },
   ),
   voiceTariffDomesticPrefixes: VOICE_TARIFF_DOMESTIC_PREFIXES,
-  // LCT P6: Deckel-Basissatz je Voice-Minute (GANZZAHL EUR-Cent, G26) fuer die Ableitung
-  // der Tenant-Decke aus dem Plan (billing/plan-caps.js). AUSDRUECKLICH NICHT der gemessene
-  // 5,4 (USD-ct) und NICHT P5s Live-Kalibrierung - die auf die naechste Ganzzahl
-  // aufgerundeten 5,4: eine Decke soll nach oben irren. Vom Menschen gesetzt, nicht
-  // selbstjustierend (PM-1). Ergibt mit Kopffreiheit 5/3 bzw. 5/4 exakt 300 / 900 ct.
-  voiceCapRateCentsPerMin: numEnv("VOICE_CAP_RATE_CENTS_PER_MIN", process.env.VOICE_CAP_RATE_CENTS_PER_MIN, {
-    fallback: 6,
-    min: 1, // 0 waere eine 0-Decke fuer jeden Abschluss (0-Cap-Tenant) - fail-closed verboten
-  }),
   // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26). ZWEI Wirkungen (P2a/D3):
   // (1) Seed beim Registrieren -> explizite tenant_budget-Zeile (seedTenantDefaultBudget),
   // (2) Gate-Fallback in effectiveCapCents fuer jeden Tenant OHNE Zeile - dadurch nimmt der
@@ -1261,7 +1258,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "voiceCapRateCentsPerMin"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],

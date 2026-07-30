@@ -5,13 +5,19 @@
 // MECHANIK GEGEN DIE MODUL-CONFIG-FALLE: config.js liest process.env EINMALIG beim
 // Modul-Import (Modul-Singleton). Damit die Ableitung 900 (Business) UNCLAMPED sieht,
 // braucht der Prozess platformSpendCapCents > 900 - deshalb MUESSEN MAX_BUDGET_EUR/
-// VOICE_CAP_RATE_CENTS_PER_MIN VOR jedem Import (auch transitiv ueber store/pg.js,
+// VOICE_TARIFF_DEFAULT_CENTS VOR jedem Import (auch transitiv ueber store/pg.js,
 // billing/*.js) gesetzt sein. Ein statischer Import wuerde per ESM-Hoisting VOR diesem
 // Zeilenblock laufen - deshalb AUSSCHLIESSLICH dynamische Imports in before() (Muster
 // assistant-context-persist-pg.test.js). `node --test` isoliert jede Datei in einem
 // eigenen Prozess -> keine Cross-File-Leckage dieser process.env-Werte.
+//
+// KS-P5a: die Decke folgt seit E5a dem BUCHUNGSSATZ (voiceTariffDefaultCents), es gibt
+// keinen zweiten Deckel-Basissatz mehr. Der Fixtur-Wert 6 bleibt bewusst stehen: diese
+// Datei prueft das VERDRAHTEN der sechs Aufrufer, nicht den Tarifwert - so bleiben alle
+// gepinnten Decken (300/900) und Verbrauchszahlen unveraendert. Den Tarifwert selbst pinnt
+// test/ks-p5a-plan-cap-carries-sold-minutes.test.js.
 process.env.MAX_BUDGET_EUR = "30";
-process.env.VOICE_CAP_RATE_CENTS_PER_MIN = "6";
+process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
 
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
@@ -84,8 +90,8 @@ function noopProvision() {
 // ---- (a) Happy-Pfad + Formel direkt gepinnt --------------------------------------
 
 test("(a) planCapCents direkt: starter=300, business=900 (Bruch, keine Rundung)", () => {
-  assert.equal(planCapsMod.planCapCents("starter", { voiceCapRateCentsPerMin: 6 }), 300);
-  assert.equal(planCapsMod.planCapCents("business", { voiceCapRateCentsPerMin: 6 }), 900);
+  assert.equal(planCapsMod.planCapCents("starter", { voiceTariffDefaultCents: 6 }), 300);
+  assert.equal(planCapsMod.planCapCents("business", { voiceTariffDefaultCents: 6 }), 900);
 });
 
 test("(a) createTenantSubscription(business) -> abgeleitete Decke 900 ct", async () => {
@@ -117,10 +123,10 @@ test("(a) createTenantSubscription(starter) -> abgeleitete Decke 300 ct", async 
 // Test, P14): PAY-15 ist der unbekannte Slug (keine Katalog-Zeile), PAY-16 die
 // OCP-Frage - ein KUENFTIGER Katalog-Slug ohne Kopffreiheit-Eintrag.
 //
-// Die Basissatz-Fixtur spiegelt die VOICE_CAP_RATE_CENTS_PER_MIN-Zeile am Dateikopf
+// Die Basissatz-Fixtur spiegelt die VOICE_TARIFF_DEFAULT_CENTS-Zeile am Dateikopf
 // (Punkt 0): dieselbe Zahl, damit die abgeleiteten Decken hier und in der Ableitung
 // darunter dieselben sind.
-const PLAN_CAP_CFG = Object.freeze({ voiceCapRateCentsPerMin: 6 });
+const PLAN_CAP_CFG = Object.freeze({ voiceTariffDefaultCents: 6 });
 const UNKNOWN_PLAN_SLUG = "enterprise_us"; // weder im Katalog noch in der Kopffreiheit-Tabelle
 
 test("PAY-15: planCapCents wirft fail-closed bei unbekanntem Plan-Slug (kein stiller Default)", () => {

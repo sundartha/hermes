@@ -148,12 +148,16 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
    oder plan-abgeleitet (300/900) bleiben beim 402. Vor dem Deploy am Prod-Postgres pruefen
    und bewusst anheben/loeschen. Details + getragene Restrisiken: `PLAN-SECURITY.md`
    Abschnitt `P7-BOOTKOHAERENZ`.
-10. **Plan-Decken liegen weiter unter der Worst-Case-Reserve (offen, Owner-Entscheidung).**
-    `planCapCents("starter")=300` / `business=900` sind kleiner als 1500 ct - ein zahlender
-    Starter-Abonnent kann weiterhin kein Ziel ohne gemessenen Inlandssatz anrufen
-    (`test/pay-04-starter-reserve-charakterisierung.test.js` pinnt das). Eigene Achse
-    (`VOICE_CAP_RATE_CENTS_PER_MIN` / `PLAN_CAP_HEADROOM`), ausdruecklich NICHT GAP-32/33.
-    **Vor dem ersten fremden Kunden zu entscheiden.**
+10. **Plan-Decken tragen die verkauften Minuten - ERLEDIGT (KS-P5a, 2026-07-30), NICHT deployt.**
+    Die Decke folgt seither dem BUCHUNGSSATZ (`voiceTariffDefaultCents`): Starter `50·T`,
+    Business `150·T` - bei T=30 also 1500 / 4500 ct. Sie traegt die verkauften Minuten
+    inklusive der Worst-Case-Reserve des letzten Anrufs, satzunabhaengig und fuer jeden
+    Katalog-Slug gepinnt in `test/ks-p5a-plan-cap-carries-sold-minutes.test.js`. Der zweite
+    Deckel-Basissatz `VOICE_CAP_RATE_CENTS_PER_MIN` ist ersatzlos entfallen.
+    **Verbleibend offen:** Owner-Entscheidung **E9** - `MAX_BUDGET_EUR` (30 €) ist seit
+    KS-P9 nur noch Warnschwelle, liegt aber ab 2 Startern bzw. 1 Business-Kunden unter der
+    Summe der verkauften Decken, die Warnung wuerde ab dann Dauerzustand. Aufstellung als
+    Entscheidungsgrundlage: `tasks/ks-p5a-report.md`.
 11. **`OWNER_NUMBER_SEED` gegen `BOOTSTRAP_E164` konsolidieren (offen).** Zwei Env-Paare fuer
     dieselbe Sache; sie komponieren heute sauber (gepinnt), sind aber eine Falle.
 

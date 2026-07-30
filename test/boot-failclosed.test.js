@@ -4,15 +4,10 @@
 // Dienst ohne Gates (fail-closed). Kindprozess-Tests: Exit-Code + stderr/stdout.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, startServerExpectExit } from "./helpers.js";
+import { BASE_ENV, startServer, startServerExpectExit } from "./helpers.js";
 import { planCapUnderivableFindings } from "../src/boot-guard.js";
 import { CATALOG_SLUGS } from "../src/plans.js";
 import { planCapCents } from "../src/billing/plan-caps.js";
-
-// Muss dem config.js-Fallback von VOICE_CAP_RATE_CENTS_PER_MIN (EUR-Cent/min) entsprechen: die
-// Gegenprobe setzt KEINEN Kurs-Override, der Server leitet die Plan-Decken also mit genau
-// diesem Fallback ab. 6 = auf die naechste Ganzzahl aufgerundete 5,4 ct/min (Muster env-docs).
-const VOICE_CAP_RATE_CENTS_PER_MIN_FALLBACK = 6;
 
 test("T-P2-06: NaN-Budget (MAX_BUDGET_EUR=acht) -> Boot verweigert (exit 1), nennt Var", async () => {
   const { code, output } = await startServerExpectExit({ env: { MAX_BUDGET_EUR: "acht" } });
@@ -172,7 +167,11 @@ test("KS-P9: MAX_BUDGET_EUR=8 unter der Business-Plan-Decke bootet gruen (kein p
   assert.deepEqual(
     planCapUnderivableFindings({
       slugs: CATALOG_SLUGS,
-      capForSlug: (slug) => planCapCents(slug, { voiceCapRateCentsPerMin: VOICE_CAP_RATE_CENTS_PER_MIN_FALLBACK }),
+      // KS-P5a: die Decke folgt dem BUCHUNGSSATZ. Der Wert kommt aus DERSELBEN Quelle, mit
+      // der der Spawn-Server oben bootet (BASE_ENV), statt aus einer handgepflegten
+      // Spiegelzahl (G5/G25) - sonst prueft die Gegenprobe eine andere Konfiguration als
+      // der gemessene Boot.
+      capForSlug: (slug) => planCapCents(slug, { voiceTariffDefaultCents: Number(BASE_ENV.VOICE_TARIFF_DEFAULT_CENTS) }),
     }),
     [],
   );

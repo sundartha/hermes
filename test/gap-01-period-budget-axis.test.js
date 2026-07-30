@@ -8,8 +8,11 @@
 //
 // A3: die Testnamen tragen KEINE Katalog-ID mehr - die Faelle sind seit P6 gruener
 // Regressionsschutz und gehoeren damit in `npm test`, nicht in `test:gates`.
+//
+// KS-P5a: die Plan-Decke folgt seit E5a dem BUCHUNGSSATZ (voiceTariffDefaultCents). Der
+// Fixtur-Wert 6 bleibt bewusst stehen - geprueft wird das Budget-FENSTER, nicht der Tarif.
 process.env.MAX_BUDGET_EUR = "30";
-process.env.VOICE_CAP_RATE_CENTS_PER_MIN = "6";
+process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
 
 import test, { before } from "node:test";
 import assert from "node:assert/strict";
