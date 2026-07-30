@@ -248,6 +248,14 @@ export function createCall(
     // Buchung nicht - eine rekonstruierte Differenz erstattete Geld zurueck, das real
     // ausgegeben wurde, und oeffnete den geteilten Lebenszeit-Topf wieder.
     estimatedCostCents: null,
+    // KS-P5: die zwei ACHSEN-ANKER der Belastung - unter WELCHEM Spend-Monat und WELCHEM
+    // Perioden-Stempel estimatedCostCents tatsaechlich gebucht wurde. Set-once zusammen
+    // mit dem Betrag (recordCallEstimatedCostCents). Ohne sie kann die spaetere Gutschrift
+    // nicht unterscheiden, ob sie dieselbe Zahl senkt, die sie erhoeht hat - und weitete
+    // sonst eine abgeschlossene Perioden-/Monatsdecke auf (B5). Bestandszeile/Inbound ->
+    // null: die Gutschrift bleibt dann auf der strengsten Achse (Lebenszeit).
+    estimatedCostSpendMonthKey: null,
+    estimatedCostPeriodKey: null,
     // actualCostMicroCents: Summe der Provider-Ist-Kosten dieses Calls in GANZZAHL
     // Mikro-Cents, in der PROVIDER-WAEHRUNG UNVERAENDERT (heute USD). KEINE Umrechnung an
     // dieser Kante - die lebt an genau einer Stelle in P4. Eine umgerechnete Zahl ist
@@ -465,6 +473,25 @@ export function markBilled(s, callId) {
   return setOnceTimestamp(getCall(s, callId), "billedAt");
 }
 
+// KS-P5: die zwei Achsen-Stempel eines Usage-Buckets als Anker-Objekt. EINE Stelle, an
+// der die Anker-FORM definiert ist - Schreibseite (metering) und Leseseite (cost-truing)
+// bauen sie nie selbst zusammen, sonst driften zwei Feldlisten auseinander (G5).
+// Reine Funktion.
+export function chargeAnchorsOfUsage(bucket) {
+  return { spendMonthKey: bucket.spendMonthKey, periodKey: bucket.budgetPeriodKey };
+}
+
+// Gegenstueck der Leseseite: die am Call persistierten Anker in dieselbe Form.
+// Reine Funktion.
+export function chargeAnchorsOfCall(call) {
+  return { spendMonthKey: call.estimatedCostSpendMonthKey, periodKey: call.estimatedCostPeriodKey };
+}
+
+// Kein Belastungs-Anker bekannt (Bestandszeile von vor KS-P5, Aufrufer ohne Call).
+// BENANNT statt still: die Gutschrift bleibt dann auf der Lebenszeit-Achse, also auf der
+// STRENGSTEN - das ist exakt das Bestandsverhalten und damit fail-closed.
+export const NO_CHARGE_ANCHORS = Object.freeze({ spendMonthKey: null, periodKey: null });
+
 // LCT P2: persistiert den GEBUCHTEN Schaetzbetrag am Call. Set-once (Muster markBilled):
 // der zuerst gebuchte Wert gewinnt, ein spaeter Retry ueberschreibt ihn nie - er ist der
 // Bezugspunkt, gegen den P4 die Korrektur bildet.
@@ -473,11 +500,18 @@ export function markBilled(s, callId) {
 // addVoiceUsageCostCents benutzt: wird die Buchung dort als korrupt verworfen, darf hier
 // KEIN Estimate stehenbleiben - sonst rechnete P4 eine Rueckerstattung gegen einen Betrag,
 // der nie in den Bucket gelaufen ist. Liefert { call, changed } (Wrapper saved bei changed).
-export function recordCallEstimatedCostCents(s, callId, costCents) {
+// KS-P5: Optionsobjekt statt viertem Positionsargument (F1). Der Aufrufer liefert den
+// Betrag UND die Anker der Buchung, unter der er entstanden ist.
+export function recordCallEstimatedCostCents(s, callId, { costCents, chargeAnchors }) {
   const call = getCall(s, callId);
   if (!call || call.estimatedCostCents !== null || !isBookableCents(costCents))
     return { call: call || null, changed: false };
   call.estimatedCostCents = costCents;
+  // KS-P5: Betrag UND Anker entstehen im selben set-once-Schritt. Getrennt geschrieben
+  // gaebe es einen Zustand "Betrag ohne Anker" - genau den Zustand, in dem die spaetere
+  // Gutschrift raten muesste.
+  call.estimatedCostSpendMonthKey = chargeAnchors.spendMonthKey;
+  call.estimatedCostPeriodKey = chargeAnchors.periodKey;
   return { call, changed: true };
 }
 
@@ -2104,9 +2138,25 @@ function authoritativeSpendMonthKey(storedKey, nowKey) {
 // gibt es GENAU EINE Stelle, die den autoritativen Monatsschluessel zusammensetzt, und
 // die Nicht-Divergenz zwischen Anzeige und Verbrauchszahl ist strukturell statt nur
 // konventionell erzwungen.
+//
+// KS-P5: Math.max(0, ...) wie bei der Schwester budgetPeriodUsageCents. Bis KS-P5 KONNTE
+// die Monats-Achse nie negativ werden (Gutschriften erreichten sie nicht) - genau deshalb
+// fehlte der Riegel. Jetzt kann sie es: der 0-Boden von costCents kappt die Lebenszeit,
+// die Monatszahl bekaeme den vollen Betrag ab (Gutschrift 100 auf Bucket 40 -> costCents 0,
+// spendMonthCostCents -60). Ein negativer Monatsverbrauch ist ein Guthaben, das ueber
+// platformSpendMonthCents in die PLATTFORM-Summe wandert und die Decke fuer ALLE Tenants
+// aufweitet.
 export function spendMonthUsageCents(bucket, nowIso) {
-  const key = spendMonthWindowKey(bucket, nowIso);
-  return key === bucket.spendMonthKey ? bucket.spendMonthCostCents : 0;
+  if (!spendMonthCounterCurrent(bucket, nowIso)) return 0;
+  return Math.max(0, bucket.spendMonthCostCents);
+}
+
+// Zeigt der gespeicherte Monatszaehler noch den AUTORITATIVEN Monat? EINE Stelle (G5):
+// die Leseprojektion darueber liest daraus ihre 0, die Gutschrift (creditHitsSpendMonth)
+// ihre Wirksamkeit. Ohne gemeinsame Quelle koennte eine Gutschrift auf einen Zaehler
+// gebucht werden, den der Leser laengst als abgelaufen behandelt. Reine Funktion.
+function spendMonthCounterCurrent(bucket, nowIso) {
+  return spendMonthWindowKey(bucket, nowIso) === bucket.spendMonthKey;
 }
 
 // Reine LESEPROJEKTION des ANGEZEIGTEN Monatsschluessels (P5b) - EINZIGE Stelle, die
@@ -2126,11 +2176,13 @@ export function spendMonthWindowKey(bucket, nowIso) {
 // bookCostCorrectionCents buchen hier, damit costCents und spendMonthCostCents nie
 // auseinanderlaufen KOENNEN.
 //
-// GENAU EINE benannte Ausnahme (LCT P4): die NEGATIVE Korrektur schreibt bewusst NUR
-// costCents und laesst spendMonthCostCents unangetastet - sonst liesse sich die
-// Monatsdecke durch verspaetete Gutschriften aus einem abgeschlossenen Monat aufweiten.
-// Ein Cap, den man mit alten Calls zurueckdrehen kann, ist kein Cap. Die Ausnahme lebt
-// AUSSCHLIESSLICH in bookCostCorrectionCents und ist dort testgepinnt.
+// GENAU EINE benannte Ausnahme (LCT P4, praezisiert in KS-P5): die NEGATIVE Korrektur
+// laeuft NICHT hier durch, sondern in applyCreditCents (bookCostCorrectionCents). Der
+// Grund ist unveraendert - eine Gutschrift aus einem ABGESCHLOSSENEN Monat darf die
+// Monatsdecke nicht zurueckdrehen; ein Cap, den man mit alten Calls aufweiten kann, ist
+// kein Cap. NEU ist nur die Feinheit: verworfen wird die Gutschrift jetzt anhand des am
+// Call persistierten BELASTUNGS-Ankers, nicht mehr pauschal. Sie bleibt damit
+// AUSSCHLIESSLICH dort und ist dort testgepinnt.
 //
 // Genau diese Buendelung ist die Gegenmassnahme zu "fail-open durch Vergessen"
 // (Pre-Mortem TOD 2): eine kuenftige dritte Schreibstelle, die nur costCents erhoeht,
@@ -2265,28 +2317,73 @@ export function convertProviderMicroToBucketCents({ remMicro, actualCostMicroCen
   return { bucketCents: carryCents, remMicro: carriedRem };
 }
 
-// LCT P4, DIE Cent-Schreibkante der Korrektur (Anhang-Signatur, verbindlich).
-// EIGENES Praedikat isCorrectionCents (Vorzeichen erlaubt) - isBookableCents bleibt
-// unangetastet. Drei Regeln, alle drei sind Sicherungen und keine Kosmetik:
-//   1. 0-BODEN: usage.costCents faellt NIE unter 0.
-//   2. ACHSEN-ASYMMETRIE: positive Korrekturen gehen ueber bookCents auf BEIDE Achsen,
-//      negative NUR auf die Lebenszeit-Achse. Sonst liesse sich die Monatsdecke durch
-//      verspaetete Gutschriften aus einem abgeschlossenen Monat aufweiten.
-//   3. deltaCents === 0 beruehrt KEINE Achse (kein Phantom-Monatsstempel ueber
+// KS-P5: trifft die Gutschrift denselben Monat, den die Spend-Monat-Achse GERADE zaehlt?
+// Drei Bedingungen, jede traegt:
+//   - der Anker existiert (Bestandszeile/Inbound -> null -> nur Lebenszeit),
+//   - er ist derselbe Monat, unter dem der Zaehler steht (Vormonat -> verworfen),
+//   - der Zaehler ist ueberhaupt noch der laufende: nach einem Rollover liest die Achse
+//     bereits 0, eine Gutschrift dagegen zoege den NEUEN Monat ins Minus.
+// Reine Funktion.
+function creditHitsSpendMonth(bucket, spendMonthKey, nowIso) {
+  return (
+    spendMonthKey !== null &&
+    spendMonthKey === bucket.spendMonthKey &&
+    spendMonthCounterCurrent(bucket, nowIso)
+  );
+}
+
+// KS-P5: trifft die Gutschrift dasselbe Perioden-Fenster wie die Belastung? Verglichen
+// wird der Perioden-STEMPEL zum Zeitpunkt der Belastung mit dem heutigen. stampBudgetPeriod
+// ist monoton (laterMonotonicKey) - ein abweichender Stempel heisst deshalb IMMER "die
+// Periode ist seither weitergewandert". Beide null (nie gestempelt) ist Gleichheit und
+// korrekt: ohne Stempel IST das Fenster die Lebenszeit. Reine Funktion.
+function creditHitsBudgetPeriod(bucket, periodKey) {
+  return periodKey === bucket.budgetPeriodKey;
+}
+
+// KS-P5: DIE Gutschrift. Drei Achsen, EIN wirksamer Betrag.
+//   1. Lebenszeit (costCents): immer, mit 0-BODEN. Der Boden kappt den Betrag; alles
+//      Weitere rechnet mit dem GEKAPPTEN Wert, damit die Achsen nicht auseinanderlaufen.
+//   2. Spend-Monat: nur, wenn die Belastung im gerade gezaehlten Monat gebucht wurde.
+//   3. Perioden-Fenster: es ist eine ABLEITUNG (costCents - Baseline), also senkt jede
+//      Gutschrift es automatisch mit. Gehoert die Belastung NICHT ins laufende Fenster,
+//      wandert die Baseline um denselben Betrag mit - das Fenster bleibt unberuehrt,
+//      obwohl die Lebenszeit sinkt ("sonst nur Lebenszeit"). Ohne diese Kompensation
+//      weitete JEDE alte Gutschrift die Perioden-Decke auf; auf DIESER Achse gibt es den
+//      Missbrauchsschutz vor KS-P5 ueberhaupt nicht.
+// Der Baseline-Riegel Math.max(0, ...) haelt die Invariante baseline <= costCents: die
+// Baseline ist ein costCents-Schnappschuss und darf nie negativ werden (sonst waere das
+// Fenster GROESSER als die Lebenszeit). Reine Mutation, Nebeneffekt im Namen (N7).
+function applyCreditCents(usage, { deltaCents, chargeAnchors, nowIso }) {
+  const vorher = usage.costCents;
+  usage.costCents = Math.max(0, vorher + deltaCents);
+  const wirksam = usage.costCents - vorher; // <= 0, durch den 0-Boden gekappt
+  if (creditHitsSpendMonth(usage, chargeAnchors.spendMonthKey, nowIso))
+    usage.spendMonthCostCents += wirksam;
+  if (!creditHitsBudgetPeriod(usage, chargeAnchors.periodKey))
+    usage.budgetPeriodBaselineCents = Math.max(0, usage.budgetPeriodBaselineCents + wirksam);
+}
+
+// LCT P4 / KS-P5, DIE Cent-Schreibkante der Korrektur. EIGENES Praedikat isCorrectionCents
+// (Vorzeichen erlaubt) - isBookableCents bleibt unangetastet. Vier Regeln, alle Sicherungen:
+//   1. 0-BODEN: usage.costCents faellt NIE unter 0 (ein negativer Lebenszeit-Wert ist fuer
+//      isBookableCents unbuchbar -> spendOrDeny sperrt den Tenant mit Grund usage_korrupt;
+//      eine Gutschrift, die den Kunden sperrt).
+//   2. POSITIVE Korrekturen gehen unveraendert ueber bookCents auf beide Achsen.
+//   3. NEGATIVE Korrekturen (Gutschriften) gehen ueber applyCreditCents und wirken je
+//      Achse NUR, wenn der BELASTUNGS-Anker dieselbe Achsen-Zahl trifft. Der Anker ist
+//      der Achsen-Stempel zum Zeitpunkt der Belastung (chargeAnchorsOfCall), NIE der
+//      Zeitpunkt der Korrektur und NIE call.startedAt.
+//   4. deltaCents === 0 beruehrt KEINE Achse (kein Phantom-Monatsstempel ueber
 //      bookCents(0)) - der Lauf gilt trotzdem als gebucht, s. applyCostCorrectionCents.
-// Liefert { usage, booked }. Nebeneffekt im Namen (N7).
-export function bookCostCorrectionCents(s, tenantId, deltaCents, nowIso) {
+// Liefert { usage, booked }. Nebeneffekt im Namen (N7). Optionsobjekt statt fuenftem
+// Positionsargument (F1).
+export function bookCostCorrectionCents(s, { tenantId, deltaCents, chargeAnchors, nowIso }) {
   const usage = usageFor(s, tenantId);
   if (!isCorrectionCents(deltaCents))
     return { usage: discardCorruptWrite(usage, `bookCostCorrectionCents tenant:${tenantId}`, deltaCents), booked: false };
-  if (deltaCents > 0) bookCents(usage, deltaCents, nowIso); // beide Achsen
-  // 0-BODEN + Achsen-Asymmetrie. NEBENEFFEKT, der in den Kommentar gehoert: wird
-  // costCents auf 0 geklemmt, bricht still die Invariante
-  // spendMonthCostCents <= costCents. spendOrDeny nutzt die Lebenszeitzahl als
-  // UNABHAENGIGE Gegenprobe gegen die Monatszahl; nach einem Clamp ist diese
-  // Gegenprobe nicht mehr aussagekraeftig. Heute entsteht daraus kein Schaden (beide
-  // bleiben buchbar), die geaenderte BEDEUTUNG der Gegenprobe steht deshalb hier.
-  else if (deltaCents < 0) usage.costCents = Math.max(0, usage.costCents + deltaCents);
+  if (deltaCents > 0) bookCents(usage, deltaCents, nowIso);
+  else if (deltaCents < 0) applyCreditCents(usage, { deltaCents, chargeAnchors, nowIso });
   return { usage, booked: true };
 }
 
@@ -2300,7 +2397,12 @@ export function bookCostCorrectionCents(s, tenantId, deltaCents, nowIso) {
 //   verworfen         -> costCorrectionMicroCentsRem bleibt BIT-GLEICH
 // Liefert { usage, booked, deltaCents }.
 export function applyCostCorrectionCents(s, tenantId,
-  { actualCostMicroCents, estimatedCostCents, providerToBucketRateMicro, dataComplete }, nowIso) {
+  { actualCostMicroCents, estimatedCostCents, providerToBucketRateMicro, dataComplete,
+    // KS-P5: die Anker der BELASTUNG. Fehlen sie (Bestandszeile vor KS-P5, Aufrufer ohne
+    // Call), gilt NO_CHARGE_ANCHORS - die Gutschrift bleibt auf der Lebenszeit-Achse und
+    // damit auf dem Bestandsverhalten. Das ist die STRENGSTE Variante, nicht die
+    // lockerste; ein vergessener Aufrufer verliert hier keine Sicherung.
+    chargeAnchors = NO_CHARGE_ANCHORS }, nowIso) {
   const usage = usageFor(s, tenantId);
   const { bucketCents, remMicro } = convertProviderMicroToBucketCents({
     remMicro: usage.costCorrectionMicroCentsRem,
@@ -2312,7 +2414,7 @@ export function applyCostCorrectionCents(s, tenantId,
   // Beweis. Reihenfolge ist Absicht: verworfen wird VOR jeder Mutation, damit der Rest
   // nachweislich bit-gleich bleibt (Rundungs-Absatz des Plans).
   if (deltaCents < 0 && !dataComplete) return { usage, booked: false, deltaCents };
-  const booked = bookCostCorrectionCents(s, tenantId, deltaCents, nowIso);
+  const booked = bookCostCorrectionCents(s, { tenantId, deltaCents, chargeAnchors, nowIso });
   if (!booked.booked) return { usage, booked: false, deltaCents }; // isCorrectionCents-Riegel
   usage.costCorrectionMicroCentsRem = remMicro; // NUR zusammen mit der Buchung
   return { usage, booked: true, deltaCents };

@@ -683,15 +683,50 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 >    Baseline ein - das Fenster wird nie mehr zurueckgesetzt. Ueber die Zeit ist das
 >    **strenger** als vorher, aber dauerhaft um den Baseline lockerer als Lebenszeit. Der
 >    Tenant ist ueber `tenantInactive`/`allowlistError` ohnehin fuer Outbound gesperrt.
-> 2. Eine verspaetete Kostenkorrektur aus der Vorperiode faellt positiv ins neue Fenster
+> 2. ~~Eine verspaetete Kostenkorrektur aus der Vorperiode faellt positiv ins neue Fenster
 >    bzw. wird negativ auf 0 geklemmt (`Math.max(0, ...)`, sonst waere sie ein Guthaben,
 >    das das Gate aufweitet). Identische Asymmetrie wie die bestehende Spend-Monat-Achse
->    (`bookCostCorrectionCents`) - kein neuer Sachverhalt.
+>    (`bookCostCorrectionCents`) - kein neuer Sachverhalt.~~ **Aufgeloest in KS-P5**
+>    (2026-07-30): eine verspaetete Gutschrift wirkt je Achse nur, wenn der am Call
+>    persistierte Belastungs-Anker (`estimated_cost_spend_month_key` /
+>    `estimated_cost_period_key`) dieselbe Achsen-Zahl trifft; gehoert sie in ein
+>    abgeschlossenes Fenster, wandert `budgetPeriodBaselineCents` mit und das Fenster bleibt
+>    unberuehrt. Eine Gutschrift der LAUFENDEN Periode gibt dem Kunden sein Kontingent
+>    dagegen zurueck, statt wie bisher nur den Lebenszeit-Zaehler zu senken.
 > 3. ~~`tenantBudgetSnapshot` (Anzeige/Ablehnungstexte) bleibt eine LEBENSZEIT-Sicht neben
 >    einer Perioden-Entscheidung.~~ **Aufgeloest in KS-P4** (2026-07-30): der Snapshot
 >    liest seither dieselbe aufgeloeste Gate-Groesse (`gateUsageCents` ueber
 >    `tenantUsageAxes`) wie `budgetExceeded`/`reserveExceedsBudget` - die Anzeige/Gate-
 >    Divergenz entfaellt strukturell, s. Abschnitt `## KS-P4` unten.
+>
+> **Belastungs-Anker + 0-Boden beider Achsen (KS-P5, 2026-07-30).** Bis dahin unbeschrieben
+> und deshalb hier nachgetragen: die PERIODEN-Achse hatte den Missbrauchsschutz vor KS-P5
+> **gar nicht**. `budgetPeriodUsageCents` ist eine reine Ableitung (`costCents` minus
+> Baseline) - jede Gutschrift senkte das Fenster automatisch mit, gleich aus welcher Periode
+> die Belastung stammte. Nur die SPEND-MONAT-Achse war geschuetzt, und die pauschal (jede
+> negative Korrektur wurde von ihr ferngehalten). Seit KS-P5 entscheidet auf BEIDEN Achsen
+> derselbe Belastungs-Anker: `recordCallEstimatedCostCents` persistiert zusammen mit dem
+> Betrag die zwei Achsen-Stempel, unter denen tatsaechlich gebucht wurde (Bucket-Brigade in
+> `reconcileOutboundVoiceBudget` - der Anker ist der Rueckgabewert der Buchung, nie
+> `call.startedAt` und nie der Zeitpunkt der Korrektur). Fehlt der Anker (Bestandszeile vor
+> KS-P5, kein Backfill moeglich), gilt `NO_CHARGE_ANCHORS` und die Gutschrift bleibt auf der
+> Lebenszeit-Achse - dem Bestandsverhalten und der strengsten der drei Achsen.
+>
+> Damit die Monats-Achse jetzt sinken KANN, traegt `spendMonthUsageCents` seit KS-P5
+> denselben `Math.max(0, ...)`-Riegel wie die Schwester `budgetPeriodUsageCents`. Ohne ihn
+> waere die Folge nicht lokal: der 0-Boden von `costCents` kappt die Lebenszeit, die
+> Monatszahl bekaeme den vollen Betrag ab und koennte negativ werden - ein negativer
+> Monatsverbrauch ist ein Guthaben, das ueber `platformSpendMonthCents` in die
+> PLATTFORM-Summe wandert und die dort abgelesene Zahl fuer ALLE Tenants nach unten zieht
+> (seit KS-P9 Beobachtung/Schwellenwarnung statt Sperre - eine verfaelschte Warnschwelle
+> bleibt trotzdem ein Befund). Testgepinnt in
+> `test/ks-p5-current-period-credits.test.js` (P5/P6).
+>
+> **Deploy-Vorbedingung (KS-P5, DDL).** Zwei additive NULLABLE Spalten auf `call`. Reihenfolge
+> zwingend **erst migrieren, dann deployen** (zusaetzliche Spalten stoeren den alten Code
+> nicht, fehlende brechen den neuen sofort - Lehre `no-automatic-db-migration`):
+> `ALTER TABLE call ADD COLUMN IF NOT EXISTS estimated_cost_spend_month_key TEXT;` und
+> `ALTER TABLE call ADD COLUMN IF NOT EXISTS estimated_cost_period_key TEXT;`
 >
 > **Deploy-Vorbedingung (GAP-07).** `alertChannelFindings` liefert seit dieser Phase einen
 > FATALEN Befund bei `PAYMENT_ENABLED=true` UND `PLATFORM_SPEND_WARN_PERCENT>0` UND leerem

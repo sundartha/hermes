@@ -9,6 +9,10 @@ import { findTenant, resolveCallLanguage } from "./state-ops.js";
 // Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
 // und interne Flags duerfen den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
 // rein interner persistierter Dedup-Marker -> wie _finished gestrippt (kein API-Leak).
+// KS-P5: die zwei Belastungs-Anker (estimatedCostSpendMonthKey/estimatedCostPeriodKey)
+// verlassen die API ebenfalls NICHT - sie gehoeren zur selben internen Abrechnungs-Achse
+// wie estimatedCostCents. Ohne das Strippen wanderten zwei neue Felder in /api/state und
+// die MCP-Ausgaben und braechen die Byte-Identitaet der Read-Parity-Tests.
 // LCT P2: die fuenf Kosten-Felder verlassen die API NICHT (Muster summarySmsSentAt) -
 // interne Abrechnungs-/Forensik-Groessen, kein Anzeige-Vertrag. Haelt /api/state und die
 // Self-Service-Antwort BYTE-IDENTISCH zum Bestand; die Sichtbarkeit entscheidet P5, nicht
@@ -28,6 +32,8 @@ export function publicCall({
   telnyxConversationId,
   callerTurns,
   estimatedCostCents,
+  estimatedCostSpendMonthKey,
+  estimatedCostPeriodKey,
   actualCostMicroCents,
   costTruedAt,
   costTruedSource,

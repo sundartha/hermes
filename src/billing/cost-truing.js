@@ -25,7 +25,7 @@
 // convertProviderMicroToBucketCents (state-ops.js), aufgerufen ausschliesslich aus
 // applyCostCorrectionCents. In diesem Modul wird NIE umgerechnet.
 import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, isBookableCents } from "../store/defaults.js";
-import { nextCostTruingAttempt } from "../store/state-ops.js";
+import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
 
@@ -341,6 +341,9 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       estimatedCostCents: call.estimatedCostCents,
       providerToBucketRateMicro: config.billing.providerToBucketRateMicro,
       dataComplete: refundProven(call, measured),
+      // KS-P5: die Anker der Belastung reisen mit. Ohne sie faellt die Gutschrift auf
+      // NO_CHARGE_ANCHORS zurueck und wirkt nur auf der Lebenszeit-Achse.
+      chargeAnchors: chargeAnchorsOfCall(call),
     });
     console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
   }

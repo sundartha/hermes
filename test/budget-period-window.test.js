@@ -13,6 +13,7 @@ import {
   makeDefaultState,
   addVoiceUsageCostCents,
   bookCostCorrectionCents,
+  NO_CHARGE_ANCHORS,
   gateUsageCents,
   stampBudgetPeriod,
   budgetExceeded,
@@ -100,7 +101,9 @@ test("B5 negative Korrektur unter die Baseline -> Gate-Verbrauch 0, nie negativ"
   const s = stateWithUsage(TENANT_A, { costCents: 100 });
   stampBudgetPeriod(s, TENANT_A, PERIOD_JULY);
   // Verspaetete Kostenkorrektur aus der VORperiode druckt costCents unter die Baseline.
-  bookCostCorrectionCents(s, TENANT_A, -30, NOW_ISO);
+  // KS-P5: ohne Belastungs-Anker (NO_CHARGE_ANCHORS) bleibt die Gutschrift auf der
+  // Lebenszeit-Achse; die Baseline wandert mit (100 -> 70), das Fenster bleibt 0.
+  bookCostCorrectionCents(s, { tenantId: TENANT_A, deltaCents: -30, chargeAnchors: NO_CHARGE_ANCHORS, nowIso: NOW_ISO });
   assert.equal(s.usage[TENANT_A].costCents, 70);
   assert.equal(
     gateUsageCents(s, TENANT_A, FLAG_OFF, NOW_ISO),

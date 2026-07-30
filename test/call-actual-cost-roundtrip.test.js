@@ -89,6 +89,10 @@ test("B1 (pg): Call ohne Kosten-Felder -> null/0 nach Flush+Reopen, kein NaN", a
   assert.equal(hydrated.costTruedAt, null);
   assert.equal(hydrated.costTruedSource, null);
   assert.equal(hydrated.costTruingAttempts, 0);
+  // KS-P5: die zwei Belastungs-Anker hydrieren wie estimatedCostCents zu null - eine
+  // Bestandszeile ohne Anker laesst die Gutschrift fail-closed auf der Lebenszeit-Achse.
+  assert.equal(hydrated.estimatedCostSpendMonthKey, null);
+  assert.equal(hydrated.estimatedCostPeriodKey, null);
   assert.ok(!Number.isNaN(hydrated.estimatedCostCents));
   assert.ok(!Number.isNaN(hydrated.actualCostMicroCents));
 });
@@ -122,6 +126,10 @@ test("B2 (json Alt-Shape): ein von Hand ohne die fuenf Felder geschriebener Call
   assert.equal(hydrated.costTruedAt, null);
   assert.equal(hydrated.costTruedSource, null);
   assert.equal(hydrated.costTruingAttempts, 0);
+  // KS-P5: json<->pg-Paritaet der zwei Belastungs-Anker (CALL_FIELD_DEFAULTS) - strukturell
+  // null, nie undefined.
+  assert.equal(hydrated.estimatedCostSpendMonthKey, null);
+  assert.equal(hydrated.estimatedCostPeriodKey, null);
   assert.ok(!Number.isNaN(hydrated.costTruingAttempts + 1), "P3 rechnet +1 - darf nie NaN werden");
 });
 
@@ -188,6 +196,12 @@ test("E1: reconcileOutboundVoiceBudget bucht + persistiert denselben Estimate-We
     assert.equal(costCentsAfterFirst - costCentsBeforeFirst, 18, "3 Minuten * 6 Cent/min = 18 Cent gebucht");
     const persisted = jsonStore.getCall(created.id);
     assert.equal(persisted.estimatedCostCents, 18, "derselbe Betrag wird am Call persistiert");
+    // KS-P5: mit dem Betrag reisen die zwei Achsen-Stempel der Buchung mit (Bucket-Brigade).
+    // Verglichen wird gegen den Bucket SELBST - eine fest verdrahtete Erwartung waere eine
+    // zweite, unabhaengig gepflegte Monats-/Perioden-Regel.
+    const bucket = jsonStore.usageOf(tenantId);
+    assert.equal(persisted.estimatedCostSpendMonthKey, bucket.spendMonthKey, "Anker = Monatsstempel NACH der Buchung");
+    assert.equal(persisted.estimatedCostPeriodKey, bucket.budgetPeriodKey, "Anker = Perioden-Stempel NACH der Buchung");
 
     // Set-once (E3): ein zweiter Aufruf auf demselben Call darf den Estimate NICHT
     // erneut buchen/ueberschreiben.

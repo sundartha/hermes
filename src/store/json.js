@@ -188,6 +188,11 @@ function migrateCalendarToMap(calendar) {
 // gesetzte Werte - auch die 0 - unangetastet.
 const CALL_FIELD_DEFAULTS = Object.freeze({
   estimatedCostCents: null,
+  // KS-P5: die zwei Belastungs-Anker (json<->pg-Parity, rowToCall liefert null). Ein
+  // Bestands-store.json ohne die Felder hydriert damit strukturell auf null, nie auf
+  // undefined - die Gutschrift faellt dann fail-closed auf die Lebenszeit-Achse.
+  estimatedCostSpendMonthKey: null,
+  estimatedCostPeriodKey: null,
   actualCostMicroCents: null,
   costTruedAt: null,
   costTruedSource: null,
@@ -421,8 +426,9 @@ export function markBilled(callId) {
 }
 
 // LCT P2: gebuchter Schaetzbetrag am Call - mutiert -> save bei changed (Muster markBilled).
-export function recordCallEstimatedCostCents(callId, costCents) {
-  const { call, changed } = ops.recordCallEstimatedCostCents(load(), callId, costCents);
+// KS-P5: input = { costCents, chargeAnchors } (Muster recordCallCostTruingResult).
+export function recordCallEstimatedCostCents(callId, input) {
+  const { call, changed } = ops.recordCallEstimatedCostCents(load(), callId, input);
   if (changed) save();
   return call;
 }

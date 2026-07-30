@@ -214,6 +214,12 @@ CREATE TABLE IF NOT EXISTS call (
   -- (nicht in-memory): ein Prozess-lokaler Zaehler wird auf dem Render-Free-Tier bei jedem
   -- Restart genullt und erreicht COST_TRUING_MAX_ATTEMPTS (P3) nie.
   estimated_cost_cents INTEGER,
+  -- KS-P5: die zwei ACHSEN-ANKER der Belastung (Spend-Monat 'YYYY-MM' bzw. ISO-Perioden-
+  -- start), unter denen estimated_cost_cents gebucht wurde. Additiv NULLABLE, KEIN
+  -- Backfill: rueckwirkend ist der Anker nicht erhebbar, NULL heisst "Anker unbekannt"
+  -- und laesst die Gutschrift fail-closed auf der Lebenszeit-Achse.
+  estimated_cost_spend_month_key TEXT,
+  estimated_cost_period_key TEXT,
   actual_cost_micro_cents BIGINT,
   cost_trued_at TEXT,
   cost_trued_source TEXT,
@@ -280,6 +286,11 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS mandate JSONB;
 -- app.current_tenant fest auf BOOTSTRAP_TENANT_ID; ein Backfill auf der FORCE-RLS-Tabelle
 -- call saehe nur die Bootstrap-Zeilen. NULL bedeutet "nie abgeglichen".
 ALTER TABLE call ADD COLUMN IF NOT EXISTS estimated_cost_cents INTEGER;
+-- KS-P5: die zwei Belastungs-Anker auf Bestands-call-Tabellen nachziehen (Muster
+-- estimated_cost_cents). Idempotent; frische DB = No-op. KEIN Backfill - rueckwirkend ist
+-- der Anker nicht erhebbar, NULL laesst die Gutschrift auf der Lebenszeit-Achse.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS estimated_cost_spend_month_key TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS estimated_cost_period_key TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS actual_cost_micro_cents BIGINT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_trued_at TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_trued_source TEXT;

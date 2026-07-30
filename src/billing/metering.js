@@ -7,7 +7,7 @@
 // Monatsmiete-Ausloeser), NICHT hier: reconcileOutboundVoiceBudget laeuft immer,
 // recordVoiceMinuteMeter / recordNumberMonthMeter nur im Payment-Pfad.
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
-import { callStartAnchorMs, numbersDueForMonthMeter } from "../store/state-ops.js";
+import { callStartAnchorMs, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
 
 const MS_PER_MINUTE = 60 * 1000;
@@ -118,12 +118,19 @@ export function makeMetering({ store }) {
     // Korrektur erstattete real ausgegebenes Geld zurueck und oeffnete den geteilten
     // Lebenszeit-Topf wieder (Kapitel 4 des Plans).
     //
-    // Reihenfolge ist Absicht: erst buchen, dann den Bezugswert festhalten. Beide Schritte
-    // sind synchrone Spiegel-Mutationen ohne IO dazwischen; die Richtung im Zweifel ist die,
-    // die MEHR gebucht laesst (fehlender Estimate -> P4 korrigiert gar nicht, fail-closed).
+    // KS-P5, Bucket-Brigade (G31): der zweite Schritt konsumiert den RUECKGABEWERT des
+    // ersten. Die Reihenfolge war bisher Konvention ("erst buchen, dann den Bezugswert
+    // festhalten") und ist seit KS-P5 sicherheitstragend - die Anker muessen die
+    // Achsen-Stempel NACH der Buchung sein, sonst zeigt die Gutschrift spaeter auf einen
+    // Monat/eine Periode, in der die Belastung nie stand. Ueber den Rueckgabewert ist die
+    // Reihenfolge nicht mehr vergessbar. Die Richtung im Zweifel bleibt die, die MEHR
+    // gebucht laesst (fehlender Estimate -> P4 korrigiert gar nicht, fail-closed).
     const estimatedCostCents = minutes * callTariffCentsPerMin(call);
-    store.addVoiceUsageCostCents(call.tenantId, estimatedCostCents);
-    store.recordCallEstimatedCostCents(call.id, estimatedCostCents);
+    const usage = store.addVoiceUsageCostCents(call.tenantId, estimatedCostCents);
+    store.recordCallEstimatedCostCents(call.id, {
+      costCents: estimatedCostCents,
+      chargeAnchors: chargeAnchorsOfUsage(usage),
+    });
   }
 
   // Monatsmiete EINER Nummer in GANZZAHL Cents (G26: nie Float-Euro), oder null ohne

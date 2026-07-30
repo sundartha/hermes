@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { config } from "../src/config.js";
 import { makeOutboundGates, tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { callTariffCentsPerMin, makeMetering } from "../src/billing/metering.js";
-import { USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { USAGE_EVENT_KIND, emptyUsage } from "../src/store/defaults.js";
 
 const TENANT_A = "t_origin";
 const DE_OWN_DID = "+4930111222333"; // eigene DID mit Inlands-Vorwahl
@@ -40,8 +40,11 @@ function fakeStore() {
     recordUsageEvent(ev) {
       usageEvents.push(ev);
     },
+    // KS-P5: die Fassade liefert den Usage-Bucket - reconcileOutboundVoiceBudget liest
+    // daraus die Achsen-Stempel (Bucket-Brigade). Ohne Rueckgabewert wuerfe der Aufruf.
     addVoiceUsageCostCents(tenantId, costCents) {
       voiceCostCents.push({ tenantId, costCents });
+      return emptyUsage();
     },
     recordCallEstimatedCostCents() {},
   };
