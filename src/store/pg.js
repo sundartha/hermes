@@ -368,8 +368,9 @@ export function makePgStore(runner) {
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
     // Diagnose-Snapshot der Tenant-Achse (P5a): reine Query, kein save (wie
-    // budgetExceeded). Wrapper-Parity zu json.js.
-    tenantBudgetSnapshot: (tenantId, cfg) => ops.tenantBudgetSnapshot(requireState(), tenantId, cfg),
+    // budgetExceeded). KS-P4: nowIso an der IO-Grenze. Wrapper-Parity zu json.js.
+    tenantBudgetSnapshot: (tenantId, cfg) =>
+      ops.tenantBudgetSnapshot(requireState(), tenantId, cfg, new Date().toISOString()),
     // Reconcile (outbound-p1c): Mutation -> save (wie trackUsage). flushUsage persistiert
     // den costCents-Bucket des Tenants (als cost_eur-Spalte). nowIso s. trackUsage (P4).
     addVoiceUsageCostCents(tenantId, costCents) {

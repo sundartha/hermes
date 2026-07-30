@@ -599,7 +599,8 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > abgeleiteter Plattform-Cap (eigene Folgephase), keine Aenderung an den
 > Ablehnungstexten/`tenantBudgetSnapshot` (die zeigen nach einem Flip weiter
 > Lebenszeit-Zahlen neben einer Monats-Entscheidung - irrefuehrend, aber nicht unsicher,
-> da keine Gate-Entscheidung daran haengt; bewusst ausgeklammerte Folgephase).
+> da keine Gate-Entscheidung daran haengt; bewusst ausgeklammerte Folgephase - **genau
+> diese Folgephase ist KS-P4, s. u.**).
 
 ## P4B-FULLCOSTGUARD — Vollkosten-Boot-Guard sichert die kuenftige Owner-Tarifsenkung ab (2026-07-20)
 
@@ -686,10 +687,11 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 >    bzw. wird negativ auf 0 geklemmt (`Math.max(0, ...)`, sonst waere sie ein Guthaben,
 >    das das Gate aufweitet). Identische Asymmetrie wie die bestehende Spend-Monat-Achse
 >    (`bookCostCorrectionCents`) - kein neuer Sachverhalt.
-> 3. `tenantBudgetSnapshot` (Anzeige/Ablehnungstexte) bleibt eine LEBENSZEIT-Sicht neben
->    einer Perioden-Entscheidung. Bekannte, seit P7 bestehende Anzeige/Gate-Divergenz -
->    irrefuehrend, aber nicht unsicher (keine Gate-Entscheidung haengt daran). Bewusst
->    ausserhalb des Scopes dieser Phase.
+> 3. ~~`tenantBudgetSnapshot` (Anzeige/Ablehnungstexte) bleibt eine LEBENSZEIT-Sicht neben
+>    einer Perioden-Entscheidung.~~ **Aufgeloest in KS-P4** (2026-07-30): der Snapshot
+>    liest seither dieselbe aufgeloeste Gate-Groesse (`gateUsageCents` ueber
+>    `tenantUsageAxes`) wie `budgetExceeded`/`reserveExceedsBudget` - die Anzeige/Gate-
+>    Divergenz entfaellt strukturell, s. Abschnitt `## KS-P4` unten.
 >
 > **Deploy-Vorbedingung (GAP-07).** `alertChannelFindings` liefert seit dieser Phase einen
 > FATALEN Befund bei `PAYMENT_ENABLED=true` UND `PLATFORM_SPEND_WARN_PERCENT>0` UND leerem
@@ -1346,3 +1348,55 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 >    `getCall`/`getCallByControlId`). Ein Leg, das eine ANDERE Instanz nach unserem
 >    `hydrate()` angelegt hat, fehlt in der Summe - der Term unterzaehlt dann, er
 >    ueberzaehlt nie.
+
+## KS-P4 — Ablehnungstexte lesen dieselbe Achse wie das Gate (2026-07-30)
+
+> **Was sich aendert.** `tenantBudgetSnapshot` (`src/store/state-ops.js`) - die einzige
+> Quelle der zwei Konsumenten `tenantBudgetDenial`/`tenantReserveDenial`
+> (`src/telephony/outbound-gates.js`) - liest den Verbrauch nicht mehr direkt aus
+> `usageFor(s, tenantId).costCents` (Lebenszeit), sondern ueber `tenantUsageAxes` dieselbe
+> aufgeloeste Gate-Groesse (`gateUsageCents`) wie `budgetExceeded`/`reserveExceedsBudget`.
+> Die neue Funktion `tenantUsageAxes` ist die EINE Quelle (G5) fuer beide Verbrauchsgroessen
+> der Tenant-Achse; der D7-Riegel selbst ist ueber `usageAxesBookable` als reines
+> Praedikat herausgezogen und wird an BEIDEN Kanten (Gate `spendOrDeny`, Anzeige
+> `tenantBudgetSnapshot`) angewendet - die Anzeige-Kante loggt dabei bewusst NICHT (kein
+> `denyCorruptUsage`), weil `/api/state` sie bei jedem Dashboard-Poll aufruft und ein
+> dauerhaft vergifteter Bucket sonst eine Log-Flut erzeugte.
+>
+> **Bewiesene Invariante:** `reserveExceedsBudget(...) === (reserveCents -
+> tenantBudgetSnapshot(...).remainingCents > 0)`. Vor dieser Phase konnte eine
+> Kostenkorrektur (`bookCostCorrectionCents`, senkt NUR `costCents`, nie die Spend-Monat-
+> Achse) genau diesen Widerspruch erzeugen: das Gate sperrt (liest die Monatszahl), der
+> Ablehnungstext rendert trotzdem einen NEGATIVEN Fehlbetrag (liest die - bereits durch die
+> Korrektur gesenkte - Lebenszeitzahl). Regressionsschutz: `test/ks-p4-snapshot-gate-axis.test.js`
+> (T1/T2, Mutationsprobe gegen den echten, live gemessenen Zustand 4,23 EUR Lebenszeit /
+> 12,84 EUR Spend-Monat) sowie `test/deny-diagnosability.test.js`/T7 (echte Ablehnungstexte
+> ueber die Gate-Kette).
+>
+> **Unberuehrt:** alle Gate-Praedikate (`budgetExceeded`/`reserveExceedsBudget`/
+> `tryReserveOutboundBudget` bleiben unveraendert die einzigen Entscheidungsstellen -
+> `tenantBudgetSnapshot` bleibt REIN LESEND), `disclosureSentence`, Signaturpruefung, Auth,
+> Abo+KYC als Outbound-Permit, `OUTBOUND_FROZEN`, Denylist, Land-Gate, Stundenlimit,
+> `MAX_CALL_DURATION_S`, alle Env-Werte und Plan-Decken. Kein neuer Env-Schluessel, keine
+> neue Dependency, keine `.env.example`-/`render.yaml`-Aenderung.
+>
+> **Getragene Kante:** `store.tenantBudgetSnapshot` und `store.reserveExceedsBudget`
+> erzeugen an der Store-Fassade (`json.js`/`pg.js`) je ein EIGENES `nowIso`
+> (`new Date().toISOString()`) - die nach aussen sichtbare Fassaden-Signatur bleibt laut
+> Spec unveraendert (kein durchgereichtes `nowIso`-Argument). Eine Divergenz ist nur
+> denkbar, wenn zwischen den zwei Aufrufen eine UTC-Monatsgrenze faellt UND die
+> Flag-Aufloesung auf der Spend-Monat-Achse steht (`BUDGET_MONTH_ENABLED=true`, Default
+> `false`); der Effekt kann dann in BEIDE Richtungen gehen, EINSCHLIESSLICH eines
+> negativen Fehlbetrags im Ablehnungstext (belegt: `outbound-gates.js` ruft erst
+> `store.reserveExceedsBudget` mit der ersten Fassaden-Uhr `t1` auf und danach, bei
+> Ablehnung, `tenantReserveDenial` -> `store.tenantBudgetSnapshot` mit der zweiten
+> Fassaden-Uhr `t2 >= t1`; rollt der Monat zwischen `t1` und `t2`, faellt
+> `spentCents` auf 0, `remainingCents` waechst, und `reserveCents - remainingCents`
+> wird negativ). Die "strukturell unmoeglich"-Zusage der bewiesenen Invariante oben
+> gilt NUR bei identischem `nowIso` auf beiden Seiten - also auf der ops-Ebene, die
+> `test/ks-p4-snapshot-gate-axis.test.js` (T1/T2) pinnt - nicht ueber die zwei
+> getrennten Fassaden-Uhren. Auswirkung bleibt reiner Anzeigetext (kein Gate kippt,
+> `reserveExceedsBudget` lehnt weiterhin korrekt ab), Eintrittsfenster
+> Sub-Millisekunde einmal pro Monat und nur bei Flag AN. Ein durchgereichtes `nowIso`
+> durch die Fassade wuerde die Divergenz strukturell schliessen, ist aber ausserhalb
+> des Umfangs dieser Phase (Signaturaenderung an beiden Store-Backends).

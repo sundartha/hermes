@@ -2434,20 +2434,43 @@ export function gatePlatformUsageCents(s, cfg, nowIso) {
 // UNTER SEINEM EIGENEN Feldnamen - "gateCents" oder "lifetimeCents", Review-Blocker
 // Runde 1) und die Funktion liefert nur noch {deny:true} - der Aufrufer muss dann bloss
 // true zurueckgeben.
+// D7-Riegel der TENANT-Achse als reines Praedikat, OHNE Log (G28: zusammengesetzte
+// Bedingung eingekapselt). Zwei Kanten teilen sich denselben Riegel und unterscheiden
+// sich NUR in der Reaktion: die GATE-Kante (spendOrDeny) benennt den vergifteten Wert
+// per denyCorruptUsage und sperrt; die ANZEIGE-Kante (tenantBudgetSnapshot) rendert
+// stattdessen einen ziffernfreien Sperrtext und loggt bewusst nicht (/api/state ruft sie
+// bei JEDEM Dashboard-Poll - ein dauerhaft vergifteter Bucket erzeugte sonst eine
+// Log-Flut). Beide pruefen BEIDE Groessen: eine Kante, die nur ihre eigene Seite pruefte,
+// verkleinerte die Reichweite der Sicherung.
+function usageAxesBookable({ gateCents, lifetimeCents }) {
+  return isBookableCents(gateCents) && isBookableCents(lifetimeCents);
+}
+
 function spendOrDeny({ label, gateCents, lifetimeCents }) {
+  if (usageAxesBookable({ gateCents, lifetimeCents })) return { deny: false, spent: gateCents };
   const gateBookable = isBookableCents(gateCents);
-  if (gateBookable && isBookableCents(lifetimeCents)) return { deny: false, spent: gateCents };
   const feld = gateBookable ? "lifetimeCents" : "gateCents";
   denyCorruptUsage(label, feld, gateBookable ? lifetimeCents : gateCents);
   return { deny: true };
 }
 
-function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
-  return spendOrDeny({
-    label: `tenant:${tenantId}`,
+// EINE Quelle (G5) fuer die zwei Verbrauchsgroessen der TENANT-Achse: die aufgeloeste
+// Gate-Groesse und den Lebenszeit-Wert als UNABHAENGIGE Gegenprobe (NICHT die
+// Gate-Groesse selbst). Seit KS-P4 lesen Gate-Entscheidung (tenantSpendOrDeny) UND
+// Ablehnungs-/Anzeige-Snapshot (tenantBudgetSnapshot) hierueber - dass beide dieselbe
+// Zahl sehen, ist damit STRUKTURELL erzwungen (G27) statt per Konvention. Genau daran
+// haengt die Zusage "Reserve > Rest folgt zwingend aus der Gate-Bedingung": ein
+// Fehlbetrag reserveCents - remainingCents kann nur dann ein negatives Vorzeichen
+// tragen, wenn die zwei Seiten verschiedene Achsen lesen.
+function tenantUsageAxes(s, tenantId, cfg, nowIso) {
+  return {
     gateCents: gateUsageCents(s, tenantId, cfg, nowIso),
-    lifetimeCents: usageFor(s, tenantId).costCents, // unabhaengige Gegenprobe, NICHT die Gate-Groesse
-  });
+    lifetimeCents: usageFor(s, tenantId).costCents,
+  };
+}
+
+function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
+  return spendOrDeny({ label: `tenant:${tenantId}`, ...tenantUsageAxes(s, tenantId, cfg, nowIso) });
 }
 
 // KS-P2 (Wurzelbehebung): dieselbe Frage wie budgetExceeded, PLUS dem noch nicht gebuchten
@@ -2508,24 +2531,33 @@ export function reserveExceedsBudget(s, tenantId, reserveCents, cfg, nowIso) {
   return spend.spent + reservationFor(s, tenantId) + reserveCents > effectiveCapCents(s, tenantId, cfg);
 }
 
-// Diagnose-Snapshot der TENANT-Achse (P5a): Decke, Ist-Verbrauch und freier Rest in
-// GANZZAHL Cents aus DERSELBEN Quelle wie die Gate-Praedikate (effectiveCapCents,
-// usageFor, reservationFor). REIN LESEND: kein Praedikat, keine Entscheidung -
+// Diagnose-Snapshot der TENANT-Achse (P5a, seit KS-P4 die Quelle der ABLEHNUNGSTEXTE):
+// Decke, Ist-Verbrauch und freier Rest in GANZZAHL Cents aus DERSELBEN Quelle wie die
+// Gate-Praedikate - Cap ueber effectiveCapCents, Verbrauch ueber tenantUsageAxes (also
+// die aufgeloeste GATE-Groesse, nicht mehr der Lebenszeit-Zaehler), Reserve ueber
+// reservationFor. REIN LESEND: kein Praedikat, keine Entscheidung -
 // budgetExceeded/reserveExceedsBudget bleiben unveraendert die einzigen Gate-Fragen.
-// spentCents/remainingCents sind null, wenn der Bucket unbuchbar ist (D7); der Aufrufer
-// (outbound-gates.js) rendert dann KEINE Zahl, sondern einen ziffernfreien Sperrtext.
+//
+// KS-P4: derselbe ZWEISEITIGE D7-Riegel wie an der Gate-Kante (usageAxesBookable). Nur
+// die Lesequelle zu wechseln erzeugte den Spiegelfall des behobenen Fehlers: vergifteter
+// Lebenszeit-Zaehler bei gesunder Gate-Groesse -> das Gate sperrt, der Snapshot rendert
+// trotzdem eine Zahl, und reserveCents - remainingCents traegt wieder ein negatives
+// Vorzeichen. spentCents/remainingCents sind null, sobald EINE der beiden Groessen
+// unbuchbar ist; der Aufrufer (outbound-gates.js) rendert dann KEINE Zahl, sondern einen
+// ziffernfreien Sperrtext.
+// Bewusst NICHT ueber tenantSpendOrDeny: dessen denyCorruptUsage-Log gehoert an die
+// GATE-Kante, nicht an eine Anzeige, die /api/state bei jedem Dashboard-Poll aufruft
+// (sonst Log-Flut bei einem dauerhaft vergifteten Bucket).
 // remainingCents zieht die bereits gebuchte In-Flight-Reserve ab (reservationFor) - der
 // "freie Rest" schliesst laufende Calls mit ein, wie reserveExceedsBudget es tut, und
 // kann bei bereits ueberreservierten Buckets legitim NEGATIV sein (kein D7-Fall, s.
 // outbound-gates.js tenantReserveDenial).
-// Bewusst NICHT ueber tenantSpendOrDeny: dessen denyCorruptUsage-Log gehoert an die
-// GATE-Kante, nicht an eine Anzeige, die /api/state bei jedem Dashboard-Poll aufruft
-// (sonst Log-Flut bei einem dauerhaft vergifteten Bucket).
-export function tenantBudgetSnapshot(s, tenantId, cfg) {
+export function tenantBudgetSnapshot(s, tenantId, cfg, nowIso) {
   const capCents = effectiveCapCents(s, tenantId, cfg);
-  const spent = usageFor(s, tenantId).costCents;
-  if (!isBookableCents(spent)) return { capCents, spentCents: null, remainingCents: null };
-  return { capCents, spentCents: spent, remainingCents: capCents - spent - reservationFor(s, tenantId) };
+  const axes = tenantUsageAxes(s, tenantId, cfg, nowIso);
+  if (!usageAxesBookable(axes)) return { capCents, spentCents: null, remainingCents: null };
+  const spentCents = axes.gateCents;
+  return { capCents, spentCents, remainingCents: capCents - spentCents - reservationFor(s, tenantId) };
 }
 
 // Setzt/aktualisiert die per-Tenant-Kostendecke (P6b3). Upsert ueber tenantId
