@@ -18,6 +18,7 @@ import {
   addVoiceUsageCostCents,
   stampBudgetPeriod,
   bookCostCorrectionCents,
+  NO_CHARGE_ANCHORS,
   tenantBudgetSnapshot,
   budgetExceeded,
   reserveExceedsBudget,
@@ -61,7 +62,9 @@ function liveFixture() {
   setTenantBudget(s, TENANT, { budgetCents: CAP_CENTS, hardCapCents: CAP_CENTS });
   addVoiceUsageCostCents(s, TENANT, 1284, JULY_ISO);
   stampBudgetPeriod(s, TENANT, PERIOD_START);
-  bookCostCorrectionCents(s, TENANT, -861, JULY_ISO);
+  // KS-P5: ohne Belastungs-Anker bleibt die Gutschrift auf der Lebenszeit-Achse - genau
+  // der Zustand, den diese Fixture braucht (Gate-Groesse 1284, Lebenszeit 423).
+  bookCostCorrectionCents(s, { tenantId: TENANT, deltaCents: -861, chargeAnchors: NO_CHARGE_ANCHORS, nowIso: JULY_ISO });
   return s;
 }
 

@@ -10,6 +10,7 @@ import {
   usageFor,
   applyCostCorrectionCents,
   bookCostCorrectionCents,
+  NO_CHARGE_ANCHORS,
 } from "../src/store/state-ops.js";
 import { emptyUsage, isBookableCents, isCorrectionCents, USAGE_CORRUPT_REASON } from "../src/store/defaults.js";
 
@@ -57,21 +58,49 @@ test("(d) 0-BODEN: costCents faellt NIE unter 0 (Ist 0, Schaetzung 15, vorhanden
   assert.equal(usage.costCents, 0, "0-Boden: NIE negativ, obwohl 3 - 15 = -12");
 });
 
-// ---- (e) ACHSEN-ASYMMETRIE: negative Korrektur laesst spendMonthCostCents UNANGETASTET ----
+// ---- (e) ACHSEN-ASYMMETRIE: seit KS-P5 entscheidet der BELASTUNGS-ANKER, nicht mehr
+// pauschal das Vorzeichen. Zwei getrennte Faelle, ein Konzept je Test (P14). ----
 
-test("(e) ACHSEN-ASYMMETRIE: negative Korrektur senkt NUR costCents, spendMonthCostCents/-Key bleiben bit-identisch", () => {
+test("(e1) FREMDER Anker (Vormonat): negative Korrektur senkt NUR costCents, spendMonthCostCents/-Key bleiben bit-identisch", () => {
   const s = makeDefaultState();
   seedUsage(s, TENANT_A, { costCents: 100, spendMonthKey: "2026-07", spendMonthCostCents: 50 });
   const { usage, booked } = applyCostCorrectionCents(
     s,
     TENANT_A,
-    { actualCostMicroCents: 0, estimatedCostCents: 15, providerToBucketRateMicro: NEUTRAL_RATE, dataComplete: true },
+    {
+      actualCostMicroCents: 0,
+      estimatedCostCents: 15,
+      providerToBucketRateMicro: NEUTRAL_RATE,
+      dataComplete: true,
+      chargeAnchors: { spendMonthKey: "2026-06", periodKey: null },
+    },
     JULY_ISO,
   );
   assert.equal(booked, true);
   assert.equal(usage.costCents, 85, "Lebenszeit-Achse sinkt (100-15)");
   assert.equal(usage.spendMonthCostCents, 50, "Monats-Achse UNVERAENDERT - sonst liesse sich die Monatsdecke mit alten Calls zurueckdrehen");
   assert.equal(usage.spendMonthKey, "2026-07", "kein Phantom-Stempel ueber eine negative Korrektur");
+});
+
+test("(e2) KS-P5, Anker = laufender Monat: die Gutschrift senkt die Monats-Achse mit (50 -> 35)", () => {
+  const s = makeDefaultState();
+  seedUsage(s, TENANT_A, { costCents: 100, spendMonthKey: "2026-07", spendMonthCostCents: 50 });
+  const { usage, booked } = applyCostCorrectionCents(
+    s,
+    TENANT_A,
+    {
+      actualCostMicroCents: 0,
+      estimatedCostCents: 15,
+      providerToBucketRateMicro: NEUTRAL_RATE,
+      dataComplete: true,
+      chargeAnchors: { spendMonthKey: "2026-07", periodKey: null },
+    },
+    JULY_ISO,
+  );
+  assert.equal(booked, true);
+  assert.equal(usage.costCents, 85);
+  assert.equal(usage.spendMonthCostCents, 35, "die Belastung steckt nachweislich in genau dieser Monatszahl");
+  assert.equal(usage.spendMonthKey, "2026-07");
 });
 
 // ---- (f) KURS + REST-UEBERTRAG in EINEM Fall (Kapitel 5 des Plans, von Hand durchgerechnet) ----
@@ -174,7 +203,12 @@ test("D7 end-to-end: bookCostCorrectionCents(NaN/1.5) verwirft, Bucket bit-ident
     const before = { ...usageFor(s, TENANT_A) };
     let result;
     const out = captureErr(() => {
-      result = bookCostCorrectionCents(s, TENANT_A, bad, JULY_ISO);
+      result = bookCostCorrectionCents(s, {
+        tenantId: TENANT_A,
+        deltaCents: bad,
+        chargeAnchors: NO_CHARGE_ANCHORS,
+        nowIso: JULY_ISO,
+      });
     });
     assert.equal(result.booked, false, `deltaCents=${String(bad)} darf nicht buchen`);
     assert.deepEqual(usageFor(s, TENANT_A), before, `deltaCents=${String(bad)}: Bucket bit-identisch`);

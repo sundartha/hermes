@@ -252,9 +252,10 @@ export function makePgStore(runner) {
       return call;
     },
     // LCT P2: gebuchter Schaetzbetrag - Flush schreibt estimated_cost_cents
-    // (INSERT + ON CONFLICT DO UPDATE SET).
-    recordCallEstimatedCostCents(callId, costCents) {
-      const { call, changed } = ops.recordCallEstimatedCostCents(requireState(), callId, costCents);
+    // (INSERT + ON CONFLICT DO UPDATE SET). KS-P5: input = { costCents, chargeAnchors },
+    // die zwei Anker-Spalten stehen ebenfalls im ON CONFLICT DO UPDATE SET.
+    recordCallEstimatedCostCents(callId, input) {
+      const { call, changed } = ops.recordCallEstimatedCostCents(requireState(), callId, input);
       if (changed) save();
       return call;
     },
@@ -1075,6 +1076,11 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // Klasse, die schon tenantId einmal gekostet hat). Bestandszeile ohne Wert -> null
     // (bzw. 0 fuer den Zaehler), json-Parity zu createCall.
     estimatedCostCents: r.estimated_cost_cents ?? null,
+    // KS-P5: Belastungs-Anker hydrieren. Ohne diese Zeilen gingen sie beim Restart verloren
+    // UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions) - die
+    // Gutschrift fiele danach still auf "nur Lebenszeit" zurueck.
+    estimatedCostSpendMonthKey: r.estimated_cost_spend_month_key ?? null,
+    estimatedCostPeriodKey: r.estimated_cost_period_key ?? null,
     actualCostMicroCents: hydratedMicroCents(r.actual_cost_micro_cents),
     costTruedAt: r.cost_trued_at ?? null,
     costTruedSource: r.cost_trued_source ?? null,
@@ -1387,8 +1393,8 @@ async function flushCalls(client, tenantId, calls) {
           call_control_id, assistant_id, diagnostic, mandate,
           estimated_cost_cents, actual_cost_micro_cents, cost_trued_at,
           cost_trued_source, cost_truing_attempts, telnyx_conversation_id, caller_turns, result,
-          consults)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38)
+          consults, estimated_cost_spend_month_key, estimated_cost_period_key)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1402,7 +1408,9 @@ async function flushCalls(client, tenantId, calls) {
          cost_truing_attempts=EXCLUDED.cost_truing_attempts,
          telnyx_conversation_id=EXCLUDED.telnyx_conversation_id,
          caller_turns=EXCLUDED.caller_turns, result=EXCLUDED.result,
-         consults=EXCLUDED.consults, context=EXCLUDED.context`,
+         consults=EXCLUDED.consults, context=EXCLUDED.context,
+         estimated_cost_spend_month_key=EXCLUDED.estimated_cost_spend_month_key,
+         estimated_cost_period_key=EXCLUDED.estimated_cost_period_key`,
       [
         c.id,
         tenantId,
@@ -1477,6 +1485,13 @@ async function flushCalls(client, tenantId, calls) {
         // Poll). Fehlte sie im UPDATE-SET, faellt sie beim naechsten Flush auf NULL
         // zurueck und jede beantwortete Rueckfrage waere nach dem Flush weg.
         c.consults ? JSON.stringify(c.consults) : null,
+        // KS-P5 ($39-$40): BEIDE im ON CONFLICT DO UPDATE SET - sie entstehen zusammen mit
+        // estimated_cost_cents NACH dem Create (reconcileOutboundVoiceBudget), also aus
+        // genau dem Grund, aus dem estimated_cost_cents dort schon steht. Fehlten sie im
+        // UPDATE-SET, faellt der Anker beim naechsten Flush auf NULL zurueck und jede
+        // spaetere Gutschrift wirkte nur noch auf der Lebenszeit-Achse.
+        c.estimatedCostSpendMonthKey ?? null,
+        c.estimatedCostPeriodKey ?? null,
       ],
     );
     await flushTranscript(client, tenantId, c);

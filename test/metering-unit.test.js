@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeMetering } from "../src/billing/metering.js";
-import { NUMBER_STATUS, USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { NUMBER_STATUS, USAGE_EVENT_KIND, emptyUsage } from "../src/store/defaults.js";
 import { makeDefaultState, recordUsageEvent } from "../src/store/state-ops.js";
 import { tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { DOMESTIC_TEST_NUMBER } from "./helpers.js";
@@ -18,6 +18,10 @@ const TENANT_A = "tenant_a";
 // nicht zufaellig gruen laeuft.
 const MONTHLY_RENT_CENTS = 92;
 const MONTHLY_RENT_CENTS_B = 137;
+// KS-P5: die Achsen-Stempel, die der Fake-Bucket NACH der Buchung traegt - genau die zwei
+// Werte, die als Belastungs-Anker am Call landen muessen.
+const BUCKET_SPEND_MONTH_KEY = "2026-01";
+const BUCKET_PERIOD_KEY = "2026-01-01T00:00:00.000Z";
 
 function fakeStore() {
   const usageEvents = [];
@@ -30,14 +34,19 @@ function fakeStore() {
     recordUsageEvent(ev) {
       usageEvents.push(ev);
     },
+    // KS-P5: die Fassade liefert den Usage-Bucket zurueck - die Bucket-Brigade in
+    // reconcileOutboundVoiceBudget liest daraus die Achsen-Stempel der Buchung. Ohne
+    // Rueckgabewert wuerfe der reale Aufruf (echte Interface-Erweiterung, kein Testartefakt).
     addVoiceUsageCostCents(tenantId, costCents) {
       voiceCostCents.push({ tenantId, costCents });
+      return { ...emptyUsage(), spendMonthKey: BUCKET_SPEND_MONTH_KEY, budgetPeriodKey: BUCKET_PERIOD_KEY };
     },
     // LCT P2: reconcileOutboundVoiceBudget persistiert den gebuchten Schaetzbetrag zusaetzlich
     // am Call (store.recordCallEstimatedCostCents). Ohne diesen Stub wuerfe der reale Aufruf
     // einen TypeError (echte Interface-Erweiterung, kein Testartefakt).
-    recordCallEstimatedCostCents(callId, costCents) {
-      estimatedCostCents.push({ callId, costCents });
+    // KS-P5: input = { costCents, chargeAnchors }.
+    recordCallEstimatedCostCents(callId, input) {
+      estimatedCostCents.push({ callId, ...input });
     },
   };
 }
@@ -131,9 +140,12 @@ test("reconcileOutboundVoiceBudget: outbound, N Minuten -> addVoiceUsageCostCent
   });
   // LCT P2 (E2): derselbe Betrag wird IM SELBEN Schritt am Call persistiert - nicht spaeter
   // aus dem Tarif rekonstruiert.
+  // KS-P5: zusammen mit dem Betrag reisen die Achsen-Stempel des Buckets NACH der Buchung
+  // mit (Bucket-Brigade) - sie sind der Anker, gegen den eine spaetere Gutschrift prueft.
   assert.deepEqual(store.estimatedCostCents[0], {
     callId: call.id,
     costCents: 1 * tariffCentsPerMin(call.to, call.from),
+    chargeAnchors: { spendMonthKey: BUCKET_SPEND_MONTH_KEY, periodKey: BUCKET_PERIOD_KEY },
   });
 });
 
