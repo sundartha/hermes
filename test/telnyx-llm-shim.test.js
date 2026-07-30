@@ -138,8 +138,20 @@ function makeHandler({
   metrics,
   voiceControl = noopVoiceControl,
   watchdog = noopWatchdog(),
+  // KS-P1b: Bestandstests treffen den Spiegel und erreichen den Re-Attach nie; der Default
+  // haelt sie byte-identisch (Miss -> logUnknown:true -> 403 wie zuvor). Wer den Pfad
+  // wirklich prueft, reicht einen Spy durch (test/ks-p1b-shim-reattach.test.js).
+  reattachActiveCallByControlId = async () => ({ call: null, logUnknown: true }),
 } = {}) {
-  const args = { store, config, agentTurn, localeFor: lf, voiceControl, watchdog };
+  const args = {
+    store,
+    config,
+    agentTurn,
+    localeFor: lf,
+    voiceControl,
+    watchdog,
+    reattachActiveCallByControlId,
+  };
   if (metrics !== undefined) args.metrics = metrics;
   return makeTelnyxLlmShim(args);
 }

@@ -311,6 +311,15 @@ function logShimFarewell(payload) {
   console.log(formatShimLine("farewell_scheduled", payload));
 }
 
+// KS-P1b: ein re-attachter Call ist ein BETRIEBS-Ereignis, kein Gate - eigener Kanal
+// (kind="reattached", console.log wie turn_ok, nicht warn). Ohne diese Zeile bliebe in den
+// Render-Logs unsichtbar, dass ein Deploy-/Instanzwechsel ein laufendes Assistant-Gespraech
+// getroffen hat - genau der Vorfall, den KS-P1 nur durch Codelesen belegen konnte. Nur die
+// server-generierte callId (PII-frei), NIE die call_control_id.
+function logShimReattach(payload) {
+  console.log(formatShimLine("reattached", payload));
+}
+
 // AL-P2: der Spike-Schalter ist NIE stumm. Jede verzoegerte Antwort schreibt eine Zeile
 // (callId + delayMs, PII-frei: keine Nummer, kein Text). Ein Schalter, den kein Log sieht,
 // waere genau die "abgeschaltete Sicherung", die CLAUDE.md verbietet.
@@ -359,6 +368,10 @@ export function makeTelnyxLlmShim({
   localeFor,
   voiceControl,
   watchdog,
+  // KS-P1b: lifecycle.reattachActiveCallByControlId (die EINE Wurzel-Instanz). Bewusst OHNE
+  // Default - ein stiller No-op-Fallback waere genau die abgeschaltete Sicherung, die hier
+  // verboten ist.
+  reattachActiveCallByControlId,
   metrics = defaultMetrics,
   // AL-P2: injizierbar, damit die Spike-Pause im Test ohne echte Wartezeit beweisbar ist
   // (Muster setTimer/clearTimer im Watchdog). Prod-Default = der geteilte unref-Timer.
@@ -392,6 +405,36 @@ export function makeTelnyxLlmShim({
   async function terminateCall(callId) {
     await terminateViaCallControl(callId);
     watchdog.clear(callId);
+  }
+
+  // KS-P1b: die Call-Aufloesung des Shims - Spiegel zuerst, bei Miss derselbe Re-Attach-Seam
+  // wie /voice/turn|outbound|status und der Call-Control-Ingest (G5). Spiegel-Treffer =
+  // byte-identisch zum Bestand (kein DB-Roundtrip, kein Verhaltensunterschied). Nur der Miss
+  // laedt RLS-sauber nach, inkl. Restzeit-Klassifikation, Guthaben-Pruefung und Cap-Rearm;
+  // ein Ueber-Zeit- oder Ueber-Guthaben-Leg wird terminalisiert statt reanimiert.
+  // Vertraut NUR der DB, nie dem Request-Body (die ccid ist bereits durch E1 gefiltert).
+  // Nebeneffekt (Spiegel-Mutation, ggf. Terminalisierung + Cap-Rearm) im Namen (N7).
+  // JEDER Miss-Fall wird mit seinem eigenen Grund geloggt; null -> der Aufrufer legt
+  // fail-closed mit 403 auf.
+  async function resolveOrReattachActiveCall(ccid) {
+    const mirrored = store.getCallByControlId(ccid);
+    if (mirrored && mirrored.status === "active") return mirrored;
+    const { call, logUnknown } = await reattachActiveCallByControlId(ccid);
+    if (call) {
+      logShimReattach({ callId: call.id });
+      return call;
+    }
+    if (logUnknown)
+      logShimGate({
+        reason: "call_unresolved",
+        found: Boolean(mirrored),
+        status: mirrored ? mirrored.status : null,
+      });
+    // logUnknown:false = der Call WAR aktiv, aber eine Sicherung hat gegriffen (Max-Dauer
+    // oder erschoepfte Decke) und ihn bereits terminalisiert + gebucht. "kein aktiver Call"
+    // waere hier irrefuehrend (G2) - eigener Grund-Token.
+    else logShimGate({ reason: "reattach_terminalized" });
+    return null;
   }
 
   return async function handleChatCompletion(req, res) {
@@ -432,11 +475,12 @@ export function makeTelnyxLlmShim({
 
     // 4) Call-Resolve (lebende Store-Referenz, kein DTO): unbekannter oder nicht-aktiver
     // Call -> 403 (ein aufgelegter Call darf keine weiteren Token-Turns ausloesen).
-    const call = store.getCallByControlId(ccid);
-    if (!call || call.status !== "active") {
-      logShimGate({ reason: "call_unresolved", found: Boolean(call), status: call ? call.status : null });
-      return res.status(HTTP_FORBIDDEN).end();
-    }
+    // KS-P1b: der Spiegel ist nicht mehr die einzige Quelle - ein Call, dessen Zeile erst
+    // NACH hydrate() dieser Instanz entstand, wird ueber den geteilten Re-Attach-Seam
+    // nachgeladen, statt das Live-Gespraech ohne Cap-Timer und ohne Watchdog weiterlaufen
+    // zu lassen (KS-P1-Befund). Alle drei Miss-Faelle loggt die Aufloesung selbst.
+    const call = await resolveOrReattachActiveCall(ccid);
+    if (!call) return res.status(HTTP_FORBIDDEN).end();
 
     const locale = localeFor(call.language);
     const model =

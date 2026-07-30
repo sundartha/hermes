@@ -87,6 +87,11 @@ export const {
   // store.attachActiveCall undefined -> der /voice-Re-Attach-Pfad wuerfe zur Laufzeit einen
   // TypeError. Beide Backends exportieren die Methode -> die Fassade ist die EINE Quelle.
   attachActiveCall,
+  // KS-P1b: dieselbe Nachladung ueber die call_control_id (Assistant-Shim, E1). OHNE
+  // diesen Re-Export waere store.attachActiveCallByControlId undefined -> der Shim-Re-
+  // Attach-Pfad wuerfe zur Laufzeit einen TypeError (Muster attachActiveCall/
+  // getCallByControlId). Beide Backends exportieren die Methode.
+  attachActiveCallByControlId,
   addTranscript,
   purgeTranscript,
   markAnswered,

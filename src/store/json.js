@@ -365,6 +365,12 @@ export function getCallByControlId(callControlId) {
 // logUnknown-Hangup wie zuvor (voice-unknown-call-log.test.js bleibt gruen).
 export const attachActiveCall = getCall;
 
+// KS-P1b: dieselbe Begruendung wie attachActiveCall, nur ueber die Telnyx-eigene
+// call_control_id (der Shim kennt keine callId). Der json-Prozess hat keinen divergenten
+// Spiegel -> Re-Attach ist identisch zur Spiegel-Query. Der Status-Guard sitzt im
+// Re-Attach-Kern (telephony/reattach.js), exakt wie bei attachActiveCall.
+export const attachActiveCallByControlId = getCallByControlId;
+
 export function addTranscript(callId, role, text) {
   if (ops.addTranscript(load(), callId, role, text)) save();
 }

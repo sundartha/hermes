@@ -19,6 +19,7 @@ import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
+import { blockingBudgetAxis } from "./budget-gate.js";
 import {
   recordProvisioningJob,
   markProvisioningJob,
@@ -125,6 +126,7 @@ const lifecycle = makeCallLifecycle({
   reattachActiveCallCore,
   cappedEndedAtMs,
   classifyCallTime,
+  blockingBudgetAxis, // KS-P1b: die EINE Geld-Achse fuer die Re-Attach-Pruefung
 });
 
 // provisioning-orchestrator (P6): enqueue/trigger/drain(single-flight)/reconcile fuer den

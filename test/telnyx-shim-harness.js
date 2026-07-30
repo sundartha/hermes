@@ -148,10 +148,23 @@ export function makeHandler({
   agentTurn,
   voiceControl,
   watchdog = noopWatchdog(),
+  // KS-P1b: Bestandstests treffen den Spiegel und erreichen den Re-Attach nie; der Default
+  // haelt sie byte-identisch (Miss -> logUnknown:true -> 403 wie zuvor). Wer den Pfad
+  // wirklich prueft, reicht einen Spy durch (test/ks-p1b-shim-reattach.test.js).
+  reattachActiveCallByControlId = async () => ({ call: null, logUnknown: true }),
   // AL-P2: Prod-Default = der geteilte unref-Timer; die Spike-Tests reichen sleepSpy durch.
   sleep = sleepMs,
 }) {
-  return makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog, sleep });
+  return makeTelnyxLlmShim({
+    store,
+    config,
+    agentTurn,
+    localeFor,
+    voiceControl,
+    watchdog,
+    reattachActiveCallByControlId,
+    sleep,
+  });
 }
 
 // AL-P2: Fake-Pause - wartet nicht, protokolliert nur ms UND wie viele SSE-Chunks zum

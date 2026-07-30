@@ -1435,3 +1435,57 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > Sub-Millisekunde einmal pro Monat und nur bei Flag AN. Ein durchgereichtes `nowIso`
 > durch die Fassade wuerde die Divergenz strukturell schliessen, ist aber ausserhalb
 > des Umfangs dieser Phase (Signaturaenderung an beiden Store-Backends).
+
+---
+
+## KS-P1b — Assistant-Shim auf dem geteilten Re-Attach-Pfad (2026-07-30)
+
+> **Geschlossene Luecke (KS-P1-Befund).** Der Telnyx-Brain-Shim
+> (`src/telnyx-llm-shim.js`) loeste den Call bisher ausschliesslich ueber den
+> Prozess-Spiegel auf (`store.getCallByControlId`) und antwortete bei einem Miss mit 403.
+> Ein Deploy-/Instanzwechsel liess damit ein LAUFENDES Assistant-Gespraech beim Provider
+> weiterlaufen - ohne Max-Dauer-Cap-Timer und ohne Dead-Air-Watchdog (beide prozesslokal),
+> also ohne jede Kostenbremse. Der Shim geht jetzt bei einem Spiegel-Miss ueber DENSELBEN
+> Re-Attach-Seam wie `/voice/turn|outbound|status` und der Call-Control-Ingest
+> (`lifecycle.reattachActiveCallByControlId` -> `telephony/reattach.js`), inklusive
+> Restzeit-Klassifikation und Cap-Rearm. Neue Store-Query `attachActiveCallByControlId` in
+> BEIDEN Backends (pg: RLS-sauberer Tenant-Loop, KEIN Bypass; json: Spiegel-Query wie
+> `attachActiveCall`).
+>
+> **Zusaetzliche Verschaerfung (E8).** Der Re-Attach prueft neben der Zeit-Achse jetzt auch
+> die Geld-Achse: `blockingBudgetAxis` (`src/budget-gate.js`) - dasselbe Praedikat, das der
+> Shim-Turn und das Dial-Gate lesen, KEIN neues Gate. Ein Leg, dessen Tenant-Decke zwischen
+> Anrufstart und Re-Attach erschoepft wurde, wird terminalisiert statt mit frischer Frist
+> reanimiert. Reihenfolge: Zeit zuerst (genauerer Grund), dann Geld.
+>
+> **Neuer Forensik-Token:** `BUDGET_FAILURE_REASON = "budget-exhausted"` neben
+> `CAP_FAILURE_REASON` (GAP-26-Logik: ein an der Decke gestorbener Anruf muss von einem am
+> Zeit-Cap gestorbenen unterscheidbar bleiben). Stabil und PII-frei. Der EINE
+> Terminalisierungspfad bleibt EINER: `terminateCappedCall` (Zeit) und
+> `terminateOverBudgetCall` (Geld) sind zwei intentions-benannte Wrapper ueber
+> `terminateActiveCall` - Reihenfolge (Provider-Leg zuerst awaited, dann buchen),
+> Idempotenz und INV-9 unveraendert.
+>
+> **Benannter Verhaltens-Blast-Radius (bewusst getragen).** Ein Leg mit erschoepfter
+> Tenant-Decke, das nach einem Instanzwechsel ueber `/voice/turn` re-attached wird, bekommt
+> kuenftig einen harten Hangup statt des hoeflichen `budgetExhaustedHangup`. Trifft nur die
+> Schnittmenge *Spiegel-Miss x Decke erschoepft* (in der Praxis: Post-Deploy) und immer in
+> die sichere Richtung. Kein stummer Pfad: `logShimReattach` (kind `reattached`), Gate-Grund
+> `reattach_terminalized` und eine `[budget]`-Warnzeile in `terminateOverBudgetCall`.
+>
+> **Unberuehrt:** `disclosureSentence`, Provider-Signaturpruefung, Basic-/MCP-Auth, Abo+KYC
+> als Outbound-Permit, `OUTBOUND_FROZEN`, Denylist, Land-Gate, Stundenlimit,
+> `MAX_CALL_DURATION_S` und die drei 300er-Klemmen (KS-P3), `outbound-gates.js`,
+> `metering.js`. Kein neuer Env-Schluessel, keine `.env.example`-/`render.yaml`-Aenderung,
+> keine neue Dependency.
+>
+> **Getragene Kante:** der ccid-Riegel in `pg.js` (`ccid ? ... : null`) ist eine
+> Roundtrip-Ersparnis, KEIN eigenes Sicherheitsnetz - `WHERE call_control_id = NULL` trifft
+> in SQL ohnehin nie eine Zeile (gemessen: die Mutationsprobe ohne den Riegel bleibt gruen).
+> Das Ergebnis ist trotzdem gepinnt (KS-P1b-10), damit eine kuenftige Umformulierung der
+> Query auffliegt.
+>
+> **Regressionsschutz:** `test/ks-p1b-shim-reattach.test.js` (KS-P1b-1..6),
+> `test/reattach-active-call.test.js` (KS-P1b-7/8),
+> `test/store-pg-reattach-active-call.test.js` (KS-P1b-9/10),
+> `test/store-backend-parity.test.js` (Backend-Paritaet erzwungen).

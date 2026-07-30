@@ -39,6 +39,14 @@ export { BOOTSTRAP_TENANT_ID };
 //                    params)->{rows} und client.exec(sqlScript) (Mehrfach-DDL).
 // KEINE DB-Verbindung hier konstruiert (DIP): Pool/Adapter wird injiziert. init()
 // muss vor dem ersten Zugriff erwartet werden (Migration + Hydrierung).
+
+// KS-P1b: die zwei Suchachsen des Re-Attach als vollstaendige, parametrisierte Queries -
+// EINE Scan-Implementierung (attachActiveCallRow) bedient beide (G5). Bewusst zwei fertige
+// Statements statt eines interpolierten WHERE-Fragments: so gibt es keinen Pfad, auf dem je
+// ein Aufrufer-Wert in den SQL-Text geraten koennte.
+const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
+const ACTIVE_CALL_BY_CONTROL_ID_SQL = `SELECT * FROM call WHERE call_control_id = $1 AND status = $2`;
+
 export function makePgStore(runner) {
   let state = null;
   // Serialisiert die DB-Flushes: Mutationen rufen save() synchron, der DB-Write
@@ -150,6 +158,44 @@ export function makePgStore(runner) {
     if (lastFlushError) throw lastFlushError;
   }
 
+  // KS-P1b: der EINE Re-Attach-Scan, parametrisiert ueber das fertige Statement (G5).
+  // Vorher stand er inline in attachActiveCall; die ccid-Variante haette ihn sonst
+  // wortgleich ein zweites Mal gebraucht (S2). Verhalten der id-Variante unveraendert.
+  // Die Folge-Queries und der RACE-GUARD haengen an rows[0].id, NICHT am Suchwert -
+  // nur so traegt derselbe Scan auch eine Suche ueber die call_control_id.
+  async function attachActiveCallRow(sql, lookupValue) {
+    try {
+      const state = requireState();
+      return await runner.withClient(async (client) => {
+        for (const tenant of state.tenants) {
+          await setTenant(client, tenant.id);
+          const rows = (await client.query(sql, [lookupValue, CALL_STATUS_ACTIVE])).rows;
+          if (rows.length === 0) continue;
+          const callId = rows[0].id;
+          const segRows = (
+            await client.query(`SELECT * FROM transcript_segment WHERE call_id = $1 ORDER BY id ASC`, [
+              callId,
+            ])
+          ).rows;
+          const itemRows = (
+            await client.query(`SELECT * FROM action_item WHERE call_id = $1 ORDER BY seq DESC`, [
+              callId,
+            ])
+          ).rows;
+          const call = rowToCall(rows[0], groupTranscripts(segRows), groupActionItemIds(itemRows));
+          const raced = ops.getCall(state, callId);
+          if (raced) return raced;
+          state.calls.push(call);
+          return call;
+        }
+        return null;
+      });
+    } catch (e) {
+      console.error("[pg] attachActiveCall fehlgeschlagen:", e.message);
+      return null;
+    }
+  }
+
   return {
     init,
     load: () => requireState(),
@@ -178,44 +224,16 @@ export function makePgStore(runner) {
     // Re-Attach-/Webhook-Pfad den Call nicht doppelt einlegt. Kein Treffer -> null.
     // FAIL-SAFE wie ensureTenant: ein DB-Schluckauf wird secret-frei geloggt und als null
     // behandelt -> der Handler legt fail-closed auf, NIE eine Rejection.
-    async attachActiveCall(callId) {
-      try {
-        const state = requireState();
-        return await runner.withClient(async (client) => {
-          for (const tenant of state.tenants) {
-            await setTenant(client, tenant.id);
-            const rows = (
-              await client.query(`SELECT * FROM call WHERE id = $1 AND status = $2`, [
-                callId,
-                CALL_STATUS_ACTIVE,
-              ])
-            ).rows;
-            if (rows.length === 0) continue;
-            const segRows = (
-              await client.query(
-                `SELECT * FROM transcript_segment WHERE call_id = $1 ORDER BY id ASC`,
-                [callId],
-              )
-            ).rows;
-            const itemRows = (
-              await client.query(
-                `SELECT * FROM action_item WHERE call_id = $1 ORDER BY seq DESC`,
-                [callId],
-              )
-            ).rows;
-            const call = rowToCall(rows[0], groupTranscripts(segRows), groupActionItemIds(itemRows));
-            const raced = ops.getCall(state, callId);
-            if (raced) return raced;
-            state.calls.push(call);
-            return call;
-          }
-          return null;
-        });
-      } catch (e) {
-        console.error("[pg] attachActiveCall fehlgeschlagen:", e.message);
-        return null;
-      }
-    },
+    attachActiveCall: (callId) => attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, callId),
+    // KS-P1b: dieselbe RLS-saubere Nachladung ueber die Telnyx-eigene call_control_id -
+    // der Assistant-Shim korreliert ausschliesslich darueber (E1, Anti-Spoofing), er kennt
+    // keine callId. Leere/fehlende ccid -> null OHNE DB-Roundtrip. Das ist eine
+    // Abkuerzung, KEIN eigenes Sicherheitsnetz: `WHERE call_control_id = NULL` trifft in
+    // SQL ohnehin nie eine Zeile, und "" matcht nur eine gleichlautende. Der Riegel spart
+    // den Tenant-Loop-Scan und haelt die Form von getCallByControlId (gleiche Antwort auf
+    // dieselbe leere Eingabe) - gemessen: ohne ihn bleibt das Verhalten identisch.
+    attachActiveCallByControlId: (ccid) =>
+      ccid ? attachActiveCallRow(ACTIVE_CALL_BY_CONTROL_ID_SQL, ccid) : Promise.resolve(null),
     addTranscript(callId, role, text) {
       if (ops.addTranscript(requireState(), callId, role, text)) save();
     },
