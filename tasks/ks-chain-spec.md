@@ -6,9 +6,24 @@ verstreut stehen und in der Umsetzung erfahrungsgemaess verloren gehen.
 
 Fuer JEDE Phase dieser Kette gilt:
 
-- **Regel 0 — Basis pruefen.** Vor der ersten Aenderung: `git merge-base --is-ancestor
-  master HEAD` im Worktree. Sitzt der Worktree nicht auf dem aktuellen `master`, ist das
-  ein Blocker — melden, nicht weiterarbeiten.
+- **Regel 0 — Basis herstellen, DANN lesen.** Ein frischer Worktree sitzt hier
+  erfahrungsgemaess auf einem alten Commit (gemessen: 57adf4a, 75 Commits hinter master).
+  Das ist normal und harmlos — solange du in dieser Reihenfolge arbeitest:
+
+  1. **Zuerst** den Arbeitsbranch von `master` anlegen: `git checkout -b <branch> master`
+     (Reviewer: `git checkout -b <review-branch> <ziel-branch>`). Refs sind zwischen
+     Worktrees geteilt, `master` loest immer korrekt auf.
+  2. **Danach** verifizieren: `git rev-parse HEAD` muss `git rev-parse master` entsprechen
+     (bzw. `git merge-base --is-ancestor master HEAD` fuer einen Ziel-Branch). Erst wenn
+     das stimmt, ist der Baum aussagekraeftig.
+  3. **Erst dann** Quelldateien lesen oder Tests fahren.
+
+  Wer Schritt 3 vor Schritt 1 macht, liest einen veralteten Stand und zieht daraus falsche
+  Schluesse. Genau das ist im KS-P10-Lauf passiert: der Review-Agent hat aus seinem eigenen
+  noch nicht umgestellten Worktree gefolgert, die Phase sei auf veralteter Basis gebaut
+  worden — beide vorangegangenen Impl-Laeufe hatten nachweislich die korrekte Basis.
+  Ein veralteter HEAD **vor** dem Checkout ist KEIN Blocker und wird nicht als solcher
+  gemeldet. Ein falscher HEAD **nach** dem Checkout ist einer.
 - **Keine Env-Aenderung im Render-Dashboard**, kein Deploy, kein schreibender Zugriff auf
   die Prod-DB. Aenderungen an `.env.example` und `render.yaml` sind Code und gehoeren in
   die Phase; das Setzen des Live-Werts ist Owner-Sache.
