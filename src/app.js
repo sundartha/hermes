@@ -95,7 +95,7 @@ export function installGlobalMiddleware({ app, config }) {
   });
 }
 
-export function registerPublicRoutes({ app, config, store, watchdog }) {
+export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }) {
   // ---- Basic-Auth fuer Dashboard + API (Public Hosting). Ausgenommen:
   // /voice/* (eigene Twilio-Signaturpruefung), /mcp (eigene MCP-Auth),
   // /.well-known/* (OAuth-Metadata, muss ohne Login erreichbar sein),
@@ -137,7 +137,11 @@ export function registerPublicRoutes({ app, config, store, watchdog }) {
   // stoppen bei hangup). Terminierung ueber das GETEILTE Call-Control-Hangup-Primitiv (auch
   // der Shim nutzt makeCallControlTerminator fuer Budget-Kill/end_call, S2). watchdog kommt
   // als die EINE Wurzel-Instanz herein (INV-7, in server.js konstruiert).
-  app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog }));
+  // KS-P1b: reattachActiveCallByControlId = dieselbe EINE lifecycle-Instanz (INV-7), die
+  // /voice/turn|outbound|status und der Call-Control-Ingest nutzen. Ohne sie verwirft der
+  // Shim ein laufendes Gespraech nach einem Instanzwechsel mit 403, waehrend der Call beim
+  // Provider ohne Cap-Timer und ohne Dead-Air-Watchdog weiterlaeuft.
+  app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog, reattachActiveCallByControlId: lifecycle.reattachActiveCallByControlId }));
 
   // P5: "/" hat kein Index (public/ traegt nur statische Marken-Assets) -> ginge sonst auf 404 bzw. die
   // Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der
@@ -229,7 +233,7 @@ export async function buildApp(deps) {
   app.set("trust proxy", 1);
 
   installGlobalMiddleware({ app, config });
-  registerPublicRoutes({ app, config, store, watchdog: conversationWatchdog });
+  registerPublicRoutes({ app, config, store, watchdog: conversationWatchdog, lifecycle });
 
   // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
   // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,

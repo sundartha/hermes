@@ -42,8 +42,11 @@ const activeCall = (secondsAgo) => ({
 });
 
 // Baut Spy-Thunks + eine feste attachActiveCall-Antwort - Build-Schritt (P13).
-function makeDeps(attachResult) {
-  const calls = { terminate: [], schedule: [] };
+// KS-P1b: budgetAxisFor ist die injizierte Geld-Achse (blockingBudgetAxis in Prod). Default
+// "frei" (null) -> alle Bestandszweige verhalten sich byte-identisch zu vorher;
+// budgetAxis:"budget_tenant" schaltet die erschoepfte Decke ein.
+function makeDeps(attachResult, { budgetAxis = null } = {}) {
+  const calls = { terminate: [], schedule: [], overBudget: [] };
   const deps = {
     attachActiveCall: async () => attachResult,
     maxCallDurationS: MAX_DURATION_S,
@@ -52,6 +55,10 @@ function makeDeps(attachResult) {
     },
     scheduleMaxDurationEnd: (call, twilioSid, ms) => {
       calls.schedule.push({ callId: call.id, twilioSid, ms });
+    },
+    budgetAxisFor: () => budgetAxis,
+    terminateOverBudgetCall: async (callId, twilioSid) => {
+      calls.overBudget.push({ callId, twilioSid });
     },
   };
   return { deps, calls };
@@ -114,6 +121,40 @@ test("reattachActiveCall: attachActiveCall liefert nicht-aktiven Call -> logUnkn
   assert.equal(calls.schedule.length, 0);
 });
 
+// ---- KS-P1b: die Notbremse wird beim Re-Attach NEU berechnet, nicht wiederhergestellt ----
+// Zwischen Anrufstart und Re-Attach koennen ANDERE Anrufe desselben Tenants sein Guthaben
+// verbraucht haben. Ein Leg, das seine Frist nicht mehr bezahlen kann, bekommt keine neue.
+
+test("KS-P1b-7: aktiv im Zeitfenster, aber Geld-Achse sperrt -> terminalisiert statt reanimiert, KEIN Timer-Rearm", async () => {
+  const call = activeCall(SECONDS_60); // Zeit waere noch da - das Geld nicht
+  const { deps, calls } = makeDeps(call, { budgetAxis: "budget_tenant" });
+
+  const result = await reattachActiveCall("reattach_c1", deps);
+
+  assert.deepEqual(
+    result,
+    { call: null, logUnknown: false },
+    "erschoepftes Guthaben ist KEIN Unbekannt-Fall: bereits terminalisiert+gebucht",
+  );
+  assert.equal(calls.overBudget.length, 1, "genau eine Geld-Terminalisierung");
+  assert.deepEqual(calls.overBudget[0], { callId: "reattach_c1", twilioSid: "CA_reattach_c1" });
+  assert.equal(calls.schedule.length, 0, "kein Rearm fuer ein Leg, das nicht mehr bezahlt ist");
+  assert.equal(calls.terminate.length, 0, "die Zeit-Achse hat NICHT gegriffen (falscher Grund waere eine Luege am Record)");
+});
+
+test("KS-P1b-8: Ueberzeit UND erschoepftes Guthaben -> die Zeit-Achse gewinnt (genauerer Cap-Grund)", async () => {
+  const call = activeCall(SECONDS_400);
+  const { deps, calls } = makeDeps(call, { budgetAxis: "budget_tenant" });
+
+  const result = await reattachActiveCall("reattach_c1", deps);
+
+  assert.deepEqual(result, { call: null, logUnknown: false });
+  assert.equal(calls.terminate.length, 1, "Zeit-Cap terminalisiert");
+  assert.equal(calls.terminate[0].status, "failed");
+  assert.equal(calls.overBudget.length, 0, "genau EINE Terminalisierung - kein zweiter Pfad");
+  assert.equal(calls.schedule.length, 0);
+});
+
 // ---- RACE-1 (Review-Blocker Runde 2): In-Flight-Dedup pro callId ----
 
 // Wie makeDeps, aber attachActiveCall zaehlt seine Aufrufe UND haengt einen Tick (Muster
@@ -134,6 +175,8 @@ function makeRaceDeps(attachResult) {
     scheduleMaxDurationEnd: (call, twilioSid, ms) => {
       calls.schedule.push({ callId: call.id, twilioSid, ms });
     },
+    budgetAxisFor: () => null, // KS-P1b: Geld-Achse frei - RACE-1 misst Coalescing, nicht Geld
+    terminateOverBudgetCall: async () => {},
   };
   return { deps, calls };
 }
@@ -170,6 +213,8 @@ test("reattachActiveCall RACE-1: unterschiedliche callIds laufen unabhaengig (ke
     scheduleMaxDurationEnd: (call, twilioSid, ms) => {
       scheduleCalls.push({ callId: call.id, twilioSid, ms });
     },
+    budgetAxisFor: () => null, // KS-P1b: Geld-Achse frei
+    terminateOverBudgetCall: async () => {},
   };
 
   const [rA, rB] = await Promise.all([

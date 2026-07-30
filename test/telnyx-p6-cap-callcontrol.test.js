@@ -102,6 +102,10 @@ function makeReattachDeps(attachResult) {
     scheduleMaxDurationEnd: (call, providerCallSid, ms) => {
       calls.schedule.push({ callId: call.id, providerCallSid, ms });
     },
+    // KS-P1b: der Re-Attach-Kern prueft zusaetzlich die Geld-Achse. Diese Datei misst die
+    // Call-Control-Fixture (twilioSid null), nicht Geld -> Achse frei = Bestandsverhalten.
+    budgetAxisFor: () => null,
+    terminateOverBudgetCall: async () => {},
   };
   return { deps, calls };
 }
@@ -144,7 +148,11 @@ const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-l
 const apiCallsSrc = fs.readFileSync(path.join(ROOT, "src", "routes", "api-calls.js"), "utf8");
 
 test("T6: terminateCappedCall verwendet hangUpAction (nicht mehr das alte providerCallSid-Ternary)", () => {
-  const marker = "async function terminateCappedCall(callId, providerCallSid, status) {";
+  // KS-P1b: der Body liegt seither im grund-parametrisierten terminateActiveCall, das
+  // terminateCappedCall (Zeit-Achse) und terminateOverBudgetCall (Geld-Achse) teilen -
+  // EIN Terminalisierungspfad, INV-9 unveraendert. Der Anker wandert mit, der
+  // Pruefgegenstand (hangUpAction statt Inline-Ternary) bleibt.
+  const marker = "async function terminateActiveCall({ callId, providerCallSid, status, failureReason }) {";
   const block = lifecycleSrc.slice(lifecycleSrc.indexOf(marker), lifecycleSrc.indexOf(marker) + 1200);
 
   assert.match(block, /hangUp:\s*hangUpAction\(voiceControl,\s*call,\s*providerCallSid\)/);

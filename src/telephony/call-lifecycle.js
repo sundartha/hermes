@@ -21,6 +21,13 @@ import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.js";
 // weiter; das Call-Widget rendert unbekannte Tokens roh (Diagnosewert, kein Bruch).
 export const CAP_FAILURE_REASON = "max-duration-cap";
 
+// KS-P1b: maschinenlesbarer Grund einer Terminalisierung DURCH DIE GELD-ACHSE. Eigener
+// Token neben CAP_FAILURE_REASON aus derselben Ueberlegung (GAP-26): ohne ihn waere ein an
+// der Decke gestorbener Anruf hinterher von einem am Zeit-Cap gestorbenen nicht zu
+// unterscheiden. Stabil und PII-frei; get_call_status reicht failure_reason unveraendert an
+// MCP-Clients weiter, das Call-Widget rendert unbekannte Tokens roh.
+export const BUDGET_FAILURE_REASON = "budget-exhausted";
+
 export function makeCallLifecycle({
   store,
   config,
@@ -33,6 +40,7 @@ export function makeCallLifecycle({
   reattachActiveCallCore, // reattachActiveCall aus ./reattach.js
   cappedEndedAtMs,
   classifyCallTime,
+  blockingBudgetAxis, // KS-P1b: die EINE Geld-Achse (budget-gate.js), injiziert wie classifyCallTime
 }) {
   // Gemeinsame Call-Max-Dauer in ms: armMaxDurationTimer UND der Reserve-Backstop-Timer teilen
   // dieselbe Rechnung (call-eigenes Limit vor globalem Default). Die Formel selbst lebt in
@@ -64,7 +72,11 @@ export function makeCallLifecycle({
   // recordFailureReason ist set-once (state-ops.js) -> ein spaeterer /voice/status-Callback
   // ueberschreibt den Cap-Grund nicht, und umgekehrt gewinnt ein bereits vom Provider
   // gemeldeter Grund.
-  async function terminateCappedCall(callId, providerCallSid, status) {
+  // KS-P1b: der Grund ist jetzt ein Parameter statt einer Konstante im Body - es gibt seit
+  // dieser Phase ZWEI Anlaesse (Zeit-Cap und erschoepfte Decke) und genau EINEN Weg, sie zu
+  // vollziehen. Reihenfolge, Idempotenz und der EINE Terminalisierungspfad (INV-9) sind
+  // unberuehrt. Ein Objekt-Argument statt vier Positionen (F1).
+  async function terminateActiveCall({ callId, providerCallSid, status, failureReason }) {
     try {
       const call = store.getCall(callId);
       if (call?.status !== "active") return;
@@ -74,7 +86,7 @@ export function makeCallLifecycle({
       await terminateAndBillCall({
         persistEnd: () => {
           store.setCallEndedAt(callId, status, endedAtIso);
-          store.recordFailureReason(callId, CAP_FAILURE_REASON); // GAP-26, s.o.
+          store.recordFailureReason(callId, failureReason); // GAP-26, s.o.
         },
         // P6 (Befund 1): call ist frisch (getCall oben) -> Call-Control-Call (callControlId
         // gesetzt) wird via endCallViaCallControl beendet, TeXML/Twilio byte-identisch ueber
@@ -87,6 +99,28 @@ export function makeCallLifecycle({
     } catch (e) {
       console.error("[max-duration] Terminalisierung fehlgeschlagen:", e.message);
     }
+  }
+
+  // Zeit-Achse. Signatur und Verhalten unveraendert - alle drei Aufrufer
+  // (scheduleMaxDurationEnd, rearmActiveCallTimers, der Re-Attach-Kern) bleiben, wie sie sind.
+  async function terminateCappedCall(callId, providerCallSid, status) {
+    await terminateActiveCall({ callId, providerCallSid, status, failureReason: CAP_FAILURE_REASON });
+  }
+
+  // KS-P1b, Geld-Achse: ein Leg, dessen Guthaben zwischen Anrufstart und Re-Attach
+  // aufgebraucht wurde, wird beendet statt mit frischer Frist reanimiert. status
+  // "completed" (nicht "failed"): das Leg war technisch gesund, wir haben es beendet - wie
+  // beim Timer-Ablauf; "failed" bleibt dem Boot-Zombie vorbehalten. Die Logzeile ist
+  // Pflicht, nicht Kuer: ohne sie waere die Terminalisierung auf den /voice/*-Pfaden im
+  // Betrieb voellig stumm (CLAUDE.md Regel 7). Nur die server-generierte callId, kein PII.
+  async function terminateOverBudgetCall(callId, providerCallSid) {
+    console.warn(`[budget] Re-Attach: Guthaben erschoepft (call=${callId}) -> terminalisiert`);
+    await terminateActiveCall({
+      callId,
+      providerCallSid,
+      status: "completed",
+      failureReason: BUDGET_FAILURE_REASON,
+    });
   }
 
   // F10 (A6): armiert den Max-Dauer-Cap. Nach ms feuert der EINE Terminalisierungspfad
@@ -129,7 +163,28 @@ export function makeCallLifecycle({
       maxCallDurationS: config.safety.maxCallDurationS,
       terminateCappedCall,
       scheduleMaxDurationEnd,
+      // KS-P1b: die Geld-Achse als gebundene Query (Muster der uebrigen Deps). tenantId
+      // kommt aus dem frisch geladenen Call (I8: rowToCall hydriert ihn).
+      budgetAxisFor: (call) =>
+        blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId }),
+      terminateOverBudgetCall,
     });
+  }
+
+  // KS-P1b: dieselbe Naht fuer den Assistant-Shim, der ausschliesslich ueber die Telnyx-
+  // eigene call_control_id korreliert (E1) und keine callId kennt. Bewusst ZWEISTUFIG statt
+  // die ccid durch den Kern zu schicken: der Kern coalesced parallele Re-Attaches pro
+  // callId (RACE-1). Ein zweiter Schluessel fuer denselben Call haette dieses Coalescing
+  // ausgehebelt - ein gleichzeitiger Ingest-/voice-Re-Attach und ein Shim-Turn haetten
+  // ZWEI Max-Dauer-Timer fuer dasselbe Leg armiert (Timer-Leak). Preis: auf dem seltenen
+  // Miss-Pfad zwei DB-Scans statt einem; bewusst akzeptiert. Nebeneffekt: der zweite
+  // Durchlauf liefert ueber den pg-RACE-GUARD die SPIEGEL-Instanz - genau die lebende
+  // Referenz, die der Shim braucht. Restzeit-Klassifikation, Guthaben-Pruefung und
+  // Cap-Rearm passieren damit im Kern, nicht hier (G5).
+  async function reattachActiveCallByControlId(callControlId) {
+    const found = await store.attachActiveCallByControlId(callControlId);
+    if (!found) return { call: null, logUnknown: true };
+    return await reattachActiveCall(found.id);
   }
 
   // F10 (A6): Boot-Re-Arm der Max-Dauer-Timer. Ein Deploy/Restart toetet sonst den
@@ -162,5 +217,11 @@ export function makeCallLifecycle({
       );
   }
 
-  return { armMaxDurationTimer, armReserveReleaseTimer, reattachActiveCall, rearmActiveCallTimers };
+  return {
+    armMaxDurationTimer,
+    armReserveReleaseTimer,
+    reattachActiveCall,
+    reattachActiveCallByControlId,
+    rearmActiveCallTimers,
+  };
 }

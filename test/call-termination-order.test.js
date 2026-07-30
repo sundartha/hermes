@@ -277,7 +277,10 @@ test("Quelltext: terminateCappedCall und cancel_call nutzen ebenfalls billThunk 
   // P5 (Server-Slim): terminateCappedCall lebt jetzt in call-lifecycle.js; finishCall kommt
   // dort als injizierter Dep herein (== callFinish.finishCall bei der Verdrahtung), daher
   // referenziert der Modul-Quelltext den bare Dep-Namen, nicht callFinish.finishCall.
-  const cappedBlock = sliceBetween(lifecycleSrc, "async function terminateCappedCall(", "\n}\n");
+  // KS-P1b: der Body ist nach terminateActiveCall gewandert (grund-parametrisierter EINER
+  // Terminalisierungspfad); terminateCappedCall ist seither nur noch der Zeit-Achsen-Wrapper.
+  // Der Pruefgegenstand bleibt derselbe: dieser eine Pfad bucht ueber billThunk.
+  const cappedBlock = sliceBetween(lifecycleSrc, "async function terminateActiveCall(", "\n  }\n");
   assert.match(cappedBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*callId\)/);
   const cancelBlock = sliceBetween(apiCallsSrc, 'router.post("/api/calls/:id/cancel"', "res.json({ status: \"cancelled\" });");
   assert.match(cancelBlock, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
