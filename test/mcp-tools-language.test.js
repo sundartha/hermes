@@ -93,14 +93,7 @@ const CALL_LINES_EN = [
 
 const AGENT_STATE_FIXTURE = {
   agent: { number: "+18643028341", owner: "Antonio", voiceEngine: "budget", model: "claude-haiku" },
-  usage: {
-    calls: 3,
-    costEur: 2.1,
-    tenantCapEur: 10,
-    spendMonthCostEur: 0.6,
-    spendMonthKey: "2026-07",
-    reservedEur: 0.6,
-  },
+  usage: { calls: 3, planUsagePercent: 40 },
   settings: { allowSummaries: true, allowPersonalData: false, allowBankData: false },
 };
 
@@ -192,22 +185,26 @@ test("mcp-tools.js traegt kein hartes de-DE-Literal mehr (ex PROMPT-09)", async 
   });
 });
 
-// ==================== T6 (ex MCP-08) ====================
-test("get_agent_status-Textblock zeigt die konfigurierte Belastungswaehrung (ex MCP-08)", async () => {
+// ==================== T6 (ex MCP-08, KS-P8 umgebaut) ====================
+// Die Praemisse von T6 (Belastungswaehrung im Textblock) entfaellt mit KS-P8/E4 - der
+// Textblock nennt ueberhaupt keinen Kostenbetrag mehr. Statt geloescht wird der Test zum
+// Waechter der neuen Zusage: schlaegt kuenftig rot, sobald irgendein Betrag/Waehrungslabel
+// in genau diese Nutzer-Flaeche zurueckkehrt (Pre-Mortem 3 aus dem KS-P8-Plan). Kein
+// Katalog-ID-Praefix am Namensanfang -> bleibt im npm test-Regressionslauf (Lehre
+// catalog-id-prefix-misroutes-tests).
+test("get_agent_status-Textblock nennt ueberhaupt keine Waehrung mehr (ex MCP-08, KS-P8/E4)", async () => {
   await withConfig("paymentCurrency", "usd", async () => {
     await withGateway(AGENT_STATE_FIXTURE, async () => {
       const handlers = captureTools({ identity: null, scopedTenant: "tenant-us" });
       const text = toolText(await handlers.get("get_agent_status")());
-      assert.doesNotMatch(text, /\bEUR\b/, "bei paymentCurrency=usd darf kein EUR-Label erscheinen");
-      assert.match(text, /\bUSD\b/, "bei paymentCurrency=usd muss USD im Textblock stehen");
+      assert.doesNotMatch(text, /\bEUR\b|\bUSD\b|€|\$/, "kein Kostenbetrag in der Nutzer-Sicht");
     });
   });
   await withConfig("paymentCurrency", "eur", async () => {
     await withGateway(AGENT_STATE_FIXTURE, async () => {
       const handlers = captureTools({ identity: null, scopedTenant: "tenant-eu" });
       const text = toolText(await handlers.get("get_agent_status")());
-      assert.doesNotMatch(text, /\bUSD\b/, "bei paymentCurrency=eur darf kein USD-Label erscheinen");
-      assert.match(text, /\bEUR\b/, "bei paymentCurrency=eur muss EUR im Textblock stehen");
+      assert.doesNotMatch(text, /\bEUR\b|\bUSD\b|€|\$/, "kein Kostenbetrag in der Nutzer-Sicht");
     });
   });
 });
@@ -271,9 +268,9 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
         typeof texts[key] === "string" && texts[key].length > 0,
         `${key} fehlt fuer ${language}`,
       );
-    for (const key of ["number", "owner", "voiceEngine", "model", "calls", "permissions", "unknownMonth"])
+    for (const key of ["number", "owner", "voiceEngine", "model", "calls", "permissions", "planUsageUnknown"])
       assert.ok(texts.agentStatus?.[key], `agentStatus.${key} fehlt fuer ${language}`);
-    for (const key of ["costLifetime", "costSpendMonth", "reserved"])
+    for (const key of ["planUsage"])
       assert.equal(
         typeof texts.agentStatus?.[key],
         "function",
@@ -382,9 +379,7 @@ const AGENT_STATUS_TEXT_DE =
   "Voice-Engine: budget\n" +
   "Modell: claude-haiku\n" +
   "Calls bisher: 3\n" +
-  "KI-Kosten gesamt (Lebenszeit): 2.100 EUR von 10 EUR eigenem Budget\n" +
-  "KI-Kosten Spend-Monat 2026-07: 0.600 EUR\n" +
-  "Aktuell reserviert: 0.600 EUR\n" +
+  "Monatsnutzung: 40 % des Minuten-Kontingents\n" +
   "Berechtigungen: Summaries=true, PersoenlicheDaten=false, Bankdaten=false";
 
 test("get_agent_status-Textblock: Feldnamen folgen der Sprache; DE byte-identisch (P15/T3a)", async () => {
@@ -403,7 +398,7 @@ test("get_agent_status-Textblock: Feldnamen folgen der Sprache; DE byte-identisc
         assert.ok(text.includes(`\n${labels.permissions}: `), `${language}: uebersetztes Berechtigungs-Label`);
         assert.doesNotMatch(
           text,
-          /Agent-Nummer|Besitzer|Modell|Berechtigungen|KI-Kosten|Aktuell reserviert/,
+          /Agent-Nummer|Besitzer|Modell|Berechtigungen|Monatsnutzung/,
           `${language}: keine deutschen Feldnamen im Textblock`,
         );
       }

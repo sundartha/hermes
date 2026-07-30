@@ -263,7 +263,7 @@ KS-P1b Shim-Reattach          -+
 KS-P3a Plan-Decken-Kohaerenz   +- Vorbedingungen von KS-P3
 KS-P7  Sperrliste erweitern   -+   (Schutz VOR Lockerung)
 KS-P3  (a) Reserve entkoppeln, (b) Zeitgrenze wird Notbremse
-KS-P8  Prozent statt Euro
+KS-P8  Prozent statt Euro     <- E4, ERLEDIGT (Merge <sha>)
 ```
 
 **Nachtrag 2026-07-30 — warum KS-P9 vor KS-P5a steht.** Der erste KS-P5a-Lauf ist daran

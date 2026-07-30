@@ -11,8 +11,7 @@
 // (eine Quelle, G5 - kein Mismatch zwischen Server- und Self-Service-Antworten).
 import { Router } from "express";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
-import { CENTS_PER_EUR } from "../store/defaults.js";
-import { spendMonthUsageCents, spendMonthWindowKey } from "../store/state-ops.js";
+import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
@@ -21,37 +20,25 @@ export const STATE_CALLS = 30,
   STATE_CALENDAR = 10,
   STATE_NOTIFICATIONS = 10;
 
-// costEur wird HIER an der EINEN API-Projektionskante aus dem autoritativen costCents
-// abgeleitet (P1 Minor 1); interne Felder (costCents/costMicroCentsRem) verlassen die API
-// NICHT. mcp-tools.js (pickAgentStatus + Text-Render) liest dieses abgeleitete costEur ->
-// eine Quelle (G5), keine Dreifach-Ableitung.
-//
-// tenantCapEur (P5a, HARTE Migration, kein sanfter Bedeutungswechsel): der EFFEKTIVE
-// TENANT-Cap aus budget.capCents (tenantBudgetSnapshot) - NICHT mehr der globale
-// Plattform-Cap des Vorgaenger-Feldes. "3,50 von 8,00" neben dem globalen Cap sah gesund
-// aus, waehrend die eigene Decke laengst blockierte (D4) - der alte Schluessel entfaellt
-// ERSATZLOS, kein Schluessel-behalten-Bedeutung-wechseln. Die Plattform-Achse (globaler
-// Notaus) verlaesst diese Projektion NICHT: kein Feld hier leitet sich aus dem globalen
-// Cap oder der globalen Verbrauchssumme ab (Cross-Tenant-Leck-Riegel, Absolute Regel 4/6).
-//
-// P5b (drei weitere TENANT-EIGENE Felder, dieselbe Regel gilt fuer sie): spendMonthCostEur
-// und spendMonthKey kommen AUSSCHLIESSLICH aus der nebeneffektfreien Leseprojektion
-// spendMonthUsageCents/spendMonthWindowKey (state-ops.js) - beide lesen nur den
-// Tenant-Bucket + die Uhr, kein s-Argument, also strukturell kein Zugriff auf fremde
-// Buckets oder Plattform-Summen. reservedEur kommt aus reservationOf (reservationFor,
-// EIN Tenant-Schluessel) - NICHT aus reservationsTotal (das waere die Plattform-Summe).
-// Diese Phase ist reine Anzeige: keines der vier Geld-Praedikate wird hier beruehrt,
-// der Flip auf die Spend-Monat-Achse ist P7.
-function usageView({ usage, budget, reservedCents, nowIso }) {
+// KS-P8 (Owner-Entscheidung E4): diese Projektion traegt KEINEN Kostenbetrag mehr.
+// Der Kunde kauft Minuten, keine Euro - eine EUR-Zahl ist fuer ihn weder handlungs-
+// leitend noch verstaendlich und legt unsere Kostenstruktur offen. Ersatzlos entfallen
+// sind alle fuenf frueheren Geld-Felder dieser Projektion (Lebenszeit-Kosten,
+// Tenant-Decke, Spend-Monat-Kosten, Spend-Monat-Schluessel, In-Flight-Reserve; kein
+// Schluessel-behalten-Bedeutung-wechseln - dieselbe harte Migration wie der Wegfall des
+// globalen Cap-Feldes in P5a). An ihrer Stelle steht EIN Wert: der Anteil der
+// verbrauchten Plan-Minuten in Prozent, abgeleitet in billing/meter.js
+// (planUsagePercent, EINE Quelle mit dem Minuten-Gate). null = kein Kontingent
+// hinterlegt (fail-closed, NIE 0 %).
+// Die Geld-Achse bleibt sichtbar, wo sie hingehoert: im Ablehnungstext des Budget-
+// Gates (store-Fassade -> outbound-gates.js, KS-P4) und in der Betreiber-Sicht
+// GET /api/billing/platform-costs.
+function usageView({ usage, quota }) {
   return {
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     calls: usage.calls,
-    costEur: usage.costCents / CENTS_PER_EUR,
-    tenantCapEur: budget.capCents / CENTS_PER_EUR,
-    spendMonthCostEur: spendMonthUsageCents(usage, nowIso) / CENTS_PER_EUR,
-    spendMonthKey: spendMonthWindowKey(usage, nowIso),
-    reservedEur: reservedCents / CENTS_PER_EUR,
+    planUsagePercent: planUsagePercent(quota),
   };
 }
 
@@ -89,9 +76,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
       calendar: upcomingCalendar(store, tenantId).slice(0, STATE_CALENDAR),
       usage: usageView({
         usage: store.usageOf(tenantId),
-        budget: store.tenantBudgetSnapshot(tenantId, config.billing),
-        reservedCents: store.reservationOf(tenantId),
-        nowIso: new Date().toISOString(),
+        quota: tenantQuotaView(store, tenantId),
       }),
       notifications: scoped.notifications.slice(0, STATE_NOTIFICATIONS),
       agent: {

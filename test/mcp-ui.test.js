@@ -670,11 +670,7 @@ const RICH_STATE = {
   },
   usage: {
     calls: 3,
-    costEur: 2.1,
-    tenantCapEur: 10,
-    spendMonthCostEur: 0.6,
-    spendMonthKey: "2026-07",
-    reservedEur: 0.6,
+    planUsagePercent: 40,
     internalCounter: 999,
   },
   settings: {
@@ -694,15 +690,11 @@ const RICH_STATE = {
 const RESOURCE_URI_AGENT = uiResourceUri(WIDGET_AGENT_STATUS); // ui://hermes/agent-status
 const AGENT_KEYS = [
   "calls",
-  "costEur",
   "model",
   "number",
   "owner",
   "permissions",
-  "reservedEur",
-  "spendMonthCostEur",
-  "spendMonthKey",
-  "tenantCapEur",
+  "planUsagePercent",
   "voiceEngine",
 ];
 // Pin bleibt WOERTLICH, wird nur explizit an seine Sprache gebunden (P13 ENTSCHAERFT 1:
@@ -714,11 +706,7 @@ const agentStatusOutput = z.object({
   voiceEngine: z.string(),
   model: z.string(),
   calls: z.number(),
-  costEur: z.number(),
-  tenantCapEur: z.number(),
-  spendMonthCostEur: z.number(),
-  spendMonthKey: z.string().nullable(),
-  reservedEur: z.number(),
+  planUsagePercent: z.number().nullable(),
   permissions: z.string(),
 });
 
@@ -734,21 +722,12 @@ test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes stru
     assert.match(txt, /Agent-Nummer:/, "Backward-Compat-Format (Agent-Nummer)");
     assert.match(txt, /Berechtigungen:/, "Backward-Compat-Format (Berechtigungen)");
 
-    // P5b-Review-Blocker: die drei Geld-/Monats-Zeilen tragen je ein eigenes Achsen-Label
-    // (Lebenszeit vs. Spend-Monat vs. Reserve) UND den dazugehoerigen Wert aus RICH_STATE -
-    // je eine Assertion pro Achse, damit ein kuenftiges Vertauschen/Vergessen der Labels
-    // (das im Plan benannte D4-Wiederholungsrisiko) rot schlaegt.
+    // KS-P8: EINE Nutzungszeile statt drei Geld-/Monats-Zeilen - Prozent, kein Betrag.
     assert.match(
       txt,
-      /KI-Kosten gesamt \(Lebenszeit\): 2\.100 EUR von 10 EUR eigenem Budget/,
-      "Lebenszeit-Achse: Label + costEur/tenantCapEur",
+      /Monatsnutzung: 40 % des Minuten-Kontingents/,
+      "Nutzungszeile: planUsagePercent statt Geldbetrag",
     );
-    assert.match(
-      txt,
-      /KI-Kosten Spend-Monat 2026-07: 0\.600 EUR/,
-      "Spend-Monat-Achse: Label + Monatsschluessel + spendMonthCostEur",
-    );
-    assert.match(txt, /Aktuell reserviert: 0\.600 EUR/, "Reserve-Achse: Label + reservedEur");
 
     assert.ok(result.structuredContent, "structuredContent vorhanden");
     assert.deepEqual(Object.keys(result.structuredContent).sort(), AGENT_KEYS);
@@ -760,18 +739,17 @@ test("T-W3-AC1: Stufe 0 additiv - Backward-Compat-Text + schema-validiertes stru
   });
 });
 
-// Review-Blocker T1 (P5b, Runde 3): spendMonthKey ist nullable (unlesbare Uhr, s.
-// spendMonthWindowKey), aber RICH_STATE oben liefert durchgaengig einen String - der
-// Fallback-Textzweig UND der nullable-Schema-Zweig liefen bislang in KEINEM Test durch
-// echtes null. Fixture per Spread aus RICH_STATE (G5 - keine zweite Kopie des ganzen
-// Objekts), NUR usage.spendMonthKey auf null gesetzt.
-const RICH_STATE_NULL_SPEND_MONTH_KEY = {
+// KS-P8/D1: planUsagePercent ist nullable (kein Kontingent hinterlegt), aber RICH_STATE
+// oben liefert durchgaengig eine Zahl - der Fallback-Textzweig UND der nullable-Schema-
+// Zweig laufen erst hier durch echtes null. Fixture per Spread aus RICH_STATE (G5 -
+// keine zweite Kopie des ganzen Objekts), NUR usage.planUsagePercent auf null gesetzt.
+const RICH_STATE_NO_PLAN = {
   ...RICH_STATE,
-  usage: { ...RICH_STATE.usage, spendMonthKey: null },
+  usage: { ...RICH_STATE.usage, planUsagePercent: null },
 };
 
-test("T-W3-AC1b: spendMonthKey=null (unlesbare Uhr) - Text-Fallback 'unbekannt' + nullable-Schema-Zweig", async () => {
-  await withGateway(RICH_STATE_NULL_SPEND_MONTH_KEY, async () => {
+test("T-W3-AC1b: planUsagePercent=null (kein Kontingent hinterlegt) - Text-Fallback + nullable-Schema-Zweig", async () => {
+  await withGateway(RICH_STATE_NO_PLAN, async () => {
     const { tools } = captureUi({ uiHost: capableHost() });
     const { handler } = tools.get("get_agent_status");
     const result = await handler({});
@@ -779,14 +757,14 @@ test("T-W3-AC1b: spendMonthKey=null (unlesbare Uhr) - Text-Fallback 'unbekannt' 
     const txt = result.content[0].text;
     assert.match(
       txt,
-      /KI-Kosten Spend-Monat unbekannt: 0\.600 EUR/,
-      "Spend-Monat-Achse: Fallback-Wortlaut statt eines Schluessels",
+      /Monatsnutzung: kein Kontingent hinterlegt/,
+      "Fail-closed-Wortlaut statt einer erfundenen 0 %",
     );
 
-    assert.equal(result.structuredContent.spendMonthKey, null, "structuredContent traegt null durch");
+    assert.equal(result.structuredContent.planUsagePercent, null, "structuredContent traegt null durch");
     assert.doesNotThrow(
       () => agentStatusOutput.parse(result.structuredContent),
-      "nullable-Schema-Zweig (spendMonthKey) validiert bei echtem null",
+      "nullable-Schema-Zweig (planUsagePercent) validiert bei echtem null",
     );
   });
 });
@@ -903,11 +881,9 @@ test("T-W3-AC6: agent-status.html self-contained + read-only + erbt W1-Binding",
   // Erbt W1-Binding: die injizierte Bootstrap-Quelle (run(window)) ist vorhanden.
   assert.ok(html.includes("run(window)"), "injiziertes W1-Binding (run(window)) vorhanden");
   assert.equal(mcpNativeRenderer.hasWidget(WIDGET_AGENT_STATUS), true, "Adapter kennt agent-status");
-  // P5b-Review-Blocker: die drei neuen Monats-/Reserve-Felder muessen als eigene
-  // data-mcp-Zeilen im Markup stehen, sonst bindet W1 sie nie an sichtbare Slots.
-  for (const field of ["spendMonthCostEur", "spendMonthKey", "reservedEur"]) {
-    assert.ok(html.includes(`data-mcp="${field}"`), `Slot data-mcp=${field}`);
-  }
+  // KS-P8: die Nutzungszeile muss als eigene data-mcp-Zeile im Markup stehen, sonst
+  // bindet W1 sie nie an einen sichtbaren Slot.
+  assert.ok(html.includes('data-mcp="planUsagePercent"'), "Slot data-mcp=planUsagePercent");
 });
 
 // ===== W-batch: drei weitere read-only Widgets ueber den BESTEHENDEN Seam =====

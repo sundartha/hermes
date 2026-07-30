@@ -100,7 +100,7 @@ test("T-P4-06: degradierte api-Antwort ({}) -> klare Tool-Fehlermeldung, kein .l
       "kein roher Deref-Fehler",
     );
 
-    // get_agent_status derefed s.agent.number + s.usage.calls/costEur -> ebenfalls Guard.
+    // get_agent_status derefed s.agent.number + s.usage.calls/planUsagePercent -> ebenfalls Guard.
     let statusResult;
     await assert.doesNotReject(async () => {
       statusResult = await handlers.get("get_agent_status")();

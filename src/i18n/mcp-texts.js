@@ -60,15 +60,15 @@ export const MCP_TEXTS = Object.freeze({
     // in einer Oberflaeche, deren Weltdefault "en" ist. DE bleibt byte-identisch zum
     // Bestand, inklusive des abschliessenden Leerzeichens im Praefix. calendarLine ist
     // eine ZEILEN-Funktion (nicht nur ein Trennwort), weil Verbinder UND Interpunktion
-    // um den Zeitraum sprachabhaengig sind - dieselbe Begruendung wie bei den
-    // Geld-/Monatszeilen unten. Die Zeitwerte kommen fertig formatiert herein.
+    // um den Zeitraum sprachabhaengig sind - dieselbe Begruendung wie bei der
+    // Nutzungszeile unten. Die Zeitwerte kommen fertig formatiert herein.
     emptyActionItems: "Keine offenen Action Items.",
     appointmentPrefix: "(Termin) ",
     calendarLine: ({ title, start, end }) => `${title}: ${start} bis ${end}`,
     // Feldnamen des get_agent_status-Textblocks (P15/T3a). LABEL, wo der Wert nur
     // angehaengt wird; ZEILEN-Funktion, wo die Sprache die Wortstellung bestimmt
-    // (Geld-/Monatszeilen). Die Betraege kommen fertig formatiert herein (costDigits +
-    // Waehrungslabel) - keine Geld-/Formatlogik im Buendel.
+    // (Nutzungszeile). KS-P8: der Prozentwert kommt fertig herein - keine Formatlogik
+    // im Buendel.
     agentStatus: Object.freeze({
       number: "Agent-Nummer",
       owner: "Besitzer",
@@ -76,11 +76,8 @@ export const MCP_TEXTS = Object.freeze({
       model: "Modell",
       calls: "Calls bisher",
       permissions: "Berechtigungen",
-      unknownMonth: "unbekannt",
-      costLifetime: (spent, cap) =>
-        `KI-Kosten gesamt (Lebenszeit): ${spent} von ${cap} eigenem Budget`,
-      costSpendMonth: (monthKey, amount) => `KI-Kosten Spend-Monat ${monthKey}: ${amount}`,
-      reserved: (amount) => `Aktuell reserviert: ${amount}`,
+      planUsage: (percent) => `Monatsnutzung: ${percent} % des Minuten-Kontingents`,
+      planUsageUnknown: "Monatsnutzung: kein Kontingent hinterlegt",
     }),
   }),
   en: Object.freeze({
@@ -119,10 +116,8 @@ export const MCP_TEXTS = Object.freeze({
       model: "Model",
       calls: "Calls so far",
       permissions: "Permissions",
-      unknownMonth: "unknown",
-      costLifetime: (spent, cap) => `AI cost total (lifetime): ${spent} of ${cap} own budget`,
-      costSpendMonth: (monthKey, amount) => `AI cost spend month ${monthKey}: ${amount}`,
-      reserved: (amount) => `Currently reserved: ${amount}`,
+      planUsage: (percent) => `Monthly usage: ${percent}% of your included minutes`,
+      planUsageUnknown: "Monthly usage: no plan quota on file",
     }),
   }),
   fr: Object.freeze({
@@ -163,10 +158,8 @@ export const MCP_TEXTS = Object.freeze({
       model: "Modèle",
       calls: "Appels jusqu'ici",
       permissions: "Autorisations",
-      unknownMonth: "inconnu",
-      costLifetime: (spent, cap) => `Coût IA total (à vie) : ${spent} sur ${cap} de budget propre`,
-      costSpendMonth: (monthKey, amount) => `Coût IA mois de dépense ${monthKey} : ${amount}`,
-      reserved: (amount) => `Actuellement réservé : ${amount}`,
+      planUsage: (percent) => `Utilisation mensuelle : ${percent} % des minutes incluses`,
+      planUsageUnknown: "Utilisation mensuelle : aucun forfait enregistré",
     }),
   }),
 });

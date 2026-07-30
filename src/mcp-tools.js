@@ -27,7 +27,7 @@ import {
   KEY_FACTS_LIMITS,
 } from "./store/defaults.js";
 import { CONSULT_EVENT, CONSULT_POLL_ABORT_MS } from "./consult/delivery.js";
-import { config, resolveGatewayUrl } from "./config.js";
+import { resolveGatewayUrl } from "./config.js";
 import { localeFor } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
 
@@ -323,20 +323,6 @@ function permissionsSummary(settings, labels) {
   );
 }
 
-// Nachkommastellen der Kostenbetraege im get_agent_status-Textblock (G25: benannte
-// Konstante statt dreimal nackter Literal-3 fuer costEur/spendMonthCostEur/reservedEur).
-const AGENT_STATUS_COST_DIGITS = 3;
-function costDigits(amount) {
-  return amount.toFixed(AGENT_STATUS_COST_DIGITS);
-}
-
-// Anzeige-Waehrung == Belastungs-Waehrung (MCP-08 / Owner-Entscheidung 7.1): das Label
-// folgt IMMER config.billing.paymentCurrency, nie einem Literal. Zur AUFRUFZEIT gelesen,
-// nicht beim Modul-Load: die Konfiguration ist ein Laufzeit-Objekt.
-function chargeCurrencyLabel() {
-  return config.billing.paymentCurrency.toUpperCase();
-}
-
 // Daten-Kontrakt get_agent_status (W3-Spec): GENAU diese flachen Eigen-Felder duerfen
 // nach aussen (structuredContent + Text + Widget). Whitelist, keine Blacklist. number/
 // owner koennen fail-closed leer sein (kein aktiver Nummern-Seed / Tenant ohne
@@ -349,31 +335,23 @@ function pickAgentStatus(s, texts) {
     voiceEngine: s.agent.voiceEngine,
     model: s.agent.model,
     calls: s.usage.calls,
-    costEur: s.usage.costEur,
-    tenantCapEur: s.usage.tenantCapEur,
-    // P5b: dieselben drei TENANT-EIGENEN Felder wie /api/state.usage (eine Quelle,
-    // keine zweite Ableitung) - Spend-Monat-Verbrauch/-Schluessel + eigene Reserve.
-    spendMonthCostEur: s.usage.spendMonthCostEur,
-    spendMonthKey: s.usage.spendMonthKey,
-    reservedEur: s.usage.reservedEur,
+    // KS-P8/E4: KEIN Kostenbetrag mehr im Chat - nur die Monatsnutzung in Prozent.
+    // null = kein Kontingent hinterlegt (Schluessel bleibt erhalten, Schema nullable).
+    planUsagePercent: s.usage.planUsagePercent ?? null,
     permissions: permissionsSummary(s.settings, texts.permissionLabels),
   };
 }
 
 // outputSchema fuer get_agent_status: validiert GENAU die Whitelist (Stufe 0
 // schema-validiert). number/owner nullable (fail-closed leer ist ein gueltiger Zustand).
-// spendMonthKey nullable (unlesbare Uhr -> null, s. spendMonthWindowKey).
+// planUsagePercent nullable (kein Kontingent hinterlegt).
 const AGENT_STATUS_OUTPUT = {
   number: z.string().nullable(),
   owner: z.string().nullable(),
   voiceEngine: z.string(),
   model: z.string(),
   calls: z.number(),
-  costEur: z.number(),
-  tenantCapEur: z.number(),
-  spendMonthCostEur: z.number(),
-  spendMonthKey: z.string().nullable(),
-  reservedEur: z.number(),
+  planUsagePercent: z.number().nullable(),
   permissions: z.string(),
 };
 
@@ -979,6 +957,12 @@ export function registerTools(
       },
     );
 
+  // KS-P8: EINE Statuszeile fuer die Monatsnutzung. Ohne hinterlegtes Kontingent (null)
+  // der fail-closed-Wortlaut aus dem Sprachbuendel statt einer erfundenen 0 %.
+  function planUsageLine(percent, agentStatusTexts) {
+    return percent === null ? agentStatusTexts.planUsageUnknown : agentStatusTexts.planUsage(percent);
+  }
+
   // Stufe 0 (Text byte-identisch zum Bestand, Backward-Compat) + structuredContent
   // (Whitelist) + Stufe 1 (agent-status Widget) NUR bei faehigem Host (enableWidgetUi).
   // Der Textblock liest dieselben gewhitelisteten Daten (data.*) - eine Quelle, keine
@@ -987,7 +971,7 @@ export function registerTools(
     "get_agent_status",
     {
       description:
-        "Status of the phone agent: phone number, voice engine, model, cost/budget, permissions.",
+        "Status of the phone agent: phone number, voice engine, model, monthly usage, permissions.",
       inputSchema: {},
       outputSchema: AGENT_STATUS_OUTPUT,
       ...enableWidgetUi(WIDGET_AGENT_STATUS),
@@ -996,7 +980,6 @@ export function registerTools(
       const s = await call("GET", "/api/state");
       requireFields(s, { agent: "object", usage: "object", settings: "object" });
       const data = pickAgentStatus(s, loc.mcp); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
-      const currency = chargeCurrencyLabel();
       const A = loc.mcp.agentStatus;
       return {
         content: [
@@ -1006,9 +989,7 @@ export function registerTools(
               `${A.number}: ${data.number}\n${A.owner}: ${data.owner}\n` +
               `${A.voiceEngine}: ${data.voiceEngine}\n${A.model}: ${data.model}\n` +
               `${A.calls}: ${data.calls}\n` +
-              `${A.costLifetime(`${costDigits(data.costEur)} ${currency}`, `${data.tenantCapEur} ${currency}`)}\n` +
-              `${A.costSpendMonth(data.spendMonthKey ?? A.unknownMonth, `${costDigits(data.spendMonthCostEur)} ${currency}`)}\n` +
-              `${A.reserved(`${costDigits(data.reservedEur)} ${currency}`)}\n` +
+              `${planUsageLine(data.planUsagePercent, A)}\n` +
               `${A.permissions}: ${data.permissions}`,
           },
         ],

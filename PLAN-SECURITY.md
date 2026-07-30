@@ -528,6 +528,11 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 ## P5A-ACHSENTRENNUNG — Achsen in Anzeige und Ablehnung getrennt (2026-07-19)
 
 > **Durch KS-P9 (2026-07-30, E10) ueberholt:** die Plattform-Achse (`MAX_BUDGET_EUR`) trifft keine Sperrentscheidung mehr. Aussagen dieses Abschnitts ueber einen Plattform-Notaus / eine Geld-Schnittmenge beschreiben den Stand VOR KS-P9 und werden bewusst nicht rueckwirkend umgeschrieben.
+>
+> **Durch KS-P8 (2026-07-30, E4) teilweise ueberholt:** die hier beschriebene "Neue
+> Informationskante" (`/api/state` nennt eigene Budgetzahlen des Tenants) gilt seither
+> NUR NOCH fuer die 402-Ablehnungstexte des `budget`-/`reserve_budget`-Gates.
+> `/api/state` traegt seit KS-P8 keinen Kostenbetrag mehr - s. Abschnitt KS-P8 unten.
 
 > **Neue Informationskante:** `/api/state` und jede 402-Ablehnung des `budget`-/
 > `reserve_budget`-Gates (`src/telephony/outbound-gates.js`) nennen jetzt EIGENE
@@ -1249,6 +1254,45 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 
 ---
 
+## KS-P8 — Kostenbetraege verlassen die Tenant-Projektion (2026-07-30, E4)
+
+> **Was entfaellt.** `GET /api/state` (und darueber `get_agent_status` sowie das
+> gleichnamige MCP-Widget) traegt ab dieser Phase KEINEN Kostenbetrag mehr. Ersatzlos
+> geloescht aus `usage`: `costEur`, `tenantCapEur`, `spendMonthCostEur`, `spendMonthKey`,
+> `reservedEur` (kein Schluessel-behalten-Bedeutung-wechseln - dieselbe harte Migration
+> wie `maxBudgetEur` in P5A-ACHSENTRENNUNG). `/api/state` ruft `tenantBudgetSnapshot`/
+> `reservationOf` seither NICHT mehr auf.
+>
+> **Was an die Stelle tritt.** EIN Wert: `usage.planUsagePercent`, der Anteil der
+> verbrauchten Plan-Minuten in ganzen Prozent (`planUsagePercent`,
+> `src/billing/meter.js`), abgeleitet aus DEMSELBEN Minuten-Kontingent (`quotaView`) und
+> DEMSELBEN Erschoepfungs-Praedikat (`planMinutesExceeded`) wie das Outbound-Gate -
+> Anzeige == Gate bleibt gewahrt. Fail-closed: kein Kontingent hinterlegt -> `null`
+> ("kein Kontingent hinterlegt"), NIE `0 %` (ein Prozentwert ohne Bezugsgroesse
+> behauptet ein Kontingent, das es nicht gibt). `floor` statt `round`: `100 %` bedeutet
+> IMMER "erschoepft", nie "das Gate blockt gleich, zeigt aber noch Luft".
+>
+> **Warum das die Angriffs-/Informationsflaeche verkleinert, nicht vergroessert.** Die
+> Tenant-Projektion legte bislang die eigene Kostenstruktur je Tenant offen (Cent-genauer
+> Verbrauch, eigene Decke, Reserve). Ein Prozentwert relativ zum GEKAUFTEN Minuten-
+> Kontingent traegt diese Information nicht mehr. Kein Gate wurde beruehrt: alle
+> Sperrentscheidungen (`budgetExceeded`, `reserveExceedsBudget`, `planMinutesExceeded`,
+> Abo+KYC-Permit, `OUTBOUND_FROZEN`, Denylist, Land-Gate, Stundenlimit,
+> `MAX_CALL_DURATION_S`, Signaturpruefung) bleiben unveraendert und lesen weiterhin
+> dieselben Werte wie vor dieser Phase.
+>
+> **Wo die Geld-Achse sichtbar bleibt.** In den 402-Ablehnungstexten
+> (`tenantBudgetSnapshot` -> `outbound-gates.js`, KS-P4) und in der Betreiber-Sicht
+> `GET /api/billing/platform-costs` (plattformweit, kein Tenant, hinter der bestehenden
+> `/api/*`-Basic-Auth) - beide unveraendert.
+>
+> **Getragene Nebenwirkung.** `/api/state` hat keine Rollen-Weiche (Owner vs. Tenant); die
+> Owner-Sicht verliert die EUR-Zahlen in `/api/state` mit. Eine neue Rollen-Mechanik waere
+> neue Auth-Flaeche und damit ausserhalb dieser Phase - der Betreiber-Ersatzpfad ist die
+> Plattform-Route oben plus DB/Logs.
+
+---
+
 ## KS-P5a — Plan-Decke und Buchung teilen sich einen Satz (2026-07-30, E5/E5a)
 
 > **Was sich aendert.** `planCapCents` (`src/billing/plan-caps.js`) rechnet ab dieser Phase
@@ -1409,6 +1453,13 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > `tenantBudgetSnapshot`) angewendet - die Anzeige-Kante loggt dabei bewusst NICHT (kein
 > `denyCorruptUsage`), weil `/api/state` sie bei jedem Dashboard-Poll aufruft und ein
 > dauerhaft vergifteter Bucket sonst eine Log-Flut erzeugte.
+>
+> **Klarstellung (KS-P8, 2026-07-30, E4):** `/api/state` ruft `tenantBudgetSnapshot` seit
+> KS-P8 NICHT MEHR auf (die Tenant-Projektion traegt keinen Kostenbetrag mehr, s. Abschnitt
+> KS-P8). Die Nicht-Log-Entscheidung oben bleibt trotzdem gueltig - die verbleibenden
+> Aufrufer sind `outbound-gates.js` (Ablehnungstexte) und `routes/voice.js`
+> (Mid-Call-Restdauer), die denselben Bucket ebenfalls im laufenden Betrieb (nicht nur
+> per Poll) treffen koennen. Reine Klarstellung, kein Log-Verhalten geaendert.
 >
 > **Bewiesene Invariante:** `reserveExceedsBudget(...) === (reserveCents -
 > tenantBudgetSnapshot(...).remainingCents > 0)`. Vor dieser Phase konnte eine
