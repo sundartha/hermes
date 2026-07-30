@@ -35,7 +35,18 @@ neue Anrufe bekommen den Anker.
 | `MAX_BUDGET_EUR` | unveraendert lassen | seit KS-P9 keine Sperre mehr, nur noch Warnschwelle |
 | `MAX_CALL_DURATION_S` | **entfaellt** (KS-P3, E2/E3) | Der Key wird nicht mehr gelesen. Ein im Dashboard stehengebliebener Wert ist ab diesem Deploy WIRKUNGSLOS - er kann kein Gespraech mehr kuerzen. Aufraeumen darf der Owner, muss er aber nicht. Die nutzbare Dauer faellt jetzt pro Call aus dem Restguthaben (Notbremse `min(Restminuten + 1 min, 1800 s)`); die 1800 s sind hartkodiert und bewusst kein Knopf. |
 
-## 3. Nach dem Deploy pruefen
+## 3. Externe Reste loeschen (AL-P2-Spike, abgeschlossen)
+
+Der Spike-Schalter ist mit KS-AUF aus dem Code entfernt. Die beiden externen Artefakte
+kann ich nicht loeschen — fuer Render habe ich nur lesende Tools plus Env-Update und
+Deploy-Trigger, fuer Telnyx gar keins:
+
+- **Render-Dienst** `hermes-spike-al-p2` — ID `srv-d9kt9bm1egvs738asd0g`
+- **Telnyx-App** `AL-P2 Spike Silence` — ID `3014656686179747728`
+
+Beide laufen sonst als bezahlte Reste weiter.
+
+## 4. Nach dem Deploy pruefen
 
 - Boot-Banner zeigt den Worst-Case-Tarif 30 ct/min.
 - Ein Outbound-Anruf schreibt `estimated_cost_cents = 30` (nicht 300) in die `call`-Zeile.
