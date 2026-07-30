@@ -597,9 +597,12 @@ export function reserveExceedsBudget(tenantId, reserveCents, cfg) {
 }
 
 // Diagnose-Snapshot der Tenant-Achse (P5a, Anzeige + Ablehnungstexte): reine Query,
-// kein save (wie budgetExceeded).
+// kein save (wie budgetExceeded). KS-P4: nowIso wird HIER erzeugt (IO-Grenze) und an die
+// zeit-freie ops-Funktion durchgereicht - dasselbe Muster wie budgetExceeded, weil der
+// Snapshot seit KS-P4 dieselbe aufgeloeste Gate-Groesse liest. Die Fassaden-Signatur
+// nach aussen bleibt unveraendert.
 export function tenantBudgetSnapshot(tenantId, cfg) {
-  return ops.tenantBudgetSnapshot(load(), tenantId, cfg);
+  return ops.tenantBudgetSnapshot(load(), tenantId, cfg, new Date().toISOString());
 }
 
 // Reconcile (outbound-p1c): Mutation -> save (wie trackUsage). nowIso s. trackUsage (P4).

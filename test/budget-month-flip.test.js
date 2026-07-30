@@ -21,6 +21,7 @@ import {
   gatePlatformUsageCents,
   tryReserveOutboundBudget,
   claimPlatformSpendWarning,
+  tenantBudgetSnapshot,
 } from "../src/store/state-ops.js";
 import { emptyUsage } from "../src/store/defaults.js";
 import { config } from "../src/config.js";
@@ -234,6 +235,12 @@ test("T10 Instrumentierung: jedes Praedikat loest GENAU EINE Aufloesung aus (bei
     const tryReserveRead = countingCfg(flagValue);
     tryReserveOutboundBudget(s, TENANT_A, 5, tryReserveRead.cfg, JULY_ISO);
     assert.equal(tryReserveRead.reads.count, 1, `tryReserveOutboundBudget, flag=${flagValue}`);
+
+    // KS-P4: tenantBudgetSnapshot liest seit dieser Phase dieselbe aufgeloeste Gate-Groesse
+    // - gehoert damit zur selben "genau eine Aufloesung je Leser"-Invariante.
+    const snapshotRead = countingCfg(flagValue);
+    tenantBudgetSnapshot(s, TENANT_A, snapshotRead.cfg, JULY_ISO);
+    assert.equal(snapshotRead.reads.count, 1, `tenantBudgetSnapshot, flag=${flagValue}`);
   }
 });
 
