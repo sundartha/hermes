@@ -7,7 +7,7 @@
 // Monatsmiete-Ausloeser), NICHT hier: reconcileOutboundVoiceBudget laeuft immer,
 // recordVoiceMinuteMeter / recordNumberMonthMeter nur im Payment-Pfad.
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
-import { numbersDueForMonthMeter } from "../store/state-ops.js";
+import { callStartAnchorMs, numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
 
 const MS_PER_MINUTE = 60 * 1000;
@@ -41,6 +41,48 @@ export function voiceMinutesOf(call) {
 export function callTariffCentsPerMin(call) {
   if (call.direction === "inbound") return tariffCentsPerMin(call.to, call.to);
   return tariffCentsPerMin(call.to, call.from);
+}
+
+// KS-P2: die bereits verstrichenen, aber noch NICHT gebuchten Minuten EINES laufenden
+// Calls. Schwester von voiceMinutesOf mit DERSELBEN Rundungsregel (ceil, Provider-
+// Minutentakt) - der Live-Term ist die Vorhersage genau der Buchung, die
+// reconcileOutboundVoiceBudget am Call-Ende vornimmt, und darf sie nie unterschaetzen.
+//
+// BEWUSST ein anderer Anker als voiceMinutesOf: callStartAnchorMs nimmt answeredAt, sonst
+// startedAt. Fuer einen BEENDETEN Call heisst "kein answeredAt" korrekt "nie beantwortet,
+// nichts zu buchen"; fuer einen LAUFENDEN Call (verlorener Answer-Webhook, Re-Attach nach
+// Instanzwechsel) hiesse dieselbe Regel "kostenlos" - der Leg laeuft real und kostet real.
+//
+// Zwei Randfaelle, beide fail-closed:
+//   Uhr-Ruecksprung (NTP) -> negative Zeit -> 0, der Live-Term darf den Verbrauch NIE
+//     unter den gebuchten Wert druecken;
+//   unlesbarer Anker      -> NaN, KEIN stilles 0. Der Riegel sitzt an der Geld-Kante
+//     (liveBudgetExceeded), wo jeder andere unbrauchbare Geldwert auch endet.
+function liveVoiceMinutesOf(call, nowMs) {
+  const elapsedMs = nowMs - callStartAnchorMs(call);
+  if (!Number.isFinite(elapsedMs)) return NaN;
+  return Math.max(0, Math.ceil(elapsedMs / MS_PER_MINUTE));
+}
+
+// KS-P2: der Live-Term ist eine TENANT-Groesse, nicht die des rufenden Legs - die Summe
+// ueber ALLE noch laufenden Outbound-Calls. Call-lokal gerechnet saehe jeder Turn nur seine
+// eigene Zeit; die der uebrigen N-1 Legs fiele unter den Tisch (Unterzaehlung). Die Groesse,
+// die diese Luecke heute deckt, ist die Reserve - und die ist strukturell ephemer (nie
+// persistiert, nie hydriert) und nach jedem Deploy 0. Eine Summe ueber den Store braucht
+// dafuer weder Migration noch Boot-Hook.
+//
+// Der Aufrufer liefert ausschliesslich AKTIVE OUTBOUND-Calls (store.activeOutboundCallsFor
+// ist der einzige Produzent, die Bedingung ist dort strukturell). Inbound traegt nichts bei -
+// spiegelbildlich zu reconcileOutboundVoiceBudget: was nie gebucht wird, darf auch live nicht
+// zaehlen.
+//
+// Ein einzelnes NaN (unlesbarer Anker) vergiftet die Summe ABSICHTLICH und faehrt den ganzen
+// Tenant fail-closed ueber die D7-Kante - nicht "der eine Call zaehlt halt 0".
+export function liveVoiceSpendCents(activeOutboundCalls, nowMs) {
+  return activeOutboundCalls.reduce(
+    (sum, call) => sum + liveVoiceMinutesOf(call, nowMs) * callTariffCentsPerMin(call),
+    0,
+  );
 }
 
 export function makeMetering({ store }) {

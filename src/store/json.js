@@ -580,6 +580,17 @@ export function budgetExceeded(tenantId, cfg) {
   return ops.budgetExceeded(load(), tenantId, cfg, new Date().toISOString());
 }
 
+// KS-P2: Live-Variante von budgetExceeded (Mid-Call-Pruefung). liveCents kommt vom Aufrufer
+// (budget-gate.js), nowIso wie bei budgetExceeded HIER an der IO-Grenze.
+export function liveBudgetExceeded(tenantId, liveCents, cfg) {
+  return ops.liveBudgetExceeded(load(), tenantId, liveCents, cfg, new Date().toISOString());
+}
+
+// KS-P2: Basis des Live-Terms - reine Query, kein save (wie budgetExceeded).
+export function activeOutboundCallsFor(tenantId) {
+  return ops.activeOutboundCallsFor(load(), tenantId);
+}
+
 // Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).
 export function reserveExceedsBudget(tenantId, reserveCents, cfg) {
   return ops.reserveExceedsBudget(load(), tenantId, reserveCents, cfg, new Date().toISOString());

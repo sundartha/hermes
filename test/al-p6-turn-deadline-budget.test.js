@@ -115,6 +115,11 @@ before(async () => {
   process.env.DEFAULT_TENANT_BUDGET_CENTS = "1500";
   process.env.PAYMENT_ENABLED = "false";
   process.env.BUDGET_MONTH_ENABLED = "false";
+  // KS-P2: die Achse dieser Datei ist die KI-TOKEN-Achse. Der Carrier-Live-Term wird
+  // ausdruecklich auf 0 gestellt (wie in test/helpers.js BASE_ENV), sonst entschiede eine
+  // lokale .env mit, wann der Cap reisst - und die Assertions oben werden zeitabhaengig.
+  process.env.VOICE_TARIFF_DEFAULT_CENTS = "0";
+  process.env.VOICE_TARIFF_DOMESTIC_CENTS = "0";
   process.env.DATA_DIR = tempDataDir(
     seedState({
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }],
