@@ -19,6 +19,69 @@ Fuer JEDE Phase dieser Kette gilt:
 
 ---
 
+## KS-P9 — Plattform-Achse verliert die Sperrwirkung
+
+Abschnitt `### KS-P9` in `PLAN-KOSTEN-STEUERUNG.md` ist die Spec. Zusaetzlich bindend:
+
+### Diese Phase setzt eine bereits getroffene Owner-Entscheidung um
+
+Der Owner hat am 2026-07-30 entschieden (E10), dass `MAX_BUDGET_EUR` kein geschuetztes Gate
+mehr ist. **CLAUDE.md Absolute Regel 1 ist bereits entsprechend geaendert** — die Regel
+nennt seitdem "die pro-Tenant-Kostendecke" statt des globalen Topfs, und die Begruendung
+steht als Owner-Entscheidung im Regelwerk selbst.
+
+Fuer den Safety-Review heisst das: das Entfernen der Plattform-Sperrwirkung ist hier
+**kein** unautorisiertes Aufweichen eines Gates, sondern der Auftrag. Zu pruefen ist
+stattdessen, ob die Umsetzung *genau* das tut und nicht mehr:
+
+- Die **pro-Tenant-Decke** bleibt in voller Schaerfe erhalten. Wird sie mit angefasst,
+  ist das ein Blocker.
+- Abo+KYC vor Outbound, Denylist, Land-Gate, Stundenlimit, Max-Gespraechsdauer,
+  Signaturpruefung, `OUTBOUND_FROZEN`: alle unangetastet.
+- Der Beobachtungspfad (`platformSpendObservedCents`, `claimPlatformSpendWarning`,
+  `PLATFORM_SPEND_WARN_PERCENT`) bleibt funktionsfaehig. Die Plattform-Summe wird weiter
+  gemessen — nur ihre Sperrentscheidung entfaellt.
+
+### Die Boot-Guards: trennen, nicht pauschal senken
+
+`spendCapCoherence` und `planCapInertFindings` begruenden sich woertlich damit, dass "der
+globale Cap immer zuerst bindet". Dieser Halbsatz wird durch die Phase falsch. Trenne am
+Code sauber:
+
+- Klauseln, die eine Tenant-/Plan-Decke gegen die **Plattform-Zahl** halten: Praemisse
+  entfaellt -> entfernen oder neu ausrichten, mit Begruendung im Bericht.
+- Klauseln, die die **Worst-Case-Reserve gegen die Tenant-Decke** halten: unberuehrt,
+  bleiben FATAL.
+
+Eine pauschale Absenkung `fatal: true -> false` ist NICHT die Loesung — genau daran ist
+der erste KS-P5a-Lauf gescheitert (D-1). Wenn eine Aussage nicht mehr stimmt, wird sie
+entfernt, nicht leiser gestellt.
+
+### Was mit `MAX_BUDGET_EUR` als Env-Wert passiert
+
+Der Key bleibt bestehen und wird weiter gelesen — er ist nach der Phase die Bezugsgroesse
+der Schwellenwarnung, nicht mehr die einer Sperre. `.env.example` und `render.yaml`
+beschreiben ihn danach wahrheitsgemaess als Beobachtungs-/Warnschwelle. Den Live-Wert
+aendert der Owner, nicht die Phase.
+
+---
+
+## KS-P10 — Inbound wird nie budget-gesperrt
+
+Abschnitt `### KS-P10` in `PLAN-KOSTEN-STEUERUNG.md` ist die Spec. Zusaetzlich bindend:
+
+- Auch diese Phase setzt eine dokumentierte Owner-Entscheidung um (E11, CLAUDE.md Regel 1).
+- **Die Richtungsunterscheidung ist das ganze Feature.** Outbound behaelt seine
+  Sperrwirkung vollstaendig — Dial-Gate, Reserve, Mid-Call-Abbruch. Ein Test, der
+  beweist, dass Outbound bei erschoepfter Decke weiterhin 402 bekommt, ist Pflicht und
+  nicht optional.
+- `call.direction` ist die einzige zulaessige Unterscheidung, spiegelbildlich zu
+  `metering.js:69`. Kein neuer Env-Schalter, kein Setting, das Inbound-Sperren wieder
+  einschaltet.
+- Ein Call ohne aufloesbare Richtung wird wie **Outbound** behandelt (fail-closed).
+
+---
+
 ## KS-P5a — Starter-Kunde bekommt die verkauften Minuten
 
 Abschnitt `### KS-P5a` in `PLAN-KOSTEN-STEUERUNG.md` ist die Spec. Zusaetzlich bindend:
@@ -35,16 +98,26 @@ erledigt). Die Decken-Ableitung muss **mit beiden Werten** kohaerent bleiben:
 Wenn die neue Ableitung an einem der beiden Werte einen **fatalen** Boot-Guard ausloest,
 ist das ein Blocker: melden, nicht durch Absenken eines Gates umgehen.
 
-### E9 ist NICHT Teil dieser Phase
+### Der Plattform-Cap ist bereits erledigt (KS-P9)
 
-`MAX_BUDGET_EUR` (Plattform-Notaus, heute 30 EUR / 3000 ct) wird in dieser Phase **nicht
-geaendert** — weder im Code-Default, noch in `.env.example`, noch in `render.yaml`. Die
-Zahl ist eine Geschaeftsentscheidung des Owners (E9) und offen.
+**KS-P9 laeuft VOR dieser Phase** und hat der Plattform-Achse die Sperrwirkung genommen
+(E10). Damit ist die Kollision aus dem ersten Lauf gegenstandslos: eine Business-Decke von
+4500 ct kollidiert mit nichts mehr, und `PLAN_CAP_INERT` existiert in seiner alten Form
+nicht mehr.
 
-Erwartetes und ausdruecklich getragenes Verhalten: die Business-Decke laeuft nach der
-Umstellung ueber den Plattform-Cap und wird von `deriveTenantBudgetFromPlan`
-(`state-ops.js:1348`) darauf **geklemmt**, mit Boot-WARN. Das ist der dokumentierte
-Zwischenzustand aus E9, kein Defekt. Ein WARN ist zulaessig, ein FATAL nicht.
+**D-1 aus dem ersten Lauf ist damit hinfaellig.** Kein Boot-Guard wird in dieser Phase von
+FATAL auf WARN gesenkt. Faellt die Decken-Ableitung trotzdem gegen einen fatalen Guard,
+ist das ein Blocker: melden, nicht das Gate leiser stellen.
+
+`MAX_BUDGET_EUR` wird in dieser Phase **nicht** angefasst — weder Code-Default noch
+`.env.example` noch `render.yaml`. Die Aufstellung unten bleibt trotzdem Pflicht: sie ist
+die Groessenordnung, an der der Owner die Warnschwelle ausrichtet.
+
+Zu pruefen und im Bericht zu beantworten: ob `deriveTenantBudgetFromPlan`
+(`state-ops.js:1348`) die Plan-Decke nach KS-P9 ueberhaupt noch auf den Plattform-Wert
+klemmen darf. Die Klemmung existiert, weil der Plattform-Cap zuerst band — bindet er nicht
+mehr, verkuerzt sie die verkaufte Leistung ohne Gegenwert. Faellt die Klemmung in KS-P9
+bereits weg, hier nur feststellen; steht sie noch, gehoert sie in diese Phase.
 
 ### Pflicht-Artefakt: die Aufstellung
 

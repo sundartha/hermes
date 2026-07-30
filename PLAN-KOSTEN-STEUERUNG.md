@@ -252,7 +252,9 @@ nicht ueber die Uhr; **KS-P8** (Prozent statt Euro fuer den Nutzer) kommt ans En
 KS-P0  (erledigt, Env)
 KS-P1  (erledigt, Messung)
    |
+KS-P9  Plattform-Achse: Gate -> Beobachtung   <- E10, NEU: Vorbedingung von KS-P5a
 KS-P5a Starter-Bug            <- E5, vorgezogen: Geldpfad gegenueber zahlenden Kunden
+KS-P10 Inbound nie budget-gesperrt            <- E11, NEU
 KS-P6  Tarif-Fallback         <- Vorbedingung von KS-P3 (sonst Boot-Refusal)
 KS-P2  Live-Verbrauch         <- die Wurzelbehebung
 KS-P4  Anzeige an Gate-Achse  <- macht die Ablehnungsmeldung ehrlich
@@ -263,6 +265,15 @@ KS-P7  Sperrliste erweitern   -+   (Schutz VOR Lockerung)
 KS-P3  (a) Reserve entkoppeln, (b) Zeitgrenze wird Notbremse
 KS-P8  Prozent statt Euro
 ```
+
+**Nachtrag 2026-07-30 — warum KS-P9 vor KS-P5a steht.** Der erste KS-P5a-Lauf ist daran
+gescheitert, dass die aus EINEM Satz abgeleitete Business-Decke (4500 ct) den Plattform-Cap
+(3000 ct) uebersteigt und der Boot-Guard `PLAN_CAP_INERT` das fatal meldet. Der Plan-Agent wollte
+den Guard von FATAL auf WARN senken; der Safety-Review hat das zu Recht gestoppt. Die Wurzel liegt
+eine Ebene tiefer: der Plattform-Cap steht mit 3000 ct **unter** dem, was ein einziger Business-
+Kunde vertraglich kauft (120 min x 30 ct = 3600 ct). Ein Notaus, der unter dem Normalbetrieb
+liegt, ist eine Produktgrenze — genau das Muster aus B2. E10 loest das an der Wurzel, statt die
+Zahl nachzuziehen.
 
 Dazu eine **Aufraeum-Phase** ohne Review-Zeremonie: Spike-Schalter aus master, Render-Dienst
 `hermes-spike-al-p2`, Telnyx-App `3014656686179747728`.
@@ -333,6 +344,103 @@ Belegt:
 
 **Abbruchkriterium (fehlte in der ersten Fassung):** Solange die Shim-Luecke offen ist, darf
 KS-P3 nicht laufen. Deshalb KS-P1b.
+
+### KS-P9 — Plattform-Achse verliert die Sperrwirkung (NEU, E10, Vorbedingung von KS-P5a)
+
+**Owner-Entscheidung 2026-07-30.** `MAX_BUDGET_EUR` hoert auf, ein Gate zu sein, und wird zur
+Beobachtungsgroesse: weiterhin gemessen, weiterhin mit Schwellenwarnung
+(`PLATFORM_SPEND_WARN_PERCENT`, existiert bereits), aber ohne Sperrentscheidung.
+
+**Begruendung.** Ein statischer, ueber alle Tenants geteilter Geldtopf kann zwei Zustaende nicht
+auseinanderhalten, die fuer ihn identisch aussehen: *wir wachsen* und *etwas ist kaputt*. Beide
+erhoehen die Summe. Ein Schwellwert, der das nicht unterscheidet, blockiert entweder das Geschaeft
+oder verpasst den Weglauf — beides ist nicht reparierbar, indem man die Zahl anders waehlt. Dazu
+kommt die Betriebslast: der Wert muesste bei jedem Wachstumsschritt von Hand im Render-Dashboard
+nachgezogen werden (kein preDeploy-Hook auf dem Free Tier). Wird er einmal vergessen, sperrt er
+alle zahlenden Kunden gleichzeitig.
+
+**Der Weglauf-Fall bleibt gedeckt — an der richtigen Stelle, am Code belegt (2026-07-30):**
+
+- Outbound setzt Abo UND KYC voraus, beides fail-closed: `kycReached` liefert ohne `kycLevel`
+  `false` (`state-ops.js:1149`), `kycLevel` wird ausschliesslich bei bestaetigter Zahlung gesetzt
+  (`billing/activation.js:87`), zusaetzlich `tenantActiveSubscriber` (`outbound-gates.js:317`).
+  Alle Outbound-Pfade laufen durch dieselbe eine Gate-Kette (`routes/api-calls.js:120`), es gibt
+  keinen zweiten Einstieg. **Ein Tenant ohne Abo erzeugt keine Carrier-Kosten.** Damit ist der
+  Vermehrungsfall (jeder neue WorkOS-`sub` = neuer Tenant) auf der Kosten-Achse gegenstandslos.
+  Ausnahmen ohne Massenwirkung: der Bootstrap-/Owner-Tenant (`state-ops.js:955`) und ein per
+  `POST /api/profiles` gesetztes `profile.unrestricted` (Basic-Auth, kein MCP-Zugang).
+- DID-Vermehrung deckeln `MAX_NUMBERS` (plattformweit, `config.js:831`) und
+  `MAX_NUMBERS_PER_TENANT` (Default 1, `config.js:833`), durchgesetzt in `requestNumber`
+  (`state-ops.js:1601`/`:1605`).
+- Der bewusste Notaus bleibt `OUTBOUND_FROZEN` — ein Schalter, der nie versehentlich feuert,
+  weil das Geschaeft laeuft.
+
+**Umfang (die Gate-Stellen sind vollstaendig erhoben, 2026-07-30):**
+
+- `globalBudgetExceeded` als Gate in drei Aufrufern: Outbound-Budget-Gate
+  (`outbound-gates.js:749`), Inbound-Reject (`voice.js:256`), Mid-Call ueber `blockingBudgetAxis`
+  (`budget-gate.js:12-15`).
+- `globalReserveExceedsBudget` in `tryReserveOutboundBudget` (`state-ops.js:2698`).
+- `gatePlatformUsageCents` speist beide ueber `globalSpendOrDeny` (`state-ops.js:2379`).
+- **Erhalten bleibt** der Beobachtungspfad `platformSpendObservedCents` /
+  `claimPlatformSpendWarning` (`state-ops.js:2746-2760`) — er ist bereits ausdruecklich als
+  "AENDERT KEINE GATE-ENTSCHEIDUNG" dokumentiert (`state-ops.js:2720`) und ist nach dieser Phase
+  die einzige Verwendung der Plattform-Achse.
+
+**Die zwei Boot-Guards verlieren ihre Praemisse, nicht ihre Strenge.** `spendCapCoherence`
+(`boot-guard.js:144`, `TENANT_DEFAULT_INERT`) und `planCapInertFindings` (`boot-guard.js:307/320`,
+`PLAN_CAP_INERT`) begruenden sich beide woertlich damit, dass "der globale Cap immer zuerst
+bindet". Bindet er nicht mehr, ist eine Tenant-Decke oberhalb der Plattform-Zahl nicht
+"wirkungslos", sondern die einzig wirksame Schranke — die Aussage der Guards wird schlicht falsch.
+Sie zu entfernen bzw. neu auszurichten ist deshalb **kein Abschwaechen einer Sicherung**, sondern
+das Loeschen einer Behauptung ueber einen Mechanismus, den es nicht mehr gibt. Das ist die
+entscheidende Abgrenzung zu D-1 aus dem ersten KS-P5a-Lauf, wo derselbe Guard bei INTAKTER
+Praemisse leiser gedreht werden sollte. Klausel A/B von `spendCapCoherence`, die die
+Worst-Case-Reserve gegen die TENANT-Decke haelt, bleibt erhalten — sie haengt nicht an der
+Plattform-Achse. Was von `spendCapCoherence` traegt und was faellt, ist in dieser Phase am Code
+zu trennen und im Bericht zu begruenden.
+
+**Erwartetes Ergebnis:** kein Kunde wird mehr gesperrt, weil ein anderer Kunde Geld ausgegeben
+hat. Die Plattform-Summe ist weiterhin messbar und warnt bei `PLATFORM_SPEND_WARN_PERCENT`.
+**Verifikation:** Test, dass ein Tenant mit intakter eigener Decke telefonieren kann, waehrend die
+Plattform-Summe die alte Schwelle ueberschreitet (Mutationsprobe: Bestand faerbt ihn rot); Test,
+dass die Warnung weiterhin genau einmal je Periode feuert; Boot bleibt gruen.
+**Absolute Regel 1:** die pro-Tenant-Decke bleibt unveraendert scharf. Diese Phase entfernt EINE
+Achse der Schnittmenge, die zweite traegt allein weiter. CLAUDE.md Regel 1 ist bereits
+entsprechend geaendert (E10) — die Phase setzt eine dokumentierte Entscheidung um, sie trifft
+sie nicht.
+**PLAN-SECURITY.md:** die entfallene Achse mit Begruendung und mit den Gegen-Gates (Abo+KYC,
+`MAX_NUMBERS`, `OUTBOUND_FROZEN`) eintragen.
+
+### KS-P10 — Inbound wird nie budget-gesperrt (NEU, E11)
+
+**Owner-Entscheidung 2026-07-30.** Ein erschoepftes Budget darf einen Inbound-Anruf weder
+abweisen noch ein laufendes Inbound-Gespraech beenden.
+
+**Befund, am Code belegt (2026-07-30):** `voice.js:256` weist Inbound ab, sobald EINE der beiden
+Achsen erschoepft ist (`store.budgetExceeded(...) || store.globalBudgetExceeded(...)`), mit Hangup
+vor `createCall`. Und `/voice/turn` bedient laut eigenem Kommentar (`voice.js:324`) **beide
+Richtungen** — der Mid-Call-Hangup aus `blockingBudgetAxis` (`budget-gate.js:12-15`) ueber
+`budgetHangupOutcome` (`voice.js:116-119`) trifft damit Inbound-Gespraeche genauso wie Outbound.
+
+**Warum das falsch ist:** fuer Inbound wird heute nichts gebucht (E7; `metering.js:68-69` steigt
+bei Inbound sofort aus, `actual_cost_micro_cents` ist bei allen Inbound-Zeilen NULL). Die
+Abweisung spart also keinen Cent und nimmt dem Kunden genau die Funktion, fuer die er bezahlt hat.
+
+**Umfang:** die Budget-Bedingung an `voice.js:256` entfaellt fuer Inbound; der Mid-Call-Abbruch
+aus `blockingBudgetAxis` wirkt nur noch auf `call.direction === "outbound"` — spiegelbildlich zu
+`metering.js:69` und deckungsgleich mit Abnahmekriterium 3 von KS-P2. Der Assistant-Pfad
+(`telnyx-llm-shim.js:497-498`, `killCallForBudget`) wird gleich behandelt.
+
+**Erwartetes Ergebnis:** ein Kunde mit erschoepftem Budget nimmt weiterhin Anrufe entgegen; nur
+sein Outbound ist gesperrt.
+**Verifikation:** Test, dass ein Inbound-Call bei erschoepfter Tenant-Decke angenommen wird
+(Mutationsprobe: der Bestand faerbt ihn rot); Test, dass ein laufendes Inbound-Gespraech bei
+erschoepftem Budget NICHT aufgelegt wird; Test, dass Outbound in derselben Lage weiterhin mit 402
+abgewiesen wird — die Sperrwirkung fuer Outbound ist NICHT Gegenstand dieser Phase.
+**Absolute Regel 1:** diese Phase schwaecht kein Outbound-Gate. Sie begrenzt die Reichweite eines
+Kosten-Gates auf die Richtung, die ueberhaupt Kosten erzeugt.
+**PLAN-SECURITY.md:** die geaenderte Reichweite eintragen.
 
 ### KS-P5a — Starter-Kunde bekommt die verkauften Minuten (NEU, ERSTE Code-Phase)
 
@@ -934,6 +1042,8 @@ KS-P5 zusaetzlich oeffnet.
 | **E5a** | Dabei zieht **keiner der beiden Saetze** — es darf nur noch EINEN geben. Die Decke wird aus DEMSELBEN Satz abgeleitet, mit dem gebucht wird. | Zwei Zahlen, die jemand synchron halten muss, laufen irgendwann auseinander; genau das ist hier passiert. `voiceCapRateCentsPerMin` entfaellt als eigene Groesse. Folgekette (u.a. `MAX_BUDGET_EUR`) in KS-P5a. |
 | **E6** | Die Plattform-Achse bleibt mid-call **vorlaeufig blind**. | benanntes Restrisiko mit Zahl, s. TOD 11. |
 | **E8** | **Die Zeit-Notbremse ist keine feste Zahl, sondern leitet sich vom Restguthaben ab:** `Notbremse = Restminuten + 1 Minute Puffer`, gedeckelt durch eine absolute Obergrenze. | Der Schaden eines haengenden Anrufs ist damit immer proportional zum Guthaben statt auf eine willkuerliche Zahl gedeckelt; im Normalbetrieb greift sie nie, weil der Live-Zaehler frueher bindet. Umgesetzt in KS-P3 (b), Neuberechnung beim Re-Attach in KS-P1b. |
+| **E10** | **`MAX_BUDGET_EUR` ist kein Gate mehr.** Die Plattform-Achse wird Beobachtung + Warnung; die Sperrwirkung entfaellt. | Ein statischer geteilter Topf kann "wir wachsen" nicht von "etwas ist kaputt" unterscheiden und muesste bei jedem Wachstumsschritt von Hand nachgezogen werden. Der Weglauf-Fall ist an der richtigen Stelle gedeckt (Abo+KYC vor Outbound, `MAX_NUMBERS`, `OUTBOUND_FROZEN`) — am Code belegt. Neue Phase **KS-P9**, CLAUDE.md Regel 1 geaendert, **E9 entfaellt**, der KS-P5a-Blocker (D-1) loest sich auf. |
+| **E11** | **Ein erschoepftes Budget sperrt niemals Inbound** und legt nie ein laufendes Inbound-Gespraech auf. | Inbound bucht heute nichts — die Abweisung spart keinen Cent und nimmt dem Kunden die Kernfunktion. Neue Phase **KS-P10**. Outbound behaelt seine Sperrwirkung. |
 | **Prio** | **Kosten-Kette vor AL-Kette.** | AL-P7/P7b/P10b/P14/P15 warten; die AL-P2-Messung ist durch E1 wieder moeglich und laeuft nebenher. |
 | **Reste** | Aufraeumen, alle drei: Spike-Schalter aus master entfernen (`af4a66e`, ersatzlos — nicht "Flag auf 0"), Render-Dienst `hermes-spike-al-p2` (`srv-d9kt9bm1egvs738asd0g`) loeschen, Telnyx-App `AL-P2 Spike Silence` (`3014656686179747728`) loeschen. | eigene Aufraeum-Phase, ohne Code-Review-Zeremonie. |
 
@@ -942,7 +1052,7 @@ KS-P5 zusaetzlich oeffnet.
 | | Frage | Empfehlung |
 |---|---|---|
 | **E7** | Sollen Inbound-Minuten kuenftig Geld kosten? | **jetzt nicht entscheiden.** Befund dazu: fuer Inbound laeuft heute gar kein Cost-Truing (`actual_cost_micro_cents` ist bei ALLEN Inbound-Zeilen NULL) — wir buchen die Kosten nicht nur nicht, wir kennen sie nicht. Bei einem Produkt, dessen Kernfunktion das Entgegennehmen von Anrufen ist, verdient das ein **eigenes Strategiedokument**, zusammen mit der Frage, was Inbound uns ueberhaupt kostet. KS-P2 misst bis dahin nur Outbound. |
-| **E9** | Welcher Plattform-Notaus (`MAX_BUDGET_EUR`) traegt N zahlende Kunden? Heute 30 EUR — ein einziger Business-Kunde mit vollem Kontingent braucht nach E5a bereits 45 EUR Decke. | **erst nach der Aufstellung in KS-P5a entscheidbar.** Die Zahl haengt daran, wie viele zahlende Kunden gleichzeitig ihr Kontingent ausschoepfen koennen sollen — das ist eine Geschaeftsentscheidung, keine technische. Bis dahin bleibt 30 EUR und klemmt die Business-Decke (mit Boot-WARN, `state-ops.js:1348`). |
+| **E9** | ~~Welcher Plattform-Notaus (`MAX_BUDGET_EUR`) traegt N zahlende Kunden?~~ | **ENTFAELLT (2026-07-30).** Die Frage ist durch E10 gegenstandslos: es gibt keine Zahl mehr zu waehlen, weil die Plattform-Achse nicht mehr sperrt. Die Aufstellung aus KS-P5a bleibt als Groessenordnung im Bericht erhalten. |
 
 ---
 

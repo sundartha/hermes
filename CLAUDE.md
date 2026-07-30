@@ -60,7 +60,22 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
 
 ## Absolute Regeln
 
-1. **SAFETY-GATES**: die per-Tenant-Verifikation als Outbound-Permit (Abo+KYC) und der globale Kill-Switch `OUTBOUND_FROZEN`, Denylist/Land-Gate/Stundenlimit, Budget-Guard (`MAX_BUDGET_EUR`, global UND pro-Tenant — Schnittmenge), Max-Gespraechsdauer und die Provider-Signaturpruefung (Twilio HMAC + Telnyx Ed25519, fail-closed) duerfen NIEMALS entfernt, aufgeweicht oder per Default umgangen werden. Neue Endpunkte, die Calls/SMS ausloesen koennen, brauchen dieselben Gates. (`ALLOWED_NUMBERS` ist seit dem outbound-p3-Cutover wirkungslos — der Key wird nicht mehr gelesen, s. `.env.example` und `src/config.js`. Die statische Allowlist ist NICHT das Gate, das hier geschuetzt wird.)
+1. **SAFETY-GATES**: die per-Tenant-Verifikation als Outbound-Permit (Abo+KYC) und der globale Kill-Switch `OUTBOUND_FROZEN`, Denylist/Land-Gate/Stundenlimit, **die pro-Tenant-Kostendecke**, Max-Gespraechsdauer und die Provider-Signaturpruefung (Twilio HMAC + Telnyx Ed25519, fail-closed) duerfen NIEMALS entfernt, aufgeweicht oder per Default umgangen werden. Neue Endpunkte, die Calls/SMS ausloesen koennen, brauchen dieselben Gates. (`ALLOWED_NUMBERS` ist seit dem outbound-p3-Cutover wirkungslos — der Key wird nicht mehr gelesen, s. `.env.example` und `src/config.js`. Die statische Allowlist ist NICHT das Gate, das hier geschuetzt wird.)
+
+   **Owner-Entscheidung 2026-07-30 (E10): `MAX_BUDGET_EUR` ist KEIN geschuetztes Gate mehr.** Die
+   Plattform-Achse wird zur Beobachtung (Messung + Schwellenwarnung); ihre Sperrwirkung entfaellt
+   (KS-P9). Begruendung: ein statischer, geteilter Geldtopf kann "wir wachsen" und "etwas ist
+   kaputt" nicht unterscheiden — er blockiert entweder das Geschaeft oder verpasst den Weglauf,
+   und er muss bei jedem Wachstumsschritt von Hand nachgezogen werden. Der Weglauf-Fall bleibt
+   gedeckt, aber an der richtigen Stelle: Outbound setzt Abo+KYC voraus (am Code belegt,
+   `state-ops.js:1149`, `activation.js:87`, `outbound-gates.js:317`) — ein unverkaufter Tenant
+   erzeugt keine Carrier-Kosten; DID-Vermehrung deckeln `MAX_NUMBERS` (plattformweit) und
+   `MAX_NUMBERS_PER_TENANT`. Der bewusste Notaus bleibt `OUTBOUND_FROZEN`.
+
+   **Owner-Entscheidung 2026-07-30 (E11): ein erschoepftes Budget darf INBOUND niemals sperren**
+   und niemals ein laufendes Inbound-Gespraech aufzulegen (KS-P10). Inbound bucht heute nichts —
+   die Abweisung spart keinen Cent und nimmt dem Kunden die Kernfunktion. Fuer Outbound bleibt
+   die Sperrwirkung der Tenant-Decke unangetastet.
 2. **OFFENLEGUNG**: Der Offenlegungssatz bei Outbound-Calls (`disclosureSentence`) bleibt fest verdrahtet als allererster Satz — kein KI-Ermessen, kein Setting, das ihn abschaltet.
 3. **AUTH FAIL-CLOSED**: Neue Endpunkte sind standardmaessig hinter Basic-Auth; Ausnahmen (wie `/voice`, `/mcp`, `/healthz`) brauchen eine eigene Absicherung und eine Begruendung im Code-Kommentar. Credential-Vergleiche timing-sicher (`safeEqual`).
 4. **SECRETS**: Nur ueber `.env` (lokal) bzw. Render-Dashboard. Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.
