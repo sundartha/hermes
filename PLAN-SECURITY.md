@@ -1489,3 +1489,43 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > `test/reattach-active-call.test.js` (KS-P1b-7/8),
 > `test/store-pg-reattach-active-call.test.js` (KS-P1b-9/10),
 > `test/store-backend-parity.test.js` (Backend-Paritaet erzwungen).
+
+## KS-P3a — Plan-Decken gegen die Worst-Case-Reserve abgesichert (2026-07-30)
+
+> **Was sich aendert.** Neuer FATALer Boot-Guard `planCapReserveFindings`
+> (`src/boot-guard.js`, verdrahtet in `assertSpendCapCoherence`): die Worst-Case-Reserve
+> EINES Anrufs (`VOICE_TARIFF_DEFAULT_CENTS · ceil(MAX_CALL_DURATION_CAP_S/60)`) wird gegen
+> `MIN(planCapCents(slug))` ueber alle `CATALOG_SLUGS` gehalten. Bisher pruefte
+> `spendCapCoherence` Klausel B ausschliesslich gegen `DEFAULT_TENANT_BUDGET_CENTS` — die
+> Decke eines ZAHLENDEN Tenants kommt aber aus dem Plan (`effectiveCapCents` bevorzugt die
+> `tenant_budget`-Zeile), und `planCapUnderivableFindings` prueft nur Ableitbarkeit. Genau
+> die Decken der zahlenden Kunden sah der Boot also nie (B7).
+>
+> **Zahlen.** Seit KS-P5a rechnen Decke und Reserve mit demselben Satz T; er kuerzt sich aus
+> der Ungleichung heraus: Starter `50T`, Business `150T`, Reserve `T·ceil(300/60) = 5T`.
+> Geprueft wird faktisch `ceil(MAX_CALL_DURATION_CAP_S/60)` gegen `includedMinutes·num/den`.
+> Beim heutigen Katalog feuert der Guard ab **MAX_CALL_DURATION_CAP_S > 3000 s**. Boot
+> nachgerechnet und gemessen gruen bei T=0 (Testsuite), T=30 (live) und T=300.
+>
+> **Absolute Regel 1: eine Sicherung kommt HINZU, keine wird entfernt.** Kein
+> `fatal: true → false`, kein Guard umgehaengt. `spendCapCoherence` A0/B unveraendert
+> (nur die gemeinsame Reserve-Rechnung ist als `worstCaseReserveCents` extrahiert —
+> verhaltensgleich), `planCapUnderivableFindings` in Signatur, Rueckgabe und Meldung
+> unveraendert. Kein Laufzeitpfad angefasst: `budgetExceeded`, `reserveExceedsBudget`,
+> `effectiveCapCents`, `tryReserveOutboundBudget`, `deriveTenantBudgetFromPlan` sind
+> byte-identisch. Ebenso unberuehrt: `disclosureSentence`, Signaturpruefung, Auth, Abo+KYC
+> als Outbound-Permit, `OUTBOUND_FROZEN`, Denylist, Land-Gate, Stundenlimit,
+> Per-Target-Cap, Max-Gespraechsdauer. **Kein neuer Env-Schluessel, keine neue Dependency.**
+>
+> **Kalibrierung (Teil 2 der Phasen-Spec) ist bereits erledigt** — KS-P5a/E5a hat
+> `voiceCapRateCentsPerMin` ersatzlos entfernt; es gibt nur noch EINEN Satz. Diese Phase
+> liefert deshalb ausschliesslich den Boot-Guard.
+>
+> **Bewusst getragenes Restrisiko.** Der Guard prueft die Decke, die aus dem Plan ABGELEITET
+> wird, nicht eine per Hand gesetzte `tenant_budget`-Zeile — eine manuell zu niedrig
+> geschriebene Decke faengt er nicht. Ausserdem greift er beim Boot, nicht beim Schreiben:
+> eine Konfiguration, die erst nach dem Start inkohaerent wuerde, meldet er erst beim
+> naechsten Neustart.
+>
+> **Regressionsschutz:** `test/ks-p3a-plan-cap-reserve-guard.test.js` (Wahrheitstabelle
+> (a)–(e)), `test/boot-failclosed.test.js` (Spawn mit dem Live-Satz 30 ct/min).
