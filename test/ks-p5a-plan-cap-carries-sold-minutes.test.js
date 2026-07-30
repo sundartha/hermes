@@ -28,9 +28,9 @@ import {
 } from "../src/store/state-ops.js";
 
 const SECONDS_PER_MINUTE = 60; // modul-lokal wie in boot-guard.js/outbound-gates.js
-// BEIDE heute wirksamen Buchungssaetze: der Code-Fallback von VOICE_TARIFF_DEFAULT_CENTS
-// (300, bis KS-P6) UND der live gesetzte Wert (30, E1). Die Invariante muss an beiden
-// halten - eine Decke, die nur bei einem der beiden Saetze aufgeht, ist keine.
+// Zwei um Faktor 10 auseinanderliegende Buchungssaetze: der seit KS-P6 ausgelieferte
+// (30, E1) und der Stand davor (300). Die Invariante ist satzunabhaengig und muss an
+// beiden halten - eine Decke, die nur bei einem Satz aufgeht, ist keine.
 const BOOKING_RATES_CENTS_PER_MIN = Object.freeze([300, 30]);
 const STARTER_CAP_AT_LIVE_RATE_CENTS = 1500;
 const BUSINESS_CAP_AT_LIVE_RATE_CENTS = 4500;

@@ -9,10 +9,15 @@
 // Land mit gemessenem Inlandssatz - der Worst-Case-Satz gilt, die Reserve bleibt 1500 ct.
 // Der Defekt sass in den WERTEN (Decke), nicht im Mechanismus.
 //
-// P7: die Rechnung ist unveraendert gepinnt (1500 ct), nur ihr ERGEBNIS gegen die Decke
-// kippt - die generische Tenant-Decke steht seit P7 auf 1500 statt 600, damit reicht die
-// Reserve genau. Dieses Kippen IST das SOLL, das GAP-33 formuliert (Auslandsziel muss
-// durchkommen); das SOLL selbst fuehrt weiter test/prod-config-smoke.test.js.
+// P7: die Rechnung selbst ist unveraendert (Worst-Case-Satz * Kappungs-Minuten), nur ihr
+// ERGEBNIS gegen die Decke kippt - die generische Tenant-Decke steht seit P7 auf 1500 statt
+// 600, damit reicht die Reserve genau. Dieses Kippen IST das SOLL, das GAP-33 formuliert
+// (Auslandsziel muss durchkommen); das SOLL selbst fuehrt weiter test/prod-config-smoke.test.js.
+//
+// KS-P6/E1: der Worst-Case-Satz (voiceTariffDefaultCents) sank von 300 auf 30 ct/min (Messung
+// statt Annahme, s. src/config.js). Die gepinnte Reserve sinkt dadurch mechanisch von 1500 auf
+// 150 ct - die INHALTLICHE Aussage (Reserve <= Tenant-Decke) haelt weiter, mit groesserem
+// Abstand als zuvor.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -24,10 +29,10 @@ const TENANT_A = "t_orig";
 const US_OWN_DID = "+15005550006"; // eigene DID des Tenants (keine +49/+33/+44-Vorwahl)
 const US_TARGET = "+15551234567"; // ebenfalls keine Domestic-Vorwahl
 
-test("Charakterisierung ORIG-05: US-Tenant ruft +1 (DID-Land == Ziel-Land) - Reserve 1500 ct kommt seit P7 durch die Tenant-Decke 1500 ct", () => {
+test("Charakterisierung ORIG-05: US-Tenant ruft +1 (DID-Land == Ziel-Land) - Reserve 150 ct kommt seit P7 durch die Tenant-Decke 1500 ct", () => {
   const reserveCents =
     tariffCentsPerMin(US_TARGET, US_OWN_DID) * Math.ceil(MAX_CALL_DURATION_CAP_S / 60);
-  assert.equal(reserveCents, 1500, "Vorbedingung: live-gemessene Worst-Case-Reserve");
+  assert.equal(reserveCents, 150, "Vorbedingung: live-gemessene Worst-Case-Reserve (KS-P6: 30 ct/min statt 300)");
   assert.equal(
     config.billing.defaultTenantBudgetCents,
     1500,
