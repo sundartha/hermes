@@ -1,9 +1,10 @@
 // KS-P3a: die Worst-Case-Reserve EINES Anrufs muss unter die KLEINSTE Plan-Decke passen -
 // sonst faellt ein Tenant mit diesem Plan schon beim ERSTEN Anruf ins Reserve-Gate (402).
 // Seit KS-P5a kuerzt sich der Satz aus der Ungleichung heraus (Decke und Reserve skalieren
-// beide mit voiceTariffDefaultCents); die lebende Variable ist die maximale Gespraechsdauer
-// gegen inkludierte Minuten x Kopffreiheit. Genau die hebt KS-P3 an - deshalb steht der
-// Guard davor.
+// beide mit voiceTariffDefaultCents). Seit KS-P3 (a) faellt zusaetzlich die Gespraechsdauer
+// heraus: die Reserve deckt ein festes Vorlauffenster (RESERVE_LEAD_MINUTES). Geprueft wird
+// damit die Katalog-Kopffreiheit gegen dieses Fenster - unabhaengig davon, wie lange ein
+// Gespraech dauern darf.
 //
 // Reine, arg-injizierte Wahrheitstabelle (Muster test/spend-cap-coherence.test.js): kein
 // Spawn, kein pglite, KEINE process.env-Manipulation - damit immun gegen eine lokale .env
@@ -17,7 +18,7 @@ import assert from "node:assert/strict";
 import { planCapReserveFindings, PLAN_CAP_FINDING } from "../src/boot-guard.js";
 import { planCapCents } from "../src/billing/plan-caps.js";
 import { CATALOG_SLUGS } from "../src/plans.js";
-import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
+import { RESERVE_LEAD_MINUTES } from "../src/store/defaults.js";
 
 // Drei Saetze, unter denen der Dienst real starten koennen muss: 0 = der Pin der Testsuite
 // (BASE_ENV), 30 = der heute ausgelieferte Live-Satz, 300 = der Stand davor. Die Invariante
@@ -26,16 +27,17 @@ const BOOKING_RATES_CENTS_PER_MIN = Object.freeze([0, 30, 300]);
 
 // Stub-Decken der Wahrheitstabelle (b): der kleinere Wert ist der, den die Meldung nennen
 // MUSS, der groessere der, den sie NICHT nennen darf.
+// KS-P3 (a): die Reserve ist Satz * RESERVE_LEAD_MINUTES - die Gespraechsdauer geht nicht
+// mehr ein. Die Stub-Zahlen werden aus der Konstanten HERGELEITET statt gepinnt, damit eine
+// kuenftige Kalibrierung des Vorlauffensters diesen Test nicht falsch-rot faerbt.
 const STUB_SMALLEST_CAP_CENTS = 300;
 const STUB_LARGER_CAP_CENTS = 900;
-// 300 ct/min * ceil(1800/60) = 9000 ct Reserve - weit ueber der kleinsten Stub-Decke.
-const STUB_TARIFF_CENTS = 300;
-const STUB_CALL_DURATION_S = 1800;
-const STUB_RESERVE_CENTS = 9000;
+const STUB_TARIFF_CENTS = 400; // -> Reserve 400 * 2 = 800 ct > kleinste Stub-Decke 300 ct
+const STUB_RESERVE_CENTS = STUB_TARIFF_CENTS * RESERVE_LEAD_MINUTES;
 
-// Grenzfall (c): 10 ct/min * ceil(300/60) = 50 ct Reserve.
+// Grenzfall (c): 10 ct/min * 2 = 20 ct Reserve.
 const BOUNDARY_TARIFF_CENTS = 10;
-const BOUNDARY_RESERVE_CENTS = 50;
+const BOUNDARY_RESERVE_CENTS = BOUNDARY_TARIFF_CENTS * RESERVE_LEAD_MINUTES;
 
 // Ein Slug ohne Kopffreiheit-Eintrag - planCapCents wirft dafuer (fail-closed).
 const SLUG_WITHOUT_HEADROOM = "enterprise";
@@ -60,7 +62,6 @@ test("KS-P3a: der ausgelieferte Katalog traegt die Worst-Case-Reserve - bei jede
         slugs: CATALOG_SLUGS,
         capForSlug: (slug) => planCapCents(slug, { voiceTariffDefaultCents: rate }),
         maxTariffCents: rate,
-        maxCallDurationS: MAX_CALL_DURATION_CAP_S,
       }),
       [],
       `Satz ${rate} ct/min: der ausgelieferte Katalog muss die Worst-Case-Reserve tragen`,
@@ -74,7 +75,6 @@ test("KS-P3a: Reserve ueber der kleinsten Plan-Decke -> genau ein FATAL, nennt S
     slugs: CATALOG_SLUGS,
     capForSlug: capForSlugThatThrows({ starter: STUB_SMALLEST_CAP_CENTS, business: STUB_LARGER_CAP_CENTS }),
     maxTariffCents: STUB_TARIFF_CENTS,
-    maxCallDurationS: STUB_CALL_DURATION_S,
   });
   assert.equal(findings.length, 1, `genau EIN Finding erwartet, war: ${JSON.stringify(findings)}`);
   assert.equal(findings[0].fatal, true);
@@ -94,7 +94,6 @@ test("KS-P3a: Gleichstand ist kohaerent, ein Cent darueber nicht (Grenze)", () =
     slugs: ["starter"],
     capForSlug: capForSlugThatThrows({ starter: BOUNDARY_RESERVE_CENTS }),
     maxTariffCents: BOUNDARY_TARIFF_CENTS,
-    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
   });
   assert.deepEqual(atBoundary, [], "Reserve === Decke ist exakt bezahlbar, also kein Befund");
 
@@ -102,7 +101,6 @@ test("KS-P3a: Gleichstand ist kohaerent, ein Cent darueber nicht (Grenze)", () =
     slugs: ["starter"],
     capForSlug: capForSlugThatThrows({ starter: BOUNDARY_RESERVE_CENTS - 1 }),
     maxTariffCents: BOUNDARY_TARIFF_CENTS,
-    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
   });
   assert.equal(oneCentOver.length, 1, "ein Cent unter der Reserve -> FATAL");
   assert.equal(oneCentOver[0].fatal, true);
@@ -119,7 +117,6 @@ test("KS-P3a: werfender capForSlug -> Slug wird uebersprungen, KEIN Wurf, uebrig
       slugs,
       capForSlug: capForSlugThatThrows({ starter: BOUNDARY_RESERVE_CENTS }),
       maxTariffCents: BOUNDARY_TARIFF_CENTS,
-      maxCallDurationS: MAX_CALL_DURATION_CAP_S,
     });
   });
   assert.deepEqual(green, [], "die ableitbare Starter-Decke traegt die Reserve");
@@ -130,7 +127,6 @@ test("KS-P3a: werfender capForSlug -> Slug wird uebersprungen, KEIN Wurf, uebrig
       slugs,
       capForSlug: capForSlugThatThrows({ starter: BOUNDARY_RESERVE_CENTS - 1 }),
       maxTariffCents: BOUNDARY_TARIFF_CENTS,
-      maxCallDurationS: MAX_CALL_DURATION_CAP_S,
     });
   });
   assert.equal(red.length, 1, "die ableitbare Starter-Decke wird trotz des Wurfs geprueft");
@@ -149,7 +145,6 @@ test("KS-P3a: keine ableitbare Decke -> [] (der Befund gehoert planCapUnderivabl
       slugs: [],
       capForSlug: capForSlugThatThrows({}),
       maxTariffCents: STUB_TARIFF_CENTS,
-      maxCallDurationS: STUB_CALL_DURATION_S,
     }),
     [],
     "leere Slug-Menge: nichts zu pruefen (und kein reduce-auf-leer-Absturz)",
@@ -159,7 +154,6 @@ test("KS-P3a: keine ableitbare Decke -> [] (der Befund gehoert planCapUnderivabl
       slugs: [SLUG_WITHOUT_HEADROOM],
       capForSlug: capForSlugThatThrows({}),
       maxTariffCents: STUB_TARIFF_CENTS,
-      maxCallDurationS: STUB_CALL_DURATION_S,
     }),
     [],
     "alle Decken unableitbar: der FATAL dazu kommt von planCapUnderivableFindings",

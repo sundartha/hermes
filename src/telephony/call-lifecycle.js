@@ -11,6 +11,7 @@
 // INV-5) aendert sich durch die Extraktion NICHT.
 import { VOICE_ENGINE } from "../config.js";
 import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.js";
+import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 
 // GAP-26: maschinenlesbarer Grund einer Terminalisierung DURCH DEN MAX-DAUER-CAP. Eigener
 // Token neben der Provider-Vokabel aus telephony/failure-reason.js: die wird aus dem
@@ -43,12 +44,19 @@ export function makeCallLifecycle({
   blockingBudgetAxis, // KS-P1b: die EINE Geld-Achse (budget-gate.js), injiziert wie classifyCallTime
 }) {
   // Gemeinsame Call-Max-Dauer in ms: armMaxDurationTimer UND der Reserve-Backstop-Timer teilen
-  // dieselbe Rechnung (call-eigenes Limit vor globalem Default). Die Formel selbst lebt in
+  // dieselbe Rechnung (call-eigenes Limit vor Fallback). Die Formel selbst lebt in
   // src/call-duration.js (G5: EINE Quelle innerhalb der Telephony-Schicht, auch fuer den
   // Realtime-Cap in bridge.js; state-ops.js#callLimitMs bleibt eine bewusst getrennte zweite
-  // Kopie, OQ-1); hier wird nur der config-Default gebunden.
+  // Kopie, OQ-1); hier wird nur der Fallback gebunden.
+  //
+  // KS-P3: die Frist steht seit dieser Phase AM CALL (call.maxDurationS, beim Anlegen aus
+  // dem Restguthaben abgeleitet - Outbound im compute_reserve-Gate, Inbound in
+  // /voice/incoming). Der hier gebundene Wert ist nur noch der FALLBACK fuer Zeilen ohne
+  // eigene Frist (Calls, die den Deploy ueberlebt haben) und ist bewusst die absolute
+  // Obergrenze: MAX_CALL_DURATION_S als Operator-Knopf ist mit E2/E3 entfallen. Der
+  // Cap-Timer, der EINE Terminalisierungspfad (INV-9) und der Boot-Re-Arm sind unberuehrt.
   function callMaxDurationMs(call) {
-    return computeMaxDurationMs(call, config.safety.maxCallDurationS);
+    return computeMaxDurationMs(call, MAX_CALL_DURATION_CAP_S);
   }
 
   // F10 (A6): der EINZIGE Terminalisierungspfad des Max-Dauer-Caps - kein zweiter Bucht-freier
@@ -81,7 +89,7 @@ export function makeCallLifecycle({
       const call = store.getCall(callId);
       if (call?.status !== "active") return;
       const endedAtIso = new Date(
-        cappedEndedAtMs(call, Date.now(), config.safety.maxCallDurationS),
+        cappedEndedAtMs(call, Date.now(), MAX_CALL_DURATION_CAP_S),
       ).toISOString();
       await terminateAndBillCall({
         persistEnd: () => {
@@ -160,7 +168,7 @@ export function makeCallLifecycle({
   function reattachActiveCall(callId) {
     return reattachActiveCallCore(callId, {
       attachActiveCall: store.attachActiveCall,
-      maxCallDurationS: config.safety.maxCallDurationS,
+      maxCallDurationS: MAX_CALL_DURATION_CAP_S,
       terminateCappedCall,
       scheduleMaxDurationEnd,
       // KS-P1b: die Geld-Achse als gebundene Query (Muster der uebrigen Deps). tenantId
@@ -202,7 +210,7 @@ export function makeCallLifecycle({
     for (const call of store.load().calls.filter((c) => c.status === "active")) {
       // G5 (Review-Blocker Runde 2): dieselbe Klassifikation wie reattachActiveCall() (F12) -
       // ausgelagert nach state-ops.js, um die Restzeit-Verzweigung nicht zweimal zu pflegen.
-      const { remaining, expired } = classifyCallTime(call, nowMs, config.safety.maxCallDurationS);
+      const { remaining, expired } = classifyCallTime(call, nowMs, MAX_CALL_DURATION_CAP_S);
       if (expired) {
         void terminateCappedCall(call.id, call.twilioSid, "failed");
         terminalized++;

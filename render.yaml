@@ -334,8 +334,8 @@ services:
       - key: VOICE_TARIFF_FULL_COST_FLOOR_CENTS
         value: "10"
       # Untergrenze aus spendCapCoherence Klausel B (FATAL, exit 1):
-      # VOICE_TARIFF_DEFAULT_CENTS * ceil(MAX_CALL_DURATION_CAP_S(300)/60), seit KS-P6
-      # 30 * 5 = 150. Darunter faellt jedes Ziel ohne gemessenen Inlandssatz vor dem Dial
+      # VOICE_TARIFF_DEFAULT_CENTS * RESERVE_LEAD_MINUTES(2), seit KS-P3
+      # 30 * 2 = 60. Darunter faellt jedes Ziel ohne gemessenen Inlandssatz vor dem Dial
       # ins Reserve-Gate (402).
       # 1500 statt 150, weil der Wert seit KS-P5a die Starter-Plan-Decke spiegelt
       # (30 verkaufte Minuten * 30 ct * 5/3 = 1500).
@@ -390,8 +390,10 @@ services:
       # schaltet nichts scharf (Betriebsauflage im Abnahmeprotokoll).
       - key: METRICS_ENABLED
         value: "true"
-      - key: MAX_CALL_DURATION_S
-        value: "180"
+      # MAX_CALL_DURATION_S ist mit KS-P3 (E2/E3) ersatzlos ENTFALLEN: die nutzbare
+      # Gespraechsdauer leitet der Server pro Call aus dem Restguthaben ab, gedeckelt
+      # durch die hartkodierte Obergrenze MAX_CALL_DURATION_CAP_S (1800 s). Ein im
+      # Dashboard stehengebliebener Wert wird ignoriert (fail-safe).
       # OUT-05: Reserve-Backstop-Puffer (ms) ueber der Call-Max-Dauer.
       - key: RESERVE_RELEASE_GRACE_MS
         value: "15000"

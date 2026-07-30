@@ -17,11 +17,13 @@ import { spendCapCoherence, SPEND_CAP_FINDING } from "../src/boot-guard.js";
 
 // Konstruiert, NICHT gemessen: platformCapCents liegt bewusst ueber der Tenant-Decke,
 // damit Klausel A nicht vorher greift und wirklich Klausel B geprueft wird.
+// KS-P3 (a): die Reserve ist Satz * RESERVE_LEAD_MINUTES statt Satz * angefangene Minuten
+// der Maximaldauer - die Zahlen werden neu konstruiert (400 * 2 = 800 ct > Decke 600 ct),
+// die Aussage des Tests bleibt unveraendert.
 const UNAFFORDABLE = Object.freeze({
   tenantDefaultCents: 600,
   platformCapCents: 3000,
-  maxTariffCents: 300,
-  maxCallDurationS: 300, // -> Reserve 300 * 5 = 1500 ct > Decke 600 ct
+  maxTariffCents: 400, // -> Reserve 400 * 2 = 800 ct > Decke 600 ct
 });
 
 test("Boot-Guard (GAP-32): ein unbezahlbarer Worst-Case-Tarif bricht den Start ab (fatal:true)", () => {
@@ -36,7 +38,7 @@ test("Boot-Guard (GAP-32): ein unbezahlbarer Worst-Case-Tarif bricht den Start a
       "unter dieser Konfiguration ist der Dienst fuer einen ganzen Zielbereich abgeschaltet",
   );
   assert.match(worstCase.message, /DEFAULT_TENANT_BUDGET_CENTS=600/);
-  assert.match(worstCase.message, /VOICE_TARIFF_DEFAULT_CENTS=300/);
-  assert.match(worstCase.message, /1500 Cent/);
-  assert.match(worstCase.message, /mindestens 1500/);
+  assert.match(worstCase.message, /VOICE_TARIFF_DEFAULT_CENTS=400/);
+  assert.match(worstCase.message, /800 Cent/);
+  assert.match(worstCase.message, /mindestens 800/);
 });

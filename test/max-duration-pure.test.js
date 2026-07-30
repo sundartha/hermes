@@ -1,6 +1,6 @@
 // F9 (A6, T2) - reine Max-Dauer-Rechenlogik (remainingMaxDurationMs/cappedEndedAtMs) +
 // setCallEndedAt (expliziter End-Anker). config-frei: defaultMaxDurationS wird als Argument
-// hereingereicht (server.js liefert spaeter config.maxCallDurationS, TABU fuer F9). Verankert
+// hereingereicht (der Aufrufer liefert den Fallback, TABU fuer F9). Verankert
 // IMMER am echten Call-Start (answeredAt bevorzugt, sonst startedAt), NIE an Date.now()/Boot-
 // Zeit - deshalb feste ANCHOR/nowMs-Werte statt Toleranz-Fenster (F.I.R.S.T.: repeatable).
 //

@@ -69,7 +69,6 @@ test("Geld-Achse: Re-Attach eines Calls mit erschoepfter Decke terminalisiert ue
   const lifecycle = makeCallLifecycle({
     store: spyStore(call, order),
     config: withConfigNamespaces({
-      maxCallDurationS: MAX_DURATION_S,
       voiceEngine: VOICE_ENGINE.BUDGET,
       billing: {},
     }),

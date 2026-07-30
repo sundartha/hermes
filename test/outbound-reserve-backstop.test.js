@@ -12,7 +12,10 @@ const TEST_SAFETY_MARGIN_MS = 200; // Puffer ueber dem exakten Timer-Delay (Jitt
 const BACKSTOP_WAIT_MS = MAX_DURATION_S * 1000 + GRACE_MS + TEST_SAFETY_MARGIN_MS;
 
 test("OUT-05 F2: Reserve-Release-Backstop gibt die Reserve OHNE Provider-Callback frei", async () => {
-  // Reserve pro Call: 600 ct/min x ceil(1/60)=1 min = 600 ct; zwei Reserven (1200 ct)
+  // KS-P3 (a): die Reserve ist Satz x RESERVE_LEAD_MINUTES (2) und haengt NICHT mehr an
+  // max_duration_s - deshalb traegt dieser Test die Frist 1 s nur noch fuer den
+  // BACKSTOP-TIMER, nicht mehr fuer den Reserve-Betrag.
+  // Reserve pro Call: 300 ct/min x 2 = 600 ct; zwei Reserven (1200 ct)
   // reissen den 1000-ct-Cap (MAX_BUDGET_EUR=10 wirkt hier als Pro-Tenant-Fallback,
   // effectiveCapCents Stufe 3 - der Owner hat keine tenant_budget-Zeile),
   // eine einzelne nicht. Absender-DID mit +49, damit VOICE_TARIFF_DOMESTIC_CENTS die
@@ -21,7 +24,7 @@ test("OUT-05 F2: Reserve-Release-Backstop gibt die Reserve OHNE Provider-Callbac
     ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
       MAX_BUDGET_EUR: "10",
-      VOICE_TARIFF_DOMESTIC_CENTS: "600",
+      VOICE_TARIFF_DOMESTIC_CENTS: "300",
       RESERVE_RELEASE_GRACE_MS: String(GRACE_MS),
       ALLOWED_COUNTRY_CODES: "*",
       FAKE_ORIGINATE: "true",

@@ -15,10 +15,12 @@ import { findPlan } from "../plans.js";
 // KS-P5a/E5a: die Kopffreiheit traegt seither ZWEI Lasten, und beide muessen bei JEDEM
 // Satz T > 0 aufgehen:
 //   (1) die verkauften Minuten selbst:                    M*T       <= M*T*num/den
-//   (2) plus die Worst-Case-Reserve des LETZTEN Anrufs:   M*T + 5*T <= M*T*num/den
-//       (5 = ceil(MAX_CALL_DURATION_CAP_S / 60))
-// (2) fordert M >= 7,5 (Starter, 5/3) bzw. M >= 20 (Business, 5/4); der Katalog liegt mit
-// 30 bzw. 120 verkauften Minuten darueber. Nachgerechnet wird das - satzunabhaengig und
+//   (2) plus die Worst-Case-Reserve des LETZTEN Anrufs:   M*T + R*T <= M*T*num/den
+//       (R = RESERVE_LEAD_MINUTES, seit KS-P3 (a) ein festes Vorlauffenster von 2 Minuten
+//        statt der angefangenen Minuten der laengstmoeglichen Gespraechsdauer - die Reserve
+//        haengt nicht mehr an der Gespraechsdauer)
+// (2) fordert M >= 3 (Starter, 5/3) bzw. M >= 8 (Business, 5/4); der Katalog liegt mit
+// 30 bzw. 120 verkauften Minuten weit darueber. Nachgerechnet wird das - satzunabhaengig und
 // fuer JEDEN Katalog-Slug - in test/ks-p5a-plan-cap-carries-sold-minutes.test.js.
 const PLAN_CAP_HEADROOM = Object.freeze({
   starter: Object.freeze({ numerator: 5, denominator: 3 }),

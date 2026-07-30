@@ -45,9 +45,10 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 export const DEPLOYED_COMMIT_UNKNOWN = "unbekannt";
 
 // Leere/abwesende Var -> dokumentierter Default (KEIN Fatal); nur gesetzt-aber-
-// ungueltig ist fatal. max ist ein bewusster Clamp (Obergrenze wie maxCallDurationS),
-// kein Fehler. Die Diagnose nennt nur Var + Erwartung, NIE einen Wert (numEnv
-// betrifft ausschliesslich numerische, nicht-geheime Vars -> kein Secret-Leak).
+// ungueltig ist fatal. max ist ein bewusster Clamp (Obergrenze wie
+// TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS), kein Fehler. Die Diagnose nennt nur Var +
+// Erwartung, NIE einen Wert (numEnv betrifft ausschliesslich numerische, nicht-geheime
+// Vars -> kein Secret-Leak).
 export function numEnv(name, raw, { fallback, min, max, integer = true } = {}) {
   if (raw === undefined || raw === "") return fallback;
   // .trim() ZUERST: parseInt/parseFloat ignorieren Rand-Whitespace bereits; der
@@ -391,8 +392,11 @@ const rawConfig = {
     // weiteres Lebenszeichen (Shim-Turn) nach ai_assistant_start, ab denen der Call als stille
     // TTS-Fehlfunktion gilt und KONTROLLIERT beendet wird. KONSERVATIV: deutlich ueber einer
     // normalen Denk-/Sprechpause -> Normalfluss terminiert NIE (scharfe Kalibrierung aus P4/P5).
-    // Sinnvoll nur < maxCallDurationS, sonst greift ohnehin erst der harte Dauer-Cap. Nur im
-    // Assistant-Pfad wirksam (Flag aus -> nie armiert). Min 5, max 300 (= Cap-Ceiling).
+    // Nur im Assistant-Pfad wirksam (Flag aus -> nie armiert). Min 5, max 300: ein
+    // Dead-Air-Watchdog jenseits von 5 Minuten ist keine Bremse mehr, sondern inert
+    // (dieselbe Footgun-Logik wie min 5). Bewusst NICHT mehr aus MAX_CALL_DURATION_CAP_S
+    // abgeleitet - seit KS-P3 ist die Gespraechsfrist guthaben-abgeleitet, ein daran
+    // gekoppeltes Watchdog-Maximum waere eine Kopplung ohne Sachgrund.
     deadAirTimeoutS: numEnv("TELNYX_DEAD_AIR_TIMEOUT_S", process.env.TELNYX_DEAD_AIR_TIMEOUT_S, {
       fallback: 45,
       min: 5,
@@ -626,8 +630,8 @@ const rawConfig = {
   // Globaler Backstop (platformSpendCapCents) bleibt PARALLEL (Schnittmenge, Regel 1).
   //
   // Fallback-Wert 1500: EINE vom Boot-Guard erzwungene Schranke (spendCapCoherence
-  // Klausel B) - mindestens VOICE_TARIFF_DEFAULT_CENTS * ceil(MAX_CALL_DURATION_CAP_S/60),
-  // seit KS-P6 also 30 * 5 = 150. Liegt die Decke darunter, ist der teuerste Zielverkehr
+  // Klausel B) - mindestens VOICE_TARIFF_DEFAULT_CENTS * RESERVE_LEAD_MINUTES,
+  // seit KS-P3 also 30 * 2 = 60. Liegt die Decke darunter, ist der teuerste Zielverkehr
   // unbezahlbar und JEDES Ziel ohne gemessenen Inlandssatz faellt schon vor dem Dial ins
   // Reserve-Gate (402); seit P7 ist dieser Befund FATAL.
   // Der Wert bleibt bei 1500 und nicht bei den geforderten 150, weil er seit KS-P5a die
@@ -862,7 +866,7 @@ const rawConfig = {
     process.env.PROVISIONING_REDRIVE_MAX_AGE_MS,
     // S1-3: strikt < 24h (kleinstes Anbieter-Idempotenzfenster, Stripe-Hold) erzwingen - ein zu
     // grosser Wert oeffnet den Doppelkauf-Pfad. Clamp (kein Boot-Refusal, Schwester-Muster wie
-    // maxCallDurationS): numEnv klemmt n>max auf max.
+    // TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS): numEnv klemmt n>max auf max.
     { fallback: 0, min: 0, max: MS_PER_DAY - 1 },
   ),
   // tenant-prolif-d: Grace-Periode (TAGE) bis zum automatischen DID-Release eines
@@ -974,11 +978,13 @@ const rawConfig = {
   // fluechtiges Dateisystem hat -> per-API angelegte Profile ueberleben keinen
   // Neustart, ueber diese Env-Var gesetzte schon. Leer = keine Seed-Profile.
   profilesSeed: process.env.PROFILES_JSON || "",
-  maxCallDurationS: numEnv("MAX_CALL_DURATION_S", process.env.MAX_CALL_DURATION_S, {
-    fallback: 180,
-    min: 1,
-    max: 300,
-  }),
+  // KS-P3 (b) / E2/E3: MAX_CALL_DURATION_S ist hier ERSATZLOS entfallen. Ein Operator-Knopf,
+  // der jede Gespraechsdauer global kuerzt, IST die willkuerliche Produktgrenze, die diese
+  // Phase beseitigt. Die nutzbare Dauer eines Legs wird jetzt pro Call aus dem Restguthaben
+  // abgeleitet (emergencyBrakeSeconds, src/call-duration.js) und von der hartkodierten
+  // absoluten Obergrenze MAX_CALL_DURATION_CAP_S gedeckelt. Ein im Dashboard
+  // stehengebliebener MAX_CALL_DURATION_S-Wert wird ab dieser Phase schlicht ignoriert -
+  // fail-safe, er kann kein Gespraech mehr kuerzen.
   // P3.1 (PLAN-CONVERSATION-QUALITY-V2): Vorlauf (ms) vor dem harten Max-Dauer-Cap, ab dem
   // /voice/turn statt eines Folge-Gathers einen deterministischen Abschluss-Satz + Hangup
   // rendert. Der Cap selbst wird dadurch NICHT verlaengert (Regel 1): der Satz liegt
@@ -987,8 +993,9 @@ const rawConfig = {
   // Schaetzung des Farewell-Watchdogs grob 8-10 s Sprechzeit, dazu ein voller Webhook-
   // Zyklus - 20 s lassen dafuer Luft, ohne mehr als einen regulaeren Turn zu opfern.
   // 0 = AUS (remaining >= 0 ist immer wahr -> nie ausgeloest = Bestandsverhalten).
-  // Muss deutlich KLEINER als maxCallDurationS bleiben, sonst endet jeder Call nach dem
-  // ersten Turn. Max 60000 gegen absurde Werte.
+  // Muss deutlich KLEINER als die KUERZESTMOEGLICHE Notbremse (60 s, der Puffer allein -
+  // s. emergencyBrakeSeconds) bleiben, sonst endet jeder Call nach dem ersten Turn. Der
+  // Default 20000 erfuellt das. Max 60000 gegen absurde Werte.
   capFarewellLeadMs: numEnv("CAP_FAREWELL_LEAD_MS", process.env.CAP_FAREWELL_LEAD_MS, {
     fallback: 20000,
     min: 0,
@@ -1269,7 +1276,7 @@ function guardedConfig(target, path = "config") {
 // Fatal-Push, kein Doppel-Eval. rawConfig selbst bleibt der interne Speicher, wird aber
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
-  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "maxCallDurationS", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
+  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],

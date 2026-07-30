@@ -99,20 +99,26 @@ test("T-P3-11: BASE_ENV (Default=0) bootet gruen, genau eine A0-Konfig-Warnung (
   }
 });
 
-// T-P3-12 (P7/GAP-32 GEDREHT): 600/300 war bis P6 die ausgelieferte Konfiguration und
-// bootete mit einer folgenlosen Klausel-B-Warnung durch - waehrend der Dienst fuer jedes
-// Ziel ohne gemessenen Inlandssatz faktisch abgeschaltet war (600 < 300*5=1500). Seit dem
-// Flip bricht genau diese Kombination den Start ab. Das ist zugleich der Beweis, dass der
-// Flip greift: ein Boot mit absichtlich inkohaerenten Werten startet nicht.
-test("T-P3-12: inkohaerente Werte (600/300) brechen den Start ab und nennen den Zielwert", async () => {
+// T-P3-12 (P7/GAP-32 GEDREHT): eine Konfiguration, unter der die Tenant-Decke nicht einmal
+// die Vorab-Reserve EINES Anrufs traegt, bootete bis P6 mit einer folgenlosen
+// Klausel-B-Warnung durch - waehrend der Dienst fuer jedes Ziel ohne gemessenen
+// Inlandssatz faktisch abgeschaltet war. Seit dem Flip bricht genau das den Start ab. Das
+// ist zugleich der Beweis, dass der Flip greift: ein Boot mit absichtlich inkohaerenten
+// Werten startet nicht.
+//
+// KS-P3 (a): die Reserve ist Satz * 2 Vorlauf-Minuten (nicht mehr Satz * angefangene
+// Minuten der Maximaldauer). Die frueheren Testwerte 600/300 sind damit KOHAERENT
+// geworden (300*2 = 600, kein Ueberschuss) - die Werte wandern auf 500/300 (Reserve 600 >
+// Decke 500), die Aussage des Tests bleibt Wort fuer Wort dieselbe.
+test("T-P3-12: inkohaerente Werte (500/300) brechen den Start ab und nennen den Zielwert", async () => {
   const { code, output } = await startServerExpectExit({
-    env: { DEFAULT_TENANT_BUDGET_CENTS: "600", VOICE_TARIFF_DEFAULT_CENTS: "300" },
+    env: { DEFAULT_TENANT_BUDGET_CENTS: "500", VOICE_TARIFF_DEFAULT_CENTS: "300" },
   });
   assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
   assert.match(output, /Start abgebrochen/);
-  assert.match(output, /DEFAULT_TENANT_BUDGET_CENTS=600/);
+  assert.match(output, /DEFAULT_TENANT_BUDGET_CENTS=500/);
   assert.match(output, /VOICE_TARIFF_DEFAULT_CENTS=300/);
-  assert.match(output, /mindestens 1500/, "Betreiber muss den Zielwert ohne Raten ablesen koennen");
+  assert.match(output, /mindestens 600/, "Betreiber muss den Zielwert ohne Raten ablesen koennen");
   assert.doesNotMatch(output, /Gateway laeuft/);
 });
 
@@ -180,8 +186,8 @@ test("KS-P9: MAX_BUDGET_EUR=8 unter der Business-Plan-Decke bootet gruen (kein p
 // KS-P3a: die neue Boot-Linie (kleinste Plan-Decke gegen die Worst-Case-Reserve) laeuft mit
 // dem LIVE-Satz. Die uebrige Spawn-Suite faehrt VOICE_TARIFF_DEFAULT_CENTS=0 (Decken 0,
 // Reserve 0) - dort waere der Guard trivial still. Bei 30 ct/min sind die Decken 1500/4500
-// und die Reserve 30*ceil(300/60)=150: kohaerent, also gruener Boot. Der feuernde Zweig ist
-// ueber Env NICHT erreichbar (MAX_CALL_DURATION_CAP_S ist eine Code-Konstante, der Satz
+// und die Reserve seit KS-P3 (a) 30*2=60: kohaerent, also gruener Boot. Der feuernde Zweig
+// ist ueber Env NICHT erreichbar (RESERVE_LEAD_MINUTES ist eine Code-Konstante, der Satz
 // kuerzt sich aus der Ungleichung heraus) - er ist in
 // test/ks-p3a-plan-cap-reserve-guard.test.js abgedeckt.
 test("KS-P3a: Boot mit dem Live-Satz (30 ct/min) bleibt gruen - Plan-Decken tragen die Reserve", async () => {

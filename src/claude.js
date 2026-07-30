@@ -617,7 +617,7 @@ export async function agentTurn(call, callerText) {
   // T1-Sicherungsboden: siehe shouldSuppressEndCall oben (EINE Quelle,
   // von Budget-agentTurn UND Realtime-bridge.js genutzt, G27). Der Guard erzwingt end_call
   // NIE - das Modell entscheidet, der Guard unterdrueckt nur ein verfruehtes Auflegen.
-  // Zeitliches Notaus bleibt maxCallDurationS.
+  // Zeitliches Notaus bleibt die guthaben-abgeleitete Notbremse am Call (KS-P3).
   const suppressEndCall = shouldSuppressEndCall(call);
 
   let messages = history;

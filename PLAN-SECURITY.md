@@ -16,9 +16,16 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > `maxDur + RESERVE_RELEASE_GRACE_MS`. Restrisiken (akzeptiert, bounded): (a) Multi-Prozess nicht
 > abgedeckt (OT-3, single-instance); (b) Freigabe braucht die Live-Call-Referenz -> cross-instance
 > blind (OT-3); (c) Hung-Originate laesst eine Reserve bis Boot stehen (selten, boot-begrenzt);
-> (d) Ist-Kosten koennen die Reserve um <= 1 Minutentakt (Rundung/Hangup-Latenz) uebersteigen,
-> fail-forward. `FAKE_ORIGINATE` ist ein boot-gehaerteter Test-Seam (nur zulaessig wenn
-> Signaturpruefung geskippt -> in Prod unmoeglich), keine abgeschaltete Sicherung.
+> (d) **seit KS-P3 (a) neu gefasst:** die Reserve deckt nicht mehr das ganze Gespraech,
+> sondern nur noch ein festes VORLAUFFENSTER von `RESERVE_LEAD_MINUTES` = 2 Minuten
+> (`outboundReserveCents` = `Satz * 2` statt `Satz * ceil(maxDur/60)`). Alles jenseits
+> dieser zwei Minuten deckt der Live-Verbrauchszaehler aus KS-P2, der ueber ALLE aktiven
+> Outbound-Legs desselben Tenants summiert. Bleibende Kante ist damit genau das Fenster
+> zwischen Dial und erstem Turn - und dafuer ist die Reserve da. Die alte Kante ("Ist-Kosten
+> uebersteigen die Reserve um <= 1 Minutentakt durch Rundung/Hangup-Latenz") besteht
+> unveraendert fort, fail-forward. `FAKE_ORIGINATE` ist ein boot-gehaerteter Test-Seam (nur
+> zulaessig wenn Signaturpruefung geskippt -> in Prod unmoeglich), keine abgeschaltete
+> Sicherung.
 
 ## PROV-01 — Provisioning-Crash-Recovery (klassifizierender Boot-Sweep) (nach F5, ergaenzt nach F6/F7)
 
@@ -411,15 +418,20 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > selbst beenden. LLM-Token laufen richtungsunabhaengig ueber `trackUsage`/`tokenCostUsd`
 > IN den Budget-Guard (gedeckelt). Carrier-Minuten laufen NICHT hinein:
 > `reconcileOutboundVoiceBudget` steigt bei `call.direction !== "outbound"` explizit aus.
-> Begrenzt wird die Exposition allein durch den harten `MAX_CALL_DURATION_S`-Cap - Worst
-> Case sind `maxCallDurationS` statt eines frueheren Auflegens. **Vertretbar nur mit
+> Begrenzt wird die Exposition seit KS-P3 NICHT mehr durch einen festen Zeit-Cap: die
+> Zeitgrenze eines Legs ist eine guthaben-abgeleitete NOTBREMSE
+> (`min(Restminuten + 1, 1800 s)`, `emergencyBrakeSeconds`), und die eigentliche
+> Kostenschranke ist der Live-Verbrauchszaehler aus KS-P2 (`blockingBudgetAxis` ->
+> `liveVoiceSpendCents`) gegen die pro-Tenant-Kostendecke. Der frueher hier genannte
+> `MAX_CALL_DURATION_S`-Cap existiert nicht mehr (E2/E3). **Vertretbar nur mit
 > `MAX_EMPTY_TURNS` auf dem konservativen Default 3. Wer den Wert hochdreht, kauft
 > Hoeflichkeit mit Carrier-Minuten, die kein Gate sieht.**
 >
-> **Nicht beruehrt (Regel 1):** `CAP_FAREWELL_LEAD_MS` (P3.1) verlaengert den Max-Dauer-Cap
-> NICHT. Der Abschluss-Satz wird INNERHALB der Frist gerendert; `terminateCappedCall`,
+> **Nicht beruehrt (Regel 1):** `CAP_FAREWELL_LEAD_MS` (P3.1) verlaengert die Frist NICHT.
+> Der Abschluss-Satz wird INNERHALB der Frist gerendert; `terminateCappedCall`,
 > `armMaxDurationTimer` und `POST /api/calls/:id/cancel` (Owner-Notaus ohne Ansage) bleiben
-> unveraendert. `CAP_FAREWELL_LEAD_MS=0` schaltet die Ansage aus, ohne den Cap anzufassen.
+> unveraendert. `CAP_FAREWELL_LEAD_MS=0` schaltet die Ansage aus, ohne die Frist anzufassen.
+> Der Default 20000 ms bleibt deutlich unter der KUERZESTMOEGLICHEN Notbremse (60 s).
 
 ## P7A-MODELPRICE — Budget-Guard rechnet pro Modell (fail-closed, 2026-07-19)
 
@@ -1566,3 +1578,59 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > Negativziele, 22 Positivziele aus Nachbarlaendern/Startmaerkten, Struktur-Invariante),
 > ein Gate-Ende-zu-Ende-Fall in `test/number-gate.test.js`, ein Fall in
 > `test/p8-private-number-country-gate.test.js`.
+
+## KS-P3 — Reserve von der Maximaldauer entkoppelt, Zeitgrenze wird guthaben-abgeleitete Notbremse (2026-07-30, E2/E3/E8)
+
+> **Was sich aendert (neue Zeit-/Kosten-Kante, mit Zahlen).**
+>
+> | Groesse | Vorher | Nachher |
+> | --- | --- | --- |
+> | Vorab-Reserve je Outbound | `Satz * ceil(maxDur/60)` (bei 30 ct/min und 300 s: 150 ct) | `Satz * RESERVE_LEAD_MINUTES` = `Satz * 2` (bei 30 ct/min: 60 ct) |
+> | Zeitgrenze je Leg | fest `MAX_CALL_DURATION_S` (Env, live 180 s), hart geklemmt auf 300 s | `min((Restminuten + 1) * 60, 1800 s)`, aus dem Restguthaben abgeleitet |
+> | Absolute Obergrenze | `MAX_CALL_DURATION_CAP_S` = 300 s | `MAX_CALL_DURATION_CAP_S` = 1800 s (hartkodiert, kein Env-Knopf) |
+>
+> **Absolute Regel 1 bleibt gewahrt.** Die Max-Gespraechsdauer wird NICHT entfernt, sondern
+> pro Call SCHAERFER: wer wenig Guthaben hat, bekommt eine kurze Frist; wer viel hat, eine
+> lange - immer unter einem harten Deckel. Der Timer-Backstop (`terminateCappedCall`, INV-9),
+> der Boot-Re-Arm und der Re-Attach-Pfad sind unangetastet. Denylist, Land-Gate,
+> Stundenlimit, Per-Target-Cap, Abo+KYC als Outbound-Permit, `OUTBOUND_FROZEN`, die
+> pro-Tenant-Kostendecke, `disclosureSentence` und die Provider-Signaturpruefung sind
+> unberuehrt.
+>
+> **Warum der Puffer (E8, `BRAKE_BUFFER_MINUTES` = 1).** Die Notbremse liegt strukturell
+> EINE Minute ueber den bezahlbaren Minuten. Damit bindet im Normalbetrieb IMMER zuerst der
+> Live-Verbrauchszaehler (KS-P2) - der Kunde hoert den Abschiedssatz, statt wortlos
+> abgeschnitten zu werden. Die Uhr ist die ZWEITE Linie, nicht die erste.
+>
+> **Fail-Richtung.** Nicht aufloesbares Guthaben (`remainingCents === null`, D7-Riegel) oder
+> ein Satz <= 0 ergeben die absolute Obergrenze, NIE "unbegrenzt". Das ist unschaedlich,
+> weil derselbe Zustand am Dial ueber `reserveUnreadableDenial` und beim Inbound ueber
+> `budgetExceeded` bereits fail-closed sperrt - die Notbremse ist dort nie die letzte Linie.
+> Untergrenze ist der Puffer allein (60 s), nie 0: eine 0-Frist terminalisierte den Call
+> schon beim Armieren, und "kein Geld" ist die Aufgabe der Geld-Achse, nicht der Uhr.
+>
+> **Der Body-Override kann nur verkuerzen.** `resolveMaxDurationS(raw, brakeSeconds)` nimmt
+> einen Client-Wunsch nur an, wenn er endlich, strikt positiv UND kuerzer als die Notbremse
+> ist. Ein Client kann sich keine Zeit erkaufen, die sein Guthaben nicht traegt.
+>
+> **`MAX_CALL_DURATION_S` ist ersatzlos entfallen (E2/E3).** Ein Operator-Knopf, der jede
+> Gespraechsdauer global kuerzt, IST die willkuerliche Produktgrenze, die diese Phase
+> beseitigt. Der Key wird nicht mehr gelesen - ein im Render-Dashboard stehengebliebener
+> Wert ist ab diesem Deploy wirkungslos (fail-safe: ein ignorierter Key kann nichts tun, ein
+> weitergelesener haette den Defekt still konserviert). Ueberall, wo er als Fallback stand,
+> steht jetzt die hartkodierte `MAX_CALL_DURATION_CAP_S`.
+>
+> **Getragene Restrisiken (benannt, nicht behoben).**
+> (1) Ein Kunde kann bis zu `Decke / 30 ct` Minuten je Periode telefonieren, auch in teure
+> Ziele - die Kosten-Achse rechnet mit UNSEREM Satz, nicht dem echten Zielpreis (TOD 1).
+> Das Gegenmittel ist die Sperrliste aus KS-P7, die bewusst VOR dieser Phase steht.
+> (2) Calls, die den Deploy ueberleben, haben kein `maxDurationS` und fallen auf die
+> absolute Obergrenze (1800 s statt vorher 180 s). Bounded auf die zum Deploy-Zeitpunkt
+> aktiven Legs; der Live-Zaehler greift beim naechsten Turn. Eine Migration fuer < 10 Minuten
+> Uebergang waere unverhaeltnismaessig.
+> (3) `rearmActiveCallTimers` (Boot-Re-Arm) hat - anders als der Re-Attach seit KS-P1b -
+> kein Geld-Gate; ein beim Boot re-armter Call behaelt seine alte Frist. Bounded durch
+> dieselbe Frist plus den Live-Zaehler am naechsten Turn. Befund einer Nachbarphase, hier
+> bewusst nur notiert.
+>
+> **Kein neuer Env-Schluessel** (einer ist ENTFALLEN), **keine neue Dependency.**

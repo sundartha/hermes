@@ -23,16 +23,19 @@ import assert from "node:assert/strict";
 import { config } from "../src/config.js";
 import { tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { makeDefaultState, registerTenant, reserveExceedsBudget } from "../src/store/state-ops.js";
-import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
+import { outboundReserveCents } from "../src/store/defaults.js";
 
 const TENANT_A = "t_orig";
 const US_OWN_DID = "+15005550006"; // eigene DID des Tenants (keine +49/+33/+44-Vorwahl)
 const US_TARGET = "+15551234567"; // ebenfalls keine Domestic-Vorwahl
 
-test("Charakterisierung ORIG-05: US-Tenant ruft +1 (DID-Land == Ziel-Land) - Reserve 150 ct kommt seit P7 durch die Tenant-Decke 1500 ct", () => {
-  const reserveCents =
-    tariffCentsPerMin(US_TARGET, US_OWN_DID) * Math.ceil(MAX_CALL_DURATION_CAP_S / 60);
-  assert.equal(reserveCents, 150, "Vorbedingung: live-gemessene Worst-Case-Reserve (KS-P6: 30 ct/min statt 300)");
+test("Charakterisierung ORIG-05: US-Tenant ruft +1 (DID-Land == Ziel-Land) - Reserve 60 ct kommt seit P7 durch die Tenant-Decke 1500 ct", () => {
+  const reserveCents = outboundReserveCents(tariffCentsPerMin(US_TARGET, US_OWN_DID));
+  assert.equal(
+    reserveCents,
+    60,
+    "Vorbedingung: live-gemessene Worst-Case-Reserve (KS-P6: 30 ct/min; KS-P3: * 2 Vorlauf-Minuten statt * 5 Dauer-Minuten)",
+  );
   assert.equal(
     config.billing.defaultTenantBudgetCents,
     1500,

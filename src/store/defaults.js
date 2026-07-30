@@ -253,10 +253,33 @@ export function globalCapCents(cfg) {
   return cfg.platformSpendCapCents;
 }
 
-// Intrinsische Fallback-/Cap-Werte der Reserve-Dauer (KEIN Operator-Knopf -> nicht config.js,
-// G35 n.z.). MAX_CALL_DURATION_CAP_S deckelt AUCH den Body-Override (place_call max_duration_s).
-export const DEFAULT_CALL_DURATION_S = 180;
-export const MAX_CALL_DURATION_CAP_S = 300;
+// ABSOLUTE Obergrenze der guthaben-abgeleiteten Notbremse (KS-P3 (b), E2/E3): die
+// laengste Frist, nach der ein Leg OHNE weitere Turns hart beendet wird. KEIN
+// Kosten-Deckel (das ist seit KS-P2 der Live-Zaehler), sondern die maximale LEBENSDAUER
+// einer technisch toten Verbindung. Deckelt weiterhin AUCH den Body-Override
+// (place_call max_duration_s). Hartkodiert und KEIN Operator-Knopf (G35 n.z.) - eine
+// Notbremse gehoert nicht an einen Knopf; die frueher hier stehende Env MAX_CALL_DURATION_S
+// ist mit E2/E3 ersatzlos entfallen (sie WAR die willkuerliche Produktgrenze).
+// 1800 s = 30 min liegt ueber jedem realistischen Terminanruf inkl. Warteschleife und in
+// der Groessenordnung des groessten verkauften Kontingents (Business, 120 min/Monat).
+export const MAX_CALL_DURATION_CAP_S = 1800;
+
+// KS-P3 (a): die Vorab-Reserve deckt seit dieser Phase nur noch das VORLAUFFENSTER, bis
+// der Live-Zaehler (KS-P2, blockingBudgetAxis) zum ersten Mal greift - nicht mehr das
+// ganze Gespraech. Ihr verbleibender Zweck ist der Schutz gegen GLEICHZEITIGKEIT
+// (mehrere Legs desselben Tenants), nicht die Deckung der Gespraechsdauer. Deshalb
+// haengt sie nicht mehr an der Maximaldauer: die waechst mit dem Guthaben, die Reserve
+// nicht. KEIN Operator-Knopf (Muster MAX_CALL_DURATION_CAP_S, G35 n.z.).
+export const RESERVE_LEAD_MINUTES = 2;
+
+// EINE Quelle (G5) der Reserve-Formel fuer die DREI Stellen, die sie brauchen: das
+// compute_reserve-Gate (die echte Buchung) und die zwei Boot-Guards, die eine Decke
+// dagegen halten (spendCapCoherence Klausel B, planCapReserveFindings). Vorher stand
+// dieselbe Rechnung zweimal - und beide Kopien trugen die Maximaldauer, die hier
+// bewusst nicht mehr vorkommt.
+export function outboundReserveCents(tariffCentsPerMin) {
+  return tariffCentsPerMin * RESERVE_LEAD_MINUTES;
+}
 
 // P6 (PLAN-CONVERSATION-QUALITY-V2, Anhang C): Verhalten des Agenten, wenn ein Angebot
 // AUSSERHALB des vorab erteilten Mandats liegt. EINE Quelle (G25/G5) fuer das

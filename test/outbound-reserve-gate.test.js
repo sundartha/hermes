@@ -1,5 +1,5 @@
 // outbound-p1c (Spec-Test 1): die Vorab-Reservierung schlaegt VOR dem Dial zu. Der
-// Worst-Case-Minutenpreis (Ziel-Tarif x ceil(maxDur/60)) wird gegen den verbleibenden
+// Worst-Case-Minutenpreis (Ziel-Tarif x RESERVE_LEAD_MINUTES) wird gegen den verbleibenden
 // effektiven Tenant-Cap geprueft; uebersteigt er ihn -> 402 (kein Originate). Der Owner
 // (Tenant Null) haelt keine tenant_budget-Zeile -> effektiver Cap = MAX_BUDGET_EUR.
 //
@@ -21,9 +21,11 @@ const postCall = (url, to) =>
   });
 
 test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert", async (t) => {
-  // Cap = MAX_BUDGET_EUR = 10 EUR = 1000 ct (Owner ohne tenant_budget-Zeile -> Pro-Tenant-
-  // Fallback, effectiveCapCents Stufe 3). Worst-Case-Tarif 400 ct/min x 3 min (maxDur 180 s) =
-  // 1200 ct = 12 EUR > 10-EUR-Cap -> Fehlbetrag 2.00 EUR. Inland 20 ct/min x 3 = 60 ct < Cap.
+  // Cap = MAX_BUDGET_EUR = 6 EUR = 600 ct (Owner ohne tenant_budget-Zeile -> Pro-Tenant-
+  // Fallback, effectiveCapCents Stufe 3). KS-P3 (a): die Reserve ist Satz x
+  // RESERVE_LEAD_MINUTES (2), nicht mehr Satz x angefangene Minuten der Maximaldauer -
+  // Worst-Case 400 ct/min x 2 = 800 ct = 8 EUR > 6-EUR-Cap -> Fehlbetrag 2.00 EUR
+  // (unveraendert). Inland 20 ct/min x 2 = 40 ct < Cap.
   // Absender-DID mit +49: der Inlandssatz greift seit P5 nur bei gleicher Vorwahl an
   // BEIDEN Enden - mit der US-Default-DID waere auch DOMESTIC ein Auslands-Leg.
   const srv = await startServer({
@@ -31,7 +33,7 @@ test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert"
     env: {
       ALLOWED_NUMBERS: `${DOMESTIC},${INTL}`,
       ALLOWED_COUNTRY_CODES: "*",
-      MAX_BUDGET_EUR: "10",
+      MAX_BUDGET_EUR: "6",
       VOICE_TARIFF_DOMESTIC_CENTS: "20",
       VOICE_TARIFF_DEFAULT_CENTS: "400",
       TWILIO_ACCOUNT_SID: "x",

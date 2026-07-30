@@ -17,7 +17,7 @@ import {
 import { localeFor } from "./i18n/locales.js";
 import { safeEqual } from "./util.js";
 import { voiceControl, mediaTransport } from "./telephony/registry.js";
-import { PROVIDER } from "./store/defaults.js";
+import { PROVIDER, MAX_CALL_DURATION_CAP_S } from "./store/defaults.js";
 import { MEDIA_EVENT } from "./telephony/media-events.js";
 import { callMaxDurationMs } from "./call-duration.js";
 
@@ -286,7 +286,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
             // Max-Dauer hart durchsetzen (zusaetzlich zu Provider timeLimit)
             endTimer = setTimeout(
               () => hangup("Max-Dauer erreicht"),
-              callMaxDurationMs(call, config.safety.maxCallDurationS),
+              callMaxDurationMs(call, MAX_CALL_DURATION_CAP_S),
             );
             connectOpenAI();
             break;

@@ -51,7 +51,7 @@ test("Cap-Grund: terminateCappedCall persistiert das Cap-Token gemeinsam mit dem
 
   const lifecycle = makeCallLifecycle({
     store: spyStore(call, order),
-    config: withConfigNamespaces({ maxCallDurationS: MAX_DURATION_S, voiceEngine: VOICE_ENGINE.BUDGET }),
+    config: withConfigNamespaces({ voiceEngine: VOICE_ENGINE.BUDGET }),
     finishCall: () => {
       order.push("bill");
       settled();

@@ -15,7 +15,9 @@ const { withConfigOverrides } = makeConfigOverrides(config);
 // EINE Quelle (G5) fuer die 13 erwarteten Namespace-Groessen (OQ-3, PLAN-POLISH-A.md).
 const EXPECTED_NAMESPACE_COUNTS = {
   // P3.1: capFarewellLeadMs ergaenzt (Cap-Vorlauf-Ansage vor dem harten Max-Dauer-Cap).
-  safety: 11,
+  // KS-P3 (b): maxCallDurationS ENTFAELLT (E2/E3 - keine feste Maximaldauer mehr, die Frist
+  // faellt pro Call aus dem Restguthaben) -> 10.
+  safety: 10,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
@@ -62,9 +64,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // im Pre-Call-Briefing, src/research/) - eigene Namespace-Zeile.
   research: 3,
 };
-const EXPECTED_TOTAL_KEYS = 133;
+const EXPECTED_TOTAL_KEYS = 132;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (133 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (132 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -149,7 +151,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // AL-P11: evidenceRetentionDays ist primitiv (Zahl, kein Array/nested Objekt) -> 124.
   // AL-P13: consultEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 125.
   // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 124.
-  assert.equal(checked, 124, "alle primitiven Blaetter (133 - 4 Arrays - 5 nested Objekte) geprueft");
+  assert.equal(checked, 123, "alle primitiven Blaetter (132 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

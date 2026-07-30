@@ -13,7 +13,8 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { makeOutboundGates } from "../src/telephony/outbound-gates.js";
+import { makeOutboundGates, tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
+import { emergencyBrakeSeconds } from "../src/call-duration.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -103,7 +104,6 @@ function defaultConfig() {
     maxCallsPerHour: 100,
     perTargetWindowMs: 3600000,
     perTargetCallCap: 100,
-    maxCallDurationS: 180,
   };
 }
 
@@ -542,24 +542,42 @@ test("resolve_identity: setzt ctx.requestedBy/ctx.tenantId, lehnt nie ab", async
   assert.equal(ctx.tenantId, "T");
 });
 
-test("compute_reserve: setzt ctx.maxDur/ctx.reserveCents, Cap greift bei ueberlanger Body-Dauer", async () => {
+// KS-P3 (b): die Frist faellt aus dem Guthaben-Snapshot des Store-Fakes (650 ct Rest) und
+// dem Worst-Case-Satz. Beide Zahlen kommen aus dem realen config-Singleton bzw. dem Fake -
+// deshalb wird die Erwartung HERGELEITET statt als Literal gepinnt (sonst pinnte dieser
+// Test eine Tarif-Kalibrierung mit, die ihn nichts angeht).
+const brakeOfDefaultStore = () =>
+  emergencyBrakeSeconds({
+    remainingCents: defaultStore().tenantBudgetSnapshot().remainingCents,
+    tariffCentsPerMin: tariffCentsPerMin(VALID_TO, undefined),
+  });
+
+test("compute_reserve: setzt ctx.maxDur/ctx.reserveCents, die Notbremse deckelt eine ueberlange Body-Dauer", async () => {
   const { gates } = makeOutboundGates(makeDeps());
-  const ctx = baseCtx({ b: { max_duration_s: 999 } });
+  const ctx = baseCtx({ b: { max_duration_s: 999999 } });
   const denial = await gateBy(gates, "compute_reserve").run(ctx);
   assert.equal(denial, null);
-  assert.equal(ctx.maxDur, 300, "MAX_CALL_DURATION_CAP_S deckelt einen ueberlangen Body-Wert");
+  assert.equal(
+    ctx.maxDur,
+    brakeOfDefaultStore(),
+    "die guthaben-abgeleitete Notbremse deckelt einen ueberlangen Body-Wert",
+  );
   assert.ok(
     Number.isInteger(ctx.reserveCents) && ctx.reserveCents >= 0,
     "reserveCents ist eine nicht-negative Ganzzahl (Wert selbst haengt am realen config-Singleton, s. Modul-Doc)",
   );
 });
 
-test("S1-6: compute_reserve mit negativem Body-max_duration_s faellt auf config-Default, KEINE negative Reserve", async () => {
+test("S1-6: compute_reserve mit negativem Body-max_duration_s faellt auf die Notbremse, KEINE negative Reserve", async () => {
   const { gates } = makeOutboundGates(makeDeps());
   const ctx = baseCtx({ b: { max_duration_s: -300 } });
   const denial = await gateBy(gates, "compute_reserve").run(ctx);
   assert.equal(denial, null);
-  assert.equal(ctx.maxDur, 180, "negativer Body-Wert -> config-Default, NICHT -300 durchgereicht");
+  assert.equal(
+    ctx.maxDur,
+    brakeOfDefaultStore(),
+    "negativer Body-Wert -> Notbremse, NICHT -300 durchgereicht",
+  );
   assert.ok(
     Number.isInteger(ctx.reserveCents) && ctx.reserveCents > 0,
     "reserveCents bleibt eine positive Ganzzahl (kein negativer/Null-Reserve-Fallout)",

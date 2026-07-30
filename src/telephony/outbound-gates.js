@@ -43,9 +43,9 @@ import {
   normalizeDialTarget,
   eurText,
   spendMonthEndDate,
-  DEFAULT_CALL_DURATION_S,
-  MAX_CALL_DURATION_CAP_S,
+  outboundReserveCents,
 } from "../store/defaults.js";
+import { emergencyBrakeSeconds } from "../call-duration.js";
 import { findActiveNumber } from "../store/views.js";
 import { sendFailSoftAlertSms } from "./alert-sms.js";
 import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.js";
@@ -56,7 +56,6 @@ import { deniedPrefix, isDenied } from "./number-denylist.js";
 import { localeFor } from "../i18n/locales.js";
 
 const HOUR_MS = 60 * 60 * 1000;
-const SECONDS_PER_MINUTE = 60;
 
 // EXPORT: drei Ausgabestellen - der Pre-Gate-Check in routes/api-calls.js, das Gate
 // trunk_zero_normalized und der Format-Zweig in numberGateError.
@@ -183,17 +182,22 @@ export function tariffCentsPerMin(to, from) {
     : defaultConfig.billing.voiceTariffDefaultCents;
 }
 
-// S1-6 Wurzelfix: loest die Max-Gespraechsdauer (Sekunden) aus dem optionalen, UNVALIDIERTEN
-// Body-Override auf: erster endlich-UND-strikt-positiver Kandidat aus [Body, config-Default,
-// Hard-Default], dann hart auf MAX_CALL_DURATION_CAP_S geklemmt. Ersetzt den `parseInt(raw||def,10)
-// || DEFAULT`-Trap, der nur 0/null/NaN abfing (negative Zahlen sind in JS truthy: -300 rutschte
-// bis zu einer NEGATIVEN Reserve durch). chosen ist immer >0 (DEFAULT_CALL_DURATION_S als Boden)
-// -> Math.min nie NaN.
-export function resolveMaxDurationS(raw, cfg) {
-  const chosen = [parseInt(raw, 10), cfg.safety.maxCallDurationS, DEFAULT_CALL_DURATION_S].find(
-    (v) => Number.isFinite(v) && v > 0,
-  );
-  return Math.min(chosen, MAX_CALL_DURATION_CAP_S);
+// Loest die Frist DIESES Legs (Sekunden) aus der guthaben-abgeleiteten Notbremse
+// (brakeSeconds, s. emergencyBrakeSeconds) und dem optionalen, UNVALIDIERTEN Body-Override
+// auf. KS-P3 (b): der Body kann die Frist nur noch VERKUERZEN, nie verlaengern - ein Client
+// kann sich keine Zeit erkaufen, die sein Guthaben nicht traegt. Die frueheren Fallback-
+// Stufen (config-Default MAX_CALL_DURATION_S, Hard-Default) sind mit E2/E3 entfallen: eine
+// feste Maximaldauer gibt es nicht mehr.
+//
+// Der S1-6 Wurzelfix bleibt inhaltlich erhalten: geprueft wird endlich UND strikt positiv,
+// nicht bloss truthy (negative Zahlen sind in JS truthy - -300 rutschte frueher bis zu einer
+// NEGATIVEN Reserve durch). 0/negativ/NaN/Muell -> die Notbremse.
+//
+// brakeSeconds ist bereits durch MAX_CALL_DURATION_CAP_S gedeckelt; ein zweites Math.min
+// hierauf waere eine Duplizierung derselben Klemme (G5).
+export function resolveMaxDurationS(raw, brakeSeconds) {
+  const requested = parseInt(raw, 10);
+  return Number.isFinite(requested) && requested > 0 ? Math.min(requested, brakeSeconds) : brakeSeconds;
 }
 
 // Sollstaerke der Gate-Kette (17 Glieder). Erzwungen statt zugesichert (G27, OUT-14): weicht
@@ -511,6 +515,19 @@ export function makeOutboundGates({
   // (ein audit()-Aufruf braucht beide oder keins) -> EIN audit-Objekt statt zwei Args.
   const deny = (status, body, audit = null) => ({ status, body, audit });
 
+  // KS-P3 (b): die Notbremse dieses Legs aus dem AKTUELLEN Restguthaben. Die Rechenregel
+  // selbst liegt in call-duration.js (EINE Quelle, G5) - hier werden nur ihre zwei
+  // Eingaben beschafft. Gelesen wird DERSELBE Snapshot wie in tenantReserveDenial:
+  // Ablehnungstext, Anzeige und Frist rechnen damit strukturell auf einer Achse (KS-P4).
+  // Der Snapshot enthaelt die Reserve DIESES Calls noch nicht (compute_reserve laeuft vor
+  // reserve_budget) - richtig so, die Frist beschreibt, was dieser Call ausgeben darf.
+  function brakeSecondsFor(tenantId, tariffCents) {
+    return emergencyBrakeSeconds({
+      remainingCents: store.tenantBudgetSnapshot(tenantId, config.billing).remainingCents,
+      tariffCentsPerMin: tariffCents,
+    });
+  }
+
   // Die geordnete Gate-Kette (Sollstaerke: GATE_CHAIN_LENGTH, unten erzwungen). Reihenfolge
   // load-bearing, per Snapshot-Test
   // (test/outbound-gates-order.test.js) festgenagelt. reserve_budget bleibt LETZTES Gate
@@ -761,15 +778,23 @@ export function makeOutboundGates({
         );
       },
     },
-    // Derivations-Gate: Max-Dauer (Body-Override, gecappt auf MAX_CALL_DURATION_CAP_S) +
-    // Reserve-Betrag (Worst-Case-Tarif * aufgerundete Minuten) fuer das folgende
-    // reserve_budget-Gate. Herkunft = die aktive Absender-DID aus resolve_outbound
-    // (steht in der Kette VOR diesem Gate und lehnt ohne aktive Tenant-Nummer mit 403 ab).
+    // Derivations-Gate mit ZWEI seit KS-P3 (a) UNABHAENGIGEN Ableitungen fuer das folgende
+    // reserve_budget-Gate:
+    //   Reserve-Betrag - Worst-Case-Satz * festes Vorlauffenster (outboundReserveCents).
+    //     Deckt nur noch die Zeit bis zum ersten Live-Zaehler-Griff und die Gleichzeitigkeit
+    //     mehrerer Legs, NICHT mehr die Gespraechsdauer.
+    //   Max-Dauer      - die guthaben-abgeleitete Notbremse, vom Body-Override hoechstens
+    //     verkuerzt (resolveMaxDurationS).
+    // Herkunft = die aktive Absender-DID aus resolve_outbound (steht in der Kette VOR diesem
+    // Gate und lehnt ohne aktive Tenant-Nummer mit 403 ab).
+    // Dieses Gate LIEST seit KS-P3 den Store (Guthaben-Snapshot fuer die Notbremse), lehnt
+    // aber weiterhin NIE ab - die Geld-Entscheidung bleibt allein bei reserve_budget.
     {
       name: "compute_reserve",
       run(ctx) {
-        ctx.maxDur = resolveMaxDurationS(ctx.b.max_duration_s, config);
-        ctx.reserveCents = tariffCentsPerMin(ctx.to, ctx.fromNumber) * Math.ceil(ctx.maxDur / SECONDS_PER_MINUTE);
+        const tariffCents = tariffCentsPerMin(ctx.to, ctx.fromNumber);
+        ctx.reserveCents = outboundReserveCents(tariffCents);
+        ctx.maxDur = resolveMaxDurationS(ctx.b.max_duration_s, brakeSecondsFor(ctx.tenantId, tariffCents));
         return null;
       },
     },

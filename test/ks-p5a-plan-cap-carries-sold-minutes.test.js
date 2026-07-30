@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 
 import { planCapCents } from "../src/billing/plan-caps.js";
 import { CATALOG_SLUGS, findPlan } from "../src/plans.js";
-import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
+import { outboundReserveCents } from "../src/store/defaults.js";
 import {
   addVoiceUsageCostCents,
   deriveTenantBudgetFromPlan,
@@ -27,7 +27,6 @@ import {
   tenantBudgetSnapshot,
 } from "../src/store/state-ops.js";
 
-const SECONDS_PER_MINUTE = 60; // modul-lokal wie in boot-guard.js/outbound-gates.js
 // Zwei um Faktor 10 auseinanderliegende Buchungssaetze: der seit KS-P6 ausgelieferte
 // (30, E1) und der Stand davor (300). Die Invariante ist satzunabhaengig und muss an
 // beiden halten - eine Decke, die nur bei einem Satz aufgeht, ist keine.
@@ -47,12 +46,6 @@ function cfgAtRate(rateCentsPerMin) {
     platformSpendCapCents: 0,
     budgetMonthEnabled: false,
   });
-}
-
-// Worst-Case-Reserve EINES Anrufs, wie outbound-gates.js sie vor dem Dial bucht:
-// Satz * angefangene Minuten der maximalen Gespraechsdauer.
-function worstCaseReserveCents(rateCentsPerMin) {
-  return rateCentsPerMin * Math.ceil(MAX_CALL_DURATION_CAP_S / SECONDS_PER_MINUTE);
 }
 
 async function captureWarn(fn) {
@@ -77,9 +70,9 @@ test("KS-P5a: jede Plan-Decke traegt die verkauften Minuten PLUS die Reserve des
         `${slug}@${rate}: Decke ${capCents} ist keine Ganzzahl (Geldgrenze aus einer Rundung, G26)`,
       );
       assert.ok(
-        soldMinutes * rate + worstCaseReserveCents(rate) <= capCents,
+        soldMinutes * rate + outboundReserveCents(rate) <= capCents,
         `${slug}@${rate}: Decke ${capCents} traegt die ${soldMinutes} verkauften Minuten nicht ` +
-          `inkl. Worst-Case-Reserve (${soldMinutes * rate} + ${worstCaseReserveCents(rate)})`,
+          `inkl. Worst-Case-Reserve (${soldMinutes * rate} + ${outboundReserveCents(rate)})`,
       );
     }
   }
@@ -106,7 +99,7 @@ test("KS-P5a: Starter telefoniert die verkauften Minuten leer - der letzte Anruf
   );
 
   // Alles bis auf den letzten (Worst-Case langen) Anruf ist bereits telefoniert und gebucht.
-  const reserveCents = worstCaseReserveCents(LIVE_BOOKING_RATE_CENTS_PER_MIN);
+  const reserveCents = outboundReserveCents(LIVE_BOOKING_RATE_CENTS_PER_MIN);
   const minutesBeforeLastCall = STARTER_SOLD_MINUTES - reserveCents / LIVE_BOOKING_RATE_CENTS_PER_MIN;
   addVoiceUsageCostCents(s, tenantId, minutesBeforeLastCall * LIVE_BOOKING_RATE_CENTS_PER_MIN);
 
