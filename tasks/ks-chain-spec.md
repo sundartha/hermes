@@ -34,6 +34,46 @@ Fuer JEDE Phase dieser Kette gilt:
 
 ---
 
+## KS-AUF — Aufraeumen: SSE-Spike-Schalter ersatzlos aus master
+
+Der AL-P2-Spike ist gemessen und abgeschlossen. Der Schalter aus Commit `af4a66e`
+(`feat(al-p2): SSE-Spike-Schalter im Shim + Urteil im Messwerkzeug`) verlaesst master
+**ersatzlos** — nicht "Flag auf 0", nicht deaktiviert stehenlassen. Ein Schalter, der eine
+kuenstliche Verzoegerung in den Antwortpfad einbauen kann, gehoert nicht dauerhaft in ein
+Produktivsystem.
+
+**Ein `git revert af4a66e` geht NICHT sauber durch** — gemessen 2026-07-30: Konflikte in
+`src/telnyx-llm-shim.js` und `test/telnyx-shim-harness.js`. Beide Dateien sind seit dem
+Spike von KS-P2 (Live-Budget-Term) und KS-P1b (Re-Attach-Seam, `killCallForBudget`) umgebaut
+worden. Die Aufloesung ist Handarbeit am Code, kein mechanischer Revert.
+
+**Was entfernt wird** (Umfang aus der Commit-Message von `af4a66e`, am Code zu verifizieren):
+
+- `src/telnyx-llm-shim.js`: `sseSpikeDelayMsFor` und jede Aufrufstelle. Die Bestandssequenz
+  ist danach der einzige Pfad.
+- `src/config.js`: `TELNYX_SSE_SPIKE_DELAY_MS`, `TELNYX_SSE_SPIKE_CALLEE`, die zugehoerige
+  `productionFootguns`-Sperre. `e164Env` nur entfernen, wenn es keinen anderen Nutzer hat —
+  sonst bleibt es.
+- `src/boot.js`: die Banner-Sonde des Spikes.
+- `src/utils/timer.js`: `sleepMs` nur, wenn kein anderer Aufrufer existiert.
+- `scripts/telnyx-call-latency.mjs`: `sseSpikeVerdict` und `--spike-delay-ms`.
+- `.env.example`, `render.yaml`, `PLAN-SECURITY.md`: die zugehoerigen Eintraege.
+- `test/al-p2-sse-spike.test.js` entfaellt; `test/helpers.js` `BASE_ENV` und
+  `test/config-shape.test.js` ziehen nach.
+
+**Harte Auflagen:**
+
+- **Nichts aus KS-P2 oder KS-P1b beschaedigen.** Der Shim traegt inzwischen den
+  Live-Budget-Term und den Re-Attach-Pfad. Entfernt wird ausschliesslich der Spike.
+- Die Notaus-Pfade (Rate-Gate, Budget-Kill, Loop-Guard, Degradations-Catch) bleiben
+  unveraendert sofortig.
+- Kein toter Code, keine verwaisten Env-Schluessel, keine Kommentare, die auf den
+  entfernten Schalter verweisen.
+- `npm test` gruen. Neue Tests sind nicht noetig; die Bestandssuite muss ohne Anpassung
+  gruen bleiben, ausser bei den oben genannten Dateien, die den Schalter direkt pinnen.
+
+---
+
 ## KS-P9 — Plattform-Achse verliert die Sperrwirkung
 
 Abschnitt `### KS-P9` in `PLAN-KOSTEN-STEUERUNG.md` ist die Spec. Zusaetzlich bindend:
