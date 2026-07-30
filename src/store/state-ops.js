@@ -512,9 +512,14 @@ export function recordCallCostTruingResult(s, callId, { source, actualCostMicroC
   return { call, changed: true };
 }
 
-// Anker der Max-Dauer-Rechnung: der ECHTE Call-Start (answeredAt bevorzugt, sonst startedAt),
-// NIE der Boot-Zeitpunkt. Fehlt beides -> NaN (Aufrufer clampen auf 0).
-function callStartAnchorMs(call) {
+// Anker der Max-Dauer-Rechnung UND des Live-Verbrauchs (KS-P2): der ECHTE Call-Start
+// (answeredAt bevorzugt, sonst startedAt), NIE der Boot-Zeitpunkt. Fehlt beides -> NaN.
+// Die zwei Aufrufer clampen bewusst UNTERSCHIEDLICH und beide fail-closed:
+// remainingMaxDurationMs auf 0 (= sofort terminieren), liveVoiceMinutesOf (metering.js)
+// reicht das NaN weiter an die D7-Kante (liveBudgetExceeded). Ein stilles 0 waere dort
+// fail-OPEN (ungemessener Call), ein durchgereichtes NaN ohne Riegel ebenfalls
+// (gebucht + NaN >= cap ist immer false).
+export function callStartAnchorMs(call) {
   return Date.parse(call.answeredAt ?? call.startedAt ?? "");
 }
 
@@ -753,6 +758,24 @@ export function countOutboundCallsSince(
       (tenantId == null || c.tenantId === tenantId) &&
       (to == null || c.to === to),
   ).length;
+}
+
+// KS-P2: alle noch LAUFENDEN Outbound-Calls eines Tenants - die Basis des Live-Terms auf
+// der Carrier-Achse. Reine Leseprojektion (kein Record-Klon: die Aufrufer lesen nur
+// Zeitanker/Nummern), keine Mutation, kein IO.
+// Die drei Bedingungen sind je eine Invariante, keine Bequemlichkeit:
+//   status "active"      - ein beendeter Call ist bereits GEBUCHT (reconcileOutbound-
+//                          VoiceBudget laeuft in finishCall NACH persistEnd) und wuerde
+//                          sonst doppelt zaehlen;
+//   direction "outbound" - fuer Inbound wird NIE etwas gebucht (metering.js), ein
+//                          Live-Term dort erzeugte einen Phantom-Verbrauch, der bei
+//                          Call-Ende spurlos verschwindet und mittendrin ein KOSTENLOSES
+//                          Inbound-Gespraech aufloest;
+//   tenantId             - die Geld-Achse ist pro Tenant (KS-P9/E10).
+export function activeOutboundCallsFor(s, tenantId) {
+  return s.calls.filter(
+    (c) => c.tenantId === tenantId && c.status === "active" && c.direction === "outbound",
+  );
 }
 
 // AL-P12 (Beziehungsgedaechtnis): die Erinnerungen an EINE Gegenstelle, neueste zuerst.
@@ -2427,6 +2450,29 @@ function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
   });
 }
 
+// KS-P2 (Wurzelbehebung): dieselbe Frage wie budgetExceeded, PLUS dem noch nicht gebuchten
+// Live-Verbrauch der Carrier-Achse. Bis KS-P2 sah die Mid-Call-Pruefung auf dieser Achse
+// nichts: reconcileOutboundVoiceBudget bucht erst bei Call-Ende, waehrend die KI-Token-Achse
+// in JEDER Schleifenrunde bucht - die teure Achse war live blind.
+//
+// liveCents kommt vom Aufrufer (budget-gate.js) und ist GANZZAHL Cents. Er durchlaeuft
+// denselben D7-Riegel wie der gebuchte Wert, mit EIGENEM Feldnamen im Log: ein unbrauchbarer
+// Zeitanker liefert NaN, und "gebucht + NaN >= cap" ist immer false - das Gate waere still
+// AUS, ohne Log, ohne Symptom. Fail-closed heisst hier: sperren und die vergiftete Groesse
+// benennen.
+//
+// Die Reserve zaehlt bewusst NICHT mit: sie ist bereits fuer genau diesen Call gebucht -
+// gebucht + Reserve + eigene Zeit haetten den Call nach der ersten Minute gegen sich selbst
+// aufgelegt. Deshalb kein reservationFor hier, anders als in reserveExceedsBudget, das eine
+// NOCH NICHT begonnene Zusatz-Exposition prueft.
+export function liveBudgetExceeded(s, tenantId, liveCents, cfg, nowIso) {
+  const spend = tenantSpendOrDeny(s, tenantId, cfg, nowIso);
+  if (spend.deny) return true;
+  if (!isBookableCents(liveCents))
+    return denyCorruptUsage(`tenant:${tenantId}`, "liveCents", liveCents);
+  return spend.spent + liveCents >= effectiveCapCents(s, tenantId, cfg);
+}
+
 // Pro-Tenant-Budget (P6b3): der GATE-Verbrauch (gateUsageCents - Perioden-Fenster bei Flag
 // AUS seit GAP-01, Spend-Monat bei Flag AN) gegen den EFFEKTIVEN Cap (pro-Tenant hard_cap_cents wenn
 // gesetzt, sonst die Tenant-Default-Decke, sonst der Pro-Tenant-Fallback - Praezedenz s.
@@ -2439,9 +2485,10 @@ function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
 // genau das richtig, und der eigene Grund macht es vom echten "Budget erschoepft"
 // unterscheidbar.
 export function budgetExceeded(s, tenantId, cfg, nowIso) {
-  const spend = tenantSpendOrDeny(s, tenantId, cfg, nowIso);
-  if (spend.deny) return true;
-  return spend.spent >= effectiveCapCents(s, tenantId, cfg);
+  // Ohne laufenden Zusatzverbrauch (Dial-Gate, Inbound-Reject): 0 ist buchbar, der D7-Riegel
+  // in liveBudgetExceeded ist damit ein No-op, der Ausdruck bleibt "spent >= cap" -
+  // byte-identisch zum Bestand. EINE Entscheidungsstelle statt zweier Kopien (G5).
+  return liveBudgetExceeded(s, tenantId, 0, cfg, nowIso);
 }
 
 // Vorab-Reservierung (outbound-p1c, Kosten-Achse, D1): wuerde der Worst-Case-Minutenpreis

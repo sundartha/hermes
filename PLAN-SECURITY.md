@@ -1287,3 +1287,62 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > versehentlich zu niedrig gesetzter Satz unterreserviert still und verkuerzt zugleich die
 > Plan-Decke. Eine Untergrenze analog `voiceTariffFloorFindings` ist eine eigene Aufgabe
 > (so schon in KS-P0 festgehalten) und NICHT Teil dieser Phase.
+
+## KS-P2 — Live-Verbrauch der Carrier-Achse in der Mid-Call-Pruefung (2026-07-30)
+
+> **Was sich aendert.** `blockingBudgetAxis` (`src/budget-gate.js`) fragt nicht mehr
+> `store.budgetExceeded`, sondern `store.liveBudgetExceeded`, und reicht dabei einen
+> LIVE-TERM mit: die Summe der angefangenen Minuten ALLER noch laufenden Outbound-Legs des
+> Tenants mal deren Leg-Tarif (`liveVoiceSpendCents`, `src/billing/metering.js` - dieselbe
+> ceil-Rundungsregel wie `voiceMinutesOf`). Bis hierher war genau die teure Achse mid-call
+> blind: die KI-Token-Achse bucht in JEDER Schleifenrunde, die Carrier-Minuten erst bei
+> Call-Ende (`reconcileOutboundVoiceBudget`).
+>
+> **Richtung der Wirkung: STRENGER, nie lockerer.** Derselbe Cap, nur frueher bindend. Ohne
+> laufenden Zusatzverbrauch (Dial-Gate, Inbound-Reject) ist der Term 0 und der Ausdruck
+> bleibt byte-identisch `spent >= cap`: `budgetExceeded` ist seither ueber
+> `liveBudgetExceeded(s, tenantId, 0, ...)` ausgedrueckt - EINE Entscheidungsstelle statt
+> zweier Kopien (G5).
+>
+> **Fail-closed (D7-Reichweite waechst, sie schrumpft nicht).** Ein unlesbarer Zeitanker
+> liefert NaN statt eines stillen 0; der Term laeuft durch denselben `isBookableCents`-Riegel
+> wie jeder gebuchte Geldwert, mit EIGENEM Feldnamen im Log:
+> `[budget] grund=usage_korrupt kante=tenant:<id> feld=liveCents wert=NaN`. Ohne den Riegel
+> waere das Gate still AUS ("gebucht + NaN >= cap" ist immer false). Ein Uhr-Ruecksprung
+> clampt auf 0 - der Live-Term darf den Verbrauch nie UNTER den gebuchten Wert druecken.
+>
+> **Inbound traegt strukturell nichts bei.** `activeOutboundCallsFor` (`state-ops.js`)
+> filtert auf `direction === "outbound"` - spiegelbildlich zu
+> `reconcileOutboundVoiceBudget`. Was nie gebucht wird, darf auch live nicht zaehlen, sonst
+> loeste ein Phantom-Verbrauch, der bei Call-Ende spurlos verschwindet, mittendrin ein
+> KOSTENLOSES Inbound-Gespraech auf. Ebenso strukturell: nur `status === "active"` (ein
+> beendeter Leg ist bereits gebucht - keine Doppelzaehlung) und nur der eigene Tenant.
+>
+> **Die Reserve zaehlt bewusst NICHT mit.** Sie ist bereits fuer genau diesen Call gebucht;
+> "gebucht + Reserve + eigene Zeit" haette den Call nach der ersten Minute gegen sich selbst
+> aufgelegt. `reserveExceedsBudget` (Vorab-Exposition eines NOCH NICHT begonnenen Calls)
+> bleibt davon unberuehrt.
+>
+> **Unberuehrt:** das Dial-Gate (`budgetExceeded` + `reserveExceedsBudget` in
+> `outbound-gates.js`), der Inbound-Reject in `routes/voice.js`, `tenantBudgetSnapshot`,
+> `tryReserveOutboundBudget`, `disclosureSentence`, Provider-Signaturpruefung, Auth, Abo+KYC
+> als Outbound-Permit, `OUTBOUND_FROZEN`, Denylist, Land-Gate, Stundenlimit, Per-Target-Cap,
+> `MAX_CALL_DURATION_S`/`MAX_CALL_DURATION_CAP_S`, alle Env-Werte und Plan-Decken. Keine neue
+> Dependency, kein neuer Env-Schluessel, keine `.env.example`-/`render.yaml`-/`config.js`-
+> Aenderung. Kein Aufrufer von `blockingBudgetAxis` wurde angefasst (`claude.js`,
+> `telnyx-llm-shim.js`): der Live-Term ist eine TENANT-Groesse und wird vollstaendig
+> innerhalb der Gate-Kette aus dem Store gezogen - es gibt kein vom Aufrufer geliefertes
+> Datum, das jemand vergessen oder auf 0 setzen koennte (G27).
+>
+> **Drei bewusst getragene Restrisiken.**
+> 1. **Die Plattform-Achse bleibt mid-call blind.** `globalBudgetExceeded` existiert seit
+>    KS-P9/E10 als Sperre nicht mehr; der einzige In-Flight-Schutz der Plattform ist
+>    `globalReserveExceedsBudget` am Dial-Gate. KS-P2 aendert daran nichts.
+> 2. **Die Vorab-Reservierung ist strukturell ephemer** - nie persistiert, nie hydriert, nach
+>    jedem Neustart 0. KS-P2 verlaesst sich fuer die Gleichzeitigkeit deshalb ausdruecklich
+>    NICHT auf sie (der Live-Term ist eine Tenant-Summe ueber alle laufenden Legs); die
+>    Reserve bleibt unangetastet, ist aber kein Deploy-fester Schutz.
+> 3. **pg-Spiegel-Grenze.** `activeOutboundCallsFor` scannt den hydrierten Spiegel (wie
+>    `getCall`/`getCallByControlId`). Ein Leg, das eine ANDERE Instanz nach unserem
+>    `hydrate()` angelegt hat, fehlt in der Summe - der Term unterzaehlt dann, er
+>    ueberzaehlt nie.

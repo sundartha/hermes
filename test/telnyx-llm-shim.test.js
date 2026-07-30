@@ -74,7 +74,13 @@ function fakeStore({ call = null, budgetExceeded = false } = {}) {
     getCall(id) {
       return call && call.id === id ? call : null;
     },
-    budgetExceeded() {
+    // KS-P2: blockingBudgetAxis fragt die LIVE-Achse. Diese Datei hat den Live-Term NICHT
+    // im Blick (kein laufender Leg) - die Basis bleibt leer, der eine budgetExceeded-
+    // Schalter steht weiter fuer "die Geld-Achse sperrt".
+    activeOutboundCallsFor() {
+      return [];
+    },
+    liveBudgetExceeded() {
       return budgetExceeded;
     },
   };
@@ -102,6 +108,13 @@ function makeCall(overrides = {}) {
     language: "de",
     callControlId: "cc_x",
     status: "active",
+    // KS-P2: Richtung, Zeitanker und beide Nummern - dieselben fuenf Felder wie in
+    // test/telnyx-shim-harness.js, damit die Fixture eine reale Leg-Form hat.
+    direction: "outbound",
+    from: "+15005550006",
+    to: "+4915112345678",
+    startedAt: new Date().toISOString(),
+    answeredAt: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -467,7 +480,10 @@ test("P5-Rate: zwei verschiedene Calls (ccids) teilen sich das Fenster NICHT", a
   const callB = makeCall({ id: "call_B", callControlId: "cc_B" });
   const store = {
     getCallByControlId: (ccid) => [callA, callB].find((c) => c.callControlId === ccid) || null,
-    budgetExceeded: () => false,
+    // KS-P2: der Shim fragt die Live-Achse; dieser Test misst das Rate-Fenster, nicht
+    // Geld -> Achse frei (Muster wie fakeStore oben).
+    activeOutboundCallsFor: () => [],
+    liveBudgetExceeded: () => false,
   };
   const agentTurn = agentTurnSpy();
   const config = fakeTelnyxShimConfig({ telnyxShimMaxTurnsPerMin: 1 });

@@ -71,7 +71,17 @@ export function fakeStore({ call, budgetExceeded = false } = {}) {
       getCallIds.push(id);
       return call && call.id === id ? call : null;
     },
-    budgetExceeded() {
+    // KS-P2: blockingBudgetAxis fragt die LIVE-Achse. Der Fake behaelt EINEN Schalter -
+    // budgetExceeded steht unveraendert fuer "die Geld-Achse sperrt", gleich ob der Anteil
+    // gebucht oder gerade laufend ist; die Aufteilung entscheidet keiner dieser Tests.
+    // activeOutboundCallsFor liefert den geseedeten Call bewusst ECHT (nicht []), damit
+    // liveVoiceSpendCents auf der Fixture wirklich laeuft und ein Wurf dort auffaellt.
+    activeOutboundCallsFor(tenantId) {
+      return call && call.tenantId === tenantId && call.status === "active" && call.direction === "outbound"
+        ? [call]
+        : [];
+    },
+    liveBudgetExceeded() {
       return budgetExceeded;
     },
     finishCall(c) {
@@ -118,6 +128,16 @@ export function makeCall(overrides = {}) {
     provider: "telnyx",
     callControlId: "cc_1",
     status: "active",
+    // KS-P2: der Live-Term braucht Richtung, Zeitanker und BEIDE Nummern (der Minutensatz
+    // haengt an Ziel UND Herkunft, isDomesticLeg). Ohne diese Felder liefe jeder
+    // Bestandstest zufaellig ueber NaN-Arithmetik statt kontrolliert durch die neue
+    // Pruefung. answeredAt bewusst gesetzt (nicht null): ein realer Shim-Turn existiert
+    // nur auf einem abgenommenen Leg.
+    direction: "outbound",
+    from: "+15005550006",
+    to: "+4915112345678",
+    startedAt: new Date().toISOString(),
+    answeredAt: new Date().toISOString(),
     ...overrides,
   };
 }

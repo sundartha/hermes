@@ -114,7 +114,9 @@ test("K0-5: zwei verschiedene Calls im selben Shim fuehren eigene turnSeq-Reihen
   const store = {
     getCallByControlId: (ccid) => [callA, callB].find((c) => c.callControlId === ccid) || null,
     getCall: (id) => [callA, callB].find((c) => c.id === id) || null,
-    budgetExceeded: () => false,
+    // KS-P2: der Shim fragt die Live-Achse; K0-5 misst turnSeq, nicht Geld -> Achse frei.
+    activeOutboundCallsFor: () => [],
+    liveBudgetExceeded: () => false,
   };
   const voiceControl = () => ({ endCallViaCallControl: async () => {} });
   const agentTurn = agentTurnSpy();

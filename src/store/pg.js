@@ -356,6 +356,14 @@ export function makePgStore(runner) {
     // (P7, Muster trackUsage): die Fassaden-Signatur bleibt unveraendert.
     budgetExceeded: (tenantId, cfg) =>
       ops.budgetExceeded(requireState(), tenantId, cfg, new Date().toISOString()),
+    // KS-P2: Live-Variante von budgetExceeded (Mid-Call-Pruefung). Wrapper-Parity zu json.js.
+    liveBudgetExceeded: (tenantId, liveCents, cfg) =>
+      ops.liveBudgetExceeded(requireState(), tenantId, liveCents, cfg, new Date().toISOString()),
+    // KS-P2: Basis des Live-Terms. Spiegel-Scan wie getCall, kein RLS/withClient-Sonderpfad.
+    // GRENZE (dieselbe wie getCallByControlId): ein Leg, das eine ANDERE Instanz nach unserer
+    // hydrate() angelegt hat, fehlt im Spiegel und faellt aus der Summe - der Live-Term
+    // unterzaehlt dann, er ueberzaehlt nie.
+    activeOutboundCallsFor: (tenantId) => ops.activeOutboundCallsFor(requireState(), tenantId),
     // Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
