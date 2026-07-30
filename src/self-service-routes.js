@@ -40,7 +40,7 @@ import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 // Tenant (provision-trigger.js) - EIN Ort statt einer dritten, abweichenden Inline-Kopie.
 import { resolveNumberCountry } from "./geo/resolve.js";
 import { isKnownPlanSlug } from "./plans.js";
-import { quotaView } from "./billing/meter.js";
+import { tenantQuotaView } from "./billing/meter.js";
 // P14: die Rueckkehr-Ziele nach Stripe Checkout kommen aus der EINEN Quelle
 // (src/portal-paths.js) - dieselbe Konstante nutzt src/routes/api-billing.js fuer
 // seine cancelUrl (frueher ein zweites, driftfaehiges Inline-Literal, G5).
@@ -73,24 +73,15 @@ function maskPrivateNumber(e164) {
 // die Browser-View). Reine Praesentation.
 function paymentView(store, config, tenant) {
   if (!config.billing.paymentEnabled) return {};
-  const { planSlug, currentPeriodStart, currentPeriodEnd, periodCreditRevoked } =
-    store.tenantSubscription(tenant);
+  const { planSlug, currentPeriodEnd } = store.tenantSubscription(tenant);
   return {
     hasCard: hasCardOnFile(store.tenantStripe(tenant)),
     subscription: { planSlug, currentPeriodEnd },
-    // BK4/B3: abgeleitetes Minuten-Kontingent des laufenden Zeitraums. DERSELBE
-    // Periodenanker (currentPeriodStart bevorzugt) + dasselbe Erschoepfungs-Praedikat
-    // wie das Outbound-Gate -> Anzeige == durchgesetztes Gate (kein "Rest X, trotzdem
-    // geblockt"). Kein Abo -> null (UI: Leerzustand). store.load() = der Ledger-State.
-    // GAP-03: periodCreditRevoked (Rueckerstattung) zeigt dieselben 0 inkludierten Minuten
-    // wie das Gate (includedMinutesFor, EINE Quelle, billing/plan-caps.js).
-    quota: quotaView(store.load(), {
-      tenantId: tenant,
-      planSlug,
-      currentPeriodStart,
-      currentPeriodEnd,
-      periodCreditRevoked,
-    }),
+    // BK4/B3 (Kommentar-Bestand bleibt) ... KS-P8: die Zusammenstellung der quotaView-
+    // Argumente liegt seit dieser Phase EINMAL in billing/meter.js (tenantQuotaView) -
+    // /api/state braucht dieselbe Sicht, und zwei Kopien der Destrukturierung wuerden
+    // driften (G5). Rueckgabewert byte-identisch zum Bestand.
+    quota: tenantQuotaView(store, tenant),
   };
 }
 

@@ -1,16 +1,20 @@
-// P5a (Achsen in Anzeige/Ablehnung getrennt): /api/state.usage traegt seit dieser Phase
-// tenantCapEur (die EIGENE Tenant-Decke) statt maxBudgetEur (der globale Plattform-Cap).
-// P5b (diese Datei): drei weitere TENANT-EIGENE Felder kommen dazu - der Spend-Monat-
-// Verbrauch (spendMonthCostEur, ueber die nebeneffektfreie Leseprojektion
-// spendMonthUsageCents aus P4), der zugehoerige Monatsschluessel (spendMonthKey) und die
-// eigene In-Flight-Reserve (reservedEur). Muster test/api-read-parity.test.js:
-// makeReadRoutes isoliert (Mock-Store, Fake-Config, Fake-Tenant-Resolver), kein
-// Server-Spawn, kein Netz.
+// P5a (Achsen in Anzeige/Ablehnung getrennt): /api/state.usage trug tenantCapEur (die
+// EIGENE Tenant-Decke) statt maxBudgetEur (der globale Plattform-Cap). P5b fuegte drei
+// weitere TENANT-EIGENE Geldfelder hinzu (spendMonthCostEur/spendMonthKey/reservedEur).
 //
-// Der Plattform-Cap (config.platformSpendCapCents) steht hier BEWUSST weit vom
-// Tenant-Cap (tenantBudgetSnapshot) entfernt (7.79 EUR vs. 10 EUR) - jede versehentliche
-// Ableitung aus dem globalen Cap statt aus dem injizierten Snapshot waere sofort sichtbar
-// (Wert UND Text unterscheiden sich).
+// KS-P8 (E4, diese Datei): der Kunde kauft Minuten, keine Euro - ALLE fuenf Geldfelder
+// entfallen ERSATZLOS (kein Schluessel-behalten-Bedeutung-wechseln, dieselbe harte
+// Migration wie maxBudgetEur -> tenantCapEur in P5a). An ihrer Stelle steht EIN Wert:
+// planUsagePercent, der Anteil der verbrauchten Plan-Minuten in Prozent (billing/meter.js,
+// EINE Quelle mit dem Minuten-Gate). Die reine Minuten-Ableitung selbst (Rollover-
+// Semantik von spendMonthUsageCents/spendMonthWindowKey) ist Subjekt der Spend-Monat-Achse,
+// nicht dieser API-Kante, und bleibt auf Unit-Ebene gepinnt in
+// test/usage-spend-month-axis.test.js und test/ks-p5-current-period-credits.test.js -
+// diese Datei prueft nur noch, dass KEIN Geldbetrag mehr an der API-Kante erscheint und
+// dass die Leseprojektion weiterhin nebeneffektfrei bleibt.
+//
+// Muster test/api-read-parity.test.js: makeReadRoutes isoliert (Mock-Store, Fake-Config,
+// Fake-Tenant-Resolver), kein Server-Spawn, kein Netz.
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -20,18 +24,20 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const PLATFORM_CAP_EUR_TEXT = "7.79"; // config.platformSpendCapCents = 779 Cent
 
-// usageOf ist per Test ueberschreibbar (Rollover-/Zukunfts-/Reserve-Faelle unten),
-// deshalb Parameter statt fest verdrahtetem Bucket (F1: ein Argument, keine
-// Duplizierung der uebrigen Mock-Methoden).
+// usageOf ist per Test ueberschreibbar, deshalb Parameter statt fest verdrahtetem Bucket
+// (F1: ein Argument, keine Duplizierung der uebrigen Mock-Methoden).
 function makeMockStore(bucket = { inputTokens: 5, outputTokens: 7, costCents: 350, calls: 3 }) {
   return {
-    load: () => ({ calls: [], actionItems: [], notifications: [], numbers: [] }),
+    load: () => ({ calls: [], actionItems: [], notifications: [], numbers: [], usageEvents: [] }),
     tenantContext: () => ({ settings: {}, ownerName: "Jonas" }),
     usageOf: () => bucket,
-    // Tenant-Achse: Cap 1000 ct (10 EUR) - unabhaengig vom Plattform-Cap unten.
-    tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),
-    // Eigene In-Flight-Reserve (P5b): 60 Cent, unabhaengig von costCents/spendMonth.
-    reservationOf: () => 60,
+    // KS-P8: kein Abo hinterlegt -> tenantQuotaView() liefert null -> planUsagePercent null.
+    tenantSubscription: () => ({
+      planSlug: null,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      periodCreditRevoked: false,
+    }),
     getCalendar: () => [],
   };
 }
@@ -41,7 +47,7 @@ function makeConfig() {
     multiTenant: false,
     claudeModel: "claude-haiku-4-5",
     voiceEngine: "budget",
-    platformSpendCapCents: 779, // != tenantCapEur (1000 ct) - beweist die getrennte Achse
+    platformSpendCapCents: 779, // != irgendein Tenant-Feld - beweist die getrennte Achse
   });
 }
 
@@ -53,8 +59,8 @@ function makeTenant() {
   };
 }
 
-// store ist per Test ueberschreibbar (T1/T2/T4 brauchen eigene Buckets/Spies),
-// Default deckt den unveraenderten Bestandsfall ab (F1: ein Argument).
+// store ist per Test ueberschreibbar, Default deckt den unveraenderten Bestandsfall ab
+// (F1: ein Argument).
 async function mount(store = makeMockStore()) {
   const app = express();
   app.use(express.json());
@@ -66,30 +72,22 @@ async function mount(store = makeMockStore()) {
   return { base, stop: () => new Promise((r) => server.close(r)) };
 }
 
-// T5 (Bestandstest erweitert): die Whitelist beweist weiterhin, dass kein Plattform-
-// Wert in der Tenant-Usage-Projektion landet - jetzt mit den drei P5b-Feldern.
-test("GET /api/state usage: tenantCapEur ersetzt maxBudgetEur ersatzlos, kein Plattform-Leck", async () => {
+// T5 (Bestandstest, KS-P8 aktualisiert): die Whitelist beweist weiterhin, dass kein
+// Plattform-Wert in der Tenant-Usage-Projektion landet - jetzt mit GENAU vier Feldern,
+// keinem Geldbetrag mehr.
+test("GET /api/state usage: planUsagePercent ersetzt alle Geldfelder ersatzlos, kein Plattform-Leck", async () => {
   const srv = await mount();
   try {
     const res = await fetch(`${srv.base}/api/state`);
     assert.equal(res.status, 200);
     const body = await res.json();
 
-    assert.equal(body.usage.tenantCapEur, 10, "1000 Cent Tenant-Cap -> 10 EUR");
+    assert.equal(body.usage.planUsagePercent, null, "kein Abo hinterlegt -> null, nie 0 %");
     assert.ok(!("maxBudgetEur" in body.usage), "maxBudgetEur entfaellt ersatzlos (harte Migration)");
     assert.deepEqual(
       Object.keys(body.usage).sort(),
-      [
-        "calls",
-        "costEur",
-        "inputTokens",
-        "outputTokens",
-        "reservedEur",
-        "spendMonthCostEur",
-        "spendMonthKey",
-        "tenantCapEur",
-      ],
-      "Whitelist beweist: keine Plattform-Groesse in der Usage-Projektion",
+      ["calls", "inputTokens", "outputTokens", "planUsagePercent"],
+      "Whitelist beweist: keine Plattform-Groesse, kein Geldfeld in der Usage-Projektion",
     );
     assert.ok(
       !JSON.stringify(body.usage).includes(PLATFORM_CAP_EUR_TEXT),
@@ -102,76 +100,9 @@ test("GET /api/state usage: tenantCapEur ersetzt maxBudgetEur ersatzlos, kein Pl
   }
 });
 
-// T3: die EIGENE In-Flight-Reserve (reservationOf -> reservationFor), unabhaengig von
-// costCents/spendMonth - eigener Test statt Nebenassertion, damit ein kuenftiger
-// Reserve-Regressions-Fund hier genau EINE rote Zeile erzeugt (keine Vermischung mit
-// der Whitelist-Pruefung oben).
-test("GET /api/state usage: reservedEur aus der eigenen In-Flight-Reserve", async () => {
-  const srv = await mount();
-  try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
-    assert.equal(body.usage.reservedEur, 0.6, "60 Cent eigene In-Flight-Reserve -> 0.6 EUR");
-  } finally {
-    await srv.stop();
-  }
-});
-
-// T1 (ROT-VOR-FIX): Bucket traegt den Schluessel des VORMONATS (zeit-unabhaengig weit
-// in der Vergangenheit, s. F.I.R.S.T. "Repeatable") -> die Leseprojektion muss den
-// Rollover zeigen (0), OHNE den Lebenszeitwert (costEur) daneben zu verfaelschen, und
-// MUSS das laufende Fenster anzeigen, nie den veralteten Bucket-Stempel.
-test("GET /api/state usage: Rollover - spendMonthCostEur=0, costEur bleibt Lebenszeitwert, Fenster ist das laufende", async () => {
-  const bucket = {
-    inputTokens: 5,
-    outputTokens: 7,
-    costCents: 350,
-    calls: 3,
-    spendMonthKey: "2020-01",
-    spendMonthCostCents: 500,
-  };
-  const srv = await mount(makeMockStore(bucket));
-  try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
-
-    assert.equal(body.usage.spendMonthCostEur, 0, "Rollover -> 0");
-    assert.equal(body.usage.costEur, 3.5, "Lebenszeit unveraendert daneben");
-    assert.notEqual(
-      body.usage.spendMonthKey,
-      "2020-01",
-      "angezeigt wird das LAUFENDE Fenster, nie der veraltete Bucket-Stempel",
-    );
-    assert.match(body.usage.spendMonthKey, /^\d{4}-\d{2}$/);
-  } finally {
-    await srv.stop();
-  }
-});
-
-// T2 (Gegentest, zeit-unabhaengig): ein Schluessel in der ZUKUNFT gewinnt ueber den
-// Monotonie-Riegel - die Projektion misst dieses Fenster und liefert den vollen Wert.
-test("GET /api/state usage: laufendes (zukuenftiges) Fenster liefert den vollen Wert", async () => {
-  const bucket = {
-    inputTokens: 5,
-    outputTokens: 7,
-    costCents: 350,
-    calls: 3,
-    spendMonthKey: "2099-12",
-    spendMonthCostCents: 500,
-  };
-  const srv = await mount(makeMockStore(bucket));
-  try {
-    const body = await (await fetch(`${srv.base}/api/state`)).json();
-
-    assert.equal(body.usage.spendMonthCostEur, 5);
-    assert.equal(body.usage.spendMonthKey, "2099-12");
-  } finally {
-    await srv.stop();
-  }
-});
-
-// T4 (Vorgabe 2, ausfuehrbar): die Projektion darf den Bucket NICHT anlegen, NICHT
-// stempeln, NICHT inkrementieren. Vormonats-Schluessel = genau der Zustand, in dem ein
-// Rollover an der Lesekante feuern wuerde. Zwei Polls, weil /api/state gepollt wird und
-// ein Einmal-Effekt sonst durchrutschen koennte.
+// T4 (Vorgabe 2, ausfuehrbar, KS-P8 uebernommen): die Projektion darf den Bucket NICHT
+// anlegen, NICHT stempeln, NICHT inkrementieren. Zwei Polls, weil /api/state gepollt
+// wird und ein Einmal-Effekt sonst durchrutschen koennte.
 test("GET /api/state usage: reine Leseprojektion - Bucket bleibt byte-identisch, kein save()", async () => {
   const bucket = {
     inputTokens: 5,

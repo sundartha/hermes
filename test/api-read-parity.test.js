@@ -54,8 +54,20 @@ function makeMockStore({ listSize = 1 } = {}) {
       numbers: [
         { tenantId: BOOTSTRAP_TENANT_ID, e164: "+4915200000001", status: NUMBER_STATUS.ACTIVE },
       ],
+      // KS-P8: tenantQuotaView liest s.usageEvents (ueber quotaView -> planMinutesExceeded/
+      // voiceMinutesUsedSince) - leer genuegt, da tenantSubscription unten kein Abo traegt
+      // (Plan-Zweig endet vor dem Ledger-Zugriff), aber die Fassade bleibt vollstaendig.
+      usageEvents: [],
     }),
     tenantContext: () => ({ settings: { greeting: "hi" }, ownerName: "Jonas" }),
+    // KS-P8: kein Abo hinterlegt -> tenantQuotaView() liefert null -> usage.planUsagePercent
+    // ist null (D1, fail-closed statt 0 %).
+    tenantSubscription: () => ({
+      planSlug: null,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      periodCreditRevoked: false,
+    }),
     // Flag-an-Pfad: tenant-gescopte Listen. calls nach tenantId gefiltert.
     exportTenantData: (t) => ({
       calls: calls.filter((c) => c.tenantId === t),
@@ -142,10 +154,11 @@ test("GET /api/state (Flag aus, Owner-Sicht): Bestandskontrakt + R3.1 + R3.2", a
     // Flag aus -> ungefilterte Bestandsliste (beide Calls), durch publicCall.
     assert.equal(body.calls.length, 2);
     assertNoStreamToken(body, "/api/state"); // R3.1
-    assert.equal(body.usage.tenantCapEur, 10);
-    // P1: costEur wird an DIESER Kante aus costCents abgeleitet (200 Cents -> 2.00 EUR);
-    // die internen Felder costCents/costMicroCentsRem verlassen die API NICHT (Whitelist).
-    assert.equal(body.usage.costEur, 2);
+    // KS-P8: kein Kostenbetrag mehr in der Tenant-Projektion - kein Abo hinterlegt ->
+    // planUsagePercent null (fail-closed, D1).
+    assert.equal(body.usage.planUsagePercent, null);
+    assert.ok(!("tenantCapEur" in body.usage), "tenantCapEur entfaellt ersatzlos (KS-P8)");
+    assert.ok(!("costEur" in body.usage), "costEur entfaellt ersatzlos (KS-P8)");
     assert.equal(body.usage.calls, 3);
     assert.ok(!("costCents" in body.usage), "costCents ist intern, kein API-Leak");
     assert.ok(!("costMicroCentsRem" in body.usage), "costMicroCentsRem ist intern, kein API-Leak");

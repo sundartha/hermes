@@ -109,3 +109,43 @@ export function quotaView(
   const remainingMinutes = exhausted ? 0 : Math.max(0, includedMinutes - usedMinutes);
   return { includedMinutes, usedMinutes, remainingMinutes, exhausted };
 }
+
+// ---- KS-P8 (E4): der Nutzer sieht Prozent, nie Euro -------------------------------
+// Argument-Zusammenstellung des Minuten-Kontingents aus der Store-Fassade: EINE Stelle,
+// an der Abo-Felder + Ledger-State fuer quotaView zusammenkommen (G5) - sie speist die
+// Self-Service-Sicht UND die /api/state-Projektion. store kommt als ARGUMENT herein
+// (DIP, Muster upcomingCalendar in store/views.js), wird NICHT importiert: derselbe
+// Aufruf laeuft gegen das globale Backend und gegen einen injizierten Test-Store.
+// Reiner Read (kein save, keine Mutation).
+export function tenantQuotaView(store, tenantId) {
+  const { planSlug, currentPeriodStart, currentPeriodEnd, periodCreditRevoked } =
+    store.tenantSubscription(tenantId);
+  return quotaView(store.load(), {
+    tenantId,
+    planSlug,
+    currentPeriodStart,
+    currentPeriodEnd,
+    periodCreditRevoked,
+  });
+}
+
+// Voller Verbrauch = 100 Prozent (G25: benannt, nicht dreimal nackt im Ausdruck).
+const FULL_PERCENT = 100;
+
+// Anteil der verbrauchten Plan-Minuten in GANZEN Prozent - die EINE Groesse, die der
+// Nutzer statt eines Geldbetrags sieht (Owner-Entscheidung E4: der Kunde kauft Minuten,
+// keine Euro). Fail-closed:
+//   kein Kontingent hinterlegt (quotaView -> null) -> null, NIE 0 % (ein Prozentwert
+//     ohne Bezugsgroesse behauptet ein Kontingent, das es nicht gibt),
+//   erschoepft -> 100 %. exhausted IST das durchgesetzte Gate-Praedikat
+//     (planMinutesExceeded), inkl. fehlendem Periodenanker und widerrufenem
+//     Periodenguthaben (includedMinutes 0) - Anzeige == Gate bleibt gewahrt.
+// floor statt round: so bedeutet 100 % genau "erschoepft" und nie "fast erschoepft,
+// aber das Gate laesst noch durch". Der Divisor ist im letzten Zweig zwingend > 0
+// (exhausted=false heisst usedMinutes < includedMinutes bei endlichem includedMinutes).
+// Reine Funktion.
+export function planUsagePercent(quota) {
+  if (!quota) return null;
+  if (quota.exhausted) return FULL_PERCENT;
+  return Math.floor((quota.usedMinutes / quota.includedMinutes) * FULL_PERCENT);
+}
