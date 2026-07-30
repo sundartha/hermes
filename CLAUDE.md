@@ -72,10 +72,13 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
    erzeugt keine Carrier-Kosten; DID-Vermehrung deckeln `MAX_NUMBERS` (plattformweit) und
    `MAX_NUMBERS_PER_TENANT`. Der bewusste Notaus bleibt `OUTBOUND_FROZEN`.
 
-   **Owner-Entscheidung 2026-07-30 (E11): ein erschoepftes Budget darf INBOUND niemals sperren**
-   und niemals ein laufendes Inbound-Gespraech aufzulegen (KS-P10). Inbound bucht heute nichts —
-   die Abweisung spart keinen Cent und nimmt dem Kunden die Kernfunktion. Fuer Outbound bleibt
-   die Sperrwirkung der Tenant-Decke unangetastet.
+   Die pro-Tenant-Kostendecke sperrt weiterhin BEIDE Richtungen, Inbound eingeschlossen. Eine
+   Lockerung fuer Inbound war 2026-07-30 vorgeschlagen (E11) und ist **zurueckgezogen**: die
+   Begruendung war falsch. Ein Inbound-Gespraech ist nicht kostenlos — die KI-Token werden in
+   jeder Schleifenrunde live auf genau die Achse gebucht, die `budgetExceeded` liest
+   (`claude.js:659/:775` -> `llm-usage.js:66` -> `bookCents`). Ohne dieses Gate kann eingehender
+   Verkehr die Tenant-Decke unbegrenzt ueberziehen. Nicht ohne ausdrueckliche Owner-Entscheidung
+   anfassen.
 2. **OFFENLEGUNG**: Der Offenlegungssatz bei Outbound-Calls (`disclosureSentence`) bleibt fest verdrahtet als allererster Satz — kein KI-Ermessen, kein Setting, das ihn abschaltet.
 3. **AUTH FAIL-CLOSED**: Neue Endpunkte sind standardmaessig hinter Basic-Auth; Ausnahmen (wie `/voice`, `/mcp`, `/healthz`) brauchen eine eigene Absicherung und eine Begruendung im Code-Kommentar. Credential-Vergleiche timing-sicher (`safeEqual`).
 4. **SECRETS**: Nur ueber `.env` (lokal) bzw. Render-Dashboard. Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.

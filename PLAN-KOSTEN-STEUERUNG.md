@@ -252,9 +252,9 @@ nicht ueber die Uhr; **KS-P8** (Prozent statt Euro fuer den Nutzer) kommt ans En
 KS-P0  (erledigt, Env)
 KS-P1  (erledigt, Messung)
    |
-KS-P9  Plattform-Achse: Gate -> Beobachtung   <- E10, NEU: Vorbedingung von KS-P5a
-KS-P5a Starter-Bug            <- E5, vorgezogen: Geldpfad gegenueber zahlenden Kunden
-KS-P10 Inbound nie budget-gesperrt            <- E11, NEU
+KS-P9  Plattform-Achse: Gate -> Beobachtung   <- E10, ERLEDIGT (Merge 5667589)
+KS-P5a Starter-Bug            <- E5, ERLEDIGT (Merge 00d480c)
+KS-P10 Inbound-Sperre         <- ZURUECKGEZOGEN, nicht bauen (E11 zurueckgezogen)
 KS-P6  Tarif-Fallback         <- Vorbedingung von KS-P3 (sonst Boot-Refusal)
 KS-P2  Live-Verbrauch         <- die Wurzelbehebung
 KS-P4  Anzeige an Gate-Achse  <- macht die Ablehnungsmeldung ehrlich
@@ -412,10 +412,20 @@ sie nicht.
 **PLAN-SECURITY.md:** die entfallene Achse mit Begruendung und mit den Gegen-Gates (Abo+KYC,
 `MAX_NUMBERS`, `OUTBOUND_FROZEN`) eintragen.
 
-### KS-P10 — Inbound wird nie budget-gesperrt (NEU, E11)
+### KS-P10 — Inbound-Sperre (ZURUECKGEZOGEN, NICHT umsetzen)
 
-**Owner-Entscheidung 2026-07-30.** Ein erschoepftes Budget darf einen Inbound-Anruf weder
-abweisen noch ein laufendes Inbound-Gespraech beenden.
+**Status 2026-07-30: diese Phase ist gestoppt und darf nicht gebaut werden**, bis der Owner
+sie ausdruecklich und in eigenen Worten beauftragt. Sie beruhte auf E11, und E11 ist
+zurueckgezogen — die Lockerung war mein Vorschlag, nicht die Entscheidung des Owners, und die
+Begruendung darunter ist am Code falsch (s. E11-Zeile in der Entscheidungstabelle: die
+KI-Token eines Inbound-Gespraechs werden live auf die Gate-Achse gebucht, die Abweisung spart
+also sehr wohl Geld).
+
+Der Abschnitt bleibt als Befund stehen, weil die beschriebene harte Kante real ist — was daraus
+folgen soll, ist offen.
+
+**Urspruengliche Formulierung (nicht beauftragt):** Ein erschoepftes Budget darf einen
+Inbound-Anruf weder abweisen noch ein laufendes Inbound-Gespraech beenden.
 
 **Befund, am Code belegt (2026-07-30):** `voice.js:256` weist Inbound ab, sobald EINE der beiden
 Achsen erschoepft ist (`store.budgetExceeded(...) || store.globalBudgetExceeded(...)`), mit Hangup
@@ -1043,7 +1053,7 @@ KS-P5 zusaetzlich oeffnet.
 | **E6** | Die Plattform-Achse bleibt mid-call **vorlaeufig blind**. | benanntes Restrisiko mit Zahl, s. TOD 11. |
 | **E8** | **Die Zeit-Notbremse ist keine feste Zahl, sondern leitet sich vom Restguthaben ab:** `Notbremse = Restminuten + 1 Minute Puffer`, gedeckelt durch eine absolute Obergrenze. | Der Schaden eines haengenden Anrufs ist damit immer proportional zum Guthaben statt auf eine willkuerliche Zahl gedeckelt; im Normalbetrieb greift sie nie, weil der Live-Zaehler frueher bindet. Umgesetzt in KS-P3 (b), Neuberechnung beim Re-Attach in KS-P1b. |
 | **E10** | **`MAX_BUDGET_EUR` ist kein Gate mehr.** Die Plattform-Achse wird Beobachtung + Warnung; die Sperrwirkung entfaellt. | Ein statischer geteilter Topf kann "wir wachsen" nicht von "etwas ist kaputt" unterscheiden und muesste bei jedem Wachstumsschritt von Hand nachgezogen werden. Der Weglauf-Fall ist an der richtigen Stelle gedeckt (Abo+KYC vor Outbound, `MAX_NUMBERS`, `OUTBOUND_FROZEN`) — am Code belegt. Neue Phase **KS-P9**, CLAUDE.md Regel 1 geaendert, **E9 entfaellt**, der KS-P5a-Blocker (D-1) loest sich auf. |
-| **E11** | **Ein erschoepftes Budget sperrt niemals Inbound** und legt nie ein laufendes Inbound-Gespraech auf. | Inbound bucht heute nichts — die Abweisung spart keinen Cent und nimmt dem Kunden die Kernfunktion. Neue Phase **KS-P10**. Outbound behaelt seine Sperrwirkung. |
+| **E11** | ~~Ein erschoepftes Budget sperrt niemals Inbound.~~ | **ZURUECKGEZOGEN 2026-07-30, nicht entschieden.** Zwei Fehler: (1) Der Owner hat diese Lockerung nie in eigenen Worten verlangt — sie war ein Vorschlag von mir und wurde faelschlich als getroffene Entscheidung ins Regelwerk geschrieben. (2) Die Begruendung "Inbound bucht nichts" ist falsch: sie gilt nur fuer Carrier-Minuten. Die KI-Token werden in JEDER Schleifenrunde live auf genau die Achse gebucht, die `budgetExceeded` liest (B3, `claude.js:659/:775`) — auch bei Inbound. Ein Inbound-Gespraech kostet also sehr wohl Geld auf der Gate-Achse, und ohne das Gate kann eingehender Verkehr die Tenant-Decke unbegrenzt ueberziehen. Die Frage bleibt offen (s. unten). |
 | **Prio** | **Kosten-Kette vor AL-Kette.** | AL-P7/P7b/P10b/P14/P15 warten; die AL-P2-Messung ist durch E1 wieder moeglich und laeuft nebenher. |
 | **Reste** | Aufraeumen, alle drei: Spike-Schalter aus master entfernen (`af4a66e`, ersatzlos — nicht "Flag auf 0"), Render-Dienst `hermes-spike-al-p2` (`srv-d9kt9bm1egvs738asd0g`) loeschen, Telnyx-App `AL-P2 Spike Silence` (`3014656686179747728`) loeschen. | eigene Aufraeum-Phase, ohne Code-Review-Zeremonie. |
 
