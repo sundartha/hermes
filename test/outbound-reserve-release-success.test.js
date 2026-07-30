@@ -21,8 +21,8 @@ test("OUT-05 F2: Erfolgs-Freigabe ueber finishCall gibt die Reserve frei", async
   const srv = await startServer({
     ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
-      // LCT P6: MAX_BUDGET_EUR muss echt ueber der abgeleiteten Business-Plan-Decke
-      // (900 ct) liegen, sonst verweigert der Boot-Guard (plan_cap_inert). Reserve pro
+      // MAX_BUDGET_EUR wirkt hier als Pro-Tenant-Fallback (effectiveCapCents Stufe 3 - der
+      // Owner hat keine tenant_budget-Zeile). Reserve pro
       // Call: 200 ct/min x ceil(180/60)=3 min = 600 ct; zwei Reserven (1200 ct) reissen
       // den 1000-ct-Cap, eine einzelne (600 ct) nicht.
       MAX_BUDGET_EUR: "10",

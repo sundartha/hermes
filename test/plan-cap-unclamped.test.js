@@ -1,12 +1,13 @@
-// LCT P6: zweite Linie der Plan-Cap-Ableitung (WARN-Klemme, kein Wurf auf dem
-// Geldpfad) + der Nachlese-Guard direkt (tenantCapRowInertFindings). pglite (F.I.R.S.T.).
+// KS-P9/E10: die Plan-Cap-Ableitung klemmt NICHT mehr auf die Plattform-Zahl. Diese Datei
+// pinnt genau das - die verkaufte Business-Decke (900 ct) bleibt stehen, auch wenn
+// MAX_BUDGET_EUR (jetzt nur noch Warnschwelle) darunter liegt. pglite (F.I.R.S.T.).
 //
-// process.env.MAX_BUDGET_EUR="5" (platformCap=500 ct) < abgeleitete Business-Decke
-// (900 ct) - GENAU der Fall, den der Clamp in deriveTenantBudgetFromPlan auffaengt.
-// KEIN Server-Boot in dieser Datei (die erste, FATALE Linie greift nur in src/boot.js) -
-// nur die Schreibkante (store.setTenantSubscription) wird direkt gerufen. Mechanik gegen
-// die Modul-Config-Falle: process.env VOR jedem Import, ausschliesslich dynamische
-// Imports in before() (Muster plan-cap-derivation.test.js).
+// process.env.MAX_BUDGET_EUR="5" (500 ct) < abgeleitete Business-Decke (900 ct) - GENAU der
+// Fall, den der Clamp frueher auffing und der seit KS-P9 folgenlos ist (sonst kuerzte eine
+// niedrig gesetzte Warnschwelle still verkaufte Leistung).
+// KEIN Server-Boot in dieser Datei - nur die Schreibkante (store.setTenantSubscription)
+// wird direkt gerufen. Mechanik gegen die Modul-Config-Falle: process.env VOR jedem Import,
+// ausschliesslich dynamische Imports in before() (Muster plan-cap-derivation.test.js).
 process.env.MAX_BUDGET_EUR = "5";
 process.env.VOICE_CAP_RATE_CENTS_PER_MIN = "6";
 
@@ -53,7 +54,7 @@ async function captureWarn(fn) {
   return lines;
 }
 
-test("(j2a) applyStripeWebhook ACTIVATE (business) laeuft vollstaendig durch, Decke geklemmt auf 500 (3x WARN, GAP-04-Marker)", async () => {
+test("(j2a) KS-P9: applyStripeWebhook ACTIVATE (business) laeuft durch, Decke bleibt 900 (KEINE Klemm-WARN)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_j2a";
   const s = store.load();
@@ -98,25 +99,14 @@ test("(j2a) applyStripeWebhook ACTIVATE (business) laeuft vollstaendig durch, De
   assert.deepEqual(provisionCalls, [tenantId], "Provisioning ausgeloest");
   assert.equal(
     store.tenantBudgetSnapshot(tenantId, config.billing).capCents,
-    500,
-    "auf platformSpendCapCents geklemmt (900 abgeleitet, 500 Cap)",
+    900,
+    "verkaufte Business-Decke ungekuerzt (KS-P9: keine Klemme auf die Plattform-Zahl)",
   );
-  // P4/GAP-03+GAP-04: activatePaidTenant patcht setTenantSubscription zusaetzlich zweimal
-  // fuer den Wartezustands-Marker (activationPending true dann false), UND applyStripeWebhook
-  // raeumt bei Erfolg reversibel auf (periodCreditRevoked:false) - jeder Patch laesst
-  // deriveTenantBudgetFromPlan erneut ableiten+klemmen -> 4 statt 1 Klemm-WARN (Webhook-
-  // Patch + 2x Marker + Reversibilitaets-Patch). Alle vier sind inhaltlich identisch
-  // (bewusst deterministisch).
   const clampLines = warnLines.filter((l) => l.includes("grund=clamp"));
-  assert.equal(clampLines.length, 4, `erwartet 4 Klemm-WARNs (GAP-03/GAP-04-Marker), war:\n${warnLines.join("\n")}`);
-  for (const line of clampLines) {
-    assert.match(line, /slug=business/);
-    assert.match(line, /abgeleitet=900/);
-    assert.match(line, /platformSpendCapCents=500/);
-  }
+  assert.deepEqual(clampLines, [], `keine Klemm-WARN mehr erwartet, war:\n${warnLines.join("\n")}`);
 });
 
-test("(j2b) Checkout-Return-Pfad (business) laeuft vollstaendig durch, Decke geklemmt auf 500 (3x WARN, GAP-04-Marker)", async () => {
+test("(j2b) KS-P9: Checkout-Return-Pfad (business) laeuft durch, Decke bleibt 900 (KEINE Klemm-WARN)", async () => {
   const { store } = await makeTestStore();
   const tenantId = "t_j2b";
   const s = store.load();
@@ -146,44 +136,20 @@ test("(j2b) Checkout-Return-Pfad (business) laeuft vollstaendig durch, Decke gek
   assert.equal(result.ok, true, "Checkout-Return-Pfad laeuft vollstaendig durch (kein Wurf)");
   assert.equal(store.tenantStripe(tenantId).paymentMethodId, "pm_j2b", "Karte via Fake gebunden");
   assert.deepEqual(provisionCalls, [tenantId], "Provisioning ausgeloest");
-  assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 500, "auf 500 geklemmt");
-  // P4/GAP-04: s. Kommentar in (j2a) - 3 statt 1 Klemm-WARN durch die zwei zusaetzlichen
-  // activationPending-Patches in activatePaidTenant.
+  assert.equal(store.tenantBudgetSnapshot(tenantId, config.billing).capCents, 900, "Decke ungekuerzt");
   const clampLines = warnLines.filter((l) => l.includes("grund=clamp"));
-  assert.equal(clampLines.length, 3, `erwartet 3 Klemm-WARNs (GAP-04-Marker), war:\n${warnLines.join("\n")}`);
+  assert.deepEqual(clampLines, [], `keine Klemm-WARN mehr erwartet, war:\n${warnLines.join("\n")}`);
 });
 
-// ---- (j3) Nachlese-Guard direkt (zweite Linie, reine Funktion) ----------------------
-
-test("(j3) tenantCapRowInertFindings: eine gesetzte Zeile >= platformCap -> genau EIN WARN-Finding", () => {
-  const findings = bootGuardMod.tenantCapRowInertFindings({
-    budgetRows: [{ tenantId: "x", hardCapCents: 900, budgetCents: 900 }],
-    platformCapCents: 500,
-  });
-  assert.equal(findings.length, 1);
-  assert.equal(findings[0].fatal, false);
-  assert.equal(findings[0].code, bootGuardMod.PLAN_CAP_FINDING.TENANT_CAP_ROW_INERT);
-  assert.match(findings[0].message, /platformSpendCapCents=500/);
-});
-
-test("(j3) tenantCapRowInertFindings: keine Zeile >= platformCap -> leer", () => {
-  const findings = bootGuardMod.tenantCapRowInertFindings({
-    budgetRows: [{ tenantId: "x", hardCapCents: 300, budgetCents: 300 }],
-    platformCapCents: 500,
-  });
-  assert.deepEqual(findings, []);
-});
-
-// ---- (j4) S1-2: planCapInertFindings faengt einen werfenden capForSlug (Katalog-Slug ohne
-// Kopffreiheit-Eintrag) und liefert ein fatal:true-Finding, statt selbst zu werfen -----------
+// ---- (j4) S1-2: planCapUnderivableFindings faengt einen werfenden capForSlug (Katalog-Slug
+// ohne Kopffreiheit-Eintrag) und liefert ein fatal:true-Finding, statt selbst zu werfen ------
 // Vor dem Fix waere der Wurf uncaught durch assertBootGates gelaufen und der Prozess LAUTLOS
 // mit exit(0) geendet (globales uncaughtException-Netz) - der fatale Guard versagte still.
-test("(j4) planCapInertFindings: werfender capForSlug -> fatal:true PLAN_CAP_UNDERIVABLE (kein Wurf)", () => {
+test("(j4) planCapUnderivableFindings: werfender capForSlug -> fatal:true PLAN_CAP_UNDERIVABLE (kein Wurf)", () => {
   let findings;
   assert.doesNotThrow(() => {
-    findings = bootGuardMod.planCapInertFindings({
+    findings = bootGuardMod.planCapUnderivableFindings({
       slugs: ["starter", "enterprise"], // 'enterprise' hat keinen Kopffreiheit-Eintrag -> planCapCents wirft
-      platformCapCents: 100000, // hoch genug, dass 'starter' NICHT inert ist -> isoliert den Wurf-Zweig
       capForSlug: (slug) => planCapThatThrows(slug),
     });
   });

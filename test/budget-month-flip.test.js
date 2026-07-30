@@ -1,8 +1,8 @@
-// P7 (PLAN-BUDGET-AXES): Der Flip - die vier Gate-Praedikate (budgetExceeded/
-// reserveExceedsBudget/globalBudgetExceeded/globalReserveExceedsBudget) lesen den
-// Verbrauch ueber die zwei Aufloesungsfunktionen gateUsageCents/gatePlatformUsageCents.
-// Hinter cfg.budgetMonthEnabled (Default AUS = Bestand): AN misst BEIDE Achsen im
-// UTC-Kalendermonat statt im Lebenszeit-Zaehler costCents.
+// P7 (PLAN-BUDGET-AXES): Der Flip - die Gate-Praedikate (budgetExceeded/
+// reserveExceedsBudget) lesen den Verbrauch ueber gateUsageCents, die
+// Plattform-BEOBACHTUNG (seit KS-P9 die einzige Verwendung der Plattform-Achse) ueber
+// gatePlatformUsageCents. Hinter cfg.budgetMonthEnabled (Default AUS = Bestand): AN misst
+// BEIDE Achsen im UTC-Kalendermonat statt im Lebenszeit-Zaehler costCents.
 //
 // Alle Faelle sind VOR der Implementierung rot: der Import von gateUsageCents/
 // gatePlatformUsageCents aus state-ops.js wirft (die Funktionen existieren noch nicht).
@@ -18,8 +18,7 @@ import {
   gateUsageCents,
   budgetExceeded,
   reserveExceedsBudget,
-  globalBudgetExceeded,
-  globalReserveExceedsBudget,
+  gatePlatformUsageCents,
   tryReserveOutboundBudget,
   claimPlatformSpendWarning,
 } from "../src/store/state-ops.js";
@@ -105,7 +104,7 @@ test("T4 Folgemonat: gateUsageCents startet bei 0, usageFor(...).costCents behae
 
 // ==== T5: beide Achsen schalten gemeinsam ===========================================
 
-test("T5 beide Achsen gemeinsam: alle vier Praedikate kippen zusammen zwischen Flag AUS und AN", () => {
+test("T5 beide Achsen gemeinsam: Gate-Praedikate und Plattform-Messung kippen zusammen zwischen Flag AUS und AN", () => {
   const s = stateWithUsage(TENANT_A, {
     costCents: 900, // Lebenszeit UEBER dem Cap (800)
     spendMonthKey: "2026-07",
@@ -123,14 +122,9 @@ test("T5 beide Achsen gemeinsam: alle vier Praedikate kippen zusammen zwischen F
     "reserveExceedsBudget muss zwischen den Flag-Zustaenden kippen",
   );
   assert.notEqual(
-    globalBudgetExceeded(s, FLAG_OFF, JULY_ISO),
-    globalBudgetExceeded(s, FLAG_ON, JULY_ISO),
-    "globalBudgetExceeded muss zwischen den Flag-Zustaenden kippen",
-  );
-  assert.notEqual(
-    globalReserveExceedsBudget(s, RESERVE, FLAG_OFF, JULY_ISO),
-    globalReserveExceedsBudget(s, RESERVE, FLAG_ON, JULY_ISO),
-    "globalReserveExceedsBudget muss zwischen den Flag-Zustaenden kippen",
+    gatePlatformUsageCents(s, FLAG_OFF, JULY_ISO),
+    gatePlatformUsageCents(s, FLAG_ON, JULY_ISO),
+    "die Plattform-Messung muss zwischen den Flag-Zustaenden kippen (Beobachtung, KS-P9)",
   );
 });
 
@@ -143,15 +137,6 @@ test("T6 D7-Reichweite Tenant: vergifteter Lebenszeit-Zaehler sperrt trotz gesun
     spendMonthCostCents: 100, // ohne den Quercheck waere das Gate hier faelschlich offen
   });
   assert.equal(budgetExceeded(s, TENANT_A, FLAG_ON, JULY_ISO), true);
-});
-
-test("T7 D7-Reichweite Plattform: vergiftete Lebenszeit-Summe sperrt trotz gesunder Monatssumme (Flag AN)", () => {
-  const s = stateWithUsage(TENANT_A, {
-    costCents: NaN,
-    spendMonthKey: "2026-07",
-    spendMonthCostCents: 100,
-  });
-  assert.equal(globalBudgetExceeded(s, FLAG_ON, JULY_ISO), true);
 });
 
 test("T8 D7 auf der Monats-Achse: vergiftete Monatszahl sperrt statt fail-open (Flag AN)", () => {
@@ -190,7 +175,7 @@ test("T8b Log-Feld-Label (Review-Blocker Runde 1, P8/G2): das Deny-Log benennt d
 
 // ==== T9: Achsen-Zuordnung ===========================================================
 
-test("T9 Achsen-Zuordnung: Tenant-Praedikate lesen gateUsageCents, Plattform-Praedikate gatePlatformUsageCents", () => {
+test("T9 Achsen-Zuordnung: Tenant-Praedikate lesen gateUsageCents, die Plattform-Messung gatePlatformUsageCents", () => {
   const s = makeDefaultState();
   // Lebenszeit- und Monatszahl bewusst GEGENLAEUFIG (nicht nur eine Achse hoch, die andere
   // niedrig): so kann ein Regress, der die Aufloesung durch den rohen Lebenszeit-Zaehler
@@ -203,9 +188,9 @@ test("T9 Achsen-Zuordnung: Tenant-Praedikate lesen gateUsageCents, Plattform-Pra
     "Tenant A ist im laufenden Monat bei 0 - nur die Lebenszeit-Zahl (900) waere ueber dem Cap",
   );
   assert.equal(
-    globalBudgetExceeded(s, FLAG_ON, JULY_ISO),
-    true,
-    "die Plattform-Monatssumme (A 0 + B 900) liegt ueber dem Cap, obwohl Tenant A selbst frei ist",
+    gatePlatformUsageCents(s, FLAG_ON, JULY_ISO),
+    900,
+    "die Plattform-Messung summiert die MONATS-Zahlen (A 0 + B 900), obwohl Tenant A selbst frei ist",
   );
 });
 
@@ -240,19 +225,15 @@ test("T10 Instrumentierung: jedes Praedikat loest GENAU EINE Aufloesung aus (bei
     reserveExceedsBudget(s, TENANT_A, 5, reserveExceedsBudgetRead.cfg, JULY_ISO);
     assert.equal(reserveExceedsBudgetRead.reads.count, 1, `reserveExceedsBudget, flag=${flagValue}`);
 
-    const globalBudgetExceededRead = countingCfg(flagValue);
-    globalBudgetExceeded(s, globalBudgetExceededRead.cfg, JULY_ISO);
-    assert.equal(globalBudgetExceededRead.reads.count, 1, `globalBudgetExceeded, flag=${flagValue}`);
+    const platformUsageRead = countingCfg(flagValue);
+    gatePlatformUsageCents(s, platformUsageRead.cfg, JULY_ISO);
+    assert.equal(platformUsageRead.reads.count, 1, `gatePlatformUsageCents, flag=${flagValue}`);
 
-    const globalReserveExceedsBudgetRead = countingCfg(flagValue);
-    globalReserveExceedsBudget(s, 5, globalReserveExceedsBudgetRead.cfg, JULY_ISO);
-    assert.equal(globalReserveExceedsBudgetRead.reads.count, 1, `globalReserveExceedsBudget, flag=${flagValue}`);
-
-    // tryReserveOutboundBudget ruft reserveExceedsBudget UND globalReserveExceedsBudget -
-    // also GENAU EINE Aufloesung je Achse, keine dritte.
+    // tryReserveOutboundBudget ruft seit KS-P9 nur noch reserveExceedsBudget - also GENAU
+    // EINE Aufloesung, keine zweite.
     const tryReserveRead = countingCfg(flagValue);
     tryReserveOutboundBudget(s, TENANT_A, 5, tryReserveRead.cfg, JULY_ISO);
-    assert.equal(tryReserveRead.reads.count, 2, `tryReserveOutboundBudget, flag=${flagValue}`);
+    assert.equal(tryReserveRead.reads.count, 1, `tryReserveOutboundBudget, flag=${flagValue}`);
   }
 });
 
@@ -267,7 +248,7 @@ test("T11 Zaehler-Fundament: 'budgetMonthEnabled' kommt in state-ops.js GENAU ZW
   );
 });
 
-// ==== T12-T13: Quelltext-Invarianten der vier Praedikate + der Reserve-Funktion =====
+// ==== T12-T13: Quelltext-Invarianten der Gate-Praedikate + der Reserve-Funktion =====
 
 // Extrahiert den Funktionsrumpf zwischen der Signatur und der ERSTEN Top-Level-
 // schliessenden Klammer (eigene Zeile) - Muster test/platform-spend-warning.test.js T15.
@@ -282,14 +263,9 @@ function functionBody(source, name) {
   return source.slice(bodyStart, bodyEnd);
 }
 
-test("T12 Quelltext: die vier Gate-Praedikate lesen 'costCents' nie direkt (die Aufloesung ist Pflicht)", () => {
+test("T12 Quelltext: die zwei Gate-Praedikate lesen 'costCents' nie direkt (die Aufloesung ist Pflicht)", () => {
   const source = sourceOf("../src/store/state-ops.js");
-  for (const name of [
-    "budgetExceeded",
-    "reserveExceedsBudget",
-    "globalBudgetExceeded",
-    "globalReserveExceedsBudget",
-  ]) {
+  for (const name of ["budgetExceeded", "reserveExceedsBudget"]) {
     const body = functionBody(source, name);
     assert.ok(
       !body.includes("costCents"),

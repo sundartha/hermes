@@ -275,8 +275,8 @@ test("Gate 12 Minuten: erschoepftes Plan-Kontingent blockt auch mit Flag an (402
 
 // ---- Gate 13: Reserve (Muster outbound-reserve-gate.test.js) ----
 test("Gate 13 Reserve: Worst-Case-Reserve > Cap blockt auch mit Flag an (402)", async () => {
-  // LCT P6: MAX_BUDGET_EUR muss echt ueber der abgeleiteten Business-Plan-Decke (900 ct)
-  // liegen, sonst verweigert der Boot-Guard (plan_cap_inert). 10 EUR = 1000 ct Cap;
+  // MAX_BUDGET_EUR wirkt hier als Pro-Tenant-Fallback (effectiveCapCents Stufe 3 - der Owner
+  // hat keine tenant_budget-Zeile). 10 EUR = 1000 ct Cap;
   // Worst-Case-Tarif 400 ct/min x 3 min (maxDur 180s) = 1200 ct > 1000 ct.
   const res = await placeCallFlagOn({
     env: { MAX_BUDGET_EUR: "10", VOICE_TARIFF_DEFAULT_CENTS: "400" },

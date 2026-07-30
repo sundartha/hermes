@@ -356,8 +356,6 @@ export function makePgStore(runner) {
     // (P7, Muster trackUsage): die Fassaden-Signatur bleibt unveraendert.
     budgetExceeded: (tenantId, cfg) =>
       ops.budgetExceeded(requireState(), tenantId, cfg, new Date().toISOString()),
-    globalBudgetExceeded: (cfg) =>
-      ops.globalBudgetExceeded(requireState(), cfg, new Date().toISOString()),
     // Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),

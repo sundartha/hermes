@@ -194,12 +194,12 @@ const rawConfig = {
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
   // Ganzzahl-Cents (G26: Geld nie als Fliesskomma) - Env-Name bleibt MAX_BUDGET_EUR
   // (Operator gibt weiter EUR ein), interne Einheit ist Cents wie defaultTenantBudgetCents/
-  // hardCapCents (Gate-Schnittmenge, Regel 1 - einheitlicher Typ verhindert Einheiten-Mix).
+  // hardCapCents (einheitlicher Typ verhindert Einheiten-Mix).
   //
-  // Fallback-Wert 30 (P7, vorher 8): 8 (=800 ct) bestand den eigenen Boot-Guard nicht mehr -
-  // die abgeleitete Business-Plan-Decke (900 ct) haette den Plattform-Cap uebersprungen
-  // (planCapInertFindings, fatal). 30 ist zugleich der live gefahrene Wert und laesst
-  // gleichzeitig Raum fuer defaultTenantBudgetCents=1500 (Klausel A: echt darunter).
+  // KS-P9/E10: KEIN Gate mehr. Die Plattform-Achse sperrt nichts; dieser Wert ist die
+  // Bezugsgroesse der Schwellenwarnung (platformSpendWarnPercent) und - bei Sentinel
+  // defaultTenantBudgetCents=0 - der PRO-TENANT-Fallback in effectiveCapCents Stufe (3).
+  // Fallback-Wert 30 ist der live gefahrene Wert.
   platformSpendCapCents: eurToCents(
     numEnv("MAX_BUDGET_EUR", process.env.MAX_BUDGET_EUR, { fallback: 30, min: 0, integer: false }),
   ),

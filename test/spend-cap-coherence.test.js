@@ -7,30 +7,31 @@ import { spendCapCoherence, unpricedModels, SPEND_CAP_FINDING } from "../src/boo
 import { config } from "../src/config.js";
 import { PRICES } from "./_prices.js";
 
-test("T-P3-01: Tenant-Default >= Plattform-Cap -> genau ein fataler Befund, nennt beide Zahlen", () => {
-  const findings = spendCapCoherence({
-    tenantDefaultCents: 1000,
-    platformCapCents: 800,
-    maxTariffCents: 300,
-    maxCallDurationS: 300,
-  });
-  assert.equal(findings.length, 1);
-  assert.equal(findings[0].fatal, true);
-  assert.equal(findings[0].code, SPEND_CAP_FINDING.TENANT_DEFAULT_INERT);
-  assert.match(findings[0].message, /1000/);
-  assert.match(findings[0].message, /800/);
-});
-
-test("T-P3-02: Grenzfall Gleichstand (>=, nicht >) -> fatal", () => {
-  const findings = spendCapCoherence({
-    tenantDefaultCents: 800,
-    platformCapCents: 800,
-    maxTariffCents: 300,
-    maxCallDurationS: 300,
-  });
-  assert.equal(findings.length, 1);
-  assert.equal(findings[0].fatal, true);
-  assert.equal(findings[0].code, SPEND_CAP_FINDING.TENANT_DEFAULT_INERT);
+// KS-P9/E10: Klausel A (Tenant-Default >= Plattform-Zahl -> FATAL "Tenant-Achse inert") ist
+// ersatzlos entfallen - die Plattform-Achse bindet nicht mehr zuerst, also kann sie die
+// Tenant-Achse auch nicht mehr inert machen. Der frueher fatale Vektor ist jetzt befundfrei,
+// solange Klausel B (Worst-Case-Reserve gegen die TENANT-Decke) haelt.
+test("KS-P9: Tenant-Default >= Plattform-Zahl ist kein Befund mehr", () => {
+  assert.deepEqual(
+    spendCapCoherence({
+      tenantDefaultCents: 1000,
+      platformCapCents: 800,
+      maxTariffCents: 300,
+      maxCallDurationS: 180,
+    }),
+    [],
+    "1000 >= 800 war T-P3-01 (FATAL), ist jetzt befundfrei",
+  );
+  assert.deepEqual(
+    spendCapCoherence({
+      tenantDefaultCents: 900,
+      platformCapCents: 900,
+      maxTariffCents: 300,
+      maxCallDurationS: 180,
+    }),
+    [],
+    "Gleichstand war T-P3-02 (FATAL), ist jetzt befundfrei",
+  );
 });
 
 test("T-P3-03: knapp unter dem Cap, kein Tarif -> kein fataler Befund", () => {

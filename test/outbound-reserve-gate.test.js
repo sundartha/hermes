@@ -21,9 +21,8 @@ const postCall = (url, to) =>
   });
 
 test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert", async (t) => {
-  // Cap = MAX_BUDGET_EUR = 10 EUR = 1000 ct (Owner ohne tenant_budget-Zeile; LCT P6: muss
-  // echt ueber der abgeleiteten Business-Plan-Decke von 900 ct liegen, sonst verweigert der
-  // Boot-Guard, plan_cap_inert). Worst-Case-Tarif 400 ct/min x 3 min (maxDur 180 s) =
+  // Cap = MAX_BUDGET_EUR = 10 EUR = 1000 ct (Owner ohne tenant_budget-Zeile -> Pro-Tenant-
+  // Fallback, effectiveCapCents Stufe 3). Worst-Case-Tarif 400 ct/min x 3 min (maxDur 180 s) =
   // 1200 ct = 12 EUR > 10-EUR-Cap -> Fehlbetrag 2.00 EUR. Inland 20 ct/min x 3 = 60 ct < Cap.
   // Absender-DID mit +49: der Inlandssatz greift seit P5 nur bei gleicher Vorwahl an
   // BEIDEN Enden - mit der US-Default-DID waere auch DOMESTIC ein Auslands-Leg.

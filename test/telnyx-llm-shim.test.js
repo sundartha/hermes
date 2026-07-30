@@ -63,7 +63,7 @@ function fakeRes() {
 // unbekannte/fremde ccid NICHT zufaellig auf den geseedeten Call trifft. getCall wird vom
 // Budget-Kill-Pfad (terminateViaCallControl-Fresh-Fetch) gebraucht, auch wenn diese Tests
 // selbst keinen voiceControl-Hangup-Pfad injizieren (der Fresh-Fetch laeuft trotzdem).
-function fakeStore({ call = null, budgetExceeded = false, globalBudgetExceeded = false } = {}) {
+function fakeStore({ call = null, budgetExceeded = false } = {}) {
   const getCallByControlIdCalls = [];
   return {
     getCallByControlIdCalls,
@@ -76,9 +76,6 @@ function fakeStore({ call = null, budgetExceeded = false, globalBudgetExceeded =
     },
     budgetExceeded() {
       return budgetExceeded;
-    },
-    globalBudgetExceeded() {
-      return globalBudgetExceeded;
     },
   };
 }
@@ -389,18 +386,6 @@ test("C4a: tenant-Budget ueberschritten -> Wind-Down-Completion, KEIN agentTurn-
   assert.equal(sseContent(res), localeFor("de").budgetExhaustedHangup);
 });
 
-test("C4b: globaler Budget-Notaus ueberschritten -> Wind-Down-Completion, KEIN agentTurn-Aufruf", async () => {
-  const store = fakeStore({ call: makeCall(), globalBudgetExceeded: true });
-  const agentTurn = agentTurnSpy();
-  const handler = makeHandler({ store, agentTurn });
-  const res = fakeRes();
-
-  await handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res);
-
-  assert.equal(agentTurn.calls.length, 0);
-  assert.equal(sseContent(res), localeFor("de").budgetExhaustedHangup);
-});
-
 // === Anti-Spoof: die ccid bindet den Call, NICHT der spoofbare Body-callId ========
 
 test("Anti-Spoof: gespoofter callId/tenantId im Body wird ignoriert - die ccid bindet den Call", async () => {
@@ -483,7 +468,6 @@ test("P5-Rate: zwei verschiedene Calls (ccids) teilen sich das Fenster NICHT", a
   const store = {
     getCallByControlId: (ccid) => [callA, callB].find((c) => c.callControlId === ccid) || null,
     budgetExceeded: () => false,
-    globalBudgetExceeded: () => false,
   };
   const agentTurn = agentTurnSpy();
   const config = fakeTelnyxShimConfig({ telnyxShimMaxTurnsPerMin: 1 });
@@ -862,18 +846,6 @@ test("OBS-1 budget_tenant: tenant-Cap -> gate reason=budget_tenant {callId,tenan
   assert.ok(gates[0].includes('"reason":"budget_tenant"'));
   assert.ok(gates[0].includes('"callId":"call_x"'));
   assert.ok(gates[0].includes('"tenantId":"t_test"'));
-});
-
-test("OBS-1 budget_global: nur globaler Notaus -> gate reason=budget_global", async () => {
-  const store = fakeStore({ call: makeCall(), globalBudgetExceeded: true });
-  const handler = makeHandler({ store, agentTurn: agentTurnSpy() });
-  const res = fakeRes();
-
-  const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
-
-  const gates = gateLines(lines);
-  assert.equal(gates.length, 1);
-  assert.ok(gates[0].includes('"reason":"budget_global"'));
 });
 
 test("OBS-1 turn_ok: Erfolg loggt unconditional (kein injizierter metrics-Spy) genau 1 turn_ok mit callId+numerischer latencyMs", async () => {

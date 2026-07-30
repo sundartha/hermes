@@ -1,7 +1,7 @@
 // LCT P7: Fixkosten sichtbar machen - globaler ElevenLabs-Zeichenzaehler (NICHT
 // tenant-scoped, Muster profile/platform_tts_usage). REINE SICHTBARKEIT: kein Gate
-// liest diese Achse (Test (f) beweist es quelltextlich ueber ein unveraendertes
-// globalBudgetExceeded-Ergebnis).
+// liest diese Achse (Test (f) beweist es ueber ein unveraendertes
+// budgetExceeded-Ergebnis).
 //
 // Drei Ebenen in einer Datei (Muster test/usage-spend-month-axis.test.js): Ops-Ebene
 // (recordTtsCharacters/platformTtsUsageView direkt auf makeDefaultState()), Fassaden-
@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  makeDefaultState, recordTtsCharacters, platformTtsUsageView, globalBudgetExceeded,
+  makeDefaultState, recordTtsCharacters, platformTtsUsageView, budgetExceeded, setTenantBudget,
   recordTenantTtsCharacters, usageFor,
 } from "../src/store/state-ops.js";
 import { emptyUsage } from "../src/store/defaults.js";
@@ -79,14 +79,17 @@ test("(e) Zukunfts-Schluessel setzt den Zaehler NICHT zurueck (Clock-Skew-Riegel
   assert.equal(platformTtsUsageView(s, CFG, AUG_ISO).characters, 530, "akkumuliert weiter auf dem Zukunfts-Schluessel, kein Rueckwaerts-Reset");
 });
 
-test("(f) kein Gate-Verhalten aendert sich: globalBudgetExceeded ist von der TTS-Achse voellig unbeeinflusst", () => {
+test("(f) kein Gate-Verhalten aendert sich: budgetExceeded ist von der TTS-Achse voellig unbeeinflusst", () => {
   const s = makeDefaultState();
   s.usage[TENANT_A] = { ...emptyUsage(), costCents: 500 };
+  // Eigene tenant_budget-Zeile: die Gate-Frage haengt damit an der TENANT-Decke, nicht an
+  // einer Plattform-Zahl (die seit KS-P9 ohnehin keine Sperrentscheidung mehr traegt).
+  setTenantBudget(s, TENANT_A, { budgetCents: 1000, hardCapCents: 1000 });
   const gateCfg = { platformSpendCapCents: 1000 };
-  const before1 = globalBudgetExceeded(s, gateCfg, AUG_ISO);
+  const before1 = budgetExceeded(s, TENANT_A, gateCfg, AUG_ISO);
   recordTtsCharacters(s, 999_999, CFG, AUG_ISO); // absichtlich weit ueber jedes TTS-Kontingent
   recordTtsCharacters(s, 999_999, CFG, AUG_ISO);
-  const after = globalBudgetExceeded(s, gateCfg, AUG_ISO);
+  const after = budgetExceeded(s, TENANT_A, gateCfg, AUG_ISO);
   assert.equal(before1, after, "das Budget-Gate liest byte-identisch, egal wie oft die TTS-Achse gebucht hat");
   assert.equal(after, false, "500 < 1000 -> Gate bleibt offen");
 });

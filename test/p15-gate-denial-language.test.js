@@ -39,7 +39,6 @@ function defaultStore(language, overrides = {}) {
     billingHoldActive: () => null,
     tenantActiveSubscriber: () => true,
     budgetExceeded: () => false,
-    globalBudgetExceeded: () => false,
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),
     tryReserveOutboundBudget: () => true,
     reserveExceedsBudget: () => false,
@@ -96,8 +95,8 @@ function baseCtx(overrides = {}) {
 // Budget-Gates ist hartkodiertes Deutsch ohne Locale-Anbindung" ist UEBERHOLT (Re-Baseline
 // tasks/i18n-tests/19-w2-baseline.md §3.3). Seit P15/T2 kommen die Texte aus
 // localeFor(store.tenantLanguage(tenantId)).gates, und die Faelle budget_tenant,
-// budget_platform, reserve_ueber_rest und reserve_erschoepft laufen unten ueber alle drei
-// Sprachen. Ein "hart deutsch"-Pin waere heute genau der Mischsprach-Pin, den der
+// reserve_ueber_rest und reserve_erschoepft laufen unten ueber alle drei Sprachen
+// (budget_platform ist mit KS-P9/E10 ersatzlos entfallen). Ein "hart deutsch"-Pin waere heute genau der Mischsprach-Pin, den der
 // GAP-27-Waechter meldet (test/characterization-marking.test.js).
 //
 // Ein Ablehnungsfall: wie er ausgeloest wird (deps/ctx), was Protokoll bleibt (status/grund)
@@ -195,23 +194,6 @@ const CASES = [
     textOf: (g) => g.budgetUnreadable,
   },
   {
-    label: "budget_platform (budget-Gate)",
-    gate: "budget",
-    status: 402,
-    grund: "budget_platform",
-    deps: { store: { globalBudgetExceeded: () => true } },
-    textOf: (g) => g.platformHalt,
-  },
-  {
-    label: "budget_platform (reserve_outcome)",
-    gate: "reserve_budget",
-    status: 402,
-    grund: "budget_platform",
-    deps: { store: { tryReserveOutboundBudget: () => false, reserveExceedsBudget: () => false } },
-    ctx: { reserveCents: 60 },
-    textOf: (g) => g.platformHalt,
-  },
-  {
     label: "reserve_ueber_rest",
     gate: "reserve_budget",
     status: 402,
@@ -275,15 +257,12 @@ for (const testCase of CASES) {
   });
 }
 
-// Ziffernfreiheit der beiden Betreiber-/D7-Texte in JEDER Sprache: eine Plattform-Zahl oder
-// ein "NaN EUR" in einer Tenant-Antwort waere ein Cross-Tenant-Leck bzw. eine Falschauskunft
-// auf einer Geld-Kante (Absolute Regel 4/6). Die DE-Achse pinnt
+// Ziffernfreiheit des D7-Textes in JEDER Sprache: ein "NaN EUR" in einer Tenant-Antwort
+// waere eine Falschauskunft auf einer Geld-Kante. Die DE-Achse pinnt
 // test/deny-diagnosability.test.js; hier gilt sie fuer alle drei Sprachen.
-test("platformHalt und budgetUnreadable tragen in KEINER Sprache eine Ziffer", () => {
+test("budgetUnreadable traegt in KEINER Sprache eine Ziffer", () => {
   for (const language of SUPPORTED_LANGUAGES) {
-    const gates = localeFor(language).gates;
-    assert.ok(!/\d/.test(gates.platformHalt), `${language}: platformHalt ziffernfrei`);
-    assert.ok(!/\d/.test(gates.budgetUnreadable), `${language}: budgetUnreadable ziffernfrei`);
+    assert.ok(!/\d/.test(localeFor(language).gates.budgetUnreadable), `${language}: budgetUnreadable ziffernfrei`);
   }
 });
 

@@ -73,19 +73,10 @@ const SECONDS_PER_MINUTE = 60;
 // Beides gepinnt in test/p15-gate-denial-language.test.js.
 export const E164_FORMAT_ERROR = "'to' must be E.164, e.g. +4917212345678";
 
-// ---- Ablehnungstexte nach Achse getrennt (P5a) -----------------------------------
-// Die ANZEIGETEXTE aller Ablehnungen liegen seit P15 im Locale-Buendel (i18n/gate-texts.js,
-// eingehaengt als LOCALES.<lang>.gates) und folgen der Tenant-Sprache. Hier bleibt nur der
-// sprachfreie GRUND - er ist Protokoll (Audit/Forensik/Metrik), keine Anzeige.
-// Der Plattform-Notaus ist eine BETREIBER-Groesse: sein Text benennt ihn, nennt aber NIE
-// eine Zahl - weder den Cap noch die Summe ueber fremde Tenants. Eine Plattform-Zahl in
-// einer Tenant-Antwort waere ein Cross-Tenant-Leck (Absolute Regel 4/6); die Ziffernfreiheit
-// ist im Buendel per Konstruktion (Konstante statt Template) und per Test gesichert.
-const PLATFORM_DENIAL_REASON = "budget_platform";
-
-// Fruehwarnung (Budget-Achsen P6): eigenes Ereignis + eigener SMS-Praefix, GETRENNT von
-// PLATFORM_DENIAL_REASON oben - eine Warnung ist keine Ablehnung und aendert keine
-// Gate-Entscheidung (s. reserve_budget-Gate unten).
+// ---- Plattform-Fruehwarnung (Budget-Achsen P6) ------------------------------------
+// Eigenes Ereignis + eigener SMS-Praefix. Eine Warnung ist keine Ablehnung und aendert
+// keine Gate-Entscheidung (s. reserve_budget-Gate unten). Seit KS-P9/E10 ist sie die
+// EINZIGE Wirkung der Plattform-Achse - einen Plattform-Notaus gibt es nicht mehr.
 const PLATFORM_WARN_EVENT = "platform_spend_warning";
 const PLATFORM_WARN_SMS_PREFIX = "[Hermes] Plattform-Warnschwelle erreicht: ";
 
@@ -240,7 +231,7 @@ export function makeOutboundGates({
   // plattformweite Stundenbremse gibt es NICHT mehr: sie ist ersatzlos entfallen, weil ein
   // globales Anruflimit mit wachsender Tenant-Zahl jeden zusaetzlichen Kunden zum Gegner
   // aller anderen macht. Verbleibender Not-Aus fuer die Plattform ist OUTBOUND_FROZEN; die
-  // GELD-Achse bleibt unveraendert eine Schnittmenge (globalBudgetExceeded, Regel 1).
+  // GELD-Achse ist seit KS-P9/E10 aus demselben Grund EINE Achse (die pro-Tenant-Decke).
   // Gezaehlt wird nach tenantId, nicht nach requestedBy: ein Tenant kann sein Limit sonst
   // durch zusaetzliche Nutzer-Identitaeten vervielfachen (der Tausch ist strikt strenger).
   // Grenze = min(config, profil): MAX_CALLS_PER_HOUR ist Pro-Tenant-DEFAULT *und* Decke -
@@ -415,7 +406,7 @@ export function makeOutboundGates({
   // Ablehnungsgrund + -text der TENANT-Achse im budget-Gate (Bucket lesbar -> eigene Decke
   // + eigener Verbrauch; unbuchbar (D7) -> ziffernfreier Sperrtext budgetUnreadable: "NaN EUR"
   // waere eine Falschauskunft auf einer Geld-Kante). EIGENE Zahlen, NIE eine
-  // Plattform-Groesse (Absolute Regel 4/6, s. PLATFORM_DENIAL_REASON oben).
+  // Plattform-Groesse - die waere ein Cross-Tenant-Leck (Absolute Regel 4/6).
   function tenantBudgetDenial(tenantId) {
     const snapshot = store.tenantBudgetSnapshot(tenantId, config.billing);
     const texts = gateTexts(tenantId);
@@ -427,16 +418,22 @@ export function makeOutboundGates({
     };
   }
 
+  // EINE Quelle (G5) fuer die ZIFFERNFREIE Reserve-Ablehnung: Grund bleibt
+  // reserve_erschoepft (kein dritter Grund fuer denselben Sperrzustand), der Text nennt
+  // keine Zahl - "NaN EUR" waere eine Falschauskunft auf einer Geld-Kante.
+  const reserveUnreadableDenial = (tenantId) => ({
+    grund: "reserve_erschoepft",
+    message: gateTexts(tenantId).budgetUnreadable,
+  });
+
   // Ablehnungsgrund + -text der TENANT-Achse im reserve_budget-Gate: Fehlbetrag (EINE
   // Formel fuer beide Reserve-Gruende: reserveCents - remainingCents) + Spend-Monat-Ende
   // als Fakt (KEINE Reset-Zusage, P4-Achse ist vor P7 nicht die Gate-Quelle). Bucket
-  // unbuchbar (D7) -> ziffernfreier Sperrtext, Grund bleibt reserve_erschoepft (kein
-  // dritter Grund fuer denselben Sperrzustand).
+  // unbuchbar (D7) -> ziffernfreier Sperrtext ueber reserveUnreadableDenial.
   function tenantReserveDenial(tenantId, reserveCents) {
     const snapshot = store.tenantBudgetSnapshot(tenantId, config.billing);
     const texts = gateTexts(tenantId);
-    if (snapshot.remainingCents === null)
-      return { grund: "reserve_erschoepft", message: texts.budgetUnreadable };
+    if (snapshot.remainingCents === null) return reserveUnreadableDenial(tenantId);
     const missingEur = eurText(reserveCents - snapshot.remainingCents);
     const monthEnd = spendMonthEndDate(Date.now());
     if (snapshot.remainingCents > 0)
@@ -450,14 +447,6 @@ export function makeOutboundGates({
     };
   }
 
-  // Klassifiziert das Ergebnis von tryReserveOutboundBudget NACH Achse (Tenant vs.
-  // Plattform), OHNE eine zweite Entscheidung zu treffen: tryReserveOutboundBudget bleibt
-  // die EINZIGE Quelle des Ja/Nein (reserved). Bei Ablehnung fragt reserveExceedsBudget
-  // (reine Query, KEIN zweiter Reserve-Versuch) dieselbe Tenant-Decke, die
-  // tryReserveOutboundBudget intern schon geprueft hat - false dort heisst zwingend "die
-  // Plattform-Achse hat abgelehnt" (Schnittmenge, Regel 1). Laeuft im selben
-  // withStoreLock-Callback wie die Entscheidung (reserve_budget-Gate unten) und bleibt
-  // REIN SYNCHRON (Lock-Invariante des Moduls, s. Modul-Doc oben).
   // SAFETY-KERN: eigener try/catch. Wuerde der Claim in den try/catch des Gates fallen,
   // machte ein Throw hier aus einem BEREITS RESERVIERTEN Call ein 402 - die Reserve waere
   // gebucht und bliebe bis zum Backstop-Timer haengen. Eine Warnung darf nie ablehnen.
@@ -470,16 +459,19 @@ export function makeOutboundGates({
     }
   }
 
+  // Klassifiziert das Ergebnis von tryReserveOutboundBudget, OHNE eine zweite Entscheidung
+  // zu treffen: tryReserveOutboundBudget bleibt die EINZIGE Quelle des Ja/Nein (reserved).
+  // Laeuft im selben withStoreLock-Callback wie die Entscheidung (reserve_budget-Gate
+  // unten) und bleibt REIN SYNCHRON (Lock-Invariante des Moduls, s. Modul-Doc oben).
+  // Nach KS-P9 lehnt tryReserveOutboundBudget aus GENAU ZWEI Gruenden ab: die Tenant-Decke
+  // (reserveExceedsBudget - reine Query, KEIN zweiter Reserve-Versuch) oder ein unbuchbarer
+  // Reserve-Betrag (isBookableCents-Riegel, S1-6). Der zweite Fall darf keine Zahl nennen.
   function reserveOutcome(ctx) {
     const reserved = store.tryReserveOutboundBudget(ctx.tenantId, ctx.reserveCents, config.billing);
     if (reserved) return { reserved: true, warning: claimSpendWarning() };
     if (store.reserveExceedsBudget(ctx.tenantId, ctx.reserveCents, config.billing))
       return { reserved: false, ...tenantReserveDenial(ctx.tenantId, ctx.reserveCents) };
-    return {
-      reserved: false,
-      grund: PLATFORM_DENIAL_REASON,
-      message: gateTexts(ctx.tenantId).platformHalt,
-    };
+    return { reserved: false, ...reserveUnreadableDenial(ctx.tenantId) };
   }
 
   // Fruehwarnung melden (Budget-Achsen P6). TRIFFT KEINE ENTSCHEIDUNG: der Call ist hier
@@ -733,27 +725,16 @@ export function makeOutboundGates({
         );
       },
     },
-    // Budget-Schnittmenge (R2): pro-Tenant-Budget UND globaler Notaus (Summe ueber alle
-    // Buckets) PARALLEL, beide fail-closed. Der globale Notaus wird NIE entfernt; pro-Tenant
-    // schraenkt nur zusaetzlich ein. PRAEZEDENZ (P5a, Achsen in Text getrennt): budgetExceeded
-    // wird IMMER geprueft, globalBudgetExceeded NUR wenn das erste false ist (wie zuvor per
-    // Kurzschluss-`&&`) - feuern BEIDE Achsen, gewinnt die EIGENE: der Nutzer bekommt die
-    // Zahl, auf die er reagieren kann, eine Plattform-Groesse erreicht ihn nie.
+    // EINE Geld-Achse (KS-P9/E10): die pro-Tenant-Kostendecke, fail-closed. Die
+    // Plattform-Achse misst und warnt nur noch, sie sperrt nicht mehr - kein Kunde wird
+    // abgewiesen, weil ein anderer Geld ausgab. Der Nutzer bekommt damit IMMER die eigenen
+    // Zahlen, auf die er reagieren kann; eine Plattform-Groesse erreicht ihn nie.
     {
       name: "budget",
       run(ctx) {
-        if (store.budgetExceeded(ctx.tenantId, config.billing)) {
-          const { grund, message } = tenantBudgetDenial(ctx.tenantId);
-          return deny(402, { error: message }, denialAudit(grund, ctx, ` tenant=${ctx.tenantId}`));
-        }
-        if (store.globalBudgetExceeded(config.billing)) {
-          return deny(
-            402,
-            { error: gateTexts(ctx.tenantId).platformHalt },
-            denialAudit(PLATFORM_DENIAL_REASON, ctx, ` tenant=${ctx.tenantId}`),
-          );
-        }
-        return null;
+        if (!store.budgetExceeded(ctx.tenantId, config.billing)) return null;
+        const { grund, message } = tenantBudgetDenial(ctx.tenantId);
+        return deny(402, { error: message }, denialAudit(grund, ctx, ` tenant=${ctx.tenantId}`));
       },
     },
     // Minuten-Kontingent-Gate (B2, GAP B): SEPARATES Gate NEBEN dem Budget-Gate (eigenes

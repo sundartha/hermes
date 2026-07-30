@@ -17,7 +17,9 @@
 // nicht Wahrheit - der Live-Service ist dashboard-managed. Gemessen am 2026-07-25 war der
 // Blueprint nicht bloss ungenau, sondern nicht startfaehig: MAX_BUDGET_EUR="8" ergab
 // platformSpendCapCents=800, und der Boot-Guard brach mit plan_cap_inert und exit(1) ab,
-// weil die abgeleitete Business-Plan-Decke darueber lag. P7 hat den Blueprint auf 30
+// weil die abgeleitete Business-Plan-Decke darueber lag (HISTORISCH - dieser Guard ist mit
+// KS-P9/E10 entfallen; der Befund bleibt als Beleg fuer die Quellen-Trennung stehen).
+// P7 hat den Blueprint auf 30
 // (und die Tenant-Decke auf 1500) gehoben - der Boot-Blocker ist weg, die Trennung der
 // beiden Quellen bleibt aber bestehen: der Blueprint traegt weiterhin nur den
 // Divergenz-Befund, Gate-Aussagen haengen an LIVE_ENV.
@@ -58,8 +60,9 @@ export const LIVE_MEASURED = Object.freeze({
   ALLOWED_COUNTRY_CODES: "*",
   // "30" ist der live gefahrene Wert (Entscheidung 8 aus PLAN-LIVE-COST-TRACING, ebenso
   // in test/helpers.js BASE_ENV gepinnt). Am Betrieb belegt: der Live-Boot am 2026-07-25
-  // zeigt den plan_cap_inert-Abbruch NICHT, den der fruehere Blueprint-Wert "8"
-  // reproduzierbar ausloest. Der Eintrag bleibt eine MESSUNG, auch nachdem P7 den
+  // zeigt den plan_cap_inert-Abbruch NICHT, den der fruehere Blueprint-Wert "8" damals
+  // reproduzierbar ausloeste (HISTORISCH, Guard mit KS-P9/E10 entfallen). Der Eintrag
+  // bleibt eine MESSUNG, auch nachdem P7 den
   // Blueprint auf denselben Wert nachgezogen hat - Blueprint und Live sind zwei Quellen.
   MAX_BUDGET_EUR: "30",
 });

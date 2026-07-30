@@ -1,6 +1,6 @@
 // P4: Budget/Usage tenant-scoped (Daten-Schicht pro-Tenant). Prueft die GENUINE
 // pro-Tenant-Datenschicht auf STATE-OPS-Ebene (ops.usageFor/trackUsage/
-// budgetExceeded/globalBudgetExceeded/countOutboundCallsSince) mit zwei
+// budgetExceeded/countOutboundCallsSince) mit zwei
 // synthetischen Tenants - nicht die owner-scoped pg-Hydrierung (die bleibt ein
 // Key, P4-Scope-Grenze). Der Spiegel wird per ops direkt manipuliert (wie der
 // pruneOldData-Test alte Daten direkt im Spiegel seedet). Test 5 belegt die
@@ -51,7 +51,7 @@ test("P4 Test 2: trackUsage(A) beeinflusst B nicht (frischer Null-Bucket)", asyn
   });
 });
 
-test("P4 Test 3: globaler Notaus greift, waehrend jeder Tenant unter seinem Cap bleibt", async () => {
+test("P4 Test 3 (KS-P9): beide Tenants bleiben frei, obwohl die Plattform-Summe die Zahl reisst", async () => {
   const { store } = await makePgTestStore();
   const s = store.load();
   // Je 6 USD * 0.93 = 5.58 EUR pro Tenant -> unter 8, Summe 11.16 EUR -> ueber 8.
@@ -59,7 +59,11 @@ test("P4 Test 3: globaler Notaus greift, waehrend jeder Tenant unter seinem Cap 
   ops.trackUsage(s, TENANT_B, tokensOf(6_000_000, 0), PRICES);
   assert.equal(ops.budgetExceeded(s, TENANT_A, PRICES), false, "A einzeln unter Cap");
   assert.equal(ops.budgetExceeded(s, TENANT_B, PRICES), false, "B einzeln unter Cap");
-  assert.equal(ops.globalBudgetExceeded(s, PRICES), true, "Plattform-Summe ueber Cap");
+  assert.equal(
+    ops.tryReserveOutboundBudget(s, TENANT_A, 10, PRICES),
+    true,
+    "die Plattform-Summe hat keine Sperrwirkung mehr",
+  );
 });
 
 test("P4 Test 4: countOutboundCallsSince pro-Tenant + pro-Nutzer + global", async () => {

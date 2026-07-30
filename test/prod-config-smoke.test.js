@@ -125,8 +125,9 @@ test("Produktionskonfiguration (GAP-33): Outbound ins Ausland kommt unter ausgel
 });
 
 // Abgrenzung zu test/env-docs-spend-cap-coherence.test.js (LCT P6): jener Test rechnet
-// STATISCH einzelne Achsen nach (plan_cap_inert bzw. spendCapCoherence aus den drei
-// Quellen). Dieser hier startet den Prozess wirklich und deckt damit JEDEN Boot-Blocker
+// STATISCH einzelne Achsen nach (spendCapCoherence aus den drei Quellen; die frueher hier
+// mitgenannte Plan-Decken-Achse ist mit KS-P9/E10 entfallen). Dieser hier startet den
+// Prozess wirklich und deckt damit JEDEN Boot-Blocker
 // des Blueprints - er hat den zweiten, unabhaengigen Blocker
 // (COST_TRUING_REQUIRED_RECORD_TYPES leer) ueberhaupt erst sichtbar gemacht. Der ist
 // weiterhin NICHT behoben: er laeuft nur deshalb nicht ins exit(1), weil PROD_ENV_EXEMPTIONS

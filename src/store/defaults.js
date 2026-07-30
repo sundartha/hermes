@@ -196,8 +196,8 @@ export const USAGE_CORRUPT_REASON = "usage_korrupt";
 
 // Ist x ein BUCHBARER Geldbetrag (GANZZAHL-Cents-Konvention, G26)? EINZIGE
 // Gueltigkeitsquelle aller Geld-Kanten (D7, G5): Schreibkante (trackUsage,
-// addVoiceUsageCostCents), Lesekante (budgetExceeded, globalBudgetExceeded und die beiden
-// reserve-bewussten Schwestern), Reserve-Riegel (tryReserveOutboundBudget) und die
+// addVoiceUsageCostCents), Lesekante (budgetExceeded und die reserve-bewusste
+// Schwester reserveExceedsBudget), Reserve-Riegel (tryReserveOutboundBudget) und die
 // pg-Hydrierung (rowToUsage) fragen NUR hier. Vorher stand eine negierte Vorzeichenpruefung
 // ad hoc genau einmal (in tryReserveOutboundBudget); fuenf weitere Inline-Kopien waeren
 // exakt die Invarianten-per-Konvention-Klasse, an der die naechste vergessene
@@ -241,13 +241,14 @@ export function isCorrectionCents(x) {
 // gleich aussehenden MICRO_CENTS_PER_CENT zu tun haben.
 export const TOKENS_PER_M_TOK = 1_000_000;
 
-// Globaler Notaus-Cap in GANZZAHL Cents (G5: eine Quelle fuer das Gate-Rechnen in Cents).
-// cfg.platformSpendCapCents ist bereits Cents -> reiner benannter Seam, kein Einheiten-Mix
-// im Gate. Die EUR-Anzeige-Schwester (frueher globalCapEur) ist mit P5a entfallen: die
-// Plattform-Achse gibt NIE eine Zahl an einen Tenant heraus (Cross-Tenant-Leck-Riegel,
-// s. den ziffernfreien platformHalt-Text in i18n/gate-texts.js) - eine EUR-Ableitung
-// dieses Caps hatte ab da
-// keinen Aufrufer mehr (F4, tote Funktion).
+// Plattform-Bezugsgroesse in GANZZAHL Cents (G5: eine Quelle fuer das Rechnen in Cents).
+// cfg.platformSpendCapCents ist bereits Cents -> reiner benannter Seam, kein Einheiten-Mix.
+// ZWEI Verwendungen seit KS-P9/E10: die Warnschwelle der Plattform-Beobachtung
+// (claimPlatformSpendWarning) und - als PRO-TENANT-Fallback - Stufe (3) von
+// effectiveCapCents. Eine SPERRE der Plattform-Achse gibt es nicht mehr. Die
+// EUR-Anzeige-Schwester (frueher globalCapEur) ist mit P5a entfallen: die Plattform-Achse
+// gibt NIE eine Zahl an einen Tenant heraus (Cross-Tenant-Leck-Riegel) - eine
+// EUR-Ableitung dieses Caps hatte ab da keinen Aufrufer mehr (F4, tote Funktion).
 export function globalCapCents(cfg) {
   return cfg.platformSpendCapCents;
 }

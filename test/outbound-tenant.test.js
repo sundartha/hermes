@@ -8,14 +8,12 @@
 // ueber REST ist I5. Der Test setzt den Header DIREKT auf den idpSubject - genau den
 // gueltigen Aufloesungs-Schluessel von requestTenant/resolveTenant.
 //
-// EHRLICH dokumentiert: pro-Tenant-Budget UND globaler Notaus nutzen BEIDE
-// config.platformSpendCapCents und global = Summe >= jeder Einzel-Bucket. Damit sind die
-// beiden Gates am HTTP-Level NICHT voneinander isolierbar (jeder erschoepfte Bucket
-// reisst auch die Summe). Die pro-Tenant-KORREKTHEIT wird darum ueber ATTRIBUTION
-// bewiesen (call.tenantId + call.from -> daran haengt trackUsage); die reine
-// Funktions-Isolation deckt bereits store-pg-tenant-budget.test.js ab. Der globale
-// Notaus wird ueber den Summen-Vektor (je Tenant < Cap, Summe >= Cap) als unveraendert
-// PARALLEL nachgewiesen.
+// KS-P9/E10: es gibt nur noch EINE Geld-Achse (die pro-Tenant-Decke) - die Plattform-Summe
+// sperrt nichts mehr. Die frueher hier beschriebene Nicht-Isolierbarkeit der zwei Gates am
+// HTTP-Level ist damit gegenstandslos. Die pro-Tenant-KORREKTHEIT wird weiter ueber
+// ATTRIBUTION bewiesen (call.tenantId + call.from -> daran haengt trackUsage); die reine
+// Funktions-Isolation deckt store-pg-tenant-budget.test.js ab. Der Summen-Vektor (je Tenant
+// < Cap, Summe >= Cap) beweist unten, dass die Plattform-Summe NICHT mehr blockt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
@@ -171,24 +169,23 @@ test("Flag an: erschoepftes Tenant-Budget blockt den Tenant (402), KEIN Call", a
   }
 });
 
-// (4) Globaler Notaus PARALLEL/unveraendert: je Tenant UNTER dem Cap, aber die SUMME
-// reisst ihn -> 402. Wuerde der globale Notaus durch den pro-Tenant-Bucket ERSETZT
-// (Schnittmenge gebrochen), liefe A (20 < 30) durch -> dieser Test faengt das.
-// LCT P6: Werte auf BASE_ENV MAX_BUDGET_EUR=30 (statt vormals 8) nachgezogen - bucket()
-// ist EUR-nominal (json.js migriert costEur*100 -> costCents beim Laden).
-test("Flag an: globaler Notaus greift bei Summe (je Tenant < Cap) -> 402; global unveraendert", async () => {
+// (4) KS-P9-Mutationsprobe auf HTTP-Ebene (der staerkste Beweis der Phase): je Tenant UNTER
+// seiner Decke, die SUMME reisst die Plattform-Zahl - A telefoniert trotzdem. Bis KS-P9 war
+// das ein 402. Status 500 = der Originate wurde offline erreicht (Muster Test (5)), also
+// hat die GESAMTE Gate-Kette durchgelassen.
+// LCT P6: Werte auf BASE_ENV MAX_BUDGET_EUR=30 nachgezogen - bucket() ist EUR-nominal
+// (json.js migriert costEur*100 -> costCents beim Laden).
+test("KS-P9: die Plattform-Summe sperrt nicht mehr - A telefoniert trotz gerissener Summe", async () => {
   const seed = seedTenants({
     usage: { [BOOTSTRAP_TENANT_ID]: bucket(0), [A]: bucket(20), [B]: bucket(20) },
-  }); // 20+20=40 >= 30
+  }); // 20+20=40 >= 30, aber je Tenant 20 < 30
   const srv = await startServer({ env: FLAG_ON, seed });
   try {
-    const res = await placeCall(srv, SUB_A); // A einzeln 20 < Cap 30, aber Summe 40 >= 30
-    assert.equal(
-      res.status,
-      402,
-      "globaler Notaus blockt, obwohl A unter dem pro-Tenant-Cap liegt",
-    );
-    assert.equal(outboundCallsTo(srv).length, 0, "kein Call bei globalem Notaus");
+    const res = await placeCall(srv, SUB_A);
+    assert.equal(res.status, 500, "Gate-Kette durchlaufen, Originate offline erreicht");
+    const calls = outboundCallsTo(srv);
+    assert.equal(calls.length, 1, "genau EIN Outbound-Call erzeugt");
+    assert.equal(calls[0].tenantId, A, "auf A attribuiert");
   } finally {
     await srv.stop();
   }

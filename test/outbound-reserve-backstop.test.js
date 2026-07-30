@@ -13,8 +13,8 @@ const BACKSTOP_WAIT_MS = MAX_DURATION_S * 1000 + GRACE_MS + TEST_SAFETY_MARGIN_M
 
 test("OUT-05 F2: Reserve-Release-Backstop gibt die Reserve OHNE Provider-Callback frei", async () => {
   // Reserve pro Call: 600 ct/min x ceil(1/60)=1 min = 600 ct; zwei Reserven (1200 ct)
-  // reissen den 1000-ct-Cap (MAX_BUDGET_EUR=10 - LCT P6: muss echt ueber der abgeleiteten
-  // Business-Plan-Decke von 900 ct liegen, sonst verweigert der Boot-Guard, plan_cap_inert),
+  // reissen den 1000-ct-Cap (MAX_BUDGET_EUR=10 wirkt hier als Pro-Tenant-Fallback,
+  // effectiveCapCents Stufe 3 - der Owner hat keine tenant_budget-Zeile),
   // eine einzelne nicht. Absender-DID mit +49, damit VOICE_TARIFF_DOMESTIC_CENTS die
   // +49-Ziele ueberhaupt tarifiert (P5: Inlandssatz nur bei gleicher Vorwahl an beiden Enden).
   const srv = await startServer({

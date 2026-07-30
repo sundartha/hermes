@@ -16,8 +16,7 @@ import {
   alertChannelFindings,
   costTruingBookingFindings,
   voiceTariffFloorFindings,
-  planCapInertFindings,
-  tenantCapRowInertFindings,
+  planCapUnderivableFindings,
   bootstrapHealDecision,
   BOOTSTRAP_HEAL,
 } from "./boot-guard.js";
@@ -68,19 +67,16 @@ function runRetention(store, config) {
 }
 
 // P3: Kohaerenz der Budget-Achsen GEGENEINANDER (spendCapCoherence, src/boot-guard.js).
-// Klausel A (Tenant-Default >= Plattform-Cap) ist FATAL - eine inerte Tenant-Achse ist
-// echter Schutzverlust (Regel 1). Klausel B (Worst-Case-Reserve > Tenant-Decke) ist seit
-// P7/GAP-32 EBENFALLS FATAL - unter ihr faellt ein ganzer Zielbereich vor dem Dial ins
-// Reserve-Gate. Nur A0 (Sentinel 0) bleibt WARN (siehe Klausel-Kommentar im Guard).
+// Klausel B (Worst-Case-Reserve > Tenant-Decke) ist seit P7/GAP-32 FATAL - unter ihr faellt
+// ein ganzer Zielbereich vor dem Dial ins Reserve-Gate. Nur A0 (Sentinel 0) bleibt WARN
+// (siehe Klausel-Kommentar im Guard).
 //
-// LCT P6 haengt zwei weitere Linien an (store.load() ist gecacht, kein Zweit-IO, Muster
-// currentCoverage): erste Linie (fatal) prueft ALLE Katalog-Slugs' abgeleitete Decke gegen
-// den Plattform-Cap - unabhaengig davon, ob schon ein Tenant diesen Plan gebucht hat
-// (verhindert eine inkohaerente Konfiguration VOR dem ersten Kunden). Zweite Linie (WARN)
-// liest die Nachlese ueber TATSAECHLICH gesetzte tenant_budget-Zeilen (nachtraeglich
-// gesenkter Cap). Beide koennen NOCH process.exit(1) ausloesen (nur die erste) - deshalb
-// bleibt assertSpendCapCoherence vor rearmActiveCallTimers() (INV-5).
-function assertSpendCapCoherence(config, store) {
+// LCT P6 haengt eine weitere Linie an (fatal): laesst sich fuer JEDEN Katalog-Slug
+// ueberhaupt eine Decke ableiten - unabhaengig davon, ob schon ein Tenant diesen Plan
+// gebucht hat (verhindert eine inkohaerente Konfiguration VOR dem ersten Kunden). Sie kann
+// NOCH process.exit(1) ausloesen - deshalb bleibt assertSpendCapCoherence vor
+// rearmActiveCallTimers() (INV-5).
+function assertSpendCapCoherence(config) {
   const findings = spendCapCoherence({
     tenantDefaultCents: config.billing.defaultTenantBudgetCents,
     platformCapCents: config.billing.platformSpendCapCents,
@@ -90,16 +86,11 @@ function assertSpendCapCoherence(config, store) {
     // Body-Override hierauf - das ist die laengstmoegliche Reserve.
     maxCallDurationS: MAX_CALL_DURATION_CAP_S,
   });
-  const planCapFindings = planCapInertFindings({
+  const planCapFindings = planCapUnderivableFindings({
     slugs: CATALOG_SLUGS,
-    platformCapCents: config.billing.platformSpendCapCents,
     capForSlug: (slug) => planCapCents(slug, config.billing),
   });
-  const rowFindings = tenantCapRowInertFindings({
-    budgetRows: store.load().tenantBudgets,
-    platformCapCents: config.billing.platformSpendCapCents,
-  });
-  const all = [...findings, ...planCapFindings, ...rowFindings];
+  const all = [...findings, ...planCapFindings];
   const fatal = all.find((f) => f.fatal);
   if (fatal) {
     console.error(`[boot] Start abgebrochen: ${fatal.message}`);
@@ -279,7 +270,7 @@ function warnMissingProvisioningConnection(config) {
 
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
-// Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel A) ist
+// Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste und assertCostTruingBooking
 // (LCT P4) das siebte, das noch process.exit(1) rufen kann - warnUnpricedModels/
 // warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
@@ -336,9 +327,9 @@ function assertBootGates(config, store) {
   // P3: Boot-Guards Konfig-Kohaerenz (Budget-Achsen gegeneinander) + Modellpreise. NACH
   // allen vier obigen Gates, DAMIT assertConfig() bereits gelaufen ist (Zahlen validiert)
   // und die bestehenden Gates ihre exakte Ausgabe-Reihenfolge behalten. Beide koennen
-  // NOCH process.exit(1) rufen (assertSpendCapCoherence bei Klausel A) - deshalb MUESSEN
+  // NOCH process.exit(1) rufen (assertSpendCapCoherence bei Klausel B) - deshalb MUESSEN
   // sie vor rearmActiveCallTimers() stehen (INV-5, s.u. in bootServer).
-  assertSpendCapCoherence(config, store);
+  assertSpendCapCoherence(config);
   warnUnpricedModels(config);
   assertProviderRateInBand(config);
   assertCostTruingBooking(config, store);
@@ -357,7 +348,7 @@ function assertBootGates(config, store) {
 // GAP-01 (P6) hat gateUsageCents (Tenant-Achse) und gatePlatformUsageCents (Plattform-
 // Achse) bei Flag AUS auseinandergezogen: die Tenant-Achse misst seither das Stripe-
 // Perioden-Fenster (budgetPeriodUsageCents), die Plattform-Achse bleibt beim Lebenszeit-
-// Topf (globalUsageTotals, Absolute Regel 1). Bei Flag AN messen BEIDE Achsen weiter
+// Topf (globalUsageTotals; seit KS-P9 nur noch Beobachtung). Bei Flag AN messen BEIDE Achsen weiter
 // denselben Spend-Monat (spendMonthUsageCents/platformSpendMonthCents) - dort gibt es
 // keine Divergenz. axisLabelWhenFlagOff traegt daher NUR den Flag-AUS-Text der jeweiligen
 // Achse (G5: der Flag-AN-Zweig ist fuer beide Achsen identisch und steht nur einmal hier).
@@ -424,7 +415,8 @@ function logBootBanner(config, port) {
   // Flag AUS verschiedene Fenster (s. budgetAxisLabel oben) - EIN gemeinsames Label haette
   // hier zwangslaeufig eine der beiden Achsen falsch beschrieben.
   console.log(
-    `  Budget-Achse:   Tenant ${budgetAxisLabel(config.billing.budgetMonthEnabled, "Perioden-Fenster")} | Plattform ${budgetAxisLabel(config.billing.budgetMonthEnabled, "Lebenszeit-Topf")}`,
+    `  Budget-Achse:   Tenant ${budgetAxisLabel(config.billing.budgetMonthEnabled, "Perioden-Fenster")} | ` +
+      `Plattform ${budgetAxisLabel(config.billing.budgetMonthEnabled, "Lebenszeit-Topf")} (nur Beobachtung/Warnschwelle, KS-P9)`,
   );
   // P7: WELCHE Decken das Gate misst, stand bisher nirgends im Log - nach einem Deploy war
   // nicht ablesbar, ob der Dienst die neuen Zahlen faehrt (der Betreiber muesste sie im
@@ -432,7 +424,7 @@ function logBootBanner(config, port) {
   // ist operator-only (NICHT /healthz, das den Hash statt der Rohwerte traegt).
   console.log(
     `  Kosten-Decken:  Tenant-Default ${config.billing.defaultTenantBudgetCents} ct | ` +
-      `Plattform ${config.billing.platformSpendCapCents} ct | ` +
+      `Plattform-Warnschwelle ${config.billing.platformSpendCapCents} ct | ` +
       `Worst-Case-Tarif ${config.billing.voiceTariffDefaultCents} ct/min`,
   );
 }

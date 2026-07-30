@@ -34,7 +34,6 @@ function defaultStore(overrides = {}) {
     tenantSubscription: () => ({}),
     planMinutesExceeded: () => false,
     budgetExceeded: () => false,
-    globalBudgetExceeded: () => false,
     withStoreLock: (fn) => fn(),
     tryReserveOutboundBudget: () => true,
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),

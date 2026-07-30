@@ -78,7 +78,6 @@ function defaultStore() {
     tenantSubscription: () => ({}),
     planMinutesExceeded: () => false,
     budgetExceeded: () => false,
-    globalBudgetExceeded: () => false,
     withStoreLock: (fn) => fn(),
     tryReserveOutboundBudget: () => true,
     // P5a (Achsen in Anzeige/Ablehnung getrennt): tenantBudgetDenial/tenantReserveDenial
