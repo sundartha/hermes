@@ -176,3 +176,22 @@ test("KS-P9: MAX_BUDGET_EUR=8 unter der Business-Plan-Decke bootet gruen (kein p
     [],
   );
 });
+
+// KS-P3a: die neue Boot-Linie (kleinste Plan-Decke gegen die Worst-Case-Reserve) laeuft mit
+// dem LIVE-Satz. Die uebrige Spawn-Suite faehrt VOICE_TARIFF_DEFAULT_CENTS=0 (Decken 0,
+// Reserve 0) - dort waere der Guard trivial still. Bei 30 ct/min sind die Decken 1500/4500
+// und die Reserve 30*ceil(300/60)=150: kohaerent, also gruener Boot. Der feuernde Zweig ist
+// ueber Env NICHT erreichbar (MAX_CALL_DURATION_CAP_S ist eine Code-Konstante, der Satz
+// kuerzt sich aus der Ungleichung heraus) - er ist in
+// test/ks-p3a-plan-cap-reserve-guard.test.js abgedeckt.
+test("KS-P3a: Boot mit dem Live-Satz (30 ct/min) bleibt gruen - Plan-Decken tragen die Reserve", async () => {
+  const srv = await startServer({ env: { VOICE_TARIFF_DEFAULT_CENTS: "30" } });
+  try {
+    const res = await fetch(`${srv.localUrl}/healthz`);
+    assert.equal(res.status, 200);
+    assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
+    assert.doesNotMatch(srv.stdout, /Plan-Decke/, "kein Plan-Decken-Befund bei kohaerenter Konfiguration");
+  } finally {
+    await srv.stop();
+  }
+});

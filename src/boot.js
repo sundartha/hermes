@@ -17,6 +17,7 @@ import {
   costTruingBookingFindings,
   voiceTariffFloorFindings,
   planCapUnderivableFindings,
+  planCapReserveFindings,
   bootstrapHealDecision,
   BOOTSTRAP_HEAL,
 } from "./boot-guard.js";
@@ -76,20 +77,32 @@ function runRetention(store, config) {
 // gebucht hat (verhindert eine inkohaerente Konfiguration VOR dem ersten Kunden). Sie kann
 // NOCH process.exit(1) ausloesen - deshalb bleibt assertSpendCapCoherence vor
 // rearmActiveCallTimers() (INV-5).
+//
+// KS-P3a haengt eine dritte Linie an (fatal): traegt die KLEINSTE Plan-Decke die
+// Worst-Case-Reserve eines Anrufs? spendCapCoherence Klausel B prueft das nur gegen
+// DEFAULT_TENANT_BUDGET_CENTS - die Decke eines ZAHLENDEN Tenants kommt aber aus dem Plan
+// (effectiveCapCents bevorzugt die tenant_budget-Zeile) und wurde bisher nie dagegen
+// gehalten.
 function assertSpendCapCoherence(config) {
+  // Die Eingaben der Worst-Case-Reserve, EINMAL benannt: beide Guards, die eine Decke
+  // dagegen halten, muessen dieselbe Reserve meinen (G5).
+  // Worst Case, NICHT der Inlandstarif: gerechnet wird das teuerste Ziel. Und die HARTE
+  // Obergrenze, nicht die Default-Dauer: resolveMaxDurationS klemmt jeden Body-Override
+  // hierauf - das ist die laengstmoegliche Reserve.
+  const worstCase = {
+    maxTariffCents: config.billing.voiceTariffDefaultCents,
+    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
+  };
+  const capForSlug = (slug) => planCapCents(slug, config.billing);
   const findings = spendCapCoherence({
     tenantDefaultCents: config.billing.defaultTenantBudgetCents,
     platformCapCents: config.billing.platformSpendCapCents,
-    // Worst Case, NICHT der Inlandstarif: der Guard rechnet das teuerste Ziel.
-    maxTariffCents: config.billing.voiceTariffDefaultCents,
-    // Die HARTE Obergrenze, nicht die Default-Dauer: resolveMaxDurationS klemmt jeden
-    // Body-Override hierauf - das ist die laengstmoegliche Reserve.
-    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
+    ...worstCase,
   });
-  const planCapFindings = planCapUnderivableFindings({
-    slugs: CATALOG_SLUGS,
-    capForSlug: (slug) => planCapCents(slug, config.billing),
-  });
+  const planCapFindings = [
+    ...planCapUnderivableFindings({ slugs: CATALOG_SLUGS, capForSlug }),
+    ...planCapReserveFindings({ slugs: CATALOG_SLUGS, capForSlug, ...worstCase }),
+  ];
   const all = [...findings, ...planCapFindings];
   const fatal = all.find((f) => f.fatal);
   if (fatal) {

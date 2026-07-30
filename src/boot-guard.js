@@ -85,6 +85,14 @@ export function meterMappingGaps(usageEventKinds, meterEventNames) {
 // (G35 n.z.). Muster: MS_PER_MINUTE in src/billing/metering.js, MS_PER_DAY in src/config.js.
 const SECONDS_PER_MINUTE = 60;
 
+// KS-P3a: die Worst-Case-Reserve EINES Anrufs, wie outbound-gates.js sie vor dem Dial bucht
+// (Satz * angefangene Minuten der laengstmoeglichen Gespraechsdauer). EINE Quelle fuer beide
+// Guards, die eine Decke dagegen halten (G5): spendCapCoherence haelt sie gegen die
+// Tenant-Default-Decke, planCapReserveFindings gegen die kleinste Plan-Decke.
+function worstCaseReserveCents({ maxTariffCents, maxCallDurationS }) {
+  return maxTariffCents * Math.ceil(maxCallDurationS / SECONDS_PER_MINUTE);
+}
+
 // P3: Befund-Codes des Kohaerenz-Guards (G25/G11: EINE Quelle statt Roh-Strings in Guard,
 // Verdrahtung und Test).
 export const SPEND_CAP_FINDING = Object.freeze({
@@ -143,18 +151,18 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
       },
     ];
   }
-  const worstCaseReserveCents = maxTariffCents * Math.ceil(maxCallDurationS / SECONDS_PER_MINUTE);
-  if (worstCaseReserveCents > tenantDefaultCents) {
+  const reserveCents = worstCaseReserveCents({ maxTariffCents, maxCallDurationS });
+  if (reserveCents > tenantDefaultCents) {
     const maxDurationS = affordableCallDurationS(tenantDefaultCents, maxTariffCents);
     return [
       {
         code: SPEND_CAP_FINDING.WORST_CASE_UNAFFORDABLE,
         fatal: true,
         message:
-          `Worst-Case-Reserve ${worstCaseReserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
+          `Worst-Case-Reserve ${reserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
           `* max. Gespraechsdauer) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ` +
           `- der teuerste Zielverkehr ist unter dieser Decke ab max_duration_s=${maxDurationS} nicht mehr bezahlbar. ` +
-          `Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens ${worstCaseReserveCents} anheben.`,
+          `Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens ${reserveCents} anheben.`,
       },
     ];
   }
@@ -263,7 +271,29 @@ export function providerRateOutOfBand(rateMicro) {
 // Guard/in der Verdrahtung, G25/G11).
 export const PLAN_CAP_FINDING = Object.freeze({
   PLAN_CAP_UNDERIVABLE: "plan_cap_underivable", // FATAL (Katalog-Slug ohne ableitbare Decke)
+  PLAN_CAP_WORST_CASE_UNAFFORDABLE: "plan_cap_worst_case_unaffordable", // FATAL (Reserve > kleinste Plan-Decke)
 });
+
+// KS-P3a: EINE Stelle, an der capForSlug gerufen und sein Wurf gefangen wird - beide
+// Plan-Decken-Guards bauen darauf auf und werfen dadurch selbst NIE (Begruendung, warum ein
+// Wurf hier zu einem LAUTLOSEN exit(0) fuehrte, s. planCapUnderivableFindings unten).
+// Liefert die ableitbaren Decken UND die Slugs, die keine haben - wer welche davon braucht,
+// entscheidet der jeweilige Guard.
+function derivePlanCaps({ slugs, capForSlug }) {
+  const derived = [];
+  const underivableSlugs = [];
+  for (const slug of slugs) {
+    let capCents;
+    try {
+      capCents = capForSlug(slug);
+    } catch {
+      underivableSlugs.push(slug);
+      continue;
+    }
+    derived.push({ slug, capCents });
+  }
+  return { derived, underivableSlugs };
+}
 
 // LCT P6 (FATAL): laesst sich fuer JEDEN Katalog-Slug ueberhaupt eine Kostendecke
 // ableiten? Greift OHNE jede tenant_budget-Zeile (frischer Deploy, erster Kunde noch nicht
@@ -284,23 +314,54 @@ export const PLAN_CAP_FINDING = Object.freeze({
 // (process-guards, AC4 "weiterlaufen") faengt ihn und der Prozess endet LAUTLOS mit exit(0) -
 // ausgerechnet dieser fatale Guard versagte still, statt laut abzulehnen (exit(1)).
 export function planCapUnderivableFindings({ slugs, capForSlug }) {
-  const underivable = [];
-  for (const slug of slugs) {
-    try {
-      capForSlug(slug);
-    } catch {
-      underivable.push(slug);
-    }
-  }
-  if (!underivable.length) return [];
+  const { underivableSlugs } = derivePlanCaps({ slugs, capForSlug });
+  if (!underivableSlugs.length) return [];
   return [
     {
       code: PLAN_CAP_FINDING.PLAN_CAP_UNDERIVABLE,
       fatal: true,
       message:
-        `Katalog-Slug(s) ${underivable.join(",")} haben KEINE ableitbare Kostendecke ` +
+        `Katalog-Slug(s) ${underivableSlugs.join(",")} haben KEINE ableitbare Kostendecke ` +
         "(fehlender Kopffreiheit-Eintrag in PLAN_CAP_HEADROOM, src/billing/plan-caps.js) - " +
         "CATALOG_SLUGS und PLAN_CAP_HEADROOM sind auseinandergelaufen. Kopffreiheit ergaenzen.",
+    },
+  ];
+}
+
+// KS-P3a (FATAL): traegt die KLEINSTE Plan-Decke die Worst-Case-Reserve EINES Anrufs?
+// Dieselbe Klausel-B-Logik wie spendCapCoherence, nur gegen MIN(planCapCents(slug)) ueber
+// alle Katalog-Slugs statt gegen DEFAULT_TENANT_BUDGET_CENTS. Der Default deckt einen
+// zahlenden Tenant NICHT ab: effectiveCapCents bevorzugt die aus dem Plan abgeleitete
+// tenant_budget-Zeile, der Boot sah diese Decken bisher nie gegen die Reserve.
+//
+// Seit KS-P5a rechnen Decke und Reserve mit DEMSELBEN Satz - er kuerzt sich aus der
+// Ungleichung heraus. Was hier tatsaechlich geprueft wird, ist die maximale Gespraechsdauer
+// gegen (inkludierte Minuten x Kopffreiheit): der Guard feuert, sobald
+// ceil(MAX_CALL_DURATION_CAP_S/60) > includedMinutes * num/den. Beim heutigen Katalog ist
+// das ab 3000 s der Fall - deshalb steht diese Sicherung VOR KS-P3, der genau diese Grenze
+// anhebt.
+//
+// Wirft NIE: capForSlug laeuft ueber derivePlanCaps (Wurf-Fang, s.o.). Ein Slug ohne
+// ableitbare Decke ist der Fall von planCapUnderivableFindings (FATAL) und wird hier
+// uebersprungen - zwei Zeilen zur selben Sache sind keine zweite Sicherung.
+// Hoechstens EIN Befund (Muster spendCapCoherence).
+export function planCapReserveFindings({ slugs, capForSlug, maxTariffCents, maxCallDurationS }) {
+  const { derived } = derivePlanCaps({ slugs, capForSlug });
+  if (!derived.length) return [];
+  const reserveCents = worstCaseReserveCents({ maxTariffCents, maxCallDurationS });
+  const smallestCap = derived.reduce((min, entry) => (entry.capCents < min.capCents ? entry : min));
+  if (reserveCents <= smallestCap.capCents) return [];
+  return [
+    {
+      code: PLAN_CAP_FINDING.PLAN_CAP_WORST_CASE_UNAFFORDABLE,
+      fatal: true,
+      message:
+        `Worst-Case-Reserve ${reserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
+        `* angefangene Minuten von ${maxCallDurationS}s) uebersteigt die kleinste Plan-Decke ` +
+        `(${smallestCap.slug}=${smallestCap.capCents} Cent) - ein Tenant mit diesem Plan faellt ` +
+        "schon beim ERSTEN Anruf ins Reserve-Gate (402). Der Tarif ist KEIN Hebel: Decke und " +
+        "Reserve skalieren beide mit ihm. Abhilfe: maximale Gespraechsdauer senken ODER " +
+        "inkludierte Minuten/Kopffreiheit des Plans anheben (src/plans.js, src/billing/plan-caps.js).",
     },
   ];
 }
