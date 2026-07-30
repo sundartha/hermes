@@ -13,10 +13,10 @@
 // der Aufrufer reicht BEREITS FORMATIERTE Werte herein (eurText/spendMonthEndDate) -
 // keine Formatierungs- oder Geld-Logik im Buendel.
 //
-// ZIFFERN-REGEL (Absolute Regel 4/6, Cross-Tenant-Leck-Riegel): platformHalt und
-// budgetUnreadable nennen per Konstruktion KEINE Zahl - weder einen Cap noch eine Summe
-// ueber fremde Tenants, und kein "NaN EUR" auf einer Geld-Kante. Das gilt in JEDER
-// Sprache; test/deny-diagnosability.test.js tastet es ziffern-genau ab.
+// ZIFFERN-REGEL (Absolute Regel 4/6, Cross-Tenant-Leck-Riegel): budgetUnreadable nennt
+// per Konstruktion KEINE Zahl - weder einen Cap noch eine Summe ueber fremde Tenants, und
+// kein "NaN EUR" auf einer Geld-Kante. Das gilt in JEDER Sprache;
+// test/deny-diagnosability.test.js tastet es ziffern-genau ab.
 //
 // NAMENS-REGEL (Absolute Regel 4, Nachbarschaft der Ziffern-Regel): kein Text dieses
 // Buendels nennt einen internen Konfigurations-Bezeichner (Env-/Setting-Name). Der
@@ -47,7 +47,6 @@ export const GATE_TEXTS = Object.freeze({
       `Dieser Anruf passt nicht mehr in dein Budget: es fehlen ${missingEur} EUR. Aktueller Spend-Monat endet am ${monthEnd}.`,
     reserveExhausted: (missingEur, monthEnd) =>
       `Dein Budget ist erschoepft: es fehlen ${missingEur} EUR. Aktueller Spend-Monat endet am ${monthEnd}.`,
-    platformHalt: "Plattform-Notaus aktiv, bitte Betreiber kontaktieren.",
   }),
   en: Object.freeze({
     kycInsufficient:
@@ -71,7 +70,6 @@ export const GATE_TEXTS = Object.freeze({
       `This call no longer fits your budget: ${missingEur} EUR short. The current spend month ends on ${monthEnd}.`,
     reserveExhausted: (missingEur, monthEnd) =>
       `Your budget is exhausted: ${missingEur} EUR short. The current spend month ends on ${monthEnd}.`,
-    platformHalt: "Platform emergency stop active, please contact the operator.",
   }),
   fr: Object.freeze({
     kycInsufficient:
@@ -95,6 +93,5 @@ export const GATE_TEXTS = Object.freeze({
       `Cet appel ne tient plus dans votre budget : il manque ${missingEur} EUR. Le mois de dépense en cours se termine le ${monthEnd}.`,
     reserveExhausted: (missingEur, monthEnd) =>
       `Votre budget est épuisé : il manque ${missingEur} EUR. Le mois de dépense en cours se termine le ${monthEnd}.`,
-    platformHalt: "Arrêt d'urgence de la plateforme actif, veuillez contacter l'exploitant.",
   }),
 });

@@ -251,9 +251,10 @@ export function makeVoiceRoutes({
       const language = store.resolveCallLanguage({ tenantId, numberRecord });
       const locale = localeFor(language);
 
-      // Schnittmenge (R2): pro-Tenant-Budget UND globaler Plattform-Notaus muessen
-      // frei sein. Fuer owner-only fallen beide zusammen -> byte-identisch zum Bestand.
-      if (store.budgetExceeded(tenantId, config.billing) || store.globalBudgetExceeded(config.billing)) {
+      // KS-P9/E10: nur noch die pro-Tenant-Decke. Die Plattform-Achse misst und warnt,
+      // sie sperrt nicht mehr - kein Kunde wird abgewiesen, weil ein anderer Geld ausgab.
+      // (Dass Inbound ueberhaupt budget-gesperrt wird, ist Gegenstand von KS-P10.)
+      if (store.budgetExceeded(tenantId, config.billing)) {
         return res
           .type("text/xml")
           .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));

@@ -131,7 +131,6 @@ export const {
   findConflict,
   trackUsage,
   budgetExceeded,
-  globalBudgetExceeded,
   reserveExceedsBudget,
   // Diagnose-Snapshot der Tenant-Achse (P5a): OHNE diesen Re-Export waere
   // store.tenantBudgetSnapshot undefined -> makeReadRoutes/outbound-gates.js wuerfen zur

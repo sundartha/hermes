@@ -41,23 +41,6 @@ test("B1: tenant-Budget ueberschritten -> Wind-Down-Completion UND Call-Control-
   assert.deepEqual(store.settlementCalls, [], "Settlement bleibt allein bei P4.5 onHangup");
 });
 
-// === B2: globaler Budget-Notaus + callControlId -> analog B1 =========================
-
-test("B2: globaler Budget-Notaus ueberschritten -> Wind-Down-Completion UND Call-Control-Hangup", async () => {
-  const call = makeCall();
-  const store = fakeStore({ call, globalBudgetExceeded: true });
-  const agentTurn = agentTurnSpy();
-  const voiceControl = voiceControlSpy();
-  const handler = makeHandler({ store, agentTurn, voiceControl });
-  const res = fakeRes();
-
-  await handler(validReq(call), res);
-
-  assert.equal(agentTurn.calls.length, 0);
-  assert.equal(sseContent(res), localeFor("de").budgetExhaustedHangup);
-  assert.deepEqual(voiceControl.calls, [{ provider: "telnyx", callControlId: "cc_1" }]);
-  assert.deepEqual(store.settlementCalls, []);
-});
 
 // === B3: unaufloesbare ccid -> 403 VOR dem Budget-Gate, kein Hangup-Versuch, kein Crash ===
 // Vorher (P1): ein Call OHNE callControlId erreichte via per-Call-Token trotzdem das

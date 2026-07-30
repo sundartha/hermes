@@ -6,6 +6,8 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 
 ## OUT-05 — Budget-/Reserve-Race bei parallelen place_call (nach F2)
 
+> **Durch KS-P9 (2026-07-30, E10) ueberholt:** die Plattform-Achse (`MAX_BUDGET_EUR`) trifft keine Sperrentscheidung mehr. Aussagen dieses Abschnitts ueber einen Plattform-Notaus / eine Geld-Schnittmenge beschreiben den Stand VOR KS-P9 und werden bewusst nicht rueckwirkend umgeschrieben.
+
 > OUT-05 (Reserve-Race): Worst-Case-Reserven pro place_call in einem strukturell ephemeren
 > In-Prozess-Ledger (`s.reservations`, nie serialisiert/hydriert); Check+Reserve atomar unter
 > `withStoreLock` (Schnittmenge Tenant+global), fail-closed try/catch (Body-Throw = Denial 402).
@@ -475,6 +477,8 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 
 ## P2A-TENANTFALLBACK — Tenant-Achse bindet fuer Tenants ohne eigene Zeile (2026-07-19)
 
+> **Durch KS-P9 (2026-07-30, E10) ueberholt:** die Plattform-Achse (`MAX_BUDGET_EUR`) trifft keine Sperrentscheidung mehr. Aussagen dieses Abschnitts ueber einen Plattform-Notaus / eine Geld-Schnittmenge beschreiben den Stand VOR KS-P9 und werden bewusst nicht rueckwirkend umgeschrieben.
+
 > **Geschlossene Luecke (D3):** Ein Tenant OHNE eigene `tenant_budget`-Zeile fiel in
 > `effectiveCapCents` bisher direkt auf den globalen Plattform-Cap (`globalCapCents`)
 > zurueck. Damit war der PLATTFORM-NOTAUS zugleich das Nutzer-Kontingent - die Tenant-
@@ -510,6 +514,8 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > beim Registrieren) unveraendert. Kein Backfill bestehender Tenants, keine Migration.
 
 ## P5A-ACHSENTRENNUNG — Achsen in Anzeige und Ablehnung getrennt (2026-07-19)
+
+> **Durch KS-P9 (2026-07-30, E10) ueberholt:** die Plattform-Achse (`MAX_BUDGET_EUR`) trifft keine Sperrentscheidung mehr. Aussagen dieses Abschnitts ueber einen Plattform-Notaus / eine Geld-Schnittmenge beschreiben den Stand VOR KS-P9 und werden bewusst nicht rueckwirkend umgeschrieben.
 
 > **Neue Informationskante:** `/api/state` und jede 402-Ablehnung des `budget`-/
 > `reserve_budget`-Gates (`src/telephony/outbound-gates.js`) nennen jetzt EIGENE
@@ -550,6 +556,8 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > Reserve-Testfall gepinnt).
 
 ## P7-SPENDMONTH — Gate-Achse auf UTC-Kalendermonat umstellbar (2026-07-20)
+
+> **Durch KS-P9 (2026-07-30, E10) ueberholt:** die Plattform-Achse (`MAX_BUDGET_EUR`) trifft keine Sperrentscheidung mehr. Aussagen dieses Abschnitts ueber einen Plattform-Notaus / eine Geld-Schnittmenge beschreiben den Stand VOR KS-P9 und werden bewusst nicht rueckwirkend umgeschrieben.
 
 > **Was diese Phase einzieht:** zwei benannte Aufloesungsfunktionen
 > (`gateUsageCents`/`gatePlatformUsageCents`, `src/store/state-ops.js`), auf die alle vier
@@ -635,6 +643,8 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 
 ## P6-BUDGETFENSTER — Perioden-Fenster + ersatzloser Wegfall der Plattform-Stundenbremse (2026-07-26)
 
+> **Durch KS-P9 (2026-07-30, E10) ueberholt:** die Plattform-Achse (`MAX_BUDGET_EUR`) trifft keine Sperrentscheidung mehr. Aussagen dieses Abschnitts ueber einen Plattform-Notaus / eine Geld-Schnittmenge beschreiben den Stand VOR KS-P9 und werden bewusst nicht rueckwirkend umgeschrieben.
+
 > **Bewusste Abweichung von Absoluter Regel 1 (O5, Owner-Entscheidung):** die
 > plattformweite Stundenbremse (`globalHourReached`, `countOutboundCallsSince` OHNE
 > Filter) ist **ersatzlos entfallen**. Begruendung: ein globales Anruflimit macht mit
@@ -695,6 +705,8 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 > Keine neue Dependency, kein neuer Env-Schluessel.
 
 ## P7-BOOTKOHAERENZ — startfaehiger Blueprint + In-Prozess-Heilung des leeren Stores (2026-07-26)
+
+> **Durch KS-P9 (2026-07-30, E10) ueberholt:** die Plattform-Achse (`MAX_BUDGET_EUR`) trifft keine Sperrentscheidung mehr. Aussagen dieses Abschnitts ueber einen Plattform-Notaus / eine Geld-Schnittmenge beschreiben den Stand VOR KS-P9 und werden bewusst nicht rueckwirkend umgeschrieben.
 
 > **Kosten-Decken kohaerent gemacht (GAP-32/GAP-33).** Die ausgelieferte Konfiguration war
 > auf zwei Achsen inkohaerent: `MAX_BUDGET_EUR=8` (800 ct) lag unter der abgeleiteten
@@ -855,6 +867,8 @@ Verschaerfen verlangt, die App-Shell aus `apps/web` vorher gegen die engere Poli
 messen, und ist deshalb ein eigener Auftrag, kein Nebeneffekt der Loeschung.
 
 ## AL-P6-TURNBUDGET — Budget-Pruefung pro Tool-Loop-Runde + Turn-Frist (2026-07-28)
+
+> **Durch KS-P9 (2026-07-30, E10) ueberholt:** die Plattform-Achse (`MAX_BUDGET_EUR`) trifft keine Sperrentscheidung mehr. Aussagen dieses Abschnitts ueber einen Plattform-Notaus / eine Geld-Schnittmenge beschreiben den Stand VOR KS-P9 und werden bewusst nicht rueckwirkend umgeschrieben.
 
 **Das Loch.** `agentTurn` (`src/claude.js`) fuhr eine feste Schleife ueber bis zu vier
 `llm.complete`-Runden und buchte in **jeder** Runde `bookTokenUsage(...)` — geprueft wurde
@@ -1125,3 +1139,61 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > `ON CONFLICT DO UPDATE SET` von `flushCalls` (`src/store/pg.js`). Ohne diesen Eintrag
 > fiele jede beantwortete Rueckfrage im pg-Backend beim naechsten Flush lautlos zurueck -
 > ein stiller Datenverlust, der im json-Backend unsichtbar geblieben waere.
+
+---
+
+## KS-P9 — Plattform-Achse verliert die Sperrwirkung (2026-07-30, E10)
+
+> **Was entfaellt.** Die Plattform-Geldachse trifft ab dieser Phase KEINE
+> Sperrentscheidung mehr. Ersatzlos geloescht: `globalBudgetExceeded`,
+> `globalReserveExceedsBudget`, `globalSpendOrDeny` (`src/store/state-ops.js`) samt ihrer
+> Fassaden-Wrapper (`store.js`/`store/json.js`/`store/pg.js`), die zweite Bedingung in
+> `tryReserveOutboundBudget`, der Plattform-Zweig des `budget`-Gates und der
+> Plattform-Fallback in `reserveOutcome` (`src/telephony/outbound-gates.js`), der
+> Plattform-Zweig der Inbound-Annahme (`src/routes/voice.js`), `BUDGET_AXIS.GLOBAL`
+> (`src/budget-gate.js`), der Ablehnungsgrund `budget_platform` und der Text `platformHalt`
+> (de/en/fr). Boot-seitig entfallen `spendCapCoherence`-Klausel A (`tenant_default_inert`,
+> FATAL), der INERT-Zweig von `planCapInertFindings` (`plan_cap_inert`, FATAL) und
+> `tenantCapRowInertFindings` (`tenant_cap_row_inert`, WARN) komplett. **Kein Guard wurde
+> von FATAL auf WARN abgesenkt** — wo die Aussage falsch wurde, wurde sie geloescht.
+>
+> **Warum das kein Schutzverlust ist (Gegen-Gates).** Ein Kostenweglauf braucht Outbound.
+> Outbound setzt in derselben Gate-Kette ein aktives Abo UND KYC voraus (fail-closed) — ein
+> unverkaufter Tenant erzeugt keine Carrier-Kosten. DID-Vermehrung deckeln `MAX_NUMBERS`
+> (plattformweit) und `MAX_NUMBERS_PER_TENANT`. Der bewusste Notaus bleibt
+> `OUTBOUND_FROZEN` (erstes Glied der Kette). Denylist, Land-Gate, Stundenlimit pro Tenant,
+> Per-Target-Cap, Max-Gespraechsdauer und die Provider-Signaturpruefung sind unberuehrt.
+>
+> **Was bleibt (in voller Schaerfe).** Die pro-Tenant-Kostendecke: `budgetExceeded`,
+> `reserveExceedsBudget`, `effectiveCapCents` (inkl. Stufe (3) `globalCapCents` — das ist
+> der PRO-TENANT-Fallback bei Sentinel `DEFAULT_TENANT_BUDGET_CENTS=0`, keine
+> Plattform-Summe; ihn zu entfernen waere fail-open), `tenantSpendOrDeny`/`spendOrDeny`,
+> der `isBookableCents`-Riegel (D7, fail-closed bei korruptem Verbrauchszaehler),
+> `tryReserveOutboundBudget` als atomare Check+Reserve unter `withStoreLock`. Boot-seitig
+> bleiben `spendCapCoherence`-Klausel A0 (WARN) und Klausel B (FATAL, Worst-Case-Reserve
+> gegen die TENANT-Decke — sie haengt an keiner Plattform-Zahl) sowie
+> `planCapUnderivableFindings` (FATAL) und `alertChannelFindings`.
+>
+> **Plan-Decken-Klemme entfaellt mit.** `deriveTenantBudgetFromPlan` klemmte die aus dem
+> Plan abgeleitete Decke auf `platformSpendCapCents`. Diese Klemme war die dritte Klausel
+> derselben Praemisse ("der Plattform-Cap bindet zuerst") und bei kohaerenter Konfiguration
+> unerreichbar, weil `plan_cap_inert` am Boot fatal war. Bliebe sie stehen, machte
+> ausgerechnet KS-P9 aus einem schlafenden Pfad einen scharfen: sobald der Betreiber
+> `MAX_BUDGET_EUR` als Warnschwelle NIEDRIG setzt (was diese Phase erst ermoeglicht),
+> kuerzte der naechste Stripe-Webhook eine verkaufte Business-Decke von 900 ct auf den
+> Warnwert — still, mit einer WARN-Zeile, ohne Boot-Guard. Sie ist deshalb in DIESER Phase
+> mit entfallen.
+>
+> **Die Plattform-Achse bleibt als BEOBACHTUNG.** `gatePlatformUsageCents`,
+> `platformSpendMonthCents`, `globalUsageTotals`, `reservationsTotal`,
+> `platformSpendObservedCents`, `claimPlatformSpendWarning` und die Emission
+> (`emitPlatformSpendWarning`, Audit + optionale SMS) sind unveraendert. `MAX_BUDGET_EUR`
+> ist ab jetzt ausschliesslich die Bezugsgroesse von `PLATFORM_SPEND_WARN_PERCENT` (und der
+> Pro-Tenant-Fallback bei Sentinel 0). **Betriebs-Vorbehalt:** ohne gesetztes
+> `PLATFORM_ALERT_SMS_TO` laeuft die Warnung NUR ins Audit-Log — `alertChannelFindings`
+> bleibt deshalb scharf (FATAL bei `PAYMENT_ENABLED=true` + `PLATFORM_SPEND_WARN_PERCENT>0`
+> + leerem Empfaenger).
+>
+> **Bewusst getragenes Restrisiko.** Fuer Starter-Kunden bleibt die zu enge Plan-Decke
+> (300 ct) bestehen. KS-P9 verschaerft sie nicht, hebt sie aber auch nicht auf — sie ist
+> Gegenstand von KS-P5a.

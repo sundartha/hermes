@@ -1,7 +1,8 @@
 // P5a (Achsen in Anzeige/Ablehnung getrennt): die "budget"- und "reserve_budget"-Gates
-// (src/telephony/outbound-gates.js) muessen nach Achse getrennte Texte + Audit-Gruende
-// liefern - Tenant-Achse nennt die EIGENE Decke/Verbrauch/Fehlbetrag, Plattform-Achse
-// bleibt ZIFFERNFREI (Cross-Tenant-Leck-Riegel, Absolute Regel 4/6). Muster
+// (src/telephony/outbound-gates.js) muessen nach Grund getrennte Texte + Audit-Gruende
+// liefern - der lesbare Bucket nennt die EIGENE Decke/Verbrauch/Fehlbetrag, der unlesbare
+// bleibt ZIFFERNFREI (kein "NaN EUR" auf einer Geld-Kante). Seit KS-P9 gibt es keine
+// Plattform-Ablehnung mehr, die hier zu pruefen waere. Muster
 // test/outbound-gates-order.test.js: makeOutboundGates(deps) + gate.run(ctx) DIREKT,
 // offline, kein Spawn, keine DB. Beweist NUR Anzeige/Text/Audit-Grund - keine der
 // Gate-PRAEDIKATE (budgetExceeded/reserveExceedsBudget/tryReserveOutboundBudget) wird
@@ -28,7 +29,6 @@ function defaultStore(overrides = {}) {
     // statt implizit vom Weltdefault zu leben.
     tenantLanguage: () => "de",
     budgetExceeded: () => false,
-    globalBudgetExceeded: () => false,
     tenantBudgetSnapshot: () => ({ capCents: 1000, spentCents: 350, remainingCents: 650 }),
     tryReserveOutboundBudget: () => true,
     reserveExceedsBudget: () => false,
@@ -67,17 +67,6 @@ test("budget-Gate, Tenant-Achse: eigene Decke + eigener Verbrauch, grund=budget_
   assert.equal(denial.status, 402);
   assert.equal(denial.body.error, "Dein Budget-Limit ist erreicht: 3.50 von 10.00 EUR verbraucht.");
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=budget_tenant tenant=T`);
-});
-
-test("budget-Gate, Plattform-Achse: zahlenfreier Notaus-Text, grund=budget_platform", async () => {
-  const { gates } = makeOutboundGates(
-    makeDeps({ store: { budgetExceeded: () => false, globalBudgetExceeded: () => true } }),
-  );
-  const denial = await gateBy(gates, "budget").run(baseCtx());
-  assert.equal(denial.status, 402);
-  assert.equal(denial.body.error, "Plattform-Notaus aktiv, bitte Betreiber kontaktieren.");
-  assert.ok(!/\d/.test(denial.body.error), "Plattform-Text traegt keine einzige Ziffer (kein Cross-Tenant-Leck)");
-  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=budget_platform tenant=T`);
 });
 
 test("budget-Gate, D7 unbuchbarer Bucket: ziffernfreier Sperrtext, grund bleibt budget_tenant", async () => {
@@ -143,16 +132,23 @@ test("reserve_budget-Gate, Tenant-Achse Rest<=0 (erschoepft): grund=reserve_ersc
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=reserve_erschoepft tenant=T requestedBy=owner`);
 });
 
-test("reserve_budget-Gate, Plattform-Achse: zahlenfreier Notaus-Text, grund=budget_platform", async () => {
+// KS-P9: tryReserveOutboundBudget lehnt nur noch aus ZWEI Gruenden ab - Tenant-Decke
+// (reserveExceedsBudget true, oben abgedeckt) oder ein unbuchbarer Reserve-Betrag
+// (isBookableCents-Riegel). Dieser Rest-Fall darf keine Zahl nennen: "NaN EUR" waere eine
+// Falschauskunft auf einer Geld-Kante.
+test("reserve_budget-Gate, unbuchbarer Reserve-Betrag: ziffernfreier Sperrtext, grund=reserve_erschoepft", async () => {
   const { gates } = makeOutboundGates(
     makeDeps({ store: { tryReserveOutboundBudget: () => false, reserveExceedsBudget: () => false } }),
   );
   const denial = await gateBy(gates, "reserve_budget").run(baseCtx({ reserveCents: 60 }));
   assert.equal(denial.status, 402);
-  assert.equal(denial.body.error, "Plattform-Notaus aktiv, bitte Betreiber kontaktieren.");
-  assert.ok(!/\d/.test(denial.body.error), "Plattform-Text traegt keine einzige Ziffer (kein Cross-Tenant-Leck)");
+  assert.equal(
+    denial.body.error,
+    "Dein Budget ist gesperrt: der Verbrauchsstand ist nicht lesbar. Bitte Betreiber kontaktieren.",
+  );
+  assert.ok(!/\d/.test(denial.body.error), "kein 'NaN EUR' auf einer Geld-Kante");
   assert.ok(!DURATION_LEAK.test(denial.body.error));
-  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=budget_platform tenant=T requestedBy=owner`);
+  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=reserve_erschoepft tenant=T requestedBy=owner`);
 });
 
 test("reserve_budget-Gate, D7 unbuchbarer Bucket: ziffernfreier Sperrtext, grund=reserve_erschoepft", async () => {

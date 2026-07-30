@@ -115,7 +115,6 @@ test("K0-5: zwei verschiedene Calls im selben Shim fuehren eigene turnSeq-Reihen
     getCallByControlId: (ccid) => [callA, callB].find((c) => c.callControlId === ccid) || null,
     getCall: (id) => [callA, callB].find((c) => c.id === id) || null,
     budgetExceeded: () => false,
-    globalBudgetExceeded: () => false,
   };
   const voiceControl = () => ({ endCallViaCallControl: async () => {} });
   const agentTurn = agentTurnSpy();

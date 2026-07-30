@@ -16,7 +16,7 @@ import {
   gateUsageCents,
   stampBudgetPeriod,
   budgetExceeded,
-  globalBudgetExceeded,
+  gatePlatformUsageCents,
 } from "../src/store/state-ops.js";
 import { emptyUsage } from "../src/store/defaults.js";
 import { PRICES } from "./_prices.js";
@@ -109,9 +109,9 @@ test("B5 negative Korrektur unter die Baseline -> Gate-Verbrauch 0, nie negativ"
   );
 });
 
-test("B6 A4-Beweis: die PLATTFORM-Achse bleibt Lebenszeit/Spend-Monat, das Fenster hebt sie nicht auf", () => {
-  // Drei gestempelte Tenants, jeder unter seiner EIGENEN Periodendecke, die Lebenszeit-
-  // Summe aber ueber platformSpendCapCents (800, s. test/_prices.js).
+test("B6 A4-Beweis: die PLATTFORM-MESSUNG bleibt Lebenszeit/Spend-Monat, das Fenster hebt sie nicht auf", () => {
+  // Drei gestempelte Tenants, jeder unter seiner EIGENEN Periodendecke - die Plattform-
+  // Messung (seit KS-P9 reine Beobachtung) sieht trotzdem die volle Lebenszeit-Summe.
   const s = makeDefaultState();
   for (const tenantId of ["t1", "t2", "t3"]) {
     s.usage[tenantId] = { ...emptyUsage(), costCents: 300 };
@@ -120,14 +120,14 @@ test("B6 A4-Beweis: die PLATTFORM-Achse bleibt Lebenszeit/Spend-Monat, das Fenst
     assert.equal(gateUsageCents(s, tenantId, FLAG_OFF, NOW_ISO), 10, `${tenantId} unter der eigenen Decke`);
   }
   assert.equal(
-    globalBudgetExceeded(s, FLAG_OFF, NOW_ISO),
-    true,
-    "Flag AUS: der Plattform-Notaus liest weiter die Lebenszeit-Summe",
+    gatePlatformUsageCents(s, FLAG_OFF, NOW_ISO),
+    3 * 310,
+    "Flag AUS: die Plattform-Messung liest weiter die Lebenszeit-Summe, nicht das Perioden-Fenster",
   );
   assert.equal(
-    globalBudgetExceeded(s, { ...FLAG_ON, platformSpendCapCents: 1 }, NOW_ISO),
-    true,
-    "Flag AN: der Plattform-Notaus liest weiter die Spend-Monat-Summe",
+    gatePlatformUsageCents(s, FLAG_ON, NOW_ISO),
+    3 * 10,
+    "Flag AN: die Plattform-Messung liest die Spend-Monat-Summe, nicht das Perioden-Fenster",
   );
 });
 

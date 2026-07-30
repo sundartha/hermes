@@ -44,7 +44,7 @@ NACH verifiziertem Deploy, Rollback = Flag aus).
 - **Outbound-Freigabe:** per-Tenant-Verifikation (aktives Abo + KYC). Globaler Not-Aus: `OUTBOUND_FROZEN`.
 - **Max-Dauer:** `MAX_CALL_DURATION_S` (Default 180 s, Max 300) beendet jeden Call hart (Twilio `timeLimit` + Timer).
 - **Disclosure-Pflicht:** Erster gesprochener Satz bei Outbound ist fest verdrahtet: _„Guten Tag, hier spricht ein KI-Assistent im Auftrag von [Name]. Das Gespräch wird für meinen Auftraggeber zusammengefasst."_
-- **Budget-Guard:** `MAX_BUDGET_EUR` stoppt neue Calls, Verbrauch live im Dashboard.
+- **Budget-Guard:** die **pro-Tenant-Kostendecke** (`DEFAULT_TENANT_BUDGET_CENTS` bzw. die aus dem Plan abgeleitete `tenant_budget`-Zeile) stoppt neue Calls, Verbrauch live im Dashboard. `MAX_BUDGET_EUR` ist seit KS-P9/E10 **kein Gate mehr**, sondern Plattform-Beobachtung mit Schwellenwarnung (`PLATFORM_SPEND_WARN_PERCENT`).
 - **Permissions:** Kalender / Buchen / persönliche Daten / Bankdaten pro Toggle im Dashboard — wirkt sofort auf die Tools des Agenten.
 
 ## Kosten

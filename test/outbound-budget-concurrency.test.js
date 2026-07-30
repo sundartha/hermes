@@ -1,11 +1,11 @@
 // OUT-05: Reserve-Ledger ueber die Store-FASSADE (json-Backend, Temp-DATA_DIR). Muster:
 // store-purge.test.js (before() seedet ein Temp-DATA_DIR, dann EIN store.js-Import fuers
 // ganze File). Der Referenz-Test fuer die Phase: beweist Atomaritaet unter
-// store.withStoreLock (kein Doppel-Grant bei N parallelen Reservierungen) UND die globale
-// Achse (Schnittmenge Tenant + Plattform, Regel 1). Jeder Test nutzt eigene Tenant-IDs UND
+// store.withStoreLock (kein Doppel-Grant bei N parallelen Reservierungen). Jeder Test nutzt eigene Tenant-IDs UND
 // gibt seine Reserve am Ende frei (F.I.R.S.T./Independence): der globale Ledger endet bei 0,
 // kein Test-Kopplungs-Leak ueber reservationsTotal. Server (F2) ruft tryReserve noch nicht -
 // dieser Test treibt NUR die Store-Fassade.
+// KS-P9/E10: die Plattform-Achse sperrt nicht mehr - der letzte Test unten pinnt genau das.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { tempDataDir } from "./helpers.js";
@@ -62,7 +62,7 @@ test("Idempotenz: eine zweite Freigabe desselben Calls ist ein No-Op (kein negat
   assert.equal(store.reservationOf(T3), 0, "kein doppelter Abzug, kein negativer Ledger");
 });
 
-test("Globale Achse: pro-Tenant frei, Summe reisst den globalen Notaus", async () => {
+test("KS-P9: die Plattform-Summe sperrt nicht mehr - beide Tenants reservieren, jeder unter seiner Decke", async () => {
   const G1 = "tenant_concurrency_global_1";
   const G2 = "tenant_concurrency_global_2";
 
@@ -76,11 +76,12 @@ test("Globale Achse: pro-Tenant frei, Summe reisst den globalen Notaus", async (
   );
   assert.equal(
     grantG2,
-    false,
-    "G2 waere pro-Tenant frei (0.60 EUR < 1 EUR), aber Summe mit G1 (1.20 EUR) reisst den globalen Cap",
+    true,
+    "G2 ist pro-Tenant frei (0.60 EUR < 1 EUR); die Summe mit G1 (1.20 EUR) sperrt seit KS-P9 nichts mehr",
   );
-  assert.equal(store.reservationOf(G2), 0, "abgelehnte Reserve bucht nichts");
+  assert.equal(store.reservationOf(G2), RESERVE_CENTS, "G2 hat tatsaechlich reserviert");
 
   // Cleanup
-  store.releaseOutboundReserve({ tenantId: G1, reserveCents: RESERVE_CENTS, reserveReleased: false });
+  for (const tenantId of [G1, G2])
+    store.releaseOutboundReserve({ tenantId, reserveCents: RESERVE_CENTS, reserveReleased: false });
 });

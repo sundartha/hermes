@@ -1,7 +1,8 @@
 // OUT-05: Reserve-Ledger (state-ops-Unit, REIN - kein IO, kein Netz, kein Store-Singleton).
 // Jeder Test baut einen frischen makeDefaultState() (F.I.R.S.T., unabhaengig). Prueft die
-// FACHLOGIK der In-Flight-Reservierung: kumulative Kappung (Tenant UND global, Schnittmenge,
-// Regel 1), atomarer Check+Increment ohne Schreibeffekt bei Ablehnung, Idempotenz + Clamp
+// FACHLOGIK der In-Flight-Reservierung: kumulative Kappung an der pro-Tenant-Decke
+// (KS-P9: die Plattform-Summe sperrt nicht mehr), atomarer Check+Increment ohne
+// Schreibeffekt bei Ablehnung, Idempotenz + Clamp
 // bei der Freigabe. Der Server (F2) ruft diese Funktionen noch nicht - reiner Store-Test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -10,7 +11,6 @@ import {
   reservationFor,
   reservationsTotal,
   reserveExceedsBudget,
-  globalReserveExceedsBudget,
   tryReserveOutboundBudget,
   releaseOutboundReserve,
   addVoiceUsageCostCents,
@@ -51,13 +51,14 @@ test("S1-6: tryReserveOutboundBudget mit negativem/NaN reserveCents -> false, Le
   assert.equal(tryReserveOutboundBudget(s, T1, 0, CFG), true, "0 ist valide (kostenlose Reserve)");
 });
 
-test("globalReserveExceedsBudget: pro-Tenant frei, Summe reisst den globalen Cap", () => {
+test("KS-P9: pro-Tenant frei -> reserviert, auch wenn die Plattform-Summe die Zahl reisst", () => {
   const s = makeDefaultState();
   s.reservations[T1] = 60; // T1 haelt bereits 0.60 EUR Reserve
-  // T2 selbst waere unter dem 1-EUR-Cap frei (0.60 EUR), aber die Plattform-Summe
-  // (0.60 + 0.60 = 1.20 EUR) reisst den globalen Notaus.
-  assert.equal(reserveExceedsBudget(s, T2, 60, CFG), false, "T2 pro-Tenant allein waere frei");
-  assert.equal(globalReserveExceedsBudget(s, 60, CFG), true, "Plattform-Summe > globaler Cap");
+  // T2 ist unter dem 1-EUR-Cap frei (0.60 EUR); die Plattform-Summe (0.60 + 0.60 = 1.20 EUR)
+  // hat seit KS-P9 keine Sperrwirkung mehr.
+  assert.equal(reserveExceedsBudget(s, T2, 60, CFG), false, "T2 pro-Tenant frei");
+  assert.equal(tryReserveOutboundBudget(s, T2, 60, CFG), true, "Plattform-Summe blockt nicht mehr");
+  assert.equal(reservationFor(s, T2), 60, "Reserve wurde gebucht");
 });
 
 test("settled costCents + In-Flight-Reserve kumulieren (Reconcile hebt die Reserve-Schwelle)", () => {

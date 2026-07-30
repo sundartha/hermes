@@ -88,7 +88,6 @@ const SECONDS_PER_MINUTE = 60;
 // P3: Befund-Codes des Kohaerenz-Guards (G25/G11: EINE Quelle statt Roh-Strings in Guard,
 // Verdrahtung und Test).
 export const SPEND_CAP_FINDING = Object.freeze({
-  TENANT_DEFAULT_INERT: "tenant_default_inert", // Klausel A  - FATAL
   TENANT_DEFAULT_UNSET: "tenant_default_unset", // Klausel A0 - WARN
   WORST_CASE_UNAFFORDABLE: "worst_case_unaffordable", // Klausel B - FATAL
 });
@@ -102,15 +101,12 @@ function affordableCallDurationS(tenantDefaultCents, maxTariffCents) {
 }
 
 // P3 (Boot-Guards Konfig-Kohaerenz): prueft die Budget-Achsen GEGENEINANDER, nicht nur
-// jede einzeln. Drei sich ausschliessende Klauseln (Reihenfolge ist die Spezifikation):
+// jede einzeln. Zwei sich ausschliessende Klauseln (Reihenfolge ist die Spezifikation):
 //
 // A0 (WARN): tenantDefaultCents === 0 ist der dokumentierte Sentinel "kein Tenant-
 //   Default" (src/config.js, min:0) - jeder Tenant ohne eigene tenant_budget-Zeile
-//   faellt auf den geteilten Plattform-Cap zurueck. Kein Schutzverlust, nur Hinweis.
-// A (FATAL): tenantDefaultCents >= platformCapCents macht die Tenant-Achse INERT - der
-//   globale Cap bindet immer zuerst, die per-Tenant-Decke wirkt nie (Regel 1: eine
-//   inerte Kosten-Achse ist echter Schutzverlust). >=, NICHT >: bei Gleichstand bindet
-//   die Tenant-Achse ebenfalls nie.
+//   faellt auf den Pro-Tenant-Fallback zurueck (effectiveCapCents Stufe 3). Kein
+//   Schutzverlust, nur Hinweis.
 // B (FATAL, GAP-32): selbst wenn die Tenant-Decke wirkt, reicht sie fuer den TEURSTEN
 //   Zielverkehr (maxTariffCents) ueber die laengstmoegliche Gespraechsdauer
 //   (maxCallDurationS, die HARTE Klemme aus resolveMaxDurationS) nicht aus - jedes Ziel
@@ -120,8 +116,14 @@ function affordableCallDurationS(tenantDefaultCents, maxTariffCents) {
 //   Konfiguration, unter der ein ganzer Zielbereich vor dem Dial abgewiesen wird, ist kein
 //   Betriebszustand - der Start wird verweigert und die Meldung nennt den Zielwert.
 //
-// Der A0-Early-Return VOR Klausel A macht "tenantDefaultCents > 0" fuer Klausel A
-// strukturell wahr (G27: Struktur statt Konvention) - Klausel B erbt das ebenfalls.
+// KS-P9/E10: die frueher hier stehende Klausel A (tenantDefaultCents >= platformCapCents
+// -> FATAL "Tenant-Achse inert") ist ERSATZLOS entfallen. Sie hielt die Tenant-Decke gegen
+// die Plattform-Zahl, weil der Plattform-Cap zuerst band - ohne Sperrwirkung ist die
+// Aussage schlicht falsch. Nicht auf WARN abgesenkt, sondern geloescht.
+//
+// Der A0-Early-Return macht "tenantDefaultCents > 0" fuer Klausel B strukturell wahr
+// (G27: Struktur statt Konvention) - diese Aussage traegt jetzt ALLEIN die
+// Divisionssicherheit von affordableCallDurationS.
 // Es entsteht hoechstens EIN Befund (die Klauseln schliessen sich aus); Array-Form
 // haelt die Verdrahtung trotzdem uniform (Muster meterMappingGaps: leer = in Ordnung).
 //
@@ -136,21 +138,8 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
         fatal: false,
         message:
           `DEFAULT_TENANT_BUDGET_CENTS=0 (Sentinel: kein Tenant-Default) - jeder Tenant ` +
-          "ohne eigene tenant_budget-Zeile faellt auf den geteilten Plattform-Cap " +
-          `platformSpendCapCents=${platformCapCents} zurueck.`,
-      },
-    ];
-  }
-  if (tenantDefaultCents >= platformCapCents) {
-    return [
-      {
-        code: SPEND_CAP_FINDING.TENANT_DEFAULT_INERT,
-        fatal: true,
-        message:
-          `DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ist >= MAX_BUDGET_EUR*100=${platformCapCents} ` +
-          "- die Tenant-Budget-Achse ist damit WIRKUNGSLOS (der globale Plattform-Cap bindet " +
-          "immer zuerst). Abhilfe: DEFAULT_TENANT_BUDGET_CENTS unter den Plattform-Cap senken " +
-          "ODER MAX_BUDGET_EUR anheben.",
+          `ohne eigene tenant_budget-Zeile faellt auf MAX_BUDGET_EUR*100=${platformCapCents} ` +
+          "als Pro-Tenant-Decke zurueck (effectiveCapCents Stufe 3).",
       },
     ];
   }
@@ -165,8 +154,7 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
           `Worst-Case-Reserve ${worstCaseReserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
           `* max. Gespraechsdauer) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ` +
           `- der teuerste Zielverkehr ist unter dieser Decke ab max_duration_s=${maxDurationS} nicht mehr bezahlbar. ` +
-          `Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens ${worstCaseReserveCents} anheben ` +
-          `(und echt unter MAX_BUDGET_EUR*100=${platformCapCents} halten).`,
+          `Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens ${worstCaseReserveCents} anheben.`,
       },
     ];
   }
@@ -271,19 +259,21 @@ export function providerRateOutOfBand(rateMicro) {
   ];
 }
 
-// LCT P6: Befund-Codes der Tenant-Kostendecke-aus-Plan-Ableitung gegen den Plattform-Cap
-// (kein Magic-String im Guard/in der Verdrahtung, G25/G11).
+// LCT P6: Befund-Codes der Tenant-Kostendecke-aus-Plan-Ableitung (kein Magic-String im
+// Guard/in der Verdrahtung, G25/G11).
 export const PLAN_CAP_FINDING = Object.freeze({
-  PLAN_CAP_INERT: "plan_cap_inert", // erste Linie - FATAL
-  PLAN_CAP_UNDERIVABLE: "plan_cap_underivable", // erste Linie - FATAL (Katalog-Slug ohne ableitbare Decke)
-  TENANT_CAP_ROW_INERT: "tenant_cap_row_inert", // zweite Linie - WARN
+  PLAN_CAP_UNDERIVABLE: "plan_cap_underivable", // FATAL (Katalog-Slug ohne ableitbare Decke)
 });
 
-// LCT P6 erste Linie (FATAL): die ABGELEITETEN Decken ALLER Katalog-Slugs gegen den
-// Plattform-Cap. Greift OHNE jede tenant_budget-Zeile (frischer Deploy, erster Kunde
-// noch nicht da) - verhindert, dass eine inkohaerente Konfiguration ueberhaupt in den
-// Betrieb kommt. capForSlug wird HEREINGEREICHT (Muster: reine Entscheidung, config-frei/
-// testbar, wie spendCapCoherence); der Aufrufer baut es aus planCapCents + config.billing.
+// LCT P6 (FATAL): laesst sich fuer JEDEN Katalog-Slug ueberhaupt eine Kostendecke
+// ableiten? Greift OHNE jede tenant_budget-Zeile (frischer Deploy, erster Kunde noch nicht
+// da) - verhindert, dass eine inkohaerente Konfiguration ueberhaupt in den Betrieb kommt.
+// capForSlug wird HEREINGEREICHT (Muster: reine Entscheidung, config-frei/testbar, wie
+// spendCapCoherence); der Aufrufer baut es aus planCapCents + config.billing.
+//
+// KS-P9/E10: der frueher hier stehende INERT-Zweig (abgeleitete Plan-Decke >= Plattform-Cap
+// -> FATAL) ist ERSATZLOS entfallen - er hielt die Plan-Decke gegen die Plattform-Zahl,
+// weil der Plattform-Cap zuerst band. Der Name sagt jetzt, was uebrig ist (N1/G20).
 //
 // S1-2 (Vertrags-Parity): capForSlug (planCapCents) WIRFT bei einem Katalog-Slug OHNE
 // Kopffreiheit-Eintrag (CATALOG_SLUGS und PLAN_CAP_HEADROOM auseinandergelaufen). Diese
@@ -293,60 +283,24 @@ export const PLAN_CAP_FINDING = Object.freeze({
 // bootServer bis zum top-level await ohne try/catch; das globale uncaughtException-Netz
 // (process-guards, AC4 "weiterlaufen") faengt ihn und der Prozess endet LAUTLOS mit exit(0) -
 // ausgerechnet dieser fatale Guard versagte still, statt laut abzulehnen (exit(1)).
-export function planCapInertFindings({ slugs, platformCapCents, capForSlug }) {
-  const inert = [];
+export function planCapUnderivableFindings({ slugs, capForSlug }) {
   const underivable = [];
   for (const slug of slugs) {
-    let cap;
     try {
-      cap = capForSlug(slug);
+      capForSlug(slug);
     } catch {
       underivable.push(slug);
-      continue;
     }
-    if (cap >= platformCapCents) inert.push(slug);
   }
-  const findings = [];
-  if (underivable.length) {
-    findings.push({
+  if (!underivable.length) return [];
+  return [
+    {
       code: PLAN_CAP_FINDING.PLAN_CAP_UNDERIVABLE,
       fatal: true,
       message:
         `Katalog-Slug(s) ${underivable.join(",")} haben KEINE ableitbare Kostendecke ` +
         "(fehlender Kopffreiheit-Eintrag in PLAN_CAP_HEADROOM, src/billing/plan-caps.js) - " +
         "CATALOG_SLUGS und PLAN_CAP_HEADROOM sind auseinandergelaufen. Kopffreiheit ergaenzen.",
-    });
-  }
-  if (inert.length) {
-    findings.push({
-      code: PLAN_CAP_FINDING.PLAN_CAP_INERT,
-      fatal: true,
-      message:
-        `Abgeleitete Plan-Decke(n) ${inert.join(",")} erreichen/uebersteigen ` +
-        `platformSpendCapCents=${platformCapCents} - die per-Tenant-Achse waere fuer diese ` +
-        "Plaene WIRKUNGSLOS (der Plattform-Cap bindet zuerst). Abhilfe: MAX_BUDGET_EUR anheben " +
-        "ODER Kopffreiheit senken.",
-    });
-  }
-  return findings;
-}
-
-// LCT P6 zweite Linie (WARN): Nachlese ueber TATSAECHLICH gesetzte tenant_budget-Zeilen,
-// die vor einer nachtraeglichen Cap-Senkung geschrieben wurden. WARN, nicht fatal: die
-// erste Linie garantiert Kohaerenz fuer die Zukunft; ein fataler Boot ueber eine bereits
-// geklemmte Alt-Zeile risse die Telefonie ab - genau das, was der Clamp an der Schreibkante
-// (deriveTenantBudgetFromPlan) vermeiden soll. budgetRows = s.tenantBudgets.
-export function tenantCapRowInertFindings({ budgetRows, platformCapCents }) {
-  const inert = budgetRows.filter((r) => r.hardCapCents >= platformCapCents);
-  if (!inert.length) return [];
-  return [
-    {
-      code: PLAN_CAP_FINDING.TENANT_CAP_ROW_INERT,
-      fatal: false,
-      message:
-        `${inert.length} gesetzte tenant_budget-Zeile(n) erreichen/uebersteigen ` +
-        `platformSpendCapCents=${platformCapCents} (Tenant-Achse fuer sie inert) - vermutlich ` +
-        "wurde MAX_BUDGET_EUR nach dem Setzen gesenkt. MAX_BUDGET_EUR anheben oder Zeilen neu ableiten.",
     },
   ];
 }

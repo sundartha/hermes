@@ -58,7 +58,7 @@ export function fakeRes() {
 // getCallIds). finishCall/endCallRecord sind No-op-Spies - Negativ-Beweis, dass
 // weder end_call noch der Mid-Call-Budget-Kill selbst ein Settlement ausloesen
 // (bleibt P4.5 onHangup, EINE Quelle, Regel 1).
-export function fakeStore({ call, budgetExceeded = false, globalBudgetExceeded = false } = {}) {
+export function fakeStore({ call, budgetExceeded = false } = {}) {
   const getCallIds = [];
   const settlementCalls = [];
   return {
@@ -73,9 +73,6 @@ export function fakeStore({ call, budgetExceeded = false, globalBudgetExceeded =
     },
     budgetExceeded() {
       return budgetExceeded;
-    },
-    globalBudgetExceeded() {
-      return globalBudgetExceeded;
     },
     finishCall(c) {
       settlementCalls.push({ op: "finishCall", call: c });

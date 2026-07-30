@@ -13,9 +13,7 @@ import {
   trackUsage,
   addVoiceUsageCostCents,
   budgetExceeded,
-  globalBudgetExceeded,
   reserveExceedsBudget,
-  globalReserveExceedsBudget,
   tryReserveOutboundBudget,
 } from "../src/store/state-ops.js";
 import { isBookableCents, USAGE_CORRUPT_REASON, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -81,7 +79,7 @@ test("Wurzel: voiceMinutesOf normalisiert ein kaputtes answeredAt/endedAt auf 0 
   assert.equal(voiceMinutesOf({ answeredAt: "kaputt", endedAt: ok }), 0, "kaputtes answeredAt -> 0");
 });
 
-// ---- (b) Lesekanten: budgetExceeded / globalBudgetExceeded ----
+// ---- (b) Lesekante: budgetExceeded ----
 
 test("(b) budgetExceeded: NaN-Bucket sperrt fail-closed mit grund=usage_korrupt", async () => {
   const s = makeDefaultState();
@@ -91,17 +89,6 @@ test("(b) budgetExceeded: NaN-Bucket sperrt fail-closed mit grund=usage_korrupt"
     result = budgetExceeded(s, TENANT_A, PRICES);
   });
   assert.equal(result, true, "NaN-Bucket muss sperren, nicht durchlassen");
-  assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
-});
-
-test("(b') globalBudgetExceeded: NaN-Bucket sperrt fail-closed mit grund=usage_korrupt", async () => {
-  const s = makeDefaultState();
-  usageFor(s, TENANT_A).costCents = NaN;
-  let result;
-  const out = await captureErr(() => {
-    result = globalBudgetExceeded(s, PRICES);
-  });
-  assert.equal(result, true, "vergifteter Tenant-Bucket macht die Plattform-Summe NaN -> sperren");
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
 
@@ -153,16 +140,14 @@ test("T5-Raender: UNBOOKABLE wird ueberall abgelehnt, BOOKABLE bleibt buchbar (0
 
 // ---- Reserve-Lesekanten (Zusatzbefund D-3) ----
 
-test("Reserve-Lesekanten: NaN-Bucket sperrt reserveExceedsBudget + globalReserveExceedsBudget", async () => {
+test("Reserve-Lesekante: NaN-Bucket sperrt reserveExceedsBudget", async () => {
   const s = makeDefaultState();
   usageFor(s, TENANT_A).costCents = NaN;
-  let a, b;
+  let a;
   const out = await captureErr(() => {
     a = reserveExceedsBudget(s, TENANT_A, 60, PRICES);
-    b = globalReserveExceedsBudget(s, 60, PRICES);
   });
   assert.equal(a, true, "reserveExceedsBudget muss bei NaN sperren, sonst wuerde reserviert");
-  assert.equal(b, true, "globalReserveExceedsBudget muss bei NaN sperren");
   assert.match(out, new RegExp(`grund=${USAGE_CORRUPT_REASON}`));
 });
 
@@ -170,13 +155,10 @@ test("Reserve-Lesekanten: NaN-Bucket sperrt reserveExceedsBudget + globalReserve
 // Vor dem Fix pruefte isBookableCents NUR Endlichkeit + Nicht-Negativitaet - ein
 // fraktionaler Bucket (0.5 statt einer Ganzzahl-Cents) waere klaglos durchgerutscht.
 // budgetExceeded/reserveExceedsBudget lesen usageFor(...).costCents DIREKT (keine
-// Re-Aggregation) und sind daher unmittelbar exponiert. globalBudgetExceeded/
-// globalReserveExceedsBudget lesen stattdessen globalUsageTotals(s).costCents, das
-// IMMER ueber Math.floor(microTotal/MICRO_CENTS_PER_CENT) neu abgeleitet wird
-// (state-ops.js globalUsageTotals) - ein einzelner fraktionaler Tenant-Bucket flooert
-// dort implizit zu einer Ganzzahl und erreicht den D7-Riegel gar nicht fraktional; die
-// globale Achse bleibt DAFUER von den bestehenden NaN-Tests abgedeckt (b'/Reserve-
-// Lesekanten), die einen wirklich unbuchbaren (NaN-)Wert durchreichen.
+// Re-Aggregation) und sind daher unmittelbar exponiert. Die Plattform-Achse hat seit
+// KS-P9 gar keine Gate-Kante mehr, an der ein D7-Riegel greifen muesste - sie misst nur
+// noch (gatePlatformUsageCents/claimPlatformSpendWarning, dort faellt ein unbuchbarer
+// Wert auf null zurueck und die Warnung schweigt).
 test("G26-Regressionstest: fraktionaler Tenant-Bucket (0.5) sperrt budgetExceeded + reserveExceedsBudget fail-closed", async () => {
   const s = makeDefaultState();
   usageFor(s, TENANT_A).costCents = 0.5;

@@ -15,8 +15,8 @@ const post = (url, to) =>
   });
 
 test("OUT-05 F2: zwei gleichzeitige place_call gegen engen Cap -> genau 1x200, 1x402(reserve)", async () => {
-  // Cap = MAX_BUDGET_EUR = 10 EUR = 1000 ct (LCT P6: muss echt ueber der abgeleiteten
-  // Business-Plan-Decke von 900 ct liegen, sonst verweigert der Boot-Guard, plan_cap_inert).
+  // Cap = MAX_BUDGET_EUR = 10 EUR = 1000 ct (Pro-Tenant-Fallback, effectiveCapCents Stufe 3 -
+  // der Owner hat keine tenant_budget-Zeile).
   // Inlandstarif 200 ct/min x ceil(180/60)=3 min = 600 ct je Reserve; zwei Reserven
   // zusammen (1200 ct) reissen den Cap, eine einzelne (600 ct) nicht. Absender-DID mit +49,
   // damit der Inlandstarif die +49-Ziele ueberhaupt tarifiert (P5: gleiche Vorwahl an

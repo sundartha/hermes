@@ -15,9 +15,7 @@ import {
   addVoiceUsageCostCents,
   spendMonthUsageCents,
   budgetExceeded,
-  globalBudgetExceeded,
   reserveExceedsBudget,
-  globalReserveExceedsBudget,
   tryReserveOutboundBudget,
 } from "../src/store/state-ops.js";
 import { emptyUsage, BOOTSTRAP_TENANT_ID, MICRO_CENTS_PER_CENT } from "../src/store/defaults.js";
@@ -240,16 +238,6 @@ test("(k) INERTHEIT: alle fuenf Gate-Praedikate sind gegen die Spend-Monat-Achse
       reserveExceedsBudget(neutral, TENANT_A, 10, cfg),
       reserveExceedsBudget(loud, TENANT_A, 10, cfg),
       `reserveExceedsBudget bei costCents=${costCents}`,
-    );
-    assert.equal(
-      globalBudgetExceeded(neutral, cfg),
-      globalBudgetExceeded(loud, cfg),
-      `globalBudgetExceeded bei costCents=${costCents}`,
-    );
-    assert.equal(
-      globalReserveExceedsBudget(neutral, 10, cfg),
-      globalReserveExceedsBudget(loud, 10, cfg),
-      `globalReserveExceedsBudget bei costCents=${costCents}`,
     );
     assert.equal(
       tryReserveOutboundBudget(neutral, TENANT_A, 10, cfg),

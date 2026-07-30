@@ -44,11 +44,12 @@ export const BASE_ENV = {
   DATA_DIR: "", // wird pro Server durch ein Temp-Verzeichnis ersetzt
   ANTHROPIC_API_KEY: "test-anthropic-key",
   CLAUDE_MODEL: "claude-haiku-4-5",
-  // LCT P6: 30 (statt vormals 8) - der Plattform-Cap muss echt ueber der abgeleiteten
-  // Business-Plan-Decke (900 ct) liegen, sonst verweigert JEDER Spawn-Test den Boot
-  // (plan_cap_inert, erste Linie, greift unconditional auf ALLE Katalog-Slugs). 30 spiegelt
-  // den Live-Wert (Entscheidung 8, PLAN-LIVE-COST-TRACING); seit P7 traegt der CODE-Fallback
-  // in src/config.js dieselbe Zahl (der Pin hier bleibt trotzdem, Lehre test-base-env-drift).
+  // 30 spiegelt den Live-Wert (Entscheidung 8, PLAN-LIVE-COST-TRACING); seit P7 traegt der
+  // CODE-Fallback in src/config.js dieselbe Zahl (der Pin hier bleibt trotzdem, Lehre
+  // test-base-env-drift). Der frueher hier begruendete Boot-Zwang (abgeleitete Plan-Decke
+  // gegen den Plattform-Cap) ist mit KS-P9/E10 entfallen; die Zahl wirkt jetzt als
+  // Warnschwelle der Plattform-Beobachtung UND - bei DEFAULT_TENANT_BUDGET_CENTS=0 - als
+  // Pro-Tenant-Fallback (effectiveCapCents Stufe 3), auf den mehrere Spawn-Tests bauen.
   MAX_BUDGET_EUR: "30",
   // LCT P6: Deckel-Basissatz (billing/plan-caps.js) neutral auf den Code-Default gepinnt
   // (Lehre test-base-env-drift).

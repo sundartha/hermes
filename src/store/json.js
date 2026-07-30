@@ -580,10 +580,6 @@ export function budgetExceeded(tenantId, cfg) {
   return ops.budgetExceeded(load(), tenantId, cfg, new Date().toISOString());
 }
 
-export function globalBudgetExceeded(cfg) {
-  return ops.globalBudgetExceeded(load(), cfg, new Date().toISOString());
-}
-
 // Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).
 export function reserveExceedsBudget(tenantId, reserveCents, cfg) {
   return ops.reserveExceedsBudget(load(), tenantId, reserveCents, cfg, new Date().toISOString());

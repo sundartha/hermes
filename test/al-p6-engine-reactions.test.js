@@ -58,17 +58,6 @@ test("AL-P6-7: Shim - Tenant-Cap mitten im Turn erschoepft -> Ansage UND Call-Co
   assert.match(gateLines[0], /"reason":"budget_tenant"/);
 });
 
-test("AL-P6-8: Shim - Plattform-Notaus mitten im Turn -> derselbe Notaus", async () => {
-  const { call, store, voiceControl, res, handler } = shimWithStopReason("budget_global");
-
-  const gateLines = await withShimGateLog(() => handler(validReq(call), res));
-
-  assert.equal(sseContent(res), localeFor("de").budgetExhaustedHangup);
-  assert.deepEqual(voiceControl.calls, [HANGUP_CALL]);
-  assert.equal(gateLines.length, 1);
-  assert.match(gateLines[0], /"reason":"budget_global"/);
-});
-
 test("AL-P6-9: Shim - der Zeit-Abbruch legt NICHT auf, der Turn-Text geht raus", async () => {
   const { call, voiceControl, res, handler } = shimWithStopReason("deadline");
 

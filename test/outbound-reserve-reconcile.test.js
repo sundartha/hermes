@@ -12,7 +12,6 @@ import {
   makeDefaultState,
   trackUsage,
   budgetExceeded,
-  globalBudgetExceeded,
   setTenantBudget,
   usageFor,
   reserveExceedsBudget,
@@ -57,14 +56,13 @@ test("INV(3b): Reconcile hebt budgetExceeded + reserveExceedsBudget an (Carrier-
   );
 });
 
-test("INV(4): Reservierung nutzt per-Tenant effectiveCapCents (Zeile gewinnt), global unberuehrt", () => {
+test("INV(4): Reservierung nutzt per-Tenant effectiveCapCents (Zeile gewinnt)", () => {
   const s = makeDefaultState();
-  setTenantBudget(s, TENANT_A, { budgetCents: 200, hardCapCents: 200 }); // 2 EUR < 8 global
-  // Reserve 3 EUR > 2-EUR-Zeile, aber < 8-EUR-platformSpendCapCents -> die Zeile gewinnt.
+  setTenantBudget(s, TENANT_A, { budgetCents: 200, hardCapCents: 200 }); // 2 EUR
+  // Reserve 3 EUR > 2-EUR-Zeile, aber < 8-EUR-Fallback -> die Zeile gewinnt.
   assert.equal(reserveExceedsBudget(s, TENANT_A, 300, PRICES), true, "pro-Tenant-Zeile (2 EUR) gewinnt");
-  // budgetExceeded byte-identisch (kein Verbrauch); globaler Notaus von der Reserve unberuehrt.
+  // budgetExceeded byte-identisch (kein Verbrauch).
   assert.equal(budgetExceeded(s, TENANT_A, PRICES), false, "leerer Bucket -> budgetExceeded unveraendert");
-  assert.equal(globalBudgetExceeded(s, PRICES), false, "globaler Notaus von der Reserve unberuehrt");
 });
 
 test("INV(5): Owner ohne tenant_budget-Zeile -> Cap = platformSpendCapCents (byte-identisch)", () => {

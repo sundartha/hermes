@@ -33,12 +33,10 @@ const LLM_TIMEOUT_MS = 2000;
 const MOCK_DELAY_MS = 1000;
 
 // Geldachse: Haiku kostet 1,0 USD je Million Input-Token; mal usdToEur (0,92) sind
-// 2 Mio. Token rund 184 ct und 50 Mio. rund 4600 ct. Die kleine Menge reisst nur einen
-// eng gesetzten TENANT-Cap, die grosse zusaetzlich den Plattform-Cap (MAX_BUDGET_EUR=30
-// = 3000 ct).
+// 2 Mio. Token rund 184 ct. Beide Mengen reissen einen eng gesetzten TENANT-Cap - die
+// einzige Geld-Achse seit KS-P9/E10.
 const TOKENS_OVER_TENANT_CAP = 2_000_000;
 const TOKENS_OVER_LARGE_TENANT_CAP = 4_000_000;
-const TOKENS_OVER_PLATFORM_CAP = 50_000_000;
 const SMALL_USAGE = { input_tokens: 10, output_tokens: 5 };
 
 function message(content, usage) {
@@ -219,18 +217,3 @@ test("AL-P6-5: Geld schlaegt Zeit - bei beiden Gruenden gewinnt die Budget-Achse
   );
 });
 
-// ZULETZT: dieser Test erschoepft den PLATTFORM-Topf (lebenszeit-skaliert, prozessweit) -
-// jeder danach laufende Turn dieser Datei wuerde budget_global sehen.
-test("AL-P6-6: der Plattform-Notaus sperrt den Loop auch bei freiem Tenant-Cap", async () => {
-  bodies = [];
-  delayMs = 0;
-  const roomyCap = 1_000_000;
-  store.setTenantBudget(BOOTSTRAP_TENANT_ID, { budgetCents: roomyCap, hardCapCents: roomyCap });
-  queue = [toolRound(), fatToolRound(TOKENS_OVER_PLATFORM_CAP), toolRound(), toolRound()];
-  const call = store.getCall("call_alp6_6");
-
-  const turn = await agentTurn(call, CALLER_TEXT);
-
-  assert.equal(bodies.length, 2);
-  assert.equal(turn.stopReason, "budget_global");
-});

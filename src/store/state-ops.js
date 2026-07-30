@@ -1309,9 +1309,9 @@ export function setTenantSubscription(
 //       "fehlend ODER unbekannt" GLEICH (fail-closed, NIE Wurf) - sonst risse planCapCents
 //       den nicht gefangenen Stripe-Webhook ab (haengende Antwort). Die bestehende Decke
 //       bleibt (fail-closed: die zuletzt abgeleitete Grenze bindet weiter).
-//   (2) Slug gesetzt+bekannt   -> Decke ableiten, ggf. auf platformCap klemmen (WARN), setzen.
+//   (2) Slug gesetzt+bekannt   -> Decke ableiten und setzen.
 //   (3) KATALOG-Slug OHNE Kopffreiheit-Eintrag (CATALOG_SLUGS/PLAN_CAP_HEADROOM auseinander-
-//       gelaufen, Konfig-Inkohaerenz, am Boot fatal via planCapInertFindings) -> planCapCents
+//       gelaufen, Konfig-Inkohaerenz, am Boot fatal via planCapUnderivableFindings) -> planCapCents
 //       WIRFT, bevor setTenantBudget schreibt (kein Torn Write). Der isKnownPlanSlug-Riegel
 //       aus (1b) faengt DIESEN Fall NICHT ab (der Slug IST im Katalog) - er bleibt der
 //       Riegel gegen Konfig-Drift, ist aber bei kohaerenter Konfiguration zur Laufzeit
@@ -1335,7 +1335,7 @@ export function deriveTenantBudgetFromPlan(s, tenantId, cfg) {
   // Konvention (resolveTierForTenant): No-op + LAUTE WARN statt Wurf - ein geworfener
   // planCapCents-Fehler risse hier den nicht gefangenen Stripe-Webhook ab. Die bestehende
   // Decke bleibt unberuehrt (die zuletzt abgeleitete Grenze bindet weiter). Der Slug ist ein
-  // Plan-Bezeichner, keine PII/kein Secret (wie die clamp-WARN unten).
+  // Plan-Bezeichner, keine PII/kein Secret.
   if (!isKnownPlanSlug(slug)) {
     console.warn(
       `[budget] plan-cap grund=slug_unbekannt slug=${slug} tenant=${tenantId} -> ` +
@@ -1343,18 +1343,10 @@ export function deriveTenantBudgetFromPlan(s, tenantId, cfg) {
     );
     return;
   }
-  let capCents = planCapCents(slug, cfg); // Fall (3): wirft nur noch bei Katalog-Slug OHNE Kopffreiheit
-  const platformCapCents = cfg.platformSpendCapCents;
-  if (capCents >= platformCapCents) {
-    // Zweite Linie (leise, aber NICHT still): ein nachtraeglich gesenkter Plattform-Cap
-    // darf den Stripe-Webhook nicht abreissen -> klemmen + GENAU EINE WARN, KEIN Wurf. Bei
-    // kohaerenter Konfiguration ist dieser Zweig unerreichbar (erste Linie am Boot ist fatal).
-    console.warn(
-      `[budget] plan-cap grund=clamp slug=${slug} abgeleitet=${capCents} ` +
-        `platformSpendCapCents=${platformCapCents} -> geklemmt (Tenant-Achse inert)`,
-    );
-    capCents = platformCapCents;
-  }
+  // KS-P9/E10: die Plan-Decke wird NICHT mehr auf die Plattform-Zahl geklemmt. Die Klemme
+  // existierte, weil der Plattform-Cap zuerst band; ohne Sperrwirkung wuerde sie nur noch
+  // verkaufte Leistung kuerzen, ohne irgendetwas zu schuetzen.
+  const capCents = planCapCents(slug, cfg); // Fall (3): wirft nur bei Katalog-Slug OHNE Kopffreiheit
   setTenantBudget(s, tenantId, { budgetCents: capCents, hardCapCents: capCents }); // beide Felder
 }
 
@@ -2294,10 +2286,13 @@ export function applyCostCorrectionCents(s, tenantId,
 //
 // P2a/D3: Stufe (2) ist neu. Vorher fiel JEDER Tenant ohne Zeile direkt auf Stufe (3) -
 // damit war der PLATTFORM-NOTAUS zugleich Nutzer-Kontingent, die Tenant-Achse fuer alle
-// Tenants ohne Zeile wirkungslos und der Cap ein GETEILTER Topf. globalCapCents bleibt
-// PARALLEL ueber globalBudgetExceeded/globalReserveExceedsBudget bestehen - es gilt
-// weiter die Schnittmenge min(Tenant, Plattform), Absolute Regel 1. Kein Gate wird
-// entfernt oder ersetzt, es kommt nur eine zusaetzliche, engere Decke dazu.
+// Tenants ohne Zeile wirkungslos und der Cap ein GETEILTER Topf.
+//
+// KS-P9/E10: die Plattform-Achse trifft keine Sperrentscheidung mehr (nur noch Messung +
+// Warnschwelle). Stufe (3) ist deshalb KEINE Plattform-Summe, sondern der PRO-TENANT-
+// FALLBACK bei Sentinel defaultTenantBudgetCents=0 - dieselbe Zahl, aber pro Tenant
+// angelegt. Sie zu entfernen waere fail-open (Tenant ganz ohne Decke) und damit genau der
+// verbotene Fall; globalCapCents bleibt deshalb bestehen.
 //
 // Der Test `> 0` ist SICHERHEITSKRITISCH, nicht kosmetisch. 0 ist die dokumentierte
 // Sentinel-Semantik "kein Default-Seed" (config.js defaultTenantBudgetCents, min 0), und
@@ -2329,7 +2324,8 @@ function effectiveCapCents(s, tenantId, cfg) {
 //
 // GAP-01 (P6) ersetzt den LEBENSZEIT-Zweig der TENANT-Achse durch das Perioden-Fenster
 // (budgetPeriodUsageCents darunter). Der Flag-AN-Zweig bleibt unberuehrt, ebenso die
-// Plattform-Achse (gatePlatformUsageCents, Absolute Regel 1).
+// Plattform-Achse (gatePlatformUsageCents), die seit KS-P9/E10 nur noch die BEOBACHTUNG
+// speist (claimPlatformSpendWarning) und keine Sperrentscheidung mehr traegt.
 
 // Leseprojektion der PERIODEN-Achse (GAP-01). Reine Funktion, KEINE Mutation, kein Cron
 // (Render Free Tier hat weder Shell noch Jobs) - der Reset ist ein Ereignis (Stripe-
@@ -2380,9 +2376,10 @@ export function gatePlatformUsageCents(s, cfg, nowIso) {
   return cfg.budgetMonthEnabled ? platformSpendMonthCents(s, nowIso) : globalUsageTotals(s).costCents;
 }
 
-// Liest den Gate-Verbrauch (ueber die Aufloesung oben) + wendet den D7-Riegel an
-// (G5-Review-Fix Runde 1): tenantSpendOrDeny UND globalSpendOrDeny stehen wortgleich als
-// "Wert lesen -> if(!isBookableCents) deny" da - EIN gemeinsamer Rumpf fuer beide.
+// Liest den Gate-Verbrauch (ueber die Aufloesung oben) + wendet den D7-Riegel an. Seit
+// KS-P9 bleibt genau EIN Aufrufer (tenantSpendOrDeny) - der Rumpf wird bewusst nicht
+// dorthin inlined, weil das die fail-closed D7-Kante der TENANT-Geldkante editieren wuerde;
+// die pro-Tenant-Achse bleibt in dieser Phase byte-identisch.
 //
 // P7-Erweiterung (D7-Reichweite darf NIE schrumpfen): geprueft wird die Gate-Groesse
 // (gateCents, nach dem Flip die Monatszahl) UND der Lebenszeit-Wert derselben Quelle
@@ -2415,8 +2412,8 @@ function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
 
 // Pro-Tenant-Budget (P6b3): der GATE-Verbrauch (gateUsageCents - Perioden-Fenster bei Flag
 // AUS seit GAP-01, Spend-Monat bei Flag AN) gegen den EFFEKTIVEN Cap (pro-Tenant hard_cap_cents wenn
-// gesetzt, sonst die Tenant-Default-Decke, sonst der Plattform-Cap - Praezedenz s.
-// effectiveCapCents). globalBudgetExceeded bleibt PARALLEL. Rein Integer
+// gesetzt, sonst die Tenant-Default-Decke, sonst der Pro-Tenant-Fallback - Praezedenz s.
+// effectiveCapCents). Rein Integer
 // gateCents-gegen-Cap (P1); fuer einen ganzzahligen Cap ist floor(x)>=cap aequivalent zu
 // x>=cap - bit-identisch zum frueheren Float-Gate.
 // Ein unbuchbarer Bucket (D7, jetzt auf BEIDEN Seiten geprueft) sperrt fail-closed mit
@@ -2434,8 +2431,7 @@ export function budgetExceeded(s, tenantId, cfg, nowIso) {
 // (reserveCents, GANZZAHL Cents) den verbleibenden effektiven Tenant-Cap UEBERSTEIGEN?
 // Gate-Verbrauch (gateUsageCents) + Reserve > effektiver Cap -> true (402 vor Dial).
 // DIESELBE Cap-Aufloesung (effectiveCapCents) + derselbe Verbrauchs-Helfer wie
-// budgetExceeded (G5, ueber denselben tenantSpendOrDeny-Helfer); globalBudgetExceeded
-// bleibt PARALLEL (Schnittmenge, Regel 1). Reine Query, kein IO.
+// budgetExceeded (G5, ueber denselben tenantSpendOrDeny-Helfer). Reine Query, kein IO.
 // Neu (OUT-05): die bereits gebuchte In-Flight-Reserve des Tenants (reservationFor)
 // zaehlt kumulativ mit -> N kurz aufeinanderfolgende Calls koennen den Cap nicht mehr
 // gemeinsam ueberschreiten. Bei LEERER Reserve byte-identisch zum Bestand. P1: rein
@@ -2630,33 +2626,10 @@ export function markMeterEventsSent(s, eventIds) {
   return n;
 }
 
-// Liest den Gate-Verbrauch der Plattform (ueber gatePlatformUsageCents) + wendet den
-// D7-Riegel an (G5-Review-Fix Runde 1, Geschwister zu tenantSpendOrDeny): beide teilen
-// sich seit P7 den gemeinsamen spendOrDeny-Rumpf oben statt ihn wortgleich zu duplizieren.
-function globalSpendOrDeny(s, cfg, nowIso) {
-  return spendOrDeny({
-    label: "plattform",
-    gateCents: gatePlatformUsageCents(s, cfg, nowIso),
-    lifetimeCents: globalUsageTotals(s).costCents,
-  });
-}
-
-// Globaler Budget-Notaus (Plattform-Cap, R2): Gate-Verbrauch der Plattform (gatePlatform-
-// UsageCents) gegen config.billing.platformSpendCapCents. Bleibt PARALLEL zum pro-Tenant-
-// Budget bestehen (Schnittmenge, beide fail-closed). Fuer owner-only faellt die Summe mit
-// dem Owner-Bucket zusammen -> byte-identisch zum Bestand bei Flag AUS. Wird NIE entfernt.
-// Rein Integer Cents-gegen-Cap (P1, bit-identisch zum frueheren Float-Gate bei
-// ganzzahligem Cap, s. budgetExceeded).
-export function globalBudgetExceeded(s, cfg, nowIso) {
-  const spend = globalSpendOrDeny(s, cfg, nowIso);
-  if (spend.deny) return true;
-  return spend.spent >= globalCapCents(cfg);
-}
-
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
 // s.reservations (tenantId -> GANZZAHL Cents) haelt die noch nicht abgerechneten
-// Worst-Case-Kosten laufender Outbound-Calls, damit der Budget-Gate (Tenant UND global,
-// Schnittmenge, Regel 1) auch WAEHREND eines Calls den kumulierten Verbrauch sieht. Der
+// Worst-Case-Kosten laufender Outbound-Calls, damit der Budget-Gate (pro-Tenant-Decke)
+// auch WAEHREND eines Calls den kumulierten Verbrauch sieht. Der
 // settled-Bucket (usageFor.costCents, gefuellt erst bei Call-Ende) bleibt UNVERAENDERT und
 // PARALLEL. Strukturell ephemer (nie persistiert/hydriert).
 
@@ -2665,39 +2638,26 @@ export function reservationFor(s, tenantId) {
   return s.reservations[tenantId] || 0;
 }
 
-// Plattform-Summe aller In-Flight-Reserven (globale Achse, reine Query).
+// Plattform-Summe aller In-Flight-Reserven (Beobachtungs-Achse, reine Query).
 export function reservationsTotal(s) {
   return Object.values(s.reservations).reduce((sum, cents) => sum + cents, 0);
 }
 
-// Globaler Reserve-Notaus (R2, reserve-bewusst): wuerde reserveCents zusaetzlich zum
-// Gate-Verbrauch der Plattform + ALLEN In-Flight-Reserven den globalen Cap ueberschreiten?
-// Schliesst die reserve-blinde Luecke in globalBudgetExceeded (das nur settled/Monat prueft).
-// Reine Query, kein IO. P1: rein Integer Cents (settled Sub-Cent-Rest an dieser
-// Vergleichskante geflooert, s. reserveExceedsBudget).
-export function globalReserveExceedsBudget(s, reserveCents, cfg, nowIso) {
-  const spend = globalSpendOrDeny(s, cfg, nowIso);
-  if (spend.deny) return true;
-  return spend.spent + reservationsTotal(s) + reserveCents > globalCapCents(cfg);
-}
-
-// Atomare Check+Reserve (Schnittmenge Tenant UND global, Regel 1). REIN SYNCHRON, KEIN
+// Atomare Check+Reserve gegen die EINE Geld-Achse (pro-Tenant-Decke). REIN SYNCHRON, KEIN
 // await zwischen Check und Increment -> unter store.withStoreLock (server.js, F2) echt
-// atomar (keine TOCTOU). Bucht reserveCents auf s.reservations[tenantId], wenn WEDER die
-// pro-Tenant- NOCH die globale reserve-bewusste Decke reisst; eine abgelehnte Reserve
+// atomar (keine TOCTOU). Bucht reserveCents auf s.reservations[tenantId], wenn die
+// pro-Tenant reserve-bewusste Decke nicht reisst; eine abgelehnte Reserve
 // hinterlaesst KEINEN Schreibeffekt. Nebeneffekt im Namen (N7). Liefert true=reserviert
 // (Dial erlaubt) / false=abgelehnt (402 vor Dial). Fail-closed (S1-6, Absolute Regel 1):
 // ein unbuchbarer reserveCents darf den Reserve-Ledger NIE senken. Frueher stand hier eine
 // direkte negierte reserveCents-Vorzeichenpruefung inline; sie fragt jetzt dieselbe EINE
 // Quelle wie alle anderen Geld-Kanten (isBookableCents, D7/G5) und schliesst dabei die
 // Luecke bei einem positiven Unendlich-Wert, den die alte Pruefung durchliess.
+// KS-P9/E10: die Plattform-Achse trifft keine Sperrentscheidung mehr (nur noch Messung +
+// Warnschwelle) - die zweite Bedingung, die frueher hier stand, ist ersatzlos entfallen.
 export function tryReserveOutboundBudget(s, tenantId, reserveCents, cfg, nowIso) {
   if (!isBookableCents(reserveCents)) return false;
-  if (
-    reserveExceedsBudget(s, tenantId, reserveCents, cfg, nowIso) ||
-    globalReserveExceedsBudget(s, reserveCents, cfg, nowIso)
-  )
-    return false;
+  if (reserveExceedsBudget(s, tenantId, reserveCents, cfg, nowIso)) return false;
   s.reservations[tenantId] = reservationFor(s, tenantId) + reserveCents;
   return true;
 }
@@ -2716,11 +2676,12 @@ export function releaseOutboundReserve(s, call) {
 
 // ---- Plattform-Fruehwarnung (Budget-Achsen P6) ----
 // Meldet - GENAU EINMAL pro Spend-Monat - dass die Plattform-Summe eine konfigurierbare
-// Warnschwelle ueberschritten hat, BEVOR der Notaus (globalBudgetExceeded/
-// globalReserveExceedsBudget) tatsaechlich blockt. AENDERT KEINE GATE-ENTSCHEIDUNG: die
-// Praedikate oben bleiben unangetastet und nebeneffektfrei (reine Query, kein IO - s. deren
-// eigene Modul-Doku). Der Emissionsort (Audit/SMS) ist NICHT hier, sondern im
-// reserve_budget-Gate (outbound-gates.js), NACH einer erfolgreichen Reservierung.
+// Warnschwelle ueberschritten hat. Seit KS-P9/E10 ist das die EINZIGE Wirkung der
+// Plattform-Achse: es gibt keinen Notaus mehr, der danach blocken koennte. AENDERT KEINE
+// GATE-ENTSCHEIDUNG: die pro-Tenant-Praedikate oben bleiben unangetastet und
+// nebeneffektfrei (reine Query, kein IO - s. deren eigene Modul-Doku). Der Emissionsort
+// (Audit/SMS) ist NICHT hier, sondern im reserve_budget-Gate (outbound-gates.js), NACH
+// einer erfolgreichen Reservierung.
 
 const PERCENT_SCALE = 100; // G25: Prozent -> Ganzzahl-Vergleich ohne Fliesskomma
 
@@ -2736,13 +2697,12 @@ function scaledThresholdCrossed(value, base, percent) {
   return value * PERCENT_SCALE >= base * percent;
 }
 
-// Plattform-Ist (Gate-Verbrauch + In-Flight) - DIESELBE Groesse, die
-// globalReserveExceedsBudget gegen den Cap haelt (kein zweiter Wahrheitsanker; P7: die
-// Warnung folgt damit automatisch der Gate-Achse - Lebenszeit bei Flag AUS, Spend-Monat
-// bei Flag AN - statt nach dem Flip dauerhaft auf der abgeschalteten Lebenszeit-Achse
-// falsch zu alarmieren). Bewusst NICHT ueber globalSpendOrDeny: dessen denyCorruptUsage-
-// Log gehoert an die GATE-Kante, nicht an eine Beobachtung (identische Begruendung wie
-// bei tenantBudgetSnapshot). Reine Query.
+// Plattform-Ist: Gate-Verbrauch der Plattform + In-Flight-Reserven - seit KS-P9 die
+// EINZIGE Verwendung der Plattform-Achse. Die Warnung folgt damit automatisch der
+// Verbrauchs-Aufloesung (P7: Lebenszeit bei Flag AUS, Spend-Monat bei Flag AN - statt nach
+// dem Flip dauerhaft auf der abgeschalteten Lebenszeit-Achse falsch zu alarmieren). Reine
+// Query, ohne denyCorruptUsage-Log: das gehoert an eine GATE-Kante, nicht an eine
+// Beobachtung (identische Begruendung wie bei tenantBudgetSnapshot).
 function platformSpendObservedCents(s, cfg, nowIso) {
   const total = gatePlatformUsageCents(s, cfg, nowIso) + reservationsTotal(s);
   return isBookableCents(total) ? total : null;

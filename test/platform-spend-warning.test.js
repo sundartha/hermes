@@ -1,9 +1,10 @@
-// P6 (PLAN-BUDGET-AXES): Fruehwarnung, BEVOR der Plattform-Notaus blockt. Nach einer
-// ERFOLGREICHEN Reservierung im letzten Gate (reserve_budget) feuert - GENAU EINMAL pro
-// Spend-Monat - ein Audit-Ereignis (+ optional eine SMS). KEIN Praedikat, KEIN Gate, KEINE
-// Ablehnungsentscheidung aendert sich (s. state-ops.js globalBudgetExceeded/
-// globalReserveExceedsBudget bleiben "Reine Query, kein IO" - T15 unten beweist es
-// quelltextlich).
+// P6 (PLAN-BUDGET-AXES): Fruehwarnung der Plattform-Achse. Nach einer ERFOLGREICHEN
+// Reservierung im letzten Gate (reserve_budget) feuert - GENAU EINMAL pro Spend-Monat -
+// ein Audit-Ereignis (+ optional eine SMS). KEIN Praedikat, KEIN Gate, KEINE
+// Ablehnungsentscheidung aendert sich. Seit KS-P9/E10 ist diese Warnung die EINZIGE
+// Wirkung der Plattform-Achse - einen Plattform-Notaus, vor dem sie warnen koennte, gibt
+// es nicht mehr; das Regressionsschloss dafuer steht in
+// test/ks-p9-platform-axis-observation.test.js.
 //
 // Zwei Ebenen in einer Datei (Muster test/usage-spend-month-axis.test.js): Ops-Ebene
 // (claimPlatformSpendWarning direkt auf makeDefaultState()) + Gate-Ebene (makeOutboundGates
@@ -74,7 +75,7 @@ test("T4 rot-vor-Fix (e): PLATFORM_SPEND_WARN_PERCENT=0 -> Warnung AUS, byte-ide
   assert.equal(s.platformSpendWarnedMonth, null, "Marker bleibt unangetastet");
 });
 
-test("T5 In-Flight-Reserven zaehlen mit (Symmetrie zu globalReserveExceedsBudget)", () => {
+test("T5 In-Flight-Reserven zaehlen mit (die Warnung sieht denselben Ist-Stand wie das Reserve-Gate)", () => {
   const settledOnly = buildState(700); // 700 < Schwelle 800 (settled allein)
   assert.equal(claimPlatformSpendWarning(settledOnly, CFG, JULY_ISO), null);
 
@@ -275,34 +276,4 @@ test("T14: claimPlatformSpendWarning liefert null (keine Ueberschreitung) -> wed
   assert.equal(result, null, "Gate-Verhalten bleibt byte-identisch");
   assert.equal(auditCalls.length, 0);
   assert.equal(messagingCalls, 0);
-});
-
-// ==== T15: Praedikate bleiben nebeneffektfrei (Quelltext-Scan) =====================
-
-// Extrahiert den Funktionsrumpf zwischen der Signatur und der ERSTEN Top-Level-
-// schliessenden Klammer (eigene Zeile) - beide gepruefte Funktionen sind flach (keine
-// verschachtelten Bloecke mit eigener schliessender Zeile), das genuegt hier.
-function functionBody(source, name) {
-  const start = new RegExp(`export function ${name}\\([^)]*\\) \\{`).exec(source);
-  assert.ok(start, `Funktion ${name} nicht in state-ops.js gefunden`);
-  const bodyStart = start.index + start[0].length;
-  const bodyEnd = source.indexOf("\n}", bodyStart);
-  assert.ok(bodyEnd > bodyStart, `Rumpfende von ${name} nicht gefunden`);
-  return source.slice(bodyStart, bodyEnd);
-}
-
-test("T15: globalBudgetExceeded/globalReserveExceedsBudget bleiben nebeneffektfrei (Quelltext-Scan)", () => {
-  const source = fs.readFileSync(
-    new URL("../src/store/state-ops.js", import.meta.url),
-    "utf8",
-  );
-  for (const name of ["globalBudgetExceeded", "globalReserveExceedsBudget"]) {
-    const body = functionBody(source, name);
-    for (const forbidden of ["audit(", "claimPlatformSpendWarning", "platformSpendWarnedMonth"]) {
-      assert.ok(
-        !body.includes(forbidden),
-        `${name} darf '${forbidden}' nicht enthalten (Command-Query-Trennung, N7)`,
-      );
-    }
-  }
 });
