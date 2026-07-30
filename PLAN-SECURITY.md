@@ -1214,7 +1214,7 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > **Zahlen (Herleitung).** Kopffreiheit unveraendert Starter 5/3, Business 5/4. Damit gilt
 > fuer jeden ganzzahligen Satz T: Starter `30·T·5/3 = 50T`, Business `120·T·5/4 = 150T` —
 > immer ganzzahlig, nie aus einer Rundung. Bei T=30 (live): **1500 / 4500 ct**; bei T=300
-> (heutiger Code-Fallback): **15000 / 45000 ct**. Die tragende Invariante ist
+> (Stand vor KS-P6): **15000 / 45000 ct**. Die tragende Invariante ist
 > `M·T + 5·T ≤ M·T·num/den` (der letzte Anruf mit seiner Worst-Case-Reserve
 > `T · ceil(MAX_CALL_DURATION_CAP_S/60) = 5T` muss noch hineinpassen); sie fordert
 > `M ≥ 7,5` (Starter) bzw. `M ≥ 20` (Business) und haelt bei jedem T > 0. Der Katalog liegt
@@ -1249,3 +1249,41 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > **E9**; die vollstaendige Aufstellung (welcher Satz gebucht wird, welche Decke je Plan
 > folgt, welches N ein gegebener Plattform-Wert traegt) steht in
 > `tasks/ks-p5a-report.md`.
+
+## KS-P6 — Worst-Case-Minutentarif im Code auf den gemessenen Wert (2026-07-30, E1)
+
+> **Was sich aendert.** Der numEnv-Fallback von `VOICE_TARIFF_DEFAULT_CENTS` faellt von
+> 300 auf 30 ct/min, gleichlautend in `src/config.js`, `.env.example` und `render.yaml`.
+> Der Live-Dienst faehrt 30 seit dem 2026-07-29 (E1, Boot-Banner `Worst-Case-Tarif
+> 30 ct/min`) - die Phase schliesst nur die Luecke zwischen Repo und Betrieb.
+>
+> **Grundlage.** 21 Outbound-Anrufe mit vollstaendigem Telnyx-Beleg: 8,18 ct je
+> ANGEFANGENER Minute (Spanne 3,89-9,23). 300 war nie gemessen; 30 ist rund das 3,7-Fache
+> des Ist.
+>
+> **Richtung der Wirkung (Code-Defaults, ohne gesetzte Env).** Beide Wirkungen sind
+> STRENGER oder neutral, keine ist eine Lockerung eines Gates:
+> - Vorab-Reserve je Anruf: `tariffCentsPerMin * ceil(maxDur/60)` faellt von 1500 auf
+>   150 ct - weniger Vor-Dial-402 bei unveraendert scharfem Gate.
+> - Plan-Kostendecke (seit KS-P5a derselbe Satz): Starter 15000 -> 1500 ct,
+>   Business 45000 -> 4500 ct. Die Decke wird ENGER, der Kunde bekommt weiterhin genau
+>   seine verkauften Minuten (`test/ks-p5a-plan-cap-carries-sold-minutes.test.js` pinnt
+>   das satzunabhaengig).
+>
+> **Boot-Guards nachgerechnet, keiner abgesenkt.** `spendCapCoherence` Klausel B:
+> 30 * ceil(300/60) = 150 <= `DEFAULT_TENANT_BUDGET_CENTS` 1500 - kein Befund.
+> `planCapUnderivableFindings` prueft nur Ableitbarkeit. `voiceTariffFloorFindings` liest
+> ausschliesslich `VOICE_TARIFF_DOMESTIC_CENTS` und ist unberuehrt. Kein
+> `fatal: true -> false`.
+>
+> **Unberuehrt:** `disclosureSentence`, Provider-Signaturpruefung, Auth, Abo+KYC als
+> Outbound-Permit, `OUTBOUND_FROZEN`, Denylist, Land-Gate, Stundenlimit, Per-Target-Cap,
+> `MAX_CALL_DURATION_S`/`MAX_CALL_DURATION_CAP_S`, `DEFAULT_TENANT_BUDGET_CENTS` (Wert
+> bleibt 1500), `MAX_BUDGET_EUR`, `VOICE_TARIFF_DOMESTIC_CENTS`. Keine neue Dependency,
+> kein neuer Env-Schluessel.
+>
+> **Bewusst getragenes Restrisiko.** Fuer `VOICE_TARIFF_DEFAULT_CENTS` existiert nach wie
+> vor KEINE Untergrenze im Code (`min: 0`; `spendCapCoherence` prueft nur nach oben). Ein
+> versehentlich zu niedrig gesetzter Satz unterreserviert still und verkuerzt zugleich die
+> Plan-Decke. Eine Untergrenze analog `voiceTariffFloorFindings` ist eine eigene Aufgabe
+> (so schon in KS-P0 festgehalten) und NICHT Teil dieser Phase.

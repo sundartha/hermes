@@ -130,7 +130,7 @@ export const hasCountryPrefix = (number, prefix) =>
 // true/false (Muster deniedPrefix): "Inland" heisst DIESELBE Vorwahl an beiden Enden, dafuer
 // braucht es den Wert. BEWUSST NICHT matchesPrefix: das kennt die "*"-Wildcard des
 // Land-Gates - mit ALLOWED_COUNTRY_CODES="*" (Live-Zustand) waere sonst jedes Ziel weltweit
-// "Inland" und damit 20 statt 300 ct/min.
+// "Inland" und damit 20 statt 30 ct/min.
 function domesticPrefixOf(number) {
   return defaultConfig.billing.voiceTariffDomesticPrefixes.find((p) => hasCountryPrefix(number, p)) ?? null;
 }

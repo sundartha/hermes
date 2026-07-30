@@ -323,19 +323,22 @@ services:
       # KS-P5a: DERSELBE Satz leitet auch die Plan-Kostendecke ab (30 min * Satz * 5/3 =
       # Starter, 120 min * Satz * 5/4 = Business; bei 30 also 1500 / 4500 ct).
       # Es gibt nur EINEN Satz.
+      # KS-P6/E1: 30 statt vormals 300 - 300 war eine Annahme, 8,18 ct/min die Messung
+      # (21 Live-Anrufe US-DID -> DE-Mobil). 30 ist zugleich der live gefahrene Wert
+      # (Boot-Banner "Worst-Case-Tarif 30 ct/min").
       - key: VOICE_TARIFF_DEFAULT_CENTS
-        value: "300"
+        value: "30"
       # LCT P4b - Vollkosten-Untergrenze (EUR-Cent). Sinkt VOICE_TARIFF_DOMESTIC_CENTS
       # darunter bei duenner Abgleich-Deckung, warnt der Boot (WARN, kein exit).
       # 10 = teuerste aktivierbare Konfiguration (inkl. ai-voice-assistant), Kurs 0,92.
       - key: VOICE_TARIFF_FULL_COST_FLOOR_CENTS
         value: "10"
-      # P7: 1500 statt 600 = VOICE_TARIFF_DEFAULT_CENTS(300) * ceil(MAX_CALL_DURATION_CAP_S(300)/60).
-      # Seit dem GAP-32-Flip ist eine Decke UNTER der Worst-Case-Reserve fatal
-      # (spendCapCoherence, Klausel B): 600 hiess, dass jedes Ziel ohne gemessenen
-      # Inlandssatz vor dem Dial mit 402 abgewiesen wurde. Der Tarif wird NICHT gesenkt
-      # (Owner-Entscheidung O6) - die Decke steigt auf den Betrag, den die eigene Rechnung
-      # fordert.
+      # Untergrenze aus spendCapCoherence Klausel B (FATAL, exit 1):
+      # VOICE_TARIFF_DEFAULT_CENTS * ceil(MAX_CALL_DURATION_CAP_S(300)/60), seit KS-P6
+      # 30 * 5 = 150. Darunter faellt jedes Ziel ohne gemessenen Inlandssatz vor dem Dial
+      # ins Reserve-Gate (402).
+      # 1500 statt 150, weil der Wert seit KS-P5a die Starter-Plan-Decke spiegelt
+      # (30 verkaufte Minuten * 30 ct * 5/3 = 1500).
       - key: DEFAULT_TENANT_BUDGET_CENTS
         value: "1500"
       # ---- Plattform-Fruehwarnung (Budget-Achsen P6) ----

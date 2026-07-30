@@ -149,7 +149,7 @@ export function tariffDriftReport({ calls, prefixes, ...params }) {
 // voiceTariffDomesticCents, weil ALLE bewerteten Praefixe aus voiceTariffDomesticPrefixes
 // stammen und der Inlandssatz genau fuer die Legs gilt, die diesen Praefix an BEIDEN Enden
 // tragen (P5) - genau die filtert isDriftSample. Legs OHNE diesen doppelten Treffer werden
-// bewusst NICHT bewertet (sie fallen auf voiceTariffDefaultCents = 300 ct, den harten
+// bewusst NICHT bewertet (sie fallen auf voiceTariffDefaultCents, den harten Worst-Case-
 // Deckel, PM-5) und keinem Praefix zugeschlagen. warnPercent teilt sich
 // costDriftWarnPercent mit dem P3-Kosten-Drift-Log (dieselbe Toleranzschwelle, EINE Quelle).
 export function tariffDriftReportFromConfig(calls, billing) {

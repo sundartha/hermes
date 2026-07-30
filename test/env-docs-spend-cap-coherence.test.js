@@ -109,6 +109,37 @@ test("src/config.js: numEnv-CODE-Fallback (kein Env gesetzt) ist kohaerent (kein
 // Plattform-Zahl bindet nicht mehr, also kann sie keine Plan-Decke inert machen. Die drei
 // spendCapCoherence-Doku-Tests oben bleiben und pruefen jetzt A0/B.
 
+// KS-P6/E1: der ausgelieferte Worst-Case-Minutentarif. Die drei Kohaerenztests oben pruefen
+// nur, dass die Zahl den eigenen Boot-Guard nicht ausloest - WELCHE Zahl ausgeliefert wird,
+// prueft keiner. Genau dort ist der Wert stehengeblieben: der Owner hat am 2026-07-29 auf 30
+// entschieden und live gesetzt, das Repo lieferte weiter 300 aus (Faktor 10 zwischen Betrieb
+// und Repo, unbemerkt). Der Satz bemisst seit KS-P5a BEIDES: die Vorab-Reserve und die
+// Plan-Kostendecke.
+// Datei-Read statt config-Import (Muster LAW-15 unten, Begruendung im Dateikopf): ein Import
+// wuerde die ambiente .env/Shell auswerten und waere umgebungsabhaengig-flaky.
+const WORST_CASE_TARIFF_CENTS_PER_MIN = 30;
+
+test("KS-P6: der ausgelieferte Worst-Case-Tarif ist 30 ct/min - dieselbe Zahl in allen drei Quellen", () => {
+  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
+  const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
+  assert.equal(
+    readCodeFallback(configSrc, "VOICE_TARIFF_DEFAULT_CENTS"),
+    WORST_CASE_TARIFF_CENTS_PER_MIN,
+    "src/config.js numEnv-Fallback",
+  );
+  assert.equal(
+    Number(readEnvValue(envExample, "VOICE_TARIFF_DEFAULT_CENTS")),
+    WORST_CASE_TARIFF_CENTS_PER_MIN,
+    ".env.example",
+  );
+  assert.equal(
+    Number(readRenderValue(renderYaml, "VOICE_TARIFF_DEFAULT_CENTS")),
+    WORST_CASE_TARIFF_CENTS_PER_MIN,
+    "render.yaml",
+  );
+});
+
 const RETENTION_DAYS_DEFAULT = 30;
 const DIAGNOSTIC_RETENTION_DAYS_DEFAULT = 7;
 

@@ -583,8 +583,16 @@ const rawConfig = {
     fallback: 20,
     min: 0,
   }),
+  // KS-P6/E1: 30 statt vormals 300. Der alte Wert war eine Annahme, keine Messung - 21
+  // Live-Anrufe (US-DID -> DE-Mobil, vollstaendige Telnyx-Belege) ergaben 8,18 ct je
+  // ANGEFANGENER Minute (Spanne 3,89-9,23); der Fallback lag um Faktor 37 darueber und
+  // reservierte fuer einen 3-Minuten-Anruf 9,00 statt 0,90 EUR. 30 ct/min sind rund das
+  // 3,7-Fache des gemessenen Ist und decken auch Ziele ab, die teurer sind als DE.
+  // Fuer DIESEN Satz gibt es KEINE Untergrenze im Code: min:0 laesst 0 zu, spendCapCoherence
+  // prueft nur nach oben, und voiceTariffFloorFindings bewacht ausschliesslich
+  // VOICE_TARIFF_DOMESTIC_CENTS. Eine Untergrenze waere eine eigene Aufgabe, keine dieser.
   voiceTariffDefaultCents: numEnv("VOICE_TARIFF_DEFAULT_CENTS", process.env.VOICE_TARIFF_DEFAULT_CENTS, {
-    fallback: 300,
+    fallback: 30,
     min: 0,
   }),
   // LCT P4b (Vollkosten-Boot-Guard): Untergrenze, unter die VOICE_TARIFF_DOMESTIC_CENTS
@@ -617,17 +625,21 @@ const rawConfig = {
   // das wuerde jeden Outbound, jeden kostenlosen Inbound und jeden laufenden Call sperren.
   // Globaler Backstop (platformSpendCapCents) bleibt PARALLEL (Schnittmenge, Regel 1).
   //
-  // Fallback-Wert 1500 (P7, vorher 600): Zwei Schranken gleichzeitig, beide vom eigenen
-  // Boot-Guard erzwungen (spendCapCoherence):
-  //   Klausel A - echt KLEINER als der Fallback von platformSpendCapCents
-  //               (eurToCents(30)=3000), sonst waere die Tenant-Achse inert.
-  //   Klausel B - mindestens VOICE_TARIFF_DEFAULT_CENTS * ceil(MAX_CALL_DURATION_CAP_S/60)
-  //               = 300 * 5 = 1500, sonst ist der teuerste Zielverkehr unter dieser Decke
-  //               unbezahlbar und JEDES Ziel ohne gemessenen Inlandssatz faellt schon vor
-  //               dem Dial ins Reserve-Gate (402). Seit P7 ist dieser Befund FATAL.
-  // Der Tarif wird dafuer NICHT gesenkt (Owner-Entscheidung O6) - der Tarif ist die
-  // Messgroesse des Gates. Dieselbe Zahl steht an drei Stellen: hier, .env.example und
-  // render.yaml; test/env-docs-spend-cap-coherence.test.js prueft alle drei gegen den Guard.
+  // Fallback-Wert 1500: EINE vom Boot-Guard erzwungene Schranke (spendCapCoherence
+  // Klausel B) - mindestens VOICE_TARIFF_DEFAULT_CENTS * ceil(MAX_CALL_DURATION_CAP_S/60),
+  // seit KS-P6 also 30 * 5 = 150. Liegt die Decke darunter, ist der teuerste Zielverkehr
+  // unbezahlbar und JEDES Ziel ohne gemessenen Inlandssatz faellt schon vor dem Dial ins
+  // Reserve-Gate (402); seit P7 ist dieser Befund FATAL.
+  // Der Wert bleibt bei 1500 und nicht bei den geforderten 150, weil er seit KS-P5a die
+  // Starter-Plan-Decke spiegelt: 30 verkaufte Minuten * 30 ct * 5/3 = 1500. Ein Tenant ohne
+  // eigene tenant_budget-Zeile bekommt damit dieselbe Decke wie ein Starter-Kunde.
+  // Die frueher hier genannte zweite Schranke ("echt KLEINER als platformSpendCapCents,
+  // sonst waere die Tenant-Achse inert") ist mit KS-P9/E10 ersatzlos entfallen - die
+  // Plattform-Zahl trifft keine Sperrentscheidung mehr und kann nichts inert machen.
+  // O6 ("den Tarif nicht senken, um eine Decke zu retten") ist durch E1 ueberholt: der Satz
+  // wurde gesenkt, weil er GEMESSEN wurde, nicht um ein Gate zu entlasten.
+  // Dieselbe Zahl steht an drei Stellen: hier, .env.example und render.yaml;
+  // test/env-docs-spend-cap-coherence.test.js prueft alle drei gegen den Guard.
   defaultTenantBudgetCents: numEnv("DEFAULT_TENANT_BUDGET_CENTS", process.env.DEFAULT_TENANT_BUDGET_CENTS, {
     fallback: 1500,
     min: 0,
