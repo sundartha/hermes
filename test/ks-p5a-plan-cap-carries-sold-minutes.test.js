@@ -1,0 +1,143 @@
+// KS-P5a/E5a: die Plan-Kostendecke und der Buchungssatz sind DERSELBE Satz. Diese Datei
+// pinnt die fachliche Invariante dahinter: eine Plan-Decke muss die VERKAUFTEN Minuten
+// tragen, und zwar inklusive der Worst-Case-Reserve des LETZTEN Anrufs - sonst haengt der
+// Kunde vor seiner letzten verkauften Minute im Reserve-Gate (402).
+//
+// Reine Rechnung + state-ops-Ebene: KEIN Server-Spawn, KEIN pglite, KEINE process.env-
+// Manipulation. Der Satz wird als cfg hereingereicht (planCapCents(slug, cfg) /
+// deriveTenantBudgetFromPlan(s, id, cfg)) - dadurch ist die Datei immun gegen eine lokale
+// .env und gegen jede kuenftige BASE_ENV-Drift.
+//
+// Die Testnamen tragen BEWUSST keinen i18n-Katalog-Praefix: dies ist Regressionsschutz und
+// gehoert in `npm test`, wo Rot etwas heisst - nicht in `test:gates`, wo Rot erlaubt ist.
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { planCapCents } from "../src/billing/plan-caps.js";
+import { CATALOG_SLUGS, findPlan } from "../src/plans.js";
+import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
+import {
+  addVoiceUsageCostCents,
+  deriveTenantBudgetFromPlan,
+  makeDefaultState,
+  registerTenant,
+  reserveExceedsBudget,
+  setTenantBudget,
+  setTenantSubscription,
+  tenantBudgetSnapshot,
+} from "../src/store/state-ops.js";
+
+const SECONDS_PER_MINUTE = 60; // modul-lokal wie in boot-guard.js/outbound-gates.js
+// BEIDE heute wirksamen Buchungssaetze: der Code-Fallback von VOICE_TARIFF_DEFAULT_CENTS
+// (300, bis KS-P6) UND der live gesetzte Wert (30, E1). Die Invariante muss an beiden
+// halten - eine Decke, die nur bei einem der beiden Saetze aufgeht, ist keine.
+const BOOKING_RATES_CENTS_PER_MIN = Object.freeze([300, 30]);
+const STARTER_CAP_AT_LIVE_RATE_CENTS = 1500;
+const BUSINESS_CAP_AT_LIVE_RATE_CENTS = 4500;
+const LIVE_BOOKING_RATE_CENTS_PER_MIN = 30;
+const STARTER_SOLD_MINUTES = 30;
+
+// Die drei Sentinel-Felder liest ausschliesslich die Cap-Aufloesung (effectiveCapCents /
+// gateUsageCents): 0/false stellt sicher, dass KEIN Fallback die abgeleitete Zeile
+// ueberdeckt und der Verbrauch auf der Lebenszeit-Achse gemessen wird.
+function cfgAtRate(rateCentsPerMin) {
+  return Object.freeze({
+    voiceTariffDefaultCents: rateCentsPerMin,
+    defaultTenantBudgetCents: 0,
+    platformSpendCapCents: 0,
+    budgetMonthEnabled: false,
+  });
+}
+
+// Worst-Case-Reserve EINES Anrufs, wie outbound-gates.js sie vor dem Dial bucht:
+// Satz * angefangene Minuten der maximalen Gespraechsdauer.
+function worstCaseReserveCents(rateCentsPerMin) {
+  return rateCentsPerMin * Math.ceil(MAX_CALL_DURATION_CAP_S / SECONDS_PER_MINUTE);
+}
+
+async function captureWarn(fn) {
+  const lines = [];
+  const orig = console.warn;
+  console.warn = (...a) => lines.push(a.map(String).join(" "));
+  try {
+    await fn();
+  } finally {
+    console.warn = orig;
+  }
+  return lines;
+}
+
+test("KS-P5a: jede Plan-Decke traegt die verkauften Minuten PLUS die Reserve des letzten Anrufs", () => {
+  for (const rate of BOOKING_RATES_CENTS_PER_MIN) {
+    for (const slug of CATALOG_SLUGS) {
+      const soldMinutes = findPlan(slug).includedMinutes;
+      const capCents = planCapCents(slug, cfgAtRate(rate));
+      assert.ok(
+        Number.isInteger(capCents),
+        `${slug}@${rate}: Decke ${capCents} ist keine Ganzzahl (Geldgrenze aus einer Rundung, G26)`,
+      );
+      assert.ok(
+        soldMinutes * rate + worstCaseReserveCents(rate) <= capCents,
+        `${slug}@${rate}: Decke ${capCents} traegt die ${soldMinutes} verkauften Minuten nicht ` +
+          `inkl. Worst-Case-Reserve (${soldMinutes * rate} + ${worstCaseReserveCents(rate)})`,
+      );
+    }
+  }
+});
+
+test("KS-P5a: die Decke folgt dem Buchungssatz (ein Satz, keine zweite Zahl)", () => {
+  assert.equal(planCapCents("starter", cfgAtRate(30)), STARTER_CAP_AT_LIVE_RATE_CENTS);
+  assert.equal(planCapCents("business", cfgAtRate(30)), BUSINESS_CAP_AT_LIVE_RATE_CENTS);
+  assert.equal(planCapCents("starter", cfgAtRate(300)), 15000);
+  assert.equal(planCapCents("business", cfgAtRate(300)), 45000);
+});
+
+test("KS-P5a: Starter telefoniert die verkauften Minuten leer - der letzte Anruf faellt NICHT ins Reserve-Gate", () => {
+  const cfg = cfgAtRate(LIVE_BOOKING_RATE_CENTS_PER_MIN);
+  const s = makeDefaultState();
+  const tenantId = "t_ks_p5a_starter";
+  registerTenant(s, tenantId, {});
+  setTenantSubscription(s, tenantId, { planSlug: "starter" });
+  deriveTenantBudgetFromPlan(s, tenantId, cfg);
+  assert.equal(
+    tenantBudgetSnapshot(s, tenantId, cfg).capCents,
+    STARTER_CAP_AT_LIVE_RATE_CENTS,
+    "Vorbedingung: die abgeleitete Decke folgt dem Buchungssatz",
+  );
+
+  // Alles bis auf den letzten (Worst-Case langen) Anruf ist bereits telefoniert und gebucht.
+  const reserveCents = worstCaseReserveCents(LIVE_BOOKING_RATE_CENTS_PER_MIN);
+  const minutesBeforeLastCall = STARTER_SOLD_MINUTES - reserveCents / LIVE_BOOKING_RATE_CENTS_PER_MIN;
+  addVoiceUsageCostCents(s, tenantId, minutesBeforeLastCall * LIVE_BOOKING_RATE_CENTS_PER_MIN);
+
+  assert.equal(
+    reserveExceedsBudget(s, tenantId, reserveCents, cfg),
+    false,
+    "der letzte verkaufte Anruf muss noch durch das Reserve-Gate passen",
+  );
+});
+
+test("KS-P5a: Buchungssatz 0 (Kosten-Achse aus) schreibt KEINE 0-Decke", async () => {
+  const s = makeDefaultState();
+  const tenantId = "t_ks_p5a_tarif_null";
+  registerTenant(s, tenantId, {});
+  setTenantSubscription(s, tenantId, { planSlug: "starter" });
+  setTenantBudget(s, tenantId, {
+    budgetCents: STARTER_CAP_AT_LIVE_RATE_CENTS,
+    hardCapCents: STARTER_CAP_AT_LIVE_RATE_CENTS,
+  });
+
+  const warnLines = await captureWarn(() => deriveTenantBudgetFromPlan(s, tenantId, cfgAtRate(0)));
+
+  assert.deepEqual(
+    s.tenantBudgets.find((b) => b.tenantId === tenantId),
+    {
+      tenantId,
+      budgetCents: STARTER_CAP_AT_LIVE_RATE_CENTS,
+      hardCapCents: STARTER_CAP_AT_LIVE_RATE_CENTS,
+    },
+    "bestehende Decke unveraendert - eine 0-Decke waere Telefonie-Totalausfall, kein strengeres Gate",
+  );
+  const tarifNullLines = warnLines.filter((l) => l.includes("grund=tarif_null"));
+  assert.equal(tarifNullLines.length, 1, `genau eine laute WARN erwartet, war: ${JSON.stringify(warnLines)}`);
+});

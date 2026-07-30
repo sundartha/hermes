@@ -8,8 +8,11 @@
 // KEIN Server-Boot in dieser Datei - nur die Schreibkante (store.setTenantSubscription)
 // wird direkt gerufen. Mechanik gegen die Modul-Config-Falle: process.env VOR jedem Import,
 // ausschliesslich dynamische Imports in before() (Muster plan-cap-derivation.test.js).
+// KS-P5a: die Decke folgt seit E5a dem BUCHUNGSSATZ (voiceTariffDefaultCents). Der
+// Fixtur-Wert 6 bleibt bewusst stehen - der gepruefte Vektor ist MAX_BUDGET_EUR=5 (500 ct)
+// UNTER der Business-Decke (900 ct), nicht der Tarifwert.
 process.env.MAX_BUDGET_EUR = "5";
-process.env.VOICE_CAP_RATE_CENTS_PER_MIN = "6";
+process.env.VOICE_TARIFF_DEFAULT_CENTS = "6";
 
 import test, { before } from "node:test";
 import assert from "node:assert/strict";

@@ -1298,7 +1298,8 @@ export function setTenantSubscription(
 // patch.planSlug ?? bestehender Slug ergibt sich hier gratis, ohne das Patch-Feld zu lesen
 // (G31: Struktur statt Konvention).
 //
-// VIER Slug-Faelle, strikt getrennt (die Verwechslung baut den Abo-ohne-Nummer-Vorfall neu):
+// VIER Slug-Faelle plus EIN Satz-Fall, strikt getrennt (die Verwechslung baut den
+// Abo-ohne-Nummer-Vorfall neu):
 //   (1) Slug fehlt/leer        -> NO-OP (Budget-Zeile unberuehrt), KEIN Wurf.
 //   (1b) Slug gesetzt, aber (nicht mehr) im Katalog (entfernt/umbenannt/Alt-/Testdaten) ->
 //       NO-OP + LAUTE WARN, KEIN Wurf. Ein slug-loser Folge-Patch (planSlug===undefined:
@@ -1316,6 +1317,12 @@ export function setTenantSubscription(
 //       aus (1b) faengt DIESEN Fall NICHT ab (der Slug IST im Katalog) - er bleibt der
 //       Riegel gegen Konfig-Drift, ist aber bei kohaerenter Konfiguration zur Laufzeit
 //       unerreichbar (erste Linie am Boot ist fatal).
+//   (4) Slug bekannt, aber der BUCHUNGSSATZ ist 0 (VOICE_TARIFF_DEFAULT_CENTS=0, die
+//       dokumentierte Abschaltung der Kosten-Achse) -> abgeleitete Decke 0 -> NO-OP +
+//       LAUTE WARN. Eine 0-Decke waere kein strengeres Gate, sondern Telefonie-
+//       Totalausfall fuer diesen Tenant (effectiveCapCents liefert die Zeile,
+//       budgetExceeded ist ab dem ersten Cent true). Gleiche Entscheidung wie
+//       seedTenantDefaultBudget ("0 -> kein Seed, kein 0-Cap-Tenant").
 //
 // BEIDE Pflichtfelder (budget_cents UND hard_cap_cents) auf denselben Wert - budget_cents
 // ist BIGINT NOT NULL; ein Aufruf nur mit hardCapCents setzte budgetCents=undefined, der
@@ -1347,6 +1354,16 @@ export function deriveTenantBudgetFromPlan(s, tenantId, cfg) {
   // existierte, weil der Plattform-Cap zuerst band; ohne Sperrwirkung wuerde sie nur noch
   // verkaufte Leistung kuerzen, ohne irgendetwas zu schuetzen.
   const capCents = planCapCents(slug, cfg); // Fall (3): wirft nur bei Katalog-Slug OHNE Kopffreiheit
+  // Fall (4), KS-P5a: die Decke folgt seit E5a dem Buchungssatz - ist der 0, ist auch die
+  // Decke 0. Bestehende Decke bleibt (fail-closed: die zuletzt abgeleitete Grenze bindet
+  // weiter), der Grund steht im Log. Der Satz ist eine Betreiber-Zahl, kein Secret/PII.
+  if (capCents <= 0) {
+    console.warn(
+      `[budget] plan-cap grund=tarif_null slug=${slug} tenant=${tenantId} -> ` +
+        "Ableitung uebersprungen (bestehende Decke bleibt, VOICE_TARIFF_DEFAULT_CENTS=0)",
+    );
+    return;
+  }
   setTenantBudget(s, tenantId, { budgetCents: capCents, hardCapCents: capCents }); // beide Felder
 }
 

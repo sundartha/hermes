@@ -31,8 +31,7 @@ const MONEY_CONFIG_KEYS = Object.freeze([
   // LCT P7 (Fixkosten sichtbar machen): DID-Listenmiete je Nummer (EUR-Cent).
   "numberMonthlyCostCents",
   // platformFixedCostCentsPerMonth traegt kein Cents-/Eur-/Usd-Suffix am WORTENDE (endet
-  // auf "PerMonth", Muster voiceCapRateCentsPerMin - ebenfalls nicht vom Namens-Scan
-  // erfasst) und wird deshalb bewusst zusaetzlich manuell eingetragen: reine Anzeige-
+  // auf "PerMonth") und wird deshalb bewusst zusaetzlich manuell eingetragen: reine Anzeige-
   // Fixkosten in GANZZAHL EUR-Cent, dasselbe Geld-Feld-Muster wie die Cents-Suffix-Felder.
   "platformFixedCostCentsPerMonth",
   // AL-P10: Preis EINER serverseitigen Vorab-Suche (Ganzzahl EUR-Cent, Muster

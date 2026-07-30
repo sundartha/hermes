@@ -51,9 +51,6 @@ export const BASE_ENV = {
   // Warnschwelle der Plattform-Beobachtung UND - bei DEFAULT_TENANT_BUDGET_CENTS=0 - als
   // Pro-Tenant-Fallback (effectiveCapCents Stufe 3), auf den mehrere Spawn-Tests bauen.
   MAX_BUDGET_EUR: "30",
-  // LCT P6: Deckel-Basissatz (billing/plan-caps.js) neutral auf den Code-Default gepinnt
-  // (Lehre test-base-env-drift).
-  VOICE_CAP_RATE_CENTS_PER_MIN: "6",
   // ---- LLM-Resilienz-Seam (P3b-R, src/llm.js) ----
   // Neutral + deterministisch: kurzer Timeout/Backoff, damit Tests, die den Seam ab
   // CP3 beruehren, nicht haengen; sonst leakt eine lokale .env via dotenv in Spawn-Tests

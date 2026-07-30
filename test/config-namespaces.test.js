@@ -31,7 +31,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // (ttsCharacterQuota, ttsCharacterQuotaWarnPercent, ttsQuotaCycleAnchorDay,
   // platformFixedCostCentsPerMonth, numberMonthlyCostCents) -> 35.
   // KE-P6B: costTruingSweepIntervalMs ergaenzt (Sweep-Kadenz als Env statt Modul-Konstante) -> 36.
-  billing: 36,
+  // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 35.
+  billing: 35,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -61,9 +62,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // im Pre-Call-Briefing, src/research/) - eigene Namespace-Zeile.
   research: 3,
 };
-const EXPECTED_TOTAL_KEYS = 134;
+const EXPECTED_TOTAL_KEYS = 133;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (134 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (133 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -147,7 +148,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // primitiv (Boolean/Zahl/Zahl, kein Array/nested Objekt) -> 123.
   // AL-P11: evidenceRetentionDays ist primitiv (Zahl, kein Array/nested Objekt) -> 124.
   // AL-P13: consultEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 125.
-  assert.equal(checked, 125, "alle primitiven Blaetter (134 - 4 Arrays - 5 nested Objekte) geprueft");
+  // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 124.
+  assert.equal(checked, 124, "alle primitiven Blaetter (133 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

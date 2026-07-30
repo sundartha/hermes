@@ -320,6 +320,9 @@ services:
       # ---- Outbound-Kosten-Achse / Vorab-Reservierung (outbound-p1c) ----
       - key: VOICE_TARIFF_DOMESTIC_CENTS
         value: "20"
+      # KS-P5a: DERSELBE Satz leitet auch die Plan-Kostendecke ab (30 min * Satz * 5/3 =
+      # Starter, 120 min * Satz * 5/4 = Business; bei 30 also 1500 / 4500 ct).
+      # Es gibt nur EINEN Satz.
       - key: VOICE_TARIFF_DEFAULT_CENTS
         value: "300"
       # LCT P4b - Vollkosten-Untergrenze (EUR-Cent). Sinkt VOICE_TARIFF_DOMESTIC_CENTS
@@ -327,11 +330,6 @@ services:
       # 10 = teuerste aktivierbare Konfiguration (inkl. ai-voice-assistant), Kurs 0,92.
       - key: VOICE_TARIFF_FULL_COST_FLOOR_CENTS
         value: "10"
-      # LCT P6 - Deckel-Basissatz je Voice-Minute (EUR-Cent). Leitet die Tenant-Kostendecke
-      # aus dem Plan ab (30 min * Satz * 5/3 = Starter, 120 min * Satz * 5/4 = Business).
-      # 6 = aufgerundete 5,4 gemessene ct/min -> 300 / 900 ct.
-      - key: VOICE_CAP_RATE_CENTS_PER_MIN
-        value: "6"
       # P7: 1500 statt 600 = VOICE_TARIFF_DEFAULT_CENTS(300) * ceil(MAX_CALL_DURATION_CAP_S(300)/60).
       # Seit dem GAP-32-Flip ist eine Decke UNTER der Worst-Case-Reserve fatal
       # (spendCapCoherence, Klausel B): 600 hiess, dass jedes Ziel ohne gemessenen
