@@ -155,8 +155,9 @@ test("OUT-15 (Mechanismus, gruen) - die Notruf-Denylist gewinnt auch bei explizi
 
 // ---- GAP-18: NANP-Sub-Ranges bleiben gesperrt, auch wenn "+1" erlaubt ist ----
 // Denylist-Praezedenz (grund=denylist VOR Land-Gate) ist bereits gebaut (s. Pruefreihenfolge-
-// Test unten). PREMIUM_PREFIXES enthaelt seit GAP-18 zwoelf "+1"-Eintraege (1-900/1-976 +
-// Karibik-Inseln, bekannt fuer Premium-Rueckruf-/One-Ring-Betrug/IRSF) - alle zwoelf
+// Test unten). Die Denylist enthaelt seit GAP-18 zwoelf "+1"-Eintraege (1-900/1-976 +
+// Karibik-Inseln, bekannt fuer Premium-Rueckruf-/One-Ring-Betrug/IRSF; seit KS-P7 stehen
+// die zehn Karibik-NPAs verhaltensgleich in der Klasse 2) - alle zwoelf
 // muessen 403 grund=denylist liefern, auch mit ALLOWED_COUNTRY_CODES="+1".
 test("NANP-Sub-Ranges (1-900/1-976 + Karibik) bleiben gesperrt, auch wenn +1 erlaubt ist (GAP-18)", async (t) => {
   const NANP_PREMIUM_TARGETS = [
@@ -466,6 +467,23 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
         );
       }
     });
+  } finally {
+    await srv.stop();
+  }
+});
+
+// KS-P7: die neuen Hochpreis-Laendercodes muessen dieselbe Gate-Praezedenz haben wie die
+// Bestandseintraege - 403 grund=denylist, auch bei ALLOWED_COUNTRY_CODES="*" (Live-Zustand).
+// EIN Vertreter genuegt; die Vollstaendigkeit der Liste prueft das offline laufende
+// test/ks-p7-high-cost-denylist.test.js (G5: kein zweiter Spawn je Praefix).
+test("KS-P7: Hochpreis-Laendercode (+53 Kuba) -> 403 grund=denylist trotz Land-Gate '*'", async () => {
+  const srv = await startServer({
+    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
+  });
+  try {
+    const res = await postCall(srv.localUrl, "+5352345678");
+    assert.equal(res.status, 403, "+53 muss als Denylist-Sperre abgewiesen werden");
+    assert.match((await res.json()).error, /is blocked/);
   } finally {
     await srv.stop();
   }

@@ -52,3 +52,9 @@ test("setPrivateNumber: leitet das Land aus tenant.country her (US-Tenant kann +
 test("normalizePrivateNumber: Notruf-Kurzwahl wirft (Format bzw. Denylist)", () => {
   assert.throws(() => normalizePrivateNumber("112", "DE"));
 });
+
+test("normalizePrivateNumber: Hochpreis-Laendercode (+53) wird abgelehnt (KS-P7 wirkt geteilt)", () => {
+  // isDenied laeuft VOR der Laender-Allowlist - die Ablehnung ist der Nummernbereich,
+  // nicht das Land. Das ist die bewusst getragene Zweitwirkung der Klasse 2.
+  assert.throws(() => normalizePrivateNumber("+5352345678", "CU"), /gesperrter Nummernbereich/);
+});

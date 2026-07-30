@@ -1529,3 +1529,40 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 >
 > **Regressionsschutz:** `test/ks-p3a-plan-cap-reserve-guard.test.js` (Wahrheitstabelle
 > (a)–(e)), `test/boot-failclosed.test.js` (Spawn mit dem Live-Satz 30 ct/min).
+
+## KS-P7 — Schutzlast von der Kosten-Achse auf die Denylist verschoben (2026-07-30)
+
+> **Was sich aendert.** `src/telephony/number-denylist.js` fuehrt eine zweite, benannte
+> Klasse `HIGH_COST_COUNTRY_PREFIXES` (ganze Laendercodes) neben den bestehenden
+> `PREMIUM_PREFIXES` (Sub-Ranges) und ergaenzt 24 Hochpreis-Ziele + `+878` (UPT).
+>
+> **Warum.** Bis KS-P0/KS-P6 war der Worst-Case-Tarif von 300 ct/min der erklaerte
+> Hauptschutz gegen teure Ziele; die Denylist nannte sich im eigenen Kommentar "Beifang,
+> NICHT der Hauptschutz". Mit 30 ct/min schaetzt die Kosten-Achse teure Ziele mit UNSEREM
+> Satz statt mit dem echten Zielpreis (TOD 1: Kuba). Die Schutzlast liegt damit auf der
+> Denylist - der Modulkommentar sagt das jetzt.
+>
+> **Aufnahmekriterium.** Terminierungspreis ueber dem Worst-Case-Tarif
+> (`VOICE_TARIFF_DEFAULT_CENTS`, 30 ct/min). BEWUSST als Kuratierungsregel dokumentiert,
+> NICHT zur Laufzeit an den Env-Wert gekoppelt: eine per Env veraenderbare Sperrmenge waere
+> ein aufweichbares Gate.
+>
+> **Absolute Regel 1: das Gate wird erweitert, nie geschwaecht.** Kein Eintrag entfernt,
+> keine Bedingung gelockert, kein Env-Schalter, keine Abschaltmoeglichkeit. Die zehn
+> karibischen NANP-Vorwahlen wurden verhaltensgleich in Klasse 2 verschoben (Beweis:
+> `test/number-gate.test.js` bleibt in allen Bestandsfaellen unveraendert gruen).
+> Unberuehrt: Land-Gate, Stundenlimit, Per-Target-Cap, Abo+KYC als Outbound-Permit,
+> `OUTBOUND_FROZEN`, Max-Gespraechsdauer, Budget-Gate, Signaturpruefung,
+> `disclosureSentence`.
+> **Kein neuer Env-Schluessel, keine neue Dependency, kein Laufzeitpfad angefasst.**
+>
+> **Bewusst getragener Preis.** Klasse 2 sperrt ganze Laender, auch gewoehnliche
+> Mobilnummern. Diaspora-Anrufe nach Kuba und Haiti sind damit nicht moeglich. Zweitwirkung:
+> ein Tenant in einem betroffenen Land kann keine private Summary-SMS-Nummer setzen
+> (`normalizePrivateNumber` teilt dieselbe Liste). Eine per-Tenant-Freischaltung waere eine
+> eigene Phase - hier bewusst NICHT gebaut, weil sie das Gate abschaltbar machen wuerde.
+>
+> **Regressionsschutz:** `test/ks-p7-high-cost-denylist.test.js` (25 handgeschriebene
+> Negativziele, 22 Positivziele aus Nachbarlaendern/Startmaerkten, Struktur-Invariante),
+> ein Gate-Ende-zu-Ende-Fall in `test/number-gate.test.js`, ein Fall in
+> `test/p8-private-number-country-gate.test.js`.
