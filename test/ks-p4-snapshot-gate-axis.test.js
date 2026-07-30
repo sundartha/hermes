@@ -222,3 +222,43 @@ test("T7 reserve_budget-Gate, LIVE-Fixture: 402, grund=reserve_erschoepft, KEIN 
   assert.ok(!NEGATIVE_AMOUNT.test(denial.body.error), `Ablehnungstext darf keinen negativen Betrag nennen: ${denial.body.error}`);
   assert.ok(!DURATION_LEAK.test(denial.body.error), "keine ausfuehrbare Dauer im Ablehnungstext (Vorgabe 4)");
 });
+
+// ---- T8: die "Getragene Kante" aus PLAN-SECURITY.md - zwei getrennte Fassaden-Uhren ---
+
+// T1/T2 belegen die Invariante NUR bei identischem nowIso (ops-Ebene). An der
+// Store-Fassade (json.js/pg.js) erzeugen reserveExceedsBudget und tenantBudgetSnapshot
+// aber je ein EIGENES new Date().toISOString() - outbound-gates.js ruft zuerst
+// reserveExceedsBudget (Uhr t1) und danach, bei Ablehnung, tenantBudgetSnapshot (Uhr
+// t2 >= t1) auf. Rollt zwischen t1 und t2 der UTC-Spend-Monat, faellt spendMonthCostCents
+// auf 0 und der Fehlbetrag kann NEGATIV werden - keine Lock-Verletzung, sondern die
+// dokumentierte Grenze der Zusage (PLAN-SECURITY.md, Abschnitt KS-P4, "Getragene Kante").
+// Diese Datei kann keine Fassaden-Uhr simulieren (nowIso ist an der ops-Ebene explizit),
+// deshalb ruft der Test dieselben zwei ops-Funktionen mit den zwei GETRENNTEN nowIso auf,
+// die eine reale Fassade in diesem Fenster liefern wuerde.
+test("T8 divergierendes nowIso ueber eine Spend-Monat-Grenze: Fehlbetrag kann negativ werden (dokumentiertes Restrisiko)", () => {
+  const s = stateWithUsage(TENANT, {
+    costCents: 1284,
+    spendMonthKey: "2026-07",
+    spendMonthCostCents: 1284,
+  });
+  const t1 = "2026-07-31T23:59:59.999Z";
+  const t2 = "2026-08-01T00:00:00.000Z";
+  const reserveCents = 300;
+
+  const gateDenies = reserveExceedsBudget(s, TENANT, reserveCents, FLAG_ON, t1);
+  assert.equal(gateDenies, true, "Vorbedingung: das Gate lehnt bei t1 (noch im alten Spend-Monat) ab");
+
+  const snapshotAfterRollover = tenantBudgetSnapshot(s, TENANT, FLAG_ON, t2);
+  assert.equal(snapshotAfterRollover.spentCents, 0, "der Spend-Monat ist bei t2 bereits gerollt");
+  assert.equal(snapshotAfterRollover.remainingCents, CAP_CENTS);
+
+  const missing = reserveCents - snapshotAfterRollover.remainingCents;
+  assert.equal(missing, -600, "der Ablehnungstext wuerde bei divergierenden Fassaden-Uhren einen negativen Fehlbetrag rendern");
+
+  // Gegenprobe (T1-Invariante): bei IDENTISCHEM nowIso auf beiden Seiten bleibt der
+  // Fehlbetrag konsistent zur Gate-Entscheidung - die Divergenz kommt ausschliesslich
+  // aus den zwei getrennten Uhren, nicht aus der Snapshot-Logik selbst.
+  const snapshotSameClock = tenantBudgetSnapshot(s, TENANT, FLAG_ON, t1);
+  const missingSameClock = reserveCents - snapshotSameClock.remainingCents;
+  assert.ok(missingSameClock > 0, "bei gleicher Uhr bleibt der Fehlbetrag konsistent zur Ablehnung");
+});

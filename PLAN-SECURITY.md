@@ -1386,6 +1386,17 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > Spec unveraendert (kein durchgereichtes `nowIso`-Argument). Eine Divergenz ist nur
 > denkbar, wenn zwischen den zwei Aufrufen eine UTC-Monatsgrenze faellt UND die
 > Flag-Aufloesung auf der Spend-Monat-Achse steht (`BUDGET_MONTH_ENABLED=true`, Default
-> `false`); der Effekt waere dann ein zu GROSSER, nie ein negativer Fehlbetrag - dieselbe
-> Restrisiko-Klasse wie das bereits getragene `budgetExceeded`/`reserveExceedsBudget`-Paar
-> (KS-P0).
+> `false`); der Effekt kann dann in BEIDE Richtungen gehen, EINSCHLIESSLICH eines
+> negativen Fehlbetrags im Ablehnungstext (belegt: `outbound-gates.js` ruft erst
+> `store.reserveExceedsBudget` mit der ersten Fassaden-Uhr `t1` auf und danach, bei
+> Ablehnung, `tenantReserveDenial` -> `store.tenantBudgetSnapshot` mit der zweiten
+> Fassaden-Uhr `t2 >= t1`; rollt der Monat zwischen `t1` und `t2`, faellt
+> `spentCents` auf 0, `remainingCents` waechst, und `reserveCents - remainingCents`
+> wird negativ). Die "strukturell unmoeglich"-Zusage der bewiesenen Invariante oben
+> gilt NUR bei identischem `nowIso` auf beiden Seiten - also auf der ops-Ebene, die
+> `test/ks-p4-snapshot-gate-axis.test.js` (T1/T2) pinnt - nicht ueber die zwei
+> getrennten Fassaden-Uhren. Auswirkung bleibt reiner Anzeigetext (kein Gate kippt,
+> `reserveExceedsBudget` lehnt weiterhin korrekt ab), Eintrittsfenster
+> Sub-Millisekunde einmal pro Monat und nur bei Flag AN. Ein durchgereichtes `nowIso`
+> durch die Fassade wuerde die Divergenz strukturell schliessen, ist aber ausserhalb
+> des Umfangs dieser Phase (Signaturaenderung an beiden Store-Backends).
