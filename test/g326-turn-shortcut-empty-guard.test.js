@@ -14,7 +14,7 @@
 // OHNE Substanz-Filter) nach dem Rausch-Turn JEDEN weiteren stillen Turn kurzgeschlossen
 // und agentTurn nie wieder aufgerufen - der R4-Empty-Turn-Zaehler (unansweredAgentTurns,
 // nur bei echtem agentTurn-Aufruf neu ausgewertet) waere eingefroren, der Call haette bis
-// maxCallDurationS re-promptet statt nach maxEmptyTurns geordnet aufzulegen.
+// der Max-Dauer-Frist re-promptet statt nach maxEmptyTurns geordnet aufzulegen.
 //
 // MAX_EMPTY_TURNS="2" (kuerzeste testbare Schwelle, F.I.R.S.T.); CALLER_SUBSTANCE_MIN_LEN
 // bleibt der BASE_ENV-Prod-Default (2). Spawn-Test (echte HTTP-Route, kein In-Process-Import

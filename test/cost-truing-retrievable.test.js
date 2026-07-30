@@ -72,7 +72,9 @@ test("(P9-2) gemischt: ein alter nicht-abrufbarer + ein junger abrufbarer Call -
   const res = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
   assert.equal(poolParams.length, 1, "der Pool wird weiterhin geholt - der alte Call schliesst den Abruf nicht aus");
-  assert.equal(poolParams[0]?.since, "2026-07-21T14:00:00.000Z", "die Schranke haengt am ABRUFBAREN Call, nicht am alten");
+  // endedAt des jungen Calls = 15:00Z, minus die Marge. KS-P3: die Marge ist seit dieser
+  // Phase aus MAX_CALL_DURATION_CAP_S abgeleitet (12 x 1800 s = 6 h statt vorher 1 h).
+  assert.equal(poolParams[0]?.since, "2026-07-21T09:00:00.000Z", "die Schranke haengt am ABRUFBAREN Call, nicht am alten");
   assert.equal(res.skippedCalls, 1);
   assert.equal(store.writes.length, 1);
   assert.equal(store.writes[0].callId, jung.id, "der junge Call ist nicht aus der Buchungsschleife gefallen");

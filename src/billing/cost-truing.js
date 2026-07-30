@@ -24,7 +24,13 @@
 // UNVERAENDERT. Die Umrechnung USD -> EUR-Bucket lebt an GENAU EINER Stelle:
 // convertProviderMicroToBucketCents (state-ops.js), aufgerufen ausschliesslich aus
 // applyCostCorrectionCents. In diesem Modul wird NIE umgerechnet.
-import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, isBookableCents } from "../store/defaults.js";
+import {
+  COST_TRUING_SOURCE,
+  MAX_CALL_DURATION_CAP_S,
+  MICRO_CENTS_PER_CENT,
+  isBookableCents,
+} from "../store/defaults.js";
+import { MS_PER_SECOND } from "../utils/timer.js";
 import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
@@ -89,10 +95,13 @@ const endedAtMs = (call) => {
 // Herleitung: die Belege tragen Zeitfelder vom GESPRAECHSBEGINN, nicht vom Ende - der
 // Pflicht-Typ call-control fuehrt ausschliesslich started_at (Messung 2026-07-21). Der
 // groesste Abstand zum endedAt eines Kandidaten ist damit die Gespraechsdauer, und die
-// deckelt MAX_CALL_DURATION_S (config.js) hart bei hoechstens 300 s. Eine Stunde ist das
-// Zwoelffache davon und traegt zusaetzlich den Versatz zwischen unserer Uhr (endedAt) und
-// der Provider-Uhr (Belegzeitstempel).
-const POOL_SINCE_MARGIN_MS = 60 * MS_PER_MINUTE;
+// deckelt MAX_CALL_DURATION_CAP_S (die absolute Obergrenze der Notbremse, KS-P3). Die
+// Marge ist deshalb ABGELEITET und nicht als Zahl gepflegt: sie war schon einmal eine
+// Zahl, die an einem Cap hing, der sich geaendert hat (TOD 12). Das Zwoelffache traegt
+// zusaetzlich den Versatz zwischen unserer Uhr (endedAt) und der Provider-Uhr
+// (Belegzeitstempel); zwoelffach, weil die Richtungen nicht symmetrisch sind (s.o.).
+const POOL_SINCE_MARGIN_FACTOR = 12;
+const POOL_SINCE_MARGIN_MS = POOL_SINCE_MARGIN_FACTOR * MAX_CALL_DURATION_CAP_S * MS_PER_SECOND;
 
 // Zeitschranke des Belegabrufs, abgeleitet aus dem AELTESTEN Kandidaten (KE-P5): ohne sie
 // zog ein Sweep mit einem 3 h alten Call denselben Umfang wie einer mit 200 Kandidaten -

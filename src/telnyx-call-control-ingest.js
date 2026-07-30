@@ -215,11 +215,11 @@ export function makeCallControlIngest({
       // afix-timeout (Review-Blocker Runde 1): auch der Retry-Leg kann verstummen, OHNE je ein
       // Terminal-Event zu senden (identisches Symptom wie der Erst-Speak) - ohne erneutes
       // Armieren haengt der Call dann wieder unbegrenzt in Stille, diesmal ungeschuetzt bis zum
-      // harten maxCallDurationS-Cap. consumeOpeningRetry() ist bereits verbraucht (oben), ein
+      // harten Max-Dauer-Cap. consumeOpeningRetry() ist bereits verbraucht (oben), ein
       // zweites Feuern dieses Timers laeuft in onSpeakFailed also direkt in den Fail-Safe-Zweig
       // (kein Endlos-Retry).
       // AFIX-TIMEOUT-RETRY-RACE (Review-Blocker Runde 4): der await oben kann von einem
-      // parallelen Hangup (echtes Telnyx-Webhook, /api/calls/:id/cancel, maxCallDurationS-Cap)
+      // parallelen Hangup (echtes Telnyx-Webhook, /api/calls/:id/cancel, Max-Dauer-Cap)
       // ueberholt werden - derselbe frische Status-Check wie am Funktionsanfang, sonst wird ein
       // Timer fuer einen inzwischen beendeten Call neu armiert.
       if (store.getCall(call.id)?.status === "active") armOpeningSpeakTimeout(call, callControlId);

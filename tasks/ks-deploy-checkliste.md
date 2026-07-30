@@ -33,7 +33,7 @@ neue Anrufe bekommen den Anker.
 |---|---|---|
 | `VOICE_TARIFF_DEFAULT_CENTS` | **erledigt** (E1, 30) | Code-Fallback ist mit KS-P6 nachgezogen |
 | `MAX_BUDGET_EUR` | unveraendert lassen | seit KS-P9 keine Sperre mehr, nur noch Warnschwelle |
-| `MAX_CALL_DURATION_S` | **offen bis KS-P3** | Live-Dienst ist Dashboard-managed; der Blueprint-Wert allein schaltet nichts |
+| `MAX_CALL_DURATION_S` | **entfaellt** (KS-P3, E2/E3) | Der Key wird nicht mehr gelesen. Ein im Dashboard stehengebliebener Wert ist ab diesem Deploy WIRKUNGSLOS - er kann kein Gespraech mehr kuerzen. Aufraeumen darf der Owner, muss er aber nicht. Die nutzbare Dauer faellt jetzt pro Call aus dem Restguthaben (Notbremse `min(Restminuten + 1 min, 1800 s)`); die 1800 s sind hartkodiert und bewusst kein Knopf. |
 
 ## 3. Nach dem Deploy pruefen
 

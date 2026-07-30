@@ -64,18 +64,23 @@ test("T-P2-03: negativer Gate-Wert -> Fatal (nennt Minimum); '0' bleibt gueltige
   assert.equal(configFatalErrors().length, before0, "0 ist gueltiger Not-Aus, kein Fatal");
 });
 
-test("T-P2-04: maxCallDurationS NaN -> Fatal (kein stilles 300); Clamp-Pfad bleibt", () => {
+// KS-P3 (b): die Aussage dieses Tests ("max ist ein bewusster Clamp, NaN ist Fatal") ist
+// unveraendert - nur die Traeger-Variable wechselt. MAX_CALL_DURATION_S ist mit E2/E3
+// ersatzlos entfallen; ein Test, der weiter gegen diesen Namen rechnete, pinnte einen
+// toten Schluessel und meldete nie mehr etwas. TELNYX_DEAD_AIR_TIMEOUT_S ist die naechste
+// numEnv-Variable mit demselben {fallback,min,max}-Vertrag.
+test("T-P2-04: deadAirTimeoutS NaN -> Fatal (kein stilles max); Clamp-Pfad bleibt", () => {
   const before = configFatalErrors().length;
-  numEnv("MAX_CALL_DURATION_S", "lang", { fallback: 180, min: 1, max: 300 });
+  numEnv("TELNYX_DEAD_AIR_TIMEOUT_S", "lang", { fallback: 45, min: 5, max: 300 });
   assert.ok(
     configFatalErrors()
       .slice(before)
-      .some((e) => e.includes("MAX_CALL_DURATION_S")),
-    "NaN-Max-Dauer muss Fatal sein (frueheres Math.min(NaN,300)-Loch geschlossen)",
+      .some((e) => e.includes("TELNYX_DEAD_AIR_TIMEOUT_S")),
+    "ein NaN-Wert muss Fatal sein (frueheres Math.min(NaN,max)-Loch geschlossen)",
   );
   // Clamp bleibt Bestandsverhalten: > max -> max, KEIN Fatal.
   const beforeClamp = configFatalErrors().length;
-  const clamped = numEnv("MAX_CALL_DURATION_S", "600", { fallback: 180, min: 1, max: 300 });
+  const clamped = numEnv("TELNYX_DEAD_AIR_TIMEOUT_S", "600", { fallback: 45, min: 5, max: 300 });
   assert.equal(clamped, 300, "Wert ueber Obergrenze wird auf max geklemmt");
   assert.equal(configFatalErrors().length, beforeClamp, "Clamp ist kein Fatal");
 });
@@ -95,7 +100,7 @@ test("T-P2-05: assertConfig faellt bei numerischem Fatal und nennt die Var", () 
 
 // P9-CFG1 (Review-Blocker): TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS bekam urspruenglich nur
 // {fallback, min}, KEIN max - ein absurd hoher Hosting-Wert (z.B. 999999) haette den
-// Kosten-Notaus lautlos inert geschaltet. Symmetrisch zu T-P2-04 (MAX_CALL_DURATION_S):
+// Kosten-Notaus lautlos inert geschaltet. Symmetrisch zu T-P2-04 (TELNYX_DEAD_AIR_TIMEOUT_S):
 // max ist ein bewusster Clamp, KEIN Fatal.
 test("T-P2-06: TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS absurd hoch -> auf max 50 geklemmt (kein Fatal)", () => {
   const before = configFatalErrors().length;

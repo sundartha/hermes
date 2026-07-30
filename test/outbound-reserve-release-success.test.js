@@ -22,11 +22,12 @@ test("OUT-05 F2: Erfolgs-Freigabe ueber finishCall gibt die Reserve frei", async
     ownerNumber: DOMESTIC_TEST_NUMBER,
     env: {
       // MAX_BUDGET_EUR wirkt hier als Pro-Tenant-Fallback (effectiveCapCents Stufe 3 - der
-      // Owner hat keine tenant_budget-Zeile). Reserve pro
-      // Call: 200 ct/min x ceil(180/60)=3 min = 600 ct; zwei Reserven (1200 ct) reissen
+      // Owner hat keine tenant_budget-Zeile). KS-P3 (a): die Reserve ist Satz x
+      // RESERVE_LEAD_MINUTES (2), nicht mehr Satz x angefangene Minuten der Maximaldauer.
+      // Reserve pro Call: 300 ct/min x 2 = 600 ct; zwei Reserven (1200 ct) reissen
       // den 1000-ct-Cap, eine einzelne (600 ct) nicht.
       MAX_BUDGET_EUR: "10",
-      VOICE_TARIFF_DOMESTIC_CENTS: "200",
+      VOICE_TARIFF_DOMESTIC_CENTS: "300",
       ALLOWED_COUNTRY_CODES: "*",
       FAKE_ORIGINATE: "true",
     },

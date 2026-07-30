@@ -31,7 +31,6 @@ import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.
 import { attachMediaBridge } from "./bridge.js";
 import {
   USAGE_EVENT_KIND,
-  MAX_CALL_DURATION_CAP_S,
   BOOTSTRAP_TENANT_ID,
   normNum,
 } from "./store/defaults.js";
@@ -86,13 +85,11 @@ function runRetention(store, config) {
 function assertSpendCapCoherence(config) {
   // Die Eingaben der Worst-Case-Reserve, EINMAL benannt: beide Guards, die eine Decke
   // dagegen halten, muessen dieselbe Reserve meinen (G5).
-  // Worst Case, NICHT der Inlandstarif: gerechnet wird das teuerste Ziel. Und die HARTE
-  // Obergrenze, nicht die Default-Dauer: resolveMaxDurationS klemmt jeden Body-Override
-  // hierauf - das ist die laengstmoegliche Reserve.
-  const worstCase = {
-    maxTariffCents: config.billing.voiceTariffDefaultCents,
-    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
-  };
+  // Worst Case, NICHT der Inlandstarif: gerechnet wird das teuerste Ziel. Eine Dauer geht
+  // seit KS-P3 (a) NICHT mehr ein - die Reserve deckt ein festes Vorlauffenster
+  // (RESERVE_LEAD_MINUTES, store/defaults.js), nicht das ganze Gespraech. Der teuerste
+  // SATZ ueber dieses Fenster ist damit die laengstmoegliche Reserve.
+  const worstCase = { maxTariffCents: config.billing.voiceTariffDefaultCents };
   const capForSlug = (slug) => planCapCents(slug, config.billing);
   const findings = spendCapCoherence({
     tenantDefaultCents: config.billing.defaultTenantBudgetCents,

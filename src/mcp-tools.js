@@ -647,7 +647,11 @@ export function registerTools(
           .positive()
           .max(MAX_CALL_DURATION_CAP_S)
           .optional()
-          .describe("Maximum call duration in seconds (default 180, max 300)."),
+          .describe(
+            "Optional upper bound for the call duration in seconds. The server derives the " +
+              "effective limit from the remaining credit and only ever applies a SHORTER value " +
+              "than that; it never extends a call.",
+          ),
         // P2b (Diagnose-Retention): reiner WUNSCH. Der Server gewaehrt ihn NUR, wenn das
         // Ziel die eigene verifizierte Nummer des Nutzers ist - sonst still ignoriert.
         // Ohne dieses Feld erreichte das Flag /api/calls nie (Zod strippt unbekannte Keys).

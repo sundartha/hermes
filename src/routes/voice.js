@@ -20,7 +20,9 @@
 // billThunk) und config/store/audit werden injiziert (INV-7 "eine Instanz").
 import { Router } from "express";
 import { VOICE_ENGINE } from "../config.js";
-import { normNum, DEFAULT_PROVIDER } from "../store/defaults.js";
+import { normNum, DEFAULT_PROVIDER, MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
+import { emergencyBrakeSeconds } from "../call-duration.js";
+import { callTariffCentsPerMin } from "../billing/metering.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.js";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.js";
@@ -97,16 +99,31 @@ export function makeVoiceRoutes({
   // statt mit einem Folge-Gather, den der wortlose Timer-Backstop Sekunden spaeter
   // abschneiden wuerde. Der Cap wird dadurch NICHT verlaengert (Regel 1): der Satz liegt
   // INNERHALB der Frist; terminateCappedCall bleibt unangetastet und beendet den Call
-  // weiterhin spaetestens bei maxCallDurationS - auch wenn ueberhaupt kein Turn mehr kommt.
+  // weiterhin spaetestens bei der am Call hinterlegten Notbremse - auch wenn ueberhaupt
+  // kein Turn mehr kommt.
   // TURN-basiert statt Timer-basiert, weil nur hier ein Request offen ist, in den sich
   // rendern laesst; dadurch laeuft der Pfad ueber voiceRender/directives und bedient beide
   // Provider ohne den optionalen speak-Port (den Twilio gar nicht hat).
   // Der Satz ist ein Locale-String, KEIN LLM-Text - er muss auch kommen, wenn das Modell
   // klemmt. Genug Restzeit ODER capFarewellLeadMs=0 (Aus-Schalter) -> null.
   function capFarewellOutcome(call) {
-    const remaining = remainingMaxDurationMs(call, Date.now(), config.safety.maxCallDurationS);
+    const remaining = remainingMaxDurationMs(call, Date.now(), MAX_CALL_DURATION_CAP_S);
     if (remaining >= config.safety.capFarewellLeadMs) return null;
     return { speech: localeFor(call.language).capFarewellSpeech, endCall: true };
+  }
+
+  // KS-P3 (b): die guthaben-abgeleitete Notbremse EINES Legs. Zweite Nutzung derselben
+  // reinen Regel wie im Outbound-Gate (call-duration.js ist die EINE Quelle, G5); hier
+  // werden nur ihre zwei Eingaben aus dem Store gezogen. Auch INBOUND bekommt sie: seine
+  // KI-Token buchen in jeder Schleifenrunde live auf dieselbe Tenant-Achse (E11-Korrektur),
+  // und ohne eigene Frist liefe ein haengendes Inbound-Leg bis zur absoluten Obergrenze.
+  // callTariffCentsPerMin traegt die Richtungsregel (inbound: Satz des EIGENEN DID-Landes) -
+  // hier NICHT nachgebaut.
+  function brakeSecondsFor(leg) {
+    return emergencyBrakeSeconds({
+      remainingCents: store.tenantBudgetSnapshot(leg.tenantId, config.billing).remainingCents,
+      tariffCentsPerMin: callTariffCentsPerMin(leg),
+    });
   }
 
   // AL-P6 (Regel 1): bricht agentTurn wegen einer erschoepften Budget-Achse ab, endet der
@@ -260,7 +277,10 @@ export function makeVoiceRoutes({
           .send(render([sayD(locale.budgetExhaustedHangup, locale.voiceProfile), hangupD()], provider));
       }
 
-      call = store.createCall({
+      // KS-P3 (b): das Leg EINMAL beschrieben, damit die Notbremse dieselbe Richtung/
+      // dasselbe Ziel sieht, die auch persistiert werden (kein zweiter, abweichender
+      // Nachbau der Leg-Felder fuer die Satz-Ableitung).
+      const inboundLeg = {
         direction: "inbound",
         from: req.body.From || "unbekannt",
         to,
@@ -268,7 +288,8 @@ export function makeVoiceRoutes({
         tenantId,
         provider,
         language,
-      });
+      };
+      call = store.createCall({ ...inboundLeg, maxDurationS: brakeSecondsFor(inboundLeg) });
       store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
 

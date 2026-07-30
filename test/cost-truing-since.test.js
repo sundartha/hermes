@@ -29,11 +29,14 @@ const {
 // Vorzeichenfehler mit-falsch.
 const P5_NOW = "2026-07-21T18:00:00.000Z";
 const OLDEST_ENDED_MINUTES_AGO = 600;                    // endedAt = 08:00:00Z
-const EXPECTED_SINCE = "2026-07-21T07:00:00.000Z";       // 08:00:00Z minus 1 h Marge
+const EXPECTED_SINCE = "2026-07-21T02:00:00.000Z";       // 08:00:00Z minus 6 h Marge
 // Der groesste Abstand, den ein Beleg zum endedAt seines Anrufs haben kann: die Gespraechs-
-// dauer, hart gedeckelt durch MAX_CALL_DURATION_S (config.js, max 300). Genau diesen Fall
-// muss die Marge abdecken - (P5-5) prueft ihn.
-const MAX_CALL_DURATION_S = 300;
+// dauer, hart gedeckelt durch MAX_CALL_DURATION_CAP_S (die absolute Obergrenze der
+// guthaben-abgeleiteten Notbremse, KS-P3). Genau diesen Fall muss die Marge abdecken -
+// (P5-5) prueft ihn. Seit KS-P3 wird die Marge daraus ABGELEITET (Faktor 12), statt als
+// Zahl gepflegt zu werden; der Eigenschafts-Assert unten haelt das fest.
+const { MAX_CALL_DURATION_CAP_S } = await import("../src/store/defaults.js");
+const POOL_SINCE_MARGIN_FACTOR = 12;
 
 // Fake im Port-Zuschnitt, der die Pool-PARAMETER aufzeichnet (der Pruefgegenstand von
 // P5-1/P5-2 ist der uebergebene Wert, nicht das Netz).
@@ -69,6 +72,32 @@ test("(P5-1) `since` kommt vom AELTESTEN Kandidaten minus Marge - EINE Schranke 
   assert.equal(res.candidates, 3);
   assert.equal(poolParams.length, 1, "EIN Pool-Abruf je Sweep, also auch EINE Schranke");
   assert.equal(poolParams[0]?.since, EXPECTED_SINCE);
+});
+
+// KS-P3 / TOD 12: die Marge war einmal eine Zahl, die an einem Cap hing, der sich geaendert
+// hat. Dieser Assert rechnet sie aus der BEOBACHTETEN Schranke zurueck und haelt sie gegen
+// die abgeleitete Untergrenze - er ueberlebt damit den naechsten Cap-Wechsel, waehrend das
+// Literal EXPECTED_SINCE oben ihn bewusst NICHT ueberlebt (dort ist die Zahl der Beweis).
+test("(P5-1b) die Marge bleibt mindestens das Zwoelffache der absoluten Obergrenze", async () => {
+  const nowMs = Date.parse(P5_NOW);
+  const state = makeDefaultState();
+  const call = makeDueOutboundCall(state, {
+    nowMs,
+    endedMinutesAgo: OLDEST_ENDED_MINUTES_AGO,
+    legRef: { callControlId: "cc_p5_marge" },
+  });
+  const poolParams = [];
+  const { run } = sweepWith({ state, control: paramRecordingAdapter(poolParams), nowMs });
+
+  await run({ trigger: SWEEP_TRIGGER.MANUAL });
+
+  const marginMs = Date.parse(call.endedAt) - Date.parse(poolParams[0].since);
+  assert.ok(
+    marginMs >= POOL_SINCE_MARGIN_FACTOR * MAX_CALL_DURATION_CAP_S * 1000,
+    `Marge ${marginMs} ms muss mindestens das ${POOL_SINCE_MARGIN_FACTOR}-fache der ` +
+      `Obergrenze (${MAX_CALL_DURATION_CAP_S}s) betragen - sonst endet die Seitenschleife ` +
+      "vor dem Beleg und der Pool gilt trotzdem als vollstaendig (fail-open im Geldpfad)",
+  );
 });
 
 test("(P5-2) ein unbrauchbarer endedAt zieht die Schranke NICHT ins Bodenlose", async () => {
@@ -135,7 +164,7 @@ test("(P5-4) EIN 3 h alter Kandidat -> genau eine Anfrage je Typ (die Schranke b
 // fuer POOL_SINCE_MARGIN_MS und faellt, sobald die Marge kleiner wird als die maximale
 // Gespraechsdauer. Die Rot-vor-Gruen-Pflicht (A2) tragen P5-1/P5-2/P5-4.
 // Fixture-Aufbau: Seite 1 traegt 50 FREMDE Belege, deren Zeitfelder GENAU am
-// Gespraechsbeginn des Kandidaten liegen (endedAt minus MAX_CALL_DURATION_S) - eine zu
+// Gespraechsbeginn des Kandidaten liegen (endedAt minus MAX_CALL_DURATION_CAP_S) - eine zu
 // knappe Marge erklaerte diese Seite fuer "vor der Schranke" und braeche ab, bevor Seite 2
 // geholt ist. Seite 2 traegt die EIGENEN Belege des Kandidaten inklusive NULL-ZWILLING
 // (Plan F3/PM-11, A2-Pflicht, weil dieser Test eine Kostensumme prueft).
@@ -157,7 +186,7 @@ test("(P5-5) die Marge deckt die Gespraechsdauer: eigene Belege auf Seite 2 werd
   state.usage[BOOTSTRAP_TENANT_ID] = { ...emptyUsage(), costCents: 100 };
   const legId = "v3:p5-anker";
   const call = makeDueOutboundCall(state, { nowMs, endedMinutesAgo: 200, legRef: { callControlId: legId }, estimatedCostCents: 20 });
-  const callStartIso = new Date(Date.parse(call.endedAt) - MAX_CALL_DURATION_S * 1000).toISOString();
+  const callStartIso = new Date(Date.parse(call.endedAt) - MAX_CALL_DURATION_CAP_S * 1000).toISOString();
   const fetchCalls = stubCountingFetch({
     bodyFor: (recordType, pageNumber) => {
       if (recordType !== "sip-trunking") return { data: [] };

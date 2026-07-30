@@ -9,8 +9,9 @@
 // Starter-Abonnent kommt also zu einem Nicht-Inlandsziel durch.
 //
 // Der gepruefte MECHANISMUS bleibt derselbe (R3 der kanonischen Liste,
-// 00-kanonische-liste.md): Reserve = tariffCentsPerMin * angefangene Minuten der
-// MAX_CALL_DURATION_CAP_S, gegen die abgeleitete Plan-Decke. Die Nachbarn bleiben
+// 00-kanonische-liste.md): Reserve = tariffCentsPerMin * RESERVE_LEAD_MINUTES (seit
+// KS-P3 (a) ein festes Vorlauffenster, nicht mehr die angefangenen Minuten der
+// Maximaldauer), gegen die abgeleitete Plan-Decke. Die Nachbarn bleiben
 // unberuehrt: GAP-32 (test/gap-32-worst-case-fatal.test.js, Boot-Guard-Schaerfe) und
 // GAP-33 (test/prod-config-smoke.test.js, Auslandsziel kommt bis zum Provider durch).
 //
@@ -23,9 +24,8 @@ import { config } from "../src/config.js";
 import { makeDefaultState, registerTenant, setTenantBudget, reserveExceedsBudget } from "../src/store/state-ops.js";
 import { planCapCents } from "../src/billing/plan-caps.js";
 import { tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
-import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
+import { outboundReserveCents } from "../src/store/defaults.js";
 
-const SECONDS_PER_MINUTE = 60;
 const TENANT_A = "t_pay04_starter";
 const NON_DOMESTIC_TARGET = "+15551234567"; // kein +49/+33/+44-Praefix
 const US_OWN_DID = "+15005550006"; // ausgelieferte Default-DID (ebenfalls ohne Inlands-Vorwahl)
@@ -34,8 +34,7 @@ test("PAY-04: Starter-Decke traegt die Worst-Case-Reserve eines Nicht-Inlandsanr
   const capCents = planCapCents("starter", config.billing);
   assert.ok(capCents > 0, "Vorbedingung: die Kosten-Achse ist aktiv (Satz > 0)");
 
-  const reserveCents =
-    tariffCentsPerMin(NON_DOMESTIC_TARGET, US_OWN_DID) * Math.ceil(MAX_CALL_DURATION_CAP_S / SECONDS_PER_MINUTE);
+  const reserveCents = outboundReserveCents(tariffCentsPerMin(NON_DOMESTIC_TARGET, US_OWN_DID));
 
   const s = makeDefaultState();
   registerTenant(s, TENANT_A, {});

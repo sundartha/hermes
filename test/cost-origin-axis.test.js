@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { config } from "../src/config.js";
 import { makeOutboundGates, tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
 import { callTariffCentsPerMin, makeMetering } from "../src/billing/metering.js";
-import { USAGE_EVENT_KIND, emptyUsage } from "../src/store/defaults.js";
+import { RESERVE_LEAD_MINUTES, USAGE_EVENT_KIND, emptyUsage } from "../src/store/defaults.js";
 
 const TENANT_A = "t_origin";
 const DE_OWN_DID = "+4930111222333"; // eigene DID mit Inlands-Vorwahl
@@ -28,7 +28,6 @@ const DE_TARGET = "+4915112345678"; // +49 steht in VOICE_TARIFF_DOMESTIC_PREFIX
 const US_TARGET = "+15551234567"; // keine Inlands-Vorwahl
 const FR_TARGET = "+33612345678"; // +33 steht in VOICE_TARIFF_DOMESTIC_PREFIXES, aber != +49
 const TOLL_FREE_TARGET = "+18005550123"; // 1-800: fuer den ANRUFER gebuehrenfrei, fuer uns nicht
-const SECONDS_PER_MINUTE = 60;
 
 // Faengt die Geld-Nebeneffekte auf (recordUsageEvent / addVoiceUsageCostCents), ohne Store.
 function fakeStore() {
@@ -47,6 +46,10 @@ function fakeStore() {
       return emptyUsage();
     },
     recordCallEstimatedCostCents() {},
+    // KS-P3 (b): compute_reserve liest den Guthaben-Snapshot als Eingabe der
+    // guthaben-abgeleiteten Notbremse. Fuer die Satz-Aussage dieser Datei ist der Wert
+    // gleichgueltig, er muss nur lesbar sein.
+    tenantBudgetSnapshot: () => ({ capCents: 100000, spentCents: 0, remainingCents: 100000 }),
   };
 }
 
@@ -201,9 +204,11 @@ test("Reserve und Buchung rechnen dieselbe Konstellation mit demselben Satz", as
   const computeReserve = gates.find((g) => g.name === "compute_reserve");
   assert.ok(computeReserve, "compute_reserve-Gate existiert");
 
-  const ctx = { b: {}, to: DE_TARGET, fromNumber: US_OWN_DID };
+  const ctx = { b: {}, to: DE_TARGET, fromNumber: US_OWN_DID, tenantId: "t_origin" };
   await computeReserve.run(ctx);
-  const reservedPerMinute = ctx.reserveCents / Math.ceil(ctx.maxDur / SECONDS_PER_MINUTE);
+  // KS-P3 (a): die Reserve ist Satz * RESERVE_LEAD_MINUTES - der Minutensatz faellt aus
+  // dem Vorlauffenster heraus, nicht mehr aus der Gespraechsdauer.
+  const reservedPerMinute = ctx.reserveCents / RESERVE_LEAD_MINUTES;
 
   const { reconcileOutboundVoiceBudget } = makeMetering({ store, config });
   reconcileOutboundVoiceBudget(makeCall({ to: DE_TARGET, from: US_OWN_DID }));

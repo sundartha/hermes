@@ -53,7 +53,6 @@ function defaultConfig() {
     maxCallsPerHour: 100,
     perTargetWindowMs: 3600000,
     perTargetCallCap: 100,
-    maxCallDurationS: 180,
   };
 }
 

@@ -558,7 +558,8 @@ export function callStartAnchorMs(call) {
 }
 
 // Hartes Max-Dauer-Limit dieses Calls in ms (call-eigenes maxDurationS vor injiziertem Default).
-// config-frei: defaultMaxDurationS reicht der Aufrufer (server.js: config.safety.maxCallDurationS) herein.
+// config-frei: defaultMaxDurationS reicht der Aufrufer herein (seit KS-P3 ueberall
+// MAX_CALL_DURATION_CAP_S - der Env-Knopf MAX_CALL_DURATION_S ist entfallen).
 function callLimitMs(call, defaultMaxDurationS) {
   return (call.maxDurationS || defaultMaxDurationS) * MS_PER_SECOND;
 }

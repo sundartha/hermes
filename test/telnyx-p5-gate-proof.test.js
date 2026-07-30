@@ -276,10 +276,12 @@ test("Gate 12 Minuten: erschoepftes Plan-Kontingent blockt auch mit Flag an (402
 // ---- Gate 13: Reserve (Muster outbound-reserve-gate.test.js) ----
 test("Gate 13 Reserve: Worst-Case-Reserve > Cap blockt auch mit Flag an (402)", async () => {
   // MAX_BUDGET_EUR wirkt hier als Pro-Tenant-Fallback (effectiveCapCents Stufe 3 - der Owner
-  // hat keine tenant_budget-Zeile). 10 EUR = 1000 ct Cap;
-  // Worst-Case-Tarif 400 ct/min x 3 min (maxDur 180s) = 1200 ct > 1000 ct.
+  // hat keine tenant_budget-Zeile). KS-P3 (a): die Reserve ist Satz * RESERVE_LEAD_MINUTES
+  // (2), nicht mehr Satz * angefangene Minuten der Maximaldauer - die Zahlen werden neu
+  // gewaehlt, die Aussage bleibt dieselbe. 5 EUR = 500 ct Cap;
+  // Worst-Case-Tarif 400 ct/min x 2 Vorlauf-Minuten = 800 ct > 500 ct.
   const res = await placeCallFlagOn({
-    env: { MAX_BUDGET_EUR: "10", VOICE_TARIFF_DEFAULT_CENTS: "400" },
+    env: { MAX_BUDGET_EUR: "5", VOICE_TARIFF_DEFAULT_CENTS: "400" },
     seed: seedOwnerTelnyx(),
     ownerNumber: TELNYX_OWNER_NUMBER,
     to: "+12025550123", // US -> Worst-Case-Default-Tarif (teuer)

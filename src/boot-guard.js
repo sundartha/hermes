@@ -1,6 +1,6 @@
 // Datenkonstanten des Store-Blatt-Moduls (Format-/Provider-Wahrheit, kein IO, keine
 // config) - die einzige Abhaengigkeit dieser Datei. Genutzt von bootstrapHealDecision.
-import { E164, PROVIDER, normNum } from "./store/defaults.js";
+import { E164, PROVIDER, RESERVE_LEAD_MINUTES, normNum, outboundReserveCents } from "./store/defaults.js";
 
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
 // Blast-Radius: faengt jeden Fehler, loggt ihn laut + secret-frei (nur err.message)
@@ -80,18 +80,10 @@ export function meterMappingGaps(usageEventKinds, meterEventNames) {
   return usageEventKinds.filter((kind) => !meterEventNames[kind]);
 }
 
-// P3: Sekunden->Minuten-Bruecke der Worst-Case-Reserve (G25: benannte Konstante statt
-// nackter 60). Zeit-Einheit, kein Betriebsparameter -> gehoert NICHT nach config.js
-// (G35 n.z.). Muster: MS_PER_MINUTE in src/billing/metering.js, MS_PER_DAY in src/config.js.
+// P3: Sekunden->Minuten-Bruecke (G25: benannte Konstante statt nackter 60). Zeit-Einheit,
+// kein Betriebsparameter -> gehoert NICHT nach config.js (G35 n.z.). Muster: MS_PER_MINUTE
+// in src/billing/metering.js, MS_PER_DAY in src/config.js.
 const SECONDS_PER_MINUTE = 60;
-
-// KS-P3a: die Worst-Case-Reserve EINES Anrufs, wie outbound-gates.js sie vor dem Dial bucht
-// (Satz * angefangene Minuten der laengstmoeglichen Gespraechsdauer). EINE Quelle fuer beide
-// Guards, die eine Decke dagegen halten (G5): spendCapCoherence haelt sie gegen die
-// Tenant-Default-Decke, planCapReserveFindings gegen die kleinste Plan-Decke.
-function worstCaseReserveCents({ maxTariffCents, maxCallDurationS }) {
-  return maxTariffCents * Math.ceil(maxCallDurationS / SECONDS_PER_MINUTE);
-}
 
 // P3: Befund-Codes des Kohaerenz-Guards (G25/G11: EINE Quelle statt Roh-Strings in Guard,
 // Verdrahtung und Test).
@@ -116,10 +108,13 @@ function affordableCallDurationS(tenantDefaultCents, maxTariffCents) {
 //   faellt auf den Pro-Tenant-Fallback zurueck (effectiveCapCents Stufe 3). Kein
 //   Schutzverlust, nur Hinweis.
 // B (FATAL, GAP-32): selbst wenn die Tenant-Decke wirkt, reicht sie fuer den TEURSTEN
-//   Zielverkehr (maxTariffCents) ueber die laengstmoegliche Gespraechsdauer
-//   (maxCallDurationS, die HARTE Klemme aus resolveMaxDurationS) nicht aus - jedes Ziel
+//   Zielverkehr (maxTariffCents) ueber das feste VORLAUFFENSTER der Reserve
+//   (RESERVE_LEAD_MINUTES) nicht aus - jedes Ziel
 //   ohne gemessenen Inlandssatz scheitert am Reserve-Gate, bevor die Tenant-Decke erreicht
-//   ist. Bis P7 war das eine blosse WARN: die Zeile stand seit dem ersten Deploy folgenlos
+//   ist. Seit KS-P3 (a) haengt die Reserve NICHT mehr an der Gespraechsdauer: die waechst
+//   mit dem Guthaben, das Vorlauffenster nicht - deshalb kann eine Anhebung der Zeitgrenze
+//   diesen Guard nicht mehr ausloesen.
+//   Bis P7 war das eine blosse WARN: die Zeile stand seit dem ersten Deploy folgenlos
 //   im Log, waehrend der Dienst fuer genau diese Ziele faktisch abgeschaltet war. Eine
 //   Konfiguration, unter der ein ganzer Zielbereich vor dem Dial abgewiesen wird, ist kein
 //   Betriebszustand - der Start wird verweigert und die Meldung nennt den Zielwert.
@@ -138,7 +133,7 @@ function affordableCallDurationS(tenantDefaultCents, maxTariffCents) {
 // Voraussetzung: laeuft NACH assertConfig() - nicht-numerische Werte sind dort bereits
 // fail-closed abgefangen (numEnv). Kein eigener NaN-Riegel (kein zweites
 // Gueltigkeitsidiom, G5/D7-Klasse).
-export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTariffCents, maxCallDurationS }) {
+export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTariffCents }) {
   if (tenantDefaultCents === 0) {
     return [
       {
@@ -151,7 +146,7 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
       },
     ];
   }
-  const reserveCents = worstCaseReserveCents({ maxTariffCents, maxCallDurationS });
+  const reserveCents = outboundReserveCents(maxTariffCents);
   if (reserveCents > tenantDefaultCents) {
     const maxDurationS = affordableCallDurationS(tenantDefaultCents, maxTariffCents);
     return [
@@ -160,8 +155,8 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
         fatal: true,
         message:
           `Worst-Case-Reserve ${reserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
-          `* max. Gespraechsdauer) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ` +
-          `- der teuerste Zielverkehr ist unter dieser Decke ab max_duration_s=${maxDurationS} nicht mehr bezahlbar. ` +
+          `* ${RESERVE_LEAD_MINUTES} Vorlauf-Minuten) uebersteigt die Tenant-Decke DEFAULT_TENANT_BUDGET_CENTS=${tenantDefaultCents} ` +
+          `- der teuerste Zielverkehr traegt unter dieser Decke nur noch ${maxDurationS}s Gespraech. ` +
           `Abhilfe: DEFAULT_TENANT_BUDGET_CENTS auf mindestens ${reserveCents} anheben.`,
       },
     ];
@@ -335,20 +330,19 @@ export function planCapUnderivableFindings({ slugs, capForSlug }) {
 // tenant_budget-Zeile, der Boot sah diese Decken bisher nie gegen die Reserve.
 //
 // Seit KS-P5a rechnen Decke und Reserve mit DEMSELBEN Satz - er kuerzt sich aus der
-// Ungleichung heraus. Was hier tatsaechlich geprueft wird, ist die maximale Gespraechsdauer
-// gegen (inkludierte Minuten x Kopffreiheit): der Guard feuert, sobald
-// ceil(MAX_CALL_DURATION_CAP_S/60) > includedMinutes * num/den. Beim heutigen Katalog ist
-// das ab 3000 s der Fall - deshalb steht diese Sicherung VOR KS-P3, der genau diese Grenze
-// anhebt.
+// Ungleichung heraus. Seit KS-P3 (a) faellt zusaetzlich die Gespraechsdauer heraus: die
+// Reserve deckt nur noch ein festes Vorlauffenster. Geprueft wird damit
+// RESERVE_LEAD_MINUTES > includedMinutes * num/den - Katalog-Kopffreiheit gegen ein festes
+// Vorlauffenster, unabhaengig davon, wie lange ein Gespraech dauern darf.
 //
 // Wirft NIE: capForSlug laeuft ueber derivePlanCaps (Wurf-Fang, s.o.). Ein Slug ohne
 // ableitbare Decke ist der Fall von planCapUnderivableFindings (FATAL) und wird hier
 // uebersprungen - zwei Zeilen zur selben Sache sind keine zweite Sicherung.
 // Hoechstens EIN Befund (Muster spendCapCoherence).
-export function planCapReserveFindings({ slugs, capForSlug, maxTariffCents, maxCallDurationS }) {
+export function planCapReserveFindings({ slugs, capForSlug, maxTariffCents }) {
   const { derived } = derivePlanCaps({ slugs, capForSlug });
   if (!derived.length) return [];
-  const reserveCents = worstCaseReserveCents({ maxTariffCents, maxCallDurationS });
+  const reserveCents = outboundReserveCents(maxTariffCents);
   const smallestCap = derived.reduce((min, entry) => (entry.capCents < min.capCents ? entry : min));
   if (reserveCents <= smallestCap.capCents) return [];
   return [
@@ -357,11 +351,11 @@ export function planCapReserveFindings({ slugs, capForSlug, maxTariffCents, maxC
       fatal: true,
       message:
         `Worst-Case-Reserve ${reserveCents} Cent (VOICE_TARIFF_DEFAULT_CENTS=${maxTariffCents} ` +
-        `* angefangene Minuten von ${maxCallDurationS}s) uebersteigt die kleinste Plan-Decke ` +
+        `* ${RESERVE_LEAD_MINUTES} Vorlauf-Minuten) uebersteigt die kleinste Plan-Decke ` +
         `(${smallestCap.slug}=${smallestCap.capCents} Cent) - ein Tenant mit diesem Plan faellt ` +
         "schon beim ERSTEN Anruf ins Reserve-Gate (402). Der Tarif ist KEIN Hebel: Decke und " +
-        "Reserve skalieren beide mit ihm. Abhilfe: maximale Gespraechsdauer senken ODER " +
-        "inkludierte Minuten/Kopffreiheit des Plans anheben (src/plans.js, src/billing/plan-caps.js).",
+        "Reserve skalieren beide mit ihm. Abhilfe: inkludierte Minuten/Kopffreiheit des Plans " +
+        "anheben (src/plans.js, src/billing/plan-caps.js).",
     },
   ];
 }

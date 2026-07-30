@@ -27,7 +27,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { eurToCents } from "../src/config.js";
 import { spendCapCoherence } from "../src/boot-guard.js";
-import { MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -60,7 +59,6 @@ test(".env.example: ausgelieferte Budget-Achsen sind kohaerent (kein fataler Boo
     tenantDefaultCents: Number(readEnvValue(envExample, "DEFAULT_TENANT_BUDGET_CENTS")),
     platformCapCents: eurToCents(Number(readEnvValue(envExample, "MAX_BUDGET_EUR"))),
     maxTariffCents: Number(readEnvValue(envExample, "VOICE_TARIFF_DEFAULT_CENTS")),
-    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
   });
   assert.equal(
     findings.some((f) => f.fatal),
@@ -75,7 +73,6 @@ test("render.yaml: ausgelieferte Budget-Achsen sind kohaerent (kein fataler Boot
     tenantDefaultCents: Number(readRenderValue(renderYaml, "DEFAULT_TENANT_BUDGET_CENTS")),
     platformCapCents: eurToCents(Number(readRenderValue(renderYaml, "MAX_BUDGET_EUR"))),
     maxTariffCents: Number(readRenderValue(renderYaml, "VOICE_TARIFF_DEFAULT_CENTS")),
-    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
   });
   assert.equal(
     findings.some((f) => f.fatal),
@@ -95,7 +92,6 @@ test("src/config.js: numEnv-CODE-Fallback (kein Env gesetzt) ist kohaerent (kein
     tenantDefaultCents: readCodeFallback(configSrc, "DEFAULT_TENANT_BUDGET_CENTS"),
     platformCapCents: eurToCents(readCodeFallback(configSrc, "MAX_BUDGET_EUR")),
     maxTariffCents: readCodeFallback(configSrc, "VOICE_TARIFF_DEFAULT_CENTS"),
-    maxCallDurationS: MAX_CALL_DURATION_CAP_S,
   });
   assert.equal(
     findings.some((f) => f.fatal),

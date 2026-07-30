@@ -77,7 +77,12 @@ const EXPECTED_MARKERS = {
   "place_call.context.key_facts": ["NO"],
   "place_call.context.recipient_relationship": [],
   "place_call.context.desired_outcome": [],
-  "place_call.max_duration_s": [],
+  // KS-P3 (b): die Beschreibung nannte bis dahin zwei feste Zahlen ("default 180, max 300"),
+  // die es seit dieser Phase nicht mehr gibt (die Frist faellt aus dem Restguthaben). Der neue
+  // Text traegt EINE Emphase - dass ein Client-Wunsch die Frist nur VERKUERZEN kann. Bewusst
+  // nachgezogen statt die Emphase wegzuschreiben: die Aussage ist die eigentliche
+  // Verhaltensgarantie dieses Feldes.
+  "place_call.max_duration_s": ["SHORTER"],
   "place_call.diagnostic": ["ONLY", "OWN"],
   get_call_status: [],
   "get_call_status.call_id": [],
