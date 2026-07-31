@@ -21,6 +21,11 @@ import {
   consultAvailableFor,
   decideConsultRequest,
 } from "./consult/in-call.js";
+import {
+  LOOK_UP_TOOL_NAME,
+  lookupAvailableFor,
+  performLookupRequest,
+} from "./research/in-call.js";
 
 // Resilienter LLM-Seam (src/llm.js): EINE Stelle fuer Timeout/
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top, Fachcode ruft nur
@@ -65,6 +70,11 @@ function promptInputs(call) {
     // store.counterpartyMemory (fail-closed); ohne Freigabe kostet der Aufruf einen
     // Boolean-Vergleich, keinen Scan.
     memory: counterpartyMemoryFor(call),
+    // AL-P10b: EINE Quelle (G5) fuer "wird look_up in diesem Zug angeboten?" - dieselbe
+    // Frage entscheidet ueber den Werkzeugsatz (agentTools) UND ueber die GRENZEN-Zeile.
+    // Ein Prompt, der "du kannst nichts nachschlagen" sagt, waehrend das Werkzeug
+    // danebensteht, ist genau die Klasse Widerspruch, an der Haiku kippt.
+    lookupAvailable: lookupAvailableFor(call),
     now: new Date().toLocaleString(loc.dateLocale, {
       timeZone,
       weekday: "long",
@@ -148,12 +158,20 @@ function clarificationRules(p) {
 // geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit + Werkzeug-Sparsamkeit). Die
 // Verzweigung bleibt hier (EINE Quelle, P11 D1) - nur die Zeilen kommen aus dem
 // Sprach-Baustein.
-function boundaryRules({ loc, settings: s, owner }) {
+function boundaryRules({ loc, settings: s, owner, lookupAvailable }) {
   const b = loc.prompt.boundaries;
   const lines = [b.heading];
   if (!s.allowPersonalData) lines.push(b.personalData(owner));
   if (!s.allowBankData) lines.push(b.bankData);
-  lines.push(b.noCalendar(owner), b.noBooking, b.noLookup, b.toolThrift);
+  // AL-P10b: genau EINE Zeile wechselt. lookupAvailable=false (Flag aus, Inbound,
+  // Kontingent erschoepft, kein Tenant-Recht) -> b.noLookup -> Prompt byte-identisch
+  // zum Bestand.
+  lines.push(
+    b.noCalendar(owner),
+    b.noBooking,
+    lookupAvailable ? b.lookupAllowed : b.noLookup,
+    b.toolThrift,
+  );
   return lines.join("\n");
 }
 
@@ -406,8 +424,31 @@ function getConsultToolDef(language) {
 // einmal. Bewusst in Kauf genommen; die Alternative waere ein dauerhaft angebotenes
 // Werkzeug ohne Empfaenger.
 function agentTools(call) {
-  if (!consultAvailableFor(call)) return toolDefs(call.language);
-  return [...toolDefs(call.language), getConsultToolDef(call.language)];
+  const tools = toolDefs(call.language);
+  if (consultAvailableFor(call)) tools.push(getConsultToolDef(call.language));
+  // AL-P10b: dieselbe Sperre wie get_consult - outbound-only, aktiver Call, Kontingent,
+  // Flag x Tenant-Recht x Secret. Erschoepftes Kontingent laesst das Werkzeug aus dem
+  // tools-Array des NAECHSTEN Zuges verschwinden (der Agent faellt auf sein Mandat
+  // zurueck). KOSTEN-HINWEIS wie oben: der cache_control-Breakpoint sitzt am letzten
+  // Tool, ein Auftauchen/Verschwinden mitten im Call kostet einmal den Tool-Block-Cache.
+  if (lookupAvailableFor(call)) tools.push(lookUpToolDef(call.language));
+  return tools;
+}
+
+// AL-P10b: die engen Verbote sitzen GENAU HIER an der Tool-Description (Lehre
+// call-quality-chain). Der Query-Filter wird serverseitig durchgesetzt
+// (research/lookup-guard.js) - der Prompt allein ist keine Durchsetzung.
+function lookUpToolDef(language) {
+  const t = localeFor(language).prompt.tools;
+  return {
+    name: LOOK_UP_TOOL_NAME,
+    description: t.lookUpDescription,
+    input_schema: {
+      type: "object",
+      properties: { query: { type: "string", description: t.lookUpQueryParam } },
+      required: ["query"],
+    },
+  };
 }
 
 // P8: Werkzeugliste des Telefon-Agenten als reine Namensliste, ABGELEITET aus toolDefs()
@@ -674,6 +715,18 @@ async function completeRound({ call, params, stream }) {
 // dieser Turn byte-identisch zum Bestand (die Budget-Engine in routes/voice.js reicht
 // keinen durch). Drittes Argument als OBJEKT, damit spaetere Abnehmer keine weitere
 // Positions-Stelle brauchen (F1).
+// Das tool_result EINES Werkzeugs dieser Runde. get_consult (AL-P14) und look_up
+// (AL-P10b) laufen NIE durch execTool - dort gibt es bewusst keinen Case, das ist der
+// zweite Riegel fuer die Realtime-Bridge, die execTool direkt ruft und beide Werkzeuge
+// nicht bedienen kann (sie bekommt tc.unknownTool). Beide Ergebnisse stehen fest, bevor
+// diese Funktion laeuft; ihr jeweiliger Entscheider liefert garantiert non-null, wenn
+// der Name in dieser Runde vorkam. Ein Objekt statt vier Positionen (F1).
+function toolResultText({ call, toolUse, consult, lookup }) {
+  if (toolUse.name === GET_CONSULT_TOOL_NAME) return consult.toolResult;
+  if (toolUse.name === LOOK_UP_TOOL_NAME) return lookup.toolResult;
+  return execTool(call, toolUse.name, toolUse.input || {});
+}
+
 export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
   // G3/G26-Fix: das Transkript-Record-Gate ist
   // RICHTUNGSLOS und byte-identisch zum fruehen Master-Stand (41ce40b:
@@ -883,6 +936,15 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
       speechStreamed = true;
     }
 
+    // AL-P10b: der EINZIGE await im Tool-Loop neben der Modellrunde. Er steht bewusst
+    // NACH der Ueberbrueckung (der Anrufer hoert den Satz, WAEHREND gesucht wird - genau
+    // die Reihenfolge, die der AL-P7b-Kommentar oben vorwegnimmt) und VOR dem
+    // tool_result-Mapping (das Ergebnis IST das tool_result). execTool bleibt dadurch
+    // synchron - die Realtime-Bridge ruft es unveraendert direkt auf.
+    // loopContinues wird durchgereicht: endet der Zug ohnehin, wird KEINE Suche
+    // ausgeloest und KEINE Gebuehr gebucht (Regel 1).
+    const lookup = await performLookupRequest({ call, toolUses, loopContinues });
+
     messages = [
       ...messages,
       { role: "assistant", content: resp.content },
@@ -897,16 +959,11 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
               tool_use_id: tu.id,
               content: endCallWaitInstruction(call),
             };
-          // get_consult laeuft NIE durch execTool - dort gibt es bewusst keinen Case
-          // (der zweite Riegel: die Realtime-Bridge ruft execTool direkt und bekaeme
-          // sonst ein Werkzeug ausgefuehrt, das sie nicht bedienen kann). consult ist in
-          // diesem Zweig garantiert nicht-null: decideConsultRequest liefert nur dann
-          // null, wenn die Runde ueberhaupt kein get_consult enthaelt.
-          const result =
-            tu.name === GET_CONSULT_TOOL_NAME
-              ? consult.toolResult
-              : execTool(call, tu.name, tu.input || {});
-          return { type: "tool_result", tool_use_id: tu.id, content: result };
+          return {
+            type: "tool_result",
+            tool_use_id: tu.id,
+            content: toolResultText({ call, toolUse: tu, consult, lookup }),
+          };
         }),
       },
     ];

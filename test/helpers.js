@@ -252,10 +252,17 @@ export const BASE_ENV = {
   PRECALL_BRIEFING_TIMEOUT_MS: "6000",
   // AL-P10: Vorab-Recherche in Spawn-Tests neutral AUS + Gebuehr auf den Code-Default
   // gepinnt. Ohne diese Zeilen leckt eine lokale .env via dotenv in die Spawn-Tests
-  // (Lehre test-base-env-drift). BRAVE_SEARCH_API_KEY steht hier bewusst NICHT: kein
-  // Code liest ihn in dieser Phase, er ist keine config-Variable.
+  // (Lehre test-base-env-drift).
   RESEARCH_ENABLED: "false",
   RESEARCH_SEARCH_FEE_CENTS: "1",
+  // AL-P10b: Nachschlagen IM Gespraech in Spawn-Tests neutral AUS + Gebuehr/Anbieter auf
+  // die Code-Defaults gepinnt. Seit dieser Phase IST BRAVE_SEARCH_API_KEY eine
+  // config-Variable - ohne diese Zeilen leckt eine lokale .env via dotenv in die
+  // Spawn-Tests (Lehre test-base-env-drift); al-p10b-lookup.test.js setzt sie explizit.
+  LOOKUP_ENABLED: "false",
+  LOOKUP_SEARCH_FEE_CENTS: "1",
+  BRAVE_SEARCH_API_KEY: "",
+  BRAVE_SEARCH_API_BASE: "",
   // AL-P13: Consult-Kanal in Spawn-Tests neutral AUS (Default). Ohne diese Zeile leakt
   // eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);
   // al-p13-consult-channel.test.js setzt es explizit auf "true".

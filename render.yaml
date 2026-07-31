@@ -301,6 +301,16 @@ services:
         value: "false"
       - key: RESEARCH_SEARCH_FEE_CENTS
         value: "1"
+      # ---- Nachschlagen IM Gespraech (AL-P10b) ---- Default AUS (fail-closed): kein
+      # look_up im Tool-Satz, keine Suchgebuehr. Anschalten erst nach Testanruf UND
+      # Nennung des ZWEITEN Auftragsverarbeiters in der Datenschutzerklaerung.
+      - key: LOOKUP_ENABLED
+        value: "false"
+      - key: LOOKUP_SEARCH_FEE_CENTS
+        value: "1"
+      # Secret: Wert im Dashboard, nie im Blueprint. Leer = Feature inaktiv.
+      - key: BRAVE_SEARCH_API_KEY
+        sync: false
       # ---- Consult-Kanal am Call (AL-P13) ---- Default AUS (fail-closed): keine
       # Consult-Routen, keine await_call_event/answer_consult-Tools.
       - key: CONSULT_ENABLED

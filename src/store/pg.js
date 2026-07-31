@@ -333,6 +333,14 @@ export function makePgStore(runner) {
       return wait;
     },
     noteConsultPoll: (callId) => ops.noteConsultPoll(requireState(), callId),
+    // AL-P10b: Suchtreffer im Kontext - saved wie answerConsult (context steht seit
+    // AL-P13 im UPDATE-SET). countCallLookup saved NICHT: ephemer, keine Spalte.
+    addLookupFacts(callId, facts) {
+      const { changed, added } = ops.addLookupFacts(requireState(), callId, facts);
+      if (changed) save();
+      return added;
+    },
+    countCallLookup: (callId) => ops.countCallLookup(requireState(), callId),
     // P3.2: ephemerer No-Speech-Streak - Wrapper-Paritaet zu json.js. KEIN save(): es gibt
     // keine Spalte (Muster releaseOutboundReserve), der Flush-Spaltenblock bleibt unberuehrt.
     countNoSpeechTurn: (callId) => ops.countNoSpeechTurn(requireState(), callId),

@@ -64,11 +64,13 @@ const EXPECTED_NAMESPACE_COUNTS = {
   privacy: 3,
   // AL-P10: researchEnabled + researchMaxUses + researchSearchFeeCents (Vorab-Recherche
   // im Pre-Call-Briefing, src/research/) - eigene Namespace-Zeile.
-  research: 3,
+  // AL-P10b: lookupEnabled + lookupSearchFeeCents + braveSearchApiKey + braveSearchApiBase
+  // (Nachschlagen IM Gespraech, src/research/in-call.js) -> 7.
+  research: 7,
 };
-const EXPECTED_TOTAL_KEYS = 134;
+const EXPECTED_TOTAL_KEYS = 138;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (134 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (138 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -155,7 +157,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 124.
   // AL-P14: inCallConsultEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 124.
   // AL-P7b: thinkingSignalEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 125.
-  assert.equal(checked, 125, "alle primitiven Blaetter (134 - 4 Arrays - 5 nested Objekte) geprueft");
+  // AL-P10b: lookupEnabled/lookupSearchFeeCents/braveSearchApiKey/braveSearchApiBase sind
+  // alle vier primitiv (Boolean/Zahl/String/String) -> 129.
+  assert.equal(checked, 129, "alle primitiven Blaetter (138 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

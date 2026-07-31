@@ -708,11 +708,12 @@ export function pendingConsult(s, callId, afterEventId) {
   );
 }
 
-// Merge in call.context.key_facts - die EINZIGE Stelle, an der eine Consult-Antwort den
-// Prompt erreicht. Bestand gewinnt (Owner-/Briefing-Fakten stehen vorn), der Ueberhang
-// faellt am GETEILTEN Deckel KEY_FACTS_LIMITS.maxItems; zurueck kommt die tatsaechlich
-// uebernommene Zahl, damit die Route sie melden kann und nichts still verschwindet.
-function mergeConsultFacts(call, facts) {
+// Merge in call.context.key_facts - die EINZIGE Stelle, an der fremder In-Call-Text
+// (Consult-Antwort ODER Suchtreffer) den Prompt erreicht. Bestand gewinnt (Owner-/
+// Briefing-Fakten stehen vorn), der Ueberhang faellt am GETEILTEN Deckel
+// KEY_FACTS_LIMITS.maxItems; zurueck kommt die tatsaechlich uebernommene Zahl, damit der
+// Aufrufer sie melden kann und nichts still verschwindet.
+function mergeContextFacts(call, facts) {
   const incoming = Array.isArray(facts) ? facts : [];
   if (!incoming.length) return 0;
   const context = (call.context ||= {});
@@ -737,11 +738,38 @@ export function answerConsult(s, callId, { eventId, facts }) {
     : null;
   if (!consult) return reject(CONSULT_ANSWER.UNKNOWN_EVENT);
   if (consult.status !== CONSULT_STATUS.OPEN) return reject(CONSULT_ANSWER.ALREADY_ANSWERED);
-  const mergedFacts = mergeConsultFacts(call, facts);
+  const mergedFacts = mergeContextFacts(call, facts);
   consult.status = CONSULT_STATUS.ANSWERED;
   consult.answeredAt = new Date().toISOString();
   consult.answeredFacts = mergedFacts;
   return { call, changed: true, outcome: CONSULT_ANSWER.ACCEPTED, mergedFacts };
+}
+
+// AL-P10b: Suchtreffer in den HINTERGRUND. Zweiter Aufrufer desselben Merges (G5) -
+// derselbe Deckel KEY_FACTS_LIMITS.maxItems, dieselbe Vorrang-Regel (Bestand gewinnt).
+// Das ist die EINZIGE Stelle, an der ein Suchtreffer den Prompt erreicht.
+export function addLookupFacts(s, callId, facts) {
+  const call = getCall(s, callId);
+  if (!call) return { call: null, changed: false, added: 0 };
+  const added = mergeContextFacts(call, facts);
+  return { call, changed: added > 0, added };
+}
+
+// AL-P10b: Kontingent-Zaehler des Nachschlags. EPHEMER (kein save, keine Spalte - Muster
+// countNoSpeechTurn/noteConsultPoll): ein Instanzwechsel mitten im Anruf setzt ihn
+// zurueck, das kostet hoechstens LOOKUP_MAX_PER_CALL weitere Suchen in genau diesem Call -
+// der harte Deckel bleibt die pro-Tenant-Kostendecke, die vor JEDER Schleifenrunde
+// geprueft wird. Nebeneffekt im Namen (N7).
+export function countCallLookup(s, callId) {
+  const call = getCall(s, callId);
+  if (!call) return 0;
+  call.lookups = (call.lookups || 0) + 1;
+  return call.lookups;
+}
+
+// Reiner Leser (Geschwister zu inCallConsults): fehlendes Feld -> 0, kein NaN.
+export function callLookups(call) {
+  return call?.lookups || 0;
 }
 
 // Offene Consults schliessen (Call terminal / Drain). Idempotent: ein zweiter Aufruf

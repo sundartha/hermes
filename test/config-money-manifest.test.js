@@ -37,6 +37,9 @@ const MONEY_CONFIG_KEYS = Object.freeze([
   // AL-P10: Preis EINER serverseitigen Vorab-Suche (Ganzzahl EUR-Cent, Muster
   // smsCostCents) - Geld-Feld der Vorab-Recherche im Pre-Call-Briefing.
   "researchSearchFeeCents",
+  // AL-P10b: Preis EINER In-Call-Suche (Ganzzahl EUR-Cent, dieselbe Achse) - Geld-Feld
+  // des Nachschlags IM Gespraech.
+  "lookupSearchFeeCents",
 ]);
 
 const MONEY_NAME_PATTERN = /(Cents|Eur|Usd)$/;

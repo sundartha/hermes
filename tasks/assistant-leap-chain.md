@@ -571,6 +571,46 @@ Boot-Guard), kein Tunnel, keine Schweige-Route (scheiterte bereits).
   Kommentar). Das gehoert in `README.md` **und** `PLAN-SECURITY.md`.
 - Flag `LOOKUP_ENABLED` bleibt **AUS**. **Abnahme = Testanruf + Key** -> Checkliste.
 
+**UMGESETZT (2026-07-31, Branch `phase/al-p10b-lookup`).** Acht Entscheidungen, an denen der
+Plantext vom Bestand ueberholt war bzw. praezisiert wurde:
+
+- **E1 — `look_up` steht in `agentTools(call)`, NICHT in `toolDefs()`.** `toolDefs()` ist der
+  feste Satz BEIDER Engines (`bridge.js` liest ihn ueber `realtimeTools`, `agentToolNames()`
+  leitet daraus ab) und gilt richtungsunabhaengig — ein Inbound-Anrufer bekaeme das Werkzeug.
+  AL-P14 hat denselben Konflikt bereits mit `agentTools(call)` geloest; AL-P10b folgt exakt.
+- **E2 — `look_up` laeuft NIE durch `execTool`.** `execTool` MUSS synchron bleiben
+  (`bridge.js handleOpenAiEvent` ist nicht `async`). Der „zweite Riegel" ist damit strukturell
+  erfuellt: es gibt bewusst keinen `case`, die Realtime-Bridge bekommt `tc.unknownTool`. Der
+  einzige `await` steht im Tool-Loop, hinter der Bruecke und vor dem `tool_result`-Mapping.
+- **E3 — `agentToolNames()` bleibt UNVERAENDERT** (offener Punkt in der Checkliste). Die Liste
+  ist per Definition aus `toolDefs()` abgeleitet (EINE Quelle) und richtungs-/tenant-blind;
+  ein Eintrag dort verspraeche dem briefenden Modell eine Faehigkeit, die ein konkreter
+  Tenant/Call gar nicht hat.
+- **E4 — Per-Tenant-Faktor auf der PROFIL-Achse (`allowLookup`), nicht auf der Settings-Achse.**
+  Geschwister-Recht derselben Klasse ist `PROFILE_FIELDS.allowConsult`; `settings` liegt in
+  FESTEN pg-Spalten (Hand-Migration vor dem Deploy), `profile` ist JSONB — keine Migration.
+- **E5 — Kontingent-Zaehler ist EPHEMER** (Muster `countNoSpeechTurn`/`noteConsultPoll`).
+  Benannte, akzeptierte Kosten: ein Instanzwechsel mitten im Anruf setzt ihn zurueck.
+- **E6 — `LOOKUP_MAX_PER_CALL` (2) und `LOOKUP_TIMEOUT_MS` (2500) sind benannte Modul-
+  Konstanten, KEINE Env-Vars** (Praezedenz `CONSULT_TIMEOUT_MS`). Env gibt es nur fuer Secret,
+  Anbieter-Basis, Gebuehr und Master-Schalter.
+- **E7 — Der Treffer geht ausschliesslich ueber `call.context.key_facts` in den Prompt**, nie
+  als Rohtext ins `tool_result`. Daraus folgt zwingend: `ASSISTANT_CONTEXT_ENABLED` ist
+  PFLICHT-Faktor des Gates (sonst rendert `assistantContextSection` `""` und die Suche waere
+  bezahlter Muell) — dieselbe Kopplung wie `src/consult/gate.js`.
+- **E8 — Der Inhalts-Riegel ist ehrlich enger gefasst als der Plan-Satz.** Deterministisch
+  durchgesetzt: Ziffernfolgen ab 5, E-Mail, `call.to`, `call.callerName`, woertliche
+  Uebernahmen. Eine Schlagwortliste „Gesundheit/Finanzen" wird BEWUSST NICHT gebaut
+  (sprachabhaengig, luecken-/fehlalarmbehaftet, vorgetaeuschtes Schutzversprechen). Die
+  Restflaeche traegt die Tool-Description — als „schwaecher als pre-call" in
+  `PLAN-SECURITY.md` gefuehrt, wie A3 es verlangt.
+
+Blast-Radius: 4 neue Produktionsdateien (`research/adapters/brave-search.js`,
+`research/lookup-guard.js`, `research/in-call.js` + Typedef in `research/ports.js`), 2 neue
+Testdateien, keine neue Dependency, keine DB-Migration, kein Eingriff in
+`execTool`/`toolDefs`/`bridge.js`/`disclosureSentence`/`outbound-gates.js`/`budget-gate.js`.
+Alle vier neuen Env-Vars Default aus bzw. leer.
+
 ### AL-P11 — Ergebnis-Karte statt Prosa
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 11`.

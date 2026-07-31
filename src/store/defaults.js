@@ -590,6 +590,7 @@ export const PROFILE_FIELDS = {
   unrestricted: "boolean", // erfuellt das Verifikations-Gate (Pfad 1; nur dieses Gate, kein hartes Gate)
   allowCalendar: "boolean", // get_calendar-MCP-Tool
   allowConsult: "boolean", // AL-P13: await_call_event/answer_consult + Consult-Routen
+  allowLookup: "boolean", // AL-P10b: look_up im Gespraech (zweiter Auftragsverarbeiter)
   allowBooking: "boolean", // POST /api/calendar
   // number ODER null: null = keine Profil-Senkung (effektiv der Pro-Tenant-Default
   // config.safety.maxCallsPerHour, telephony/outbound-gates tenantHourReached). Muss als
@@ -888,6 +889,7 @@ const OWNER_PROFILE = {
   unrestricted: false,
   allowCalendar: true,
   allowConsult: true, // AL-P13: Consult-Kanal ist zunaechst eine Owner-Faehigkeit
+  allowLookup: true, // AL-P10b: der In-Call-Nachschlag ist zunaechst eine Owner-Faehigkeit
   allowBooking: true,
   maxCallsPerHour: null,
 };
@@ -900,6 +902,7 @@ const DEFAULT_PROFILE = {
   unrestricted: false,
   allowCalendar: false,
   allowConsult: false, // AL-P13: fail-closed wie allowCalendar/allowBooking
+  allowLookup: false, // AL-P10b: fail-closed wie allowConsult
   allowBooking: false,
   maxCallsPerHour: DEFAULT_PROFILE_MAX_CALLS_PER_HOUR,
 };

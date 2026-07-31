@@ -505,6 +505,19 @@ export function noteConsultPoll(callId) {
   ops.noteConsultPoll(load(), callId);
 }
 
+// AL-P10b: Suchtreffer im Kontext - saved wie answerConsult (context ist persistent und
+// steht seit AL-P13 im pg-UPDATE-SET). countCallLookup saved NICHT: ephemer, keine Spalte
+// (Muster countNoSpeechTurn / noteConsultPoll).
+export function addLookupFacts(callId, facts) {
+  const { changed, added } = ops.addLookupFacts(load(), callId, facts);
+  if (changed) save();
+  return added;
+}
+
+export function countCallLookup(callId) {
+  return ops.countCallLookup(load(), callId);
+}
+
 // P3.2: ephemerer No-Speech-Streak - KEIN save() (das Feld ist wie reserveCents nicht
 // persistenz-tragend; ein Flush aus anderem Anlass nimmt es folgenlos mit).
 export function countNoSpeechTurn(callId) {
