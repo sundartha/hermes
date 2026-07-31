@@ -128,12 +128,15 @@ before(async () => {
   ({ withConfig } = makeConfigOverrides(config));
 });
 
+// Null-sicher: laeuft kein Test dieser Datei (Gates-Lauf filtert per Katalog-Pattern,
+// Praefix bewusst ohne Katalog-ID, s. Kommentar oben), bleibt der Root-before() aus und
+// anthropic/brave bleiben undefined - dieser Hook laeuft trotzdem (node:test).
 after(async () => {
   for (const res of hungResponses) res.destroy();
-  anthropic.closeAllConnections?.();
-  brave.closeAllConnections?.();
-  await new Promise((r) => anthropic.close(r));
-  await new Promise((r) => brave.close(r));
+  anthropic?.closeAllConnections?.();
+  brave?.closeAllConnections?.();
+  if (anthropic) await new Promise((r) => anthropic.close(r));
+  if (brave) await new Promise((r) => brave.close(r));
 });
 
 // Frischer Zustand vor jedem Fall - EINE Stelle statt sechsmal derselben vier Zeilen.
