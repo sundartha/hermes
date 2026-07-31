@@ -119,7 +119,11 @@ Schweige-Route (scheiterte bereits am 2026-07-29)):
    und die AL-P2-Tests). Umfangsvorlage: Abschnitt **KS-AUF** in `tasks/ks-chain-spec.md`
    — diese Liste ist am 2026-07-30 (`643f8dc`) schon einmal sauber durchgelaufen.
    Historie der ersten Runde: `tasks/al-p2-report.md`, `tasks/al-p2b-report.md`.
-7. **Altlasten aus der ersten Runde (kein Code, weiter offen):** Render-Dienst
-   `hermes-spike-al-p2` (`srv-d9kt9bm1egvs738asd0g`) und Telnyx-App `AL-P2 Spike Silence`
-   (`3014656686179747728`) loeschen; beide DIDs per Objekt-GET auf Connection `Hermes`
-   (`2982643896460248193`) verifizieren.
+7. ~~**Altlasten aus der ersten Runde**~~ — **ERLEDIGT, nichts zu tun.** Nachgeprueft am
+   2026-07-31 statt aus einer Notiz uebernommen: Render-Dienst `hermes-spike-al-p2`
+   (`srv-d9kt9bm1egvs738asd0g`) liefert **404** (geloescht); die Telnyx-App
+   `AL-P2 Spike Silence` (`3014656686179747728`) wurde mit `DELETE` 200 entfernt,
+   Gegenprobe `GET` 404 (`tasks/ks-deploy-checkliste.md`). Alle drei DIDs stehen seit dem
+   Rueckbau vom 29.07. wieder auf der TeXML-App `Hermes` (`2982643896460248193`), damals per
+   direkter Telnyx-Abfrage verifiziert; seither hat sie nichts angefasst. Die neue Messung
+   braucht **kein** Telnyx-Objekt — sie laeuft ueber den Live-Anschluss.

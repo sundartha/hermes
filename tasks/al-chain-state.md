@@ -371,3 +371,70 @@ Wer das uebernommen haette, haette AL-P7 (5-9 Tage) auf einer erfundenen Tatsach
   nachgezogen — genau die Trennung, die KS-AUF vorhergesagt hatte.
   **Der Schalter ist erneut befristet:** AL-P2z entfernt ihn ersatzlos, sobald ein Urteil
   vorliegt. Umfangsvorlage dafuer ist der Abschnitt KS-AUF in `tasks/ks-chain-spec.md`.
+
+### 2026-07-31 — AL-P2 GEMESSEN: `incremental` (GRUEN)
+
+**Der Blocker, an dem seit dem 29.07. sechs Phasen hingen, ist aufgeloest.** Der Owner hat Push,
+Deploy, Env-Werte und den Anruf ausdruecklich freigegeben und ist selbst ans Telefon gegangen.
+
+| | |
+|---|---|
+| Deploy | `dep-d9m7krbl550s73dciogg`, live nach 52 s, `/healthz` -> `3bc5f43` |
+| Scharfschalten | `TELNYX_SSE_SPIKE_DELAY_MS=8000` + `TELNYX_SSE_SPIKE_CALLEE` (Owner-Mobil) |
+| Banner | `SSE-Spike: AKTIV (8000 ms, nur fuer die konfigurierte Wegwerf-Nummer)` |
+| Pfad verifiziert | `Voice-Engine: budget` + `Assistant-Pfad: AKTIV` — die Messung lief durch den Shim |
+| Anruf | `call_ms8t87whrxqo`, Conversation `12d1d46e-0af4-4b00-936c-965722bb4127` |
+
+**Urteil, doppelt belegt (wie der Plan es verlangt):**
+
+1. **Messwert:** `node scripts/telnyx-call-latency.mjs 12d1d46e-… --spike-delay-ms 8000` ->
+   `status=incremental`, `audio_first_token_duration_ms`-Median **129 ms** ueber 3 Turns,
+   waehrend der Shim jeden Chunk nach dem ersten **8000 ms** zurueckhielt. Bei Pufferung bis
+   `data:[DONE]` muesste dieser Wert >= 8000 ms sein.
+2. **Gehoer des Owners:** er meldete dem Agenten woertlich, dieser „bricht mitten im Satz einfach
+   ab, obwohl ich nichts sage" — die inkrementelle Signatur (erster Chunk sofort, 8-s-Loch, dann
+   der Rest). Bei Pufferung waere es 8 s Stille und danach ein zusammenhaengender Satz gewesen.
+
+**Folgen fuer die Kette:**
+- **AL-P7 (echtes Token-Streaming) ist gerechtfertigt** — nicht mehr gestrichen.
+- **AL-P7b nimmt Weg A** (Ueberbrueckungssatz als fuehrender Text im selben Antwort-Block, kein
+  Extra-Roundtrip). Weg B samt out-of-band-Sprechkanal und dessen drei Riegeln **entfaellt**.
+- **AL-P10b** ist damit ebenfalls entsperrt (haengt an AL-P7b).
+- **AL-P15** schrumpft: Experiment B war nur noetig, falls AL-P2 rot ausfaellt.
+
+**Nebenbefund, nicht gesucht:** dieselbe Ausgabe liefert `unaccounted-median = 0 ms`,
+`status=ok`. Das ist die offene **AL-P1-Abnahme 1** — und `status=unknown_component` haette
+AL-P7 blockiert. Ebenfalls erledigt.
+
+**Live-Beleg fuer die KS-Kette nebenbei:** der Anruf lief ueber die regulaere `place_call`-Kette
+mit allen Gates und wurde **nicht** vom Budget-Gate abgelehnt. Der in der Uebergabe vermutete
+Live-Defekt („lehnt Anrufe ab, die rechnerisch hineinpassen") ist damit am lebenden System
+widerlegt.
+
+### 2026-07-31 — Telnyx-Turn-Timeout: **groesser als 30 s**
+
+Zweite Haelfte der AL-P2-Messung, mit der **obersten** Sprosse zuerst statt der geplanten Leiter
+5/10/20/30 s — bricht der Turn dort nicht ab, sind die drei niedrigeren Sprossen ohne Aussage.
+
+| | |
+|---|---|
+| Anruf | `call_ms8tfa3a1b2b`, Conversation `19b2c73f-aa24-4a16-b163-2008d9db49da` |
+| Verzoegerung | 30 000 ms je Turn (`sse_spike_delay` im Log belegt) |
+| Ergebnis | `audio_first_token_duration_ms` = **99 ms**, `status=incremental`, Turn **nicht** abgebrochen |
+| Gegenprobe | 4 Agent-Aeusserungen ueber 120 s Anrufdauer, jede mit 30-s-Halt |
+
+**Der Turn ueberlebt 30 s.** Der Telnyx-Turn-Timeout liegt damit **oberhalb** des im Plan
+vorgesehenen Messbereichs. Fuer AL-P14 heisst das: die bindende Grenze fuer `consultTimeoutMs`
+ist **nicht** Telnyx, sondern unser eigener `PROVIDER_WEBHOOK_HARDCUT_MS = 15000`
+(`src/turn-budget.js`) — und der ist eine bewusste eigene Sicherung, kein geratener Fremdwert.
+
+**Ein Fehlversuch dazwischen, ehrlich vermerkt:** `call_ms8tdt8shwxs` wurde **nicht angenommen**
+(`call.initiated` -> nach 31 s `call.hangup`, kein `call.answered`, keine Conversation). Das ist
+dieselbe 31-s-Signatur wie beim gescheiterten Versuch am 29.07. — dort war sie als ungeklaertes
+Raetsel notiert. **Sie ist schlicht das Klingel-Timeout eines nicht angenommenen Anrufs**, kein
+Defekt. Der Wiederholungsanruf 40 s spaeter kam normal durch.
+
+**Abgeruestet, unmittelbar nach der Messung:** `TELNYX_SSE_SPIKE_DELAY_MS=0`,
+`TELNYX_SSE_SPIKE_CALLEE=""` (Protokoll in `tasks/al-env-changes.md`). Der Schalter ist damit
+inert; **ersatzlos aus dem Code entfernt ihn AL-P2z** — das ist die Zusage der Phase, nicht
+„Flag auf 0".

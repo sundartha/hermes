@@ -465,13 +465,36 @@ Boot-Guard), kein Tunnel, keine Schweige-Route (scheiterte bereits).
 ### AL-P7 — Echtes Token-Streaming und Satz-Chunking
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 7`.
-- **Startet NUR, wenn AL-P2 gruen ist.** Bei rot wird die Phase ersatzlos gestrichen.
+- **Die Vorbedingung ist ERFUELLT.** AL-P2 wurde am 2026-07-31 live gemessen:
+  **`status=incremental`** — bei 8000 ms kuenstlichem Rueckhalt begann Telnyx nach **129 ms** zu
+  sprechen (Median ueber 3 Turns, Conversation `12d1d46e-…`), bei 30 000 ms nach **99 ms**
+  (`19b2c73f-…`). Bei Pufferung bis `data:[DONE]` muessten diese Werte >= dem Rueckhalt liegen.
+  Zweitbeleg am Gehoer des Owners. **Die Phase ist damit gerechtfertigt und wird gebaut.**
+- **Gemessener Telnyx-Turn-Timeout: > 30 s** — der Turn ueberlebte die oberste geplante Sprosse.
+  Die bindende Zeitgrenze im Turn ist deshalb **nicht** Telnyx, sondern unser eigener
+  `PROVIDER_WEBHOOK_HARDCUT_MS = 15000` (`src/turn-budget.js`). Wer hier plant, rechnet gegen
+  diese eigene Sicherung, nicht gegen einen vermuteten Fremdwert.
+- **AL-P1-Abnahme 1 ist mitgeliefert:** dieselbe Messung ergab `unaccounted-median = 0 ms`,
+  `status=ok`. Das Gegenteil (`unknown_component`) waere laut Checkliste ein **Blocker** fuer
+  diese Phase gewesen.
 - Groesster Blast-Radius der Kette: geteilter `agentTurn`-Seam. Der Plan zerlegt die Phase in
   kleinstmoegliche, je fuer sich gruene Schritte.
 
 ### AL-P7b — Das Denk-Signal
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 7b`.
+- **WEG A IST ENTSCHIEDEN — durch Messung, nicht durch Annahme.** AL-P2 ist gruen
+  (`incremental`, 2026-07-31, s. AL-P7). Damit gilt:
+  - Der Fueller ist der **fuehrende Text des Modells im selben Antwort-Block wie der
+    Werkzeugaufruf** — kein zusaetzlicher Roundtrip, kein zusaetzliches Token-Budget von Belang.
+  - **Weg B entfaellt vollstaendig**, samt seiner drei Riegel und dem out-of-band-Sprechkanal
+    ueber `voiceControl.speak` waehrend der Assistant-Session. Dieser Kanal wird in dieser Phase
+    **nicht** gebaut — er waere ein Sprechweg, der an `agentTurn` vorbeilaeuft (ohne
+    `shapeForSpeech`, ohne Laengen-/Sprachbindung, ohne Prompt-Leitplanken).
+  - Die Saetze aus `src/i18n/locales.js` sind auf Weg A **nicht** die Quelle des Fuellers; die
+    Sprachbindung traegt der bestehende Prompt-Sprachvertrag und wird per Fixture geprueft
+    (de/fr/en, DE ohne Umlaute).
+  - Die Phase setzt **AL-P7 voraus** (Streaming-Pfad) und laeuft deshalb nach ihr.
 - **Bindende Owner-Betriebserfahrung** (`tasks/al-owner-notes.md` §2, aus einem real betriebenen
   Recherche-Telefonagenten — schlaegt jede Benchmark-Tabelle):
   1. **Der Ueberbrueckungssatz wird IMMER zu Ende gesprochen.** Das Ergebnis wartet auf
