@@ -15,21 +15,18 @@ import {
 } from "../src/research/lookup-guard.js";
 import { KEY_FACTS_LIMITS } from "../src/store/defaults.js";
 
-// Der Angerufene: Nummer + Name + eine caller-Zeile, gegen die die Zitat-Suche laeuft.
+// Der Angerufene: Nummer + eine caller-Zeile, gegen die die Zitat-Suche laeuft.
+// KEIN callerName im Fixture: call.callerName ist in Produktion (createCall,
+// state-ops.js) seit G1 hart null - ein Fixture, das es setzt, wuerde eine Konfiguration
+// pruefen, die im Betrieb nie vorkommt (Lehre "gleiche Fixture-Werte testen nichts").
+// Der Namensbezug ist deshalb NICHT deterministisch durchgesetzt, sondern traegt die
+// Tool-Description (t.lookUpQueryParam, siehe PLAN-SECURITY.md AL-P10b Riegel 3/E8).
 const CALL = Object.freeze({
   to: "+4915112345678",
-  callerName: "Petra Hollmann",
   transcript: [
     { role: "agent", text: "Guten Tag, ich rufe wegen eines Termins an." },
     { role: "caller", text: "Wir haben diese Woche nur noch am Freitag einen Platz frei." },
   ],
-});
-
-test("AL-P10b-G1: der Name des Angerufenen verlaesst den Server nicht (Abnahme 7)", () => {
-  assert.equal(sanitizeLookupQuery("Praxis Hollmann Sprechzeiten", CALL), null);
-  assert.equal(sanitizeLookupQuery("wer ist petra?", CALL), null);
-  // Gegenprobe: dieselbe Sachfrage ohne Namen kommt durch.
-  assert.ok(sanitizeLookupQuery("Sprechzeiten Zahnarztpraxis Innenstadt", CALL));
 });
 
 test("AL-P10b-G2: die Rufnummer des Angerufenen wird in jeder Schreibweise verworfen", () => {

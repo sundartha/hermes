@@ -3,11 +3,15 @@
 // Store, kein config, kein IO (Muster src/consult/question.js / src/call-result.js).
 //
 // EHRLICHE REICHWEITE (E8): deterministisch durchgesetzt werden Ziffernfolgen,
-// E-Mail-Adressen, die Rufnummer des Angerufenen, sein Name und woertliche Uebernahmen
-// aus dem Transkript. Eine Schlagwortliste fuer "Gesundheit/Finanzen" wird BEWUSST NICHT
-// gebaut: sie waere sprachabhaengig, luecken- und fehlalarm-behaftet und wuerde ein
-// Schutzversprechen vortaeuschen. Diese Restflaeche traegt die Tool-Description
-// (enges Verbot am Entscheidungspunkt, Repo-Lehre) - so steht es auch in PLAN-SECURITY.
+// E-Mail-Adressen, die Rufnummer des Angerufenen und woertliche Uebernahmen aus dem
+// Transkript. KEIN Namens-Filter: call.callerName ist seit G1 (Identitaets-Bindung,
+// state-ops.js createCall) hart null - es gibt in diesem Repo keine einzige Zuweisung,
+// die es befuellt, ein Filter darauf waere toter Code mit einer falschen
+// Schutz-Behauptung. Eine Schlagwortliste fuer "Gesundheit/Finanzen/Personenbezug" wird
+// BEWUSST NICHT gebaut: sie waere sprachabhaengig, luecken- und fehlalarm-behaftet und
+// wuerde ein Schutzversprechen vortaeuschen. Diese Restflaeche traegt die Tool-Description
+// (t.lookUpQueryParam: "ohne Personenbezug", enges Verbot am Entscheidungspunkt, Repo-
+// Lehre) - so steht es auch in PLAN-SECURITY.
 import { KEY_FACTS_LIMITS, normNum } from "../store/defaults.js";
 import { clampAtWordBoundary, containsVerbatimQuote, stripQuotedSpans } from "../utils/text.js";
 
@@ -19,10 +23,6 @@ export const LOOKUP_MAX_FACTS = 3;
 // Ab dieser Laenge ist eine zusammenhaengende Ziffernfolge keine Jahreszahl mehr, sondern
 // eine Nummer (Rufnummer, IBAN, Karte, Kundennummer). 4 laesst "2026" durch, 5+ nicht.
 const LOOKUP_DIGIT_RUN_MAX = 4;
-
-// Kuerzere Namens-Token ("Li", "Ay") waeren ein Fehlalarm-Generator - sie stecken in
-// beliebigen Sachwoertern.
-const NAME_TOKEN_MIN_CHARS = 3;
 
 // Zeichen, die in einer geschriebenen Rufnummer als Trennung vorkommen. Ohne diese
 // Reduktion versteckt "0170 123 4567" seine Ziffernfolge vor der Laengenpruefung.
@@ -47,18 +47,6 @@ function digitsOf(text) {
   return text.replace(NON_DIGITS, "");
 }
 
-// Kommt ein hinreichend langes Token des Namens in der Query vor? Kleinschreibung, damit
-// "Herr Meier" und "meiers" gleichermassen greifen.
-function mentionsName(text, callerName) {
-  if (typeof callerName !== "string") return false;
-  const haystack = text.toLowerCase();
-  return callerName
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((token) => token.length >= NAME_TOKEN_MIN_CHARS)
-    .some((token) => haystack.includes(token));
-}
-
 // Traegt die Query die Rufnummer des Angerufenen? Leere Nummer -> false (ein leerer
 // Suchstring waere sonst in JEDER Query enthalten und wuerde alles verwerfen).
 function mentionsTarget(text, to) {
@@ -73,7 +61,7 @@ function mentionsTarget(text, to) {
  * Aufrufer liefert die deterministische Ablehnung an das Modell, bucht keine Gebuehr und
  * laesst das Kontingent unberuehrt. Reihenfolge ist bindend - erst die expliziten Zitate
  * raus (sonst kaeme ein in Anfuehrungszeichen gesetztes Zitat durch die Zitat-Suche gar
- * nicht mehr an), dann die Personenbezugs-Pruefungen, zuletzt die Kappe.
+ * nicht mehr an), dann die Ziel-Pruefung, zuletzt die Kappe.
  */
 export function sanitizeLookupQuery(query, call) {
   if (typeof query !== "string") return null;
@@ -81,7 +69,6 @@ export function sanitizeLookupQuery(query, call) {
   if (DIGIT_RUN.test(withoutNumberSeparators(text))) return null;
   if (EMAIL_LIKE.test(text)) return null;
   if (mentionsTarget(text, call?.to)) return null;
-  if (mentionsName(text, call?.callerName)) return null;
   if (containsVerbatimQuote(text, call?.transcript)) return null;
   return clampAtWordBoundary(text, LOOKUP_QUERY_MAX_CHARS).trim() || null;
 }

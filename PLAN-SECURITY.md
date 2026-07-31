@@ -1252,10 +1252,12 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 >    wenn die Antwort nie ankommt - Regel 1).
 > 3. **Egress-Riegel serverseitig** (`src/research/lookup-guard.js`): verworfen werden
 >    Ziffernfolgen ab 5 Stellen (Rufnummer/IBAN/Karte/Kundennummer), E-Mail-Adressen, die
->    Rufnummer des Angerufenen, ein Namens-Token aus `call.callerName` und woertliche
->    Uebernahmen (>= 6 Woerter) aus `caller`-Zeilen des Transkripts; Zitatspannen werden
->    entfernt, der Rest auf 120 Zeichen gekappt. Eine verworfene Suche verlaesst den
->    Server NICHT, kostet nichts und verbraucht das Kontingent nicht.
+>    Rufnummer des Angerufenen und woertliche Uebernahmen (>= 6 Woerter) aus `caller`-
+>    Zeilen des Transkripts; Zitatspannen werden entfernt, der Rest auf 120 Zeichen
+>    gekappt. Eine verworfene Suche verlaesst den Server NICHT, kostet nichts und
+>    verbraucht das Kontingent nicht. KEIN Namens-Filter: `call.callerName` ist seit G1
+>    (Identitaets-Bindung) hart `null` - kein Producer im Repo befuellt es, ein Filter
+>    darauf waere toter Code mit einer falschen Schutzbehauptung.
 > 4. **`execTool` kennt `look_up` nicht.** Ein dennoch gefeuertes Werkzeug faellt in den
 >    `default`-Zweig (`unknownTool`). Der Riegel gilt damit automatisch fuer die
 >    Realtime-Bridge, die `execTool` direkt ruft; `toolDefs()` bleibt unveraendert, die
@@ -1265,11 +1267,12 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > als die pre-call-Konstruktion** von AL-P10. Dort ist der Egress ueber eine gefrorene
 > Feld-Whitelist (`RESEARCH_EGRESS_FIELDS`) begrenzt - hier formuliert ein Modell die
 > Query frei, und der Server prueft sie nur gegen deterministisch pruefbare Muster. Ein
-> Schlagwortfilter fuer "Gesundheits-/Finanzdetails" wird BEWUSST NICHT gebaut: er waere
-> sprachabhaengig, luecken- und fehlalarm-behaftet und wuerde ein Schutzversprechen
-> vortaeuschen, das er nicht halten kann. Diese Restflaeche traegt die Tool-Description
-> (enges Verbot am Entscheidungspunkt) - Prompt, also KEINE Durchsetzung. Wer das Flag
-> scharf schaltet, akzeptiert genau diese Restflaeche.
+> Schlagwortfilter fuer "Gesundheits-/Finanzdetails/Personenbezug (Name)" wird BEWUSST
+> NICHT gebaut: er waere sprachabhaengig, luecken- und fehlalarm-behaftet und wuerde ein
+> Schutzversprechen vortaeuschen, das er nicht halten kann. Diese Restflaeche traegt die
+> Tool-Description (`t.lookUpQueryParam`: "ohne Personenbezug", enges Verbot am
+> Entscheidungspunkt) - Prompt, also KEINE Durchsetzung. Wer das Flag scharf schaltet,
+> akzeptiert genau diese Restflaeche.
 >
 > **Fremdtext hat genau EINE Tuer:** der Treffer geht ausschliesslich ueber
 > `addLookupFacts` -> `call.context.key_facts` -> HINTERGRUND-Block MIT Guardrail-Zeile.

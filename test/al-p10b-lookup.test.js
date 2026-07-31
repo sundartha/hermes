@@ -31,7 +31,10 @@ const OWNER = "Jonas Beispiel";
 const SUBSTANTIAL = "Ja, Donnerstag passt gut";
 const LOOK_UP = "look_up";
 const QUERY = "Oeffnungszeiten Baumarkt Musterstadt";
-const CALLEE_NAME = "Petra Hollmann";
+// Eine am Egress-Filter verworfene Query (Rufnummer des Angerufenen, geschriebene Form -
+// seedCall.to ist default "+4915112345678"). KEIN Namens-Fixture: call.callerName ist in
+// Produktion seit G1 hart null, ein Filter darauf existiert nicht mehr (lookup-guard.js).
+const REJECTED_QUERY = "Wem gehoert 015112345678";
 const BRAVE_KEY = "test-alp10b-brave-key";
 
 function message(content, stopReason) {
@@ -112,8 +115,8 @@ before(async () => {
   process.env.ASSISTANT_CONTEXT_ENABLED = "true";
   process.env.THINKING_SIGNAL_ENABLED = "true";
   const calls = [];
-  for (let i = 1; i <= 22; i++) calls.push(seedCall({ id: `call_alp10b_${i}`, callerName: CALLEE_NAME }));
-  calls.push(seedCall({ id: "call_alp10b_inbound", direction: "inbound", callerName: CALLEE_NAME }));
+  for (let i = 1; i <= 22; i++) calls.push(seedCall({ id: `call_alp10b_${i}` }));
+  calls.push(seedCall({ id: "call_alp10b_inbound", direction: "inbound" }));
   process.env.DATA_DIR = tempDataDir(
     seedState({
       tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }],
@@ -288,8 +291,8 @@ async function costDeltaOf(callId, { results = [], hangs = false, query = QUERY 
 }
 
 test("AL-P10b-9: eine ausgeloeste Suche kostet die Gebuehr, eine verworfene nicht", async () => {
-  // Verworfen am Egress-Filter (Name des Angerufenen) -> Referenzwert ohne Gebuehr.
-  const declined = await costDeltaOf("call_alp10b_9", { query: `Praxis ${CALLEE_NAME}` });
+  // Verworfen am Egress-Filter (Rufnummer des Angerufenen) -> Referenzwert ohne Gebuehr.
+  const declined = await costDeltaOf("call_alp10b_9", { query: REJECTED_QUERY });
   assert.equal(braveRequests.length, 0, "verworfene Suche ist rausgegangen");
   const searched = await costDeltaOf("call_alp10b_10", { results: [braveBody("Treffer")] });
   assert.equal(braveRequests.length, 1);
@@ -297,7 +300,7 @@ test("AL-P10b-9: eine ausgeloeste Suche kostet die Gebuehr, eine verworfene nich
 });
 
 test("AL-P10b-10: ein Timeout bucht ebenfalls, der Turn liefert trotzdem Sprache", async () => {
-  const declined = await costDeltaOf("call_alp10b_11", { query: `Praxis ${CALLEE_NAME}` });
+  const declined = await costDeltaOf("call_alp10b_11", { query: REJECTED_QUERY });
   arm({ hangs: true });
   queue = lookupThenAnswer("Moment.", "Dann sage ich Ihnen das spaeter.");
   const before = store.usageOf(BOOTSTRAP_TENANT_ID).costCents;
@@ -332,9 +335,9 @@ test("AL-P10b-11: look_up NEBEN end_call loest keine Suche und keine Gebuehr aus
 
 // ---------- E: Egress + Injektion ----------
 
-test("AL-P10b-12: eine Query mit dem Namen des Angerufenen erreicht den Anbieter nicht", async () => {
+test("AL-P10b-12: eine Query mit der Rufnummer des Angerufenen erreicht den Anbieter nicht", async () => {
   arm({ results: [braveBody("Darf nie passieren")] });
-  queue = lookupThenAnswer("Moment.", "Das weiss ich nicht.", `Wohnort ${CALLEE_NAME}`);
+  queue = lookupThenAnswer("Moment.", "Das weiss ich nicht.", REJECTED_QUERY);
   const call = store.getCall("call_alp10b_14");
   await claude.agentTurn(call, SUBSTANTIAL);
   assert.equal(braveRequests.length, 0);
@@ -390,7 +393,7 @@ test("AL-P10b-14: die [lookup]-Logzeilen tragen weder Query noch Treffer noch Se
     await claude.agentTurn(store.getCall("call_alp10b_16"), SUBSTANTIAL);
     // Zweiter Durchlauf: der verworfene Fall schreibt seine eigene Zeile.
     arm();
-    queue = lookupThenAnswer("Moment.", "Weiss ich nicht.", `Wohnort ${CALLEE_NAME}`);
+    queue = lookupThenAnswer("Moment.", "Weiss ich nicht.", REJECTED_QUERY);
     await claude.agentTurn(store.getCall("call_alp10b_17"), SUBSTANTIAL);
   } finally {
     console.log = realLog;
@@ -399,7 +402,7 @@ test("AL-P10b-14: die [lookup]-Logzeilen tragen weder Query noch Treffer noch Se
   const lookupLines = lines.filter((l) => l.includes("[lookup]"));
   assert.equal(lookupLines.length, 2, `unerwartete Zeilen: ${lookupLines.join(" | ")}`);
   for (const line of lookupLines) {
-    for (const secret of [QUERY, fact, BRAVE_KEY, CALLEE_NAME, "+4915112345678", "15112345678"]) {
+    for (const secret of [QUERY, fact, BRAVE_KEY, "+4915112345678", "15112345678"]) {
       assert.ok(!line.includes(secret), `Leak in Logzeile: ${line}`);
     }
   }
