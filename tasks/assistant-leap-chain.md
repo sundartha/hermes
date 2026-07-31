@@ -231,11 +231,20 @@ tragen darum exakt diese IDs.
 2. **Bindend im Plan-Doc ist der Abschnitt „Entscheidungen O1-O9".** Der Abschnitt „Herleitung
    der offenen Fragen" darunter ist **historisch und gilt NICHT** — er enthaelt Ausweich-
    Antworten, die der Owner spaeter umgekehrt hat (insbesondere O8).
-3. **Regel 0 — Worktree-Basis.** `isolation: "worktree"` legt den Worktree **nicht zuverlaessig**
-   auf dem aktuellen `master` an. Vor der ersten Aenderung pruefen:
-   `git rev-parse master` und `git merge-base --is-ancestor master HEAD`. Der Arbeitsbranch wird
-   ausdruecklich von `master` abgezweigt (`git checkout -b <branch> master`). Steht der Worktree
-   auf einem aelteren Commit, ist das ein **Abbruchgrund**, kein „passt schon".
+3. **Regel 0 — Basis herstellen, DANN lesen.** Ein frischer Worktree sitzt hier
+   erfahrungsgemaess auf einem alten Commit. Das ist normal und harmlos — solange in dieser
+   Reihenfolge gearbeitet wird:
+   1. **Zuerst** den Arbeitsbranch von `master` anlegen: `git checkout -b <branch> master`
+      (Reviewer: `git checkout -b <review-branch> <ziel-branch>`). Refs sind zwischen Worktrees
+      geteilt, `master` loest immer korrekt auf.
+   2. **Danach** verifizieren: `git rev-parse HEAD` == `git rev-parse master` (bzw.
+      `git merge-base --is-ancestor master HEAD` fuer einen Ziel-Branch).
+   3. **Erst dann** Quelldateien lesen oder Tests fahren.
+
+   Wer Schritt 3 vor Schritt 1 macht, liest einen veralteten Stand und zieht daraus falsche
+   Schluesse (in der KS-Kette einmal passiert: der Review-Agent meldete aus seinem eigenen noch
+   nicht umgestellten Worktree eine „veraltete Basis", die es nie gab). Ein veralteter HEAD
+   **vor** dem Checkout ist KEIN Blocker. Ein falscher HEAD **nach** dem Checkout ist einer.
 4. **Neue Env-Variable = vier Orte, sonst ist sie kaputt:** `src/config.js` (Namespace, kein
    Alias-Wildwuchs) + `.env.example` + `render.yaml` + **`BASE_ENV` in `test/helpers.js`**.
    Fehlt der vierte, leckt die lokale `.env` in die Spawn-Tests.
@@ -255,6 +264,25 @@ tragen darum exakt diese IDs.
     Owner. Anlegen ja, einschalten nein.
 11. **Keine neue npm-Dependency** ohne ausdrueckliche Freigabe im Phasen-Abschnitt hier.
     HTTP-Aufrufe laufen ueber das Bestandsmuster (`fetch` + Timeout), nicht ueber ein SDK.
+12. **DER PLAN IST AELTER ALS DER CODE.** `PLAN-ASSISTANT-LEAP.md` wurde vor der KS-Kette
+    (Kosten-Steuerung, gemergt und live am 2026-07-30/31) geschrieben. Die KS-Kette hat genau die
+    Stellen umgebaut, an denen AL weiterarbeitet. **Jede Zahl, jedes Symbol und jede
+    Mechanik-Beschreibung aus dem Plan-Doc wird am ECHTEN Code auf `master` nachgeprueft, bevor
+    darauf geplant wird.** Bei Widerspruch gilt der Code; die Abweichung wird im Bericht benannt
+    und **nicht** nebenbei gefixt (fremde Phase). Bekannte Drift, nicht abschliessend:
+    - `src/telnyx-llm-shim.js` traegt seit KS-P2 den **Live-Budget-Term** in der Mid-Call-Pruefung
+      und seit KS-P1b den **geteilten Re-Attach-Pfad** (`killCallForBudget`). Beides ist
+      Geldpfad — wer den Shim anfasst, darf davon nichts beschaedigen.
+    - **Worst-Case-Tarif-Fallback 300 -> 30 ct/min** (KS-P6). Ist-Werte kommen aus dem
+      Boot-Banner, nicht aus dem Plan-Text.
+    - **`MAX_CALL_DURATION_S` wird nicht mehr gelesen** (KS-P3/E2/E3). Die nutzbare Dauer faellt
+      pro Call aus dem Restguthaben; die Notbremse ist `min(Restminuten + 1 min, 1800 s)`, die
+      1800 s sind hartkodiert und bewusst kein Knopf.
+    - **Die Plattform-Achse (`MAX_BUDGET_EUR`) ist seit KS-P9/E10 KEINE Sperre mehr**, nur
+      Messung + Warnschwelle. Die **pro-Tenant-Kostendecke sperrt weiterhin beide Richtungen**,
+      Inbound eingeschlossen (E11 wurde zurueckgezogen, die Begruendung war falsch).
+    - Reserve, Ablehnungstexte und Anzeige lesen seit KS-P4/P5a/P8 **dieselbe Achse wie das
+      Gate**; der Nutzer sieht Prozent statt Euro.
 
 ### AL-P1 — Latenz-Achse und Abbruch-Achse schliessen
 
@@ -351,6 +379,54 @@ Aufnahme nicht zu trennen, wann *unser* Assistant zu sprechen beginnt.
   Verweigerung im Skript, nicht nur ein Kommentar.
 - **`scripts/telnyx-assistant-provision.mjs` wird nicht benutzt und nicht veraendert.**
 - Secrets nie loggen; die Rufnummern duerfen im Klartext stehen (es sind unsere eigenen).
+
+### AL-P2s — Den Spike-Schalter erneut aufsetzen (BEFRISTET, Owner-Entscheidung 2026-07-31)
+
+**Warum es diese Phase gibt:** AL-P2 ist bis heute **nicht gemessen** — es existiert kein Urteil
+(`incremental`/`buffered`). Der Messversuch am 29.07. scheiterte daran, dass die Schweige-Route
+den Anruf nie annahm; die Umgebung wurde vollstaendig zurueckgebaut und der Schalter mit **KS-AUF**
+(`643f8dc`) ersatzlos aus master entfernt. Die KS-Spec behauptet an einer Stelle „der AL-P2-Spike
+ist gemessen und abgeschlossen" — **das ist falsch** und war der Anlass fuer diesen Abschnitt.
+
+**Owner-Entscheidung 2026-07-31:** die Messung laeuft auf dem **Live-Dienst**, Zielnummer ist die
+**Mobilnummer des Owners** — er geht ran und schweigt. Kein Wegwerf-Dienst (scheiterte am
+Boot-Guard), kein Tunnel, keine Schweige-Route (scheiterte bereits).
+
+- **Vorlage:** `git show af4a66e` ist die vollstaendige frueher gebaute Fassung. **Ein
+  Revert-des-Reverts geht NICHT sauber durch** — `src/telnyx-llm-shim.js` und
+  `test/telnyx-shim-harness.js` sind seit dem Spike durch KS-P2 (Live-Budget-Term) und KS-P1b
+  (Re-Attach-Seam, `killCallForBudget`) umgebaut. Handarbeit gegen den **heutigen** Code, mit
+  `af4a66e` als Referenz fuer Umfang und Riegel.
+- **Umfang (identisch zur Vorlage, nicht groesser):**
+  - `src/telnyx-llm-shim.js`: `sseSpikeDelayMsFor` ist die **EINE** Stelle, die ueber
+    Betroffenheit entscheidet — Verzoegerung **UND** Zielnummer gesetzt **UND** `call.to` gleich
+    Zielnummer. Jede andere Konstellation liefert die **byte-identische** Bestandssequenz.
+  - Die vier Notaus-Pfade (Rate-Gate, Budget-Kill, Loop-Guard, Degradations-Catch) uebergeben
+    ausdruecklich **keine** Pause und bleiben sofortig. Ebenso unberuehrt: der Live-Budget-Term
+    aus KS-P2 und der Re-Attach-Pfad aus KS-P1b — **Geldpfad, nicht beschaedigen.**
+  - `src/config.js`: `TELNYX_SSE_SPIKE_DELAY_MS`, `TELNYX_SSE_SPIKE_CALLEE` (E.164, fail-closed,
+    Wert wird **nie** geloggt) und die `productionFootguns`-Sperre: Verzoegerung ohne Zielnummer
+    ist im Hosting ein **Boot-Refusal**.
+  - `src/boot.js`: Banner-Sonde bei jedem Start. `src/utils/timer.js`: `sleepMs`.
+  - `scripts/telnyx-call-latency.mjs`: `sseSpikeVerdict`
+    (`incremental`/`buffered`/`inconclusive`/`no_data` — **kein Urteil ohne Messung**) und
+    `--spike-delay-ms`.
+  - Env-Vierklang (`config.js`, `.env.example`, `render.yaml`, `BASE_ENV` in `test/helpers.js`),
+    `PLAN-SECURITY.md`-Eintrag, Fahr- **und** Rueckbau-Protokoll in
+    `tasks/al-testcall-checklist.md`.
+- **Der Schalter ist befristet.** Der Rueckbau ist **Teil der Abnahme**, nicht „Flag auf 0" — er
+  laeuft als eigene Phase **AL-P2z** direkt nach der geglueckten Messung. Genau diese Zusage
+  wurde beim letzten Mal eingehalten (KS-AUF); sie gilt erneut.
+- **Ausdruecklich NICHT Teil dieser Phase:** Deploy, Env-Werte setzen, Telefonieren, Telnyx-
+  Objekte anfassen. Das ist Owner-/Lead-Arbeit nach dem Merge.
+
+### AL-P2z — Den Spike-Schalter wieder ersatzlos entfernen
+
+- Laeuft **erst nach** einer geglueckten Messung mit protokolliertem Urteil.
+- Vorlage fuer den Umfang: der Abschnitt **KS-AUF** in `tasks/ks-chain-spec.md` — dort steht die
+  vollstaendige Entfernungsliste, die schon einmal sauber durchgelaufen ist.
+- Kein toter Code, keine verwaisten Env-Schluessel, keine Kommentare, die auf den entfernten
+  Schalter verweisen. `npm test` gruen ohne neue Tests.
 
 ### AL-P3 — Endpointing konfigurieren
 
@@ -490,6 +566,30 @@ Aufnahme nicht zu trennen, wann *unser* Assistant zu sprechen beginnt.
 - Beruehrt den **Tool-Entscheidungspunkt**. Repo-Lehre: Haiku braucht dort **enge Verbote**, nicht
   wohlmeinende Beschreibungen.
 - **Richtungs-Gate** wie bei AL-P10b. **Abnahme = Testanruf** -> Checkliste.
+- **OWNER-ENTSCHEIDUNG 2026-07-31 (Datenschutz-Grenze, die AL-P13 ausdruecklich vor dieser Phase
+  verlangt hat): die Consult-Frage ist eine PARAPHRASE — keine woertlichen Zitate des
+  Angerufenen.** In AL-P13 stammten Consult-Fragen ausschliesslich aus `context.open_questions`
+  (Auftrag des Nutzers). AL-P14 formuliert sie erstmals aus **fremder Rede**; damit exportiert ein
+  Consult Aussagen eines Dritten, der nie eingewilligt hat. Bindend:
+  - Die Frage wird **serverseitig laengenbegrenzt** (benannte Konstante, Muster
+    `RESULT_EVIDENCE_MAX_ITEMS` aus AL-P11) und traegt **kein woertliches Zitat** — nur die
+    Sachfrage. Durchsetzung **serverseitig UND im Prompt**, nicht nur im Prompt.
+  - Das ist ein **Testgegenstand**: ein Test speist absichtlich eine Frage mit woertlichem Zitat
+    ein und weist nach, dass sie den Server nicht in dieser Form verlaesst.
+  - Freischaltung erst, wenn die Datenschutzerklaerung (`apps/web`) die Weitergabe von Inhalten
+    aus dem laufenden Gespraech an den MCP-Host nennt — Muster O5/AL-P11. Bis dahin: gebaut,
+    Flag aus, Zeile in `tasks/al-testcall-checklist.md`.
+- **`consultTimeoutMs` ohne AL-P2-Messung:** der Plan schreibt „deutlich unter dem in Phase 2
+  gemessenen Telnyx-Timeout". **Dieser Wert existiert nicht** — AL-P2 ist bis heute nicht
+  gemessen. Die einzige Zahl im Code ist `PROVIDER_WEBHOOK_HARDCUT_MS = 15000`
+  (`src/turn-budget.js`), aus der **Twilio**-Doku abgeleitet und fuer den Shim-Pfad ausdruecklich
+  „live UNBESTAETIGT". Also: konservativ **deutlich darunter** waehlen, die Herleitung im
+  Kommentar als unbestaetigt kennzeichnen — und **keine Zahl behaupten, die nicht gemessen ist**.
+- **`USER_IDLE_REPLY_SECS`:** der Plan verlangt `>= consultTimeoutMs` **oder** dass der
+  Fueller-Turn den Idle-Timer bewusst neu setzt. Der Ist-Wert ist klein (AL-P5 zielt auf 2 s; der
+  Provisioner-Lauf steht noch aus) — die erste Bedingung ist damit praktisch nicht erfuellbar.
+  **Also gilt der zweite Weg:** waehrend eines laufenden Consults wird das Idle-Nachhaken
+  ausgesetzt. Ist-Wert live nachlesen, nicht annehmen. Das ist Abnahme, keine Nebenbemerkung.
 
 ### AL-P15 — Zustellung deterministisch machen
 
