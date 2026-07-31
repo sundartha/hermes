@@ -47,7 +47,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P8: briefingModel + briefingTimeoutMs ergaenzt (Pre-Call-Briefing-Modell + -Timeout) -> 12.
   llm: 12,
   telnyx: 2,
-  voice: 10,
+  // AL-P7b: thinkingSignalEnabled ergaenzt (Denk-Signal-Flag) -> 11.
+  voice: 11,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   telephony: 9,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
@@ -65,9 +66,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // im Pre-Call-Briefing, src/research/) - eigene Namespace-Zeile.
   research: 3,
 };
-const EXPECTED_TOTAL_KEYS = 133;
+const EXPECTED_TOTAL_KEYS = 134;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (133 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (134 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -153,7 +154,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // AL-P13: consultEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 125.
   // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 124.
   // AL-P14: inCallConsultEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 124.
-  assert.equal(checked, 124, "alle primitiven Blaetter (133 - 4 Arrays - 5 nested Objekte) geprueft");
+  // AL-P7b: thinkingSignalEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 125.
+  assert.equal(checked, 125, "alle primitiven Blaetter (134 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

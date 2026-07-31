@@ -16,6 +16,7 @@ nur der Variablenname und „gesetzt/entfernt", niemals der Wert.
 | 2026-07-31 10:42 | `TELNYX_SSE_SPIKE_DELAY_MS` | `8000` | `30000` | AL-P2 | zweite Messung: Telnyx-Turn-Timeout (oberste Sprosse zuerst) |
 | 2026-07-31 10:47 | `TELNYX_SSE_SPIKE_DELAY_MS` | `30000` | `0` | AL-P2 | **abgeruestet** nach geglueckter Messung |
 | 2026-07-31 10:47 | `TELNYX_SSE_SPIKE_CALLEE` | (gesetzt) | `""` (leer) | AL-P2 | **abgeruestet**; die Schluessel verschwinden endgueltig mit AL-P2z |
+| 2026-07-31 | `THINKING_SIGNAL_ENABLED` | (existiert nicht) | **angelegt** in `.env.example`/`render.yaml`, Default `false` | AL-P7b | Denk-Signal-Flag; noch NICHT in Render gesetzt/gescharft — bleibt gesperrt (s. Kopf dieser Datei), Anschalten IST die Abnahme (`tasks/al-testcall-checklist.md`) |
 
 **Hinweis zur Reihenfolge:** `..._DELAY_MS > 0` **ohne** `..._CALLEE` ist im Hosting ein
 Boot-Refusal. Beide Werte wurden deshalb jeweils in einem Zug gesetzt bzw. entschaerft.

@@ -1033,6 +1033,18 @@ const rawConfig = {
     fallback: 2,
     min: 1,
   }),
+  // AL-P7b (PLAN-ASSISTANT-LEAP.md, Phase 7b): das Denk-Signal. AN -> der Systemprompt
+  // bekommt die Regel, einem Werkzeugaufruf einen kurzen Ueberbrueckungssatz voranzustellen,
+  // und agentTurn spricht diesen Satz, sobald der Tool-Loop weiterlaeuft (hoechstens EINMAL
+  // pro Turn). DEFAULT AUS (fail-closed): aus -> der Prompt-Block entfaellt ersatzlos
+  // (byte-identischer Systemprompt) und es geht kein zusaetzliches Fragment auf die Leitung.
+  // Wirkt NUR zusammen mit einem Abnehmer, also im Shim-Pfad mit
+  // TELNYX_SHIM_TOKEN_STREAMING=true (AL-P7 ist Vorbedingung); die Budget-Engine reicht
+  // keinen Abnehmer durch und bleibt unberuehrt. Kein Footgun-Eintrag: das Flag entwaffnet
+  // keine Sicherung, es aendert nur, WAS gesprochen wird.
+  thinkingSignalEnabled: boolEnv("THINKING_SIGNAL_ENABLED", process.env.THINKING_SIGNAL_ENABLED, {
+    fallback: false,
+  }),
   // Rate-Limit pro IP und Minute fuer alle Nicht-Twilio-Routen (localhost-Socket
   // ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min) plus Interaktionen.
   rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, {
@@ -1269,7 +1281,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
-  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap"],
+  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled"],
   telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge", "machineDetection"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],

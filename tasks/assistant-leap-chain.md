@@ -505,6 +505,24 @@ Boot-Guard), kein Tunnel, keine Schweige-Route (scheiterte bereits).
   3. **Der Fuellsatz ist KONTEXTABHAENGIG**, kein fester Standardsatz. Er entsteht als fuehrender
      Text im **selben** Antwort-Block wie der Werkzeugaufruf — das kostet keinen Extra-Roundtrip.
 - Flag `THINKING_SIGNAL_ENABLED`, Default **aus**. **Abnahme = Testanruf** -> Checkliste.
+- **UMGESETZT** (`src/thinking-signal.js`, `src/claude.js`, `src/telnyx-llm-shim.js`,
+  Prompt-Bloecke in `src/i18n/prompts/{de,en,fr}.js`). Zwei bewusste Abweichungen vom
+  Plan-Wortlaut oben, beide im Umsetzungsplan begruendet (§1 E3/E5):
+  - **E3 (Schwelle strukturell statt zeitlich):** kein `~1,3 s`-Timer und kein Warten auf
+    `speak.ended`. Die Bruecke feuert genau dann, wenn der Tool-Loop nach der Runde
+    weiterlaeuft — das ist eine echte Teilmenge von "Zug ueber der Normaldauer" (ein
+    weiterlaufender Loop heisst mindestens zwei Modell-Roundtrips) und ohne Uhr testbar.
+    "Der Ueberbrueckungssatz wird IMMER zu Ende gesprochen" (Owner-Kriterium oben) ist
+    trotzdem erfuellt — **strukturell**: Bruecke und Antwort sind zwei `content`-Deltas
+    DESSELBEN SSE-Stroms, in dieser Reihenfolge; es gibt keinen zweiten Sprechkanal, der
+    die Bruecke unterbrechen koennte.
+  - **E5 (kein Nachhaken in die eigene Wartezeit, NICHT gebaut):** der Idle-Timer gehoert
+    Telnyx (`USER_IDLE_REPLY_SECS`) und ist per-Turn nicht abschaltbar; ein serverseitiger
+    In-Flight-Riegel im Shim waere geraten (unvermessen, ob/wie Telnyx auf einen zweiten
+    Request waehrend eines offenen antwortet). Der Testanruf **misst** das erst (dritte
+    Checklisten-Zeile); ergibt die Messung ein Nachhaken, folgt eine eigene Mini-Phase.
+  - Beide Flags (`THINKING_SIGNAL_ENABLED`) bleiben Default **aus**; bei ausgeschaltetem
+    Flag ist der Systemprompt byte-identisch (Test AL-P7b-6/-11).
 
 ### AL-P8 — Der Bench misst den Pfad, der live ist
 

@@ -394,6 +394,14 @@ export function tokenStreamingBannerLine(telnyxAssistant) {
     : "";
 }
 
+// AL-P7b: das Denk-Signal aendert, WAS der Anrufer hoert. Ein solcher Schalter darf nicht
+// unbemerkt scharf sein (Muster tokenStreamingBannerLine / inCallConsultBannerLine, und die
+// Repo-Lehre "Deploy-Stand nie aus einer Notiz lesen"). Aus -> keine Zeile, Banner
+// byte-identisch.
+export function thinkingSignalBannerLine(voice) {
+  return voice.thinkingSignalEnabled ? "Denk-Signal: AKTIV (THINKING_SIGNAL_ENABLED=true)" : "";
+}
+
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -411,6 +419,8 @@ function logBootBanner(config, port) {
   if (inCallConsult) console.log(`  ${inCallConsult}`);
   const tokenStreaming = tokenStreamingBannerLine(config.telnyx.telnyxAssistant);
   if (tokenStreaming) console.log(`  ${tokenStreaming}`);
+  const thinkingSignal = thinkingSignalBannerLine(config.voice);
+  if (thinkingSignal) console.log(`  ${thinkingSignal}`);
   console.log(
     `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
   );
