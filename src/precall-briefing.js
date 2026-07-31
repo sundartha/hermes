@@ -24,10 +24,15 @@
 // kein zweiter Auftragsverarbeiter. Mit aktivem Flag wandert Auftragsmaterial an einen
 // Suchindex; Riegel ist eine Feld-Whitelist (src/research/sanitize.js): `to` - die
 // Rufnummer des Angerufenen - bleibt bei aktiver Recherche draussen (O3, fail-closed).
-import { createLlmClient, LlmUnavailableError, LLM_UNAVAILABLE_REASON } from "./llm.js";
+import { attemptReachedProvider, createLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import { metrics } from "./metrics.js";
-import { bookTokenUsage, bookEstimatedTokenUsage, bookResearchSearchFee } from "./llm-usage.js";
+import {
+  estimatedAbortUsage,
+  bookTokenUsage,
+  bookEstimatedTokenUsage,
+  bookResearchSearchFee,
+} from "./llm-usage.js";
 import { agentToolNames } from "./claude.js";
 import { validateAssistantContext, validateMandate } from "./routes/_validation.js";
 import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./store/defaults.js";
@@ -38,11 +43,6 @@ import { researchEgressInput } from "./research/sanitize.js";
 const BRIEFING_MAX_TOKENS = 700; // reicht fuer die vier Kontextfelder + ein Mandat (G25)
 const BRIEFING_MAX_RETRIES = 0; // Spec: kein Retry - place_call wartet synchron darauf
 const BRIEFING_TOOL_NAME = "hintergrund";
-// AL-P9: pessimistische Zeichen-je-Token-Annahme fuer die Abbruch-Schaetzung (G25).
-// Deutscher Text liegt beim Anthropic-Tokenizer bei rund 3,5-4 Zeichen je Token; 3
-// rundet bewusst nach oben. Keine Betriebs-Stellschraube -> Modul-Konstante, nicht
-// config.js (G35 n. z.; Muster SECONDS_PER_MINUTE in boot-guard.js).
-const BRIEFING_ESTIMATE_CHARS_PER_TOKEN = 3;
 // D8 (Pre-Mortem: kein Modell darf sich selbst die weitreichendste Mandats-Option
 // ausstellen): das Schema bietet accept_best erst gar nicht an. Zweite Sicherung
 // (Code-Nachriegel) in withoutSelfGrantedAcceptBest unten - Defense-in-depth, falls das
@@ -236,36 +236,12 @@ function briefingTooling(provider) {
   return { tools: [briefingTool, ...provider.researchTools()], tool_choice: { type: "any" } };
 }
 
-// AL-P9/AL-P10: EIN Praedikat fuer "der Versuch war nachweislich auf der Leitung" (G5) -
-// Token-Schaetzung UND Suchgebuehr haengen an derselben Unterscheidung. CIRCUIT_OPEN
-// wirft VOR dem Request (nichts verbraucht); RETRIES_EXHAUSTED bedeutet mindestens einen
-// abgesetzten Versuch (BRIEFING_MAX_RETRIES ist 0, also genau einen). Nicht-transiente
-// Fehler (4xx/Auth) weisen ohne Generierung ab. Rein (N7).
-function attemptReachedProvider(err) {
-  return (
-    err instanceof LlmUnavailableError && err.reason === LLM_UNAVAILABLE_REASON.RETRIES_EXHAUSTED
-  );
-}
-
 // AL-P10: zu buchende Suchen aus einer erfolgreichen Antwort. Zaehler unbekannt
 // (Anbieter meldet server_tool_use nicht) -> pessimistisch der harte Deckel, NIE 0
 // (Regel 1). Ohne Provider 0 -> bookResearchSearchFee no-oppt. Rein (N7).
 function searchesToBook(provider, usage) {
   if (!provider) return 0;
   return provider.searchCount(usage) ?? config.research.researchMaxUses;
-}
-
-// AL-P9: ein abgebrochener Versuch hat beim Anbieter trotzdem Token erzeugt - wir kennen
-// sie nur nicht. Deterministische, bewusst PESSIMISTISCHE Obergrenze aus zwei bekannten
-// Groessen: Prompt-Laenge und harter Ausgabe-Deckel. Ueberbuchung ist die etablierte
-// Fehlerrichtung (priceForModel -> teuerste Rate), eine 0-Buchung waere ein Loch im
-// Budget-Gate (Regel 1). Rein (N7). Form wie eine Anthropic-usage (inputTokensOf
-// vertraegt die fehlenden Cache-Felder).
-function estimatedAbortUsage(promptChars) {
-  return {
-    input_tokens: Math.ceil(promptChars / BRIEFING_ESTIMATE_CHARS_PER_TOKEN),
-    output_tokens: BRIEFING_MAX_TOKENS,
-  };
 }
 
 // Bucht die Schaetzung NUR, wenn der Versuch nachweislich auf der Leitung war:
@@ -276,7 +252,7 @@ function estimatedAbortUsage(promptChars) {
 // Budget abziehen, bis Outbound einfriert). Nebeneffekt im Namen (N7).
 function bookAbortedAttempt({ err, tenantId, promptChars }) {
   if (!attemptReachedProvider(err)) return;
-  const usage = estimatedAbortUsage(promptChars);
+  const usage = estimatedAbortUsage({ promptChars, maxTokens: BRIEFING_MAX_TOKENS });
   bookEstimatedTokenUsage({ tenantId, usage, model: config.llm.briefingModel });
   console.warn(
     `[precall-briefing] geschaetzte Kosten gebucht (grund=${err.reason}, ` +

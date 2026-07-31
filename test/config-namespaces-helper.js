@@ -41,6 +41,9 @@ export function fakeTelnyxShimConfig({
   telnyxShimMaxTurnsPerMin = 100,
   telnyxShimSharedSecret = "shim-secret",
   telnyxShimDebugShape = false,
+  // AL-P7: Default AUS = Bestandspfad (EIN content-Chunk am Ende) - alle Bestands-Shim-
+  // Tests bleiben damit unveraendert gueltig; nur die AL-P7-Tests flippen ihn.
+  telnyxShimTokenStreaming = false,
 } = {}) {
   return withConfigNamespaces({
     claudeModel,
@@ -49,6 +52,7 @@ export function fakeTelnyxShimConfig({
       shimMaxTurnsPerMin: telnyxShimMaxTurnsPerMin,
       shimSharedSecret: telnyxShimSharedSecret,
       shimDebugShape: telnyxShimDebugShape,
+      shimTokenStreaming: telnyxShimTokenStreaming,
     },
   });
 }

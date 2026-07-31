@@ -428,6 +428,16 @@ const rawConfig = {
     shimDebugShape: boolEnv("TELNYX_SHIM_DEBUG_SHAPE", process.env.TELNYX_SHIM_DEBUG_SHAPE, {
       fallback: false,
     }),
+    // AL-P7: echtes Token-Streaming des Shim-Turns. DEFAULT AUS (fail-closed): aus heisst
+    // byte-identisch zum Bestand - agentTurn bekommt keinen Satz-Abnehmer, llm.js streamt
+    // nicht, die SSE-Antwort ist wieder EIN content-Chunk. Wirkt nur zusammen mit einem
+    // Request, der stream:true verlangt (Telnyx tut das live). Kein Footgun-Eintrag: das
+    // Flag entwaffnet keine Sicherung, es aendert nur die Draht-Kadenz.
+    shimTokenStreaming: boolEnv(
+      "TELNYX_SHIM_TOKEN_STREAMING",
+      process.env.TELNYX_SHIM_TOKEN_STREAMING,
+      { fallback: false },
+    ),
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----

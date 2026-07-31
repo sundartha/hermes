@@ -48,6 +48,10 @@ const BACKOFF_FACTOR = 2;
 export const LLM_UNAVAILABLE_REASON = Object.freeze({
   CIRCUIT_OPEN: "circuit-open",
   RETRIES_EXHAUSTED: "retries-exhausted",
+  // AL-P7: unsere EIGENE Wanduhr-Sicherung hat den Stream beendet. Kein Anbieter-Fehler
+  // und kein Retry-Fall (Text ist zum Teil schon gesprochen) - aber der Versuch WAR auf
+  // der Leitung, es sind Token entstanden.
+  STREAM_ABORTED: "stream-aborted",
 });
 
 // Geworfen, wenn der Breaker offen ist ODER die Retry-Obergrenze erschoepft ist.
@@ -69,6 +73,17 @@ export class LlmUnavailableError extends Error {
 // generisches technisches Ende (turnErrorSpeech).
 export function degradedSpeechFor(err, locale) {
   return err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
+}
+
+// AL-P9/AL-P7: EIN Praedikat "der Versuch war nachweislich auf der Leitung" (G5) - die
+// Token-Schaetzung des abgebrochenen Briefings (precall-briefing.js) und die des
+// abgerissenen Turn-Streams (claude.js) haengen an derselben Unterscheidung. NUR
+// CIRCUIT_OPEN wirft VOR dem Request; jede andere LlmUnavailableError-Ursache hat
+// mindestens einen Versuch abgesetzt. Nicht-transiente Fehler (4xx/Auth) sind KEINE
+// LlmUnavailableError - der Anbieter weist dort ohne Generierung ab. Fail-safe Richtung:
+// im Zweifel buchen (Ueberbuchung statt Loch im Budget-Gate, Regel 1). Rein (N7).
+export function attemptReachedProvider(err) {
+  return err instanceof LlmUnavailableError && err.reason !== LLM_UNAVAILABLE_REASON.CIRCUIT_OPEN;
 }
 
 // Klassifiziert, ob ein Fehler transient (retrybar) ist. PURE Funktion, exportiert
@@ -178,15 +193,23 @@ function metricsExtra(callId, usage) {
   return extra;
 }
 
-// Factory (P15: Konstruktion/Verdrahtung getrennt vom Fachcode). <=4 benannte Felder
-// in EINEM Optionsobjekt (F1). messagesCreate ist ein optionaler Test-Seam (DIP):
-// gesetzt -> ersetzt sdk.messages.create; sonst = der echte Prod-Pfad (kein toter Code).
+// Ein Text-Delta des Anthropic-Streams (G28: die zusammengesetzte Bedingung bekommt
+// einen Namen statt im if zu stehen). Rein (N7).
+function isTextDelta(event) {
+  return event.type === "content_block_delta" && event.delta.type === "text_delta";
+}
+
+// Factory (P15: Konstruktion/Verdrahtung getrennt vom Fachcode). Benannte Felder in
+// EINEM Optionsobjekt (F1). messagesCreate/messagesStream sind optionale Test-Seams
+// (DIP): gesetzt -> ersetzen sdk.messages.create bzw. sdk.messages.stream; sonst = der
+// echte Prod-Pfad (kein toter Code).
 export function createLlmClient({
   apiKey,
   config,
   sleep = defaultSleep,
   metrics = noopMetrics,
   messagesCreate,
+  messagesStream,
 } = {}) {
   const sdk = new Anthropic({
     apiKey,
@@ -194,6 +217,15 @@ export function createLlmClient({
     maxRetries: 0, // manueller Retry ERSETZT den SDK-Retry (sonst doppelte Backoffs)
   });
   const create = messagesCreate || ((params) => sdk.messages.create(params));
+  // AL-P7 (Test-Seam wie create, DIP). WANDUHR: der SDK-Per-Request-Timeout deckt bei
+  // stream:true NUR die Zeit bis zu den Antwort-Headern (der Timer wird direkt danach
+  // geloescht) - die Generierung selbst liefe sonst unbegrenzt weiter und der Turn hinge
+  // bis zum Dead-Air-Watchdog. Massstab ist die Restfrist des Tool-Loops (AL-P6), kein
+  // neuer Knopf.
+  const openStream = (params, budgetMs) =>
+    (messagesStream || ((p, o) => sdk.messages.stream(p, o)))(params, {
+      signal: AbortSignal.timeout(budgetMs),
+    });
   const breaker = makeBreaker(
     {
       threshold: config.llm.llmBreakerThreshold,
@@ -202,10 +234,11 @@ export function createLlmClient({
     },
     Date.now,
   );
-  // I13: callId ist ein additiver Bench-/Metrik-Begleiter, KEIN Anthropic-Request-Feld -
-  // er wird hier abgestreift (Rest-Destrukturierung), bevor params an create()/das SDK
-  // geht (kein Leak eines unbekannten Feldes in den Provider-Request-Body).
-  async function complete({ callId, ...params } = {}) {
+  // AL-P7: EIN resilienter Rahmen fuer BEIDE Aufruf-Arten (S2) - Breaker-Vorpruefung,
+  // begrenztes selektives Retry, beide Metrik-Emissionen und die Fehler-Klassifikation
+  // stehen genau einmal. Die Arten unterscheiden sich nur darin, WAS ein Versuch tut
+  // (attempt) und WANN ein Retry noch erlaubt ist (retryable).
+  async function runResilient({ callId, attempt, retryable }) {
     if (breaker.isOpen()) {
       metrics.llmCall({
         outcome: "breaker-open",
@@ -221,13 +254,13 @@ export function createLlmClient({
       const resp = await withRetry(
         () => {
           attempts += 1;
-          return create(params);
+          return attempt();
         },
         {
           max: config.llm.llmMaxRetries,
           baseMs: config.llm.llmBackoffMs,
           jitter: true,
-          retryable: isTransient,
+          retryable,
           sleep,
           random: Math.random,
         },
@@ -254,5 +287,56 @@ export function createLlmClient({
       throw err; // nicht-transient (4xx/Auth) unveraendert nach oben
     }
   }
-  return { complete };
+
+  // I13: callId ist ein additiver Bench-/Metrik-Begleiter, KEIN Anthropic-Request-Feld -
+  // er wird hier abgestreift (Rest-Destrukturierung), bevor params an create()/das SDK
+  // geht (kein Leak eines unbekannten Feldes in den Provider-Request-Body).
+  async function complete({ callId, ...params } = {}) {
+    return runResilient({ callId, attempt: () => create(params), retryable: isTransient });
+  }
+
+  // AL-P7: dieselbe Resilienz, andere Draht-Form. Der Aufrufer bekommt die Text-Fragmente
+  // WAEHREND der Generierung ueber sink (DIP - llm.js kennt weder Saetze noch SSE):
+  //   sink.pushText(delta)   jedes Text-Fragment in Reihenfolge
+  //   sink.toolUseStarted()  ein Werkzeug-Block hat begonnen (der Abnehmer entscheidet)
+  //
+  // NEUE RESILIENZ-SEMANTIK (bindend): ein Retry ist verboten, sobald das erste Fragment
+  // den Seam verlassen hat - gestreamter Text ist nicht zurueckholbar. Davor bleibt der
+  // Aufruf idempotent und wird wie bisher selektiv wiederholt. Die Kehrseite ist bewusst:
+  // ein transienter Abriss NACH dem ersten Fragment meldet dem Breaker keinen Fehlversuch
+  // (withRetry koppelt "retrybar" und "zaehlt fuer den Breaker") - der Breaker bleibt ueber
+  // den Nicht-Stream-Pfad und alle frueheren Abrisse gefuettert.
+  async function completeStream({ callId, sink, streamBudgetMs, ...params } = {}) {
+    let forwardedText = false;
+    const attempt = async () => {
+      let textBlocks = 0;
+      const stream = openStream(params, streamBudgetMs);
+      try {
+        for await (const event of stream) {
+          if (event.type === "content_block_start") {
+            if (event.content_block.type === "tool_use") sink.toolUseStarted();
+            // Fugenzeichen zwischen zwei Textbloecken: haelt die gestreamte Zeichenfolge
+            // identisch zu der, die der Aufrufer aus resp.content zusammensetzt
+            // (textParts.join(" ") in claude.js).
+            else if (event.content_block.type === "text" && textBlocks++ > 0) sink.pushText(" ");
+          } else if (isTextDelta(event)) {
+            forwardedText = true;
+            sink.pushText(event.delta.text);
+          }
+        }
+        return await stream.finalMessage();
+      } catch (err) {
+        if (err instanceof Anthropic.APIUserAbortError)
+          throw new LlmUnavailableError(LLM_UNAVAILABLE_REASON.STREAM_ABORTED);
+        throw err;
+      }
+    };
+    return runResilient({
+      callId,
+      attempt,
+      retryable: (err) => !forwardedText && isTransient(err),
+    });
+  }
+
+  return { complete, completeStream };
 }

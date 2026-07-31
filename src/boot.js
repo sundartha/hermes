@@ -385,6 +385,15 @@ export function inCallConsultBannerLine(tenancy) {
   return tenancy.inCallConsultEnabled ? "In-Call-Consult: AKTIV (IN_CALL_CONSULT_ENABLED=true)" : "";
 }
 
+// AL-P7: welcher Draht live laeuft, darf nicht wieder nur im Code stehen (die
+// Assistant-Flag-Blindheit hat den Plan schon eine Messrunde gekostet). Aus -> keine
+// Zeile, Banner byte-identisch (Muster inCallConsultBannerLine).
+export function tokenStreamingBannerLine(telnyxAssistant) {
+  return telnyxAssistant.shimTokenStreaming
+    ? "Token-Streaming: AKTIV (TELNYX_SHIM_TOKEN_STREAMING=true)"
+    : "";
+}
+
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -400,6 +409,8 @@ function logBootBanner(config, port) {
   console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
   if (inCallConsult) console.log(`  ${inCallConsult}`);
+  const tokenStreaming = tokenStreamingBannerLine(config.telnyx.telnyxAssistant);
+  if (tokenStreaming) console.log(`  ${tokenStreaming}`);
   console.log(
     `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
   );
