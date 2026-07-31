@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { CENTS_PER_EUR, E164, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
+import { CENTS_PER_EUR, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
 // GAP-07: boot-guard.js hat KEINE Imports -> kein Zyklus, obwohl der Boot-Guard sonst
 // downstream von config.js sitzt.
 import { alertChannelFindings } from "./boot-guard.js";
@@ -97,24 +97,6 @@ export function boolEnv(name, raw, { fallback }) {
     `${name}="${raw}" ist kein gueltiger Boolean (erwartet: "true" oder "false").`,
   );
   return fallback;
-}
-
-// ---- E.164-Env-Validierung (fail-closed, Muster numEnv/boolEnv) ----
-// Fuer Env-Vars, die GENAU EINE Rufnummer tragen. abwesend/leer -> "" (dokumentierter
-// Default, KEIN Fatal); gesetzt, aber kein E.164 -> Fatal-Push + "" (Boot-Refusal statt
-// stiller Fehlkonfiguration, die den Schalter lautlos nie greifen liesse). Die Diagnose
-// nennt NUR den Var-Namen, NIE den Wert - eine Rufnummer ist PII und hat in keinem Log
-// etwas verloren (Muster productionFootguns).
-export function e164Env(name, raw) {
-  if (raw === undefined || raw === "") return "";
-  const trimmed = raw.trim();
-  if (!E164.test(trimmed)) {
-    fatalConfigErrors.push(
-      `${name} ist keine gueltige E.164-Nummer (erwartet +<Landesvorwahl><Nummer>; Wert wird nicht geloggt).`,
-    );
-    return "";
-  }
-  return trimmed;
 }
 
 // Produktions-Erkennung: Render setzt RENDER_EXTERNAL_URL automatisch -> echtes
@@ -446,22 +428,6 @@ const rawConfig = {
     shimDebugShape: boolEnv("TELNYX_SHIM_DEBUG_SHAPE", process.env.TELNYX_SHIM_DEBUG_SHAPE, {
       fallback: false,
     }),
-    // ---- AL-P2s (SSE-Spike, BEFRISTET - Rueckbau ist Phase AL-P2z) ----
-    // Der Spike beantwortet EINE Frage: konsumiert Telnyx unseren SSE-Strom inkrementell,
-    // oder puffert es bis data:[DONE]? Dafuer haelt der Shim die RESTLICHEN Chunks EINER
-    // Antwort um diese Zeit zurueck; der erste Sprech-Chunk geht sofort raus. 0 = aus,
-    // dann ist die Draht-Sequenz byte-identisch zum Bestand. Max 30000 = oberste Sprosse
-    // der Timeout-Leiter (5/10/20/30 s); daruber misst man nur noch den Dead-Air-Watchdog.
-    sseSpikeDelayMs: numEnv("TELNYX_SSE_SPIKE_DELAY_MS", process.env.TELNYX_SSE_SPIKE_DELAY_MS, {
-      fallback: 0,
-      min: 0,
-      max: 30000,
-    }),
-    // Die EINE Wegwerf-Zielnummer, fuer die die Verzoegerung ueberhaupt gilt. Leer -> der
-    // Schalter ist wirkungslos, egal was oben steht (fail-safe). Im Hosting ist eine
-    // Verzoegerung OHNE diese Nummer ein Boot-Refusal (productionFootguns): unscoped wuerde
-    // sie JEDEN Live-Turn dieses Dienstes anhalten.
-    sseSpikeCallee: e164Env("TELNYX_SSE_SPIKE_CALLEE", process.env.TELNYX_SSE_SPIKE_CALLEE),
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
@@ -1431,18 +1397,6 @@ export function productionFootguns(cfg = config, isProduction = detectProduction
   )
     errors.push(
       "TELNYX_SHIM_MAX_TURNS_PER_MIN zu hoch - die per-Call-Turn-Bremse (Token-/Toll-Fraud) waere praktisch aus (im Hosting bei aktivem Assistant unzulaessig).",
-    );
-  // AL-P2s (Spike-Schalter, befristet): eine SSE-Verzoegerung OHNE exakte Zielnummer wuerde
-  // JEDEN Turn dieses Dienstes um Sekunden anhalten - Dead-Air-Watchdog, Abschiedsfenster
-  // und Gespraechsdauer haengen daran. Im Hosting daher nur ZUSAMMEN mit der Wegwerf-Nummer
-  // erlaubt. Bewusst NICHT an telnyxAssistant.enabled gekoppelt: die Kombination ist auch
-  // dann Unsinn, wenn der Shim gerade 404 liefert, und das Flag kann jederzeit kippen.
-  if (
-    cfg.telnyx?.telnyxAssistant?.sseSpikeDelayMs > 0 &&
-    !cfg.telnyx?.telnyxAssistant?.sseSpikeCallee
-  )
-    errors.push(
-      "TELNYX_SSE_SPIKE_DELAY_MS > 0 ohne TELNYX_SSE_SPIKE_CALLEE - die SSE-Verzoegerung traefe JEDEN Live-Anruf (im Hosting unzulaessig).",
     );
   return errors;
 }
