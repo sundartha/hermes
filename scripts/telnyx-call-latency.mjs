@@ -32,12 +32,20 @@ const ASSISTANT_ROLE = "assistant";
 // AL-P1: die vier Posten, die Telnyx BENENNT, getrennt von der Gesamtzahl. Erst diese
 // Trennung macht "der Rest ist benannt und beziffert" (Abnahme 2) berechenbar statt
 // behauptet. LATENCY_FIELDS bleibt die EINE Liste fuer Tabelle+Mediane (G5).
+const AUDIO_FIRST_TOKEN_FIELD = "audio_first_token_duration_ms";
 const ACCOUNTED_LATENCY_FIELDS = Object.freeze([
   "transcription_duration_ms",
   "llm_first_token_duration_ms",
-  "audio_first_token_duration_ms",
+  AUDIO_FIRST_TOKEN_FIELD,
   "start_speaking_plan_extra_wait_duration_ms",
 ]);
+// AL-P2s (SSE-Spike): Urteilsschwellen als ANTEIL der armierten Verzoegerung. Unter der
+// Haelfte hat Telnyx gesprochen, bevor der Rest ueberhaupt am Draht war (inkrementell); ab
+// 90 % hat es die Verzoegerung mitgewartet (gepuffert bis data:[DONE]). Dazwischen wird
+// bewusst KEIN Urteil gefaellt - an dieser Zahl haengt eine ganze Phase (AL-P7).
+const SPIKE_INCREMENTAL_MAX_SHARE = 0.5;
+const SPIKE_BUFFERED_MIN_SHARE = 0.9;
+const SPIKE_FLAG = "--spike-delay-ms";
 const TOTAL_LATENCY_FIELD = "end_user_perceived_latency_ms";
 // K0 (Plan §2): die fuenf Latenz-Bestandteile, die Telnyx pro assistant-Message im
 // metadata-Objekt mitliefert - EINE Liste (G5), sowohl fuer Tabellen-Spalten als auch fuer
@@ -145,6 +153,18 @@ export function unaccountedVerdict(rows) {
   return { medianMs, exceedsTolerance };
 }
 
+// AL-P2s: Urteil des SSE-Spikes, gemessen am Median von audio_first_token_duration_ms ueber
+// alle assistant-Turns, bezogen auf die ARMIERTE Verzoegerung. "no_data" statt einer
+// erfundenen 0, wenn Telnyx das Feld nicht liefert (Muster unaccountedVerdict) - der
+// Zweitbeleg ist ohnehin die Aufnahme.
+export function sseSpikeVerdict(rows, spikeDelayMs) {
+  const medianMs = median(rows.map((r) => r[AUDIO_FIRST_TOKEN_FIELD]));
+  if (typeof medianMs !== "number") return { medianMs, status: "no_data" };
+  if (medianMs < spikeDelayMs * SPIKE_INCREMENTAL_MAX_SHARE) return { medianMs, status: "incremental" };
+  if (medianMs >= spikeDelayMs * SPIKE_BUFFERED_MIN_SHARE) return { medianMs, status: "buffered" };
+  return { medianMs, status: "inconclusive" };
+}
+
 function fmt(value) {
   return typeof value === "number" ? String(Math.round(value)) : NO_VALUE;
 }
@@ -181,18 +201,43 @@ function printTable(rows) {
   );
 }
 
+// AL-P2s: Fusszeile des Spike-Urteils. Eigene Funktion, damit printTable unberuehrt bleibt
+// (die Tabelle ist der Bestand, das Urteil eine zusaetzliche, opt-in Zeile).
+function printSpikeVerdict(rows, spikeDelayMs) {
+  const { medianMs, status } = sseSpikeVerdict(rows, spikeDelayMs);
+  console.log(
+    `sse-spike  delay=${spikeDelayMs} ms  ${AUDIO_FIRST_TOKEN_FIELD}-median=${fmt(medianMs)} ms  turns=${rows.length}  status=${status}`,
+  );
+  console.log(
+    "sse-spike  Deutung: incremental=GRUEN (AL-P7 gerechtfertigt) | buffered=ROT (AL-P7 entfaellt) | inconclusive/no_data=erneut messen, die Aufnahme entscheidet",
+  );
+}
+
 function failClosed(reason) {
   console.error(`Grund: ${reason}`);
-  console.error("Aufruf: node scripts/telnyx-call-latency.mjs <telnyx_conversation_id> | --call <hermes-call-id>");
+  console.error(
+    `Aufruf: node scripts/telnyx-call-latency.mjs <telnyx_conversation_id> | --call <hermes-call-id> [${SPIKE_FLAG} <ms>]`,
+  );
   process.exit(1);
 }
 
-// AL-P1: reine Argumentform (statt process.argv-Gefummel in main).
+// AL-P2s: --spike-delay-ms <ms> aus der Argumentliste herausloesen. Fehlender/ungueltiger
+// Wert -> Fehler statt stiller Ignoranz (ein stumm verschluckter Wert wuerde ein Urteil
+// ohne Bezugsgroesse drucken).
+function extractSpikeDelay(args) {
+  const i = args.indexOf(SPIKE_FLAG);
+  if (i < 0) return { rest: args };
+  const ms = Number.parseInt(args[i + 1] ?? "", 10);
+  if (!Number.isSafeInteger(ms) || ms <= 0)
+    return { error: `${SPIKE_FLAG} braucht eine positive Ganzzahl in Millisekunden` };
+  return { rest: [...args.slice(0, i), ...args.slice(i + 2)], spikeDelayMs: ms };
+}
+
+// AL-P1: das AUSWERTUNGSZIEL aus den (spike-bereinigten) Argumenten.
 //   <conversation-uuid>       -> { conversationId }
 //   --call <hermes-call-id>   -> { hermesCallId }
 //   alles andere              -> { error: "<Grund>" }
-export function parseLatencyArgs(argv) {
-  const args = argv.slice(2);
+function latencyTarget(args) {
   if (args.length === 0) return { error: "kein Argument uebergeben (Telnyx-Conversation-ID fehlt)" };
   if (args[0] === "--call") {
     const hermesCallId = args[1];
@@ -200,6 +245,16 @@ export function parseLatencyArgs(argv) {
     return { hermesCallId };
   }
   return { conversationId: args[0] };
+}
+
+// Reine Argumentform (statt process.argv-Gefummel in main). AL-P2s: das optionale
+// --spike-delay-ms <ms> wird VORAB herausgeloest (Position egal) und als spikeDelayMs an das
+// Ergebnis gehaengt; ohne das Flag bleibt die Bestandsform exakt unveraendert.
+export function parseLatencyArgs(argv) {
+  const { rest, spikeDelayMs, error } = extractSpikeDelay(argv.slice(2));
+  if (error) return { error };
+  const target = latencyTarget(rest);
+  return spikeDelayMs === undefined || target.error ? target : { ...target, spikeDelayMs };
 }
 
 // AL-P1: --call loest die interne Hermes-call.id gegen die persistierte Telnyx-UUID auf,
@@ -235,6 +290,7 @@ async function main() {
   if (rows.length === 0) failClosed(`keine assistant-Messages in Conversation ${conversationId} gefunden`);
 
   printTable(rows);
+  if (args.spikeDelayMs) printSpikeVerdict(rows, args.spikeDelayMs);
 }
 
 // Nur als Skript ausfuehren, NICHT beim Import (Muster telnyx-assistant-provision.mjs -
