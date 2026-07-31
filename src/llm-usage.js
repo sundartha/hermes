@@ -77,6 +77,23 @@ export function bookEstimatedTokenUsage({ tenantId, usage, model }) {
   store.trackUsage(tenantId, billedTokens(usage, model), config.llm);
 }
 
+// AL-P9/AL-P7: pessimistische Zeichen-je-Token-Annahme (G25). Deutscher Text liegt beim
+// Anthropic-Tokenizer bei rund 3,5-4 Zeichen je Token; 3 rundet bewusst nach oben.
+const ESTIMATE_CHARS_PER_TOKEN = 3;
+
+// Deterministische, bewusst PESSIMISTISCHE Obergrenze eines ABGEBROCHENEN Anthropic-
+// Aufrufs aus zwei bekannten Groessen: Prompt-Laenge und harter Ausgabe-Deckel. EINE
+// Quelle (G5) fuer den Briefing-Abbruch (AL-P9) und den Stream-Abriss (AL-P7).
+// Ueberbuchung ist die etablierte Fehlerrichtung (priceForModel -> teuerste Rate), eine
+// 0-Buchung waere ein Loch im Budget-Gate (Regel 1). Form wie eine Anthropic-usage
+// (inputTokensOf vertraegt die fehlenden Cache-Felder). Rein (N7).
+export function estimatedAbortUsage({ promptChars, maxTokens }) {
+  return {
+    input_tokens: Math.ceil(promptChars / ESTIMATE_CHARS_PER_TOKEN),
+    output_tokens: maxTokens,
+  };
+}
+
 // AL-P10: Gebuehr der serverseitigen Vorab-Recherche. Anthropic rechnet web_search PRO
 // SUCHE ab; die Suchen tauchen in input_tokens/output_tokens NICHT auf - ohne diesen
 // Posten waere das Budget-Gate (Regel 1) an dieser Stelle blind.

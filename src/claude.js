@@ -1,10 +1,12 @@
 // Das "Gehirn": Claude fuehrt das Gespraech, nutzt Tools (Nachricht aufnehmen,
 // auflegen) und schreibt am Ende Summary + Action Items.
-import { createLlmClient } from "./llm.js";
+import { attemptReachedProvider, createLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
 import { CONSULT_WAIT, MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
-import { bookTokenUsage } from "./llm-usage.js";
+import { bookTokenUsage, estimatedAbortUsage } from "./llm-usage.js";
+import { makeSentenceChunker } from "./speech-chunker.js";
+import { shapeForSpeech } from "./speech-shape.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
@@ -544,34 +546,10 @@ export function shouldSuppressEndCall(call) {
   return !substantialCallerSeen && !emptyTurnsReached;
 }
 
-// I8 (call-quality Impl-1): deterministisches Text-Shaping der Modell-Antwort VOR dem
-// Fallback/addTranscript - eine defensive Schicht, falls das Modell trotz "Kein
-// Markdown, keine Listen" (Regel oben) doch Markdown/Aufzaehlungen/Gedankenstriche
-// liefert (TTS liest Sonderzeichen sonst woertlich vor, S1-tts). Pure Funktion (kein
-// Nebeneffekt, kein Store-/Netz-Zugriff). VORSICHT bewusst eingehalten: nur
-// GEDANKENSTRICHE MIT umgebendem Leerzeichen werden zu Komma normalisiert - Wort-
-// Bindestriche ohne Leerzeichen ("E-Mail", "Kuendigungs-Service") bleiben unangetastet.
-export function shapeForSpeech(text) {
-  if (!text) return text;
-  let out = text
-    // Aufzaehlungs-Marker (-, *, +) am Zeilenanfang entfernen, BEVOR die generische
-    // Markdown-Bereinigung greift (sonst zerfaellt "- " zu einer bedeutungslosen Luecke).
-    .replace(/^[ \t]*[-*+]\s+/gm, "")
-    // Verbliebene Markdown-Reste (Betonung/Code/Ueberschrift-Marker).
-    .replace(/[*_#`]/g, "")
-    // " - "-Gedankenstriche (Leerzeichen auf BEIDEN Seiten) -> Komma; trifft NICHT
-    // Wort-Bindestriche ohne umgebendes Leerzeichen.
-    .replace(/\s+-\s+/g, ", ")
-    // Whitespace/Zeilenumbrueche normalisieren (EIN Leerzeichen), dann trimmen.
-    .replace(/\s+/g, " ")
-    .trim()
-    // Haengendes Komma/Semikolon/Doppelpunkt am Ende (z.B. Rest eines abgebrochenen
-    // Gedankenstrich-Satzes) abraeumen, BEVOR das Satzende ergaenzt wird (sonst ",.").
-    .replace(/[,;:]+$/, "");
-  // Satzende sicherstellen - TTS liest einen abrupt endenden Satz sonst unnatuerlich.
-  if (out && !/[.!?]$/.test(out)) out += ".";
-  return out;
-}
+// Der Shaper lebt seit AL-P7 in src/speech-shape.js (geteilter Kern mit dem chunk-
+// sicheren Zwilling des Token-Streams, G5). Der Re-Export haelt die Bestands-Importpfade
+// gueltig (bridge.js, Tests) - EINE Implementierung, kein zweiter Shaper.
+export { shapeForSpeech };
 
 // AL-P6: Grund-Token eines vorzeitig beendeten Tool-Loops. Die GELD-Gruende kommen aus
 // budget-gate.js (BUDGET_AXIS - dieselben Token wie im Shim-Log); hier steht nur die
@@ -604,8 +582,87 @@ function logTurnStop({ callId, grund, roundtrips }) {
   console.warn(`[turn] abbruch grund=${grund} call=${callId} runden=${roundtrips}`);
 }
 
+// AL-P6/AL-P7: Ausgabe-Deckel EINER Modellrunde (G25). Wird an zwei Stellen gebraucht:
+// an der Anfrage und als pessimistischer Ersatzwert, wenn ein Stream abreisst.
+const TURN_MAX_TOKENS = 300;
+
+// Zeichenumfang des VOLLSTAENDIG gebauten Prompts einer Runde - die eine Groesse, aus der
+// sich ein abgerissener Aufruf noch deterministisch schaetzen laesst. Rein (N7).
+function promptCharsOf({ system, tools, messages }) {
+  return (
+    JSON.stringify(system).length + JSON.stringify(tools).length + JSON.stringify(messages).length
+  );
+}
+
+// AL-P7: der Satz-Abnehmer DIESER Runde - oder null, wenn nicht gestreamt werden darf.
+// Drei Bedingungen, jede fail-closed:
+//   1. Es gibt ueberhaupt einen Abnehmer (nur der Shim-Pfad liefert einen; die
+//      Budget-Engine rendert ein fertiges TeXML-Dokument und kann nichts inkrementell).
+//   2. Der Werkzeugsatz der Runde besteht AUSSCHLIESSLICH aus Seiteneffekt-Werkzeugen.
+//      Nur dann ist der Text dieser Runde nachweislich der Text des Turns: jede andere
+//      Werkzeugklasse kann ihn verwerfen (die naechste Runde ueberschreibt speech) oder
+//      ersetzen (get_consult setzt den Ueberbrueckungssatz) - gesprochen ist gesprochen.
+//      Ein kuenftiges, unbekanntes Werkzeug schaltet das Streamen damit von selbst ab (G27).
+//   3. Die Frist des Turns traegt noch einen vollen Versuch (derselbe Massstab wie
+//      roundStopReason ab der zweiten Runde, G5) - sonst laeuft der Bestandspfad.
+function streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs }) {
+  if (!onSpeechChunk) return null;
+  if (!tools.every((t) => isSideEffectOnlyTool(t.name))) return null;
+  if (!roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs: config.llm.llmRequestTimeoutMs }))
+    return null;
+  return makeSentenceChunker({ onChunk: onSpeechChunk });
+}
+
+// Genau EIN Modell-Aufruf einer Schleifenrunde - samt der EINEN Verbrauchsbuchung dieses
+// Aufrufs (Regel 1). Nebeneffekte im Namen (N7).
+//
+// KOSTEN-REGEL DIESER PHASE: je llm-Aufruf faellt GENAU EIN bookTokenUsage. Im Gutfall mit
+// dem echten usage der Antwort; reisst ein GESTREAMTER Aufruf ab, mit einem
+// deterministischen, pessimistischen Ersatzwert (Input aus der bekannten Prompt-Laenge,
+// Output fail-closed auf TURN_MAX_TOKENS). Nie 0, nie "kein Beleg", nie zwei Belege. Die
+// Ueberbuchung im Abrissfall ist bewusst akzeptiert - dieselbe Fehlerrichtung wie
+// priceForModel -> mostExpensivePrice.
+//
+// WARUM HIER bookTokenUsage (beide Achsen) und NICHT bookEstimatedTokenUsage wie beim
+// Briefing (AL-P9): dort hat der Kunde nie ein Ergebnis gesehen, ein Beleg waere ein
+// Phantom. Hier ist ein Teil des Textes bereits gesprochen worden - die Leistung ist
+// erbracht, und die Abnahme dieser Phase verlangt genau EIN usage_event je Runde, im
+// Gutfall wie im Abrissfall.
+//
+// Der Nicht-Stream-Zweig ist byte-identisch zum Bestand (kein Buchen bei Fehlern) - das
+// ist die Zusage "Flag aus = Bestand".
+async function completeRound({ call, params, stream }) {
+  const bookReal = (usage) =>
+    bookTokenUsage({ tenantId: call.tenantId, callId: call.id, usage, model: params.model });
+  if (!stream) {
+    const resp = await llm.complete(params);
+    bookReal(resp.usage);
+    return resp;
+  }
+  const promptChars = promptCharsOf(params);
+  try {
+    const resp = await llm.completeStream({
+      ...params,
+      sink: stream.sink,
+      streamBudgetMs: stream.budgetMs,
+    });
+    bookReal(resp.usage);
+    return resp;
+  } catch (err) {
+    // Der Anbieter hat gerechnet, wenn der Versuch auf der Leitung war ODER wenn schon ein
+    // Fragment ankam (z.B. ein Schreibfehler des Abnehmers - kein LLM-Fehlertyp).
+    if (attemptReachedProvider(err) || stream.sink.receivedText())
+      bookReal(estimatedAbortUsage({ promptChars, maxTokens: TURN_MAX_TOKENS }));
+    throw err;
+  }
+}
+
 // Liefert { speech, endCall } und fuehrt Tool-Aufrufe serverseitig aus.
-export async function agentTurn(call, callerText) {
+// AL-P7: onSpeechChunk ist der optionale Satz-Abnehmer des Streaming-Pfads. Ohne ihn ist
+// dieser Turn byte-identisch zum Bestand (die Budget-Engine in routes/voice.js reicht
+// keinen durch). Drittes Argument als OBJEKT, damit spaetere Abnehmer keine weitere
+// Positions-Stelle brauchen (F1).
+export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
   // G3/G26-Fix: das Transkript-Record-Gate ist
   // RICHTUNGSLOS und byte-identisch zum fruehen Master-Stand (41ce40b:
   // "if (callerText) store.addTranscript(...)"). JEDE nicht-leere Anrufer-Aeusserung landet
@@ -710,16 +767,27 @@ export async function agentTurn(call, callerText) {
       break;
     }
 
-    const resp = await llm.complete({
+    const tools = toolsWithCacheControl(agentTools(call));
+    const elapsedMs = Date.now() - loopStartedAt;
+    const sink = streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs });
+    const params = {
       model,
-      max_tokens: 300,
+      max_tokens: TURN_MAX_TOKENS,
       system: [{ type: "text", text: systemPrompt(call), cache_control: CACHE_CONTROL_EPHEMERAL }],
-      tools: toolsWithCacheControl(agentTools(call)),
+      tools,
       messages,
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
+    };
+    const resp = await completeRound({
+      call,
+      params,
+      stream: sink && { sink, budgetMs: deadlineMs - elapsedMs },
     });
     roundtrips += 1;
-    bookTokenUsage({ tenantId: call.tenantId, callId: call.id, usage: resp.usage, model });
+    // AL-P7: der Rest des Puffers geht als letzter Chunk raus. Zulaessig ohne weitere
+    // Pruefung, weil streamSinkFor nur Runden armiert, deren Text nachweislich der Text
+    // des Turns ist (siehe dort). Lieferte die Runde gar keinen Text, ist das ein No-op.
+    if (sink) sink.flushRemainder();
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
     if (textParts.length) speech = textParts.join(" ").trim();

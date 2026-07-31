@@ -67,6 +67,7 @@ test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duc
     shimSharedSecret: "",
     shimApiKeyRef: "",
     shimDebugShape: false,
+    shimTokenStreaming: false,
   });
 });
 
@@ -86,7 +87,7 @@ test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewa
 });
 
 // Teil 2: telnyxAssistant-Gruppierung (P5, erstes Feature-Grouping).
-test("telnyxAssistant: alle 10 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
+test("telnyxAssistant: alle 11 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
   assert.equal(config.telnyx.telnyxAssistant.enabled, false);
   assert.equal(config.telnyx.telnyxAssistant.assistantId, "");
   assert.equal(config.telnyx.telnyxAssistant.callControlAppId, "");
@@ -97,6 +98,7 @@ test("telnyxAssistant: alle 10 Keys existieren mit den dokumentierten Defaults (
   assert.equal(config.telnyx.telnyxAssistant.shimSharedSecret, "");
   assert.equal(config.telnyx.telnyxAssistant.shimApiKeyRef, "");
   assert.equal(config.telnyx.telnyxAssistant.shimDebugShape, false);
+  assert.equal(config.telnyx.telnyxAssistant.shimTokenStreaming, false);
 });
 
 // Regression: der alte flache Pfad existiert NACHWEISLICH nicht mehr - waere er

@@ -120,6 +120,10 @@ services:
       # Default false; Owner flippt im Dashboard nur fuer den EINEN Diagnose-Call auf true.
       - key: TELNYX_SHIM_DEBUG_SHAPE
         value: "false"
+      # AL-P7: echtes Token-Streaming des Shim-Turns (satzweise SSE statt EIN Chunk am
+      # Ende). Safe-Default false; Owner flippt im Dashboard fuer die Latenz-Abnahme.
+      - key: TELNYX_SHIM_TOKEN_STREAMING
+        value: "false"
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,
