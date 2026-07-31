@@ -46,7 +46,19 @@ function streamingAgentTurn({ chunks = [SATZ_1, SATZ_2], speech = GANZER_TEXT, t
       options.onSpeechChunk?.(chunk);
       if (i === throwAfter) throw new Error("modell weg");
     }
-    return { speech, endCall: false, roundtrips: 1, toolNames: [], stopReason: null };
+    // AL-P7b: der Double streamt den GANZEN Text NUR, wenn ihm ueberhaupt ein Abnehmer
+    // durchgereicht wurde - sagt das jetzt explizit statt es den Shim aus der Chunk-Zahl
+    // raten zu lassen. Ohne Abnehmer (Flag AUS, kein wire) blieb der Text unbestritten,
+    // der Bestandspfad muss ihn also weiterhin einmal aussprechen.
+    return {
+      speech,
+      speechStreamed: Boolean(options.onSpeechChunk),
+      thinkingSignalSpoken: false,
+      endCall: false,
+      roundtrips: 1,
+      toolNames: [],
+      stopReason: null,
+    };
   }
   agentTurn.calls = calls;
   return agentTurn;

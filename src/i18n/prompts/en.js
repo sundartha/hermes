@@ -58,6 +58,13 @@ ${identityLine}
     toolThrift: "- Be economical: you only get a few tool calls per reply.",
   },
 
+  // AL-P7b (Weg A): see de.js - the sentence itself comes from the model, this block only
+  // says WHEN it is due and what it must never say.
+  thinkingSignal: `WHEN YOU MAKE SOMEONE WAIT:
+- When you call a tool that makes the other person wait, put ONE short spoken sentence in front of that call, in the SAME turn, to bridge the wait.
+- That sentence fits the conversation. No stock phrase, never the same one twice.
+- NEVER say that you are looking something up, searching, checking or asking someone, and NEVER name a source afterwards. You only bridge the wait and then simply give the result.`,
+
   mandate: {
     scopeLabel: "YOUR LEEWAY:",
     scopeRules:

@@ -310,6 +310,10 @@ services:
       # Datenschutzerklaerung anschalten.
       - key: IN_CALL_CONSULT_ENABLED
         value: "false"
+      # ---- Denk-Signal (AL-P7b) ---- Default AUS (fail-closed): kein Prompt-Block, kein
+      # zusaetzliches SSE-Fragment. Braucht TELNYX_SHIM_TOKEN_STREAMING=true, um zu wirken.
+      - key: THINKING_SIGNAL_ENABLED
+        value: "false"
       # Plattform-BEOBACHTUNG, kein Gate: seit KS-P9/E10 sperrt die Plattform-Achse nichts
       # mehr - dieser Wert ist die Bezugsgroesse von PLATFORM_SPEND_WARN_PERCENT (und der
       # Pro-Tenant-Fallback bei DEFAULT_TENANT_BUDGET_CENTS=0). Die sperrende Kosten-Achse

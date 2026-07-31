@@ -155,6 +155,11 @@ function turnDiagnostics(turn, callerText) {
     toolNames: Array.isArray(turn?.toolNames) ? turn.toolNames : [],
     chars: callerText.length,
     speechEmpty: speechEmptyOf(turn),
+    // AL-P7b: hat dieser Turn die Wartezeit ueberbrueckt? Ein Boolean, kein Text - die
+    // PII-Freiheit der Zeile bleibt unberuehrt. Ohne diese Spalte waere am Live-Log nicht
+    // unterscheidbar, ob ein Chunk die Ueberbrueckung oder die Antwort war; genau darauf
+    // stehen die Abnahmen 2 und 6 dieser Phase.
+    thinkingSignal: turn?.thinkingSignalSpoken === true,
   };
 }
 
@@ -586,8 +591,13 @@ export function makeTelnyxLlmShim({
       // AL-P7: hat der Turn seinen Text bereits satzweise gesprochen, fehlt nur noch der
       // Abschluss - ihn ein zweites Mal zu senden waere Doppelrede. Der Abschiedssatz geht
       // weiterhin ZUERST raus, nur frueher.
-      const alreadySpoken = Boolean(wire && wire.chunkCount() > 0);
-      respond(alreadySpoken ? "" : turn.speech);
+      // AL-P7b: die Auskunft kommt jetzt vom TURN, nicht mehr aus der Chunk-ZAHL. Seit dem
+      // Denk-Signal sind das zwei verschiedene Aussagen: der Ueberbrueckungssatz IST ein
+      // Chunk, die Antwort steht aber noch aus - die Chunk-Zahl haette sie verschluckt und
+      // der Anrufer haette nach "einen Moment" nur Stille gehoert.
+      // Fail-safe-Richtung (=== true): fehlt das Feld, wird der Text GESPROCHEN. Der
+      // schlimmste Fall ist eine Wiederholung, nicht eine verschwundene Antwort.
+      respond(turn.speechStreamed === true ? "" : turn.speech);
     } catch (err) {
       // P2 (Resilienz-Bruecke): NIE roher 5xx/leerer Hang - Telnyx liest den als
       // abgebrochenen/stummen Turn. Stattdessen dieselbe Zwei-Klassen-Degradation wie

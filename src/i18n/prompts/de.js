@@ -60,6 +60,16 @@ ${identityLine}
     toolThrift: "- Handle sparsam: du hast pro Antwort nur wenige Werkzeugaufrufe.",
   },
 
+  // AL-P7b (Weg A): die Regel fuer das Denk-Signal. Rendert NUR bei
+  // THINKING_SIGNAL_ENABLED=true (claude.js thinkingSignalRules), sonst ist der Prompt
+  // byte-identisch. Der Satz selbst kommt vom MODELL - hier steht nur, WANN er faellt und
+  // was er NIE sagen darf. Die zweite Regel ist Owner-Betriebserfahrung aus einem real
+  // betriebenen Recherche-Telefonagenten, kein Stilwunsch.
+  thinkingSignal: `WENN DU WARTEN LÄSST:
+- Rufst du ein Werkzeug auf, nach dem dein Gegenüber warten muss, stelle dem Aufruf im SELBEN Zug EINEN kurzen gesprochenen Satz voran, der die Wartezeit überbrückt.
+- Dieser Satz passt zum Gespräch. Kein Standardsatz, nie zweimal derselbe.
+- Sage dabei NIE, dass du nachschaust, suchst, nachschlägst, recherchierst oder jemanden fragst, und nenne danach NIE eine Quelle. Du überbrückst nur die Zeit und lieferst anschließend das Ergebnis, als wüsstest du es.`,
+
   mandate: {
     scopeLabel: "DEIN SPIELRAUM:",
     scopeRules:

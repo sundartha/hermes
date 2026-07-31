@@ -79,6 +79,10 @@ bleiben AUS. **Ihr Anschalten IST die Abnahme.**
 | AL-P7 | **AL-P7-B (Abnahme 1, Latenz):** >= 5 gescriptete Anrufe, danach `node scripts/telnyx-call-latency.mjs <conversation-id>` | Median `end_user_perceived_latency_ms` sinkt gegen die AL-P1-Baseline um **>= 300 ms**. Weniger -> Flag zurueck auf `false` (der alte Pfad bleibt vollstaendig erhalten) | offen |
 | AL-P7 | **AL-P7-C (Abnahme 3, Widerspruch):** Aufnahmen der 5 Anrufe durchhoeren | kein Fall „Satz gesprochen, danach widersprach das Werkzeugergebnis". *(Strukturell ausgeschlossen: gestreamt wird nur eine Runde, deren Werkzeugsatz ausschliesslich Seiteneffekt-Werkzeuge enthaelt — `streamSinkFor` in `src/claude.js`. Die Probe ist die Gegenkontrolle am Ohr.)* | offen |
 | AL-P7 | **AL-P7-D (Abnahme 4, Barge-in):** Owner faellt mit einem echten Satz ins Wort / sagt nur „mhm" | Ins-Wort-fallen stoppt sofort, „mhm" nicht. Reisst die Probe -> Flag zurueck auf `false` | offen |
+| AL-P7b | **AL-P7b — Ueberbrueckung hoerbar:** Testanruf mit kuenstlich verzoegertem Zug | in der Aufnahme belegt: Signal binnen 1,5 s, danach die Antwort. Im Render-Log traegt die zugehoerige `turn_ok`-Zeile `"thinkingSignal":true` | offen |
+| AL-P7b | **AL-P7b — kein Abschneiden (Owner-Kriterium):** dieselbe Aufnahme | die Ueberbrueckung ist vollstaendig gesprochen, die Antwort folgt danach. Reisst sie ab -> Phase zurueckdrehen (Flag-Flip) | offen |
+| AL-P7b | **AL-P7b — kein Nachhaken in die eigene Wartezeit (MESSUNG, s. E5 in der Umsetzungsspec):** waehrend eines laufenden Zuges | **keine zweite** `turn_ok`-Zeile mit demselben `call=` und hoeherem `turnSeq`. Erscheint sie -> eigene Mini-Phase (In-Flight-Riegel im Shim); erst messen, dann bauen | offen |
+| AL-P7b | **AL-P7b — Flag anschalten:** `THINKING_SIGNAL_ENABLED=true` im Render-Dashboard, NACH bestandenem Testanruf (setzt `TELNYX_SHIM_TOKEN_STREAMING=true` voraus) | Flag steht im Dashboard auf `true`, Boot-Banner zeigt `Denk-Signal: AKTIV`. Rueckweg ist derselbe Schalter | offen |
 
 ---
 

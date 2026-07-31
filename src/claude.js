@@ -6,6 +6,7 @@ import * as store from "./store.js";
 import { CONSULT_WAIT, MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
 import { bookTokenUsage, estimatedAbortUsage } from "./llm-usage.js";
 import { makeSentenceChunker } from "./speech-chunker.js";
+import { makeThinkingSignal } from "./thinking-signal.js";
 import { shapeForSpeech } from "./speech-shape.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
@@ -191,6 +192,14 @@ function mandateSection({ call, owner, loc }) {
   return blocks.join("\n\n");
 }
 
+// AL-P7b (Weg A): die Regel fuer den Ueberbrueckungssatz. Flag aus -> "" -> filter(Boolean)
+// in systemPrompt haelt den Bestandsprompt byte-identisch (Muster mandateSection/D8). Die
+// Sprachbindung traegt der Prompt-Sprachvertrag (loc.prompt.thinkingSignal) - auf Weg A ist
+// das Locale-Buendel der gesprochenen Saetze NICHT die Quelle des Fuellers.
+function thinkingSignalRules(p) {
+  return config.voice.thinkingSignalEnabled ? p.loc.prompt.thinkingSignal : "";
+}
+
 export function systemPrompt(call) {
   const p = promptInputs(call);
   return [
@@ -199,6 +208,9 @@ export function systemPrompt(call) {
     speechRules(p),
     clarificationRules(p),
     boundaryRules(p),
+    // AL-P7b: steht direkt hinter den GRENZEN, weil es eine Regel ueber das Verhalten AM
+    // Werkzeugaufruf ist (Nachbar von toolThrift). Flag aus -> "" -> Prompt byte-identisch.
+    thinkingSignalRules(p),
     // P6: rote Linien (GRENZEN) zuerst, dann der gruene Bereich. Ohne Mandat "" ->
     // filter(Boolean) haelt den Bestandsprompt byte-identisch (Muster D8).
     mandateSection(p),
@@ -736,6 +748,17 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
   let endCall = false;
   let suppressedEndCall = false;
   let speech = "";
+  // AL-P7b: die EINE Frage, die der Aufrufer nach dem Turn stellt - steht der AKTUELLE Wert
+  // von speech bereits auf der Leitung? Seit dem Denk-Signal ist "es wurde etwas gestreamt"
+  // NICHT mehr dieselbe Aussage (die Ueberbrueckung ist gestreamt, die Antwort nicht). Die
+  // Invariante wird an JEDER speech-Zuweisung mitgefuehrt.
+  let speechStreamed = false;
+  // AL-P7b: der Ueberbrueckungssatz dieses Turns - hoechstens EINER. Ohne Abnehmer
+  // (Budget-Engine) oder mit ausgeschaltetem Flag ein No-op -> Bestandsverhalten.
+  const thinkingSignal = makeThinkingSignal({
+    onSpeechChunk,
+    enabled: config.voice.thinkingSignalEnabled,
+  });
   let roundtrips = 0; // L0: Anzahl llm.complete-Roundtrips dieses Turns
   const firedTools = []; // L0: vom Modell angeforderte Tool-NAMEN dieses Turns (PII-frei)
 
@@ -764,6 +787,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     // ueberspringt die Modellrunde, nicht die Pruefung). Bricht immer in Runde 0 ab.
     if (holdSpeech) {
       speech = holdSpeech;
+      // speechStreamed bleibt false: der Halte-Satz ist LLM-frei und ging nie ueber den Draht.
       break;
     }
 
@@ -790,7 +814,13 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     if (sink) sink.flushRemainder();
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
-    if (textParts.length) speech = textParts.join(" ").trim();
+    if (textParts.length) {
+      speech = textParts.join(" ").trim();
+      // AL-P7b: nur eine armierte Runde (streamSinkFor, AL-P7) hat ihren Text bereits
+      // satzweise gesprochen. Eine unarmierte Runde ueberschreibt einen frueher gesetzten
+      // true-Wert korrekt mit false - ihr Text steht noch aus.
+      speechStreamed = Boolean(sink);
+    }
 
     const toolUses = resp.content.filter((b) => b.type === "tool_use");
     firedTools.push(...toolUses.map((tu) => tu.name)); // L0: Tools dieses Roundtrips
@@ -804,40 +834,22 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     const consult = decideConsultRequest(call, toolUses);
     if (consult?.accepted) {
       speech = consult.speech;
+      // AL-P7b: der Consult-Fueller ist ein NEUER, ungesprochener Text - auch wenn eine
+      // fruehere Runde bereits eine Ueberbrueckung gesprochen hat.
+      speechStreamed = false;
       break;
     }
 
-    messages = [
-      ...messages,
-      { role: "assistant", content: resp.content },
-      {
-        role: "user",
-        content: toolUses.map((tu) => {
-          if (tu.name === END_CALL_TOOL_NAME) {
-            if (suppressEndCall) {
-              // end_call ignorieren und das Modell anweisen, auf die Antwort zu warten.
-              suppressedEndCall = true;
-              return {
-                type: "tool_result",
-                tool_use_id: tu.id,
-                content: endCallWaitInstruction(call),
-              };
-            }
-            endCall = true;
-          }
-          // get_consult laeuft NIE durch execTool - dort gibt es bewusst keinen Case
-          // (der zweite Riegel: die Realtime-Bridge ruft execTool direkt und bekaeme
-          // sonst ein Werkzeug ausgefuehrt, das sie nicht bedienen kann). consult ist in
-          // diesem Zweig garantiert nicht-null: decideConsultRequest liefert nur dann
-          // null, wenn die Runde ueberhaupt kein get_consult enthaelt.
-          const result =
-            tu.name === GET_CONSULT_TOOL_NAME
-              ? consult.toolResult
-              : execTool(call, tu.name, tu.input || {});
-          return { type: "tool_result", tool_use_id: tu.id, content: result };
-        }),
-      },
-    ];
+    // AL-P7b: die end_call-Entscheidung haengt an den ANGEFORDERTEN Werkzeugen, nicht an
+    // deren Ausfuehrung - sie steht deshalb VOR dem tool_result-Mapping. Werte, Reihenfolge
+    // und Klebrigkeit ueber Runden hinweg sind unveraendert; gewonnen ist, dass schon VOR
+    // execTool feststeht, ob der Loop weiterlaeuft. Genau das braucht das Denk-Signal:
+    // sobald ein Werkzeug selbst wartet (AL-P10b look_up), waere eine Ueberbrueckung NACH
+    // der Ausfuehrung zu spaet. Nebenbei tut das Mapping jetzt nur noch eine Sache (G30).
+    if (toolUses.some((tu) => tu.name === END_CALL_TOOL_NAME)) {
+      if (suppressEndCall) suppressedEndCall = true;
+      else endCall = true;
+    }
     // Echtes oder unterdruecktes end_call mit vorhandener Aeusserung -> Turn beenden,
     // nicht weiter re-prompten. Bei unterdruecktem end_call bleibt endCall=false, der
     // Webhook rendert also ein <Gather>. Ohne speech weiterlaufen (max. 4 Runden),
@@ -851,7 +863,46 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     // einem unbekannten Werkzeug weiterhin auflegt statt eine Runde nachzulegen.
     // Bei leerem speech aendert sich nichts - der schlechteste Fall ist Bestandsverhalten.
     const sideEffectOnlyRound = toolUses.every((tu) => isSideEffectOnlyTool(tu.name));
-    if (speech && (endCall || suppressedEndCall || sideEffectOnlyRound)) break;
+    // EIN benannter Ausdruck (G5) statt derselben Bedingung an zwei Stellen: er steuert das
+    // Denk-Signal UND den Ausstieg unten. Wortlaut byte-identisch zum Bestands-Ausstieg.
+    const loopContinues = !(speech && (endCall || suppressedEndCall || sideEffectOnlyRound));
+
+    // AL-P7b (Weg A): genau hier beginnt die Wartezeit, die der Anrufer sonst als tote
+    // Leitung hoert. Der fuehrende Text DIESER Runde geht als Ueberbrueckung raus -
+    // hoechstens einmal pro Turn, nie in einer Runde, die den Turn ohnehin beendet
+    // (das ist die Schwelle: ein weiterlaufender Loop heisst mindestens zwei Roundtrips).
+    // Ein angenommenes get_consult ist oben bereits ausgestiegen und spricht seinen EIGENEN
+    // Ueberbrueckungssatz - hier entstuende sonst eine doppelte Ueberbrueckung.
+    if (loopContinues && thinkingSignal.speakBridge(speech)) speechStreamed = true;
+
+    messages = [
+      ...messages,
+      { role: "assistant", content: resp.content },
+      {
+        role: "user",
+        content: toolUses.map((tu) => {
+          // end_call ignorieren und das Modell anweisen, auf die Antwort zu warten. Die
+          // ZUSTANDS-Entscheidung ist oben gefallen; hier entsteht nur noch der Text.
+          if (tu.name === END_CALL_TOOL_NAME && suppressEndCall)
+            return {
+              type: "tool_result",
+              tool_use_id: tu.id,
+              content: endCallWaitInstruction(call),
+            };
+          // get_consult laeuft NIE durch execTool - dort gibt es bewusst keinen Case
+          // (der zweite Riegel: die Realtime-Bridge ruft execTool direkt und bekaeme
+          // sonst ein Werkzeug ausgefuehrt, das sie nicht bedienen kann). consult ist in
+          // diesem Zweig garantiert nicht-null: decideConsultRequest liefert nur dann
+          // null, wenn die Runde ueberhaupt kein get_consult enthaelt.
+          const result =
+            tu.name === GET_CONSULT_TOOL_NAME
+              ? consult.toolResult
+              : execTool(call, tu.name, tu.input || {});
+          return { type: "tool_result", tool_use_id: tu.id, content: result };
+        }),
+      },
+    ];
+    if (!loopContinues) break;
   }
 
   if (stopReason) logTurnStop({ callId: call.id, grund: stopReason, roundtrips });
@@ -866,8 +917,16 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
   // I8: Modell-Text shapen, BEVOR ueber den Fallback entschieden wird (reiner Text-
   // Shaper, aendert eine leere Antwort nicht). I2: Fallback ist richtungsabhaengig +
   // sprachabhaengig (Locale-Bundle) - DE-inbound bleibt byte-identisch zum Vorgaenger.
+  // AL-P7b: shapeForSpeech kann den Text noch veraendern (Schlusspunkt der Transkript-
+  // Zeile). speechStreamed bleibt davon unberuehrt - es beantwortet "wurde diese Aeusserung
+  // bereits gesprochen", nicht "ist sie byte-gleich zur Leitung" (AL-P7-Bestandsgrenze).
   speech = shapeForSpeech(speech);
-  if (!speech) speech = localeFor(call.language).turnFallbackSpeech[call.direction];
+  if (!speech) {
+    speech = localeFor(call.language).turnFallbackSpeech[call.direction];
+    // Der Fallback ist server-eigener Text und ging nie ueber den Draht - er MUSS gesprochen
+    // werden, auch wenn dieser Turn zuvor eine Ueberbrueckung gesprochen hat.
+    speechStreamed = false;
+  }
   store.addTranscript(call.id, "agent", speech);
   // AL-P1: roundtrips/firedTools wurden bisher NUR in metrics.logTurn geschrieben - und der
   // Seam steht hinter METRICS_ENABLED (Fallback false), war live also stumm. Genau auf
@@ -878,7 +937,18 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
   // AL-P6: stopReason ist rein additiv (null im Normalfall). Der Aufrufer entscheidet die
   // REAKTION: der Shim beendet ueber Call-Control, die Budget-Engine ueber den TeXML-
   // Render. Die PRUEFUNG liegt an genau einer Stelle (oben, roundStopReason).
-  return { speech, endCall, roundtrips, toolNames: firedTools, stopReason };
+  // AL-P7b: zwei rein additive Felder. speechStreamed loest den Aufrufer von der
+  // Chunk-ZAHL (die seit der Ueberbrueckung nicht mehr "der Turn-Text ist gesprochen"
+  // bedeutet); thinkingSignalSpoken ist der PII-freie Diskriminator der Live-Abnahme.
+  return {
+    speech,
+    speechStreamed,
+    thinkingSignalSpoken: thinkingSignal.spoken(),
+    endCall,
+    roundtrips,
+    toolNames: firedTools,
+    stopReason,
+  };
 }
 
 // ---------- Summary + Action Items nach dem Call ----------
