@@ -3,6 +3,27 @@
 Diese Datei sammelt alles, was die Kosten-Kette ausserhalb des Repos braucht.
 Der Code allein ist nicht ausreichend. Owner-Aufgaben, nicht Agenten-Aufgaben.
 
+## STAND 2026-07-31 — ABGEARBEITET, Kette ist LIVE
+
+| Schritt | Stand |
+|---|---|
+| DB-Migration (beide Spalten) | erledigt, per `information_schema` verifiziert |
+| Push nach `upstream` | erledigt, `upstream/master = d6167bf` |
+| Telnyx-App `3014656686179747728` | geloescht (war eine **TeXML**-App, daher im Portal schwer zu finden); `DELETE` 200, Gegenprobe `GET` 404 |
+| Render-Dienst `hermes-spike-al-p2` | vom Owner geloescht |
+| Deploy Gateway | erledigt, `dep-d9m57abl550s73d8umtg` |
+| `/healthz` | `commit=d6167bf...` |
+| Boot-Banner | `Worst-Case-Tarif 30 ct/min`, `Plattform-Warnschwelle 3000 ct`, `(nur Beobachtung/Warnschwelle, KS-P9)` |
+| Kein fataler Boot-Guard | bestaetigt — auch der neue `planCapReserveFindings` (KS-P3a) feuert nicht |
+
+**Offen:** ein echter Outbound-Anruf, um `estimated_cost_cents = 30` in der `call`-Zeile
+zu belegen (s. Abschnitt 4). Das ist die einzige Zusage der Kette, die noch nicht am
+Live-System gemessen ist.
+
+**Nebenbefund aus dem Boot-Banner:** `BUDGET_MONTH_ENABLED=true` ist live bestaetigt —
+die Decken sind Monats-Werte, kein Lebenszeit-Topf. Diese Frage war bis hierher offen und
+stuetzte sich nur auf eine Notiz.
+
 ## 1. DB-Migration (KS-P5) — BLOCKIEREND
 
 `applySchema` laeuft in diesem Repo **nur in Tests**. Neue Spalten entstehen auf der
