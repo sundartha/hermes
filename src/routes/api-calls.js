@@ -309,6 +309,10 @@ export function makeCallRoutes({
     if (!callVisibleTo(call, tenantId)) return res.status(404).json({ error: "not found" });
     if (!consultAllowedFor(store.resolveProfile(tenantId)))
       return res.status(404).json({ error: "not found" });
+    // AL-P14: der Zug des Clients ist der Beleg, dass eine Rueckfrage im Gespraech
+    // ueberhaupt jemanden erreicht. Vor waitForEvent gebucht - es zaehlt die ABSICHT
+    // des Clients, nicht der Ausgang des Polls. Ephemer, kein Persistenz-Pfad.
+    store.noteConsultPoll(call.id);
     const event = await consultDelivery.waitForEvent({
       callId: call.id,
       tenantId: call.tenantId,

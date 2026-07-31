@@ -1206,6 +1206,69 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 
 ---
 
+## AL-P14 — Rueckfrage IM Gespraech (2026-07-31)
+
+> **Neue Exposition, deshalb ein EIGENES Flag.** AL-P13 exportierte nur Fragen aus dem
+> AUFTRAG des Nutzers. Ab AL-P14 formuliert der Telefon-Agent eine Frage waehrend eines
+> laufenden Gespraechs und schickt sie an den MCP-Host - die Frage entsteht also aus
+> FREMDER Rede, und der Angerufene hat dem nie zugestimmt. Genau die in AL-P13 als
+> "in AL-P14 neu zu bewerten" markierte Grenze wird hier ueberschritten. Schalter:
+> `IN_CALL_CONSULT_ENABLED`, Default AUS, wirksam nur als Schnittmenge mit
+> `CONSULT_ENABLED`, `ASSISTANT_CONTEXT_ENABLED` und dem Per-Tenant-Recht `allowConsult`.
+> Ist er scharf, sagt es das Boot-Banner bei jedem Start (`inCallConsultBannerLine`) -
+> kein Deploy fuehrt ihn unbemerkt weiter.
+>
+> **Fuenf unabhaengige Riegel** (`consultAvailableFor`, `src/consult/in-call.js`):
+>
+> 1. **Richtungs-Gate (Sicherheitskern):** nur `direction === "outbound"`. Ein fremder
+>    Inbound-Anrufer kann den Agenten damit strukturell nicht dazu bringen, seine
+>    Aeusserungen als "Rueckfrage" in den claude.ai-Kontext des Tenants zu exportieren
+>    (Second-Order-Injektion). Per Mutationsprobe belegt: entfernt man das Praedikat, wird
+>    `AL-P14-2` rot.
+> 2. **Poll-Kandidaten-Gate:** das Werkzeug erscheint nur, wenn auf DIESEN Call innerhalb
+>    von `CONSULT_POLL_FRESH_MS` gepollt wurde. Der Marker (`call.consultPolledAtMs`) ist
+>    EPHEMER (keine pg-Spalte) - nach einem Instanzwechsel gilt fail-closed "kein
+>    wartender Client".
+> 3. **`execTool` kennt `get_consult` nicht.** Ein dennoch gefeuertes Werkzeug faellt in
+>    den `default`-Zweig (`unknownTool`). Der Riegel gilt damit automatisch fuer die
+>    Realtime-Bridge, die `execTool` direkt ruft; `toolDefs()` bleibt unveraendert, die
+>    Realtime-Engine und `agentToolNames` sehen das Werkzeug nie.
+> 4. **Paraphrase-Riegel serverseitig** (`src/consult/question.js`): explizite Zitate
+>    (Anfuehrungszeichen-Spannen) werden entfernt, implizite Zitate (>= 6 Woerter woertlich
+>    aus einer `caller`-Zeile) fuehren zur Ablehnung, die Frage wird auf 200 Zeichen
+>    gekappt. Der Prompt verbietet Zitate zusaetzlich - aber ein Prompt ist keine
+>    Durchsetzung.
+> 5. **Kontingent + Zeitfenster:** hoechstens EIN In-Call-Consult je Gespraech
+>    (`MAX_IN_CALL_CONSULTS_PER_CALL`), und nur, wenn die Wartezeit noch in die laufende
+>    Abrechnungsminute passt (`consultFitsBillingMinute`) - eine Rueckfrage reisst damit
+>    keine zusaetzliche Carrier-Minute auf. Eine Ablehnung ist deterministisch und
+>    verbraucht das Kontingent NICHT.
+>
+> **Nicht-blockierend, per Konstruktion:** es wird nirgends gewartet. `get_consult` bricht
+> den Tool-Loop sofort ab und spricht einen deterministischen, LLM-freien
+> Ueberbrueckungssatz. Die Frist (`CONSULT_TIMEOUT_MS = 4000`, benannte Konstante, KEIN
+> Env-Knopf - ein zu gross gesetzter Wert waere eine abgeschaltete Sicherung) wird erst
+> beim NAECHSTEN Turn ausgewertet. Danach gibt es hoechstens EINEN Halte-Satz, dann
+> schaltet der Consult auf `timed_out` und der Agent entscheidet im Rahmen seines
+> Mandats. Ein Anruf kann dadurch nicht einfrieren (per Test ueber drei Turns belegt).
+>
+> **Fremdtext hat weiterhin genau EINE Tuer:** die ANTWORT laeuft unveraendert ueber
+> `answerConsult` -> `call.context.key_facts` -> HINTERGRUND-Block. Der Timeout-Hinweis in
+> der Message-Kette ist server-eigener, eckig geklammerter Steuertext derselben Klasse wie
+> `silentTurn` - keine zweite Tuer, keine Injektionsflaeche.
+>
+> **Keine Aenderung** an Safety-Gates, Offenlegungssatz, Signaturpruefung, Auth oder
+> Routen-Bestand; keine neue Route, keine neue DB-Spalte, keine neue Dependency. Die
+> Log-Zeile `[consult] gestellt call=<id> frist_ms=<n>` ist PII-frei (nie die Frage, nie
+> eine Nummer).
+>
+> **Freischaltung erst nach Datenschutzerklaerung:** `IN_CALL_CONSULT_ENABLED=true` darf
+> erst gesetzt werden, nachdem die Datenschutzerklaerung in `apps/web` die Weitergabe von
+> Inhalten aus dem laufenden Gespraech an den MCP-Host nennt (Abnahme AL-P14-6 in
+> `tasks/al-testcall-checklist.md`).
+
+---
+
 ## KS-P9 — Plattform-Achse verliert die Sperrwirkung (2026-07-30, E10)
 
 > **Was entfaellt.** Die Plattform-Geldachse trifft ab dieser Phase KEINE

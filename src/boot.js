@@ -389,6 +389,13 @@ export function sseSpikeBannerLine({ sseSpikeDelayMs, sseSpikeCallee }) {
     : `SSE-Spike:      wirkungslos (${sseSpikeDelayMs} ms gesetzt, TELNYX_SSE_SPIKE_CALLEE fehlt)`;
 }
 
+// AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den
+// MCP-Host. Ein solcher Schalter darf nicht unbemerkt scharf sein (Muster
+// sseSpikeBannerLine). Aus -> keine Zeile, Banner byte-identisch.
+export function inCallConsultBannerLine(tenancy) {
+  return tenancy.inCallConsultEnabled ? "In-Call-Consult: AKTIV (IN_CALL_CONSULT_ENABLED=true)" : "";
+}
+
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -404,6 +411,8 @@ function logBootBanner(config, port) {
   console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
   const sseSpike = sseSpikeBannerLine(config.telnyx.telnyxAssistant);
   if (sseSpike) console.log(`  ${sseSpike}`);
+  const inCallConsult = inCallConsultBannerLine(config.tenancy);
+  if (inCallConsult) console.log(`  ${inCallConsult}`);
   console.log(
     `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
   );

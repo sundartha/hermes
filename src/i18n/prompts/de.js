@@ -129,6 +129,23 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       "Nutze es NICHT für etwas, das dein Auftrag dich selbst entscheiden lässt - " +
       "das sagst du direkt zu, statt es weiterzugeben.",
     takeMessageParam: "Die Nachricht",
+    // AL-P14: der Notausgang. Die engen Verbote sitzen GENAU HIER an der Tool-Description
+    // (Lehre call-quality-chain: breite Prompt-Regeln kippen bei Haiku in Ueberkorrektur).
+    // Der Paraphrase-Zwang steht hier UND wird serverseitig durchgesetzt (consult/
+    // question.js) - der Prompt allein ist keine Durchsetzung. Der vorletzte Satz ist der
+    // Ausstieg gegen Ueberkorrektur.
+    getConsultDescription:
+      "Stellt EINE kurze Sachfrage an deinen Auftraggeber und holt dessen Entscheidung ein. " +
+      "Nutze das NUR, wenn dein AUFTRAG und dein SPIELRAUM die Frage nicht abdecken und die " +
+      "Antwort das Gespräch jetzt entscheidet. " +
+      "Formuliere die Frage in EIGENEN Worten, als reine Sachfrage. " +
+      "Zitiere NIEMALS wörtlich, was dein Gegenüber gesagt hat, und nenne keine Namen, " +
+      "Zahlen oder Details, die für die Entscheidung nicht nötig sind. " +
+      "Eine Antwort ist NICHT garantiert: kommt keine, entscheidest du im Rahmen deines " +
+      "Mandats oder nimmst das Anliegen als Nachricht auf. " +
+      "Deckt dein Auftrag die Frage ab, entscheide selbst und rufe dieses Werkzeug NICHT auf. " +
+      "Höchstens EINMAL pro Gespräch.",
+    getConsultQuestionParam: "Die Sachfrage, in eigenen Worten, ohne wörtliches Zitat",
   },
 
   summaryInput: {
@@ -148,6 +165,16 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     endCallWait: "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.",
     takeMessageResult: "Nachricht ist notiert.",
     unknownTool: "Unbekanntes Tool.",
+    // AL-P14: deterministische Ablehnung der Rueckfrage (Richtung/Kontingent/Zeitfenster/
+    // Form). Server-eigener Text, keine fremde Rede.
+    consultDeclined:
+      "Rückfrage jetzt nicht möglich. Entscheide im Rahmen deines Mandats oder nimm das " +
+      "Anliegen über take_message auf.",
+    // AL-P14 (Mandats-Fallback): eckig geklammerter Steuertext wie silentTurn - er haengt
+    // sich an den letzten user-Turn und erscheint genau EINMAL.
+    consultTimeout:
+      "[Auf deine Rückfrage kam keine Antwort. Entscheide im Rahmen deines Mandats oder " +
+      "nimm das Anliegen als Nachricht auf.]",
   },
 
   realtimeSpeechStyle: "SPRECHWEISE: natuerlich, zuegig, kurze Saetze.",

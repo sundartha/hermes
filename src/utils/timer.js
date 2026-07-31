@@ -15,6 +15,12 @@ export function defaultSetTimer(fn, ms) {
 // gehoert damit ins selbe geteilte Modul statt zweimal lokal definiert zu werden).
 export const MS_PER_SECOND = 1000;
 
+// Abrechnungs-/Provider-Minutentakt. EINE Quelle (G5): dieselbe Zahl definiert die
+// Minutendefinition von voiceMinutesOf (billing/metering.js) UND die Zeitfenster-Regel
+// des Consults - zwei Kopien wuerden bedeuten, dass die Regel gegen eine andere Minute
+// rechnet als die Buchung.
+export const MS_PER_MINUTE = 60 * MS_PER_SECOND;
+
 // AL-P2s: dieselbe Wartezeit als Promise - fuer Code, der eine Pause AWAITEN muss, statt
 // einen Callback zu stellen. Baut auf defaultSetTimer auf, damit es bei EINEM Timer-
 // Primitiv bleibt (G5) und eine laufende Pause den Prozessabbau nicht blockiert (unref).

@@ -37,6 +37,7 @@ import {
   KEY_FACTS_LIMITS,
   CONSULT_STATUS,
   CONSULT_ANSWER,
+  CONSULT_WAIT,
   GLOBAL_CAP_REASON,
   REQUEST_NUMBER_REASON,
   TENANT_STATUS,
@@ -292,6 +293,11 @@ export function createCall(
     // rowToCall -> nach einem Deploy-Instanzwechsel beginnt die Staffel fail-safe von
     // vorn (mehr Hoeflichkeit, nie ein frueherer Hangup).
     noSpeechStreak: 0,
+    // AL-P14: Zeitstempel (ms) des letzten Consult-Polls dieses Calls. EPHEMER wie
+    // noSpeechStreak: KEINE pg-Spalte, keine Hydrierung in rowToCall -> nach einem
+    // Instanzwechsel gilt fail-closed "kein wartender Client" und das Werkzeug
+    // verschwindet, statt in einen sicheren Timeout zu laufen.
+    consultPolledAtMs: 0,
     // AL-P1: Telnyx-Conversation-UUID (Latenz-Achse) + purge-fester Anrufer-Turn-Zaehler
     // (Abbruch-Achse). Initial null/0 - byte-identisch zur pg-Hydrierung (rowToCall),
     // kein json<->pg-Shape-Drift.
@@ -750,6 +756,54 @@ export function expireOpenConsults(s, callId) {
     changed = true;
   }
   return { call, changed };
+}
+
+// AL-P14: EIN Consult ist ein IN-CALL-Consult, wenn er NACH dem Abnehmen entstand.
+// Abgeleitet statt gespeichert: Consult #0 (AL-P13) entsteht beim Waehlen, also vor
+// markAnswered - ein zusaetzliches Quellenfeld waere ein zweiter, pflegebeduerftiger
+// Wahrheitsort fuer dieselbe Tatsache. Nie beantwortet -> kein In-Call-Consult.
+// Unlesbare Zeitstempel (Fremd-/Altdatensatz) -> false, fail-closed. Reiner Leser.
+export function isInCallConsult(call, consult) {
+  const answeredAtMs = Date.parse(call?.answeredAt ?? "");
+  const askedAtMs = Date.parse(consult?.askedAt ?? "");
+  if (Number.isNaN(answeredAtMs) || Number.isNaN(askedAtMs)) return false;
+  return askedAtMs >= answeredAtMs;
+}
+
+// Alle In-Call-Consults dieses Calls (Kontingent-Zaehlung). Reiner Leser.
+export function inCallConsults(call) {
+  if (!Array.isArray(call?.consults)) return [];
+  return call.consults.filter((consult) => isInCallConsult(call, consult));
+}
+
+// AL-P14: der Client hat auf diesen Call gepollt. EPHEMER (kein save, keine Spalte -
+// Muster countNoSpeechTurn): das ist eine Beobachtung ueber das JETZT, kein Zustand,
+// der einen Deploy ueberleben duerfte. Nebeneffekt im Namen (N7).
+export function noteConsultPoll(s, callId, nowMs = Date.now()) {
+  const call = getCall(s, callId);
+  if (call) call.consultPolledAtMs = nowMs;
+}
+
+// AL-P14: der EINE Zustandsschritt der laufenden Rueckfrage, einmal je Turn.
+// HOLD  = Frist laeuft noch und dies ist der erste Turn seither (held wird gesetzt);
+// TIMED_OUT = Frist abgelaufen ODER schon einmal gehalten -> Status timed_out (einmalig,
+//             ein zweiter Aufruf liefert NONE, das ist der Einmal-Riegel des Fallbacks);
+// NONE  = nichts offen. Nebeneffekt im Namen (N7).
+// Betrachtet NUR In-Call-Consults: Consult #0 (Klingelzeit) hat keine Gespraechs-Frist -
+// er wartet ausschliesslich auf den Client und darf nie einen Halte-Satz ausloesen.
+export function advanceInCallConsult(s, callId, { nowMs, timeoutMs }) {
+  const call = getCall(s, callId);
+  const idle = { call: call || null, changed: false, wait: CONSULT_WAIT.NONE };
+  if (!call) return idle;
+  const consult = inCallConsults(call).find((c) => c.status === CONSULT_STATUS.OPEN);
+  if (!consult) return idle;
+  const deadlinePassed = nowMs - Date.parse(consult.askedAt) >= timeoutMs;
+  if (!deadlinePassed && !consult.held) {
+    consult.held = true;
+    return { call, changed: true, wait: CONSULT_WAIT.HOLD };
+  }
+  consult.status = CONSULT_STATUS.TIMED_OUT;
+  return { call, changed: true, wait: CONSULT_WAIT.TIMED_OUT };
 }
 
 // P3.2: konsekutiven Leer-Gather-Turn mitzaehlen und den NEUEN Streak liefern (Nebeneffekt

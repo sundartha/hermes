@@ -3,7 +3,7 @@
 import { createLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
-import { MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
+import { CONSULT_WAIT, MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
 import { bookTokenUsage } from "./llm-usage.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
@@ -11,6 +11,13 @@ import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from 
 import { blockingBudgetAxis } from "./budget-gate.js";
 import { evidenceRetentionEnabled, normalizeCallResult } from "./call-result.js";
 import { budgetedMemoryLines } from "./call-memory.js";
+import { clampAtWordBoundary } from "./utils/text.js";
+import {
+  GET_CONSULT_TOOL_NAME,
+  advanceConsultWait,
+  consultAvailableFor,
+  decideConsultRequest,
+} from "./consult/in-call.js";
 
 // Resilienter LLM-Seam (src/llm.js): EINE Stelle fuer Timeout/
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top, Fachcode ruft nur
@@ -286,10 +293,7 @@ function trimGoalForSpeech(goal) {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/[.!?]+$/, "");
-  if (text.length <= OPENING_GOAL_MAX_CHARS) return text;
-  const cut = text.slice(0, OPENING_GOAL_MAX_CHARS);
-  const lastSpace = cut.lastIndexOf(" ");
-  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[.!?]+$/, "");
+  return clampAtWordBoundary(text, OPENING_GOAL_MAX_CHARS).replace(/[.!?]+$/, "");
 }
 
 // ---------- Tools ----------
@@ -302,7 +306,9 @@ const TAKE_MESSAGE_TOOL_NAME = "take_message";
 // antworten muesste (end_call -> "OK", take_message -> "Nachricht ist notiert."). Genau
 // dann darf der Loop nach diesem Roundtrip enden, sobald bereits Text vorliegt - der
 // zweite llm.complete-Roundtrip war reine Latenz.
-// informationsliefernd = alles NICHT Gelistete (heute keines; kuenftig look_up/get_consult).
+// informationsliefernd = alles NICHT Gelistete. get_consult (AL-P14) gehoert bewusst
+// NICHT in diese Liste: es beendet den Turn selbst und darf den Ausstieg der Runde
+// nicht ueber die Seiteneffekt-Regel steuern.
 // Die Liste ist bewusst eine NAMENS-Liste und kein Feld an den toolDefs-Objekten: die
 // gehen 1:1 an Anthropic (agentTurn) UND an die Realtime-API (bridge.js realtimeTools),
 // ein Zusatzfeld waere dort ein unbekanntes Schema-Feld.
@@ -359,6 +365,35 @@ export function toolDefs(language) {
       },
     },
   ];
+}
+
+// AL-P14: der Notausgang. Die engen Verbote sitzen GENAU HIER an der Tool-Description
+// (Lehre call-quality-chain: breite Prompt-Regeln kippen bei Haiku in Ueberkorrektur).
+// Der Paraphrase-Zwang steht im Prompt UND wird serverseitig durchgesetzt - der Prompt
+// allein ist keine Durchsetzung.
+function getConsultToolDef(language) {
+  const t = localeFor(language).prompt.tools;
+  return {
+    name: GET_CONSULT_TOOL_NAME,
+    description: t.getConsultDescription,
+    input_schema: {
+      type: "object",
+      properties: { question: { type: "string", description: t.getConsultQuestionParam } },
+      required: ["question"],
+    },
+  };
+}
+
+// Werkzeugsatz DIESES Turns. toolDefs bleibt der feste Satz beider Engines (die
+// Realtime-Bridge und agentToolNames lesen weiter dort); nur der Budget-/Shim-Turn
+// bekommt den Notausgang dazu, und nur wenn er in diesem Call auch bedient werden kann.
+// KOSTEN-HINWEIS: der cache_control-Breakpoint sitzt am LETZTEN Tool - taucht das
+// Werkzeug mitten im Call auf oder verschwindet es, faellt der Tool-Block-Cache genau
+// einmal. Bewusst in Kauf genommen; die Alternative waere ein dauerhaft angebotenes
+// Werkzeug ohne Empfaenger.
+function agentTools(call) {
+  if (!consultAvailableFor(call)) return toolDefs(call.language);
+  return [...toolDefs(call.language), getConsultToolDef(call.language)];
 }
 
 // P8: Werkzeugliste des Telefon-Agenten als reine Namensliste, ABGELEITET aus toolDefs()
@@ -589,6 +624,14 @@ export async function agentTurn(call, callerText) {
     store.countCallerTurn(call.id);
   }
 
+  // AL-P14: der EINE Zustandsschritt der laufenden Rueckfrage, VOR jeder Modellrunde und
+  // NACH dem Transkript-Recording (eine Anrufer-Zeile darf nie verloren gehen). HOLD
+  // spricht den deterministischen Halte-Satz statt einer Modellantwort; TIMED_OUT ist
+  // einmalig und traegt den Mandats-Fallback in die Message-Kette.
+  const consultWait = advanceConsultWait(call);
+  const holdSpeech =
+    consultWait === CONSULT_WAIT.HOLD ? localeFor(call.language).consultHoldSpeech : "";
+
   // Verlauf -> Messages (Transkript kompakt halten: letzte 24 Beitraege)
   const history = call.transcript.slice(-24).map((t) => ({
     role: t.role === "agent" ? "assistant" : "user",
@@ -612,6 +655,18 @@ export async function agentTurn(call, callerText) {
           ? tc.openingBootstrap.outbound
           : tc.openingBootstrap.inbound,
     });
+  }
+
+  // AL-P14 (Mandats-Fallback): auf die Rueckfrage kam nichts. Der Hinweis ist
+  // server-eigener, eckig geklammerter Steuertext - dieselbe Klasse wie silentTurn, KEIN
+  // fremder Text (die ANTWORT wandert weiterhin ausschliesslich ueber key_facts in den
+  // HINTERGRUND-Block, Gate 5). Der Block darueber garantiert, dass die letzte Message
+  // ein user-Turn ist; der Marker haengt sich an genau ihn. Er erscheint genau EINMAL -
+  // der Einmal-Riegel ist die Zustandsumschaltung im Store, nicht eine Zaehlung hier.
+  if (consultWait === CONSULT_WAIT.TIMED_OUT) {
+    const tc = localeFor(call.language).prompt.turnControl;
+    const last = history[history.length - 1];
+    last.content = `${last.content}\n${tc.consultTimeout}`;
   }
 
   // T1-Sicherungsboden: siehe shouldSuppressEndCall oben (EINE Quelle,
@@ -647,11 +702,19 @@ export async function agentTurn(call, callerText) {
     });
     if (stopReason) break;
 
+    // AL-P14: laeuft eine Rueckfrage, spricht dieser Turn den deterministischen
+    // Halte-Satz - LLM-FREI, aber NACH dem Geld-Gate der Runde (Regel 1: der Halte-Turn
+    // ueberspringt die Modellrunde, nicht die Pruefung). Bricht immer in Runde 0 ab.
+    if (holdSpeech) {
+      speech = holdSpeech;
+      break;
+    }
+
     const resp = await llm.complete({
       model,
       max_tokens: 300,
       system: [{ type: "text", text: systemPrompt(call), cache_control: CACHE_CONTROL_EPHEMERAL }],
-      tools: toolsWithCacheControl(toolDefs(call.language)),
+      tools: toolsWithCacheControl(agentTools(call)),
       messages,
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
     });
@@ -664,6 +727,17 @@ export async function agentTurn(call, callerText) {
     const toolUses = resp.content.filter((b) => b.type === "tool_use");
     firedTools.push(...toolUses.map((tu) => tu.name)); // L0: Tools dieses Roundtrips
     if (!toolUses.length) break;
+
+    // AL-P14: die Rueckfrage ist das EINZIGE Werkzeug, das den Turn selbst beendet -
+    // deshalb wird sie VOR dem generischen Tool-Mapping ausgewertet. Angenommen: kein
+    // zweiter llm.complete, gesprochen wird der deterministische Ueberbrueckungssatz.
+    // Abgelehnt: ein deterministisches tool_result, das Kontingent bleibt unberuehrt,
+    // der Loop laeuft weiter wie bei jedem informationsliefernden Werkzeug.
+    const consult = decideConsultRequest(call, toolUses);
+    if (consult?.accepted) {
+      speech = consult.speech;
+      break;
+    }
 
     messages = [
       ...messages,
@@ -683,7 +757,15 @@ export async function agentTurn(call, callerText) {
             }
             endCall = true;
           }
-          const result = execTool(call, tu.name, tu.input || {});
+          // get_consult laeuft NIE durch execTool - dort gibt es bewusst keinen Case
+          // (der zweite Riegel: die Realtime-Bridge ruft execTool direkt und bekaeme
+          // sonst ein Werkzeug ausgefuehrt, das sie nicht bedienen kann). consult ist in
+          // diesem Zweig garantiert nicht-null: decideConsultRequest liefert nur dann
+          // null, wenn die Runde ueberhaupt kein get_consult enthaelt.
+          const result =
+            tu.name === GET_CONSULT_TOOL_NAME
+              ? consult.toolResult
+              : execTool(call, tu.name, tu.input || {});
           return { type: "tool_result", tool_use_id: tu.id, content: result };
         }),
       },
