@@ -172,6 +172,10 @@ export const BASE_ENV = {
   // OBS-FLAG neutral AUS, sonst leakt eine lokale .env mit TELNYX_SHIM_DEBUG_SHAPE=true
   // via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
   TELNYX_SHIM_DEBUG_SHAPE: "false",
+  // AL-P2s (SSE-Spike, befristet) neutral AUS, sonst leakt eine lokale .env mit gesetztem
+  // Spike via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
+  TELNYX_SSE_SPIKE_DELAY_MS: "0",
+  TELNYX_SSE_SPIKE_CALLEE: "",
   // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
   // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_API_KEY_REF: "",

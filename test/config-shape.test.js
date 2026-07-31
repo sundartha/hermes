@@ -67,6 +67,11 @@ test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duc
     shimSharedSecret: "",
     shimApiKeyRef: "",
     shimDebugShape: false,
+    // AL-P2s (SSE-Spike, BEFRISTET): beide Keys fallen mit dem Rueckbau der Phase wieder
+    // aus dieser Gruppe. Gegenstand dieses Tests ist das toJSON-Duck-Typing, nicht die
+    // Key-Liste - die Liste ist nur das Beweismaterial dafuer, dass serialisiert WIRD.
+    sseSpikeDelayMs: 0,
+    sseSpikeCallee: "",
   });
 });
 

@@ -83,31 +83,43 @@ inkrementell konsumiert — dafuer muss der Verzoegerungs-Schalter **im laufende
 erreichbaren Shim** stecken. Deployen war dieser Session untersagt, und einen Tunnel auf den
 Entwicklungsrechner deckt die Freigabe nicht.
 
-**Was der Owner tun muss, in dieser Reihenfolge:**
+**Was der Owner tun muss, in dieser Reihenfolge** (Owner-Entscheidung 2026-07-31: die
+Messung laeuft auf dem **Live-Dienst**, Ziel ist die **Mobilnummer des Owners** — er geht ran
+und schweigt. Kein Wegwerf-Dienst (scheiterte am Boot-Guard), kein Tunnel, keine
+Schweige-Route (scheiterte bereits am 2026-07-29)):
 
-1. **Entscheiden, wo der Spike laeuft.** Zwei Wege:
-   - **(a) Wegwerf-Service auf Render** mit dem Spike-Branch — beruehrt den Live-Dienst nicht.
-     Sauberste Variante, kostet einen zusaetzlichen Service.
-   - **(b) Tunnel** (ngrok/cloudflared) auf einen lokal laufenden Shim. Billiger, aber ein
-     lokaler Server mit Live-Zugangsdaten haengt am oeffentlichen Netz.
-2. **Wegwerf-Umgebung anlegen** — Freigabe liegt vor, Bestand ist gemessen:
-   - Absender-DID: `+18643028341` (Tenant `owner`, seit 2026-06-28 ungenutzt)
-   - Ziel-DID (nimmt ab und schweigt): `+15739090177` (seit 2026-07-24 ungenutzt)
-   - **`+17067101188` NICHT anfassen** — das ist die live genutzte Nummer (Outbound 07-27).
-   - **Achtung, die Uebergabe-Notiz stimmt hier nicht:** es gibt **keine** herrenlose Ersatz-DID.
-     Alle drei sind `active` und je die einzige Nummer eines Tenants. Umhaengen nimmt dem
-     Tenant Inbound UND Outbound — **Vorher-Zustand notieren, hinterher per Objekt-GET
-     verifizieren, dass beide wieder auf `Hermes` (`2982643896460248193`) zeigen.**
-   - Wegwerf-Assistant: einer der drei ungenutzten `Blank`-Assistants.
-   - **NIE ueber `scripts/telnyx-assistant-provision.mjs`** — es schreibt die ganze Live-Config
-     aus der lokalen `.env`.
-3. **Spike gefahren, Schalter zurueckgebaut.** Der befristete SSE-Verzoegerungs-Schalter
-   (`af4a66e`) ist mit der Phase KS-AUF ersatzlos aus master entfernt — Code, beide
-   Env-Vars, Boot-Refusal, Banner-Zeile, Log-Kanal und Tests. Die Env-Schluessel
-   `TELNYX_SSE_SPIKE_DELAY_MS`/`_CALLEE` existieren nicht mehr; das Fahr-Protokoll ist
-   damit gegenstandslos. Historie: `tasks/al-p2-report.md`, `tasks/al-p2b-report.md`.
-4. **Offen fuer den Owner (kein Code):** beide DIDs per Objekt-GET zurueck auf Connection
-   `Hermes` (`2982643896460248193`) verifizieren; Env-Aenderungen nach
-   `tasks/al-env-changes.md`; Render-Dienst `hermes-spike-al-p2`
-   (`srv-d9kt9bm1egvs738asd0g`) und Telnyx-App `AL-P2 Spike Silence`
-   (`3014656686179747728`) loeschen.
+1. **Deploy** des AL-P2s-Branches auf den Live-Dienst. Der Schalter ist ohne gesetzte
+   Env-Vars vollstaendig inert — der Deploy allein aendert nichts am Verhalten.
+2. **Scharfschalten** im Render-Dashboard: `TELNYX_SSE_SPIKE_CALLEE=<Mobilnummer des
+   Owners, E.164>` und `TELNYX_SSE_SPIKE_DELAY_MS=8000`. Die Nummer steht **nicht** im
+   Repo (PII); Env-Aenderungen nach `tasks/al-env-changes.md`.
+   - Das Boot-Banner MUSS `SSE-Spike:      AKTIV (8000 ms …)` zeigen. Fehlt die Zeile, wirkt
+     der Schalter nicht. Steht dort `wirkungslos`, fehlt die Zielnummer.
+   - Reihenfolge beachten: `..._DELAY_MS > 0` **ohne** `..._CALLEE` ist im Hosting ein
+     **Boot-Refusal** — beide Werte in einem Zug setzen.
+   - `+17067101188` und der Live-Assistant werden NICHT angefasst;
+     `scripts/telnyx-assistant-provision.mjs` wird NICHT benutzt (es schreibt die ganze
+     Live-Config aus der lokalen `.env`).
+3. **Anruf 1** vom Live-Dienst auf die Owner-Mobilnummer. Der Owner nimmt ab und schweigt.
+   Im Render-Log muss je Turn `[telnyx-shim] sse_spike_delay {"callId":…,"delayMs":8000}`
+   stehen. **Klingelt das Telefon nicht, ist das KEIN Spike-Ergebnis** — die intermittente
+   US-DID → DE-Mobil-Zustellung ist ein bekannter Carrier-Befund, kein Hermes-Bug.
+4. **Urteil:** `node scripts/telnyx-call-latency.mjs --call <call_id> --spike-delay-ms 8000`
+   → `status=incremental` = **GRUEN** (AL-P7 gerechtfertigt), `status=buffered` = **ROT**
+   (AL-P7 entfaellt, AL-P7b nimmt Weg B), `inconclusive`/`no_data` = erneut messen.
+   Die Aufnahme ist der unabhaengige Zweitbeleg.
+5. **Timeout-Leiter:** `TELNYX_SSE_SPIKE_DELAY_MS` = 5000/10000/20000/30000, je ein Anruf.
+   Die niedrigste Sprosse ohne assistant-Message und die hoechste mit Antwort klammern den
+   **Telnyx-Turn-Timeout** — Zahl protokollieren (bisher steht dafuer nur der aus der
+   Twilio-Doku abgeleitete `PROVIDER_WEBHOOK_HARDCUT_MS` in `src/turn-budget.js`,
+   „live UNBESTAETIGT").
+6. **Rueckbau — Phase AL-P2z, Teil der Abnahme, NICHT „Flag auf 0":** beide Env-Werte im
+   Render-Dashboard loeschen, dann Code ersatzlos entfernen (Schalter, beide Env-Keys,
+   `e164Env`, Footgun, Banner-Zeile, Log-Kanal, `sleepMs`, das Spike-Urteil im Messwerkzeug
+   und die AL-P2-Tests). Umfangsvorlage: Abschnitt **KS-AUF** in `tasks/ks-chain-spec.md`
+   — diese Liste ist am 2026-07-30 (`643f8dc`) schon einmal sauber durchgelaufen.
+   Historie der ersten Runde: `tasks/al-p2-report.md`, `tasks/al-p2b-report.md`.
+7. **Altlasten aus der ersten Runde (kein Code, weiter offen):** Render-Dienst
+   `hermes-spike-al-p2` (`srv-d9kt9bm1egvs738asd0g`) und Telnyx-App `AL-P2 Spike Silence`
+   (`3014656686179747728`) loeschen; beide DIDs per Objekt-GET auf Connection `Hermes`
+   (`2982643896460248193`) verifizieren.
