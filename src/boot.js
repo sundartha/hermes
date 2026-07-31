@@ -378,20 +378,9 @@ export function assistantPathLabel(assistantEnabled) {
     : "aus (TELNYX_AI_ASSISTANT_ENABLED=false)";
 }
 
-// AL-P2s: der SSE-Spike-Schalter ist ein BEFRISTETER Diagnose-Eingriff im Antwortpfad. Er
-// erscheint bei jedem Start im Banner, damit kein Deploy ihn unbemerkt weiterfaehrt
-// (Vorbild: Assistant-Pfad-Zeile aus AL-P1). "" = aus -> keine Zeile. Die Zielnummer wird
-// NIE gedruckt (kein PII im Banner, wie bei den Nummern-Gates).
-export function sseSpikeBannerLine({ sseSpikeDelayMs, sseSpikeCallee }) {
-  if (!sseSpikeDelayMs) return "";
-  return sseSpikeCallee
-    ? `SSE-Spike:      AKTIV (${sseSpikeDelayMs} ms, nur fuer die konfigurierte Wegwerf-Nummer) - nach der Messung ersatzlos entfernen`
-    : `SSE-Spike:      wirkungslos (${sseSpikeDelayMs} ms gesetzt, TELNYX_SSE_SPIKE_CALLEE fehlt)`;
-}
-
 // AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den
 // MCP-Host. Ein solcher Schalter darf nicht unbemerkt scharf sein (Muster
-// sseSpikeBannerLine). Aus -> keine Zeile, Banner byte-identisch.
+// assistantPathLabel). Aus -> keine Zeile, Banner byte-identisch.
 export function inCallConsultBannerLine(tenancy) {
   return tenancy.inCallConsultEnabled ? "In-Call-Consult: AKTIV (IN_CALL_CONSULT_ENABLED=true)" : "";
 }
@@ -409,8 +398,6 @@ function logBootBanner(config, port) {
     `  Voice-Engine:   ${config.voice.voiceEngine}${config.voice.voiceEngine === VOICE_ENGINE.REALTIME && !config.voice.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
   );
   console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
-  const sseSpike = sseSpikeBannerLine(config.telnyx.telnyxAssistant);
-  if (sseSpike) console.log(`  ${sseSpike}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
   if (inCallConsult) console.log(`  ${inCallConsult}`);
   console.log(
