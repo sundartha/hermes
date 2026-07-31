@@ -13,8 +13,8 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 |---|---|---|---|---|
 | AL-P1 | `phase/al-p1-latenz-achse` | PASS (0 Fix-Runden, 3350 gruen) | `dd0c0dc` | **gemergt** — 4 Abnahmen in der Checkliste |
 | AL-P2 | — | — | — | offen — **nicht gemessen**, kein Urteil |
-| AL-P2s | `phase/al-p2s-spike-schalter` | PASS (0 Fix-Runden, highStakes, 3611 gruen) | `4305c15` | **gemergt** — Schalter steht wieder, Messung offen |
-| AL-P2z | — | — | — | offen (Rueckbau, erst nach der Messung) |
+| AL-P2s | `phase/al-p2s-spike-schalter` | PASS (0 Fix-Runden, highStakes, 3611 gruen) | `4305c15` | **gemergt** — Schalter gestellt, Messung gefahren |
+| AL-P2z | `phase/al-p2z-spike-entfernen` | PASS (0 Fix-Runden, 3615 gruen) | `96d2526` | **gemergt** — Schalter ersatzlos weg (718 Zeilen), `git grep` leer |
 | AL-P3 | `phase/al-p3-endpointing` | PASS (0 Fix-Runden, 3374 gruen) | `a4cbdd1` | **gemergt** — 3 Abnahmen in der Checkliste |
 | AL-P4 | `phase/al-p4-tool-loop` | PASS (0 Fix-Runden, 3359 gruen) | `1021bc1` | **gemergt** — 2 Abnahmen in der Checkliste |
 | AL-P5 | `phase/al-p5-eroeffnung-fix2` | PASS (2 Fix-Runden, highStakes, 3417 gruen) | `e208bc9` | **gemergt** — Abnahme = Testanruf |
@@ -28,8 +28,8 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P11 | `phase/al-p11-ergebnis-karte` | PASS (0 Fix-Runden, 3457 gruen) | `dd0cc26` | **gemergt** — Zitate erst nach Datenschutzerklaerung |
 | AL-P12 | `phase/al-p12-gedaechtnis` | PASS (0 Fix-Runden, 3475 gruen) | `3d645de` | **gemergt** |
 | AL-P13 | `phase/al-p13-consult-kanal-fix1` | PASS (1 Fix-Runde, highStakes, 3524 gruen) | `a090dbd` | **gemergt** — Bahn B KOMPLETT |
-| AL-P14 | — | — | — | offen |
-| AL-P15 | — | — | — | offen |
+| AL-P14 | `phase/al-p14-get-consult` | PASS (0 Fix-Runden, highStakes, 3636 gruen) | `5903f90` | **gemergt** — Flag AUS, Abnahme in der Checkliste |
+| AL-P15 | — | — | — | offen (haengt an AL-P14-Praxis) |
 
 ## Verlauf
 
@@ -437,4 +437,42 @@ Defekt. Der Wiederholungsanruf 40 s spaeter kam normal durch.
 **Abgeruestet, unmittelbar nach der Messung:** `TELNYX_SSE_SPIKE_DELAY_MS=0`,
 `TELNYX_SSE_SPIKE_CALLEE=""` (Protokoll in `tasks/al-env-changes.md`). Der Schalter ist damit
 inert; **ersatzlos aus dem Code entfernt ihn AL-P2z** — das ist die Zusage der Phase, nicht
-„Flag auf 0".
+„Flag auf 0". **Eingeloest:** `96d2526`, 718 Zeilen entfernt, `git grep` auf
+`sseSpike`/`SSE_SPIKE` in `src/`, `scripts/`, `test/`, `.env.example`, `render.yaml` ist leer.
+
+### 2026-07-31 — Owner-Gegenprobe am Telefon: KEINE Verschlechterung
+
+Der Owner meldete nach den Messanrufen zwei Defekte: falsch gesprochene Umlaute und ein
+Abbrechen mitten im Satz. **Beide Meldungen waren berechtigt, keiner war ein Regress.**
+
+1. **Das Abbrechen war das Messgeraet selbst** — der Schalter hielt jeden Chunk nach dem ersten
+   8 bzw. 30 s zurueck. Genau diese Wahrnehmung ist der zweite Beleg fuer `incremental`.
+2. **Die falschen Umlaute kamen aus dem uebergebenen Auftragstext, nicht aus dem System.** Der
+   `objective` von `place_call` wird dem Angerufenen **woertlich vorgelesen**; er war in der
+   Kommentar-Konvention des Repos geschrieben („moechte pruefen … ohne Verzoegerung … hoer
+   einfach zu"). `src/i18n/locales.js:9` schreibt fuer **gesprochene** Strings ausdruecklich
+   korrekte Umlaute vor, `shapeForSpeech` fasst sie nicht an. **Lehre: die ASCII-Konvention gilt
+   fuer Quelltext, nicht fuer Nutzdaten, die gesprochen werden.**
+3. **Gegenprobe gefahren** (`call_ms8u3j5xivkz`, 72 s, Auftrag in korrektem Deutsch, Schalter
+   aus): der Owner testete gezielt mit dem Wort „Tuete" und urteilte **„schon besser, ist gut"**;
+   Gesamteindruck „auf dem gleichen Stand wie vorher". Damit ist die Regressionsfrage beantwortet.
+
+**Zwei echte Befunde aus derselben Gegenprobe, beide NICHT von dieser Kette verursacht:**
+- **STT-Kauderwelsch (R2)** trat erneut auf: eine Aeusserung des Owners kam zweimal identisch
+  falsch transkribiert an, der Agent fragte daraufhin am Thema vorbei.
+- **Der Einsatz der Eroeffnung klingt abgehackt.** Sie laeuft ueber vorab synthetisiertes
+  ElevenLabs-Audio (`opening_voice=elevenlabs`), also einen anderen Weg als das restliche
+  Gespraech. Braucht eine Aufnahme, keine Vermutung.
+- **Der Owner fragte im Gespraech nach einer Web-Recherche** („welche Filme laufen im Kino") und
+  bekam „ich habe keinen Internetzugriff". Das ist exakt **AL-P10b**. Zur Einordnung: die bereits
+  gebaute Recherche (AL-P10) laeuft **vor** dem Waehlen und haette die Frage auch eingeschaltet
+  nicht beantwortet.
+
+**Drei Fehl-/Teilanrufe, damit die Statistik ehrlich bleibt:** von 5 Waehlversuchen erreichten 3
+den Owner. Einer klingelte 31 s ohne Annahme; einer wurde nach exakt 30 s **vom Netz** angenommen
+(Mailbox/Ansage — der Owner bestaetigte, dass es bei ihm nicht geklingelt hat), woraufhin der
+Agent 7 s ins Leere sprach. **Lehre fuer den Lead: `call.answered` ist ein Protokoll-Ereignis,
+kein Mensch.** Diese Session hat daraus einmal faelschlich „der Owner hat abgenommen und
+aufgelegt" gefolgert. Belegen laesst sich die Mailbox-These derzeit nicht — die Telnyx-
+`detail_records` sind fuer diese Anrufe noch leer. Passend zum bekannten Befund
+**US-DID -> DE-Mobil ist intermittent**.
