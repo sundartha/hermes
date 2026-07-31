@@ -571,6 +571,43 @@ Boot-Guard), kein Tunnel, keine Schweige-Route (scheiterte bereits).
   Kommentar). Das gehoert in `README.md` **und** `PLAN-SECURITY.md`.
 - Flag `LOOKUP_ENABLED` bleibt **AUS**. **Abnahme = Testanruf + Key** -> Checkliste.
 
+### AL-P10b-fix — Den einen stehengebliebenen Review-Blocker von AL-P10b beheben
+
+**Basis ist NICHT `master`, sondern `phase/al-p10b-lookup-fix2`.** AL-P10b lief am 2026-07-31 mit
+Gate **BLOCKED** aus: zwei Fix-Runden waren verbraucht, ein Befund blieb stehen. Nur dieser
+Befund wird behoben — **kein weiterer Scope, keine Nachbesserung an bereits abgenommenen
+Teilen.**
+
+**Der Befund (vom Safety-Review empirisch gemessen, nicht gelesen):** Der **Realtime-Pfad**
+erhaelt die GRENZEN-Prompt-Zeile „kann nachschlagen", **ohne** dass ihm das Werkzeug angeboten
+wird.
+
+- `src/claude.js` `promptInputs()` setzt `lookupAvailable: lookupAvailableFor(call)`;
+  `boundaryRules()` rendert daraus `b.lookupAllowed`.
+- `systemPrompt()` ist geteilt: `src/bridge.js` baut `instructions(call)` daraus, waehrend der
+  Realtime-Werkzeugsatz aus `realtimeTools(language) = toolDefs(language)` kommt — und `toolDefs`
+  traegt `look_up` **bewusst nie** (Entscheidung E1 der Phase).
+- Messung mit `LOOKUP_ENABLED=true`, `ASSISTANT_CONTEXT_ENABLED=true`, gesetztem Key, aktivem
+  Outbound-Call, `VOICE_ENGINE=realtime`: „Prompt sagt kann nachschlagen: **true**",
+  „toolDefs: **end_call,take_message**".
+
+**Warum das zaehlt, obwohl es live nicht ausloesbar ist** (`VOICE_ENGINE=budget`, Flag aus): es
+ist genau die Faehigkeits-Unehrlichkeit, die der `boundaryRules`-Block laut seinem eigenen
+Kopfkommentar schliesst, und genau der geteilte Aufrufer, den CLAUDE.md unter „Vor Edits"
+benennt. Der Kommentar an `promptInputs` behauptet ausdruecklich das Gegenteil („dieselbe Frage
+entscheidet ueber den Werkzeugsatz UND ueber die GRENZEN-Zeile") — fuer `bridge.js` stimmt das
+nicht. **Schweigend stehen lassen ist keine Option.**
+
+**Auftrag:**
+1. Die GRENZEN-Zeile an das **tatsaechlich in diesem Zug angebotene** Werkzeug binden — bzw.
+   `lookupAvailable` fuer den Realtime-Pfad **fail-closed auf false**. Die kleinere, ehrlichere
+   Loesung gewinnt; die Wahl wird im Kommentar begruendet.
+2. **Regressionstest**, der pinnt: der Realtime-Prompt enthaelt **nie** `lookupAllowed`, solange
+   `realtimeTools` kein `look_up` traegt. Mutationsprobe: die Eigenschaft absichtlich
+   kaputtmachen und pruefen, dass der Test rot wird.
+3. Den irrefuehrenden Kommentar an `promptInputs` korrigieren.
+4. `npm test` gruen. Keine Katalog-ID am Testnamen-Anfang.
+
 ### AL-P11 — Ergebnis-Karte statt Prosa
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 11`.
