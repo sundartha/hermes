@@ -324,6 +324,15 @@ export function makePgStore(runner) {
     },
     pendingConsult: (callId, afterEventId) =>
       ops.pendingConsult(requireState(), callId, afterEventId),
+    // AL-P14: Zustandsschritt der Wartezeit - saved wie answerConsult (der Status liegt in
+    // der consults-Spalte). noteConsultPoll saved NICHT: ephemer, es gibt keine Spalte
+    // (Muster countNoSpeechTurn / releaseOutboundReserve).
+    advanceInCallConsult(callId, input) {
+      const { changed, wait } = ops.advanceInCallConsult(requireState(), callId, input);
+      if (changed) save();
+      return wait;
+    },
+    noteConsultPoll: (callId) => ops.noteConsultPoll(requireState(), callId),
     // P3.2: ephemerer No-Speech-Streak - Wrapper-Paritaet zu json.js. KEIN save(): es gibt
     // keine Spalte (Muster releaseOutboundReserve), der Flush-Spaltenblock bleibt unberuehrt.
     countNoSpeechTurn: (callId) => ops.countNoSpeechTurn(requireState(), callId),

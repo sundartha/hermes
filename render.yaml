@@ -310,6 +310,11 @@ services:
       # Consult-Routen, keine await_call_event/answer_consult-Tools.
       - key: CONSULT_ENABLED
         value: "false"
+      # ---- Rueckfrage IM Gespraech (AL-P14) ---- Default AUS (fail-closed): kein
+      # get_consult im Tool-Satz, kein In-Call-Consult. Erst nach Nennung in der
+      # Datenschutzerklaerung anschalten.
+      - key: IN_CALL_CONSULT_ENABLED
+        value: "false"
       # Plattform-BEOBACHTUNG, kein Gate: seit KS-P9/E10 sperrt die Plattform-Achse nichts
       # mehr - dieser Wert ist die Bezugsgroesse von PLATFORM_SPEND_WARN_PERCENT (und der
       # Pro-Tenant-Fallback bei DEFAULT_TENANT_BUDGET_CENTS=0). Die sperrende Kosten-Achse

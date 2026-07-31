@@ -127,6 +127,20 @@ At the end, say goodbye in one sentence and then call end_call.`,
       "Do NOT use this for something your task lets you decide yourself - " +
       "commit to that directly instead of passing it on.",
     takeMessageParam: "The message",
+    // AL-P14: s. DE - die engen Verbote sitzen an der Tool-Description, der
+    // Paraphrase-Zwang wird zusaetzlich serverseitig durchgesetzt.
+    getConsultDescription:
+      "Asks your principal ONE short factual question and gets their decision. " +
+      "Use this ONLY when your TASK and your LATITUDE do not cover the question and the " +
+      "answer decides the conversation right now. " +
+      "Put the question in YOUR OWN words, as a plain factual question. " +
+      "NEVER quote verbatim what the other person said, and do not mention names, " +
+      "numbers or details that the decision does not need. " +
+      "An answer is NOT guaranteed: if none arrives, decide within your mandate " +
+      "or record the request as a message. " +
+      "If your task covers the question, decide yourself and do NOT call this tool. " +
+      "At most ONCE per conversation.",
+    getConsultQuestionParam: "The factual question, in your own words, without any verbatim quote",
   },
 
   summaryInput: {
@@ -146,6 +160,13 @@ At the end, say goodbye in one sentence and then call end_call.`,
     endCallWait: "The other person hasn't said anything yet. Don't hang up - wait for their reply.",
     takeMessageResult: "Message noted.",
     unknownTool: "Unknown tool.",
+    // AL-P14: s. DE.
+    consultDeclined:
+      "A follow-up question is not possible right now. Decide within your mandate or " +
+      "record the request via take_message.",
+    consultTimeout:
+      "[No answer came back to your question. Decide within your mandate or record the " +
+      "request as a message.]",
   },
 
   realtimeSpeechStyle: "SPEAKING STYLE: natural, brisk, short sentences.",

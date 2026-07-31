@@ -303,6 +303,18 @@ export const CONSULT_STATUS = Object.freeze({
   OPEN: "open",
   ANSWERED: "answered",
   EXPIRED: "expired",
+  // AL-P14: die Wartezeit EINES In-Call-Consults ist abgelaufen. Bewusst NICHT
+  // "expired" (das heisst "der Call ist terminal"): nur so bleibt im Export und im
+  // Log unterscheidbar, ob niemand geantwortet hat oder der Anruf endete.
+  TIMED_OUT: "timed_out",
+});
+
+// AL-P14: Ergebnis EINES Zustandsschritts der Consult-Wartezeit - maschinenlesbar,
+// damit agentTurn nicht auf Statuszeichenketten vergleicht (Muster CONSULT_ANSWER).
+export const CONSULT_WAIT = Object.freeze({
+  NONE: "none",
+  HOLD: "hold",
+  TIMED_OUT: "timed_out",
 });
 
 // AL-P13: Ergebnis von answerConsult - maschinenlesbar, damit die Route den HTTP-Status

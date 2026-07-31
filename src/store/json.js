@@ -492,6 +492,19 @@ export function pendingConsult(callId, afterEventId) {
   return ops.pendingConsult(load(), callId, afterEventId);
 }
 
+// AL-P14: Zustandsschritt der Wartezeit - saved wie answerConsult (der Status liegt in
+// der consults-Spalte). noteConsultPoll saved NICHT: ephemer, es gibt keine Spalte
+// (Muster countNoSpeechTurn / releaseOutboundReserve).
+export function advanceInCallConsult(callId, input) {
+  const { changed, wait } = ops.advanceInCallConsult(load(), callId, input);
+  if (changed) save();
+  return wait;
+}
+
+export function noteConsultPoll(callId) {
+  ops.noteConsultPoll(load(), callId);
+}
+
 // P3.2: ephemerer No-Speech-Streak - KEIN save() (das Feld ist wie reserveCents nicht
 // persistenz-tragend; ein Flush aus anderem Anlass nimmt es folgenlos mit).
 export function countNoSpeechTurn(callId) {

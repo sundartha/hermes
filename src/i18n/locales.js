@@ -194,6 +194,13 @@ export const LOCALES = Object.freeze({
       inbound: "Alles klar, vielen Dank für Ihren Anruf. Auf Wiederhören!",
       outbound: "Alles klar, vielen Dank für Ihre Zeit. Auf Wiederhören!",
     },
+    // AL-P14: deterministischer Ueberbrueckungssatz, wenn die Rueckfrage rausgeht. LLM-FREI
+    // (er muss auch kommen, wenn das Modell klemmt) und bewusst als Frage formuliert: der
+    // Folge-Turn entsteht nur, wenn der Angerufene etwas sagt. Enthaelt bewusst KEIN " - "
+    // (shapeForSpeech wuerde es zu Komma normalisieren und den Wortlaut brechen).
+    consultFillerSpeech: "Einen kleinen Moment, ich prüfe das kurz. Sind Sie noch dran?",
+    // AL-P14: hoechstens EIN Halte-Satz je Rueckfrage (danach greift der Mandats-Fallback).
+    consultHoldSpeech: "Einen Moment noch, bitte. Ich bin gleich für Sie da.",
     // P11: Modell-Text (Systemprompt-Geruest, Tool-Beschreibungen, Steuer-Marker) - s.
     // i18n/prompts/. Wird nie gesprochen. bridge.js-Suffix liegt in prompt.realtimeSpeechStyle
     // (nicht hier doppelt).
@@ -270,6 +277,9 @@ export const LOCALES = Object.freeze({
       inbound: "Très bien, merci pour votre appel. Au revoir !",
       outbound: "Très bien, merci pour votre temps. Au revoir !",
     },
+    // AL-P14: Ueberbrueckungs-/Halte-Satz, s. DE (kuratiert, R8).
+    consultFillerSpeech: "Un petit instant, je vérifie cela. Vous êtes toujours là ?",
+    consultHoldSpeech: "Encore un instant, s'il vous plaît. Je reviens tout de suite.",
     prompt: PROMPT_FR,
     postCall: Object.freeze({
       cancelledTitle: "Appel annulé",
@@ -339,6 +349,9 @@ export const LOCALES = Object.freeze({
       inbound: "Alright, thank you for calling. Goodbye!",
       outbound: "Alright, thank you for your time. Goodbye!",
     },
+    // AL-P14: Ueberbrueckungs-/Halte-Satz, s. DE (kuratiert, R8).
+    consultFillerSpeech: "One moment, I'm just checking that. Are you still there?",
+    consultHoldSpeech: "Just one more moment, please. I'll be right with you.",
     prompt: PROMPT_EN,
     postCall: Object.freeze({
       cancelledTitle: "Call cancelled",

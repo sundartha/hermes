@@ -9,8 +9,7 @@
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
 import { callStartAnchorMs, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
-
-const MS_PER_MINUTE = 60 * 1000;
+import { MS_PER_MINUTE } from "../utils/timer.js";
 
 // Abgerechnete Voice-Minuten EINES Calls (ceil ab answeredAt bis endedAt, Provider-
 // Minutentakt). Nie beantwortet -> 0. EINE Minuten-Quelle (G5) fuer Stripe-Voice-Meter,

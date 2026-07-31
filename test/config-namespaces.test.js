@@ -52,7 +52,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   telephony: 9,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
   // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
-  tenancy: 7,
+  // AL-P14: inCallConsultEnabled ergaenzt (Rueckfrage IM Gespraech, Default aus) -> 8.
+  tenancy: 8,
   // P1 (i18n-Fix): deployedCommit ergaenzt (Deploy-Commit fuer /healthz + Boot-Banner) -> 8.
   server: 8,
   store: 3,
@@ -64,9 +65,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // im Pre-Call-Briefing, src/research/) - eigene Namespace-Zeile.
   research: 3,
 };
-const EXPECTED_TOTAL_KEYS = 132;
+const EXPECTED_TOTAL_KEYS = 133;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (132 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (133 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -151,7 +152,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // AL-P11: evidenceRetentionDays ist primitiv (Zahl, kein Array/nested Objekt) -> 124.
   // AL-P13: consultEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 125.
   // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 124.
-  assert.equal(checked, 123, "alle primitiven Blaetter (132 - 4 Arrays - 5 nested Objekte) geprueft");
+  // AL-P14: inCallConsultEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 124.
+  assert.equal(checked, 124, "alle primitiven Blaetter (133 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

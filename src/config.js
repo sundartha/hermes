@@ -914,6 +914,17 @@ const rawConfig = {
   // ASSISTANT_CONTEXT_ENABLED und dem Per-Tenant-Recht allowConsult (src/consult/gate.js) -
   // dieselbe Kopplung wie precallBriefingEnabled.
   consultEnabled: boolEnv("CONSULT_ENABLED", process.env.CONSULT_ENABLED, { fallback: false }),
+  // AL-P14: get_consult IM Gespraech. EIGENES Flag neben CONSULT_ENABLED, weil sich die
+  // Datenschutz-Exposition unterscheidet: AL-P13 exportiert Fragen aus dem AUFTRAG des
+  // Nutzers, AL-P14 erstmals eine Frage aus fremder Rede (der Angerufene hat nie
+  // eingewilligt). DEFAULT AUS (fail-closed): das Werkzeug steht nicht im tools-Array,
+  // kein In-Call-Consult entsteht, der Prompt und der Tool-Satz sind byte-identisch.
+  // Wirkt NUR als Schnittmenge mit CONSULT_ENABLED, ASSISTANT_CONTEXT_ENABLED und dem
+  // Per-Tenant-Recht allowConsult. Anschalten erst, wenn die Datenschutzerklaerung die
+  // Weitergabe von Inhalten aus dem laufenden Gespraech an den MCP-Host nennt (O5-Muster).
+  inCallConsultEnabled: boolEnv("IN_CALL_CONSULT_ENABLED", process.env.IN_CALL_CONSULT_ENABLED, {
+    fallback: false,
+  }),
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
   // Routen sind nicht erreichbar (404), die getrennte Seite bleibt hinter Basic-Auth
@@ -1284,7 +1295,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap"],
   telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge", "machineDetection"],
-  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled"],
+  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],

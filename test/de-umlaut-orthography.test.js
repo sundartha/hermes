@@ -36,6 +36,10 @@ const SPOKEN_DE_FIELDS = [
   ["S11 capFarewellSpeech", LOCALES.de.capFarewellSpeech],
   // GAP-14: der Inbound-Pflichtsatz ist ein deterministisch GESPROCHENER DE-String.
   ["S12 inboundNotice", LOCALES.de.inboundNotice],
+  // AL-P14: Ueberbrueckungs- und Halte-Satz der Rueckfrage im Gespraech - beide werden
+  // deterministisch GESPROCHEN (LLM-frei), gehoeren also in dieselbe Klasse wie S1-S12.
+  ["S13 consultFillerSpeech", LOCALES.de.consultFillerSpeech],
+  ["S14 consultHoldSpeech", LOCALES.de.consultHoldSpeech],
 ];
 
 test("P1-U1: gesprochene DE-Strings (S1-S7) tragen keine ASCII-Transliteration mehr", () => {

@@ -124,6 +124,20 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
       "Ne l'utilise PAS pour quelque chose que ta mission te laisse décider toi-même - " +
       "engage-toi directement sur ce point plutôt que de le transmettre.",
     takeMessageParam: "Le message",
+    // AL-P14: s. DE - die engen Verbote sitzen an der Tool-Description, der
+    // Paraphrase-Zwang wird zusaetzlich serverseitig durchgesetzt (kuratiert, R8).
+    getConsultDescription:
+      "Pose UNE brève question factuelle à ton donneur d'ordre et recueille sa décision. " +
+      "Ne l'utilise QUE si ta MISSION et ta MARGE ne couvrent pas la question et que la " +
+      "réponse décide de la conversation maintenant. " +
+      "Formule la question avec TES PROPRES mots, comme une simple question factuelle. " +
+      "Ne cite JAMAIS mot pour mot ce que ton interlocuteur a dit, et ne mentionne ni noms, " +
+      "ni chiffres, ni détails dont la décision n'a pas besoin. " +
+      "Une réponse n'est PAS garantie : s'il n'en vient aucune, décide dans le cadre de ton " +
+      "mandat ou consigne la demande comme un message. " +
+      "Si ta mission couvre la question, décide toi-même et n'appelle PAS cet outil. " +
+      "UNE FOIS au maximum par conversation.",
+    getConsultQuestionParam: "La question factuelle, avec tes propres mots, sans citation mot pour mot",
   },
 
   summaryInput: {
@@ -143,6 +157,13 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
     endCallWait: "La personne appelée n'a encore rien dit. Ne raccroche pas - attends sa réponse.",
     takeMessageResult: "Message noté.",
     unknownTool: "Outil inconnu.",
+    // AL-P14: s. DE.
+    consultDeclined:
+      "Une question de clarification n'est pas possible maintenant. Décide dans le cadre de " +
+      "ton mandat ou consigne la demande via take_message.",
+    consultTimeout:
+      "[Aucune réponse n'est venue à ta question. Décide dans le cadre de ton mandat ou " +
+      "consigne la demande comme un message.]",
   },
 
   realtimeSpeechStyle: "STYLE ORAL : naturel, dynamique, phrases courtes.",

@@ -113,6 +113,10 @@ export const {
   answerConsult,
   expireOpenConsults,
   pendingConsult,
+  // AL-P14: In-Call-Rueckfrage. OHNE diese Re-Exports waeren sie auf der Fassade
+  // undefined -> agentTurn bzw. die Poll-Route wuerfen zur Laufzeit einen TypeError.
+  advanceInCallConsult,
+  noteConsultPoll,
   // P3.2: No-Speech-Staffel-Zaehler (ephemer). OHNE diese Re-Exports waeren sie auf der
   // Fassade undefined -> /voice/turn wuerfe zur Laufzeit einen TypeError.
   countNoSpeechTurn,
