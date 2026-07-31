@@ -19,8 +19,8 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P4 | `phase/al-p4-tool-loop` | PASS (0 Fix-Runden, 3359 gruen) | `1021bc1` | **gemergt** — 2 Abnahmen in der Checkliste |
 | AL-P5 | `phase/al-p5-eroeffnung-fix2` | PASS (2 Fix-Runden, highStakes, 3417 gruen) | `e208bc9` | **gemergt** — Abnahme = Testanruf |
 | AL-P6 | `phase/al-p6-turn-budget` | PASS (0 Fix-Runden, highStakes, 3385 gruen) | `f16c00a` | **gemergt** |
-| AL-P7 | — | — | — | offen (haengt an AL-P2) |
-| AL-P7b | — | — | — | offen |
+| AL-P7 | `phase/al-p7-token-streaming` | PASS (0 Fix-Runden, highStakes, 3649 gruen) | `591e21f` | **gemergt** — `TELNYX_SHIM_TOKEN_STREAMING` Default AUS |
+| AL-P7b | — | — | — | offen (Weg A, gemessen entschieden) |
 | AL-P8 | `phase/al-p8-bench-fix1` | PASS (1 Fix-Runde, 3412 gruen) | `61d7563` | **gemergt** — 2 Abnahmen (kosten Geld) |
 | AL-P9 | `phase/al-p9-briefing-impl` (NICHT der gemeldete) | PASS (0 Fix-Runden, 3426 gruen) | `479721e` | **gemergt** — Flag bleibt AUS |
 | AL-P10 | `phase/al-p10-precall-research-fix1` | PASS (1 Fix-Runde, 3462 gruen) | `21a1f9c` | **gemergt** — Flag bleibt AUS |
