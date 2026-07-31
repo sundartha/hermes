@@ -12,7 +12,9 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | Phase | Branch (zurueckgegeben) | Gate | Merge-Commit | Stand |
 |---|---|---|---|---|
 | AL-P1 | `phase/al-p1-latenz-achse` | PASS (0 Fix-Runden, 3350 gruen) | `dd0c0dc` | **gemergt** — 4 Abnahmen in der Checkliste |
-| AL-P2 | — | — | — | offen |
+| AL-P2 | — | — | — | offen — **nicht gemessen**, kein Urteil |
+| AL-P2s | `phase/al-p2s-spike-schalter` | PASS (0 Fix-Runden, highStakes, 3611 gruen) | `4305c15` | **gemergt** — Schalter steht wieder, Messung offen |
+| AL-P2z | — | — | — | offen (Rueckbau, erst nach der Messung) |
 | AL-P3 | `phase/al-p3-endpointing` | PASS (0 Fix-Runden, 3374 gruen) | `a4cbdd1` | **gemergt** — 3 Abnahmen in der Checkliste |
 | AL-P4 | `phase/al-p4-tool-loop` | PASS (0 Fix-Runden, 3359 gruen) | `1021bc1` | **gemergt** — 2 Abnahmen in der Checkliste |
 | AL-P5 | `phase/al-p5-eroeffnung-fix2` | PASS (2 Fix-Runden, highStakes, 3417 gruen) | `e208bc9` | **gemergt** — Abnahme = Testanruf |
@@ -321,3 +323,51 @@ Der Owner hat den Deploy freigegeben; die Sperre aus dem Kickoff faellt damit.
   `AL-P2 Spike Silence (WEGWERF)` (`3014656686179747728`). Beide kostenlos und ungefaehrlich,
   aber ueberfluessig, sobald der Spike anders geloest wird.
 - **Uebergabe geschrieben:** `tasks/al-handover-2026-07-29.md`.
+
+### 2026-07-31 — Wiederaufnahme nach der KS-Kette
+
+Zwischen dem 29.07. und heute lief die **KS-Kette** (Kosten-Steuerung, `PLAN-KOSTEN-STEUERUNG.md`)
+und ist seit `d6167bf` live. Sie hat zwei der drei Punkte erledigt, die die Uebergabe der
+AL-Kette voranstellte:
+
+1. **Der vermutete Budget-Gate-Defekt ist behandelt** (KS-P4: Ablehnungstexte und Reserve lesen
+   dieselbe Achse wie das Gate; KS-P2/P3/P5a am selben Pfad).
+2. **Der Spike-Schalter war ersatzlos aus master** (KS-AUF, `643f8dc`).
+
+**Richtigstellung, die diese Session gemessen hat:** `tasks/ks-chain-spec.md` behauptet im
+Abschnitt KS-AUF „Der AL-P2-Spike ist gemessen und abgeschlossen". **Das stimmt nicht.** Es gibt
+kein Urteil — weder `incremental` noch `buffered`; der Messversuch vom 29.07. scheiterte daran,
+dass die Schweige-Route den Anruf nie annahm. Belegt an: kein Verdikt in irgendeinem Report, kein
+Commit zwischen dem 29.07. und heute, der eine Messung dokumentiert, und
+`tasks/al-testcall-checklist.md` fuehrt AL-P2 weiterhin als **BLOCKER Nr. 1**.
+Wer das uebernommen haette, haette AL-P7 (5-9 Tage) auf einer erfundenen Tatsache gebaut.
+
+- **Ausgangslage gemessen statt angenommen:** live `/healthz` = `d6167bf`, lokal `master`
+  = `64f89dc` (zwei reine Doku-Commits darauf) — Code-Stand identisch. Baseline `npm test`
+  **3611/3611 gruen**, `not ok` = 0.
+- **Abhaengigkeiten am Plan nachgeprueft, nicht aus der Uebergabe uebernommen:** AL-P7, P7b und
+  P10b haengen hart an AL-P2; P15 haengt an P14 plus einer Live-Messung. **AL-P14 haengt NICHT an
+  AL-P2** — der Plan nennt als Vorbedingungen Phase 13, 6 und 4, alle drei gemergt und live. Die
+  Uebergabe fuehrte P14 pauschal als „blockiert"; das war zu grob. Einzige echte Beruehrung: der
+  Plan will `consultTimeoutMs` „deutlich unter dem in Phase 2 gemessenen Telnyx-Timeout" — diese
+  Zahl existiert nicht, also wird konservativ gegen den (fuer den Shim-Pfad unbestaetigten)
+  `PROVIDER_WEBHOOK_HARDCUT_MS = 15000` hergeleitet und als unbestaetigt gekennzeichnet.
+- **Owner-Entscheidungen 2026-07-31:**
+  1. **AL-P2 wird live gemessen, der Owner geht selbst ans Telefon** (kein Wegwerf-Dienst — der
+     scheiterte am Boot-Guard; kein Tunnel; keine Schweige-Route — die scheiterte bereits).
+  2. **AL-P14: die Consult-Frage ist eine Paraphrase, keine woertlichen Zitate des Angerufenen**,
+     serverseitig laengenbegrenzt und durchgesetzt, als Test gepinnt. Damit ist die
+     Datenschutz-Grenze beantwortet, die AL-P13 ausdruecklich **vor** dieser Phase verlangt hat.
+- **Neue bindende Regel 12 in der Kette: der Plan ist AELTER als der Code.** Die KS-Kette hat
+  `src/telnyx-llm-shim.js` (Live-Budget-Term KS-P2, Re-Attach-Pfad KS-P1b), den Tarif-Fallback
+  (300 -> 30 ct/min), `MAX_CALL_DURATION_S` (wird nicht mehr gelesen), die Plattform-Achse (seit
+  KS-P9 keine Sperre) und die Ablehnungstexte umgebaut. Jede Plan-Zahl wird am echten Code
+  nachgeprueft; bei Widerspruch gilt der Code. Ausserdem Regel 0 auf die korrigierte KS-Fassung
+  gebracht („Basis herstellen, DANN lesen") — die alte Formulierung hat in der KS-Kette eine
+  Fix-Runde an einem Nicht-Befund verbrannt.
+- **AL-P2s gemergt (`4305c15`), PASS ohne Fix-Runde**, Verifikationslauf auf dem gemergten master
+  **3631/3631 gruen**. Der Impl-Agent hat die 12 konfliktfreien Dateien der Vorlage `af4a66e`
+  mechanisch restauriert und die 3 driftenden Dateien (Shim, Shim-Harness, Checkliste) von Hand
+  nachgezogen — genau die Trennung, die KS-AUF vorhergesagt hatte.
+  **Der Schalter ist erneut befristet:** AL-P2z entfernt ihn ersatzlos, sobald ein Urteil
+  vorliegt. Umfangsvorlage dafuer ist der Abschnitt KS-AUF in `tasks/ks-chain-spec.md`.
