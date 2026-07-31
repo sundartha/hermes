@@ -47,20 +47,28 @@ export function bridgeSpeechFrom(roundText) {
  * @param {{ onSpeechChunk?: (text: string) => void, enabled: boolean }} deps
  *   onSpeechChunk fehlt auf dem Budget-Engine-Pfad (routes/voice.js reicht keinen durch)
  *   -> das Signal ist dort strukturell ein No-op, ganz ohne Flag.
- * @returns {{ speakBridge(roundText: string): boolean, spoken(): boolean }}
+ * @returns {{ speakBridge(roundText: string): string, spoken(): boolean }}
  */
 export function makeThinkingSignal({ onSpeechChunk, enabled }) {
   let spoken = false;
   return {
-    // Nebeneffekt im Namen (N7): schreibt auf die Leitung. true = es wurde gesprochen.
+    // Nebeneffekt im Namen (N7): schreibt auf die Leitung. Rueckgabe ist der TATSAECHLICH
+    // gesprochene Text (kann durch THINKING_SIGNAL_MAX_CHARS gegenueber roundText gekappt
+    // sein) oder "" (nichts gesprochen). Der Aufrufer MUSS diesen Rueckgabewert als neuen
+    // speech-Stand uebernehmen, sonst divergieren Leitung und Transkript (Korrektheits-Fix
+    // Runde 1: vorher gab es nur ein Boolean zurueck, das den vollen roundText faelschlich
+    // als "schon gesprochen" markierte, auch wenn nur die gekappten ersten
+    // THINKING_SIGNAL_MAX_CHARS auf die Leitung gingen).
     // Fail-closed in dieser Reihenfolge: Einmal-Riegel, Flag, Abnehmer, Inhalt.
     speakBridge(roundText) {
-      if (spoken || !enabled || !onSpeechChunk) return false;
+      if (spoken || !enabled || !onSpeechChunk) return "";
       const bridge = bridgeSpeechFrom(roundText);
-      if (!bridge) return false;
+      if (!bridge) return "";
       onSpeechChunk(bridge);
       spoken = true;
-      return true;
+      // Ohne das Trennzeichen zurueckgeben (das gehoert nur dem Stream-Abnehmer, N7 - der
+      // Aufrufer will den GESPROCHENEN SATZ, keine Verkettungs-Deko).
+      return bridge.slice(0, bridge.length - BRIDGE_TAIL_SEPARATOR.length);
     },
     spoken: () => spoken,
   };

@@ -15,22 +15,38 @@ function chunkSpy() {
 test("AL-P7b-1: Flag aus ODER kein Abnehmer -> kein Aufruf, kein spoken()", () => {
   const { onSpeechChunk, chunks } = chunkSpy();
   const off = makeThinkingSignal({ onSpeechChunk, enabled: false });
-  assert.equal(off.speakBridge("Einen Moment."), false);
+  assert.equal(off.speakBridge("Einen Moment."), "");
   assert.deepEqual(chunks, []);
   assert.equal(off.spoken(), false);
 
   const noSink = makeThinkingSignal({ onSpeechChunk: undefined, enabled: true });
-  assert.equal(noSink.speakBridge("Einen Moment."), false);
+  assert.equal(noSink.speakBridge("Einen Moment."), "");
   assert.equal(noSink.spoken(), false);
 });
 
 test("AL-P7b-2: nur EINMAL pro Turn - der zweite Aufruf im selben Turn spricht nicht mehr", () => {
   const { onSpeechChunk, chunks } = chunkSpy();
   const signal = makeThinkingSignal({ onSpeechChunk, enabled: true });
-  assert.equal(signal.speakBridge("Einen Moment, das pruefe ich."), true);
-  assert.equal(signal.speakBridge("Noch ein Satz."), false, "Einmal-Riegel");
+  assert.equal(signal.speakBridge("Einen Moment, das pruefe ich."), "Einen Moment, das pruefe ich.");
+  assert.equal(signal.speakBridge("Noch ein Satz."), "", "Einmal-Riegel");
   assert.equal(chunks.length, 1);
   assert.equal(signal.spoken(), true);
+});
+
+test("AL-P7b-15: Rueckgabe ist der GESPROCHENE Text ohne Trennzeichen - Aufrufer kann ihn direkt als speech uebernehmen", () => {
+  const { onSpeechChunk, chunks } = chunkSpy();
+  const signal = makeThinkingSignal({ onSpeechChunk, enabled: true });
+  const spokenText = signal.speakBridge("Einen Moment, das pruefe ich.");
+  assert.equal(chunks[0], `${spokenText} `, "Chunk = Rueckgabe + Trennzeichen");
+});
+
+test("AL-P7b-16: kappt roundText ueber THINKING_SIGNAL_MAX_CHARS, ist die Rueckgabe die GEKAPPTE Fassung, nie der volle Rundentext", () => {
+  const { onSpeechChunk } = chunkSpy();
+  const signal = makeThinkingSignal({ onSpeechChunk, enabled: true });
+  const langerText = "Wort ".repeat(40).trim(); // deutlich ueber THINKING_SIGNAL_MAX_CHARS
+  const spokenText = signal.speakBridge(langerText);
+  assert.ok(spokenText.length < langerText.length, "gekappt, nicht der volle Rundentext");
+  assert.ok(spokenText.length <= THINKING_SIGNAL_MAX_CHARS + 1, "Kappe haelt (plus Satzendzeichen)");
 });
 
 test("AL-P7b-3: der gesprochene Text ist geshapt und traegt das Trennzeichen am Ende", () => {
@@ -57,7 +73,7 @@ test("AL-P7b-5: leerer/Whitespace-/Nicht-String-Rundentext -> kein Aufruf des Ab
   for (const empty of ["", "   ", null, undefined, 42]) {
     const { onSpeechChunk, chunks } = chunkSpy();
     const signal = makeThinkingSignal({ onSpeechChunk, enabled: true });
-    assert.equal(signal.speakBridge(empty), false, `Eingabe: ${JSON.stringify(empty)}`);
+    assert.equal(signal.speakBridge(empty), "", `Eingabe: ${JSON.stringify(empty)}`);
     assert.deepEqual(chunks, []);
   }
 });

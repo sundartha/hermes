@@ -873,7 +873,15 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     // (das ist die Schwelle: ein weiterlaufender Loop heisst mindestens zwei Roundtrips).
     // Ein angenommenes get_consult ist oben bereits ausgestiegen und spricht seinen EIGENEN
     // Ueberbrueckungssatz - hier entstuende sonst eine doppelte Ueberbrueckung.
-    if (loopContinues && thinkingSignal.speakBridge(speech)) speechStreamed = true;
+    // Korrektheits-Fix Runde 1: speech MUSS auf den tatsaechlich gesprochenen
+    // Brueckentext gezogen werden, nicht auf den vollen (ggf. laengeren) Rundentext -
+    // sonst weicht das Transkript (und die Owner-SMS/Summary) von der Leitung ab, sobald
+    // THINKING_SIGNAL_MAX_CHARS kappt (thinking-signal.js).
+    const bridgeText = loopContinues && thinkingSignal.speakBridge(speech);
+    if (bridgeText) {
+      speech = bridgeText;
+      speechStreamed = true;
+    }
 
     messages = [
       ...messages,

@@ -67,7 +67,7 @@ before(async () => {
   process.env.ASSISTANT_CONTEXT_ENABLED = "true";
   const answeredAt = new Date().toISOString();
   const calls = [];
-  for (let i = 1; i <= 7; i++)
+  for (let i = 1; i <= 8; i++)
     calls.push(seedCall({ id: `call_alp7b_${i}`, direction: "outbound", language: "de", answeredAt }));
   process.env.DATA_DIR = tempDataDir(
     seedState({
@@ -185,6 +185,29 @@ test("AL-P7b-13: liefert die naechste Runde keinen Text, bleibt die Bruecke der 
   assert.equal(chunks.length, 1);
   assert.equal(turn.speech, BRUECKE_TEXT, "der Brueckentext bleibt der einzige Turn-Text");
   assert.equal(turn.speechStreamed, true, "-> der Aufrufer spricht ihn NICHT erneut");
+});
+
+test("AL-P7b-20: Rundentext ueber THINKING_SIGNAL_MAX_CHARS - turn.speech ist die GEKAPPTE Leitungs-Fassung, nie der volle Rundentext (Korrektheits-Fix Runde 1)", async () => {
+  bodies = [];
+  // 167 Zeichen, deutlich ueber THINKING_SIGNAL_MAX_CHARS (120) - ein anderes Fixture als
+  // BRUECKE_TEXT (34 Zeichen), sonst greift die Kappung nie und der Test belegt nichts
+  // (Repo-Lehre "gleiche Fixture-Werte testen nichts").
+  const LANGER_RUNDENTEXT =
+    "Einen Moment, ich schaue direkt im Kalender nach, ob der Termin am Donnerstag " +
+    "um neun Uhr morgens noch frei ist oder ob wir einen anderen Tag zusammen finden muessen.";
+  assert.ok(LANGER_RUNDENTEXT.length > 120, "Testvoraussetzung: Fixture muss ueber der Kappe liegen");
+  queue = [reply(text(LANGER_RUNDENTEXT), toolUse("nachschlagen")), reply()];
+  armConsult("call_alp7b_8");
+  const { turn, chunks } = await bridgedTurn("call_alp7b_8");
+
+  assert.equal(chunks.length, 1);
+  const gesprochenerText = chunks[0].trimEnd();
+  assert.ok(gesprochenerText.length < LANGER_RUNDENTEXT.length, "auf der Leitung steht die gekappte Fassung");
+  assert.equal(turn.speechStreamed, true);
+  // Die Kernaussage des Fixes: turn.speech (Transkript/Summary/SMS) MUSS mit der Leitung
+  // uebereinstimmen - NICHT der volle, nie gesprochene Rundentext.
+  assert.equal(turn.speech, gesprochenerText, "Transkript == tatsaechlich Gesprochenes");
+  assert.notEqual(turn.speech, LANGER_RUNDENTEXT, "der volle Rundentext wurde NIE vollstaendig gesprochen");
 });
 
 test("AL-P7b-14: die Bruecke erzeugt KEINEN zusaetzlichen Modell-Aufruf und KEINE zusaetzliche Buchung", async () => {
