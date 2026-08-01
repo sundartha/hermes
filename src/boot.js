@@ -47,6 +47,9 @@ import { MS_PER_SECOND } from "./utils/timer.js";
 // in der Outbound-Kette das Herkunfts-Gate abschaltet (G5). Kein Zyklus: outbound-gates.js
 // importiert boot.js nicht.
 import { numberOriginDecoupled } from "./telephony/outbound-gates.js";
+// AL-P16: der Aus-Zustand der Ergebnis-Zitate hat bereits eine Quelle - die Sonde
+// wiederholt die Schwelle nicht, sie fragt dieselbe Entscheidung (G5).
+import { evidenceRetentionEnabled } from "./call-result.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -373,9 +376,7 @@ export function budgetAxisLabel(budgetMonthEnabled, axisLabelWhenFlagOff) {
 // Plan eine Messrunde gekostet. Eigene Funktion, damit die Banner-Zeile eine
 // Abstraktionsebene bleibt (G34) und die Bedingung einen Namen hat (G28).
 export function assistantPathLabel(assistantEnabled) {
-  return assistantEnabled
-    ? "AKTIV (TELNYX_AI_ASSISTANT_ENABLED=true)"
-    : "aus (TELNYX_AI_ASSISTANT_ENABLED=false)";
+  return envFlagState("TELNYX_AI_ASSISTANT_ENABLED", assistantEnabled);
 }
 
 // AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den
@@ -402,6 +403,107 @@ export function thinkingSignalBannerLine(voice) {
   return voice.thinkingSignalEnabled ? "Denk-Signal: AKTIV (THINKING_SIGNAL_ENABLED=true)" : "";
 }
 
+// ---- AL-P16: Boot-Sonden fuer die blinden Schalter -------------------------------
+// Am 2026-08-01 waren Faehigkeiten scharf geschaltet, bei denen "gesetzt" nicht dasselbe
+// ist wie "wirkt" - und der Unterschied war am laufenden Dienst nicht ablesbar. Zweimal
+// an einem Tag war der Grund derselbe: das Plattform-Flag stand auf true, das
+// Per-Tenant-Recht auf false.
+//
+// REGEL FUER ALLE SONDEN-ZEILEN: AKTIV/aus meldet AUSSCHLIESSLICH den Plattform-Schalter
+// in der Klammer. Was nach dem Gedankenstrich steht, sind die UEBRIGEN Bedingungen - die
+// Sonde faellt kein Gesamturteil. Das ist Absicht: die Schnittmenge entscheiden die Gates
+// (consult/gate.js, research/registry.js, precall-briefing.js); ein zweites Urteil hier
+// waere eine Kopie davon (G5) und das Per-Tenant-Recht ist zur Bootzeit ohnehin nicht
+// bekannt (es haengt am Tenant, nicht an der Konfiguration).
+//
+// Die Sonden lesen die FERTIG GEPARSTE Konfiguration (Namespaces tenancy/research/
+// privacy), nie process.env - eine Sonde auf der Rohumgebung beweist nichts ueber den
+// Code-Pfad, den der Dienst wirklich faehrt.
+//
+// Anders als Token-Streaming/Denk-Signal/In-Call-Consult verschwinden diese Zeilen im
+// Aus-Zustand NICHT: eine fehlende Zeile waere im Live-Log nicht von einem Deploy ohne
+// die Sonde zu unterscheiden - genau diese Unterscheidung ist der Zweck der Phase.
+
+// EIN Format fuer jeden Schalter-Zustand (G5). value getrennt von active, weil nicht jeder
+// Schalter ein Bool ist (EVIDENCE_RETENTION_DAYS traegt eine Frist).
+function envState(envKey, value, active) {
+  return `${active ? "AKTIV" : "aus"} (${envKey}=${value})`;
+}
+
+// Bool-Schalter: der Wert IST der Zustand.
+function envFlagState(envKey, on) {
+  return envState(envKey, on, on);
+}
+
+function probeLine(label, state, remainingConditions) {
+  return `${label}: ${state} - ${remainingConditions}`;
+}
+
+// Ohne den Kontext-Kanal hat das Briefing keinen Konsumenten (briefingActive()).
+function precallBriefingProbeLine(tenancy) {
+  return probeLine(
+    "Vorab-Briefing",
+    envFlagState("PRECALL_BRIEFING_ENABLED", tenancy.precallBriefingEnabled),
+    `wirkt nur mit ASSISTANT_CONTEXT_ENABLED=${tenancy.assistantContextEnabled}`,
+  );
+}
+
+function researchProbeLine(research) {
+  return probeLine(
+    "Vorab-Recherche",
+    envFlagState("RESEARCH_ENABLED", research.researchEnabled),
+    "wirkt nur mit allowResearch am Tenant",
+  );
+}
+
+// Zweiteilig: Flag UND Anbieter-Schluessel. NIEMALS den Schluessel selbst (Regel 4) -
+// nur, ob er da ist.
+function lookupProbeLine(research) {
+  return probeLine(
+    "In-Call-Nachschlag",
+    envFlagState("LOOKUP_ENABLED", research.lookupEnabled),
+    `EXA_API_KEY ${research.exaApiKey ? "gesetzt" : "fehlt"}, wirkt nur mit allowLookup am Tenant`,
+  );
+}
+
+function consultProbeLine(tenancy) {
+  return probeLine(
+    "Consult-Kanal",
+    envFlagState("CONSULT_ENABLED", tenancy.consultEnabled),
+    `wirkt nur mit ASSISTANT_CONTEXT_ENABLED=${tenancy.assistantContextEnabled} und allowConsult am Tenant`,
+  );
+}
+
+// Kein Bool, sondern eine Frist - die Zahl ist die Aussage. Der Aus-Zustand kommt aus
+// evidenceRetentionEnabled: dieselbe Entscheidung, die auch bestimmt, ob ueberhaupt ein
+// Zitat erhoben wird.
+function evidenceProbeLine(privacy) {
+  const days = privacy.evidenceRetentionDays;
+  const collecting = evidenceRetentionEnabled(privacy);
+  return probeLine(
+    "Ergebnis-Zitate",
+    envState("EVIDENCE_RETENTION_DAYS", days, collecting),
+    collecting ? `Zitate werden erhoben und nach ${days} Tagen geloescht` : "0 = keine Zitate",
+  );
+}
+
+/**
+ * Die AL-P16-Sonden in Banner-Reihenfolge (vor dem Anruf -> im Anruf -> nach dem Anruf).
+ * Rein: Konfiguration rein, Zeilen raus - gedruckt wird ausschliesslich in logBootBanner.
+ *
+ * @param {{ tenancy: object, research: object, privacy: object }} config
+ * @returns {string[]}
+ */
+export function capabilityProbeLines({ tenancy, research, privacy }) {
+  return [
+    precallBriefingProbeLine(tenancy),
+    researchProbeLine(research),
+    lookupProbeLine(research),
+    consultProbeLine(tenancy),
+    evidenceProbeLine(privacy),
+  ];
+}
+
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -421,6 +523,9 @@ function logBootBanner(config, port) {
   if (tokenStreaming) console.log(`  ${tokenStreaming}`);
   const thinkingSignal = thinkingSignalBannerLine(config.voice);
   if (thinkingSignal) console.log(`  ${thinkingSignal}`);
+  // AL-P16: die Sonden stehen unkonditional, auch im Aus-Zustand (s. Kommentar bei
+  // capabilityProbeLines).
+  for (const line of capabilityProbeLines(config)) console.log(`  ${line}`);
   console.log(
     `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
   );
