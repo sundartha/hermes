@@ -102,34 +102,34 @@ Damit die naechste Session keine Zeit an bereits erledigten Fragen verbrennt:
 
 ---
 
-## 3. Die Frage, die VOR der naechsten Phase auf den Tisch gehoert
+## 3. Was der Auftrag IST — und was er nicht ist
 
-Der Owner sagt, ein an **einem Tag** gebauter ElevenLabs-Agent war **zehnmal besser** als das,
-woran hier seit Wochen gearbeitet wird. Das ist kein Prompt-Problem, das ist ein Signal ueber den
-**Stack**.
+**Der Auftrag ist: dieses Telefonat gut machen.** Nichts danebenstellen, nichts vergleichen,
+keinen zweiten Agenten bauen. Der Owner hat das am 2026-08-01 unmissverstaendlich klargestellt,
+nachdem eine frühere Fassung dieser Uebergabe genau das vorgeschlagen hatte. **Diese Zeile geht
+jedem Architektur-Vorschlag vor.**
 
-Heute laeuft: `VOICE_ENGINE=budget` + Telnyx-AI-Assistant + unser Custom-LLM-Shim. Diese
-Konstruktion bringt strukturelle Grenzen mit, die in diesem Repo dokumentiert sind:
-- **kein echtes Barge-in** ausser ueber Streaming (`barge-in-telnyx-texml-limitation`),
-- **STT-Qualitaet nicht in unserer Hand** (D-5),
-- Turn-Taking und Timing weitgehend fremdbestimmt (`conversation-optimization-plan`:
-  „Telnyx-Schalter stehen per DEFAULT gegen uns"),
-- ein eigener Streaming-Stack ist als **Langfrist-Richtung** bereits notiert
-  (`voice-stack-strategy`), braucht aber einen `RealtimeBackend`-Port — `bridge.js` ist heute
-  OpenAI-fest.
+Der Vergleich, den er gezogen hat („ein an einem Tag gebauter Agent klang zehnmal besser"), ist
+eine **Qualitaetsaussage ueber das Ergebnis**, kein Auftrag zu einem Umbau. Er bedeutet: die
+Latte liegt dort, und wir sind darunter.
 
-**Auftrag an die naechste Session:** dem Owner diese Entscheidung **sauber aufbereitet** vorlegen,
-bevor weitere Phasen in den bestehenden Pfad gebaut werden. Nicht ausweichen, nicht schoenreden,
-nicht heimlich weiterbauen. Konkret: was kostet es, den ElevenLabs-Agenten, den er kennt, als
-Referenz nachzustellen und **gegen** unseren Pfad zu messen — an denselben Anrufen, am selben Ohr?
+Die vier Befunde aus Abschnitt 1 sind **alle im bestehenden Stack behebbar** — es sind eine
+Armierungsregel, ein nie feuernder Schwellenwert, ein Prompt am Tool-Entscheidungspunkt und die
+STT-Qualitaet. Nichts davon verlangt einen anderen Voice-Stack.
 
-**Bis diese Frage beantwortet ist, sind die Phasen unten Schadensbegrenzung, keine Strategie.**
+**Erst wenn diese vier behoben sind und das Telefonat sich am Ohr des Owners immer noch schlecht
+anfuehlt**, ist die Stack-Frage ueberhaupt eine Frage. Dann — und nur dann — sind die
+dokumentierten Grenzen relevant: kein echtes Barge-in ausser ueber Streaming
+(`barge-in-telnyx-texml-limitation`), STT nicht in unserer Hand (D-5), Turn-Taking fremdbestimmt
+(`conversation-optimization-plan`). Bis dahin ist das eine Ausrede, keine Analyse.
 
 ---
 
 ## 4. Reihenfolge, wenn weitergebaut wird
 
 Jede Phase liefert eine **Messung**, keine Behauptung. Bench ist `npm run convo-bench` (n >= 5).
+
+**Nicht vorher fragen, sondern bauen.** Punkt 3 dieser Liste ist die einzige Owner-Frage.
 
 1. **D-2 zuerst — warum feuert das Denk-Signal nie?** Es ist die einzige Faehigkeit, die die vom
    Owner gehoerten Pausen **direkt** adressiert, und sie kostet nichts extra (der Fueller ist
