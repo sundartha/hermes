@@ -820,6 +820,14 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
   });
   let roundtrips = 0; // L0: Anzahl llm.complete-Roundtrips dieses Turns
   const firedTools = []; // L0: vom Modell angeforderte Tool-NAMEN dieses Turns (PII-frei)
+  // AL-D1: die zwei Groessen, die am Live-Log die zwei Befunde des ersten Ende-zu-Ende-
+  // Anrufs aufloesen. offeredTools beantwortet "lag das Werkzeug ueberhaupt im Satz" -
+  // firedTools allein kann "Gate hat nie angeboten" nicht von "Modell hat nicht gewaehlt"
+  // trennen. streamArmedRounds beantwortet "wurde der Streaming-Pfad ueberhaupt armiert" -
+  // ohne diese Zahl ist streamChunks=0 zwischen "nie armiert" und "armiert, aber der
+  // Chunker gab nichts aus" mehrdeutig. Beides PII-frei (Namen sind Code-Konstanten).
+  const offeredTools = new Set(); // Union ueber die Runden dieses Turns
+  let streamArmedRounds = 0;
 
   // EINE Modell-ID fuer Anfrage UND Buchung (P7a): das Gate muss exakt das Modell
   // bepreisen, das gefragt wurde.
@@ -851,8 +859,10 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     }
 
     const tools = toolsWithCacheControl(agentTools(call));
+    for (const tool of tools) offeredTools.add(tool.name);
     const elapsedMs = Date.now() - loopStartedAt;
     const sink = streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs });
+    if (sink) streamArmedRounds += 1;
     const params = {
       model,
       max_tokens: TURN_MAX_TOKENS,
@@ -1018,6 +1028,10 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     endCall,
     roundtrips,
     toolNames: firedTools,
+    // AL-D1: ANGEBOTEN (Union ueber die Runden) gegen GEFEUERT (toolNames) - erst der
+    // Unterschied macht das Registrierungs-Gate am Live-Log sichtbar.
+    offeredToolNames: [...offeredTools],
+    streamArmedRounds,
     stopReason,
   };
 }

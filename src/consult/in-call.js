@@ -49,7 +49,11 @@ function callAnswered(call) {
 // Wartet gerade ein Client auf diesem Call? Der Code kennt keinen Herkunfts-Marker
 // "kam aus einem MCP-Client" - der frische Poll ist die staerkere, direkt gemessene
 // Tatsache. Fehlendes Feld (Instanzwechsel, ephemer) -> false, fail-closed.
-function clientIsPolling(call, nowMs) {
+//
+// AL-D1: exportiert, weil dies der EINZIGE Faktor von consultAvailableFor ist, der weder
+// im Boot-Banner noch in der Datenbank steht - er haengt an der Wanduhr. Die Shim-Diagnose
+// liest genau dieses Praedikat (G5: keine zweite, driftende Frischepruefung).
+export function consultClientIsPolling(call, nowMs = Date.now()) {
   return nowMs - (call.consultPolledAtMs || 0) <= CONSULT_POLL_FRESH_MS;
 }
 
@@ -65,7 +69,7 @@ export function consultAvailableFor(call, nowMs = Date.now()) {
     call.direction === "outbound" &&
     call.status === "active" &&
     callAnswered(call) &&
-    clientIsPolling(call, nowMs) &&
+    consultClientIsPolling(call, nowMs) &&
     inCallConsults(call).length < MAX_IN_CALL_CONSULTS_PER_CALL
   );
 }
