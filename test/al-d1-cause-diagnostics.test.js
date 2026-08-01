@@ -24,6 +24,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { text, toolUse, reply, makeJsonMessage, makeWriteSse } from "./anthropic-sse-fixtures.js";
 
 const OWNER = "Jonas Beispiel";
 const SUBSTANTIAL = "Ja, Donnerstag passt gut"; // hebt suppressEndCall auf
@@ -32,74 +33,17 @@ const CONSULT = "get_consult";
 const LOOK_UP = "look_up";
 const END_CALL = "end_call";
 const TAKE_MESSAGE = "take_message";
-const MOCK_USAGE = { input_tokens: 10, output_tokens: 5 };
 
 // Ein Consult #0 entsteht beim WAEHLEN, also vor markAnswered. Der Abstand muss nur
 // echt positiv sein - isInCallConsult vergleicht askedAt >= answeredAt.
 const CONSULT_ZERO_LEAD_MS = 60_000;
 
-// --- Skript-Bausteine: EINE Antwort-Beschreibung, zwei Draht-Formen (JSON + SSE) ---
-const text = (value) => ({ type: "text", text: value });
-const toolUse = (name, input = {}) => ({ type: "tool_use", id: "tu1", name, input });
-const reply = (...blocks) => ({ blocks });
+// --- Skript-Bausteine: text/toolUse/reply + Draht-Rendering (JSON + SSE) aus dem
+// gemeinsamen Test-Rohstoff test/anthropic-sse-fixtures.js. Eigene Nachrichten-ID.
+const jsonMessage = makeJsonMessage("msg_ald1");
+const writeSse = makeWriteSse(jsonMessage);
 
 const UNWANTED_EXTRA_ROUNDTRIP_MARKER = "UNGEWOLLTER-ZUSATZ-ROUNDTRIP";
-
-function jsonMessage(blocks) {
-  return {
-    id: "msg_ald1",
-    type: "message",
-    role: "assistant",
-    model: "claude-haiku-4-5",
-    content: blocks,
-    stop_reason: blocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn",
-    stop_sequence: null,
-    usage: MOCK_USAGE,
-  };
-}
-
-function sseEvent(res, type, data) {
-  res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
-}
-
-// Echtes Anthropic-SSE (Muster al-p7-turn-streaming): message_start -> je Block
-// content_block_start/-delta/-stop -> message_delta -> message_stop. Text kommt in ZWEI
-// Deltas, deren Grenze bewusst NICHT auf einer Satzgrenze liegt.
-function writeSse(res, blocks) {
-  res.setHeader("content-type", "text/event-stream");
-  sseEvent(res, "message_start", {
-    message: { ...jsonMessage([]), content: [], usage: { ...MOCK_USAGE, output_tokens: 1 } },
-  });
-  let index = 0;
-  for (const block of blocks) {
-    if (block.type === "text") {
-      sseEvent(res, "content_block_start", { index, content_block: { type: "text", text: "" } });
-      const half = Math.ceil(block.text.length / 2);
-      sseEvent(res, "content_block_delta", {
-        index,
-        delta: { type: "text_delta", text: block.text.slice(0, half) },
-      });
-      sseEvent(res, "content_block_delta", {
-        index,
-        delta: { type: "text_delta", text: block.text.slice(half) },
-      });
-    } else {
-      sseEvent(res, "content_block_start", { index, content_block: { ...block, input: {} } });
-      sseEvent(res, "content_block_delta", {
-        index,
-        delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input || {}) },
-      });
-    }
-    sseEvent(res, "content_block_stop", { index });
-    index += 1;
-  }
-  sseEvent(res, "message_delta", {
-    delta: { stop_reason: jsonMessage(blocks).stop_reason, stop_sequence: null },
-    usage: { output_tokens: MOCK_USAGE.output_tokens },
-  });
-  sseEvent(res, "message_stop", {});
-  res.end();
-}
 
 let server;
 let queue = [];

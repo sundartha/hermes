@@ -32,6 +32,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { captureConsole, seedCall, seedState, tempDataDir } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { text, toolUse, reply, makeJsonMessage, makeWriteSse } from "./anthropic-sse-fixtures.js";
 
 const OWNER = "Jonas Beispiel";
 
@@ -52,79 +53,18 @@ const GET_CONSULT = "get_consult";
 const TAKE_MESSAGE = "take_message";
 const LOOKUP_EGRESS_BLOCKED_LINE = "[lookup] verworfen grund=egress";
 const TURN_OK_MARKER = "[telnyx-shim] turn_ok";
-const MOCK_USAGE = { input_tokens: 10, output_tokens: 5 };
 
 // Zwei Fixtures fuer den PII-Negativbeweis der turn_ok-Zeile. Bewusst so gewaehlt, dass
 // sie in keinem Feldnamen und keiner Code-Konstante vorkommen koennen.
 const GEHEIMER_SATZ = "Ananas-Windrad-Quittung siebzehn.";
 const GEHEIMER_ANRUFERTEXT = "Kastanienbaum-Fahrplan zwanzig.";
 
-// --- Skript-Bausteine: EINE Antwort-Beschreibung, zwei Draht-Formen (JSON + SSE) ---
-// Wortgleich uebernommen aus test/al-d1-cause-diagnostics.test.js: Testfixture-Rohstoff,
-// kein Produktivcode. Eine Extraktion in test/helpers.js ist NICHT Teil dieser Phase
-// (helpers.js importiert config.js bewusst nicht, und der Rohstoff wuerde ihn ueber den
-// Anthropic-Mock nicht mitziehen - der Umbau bleibt trotzdem eine eigene Entscheidung).
-const text = (value) => ({ type: "text", text: value });
-const toolUse = (name, input = {}) => ({ type: "tool_use", id: "tu1", name, input });
-const reply = (...blocks) => ({ blocks });
+// --- Skript-Bausteine: text/toolUse/reply + Draht-Rendering (JSON + SSE) aus dem
+// gemeinsamen Test-Rohstoff test/anthropic-sse-fixtures.js. Eigene Nachrichten-ID.
+const jsonMessage = makeJsonMessage("msg_ald2");
+const writeSse = makeWriteSse(jsonMessage);
 
 const UNWANTED_EXTRA_ROUNDTRIP_MARKER = "UNGEWOLLTER-ZUSATZ-ROUNDTRIP";
-
-function jsonMessage(blocks) {
-  return {
-    id: "msg_ald2",
-    type: "message",
-    role: "assistant",
-    model: "claude-haiku-4-5",
-    content: blocks,
-    stop_reason: blocks.some((b) => b.type === "tool_use") ? "tool_use" : "end_turn",
-    stop_sequence: null,
-    usage: MOCK_USAGE,
-  };
-}
-
-function sseEvent(res, type, data) {
-  res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
-}
-
-// Echtes Anthropic-SSE: message_start -> je Block content_block_start/-delta/-stop ->
-// message_delta -> message_stop. Text kommt in ZWEI Deltas, deren Grenze bewusst NICHT
-// auf einer Satzgrenze liegt.
-function writeSse(res, blocks) {
-  res.setHeader("content-type", "text/event-stream");
-  sseEvent(res, "message_start", {
-    message: { ...jsonMessage([]), content: [], usage: { ...MOCK_USAGE, output_tokens: 1 } },
-  });
-  let index = 0;
-  for (const block of blocks) {
-    if (block.type === "text") {
-      sseEvent(res, "content_block_start", { index, content_block: { type: "text", text: "" } });
-      const half = Math.ceil(block.text.length / 2);
-      sseEvent(res, "content_block_delta", {
-        index,
-        delta: { type: "text_delta", text: block.text.slice(0, half) },
-      });
-      sseEvent(res, "content_block_delta", {
-        index,
-        delta: { type: "text_delta", text: block.text.slice(half) },
-      });
-    } else {
-      sseEvent(res, "content_block_start", { index, content_block: { ...block, input: {} } });
-      sseEvent(res, "content_block_delta", {
-        index,
-        delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input || {}) },
-      });
-    }
-    sseEvent(res, "content_block_stop", { index });
-    index += 1;
-  }
-  sseEvent(res, "message_delta", {
-    delta: { stop_reason: jsonMessage(blocks).stop_reason, stop_sequence: null },
-    usage: { output_tokens: MOCK_USAGE.output_tokens },
-  });
-  sseEvent(res, "message_stop", {});
-  res.end();
-}
 
 let server;
 let queue = [];
@@ -216,11 +156,12 @@ function recordingAgentTurn(real) {
   return agentTurn;
 }
 
-// --- Operate-Schritt (P13): EIN Shim-Request gegen den echten agentTurn ---
-// tokenStreaming steuert B2 (das wire-Objekt), bodyStream den zweiten Disjunkt derselben
-// Bedingung (req.body.stream).
-async function shimTurn({ call, tokenStreaming = true, bodyStream = true, callerText = SUBSTANTIAL }) {
-  const agentTurn = recordingAgentTurn(claude.agentTurn);
+// --- Operate-Schritt (P13): EIN Shim-Request, gemeinsame Low-Level-Stufe fuer shimTurn
+// (echter agentTurn-Pfad) und spiedTurnOk (Spy-Pfad der PII-Pin-Tests). tokenStreaming
+// steuert B2 (das wire-Objekt), bodyStream den zweiten Disjunkt derselben Bedingung
+// (req.body.stream). Der Aufrufer liefert agentTurn - die einzige Achse, auf der sich
+// die beiden Pfade unterscheiden.
+async function runShimRequest({ call, tokenStreaming = true, bodyStream = true, callerText, agentTurn }) {
   const handler = harness.makeHandler({
     store: harness.fakeStore({ call }),
     config: fakeTelnyxShimConfig({ telnyxShimTokenStreaming: tokenStreaming }),
@@ -233,6 +174,12 @@ async function shimTurn({ call, tokenStreaming = true, bodyStream = true, caller
     messages: [{ role: "user", content: callerText }],
   });
   const lines = await captureConsole(() => handler(req, res));
+  return { res, lines };
+}
+
+async function shimTurn({ call, tokenStreaming = true, bodyStream = true, callerText = SUBSTANTIAL }) {
+  const agentTurn = recordingAgentTurn(claude.agentTurn);
+  const { res, lines } = await runShimRequest({ call, tokenStreaming, bodyStream, callerText, agentTurn });
   return {
     res,
     lines,
@@ -385,17 +332,14 @@ test("AL-D2-6: K6 angenommenes get_consult - B4 sperrt korrekt, der Fueller spri
 
 // EIN Shim-Lauf gegen einen agentTurn-Spy - die turn_ok-Zeile ist der Gegenstand.
 async function spiedTurnOk({ call, tokenStreaming, bodyStream }) {
-  const handler = harness.makeHandler({
-    store: harness.fakeStore({ call }),
-    config: fakeTelnyxShimConfig({ telnyxShimTokenStreaming: tokenStreaming }),
-    agentTurn: harness.agentTurnSpy({ speech: GEHEIMER_SATZ, endCall: false }),
-    voiceControl: harness.voiceControlSpy(),
+  const agentTurn = harness.agentTurnSpy({ speech: GEHEIMER_SATZ, endCall: false });
+  const { lines } = await runShimRequest({
+    call,
+    tokenStreaming,
+    bodyStream,
+    callerText: GEHEIMER_ANRUFERTEXT,
+    agentTurn,
   });
-  const req = harness.validReq(call, {
-    stream: bodyStream,
-    messages: [{ role: "user", content: GEHEIMER_ANRUFERTEXT }],
-  });
-  const lines = await captureConsole(() => handler(req, harness.fakeRes()));
   const turnOk = lines.filter((l) => l.includes(TURN_OK_MARKER));
   assert.equal(turnOk.length, 1, "genau eine turn_ok-Zeile erwartet");
   return turnOk[0];
