@@ -16,6 +16,7 @@ import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { blockingBudgetAxis, isBudgetAxis } from "./budget-gate.js";
+import { consultClientIsPolling } from "./consult/in-call.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk"; // stream:true (SSE-Delta-Chunks)
@@ -160,6 +161,14 @@ function turnDiagnostics(turn, callerText) {
     // unterscheidbar, ob ein Chunk die Ueberbrueckung oder die Antwort war; genau darauf
     // stehen die Abnahmen 2 und 6 dieser Phase.
     thinkingSignal: turn?.thinkingSignalSpoken === true,
+    // AL-D1: der dem Modell ANGEBOTENE Werkzeugsatz dieses Turns. NAMEN, also dieselbe
+    // PII-Klasse wie toolNames. Fail-safe wie dort: nur ein Array, sonst [].
+    offeredToolNames: Array.isArray(turn?.offeredToolNames) ? turn.offeredToolNames : [],
+    // AL-D1: in wie vielen Runden der Streaming-Pfad armiert war. Fail-safe wie
+    // roundtrips: nur eine Ganzzahl, sonst null.
+    streamArmedRounds: Number.isSafeInteger(turn?.streamArmedRounds)
+      ? turn.streamArmedRounds
+      : null,
   };
 }
 
@@ -557,6 +566,9 @@ export function makeTelnyxLlmShim({
     let endCall = false;
     let farewellChars = 0; // Basis der Sprechdauer-Schaetzung (Schritt 8)
     try {
+      // AL-D1: Momentaufnahme VOR dem Turn - genau der Zeitpunkt, zu dem agentTools()
+      // ueber get_consult entscheidet. Nach dem Turn gemessen waere es eine andere Zahl.
+      const consultPollFresh = consultClientIsPolling(call);
       const startedAt = Date.now();
       const turn = await agentTurn(call, callerText, wire ? { onSpeechChunk: wire.writeChunk } : {});
       const latencyMs = Date.now() - startedAt;
@@ -571,6 +583,8 @@ export function makeTelnyxLlmShim({
         // AL-P7: die Live-Sonde, an der der Owner sieht, DASS gestreamt wurde. Eine Zahl,
         // kein Text - die PII-Freiheit der Zeile bleibt unberuehrt.
         streamChunks: wire ? wire.chunkCount() : 0,
+        // AL-D1: wartete zu Turn-Beginn ueberhaupt ein MCP-Client? Ein Boolean, kein Text.
+        consultPollFresh,
         ...turnDiagnostics(turn, callerText),
       });
       // P5 (OBS/R6): unter demselben default-off TELNYX_SHIM_DEBUG_SHAPE-Flag und demselben
