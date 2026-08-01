@@ -757,6 +757,41 @@ der Test rot wird.
 **Risiko:** `src/boot.js` liegt im Startpfad — ein Fehler dort ist kein haesslicher Code, sondern
 ein Dienst, der nicht mehr hochkommt. Deshalb `highStakes`.
 
+**UMGESETZT (2026-08-01, Branch `phase/al-p16-boot-sonden`).** Ein neuer Export
+`capabilityProbeLines(config)` in `src/boot.js` liefert die Zeilen in Banner-Reihenfolge; gedruckt
+wird ausschliesslich in `logBootBanner`. Die Spec zaehlt in der Ueberschrift **vier** Schalter,
+verlangt in den Inhalts-Bullets aber ausdruecklich auch eine Zeile fuer den In-Call-Nachschlag
+(„zweiteilig: Flag UND `EXA_API_KEY`. Die Zeile sagt beides"). `LOOKUP_ENABLED` ist am Code ein
+eigener Schalter (`config.research.lookupEnabled`, eigener Gate-Zweig `inCallSearchProvider` in
+`src/research/registry.js`) und steht in keiner der Listen des „Warum"-Absatzes — er ist also
+ebenso blind. Umgesetzt sind daher **fuenf** Zeilen: eine wegzulassen haette einen expliziten
+Inhalts-Bullet verletzt, eine mehr verletzt nur eine Ueberschriften-Zahl. Drei Entscheidungen:
+
+- **D1 — die Sonde faellt KEIN Gesamturteil.** `AKTIV`/`aus` meldet ausschliesslich den
+  Plattform-Schalter in der Klammer; alles nach dem Gedankenstrich sind die uebrigen Bedingungen.
+  Die Schnittmenge entscheiden weiterhin `consult/gate.js`, `research/registry.js` und
+  `briefingActive()` — ein zweites Urteil im Banner waere eine Kopie davon (G5) und koennte still
+  auseinanderlaufen; das Per-Tenant-Recht ist zur Bootzeit ohnehin nicht ableitbar.
+- **D2 — die Zeilen stehen IMMER, auch im Aus-Zustand.** Abweichend vom Muster
+  `tokenStreamingBannerLine`/`thinkingSignalBannerLine`/`inCallConsultBannerLine` (leer bei aus),
+  nach dem Muster `assistantPathLabel`. Grund ist der Phasenzweck: eine Zeile, die bei „aus"
+  verschwindet, ist im Live-Log nicht von einem Deploy ohne die Sonde zu unterscheiden.
+- **D3 — ein Wiederverwender statt einer fuenften Wahrheit.** Der Aus-Zustand der Zitate kommt aus
+  der bestehenden Entscheidung `evidenceRetentionEnabled(privacy)` in `src/call-result.js` —
+  dieselbe Funktion, die bestimmt, ob ueberhaupt ein Zitat erhoben wird. `assistantPathLabel`
+  wurde ausgabegleich auf denselben Formatierer (`envFlagState`) gezogen; `AL-P1-9` blieb ohne
+  Anpassung gruen und ist der Regressionsbeweis dieses Refactors.
+
+**Mutationsprobe (Abnahme) durchgefuehrt:** `consultProbeLine` versuchsweise auf
+`process.env.CONSULT_ENABLED === "true"` statt auf das uebergebene `tenancy`-Objekt umgestellt ->
+`AL-P16-5` und `AL-P16-7` wurden rot (7 pass / 2 fail), nach der Ruecknahme wieder 9/9 gruen.
+Neun Tests in `test/al-p16-boot-probes.test.js` (Praefix `AL-` faellt nicht unter das
+Katalogmuster, laeuft also im Regressionslauf, wo Rot verboten ist): sieben auf der reinen
+Funktion (je Schalter beide Richtungen, Secret-Riegel, Mutationsprobe), zwei am echten Boot-Log
+eines gespawnten Servers — sonst bliebe die Verdrahtung in `logBootBanner` ungetestet. Der
+Sentinel-Key taucht im gesamten Boot-Log nicht auf (Regel 4). Keine neue Env-Variable, kein Gate,
+kein Geldpfad; `.env.example`, `render.yaml` und `test/helpers.js` blieben unberuehrt.
+
 ### AL-P11 — Ergebnis-Karte statt Prosa
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 11`.
