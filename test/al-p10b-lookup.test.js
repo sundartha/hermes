@@ -33,6 +33,13 @@ import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 // Statischer Import ist sicher: lookup-guard.js liest weder config noch env (nur
 // store/defaults.js + utils/text.js) - der config-Import bleibt dynamisch nach der Env.
 import { LOOKUP_MAX_FACTS } from "../src/research/lookup-guard.js";
+// AL-P17 (E1): look_up ist jetzt STROM-SICHER, der Werkzeugsatz dieser Datei armiert also
+// den Satz-Chunker. Die drei Tests, die einen onSpeechChunk durchreichen, laufen damit in
+// den Anthropic-Streamingpfad - der Mock braucht den SSE-Zweig. Genutzt wird der GETEILTE
+// Test-Rohstoff (kein zweiter SSE-Renderer, G5); reine Infrastruktur, keine Assertion
+// beruehrt. MOCK_USAGE dort ist identisch zu der lokalen message()-Fixture (10/5), die
+// Kostendifferenz-Assertionen bleiben damit gueltig.
+import { makeJsonMessage, makeWriteSse, MOCK_USAGE } from "./anthropic-sse-fixtures.js";
 
 const OWNER = "Jonas Beispiel";
 // Hebt suppressEndCall auf (isSubstantialCallerText) - ohne substanzielle Anrufer-Zeile
@@ -55,9 +62,12 @@ function message(content, stopReason) {
     content,
     stop_reason: stopReason,
     stop_sequence: null,
-    usage: { input_tokens: 10, output_tokens: 5 },
+    usage: MOCK_USAGE,
   };
 }
+
+// Derselbe Antwort-Inhalt als echtes Anthropic-SSE (AL-P17-Infrastruktur, s. Import oben).
+const writeSse = makeWriteSse(makeJsonMessage("msg_alp10b"));
 
 const textOnly = (text) => message([{ type: "text", text }], "end_turn");
 const toolCall = (name, input, id = "tu1") => ({ type: "tool_use", id, name, input });
@@ -107,9 +117,12 @@ before(async () => {
     let raw = "";
     req.on("data", (d) => (raw += d));
     req.on("end", () => {
-      bodies.push(JSON.parse(raw));
+      const body = JSON.parse(raw);
+      bodies.push(body);
+      const scripted = queue.shift() || textOnly(UNWANTED_EXTRA_ROUNDTRIP_MARKER);
+      if (body.stream === true) return writeSse(res, scripted.content);
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify(queue.shift() || textOnly(UNWANTED_EXTRA_ROUNDTRIP_MARKER)));
+      res.end(JSON.stringify(scripted));
     });
   });
   await new Promise((r) => anthropic.listen(0, "127.0.0.1", r));
@@ -276,6 +289,10 @@ test("AL-P10b-6: Gutfall - der Treffer steht in Runde 2 unter HINTERGRUND, mit G
   ]);
 });
 
+// AL-P17: unveraendert gruen, nur der SPRECHER hat gewechselt - seit E1 streamt der
+// Satz-Chunker den fuehrenden Rundentext, die Bruecke schweigt (E2). Die Zeitordnung
+// haelt aus demselben Grund wie zuvor: sink.flushRemainder() laeuft unmittelbar nach der
+// Modellrunde und VOR performLookupRequest. Keine Assertion angefasst.
 test("AL-P10b-7: die Ueberbrueckung ist auf der Leitung, BEVOR die Suche rausgeht", async () => {
   arm({ results: [exaBody("Mo-Sa 8 bis 20 Uhr")] });
   queue = lookupThenAnswer("Einen Moment, ich sehe nach.", "Bis 20 Uhr.");

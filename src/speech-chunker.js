@@ -46,7 +46,11 @@ function nextSentenceCut(text) {
 }
 
 /**
- * @param {{ onChunk: (text: string) => void }} deps
+ * @param {{ onChunk: (text: string) => void, continuesStream?: boolean }} deps
+ *   continuesStream (AL-P17): auf diesem Draht steht bereits Text - eine FRUEHERE Runde
+ *   desselben Turns hat schon gesprochen. Dann braucht auch das ERSTE Fragment das
+ *   fuehrende Trennzeichen, sonst klebt der erste Satz der Folgerunde am letzten der
+ *   Vorrunde ("...schaue ich nach.Donnerstag..."). Default false = Bestandsverhalten.
  * @returns {{
  *   pushText(delta: string): void,   // Stream-Fragment aufnehmen (Sink-Vertrag, llm.js)
  *   toolUseStarted(): void,          // ab hier nur noch puffern (Riegel, Sink-Vertrag)
@@ -55,7 +59,7 @@ function nextSentenceCut(text) {
  *   receivedText(): boolean          // kam ueberhaupt ein Fragment an (Buchungs-Entscheid)
  * }}
  */
-export function makeSentenceChunker({ onChunk }) {
+export function makeSentenceChunker({ onChunk, continuesStream = false }) {
   let buffer = "";
   let eager = true; // solange kein Werkzeug-Block begonnen hat, geht jeder Satz sofort raus
   let chunks = 0;
@@ -66,11 +70,13 @@ export function makeSentenceChunker({ onChunk }) {
   //
   // Der Abnehmer haengt die Fragmente ROH aneinander (OpenAI-Delta-Semantik) - die
   // Wortgrenze zwischen zwei Saetzen muss deshalb IM Chunk stehen. shapeChunkForSpeech
-  // trimmt jedes Fragment; ab dem zweiten Chunk kommt das Trennzeichen hier zurueck.
+  // trimmt jedes Fragment; das Trennzeichen kommt hier zurueck, sobald auf dem Draht
+  // schon etwas steht - ab dem zweiten Chunk dieser Instanz, mit continuesStream (AL-P17)
+  // auch beim ersten.
   function emit(raw) {
     const shaped = shapeChunkForSpeech(raw);
     if (!shaped) return;
-    onChunk(chunks === 0 ? shaped : ` ${shaped}`);
+    onChunk(chunks === 0 && !continuesStream ? shaped : ` ${shaped}`);
     chunks += 1;
   }
 
