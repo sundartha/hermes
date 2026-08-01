@@ -721,6 +721,42 @@ highlightScores[],…}],costDollars}`. Drei Entscheidungen, die der Plantext off
 unberuehrt; die 15 Bestandstests aus AL-P10b decken Gates, Geld, Egress, Injektion und Logs
 weiter ab (nur die Mock-Naht wurde auf die Exa-Form umgestellt).
 
+### AL-P16 — Boot-Sonden fuer die vier blinden Schalter
+
+**Warum:** am 2026-08-01 wurden alle Faehigkeiten der Kette scharf geschaltet. Drei davon melden
+sich beim Start selbst (`Token-Streaming`, `Denk-Signal`, `In-Call-Consult`) — **vier nicht**:
+`CONSULT_ENABLED`, `PRECALL_BRIEFING_ENABLED`, `RESEARCH_ENABLED`, `EVIDENCE_RETENTION_DAYS`.
+Bei denen ist „gesetzt" nicht dasselbe wie „wirkt", und der Unterschied ist am Live-System nicht
+ablesbar. Genau diese Klasse Fehler ist an einem Tag **zweimal** aufgetreten: die per-Tenant-
+Rechte standen auf `false`, waehrend die Env-Flags laengst `true` waren, und ein direkter
+DB-Schreibzugriff waere um ein Haar von der In-Memory-Kopie des Stores ueberschrieben worden.
+
+**Was konkret:**
+- Vier Banner-Zeilen in `src/boot.js`, **im Stil der bestehenden** (`Label: AKTIV (KEY=wert)`
+  bzw. der Aus-Zustand in derselben Form). Sie lesen die **fertig geparste Konfiguration**,
+  nicht `process.env` — eine Sonde, die die Rohumgebung liest, beweist nichts ueber den
+  Code-Pfad.
+- **Zusatz gegen die Verwechslung, die heute passiert ist:** wo eine Faehigkeit die
+  **Schnittmenge** aus Plattform-Flag UND einem per-Tenant-Recht ist, sagt die Zeile das
+  ausdruecklich (Muster: `… - wirkt nur mit <recht> am Tenant`). Betrifft mindestens
+  Vorab-Recherche (`settings.allowResearch`), In-Call-Nachschlag (`profile.allowLookup`) und
+  Consult (`profile.allowConsult`). Ohne diesen Zusatz erzeugt eine gruene Zeile falsche
+  Sicherheit.
+- **`EVIDENCE_RETENTION_DAYS`** meldet den Zahlenwert und was er bedeutet (0 = keine Zitate).
+- **Der In-Call-Nachschlag ist zweiteilig:** Flag UND `EXA_API_KEY`. Die Zeile sagt beides —
+  aber **niemals den Key**, nur `gesetzt`/`fehlt` (Regel 4: Secrets nie loggen). Ein Test pinnt,
+  dass der Wert nicht im Banner landet.
+- **Keine neue Env-Variable, keine Verhaltensaenderung.** Reine Beobachtbarkeit; die Suite muss
+  ohne Anpassung bestehender Tests gruen bleiben, ausser bei den Dateien, die das Banner pinnen.
+
+**Abnahme:** je Schalter ein Test, der die Zeile bei an UND bei aus pinnt (beide Richtungen —
+eine Sonde, die nur den Gutfall zeigt, meldet den Ausfall nie). Dazu die **Mutationsprobe**:
+Sonde absichtlich auf die Rohumgebung statt auf die Konfiguration umstellen und pruefen, dass
+der Test rot wird.
+
+**Risiko:** `src/boot.js` liegt im Startpfad — ein Fehler dort ist kein haesslicher Code, sondern
+ein Dienst, der nicht mehr hochkommt. Deshalb `highStakes`.
+
 ### AL-P11 — Ergebnis-Karte statt Prosa
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 11`.
