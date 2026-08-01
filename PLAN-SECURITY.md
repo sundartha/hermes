@@ -1223,6 +1223,84 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 
 ---
 
+## AL-P10b — Nachschlagen IM Gespraech (2026-07-31)
+
+> **Neue Exposition, deshalb ein EIGENES Flag UND ein eigener Abschnitt.** Die
+> Vorab-Recherche (AL-P10) laeuft in Anthropics serverseitigem `web_search` INNERHALB des
+> bestehenden Modell-Aufrufs - kein eigener HTTP-Client, kein neues Secret, kein zweiter
+> Auftragsverarbeiter. **AL-P10b durchbricht genau diese Randbedingung**: der In-Call-
+> Adapter (`src/research/adapters/brave-search.js`) fuehrt die Suche SELBST aus, mit einem
+> NEUEN Secret (`BRAVE_SEARCH_API_KEY`) bei einem ZWEITEN Auftragsverarbeiter (Brave).
+> Schalter: `LOOKUP_ENABLED`, Default AUS.
+>
+> **Vier unabhaengige Riegel** (`lookupProviderFor`, `src/research/in-call.js`):
+>
+> 1. **Richtungs-Gate (Sicherheitskern):** nur `direction === "outbound"` und nur ein
+>    aktiver Call. Eine im Gespraech mit einem FREMDEN Inbound-Anrufer entstandene Frage
+>    kann damit strukturell nicht an einen Suchindex gehen. Zusaetzlich Schnittmenge mit
+>    `ASSISTANT_CONTEXT_ENABLED` (ohne HINTERGRUND-Kanal gaebe es keinen Empfaenger fuer
+>    den Treffer), dem Per-Tenant-Recht `allowLookup` (Default AUS in `DEFAULT_PROFILE`
+>    UND `PAID_PLAN_PROFILE`, nur `OWNER_PROFILE` traegt `true`), einem gesetzten
+>    Secret (leer = fail-closed inaktiv, auch bei `LOOKUP_ENABLED=true`) und der
+>    **Budget-Engine**: unter `VOICE_ENGINE=realtime` ist das Werkzeug strukturell
+>    inaktiv (AL-P10b-fix, s. Riegel 4).
+> 2. **Kontingent:** hoechstens `LOOKUP_MAX_PER_CALL = 2` Suchen je Gespraech (benannte
+>    Konstante, KEIN Env-Knopf - ein zu gross gesetzter Wert waere eine abgeschaltete
+>    Sicherung). Der Zaehler ist EPHEMER (keine DB-Spalte, Muster `countNoSpeechTurn`):
+>    ein Instanzwechsel MITTEN im Anruf setzt ihn zurueck und kostet hoechstens 2 weitere
+>    Suchen a `LOOKUP_SEARCH_FEE_CENTS` in genau diesem Call - benannt und akzeptiert; der
+>    harte Deckel bleibt die pro-Tenant-Kostendecke, die vor JEDER Schleifenrunde greift.
+>    Die Gebuehr wird VOR dem Absenden gebucht (eine ausgeloeste Suche ist bezahlt, auch
+>    wenn die Antwort nie ankommt - Regel 1).
+> 3. **Egress-Riegel serverseitig** (`src/research/lookup-guard.js`): verworfen werden
+>    Ziffernfolgen ab 5 Stellen (Rufnummer/IBAN/Karte/Kundennummer), E-Mail-Adressen, die
+>    Rufnummer des Angerufenen und woertliche Uebernahmen (>= 6 Woerter) aus `caller`-
+>    Zeilen des Transkripts; Zitatspannen werden entfernt, der Rest auf 120 Zeichen
+>    gekappt. Eine verworfene Suche verlaesst den Server NICHT, kostet nichts und
+>    verbraucht das Kontingent nicht. KEIN Namens-Filter: `call.callerName` ist seit G1
+>    (Identitaets-Bindung) hart `null` - kein Producer im Repo befuellt es, ein Filter
+>    darauf waere toter Code mit einer falschen Schutzbehauptung.
+> 4. **`execTool` kennt `look_up` nicht.** Ein dennoch gefeuertes Werkzeug faellt in den
+>    `default`-Zweig (`unknownTool`). Der Riegel gilt damit automatisch fuer die
+>    Realtime-Bridge, die `execTool` direkt ruft; `toolDefs()` bleibt unveraendert, die
+>    Realtime-Engine und `agentToolNames` sehen das Werkzeug nie.
+>    **AL-P10b-fix:** weil die Realtime-Bridge sich den `systemPrompt` mit der
+>    Budget-Engine teilt, versprach die GRENZEN-Zeile dort bis dahin eine Faehigkeit
+>    ohne Werkzeug (gemessen: Prompt "kann nachschlagen" = true, angebotene Werkzeuge =
+>    `end_call,take_message`). Der Engine-Faktor in `lookupProviderFor` schliesst das an
+>    der EINEN Quelle: Prompt-Zeile und Werkzeugsatz koennen nicht auseinanderlaufen.
+>    Gepinnt in `test/al-p10b-lookup.test.js` (AL-P10b-15), inklusive Praemisse
+>    "`realtimeTools` traegt kein `look_up`".
+>
+> **EHRLICHE GRENZE (E8), bewusst so und nicht geschoent:** dieser Filter ist **schwaecher
+> als die pre-call-Konstruktion** von AL-P10. Dort ist der Egress ueber eine gefrorene
+> Feld-Whitelist (`RESEARCH_EGRESS_FIELDS`) begrenzt - hier formuliert ein Modell die
+> Query frei, und der Server prueft sie nur gegen deterministisch pruefbare Muster. Ein
+> Schlagwortfilter fuer "Gesundheits-/Finanzdetails/Personenbezug (Name)" wird BEWUSST
+> NICHT gebaut: er waere sprachabhaengig, luecken- und fehlalarm-behaftet und wuerde ein
+> Schutzversprechen vortaeuschen, das er nicht halten kann. Diese Restflaeche traegt die
+> Tool-Description (`t.lookUpQueryParam`: "ohne Personenbezug", enges Verbot am
+> Entscheidungspunkt) - Prompt, also KEINE Durchsetzung. Wer das Flag scharf schaltet,
+> akzeptiert genau diese Restflaeche.
+>
+> **Fremdtext hat genau EINE Tuer:** der Treffer geht ausschliesslich ueber
+> `addLookupFacts` -> `call.context.key_facts` -> HINTERGRUND-Block MIT Guardrail-Zeile.
+> Das `tool_result` selbst ist server-eigener Konstanttext. Mandat, Offenlegungssatz,
+> Wahlziel und die Safety-Gates sind von dort strukturell unerreichbar (per Injektions-
+> Fixture in `test/al-p10b-lookup.test.js` belegt).
+>
+> **Keine Aenderung** an Safety-Gates, Offenlegungssatz, Signaturpruefung, Auth oder
+> Routen-Bestand; keine neue Route, keine neue DB-Spalte, keine neue Dependency. Die
+> Log-Zeilen `[lookup] verworfen grund=egress call=<id>` und `[lookup] fertig call=<id>
+> ok=<b> dauer_ms=<n> fakten=<n>` sind PII-frei (nie die Query, nie der Treffer, nie eine
+> Nummer, nie der Key).
+>
+> **Freischaltung erst nach Datenschutzerklaerung:** `LOOKUP_ENABLED=true` darf erst
+> gesetzt werden, nachdem die Datenschutzerklaerung in `apps/web` den ZWEITEN
+> Auftragsverarbeiter nennt (Abnahme in `tasks/al-testcall-checklist.md`).
+
+---
+
 ## KS-P9 — Plattform-Achse verliert die Sperrwirkung (2026-07-30, E10)
 
 > **Was entfaellt.** Die Plattform-Geldachse trifft ab dieser Phase KEINE

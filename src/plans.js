@@ -88,6 +88,8 @@ export function findPlan(slug) {
 //   allowCalendar/Booking=false - Funktion bewusst verworfen
 //   allowConsult=false       - AL-P13: der Consult-Kanal bleibt eine Owner-Faehigkeit,
 //                              bis die Abnahme durch ist (kein Plan-Freibrief)
+//   allowLookup=false        - AL-P10b: dasselbe fuer den In-Call-Nachschlag (er bringt
+//                              einen ZWEITEN Auftragsverarbeiter mit)
 //   maxCallsPerHour=null     - keine Profil-Senkung; faellt auf den Pro-Tenant-Default
 //                              config.safety.maxCallsPerHour (telephony/outbound-gates.js
 //                              tenantHourReached). Minuten-Quota (GAP B) + Budget sind die
@@ -108,6 +110,9 @@ const PAID_PLAN_PROFILE = Object.freeze({
   // AL-P13: Consult-Kanal ist eine Owner-Faehigkeit bis die Abnahme (10 echte
   // place_call aus claude.ai + 5 aus ChatGPT, O9) durch ist - kein Plan-Freibrief.
   allowConsult: false,
+  // AL-P10b: der Nachschlag bleibt eine Owner-Faehigkeit, bis Testanruf und
+  // Datenschutzerklaerung durch sind (zweiter Auftragsverarbeiter) - kein Plan-Freibrief.
+  allowLookup: false,
   allowBooking: false,
   maxCallsPerHour: null,
 });

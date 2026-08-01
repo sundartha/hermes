@@ -61,7 +61,10 @@ function sendFunctionOutput(openaiWs, callId, output) {
 
 // Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters). P11:
 // sprachabhaengig (toolDefs(language)) - call ist an beiden Call-Sites in Scope.
-function realtimeTools(language) {
+// Exportiert, weil AL-P10b-fix genau die Relation "Realtime-Werkzeugsatz <-> GRENZEN-
+// Zeile im Realtime-Prompt" pinnt - die Praemisse muss direkt pruefbar sein, nicht
+// ueber einen Stellvertreter.
+export function realtimeTools(language) {
   return toolDefs(language).map((t) => ({
     type: "function",
     name: t.name,
@@ -76,7 +79,10 @@ function realtimeTools(language) {
 // Modellentscheidung, die Anweisung war irrefuehrend. Der Prosodie-Hinweis bleibt. P11:
 // der Sprech-Hinweis kommt jetzt aus dem Sprach-Baustein (loc.prompt.realtimeSpeechStyle,
 // DE byte-identisch zum frueheren Inline-Suffix, transliteriert wie zuvor).
-function instructions(call) {
+// Exportiert und sprechend benannt (Gegenstueck zu realtimeTools): ein Modul-Export
+// "instructions" waere ohne Datei-Kontext nicht lesbar. Rein - kein Store-Schreibpfad,
+// keine Netz-Kante.
+export function realtimeInstructions(call) {
   return systemPrompt(call) + "\n\n" + localeFor(call.language).prompt.realtimeSpeechStyle;
 }
 
@@ -185,7 +191,7 @@ export function attachMediaBridge(httpServer, onCallEnded) {
             type: "session.update",
             session: {
               modalities: ["text", "audio"],
-              instructions: instructions(call),
+              instructions: realtimeInstructions(call),
               voice: loc.realtimeVoice ?? config.voice.realtimeVoice,
               input_audio_format: "g711_ulaw",
               output_audio_format: "g711_ulaw",

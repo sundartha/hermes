@@ -57,6 +57,11 @@ ${identityLine}
       "- Du buchst KEINE Termine fest. Einen Terminwunsch nimmst du mit allen Angaben als Nachricht auf: Tag, Uhrzeit, und bis wann er gilt.",
     noLookup:
       "- Du kannst nichts nachschlagen, nichts recherchieren und niemanden weiterverbinden. Wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf.",
+    // AL-P10b: der Gegenpart zu noLookup. Steht GENAU DANN im Prompt, wenn look_up in
+    // diesem Zug auch wirklich im Werkzeugsatz liegt (claude.js lookupAvailable) - der
+    // "weiterverbinden"-Teil von noLookup bleibt erhalten, den kann der Agent weiterhin nicht.
+    lookupAllowed:
+      "- Du kannst zu SACHFRAGEN (Öffnungszeiten, Adressen, Preise, öffentlich bekannte Fakten) kurz etwas nachschlagen. Personenbezogenes deines Gegenübers schlägst du NIE nach. Weiterverbinden kannst du nicht; wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf.",
     toolThrift: "- Handle sparsam: du hast pro Antwort nur wenige Werkzeugaufrufe.",
   },
 
@@ -156,6 +161,20 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       "Deckt dein Auftrag die Frage ab, entscheide selbst und rufe dieses Werkzeug NICHT auf. " +
       "Höchstens EINMAL pro Gespräch.",
     getConsultQuestionParam: "Die Sachfrage, in eigenen Worten, ohne wörtliches Zitat",
+    // AL-P10b: die engen Verbote sitzen GENAU HIER an der Tool-Description (Lehre
+    // call-quality-chain). Der Query-Filter wird zusaetzlich serverseitig durchgesetzt
+    // (research/lookup-guard.js) - der Prompt allein ist keine Durchsetzung.
+    lookUpDescription:
+      "Schlägt EINE kurze Sachfrage nach und ergänzt damit deinen HINTERGRUND. " +
+      "Nutze das NUR, wenn AUFTRAG und HINTERGRUND die Antwort nicht enthalten und die " +
+      "Antwort das Gespräch jetzt weiterbringt. " +
+      "Frage nur nach öffentlich bekannten Sachen: Öffnungszeiten, Adressen von Betrieben, " +
+      "Preise, allgemeine Fakten. " +
+      "Suche NIEMALS nach Namen, Rufnummern, Adressen, Gesundheits- oder Geldangaben " +
+      "deines Gegenübers und zitiere es NIEMALS wörtlich. " +
+      "Sage NIE, dass du nachschaust, und nenne NIE eine Quelle. " +
+      "Höchstens zweimal pro Gespräch.",
+    lookUpQueryParam: "Die Sachfrage, in eigenen Worten, ohne Personenbezug",
   },
 
   summaryInput: {
@@ -185,6 +204,18 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     consultTimeout:
       "[Auf deine Rückfrage kam keine Antwort. Entscheide im Rahmen deines Mandats oder " +
       "nimm das Anliegen als Nachricht auf.]",
+    // AL-P10b: die drei deterministischen tool_result-Texte des Nachschlags. Server-
+    // eigener Text, keine fremde Rede - der TREFFER selbst geht ausschliesslich ueber
+    // key_facts in den HINTERGRUND-Block.
+    lookUpDeclined:
+      "Nachschlagen jetzt nicht möglich. Antworte aus deinem Auftrag und deinem " +
+      "Hintergrund oder nimm das Anliegen über take_message auf.",
+    lookUpUnavailable:
+      "Dazu konnte nichts nachgesehen werden. Nenne das nicht als Suche - antworte aus " +
+      "deinem Auftrag oder nimm das Anliegen als Nachricht auf.",
+    lookUpResult:
+      "Der HINTERGRUND ist um die gefundenen Fakten ergänzt. Nutze sie in deiner Antwort, " +
+      "ohne sie vorzulesen und ohne eine Quelle zu nennen.",
   },
 
   realtimeSpeechStyle: "SPRECHWEISE: natuerlich, zuegig, kurze Saetze.",

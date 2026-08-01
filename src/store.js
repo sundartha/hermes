@@ -117,6 +117,11 @@ export const {
   // undefined -> agentTurn bzw. die Poll-Route wuerfen zur Laufzeit einen TypeError.
   advanceInCallConsult,
   noteConsultPoll,
+  // AL-P10b: Suchtreffer + Kontingent-Zaehler des In-Call-Nachschlags. OHNE diese
+  // Re-Exports waeren sie auf der Fassade undefined -> performLookupRequest wuerfe zur
+  // Laufzeit einen TypeError (Muster advanceInCallConsult).
+  addLookupFacts,
+  countCallLookup,
   // P3.2: No-Speech-Staffel-Zaehler (ephemer). OHNE diese Re-Exports waeren sie auf der
   // Fassade undefined -> /voice/turn wuerfe zur Laufzeit einen TypeError.
   countNoSpeechTurn,

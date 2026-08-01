@@ -109,3 +109,17 @@ export function bookResearchSearchFee({ tenantId, searches }) {
   if (!searches) return;
   store.addResearchFeeCostCents(tenantId, searches * config.research.researchSearchFeeCents);
 }
+
+// AL-P10b: Gebuehr EINER In-Call-Suche (Brave). Eigene benannte Funktion statt eines
+// Flags an bookResearchSearchFee, weil es eine ANDERE Achse mit eigenem Preis ist (N4:
+// der Name sagt, was bezahlt wird). Wie dort bewusst NUR die Live-Budget-Achse, NICHT der
+// Stripe-Ledger (usage_event kennt kein research-kind); Unterbuchung im Ledger ist
+// Umsatzverlust bei uns, kein Schutzverlust.
+//
+// Der Aufrufer bucht VOR dem Absenden: eine ausgeloeste Suche ist berechnet, auch wenn
+// die Antwort nie ankommt (Regel 1 - nie 0, wo Geld geflossen sein kann). Derselbe
+// Store-Op wie die Vorab-Recherche - es ist dieselbe Cent-Achse, ein zweiter Op waere ein
+// zweiter Loeschpfad ohne Gewinn. Nebeneffekt im Namen (N7).
+export function bookLookupSearchFee({ tenantId }) {
+  store.addResearchFeeCostCents(tenantId, config.research.lookupSearchFeeCents);
+}

@@ -55,6 +55,10 @@ ${identityLine}
       "- You do NOT book appointments firmly. You take an appointment request down as a message with all details: day, time, and how long it's valid.",
     noLookup:
       "- You cannot look anything up, research anything, or transfer anyone. If that is requested, say so honestly and take the request down as a message.",
+    // AL-P10b: s. DE - Gegenpart zu noLookup, rendert nur wenn look_up im Zug wirklich
+    // angeboten wird. Der "transfer"-Teil bleibt, das kann der Agent weiterhin nicht.
+    lookupAllowed:
+      "- For FACTUAL questions (opening hours, addresses, prices, publicly known facts) you can look something up briefly. You NEVER look up anything personal about the other person. You cannot transfer anyone; if that is requested, say so honestly and take the request down as a message.",
     toolThrift: "- Be economical: you only get a few tool calls per reply.",
   },
 
@@ -148,6 +152,19 @@ At the end, say goodbye in one sentence and then call end_call.`,
       "If your task covers the question, decide yourself and do NOT call this tool. " +
       "At most ONCE per conversation.",
     getConsultQuestionParam: "The factual question, in your own words, without any verbatim quote",
+    // AL-P10b: s. DE - die engen Verbote sitzen an der Tool-Description, der Query-Filter
+    // wird zusaetzlich serverseitig durchgesetzt.
+    lookUpDescription:
+      "Looks up ONE short factual question and adds the result to your BACKGROUND. " +
+      "Use this ONLY when your TASK and your BACKGROUND do not contain the answer and the " +
+      "answer moves the conversation forward right now. " +
+      "Only ask about publicly known things: opening hours, business addresses, prices, " +
+      "general facts. " +
+      "NEVER search for names, phone numbers, addresses, health or money details of the " +
+      "other person, and NEVER quote them verbatim. " +
+      "NEVER say that you are looking something up, and NEVER name a source. " +
+      "At most twice per conversation.",
+    lookUpQueryParam: "The factual question, in your own words, without personal details",
   },
 
   summaryInput: {
@@ -174,6 +191,16 @@ At the end, say goodbye in one sentence and then call end_call.`,
     consultTimeout:
       "[No answer came back to your question. Decide within your mandate or record the " +
       "request as a message.]",
+    // AL-P10b: s. DE.
+    lookUpDeclined:
+      "Looking something up is not possible right now. Answer from your task and your " +
+      "background, or record the request via take_message.",
+    lookUpUnavailable:
+      "Nothing could be looked up on that. Do not mention it as a search - answer from " +
+      "your task or record the request as a message.",
+    lookUpResult:
+      "Your BACKGROUND now contains the facts that were found. Use them in your reply, " +
+      "without reading them out and without naming a source.",
   },
 
   realtimeSpeechStyle: "SPEAKING STYLE: natural, brisk, short sentences.",
