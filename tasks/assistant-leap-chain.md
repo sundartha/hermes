@@ -792,6 +792,52 @@ eines gespawnten Servers — sonst bliebe die Verdrahtung in `logBootBanner` ung
 Sentinel-Key taucht im gesamten Boot-Log nicht auf (Regel 4). Keine neue Env-Variable, kein Gate,
 kein Geldpfad; `.env.example`, `render.yaml` und `test/helpers.js` blieben unberuehrt.
 
+### AL-D1 — Zwei Live-Befunde aus dem ersten Ende-zu-Ende-Anruf: URSACHE MESSEN, dann fixen
+
+**Herkunft:** echter Anruf `call_msabz9975sph` am 2026-08-01 gegen den Live-Dienst (`c4cff7f`),
+mit allen Flags an. Consult #0 (vor dem ersten Turn) funktionierte einwandfrei — Fragen gestellt,
+vom MCP-Client beantwortet, `accepted:true, merged_facts:3`. Zwei Dinge funktionierten NICHT.
+
+**Diese Phase fixt NICHTS, bevor die Ursache am Code oder an einem Reproduktionstest BELEGT ist.**
+Eine Vermutung, die plausibel klingt, gilt hier nicht als Ursache. Wer nicht reproduzieren kann,
+meldet das als Ergebnis — das ist ein erlaubter Ausgang.
+
+**Befund A — `get_consult` feuert nie, obwohl die Gegenstelle ausdruecklich darum bittet.**
+Gemessen: ueber **alle 9 Turns** steht in `toolNames` nur `take_message` (Turns 7-9), **nie**
+`get_consult`. Die Gegenstelle sagte dreimal woertlich „frag Antonio"; der Agent antwortete
+einmal „Ich frage Antonio" und nahm dann eine Nachricht auf — genau der Satz, den O4 verbieten
+sollte. Ein MCP-Poll-Kandidat existierte nachweislich (derselbe Client hat Consult #0 beantwortet
+und pollte weiter). Zu klaeren, in dieser Reihenfolge:
+1. Wird `get_consult` in diesem Call ueberhaupt in `agentTools(call)` gelegt? Wenn nein: welche
+   Bedingung fehlt (Richtungs-Gate, Poll-Kandidat, `consultMaxPerCall`, Zeitfenster-Regel)?
+2. **Naheliegendster Verdacht, NICHT verifiziert:** `consultMaxPerCall = 1` — und Consult #0 hat
+   den Zaehler bereits verbraucht. Der Plan sagt ausdruecklich „derselbe Pfad wie Consult #0 —
+   EINE Mechanik statt zweier"; teilen sie sich auch den **Zaehler**, ist der In-Call-Consult in
+   jedem Anruf mit Briefing-Rueckfragen strukturell unerreichbar. Mit `PRECALL_BRIEFING_ENABLED`
+   live sind das die meisten Anrufe. Das waere kein Randfall, sondern die Regel.
+3. Erst wenn 1./2. beantwortet sind: liegt es am Werkzeugsatz oder an der Modell-Entscheidung?
+   Falls Letzteres, gilt die Repo-Lehre — Haiku braucht am Tool-Entscheidungspunkt **enge
+   Verbote**, keine wohlmeinenden Beschreibungen.
+
+**Befund B — Token-Streaming ist an und streamt nicht.** Gemessen: `"streamChunks":0` in **jedem**
+der 9 Turns, auch bei 41-Zeichen-Antworten, waehrend das Boot-Banner `Token-Streaming: AKTIV
+(TELNYX_SHIM_TOKEN_STREAMING=true)` meldet. Das Feld existiert im Log, der Code kennt den Pfad
+also. Zu klaeren: wird `completeStream()` ueberhaupt gerufen, und wenn ja, warum liefert der
+Chunker null Chunks? Kandidaten (ungeprueft): der Streaming-Pfad greift nur in der letzten
+Schleifenrunde; der Chunker gibt erst ab einer Satzgrenze/Mindestlaenge aus; der `tool_use`-Riegel
+haelt alles zurueck. **Ein Reproduktionstest gegen den bestehenden Shim-Harness ist der Weg**,
+nicht ein weiterer echter Anruf.
+
+**Rahmen:**
+- Beide Befunde sind **nicht gefaehrlich** — kein Gate, keine Offenlegung, keine Auth beruehrt;
+  B faellt auf das Bestandsverhalten zurueck. Es geht um Wirkungslosigkeit, nicht um Schaden.
+- Alle Riegel bleiben, wo sie sind. Insbesondere wird `consultMaxPerCall` **nicht** einfach
+  hochgesetzt, um A zu „loesen" — falls der geteilte Zaehler die Ursache ist, ist die Frage,
+  ob Consult #0 und der In-Call-Consult getrennte Kontingente brauchen, eine **Design-Frage
+  fuer den Owner**, keine Nebenbei-Entscheidung.
+- Ergebnis der Phase ist ein **Bericht mit Belegen** plus, wo die Ursache eindeutig ist, der
+  minimale Fix samt Regressionstest mit Mutationsprobe.
+
 ### AL-P11 — Ergebnis-Karte statt Prosa
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 11`.
