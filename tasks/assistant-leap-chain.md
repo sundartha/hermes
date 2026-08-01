@@ -694,6 +694,33 @@ Anbieter ohne Umbau, falls der Owner spaeter vergleichen will — dann als eigen
 Adapter-Tausch geht damit direkt in den Produktionspfad, sobald deployt wird — ohne Key bleibt er
 inaktiv, mit Key ist er sofort scharf. Kein „ist ja eh aus".
 
+**UMGESETZT (2026-08-01, Branch `phase/al-p10c-exa`).** Die API-Form wurde an der aktuellen
+Anbieter-Doku nachgeschlagen (`exa.ai/docs/reference/search` + `/pricing`, abgerufen
+2026-08-01): `POST https://api.exa.ai/search`, Auth-Header `x-api-key`, JSON-Body
+`{query,type,numResults,contents}`, Antwort `{requestId,results:[{title,url,id,highlights[],
+highlightScores[],…}],costDollars}`. Drei Entscheidungen, die der Plantext offen liess:
+
+- **E1 — `type: "auto"`, nicht `fast`/`instant`.** Die Doku nennt `fast` (~450 ms) und
+  `instant` (~250 ms) als schneller gegenueber `auto` (~1 s), belegt aber **nicht**, wie sie
+  mit `contents` zusammenspielen. Diese Phase raet keine API-Form
+  (`cost-truing-leg-join-root-cause`). ~1 s liegt sicher unter `LOOKUP_TIMEOUT_MS = 2500`;
+  eine Umstellung ist eine **gemessene** Folgeentscheidung, kein Kommentar-Fix.
+- **E2 — `contents: { highlights: true }`, nicht `text`.** Highlights sind query-relevante
+  Auszuege — das kuerzeste Gegenstueck zu Braves `description`. `contents.text` waere die ganze
+  Seite bei **gleichem** Seitenpreis: mehr Egress, mehr Injektionsflaeche, mehr Latenz.
+- **E3 — `numResults = LOOKUP_MAX_FACTS`, EINE Quelle.** Der Adapter importiert die Konstante
+  aus `lookup-guard.js` statt eine eigene Zahl zu fuehren: mehr zu holen waere bezahlter Muell
+  (der Inhalts-Riegel wirft es weg), weniger waere Verlust. **Gebuehren-Herleitung:**
+  `$7/1k Anfragen` (inkl. bis 10 Treffer) + `$1/1k Seiten` fuer `contents` -> bei 3 geholten
+  Treffern `0,7 + 3 x 0,1 = genau 1,0 US-Cent`. Der Startwert `LOOKUP_SEARCH_FEE_CENTS = 1` ist
+  damit **belegt statt geraten** — aber **ohne Puffer**: Formel `Cent = 0,7 + 0,1 x
+  Trefferzahl`, ab 4 Treffern muss der Wert steigen. Der Test `AL-P10c-3` verriegelt genau
+  diese Relation, damit sie nicht still auseinanderlaeuft.
+
+`src/research/in-call.js`, `ports.js`, `claude.js`, `bridge.js` und `src/store*` blieben
+unberuehrt; die 15 Bestandstests aus AL-P10b decken Gates, Geld, Egress, Injektion und Logs
+weiter ab (nur die Mock-Naht wurde auf die Exa-Form umgestellt).
+
 ### AL-P11 — Ergebnis-Karte statt Prosa
 
 - **Spezifikation:** `PLAN-ASSISTANT-LEAP.md`, `#### Phase 11`.

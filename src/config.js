@@ -265,26 +265,27 @@ const rawConfig = {
   // Prompt und Werkzeugsatz sind byte-identisch zum Bestand, es entsteht keine Gebuehr
   // und kein Egress. EIGENER Schalter neben RESEARCH_ENABLED, weil die Exposition eine
   // andere ist: hier geht eine im Gespraech entstandene Frage an einen ZWEITEN
-  // Auftragsverarbeiter (Brave), nicht Auftragsmaterial an Anthropic.
+  // Auftragsverarbeiter (Exa), nicht Auftragsmaterial an Anthropic.
   // Wirkt nur als Schnittmenge mit ASSISTANT_CONTEXT_ENABLED, dem Per-Tenant-Recht
-  // allowLookup (Profil) und einem gesetzten BRAVE_SEARCH_API_KEY.
+  // allowLookup (Profil) und einem gesetzten EXA_API_KEY.
   lookupEnabled: boolEnv("LOOKUP_ENABLED", process.env.LOOKUP_ENABLED, { fallback: false }),
   // Preis EINER In-Call-Suche in GANZZAHL Cents, dieselbe Achse wie alle anderen Kosten.
   // Wird VOR dem Absenden gebucht (eine ausgeloeste Suche ist bezahlt, auch ohne Antwort).
-  // VOR dem Anschalten gegen die aktuelle Anbieter-Preisliste pruefen - der Fallback ist
-  // ein Startwert, kein Beleg. Aufrunden ist die gewollte Fehlerrichtung.
+  // BELEGT gegen die Exa-Preisliste (exa.ai/docs/reference/pricing, 2026-08-01):
+  // $7/1k Anfragen (inkl. bis 10 Treffer) + $1/1k Seiten fuer contents -> bei 3 geholten
+  // Treffern 0,7 + 3 x 0,1 = genau 1,0 US-Cent. KEIN Puffer: Formel Cent = 0,7 + 0,1 x
+  // Trefferzahl; ab 4 Treffern muss dieser Wert steigen. Der Test AL-P10c-3 haelt die
+  // Relation zu LOOKUP_MAX_FACTS fest, damit sie nicht still auseinanderlaeuft.
   lookupSearchFeeCents: numEnv("LOOKUP_SEARCH_FEE_CENTS", process.env.LOOKUP_SEARCH_FEE_CENTS, {
     fallback: 1,
     min: 0,
   }),
   // SECRET, nie loggen/leaken (Regel 4). Leer = Feature fail-closed inaktiv, auch bei
   // LOOKUP_ENABLED=true. .trim() gegen pasted Newline (Muster elevenLabs apiKey).
-  braveSearchApiKey: (process.env.BRAVE_SEARCH_API_KEY || "").trim(),
+  exaApiKey: (process.env.EXA_API_KEY || "").trim(),
   // Anbieter-Basis, ausschliesslich damit Tests gegen einen lokalen Mock laufen koennen
   // (Muster ELEVENLABS_API_BASE / ANTHROPIC_BASE_URL) - im Betrieb nie setzen.
-  braveSearchApiBase: stripTrailingSlash(
-    (process.env.BRAVE_SEARCH_API_BASE || "https://api.search.brave.com").trim(),
-  ),
+  exaApiBase: stripTrailingSlash((process.env.EXA_API_BASE || "https://api.exa.ai").trim()),
 
   // ---- Mess-Instrumentierung (L0, src/metrics.js) ----
   // Master-Schalter fuer PII-freie Latenz-/Loop-/STT-Gap-Logs. DEFAULT AUS
@@ -1314,7 +1315,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
-  research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents", "lookupEnabled", "lookupSearchFeeCents", "braveSearchApiKey", "braveSearchApiBase"],
+  research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents", "lookupEnabled", "lookupSearchFeeCents", "exaApiKey", "exaApiBase"],
 });
 
 // EINE Gruppen-Fabrik (G5) fuer beide Oberflaechen: jedes Blatt ist Getter+Setter auf

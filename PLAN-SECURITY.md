@@ -1229,8 +1229,11 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > Vorab-Recherche (AL-P10) laeuft in Anthropics serverseitigem `web_search` INNERHALB des
 > bestehenden Modell-Aufrufs - kein eigener HTTP-Client, kein neues Secret, kein zweiter
 > Auftragsverarbeiter. **AL-P10b durchbricht genau diese Randbedingung**: der In-Call-
-> Adapter (`src/research/adapters/brave-search.js`) fuehrt die Suche SELBST aus, mit einem
-> NEUEN Secret (`BRAVE_SEARCH_API_KEY`) bei einem ZWEITEN Auftragsverarbeiter (Brave).
+> Adapter (`src/research/adapters/exa-search.js`) fuehrt die Suche SELBST aus, mit einem
+> NEUEN Secret (`EXA_API_KEY`) bei einem ZWEITEN Auftragsverarbeiter (Exa).
+> **AL-P10c (2026-08-01):** Anbieter-Tausch Brave -> Exa. Brave war NIE live (nie ein Key
+> gesetzt, kein einziger Aufruf gegen die echte API); der Adapter wurde ersatzlos entfernt.
+> Alle vier Riegel gelten unveraendert weiter.
 > Schalter: `LOOKUP_ENABLED`, Default AUS.
 >
 > **Vier unabhaengige Riegel** (`lookupProviderFor`, `src/research/in-call.js`):

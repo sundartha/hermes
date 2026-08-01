@@ -1,7 +1,7 @@
 // Regressionstest fuer den Gates-Lauf-Blocker aus der AL-P10b-Review: test/al-p10b-lookup.test.js
 // traegt bewusst KEINE Katalog-ID am Namensanfang (Lehre catalog-id-prefix-misroutes-tests),
 // also matcht im Gates-Lauf (--test-name-pattern) KEIN Test der Datei. Der Root-before()-Hook
-// laeuft dann nie (anthropic/brave bleiben undefined), der Root-after()-Hook laeuft aber
+// laeuft dann nie (anthropic/exa bleiben undefined), der Root-after()-Hook laeuft aber
 // trotzdem - vor dem Fix dereferenzierte er die undefined-Objekte und liess den Kindprozess
 // haengen statt sauber rot zu werden (failureType hookFailed, EXIT != 0, kein Prozessende).
 //

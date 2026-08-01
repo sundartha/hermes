@@ -110,10 +110,10 @@ export function bookResearchSearchFee({ tenantId, searches }) {
   store.addResearchFeeCostCents(tenantId, searches * config.research.researchSearchFeeCents);
 }
 
-// AL-P10b: Gebuehr EINER In-Call-Suche (Brave). Eigene benannte Funktion statt eines
-// Flags an bookResearchSearchFee, weil es eine ANDERE Achse mit eigenem Preis ist (N4:
-// der Name sagt, was bezahlt wird). Wie dort bewusst NUR die Live-Budget-Achse, NICHT der
-// Stripe-Ledger (usage_event kennt kein research-kind); Unterbuchung im Ledger ist
+// AL-P10b: Gebuehr EINER In-Call-Suche (Exa, Anbieter seit AL-P10c). Eigene benannte
+// Funktion statt eines Flags an bookResearchSearchFee, weil es eine ANDERE Achse mit
+// eigenem Preis ist (N4: der Name sagt, was bezahlt wird). Wie dort bewusst NUR die
+// Live-Budget-Achse, NICHT der Stripe-Ledger (usage_event kennt kein research-kind); Unterbuchung im Ledger ist
 // Umsatzverlust bei uns, kein Schutzverlust.
 //
 // Der Aufrufer bucht VOR dem Absenden: eine ausgeloeste Suche ist berechnet, auch wenn
