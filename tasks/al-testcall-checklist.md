@@ -8,9 +8,54 @@ Regel aus `tasks/assistant-leap-chain.md` §2: die geldrelevanten Flags
 (`PRECALL_BRIEFING_ENABLED`, `RESEARCH_ENABLED`, `LOOKUP_ENABLED`, `THINKING_SIGNAL_ENABLED`)
 bleiben AUS. **Ihr Anschalten IST die Abnahme.**
 
+## STAND 2026-08-01 — ALLES SCHARF GESCHALTET (Owner-Weisung)
+
+Der Owner hat am 2026-08-01 deployt und **alle** Flags anschalten lassen („nichts aus").
+Damit ist die Regel im Kopf dieser Datei („die geldrelevanten Flags bleiben AUS, ihr
+Anschalten IST die Abnahme") **eingeloest** — die Abnahmen unten sind ab jetzt Messungen am
+laufenden System, keine Vorbedingungen mehr.
+
+| Faehigkeit | Stand | Beleg |
+|---|---|---|
+| Token-Streaming (AL-P7) | **an** | Boot-Banner `Token-Streaming: AKTIV` |
+| Denk-Signal (AL-P7b) | **an** | Boot-Banner `Denk-Signal: AKTIV` |
+| `get_consult` im Gespraech (AL-P14) | **an** | Boot-Banner + Profil-Recht `allowConsult=true` |
+| Consult-Kanal (AL-P13) | **an** | `CONSULT_ENABLED=true` (keine Boot-Sonde) |
+| Vorab-Briefing (AL-P9) | **an** | `PRECALL_BRIEFING_ENABLED=true` (keine Boot-Sonde) |
+| Vorab-Recherche (AL-P10) | **an** | Env + `settings.allow_research=t` (DB-verifiziert) |
+| Beziehungsgedaechtnis (AL-P12) | **an** | `settings.allow_call_memory=t` (DB-verifiziert) |
+| Zitate in der Ergebnis-Karte (AL-P11) | **an**, 7 Tage | `EVIDENCE_RETENTION_DAYS=7` (keine Boot-Sonde, Owner-Angabe) |
+| In-Call-Recherche (AL-P10b) | **aus** | Adapter wird in AL-P10c auf **Exa** getauscht; `EXA_API_KEY` liegt bereits |
+
+**Vier Schalter haben KEINE Boot-Sonde** (`CONSULT_ENABLED`, `PRECALL_BRIEFING_ENABLED`,
+`RESEARCH_ENABLED`, `EVIDENCE_RETENTION_DAYS`). Sie sind gesetzt, aber am Live-System nicht
+belegbar — im Unterschied zu den drei, die im Banner stehen. Wer sie beweisen will, braucht
+einen echten Anruf und die Log-Zeilen aus den jeweiligen Abnahmen unten.
+
+**Gelernt und teuer, falls jemand wieder direkt in die DB schreibt:** der pg-Store haelt den
+Zustand **im Speicher** (`requireState()`/`save()`). Ein `UPDATE` am laufenden Prozess vorbei ist
+fuer den Dienst unsichtbar **und kann von seiner alten Kopie ueberschrieben werden**. Deshalb gilt:
+DB-Schreibzugriff -> **Neustart** -> Gegenprobe. Am 2026-08-01 so gemacht und geprueft; die Werte
+haben den Neustart ueberlebt.
+
+### OFFENE PFLICHT beim Owner: Datenschutzerklaerung nachziehen
+
+Zwei der heute scharf geschalteten Faehigkeiten waren **nicht** aus Vorsicht aus, sondern weil sie
+Daten **Dritter** betreffen — Menschen, die der Agent anruft und die nie eingewilligt haben:
+
+- **AL-P11 / `EVIDENCE_RETENTION_DAYS=7`:** bis zu **2 woertliche Zitate** des Angerufenen werden
+  7 Tage gespeichert.
+- **AL-P12 / `allow_call_memory=true`:** Gespraechsergebnisse werden ueber Anrufe hinweg
+  wiederverwendet.
+
+Die Datenschutzerklaerung (`apps/web`) nennt **beides bis heute nicht**. Der Owner hat das
+Anschalten am 2026-08-01 ausdruecklich freigegeben; die Anpassung des Textes bleibt offen und
+gehoert nachgezogen. **Rueckweg, falls es schnell gehen muss:** `EVIDENCE_RETENTION_DAYS=0` und
+`allow_call_memory=false` — beide sofort wirksam nach einem Neustart.
+
 ## Startbestand (aus der Uebergabe, vor der ersten Phase)
 
-1. **`EXA_API_KEY` beschaffen und setzen** (`.env` + Render-Dashboard).
+1. ~~**`EXA_API_KEY` beschaffen und setzen**~~ — **ERLEDIGT 2026-08-01: der Owner hat den Key im Render-Dashboard gesetzt.** Niemals committen.
    Erst fuer die Abnahme von AL-P10b noetig — zum Bauen nicht. Niemals committen.
    *(Der Owner hat am 28.07. auf Brave korrigiert und am 01.08. mit AL-P10c auf Exa
    zurueckgedreht; Brave ist nie live gelaufen.)*
