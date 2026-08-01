@@ -24,7 +24,7 @@ Quelle der Wahrheit ist `git`, nicht diese Datei — bei Zweifel `git log --onel
 | AL-P8 | `phase/al-p8-bench-fix1` | PASS (1 Fix-Runde, 3412 gruen) | `61d7563` | **gemergt** — 2 Abnahmen (kosten Geld) |
 | AL-P9 | `phase/al-p9-briefing-impl` (NICHT der gemeldete) | PASS (0 Fix-Runden, 3426 gruen) | `479721e` | **gemergt** — Flag bleibt AUS |
 | AL-P10 | `phase/al-p10-precall-research-fix1` | PASS (1 Fix-Runde, 3462 gruen) | `21a1f9c` | **gemergt** — Flag bleibt AUS |
-| AL-P10b | — | — | — | offen |
+| AL-P10b | `phase/al-p10b-lookup-fix3` (NICHT der geplante) | BLOCKED -> PASS im Nachlauf AL-P10b-fix (3694 gruen) | `b33216f` | **gemergt** — `LOOKUP_ENABLED` Default AUS, Key fehlt noch |
 | AL-P11 | `phase/al-p11-ergebnis-karte` | PASS (0 Fix-Runden, 3457 gruen) | `dd0cc26` | **gemergt** — Zitate erst nach Datenschutzerklaerung |
 | AL-P12 | `phase/al-p12-gedaechtnis` | PASS (0 Fix-Runden, 3475 gruen) | `3d645de` | **gemergt** |
 | AL-P13 | `phase/al-p13-consult-kanal-fix1` | PASS (1 Fix-Runde, highStakes, 3524 gruen) | `a090dbd` | **gemergt** — Bahn B KOMPLETT |
@@ -439,6 +439,36 @@ Defekt. Der Wiederholungsanruf 40 s spaeter kam normal durch.
 inert; **ersatzlos aus dem Code entfernt ihn AL-P2z** — das ist die Zusage der Phase, nicht
 „Flag auf 0". **Eingeloest:** `96d2526`, 718 Zeilen entfernt, `git grep` auf
 `sseSpike`/`SSE_SPIKE` in `src/`, `scripts/`, `test/`, `.env.example`, `render.yaml` ist leer.
+
+### 2026-08-01 — AL-P10b nach BLOCKED gemergt; Kette bis auf AL-P15 gebaut
+
+- **AL-P7 (`591e21f`), AL-P7b (`7db1393`), AL-P14 (`5903f90`), AL-P2s/AL-P2z** stehen. Mit
+  **AL-P10b (`b33216f`)** ist die Kette **16 von 17** — offen ist nur noch AL-P15, und die ist
+  eine Messphase, die AL-P14 erst in der Praxis braucht.
+- **AL-P10b lief zunaechst BLOCKED aus** (2 Fix-Runden verbraucht, ein Befund blieb). Der Befund
+  war echt und **gemessen statt vermutet**: der Realtime-Pfad bekam die GRENZEN-Prompt-Zeile
+  „kann nachschlagen", waehrend `realtimeTools = toolDefs` das Werkzeug nach Entscheidung E1
+  bewusst nie traegt — Faehigkeits-Unehrlichkeit in geteiltem Code, live nicht ausloesbar
+  (`VOICE_ENGINE=budget`, Flag aus), aber neu eingefuehrt. Behoben im Nachlauf **AL-P10b-fix**
+  auf `phase/al-p10b-lookup-fix3` (Basis: der Branch, NICHT master), Gate PASS ohne Fix-Runde.
+- **Der erste Anlauf dieses Nachlaufs lief vollstaendig ins Leere:** alle sechs Agenten
+  scheiterten am Wochenlimit der API (`resets 3am`), 0 Tokens, 0 Werkzeugaufrufe, 0 Dateien.
+  **Wichtig fuer die naechste Session:** ein solcher Lauf hinterlaesst **keinen** Branch — der
+  Neustart war deshalb gefahrlos. Waere der Torso entstanden, waere der zweite Lauf still auf
+  `…-fix3-impl` ausgewichen und haette trotzdem den geplanten Namen gemeldet.
+- **Merge-Konflikt in dieser Spec-Datei** (beide Seiten haben Abschnitte angehaengt) — beide
+  Saetze behalten. Dabei eine **ueberholte Aussage korrigiert**: der `callerName`-Filter aus E8
+  ist ersatzlos gestrichen; das Feld ist seit der G1-Identitaets-Bindung hart `null`, und der
+  Test, der den Filter gruen zeigte, setzte den Wert selbst. Ein Filter gegen eine Konstante
+  `null` ist vorgetaeuschter Schutz.
+- **Suite-Protokoll, ehrlich:** der erste Lauf auf dem gemergten Baum meldete **2 Fehlschlaege
+  von 3715**, und ich habe **nur die Zusammenfassung gegriffen — die Namen sind verloren**.
+  Genau der Fehler, den diese Datei nach Welle 1 schon einmal notiert hat. **Zwei** folgende
+  Volllaeufe auf demselben Baum, beide mit vollem Mitschnitt: **3715/3715, exit 0, keine
+  `not ok`-Zeile**. Nach dem Gate-Protokoll (rot zaehlt nur, wenn es isoliert rot bleibt) gilt
+  das als der dokumentierte Volllast-Flake — **belegt ist es damit aber nicht, nur
+  wahrscheinlich.** Wer das naechste Mal einen roten Lauf sieht: Ausgabe in eine Datei, dann
+  `grep "^not ok"` — die Zusammenfassung allein reicht nicht.
 
 ### 2026-07-31 — Owner-Gegenprobe am Telefon: KEINE Verschlechterung
 
