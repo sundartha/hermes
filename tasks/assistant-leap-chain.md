@@ -34,7 +34,7 @@ Diese Datei ist der `specFile` fuer `phase-impl-lean`. `planDoc` ist immer
 
 | Frage | Entscheidung |
 |---|---|
-| Such-Anbieter (Phase 10b) | **Brave Search** (`BRAVE_SEARCH_API_KEY`) — korrigiert am 28.07.: der Owner hat seinen frueheren Recherche-Agenten mit Brave betrieben, nicht mit Exa. Betriebserfahrung schlaegt Benchmark-Tabelle; Exa bleibt Ausweichkandidat hinter demselben Port. **Der Key wird zum BAUEN nicht gebraucht** — Adapter gegen Fixtures; leerer, dokumentierter Platzhalter in `.env.example` und `render.yaml`, ohne Key fail-closed inaktiv. |
+| Such-Anbieter (Phase 10b) | **UEBERHOLT — seit 2026-08-01 gilt Exa, s. Abschnitt AL-P10c.** Historisch: **Brave Search** (`BRAVE_SEARCH_API_KEY`) — korrigiert am 28.07.: der Owner hat seinen frueheren Recherche-Agenten mit Brave betrieben, nicht mit Exa. Betriebserfahrung schlaegt Benchmark-Tabelle; Exa bleibt Ausweichkandidat hinter demselben Port. **Der Key wird zum BAUEN nicht gebraucht** — Adapter gegen Fixtures; leerer, dokumentierter Platzhalter in `.env.example` und `render.yaml`, ohne Key fail-closed inaktiv. |
 | Render-Env-Vars aendern | **Erlaubt, mit Protokoll** — jede Aenderung mit Zeitstempel, Variable, Alt-/Neuwert und Phase in `tasks/al-env-changes.md`. |
 | ABER: geldrelevante Flags | **Bleiben AUS.** `PRECALL_BRIEFING_ENABLED`, `RESEARCH_ENABLED`, `LOOKUP_ENABLED`, `THINKING_SIGNAL_ENABLED`: ihr Anschalten IST die Abnahme, und die hat der Owner auf "offen protokollieren" gesetzt. Erlaubt sind nur neue Variablen mit Default-aus und inerte Werte. |
 | Phasen mit Testanruf-Abnahme | **Code bauen, Flag AUS lassen, Abnahme offen protokollieren** in `tasks/al-testcall-checklist.md`. Nicht zurueckstellen. |
@@ -654,6 +654,45 @@ Blast-Radius: 4 neue Produktionsdateien (`research/adapters/brave-search.js`,
 Testdateien, keine neue Dependency, keine DB-Migration, kein Eingriff in
 `execTool`/`toolDefs`/`bridge.js`/`disclosureSentence`/`outbound-gates.js`/`budget-gate.js`.
 Alle vier neuen Env-Vars Default aus bzw. leer.
+
+### AL-P10c — Such-Anbieter der In-Call-Recherche: Brave raus, Exa rein
+
+**Owner-Entscheidung 2026-08-01, kehrt die Entscheidung vom 28.07. um:** der In-Call-Nachschlag
+laeuft ueber **Exa**, nicht ueber Brave. Diese Zeile geht allen frueheren Angaben vor — auch
+Abschnitt 2 dieser Datei und der Startbestand in `tasks/al-testcall-checklist.md`.
+
+**Warum ersetzen statt danebenstellen:** Brave war **nie live** — es wurde nie ein
+`BRAVE_SEARCH_API_KEY` gesetzt, es gibt keinen einzigen Aufruf gegen die echte API. Zwei Adapter
+fuer denselben Platz waeren toter Code (CLAUDE.md, hart verboten). Der Port traegt einen zweiten
+Anbieter ohne Umbau, falls der Owner spaeter vergleichen will — dann als eigene Entscheidung.
+
+**Was konkret:**
+- Neuer Adapter `src/research/adapters/exa-search.js` **hinter demselben Port** (`ports.js`,
+  `registry.js`) und mit **derselben Signatur** wie der Brave-Adapter. Kein zweiter Such-Client,
+  keine Aenderung an `src/research/in-call.js` ausser der Anbieter-Auswahl.
+- `src/research/adapters/brave-search.js` und **jede** Spur von `BRAVE_SEARCH_API_KEY` /
+  `BRAVE_*` entfernen: `config.js`, `.env.example`, `render.yaml`, `BASE_ENV` in
+  `test/helpers.js`, Tests, `README.md`, `PLAN-SECURITY.md`. Danach ist `git grep -i brave` in
+  `src/`, `test/`, `.env.example`, `render.yaml` **leer** — das ist zu belegen.
+- `EXA_API_KEY` nach der **Vier-Stellen-Pflicht** anlegen (leerer, dokumentierter Platzhalter;
+  ohne Key **fail-closed inaktiv**, exakt wie zuvor).
+- **Die API-Form wird nachgeschlagen, nicht geraten.** Endpunkt, Auth-Header, Request- und
+  Response-Schema von Exa gegen die **aktuelle** Anbieter-Doku pruefen (WebFetch), bevor der
+  Adapter entsteht. Eine falsch geratene Feldnamen-Zuordnung ist in diesem Repo schon einmal
+  teuer geworden (297 von 297 Belegen verworfen, `cost-truing-leg-join-root-cause`).
+- **Keine neue npm-Dependency**, kein SDK: `fetch` + Timeout nach Bestandsmuster.
+- Alle Riegel aus AL-P10b bleiben unveraendert in Kraft: Richtungs-Gate (outbound + aktiver
+  Call), Schnittmenge mit `ASSISTANT_CONTEXT_ENABLED` und dem Profil-Recht `allowLookup`,
+  Kontingent, Inhalts-Riegel, Treffer ausschliesslich als `context.key_facts` im
+  HINTERGRUND-Block, Suchgebuehr vor dem Zug gebucht.
+- **`LOOKUP_SEARCH_FEE_CENTS` gegen die Exa-Preisliste pruefen** und den Wert begruenden — der
+  Startwert 1 Cent stammt aus der Brave-Annahme.
+- Dokumentationspflicht bleibt: der In-Call-Adapter ist **ein zweiter Auftragsverarbeiter**. In
+  `README.md` und `PLAN-SECURITY.md` steht ab jetzt **Exa**, nicht Brave.
+
+**Achtung, Live-Zustand:** `LOOKUP_ENABLED` ist seit dem 2026-08-01 **live auf true**. Der
+Adapter-Tausch geht damit direkt in den Produktionspfad, sobald deployt wird — ohne Key bleibt er
+inaktiv, mit Key ist er sofort scharf. Kein „ist ja eh aus".
 
 ### AL-P11 — Ergebnis-Karte statt Prosa
 
