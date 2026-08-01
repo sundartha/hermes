@@ -71,9 +71,15 @@ function promptInputs(call) {
     // Boolean-Vergleich, keinen Scan.
     memory: counterpartyMemoryFor(call),
     // AL-P10b: EINE Quelle (G5) fuer "wird look_up in diesem Zug angeboten?" - dieselbe
-    // Frage entscheidet ueber den Werkzeugsatz (agentTools) UND ueber die GRENZEN-Zeile.
+    // Frage entscheidet ueber den Werkzeugsatz UND ueber die GRENZEN-Zeile.
     // Ein Prompt, der "du kannst nichts nachschlagen" sagt, waehrend das Werkzeug
     // danebensteht, ist genau die Klasse Widerspruch, an der Haiku kippt.
+    // AL-P10b-fix: die Zusage gilt fuer BEIDE Aufrufer dieses Prompts. Budget-Engine:
+    // agentTools schaltet mit demselben Praedikat. Realtime-Bridge: ihr Werkzeugsatz
+    // (realtimeTools = toolDefs) traegt look_up nie, deshalb liefert lookupAvailableFor
+    // unter VOICE_ENGINE=realtime fail-closed false (Engine-Faktor in
+    // research/in-call.js lookupProviderFor). Vorher stimmte der Satz nur fuer die
+    // Budget-Engine - der Realtime-Prompt versprach eine Faehigkeit ohne Werkzeug.
     lookupAvailable: lookupAvailableFor(call),
     now: new Date().toLocaleString(loc.dateLocale, {
       timeZone,
@@ -164,8 +170,8 @@ function boundaryRules({ loc, settings: s, owner, lookupAvailable }) {
   if (!s.allowPersonalData) lines.push(b.personalData(owner));
   if (!s.allowBankData) lines.push(b.bankData);
   // AL-P10b: genau EINE Zeile wechselt. lookupAvailable=false (Flag aus, Inbound,
-  // Kontingent erschoepft, kein Tenant-Recht) -> b.noLookup -> Prompt byte-identisch
-  // zum Bestand.
+  // Realtime-Engine, Kontingent erschoepft, kein Tenant-Recht) -> b.noLookup -> Prompt
+  // byte-identisch zum Bestand.
   lines.push(
     b.noCalendar(owner),
     b.noBooking,

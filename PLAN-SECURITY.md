@@ -1240,8 +1240,10 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 >    kann damit strukturell nicht an einen Suchindex gehen. Zusaetzlich Schnittmenge mit
 >    `ASSISTANT_CONTEXT_ENABLED` (ohne HINTERGRUND-Kanal gaebe es keinen Empfaenger fuer
 >    den Treffer), dem Per-Tenant-Recht `allowLookup` (Default AUS in `DEFAULT_PROFILE`
->    UND `PAID_PLAN_PROFILE`, nur `OWNER_PROFILE` traegt `true`) und einem gesetzten
->    Secret (leer = fail-closed inaktiv, auch bei `LOOKUP_ENABLED=true`).
+>    UND `PAID_PLAN_PROFILE`, nur `OWNER_PROFILE` traegt `true`), einem gesetzten
+>    Secret (leer = fail-closed inaktiv, auch bei `LOOKUP_ENABLED=true`) und der
+>    **Budget-Engine**: unter `VOICE_ENGINE=realtime` ist das Werkzeug strukturell
+>    inaktiv (AL-P10b-fix, s. Riegel 4).
 > 2. **Kontingent:** hoechstens `LOOKUP_MAX_PER_CALL = 2` Suchen je Gespraech (benannte
 >    Konstante, KEIN Env-Knopf - ein zu gross gesetzter Wert waere eine abgeschaltete
 >    Sicherung). Der Zaehler ist EPHEMER (keine DB-Spalte, Muster `countNoSpeechTurn`):
@@ -1262,6 +1264,13 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 >    `default`-Zweig (`unknownTool`). Der Riegel gilt damit automatisch fuer die
 >    Realtime-Bridge, die `execTool` direkt ruft; `toolDefs()` bleibt unveraendert, die
 >    Realtime-Engine und `agentToolNames` sehen das Werkzeug nie.
+>    **AL-P10b-fix:** weil die Realtime-Bridge sich den `systemPrompt` mit der
+>    Budget-Engine teilt, versprach die GRENZEN-Zeile dort bis dahin eine Faehigkeit
+>    ohne Werkzeug (gemessen: Prompt "kann nachschlagen" = true, angebotene Werkzeuge =
+>    `end_call,take_message`). Der Engine-Faktor in `lookupProviderFor` schliesst das an
+>    der EINEN Quelle: Prompt-Zeile und Werkzeugsatz koennen nicht auseinanderlaufen.
+>    Gepinnt in `test/al-p10b-lookup.test.js` (AL-P10b-15), inklusive Praemisse
+>    "`realtimeTools` traegt kein `look_up`".
 >
 > **EHRLICHE GRENZE (E8), bewusst so und nicht geschoent:** dieser Filter ist **schwaecher
 > als die pre-call-Konstruktion** von AL-P10. Dort ist der Egress ueber eine gefrorene

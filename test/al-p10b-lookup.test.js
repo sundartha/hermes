@@ -74,7 +74,7 @@ let braveResults = [];
 let braveHangs = false;
 const hungResponses = [];
 
-let store, claude, config, LOCALES, inCall, withConfig;
+let store, claude, config, LOCALES, inCall, withConfig, bridge, VOICE_ENGINE;
 
 // Der Adapter faltet title + description zu EINER Zeile - die Erwartung bildet genau das
 // ab (und pinnt damit auch, dass die URL NICHT mitkommt).
@@ -123,10 +123,13 @@ before(async () => {
       calls,
     }),
   );
-  ({ config } = await import("../src/config.js"));
+  ({ config, VOICE_ENGINE } = await import("../src/config.js"));
   store = await import("../src/store.js");
   claude = await import("../src/claude.js");
   inCall = await import("../src/research/in-call.js");
+  // AL-P10b-fix: die Bridge ist der zweite Aufrufer des systemPrompt. Import ist
+  // nebenwirkungsfrei (der WebSocketServer entsteht erst in attachMediaBridge).
+  bridge = await import("../src/bridge.js");
   ({ LOCALES } = await import("../src/i18n/locales.js"));
   ({ withConfig } = makeConfigOverrides(config));
 });
@@ -407,4 +410,33 @@ test("AL-P10b-14: die [lookup]-Logzeilen tragen weder Query noch Treffer noch Se
     }
   }
   assert.ok(lookupLines.some((l) => /dauer_ms=\d+/.test(l)), "keine Latenz-Zahl im Log");
+});
+
+// ---------- G: Engine-Ehrlichkeit (AL-P10b-fix) ----------
+
+// Der Realtime-Pfad teilt sich den systemPrompt mit der Budget-Engine, hat aber einen
+// EIGENEN Werkzeugsatz (realtimeTools = toolDefs, ohne look_up - Entscheidung E1).
+// Gemessen wurde vor dem Fix: Prompt "kann nachschlagen" = true, angebotene Werkzeuge =
+// end_call,take_message. Der Test pinnt beide Haelften plus die Praemisse.
+test("AL-P10b-15: Realtime-Engine - kein look_up im Werkzeugsatz UND keine lookupAllowed-Zeile im Prompt", async () => {
+  const call = store.getCall("call_alp10b_18");
+  const b = LOCALES.de.prompt.boundaries;
+  // Praemisse LAUT statt still: traegt der Realtime-Werkzeugsatz eines Tages look_up,
+  // ist die Aussage dieses Tests hinfaellig - dann faellt er auf, statt gruen zu luegen.
+  assert.ok(
+    !bridge.realtimeTools("de").some((t) => t.name === LOOK_UP),
+    "Praemisse gebrochen: realtimeTools traegt look_up - Prompt-Bindung neu entscheiden",
+  );
+  await withConfig("voiceEngine", VOICE_ENGINE.REALTIME, async () => {
+    assert.equal(inCall.lookupAvailableFor(call), false, "look_up trotz Realtime-Engine registriert");
+    const prompt = bridge.realtimeInstructions(call);
+    assert.ok(!prompt.includes(b.lookupAllowed), "Realtime-Prompt verspricht ein Werkzeug, das er nicht anbietet");
+    assert.ok(prompt.includes(b.noLookup), "GRENZEN-Zeile fehlt im Realtime-Prompt");
+  });
+  // Gegenprobe an DERSELBEN Fixture: der Fix ist chirurgisch, die Budget-Engine bleibt
+  // unveraendert scharf (sonst waere das Feature still global abgeschaltet).
+  await withConfig("voiceEngine", VOICE_ENGINE.BUDGET, async () => {
+    assert.equal(inCall.lookupAvailableFor(call), true, "Budget-Engine mit-abgeschaltet");
+    assert.ok(claude.systemPrompt(call).includes(b.lookupAllowed));
+  });
 });
