@@ -281,16 +281,29 @@ speechWireOpen: wire !== null,
 - `turnDiagnostics` bleibt **unangetastet** — es sieht `wire` nicht, ein drittes Argument
   waere unnoetige Kopplung (F1).
 
-**Sonst nichts.** `git diff master --stat` (ohne die beiden Berichts-Dateien):
+**Dazu kommt eine Test-Infrastruktur-Bereinigung** (Review-Runde 1, Commit `ea16ef9`): die
+Anthropic-SSE-Fixture-Bausteine (`text`/`toolUse`/`reply`/`jsonMessage`/`sseEvent`/`writeSse`),
+die in `test/al-d1-cause-diagnostics.test.js` bereits existierten und fuer diese Phase
+wortgleich in `test/al-d2-thinking-signal-diagnostics.test.js` uebernommen worden waren
+(G5/S2-Duplizierung), wurden nach `test/anthropic-sse-fixtures.js` extrahiert und in beiden
+Testdateien durch den Import ersetzt. Das aendert `test/al-d1-cause-diagnostics.test.js`
+(-66 Zeilen) — ein **Bestandstest wurde geaendert**, aber rein strukturell: die Fixture-Funktionen
+sind byte-identisch, nur der Ort hat sich verschoben; assertions/IDs/Verhalten unangetastet.
+`git diff 1bf694a ea16ef9 --stat` (ohne `tasks/al-d2-diagnose.md` selbst):
 
 ```
- src/telnyx-llm-shim.js                        |   7 +
- test/al-d2-thinking-signal-diagnostics.test.js| neu
+ src/telnyx-llm-shim.js                         |   7 +
+ test/al-d1-cause-diagnostics.test.js           |  66 +----
+ test/al-d2-thinking-signal-diagnostics.test.js | 368 ++++++++++++++++++++++
+ test/anthropic-sse-fixtures.js                 |  78 ++++++
+ 4 files changed, 419 insertions(+), 34 deletions(-)
 ```
 
 Insbesondere: **keine** Zeile in `src/claude.js`, **keine** Zeile in
 `src/thinking-signal.js`, keine Gate-/Offenlegungs-/Auth-/Geldpfad-Datei, kein
-`package.json`/`package-lock.json`-Diff, **kein** Bestandstest geaendert.
+`package.json`/`package-lock.json`-Diff. Der Bestandstest-Diff in
+`test/al-d1-cause-diagnostics.test.js` ist Extraktion, kein Verhaltens- oder Assertion-Diff
+(gepruefte K1-K6- und PII-Pin-Ergebnisse dieser Datei unveraendert).
 
 **Verifikation:** `npm test` gruen (3724 Tests, 0 rot, inkl. AL-D2-1..8);
 `npm run test:gates` unveraendert bei der dokumentierten Baseline (3 rot: GAP-05, GAP-15
@@ -301,12 +314,18 @@ zweimal); `node --check` gruen fuer `src/telnyx-llm-shim.js` und
 
 ## Anhang: Notiz fuer den Clean-Code-Audit (S3)
 
-Die Anthropic-Mock-Bausteine (`text`, `toolUse`, `reply`, `jsonMessage`, `sseEvent`,
-`writeSse`, `UNWANTED_EXTRA_ROUNDTRIP_MARKER`) sind aus
-`test/al-d1-cause-diagnostics.test.js` **wortgleich uebernommen**. Das ist bewusst:
-Testfixture-Rohstoff, kein Produktivcode. Eine Extraktion in eine gemeinsame Datei ist
-**nicht** Teil dieser Phase (Scope) — `test/helpers.js` scheidet als Ort aus, weil es
-praktisch jede Testdatei als allererstes importiert und ein dort gezogener
-`config.js`-Import den `test-base-env-drift`-Bug fuer die gesamte Suite reproduzieren
-wuerde (s. Kopfkommentar in `test/config-namespaces-helper.js`). Der Umbau bleibt eine
-eigene, spaetere Entscheidung.
+Ursprung: Die Anthropic-Mock-Bausteine (`text`, `toolUse`, `reply`, `jsonMessage`, `sseEvent`,
+`writeSse`) waren in der ersten Fassung dieser Phase aus `test/al-d1-cause-diagnostics.test.js`
+wortgleich in `test/al-d2-thinking-signal-diagnostics.test.js` uebernommen — eine G5/S2-
+Duplizierung, die der Clean-Code-Review (Runde 1) als Blocker markiert hat.
+
+**Getroffene Entscheidung (Commit `ea16ef9`):** die Bausteine wurden in eine neue,
+gemeinsame Datei `test/anthropic-sse-fixtures.js` extrahiert (mit `makeJsonMessage`/
+`makeWriteSse`-Fabriken fuer die je Datei unterschiedliche Nachrichten-ID); beide Testdateien
+importieren jetzt von dort statt die Bausteine zu duplizieren.
+
+**Warum nicht `test/helpers.js`:** diese Datei scheidet als Ort aus, weil sie praktisch jede
+Testdatei als allererstes importiert und ein dort gezogener `config.js`-Import den
+`test-base-env-drift`-Bug fuer die gesamte Suite reproduzieren wuerde (s. Kopfkommentar in
+`test/config-namespaces-helper.js`). `test/anthropic-sse-fixtures.js` ist bewusst eine
+eigenstaendige, config-freie Datei ohne diesen Import.
