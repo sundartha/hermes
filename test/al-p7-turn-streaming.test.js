@@ -130,7 +130,7 @@ before(async () => {
   process.env.ASSISTANT_CONTEXT_ENABLED = "true";
   const answeredAt = new Date().toISOString();
   const calls = [];
-  for (let i = 1; i <= 8; i++)
+  for (let i = 1; i <= 9; i++)
     calls.push(seedCall({ id: `call_alp7_${i}`, direction: "outbound", language: "de", answeredAt }));
   process.env.DATA_DIR = tempDataDir(
     seedState({
@@ -206,7 +206,19 @@ test("AL-P7-19: ohne Abnehmer wird nicht gestreamt (Bestandspfad, stream nicht i
   assert.equal(turn.speech, ZWEI_SAETZE);
 });
 
-test("AL-P7-20: ein informationslieferndes Werkzeug im Satz verbietet das Streamen (Abnahme 3)", async () => {
+// AL-P17 (E1/E3) hat die Zusage dieses Tests umgedreht.
+//   Zusage vorher: ein INFORMATIONSLIEFERNDES Werkzeug (get_consult) im angebotenen Satz
+//     sperrt das Streamen.
+//   Zusage jetzt:  get_consult ist strom-sicher (der Fueller ersetzt seit E3 keinen
+//     bereits gesprochenen Text mehr, Owner-Entscheidung O-D1-B) und armiert. Gesperrt
+//     wird nur noch bei einem UNBEKANNTEN Werkzeug (fail-closed, G27).
+//   Warum das die Absicht ist: die Klasse "informationsliefernd sperrt" war die Ursache
+//     von Befund D-1 - sie hielt den Satz-Chunker live in JEDEM Turn still. Der
+//     fail-closed-Beweis lebt jetzt genau EINMAL, als Einheitstest mit einem erfundenen
+//     Werkzeug (AL-P17-4, test/al-p17-first-round-audible.test.js); dieser Test pinnt an
+//     seinem Ort die GEAENDERTE Ende-zu-Ende-Aussage. Abnahme 3 aus AL-P7 bleibt damit
+//     als Ganzes abgedeckt, nur auf zwei Orte verteilt.
+test("AL-P7-20: get_consult im angebotenen Satz armiert das Streamen jetzt (AL-P17 E1/E3)", async () => {
   bodies = [];
   queue = [reply(text(ZWEI_SAETZE))];
   const call = armConsult("call_alp7_4");
@@ -214,8 +226,8 @@ test("AL-P7-20: ein informationslieferndes Werkzeug im Satz verbietet das Stream
   await claude.agentTurn(call, SUBSTANTIAL, { onSpeechChunk: (t) => chunks.push(t) });
   const toolNames = bodies[0].tools.map((t) => t.name);
   assert.ok(toolNames.includes("get_consult"), `Fixture greift nicht, tools: ${toolNames}`);
-  assert.notEqual(bodies[0].stream, true, "informationslieferndes Werkzeug -> kein Streaming");
-  assert.deepEqual(chunks, []);
+  assert.equal(bodies[0].stream, true, "strom-sicherer Werkzeugsatz -> Streamingpfad");
+  assert.ok(chunks.length > 1, `mehrere Chunks erwartet, waren: ${JSON.stringify(chunks)}`);
 });
 
 test("AL-P7-21: Seiteneffekt-Runde streamt UND beendet den Turn nach einem Roundtrip (AL-P4 intakt)", async () => {
@@ -254,6 +266,26 @@ test("AL-P7-23: ein abgerissener Stream bucht GENAU EINEN pessimistischen Beleg 
   assert.equal(delta.newEvents.length, 1, "genau ein usage_event, auch im Abrissfall");
   assert.ok(delta.inputTokens > 0, "Input-Schaetzung aus der Prompt-Laenge, nie 0");
   assert.equal(delta.outputTokens, TURN_MAX_TOKENS, "Output fail-closed auf den Runden-Deckel");
+});
+
+// AL-P17: nach E1 sind MEHRERE Runden eines Turns armiert (bis AL-P17 beendete eine
+// armierte Runde den Turn praktisch immer). Die Buchungsregel aus completeRound ist davon
+// unberuehrt - dieser Test macht das zur Zusage statt zur Annahme. Er liegt bewusst HIER
+// und nicht in der neuen AL-P17-Datei: bookingSnapshot/bookingDelta und PAYMENT_ENABLED
+// existieren nur in dieser Datei, eine zweite Ledger-Fixture waere Duplizierung (G5/S2).
+test("AL-P17-5: zwei gestreamte Runden buchen GENAU EINEN Beleg je Modellrunde", async () => {
+  bodies = [];
+  // armConsult -> get_consult im angebotenen Satz -> nach E1 armiert. Das gefeuerte
+  // Werkzeug ist unbekannt, damit der Loop weiterlaeuft und eine ZWEITE Runde entsteht.
+  armConsult("call_alp7_9");
+  queue = [reply(text(ZWEI_SAETZE), toolUse("nachschlagen")), reply(text(ZWEI_SAETZE))];
+  const before = bookingSnapshot();
+  const { turn } = await streamedTurn("call_alp7_9");
+  const delta = bookingDelta(before);
+  assert.equal(turn.streamArmedRounds, 2, "beide Runden waren armiert");
+  assert.equal(delta.newEvents.length, 2, "genau EIN Beleg je Modellrunde, auch gestreamt");
+  assert.equal(delta.inputTokens, 2 * MOCK_USAGE.input_tokens);
+  assert.equal(delta.outputTokens, 2 * MOCK_USAGE.output_tokens);
 });
 
 test("AL-P7-24: ein abgerissener Stream reicht den Fehler an den Aufrufer durch (Degradation bleibt dessen Sache)", async () => {

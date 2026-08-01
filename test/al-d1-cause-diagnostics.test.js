@@ -5,8 +5,13 @@
 // Gegenstand sind vier Zusagen:
 //   (A) Falsifikation - ein beantworteter Consult #0 (VOR dem Abnehmen gestellt) verbraucht
 //       das In-Call-Kontingent NICHT; der "geteilte Zaehler" ist NICHT die Ursache;
-//   (B) Reproduktion Befund B - ein informationslieferndes Werkzeug im Satz (look_up ODER
-//       get_consult) schaltet die Streaming-Armierung ab -> streamArmedRounds === 0;
+//   (B) BEHOBEN durch AL-P17 - bis dahin schaltete ein informationslieferndes Werkzeug im
+//       Satz (look_up ODER get_consult) die Streaming-Armierung ab (streamArmedRounds 0,
+//       der gemessene Befund B). Seit AL-P17 (E1: Allowlist der STROM-SICHEREN Werkzeuge,
+//       E3: der Consult-Fueller ersetzt keinen gesprochenen Text mehr) armieren genau
+//       dieselben Fixture-Zustaende. Die beiden Tests bleiben stehen und wandern vom
+//       Ursachen-Pin zum Behoben-Pin; der historische Messwert steht in
+//       tasks/al-d1-report.md und tasks/al-p17-diagnose.md;
 //   (C) Positivkontrolle - ein rein seiteneffekt-basierter Satz streamt wirklich (ohne sie
 //       waere (B) auch bei komplett totem Streaming gruen);
 //   (D) das Instrument selbst - offeredToolNames ist die Union ueber die Runden und
@@ -164,9 +169,16 @@ test("AL-D1-1: ein beantworteter Consult #0 verbraucht das In-Call-Kontingent NI
   );
 });
 
-// ---------- B: Reproduktion von Befund B (beide Wege) ----------
+// ---------- B: derselbe Fixture-Zustand, seit AL-P17 behoben ----------
 
-test("AL-D1-2: ein armiertes look_up schaltet das Streamen ab (streamArmedRounds 0)", async () => {
+// AL-D1 hat hier Befund B gemessen (streamArmedRounds === 0); AL-P17 hat es behoben.
+//   Zusage vorher: look_up im angebotenen Satz sperrt das Streamen.
+//   Zusage jetzt:  look_up ist strom-sicher (Owner-Entscheidung O-D1-A: der fuehrende Text
+//     einer look_up-Runde ist genau der Satz, den das Denk-Signal ohnehin spraeche) und
+//     armiert - derselbe Fixture-Zustand, gedrehter Messwert.
+//   Warum das die Absicht ist: genau dieser Wert IST die Phase AL-P17. Der Test wird nicht
+//     geloescht, er wandert vom Ursachen-Pin zum Behoben-Pin.
+test("AL-D1-2: ein armiertes look_up armiert das Streamen (AL-P17 E1 - vorher Befund B)", async () => {
   bodies = [];
   queue = [reply(text(ZWEI_SAETZE))];
   // Kein frischer Poll -> get_consult ist NICHT im Satz; look_up ist der alleinige
@@ -175,12 +187,17 @@ test("AL-D1-2: ein armiertes look_up schaltet das Streamen ab (streamArmedRounds
 
   assert.ok(turn.offeredToolNames.includes(LOOK_UP), `Fixture greift nicht: ${turn.offeredToolNames}`);
   assert.ok(!turn.offeredToolNames.includes(CONSULT), "get_consult darf hier nicht mitwirken");
-  assert.equal(turn.streamArmedRounds, 0, "keine Runde durfte armiert werden");
-  assert.deepEqual(chunks, []);
-  assert.notEqual(bodies[0].stream, true, "der Bestandspfad (kein Streaming) lief");
+  assert.equal(turn.streamArmedRounds, 1, "AL-P17: genau diese Runde ist jetzt armiert");
+  assert.ok(chunks.length > 1, `mehrere Chunks erwartet, waren: ${JSON.stringify(chunks)}`);
+  assert.equal(bodies[0].stream, true, "der Streamingpfad wurde wirklich gefahren");
 });
 
-test("AL-D1-3: ein armiertes get_consult schaltet das Streamen ab (streamArmedRounds 0)", async () => {
+// Wie AL-D1-2, mit einem zusaetzlichen Grund fuer die Zulassung:
+//   Zusage vorher: get_consult im angebotenen Satz sperrt das Streamen.
+//   Zusage jetzt:  get_consult ist strom-sicher, weil E3 (Owner-Entscheidung O-D1-B) den
+//     deterministischen Fueller genau dann entfallen laesst, wenn bereits gestreamt wurde.
+//     Ohne E3 waere diese Aufnahme falsch - die beiden Aenderungen gehoeren zusammen.
+test("AL-D1-3: ein armiertes get_consult armiert das Streamen (AL-P17 E1+E3 - vorher Befund B)", async () => {
   bodies = [];
   queue = [reply(text(ZWEI_SAETZE))];
   const call = exhaustLookup(armPoll("call_ald1_3"));
@@ -189,9 +206,9 @@ test("AL-D1-3: ein armiertes get_consult schaltet das Streamen ab (streamArmedRo
 
   assert.ok(turn.offeredToolNames.includes(CONSULT), `Fixture greift nicht: ${turn.offeredToolNames}`);
   assert.ok(!turn.offeredToolNames.includes(LOOK_UP), "look_up darf hier nicht mitwirken");
-  assert.equal(turn.streamArmedRounds, 0, "keine Runde durfte armiert werden");
-  assert.deepEqual(chunks, []);
-  assert.notEqual(bodies[0].stream, true, "der Bestandspfad (kein Streaming) lief");
+  assert.equal(turn.streamArmedRounds, 1, "AL-P17: genau diese Runde ist jetzt armiert");
+  assert.ok(chunks.length > 1, `mehrere Chunks erwartet, waren: ${JSON.stringify(chunks)}`);
+  assert.equal(bodies[0].stream, true, "der Streamingpfad wurde wirklich gefahren");
 });
 
 // ---------- C: Positivkontrolle ----------
