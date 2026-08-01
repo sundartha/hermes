@@ -506,3 +506,58 @@ kein Mensch.** Diese Session hat daraus einmal faelschlich „der Owner hat abge
 aufgelegt" gefolgert. Belegen laesst sich die Mailbox-These derzeit nicht — die Telnyx-
 `detail_records` sind fuer diese Anrufe noch leer. Passend zum bekannten Befund
 **US-DID -> DE-Mobil ist intermittent**.
+
+---
+
+## 2026-08-01 — AL-D2 und AL-P17: die Pausen sind Streaming-Territorium, nicht Denk-Signal
+
+**AL-D2 (Diagnose, Merge `8461b69`, Bericht `tasks/al-d2-diagnose.md`).** Gemessen, nicht
+behauptet: das Denk-Signal hat KEINEN Defekt — es hatte in keinem der 21 Live-Turns etwas zu
+ueberbruecken. 18/21 Turns riefen kein Werkzeug (`if (!toolUses.length) break;` sperrt vor
+allem anderen), 3/21 waren `take_message`+Text (`loopContinues === false`). Werkzeug-Wartezeit,
+das Einzige was das Signal deckt, kam in **0 von 21** Turns vor.
+
+**Die in der Uebergabe genannte Zeit-Schwelle (~1,3 s) existiert im Code nicht** — AL-P7b hat
+sie als Abweichung E3 durch eine strukturelle ersetzt. Damit ist die Begruendung „D-2 zuerst,
+weil es die Pausen direkt adressiert" widerlegt: `speakBridge` laeuft erst NACH der Modellrunde
+und kann die ERSTE Runde eines Turns per Konstruktion nicht ueberbruecken — genau dort lagen
+die Pausen.
+
+Nebenbefund **K4**, weiterhin OFFEN: `look_up` **ohne** fuehrenden Text laesst den Anrufer die
+volle Suchdauer stumm warten. Ueberlebt jeden Prompt-Fix und wird durch D-3 erst scharf.
+Zusaetzlich gebaut: `speechWireOpen` in der `turn_ok`-Zeile — die einzige Bedingung, die
+offline nicht entscheidbar war (lag ueberhaupt ein Sprechkanal an?).
+
+**AL-P17 (Umsetzung von D-1, Merge, Bericht `tasks/al-p17-diagnose.md`).**
+
+**Owner-Entscheidungen 2026-08-01, bindend:**
+- **O-D1-A** — die Armierungsregel wird PRAEZISIERT, nicht gelockert: gesperrt wird nur bei
+  Werkzeugen, die bereits gesprochenen Text ersetzen koennen. **Die Regel bleibt eine
+  ALLOWLIST** (`STREAM_SAFE_TOOL_NAMES`) — eine Denylist („sperre bei `get_consult`") faellt
+  bei jedem kuenftigen Werkzeug fail-open und ist der Kern-Riegel dieser Phase.
+- **O-D1-B** — Consult-Kollision: hat das Modell in einer armierten Runde schon selbst
+  ueberbrueckt, entfaellt der deterministische Consult-Fueller. **Damit gilt die AL-P14-Zusage
+  „der Haltesatz ist LLM-frei" in genau diesem Fall nicht mehr** — bewusst, weil `get_consult`
+  live in 10/12 Turns im Satz lag und die Regel sonst nur in ~2/12 Turns gewirkt haette.
+
+Zwei Riegel, die aus O-D1-A folgen und ohne die die Phase falsch waere: **E2** (die Bruecke
+schweigt, wenn der Rundentext schon auf dem Draht liegt — sonst spraeche der Agent denselben
+Satz zweimal, die bisherige Ausschliesslichkeit ueber `sideEffectOnlyRound` faellt mit E1 weg)
+und **E1b** (`continuesStream` im Satz-Chunker — sonst klebte der erste Satz der Folgerunde am
+letzten der Vorrunde).
+
+**Gemessen am echten Serverprozess**, dieselbe Klasse wie 18/21 der Live-Turns: vorher **ein**
+content-Delta am Ende, nachher **zwei**, das erste ist der erste fertige Satz.
+
+**Folge, ausdruecklich festhalten: das Denk-Signal (AL-P7b) ist auf dem Shim-Pfad jetzt
+RUHEND.** Jede Runde mit offenem Draht ist armiert, also feuert die Bruecke nicht mehr —
+`thinkingSignalSpoken` ist live dauerhaft `false`, obwohl das Boot-Banner `Denk-Signal: AKTIV`
+meldet. Das ist kein Defekt, aber genau die Klasse „gruene Sonde beweist Konfiguration, nicht
+Wirkung". Der Live-Diskriminator des Streamings ist `streamArmedRounds` bzw. `streamChunks`.
+
+**Akzeptiertes Restrisiko (im Bericht begruendet):** reisst eine armierte Runde ab, haengt der
+Shim-Catch den Degradationssatz ohne Wortgrenze an das bereits Gesprochene. Der Anrufer hoert
+dabei nur VOLLSTAENDIGE Saetze (der unvollstaendige Rest liegt im Chunker-Puffer, `flushRemainder`
+wird im Wurf-Fall nie erreicht). Alle vier Safety-Notaus wurden am Code als hoerbar geprueft.
+
+**Naechster Schritt: D-3** — enge Verbote am Tool-Entscheidungspunkt, plus der K4-Fall.
