@@ -580,6 +580,13 @@ export function makeTelnyxLlmShim({
         callId: call.id,
         latencyMs,
         turnSeq,
+        // AL-D2: hatte dieser Turn ueberhaupt einen offenen Sprechkanal? An genau diesem
+        // Kanal haengen BEIDE Streaming-Faehigkeiten: ohne ihn bekommt agentTurn keinen
+        // onSpeechChunk, und dann steigen streamSinkFor (AL-P7) UND speakBridge (AL-P7b)
+        // an derselben Bedingung aus. streamChunks:0 allein kann "kein Kanal" nicht von
+        // "Kanal offen, aber nichts gesendet" trennen - genau diese Mehrdeutigkeit blieb
+        // nach den Live-Anrufen vom 2026-08-01 stehen. Ein Boolean, kein Text.
+        speechWireOpen: wire !== null,
         // AL-P7: die Live-Sonde, an der der Owner sieht, DASS gestreamt wurde. Eine Zahl,
         // kein Text - die PII-Freiheit der Zeile bleibt unberuehrt.
         streamChunks: wire ? wire.chunkCount() : 0,
