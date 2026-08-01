@@ -38,7 +38,7 @@ import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
 import { makeAuthGate } from "./wiring/auth-gate.js";
 import { guardedBoot } from "./boot-guard.js";
-import { createPortalRunner } from "./portal-pool.js";
+import { createPortalRunner as defaultCreatePortalRunner } from "./portal-pool.js";
 import {
   isTrustedLocalCaller,
   internalIdentity,
@@ -225,6 +225,13 @@ export async function buildApp(deps) {
     costTruing,
     messaging,
     consultDelivery,
+    // DIP-Seam (PLAN-AUTH-GATE P1) - dieselbe Naht, die wireWebLogin intern schon nutzt,
+    // nur eine Ebene hoeher gezogen: der Routen-Inventar-Test
+    // (test/route-auth-inventory.test.js) muss den PRODUKTIONS-Routengraph bauen
+    // (sessionSecret + storeBackend "pg" -> Web-Login-Block gemountet), und der einzige
+    // infrastruktur-beruehrende Kollaborator darin ist der pg-Pool. Default = der echte
+    // Runner -> der Produktivpfad (server.js reicht den Dep nicht) bleibt unveraendert.
+    createPortalRunner = defaultCreatePortalRunner,
   } = deps;
 
   const app = express();

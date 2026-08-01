@@ -1793,3 +1793,61 @@ aktiv und Master-Credentials nirgends in der Hermes-Env.
 > bewusst nur notiert.
 >
 > **Kein neuer Env-Schluessel** (einer ist ENTFALLEN), **keine neue Dependency.**
+
+## AUTH-P1 — Routen-Inventar ersetzt die Sammelsicherung (2026-08-01)
+
+Erste Phase von `PLAN-AUTH-GATE.md`. **Aendert kein Laufzeitverhalten** — sie baut den
+Meldeweg, den der spaetere Wegfall des Basic-Auth-Gates braucht.
+
+**Das Problem, das hier geloest wird.** Heute ist eine neue Route per Default sicher:
+das Basic-Auth-Gate (`src/wiring/auth-gate.js`) sichert alles, was nicht ausdruecklich
+ausgenommen ist. Faellt das Gate (P7), kehrt sich die Richtung um — eine neue Route
+waere per Default oeffentlich, und zwar **lautlos**: sie antwortet 200, loggt nichts und
+verhaelt sich normal, nur eben fuer jeden. Es gaebe kein Signal.
+
+**Der Ersatz ist eine maschinelle Vollstaendigkeitspruefung.**
+`test/route-auth-inventory.test.js` laeuft ueber den Express-Routengraph und ordnet jede
+Route in genau eine Klasse ein (`src/route-policy.js`):
+
+- **auth** — traegt eine der drei benannten Auth-Middlewares (`webAuthGateMiddleware`,
+  `adminOnlyMiddleware`, `mcpAuth`). Heute 12 Routen.
+- **public** — bewusst oeffentlich oder handler-intern abgesichert, **mit Begruendung im
+  Code**. Heute 19 Routen.
+- **gate_only** — haengt heute allein am Basic-Auth-Gate. Heute **21** Routen. Diese
+  Liste IST die Arbeitsliste von P4/P5/P6, und sie ist die **harte Vorbedingung fuer
+  P7: das Gate darf erst fallen, wenn sie leer ist.** Bewusst NICHT als "public"
+  gefuehrt — das haette gruen gemeldet, was in Wahrheit eine offene Tuer ist.
+- **unprotected** — nirgends eingeordnet -> `npm test` rot.
+
+**Warum der Test den Produktions-Routengraph baut (Befund B3).** Der gesamte
+Web-Login-Block (`/auth/*`, `/api/self-service/*`, `/api/admin/*`,
+`/api/portal/state`, `/webhooks/stripe`) haengt in `src/app.js` an
+`sessionSecret && storeBackend === "pg"`. Die Spawn-Tests fahren `STORE_BACKEND=json` —
+in ihnen existieren diese Routen **gar nicht**. Ein naiv gebauter Inventar-Test waere
+blind fuer genau die Middleware, auf der P5/P6 ruhen: gruen und wertlos. Der Test baut
+darum den Prod-Graph offline (pg-Schalter + injizierter `createPortalRunner`, ohne
+erreichbare Postgres) und beweist ueber eine **Positiv-Assertion**, dass es dieser Graph
+ist. Empirisch bestaetigt: mit `json` bleibt die Klassifikations-Assertion **gruen**,
+nur die Positiv-Assertion schlaegt an — ohne sie waere der Test wertlos gewesen.
+
+**Rot-vor-Fix nachgewiesen** (beide Faelle gemessen, nicht behauptet):
+ein absichtlich eingefuegtes `app.get("/probe-rot-vor-fix", ...)` macht 2 Tests rot;
+ein auf `json` gedrehter Graph macht 4 Tests rot.
+
+**Der einzige Code-Eingriff:** `buildApp` nimmt `createPortalRunner` als optionalen
+Dep entgegen (Default = der echte Runner). Derselbe DIP-Seam, den `wireWebLogin` intern
+schon nutzt, nur eine Ebene hoeher. Der Produktivpfad (`server.js` reicht den Dep nicht)
+ist unveraendert.
+
+**Getragene Restrisiken (benannt, nicht behoben).**
+(1) Der Test sieht **route-level** Middleware. Nicht sichtbar sind Auth im
+Handler-Rumpf (`GET /voice/tts/:token`, `POST /v1/chat/completions`,
+`POST /webhooks/stripe`), Praefix-Middleware (`/voice/*`-Signaturpruefung) und Routen,
+die nur hinter einem Flag registriert werden (`POST /auth/dev-login`). Dafuer gibt es
+den quartalsweisen Pruefpunkt in `docs/RUNBOOK-AUTH-REVIEW.md` — ein Mensch, kein
+Mechanismus; wird er ausgelassen, meldet nichts.
+(2) Der Test sieht, DASS eine Auth-Middleware da ist, nicht ob es die **richtige Stufe**
+ist. Eine Betreiber-Route mit `webAuthMw` statt `webAuthMw + adminMw` faellt keinem
+Mechanismus auf. Bleibt eine Review-Entscheidung.
+
+**Kein neuer Env-Schluessel, keine neue Dependency, keine DB-Aenderung.**
