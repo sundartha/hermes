@@ -1,5 +1,18 @@
 # PLAN-AUTH-GATE.md — das Basic-Auth-Gate aufloesen (Option C)
 
+> **STAND-WARNUNG (Pruefung 2026-08-01) — VOR JEDER UMSETZUNG LESEN.** Dieser Plan wurde am
+> 2026-07-28 gegen Commit `a727804` geschrieben; **jede Zeilennummer in diesem Dokument ist
+> von DIESEM Stand.** Seither sind 142 Commits gelandet (HEAD `d7aa89d`), im Wesentlichen die
+> Umsetzung von PLAN-ASSISTANT-LEAP. Zwei unabhaengige Pruefungen gegen `d7aa89d`
+> (2026-08-01) haben ergeben: **keine inhaltliche Aussage ist veraltet**, aber viele
+> Zeilennummern sind verschoben — bei `claude.js`, `mcp-tools.js`, `telnyx-llm-shim.js`,
+> `boot.js` und `config.js` um bis zu ~220 Zeilen.
+>
+> **Arbeitsregel fuer jede Session, die diesen Plan umsetzt:** Codestellen IMMER per
+> `grep -n` auf den zitierten Funktions-/Variablennamen oder Kommentartext suchen, NIEMALS
+> blind der Zeilennummer folgen. An der alten Zeile steht heute plausibel aussehender, aber
+> FALSCHER Code. Erwarte weitere Drift: parallele Sessions arbeiten am selben Repo.
+
 > **Fassung 3** — alle Owner-Entscheidungen getroffen (Abschnitt 10), Phasen entsprechend
 > festgezurrt. Dieses Dokument ist so geschrieben, dass eine **neue Session es ohne
 > Vorwissen umsetzen kann**: Ausgangslage, Belege, Reihenfolge-Begruendung und je Phase
@@ -32,7 +45,8 @@ das die falsche Antwort auf eine falsche URL.
 (Option C). Zielbild: EIN Auth-Mechanismus fuer Menschen — die bestehende
 WorkOS/OIDC-Browser-Session — statt zweier paralleler Mechanismen, und spuerbar weniger
 Code. Einfachheit ist ausdrueckliches Abnahmekriterium. **Aber:** das Gate ist heute die
-einzige Sicherung von 17 Routen (Beleg in Abschnitt 1); es ersatzlos zu entfernen wuerde
+einzige Sicherung von 19 Routen (Beleg in Abschnitt 1, Stand Pruefung 2026-08-01; zwei davon
+erst nach Fassung 3 dazugekommen); es ersatzlos zu entfernen wuerde
 Transkripte offenlegen und anonyme, kostenpflichtige Telefonate ermoeglichen. Der Umbau
 laeuft deshalb in neun Phasen, die die Loecher schliessen, **bevor** die Sammelsicherung
 faellt. Alle neun Owner-Entscheidungen dazu sind getroffen und in Abschnitt 10 festgehalten.
@@ -61,7 +75,10 @@ schuetzt damit **null Dateien**. `public/tenant.html` ist mit P14 (`6b57725`) ge
 existiert keine menschlich bedienbare HTML-Oberflaeche mehr, die den Basic-Prompt braucht.
 (Anmerkung: `CLAUDE.md:59` beschreibt `public/` noch als "Dashboards" — die Zeile ist veraltet.)
 
-**Das Gate ist KEIN Relikt — es ist die einzige Sicherung von 17 Routen.** Beweis (lokaler
+**Das Gate ist KEIN Relikt — es ist die einzige Sicherung von 19 Routen** (Stand Pruefung
+2026-08-01; die Probe unten wurde am 2026-07-28 gegen 17 Routen gefahren, die beiden seither
+dazugekommenen Consult-Routen sind in Abschnitt 3 mit Beleg aufgenommen und tragen dasselbe
+Muster — nur `requestTenant`/`requireTenant`, keine eigene Auth-Middleware). Beweis (lokaler
 Spawn-Server, `DASHBOARD_PASSWORD=""`, `MULTI_TENANT=true`, Request mit `X-Forwarded-For`
 = externer Proxy-Traffic, also genau die Produktions-Topologie):
 
@@ -137,12 +154,23 @@ Vollstaendige Liste dessen, was heute hinter dem Gate liegt (Mount-Reihenfolge `
 Legende: **(a)** bereits eigenstaendig geschuetzt — **(b)** wird ungeschuetzt, Arbeit noetig —
 **(c)** soll oeffentlich bleiben.
 
+**Nachtrag (Pruefung 2026-08-01):** nach Fassung 3 sind zwei Routen dazugekommen
+(Consult-Kanal aus PLAN-ASSISTANT-LEAP, `routes/api-calls.js:306,331`): `GET
+/api/calls/:id/consult` und `POST /api/calls/:id/consult/answer`. Beide haengen heute
+allein am Basic-Gate — `GET .../consult` prueft nur `requestTenant`+`callVisibleTo`, keine
+eigene Auth-Middleware; `POST .../consult/answer` ruft `requireTenant`, aber anonym greift
+weiterhin der Bootstrap-Fallback auf `"owner"` (Abschnitt 1). Sie sind unten mit
+aufgenommen. Die Tabelle zaehlt damit **19** statt 17 "nur Gate"-Zeilen (21 echte
+HTTP-Endpunkte, weil die Profiles-Zeile drei Methoden buendelt).
+
 | Pfad | Datei:Zeile | heute | nach Wegfall |
 | --- | --- | --- | --- |
 | `express.static(publicDir)` | `app.js:265` | Gate davor | **(c)** liefert nur `favicon.ico` + `brand/*`, beide schon exempt (`auth-gate.js:54,61`) |
 | `/voice/tts/:token` | `routes/voice.js:162` | Einmal-Token | **(a)** Token+TTL, PLAY-TTS in PLAN-SECURITY.md |
 | `/voice/*` | `routes/voice.js:173` | Signaturpruefung | **(a)** Twilio-HMAC / Telnyx-Ed25519, fail-closed |
 | `POST /api/calls` | `routes/api-calls.js:81` | **nur Gate** | **(b1)** |
+| `GET /api/calls/:id/consult` | `routes/api-calls.js:306` | **nur Gate** | **(b1)** |
+| `POST /api/calls/:id/consult/answer` | `routes/api-calls.js:331` | **nur Gate** | **(b1)** |
 | `POST /api/calls/:id/cancel` | `routes/api-calls.js:264` | **nur Gate** | **(b1)** |
 | `GET /api/state` | `routes/api-read.js:73` | **nur Gate** | **(b1)** |
 | `GET /api/calls/:id` | `routes/api-read.js:111` | **nur Gate** | **(b1)** |
@@ -171,10 +199,18 @@ nur bei `devLoginEnabled`, fail-closed), `/api/portal/state` (`wiring/web-login.
 
 ### (b1) — bekommt eigene Auth
 
-1. **`POST /api/calls`, `POST /api/calls/:id/cancel`, `GET /api/state`, `GET /api/calls/:id`** —
+1. **`POST /api/calls`, `POST /api/calls/:id/cancel`, `GET /api/state`, `GET /api/calls/:id`,
+   `GET /api/calls/:id/consult`, `POST /api/calls/:id/consult/answer`** —
    einziger echter Aufrufer sind die MCP-Tools **in-process ueber localhost**
-   (`src/mcp-tools.js:44` `fetch(resolveGatewayUrl() + path)`; Pfade `mcp-tools.js:520,546,598,628,646`).
-   `apps/web` ruft `/api/state` NICHT auf — die einzigen zwei Treffer
+   (`src/mcp-tools.js`, Funktion `api()`, `fetch(resolveGatewayUrl() + path)`; Pfade fuer die
+   ersten vier Routen per `grep -n "resolveGatewayUrl\|await call(" src/mcp-tools.js`).
+   **Verifiziert (2026-08-01) fuer die beiden Consult-Routen:** sie werden ausschliesslich
+   von den MCP-Tools `await_call_event` (ruft ueber `pollConsult()` `GET
+   /api/calls/:id/consult`) und `answer_consult` (ruft ueber `call()`
+   `POST /api/calls/:id/consult/answer`) aufgerufen, beide ueber denselben `api()`-Pfad wie
+   alle anderen Tools (`grep -n "consult" src/mcp-tools.js`). `apps/web` kennt den
+   Consult-Kanal nicht — `grep -rn "consult" apps/web/src/` liefert **keinen** Treffer.
+   `apps/web` ruft auch `/api/state` NICHT auf — die einzigen zwei Treffer
    (`apps/web/src/lib/api.js:586`, `components/app/SettingsIsland.astro:30`) sind Kommentare.
    **Vorschlag:** neue benannte Middleware `internalOnly` = `isTrustedLocalCaller(req) ? next() : 403`
    (`routes/_tenant.js:44` ist die bereits definierte, reviewte Vertrauensgrenze). Das ist exakt
@@ -360,13 +396,14 @@ Je Phase unten nur noch das phasenspezifische Abbruchsignal.
 Die Phasen sehen einzeln harmlos aus. Drei Abhaengigkeiten sind es nicht; wer sie umstellt,
 oeffnet ein Zeitfenster, in dem das System **schwaecher ist als heute**:
 
-1. **P3 und P4 muessen vor P7 liegen.** Das Gate ist die einzige Sicherung von 17 Routen.
+1. **P3 und P4 muessen vor P7 liegen.** Das Gate ist die einzige Sicherung von 19 Routen.
    Faellt es vorher, sind zwei anonyme Schreibfenster offen — und zwar zwei **unabhaengige**,
    von denen keines das andere deckt:
    - Der Bootstrap-Fallback (`routes/_tenant.js:151`, plus `:132` bei `MULTI_TENANT=false`)
      bindet eine fehlende Identitaet an den Tenant `"owner"`. Anonym = Owner. Betrifft
      alles, was ueber `requestTenant`/`requireTenant` laeuft (`/api/state`, `/api/calls`,
-     `/api/tenant-data/export`, ...). **Das schliesst P3.**
+     `/api/tenant-data/export`, `/api/calls/:id/consult`,
+     `/api/calls/:id/consult/answer`, ...). **Das schliesst P3.**
    - `/api/profiles` (`routes/api-profiles.js:26,28,38`) und
      `POST /api/action-items/:id/toggle` (`routes/api-tenant-write.js:41`) rufen den
      Tenant-Resolver **gar nicht** auf — P3 wirkt dort nicht. Ein anonymes
@@ -545,10 +582,13 @@ P9 (Cache-Header, Legacy-Checkout) ist unabhaengig und kann jederzeit laufen.
 
 - **Vorbedingung:** P4 gemergt.
 - **Ziel:** `internalOnly` (benannte Middleware, `isTrustedLocalCaller(req) ? next() : 403`)
-  vor **fuenf** Routen: `POST /api/calls`, `POST /api/calls/:id/cancel`, `GET /api/state`,
-  `GET /api/calls/:id` **und `GET /api/tenant-data/export`** (Entscheidung 1 — bewusst
-  `internalOnly` statt `webAuthMw`). Zusaetzlich schreiben `webAuthMw`/`adminMw`/
-  `internalOnly` bei Ablehnung `audit("auth_failed", req, ...)` (S4).
+  vor **sieben** Routen: `POST /api/calls`, `POST /api/calls/:id/cancel`, `GET /api/state`,
+  `GET /api/calls/:id`, `GET /api/tenant-data/export` (Entscheidung 1 — bewusst
+  `internalOnly` statt `webAuthMw`) **sowie den beiden nach Fassung 3 hinzugekommenen
+  Consult-Routen `GET /api/calls/:id/consult` und `POST /api/calls/:id/consult/answer`**
+  (Beleg und Einstufung: Abschnitt 3, (b1)-1 — ausschliesslicher Aufrufer ist der
+  In-Process-MCP-Pfad, `apps/web` hat keinen Treffer fuer `consult`). Zusaetzlich schreiben
+  `webAuthMw`/`adminMw`/`internalOnly` bei Ablehnung `audit("auth_failed", req, ...)` (S4).
 - **Dateien:** neu `src/wiring/internal-only.js`; `src/routes/api-calls.js`,
   `src/routes/api-read.js`, `src/web-auth.js` (Audit in den Ablehnungszweigen), `src/app.js`.
 - **Ausserhalb des Umfangs (bewusst ausgelagert, nicht vergessen):** ein Werkzeug fuer den
@@ -565,9 +605,9 @@ P9 (Cache-Header, Legacy-Checkout) ist unabhaengig und kann jederzeit laufen.
 - **H11:** `auth_failed` bekommt einen groben, PII-freien Grund (`reason=no_session` /
   `expired` / `not_admin` / `not_local`). Ohne das erzeugt die 1-h-TTL ohne Rolling
   Dauerrauschen, in dem ein echter Angriff untergeht.
-- **Abnahme (maschinell):** externer Request (mit `X-Forwarded-For`) auf `/api/state` und
-  `/api/tenant-data/export` -> 403; in-process MCP-Tool-Aufruf -> 200; ein Audit-Eintrag
-  pro Ablehnung; Secret-Leak-Test gruen.
+- **Abnahme (maschinell):** externer Request (mit `X-Forwarded-For`) auf `/api/state`,
+  `/api/tenant-data/export` und `/api/calls/:id/consult` -> 403; in-process MCP-Tool-Aufruf
+  -> 200; ein Audit-Eintrag pro Ablehnung; Secret-Leak-Test gruen.
 - **Testauftrag:** neuer Spawn-Test (Muster wie die Probe in Abschnitt 1); `npm test` gruen.
 - **Rollback:** Revert. **Abbruchsignal live:** MCP-Tools in claude.ai liefern Fehler.
 
@@ -791,11 +831,11 @@ sitzt. Fuer diese drei Faelle gilt daher beides:
 - ein wiederkehrender Pruefpunkt in **`docs/RUNBOOK-AUTH-REVIEW.md`** (neue Datei, in P1
   anzulegen), **Takt: quartalsweise**, mit genau dieser Checkliste:
 
-  | # | Route | Was geprueft wird | Beleg-Stelle |
+  | # | Route | Was geprueft wird | Beleg-Anker (grep, KEINE Zeilennummer — die drifted) |
   | --- | --- | --- | --- |
-  | 1 | `GET /voice/tts/:token` | Token wird weiterhin einmalig verbraucht (`takeOnce`) und die TTL ist gesetzt; die Route liegt weiterhin VOR der Signatur-Middleware und ist nicht versehentlich oeffentlich erweitert worden | `src/routes/voice.js:162`, `ELEVENLABS_TTS_TOKEN_TTL_MS` |
-  | 2 | `POST /v1/chat/completions` | Flag-Gate (404 bei `TELNYX_AI_ASSISTANT_ENABLED` aus) UND `safeEqual`-Bearer-Pruefung gegen `telnyxShimSharedSecret` sind beide noch da; Empty-Secret-Trap weiterhin abgelehnt | `src/telnyx-llm-shim.js:324-327` |
-  | 3 | `app.use("/voice", ...)` | Die Ed25519-/HMAC-Signaturpruefung ist weiterhin als Praefix-Middleware VOR allen `/voice`-Handlern montiert und fail-closed (ungueltig -> 403, nicht `next()`) | `src/routes/voice.js:173` |
+  | 1 | `GET /voice/tts/:token` | Token wird weiterhin einmalig verbraucht (`takeOnce`) und die TTL ist gesetzt; die Route liegt weiterhin VOR der Signatur-Middleware und ist nicht versehentlich oeffentlich erweitert worden | Route-Registrierung in `src/routes/voice.js`: `grep -n 'voice/tts/:token' src/routes/voice.js`; Handler ruft `ttsStore.takeOnce(...)`; TTL-Konstante `ELEVENLABS_TTS_TOKEN_TTL_MS` (`grep -n ELEVENLABS_TTS_TOKEN_TTL_MS src/config.js`) |
+  | 2 | `POST /v1/chat/completions` | Flag-Gate (404 bei `TELNYX_AI_ASSISTANT_ENABLED` aus) UND `safeEqual`-Bearer-Pruefung gegen das Shim-Secret sind beide noch da; Empty-Secret-Trap weiterhin abgelehnt | Handler `handleChatCompletion` (Rueckgabewert von `makeTelnyxLlmShim`) in `src/telnyx-llm-shim.js`: `grep -n 'safeEqual(bearer' src/telnyx-llm-shim.js` fuer die Bearer-Pruefung, `grep -n 'telnyxAssistant.enabled' src/telnyx-llm-shim.js` fuer das Flag-Gate davor |
+  | 3 | `app.use("/voice", ...)` (heute: `router.use("/voice", ...)` in `makeVoiceRoutes`) | Die Ed25519-/HMAC-Signaturpruefung ist weiterhin als Praefix-Middleware VOR allen `/voice`-Handlern montiert und fail-closed (ungueltig -> 403, nicht `next()`) | `grep -n 'router.use("/voice"' src/routes/voice.js`; ruft `inboundSignatureVerifier().verifyInboundSignature(...)` |
 
   Zusaetzlich in derselben Datei: der Hinweis aus P8, dass ein Rollback ueber P8 hinaus das
   Wiedersetzen von `DASHBOARD_PASSWORD` im Render-Dashboard erfordert.
