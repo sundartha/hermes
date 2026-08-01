@@ -10,10 +10,13 @@ bleiben AUS. **Ihr Anschalten IST die Abnahme.**
 
 ## Startbestand (aus der Uebergabe, vor der ersten Phase)
 
-1. **`BRAVE_SEARCH_API_KEY` beschaffen und setzen** (`.env` + Render-Dashboard).
+1. **`EXA_API_KEY` beschaffen und setzen** (`.env` + Render-Dashboard).
    Erst fuer die Abnahme von AL-P10b noetig — zum Bauen nicht. Niemals committen.
-   *(Die Uebergabe nannte hier urspruenglich `EXA_API_KEY`; der Owner hat am 28.07. auf Brave
-   korrigiert — Betriebserfahrung aus einem real betriebenen Recherche-Agenten.)*
+   *(Der Owner hat am 28.07. auf Brave korrigiert und am 01.08. mit AL-P10c auf Exa
+   zurueckgedreht; Brave ist nie live gelaufen.)*
+   **ACHTUNG, blockierend:** `LOOKUP_ENABLED` steht seit 01.08. LIVE auf `true` — mit dem
+   Setzen des Keys ist der Pfad SOFORT scharf. Vorher muss die Datenschutzerklaerung in
+   `apps/web` Exa als zweiten Auftragsverarbeiter nennen (s. AL-P10b-4 unten).
 2. **O2 — Offenlegungssatz:** falls die 3-4 Sekunden gewuenscht sind, Rechtspruefung des zweiten
    Teilsatzes beauftragen. Bis dahin gilt „unveraendert" (so gebaut).
 3. **O6 — Auslands-Tarif:** Ist-Werte von `VOICE_TARIFF_DEFAULT_CENTS`,
@@ -78,9 +81,9 @@ bleiben AUS. **Ihr Anschalten IST die Abnahme.**
 | AL-P10b | **AL-P10b-1 (Ende-zu-Ende):** ein echter Outbound-Anruf, in dem der Agent `look_up` zieht | Aufnahme belegt: der Agent nennt die nachgeschlagene Sachauskunft im Folge-Turn, ohne die Suche zu erwaehnen und ohne eine Quelle zu nennen; im Render-Log steht `[lookup] fertig call=… ok=true` | offen |
 | AL-P10b | **AL-P10b-2 (maximale Stille):** dieselbe Aufnahme | zwischen Ueberbrueckungssatz und Antwort ist **keine tote Leitung** hoerbar. Setzt `THINKING_SIGNAL_ENABLED=true` UND `TELNYX_SHIM_TOKEN_STREAMING=true` voraus - ohne beides gibt es keine Bruecke und die Suchzeit wird zu Stille | offen |
 | AL-P10b | **AL-P10b-3 (Suchlatenz p50/p95, O8):** ueber **>= 20** Suchen die `dauer_ms=`-Werte der `[lookup] fertig`-Zeilen einsammeln | p50 und p95 notiert und gegen `LOOKUP_TIMEOUT_MS = 2500` bewertet. Liegt p95 an der Frist, ist der Anbieter zu langsam fuer den In-Call-Pfad -> Flag zurueck auf `false` (der Bestandspfad bleibt vollstaendig erhalten) | offen |
-| AL-P10b | **Owner-Aufgabe:** `BRAVE_SEARCH_API_KEY` im Render-Dashboard setzen (zum Bauen/Testen NICHT noetig, der Adapter faehrt gegen Fixtures) | Key steht im Dashboard, nirgends im Repo. Leerer Key = Feature fail-closed inaktiv, auch bei `LOOKUP_ENABLED=true` | offen |
+| AL-P10b | **Owner-Aufgabe:** `EXA_API_KEY` im Render-Dashboard setzen (zum Bauen/Testen NICHT noetig, der Adapter faehrt gegen Fixtures) | Key steht im Dashboard, nirgends im Repo. Leerer Key = Feature fail-closed inaktiv, auch bei `LOOKUP_ENABLED=true` | offen |
 | AL-P10b | **Owner-Aufgabe:** `allowLookup=true` im Rechteprofil des Test-Tenants setzen (Admin-Pfad) | Recht steht; Default bleibt `false` in `DEFAULT_PROFILE` UND `PAID_PLAN_PROFILE` (kein Plan-Freibrief). Rueckweg ist derselbe Schalter | offen |
-| AL-P10b | **AL-P10b-4 (Freischaltung):** `LOOKUP_ENABLED=true` erst, **nachdem** die Datenschutzerklaerung in `apps/web` den **zweiten Auftragsverarbeiter** (Brave Search) nennt UND AL-P10b-1..3 bestanden sind | Datenschutzerklaerung nennt den Verarbeiter (Lab -> Live ueber `docs/RUNBOOK-LAB-LIVE.md`); danach Env-Aenderung nach `tasks/al-env-changes.md`. Rueckweg ist derselbe Schalter | offen |
+| AL-P10b | **AL-P10b-4 (Freischaltung):** `LOOKUP_ENABLED=true` erst, **nachdem** die Datenschutzerklaerung in `apps/web` den **zweiten Auftragsverarbeiter** (Exa) nennt UND AL-P10b-1..3 bestanden sind | Datenschutzerklaerung nennt den Verarbeiter (Lab -> Live ueber `docs/RUNBOOK-LAB-LIVE.md`); danach Env-Aenderung nach `tasks/al-env-changes.md`. Rueckweg ist derselbe Schalter | offen |
 | AL-P10b | **Offener Punkt (E3, bewusst NICHT in dieser Phase gebaut):** `agentToolNames()` bleibt unveraendert, das Pre-Call-Briefing sagt dem briefenden Modell weiterhin „der Agent kann nichts nachschlagen" | Owner entscheidet, ob der Briefing-Satz nachgezogen wird. Konservativ ist der Bestand: das Briefing liefert dann eher MEHR Fakten vorab - genau der Zweck von AL-P10 | offen |
 | AL-P10b | **Offener Punkt (A3-Restschuld, NICHT in dieser Phase gebaut):** Herkunftsmarkierung fuer Action-Items, die auf einem Suchtreffer beruhen | Owner entscheidet, ob eine eigene Mini-Phase noetig ist. Heute ist ein Suchtreffer im HINTERGRUND von einem Briefing-Fakt nicht unterscheidbar | offen |
 | AL-P7 | **AL-P7-A (Freischaltung):** `TELNYX_SHIM_TOKEN_STREAMING=true` im Render-Dashboard setzen (Bewegung nach `tasks/al-env-changes.md` protokollieren) | Boot-Banner zeigt `Token-Streaming: AKTIV (TELNYX_SHIM_TOKEN_STREAMING=true)`; `[telnyx-shim] turn_ok` traegt `"streamChunks":` mit einem Wert **> 0** | offen |

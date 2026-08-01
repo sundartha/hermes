@@ -64,8 +64,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   privacy: 3,
   // AL-P10: researchEnabled + researchMaxUses + researchSearchFeeCents (Vorab-Recherche
   // im Pre-Call-Briefing, src/research/) - eigene Namespace-Zeile.
-  // AL-P10b: lookupEnabled + lookupSearchFeeCents + braveSearchApiKey + braveSearchApiBase
-  // (Nachschlagen IM Gespraech, src/research/in-call.js) -> 7.
+  // AL-P10b: lookupEnabled + lookupSearchFeeCents + exaApiKey + exaApiBase (Nachschlagen
+  // IM Gespraech, src/research/in-call.js; Anbieter-Tausch AL-P10c, Anzahl
+  // unveraendert) -> 7.
   research: 7,
 };
 const EXPECTED_TOTAL_KEYS = 138;
@@ -157,8 +158,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 124.
   // AL-P14: inCallConsultEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 124.
   // AL-P7b: thinkingSignalEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 125.
-  // AL-P10b: lookupEnabled/lookupSearchFeeCents/braveSearchApiKey/braveSearchApiBase sind
-  // alle vier primitiv (Boolean/Zahl/String/String) -> 129.
+  // AL-P10b: lookupEnabled/lookupSearchFeeCents/exaApiKey/exaApiBase (Anbieter-Tausch
+  // AL-P10c, Anzahl unveraendert) sind alle vier primitiv
+  // (Boolean/Zahl/String/String) -> 129.
   assert.equal(checked, 129, "alle primitiven Blaetter (138 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 

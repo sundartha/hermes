@@ -309,7 +309,7 @@ services:
       - key: LOOKUP_SEARCH_FEE_CENTS
         value: "1"
       # Secret: Wert im Dashboard, nie im Blueprint. Leer = Feature inaktiv.
-      - key: BRAVE_SEARCH_API_KEY
+      - key: EXA_API_KEY
         sync: false
       # ---- Consult-Kanal am Call (AL-P13) ---- Default AUS (fail-closed): keine
       # Consult-Routen, keine await_call_event/answer_consult-Tools.

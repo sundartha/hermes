@@ -5,16 +5,17 @@
 // Fail-closed: Master aus ODER Tenant aus -> null -> der Aufrufer laeuft byte-identisch
 // zum Bestand weiter (kein Werkzeug im tools-Array, keine Gebuehr).
 //
-// Anbieterwechsel = eine Adapter-Datei + ein Tabelleneintrag. Dokumentierte
-// Ausweichkandidaten: Brave Search und Exa (beide mit API-Key; sie kommen mit
-// AL-P10b und deren eigenem, anderen Port-Vertrag - s. ports.js).
+// Anbieterwechsel = eine Adapter-Datei + ein Tabelleneintrag. AL-P10c hat genau das
+// vorgefuehrt: der In-Call-Anbieter wurde getauscht, ohne Umbau an in-call.js/ports.js.
+// Ein zweiter In-Call-Anbieter passt jederzeit in die Tabelle - er wird erst gebaut, wenn
+// er gebraucht wird.
 import { anthropicWebSearch } from "./adapters/anthropic-web-search.js";
-import { braveSearch } from "./adapters/brave-search.js";
+import { exaSearch } from "./adapters/exa-search.js";
 import { config } from "../config.js";
 
 const RESEARCH_PROVIDER = Object.freeze({
   ANTHROPIC_WEB_SEARCH: "anthropic_web_search",
-  BRAVE_SEARCH: "brave_search",
+  EXA_SEARCH: "exa_search",
 });
 
 const PRECALL_ADAPTERS = Object.freeze({
@@ -26,10 +27,10 @@ const PRECALL_PROVIDER = RESEARCH_PROVIDER.ANTHROPIC_WEB_SEARCH;
 // AL-P10b: der zweite Adapter-Platz. Anderer Vertrag (ports.js InCallSearchProvider),
 // dieselbe Tabellen-Mechanik.
 const IN_CALL_ADAPTERS = Object.freeze({
-  [RESEARCH_PROVIDER.BRAVE_SEARCH]: braveSearch,
+  [RESEARCH_PROVIDER.EXA_SEARCH]: exaSearch,
 });
 
-const IN_CALL_PROVIDER = RESEARCH_PROVIDER.BRAVE_SEARCH;
+const IN_CALL_PROVIDER = RESEARCH_PROVIDER.EXA_SEARCH;
 
 /**
  * @param {{ tenantAllows: boolean }} gate
@@ -51,6 +52,6 @@ export function precallResearchProvider({ tenantAllows }) {
  */
 export function inCallSearchProvider({ tenantAllows }) {
   if (!config.research.lookupEnabled || !tenantAllows) return null;
-  if (!config.research.braveSearchApiKey) return null;
+  if (!config.research.exaApiKey) return null;
   return IN_CALL_ADAPTERS[IN_CALL_PROVIDER];
 }
