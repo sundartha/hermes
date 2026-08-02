@@ -181,14 +181,14 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     // AL-P10b: die engen Verbote sitzen GENAU HIER an der Tool-Description (Lehre
     // call-quality-chain). Der Query-Filter wird zusaetzlich serverseitig durchgesetzt
     // (research/lookup-guard.js) - der Prompt allein ist keine Durchsetzung.
-    // AL-D3: R2 bindet den Bedingungssatz an den AUFTRAG statt an "das Gespräch" (die
+    // AL-D3: R2 bindet den Bedingungssatz an den AUFTRAG statt an "das Gespraech" (die
     // Ueberfeuerung aus dem Pre-Mortem - jede Plauderei "bringt das Gespraech weiter").
     // R3 ist der EIGENE, ausdruecklich richtig gerahmte Verbotsfall fuer auftragsfremde
     // Recherche - der Ausweg zeigt auf take_message (immer im Satz), braucht also keinen
     // eigenen Ausstieg. R4 ist der fuehrende Ueberbrueckungssatz (K4-Ausloesung, Spec B3) -
-    // Muster wörtlich vom Selbe-Zug-Satz in takeMessageDescription übernommen, direkt neben
-    // dem Bestandsriegel, weil beide zusammen gelesen werden: überbrücke, aber verrate
-    // nichts. src/thinking-signal.js bleibt unangetastet.
+    // Muster woertlich vom Selbe-Zug-Satz in takeMessageDescription uebernommen, direkt
+    // neben dem Bestandsriegel, weil beide zusammen gelesen werden: ueberbruecke, aber
+    // verrate nichts. src/thinking-signal.js bleibt unangetastet.
     lookUpDescription:
       "Schlägt EINE kurze Sachfrage nach und ergänzt damit deinen HINTERGRUND. " +
       "Nutze das NUR, wenn AUFTRAG und HINTERGRUND die Antwort nicht enthalten und die " +
