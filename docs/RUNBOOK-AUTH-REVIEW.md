@@ -44,6 +44,25 @@ Zusaetzlich bei jedem Durchgang:
 - **`src/route-policy.js` durchlesen.** Jeder Eintrag in `PUBLIC_ROUTES` nennt eine
   Begruendung. Stimmt sie noch?
 
+## Nach jedem Deploy: die Live-Probe fahren
+
+`test/route-auth-inventory.test.js` prueft den Quellstand. Ob die **laufende Instanz**
+tatsaechlich so antwortet, sagt nur `scripts/probe-auth.sh` (PLAN-AUTH-GATE P2):
+
+```
+scripts/probe-auth.sh https://app.sundartha.com <commit-sha-aus-/healthz> ist-aufnahme
+```
+
+Der Commit ist ein Pflichtargument und kommt aus `GET /healthz` der Live-Instanz, nicht
+aus `git rev-parse` — Render deployt aus dem Upstream-Remote, der lokale `master` ist
+nicht der Live-Stand. Exit 0 = alles wie erwartet · 1 = Abweichung · 2 = Abbruch vor der
+Messung (falscher Commit, Rate-Limit, `/healthz` nicht erreichbar).
+
+**Eine rote Zeile wird nicht weggeklickt.** Entweder ist es ein Befund, oder die
+Erwartung hat sich mit einer Phase geaendert — dann wird die Tabelle im Skript **im
+selben Commit** wie die Phase nachgezogen (H10). Der Lauf hinterlaesst
+`auth_failed`-Zeilen im Render-Log; das ist erwartet, kein Vorfall.
+
 ## Hinweis fuer Rollbacks (gilt ab PLAN-AUTH-GATE P8)
 
 Sobald P8 gelaufen ist, ist `DASHBOARD_PASSWORD` aus `config.js`, `render.yaml` und

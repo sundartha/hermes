@@ -1851,3 +1851,61 @@ ist. Eine Betreiber-Route mit `webAuthMw` statt `webAuthMw + adminMw` faellt kei
 Mechanismus auf. Bleibt eine Review-Entscheidung.
 
 **Kein neuer Env-Schluessel, keine neue Dependency, keine DB-Aenderung.**
+
+## AUTH-P2 — Live-Probe der Routen-Absicherung (2026-08-02)
+
+Zweite Phase von `PLAN-AUTH-GATE.md`. **Aendert kein Laufzeitverhalten** — reines
+`curl` + Statusvergleich, keine neue Dependency. `scripts/probe-auth.sh` fragt jede
+Route der laufenden Instanz **ohne Sitzung und ohne Credentials** ab. AUTH-P1 prueft den
+Quellstand, diese Probe den **deployten** Zustand; erst beide zusammen decken den Fall
+ab, dass der Code richtig ist und die Instanz trotzdem offen steht.
+
+**Ziel-Pin (W7).** URL **und** erwarteter Commit sind Pflichtargumente. Erste Handlung
+ist `GET /healthz` (liefert `commit`); weicht der SHA ab -> Abbruch mit Exit 2, **keine
+weitere Anfrage**. Ohne den Pin liefe die Probe gruen gegen einen alten Deploy, waehrend
+Produktion offen steht.
+
+**404 ist kein Erfolg (W6) — und das Gate verdeckt genau das.** Fuer sitzungspflichtige
+Routen zaehlt nur 401/403; ein 404 hiesse, dass `guardedBoot` (fail-open) den
+Web-Login-Block verschluckt hat und die Route gar nicht gemountet ist. Solange das
+Basic-Auth-Gate steht, ist dieser 404 aber **unsichtbar**: das Gate haengt vor dem
+404-Handler und beantwortet jeden unbekannten Pfad mit 401. Die Probe prueft deshalb
+zusaetzlich, **wer** geantwortet hat: `WWW-Authenticate: Basic` ist der Fingerabdruck
+des Gates. Traegt eine Route, die vom Sitzungs-Cookie geschuetzt sein soll, diese
+Challenge, ist der Web-Login-Block nicht gemountet — der W6-Zustand, heute schon
+sichtbar. (Die Bearer-Challenge von `mcpAuth` zaehlt bewusst nicht mit.)
+
+**Zwei Modi, beide gebaut.** `ist-aufnahme` (Vorgabe, heute): die Basic-Challenge wird
+je Zeile gegen die erwartete Schicht geprueft. `nach-p7`: sie muss **ueberall** fehlen.
+Kein auskommentierter Platzhalter — der P7-Modus ist gegen den lokalen Server
+vorgefuehrt (44 Abweichungen, Exit 1, weil das Gate dort noch steht).
+
+**Eine Wahrheit, maschinell gepinnt.** `test/probe-auth-table.test.js` haelt die
+Erwartungstabelle gegen `src/route-policy.js`: jede Route der Politik kommt in der
+Tabelle vor, die Einordnung stimmt ueberein, eine sitzungspflichtige Zeile darf **nie**
+404 oder 2xx erwarten, und keine Zeile darf etwas fuer oeffentlich erklaeren, das in
+`PUBLIC_ROUTES` nicht begruendet ist. Ohne diesen Test koennte die Probe gruen ueber
+genau die Tuer laufen, die sie finden soll.
+
+**Ist-Aufnahme vom 2026-08-02** gegen `https://app.sundartha.com`, Commit `44a7d09`
+(16 Commits hinter dem lokalen `master`, ohne P1): **59 Routen, 0 Abweichungen,
+Exit 0**. Alle 21 Gate-Routen antworten mit der Basic-Challenge, alle 12
+Sitzungs-Routen ohne sie (der Web-Login-Block ist gemountet, `guardedBoot` hat nichts
+verschluckt), `/api/plans` und `/healthz` sind wie vorgesehen oeffentlich, die drei
+Negativkontrollen liefern 401 statt eines Treffers. **Kein Befund.**
+
+**Getragene Restrisiken (benannt, nicht behoben).**
+(1) Die erwarteten Statuscodes sind eine Momentaufnahme der **deployten Konfiguration**.
+`TELNYX_AI_ASSISTANT_ENABLED` aus wuerde `/v1/chat/completions` von 403 auf 404 drehen,
+`PAYMENT_ENABLED` aus den Stripe-Webhook von 400 auf 404 — die Probe meldet das als
+Abweichung. Das ist gewollt (H10: die Tabelle wird bewusst nachgezogen, nie
+weggeklickt), heisst aber: eine rote Zeile ist nicht automatisch ein Loch.
+(2) Parametrisierte Routen werden mit einem Platzhalter angefragt. Gemessen wird damit
+die Auth-Schicht, nicht der Handler dahinter.
+(3) Die Probe laeuft **von Hand**, nicht automatisch. Sie ist der Abnahme-Nachweis jeder
+Phase, die live geht (`docs/RUNBOOK-AUTH-REVIEW.md`); wird sie ausgelassen, meldet
+nichts.
+(4) Ein Lauf erzeugt `auth_failed`-Zeilen im Render-Log. Das ist erwartet und kein
+Vorfall.
+
+**Kein neuer Env-Schluessel, keine neue Dependency, keine DB-Aenderung.**

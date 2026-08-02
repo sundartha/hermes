@@ -63,11 +63,55 @@ fallen, wenn sie leer ist. Wer sie leert, ohne die Route abzusichern, faellt in
 
 ---
 
+## P2 — Live-Probe `scripts/probe-auth.sh` (fertig)
+
+- **Erwartet:**
+  1. Lauf gegen Live mit **Exit 0** (Ist-Aufnahme, Gate steht noch).
+  2. Manipulierter Erwartungswert -> **Exit 1**.
+  3. Falscher Commit -> **Exit 2**, ohne weitere Anfrage.
+  4. Die Erwartungstabelle widerspricht `src/route-policy.js` nirgends.
+- **Verifikation:** alle drei Exit-Faelle vorgefuehrt (nicht behauptet); `npm test`;
+  drei Rot-vor-Fix-Laeufe gegen den Tabellen-Test.
+- **Ergebnis:**
+  - **Live-Lauf 2026-08-02**, `https://app.sundartha.com`, Commit `44a7d09`
+    (= 16 Commits hinter dem lokalen `master`, **ohne** P1 — der Live-Stand kommt aus
+    dem Upstream-Remote): **59 Routen, 0 Abweichungen, Exit 0. Kein Befund.**
+    Belegt nebenbei, dass P1 kein Laufzeitverhalten geaendert hat: dieselbe Tabelle
+    passt auf einen Deploy ohne `route-policy.js`.
+  - Exit 1 vorgefuehrt: `/healthz`-Erwartung lokal von 200 auf 503 gedreht -> Zeile
+    kippt von OK auf ABWEICHUNG, Zaehler 20 -> 21, Exit-Code 1. Zurueckgesetzt.
+  - Exit 2 vorgefuehrt: falscher SHA (`ABBRUCH: Ziel-Pin verletzt`), fehlendes
+    Argument, unbekannter Modus — je Exit 2, keine Messung.
+  - `npm test`: gruen, 3763 Tests (Basis vor der Phase: 3758, +5 neue).
+- **Dateien:** neu `scripts/probe-auth.sh`, `test/probe-auth-table.test.js`; geaendert
+  `docs/RUNBOOK-AUTH-REVIEW.md` (Deploy-Schritt), `PLAN-SECURITY.md` (AUTH-P2).
+
+### Entwurfsentscheidung, die ueber den Plantext hinausgeht
+
+Der Plan verlangt "404 ist ein Fehlschlag" als W6-Detektor. **Solange das Gate steht,
+ist dieser 404 nicht messbar**: das Gate haengt vor dem 404-Handler und beantwortet
+jeden unbekannten Pfad mit 401 — eine fehlende Route sieht exakt aus wie eine
+geschuetzte. Der Plan-Satz "die Probe ist der einzige Ort, an dem dieser Zustand
+auffaellt" waere heute also unwahr gewesen.
+
+Deshalb traegt jede Tabellenzeile zusaetzlich die **erwartete antwortende Schicht**
+(`gate` / `webauth` / `mcpauth` / `keine`), geprueft ueber `WWW-Authenticate: Basic` —
+den Fingerabdruck des Gates. Antwortet das Gate fuer eine Route, die der
+Sitzungs-Cookie schuetzen soll, ist der Web-Login-Block nicht gemountet. Genau dieser
+Durchfall ist lokal vorgefuehrt: gegen einen Server ohne pg-Backend melden alle 11
+Web-Login-Routen `DURCHFALL ... W6`, obwohl sie mit 401 antworten. Ab P7 uebernimmt die
+404-Regel; der Modus `nach-p7` verlangt dann, dass die Challenge ueberall fehlt.
+
+Zweite Zugabe: `test/probe-auth-table.test.js`. Ohne ihn haetten Probe und
+`route-policy.js` zwei Wahrheiten ueber dieselbe Route sagen koennen — die Probe waere
+gruen ueber genau die Tuer gelaufen, die sie finden soll.
+
+---
+
 ## Naechste Phase
 
-**P2 — Live-Probe `scripts/probe-auth.sh`.** Aendert kein Laufzeitverhalten.
-Vorbedingung erfuellt (P1 fertig). Danach erst P3 (Bootstrap-Fallback fail-closed),
-und die verlangt laut Plan, dass P1+P2 **gemergt** sind.
+**P3 — Bootstrap-Fallback fail-closed.** Vorbedingung laut Plan: **P1 und P2 gemergt**
+— das ist eine Owner-Handlung. Bis dahin laeuft nichts weiter.
 
 **Offener Owner-Entscheid (erst fuer P7):** Plan-Entscheidung 5 laesst `/signin`,
 `/sign-in`, `/account`, `/portal`, `/admin` als zusaetzliche Redirect-Ziele
