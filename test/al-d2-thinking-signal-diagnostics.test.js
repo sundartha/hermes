@@ -12,6 +12,10 @@
 //   B2  thinking-signal.js speakBridge: onSpeechChunk - im Shim das "wire"-Objekt
 //   B6  thinking-signal.js speakBridge: bridgeSpeechFrom(speech) liefert nicht-leer
 //
+// AL-P17-Nachtrag: die Diagnose ist unveraendert richtig, drei ihrer Pins beschreiben
+// aber jetzt den BEHOBENEN Zustand (K1/K3/K6 - je Test einzeln begruendet). K4 bleibt
+// ausdruecklich OFFEN und ist genau hier gruen gepinnt (AL-D2-4).
+//
 // Getrieben wird der SHIM (POST auf die Shim-Route mit stream:true, wie Telnyx live) gegen
 // den ECHTEN agentTurn und einen lokalen Anthropic-Mock. Zwei Naehte in einer Datei:
 // Anthropic-Mock wie test/al-d1-cause-diagnostics.test.js (JSON + echtes SSE), Shim-Fakes
@@ -198,7 +202,17 @@ const contentPieces = (res) =>
 
 // ---------- K1: Text ohne Werkzeug - der dominante Live-Fall (18/21) ----------
 
-test("AL-D2-1: K1 Text ohne Werkzeug - B3 sperrt, und BEIDE Streaming-Faehigkeiten sind still", async () => {
+// AL-P17 (E1) hat die halbe Zusage dieses Tests gedreht.
+//   Zusage vorher: in der dominanten Live-Klasse sind BEIDE Streaming-Faehigkeiten still.
+//   Zusage jetzt:  das Denk-Signal ist dort weiterhin still (B3 sperrt) - das
+//     Token-Streaming ist es nicht mehr. Drei Assertions umgestellt
+//     (streamArmedRounds 0->1, bodies[0].stream false->true, turn_ok-Zahl); die
+//     B3-Aussage bleibt woertlich stehen.
+//   Warum das die Absicht ist: genau diese Klasse (18/21 Live-Turns) war der Anlass der
+//     Phase - sie hatte keinen einzigen Mechanismus gegen die Latenz der ersten Runde.
+//   contentPieces bleibt EIN Stueck: NUR_TEXT ist einsaetzig. Die Mehrfach-Delta-Aussage
+//     traegt AL-P17-1 mit einem zweisaetzigen Fixture.
+test("AL-D2-1: K1 Text ohne Werkzeug - B3 sperrt weiterhin, das Token-Streaming laeuft jetzt (AL-P17)", async () => {
   bodies = [];
   queue = [reply(text(NUR_TEXT))];
 
@@ -207,12 +221,12 @@ test("AL-D2-1: K1 Text ohne Werkzeug - B3 sperrt, und BEIDE Streaming-Faehigkeit
   assert.ok(turn.offeredToolNames.includes(LOOK_UP), `Fixture greift nicht: ${turn.offeredToolNames}`);
   assert.equal(turn.thinkingSignalSpoken, false, "B3 sperrt: die Runde lieferte kein tool_use");
   assert.equal(turn.roundtrips, 1, "genau EINE Modellrunde - ihr Text IST die fertige Antwort");
-  assert.equal(turn.streamArmedRounds, 0, "AL-P7 ist in derselben Klasse ebenfalls still");
+  assert.equal(turn.streamArmedRounds, 1, "AL-P17: dieselbe Klasse ist jetzt armiert");
   assert.equal(bodies.length, 1);
-  assert.notEqual(bodies[0].stream, true, "der Bestandspfad (kein Anthropic-Streaming) lief");
-  assert.deepEqual(contentPieces(res), [NUR_TEXT], "der Anrufer hoert genau EINEN Block, am Ende");
+  assert.equal(bodies[0].stream, true, "der Anthropic-Streamingpfad lief");
+  assert.deepEqual(contentPieces(res), [NUR_TEXT], "einsaetziges Fixture -> genau EIN Block");
   assert.ok(turnOk.includes('"thinkingSignal":false'));
-  assert.ok(turnOk.includes('"streamArmedRounds":0'));
+  assert.ok(turnOk.includes('"streamArmedRounds":1'));
 });
 
 // ---------- K2: take_message plus Text (3/21) ----------
@@ -236,7 +250,20 @@ test("AL-D2-2: K2 take_message plus Text - B5 sperrt (sideEffectOnlyRound bei vo
 
 // ---------- K3: POSITIVKONTROLLE - ohne sie waeren alle Negativ-Befunde wertlos ----------
 
-test("AL-D2-3: K3 look_up MIT fuehrendem Text - die Bruecke feuert und liegt auf dem Draht VOR der Antwort", async () => {
+// AL-P17 (E1+E2) hat den SPRECHER dieser Zusage getauscht - das ist die heikelste
+// Anpassung der Phase.
+//   Zusage vorher: der fuehrende Satz liegt auf dem Draht VOR der Antwort, gesprochen von
+//     der Bruecke (thinkingSignalSpoken === true).
+//   Zusage jetzt:  identische Zusage, anderer Sprecher - der Satz-Chunker streamt ihn,
+//     und der Doppelrede-Riegel E2 laesst die Bruecke schweigen.
+//   Warum das die Absicht ist: ohne E2 stuende derselbe Satz ZWEIMAL auf der Leitung.
+//     Genau diese Ausschliesslichkeit garantierte bis AL-P17 die Bedingung
+//     sideEffectOnlyRound; mit E1 muss sie explizit gebaut werden.
+//   Umfang: nur der erste Assertionsblock wechselt. Die tragenden Bloecke 2-6
+//     (Reihenfolge, EIN Envelope, finish_reason, [DONE], zwei Roundtrips,
+//     Egress-Negativbeweis) bleiben woertlich; in Block 2 kommt E1b dazu (die Wortgrenze
+//     wandert vom Ende des ersten Deltas an den Anfang des zweiten).
+test("AL-D2-3: K3 look_up MIT fuehrendem Text - der fuehrende Satz liegt auf dem Draht VOR der Antwort (AL-P17: Sprecher ist der Chunker)", async () => {
   bodies = [];
   // look_up bewusst OHNE query-Feld: sanitizeLookupQuery liefert null, die Suche wird
   // VOR Kontingent, Gebuehr und Egress verworfen -> deterministisch, kostenlos, und
@@ -248,13 +275,18 @@ test("AL-D2-3: K3 look_up MIT fuehrendem Text - die Bruecke feuert und liegt auf
   assert.ok(turn.offeredToolNames.includes(LOOK_UP), `Fixture greift nicht: ${turn.offeredToolNames}`);
   assert.ok(turn.offeredToolNames.includes(GET_CONSULT), "der live gemessene Werkzeugsatz");
 
-  // 1) Es wurde ueberhaupt gebrueckt - sonst waeren K1/K2/K4/K5 auch bei totem Signal gruen.
-  assert.equal(turn.thinkingSignalSpoken, true);
-  assert.ok(turnOk.includes('"thinkingSignal":true'));
+  // 1) Es wurde ueberhaupt gestreamt - sonst waeren K1/K2/K4/K5 auch bei totem Streaming
+  //    gruen. Die Bruecke schweigt dabei bewusst (E2), sonst stuende der Satz zweimal auf
+  //    der Leitung.
+  assert.equal(turn.thinkingSignalSpoken, false, "E2: die Bruecke schweigt, der Chunker war schneller");
+  assert.ok(turnOk.includes('"thinkingSignal":false'));
+  assert.ok(turnOk.includes('"streamArmedRounds":2'));
   assert.ok(turnOk.includes('"speechWireOpen":true'));
 
-  // 2) DIE Reihenfolge auf dem Draht: genau zwei content-Deltas, Bruecke an Position 0.
-  assert.deepEqual(contentPieces(res), [`${BRUECKE} `, ANTWORT]);
+  // 2) DIE Reihenfolge auf dem Draht: genau zwei content-Deltas, der fuehrende Satz an
+  //    Position 0. E1b: das Trennzeichen steht jetzt VORNE am zweiten Delta (der Chunker
+  //    weiss ueber continuesStream, dass schon Text auf dem Draht liegt).
+  assert.deepEqual(contentPieces(res), [BRUECKE, ` ${ANTWORT}`]);
 
   // 3) Zusaetzlich als Ordnung formuliert, damit ein spaeterer Chunk-Umbau hier auffaellt.
   const wire = harness.sseContent(res);
@@ -312,7 +344,17 @@ test("AL-D2-5: K5 derselbe Modellverlauf ohne Wire - B2 sperrt, speechWireOpen m
 
 // ---------- K6: angenommenes get_consult - B4 sperrt, und zwar korrekt ----------
 
-test("AL-D2-6: K6 angenommenes get_consult - B4 sperrt korrekt, der Fueller spricht statt der Bruecke", async () => {
+// AL-P17 (E3, Owner-Entscheidung O-D1-B) hat den Sprecher dieses Falls getauscht.
+//   Zusage vorher: es spricht ein ANDERER Sprecher (consultFillerSpeech), keine Stille.
+//   Zusage jetzt:  es spricht der MODELLSATZ, ebenfalls keine Stille - und weiterhin nur
+//     EIN Haltesatz. Der deterministische Fueller entfaellt, weil der Anrufer die
+//     Ueberbrueckung des Modells bereits gehoert hat; er waere ein ZWEITER Haltesatz.
+//   Warum das die Absicht ist: der Owner hat den Fall ausdruecklich entschieden. Die
+//     tragende Zusage ("keine Stille, kein zweiter Haltesatz") wird dabei VERSCHAERFT
+//     gepinnt - contentPieces.length === 1 statt nur eines Wert-Vergleichs.
+//     Die Gegenrichtung (Runde OHNE fuehrenden Text -> Fueller unveraendert) pinnt
+//     AL-P17-3b.
+test("AL-D2-6: K6 angenommenes get_consult - der Modellsatz spricht statt des Fuellers (AL-P17 E3)", async () => {
   bodies = [];
   queue = [reply(text(CONSULT_ANKUENDIGUNG), toolUse(GET_CONSULT, { question: CONSULT_FRAGE }))];
 
@@ -320,9 +362,11 @@ test("AL-D2-6: K6 angenommenes get_consult - B4 sperrt korrekt, der Fueller spri
 
   assert.ok(turn.offeredToolNames.includes(GET_CONSULT), `Fixture greift nicht: ${turn.offeredToolNames}`);
   assert.equal(turn.thinkingSignalSpoken, false, "keine doppelte Ueberbrueckung");
-  assert.equal(turn.speech, localeFor("de").consultFillerSpeech, "ein ANDERER Sprecher, nicht Stille");
-  assert.equal(turn.speechStreamed, false);
-  assert.deepEqual(contentPieces(res), [localeFor("de").consultFillerSpeech]);
+  assert.equal(turn.speech, CONSULT_ANKUENDIGUNG, "der bereits gesprochene Modellsatz bleibt stehen");
+  assert.notEqual(turn.speech, localeFor("de").consultFillerSpeech);
+  assert.equal(turn.speechStreamed, true);
+  assert.deepEqual(contentPieces(res), [CONSULT_ANKUENDIGUNG]);
+  assert.equal(contentPieces(res).length, 1, "GENAU EIN Haltesatz - nie zwei");
   assert.equal(bodies.length, 1, "ein angenommenes get_consult beendet den Turn sofort");
   assert.ok(turnOk.includes('"thinkingSignal":false'));
   assert.ok(turnOk.includes('"speechEmpty":false'));

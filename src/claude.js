@@ -362,6 +362,37 @@ export function isSideEffectOnlyTool(name) {
   return SIDE_EFFECT_ONLY_TOOL_NAMES.has(name);
 }
 
+// AL-P17 (E1, Owner-Entscheidung O-D1-A vom 2026-08-01): die zweite Werkzeug-KLASSE
+// dieser Datei - STROM-SICHER. Strom-sicher heisst: dieses Werkzeug kann einen bereits
+// GESPROCHENEN Rundentext nicht mehr ersetzen. Nur wenn JEDES angebotene Werkzeug der
+// Runde hier steht, darf ihr Text satzweise raus (streamSinkFor).
+//
+// ALLOWLIST, niemals Denylist: eine Regel der Form "sperre bei get_consult" faellt bei
+// jedem kuenftigen Werkzeug fail-open. Hier schaltet ein unbekanntes Werkzeug das
+// Streamen von selbst ab (G27) - das ist die Eigenschaft, die aus der Vorgaenger-Regel
+// erhalten bleibt.
+//
+// Warum heute ALLE vier bekannten Werkzeuge drinstehen:
+//   end_call/take_message - ihr tool_result traegt nichts, worauf das Modell antworten
+//                           muesste (die AL-P4-Klasse oben).
+//   look_up               - liefert Information, ersetzt aber nichts: der FUEHRENDE Text
+//                           der Runde ist genau der Satz, den das Denk-Signal ohnehin
+//                           spraeche, und die Folgerunde HAENGT ihren Text an.
+//   get_consult           - ersetzte den Rundentext bis AL-P17 durch den Fueller. Genau
+//                           das unterbleibt seit E3, wenn bereits gestreamt wurde
+//                           (O-D1-B). E3 ist die Vorbedingung dieser Zeile - beide
+//                           gehoeren zusammen oder gar nicht.
+// KEINE Ableitung aus toolDefs()/agentTools(): eine abgeleitete Liste waere genau die
+// fail-open-Regel, die oben ausgeschlossen ist.
+const STREAM_SAFE_TOOL_NAMES = Object.freeze(
+  new Set([END_CALL_TOOL_NAME, TAKE_MESSAGE_TOOL_NAME, LOOK_UP_TOOL_NAME, GET_CONSULT_TOOL_NAME]),
+);
+
+// Rein (N7), ohne Store-/Netz-Zugriff.
+function isStreamSafeTool(name) {
+  return STREAM_SAFE_TOOL_NAMES.has(name);
+}
+
 // Fester Tool-Satz fuer BEIDE Engines (Budget-Tool-Loop + Realtime-Bridge ueber
 // realtimeTools). Seit P1b (Owner-Entscheidung E1) OHNE Kalender-/Buchungs-Tool: der
 // Telefon-Agent nimmt Terminwuensche nur als Nachricht auf, er bucht nichts und liest
@@ -657,19 +688,30 @@ function promptCharsOf({ system, tools, messages }) {
 // Drei Bedingungen, jede fail-closed:
 //   1. Es gibt ueberhaupt einen Abnehmer (nur der Shim-Pfad liefert einen; die
 //      Budget-Engine rendert ein fertiges TeXML-Dokument und kann nichts inkrementell).
-//   2. Der Werkzeugsatz der Runde besteht AUSSCHLIESSLICH aus Seiteneffekt-Werkzeugen.
-//      Nur dann ist der Text dieser Runde nachweislich der Text des Turns: jede andere
-//      Werkzeugklasse kann ihn verwerfen (die naechste Runde ueberschreibt speech) oder
-//      ersetzen (get_consult setzt den Ueberbrueckungssatz) - gesprochen ist gesprochen.
-//      Ein kuenftiges, unbekanntes Werkzeug schaltet das Streamen damit von selbst ab (G27).
+//   2. AL-P17 (E1): JEDES angebotene Werkzeug ist bekannt und STROM-SICHER
+//      (isStreamSafeTool). Bis AL-P17 stand hier die schaerfere Bedingung
+//      "ausschliesslich Seiteneffekt-Werkzeuge". Sie sperrte live in JEDEM Turn, weil
+//      look_up an keiner Frische-Bedingung haengt und damit immer im Satz liegt
+//      (AL-D1-2) - der einzige Mechanismus gegen die Latenz der ERSTEN Modellrunde war
+//      dadurch dauerhaft still (AL-D2 Klasse K1). Die Regel bleibt eine ALLOWLIST: ein
+//      kuenftiges, unbekanntes Werkzeug schaltet das Streamen von selbst ab (G27).
 //   3. Die Frist des Turns traegt noch einen vollen Versuch (derselbe Massstab wie
 //      roundStopReason ab der zweiten Runde, G5) - sonst laeuft der Bestandspfad.
-function streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs }) {
+//
+// continuesStream: steht auf dem Draht DIESES Turns schon Text? Der Chunker ist je Runde
+// eine neue Instanz und kann das nicht wissen; ohne die Auskunft klebte der erste Satz
+// der Folgerunde am letzten der Vorrunde.
+//
+// Exportiert, weil der fail-closed-Fall NICHT ueber agentTurn erreichbar ist: agentTools
+// kann per Konstruktion nur BEKANNTE Werkzeuge anbieten, ein erfundenes Werkzeug kommt
+// dort nie an. Die Armierungsregel ist der Gegenstand dieser Phase und muss direkt
+// pinnbar sein - dieselbe Begruendung, aus der isSideEffectOnlyTool exportiert ist.
+export function streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs, continuesStream }) {
   if (!onSpeechChunk) return null;
-  if (!tools.every((t) => isSideEffectOnlyTool(t.name))) return null;
+  if (!tools.every((t) => isStreamSafeTool(t.name))) return null;
   if (!roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs: config.llm.llmRequestTimeoutMs }))
     return null;
-  return makeSentenceChunker({ onChunk: onSpeechChunk });
+  return makeSentenceChunker({ onChunk: onSpeechChunk, continuesStream });
 }
 
 // Genau EIN Modell-Aufruf einer Schleifenrunde - samt der EINEN Verbrauchsbuchung dieses
@@ -812,6 +854,13 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
   // NICHT mehr dieselbe Aussage (die Ueberbrueckung ist gestreamt, die Antwort nicht). Die
   // Invariante wird an JEDER speech-Zuweisung mitgefuehrt.
   let speechStreamed = false;
+  // AL-P17: steht auf dem Sprech-Draht DIESES Turns bereits Text? Nur der Turn weiss das -
+  // der Satz-Chunker ist je Runde eine NEUE Instanz und begaenne sonst jede Folgerunde
+  // ohne Wortgrenze ("...schaue ich nach.Donnerstag um neun..."). Dieselbe Wurzel und
+  // dieselbe Loesung wie BRIDGE_TAIL_SEPARATOR (thinking-signal.js) - dort haengt das
+  // Zeichen hinten, weil die Bruecke immer das erste Fragment ist. Genau deshalb setzt
+  // die Bruecke dieses Flag bewusst NICHT: sie liefert ihre Wortgrenze selbst mit.
+  let wireHasSpeech = false;
   // AL-P7b: der Ueberbrueckungssatz dieses Turns - hoechstens EINER. Ohne Abnehmer
   // (Budget-Engine) oder mit ausgeschaltetem Flag ein No-op -> Bestandsverhalten.
   const thinkingSignal = makeThinkingSignal({
@@ -861,7 +910,13 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     const tools = toolsWithCacheControl(agentTools(call));
     for (const tool of tools) offeredTools.add(tool.name);
     const elapsedMs = Date.now() - loopStartedAt;
-    const sink = streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs });
+    const sink = streamSinkFor({
+      onSpeechChunk,
+      tools,
+      elapsedMs,
+      deadlineMs,
+      continuesStream: wireHasSpeech,
+    });
     if (sink) streamArmedRounds += 1;
     const params = {
       model,
@@ -880,7 +935,13 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     // AL-P7: der Rest des Puffers geht als letzter Chunk raus. Zulaessig ohne weitere
     // Pruefung, weil streamSinkFor nur Runden armiert, deren Text nachweislich der Text
     // des Turns ist (siehe dort). Lieferte die Runde gar keinen Text, ist das ein No-op.
-    if (sink) sink.flushRemainder();
+    if (sink) {
+      sink.flushRemainder();
+      // Ab jetzt steht Text auf dem Draht dieses Turns (die naechste Runde bekommt ihr
+      // fuehrendes Trennzeichen). chunkCount statt eines eigenen Zaehlers: der Chunker
+      // gibt kein leeres Fragment aus, die Zahl ist die ehrliche Auskunft (G5).
+      if (sink.chunkCount() > 0) wireHasSpeech = true;
+    }
 
     const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
     if (textParts.length) {
@@ -902,10 +963,19 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     // der Loop laeuft weiter wie bei jedem informationsliefernden Werkzeug.
     const consult = decideConsultRequest(call, toolUses);
     if (consult?.accepted) {
-      speech = consult.speech;
-      // AL-P7b: der Consult-Fueller ist ein NEUER, ungesprochener Text - auch wenn eine
-      // fruehere Runde bereits eine Ueberbrueckung gesprochen hat.
-      speechStreamed = false;
+      // AL-P17 (E3, Owner-Entscheidung O-D1-B vom 2026-08-01): der deterministische
+      // Consult-Fueller spricht nur noch, wenn dieser Turn noch NICHTS gesprochen hat.
+      // Lag der fuehrende Text der Runde schon auf der Leitung, hat der Anrufer seine
+      // Ueberbrueckung bereits gehoert - der Fueller waere ein ZWEITER Haltesatz.
+      // AUSDRUECKLICH: damit gilt die AL-P14-Zusage "der Haltesatz ist LLM-frei" in
+      // GENAU DIESEM Fall nicht mehr. Das ist eine bewusste Owner-Entscheidung, keine
+      // Nachlaessigkeit; der Fall ohne gestreamten Text bleibt unveraendert LLM-frei.
+      // Die Consult-Mechanik selbst (Kontingent, Frische, Frist, Mandats-Fallback,
+      // Paraphrase-Pflicht) ist NICHT beruehrt - nur, welcher Satz gesprochen wird.
+      // speechStreamed braucht keine Zuweisung: ohne gestreamten Text ist es bereits
+      // false, mit gestreamtem Text bleibt der gesprochene Text stehen - die Invariante
+      // "speechStreamed beschreibt den AKTUELLEN Wert von speech" haelt in beiden Armen.
+      if (!speechStreamed) speech = consult.speech;
       break;
     }
 
@@ -946,7 +1016,16 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     // Brueckentext gezogen werden, nicht auf den vollen (ggf. laengeren) Rundentext -
     // sonst weicht das Transkript (und die Owner-SMS/Summary) von der Leitung ab, sobald
     // THINKING_SIGNAL_MAX_CHARS kappt (thinking-signal.js).
-    const bridgeText = loopContinues && thinkingSignal.speakBridge(speech);
+    // AL-P17 (E2, Korrektheitsriegel): bis AL-P17 garantierte sideEffectOnlyRound die
+    // Ausschliesslichkeit von Streaming und Bruecke - eine armierte Runde war nie eine,
+    // die den Loop fortsetzt. Mit E1 faellt diese Garantie: eine Runde mit Text +
+    // look_up streamt ihren Text UND liefe hier in speakBridge, das denselben Satz ein
+    // ZWEITES Mal auf dieselbe Leitung schriebe. Gelesen wird die vorhandene Invariante
+    // speechStreamed ("der AKTUELLE Wert von speech steht bereits auf dem Draht") - kein
+    // zweiter Zustand, keine zweite Wahrheit (G5). Der Einmal-pro-Turn-Riegel in
+    // thinking-signal.js wird dabei NICHT verbraucht: eine spaetere, nicht armierte Runde
+    // darf weiterhin ueberbruecken.
+    const bridgeText = loopContinues && !speechStreamed && thinkingSignal.speakBridge(speech);
     if (bridgeText) {
       speech = bridgeText;
       speechStreamed = true;
@@ -1021,6 +1100,15 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
   // AL-P7b: zwei rein additive Felder. speechStreamed loest den Aufrufer von der
   // Chunk-ZAHL (die seit der Ueberbrueckung nicht mehr "der Turn-Text ist gesprochen"
   // bedeutet); thinkingSignalSpoken ist der PII-freie Diskriminator der Live-Abnahme.
+  //
+  // AL-P17 (E2, Lesart festgeschrieben): thinkingSignalSpoken bedeutet unveraendert
+  // "die BRUECKEN-FUNKTION hat gesprochen" - mechanismus-bezogen, NICHT turn-bezogen
+  // ("dieser Turn hat ueberbrueckt"). Die turn-bezogene Lesart braeuchte einen zweiten
+  // Schreiber auf dasselbe Feld und machte den turn_ok-Diskriminator mehrdeutig - genau
+  // der Fehler, den AL-D2 mit speechWireOpen gerade repariert hat. Folge, ausdruecklich:
+  // im heutigen Werkzeugsatz ist jede Runde mit offenem Draht armiert, also ist das Feld
+  // in Live-Turns dauerhaft false. Der Live-Diskriminator DIESER Faehigkeit ist deshalb
+  // streamArmedRounds (hier) bzw. streamChunks (Shim), nicht thinkingSignalSpoken.
   return {
     speech,
     speechStreamed,
