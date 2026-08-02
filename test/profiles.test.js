@@ -101,15 +101,21 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
     );
 
     await t.test(
-      "extern: Header ignoriert -> requestedBy=owner (kein Spoof)",
+      "extern: kein Tenant -> 403, gar kein Call (kein Spoof)",
       { skip: !srv.externalUrl && "keine externe Interface-IP" },
       async () => {
+        // AUTH-P3: der externe Aufrufer traegt keine Identitaet -> operatorChannelTenant
+        // liefert TENANT_REJECT statt Bootstrap -> das Gate "tenant_reject" greift VOR
+        // resolve_identity's Originate, also vor dem frueheren 500. Das ist keine
+        // Abschwaechung der Spoof-Aussage, sondern deren fruehere Durchsetzung: der
+        // externe X-Internal-Identity-Header gilt weiterhin nicht, UND es entsteht
+        // ueberhaupt kein Call mehr (statt eines Calls mit requestedBy=owner).
         const res = await postCall(srv.externalUrl, TO_EXT, "evil@x");
-        assert.equal(res.status, 500);
+        assert.equal(res.status, 403);
         assert.equal(
-          callByTo(srv, TO_EXT).requestedBy,
-          "owner",
-          "externer X-Internal-Identity darf NICHT gelten",
+          callByTo(srv, TO_EXT),
+          undefined,
+          "extern entsteht gar kein Call mehr (tenant_reject vor resolve_identity's Originate)",
         );
       },
     );

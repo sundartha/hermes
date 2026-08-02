@@ -1909,3 +1909,91 @@ nichts.
 Vorfall.
 
 **Kein neuer Env-Schluessel, keine neue Dependency, keine DB-Aenderung.**
+
+## AUTH-P3 — Bootstrap-Fallback nur noch fuer `isTrustedLocalCaller` (2026-08-02)
+
+Dritte Phase von `PLAN-AUTH-GATE.md`. **Aendert Laufzeitverhalten fuer genau EINEN Pfad:**
+den identitaetslosen Request. Bis hierher galt in `src/routes/_tenant.js` unkonditional
+"keine Identitaet = Bootstrap-/Owner-Tenant" — an ZWEI Stellen (`MULTI_TENANT=false`-Zweig
+und der Fallback in `requestTenant`, beide auf `singleTenantBootstrap()`). Dieser Satz war
+nur wahr, solange das Basic-Auth-Gate jeden anonymen Request abfing (empirischer Befund,
+PLAN-AUTH-GATE Abschnitt 1: ohne das Gate lieferte `GET /api/state` einem Request aus dem
+Internet Owner-Daten UND ein `POST /api/calls` einen echten Outbound-Anruf).
+
+**Der Fix.** Eine neue, EINE Funktion `operatorChannelTenant(req)` ersetzt beide
+Aufrufstellen: `isTrustedLocalCaller(req) ? BOOTSTRAP_TENANT_ID : TENANT_REJECT`.
+`isTrustedLocalCaller` ist KEINE neue Vertrauensquelle — es ist die bereits vorhandene,
+security-reviewte AM1-Grenze (echter Loopback-Socket UND kein `X-Forwarded-For`), die
+`internalIdentity`/`internalTenant` schon nutzten. Jeder identitaetslose Request, der
+diese Grenze nicht erfuellt, faellt jetzt auf `TENANT_REJECT` statt auf den Owner-Tenant.
+
+**Konsumenten-Enumeration (Pflichtschritt, vollstaendig gegrept).** Jeder
+`requestTenant`/`requireTenant`-Aufrufer in `src/` (12 Fundstellen ueber
+`api-read.js`, `api-calls.js`, `api-tenant-write.js`, `api-billing.js`, `routes/mcp.js`,
+`outbound-gates.js`), jedes `scripts/*`, das die eigene REST-API ruft, `src/mcp-tools.js`
+(In-Process-Hop) und alle Tests ohne Identitaet gegen tenant-gebundene Routen wurden
+einzeln beurteilt. Ergebnis: **kein Konsument stirbt lautlos.**
+
+- Der In-Process-Pfad (MCP-Tools -> eigene REST-API ueber `http://localhost`, stdio-
+  Single-Operator) bleibt byte-identisch: echter Loopback-Socket, kein
+  `X-Forwarded-For` (Node-`fetch` setzt ihn nie) -> weiterhin Bootstrap. Getestet, nicht
+  behauptet (AUTH-P3-14/-15).
+- `scripts/sweep-jetzt.sh` (der einzige lebende externe Credential-Nutzer) ruft
+  `/api/billing/cost-truing/sweep` — eine Route OHNE Resolver. Unberuehrt.
+- `POST /mcp` laeuft live unter `MCP_AUTH=oauth` (2026-08-02 gemessen: der 401 auf
+  `https://app.sundartha.com/mcp` stammt ausschliesslich aus `verifyOauth`) — `req.auth`
+  ist gesetzt, der geaenderte Zweig wird nicht betreten. **Restrisiko, nicht Code:** ein
+  Ruecksprung auf `MCP_AUTH="" `/`token` (render.yaml-Blueprint traegt noch `value: ""`)
+  wuerde den Connector nach dieser Phase stumm schalten (kein `req.auth`, externer
+  Request -> `TENANT_REJECT`). Keine Boot-Sonde dafuer vorhanden.
+- Legacy-Route `GET /api/billing/checkout-return`: ein *vor* dem Deploy geoeffneter
+  Stripe-Checkout endet nach dieser Phase in 403 statt Karten-Bindung. Kein Live-Regress
+  (die aktive Karten-Erfassung laeuft ueber `/api/self-service/billing/*`), aber genau
+  der Live-Schwanz, den PLAN-AUTH-GATE Abschnitt 3 (b2)-7 fuer P9 beschreibt.
+
+**Abnahmekriterium der Spec nicht wort-fuer-wort erreichbar (benannter Befund, keine
+Abweichung).** `GET /api/state` ruft `requestTenant`, nicht `requireTenant` — es hat
+keinen 403-Pfad. Nach dieser Phase liefert die Route einem externen Aufrufer weiterhin
+200, aber ohne Owner-Daten (`MULTI_TENANT=true`: leere Listen, `agent.owner=""`) bzw.
+bei `MULTI_TENANT=false` unveraendert die **ungefilterte** Liste (Restloch, geschlossen
+erst durch P5 `internalOnly`). `/api/state` in P3 auf `requireTenant` zu heben haette
+eine ZWEITE Verhaltensaenderung bedeutet und den Scope verletzt — bewusst nicht gemacht.
+Test `AUTH-P3-16` pinnt den Restzustand explizit mit Verweis auf P5, statt ihn
+unbemerkt verschwinden zu lassen.
+
+**Vier Bestandstests kippen, jeder einzeln angepasst — keine Assertion abgeschwaecht:**
+`test/request-tenant-unit.test.js` (drei Faelle: der reqWith-Default-Socket war extern,
+die Tests meinten aber den Betreiber-Kanal bzw. pinnten genau die jetzt beseitigte
+Eigenschaft) und `test/profiles.test.js` (der haerteste Fall: ein externer Aufruf ohne
+Identitaet erzeugte frueher einen Call mit `requestedBy=owner` und endete an einem
+Twilio-500; jetzt greift `tenant_reject` VOR dem Originate -> 403, gar kein Call — die
+Spoof-Aussage wird frueher durchgesetzt, nicht schwaecher geprueft).
+
+**Mutationsprobe gefahren** (`operatorChannelTenant` testweise auf den alten
+unkonditionalen `BOOTSTRAP_TENANT_ID`-Return zurueckgedreht): genau die elf dafuer
+gebauten AUTH-P3-Tests wurden rot (inkl. der beiden angepassten Bestandstest-Faelle,
+die die Mutation als Gegenprobe ebenfalls faengt), die uebrige Suite blieb gruen.
+Mutation von Hand zurueckgenommen (kein `git stash` — geteilt zwischen Worktrees),
+`npm test` danach wieder vollstaendig gruen.
+
+**16 neue Tests** in `test/auth-p3-bootstrap-fallback.test.js` (Praefix `AUTH-P3-N`,
+bewusst NICHT im i18n-Katalog-Muster — sonst laeuft die Datei still im
+`test:gates`-Lauf, wo Rot erlaubt ist und nichts meldet). Deckt `operatorChannelTenant`
+tabellarisch (alle vier Kombinationen Loopback/extern x XFF/kein-XFF), `requestTenant`/
+`requireTenant` in beiden Flag-Zustaenden sowie sieben Spawn-Beweise, dass das Basic-Auth-
+Gate in diesen Tests nachweislich ABWESEND ist (nicht umgangen — `DASHBOARD_PASSWORD=""`
+in `BASE_ENV`, jeder 403-Test prueft zusaetzlich `status !== 401` und
+`www-authenticate === null`).
+
+**Getragene Restrisiken (benannt, nicht behoben).**
+(1) `/api/state` bleibt unter `MULTI_TENANT=false` ungefiltert und ohne 403 — schliesst
+erst P5 (`internalOnly`).
+(2) `MCP_AUTH` != `oauth` wuerde den MCP-Connector nach dieser Phase stumm schalten —
+kein Code-Guard dagegen (waere neuer Scope), nur dieser Eintrag als Warnung.
+(3) Fuer `GATEWAY_URL` auf einer oeffentlichen URL statt `localhost` existiert keine
+Boot-Sonde; der In-Process-Hop liefe dann ueber den Render-Proxy (XFF gesetzt) und alle
+MCP-Tools wuerden `TENANT_REJECT` sehen.
+
+**Kein neuer Env-Schluessel, keine neue Dependency, keine DB-Aenderung.**
+`src/route-policy.js`, `scripts/probe-auth.sh`, `src/wiring/auth-gate.js` unangetastet
+(das ist P5/P6/P7).

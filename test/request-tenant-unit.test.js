@@ -231,13 +231,18 @@ test("isTrustedLocalCaller: externe Socket-Adresse -> false (mit und ohne XFF)",
 
 // === makeRequestTenant -> requestTenant ========================================
 
-test("requestTenant: Flag AUS -> explizite Bootstrap-Bindung (kein REJECT, kein Lookup)", () => {
+test("requestTenant: Flag AUS -> Bootstrap fuer den Betreiber-Kanal (kein REJECT, kein Lookup)", () => {
+  // AUTH-P3: der Flag-Kurzschluss greift weiterhin VOR auth/tenant (R5) - das ist die
+  // hier gepinnte Aussage. Der Betreiber-Kanal ist Loopback ohne X-Forwarded-For; der
+  // externe Gegenfall (identischer auth/tenant-Kurzschluss, aber TENANT_REJECT statt
+  // Bootstrap) liegt in AUTH-P3-4 (auth-p3-bootstrap-fallback.test.js).
   const store = makeStore({ "sub-b": "B" });
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(false, () => {
     // Selbst mit gesetztem auth/tenant kurzschliesst der Flag-Check zuerst (R5).
-    assert.equal(requestTenant(reqWith({ auth: { sub: "sub-b" } })), BOOTSTRAP_TENANT_ID);
-    assert.equal(requestTenant(reqWith({ tenant: { tenantId: "B" } })), BOOTSTRAP_TENANT_ID);
+    const local = { remoteAddress: "127.0.0.1", headers: {} };
+    assert.equal(requestTenant(reqWith({ ...local, auth: { sub: "sub-b" } })), BOOTSTRAP_TENANT_ID);
+    assert.equal(requestTenant(reqWith({ ...local, tenant: { tenantId: "B" } })), BOOTSTRAP_TENANT_ID);
   });
   assert.deepEqual(store.calls, [], "Flag-aus-Pfad darf store.resolveTenant nie aufrufen");
 });
@@ -377,14 +382,19 @@ test("requestTenant: Flag AN + x-internal-tenant=reject -> TENANT_REJECT (fail-c
   });
 });
 
-test("requestTenant: extern + x-internal-tenant -> ignoriert (faellt auf bisherigen Pfad)", () => {
+test("requestTenant: extern + x-internal-tenant -> ignoriert, kein Lookup, TENANT_REJECT", () => {
   // Externer Socket (faelschbar) -> internalTenant null -> Kurzschluss greift NICHT.
-  // Ohne auth/internal-Identitaet bleibt der Single-Operator-Pfad: Bootstrap-Bindung.
+  // AUTH-P3: ohne auth/internal-Identitaet ist der externe Aufrufer NICHT mehr der
+  // Betreiber-Kanal -> operatorChannelTenant liefert TENANT_REJECT statt Bootstrap. Die
+  // eigentliche, unveraendert gepinnte Aussage bleibt store.calls===[] - ein externer
+  // X-Internal-Tenant loest NIE einen Lookup aus.
   const store = makeStore({ B: "B" });
   const { requestTenant } = makeRequestTenant(store);
   withMultiTenant(true, () => {
     const req = reqWith({ remoteAddress: "203.0.113.7", headers: { "x-internal-tenant": "B" } });
-    assert.equal(requestTenant(req), BOOTSTRAP_TENANT_ID);
+    const out = requestTenant(req);
+    assert.equal(out, TENANT_REJECT);
+    assert.notEqual(out, BOOTSTRAP_TENANT_ID);
   });
   assert.deepEqual(store.calls, [], "externer X-Internal-Tenant wird ignoriert (kein Lookup)");
 });
@@ -451,12 +461,16 @@ test("requireTenant: gueltiger Tenant -> Tenant-String, kein 403", () => {
   assert.equal(res.statusCode, null, "kein Status-Write auf dem Erfolgs-Pfad");
 });
 
-test("requireTenant: Flag AUS -> BOOTSTRAP_TENANT_ID, Gate inert (kein 403)", () => {
+test("requireTenant: Flag AUS -> BOOTSTRAP_TENANT_ID, Gate inert fuer den Betreiber-Kanal (kein 403)", () => {
+  // AUTH-P3: der Betreiber-Kanal ist Loopback ohne X-Forwarded-For - explizit gesetzt,
+  // statt auf den (jetzt externen) reqWith-Default zu bauen. Der externe Gegenfall
+  // liegt in AUTH-P3-8 (auth-p3-bootstrap-fallback.test.js): dort liefert derselbe
+  // Flag-AUS-Pfad 403, weil operatorChannelTenant TENANT_REJECT zurueckgibt.
   const store = makeStore();
   const { requireTenant } = makeRequestTenant(store);
   const res = fakeRes();
   const out = withMultiTenant(false, () =>
-    requireTenant(reqWith({ tenant: { tenantId: "B" } }), res),
+    requireTenant(reqWith({ remoteAddress: "127.0.0.1", headers: {}, tenant: { tenantId: "B" } }), res),
   );
   assert.equal(out, BOOTSTRAP_TENANT_ID);
   assert.equal(res.statusCode, null);

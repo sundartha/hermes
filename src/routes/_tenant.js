@@ -81,6 +81,23 @@ export const ANON_IDENTITY = "anon";
 // In I4 filtert noch KEIN Endpunkt; I5/I6/I7 machen daraus 404/403.
 export const TENANT_REJECT = "reject";
 
+// AUTH-P3: der Tenant eines Requests OHNE jede Identitaet. Bis hierher galt
+// unkonditional "keine Identitaet = Bootstrap-/Owner-Tenant". Dieser Satz war nur wahr,
+// solange das Basic-Auth-Gate davorstand: ohne das Gate lieferte genau dieser Pfad einem
+// anonymen Request aus dem Internet Owner-Daten UND einen echten Outbound-Anruf
+// (empirischer Befund, PLAN-AUTH-GATE Abschnitt 1). Der Betreiber-Kanal ist NICHT "wer
+// keine Identitaet mitschickt", sondern der genuin lokale In-Process-Aufrufer: die
+// MCP-Tools, die die eigene REST-API ueber Loopback rufen, und der stdio-Single-Operator.
+// isTrustedLocalCaller ist dafuer die BEREITS VORHANDENE, security-reviewte Grenze
+// (echter Loopback-Socket UND kein X-Forwarded-For) - hier kommt KEINE zweite
+// Vertrauensquelle hinzu. Jeder andere identitaetslose Request: TENANT_REJECT
+// (fail-closed, NIE Owner). EINE Quelle fuer BEIDE identitaetslosen Pfade in
+// requestTenant (Flag aus / Flag an ohne Identitaet), damit die Vertrauensgrenze nicht
+// in zwei Zweigen lockstep gepflegt werden muss (G5) - und genau EINE Stelle, an der der
+// Single-Tenant-Bootstrap ueberhaupt vergeben wird (vormals singleTenantBootstrap).
+export const operatorChannelTenant = (req) =>
+  isTrustedLocalCaller(req) ? BOOTSTRAP_TENANT_ID : TENANT_REJECT;
+
 // Ownership-Regel fuer einen Call (I5): gehoert der Call dem Request-Tenant?
 // Reine Funktion ohne Deps, Teil des Resolver-Vertrags (T4 §3.2). server.js haelt
 // heute noch eine inline-Kopie (Z. 371); T4 Phase 5 stellt cancel + /api/calls/:id
@@ -97,16 +114,12 @@ export const tenantOwnsCall = (call, tenant) => call.tenantId === tenant;
 // (makeRequestTenant) ohne explizite config byte-identisch dieselbe Quelle liest
 // (Tests mutieren config.tenancy.multiTenant live auf dem Singleton).
 export function makeTenantResolver({ store, config = defaultConfig }) {
-  // EXPLIZITE Bindung an den konfigurierten Single-Tenant-Bootstrap (P3). Genau EINE
-  // Stelle, an der der Flag-aus-/Single-Tenant-Pfad an einen Tenant gebunden wird -
-  // benannt statt als roher BOOTSTRAP_TENANT_ID-Constant-Return verstreut (G5/N3).
-  const singleTenantBootstrap = () => BOOTSTRAP_TENANT_ID;
-
   // Request-Tenant aus der Auth-Identitaet aufloesen (Geschwister zu internalIdentity).
   // Aufloesungs-Reihenfolge (load-bearing):
-  //   (1) Flag aus -> explizite Bootstrap-Bindung (singleTenantBootstrap, kein
-  //       Aufloesungs-Pfad; muss ZUERST stehen, sonst kaeme bei Flag aus ein
-  //       Session-Tenant statt des Bootstrap-Tenants -> R5).
+  //   (1) Flag aus -> es existiert keine Tenant-Achse; der Bootstrap-Tenant ist der
+  //       einzige. Er geht ueber operatorChannelTenant NUR an den Betreiber-Kanal
+  //       (AUTH-P3), jeder andere Aufrufer -> TENANT_REJECT. Muss ZUERST stehen, sonst
+  //       kaeme bei Flag aus ein Session-Tenant statt des Bootstrap-Tenants (R5).
   //   (2) req.tenant (Web-Session, A4): VOR der req.auth-Logik. req.tenant wird im
   //       ganzen src/ NUR von webAuthMiddleware gesetzt (web-auth.js) - erst nach
   //       signiertem Cookie + gueltiger, nicht-invalidierter DB-Session + aktivem
@@ -118,10 +131,10 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   //       divergieren (R7). fail-closed: leere/fehlende tenantId -> TENANT_REJECT,
   //       NIE Owner. Bewusst `||`, NICHT `??` - `??` liesse `""` durch (R2).
   //   (3) req.auth.sub (MCP-Achse) bzw. localhost-internalIdentity. FEHLENDE Identitaet
-  //       (kein req.auth UND kein localhost-internal, also der localhost-/stdio-
-  //       Single-Operator-Kanal) -> explizite Bootstrap-Bindung (P3, singleTenantBootstrap;
-  //       vormals roher BOOTSTRAP_TENANT_ID-Constant-Return). VORHANDENE, aber
-  //       unbekannte/leere Identitaet -> TENANT_REJECT (resolveTenant liefert null).
+  //       (kein req.auth UND kein localhost-internal) -> operatorChannelTenant: Bootstrap
+  //       NUR fuer den genuin lokalen In-Process-Aufrufer (MCP-Tools/stdio), sonst
+  //       TENANT_REJECT (AUTH-P3). VORHANDENE, aber unbekannte/leere Identitaet ->
+  //       TENANT_REJECT (resolveTenant liefert null).
   // Hinweis (AM6, umgesetzt): der REST-X-Internal-Identity-Kanal traegt email-first
   // (mcp-tools, Profile-Achse), die Tenant-Achse keyt aber auf sub. Statt die REST-
   // Identitaet sub-seitig neu aufzuloesen, reicht das /mcp-Gateway den BEREITS
@@ -129,7 +142,7 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   // Lesepfad get_my_number unter MULTI_TENANT konsumiert ihn -> die sub/email-
   // Divergenz verschwindet an EINER autoritativen Aufloesung am JWT.
   function requestTenant(req) {
-    if (!config.tenancy.multiTenant) return singleTenantBootstrap();
+    if (!config.tenancy.multiTenant) return operatorChannelTenant(req);
     if (req.tenant) return req.tenant.tenantId || TENANT_REJECT; // Web-Session, fail-closed
     // AM6: am /mcp-Gateway bereits aufgeloester Tenant (X-Internal-Tenant, trusted-
     // localhost). Analog req.tenant eine Vorab-Aufloesung -> direkt zurueck, kein zweiter
@@ -139,16 +152,17 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
     const sub = req.auth ? req.auth.sub : null;
     const internal = req.auth ? null : internalIdentity(req);
     // FEHLENDE Identitaet (WEDER ein verifiziertes Token req.auth NOCH eine localhost-
-    // interne Identitaet, also der localhost-/stdio-Single-Operator-Kanal): EXPLIZITE
-    // Bindung an den Bootstrap-Tenant (P3, singleTenantBootstrap), NICHT als roher
-    // BOOTSTRAP_TENANT_ID-Constant-Return. Das ist KEIN Leck: ohne Identitaet ist dies
-    // der vertraute Owner-/Betreiber-Kanal (V4-Kontrakt, von I4 security-reviewed).
+    // interne Identitaet): operatorChannelTenant entscheidet, ob dies der Betreiber-Kanal
+    // ist. Der frueher hier stehende Satz "ohne Identitaet ist dies der vertraute
+    // Owner-/Betreiber-Kanal" galt nur mit dem Basic-Auth-Gate davor; seit AUTH-P3 traegt
+    // die Aussage die Topologie: Bootstrap nur fuer den genuin lokalen In-Process-Aufrufer,
+    // sonst TENANT_REJECT.
     // KRITISCH (Regel #3 fail-closed): das Gate haengt an !req.auth, NICHT an !sub. Ein
     // VORHANDENES, verifiziertes Token OHNE sub-Claim (jose erzwingt sub nicht) ist eine
     // vorhandene Identitaet und darf NIE zum Owner kollabieren - es faellt eine Zeile
     // tiefer auf resolveTenant(null) -> TENANT_REJECT. Der echte fail-closed-Riegel:
     // jede VORHANDENE, aber unbekannte/leere Identitaet -> TENANT_REJECT (NIE Owner).
-    if (!req.auth && !internal) return singleTenantBootstrap();
+    if (!req.auth && !internal) return operatorChannelTenant(req);
     const tenantId = store.resolveTenant(sub || internal);
     return tenantId || TENANT_REJECT; // vorhanden-aber-unbekannt -> Reject, NIE Owner
   }
@@ -157,9 +171,11 @@ export function makeTenantResolver({ store, config = defaultConfig }) {
   // Eine VORHANDENE, aber unbekannte Identitaet (TENANT_REJECT) wird hart mit 403
   // abgewiesen, statt in einen Pseudo-Tenant-Bucket zu schreiben (Owner-Entscheidung).
   // Liefert den Tenant ODER null (dann ist 403 bereits gesendet -> Handler returnt).
-  // Flag AUS / fehlende Identitaet -> requestTenant === singleTenantBootstrap(), nie
-  // REJECT -> Guard inert -> Owner-Pfad byte-identisch. Nur eine VORHANDENE, aber
-  // unbekannte Identitaet -> REJECT -> 403. Eigenstaendig von I5's call-404-Helper
+  // Flag AUS / fehlende Identitaet -> requestTenant === operatorChannelTenant: fuer den
+  // Betreiber-Kanal (Loopback ohne X-Forwarded-For) Bootstrap -> Guard inert, Owner-Pfad
+  // byte-identisch; fuer jeden anderen identitaetslosen Request REJECT -> 403 (AUTH-P3).
+  // Eine VORHANDENE, aber unbekannte Identitaet -> REJECT -> 403. Eigenstaendig von I5's
+  // call-404-Helper
   // (requireTenantOwnsCall vergleicht call.tenantId); dieser wrappt nur requestTenant.
   function requireTenant(req, res) {
     const tenant = requestTenant(req);
