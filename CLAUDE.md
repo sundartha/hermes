@@ -20,6 +20,17 @@ Der Dienst laeuft oeffentlich erreichbar (Render) und telefoniert mit echten Men
 
 Bei nicht-trivialen Tasks (3+ Schritte oder architektonische Entscheidungen): Lies `.claude/refs/workflow.md` und befolge die Regeln dort. Das ist keine Empfehlung, das ist Pflicht. Alles, was Calls, SMS, Auth oder Budget-Gates beruehrt, gilt automatisch als nicht-trivial.
 
+### Aufraeumen nach einer gemergten Kette (Pflicht, gehoert in den Merge-Commit)
+
+Phasen-Ketten produzieren ~14 Dateien pro Arbeitstag. Wer sie liegen laesst, zwingt jede kuenftige Session, 100 KB Prozesshistorie zu durchsuchen — und jeden Kickoff-Prompt, eine Nicht-lesen-Liste zu tragen. Deshalb: **ist eine Phase gemergt, verschwindet ihr Prozessmuell im selben Zug.**
+
+- **Loeschen:** `tasks/<phase>-report.md`, `-workflow-report.md`, `-spec.md`, verbrauchte Kickoff-Prompts, ueberholte Uebergaben — und das per-run-Skript aus `.claude/workflows/runs/`. Die neueste Kopie bleibt als Vorlage.
+- **Behalten:** der Kettenstand, offene Befunde, Betriebswissen (Flags/Env), aktive Kickoffs, `tasks/lessons.md`.
+- **Reihenfolge ist nicht optional:** untrackte Doku erst committen, dann loeschen — sonst ist es fuer genau die Dateien unumkehrbar, die nie in der Historie waren. Vor dem Commit auf Secrets/PII pruefen, Dateien einzeln adden (nie `git add -A`).
+- Verwaiste Verweise auf geloeschte Docs bleiben stehen; das ist Bestandspraxis, die Historie liegt in `git`.
+
+Nur `CLAUDE.md`, `MEMORY.md` und `.claude/workflows/` (oberste Ebene) landen automatisch im Session-Kontext. `tasks/**`, `PLAN-*.md`, `docs/**` kosten **null** Token pro Session — hier geht es um Navigierbarkeit, nicht um Kontext. Wer Kontext sparen will, raeumt `.claude/workflows/` auf.
+
 ## Code-Qualitaet
 
 Bei nicht-trivialen Code-Aenderungen ist `.claude/refs/clean-code.md` zu lesen und zu befolgen. Pflicht, nicht Empfehlung.
