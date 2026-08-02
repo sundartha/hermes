@@ -50,8 +50,13 @@ Zusaetzlich bei jedem Durchgang:
 tatsaechlich so antwortet, sagt nur `scripts/probe-auth.sh` (PLAN-AUTH-GATE P2):
 
 ```
-scripts/probe-auth.sh https://app.sundartha.com <commit-sha-aus-/healthz> ist-aufnahme
+scripts/probe-auth.sh https://app.sundartha.com <commit-sha-aus-/healthz> nach-p7
 ```
+
+`nach-p7` ist seit AUTH-P7 der Vorgabe-Modus (auch ohne das dritte Argument) und gilt
+fuer jeden Deploy ab diesem Commit. `ist-aufnahme` bleibt gueltig, aber nur fuer den
+Rollback-Fall: einen Lauf gegen einen Deploy VOR AUTH-P7, wo das Basic-Auth-Gate noch
+lebt und die Tabellenspalte `ANTWORTET` noch den Wert `gate` traegt.
 
 Der Commit ist ein Pflichtargument und kommt aus `GET /healthz` der Live-Instanz, nicht
 aus `git rev-parse` — Render deployt aus dem Upstream-Remote, der lokale `master` ist

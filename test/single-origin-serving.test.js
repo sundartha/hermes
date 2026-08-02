@@ -1,7 +1,8 @@
-// P1 — Single-Origin-Serving: WEB_DIST_DIR liefert den apps/web-Build statisch VOR der
-// Basic-Auth. Spawn-Tests (startServer) gegen ein winziges Fixture-dist. Beweist:
-//  (1) Marketing-Pfad ist OHNE Auth erreichbar (static vor Basic-Auth), die Owner-Legacy-
-//      API (/api/calls) bleibt HINTER der Basic-Auth (401 - kein Freilegen).
+// P1 — Single-Origin-Serving: WEB_DIST_DIR liefert den apps/web-Build statisch,
+// oeffentlich (ohne Sitzung). Spawn-Tests (startServer) gegen ein winziges
+// Fixture-dist. Beweist:
+//  (1) Marketing-Pfad ist OHNE Auth erreichbar, eine echte API-Route (/api/state)
+//      bleibt hinter internalOnly (403 - kein Freilegen).
 //  (2) /tenant.html -> 302 /app (Altpfad des mit P14 geloeschten Dashboards). Der
 //      Redirect bleibt NICHT nur wegen Bookmarks: eine Stripe-Checkout-Session, die VOR
 //      dem Deploy geoeffnet wurde, traegt die alte Rueckkehr-Adresse IN der Stripe-
@@ -51,21 +52,22 @@ function rawGet(url) {
 }
 
 test(
-  "WEB_DIST_DIR: Marketing OHNE Auth erreichbar (static VOR Basic-Auth), /api/calls bleibt 401",
+  "WEB_DIST_DIR: Marketing OHNE Auth erreichbar, /api/state bleibt 403 (internalOnly)",
   { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
   async () => {
-    // DASHBOARD_PASSWORD gesetzt -> Basic-Auth scharf; extern (keine localhost-Ausnahme).
+    // DASHBOARD_PASSWORD gesetzt (Wiederauferstehungs-Detektor); extern (keine
+    // localhost-Ausnahme) - internalOnly ist die einzige Sicherung auf /api/state.
     const srv = await startServer({
       env: { WEB_DIST_DIR: WEB_DIST, DASHBOARD_PASSWORD: "test-geheim" },
     });
     try {
-      // Marketing-Landing same-origin OHNE Credentials -> 200 (static greift vor Basic-Auth).
+      // Marketing-Landing same-origin OHNE Credentials -> 200 (static ist oeffentlich).
       const marketing = await fetch(`${srv.externalUrl}/`);
       assert.equal(marketing.status, 200, "Marketing-Landing ohne Auth erreichbar");
       assert.match(await marketing.text(), /Marketing-Fixture/);
-      // Negativ: die Owner-Legacy-API bleibt HINTER der Basic-Auth (kein Freilegen).
-      const api = await fetch(`${srv.externalUrl}/api/calls`);
-      assert.equal(api.status, 401, "Owner-Legacy-API weiter hinter Basic-Auth");
+      // Negativ: eine echte API-Route bleibt HINTER internalOnly (kein Freilegen).
+      const api = await fetch(`${srv.externalUrl}/api/state`);
+      assert.equal(api.status, 403, "API-Route weiter hinter internalOnly");
     } finally {
       await srv.stop();
     }

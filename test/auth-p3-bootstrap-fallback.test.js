@@ -9,13 +9,12 @@
 // PROMPT|UI|VOICE|WEB|WORLD-<Ziffer>): sonst landet die Datei still im test:gates-Lauf,
 // wo Rot erlaubt ist und nichts meldet (Lehre catalog-id-prefix-misroutes-tests).
 //
-// Wie die Spawn-Tests das Basic-Auth-Gate nachweislich UMGEHEN (nicht messen sie sonst die
-// falsche Sicherung): BASE_ENV.DASHBOARD_PASSWORD = "" (test/helpers.js) -> makeAuthGate
-// (src/wiring/auth-gate.js) startet mit `if (!config.auth.dashboardPassword) return next();`
-// - das Gate ist ABWESEND, nicht umgangen. Jeder 403-Test hier prueft zusaetzlich
-// res.status !== 401 und www-authenticate === null: sollte je ein Passwort in die
-// Umgebung leaken, meldet der Test es, statt still das Gate zu messen. Rate-Limit ist kein
-// Stoerfaktor (RATE_LIMIT_PER_MIN="1000" in BASE_ENV).
+// Seit AUTH-P7 existiert kein Basic-Auth-Gate mehr im Code (BASE_ENV.DASHBOARD_PASSWORD
+// = "" in test/helpers.js ist reine Env-Neutralisierung gegen ein lokal gesetztes .env).
+// Jeder 403-Test hier prueft zusaetzlich res.status !== 401 und www-authenticate === null:
+// sollte je ein Gate wiederauferstehen, meldet der Test es, statt still eine falsche
+// Sicherung zu messen. Rate-Limit ist kein Stoerfaktor (RATE_LIMIT_PER_MIN="1000" in
+// BASE_ENV).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";

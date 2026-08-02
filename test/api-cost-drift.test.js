@@ -11,8 +11,9 @@
 // operatorAuth gemountet). (A)-(C) migriert auf In-Process-Mount von makeBillingRoutes
 // (Muster api-flush-meters.test.js) - der Endpunkt rechnet rein aus dem geladenen
 // Store-Spiegel, ein Store-Double aus makeDefaultState() genuegt, kein Server-Spawn
-// noetig. (D) misst das Basic-Auth-Gate selbst (401 VOR jeder Route-Existenz-Frage) und
-// bleibt darum ein echter Spawn-Test, UNVERAENDERT.
+// noetig. (D) misst, dass ohne Admin-Sitzungs-Infra (json-Spawn, kein SESSION_SECRET)
+// die Route gar nicht gemountet ist (404) - seit AUTH-P7 gibt es kein Gate mehr, das
+// stattdessen antworten koennte. Bleibt darum ein echter Spawn-Test, UNVERAENDERT.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -160,20 +161,20 @@ test("GET /api/billing/cost-drift: Antwort ist PII-frei", async () => {
   }
 });
 
-// (D) Auth fail-closed (CLAUDE.md Regel 3): der Endpunkt liegt hinter der bestehenden
-// /api/*-Basic-Auth. Er traegt eine Plattform-Aggregation ueber ALLE Tenants - genau die
-// Groesse, die nicht ungegatet erreichbar sein darf. Extern ohne Credentials -> 401.
-// UNVERAENDERT (echter Spawn-Server): misst das Gate, nicht die Route (AUTH-P6 aendert
-// hier nichts - das Gate antwortet einer Anfrage ohne Sitzung VOR jeder Route-Existenz-
-// Frage, s. scripts/probe-auth.sh Begruendung).
+// (D) Auth fail-closed (CLAUDE.md Regel 3): der Endpunkt ist eine Betreiber-Route und
+// existiert ohne Admin-Sitzungs-Infra (json-Spawn, kein SESSION_SECRET) gar nicht -
+// niemals ungeschuetzt. Er traegt eine Plattform-Aggregation ueber ALLE Tenants - genau
+// die Groesse, die nicht ungegatet erreichbar sein darf. Extern ohne Credentials -> 404.
+// UNVERAENDERT (echter Spawn-Server): misst die Mount-Bedingung, nicht die Route-Logik
+// (s. scripts/probe-auth.sh Begruendung).
 test(
-  "GET /api/billing/cost-drift extern ohne Creds -> 401 (Basic-Auth fail-closed)",
+  "GET /api/billing/cost-drift extern ohne Admin-Sitzung -> 404 (Route ohne operatorAuth nicht gemountet)",
   { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
     try {
       const res = await fetch(`${srv.externalUrl}/api/billing/cost-drift`);
-      assert.equal(res.status, 401);
+      assert.equal(res.status, 404);
     } finally {
       await srv.stop();
     }

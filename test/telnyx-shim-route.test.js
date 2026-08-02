@@ -1,5 +1,5 @@
 // Spawn/Wiring-Tests fuer den Telnyx Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1):
-// beweisen die Route-Registrierung in src/server.js (Mount VOR der Basic-Auth,
+// beweisen die Route-Registrierung in src/server.js (oeffentlicher Mount,
 // Body-Parsing, lebende store.getCallByControlId-Referenz end-to-end). Unit-Verhalten
 // (Auth/Korrelation/Budget/Fehler) steht in test/telnyx-llm-shim.test.js - hier nur
 // der HTTP-/Wiring-Beweis.
@@ -29,9 +29,9 @@ test("Flag aus (BASE_ENV-Default) -> 404 (beweist Mount + Route existiert, Flag-
   }
 });
 
-test("Basic-Auth-Exemption: Flag an, DASHBOARD_PASSWORD gesetzt, kein Authorization -> 403 (NICHT 401)", async () => {
-  // 403 statt 401 beweist: die Route liegt VOR der Basic-Auth-Middleware und laeuft
-  // durch ihre EIGENE fail-closed Absicherung, nicht durch die Dashboard-Auth.
+test("Shim-Bearer fail-closed: kein Authorization -> 403", async () => {
+  // 403 beweist: die Route laeuft durch ihre EIGENE fail-closed Absicherung
+  // (statisches Bearer-Secret), nicht durch eine Sitzungs-Middleware.
   const srv = await startServer({
     env: { TELNYX_AI_ASSISTANT_ENABLED: "true", DASHBOARD_PASSWORD: "secret", ...TELNYX_ASSISTANT_BOOT_ENV },
   });

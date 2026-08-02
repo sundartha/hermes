@@ -11,9 +11,10 @@
 // antworten muessen, nicht durch das Gate davor). (a)-(c) migriert auf In-Process-Mount
 // von makeOnboardRoutes + Provisioning-Double, das die Reason-Codes liefert (Muster
 // onboarding-route.test.js); das Reason->Status-Mapping (RETRY_REASON_STATUS) bleibt
-// wortgleich gepinnt. (d) bleibt UNVERAENDERT (echter Spawn-Server): es misst den
-// Basic-Auth-Gate-Riegel VOR jeder Route-Existenz-Frage (X-Forwarded-For schlaegt
-// trusted-localhost -> 401, unabhaengig davon, ob die Route dahinter existiert).
+// wortgleich gepinnt. (d) bleibt UNVERAENDERT (echter Spawn-Server): kein SESSION_SECRET
+// im env(idp)-Fixture -> operatorAuth existiert nicht -> die Route ist gar nicht
+// gemountet (404), unabhaengig vom X-Forwarded-For-Header. Seit AUTH-P7 gibt es kein
+// Gate mehr, das stattdessen 401 antworten koennte.
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -167,11 +168,12 @@ const retry = (srv, body, headers = {}) =>
     body: JSON.stringify(body),
   });
 
-// (d) Auth fail-closed (Regel 3): ein proxy-weitergereichter Request (X-Forwarded-For) ist
-// NICHT trusted-localhost -> ohne Basic-Auth 401. Der Owner-Gate-Riegel des Geld-Endpoints.
-// Antwortet unveraendert vom Basic-Auth-Gate, das VOR jeder Route-Existenz-Frage sitzt -
-// AUTH-P6 aendert an dieser Zusage nichts (s. scripts/probe-auth.sh).
-test("(d) proxied ohne Basic-Auth -> 401", async () => {
+// (d) Auth fail-closed (Regel 3): kein SESSION_SECRET im Fixture -> operatorAuth
+// existiert nicht -> die Route ist gar nicht gemountet. Ein proxy-weitergereichter
+// Request (X-Forwarded-For) trifft darum auf Express' eigenen 404, unabhaengig vom
+// Header - seit AUTH-P7 gibt es kein Gate mehr, das VOR der Route-Existenz-Frage
+// antworten wuerde (s. scripts/probe-auth.sh).
+test("(d) proxied ohne Admin-Sitzung -> 404 (Route ohne operatorAuth nicht gemountet)", async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: env(idp),
@@ -179,7 +181,7 @@ test("(d) proxied ohne Basic-Auth -> 401", async () => {
   });
   try {
     const res = await retry(srv, { tenantId: "t_auth" }, { "X-Forwarded-For": "1.2.3.4" });
-    assert.equal(res.status, 401);
+    assert.equal(res.status, 404);
   } finally {
     await srv.stop();
     await idp.close();

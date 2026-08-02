@@ -10,8 +10,9 @@
 // Fixturen benutzen weiterhin bewusst provider=twilio: der Twilio-Adapter hat keine
 // Beleg-Methoden (fetchCostRecordPool/assignCostRecords) -> trueOneCall zaehlt den Call
 // als uebersprungen, ohne je einen Provider zu kontaktieren (netzfrei, wie bisher).
-// (C) misst das Basic-Auth-Gate selbst und bleibt darum ein echter Spawn-Test,
-// UNVERAENDERT.
+// (C) misst, dass ohne Admin-Sitzungs-Infra (json-Spawn, kein SESSION_SECRET) die
+// Route gar nicht gemountet ist (404) - seit AUTH-P7 kein Gate mehr, das antworten
+// koennte. Bleibt darum ein echter Spawn-Test, UNVERAENDERT.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -160,11 +161,12 @@ test("POST /api/billing/cost-truing/sweep mit Store-Daten: echter Sweep (Kandida
   }
 });
 
-// (C) Auth fail-closed (CLAUDE.md Regel 3): der Endpunkt liegt hinter der bestehenden
-// /api/*-Basic-Auth. Extern (keine localhost-Ausnahme) ohne Credentials -> 401, kein
-// Sweep. UNVERAENDERT (echter Spawn-Server): misst das Gate, nicht die Route.
+// (C) Auth fail-closed (CLAUDE.md Regel 3): der Endpunkt ist eine Betreiber-Route und
+// existiert ohne Admin-Sitzungs-Infra (json-Spawn, kein SESSION_SECRET) gar nicht -
+// niemals ungeschuetzt. Extern ohne Credentials -> 404, kein Sweep. UNVERAENDERT
+// (echter Spawn-Server): misst die Mount-Bedingung, nicht die Route-Logik.
 test(
-  "POST /api/billing/cost-truing/sweep extern ohne Creds -> 401 (Basic-Auth fail-closed)",
+  "POST /api/billing/cost-truing/sweep extern ohne Admin-Sitzung -> 404 (Route ohne operatorAuth nicht gemountet)",
   { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
@@ -172,7 +174,7 @@ test(
       const res = await fetch(`${srv.externalUrl}/api/billing/cost-truing/sweep`, {
         method: "POST",
       });
-      assert.equal(res.status, 401);
+      assert.equal(res.status, 404);
     } finally {
       await srv.stop();
     }

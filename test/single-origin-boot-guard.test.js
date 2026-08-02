@@ -1,7 +1,7 @@
 // P1 — Single-Origin-Boot-Guard: assertConfig() verweigert den Boot, wenn WEB_DIST_DIR
 // gesetzt ist, der Build (<dir>/index.html) aber fehlt - fail-closed (sichtbarer Boot-
-// Fehler statt stiller 401: ohne index.html faende express.static nichts, jeder
-// Marketing-Request fiele auf die Basic-Auth durch). Rein-Unit gegen die config-Funktion
+// Fehler statt stiller 404: ohne index.html faende express.static nichts, jeder
+// Marketing-Request fiele auf 404 durch). Rein-Unit gegen die config-Funktion
 // (kein Server-Spawn, kein pglite). Eigene Testdatei mit SAUBEREM Modul-Scope: config.js
 // haelt fatalConfigErrors modulweit; ein numEnv-polluter (config-failclosed.test.js)
 // wuerde die Gegenprobe (assertConfig() === true) verfaelschen - hier akkumuliert nichts.

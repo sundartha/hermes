@@ -3,8 +3,9 @@
 // als Factory mit Dependency-Injection - gleiches Muster wie makeBillingRoutes/
 // makeCallRoutes.
 //
-// AUTH-P6: beide Routen sind Betreiber-Routen und haengen zusaetzlich zur Basic-Auth
-// hinter einer echten Admin-Sitzung (webAuthMw+adminMw, operatorRoutes/operatorAuth) -
+// AUTH-P6: beide Routen sind Betreiber-Routen und haengen hinter einer echten
+// Admin-Sitzung (webAuthMw+adminMw, operatorRoutes/operatorAuth) - seit AUTH-P7 die
+// einzige Sicherung -
 // und NUR DANN gemountet, wenn diese Sicherung existiert (fail-closed, s.
 // wiring/operator-routes.js). BEWUSST KEIN MCP-Tool (kein Self-Service ueber MCP,
 // kein offener ungegateter Geld-Endpunkt, R4). Die Kosten-Notbremse ist zusaetzlich
@@ -86,7 +87,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
   const geoLookup = geoLookupAdapter();
 
   // ---- Onboarding (zahlungsfrei): Tenant registrieren -> Nummer anfragen ->
-  // (optional) echter Provider-Kauf -> aktivieren. Hinter Basic-Auth UND einer
+  // (optional) echter Provider-Kauf -> aktivieren. Hinter einer
   // Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung gar nicht
   // gemountet.
   operator.post("/api/onboard", async (req, res) => {
@@ -245,7 +246,7 @@ export function makeOnboardRoutes({ store, config, audit, provisioning, operator
   // Operator-Re-Trigger (P2): provisioniert eine NEUE Nummer fuer einen aktiven, bezahlten
   // Subscriber, dessen vorheriger Nummernkauf scheiterte (provisionNumber faellt bei Order-/
   // Hold-Fehler auf 'failed' -> tenantHasLiveNumber wird wieder offen -> frische 'requested'
-  // -> Worker kauft). Hinter Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw,
+  // -> Worker kauft). Hinter einer Admin-Sitzung (webAuthMw+adminMw,
   // AUTH-P6); ohne diese Sicherung gar nicht gemountet - trusted-localhost traegt diese
   // Route bewusst NICHT mehr (anders als die sieben P5-Routen). Geld-Safety (Regel 1):
   // NUR fuer einen active + KYC>=CARD Subscriber (das Abo IST die Freigabe, dieselbe

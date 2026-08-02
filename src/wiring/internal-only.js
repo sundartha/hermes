@@ -1,9 +1,10 @@
 // ---- internalOnly (PLAN-AUTH-GATE AUTH-P5) --------------------------------------
-// Macht explizit, was heute nur Nebeneffekt des Basic-Auth-Gates ist: die sieben
-// MCP-Routen (POST /api/calls, .../cancel, .../consult, .../consult/answer,
-// GET /api/state, GET /api/calls/:id, GET /api/tenant-data/export) haben genau EINEN
-// echten Aufrufer - den In-Process-MCP-Pfad ueber Loopback (src/mcp-tools.js, api() ->
-// resolveGatewayUrl()). apps/web ruft keine davon (Plan Abschnitt 3, (b1)-1).
+// Seit AUTH-P7 ist dies die einzige Sicherung (kein Basic-Auth-Gate mehr davor): die
+// neun MCP-/Legacy-Routen (POST /api/calls, .../cancel, .../consult,
+// .../consult/answer, GET /api/state, GET /api/calls/:id, GET /api/tenant-data/export,
+// POST /api/billing/setup-checkout, GET /api/billing/checkout-return) haben genau
+// EINEN echten Aufrufer - den In-Process-MCP-Pfad ueber Loopback (src/mcp-tools.js,
+// api() -> resolveGatewayUrl()). apps/web ruft keine davon (Plan Abschnitt 3, (b1)-1).
 //
 // KEINE neue Trust-Idee: isTrustedLocalCaller ist die BEREITS reviewte Grenze aus
 // AUTH-P3 (echter Loopback-Socket UND kein X-Forwarded-For). Sie wird an genau EINER

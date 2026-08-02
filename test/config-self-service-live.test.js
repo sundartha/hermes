@@ -1,8 +1,9 @@
 // P7 (Cluster 4, G5): isSelfServiceLive(cfg) in src/config.js ersetzt die vormals
 // vierfach wortgleiche zusammengesetzte Bedingung (config.selfServiceEnabled &&
-// config.multiTenant) in config.js/wiring/auth-gate.js/wiring/web-login.js. Reine
-// Praedikatfunktion, alle 4 Bool-Kombis - nur "scharf" (true), wenn BEIDE Flags an sind
-// (Schnittmenge, kein OR).
+// config.multiTenant) in config.js/wiring/web-login.js (der dritte damalige
+// Konsument, das mit AUTH-P7 geloeschte Basic-Auth-Gate-Modul, ist nicht mehr Teil
+// des Codes). Reine Praedikatfunktion, alle 4 Bool-Kombis - nur "scharf" (true), wenn
+// BEIDE Flags an sind (Schnittmenge, kein OR).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isSelfServiceLive } from "../src/config.js";

@@ -5,7 +5,7 @@
 // Pfade/Status/Bodies/Audit-Aufrufe). Kein Router: die EINE Route wird in
 // wireWebLogin per app.post(stripeWebhookPath, ...) an den Store gehaengt.
 //
-// KEINE Basic-Auth (Stripe kann keine Credentials senden) - die Sicherung ist die
+// KEINE Sitzungspflicht (Stripe kann keine Credentials senden) - die Sicherung ist die
 // HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET, fail-closed: Signatur VOR dem
 // JSON-Parse (rawBody). Ohne PAYMENT_ENABLED -> 404 (byte-identisch). accounts/
 // sessions sind die in wireWebLogin ueber den portalRunner konstruierten Instanzen;

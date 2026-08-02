@@ -530,18 +530,20 @@ export async function waitForLog(srv, regex, timeoutMs = 3000) {
   }
 }
 
-// Pinnt das Basic-Auth-Gate als ABWESEND statt umgangen (AUTH-P3/AUTH-P5, geteilt
-// zwischen auth-p3-bootstrap-fallback.test.js und auth-p5-internal-only.test.js - EINE
-// Quelle statt zweier Kopien, S2). BASE_ENV.DASHBOARD_PASSWORD="" laesst makeAuthGate
-// (src/wiring/auth-gate.js) mit `if (!config.auth.dashboardPassword) return next();`
-// sofort durchreichen - kein 401, kein www-authenticate-Header. Ein 403 in einem Test,
-// der dies NICHT prueft, koennte auch vom Gate kommen (falsch positiv gemessen).
+// Pinnt: es existiert kein Basic-Auth-Gate mehr (AUTH-P7, geteilt zwischen
+// auth-p3-bootstrap-fallback.test.js und auth-p5-internal-only.test.js - EINE Quelle
+// statt zweier Kopien, S2). Vor AUTH-P7 liess BASE_ENV.DASHBOARD_PASSWORD="" das Gate
+// mit `if (!config.auth.dashboardPassword) return next();` sofort durchreichen; seit
+// AUTH-P7 gibt es diese Zeile im Code nicht mehr - kein 401, kein www-authenticate-
+// Header, aus keinem Pfad mehr. Ein 403/404 in einem Test, der dies NICHT prueft,
+// koennte theoretisch auch von einem wiederauferstandenen Gate kommen (falsch positiv
+// gemessen); das ist der Wiederauferstehungs-Detektor.
 export function assertGateAbsent(res) {
-  assert.notEqual(res.status, 401, "das ist NICHT das Basic-Auth-Gate, das hier misst");
+  assert.notEqual(res.status, 401, "kein Gate mehr - 401 waere eine Wiederauferstehung");
   assert.equal(
     res.headers.get("www-authenticate"),
     null,
-    "kein www-authenticate -> misst tatsaechlich die Ziel-Sicherung, nicht das Gate",
+    "kein www-authenticate -> kein Gate mehr davor",
   );
 }
 

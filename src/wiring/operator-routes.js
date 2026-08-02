@@ -1,14 +1,15 @@
 // ---- operatorRoutes (AUTH-P6) -----------------------------------------------------
-// Sechs Betreiber-Routen (4x /api/billing/*, 2x /api/onboard*) brauchen ausser der
-// Basic-Auth-Sammelsicherung eine echte Admin-Sitzung: webAuthMw (Browser-Session) UND
-// adminMw (role='admin' ODER ADMIN_EMAILS). Beide Middlewares entstehen HEUTE nur im
+// Sechs Betreiber-Routen (4x /api/billing/*, 2x /api/onboard*) brauchen eine echte
+// Admin-Sitzung: webAuthMw (Browser-Session) UND adminMw (role='admin' ODER
+// ADMIN_EMAILS) - seit AUTH-P7 die EINZIGE Sicherung dieser Routen. Beide Middlewares
+// entstehen HEUTE nur im
 // guardedBoot-Block (src/wiring/web-login.js, wireWebLogin) - und der ist fail-OPEN
 // (src/boot-guard.js): wirft ein Mount-Schritt dort, faengt guardedBoot es ab und die
 // Wurzel bekommt operatorAuth NIE zugewiesen (bleibt null).
 //
 // HARTE INVARIANTE: fehlt operatorAuth, werden die sechs Routen GAR NICHT gemountet -
 // niemals ungeschuetzt. Ein 404 ist damit der Meldeweg fuer einen verschluckten
-// guardedBoot: die Live-Probe (scripts/probe-auth.sh) wertet ihn ab P7 als DURCHFALL
+// guardedBoot: die Live-Probe (scripts/probe-auth.sh) wertet ihn als DURCHFALL
 // (W6). Waeren die Routen stattdessen ungeschuetzt gemountet, waere derselbe Ausfall
 // eine offene Tuer, die niemandem auffaellt - das ist der Unterschied, den diese Datei
 // erzwingt.

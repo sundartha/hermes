@@ -21,11 +21,11 @@ test("MCP_AUTH=oauth: Resource Server prueft Tokens", async (t) => {
       MCP_AUTH: "oauth",
       OAUTH_ISSUER_URL: idp.issuer,
       OAUTH_AUDIENCE: AUDIENCE,
-      DASHBOARD_PASSWORD: "geheim", // beweist: Well-known braucht KEINE Basic-Auth
+      DASHBOARD_PASSWORD: "geheim", // Wiederauferstehungs-Detektor: der Wert wird seit AUTH-P7 von nichts mehr gelesen
     },
   });
   try {
-    await t.test("Well-known: 200 JSON ohne Basic-Auth-Prompt", async () => {
+    await t.test("Well-known: 200 JSON ohne Auth-Prompt", async () => {
       const res = await fetch(`${srv.localUrl}/.well-known/oauth-protected-resource`);
       assert.equal(res.status, 200);
       assert.ok(!res.headers.get("www-authenticate"));

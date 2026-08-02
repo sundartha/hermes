@@ -1,8 +1,8 @@
 // AUTH-P6-5/-6: die sechs Betreiber-Routen sind ohne die Admin-Sitzungs-Infrastruktur
 // (webAuthMw+adminMw, s. src/wiring/operator-routes.js) gar nicht gemountet (404) -
-// niemals ungeschuetzt. AUTH-P6-6 pinnt zusaetzlich, WELCHE Schicht einem anonymen
-// externen Aufrufer heute antwortet (das Basic-Auth-Gate, mit Basic-Challenge), solange
-// der Mount hinter dem Gate bleibt (P6-Entscheidung, Plan Abschnitt 3).
+// niemals ungeschuetzt. AUTH-P6-6 pinnt zusaetzlich, dass ein anonymer externer
+// Aufrufer seit AUTH-P7 KEINE Basic-Challenge mehr sieht (das Gate ist gefallen) -
+// die W6-Negativkontrolle, die scripts/probe-auth.sh live nachvollzieht.
 //
 // Testpraefix bewusst "AUTH-P6-N" (NICHT DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|
 // PROMPT|UI|VOICE|WEB|WORLD-<Ziffer>): sonst landet die Datei still im test:gates-Lauf,
@@ -66,20 +66,19 @@ test("AUTH-P6-5b: SESSION_SECRET ALLEIN (weiter json) mountet die sechs Routen N
 });
 
 test(
-  "AUTH-P6-6: einem anonymen externen Aufrufer antwortet das Basic-Auth-Gate (401 + WWW-Authenticate: Basic) - die Zeile, die scripts/probe-auth.sh erwartet",
+  "AUTH-P6-6 (AUTH-P7): einem anonymen externen Aufrufer antwortet KEINE Schicht mehr mit einer Basic-Challenge - 404 ohne WWW-Authenticate (W6-Negativkontrolle, die scripts/probe-auth.sh live prueft)",
   { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
     try {
       for (const route of OPERATOR_ROUTES) {
         const res = await fetchRoute(`${srv.externalUrl}`, route);
-        assert.equal(res.status, 401, `${route.method} ${route.path}`);
-        assert.match(
-          res.headers.get("www-authenticate") || "",
-          /^Basic/,
-          `${route.method} ${route.path}: das Basic-Auth-Gate muss antworten - aendert sich das, ` +
-            "muss scripts/probe-auth.sh im selben Commit mitwandern (H10)",
+        assert.equal(
+          res.status,
+          404,
+          `${route.method} ${route.path}: ohne Admin-Sitzungs-Infra nicht gemountet - kein Gate mehr, das antworten koennte`,
         );
+        assertGateAbsent(res);
       }
     } finally {
       await srv.stop();

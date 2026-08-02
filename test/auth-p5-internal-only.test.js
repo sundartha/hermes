@@ -1,17 +1,18 @@
 // AUTH-P5: internalOnly vor den sieben MCP-Routen + Audit-Ersatz an vier Stellen.
-// Bis hierher war der Schutz dieser sieben Routen NUR ein Nebeneffekt des Basic-Auth-
-// Gates (das mit P7 faellt). internalOnly macht die eigentliche Vertrauensgrenze
-// explizit: genuin lokaler In-Process-Aufrufer (isTrustedLocalCaller, echter Loopback-
-// Socket OHNE X-Forwarded-For) - dieselbe Grenze wie AUTH-P3, keine neue Trust-Idee.
+// Bis dahin war der Schutz dieser sieben Routen NUR ein Nebeneffekt des Basic-Auth-
+// Gates (das mit AUTH-P7 gefallen ist). internalOnly macht die eigentliche
+// Vertrauensgrenze explizit: genuin lokaler In-Process-Aufrufer (isTrustedLocalCaller,
+// echter Loopback-Socket OHNE X-Forwarded-For) - dieselbe Grenze wie AUTH-P3, keine
+// neue Trust-Idee.
 //
 // Testpraefix bewusst "AUTH-P5-N" (NICHT DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|
 // PROMPT|UI|VOICE|WEB|WORLD-<Ziffer>): sonst landet die Datei still im test:gates-Lauf,
 // wo Rot erlaubt ist und nichts meldet (Lehre catalog-id-prefix-misroutes-tests).
 //
-// AUTH-P5-1/-2/-3 messen internalOnly ueber echte Spawn-Server (Muster AUTH-P3):
-// BASE_ENV.DASHBOARD_PASSWORD="" -> das Basic-Auth-Gate ist ABWESEND (makeAuthGate
-// startet mit `if (!config.auth.dashboardPassword) return next();`), nicht umgangen -
-// jeder 403-Fall prueft zusaetzlich assertGateAbsent (kein 401, kein www-authenticate).
+// AUTH-P5-1/-2/-3 messen internalOnly ueber echte Spawn-Server (Muster AUTH-P3): seit
+// AUTH-P7 existiert kein Basic-Auth-Gate mehr im Code (BASE_ENV.DASHBOARD_PASSWORD=""
+// ist reine Env-Neutralisierung) - jeder 403-Fall prueft zusaetzlich assertGateAbsent
+// (kein 401, kein www-authenticate), der Wiederauferstehungs-Detektor.
 //
 // AUTH-P5-4/-5/-6 messen die drei Ablehnungszweige in web-auth.js direkt: eine winzige
 // lokale Express-App (Muster mountAdmin in test/web-auth.test.js) statt eines vollen

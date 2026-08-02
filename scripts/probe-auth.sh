@@ -15,14 +15,12 @@
 # heisst, dass guardedBoot (src/boot-guard.js, fail-open) den Web-Login-Block
 # verschluckt hat und die Route gar nicht gemountet ist - /healthz bliebe dabei 200 und
 # der Ausfall unsichtbar.
-# ABER: solange das Basic-Auth-Gate steht, sieht man diesen 404 gar nicht. Das Gate
-# haengt VOR dem 404-Handler und beantwortet jeden unbekannten Pfad mit 401 - eine
-# fehlende Route ist damit von einer geschuetzten nicht zu unterscheiden. Deshalb
-# prueft die Probe zusaetzlich, WER geantwortet hat: die Basic-Challenge
-# (WWW-Authenticate: Basic) ist der Fingerabdruck des Gates. Traegt eine Route, die vom
-# Sitzungs-Cookie geschuetzt sein SOLL, ploetzlich diese Challenge, dann ist der
-# Web-Login-Block nicht gemountet - genau der Zustand, den W6 meint, nur heute schon
-# sichtbar.
+# AUTH-P7: das frueher davorstehende Basic-Auth-Gate ist gefallen. Bis dahin maskierte
+# es genau diesen 404 (jeder unbekannte Pfad kam als 401 mit Basic-Challenge zurueck) -
+# eine fehlende Route war von einer geschuetzten nicht zu unterscheiden. Die
+# Basic-Challenge (WWW-Authenticate: Basic) bleibt trotzdem Teil der Messung: sie ist
+# der Wiederauferstehungs-Detektor fuer das gefallene Gate (Modus nach-p7 unten) UND
+# faengt einen versehentlich wieder eingemounteten Gate-Rest.
 #
 # SICHERHEITSZUSAGEN:
 #   - keine Credentials, kein Cookie, kein Token - weder als Argument noch im Skript.
@@ -35,7 +33,7 @@
 #   - Der Lauf erzeugt auth_failed-Zeilen im Server-Log. Das ist erwartet.
 #
 # Aufruf:  scripts/probe-auth.sh <basis-url> <erwarteter-commit> [modus]
-#   modus = ist-aufnahme (Vorgabe) | nach-p7
+#   modus = nach-p7 (Vorgabe) | ist-aufnahme
 # Exit:    0 = alle Erwartungen erfuellt · 1 = mindestens eine Abweichung
 #          2 = Abbruch vor der Messung (Argumente, /healthz, Commit, Rate-Limit)
 set -uo pipefail
@@ -74,9 +72,9 @@ EXIT_ABBRUCH=2
 #   statisch    - statisch ausgeliefert, keine Express-Route (darum nicht im Inventar)
 #   fehlt       - darf es nicht geben (Negativkontrolle)
 #
-# ANTWORTET - welche Schicht die Antwort geben soll. Nur "gate" sendet die
-# Basic-Challenge; jeder andere Wert verlangt, dass sie FEHLT:
-#   gate     - src/wiring/auth-gate.js (die Sammelsicherung, die dieser Plan aufloest)
+# ANTWORTET - welche Schicht die Antwort geben soll. Seit AUTH-P7 sendet KEINE Schicht
+# mehr eine Basic-Challenge - jeder Wert verlangt, dass sie FEHLT:
+#   internal - src/wiring/internal-only.js (genuin lokaler In-Process-Aufrufer)
 #   webauth  - webAuthGateMiddleware (Sitzungs-Cookie)
 #   mcpauth  - src/auth.js (Bearer/OAuth; sendet eine Bearer-Challenge, keine Basic-)
 #   keine    - Route bzw. Asset antwortet selbst
@@ -87,16 +85,23 @@ EXIT_ABBRUCH=2
 # Sicherheitsproben wegzuklicken.
 ERWARTUNGEN=$(
   cat <<'TABELLE'
-oeffentlich|GET|/healthz|200|keine|Keep-Alive und Deploy-Wahrheit, Gate-exempt
-oeffentlich|GET|/api/plans|200|keine|oeffentlicher Tarifkatalog, vor dem Gate gemountet
-oeffentlich|GET|/.well-known/oauth-protected-resource|200|keine|OAuth-Metadata, Gate-exempt
-oeffentlich|GET|/.well-known/oauth-protected-resource/mcp|200|keine|OAuth-Metadata, Gate-exempt
+oeffentlich|GET|/healthz|200|keine|Keep-Alive und Deploy-Wahrheit, vor jeder Auth-Schicht gemountet
+oeffentlich|GET|/api/plans|200|keine|oeffentlicher Tarifkatalog, registerPublicRoutes
+oeffentlich|GET|/.well-known/oauth-protected-resource|200|keine|OAuth-Metadata, registerWellKnown
+oeffentlich|GET|/.well-known/oauth-protected-resource/mcp|200|keine|OAuth-Metadata (MCP-Variante)
 oeffentlich|POST|/v1/chat/completions|403|keine|Telnyx-Shim: Flag an, Bearer fehlt -> 403 (Flag aus waere 404)
 oeffentlich|GET|/auth/login|302|keine|Einstieg in den OIDC-Login
 oeffentlich|GET|/auth/callback|302|keine|ohne state-Cookie -> Neustart des Flows
 oeffentlich|POST|/auth/logout|204|keine|ohne Sitzung wirkungslos
 oeffentlich|POST|/webhooks/stripe|400|keine|HMAC-Pruefung schlaegt fehl (PAYMENT_ENABLED aus waere 404)
 oeffentlich|GET|/tenant.html|302|keine|Altpfad-Umleitung auf /app
+oeffentlich|GET|/login|302|keine|AUTH-P7-Umleitung auf /auth/login
+oeffentlich|GET|/signin|302|keine|AUTH-P7-Umleitung auf /auth/login
+oeffentlich|GET|/sign-in|302|keine|AUTH-P7-Umleitung auf /auth/login
+oeffentlich|GET|/dashboard|302|keine|AUTH-P7-Umleitung auf /app
+oeffentlich|GET|/account|302|keine|AUTH-P7-Umleitung auf /app
+oeffentlich|GET|/portal|302|keine|AUTH-P7-Umleitung auf /app
+oeffentlich|GET|/admin|302|keine|AUTH-P7-Umleitung auf /app (beschattet /api/admin/* NICHT)
 oeffentlich|GET|/app/*|200|keine|SPA-Fallback auf die App-Shell
 oeffentlich|GET|/voice/tts/:token|404|keine|Einmal-Token ungueltig; Route existiert
 oeffentlich|POST|/voice/incoming|403|keine|Provider-Signatur fail-closed
@@ -106,22 +111,22 @@ oeffentlich|POST|/voice/status|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/call-control|403|keine|Provider-Signatur fail-closed
 oeffentlich|GET|/mcp|405|keine|Transport ist POST-only
 oeffentlich|DELETE|/mcp|405|keine|Transport ist POST-only
-sitzung|POST|/mcp|401|mcpauth|mcpAuth fail-closed
-sitzung|GET|/api/state|401|gate|Basic-Auth-Gate (P5: internalOnly -> 403)
-sitzung|GET|/api/calls/:id|401|gate|Basic-Auth-Gate (P5: internalOnly)
-sitzung|POST|/api/calls|401|gate|Basic-Auth-Gate (P5: internalOnly) - loest echte Anrufe aus
-sitzung|POST|/api/calls/:id/cancel|401|gate|Basic-Auth-Gate (P5: internalOnly)
-sitzung|GET|/api/calls/:id/consult|401|gate|Basic-Auth-Gate (P5: internalOnly)
-sitzung|POST|/api/calls/:id/consult/answer|401|gate|Basic-Auth-Gate (P5: internalOnly)
-sitzung|GET|/api/tenant-data/export|401|gate|Basic-Auth-Gate (P5: internalOnly) - Transkripte
-sitzung|POST|/api/billing/flush-meters|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly) - Geld-Route
-sitzung|POST|/api/billing/setup-checkout|401|gate|Basic-Auth-Gate (P9) - Geld-Route
-sitzung|GET|/api/billing/checkout-return|401|gate|Basic-Auth-Gate (P9)
-sitzung|POST|/api/billing/cost-truing/sweep|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly)
-sitzung|GET|/api/billing/cost-drift|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly)
-sitzung|GET|/api/billing/platform-costs|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly)
-sitzung|POST|/api/onboard|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly) - kauft Nummern
-sitzung|POST|/api/onboard/retry|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly) - kauft Nummern
+sitzung|POST|/mcp|401|mcpauth|mcpAuth fail-closed (Bearer-Challenge, keine Basic-)
+sitzung|GET|/api/state|403|internal|internalOnly: kein lokaler In-Process-Aufrufer
+sitzung|GET|/api/calls/:id|403|internal|internalOnly: kein lokaler In-Process-Aufrufer
+sitzung|POST|/api/calls|403|internal|internalOnly - loest echte Anrufe aus
+sitzung|POST|/api/calls/:id/cancel|403|internal|internalOnly
+sitzung|GET|/api/calls/:id/consult|403|internal|internalOnly
+sitzung|POST|/api/calls/:id/consult/answer|403|internal|internalOnly
+sitzung|GET|/api/tenant-data/export|403|internal|internalOnly - Transkripte
+sitzung|POST|/api/billing/setup-checkout|403|internal|internalOnly (AUTH-P7, P9 loescht) - Geld-Route
+sitzung|GET|/api/billing/checkout-return|403|internal|internalOnly (AUTH-P7, P9 loescht)
+sitzung|POST|/api/billing/flush-meters|401|webauth|webAuth vor adminOnly - 401 vor 403, Geld-Route
+sitzung|POST|/api/billing/cost-truing/sweep|401|webauth|webAuth vor adminOnly - 401 vor 403
+sitzung|GET|/api/billing/cost-drift|401|webauth|webAuth vor adminOnly - 401 vor 403
+sitzung|GET|/api/billing/platform-costs|401|webauth|webAuth vor adminOnly - 401 vor 403
+sitzung|POST|/api/onboard|401|webauth|webAuth vor adminOnly - kauft Nummern
+sitzung|POST|/api/onboard/retry|401|webauth|webAuth vor adminOnly - kauft Nummern
 sitzung|GET|/api/portal/state|401|webauth|Sitzungs-Cookie fehlt
 sitzung|GET|/api/self-service/state|401|webauth|Sitzungs-Cookie fehlt
 sitzung|POST|/api/self-service/settings|401|webauth|Sitzungs-Cookie fehlt
@@ -135,17 +140,15 @@ sitzung|POST|/api/admin/tenants/:id/approve|401|webauth|webAuth vor adminOnly - 
 sitzung|POST|/api/admin/tenants/:id/suspend|401|webauth|webAuth vor adminOnly - 401 vor 403
 statisch|GET|/|200|keine|Marketing-Startseite aus WEB_DIST_DIR
 statisch|GET|/app/|200|keine|App-Shell aus WEB_DIST_DIR
-statisch|GET|/favicon.ico|200|keine|Marken-Asset, Gate-exempt
-statisch|GET|/brand/hermes-icon.png|200|keine|Marken-Asset, Gate-exempt
-fehlt|GET|/diese-route-gibt-es-nicht-12345|401|gate|heute vom Gate maskiert; ab P7 muss hier 404 stehen
-fehlt|GET|/login|401|gate|kein Login-Ziel auf dem Gateway; heute vom Gate maskiert
-fehlt|GET|/dashboard|401|gate|kein Dashboard-Ziel auf dem Gateway; heute vom Gate maskiert
-fehlt|POST|/api/settings|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
-fehlt|POST|/api/action-items/:id/toggle|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
-fehlt|POST|/api/calendar|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
-fehlt|GET|/api/profiles|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
-fehlt|POST|/api/profiles|401|gate|in P4 geloescht; haette das Verifikations-Gate ausgehebelt; ab P7 404
-fehlt|DELETE|/api/profiles/:tenantId|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
+statisch|GET|/favicon.ico|200|keine|Marken-Asset aus public/
+statisch|GET|/brand/hermes-icon.png|200|keine|Marken-Asset aus public/
+fehlt|GET|/diese-route-gibt-es-nicht-12345|404|keine|Express-404 - nichts maskiert ihn mehr
+fehlt|POST|/api/settings|404|keine|in AUTH-P4 geloescht; ab AUTH-P7 sichtbar 404
+fehlt|POST|/api/action-items/:id/toggle|404|keine|in AUTH-P4 geloescht; ab AUTH-P7 sichtbar 404
+fehlt|POST|/api/calendar|404|keine|in AUTH-P4 geloescht; ab AUTH-P7 sichtbar 404
+fehlt|GET|/api/profiles|404|keine|in AUTH-P4 geloescht; ab AUTH-P7 sichtbar 404
+fehlt|POST|/api/profiles|404|keine|in AUTH-P4 geloescht; haette das Verifikations-Gate ausgehebelt
+fehlt|DELETE|/api/profiles/:tenantId|404|keine|in AUTH-P4 geloescht; ab AUTH-P7 sichtbar 404
 TABELLE
 )
 
@@ -156,14 +159,14 @@ abbruch() {
 }
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
-  echo "Aufruf: $0 <basis-url> <erwarteter-commit> [$MODUS_IST_AUFNAHME|$MODUS_NACH_P7]" >&2
-  echo "  Beispiel: $0 https://app.sundartha.com a1b2c3d $MODUS_IST_AUFNAHME" >&2
+  echo "Aufruf: $0 <basis-url> <erwarteter-commit> [$MODUS_NACH_P7|$MODUS_IST_AUFNAHME]" >&2
+  echo "  Beispiel: $0 https://app.sundartha.com a1b2c3d $MODUS_NACH_P7" >&2
   exit "$EXIT_ABBRUCH"
 fi
 
 BASIS_URL="${1%/}"
 ERWARTETER_COMMIT="$2"
-MODUS="${3:-$MODUS_IST_AUFNAHME}"
+MODUS="${3:-$MODUS_NACH_P7}"
 
 case "$MODUS" in
   "$MODUS_IST_AUFNAHME" | "$MODUS_NACH_P7") ;;
@@ -258,8 +261,12 @@ bewerte_status() {
   printf 'ABWEICHUNG'
 }
 
-# Bewertung der antwortenden Schicht anhand der Basic-Challenge. Im Modus nach-p7 darf
-# es sie nirgends mehr geben; davor entscheidet die Spalte ANTWORTET.
+# Bewertung der antwortenden Schicht anhand der Basic-Challenge. Im Modus nach-p7
+# (Vorgabe, gilt fuer JEDEN Deploy ab AUTH-P7) darf es sie nirgends mehr geben. Der
+# Zweig fuer ist-aufnahme bleibt als Argument gueltig und erreichbar - er ist der
+# Bestandsmodus fuer Laeufe gegen einen Deploy VOR AUTH-P7 (Rollback-Fall): dort trug
+# die Tabellenspalte ANTWORTET noch den Wert "gate", und nur diese eine Schicht durfte
+# die Basic-Challenge senden.
 bewerte_challenge() {
   local antwortet="$1" hat_challenge="$2"
   if [ "$MODUS" = "$MODUS_NACH_P7" ]; then

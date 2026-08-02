@@ -5,8 +5,7 @@
 // Laufzeit-Instanzen (config/store/audit + die in server.js konstruierten P1-P6-
 // Instanzen) kommen via deps herein; reine Helfer/Factories/Konstanten werden direkt
 // importiert (Konvention wie wiring/web-login.js). STRIPE_WEBHOOK_PATH bleibt EINE
-// Konstante (INV-1), gespeist an captureRawBody + installAuthGate(paths) +
-// wireWebLogin(stripeWebhookPath).
+// Konstante (INV-1), gespeist an captureRawBody + wireWebLogin(stripeWebhookPath).
 import path from "path";
 import express from "express";
 import { securityHeaders, createRateLimiter, errorHandler } from "./middleware.js";
@@ -15,8 +14,6 @@ import { PLAN_CATALOG } from "./plans.js";
 import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
 import { agentTurn } from "./claude.js";
 import { localeFor } from "./i18n/locales.js";
-import { safeEqual } from "./util.js";
-import { BRAND_ASSETS_PREFIX } from "./mcp-server-info.js";
 import { configFingerprint } from "./config-fingerprint.js";
 import {
   voiceControl,
@@ -34,7 +31,6 @@ import { makeCallRoutes } from "./routes/api-calls.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
 import { makeMcpRoutes } from "./routes/mcp.js";
 import { wireWebLogin } from "./wiring/web-login.js";
-import { makeAuthGate } from "./wiring/auth-gate.js";
 import { guardedBoot } from "./boot-guard.js";
 import { createPortalRunner as defaultCreatePortalRunner } from "./portal-pool.js";
 import {
@@ -45,8 +41,9 @@ import {
 } from "./request-tenant.js";
 // P14: App-Shell- und Altpfad als EINE Quelle (src/portal-paths.js) - dieselben
 // Konstanten brauchen die Stripe-Rueckkehr-Ziele in self-service-routes.js und
-// api-billing.js (Import in die Gegenrichtung waere ein Zyklus).
-import { APP_PATH, LEGACY_PORTAL_PATH } from "./portal-paths.js";
+// api-billing.js (Import in die Gegenrichtung waere ein Zyklus). LOGIN_ALIAS_PATHS/
+// APP_ALIAS_PATHS (AUTH-P7): die sieben eingetippten Sackgassen, s. registerPathRedirects.
+import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 
 // Body-Groesse begrenzen: kein Endpunkt braucht mehr als 100kb (Twilio-Webhooks
 // und API-Payloads sind klein) - schuetzt vor Memory-Druck durch Riesen-Bodies.
@@ -58,8 +55,8 @@ const LOGIN_PATH = "/auth/login";
 // W4: Stripe-Webhook-Pfad (kein Magic-String, G25). Die HMAC-Signaturpruefung braucht
 // den unveraenderten Roh-Body -> wird zusaetzlich zu /voice erfasst (s. captureRawBody).
 const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
-// /voice-Praefix als EINE Quelle (G5): Basic-Auth-Exemption (auth-gate), rawBody-Capture
-// und der Rate-Limit-Bypass teilen denselben Praefix.
+// /voice-Praefix als EINE Quelle (G5): rawBody-Capture und der Rate-Limit-Bypass
+// teilen denselben Praefix.
 const VOICE_PATH_PREFIX = "/voice";
 // rawBody fuer /voice (Twilio/Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
 // gegen den unveraenderten Body. Der Twilio-HMAC nutzt weiterhin nur die geparsten
@@ -94,11 +91,9 @@ export function installGlobalMiddleware({ app, config }) {
 }
 
 export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }) {
-  // ---- Basic-Auth fuer Dashboard + API (Public Hosting). Ausgenommen:
-  // /voice/* (eigene Twilio-Signaturpruefung), /mcp (eigene MCP-Auth),
-  // /.well-known/* (OAuth-Metadata, muss ohne Login erreichbar sein),
-  // /healthz (Keep-Alive) und vertrauenswuerdige lokale In-Process-Aufrufe (interne
-  // MCP-Tools, isTrustedLocalCaller - NICHT per Socket-Adresse allein, s.u.).
+  // ---- Routen, die vor jeder Identitaet erreichbar sein muessen. Jede einzeln in
+  // src/route-policy.js (PUBLIC_ROUTES) begruendet und maschinell gegen den
+  // Produktions-Routengraph geprueft (test/route-auth-inventory.test.js).
   // GAP-36 (Deploy-Wahrheit): der EINE Ort, an dem der laufende Dienst selbst sagt,
   // welchen Commit und welche Konfiguration er faehrt (Post-Deploy-Smoke +
   // Rollback-Drill). AUTH-AUSNAHME bleibt unveraendert (Keep-Alive) - deshalb NUR
@@ -111,20 +106,20 @@ export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }
   );
 
   // ---- GET /api/plans: oeffentlicher, read-only Plan-Katalog (BK0) -------------
-  // AUTH-AUSNAHME (Regel 3, begruendet): bewusst VOR der Basic-Auth gemountet, ohne
-  // Login erreichbar - exakt wie /healthz. Liefert NUR den oeffentlichen Tarif-Katalog
-  // (Preise/Leistungen, identisch zu www.sundartha.com/preise) - KEINE Tenant-Daten,
-  // KEINE Secrets, KEINE PII, kein Schreibpfad. SSoT: src/plans.js (Marketing-Spiegel
-  // apps/web/src/lib/plans.js, drift-getestet). BK1 (Dashboard-Kacheln) konsumiert ihn.
+  // AUTH-AUSNAHME (Regel 3, begruendet): bewusst ohne Login erreichbar - exakt wie
+  // /healthz. Liefert NUR den oeffentlichen Tarif-Katalog (Preise/Leistungen,
+  // identisch zu www.sundartha.com/preise) - KEINE Tenant-Daten, KEINE Secrets, KEINE
+  // PII, kein Schreibpfad. SSoT: src/plans.js (Marketing-Spiegel apps/web/src/lib/
+  // plans.js, drift-getestet). BK1 (Dashboard-Kacheln) konsumiert ihn.
   app.get("/api/plans", (_req, res) => res.json(PLAN_CATALOG));
 
   registerWellKnown(app);
 
   // ---- Telnyx AI Assistant Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1) ----------------
   // AUTH-AUSNAHME (Regel 3, begruendet): Telnyx BYO-LLM ruft diesen /v1/chat/completions-
-  // kompatiblen Endpunkt SERVERSEITIG (kein Basic-Auth-Header moeglich) -> bewusst VOR der
-  // Basic-Auth registriert (analog /voice/tts/:token), mit EIGENER fail-closed Absicherung:
-  // 404 bei TELNYX_AI_ASSISTANT_ENABLED aus (Existenz hinter dem Flag); statisches Bearer-
+  // kompatiblen Endpunkt SERVERSEITIG (kann keinen Session-Cookie senden), mit EIGENER
+  // fail-closed Absicherung im Handler (analog /voice/tts/:token): 404 bei
+  // TELNYX_AI_ASSISTANT_ENABLED aus (Existenz hinter dem Flag); statisches Bearer-
   // Integration-Secret (E2) timing-sicher via safeEqual + call_control_id-Korrelation aus
   // forward_metadata (E1) gegen den Store-Call-Record (403 sonst); Budget-Gate pro Turn (kein
   // Token-Burn ueber dem Cap). NICHT unter /voice -> die Ed25519-Signaturpruefung (P4.5)
@@ -141,10 +136,10 @@ export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }
   // Provider ohne Cap-Timer und ohne Dead-Air-Watchdog weiterlaeuft.
   app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog, reattachActiveCallByControlId: lifecycle.reattachActiveCallByControlId }));
 
-  // P5: "/" hat kein Index (public/ traegt nur statische Marken-Assets) -> ginge sonst auf 404 bzw. die
-  // Owner-Basic-Auth-Sackgasse. 302 auf den Login (= Registrierung, Strategie R2). VOR der
-  // Basic-Auth + express.static gemountet wie /auth/*; traegt keine Tenant-Daten, braucht
-  // keine Session - daher unkonditional (greift auch ohne Web-Login-Infra).
+  // P5: "/" hat kein Index (public/ traegt nur statische Marken-Assets) -> ginge sonst auf 404.
+  // 302 auf den Login (= Registrierung, Strategie R2). VOR express.static gemountet wie
+  // /auth/*; traegt keine Tenant-Daten, braucht keine Session - daher unkonditional (greift
+  // auch ohne Web-Login-Infra).
   // Single-Origin (P1): mit WEB_DIST_DIR faellt "/" bewusst durch auf die statische
   // Marketing-index.html (dist/index.html, weiter unten gemountet) -> der Landing-Redirect
   // gilt nur OHNE den unified Build (byte-identisch zum Bestand).
@@ -153,17 +148,34 @@ export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }
   }
 }
 
+export function registerPathRedirects({ app }) {
+  // ---- Eingetippte Sackgassen -> 302 (AUTH-P7, Owner-Entscheidung 2026-08-02) ------
+  // Das war der urspruengliche Ausloeser von PLAN-AUTH-GATE: wer /login oder /dashboard
+  // tippt, soll im Login landen statt in einer Sackgasse. Mount VOR wireWebLogin und
+  // VOR beiden statischen Schichten - kein Shadowing, weil app.get EXAKT matcht (nicht
+  // app.use/Praefix) und keiner der sieben Pfade als Route, als apps/web-Seite oder in
+  // public/ existiert; /admin und /api/admin/* sind verschiedene Pfade.
+  // NUR GET: ein POST auf /login soll 404 bleiben, hier gibt es kein Formular.
+  // KEIN Query-Durchreichen (anders als LEGACY_PORTAL_PATH, wo die Stripe-Rueckkehr es
+  // braucht): niemand kommt hier mit sinnvollem Query an, und ein ungeprueft in die
+  // Location gereichter Query waere unnoetige Flaeche. Beide Ziele sind Konstanten aus
+  // dem Modul - nie aus dem Request abgeleitet (kein Open Redirect).
+  const umleitungAuf = (ziel) => (_req, res) => res.redirect(302, ziel);
+  for (const pfad of LOGIN_ALIAS_PATHS) app.get(pfad, umleitungAuf(LOGIN_PATH));
+  for (const pfad of APP_ALIAS_PATHS) app.get(pfad, umleitungAuf(APP_PATH));
+}
+
 export function registerStaticServing({ app, config }) {
   // ---- Single-Origin: apps/web (Astro-Build) statisch ausliefern (WEB_DIST_DIR) ----
-  // Hinter dem Pfad-Flag (leer = aus -> heutiges Serving byte-identisch). MUSS VOR der
-  // Basic-Auth (unten) liegen, SONST verlangte die oeffentliche Marketing-Site das
-  // Admin-Passwort.
+  // Hinter dem Pfad-Flag (leer = aus -> heutiges Serving byte-identisch).
   // AUTH-AUSNAHME (Regel 3, begruendet): Marketing-Seiten + die /app-Shell sind bewusst
   // oeffentlich - statisches HTML/JS OHNE Tenant-Daten. Jede Tenant-Sicht laedt ihre Daten
   // erst ueber /api/self-service/* (webAuthMw, active-only, Session-Cookie) -> kein
   // Datenleck ueber das statische Serving. /api/*, /auth/*, /.well-known/*, der Stripe-
   // Webhook und /healthz sind oben bereits gematcht (Mount-Reihenfolge) -> kein Shadowing;
-  // die Owner-Legacy-API liegt HINTER der Basic-Auth (unten) -> von diesem Mount unberuehrt.
+  // die Reihenfolge bleibt aus diesem Grund fix, auch ohne die frueher davorstehende
+  // Basic-Auth-Schicht. Die Owner-Legacy-API (weiter unten gemountet) traegt seit AUTH-P7
+  // ihre eigene Sicherung (internalOnly).
   if (config.server.webDistDir) {
     // Altpfad /tenant.html -> /app. Die Datei public/tenant.html ist mit P14 geloescht;
     // dieser Redirect bleibt trotzdem, und zwar NICHT nur wegen Bookmarks: eine Stripe-
@@ -183,26 +195,6 @@ export function registerStaticServing({ app, config }) {
     // SPA-Fallback: Unterpfade unter /app liefern die App-Shell (Client-seitiges Routing).
     app.get("/app/*", (_req, res) => res.sendFile(path.join(config.server.webDistDir, "app", "index.html")));
   }
-}
-
-export function installAuthGate({ app, config, audit }) {
-  // ---- Basic-Auth-Gate ---------------------------------------------------------------
-  // Kern-Safety-Naht: Gate + gesamte Exemption-Liste leben in src/wiring/auth-gate.js
-  // (makeAuthGate). Mount an UNVERAENDERTER Position (nach der WEB_DIST_DIR-Static-
-  // Schicht, VOR express.static(publicDir) in buildApp, INV-2); Exemption-Reihenfolge
-  // eingefroren (INV-3, auth-gate-exemption-order.test.js). Alle Voice-/API-/MCP-Router
-  // bleiben HINTER dem Gate. STRIPE_WEBHOOK_PATH bleibt EINE Quelle (INV-1).
-  app.use(
-    makeAuthGate({
-      config,
-      audit,
-      isTrustedLocalCaller,
-      safeEqual,
-      BRAND_ASSETS_PREFIX,
-      VOICE_PATH_PREFIX,
-      paths: { STRIPE_WEBHOOK_PATH },
-    }),
-  );
 }
 
 export async function buildApp(deps) {
@@ -239,11 +231,12 @@ export async function buildApp(deps) {
 
   installGlobalMiddleware({ app, config });
   registerPublicRoutes({ app, config, store, watchdog: conversationWatchdog, lifecycle });
+  registerPathRedirects({ app });
 
   // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
   // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
-  // ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
-  // damit /auth/login nicht durch Basic-Auth geblockt wird.
+  // ohne Secret keine Cookie-Signatur. Muss VOR express.static liegen, damit
+  // /auth/login nicht durch das statische Serving geschattet wird.
   //
   // AUTH-P6: operatorAuth traegt die Admin-Sitzungs-Middlewares (webAuthMw+adminMw) fuer
   // die sechs Betreiber-Routen (makeBillingRoutes/makeOnboardRoutes, s.u.) nach oben.
@@ -279,7 +272,6 @@ export async function buildApp(deps) {
   }
 
   registerStaticServing({ app, config });
-  installAuthGate({ app, config, audit });
   app.use(express.static(config.server.publicDir));
 
   // Play-TTS-Seam, Voice-Render-Helfer und Directiven-Synth kommen als die EINEN
@@ -289,7 +281,7 @@ export async function buildApp(deps) {
   // Alle /voice/* (GET /voice/tts/:token, app.use("/voice",sig-MW), incoming/turn/outbound/
   // status/call-control) leben in routes/voice.js (makeVoiceRoutes, DI-Muster wie
   // makeCallRoutes). Mount an UNVERAENDERTER Position: nach express.static(publicDir), vor
-  // makeCallRoutes (INV-2). /voice ist Auth-Gate-exempt (Sig fail-closed). INV-4: TTS-Route
+  // makeCallRoutes (INV-2). Sicherung ist die Provider-Signaturpruefung, fail-closed. INV-4: TTS-Route
   // VOR der Sig-MW (im Router festgehalten). finishCall = die EINE callFinish-Instanz
   // (INV-7); watchdog = der EINE conversationWatchdog (geteilt mit dem Shim);
   // voiceRender/directiveSynth/ttsStore/lifecycle = die EINEN Wurzel-Instanzen.
@@ -319,7 +311,7 @@ export async function buildApp(deps) {
   // Die Outbound-Call-Route-Gruppe (POST /api/calls, POST /api/calls/:id/cancel) lebt
   // in src/routes/api-calls.js (makeCallRoutes, DI-Muster wie makeReadRoutes) - reine
   // Verschiebung, Verhalten unveraendert. An unveraenderter Mount-Position (nach
-  // der REST-API-Section, vor makeReadRoutes), hinter Basic-Auth (Bestand deckt /api/* ab).
+  // der REST-API-Section, vor makeReadRoutes), hinter `internalOnly` (AUTH-P5).
   // INV-9: die Outbound-Gate-Kette (outboundGates = EIN gepinntes Array) + der Max-Dauer-
   // Cap (arm.*) + der Fehlerpfad (terminateAndBillCall) wandern unveraendert mit; finishCall
   // = die EINE callFinish-Instanz (INV-7), arm.* = die EINE lifecycle-Instanz.
@@ -355,8 +347,8 @@ export async function buildApp(deps) {
   // DI-Muster wie makeCallRoutes) - reine Verschiebung, Verhalten unveraendert.
   // STATE_*-Konstanten und die View-Helfer (publicCall/upcomingCalendar/activeNumberFor)
   // sind mitgewandert; tenantOwnsCall (eine Quelle wie POST /api/calls/:id/cancel) und
-  // die request-tenant-Resolver werden injiziert. Hinter Basic-Auth (Bestand deckt
-  // /api/* ab); die lesenden MCP-Tools erben das Scoping AUTOMATISCH ueber /api/state.
+  // die request-tenant-Resolver werden injiziert. Hinter `internalOnly` (AUTH-P5); die
+  // lesenden MCP-Tools erben das Scoping AUTOMATISCH ueber /api/state.
   app.use(
     makeReadRoutes({
       store,
@@ -370,14 +362,13 @@ export async function buildApp(deps) {
   // Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return,
   // cost-truing/sweep) lebt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster
   // wie makeReadRoutes). An unveraenderter Mount-Position (nach makeReadRoutes, vor
-  // /api/onboard), hinter Basic-Auth (Bestand deckt /api/* ab); die vier Betreiber-
-  // Routen (flush-meters, cost-truing/sweep, cost-drift, platform-costs) zusaetzlich
-  // hinter webAuthMw+adminMw und NUR DANN gemountet, wenn operatorAuth existiert
-  // (AUTH-P6, s.o.) - keine reine Verschiebung mehr, das Verhalten dieser vier Routen
-  // aendert sich bewusst. Das Legacy-Checkout-Paar (setup-checkout, checkout-return,
-  // P9) bleibt unveraendert hinter der Basic-Auth allein. billing = stripeBilling
-  // (EINE Instanz, INV-7); requireTenant = die EINE Wurzel-Instanz (403 bei
-  // TENANT_REJECT). costTruing = die EINE LCT-P3-Instanz (INV-7, in server.js
+  // /api/onboard). Die vier Betreiber-Routen (flush-meters, cost-truing/sweep,
+  // cost-drift, platform-costs) haengen hinter webAuthMw+adminMw und werden NUR DANN
+  // gemountet, wenn operatorAuth existiert (AUTH-P6, s.o.). Das Legacy-Checkout-Paar
+  // (setup-checkout, checkout-return, geloescht erst in P9) traegt seit AUTH-P7
+  // `internalOnly` (dieselbe Middleware wie die sieben P5-Routen). billing =
+  // stripeBilling (EINE Instanz, INV-7); requireTenant = die EINE Wurzel-Instanz (403
+  // bei TENANT_REJECT). costTruing = die EINE LCT-P3-Instanz (INV-7, in server.js
   // konstruiert).
   app.use(
     makeBillingRoutes({
@@ -394,9 +385,8 @@ export async function buildApp(deps) {
   // ---- Onboarding-Routen ------------------------------------------------------------
   // /api/onboard + /api/onboard/retry lebt in src/routes/api-onboard.js
   // (makeOnboardRoutes, DI-Muster wie makeBillingRoutes/makeCallRoutes). Unveraenderte
-  // Mount-Position (nach makeBillingRoutes, vor /mcp), hinter Basic-Auth (Bestand
-  // deckt /api/* ab) UND zusaetzlich hinter webAuthMw+adminMw, NUR DANN gemountet,
-  // wenn operatorAuth existiert (AUTH-P6, s.o.) - keine reine Verschiebung mehr.
+  // Mount-Position (nach makeBillingRoutes, vor /mcp), hinter webAuthMw+adminMw, NUR
+  // DANN gemountet, wenn operatorAuth existiert (AUTH-P6, s.o.).
   // provisioning = die EINE P6-Instanz (INV-7). Der withStoreLock-kritische Abschnitt +
   // Nummern-Caps + persist_error->503 sind unveraendert.
   app.use(makeOnboardRoutes({ store, config, audit, provisioning, operatorAuth }));
@@ -405,8 +395,8 @@ export async function buildApp(deps) {
   // Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt in src/routes/mcp.js
   // (makeMcpRoutes, DI-Muster wie makeBillingRoutes/makeVoiceRoutes) - reine Verschiebung,
   // Verhalten unveraendert. Mount an UNVERAENDERTER Position: nach makeOnboardRoutes, vor
-  // errorHandler (INV-2). /mcp ist Auth-Gate-exempt (Gate ruft next() fuer /mcp*, INV-3);
-  // mcpAuth bleibt die EINZIGE Absicherung auf POST, fail-closed. Stateless pro Request
+  // errorHandler (INV-2). mcpAuth (src/auth.js) bleibt die EINZIGE Absicherung auf POST,
+  // fail-closed. Stateless pro Request
   // (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
   // Wurzel-Instanz (INV-7).
   app.use(makeMcpRoutes({ config, store, requestTenant }));

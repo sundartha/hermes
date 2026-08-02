@@ -6,8 +6,8 @@
 //   - Tenant = Request MIT X-Internal-Identity=<idpSubject> (localhost -> vertraut,
 //              requestTenant -> resolveTenant(sub) -> Tenant)
 // Alle /api/*-Requests gehen an srv.localUrl (127.0.0.1): nur dort vertraut der
-// Server den X-Internal-Identity-Header (internalIdentity), und die Basic-Auth ist
-// bei leerem DASHBOARD_PASSWORD ohnehin aus. Flag AN = MULTI_TENANT=true; Flag AUS
+// Server den X-Internal-Identity-Header (internalIdentity) - es gibt seit AUTH-P7
+// keine Basic-Auth mehr, die dem noch im Weg stehen koennte. Flag AN = MULTI_TENANT=true; Flag AUS
 // (BASE_ENV-Default) haelt den Owner-Pfad byte-identisch.
 import test from "node:test";
 import assert from "node:assert/strict";

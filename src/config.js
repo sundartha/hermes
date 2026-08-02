@@ -930,8 +930,8 @@ const rawConfig = {
   }),
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
-  // Routen sind nicht erreichbar (404), die getrennte Seite bleibt hinter Basic-Auth
-  // -> heutiges Admin-Dashboard + /api/* byte-identisch. Getrennt von MULTI_TENANT
+  // Routen existieren ohne das Flag schlicht nicht (404) -> heutiges Admin-Dashboard
+  // + /api/* byte-identisch. Getrennt von MULTI_TENANT
   // (groesste Angriffsflaeche: oeffentlicher Tenant-Login + Self-Service-Schreiben).
   selfServiceEnabled: boolEnv("SELF_SERVICE_ENABLED", process.env.SELF_SERVICE_ENABLED, {
     fallback: false,
@@ -1240,9 +1240,10 @@ const rawConfig = {
   dataDir: process.env.DATA_DIR || path.join(__dirname, "..", "data"),
   publicDir: path.join(__dirname, "..", "public"),
   // Single-Origin (P1): Verzeichnis des apps/web-Builds (astro build -> apps/web/dist).
-  // Leer (Default) = AUS -> heutiges Serving byte-identisch (nur public/, hinter Basic-
-  // Auth). Gesetzt -> der Gateway liefert Marketing + App-Shell same-origin (server.js),
-  // VOR der Basic-Auth. Pfad-Flag (Muster MULTI_TENANT/PAYMENT_ENABLED, fail-closed).
+  // Leer (Default) = AUS -> heutiges Serving byte-identisch (nur public/, oeffentlich).
+  // Gesetzt -> der Gateway liefert Marketing + App-Shell same-origin (server.js); die
+  // Mount-Reihenfolge steht aus Shadowing-Gruenden fest. Pfad-Flag (Muster
+  // MULTI_TENANT/PAYMENT_ENABLED, fail-closed).
   // AM3: zu absolutem Pfad aufloesen (path.resolve, idempotent). Ein RELATIVER WEB_DIST_DIR
   // (live "apps/web/dist") liess res.sendFile (SPA-Fallback /app/*) mit "path must be
   // absolute" 500en, waehrend express.static (cwd-relativ) noch griff. Absolut behebt das
@@ -1418,7 +1419,9 @@ export function productionFootguns(cfg = config, isProduction = detectProduction
   const errors = [];
   if (!cfg.auth.dashboardPassword)
     errors.push(
-      "DASHBOARD_PASSWORD fehlt - Dashboard und API waeren oeffentlich erreichbar (im Hosting Pflicht).",
+      "DASHBOARD_PASSWORD fehlt - seit AUTH-P7 liest keine Route mehr diese Variable; " +
+        "Boot-Pflicht bleibt bis AUTH-P8 ausschliesslich als Rollback-Sicherung (ein " +
+        "Rollback auf einen Commit vor AUTH-P7 findet damit ein scharfes Gate vor).",
     );
   if (cfg.auth.mcpAuth === "off")
     errors.push("MCP_AUTH=off - /mcp ist ohne jede Pruefung offen (im Hosting unzulaessig).");
@@ -1491,8 +1494,8 @@ export function assertConfig() {
   )
     missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
   // Single-Origin (P1): WEB_DIST_DIR gesetzt, aber der Build (<dir>/index.html) fehlt ->
-  // sichtbarer Boot-Fehler statt stiller 401. Ohne index.html faende express.static nichts,
-  // jeder Marketing-Request fiele auf die Basic-Auth durch (Admin-Passwort statt Landing).
+  // sichtbarer Boot-Fehler statt stiller 404. Ohne index.html faende express.static
+  // nichts, jeder Marketing-Request fiele auf 404 durch statt die Landing zu zeigen.
   if (config.server.webDistDir && !existsSync(path.join(config.server.webDistDir, "index.html")))
     missing.push(
       "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",

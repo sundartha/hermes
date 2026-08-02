@@ -3,18 +3,19 @@
 // genau diese Rolle - pollen und antworten -, damit das Werkzeug im Werkzeugsatz LIEGT.
 // Die Poll-Frische selbst (CONSULT_POLL_FRESH_MS) wird NICHT angefasst.
 //
-// KEINE ZUGANGSDATEN: /api/* liegt hinter der Basic-Auth, die bei leerem
-// DASHBOARD_PASSWORD durchlaesst (src/wiring/auth-gate.js) - der Bench setzt es nicht
-// (test/helpers.js BASE_ENV.DASHBOARD_PASSWORD===""). Kommt dennoch ein 401, bricht die
-// Pumpe LAUT ab (der Fehler faellt bei stop() aus, statt still weiterzupollen).
+// KEINE ZUGANGSDATEN: /api/* haengt hinter internalOnly (AUTH-P5, seit AUTH-P7 die
+// einzige Sicherung) - der Bench laeuft ueber echten Loopback und braucht darum keine.
+// Kaeme die Pumpe je durch einen Proxy (X-Forwarded-For gesetzt), weist internalOnly
+// mit 403 ab (grund=not_local) statt mit 401 - die Pumpe bricht dann LAUT ab (der
+// Fehler faellt bei stop() aus, statt still weiterzupollen).
 const CONSULT_EVENT = Object.freeze({ CONSULT: "consult", DONE: "done" });
-const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
 
 async function fetchConsultEvent({ baseUrl, callId, afterEventId, signal }) {
   const query = afterEventId ? `?after=${encodeURIComponent(afterEventId)}` : "";
   const res = await fetch(`${baseUrl}/api/calls/${callId}/consult${query}`, { signal });
-  if (res.status === HTTP_UNAUTHORIZED) {
-    throw new Error("consult-pump: 401 auf GET /api/calls/:id/consult - Basic-Auth-Annahme verletzt");
+  if (res.status === HTTP_FORBIDDEN) {
+    throw new Error("consult-pump: 403 auf GET /api/calls/:id/consult - internalOnly-Annahme verletzt (kein Loopback?)");
   }
   return res.json();
 }

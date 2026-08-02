@@ -151,9 +151,8 @@ export async function wireWebLogin({
   );
 
   // Kunden-Portal (READ-only, tenant-scoped ueber portalStore). webAuthMw setzt req.tenant
-  // (fail-closed); portalStore.withTenant erzwingt RLS. KEINE Owner-Daten. VOR der Basic-
-  // Auth-Schicht registriert -> /api/portal/* ist owner-Basic-Auth-exempt und ausschliesslich
-  // ueber webAuth (Kunden-Session) gesichert.
+  // (fail-closed); portalStore.withTenant erzwingt RLS. KEINE Owner-Daten. Ausschliesslich
+  // ueber webAuth (Kunden-Session) gesichert - seit AUTH-P7 die einzige Schicht davor.
   app.get("/api/portal/state", webAuthMw, async (req, res) => {
     try {
       const calls = await portalStore.listCalls(req.tenant.tenantId);
@@ -176,9 +175,8 @@ export async function wireWebLogin({
   // X-Internal-Identity-Pfad. NUR hier (im Web-Login-Block: sessionSecret + pg) registriert
   // -> ohne Web-Login-Infra existieren die Routen nicht (404). Zusaetzlich an
   // SELF_SERVICE_ENABLED + MULTI_TENANT gegated (eigenes Reife-Flag; ohne MULTI_TENANT keyt
-  // der Mirror nur den Owner-Bucket). VOR der Basic-Auth-Schicht -> ausschliesslich ueber
-  // webAuthMw (Kunden-Session) gesichert, kein Admin-Basic-Auth. audit = util.audit (nur
-  // Keys, keine Werte/PII).
+  // der Mirror nur den Owner-Bucket). Ausschliesslich ueber webAuthMw (Kunden-Session)
+  // gesichert, keine Admin-Sitzung. audit = util.audit (nur Keys, keine Werte/PII).
   if (isSelfServiceLive(config)) {
     app.use(
       makeSelfServiceRoutes({
@@ -195,8 +193,8 @@ export async function wireWebLogin({
   }
 
   // ---- Stripe-Webhook (W4): Abo-Lifecycle nachziehen ------------------------------
-  // KEINE Basic-Auth (Stripe kann keine Credentials senden) - die Sicherung ist die HMAC-
-  // Signaturpruefung gegen STRIPE_WEBHOOK_SECRET (fail-closed, eigener Begruendungs-
+  // KEINE Sitzungspflicht (Stripe kann keine Credentials senden) - die Sicherung ist die
+  // HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET (fail-closed, eigener Begruendungs-
   // Kommentar wie /voice). Ohne PAYMENT_ENABLED -> 404 (byte-identisch). Liegt im
   // guardedBoot-Block, weil applyStripeWebhookSerialized accounts.setStatus +
   // sessions.invalidateByTenant braucht (nur hier konstruiert). Serialisiert pro Stripe-

@@ -140,8 +140,8 @@ test("Settings-Whitelist (Store-Ebene, updateSettings)", () => {
 // unbekannt ignoriert") bereits auf der Store-Ebene (verifiziert), also kein Zusagen-
 // Verlust. Der test:gates-Katalog verliert damit einen Mechanismus-Test (Bericht).
 
-// P8b: Auskunft/Export (Art. 15/20). Read-only Owner-Tenant-Export hinter der
-// /api/*-Basic-Auth, Calls OHNE streamToken (publicCall-Invariante wie /api/state).
+// P8b: Auskunft/Export (Art. 15/20). Read-only Owner-Tenant-Export hinter
+// `internalOnly` (AUTH-P5/-P7), Calls OHNE streamToken (publicCall-Invariante wie /api/state).
 test("GET /api/tenant-data/export liefert Owner-Daten ohne streamToken", async (t) => {
   const srv = await startServer({
     seed: seedState({

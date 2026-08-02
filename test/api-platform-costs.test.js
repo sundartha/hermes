@@ -14,8 +14,10 @@
 // (Muster api-cost-drift.test.js) - die Route rechnet rein aus dem geladenen Store-
 // Spiegel und der Config, kontaktiert keinen Provider. platformTtsUsage wird HIER
 // explizit ergaenzt (emptyPlatformTtsUsage): seedState() traegt es nicht, der json-
-// Store-Reader backfillt es sonst beim Laden nach (src/store/json.js). (C) misst das
-// Basic-Auth-Gate selbst und bleibt darum ein echter Spawn-Test, UNVERAENDERT.
+// Store-Reader backfillt es sonst beim Laden nach (src/store/json.js). (C) misst, dass
+// ohne Admin-Sitzungs-Infra (json-Spawn, kein SESSION_SECRET) die Route gar nicht
+// gemountet ist (404) - seit AUTH-P7 kein Gate mehr, das antworten koennte. Bleibt
+// darum ein echter Spawn-Test, UNVERAENDERT.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -153,18 +155,20 @@ test("GET /api/billing/platform-costs: Antwort ist PII-frei (kein E.164, keine T
   }
 });
 
-// (C) Auth fail-closed (CLAUDE.md Regel 3): die Route liegt hinter der bestehenden
-// /api/*-Basic-Auth. Sie traegt eine Plattform-Aggregation ueber ALLE Tenants - genau die
-// Groesse, die nicht ungegatet erreichbar sein darf. Extern ohne Credentials -> 401.
-// UNVERAENDERT (echter Spawn-Server): misst das Gate, nicht die Route.
+// (C) Auth fail-closed (CLAUDE.md Regel 3): die Route ist eine Betreiber-Route und
+// existiert ohne Admin-Sitzungs-Infra (json-Spawn, kein SESSION_SECRET) gar nicht -
+// niemals ungeschuetzt. Sie traegt eine Plattform-Aggregation ueber ALLE Tenants -
+// genau die Groesse, die nicht ungegatet erreichbar sein darf. Extern ohne
+// Credentials -> 404. UNVERAENDERT (echter Spawn-Server): misst die Mount-Bedingung,
+// nicht die Route-Logik.
 test(
-  "GET /api/billing/platform-costs extern ohne Creds -> 401 (Basic-Auth fail-closed)",
+  "GET /api/billing/platform-costs extern ohne Admin-Sitzung -> 404 (Route ohne operatorAuth nicht gemountet)",
   { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "test-geheim" } });
     try {
       const res = await fetch(`${srv.externalUrl}/api/billing/platform-costs`);
-      assert.equal(res.status, 401);
+      assert.equal(res.status, 404);
     } finally {
       await srv.stop();
     }

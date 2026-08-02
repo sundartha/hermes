@@ -258,6 +258,9 @@ services:
       # resource_missing auf den Customer. 0 = sofortiger Retry.
       - key: STRIPE_CUSTOMER_RETRY_DELAY_MS
         value: "2000"
+      # AUTH-P7: keine Route liest diese Variable mehr. Boot-Pflicht bleibt bis AUTH-P8
+      # ausschliesslich als Rollback-Sicherung - wer sie hier streicht, macht einen
+      # Rollback auf einen Commit vor AUTH-P7 unbrauchbar (kein scharfes Gate mehr).
       - key: DASHBOARD_PASSWORD
         sync: false
       # Rechteprofile (Phase 2) als JSON, z.B.

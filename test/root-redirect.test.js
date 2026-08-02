@@ -1,6 +1,6 @@
 // P5 — Landing-Redirect: "/" hat kein Index -> 302 auf den Login (Akzeptanz 5).
 // Server-Spawn via startServer (json-Default genuegt: der Redirect ist unkonditional,
-// VOR Basic-Auth + express.static gemountet -> greift ohne Web-Login-Infra). Getrennte
+// VOR express.static gemountet -> greift ohne Web-Login-Infra). Getrennte
 // Datei (pglite NICHT mit child-process mischen). node:http-GET ohne Redirect-Follow.
 import { test } from "node:test";
 import assert from "node:assert/strict";

@@ -2,10 +2,11 @@
 // den HTTP-/mcp-Endpunkt (Muster: startServer+mcpPost+readToolResult wie in
 // test/am6-oauth-tenant.test.js) - das ist der LIVE-Connector-Pfad (claude.ai/
 // ChatGPT), nicht nur der stdio-Pfad (Claude Desktop). Zusaetzlich die statische
-// Auslieferung des Icon-Assets (Muster: test/headers.test.js) UND deren
-// Basic-Auth-Ausnahme (Muster: test/audit.test.js externalUrl-Skip) - ohne diese
-// Ausnahme waere das Icon in Produktion (DASHBOARD_PASSWORD gesetzt) fuer jeden
-// MCP-Host unerreichbar und der T3-Fix live wirkungslos.
+// Auslieferung des Icon-Assets (Muster: test/headers.test.js), die von
+// express.static(publicDir) ohne jede Vorschaltung ausgeliefert wird (Muster:
+// test/audit.test.js externalUrl-Skip) - ohne diese Erreichbarkeit waere das Icon
+// in Produktion (DASHBOARD_PASSWORD gesetzt) fuer jeden MCP-Host unerreichbar und
+// der T3-Fix live wirkungslos.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -98,22 +99,22 @@ test("T-T3-AC6a: GET /brand/hermes-icon.png liefert 200 + image/png", async () =
 });
 
 test(
-  "T-T3-AC6b: /brand/-Assets bleiben OHNE Basic-Auth erreichbar (Produktions-Fall: DASHBOARD_PASSWORD gesetzt, externe IP)",
+  "T-T3-AC6b: /brand/-Assets bleiben erreichbar (Produktions-Fall: DASHBOARD_PASSWORD gesetzt, externe IP)",
   { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
   async () => {
     const srv = await startServer({ env: { DASHBOARD_PASSWORD: "super-geheim-pw" } });
     try {
       const res = await fetch(`${srv.externalUrl}/brand/hermes-icon.png`);
-      assert.equal(res.status, 200, "Basic-Auth darf das Icon nicht sperren, sonst laedt kein Host es");
+      assert.equal(res.status, 200, "das Icon liegt oeffentlich unter public/, keine Ausnahme noetig");
       assert.equal(res.headers.get("content-type"), "image/png");
       // Favicon-Konvention: Icon-Fetcher (Browser, Connector-UIs) ziehen
-      // /favicon.ico ohne Credentials von der Wurzel - vor der Ausnahme
-      // antwortete Produktion 401 (empirisch 2026-07-02, Wuerfel in claude.ai).
+      // /favicon.ico ohne Credentials von der Wurzel - vor AUTH-P7 antwortete
+      // Produktion 401 (empirisch 2026-07-02, Wuerfel in claude.ai).
       const favicon = await fetch(`${srv.externalUrl}/favicon.ico`);
-      assert.equal(favicon.status, 200, "favicon.ico muss ohne Basic-Auth erreichbar sein");
-      // Gegenprobe: die Ausnahme ist eng - eine andere Route bleibt weiter gesperrt.
+      assert.equal(favicon.status, 200, "favicon.ico muss erreichbar sein");
+      // Gegenprobe: eine echte API-Route bleibt weiter gesperrt (internalOnly).
       const guarded = await fetch(`${srv.externalUrl}/api/state`);
-      assert.equal(guarded.status, 401, "Basic-Auth bleibt fuer andere Routen scharf");
+      assert.equal(guarded.status, 403, "andere Routen bleiben scharf (internalOnly)");
     } finally {
       await srv.stop();
     }

@@ -15,17 +15,17 @@
 // app.sundartha.com, die http(s)-Icon-URL zeigte via PUBLIC_URL auf onrender.com,
 // claude.ai zeigte den Default-Wuerfel. Die eingebettete Ressource ist
 // origin-unabhaengig und funktioniert auch im stdio-Transport (Claude Desktop).
-// Die https-Variante bleibt als icons[1] fuer Hosts, die adressierbare/grosse
-// Icons bevorzugen; ein MCP-Host laedt sie OHNE Dashboard-Credentials -
-// server.js braucht dafuer die eng begruendete Basic-Auth-Ausnahme fuer
-// BRAND_ASSETS_PREFIX (siehe dort), sonst waere sie in Produktion
-// (DASHBOARD_PASSWORD gesetzt) wirkungslos.
+// Die https-Variante bleibt als icons[1] fuer Hosts, die adressierbare/grosse Icons
+// bevorzugen; ein MCP-Host laedt sie OHNE Dashboard-Credentials - sie liegt unter
+// public/ und wird von express.static ohne jede Vorschaltung ausgeliefert (AUTH-P7:
+// die frueher dafuer noetige Basic-Auth-Ausnahme fuer BRAND_ASSETS_PREFIX ist mit dem
+// Gate selbst entfallen).
 import { config } from "./config.js";
 import { HERMES_ICON_DATA_URI, HERMES_ICON_SIZE } from "./brand-icon-data.js";
 import { uiServerExtension } from "./ui/contract.js";
 
 // Pfad-Praefix fuer selbst gehostete Marken-Assets unter public/ (kein Magic-String,
-// G25) - server.js braucht denselben Wert fuer die Basic-Auth-Ausnahme.
+// G25) - server.js braucht denselben Wert fuer icons[1].src oben.
 export const BRAND_ASSETS_PREFIX = "/brand/";
 const HERMES_ICON_FILENAME = "hermes-icon.png";
 
@@ -48,9 +48,10 @@ export const HERMES_SERVER_INFO = {
   //
   // Der graue Wuerfel dort ist KEIN Code-Problem: s2 loest hart auf den
   // http-Origin auf, und Googlebot lief am 23.06.2026 auf http://sundartha.com/
-  // in unsere Basic-Auth (401, in der Search Console sichtbar) - Google hat
-  // deshalb nie ein Favicon fuer diesen Origin. Behoben wird das ausserhalb des
-  // Codes (Search Console: http-Property + Recrawl), nicht hier.
+  // in unsere damalige Basic-Auth (401, in der Search Console sichtbar) - Google hat
+  // deshalb nie ein Favicon fuer diesen Origin. Die Ursache existiert seit AUTH-P7
+  // nicht mehr (kein Gate, das 401 antwortet); der Search-Console-Handgriff (http-
+  // Property + Recrawl) steht trotzdem weiterhin aus, das behebt sich nicht von selbst.
   websiteUrl: "https://www.sundartha.com",
   icons: [
     {

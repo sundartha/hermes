@@ -2423,3 +2423,152 @@ Deploy nicht mehr an das Onboarding (`/api/onboard`) → sofortiger Rollback (Re
 Commit) — `/api/onboard` ist die einzige Flaeche zum Anlegen neuer Tenants, ohne
 Admin-Zugang steht der Verkauf. Sekundär: `scripts/sweep-jetzt.sh` liefert 401/403 im
 Cron-Log — erwartet (s.o.), kein Abbruchsignal fuer sich allein.
+
+## AUTH-P7 — das Basic-Auth-Gate entfernt (2026-08-02)
+
+Siebte Phase von `PLAN-AUTH-GATE.md`, der eigentliche Auftrag der Kette: `src/wiring/
+auth-gate.js` (`makeAuthGate`, die Sammelsicherung samt neunteiliger Exemption-Liste)
+ist geloescht. Jede Route traegt seither ihre eigene Sicherung oder steht mit
+Begruendung in `PUBLIC_ROUTES` (`src/route-policy.js`) — genau der Zustand, den AUTH-P1
+bis AUTH-P6 vorbereitet haben, ohne ihn scharfzuschalten.
+
+**Befund B-1 (korrigiert vor der Umsetzung).** Die urspruengliche Abnahme-Regel
+"`grep -rn "WWW-Authenticate" src/` → leer" war falsch. `src/auth.js` setzt bei fehlendem
+MCP-Bearer-Token eine RFC-9728-Challenge (`WWW-Authenticate: Bearer resource_metadata=
+"…"`) — die Discovery-Naht des Claude-Connectors, in `test/oauth.test.js` gepinnt. Wer
+die Regel woertlich befolgt, loescht die Bearer-Challenge und macht den OAuth-Connector
+still kaputt. Korrigierte Abnahme: `WWW-Authenticate` kommt in `src/` **ausschliesslich**
+in `src/auth.js` vor (zwei Zeilen: Kommentar + Challenge); `basic realm` und
+`makeAuthGate`/`installAuthGate`/`wiring/auth-gate` sind **leer**. `test/auth-p7-gate-
+removed.test.js` (AUTH-P7-8) haelt beides als Positiv-/Negativ-Assertion fest.
+
+**Was der Wegfall real freilegt: NICHTS.** Der Mount-Baum vor P7 hatte das Gate NACH
+`registerPublicRoutes`, `wireWebLogin` und `registerStaticServing` — vier der neun
+Exemptions (`/voice`, `/mcp`, `/.well-known/*`, `/healthz`, der Stripe-Webhook) waren
+damit bereits wirkungslos, bevor diese Phase begann. Die einzige neu ungeschuetzte
+Schicht ist `express.static(publicDir)` — und `public/` enthaelt seit der Owner-Removal-
+Kette (P5) nur noch zwei Marken-Assets (`favicon.ico`, `brand/hermes-icon.png`), die
+zuvor ohnehin per Exemption oeffentlich waren. Der vollstaendige, von aussen sichtbare
+Blast-Radius: (a) die neun `internalOnly`-Routen wechseln 401→403, (b) die sechs
+Betreiber-Routen (AUTH-P6) antworten weiter 401, nur ohne Basic-Challenge (Schichtwechsel
+Gate→`webAuthGateMiddleware`), (c) jeder nicht existierende Pfad liefert 401→404 statt
+maskiert zu werden — inklusive der sechs in AUTH-P4 geloeschten Routen, (d) sieben neue
+302-Umleitungen, (e) keine Basic-Challenge mehr in irgendeiner Antwort.
+
+**Das Legacy-Checkout-Paar traegt `internalOnly`.** `GATE_ONLY_ROUTES` (`src/route-
+policy.js`) musste vor dem Gate-Wegfall leer sein — das war die harte Vorbedingung aus
+AUTH-P5/P6. `POST /api/billing/setup-checkout` und `GET /api/billing/checkout-return`
+(`src/routes/api-billing.js`) bekommen darum in diesem Commit dieselbe Middleware wie
+die sieben P5-Routen (kein neuer Mechanismus). Begruendung: seit AUTH-P3 liefert
+`requireTenant` jedem nicht-lokalen Aufrufer ohnehin 403 — `internalOnly` macht denselben
+Zustand nur sichtbar und maschinell pruefbar. Geloescht wird das Paar weiterhin erst in
+AUTH-P9 (Karenzfrist). `GATE_ONLY_ROUTES` ist jetzt `Object.freeze([])` — die Liste
+bleibt als MECHANISMUS stehen (ein neuer Eintrag heisst: eine Route haengt wieder allein
+an einer Sammelsicherung, die es nicht mehr gibt), nicht als Beweis fuer einen laufenden
+Umbau.
+
+**Sieben neue Umleitungen (Owner-Entscheidung 2026-08-02).** `/login`, `/signin`,
+`/sign-in` → 302 `/auth/login`; `/dashboard`, `/account`, `/portal`, `/admin` → 302
+`/app`. Die Pfade leben als benannte Konstanten in `src/portal-paths.js`
+(`LOGIN_ALIAS_PATHS`/`APP_ALIAS_PATHS`) — NUR die Quell-Pfade, die Ziele bleiben, wo sie
+schon standen (`APP_PATH`, das modul-lokale `LOGIN_PATH` in `src/app.js`), damit keine
+vierte Definition von `"/auth/login"` entsteht (die drei bestehenden — `src/app.js`,
+`src/web-auth.js:LOGIN_ROUTE`, ein Literal in `src/route-policy.js` — sind ein
+**Bestands**-G5-Verstoss und bleiben in dieser Phase unangetastet, s. offener Befund
+unten). `registerPathRedirects` (`src/app.js`) mountet mit `app.get` (nie `app.use` —
+sonst Praefix-Shadowing) einzeln je Pfad (nie `app.get([...])` — sonst traegt
+`layer.route.path` ein Array und der Inventar-Fingerprint/die Probe-Zuordnung brechen),
+VOR `wireWebLogin` und beiden statischen Schichten. Shadowing-Pruefung (gemessen): keine
+der sieben Adressen ist eine existierende Route, eine `apps/web/dist`-Seite oder eine
+`public/`-Datei; `/admin` beschattet `/api/admin/*` NICHT (`app.get` matcht exakt, kein
+Praefix). Akzeptiertes Restrisiko: legt `apps/web` spaeter eine gleichnamige Seite an,
+gewinnt die Umleitung, und kein Mechanismus meldet das automatisch — Gegenmassnahme ist
+der Kommentar in `src/portal-paths.js` plus der quartalsweise Durchgang in
+`docs/RUNBOOK-AUTH-REVIEW.md`.
+
+**`src/route-policy.js` mitgezogen.** Die sieben Umleitungen kommen als
+`PUBLIC_ROUTES`-Eintraege dazu, abgeleitet aus `LOGIN_ALIAS_PATHS`/`APP_ALIAS_PATHS`
+(keine achte Wiederholung der Pfade). `ROUTE_FINGERPRINT`
+(`test/route-auth-inventory.test.js`) waechst um dieselben sieben Eintraege (46 → 53).
+
+**`scripts/probe-auth.sh` auf den neuen Stand.** Der Vorgabe-Modus wechselt von
+`ist-aufnahme` auf `nach-p7` (der Modus `ist-aufnahme` bleibt als Argument gueltig — er
+ist der Rollback-Fall gegen einen Deploy vor AUTH-P7). Die Spalte `ANTWORTET` verliert
+den Wert `gate` vollstaendig, `internal` kommt als neuer Wert fuer `internalOnly` dazu.
+Die Erwartungstabelle waechst von 59 auf 64 Zeilen (+7 Umleitungen, davon zwei aus dem
+`fehlt`-Block gewandert: `/login`, `/dashboard` waren vorher Negativkontrollen, sind jetzt
+oeffentliche 302er). `test/probe-auth-table.test.js` zieht Enum und Widerspruchsregeln
+nach; neu: eine `fehlt`-Zeile MUSS jetzt `antwortet=keine, status=404` tragen (die
+maschinelle Fassung der P7-Zusage "nichts maskiert einen fehlenden Pfad mehr").
+
+**Neue Tests.** `test/auth-p7-gate-removed.test.js` (AUTH-P7-1 bis -8): der
+Datenleck-Riegel (`/api/state` ohne Sitzung → 403, nie 200), die 404-Zusage fuer
+unbekannte Pfade, die sieben Umleitungen samt Vollstaendigkeits- und
+Shadowing-Negativprobe, "keine Antwort traegt eine Basic-Challenge" ueber vier
+Antwortklassen PLUS die Gegenprobe zu B-1 (`POST /mcp` behaelt seine Bearer-Challenge),
+die Pre-Mortem-Gegenprobe (der In-Process-MCP-Pfad bleibt bei echtem Loopback
+unversehrt), das Legacy-Checkout-Paar mit `internalOnly` (inkl. der Regel-4-Probe: keine
+`session_id` in der Audit-Zeile) und der Quelltext-Scan gegen eine Wiederauferstehung.
+`AUTH-P7-6` (`GATE_ONLY_ROUTES` ist leer) lebt in `test/probe-auth-table.test.js`, wo
+bereits alle `GATE_ONLY`-Assertionen zu Hause sind.
+
+**Elf Bestandstestdateien kippen (401→403/404, ohne Verhaltensverlust), elf weitere
+sind gruen mit toter Praemisse (nur Kommentar/Testname).** `test/security.test.js` (3
+Assertionen auf 403, zwei "Gate akzeptiert Credentials"-Untertests ersatzlos gestrichen
+— das Subjekt entfaellt ohne Gate), `test/auth-p6-mount-gate.test.js` (AUTH-P6-6 auf die
+W6-Negativkontrolle umgeschrieben: 404 ohne Basic-Challenge statt 401 mit),
+`test/plans-route.test.js`, `test/single-origin-serving.test.js` (Kontrast-Ziel von
+`GET /api/calls` — das es nie gab, das Gate maskierte den Bug — auf `GET /api/state`
+gewechselt), `test/mcp-server-icon.test.js`, `test/api-cost-drift.test.js`,
+`test/api-cost-truing-sweep.test.js`, `test/api-platform-costs.test.js`,
+`test/p2-onboard-retry.test.js`, `test/did-07-onboard-retry-owner-gate.test.js` (liegt
+im `test:gates`-Katalog), `test/audit.test.js` (Basic-Header entfernt, Erwartung 403,
+Audit-Grund auf `not_local` geschaerft). Reine Text-/Namensfixes ohne Assertions-
+Aenderung: `test/helpers.js` (`assertGateAbsent`-Kommentar), `test/auth-p3-bootstrap-
+fallback.test.js`, `test/auth-p5-internal-only.test.js`, `test/oauth.test.js`,
+`test/telnyx-shim-route.test.js`, `test/i6-write-scope.test.js`,
+`test/config-self-service-live.test.js`, `test/web-login-wiring.test.js`. Zusaetzlich
+(beim Testlauf gefunden, nicht im Umsetzungsplan vorgesehen):
+`test/al-d3-consult-pump.test.js` (AL-D3-N7) — `scripts/convo-bench/consult-pump.mjs`
+antwortet auf einen Auth-Fehlschlag seit AUTH-P7 mit 403 statt 401 (`internalOnly` statt
+Gate), der Fake-Server und die Assertion im Test wandern mit. Unveraendert (Boot-Guard
+bleibt bis P8): `test/boot-prod-footguns.test.js`, `test/config-prod-footguns.test.js`,
+`test/prod-env.js`.
+
+**`DASHBOARD_PASSWORD` bleibt — bewusst, nicht vergessen.** Die Variable steht
+weiterhin in `src/config.js`, `render.yaml` und `.env.example`, aber ab diesem Commit
+liest sie KEINE Route mehr. Sie bleibt bis AUTH-P8 (fruehestens 14 Tage nach dem
+Live-Deploy) Boot-Pflicht in Produktion (`productionFootguns`, `src/config.js`) —
+ausschliesslich als Rollback-Sicherung: ein Rollback auf einen Commit vor AUTH-P7 findet
+damit ein scharfes Gate vor. Die Boot-Meldung ist entsprechend umformuliert (nennt
+weiterhin den Variablennamen — `test/config-prod-footguns.test.js`/`test/boot-prod-
+footguns.test.js` matchen nur den Namen, nicht den Wortlaut), der Guard-Mechanismus
+selbst ist unveraendert.
+
+**Erwartete Betriebsfolge: das Volumen der `auth_failed`-Zeilen faellt.** Nicht, weil
+die Angriffe aufgehoert haben, sondern weil ein Bot-Scan auf `/.env` o.ae. kuenftig
+einen 404 OHNE jede Middleware trifft, statt eine `auth_failed`-Zeile auszuloesen. Die
+Rauschreduktion ist beabsichtigt (Plan Abschnitt 5, S4) und gehoert in den ersten
+Nach-Deploy-Review, damit niemand sie faelschlich als "nichts scannt uns mehr" liest.
+
+**Offener Befund (nicht Teil dieser Phase, gehoert vor die naechste Auth-Aenderung):**
+`"/auth/login"` ist dreifach definiert — `src/app.js` (`LOGIN_PATH`, modul-lokal),
+`src/web-auth.js` (`LOGIN_ROUTE`, exportiert), `src/route-policy.js` (Literal). Die
+Vereinheitlichung ist ein Bestands-G5-Verstoss, kein AUTH-P7-Regress, und bewusst NICHT
+in dieser Phase behoben (Absolute Regel 6, Scope).
+
+**Absolute Regeln:** unberuehrt, aber Regel 3 ist neu gefasst (`CLAUDE.md`) — die
+Begruendung fuer eine Auth-Ausnahme muss seit AUTH-P7 zusaetzlich maschinenlesbar in
+`PUBLIC_ROUTES` stehen, sonst schlaegt `test/route-auth-inventory.test.js` fehl. Das ist
+STRENGER als vorher, nicht schwaecher. Safety-Gates (Denylist/Land/Stundenlimit/
+pro-Tenant-Kostendecke/Max-Dauer/Signaturpruefung/`OUTBOUND_FROZEN`/Abo+KYC): nicht
+angefasst — das Basic-Auth-Gate war nie eines davon, sein Wegfall ist der ausdrueckliche
+Auftrag dieser Phase. `disclosureSentence`: unangetastet. Keine neue Dependency, kein
+neues Flag, keine DB-Aenderung.
+
+**Rollback-Weg.** Deploy des Vorgaenger-Commits. `DASHBOARD_PASSWORD` steht in Render,
+`config.js` und `render.yaml` weiterhin — das alte Gate ist damit sofort wieder scharf.
+**Abbruchsignal live:** die Probe meldet 200 auf `/api/state` OHNE Sitzung → sofortiger
+Rollback (der Datenleck-Fall). Der eigentliche Abnahmenachweis —
+`scripts/probe-auth.sh <url> <sha> nach-p7` → Exit 0 — ist eine Owner-Handlung nach dem
+Deploy und kann in der Umsetzungs-Session nicht erbracht werden.

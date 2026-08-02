@@ -36,7 +36,8 @@ async function makePgliteRunner() {
 // cfg.billing.paymentEnabled (S2-16 Zweig 1). Die Attrappe traegt seither DIESELBE
 // Namespace-Form wie der echte config-Export (kein Hybrid mehr) - ein flacher Override
 // (z.B. `{ ...baseConfig, devLoginEnabled: true }`) traefe sonst NUR einen wirkungslosen
-// Flach-Nachbarn statt den gelesenen Namespace-Pfad (Lehre auth-gate-exemption-order.test.js).
+// Flach-Nachbarn statt den gelesenen Namespace-Pfad (Lehre: eine Attrappe mit falscher
+// Config-Form testet den Aufruf, nicht den gelesenen Wert - stillschweigend gruen).
 // storeBackend bleibt flach: wireWebLogin selbst liest es nicht (nur app.js VOR dem Aufruf).
 const baseConfig = {
   storeBackend: "pg",

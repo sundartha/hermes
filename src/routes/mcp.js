@@ -10,9 +10,8 @@
 // stateless Streamable-HTTP-Vertrag (die initialize-Capabilities wandern beim
 // sessionIdGenerator=undefined nicht zum tools/list-POST mit).
 //
-// /mcp ist Auth-Gate-exempt (der Basic-Auth-Gate in server.js ruft next() fuer /mcp*,
-// INV-3); mcpAuth (src/auth.js: Legacy-Bearer-Token, statisches Token oder OAuth 2.1)
-// ist die EINZIGE Absicherung auf POST und bleibt fail-closed (Default nur localhost).
+// mcpAuth (src/auth.js: Legacy-Bearer-Token, statisches Token oder OAuth 2.1) ist und
+// bleibt die EINZIGE Absicherung auf POST, fail-closed (Default nur localhost).
 // GET/DELETE tragen KEINE Auth (nur 405). Die stateless/pure Bausteine (McpServer,
 // Transport, registerTools, HERMES_SERVER_INFO, mcpServerOptions, consultAllowedFor,
 // mcpAuth, hashEmail, ANON_IDENTITY) kommen direkt aus ihren Quellmodulen (G5 - wie

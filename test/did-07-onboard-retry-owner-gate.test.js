@@ -9,7 +9,7 @@
 // keine SOLL-Gegenfassung.
 //
 // Eigene Datei (Datei-Eigentum Block B6): der beleghafte Bestandstest liegt bereits in
-// test/p2-onboard-retry.test.js:116 ("(d) proxied ohne Basic-Auth -> 401") - das Muster
+// test/p2-onboard-retry.test.js ("(d) proxied ohne Admin-Sitzung -> 404") - das Muster
 // dort wird hier 1:1 wiederholt statt die fremde Datei anzufassen (Regel 4).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -40,18 +40,18 @@ const retry = (srv, body, headers = {}) =>
     body: JSON.stringify(body),
   });
 
-test("DID-07 (Mechanismus gruen, Regressions-Pin): proxied ohne Basic-Auth -> 401, auch fuer einen zahlenden Subscriber", async () => {
+test("DID-07 (Mechanismus gruen, Regressions-Pin): proxied ohne Admin-Sitzung -> 404, auch fuer einen zahlenden Subscriber", async () => {
   const idp = await startIdp();
   const srv = await startServer({
     env: env(idp),
     seed: seedState({ tenants: [subscriberTenant("t_did07", "sub-did07")] }),
   });
   try {
-    // X-Forwarded-For simuliert eine externe IP (kein trusted-localhost) - der
-    // Test-Prozess selbst laeuft ueber Loopback (Basic-Auth-exempt), ohne diesen
-    // Header wuerde die Owner-Gate-Pruefung gar nicht greifen.
+    // X-Forwarded-For simuliert eine externe IP (kein trusted-localhost). Kein
+    // SESSION_SECRET im Fixture -> operatorAuth existiert nicht -> die Route ist gar
+    // nicht gemountet, unabhaengig vom Header.
     const res = await retry(srv, { tenantId: "t_did07" }, { "X-Forwarded-For": "1.2.3.4" });
-    assert.equal(res.status, 401, "kein Basic-Auth-Header + proxied -> 401, auch fuer active+CARD-Subscriber");
+    assert.equal(res.status, 404, "Route ohne operatorAuth nicht gemountet -> 404, auch fuer active+CARD-Subscriber");
   } finally {
     await srv.stop();
     await idp.close();

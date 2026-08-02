@@ -50,12 +50,11 @@ export function audit(action, req, details = "") {
 }
 
 // ---- Auth-Ablehnungen: EIN Eintrag, EINE Vokabel (PLAN-AUTH-GATE AUTH-P5) -------
-// Bis hierher schrieb NUR das Basic-Auth-Gate (src/wiring/auth-gate.js) eine
-// auth_failed-Zeile. Faellt das Gate (AUTH-P7), verschwaende der einzige Meldeweg fuer
-// abgewiesene Zugriffe (Plan Abschnitt 5, S4). Die drei Nachfolger-Sicherungen
-// (webAuthGateMiddleware, adminOnlyMiddleware, internalOnly) schreiben ihn deshalb
-// selbst - ueber DIESE eine Funktion, damit die Zeile nicht an vier Stellen leicht
-// verschieden dasteht (G5) und die Grund-Token eine feste, benannte Menge bleiben (G25).
+// Bis AUTH-P5 schrieb NUR das Basic-Auth-Gate eine auth_failed-Zeile. Seit AUTH-P7 ist
+// das Gate ganz gefallen; die drei Nachfolger-Sicherungen (webAuthGateMiddleware,
+// adminOnlyMiddleware, internalOnly) schreiben die Zeile deshalb selbst - ueber DIESE
+// eine Funktion, damit sie nicht an mehreren Stellen leicht verschieden dasteht (G5)
+// und die Grund-Token eine feste, benannte Menge bleiben (G25).
 //
 // ABSOLUTE REGEL 4: req.path, NIEMALS req.originalUrl. originalUrl traegt den Query-
 // String - dort haengen der OAuth-code (/auth/callback) und die Stripe-session_id

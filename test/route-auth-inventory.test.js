@@ -1,11 +1,11 @@
 // ---- Routen-Inventar (PLAN-AUTH-GATE P1) -----------------------------------------
-// Der dauerhafte Ersatz fuer die Sammelsicherung. Heute schuetzt EIN Basic-Auth-Gate
-// alles, was nicht ausdruecklich ausgenommen ist - eine neue Route ist damit per
-// Default sicher. Faellt das Gate (P7), kehrt sich das um: eine neue Route waere per
-// Default oeffentlich, und zwar lautlos (200 statt Fehler, kein Log, siehe
-// PLAN-AUTH-GATE Abschnitt 5, S1). Dieser Test stellt den Default wieder her, nur
-// maschinell: er laeuft ueber den Routengraph und verlangt fuer JEDE Route eine
-// bewusste Einordnung in src/route-policy.js.
+// Der dauerhafte Ersatz fuer die Sammelsicherung. Frueher schuetzte EIN Basic-Auth-Gate
+// alles, was nicht ausdruecklich ausgenommen war - eine neue Route war damit per
+// Default sicher. Seit AUTH-P7 gibt es keine Sammelsicherung mehr: eine neue Route
+// waere ohne diesen Test per Default oeffentlich, und zwar lautlos (200 statt Fehler,
+// kein Log, siehe PLAN-AUTH-GATE Abschnitt 5, S1). Dieser Test stellt den Default
+// wieder her, nur maschinell: er laeuft ueber den Routengraph und verlangt fuer JEDE
+// Route eine bewusste Einordnung in src/route-policy.js.
 //
 // WARUM DER GRAPH MIT pg-BACKEND GEBAUT WIRD (B3): der gesamte Web-Login-Block
 // (/auth/*, /api/self-service/*, /api/admin/*, /api/portal/state, /webhooks/stripe)
@@ -115,7 +115,7 @@ async function withSilencedConsole(fn) {
 // ---- Graph einsammeln -------------------------------------------------------------
 // Express 4: layer.route ist eine Route (Pfad + Methoden + Handler-Kette),
 // layer.handle.stack ein gemounteter Router. Middleware-Schichten ohne Route
-// (express.static, das Auth-Gate, Body-Parser) interessieren hier nicht - sie sind
+// (express.static, Body-Parser, Rate-Limiter) interessieren hier nicht - sie sind
 // nicht einer Route zugeordnet und darum nicht einzuordnen.
 function collectRoutes(app) {
   const routes = [];
@@ -170,6 +170,8 @@ const ROUTE_FINGERPRINT = [
   "DELETE /mcp",
   "GET /.well-known/oauth-protected-resource",
   "GET /.well-known/oauth-protected-resource/mcp",
+  "GET /account",
+  "GET /admin",
   "GET /api/admin/tenants",
   "GET /api/billing/checkout-return",
   "GET /api/billing/cost-drift",
@@ -186,8 +188,13 @@ const ROUTE_FINGERPRINT = [
   "GET /app/*",
   "GET /auth/callback",
   "GET /auth/login",
+  "GET /dashboard",
   "GET /healthz",
+  "GET /login",
   "GET /mcp",
+  "GET /portal",
+  "GET /sign-in",
+  "GET /signin",
   "GET /tenant.html",
   "GET /voice/tts/:token",
   "POST /api/admin/tenants/:id/approve",

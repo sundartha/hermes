@@ -67,7 +67,7 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
 - `src/auth.js` / `src/web-auth.js` — MCP-Auth (Legacy-Token oder OAuth-OIDC via `jose`) bzw. Browser-Login (OIDC Auth-Code + PKCE); `src/audit-store.js`, `src/middleware.js`
 - `src/billing/` (Stripe Hold/Capture + Metering, hinter `PAYMENT_ENABLED`), `src/onboarding.js`, `src/worker/provisioning.js`, `src/queue/` (Nummern-Provisioning, Queue-Backend memory/pg-boss)
 - `src/config.js` — gesamte Konfiguration aus `.env`, inkl. Safety-Gates; `src/boot-guard.js`/`src/process-guards.js` (Start-/Prozess-Sicherungen)
-- `public/` — Dashboards (statisches HTML/JS, pollt `/api/state`): `index.html` (Owner) + `tenant.html` (Tenant-Self-Service)
+- `public/` — statische Marken-Assets (`favicon.ico`, `brand/hermes-icon.png`), oeffentlich ausgeliefert; das Kunden-Dashboard ist die App-Shell aus `apps/web` unter `/app`
 
 ## Absolute Regeln
 
@@ -91,7 +91,7 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
    Verkehr die Tenant-Decke unbegrenzt ueberziehen. Nicht ohne ausdrueckliche Owner-Entscheidung
    anfassen.
 2. **OFFENLEGUNG**: Der Offenlegungssatz bei Outbound-Calls (`disclosureSentence`) bleibt fest verdrahtet als allererster Satz — kein KI-Ermessen, kein Setting, das ihn abschaltet.
-3. **AUTH FAIL-CLOSED**: Neue Endpunkte sind standardmaessig hinter Basic-Auth; Ausnahmen (wie `/voice`, `/mcp`, `/healthz`) brauchen eine eigene Absicherung und eine Begruendung im Code-Kommentar. Credential-Vergleiche timing-sicher (`safeEqual`).
+3. **AUTH FAIL-CLOSED**: Neue Endpunkte sind **standardmaessig** hinter einer authentifizierten Identitaet — Browser-Session (`webAuthMw`, fuer Betreiber-Routen zusaetzlich `adminMw`) oder, fuer den In-Process-MCP-Pfad, `internalOnly` (`isTrustedLocalCaller`). Jede Ausnahme (wie `/voice`, `/mcp`, `/healthz`, `/api/plans`) braucht eine eigene Absicherung, eine Begruendung im Code-Kommentar **und** einen Eintrag in der Oeffentlich-Liste (`src/route-policy.js`); ohne beides schlaegt `test/route-auth-inventory.test.js` fehl. Credential-Vergleiche timing-sicher (`safeEqual`).
 4. **SECRETS**: Nur ueber `.env` (lokal) bzw. Render-Dashboard. Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.
 5. **AUDIO**: Audio laeuft NIEMALS durch MCP — nur Transkripte/Status.
 6. **SCOPE**: NUR implementieren, was gefragt wurde.

@@ -4,11 +4,12 @@
 // Dependency-Injection - gleiches Muster wie makeReadRoutes/makeCallRoutes.
 //
 // AUTH-P6: vier dieser Routen (flush-meters, cost-truing/sweep, cost-drift,
-// platform-costs) sind Betreiber-Routen und haengen zusaetzlich zur Basic-Auth hinter
-// einer echten Admin-Sitzung (webAuthMw+adminMw, operatorRoutes/operatorAuth) - und
-// NUR DANN gemountet, wenn diese Sicherung existiert (fail-closed, s.
-// wiring/operator-routes.js). Das Legacy-Checkout-Paar (setup-checkout,
-// checkout-return, P9) bleibt UNVERAENDERT nur hinter der Basic-Auth.
+// platform-costs) sind Betreiber-Routen und haengen hinter einer echten Admin-Sitzung
+// (webAuthMw+adminMw, operatorRoutes/operatorAuth) - und NUR DANN gemountet, wenn
+// diese Sicherung existiert (fail-closed, s. wiring/operator-routes.js). Das
+// Legacy-Checkout-Paar (setup-checkout, checkout-return) traegt seit AUTH-P7
+// `internalOnly` (dieselbe Middleware wie die sieben P5-Routen, KEIN neuer
+// Mechanismus) - geloescht wird es weiterhin erst in P9 (Karenzfrist).
 //
 // BEWUSST KEIN MCP-Tool (kein offener ungegateter Geld-Endpunkt, R4). Ohne
 // PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch zum Bestand). billing = die
@@ -27,6 +28,7 @@ import { countActiveNumbers } from "../store/views.js";
 // (frueher stand die cancelUrl hier als zweites Inline-Literal, driftfaehig, G5).
 import { CHECKOUT_RETURN } from "../portal-paths.js";
 import { operatorRoutes } from "../wiring/operator-routes.js";
+import { internalOnly } from "../wiring/internal-only.js";
 
 // Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
@@ -53,7 +55,7 @@ export function makeBillingRoutes({
 
   // ---- Stripe-Metering-Flush (P6b3): aggregiert den usage_event-Ledger je tenant+kind
   // und meldet je Aggregat EIN reportMeter (idempotent ueber stripe_meter_sent). Hinter
-  // Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung
+  // einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung
   // gar nicht gemountet. KEIN MCP-Tool. NUR im Metering-Pfad erreichbar: ohne
   // PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch zum Bestand). "Periodisch" =
   // extern cron-baar (echter Scheduler = P8); KEIN neuer Scheduler-Dep. Antwort = nur
@@ -67,12 +69,13 @@ export function makeBillingRoutes({
   });
 
   // ---- Karten-Erfassung via Stripe Checkout (setup-Mode), Pay1 ----
-  // Hinter Basic-Auth (Bestand deckt /api/* ab; localhost = Owner). KEIN MCP-Tool
-  // (kein offener ungegateter Geld-Endpunkt, R4). tenant-scoped (requireTenant ->
-  // fail-closed 403 bei TENANT_REJECT). Ohne PAYMENT_ENABLED -> 404 (byte-identisch
-  // zum Bestand, Muster flush-meters). Die Karte wird OHNE Abbuchung am Customer
-  // gespeichert; der spaetere Hold/Capture (Pay2) nutzt customer+payment_method.
-  router.post("/api/billing/setup-checkout", async (req, res) => {
+  // Hinter `internalOnly` (AUTH-P7, s. Kopfkommentar; localhost = Owner). KEIN
+  // MCP-Tool (kein offener ungegateter Geld-Endpunkt, R4). tenant-scoped
+  // (requireTenant -> fail-closed 403 bei TENANT_REJECT). Ohne PAYMENT_ENABLED -> 404
+  // (byte-identisch zum Bestand, Muster flush-meters). Die Karte wird OHNE Abbuchung
+  // am Customer gespeichert; der spaetere Hold/Capture (Pay2) nutzt
+  // customer+payment_method.
+  router.post("/api/billing/setup-checkout", internalOnly, async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
     // WEB-10: stabiler, sprachneutraler Code statt deutschem Klartext mit Env-Namen.
     if (!requirePublicUrl(res, config)) return;
@@ -93,7 +96,7 @@ export function makeBillingRoutes({
   });
 
   // ---- Kosten-Abgleich manuell anstossen (LCT P3) ----
-  // Hinter Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
+  // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
   // Sicherung gar nicht gemountet. KEIN MCP-Tool (Muster flush-meters, R4: kein offener
   // ungegateter Geld-naher Endpunkt). BEWUSST OHNE PAYMENT_ENABLED-Gate: der Abgleich
   // ist Beobachtung der Kosten-Achse, die - wie reconcileOutboundVoiceBudget - auch ohne
@@ -109,7 +112,7 @@ export function makeBillingRoutes({
   });
 
   // ---- Drift-Waechter: gemessener Minutensatz je Praefix (LCT P5) ----
-  // Hinter Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
+  // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
   // Sicherung gar nicht gemountet. NICHT tenant-gescopt - dieselbe Naht und dieselbe
   // Begruendung wie der Sweep-Endpunkt daneben (Plattform-Groesse ueber alle Tenants).
   // BEWUSST NICHT in /api/state: dort gilt der Cross-Tenant-Leck-Riegel (api-read.js,
@@ -122,7 +125,7 @@ export function makeBillingRoutes({
   });
 
   // ---- Fixkosten sichtbar machen (LCT P7): ElevenLabs-Wand + DID-Miete ----
-  // Hinter Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
+  // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
   // Sicherung gar nicht gemountet. NICHT tenant-gescopt - dieselbe Naht und Begruendung
   // wie cost-drift daneben (Plattform-Aggregat, kein Tenant-Filter existiert).
   // public/index.html gibt es nicht mehr (Owner-Removal P5) - dieser Reader ist der
@@ -147,7 +150,11 @@ export function makeBillingRoutes({
     });
   });
 
-  router.get("/api/billing/checkout-return", async (req, res) => {
+  // ---- Stripe-Rueckkehr nach der Karten-Erfassung, Gegenstueck zu setup-checkout ----
+  // Hinter `internalOnly` (AUTH-P7, s. Kopfkommentar). tenant-scoped (requireTenant ->
+  // fail-closed 403 bei TENANT_REJECT). Audit-Zeilen tragen NUR tenant, NIE session_id
+  // (Regel 4/W9) - unveraendert seit AUTH-P5.
+  router.get("/api/billing/checkout-return", internalOnly, async (req, res) => {
     if (!requirePaymentEnabled(res, config)) return;
     const tenant = requireTenant(req, res); // tenant-gescopt; REJECT -> 403
     if (!tenant) return;

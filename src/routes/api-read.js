@@ -6,8 +6,8 @@
 // (t4-server-decomposition.md, Phase 3): EINE kohaerente Route-Gruppe,
 // behavior-preserving (reine Verschiebung, keine Logik-Aenderung).
 //
-// Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab) und seit AUTH-P5
-// zusaetzlich hinter `internalOnly` (Loopback ohne X-Forwarded-For). Die View-
+// Hinter `internalOnly` (Loopback ohne X-Forwarded-For, seit AUTH-P5; seit AUTH-P7
+// die einzige Sicherung dieser drei Routen). Die View-
 // Helfer (publicCall/upcomingCalendar/activeNumberFor) kommen direkt aus store/views
 // (eine Quelle, G5 - kein Mismatch zwischen Server- und Self-Service-Antworten).
 import { Router } from "express";
@@ -108,8 +108,8 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
   });
 
   // Auskunft/Export (Art. 15/20): nicht-destruktiver Owner-Tenant-Export, read-only,
-  // hinter der bestehenden /api/*-Basic-Auth und seit AUTH-P5 zusaetzlich hinter
-  // `internalOnly` (Loopback ohne X-Forwarded-For) - NICHT webAuthMw (Owner-
+  // hinter `internalOnly` (Loopback ohne X-Forwarded-For, seit AUTH-P5; seit AUTH-P7
+  // die einzige Sicherung) - NICHT webAuthMw (Owner-
   // Entscheidung 1, PLAN-AUTH-GATE): der Kanal bleibt der In-Process-MCP-Pfad, keine
   // Browser-Session. Calls durch publicCall (KEIN streamToken-Leak, dieselbe
   // Invariante wie /api/state). BEWUSST KEIN MCP-Tool (kein Bulk-Export ueber MCP,

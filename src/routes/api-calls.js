@@ -12,13 +12,12 @@
 // armMaxDurationTimer(call,tw.sid) (TeXML-Zweig) sitzen an exakt denselben Punkten
 // (kein Cap-Verlust). Der Fehlerpfad (terminateAndBillCall + providerStatus-
 // Kategorisierung, kein Roh-Provider-/Secret-Leak an den Client) wandert unveraendert.
-// Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab) und seit AUTH-P5
-// zusaetzlich hinter `internalOnly` (Loopback ohne X-Forwarded-For), an unveraenderter
-// Mount-Position (vor makeReadRoutes). normNum/PROVIDER (store/defaults)
-// und isTrunkZeroFormatError/E164_FORMAT_ERROR (outbound-gates) kommen direkt aus ihrer
-// Heimat (eine Quelle, G5 - wie eurText/spendMonthEndDate in outbound-gates.js); die
-// Laufzeit-Instanzen (Gate-Array, Timer, Terminierung, finishCall) und die
-// request-tenant-Resolver werden
+// Hinter `internalOnly` (Loopback ohne X-Forwarded-For, seit AUTH-P5; seit AUTH-P7 die
+// einzige Sicherung), an unveraenderter Mount-Position (vor makeReadRoutes).
+// normNum/PROVIDER (store/defaults) und isTrunkZeroFormatError/E164_FORMAT_ERROR
+// (outbound-gates) kommen direkt aus ihrer Heimat (eine Quelle, G5 - wie
+// eurText/spendMonthEndDate in outbound-gates.js); die Laufzeit-Instanzen
+// (Gate-Array, Timer, Terminierung, finishCall) und die request-tenant-Resolver werden
 // injiziert (EINE Quelle, INV-7).
 import { Router } from "express";
 import { VOICE_ENGINE } from "../config.js";
@@ -295,8 +294,8 @@ export function makeCallRoutes({
     }
   });
 
-  // AL-P13: kurzer Long-Poll auf das naechste Consult-Ereignis. HINTER der bestehenden
-  // /api/*-Basic-Auth (Regel 3, keine neue Auth-Ausnahme), plus callVisibleTo wie
+  // AL-P13: kurzer Long-Poll auf das naechste Consult-Ereignis. HINTER `internalOnly`
+  // (Regel 3, keine neue Auth-Ausnahme), plus callVisibleTo wie
   // GET /api/calls/:id: fremder Call -> 404 (kein Existenz-Leck, NICHT 403). Fehlende
   // Faehigkeit -> ebenfalls 404: die Existenz des Kanals ist selbst eine Information.
   // Liefert NIE Transkript/Audio - nur Ereignis, Kennung und Fragen (Regel 5).

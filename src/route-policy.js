@@ -1,9 +1,9 @@
 // ---- Routen-Auth-Politik (PLAN-AUTH-GATE P1) -------------------------------------
-// Die maschinenlesbare Fassung von Absoluter Regel 3 (AUTH FAIL-CLOSED). Bis heute
-// traegt ein einziges Basic-Auth-Gate (src/wiring/auth-gate.js) als Sammelsicherung
-// alles, was nicht ausdruecklich ausgenommen ist. Diese Sammelsicherung faellt
-// (Owner-Entscheidung, PLAN-AUTH-GATE.md). Ihr Ersatz ist kein zweites Gate, sondern
-// eine Vollstaendigkeitspruefung: test/route-auth-inventory.test.js laeuft ueber den
+// Die maschinenlesbare Fassung von Absoluter Regel 3 (AUTH FAIL-CLOSED). Bis AUTH-P7
+// trug ein einziges Basic-Auth-Gate als Sammelsicherung alles, was nicht ausdruecklich
+// ausgenommen war. Diese Sammelsicherung ist gefallen (Owner-Entscheidung,
+// PLAN-AUTH-GATE.md). Ihr Ersatz ist kein zweites Gate, sondern eine
+// Vollstaendigkeitspruefung: test/route-auth-inventory.test.js laeuft ueber den
 // PRODUKTIONS-Routengraph und verlangt fuer JEDE Route eine bewusste Einordnung.
 // Eine neue Route ohne Auth-Middleware und ohne Eintrag hier macht `npm test` rot.
 //
@@ -25,7 +25,7 @@
 // Pfade, fuer die es bereits eine benannte Konstante gibt, werden importiert statt
 // als Literal wiederholt (G5/G25) - test/p14-checkout-return-app-shell.test.js pinnt
 // das fuer den Altpfad ausdruecklich.
-import { APP_PATH, LEGACY_PORTAL_PATH } from "./portal-paths.js";
+import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 
 // Benannte Auth-Middlewares. Der Inventar-Test erkennt sie an handler.name in der
 // Route-Handler-Kette. INVARIANTE: diese Middlewares MUESSEN benannte Funktionen
@@ -48,7 +48,7 @@ export const AUTH_MIDDLEWARE_NAMES = Object.freeze([
 export const ROUTE_CLASS = Object.freeze({
   AUTH: "auth", // traegt eine benannte Auth-Middleware
   PUBLIC: "public", // bewusst oeffentlich bzw. handler-intern abgesichert
-  GATE_ONLY: "gate_only", // haengt HEUTE allein am Basic-Auth-Gate (Restarbeit)
+  GATE_ONLY: "gate_only", // haengt allein an einer Sammelsicherung (seit AUTH-P7 leer, bleibt als Mechanismus)
   UNPROTECTED: "unprotected", // nirgends eingeordnet -> Testfehler
 });
 
@@ -64,6 +64,10 @@ const VOICE_SIGNATURE_REASON =
   "Ed25519, fail-closed) sitzt vor allen /voice-Handlern, nicht an der einzelnen Route.";
 const MCP_METHOD_NOT_ALLOWED_REASON =
   "Fester 405 (der Transport ist POST-only). Kein Zustand, kein Inhalt.";
+const ALIAS_REASON =
+  "302-Umleitung einer von Hand getippten Adresse (AUTH-P7). Liefert keine Daten, liest " +
+  "keinen Zustand, reicht keinen Query weiter; das Ziel ist eine Konstante, nie eine " +
+  "Eingabe. Die Sicherung liegt am ZIEL, nicht hier.";
 
 export const PUBLIC_ROUTES = Object.freeze([
   {
@@ -179,24 +183,27 @@ export const PUBLIC_ROUTES = Object.freeze([
     path: "/mcp",
     reason: MCP_METHOD_NOT_ALLOWED_REASON,
   },
+  // AUTH-P7: die sieben Umleitungen. Abgeleitet aus derselben Quelle, aus der src/app.js
+  // sie mountet (G5) - eine achte Wiederholung der Pfade waere genau die Duplizierung,
+  // die src/portal-paths.js verhindern soll. Zwei Zwangspunkte bleiben trotzdem: der
+  // ROUTE_FINGERPRINT und die Abdeckungsregel von test/probe-auth-table.test.js werden
+  // rot, wenn jemand hier einen Pfad ergaenzt, ohne ihn ueberall nachzuziehen.
+  ...LOGIN_ALIAS_PATHS.map((path) => ({ method: "GET", path, reason: ALIAS_REASON })),
+  ...APP_ALIAS_PATHS.map((path) => ({ method: "GET", path, reason: ALIAS_REASON })),
 ]);
 
-// ---- Restarbeit: haengt HEUTE allein am Basic-Auth-Gate ---------------------------
-// Diese Routen sind NICHT oeffentlich. Sie sind geschuetzt - aber ausschliesslich
-// durch die Sammelsicherung, die dieser Plan aufloest. Der Inventar-Test laesst sie
-// deshalb durch und haelt sie zugleich sichtbar: die Liste IST die Arbeitsliste.
+// ---- Restarbeit: haengt allein an einer Sammelsicherung ---------------------------
+// Diese Routen sind NICHT oeffentlich. Bis AUTH-P7 haengten sie ausschliesslich an der
+// Basic-Auth-Sammelsicherung; die Liste bleibt als MECHANISMUS stehen, damit eine
+// kuenftige Route nicht wieder still allein an einer Sammelsicherung haengt, die es
+// heute nicht mehr gibt. Der Inventar-Test laesst die hier gelisteten Routen durch und
+// haelt sie zugleich sichtbar: die Liste IST die Arbeitsliste.
 //
-// HARTE VORBEDINGUNG FUER P7: das Gate darf erst fallen, wenn diese Liste LEER ist.
-// Jede Zeile verschwindet hier erst dann, wenn die Route in P4 geloescht (b2) oder in
-// P5/P6 mit eigener Auth versehen wurde (b1). Waere sie stattdessen nach PUBLIC_ROUTES
-// gewandert, haette der Test gruen gemeldet, was in Wahrheit eine offene Tuer ist.
-//
-// Stand nach AUTH-P6: nur noch das Legacy-Checkout-Paar. P7 darf das Gate erst nehmen,
-// wenn diese Liste leer ist (P9 leert sie).
-export const GATE_ONLY_ROUTES = Object.freeze([
-  { method: "POST", path: "/api/billing/setup-checkout", plan: "P9 loeschen (Karenz)" },
-  { method: "GET", path: "/api/billing/checkout-return", plan: "P9 loeschen (Karenz)" },
-]);
+// HARTE VORBEDINGUNG FUER P7 WAR: das Gate durfte erst fallen, wenn diese Liste LEER
+// ist. Das Legacy-Checkout-Paar traegt seit AUTH-P7 `internalOnly` (dieselbe
+// Middleware wie die sieben P5-Routen) und ist damit in die Klasse AUTH gewandert -
+// die Liste ist jetzt leer. Geloescht wird das Paar erst in P9 (Karenzfrist).
+export const GATE_ONLY_ROUTES = Object.freeze([]);
 
 // Schluessel einer Route. EINE Quelle fuer beide Listen und den Test (G5).
 export const routeKey = (method, path) => `${String(method).toUpperCase()} ${path}`;

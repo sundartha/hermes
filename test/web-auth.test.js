@@ -222,7 +222,7 @@ test("GET /auth/callback mit passendem state: upsert 1x, Session-Cookie gesetzt,
 
 test("GET /auth/callback mit postLoginPath: redirectet ins Kunden-Portal statt /", async () => {
   // Bug-Wurzel W3: ein frisch eingeloggter (suspendierter) Tenant darf NICHT auf "/"
-  // (Owner-Dashboard hinter Basic-Auth) landen, sondern auf der Self-Service-Shell.
+  // in einer rohen Auth-Sackgasse landen, sondern auf der Self-Service-Shell.
   const { deps } = fakeDeps({ postLoginPath: "/app" });
   const srv = await mountRouter(deps);
   try {

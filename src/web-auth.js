@@ -144,8 +144,8 @@ function recoverLogin(req, res) {
 export function makeWebAuthRoutes(deps) {
   // postLoginPath: Ziel des Browser-Redirects nach erfolgreichem Callback. Default "/"
   // (byte-identisch zum Bestand). server.js reicht das Kunden-Portal durch, damit ein
-  // frisch eingeloggter (noch suspendierter) Tenant NICHT auf dem Owner-Dashboard hinter
-  // Basic-Auth landet (rohe 403-/Auth-Sackgasse), sondern auf der "Choose your plan"-Shell.
+  // frisch eingeloggter (noch suspendierter) Tenant NICHT auf dem Owner-Dashboard in
+  // einer rohen Auth-Sackgasse landet, sondern auf der "Choose your plan"-Shell.
   const { secret, redirectUri, ttlSeconds, oidc, accounts, sessions, audit } = deps;
   const postLoginPath = deps.postLoginPath || "/";
   // Absolute Rueckkehr-URL fuer den WorkOS-Sign-out-Redirect (return_to). Muss absolut sein
@@ -326,8 +326,8 @@ export function makeWebAuthRoutes(deps) {
   // ueber DIESELBE Quelle wie der echte Callback (accounts.upsertOnFirstLogin +
   // sessions.create, G5 - kein paralleler Auth-Pfad), setzt das signierte Session-Cookie
   // und redirectet auf postLoginPath. Aktiviert den Tenant NICHT (bleibt suspended) -
-  // Aktivierung/Seed macht das Test-Harness. Liegt unter /auth/* (vor Basic-Auth, hinter
-  // dem /auth-Rate-Limiter in server.js) -> keine zusaetzliche Auth-Ausnahme noetig.
+  // Aktivierung/Seed macht das Test-Harness. Liegt unter /auth/* (hinter dem
+  // /auth-Rate-Limiter in server.js) -> keine zusaetzliche Auth-Ausnahme noetig.
   // Niemals Tokens/Secrets loggen. sub/email aus dem Body, sonst dev-Defaults.
   if (deps.devLoginEnabled) {
     router.post("/auth/dev-login", async (req, res) => {
@@ -727,7 +727,7 @@ const PENDING_ALLOWED_STATUS = Object.freeze(
 //
 // AUTH-P5: beide Ablehnungszweige (401/403) schreiben zusaetzlich eine auth_failed-
 // Zeile ueber auditAuthFailed (EINE Quelle, src/util.js) - der Ersatz fuer den
-// einzigen heutigen Meldeweg, wenn das Basic-Auth-Gate faellt (P7). Der catch-Zweig
+// einzigen frueheren Meldeweg, seit das Basic-Auth-Gate gefallen ist (AUTH-P7). Der catch-Zweig
 // (Infrastruktur-Fehler, z.B. DB weg) schreibt BEWUSST NICHT: er ist keine Auth-
 // Entscheidung, und "expired"/"no_session" waere dort ein irrefuehrendes Forensik-
 // Label (Befund F2, Plan Abschnitt 7 - eigener Punkt in PLAN-SECURITY.md).

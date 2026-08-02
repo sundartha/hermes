@@ -1,10 +1,14 @@
 // AL-D3 Review-Fix (Runde 2, AL-D3-TEST1): startConsultPump/pumpLoop
 // (scripts/convo-bench/consult-pump.mjs) hatte keinen automatisierten Test - weder der
 // Normalfall (consult-Event -> answer posten -> weiterpollen -> done-Event -> Rueckkehr)
-// noch die beiden Fehlerpfade (401 -> geworfener Fehler bei stop(), Abort waehrend eines
+// noch die beiden Fehlerpfade (403 -> geworfener Fehler bei stop(), Abort waehrend eines
 // haengenden fetch). Muster: withEchoServer aus test/al-d3-http-fake-helpers.test.js -
 // ein lokaler node:http-Server, den der Test selbst steuert, statt den Bench-Server zu
 // spawnen (kein Netz, kein echter Anruf).
+//
+// AUTH-P7: der real erreichbare Fehlschlag ist seit dem Gate-Wegfall 403 (internalOnly,
+// grund=not_local), nicht mehr 401 (Basic-Auth-Gate) - s. scripts/convo-bench/
+// consult-pump.mjs Kopfkommentar.
 //
 // Testname-Praefix "AL-D3-" trifft KEIN Katalog-Praefix aus package.json
 // config.i18nCatalogPattern - dieser Test laeuft in `npm test`, wo Rot zaehlt.
@@ -73,15 +77,15 @@ test("AL-D3-N6: startConsultPump beantwortet ein consult-Event und kehrt bei don
   }
 });
 
-test("AL-D3-N7: startConsultPump wirft ueber stop(), wenn die Pumpe auf eine 401-Antwort lief", async () => {
+test("AL-D3-N7: startConsultPump wirft ueber stop(), wenn die Pumpe auf eine 403-Antwort lief", async () => {
   const srv = await withConsultServer((req, res) => {
-    res.writeHead(401);
+    res.writeHead(403);
     res.end();
   });
   try {
     const pump = startConsultPump({ baseUrl: srv.url, callId: CALL_ID, answers: [] });
-    await wait(POLL_SETTLE_MS); // laesst den ersten fetch auf die 401-Antwort laufen
-    await assert.rejects(() => pump.stop(), /401/);
+    await wait(POLL_SETTLE_MS); // laesst den ersten fetch auf die 403-Antwort laufen
+    await assert.rejects(() => pump.stop(), /403/);
   } finally {
     await srv.close();
   }

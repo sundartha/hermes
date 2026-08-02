@@ -85,18 +85,17 @@ test("Audit-Zeilen fuer fehlgeschlagene Auth-Versuche", async (t) => {
   });
   try {
     await t.test(
-      "Basic-Auth-Fehlversuch (extern) -> genau eine Zeile",
+      "abgelehnter externer Zugriff -> genau eine Audit-Zeile",
       { skip: !EXTERNAL_IP && "keine externe Interface-IP" },
       async () => {
-        const res = await fetch(`${srv.externalUrl}/api/state`, {
-          headers: {
-            Authorization: "Basic " + Buffer.from("admin:falsches-pw").toString("base64"),
-          },
-        });
-        assert.equal(res.status, 401);
-        await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/api\/state/);
+        // AUTH-P7: kein Gate mehr davor, das auf einen Basic-Header reagieren
+        // koennte - internalOnly weist jeden nicht-lokalen Aufrufer ab, unabhaengig
+        // von Credentials.
+        const res = await fetch(`${srv.externalUrl}/api/state`);
+        assert.equal(res.status, 403);
+        await waitForLog(srv, /\[audit\] auth_failed ip=\S+ path=\/api\/state grund=not_local/);
         assert.equal(
-          countMatches(srv.stdout, "\\[audit\\] auth_failed ip=\\S+ path=/api/state"),
+          countMatches(srv.stdout, "\\[audit\\] auth_failed ip=\\S+ path=/api/state grund=not_local"),
           1,
         );
       },
