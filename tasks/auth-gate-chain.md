@@ -108,10 +108,54 @@ gruen ueber genau die Tuer gelaufen, die sie finden soll.
 
 ---
 
+## P3 — Bootstrap-Fallback fail-closed (fertig, gemergt `8baf654`)
+
+- **Erwartet:** eine fehlende Identitaet bindet nur noch den genuin lokalen
+  In-Process-Aufrufer an den Bootstrap-Tenant; jeder andere identitaetslose Request
+  bekommt `TENANT_REJECT` — **auch bei entferntem Gate**.
+- **Verifikation:** `phase-impl-lean` (Plan/Safety auf Opus, Impl/Audit auf Sonnet),
+  dualer Review, Mutationsprobe, `npm test` auf master.
+- **Ergebnis:** Gate **PASS** ohne Fix-Runde. `npm test` gruen (3759 korrigiert).
+  Eine benannte Quelle `operatorChannelTenant` an **beiden** Stellen; keine zweite
+  Vertrauensquelle. Mutationsprobe: alter Fallback zurueckgedreht -> 11 von 16 neuen
+  Tests rot, die 5 In-Process-Pins blieben gruen (genau die Trennung, die der Plan
+  verlangt). Politik-Dateien (`route-policy.js`, `probe-auth.sh`, `auth-gate.js`)
+  nachweislich unberuehrt.
+- **Von aussen sichtbar heute: nichts.** Das Gate antwortet weiterhin zuerst. Die Phase
+  zieht den Boden ein, auf dem P7 stehen wird.
+- **Drei Befunde aus der Konsumenten-Enumeration, die offen bleiben:**
+  1. `POST /mcp` lebt live nur deshalb weiter, weil `MCP_AUTH=oauth` laeuft (`req.auth`
+     gesetzt, der geaenderte Zweig wird nicht betreten). Bei `MCP_AUTH=token/off` waere
+     der Connector still tot. **Keine Boot-Sonde** deckt das ab.
+  2. `GET /api/billing/checkout-return` liefert einem VOR dem Deploy geoeffneten
+     Legacy-Checkout jetzt 403 statt Karten-Bindung. Kein Live-Regress (die aktive
+     Kartenerfassung laeuft ueber den Self-Service-Pfad), aber der Grund, warum P9 die
+     30 Tage Karenz hat.
+  3. Zwei Tests in `test/security.test.js` bleiben gruen, messen aber weniger als ihr
+     Name verspricht (sie pruefen nur `status===200`). Bewusst nicht angefasst
+     (Scope-Grenze), in `PLAN-SECURITY.md` als Befund benannt.
+
+---
+
+## Owner-Entscheidung 2026-08-02 (bindend, fuer P7)
+
+**Plan-Entscheidung 5 ist beantwortet: alle vorgeschlagenen Umleitungen kommen mit.**
+
+| Pfad | Ziel |
+| --- | --- |
+| `/login`, `/signin`, `/sign-in` | 302 `/auth/login` |
+| `/dashboard`, `/account`, `/portal`, `/admin` | 302 `/app` |
+
+Pfade als benannte Konstanten in `src/portal-paths.js`, Mount VOR dem statischen
+Serving (Muster `LEGACY_PORTAL_PATH`). Die drei `fehlt`-Zeilen der Probe (`/login`,
+`/dashboard`, plus die vier neuen) werden im P7-Commit auf 302 gedreht (H10).
+
+---
+
 ## Naechste Phase
 
-**P3 — Bootstrap-Fallback fail-closed.** Vorbedingung laut Plan: **P1 und P2 gemergt**
-— das ist eine Owner-Handlung. Bis dahin laeuft nichts weiter.
+**P4 — tote, aber scharfe Routen loeschen.** Vorbedingung (P3 gemergt) erfuellt.
+Spec: `tasks/auth-gate-p4-spec.md`.
 
 **Offener Owner-Entscheid (erst fuer P7):** Plan-Entscheidung 5 laesst `/signin`,
 `/sign-in`, `/account`, `/portal`, `/admin` als zusaetzliche Redirect-Ziele
