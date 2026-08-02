@@ -5,21 +5,18 @@
 //   (A) Mechanismus: setWorldDefaultLanguageEnabled() selbst (rein, config-frei,
 //       kein Spawn) - state-ops/locales bleiben config-frei importierbar (s. Kommentar
 //       in defaults.js), die Funktion wird NUR von config.js beim Boot aufgerufen.
-//   (B) Wiring: ein echter Server-Kindprozess mit gesetztem Env beweist, dass config.js
-//       den Schalter tatsaechlich liest und in defaults.js drueckt - end-to-end ueber
-//       den Onboard-Pfad (unbekanntes Land -> DEFAULT_LANGUAGE, wie WORLD-01).
+//   (B) Wiring: s. test/p10-world-default-language-onboard.test.js (AUTH-P6: aus DIESER
+//       Datei ausgelagert, weil (B) src/config.js transitiv laden MUSS (In-Process-Mount
+//       von makeOnboardRoutes braucht withConfigNamespaces) - genau das Laden von
+//       config.js loest seinen Boot-Wiring-Seiteneffekt aus (setWorldDefaultLanguageEnabled
+//       aus dem PROZESS-Env, hier unbekannt) und wuerde Test (A) unten seine Praemisse
+//       ("state-ops/locales bleiben config-frei importierbar") unter den Fuessen wegziehen -
+//       (A) muss die EINZIGE Importquelle in diesem Prozess bleiben, die
+//       setWorldDefaultLanguageEnabled beruehrt.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { startServer } from "./helpers.js";
 import { DEFAULT_LANGUAGE, setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
 import { RENDER_ENV, prodEnv } from "./prod-env.js";
-
-const postJson = (url, body) =>
-  fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
 
 // ---- (A) Mechanismus ----
 
@@ -68,32 +65,4 @@ test("Aktivierungsfenster: prodEnv() ohne Override faehrt den Weltdefault-Flip A
     "false",
     "SOLL: ohne expliziten Override spiegelt prodEnv() den geschlossenen Aktivierungsfenster-Zustand",
   );
-});
-
-// ---- (B) Wiring ueber config.js (echter Server-Kindprozess) ----
-
-// Analog zu f1-geo-onboard.test.js (GB->en), aber mit einem Land OHNE eigenes Bundle
-// (ES) - das ist genau der Weltdefault-Pfad (WORLD-01), den der Schalter steuert.
-test("WORLD_DEFAULT_LANGUAGE_ENABLED=true (Default): Onboard mit country=ES -> language=en", async () => {
-  const srv = await startServer({ env: { WORLD_DEFAULT_LANGUAGE_ENABLED: "true" } });
-  try {
-    const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_es_on", country: "ES" });
-    assert.equal(res.status, 200);
-    const json = await res.json();
-    assert.equal(json.language, "en");
-  } finally {
-    await srv.stop();
-  }
-});
-
-test("WORLD_DEFAULT_LANGUAGE_ENABLED=false: Onboard mit country=ES -> language=de (Rueckflip ohne Deploy)", async () => {
-  const srv = await startServer({ env: { WORLD_DEFAULT_LANGUAGE_ENABLED: "false" } });
-  try {
-    const res = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "t_es_off", country: "ES" });
-    assert.equal(res.status, 200);
-    const json = await res.json();
-    assert.equal(json.language, "de", "Schalter aus -> Vor-Flip-Verhalten, kein Deploy noetig");
-  } finally {
-    await srv.stop();
-  }
 });

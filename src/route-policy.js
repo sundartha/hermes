@@ -190,15 +190,12 @@ export const PUBLIC_ROUTES = Object.freeze([
 // Jede Zeile verschwindet hier erst dann, wenn die Route in P4 geloescht (b2) oder in
 // P5/P6 mit eigener Auth versehen wurde (b1). Waere sie stattdessen nach PUBLIC_ROUTES
 // gewandert, haette der Test gruen gemeldet, was in Wahrheit eine offene Tuer ist.
+//
+// Stand nach AUTH-P6: nur noch das Legacy-Checkout-Paar. P7 darf das Gate erst nehmen,
+// wenn diese Liste leer ist (P9 leert sie).
 export const GATE_ONLY_ROUTES = Object.freeze([
-  { method: "POST", path: "/api/billing/flush-meters", plan: "P6 webAuthMw+adminMw" },
   { method: "POST", path: "/api/billing/setup-checkout", plan: "P9 loeschen (Karenz)" },
-  { method: "POST", path: "/api/billing/cost-truing/sweep", plan: "P6 webAuthMw+adminMw" },
-  { method: "GET", path: "/api/billing/cost-drift", plan: "P6 webAuthMw+adminMw" },
-  { method: "GET", path: "/api/billing/platform-costs", plan: "P6 webAuthMw+adminMw" },
   { method: "GET", path: "/api/billing/checkout-return", plan: "P9 loeschen (Karenz)" },
-  { method: "POST", path: "/api/onboard", plan: "P6 webAuthMw+adminMw" },
-  { method: "POST", path: "/api/onboard/retry", plan: "P6 webAuthMw+adminMw" },
 ]);
 
 // Schluessel einer Route. EINE Quelle fuer beide Listen und den Test (G5).

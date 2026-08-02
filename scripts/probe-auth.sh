@@ -114,14 +114,14 @@ sitzung|POST|/api/calls/:id/cancel|401|gate|Basic-Auth-Gate (P5: internalOnly)
 sitzung|GET|/api/calls/:id/consult|401|gate|Basic-Auth-Gate (P5: internalOnly)
 sitzung|POST|/api/calls/:id/consult/answer|401|gate|Basic-Auth-Gate (P5: internalOnly)
 sitzung|GET|/api/tenant-data/export|401|gate|Basic-Auth-Gate (P5: internalOnly) - Transkripte
-sitzung|POST|/api/billing/flush-meters|401|gate|Basic-Auth-Gate (P6) - Geld-Route
+sitzung|POST|/api/billing/flush-meters|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly) - Geld-Route
 sitzung|POST|/api/billing/setup-checkout|401|gate|Basic-Auth-Gate (P9) - Geld-Route
 sitzung|GET|/api/billing/checkout-return|401|gate|Basic-Auth-Gate (P9)
-sitzung|POST|/api/billing/cost-truing/sweep|401|gate|Basic-Auth-Gate (P6)
-sitzung|GET|/api/billing/cost-drift|401|gate|Basic-Auth-Gate (P6)
-sitzung|GET|/api/billing/platform-costs|401|gate|Basic-Auth-Gate (P6)
-sitzung|POST|/api/onboard|401|gate|Basic-Auth-Gate (P6) - kauft Nummern
-sitzung|POST|/api/onboard/retry|401|gate|Basic-Auth-Gate (P6) - kauft Nummern
+sitzung|POST|/api/billing/cost-truing/sweep|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly)
+sitzung|GET|/api/billing/cost-drift|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly)
+sitzung|GET|/api/billing/platform-costs|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly)
+sitzung|POST|/api/onboard|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly) - kauft Nummern
+sitzung|POST|/api/onboard/retry|401|gate|Basic-Auth-Gate (P6: webAuth+adminOnly) - kauft Nummern
 sitzung|GET|/api/portal/state|401|webauth|Sitzungs-Cookie fehlt
 sitzung|GET|/api/self-service/state|401|webauth|Sitzungs-Cookie fehlt
 sitzung|POST|/api/self-service/settings|401|webauth|Sitzungs-Cookie fehlt

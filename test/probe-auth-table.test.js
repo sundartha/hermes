@@ -258,3 +258,50 @@ test("AUTH-P5-7: die sieben in P5 abgesicherten Routen stehen nicht mehr in der 
     assert.equal(zeile.antwortet, ANTWORTET.GATE, `${schluessel}: ANTWORTET muss 'gate' bleiben`);
   }
 });
+
+// Die sechs in AUTH-P6 mit webAuthMw+adminMw abgesicherten Betreiber-Routen als EINE
+// benannte Konstante (keine dritte Wahrheit - die Behauptung "diese sechs sind jetzt
+// AUTH" gibt es sonst nirgends).
+const IN_P6_ABGESICHERT = [
+  { method: "POST", path: "/api/billing/flush-meters" },
+  { method: "POST", path: "/api/billing/cost-truing/sweep" },
+  { method: "GET", path: "/api/billing/cost-drift" },
+  { method: "GET", path: "/api/billing/platform-costs" },
+  { method: "POST", path: "/api/onboard" },
+  { method: "POST", path: "/api/onboard/retry" },
+];
+
+// AUTH-P6-9: ohne diesen Test ist das Entfernen aus GATE_ONLY_ROUTES NICHT maschinell
+// erzwungen (Muster AUTH-P5-7). H10: die Probe-Tabelle bleibt fuer diese sechs Zeilen
+// UNVERAENDERT (ART sitzung, STATUS 401, ANTWORTET gate) - der Mount bleibt HINTER dem
+// Basic-Auth-Gate (Plan Abschnitt 3), das Gate antwortet einer Anfrage ohne Sitzung und
+// ohne Credentials weiterhin VOR webAuthMw/adminMw; der 401 OHNE Basic-Challenge wird
+// erst mit P7 sichtbar (dort gepinnt). Zusaetzlich wird GENAU der Zwischenstand
+// gemessen, den P7 vorfindet: nur noch das Legacy-Checkout-Paar in GATE_ONLY_ROUTES.
+test("AUTH-P6-9: die sechs in P6 abgesicherten Betreiber-Routen stehen nicht mehr in der Politik, die Probe-Zeile bleibt unveraendert (H10)", () => {
+  for (const { method, path } of IN_P6_ABGESICHERT) {
+    const schluessel = routeKey(method, path);
+    assert.equal(
+      GATE_ONLY_KEYS.has(schluessel),
+      false,
+      `${schluessel}: steht noch in GATE_ONLY_ROUTES - in AUTH-P6 mit webAuthMw+adminMw abgesichert, aber die Politik nicht nachgezogen`,
+    );
+    const zeile = TABELLEN_SCHLUESSEL.get(schluessel);
+    assert.ok(zeile, `${schluessel}: fehlt in der Probe-Tabelle`);
+    assert.equal(zeile.art, ART.SITZUNG, `${schluessel}: ART muss 'sitzung' bleiben`);
+    assert.equal(
+      zeile.status,
+      "401",
+      `${schluessel}: erwarteter Status bleibt 401 - das Gate antwortet VOR webAuthMw/adminMw (H10, kein Defekt)`,
+    );
+    assert.equal(zeile.antwortet, ANTWORTET.GATE, `${schluessel}: ANTWORTET muss 'gate' bleiben`);
+  }
+});
+
+test("AUTH-P6-9: GATE_ONLY_ROUTES enthaelt nach dieser Phase nur noch das Legacy-Checkout-Paar", () => {
+  assert.deepEqual(
+    GATE_ONLY_ROUTES.map((r) => routeKey(r.method, r.path)),
+    ["POST /api/billing/setup-checkout", "GET /api/billing/checkout-return"],
+    "Der Zwischenstand fuer P7 muss GENAU aus dem Legacy-Checkout-Paar bestehen (P9 leert es).",
+  );
+});

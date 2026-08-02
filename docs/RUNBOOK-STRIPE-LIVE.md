@@ -112,7 +112,7 @@ Im Render-Log KEINE `[Konfiguration]`/Boot-Refusal-Zeilen zu Payment.
 3. Stripe-Dashboard -> Webhook-Endpoint -> Ereignisse: `customer.subscription.created` mit **HTTP 2xx** zugestellt (nicht "Fehlgeschlagen"). Ein 4xx heisst fast immer: Test-`whsec` statt Live-`whsec` in Render.
 4. Nummern-Onboarding: Hold ueber `NUMBER_SETUP_FEE_CENTS` erscheint als PaymentIntent (`requires_capture`), nach Nummernkauf `succeeded` mit `livemode: true`.
 5. Nummer existiert real beim Provider (Twilio/Telnyx-Konsole) — echter Kauf, echte Kosten.
-6. `POST /api/billing/flush-meters` (Basic-Auth) -> `{ sent: >0, failed: 0 }`; Meter-Events im Stripe-Dashboard sichtbar.
+6. `POST /api/billing/flush-meters` (Admin-Session im Browser; Basic-Auth reicht seit AUTH-P6 nicht mehr) -> `{ sent: >0, failed: 0 }`; Meter-Events im Stripe-Dashboard sichtbar.
 7. Aufraeumen: Test-Abo im Stripe-Dashboard kuendigen, Zahlung(en) refunden, ggf. Nummer wieder freigeben.
 
 ## 8. Rollback

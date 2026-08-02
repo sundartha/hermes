@@ -151,27 +151,21 @@ test("AUTH-P4-6: DELETE /api/profiles/:tenantId ist entfernt - vorhandenes Profi
   }
 });
 
-test("AUTH-P4-7: POST /api/onboard funktioniert nach dem Umzug von validIdentity unveraendert", async () => {
-  // Dass der Server ueberhaupt spawnt und /healthz liefert (startServer wartet auf die
-  // Boot-Zeile), IST der Boot-Beweis: ein fehlender Export in _validation.js haette den
-  // Import von api-onboard.js beim Laden von app.js zerrissen (SyntaxError zur Ladezeit,
-  // node --check haette das NICHT gefangen). NICHT als redundant zu
-  // onboarding-route.test.js wegkuerzen - dieser Test ist der einzige, der den Umzug
-  // selbst nachweist (IDENTITY_MAX_LEN im interpolierten Fehlertext).
+// AUTH-P6: /api/onboard ist seither eine Betreiber-Route (webAuthMw+adminMw, nur MIT
+// operatorAuth gemountet) - ein Spawn-Server (json/kein SESSION_SECRET) mountet sie
+// darum nicht mehr, der frueher hier gefuehrte 400-Body-Beweis waere ein 404. Der
+// eigentliche Boot-Beweis (spawnt der Prozess ueberhaupt, ohne SyntaxError beim Laden
+// von api-onboard.js/_validation.js?) bleibt als Spawn-Test - ein fehlender Export in
+// _validation.js zerreisst den Import von app.js zur Ladezeit, node --check faengt das
+// NICHT. Die beiden 400-Body-Assertionen (tenantId/idpSubject, IDENTITY_MAX_LEN=254 im
+// interpolierten Text) sind nach test/onboarding-identity.test.js gewandert
+// (In-Process-Mount, dieselbe validIdentity-Kette bleibt dort erreichbar) - NICHT
+// geloescht, nur die Naht gewechselt.
+test("AUTH-P4-7: der Server bootet nach dem Umzug von validIdentity (kein SyntaxError beim Laden von api-onboard.js)", async () => {
   const srv = await startServer();
   try {
-    const badTenant = await postJson(`${srv.localUrl}/api/onboard`, { tenantId: "a b" });
-    assert.equal(badTenant.status, 400);
-    const tenantErr = (await badTenant.json()).error;
-    assert.match(tenantErr, /tenantId/);
-    assert.match(tenantErr, /254/, "IDENTITY_MAX_LEN muss mit umgezogen und interpoliert sein");
-
-    const badSub = await postJson(`${srv.localUrl}/api/onboard`, {
-      idpSubject: "a b",
-      tenantId: "t_ok",
-    });
-    assert.equal(badSub.status, 400);
-    assert.match((await badSub.json()).error, /idpSubject/);
+    const health = await fetch(`${srv.localUrl}/healthz`);
+    assert.equal(health.status, 200);
   } finally {
     await srv.stop();
   }
