@@ -365,9 +365,25 @@ export async function runScenarioRepeat({
   } finally {
     // AL-D3: die Pumpe steht ZUERST (ihr laufender Fetch haengt sonst an einem bereits
     // gestoppten Server), der Such-Fake NACH srv.stop() (Muster Treiber-Transport).
-    if (consultPump) await consultPump.stop();
+    //
+    // Review-Fix Runde 2: consultPump.stop() wirft absichtlich erneut, wenn die Pumpe
+    // im Lauf auf einen fatalError lief (z.B. der dokumentierte 401-Fall,
+    // consult-pump.mjs:74). Ohne eigenes try/catch riss das die restliche Kette ab -
+    // srv.stop()/searchFake.close()/transport.close() liefen nie, der gespawnte
+    // Server-Kindprozess und der lokale Exa-Fake blieben offen (Lehre "Verwaiste
+    // Testserver"). Der Fehler wird gesammelt und erst NACH allen Cleanups erneut
+    // geworfen.
+    let consultPumpError = null;
+    if (consultPump) {
+      try {
+        await consultPump.stop();
+      } catch (err) {
+        consultPumpError = err;
+      }
+    }
     if (srv) await srv.stop();
     if (searchFake) await searchFake.close();
     await transport.close();
+    if (consultPumpError) throw consultPumpError;
   }
 }
