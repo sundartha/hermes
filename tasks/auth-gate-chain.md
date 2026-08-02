@@ -236,3 +236,60 @@ Spec: `tasks/auth-gate-p6-spec.md`.
 Owner-Account als Admin — `account.role='admin'` in der Produktions-DB oder
 `ADMIN_EMAILS` in der Render-Env? Ist beides unklar, sperrt der Deploy den Owner aus dem
 Onboarding aus.
+
+---
+
+## P6 — Betreiber-Routen auf Admin-Session (fertig, gemergt `0d16ef4`)
+
+- **Ergebnis:** Gate **PASS** ohne Fix-Runde, `npm test` gruen (3782). Die sechs
+  Betreiber-Routen tragen `webAuthMw` + `adminMw`. Neu: `src/wiring/operator-routes.js`
+  — ein `guarded()`-Wrapper, der die Route **gar nicht registriert**, wenn die
+  Middlewares fehlen (`operatorAuth` wird nur im `guardedBoot`-Callback gesetzt).
+- **Vier Mutationsproben**, jede mit zwei unabhaengigen Detektoren. Die wichtigste:
+  `if (!operatorAuth) return;` durch ungeschuetztes Mounten ersetzt -> die Mount-Tests
+  **und** der P1-Inventar-Test wurden rot (die sechs Routen als `UNPROTECTED`).
+- **Mount-Position bewusst unveraendert** (hinter dem Gate): das haelt die Staffelung
+  Gate + Sitzung bis P7 und trennt "welche Sicherung greift" (P6) von "welche Schicht
+  antwortet" (P7) in zwei Commits. Ein Live-Befund bleibt damit zuordenbar. Folge: die
+  Probe-Tabelle aendert sich **strukturell nicht** (`sitzung | 401 | gate`), nur die
+  Begruendungsspalte wurde praezisiert.
+- **`GATE_ONLY_ROUTES` enthaelt jetzt genau das Legacy-Checkout-Paar** — maschinell
+  gemessen, nicht behauptet. Das ist der Zwischenstand, den P7 vorfindet.
+- **Preis:** ~12 Bestandstest-Dateien mussten von Spawn- auf In-Process-Mount
+  umgestellt werden, weil die Routen im json-Backend-Spawn nicht mehr existieren.
+  Jede Umstellung ist im Bericht einzeln begruendet.
+
+### BLOCKER VOR DEM DEPLOY VON P6 — am 2026-08-02 gemessen, nicht vermutet
+
+`adminOnlyMiddleware` laesst durch, wenn `account.role === 'admin'` **oder** die
+E-Mail in `ADMIN_EMAILS` steht. Ich habe die Produktions-DB gelesen:
+
+```
+select tenant_id, role from account;
+t_user_01KX600834GCJFV9GTZQKWZMTH | member
+t_user_01KXH2B75WJ75W3JYYXDPPSK3R | member
+```
+
+**Kein einziger Account traegt `role='admin'`.** Ob `ADMIN_EMAILS` im Render-Dashboard
+des Dienstes `vodafone-agent` gesetzt ist, laesst sich von hier **nicht** lesen (die
+Render-API bietet kein Lese-Werkzeug fuer Env-Variablen, und `/healthz` liefert nur
+einen Einweg-Hash). In den Request-Logs der letzten 30 Tage gibt es **keinen einzigen**
+Aufruf von `/api/admin/*` — es gibt also auch keinen empirischen Beleg, dass
+Admin-Zugang heute funktioniert.
+
+**Vor dem Deploy zu tun, sonst sperrt er den Owner aus dem Onboarding aus:** entweder
+`ADMIN_EMAILS` im Render-Dashboard auf die eigene Login-Adresse setzen, oder
+`scripts/grant-admin.js` gegen die Produktions-DB fahren. Zweite Falle: `webAuthMw` ist
+active-only — ein `suspended` Account bekommt 403 **vor** `adminOnly`, egal welche
+Rolle er traegt. Nach einem direkten DB-`UPDATE` gehoert ein Neustart dazu (der
+pg-Store haelt Zustand im Speicher).
+
+**Betriebsfolge:** `scripts/sweep-jetzt.sh` (curl mit Basic-Auth) wird mit diesem Deploy
+wirkungslos. Das ist konsistent — P7 streicht das Skript ohnehin ersatzlos.
+
+---
+
+## Naechste Phase
+
+**P7 — das Gate entfernen.** Vorbedingung erfuellt: P3-P6 gemergt, P1+P2 gruen gegen den
+aktuellen Prod-Commit (`44a7d09`, gemessen 2026-08-02). Spec: `tasks/auth-gate-p7-spec.md`.
