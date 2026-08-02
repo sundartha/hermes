@@ -15,6 +15,9 @@ import mandatAusserhalb from "./mandat-ausserhalb.mjs";
 import zweiterAnrufGedaechtnis from "./zweiter-anruf-gedaechtnis.mjs";
 import rueckfrageNotausgang from "./rueckfrage-notausgang.mjs";
 import anrufbeantworter from "./anrufbeantworter.mjs";
+import d3ConsultVerlangt from "./d3-consult-verlangt.mjs";
+import d3NachschlagAuftrag from "./d3-nachschlag-auftrag.mjs";
+import d3FremdeRecherche from "./d3-fremde-recherche.mjs";
 
 export const SCENARIOS = Object.freeze({
   [friseurVoll.id]: friseurVoll,
@@ -32,6 +35,9 @@ export const SCENARIOS = Object.freeze({
   [zweiterAnrufGedaechtnis.id]: zweiterAnrufGedaechtnis,
   [rueckfrageNotausgang.id]: rueckfrageNotausgang,
   [anrufbeantworter.id]: anrufbeantworter,
+  [d3ConsultVerlangt.id]: d3ConsultVerlangt,
+  [d3NachschlagAuftrag.id]: d3NachschlagAuftrag,
+  [d3FremdeRecherche.id]: d3FremdeRecherche,
 });
 
 export const SCENARIO_IDS = Object.freeze(Object.keys(SCENARIOS));

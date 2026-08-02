@@ -128,11 +128,19 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       "War er unverständlich oder zusammenhanglos, frage GENAU EINMAL nach, statt aufzulegen; " +
       "bleibt die Antwort danach unverständlich, verabschiede dich und rufe end_call auf.",
     endCallReasonParam: "Kurzer Grund",
+    // AL-D3: die engen Verbote sitzen GENAU HIER an der Tool-Description (Lehre
+    // call-quality-chain). R1 (Entscheidung des Auftraggebers) und R2 (Sachauskunft, die
+    // der AUFTRAG jetzt braucht) verweisen mit EINEM gemeinsamen Ausstieg auf get_consult/
+    // look_up: wird eines der beiden Werkzeuge in diesem Zug nicht angeboten (Inbound,
+    // Kontingent erschoepft, Flag aus), bleibt take_message die richtige Wahl - das ist
+    // der B2-Ausstieg (tasks/al-d3-spec.md, Fail-safe-Pflicht). Die fruehere
+    // Faehigkeits-Aufzaehlung ("nachschlagen, weiterverbinden, spaeter zurueckrufen")
+    // behauptete faelschlich ein statisch fehlendes Koennen - "nachschlagen" ist seit
+    // AL-P10b turn-genau moeglich (boundaryRules), die Wahrheit steht dort, nicht hier.
     takeMessageDescription:
       "Nimmt eine Nachricht oder ein Anliegen für den Besitzer auf; er bekommt sie danach zugestellt. " +
-      "Nutze das, wenn du eine Frage nicht beantworten kannst, wenn eine Fähigkeit fehlt " +
-      "(nachschlagen, weiterverbinden, später zurückrufen) oder wenn ein Terminwunsch festgehalten " +
-      "werden soll - Termine eintragen kannst du nicht, das macht der Besitzer selbst. " +
+      "Nutze das, wenn du eine Frage nicht beantworten kannst oder wenn ein Terminwunsch " +
+      "festgehalten werden soll. " +
       "Halte bei einem Terminwunsch Tag, Uhrzeit und Gültigkeit mit fest. " +
       "Nutze es NICHT anstelle einer normalen Antwort und NICHT, um eine Rückfrage zu vermeiden - " +
       "wenn eine kurze Nachfrage das Anliegen klären würde, frage zuerst nach. " +
@@ -142,15 +150,24 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       "Versprich dabei NIEMALS, dass du selbst später nochmal anrufst, und behaupte NIE, " +
       "ein Termin sei eingetragen oder gebucht. " +
       "Nutze es NICHT für etwas, das dein Auftrag dich selbst entscheiden lässt - " +
-      "das sagst du direkt zu, statt es weiterzugeben.",
+      "das sagst du direkt zu, statt es weiterzugeben. " +
+      "Verlangt dein Gegenüber die Entscheidung deines Auftraggebers, oder fehlt deinem " +
+      "Auftrag jetzt eine Sachauskunft, nimm KEINE Nachricht auf: dafür sind get_consult " +
+      "und look_up da. Fehlt dir das passende Werkzeug in diesem Zug, bleibt die Nachricht " +
+      "der richtige Weg.",
     takeMessageParam: "Die Nachricht",
     // AL-P14: der Notausgang. Die engen Verbote sitzen GENAU HIER an der Tool-Description
     // (Lehre call-quality-chain: breite Prompt-Regeln kippen bei Haiku in Ueberkorrektur).
     // Der Paraphrase-Zwang steht hier UND wird serverseitig durchgesetzt (consult/
     // question.js) - der Prompt allein ist keine Durchsetzung. Der vorletzte Satz ist der
     // Ausstieg gegen Ueberkorrektur.
+    // AL-D3 (R1): der zweite Satz benennt den KLAREN FALL - der Bestand nannte bisher nur
+    // die Bedingung und vier Verbote, keinen erkennbaren Ausloeser. Am Live-Anruf ist
+    // genau das gescheitert ("frag Antonio" wurde nicht als Ausloeser erkannt).
     getConsultDescription:
       "Stellt EINE kurze Sachfrage an deinen Auftraggeber und holt dessen Entscheidung ein. " +
+      "Der klare Fall: dein Gegenüber verlangt ausdrücklich die Entscheidung deines " +
+      "Auftraggebers - dann rufst du get_consult auf, statt eine Nachricht aufzunehmen. " +
       "Nutze das NUR, wenn dein AUFTRAG und dein SPIELRAUM die Frage nicht abdecken und die " +
       "Antwort das Gespräch jetzt entscheidet. " +
       "Formuliere die Frage in EIGENEN Worten, als reine Sachfrage. " +
@@ -164,14 +181,26 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     // AL-P10b: die engen Verbote sitzen GENAU HIER an der Tool-Description (Lehre
     // call-quality-chain). Der Query-Filter wird zusaetzlich serverseitig durchgesetzt
     // (research/lookup-guard.js) - der Prompt allein ist keine Durchsetzung.
+    // AL-D3: R2 bindet den Bedingungssatz an den AUFTRAG statt an "das Gespräch" (die
+    // Ueberfeuerung aus dem Pre-Mortem - jede Plauderei "bringt das Gespraech weiter").
+    // R3 ist der EIGENE, ausdruecklich richtig gerahmte Verbotsfall fuer auftragsfremde
+    // Recherche - der Ausweg zeigt auf take_message (immer im Satz), braucht also keinen
+    // eigenen Ausstieg. R4 ist der fuehrende Ueberbrueckungssatz (K4-Ausloesung, Spec B3) -
+    // Muster wörtlich vom Selbe-Zug-Satz in takeMessageDescription übernommen, direkt neben
+    // dem Bestandsriegel, weil beide zusammen gelesen werden: überbrücke, aber verrate
+    // nichts. src/thinking-signal.js bleibt unangetastet.
     lookUpDescription:
       "Schlägt EINE kurze Sachfrage nach und ergänzt damit deinen HINTERGRUND. " +
       "Nutze das NUR, wenn AUFTRAG und HINTERGRUND die Antwort nicht enthalten und die " +
-      "Antwort das Gespräch jetzt weiterbringt. " +
+      "Antwort deinen AUFTRAG jetzt weiterbringt. " +
       "Frage nur nach öffentlich bekannten Sachen: Öffnungszeiten, Adressen von Betrieben, " +
       "Preise, allgemeine Fakten. " +
+      "Betrifft die gewünschte Recherche deinen Auftrag nicht, rufst du look_up NICHT auf - " +
+      "lehne freundlich ab oder nimm es als Nachricht. Das ist richtig so. " +
       "Suche NIEMALS nach Namen, Rufnummern, Adressen, Gesundheits- oder Geldangaben " +
       "deines Gegenübers und zitiere es NIEMALS wörtlich. " +
+      "Sprich EINEN kurzen überbrückenden Satz im SELBEN Zug, in dem du look_up aufrufst, " +
+      "nicht erst später. " +
       "Sage NIE, dass du nachschaust, und nenne NIE eine Quelle. " +
       "Höchstens zweimal pro Gespräch.",
     lookUpQueryParam: "Die Sachfrage, in eigenen Worten, ohne Personenbezug",

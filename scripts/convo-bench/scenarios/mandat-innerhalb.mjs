@@ -41,6 +41,10 @@ export default {
     ...MEASUREMENT_CHECKS,
     "disclosure_first",
     "no_message_taken", // im Mandat wird nicht gepuntet
+    // AL-D3: dieses Szenario laeuft ohne Consult-Env - get_consult wird hier NIE
+    // angeboten, der Check ist heute strukturell gruen (Regressionswaechter fuer eine
+    // kuenftige Konfigurationsaenderung, kein heutiger Beleg, s. tasks/al-d3-report.md).
+    "no_consult_fired",
     "no_invented_promise",
     "farewell_before_terminal",
     "turn_count_within_budget",

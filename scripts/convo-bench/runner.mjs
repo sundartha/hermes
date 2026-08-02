@@ -25,6 +25,8 @@ import { nextCalleeTurn } from "./persona.mjs";
 import { judgeConversation } from "./judge.mjs";
 import { runChecks } from "./checks.mjs";
 import { parseMetricsLog } from "./metrics-parse.mjs";
+import { startExaFake } from "./exa-fake.mjs";
+import { startConsultPump } from "./consult-pump.mjs";
 
 // Produktions-Default (Spec §0: "Kein Wechsel von claude-haiku-4-5 ... im Produktions-
 // Pfad") - die Bench setzt CLAUDE_MODEL fuer den gespawnten Server explizit auf
@@ -58,7 +60,15 @@ function gitRev() {
   }
 }
 
-function buildEnv({ apiKey, scenario, driverEnv }) {
+// AL-D3: szenario-eigene Env als generischer Durchreicher. Bis hierher praegte NUR
+// assistantContextEnabled die Env - Faehigkeiten, die an einem Flag haengen (look_up,
+// get_consult), waren im Bench damit strukturell abwesend, unabhaengig vom Szenario.
+// REICHWEITE: dieses Objekt erreicht AUSSCHLIESSLICH den gespawnten Kindprozess. Weder
+// BASE_ENV (test/helpers.js) noch .env noch render.yaml werden angefasst - test/al-d3-*
+// pinnt das.
+// PRAEZEDENZ, bewusst: scenario.env < driverEnv (der Treiber besitzt seinen Transport) <
+// searchEnv (der Runner besitzt die Adresse des selbst gestarteten Fakes).
+function buildEnv({ apiKey, scenario, driverEnv, searchEnv }) {
   return {
     ANTHROPIC_API_KEY: apiKey,
     CLAUDE_MODEL: PRODUCTION_CLAUDE_MODEL,
@@ -66,9 +76,15 @@ function buildEnv({ apiKey, scenario, driverEnv }) {
     ASSISTANT_CONTEXT_ENABLED: scenario.assistantContextEnabled ? "true" : "false",
     MAX_BUDGET_EUR: BENCH_MAX_BUDGET_EUR,
     VOICE_ENGINE: "budget",
+    ...(scenario.env ?? {}),
     ...driverEnv,
+    ...searchEnv,
   };
 }
+
+// AL-D3: default-Treffer fuer ein Szenario mit fakeSearch:true ohne eigene
+// searchFacts-Angabe - haelt startExaFake({facts}) auch ohne Szenario-Deklaration lauffaehig.
+const DEFAULT_SEARCH_FACTS = Object.freeze([{ title: "Bench-Treffer", highlight: "Bench-Auszug" }]);
 
 // F1: Objekt statt drittem losem Argument - extra (treiber-eigene Seed-Felder, z.B.
 // callControlId/assistantId des Shim-Treibers) geht ans Ende von seedCall durch.
@@ -205,10 +221,15 @@ export async function runScenarioRepeat({
 
   // Der Treiber-Transport lebt VOR startServer (ein evtl. lokaler Provider-Fake muss
   // laufen, bevor der Server-Env darauf zeigt) und wird im aeusseren finally NACH
-  // srv.stop() geschlossen.
+  // srv.stop() geschlossen. AL-D3: derselbe Grund fuer den Such-Fake - EXA_API_BASE
+  // muss stehen, bevor der Server startet.
   const transport = await DRIVERS[driverId].create({ scenario, provider });
+  const searchFake = scenario.fakeSearch
+    ? await startExaFake({ facts: scenario.searchFacts ?? DEFAULT_SEARCH_FACTS })
+    : null;
+  const searchEnv = searchFake ? { EXA_API_BASE: searchFake.url } : {};
   const call = isInbound ? null : buildCallSeed({ scenario, provider, extra: transport.seedOverrides });
-  const env = buildEnv({ apiKey, scenario, driverEnv: transport.env });
+  const env = buildEnv({ apiKey, scenario, driverEnv: transport.env, searchEnv });
   const seed = buildSeed({ scenario, call, isInbound });
 
   const transcript = [];
@@ -218,11 +239,22 @@ export async function runScenarioRepeat({
   let personaError = null;
   let callId = call?.id ?? null;
   let srv;
+  let consultPump = null;
 
   try {
     srv = await startServer({ env, seed, ownerNumber });
     const opened = await transport.open({ srv, scenario, call, activeOwnerNumber });
     callId = opened.callId;
+    // AL-D3: die Pumpe startet, sobald die callId feststeht - get_consult braucht einen
+    // FRISCHEN Client-Poll (consultClientIsPolling), bevor es ueberhaupt im Werkzeugsatz
+    // erscheint. D-4 (Poll-Frische selbst) bleibt unangefasst.
+    if (scenario.pumpConsult) {
+      consultPump = startConsultPump({
+        baseUrl: srv.localUrl,
+        callId,
+        answers: scenario.consultAnswer ?? [],
+      });
+    }
     let turn = opened.turn;
     pushSample(agentSamples, transcript, turn);
 
@@ -331,7 +363,27 @@ export async function runScenarioRepeat({
       shim_gates: transport.diagnostics().shim_gate_reasons ?? [],
     };
   } finally {
+    // AL-D3: die Pumpe steht ZUERST (ihr laufender Fetch haengt sonst an einem bereits
+    // gestoppten Server), der Such-Fake NACH srv.stop() (Muster Treiber-Transport).
+    //
+    // Review-Fix Runde 2: consultPump.stop() wirft absichtlich erneut, wenn die Pumpe
+    // im Lauf auf einen fatalError lief (z.B. der dokumentierte 401-Fall,
+    // consult-pump.mjs:74). Ohne eigenes try/catch riss das die restliche Kette ab -
+    // srv.stop()/searchFake.close()/transport.close() liefen nie, der gespawnte
+    // Server-Kindprozess und der lokale Exa-Fake blieben offen (Lehre "Verwaiste
+    // Testserver"). Der Fehler wird gesammelt und erst NACH allen Cleanups erneut
+    // geworfen.
+    let consultPumpError = null;
+    if (consultPump) {
+      try {
+        await consultPump.stop();
+      } catch (err) {
+        consultPumpError = err;
+      }
+    }
     if (srv) await srv.stop();
+    if (searchFake) await searchFake.close();
     await transport.close();
+    if (consultPumpError) throw consultPumpError;
   }
 }

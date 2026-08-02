@@ -3,16 +3,32 @@
 // Registry-Integritaet ueber ALLE registrierten Szenarien (inkl. der drei neuen). Rein,
 // netz- und spawn-frei (Muster test/cq-p4-bench-hardening.test.js): checks.mjs zieht nur
 // src/i18n/locales.js -> src/store/defaults.js (beide rein).
-import { test } from "node:test";
+//
+// AL-D3: erweitert um die vier Werkzeug-Checks (consult_fired/no_consult_fired/
+// lookup_fired/no_lookup_fired) + lookup_turn_not_silent (AL-D3-11..13), die
+// Werkzeugnamen-Kopplung an die echten Produkt-Exporte (AL-D3-14) und die
+// Apparat-Integritaet ueber ALLE Szenarien inkl. der drei neuen (AL-D3-15). Die
+// metricsTurns-Fixture traegt seither Objekte ({roundtrips, tools}) statt nackter
+// Zahlen - EINE Form fuer alle Turn-Metrik-Tests dieser Datei (G5), keine zweite,
+// abweichende Fixture-Form.
+import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { runChecks, MEASUREMENT_CHECKS } from "../scripts/convo-bench/checks.mjs";
+import {
+  runChecks,
+  MEASUREMENT_CHECKS,
+  GET_CONSULT_TOOL_NAME,
+  LOOK_UP_TOOL_NAME,
+} from "../scripts/convo-bench/checks.mjs";
 import { SCENARIOS, SCENARIO_IDS } from "../scripts/convo-bench/scenarios/index.mjs";
+import { tempDataDir, seedState } from "./helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OWNER_NAME = "Jonas Beispiel";
 
 // Vollstaendiges runResult-Geruest (Muster cq-p4-bench-hardening.test.js runResult):
 // agentSamples[0] ist immer die LLM-freie Eroeffnung, agentSays fuellt die FREI
-// GENERIERTEN Folge-Turns ab agentSamples[1].
+// GENERIERTEN Folge-Turns ab agentSamples[1]. metricsTurns: Array<{roundtrips?, tools?}>
+// (AL-D3) - EIN Eintrag je Turn-Metrikzeile.
 function runResult({
   openingText = `Ich rufe im Auftrag von ${OWNER_NAME} an. Testanliegen.`,
   agentSays = [],
@@ -32,7 +48,7 @@ function runResult({
     agentSamples,
     endedVia,
     turnCount: agentSamples.length,
-    metricsParsed: metricsTurns.map((roundtrips) => ({ kind: "turn", payload: { roundtrips } })),
+    metricsParsed: metricsTurns.map((payload) => ({ kind: "turn", payload })),
     storeSnapshot: { actionItems, calendarNewEvents: [] },
   };
 }
@@ -159,7 +175,7 @@ test("AL-P8-7 one_question_per_turn zaehlt Turns mit mehr als einer Frage und fa
 });
 
 test("AL-P8-8 roundtrips_per_turn mittelt die metrics-turn-Zeilen und ist n/a ohne turn-Metriken", () => {
-  const rr = runResult({ metricsTurns: [1, 2, 3] });
+  const rr = runResult({ metricsTurns: [{ roundtrips: 1 }, { roundtrips: 2 }, { roundtrips: 3 }] });
   const result = only("roundtrips_per_turn", rr, scenario());
   assert.equal(result.pass, true);
   assert.equal(result.value, 2);
@@ -218,5 +234,94 @@ test("AL-P8-12 Bestands-Checks tragen weiterhin kein value-Feld (additiver Vertr
   const rr = runResult({ agentSays: ["Testantwort."], actionItems: [{ id: "a1" }] });
   for (const r of runChecks(rr, scenario({ checks: BESTANDS_CHECK_IDS, mandate: undefined }))) {
     assert.equal(r.value, undefined, `Bestands-Check "${r.id}" traegt ueberraschend ein value-Feld`);
+  }
+});
+
+// ---------- AL-D3: die vier Werkzeug-Checks + der Ruhe-Check ----------
+
+test("AL-D3-11 consult_fired/no_consult_fired lesen tools aus der Turn-Metrik", () => {
+  const withConsult = runResult({
+    agentSays: ["Ok."],
+    metricsTurns: [{ roundtrips: 2, tools: [GET_CONSULT_TOOL_NAME] }],
+  });
+  assert.equal(only("consult_fired", withConsult, scenario()).pass, true);
+  assert.equal(only("no_consult_fired", withConsult, scenario()).pass, false);
+
+  const withoutConsult = runResult({
+    agentSays: ["Ok."],
+    metricsTurns: [{ roundtrips: 1, tools: ["take_message"] }],
+  });
+  assert.equal(only("consult_fired", withoutConsult, scenario()).pass, false);
+  assert.equal(only("no_consult_fired", withoutConsult, scenario()).pass, true);
+});
+
+test("AL-D3-12 lookup_fired/no_lookup_fired lesen tools aus der Turn-Metrik", () => {
+  const withLookup = runResult({
+    agentSays: ["Einen Moment."],
+    metricsTurns: [{ roundtrips: 2, tools: [LOOK_UP_TOOL_NAME] }],
+  });
+  assert.equal(only("lookup_fired", withLookup, scenario()).pass, true);
+  assert.equal(only("no_lookup_fired", withLookup, scenario()).pass, false);
+
+  const withoutLookup = runResult({
+    agentSays: ["Alles klar."],
+    metricsTurns: [{ roundtrips: 1, tools: ["take_message"] }],
+  });
+  assert.equal(only("lookup_fired", withoutLookup, scenario()).pass, false);
+  assert.equal(only("no_lookup_fired", withoutLookup, scenario()).pass, true);
+});
+
+test("AL-D3-13 lookup_turn_not_silent: gruen mit Text, rot bei leerem sayTexts, n/a-gruen ohne look_up, rot bei abweichender Turn-Zaehlung", () => {
+  const spoken = runResult({
+    agentSays: ["Einen Moment, ich sehe das nach."],
+    metricsTurns: [{ roundtrips: 2, tools: [LOOK_UP_TOOL_NAME] }],
+  });
+  assert.equal(only("lookup_turn_not_silent", spoken, scenario()).pass, true);
+
+  const silent = runResult({
+    agentSays: [""],
+    metricsTurns: [{ roundtrips: 2, tools: [LOOK_UP_TOOL_NAME] }],
+  });
+  const silentResult = only("lookup_turn_not_silent", silent, scenario());
+  assert.equal(silentResult.pass, false, silentResult.detail);
+
+  const noLookup = runResult({
+    agentSays: ["Alles klar."],
+    metricsTurns: [{ roundtrips: 1, tools: ["take_message"] }],
+  });
+  assert.equal(only("lookup_turn_not_silent", noLookup, scenario()).pass, true);
+
+  const mismatched = runResult({
+    agentSays: ["Erste.", "Zweite."],
+    metricsTurns: [{ roundtrips: 1, tools: [] }],
+  });
+  const mismatchedResult = only("lookup_turn_not_silent", mismatched, scenario());
+  assert.equal(mismatchedResult.pass, false);
+  assert.match(mismatchedResult.detail, /Turn-Zaehlung weicht ab/);
+});
+
+let productGetConsultToolName, productLookUpToolName;
+before(async () => {
+  // AL-D3-14: dynamischer Import NACH gesetztem DATA_DIR (Muster al-p10b-lookup.test.js) -
+  // src/consult/in-call.js und src/research/in-call.js ziehen config.js/store.js, die
+  // eine gueltige DATA_DIR erwarten. Reiner Konstanten-Vergleich, kein Store-Zugriff.
+  process.env.DATA_DIR = tempDataDir(
+    seedState({ calls: [], tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
+  );
+  ({ GET_CONSULT_TOOL_NAME: productGetConsultToolName } = await import("../src/consult/in-call.js"));
+  ({ LOOK_UP_TOOL_NAME: productLookUpToolName } = await import("../src/research/in-call.js"));
+});
+
+test("AL-D3-14 die lokalen Werkzeug-Konstanten in checks.mjs stimmen mit den Produkt-Exporten ueberein", () => {
+  assert.equal(GET_CONSULT_TOOL_NAME, productGetConsultToolName);
+  assert.equal(LOOK_UP_TOOL_NAME, productLookUpToolName);
+});
+
+test("AL-D3-15 Apparat-Integritaet: jede registrierte SCENARIOS-id ist konsistent (id, direction, checks-Array)", () => {
+  for (const id of SCENARIO_IDS) {
+    const sc = SCENARIOS[id];
+    assert.equal(sc.id, id, `${id}: SCENARIOS[id].id weicht ab`);
+    assert.ok(sc.direction, `${id}: direction fehlt`);
+    assert.ok(Array.isArray(sc.checks), `${id}: checks ist kein Array`);
   }
 });

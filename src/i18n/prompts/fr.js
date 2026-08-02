@@ -120,11 +120,12 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
       "S'il était incompréhensible ou incohérent, redemande EXACTEMENT UNE FOIS au lieu de raccrocher ; " +
       "si la réponse reste incompréhensible ensuite, dis au revoir et appelle end_call.",
     endCallReasonParam: "Motif bref",
+    // AL-D3: s. DE - dieselbe Struktur (R1/R2 mit einem gemeinsamen Ausstieg, die
+    // Faehigkeits-Falschaussage entfernt).
     takeMessageDescription:
       "Prend un message ou une demande pour le propriétaire ; il lui sera transmis ensuite. " +
-      "Utilise cet outil quand tu ne peux pas répondre à une question, quand une capacité manque " +
-      "(rechercher, transférer, rappeler plus tard), ou quand une demande de rendez-vous doit être " +
-      "consignée - tu ne peux pas enregistrer de rendez-vous, le propriétaire le fait lui-même. " +
+      "Utilise cet outil quand tu ne peux pas répondre à une question ou quand une demande " +
+      "de rendez-vous doit être consignée. " +
       "Pour une demande de rendez-vous, consigne le jour, l'heure et la validité. " +
       "Ne l'utilise PAS à la place d'une réponse normale, ni PAS pour éviter une question de clarification - " +
       "si une brève question permettrait de clarifier la demande, pose-la d'abord. " +
@@ -133,12 +134,19 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
       "Ne promets JAMAIS que tu rappelleras toi-même plus tard, et n'affirme JAMAIS " +
       "qu'un rendez-vous est enregistré ou réservé. " +
       "Ne l'utilise PAS pour quelque chose que ta mission te laisse décider toi-même - " +
-      "engage-toi directement sur ce point plutôt que de le transmettre.",
+      "engage-toi directement sur ce point plutôt que de le transmettre. " +
+      "Si ton interlocuteur exige la décision de ton donneur d'ordre, ou s'il manque " +
+      "maintenant une information factuelle à ta mission, n'en prends PAS un message : " +
+      "get_consult et look_up sont là pour cela. Si l'outil correspondant ne t'est pas " +
+      "proposé dans ce tour, le message reste la bonne voie.",
     takeMessageParam: "Le message",
     // AL-P14: s. DE - die engen Verbote sitzen an der Tool-Description, der
     // Paraphrase-Zwang wird zusaetzlich serverseitig durchgesetzt (kuratiert, R8).
+    // AL-D3 (R1): s. DE - der zweite Satz benennt den klaren Fall.
     getConsultDescription:
       "Pose UNE brève question factuelle à ton donneur d'ordre et recueille sa décision. " +
+      "Le cas clair : ton interlocuteur exige explicitement la décision de ton donneur " +
+      "d'ordre - tu appelles alors get_consult au lieu de prendre un message. " +
       "Ne l'utilise QUE si ta MISSION et ta MARGE ne couvrent pas la question et que la " +
       "réponse décide de la conversation maintenant. " +
       "Formule la question avec TES PROPRES mots, comme une simple question factuelle. " +
@@ -151,14 +159,20 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
     getConsultQuestionParam: "La question factuelle, avec tes propres mots, sans citation mot pour mot",
     // AL-P10b: s. DE - les interdictions serrées sont ici, le filtre de requête est en
     // plus appliqué côté serveur (kuratiert, R8).
+    // AL-D3: s. DE - R2 (Auftragsbindung), R3 (eigener, richtig gerahmter Verbotsfall),
+    // R4 (fuehrender Ueberbrueckungssatz, direkt neben dem Bestandsriegel).
     lookUpDescription:
       "Consulte UNE brève question factuelle et complète ainsi ton CONTEXTE. " +
       "Ne l'utilise QUE si ta MISSION et ton CONTEXTE ne contiennent pas la réponse et que " +
-      "la réponse fait avancer la conversation maintenant. " +
+      "la réponse fait avancer ta MISSION maintenant. " +
       "Ne demande que des choses publiquement connues : horaires d'ouverture, adresses " +
       "d'établissements, prix, faits généraux. " +
+      "Si la recherche demandée ne concerne pas ta mission, n'appelle PAS look_up - refuse " +
+      "aimablement ou prends-la comme un message. C'est correct. " +
       "Ne recherche JAMAIS de noms, numéros de téléphone, adresses, données de santé ou " +
       "d'argent de ton interlocuteur, et ne le cite JAMAIS mot pour mot. " +
+      "Prononce UNE brève phrase de transition dans le tour MÊME où tu appelles look_up, " +
+      "pas seulement plus tard. " +
       "Ne dis JAMAIS que tu consultes quelque chose, et ne cite JAMAIS de source. " +
       "Deux fois au maximum par conversation.",
     lookUpQueryParam: "La question factuelle, avec tes propres mots, sans donnée personnelle",

@@ -17,6 +17,13 @@ export function expectedDisclosure(ownerName, language) {
 
 const ISO_DATE_RE = /\b\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?\b/;
 const TOOL_LOOP_EXHAUSTION_ROUNDTRIPS = 4;
+// AL-D3: sprachinvariante Werkzeug-Namen, LOKAL statt importiert - src/consult/in-call.js
+// und src/research/in-call.js ziehen beide config/store, checks.mjs bleibt laut eigenem
+// Kopfkommentar rein und spawn-frei. EXPORTIERT, damit AL-D3-14
+// (test/al-p8-bench-checks.test.js) sie gegen die echten Produkt-Exporte vergleichen kann -
+// die Kopplung rottet damit nicht still.
+export const GET_CONSULT_TOOL_NAME = "get_consult";
+export const LOOK_UP_TOOL_NAME = "look_up";
 // Phrasen-Fragment, das NUR in der Offenlegung vorkommt (disclosure-Bundle, alle
 // Sprachen) - fuer den Inbound-Leak-Check reicht die deutsche Variante, da die Bench
 // ausschliesslich mit language="de" seedet (siehe runner.mjs buildCallSeed).
@@ -197,6 +204,47 @@ function checkNoToolLoopExhaustion(runResult) {
   };
 }
 
+// AL-D3: EINE Quelle fuer die je Turn GEFEUERTEN Werkzeuge (G5, Muster turnRoundtrips):
+// metrics.logTurn schreibt tools=firedTools, parseMetricsLog legt sie roh ab. Bis AL-D3
+// hat kein Check dieses Signal gelesen - offeredToolNames gegen toolNames war genau der
+// Befund D-3, und der Bench konnte ihn nicht sehen.
+function turnFiredTools(runResult) {
+  return runResult.metricsParsed
+    .filter((m) => m.kind === "turn" && Array.isArray(m.payload.tools))
+    .map((m) => m.payload.tools);
+}
+
+function toolFireCount(runResult, toolName) {
+  return turnFiredTools(runResult).filter((tools) => tools.includes(toolName)).length;
+}
+
+// AL-D3: EINE Implementierung fuer alle vier Ja/Nein-Werkzeug-Checks (G5, Muster
+// phraseDenylistResult/agentHangupDisciplineResult) - feuerte das benannte Werkzeug in
+// mindestens einem Turn dieses Laufs, ja oder nein? value ist die Trefferzahl.
+function firedToolResult({ id, runResult, toolName, expectFired }) {
+  const count = toolFireCount(runResult, toolName);
+  const fired = count > 0;
+  const pass = fired === expectFired;
+  const label = expectFired ? `kein Turn feuerte ${toolName}` : `${count} Turn(s) feuerten ${toolName}`;
+  return { id, pass, detail: pass ? "ok" : label, value: count };
+}
+
+function checkConsultFired(runResult) {
+  return firedToolResult({ id: "consult_fired", runResult, toolName: GET_CONSULT_TOOL_NAME, expectFired: true });
+}
+
+function checkNoConsultFired(runResult) {
+  return firedToolResult({ id: "no_consult_fired", runResult, toolName: GET_CONSULT_TOOL_NAME, expectFired: false });
+}
+
+function checkLookupFired(runResult) {
+  return firedToolResult({ id: "lookup_fired", runResult, toolName: LOOK_UP_TOOL_NAME, expectFired: true });
+}
+
+function checkNoLookupFired(runResult) {
+  return firedToolResult({ id: "no_lookup_fired", runResult, toolName: LOOK_UP_TOOL_NAME, expectFired: false });
+}
+
 function checkInboundNoDisclosureLeak(runResult) {
   const id = "inbound_no_disclosure_leak";
   if (runResult.call.direction !== "inbound") return { id, pass: true, detail: "n/a (outbound)" };
@@ -316,6 +364,34 @@ function freeAgentTurns(runResult) {
 // handoff_rate/one_question_per_turn/recap_present genau diese Turn-Granularitaet.
 function freeAgentTurnTexts(runResult) {
   return freeAgentTurns(runResult).map((sample) => sample.sayTexts.join(" "));
+}
+
+// AL-D3 (R4): in jedem Turn, der look_up feuerte, muss gesprochener Text auf der
+// Leitung gelegen haben - "nicht stumm", nicht mehr (Reichweiten-Grenze: der
+// Shim-Treiber faltet ALLE SSE-Deltas eines Zuges zu einem sayTexts-Eintrag, ein Zug mit
+// Text NACH der Suche ist von einem mit fuehrendem Satz an diesem Signal nicht
+// unterscheidbar - siehe Bericht). Paart index-weise turnFiredTools <-> freeAgentTurnTexts
+// (dieselbe Turn-Granularitaet, die LLM-freie Eroeffnung faellt in beiden weg). Weichen
+// die Laengen ab, ist der Check ROT mit dem Befund - nicht still gruen.
+function checkLookupTurnNotSilent(runResult) {
+  const id = "lookup_turn_not_silent";
+  const toolsByTurn = turnFiredTools(runResult);
+  const textsByTurn = freeAgentTurnTexts(runResult);
+  if (toolsByTurn.length !== textsByTurn.length) {
+    return {
+      id,
+      pass: false,
+      detail: `Turn-Zaehlung weicht ab: ${toolsByTurn.length} Metrik-Turns vs. ${textsByTurn.length} Text-Turns`,
+    };
+  }
+  const silentTurns = toolsByTurn.filter(
+    (tools, i) => tools.includes(LOOK_UP_TOOL_NAME) && !textsByTurn[i].trim(),
+  ).length;
+  return {
+    id,
+    pass: silentTurns === 0,
+    detail: silentTurns === 0 ? "ok" : `${silentTurns} look_up-Turn(s) ohne gesprochenen Text`,
+  };
 }
 
 // AL-P8: Zeichen, die der Agent spricht, BEVOR er das Wort abgibt (= Sample 0, die
@@ -458,6 +534,12 @@ const CHECKS = {
   roundtrips_per_turn: checkRoundtripsPerTurn,
   result_slots_present: checkResultSlotsPresent,
   memory_fact_recalled: checkMemoryFactRecalled,
+  // AL-D3: die vier Regel-Checks (R1/R2/R3) + der Ruhe-Check (R4).
+  consult_fired: checkConsultFired,
+  no_consult_fired: checkNoConsultFired,
+  lookup_fired: checkLookupFired,
+  no_lookup_fired: checkNoLookupFired,
+  lookup_turn_not_silent: checkLookupTurnNotSilent,
 };
 
 // Nur die vom Szenario deklarierten Check-IDs laufen lassen (scenario.checks: string[]).
