@@ -1,7 +1,7 @@
 // ---- makeReadRoutes (Phase 3) ---------------------------------------------------
 // Extrahierte Read-/Export-Route-Gruppe (GET /api/state, GET /api/calls/:id,
 // GET /api/tenant-data/export) als Factory mit Dependency-Injection - gleiches
-// Muster wie makeProfileRoutes/makeWebAuthRoutes/makeSelfServiceRoutes (web-auth.js
+// Muster wie makeCallRoutes/makeWebAuthRoutes/makeSelfServiceRoutes (web-auth.js
 // ist die bewaehrte Vorlage). Teil der laufenden server.js-Decomposition
 // (t4-server-decomposition.md, Phase 3): EINE kohaerente Route-Gruppe,
 // behavior-preserving (reine Verschiebung, keine Logik-Aenderung).

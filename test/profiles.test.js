@@ -20,6 +20,8 @@ import {
   MCP_AUDIENCE,
 } from "./helpers.js";
 import { hashEmail } from "../src/util.js";
+import { makeDefaultState, updateSettings } from "../src/store/state-ops.js";
+import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const OFFLINE = { TWILIO_ACCOUNT_SID: "x" }; // nicht-AC -> Twilio-Client wirft sync -> durchgelassen = 500
 const postCall = (url, to, identity) =>
@@ -30,12 +32,6 @@ const postCall = (url, to, identity) =>
       ...(identity ? { "X-Internal-Identity": identity } : {}),
     },
     body: JSON.stringify({ to, objective: "Test" }),
-  });
-const postJson = (url, body) =>
-  fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
   });
 
 // Telefonbarer Nicht-Owner-Tenant: aktiv, CARD-verifiziert, ownerName (passiert KYC- +
@@ -197,134 +193,21 @@ test("pro-Nutzer-Stundenlimit: Profil kann nur senken (min global/profil)", asyn
 });
 
 // ---- (e) Settings koennen Profile nicht anfassen ----
-test("(e) POST /api/settings {profiles} aendert die Profile nicht", async () => {
-  const srv = await startServer({
-    seed: seedState({ profiles: { "carol@team.test": { unrestricted: false } } }),
+// AUTH-P4: die HTTP-Naht (POST /api/settings) ist geloescht - die Whitelist-Zusage
+// (updateSettings kann keinen profiles-Key schreiben) wird jetzt direkt auf der
+// Store-Ebene gemessen (Muster test/f1-geo-store.test.js), damit sie nicht mit der
+// Route mitverschwindet.
+test("(e) updateSettings({profiles}) aendert die Profile nicht", () => {
+  const s = makeDefaultState();
+  s.settings[BOOTSTRAP_TENANT_ID] = defaultSettings();
+  s.profiles = { "carol@team.test": { unrestricted: false } };
+  const { changed } = updateSettings(s, BOOTSTRAP_TENANT_ID, {
+    profiles: { "evil@x": { unrestricted: true } },
+    evil: "x",
   });
-  try {
-    const res = await postJson(`${srv.localUrl}/api/settings`, {
-      profiles: { "evil@x": { unrestricted: true } },
-      evil: "x",
-    });
-    assert.equal(res.status, 200);
-    assert.equal(
-      "profiles" in (await res.json()),
-      false,
-      "settings darf keinen profiles-Key bekommen",
-    );
-    const stored = srv.readStore();
-    assert.equal("evil@x" in stored.profiles, false, "settings darf kein Profil anlegen");
-    assert.deepEqual(stored.profiles, { "carol@team.test": { unrestricted: false } });
-  } finally {
-    await srv.stop();
-  }
-});
-
-// ---- 2.4 Booking-Gate (MULTI_TENANT=true: das Booking-Recht keyt auf die tenantId) ----
-test("Booking-Gate auf POST /api/calendar", async (t) => {
-  const srv = await startServer({
-    env: { MULTI_TENANT: "true" },
-    seed: seedState({
-      tenants: [subTenant("t_booker", "booker@team.test"), subTenant("t_def", "default@team.test")],
-      profiles: { t_booker: { allowBooking: true } }, // t_def hat KEIN Profil -> DEFAULT (allowBooking=false)
-    }),
-  });
-  const cal = (identity) =>
-    fetch(`${srv.localUrl}/api/calendar`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(identity ? { "X-Internal-Identity": identity } : {}),
-      },
-      body: JSON.stringify({
-        title: "Termin",
-        start: "2026-07-01T10:00:00Z",
-        end: "2026-07-01T11:00:00Z",
-      }),
-    });
-  try {
-    await t.test("Owner (kein Header -> BOOTSTRAP/OWNER_PROFILE) -> 200", async () => {
-      assert.equal((await cal(null)).status, 200);
-    });
-
-    await t.test("profilloser Tenant (DEFAULT, allowBooking=false) -> 403", async () => {
-      const res = await cal("default@team.test");
-      assert.equal(res.status, 403);
-      assert.match((await res.json()).error, /allowBooking/);
-    });
-
-    await t.test("Tenant-Profil mit allowBooking=true -> 200", async () => {
-      assert.equal((await cal("booker@team.test")).status, 200);
-    });
-  } finally {
-    await srv.stop();
-  }
-});
-
-// ---- 2.5 Profil-Verwaltung (hinter Basic-Auth; hier localhost). Phase S: Schluessel = tenantId ----
-test("Profil-Verwaltung: POST/GET/DELETE + Audit ohne Werte", async (t) => {
-  const srv = await startServer();
-  try {
-    await t.test("POST legt Profil an, sanitisiert Fremd-Keys/falsche Typen", async () => {
-      const res = await postJson(`${srv.localUrl}/api/profiles`, {
-        tenantId: "t_dora",
-        unrestricted: true,
-        allowedNumbers: ["+49 151 2222-3333"], // wird normalisiert
-        evil: "x", // Fremd-Key -> verworfen
-        maxCallsPerHour: "viele", // falscher Typ -> verworfen
-      });
-      assert.equal(res.status, 200);
-      const { profile } = await res.json();
-      assert.equal(profile.unrestricted, true);
-      assert.deepEqual(profile.allowedNumbers, ["+4915122223333"]);
-      assert.equal("evil" in profile, false);
-      assert.equal("maxCallsPerHour" in profile, false);
-      // Audit: nur tenantId + Keys, KEINE Werte (Nummer darf nicht im Log stehen)
-      await waitForLog(srv, /\[audit\] profile_update ip=\S+ tenantId=t_dora keys=/);
-      assert.ok(!srv.stdout.includes("+4915122223333"), "Profil-Werte duerfen nicht im Log stehen");
-    });
-
-    await t.test("GET listet die Profile", async () => {
-      const profiles = await (await fetch(`${srv.localUrl}/api/profiles`)).json();
-      assert.ok("t_dora" in profiles);
-      assert.equal(profiles["t_dora"].unrestricted, true);
-    });
-
-    await t.test("POST ohne gueltige tenantId -> 400", async () => {
-      assert.equal(
-        (await postJson(`${srv.localUrl}/api/profiles`, { unrestricted: true })).status,
-        400,
-      );
-    });
-
-    await t.test("IdP-sub-foermiger Schluessel (kein @) ist erlaubt; Whitespace nicht", async () => {
-      const ok = await postJson(`${srv.localUrl}/api/profiles`, {
-        tenantId: "t_user_01TESTKEY",
-        unrestricted: true,
-      });
-      assert.equal(ok.status, 200);
-      assert.ok("t_user_01TESTKEY" in srv.readStore().profiles);
-      assert.equal(
-        (await postJson(`${srv.localUrl}/api/profiles`, { tenantId: "a b", unrestricted: true }))
-          .status,
-        400,
-      );
-    });
-
-    await t.test("DELETE entfernt das Profil + Audit", async () => {
-      const res = await fetch(`${srv.localUrl}/api/profiles/t_dora`, { method: "DELETE" });
-      assert.equal(res.status, 200);
-      await waitForLog(srv, /\[audit\] profile_delete ip=\S+ tenantId=t_dora/);
-      assert.equal("t_dora" in srv.readStore().profiles, false);
-    });
-
-    await t.test("DELETE unbekannt -> 404", async () => {
-      const res = await fetch(`${srv.localUrl}/api/profiles/t_nobody`, { method: "DELETE" });
-      assert.equal(res.status, 404);
-    });
-  } finally {
-    await srv.stop();
-  }
+  assert.equal(changed.includes("profiles"), false, "settings darf keinen profiles-Key uebernehmen");
+  assert.equal("evil@x" in s.profiles, false, "settings darf kein Profil anlegen");
+  assert.deepEqual(s.profiles, { "carol@team.test": { unrestricted: false } });
 });
 
 // ---- PROFILES_JSON: Seed beim Start (persistiert ueber Render-Neustarts). Phase S: Keys = tenantIds ----
@@ -344,15 +227,20 @@ test("PROFILES_JSON seedet Profile beim Start", async (t) => {
     }),
   });
   try {
-    await t.test("GET /api/profiles zeigt das geseedete Profil (sanitisiert)", async () => {
-      const profiles = await (await fetch(`${srv.localUrl}/api/profiles`)).json();
-      assert.equal(profiles.t_persist?.unrestricted, true);
-      assert.equal("evil" in profiles.t_persist, false, "Fremd-Key muss sanitisiert sein");
-    });
-
+    // AUTH-P4: GET /api/profiles ist geloescht - PROFILES_JSON wird NUR in-memory
+    // geseedet (seedProfilesFromEnv() ruft KEIN save()); srv.readStore() liest aber die
+    // DATEI. Reihenfolge deshalb bewusst: erst der place_call (createCall() persistiert
+    // synchron ueber save(), das den GESAMTEN State inkl. profiles schreibt), DANACH aus
+    // der Datei lesen - sonst traeft die Datei noch die urspruengliche, profil-lose Form.
     await t.test("geseedetes unrestricted-Profil (unter tenantId) hebt die Allowlist auf -> 500", async () => {
       const res = await postCall(srv.localUrl, "+4915123999999", "persist-sub");
       assert.equal(res.status, 500);
+    });
+
+    await t.test("Store traegt das geseedete Profil (sanitisiert)", () => {
+      const profiles = srv.readStore().profiles;
+      assert.equal(profiles.t_persist?.unrestricted, true);
+      assert.equal("evil" in profiles.t_persist, false, "Fremd-Key muss sanitisiert sein");
     });
   } finally {
     await srv.stop();
@@ -362,8 +250,8 @@ test("PROFILES_JSON seedet Profile beim Start", async (t) => {
 test("PROFILES_JSON kaputt -> Start crasht nicht, Store bleibt leer", async () => {
   const srv = await startServer({ env: { PROFILES_JSON: "{kein json" } });
   try {
-    const profiles = await (await fetch(`${srv.localUrl}/api/profiles`)).json();
-    assert.deepEqual(profiles, {});
+    // AUTH-P4: GET /api/profiles ist geloescht - direkt aus dem Store lesen.
+    assert.deepEqual(srv.readStore().profiles, {});
   } finally {
     await srv.stop();
   }

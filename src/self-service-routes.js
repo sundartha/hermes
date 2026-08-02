@@ -8,7 +8,7 @@
 // und audit injiziert (DIP) -> derselbe Handler in Produktion (server.js) UND im
 // in-process pglite-Test, ohne Replik (G5) und ohne TDZ auf server.js-Modul-Helfer.
 //
-// STRENGER als POST /api/settings (Admin): Lesen ueber die tenant-gefilterte Quelle
+// STRENGER als store.updateSettings (Admin): Lesen ueber die tenant-gefilterte Quelle
 // exportTenantData; Schreiben ueber die engere Whitelist selfServicePatch VOR
 // store.updateSettings (greeting nur als Vorlage; Permission-Flags nur restriktiver;
 // alles andere abgelehnt). updateSettings bleibt UNVERAENDERT.
@@ -259,7 +259,7 @@ export function makeSelfServiceRoutes({
 
   // Self-Service-Settings-Schreiben: ENGERE Whitelist (selfServicePatch) DAVOR, dann
   // die bestehende strenge updateSettings (Key/Typ). Nur Keys auditieren (greeting-
-  // Wert/PII gehoeren nicht ins Log, wie /api/settings).
+  // Wert/PII gehoeren nicht ins Log, wie bei store.updateSettings).
   router.post("/api/self-service/settings", webAuthMw, (req, res) => {
     const tenant = req.tenant.tenantId;
     // O9/E2E-01: Landwechsel ist vorerst NICHT self-service-faehig - stabiler 409 statt

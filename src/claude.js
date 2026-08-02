@@ -513,9 +513,10 @@ function toolsWithCacheControl(tools) {
   );
 }
 
-// Tool-Dispatch beider Engines. Kein Kalender-/Buchungs-Case mehr (P1b): der
-// Schreibpfad in den Kalender laeuft ausschliesslich ueber POST /api/calendar
-// (Mensch/Dashboard) bzw. das MCP-Tool - nie aus einem laufenden Gespraech. P11: die
+// Tool-Dispatch beider Engines. Kein Kalender-/Buchungs-Case mehr (P1b), und seit
+// AUTH-P4 auch keine HTTP-Schreibflaeche mehr - in den Kalender schreibt nichts mehr
+// aus dem Gespraech (das lesende Kalender-Auskunfts-Tool bleibt ein reiner Lese-Case,
+// s. mcp-tools.js). P11: die
 // tool_result-Texte sind sprachabhaengig (loc.prompt.turnControl), call.language ist an
 // der Dispatch-Site immer vorhanden (beide Engines reichen den vollen call durch).
 export function execTool(call, name, input) {

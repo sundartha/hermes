@@ -667,8 +667,8 @@ CREATE POLICY tenant_isolation ON usage
   WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 -- profile: Owner-Removal P5 - GLOBAL, haengt NICHT mehr an app.current_tenant.
 -- Eine fuer die App-Rolle global lesbare/schreibbare Tabelle (admin-weit). Die
--- Zugriffskontrolle liegt bewusst eine Schicht hoeher (Basic-/adminOnly-Auth der
--- /api/profiles-Routen + sanitizeProfile-Whitelist), NICHT in der RLS. RLS bleibt
+-- HTTP-Schreibflaeche auf profile ist mit AUTH-P4 entfallen; geschrieben wird nur
+-- noch aus dem Prozess (Aktivierung/Backfill, sanitizeProfile-Whitelist). RLS bleibt
 -- FORCE-aktiv (Konsistenz, kein Sonder-Disable), die Policy ist nur permissiv -
 -- es gibt keine Tenant-Dimension mehr, also auch keinen Cross-Tenant-Leak.
 DROP POLICY IF EXISTS tenant_isolation ON profile;

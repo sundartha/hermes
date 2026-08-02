@@ -114,12 +114,6 @@ sitzung|POST|/api/calls/:id/cancel|401|gate|Basic-Auth-Gate (P5: internalOnly)
 sitzung|GET|/api/calls/:id/consult|401|gate|Basic-Auth-Gate (P5: internalOnly)
 sitzung|POST|/api/calls/:id/consult/answer|401|gate|Basic-Auth-Gate (P5: internalOnly)
 sitzung|GET|/api/tenant-data/export|401|gate|Basic-Auth-Gate (P5: internalOnly) - Transkripte
-sitzung|POST|/api/settings|401|gate|Basic-Auth-Gate (P4: loeschen)
-sitzung|POST|/api/action-items/:id/toggle|401|gate|Basic-Auth-Gate (P4: loeschen)
-sitzung|POST|/api/calendar|401|gate|Basic-Auth-Gate (P4: loeschen)
-sitzung|GET|/api/profiles|401|gate|Basic-Auth-Gate (P4: loeschen)
-sitzung|POST|/api/profiles|401|gate|Basic-Auth-Gate (P4) - haette das Verifikations-Gate ausgehebelt
-sitzung|DELETE|/api/profiles/:tenantId|401|gate|Basic-Auth-Gate (P4: loeschen)
 sitzung|POST|/api/billing/flush-meters|401|gate|Basic-Auth-Gate (P6) - Geld-Route
 sitzung|POST|/api/billing/setup-checkout|401|gate|Basic-Auth-Gate (P9) - Geld-Route
 sitzung|GET|/api/billing/checkout-return|401|gate|Basic-Auth-Gate (P9)
@@ -146,6 +140,12 @@ statisch|GET|/brand/hermes-icon.png|200|keine|Marken-Asset, Gate-exempt
 fehlt|GET|/diese-route-gibt-es-nicht-12345|401|gate|heute vom Gate maskiert; ab P7 muss hier 404 stehen
 fehlt|GET|/login|401|gate|kein Login-Ziel auf dem Gateway; heute vom Gate maskiert
 fehlt|GET|/dashboard|401|gate|kein Dashboard-Ziel auf dem Gateway; heute vom Gate maskiert
+fehlt|POST|/api/settings|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
+fehlt|POST|/api/action-items/:id/toggle|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
+fehlt|POST|/api/calendar|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
+fehlt|GET|/api/profiles|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
+fehlt|POST|/api/profiles|401|gate|in P4 geloescht; haette das Verifikations-Gate ausgehebelt; ab P7 404
+fehlt|DELETE|/api/profiles/:tenantId|401|gate|in P4 geloescht; heute vom Gate mit 401 maskiert, ab P7 404
 TABELLE
 )
 

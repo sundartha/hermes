@@ -181,3 +181,40 @@ test("Probe-Tabelle: jede Zeile traegt eine Begruendung", () => {
       "niemand, ob der Wert je stimmte.",
   );
 });
+
+// Die sechs in AUTH-P4 geloeschten Routen als EINE benannte Konstante (keine dritte
+// Wahrheit - die Behauptung "diese sechs sind weg" gibt es sonst nirgends).
+const IN_P4_GELOESCHT = [
+  { method: "POST", path: "/api/settings" },
+  { method: "POST", path: "/api/action-items/:id/toggle" },
+  { method: "POST", path: "/api/calendar" },
+  { method: "GET", path: "/api/profiles" },
+  { method: "POST", path: "/api/profiles" },
+  { method: "DELETE", path: "/api/profiles/:tenantId" },
+];
+
+// AUTH-P4-8 (Befund B3 aus dem Umsetzungsplan): die Bestandsregeln oben halten (1)
+// route-policy.js und (3) probe-auth.sh nur in EINER Richtung zusammen - wird die
+// Probe auf 'fehlt' gedreht, aber GATE_ONLY_ROUTES vergessen, feuert die Regel
+// "ANTWORTET='gate', aber ART!='sitzung'/'fehlt'" und der Lauf wird rot. Die
+// haeufigere Gegenrichtung (Route geloescht, Politik nachgezogen, aber das Shell-
+// Skript vergessen) faellt durch beide Bestandsregeln, weil GATE_ONLY_ROUTES dann
+// schon leer ist und 'inGateOnly' fuer keine der sechs Zeilen mehr greift. Dieser
+// Test schliesst genau diese Luecke: er verlangt explizit, dass die sechs
+// geloeschten Routen NICHT mehr in der Politik stehen UND als Negativkontrolle
+// (art=fehlt, status=401, antwortet=gate) in der Probe-Tabelle auftauchen.
+test("AUTH-P4-8: die sechs in P4 geloeschten Routen stehen nicht mehr in der Politik und sind Negativkontrolle der Probe", () => {
+  for (const { method, path } of IN_P4_GELOESCHT) {
+    const schluessel = routeKey(method, path);
+    assert.equal(
+      GATE_ONLY_KEYS.has(schluessel),
+      false,
+      `${schluessel}: steht noch in GATE_ONLY_ROUTES - in AUTH-P4 geloescht, aber die Politik nicht nachgezogen`,
+    );
+    const zeile = TABELLEN_SCHLUESSEL.get(schluessel);
+    assert.ok(zeile, `${schluessel}: fehlt in der Probe-Tabelle - keine Negativkontrolle mehr`);
+    assert.equal(zeile.art, ART.FEHLT, `${schluessel}: ART muss 'fehlt' sein`);
+    assert.equal(zeile.status, "401", `${schluessel}: erwarteter Status muss 401 sein (Gate maskiert, ab P7 404)`);
+    assert.equal(zeile.antwortet, ANTWORTET.GATE, `${schluessel}: ANTWORTET muss 'gate' sein`);
+  }
+});

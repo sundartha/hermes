@@ -1,4 +1,4 @@
-// Self-Service-Settings: eine STRENGERE Whitelist als POST /api/settings (Admin).
+// Self-Service-Settings: eine STRENGERE Whitelist als store.updateSettings (Admin).
 // Reine, IO-freie Logik (P2/G34): filtert einen Settings-Patch auf das, was ein
 // Tenant SELBST aendern darf, BEVOR store.updateSettings (die Admin-Whitelist)
 // laeuft. updateSettings wird NICHT aufgeweicht - diese Schicht liegt davor.
@@ -16,11 +16,11 @@ import { ALL_GREETING_TEMPLATES } from "./i18n/greeting-catalog.js";
 // allowCalendar/allowBooking sind seit P1b KEINE Self-Service-Felder mehr: der
 // Telefon-Agent hat weder Kalender- noch Buchungs-Tool, ein Schalter dafuer waere
 // ein Angebot ohne Wirkung (E1). Die Felder bleiben im Datenmodell und nur ueber
-// POST /api/settings (Plattform-Admin) schreibbar.
+// store.updateSettings (Plattform-Admin) schreibbar.
 export const SELF_SERVICE_FREE_FIELDS = ["agentName", "language", "agentStyle"];
 
 // Permission-Flags, die ein Tenant NUR restriktiver setzen darf (true->false ja,
-// false->true NEIN - Aktivieren bleibt Plattform-Admin via POST /api/settings).
+// false->true NEIN - Aktivieren geht seit AUTH-P4 nur noch per direktem DB-Eingriff).
 export const SELF_SERVICE_RESTRICT_ONLY_FIELDS = ["allowPersonalData", "allowBankData"];
 
 // O9/E2E-01: Felder, die ein Tenant NICHT selbst umstellen darf, weil ihre Aenderung

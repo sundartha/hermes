@@ -1,7 +1,7 @@
 // ---- makeBillingRoutes (Server-Slim P7) -----------------------------------------
 // Extrahierte /api/billing/*-Route-Gruppe (flush-meters, setup-checkout,
 // checkout-return) als Factory mit Dependency-Injection - gleiches Muster wie
-// makeReadRoutes/makeProfileRoutes. Teil der server.js-Decomposition (PLAN-SERVER-SLIM
+// makeReadRoutes/makeCallRoutes. Teil der server.js-Decomposition (PLAN-SERVER-SLIM
 // P7): reine Verschiebung, Verhalten unveraendert.
 //
 // Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab). BEWUSST KEIN

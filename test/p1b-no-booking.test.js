@@ -5,9 +5,9 @@
 // false/false wuerde nichts zeigen: er wuerde auch dann gruen, wenn P1b nur den
 // Default geflippt haette (der Bestand aber unveraendert weiterbucht).
 //
-// Die Kalender-OWNER-Flaeche (MCP-Tool get_calendar, POST /api/calendar) ist
-// NICHT Gegenstand dieses Tests und bleibt bewusst bestehen - sie haengt an der
-// Profil-Achse (resolveProfile), nicht an diesen Settings.
+// Die Kalender-OWNER-Flaeche (MCP-Tool get_calendar) ist NICHT Gegenstand dieses
+// Tests und bleibt bewusst bestehen - sie haengt an der Profil-Achse (resolveProfile),
+// nicht an diesen Settings.
 
 import { test, before } from "node:test";
 import assert from "node:assert/strict";

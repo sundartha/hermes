@@ -42,8 +42,9 @@ export const ALL_GREETING_TEMPLATES = Object.freeze(
 // PROMPT-03: die gespeicherte Begruessung gilt nur, solange sie zur Sprache des Anrufs
 // passt. Stammt sie aus dem Katalog EINER ANDEREN Sprache (Normalfall: der deutsche
 // Seed-Default auf einem EN-/FR-Tenant), gewinnt die Standard-Vorlage der Anrufsprache.
-// Ein frei gesetzter Text (Plattform-Admin ueber POST /api/settings) bleibt unangetastet -
-// er ist eine Entscheidung, keine Sprach-Altlast. Rein, kein Nebeneffekt.
+// Ein frei gesetzter Text (Plattform-Admin, seit AUTH-P4 nur per direktem DB-Eingriff)
+// bleibt unangetastet - er ist eine Entscheidung, keine Sprach-Altlast. Rein, kein
+// Nebeneffekt.
 export function greetingForLanguage(storedGreeting, language) {
   const templates = greetingTemplatesFor(language);
   if (templates.includes(storedGreeting)) return storedGreeting;

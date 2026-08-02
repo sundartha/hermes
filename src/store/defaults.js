@@ -448,7 +448,7 @@ export function defaultSettings() {
     // mehr setzen. Bewusst NICHT entfernt - ein Spalten-Drop waere eine Migration mit
     // Rollback-Risiko ohne funktionalen Gewinn. Die GLEICHNAMIGEN Felder auf der
     // Profil-Achse (PROFILE_FIELDS weiter unten) leben unabhaengig weiter und gaten
-    // weiterhin das MCP-Tool und POST /api/calendar - nicht verwechseln.
+    // weiterhin das MCP-Tool - nicht verwechseln.
     allowCalendar: true,
     allowBooking: true,
     allowSummaries: true,
@@ -456,7 +456,8 @@ export function defaultSettings() {
     // allowSummaries). Default true = Bestandsverhalten (wer eine private Nummer hinterlegt,
     // bekommt die SMS). false = Summary ja, aber KEINE SMS - ohne die Nummer (Login-/
     // Kontaktkanal) loeschen zu muessen. Kein PII (Boolean) -> ueber /api/state + MCP
-    // sichtbar unkritisch; schreibbar ueber die POST /api/settings-Whitelist (updateSettings).
+    // sichtbar unkritisch; schreibbar ueber die updateSettings-Whitelist; seit AUTH-P4
+    // ohne HTTP-Schreibflaeche (nur direkter DB-Eingriff).
     smsSummaryOptIn: true,
     allowPersonalData: false,
     allowBankData: false,
@@ -465,8 +466,9 @@ export function defaultSettings() {
     // Entscheidung, die dem Tenant gehoert, nicht dem globalen Schalter allein. Der
     // Adapter liest die SCHNITTMENGE aus config.research.researchEnabled und diesem
     // Feld (src/research/registry.js). Kein PII (Boolean) -> ueber /api/state
-    // unkritisch; schreibbar ueber die POST /api/settings-Whitelist (updateSettings),
-    // NICHT ueber Self-Service (Geldpfad, Owner-Gate O3).
+    // unkritisch; schreibbar ueber die updateSettings-Whitelist; seit AUTH-P4 ohne
+    // HTTP-Schreibflaeche (nur direkter DB-Eingriff), NICHT ueber Self-Service
+    // (Geldpfad, Owner-Gate O3).
     allowResearch: false,
     // AL-P12: Beziehungsgedaechtnis - darf der Agent beim naechsten Anruf an dieselbe
     // Nummer die Ergebnisse/Fakten seiner frueheren Anrufe dorthin im Prompt sehen?
@@ -476,8 +478,8 @@ export function defaultSettings() {
     // in kuenftige Prompts injiziert - ein neuer Verarbeitungszweck ueber Drittdaten, der
     // fuer Bestands-Tenants nicht still scharf geschaltet wird (Muster allowResearch /
     // PRECALL_BRIEFING_ENABLED: Faehigkeit vorhanden, Schalter aus). Kein PII (Boolean);
-    // schreibbar ueber die POST /api/settings-Whitelist (updateSettings), NICHT ueber
-    // Self-Service.
+    // schreibbar ueber die updateSettings-Whitelist; seit AUTH-P4 ohne HTTP-
+    // Schreibflaeche (nur direkter DB-Eingriff), NICHT ueber Self-Service.
     allowCallMemory: false,
     // Gespraechssprache pro Tenant als OPTIONALES Override (F1 Phase 4, Entscheidung #8):
     // null = "nicht gesetzt" -> die Aufloesungs-Praezedenz (resolveCallLanguage) faellt
@@ -508,7 +510,8 @@ export function demoCalendar() {
 
 // Settings-Map mit dem Owner-Bucket vorbelegt (Identitaets-Schicht pro-Tenant, I2;
 // analog emptyUsageMap). s.settings ist eine Map tenantId -> Settings. Der
-// Owner-Bucket existiert von Anfang an (Dashboard/POST /api/settings lesen ihn).
+// Owner-Bucket existiert von Anfang an (die Lesepfade /api/state und Self-Service
+// lesen ihn).
 export function defaultSettingsMap() {
   return { [BOOTSTRAP_TENANT_ID]: defaultSettings() };
 }
@@ -591,7 +594,7 @@ export const PROFILE_FIELDS = {
   allowCalendar: "boolean", // get_calendar-MCP-Tool
   allowConsult: "boolean", // AL-P13: await_call_event/answer_consult + Consult-Routen
   allowLookup: "boolean", // AL-P10b: look_up im Gespraech (zweiter Auftragsverarbeiter)
-  allowBooking: "boolean", // POST /api/calendar
+  allowBooking: "boolean", // seit AUTH-P4 ohne Konsumenten (die einzige gegatete Aktion war POST /api/calendar)
   // number ODER null: null = keine Profil-Senkung (effektiv der Pro-Tenant-Default
   // config.safety.maxCallsPerHour, telephony/outbound-gates tenantHourReached). Muss als
   // null erhalten bleiben (PLAN_PROFILE/OWNER_PROFILE) - sonst faellt das Profil ueber
