@@ -293,3 +293,97 @@ wirkungslos. Das ist konsistent — P7 streicht das Skript ohnehin ersatzlos.
 
 **P7 — das Gate entfernen.** Vorbedingung erfuellt: P3-P6 gemergt, P1+P2 gruen gegen den
 aktuellen Prod-Commit (`44a7d09`, gemessen 2026-08-02). Spec: `tasks/auth-gate-p7-spec.md`.
+
+---
+
+## P7 — das Gate entfernen (fertig, gemergt `b111927`)
+
+- **Ergebnis:** Gate **PASS** nach **zwei** Fix-Runden. `src/wiring/auth-gate.js`,
+  `test/auth-gate-exemption-order.test.js` und `scripts/sweep-jetzt.sh` sind weg.
+  `GATE_ONLY_ROUTES` ist **leer** (Assertion im Test). **Genau ein Commit** — die
+  Fix-Runden wurden zusammengefuehrt, ein Rollback nimmt den Wegfall als Ganzes zurueck.
+- **Vom Lead selbst nachgeprueft:** keine Basic-Challenge mehr in `src/`
+  (`realm=` / `"Basic ` -> leer); `makeAuthGate`/`installAuthGate` nur noch **im Test**,
+  der ihre Abwesenheit pinnt; `DASHBOARD_PASSWORD` steht weiterhin in `config.js`,
+  `render.yaml` und `.env.example` — der Rollback-Weg ist intakt.
+- **Die Plan-Abnahme "`grep -rn WWW-Authenticate src/` leer" ist zu grob formuliert.**
+  Zwei Treffer bleiben, beide in `src/auth.js`: `mcpAuth` sendet eine **Bearer**-Challenge
+  (RFC 6750/9728). Das ist korrekt und gewollt — die Probe unterscheidet seit P2
+  ausdruecklich Basic von Bearer. Richtig ist: **keine Basic-Challenge mehr.**
+- **Alle elf Gate-Exemptions einzeln beurteilt.** Fuenf waren mehr als eine Ausnahme
+  (`VOICE_PATH_PREFIX`, `STRIPE_WEBHOOK_PATH`, `isTrustedLocalCaller`, `safeEqual`,
+  `dashboardPassword`) — ihre Konstanten leben weiter, nur der Gate-Konsument fiel weg.
+- **Das Legacy-Checkout-Paar** hat `internalOnly` bekommen (die Konfliktaufloesung aus
+  der Spec). Geloescht wird es weiterhin erst in P9b.
+- **Die sieben Umleitungen** sind drin, `/admin` beschattet `/api/admin/*` nachweislich
+  nicht.
+- **Ein Lauf-Zwischenfall:** der erste Impl-Agent starb spurlos (Worktree registriert,
+  Verzeichnis weg, kein `result` im Journal). Beide Reviewer meldeten korrekt
+  "Ziel-Branch existiert nicht" und blockierten — **kein falsches PASS**. Aufgeraeumt und
+  per `resumeFromRunId` neu gefahren; der Plan (57 KB, Opus) kam aus dem Cache.
+- **`npm test`:** einer von drei Laeufen zeigte 1 rot, zwei Folgelaeufe gruen
+  (3781/3781) und der Fehler war nicht reproduzierbar — der bekannte Last-Flake.
+
+## P9a — Cache-Header (fertig, gemergt `af2aa95`)
+
+- **Ergebnis:** Gate **PASS** ohne Fix-Runde, `npm test` gruen (3786). `/_astro/*` traegt
+  `public, max-age=31536000, immutable`, `*.html` traegt `no-cache`.
+  `src/middleware.js` (`no-store` fuer `/api/`) nachweislich unberuehrt.
+- **Der teure Fehler ist ausgeschlossen:** der Praefix wird **exakt** gematcht. Zwei
+  Gegenproben im Test — `/assets/hero.js` (nicht fingerprintet) und
+  `/_astrophysik/hinweis.js` (enthaelt `_astro` als Teilstring) bekommen **kein**
+  `immutable`. Die Mutation `startsWith -> includes` faerbte genau diesen Test rot.
+
+---
+
+# DEPLOY — was jetzt zu tun ist (Owner-Handlung)
+
+**Stand:** `master` traegt P1-P7 + P9a. **Live laeuft weiterhin `44a7d09`** — ein Commit
+von vor dieser Kette. Es ist also **nichts** von alledem in Produktion.
+
+### Vor dem Deploy: der Admin-Zugang (sonst sperrt der Deploy dich aus)
+
+Siehe den Block bei P6. Kurz: kein Account in der Produktions-DB traegt
+`role='admin'`. Entweder `ADMIN_EMAILS` im Render-Dashboard setzen oder
+`scripts/grant-admin.js` fahren — **vorher**, nicht danach.
+
+### Der Deploy selbst
+
+1. Im Render-Dashboard den Dienst `vodafone-agent` manuell deployen (`autoDeploy` steht
+   aus). Der Live-Stand kommt aus dem **Upstream**-Remote — ein `git push origin` macht
+   nichts live.
+2. `GET /healthz` lesen und den neuen Commit-SHA notieren.
+3. **Sofort danach:**
+   ```
+   scripts/probe-auth.sh https://app.sundartha.com <neuer-sha> nach-p7
+   ```
+   Exit 0 = alle 66 Zeilen wie vorhergesagt. Die Tabelle im Skript ist eine
+   **Vorhersage aus dem Code**, erhoben vor dem Deploy — sie wurde nicht nachtraeglich
+   an ein Ergebnis angepasst.
+4. **Abbruchsignal:** die Probe meldet **200 auf `/api/state` ohne Sitzung** ->
+   sofortiger Rollback (Deploy des Vorgaenger-Commits). Das alte Gate findet
+   `DASHBOARD_PASSWORD` noch vor und ist sofort wieder scharf. Das ist der Datenleck-Fall.
+5. Erwartete Nebenwirkung, kein Vorfall: das Volumen der `auth_failed`-Zeilen im
+   Render-Log **faellt** (das Gate hat bisher jeden Bot-Scan mitgeloggt). Das heisst
+   nicht, dass die Scans aufgehoert haben.
+
+### Was der Deploy sonst noch aendert
+
+- `scripts/sweep-jetzt.sh` gibt es nicht mehr (Basic-Auth-Credentials, ersatzlos).
+- Der In-Process-MCP-Pfad haengt jetzt an `isTrustedLocalCaller`. **Abbruchsignal:**
+  MCP-Werkzeuge in claude.ai liefern Fehler statt Daten. Im Log steht dann
+  `grund=not_local`.
+- `POST /mcp` lebt nur weiter, solange `MCP_AUTH=oauth` gesetzt ist. Keine Boot-Sonde
+  deckt das ab (offener Befund aus P3).
+
+---
+
+# OFFEN — an den Kalender gebunden, nicht an Arbeit
+
+| Phase | Was | Frueheste Ausfuehrung |
+| --- | --- | --- |
+| **P8** | `DASHBOARD_PASSWORD` aus `config.js`/`render.yaml`/`.env.example` entfernen; der Boot-Guard verlangt stattdessen `SESSION_SECRET` + `STORE_BACKEND=pg` | **14 Tage nach dem Live-Deploy von P7**, und erst nach einem gruenen Rollback-Drill auf Staging |
+| **P9b** | `POST /api/billing/setup-checkout` + `GET /api/billing/checkout-return` loeschen (`checkout-return` bleibt als 302 auf `/app?card=error`) | **30 Tage nach dem Live-Deploy von P7** |
+
+Beide brauchen **keine** neue Entscheidung — nur den verstrichenen Kalender und, bei P8,
+den Drill. Die Spec fuer P8 steht in `PLAN-AUTH-GATE.md` Abschnitt 7.
