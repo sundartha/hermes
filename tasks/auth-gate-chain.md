@@ -152,10 +152,52 @@ Serving (Muster `LEGACY_PORTAL_PATH`). Die drei `fehlt`-Zeilen der Probe (`/logi
 
 ---
 
+## P4 — tote, aber scharfe Routen loeschen (fertig, gemergt `9eb68c9`)
+
+- **Erwartet:** die sechs anonymen Schreibflaechen sind weg, der Boot bleibt heil, und
+  die vier Sicherungs-Stellen sagen danach dasselbe.
+- **Verifikation:** `phase-impl-lean`, dualer Review, Spawn-Test mit echtem Serverstart,
+  `npm test` auf master nach dem Merge.
+- **Ergebnis:** Gate **PASS** ohne Fix-Runde. `npm test` gruen (3756 korrigiert).
+  **Kein lebender Aufrufer** gefunden — die Enumeration lief ueber `src/`, `scripts/`,
+  `apps/web/src/`, `public/`, `test/`, `src/mcp-tools.js`, `docs/`; alle Treffer waren
+  Kommentare, Doku oder Tests. `validIdentity`/`IDENTITY_MAX_LEN` sind nach
+  `src/routes/_validation.js` gezogen, der Boot per Spawn-Test belegt (nicht per
+  `node --check` — das faengt keinen fehlenden Export).
+- **Von aussen sichtbar heute: nichts.** Das Gate haengt vor dem 404-Handler; eine
+  geloeschte Route ist von einer geschuetzten nicht zu unterscheiden. Die sechs
+  Probe-Zeilen stehen deshalb jetzt als `fehlt` mit **Status 401 / Schicht gate** —
+  erst P7 dreht sie auf 404. Sie wurden bewusst **nicht geloescht**: als
+  Negativkontrolle sind sie mehr wert denn je.
+- **Preis, den diese Phase kostet:** 13 Bestandstests entfielen oder wurden umgestellt
+  (jeder einzeln begruendet im Bericht). Zwei Zusagen wanderten von der HTTP-Naht auf
+  die Store-Ebene (Settings-Whitelist, Sprach-Code-Filter). Ein gruener Mechanismus-Test
+  aus dem `test:gates`-Katalog (`VOICE-09`) faellt weg; seine Zusage haelt
+  `test/f1-geo-store.test.js` weiter.
+
+---
+
+## Betriebsnotiz: die Parallel-Bahn hat waehrenddessen gemergt
+
+Waehrend AUTH-P4 lief, hat die AL-Kette **AL-D3** nach `master` gebracht. Zwei Folgen,
+die beim naechsten Mal Zeit sparen:
+
+1. `git diff master..branch` (zwei Punkte) zeigte dadurch die AL-D3-Arbeit als
+   **Loeschungen** — es sah aus, als wuerde die Phase fremde Arbeit zuruecknehmen.
+   Richtig ist `git diff master...branch` (drei Punkte, gegen die Merge-Basis).
+2. Der Merge war trotzdem gefahrlos: **keine einzige Datei** wurde von beiden Seiten
+   angefasst (mit `comm -12` ueber die beiden Dateilisten geprueft). Deshalb
+   `--no-ff`-Merge statt Fast-Forward, danach `npm test` auf dem **kombinierten** Stand
+   — der Lauf der Phase kannte AL-D3 ja noch nicht.
+
+---
+
 ## Naechste Phase
 
-**P4 — tote, aber scharfe Routen loeschen.** Vorbedingung (P3 gemergt) erfuellt.
-Spec: `tasks/auth-gate-p4-spec.md`.
+**P5 — `internalOnly` + Audit-Ersatz.** Vorbedingung (P4 gemergt) erfuellt.
+Spec: `tasks/auth-gate-p5-spec.md`. Dort steht auch, warum die Erwartungstabelle der
+Probe in P5 **nicht** von 401 auf 403 wechselt — der Plantext ist an dieser Stelle
+ungenau, das Gate antwortet weiterhin zuerst.
 
 **Offener Owner-Entscheid (erst fuer P7):** Plan-Entscheidung 5 laesst `/signin`,
 `/sign-in`, `/account`, `/portal`, `/admin` als zusaetzliche Redirect-Ziele
