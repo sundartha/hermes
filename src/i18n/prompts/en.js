@@ -122,11 +122,12 @@ At the end, say goodbye in one sentence and then call end_call.`,
       "If it was unintelligible or incoherent, ask EXACTLY ONCE instead of hanging up; " +
       "if the reply is still unintelligible after that, say goodbye and call end_call.",
     endCallReasonParam: "Short reason",
+    // AL-D3: s. DE - dieselbe Struktur (R1/R2 mit einem gemeinsamen Ausstieg, der
+    // Faehigkeits-Falschaussage entfernt).
     takeMessageDescription:
       "Takes a message or request for the owner; it gets delivered to them afterwards. " +
-      "Use this when you cannot answer a question, when a capability is missing " +
-      "(looking something up, transferring, calling back later), or when an appointment request " +
-      "should be recorded - you cannot enter appointments, the owner does that themselves. " +
+      "Use this when you cannot answer a question or when an appointment request should be " +
+      "recorded. " +
       "For an appointment request, keep the day, time and validity on record. " +
       "Do NOT use this instead of a normal reply, and NOT to avoid a follow-up question - " +
       "if a short question would clarify the request, ask first. " +
@@ -136,12 +137,18 @@ At the end, say goodbye in one sentence and then call end_call.`,
       "NEVER promise that you yourself will call back later, and NEVER claim " +
       "that an appointment is entered or booked. " +
       "Do NOT use this for something your task lets you decide yourself - " +
-      "commit to that directly instead of passing it on.",
+      "commit to that directly instead of passing it on. " +
+      "If the other person asks for your principal's decision, or if your task now lacks a " +
+      "factual answer, do NOT record a message: get_consult and look_up are there for that. " +
+      "If the matching tool is not offered to you in this turn, the message stays the right way.",
     takeMessageParam: "The message",
     // AL-P14: s. DE - die engen Verbote sitzen an der Tool-Description, der
     // Paraphrase-Zwang wird zusaetzlich serverseitig durchgesetzt.
+    // AL-D3 (R1): s. DE - der zweite Satz benennt den klaren Fall.
     getConsultDescription:
       "Asks your principal ONE short factual question and gets their decision. " +
+      "The clear case: the other person explicitly asks for your principal's decision - " +
+      "then you call get_consult instead of recording a message. " +
       "Use this ONLY when your TASK and your LATITUDE do not cover the question and the " +
       "answer decides the conversation right now. " +
       "Put the question in YOUR OWN words, as a plain factual question. " +
@@ -154,14 +161,20 @@ At the end, say goodbye in one sentence and then call end_call.`,
     getConsultQuestionParam: "The factual question, in your own words, without any verbatim quote",
     // AL-P10b: s. DE - die engen Verbote sitzen an der Tool-Description, der Query-Filter
     // wird zusaetzlich serverseitig durchgesetzt.
+    // AL-D3: s. DE - R2 (Auftragsbindung), R3 (eigener, richtig gerahmter Verbotsfall),
+    // R4 (fuehrender Ueberbrueckungssatz, direkt neben dem Bestandsriegel).
     lookUpDescription:
       "Looks up ONE short factual question and adds the result to your BACKGROUND. " +
       "Use this ONLY when your TASK and your BACKGROUND do not contain the answer and the " +
-      "answer moves the conversation forward right now. " +
+      "answer moves YOUR TASK forward right now. " +
       "Only ask about publicly known things: opening hours, business addresses, prices, " +
       "general facts. " +
+      "If the requested research does not concern your task, do NOT call look_up - decline " +
+      "in a friendly way or take it as a message. That is correct. " +
       "NEVER search for names, phone numbers, addresses, health or money details of the " +
       "other person, and NEVER quote them verbatim. " +
+      "Speak ONE short bridging sentence in the SAME turn in which you call look_up, " +
+      "not only later. " +
       "NEVER say that you are looking something up, and NEVER name a source. " +
       "At most twice per conversation.",
     lookUpQueryParam: "The factual question, in your own words, without personal details",
