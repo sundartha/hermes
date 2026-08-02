@@ -561,3 +561,60 @@ dabei nur VOLLSTAENDIGE Saetze (der unvollstaendige Rest liegt im Chunker-Puffer
 wird im Wurf-Fall nie erreicht). Alle vier Safety-Notaus wurden am Code als hoerbar geprueft.
 
 **Naechster Schritt: D-3** — enge Verbote am Tool-Entscheidungspunkt, plus der K4-Fall.
+
+## 2026-08-02 — AL-D3: gemergt, gemessen, **ohne belegbaren Gewinn**
+
+Live-Commit `07234ae` (Merge) + `eef7f13` (Kommentar-Konvention). `npm test` 3802/0 rot,
+`test:gates` 566 mit 3 rot (Baseline GAP-05, GAP-15 x2). Details der Umsetzung und der
+vollstaendige Messbericht liegen in der Git-Historie (`36e8049`, `tasks/al-d3-report.md`).
+
+**Geaendert wurde genau eine Sache am Produkt:** die drei Tool-Beschreibungen
+(`src/i18n/prompts/{de,en,fr}.js`). `take_message` nennt "nachschlagen" nicht laenger als
+FEHLENDE Faehigkeit (seit AL-P10b unwahr) und schliesst die beiden Faelle aus — mit EINEM
+gemeinsamen Ausstieg, weil `get_consult`/`look_up` inbound strukturell nie im Werkzeugsatz
+liegen. `get_consult` bekam den erkennbaren Ausloeser, `look_up` die Auftragsbindung, den
+Negativfall und den fuehrenden Ueberbrueckungssatz (K4).
+
+### Die Messung (Bench, n=5 je Szenario je Stand, identischer Apparat)
+
+| Regel | Check | vorher | nachher |
+|---|---|---:|---:|
+| R2 | `lookup_fired` | 5/5 | 5/5 |
+| R4 | `lookup_turn_not_silent` | 5/5 | 5/5 |
+| R3 | `no_lookup_fired` | 5/5 | 5/5 |
+| R1 | `consult_fired` | 0/5 | 1/5 |
+
+**Jeder Check steht vorher wie nachher gleich.** Die 1/5 sind bei n=5 Rauschen und werden
+nicht als Gewinn gewertet.
+
+### Drei Befunde, die bleiben
+
+**D3-B1 — Der Bench reproduziert den Live-Defekt bei `look_up` NICHT.** Live: 0 von 12
+Turns. Im Bench feuert `look_up` **schon mit den alten Beschreibungen** 5/5. Das Szenario
+ist ein leichterer Fall als der echte Anruf; ein Vorher/Nachher kann dort per Konstruktion
+nichts zeigen. **Jede kuenftige Phase, die `look_up` am Bench misst, misst am Problem
+vorbei, solange dieses Szenario nicht den Live-Fall trifft.**
+
+**D3-B2 — Bei `get_consult` ist der Defekt reproduziert, die Schaerfung bewegt ihn nicht.**
+Ueber 11 instrumentierte Laeufe lag `get_consult` in ~10 Turns im *angebotenen* Satz und
+wurde **einmal** gefeuert; `take_message` gewann durchgehend. Kein Verfuegbarkeitsproblem —
+eine Modellwahl. **R1 ist offen.** Zwei Prompt-Anlaeufe ohne Wirkung sind genug: der
+naechste Schritt ist eine Diagnose, keine dritte Formulierungsrunde.
+
+**D3-B3 — Widerlegt: der Systemprompt ist NICHT die Ursache.** `MANDATE_OUT_OF_SCOPE_DEFAULT`
+ist `take_message`, und der AUSSERHALB-Block rendert bei **jedem** Mandat mit dem woertlichen
+Satz "gib es ueber take_message weiter" (`outOfScopeSentence`). Gegenversuch mit
+`on_out_of_scope: "decline"`: `get_consult` ebenfalls **0/5**. Hypothese erledigt. (Dass
+jeder Outbound-Anruf mit Mandat diese Anweisung traegt, war vorher nirgends aufgeschrieben.)
+
+### Was der Apparat wert ist
+
+Vor dieser Phase konnte der Bench `get_consult`/`look_up` **gar nicht** anbieten
+(`buildEnv` setzte die Flags nie). Neu: Env-Naht pro Szenario, lokaler Exa-Fake,
+Consult-Pumpe, Checks auf dem bereits geloggten `tools`-Feld, drei Szenarien — und der
+bis dahin fehlende Sprach-Paritaetstest. Ohne das waere D3-B1/B2 nicht erhebbar gewesen.
+
+**Offen bleibt:** R1 (Diagnose statt Formulierung), ein Bench-Szenario, das den
+`look_up`-Live-Fall trifft, K4 (der Check kann einen fuehrenden Satz nicht von einem nach
+der Suche gesprochenen unterscheiden — die scharfe Messung braucht einen inkrementellen
+SSE-Leser im Treiber), sowie unveraendert AL-P15, D-4, D-5, D-6.
