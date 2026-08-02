@@ -202,3 +202,37 @@ ungenau, das Gate antwortet weiterhin zuerst.
 **Offener Owner-Entscheid (erst fuer P7):** Plan-Entscheidung 5 laesst `/signin`,
 `/sign-in`, `/account`, `/portal`, `/admin` als zusaetzliche Redirect-Ziele
 ausdruecklich offen.
+
+---
+
+## P5 — `internalOnly` + Audit-Ersatz (fertig, gemergt `e7915b5`)
+
+- **Erwartet:** die sieben MCP-Routen sind fuer externe Aufrufer geschlossen, und
+  abgelehnte Anfragen hinterlassen eine Spur, die den Gate-Wegfall ueberlebt.
+- **Ergebnis:** Gate **PASS** ohne Fix-Runde, `npm test` gruen (3770 korrigiert).
+  `internalOnly` (`src/wiring/internal-only.js`) haengt vor allen sieben Routen;
+  `auditAuthFailed` (`src/util.js`) ist die **eine** Stelle, die die Audit-Zeile baut,
+  mit vier festen Grund-Token (`no_session`, `not_active`, `not_admin`, `not_local`).
+- **W9 dreifach belegt:** `?session_id=XYZ&code=ABC` taucht in keiner Audit-Zeile auf
+  (drei Tests fuer internalOnly, webAuth und adminOnly). Die Mutationsprobe
+  `req.path -> req.originalUrl` faerbte genau diese drei rot.
+- **Fuenf Mutationsproben** einzeln vorgefuehrt und zurueckgenommen — darunter
+  `isTrustedLocalCaller -> isLocalSocket`, was die AM1-Regression reproduziert
+  (hinter Render ist auch externer Verkehr Loopback).
+- **Die Probe-Tabelle blieb unveraendert**, wie in der Spec begruendet: das Gate
+  antwortet weiterhin zuerst. Der 403 ist heute nur im Test belegt und wird erst mit P7
+  von aussen sichtbar.
+- **P3-Restluecke geschlossen:** `AUTH-P3-16` liess `GET /api/state` mit `X-Forwarded-For`
+  bewusst noch mit 200 (ohne Owner-Daten) durch — `internalOnly` macht daraus 403.
+
+---
+
+## Naechste Phase
+
+**P6 — Betreiber-Routen auf Admin-Session.** Vorbedingung (P5 gemergt) erfuellt.
+Spec: `tasks/auth-gate-p6-spec.md`.
+
+**Offene Pruefung vor dem Deploy von P6 (Owner):** ueber welchen Weg gilt der
+Owner-Account als Admin — `account.role='admin'` in der Produktions-DB oder
+`ADMIN_EMAILS` in der Render-Env? Ist beides unklar, sperrt der Deploy den Owner aus dem
+Onboarding aus.
