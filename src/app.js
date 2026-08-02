@@ -244,6 +244,14 @@ export async function buildApp(deps) {
   // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
   // ohne Secret keine Cookie-Signatur. Muss VOR Basic-Auth und express.static liegen,
   // damit /auth/login nicht durch Basic-Auth geblockt wird.
+  //
+  // AUTH-P6: operatorAuth traegt die Admin-Sitzungs-Middlewares (webAuthMw+adminMw) fuer
+  // die sechs Betreiber-Routen (makeBillingRoutes/makeOnboardRoutes, s.u.) nach oben.
+  // Initialwert null, Zuweisung NUR im guardedBoot-Callback: wirft ein Schritt davor oder
+  // laeuft der Block gar nicht (kein sessionSecret/pg), bleibt operatorAuth null -
+  // fail-closed by construction, kein Zweig, den man vergessen kann. guardedBoot selbst
+  // bleibt unveraendert (liefert weiterhin boolean, s. INV-11/boot-guard.test.js).
+  let operatorAuth = null;
   if (config.auth.sessionSecret && config.store.storeBackend === "pg") {
     // INV-11: der gesamte Web-Login/Portal/Stripe-Webhook/Self-Service-Block (in
     // src/wiring/web-login.js, wireWebLogin) laeuft in guardedBoot (fail-OPEN). Wirft
@@ -255,8 +263,8 @@ export async function buildApp(deps) {
     // fakebar); STRIPE_WEBHOOK_PATH/APP_PATH bleiben EINE Konstante
     // (INV-1) und werden hereingereicht. provision = provisioning.triggerTenantProvisioning
     // (die EINE P6-Orchestrator-Instanz, in server.js konstruiert, TDZ-Vermeidung).
-    await guardedBoot("Web-Login/Portal", () =>
-      wireWebLogin({
+    await guardedBoot("Web-Login/Portal", async () => {
+      operatorAuth = await wireWebLogin({
         app,
         config,
         store,
@@ -266,8 +274,8 @@ export async function buildApp(deps) {
         stripeWebhookPath: STRIPE_WEBHOOK_PATH,
         appPath: APP_PATH,
         messaging,
-      }),
-    );
+      });
+    });
   }
 
   registerStaticServing({ app, config });
@@ -361,12 +369,16 @@ export async function buildApp(deps) {
   // ---- Billing-Routen ---------------------------------------------------------------
   // Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return,
   // cost-truing/sweep) lebt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster
-  // wie makeReadRoutes) - reine Verschiebung, Verhalten unveraendert. An unveraenderter
-  // Mount-Position (nach makeReadRoutes, vor /api/onboard), hinter Basic-Auth
-  // (Bestand deckt /api/* ab). billing = stripeBilling (EINE Instanz, INV-7);
-  // requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT). costTruing = die
-  // EINE LCT-P3-Instanz (INV-7, in server.js konstruiert). Der Safety-Kontext (kein
-  // MCP-Tool, PAYMENT_ENABLED-404-Gate) ist ins Modul mitgewandert.
+  // wie makeReadRoutes). An unveraenderter Mount-Position (nach makeReadRoutes, vor
+  // /api/onboard), hinter Basic-Auth (Bestand deckt /api/* ab); die vier Betreiber-
+  // Routen (flush-meters, cost-truing/sweep, cost-drift, platform-costs) zusaetzlich
+  // hinter webAuthMw+adminMw und NUR DANN gemountet, wenn operatorAuth existiert
+  // (AUTH-P6, s.o.) - keine reine Verschiebung mehr, das Verhalten dieser vier Routen
+  // aendert sich bewusst. Das Legacy-Checkout-Paar (setup-checkout, checkout-return,
+  // P9) bleibt unveraendert hinter der Basic-Auth allein. billing = stripeBilling
+  // (EINE Instanz, INV-7); requireTenant = die EINE Wurzel-Instanz (403 bei
+  // TENANT_REJECT). costTruing = die EINE LCT-P3-Instanz (INV-7, in server.js
+  // konstruiert).
   app.use(
     makeBillingRoutes({
       config,
@@ -375,17 +387,19 @@ export async function buildApp(deps) {
       billing: stripeBilling,
       tenant: { requireTenant },
       costTruing,
+      operatorAuth,
     }),
   );
 
   // ---- Onboarding-Routen ------------------------------------------------------------
   // /api/onboard + /api/onboard/retry lebt in src/routes/api-onboard.js
-  // (makeOnboardRoutes, DI-Muster wie makeBillingRoutes/makeCallRoutes) - reine
-  // Verschiebung. Unveraenderte Mount-Position (nach makeBillingRoutes, vor /mcp),
-  // hinter Basic-Auth (Bestand deckt /api/* ab). provisioning = die EINE P6-Instanz
-  // (INV-7). Der withStoreLock-kritische Abschnitt + Nummern-Caps + persist_error->503
-  // wandern unveraendert mit.
-  app.use(makeOnboardRoutes({ store, config, audit, provisioning }));
+  // (makeOnboardRoutes, DI-Muster wie makeBillingRoutes/makeCallRoutes). Unveraenderte
+  // Mount-Position (nach makeBillingRoutes, vor /mcp), hinter Basic-Auth (Bestand
+  // deckt /api/* ab) UND zusaetzlich hinter webAuthMw+adminMw, NUR DANN gemountet,
+  // wenn operatorAuth existiert (AUTH-P6, s.o.) - keine reine Verschiebung mehr.
+  // provisioning = die EINE P6-Instanz (INV-7). Der withStoreLock-kritische Abschnitt +
+  // Nummern-Caps + persist_error->503 sind unveraendert.
+  app.use(makeOnboardRoutes({ store, config, audit, provisioning, operatorAuth }));
 
   // ================= MCP ueber Streamable HTTP (Custom Connector) =================
   // Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt in src/routes/mcp.js

@@ -215,4 +215,10 @@ export async function wireWebLogin({
   // ab und diese Zeile bleibt aus. Macht den fail-open-Zustand dauerhaft sichtbar (Render-Log)
   // statt lautlos 404.
   console.log("[boot] Web-Login aktiv");
+
+  // AUTH-P6: die Betreiber-Sicherung nach oben reichen. webAuthMw/adminMw entstehen fuer
+  // die Admin-Routen ohnehin HIER - ein zweiter Bau waere eine zweite Wahrheit darueber,
+  // wer Admin ist (G5). Rueckgabe erst NACH allen Mounts: wirft ein Schritt vorher, faengt
+  // guardedBoot es ab, der Aufrufer bekommt nichts und mountet die Betreiber-Routen nicht.
+  return { webAuthMw, adminMw };
 }

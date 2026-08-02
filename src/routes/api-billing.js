@@ -1,15 +1,21 @@
-// ---- makeBillingRoutes (Server-Slim P7) -----------------------------------------
+// ---- makeBillingRoutes (Server-Slim P7, AUTH-P6) --------------------------------
 // Extrahierte /api/billing/*-Route-Gruppe (flush-meters, setup-checkout,
-// checkout-return) als Factory mit Dependency-Injection - gleiches Muster wie
-// makeReadRoutes/makeCallRoutes. Teil der server.js-Decomposition (PLAN-SERVER-SLIM
-// P7): reine Verschiebung, Verhalten unveraendert.
+// checkout-return, cost-truing/sweep, cost-drift, platform-costs) als Factory mit
+// Dependency-Injection - gleiches Muster wie makeReadRoutes/makeCallRoutes.
 //
-// Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab). BEWUSST KEIN
-// MCP-Tool (kein offener ungegateter Geld-Endpunkt, R4). Ohne PAYMENT_ENABLED -> 404
-// (fail-closed, byte-identisch zum Bestand). billing = die EINE stripeBilling-Instanz
-// (INV-7), requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT). Die pure
-// Helfer (flushMeters/bindCardFromSession/startCheckoutWithStaleCustomerHeal) kommen
-// direkt aus billing/* (eine Quelle, G5 - wie publicCall in makeReadRoutes).
+// AUTH-P6: vier dieser Routen (flush-meters, cost-truing/sweep, cost-drift,
+// platform-costs) sind Betreiber-Routen und haengen zusaetzlich zur Basic-Auth hinter
+// einer echten Admin-Sitzung (webAuthMw+adminMw, operatorRoutes/operatorAuth) - und
+// NUR DANN gemountet, wenn diese Sicherung existiert (fail-closed, s.
+// wiring/operator-routes.js). Das Legacy-Checkout-Paar (setup-checkout,
+// checkout-return, P9) bleibt UNVERAENDERT nur hinter der Basic-Auth.
+//
+// BEWUSST KEIN MCP-Tool (kein offener ungegateter Geld-Endpunkt, R4). Ohne
+// PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch zum Bestand). billing = die
+// EINE stripeBilling-Instanz (INV-7), requireTenant = die EINE Wurzel-Instanz (403 bei
+// TENANT_REJECT). Die pure Helfer (flushMeters/bindCardFromSession/
+// startCheckoutWithStaleCustomerHeal) kommen direkt aus billing/* (eine Quelle, G5 -
+// wie publicCall in makeReadRoutes).
 import { Router } from "express";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.js";
@@ -20,26 +26,39 @@ import { countActiveNumbers } from "../store/views.js";
 // P14: dieselbe EINE Quelle der Stripe-Rueckkehr-Ziele wie self-service-routes.js
 // (frueher stand die cancelUrl hier als zweites Inline-Literal, driftfaehig, G5).
 import { CHECKOUT_RETURN } from "../portal-paths.js";
+import { operatorRoutes } from "../wiring/operator-routes.js";
 
 // Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
 
-// deps: { config, store, audit, billing, tenant, costTruing }. config ist das globale
-// Config-Objekt (paymentEnabled/publicUrl/stripeCustomerRetryDelayMs). store traegt
-// load/save. audit ist util.audit (loggt nur Keys, keine Werte/Secrets). billing ist
-// die EINE stripeBilling-Instanz (Stripe-Port). tenant buendelt die request-tenant-
-// Resolver: requireTenant (tenant-gescopt; REJECT -> 403). costTruing ist die EINE
-// LCT-P3-Instanz (INV-7, in server.js konstruiert).
-export function makeBillingRoutes({ config, store, audit, billing, tenant: { requireTenant }, costTruing }) {
+// deps: { config, store, audit, billing, tenant, costTruing, operatorAuth }. config ist
+// das globale Config-Objekt (paymentEnabled/publicUrl/stripeCustomerRetryDelayMs).
+// store traegt load/save. audit ist util.audit (loggt nur Keys, keine Werte/Secrets).
+// billing ist die EINE stripeBilling-Instanz (Stripe-Port). tenant buendelt die
+// request-tenant-Resolver: requireTenant (tenant-gescopt; REJECT -> 403). costTruing
+// ist die EINE LCT-P3-Instanz (INV-7, in server.js konstruiert). operatorAuth traegt
+// { webAuthMw, adminMw } fuer die vier Betreiber-Routen (AUTH-P6) - null, wenn die
+// Admin-Sitzungs-Infra nicht verfuegbar ist (dann werden diese vier NICHT gemountet).
+export function makeBillingRoutes({
+  config,
+  store,
+  audit,
+  billing,
+  tenant: { requireTenant },
+  costTruing,
+  operatorAuth,
+}) {
   const router = Router();
+  const operator = operatorRoutes({ router, operatorAuth });
 
   // ---- Stripe-Metering-Flush (P6b3): aggregiert den usage_event-Ledger je tenant+kind
   // und meldet je Aggregat EIN reportMeter (idempotent ueber stripe_meter_sent). Hinter
-  // Basic-Auth (Bestand deckt /api/* ab; localhost = Owner) - KEIN MCP-Tool. NUR im
-  // Metering-Pfad erreichbar: ohne PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch
-  // zum Bestand). "Periodisch" = extern cron-baar (echter Scheduler = P8); KEIN neuer
-  // Scheduler-Dep. Antwort = nur Zaehler {sent, failed} (KEINE Event-Inhalte, kein Secret).
-  router.post("/api/billing/flush-meters", async (req, res) => {
+  // Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung
+  // gar nicht gemountet. KEIN MCP-Tool. NUR im Metering-Pfad erreichbar: ohne
+  // PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch zum Bestand). "Periodisch" =
+  // extern cron-baar (echter Scheduler = P8); KEIN neuer Scheduler-Dep. Antwort = nur
+  // Zaehler {sent, failed} (KEINE Event-Inhalte, kein Secret).
+  operator.post("/api/billing/flush-meters", async (req, res) => {
     if (!requirePaymentEnabled(res, config, "metering disabled (PAYMENT_ENABLED)")) return;
     const result = await flushMeters(store.load(), { billing });
     store.save();
@@ -74,42 +93,45 @@ export function makeBillingRoutes({ config, store, audit, billing, tenant: { req
   });
 
   // ---- Kosten-Abgleich manuell anstossen (LCT P3) ----
-  // Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab) - KEIN MCP-Tool
-  // (Muster flush-meters, R4: kein offener ungegateter Geld-naher Endpunkt). BEWUSST
-  // OHNE PAYMENT_ENABLED-Gate: der Abgleich ist Beobachtung der Kosten-Achse, die - wie
-  // reconcileOutboundVoiceBudget - auch ohne Zahlungspfad laeuft; ein 404 hier machte den
-  // Job im heutigen Live-Betrieb unausloesbar. NICHT tenant-gescopt: ein Plattform-Job
-  // ueber alle Tenants (Muster flush-meters). Antwort = NUR Zaehler + Quote, keine
-  // Call-IDs, keine Rufnummern, keine Tenant-Kennungen. Ausloeser Nummer zwei neben dem
-  // Intervall - der Laufriegel im Modul faengt die Ueberlappung.
-  router.post("/api/billing/cost-truing/sweep", async (req, res) => {
+  // Hinter Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
+  // Sicherung gar nicht gemountet. KEIN MCP-Tool (Muster flush-meters, R4: kein offener
+  // ungegateter Geld-naher Endpunkt). BEWUSST OHNE PAYMENT_ENABLED-Gate: der Abgleich
+  // ist Beobachtung der Kosten-Achse, die - wie reconcileOutboundVoiceBudget - auch ohne
+  // Zahlungspfad laeuft; ein 404 hier machte den Job im heutigen Live-Betrieb
+  // unausloesbar. NICHT tenant-gescopt: ein Plattform-Job ueber alle Tenants (Muster
+  // flush-meters). Antwort = NUR Zaehler + Quote, keine Call-IDs, keine Rufnummern,
+  // keine Tenant-Kennungen. Ausloeser Nummer zwei neben dem Intervall - der Laufriegel
+  // im Modul faengt die Ueberlappung.
+  operator.post("/api/billing/cost-truing/sweep", async (req, res) => {
     const result = await costTruing.runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
     audit("cost_truing_sweep", req, `skipped=${result.skipped} deckung=${result.coveragePercent ?? "-"}%`);
     res.json(result);
   });
 
   // ---- Drift-Waechter: gemessener Minutensatz je Praefix (LCT P5) ----
-  // Hinter der bestehenden /api/*-Basic-Auth, NICHT tenant-gescopt - dieselbe Naht und
-  // dieselbe Begruendung wie der Sweep-Endpunkt daneben (Plattform-Groesse ueber alle
-  // Tenants). BEWUSST NICHT in /api/state: dort gilt der Cross-Tenant-Leck-Riegel
-  // (api-read.js, usageView) - ein praefix-weites p95 ueber alle Tenants ist genau die
-  // Plattform-Aggregation, die diese Projektion nicht verlassen darf. Antwort ist
-  // PII-frei: Praefix ("+49" ist keine Rufnummer), Befund-Code, Stichprobenzahl, zwei
+  // Hinter Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
+  // Sicherung gar nicht gemountet. NICHT tenant-gescopt - dieselbe Naht und dieselbe
+  // Begruendung wie der Sweep-Endpunkt daneben (Plattform-Groesse ueber alle Tenants).
+  // BEWUSST NICHT in /api/state: dort gilt der Cross-Tenant-Leck-Riegel (api-read.js,
+  // usageView) - ein praefix-weites p95 ueber alle Tenants ist genau die Plattform-
+  // Aggregation, die diese Projektion nicht verlassen darf. Antwort ist PII-frei:
+  // Praefix ("+49" ist keine Rufnummer), Befund-Code, Stichprobenzahl, zwei
   // Cent-Betraege. Kein Alarm-Empfaenger, keine Call-ID, keine Tenant-Kennung.
-  router.get("/api/billing/cost-drift", (req, res) => {
+  operator.get("/api/billing/cost-drift", (req, res) => {
     res.json({ prefixes: tariffDriftReportFromConfig(store.load().calls, config.billing) });
   });
 
   // ---- Fixkosten sichtbar machen (LCT P7): ElevenLabs-Wand + DID-Miete ----
-  // Hinter der bestehenden /api/*-Basic-Auth, NICHT tenant-gescopt - dieselbe Naht und
-  // Begruendung wie cost-drift daneben (Plattform-Aggregat, kein Tenant-Filter existiert).
+  // Hinter Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
+  // Sicherung gar nicht gemountet. NICHT tenant-gescopt - dieselbe Naht und Begruendung
+  // wie cost-drift daneben (Plattform-Aggregat, kein Tenant-Filter existiert).
   // public/index.html gibt es nicht mehr (Owner-Removal P5) - dieser Reader ist der
   // Anzeige-Pfad. REINE ANZEIGE: kein Gate/keine Reserve/keine Buchung liest diese Route.
   // Antwort ist PII-frei: nur Cent-Betraege, ein Nummern-ZAEHLER (keine E.164), die
   // Zeichenzahl des TTS-Kontingents und der Zyklus-Schluessel. "Listenpreis, nicht
   // Rechnungsposten" (Entscheidung 6) - listPriceNotBilled markiert das explizit in der
   // Antwort, damit kein Konsument die Zahl faelschlich als Ist-Kosten liest.
-  router.get("/api/billing/platform-costs", (req, res) => {
+  operator.get("/api/billing/platform-costs", (req, res) => {
     const nowIso = new Date().toISOString();
     const activeNumbers = countActiveNumbers(store.load());
     const didRentCents = config.billing.numberMonthlyCostCents * activeNumbers;

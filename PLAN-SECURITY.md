@@ -2255,3 +2255,171 @@ Fehler statt Daten → sofortiger Rollback (Revert, ein Commit). Sekundär: `gru
 taucht im Render-Log fuer `path=/api/state` auf, obwohl niemand von aussen anfragt —
 `AUTH-P5-2` pinnt den In-Process-Pfad inklusive eines echten MCP-`tools/call` genau
 dagegen.
+
+## AUTH-P6 — Betreiber-Routen auf Admin-Session (2026-08-02)
+
+Sechste Phase von `PLAN-AUTH-GATE.md`. Sechs Betreiber-Routen — `POST /api/onboard`,
+`POST /api/onboard/retry` (`src/routes/api-onboard.js`), `POST /api/billing/flush-meters`,
+`POST /api/billing/cost-truing/sweep`, `GET /api/billing/cost-drift`,
+`GET /api/billing/platform-costs` (`src/routes/api-billing.js`) — haengen jetzt zusaetzlich
+zur Basic-Auth hinter einer echten Admin-Browser-Sitzung (`webAuthMw`+`adminMw`).
+`/api/tenant-data/export` bleibt AUSSEN VOR (AUTH-P5, `internalOnly`, Plan-Entscheidung 1
+— nicht neu aufgerollt). Das Legacy-Checkout-Paar (`setup-checkout`, `checkout-return`)
+bleibt UNVERAENDERT (P9, Karenz).
+
+**Die harte Invariante.** `webAuthMw`/`adminMw` entstehen HEUTE nur im
+`guardedBoot`-Block (`src/wiring/web-login.js`, `wireWebLogin`), der fail-OPEN ist
+(`src/boot-guard.js`). `wireWebLogin` gibt seit dieser Phase `{ webAuthMw, adminMw }`
+zurueck — als ALLERLETZTE Anweisung, NACH dem Boot-Marker `console.log("[boot]
+Web-Login aktiv")`. Wirft ein Mount-Schritt vorher, faengt `guardedBoot` es fail-open
+ab und gibt nichts zurueck. `src/app.js` haelt eine Bindung `let operatorAuth = null`,
+die NUR im `guardedBoot`-Callback zugewiesen wird — laeuft der Block gar nicht (kein
+`sessionSecret`/`pg`) oder wirft er, bleibt `operatorAuth === null`: fail-closed by
+construction, kein Zweig, den man vergessen kann. `guardedBoot` selbst bleibt
+UNVERAENDERT (liefert weiterhin `boolean`, kein Vertragsbruch mit `boot-guard.test.js`).
+
+**`operatorRoutes` (neu, `src/wiring/operator-routes.js`).** Die EINE Stelle (G5/G27),
+an der die Bedingung "Sicherung da → mounten, sonst NICHT mounten" steht — nicht an
+sechs Registrierungsstellen. `operatorRoutes({ router, operatorAuth })` liefert `get`/
+`post`-Wrapper, die `if (!operatorAuth) return;` VOR jeder Registrierung pruefen; ist
+`operatorAuth` da, haengt die Registrierung `operatorAuth.webAuthMw, operatorAuth.adminMw`
+UNVERAENDERT (keine Wrapper-Arrow) vor den Handler — `AUTH_MIDDLEWARE_NAMES`
+(`src/route-policy.js`) erkennt beide weiterhin als benannte Funktionen im Express-
+Stack. `makeBillingRoutes`/`makeOnboardRoutes` bekommen `operatorAuth` als neuen Dep und
+mounten ihre vier bzw. zwei Betreiber-Zeilen ueber `operator.post`/`operator.get` statt
+`router.post`/`router.get`; alle anderen Zeilen (Legacy-Checkout-Paar) bleiben auf dem
+rohen `router`.
+
+**Die zweite, von Disziplin unabhaengige Sicherung.** Wer kuenftig eine Betreiber-Route
+mit dem rohen `router` statt ueber `operatorRoutes` mountet, landet in
+`ROUTE_CLASS.UNPROTECTED` (`src/route-policy.js`) und macht
+`test/route-auth-inventory.test.js` rot — Struktur UND Messung, nicht nur eine der
+beiden.
+
+**Mount-Position bewusst UNVERAENDERT (hinter dem Basic-Auth-Gate).** `installAuthGate`
+mountet in `src/app.js` VOR `makeBillingRoutes`/`makeOnboardRoutes` — unveraendert seit
+P0. Einem anonymen externen Aufrufer antwortet weiterhin das Basic-Auth-Gate (401 MIT
+`WWW-Authenticate: Basic`), nicht `webAuthGateMiddleware` (401 ohne Challenge) — die
+Staffelung Gate+Sitzung bleibt bis P7 erhalten, der Diff bleibt klein, und Sicherung +
+antwortende Schicht wechseln nicht im selben Commit (waere bei einem Live-Befund nicht
+mehr trennbar, welche Aenderung ihn ausloeste). Folge: `scripts/probe-auth.sh` aendert
+fuer die sechs Zeilen NUR die Begruendungs-Spalte (`... (P6: webAuth+adminOnly)`) — ART
+bleibt `sitzung`, STATUS bleibt `401`, ANTWORTET bleibt `gate`. Maschinell erzwungen
+durch `AUTH-P6-9` (`test/probe-auth-table.test.js`): die sechs Zeilen duerfen nicht mehr
+in `GATE_ONLY_ROUTES` stehen, die Probe-Zeile bleibt unveraendert, UND `GATE_ONLY_ROUTES`
+enthaelt danach GENAU das Legacy-Checkout-Paar (der Zwischenstand, den P7 vorfindet).
+
+**`src/route-policy.js` mitgezogen (H10, selber Commit).** Die sechs Zeilen mit
+`plan: "P6 webAuthMw+adminMw"` fallen aus `GATE_ONLY_ROUTES` (8 → 2: nur noch das
+Legacy-Checkout-Paar). `ROUTE_FINGERPRINT` bleibt UNVERAENDERT — die Routen existieren
+weiter, nur ihre Einordnung wechselt von `GATE_ONLY` auf `AUTH`.
+
+**Admin-Mechanismus (kein neuer Code, nur Betriebswissen).** `adminOnly`
+(`src/web-auth.js`): `t.role === "admin" || (t.email && allow.includes(t.email))` — ODER,
+nicht UND. `ADMIN_EMAILS` existiert bereits (`config.auth.adminEmails`), keine neue
+Env-Variable. Vor diesem Deploy MUSS der Owner pruefen: (1) steht die eigene Login-
+E-Mail in `ADMIN_EMAILS` im Render-Dashboard, ODER (2) `role='admin'` +
+`status='active'` in der Produktions-`accounts`-Tabelle (`scripts/grant-admin.js`
+existiert bereits). `status` ist die zweite Falle: `webAuth` ist active-only — ein
+`suspended`-Admin-Account bekommt 403 VOR `adminOnly`, unabhaengig von der Rolle.
+
+**Zwei operative Folgen, die mit dem Deploy sofort eintreten.**
+`scripts/sweep-jetzt.sh` (curl mit Basic-Auth gegen `/api/billing/cost-truing/sweep`)
+wird wirkungslos (403/401) — konsistent mit der Owner-Entscheidung, das Skript in P7
+ersatzlos zu streichen; der Intervall-Sweep laeuft unveraendert weiter. Alle sechs
+Routen sind ab jetzt NUR noch aus einem eingeloggten Browser mit Admin-Account
+bedienbar — `curl` mit Basic-Auth reicht nicht mehr, auch nicht von localhost
+(`isTrustedLocalCaller` traegt diese sechs Routen bewusst NICHT, anders als die sieben
+P5-Routen).
+
+**Neun neue Tests**, drei Dateien nach Ausfuehrungsart getrennt (Lehre: pglite nie mit
+Kindprozess mischen). `test/auth-p6-operator-routes.test.js` (pglite, kein Spawn):
+`AUTH-P6-1` (ohne Sitzung → 401 auf allen sechs Routen, kein `www-authenticate`, keine
+Seiteneffekte), `AUTH-P6-2` (aktive Nicht-Admin-Sitzung → 403, keine Seiteneffekte),
+`AUTH-P6-3`/`AUTH-P6-4` (Admin per `ADMIN_EMAILS` bzw. per `role='admin'` — beide
+Zugangswege tragen, dieselbe Erfolgs-Assertion). `test/auth-p6-mount-gate.test.js`
+(Spawn, kein pglite): `AUTH-P6-5` (json/kein `SESSION_SECRET` → alle sechs Routen 404,
+Gate nachweisbar abwesend, `/healthz` lebt weiter), `AUTH-P6-5b` (`SESSION_SECRET`
+ALLEIN, weiter json → weiterhin 404 — die Bedingung ist ein UND), `AUTH-P6-6` (externer
+Aufrufer → 401 MIT `WWW-Authenticate: Basic` — die Zeile, die die Probe erwartet).
+`test/route-auth-inventory.test.js` (+2): `AUTH-P6-7` (die sechs Routen tragen BEIDE
+Middlewares, nicht nur eine — schliesst die in Abschnitt "Ehrliche Luecke" (`AUTH-P1`
+oben) benannte Schwaeche von `classifyRoute` fuer diese sechs), `AUTH-P6-8` (Kehrseite
+im mageren json-Graph: keiner der sechs Schluessel existiert dort). Plus `AUTH-P6-9` in
+`test/probe-auth-table.test.js` (s.o.).
+
+**Mutationsprobe (vorgefuehrt, zurueckgenommen).** `adminMw` aus der Kette entfernen
+(`operator-routes.js`) → `AUTH-P6-2` (Nicht-Admin bekaeme 200 statt 403) UND `AUTH-P6-7`
+(`adminOnlyMiddleware` fehlt in der Kette) rot — zwei unabhaengige Detektoren.
+`webAuthMw` entfernen → `AUTH-P6-1` und `AUTH-P6-7` rot. Das `if (!operatorAuth) return;`
+durch ungeschuetztes Mounten ersetzt → `AUTH-P6-5` (404 → 200/400) und `AUTH-P6-8` rot;
+zusaetzlich meldet `route-auth-inventory.test.js` die sechs Routen als `UNPROTECTED`
+(kein Auth-Middleware-Name, kein `GATE_ONLY`-Eintrag mehr). Die sechs Zeilen NICHT aus
+`GATE_ONLY_ROUTES` entfernt → `AUTH-P6-9` rot.
+
+**Kippende Bestandstests — 15 Dateien, je einzeln migriert (In-Process-Mount statt
+Server-Spawn, dieselben Assertionen).** `test/billing-payment-gate.test.js` (1 Test:
+`operatorAuth`-Durchreiche-Attrappe ergaenzt), `test/api-flush-meters.test.js` (4),
+`test/api-cost-drift.test.js` (3 von 4, der externe-IP-Auth-Test bleibt Spawn),
+`test/api-cost-truing-sweep.test.js` (2 von 3, dito, mit einer ECHTEN
+`makeCostTruing`-Instanz), `test/api-platform-costs.test.js` (2 von 6, dito),
+`test/onboarding-route.test.js` (8, inkl. Provisioning-Double statt echtem Telnyx-Kauf
+— **Coverage-Delta B**, s.u.), `test/onboarding-identity.test.js` (6, plus die zwei
+`AUTH-P4-7`-Assertionen aus `auth-p4-deleted-routes.test.js` uebernommen),
+`test/f1-geo-onboard.test.js` (9, inkl. `setWorldDefaultLanguageEnabled(true)` explizit
+gesetzt — s.u.), `test/fmt-11-onboard-privatenumber-country-gate.test.js` (1),
+`test/onboard-persist-failure.test.js` (1, "Prozess lebt weiter" →
+"kein `unhandledRejection`-Ereignis" — **Coverage-Delta C**), `test/p2-onboard-retry.test.js`
+(3 von 4, NICHT 2 von 4 wie im Umsetzungsplan angenommen — s. Deviation unten; (d) bleibt
+Spawn), `test/prov01-retry-redrive-http.test.js` (2, mit dem ECHTEN
+`makeProvisioningOrchestrator` + dem ECHTEN Telnyx-Adapter gegen den lokalen Mock — der
+Seed-Schritt "Tenant per HTTP anlegen" wird durch direkte `registerTenant`/
+`requestNumber`/`queueProvisioning`-Aufrufe ersetzt, Setup statt Subjekt),
+`test/p10-world-default-language-switch.test.js` (die zwei Wiring-Tests AUSGELAGERT nach
+`test/p10-world-default-language-onboard.test.js`, NICHT im Bestand migriert — s.
+Deviation unten), `test/e2e-05-us-launch-full-chain.test.js` (Spawn bleibt — Kette, kein
+Routen-Test; der Onboard-HTTP-Schritt wird durch direkte Aufrufe derselben puren
+Funktionen ersetzt, die die Route intern nutzt, PLUS einen Store-Seed mit dem
+Ergebniszustand gegen einen echten Boot unter `prodEnv()`), `test/auth-p4-deleted-
+routes.test.js` (AUTH-P4-7 auf den Boot-Beweis reduziert, s.o.).
+
+**Zwei Deviationen vom Umsetzungsplan (Plan-Praemisse durch Messung widerlegt, nicht
+stillschweigend uebernommen).**
+(1) `test/p2-onboard-retry.test.js`: der Plan nannte "2 von 4" Tests fuer die Migration;
+empirisch brauchen DREI der vier Tests ((a)/(b)/(c)) die Migration — sie antworten alle
+DURCH die Route selbst (200/409/403), nicht durch das Gate davor. Nur (d) misst
+tatsaechlich das Gate (401 vor jeder Route-Existenz-Frage) und blieb darum unveraendert.
+(2) `test/p10-world-default-language-switch.test.js`: die zwei Wiring-Tests (Achse B)
+mussten in eine EIGENE Datei wandern, nicht in derselben Datei migriert werden — sie
+brauchen `withConfigNamespaces` und damit `src/config.js`, dessen Boot-Wiring-
+Seiteneffekt (`setWorldDefaultLanguageEnabled(config.provisioning.
+worldDefaultLanguageEnabled)`) beim blossen Import feuert und den allerersten Test der
+Datei (Achse A, "Code-Default ist 'en', OHNE config.js geladen zu haben") seine Praemisse
+entzogen haette.
+
+**Drei benannte Coverage-Verluste (bewusst, nicht verschwiegen).**
+**A** — die Kette `server.js (makeCostTruing/provisioning) → deps → buildApp → Route`
+ist fuer die sechs Betreiber-Routen NICHT mehr ueber einen Spawn-Server gemessen (dafuer
+braeuchte es pg im Spawn). Ersatz: ab P7 misst die Live-Probe sie — ein 404 auf diesen
+Routen ist dort ein DURCHFALL. **B** — der Nummernkauf ueber HTTP (Telnyx-Mock, Warten
+auf `active`) laeuft in `test/onboarding-route.test.js` nicht mehr durch den Router; die
+Kauf-Kette selbst bleibt in `test/provisioning-worker.test.js` und
+`test/onboarding-service.test.js` gedeckt (und weiterhin voll ueber
+`test/prov01-retry-redrive-http.test.js`, das den echten Orchestrator+Adapter behaelt).
+**C** — "der Prozess ueberlebt einen Save-Fehler" (`onboard-persist-failure.test.js`)
+wurde zu "der Handler antwortet 503 ohne unhandled rejection"; der Prozess-/Boot-Aspekt
+bleibt in den uebrigen Spawn-Tests gedeckt.
+
+**Absolute Regeln:** unberuehrt. Die Kette wird ENGER, nie weiter — die sechs Routen
+sind entweder admin-gesichert ODER existieren nicht, niemals ungeschuetzt.
+`disclosureSentence`, Signaturpruefung, `OUTBOUND_FROZEN`, pro-Tenant-Kostendecke,
+Denylist/Land/Stundenlimit: nicht angefasst. Kein Secret beruehrt (`ADMIN_EMAILS`
+existiert bereits). Keine neue Dependency, kein Flag, keine Env-Variable, keine
+DB-Aenderung. `src/wiring/auth-gate.js` (P7) unangetastet. Das Legacy-Checkout-Paar
+(P9) unangetastet.
+
+**Abbruchsignal live (falls dieser Schritt falsch war):** der Owner kommt nach dem
+Deploy nicht mehr an das Onboarding (`/api/onboard`) → sofortiger Rollback (Revert, ein
+Commit) — `/api/onboard` ist die einzige Flaeche zum Anlegen neuer Tenants, ohne
+Admin-Zugang steht der Verkauf. Sekundär: `scripts/sweep-jetzt.sh` liefert 401/403 im
+Cron-Log — erwartet (s.o.), kein Abbruchsignal fuer sich allein.

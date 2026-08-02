@@ -1,18 +1,20 @@
-// ---- makeOnboardRoutes (Server-Slim P10) -----------------------------------------
+// ---- makeOnboardRoutes (Server-Slim P10, AUTH-P6) --------------------------------
 // Extrahierte Onboarding-Route-Gruppe (POST /api/onboard, POST /api/onboard/retry)
 // als Factory mit Dependency-Injection - gleiches Muster wie makeBillingRoutes/
-// makeCallRoutes. Teil der server.js-Decomposition (PLAN-SERVER-SLIM P10): REINE
-// Verschiebung, Verhalten unveraendert (byte-identische Pfade/Status/Bodies/Audit).
+// makeCallRoutes.
 //
-// Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab; localhost =
-// Owner). BEWUSST KEIN MCP-Tool (kein Self-Service ueber MCP, kein offener ungegateter
-// Geld-Endpunkt, R4). Die Kosten-Notbremse ist die Nummern-Cap (maxNumbers/
-// maxNumbersPerTenant) - sie ERSETZT das uebersprungene Stripe-Schloss. Echter
-// Provider-Kauf NUR bei PROVISIONING_ENABLED=true; sonst Dry-Run (fail-closed).
-// provisioning = die EINE P6-Orchestrator-Instanz (INV-7, geteilt mit Webhook +
-// Self-Service). Die pure Helfer (validIdentity/registerTenant/... + PROVIDER/
-// KYC_OUTBOUND_MIN) kommen direkt aus ihrer Heimat (eine Quelle, G5 - wie normNum in
-// makeCallRoutes); nur die Laufzeit-Instanzen werden injiziert.
+// AUTH-P6: beide Routen sind Betreiber-Routen und haengen zusaetzlich zur Basic-Auth
+// hinter einer echten Admin-Sitzung (webAuthMw+adminMw, operatorRoutes/operatorAuth) -
+// und NUR DANN gemountet, wenn diese Sicherung existiert (fail-closed, s.
+// wiring/operator-routes.js). BEWUSST KEIN MCP-Tool (kein Self-Service ueber MCP,
+// kein offener ungegateter Geld-Endpunkt, R4). Die Kosten-Notbremse ist zusaetzlich
+// die Nummern-Cap (maxNumbers/maxNumbersPerTenant) - sie ERSETZT das uebersprungene
+// Stripe-Schloss. Echter Provider-Kauf NUR bei PROVISIONING_ENABLED=true; sonst
+// Dry-Run (fail-closed). provisioning = die EINE P6-Orchestrator-Instanz (INV-7,
+// geteilt mit Webhook + Self-Service). Die pure Helfer (validIdentity/
+// registerTenant/... + PROVIDER/KYC_OUTBOUND_MIN) kommen direkt aus ihrer Heimat
+// (eine Quelle, G5 - wie normNum in makeCallRoutes); nur die Laufzeit-Instanzen
+// werden injiziert.
 import { Router } from "express";
 import { validIdentity, IDENTITY_MAX_LEN } from "./_validation.js";
 import { checkSubAlreadyMerged } from "../onboard-guard.js";
@@ -30,6 +32,7 @@ import {
   normalizePrivateNumber,
   requestNumber,
 } from "../store/state-ops.js";
+import { operatorRoutes } from "../wiring/operator-routes.js";
 
 // Reason -> HTTP-Status-Mapping fuer requestNumber()-Ablehnungen (Nummern-Anfrage,
 // Regel 1: Nummern-Caps ersetzen das uebersprungene Stripe-Schloss).
@@ -65,14 +68,17 @@ function requireValidTenantId(res, tenantId) {
   return false;
 }
 
-// deps: { store, config, audit, provisioning }. store traegt load/save/withStoreLock/
-// resolveTenant/tenantActiveSubscriber. config ist das globale Config-Objekt
-// (defaultTenantBudgetCents/geoEnabled/provisioningCountry/forceNumberCountry/
-// provisioningEnabled). audit ist util.audit (loggt nur Keys, keine Werte/Secrets).
-// provisioning ist die EINE P6-Orchestrator-Instanz (queueProvisioning/
-// runProvisioningDrainExclusive/triggerTenantProvisioning, INV-7).
-export function makeOnboardRoutes({ store, config, audit, provisioning }) {
+// deps: { store, config, audit, provisioning, operatorAuth }. store traegt load/save/
+// withStoreLock/resolveTenant/tenantActiveSubscriber. config ist das globale
+// Config-Objekt (defaultTenantBudgetCents/geoEnabled/provisioningCountry/
+// forceNumberCountry/provisioningEnabled). audit ist util.audit (loggt nur Keys,
+// keine Werte/Secrets). provisioning ist die EINE P6-Orchestrator-Instanz
+// (queueProvisioning/runProvisioningDrainExclusive/triggerTenantProvisioning, INV-7).
+// operatorAuth traegt { webAuthMw, adminMw } fuer beide Routen (AUTH-P6) - null, wenn
+// die Admin-Sitzungs-Infra nicht verfuegbar ist (dann werden sie NICHT gemountet).
+export function makeOnboardRoutes({ store, config, audit, provisioning, operatorAuth }) {
   const router = Router();
+  const operator = operatorRoutes({ router, operatorAuth });
 
   // Aktiver Geo-Lookup (F1 Phase 6, config-getrieben). Bei GEO_ENABLED aus = Null-
   // Adapter (loest IP nie auf -> DE-Fallback, netzfrei). EINMAL beim Routen-Setup
@@ -80,8 +86,10 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
   const geoLookup = geoLookupAdapter();
 
   // ---- Onboarding (zahlungsfrei): Tenant registrieren -> Nummer anfragen ->
-  // (optional) echter Provider-Kauf -> aktivieren.
-  router.post("/api/onboard", async (req, res) => {
+  // (optional) echter Provider-Kauf -> aktivieren. Hinter Basic-Auth UND einer
+  // Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung gar nicht
+  // gemountet.
+  operator.post("/api/onboard", async (req, res) => {
     // G1: zwei Eingaben (firstName + lastName) statt eines ownerName (Owner-Entscheidung
     // #1). Beide optional + Freitext (duerfen Leerzeichen, NICHT durch validIdentity, das
     // nur den Routing-Schluessel tenantId prueft); registerTenant trimmt + komponiert
@@ -237,13 +245,15 @@ export function makeOnboardRoutes({ store, config, audit, provisioning }) {
   // Operator-Re-Trigger (P2): provisioniert eine NEUE Nummer fuer einen aktiven, bezahlten
   // Subscriber, dessen vorheriger Nummernkauf scheiterte (provisionNumber faellt bei Order-/
   // Hold-Fehler auf 'failed' -> tenantHasLiveNumber wird wieder offen -> frische 'requested'
-  // -> Worker kauft). Hinter der globalen Basic-Auth (Owner) ODER trusted-localhost wie alle
-  // /api/* (Regel 3). Geld-Safety (Regel 1): NUR fuer einen active + KYC>=CARD Subscriber
-  // (das Abo IST die Freigabe, dieselbe Semantik wie das Outbound-Allowlist-Gate) - kein
-  // Nummernkauf fuer Nicht-Zahler/suspendierte/fremde Tenants. Reuse triggerTenantProvisioning
-  // (alle Gates: PROVISIONING_ENABLED, Caps, tenantHasLiveNumber, Hold/Capture) - keine zweite
+  // -> Worker kauft). Hinter Basic-Auth UND einer Admin-Sitzung (webAuthMw+adminMw,
+  // AUTH-P6); ohne diese Sicherung gar nicht gemountet - trusted-localhost traegt diese
+  // Route bewusst NICHT mehr (anders als die sieben P5-Routen). Geld-Safety (Regel 1):
+  // NUR fuer einen active + KYC>=CARD Subscriber (das Abo IST die Freigabe, dieselbe
+  // Semantik wie das Outbound-Allowlist-Gate) - kein Nummernkauf fuer Nicht-Zahler/
+  // suspendierte/fremde Tenants. Reuse triggerTenantProvisioning (alle Gates:
+  // PROVISIONING_ENABLED, Caps, tenantHasLiveNumber, Hold/Capture) - keine zweite
   // Kauflogik (G5). 'already_provisioned' = Tenant hat schon eine lebende Nummer (idempotent).
-  router.post("/api/onboard/retry", async (req, res) => {
+  operator.post("/api/onboard/retry", async (req, res) => {
     const { tenantId } = req.body || {};
     if (!requireValidTenantId(res, tenantId)) return;
     // Geld-Safety (Regel 1): nur ein aktiver, KYC-verifizierter Subscriber - verhindert, dass

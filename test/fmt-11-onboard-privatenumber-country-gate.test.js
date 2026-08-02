@@ -3,26 +3,68 @@
 //
 // P8 A3-Migration: dieser Test war "SOLL (rot)". Mit P8 (allowedPrivateNumberCodes leitet
 // das erlaubte Praefix aus country her; api-onboard.js reicht country jetzt an
-// normalizePrivateNumber durch) ist der Zielzustand erreicht - der Test wandert von
-// test:gates nach npm test.
+// normalizePrivateNumber durch) ist der Zielzustand erreicht.
 //
-// Eigene Datei (kein Edit an test/onboarding-route.test.js, Datei-Eigentum Block B6):
-// gleiches Muster (startServer, postJson) wie dort (S1-9a/b).
+// AUTH-P6: /api/onboard ist seither eine Betreiber-Route (webAuthMw+adminMw, nur MIT
+// operatorAuth gemountet) - migriert auf In-Process-Mount von makeOnboardRoutes (Muster
+// onboarding-route.test.js/f1-geo-onboard.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer } from "./helpers.js";
+import express from "express";
+import { makeOnboardRoutes } from "../src/routes/api-onboard.js";
+import { operatorAuthPassThrough } from "./operator-route-app.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { makeDefaultState } from "../src/store/state-ops.js";
 
-const postJson = (url, body) =>
-  fetch(url, {
+async function startOnboardApp() {
+  const state = makeDefaultState();
+  const app = express();
+  app.use(express.json());
+  app.use(
+    makeOnboardRoutes({
+      store: {
+        load: () => state,
+        save: () => {},
+        withStoreLock: (fn) => Promise.resolve().then(fn),
+        resolveTenant: () => null,
+      },
+      config: withConfigNamespaces({
+        maxNumbers: 5,
+        maxNumbersPerTenant: 1,
+        provisioningEnabled: false,
+        provisioningCountry: "DE",
+        forceNumberCountry: "",
+        geoEnabled: false,
+        defaultTenantBudgetCents: 0,
+      }),
+      audit: () => {},
+      provisioning: {
+        queueProvisioning: async () => ({ ok: true, jobId: "job_test1" }),
+        runProvisioningDrainExclusive: async () => {},
+      },
+      operatorAuth: operatorAuthPassThrough(),
+    }),
+  );
+  const server = await new Promise((r) => {
+    const s = app.listen(0, "127.0.0.1", () => r(s));
+  });
+  return {
+    base: `http://127.0.0.1:${server.address().port}`,
+    close: () => new Promise((r) => server.close(r)),
+  };
+}
+
+const postJson = (app, body) =>
+  fetch(`${app.base}/api/onboard`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
 test("Onboarding: country=US + passende +1-Nummer passiert das private-Nummer-Gate (ex FMT-11)", async () => {
-  const srv = await startServer();
+  const app = await startOnboardApp();
   try {
-    const res = await postJson(`${srv.localUrl}/api/onboard`, {
+    const res = await postJson(app, {
       tenantId: "t_fmt11",
       country: "US",
       privateNumber: "+12025550123",
@@ -34,6 +76,6 @@ test("Onboarding: country=US + passende +1-Nummer passiert das private-Nummer-Ga
       `country=US + passende +1-Nummer darf nicht am +49-Default-Gate scheitern (war ${res.status}, error=${json?.error})`,
     );
   } finally {
-    await srv.stop();
+    await app.close();
   }
 });

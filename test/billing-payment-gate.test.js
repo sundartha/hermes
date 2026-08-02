@@ -24,6 +24,7 @@ import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } f
 import { registerTenant } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { operatorAuthPassThrough } from "./operator-route-app.js";
 
 const PAYMENT_DISABLED_MESSAGE = "payment disabled (PAYMENT_ENABLED)";
 const METERING_DISABLED_MESSAGE = "metering disabled (PAYMENT_ENABLED)";
@@ -75,6 +76,10 @@ async function startBillingApp() {
       audit: () => {},
       billing: {},
       tenant: {},
+      // AUTH-P6: flush-meters ist jetzt eine Betreiber-Route und wird nur MIT
+      // operatorAuth gemountet. Durchreiche-Attrappe (kein echtes Auth-Verhalten) -
+      // dieser Test misst weiterhin das PAYMENT_ENABLED-Gate, nicht die Sitzung.
+      operatorAuth: operatorAuthPassThrough(),
     }),
   );
   const server = await new Promise((r) => {
