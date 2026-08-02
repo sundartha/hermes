@@ -3274,8 +3274,8 @@ const OPTIONAL_ENUM_FIELDS = Object.freeze({
 const FIELD_GUARDS = Object.freeze({ greeting: hasInboundNotice });
 
 // Whitelist gegen die Default-Settings: nur bekannte Keys mit passendem Typ.
-// Unbekannte Keys / falsche Typen werden ignoriert - POST /api/settings kann
-// so keine fremden Felder in den Store schreiben oder Typen kippen. Optionale Enum-
+// Unbekannte Keys / falsche Typen werden ignoriert - kein Aufrufer kann so fremde
+// Felder in den Store schreiben oder Typen kippen. Optionale Enum-
 // Overrides (language, agentStyle) haben eine eigene fail-closed Katalog-Validierung
 // (siehe OPTIONAL_ENUM_FIELDS / resolveOptionalEnumOverride) statt des typeof-Checks.
 // Liefert auch die uebernommenen Keys (fuers Audit-Log in server.js).

@@ -4,9 +4,9 @@
 // T4-Zielort verschoben (siehe docs/strategy/t4-server-decomposition.md §3.2 Klasse C).
 // invalidText/TEXT_LIMITS leben lokal; E164 wird seit F2 aus store/defaults.js
 // re-exportiert (reines Konstanten-Modul, keine Store-State-/Netz-Last zur Laufzeit).
-// Von ZWEI API-Routen geteilt (/api/calls via E164+invalidText, /api/calendar via
-// invalidText) -> eigenes Mini-Modul, von beiden importiert (G5: eine Quelle, kein
-// Copy-Paste). Verhaltens-erhaltend: byte-identisch zur bisherigen server.js-Definition.
+// Von mehreren Konsumenten geteilt (HTTP-Kante der /api/calls-Gruppe, die Outbound-Gates
+// und der Onboard-Pfad) -> eigenes Mini-Modul, von allen importiert (G5: eine Quelle,
+// kein Copy-Paste). Verhaltens-erhaltend gegenueber der urspruenglichen Definition.
 
 // E.164-Format: '+' gefolgt von 7-15 Ziffern, erste Ziffer != 0. Kanonisch in
 // store/defaults.js neben normNum (EINE Quelle, G5 - F2 brauchte denselben Regex im
@@ -18,6 +18,16 @@ export { E164 } from "../store/defaults.js";
 // fuer HTTP-Kante und Consult-Merge, Muster E164) und wird hier fuer die Konsumenten
 // dieser Datei re-exportiert. Werte unveraendert -> Verhalten byte-identisch.
 export { KEY_FACTS_LIMITS } from "../store/defaults.js";
+
+// Gestalt-Pruefung eines Identitaets-/Routing-Schluessels: nicht-leerer String ohne
+// Whitespace, hoechstens IDENTITY_MAX_LEN Zeichen. BEWUSST KEINE strikte Email-Form -
+// derselbe Validator deckt die tenantId (z.B. "t_user_01...") und den IdP-sub ab, daher
+// der generische Name. Aus routes/api-profiles.js hierher gezogen, als dessen HTTP-Routen
+// mit AUTH-P4 entfielen; Werte und Verhalten byte-identisch.
+export const IDENTITY_MAX_LEN = 254; // RFC 5321 (Email-Obergrenze, reicht auch fuer sub/tenantId)
+export const validIdentity = (e) =>
+  typeof e === "string" && e.length > 0 && e.length <= IDENTITY_MAX_LEN && !/\s/.test(e);
+
 export const TEXT_LIMITS = {
   objective: 500,
   briefing: 2000,

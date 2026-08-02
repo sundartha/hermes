@@ -1,7 +1,7 @@
 // ---- makeCallRoutes (Server-Slim-Decomposition) ---------------------------------
 // Extrahierte Outbound-Call-Route-Gruppe (POST /api/calls, POST /api/calls/:id/cancel)
 // als Factory mit Dependency-Injection - gleiches Muster wie makeReadRoutes/
-// makeTenantWriteRoutes/makeBillingRoutes. Teil der server.js-Decomposition
+// makeBillingRoutes. Teil der server.js-Decomposition
 // (PLAN-SERVER-SLIM.md): REINE Verschiebung, Verhalten unveraendert (byte-identische
 // Pfade/Status/Bodies/Audit-Events). Der G30-Split der langen /api/calls-Handler ist
 // bewusste Folgearbeit, NICHT diese Phase.
@@ -322,8 +322,8 @@ export function makeCallRoutes({
     res.json(event);
   });
 
-  // AL-P13: Antwort einspeisen. Reihenfolge bindend (Safety vor Eingabefehler, Muster
-  // POST /api/calendar): Tenant-Aufloesung -> Ownership -> Faehigkeit -> Validierung.
+  // AL-P13: Antwort einspeisen. Reihenfolge bindend (Safety vor Eingabefehler):
+  // Tenant-Aufloesung -> Ownership -> Faehigkeit -> Validierung.
   // Die Antwort ist FREMDBESTIMMTER Text ueber einen SCHREIBENDEN Endpunkt und laeuft
   // deshalb durch DIESELBE validateAssistantContext-Kante wie das Briefing - eine
   // zweite, eigene Laengenpruefung waere eine zweite, schwaechere Tuer in den

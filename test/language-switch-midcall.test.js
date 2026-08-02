@@ -4,9 +4,16 @@
 // call.language statt neu aufzuloesen. Positive Invariante ohne Pin: ein spaeteres
 // "Sprache pro Turn neu aufloesen" wuerde mitten im Gespraech die Stimme wechseln.
 //
-// Umstellung ueber POST /api/settings (Owner-Naht) statt /api/self-service/settings:
-// beide muenden in store.updateSettings; die Self-Service-Route braucht Web-Login +
-// pglite, und pglite gehoert nie in eine Datei mit Server-Spawn (Lehre p6a-Stall).
+// AUTH-P4: die frühere Umstell-Naht (POST /api/settings) ist geloescht. Der verbleibende
+// Settings-Schreibpfad (/api/self-service/settings) braucht Web-Login + pglite, und
+// pglite gehoert nie in eine Datei mit Server-Spawn (Lehre p6a-Stall) - kein Ersatz-
+// Schreibvorgang in dieser Datei. Stattdessen traegt der SEED die Umstellung bereits:
+// call.language="de" (der laufende Anruf) UND settings[BOOTSTRAP].language="en" (der
+// Tenant-Override) von Anfang an nebeneinander. Derselbe No-Speech-Turn belegt die
+// Invariante dadurch STAERKER als der fruehere Live-Flip: wuerde irgendein Turn-Pfad
+// die Sprache neu aufloesen statt call.language zu lesen, kaeme "en" heraus - es kommt
+// "de". Der zweite Test (naechster Anruf traegt die neue Sprache) braucht mit diesem
+// Seed gar keinen Schreibvorgang mehr.
 //
 // Der Turn-Beweis laeuft ueber den No-Speech-Zweig (leerer SpeechResult): er rendert
 // einen vollstaendigen Folge-Gather OHNE LLM-Aufruf -> offline, deterministisch.
@@ -20,11 +27,13 @@ const DE_VOICE = /voice="Polly\.Vicki-Neural"/;
 const DE_STT = /language="de-DE"/;
 const EN_STT = /language="en-GB"/;
 
-// Aktiver DE-Inbound-Call auf der DE-Owner-Nummer; der Anrufer hat bereits gesprochen
-// (sonst greift der No-Speech-Zweig nicht, s. callerHasSpoken in claude.js).
+// Aktiver DE-Inbound-Call auf der DE-Owner-Nummer (call.language="de"), der Anrufer hat
+// bereits gesprochen (sonst greift der No-Speech-Zweig nicht, s. callerHasSpoken in
+// claude.js) - UND ein bereits auf "en" umgestellter Tenant-Settings-Override, der fuer
+// diesen laufenden Anruf wirkungslos bleiben muss.
 function midCallSeed() {
   return seedState({
-    settings: {},
+    settings: { language: "en" },
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }],
     numbers: [
       {
@@ -55,13 +64,6 @@ const emptyTurn = (srv) =>
     body: new URLSearchParams({ SpeechResult: "" }),
   });
 
-const setLanguage = (srv, language) =>
-  fetch(`${srv.localUrl}/api/settings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ language }),
-  });
-
 test("E2E-03 - Sprachumstellung waehrend des Anrufs laesst den laufenden Turn auf de", async () => {
   const srv = await startServer({ seed: midCallSeed() });
   try {
@@ -72,14 +74,10 @@ test("E2E-03 - Sprachumstellung waehrend des Anrufs laesst den laufenden Turn au
     assert.match(xml1, DE_VOICE);
     assert.doesNotMatch(xml1, EN_STT);
 
-    const patch = await setLanguage(srv, "en");
-    assert.equal(patch.status, 200);
-    assert.equal((await patch.json()).language, "en", "Umstellung muss wirklich greifen");
-
     const turn2 = await emptyTurn(srv);
     assert.equal(turn2.status, 200);
     const xml2 = await turn2.text();
-    assert.match(xml2, DE_STT, "der laufende Anruf bleibt auf de, trotz Settings-Flip");
+    assert.match(xml2, DE_STT, "der laufende Anruf bleibt auf de, trotz settings.language=en");
     assert.match(xml2, DE_VOICE);
     assert.doesNotMatch(xml2, EN_STT);
   } finally {
@@ -90,10 +88,6 @@ test("E2E-03 - Sprachumstellung waehrend des Anrufs laesst den laufenden Turn au
 test("E2E-03 - erst der NAECHSTE Anruf traegt die neue Sprache (en)", async () => {
   const srv = await startServer({ seed: midCallSeed() });
   try {
-    const patch = await setLanguage(srv, "en");
-    assert.equal(patch.status, 200);
-    assert.equal((await patch.json()).language, "en", "Umstellung muss wirklich greifen");
-
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({

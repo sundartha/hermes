@@ -2,7 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, defaultSettings } from "../src/store/defaults.js";
+import { makeDefaultState, updateSettings } from "../src/store/state-ops.js";
 
 const postJson = (url, body) =>
   fetch(url, {
@@ -14,15 +15,27 @@ const postJson = (url, body) =>
 test("Body-Size-Limit 100kb", async (t) => {
   const srv = await startServer();
   try {
+    // AUTH-P4: POST /api/settings ist geloescht - der Deckel ist eine express.json-
+    // Middleware-Eigenschaft (VOR jedem Handler), kein settings-spezifisches Verhalten.
+    // Traeger jetzt POST /api/calls: der Parser wirft, bevor irgendein Handler
+    // (inkl. Validierung) laeuft - der 413 selbst belegt das, ein gueltiger Body ist
+    // fuer diesen Test nicht noetig.
     await t.test("POST mit 200kb-Body -> 413", async () => {
-      const res = await postJson(`${srv.localUrl}/api/settings`, {
-        greeting: "x".repeat(200 * 1024),
+      const res = await postJson(`${srv.localUrl}/api/calls`, {
+        objective: "x".repeat(200 * 1024),
       });
       assert.equal(res.status, 413);
     });
 
+    // Traeger POST /voice/turn?callId=missing (offline, kein Seiteneffekt - derselbe
+    // Traeger, den der urlencoded-Sub-Test darunter fuer den anderen Parser nutzt):
+    // ein kleiner JSON-Body muss den Deckel unbeschadet passieren.
     await t.test("kleiner Body unveraendert 2xx", async () => {
-      const res = await postJson(`${srv.localUrl}/api/settings`, { greeting: "Hallo Test" });
+      const res = await fetch(`${srv.localUrl}/voice/turn?callId=missing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ SpeechResult: "" }),
+      });
       assert.equal(res.status, 200);
     });
 
@@ -89,113 +102,43 @@ test("Eingabe-Validierung /api/calls", async (t) => {
   }
 });
 
-test("Eingabe-Validierung /api/calendar", async (t) => {
-  const srv = await startServer();
-  const cal = (body) => postJson(`${srv.localUrl}/api/calendar`, body);
-  try {
-    await t.test("ungueltige Datumswerte -> 400", async () => {
-      const res = await cal({ title: "Test", start: "morgen", end: "uebermorgen" });
-      assert.equal(res.status, 400);
-    });
+// AUTH-P4: "Eingabe-Validierung /api/calendar" ist ersatzlos entfallen. Die dortigen
+// Regeln (ungueltige Datumswerte, end<=start) waren ROUTE-LOKAL (isNaN, Vergleich) im
+// jetzt geloeschten Handler und sind mit ihm weg. Der geteilte Anteil (invalidText fuer
+// title) lebt in src/routes/_validation.js weiter und hat mit
+// src/telephony/outbound-gates.js einen eigenen, weiterhin getesteten Konsumenten.
 
-    await t.test("end <= start -> 400", async () => {
-      const res = await cal({
-        title: "Test",
-        start: "2026-07-01T11:00:00Z",
-        end: "2026-07-01T10:00:00Z",
-      });
-      assert.equal(res.status, 400);
-      assert.match((await res.json()).error, /end muss nach start/);
-      const same = await cal({
-        title: "Test",
-        start: "2026-07-01T10:00:00Z",
-        end: "2026-07-01T10:00:00Z",
-      });
-      assert.equal(same.status, 400);
-    });
+// AUTH-P4: "Settings-Whitelist" (HTTP-Naht POST /api/settings) ist geloescht. Die
+// Zusage (unbekannter Key/falscher Typ werden ignoriert) gibt es auf Store-Ebene noch
+// nicht (verifiziert) - ersatzloses Streichen waere ein echter Zusagen-Verlust, deshalb
+// auf updateSettings umgestellt (Muster test/f1-geo-store.test.js).
+test("Settings-Whitelist (Store-Ebene, updateSettings)", () => {
+  const s = makeDefaultState();
+  s.settings[BOOTSTRAP_TENANT_ID] = defaultSettings();
 
-    await t.test("title zu lang -> 400", async () => {
-      const res = await cal({
-        title: "x".repeat(201),
-        start: "2026-07-01T10:00:00Z",
-        end: "2026-07-01T11:00:00Z",
-      });
-      assert.equal(res.status, 400);
-    });
+  const res1 = updateSettings(s, BOOTSTRAP_TENANT_ID, { evil: "x", allowBooking: "nein" });
+  assert.equal(res1.changed.includes("evil"), false, "unbekannter Key wird ignoriert");
+  assert.equal(res1.changed.includes("allowBooking"), false, "falscher Typ wird ignoriert");
+  assert.equal("evil" in s.settings[BOOTSTRAP_TENANT_ID], false);
+  assert.equal(
+    s.settings[BOOTSTRAP_TENANT_ID].allowBooking,
+    true,
+    "String 'nein' darf das Boolean nicht ueberschreiben",
+  );
 
-    await t.test("gueltiger Eintrag -> 200 und im Store", async () => {
-      const res = await cal({
-        title: "Zahnarzt",
-        start: "2026-07-01T10:00:00Z",
-        end: "2026-07-01T11:00:00Z",
-      });
-      assert.equal(res.status, 200);
-      const ev = await res.json();
-      assert.ok(ev.id);
-      // readStore() liest den rohen (migrierten) Store: calendar ist seit I2 eine
-      // Map tenantId -> [events]; der Owner-Bucket traegt die Laufzeit-Termine.
-      assert.ok(srv.readStore().calendar[BOOTSTRAP_TENANT_ID].some((e) => e.id === ev.id));
-    });
-  } finally {
-    await srv.stop();
-  }
-});
-
-test("Settings-Whitelist", async (t) => {
-  const srv = await startServer();
-  try {
-    await t.test("unbekannter Key + falscher Typ werden ignoriert", async () => {
-      const res = await postJson(`${srv.localUrl}/api/settings`, {
-        evil: "x",
-        allowBooking: "nein",
-      });
-      assert.equal(res.status, 200);
-      const settings = await res.json();
-      assert.equal("evil" in settings, false);
-      assert.equal(
-        settings.allowBooking,
-        true,
-        "String 'nein' darf das Boolean nicht ueberschreiben",
-      );
-      // readStore() liest den rohen (migrierten) Store: settings ist seit I2 eine
-      // Map tenantId -> Bucket. Die HTTP-Response (oben) bleibt flach.
-      const stored = srv.readStore().settings[BOOTSTRAP_TENANT_ID];
-      assert.equal("evil" in stored, false);
-      assert.equal(stored.allowBooking, true);
-    });
-
-    await t.test("bekannter Key mit korrektem Typ wird uebernommen", async () => {
-      const res = await postJson(`${srv.localUrl}/api/settings`, { allowBooking: false });
-      assert.equal(res.status, 200);
-      assert.equal((await res.json()).allowBooking, false);
-      assert.equal(srv.readStore().settings[BOOTSTRAP_TENANT_ID].allowBooking, false);
-    });
-  } finally {
-    await srv.stop();
-  }
+  const res2 = updateSettings(s, BOOTSTRAP_TENANT_ID, { allowBooking: false });
+  assert.ok(res2.changed.includes("allowBooking"), "bekannter Key mit korrektem Typ wird uebernommen");
+  assert.equal(s.settings[BOOTSTRAP_TENANT_ID].allowBooking, false);
 });
 
 // VOICE-09 (tasks/i18n-tests/03-telefonie-render.md): die POSITIVE Haelfte ("language='en'
 // wird gesetzt") ist seit W2-B1 end-to-end belegt - test/language-switch-midcall.test.js
-// postet genau diesen Patch, prueft 200 + settings.language==='en' und die Wirkung auf den
-// naechsten Anruf. Hier steht die bislang ungetestete NEGATIVE Haelfte: die Route validiert
-// fail-closed gegen SUPPORTED_LANGUAGES (OPTIONAL_ENUM_FIELDS in src/store/state-ops.js) -
-// ein unbekannter Code wird IGNORIERT, nicht geschrieben, und ist kein Fehler (kein 400/500).
-// Kein Duplikat der Store-Ebene (f1-geo-store.test.js): gemessen wird die HTTP-Naht.
-test("VOICE-09 (Mechanismus, gruen) - POST /api/settings mit unbekanntem language-Code schreibt nichts", async () => {
-  const srv = await startServer();
-  try {
-    const ok = await postJson(`${srv.localUrl}/api/settings`, { language: "en" });
-    assert.equal((await ok.json()).language, "en", "Vorbedingung: gueltiger Code kommt an");
-
-    const res = await postJson(`${srv.localUrl}/api/settings`, { language: "xx" });
-    assert.equal(res.status, 200, "unbekannter Code ist kein Fehler, sondern wird ignoriert");
-    assert.equal((await res.json()).language, "en", "der alte Wert bleibt stehen");
-    assert.equal(srv.readStore().settings[BOOTSTRAP_TENANT_ID].language, "en");
-  } finally {
-    await srv.stop();
-  }
-});
+// prueft die Wirkung auf den naechsten Anruf. Hier stand die NEGATIVE Haelfte (unbekannter
+// Code wird ignoriert, kein Fehler): AUTH-P4 loescht die einzige HTTP-Naht (POST
+// /api/settings), die dieser Mechanismus-Test maessen konnte - die Zusage haelt
+// test/f1-geo-store.test.js ("updateSettings: bekannte Sprache uebernommen; ... Freitext/
+// unbekannt ignoriert") bereits auf der Store-Ebene (verifiziert), also kein Zusagen-
+// Verlust. Der test:gates-Katalog verliert damit einen Mechanismus-Test (Bericht).
 
 // P8b: Auskunft/Export (Art. 15/20). Read-only Owner-Tenant-Export hinter der
 // /api/*-Basic-Auth, Calls OHNE streamToken (publicCall-Invariante wie /api/state).

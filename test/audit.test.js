@@ -66,23 +66,14 @@ test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
       assert.equal(countMatches(srv.stdout, "\\[audit\\] cancel_call ip=\\S+ call=call_audit1"), 1);
     });
 
-    await t.test("settings_update: nur Keys im Log, keine Werte", async () => {
-      // GAP-14: der Guard in updateSettings nimmt nur Greetings MIT Pflichtsatz an.
-      // Subjekt dieses Tests ist "keine WERTE im Log", nicht "jeder String ist schreibbar" -
-      // der Geheim-Token bleibt drin, beide Assertions bleiben unveraendert.
-      const res = await postJson(`${srv.localUrl}/api/settings`, {
-        greeting: "GEHEIMER-FREITEXT: Sie sprechen mit einer KI, das Gespräch wird transkribiert.",
-        allowBooking: false,
-      });
-      assert.equal(res.status, 200);
-      await waitForLog(srv, /\[audit\] settings_update ip=\S+ keys=/);
-      assert.equal(countMatches(srv.stdout, "\\[audit\\] settings_update ip=\\S+ keys="), 1);
-      assert.match(srv.stdout, /settings_update ip=\S+ keys=greeting,allowBooking/);
-      assert.ok(
-        !srv.stdout.includes("GEHEIMER-FREITEXT"),
-        "Settings-Werte duerfen nicht im Log stehen",
-      );
-    });
+    // AUTH-P4: "settings_update: nur Keys im Log, keine Werte" ist entfallen. Das
+    // audit("settings_update", ...)-Event wurde AUSSCHLIESSLICH in api-tenant-write.js
+    // ausgeloest (verifiziert) - mit POST /api/settings existiert dieses Event nicht
+    // mehr. Der ueberlebende Schreibpfad (/api/self-service/settings) auditiert unter
+    // anderem Namen (self_service_settings) und loggt ebenfalls nur Keys
+    // (src/self-service-routes.js). Ehrliche Luecke: dafuer gibt es heute keinen
+    // Audit-Test (braeuchte pglite + Web-Login, fremde Phase) - Befund in
+    // PLAN-SECURITY.md, kein Testneubau hier.
   } finally {
     await srv.stop();
   }

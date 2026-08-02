@@ -241,24 +241,27 @@ test("AUTH-P3-11: GET /api/tenant-data/export, MULTI_TENANT=false, externer Aufr
   }
 });
 
-test("AUTH-P3-12: POST /api/settings, MULTI_TENANT=true, externer Aufrufer (XFF) -> 403, kein Schreibzugriff", async () => {
+// AUTH-P4: der urspruengliche Traeger (POST /api/settings) ist geloescht. Umgestellt
+// auf POST /api/calls/:id/consult/answer - eine weiterhin lebende, schreibende Route,
+// deren Handler requireTenant(req, res) ALS ERSTES aufruft (Reihenfolge bindend, s.
+// Modulkommentar in api-calls.js): bei TENANT_REJECT schreibt requireTenant selbst die
+// 403-Antwort, VOR jedem Call-Lookup - anders als POST /api/calls/:id/cancel (das bei
+// fehlender Sichtbarkeit bewusst 404 statt 403 liefert, kein Existenz-Leck). ID und
+// Testname bleiben AUTH-P3-12 (sonst rottet die Zuordnung in PLAN-SECURITY.md); die
+// Zusage ist unveraendert "externer Aufrufer ohne Identitaet -> 403, kein Schreibzugriff".
+test("AUTH-P3-12: POST /api/calls/:id/consult/answer, MULTI_TENANT=true, externer Aufrufer (XFF) -> 403, kein Schreibzugriff", async () => {
   const srv = await startServer({
     env: { MULTI_TENANT: "true" },
-    seed: seedState({}),
+    seed: seedState({ calls: [seedCall({ id: "call_ap312", status: "active" })] }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/api/settings`, {
+    const res = await fetch(`${srv.localUrl}/api/calls/call_ap312/consult/answer`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Forwarded-For": "203.0.113.9" },
-      body: JSON.stringify({ agentName: "Gekapert" }),
+      body: JSON.stringify({ event_id: "evt_1", answers: ["x"] }),
     });
     assert.equal(res.status, 403);
     assertGateAbsent(res);
-    // Kein akzeptierter Schreibzugriff -> store.save() lief nie -> die Datei traegt noch
-    // die urspruengliche, UNMIGRIERTE Flach-Form (Migration auf die owner-keyed Map
-    // passiert nur in-memory bei load(); persistiert erst beim naechsten save()).
-    const store = srv.readStore();
-    assert.equal(store.settings.agentName, "Hermes", "der Owner-Settings-Bucket bleibt unangetastet");
   } finally {
     await srv.stop();
   }

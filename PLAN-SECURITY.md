@@ -1997,3 +1997,128 @@ MCP-Tools wuerden `TENANT_REJECT` sehen.
 **Kein neuer Env-Schluessel, keine neue Dependency, keine DB-Aenderung.**
 `src/route-policy.js`, `scripts/probe-auth.sh`, `src/wiring/auth-gate.js` unangetastet
 (das ist P5/P6/P7).
+
+## AUTH-P4 — tote Schreibflaeche entfernt (2026-08-02)
+
+Vierte Phase von `PLAN-AUTH-GATE.md`. Loescht sechs Routen ersatzlos, statt sie
+abzusichern: `POST /api/settings`, `POST /api/action-items/:id/toggle`,
+`POST /api/calendar` (aus `src/routes/api-tenant-write.js`) sowie `GET /api/profiles`,
+`POST /api/profiles`, `DELETE /api/profiles/:tenantId` (aus `src/routes/api-profiles.js`).
+Beide Dateien entfallen vollstaendig, ebenso ihre Mounts/Importe in `src/app.js`.
+
+**Der geschlossene Vektor.** `POST /api/profiles {"unrestricted":true}` konnte fuer eine
+beliebige `tenantId` ein Profil mit `unrestricted: true` anlegen — genau das Feld, das
+`src/telephony/outbound-gates.js` (`if (profile.unrestricted) return null;`) liest, um
+das Verifikations-Gate (Abo+KYC) zu umgehen. Die Route war hinter Basic-Auth, aber
+sonst ohne eigene Absicherung erreichbar (`nur Gate`, s. AUTH-P1-Inventar). Mit der
+Loeschung existiert dieser HTTP-Weg zum Verifikations-Bypass nicht mehr. Test
+`AUTH-P4-5` pinnt genau diesen Vektor.
+
+**Der Profil-MECHANISMUS bleibt unangetastet.** `resolveProfile`, `PROFILES_JSON`
+(Boot-Seed) und `src/telephony/outbound-gates.js` sind unveraendert — nur die
+HTTP-Schreibflaeche darauf ist weg. Ein Profil entsteht danach ausschliesslich ueber
+`PROFILES_JSON` beim Boot oder direkten DB-/Store-Eingriff.
+
+**Pflicht-Umzug, sonst bricht der Boot.** `validIdentity`/`IDENTITY_MAX_LEN` wanderten
+byte-identisch von `src/routes/api-profiles.js` nach `src/routes/_validation.js` (Anbau
+an eine seit T4 Phase 2 bestehende Datei, keine Neuanlage). `src/routes/api-onboard.js`
+importiert sie von dort — der einzige Konsument ueber Modulgrenze (verifiziert per
+Grep vor der Loeschung). `AUTH-P4-7` beweist den Umzug ueber einen echten Server-Spawn
+(nicht `node --check` — das prueft Syntax, nicht Modul-Aufloesung; ein fehlender Export
+haette erst zur Ladezeit einen `SyntaxError` geworfen).
+
+**Vollstaendige Aufrufer-Enumeration (Pflichtschritt, vollstaendig gegrept ueber
+`src/`, `scripts/`, `apps/web/src/`, `public/`, `test/`, `docs/`,
+`src/mcp-tools.js`).** Kein lebender Aufrufer der sechs Routen ausserhalb von Tests.
+`src/mcp-tools.js` liest `s.actionItems`/Kalender nur lesend ueber `GET /api/state`
+bzw. `get_calendar` — kein MCP-Tool ruft eine der sechs Routen. Zwei Doku-Stellen
+(`tasks/al-testcall-checklist.md:110`, `tasks/al-env-changes.md:43`) beschreiben einen
+manuellen Betriebsvorgang ueber `POST /api/settings` — kein Code-Aufrufer, aber siehe
+Owner-Entscheidung unten.
+
+**Owner-Entscheidung (Settings-Felder ausserhalb der Self-Service-Whitelist).** Mit
+`POST /api/settings` faellt die einzige HTTP-Schreibflaeche fuer Settings-Felder, die
+NICHT in der Self-Service-Whitelist stehen (`allowResearch`, `allowCallMemory`,
+`smsSummaryOptIn` u.a., s. `src/self-service.js`). Der Owner hat das ausdruecklich
+akzeptiert: diese Felder sind danach nur noch per direktem DB-/Store-Eingriff setzbar.
+Betroffen sind zwei bekannte manuelle Vorgaenge (`tasks/al-testcall-checklist.md`
+AL-P12: `allowCallMemory=true`; `tasks/al-env-changes.md`), beide Aufgaben-Notizen,
+keine Runbooks — nicht editiert (Scope dieser Phase), der Ersatzweg (DB-Eingriff) ist
+hier dokumentiert.
+
+**Vier Mitzieh-Stellen im selben Commit (H10):** (1) `src/route-policy.js` —
+die sechs Eintraege ersatzlos aus `GATE_ONLY_ROUTES` entfernt (21 → 15), NICHT nach
+`PUBLIC_ROUTES` verschoben. (2) `test/route-auth-inventory.test.js` — `ROUTE_FINGERPRINT`
+um die sechs Zeilen gekuerzt (52 → 46), sortiert. (3) `scripts/probe-auth.sh` — die
+sechs Zeilen von `sitzung`/`gate` auf `fehlt`/`gate` gedreht, erwarteter Status bleibt
+**401** (nicht 404): das Basic-Auth-Gate haengt vor Express' 404-Handler und maskiert
+die geloeschte Route am heutigen Deploy weiterhin — messbar wird der Unterschied erst
+mit P7. Die Zeilen bleiben als Negativkontrolle stehen, nicht geloescht. (4)
+`docs/RUNBOOK-AUTH-REVIEW.md` — kein Edit noetig, verifiziert (keine der sechs Routen
+und keine der beiden Dateien namentlich erwaehnt). `test/probe-auth-table.test.js`
+haelt (1) und (3) zusammen; die neue `AUTH-P4-8` schliesst zusaetzlich die Richtung,
+in der die Bestandsregeln allein nicht ausreichen (Route geloescht, Politik
+nachgezogen, aber die Probe vergessen — dann ist `GATE_ONLY_ROUTES` bereits leer und
+die Bestandsregeln schweigen).
+
+**Acht neue Tests** in `test/auth-p4-deleted-routes.test.js` (Praefix `AUTH-P4-N`) plus
+`AUTH-P4-8` in `test/probe-auth-table.test.js`. Der Diskriminator "Route wirklich weg"
+ist der Antwort-Koerper (JSON = noch gemountet, `text/html` = echter Express-404), NICHT
+allein der Status: `POST /api/action-items/:id/toggle` und
+`DELETE /api/profiles/:tenantId` antworteten auch gemountet mit 404 bei unbekannter
+id/tenantId — `AUTH-P4-2`/`AUTH-P4-6` zielen deshalb auf einen EXISTIERENDEN Datensatz.
+
+**Neun Bestandstests entfallen/wandern, keiner ersatzlos ohne Grund (Detail in
+`tasks/`-Historie, hier nur die Bilanz):** zwei ganze Dateien geloescht
+(`test/api-routes.test.js`, `test/api-action-items-toggle.test.js` — die Route WAR die
+Zusage). Innerhalb bestehender Dateien: `test/profiles.test.js` (Profil-Verwaltung +
+Booking-Gate-HTTP-Tests entfallen, ersetzt durch `AUTH-P4-4/-5/-6`; die
+`(e)`-Settings-Whitelist-Zusage auf `updateSettings` umgestellt), `test/api.test.js`
+(Kalender-Validierung entfallen — war route-lokal; Settings-Whitelist auf
+`updateSettings` umgestellt; `VOICE-09` entfallen — die Zusage haelt
+`test/f1-geo-store.test.js` bereits store-seitig), `test/i6-write-scope.test.js` (zwei
+Tests + ein Sub-Test entfallen — die HTTP-Naht, an der Cross-Tenant-Scoping fehlschlagen
+konnte, ist weg; die Zusage wird gegenstandslos, nicht ungeprueft: der verbleibende
+`/api/self-service/settings`-Pfad nimmt den Tenant strukturell aus der Session),
+`test/language-switch-midcall.test.js` (E2E-03, Umstellung ueber den Seed statt eines
+Live-Flips, verifiziert gruen), `test/auth-p3-bootstrap-fallback.test.js` (`AUTH-P3-12`
+auf `POST /api/calls/:id/consult/answer` umgestellt — ID/Name bleiben, damit die
+Zuordnung in diesem Dokument nicht rottet), `test/plans-route.test.js` (Auth-Kontrast
+auf `GET /api/state` umgestellt).
+
+**Zwei ehrliche Luecken, benannt statt verschwiegen:**
+(1) `test/audit.test.js` — der `settings_update`-Audit-Test entfaellt ersatzlos
+(das Event wurde ausschliesslich in `api-tenant-write.js` ausgeloest). Der
+ueberlebende Schreibpfad (`/api/self-service/settings`) auditiert unter anderem Namen
+(`self_service_settings`, `src/self-service-routes.js`) und loggt ebenfalls nur Keys —
+aber dafuer existiert heute kein Test (braeuchte pglite + Web-Login, fremde Phase).
+(2) Der `test:gates`-Katalog verliert mit `VOICE-09` einen gruenen Mechanismus-Test
+(Regressionsschutz), weil die einzige HTTP-Naht, die er mass, weg ist; die materielle
+Zusage lebt in `test/f1-geo-store.test.js` weiter.
+
+**Drei benannte Reste (bewusst liegen gelassen, nicht uebersehen).** (1) Vier
+Store-Fassaden-Funktionen (`listProfiles`, `deleteProfile`, `toggleActionItem`,
+`addCalendarEvent`) verlieren ihren letzten `src/`-Aufrufer — Entfernung wuerde zwei
+Backends (json/pg) anfassen und gehoert in einen eigenen Store-Aufraeum-Schritt, nicht
+in diese chirurgische Auth-Loeschung. (2) `PROFILE_FIELDS.allowBooking` ist danach ein
+Gate ohne gegatete Aktion (der einzige Konsument war `POST /api/calendar`) — das Feld
+bleibt (Kommentar aktualisiert), weil `src/plans.js` jedes `PROFILE_FIELDS`-Feld
+explizit setzt und ein Feld-Drop eine Migration mit Rollback-Risiko ohne funktionalen
+Gewinn waere. (3) `src/routes/_tenant.js` nennt weiterhin `makeProfileRoutes` als
+DI-Vorbild (toter Verweis) — die Datei steht unter explizitem Anfass-Verbot dieser
+Phase (P3 ist fertig) und faellt in P5 mit, wo `internalOnly` ohnehin dort landet.
+
+**Nichts am heutigen Deploy sichtbar anders.** Fuer einen Aufrufer ohne Credentials ist
+die Antwort auf alle sechs Pfade vorher wie nachher 401 mit `WWW-Authenticate: Basic`
+(das Basic-Auth-Gate deckt `/api/*` vollstaendig ab, vor Express' 404-Handler). Fuer
+einen Aufrufer MIT dem Dashboard-Passwort aendert sich sehr wohl etwas (404 statt
+Wirkung) — genau der beabsichtigte Effekt, und es gibt keinen solchen Aufrufer im Repo
+(Enumeration oben), nur die zwei manuellen Vorgaenge, die der Owner akzeptiert hat.
+
+**Absolute Regeln:** unberuehrt. Kein Safety-Gate faellt — im Gegenteil, ein
+Umgehungsvektor auf das Verifikations-Gate wird geschlossen. `disclosureSentence`,
+Signaturpruefung, `OUTBOUND_FROZEN`, pro-Tenant-Kostendecke, Denylist/Land/Stundenlimit:
+nicht angefasst. Kein Secret beruehrt. Keine neue Dependency, kein Flag, keine
+Env-Variable, keine DB-Aenderung. `src/wiring/auth-gate.js` (P7), `src/routes/_tenant.js`
+(P3 fertig) und der Profil-Mechanismus (`resolveProfile`, `PROFILES_JSON`,
+`src/telephony/outbound-gates.js`) unangetastet.

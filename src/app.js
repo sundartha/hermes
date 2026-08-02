@@ -29,8 +29,6 @@ import { originateAiAssistantCall } from "./telnyx-origination.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeReadRoutes } from "./routes/api-read.js";
-import { makeTenantWriteRoutes } from "./routes/api-tenant-write.js";
-import { makeProfileRoutes } from "./routes/api-profiles.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
@@ -346,7 +344,7 @@ export async function buildApp(deps) {
   // ---- Read-/Export-Routen (Phase 3) ----
   // T4-Decomposition: die GET-Route-Gruppe (/api/state, /api/calls/:id,
   // /api/tenant-data/export) lebt in src/routes/api-read.js (makeReadRoutes,
-  // DI-Muster wie makeProfileRoutes) - reine Verschiebung, Verhalten unveraendert.
+  // DI-Muster wie makeCallRoutes) - reine Verschiebung, Verhalten unveraendert.
   // STATE_*-Konstanten und die View-Helfer (publicCall/upcomingCalendar/activeNumberFor)
   // sind mitgewandert; tenantOwnsCall (eine Quelle wie POST /api/calls/:id/cancel) und
   // die request-tenant-Resolver werden injiziert. Hinter Basic-Auth (Bestand deckt
@@ -360,38 +358,11 @@ export async function buildApp(deps) {
     }),
   );
 
-  // ---- Tenant-Write-Routen ---------------------------------------------------------
-  // Die tenant-scoped Schreib-Route-Gruppe (POST /api/settings,
-  // POST /api/action-items/:id/toggle, POST /api/calendar) lebt in
-  // src/routes/api-tenant-write.js (makeTenantWriteRoutes, DI-Muster wie makeReadRoutes)
-  // - reine Verschiebung, Verhalten unveraendert. An unveraenderter Mount-Position (nach
-  // makeReadRoutes, vor makeProfileRoutes), hinter Basic-Auth (Bestand deckt /api/* ab).
-  // requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT); die handler-interne
-  // Reihenfolge (requireTenant -> allowBooking -> Validierung) ist exakt mitgewandert.
-  // internalIdentity/OWNER_ID injiziert (EINE Quelle, request-tenant.js).
-  app.use(
-    makeTenantWriteRoutes({
-      store,
-      audit,
-      tenant: { requireTenant },
-      internalIdentity,
-      OWNER_ID,
-    }),
-  );
-
-  // ---- Rechteprofile verwalten (Phase 2) ----
-  // Die /api/profiles-Route-Gruppe lebt in
-  // src/routes/api-profiles.js (makeProfileRoutes, DI-Muster wie makeWebAuthRoutes) -
-  // reine Verschiebung, Verhalten unveraendert. validIdentity wird von dort importiert
-  // (eine Quelle, G5) und in /api/onboard weiterverwendet.
-  // Hinter Basic-Auth (Bestand deckt /api/* ab); KEIN MCP-Tool (s. Modul-Kommentar).
-  app.use(makeProfileRoutes({ store, audit }));
-
   // ---- Billing-Routen ---------------------------------------------------------------
   // Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return,
   // cost-truing/sweep) lebt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster
   // wie makeReadRoutes) - reine Verschiebung, Verhalten unveraendert. An unveraenderter
-  // Mount-Position (nach makeProfileRoutes, vor /api/onboard), hinter Basic-Auth
+  // Mount-Position (nach makeReadRoutes, vor /api/onboard), hinter Basic-Auth
   // (Bestand deckt /api/* ab). billing = stripeBilling (EINE Instanz, INV-7);
   // requireTenant = die EINE Wurzel-Instanz (403 bei TENANT_REJECT). costTruing = die
   // EINE LCT-P3-Instanz (INV-7, in server.js konstruiert). Der Safety-Kontext (kein
