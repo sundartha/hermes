@@ -165,6 +165,42 @@ export function registerPathRedirects({ app }) {
   for (const pfad of APP_ALIAS_PATHS) app.get(pfad, umleitungAuf(APP_PATH));
 }
 
+// ---- Cache-Header fuer die statische Auslieferung (AUTH-P9a) ----------------------
+// Bewusst HIER statt im Konstanten-Block am Dateikopf: sie werden ausschliesslich von
+// registerStaticServing gebraucht (G10, Deklaration nah am Verwendungsort).
+// Astro schreibt fingerprintete Assets in sein Default-Verzeichnis _astro/
+// (apps/web/astro.config.mjs setzt build.assets NICHT), z.B. /_astro/index.CC3WiDDo.css:
+// der Inhalts-Hash steckt im Dateinamen, derselbe Name kann also nie einen anderen Inhalt
+// bekommen. Alles andere in dist/ traegt KEINEN Hash - apps/web/public/* wird verbatim
+// kopiert (/assets/hero.js, /favicon.svg, /robots.txt).
+const ASTRO_ASSET_DIR = "_astro";
+const HTML_SUFFIX = ".html";
+// Ein Jahr in Sekunden - die von RFC 9111 empfohlene Obergrenze fuer max-age.
+const IMMUTABLE_MAX_AGE_SECONDS = 31_536_000;
+const IMMUTABLE_CACHE_CONTROL = `public, max-age=${IMMUTABLE_MAX_AGE_SECONDS}, immutable`;
+// HTML muss bei JEDEM Deploy neu geholt werden: veraltetes HTML zeigt auf Chunk-Namen des
+// Vorgaenger-Builds, die es nicht mehr gibt (Vorfall 2026-07-28, PLAN-AUTH-GATE Abschnitt
+// 1/2). no-cache = darf gespeichert werden, MUSS aber vor jeder Nutzung revalidiert werden.
+const HTML_CACHE_CONTROL = "no-cache";
+
+// Welcher Cache-Control-Wert gilt fuer DIESE Datei? Reine Entscheidung ohne Nebenwirkung
+// (P5 Command-Query): null = kein eigener Wert -> der serve-static-Default
+// (public, max-age=0) bleibt unangetastet stehen. filePath ist der ABSOLUTE Dateisystem-
+// Pfad, den serve-static gerade ausliefert; astroDirPrefix ist "<dist>/_astro" + Trenner.
+//
+// Reihenfolge ist Absicht, nicht Zufall: HTML zuerst. Ein faelschlich als immutable
+// ausgeliefertes HTML ueberlebt jeden Rollback im Browser des Nutzers, und kein Deploy holt
+// es zurueck - diese Reihenfolge macht das strukturell unmoeglich (G27 Struktur statt
+// Konvention), statt sich darauf zu verlassen, dass nie eine .html unter _astro/ landet.
+//
+// EXAKTER Praefix-Match, KEIN "enthaelt _astro": ein Geschwister-Verzeichnis wie
+// _astrophysik/ oder eine Datei _astro.txt darf niemals immutable werden.
+function cacheControlForStaticFile(filePath, astroDirPrefix) {
+  if (filePath.endsWith(HTML_SUFFIX)) return HTML_CACHE_CONTROL;
+  if (filePath.startsWith(astroDirPrefix)) return IMMUTABLE_CACHE_CONTROL;
+  return null;
+}
+
 export function registerStaticServing({ app, config }) {
   // ---- Single-Origin: apps/web (Astro-Build) statisch ausliefern (WEB_DIST_DIR) ----
   // Hinter dem Pfad-Flag (leer = aus -> heutiges Serving byte-identisch).
@@ -191,7 +227,22 @@ export function registerStaticServing({ app, config }) {
     });
     // Statische Marketing-Site + App-Shell. extensions:["html"] loest /preise -> preise.html
     // auf; "/" liefert dist/index.html, /app -> app/index.html (express.static-Index-Default).
-    app.use(express.static(config.server.webDistDir, { extensions: ["html"] }));
+    // AUTH-P9a: EINE Quelle fuer den Praefix (G5), einmal beim Mount berechnet statt pro
+    // Request. config.server.webDistDir ist bereits absolut (config.js path.resolve, AM3) -
+    // dieselbe Basis, gegen die serve-static den ausgelieferten Pfad aufloest.
+    const astroDirPrefix = path.join(config.server.webDistDir, ASTRO_ASSET_DIR) + path.sep;
+    app.use(
+      express.static(config.server.webDistDir, {
+        extensions: ["html"],
+        // serve-static feuert setHeaders VOR seinem eigenen Cache-Control-Default und setzt
+        // diesen nur, wenn der Header noch nicht steht -> unser Wert gewinnt, und wo wir
+        // nichts setzen, bleibt der heutige Default (public, max-age=0) unveraendert.
+        setHeaders: (res, filePath) => {
+          const cacheControl = cacheControlForStaticFile(filePath, astroDirPrefix);
+          if (cacheControl) res.set("Cache-Control", cacheControl);
+        },
+      }),
+    );
     // SPA-Fallback: Unterpfade unter /app liefern die App-Shell (Client-seitiges Routing).
     app.get("/app/*", (_req, res) => res.sendFile(path.join(config.server.webDistDir, "app", "index.html")));
   }
