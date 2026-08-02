@@ -106,6 +106,10 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
         // Abschwaechung der Spoof-Aussage, sondern deren fruehere Durchsetzung: der
         // externe X-Internal-Identity-Header gilt weiterhin nicht, UND es entsteht
         // ueberhaupt kein Call mehr (statt eines Calls mit requestedBy=owner).
+        // AUTH-P5: der 403 kommt seit dieser Phase bereits von internalOnly (vor dem
+        // Handler), nicht mehr vom tenant_reject-Gate im Handler-Rumpf - die Aussage
+        // "kein Spoof, kein Call" bleibt unveraendert wahr, misst nur eine Schicht
+        // frueher.
         const res = await postCall(srv.externalUrl, TO_EXT, "evil@x");
         assert.equal(res.status, 403);
         assert.equal(

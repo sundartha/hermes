@@ -25,7 +25,15 @@ import {
   makeRequestTenant,
   TENANT_REJECT,
 } from "../src/routes/_tenant.js";
-import { startServer, seedState, seedCall, mcpPost, toolCall, readToolResult } from "./helpers.js";
+import {
+  startServer,
+  seedState,
+  seedCall,
+  mcpPost,
+  toolCall,
+  readToolResult,
+  assertGateAbsent,
+} from "./helpers.js";
 
 // --- Unit-Test-Helfer (Muster request-tenant-unit.test.js, EINE Datei = eigene Kopie,
 // Repo-Konvention - siehe reqWith/fakeRes in u.a. error-handler.test.js) ---
@@ -192,16 +200,12 @@ test("AUTH-P3-9: operatorChannelTenant liefert BOOTSTRAP_TENANT_ID NUR bei Loopb
 });
 
 // === Spawn-Tests: Gate beweisbar abwesend (DASHBOARD_PASSWORD="" in BASE_ENV) ====
-
-// Pinnt das Gate als ABWESEND statt umgangen: kein 401, kein www-authenticate-Header.
-function assertGateAbsent(res) {
-  assert.notEqual(res.status, 401, "das ist NICHT das Basic-Auth-Gate, das hier misst");
-  assert.equal(
-    res.headers.get("www-authenticate"),
-    null,
-    "kein www-authenticate -> misst tatsaechlich AUTH-P3, nicht das Gate",
-  );
-}
+// assertGateAbsent lebt in test/helpers.js (geteilt mit auth-p5-internal-only.test.js, S2).
+//
+// AUTH-P5-Hinweis (AUTH-P3-10/-11/-12/-13): der 403, der hier gemessen wird, kommt seit
+// AUTH-P5 zuerst von internalOnly (vor dem jeweiligen Handler) statt vom Tenant-Reject
+// im Handler-Rumpf. Assertions bleiben unveraendert wahr (Status + Store-Nebenwirkung);
+// die eigentliche operatorChannelTenant-Zusage tragen weiterhin die neun Unit-Tests oben.
 
 test("AUTH-P3-10: GET /api/tenant-data/export, MULTI_TENANT=true, externer Aufrufer (XFF) -> 403", async () => {
   const srv = await startServer({
@@ -325,7 +329,7 @@ test("AUTH-P3-15: MCP-Tools sterben nicht - list_calls ueber Loopback ohne XFF (
   }
 });
 
-test("AUTH-P3-16: GET /api/state MIT XFF -> bewusst weiterhin 200, aber ohne Owner-Daten (403 kommt erst mit P5/internalOnly)", async () => {
+test("AUTH-P3-16: GET /api/state MIT XFF -> 403 (die in P3 bewusst offen gelassene Luecke ist mit AUTH-P5/internalOnly geschlossen)", async () => {
   const srv = await startServer({
     env: { MULTI_TENANT: "true" },
     seed: seedState({ calls: [seedCall()] }),
@@ -334,14 +338,11 @@ test("AUTH-P3-16: GET /api/state MIT XFF -> bewusst weiterhin 200, aber ohne Own
     const res = await fetch(`${srv.localUrl}/api/state`, {
       headers: { "X-Forwarded-For": "203.0.113.9" },
     });
-    // BEFUND (Plan-Abschnitt 0): GET /api/state ruft requestTenant (nicht requireTenant) -
-    // AUTH-P3 entzieht dem externen Aufrufer nur den Owner-Tenant, liefert aber KEIN 403.
-    // Das 403 fuer diese Route ist Aufgabe von P5 (internalOnly). Dieser Test pinnt den
-    // Restzustand bewusst, damit die Luecke nicht unbemerkt verschwindet.
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 403);
+    assertGateAbsent(res);
     const body = await res.json();
-    assert.equal(body.agent.owner, "", "kein Owner-Tenant fuer den externen Aufrufer");
-    assert.equal(body.calls.length, 0, "keine Owner-Calls fuer den externen Aufrufer");
+    assert.ok(body.error, "403-Body traegt eine Fehlermeldung");
+    assert.ok(!("agent" in body), "kein Owner-Feld in der 403-Antwort (internalOnly antwortet VOR dem Handler)");
   } finally {
     await srv.stop();
   }

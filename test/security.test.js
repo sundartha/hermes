@@ -83,12 +83,21 @@ test(
         assert.equal(res.status, 401);
       });
 
-      await t.test("extern mit korrekten Credentials -> 200", async () => {
+      // AUTH-P5: /api/state haengt seit dieser Phase zusaetzlich hinter internalOnly
+      // (Loopback ohne X-Forwarded-For) - ein externer Aufrufer erreicht die Route
+      // nie, auch mit korrekten Credentials nicht. Das SUBJEKT dieses Tests ist das
+      // Basic-Auth-Gate, nicht die Route: die Assertion misst darum, dass das Gate
+      // die Credentials akzeptiert und den Request durchgereicht hat (kein 401, kein
+      // www-authenticate-Header), nicht mehr, dass die Route 200 liefert. Die Zusage
+      // wird dadurch praeziser, nicht schwaecher.
+      await t.test("extern mit korrekten Credentials -> Gate akzeptiert (403 von internalOnly, nicht vom Gate)", async () => {
         const auth = "Basic " + Buffer.from("admin:test-geheim").toString("base64");
         const res = await fetch(`${srv.externalUrl}/api/state`, {
           headers: { Authorization: auth },
         });
-        assert.equal(res.status, 200);
+        assert.notEqual(res.status, 401, "das Gate hat die Credentials akzeptiert");
+        assert.equal(res.headers.get("www-authenticate"), null, "das Gate hat den Request durchgereicht");
+        assert.equal(res.status, 403, "internalOnly weist den externen Aufrufer dahinter ab");
       });
     } finally {
       await srv.stop();
@@ -117,13 +126,22 @@ test("Basic-Auth: Loopback-Socket + X-Forwarded-For umgeht Auth NICHT (Render-Pr
       assert.equal(res.status, 401);
     });
 
-    await t.test("Loopback MIT X-Forwarded-For + korrekte Credentials -> 200", async () => {
-      const auth = "Basic " + Buffer.from("admin:test-geheim").toString("base64");
-      const res = await fetch(`${srv.localUrl}/api/state`, {
-        headers: { "X-Forwarded-For": "203.0.113.9", Authorization: auth },
-      });
-      assert.equal(res.status, 200);
-    });
+    // AUTH-P5: dieselbe Praezisierung wie oben ("Basic-Auth fuer Dashboard + API") -
+    // /api/state verlangt seit dieser Phase zusaetzlich internalOnly; die Route selbst
+    // ist fuer einen Proxy-Aufrufer (Loopback-Socket + X-Forwarded-For) nicht mehr
+    // erreichbar. Die Assertion misst weiterhin, dass das Gate passiert wurde.
+    await t.test(
+      "Loopback MIT X-Forwarded-For + korrekte Credentials -> Gate akzeptiert (403 von internalOnly, nicht vom Gate)",
+      async () => {
+        const auth = "Basic " + Buffer.from("admin:test-geheim").toString("base64");
+        const res = await fetch(`${srv.localUrl}/api/state`, {
+          headers: { "X-Forwarded-For": "203.0.113.9", Authorization: auth },
+        });
+        assert.notEqual(res.status, 401, "das Gate hat die Credentials akzeptiert");
+        assert.equal(res.headers.get("www-authenticate"), null, "das Gate hat den Request durchgereicht");
+        assert.equal(res.status, 403, "internalOnly weist den Proxy-Aufrufer dahinter ab");
+      },
+    );
   } finally {
     await srv.stop();
   }

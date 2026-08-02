@@ -4,7 +4,7 @@
 import crypto from "crypto";
 import { Router } from "express";
 import { tenantIdForSubject, TENANT_STATUS } from "./store/defaults.js";
-import { safeEqual } from "./util.js";
+import { safeEqual, auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 import { resolveOnboardCountry, tenantGeoForCountry } from "./geo/resolve.js";
 
 // Laenge des CSRF-/nonce-Zufallswerts in Bytes (analog oauth_state).
@@ -724,14 +724,26 @@ const PENDING_ALLOWED_STATUS = Object.freeze(
 // Die EINZIGE gewollte Divergenz ist statusAllowed(status): active-only (webAuth) vs.
 // active|suspended (webAuthAllowPending). resolveWebSession/tenantContextOf bleiben die
 // EINE Aufloesungsquelle - hier NICHT dupliziert, NICHT umgangen.
+//
+// AUTH-P5: beide Ablehnungszweige (401/403) schreiben zusaetzlich eine auth_failed-
+// Zeile ueber auditAuthFailed (EINE Quelle, src/util.js) - der Ersatz fuer den
+// einzigen heutigen Meldeweg, wenn das Basic-Auth-Gate faellt (P7). Der catch-Zweig
+// (Infrastruktur-Fehler, z.B. DB weg) schreibt BEWUSST NICHT: er ist keine Auth-
+// Entscheidung, und "expired"/"no_session" waere dort ein irrefuehrendes Forensik-
+// Label (Befund F2, Plan Abschnitt 7 - eigener Punkt in PLAN-SECURITY.md).
 function webAuthWithStatusGate(statusAllowed) {
   return function makeWebAuthMiddleware(deps) {
     return async function webAuthGateMiddleware(req, res, next) {
       try {
         const ctx = await resolveWebSession(deps, req);
-        if (!ctx) return res.status(401).json({ error: "Unauthorized" });
-        if (!statusAllowed(ctx.acct.status))
+        if (!ctx) {
+          auditAuthFailed(req, AUTH_FAILED_GRUND.NO_SESSION);
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        if (!statusAllowed(ctx.acct.status)) {
+          auditAuthFailed(req, AUTH_FAILED_GRUND.NOT_ACTIVE);
           return res.status(403).json({ error: "Forbidden" });
+        }
         req.tenant = tenantContextOf(ctx);
         next();
       } catch {
@@ -759,13 +771,17 @@ export const webAuthAllowPending = webAuthWithStatusGate((status) =>
 // ---- adminOnly -------------------------------------------------------
 // Express-Middleware NACH webAuth (braucht req.tenant): erlaubt nur Admins -
 // E-Mail in der Allowlist ODER role==='admin'. Fail-closed: ohne req.tenant
-// oder kein Admin -> 403. Kein Detail-Leak.
+// oder kein Admin -> 403. Kein Detail-Leak. AUTH-P5: der 403-Zweig schreibt
+// zusaetzlich eine auth_failed-Zeile (auditAuthFailed, grund=not_admin).
 export function adminOnly(deps) {
   const allow = (deps.adminEmails || []).map((e) => e.toLowerCase());
   return function adminOnlyMiddleware(req, res, next) {
     const t = req.tenant;
     const isAdmin = t && (t.role === "admin" || (t.email && allow.includes(t.email.toLowerCase())));
-    if (!isAdmin) return res.status(403).json({ error: "Forbidden" });
+    if (!isAdmin) {
+      auditAuthFailed(req, AUTH_FAILED_GRUND.NOT_ADMIN);
+      return res.status(403).json({ error: "Forbidden" });
+    }
     next();
   };
 }

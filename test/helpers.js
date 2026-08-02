@@ -1,6 +1,7 @@
 // Test-Helpers: Server als Kindprozess starten (PORT=0 -> echten Port aus dem
 // Log parsen), Store-Seeding in ein Temp-DATA_DIR und Requests ueber die
 // externe Interface-IP (fuer Tests, die NICHT als localhost gelten sollen).
+import assert from "node:assert/strict";
 import { spawn } from "child_process";
 import fs from "fs";
 import http from "node:http";
@@ -527,6 +528,21 @@ export async function waitForLog(srv, regex, timeoutMs = 3000) {
       throw new Error(`Log-Pattern ${regex} nicht gefunden in:\n${srv.stdout}`);
     await new Promise((r) => setTimeout(r, 20));
   }
+}
+
+// Pinnt das Basic-Auth-Gate als ABWESEND statt umgangen (AUTH-P3/AUTH-P5, geteilt
+// zwischen auth-p3-bootstrap-fallback.test.js und auth-p5-internal-only.test.js - EINE
+// Quelle statt zweier Kopien, S2). BASE_ENV.DASHBOARD_PASSWORD="" laesst makeAuthGate
+// (src/wiring/auth-gate.js) mit `if (!config.auth.dashboardPassword) return next();`
+// sofort durchreichen - kein 401, kein www-authenticate-Header. Ein 403 in einem Test,
+// der dies NICHT prueft, koennte auch vom Gate kommen (falsch positiv gemessen).
+export function assertGateAbsent(res) {
+  assert.notEqual(res.status, 401, "das ist NICHT das Basic-Auth-Gate, das hier misst");
+  assert.equal(
+    res.headers.get("www-authenticate"),
+    null,
+    "kein www-authenticate -> misst tatsaechlich die Ziel-Sicherung, nicht das Gate",
+  );
 }
 
 // Wartet, bis der auf Platte persistierte Store ein Praedikat erfuellt (G5: geteilt von

@@ -12,8 +12,9 @@
 // armMaxDurationTimer(call,tw.sid) (TeXML-Zweig) sitzen an exakt denselben Punkten
 // (kein Cap-Verlust). Der Fehlerpfad (terminateAndBillCall + providerStatus-
 // Kategorisierung, kein Roh-Provider-/Secret-Leak an den Client) wandert unveraendert.
-// Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab), an
-// unveraenderter Mount-Position (vor makeReadRoutes). normNum/PROVIDER (store/defaults)
+// Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab) und seit AUTH-P5
+// zusaetzlich hinter `internalOnly` (Loopback ohne X-Forwarded-For), an unveraenderter
+// Mount-Position (vor makeReadRoutes). normNum/PROVIDER (store/defaults)
 // und isTrunkZeroFormatError/E164_FORMAT_ERROR (outbound-gates) kommen direkt aus ihrer
 // Heimat (eine Quelle, G5 - wie eurText/spendMonthEndDate in outbound-gates.js); die
 // Laufzeit-Instanzen (Gate-Array, Timer, Terminierung, finishCall) und die
@@ -30,6 +31,7 @@ import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
+import { internalOnly } from "../wiring/internal-only.js";
 
 // I10 (call-quality Impl-1): additives Meta in der /api/calls-Erfolgsantwort - zeigt dem
 // aufrufenden MCP-Client (place_call), WAS vom optionalen context tatsaechlich ankam.
@@ -104,7 +106,7 @@ export function makeCallRoutes({
   }
 
   // Outbound-Call starten (Vertrag laut Brief: objective/briefing/constraints/...)
-  router.post("/api/calls", async (req, res) => {
+  router.post("/api/calls", internalOnly, async (req, res) => {
     const b = req.body || {};
     let to = normNum(b.to);
     const objective = b.objective || b.goal;
@@ -303,7 +305,7 @@ export function makeCallRoutes({
   // ueber das Socket-Ereignis freigeben (genau dort schliesst routes/mcp.js Transport
   // und Server, waehrend der Handler weiterlaeuft). Der Slot faellt im finally von
   // waitForEvent, spaetestens nach der Haltezeit.
-  router.get("/api/calls/:id/consult", async (req, res) => {
+  router.get("/api/calls/:id/consult", internalOnly, async (req, res) => {
     const call = store.getCall(req.params.id);
     const tenantId = requestTenant(req);
     if (!callVisibleTo(call, tenantId)) return res.status(404).json({ error: "not found" });
@@ -328,7 +330,7 @@ export function makeCallRoutes({
   // deshalb durch DIESELBE validateAssistantContext-Kante wie das Briefing - eine
   // zweite, eigene Laengenpruefung waere eine zweite, schwaechere Tuer in den
   // Systemprompt. Verstoss -> 400, Antwort verworfen, Consult bleibt unbeantwortet.
-  router.post("/api/calls/:id/consult/answer", (req, res) => {
+  router.post("/api/calls/:id/consult/answer", internalOnly, (req, res) => {
     const tenantId = requireTenant(req, res); // REJECT -> 403 (Write-403, I-Kette)
     if (!tenantId) return;
     const call = store.getCall(req.params.id);
@@ -360,7 +362,7 @@ export function makeCallRoutes({
   });
 
   // Laufenden Anruf sauber abbrechen
-  router.post("/api/calls/:id/cancel", async (req, res) => {
+  router.post("/api/calls/:id/cancel", internalOnly, async (req, res) => {
     const call = store.getCall(req.params.id);
     if (!callVisibleTo(call, requestTenant(req)))
       return res.status(404).json({ error: "not found" });

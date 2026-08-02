@@ -39,6 +39,9 @@ export const AUTH_MIDDLEWARE_NAMES = Object.freeze([
   "adminOnlyMiddleware",
   // src/auth.js - MCP-Bearer/OIDC, fail-closed
   "mcpAuth",
+  // src/wiring/internal-only.js - genuin lokaler In-Process-Aufrufer
+  // (echter Loopback-Socket OHNE X-Forwarded-For), AUTH-P5
+  "internalOnly",
 ]);
 
 // Einordnung einer Route durch den Inventar-Test.
@@ -188,13 +191,6 @@ export const PUBLIC_ROUTES = Object.freeze([
 // P5/P6 mit eigener Auth versehen wurde (b1). Waere sie stattdessen nach PUBLIC_ROUTES
 // gewandert, haette der Test gruen gemeldet, was in Wahrheit eine offene Tuer ist.
 export const GATE_ONLY_ROUTES = Object.freeze([
-  { method: "POST", path: "/api/calls", plan: "P5 internalOnly" },
-  { method: "GET", path: "/api/calls/:id/consult", plan: "P5 internalOnly" },
-  { method: "POST", path: "/api/calls/:id/consult/answer", plan: "P5 internalOnly" },
-  { method: "POST", path: "/api/calls/:id/cancel", plan: "P5 internalOnly" },
-  { method: "GET", path: "/api/state", plan: "P5 internalOnly" },
-  { method: "GET", path: "/api/calls/:id", plan: "P5 internalOnly" },
-  { method: "GET", path: "/api/tenant-data/export", plan: "P5 internalOnly" },
   { method: "POST", path: "/api/billing/flush-meters", plan: "P6 webAuthMw+adminMw" },
   { method: "POST", path: "/api/billing/setup-checkout", plan: "P9 loeschen (Karenz)" },
   { method: "POST", path: "/api/billing/cost-truing/sweep", plan: "P6 webAuthMw+adminMw" },

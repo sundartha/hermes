@@ -2122,3 +2122,136 @@ nicht angefasst. Kein Secret beruehrt. Keine neue Dependency, kein Flag, keine
 Env-Variable, keine DB-Aenderung. `src/wiring/auth-gate.js` (P7), `src/routes/_tenant.js`
 (P3 fertig) und der Profil-Mechanismus (`resolveProfile`, `PROFILES_JSON`,
 `src/telephony/outbound-gates.js`) unangetastet.
+
+## AUTH-P5 — internalOnly + Audit-Ersatz (2026-08-02)
+
+Fuenfte Phase von `PLAN-AUTH-GATE.md`. Macht die Vertrauensgrenze, die die sieben
+MCP-Routen bisher nur als Nebeneffekt des Basic-Auth-Gates trugen, zu einer eigenen,
+benannten Middleware — und legt den Audit-Ersatz an, den `PLAN-AUTH-GATE.md` fuer den
+Gate-Wegfall (P7) voraussetzt.
+
+**`internalOnly` (neu, `src/wiring/internal-only.js`).** `internalOnly(req, res, next)`:
+`isTrustedLocalCaller(req) ? next() : 403 "Forbidden"`. **Keine neue Trust-Idee** —
+`isTrustedLocalCaller` (`src/routes/_tenant.js`) ist dieselbe, bereits reviewte Grenze
+aus AUTH-P3 (echter Loopback-Socket UND kein `X-Forwarded-For`), an genau EINER Stelle
+formuliert. Haengt jetzt vor genau sieben Routen: `POST /api/calls`,
+`POST /api/calls/:id/cancel`, `GET /api/calls/:id/consult`,
+`POST /api/calls/:id/consult/answer` (`src/routes/api-calls.js`), `GET /api/state`,
+`GET /api/calls/:id`, `GET /api/tenant-data/export` (`src/routes/api-read.js`) — der
+einzige echte Aufrufer bleibt der In-Process-MCP-Pfad ueber Loopback
+(`src/mcp-tools.js` → `resolveGatewayUrl()`).
+
+**Audit-Ersatz (`AUTH_FAILED_GRUND` + `auditAuthFailed`, neu in `src/util.js`).** Bis
+hierher schrieb NUR das Basic-Auth-Gate (`src/wiring/auth-gate.js`) eine
+`auth_failed`-Zeile. Faellt das Gate (P7), verschwaende der einzige Meldeweg fuer
+abgewiesene Zugriffe. Drei Nachfolger-Sicherungen schreiben ihn jetzt selbst — ueber
+EINE Funktion, EINE feste Token-Menge:
+
+| Token | Schreibstelle | Auslöser |
+|---|---|---|
+| `no_session` | `web-auth.js`, `webAuthGateMiddleware` (401) | kein/ungueltiges Cookie, keine/invalidierte/abgelaufene Session |
+| `not_active` | `web-auth.js`, `webAuthGateMiddleware` (403) | Sitzung gueltig, Tenant-Status nicht erlaubt (suspended/closed) |
+| `not_admin` | `web-auth.js`, `adminOnlyMiddleware` (403) | Sitzung gueltig, kein Admin |
+| `not_local` | `wiring/internal-only.js` (403) | kein vertrauenswuerdiger In-Process-Aufrufer |
+
+`expired` bleibt bewusst ohne Produzenten: der 403-Zweig von `webAuthGateMiddleware` ist
+ein gesperrter Tenant, keine abgelaufene Sitzung — `expired` waere dort ein aktiv
+irrefuehrendes Forensik-Label. Der `catch`-Zweig (Infrastruktur-Fehler, z.B. DB weg)
+schreibt weiterhin NICHTS — er ist keine Auth-Entscheidung (Befund F2 unten).
+
+**Zwei benannte Abweichungen von der urspruenglichen Spec (Owner kann vetoen).**
+(1) Log-Schluessel `grund=` statt `reason=`: dasselbe Ereignis (`auth_failed`) traegt in
+`src/auth.js` (mcpAuth) bereits `grund=` — zwei Schreibweisen fuer dasselbe Feld waeren
+ein Log-Defekt. (2) Token `not_active` statt `expired` fuer den `webAuthGateMiddleware`-
+403 (Begruendung s.o.).
+
+**Regel 4 (kein Query im Forensik-Trail).** `auditAuthFailed` ist die EINZIGE Stelle, die
+die Detail-Zeichenkette baut, und nutzt ausschliesslich `req.path` — `req.originalUrl`
+(traegt OAuth-`code` bzw. Stripe-`session_id`) kommt im gesamten neuen Code nicht vor.
+Test `AUTH-P5-3`/`-4`/`-6` (W9) beweisen das mit einem echten Query-String
+(`?session_id=XYZ&code=ABC`) gegen den vollen Server bzw. eine echte Express-Route.
+
+**`src/route-policy.js` mitgezogen (H10, selber Commit).** `AUTH_MIDDLEWARE_NAMES` +
+`"internalOnly"` (vierter Eintrag, benannte Funktion — sonst waere sie im Express-Stack
+`<anonymous>` und die Route saehe ungeschuetzt aus). Die sieben Zeilen mit
+`plan: "P5 internalOnly"` fallen aus `GATE_ONLY_ROUTES` (15 → 8: 4× P6-Billing, 2× P9,
+2× P6-Onboard). `ROUTE_FINGERPRINT` (`test/route-auth-inventory.test.js`) bleibt
+UNVERAENDERT — es entsteht/verschwindet keine Route, nur ihre Einordnung wechselt von
+`GATE_ONLY` auf `AUTH`.
+
+**`scripts/probe-auth.sh` bleibt UNVERAENDERT (am Code nachgepruewft, nicht behauptet).**
+`installAuthGate` mountet in `src/app.js` VOR `makeCallRoutes`/`makeReadRoutes`. Eine
+Anfrage ohne Sitzung und ohne Credentials — genau das, was die Probe misst — bekommt vom
+Basic-Auth-Gate 401, BEVOR `internalOnly` ueberhaupt in der Handler-Kette liegt. Die
+sieben Zeilen bleiben faktisch `sitzung|…|401|gate`; der 403 wird erst mit P7 sichtbar
+und ist in `test/probe-auth-table.test.js` (`AUTH-P5-7`) maschinell erzwungen (die
+sieben Routen duerfen nicht mehr in `GATE_ONLY_ROUTES` stehen, die Probe-Zeile bleibt
+`sitzung/401/gate`).
+
+**Sieben neue Tests** in `test/auth-p5-internal-only.test.js` (Praefix `AUTH-P5-N`,
+matcht keinen i18n-Katalog-Praefix → laeuft im Regressionslauf) plus `AUTH-P5-7` in
+`test/probe-auth-table.test.js`: `AUTH-P5-1` (alle sieben Routen: 403 + genau eine
+Audit-Zeile + kein Seiteneffekt, Spawn-Server ohne Dashboard-Passwort — Gate beweisbar
+abwesend, nicht umgangen), `AUTH-P5-2` (Pre-Mortem-Gegenprobe: der In-Process-Pfad
+inklusive eines echten MCP-`tools/call` bleibt offen), `AUTH-P5-3` (W9, gegen den vollen
+Server), `AUTH-P5-4`/`-5`/`-6` (die drei Web-Auth-Ablehnungszweige gegen eine winzige
+lokale Express-App mit injizierten Session-/Account-Fakes — echte `req.path`/
+`req.originalUrl`-Semantik), `AUTH-P5-7` (Politik-/Probe-Konsistenz). `assertGateAbsent`
+wanderte additiv nach `test/helpers.js` (geteilt mit `auth-p3-bootstrap-fallback.test.js`,
+S2).
+
+**Mutationsprobe (vorgefuehrt, zurueckgenommen).** `internalOnly` auf `next()` gedreht →
+alle sieben `AUTH-P5-1`-Subtests + `AUTH-P5-3` + `AUTH-P3-16` + die zwei umgestellten
+`security.test.js`-Faelle rot, `route-auth-inventory` bleibt gruen (korrekt — die
+Middleware existiert weiter). Eine Route (`GET /api/state`) ohne `internalOnly` →
+`route-auth-inventory` meldet `UNPROTECTED`. `auditAuthFailed` auf `req.originalUrl`
+gedreht → genau die drei W9-Tests rot. `isTrustedLocalCaller` → `isLocalSocket` in
+`internal-only.js` → alle sieben Routen wieder offen (AM1-Regression). Die sieben
+Zeilen in `GATE_ONLY_ROUTES` stehen gelassen → `AUTH-P5-7` rot.
+
+**Kippende Bestandstests, jeder einzeln behandelt.** `AUTH-P3-16` (200 → 403, Titel und
+Assertions umgestellt — die in P3 bewusst offen gelassene Luecke ist jetzt geschlossen).
+`security.test.js`: die beiden „…mit korrekten Credentials → 200"-Faelle (extern bzw.
+Loopback+XFF) messen jetzt explizit „das Gate hat die Credentials akzeptiert und
+durchgereicht" (kein 401, kein `www-authenticate`) statt „die Route liefert 200" — das
+SUBJEKT der Tests ist das Gate, nicht die Route dahinter; die Zusage wird praeziser, nicht
+schwaecher. `route-auth-inventory.test.js`: Titel „drei" → „vier" Auth-Middlewares (der
+Test selbst iteriert `AUTH_MIDDLEWARE_NAMES` und deckt `internalOnly` automatisch ab).
+`profiles.test.js`: Kommentar ergaenzt (403 kommt jetzt von `internalOnly`, nicht mehr
+vom `tenant_reject`-Gate im Handler — Status/Store-Assertion bleiben unveraendert wahr).
+`test/call-termination-order.test.js`: ein Quelltext-Marker
+(`router.post("/api/calls", async...`) traf durch die neue `internalOnly`-Position
+nicht mehr; Marker auf `router.post("/api/calls", internalOnly, async...` nachgezogen
+(reiner Substring-Anker, keine neue Zusage). `test/audit.test.js`,
+`test/plans-route.test.js`, `test/mcp-server-icon.test.js`,
+`test/single-origin-serving.test.js`: KEIN Eingriff — `DASHBOARD_PASSWORD` ist dort
+gesetzt, das Gate antwortet vor `internalOnly` (Mount-Reihenfolge, am Code verifiziert).
+
+**Befunde, die diese Phase bewusst NICHT repariert (benannt, nicht verschwiegen):**
+(F1) `npm run check` (Setup-Check) vergleicht `/api/state` durch den Tunnel gegen den
+Loopback-Wert — ab P5 antwortet die Route Aussenverkehr mit 403, die Pruefung meldet
+falsch-positiv `PUBLIC_URL antwortet nicht`. Fix bereitliegend (Vergleich auf
+`/healthz` umstellen), eigene Mini-Phase. (F2) Der `catch`-Zweig von
+`webAuthGateMiddleware` bleibt stumm (kein Audit, kein `console.error`) — ein
+DB-Ausfall im Session-Store sieht aus wie ein fehlendes Cookie. (F3)
+`scripts/convo-bench/consult-pump.mjs` kennt nur 401 als Abbruchsignal, nicht 403 —
+bleibt funktionsfaehig (laeuft gegen Loopback ohne XFF), aber ein kuenftiger
+Fehlkonfigurationsfall wuerde still leerlaufen. (F4) `docs/RUNBOOK-RESTORE.md` nennt
+`GET /api/state` als manuellen Probe-Read — von aussen liefert das ab P7 403. (F5)
+Ein undokumentierter `GATEWAY_URL`-Override (`src/mcp-tools.js`/`src/mcp-server.js`)
+wuerde bei Zeigen auf einen entfernten Gateway alle sieben Routen fuer den stdio-MCP-
+Server 403 machen — nicht in `.env.example`, als Restrisiko benannt.
+
+**Absolute Regeln:** unberuehrt. Die Kette wird ENGER, nie weiter — `internalOnly` laeuft
+vor jedem der sieben Handler und kann kein Gate ueberspringen. `disclosureSentence`,
+Signaturpruefung, `OUTBOUND_FROZEN`, pro-Tenant-Kostendecke, Denylist/Land/Stundenlimit:
+nicht angefasst. Kein Secret beruehrt. Keine neue Dependency, kein Flag, keine
+Env-Variable, keine DB-Aenderung. `src/wiring/auth-gate.js` (P7) unangetastet.
+`/api/tenant-data/export` bekommt `internalOnly`, NICHT `webAuthMw` (Owner-Entscheidung,
+kein Ersatz fuer den DSGVO-Auskunftsweg, s. `PLAN-TENANT-EXPORT.md`).
+
+**Abbruchsignal live (falls dieser Schritt falsch war):** MCP-Tools in claude.ai liefern
+Fehler statt Daten → sofortiger Rollback (Revert, ein Commit). Sekundär: `grund=not_local`
+taucht im Render-Log fuer `path=/api/state` auf, obwohl niemand von aussen anfragt —
+`AUTH-P5-2` pinnt den In-Process-Pfad inklusive eines echten MCP-`tools/call` genau
+dagegen.

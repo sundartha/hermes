@@ -232,7 +232,10 @@ test("Quelltext: /voice/status nutzt terminateAndBillCall(bill: billThunk(...)) 
 test("Quelltext: place_call-catch nutzt terminateAndBillCall (die geschlossene C5-Luecke)", () => {
   const routeBlock = sliceBetween(
     apiCallsSrc,
-    'router.post("/api/calls", async (req, res) => {',
+    // AUTH-P5: internalOnly haengt jetzt zwischen dem Pfad und dem Handler (der
+    // Marker bleibt ein reiner Substring-Anker, kein struktureller Test der
+    // Middleware-Kette - das deckt route-auth-inventory.test.js).
+    'router.post("/api/calls", internalOnly, async (req, res) => {',
     'router.post("/api/calls/:id/cancel"',
   );
   const catchBlock = sliceBetween(routeBlock, "} catch (err) {", "res.status(providerStatus");

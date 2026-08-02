@@ -218,3 +218,43 @@ test("AUTH-P4-8: die sechs in P4 geloeschten Routen stehen nicht mehr in der Pol
     assert.equal(zeile.antwortet, ANTWORTET.GATE, `${schluessel}: ANTWORTET muss 'gate' sein`);
   }
 });
+
+// Die sieben in AUTH-P5 mit internalOnly abgesicherten Routen als EINE benannte
+// Konstante (keine dritte Wahrheit - die Behauptung "diese sieben sind jetzt AUTH"
+// gibt es sonst nirgends).
+const IN_P5_ABGESICHERT = [
+  { method: "POST", path: "/api/calls" },
+  { method: "POST", path: "/api/calls/:id/cancel" },
+  { method: "GET", path: "/api/calls/:id/consult" },
+  { method: "POST", path: "/api/calls/:id/consult/answer" },
+  { method: "GET", path: "/api/state" },
+  { method: "GET", path: "/api/calls/:id" },
+  { method: "GET", path: "/api/tenant-data/export" },
+];
+
+// AUTH-P5-7: ohne diesen Test ist das Entfernen aus GATE_ONLY_ROUTES NICHT maschinell
+// erzwungen - ein vergessener Restposten bliebe gruen, und P7s harte Vorbedingung
+// ("die Liste muss leer sein") waere eine Behauptung statt einer Messung. H10 (Plan
+// Abschnitt 6): die Probe-Tabelle bleibt fuer diese sieben Zeilen UNVERAENDERT (ART
+// sitzung, STATUS 401, ANTWORTET gate) - das Basic-Auth-Gate antwortet einer Anfrage
+// ohne Sitzung und ohne Credentials VOR internalOnly, der 403 wird erst mit P7
+// sichtbar und ist hier ausschliesslich in test/auth-p5-internal-only.test.js gepinnt.
+test("AUTH-P5-7: die sieben in P5 abgesicherten Routen stehen nicht mehr in der Politik, die Probe-Zeile bleibt unveraendert (H10)", () => {
+  for (const { method, path } of IN_P5_ABGESICHERT) {
+    const schluessel = routeKey(method, path);
+    assert.equal(
+      GATE_ONLY_KEYS.has(schluessel),
+      false,
+      `${schluessel}: steht noch in GATE_ONLY_ROUTES - in AUTH-P5 mit internalOnly abgesichert, aber die Politik nicht nachgezogen`,
+    );
+    const zeile = TABELLEN_SCHLUESSEL.get(schluessel);
+    assert.ok(zeile, `${schluessel}: fehlt in der Probe-Tabelle`);
+    assert.equal(zeile.art, ART.SITZUNG, `${schluessel}: ART muss 'sitzung' bleiben`);
+    assert.equal(
+      zeile.status,
+      "401",
+      `${schluessel}: erwarteter Status bleibt 401 - das Gate antwortet VOR internalOnly (H10, kein Defekt)`,
+    );
+    assert.equal(zeile.antwortet, ANTWORTET.GATE, `${schluessel}: ANTWORTET muss 'gate' bleiben`);
+  }
+});

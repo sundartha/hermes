@@ -263,7 +263,7 @@ test("Routen-Inventar: der Routen-Fingerprint ist unveraendert", () => {
   );
 });
 
-test("Routen-Inventar: die drei Auth-Middlewares sind benannte Funktionen und im Graph sichtbar", () => {
+test("Routen-Inventar: die vier Auth-Middlewares sind benannte Funktionen und im Graph sichtbar", () => {
   const seen = new Set(PROD_GRAPH.flatMap((route) => route.handlerNames));
   for (const name of AUTH_MIDDLEWARE_NAMES) {
     assert.ok(

@@ -48,3 +48,29 @@ export function hashEmail(value) {
 export function audit(action, req, details = "") {
   console.log(`[audit] ${action} ip=${req?.ip ?? "system"}${details ? " " + details : ""}`);
 }
+
+// ---- Auth-Ablehnungen: EIN Eintrag, EINE Vokabel (PLAN-AUTH-GATE AUTH-P5) -------
+// Bis hierher schrieb NUR das Basic-Auth-Gate (src/wiring/auth-gate.js) eine
+// auth_failed-Zeile. Faellt das Gate (AUTH-P7), verschwaende der einzige Meldeweg fuer
+// abgewiesene Zugriffe (Plan Abschnitt 5, S4). Die drei Nachfolger-Sicherungen
+// (webAuthGateMiddleware, adminOnlyMiddleware, internalOnly) schreiben ihn deshalb
+// selbst - ueber DIESE eine Funktion, damit die Zeile nicht an vier Stellen leicht
+// verschieden dasteht (G5) und die Grund-Token eine feste, benannte Menge bleiben (G25).
+//
+// ABSOLUTE REGEL 4: req.path, NIEMALS req.originalUrl. originalUrl traegt den Query-
+// String - dort haengen der OAuth-code (/auth/callback) und die Stripe-session_id
+// (/api/billing/checkout-return). Der Query gehoert nie in den Forensik-Trail.
+//
+// Schluesselname `grund=` statt `reason=`: dasselbe Ereignis traegt in src/auth.js
+// bereits `grund=` (mcpAuth). Zwei Schreibweisen fuer dasselbe Feld waeren im Log ein
+// echter Defekt - der Konstantenname spiegelt darum den Log-Schluessel.
+export const AUTH_FAILED_GRUND = Object.freeze({
+  NO_SESSION: "no_session", // kein gueltiges Sitzungs-Cookie / keine gueltige Session (401)
+  NOT_ACTIVE: "not_active", // Sitzung gueltig, Tenant-Status nicht erlaubt (403)
+  NOT_ADMIN: "not_admin", // Sitzung gueltig, aber kein Admin (403)
+  NOT_LOCAL: "not_local", // kein vertrauenswuerdiger In-Process-Aufrufer (403)
+});
+
+export function auditAuthFailed(req, grund) {
+  audit("auth_failed", req, `path=${req.path} grund=${grund}`);
+}

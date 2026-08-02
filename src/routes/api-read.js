@@ -6,12 +6,14 @@
 // (t4-server-decomposition.md, Phase 3): EINE kohaerente Route-Gruppe,
 // behavior-preserving (reine Verschiebung, keine Logik-Aenderung).
 //
-// Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab). Die View-
+// Hinter der bestehenden /api/*-Basic-Auth (server.js deckt /api/* ab) und seit AUTH-P5
+// zusaetzlich hinter `internalOnly` (Loopback ohne X-Forwarded-For). Die View-
 // Helfer (publicCall/upcomingCalendar/activeNumberFor) kommen direkt aus store/views
 // (eine Quelle, G5 - kein Mismatch zwischen Server- und Self-Service-Antworten).
 import { Router } from "express";
 import { publicCall, activeNumberFor, numberStatusFor, upcomingCalendar } from "../store/views.js";
 import { tenantQuotaView, planUsagePercent } from "../billing/meter.js";
+import { internalOnly } from "../wiring/internal-only.js";
 
 // Anzeige-Slices fuer /api/state (Bestand): neueste N Calls/ActionItems/Termine/
 // Notifications. Benannte Konstanten statt nackter Zahlen im Slice (G25).
@@ -57,7 +59,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
   // wie im Bestand, inkl. Legacy-Calls ohne tenantId -> byte-identisch). Die lesenden
   // MCP-Tools (list_calls/list_action_items/get_my_number/get_agent_status) erben das
   // Scoping AUTOMATISCH ueber diese Route (mcp-tools.js unveraendert).
-  router.get("/api/state", (req, res) => {
+  router.get("/api/state", internalOnly, (req, res) => {
     const s = store.load();
     const tenantId = requestTenant(req);
     const ctx = store.tenantContext(tenantId);
@@ -93,7 +95,7 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
     });
   });
 
-  router.get("/api/calls/:id", (req, res) => {
+  router.get("/api/calls/:id", internalOnly, (req, res) => {
     const call = store.getCall(req.params.id);
     if (!call) return res.status(404).json({ error: "not found" });
     // Tenant-Scope (I5): fremder Call -> 404 (kein Existenz-Leck, NICHT 403). Flag
@@ -106,11 +108,15 @@ export function makeReadRoutes({ store, config, audit, tenant }) {
   });
 
   // Auskunft/Export (Art. 15/20): nicht-destruktiver Owner-Tenant-Export, read-only,
-  // hinter der bestehenden /api/*-Basic-Auth. Calls durch publicCall (KEIN
-  // streamToken-Leak, dieselbe Invariante wie /api/state). BEWUSST KEIN MCP-Tool
-  // (kein Bulk-Export ueber MCP, Regel 5). Die Loeschung (Art. 17) hat KEINEN
-  // Endpunkt - nur Script (kleinste Angriffsflaeche, Safety vor Features).
-  router.get("/api/tenant-data/export", (req, res) => {
+  // hinter der bestehenden /api/*-Basic-Auth und seit AUTH-P5 zusaetzlich hinter
+  // `internalOnly` (Loopback ohne X-Forwarded-For) - NICHT webAuthMw (Owner-
+  // Entscheidung 1, PLAN-AUTH-GATE): der Kanal bleibt der In-Process-MCP-Pfad, keine
+  // Browser-Session. Calls durch publicCall (KEIN streamToken-Leak, dieselbe
+  // Invariante wie /api/state). BEWUSST KEIN MCP-Tool (kein Bulk-Export ueber MCP,
+  // Regel 5) und KEIN Ersatz fuer den DSGVO-Auskunftsweg (PLAN-TENANT-EXPORT.md). Die
+  // Loeschung (Art. 17) hat KEINEN Endpunkt - nur Script (kleinste Angriffsflaeche,
+  // Safety vor Features).
+  router.get("/api/tenant-data/export", internalOnly, (req, res) => {
     const tenantId = requireTenant(req, res); // L6: tenant-gescopt statt OWNER-gepinnt; REJECT -> 403
     if (!tenantId) return;
     const data = store.exportTenantData(tenantId);
