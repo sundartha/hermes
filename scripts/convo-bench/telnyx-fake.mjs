@@ -4,6 +4,7 @@
 // ai_assistant_start / hangup) und macht ihre Bodies fuer den Treiber lesbar - so
 // stammt der gemessene Eroeffnungstext aus dem SERVER, nie aus einer Bench-Fixture.
 import http from "node:http";
+import { readJsonBody } from "./http-fake-helpers.mjs";
 
 const ACTION_URL_RE = /^\/v2\/calls\/([^/]+)\/actions\/([^/?]+)/;
 const ACTION_POLL_INTERVAL_MS = 10;
@@ -29,15 +30,6 @@ export function callControlEventBody({ eventType, callControlId, status }) {
   return { data: { event_type: eventType, payload } };
 }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    let raw = "";
-    req.on("data", (chunk) => (raw += chunk));
-    req.on("end", () => resolve(raw));
-    req.on("error", reject);
-  });
-}
-
 // Startet den Fake. actions[] sammelt {callControlId, action, body} in Reihenfolge.
 export async function startTelnyxFake() {
   const actions = [];
@@ -49,13 +41,7 @@ export async function startTelnyxFake() {
       res.end(JSON.stringify({ errors: [{ code: "not_found", title: "unknown path" }] }));
       return;
     }
-    const raw = await readBody(req);
-    let body = {};
-    try {
-      body = raw ? JSON.parse(raw) : {};
-    } catch {
-      body = {};
-    }
+    const body = await readJsonBody(req);
     actions.push({ callControlId: match[1], action: match[2], body });
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ data: {} }));
