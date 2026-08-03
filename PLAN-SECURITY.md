@@ -2625,6 +2625,111 @@ Deploy und kann in der Umsetzungs-Session nicht erbracht werden.
 > die eigentliche Aussage — es gibt keine nutzungsbasierte Weiterbelastung
 > (Owner-Entscheidung 2a) — steht in `README.md`.
 
+## KV-P3 — Inbound erreicht den Ist-Abgleich (2026-08-03)
+
+> **Was sich aendert.** Der Ist-Abgleich (`src/billing/cost-truing.js`) verliert seinen
+> Richtungsfilter: `isEndedOutbound` heisst jetzt `isEndedCall` und prueft nur noch
+> `!!call.endedAt`. Damit werden beendete INBOUND-Calls Kandidaten von
+> `isTruingCandidate`, bekommen `cost_trued_at`, `actual_cost_micro_cents` und eine
+> Delta-Buchung auf der pro-Tenant-Kostendecke. Der Name trug die Richtung mit; beides
+> ist weg. `OUTBOUND_DIRECTION` faellt als toter Code. Der Telnyx-Adapter ist NICHT
+> angefasst — geprueft per `grep -n "direction" src/telephony/adapters/telnyx/voice.js`
+> (0 Treffer); die Beleg-Zuordnung (Anker `call_control_id`, Session-Felder
+> `telnyx_session_id`/`call_session_id`) kennt das Feld `direction` nirgends.
+>
+> **Warum, mit Zahlen.** KV-P2 bucht seit dem 2026-08-03 eine Schaetzung von
+> `VOICE_TARIFF_INBOUND_CENTS` = 6 EUR-Cent je angefangener Minute auf die Gate-Achse.
+> Der an KV-M1 gemessene Ist-Satz (Ankeranruf `call_msczw0irl06s`, 79,6 s = 2 angefangene
+> Minuten, 13 zugeordnete Belege, 3.731.030 USD-Mikro-Cent) betraegt 1,87 US-Cent je
+> angefangener Minute, umgerechnet mit `providerToBucketRateMicro` = 920000 rund 1,72
+> EUR-Cent. Ohne diesen Abgleich belastet KV-P2 den Kunden dauerhaft um etwa das
+> Dreieinhalbfache der realen Kosten. Das ist der Zweck dieser Phase.
+>
+> **Erwartete Korrekturrichtung: NEGATIV.** Am KV-M1-Anker: 12 ct gebucht (2 angefangene
+> Minuten x 6 ct) gegen 3 ct Ist (Bucket-Cent, ganzzahlig, mit Rest-Uebertrag in
+> `costCorrectionMicroCentsRem`) = -9 ct. Eine negative Korrektur laeuft ueber
+> `applyCreditCents` (`state-ops.js`) und verlangt vorher den vollen Beweis:
+> `refundProven` (vollstaendige Pflicht-Menge, `billedSecTotal > 0`, buchbarer
+> Schaetzbetrag). Ohne diesen Beweis wird sie verworfen und der Mikro-Cent-Rest bleibt
+> bit-gleich — die Nachforderung (positives Delta) wird dagegen bedingungslos gebucht.
+> Diese Asymmetrie ist unveraendert (LCT P4).
+>
+> **Der Periodengrenzen-Riegel bleibt UNVERAENDERT (KS-P5).** Trifft die Gutschrift nach
+> einem Monats- oder Periodenwechsel ein, wirkt sie ausschliesslich auf der
+> Lebenszeit-Achse: `creditHitsSpendMonth` verlangt einen passenden, noch laufenden
+> Monatsanker, und `creditHitsBudgetPeriod` verschiebt bei fremder Periode die Baseline
+> mit, damit das laufende Fenster nicht aufgeweitet wird. Ohne diese Kompensation
+> vergroesserte jede alte Gutschrift die Perioden-Decke — auf DIESER Achse gibt es sonst
+> keinen Missbrauchsschutz. Es zu "reparieren" waere ein Scope-Bruch dieser Phase.
+>
+> **RESTRISIKO (TOD 4), bewusst getragen, mit Zahl.** Zwischen der Buchung der Schaetzung
+> (1 ms nach Gespraechsende) und ihrer Korrektur liegen `COST_TRUING_DELAY_MINUTES` (30)
+> plus ein Sweep-Takt `COST_TRUING_SWEEP_INTERVAL_MS` (1 h), also bis zu rund 1,5
+> Stunden, in denen das Gate NUR die Schaetzung sieht. Die Fail-Richtung ist bewusst
+> "im Zweifel teurer": der Kunde wird in diesem Fenster zu hoch belastet, nie zu niedrig.
+> Die Exposition eines EINZELNEN Legs deckelt `MAX_CALL_DURATION_CAP_S` (1800 s) auf
+> hoechstens 30 x 6 = 180 Cent Schaetzung gegen rund 52 Cent Ist. Faellt dieses Fenster
+> ueber eine Monats-/Periodengrenze, bleibt die Ueberzahlung auf der gate-tragenden Achse
+> stehen und wird nur auf der Lebenszeit-Achse gutgeschrieben — maximal rund 128 Cent je
+> betroffenem Anruf.
+>
+> **BETRIEBLICHE VORBEDINGUNG, ALS OFFENER BEFUND (nicht in dieser Phase abschliessbar).**
+> `refundProven` verlangt, dass JEDER Typ aus `COST_TRUING_REQUIRED_RECORD_TYPES` unter
+> den zugeordneten Belegen des Calls vorkommt. KV-M1 hat fuer den Inbound-Anker gemessen:
+> `sip-trunking` 1, `call-control` 1, `speech-to-text` 5, `text-to-speech` 5, `recording`
+> 1, `ai-voice-assistant` 0. Steht `ai-voice-assistant` in der LIVE gesetzten
+> Pflicht-Menge, landet jeder Inbound-Call dauerhaft auf `incomplete`, bekommt NIE eine
+> Gutschrift und drueckt die Deckungsquote. Der Live-Wert konnte fuer diesen Bericht
+> NICHT gelesen werden: `.env.example`/`render.yaml` fuehren ihn leer (leer = FATAL
+> Boot-Refusal, `costTruingBookingFindings`, also laeuft live ein anderer, im
+> Render-Dashboard gesetzter Wert), ein Render-Werkzeug zum Lesen von Env-Variablen
+> existiert nicht (nur Schreiben), und der seit KV-M0 vorgesehene Boot-Banner
+> (`costTruingTypesBannerLine`) ist im aktuell deployten Commit noch nicht enthalten
+> (Produktion liegt 45 Commits hinter `master`). Ein indirektes Log-Indiz (eine live
+> gebuchte NEGATIVE Korrektur auf einem — vor KV-P2 zwangslaeufig outbound — Call, was
+> `dataComplete=true` voraussetzt) spricht dafuer, dass `ai-voice-assistant` heute NICHT
+> in der Pflicht-Menge steht, ist aber kein Beweis. **Vor dem Deploy dieser Phase ist der
+> Wert im Render-Dashboard von Hand zu pruefen**; enthaelt er `ai-voice-assistant`, ist das
+> vor dem Deploy als Owner-Entscheidung zu klaeren (kein Code-Fix in dieser Phase). Details:
+> `tasks/kv-p3-lastrechnung.md` Abschnitt 8.
+>
+> **Lastrechnung (TOD 5): kein Blocker.** Der Bruchpunkt-Waechter warnt ab 1441 Anfragen
+> je Sweep (`SWEEP_REQUESTS_WARN_THRESHOLD` = 1440, strikt `>`). KV-P3 erhoeht die
+> Anfragezahl NICHT: der Belegabruf laeuft genau EINMAL je Provider (nicht je Kandidat),
+> die Query kennt keine Call-Referenz, und die Belege eines Inbound-Calls liegen im
+> konto-weiten Pool bereits heute — sie werden nur nie zugeordnet. Obergrenze eines
+> Sweeps: 6 Belegtypen x 10 Seiten x 2 Versuche x 1 belegfaehiger Provider = 120
+> Anfragen, Faktor 12 unter der Schwelle. Vollstaendige Rechnung:
+> `tasks/kv-p3-lastrechnung.md`.
+>
+> **Deckungsquote (N4).** Beendete Inbound-Calls kommen in den Nenner von
+> `costTruingCoveragePercent`. Kurzfristig sinkt die Quote (unabgeglichener Bestand,
+> `no_estimate`-Altzeilen), nach ein bis zwei Sweeps steigt sie wieder, sofern die
+> Zuordnung so gut greift wie an KV-M1 gemessen. Rechne mit
+> `coverage_below_threshold`-WARN-Befunden nach dem Deploy — WARN, KEIN Boot-Refusal.
+> Die FORMEL bleibt unveraendert; der strukturell zu weite Nenner ist KV-M3.
+>
+> **Absolute Regel 1 unberuehrt.** Diese Phase macht die Zahl der pro-Tenant-Kostendecke
+> GENAUER, sie schwaecht deren Sperrwirkung nicht — die Decke sperrt weiterhin BEIDE
+> Richtungen. Die Inbound-Abweisung in `src/routes/voice.js` ist NICHT angefasst (E11
+> bleibt zurueckgezogen).
+>
+> **Unberuehrt:** `src/routes/voice.js`, `metering.js` (Sofortbuchung/Inbound-Satz aus
+> KV-P2), der Gutschrift-Riegel gegen Periodengrenzen, die Deckungsquoten-Formel (KV-M3),
+> die DID-Miete (KV-P4), der Telnyx-Adapter, `MAX_BUDGET_EUR`, `OUTBOUND_FROZEN`, Abo+KYC
+> als Outbound-Permit, Denylist, Land-Gate, Stundenlimit, Signaturpruefung,
+> `disclosureSentence`. Keine neue DB-Spalte, kein Backfill, keine neue Route, kein
+> `route-policy.js`-Eintrag, kein zweiter Sweep, kein Timer, kein Cron, keine neue
+> Dependency, keine neue Env-Variable.
+>
+> **Kein rueckwirkendes Buchen.** Historische Inbound-Calls ohne persistierte Schaetzung
+> landen in `cost_trued_source = 'no_estimate'`, bewegen keinen Cent und werfen nicht
+> (Abnahme KV-P3-3). Sie werden NICHT nachtraeglich bebucht.
+>
+> **Rollback.** `call.direction === "outbound" &&` in `isEndedCall` wieder einsetzen.
+> Bereits korrigierte Inbound-Calls bleiben korrekt (`costTruedAt` gesetzt, keine
+> Doppelbuchung moeglich — der Riegel ist richtungsblind).
+
 ## KV-P2 — Inbound-Carrier-Minuten erreichen die Gate-Achse (2026-08-03, Owner-Entscheidung 1a)
 
 > **Was sich aendert.** `reconcileOutboundVoiceBudget` verliert seinen Richtungsfilter und

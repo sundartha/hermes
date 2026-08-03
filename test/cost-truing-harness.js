@@ -76,10 +76,14 @@ export function isoMinutesAgo(nowMs, minutes) {
   return new Date(nowMs - minutes * MS_PER_MINUTE).toISOString();
 }
 
-// Ein beendeter Outbound-Call, faellig fuer den Abgleich (endedAt lange genug her).
+// Ein beendeter, fuer den Abgleich faelliger Call. RICHTUNG als Parameter, weil der Sweep
+// seit KV-P3 richtungsoffen ist - zwei nebeneinander gepflegte Bauer waeren dieselbe
+// Fixtur zweimal (G5/S2) und liefen beim ersten Nachziehen auseinander. Die zwei
+// exportierten Wrapper darunter halten die Namen ehrlich (N2): keiner behauptet eine
+// Richtung, die er nicht baut.
 // legRef waehlt twilioSid ODER callControlId (providerLegIdOf: twilioSid || callControlId).
-export function makeDueOutboundCall(state, { nowMs, tenantId = BOOTSTRAP_TENANT_ID, provider = "telnyx", legRef = { callControlId: "cc_1" }, endedMinutesAgo = 200, estimatedCostCents = null, to = "+49" } = {}) {
-  const call = createCall(state, { direction: "outbound", from: "+49", to, tenantId, provider });
+function makeDueCall(state, { direction, nowMs, tenantId = BOOTSTRAP_TENANT_ID, provider = "telnyx", legRef = { callControlId: "cc_1" }, endedMinutesAgo = 200, estimatedCostCents = null, from = "+49", to = "+49" }) {
+  const call = createCall(state, { direction, from, to, tenantId, provider });
   call.status = "completed";
   call.answeredAt = isoMinutesAgo(nowMs, endedMinutesAgo + 1);
   call.endedAt = isoMinutesAgo(nowMs, endedMinutesAgo);
@@ -88,6 +92,13 @@ export function makeDueOutboundCall(state, { nowMs, tenantId = BOOTSTRAP_TENANT_
   if (estimatedCostCents !== null) call.estimatedCostCents = estimatedCostCents;
   return call;
 }
+
+export const makeDueOutboundCall = (state, opts = {}) => makeDueCall(state, { ...opts, direction: "outbound" });
+// KV-P3: Gegenstueck fuer die Inbound-Abnahmen. `to` ist hier die EIGENE DID, `from` der
+// Anrufer - fuer den Abgleich ohne Belang (er rechnet gegen estimatedCostCents, nie gegen
+// einen Tarif), aber falsch herum benannte Fixturen sind der Anfang der naechsten
+// Fehlannahme.
+export const makeDueInboundCall = (state, opts = {}) => makeDueCall(state, { ...opts, direction: "inbound" });
 
 export function fakeVoiceControl(byProvider) {
   return (provider) => {

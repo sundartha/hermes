@@ -396,7 +396,15 @@ test("(h3) Gegenprobe: dieselben Records mit NICHT erfuellter Pflicht-Menge -> '
 
 // ---- (i) costTruingCoveragePercent: reine Projektion ----
 
-test("(i) costTruingCoveragePercent: 3 von 4 beendeten Outbound-Calls bewiesen -> 75; Nenner 0 -> 0 (kein Freispruch, kein NaN)", () => {
+// KV-P3 DREHT DIE ZUSAGE DIESES TESTS, bewusst und mit Begruendung: bis KV-P3 filterte
+// die Quote auf direction === "outbound" und zaehlte einen beendeten Inbound-Call in
+// KEINER Achse. Seit KV-P3 ist der Ist-Abgleich richtungsoffen (die Schaetzung aus KV-P2
+// bliebe sonst dauerhaft rund 3,5x ueber dem Ist stehen), und Nenner UND Zaehler folgen
+// derselben EINEN Quelle isEndedCall. Der beendete Inbound-Call zaehlt jetzt in BEIDEN.
+// Was UNVERAENDERT gilt und deshalb hier stehen bleibt: ein noch LAUFENDER Call
+// (endedAt === null) zaehlt in keiner Achse - das ist die Zusage, die diese Phase NICHT
+// anfasst.
+test("(i) costTruingCoveragePercent: 4 von 5 beendeten Calls BEIDER Richtungen bewiesen -> 80; laufende Calls zaehlen nie; Nenner 0 -> 0 (kein Freispruch, kein NaN)", () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
   for (let i = 0; i < 3; i++) {
@@ -408,14 +416,15 @@ test("(i) costTruingCoveragePercent: 3 von 4 beendeten Outbound-Calls bewiesen -
   unproven.costTruedSource = COST_TRUING_SOURCE.UNAVAILABLE;
   unproven.costTruedAt = new Date(nowMs).toISOString();
 
-  // Zusatz: Inbound- und noch laufende Calls zaehlen in KEINER der beiden Achsen.
+  // Ein beendeter, BEWIESENER Inbound-Call zaehlt seit KV-P3 in Zaehler UND Nenner.
   const inbound = createCall(state, { direction: "inbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   inbound.status = "completed";
   inbound.endedAt = new Date(nowMs).toISOString();
   inbound.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
-  createCall(state, { direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID }); // endedAt bleibt null
+  // Ein noch LAUFENDER Call (endedAt bleibt null) zaehlt weiterhin in KEINER Achse.
+  createCall(state, { direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
 
-  assert.equal(costTruingCoveragePercent(state), 75);
+  assert.equal(costTruingCoveragePercent(state), 80, "der beendete, bewiesene Inbound-Call zaehlt in Zaehler UND Nenner");
 
   const emptyState = makeDefaultState();
   assert.strictEqual(costTruingCoveragePercent(emptyState), 0);

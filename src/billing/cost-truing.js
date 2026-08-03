@@ -1,8 +1,11 @@
-// Kosten-Abgleich im Beobachtungsmodus (LCT P3): misst die Ist-Kosten JEDES beendeten
-// Outbound-Calls gegen den Provider und schreibt AUSSCHLIESSLICH die vier P2-Felder, die
-// publicCall (src/store/views.js) bereits strippt und die kein Gate, kein Meter und keine
-// Projektion liest. Muster makeMetering (store+config im Closure, keine Telefonie-Logik
-// im Server, kein Netz-IO im Store).
+// Kosten-Abgleich (LCT P3, seit LCT P4 buchend): misst die Ist-Kosten JEDES beendeten
+// Calls gegen den Provider - seit KV-P3 in BEIDEN Richtungen. Der Richtungsfilter fiel,
+// weil ein Inbound-Call seit KV-P2 eine Schaetzung auf der Gate-Achse traegt (6 EUR-Cent
+// je angefangener Minute) und ohne Abgleich dauerhaft rund 3,5x ueber dem an KV-M1
+// gemessenen Ist (1,87 US-Cent/min) stehen bliebe. Schreibt weiterhin AUSSCHLIESSLICH die
+// vier P2-Felder, die publicCall (src/store/views.js) bereits strippt und die kein Gate,
+// kein Meter und keine Projektion liest. Muster makeMetering (store+config im Closure,
+// keine Telefonie-Logik im Server, kein Netz-IO im Store).
 //
 // Warum NICHT in finishCall: die CDR-Latenz ist UNBELEGT (PLAN-LIVE-COST-TRACING.md
 // Kap. 2.6) - ein synchroner Abruf blockierte den Teardown oder lieferte verlaesslich null.
@@ -39,7 +42,6 @@ import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "
 // boot.js und api-billing.js teilen sich diese eine Quelle statt zweier Magic-Strings.
 export const SWEEP_TRIGGER = Object.freeze({ INTERVAL: "interval", MANUAL: "manual" });
 
-const OUTBOUND_DIRECTION = "outbound"; // dieselbe Achse wie metering.js, hier 2x gebraucht -> benannt
 const PERCENT_BASE = 100;
 const MS_PER_MINUTE = 60 * 1000;
 const SWEEP_RUNNING_REASON = "sweep_running";
@@ -73,7 +75,17 @@ const DRIFT_ALERT_SMS_PREFIX = "[hermes] Tarif-Drift: ";
 // Sicherung, die an ihre eigene Verletzung angepasst wird.
 const SWEEP_REQUESTS_WARN_THRESHOLD = 1440;
 
-const isEndedOutbound = (call) => call.direction === OUTBOUND_DIRECTION && !!call.endedAt;
+// DAS Praedikat "beendeter Call" - RICHTUNGSOFFEN seit KV-P3. Bis dahin stand hier
+// zusaetzlich direction === "outbound"; der Filter war die zweite Haelfte der
+// Inbound-Luecke (L1): KV-P2 bucht die Schaetzung, ohne diesen Abgleich bliebe sie
+// fuer immer stehen. Der Name traegt die Richtung deshalb nicht mehr mit (N2) - ein
+// Name, der "Outbound" behauptet, waehrend die Funktion beide Richtungen bedient,
+// ist die Sorte Luege, an der die naechste Phase falsch abbiegt.
+// EINE Quelle fuer BEIDE Verbraucher (G5): den Kandidaten-Riegel (isTruingCandidate)
+// und den Nenner der Deckungsquote - zwei getrennte Fassungen liefen beim ersten
+// Nachziehen auseinander, und die Quote meldete dann eine andere Menge, als der Sweep
+// bearbeitet.
+const isEndedCall = (call) => !!call.endedAt;
 const providerLegIdOf = (call) => call.twilioSid || call.callControlId || null;
 
 // Beendet-Zeitstempel EINES Calls in Millisekunden, oder null (fehlend/unbrauchbar).
@@ -119,17 +131,25 @@ function poolSinceFor(candidates) {
   return oldestMs === null ? undefined : new Date(oldestMs - POOL_SINCE_MARGIN_MS).toISOString();
 }
 
-// Anteil der beendeten Outbound-Calls mit beweisbar vollstaendiger Datenlage. Zaehler:
-// costTruedSource === 'telnyx_detail_records' (dieser Wert wird unten NUR bei kompletter
-// Typ-Menge gesetzt - EINE Quelle der Vollstaendigkeits-Aussage, kein zweites Praedikat).
-// Nenner: alle beendeten Outbound-Calls. NENNER 0 -> 0, kein Freispruch: die 0-Zeilen-
+// Anteil der beendeten Calls mit beweisbar vollstaendiger Datenlage - seit KV-P3
+// BEIDE Richtungen (der Nenner folgt automatisch dem Kandidaten-Praedikat, dieselbe
+// EINE Quelle isEndedCall). Zaehler: costTruedSource === 'telnyx_detail_records'
+// (dieser Wert wird unten NUR bei kompletter Typ-Menge gesetzt - EINE Quelle der
+// Vollstaendigkeits-Aussage, kein zweites Praedikat).
+// Nenner: alle beendeten Calls. NENNER 0 -> 0, kein Freispruch: die 0-Zeilen-
 // Antwort ist die fail-open-Variante genau der Zahl, die ab P4/P4b den Flip freigibt.
 // Abgerundet (floor) - die Abweichung geht Richtung "zu wenig Deckung", nie Richtung
 // vorgetaeuschter Reife. Nicht persistiert: live aus dem geladenen Spiegel gerechnet.
 // Aufrufer reichen store.load() herein (P4- und P4b-Boot-Guard rufen DIESE Funktion,
 // statt die Rechnung ein zweites Mal zu erfinden).
+//
+// BEKANNTE, BEWUSST NICHT HIER BEHOBENE SCHWAECHE (Plan-Befund N4): der Nenner
+// enthaelt Calls, die STRUKTURELL keinen Beleg haben koennen - nie beantwortete Legs
+// und Bestandszeilen ohne Schaetzbetrag ('no_estimate'). Die Quote ist dadurch
+// strukturell zu niedrig. Die FORMEL zu aendern ist KV-M3, nicht diese Phase; wer sie
+// hier "nebenbei" mitfixt, vermischt zwei Befunde in einem Diff.
 export function costTruingCoveragePercent(state) {
-  const ended = Array.isArray(state?.calls) ? state.calls.filter(isEndedOutbound) : [];
+  const ended = Array.isArray(state?.calls) ? state.calls.filter(isEndedCall) : [];
   if (ended.length === 0) return 0;
   const proven = ended.filter((c) => c.costTruedSource === COST_TRUING_SOURCE.DETAIL_RECORDS).length;
   return Math.floor((proven * PERCENT_BASE) / ended.length);
@@ -163,7 +183,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // auf dem Render-Free-Tier bei jedem Restart genullt, erreicht die Obergrenze nie und
   // liesse den Job unbegrenzt gegen tote Calls laufen.
   function isTruingCandidate(call, nowMs) {
-    if (!isEndedOutbound(call) || call.costTruedAt !== null) return false;
+    if (!isEndedCall(call) || call.costTruedAt !== null) return false;
     if (nextCostTruingAttempt(call) > config.billing.costTruingMaxAttempts) return false;
     const endedMs = endedAtMs(call);
     if (endedMs === null) return false; // unbrauchbarer Zeitstempel != "faellig"
