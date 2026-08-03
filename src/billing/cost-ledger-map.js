@@ -63,7 +63,12 @@ export const COST_LEDGER_MAP = Object.freeze({
       "1,87 US-ct/min gemessenes Ist), NICHT der Outbound-Worst-Case. Fehlt der Wert, " +
       "greift der Code-Fallback 6, nie 0; Muell verweigert den Boot. Ledger nur unter " +
       "PAYMENT_ENABLED (call-finish.js), Gate (reconcileVoiceBudget) IMMER - seit KV-P2 " +
-      "ohne Richtungsfilter, die Hauptluecke des Plans ist damit geschlossen.",
+      "ohne Richtungsfilter, die Hauptluecke des Plans ist damit geschlossen. Seit KV-P3 " +
+      "korrigiert der Ist-Abgleich (cost-truing.js, ebenfalls richtungsoffen) diese " +
+      "Schaetzung gegen die Provider-Belege; die Korrektur ist bei Inbound typischerweise " +
+      "NEGATIV (6 ct Schaetzung gegen 1,72 EUR-Cent Ist). Sie erreicht die Spend-Monat- " +
+      "und Perioden-Achse nur, wenn sie DIESELBE Periode trifft wie die Belastung " +
+      "(applyCreditCents, KS-P5) - sonst wirkt sie nur auf der Lebenszeit-Achse.",
   },
   ai_token: {
     kind: USAGE_EVENT_KIND.AI_TOKEN,
