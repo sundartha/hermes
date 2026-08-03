@@ -63,6 +63,38 @@ aufgerufen. Nach *"Gut, dann gebe ich Antonio Bescheid"* (Segment 36) redet er w
 **B-6 — Pathologische Wiederholung.** `take_message` feuerte **8 mal**, immer mit derselben
 Nachricht. Die Segmente 18, 23, 24, 26, 30, 32, 34, 38 tragen im Kern denselben Satz.
 
+**B-8 — Inbound und Outbound sind ZWEI VERSCHIEDENE MASCHINEN. Am Log belegt.**
+Der Owner hat am 03.08. zusaetzlich die eigene Nummer angerufen (`call_msczw0irl06s`,
+inbound, 79 s, 4 Turns) und berichtet: *"es war die gleiche Stimme, hat sich aber ganz
+anders angehoert, auch ganz anders gesprochen ... als wuerde ich mit einem anderen Agenten
+reden."* Er hat recht, woertlich:
+
+- **Outbound** laeuft ueber den Telnyx-Assistant/LLM-Shim: `assistant_id` und
+  `telnyx_conversation_id` sind gesetzt, im Log stehen `[telnyx-shim] turn_ok`-Zeilen mit
+  `streamArmedRounds`, `streamChunks`, `offeredToolNames`.
+- **Inbound** laeuft ueber die **Budget-Engine** (TeXML-Gather + STT): `assistant_id` und
+  `telnyx_conversation_id` sind **NULL**, im Log stehen ausschliesslich
+  `[metrics] speech_result` / `stt_gap` / `turn`. **Keine einzige `turn_ok`-Zeile.**
+
+**Folge 1: das Token-Streaming aus AL-P17 wirkt inbound ueberhaupt nicht.** Die Boot-Sonde
+meldet "Token-Streaming: AKTIV" — das gilt nur fuer den Shim-Pfad. Jede Aussage ueber
+Gespraechsqualitaet muss ab sofort die Richtung nennen.
+
+**Folge 2, und das ist die eigentliche Zahl:** die gemessenen `stt_gap`-Werte dieses
+Anrufs lauten **10827 ms, 17839 ms, 12671 ms**. Zehn bis achtzehn Sekunden Stille zwischen
+dem Ende der Agenten-Antwort und dem Erkennen der naechsten Aeusserung. Die LLM-Latenzen
+desselben Anrufs lagen bei 1036, 1247, 1340 und 2846 ms. **Die Pausen kommen nicht vom
+Modell, sondern aus der Gather-/STT-Schicht** — und sie sind inbound eine Groessenordnung
+schlimmer als outbound.
+
+**Folge 3:** inbound gibt es **kein** `get_consult` und **kein** `look_up` (Richtungs-Gate),
+und der Anrufer bekam keine Zusammenfassung (`sms_summary_skipped reason=no_private_number`).
+Der Owner hat aufgelegt (`hangupSource: caller`).
+
+**Folge 4:** fuer inbound existiert **kein Rohtranskript** mehr — `transcript_segment` ist
+fuer diesen Anruf leer, nur `summary` und `result` blieben. Forensik ist dort also nur
+moeglich, wenn man sie VOR der Zusammenfassung sichert.
+
 **B-7 — STT-Kauderwelsch (vorbestehend).** *"Hast Du das im Internet tress passiert?"*,
 *"Bis zum behindert, man."* Nicht von dieser Kette verursacht, nie behoben.
 
