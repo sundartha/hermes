@@ -27,6 +27,13 @@
 // UNVERAENDERT. Die Umrechnung USD -> EUR-Bucket lebt an GENAU EINER Stelle:
 // convertProviderMicroToBucketCents (state-ops.js), aufgerufen ausschliesslich aus
 // applyCostCorrectionCents. In diesem Modul wird NIE umgerechnet.
+//
+// Deckungsquote (KV-M3): costTruingCoveragePercent zaehlt seit dieser Phase im Nenner
+// NUR noch belegbare Calls (beantwortet, mit buchbarer Schaetzung, innerhalb des
+// Provider-Belegfensters) statt JEDEM beendeten Call - der Nenner enthielt vorher Calls,
+// die strukturell nie einen Beleg bekommen koennen (Plan-Befund N4). Die drei
+// ausgeschlossenen Gruppen bekommen eigene, IMMER sichtbare Zaehler in der Sweep-Zeile
+// und im Rueckgabewert (coverageBucketOf/coverageBreakdown).
 import {
   COST_TRUING_SOURCE,
   MAX_CALL_DURATION_CAP_S,
@@ -75,6 +82,40 @@ const DRIFT_ALERT_SMS_PREFIX = "[hermes] Tarif-Drift: ";
 // Sicherung, die an ihre eigene Verletzung angepasst wird.
 const SWEEP_REQUESTS_WARN_THRESHOLD = 1440;
 
+// Die vier sich gegenseitig ausschliessenden Ausgaenge des Praedikats "belegbar"
+// (KV-M3, N4-Behebung). EIN Ausdruck mit vier benannten Buckets statt eines Booleans -
+// jede ausgeschlossene Gruppe bekommt einen eigenen, sichtbaren Zaehler (s.
+// coverageBreakdown), statt still im Nenner zu verschwinden.
+const COVERAGE_BUCKET = Object.freeze({
+  ELIGIBLE: "eligible",
+  NEVER_ANSWERED: "nie_beantwortet",
+  NO_ESTIMATE: "ohne_schaetzung",
+  OUTSIDE_WINDOW: "ausserhalb_fenster",
+});
+
+// Providerseitiges Belegfenster (KV-M3, N4-Behebung Teil 1): /v2/detail_records deckt
+// GEMESSEN nur die letzten PROVIDER_COST_RECORD_WINDOW_DAYS Tage ab (Kosten-Inventar
+// 2026-07-31, tasks/kosten-inventar.md:546: "last_7_days"). Diese Zahl existierte vor
+// KV-M3 an KEINER Stelle im Code (grep auf "last_7_days"/"7 Tage" in src/: 0 Treffer) -
+// das war der Befund selbst, keine Kopie eines vorhandenen Werts.
+// Ein beendeter Call AELTER als dieses Fenster kann strukturell nie mehr belegt werden,
+// unabhaengig davon, ob je ein Sweep ihn versucht hat.
+// BEWUSST KEINE Env-Variable, aus DEMSELBEN Grund wie SWEEP_REQUESTS_WARN_THRESHOLD
+// (oben in dieser Datei): ein Wert, den ein Operator herunterdrehen kann, um Calls
+// vorzeitig aus dem Nenner zu nehmen, ist die Sicherung, die an ihre eigene Verletzung
+// angepasst wird - ein zu KLEIN gesetztes Fenster schliesst noch belegbare Calls aus
+// dem Nenner aus und TREIBT die Quote kuenstlich nach oben, still den WARN aushebelnd.
+// Ein zu GROSSES Fenster ist dagegen harmlos (es drueckt die Quote hoechstens, nie
+// faelschlich hoch) - die Richtung mit Schadenspotenzial ist die eine, die eine
+// Env-Variable eroeffnen wuerde. Exportiert, damit Tests exakt gegen sie koppeln
+// (kein zweites "7" in den Tests, G5/G25).
+export const PROVIDER_COST_RECORD_WINDOW_DAYS = 7;
+const HOURS_PER_DAY = 24;
+const MINUTES_PER_HOUR = 60;
+const SECONDS_PER_MINUTE = 60;
+const PROVIDER_COST_RECORD_WINDOW_MS =
+  PROVIDER_COST_RECORD_WINDOW_DAYS * HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
+
 // DAS Praedikat "beendeter Call" - RICHTUNGSOFFEN seit KV-P3. Bis dahin stand hier
 // zusaetzlich direction === "outbound"; der Filter war die zweite Haelfte der
 // Inbound-Luecke (L1): KV-P2 bucht die Schaetzung, ohne diesen Abgleich bliebe sie
@@ -82,9 +123,10 @@ const SWEEP_REQUESTS_WARN_THRESHOLD = 1440;
 // Name, der "Outbound" behauptet, waehrend die Funktion beide Richtungen bedient,
 // ist die Sorte Luege, an der die naechste Phase falsch abbiegt.
 // EINE Quelle fuer BEIDE Verbraucher (G5): den Kandidaten-Riegel (isTruingCandidate)
-// und den Nenner der Deckungsquote - zwei getrennte Fassungen liefen beim ersten
-// Nachziehen auseinander, und die Quote meldete dann eine andere Menge, als der Sweep
-// bearbeitet.
+// und die VORFILTERUNG des Deckungsquote-Nenners (coverageBreakdown) - zwei getrennte
+// Fassungen liefen beim ersten Nachziehen auseinander. Seit KV-M3 ist isEndedCall nicht
+// mehr der Nenner selbst (s. coverageBucketOf): ein beendeter Call zaehlt nur dann, wenn
+// er zusaetzlich belegbar ist.
 const isEndedCall = (call) => !!call.endedAt;
 const providerLegIdOf = (call) => call.twilioSid || call.callControlId || null;
 
@@ -97,6 +139,66 @@ const endedAtMs = (call) => {
   const ms = Date.parse(call.endedAt);
   return Number.isFinite(ms) ? ms : null;
 };
+
+// DAS Praedikat "belegbar" (KV-M3, N4). Ein beendeter Call kann NUR dann je einen
+// Provider-Beleg bekommen, wenn (1) er ueberhaupt beantwortet wurde - ein nie
+// angenommenes Leg hat nichts zu belegen -, (2) eine buchbare Schaetzung persistiert
+// ist - ohne sie klassifiziert truedSourceOf() ihn ohnehin fuer immer als NO_ESTIMATE,
+// s. dort -, und (3) sein Ende innerhalb des Provider-Belegfensters liegt.
+// Reihenfolge ist eine Aussage: "nie beantwortet" geht vor "ohne Schaetzung", weil ein
+// nie beantworteter Call strukturell auch nie eine Schaetzung bekommt
+// (reconcileVoiceBudget bucht nur auf tatsaechlich verbrauchte Minuten) - die
+// aussagekraeftigere Kategorie darf nicht hinter der schwaecheren verschwinden.
+// EINE Quelle (G5): sowohl der Nenner der Deckungsquote als auch die drei
+// Nebenzaehler (coverageBreakdown) lesen AUSSCHLIESSLICH diese Funktion - eine zweite,
+// getrennt gepflegte Fassung liefe beim naechsten Nachziehen auseinander, exakt wie
+// isEndedCall es vor KV-P3 tat.
+function coverageBucketOf(call, nowMs) {
+  if (!call.answeredAt) return COVERAGE_BUCKET.NEVER_ANSWERED;
+  if (!isBookableCents(call.estimatedCostCents)) return COVERAGE_BUCKET.NO_ESTIMATE;
+  const endedMs = endedAtMs(call);
+  if (endedMs === null || nowMs - endedMs > PROVIDER_COST_RECORD_WINDOW_MS)
+    return COVERAGE_BUCKET.OUTSIDE_WINDOW;
+  return COVERAGE_BUCKET.ELIGIBLE;
+}
+
+// EIN Durchlauf ueber alle beendeten Calls (KV-M3, G5/G30): bildet Nenner, Zaehler UND
+// die drei Nebenzaehler in einem Pass - keine zweite Iteration, kein zweiter
+// Formel-Ausdruck. costTruingCoveragePercent und die Sweep-Log-Zeile leiten sich BEIDE
+// aus GENAU diesem Objekt ab (percentFromBreakdown), damit sie nie auseinanderlaufen
+// koennen. Zaehler (proven) bleibt costTruedSource === 'telnyx_detail_records' (dieser
+// Wert wird nur bei kompletter Pflicht-Typ-Menge gesetzt - EINE Quelle der
+// Vollstaendigkeits-Aussage, kein zweites Praedikat).
+function coverageBreakdown(state, nowMs) {
+  const ended = Array.isArray(state?.calls) ? state.calls.filter(isEndedCall) : [];
+  const breakdown = { eligible: 0, proven: 0, noEstimate: 0, neverAnswered: 0, outsideWindow: 0 };
+  for (const call of ended) {
+    const bucket = coverageBucketOf(call, nowMs);
+    if (bucket === COVERAGE_BUCKET.NEVER_ANSWERED) {
+      breakdown.neverAnswered++;
+      continue;
+    }
+    if (bucket === COVERAGE_BUCKET.NO_ESTIMATE) {
+      breakdown.noEstimate++;
+      continue;
+    }
+    if (bucket === COVERAGE_BUCKET.OUTSIDE_WINDOW) {
+      breakdown.outsideWindow++;
+      continue;
+    }
+    breakdown.eligible++;
+    if (call.costTruedSource === COST_TRUING_SOURCE.DETAIL_RECORDS) breakdown.proven++;
+  }
+  return breakdown;
+}
+
+// Die Quote aus einem bereits gebildeten Breakdown (KV-M3): NENNER 0 -> 0, kein
+// Freispruch - dieselbe Konvention wie vor dieser Phase, jetzt bezogen auf den engeren
+// (nur belegbare Calls zaehlenden) Nenner. Abgerundet (floor) - die Abweichung geht
+// Richtung "zu wenig Deckung", nie Richtung vorgetaeuschter Reife.
+function percentFromBreakdown({ eligible, proven }) {
+  return eligible === 0 ? 0 : Math.floor((proven * PERCENT_BASE) / eligible);
+}
 
 // Marge, um die die Zeitschranke des Belegabrufs VOR dem aeltesten Kandidaten liegt (KE-P5).
 // GELD-Sicherung, kein Sparknopf - die Richtungen sind nicht symmetrisch:
@@ -131,28 +233,22 @@ function poolSinceFor(candidates) {
   return oldestMs === null ? undefined : new Date(oldestMs - POOL_SINCE_MARGIN_MS).toISOString();
 }
 
-// Anteil der beendeten Calls mit beweisbar vollstaendiger Datenlage - seit KV-P3
-// BEIDE Richtungen (der Nenner folgt automatisch dem Kandidaten-Praedikat, dieselbe
-// EINE Quelle isEndedCall). Zaehler: costTruedSource === 'telnyx_detail_records'
-// (dieser Wert wird unten NUR bei kompletter Typ-Menge gesetzt - EINE Quelle der
-// Vollstaendigkeits-Aussage, kein zweites Praedikat).
-// Nenner: alle beendeten Calls. NENNER 0 -> 0, kein Freispruch: die 0-Zeilen-
-// Antwort ist die fail-open-Variante genau der Zahl, die ab P4/P4b den Flip freigibt.
+// Anteil der beendeten Calls mit beweisbar vollstaendiger Datenlage - seit KV-M3 NUR
+// noch unter den BELEGBAREN (coverageBucketOf: beantwortet, mit buchbarer Schaetzung,
+// innerhalb des Provider-Belegfensters). Vor KV-M3 zaehlte der Nenner JEDEN beendeten
+// Call, egal ob er strukturell je einen Beleg bekommen konnte (Plan-Befund N4) - eine
+// Warnung, die nie gruen werden kann, ist keine Warnung mehr, sondern Tapete. Die drei
+// ausgeschlossenen Gruppen verschwinden NICHT, sie bekommen eigene, IMMER sichtbare
+// Zaehler (s. reportCoverage/sweepAllCandidates), damit eine Quote von z.B. 100% nie
+// verschleiert, wie viele Calls ohne Schaetzung oder ausserhalb des Belegfensters lagen.
 // Abgerundet (floor) - die Abweichung geht Richtung "zu wenig Deckung", nie Richtung
-// vorgetaeuschter Reife. Nicht persistiert: live aus dem geladenen Spiegel gerechnet.
-// Aufrufer reichen store.load() herein (P4- und P4b-Boot-Guard rufen DIESE Funktion,
-// statt die Rechnung ein zweites Mal zu erfinden).
-//
-// BEKANNTE, BEWUSST NICHT HIER BEHOBENE SCHWAECHE (Plan-Befund N4): der Nenner
-// enthaelt Calls, die STRUKTURELL keinen Beleg haben koennen - nie beantwortete Legs
-// und Bestandszeilen ohne Schaetzbetrag ('no_estimate'). Die Quote ist dadurch
-// strukturell zu niedrig. Die FORMEL zu aendern ist KV-M3, nicht diese Phase; wer sie
-// hier "nebenbei" mitfixt, vermischt zwei Befunde in einem Diff.
-export function costTruingCoveragePercent(state) {
-  const ended = Array.isArray(state?.calls) ? state.calls.filter(isEndedCall) : [];
-  if (ended.length === 0) return 0;
-  const proven = ended.filter((c) => c.costTruedSource === COST_TRUING_SOURCE.DETAIL_RECORDS).length;
-  return Math.floor((proven * PERCENT_BASE) / ended.length);
+// vorgetaeuschter Reife. NENNER 0 -> 0, kein Freispruch (percentFromBreakdown). Nicht
+// persistiert: live aus dem geladenen Spiegel gerechnet. Aufrufer reichen store.load()
+// herein (P4- und P4b-Boot-Guard rufen DIESE Funktion, statt die Rechnung ein zweites
+// Mal zu erfinden). nowMs mit Default (Date.now()), damit alle Bestandsaufrufer mit
+// einem Argument unveraendert weiterlaufen.
+export function costTruingCoveragePercent(state, nowMs = Date.now()) {
+  return percentFromBreakdown(coverageBreakdown(state, nowMs));
 }
 
 // messaging ist der Alarmkanal (LCT P5, Drift-Waechter-SMS), kein Abgleich-Pfad - der
@@ -291,9 +387,16 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // Zustand, in dem "dann flippen wir halt trotzdem" unbemerkt bleibt (Risiko: stiller
   // Ausfall des Jobs im schlafenden Free-Tier-Dyno, PM-4). PII-frei: keine Rufnummer,
   // keine Tenant-Klarnamen, keine Transkript-Fragmente.
-  function reportCoverage(coveragePercent, nowMs) {
+  // KV-M3/TOD 8: die drei Nebenzaehler stehen IMMER in dieser Zeile, nicht nur beim
+  // Unterschreiten der Schwelle - genau dann, wenn die Quote GUT aussieht und die WARN
+  // unten NICHT feuert, waere ein Belegausfall sonst an dieser Stelle unsichtbar.
+  function reportCoverage(coveragePercent, coverage, nowMs) {
     const min = config.billing.costTruingMinCoveragePercent;
-    console.log(`[cost-truing] deckung=${coveragePercent}% schwelle=${min}%`);
+    console.log(
+      `[cost-truing] deckung=${coveragePercent}% schwelle=${min}% ` +
+        `ohne_schaetzung=${coverage.noEstimate} nie_beantwortet=${coverage.neverAnswered} ` +
+        `ausserhalb_fenster=${coverage.outsideWindow}`,
+    );
     if (coveragePercent >= min) {
       sweepsBelowThreshold = 0;
       return;
@@ -648,12 +751,28 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     const { pools, fetchTally } = await fetchCostRecordPools(retrievable, controls);
     const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls, failed: 0 };
     for (const call of retrievable) trueOneCall(call, pools.get(call.provider), tally);
-    const coveragePercent = costTruingCoveragePercent(store.load());
+    // EIN Breakdown (coverageBreakdown), aus dem SOWOHL die Quote ALS AUCH die drei
+    // Nebenzaehler abgeleitet werden (KV-M3, G5) - keine zweite Iteration ueber
+    // state.calls, kein zweiter Formel-Ausdruck.
+    const coverage = coverageBreakdown(store.load(), nowMs);
+    const coveragePercent = percentFromBreakdown(coverage);
     logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally });
     reportFetchVolume(fetchTally, nowMs);
-    reportCoverage(coveragePercent, nowMs);
+    reportCoverage(coveragePercent, coverage, nowMs);
     reportTariffDrift(store.load(), nowMs);
-    return { skipped: false, candidates: candidates.length, coveragePercent, ...tally };
+    return {
+      skipped: false,
+      candidates: candidates.length,
+      coveragePercent,
+      // KV-M3: eigene, coverage-praefigierte Felder - NICHT noEstimate pur, das existiert
+      // bereits in tally (Ergebnis-Bilanz DIESES Sweeps, COST_TRUING_SOURCE.NO_ESTIMATE-
+      // Ausgang) und misst etwas anderes als dieser, ueber ALLE beendeten Calls gebildete
+      // Denominator-Ausschluss (G11: keine Namenskollision mit zwei Bedeutungen).
+      coverageNoEstimate: coverage.noEstimate,
+      coverageNeverAnswered: coverage.neverAnswered,
+      coverageOutsideWindow: coverage.outsideWindow,
+      ...tally,
+    };
   }
 
   async function runCostTruingSweep({ trigger }) {

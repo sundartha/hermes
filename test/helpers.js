@@ -514,8 +514,18 @@ export function seedCall(overrides = {}) {
 // der frueher in cost-truing-booking-guard.test.js (fiveCallsSeed) und voice-tariff-full-
 // cost-guard.test.js (tenCallsSeed) je kopierten Bauer. Ein beendeter Outbound-Call traegt
 // costTruedSource; costTruingCoveragePercent liest NUR den Anteil 'telnyx_detail_records'.
+// KV-M3: zusaetzlich beantwortet UND mit buchbarer Schaetzung - ohne beides waere JEDER
+// Call dieser Fabrik strukturell 'nie_beantwortet'/'ohne_schaetzung' und damit IMMER
+// ausserhalb des (jetzt engeren) Nenners, unabhaengig vom uebergebenen costTruedSource.
 function outboundEndedCall(id, costTruedSource) {
-  return seedCall({ id, direction: "outbound", endedAt: new Date().toISOString(), costTruedSource });
+  return seedCall({
+    id,
+    direction: "outbound",
+    answeredAt: new Date().toISOString(),
+    endedAt: new Date().toISOString(),
+    estimatedCostCents: 20,
+    costTruedSource,
+  });
 }
 
 // count beendete Outbound-Calls, davon die ersten `proven` als bewiesen
