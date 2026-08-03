@@ -2078,6 +2078,17 @@ function tokenCostUsd(tokens, cfg) {
   );
 }
 
+// KV-P6: EINE Stelle (G5), die den UNGERUNDETEN KI-Kosten-Betrag in Mikro-Cent liefert -
+// dieselbe Preisformel wie aiCostCents (Stripe-Meter, GERUNDETE Cents) und derselbe
+// Ausdruck, den trackUsage bisher inline fuehrte. Gate-Achse (trackUsage) UND Ledger-
+// Schreiber (recordUsageEvent ueber llm-usage.js) rufen AUSSCHLIESSLICH diese Funktion -
+// eine zweite, unabhaengig geschriebene Kopie waere genau die Duplizierung, die KV-P6
+// beheben soll (zwei Rechnungen, die nur zufaellig uebereinstimmen, sind keine
+// Gleichheit). Reine Funktion, kein Runden vor der letzten Multiplikation.
+export function tokenCostMicroCents(tokens, cfg) {
+  return Math.round(tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR * MICRO_CENTS_PER_CENT);
+}
+
 // ---- D7-Riegel: unbuchbare Geldwerte laut verwerfen bzw. laut sperren ----
 // Dieses Modul ist sonst IO-frei; die zwei console-Aufrufe hier sind eine bewusste,
 // eng begrenzte Ausnahme (kein Datei-/DB-IO). Ein STILLER Discard bzw. eine stille
@@ -2322,9 +2333,7 @@ function carryMicroRemainder(remMicro, incrementMicro, divisor) {
 // (Muster voiceMinutesUsedSince/setSuspendedAtIfAbsent, state-ops bleibt zeit-frei).
 export function trackUsage(s, tenantId, tokens, cfg, nowIso) {
   const usage = usageFor(s, tenantId);
-  const microInc = Math.round(
-    tokenCostUsd(tokens, cfg) * cfg.usdToEur * CENTS_PER_EUR * MICRO_CENTS_PER_CENT,
-  );
+  const microInc = tokenCostMicroCents(tokens, cfg);
   // D7-Riegel VOR jeder Mutation: bisher stiegen inputTokens/outputTokens schon, bevor die
   // Kostenrechnung ueberhaupt lief - ein NaN-Turn hinterliess also drei vergiftete Felder.
   // Alles-oder-nichts, kein Teil-Schreibeffekt.
@@ -2785,6 +2794,10 @@ export function recordUsageEvent(
     kind,
     quantity,
     costCents,
+    // KV-P6: additiv nullable. NUR ai_token fuellt sie heute (tokenCostMicroCents,
+    // dieselbe Formel wie trackUsage) - jedes andere kind bleibt null, kein "0 statt
+    // unbekannt" (Muster numberId).
+    costMicroCents = null,
     occurredAt = new Date().toISOString(),
   },
 ) {
@@ -2798,6 +2811,7 @@ export function recordUsageEvent(
     kind,
     quantity,
     costCents,
+    costMicroCents,
     occurredAt,
     stripeMeterSent: false,
   };

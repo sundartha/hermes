@@ -614,6 +614,32 @@ test("usage_event ueberlebt Flush+Re-Hydrierung; stripe_meter_sent-Flip persisti
   assert.equal(r2.pendingMeterEvents().length, 0, "kein pending Event mehr (Idempotenz-Schloss)");
 });
 
+test("KV-P6-5 (pg): cost_micro_cents ueberlebt Flush+Re-Hydrierung; NULL bei fehlendem Wert; BIGINT traegt einen Betrag jenseits des INT4-Bereichs", async () => {
+  const { store, db } = await makePgTestStore();
+  const GROSS_BETRAG = 3_000_000_000; // > 2^31 (INT4-Grenze ~2,147 Mrd.) - der Grund fuer BIGINT
+  const mitMicro = store.recordUsageEvent({
+    tenantId: BOOTSTRAP_TENANT_ID,
+    kind: USAGE_EVENT_KIND.AI_TOKEN,
+    quantity: 10,
+    costCents: 0,
+    costMicroCents: GROSS_BETRAG,
+  });
+  const ohneMicro = store.recordUsageEvent({
+    tenantId: BOOTSTRAP_TENANT_ID,
+    kind: USAGE_EVENT_KIND.VOICE_MINUTE,
+    quantity: 1,
+    costCents: 10,
+    // costMicroCents bewusst weggelassen
+  });
+  await store.save();
+
+  const r1 = await reopen(db);
+  const persistedMicro = r1.load().usageEvents.find((e) => e.id === mitMicro.id);
+  const persistedOhne = r1.load().usageEvents.find((e) => e.id === ohneMicro.id);
+  assert.equal(persistedMicro.costMicroCents, GROSS_BETRAG, "BIGINT ueberlebt einen Betrag jenseits INT4");
+  assert.equal(persistedOhne.costMicroCents, null, "fehlender Wert bleibt NULL, nie 0 (additiv-nullable)");
+});
+
 // ---- ensureTenant: Signup-Spiegel-Nachzug (Nach-Boot, idempotent, fail-safe) ----
 // Der OIDC-Web-Login legt die tenant-Zeile NACH dem Boot in der DB an; der Spiegel wird
 // sonst nur bei init() hydriert. ensureTenant zieht GENAU diesen Tenant nach - mit dem

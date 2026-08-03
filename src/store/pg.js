@@ -915,7 +915,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   ).rows;
   const ueRows = (
     await client.query(
-      `SELECT id, tenant_id, call_id, number_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent
+      `SELECT id, tenant_id, call_id, number_id, kind, quantity, cost_cents, cost_micro_cents, occurred_at, stripe_meter_sent
        FROM usage_event WHERE tenant_id = $1 ORDER BY id ASC`,
       [tenantId],
     )
@@ -981,6 +981,12 @@ async function hydrateTenantInto(client, state, tenantId) {
       kind: r.kind,
       quantity: Number(r.quantity),
       costCents: Number(r.cost_cents),
+      // KV-P6: BIGINT kommt als String vom Treiber; NULL bleibt null (Muster numberId) -
+      // kein "0 statt unbekannt".
+      costMicroCents:
+        r.cost_micro_cents === null || r.cost_micro_cents === undefined
+          ? null
+          : Number(r.cost_micro_cents),
       occurredAt: r.occurred_at,
       stripeMeterSent: r.stripe_meter_sent,
     })),
@@ -1770,8 +1776,8 @@ async function flushUsageEvents(client, tenantId, events) {
     rows: events,
     insertRow: (e) =>
       client.query(
-        `INSERT INTO usage_event (id, tenant_id, call_id, number_id, kind, quantity, cost_cents, occurred_at, stripe_meter_sent)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        `INSERT INTO usage_event (id, tenant_id, call_id, number_id, kind, quantity, cost_cents, cost_micro_cents, occurred_at, stripe_meter_sent)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (id) DO UPDATE SET stripe_meter_sent=EXCLUDED.stripe_meter_sent`,
         [
           e.id,
@@ -1781,6 +1787,7 @@ async function flushUsageEvents(client, tenantId, events) {
           e.kind,
           e.quantity,
           e.costCents,
+          e.costMicroCents ?? null,
           e.occurredAt,
           e.stripeMeterSent,
         ],

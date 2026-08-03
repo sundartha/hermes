@@ -556,6 +556,15 @@ CREATE TABLE IF NOT EXISTS usage_event (
 -- mitloeschen. tenant_id + RLS bleibt die Isolationslinie.
 ALTER TABLE usage_event ADD COLUMN IF NOT EXISTS number_id TEXT;
 
+-- cost_micro_cents (KV-P6): ungerundeter KI-Kosten-Betrag in Mikro-Cent (1 Cent = 1e6,
+-- MICRO_CENTS_PER_CENT, state-ops.js). Additiv NULLABLE: nur ai_token-Belege fuellen sie
+-- (tokenCostMicroCents, dieselbe Preisformel wie das Gate-Carry in trackUsage); jedes
+-- andere kind und jeder Bestands-Beleg VOR dieser Phase traegt NULL, NICHT 0 - eine 0
+-- waere eine erfundene Messung (kein Backfill, s. Phasenbericht KV-P6). BIGINT statt
+-- NUMERIC/Float (G26) - reale Lebenszeit-Summen ueberschreiten den INT4-Bereich
+-- (~2,1 Mrd.) schon bei wenigen zehn Euro KI-Kosten in Mikro-Cent-Aufloesung.
+ALTER TABLE usage_event ADD COLUMN IF NOT EXISTS cost_micro_cents BIGINT;
+
 -- account: identity(sub)->tenant Resolver. RLS-EXEMPT (laeuft VOR app.current_tenant).
 -- tenant_id NICHT unique -> Schema traegt spaeter mehrere Accounts pro Tenant (B2B),
 -- jetzt aber Single-User pro Tenant (B2C). role: member|admin.
