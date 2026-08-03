@@ -19,7 +19,7 @@ import {
   PROVISIONING_JOB_STATUS,
   USAGE_EVENT_KIND,
 } from "../src/store/defaults.js";
-import { aggregatePendingMeters } from "../src/billing/meter.js";
+import { aggregateMeterEvents } from "../src/billing/meter.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import * as ops from "../src/store/state-ops.js";
 import { PRICES, tokensOf } from "./_prices.js";
@@ -380,7 +380,7 @@ test("T-PA6-3 usage_event: Cross-Tenant own-Filter + volle Spalten round-trippen
   assert.equal(r2.stripeMeterSent, false);
 });
 
-test("T-PA6-4 usage_event Downstream: planMinutesExceeded + aggregatePendingMeters lesen die round-getrippten Zeilen", async () => {
+test("T-PA6-4 usage_event Downstream: planMinutesExceeded + aggregateMeterEvents lesen die round-getrippten Zeilen", async () => {
   const { store, db } = await makePgTestStore();
   const s = store.load();
   ops.registerTenant(s, TENANT_B, { firstName: "Maria" });
@@ -424,9 +424,11 @@ test("T-PA6-4 usage_event Downstream: planMinutesExceeded + aggregatePendingMete
     "12 verbrauchte Minuten < 100 Kontingent -> nicht exceeded",
   );
 
-  // aggregatePendingMeters schliesst das bereits gesendete Event aus - stripe_meter_sent
-  // hat den Round-Trip ueberlebt.
-  const bMeters = aggregatePendingMeters(rs).filter((m) => m.tenantId === TENANT_B);
+  // aggregateMeterEvents(pendingMeterEvents(...)) schliesst das bereits gesendete Event
+  // aus - stripe_meter_sent hat den Round-Trip ueberlebt.
+  const bMeters = aggregateMeterEvents(ops.pendingMeterEvents(rs)).filter(
+    (m) => m.tenantId === TENANT_B,
+  );
   assert.equal(bMeters.length, 1);
   assert.equal(bMeters[0].kind, USAGE_EVENT_KIND.VOICE_MINUTE);
   assert.equal(bMeters[0].quantity, 7, "nur das ungesendete Event zaehlt ins Aggregat");

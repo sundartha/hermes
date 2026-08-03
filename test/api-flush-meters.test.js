@@ -65,14 +65,25 @@ async function withStripeMock(url, fn) {
   }
 }
 
+// KV-P0: Stichtag WEIT vor jedem new Date()-Fixture dieser Datei - Tests (B)/(C)/(D)
+// pruefen die Route selbst (404, Zaehler, Event-Markierung), nicht den Stichtag-Filter
+// (der hat seinen eigenen Testfall (E) hier und seine eigene Testdatei,
+// test/kv-p0-flush-epoch.test.js). Default-Parameter DAMIT bestehende Aufrufer ohne
+// flushEpochIso weiterhin einen scharfen Flush messen.
+const FLUSH_EPOCH_WEIT_VOR_FIXTURES = "2000-01-01T00:00:00.000Z";
+
 // In-Process-App: EIN state-Objekt (seedState-Form) als store-Double, das flushMeters
 // per markMeterEventsSent mutiert (save() ist ein No-Op - kein IO in diesem Test).
-async function startBillingApp({ paymentEnabled, state }) {
+async function startBillingApp({
+  paymentEnabled,
+  state,
+  flushEpochIso = FLUSH_EPOCH_WEIT_VOR_FIXTURES,
+}) {
   const app = express();
   app.use(express.json());
   app.use(
     makeBillingRoutes({
-      config: withConfigNamespaces({ paymentEnabled }),
+      config: withConfigNamespaces({ paymentEnabled, flushEpochIso }),
       store: { load: () => state, save: () => {} },
       audit: () => {},
       billing: stripeBilling,
@@ -103,11 +114,13 @@ test("ohne PAYMENT_ENABLED: POST /api/billing/flush-meters -> 404 (fail-closed)"
   }
 });
 
-// (B) Aktiv, leerer Ledger: 200 {sent:0,failed:0}; Billing-Port NIE beruehrt (kein Stripe),
-// Antwort traegt nur die Zaehler (kein Secret/Event-Inhalt). seedState() traegt KEIN
-// usageEvents-Feld (nur der json-Store-Reader fuellt es beim Laden nach) - dieses
-// Store-Double mountet direkt, darum hier EXPLIZIT.
-test("mit PAYMENT_ENABLED, leerer Ledger: -> 200 {sent:0,failed:0} (kein Stripe-Kontakt)", async () => {
+// (B) Aktiv, leerer Ledger: 200 {sent:0,failed:0,skipped:0,skipReason:null}; Billing-Port
+// NIE beruehrt (kein Stripe), Antwort traegt nur Zaehler + Grund-Code (kein Secret/Event-
+// Inhalt, keine Tenant-Kennung, kein Betrag - KV-P0 erweitert die Antwort um zwei
+// Zaehler-Felder, kein Leak). seedState() traegt KEIN usageEvents-Feld (nur der
+// json-Store-Reader fuellt es beim Laden nach) - dieses Store-Double mountet direkt,
+// darum hier EXPLIZIT.
+test("mit PAYMENT_ENABLED, leerer Ledger: -> 200 {sent:0,failed:0,skipped:0,skipReason:null} (kein Stripe-Kontakt)", async () => {
   const app = await startBillingApp({
     paymentEnabled: true,
     state: { ...seedState(), usageEvents: [] },
@@ -116,17 +129,18 @@ test("mit PAYMENT_ENABLED, leerer Ledger: -> 200 {sent:0,failed:0} (kein Stripe-
     const res = await flushMeters(app);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { sent: 0, failed: 0 });
-    assert.deepEqual(Object.keys(body).sort(), ["failed", "sent"]); // nur Zaehler
+    assert.deepEqual(body, { sent: 0, failed: 0, skipped: 0, skipReason: null });
+    assert.deepEqual(Object.keys(body).sort(), ["failed", "sent", "skipReason", "skipped"]); // Zaehler + Grund-Code
   } finally {
     await app.close();
   }
 });
 
-// (C) Aktiv, EIN pending usage_event + Fake-Stripe: 200 {sent:1,failed:0}; die Antwort
-// bleibt {sent,failed} (KEIN Secret/Event-Inhalt) auch wenn real ein Meter gemeldet wurde;
-// das Event ist im state als gesendet markiert (markMeterEventsSent-Seiteneffekt gepinnt).
-test("mit PAYMENT_ENABLED, EIN pending usage_event: -> 200 {sent:1,failed:0}, Event markiert, Antwort ohne Event-Inhalt", async () => {
+// (C) Aktiv, EIN pending usage_event NACH dem (Default-)Stichtag + Fake-Stripe:
+// 200 {sent:1,failed:0,skipped:0,skipReason:null}; die Antwort bleibt nur Zaehler +
+// Grund-Code (KEIN Secret/Event-Inhalt) auch wenn real ein Meter gemeldet wurde; das
+// Event ist im state als gesendet markiert (markMeterEventsSent-Seiteneffekt gepinnt).
+test("mit PAYMENT_ENABLED, EIN pending usage_event: -> 200 {sent:1,failed:0,skipped:0,skipReason:null}, Event markiert, Antwort ohne Event-Inhalt", async () => {
   const stripe = await startFakeStripe();
   const state = {
     ...seedState(),
@@ -150,8 +164,8 @@ test("mit PAYMENT_ENABLED, EIN pending usage_event: -> 200 {sent:1,failed:0}, Ev
       const res = await flushMeters(app);
       assert.equal(res.status, 200);
       const body = await res.json();
-      assert.deepEqual(body, { sent: 1, failed: 0 });
-      assert.deepEqual(Object.keys(body).sort(), ["failed", "sent"]); // kein Leak trotz Meldung
+      assert.deepEqual(body, { sent: 1, failed: 0, skipped: 0, skipReason: null });
+      assert.deepEqual(Object.keys(body).sort(), ["failed", "sent", "skipReason", "skipped"]); // kein Leak trotz Meldung
       assert.equal(stripe.meterPosts.length, 1, "genau ein Meter-POST an Stripe");
       const stored = state.usageEvents.find((e) => e.id === "ue_test1");
       assert.equal(stored.stripeMeterSent, true, "Event nach Flush als gesendet markiert");
@@ -162,11 +176,11 @@ test("mit PAYMENT_ENABLED, EIN pending usage_event: -> 200 {sent:1,failed:0}, Ev
   }
 });
 
-// (D) P1/S1-7: EIN pending "sms"-usage_event -> 200 {sent:1,failed:0}. Beweist, dass das
-// SMS-Mapping (STRIPE_METER_EVENT_NAME.sms) existiert - vor dem Fix warf reportMeter
-// 'unbekanntes kind' und flushMeters zaehlte failed:1 (Event bleibt pending, Umsatz nie
-// gemeldet).
-test("mit PAYMENT_ENABLED, EIN pending sms-usage_event: -> 200 {sent:1,failed:0} (SMS-Meter-Mapping vorhanden)", async () => {
+// (D) P1/S1-7: EIN pending "sms"-usage_event -> 200 {sent:1,failed:0,skipped:0,
+// skipReason:null}. Beweist, dass das SMS-Mapping (STRIPE_METER_EVENT_NAME.sms)
+// existiert - vor dem Fix warf reportMeter 'unbekanntes kind' und flushMeters zaehlte
+// failed:1 (Event bleibt pending, Umsatz nie gemeldet).
+test("mit PAYMENT_ENABLED, EIN pending sms-usage_event: -> 200 {sent:1,failed:0,skipped:0,skipReason:null} (SMS-Meter-Mapping vorhanden)", async () => {
   const stripe = await startFakeStripe();
   const state = {
     ...seedState(),
@@ -189,10 +203,49 @@ test("mit PAYMENT_ENABLED, EIN pending sms-usage_event: -> 200 {sent:1,failed:0}
       const res = await flushMeters(app);
       assert.equal(res.status, 200);
       const body = await res.json();
-      assert.deepEqual(body, { sent: 1, failed: 0 });
+      assert.deepEqual(body, { sent: 1, failed: 0, skipped: 0, skipReason: null });
       assert.equal(stripe.meterPosts.length, 1, "genau ein Meter-POST an Stripe");
       const stored = state.usageEvents.find((e) => e.id === "ue_sms1");
       assert.equal(stored.stripeMeterSent, true, "sms-Event nach Flush als gesendet markiert");
+    });
+  } finally {
+    await app.close();
+    await stripe.close();
+  }
+});
+
+// (E) KV-P0: aktiv, EIN pending usage_event, aber KEIN Flush-Stichtag gesetzt -> 200
+// {sent:0,failed:0,skipped:1,skipReason:"no_flush_epoch"}; Stripe wird NIE kontaktiert
+// (kein Meter-POST), das Event bleibt stripeMeterSent:false. Beweist den Riegel auf
+// HTTP-Ebene, nicht nur im Kern (state-ops/billing-meter haben ihre eigene Testdatei,
+// test/kv-p0-flush-epoch.test.js).
+test("mit PAYMENT_ENABLED, EIN pending usage_event, KEIN Flush-Stichtag: -> 200 {sent:0,failed:0,skipped:1,skipReason:'no_flush_epoch'}, kein Stripe-Kontakt", async () => {
+  const stripe = await startFakeStripe();
+  const state = {
+    ...seedState(),
+    usageEvents: [
+      {
+        id: "ue_kv_p0_1",
+        tenantId: BOOTSTRAP_TENANT_ID,
+        callId: null,
+        kind: "voice_minute",
+        quantity: 2,
+        costCents: 0,
+        occurredAt: new Date().toISOString(),
+        stripeMeterSent: false,
+      },
+    ],
+  };
+  const app = await startBillingApp({ paymentEnabled: true, state, flushEpochIso: null });
+  try {
+    await withStripeMock(stripe.url, async () => {
+      const res = await flushMeters(app);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.deepEqual(body, { sent: 0, failed: 0, skipped: 1, skipReason: "no_flush_epoch" });
+      assert.equal(stripe.meterPosts.length, 0, "kein Meter-POST ohne Stichtag");
+      const stored = state.usageEvents.find((e) => e.id === "ue_kv_p0_1");
+      assert.equal(stored.stripeMeterSent, false, "Event bleibt unangetastet ohne Stichtag");
     });
   } finally {
     await app.close();

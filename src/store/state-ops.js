@@ -2893,6 +2893,40 @@ export function pendingMeterEvents(s) {
   return s.usageEvents.filter((e) => !e.stripeMeterSent);
 }
 
+// Grund, aus dem ein Flush NICHTS melden konnte. Ohne Stichtag ist "nichts gemeldet"
+// eine SPERRE, kein leerer Ledger - beide Faelle muessen unterscheidbar bleiben, sonst
+// sieht der Riegel aus wie Erfolg. Benannte Konstante (G25), EINE Quelle fuer Flush,
+// Route-Audit und Test.
+export const METER_FLUSH_SKIP = Object.freeze({ NO_EPOCH: "no_flush_epoch" });
+
+// DIE Auswahl der an Stripe meldbaren Ledger-Zeilen (KV-P0). Einziger Ort, an dem ueber
+// die Melde-Berechtigung entschieden wird: der Aggregator in billing/meter.js gruppiert
+// nur noch, er waehlt nicht mehr aus (er sieht den Zustand gar nicht). Ein kuenftiger
+// zweiter Flush-Aufrufer kommt an dieser Funktion nicht vorbei, und wer den Stichtag
+// vergisst, meldet NICHTS.
+//
+// FAIL-CLOSED, und zwar der ganze Zweck: ohne lesbaren Stichtag ist das Ergebnis LEER,
+// nie der Bestand. Der typeof-Waechter ist NICHT redundant - new Date(null) ergibt in
+// JS ein GUELTIGES Date (1970-01-01), und null ist genau der "nicht gesetzt"-Wert aus
+// config.js. Ohne ihn kippte die Fail-Richtung auf "meldet alles". Dasselbe gilt fuer
+// 0, true und ein durchgereichtes Date-Objekt.
+//
+// VERGLEICHSTYP: beide Seiten sind ISO-8601-STRINGS in kanonischer UTC-Form.
+// recordUsageEvent stempelt new Date().toISOString(); das pg-Backend haelt occurred_at
+// als TEXT und hydriert denselben String (store/pg.js) - json haelt ihn ohnehin. Der
+// Stichtag wird hier auf genau diese Form gebracht, BEVOR verglichen wird; ein Vergleich
+// String gegen Date waere still immer falsch. >= ist INKLUSIV: ein Ereignis exakt auf
+// dem Stichtag wird gemeldet. Reine Query, kein IO, keine Mutation.
+export function flushableMeterEvents(s, { flushEpochIso } = {}) {
+  const pending = pendingMeterEvents(s);
+  const epoch = typeof flushEpochIso === "string" ? parseValidDate(flushEpochIso) : null;
+  if (!epoch)
+    return { events: [], skipped: pending.length, skipReason: METER_FLUSH_SKIP.NO_EPOCH };
+  const epochIso = epoch.toISOString();
+  const events = pending.filter((e) => e.occurredAt >= epochIso);
+  return { events, skipped: pending.length - events.length, skipReason: null };
+}
+
 // Markiert die gemeldeten Events als gesendet (Idempotenz-Schloss: zweiter Flush
 // findet sie nicht mehr in pendingMeterEvents). Liefert die Anzahl der Flips.
 export function markMeterEventsSent(s, eventIds) {

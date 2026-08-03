@@ -259,7 +259,11 @@ async function assertOperatorSuccess(app, sessionId) {
       assert.equal(json.numberId, "num_p6_retry");
     } else if (route.path === "/api/billing/flush-meters") {
       assert.equal(res.status, 200);
-      assert.deepEqual(json, { sent: 0, failed: 0 });
+      // KV-P0: OPERATOR_CONFIG setzt kein flushEpochIso (undefined) - der Flush ist
+      // damit fail-closed geriegelt (skipReason=no_flush_epoch). Diese Datei prueft die
+      // Auth-Sicherung (Erfolg != 401/403/404), nicht die Metering-Fachlogik - die neuen
+      // Felder werden mitgepinnt, nicht verschwiegen.
+      assert.deepEqual(json, { sent: 0, failed: 0, skipped: 0, skipReason: "no_flush_epoch" });
     } else if (route.path === "/api/billing/cost-truing/sweep") {
       assert.equal(res.status, 200);
       assert.equal(typeof json.coveragePercent, "number");

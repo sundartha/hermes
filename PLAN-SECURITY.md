@@ -2572,3 +2572,55 @@ neues Flag, keine DB-Aenderung.
 Rollback (der Datenleck-Fall). Der eigentliche Abnahmenachweis —
 `scripts/probe-auth.sh <url> <sha> nach-p7` → Exit 0 — ist eine Owner-Handlung nach dem
 Deploy und kann in der Umsetzungs-Session nicht erbracht werden.
+
+## KV-P0 — Flush-Stichtag verriegelt die Nachmeldung an Stripe (2026-08-03)
+
+> **Was hinzukommt.** `flushMeters` (`src/billing/meter.js`) meldet ab dieser Phase
+> ausschliesslich Verbrauchsereignisse mit `occurredAt >= BILLING_FLUSH_EPOCH` an Stripe.
+> Die Auswahl trifft **eine** Funktion an der Entstehung der Kandidatenliste —
+> `flushableMeterEvents` in `src/store/state-ops.js`; der Aggregator daneben
+> (`aggregateMeterEvents`) gruppiert nur noch eine ihm uebergebene Liste und sieht den
+> Zustand gar nicht mehr. Ein zweiter Flush-Aufrufer kann den Riegel deshalb nicht
+> umgehen, sondern hoechstens den Stichtag vergessen — und dann meldet er **nichts**.
+>
+> **Fail-Richtung, ausdruecklich.** Fehlt der Wert, ist er leer, unlesbar oder kein
+> String, gehen **null** Ereignisse hinaus (`sent === 0`, `skipReason =
+> "no_flush_epoch"`, `skipped` = Zahl der zurueckgehaltenen Zeilen). "Meldet nichts" ist
+> der Ruhezustand; "meldet alles" ist per Konstruktion nicht erreichbar. Der Waechter auf
+> den Argumenttyp ist nicht kosmetisch: `new Date(null)` ergibt in JavaScript ein
+> gueltiges Datum (1970-01-01) — ohne ihn haette ausgerechnet der "nicht gesetzt"-Wert
+> den gesamten Altbestand freigegeben.
+>
+> **Warum.** Der Ledger trug am 2026-08-03 **138 von 138** `usage_event`-Zeilen mit
+> `stripe_meter_sent = false`, darunter Inbound-Minuten zum alten 300-ct-Worst-Case-Tarif
+> und als `number_month` etikettierte Einrichtungsgebuehren, die keine Monatsmiete sind.
+> `POST /api/billing/flush-meters` hat keinen Ausloeser, ist aber scharf
+> (`PAYMENT_ENABLED` live `true`) und haette bei **einem** Aufruf — beim Debuggen, aus
+> Neugier, per Skript — alles auf einmal an echte Kunden gemeldet. Das war ein
+> Ein-Klick-Fehlbetrag, kein theoretisches Risiko (Pre-Mortem TOD 3,
+> `tasks/PLAN-KOSTEN-VOLLSTAENDIGKEIT.md`).
+>
+> **Was sich NICHT aendert.** Keine Zeile in Prod wird geschrieben, geloescht,
+> umetikettiert oder nachgebucht — die Altzeilen bleiben stehen und werden lediglich
+> unerreichbar fuer den Flush. Die Auth des Endpunkts (Admin-Sitzung, `webAuthMw`+
+> `adminMw`, ohne diese Infra gar nicht gemountet) und das `PAYMENT_ENABLED`-404 bleiben
+> unveraendert; es entsteht keine neue oeffentliche Route und kein Eintrag in
+> `src/route-policy.js`. Die Semantik von `stripe_meter_sent` bleibt unangetastet (nur
+> tatsaechlich Gemeldetes flippt). Die Gate-Achse (`usage.costCents`/
+> `spendMonthCostCents`, `bookCents`, `budgetExceeded`) ist von dieser Phase nicht
+> beruehrt.
+>
+> **Betriebs-Vorbehalt.** Ein **gesetzter** Wert in falscher Form (ohne Zonenangabe,
+> `"0"`, ein Datum in Landesschreibweise) verweigert den Boot (`assertConfig`, Muster
+> `numEnv`/`boolEnv`) — bewusst laut statt still. Und: **der Wert wird nie
+> zurueckdatiert.** Er ist ein Riegel vor den Altzeilen, kein Berichtsfenster; wer ihn
+> nach hinten schiebt, hebt genau die Sicherung auf, die dieser Abschnitt beschreibt.
+> Sichtbarer Indikator ist der Zaehler `skipped` in der Antwort und in der Audit-Zeile
+> `meter_flush`: faellt er unerwartet auf 0, wurde der Stichtag bewegt.
+>
+> **Bewusst getragenes Restrisiko.** Der Riegel schuetzt vor der versehentlichen
+> *Massen*-Meldung, nicht vor einer absichtlichen: ein Betreiber mit Admin-Sitzung, der
+> den Stichtag zurueckdatiert und den Endpunkt aufruft, kann die Altzeilen weiterhin
+> melden. Das ist die Grenze eines Konfigurationsriegels und wird als solche getragen;
+> die eigentliche Aussage — es gibt keine nutzungsbasierte Weiterbelastung
+> (Owner-Entscheidung 2a) — steht in `README.md`.

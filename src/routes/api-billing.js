@@ -58,13 +58,24 @@ export function makeBillingRoutes({
   // einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung
   // gar nicht gemountet. KEIN MCP-Tool. NUR im Metering-Pfad erreichbar: ohne
   // PAYMENT_ENABLED -> 404 (fail-closed, byte-identisch zum Bestand). "Periodisch" =
-  // extern cron-baar (echter Scheduler = P8); KEIN neuer Scheduler-Dep. Antwort = nur
-  // Zaehler {sent, failed} (KEINE Event-Inhalte, kein Secret).
+  // extern cron-baar (echter Scheduler = P8); KEIN neuer Scheduler-Dep.
+  // KV-P0: zusaetzlich verriegelt durch config.billing.flushEpochIso - gemeldet wird
+  // NUR occurredAt >= diesem Stichtag; fehlt er, meldet flushMeters NICHTS (fail-closed,
+  // "meldet nichts", nie "meldet alles"). Antwort = NUR Zaehler + ein Grund-Code
+  // {sent, failed, skipped, skipReason} (KEINE Event-Inhalte, keine Tenant-Kennung, kein
+  // Betrag, kein Secret).
   operator.post("/api/billing/flush-meters", async (req, res) => {
     if (!requirePaymentEnabled(res, config, "metering disabled (PAYMENT_ENABLED)")) return;
-    const result = await flushMeters(store.load(), { billing });
+    const result = await flushMeters(store.load(), {
+      billing,
+      flushEpochIso: config.billing.flushEpochIso,
+    });
     store.save();
-    audit("meter_flush", req, `sent=${result.sent} failed=${result.failed}`);
+    audit(
+      "meter_flush",
+      req,
+      `sent=${result.sent} failed=${result.failed} skipped=${result.skipped} grund=${result.skipReason ?? "-"}`,
+    );
     res.json(result);
   });
 
