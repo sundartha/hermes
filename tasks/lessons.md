@@ -205,3 +205,36 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   keinen seiner Testnamen matcht - file-scope `before()/after()` mit geteiltem
   `startServer()`-Spawn ohne `if (srv)`-Guard. Macht `test:gates` praktisch nicht
   end-to-end durchlaufbar. Eigene kleine Fix-Phase wert.
+
+---
+
+## Grosse Inhalte gehoeren in eine Datei, nicht ins StructuredOutput-Schema (2026-08-03, KV-P1)
+
+- **Ein Schema-Feld, das eine Markdown-Tabelle verlangt, toetet den Lauf.** Das KV-P1-Skript
+  forderte `costMapTable`, `triggerTable` und weitere Freitextfelder. Der Impl-Agent hatte
+  die Phase fertig implementiert UND committet - und starb danach zweimal an
+  `InputValidationError: StructuredOutput was called with input that could not be parsed as
+  JSON` (16 KB Nutzlast). Der Workflow brach ab, bevor irgendein Review lief.
+- **Der Bericht ist dann verloren, die Arbeit nicht.** Das Transcript speichert je Tool-Aufruf
+  nur die ersten 2048 Zeichen - die Nutzlast laesst sich NICHT rekonstruieren. Der Commit auf
+  dem Branch existiert aber. Richtiges Vorgehen: Branch pruefen (`git log master..<branch>`),
+  und ein Wiederaufnahme-Skript schreiben, das Plan und Implementierung UEBERSPRINGT und bei
+  der Verifikation einsteigt. Nicht neu implementieren lassen.
+- **Regel fuer jedes per-run-Skript:** jedes Schema-Textfeld hoechstens ~400 Zeichen, keine
+  Tabellen, keine Code-Bloecke. Umfangreiches schreibt der Agent in eine DATEI, das Feld
+  traegt nur den Pfad. Die Regel gehoert als eigener Absatz in JEDEN Agenten-Prompt, nicht
+  nur in die Feldbeschreibung.
+- **Nebenbefund:** ein Agent kann ausserhalb seines Worktrees nicht schreiben. Wer eine Datei
+  im Haupt-Repo erwartet, bekommt sie im Worktree - und der wird spaeter aufgeraeumt. Den
+  Report-Agenten deshalb ausdruecklich anweisen, den Worktree-Pfad zu suchen, wenn die Datei
+  im Haupt-Repo fehlt.
+
+## Ein Riegel, der Dateien zaehlt, faengt den wahrscheinlichsten Fall nicht (2026-08-03, KV-P1b)
+
+- Der Ein-Aufrufer-Riegel gegen Doppelbelastung pruefte, in WELCHEN DATEIEN
+  `store.addVoiceUsageCostCents(` vorkommt, und verglich die Dateiliste. Ein zweiter Aufruf
+  **in derselben Datei** aendert die Liste nicht - und genau dort liegt der bestehende
+  Aufruf. Der Riegel deckte also alles ab ausser dem wahrscheinlichsten Fall.
+- **Regel:** ein Textmuster-Riegel zaehlt Vorkommen, nicht Dateien. Und die Mutationsprobe
+  muss BEIDE Faelle fahren (gleiche Datei / andere Datei) - der erste Lauf hatte nur den
+  zweiten geprueft und den Riegel deshalb faelschlich fuer wirksam gehalten.
