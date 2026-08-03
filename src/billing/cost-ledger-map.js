@@ -80,7 +80,10 @@ export const COST_LEDGER_MAP = Object.freeze({
       "Ledger rundet pro Buchung auf volle EUR-Cent (aiCostCents, Math.round) - ein " +
       "einzelner kleiner Turn kann als 0-Cent-Event erscheinen. Gate (trackUsage) " +
       "akkumuliert denselben Betrag in Mikro-Cent (costMicroCentsRem) und verliert den " +
-      "Rest NIE - die zwei Achsen divergieren dadurch schon bei GLEICHER Preisquelle.",
+      "Rest NIE - die zwei Achsen divergieren dadurch schon bei GLEICHER Preisquelle. " +
+      "Seit KV-P6 traegt derselbe Ledger-Beleg zusaetzlich cost_micro_cents (ungerundet, " +
+      "tokenCostMicroCents - dieselbe Formel wie das Gate-Carry); cost_cents selbst " +
+      "bleibt gerundet und damit bei kleinen Turns weiterhin 0 (kein Backfill).",
   },
   research_fee: {
     kind: null,

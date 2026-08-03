@@ -10,7 +10,7 @@
 import { config } from "./config.js";
 import * as store from "./store.js";
 import { USAGE_EVENT_KIND } from "./store/defaults.js";
-import { aiCostCents } from "./store/state-ops.js";
+import { aiCostCents, tokenCostMicroCents } from "./store/state-ops.js";
 
 // L3: tatsaechlich verarbeitete Input-Token EINES Anthropic-Aufrufs inkl. Cache. Mit
 // Prompt-Caching zaehlt usage.input_tokens nur den UNGECACHTEN Rest; der gecachte
@@ -41,6 +41,10 @@ function meterAiTokens({ tenantId, callId, tokens }) {
     kind: USAGE_EVENT_KIND.AI_TOKEN,
     quantity: tokens.inputTokens + tokens.outputTokens,
     costCents: aiCostCents(tokens, config.llm),
+    // KV-P6: derselbe ungerundete Betrag, den trackUsage (bookTokenUsage, oben) fuer
+    // dieselben tokens/config.llm in costMicroCentsRem fortschreibt - EINE Preisformel
+    // (tokenCostMicroCents), nicht zwei unabhaengige Rundungen.
+    costMicroCents: tokenCostMicroCents(tokens, config.llm),
   });
 }
 
