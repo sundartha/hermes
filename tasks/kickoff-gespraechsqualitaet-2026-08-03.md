@@ -95,6 +95,51 @@ Der Owner hat aufgelegt (`hangupSource: caller`).
 fuer diesen Anruf leer, nur `summary` und `result` blieben. Forensik ist dort also nur
 moeglich, wenn man sie VOR der Zusammenfassung sichert.
 
+**B-9 — Die Zweiteilung ist keine Architektur, sondern ein stiller Rueckfall. Wurzel am
+Code belegt.** Der Inbound-Assistant-Pfad EXISTIERT (`inboundAssistantHandoffXml` in
+`src/routes/voice.js`, `startInboundAiAssistant` in `src/telnyx-inbound.js`) und das Flag
+ist live an (Boot-Banner: `Assistant-Pfad: AKTIV`). Er feuert trotzdem nie. Sein Waechter:
+
+```js
+// Telnyx-TeXML-Inbound-Body-Feld mit der call_control_id des Inbound-Legs. Doku-Stand,
+// live unbestaetigt ... Fehlt es -> null: der Aufrufer faellt fail-safe auf den
+// bestehenden TeXML-Greeting-Pfad zurueck (byte-identisch), kein kaputter Assistant-Pfad.
+const INBOUND_CALL_CONTROL_ID_FIELD = "CallControlId";
+```
+
+Ein **geratener Feldname**, vom Autor selbst als "live unbestaetigt" markiert, mit einem
+**stillen** Rueckfall auf die alte Engine. Kein Log, keine Boot-Sonde, kein Test faengt den
+Fall — der Dienst meldet `Assistant-Pfad: AKTIV` und laeuft inbound trotzdem seit Wochen
+ueber die Budget-Engine. Beleg: fuer den Outbound-Anruf steht
+`[telnyx/voice] startAssistant ok status=200 ccid=true` im Log, fuer den Inbound-Anruf
+**keine einzige** solche Zeile.
+
+**Das ist dieselbe Fehlerklasse, die dieses Repo schon einmal teuer bezahlt hat**
+(geratene Feldnamen in der Kosten-Kette: 297 von 297 Belegen wertlos). Die Lehre lautet
+nicht "besser raten", sondern: **ein Pfad, dessen Aktivierung von einem unbestaetigten
+Feldnamen abhaengt, braucht eine Sonde, die sein Ausbleiben SICHTBAR macht.**
+
+**Die Owner-Entscheidung dazu ist gefallen (03.08.):** *"Es ergibt natuerlich ueberhaupt
+keinen Sinn, zwei verschiedene Pfade zu haben. Guter Code ist simpel."* Zu klaeren ist
+also nicht OB vereinheitlicht wird, sondern wie:
+
+- **Weg A:** den Feldnamen am echten Inbound-Webhook messen (ein Log-Griff, kein Umbau),
+  den Handoff fertigstellen — dann laeuft beides ueber den Assistant-Pfad.
+- **Weg B:** den Inbound-Assistant-Stub loeschen und bewusst auf die Budget-Engine setzen,
+  dann aber fuer BEIDE Richtungen.
+
+**Ehrliche Einschraenkung zu "ein Pfad":** die Budget-Engine kann nicht ersatzlos
+verschwinden — Twilio hat die Assistant-Faehigkeit nicht (`providerSupports(provider,
+CAPABILITY.AI_ASSISTANT)`), sie bleibt also der Weg fuer diesen Provider. Erreichbar und zu
+fordern ist deshalb nicht "eine Engine im Code", sondern: **dieselbe Erfahrung unabhaengig
+von der Richtung, und kein Rueckfall ohne Sonde.** Ausserdem gilt die dokumentierte Grenze
+weiter: echtes Barge-in gibt es nur ueber den Streaming-/Assistant-Pfad, TeXML-Gather kann
+es nicht — das ist der sachliche Grund, warum der Assistant-Pfad ueberhaupt gebaut wurde.
+
+**Das gehoert VOR die Befund-Phasen B-1..B-7 in die Reihenfolge**, mindestens als Messung:
+solange inbound und outbound verschiedene Maschinen sind, gilt jeder Befund oben nur fuer
+eine Richtung, und der Pruefstand aus Schritt 1 misst nur die halbe Wahrheit.
+
 **B-7 — STT-Kauderwelsch (vorbestehend).** *"Hast Du das im Internet tress passiert?"*,
 *"Bis zum behindert, man."* Nicht von dieser Kette verursacht, nie behoben.
 
