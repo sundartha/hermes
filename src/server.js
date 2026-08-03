@@ -35,6 +35,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
 import { makeCostTruing } from "./billing/cost-truing.js";
+import { makeCostCrossCheck } from "./billing/cost-cross-check.js";
 import {
   makeRequestTenant,
   internalIdentity,
@@ -92,6 +93,13 @@ const metering = makeMetering({ store });
 // kein Meter, keine Buchung wird beruehrt. messaging (LCT P5, Drift-Waechter-Alarm) ist
 // dieselbe Instanz wie bei outboundGates/callFinish (kein zweiter Messaging-Zugang, DIP).
 const costTruing = makeCostTruing({ store, config, voiceControl, audit, messaging });
+
+// KV-M4: monatliche Gegenprobe (reine Beobachtung) EINMAL beim Boot verdrahtet (Naht wie
+// costTruing, INV-7). Dieselbe voiceControl-Registry (Telnyx-only, kein Abgleich moeglich
+// -> sauberer No-op, Muster costTruing). Liest NUR die Gate-Achse und den Ledger, schreibt
+// AUSSCHLIESSLICH den eigenen Monats-Riegel (state.costCrossCheck) - kein Gate, kein Meter,
+// keine Buchung wird beruehrt.
+const costCrossCheck = makeCostCrossCheck({ store, config, voiceControl });
 
 // call-finish (P4): finishCall (Settlement/Summary/SMS) + releaseReserve (Reserve-Freigabe)
 // EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler; INV-7).
@@ -221,6 +229,7 @@ const deps = {
   directiveSynth,
   voiceRender,
   costTruing,
+  costCrossCheck,
   messaging,
   consultDelivery,
 };

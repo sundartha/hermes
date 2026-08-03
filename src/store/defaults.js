@@ -584,6 +584,17 @@ export function emptyPlatformTtsUsage() {
   return { cycleKey: null, characters: 0, warnedCycle: null };
 }
 
+// KV-M4: globaler Riegel der monatlichen Gegenprobe (nicht tenant-scoped, Muster
+// platformTtsUsage - EIN Konto, keine Tenant-Dimension, kein Ledger-Beleg). PERSISTIERT
+// (ueberlebt einen Restart - dieselbe Begruendung wie platformTtsUsage/costTruingAttempts:
+// ein rein prozess-lokaler Riegel wuerde bei jedem Free-Tier-Restart auf null fallen und
+// den Provider-Aufruf erneut ausloesen). lastCheckedMonthKey ist 'YYYY-MM' (Muster
+// platformTtsUsage.cycleKey) - der zuletzt GEPRUEFTE (nicht: erfolgreich abgeglichene)
+// Kalendermonat. REINE BEOBACHTUNG: kein Gate, kein Meter, keine Buchung liest dieses Feld.
+export function emptyCostCrossCheck() {
+  return { lastCheckedMonthKey: null };
+}
+
 // ---- Rechteprofile pro Nutzer (Phase 2) ----
 // Profil-Felder mit erwartetem Typ (Whitelist gegen sanitizeProfile, analog
 // updateSettings). "string[]" = Array aus Strings.

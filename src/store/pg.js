@@ -25,6 +25,7 @@ import {
   isBookableCents,
   USAGE_CORRUPT_REASON,
   emptyPlatformTtsUsage,
+  emptyCostCrossCheck,
 } from "./defaults.js";
 import { migrate } from "../db/migrate.js";
 import { backfillGreetingNotices } from "./greeting-notice-migration.js";
@@ -468,6 +469,15 @@ export function makePgStore(runner) {
       return r;
     },
 
+    // KV-M4: Riegel der monatlichen Gegenprobe. Wrapper-Parity zu json.js - save() NUR bei
+    // tatsaechlicher Aenderung (Muster recordTenantTtsCharacters).
+    markCostCrossCheckAttempted(monthKey) {
+      const s = requireState();
+      const before = s.costCrossCheck.lastCheckedMonthKey;
+      ops.markCrossCheckAttempted(s, monthKey);
+      if (s.costCrossCheck.lastCheckedMonthKey !== before) save();
+    },
+
     // ---- Per-Tenant-Budget + Metering (P6b3): Wrapper-Parity zu json.js ----
     setTenantBudget(tenantId, amounts) {
       const row = ops.setTenantBudget(requireState(), tenantId, amounts);
@@ -765,6 +775,7 @@ async function hydrate(client) {
   // gesetzte GUC ist fuer diesen Read irrelevant. EIN Read, nicht pro Tenant.
   state.profiles = await hydrateProfiles(client);
   state.platformTtsUsage = await hydratePlatformTtsUsage(client); // LCT P7: global, wie profiles
+  state.costCrossCheck = await hydrateCostCrossCheck(client); // KV-M4: global, wie platformTtsUsage
   await hydrateSubIndex(client, state); // tenant-prolif-b: Merge-Overlay aus account
   return state;
 }
@@ -787,6 +798,17 @@ async function hydratePlatformTtsUsage(client) {
   if (rows.length === 0) return emptyPlatformTtsUsage();
   const r = rows[0];
   return { cycleKey: r.cycle_key, characters: Number(r.characters), warnedCycle: r.warned_cycle };
+}
+
+// Liest die globale Singleton-Zeile (id=1) der cost_cross_check-Tabelle (KV-M4, Muster
+// hydratePlatformTtsUsage - kein RLS-Tenant-Filter). Keine Zeile (frische DB, kein Seed) ->
+// ops.emptyCostCrossCheck().
+async function hydrateCostCrossCheck(client) {
+  const rows = (
+    await client.query(`SELECT last_checked_month_key FROM cost_cross_check WHERE id = 1`)
+  ).rows;
+  if (rows.length === 0) return emptyCostCrossCheck();
+  return { lastCheckedMonthKey: rows[0].last_checked_month_key };
 }
 
 // tenant-prolif-b: den sub->tenantId-Resolver-Index aus der account-Tabelle fuellen. account
@@ -1231,6 +1253,9 @@ async function flush(client, state, preFlush) {
     // LCT P7: platform_tts_usage ist global wie profile - EIN Flush, ausserhalb der
     // Tenant-Schleife (kein app.current_tenant, keine Tenant-Dimension).
     await flushPlatformTtsUsage(client, state.platformTtsUsage);
+    // KV-M4: cost_cross_check ist global wie platform_tts_usage - EIN Flush, ausserhalb
+    // der Tenant-Schleife (kein app.current_tenant, keine Tenant-Dimension).
+    await flushCostCrossCheck(client, state.costCrossCheck);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -1644,6 +1669,16 @@ async function flushPlatformTtsUsage(client, row) {
      ON CONFLICT (id) DO UPDATE SET cycle_key=EXCLUDED.cycle_key, characters=EXCLUDED.characters,
        warned_cycle=EXCLUDED.warned_cycle`,
     [row.cycleKey, row.characters, row.warnedCycle],
+  );
+}
+
+// Riegel-Flush der monatlichen Gegenprobe (KV-M4, global, Singleton id=1, Muster
+// flushPlatformTtsUsage). Voll-Upsert der EINEN Zeile.
+async function flushCostCrossCheck(client, row) {
+  await client.query(
+    `INSERT INTO cost_cross_check (id, last_checked_month_key) VALUES (1,$1)
+     ON CONFLICT (id) DO UPDATE SET last_checked_month_key=EXCLUDED.last_checked_month_key`,
+    [row.lastCheckedMonthKey],
   );
 }
 

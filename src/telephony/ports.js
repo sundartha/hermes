@@ -154,6 +154,20 @@
  *   Ordnet die Belege EINES Pools genau EINEM Call zu - SYNCHRON und ohne Netz (PM-5).
  *   Gehoert mit fetchCostRecordPool zusammen: ein Adapter implementiert beide oder keine.
  *   WIRFT NIE; leere Record-Liste bei ok:true heisst "nichts zugeordnet", nie "0 Kosten".
+ * @property {(params: {month: string}) => Promise<MonthlyInvoiceTotal>} [fetchMonthlyInvoiceTotal]
+ *   Provider-Rechnungssumme EINES abgeschlossenen UTC-Kalendermonats ('YYYY-MM'), Monats-
+ *   Rollup ohne DID-Aufschluesselung (KV-M4, reine Beobachtung - liest nie ein Gate).
+ *   Telnyx-only, WIRFT NIE - Ergebnis-Objekt {ok:true, totalMicroCents, currency} |
+ *   {ok:false, reason}. ok:false heisst NIEMALS "Rechnung = 0".
+ */
+
+/**
+ * @typedef {Object} MonthlyInvoiceTotal
+ * @property {boolean} ok
+ * @property {number} [totalMicroCents] - nur bei ok:true; GANZZAHL Mikro-Cents in der
+ *   Provider-Waehrung (KEINE Umrechnung an dieser Kante, Muster VoiceCostRecord)
+ * @property {string} [currency]        - nur bei ok:true; Provider-Waehrung (ISO-4217)
+ * @property {string} [reason]          - nur bei ok:false; PII-frei, fuer Logs
  */
 
 /**

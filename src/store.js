@@ -183,6 +183,10 @@ export const {
   // store.recordTenantTtsCharacters undefined -> billing/cost-truing.js wuerfe zur Laufzeit
   // einen TypeError. Muster recordTtsCharacters.
   recordTenantTtsCharacters,
+  // KV-M4 (Riegel der monatlichen Gegenprobe): OHNE diesen Re-Export waere
+  // store.markCostCrossCheckAttempted undefined -> billing/cost-cross-check.js wuerfe zur
+  // Laufzeit einen TypeError. Muster recordTenantTtsCharacters.
+  markCostCrossCheckAttempted,
   usageOf,
   addNotification,
   pruneOldData,
