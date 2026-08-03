@@ -183,6 +183,10 @@ export const {
   // store.recordTenantTtsCharacters undefined -> billing/cost-truing.js wuerfe zur Laufzeit
   // einen TypeError. Muster recordTtsCharacters.
   recordTenantTtsCharacters,
+  // KV-P7 (Massnahme 3): Telnyx-Relay-Verbrauch des ElevenLabs-Kontingents. OHNE diesen
+  // Re-Export waere store.recordRelayTtsCharacters undefined -> billing/cost-truing.js
+  // wuerfe zur Laufzeit einen TypeError. Muster recordTenantTtsCharacters.
+  recordRelayTtsCharacters,
   // KV-M4 (Riegel der monatlichen Gegenprobe): OHNE diesen Re-Export waere
   // store.markCostCrossCheckAttempted undefined -> billing/cost-cross-check.js wuerfe zur
   // Laufzeit einen TypeError. Muster recordTenantTtsCharacters.

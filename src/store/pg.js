@@ -469,6 +469,16 @@ export function makePgStore(runner) {
       return r;
     },
 
+    // KV-P7 (Massnahme 3): Telnyx-Relay-Verbrauch. Wrapper-Parity zu json.js - save()
+    // flusht den KOMPLETTEN Spiegel (Voll-Upsert, s. save() oben) und deckt damit BEIDE
+    // betroffenen Tabellen (flushUsage/tts_characters UND flushPlatformTtsUsage) in einem
+    // Aufruf, wie recordTtsCharacters daneben.
+    recordRelayTtsCharacters(tenantId, chars, nowIso) {
+      const r = ops.recordRelayTtsCharacters(requireState(), { tenantId, chars, cfg: config.billing, nowIso });
+      if (r.changed) save();
+      return r.warning;
+    },
+
     // KV-M4: Riegel der monatlichen Gegenprobe. Wrapper-Parity zu json.js - save() NUR bei
     // tatsaechlicher Aenderung (Muster recordTenantTtsCharacters).
     markCostCrossCheckAttempted(monthKey) {

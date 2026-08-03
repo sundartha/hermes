@@ -60,6 +60,13 @@ const COST_TRUING_FINDING = Object.freeze({
   COVERAGE_STALLED: "coverage_stalled",
   // KE-P8: dritter Code auf DEMSELBEN Kanal - kein eigener Alarmweg, keine SMS-Klasse (PM-7).
   REQUESTS_ABOVE_THRESHOLD: "requests_above_threshold",
+  // KV-P7: vierter/fuenfter Code auf DEMSELBEN Kanal (kein eigener Alarmweg, keine
+  // SMS-Klasse - dieselbe Praezedenz wie REQUESTS_ABOVE_THRESHOLD). Meldet die
+  // ElevenLabs-Kontingent-Warnschwelle/-Erschoepfung, wenn sie ueber den Telnyx-Relay-
+  // Verbrauch (recordRelayTtsCharacters) erreicht wird - der Play-TTS-Pfad alarmiert
+  // dieselbe Schwelle stattdessen per SMS (server.js), NICHT hierueber.
+  TTS_QUOTA_WARN_THRESHOLD: "tts_quota_warn_threshold",
+  TTS_QUOTA_EXHAUSTED: "tts_quota_exhausted",
 });
 const COST_TRUING_AUDIT_EVENT = "cost_truing_befund";
 // LCT P5 (Drift-Waechter): eigenes Audit-Ereignis + eigener SMS-Praefix, getrennt von
@@ -480,20 +487,37 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
   }
 
-  // ElevenLabs-Zeichen des Calls, PRO TENANT (KE-P6, Plan F6). Der globale Zaehler
-  // (platformTtsUsage, LCT P7) bleibt unveraendert, was er ist: er misst den Play-TTS-Pfad,
-  // den unser Prozess selbst synthetisiert. Auf dem Assistant-Pfad synthetisiert Telnyx
-  // serverseitig - dort steht er dauerhaft bei 0, und genau diese Luecke schliesst der
-  // Telnyx-Beleg.
+  // ElevenLabs-Zeichen des Calls, PRO TENANT (KE-P6, Plan F6) UND auf dem globalen
+  // Plattform-Kontingent-Zaehler (KV-P7, C2: dieser Kommentar behauptete vor KV-P7, der
+  // globale Zaehler bliebe unveraendert und stuende auf dem Assistant-Pfad "dauerhaft bei
+  // 0" - das stimmte, BEVOR store.recordRelayTtsCharacters existierte, und ist jetzt
+  // falsch). Auf dem Assistant-Pfad synthetisiert Telnyx die Stimme serverseitig; genau
+  // diesen Verbrauch sah der Kontingent-Zaehler bisher strukturell nie, unabhaengig davon
+  // ob Play-TTS an oder aus ist (Klaerung Teil (c), tasks/kv-p7-tts-klaerung.md). Die
+  // Warnschwelle/Erschoepfung laeuft ab jetzt ueber DENSELBEN Befundkanal wie die uebrigen
+  // Sweep-Befunde (emitFinding: entprellen -> WARN -> Audit) - KEINE SMS: der Play-TTS-Pfad
+  // alarmiert dieselbe Schwelle bereits per SMS (server.js), eine zweite Alarmklasse fuer
+  // dasselbe Konto waere Kanal-Verdopplung.
   // RIEGEL GEGEN DOPPELZAEHLUNG ist costTruedAt und sonst nichts: eine Messung
   // (measured !== null) setzt closed und damit costTruedAt, der Call ist danach nie wieder
   // Kandidat (isTruingCandidate). Kein zweiter Riegel noetig - ein zweiter waere eine zweite
   // Wahrheit. Gegen VERSCHRAENKUNG zweier Sweeps traegt der Laufriegel sweepRunning.
   // 0 Zeichen -> gar kein Schreibzugriff (ein Anruf ohne zugeordneten ElevenLabs-Beleg darf
   // keine Tenant-Zeile anfassen).
+  function reportTtsQuotaFinding(warning, nowMs) {
+    if (!warning) return;
+    const code = warning.exhausted
+      ? COST_TRUING_FINDING.TTS_QUOTA_EXHAUSTED
+      : COST_TRUING_FINDING.TTS_QUOTA_WARN_THRESHOLD;
+    emitFinding(code, `zeichen=${warning.characters}/${warning.quota} zyklus=${warning.cycleKey}`, nowMs);
+  }
+
   function bookTtsCharactersFor(call, measured) {
     if (measured.ttsCharacters <= 0) return;
-    store.recordTenantTtsCharacters(call.tenantId, measured.ttsCharacters);
+    const nowMs = now(); // EIN Zeitpunkt, zwei Projektionen (Muster closedAt in trueOneCall)
+    const warning = store.recordRelayTtsCharacters(
+      call.tenantId, measured.ttsCharacters, new Date(nowMs).toISOString());
+    reportTtsQuotaFinding(warning, nowMs);
   }
 
   // Abruf-Kennzahlen EINER Provider-Antwort, gelesen VOR der Buchbarkeits-Uebersetzung

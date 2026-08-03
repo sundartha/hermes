@@ -11,7 +11,7 @@
 // DYNAMISCH, NACH ihrem eigenen process.env-Setup (Lehre test-base-env-drift, Muster
 // telnyx-cost-records.test.js) - genau wie sie telnyxVoice/cost-truing.js dynamisch holen.
 import {
-  createCall, recordCallCostTruingResult, applyCostCorrectionCents, recordTenantTtsCharacters,
+  createCall, recordCallCostTruingResult, applyCostCorrectionCents, recordRelayTtsCharacters,
   markCrossCheckAttempted,
 } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -25,7 +25,10 @@ const MS_PER_MINUTE = 60 * 1000;
 // vereinfachtes Store-Mock-Verhalten). Die Stub hat BEWUSST keine query/pool/client-
 // Methode (der Sweep darf nie eigenes SQL absetzen - ein Aufruf einer solchen Methode
 // waere ein TypeError).
-export function makeStubStore(state, { nowMs = Date.now() } = {}) {
+// billing (KV-P7): Config-Fixture fuer recordRelayTtsCharacters (Zyklus/Quote/Schwelle).
+// Default fakeConfig().billing, damit ein Aufrufer ohne eigene Config trotzdem eine echte
+// Zyklus-Berechnung bekommt statt eines zweiten, vereinfachten Fixture-Werts (G5).
+export function makeStubStore(state, { nowMs = Date.now(), billing = fakeConfig().billing } = {}) {
   const writes = [];
   return {
     state,
@@ -41,10 +44,13 @@ export function makeStubStore(state, { nowMs = Date.now() } = {}) {
     applyCostCorrectionCents(tenantId, input) {
       return applyCostCorrectionCents(state, tenantId, input, new Date(nowMs).toISOString());
     },
-    // KE-P6: ElevenLabs-Zeichen pro Tenant - dieselbe Delegation wie die beiden Methoden
-    // darueber (ECHTE state-ops-Funktion, kein zweites, vereinfachtes Verhalten).
-    recordTenantTtsCharacters(tenantId, chars) {
-      return recordTenantTtsCharacters(state, tenantId, chars);
+    // KV-P7 (Massnahme 3): Telnyx-Relay-Verbrauch - dieselbe Delegation an die ECHTE
+    // state-ops-Funktion (kein zweites, vereinfachtes Verhalten), Facade-Signatur
+    // (tenantId, chars, nowIso) wie store.js/store/pg.js. Ersetzt den frueheren
+    // recordTenantTtsCharacters-Stub: der einzige Aufrufer (cost-truing.js,
+    // bookTtsCharactersFor) ruft seit KV-P7 recordRelayTtsCharacters.
+    recordRelayTtsCharacters(tenantId, chars, nowIso) {
+      return recordRelayTtsCharacters(state, { tenantId, chars, cfg: billing, nowIso }).warning;
     },
     // KV-M4: Riegel der monatlichen Gegenprobe - dieselbe Delegation (ECHTE state-ops-
     // Funktion, kein zweites, vereinfachtes Verhalten).
@@ -74,6 +80,13 @@ export function fakeConfig(overrides = {}) {
     providerToBucketRateMicro: 1_000_000,
     costCalibrationMinSamples: 20,
     platformAlertSmsTo: "",
+    // KV-P7: Fallback-Werte aus src/config.js (ttsCharacterQuota/-WarnPercent/
+    // ttsQuotaCycleAnchorDay) - ohne sie liest recordRelayTtsCharacters (bumpPlatformTtsQuota)
+    // cfg.ttsCharacterQuota als undefined (withConfigNamespaces delegiert auf den flachen
+    // Slot, der ohne Eintrag hier fehlt).
+    ttsCharacterQuota: 39981,
+    ttsCharacterQuotaWarnPercent: 75,
+    ttsQuotaCycleAnchorDay: 3,
     ...overrides,
   });
 }

@@ -32,6 +32,16 @@ export const MEDIA_PATH = Object.freeze({
   [PROVIDER.TELNYX]: "/media/telnyx",
 });
 
+// KV-P7: DIE Tatsache, an der der Boot-Befund REALTIME_NO_MIDCALL_BUDGET haengt. Heute
+// NEIN - der einzige laufzeit-wirksame Riegel in dieser Datei ist der Max-Dauer-Timer
+// (endTimer, gesetzt in MEDIA_EVENT.START); blockingBudgetAxis (src/budget-gate.js) kommt
+// in dieser Datei nicht vor, waehrend die Budget-Engine sie vor JEDER Turn-Runde prueft
+// (src/claude.js, roundStopReason). Wer die Pruefung fuer die Realtime-Bruecke baut, setzt
+// DIESE Konstante auf true - dann verstummt der Boot-Befund von selbst. EINE Quelle (G5);
+// test/kv-p7-latent-paths.test.js haelt sie gegen den tatsaechlichen Dateiinhalt dieser
+// Datei, damit ein spaeteres "true" ohne echte Pruefung nicht stillschweigend durchrutscht.
+export const REALTIME_MID_CALL_BUDGET_CHECK = false;
+
 function providerFromMediaPath(pathname) {
   for (const [provider, p] of Object.entries(MEDIA_PATH)) if (pathname === p) return provider;
   return null;
