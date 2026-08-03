@@ -7,6 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeMetering } from "../src/billing/metering.js";
+import { config } from "../src/config.js";
 import { NUMBER_STATUS, USAGE_EVENT_KIND, emptyUsage } from "../src/store/defaults.js";
 import { makeDefaultState, recordUsageEvent } from "../src/store/state-ops.js";
 import { tariffCentsPerMin } from "../src/telephony/outbound-gates.js";
@@ -35,13 +36,13 @@ function fakeStore() {
       usageEvents.push(ev);
     },
     // KS-P5: die Fassade liefert den Usage-Bucket zurueck - die Bucket-Brigade in
-    // reconcileOutboundVoiceBudget liest daraus die Achsen-Stempel der Buchung. Ohne
+    // reconcileVoiceBudget liest daraus die Achsen-Stempel der Buchung. Ohne
     // Rueckgabewert wuerfe der reale Aufruf (echte Interface-Erweiterung, kein Testartefakt).
     addVoiceUsageCostCents(tenantId, costCents) {
       voiceCostCents.push({ tenantId, costCents });
       return { ...emptyUsage(), spendMonthKey: BUCKET_SPEND_MONTH_KEY, budgetPeriodKey: BUCKET_PERIOD_KEY };
     },
-    // LCT P2: reconcileOutboundVoiceBudget persistiert den gebuchten Schaetzbetrag zusaetzlich
+    // LCT P2: reconcileVoiceBudget persistiert den gebuchten Schaetzbetrag zusaetzlich
     // am Call (store.recordCallEstimatedCostCents). Ohne diesen Stub wuerfe der reale Aufruf
     // einen TypeError (echte Interface-Erweiterung, kein Testartefakt).
     // KS-P5: input = { costCents, chargeAnchors }.
@@ -109,30 +110,36 @@ test("recordVoiceMinuteMeter: N Minuten -> Event mit kind/quantity/costCents aus
   assert.equal(ev.costCents, 1 * tariffCentsPerMin(call.to, call.from));
 });
 
-// PAY-08 (Buchhaltung, kein eigener Test): "ein Inbound-Anruf zieht das Tenant-Budget nie
-// ab" ist woertlich die Aussage des Tests darunter (Beleg: `if (call.direction !==
-// "outbound") return;` als erste Zeile von reconcileOutboundVoiceBudget in
-// src/billing/metering.js). Ein zweiter Test waere ein Duplikat (G5); die Katalog-ID steht
-// deshalb hier und nicht im Testnamen - der Test bleibt damit im Regressionslauf.
-test("reconcileOutboundVoiceBudget: inbound -> kein addVoiceUsageCostCents", () => {
+// PAY-08 (Buchhaltung, kein eigener Test): PAY-08s Praemisse ("ein Inbound-Anruf zieht das
+// Tenant-Budget nie ab") ist mit Owner-Entscheidung 1(a)/KV-P2 ueberholt - Inbound bucht
+// seither auf dieselbe Achse; die Sperrwirkung der Decke fuer Inbound bestand schon vorher
+// (routes/voice.js), neu ist nur, dass sie gespeist wird. Die woertliche Aussage steht jetzt
+// im Test darunter. Ein zweiter Test waere ein Duplikat (G5); die Katalog-ID steht deshalb
+// hier und nicht im Testnamen - der Test bleibt damit im Regressionslauf.
+test("reconcileVoiceBudget: inbound -> addVoiceUsageCostCents mit dem Inbound-Satz", () => {
   const store = fakeStore();
-  const { reconcileOutboundVoiceBudget } = makeMetering({ store });
-  reconcileOutboundVoiceBudget(makeCall({ direction: "inbound" }));
+  const { reconcileVoiceBudget } = makeMetering({ store });
+  const call = makeCall({ direction: "inbound" });
+  reconcileVoiceBudget(call);
+  assert.equal(store.voiceCostCents.length, 1);
+  assert.deepEqual(store.voiceCostCents[0], {
+    tenantId: TENANT_A,
+    costCents: 1 * config.billing.voiceTariffInboundCents,
+  });
+});
+
+test("reconcileVoiceBudget: outbound, 0 Minuten -> keiner", () => {
+  const store = fakeStore();
+  const { reconcileVoiceBudget } = makeMetering({ store });
+  reconcileVoiceBudget(makeCall({ answeredAt: null }));
   assert.equal(store.voiceCostCents.length, 0);
 });
 
-test("reconcileOutboundVoiceBudget: outbound, 0 Minuten -> keiner", () => {
+test("reconcileVoiceBudget: outbound, N Minuten -> addVoiceUsageCostCents(tenantId, N*tarif)", () => {
   const store = fakeStore();
-  const { reconcileOutboundVoiceBudget } = makeMetering({ store });
-  reconcileOutboundVoiceBudget(makeCall({ answeredAt: null }));
-  assert.equal(store.voiceCostCents.length, 0);
-});
-
-test("reconcileOutboundVoiceBudget: outbound, N Minuten -> addVoiceUsageCostCents(tenantId, N*tarif)", () => {
-  const store = fakeStore();
-  const { reconcileOutboundVoiceBudget } = makeMetering({ store });
+  const { reconcileVoiceBudget } = makeMetering({ store });
   const call = makeCall();
-  reconcileOutboundVoiceBudget(call);
+  reconcileVoiceBudget(call);
   assert.equal(store.voiceCostCents.length, 1);
   assert.deepEqual(store.voiceCostCents[0], {
     tenantId: TENANT_A,
@@ -323,11 +330,11 @@ test("eine freigegebene Nummer erzeugt keine Miete mehr", () => {
 // wenn man sie ruft; gegated wird ausschliesslich beim Aufrufer.
 test("Modul bucht ungated: ohne jedes config-Gate im Modul (Gate liegt beim Aufrufer)", () => {
   const store = fakeStore();
-  const { recordVoiceMinuteMeter, reconcileOutboundVoiceBudget, recordNumberMonthMeter } =
+  const { recordVoiceMinuteMeter, reconcileVoiceBudget, recordNumberMonthMeter } =
     makeMetering({ store });
   const call = makeCall();
   recordVoiceMinuteMeter(call);
-  reconcileOutboundVoiceBudget(call);
+  reconcileVoiceBudget(call);
   recordNumberMonthMeter(makeNumber({ monthlyCostCents: MONTHLY_RENT_CENTS }), ERSTER_MONAT);
   assert.equal(store.usageEvents.length, 2, "Voice-Minute- + Number-Month-Event trotz paymentEnabled=false");
   assert.equal(store.voiceCostCents.length, 1, "Reconcile bucht trotz paymentEnabled=false");

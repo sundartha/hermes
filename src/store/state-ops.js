@@ -244,7 +244,7 @@ export function createCall(
     // kein Meter und keine Projektion liest sie in dieser Phase.
     //
     // estimatedCostCents: der TATSAECHLICH gebuchte Schaetzbetrag (GANZZAHL Cents),
-    // geschrieben von reconcileOutboundVoiceBudget im SELBEN Schritt, in dem gebucht wird.
+    // geschrieben von reconcileVoiceBudget im SELBEN Schritt, in dem gebucht wird.
     // NIE spaeter aus tariffCentsPerMin rekonstruiert: der Tarif aendert sich (P4b), die
     // Buchung nicht - eine rekonstruierte Differenz erstattete Geld zurueck, das real
     // ausgegeben wurde, und oeffnete den geteilten Lebenszeit-Topf wieder.
@@ -253,8 +253,9 @@ export function createCall(
     // Perioden-Stempel estimatedCostCents tatsaechlich gebucht wurde. Set-once zusammen
     // mit dem Betrag (recordCallEstimatedCostCents). Ohne sie kann die spaetere Gutschrift
     // nicht unterscheiden, ob sie dieselbe Zahl senkt, die sie erhoeht hat - und weitete
-    // sonst eine abgeschlossene Perioden-/Monatsdecke auf (B5). Bestandszeile/Inbound ->
-    // null: die Gutschrift bleibt dann auf der strengsten Achse (Lebenszeit).
+    // sonst eine abgeschlossene Perioden-/Monatsdecke auf (B5). Bestandszeile (vor KS-P5) ->
+    // null: die Gutschrift bleibt dann auf der strengsten Achse (Lebenszeit). Inbound
+    // traegt die Anker seit KV-P2 wie jeder andere gebuchte Call.
     estimatedCostSpendMonthKey: null,
     estimatedCostPeriodKey: null,
     // actualCostMicroCents: Summe der Provider-Ist-Kosten dieses Calls in GANZZAHL
@@ -877,22 +878,19 @@ export function countOutboundCallsSince(
   ).length;
 }
 
-// KS-P2: alle noch LAUFENDEN Outbound-Calls eines Tenants - die Basis des Live-Terms auf
-// der Carrier-Achse. Reine Leseprojektion (kein Record-Klon: die Aufrufer lesen nur
-// Zeitanker/Nummern), keine Mutation, kein IO.
-// Die drei Bedingungen sind je eine Invariante, keine Bequemlichkeit:
-//   status "active"      - ein beendeter Call ist bereits GEBUCHT (reconcileOutbound-
-//                          VoiceBudget laeuft in finishCall NACH persistEnd) und wuerde
-//                          sonst doppelt zaehlen;
-//   direction "outbound" - fuer Inbound wird NIE etwas gebucht (metering.js), ein
-//                          Live-Term dort erzeugte einen Phantom-Verbrauch, der bei
-//                          Call-Ende spurlos verschwindet und mittendrin ein KOSTENLOSES
-//                          Inbound-Gespraech aufloest;
-//   tenantId             - die Geld-Achse ist pro Tenant (KS-P9/E10).
-export function activeOutboundCallsFor(s, tenantId) {
-  return s.calls.filter(
-    (c) => c.tenantId === tenantId && c.status === "active" && c.direction === "outbound",
-  );
+// KS-P2/KV-P2: alle noch LAUFENDEN Legs eines Tenants - die Basis des Live-Terms auf der
+// Carrier-Achse, seit KV-P2 richtungsoffen. Reine Leseprojektion, keine Mutation, kein IO.
+// Die zwei verbliebenen Bedingungen sind je eine Invariante, keine Bequemlichkeit:
+//   status "active" - ein beendeter Call ist bereits GEBUCHT (persistEnd schreibt den
+//                     Status VOR bill(), call-termination.js) und wuerde sonst doppelt
+//                     zaehlen;
+//   tenantId        - die Geld-Achse ist pro Tenant (KS-P9/E10).
+// Die dritte Bedingung (direction "outbound") ist mit KV-P2 ENTFALLEN: Inbound bucht
+// seither auf dieselbe Achse, und was gebucht wird, muss live zaehlen. Eine zweite
+// Abfrage fuer die andere Richtung gibt es bewusst NICHT (G5) - eine zweite Liste, die
+// jemand synchron halten muesste, ist das Muster, an dem dieses Repo schon gescheitert ist.
+export function activeCallsFor(s, tenantId) {
+  return s.calls.filter((c) => c.tenantId === tenantId && c.status === "active");
 }
 
 // AL-P12 (Beziehungsgedaechtnis): die Erinnerungen an EINE Gegenstelle, neueste zuerst.
@@ -2402,7 +2400,8 @@ export function convertProviderMicroToBucketCents({ remMicro, actualCostMicroCen
 
 // KS-P5: trifft die Gutschrift denselben Monat, den die Spend-Monat-Achse GERADE zaehlt?
 // Drei Bedingungen, jede traegt:
-//   - der Anker existiert (Bestandszeile/Inbound -> null -> nur Lebenszeit),
+//   - der Anker existiert (Bestandszeile vor KS-P5 -> null -> nur Lebenszeit; Inbound
+//     traegt den Anker seit KV-P2 wie jeder andere gebuchte Call),
 //   - er ist derselbe Monat, unter dem der Zaehler steht (Vormonat -> verworfen),
 //   - der Zaehler ist ueberhaupt noch der laufende: nach einem Rollover liest die Achse
 //     bereits 0, eine Gutschrift dagegen zoege den NEUEN Monat ins Minus.
@@ -2660,7 +2659,7 @@ function tenantSpendOrDeny(s, tenantId, cfg, nowIso) {
 
 // KS-P2 (Wurzelbehebung): dieselbe Frage wie budgetExceeded, PLUS dem noch nicht gebuchten
 // Live-Verbrauch der Carrier-Achse. Bis KS-P2 sah die Mid-Call-Pruefung auf dieser Achse
-// nichts: reconcileOutboundVoiceBudget bucht erst bei Call-Ende, waehrend die KI-Token-Achse
+// nichts: reconcileVoiceBudget bucht erst bei Call-Ende, waehrend die KI-Token-Achse
 // in JEDER Schleifenrunde bucht - die teure Achse war live blind.
 //
 // liveCents kommt vom Aufrufer (budget-gate.js) und ist GANZZAHL Cents. Er durchlaeuft

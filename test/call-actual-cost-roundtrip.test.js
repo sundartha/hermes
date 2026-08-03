@@ -178,7 +178,7 @@ test("D1 (pg): migrate() zweimal auf derselben DB -> kein Throw, geschriebene Ze
 
 // ---- (e) Estimate == gebuchter Betrag, stabil gegen Tarifwechsel (E2/E3/E4) ----
 
-test("E1: reconcileOutboundVoiceBudget bucht + persistiert denselben Estimate-Wert, stabil gegen spaeteren Tarifwechsel", async () => {
+test("E1: reconcileVoiceBudget bucht + persistiert denselben Estimate-Wert, stabil gegen spaeteren Tarifwechsel", async () => {
   const { withConfig } = makeConfigOverrides(config);
   const tenantId = BOOTSTRAP;
   const created = jsonStore.createCall(
@@ -191,7 +191,7 @@ test("E1: reconcileOutboundVoiceBudget bucht + persistiert denselben Estimate-We
   await withConfig("voiceTariffDomesticCents", 6, async () => {
     const metering = makeMetering({ store: jsonStore, config });
     const costCentsBeforeFirst = jsonStore.usageOf(tenantId).costCents;
-    metering.reconcileOutboundVoiceBudget(mirrored);
+    metering.reconcileVoiceBudget(mirrored);
     const costCentsAfterFirst = jsonStore.usageOf(tenantId).costCents;
     assert.equal(costCentsAfterFirst - costCentsBeforeFirst, 18, "3 Minuten * 6 Cent/min = 18 Cent gebucht");
     const persisted = jsonStore.getCall(created.id);
@@ -206,7 +206,7 @@ test("E1: reconcileOutboundVoiceBudget bucht + persistiert denselben Estimate-We
     // Set-once (E3): ein zweiter Aufruf auf demselben Call darf den Estimate NICHT
     // erneut buchen/ueberschreiben.
     const costCentsBeforeSecond = jsonStore.usageOf(tenantId).costCents;
-    metering.reconcileOutboundVoiceBudget(mirrored);
+    metering.reconcileVoiceBudget(mirrored);
     assert.equal(jsonStore.getCall(created.id).estimatedCostCents, 18, "set-once: Estimate bleibt 18");
     assert.equal(
       jsonStore.usageOf(tenantId).costCents,

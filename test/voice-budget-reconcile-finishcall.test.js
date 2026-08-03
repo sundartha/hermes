@@ -1,12 +1,16 @@
-// outbound-p1c (S1-2): die finishCall-VERDRAHTUNG des Budget-Reconcile end-to-end ueber
-// die echte /voice/status-Route (kein Unit-Mock). Der reine Helper addVoiceUsageCostCents
-// ist auf state-ops-Ebene gepinnt (outbound-reserve-reconcile.test.js); dieser Spawn-Test
-// deckt die drei zuvor unverifizierten Stellen ab:
-//   1) reconcileOutboundVoiceBudget laeuft bei JEDEM Call-Ende (auch ohne PAYMENT_ENABLED)
-//      und mutiert persistent den Tenant-Budget-Bucket (costCents im Store),
-//   2) der direction-Guard: ein INBOUND-Call darf NICHT abziehen (byte-identisch),
+// outbound-p1c (S1-2)/KV-P2: die finishCall-VERDRAHTUNG des Budget-Reconcile end-to-end
+// ueber die echte /voice/status-Route (kein Unit-Mock). Der reine Helper
+// addVoiceUsageCostCents ist auf state-ops-Ebene gepinnt (outbound-reserve-reconcile.test.js);
+// dieser Spawn-Test deckt die drei zuvor unverifizierten Stellen ab:
+//   1) reconcileVoiceBudget laeuft bei JEDEM Call-Ende (auch ohne PAYMENT_ENABLED) und
+//      mutiert persistent den Tenant-Budget-Bucket (costCents im Store),
+//   2) KV-P2: ein INBOUND-Call bucht seit dieser Phase MIT (der frueher hier gepinnte
+//      direction-Guard ist die Hauptluecke, die KV-P2 schliesst - dieselbe Datei traegt
+//      seither keine Richtungs-Luege mehr im Namen, git mv von
+//      outbound-reconcile-finishcall.test.js),
 //   3) der Leg-Tarif (callTariffCentsPerMin) am Reconcile-Pfad: Inland vs. International
-//      buchen unterschiedliche Cents (der Tarif haengt am Leg, nicht pauschal).
+//      buchen unterschiedliche Cents (der Tarif haengt am Leg, nicht pauschal); Inbound
+//      bucht seinen eigenen, kalibrierten Satz unabhaengig davon.
 //
 // Deterministisch ohne echtes Netz: die Calls sind mit fixen answeredAt/endedAt (5 Min
 // Abstand) und status="completed" geseedet -> endCallRecord laesst sie unberuehrt (nur
@@ -27,6 +31,9 @@ const ENDED_AT = "2026-01-01T00:05:00.000Z";
 const BILLED_MINUTES = 5;
 const DOMESTIC_TARIFF_CENTS = 20; // +49/+33/+44 -> Inlandstarif
 const DEFAULT_TARIFF_CENTS = 300; // alles andere -> Worst-Case-Default
+// KV-P2: bewusst von DOMESTIC/DEFAULT verschieden - ein Rueckfall auf einen der beiden
+// Outbound-Saetze waere an der ZAHL sichtbar, nicht nur am Vorzeichen.
+const INBOUND_TARIFF_CENTS = 5;
 const DOMESTIC_TO = "+4915112345678"; // DE -> Inlandstarif
 const INTL_TO = "+12025550123"; // US -> Default-Tarif
 
@@ -48,11 +55,12 @@ async function completeCall(srv, callId) {
 // costCents des Owner-Buckets aus dem PERSISTIERTEN Store (Quelle der Wahrheit).
 const ownerCostCents = (srv) => srv.readStore().usage[BOOTSTRAP_TENANT_ID].costCents;
 
-test("Reconcile-Verdrahtung: outbound bucht tarif-x-minuten, inbound zieht nichts ab", async () => {
+test("Reconcile-Verdrahtung: outbound bucht tarif-x-minuten, inbound bucht den kalibrierten Inbound-Satz", async () => {
   const srv = await startServer({
     env: {
       VOICE_TARIFF_DOMESTIC_CENTS: String(DOMESTIC_TARIFF_CENTS),
       VOICE_TARIFF_DEFAULT_CENTS: String(DEFAULT_TARIFF_CENTS),
+      VOICE_TARIFF_INBOUND_CENTS: String(INBOUND_TARIFF_CENTS),
     },
     seed: seedState({
       calls: [
@@ -89,18 +97,19 @@ test("Reconcile-Verdrahtung: outbound bucht tarif-x-minuten, inbound zieht nicht
     }),
   });
   try {
-    // (2) INBOUND zuerst: der direction-Guard verhindert jeden Abzug. Der seedState-
-    // Bucket startet bei costCents 0; der Inbound-Call hat abrechenbare Minuten (5 Min,
-    // to=Inland) - ein gebrochener Guard wuerde also abziehen. costCents bleibt 0 ->
-    // byte-identisch. (readStore liefert den Owner-Bucket erst NACH dem ersten save(),
-    // den finishCall hier ausloest - vorher haelt store.json die flache Seed-Form.)
+    // (2) INBOUND zuerst: KV-P2 bucht seit dieser Phase MIT, mit dem eigenen kalibrierten
+    // Inbound-Satz - unabhaengig vom Land der DID (readStore liefert den Owner-Bucket erst
+    // NACH dem ersten save(), den finishCall hier ausloest - vorher haelt store.json die
+    // flache Seed-Form).
     await completeCall(srv, "rc_inbound");
-    assert.equal(ownerCostCents(srv), 0, "Inbound bucht NICHT in den Budget-Bucket (direction-Guard)");
+    const afterInbound = BILLED_MINUTES * INBOUND_TARIFF_CENTS;
+    assert.equal(ownerCostCents(srv), afterInbound, "Inbound bucht Minuten x kalibrierten Inbound-Satz");
 
-    // (1)+(3) OUTBOUND Inland: Reconcile bucht BILLED_MINUTES x Inlandstarif.
+    // (1)+(3) OUTBOUND Inland: Reconcile bucht BILLED_MINUTES x Inlandstarif, additiv auf
+    // dem Inbound-Beleg oben.
     await completeCall(srv, "rc_out_dom");
-    const afterDomestic = BILLED_MINUTES * DOMESTIC_TARIFF_CENTS;
-    assert.equal(ownerCostCents(srv), afterDomestic, "Outbound Inland: Minuten x Inlandstarif gebucht");
+    const afterDomestic = afterInbound + BILLED_MINUTES * DOMESTIC_TARIFF_CENTS;
+    assert.equal(ownerCostCents(srv), afterDomestic, "Outbound Inland: Minuten x Inlandstarif additiv gebucht");
 
     // (3) OUTBOUND International: derselbe Pfad tarifiert das Leg -> der teurere
     // Default-Tarif kommt OBENDRAUF (beweist die Kopplung ans Leg, nicht pauschal).

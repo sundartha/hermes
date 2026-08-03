@@ -106,7 +106,7 @@ function captureErrLines(fn) {
 
 // Store-Fassade fuer makeMetering auf den ECHTEN state-ops (Muster
 // cost-truing-harness.makeStubStore): dieselben zwei Methoden, die
-// reconcileOutboundVoiceBudget benutzt, mit INJIZIERTER Uhr - die json-Fassade nimmt dort
+// reconcileVoiceBudget benutzt, mit INJIZIERTER Uhr - die json-Fassade nimmt dort
 // Date.now(), was den Monatsgrenzen-Fall unpruefbar machte.
 function meteringStoreOn(s, nowIso) {
   return {
@@ -272,8 +272,8 @@ test("P7 Anker-Kette: die Buchung stempelt die Anker, der Abgleichlauf gibt gena
   const call = makeDueOutboundCall(s, { nowMs }); // 1-Minuten-Call auf dem Bootstrap-Tenant
   stampBudgetPeriod(s, BOOTSTRAP_TENANT_ID, PERIOD_JULY);
 
-  // Schreibseite: Bucket-Brigade in reconcileOutboundVoiceBudget.
-  makeMetering({ store: meteringStoreOn(s, JULY_ISO) }).reconcileOutboundVoiceBudget(call);
+  // Schreibseite: Bucket-Brigade in reconcileVoiceBudget.
+  makeMetering({ store: meteringStoreOn(s, JULY_ISO) }).reconcileVoiceBudget(call);
 
   const bucket = usageFor(s, BOOTSTRAP_TENANT_ID);
   const gebucht = callTariffCentsPerMin(call); // 1 Minute x Leg-Tarif
@@ -315,7 +315,7 @@ test("P8 Monatsgrenze: der Anker ist der Monat der BUCHUNG, nicht der von call.s
   call.answeredAt = JULI_LETZTE_MINUTE_ISO;
   call.endedAt = AUGUST_ENDE_ISO;
 
-  makeMetering({ store: meteringStoreOn(s, AUGUST_BUCHUNG_ISO) }).reconcileOutboundVoiceBudget(call);
+  makeMetering({ store: meteringStoreOn(s, AUGUST_BUCHUNG_ISO) }).reconcileVoiceBudget(call);
 
   assert.equal(call.estimatedCostSpendMonthKey, MONTH_AUGUST, "gebucht wurde im August, obwohl der Call im Juli begann");
   const gebucht = call.estimatedCostCents;

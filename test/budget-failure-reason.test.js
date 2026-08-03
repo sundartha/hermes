@@ -7,7 +7,7 @@
 //                              BUDGET_FAILURE_REASON })
 // Dieser Test faehrt makeCallLifecycle() + den echten reattachActiveCallCore (reattach.js) +
 // die echte blockingBudgetAxis (budget-gate.js) durch, mit einem Spy-Store, der NUR die
-// beiden Geld-Achse-Primitiven (activeOutboundCallsFor/liveBudgetExceeded) faelscht - genau
+// beiden Geld-Achse-Primitiven (activeCallsFor/liveBudgetExceeded) faelscht - genau
 // wie cap-failure-reason.test.js den Cap-Zweig gegen die echte Orchestrierung pinnt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -44,7 +44,7 @@ function spyStore(call, order) {
     // Geld-Achse erschoepft: liveBudgetExceeded meldet true unabhaengig vom Live-Term, damit
     // blockingBudgetAxis(BUDGET_AXIS.TENANT) liefert - genau die reale Entscheidungsfunktion,
     // nicht ein Stub von budgetAxisFor selbst.
-    activeOutboundCallsFor: () => [],
+    activeCallsFor: () => [],
     liveBudgetExceeded: () => true,
   };
 }

@@ -1,11 +1,13 @@
-// Metering: Voice-Minuten-/Nummern-Meter (P6b3) + Budget-Reconcile (outbound-p1c).
-// Reine Verschiebung aus server.js (Server-Slim P1). Die Factory schliesst NUR den store -
-// die Monatsmiete kommt seit P5 aus dem Nummern-Datensatz, nicht mehr aus config; die
-// Kosten-/Kind-Quellen (tariffCentsPerMin, USAGE_EVENT_KIND) und die Faelligkeits-Regel
+// Metering: Voice-Minuten-/Nummern-Meter (P6b3) + Budget-Reconcile (outbound-p1c, seit
+// KV-P2 richtungsoffen). Reine Verschiebung aus server.js (Server-Slim P1). Die Factory
+// schliesst NUR den store - die Monatsmiete kommt seit P5 aus dem Nummern-Datensatz, nicht
+// mehr aus config; die Kosten-/Kind-Quellen (tariffCentsPerMin, config.billing.
+// voiceTariffInboundCents, USAGE_EVENT_KIND) und die Faelligkeits-Regel
 // (numbersDueForMonthMeter) importiert das Modul selbst (EINE Quelle je, G5). Die
 // paymentEnabled-Gating-Bedingung liegt beim AUFRUFER (finishCall / Provisioning-Drain /
-// Monatsmiete-Ausloeser), NICHT hier: reconcileOutboundVoiceBudget laeuft immer,
+// Monatsmiete-Ausloeser), NICHT hier: reconcileVoiceBudget laeuft immer,
 // recordVoiceMinuteMeter / recordNumberMonthMeter nur im Payment-Pfad.
+import { config as defaultConfig } from "../config.js";
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
 import { callStartAnchorMs, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
@@ -30,22 +32,25 @@ export function voiceMinutesOf(call) {
   return Number.isFinite(minutes) ? minutes : 0;
 }
 
-// Minutensatz DIESES Legs (P5, Herkunfts-Achse). Die eigene DID des Tenants steht
-// richtungsabhaengig an verschiedenen Enden: outbound waehlen WIR (call.from), inbound wird
-// die DID angewaehlt (call.to). Inbound hat kein fremdes Ziel-Leg - der Satz haengt am Land
-// der EIGENEN DID, sie steht deshalb an beiden Enden (O3b/B2: Beleg zum Satz des DID-Landes,
-// nie zum Auslands-Worst-Case des Anrufers - aber auch nie pauschal Inland: eine US-DID
-// bekommt den Default-Satz). Unbekannte Richtung faellt in den outbound-Zweig und ohne
-// Herkunft fail-closed auf den teuersten Satz.
+// Minutensatz DIESES Legs - die EINZIGE Funktion, die den Satz eines CALL-RECORDS
+// bestimmt (Ledger, Gate, Live-Term und die guthaben-abgeleitete Notbremse lesen alle
+// hier, G5). tariffCentsPerMin daneben bepreist ein GEWAEHLTES Ziel (Vorab-Reserve am
+// Dial, wo es noch keinen Call-Record gibt) - fuer Outbound dieselbe Zahl, weil es
+// dasselbe gewaehlte Ziel ist.
+// KV-P2: Inbound hat KEIN gewaehltes Ziel. Der frueher hier gezogene Satz des eigenen
+// DID-Landes war eine Notloesung und an einer US-DID der Auslands-Worst-Case (30 ct) -
+// 16-fach ueber dem an KV-M1 gemessenen Ist von 1,87 US-Cent je angefangener Minute.
+// Seither traegt Inbound einen eigenen, kalibrierten Satz; er wird an GENAU DIESER
+// EINEN Stelle gelesen (kein zweiter Tarif-Pfad, G5).
 export function callTariffCentsPerMin(call) {
-  if (call.direction === "inbound") return tariffCentsPerMin(call.to, call.to);
+  if (call.direction === "inbound") return defaultConfig.billing.voiceTariffInboundCents;
   return tariffCentsPerMin(call.to, call.from);
 }
 
 // KS-P2: die bereits verstrichenen, aber noch NICHT gebuchten Minuten EINES laufenden
 // Calls. Schwester von voiceMinutesOf mit DERSELBEN Rundungsregel (ceil, Provider-
 // Minutentakt) - der Live-Term ist die Vorhersage genau der Buchung, die
-// reconcileOutboundVoiceBudget am Call-Ende vornimmt, und darf sie nie unterschaetzen.
+// reconcileVoiceBudget am Call-Ende vornimmt, und darf sie nie unterschaetzen.
 //
 // BEWUSST ein anderer Anker als voiceMinutesOf: callStartAnchorMs nimmt answeredAt, sonst
 // startedAt. Fuer einen BEENDETEN Call heisst "kein answeredAt" korrekt "nie beantwortet,
@@ -64,21 +69,22 @@ function liveVoiceMinutesOf(call, nowMs) {
 }
 
 // KS-P2: der Live-Term ist eine TENANT-Groesse, nicht die des rufenden Legs - die Summe
-// ueber ALLE noch laufenden Outbound-Calls. Call-lokal gerechnet saehe jeder Turn nur seine
+// ueber ALLE noch laufenden Calls. Call-lokal gerechnet saehe jeder Turn nur seine
 // eigene Zeit; die der uebrigen N-1 Legs fiele unter den Tisch (Unterzaehlung). Die Groesse,
 // die diese Luecke heute deckt, ist die Reserve - und die ist strukturell ephemer (nie
 // persistiert, nie hydriert) und nach jedem Deploy 0. Eine Summe ueber den Store braucht
 // dafuer weder Migration noch Boot-Hook.
 //
-// Der Aufrufer liefert ausschliesslich AKTIVE OUTBOUND-Calls (store.activeOutboundCallsFor
-// ist der einzige Produzent, die Bedingung ist dort strukturell). Inbound traegt nichts bei -
-// spiegelbildlich zu reconcileOutboundVoiceBudget: was nie gebucht wird, darf auch live nicht
-// zaehlen.
+// Der Aufrufer liefert ALLE aktiven Legs des Tenants (store.activeCallsFor, der einzige
+// Produzent). KV-P2/Owner-Entscheidung 3b dreht die alte Begruendung genau um: was gebucht
+// wird, MUSS live zaehlen, sonst ist der Live-Term ausgerechnet bei einer buchenden
+// Kostenart blind. Keine Doppelzaehlung, weil persistEnd() den Status vor bill() von
+// "active" wegschreibt (call-termination.js).
 //
 // Ein einzelnes NaN (unlesbarer Anker) vergiftet die Summe ABSICHTLICH und faehrt den ganzen
 // Tenant fail-closed ueber die D7-Kante - nicht "der eine Call zaehlt halt 0".
-export function liveVoiceSpendCents(activeOutboundCalls, nowMs) {
-  return activeOutboundCalls.reduce(
+export function liveVoiceSpendCents(activeCalls, nowMs) {
+  return activeCalls.reduce(
     (sum, call) => sum + liveVoiceMinutesOf(call, nowMs) * callTariffCentsPerMin(call),
     0,
   );
@@ -89,7 +95,7 @@ export function makeMetering({ store }) {
   // (PAYMENT_ENABLED, vom Aufrufer gegated) - Nebeneffekt (recordUsageEvent) im Namen.
   // 0 Minuten -> kein Event (kein Null-Beleg). Kosten-Cents aus dem Leg-Tarif (Ziel UND
   // Herkunft, callTariffCentsPerMin - EINE Kosten-Quelle G5) x Minuten.
-  // KV-P1: diese Buchung + reconcileOutboundVoiceBudget darunter sind die Zeilen
+  // KV-P1: diese Buchung + reconcileVoiceBudget darunter sind die Zeilen
   // voice_minute_outbound/voice_minute_inbound der Kosten-Landkarte
   // (src/billing/cost-ledger-map.js).
   function recordVoiceMinuteMeter(call) {
@@ -104,13 +110,16 @@ export function makeMetering({ store }) {
     });
   }
 
-  // Reconcile (outbound-p1c, Kosten-Achse, D1): bucht die IST-Voice-Minuten eines beendeten
-  // OUTBOUND-Calls (Minuten x Leg-Tarif: Ziel UND Herkunft) in den Budget-Bucket des
-  // Tenants - so sieht der Budget-Gate + die Vorab-Reservierung endlich die Carrier-Minuten. IMMER (auch ohne
-  // PAYMENT_ENABLED, im owner-only-Interim). Inbound byte-identisch (kein Budget-Abzug).
-  // Nie beantwortet -> 0 Minuten -> kein Abzug. Nebeneffekt (Store-Mutation) im Namen (N7).
-  function reconcileOutboundVoiceBudget(call) {
-    if (call.direction !== "outbound") return;
+  // KV-P2: bucht die IST-Voice-Minuten eines BEENDETEN Calls BEIDER RICHTUNGEN (Minuten x
+  // Leg-Satz) in den Budget-Bucket des Tenants - so sieht das Budget-Gate + die
+  // Vorab-Reservierung die Carrier-Minuten. IMMER (auch ohne PAYMENT_ENABLED).
+  // Der frueher hier stehende Richtungsfilter war die Hauptluecke des Plans: dieselben
+  // Kosten desselben Anrufs wurden im Ledger (recordVoiceMinuteMeter, richtungsblind) und
+  // auf der Gate-Achse (hier, nur outbound) verschieden gefiltert - waehrend die Decke
+  // eingehende Anrufe bereits abweist (routes/voice.js). Der Name trug die Richtung mit;
+  // beides ist mit dieser Phase weg (N2). Nie beantwortet -> 0 Minuten -> kein Abzug.
+  // Nebeneffekt (Store-Mutation) im Namen (N7).
+  function reconcileVoiceBudget(call) {
     const minutes = voiceMinutesOf(call);
     if (minutes <= 0) return;
     // LCT P2: EIN Ausdruck, EIN Wert - gebucht und persistiert wird dieselbe Zahl im selben
@@ -202,7 +211,7 @@ export function makeMetering({ store }) {
   return {
     voiceMinutesOf,
     recordVoiceMinuteMeter,
-    reconcileOutboundVoiceBudget,
+    reconcileVoiceBudget,
     recordNumberMonthMeter,
     recordDueNumberMonthMeters,
   };

@@ -350,6 +350,10 @@ services:
       # (Boot-Banner "Worst-Case-Tarif 30 ct/min").
       - key: VOICE_TARIFF_DEFAULT_CENTS
         value: "30"
+      # KV-P2 - Inbound-Minutensatz (EUR-Cent). Kalibriert an KV-M1 (1,87 US-ct/min
+      # gemessen), NICHT der Outbound-Worst-Case. Unset -> Code-Default 6.
+      - key: VOICE_TARIFF_INBOUND_CENTS
+        value: "6"
       # LCT P4b - Vollkosten-Untergrenze (EUR-Cent). Sinkt VOICE_TARIFF_DOMESTIC_CENTS
       # darunter bei duenner Abgleich-Deckung, warnt der Boot (WARN, kein exit).
       # 10 = teuerste aktivierbare Konfiguration (inkl. ai-voice-assistant), Kurs 0,92.

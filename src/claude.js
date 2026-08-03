@@ -628,9 +628,10 @@ function unansweredAgentTurns(transcript) {
 // einem Pfad, den Fremde ausloesen (siehe Kosten-Abwaegung in PLAN-SECURITY.md).
 // KOSTEN (benannt, bounded): ein Inbound-Call, bei dem niemand spricht (Anrufbeantworter,
 // Fehlwahl, Rauschen), kann sich jetzt bis zu maxEmptyTurns Turns lang nicht selbst
-// beenden. LLM-Token laufen richtungsunabhaengig in den Budget-Guard; Carrier-Minuten NICHT
-// (reconcileOutboundVoiceBudget steigt bei Inbound aus). Begrenzt wird die Exposition
-// allein durch den 180-s-Hard-Cap. maxEmptyTurns fuer Inbound NIE hochdrehen.
+// beenden. LLM-Token UND Carrier-Minuten laufen seit KV-P2 richtungsunabhaengig in den
+// Budget-Guard; die Exposition eines stillen Inbound-Calls ist damit zusaetzlich durch die
+// Tenant-Decke begrenzt. Begrenzt wird die Exposition ausserdem durch den 180-s-Hard-Cap.
+// maxEmptyTurns fuer Inbound NIE hochdrehen.
 export function shouldSuppressEndCall(call) {
   const substantialCallerSeen = callerHasSpoken(call);
   const emptyTurnsReached = unansweredAgentTurns(call.transcript) >= config.voice.maxEmptyTurns;

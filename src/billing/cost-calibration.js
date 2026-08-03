@@ -67,7 +67,7 @@ function isDriftSample(call, prefix) {
 // Aufrunden: der gemessene Wert treibt den Vergleich, und ein hoeherer Messwert macht den
 // GEFAEHRLICHEN Befund (underestimate) wahrscheinlicher - im Zweifel die Richtung, die
 // mehr sieht. Minuten kommen aus voiceMinutesOf (EINE Minuten-Quelle, G5, dieselbe, gegen
-// die reconcileOutboundVoiceBudget gebucht hat). null bei 0 Minuten / unsicherem Integer.
+// die reconcileVoiceBudget gebucht hat). null bei 0 Minuten / unsicherem Integer.
 function providerMicroCentsPerMinOf(call) {
   const minutes = voiceMinutesOf(call);
   if (minutes <= 0) return null;
