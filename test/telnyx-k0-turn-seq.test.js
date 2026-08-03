@@ -115,7 +115,7 @@ test("K0-5: zwei verschiedene Calls im selben Shim fuehren eigene turnSeq-Reihen
     getCallByControlId: (ccid) => [callA, callB].find((c) => c.callControlId === ccid) || null,
     getCall: (id) => [callA, callB].find((c) => c.id === id) || null,
     // KS-P2: der Shim fragt die Live-Achse; K0-5 misst turnSeq, nicht Geld -> Achse frei.
-    activeOutboundCallsFor: () => [],
+    activeCallsFor: () => [],
     liveBudgetExceeded: () => false,
   };
   const voiceControl = () => ({ endCallViaCallControl: async () => {} });

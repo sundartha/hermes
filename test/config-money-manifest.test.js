@@ -20,6 +20,8 @@ const MONEY_CONFIG_KEYS = Object.freeze([
   "numberSetupFeeCents",
   "voiceTariffDomesticCents",
   "voiceTariffDefaultCents",
+  // KV-P2: Minutensatz eines INBOUND-Legs (Ganzzahl EUR-Cent), kalibriert an KV-M1.
+  "voiceTariffInboundCents",
   "voiceTariffFullCostFloorCents",
   "defaultTenantBudgetCents",
   "smsCostCents",

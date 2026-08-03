@@ -5,7 +5,7 @@
 // EINE Instanz je Prozess (Wurzel-Scope, INV-7): dieselbe finishCall-Referenz geht an
 // attachMediaBridge UND makeCallControlIngest - die In-Memory-Guards (call._finished) und
 // der persistierte billedAt-Marker verlangen Identitaet. Die paymentEnabled-Gating-Bedingung
-// (Voice-Minuten-Meter) bleibt im finishCall-Body (INV-9); reconcileOutboundVoiceBudget
+// (Voice-Minuten-Meter) bleibt im finishCall-Body (INV-9); reconcileVoiceBudget
 // laeuft immer, releaseReserve wird intra-modul aufgerufen. P2b: die injizierte config
 // schliesst zusaetzlich config.privacy (Diagnose-Retention-Frist) - dieselbe Rolle wie
 // config.billing fuer das Metering, nur fuer den Roh-Transkript-Purge-Entscheid.
@@ -50,7 +50,7 @@ export function makeCallFinish({
       // Voice-Minuten metern, BEVOR der Nicht-completed-Pfad early-returnt: auch ein
       // beantworteter, aber nicht zusammengefasster Call hat abrechenbare Minuten.
       if (config.billing.paymentEnabled) metering.recordVoiceMinuteMeter(call);
-      metering.reconcileOutboundVoiceBudget(call); // outbound-p1c: Carrier-Minuten in den Budget-Bucket (D1), IMMER
+      metering.reconcileVoiceBudget(call); // KV-P2: Carrier-Minuten BEIDER Richtungen in den Budget-Bucket, IMMER
       store.markBilled(call.id); // -> billed_at persistiert, ueberlebt Restart (F9)
     }
     await releaseReserve(call); // OUT-05 (F2): Worst-Case-Reserve abbauen; Ist-Minuten bleiben in costCents

@@ -15,11 +15,11 @@ export function blockingBudgetAxis({ store, billing, tenantId }) {
   // KS-P2: die Frage lautet nicht mehr "was ist gebucht?", sondern "was ist gebucht PLUS was
   // laeuft gerade?". Bis hierher war die Carrier-Achse mid-call blind: die KI-Token-Achse
   // bucht in jeder Schleifenrunde, die Carrier-Minuten erst bei Call-Ende
-  // (reconcileOutboundVoiceBudget) - und genau die sind die teure Achse.
+  // (reconcileVoiceBudget) - und genau die sind die teure Achse.
   // Die Signatur bleibt bewusst call-frei: der Live-Term ist eine TENANT-Groesse (Summe
-  // aller laufenden Outbound-Legs). Damit gibt es kein vom Aufrufer geliefertes Datum, das
-  // ein vergessener Aufrufer stumm auf 0 setzen koennte (G27).
-  const liveCents = liveVoiceSpendCents(store.activeOutboundCallsFor(tenantId), Date.now());
+  // aller laufenden Legs des Tenants, seit KV-P2 beide Richtungen). Damit gibt es kein vom
+  // Aufrufer geliefertes Datum, das ein vergessener Aufrufer stumm auf 0 setzen koennte (G27).
+  const liveCents = liveVoiceSpendCents(store.activeCallsFor(tenantId), Date.now());
   return store.liveBudgetExceeded(tenantId, liveCents, billing) ? BUDGET_AXIS.TENANT : null;
 }
 

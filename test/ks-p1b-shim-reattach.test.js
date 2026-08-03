@@ -41,7 +41,7 @@ function mirrorlessStore(call) {
       return null;
     },
     getCall: (id) => (call && call.id === id ? call : null),
-    activeOutboundCallsFor: () => [],
+    activeCallsFor: () => [],
     liveBudgetExceeded: () => false,
   };
 }

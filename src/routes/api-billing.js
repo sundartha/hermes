@@ -110,7 +110,7 @@ export function makeBillingRoutes({
   // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese
   // Sicherung gar nicht gemountet. KEIN MCP-Tool (Muster flush-meters, R4: kein offener
   // ungegateter Geld-naher Endpunkt). BEWUSST OHNE PAYMENT_ENABLED-Gate: der Abgleich
-  // ist Beobachtung der Kosten-Achse, die - wie reconcileOutboundVoiceBudget - auch ohne
+  // ist Beobachtung der Kosten-Achse, die - wie reconcileVoiceBudget - auch ohne
   // Zahlungspfad laeuft; ein 404 hier machte den Job im heutigen Live-Betrieb
   // unausloesbar. NICHT tenant-gescopt: ein Plattform-Job ueber alle Tenants (Muster
   // flush-meters). Antwort = NUR Zaehler + Quote, keine Call-IDs, keine Rufnummern,

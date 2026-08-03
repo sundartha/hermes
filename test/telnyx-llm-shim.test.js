@@ -77,7 +77,7 @@ function fakeStore({ call = null, budgetExceeded = false } = {}) {
     // KS-P2: blockingBudgetAxis fragt die LIVE-Achse. Diese Datei hat den Live-Term NICHT
     // im Blick (kein laufender Leg) - die Basis bleibt leer, der eine budgetExceeded-
     // Schalter steht weiter fuer "die Geld-Achse sperrt".
-    activeOutboundCallsFor() {
+    activeCallsFor() {
       return [];
     },
     liveBudgetExceeded() {
@@ -494,7 +494,7 @@ test("P5-Rate: zwei verschiedene Calls (ccids) teilen sich das Fenster NICHT", a
     getCallByControlId: (ccid) => [callA, callB].find((c) => c.callControlId === ccid) || null,
     // KS-P2: der Shim fragt die Live-Achse; dieser Test misst das Rate-Fenster, nicht
     // Geld -> Achse frei (Muster wie fakeStore oben).
-    activeOutboundCallsFor: () => [],
+    activeCallsFor: () => [],
     liveBudgetExceeded: () => false,
   };
   const agentTurn = agentTurnSpy();

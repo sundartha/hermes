@@ -2,7 +2,7 @@
 // GEBUCHTEN Verbrauch, sondern auch den noch nicht gebuchten LIVE-Verbrauch der
 // Carrier-Achse. Bis hierher war genau die teure Achse mid-call blind: die KI-Token-Achse
 // bucht in jeder Schleifenrunde, die Carrier-Minuten erst bei Call-Ende
-// (reconcileOutboundVoiceBudget).
+// (reconcileVoiceBudget).
 //
 // Der Live-Term ist eine TENANT-Groesse: die Summe der angefangenen Minuten ALLER noch
 // laufenden Outbound-Legs des Tenants mal deren Leg-Tarif. Damit deckt EINE Groesse die
@@ -25,7 +25,7 @@ import {
   addVoiceUsageCostCents,
   budgetExceeded,
   liveBudgetExceeded,
-  activeOutboundCallsFor,
+  activeCallsFor,
   tryReserveOutboundBudget,
 } from "../src/store/state-ops.js";
 // test/telnyx-shim-harness.js importiert src/config.js STATISCH und wird deshalb - wie
@@ -35,6 +35,10 @@ import {
 // Fixierter Minutensatz dieser Datei: das Leg +1 -> +49 ist KEIN Inlands-Leg
 // (isDomesticLeg), es zieht also VOICE_TARIFF_DEFAULT_CENTS.
 const TARIFF_CENTS_PER_MIN = 50;
+// KV-P2: eigener, von TARIFF_CENTS_PER_MIN (50) und dem Inlandssatz (0, s.u.) verschiedener
+// Satz - ein Rueckfall auf den Outbound-Satz waere an der ZAHL sichtbar, nicht nur am
+// Vorzeichen.
+const INBOUND_TARIFF_CENTS_PER_MIN = 20;
 const MS_PER_MINUTE = 60_000;
 
 const TENANT = "tenant_ks_p2";
@@ -66,6 +70,7 @@ let shim; // Modul-Namensraum von test/telnyx-shim-harness.js (s. Hinweis oben)
 before(async () => {
   process.env.VOICE_TARIFF_DEFAULT_CENTS = String(TARIFF_CENTS_PER_MIN);
   process.env.VOICE_TARIFF_DOMESTIC_CENTS = "0";
+  process.env.VOICE_TARIFF_INBOUND_CENTS = String(INBOUND_TARIFF_CENTS_PER_MIN);
   await import("../src/config.js");
   ({ blockingBudgetAxis } = await import("../src/budget-gate.js"));
   ({ liveVoiceSpendCents } = await import("../src/billing/metering.js"));
@@ -108,7 +113,7 @@ function stateWith({ capCents, bookedCents = 0, legs = [] }) {
 // Nachbau der Geld-Entscheidung im Test.
 function storeOver(s) {
   return {
-    activeOutboundCallsFor: (tenantId) => activeOutboundCallsFor(s, tenantId),
+    activeCallsFor: (tenantId) => activeCallsFor(s, tenantId),
     liveBudgetExceeded: (tenantId, liveCents, cfg) =>
       liveBudgetExceeded(s, tenantId, liveCents, cfg, NOW_ISO),
   };
@@ -140,20 +145,28 @@ test("KS-P2-1: die laufende Minute allein reisst den Cap - der Turn liefert budg
   assert.equal(budgetExceeded(s, TENANT, CFG, NOW_ISO), false, "gebucht ist noch nichts");
 });
 
-test("KS-P2-2: Inbound zaehlt NICHT - ein laufendes Inbound-Gespraech wird nicht aufgelegt", () => {
-  // Realistische Inbound-Form: die EIGENE DID wird angewaehlt (to), der Anrufer ist die
-  // Gegenstelle (from). Die DID steht bewusst in +1 - ein Land ohne gemessenen Inlandssatz,
-  // callTariffCentsPerMin liefert dafuer den vollen Default-Satz. Mit einer +49-DID kaeme
-  // der Inlandssatz 0 heraus und der Test bestuende auch OHNE den Richtungs-Filter.
+// KS-P2-2: Inbound zaehlt MIT - der Live-Term deckt seit KV-P2 alle laufenden Legs
+// (Owner-Entscheidung 3b). Realistische Inbound-Form: die EIGENE DID wird angewaehlt (to),
+// der Anrufer ist die Gegenstelle (from). callTariffCentsPerMin liest fuer Inbound seit
+// KV-P2 config.billing.voiceTariffInboundCents - unabhaengig von to/from.
+test("KS-P2-2: Inbound zaehlt MIT - der Live-Term deckt seit KV-P2 alle laufenden Legs", () => {
   const inbound = activeLeg({ direction: "inbound", to: "+15005550006", from: "+4915112345678" });
-  const s = stateWith({ capCents: 100, legs: [inbound] });
 
   assert.equal(
     liveVoiceSpendCents([inbound], Date.now()),
-    2 * TARIFF_CENTS_PER_MIN,
-    "der Leg WAERE teuer - nur die Richtung haelt ihn aus der Summe",
+    2 * INBOUND_TARIFF_CENTS_PER_MIN,
+    "der Inbound-Satz zaehlt, nicht mehr die Richtung",
   );
-  assert.equal(axisFor(s), null);
+  assert.equal(
+    axisFor(stateWith({ capCents: 10, legs: [inbound] })),
+    "budget_tenant",
+    "eine kleine Decke wird vom laufenden Inbound-Leg gerissen",
+  );
+  assert.equal(
+    axisFor(stateWith({ capCents: 10_000, legs: [inbound] })),
+    null,
+    "die Decke bindet, nicht die Richtung",
+  );
 });
 
 test("KS-P2-3: die Vorab-Reserve zaehlt NICHT mit (der Call laeuft nicht gegen sich selbst)", () => {

@@ -90,7 +90,7 @@ function makeHarness({ summarizeCall, smsCapture, notifyCapture }) {
   return makeCallFinish({
     store,
     config,
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileOutboundVoiceBudget: () => {} },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
     messaging: () => ({
       sendSms: async ({ body }) => {
         smsCapture.push(body);

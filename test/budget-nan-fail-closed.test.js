@@ -55,14 +55,14 @@ async function reopen(db) {
   return store;
 }
 
-// ---- (a)+Wurzel: metering.voiceMinutesOf / reconcileOutboundVoiceBudget ----
+// ---- (a)+Wurzel: metering.voiceMinutesOf / reconcileVoiceBudget ----
 
-test("(a) reconcileOutboundVoiceBudget mit kaputtem endedAt bucht NICHT (Bucket bit-identisch)", () => {
+test("(a) reconcileVoiceBudget mit kaputtem endedAt bucht NICHT (Bucket bit-identisch)", () => {
   const s = makeDefaultState();
   addVoiceUsageCostCents(s, TENANT_A, 250); // vorbelegter Bucket
   const fakeStore = { addVoiceUsageCostCents: (t, c) => addVoiceUsageCostCents(s, t, c) };
-  const { reconcileOutboundVoiceBudget } = makeMetering({ store: fakeStore, config: {} });
-  reconcileOutboundVoiceBudget({
+  const { reconcileVoiceBudget } = makeMetering({ store: fakeStore, config: {} });
+  reconcileVoiceBudget({
     direction: "outbound",
     tenantId: TENANT_A,
     to: "+491701234567",

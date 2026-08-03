@@ -73,12 +73,12 @@ export function fakeStore({ call, budgetExceeded = false } = {}) {
     // KS-P2: blockingBudgetAxis fragt die LIVE-Achse. Der Fake behaelt EINEN Schalter -
     // budgetExceeded steht unveraendert fuer "die Geld-Achse sperrt", gleich ob der Anteil
     // gebucht oder gerade laufend ist; die Aufteilung entscheidet keiner dieser Tests.
-    // activeOutboundCallsFor liefert den geseedeten Call bewusst ECHT (nicht []), damit
+    // activeCallsFor liefert den geseedeten Call bewusst ECHT (nicht []), damit
     // liveVoiceSpendCents auf der Fixture wirklich laeuft und ein Wurf dort auffaellt.
-    activeOutboundCallsFor(tenantId) {
-      return call && call.tenantId === tenantId && call.status === "active" && call.direction === "outbound"
-        ? [call]
-        : [];
+    // KV-P2: kein direction-Filter mehr - activeCallsFor ist richtungsoffen (die Fixtures
+    // dieser Harness sind Default-outbound, das Verhalten bleibt dadurch unveraendert).
+    activeCallsFor(tenantId) {
+      return call && call.tenantId === tenantId && call.status === "active" ? [call] : [];
     },
     liveBudgetExceeded() {
       return budgetExceeded;

@@ -120,7 +120,7 @@ test("Sprachreinheit: germanLeakCount ueber sieben Kanaele ist 0 fuer einen EN-T
       markBilled: () => {},
     },
     config: { billing: { paymentEnabled: false, smsCostCents: 0 }, privacy: {} },
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileOutboundVoiceBudget: () => {} },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
     messaging: () => ({ sendSms: async ({ body }) => sms.push(body) }),
     summarizeCall: async () => ({ summary: "Call summary", actionItems: [] }),
     planSummarySms: () => ({ send: true, to: "+12025550199", smsFrom: { e164: "+12025550188" }, reason: null }),

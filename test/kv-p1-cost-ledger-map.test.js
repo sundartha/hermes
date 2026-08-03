@@ -1,7 +1,7 @@
 // KV-P1 (PLAN-KOSTEN-VOLLSTAENDIGKEIT.md): faehrt die Kosten-Landkarte
 // (src/billing/cost-ledger-map.js) gegen die REALITAET, nicht gegen eine zweite Konstante.
 // Fuer JEDE Zeile wird der echte Produktions-Buchungspfad ausgeloest (recordVoiceMinuteMeter/
-// reconcileOutboundVoiceBudget, bookTokenUsage, bookResearchSearchFee/bookLookupSearchFee,
+// reconcileVoiceBudget, bookTokenUsage, bookResearchSearchFee/bookLookupSearchFee,
 // finishCall (SMS), recordNumberMonthMeter, recordTenantTtsCharacters) und danach werden
 // BEIDE Buecher gelesen: Buch A = der Verbrauchs-Ledger (usage_event), Buch B = die
 // Gate-Achse (usage.costCents/costMicroCentsRem). Kein Server-Spawn, kein Netz (P12).
@@ -60,6 +60,10 @@ const MONTHLY_RENT_CENTS = 92; // beliebiger, von 0 verschiedener Fixture-Wert (
 const SMS_COST_CENTS_FIXTURE = 7; // bewusst NICHT 0 - eine 0 waere eine leere 0===0-Assertion
 const RESEARCH_FEE_CENTS_FIXTURE = 3;
 const LOOKUP_FEE_CENTS_FIXTURE = 4;
+// KV-P2: bewusst von 0 verschieden (Muster SMS_COST_CENTS_FIXTURE) - eine 0 waere am
+// Gate eine leere 0===0-Assertion und liesse einen Rueckfall auf den Richtungsfilter
+// unsichtbar.
+const INBOUND_TARIFF_CENTS_FIXTURE = 9;
 const TTS_CHARACTERS_FIXTURE = 42;
 // Ein 5/5-Token-Turn rundet mit den heutigen Modellpreisen (claude-haiku-4-5: 1,0/5,0 USD
 // je Mio. Token, usdToEur 0,92) auf 0 EUR-Cent - das demonstriert die ai_token-Zeile. Die
@@ -83,6 +87,9 @@ before(async () => {
   process.env.PAYMENT_ENABLED = "true"; // ai_token-Zeile: meterAiTokens gated auf PAYMENT_ENABLED
   process.env.RESEARCH_SEARCH_FEE_CENTS = String(RESEARCH_FEE_CENTS_FIXTURE);
   process.env.LOOKUP_SEARCH_FEE_CENTS = String(LOOKUP_FEE_CENTS_FIXTURE);
+  // KV-P2: explizit setzen, sonst entscheidet eine lokale .env ueber den Inbound-Satz
+  // (Lehre test-base-env-drift, Muster RESEARCH_SEARCH_FEE_CENTS oben).
+  process.env.VOICE_TARIFF_INBOUND_CENTS = String(INBOUND_TARIFF_CENTS_FIXTURE);
   process.env.DATA_DIR = tempDataDir(
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active" }] }),
   );
@@ -140,13 +147,13 @@ function makeVoiceCall(tenantId, overrides = {}) {
 
 test("KV-P1-1 voice_minute_outbound: Ledger UND Gate tragen denselben Betrag", () => {
   const s = makeDefaultState();
-  const { recordVoiceMinuteMeter, reconcileOutboundVoiceBudget } = makeMetering({
+  const { recordVoiceMinuteMeter, reconcileVoiceBudget } = makeMetering({
     store: realMeteringStore(s),
   });
   const call = makeVoiceCall(TENANT_VOICE_OUT);
 
   recordVoiceMinuteMeter(call);
-  reconcileOutboundVoiceBudget(call);
+  reconcileVoiceBudget(call);
 
   const events = s.usageEvents.filter((e) => e.kind === USAGE_EVENT_KIND.VOICE_MINUTE);
   const gateCents = usageOf(s, TENANT_VOICE_OUT).costCents;
@@ -161,15 +168,15 @@ test("KV-P1-1 voice_minute_outbound: Ledger UND Gate tragen denselben Betrag", (
   assert.equal(gateCents, 1 * erwarteterTarif, "Buch B: der Budget-Bucket traegt denselben Betrag");
 });
 
-test("KV-P1-2 voice_minute_inbound: Ledger feuert trotzdem, Gate bleibt bei 0 (die Hauptluecke)", () => {
+test("KV-P1-2 voice_minute_inbound: Ledger UND Gate tragen den kalibrierten Inbound-Satz", () => {
   const s = makeDefaultState();
-  const { recordVoiceMinuteMeter, reconcileOutboundVoiceBudget } = makeMetering({
+  const { recordVoiceMinuteMeter, reconcileVoiceBudget } = makeMetering({
     store: realMeteringStore(s),
   });
   const call = makeVoiceCall(TENANT_VOICE_IN, { direction: "inbound" });
 
   recordVoiceMinuteMeter(call);
-  reconcileOutboundVoiceBudget(call);
+  reconcileVoiceBudget(call);
 
   const events = s.usageEvents.filter((e) => e.kind === USAGE_EVENT_KIND.VOICE_MINUTE);
   const gateCents = usageOf(s, TENANT_VOICE_IN).costCents;
@@ -178,11 +185,12 @@ test("KV-P1-2 voice_minute_inbound: Ledger feuert trotzdem, Gate bleibt bei 0 (d
     gateWrote: gateCents > 0,
   });
 
-  assert.equal(events.length, 1, "Buch A: der Ledger kennt keine Richtung - der Beleg steht trotzdem");
+  assert.equal(events.length, 1, "Buch A: genau ein Voice-Minute-Beleg");
+  assert.equal(events[0].costCents, 1 * INBOUND_TARIFF_CENTS_FIXTURE, "Buch A traegt den Inbound-Satz");
   assert.equal(
     gateCents,
-    0,
-    "Buch B: reconcileOutboundVoiceBudget filtert inbound heraus - das ist die Luecke, die KV-P2 schliesst",
+    1 * INBOUND_TARIFF_CENTS_FIXTURE,
+    "Buch B: reconcileVoiceBudget bucht seit KV-P2 auch Inbound - die Hauptluecke ist geschlossen",
   );
 });
 
@@ -284,7 +292,7 @@ test("KV-P1-5 sms: die Summary-SMS bucht den Ledger, das Gate bleibt unberuehrt"
     config: callFinishConfig,
     // Metering isoliert ausgeschaltet (Muster test/web-14-call-finish-sms-text-language.test.js):
     // diese Zeile prueft NUR den SMS-Pfad, nicht die Voice-Metering-Zeilen aus KV-P1-1/2.
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileOutboundVoiceBudget: () => {} },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
     messaging: () => ({ sendSms: async () => {} }),
     summarizeCall: async () => ({ summary: "Testzusammenfassung", actionItems: [] }),
     planSummarySms: () => ({ send: true, to: "+12025550199", smsFrom: { e164: "+12025550001" } }),

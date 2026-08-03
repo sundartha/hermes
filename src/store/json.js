@@ -624,9 +624,9 @@ export function liveBudgetExceeded(tenantId, liveCents, cfg) {
   return ops.liveBudgetExceeded(load(), tenantId, liveCents, cfg, new Date().toISOString());
 }
 
-// KS-P2: Basis des Live-Terms - reine Query, kein save (wie budgetExceeded).
-export function activeOutboundCallsFor(tenantId) {
-  return ops.activeOutboundCallsFor(load(), tenantId);
+// KS-P2/KV-P2: Basis des Live-Terms - reine Query, kein save (wie budgetExceeded).
+export function activeCallsFor(tenantId) {
+  return ops.activeCallsFor(load(), tenantId);
 }
 
 // Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).

@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS call (
   -- keinen dritten Zustand, und Bestandszeilen sind per Definition nicht diagnostisch.
   diagnostic BOOLEAN NOT NULL DEFAULT FALSE,
   -- LCT P2 (Ist-Kosten-Achse): estimated_cost_cents ist der TATSAECHLICH gebuchte
-  -- Schaetzbetrag (GANZZAHL Cents, reconcileOutboundVoiceBudget), NIE spaeter aus dem
+  -- Schaetzbetrag (GANZZAHL Cents, reconcileVoiceBudget), NIE spaeter aus dem
   -- Tarif rekonstruiert. actual_cost_micro_cents ist BIGINT (nicht NUMERIC/Float, G26) in
   -- GANZZAHL Mikro-Cents, PROVIDER-WAEHRUNG unveraendert (heute USD) - KEINE Umrechnung an
   -- dieser Kante (D5), die lebt an genau einer Stelle in P4. cost_trued_at/cost_trued_source

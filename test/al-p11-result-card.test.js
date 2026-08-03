@@ -375,7 +375,7 @@ async function runFinishCallForSms(call, summaryResult) {
   const callFinish = makeCallFinish({
     store: makeFakeCallFinishStore(notifyCapture),
     config: { billing: { paymentEnabled: false, smsCostCents: 0 }, privacy: {} },
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileOutboundVoiceBudget: () => {} },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
     messaging: () => ({ sendSms: async ({ body }) => smsCapture.push(body) }),
     summarizeCall: async () => summaryResult,
     planSummarySms: () => ({

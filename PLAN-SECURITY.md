@@ -2624,3 +2624,87 @@ Deploy und kann in der Umsetzungs-Session nicht erbracht werden.
 > melden. Das ist die Grenze eines Konfigurationsriegels und wird als solche getragen;
 > die eigentliche Aussage — es gibt keine nutzungsbasierte Weiterbelastung
 > (Owner-Entscheidung 2a) — steht in `README.md`.
+
+## KV-P2 — Inbound-Carrier-Minuten erreichen die Gate-Achse (2026-08-03, Owner-Entscheidung 1a)
+
+> **Was sich aendert.** `reconcileOutboundVoiceBudget` verliert seinen Richtungsfilter und
+> seinen Namen: `reconcileVoiceBudget` (`src/billing/metering.js`) bucht die Ist-Minuten
+> eines beendeten Calls BEIDER Richtungen auf die pro-Tenant-Kostendecke
+> (`addVoiceUsageCostCents` -> `bookCents` -> `usage.costCents`/`spendMonthCostCents`) und
+> persistiert Betrag plus beide Achsen-Anker an der `call`-Zeile. Die Kosten-Landkarte
+> (`src/billing/cost-ledger-map.js`) kippt dafuer GENAU EINE Zeile: `voice_minute_inbound`
+> von `gate: false` auf `gate: true`.
+>
+> **Warum.** Bis hierher erreichte von einem eingehenden Anruf KEINE Carrier-Kostenart die
+> Gate-Achse, waehrend dieselbe Achse eingehende Anrufe bereits abwies
+> (`store.budgetExceeded` in `src/routes/voice.js`). Die Asymmetrie lief in beide falschen
+> Richtungen: der Kunde verlor die Funktion, fuer die er zahlt, und die Kosten, die er dabei
+> erzeugte, zahlte jemand anders. Die Hermes-Nummer ist oeffentlich waehlbar; die einzige
+> Bremse war der KI-Token-Akku.
+>
+> **Der Satz, mit Zahlen.** `VOICE_TARIFF_INBOUND_CENTS`, Default **6 EUR-Cent je
+> angefangener Minute**. Kalibriert an KV-M1 (2026-08-03): ein kontrollierter Inbound-Anruf
+> (`call_msczw0irl06s`, 79,6 s = 2 angefangene Minuten) kostete real **1,87 US-Cent je
+> angefangener Minute** (3,731 US-Cent gesamt; 71 % speech-to-text, 17 % sip-trunking,
+> 11 % call-control, 1,4 % text-to-speech), umgerechnet 1,72 EUR-Cent. 6 traegt damit
+> 3,5x Sicherheitsaufschlag ueber dem Ist und liegt 5x unter dem Outbound-Worst-Case (30).
+>
+> **KONFIGURATIONSGRENZE DER MESSUNG (kein Nebensatz).** Die Zahl gilt AUSSCHLIESSLICH fuer
+> die Konfiguration, in der sie erhoben wurde: US-DID, `VOICE_ENGINE=budget`, Sprache `de`,
+> ElevenLabs-TTS aktiv, Assistant-Pfad NICHT beteiligt (null `ai-voice-assistant`-Belege),
+> EIN Anruf. Fuer eine +49-DID ist der Satz UNGEMESSEN — es existiert derzeit keine
+> +49-DID im Bestand. Der teuerste Posten (speech-to-text) skaliert mit der SPRECHZEIT,
+> nicht mit der Verbindungsdauer; ein dichtes Gespraech ist teurer als das gemessene.
+> Eine zweite Messung an einer +49-DID und eine am Assistant-Pfad stehen aus.
+>
+> **Fail-Richtung.** Fehlt der Wert oder ist er leer, greift der Code-Fallback 6 — **nie 0**.
+> Ein gesetzter, aber unbrauchbarer Wert (Muell, negativ) landet in `fatalConfigErrors` und
+> verweigert den Boot (`numEnv`/`assertConfig`). Ein ausdrueckliches `0` schaltet die
+> Inbound-Kosten-Achse ab, genau wie `VOICE_TARIFF_DEFAULT_CENTS=0` die Outbound-Achse —
+> ein sichtbarer Betreiber-Akt, kein stiller Ausfall.
+>
+> **Der Live-Zaehler zieht mit (Owner-Entscheidung 3b).** `activeOutboundCallsFor` heisst
+> jetzt `activeCallsFor` (`src/store/state-ops.js`) und liefert alle laufenden Legs des
+> Tenants. EINE Abfrage, keine zweite Liste. Der Mid-Call-Abbruch ist dadurch KEIN Zuwachs:
+> `blockingBudgetAxis` laeuft schon vorher richtungsblind in jeder Schleifenrunde und
+> beendet ein Inbound-Gespraech bei erschoepfter Decke ueber `budgetHangupOutcome`. Neu ist
+> allein, dass die Pruefung die eigenen, noch ungebuchten Minuten des laufenden Inbound-Legs
+> sieht. Keine Doppelzaehlung: `persistEnd()` schreibt den Status vor `bill()` von `active`
+> weg (`src/telephony/call-termination.js`).
+>
+> **Decken-Kalibrierung (Vorbedingung des Merges, TOD 1).** Starter: Decke 1500 ct, 250
+> Inbound-Minuten bis zur Sperre, die 30 gekauften Minuten kosten 180 ct = 12 % der Decke.
+> Business: 4500 ct, 750 Inbound-Minuten, 120 gekaufte Minuten = 720 ct = 16 %. Ein Kunde
+> kann seine gekauften Minuten also vollstaendig eingehend telefonieren; die Decke wurde
+> NICHT angehoben und NICHT gesenkt. Vollstaendige Rechnung:
+> `tasks/kv-p2-decken-rechnung.md`.
+>
+> **Absolute Regel 1 unberuehrt.** Diese Phase FUETTERT ein geschuetztes Gate, sie schwaecht
+> es nicht. Die Sperrwirkung der pro-Tenant-Decke bleibt unveraendert, inklusive der in
+> `CLAUDE.md` festgehaltenen Aussage, dass sie BEIDE Richtungen sperrt. Die
+> Inbound-Abweisung in `src/routes/voice.js` ist NICHT angefasst (jede Beruehrung waere die
+> Wiederaufnahme der zurueckgezogenen Entscheidung E11 und braeuchte eine schriftliche
+> `CLAUDE.md`-Aenderung).
+>
+> **Unberuehrt:** `cost-truing.js` (der Inbound-Ist-Abgleich ist KV-P3), die DID-Miete
+> (KV-P4), SMS, Play-TTS, das Minuten-Kontingent-Gate, Tarif/Marge/Abo-Preis, Denylist,
+> Land-Gate, Stundenlimit, Per-Target-Cap, Signaturpruefung, `OUTBOUND_FROZEN`, Abo+KYC als
+> Outbound-Permit, `MAX_NUMBERS`, `disclosureSentence`. Keine neue Route, kein
+> `route-policy.js`-Eintrag, keine neue DB-Spalte, kein Backfill, keine neue Dependency.
+>
+> **Kein rueckwirkendes Buchen.** Die zwei historischen Inbound-Calls (2026-07-10 und
+> `call_mrntu643cvc2`, 2026-07-16) bleiben ungebucht. Sie tragen im Ledger 300 bzw. 600 ct
+> zum alten Worst-Case-Tarif und sind ueber den KV-P0-Stichtag von der Stripe-Meldung
+> ausgeschlossen.
+>
+> **Zwei bewusst getragene Restrisiken.**
+> 1. **Der Ist-Abgleich fehlt fuer Inbound noch (TOD 4).** Bis KV-P3 steht die Schaetzung
+>    von 6 ct/min gegen ein gemessenes Ist von 1,72 EUR-Cent — der Kunde wird in diesem
+>    Fenster um Faktor 3,5 zu hoch belastet. Die Richtung ist bewusst gewaehlt ("im Zweifel
+>    teurer"), die Korrektur kommt mit KV-P3.
+> 2. **Ein einzelnes sehr langes Inbound-Gespraech zwischen zwei Sweeps.** Zwischen
+>    Buchung und Korrektur liegen `COST_TRUING_DELAY_MINUTES` (30) plus ein Sweep-Takt
+>    (1 h), also bis zu ~1,5 Stunden, in denen das Gate nur die Schaetzung sieht. Die
+>    Exposition eines EINZELNEN Legs ist durch `MAX_CALL_DURATION_CAP_S` (1800 s) hart
+>    gedeckelt: hoechstens 30 x 6 = **180 Cent**, bei realen Kosten von rund 52 Cent. Der
+>    Live-Term begrenzt es zusaetzlich, seit er Inbound sieht.

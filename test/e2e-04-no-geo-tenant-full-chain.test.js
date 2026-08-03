@@ -127,7 +127,7 @@ test("Summary-SMS fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", asy
   const callFinish = makeCallFinish({
     store,
     config: { billing: { paymentEnabled: false, smsCostCents: 0 }, privacy: {} },
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileOutboundVoiceBudget: () => {} },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
     messaging: () => ({ sendSms: async ({ body }) => smsCapture.push(body) }),
     summarizeCall: async () => ({ summary: "Call summary", actionItems: [] }),
     planSummarySms: () => ({ send: true, to: "+12025550199", smsFrom: { e164: "+12025550188" }, reason: null }),

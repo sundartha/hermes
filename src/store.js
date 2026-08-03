@@ -151,7 +151,7 @@ export const {
   // Laufzeit einen TypeError. Beide Backends exportieren sie -> die Fassade ist die EINE
   // Quelle. Muster wie reserveExceedsBudget.
   liveBudgetExceeded,
-  activeOutboundCallsFor,
+  activeCallsFor,
   // Diagnose-Snapshot der Tenant-Achse (P5a): OHNE diesen Re-Export waere
   // store.tenantBudgetSnapshot undefined -> makeReadRoutes/outbound-gates.js wuerfen zur
   // Laufzeit einen TypeError. Muster wie reserveExceedsBudget (reine Query).

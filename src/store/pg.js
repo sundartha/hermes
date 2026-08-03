@@ -395,11 +395,11 @@ export function makePgStore(runner) {
     // KS-P2: Live-Variante von budgetExceeded (Mid-Call-Pruefung). Wrapper-Parity zu json.js.
     liveBudgetExceeded: (tenantId, liveCents, cfg) =>
       ops.liveBudgetExceeded(requireState(), tenantId, liveCents, cfg, new Date().toISOString()),
-    // KS-P2: Basis des Live-Terms. Spiegel-Scan wie getCall, kein RLS/withClient-Sonderpfad.
+    // KS-P2/KV-P2: Basis des Live-Terms. Spiegel-Scan wie getCall, kein RLS/withClient-Sonderpfad.
     // GRENZE (dieselbe wie getCallByControlId): ein Leg, das eine ANDERE Instanz nach unserer
     // hydrate() angelegt hat, fehlt im Spiegel und faellt aus der Summe - der Live-Term
     // unterzaehlt dann, er ueberzaehlt nie.
-    activeOutboundCallsFor: (tenantId) => ops.activeOutboundCallsFor(requireState(), tenantId),
+    activeCallsFor: (tenantId) => ops.activeCallsFor(requireState(), tenantId),
     // Vorab-Reservierung (outbound-p1c): reine Query, kein save (wie budgetExceeded).
     reserveExceedsBudget: (tenantId, reserveCents, cfg) =>
       ops.reserveExceedsBudget(requireState(), tenantId, reserveCents, cfg, new Date().toISOString()),
@@ -1495,7 +1495,7 @@ async function flushCalls(client, tenantId, calls) {
         c.mandate ? JSON.stringify(c.mandate) : null,
         // LCT P2 ($30-$34): ALLE FUENF im ON CONFLICT DO UPDATE SET - anders als
         // context/mandate/diagnostic (bei createCall gesetzt, danach unveraenderlich)
-        // mutieren sie NACH dem Create: estimated_cost_cents in reconcileOutboundVoiceBudget,
+        // mutieren sie NACH dem Create: estimated_cost_cents in reconcileVoiceBudget,
         // die vier uebrigen im Kosten-Abgleich (P3). Fehlte auch nur eine im UPDATE-SET,
         // fiele der Wert beim naechsten Flush auf den Create-Zustand zurueck, der Call
         // saehe dauerhaft "nie abgeglichen" aus und P3 fragte ihn endlos erneut ab.
@@ -1521,7 +1521,7 @@ async function flushCalls(client, tenantId, calls) {
         // zurueck und jede beantwortete Rueckfrage waere nach dem Flush weg.
         c.consults ? JSON.stringify(c.consults) : null,
         // KS-P5 ($39-$40): BEIDE im ON CONFLICT DO UPDATE SET - sie entstehen zusammen mit
-        // estimated_cost_cents NACH dem Create (reconcileOutboundVoiceBudget), also aus
+        // estimated_cost_cents NACH dem Create (reconcileVoiceBudget), also aus
         // genau dem Grund, aus dem estimated_cost_cents dort schon steht. Fehlten sie im
         // UPDATE-SET, faellt der Anker beim naechsten Flush auf NULL zurueck und jede
         // spaetere Gutschrift wirkte nur noch auf der Lebenszeit-Achse.

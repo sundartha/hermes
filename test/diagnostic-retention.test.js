@@ -139,7 +139,7 @@ function makeHarness({ call, summarizeCall, diagnosticRetentionDays = 7 }) {
   const callFinish = makeCallFinish({
     store,
     config,
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileOutboundVoiceBudget: () => {} },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
     messaging: () => ({ sendSms: async () => {} }),
     summarizeCall,
     planSummarySms: () => ({ send: false, reason: null }),

@@ -36,7 +36,7 @@ function makeHarness({ call, summarizeCall, planSummarySms, smsCapture, notifyCa
   const callFinish = makeCallFinish({
     store,
     config,
-    metering: { recordVoiceMinuteMeter: () => {}, reconcileOutboundVoiceBudget: () => {} },
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
     messaging: () => ({
       sendSms: async ({ body }) => {
         smsCapture.push(body);

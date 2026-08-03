@@ -325,6 +325,11 @@ export const BASE_ENV = {
   // byte-identisch). Die outbound-p1c-Tests setzen die Werte explizit.
   VOICE_TARIFF_DOMESTIC_CENTS: "0",
   VOICE_TARIFF_DEFAULT_CENTS: "0",
+  // KV-P2: Inbound-Kosten-Achse test-neutral auf 0 (wie die zwei Saetze darueber) - sonst
+  // leakt eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift) und
+  // faerbte jeden Bestands-Spawn mit Inbound-Call umgebungsabhaengig. Die KV-P2-Tests
+  // setzen den Satz explizit.
+  VOICE_TARIFF_INBOUND_CENTS: "0",
   // LCT P4b: Vollkosten-Boot-Guard test-neutral aus (Schwelle 0 => 0<0 false => still),
   // analog VOICE_TARIFF_DOMESTIC_CENTS=0. Die P4b-Tests setzen die Schwelle explizit.
   VOICE_TARIFF_FULL_COST_FLOOR_CENTS: "0",

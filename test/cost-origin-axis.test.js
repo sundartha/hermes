@@ -39,7 +39,7 @@ function fakeStore() {
     recordUsageEvent(ev) {
       usageEvents.push(ev);
     },
-    // KS-P5: die Fassade liefert den Usage-Bucket - reconcileOutboundVoiceBudget liest
+    // KS-P5: die Fassade liefert den Usage-Bucket - reconcileVoiceBudget liest
     // daraus die Achsen-Stempel (Bucket-Brigade). Ohne Rueckgabewert wuerfe der Aufruf.
     addVoiceUsageCostCents(tenantId, costCents) {
       voiceCostCents.push({ tenantId, costCents });
@@ -168,32 +168,37 @@ test("DE-Ziel von einer DE-DID bucht den Inlandssatz", () => {
   assert.deepEqual(voiceCostOf(store), [config.billing.voiceTariffDomesticCents]);
 });
 
-// ---- ORIG-03: Inbound haengt am Land der EIGENEN DID -----------------------------
-// PAY-09 (Buchhaltung, kein eigener Test): "recordVoiceMinuteMeter rechnet auch fuer
-// INBOUND-Calls mit dem Auslandstarif, wenn call.to eine US-DID ist" ist woertlich die
+// ---- ORIG-03: Inbound hat kein gewaehltes Ziel -----------------------------------
+// PAY-09 (Buchhaltung, kein eigener Test): "recordVoiceMinuteMeter bucht Inbound mit dem
+// kalibrierten Inbound-Satz, unabhaengig vom Land der eigenen DID" ist woertlich die
 // Aussage des Tests direkt darunter. Ein zweiter Test waere ein Duplikat (G5); die
 // Katalog-ID steht deshalb hier und nicht im Testnamen - der Test bleibt damit im
 // Regressionslauf.
-test("Herkunfts-Achse (ORIG-03): Inbound auf eine US-DID bucht den Satz des DID-Landes, nie den Anrufer", () => {
-  const store = fakeStore();
-  const { recordVoiceMinuteMeter } = makeMetering({ store, config });
-  // Inbound: to = die EIGENE DID (sie wird angewaehlt), from = der externe Anrufer.
-  recordVoiceMinuteMeter(makeCall({ direction: "inbound", to: US_OWN_DID, from: DE_TARGET }));
-  assert.deepEqual(
-    voiceCostOf(store),
-    [config.billing.voiceTariffDefaultCents],
-    "eine US-DID hat keinen gemessenen Inlandssatz - pauschal Inland waere eine Unterberechnung",
+//
+// KV-P2: vormals zwei Tests (US-DID -> Default-Satz, DE-DID -> Inlandssatz), zu EINEM
+// zusammengefuehrt - die Herkunfts-Achse bepreist ein GEWAEHLTES Ziel, und ein Inbound-Leg
+// hat keins. Die alte Regel war eine Notloesung, die an einer US-DID den Auslands-
+// Worst-Case zog (16-fach ueber dem an KV-M1 gemessenen Ist). Beide Fixtures bleiben, mit
+// DERSELBEN Erwartung: das Land der eigenen DID darf das Ergebnis nicht mehr aendern.
+test("Herkunfts-Achse (ORIG-03): Inbound bucht den kalibrierten Inbound-Satz - unabhaengig vom Land der eigenen DID", () => {
+  const storeUs = fakeStore();
+  makeMetering({ store: storeUs, config }).recordVoiceMinuteMeter(
+    makeCall({ direction: "inbound", to: US_OWN_DID, from: DE_TARGET }),
   );
-});
-
-test("Herkunfts-Achse (ORIG-03): Inbound auf eine DE-DID bucht den Inlandssatz, nicht den Auslands-Worst-Case", () => {
-  const store = fakeStore();
-  const { recordVoiceMinuteMeter } = makeMetering({ store, config });
-  recordVoiceMinuteMeter(makeCall({ direction: "inbound", to: DE_OWN_DID, from: US_TARGET }));
   assert.deepEqual(
-    voiceCostOf(store),
-    [config.billing.voiceTariffDomesticCents],
-    "die naive Fassung tariffCentsPerMin(call.to, call.from) haette hier den Anrufer tarifiert",
+    voiceCostOf(storeUs),
+    [config.billing.voiceTariffInboundCents],
+    "US-DID: kein Auslands-Worst-Case mehr fuer Inbound",
+  );
+
+  const storeDe = fakeStore();
+  makeMetering({ store: storeDe, config }).recordVoiceMinuteMeter(
+    makeCall({ direction: "inbound", to: DE_OWN_DID, from: US_TARGET }),
+  );
+  assert.deepEqual(
+    voiceCostOf(storeDe),
+    [config.billing.voiceTariffInboundCents],
+    "DE-DID: derselbe Inbound-Satz, kein Inlandsrabatt mehr ueber die eigene DID",
   );
 });
 
@@ -210,8 +215,8 @@ test("Reserve und Buchung rechnen dieselbe Konstellation mit demselben Satz", as
   // dem Vorlauffenster heraus, nicht mehr aus der Gespraechsdauer.
   const reservedPerMinute = ctx.reserveCents / RESERVE_LEAD_MINUTES;
 
-  const { reconcileOutboundVoiceBudget } = makeMetering({ store, config });
-  reconcileOutboundVoiceBudget(makeCall({ to: DE_TARGET, from: US_OWN_DID }));
+  const { reconcileVoiceBudget } = makeMetering({ store, config });
+  reconcileVoiceBudget(makeCall({ to: DE_TARGET, from: US_OWN_DID }));
   const [booked] = store.voiceCostCents;
 
   assert.equal(
@@ -227,15 +232,15 @@ test("Reserve und Buchung rechnen dieselbe Konstellation mit demselben Satz", as
 });
 
 // ---- Richtungs-Weiche ------------------------------------------------------------
-test("callTariffCentsPerMin waehlt die eigene DID richtungsabhaengig", () => {
+test("callTariffCentsPerMin: outbound tarifiert das Leg, inbound den kalibrierten Satz", () => {
   assert.equal(
     callTariffCentsPerMin({ direction: "outbound", to: DE_TARGET, from: DE_OWN_DID }),
     config.billing.voiceTariffDomesticCents,
-    "outbound: die eigene DID steht in call.from",
+    "outbound: die eigene DID steht in call.from, der Satz haengt am Leg",
   );
   assert.equal(
     callTariffCentsPerMin({ direction: "inbound", to: DE_OWN_DID, from: US_TARGET }),
-    config.billing.voiceTariffDomesticCents,
-    "inbound: die eigene DID steht in call.to und zaehlt an beiden Enden",
+    config.billing.voiceTariffInboundCents,
+    "inbound: kein gewaehltes Ziel - der kalibrierte Inbound-Satz gilt, unabhaengig von to/from",
   );
 });

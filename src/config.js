@@ -644,6 +644,24 @@ const rawConfig = {
     fallback: 30,
     min: 0,
   }),
+  // KV-P2 (tasks/PLAN-KOSTEN-VOLLSTAENDIGKEIT.md): Minutensatz eines INBOUND-Legs
+  // (GANZZAHL EUR-Cent/min, G26). EIGENER Wert statt tariffCentsPerMin(to, to): der dort
+  // gezogene Satz ist der Preis eines von UNS GEWAEHLTEN Ziels - an einer US-DID also der
+  // Auslands-Worst-Case (30). KV-M1 hat einen kontrollierten Inbound-Anruf vollstaendig
+  // vermessen: 1,87 US-Cent je ANGEFANGENER Minute (x 0,92 = 1,72 EUR-Cent), davon 71 %
+  // speech-to-text, 17 % sip-trunking, 11 % call-control. 30 waeren 16-fach ueberhoeht und
+  // sperrten einen Starter-Kunden nach 50 Inbound-Minuten bei realen Kosten von 86 Cent.
+  // 6 = 3,5x ueber dem Ist, 5x unter dem Outbound-Worst-Case ("im Zweifel teurer", ohne den
+  // Kunden aus seiner eigenen Erreichbarkeit zu sperren; Rechnung: tasks/kv-p2-decken-rechnung.md).
+  // GRENZE DER MESSUNG: EIN Anruf, US-DID, VOICE_ENGINE=budget, Sprache de, Assistant-Pfad
+  // NICHT beteiligt. Fuer eine +49-DID ist der Satz UNGEMESSEN - es existiert keine.
+  // FAIL-RICHTUNG: unset/leer -> 6 (nie 0). Muell/negativ -> fatalConfigErrors -> Boot-Refusal
+  // (assertConfig). Ein AUSDRUECKLICH gesetztes 0 schaltet die Inbound-Kosten-Achse ab, genau
+  // wie VOICE_TARIFF_DEFAULT_CENTS=0 die Outbound-Achse - Betreiber-Akt, kein stiller Ausfall.
+  voiceTariffInboundCents: numEnv("VOICE_TARIFF_INBOUND_CENTS", process.env.VOICE_TARIFF_INBOUND_CENTS, {
+    fallback: 6,
+    min: 0,
+  }),
   // LCT P4b (Vollkosten-Boot-Guard): Untergrenze, unter die VOICE_TARIFF_DOMESTIC_CENTS
   // nicht sinken darf, ohne dass ein Boot-Guard (WARN) anschlaegt, solange die
   // Abgleich-Deckung duenn ist. GANZZAHL EUR-Cent (wie der Tarif). Herleitung ueber die
@@ -1346,7 +1364,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
