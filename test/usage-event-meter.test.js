@@ -11,7 +11,7 @@ import {
   recordUsageEvent,
   pendingMeterEvents,
 } from "../src/store/state-ops.js";
-import { aggregatePendingMeters, flushMeters } from "../src/billing/meter.js";
+import { aggregateMeterEvents, flushMeters } from "../src/billing/meter.js";
 import { NUMBER_STATUS, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { fakeBilling } from "./helpers.js";
 
@@ -23,6 +23,11 @@ const NUMBER_ID_B = "num_b";
 const MIETE_CENTS = 92;
 const JANUAR = "2026-01-15T09:00:00.000Z";
 const FEBRUAR = "2026-02-15T09:00:00.000Z";
+// KV-P0: fester Flush-Stichtag WEIT vor allen new Date()-Fixtures dieser Datei - diese
+// Tests pruefen Aggregation/Idempotenz/Fehlschlag, nicht den Stichtag-Filter selbst
+// (der hat seine eigene Testdatei, test/kv-p0-flush-epoch.test.js). Ein Stichtag in der
+// Vergangenheit laesst jedes hier erzeugte Event durch, ohne die Invarianten zu aendern.
+const FLUSH_EPOCH_WEIT_VOR_FIXTURES = "2000-01-01T00:00:00.000Z";
 
 test("INV(6): recordUsageEvent speichert Cents als Ganzzahl + setzt Defaults", () => {
   const s = makeDefaultState();
@@ -171,7 +176,7 @@ test("numbersDueForMonthMeter: Beleg OHNE numberId sperrt keine Nummer (Bestands
   assert.deepEqual(faelligeIds(s, { nowIso: JANUAR }), [NUMBER_ID_A]);
 });
 
-test("INV(4): aggregatePendingMeters summiert je (tenant,kind), Tenants getrennt", () => {
+test("INV(4): aggregateMeterEvents summiert je (tenant,kind), Tenants getrennt", () => {
   const s = makeDefaultState();
   recordUsageEvent(s, {
     tenantId: TENANT_A,
@@ -216,7 +221,7 @@ test("INV(4): aggregatePendingMeters summiert je (tenant,kind), Tenants getrennt
     costCents: 250,
   });
 
-  const aggs = aggregatePendingMeters(s);
+  const aggs = aggregateMeterEvents(pendingMeterEvents(s));
   assert.equal(aggs.length, 3, "3 Aggregate: A/voice, A/ai_token, B/voice");
 
   const aVoice = aggs.find(
@@ -252,13 +257,17 @@ test("INV(5): flushMeters meldet je Aggregat EINMAL + ist idempotent (zweiter Fl
   });
   const billing = fakeBilling();
 
-  const first = await flushMeters(s, { billing });
-  assert.deepEqual(first, { sent: 2, failed: 0 });
+  const first = await flushMeters(s, { billing, flushEpochIso: FLUSH_EPOCH_WEIT_VOR_FIXTURES });
+  assert.deepEqual(first, { sent: 2, failed: 0, skipped: 0, skipReason: null });
   assert.equal(billing.log.length, 2, "EIN reportMeter je Aggregat");
   assert.equal(pendingMeterEvents(s).length, 0, "alle Events als gesendet markiert");
 
-  const second = await flushMeters(s, { billing });
-  assert.deepEqual(second, { sent: 0, failed: 0 }, "zweiter Flush sendet nichts");
+  const second = await flushMeters(s, { billing, flushEpochIso: FLUSH_EPOCH_WEIT_VOR_FIXTURES });
+  assert.deepEqual(
+    second,
+    { sent: 0, failed: 0, skipped: 0, skipReason: null },
+    "zweiter Flush sendet nichts",
+  );
   assert.equal(billing.log.length, 2, "billing.log unveraendert (kein Doppelversand)");
 });
 
@@ -286,15 +295,19 @@ test("INV(5b): wirft reportMeter fuer EIN Aggregat -> dessen Events bleiben pend
     },
   });
 
-  const r1 = await flushMeters(s, { billing });
+  const r1 = await flushMeters(s, { billing, flushEpochIso: FLUSH_EPOCH_WEIT_VOR_FIXTURES });
   assert.equal(r1.sent, 1, "ein Aggregat (voice) gesendet");
   assert.equal(r1.failed, 1, "ein Aggregat (ai_token) gescheitert");
+  assert.equal(r1.skipped, 0);
   const stillPending = pendingMeterEvents(s);
   assert.equal(stillPending.length, 1, "nur das ai_token-Event bleibt pending");
   assert.equal(stillPending[0].kind, USAGE_EVENT_KIND.AI_TOKEN);
 
   // Retry: jetzt nimmt das Default-fakeBilling (wirft nicht) das pending-Event nach.
-  const r2 = await flushMeters(s, { billing: fakeBilling() });
+  const r2 = await flushMeters(s, {
+    billing: fakeBilling(),
+    flushEpochIso: FLUSH_EPOCH_WEIT_VOR_FIXTURES,
+  });
   assert.equal(r2.sent, 1, "Retry holt das vorher gescheiterte Aggregat nach");
   assert.equal(pendingMeterEvents(s).length, 0);
 });
@@ -316,7 +329,7 @@ test("INV(5c): idempotencyKey stabil je Aggregat (meter_<tenant>_<kind>_<minEven
     costCents: 150,
   });
   const billing = fakeBilling();
-  await flushMeters(s, { billing });
+  await flushMeters(s, { billing, flushEpochIso: FLUSH_EPOCH_WEIT_VOR_FIXTURES });
   const [, args] = billing.log[0];
   const minId = [e1.id, e2.id].sort()[0];
   assert.equal(args.idempotencyKey, `meter_${TENANT_A}_${USAGE_EVENT_KIND.VOICE_MINUTE}_${minId}`);

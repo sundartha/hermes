@@ -206,6 +206,11 @@ services:
         value: "https://api.stripe.com"
       - key: NUMBER_SETUP_FEE_CENTS
         value: "0"
+      # KV-P0: Flush-Stichtag fuer POST /api/billing/flush-meters (ISO-8601 mit Zone).
+      # LEER = es wird NICHTS an Stripe gemeldet (fail-closed). Explizit ausgeliefert,
+      # damit der Live-Wert ablesbar ist statt nur im Code zu stehen. NIE zurueckdatieren.
+      - key: BILLING_FLUSH_EPOCH
+        value: ""
       - key: PAYMENT_CURRENCY
         value: "eur"
       # Waehrung der Provider-Detail-Records. Default im Code = USD; hier explizit, damit

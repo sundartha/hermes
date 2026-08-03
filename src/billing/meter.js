@@ -5,8 +5,15 @@
 // store.save() (Aufrufer persistiert), KEIN config-Zugriff (Parameter hereingereicht),
 // KEIN Stripe-Objekt (nur kind/quantity/cost ueber den Port). Idempotent:
 // bereits gesendete Events (stripeMeterSent) werden NIE erneut gemeldet.
+//
+// KV-P0 - STICHTAG: gemeldet werden ausschliesslich Ereignisse mit occurredAt >=
+// flushEpochIso (BILLING_FLUSH_EPOCH). Die Auswahl trifft state-ops.flushableMeterEvents,
+// nicht dieses Modul; fehlt der Stichtag, ist die Auswahl LEER (fail-closed: "meldet
+// nichts", nie "meldet alles"). Der Wert kommt als Parameter herein - dieses Modul
+// bleibt config-frei (DIP, s.o.).
 import {
-  pendingMeterEvents,
+  flushableMeterEvents,
+  METER_FLUSH_SKIP,
   markMeterEventsSent,
   voiceMinutesUsedSince,
   planMinutesExceeded,
@@ -15,15 +22,17 @@ import { findPlan } from "../plans.js";
 import { resolvePeriodStartIso } from "./period.js";
 import { includedMinutesFor } from "./plan-caps.js";
 
-// Aggregiert die NOCH NICHT gesendeten usage_event-Zeilen je (tenantId, kind):
+// Aggregiert eine ihr UEBERGEBENE Liste von usage_event-Zeilen je (tenantId, kind):
 // summiert quantity + costCents, sammelt die Event-ids (in stabiler Reihenfolge).
 // Liefert eine Liste [{ tenantId, kind, quantity, costCents, eventIds }]. Reine
-// Query (kein save). Gruppiert ueber eine GESCHACHTELTE Map (tenantId -> kind ->
+// Query (kein save), waehlt selbst NICHTS aus (KV-P0: die Auswahl ist
+// flushableMeterEvents; ein Aggregator, der auch auswaehlen kann, ist ein zweiter Weg
+// am Stichtag vorbei). Gruppiert ueber eine GESCHACHTELTE Map (tenantId -> kind ->
 // Aggregat): so gibt es keinen String-Delimiter und damit keine Kollision zwischen
 // beliebigen tenantId- und kind-Strings.
-export function aggregatePendingMeters(s) {
+export function aggregateMeterEvents(events) {
   const byTenant = new Map();
-  for (const e of pendingMeterEvents(s)) {
+  for (const e of events) {
     if (!byTenant.has(e.tenantId)) byTenant.set(e.tenantId, new Map());
     const byKind = byTenant.get(e.tenantId);
     let agg = byKind.get(e.kind);
@@ -49,12 +58,20 @@ function meterIdempotencyKey({ tenantId, kind, eventIds }) {
 // stripeMeterSent verhindert die Doppel-Meldung beim zweiten Flush. billing kann
 // werfen -> dieses Aggregat bleibt UNgesendet (Events bleiben pending, naechster
 // Flush holt sie nach); andere Aggregate werden NICHT blockiert (Best-Effort je
-// Tenant/kind, Reihenfolge stabil). Liefert { sent, failed } fuers Audit (KEINE
-// Event-Inhalte, kein Secret).
-export async function flushMeters(s, { billing }) {
+// Tenant/kind, Reihenfolge stabil). flushEpochIso ist der KV-P0-Stichtag (aus
+// config.billing.flushEpochIso, vom Aufrufer injiziert - dieses Modul bleibt
+// config-frei). Liefert { sent, failed, skipped, skipReason } fuers Audit (KEINE
+// Event-Inhalte, kein Secret): skipped/skipReason machen einen Riegel-Nullerfolg von
+// einem leeren Ledger unterscheidbar (kein stiller 0-Erfolg).
+export async function flushMeters(s, { billing, flushEpochIso }) {
+  const { events, skipped, skipReason } = flushableMeterEvents(s, { flushEpochIso });
+  if (skipReason === METER_FLUSH_SKIP.NO_EPOCH)
+    console.warn(
+      `[meter] kein Flush-Stichtag (BILLING_FLUSH_EPOCH) - nichts gemeldet, ${skipped} Zeile(n) zurueckgehalten.`,
+    );
   let sent = 0;
   let failed = 0;
-  for (const agg of aggregatePendingMeters(s)) {
+  for (const agg of aggregateMeterEvents(events)) {
     try {
       await billing.reportMeter({
         tenantRef: agg.tenantId,
@@ -70,7 +87,7 @@ export async function flushMeters(s, { billing }) {
       console.error("[meter] reportMeter fehlgeschlagen:", err.message);
     }
   }
-  return { sent, failed };
+  return { sent, failed, skipped, skipReason };
 }
 
 // ---- BK4: Minuten-Kontingent-Lese-Sicht (kein Stripe, kein save, kein IO) ----------

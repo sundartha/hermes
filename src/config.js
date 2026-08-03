@@ -99,6 +99,35 @@ export function boolEnv(name, raw, { fallback }) {
   return fallback;
 }
 
+// ---- ISO-Zeitpunkt-Env-Validierung (fail-closed, KV-P0) ----
+// Dritter Geschwister-Parser zu numEnv/boolEnv, fuer Env-Werte, die einen ZEITPUNKT
+// tragen. Ein nacktes new Date() am Aufrufer genuegt nicht, aus zwei Gruenden:
+//   1. new Date() ist zu grosszuegig - "0" ergibt den 01.01.2000, "1" den 01.01.2001.
+//      Ein Vertipper wuerde still zu einem sehr alten Stichtag und damit (bei
+//      BILLING_FLUSH_EPOCH) zur Freigabe des gesamten Altbestands.
+//   2. Ein Zeitpunkt OHNE Zonenangabe ist mehrdeutig: "2026-08-04T00:00:00" liest Node
+//      als LOKALE Zeit des Hosts. Die Zone ist deshalb Pflicht (Z oder +hh:mm).
+// abwesend/leer -> null (dokumentierter "nicht gesetzt"-Zustand, KEIN Fatal); gesetzt,
+// aber nicht in dieser Form -> Fatal-Push + null (Boot-Refusal statt stillem Riegel-Aus,
+// Muster numEnv/boolEnv). Rueckgabe ist IMMER kanonisches UTC-ISO: der Vergleich gegen
+// usage_event.occurredAt ist ein STRING-Vergleich und darf nie zwei Schreibweisen
+// desselben Zeitpunkts gegeneinanderstellen. Die Diagnose nennt Var + erwartete Form.
+const ISO_INSTANT_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
+
+export function isoInstantEnv(name, raw) {
+  if (raw === undefined || raw === "") return null;
+  const trimmed = raw.trim();
+  const at = new Date(trimmed);
+  if (!ISO_INSTANT_PATTERN.test(trimmed) || Number.isNaN(at.getTime())) {
+    fatalConfigErrors.push(
+      `${name}="${raw}" ist kein gueltiger ISO-8601-Zeitpunkt mit Zone (erwartet z.B. 2026-08-04T00:00:00Z).`,
+    );
+    return null;
+  }
+  return at.toISOString();
+}
+
 // Produktions-Erkennung: Render setzt RENDER_EXTERNAL_URL automatisch -> echtes
 // oeffentliches Hosting. EINE Quelle des Diskriminators (G5). Call-time gelesen, damit
 // productionFootguns/assertConfig denselben Ausdruck treffen, auch wenn ein Test das
@@ -480,6 +509,19 @@ const rawConfig = {
     fallback: 0,
     min: 0,
   }),
+  // ---- Flush-Stichtag (KV-P0): Riegel vor der Ein-Klick-Nachmeldung ----
+  // Aeltester Zeitpunkt, den POST /api/billing/flush-meters an Stripe melden DARF
+  // (usage_event.occurredAt >= diesem Wert, inklusiv). NICHT GESETZT = null = es wird
+  // NICHTS gemeldet. Die Fail-Richtung ist "meldet nichts", NIEMALS "meldet alles" -
+  // das ist der ganze Zweck des Wertes.
+  // Hintergrund: der Ledger traegt Zeilen aus dem Vorbetrieb (Stand 2026-08-03: 138 nie
+  // gemeldete, darunter Inbound-Minuten zum alten 300-ct-Worst-Case-Tarif und zwei als
+  // number_month etikettierte Einrichtungsgebuehren). Der Endpunkt ist scharf
+  // (PAYMENT_ENABLED live true) und wuerde bei EINEM Aufruf alles auf einmal melden.
+  // NIE ZURUECKDATIEREN: der Wert ist ein Riegel vor genau diesen Altzeilen, kein
+  // Berichtsfenster. Es gibt bewusst keinen Ausloeser fuer den Flush (kein Cron, kein
+  // Sweep-Hook) - eine nutzungsbasierte Weiterbelastung findet nicht statt (README).
+  flushEpochIso: isoInstantEnv("BILLING_FLUSH_EPOCH", process.env.BILLING_FLUSH_EPOCH),
   paymentCurrency: (process.env.PAYMENT_CURRENCY || "eur").toLowerCase(),
   // Waehrung, in der der Telefonie-Provider seine Detail-Records ausweist (ISO-4217,
   // Grossschreibung). Default USD - in allen 293 Records der Messung vom 2026-07-20 war
@@ -1304,7 +1346,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],

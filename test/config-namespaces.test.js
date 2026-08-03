@@ -34,7 +34,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // platformFixedCostCentsPerMonth, numberMonthlyCostCents) -> 35.
   // KE-P6B: costTruingSweepIntervalMs ergaenzt (Sweep-Kadenz als Env statt Modul-Konstante) -> 36.
   // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 35.
-  billing: 35,
+  // KV-P0: flushEpochIso ergaenzt (Flush-Stichtag, verriegelt POST /api/billing/flush-meters) -> 36.
+  billing: 36,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -69,9 +70,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // unveraendert) -> 7.
   research: 7,
 };
-const EXPECTED_TOTAL_KEYS = 138;
+const EXPECTED_TOTAL_KEYS = 139;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (138 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (139 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -161,7 +162,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // AL-P10b: lookupEnabled/lookupSearchFeeCents/exaApiKey/exaApiBase (Anbieter-Tausch
   // AL-P10c, Anzahl unveraendert) sind alle vier primitiv
   // (Boolean/Zahl/String/String) -> 129.
-  assert.equal(checked, 129, "alle primitiven Blaetter (138 - 4 Arrays - 5 nested Objekte) geprueft");
+  // KV-P0: flushEpochIso ist primitiv (String | null - null ist falsy, faellt also nicht
+  // in den object-Nested-Zweig, kein Array/nested Objekt) -> 130.
+  assert.equal(checked, 130, "alle primitiven Blaetter (139 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

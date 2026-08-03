@@ -283,6 +283,11 @@ export const BASE_ENV = {
   STRIPE_SECRET_KEY: "",
   STRIPE_API_BASE: "",
   NUMBER_SETUP_FEE_CENTS: "0",
+  // KV-P0: Flush-Stichtag neutral LEER = fail-closed (nichts wird gemeldet). Ohne diese
+  // Zeile leakt eine lokale .env mit gesetztem BILLING_FLUSH_EPOCH via dotenv in die
+  // Spawn-Tests (Lehre test-base-env-drift) - die Suite misst dann einen scharfen Flush,
+  // waehrend sie den gesperrten behauptet.
+  BILLING_FLUSH_EPOCH: "",
   PAYMENT_CURRENCY: "eur",
   // Provider-Waehrung explizit (Lehre test-base-env-drift): ohne diese Zeile leakt eine
   // lokale .env mit PROVIDER_CURRENCY via dotenv in die Spawn-Tests.
