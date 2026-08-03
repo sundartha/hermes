@@ -1145,3 +1145,81 @@ Zeile dazu, sonst sieht die Zahl besser aus, als die Realitaet ist.
   schaedlich - ein Rollback von KV-P2 nach gemergtem KV-P3 laesst den Abgleich auf
   Inbound-Calls ohne Schaetzung laufen, die er als `no_estimate` verwirft. Kein Boot-Refusal,
   nur ein sinnloser Lauf.
+
+---
+
+## KETTENSTAND (Stand 2026-08-03, alle Phasen gemergt)
+
+Neun Phasen, einzeln gemergt, `npm test` nach jedem Merge gruen (zuletzt 3858/3858).
+Merge-Commits auf `master`: `22f625c` (P0), `8ffd6ab` (M0), `b8ba31c` (P1+P1b),
+`b112db2` (P2), `e7fe348` (P3), `65c31af` (M3), `5e5ae32` (P6), `37953ca` (M4),
+`dd47c5b` (P7). **Nichts davon ist deployed** - der Merge auf `master` macht nichts live.
+
+| Phase | Was sie geaendert hat | Landkarten-Zeile |
+|---|---|---|
+| KV-P0 | `flushMeters` meldet nur `occurredAt >= BILLING_FLUSH_EPOCH`; fehlt/leer/unparsebar -> **nichts** | keine (Schutz) |
+| KV-M0 | Boot-Banner zeigt 7 Konfigurationswerte aus der **aufgeloesten** Config + Secret-Scan ueber die GESAMTE Ausgabe | keine (Ausgabe) |
+| KV-P1 | `src/billing/cost-ledger-map.js` + Verhaltenstest je Zeile; Ein-Aufrufer-Riegel (P1b: zaehlt Vorkommen, nicht Dateien) | deklariert den IST |
+| KV-P2 | `reconcileVoiceBudget` ohne Richtungsfilter; `activeCallsFor` richtungsoffen; `VOICE_TARIFF_INBOUND_CENTS=6` | `voice_minute_inbound` **gate false -> true** |
+| KV-P3 | `isEndedCall` statt `isEndedOutbound`; Inbound erreicht den Ist-Abgleich | keine (macht eine Kante genauer) |
+| KV-M3 | Nenner = belegbare Calls; drei Nebenzaehler in derselben Log-Zeile; `PROVIDER_COST_RECORD_WINDOW_DAYS=7` | keine |
+| KV-P6 | `usage_event.cost_micro_cents` (BIGINT); `tokenCostMicroCents` als EINE Quelle fuer Gate-Achse UND Ledger | keine |
+| KV-M4 | Monatliche Gegenprobe, reine Beobachtung; Monats-Riegel persistiert (`cost_cross_check`) | keine |
+| KV-P7 | Zwei WARN-Boot-Guards; Relay-Verbrauch speist den ElevenLabs-Kontingent-Zaehler | keine (`play_tts` bleibt `gate: false`) |
+
+### Gemessene Grenzen, die in jede spaetere Entscheidung gehoeren
+
+- **Der Inbound-Satz (6 ct/min) ist an EINER Messung kalibriert:** US-DID, Budget-Engine,
+  Sprache `de`, Assistant-Pfad NICHT beteiligt. Fuer eine +49-DID ist er **ungemessen** -
+  es existiert keine. Ist-Wert war 1,87 US-Cent je angefangener Minute.
+- **KV-M4 kann nur die HAELFTE seiner Frage beantworten.** Der Telnyx-Rechnungs-Endpunkt
+  traegt kein Betragsfeld (live und gegen die OpenAPI-Spezifikation geprueft). Die Differenz
+  "Rechnung gegen abgerufen" - also *gibt es eine Kostenart, die wir gar nicht abrufen?* -
+  ist strukturell nicht verfuegbar. Die Differenz "abgerufen gegen gebucht" funktioniert.
+- **Der Carrier-Anteil der Gate-Achse ist nicht getrennt lesbar** (`usage.costCents` ist ein
+  ungetrennter Skalar). KV-M4 nutzt als Ersatz die Ledger-Summe `kind=VOICE_MINUTE`; sie
+  unterschaetzt systematisch, wenn `PAYMENT_ENABLED=false` ist.
+- **TTS-Geld war nie die Luecke, die der Plan vermutete.** `text-to-speech` steht in den
+  zuordenbaren Beleg-Typen, die Beleg-Summe ist typ-blind, und der Ist-Abgleich bucht sie
+  seit KV-P3 fuer beide Richtungen. Der urspruenglich geplante Preis-pro-Zeichen-Parameter
+  waere eine **Doppelbuchung** gewesen (+1,4 % dauerhaft, weil `costTruedAt` danach jede
+  Selbstheilung sperrt) - Massnahme 4 aus KV-P7 ist deshalb ersatzlos entfallen. Beleg:
+  `tasks/kv-p7-tts-klaerung.md`.
+- **DDL laeuft beim Boot automatisch** (`store.js` awaited `init()` -> `pg.js` ruft
+  `migrate()` -> `applySchema`), seit dem ersten Postgres-Commit. Die Datenheilung nicht.
+  Die gegenteilige Projektnotiz war falsch und ist korrigiert.
+
+### Nach dem Deploy zu erledigen (keines davon ist erledigt)
+
+1. **Die sieben Banner-Werte im Render-Boot-Log ablesen** und hier eintragen. Das ist die
+   eigentliche Abnahme von KV-M0 und entsperrt jede Zahl, die heute unbelegt ist.
+2. **`BILLING_FLUSH_EPOCH` im Render-Dashboard setzen** - nur falls der Flush-Pfad je
+   genutzt werden soll, mit einem Zeitpunkt NACH allen 138 Altzeilen. Nichtstun ist sicher:
+   unset = es wird nichts gemeldet.
+3. **Existiert `usage_event.cost_micro_cents` in Prod wirklich?** (`information_schema`), und
+   tragen NEUE Zeilen einen Wert > 0? Die 101 Altzeilen bleiben 0 bzw. NULL - wer sie
+   summiert, misst nichts.
+4. **Der KV-M1-Anruf muss sich als korrigiert nachweisen lassen** (`COST_TRUING_DELAY_MINUTES`
+   plus ein Sweep-Takt). Das ist die Live-Abnahme von KV-P3.
+5. **Erste Sweep-Log-Zeile ablesen:** Quote plus die drei Nebenzaehler (KV-M3), und die erste
+   Gegenprobe-Zeile (KV-M4).
+6. **Nach dem DRITTEN Monatswert** die Schwellen-Frage (Owner-Entscheidung 6) erneut vorlegen.
+
+### Weiterhin blockiert, nicht vergessen
+
+- **KV-P4** (DID-Miete + Backfill): blockiert an KV-M2. Es existiert nur die Juni-Rechnung,
+  2 der 3 Nummern sind juenger. Wartet auf die naechste Telnyx-Rechnung. 3 von 3 Nummern
+  haben weiterhin keinen `monthly_cost_cents`.
+- **KV-P5** (SMS-Preis fail-closed): blockiert an U3 - es wurde noch nie eine SMS gesendet,
+  der Preis ist ohne absichtliche Test-SMS nicht messbar. Die Luecke ist latent, nicht laufend.
+- **KV-P8** (abgebrochener KI-Turn): blockiert an U4 - kein Anthropic-Admin-Key. Groessenordnung
+  Zehntel-Cent je Vorfall.
+- **KV-P9**: gestrichen (Owner-Entscheidung 2a). Der Flush-Pfad ist in `README.md` als
+  "gebaut, bewusst inaktiv" dokumentiert.
+
+### Bestandsdefekt, ausserhalb dieser Kette gefunden
+
+`test/auth-p9a-cache-headers.test.js` haengt oder crasht (`hookFailed`), sobald
+`--test-name-pattern` keinen seiner Testnamen matcht - also bei jedem `npm run test:gates`.
+Ursache: file-scope `before()/after()` mit geteiltem `startServer()`-Spawn ohne `if (srv)`-Guard.
+Macht den Gates-Lauf praktisch nicht end-to-end durchlaufbar. Eine kleine eigene Fix-Phase wert.
