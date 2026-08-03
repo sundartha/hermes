@@ -28,7 +28,10 @@
 //   (b) einen Wert in USAGE_EVENT_KIND ergaenzen ohne Tabellenzeile -> KV-P1-8 rot.
 //   (c) eine Tabellenzeile entfernen, deren Kosten-Art es weiterhin gibt -> KV-P1-9 rot
 //       (verwaiste ledger:true-Zeile) bzw. KV-P1-8 rot (Enum-Wert ohne Zeile).
-//   (d) einen zweiten Aufrufer von store.addVoiceUsageCostCents( anlegen -> KV-P1-10 rot.
+//   (d) einen zweiten Aufruf von store.addVoiceUsageCostCents( anlegen -> KV-P1-10 rot,
+//       UNABHAENGIG davon, ob dieser zweite Aufruf in src/billing/metering.js selbst
+//       steht (zweiter Aufruf in DERSELBEN Datei) oder in einer anderen src-Datei -
+//       der Riegel zaehlt Vorkommen ueber alle src-Dateien hinweg, nicht Dateinamen.
 // Jede Mutation danach zuruecknehmen, npm test wieder gruen.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
@@ -386,15 +389,37 @@ function alleSrcDateien(relDir) {
   return treffer;
 }
 
-test("KV-P1-10: addVoiceUsageCostCents hat genau EINEN Aufrufer (store.addVoiceUsageCostCents()) in src/", () => {
-  const CALL_SITE_PATTERN = /store\.addVoiceUsageCostCents\(/;
-  const treffer = alleSrcDateien("src")
-    .filter((datei) => CALL_SITE_PATTERN.test(fs.readFileSync(datei, "utf8")))
-    .map((datei) => path.relative(REPO_ROOT, datei));
+test("KV-P1-10: addVoiceUsageCostCents hat genau EIN Vorkommen von store.addVoiceUsageCostCents() in src/", () => {
+  const CALL_SITE_PATTERN = /store\.addVoiceUsageCostCents\(/g;
+  const EXPECTED_CALL_SITE = "src/billing/metering.js";
+  const ERWARTETE_VORKOMMEN = 1;
 
+  // matchAll zaehlt ALLE Treffer je Datei (nicht nur, OB die Datei ueberhaupt trifft) -
+  // genau das deckt einen zweiten Aufruf INNERHALB derselben Datei auf, den ein reiner
+  // Dateiname-Vergleich uebersehen wuerde (der urspruengliche Fehler dieses Riegels).
+  // matchAll verlangt den /g-Flag und klont den Regex intern: der hier wiederverwendete
+  // CALL_SITE_PATTERN behaelt ueber alle Dateien hinweg lastIndex=0 (empirisch geprueft) -
+  // der klassische /g-Fallstrick (zustandsbehaftetes lastIndex bei exec()/test()-Wiederverwendung)
+  // greift bei matchAll nicht.
+  const vorkommenJeDatei = alleSrcDateien("src")
+    .map((datei) => ({
+      datei: path.relative(REPO_ROOT, datei),
+      anzahl: [...fs.readFileSync(datei, "utf8").matchAll(CALL_SITE_PATTERN)].length,
+    }))
+    .filter((eintrag) => eintrag.anzahl > 0);
+
+  const gesamtVorkommen = vorkommenJeDatei.reduce((summe, eintrag) => summe + eintrag.anzahl, 0);
+  const fundstellen = vorkommenJeDatei.map((eintrag) => `${eintrag.datei}:${eintrag.anzahl}`).join(", ") || "keine";
+
+  assert.equal(
+    gesamtVorkommen,
+    ERWARTETE_VORKOMMEN,
+    `ein zweiter Aufruf waere eine potenzielle Doppelbelastung (TOD 2) - ` +
+      `gefunden: ${gesamtVorkommen} Vorkommen [${fundstellen}]`,
+  );
   assert.deepEqual(
-    treffer,
-    ["src/billing/metering.js"],
-    "ein zweiter Aufrufer waere eine potenzielle Doppelbelastung (TOD 2)",
+    vorkommenJeDatei.map((eintrag) => eintrag.datei),
+    [EXPECTED_CALL_SITE],
+    `das einzige Vorkommen muss in ${EXPECTED_CALL_SITE} liegen - gefunden: [${fundstellen}]`,
   );
 });
