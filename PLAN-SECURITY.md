@@ -2813,3 +2813,51 @@ Deploy und kann in der Umsetzungs-Session nicht erbracht werden.
 >    Exposition eines EINZELNEN Legs ist durch `MAX_CALL_DURATION_CAP_S` (1800 s) hart
 >    gedeckelt: hoechstens 30 x 6 = **180 Cent**, bei realen Kosten von rund 52 Cent. Der
 >    Live-Term begrenzt es zusaetzlich, seit er Inbound sieht.
+
+## KV-M3 — Deckungsquote misst nur noch belegbare Calls (2026-08-03, Owner-Entscheidung 5a)
+
+> **Was sich aendert.** `costTruingCoveragePercent` (`src/billing/cost-truing.js`) zaehlt im
+> Nenner nicht mehr JEDEN beendeten Call, sondern nur noch BELEGBARE: beantwortet, mit
+> persistierter buchbarer Schaetzung, beendet innerhalb des Provider-Belegfensters (GEMESSEN
+> 7 Tage, `tasks/kosten-inventar.md:546` - existierte vor dieser Phase an KEINER Stelle im
+> Code). Die drei ausgeschlossenen Gruppen bekommen eigene, IMMER gedruckte Zaehler in der
+> Sweep-Log-Zeile (`ohne_schaetzung=`, `nie_beantwortet=`, `ausserhalb_fenster=`) sowie im
+> Sweep-Rueckgabewert (`coverageNoEstimate`, `coverageNeverAnswered`, `coverageOutsideWindow`).
+>
+> **Warum das eine Sicherheits-relevante Aenderung ist, obwohl kein Sperrpfad angefasst wird.**
+> `voiceTariffFloorFindings` (Boot-Guard, WARN, kein exit(1)) haengt an genau dieser Quote:
+> `belowFloor && coveragePercent < minCoveragePercent`. Springt die Quote (im Prod-Datenbestand
+> laut Plan von 25 % auf 100 %, Nenner 31 -> 8) ueber die Schwelle (80 %), wird `thinCoverage`
+> `false`, die Konjunktion `false`, `findings` leer, kein `console.warn` mehr in
+> `warnVoiceTariffBelowFullCost`. Kein Code in `boot.js`/`boot-guard.js` wird veraendert - der
+> Wirkungsweg laeuft ausschliesslich ueber den geaenderten Rueckgabewert von
+> `costTruingCoveragePercent`.
+>
+> **Owner-Entscheidung 5 (2026-08-03): (a), ja, MIT den drei Nebenzaehlern.** Begruendung:
+> eine Warnung, die strukturell nie gruen werden kann (der Nenner enthielt bis zu dieser
+> Phase Calls, die NIE einen Beleg haben koennen), ist keine Warnung mehr, sondern Tapete -
+> sie trainiert darauf, die Zeile zu ueberlesen. Alternative (b) (Schwelle absenken) haette
+> eine Zahl behalten, die etwas anderes misst als ihr Name sagt. Bedingung der Zustimmung:
+> die drei Nebenzaehler bleiben SICHTBAR, auch wenn die Quote ueber der Schwelle liegt und
+> die WARN selbst nicht feuert - genau dann waere ein Belegausfall sonst am unauffaelligsten.
+>
+> **Restrisiko, bewusst getragen:** ein spaeter auftretender echter Belegausfall (z. B.
+> Adapter-Regression, die Records leise verwirft) druect die Quote weiterhin unter die
+> Schwelle und loest die WARN weiterhin aus - DAS bleibt unveraendert scharf. Was sich
+> aendert, ist ausschliesslich die Zusammensetzung des Nenners, nicht der Melde-Mechanismus.
+> Der monatliche Gegenprobe-Mechanismus (KV-M4, Provider-Rechnung gegen gebuchte Summe) ist
+> der strukturelle Schutz gegen einen Belegausfall, der sich NICHT ueber die Coverage-Quote
+> zeigt (z. B. wenn er gleichmaessig alle drei Nebenzaehler anhebt, statt die proven-Zahl zu
+> senken) - er bleibt unveraendert Teil der Kette.
+>
+> **Unberuehrt:** die pro-Tenant-Kostendecke, `OUTBOUND_FROZEN`, Signaturpruefung,
+> `disclosureSentence`, `COST_TRUING_MIN_COVERAGE_PERCENT` (Schwelle selbst NICHT
+> geaendert), der Ist-Abgleich-Mechanismus selbst (Kandidatenauswahl, Delta-Buchung,
+> Gate-Achse). Keine neue DB-Spalte, kein Backfill, keine neue Env-Variable (das
+> Belegfenster ist eine benannte Code-Konstante, KEIN Env-Hebel - dieselbe Begruendung wie
+> `SWEEP_REQUESTS_WARN_THRESHOLD`: ein Wert, den ein Operator herunterdrehen kann, um Calls
+> vorzeitig aus dem Nenner zu nehmen, ist die Sicherung, die an ihre eigene Verletzung
+> angepasst wird).
+>
+> **Rollback.** `coverageBucketOf` durch eine Fassung ersetzen, die fuer jeden beendeten Call
+> `ELIGIBLE` liefert (= alte Formel). Keine Datenwirkung, reine Log-/WARN-Verhaltensaenderung.

@@ -105,6 +105,10 @@ test("POST /api/billing/cost-truing/sweep, leerer Store: 200 + volle Zaehler-Sha
       skipped: false,
       candidates: 0,
       coveragePercent: 0,
+      // KV-M3: die drei Nebenzaehler des (jetzt engeren) Deckungsquote-Nenners.
+      coverageNoEstimate: 0,
+      coverageNeverAnswered: 0,
+      coverageOutsideWindow: 0,
       measured: 0,
       incomplete: 0,
       noEstimate: 0,
@@ -128,7 +132,11 @@ test("POST /api/billing/cost-truing/sweep mit Store-Daten: echter Sweep (Kandida
   proven.costTruedAt = new Date().toISOString();
   proven.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
   proven.actualCostMicroCents = 8636870;
+  // KV-M3: endedOutboundCall setzt kein estimatedCostCents - ohne buchbare Schaetzung
+  // waeren BEIDE Calls 'ohne_schaetzung' und aus dem (jetzt engeren) Nenner draussen.
+  proven.estimatedCostCents = 20;
   const candidate = endedOutboundCall(seed);
+  candidate.estimatedCostCents = 20;
 
   const app = await startSweepApp(seed);
   try {
@@ -139,6 +147,9 @@ test("POST /api/billing/cost-truing/sweep mit Store-Daten: echter Sweep (Kandida
       skipped: false,
       candidates: 1, // nur der noch nicht abgeglichene Call
       coveragePercent: 50, // 1 von 2 beendeten Outbound-Calls beweisbar vollstaendig
+      coverageNoEstimate: 0,
+      coverageNeverAnswered: 0,
+      coverageOutsideWindow: 0,
       measured: 0,
       incomplete: 0,
       noEstimate: 0,

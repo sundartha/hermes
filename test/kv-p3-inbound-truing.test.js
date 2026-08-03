@@ -196,24 +196,26 @@ test("KV-P3-4 Inbound und Outbound im SELBEN Sweep: jeder Call gegen seine EIGEN
 
 // Pinnt die Richtung als Absicht (Pre-Mortem TOD-E): KV-M3 aendert die FORMEL gegen diese
 // Zusage, nicht gegen einen unbeobachteten Nebeneffekt dieser Phase.
+// KV-M3: alle Fixtur-Calls brauchen zusaetzlich eine buchbare Schaetzung, sonst waeren sie
+// unabhaengig vom Beweis-Status 'ohne_schaetzung' und faelen aus dem (jetzt engeren) Nenner.
 test("KV-P3-5 Deckungsquote: ein bewiesener Inbound-Call hebt sie, ein unbewiesener senkt sie - die FORMEL bleibt unveraendert (KV-M3)", () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
 
   // Basis: 1 bewiesener Outbound-Call -> 100 %.
-  const provenOutbound = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_kvp3_5_out" } });
+  const provenOutbound = makeDueOutboundCall(state, { nowMs, estimatedCostCents: 20, legRef: { callControlId: "cc_kvp3_5_out" } });
   provenOutbound.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
   provenOutbound.costTruedAt = new Date(nowMs).toISOString();
   assert.equal(costTruingCoveragePercent(state), 100, "Basis: 1 von 1 bewiesen");
 
   // + 1 bewiesener beendeter Inbound-Call -> 100 % (Zaehler UND Nenner +1).
-  const provenInbound = makeDueInboundCall(state, { nowMs, legRef: { callControlId: "cc_kvp3_5_in" } });
+  const provenInbound = makeDueInboundCall(state, { nowMs, estimatedCostCents: 12, legRef: { callControlId: "cc_kvp3_5_in" } });
   provenInbound.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
   provenInbound.costTruedAt = new Date(nowMs).toISOString();
   assert.equal(costTruingCoveragePercent(state), 100, "2 von 2 bewiesen");
 
   // + 1 unbewiesener beendeter Inbound-Call -> floor(2*100/3) = 66 %.
-  const unprovenInbound = makeDueInboundCall(state, { nowMs, legRef: { callControlId: "cc_kvp3_5_in2" } });
+  const unprovenInbound = makeDueInboundCall(state, { nowMs, estimatedCostCents: 12, legRef: { callControlId: "cc_kvp3_5_in2" } });
   unprovenInbound.costTruedSource = COST_TRUING_SOURCE.UNAVAILABLE;
   unprovenInbound.costTruedAt = new Date(nowMs).toISOString();
   assert.equal(costTruingCoveragePercent(state), 66, "2 von 3 bewiesen");

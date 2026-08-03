@@ -404,22 +404,27 @@ test("(h3) Gegenprobe: dieselben Records mit NICHT erfuellter Pflicht-Menge -> '
 // Was UNVERAENDERT gilt und deshalb hier stehen bleibt: ein noch LAUFENDER Call
 // (endedAt === null) zaehlt in keiner Achse - das ist die Zusage, die diese Phase NICHT
 // anfasst.
+// KV-M3: seit dieser Phase zusaetzlich mit buchbarer Schaetzung UND answeredAt, sonst
+// waere keiner der Calls im (jetzt engeren) Nenner - createCall setzt answeredAt NICHT
+// automatisch (anders als makeDueOutboundCall aus dem Harness).
 test("(i) costTruingCoveragePercent: 4 von 5 beendeten Calls BEIDER Richtungen bewiesen -> 80; laufende Calls zaehlen nie; Nenner 0 -> 0 (kein Freispruch, kein NaN)", () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
   for (let i = 0; i < 3; i++) {
-    const c = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: `cc_proven_${i}` } });
+    const c = makeDueOutboundCall(state, { nowMs, estimatedCostCents: 20, legRef: { callControlId: `cc_proven_${i}` } });
     c.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
     c.costTruedAt = new Date(nowMs).toISOString();
   }
-  const unproven = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_unproven" } });
+  const unproven = makeDueOutboundCall(state, { nowMs, estimatedCostCents: 20, legRef: { callControlId: "cc_unproven" } });
   unproven.costTruedSource = COST_TRUING_SOURCE.UNAVAILABLE;
   unproven.costTruedAt = new Date(nowMs).toISOString();
 
   // Ein beendeter, BEWIESENER Inbound-Call zaehlt seit KV-P3 in Zaehler UND Nenner.
   const inbound = createCall(state, { direction: "inbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
   inbound.status = "completed";
+  inbound.answeredAt = new Date(nowMs).toISOString();
   inbound.endedAt = new Date(nowMs).toISOString();
+  inbound.estimatedCostCents = 12;
   inbound.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
   // Ein noch LAUFENDER Call (endedAt bleibt null) zaehlt weiterhin in KEINER Achse.
   createCall(state, { direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
@@ -498,7 +503,9 @@ test("(j2) Deckung bleibt COST_TRUING_COVERAGE_STALL_SWEEPS Sweeps unter der Sch
 test("(j3) Deckung ueber der Schwelle -> kein Befund, aber die Quote steht im Sweep-Log", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
-  const c = makeDueOutboundCall(state, { nowMs, legRef: { callControlId: "cc_ok" } });
+  // KV-M3: estimatedCostCents noetig, sonst waere der Call ohne Schaetzung und faellt
+  // aus dem (jetzt engeren) Nenner - die Quote waere 0%, nicht 100%.
+  const c = makeDueOutboundCall(state, { nowMs, estimatedCostCents: 20, legRef: { callControlId: "cc_ok" } });
   c.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS; // 100% Deckung
   c.costTruedAt = new Date(nowMs).toISOString();
   const store = makeStubStore(state);
@@ -764,7 +771,12 @@ test("(P5-S7) usage/spendMonth und Sweep-Rueckgabe bleiben byte-identisch (negat
   assert.deepStrictEqual(usageAfter, usageBefore, "usage-Map inkl. costCents/spendMonthCostCents unveraendert");
   assert.deepStrictEqual(
     Object.keys(result).sort(),
-    ["candidates", "coveragePercent", "failed", "incomplete", "measured", "noEstimate", "skipped", "skippedCalls", "unavailable"].sort(),
+    [
+      "candidates", "coveragePercent",
+      // KV-M3: die drei Nebenzaehler des (jetzt engeren) Deckungsquote-Nenners.
+      "coverageNoEstimate", "coverageNeverAnswered", "coverageOutsideWindow",
+      "failed", "incomplete", "measured", "noEstimate", "skipped", "skippedCalls", "unavailable",
+    ].sort(),
     "Sweep-Rueckgabe traegt genau die bekannten Zaehler/Quoten-Felder (noEstimate seit der LCT-P4-Korrektur)",
   );
 });

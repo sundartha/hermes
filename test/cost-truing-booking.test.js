@@ -290,23 +290,35 @@ test("(l) estimatedCostCents=null (Bestandszeile), Records vollstaendig -> costT
   assert.notEqual(call.costTruedAt, null, "Records lagen vor -> der Call ist abgeschlossen (kein weiterer Versuch)");
 });
 
-// ---- (p) Deckungsquote unveraendert: NO_ESTIMATE drueckt die Quote GENAU so wie zuvor
-// 'incomplete' (beide sind nicht 'telnyx_detail_records', also nicht-proven) ----
-test("(p) costTruingCoveragePercent: NO_ESTIMATE und 'incomplete' druecken die Quote identisch (Bestandszeile bleibt nicht-proven)", () => {
+// ---- (p) KV-M3: NO_ESTIMATE verlaesst den Nenner, INCOMPLETE bleibt drin ----
+//
+// VOR KV-M3 druecken beide Zustaende die Quote IDENTISCH (beide sind nicht
+// 'telnyx_detail_records', also nicht-proven) - das war exakt das Symptom aus
+// Plan-Befund N4: ein NO_ESTIMATE-Call hat per Konstruktion (truedSourceOf) NIE eine
+// buchbare Schaetzung und landet unter der neuen Formel strukturell IMMER im Bucket
+// NO_ESTIMATE, damit ausserhalb des Nenners - waehrend ein INCOMPLETE-Call (der sehr
+// wohl eine Schaetzung tragen kann) im Nenner bleibt und die Quote druecht. Das ist die
+// BEABSICHTIGTE Verhaltensaenderung dieser Phase, kein Kollateralschaden.
+test("(p) KV-M3: NO_ESTIMATE verlaesst den Nenner, INCOMPLETE bleibt drin - die Quote ist NICHT mehr identisch", () => {
   const nowMs = Date.now();
   const withNoEstimate = makeDefaultState();
-  makeDueOutboundCall(withNoEstimate, { nowMs }).costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
+  const proven = makeDueOutboundCall(withNoEstimate, { nowMs, estimatedCostCents: 20 });
+  proven.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
+  // estimatedCostCents bleibt bei diesem Call null (truedSourceOf setzt NO_ESTIMATE NUR dann).
   makeDueOutboundCall(withNoEstimate, { nowMs, legId: "cc_2" }).costTruedSource = COST_TRUING_SOURCE.NO_ESTIMATE;
 
   const withIncomplete = makeDefaultState();
-  makeDueOutboundCall(withIncomplete, { nowMs }).costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
-  makeDueOutboundCall(withIncomplete, { nowMs, legId: "cc_2" }).costTruedSource = COST_TRUING_SOURCE.INCOMPLETE;
+  const proven2 = makeDueOutboundCall(withIncomplete, { nowMs, estimatedCostCents: 20 });
+  proven2.costTruedSource = COST_TRUING_SOURCE.DETAIL_RECORDS;
+  makeDueOutboundCall(withIncomplete, { nowMs, legId: "cc_2", estimatedCostCents: 15 }).costTruedSource =
+    COST_TRUING_SOURCE.INCOMPLETE;
 
-  assert.equal(costTruingCoveragePercent(withNoEstimate), 50, "1 von 2 beweisbar vollstaendig");
-  assert.equal(
+  assert.equal(costTruingCoveragePercent(withNoEstimate), 100, "NO_ESTIMATE-Call verlaesst den Nenner - 1 von 1");
+  assert.equal(costTruingCoveragePercent(withIncomplete), 50, "INCOMPLETE-Call MIT Schaetzung bleibt im Nenner - 1 von 2");
+  assert.notEqual(
     costTruingCoveragePercent(withNoEstimate),
     costTruingCoveragePercent(withIncomplete),
-    "die Quote ist identisch, ob die Bestandszeile 'incomplete' (alt) oder NO_ESTIMATE (neu) heisst",
+    "genau der Unterschied, den KV-M3 herstellt: NO_ESTIMATE ist strukturell unbelegbar, INCOMPLETE ist ein echter Belegausfall",
   );
 });
 
