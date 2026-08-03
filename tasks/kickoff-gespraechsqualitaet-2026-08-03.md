@@ -162,12 +162,50 @@ eine Richtung, und der Pruefstand aus Schritt 1 misst nur die halbe Wahrheit.
    moeglich halten — telefonierte Minuten sind der groesste Kostenblock (Tarif 30 ct/min).
    Das ist eine **neue** Anforderung und noch nirgends umgesetzt.
 
-### Eine offene Owner-Hypothese
+### Owner-Entscheidungen vom 2026-08-03 (bindend, nicht neu aufrollen)
 
-*"Vielleicht liegt es am Modell, vielleicht ist Haiku zu doof. Dann koennen wir ja mal
-Sonnet ausprobieren."* — Das ist eine **zu pruefende Hypothese**, kein Auftrag. Sie ist
-erst dann sinnvoll pruefbar, wenn es einen Messstand gibt, der die Befunde oben reproduziert
-(s. unten). Vorher misst ein Modellwechsel nichts.
+**O-1 — Inbound und Outbound werden vereinheitlicht, ueber Weg A.** Den echten
+TeXML-Feldnamen am Live-Webhook **messen** (`INBOUND_CALL_CONTROL_ID_FIELD` steht heute auf
+dem geratenen `"CallControlId"`), dann den Inbound-Handoff scharf schalten. Danach laufen
+beide Richtungen ueber den Assistant-Pfad. **Zusatzauflage: der stille Rueckfall verschwindet.**
+Faellt der Handoff aus, muss das im Log und in einer Boot-/Turn-Sonde SICHTBAR sein — ein
+Pfad, der lautlos auf die alte Engine zurueckfaellt, ist der eigentliche Defekt (B-9).
+
+**O-2 — Die Twilio-Abstraktion wird entfernt, als EIGENE Phase** mit eigener Spec und
+eigenem Review, nicht nebenbei. Gemessene Grundlage: 43 von 43 Anrufen und 3 von 3 Nummern
+sind Telnyx, Twilio hat live nie einen Anruf gefuehrt. Die Phase beruehrt
+`src/telephony/` (Ports, Registry, Adapter) und die Capability-Weichen. **Sie blockiert O-1
+nicht und laeuft nicht parallel dazu.**
+
+**O-3 — "So kurz wie moeglich" ist eine MESSGROESSE, keine Kappe.** Turns und Dauer je
+**erledigtem** Auftrag werden gemessen und als Ziel im Prompt verankert. **Keine harte
+Turn- oder Sekundengrenze** — eine Kappe schneidet Gespraeche mitten durch. (Die bestehende
+Max-Dauer-Notbremse als Safety-Gate bleibt davon unberuehrt.)
+
+**O-4 — Der Modellwechsel Haiku -> Sonnet wird gemessen, nicht geraten.** A/B-Lauf auf dem
+Pruefstand, **erst nachdem** dieser die Befunde reproduziert. Der Bench weist Kosten je
+Gespraech aus; die Entscheidung faellt an Qualitaet UND Preis. Vorher wird das Modell nicht
+angefasst.
+
+**O-5 — Token-Streaming bleibt AN.** Es ist die einzige nachweislich funktionierende
+Verbesserung der letzten Kette (19/19 Runden armiert).
+
+### Noch offen — der Owner hat sie gesehen, aber noch nicht entschieden
+
+Diese Punkte sind ihm am 03.08. vorgelegt worden. **Nicht selbst entscheiden, sondern
+vorlegen, sobald sie den Weg kreuzen:**
+
+| | Frage | Empfehlung, die ihm vorlag |
+|---|---|---|
+| B-1 | AL-D3 behalten oder zuruecknehmen? (gemergt, gemessen wirkungslos) | behalten — entfernt eine Falschaussage, bringt den Sprach-Paritaetstest |
+| B-2 | Die fremde auth-gate-Kette liegt gemergt auf `master` und **blockiert jeden Deploy von dort** (Basic-Gate entfernt, kein Account mit `role='admin'`) | Blocker schliessen, BEVOR wieder `master` deployt wird |
+| B-3 | US-DID (`+1706...`) bei Plattform-Land DE — deutsche Nummer? | +49-DID, US->DE-Zustellung ist dokumentiert sporadisch |
+| B-4 | `sms_summary_skipped reason=no_private_number` — aufgenommene Nachrichten kommen nie an | private Nummer hinterlegen, sonst ist `take_message` wirkungslos |
+| C-1 | `diagnostic: true` wird vom Server ignoriert (in der DB steht `false`) | reparieren, sonst ist Anruf-Forensik Glueckssache |
+| C-2 | Inbound hat gar kein Rohtranskript, nur die Zusammenfassung | gezielter Diagnosemodus statt hoeherer Aufbewahrung |
+| C-3 | **Datenschutzerklaerung** nennt weder die woertlichen Zitate Dritter (`EVIDENCE_RETENTION_DAYS=7`) noch das anrufuebergreifende Gedaechtnis (`allow_call_memory=true`) — beides seit 01.08. live | offene Pflicht, keine Geschmacksfrage |
+| D-1 | Zwei Sessions arbeiten parallel auf `master` (am 03.08. dreimal waehrend einer laufenden Welle gemergt) | eine Session je Kette, oder getrennte Integrationszweige |
+| D-2 | Pruefstand: nur Outbound oder auch Inbound? | mit Outbound starten, Inbound nachziehen sobald C-1/C-2 stehen |
 
 ### Warum 17 gruene Phasen nichts gebracht haben — lies das, bevor du planst
 
