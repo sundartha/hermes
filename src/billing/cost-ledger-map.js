@@ -121,9 +121,17 @@ export const COST_LEDGER_MAP = Object.freeze({
     ledger: false,
     gate: false,
     preisquelle:
-      "KEIN Preis-Parameter existiert repo-weit fuer Play-TTS-Zeichen (recordTtsCharacters/ " +
-      "recordTenantTtsCharacters zaehlen NUR Zeichen, nie Cents). Weder Ledger noch Gate " +
-      "sind erreichbar, weil es nichts zu buchen gibt, das einen Betrag traegt.",
+      "KEIN Preis-Parameter existiert repo-weit fuer die vom PLAY-TTS-PFAD selbst " +
+      "synthetisierten Zeichen (recordTtsCharacters/recordTenantTtsCharacters zaehlen NUR " +
+      "Zeichen, nie Cents) - unser Server erzeugt die Audiodatei selbst, Telnyx stellt " +
+      "dafuer keinen Beleg aus. Weder Ledger noch Gate sind fuer DIESEN Pfad erreichbar; " +
+      "gedeckt ist nur die ElevenLabs-Monatsgebuehr als Fixkosten-ANZEIGE " +
+      "(PLATFORM_FIXED_COST_CENTS_PER_MONTH), kein Betrag pro Anruf (KV-P7-Klaerung, " +
+      "tasks/kv-p7-tts-klaerung.md). KORREKTUR (KV-P7, C2): das gilt NUR fuer diese Zeile - " +
+      "von TELNYX selbst berechnetes TTS-Geld ist eine ANDERE Kostenart und erreicht die " +
+      "Gate-Achse sehr wohl, weil text-to-speech ein ASSIGNABLE_COST_RECORD_TYPES-Beleg ist " +
+      "(sumRecordMicroCents ist typ-blind) und ueber den Ist-Abgleich (cost-truing.js, " +
+      "richtungsoffen seit KV-P3) in applyCostCorrectionCents gebucht wird.",
   },
 });
 

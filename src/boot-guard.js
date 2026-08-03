@@ -471,3 +471,49 @@ export function costTruingBookingFindings({
   }
   return findings;
 }
+
+// KV-P7: zwei latente Kosten-Pfade, beide WARN (kein exit(1) - ein Guard, der den Boot in
+// einer Konfiguration verweigert, an die niemand gedacht hat, waere ein selbst
+// verursachter Telefonie-Totalausfall, Praezedenz warnUnpricedModels). Beide Befunde
+// machen eine bestehende, blinde Sicherung LAUT statt sie zu verschaerfen - Klaerung s.
+// tasks/kv-p7-tts-klaerung.md.
+export const LATENT_COST_PATH_FINDING = Object.freeze({
+  PLAY_TTS_UNPRICED: "play_tts_unpriced", // WARN
+  REALTIME_NO_MIDCALL_BUDGET: "realtime_no_midcall_budget", // WARN
+});
+
+// Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster alertChannelFindings).
+// realtimeMidCallBudgetCheck OHNE Default (kein "= false"): ein vergessenes Argument soll
+// einen UEBERFLUESSIGEN WARN erzeugen, nie ein stilles Verstummen der Pruefung - die
+// richtige Fehlrichtung fuer einen Sicherheits-Guard.
+export function latentCostPathFindings({ playTtsEnabled, realtimeEngineSelected, realtimeMidCallBudgetCheck }) {
+  const findings = [];
+  if (playTtsEnabled) {
+    findings.push({
+      code: LATENT_COST_PATH_FINDING.PLAY_TTS_UNPRICED,
+      fatal: false,
+      message:
+        "ELEVENLABS_PLAY_TTS_ENABLED=true - die von diesem Pfad selbst synthetisierten " +
+        "Zeichen erzeugen KEINEN Telnyx-Beleg und erreichen deshalb weder den Stripe-Ledger " +
+        "noch die Gate-Achse (der Ist-Abgleich sieht nur, was der Provider abrechnet). " +
+        "Gedeckt sind nur die ElevenLabs-Monatsgebuehr als Fixkosten-ANZEIGE " +
+        "(PLATFORM_FIXED_COST_CENTS_PER_MONTH) und der Zeichenzaehler TTS_CHARACTER_QUOTA. " +
+        "Handlung: ELEVENLABS_PLAY_TTS_ENABLED=false lassen, bis entschieden ist, wie diese " +
+        "Monatsgebuehr auf Anrufe umgelegt wird (Preisfrage, tasks/kv-p7-tts-klaerung.md).",
+    });
+  }
+  if (realtimeEngineSelected && !realtimeMidCallBudgetCheck) {
+    findings.push({
+      code: LATENT_COST_PATH_FINDING.REALTIME_NO_MIDCALL_BUDGET,
+      fatal: false,
+      message:
+        "VOICE_ENGINE=realtime, aber die Realtime-Bruecke prueft nach Gespraechsbeginn " +
+        "KEINE Geld-Achse mehr - nur einen Max-Dauer-Timer (src/bridge.js). Die " +
+        "Budget-Engine prueft blockingBudgetAxis vor JEDER Turn-Runde (src/claude.js, " +
+        "roundStopReason); ein Tenant kann seine Kostendecke im laufenden Gespraech " +
+        "ueberziehen. Handlung: VOICE_ENGINE=budget lassen, bis die Bruecke dieselbe " +
+        "Pruefung fuehrt (dann REALTIME_MID_CALL_BUDGET_CHECK in src/bridge.js auf true).",
+    });
+  }
+  return findings;
+}

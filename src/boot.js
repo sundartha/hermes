@@ -20,6 +20,7 @@ import {
   planCapReserveFindings,
   bootstrapHealDecision,
   BOOTSTRAP_HEAL,
+  latentCostPathFindings,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
@@ -28,7 +29,7 @@ import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 // Provider-Konstante, kein Transport: dieselbe Richtung wie telnyx-call-control-ingest.js
 // (assistantVoiceConfigured).
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
-import { attachMediaBridge } from "./bridge.js";
+import { attachMediaBridge, REALTIME_MID_CALL_BUDGET_CHECK } from "./bridge.js";
 import {
   USAGE_EVENT_KIND,
   BOOTSTRAP_TENANT_ID,
@@ -281,13 +282,26 @@ function warnMissingProvisioningConnection(config) {
   );
 }
 
+// KV-P7: zwei latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
+// boot-guard.js fuer die Begruendung je Befund). WARN, kein exit(1) - Muster
+// warnUnpricedModels. realtimeMidCallBudgetCheck kommt aus GENAU EINER Quelle
+// (REALTIME_MID_CALL_BUDGET_CHECK, src/bridge.js) - kein zweites Flag hier.
+function warnLatentCostPaths(config) {
+  const findings = latentCostPathFindings({
+    playTtsEnabled: config.voice.elevenLabsPlayTts.enabled,
+    realtimeEngineSelected: config.voice.voiceEngine === VOICE_ENGINE.REALTIME,
+    realtimeMidCallBudgetCheck: REALTIME_MID_CALL_BUDGET_CHECK,
+  });
+  for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+}
+
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste und assertCostTruingBooking
 // (LCT P4) das siebte, das noch process.exit(1) rufen kann - warnUnpricedModels/
 // warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
-// warnMissingProvisioningConnection sind reine Diagnose (nie fatal).
+// warnMissingProvisioningConnection/warnLatentCostPaths sind reine Diagnose (nie fatal).
 function assertBootGates(config, store) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -353,6 +367,7 @@ function assertBootGates(config, store) {
   warnTurnOutlivesDeadAir(config); // AL-P6, WARN
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
+  warnLatentCostPaths(config); // KV-P7, WARN
 }
 
 // Welche Budget-Achse die Gates messen (Budget-Achsen P7). Eigene Funktion, damit die
@@ -562,6 +577,20 @@ export function costConfigBannerLines({ billing, llm, voice }) {
   ];
 }
 
+// KV-P7: Deckungshinweis des ElevenLabs-Kontingents - PERMANENT im Banner, unabhaengig von
+// jedem Flag (Play-TTS an/aus, Relay an/aus). Der Zaehler ist seit dieser Phase nicht mehr
+// blind (Massnahme 3, recordRelayTtsCharacters), bleibt aber eine UNTERGRENZE: Zeichen
+// kommen erst verzoegert an (Ist-Abgleich, nicht Echtzeit) und nur bei vollstaendigem
+// Beleg-Pool (complete:true) - genau der Rest, aus dem sonst wieder falsche Sicherheit
+// abgeleitet wuerde. Reine Funktion (Muster costConfigBannerLines) gegen die AUFGELOESTE
+// Config, NICHT process.env.
+export function ttsQuotaCoverageBannerLine(billing) {
+  return (
+    `ElevenLabs-Kontingent: TTS_CHARACTER_QUOTA=${billing.ttsCharacterQuota} Zeichen/Zyklus | ` +
+    "Relay-Verbrauch: nachtraeglich ueber den Ist-Abgleich gezaehlt (UNTERGRENZE - nur belegte Anrufe)"
+  );
+}
+
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -620,6 +649,9 @@ function logBootBanner(config, port) {
   // KV-M0: sieben in Prod bisher nicht lesbare Werte - entsperrt jede Zahl der
   // Kosten-Vollstaendigkeits-Rechnung fuer kuenftige Untersuchungen (Muster capabilityProbeLines).
   for (const line of costConfigBannerLines(config)) console.log(`  ${line}`);
+  // KV-P7: eigene Zeile, NICHT Teil der KV-M0-Dreiergruppe oben (die bleibt unangetastet) -
+  // permanenter Deckungshinweis des ElevenLabs-Kontingents, unkonditional gedruckt.
+  console.log(`  ${ttsQuotaCoverageBannerLine(config.billing)}`);
 }
 
 // GAP-38: heilt einen nachweislich frischen Store aus den Deploy-Parametern - der Ersatz

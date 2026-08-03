@@ -716,6 +716,16 @@ export function recordTenantTtsCharacters(tenantId, chars) {
   return r;
 }
 
+// KV-P7 (Massnahme 3): Telnyx-Relay-Verbrauch - PERSISTIERT ZWEI Tabellen (usage-Bucket
+// des Tenants UND platformTtsUsage) -> save() deckt beide (EIN load()/save()-Zyklus,
+// Muster recordTtsCharacters). Rueckgabe-Parity zu recordTtsCharacters (nur die Warnung,
+// nicht das interne {changed}).
+export function recordRelayTtsCharacters(tenantId, chars, nowIso) {
+  const r = ops.recordRelayTtsCharacters(load(), { tenantId, chars, cfg: config.billing, nowIso });
+  if (r.changed) save();
+  return r.warning;
+}
+
 // ---- KV-M4: Riegel der monatlichen Gegenprobe ----
 // PERSISTIERT (Muster recordTtsCharacters) -> save() NUR bei tatsaechlicher Aenderung
 // (laterMonotonicKey kann bei einem bereits gestempelten/zukuenftigen Monat No-op sein).

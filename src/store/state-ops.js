@@ -3129,27 +3129,26 @@ function ttsCycleWindowKey(row, cfg, nowIso) {
   return laterMonotonicKey(row.cycleKey, ttsCycleKeyOf(nowIso, cfg.ttsQuotaCycleAnchorDay));
 }
 
-// Verbucht erfolgreich an ElevenLabs gesendete Zeichen auf dem globalen Zaehler UND auf dem
-// reservierten Kostentraeger (GAP-09), und meldet die Warnschwelle GENAU EINMAL je Zyklus
-// (Muster claimPlatformSpendWarning). nowIso kommt vom Aufrufer (state-ops bleibt zeit-frei).
+// Kern-Buchung des ElevenLabs-PLATTFORM-Kontingents (Zyklus-Schluessel, Zaehler,
+// Warnungs-Union - EINE Aufgabe, G30). KV-P7: aus recordTtsCharacters herausgezogen, weil
+// den Kontingent-Zaehler ab jetzt ZWEI Verbraucher mit VERSCHIEDENEN Kostentraegern
+// speisen - Play-TTS (reservierter Kostentraeger PLATFORM_TTS_COST_CENTER_ID) und der
+// Telnyx-Relay-Pfad (echter Tenant-Bucket, recordRelayTtsCharacters unten). EIN
+// ElevenLabs-Konto = EIN Kontingent (G5) - beide teilen sich diese Funktion, keine zweite
+// Zyklus-/Schwellen-Logik.
 // Liefert {changed, warning}; warning ist eine unterschiedene Union:
 //   {characters, quota, cycleKey}                  = Warnschwelle (genau einmal je Zyklus, Alarm-Pflicht)
 //   dieselben Felder + exhausted:true              = Kontingent erschoepft (jede Buchung, Riegel-Pflicht, KEIN Alarm)
 //   null                                           = nichts zu melden
 // Ganzzahl-Arithmetik durchweg (G26); Zukunfts-/Unlesbar-Riegel ueber laterMonotonicKey
 // (dieselbe Regel wie die Spend-Monat-Achse, G5).
-export function recordTtsCharacters(s, chars, cfg, nowIso) {
+function bumpPlatformTtsQuota(s, chars, cfg, nowIso) {
   const row = s.platformTtsUsage;
   const key = ttsCycleWindowKey(row, cfg, nowIso);
   if (key === null) return { changed: false, warning: null }; // kein Anker je gestempelt UND Uhr unlesbar -> No-op
   const charactersBefore = key !== row.cycleKey ? 0 : row.characters; // Rollover startet frisch
   row.characters = charactersBefore + chars;
   row.cycleKey = key;
-  // GAP-09: derselbe Betrag zusaetzlich auf den reservierten Kostentraeger - ueber die
-  // BESTEHENDE Erhoehungsregel (G5: recordTenantTtsCharacters bringt die Ganzzahl-/<=0-
-  // Riegel schon mit). Lebenszeit-Summe wie dort; nach einem Zyklus-Rollover liegt die
-  // Bucket-Summe damit UEBER dem Zyklus-Zaehler - "deckt" ist >=, nicht ==.
-  recordTenantTtsCharacters(s, PLATFORM_TTS_COST_CENTER_ID, chars);
   const notice = { characters: row.characters, quota: cfg.ttsCharacterQuota, cycleKey: key };
   // GAP-09: war das Kontingent schon VOR dieser Buchung erschoepft, ist diese Buchung reine
   // Overage -> eigene Meldeform (Marker exhausted), damit der Play-TTS-Pfad auf Azure-<Say>
@@ -3166,6 +3165,39 @@ export function recordTtsCharacters(s, chars, cfg, nowIso) {
     return { changed: true, warning: notice };
   }
   return { changed: true, warning: null };
+}
+
+// Verbucht erfolgreich an ElevenLabs gesendete Play-TTS-Zeichen auf dem globalen Zaehler UND
+// auf dem reservierten Kostentraeger (GAP-09). nowIso kommt vom Aufrufer (state-ops bleibt
+// zeit-frei). KV-P7: BYTE-IDENTISCHES Verhalten zum Bestand (reine Aufteilung, kein
+// Verhaltenswechsel) - der fruehere unbedingte Kostentraeger-Aufruf lag hinter dem
+// key===null-Early-Return, also GENAU hinter `changed`, wie hier.
+export function recordTtsCharacters(s, chars, cfg, nowIso) {
+  const result = bumpPlatformTtsQuota(s, chars, cfg, nowIso);
+  // GAP-09: derselbe Betrag zusaetzlich auf den reservierten Play-TTS-Kostentraeger - ueber
+  // die BESTEHENDE Erhoehungsregel (G5: recordTenantTtsCharacters bringt die Ganzzahl-/<=0-
+  // Riegel schon mit).
+  if (result.changed) recordTenantTtsCharacters(s, PLATFORM_TTS_COST_CENTER_ID, chars);
+  return result;
+}
+
+// KV-P7 (Massnahme 3): der Telnyx-Relay-Pfad synthetisiert TTS SERVERSEITIG bei Telnyx -
+// dieselben ElevenLabs-Zeichen wie Play-TTS, aber OHNE je recordTtsCharacters aufzurufen
+// (dessen einziger Aufrufer ist tts/directive-synth.js, hinter
+// config.voice.elevenLabsPlayTts.enabled). Der Kontingent-Zaehler sah diesen Verbrauch
+// strukturell nie, unabhaengig davon ob Play-TTS an oder aus ist. Diese Funktion schliesst
+// die Luecke: die Zeichen gehen auf den ECHTEN Tenant-Bucket (NICHT auf
+// PLATFORM_TTS_COST_CENTER_ID - der Verbrauch stammt nicht von dort, anders als bei
+// recordTtsCharacters), UND auf denselben Plattform-Zyklus-Zaehler (EIN ElevenLabs-Konto =
+// EIN Kontingent, G5 - keine zweite Zyklus-/Schwellen-Logik).
+// recordTenantTtsCharacters ist die EINE Gueltigkeitsregel (nicht-ganzzahlig/<=0 -> nichts
+// bewegt sich, kein zweiter Riegel hier). changed:true, sobald der Tenant-Bucket stieg -
+// auch wenn der Zyklus-Zaehler bei unlesbarer Uhr aussetzt (bumpPlatformTtsQuota liefert
+// dann warning:null): sonst verloere die Fassade den bereits geschriebenen Tenant-Wert.
+export function recordRelayTtsCharacters(s, { tenantId, chars, cfg, nowIso }) {
+  const tenant = recordTenantTtsCharacters(s, tenantId, chars);
+  if (!tenant.changed) return { changed: false, warning: null };
+  return { changed: true, warning: bumpPlatformTtsQuota(s, chars, cfg, nowIso).warning };
 }
 
 // Reine Leseprojektion fuer den Anzeige-Endpunkt (kein Gate). Zyklus-korrekt: nach einem

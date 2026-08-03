@@ -11,7 +11,7 @@ process.env.PROVIDER_CURRENCY = "USD";
 
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
 const { makeCostTruing, SWEEP_TRIGGER } = await import("../src/billing/cost-truing.js");
-const { makeDefaultState, usageFor } = await import("../src/store/state-ops.js");
+const { makeDefaultState, usageFor, platformTtsUsageView } = await import("../src/store/state-ops.js");
 const {
   makeStubStore, fakeConfig, makeDueOutboundCall, fakeVoiceControl, isoMinutesAgo,
   stubCountingFetch, foreignSipTrunkingPage, NEVER_LAST_PAGE_TOTAL,
@@ -181,4 +181,89 @@ test("(P6-7) unvollstaendiger Pool -> keine Zeichen (dieselbe fail-closed-Asymme
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
   assert.equal(usageFor(state, TENANT_A).ttsCharacters, 0);
+});
+
+// ---- KV-P7 (Massnahme 3, Sweep-Ebene): Relay-Verbrauch im Kontingent-Zaehler ------------
+// Der Sweep bucht ueber store.recordRelayTtsCharacters (cost-truing.js, bookTtsCharactersFor)
+// - dieselbe Zuordnung wie oben (P6-5/P6-6), zusaetzlich am PLATTFORM-Zyklus-Zaehler
+// geprueft statt nur am Tenant-Bucket.
+
+test("KV-P7-12: Relay-Verbrauch landet NACH dem Sweep im Kontingent-Zaehler; zweiter Sweep aendert nichts (costTruedAt)", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  makeDueOutboundCall(state, { nowMs, tenantId: TENANT_A, legRef: { callControlId: ANCHOR_A } });
+  const store = makeStubStore(state);
+  const at = isoMinutesAgo(nowMs, ENDED_MINUTES_AGO);
+  stubCountingFetch({
+    bodyFor: (recordType) => {
+      if (recordType === "sip-trunking")
+        return { data: [sipTrunkingRecord({ callControlId: ANCHOR_A, sessionId: SESSION_A, cost: "0.0401", billedSec: 60, at })] };
+      if (recordType === "text-to-speech")
+        return { data: [ttsRecord({ sessionId: SESSION_A, chars: 238, cost: "1.666E-4" })] };
+      return { data: [] };
+    },
+  });
+  const config = fakeConfig();
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({ telnyx: telnyxVoice }), audit: () => {}, now: () => nowMs,
+  });
+
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  const nowIso = new Date(nowMs).toISOString();
+  assert.equal(platformTtsUsageView(state, config.billing, nowIso).characters, 238);
+
+  await runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL });
+  assert.equal(
+    platformTtsUsageView(state, config.billing, nowIso).characters, 238,
+    "zweiter Sweep bucht NICHT erneut - costTruedAt ist der Riegel",
+  );
+});
+
+test("KV-P7-13: Warnschwelle laeuft ueber den bestehenden Befundkanal (WARN + Audit), KEINE SMS", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  makeDueOutboundCall(state, { nowMs, tenantId: TENANT_A, legRef: { callControlId: ANCHOR_A } });
+  // Kontingent klein: 238 Zeichen ueberschreiten 50% von 300 (=150) sofort.
+  const config = fakeConfig({ ttsCharacterQuota: 300, ttsCharacterQuotaWarnPercent: 50 });
+  const store = makeStubStore(state, { billing: config.billing });
+  const at = isoMinutesAgo(nowMs, ENDED_MINUTES_AGO);
+  stubCountingFetch({
+    bodyFor: (recordType) => {
+      if (recordType === "sip-trunking")
+        return { data: [sipTrunkingRecord({ callControlId: ANCHOR_A, sessionId: SESSION_A, cost: "0.0401", billedSec: 60, at })] };
+      if (recordType === "text-to-speech")
+        return { data: [ttsRecord({ sessionId: SESSION_A, chars: 238, cost: "1.666E-4" })] };
+      return { data: [] };
+    },
+  });
+
+  const warns = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warns.push(args.join(" "));
+  const auditCalls = [];
+  const audit = (event, req, detail) => auditCalls.push({ event, req, detail });
+  const smsCalls = [];
+  const messaging = () => ({
+    async sendSms(args) {
+      smsCalls.push(args);
+    },
+  });
+  const { runCostTruingSweep } = makeCostTruing({
+    store, config, voiceControl: fakeVoiceControl({ telnyx: telnyxVoice }), audit, messaging, now: () => nowMs,
+  });
+  try {
+    await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.ok(
+    warns.some((w) => w.includes("grund=tts_quota_warn_threshold")),
+    `erwartet WARN mit grund=tts_quota_warn_threshold:\n${warns.join("\n")}`,
+  );
+  assert.equal(
+    auditCalls.filter((c) => c.detail.includes("tts_quota_warn_threshold")).length, 1,
+    "genau EINE Audit-Zeile fuer die Warnschwelle",
+  );
+  assert.equal(smsCalls.length, 0, "der Sweep-Weg loest KEINE SMS aus (der Play-TTS-Pfad alarmiert separat)");
 });
