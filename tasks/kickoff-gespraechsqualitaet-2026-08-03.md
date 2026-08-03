@@ -128,13 +128,20 @@ also nicht OB vereinheitlicht wird, sondern wie:
 - **Weg B:** den Inbound-Assistant-Stub loeschen und bewusst auf die Budget-Engine setzen,
   dann aber fuer BEIDE Richtungen.
 
-**Ehrliche Einschraenkung zu "ein Pfad":** die Budget-Engine kann nicht ersatzlos
-verschwinden — Twilio hat die Assistant-Faehigkeit nicht (`providerSupports(provider,
-CAPABILITY.AI_ASSISTANT)`), sie bleibt also der Weg fuer diesen Provider. Erreichbar und zu
-fordern ist deshalb nicht "eine Engine im Code", sondern: **dieselbe Erfahrung unabhaengig
-von der Richtung, und kein Rueckfall ohne Sonde.** Ausserdem gilt die dokumentierte Grenze
-weiter: echtes Barge-in gibt es nur ueber den Streaming-/Assistant-Pfad, TeXML-Gather kann
-es nicht — das ist der sachliche Grund, warum der Assistant-Pfad ueberhaupt gebaut wurde.
+**Twilio ist KEIN Gegenargument — an der Prod-DB gemessen (03.08.):** ueber alle drei
+Tenants sind **43 von 43 Anrufen und 3 von 3 Nummern `provider=telnyx`**. Twilio hat live
+nie einen Anruf gefuehrt. Der Capability-Waechter `providerSupports(provider,
+CAPABILITY.AI_ASSISTANT)`, der die Budget-Engine formal noch rechtfertigt, schuetzt also
+einen Provider, der nie benutzt wurde. Wer die Vereinheitlichung mit "aber Twilio kann das
+nicht" abwehrt, argumentiert gegen Verkehr, den es nicht gibt. **Ob die Twilio-Abstraktion
+insgesamt bleibt, ist eine EIGENE Owner-Entscheidung** (Anbieter-Unabhaengigkeit gegen
+Einfachheit) und gehoert nicht nebenbei in diese Kette entschieden — sie blockiert die
+Vereinheitlichung von Inbound/Outbound aber nicht.
+
+Was sachlich bleibt: echtes Barge-in gibt es nur ueber den Streaming-/Assistant-Pfad,
+TeXML-Gather kann es prinzipiell nicht (`barge-in-telnyx-texml-limitation`). Das ist der
+Grund, warum der Assistant-Pfad gebaut wurde — und ein Argument DAFUER, ihn auch inbound
+scharf zu bekommen, nicht dagegen.
 
 **Das gehoert VOR die Befund-Phasen B-1..B-7 in die Reihenfolge**, mindestens als Messung:
 solange inbound und outbound verschiedene Maschinen sind, gilt jeder Befund oben nur fuer
