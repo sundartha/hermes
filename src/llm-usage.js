@@ -61,6 +61,8 @@ function billedTokens(usage, model) {
 // Stelle (G5) fuer ALLE drei Aufrufer (agentTurn, summarizeCall in claude.js UND
 // fetchPrecallBriefing in precall-briefing.js). Reihenfolge (trackUsage vor
 // meterAiTokens) unveraendert. Nebeneffekte im Namen (N7).
+// KV-P1: diese Buchung ist die Zeile ai_token der Kosten-Landkarte
+// (src/billing/cost-ledger-map.js).
 export function bookTokenUsage({ tenantId, callId, usage, model }) {
   const tokens = billedTokens(usage, model);
   store.trackUsage(tenantId, tokens, config.llm);
@@ -105,6 +107,8 @@ export function estimatedAbortUsage({ promptChars, maxTokens }) {
 //
 // searches = 0 -> No-Op (kein Muell-Beleg, keine 0-Buchung im Log). Nebeneffekt im
 // Namen (N7); der Aufrufer entscheidet OB, diese Stelle nur WOHIN.
+// KV-P1: diese Buchung ist (zusammen mit bookLookupSearchFee darunter) die Zeile
+// research_fee der Kosten-Landkarte (src/billing/cost-ledger-map.js).
 export function bookResearchSearchFee({ tenantId, searches }) {
   if (!searches) return;
   store.addResearchFeeCostCents(tenantId, searches * config.research.researchSearchFeeCents);
