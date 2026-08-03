@@ -238,6 +238,50 @@ stehen (vorher gibt es dort kein Rohmaterial).
 genannt). Begruendung des Owners: hat mit der Optimierung des Agenten nichts zu tun.
 **Nicht in dieser Kette anfassen und nicht erneut vorlegen.**
 
+### O-14 — Diese Kette startet NACH der KV-Kette (Owner, 2026-08-03)
+
+Parallel laeuft die Kette **KV (Kosten-Vollstaendigkeit)**,
+`tasks/PLAN-KOSTEN-VOLLSTAENDIGKEIT.md`. Sie geht vor. **Nicht parallel starten** — zwei
+Worktree-Workflows ueberlasten die Maschine, und jeder `master`-Commit der einen Kette
+erzeugt in der anderen einen falsch-positiven Stale-Base-Blocker (am 03.08. dreimal
+passiert).
+
+Der Grund ist aber nicht nur Betrieb, sondern Sachlage: **KV schliesst ein offenes
+Kostenleck auf einer oeffentlich waehlbaren Nummer** (Inbound ist heute weder vom
+Kosten-Gate noch vom Minuten-Kontingent gebremst), und **diese Kette wuerde das Leck vorher
+vergroessern**. Kosten-Gates haben Vorrang (CLAUDE.md).
+
+**Drei Uebergabepunkte, die beim Start dieser Kette zu pruefen sind:**
+
+1. **O-1 macht eine KV-Messung ungueltig.** KV-M1 hat den Inbound-Ist-Satz an genau dem
+   Anruf gemessen, der auch B-8 belegt (`call_msczw0irl06s`), unter der ausdruecklich
+   festgehaltenen Konfiguration `VOICE_ENGINE=budget`: **1,87 US-Cent je angefangener
+   Minute.** Der Assistant-Pfad kostet laut demselben Plan **~5 US-Cent je angefangener
+   Minute**. Verschiebt O-1 den Inbound-Verkehr dorthin, **verdreifacht sich der
+   Inbound-Minutenpreis** und KV-P2s Tarif samt Decken-Rechnung stimmt nicht mehr.
+   **Pflicht: KV-M1 nach O-1 auf dem Assistant-Pfad wiederholen** und den Tarif neu
+   kalibrieren. KV-P2 hat dafuer EINE Tarif-Quelle mit fail-closed-Rueckfall — es ist eine
+   Messung, kein Umbau. **Im Kettenstand ankuendigen, nicht stillschweigend tun.**
+
+2. **O-2 (Twilio raus) darf `twilioSid` NICHT anfassen.** Das Feld traegt trotz seines
+   Namens den **Telnyx**-TeXML-Leg-Token:
+   `const providerLegIdOf = (call) => call.twilioSid || call.callControlId || null;`
+   (`src/billing/cost-truing.js:77`, Kommentar dazu in
+   `src/telephony/adapters/telnyx/voice.js:112`). Die gesamte Ist-Kosten-Zuordnung haengt
+   daran — KV-M1 hat ueber genau diesen Anker zugeordnet (`v3:zkVIbQTK…`). Im Quellcode
+   haengen ~39 Stellen am Namen. **Ein Rebrand oder eine Entfernung dieses Feldes ist eine
+   EIGENE Phase mit Datenmigration, nicht Teil der Twilio-Aufraeumung.** Wer das
+   uebersieht, koepft die Kostenzuordnung.
+
+3. **Gemeinsame Dateien.** KV fasst `src/billing/metering.js`, `src/billing/cost-truing.js`,
+   `src/telephony/adapters/telnyx/voice.js` und die Budget-Achsen-Pruefung in
+   `src/claude.js` / `src/telnyx-llm-shim.js` an. Diese Kette fasst `src/routes/voice.js`,
+   `src/telnyx-inbound.js`, `src/telephony/**`, `src/claude.js` und
+   `src/i18n/prompts/*.js` an. **Ueberschneidung: `src/claude.js`, `src/telnyx-llm-shim.js`
+   und `src/telephony/**`.** Vor dem Start dieser Kette: `git log --oneline` gegen den
+   Stand pruefen, auf dem die Befunde B-1..B-9 erhoben wurden — aendert KV dort etwas, sind
+   die Befunde **neu zu messen**, bevor eine Phase darauf gebaut wird.
+
 ### Warum 17 gruene Phasen nichts gebracht haben — lies das, bevor du planst
 
 **Der Feedback-Loop war kaputt, nicht der Arbeitsablauf.** Jede Phase wurde gegen `npm test`
