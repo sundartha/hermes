@@ -190,22 +190,53 @@ angefasst.
 **O-5 — Token-Streaming bleibt AN.** Es ist die einzige nachweislich funktionierende
 Verbesserung der letzten Kette (19/19 Runden armiert).
 
-### Noch offen — der Owner hat sie gesehen, aber noch nicht entschieden
+### Weitere Owner-Entscheidungen vom 2026-08-03 (bindend)
 
-Diese Punkte sind ihm am 03.08. vorgelegt worden. **Nicht selbst entscheiden, sondern
-vorlegen, sobald sie den Weg kreuzen:**
+**O-6 — AL-D3 bleibt.** Gemergt, gemessen wirkungslos, aber es entfernt eine Falschaussage
+(`take_message` behauptete, Nachschlagen sei eine fehlende Faehigkeit — seit AL-P10b unwahr)
+und bringt den Sprach-Paritaetstest, den es vorher nicht gab. Kein Rueckbau.
 
-| | Frage | Empfehlung, die ihm vorlag |
-|---|---|---|
-| B-1 | AL-D3 behalten oder zuruecknehmen? (gemergt, gemessen wirkungslos) | behalten — entfernt eine Falschaussage, bringt den Sprach-Paritaetstest |
-| B-2 | Die fremde auth-gate-Kette liegt gemergt auf `master` und **blockiert jeden Deploy von dort** (Basic-Gate entfernt, kein Account mit `role='admin'`) | Blocker schliessen, BEVOR wieder `master` deployt wird |
-| B-3 | US-DID (`+1706...`) bei Plattform-Land DE — deutsche Nummer? | +49-DID, US->DE-Zustellung ist dokumentiert sporadisch |
-| B-4 | `sms_summary_skipped reason=no_private_number` — aufgenommene Nachrichten kommen nie an | private Nummer hinterlegen, sonst ist `take_message` wirkungslos |
-| C-1 | `diagnostic: true` wird vom Server ignoriert (in der DB steht `false`) | reparieren, sonst ist Anruf-Forensik Glueckssache |
-| C-2 | Inbound hat gar kein Rohtranskript, nur die Zusammenfassung | gezielter Diagnosemodus statt hoeherer Aufbewahrung |
-| C-3 | **Datenschutzerklaerung** nennt weder die woertlichen Zitate Dritter (`EVIDENCE_RETENTION_DAYS=7`) noch das anrufuebergreifende Gedaechtnis (`allow_call_memory=true`) — beides seit 01.08. live | offene Pflicht, keine Geschmacksfrage |
-| D-1 | Zwei Sessions arbeiten parallel auf `master` (am 03.08. dreimal waehrend einer laufenden Welle gemergt) | eine Session je Kette, oder getrennte Integrationszweige |
-| D-2 | Pruefstand: nur Outbound oder auch Inbound? | mit Outbound starten, Inbound nachziehen sobald C-1/C-2 stehen |
+**O-7 — Der auth-gate-Blocker wird geschlossen, BEVOR wieder von `master` deployt wird.**
+Auf `master` liegt eine fremde Kette, die das Basic-Auth-Gate entfernt (`b111927`), waehrend
+kein Account `role='admin'` traegt. Ein Deploy von dort sperrt den Owner aus seinem eigenen
+Dienst aus. **Diese Kette gehoert nicht dieser Session — nicht selbst reparieren, sondern
+den Zustand pruefen und melden, bevor irgendetwas nach `master` deployt wird.** Der Deploy
+am 03.08. lief bewusst gegen `upstream/master` (`ce4df1d`), nicht gegen den lokalen Stand.
+
+**O-8 — Die US-Nummer ist GEWOLLT und bleibt.** Owner-Klarstellung 03.08.: derzeit sind nur
+US-Nummern kaufbar, und das ist so beabsichtigt (`FORCE_NUMBER_COUNTRY=US` bei Plattform-Land
+DE, das Boot-Banner warnt darueber). **Das ist eine Randbedingung, keine offene Frage und
+kein Befund.** Die dokumentierte Folge bleibt bestehen und ist akzeptiert: die Zustellung
+von einer US-DID nach DE ist sporadisch (`telnyx-fresh-did-no-de-routing`) — wer einen
+fehlgeschlagenen Waehlversuch sieht, sucht den Fehler **nicht** hier und baut auch keine
++49-Beschaffung ein.
+
+**O-9 — Zugestellte Nachrichten: der Owner hinterlegt eine private Nummer.**
+Beleg: `[audit] sms_summary_skipped ip=system call=call_msczw0irl06s reason=no_private_number`
+— die im Inbound-Anruf aufgenommene Nachricht hat den Owner nie erreicht. **Solange das so
+ist, ist `take_message` wirkungslos, egal wie oft es feuert** — und jede Messung von
+"Nachricht korrekt aufgenommen" misst nur die halbe Kette. **Owner-Handgriff, kein
+Code-Thema.**
+
+**O-10 — `diagnostic: true` wird repariert.** Der Server ignoriert das Feld: beim Testanruf
+am 03.08. gesetzt, in der DB steht `diagnostic=false`. Das Rohtranskript ueberlebte nur,
+weil die Loeschung noch nicht gelaufen war. Ohne Fix ist jede Anruf-Forensik Glueckssache.
+
+**O-11 — Gezielter Diagnosemodus statt hoeherer Aufbewahrung.** Fuer Inbound existiert
+heute **kein** Rohtranskript (`transcript_segment` leer, nur `summary`/`result`). Die
+Aufbewahrung wird NICHT generell hochgedreht — es kommt ein Modus, der gezielt mitschneidet.
+
+**O-12 — Eine Session je Kette.** Am 03.08. hat eine parallele Session dreimal waehrend
+einer laufenden Welle nach `master` gemergt. Kuenftig: eine Session je Kette oder getrennte
+Integrationszweige.
+
+**O-13 — Der Pruefstand startet mit Outbound.** Inbound wird nachgezogen, sobald O-10/O-11
+stehen (vorher gibt es dort kein Rohmaterial).
+
+**Ausdruecklich ZURUECKGESTELLT (Owner, 03.08.):** die Datenschutzerklaerung
+(`EVIDENCE_RETENTION_DAYS=7`, `allow_call_memory=true` seit 01.08. live, in `apps/web` nicht
+genannt). Begruendung des Owners: hat mit der Optimierung des Agenten nichts zu tun.
+**Nicht in dieser Kette anfassen und nicht erneut vorlegen.**
 
 ### Warum 17 gruene Phasen nichts gebracht haben — lies das, bevor du planst
 
