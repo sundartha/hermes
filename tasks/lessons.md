@@ -180,3 +180,28 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   (`grund=reserve_ueber_rest`, `tenant=t_user_...`) zeigte in einer Abfrage, dass sogar der
   untersuchte Tenant der falsche war. **Runtime-Output vor Code-Rekonstruktion** (CLAUDE.md
   Regel 7) haette die ganze Hypothese gespart.
+
+---
+
+## Der Clean-Code-Auditor sieht nur den Diff, nicht das Repo (2026-08-03, KV-M0)
+
+- **Ein Auditor, der `git diff BASE..BRANCH` liest, kann nicht sehen, was in BASE steht.**
+  KV-M0 las `config.billing.flushEpochIso`; das Feld kam ueber die Basis herein (KV-P0-Merge,
+  `config.js:524` + Namespace-Whitelist `:1349`). Im Diff `master..branch` kommt `config.js`
+  gar nicht vor - der Auditor schloss daraus "existiert nirgends" und meldete einen S1
+  ("garantierter Boot-Crash in jeder Umgebung"), inklusive einer **behaupteten empirischen
+  Verifikation**, die nicht stattgefunden haben kann: die sechs betroffenen Tests waren
+  gruen, die volle Suite 3803/3803.
+- **Konsequenz fuer den Lead:** ein Blocker ist eine Behauptung, genau wie ein roter Test.
+  Bei einem "Symbol X existiert nicht"-Blocker zuerst `git grep X <branch> -- <datei>` und
+  den Test selbst laufen lassen, bevor eine Fix-Runde gestartet wird. Der Fix-Agent hat hier
+  richtig gehandelt: er hat die Reproduktion versucht, sie schlug fehl, und er hat NICHTS
+  committet - dadurch fiel das Gate auf BLOCKED, obwohl der Safety-Reviewer unabhaengig
+  freigegeben hatte.
+- **Konsequenz fuer kuenftige Skripte:** dem Clean-Code-Auditor auftragen, vor einem
+  "existiert nicht"-Befund am ausgecheckten Branch zu grepen statt nur im Diff zu lesen.
+- **Nebenbefund, ungefixt:** `test/auth-p9a-cache-headers.test.js` haengt oder crasht
+  (`hookFailed`, `undefined.stop()`), sobald `--test-name-pattern` (also `npm run test:gates`)
+  keinen seiner Testnamen matcht - file-scope `before()/after()` mit geteiltem
+  `startServer()`-Spawn ohne `if (srv)`-Guard. Macht `test:gates` praktisch nicht
+  end-to-end durchlaufbar. Eigene kleine Fix-Phase wert.
