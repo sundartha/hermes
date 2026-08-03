@@ -89,6 +89,9 @@ export function makeMetering({ store }) {
   // (PAYMENT_ENABLED, vom Aufrufer gegated) - Nebeneffekt (recordUsageEvent) im Namen.
   // 0 Minuten -> kein Event (kein Null-Beleg). Kosten-Cents aus dem Leg-Tarif (Ziel UND
   // Herkunft, callTariffCentsPerMin - EINE Kosten-Quelle G5) x Minuten.
+  // KV-P1: diese Buchung + reconcileOutboundVoiceBudget darunter sind die Zeilen
+  // voice_minute_outbound/voice_minute_inbound der Kosten-Landkarte
+  // (src/billing/cost-ledger-map.js).
   function recordVoiceMinuteMeter(call) {
     const minutes = voiceMinutesOf(call);
     if (minutes <= 0) return;
@@ -143,6 +146,8 @@ export function makeMetering({ store }) {
 
   // number_month-Meter EINER Nummer (P6b3 Meter 1, seit P5 wiederkehrend). NUR im
   // Metering-Pfad (PAYMENT_ENABLED, vom Aufrufer gegated) - Nebeneffekt im Namen (N7).
+  // KV-P1: diese Buchung ist die Zeile number_month der Kosten-Landkarte
+  // (src/billing/cost-ledger-map.js).
   // nowIso ist DIESELBE Uhr, mit der die Faelligkeit geprueft wurde: Pruefung und Beleg
   // muessen im selben Kalendermonat liegen, sonst faellt ein Monat zwischen zwei Uhren
   // durch. numberId ist der Idempotenz-Anker (ein Beleg je Nummer und Monat), callId

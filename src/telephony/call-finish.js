@@ -113,6 +113,8 @@ export function makeCallFinish({
           // nach ERFOLGREICHEM Send - schlaegt sendSms fehl, springt der catch an, es wird
           // KEIN Event geschrieben -> der Cap zaehlt nur real gesendete SMS (AK #3). grobe
           // Kosten aus dem benannten Tarif (config.billing.smsCostCents); NIE die Zielnummer (PII).
+          // KV-P1: diese Buchung ist die Zeile sms der Kosten-Landkarte
+          // (src/billing/cost-ledger-map.js).
           store.recordUsageEvent({
             tenantId: call.tenantId,
             callId: call.id,
