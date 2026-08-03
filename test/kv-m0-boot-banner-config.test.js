@@ -1,0 +1,241 @@
+// KV-M0: sieben Werte, die jede Zahl der Kosten-Vollstaendigkeits-Rechnung tragen, waren
+// in Prod nicht lesbar (kein Render-Lesetool fuer Env). Diese Phase gibt sie im
+// Boot-Banner aus - sie entscheidet nichts, sie druckt (kein neuer Guard, kein Verhalten
+// geaendert). Zwei Ebenen, Muster test/al-p16-boot-probes.test.js:
+//   (a) costConfigBannerLines als reine Funktion - beweist, dass die Zeilen der
+//       AUFGELOESTEN Config folgen, nicht process.env (KV-M0-1..3);
+//   (b) zwei Spawn-Tests am ECHTEN Boot-Log - Verdrahtung + Secret-Scan ueber die
+//       GESAMTE Banner-Ausgabe (KV-M0-4..6).
+//
+// IDs beginnen mit "KV-M0-" - kein i18n-Katalog-Praefix (DID|E2E|FMT|GAP|LANG|LAW|MCP|
+// ORIG|OUT|PAY|PROMPT|UI|VOICE|WEB|WORLD gefolgt von einer Ziffer), landet also im
+// npm-test-Regressionslauf, nicht im test:gates-Katalog.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { costConfigBannerLines, UNSET_LABEL } from "../src/boot.js";
+import { startServer } from "./helpers.js";
+
+// Alles auf Fallback-Werten (= der ausgelieferte Ruhezustand aus config.js).
+function bannerConfig({ billing = {}, llm = {}, voice = {} } = {}) {
+  return {
+    billing: {
+      paymentEnabled: false,
+      smsCostCents: 0,
+      flushEpochIso: null,
+      costTruingRequiredRecordTypes: [],
+      ...billing,
+    },
+    llm: { claudeModel: "claude-haiku-4-5", briefingModel: "claude-sonnet-5", ...llm },
+    voice: { elevenLabsPlayTts: { enabled: false, ...voice.elevenLabsPlayTts } },
+  };
+}
+
+test("KV-M0-1: costConfigBannerLines folgt der aufgeloesten Config, NICHT process.env (Muster AL-P16-7)", () => {
+  // Die Umgebung wird auf das GEGENTEIL der uebergebenen Konfiguration gestellt: eine
+  // Zeile, die process.env liest, liefert dann einen der Sentinel-Werte statt des
+  // uebergebenen config-Werts.
+  const opposite = {
+    PAYMENT_ENABLED: "false",
+    SMS_COST_CENTS: "999",
+    CLAUDE_MODEL: "opposite-claude-model",
+    PRECALL_BRIEFING_MODEL: "opposite-briefing-model",
+    ELEVENLABS_PLAY_TTS_ENABLED: "false",
+    BILLING_FLUSH_EPOCH: "2099-01-01T00:00:00.000Z",
+    COST_TRUING_REQUIRED_RECORD_TYPES: "opposite-record-type",
+  };
+  const savedEnv = Object.fromEntries(Object.keys(opposite).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, opposite);
+  try {
+    const config = bannerConfig({
+      billing: {
+        paymentEnabled: true,
+        smsCostCents: 2,
+        flushEpochIso: null,
+        costTruingRequiredRecordTypes: [],
+      },
+      voice: { elevenLabsPlayTts: { enabled: true } },
+    });
+    const lines = costConfigBannerLines(config).join("\n");
+
+    // Die uebergebenen config-Werte muessen erscheinen ...
+    assert.match(lines, /AKTIV \(PAYMENT_ENABLED=true\)/);
+    assert.match(lines, /SMS_COST_CENTS=2 ct/);
+    assert.match(lines, /CLAUDE_MODEL=claude-haiku-4-5/);
+    assert.match(lines, /PRECALL_BRIEFING_MODEL=claude-sonnet-5/);
+    assert.match(lines, /AKTIV \(ELEVENLABS_PLAY_TTS_ENABLED=true\)/);
+
+    // ... und KEINER der Gegenteil-Sentinel-Werte aus process.env darf auftauchen.
+    assert.doesNotMatch(lines, /999/);
+    assert.doesNotMatch(lines, /opposite-claude-model/);
+    assert.doesNotMatch(lines, /opposite-briefing-model/);
+    assert.doesNotMatch(lines, /opposite-record-type/);
+    assert.doesNotMatch(lines, /2099-01-01/);
+    assert.doesNotMatch(lines, /aus \(PAYMENT_ENABLED=false\)/);
+    assert.doesNotMatch(lines, /aus \(ELEVENLABS_PLAY_TTS_ENABLED=false\)/);
+  } finally {
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test("KV-M0-2: BILLING_FLUSH_EPOCH und COST_TRUING_REQUIRED_RECORD_TYPES zeigen bei null/leer denselben Literal-String", () => {
+  const config = bannerConfig({ billing: { flushEpochIso: null, costTruingRequiredRecordTypes: [] } });
+  const [paymentLine, costTruingLine] = costConfigBannerLines(config);
+  assert.match(paymentLine, new RegExp(`BILLING_FLUSH_EPOCH=${UNSET_LABEL}$`));
+  assert.equal(costTruingLine, `Cost-Truing-Typen: COST_TRUING_REQUIRED_RECORD_TYPES=${UNSET_LABEL}`);
+});
+
+test("KV-M0-3: die fuenf nicht-nullbaren Felder zeigen NIE UNSET_LABEL, auch auf ihrem Fallback-Wert (Gegenprobe zu KV-M0-2)", () => {
+  // flushEpochIso/costTruingRequiredRecordTypes hier bewusst GESETZT (nicht null/leer) -
+  // sonst wuerde ihr eigener UNSET_LABEL-Anteil in derselben Zeile die Aussage verwaessern.
+  // Diese Zeile prueft ausschliesslich, ob die FALLBACK-Werte der fuenf uebrigen Felder
+  // (false/0/Modell-Default) je faelschlich als "nicht gesetzt" erscheinen.
+  const config = bannerConfig({
+    billing: {
+      paymentEnabled: false,
+      smsCostCents: 0,
+      flushEpochIso: "2026-08-03T00:00:00.000Z",
+      costTruingRequiredRecordTypes: ["sip-trunking"],
+    },
+    voice: { elevenLabsPlayTts: { enabled: false } },
+  });
+  const lines = costConfigBannerLines(config);
+  for (const line of lines) {
+    assert.doesNotMatch(line, new RegExp(UNSET_LABEL), `Zeile darf "${UNSET_LABEL}" nicht zeigen: ${line}`);
+  }
+  // SMS_COST_CENTS=0 ct ist ein ECHTER Betriebswert (KV-P5), kein Sentinel - die Zeile
+  // muss die Zahl 0 zeigen, nicht "nicht gesetzt".
+  assert.match(lines[0], /SMS_COST_CENTS=0 ct/);
+});
+
+// ---- Spawn-Tests: Verdrahtung + Secret-Scan am echten Boot-Log --------------------
+
+// Alle sieben Werte gesetzt (Muster PAY_ENV aus test/b2-quota-gate.test.js): PAYMENT_ENABLED
+// braucht STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET/NUMBER_SETUP_FEE_CENTS>0 als Boot-Pflicht
+// (config.js assertConfig), sonst verweigert der Boot fail-closed.
+const ALL_SEVEN_SET_ENV = {
+  PAYMENT_ENABLED: "true",
+  STRIPE_SECRET_KEY: "sk_test_x",
+  STRIPE_WEBHOOK_SECRET: "whsec_test_x",
+  NUMBER_SETUP_FEE_CENTS: "500",
+  SMS_COST_CENTS: "2",
+  BILLING_FLUSH_EPOCH: "2026-08-03T00:00:00Z",
+  COST_TRUING_REQUIRED_RECORD_TYPES:
+    "sip-trunking,call-control,speech-to-text,text-to-speech,recording,ai-voice-assistant",
+  ELEVENLABS_PLAY_TTS_ENABLED: "true",
+};
+
+// BEWUSST kein file-scoped before()/after() fuer einen geteilten Spawn (Muster
+// test/auth-p9a-cache-headers.test.js): --test-name-pattern (test:gates) matcht KEINEN
+// KV-M0-Testnamen, und node:test fuehrt "after" dann nach, ohne zuvor "before" laufen zu
+// lassen - der Hook crasht auf undefined.stop() UND die abgehaengte before()-Promise
+// spawnt den Server trotzdem im Hintergrund weiter (empirisch: srv.stop() wird nie
+// aufgerufen, der Kindprozess bleibt haengen, node --test beendet sich nicht mehr). Jeder
+// Spawn-Test startet und stoppt deshalb seinen EIGENEN Server (Muster
+// test/al-p16-boot-probes.test.js AL-P16-8/9) - ein zusaetzlicher Spawn kostet Laufzeit,
+// ist aber unter --test-name-pattern-Filterung fail-safe.
+async function startAllSevenSetServer() {
+  const srv = await startServer({
+    env: {
+      ...ALL_SEVEN_SET_ENV,
+      // Echte secret-artige Werte im Env dieses Spawns (Vorstufe zu KV-M0-6): der Test
+      // beweist, dass NICHTS davon im Boot-Log landet, unabhaengig davon, dass sie hier
+      // gesetzt sind (Regel 4).
+      ANTHROPIC_API_KEY: "sk-ant-kv-m0-secret-darf-nirgends-auftauchen",
+      TWILIO_AUTH_TOKEN: "kv-m0-twilio-token-darf-nirgends-auftauchen",
+    },
+  });
+  const res = await fetch(`${srv.localUrl}/healthz`);
+  assert.equal(res.status, 200);
+  return srv;
+}
+
+test("KV-M0-4: der echte Boot druckt alle drei Zeilen genau einmal (BASE_ENV-Defaults, Muster AL-P16-8)", async () => {
+  // Eigener Spawn (Alles-aus-Zustand) - BASE_ENV pinnt SMS_COST_CENTS nicht, deshalb hier
+  // explizit gesetzt (sonst koennte eine lokale .env den Wert ueberschreiben, Lehre
+  // test-base-env-drift).
+  const srv = await startServer({ env: { SMS_COST_CENTS: "0" } });
+  try {
+    const res = await fetch(`${srv.localUrl}/healthz`);
+    assert.equal(res.status, 200);
+    for (const label of ["Zahlungsabwicklung", "Cost-Truing-Typen", "Modelle"]) {
+      const hits = srv.stdout.match(new RegExp(`${label}: `, "g"));
+      assert.equal(hits ? hits.length : 0, 1, `erwartet genau eine ${label}-Zeile:\n${srv.stdout}`);
+    }
+    assert.match(
+      srv.stdout,
+      /Zahlungsabwicklung: aus \(PAYMENT_ENABLED=false\) \| SMS_COST_CENTS=0 ct \| BILLING_FLUSH_EPOCH=nicht gesetzt/,
+    );
+    assert.match(
+      srv.stdout,
+      /Cost-Truing-Typen: COST_TRUING_REQUIRED_RECORD_TYPES=sip-trunking,call-control/,
+    );
+    assert.match(
+      srv.stdout,
+      /Modelle: CLAUDE_MODEL=claude-haiku-4-5 \| PRECALL_BRIEFING_MODEL=claude-sonnet-5 \| aus \(ELEVENLABS_PLAY_TTS_ENABLED=false\)/,
+    );
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("KV-M0-5: alle sieben Werte gesetzt - das Banner zeigt sie und leakt keines der STRIPE-Secrets", async () => {
+  const srv = await startAllSevenSetServer();
+  try {
+    const stdout = srv.stdout;
+    assert.match(stdout, /AKTIV \(PAYMENT_ENABLED=true\)/);
+    assert.match(stdout, /SMS_COST_CENTS=2 ct/);
+    assert.match(stdout, /BILLING_FLUSH_EPOCH=2026-08-03T00:00:00\.000Z/);
+    assert.match(
+      stdout,
+      /COST_TRUING_REQUIRED_RECORD_TYPES=sip-trunking,call-control,speech-to-text,text-to-speech,recording,ai-voice-assistant/,
+    );
+    assert.match(stdout, /AKTIV \(ELEVENLABS_PLAY_TTS_ENABLED=true\)/);
+    assert.doesNotMatch(stdout, /sk_test_x/);
+    assert.doesNotMatch(stdout, /whsec_test_x/);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// Jedes Muster einzeln geprueft (kein Mega-Regex), damit ein Treffer benennt, WELCHES
+// Muster gefeuert hat.
+const SECRET_LEAK_PATTERNS = [
+  { name: "sk_-Praefix", pattern: /sk_/ },
+  { name: "sk--Praefix", pattern: /sk-/ },
+  { name: "Bearer-Header", pattern: /Bearer /i },
+  { name: "KEY=-Zuweisung", pattern: /KEY=/ },
+  { name: "SECRET=-Zuweisung", pattern: /SECRET=/ },
+  { name: "TOKEN=-Zuweisung", pattern: /TOKEN=/ },
+  { name: "PASSWORD=-Zuweisung", pattern: /PASSWORD=/i },
+  { name: "lange Hex-Zeichenkette (>64)", pattern: /[0-9a-f]{65,}/i },
+  { name: "lange Base64-Zeichenkette (>=40)", pattern: /[A-Za-z0-9+/]{40,}={0,2}/ },
+];
+
+// GAP-36 druckt VOR dem eigentlichen Banner zwei Diagnosezeilen ("[boot] deployed
+// commit=..." bis zu 40 Hex-Zeichen, "[boot] configHash=..." GENAU 64 Hex-Zeichen) - ein
+// sha256-Hex-Digest ist ein Teilstring des Base64-Alphabets. Beide sind bereits durch
+// test/gap-36-healthz-fingerprint.test.js auf Nicht-Secret geprueft; ein Scan ueber den
+// KOMPLETTEN Prozess-Output wuerde auf diesen zwei absichtlich gedruckten Diagnosewerten
+// falsch-positiv rot. Deshalb: Scan-Bereich beginnt an der ersten Zeile NACH den beiden
+// GAP-36-Zeilen ("Hermes Gateway laeuft auf ...", INV-6 aus src/boot.js) - exakt der
+// Abschnitt, den diese Phase erweitert.
+function bannerSectionFrom(stdout) {
+  const start = stdout.indexOf("Hermes Gateway laeuft auf");
+  assert.ok(start >= 0, "Banner-Startmarke 'Hermes Gateway laeuft auf' nicht im Boot-Log gefunden");
+  return stdout.slice(start);
+}
+
+test("KV-M0-6: kein Secret-Muster in der GESAMTEN Boot-Banner-Ausgabe (bleibender Wert der Phase)", async () => {
+  const srv = await startAllSevenSetServer();
+  try {
+    const bannerSection = bannerSectionFrom(srv.stdout);
+    for (const { name, pattern } of SECRET_LEAK_PATTERNS) {
+      assert.doesNotMatch(bannerSection, pattern, `Secret-Muster "${name}" im Boot-Banner gefunden`);
+    }
+  } finally {
+    await srv.stop();
+  }
+});

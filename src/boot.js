@@ -504,6 +504,64 @@ export function capabilityProbeLines({ tenancy, research, privacy }) {
   ];
 }
 
+// ---- KV-M0: Live-Konfiguration im Boot-Banner --------------------------------------
+// Sieben Werte, die die Kosten-Vollstaendigkeits-Rechnung tragen, waren in Prod nicht
+// lesbar (kein Render-Lesetool fuer Env-Werte) - jede Untersuchung musste aus
+// Ledger-Zeilen rueckschliessen, was gesetzt ist. Reine Funktionen (Muster
+// capabilityProbeLines): Konfiguration rein, Zeilen raus - gedruckt wird ausschliesslich
+// in logBootBanner. NUR Zahlen/Booleans/Modell-IDs/Typenlisten - NIE ein Secret (Regel 4).
+
+// Ein Literal fuer "strukturell nicht gesetzt" (G25/G5). Nur costTruingRequiredRecordTypes
+// (leeres Array) und flushEpochIso (null) koennen diesen Zustand ueberhaupt einnehmen -
+// die uebrigen fuenf Werte in dieser Gruppe loesen in config.js immer schon auf einen
+// funktionierenden Fallback auf (PAYMENT_ENABLED=false, SMS_COST_CENTS=0, Modell-IDs,
+// ELEVENLABS_PLAY_TTS_ENABLED=false); sie koennen "nicht gesetzt" nicht anzeigen, ohne
+// ueber die tatsaechlich laufende Konfiguration zu luegen.
+export const UNSET_LABEL = "nicht gesetzt";
+
+function costTruingRecordTypesLabel(types) {
+  return types.length > 0 ? types.join(",") : UNSET_LABEL;
+}
+
+function flushEpochLabel(flushEpochIso) {
+  return flushEpochIso || UNSET_LABEL;
+}
+
+function paymentConfigBannerLine(billing) {
+  return (
+    `Zahlungsabwicklung: ${envFlagState("PAYMENT_ENABLED", billing.paymentEnabled)} | ` +
+    `SMS_COST_CENTS=${billing.smsCostCents} ct | ` +
+    `BILLING_FLUSH_EPOCH=${flushEpochLabel(billing.flushEpochIso)}`
+  );
+}
+
+function costTruingTypesBannerLine(billing) {
+  return `Cost-Truing-Typen: COST_TRUING_REQUIRED_RECORD_TYPES=${costTruingRecordTypesLabel(billing.costTruingRequiredRecordTypes)}`;
+}
+
+function modelConfigBannerLine(llm, voice) {
+  return (
+    `Modelle: CLAUDE_MODEL=${llm.claudeModel} | ` +
+    `PRECALL_BRIEFING_MODEL=${llm.briefingModel} | ` +
+    `${envFlagState("ELEVENLABS_PLAY_TTS_ENABLED", voice.elevenLabsPlayTts.enabled)}`
+  );
+}
+
+/**
+ * KV-M0: die drei Konfigurations-Zeilen in Banner-Reihenfolge. Rein wie
+ * capabilityProbeLines - gedruckt wird ausschliesslich in logBootBanner.
+ *
+ * @param {{ billing: object, llm: object, voice: object }} config
+ * @returns {string[]}
+ */
+export function costConfigBannerLines({ billing, llm, voice }) {
+  return [
+    paymentConfigBannerLine(billing),
+    costTruingTypesBannerLine(billing),
+    modelConfigBannerLine(llm, voice),
+  ];
+}
+
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -559,6 +617,9 @@ function logBootBanner(config, port) {
       `Plattform-Warnschwelle ${config.billing.platformSpendCapCents} ct | ` +
       `Worst-Case-Tarif ${config.billing.voiceTariffDefaultCents} ct/min`,
   );
+  // KV-M0: sieben in Prod bisher nicht lesbare Werte - entsperrt jede Zahl der
+  // Kosten-Vollstaendigkeits-Rechnung fuer kuenftige Untersuchungen (Muster capabilityProbeLines).
+  for (const line of costConfigBannerLines(config)) console.log(`  ${line}`);
 }
 
 // GAP-38: heilt einen nachweislich frischen Store aus den Deploy-Parametern - der Ersatz
