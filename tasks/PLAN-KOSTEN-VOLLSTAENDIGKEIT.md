@@ -26,9 +26,10 @@ Ausloeser.
 
 ## Nachgemessen fuer diesen Plan
 
-Das Inventar ist die Grundlage; die folgenden fuenf Punkte sind eigene Messungen dieses
+Das Inventar ist die Grundlage; die folgenden Punkte sind eigene Messungen dieses
 Plans, weil die Phasen sonst auf Vermutungen stuenden. Alle read-only (Prod-Postgres per
-`psql`, FORCE-RLS je Tenant, plus `grep`/`sed` im Quelltext).
+`psql`, FORCE-RLS je Tenant, plus `grep`/`sed` im Quelltext). N1-N6 stammen vom 2026-07-31,
+N7 vom 2026-08-03 (Vorbereitung der Owner-Entscheidungen).
 
 **N1 - Inbound-Minuten sind bepreist und liegen im Ledger, nur nicht auf der Gate-Achse.**
 Zwei Belege, beide mit `estimated_cost_cents = NULL` und `actual_cost_micro_cents = NULL` am
@@ -114,6 +115,30 @@ stammen also aus einem aelteren Pfad und sind der Groesse nach die einmalige
 Einrichtungsgebuehr, nicht eine wiederkehrende Miete. **Wiederkehrende DID-Miete wurde noch
 nie gebucht, fuer keine Nummer.**
 
+**N7 - Inbound verbraucht schon heute das VERKAUFTE Minuten-Kontingent (2026-08-03).**
+Der Plan schreibt an KV-P2, das Minuten-Kontingent-Gate lasse Inbound ungebremst
+(`outbound-gates.js:760`, "Inbound bleibt ungated"). Das gilt fuer die *Sperre*, nicht fuer
+den *Verbrauch* - und die Unterscheidung fehlte:
+
+- `recordVoiceMinuteMeter` (`metering.js:92`) schreibt `voice_minute` richtungsblind (das
+  ist N1),
+- `voiceMinutesUsedSince` (`state-ops.js:2829`) filtert auf kind + tenantId + Zeit,
+  **nicht** auf Richtung,
+- `planMinutesExceeded` (`:2888`) liest genau diese Summe, und das `minutes`-Gate
+  (`outbound-gates.js:763`) sperrt damit Outbound.
+
+**Live-Folge, heute, bei `PAYMENT_ENABLED=true`:** ein Starter-Kunde, der 30 Minuten lang
+angerufen wird, kann nicht mehr hinaus telefonieren - obwohl er keine einzige Minute selbst
+ausgeloest hat. Das ist Bestandsverhalten, kein Effekt von KV-P2.
+
+**Owner-Entscheidung 2026-08-03: so bleibt es.** Der Katalogtext lautet "30 minutes of
+calls per month" und deckt beide Richtungen; eine Aenderung waere eine Produkt-/Preisfrage
+und damit ausdruecklich nicht Gegenstand dieses Plans. Der Befund gehoert trotzdem
+hierher, weil er die Kalibrierung aus TOD 1 entschaerft: bei einem Kunden, der beide
+Richtungen nutzt, beisst das Minuten-Kontingent VOR der Geld-Decke. Die Geld-Decke bleibt
+allein bei dem Kunden die bindende Grenze, der ueberwiegend angerufen wird - genau der
+Missbrauchsfall, den KV-P2 abdeckt.
+
 ---
 
 ## Die gemeinsame Wurzel
@@ -192,7 +217,7 @@ KV-P5  SMS-Preis fail-closed
 KV-P6  Ledger in Mikro-Cent
 KV-P7  Latente Pfade verriegeln (Play-TTS, Realtime, ElevenLabs-Kontingent-Zaehler)
 KV-P8  Abgebrochener KI-Turn   (braucht U4)
-KV-P9  Stripe-Weiterbelastung  <- GEPARKT bis Owner-Entscheidung 2
+KV-P9  Stripe-Weiterbelastung  <- GESTRICHEN (Owner-Entscheidung 2 = (a), 2026-08-03)
 ```
 
 ---
@@ -262,8 +287,71 @@ Outbound-Seite einmal um Faktor 37 danebenliegen liess.
 4. Dieselbe Rechnung wie in Inventar-Abschnitt 3 aufmachen: Provider-Summe gegen
    `usage_event` gegen Gate-Achse.
 
+---
+
+#### ERGEBNIS KV-M1 (gemessen 2026-08-03) - **1,87 US-Cent je angefangener Minute**
+
+**Konfiguration der Messung** (ohne sie ist die Zahl wertlos, s. Risiko unten):
+US-DID `+1706710…` als Ziel, Anrufer eine deutsche Mobilnummer, `VOICE_ENGINE=budget`,
+Sprache `de`, ElevenLabs-TTS aktiv. Anker-Anruf `call_msczw0irl06s`, Tenant
+`t_user_01KX6008…`, 2026-08-03T08:56:29Z bis 08:57:49Z = **79,6 s -> 2 angefangene
+Minuten**. Zuordnung ueber `providerLegIdOf` = `twilio_sid`
+(`v3:zkVIbQTK…`); 13 von 375 Rohbelegen zugeordnet (1 ueber den Anker, 2 ueber
+`telnyx_session_id`, 10 ueber `call_session_id`), Pool `complete:true`.
+
+| Belegart | Belege | Mikro-Cent | US-Cent | Anteil |
+|---|---|---|---|---|
+| `speech-to-text` | 5 | 2.640.000 | 2,640 | **71 %** |
+| `sip-trunking` | 1 | 640.000 | 0,640 | 17 % |
+| `call-control` | 1 | 400.000 | 0,400 | 11 % |
+| `text-to-speech` | 5 | 51.030 | 0,051 | 1,4 % |
+| `recording` | 1 | 0 | 0 | 0 % |
+| `ai-voice-assistant` | **0** | 0 | 0 | 0 % |
+| **Summe** | **13** | **3.731.030** | **3,731** | |
+
+**Der Dreifach-Vergleich (Inventar-Abschnitt 3 fuer Inbound):**
+
+| Buch | Betrag | Verhaeltnis zum Ist |
+|---|---|---|
+| Provider-Ist | 3,73 ct | 1x |
+| Verbrauchsbuch (`usage_event`, `voice_minute` q=2) | **60 ct** | **16x zu hoch** |
+| Gate-Achse, Carrier-Anteil | **0 ct** | die Luecke aus N1/N2, live bestaetigt |
+
+**Vier Nebenbefunde, alle mit Konsequenz:**
+
+1. **Der Abrechnungstakt ist gemischt - genau dafuer war die 2-Minuten-Vorgabe da.**
+   `sip-trunking` und `call-control` melden beide `billed_sec = 120` fuer ein 79,6-s-Gespraech:
+   **auf volle Minuten aufgerundet, pauschal**. `speech-to-text` meldet 105 s:
+   **sekundengenau**. Ein Inbound-Satz "je angefangener Minute" ist damit fuer 28 % der
+   Kosten richtig und fuer 71 % zu grob - er ueberschaetzt kurze Gespraeche.
+2. **`sip-trunking` inbound rechnet mit 0,0032 USD/min ab** (640.000 µct / 2 min = 0,32 ct).
+   Die im Plan als unbelegt gefuehrte Vermutung ist damit belegt.
+3. **Der Assistant-Pfad beantwortet Inbound heute NICHT** - null `ai-voice-assistant`-Belege.
+   Damit faellt die Annahme "5 US-Cent Assistant-Gebuehr je angefangener Minute" fuer den
+   Live-Inbound-Pfad weg, und mit ihr das 1:20-Argument aus dem Inventar (KI-Token-Akku
+   gegen Assistant-Gebuehr). Der reale Abstand ist viel kleiner: 5 KI-Turns dieses Anrufs
+   gegen 3,73 ct Carrier-Kosten. Die Luecke bleibt real, ihre *Dringlichkeit* ist eine
+   Groessenordnung geringer als angenommen.
+4. **KV-P6 live belegt:** alle 5 `ai_token`-Zeilen dieses Anrufs tragen `cost_cents = 0`.
+
+**Konsequenz fuer den Inbound-Satz in KV-P2.** Der fail-closed-Rueckfall auf den
+Outbound-Worst-Case (30 ct/min) waere **16-fach ueberhoeht**: ein Starter-Kunde waere nach
+50 Inbound-Minuten gesperrt, bei realen Kosten von 93 US-Cent gegen eine 15-Euro-Decke. Ein
+an dieser Messung kalibrierter Satz mit deutlichem Sicherheitsaufschlag - Groessenordnung
+**6 ct/min, also 3x ueber dem Ist und 5x unter dem heutigen Fallback** - traegt die
+Fail-Richtung "im Zweifel teurer", ohne den Kunden aus seiner eigenen Erreichbarkeit zu
+sperren. Der endgueltige Satz gehoert in die Spec von KV-P2.
+
+**Grenzen dieser Messung, ausdruecklich:** EIN Anruf, EINE Konfiguration. Nicht gemessen:
+DE-DID (dort greift der Inlandssatz), Assistant-Pfad, laengere Gespraeche, andere Sprachen.
+Der STT-Anteil skaliert mit der Sprechzeit, nicht mit der Verbindungsdauer - ein
+schweigsames Gespraech ist billiger, ein dichtes teurer. Eine zweite Messung an einer
++49-DID ist die naechstwichtigste, weil sie den Satz halbiert oder bestaetigt.
+
+---
+
 **Aufwand.** S. **Eigenkosten der Messung: ein Anruf, groessenordnungsmaessig 10 US-Cent** -
-das ist die Obergrenze, sie ist bekannt und gedeckelt.
+das ist die Obergrenze, sie ist bekannt und gedeckelt. (Ist: 3,73 US-Cent.)
 **Abnahme.** Eine Zahl: USD je angefangener Inbound-Minute, aufgeschluesselt nach den sechs
 Typen (inklusive `speech-to-text`, auch wenn dessen Beitrag am Assistant-Pfad erwartbar 0 ist -
 siehe Inventar K19). Plus die Feststellung, ob `sip-trunking` inbound tatsaechlich mit der beobachteten
@@ -295,6 +383,44 @@ DID-Positionen je Nummer auslesen. Kein GET-Endpunkt liefert die Miete je gekauf
 Position nicht, ist das Ergebnis "ungemessen, Grund: X" - **kein** Ersatzwert aus dem
 Listenpreis.
 **Blockiert.** KV-P4.
+
+---
+
+#### ERGEBNIS KV-M2 (Versuch 2026-08-03): **UNGEMESSEN, Grund: es gibt noch keine Rechnung**
+
+`GET /v2/invoices` liefert genau **eine** Rechnung: Zeitraum **2026-06-01 bis 06-30**
+(`invoice_id df551340…`, `paid: true`). Die Juli-Rechnung existiert noch nicht. Damit ist
+die Messung fuer 2 der 3 Nummern heute strukturell unmoeglich - sie wurden am 2026-07-10
+bzw. 07-24 gekauft und koennen auf einer Juni-Rechnung nicht stehen.
+
+Fuer die dritte (Owner-Nummer, gekauft 2026-06-24) waere die Juni-Rechnung zustaendig, ihre
+**Positionen sind ueber die API aber nicht erreichbar**: `/v2/invoices/{id}` liefert nur
+dieselben Metadaten wie die Liste (kein Betrag, keine Positionen), und die `file_id`
+(`2cd94c26…`) loest weder unter `/v2/documents/{id}`, `/v2/documents/{id}/download` noch
+`/v2/media/{id}` auf (alle HTTP 404, Fehlercode 10005). Die Datei-ID der Rechnung gehoert
+offenbar nicht zur Documents-API.
+
+**Konsequenz:** KV-M2 bleibt offen und braucht einen der beiden Wege - (a) der Owner laedt
+die Rechnung im Telnyx-Portal herunter (Billing -> Invoices), oder (b) die Messung wartet
+auf die Juli-/August-Rechnung, die dann alle drei Nummern enthaelt. **(b) ist der bessere
+Weg**, weil er alle drei Betraege in einem Zug liefert - und der Backfill aus KV-P4 braucht
+ohnehin alle drei. KV-P4 bleibt bis dahin blockiert.
+
+**Nebenbefund aus dem Nummern-Bestand (Prod-DB, 2026-08-03):**
+
+| Tenant | Nummer | `country` | `monthly_cost_cents` | `provider_number_id` |
+|---|---|---|---|---|
+| `owner` | `+1864302…` | **DE** (falsch) | NULL | **fehlt** |
+| `t_user_01KX6008…` | `+1706710…` | US | NULL | vorhanden |
+| `t_user_01KXH2B…` | `+1573909…` | US | NULL | vorhanden |
+
+Drei Dinge daraus: (1) L4 ist bestaetigt - 3 von 3 ohne Preis. (2) **Es gibt keine
++49-DID** - die zweite KV-M1-Messung an einer deutschen Nummer ist heute nicht moeglich,
+und der Inbound-Satz gilt vorerst nur fuer US-DIDs. (3) Zwei Datendefekte, die nicht in
+diesen Plan gehoeren, aber festgehalten sein wollen: die Owner-Nummer traegt
+`country = 'DE'` bei einer `+1`-Nummer (Geo-/Sprachaufloesung liest diese Spalte; der
+Tarif nicht, der geht ueber die Vorwahl), und ihr fehlt die `provider_number_id`, ueber die
+ein Rechnungsabgleich je Nummer laufen wuerde.
 
 ---
 
@@ -407,14 +533,45 @@ waehrend allein die Assistant-Gebuehr 5 US-Cent je angefangener Minute kostet.
   Tarif-Quelle, keine zweite Kopie (G5).
 - Der Inbound-Tarif wird an KV-M1 kalibriert. Fehlt der Wert, faellt er fail-closed auf den
   Outbound-Worst-Case zurueck, nie auf 0.
-- Der Live-Zaehler aus KS-P2 (`liveVoiceSpendCents`, `metering.js:81-86`) ist heute
-  ausdruecklich outbound-only, und `store.activeOutboundCallsFor` ist sein einziger Produzent.
-  **Ob er mitzieht, ist eine eigene Entscheidung** (Owner-Entscheidung 3): ein Live-Term auf
-  einer Achse, die auch bucht, ist konsistent - aber er legt ein laufendes Inbound-Gespraech
-  mitten im Satz auf, und die Kombination mit `voice.js:274` (N2) macht daraus fuer den Kunden
-  "meine Nummer ist tot". Ohne ausdruecklichen Owner-Entscheid bleibt der Live-Term
-  outbound-only, und Inbound wirkt erst bei Call-Ende.
+- **Der Live-Zaehler zieht mit (Owner-Entscheidung 3 = (b), 2026-08-03).**
+  `liveVoiceSpendCents` (`metering.js:79`) ist heute outbound-only, weil
+  `store.activeOutboundCallsFor` sein einziger Produzent ist. Diese Abfrage wird
+  richtungsoffen; eine zweite `activeInboundCallsFor` entsteht NICHT (G5). Der Live-Term
+  deckt danach alle laufenden Legs des Tenants, und der Modul-Kommentar
+  ("Inbound traegt nichts bei") wird mitgezogen - er ist mit dieser Phase sachlich falsch.
+  Der Mid-Call-Abbruch selbst ist kein Zuwachs dieser Phase: `blockingBudgetAxis` laeuft
+  schon heute richtungsblind in jeder Schleifenrunde (`claude.js:661`,
+  `telnyx-llm-shim.js:561`). Neu ist allein, dass die Pruefung die eigenen, noch
+  ungebuchten Minuten des laufenden Inbound-Legs sieht.
 - `KV-P1`-Zeile `voice_minute/inbound` kippt von `gate=nein` auf `gate=ja`.
+
+**Decken-Rechnung (TOD 1), VORLAEUFIG - 2026-08-03.** TOD 1 macht diese Rechnung zur
+Vorbedingung der Phase. Erster Durchgang mit den in `.env.example` dokumentierten Saetzen
+(30 ct Ausland / 20 ct Inland) - **die LIVE gesetzten Werte sind unbestaetigt, genau das
+loest KV-M0**; der Inbound-Ist-Satz ist ungemessen (KV-M1). Decke =
+`planCapCents` = verkaufte Minuten x 30 ct x Kopffreiheit. Inbound bucht mit
+`tariffCentsPerMin(to, to)`: an einer +49-DID 20 ct/min, an einer US-DID 30 ct/min
+(`isDomesticLeg` verlangt eine BEKANNTE Inlandsvorwahl an beiden Enden, `+1` zaehlt nicht).
+
+| | Decke | rein inbound bis zur Sperre | nach vollem Outbound-Kontingent (inlaendisch / Ausland) |
+|---|---|---|---|
+| Starter (30 min) | 1500 ct | 75 Inbound-Min | 45 / 30 Inbound-Min |
+| Business (120 min) | 4500 ct | 225 Inbound-Min | 105 / 45 Inbound-Min |
+
+Zwei Befunde daraus, beide gehoeren in den Phasenbericht:
+1. **KV-P3 ist keine Kuer, sondern Teil der Kalibrierung.** Outbound ist mit 5,4 ct/min
+   gemessen; laege Inbound aehnlich, gibt der Ist-Abgleich rund 14 ct/min zurueck und die
+   Reichweite verdreifacht sich (Starter ~250 statt 75 Inbound-Minuten). **KV-P2 ohne
+   KV-P3 ist die harte Variante** - zwischen Buchung und Korrektur stehen
+   `COST_TRUING_DELAY_MINUTES` (30) plus ein Sweep-Takt.
+2. **N7 entschaerft den Normalfall.** Wer beide Richtungen nutzt, laeuft vorher in das
+   Minuten-Kontingent (das Inbound bereits verbraucht). Die Geld-Decke bindet allein beim
+   ueberwiegend angerufenen Kunden.
+
+Die Rechnung wird mit den Ist-Werten aus KV-M0/KV-M1 wiederholt, **bevor** KV-P2 gemergt
+wird; ergibt sie dann, dass ein Kunde seine gekauften Minuten nicht inbound telefonieren
+kann, wird die Decke vorher angehoben. Nach der Erweiterung von KV-P4 kommt die
+Mietzeile hinzu.
 
 **Aufwand.** M.
 **Abnahme.** Vier Tests. (1) Ein beendeter Inbound-Call mit 2 Minuten erhoeht
@@ -470,7 +627,20 @@ um einen Inbound-Fall erweitert.
 nachweislich (`boot.js:551-553`) - er hat nichts zu buchen. Das ist der Lehrbuchfall aus N5:
 additiv-nullables Pflichtfeld ohne Backfill.
 
-**Umfang, zwei Teile, beide in dieser Phase:**
+**UMFANGS-ERWEITERUNG 2026-08-03 (Owner).** Die Erstfassung liess die Miete im
+Verbrauchsbuch stehen; die Landkarte fuehrt sie unter "Gate: nie vorgesehen". Das ist mit
+der Owner-Fassung des Plan-Zwecks nicht vereinbar - die Nummernmiete wurde ausdruecklich
+als Kosten genannt, die der Kunde verursacht. **Die Miete muss also auch die Gate-Achse
+erreichen**, nicht nur `usage_event`. Heute schreibt `recordNumberMonthMeter`
+(`metering.js:152-166`) ausschliesslich `store.recordUsageEvent` - kein `bookCents`-Pfad.
+Das ist Teil 3 unten. Zwei Punkte gehoeren dabei ausdruecklich in den Phasenbericht:
+(a) es ist die erste NICHT-gespraechsbezogene Kostenart auf der Gate-Achse - eine Buchung
+ohne Call-Anker, die der Ist-Abgleich nie korrigiert; (b) die Decke muss sie tragen: bei
+Starter (1500 ct) frisst eine Miete in der Groessenordnung des Listenpreises (92 ct) rund
+6 Prozent des Monatsrahmens, bevor der Kunde den ersten Satz gesprochen hat. Die
+Decken-Rechnung aus TOD 1 wird deshalb um die Mietzeile erweitert.
+
+**Umfang, drei Teile, alle in dieser Phase:**
 
 1. **Neukauf lernt den Preis.** Der Provisioning-Pfad uebernimmt den Provider-Preis in
    `number.monthlyCostCents`. Faellt er nicht an, wird die Nummer **mit einem sichtbaren
@@ -481,7 +651,14 @@ additiv-nullables Pflichtfeld ohne Backfill.
    reviewbarer, wiederholbarer Code - ein Einmal-SQL-Kommando in einer Konsole ist genau der
    Schritt, der beim naechsten Mal vergessen wird.
 
-Die Miete rueckwirkend nachzubuchen ist **nicht** Teil der Phase (Owner-Entscheidung 4).
+3. **Die Miete erreicht die Gate-Achse.** Derselbe Faelligkeits-Riegel
+   (`numbersDueForMonthMeter`) speist beide Buecher in EINEM Schritt - Muster
+   `bookTokenUsage` (`llm-usage.js:64-68`), nicht zwei unabhaengige Schreibvorgaenge an
+   derselben Aufrufstelle (das ist genau die Wurzel, die dieser Plan behebt). Die
+   `KV-P1`-Zeile `number_month` kippt von `gate=nein` auf `gate=ja`.
+
+Die Miete rueckwirkend nachzubuchen ist **nicht** Teil der Phase (Owner-Entscheidung 4 =
+(a), bestaetigt 2026-08-03).
 
 **Aufwand.** M.
 **Abnahme.** Nach dem Deploy tragen alle drei Nummern einen Preis (`SELECT id,
@@ -512,6 +689,20 @@ wie bei inlaendischen.
   `assertConfig`). Ein Preis von 0 fuer eine real bepreiste Leistung ist ein
   Konfigurationsfehler, kein Betriebszustand.
 - Die SMS-Kosten erreichen die Gate-Achse (`KV-P1`-Zeile kippt).
+
+**ERGEBNIS U3 (Versuch 2026-08-03): ungemessen - und die Luecke ist LATENT, nicht laufend.**
+Der SMS-Preis laesst sich nicht aus der Historie lesen, weil es keine Historie gibt:
+`detail_records` mit `record_type=messaging` liefert ueber die letzten 30 Tage **0 Treffer**
+(`total_results: 0`; `media-streaming` und `amd` ebenfalls 0), und in der Prod-DB traegt
+**keiner von 43 Calls** ein `summary_sms_sent_at`. Es ist also noch nie eine SMS
+rausgegangen - weder eine Zusammenfassung noch ein Plattform-Alarm.
+
+Zwei Konsequenzen: (1) Die Messung braucht zwingend eine **absichtlich ausgeloeste**
+Test-SMS, sie ist nicht kostenlos aus dem Bestand zu haben. (2) **Die Dringlichkeit von
+KV-P5 sinkt deutlich** - der 0-Preis hat noch nie eine reale Leistung falsch bepreist, weil
+noch nie eine SMS bepreist werden musste. Die Phase bleibt richtig (ein fehlender Preis
+darf keine 0 sein, und die Kappe ist eine reine Stueckzahl), aber sie schuetzt einen Pfad,
+der noch nicht laeuft. Sie gehoert damit ans Ende der Kette, nicht an den Anfang.
 
 **Aufwand.** S (plus Messung).
 **Abnahme.** Test: eine gesendete SMS erhoeht `usage.costCents` um `smsCostCents`;
@@ -570,7 +761,30 @@ anderen Guard als die beiden anderen.
   Boot-Banner-Hinweis "ElevenLabs-Kontingentwarnung deckt den Telnyx-Relay-Pfad NICHT ab"),
   damit niemand aus einem stillen `ttsCharacterQuota` faelschlich Sicherheit ableitet.
 
-**Umfang.** Drei Massnahmen, fail-closed:
+**UMFANGS-ERWEITERUNG 2026-08-03 (Owner).** Die Erstfassung wollte diese Pfade nur
+*verriegeln*. Text-to-Speech wurde vom Owner ausdruecklich als Kostenart genannt, die in
+den Rahmen des Kunden gehoert - Verriegeln allein erfuellt das nicht. Der Befund darunter
+ist enger, als "kein Preis-Parameter" klingt, und daher billiger zu schliessen:
+
+- Die **Zeichen liegen bereits pro Tenant vor**: `bookTtsCharactersFor` (`cost-truing.js:371`)
+  schreibt sie ueber `recordTenantTtsCharacters` (`state-ops.js:3125`) nach
+  `usageFor(tenantId).ttsCharacters` - dasselbe Objekt, das auch `costCents` haelt. Es fehlt
+  ausschliesslich der Schritt Zeichen -> Geld.
+- Was fehlt, ist **der Preis pro Zeichen** - repo-weit kein Parameter. Ohne ihn koennen
+  gezaehlte Zeichen niemals Geld werden, egal wie sauber sie gezaehlt sind. Das ist die
+  dritte Wurzel-Auspraegung ("ein fehlender Preis ist lautlos eine 0") in Reinform.
+- Reichweite ehrlich: der Zeichen-Zaehler haengt am Ist-Abgleich und damit an dessen
+  Richtungsfilter - vor KV-P3 sieht er nur Outbound.
+
+**Zusaetzliche Massnahme 4 dieser Phase:** ein Preis-pro-Zeichen-Parameter (Env, in
+`config.js` zentralisiert und in `.env.example` dokumentiert), gemessen am
+ElevenLabs-Tarif, und die Buchung `Zeichen x Preis` auf die Gate-Achse - in EINEM Schritt
+mit der Zeichen-Buchung, Muster `bookTokenUsage`. Die `KV-P1`-Zeile fuer TTS kippt damit
+auf `gate=ja`. Fehlt der Preis, wird fail-closed NICHT auf 0 gebucht, sondern ein
+Boot-Befund gemeldet (Massnahme 1 unten wird dadurch von "nur wenn Play-TTS an" auf
+"immer, sobald TTS ueberhaupt laeuft" verschaerft).
+
+**Umfang.** Vier Massnahmen, fail-closed:
 
 1. `ELEVENLABS_PLAY_TTS_ENABLED=true` ohne gesetzten Preis-pro-Zeichen -> Boot-Befund.
 2. `VOICE_ENGINE=realtime` ohne Mid-Call-Budget-Pruefung im Realtime-Pfad -> Boot-Befund.
@@ -608,6 +822,21 @@ ab? - braucht einen Admin-Key, der vorhandene antwortet mit HTTP 401). Lautet di
 "nein", ist die Phase eine Zeile Dokumentation und faellt weg. Lautet sie "ja", bekommt der
 Live-Pfad denselben Aufruf wie der Briefing-Pfad.
 
+**ERGEBNIS U4 (Versuch 2026-08-03): ungemessen, beide Wege verschlossen.** Empirisch braucht
+die Frage einen Anthropic-Admin-Key fuer die Usage-/Cost-API; in `.env` liegt keiner
+(`ANTHROPIC_ADMIN_KEY` fehlt, der vorhandene Key antwortet mit HTTP 401). Dokumentarisch
+laesst sie sich ebenfalls nicht beantworten: die Preis-Seite der Anbieter-Doku ist unter der
+bekannten URL nicht erreichbar (HTTP 404), und die im Repo verfuegbare API-Referenz sagt
+zum client-seitigen Abbruch nichts. **Nicht geraten** - eine benachbarte Aussage
+("abgebrochene Antworten werden nach bereits gestreamter Ausgabe berechnet") betrifft
+anbieterseitige Ablehnungen, nicht Verbindungsabbrueche des Clients, und traegt die
+Verallgemeinerung nicht.
+
+KV-P8 bleibt damit blockiert. Da die Groessenordnung Zehntel-Cent je Vorfall betraegt und
+der Fall nicht willentlich ausloesbar ist, ist das der billigste offene Punkt des Plans -
+er rechtfertigt keinen Admin-Key-Beschaffungsvorgang, sondern wartet, bis ohnehin einer da
+ist.
+
 **Aufwand.** S.
 **Abnahme.** Test: ein `RETRIES_EXHAUSTED`-Wurf im Turn-Pfad erhoeht die Gate-Achse um den
 geschaetzten Betrag - und **nicht** den Stripe-Ledger (eine Schaetzung ist kein Kundenbeleg;
@@ -617,9 +846,21 @@ ausloesbar.
 
 ---
 
-### KV-P9 - Stripe-Weiterbelastung (GEPARKT)
+### KV-P9 - Stripe-Weiterbelastung (GESTRICHEN, Owner-Entscheidung 2 = (a))
 
-**Zweck / Status.** L2 ist real (138 von 138 Zeilen nie gemeldet, kein Cron im
+**Status 2026-08-03: entschieden und gestrichen.** Der Abo-Preis ist endgueltig; es gibt
+keine nutzungsbasierte Weiterbelastung. Was bleibt, ist eine Dokumentationspflicht: der
+Flush-Pfad und `stripe_meter_sent` werden in `README.md` ausdruecklich als **"gebaut,
+bewusst inaktiv"** gefuehrt - ein Mechanismus, der so aussieht, als liefe er, ist
+schlimmer als keiner. Diese Zeile wandert in die Definition of Done von KV-P0, damit sie
+nicht als eigene Phase liegen bleibt.
+
+Das Verbrauchsbuch (`usage_event`) bleibt vollstaendig bestehen: es ist unsere eigene
+Kostenrechnung und die Belegkette, nicht nur eine Rechnungsgrundlage. Nur der Weg nach
+aussen bleibt zu. Eine spaetere Umstellung auf Weiterbelastung ist billig, sobald KV-P6
+den Ledger geldrichtig macht.
+
+**Urspruengliche Fassung (ueberholt).** L2 ist real (138 von 138 Zeilen nie gemeldet, kein Cron im
 Render-Workspace, 0 Treffer auf `/api/billing/flush-meters` im gesamten abrufbaren
 Log-Fenster), aber es ist **keine technische Frage**. Ob nutzungsbasiert weiterbelastet
 werden soll, entscheidet der Owner (Entscheidung 2). Bis dahin bleibt die Sperre aus KV-P0
@@ -721,6 +962,29 @@ andere Aussage als 100 % bei `ohne_schaetzung=0`, und beide stehen nebeneinander
 
 Zu beantworten, **bevor** gebaut wird. Keine dieser Fragen laesst sich aus dem Code ableiten.
 
+**Beantwortet am 2026-08-03.** Der Owner hat den Zweck dieses Plans dabei enger und
+schaerfer gefasst als die urspruengliche Formulierung: **Ziel ist ein vollstaendiges Bild
+der Kosten, die EIN Kunde durch SEINEN Verbrauch verursacht, auf der Achse, die seinen
+Kostenrahmen durchsetzt.** Woertlich: "ich muss alle Kosten begreifen, die mit seinem
+Verbrauch zu tun haben. Also Text-to-Speech, Speech-to-Text, die Miete der Nummer, seine
+Telefonkosten an sich, aber nicht die Stripe-Gebuehren." Daraus folgen zwei
+Umfangs-Erweiterungen gegenueber der Erstfassung (s. KV-P4 und KV-P7).
+
+| # | Frage | Entscheidung |
+|---|---|---|
+| 1 | Inbound-Minuten auf die Tenant-Decke? | **(a) ja, dieselbe Achse wie Outbound** |
+| 2 | Verbrauch an Stripe weiterbelasten? | **(a) nein - der Abo-Preis ist endgueltig, KV-P9 entfaellt** |
+| 3 | Live-Zaehler (mid-call) auch fuer Inbound? | **(b) ja - Begruendung der Erstfassung widerlegt, s. unten** |
+| 4 | DID-Miete rueckwirkend nachbuchen? | **(a) nein, ab Backfill vorwaerts** |
+| 5 | Darf KV-M3 die Deckungs-Warnung verstummen lassen? | **(a) ja, mit den drei Nebenzaehlern aus TOD 8** |
+| 6 | Alarm-Schwelle fuer KV-M4 | offen - erst nach dem dritten Monatswert entscheidbar |
+| 7 | Plattform-Fixkosten (Stripe/WorkOS/Render) | **draussen** - sie haben mit dem Verbrauch des Kunden nichts zu tun |
+
+**Zu 7, praeziser als die urspruengliche Empfehlung:** Fixkosten bleiben aus diesem Plan
+vollstaendig heraus, auch aus KV-M4. Die Gegenprobe vergleicht Provider-Verbrauchskosten
+gegen gebuchte Verbrauchskosten; eine Fixkosten-Zeile beantwortet keine der zwei Fragen,
+die KV-M4 stellt, und verwaessert beide.
+
 **1. Sollen Inbound-Carrier-Minuten das Tenant-Budget belasten?**
 *Kontext, gemessen:* Sie kosten real Geld (Assistant-Gebuehr 0,05 USD je angefangener Minute
 flat, plus SIP, Recording, TTS), sie werden bereits bepreist im Ledger gefuehrt (N1), und die
@@ -768,12 +1032,30 @@ spaetere Umstellung auf (b) ist billig, sobald KV-P6 den Ledger geldrichtig mach
   abgeschnitten; die maximale Ueberziehung ist ein Gespraech.
 - *(b) Ja* - konsistent mit Outbound, aber ein Anrufer wird mitten im Satz getrennt.
 
-*Empfehlung: (a).* Begruendung: Der Schaden ist beschraenkt (ein Gespraech, gedeckelt durch
-die Zeit-Notbremse), und ein aufgelegter Inbound-Anruf trifft nicht den Nutzer, sondern
-dessen Anrufer - jemanden, der von unseren Decken nichts weiss. Falls (b): der Live-Term
-braucht dann `store.activeInboundCallsFor` als eigenen Produzenten, `liveVoiceSpendCents`
-(`metering.js:81-86`) darf seinen Vertrag "nur Outbound" nicht per Kommentar-Aenderung
-verlieren.
+**ENTSCHIEDEN 2026-08-03: (b).** Die Empfehlung der Erstfassung lautete (a) und stand auf
+einer falschen Praemisse - sie ist hier korrigiert stehengelassen, damit die Korrektur
+nachvollziehbar bleibt:
+
+- *Die Praemisse war falsch.* "Ein laufendes Inbound-Gespraech wird nie abgeschnitten"
+  stimmt nicht. `blockingBudgetAxis` laeuft in JEDER Runde der Gespraechsschleife
+  (`claude.js:661`, Assistant-Pfad `telnyx-llm-shim.js:561`) und ist richtungsblind; ueber
+  `budgetHangupOutcome` (`routes/voice.js:133`) wird ein Inbound-Gespraech bei erschoepfter
+  Decke schon HEUTE mitten im Satz beendet. (b) fuegt diesen Abbruch nicht hinzu - er
+  existiert. (b) schliesst nur das Fenster, in dem die Pruefung die eigenen, noch nicht
+  gebuchten Minuten des laufenden Inbound-Legs nicht sieht.
+- *Die Code-Begruendung kippt mit Entscheidung 1.* `metering.js:74` haelt fest: "Inbound
+  traegt nichts bei - was nie gebucht wird, darf auch live nicht zaehlen." Mit (1a) wird
+  Inbound gebucht; derselbe Satz ergibt dann das Gegenteil: was gebucht wird, MUSS live
+  zaehlen, sonst ist der Live-Term ausgerechnet bei einer buchenden Kostenart blind.
+- *Owner-Begruendung:* der Zweck des Rahmens ist, den laufenden Verbrauch zu sehen und bei
+  Ueberschreitung zu beenden - eine Richtungs-Ausnahme davon ist willkuerlich.
+
+*Umsetzung (Umfang von KV-P2):* `store.activeOutboundCallsFor` wird zu einer
+richtungsoffenen Abfrage erweitert statt um eine zweite `activeInboundCallsFor` ergaenzt -
+EINE Quelle (G5), keine zweite Liste, die jemand synchron halten muss. Der Vertrag von
+`liveVoiceSpendCents` (`metering.js:79`) aendert sich damit ausdruecklich von "nur
+Outbound" auf "alle laufenden Legs des Tenants"; der Modul-Kommentar wird mitgezogen, nicht
+nur der Code.
 
 **4. Wird die DID-Miete rueckwirkend nachgebucht?**
 *Kontext:* Der Owner-Tenant haelt seine DE-Nummer seit 2026-06-24 ohne je eine Mietbuchung,
@@ -821,9 +1103,10 @@ Zeile dazu, sonst sieht die Zahl besser aus, als die Realitaet ist.
   dokumentiert.
 - **Kein Umbau der Plattform-Achse.** `MAX_BUDGET_EUR` ist seit E10 Beobachtung; dieser Plan
   aendert daran nichts.
-- **Kein Bau der latenten Pfade.** KV-P7 verriegelt Play-TTS und Realtime, es baut sie nicht;
-  der ElevenLabs-Kontingent-Zaehler (K18) ist die eine Ausnahme, wo KV-P7 selbst eine Kante
-  speist statt nur zu verriegeln - siehe dort.
+- **Kein Bau der latenten Pfade.** KV-P7 verriegelt Play-TTS und Realtime, es baut sie nicht.
+  Zwei Ausnahmen, beide dort begruendet: der ElevenLabs-Kontingent-Zaehler (K18) und - seit
+  der Owner-Erweiterung vom 2026-08-03 - die **Bepreisung** der TTS-Zeichen. Beide speisen
+  eine Kante, statt nur zu verriegeln; der Play-TTS-Pfad selbst bleibt aus.
 - **Keine Sicherung wird entfernt oder aufgeweicht.** Jede Phase fuegt hinzu oder speist eine
   vorhandene Achse. Zwei Ausnahmen, beide ausdruecklich als eigene Owner-Entscheidung
   gefuehrt und beide NICHT Teil der Phasen selbst: die WARN-Meldung aus KV-M3 (Entscheidung
