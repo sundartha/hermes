@@ -104,6 +104,31 @@ const MS_PER_SECOND = 1000;
 const detailRecordsThrottle = createMinuteWindowThrottle({
   budget: DETAIL_RECORDS_BUDGET_PER_MINUTE,
 });
+
+// ---- KV-M4: monatliche Provider-Rechnungssumme (Gegenprobe, reine Beobachtung) ----
+// GET /v2/invoices - live verifiziert 2026-08-03 (echter Aufruf gegen den Live-Account +
+// die offizielle OpenAPI-Schema-Definition, team-telnyx/openapi spec3.json): die
+// Invoice-Ressource traegt AUSSCHLIESSLICH invoice_id/file_id/period_start/period_end/
+// paid/url - KEIN Geldbetrag, KEINE Waehrung. Das Konto arbeitet zusaetzlich prepaid
+// (GET /v2/balance liefert credit_limit=0, available_credit als Guthabenstand) - ein
+// abrufbarer "Rechnungsbetrag" existiert bei Telnyx strukturell nicht als API-Feld, nur
+// als PDF hinter file_id (Parsing ausserhalb des Scopes: keine neue Dependency, G35).
+// Der Endpunkt kennt laut Schema NUR die Query-Parameter sort/page - KEIN filter[month]
+// (die im Plan angenommene Filterform war eine unverifizierte Annahme und ist damit
+// widerlegt, nicht nur umbenannt). Der Monatsabgleich laeuft deshalb CLIENT-SEITIG ueber
+// period_start, sortiert absteigend (juengste zuerst) - EINE Seite mit
+// INVOICE_LOOKBACK_PAGE_SIZE Zeilen deckt bei monatlicher Rechnungsfrequenz weit mehr als
+// ein Jahr ab und bleibt damit bei genau EINEM GET (Lastbudget TEIL 3).
+const INVOICES_BASE = "/v2/invoices";
+const INVOICE_LOOKBACK_PAGE_SIZE = 12;
+const INVOICE_SORT_NEWEST_FIRST = "-period_start";
+
+function logInvoiceFetchFailure(err) {
+  const status = err?.providerStatus ?? MISSING_PROVIDER_FIELD;
+  const code = err?.providerCode ?? MISSING_PROVIDER_FIELD;
+  console.warn(`[telnyx/voice] fetchMonthlyInvoiceTotal fehler status=${status} code=${code}`);
+}
+
 // Zuordnung Beleg -> Call, ZWEISTUFIG (LCT-FIX-1). Die frueheren Kandidaten leg_id/
 // call_leg_id liefert Telnyx nicht bzw. nur als UUID eines ANDEREN ID-Systems - damit wurde
 // live JEDER Beleg verworfen (297 Belege, Messung 2026-07-21).
@@ -874,5 +899,39 @@ export const telnyxVoice = {
     }
     logCostRecordsOk({ recordCount: records.length, acceptedByRoute, rejectedByReason });
     return { ok: true, records };
+  },
+
+  // KV-M4: Provider-Monatssumme fuer die Gegenprobe (reine Beobachtung). GENAU EIN GET,
+  // absteigend sortiert (juengste zuerst) - der gesuchte Monat ist immer der zuletzt
+  // abgeschlossene, eine Seite mit INVOICE_LOOKBACK_PAGE_SIZE Zeilen deckt ihn ohne
+  // Nachblaettern. `month` bindet NUR den client-seitigen Vergleich gegen period_start -
+  // der Endpunkt kennt keinen Monatsfilter (verifiziertes Schema, s. Kopf-Kommentar).
+  //
+  // WIRFT NIE. ok:true ist mit dem HEUTIGEN Telnyx-Schema STRUKTURELL unerreichbar: die
+  // Invoice-Ressource traegt keinen Geldbetrag (live + OpenAPI-Schema verifiziert,
+  // 2026-08-03) - dieser Zweig ist bewusst NICHT auskodiert (kein toter Code fuer ein
+  // Feld, das nachweislich nicht existiert). Aendert Telnyx das Schema kuenftig, ist die
+  // Parsing-Erweiterung eine eigene, spaetere Aenderung.
+  async fetchMonthlyInvoiceTotal({ month }) {
+    if (!config.telephony.telnyxApiKey) return { ok: false, reason: "config_missing" };
+    try {
+      const q = new URLSearchParams({
+        sort: INVOICE_SORT_NEWEST_FIRST,
+        "page[size]": String(INVOICE_LOOKBACK_PAGE_SIZE),
+      });
+      const res = await fetch(`${config.telephony.telnyxApiBase}${INVOICES_BASE}?${q}`, {
+        headers: headers(),
+      });
+      await assertTelnyxOk(res, "fetchMonthlyInvoiceTotal", ATTACH_STATUS);
+      const { data } = await parseTelnyxBody(res);
+      if (!Array.isArray(data)) return { ok: false, reason: "shape_unexpected" };
+      const invoiceOfMonth = data.some(
+        (row) => typeof row.period_start === "string" && row.period_start.slice(0, 7) === month,
+      );
+      return { ok: false, reason: invoiceOfMonth ? "amount_not_exposed_by_provider" : "invoice_not_found" };
+    } catch (err) {
+      logInvoiceFetchFailure(err);
+      return { ok: false, reason: "provider_error" };
+    }
   },
 };

@@ -11,6 +11,7 @@ import {
   calendarMap,
   emptyUsage,
   emptyPlatformTtsUsage,
+  emptyCostCrossCheck,
   sanitizeProfile,
   BOOTSTRAP_TENANT_ID,
   normNum,
@@ -57,6 +58,7 @@ export function load() {
     state.reservations ||= {}; // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
     state.subIndex ||= {}; // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
     state.platformTtsUsage ||= emptyPlatformTtsUsage(); // LCT P7: Bestands-store.json ohne die Zeile nachziehen
+    state.costCrossCheck ||= emptyCostCrossCheck(); // KV-M4: Bestands-store.json ohne die Zeile nachziehen
     state.calls = migrateCallFields(state.calls || []);
   } catch {
     // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3): erst
@@ -712,6 +714,16 @@ export function recordTenantTtsCharacters(tenantId, chars) {
   const r = ops.recordTenantTtsCharacters(load(), tenantId, chars);
   if (r.changed) save();
   return r;
+}
+
+// ---- KV-M4: Riegel der monatlichen Gegenprobe ----
+// PERSISTIERT (Muster recordTtsCharacters) -> save() NUR bei tatsaechlicher Aenderung
+// (laterMonotonicKey kann bei einem bereits gestempelten/zukuenftigen Monat No-op sein).
+export function markCostCrossCheckAttempted(monthKey) {
+  const s = load();
+  const before = s.costCrossCheck.lastCheckedMonthKey;
+  ops.markCrossCheckAttempted(s, monthKey);
+  if (s.costCrossCheck.lastCheckedMonthKey !== before) save();
 }
 
 // ---- Per-Tenant-Budget + Metering (P6b3) ----

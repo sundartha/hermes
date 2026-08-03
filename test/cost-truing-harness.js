@@ -12,6 +12,7 @@
 // telnyx-cost-records.test.js) - genau wie sie telnyxVoice/cost-truing.js dynamisch holen.
 import {
   createCall, recordCallCostTruingResult, applyCostCorrectionCents, recordTenantTtsCharacters,
+  markCrossCheckAttempted,
 } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -44,6 +45,11 @@ export function makeStubStore(state, { nowMs = Date.now() } = {}) {
     // darueber (ECHTE state-ops-Funktion, kein zweites, vereinfachtes Verhalten).
     recordTenantTtsCharacters(tenantId, chars) {
       return recordTenantTtsCharacters(state, tenantId, chars);
+    },
+    // KV-M4: Riegel der monatlichen Gegenprobe - dieselbe Delegation (ECHTE state-ops-
+    // Funktion, kein zweites, vereinfachtes Verhalten).
+    markCostCrossCheckAttempted(monthKey) {
+      markCrossCheckAttempted(state, monthKey);
     },
   };
 }

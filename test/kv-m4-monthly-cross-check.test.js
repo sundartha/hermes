@@ -1,0 +1,295 @@
+// KV-M4 (tasks/PLAN-KOSTEN-VOLLSTAENDIGKEIT.md): monatliche Gegenprobe Provider-Rechnung
+// gegen abgerufene Ist-Kosten gegen gebuchte Gate-Betraege. REINE BEOBACHTUNG - keiner
+// dieser Tests behauptet etwas ueber die Gate-Achse oder den Ledger selbst (die werden nur
+// gelesen). In-process, netzfrei (P12/R): der Telnyx-Provider wird ausschliesslich ueber
+// fakeVoiceControl gestellt, kein echter fetch.
+//
+// Muster kv-m3-coverage-denominator.test.js + cost-truing-harness.js (G5: kein zweiter
+// Stub-Store, keine zweite fakeConfig/fakeVoiceControl-Kopie).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  makeDefaultState,
+  createCall,
+  recordUsageEvent,
+  crossCheckDueMonthKey,
+} from "../src/store/state-ops.js";
+import { BOOTSTRAP_TENANT_ID, PROVIDER, USAGE_EVENT_KIND } from "../src/store/defaults.js";
+import { makeCostCrossCheck } from "../src/billing/cost-cross-check.js";
+import { runSweepTick } from "../src/boot.js";
+import { makeStubStore, fakeConfig, fakeVoiceControl } from "./cost-truing-harness.js";
+import { captureConsole } from "./helpers.js";
+
+// Feste Uhr: der faellige Monat ist IMMER der zuletzt VOLLSTAENDIG abgeschlossene
+// UTC-Kalendermonat relativ zu NOW_ISO - 2026-08-15 -> faellig ist 2026-07.
+const NOW_ISO = "2026-08-15T12:00:00.000Z";
+const DUE_MONTH_KEY = "2026-07";
+const OTHER_MONTH_KEY = "2026-06";
+
+// Ein bereits abgeglichener Telnyx-Call mit bekanntem actual_cost_micro_cents, verankert
+// auf monthKey (estimatedCostSpendMonthKey - DERSELBE Anker wie reconcileVoiceBudget/
+// bookCents, KS-P5). provider/costTruedAt ueberschreibbar, um die drei Filter von
+// actualCostMicroCentsForMonth einzeln als Rauschen zu pruefen (Provider, Monat, Abgleich-
+// Status).
+function makeTruedCall(state, { monthKey, actualCostMicroCents, provider = PROVIDER.TELNYX, costTruedAt = "2026-07-20T00:00:00.000Z" }) {
+  const call = createCall(state, {
+    direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID, provider,
+  });
+  call.estimatedCostSpendMonthKey = monthKey;
+  call.costTruedAt = costTruedAt;
+  call.actualCostMicroCents = actualCostMicroCents;
+  return call;
+}
+
+function makeLedgerEvent(state, { kind, costCents, occurredAt }) {
+  return recordUsageEvent(state, {
+    tenantId: BOOTSTRAP_TENANT_ID, kind, quantity: 1, costCents, occurredAt,
+  });
+}
+
+test("KV-M4-1 Rechnungstest mit gestellten Zahlen: drei Rohwerte und zwei Differenzen exakt, inkl. Waehrungs-Umrechnung mit NICHT-neutraler Rate", async () => {
+  const state = makeDefaultState();
+
+  // Zwei belegbare Telnyx-Calls im faelligen Monat -> Summe 1.198.000.000 USD-Mikro-Cent.
+  makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 600_000_000 });
+  makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 598_000_000 });
+  // Rauschen: falscher Monat, falscher Provider, nicht abgeglichen - jedes wuerde die
+  // Summe verfaelschen, wenn der jeweilige Filter fehlte.
+  makeTruedCall(state, { monthKey: OTHER_MONTH_KEY, actualCostMicroCents: 999_000_000 });
+  makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 777_000_000, provider: PROVIDER.TWILIO });
+  makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 555_000_000, costTruedAt: null });
+
+  // Zwei VOICE_MINUTE-Belege im faelligen Monat -> Summe 920 EUR-Cent (Gate-Ledger-Proxy).
+  makeLedgerEvent(state, { kind: USAGE_EVENT_KIND.VOICE_MINUTE, costCents: 400, occurredAt: "2026-07-05T00:00:00.000Z" });
+  makeLedgerEvent(state, { kind: USAGE_EVENT_KIND.VOICE_MINUTE, costCents: 520, occurredAt: "2026-07-25T00:00:00.000Z" });
+  // Rauschen: falscher Monat (VOICE_MINUTE) UND falsche Kosten-Art (AI_TOKEN, DERSELBE
+  // Monat, ANDERER Betrag) - das ist die Mutationsprobe-Zielgroesse (LIEFERE 4): vertauscht
+  // die Implementierung carrierGateCostCentsForMonth gegen eine Summe ueber AI_TOKEN, liefert
+  // sie 999 statt 920 und dieser exakte Assert wird rot.
+  makeLedgerEvent(state, { kind: USAGE_EVENT_KIND.VOICE_MINUTE, costCents: 300, occurredAt: "2026-06-10T00:00:00.000Z" });
+  makeLedgerEvent(state, { kind: USAGE_EVENT_KIND.AI_TOKEN, costCents: 999, occurredAt: "2026-07-10T00:00:00.000Z" });
+
+  const store = makeStubStore(state);
+  // NICHT-neutrale Rate (0,92 EUR/USD, wie im Kickoff-Beispiel) - eine neutrale Rate
+  // (1.000.000) wuerde einen Richtungs-/Rundungsfehler der Umrechnung verdecken.
+  const RATE_MICRO = 920_000;
+  const config = fakeConfig({ providerToBucketRateMicro: RATE_MICRO });
+  const invoiceTotalMicroCents = 1_245_000_000;
+  const voiceControl = fakeVoiceControl({
+    telnyx: {
+      async fetchMonthlyInvoiceTotal({ month }) {
+        assert.equal(month, DUE_MONTH_KEY, "die Gegenprobe fragt exakt den faelligen Monat ab");
+        return { ok: true, totalMicroCents: invoiceTotalMicroCents, currency: "USD" };
+      },
+    },
+  });
+  const { runMonthlyCrossCheck } = makeCostCrossCheck({ store, config, voiceControl });
+
+  let result;
+  const logs = await captureConsole(async () => {
+    result = await runMonthlyCrossCheck(NOW_ISO);
+  });
+
+  assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY });
+
+  // Von Hand gerechnet (keine Naeherung, kein Aufruf derselben Produktionsfunktion):
+  //   diff_rechnung_minus_ist = 1.245.000.000 - 1.198.000.000 = 47.000.000
+  //   konvertiert = ceil(1.198.000.000 * 920.000 / 1e12) = ceil(1102,16) = 1103
+  //   diff_ist_minus_gate = 1103 - 920 = 183
+  const expectedLine =
+    "[cost-cross-check] monat=2026-07 telnyx_rechnung_usd_micro_cent=1245000000 " +
+    "ist_calls_usd_micro_cent=1198000000 diff_rechnung_minus_ist_usd_micro_cent=47000000 " +
+    "gate_carrier_eur_cent=920 ist_konvertiert_eur_cent(rate=920000)=1103 " +
+    "diff_ist_minus_gate_eur_cent=183";
+  assert.ok(logs.includes(expectedLine), `Log-Zeile weicht ab.\nErwartet: ${expectedLine}\nErhalten: ${logs.join("\n")}`);
+});
+
+test("KV-M4-2 Idempotenz: zwei Sweeps im selben Kalendermonat loesen genau EINEN Provider-Aufruf aus", async () => {
+  const state = makeDefaultState();
+  const store = makeStubStore(state);
+  const config = fakeConfig();
+  let invoiceCalls = 0;
+  const voiceControl = fakeVoiceControl({
+    telnyx: {
+      async fetchMonthlyInvoiceTotal() {
+        invoiceCalls++;
+        return { ok: false, reason: "amount_not_exposed_by_provider" };
+      },
+    },
+  });
+  const { runMonthlyCrossCheck } = makeCostCrossCheck({ store, config, voiceControl });
+
+  const first = await runMonthlyCrossCheck(NOW_ISO);
+  const second = await runMonthlyCrossCheck(NOW_ISO);
+
+  assert.deepEqual(first, { skipped: false, monthKey: DUE_MONTH_KEY });
+  assert.deepEqual(second, { skipped: true });
+  assert.equal(invoiceCalls, 1, "der zweite Sweep im selben Monat loest KEINEN weiteren Provider-Aufruf aus");
+});
+
+test("KV-M4-3 Idempotenz ueberlebt einen Neustart (JSON-Serialisierungs-Roundtrip, nicht nur In-Memory)", async () => {
+  const stateBeforeRestart = makeDefaultState();
+  const storeBeforeRestart = makeStubStore(stateBeforeRestart);
+  const config = fakeConfig();
+  let invoiceCalls = 0;
+  const countingVoiceControl = fakeVoiceControl({
+    telnyx: {
+      async fetchMonthlyInvoiceTotal() {
+        invoiceCalls++;
+        return { ok: false, reason: "amount_not_exposed_by_provider" };
+      },
+    },
+  });
+
+  const run1 = makeCostCrossCheck({ store: storeBeforeRestart, config, voiceControl: countingVoiceControl });
+  const firstResult = await run1.runMonthlyCrossCheck(NOW_ISO);
+  assert.deepEqual(firstResult, { skipped: false, monthKey: DUE_MONTH_KEY });
+  assert.equal(invoiceCalls, 1);
+
+  // Simulierter Prozess-Neustart: state.json.stringify/parse-Roundtrip (Muster
+  // kv-p6-json-durchstich.test.js) statt eines zweiten Aufrufs auf DEMSELBEN In-Memory-
+  // Objekt - genau das ist der Unterschied zu einem reinen In-Memory-Test (KV-M4-2 allein
+  // wuerde die Persistenz NICHT belegen).
+  const stateAfterRestart = JSON.parse(JSON.stringify(stateBeforeRestart));
+  assert.equal(
+    stateAfterRestart.costCrossCheck.lastCheckedMonthKey,
+    DUE_MONTH_KEY,
+    "der Riegel muss den Serialisierungs-Roundtrip tragen",
+  );
+
+  const storeAfterRestart = makeStubStore(stateAfterRestart);
+  const run2 = makeCostCrossCheck({ store: storeAfterRestart, config, voiceControl: countingVoiceControl });
+  const secondResult = await run2.runMonthlyCrossCheck(NOW_ISO);
+
+  assert.deepEqual(secondResult, { skipped: true });
+  assert.equal(invoiceCalls, 1, "nach dem simulierten Neustart loest derselbe Monat KEINEN weiteren Provider-Aufruf aus");
+});
+
+test("KV-M4-4 Provider antwortet mit Fehler: kein Wurf, Log zeigt nicht_verfuegbar, Monat gilt als geprueft", async () => {
+  const state = makeDefaultState();
+  makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 100 });
+  const store = makeStubStore(state);
+  const config = fakeConfig();
+  let invoiceCalls = 0;
+  const voiceControl = fakeVoiceControl({
+    telnyx: {
+      async fetchMonthlyInvoiceTotal() {
+        invoiceCalls++;
+        throw new Error("kv-m4-4-netzfehler"); // Netzfehler-Stub liefert throw (Kickoff-Vorgabe)
+      },
+    },
+  });
+  const { runMonthlyCrossCheck } = makeCostCrossCheck({ store, config, voiceControl });
+
+  let result;
+  const logs = await captureConsole(async () => {
+    result = await runMonthlyCrossCheck(NOW_ISO);
+  });
+
+  assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY }, "runMonthlyCrossCheck wirft NICHT weiter");
+  assert.ok(
+    logs.some((l) => l === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=provider_error) ist_calls_usd_micro_cent=100 gate_carrier_eur_cent=0"),
+    `unerwartete Log-Zeile: ${logs.join("\n")}`,
+  );
+
+  const second = await runMonthlyCrossCheck(NOW_ISO);
+  assert.deepEqual(second, { skipped: true }, "der Monat gilt trotz Fehlschlag als geprueft - kein zweiter Versuch im selben Monat");
+  assert.equal(invoiceCalls, 1);
+});
+
+test("KV-M4-5 Provider liefert keine Rechnung fuer den Monat: dieselbe Behandlung wie ein harter Fehler", async () => {
+  const state = makeDefaultState();
+  const store = makeStubStore(state);
+  const config = fakeConfig();
+  const voiceControl = fakeVoiceControl({
+    telnyx: {
+      async fetchMonthlyInvoiceTotal() {
+        return { ok: false, reason: "invoice_not_found" };
+      },
+    },
+  });
+  const { runMonthlyCrossCheck } = makeCostCrossCheck({ store, config, voiceControl });
+
+  let result;
+  const logs = await captureConsole(async () => {
+    result = await runMonthlyCrossCheck(NOW_ISO);
+  });
+
+  assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY });
+  assert.ok(
+    logs.some((l) => l.includes("telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found)")),
+    `unerwartete Log-Zeile: ${logs.join("\n")}`,
+  );
+
+  const second = await runMonthlyCrossCheck(NOW_ISO);
+  assert.deepEqual(second, { skipped: true }, "kein zweiter Versuch im selben Monat");
+});
+
+test("KV-M4-6 Leerer Monat: keine Calls, keine Ledger-Belege -> beide Summen 0 (nicht null), kein Wurf", async () => {
+  const state = makeDefaultState();
+  const store = makeStubStore(state);
+  const config = fakeConfig();
+  const voiceControl = fakeVoiceControl({
+    telnyx: { async fetchMonthlyInvoiceTotal() { return { ok: false, reason: "invoice_not_found" }; } },
+  });
+  const { runMonthlyCrossCheck } = makeCostCrossCheck({ store, config, voiceControl });
+
+  let result;
+  const logs = await captureConsole(async () => {
+    result = await runMonthlyCrossCheck(NOW_ISO);
+  });
+
+  assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY });
+  assert.ok(
+    logs.some((l) => l === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found) ist_calls_usd_micro_cent=0 gate_carrier_eur_cent=0"),
+    `unerwartete Log-Zeile: ${logs.join("\n")}`,
+  );
+});
+
+test("KV-M4-7 erster Lauf ueberhaupt: crossCheckDueMonthKey liefert den Vormonat, nicht null", () => {
+  const state = makeDefaultState();
+  assert.equal(state.costCrossCheck.lastCheckedMonthKey, null, "Vorbedingung: noch nie geprueft");
+  assert.equal(crossCheckDueMonthKey(state, NOW_ISO), DUE_MONTH_KEY);
+});
+
+// Winziger, lokaler console.error-Capture (NICHT test/helpers.js erweitert): captureConsole
+// dort deckt NUR log/warn ab (Muster kv-m3/cost-truing-Tests) - boot.js loggt Sweep-Fehler
+// bewusst ueber console.error (Fehlerkanal), ein dritter Konsument dieser einen Zeile waere
+// hier unverhaeltnismaessig gegenueber einem 6-Zeilen-Lokal-Helfer.
+async function captureConsoleError(fn) {
+  const lines = [];
+  const orig = console.error;
+  console.error = (...a) => lines.push(a.map(String).join(" "));
+  try {
+    await fn();
+  } finally {
+    console.error = orig;
+  }
+  return lines;
+}
+
+test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing und provisioning NICHT auf (Test gegen die boot.js-Verdrahtung selbst)", async () => {
+  let costTruingCalled = false;
+  let provisioningCalled = false;
+  const costTruingFake = { async runCostTruingSweep() { costTruingCalled = true; return {}; } };
+  const provisioningFake = { async settleDueNumberMonthMeters() { provisioningCalled = true; return {}; } };
+  const throwingCostCrossCheck = { async runMonthlyCrossCheck() { throw new Error("kv-m4-8-boom"); } };
+
+  const errorLogs = await captureConsoleError(async () => {
+    // runSweepTick selbst ist SYNCHRON (kein await zwischen den drei Zweigen) - der Aufruf
+    // darf nicht werfen, obwohl einer der drei Zweige rejected.
+    assert.doesNotThrow(() => {
+      runSweepTick({ costTruing: costTruingFake, provisioning: provisioningFake, costCrossCheck: throwingCostCrossCheck });
+    });
+    // Alle drei Zweige sind fire-and-forget - eine Microtask-Runde reicht, damit auch die
+    // werfende Promise ihr .catch() durchlaeuft, bevor der Test endet.
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+
+  assert.equal(costTruingCalled, true, "costTruing.runCostTruingSweep lief trotz werfendem costCrossCheck");
+  assert.equal(provisioningCalled, true, "provisioning.settleDueNumberMonthMeters lief trotz werfendem costCrossCheck");
+  assert.ok(
+    errorLogs.some((l) => l === "[cost-cross-check] kv-m4-8-boom"),
+    `der Wurf wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
+  );
+});

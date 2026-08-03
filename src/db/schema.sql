@@ -445,6 +445,18 @@ CREATE TABLE IF NOT EXISTS platform_tts_usage (
   warned_cycle TEXT
 );
 
+-- cost_cross_check: GLOBAL, keine Tenant-Bindung (KV-M4 - die monatliche Gegenprobe
+-- Provider-Rechnung/Ist-Kosten/Gate-Buchung ist plattformweit, EIN Telnyx-Konto, Muster
+-- platform_tts_usage oben). Singleton-Tabelle (id-CHECK erzwingt genau eine Zeile) statt
+-- tenant_id-PK: es gibt keine Tenant-Dimension, der Riegel deckt genau EINEN Zaehler.
+-- last_checked_month_key ist 'YYYY-MM' (Muster platform_tts_usage.cycle_key) - der zuletzt
+-- GEPRUEFTE (nicht: erfolgreich abgeglichene) Kalendermonat. REINE BEOBACHTUNG: kein Gate,
+-- kein Ledger-Beleg, keine Buchung liest oder schreibt diese Tabelle ausser dem Riegel selbst.
+CREATE TABLE IF NOT EXISTS cost_cross_check (
+  id                     INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  last_checked_month_key TEXT
+);
+
 -- notification: Ring-Puffer (neueste zuerst), seq fuer stabile Reihenfolge.
 CREATE TABLE IF NOT EXISTS notification (
   id        TEXT PRIMARY KEY,
@@ -643,6 +655,8 @@ ALTER TABLE usage_event        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_event        FORCE  ROW LEVEL SECURITY;
 ALTER TABLE platform_tts_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE platform_tts_usage FORCE  ROW LEVEL SECURITY;
+ALTER TABLE cost_cross_check   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cost_cross_check   FORCE  ROW LEVEL SECURITY;
 
 -- tenant_isolation-Policies: USING filtert lesbare/aenderbare Zeilen, WITH CHECK
 -- prueft NEU geschriebene Zeilen (INSERT + UPDATE-Ergebnis). Beide Klauseln sind
@@ -688,6 +702,12 @@ CREATE POLICY profile_global ON profile USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS tenant_isolation ON platform_tts_usage;
 DROP POLICY IF EXISTS platform_tts_usage_global ON platform_tts_usage;
 CREATE POLICY platform_tts_usage_global ON platform_tts_usage USING (true) WITH CHECK (true);
+-- cost_cross_check: GLOBAL wie platform_tts_usage - keine Tenant-Dimension, kein
+-- app.current_tenant-Filter. FORCE RLS bleibt aktiv (Konsistenz), die Policy ist permissiv
+-- (Muster platform_tts_usage_global).
+DROP POLICY IF EXISTS tenant_isolation ON cost_cross_check;
+DROP POLICY IF EXISTS cost_cross_check_global ON cost_cross_check;
+CREATE POLICY cost_cross_check_global ON cost_cross_check USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS tenant_isolation ON notification;
 CREATE POLICY tenant_isolation ON notification
   USING (tenant_id = current_setting('app.current_tenant', true))

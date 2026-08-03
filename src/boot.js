@@ -675,6 +675,32 @@ export async function healBootstrapStore({ config, store, messaging }) {
   return decision;
 }
 
+// KV-M4: der periodische Sweep-Tick als benannte, exportierte Funktion (testbar ohne
+// echten Timer/Spawn - Muster makeGracefulShutdown weiter unten: "injizierbare Fabrik,
+// testbar mit Stub + Spy, ohne echten Prozess-Exit/Spawn"). DREI unabhaengige, SYNCHRON
+// gestartete Zweige (kein await zwischen ihnen) - ein Wurf/Reject in einem Zweig darf die
+// anderen NIE beruehren. Das ist keine neue Eigenschaft, die diese Funktion herstellen
+// muss: ein throw in einer async-Funktion wird zu einer rejected Promise, nicht zu einer
+// synchron propagierenden Exception, die die Zeilen davor abbricht (JS-Event-Loop). Jeder
+// Zweig traegt zusaetzlich sein eigenes .catch() (zweite Linie, Muster der beiden
+// Bestandszweige). test/kv-m4-monthly-cross-check.test.js (KV-M4-8) belegt die Isolation
+// direkt gegen diese Funktion, nicht nur als Behauptung im Kommentar.
+export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
+  void costTruing
+    .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
+    .catch((e) => console.error("[cost-truing]", e.message));
+  void provisioning
+    .settleDueNumberMonthMeters()
+    .catch((e) => console.error("[number-month]", e.message));
+  // KV-M4: dritter, unabhaengiger Schritt im selben Stunden-Takt - kein zweiter Timer,
+  // keine neue Ressource (TEIL 3 des Kickoffs). runMonthlyCrossCheck wirft intern nie
+  // (Ergebnis-Objekt), das .catch() hier ist trotzdem die zweite Linie, wie bei den
+  // beiden Zweigen darueber.
+  void costCrossCheck
+    .runMonthlyCrossCheck()
+    .catch((e) => console.error("[cost-cross-check]", e.message));
+}
+
 export async function bootServer({
   app,
   config,
@@ -683,6 +709,7 @@ export async function bootServer({
   callFinish,
   provisioning,
   costTruing,
+  costCrossCheck,
   messaging,
   consultDelivery,
 }) {
@@ -727,14 +754,14 @@ export async function bootServer({
   // sind voneinander unabhaengig: ein haengender CDR-Abruf blockiert die Miete nicht.
   // settleDueNumberMonthMeters wirft nicht (interner catch); das .catch() hier ist
   // derselbe Riegel gegen unhandled rejections wie beim Sweep darueber.
-  setInterval(() => {
-    void costTruing
-      .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
-      .catch((e) => console.error("[cost-truing]", e.message));
-    void provisioning
-      .settleDueNumberMonthMeters()
-      .catch((e) => console.error("[number-month]", e.message));
-  }, config.billing.costTruingSweepIntervalMs).unref();
+  //
+  // KV-M4: costCrossCheck faehrt als DRITTER, unabhaengiger Schritt in DEMSELBEN Intervall
+  // mit (runSweepTick oben, exportiert und direkt testbar) - kein zweiter Timer, keine
+  // neue Ressource.
+  setInterval(
+    () => runSweepTick({ costTruing, provisioning, costCrossCheck }),
+    config.billing.costTruingSweepIntervalMs,
+  ).unref();
 
   // F10-ORD (Review-Blocker Runde 1): rearmActiveCallTimers() laeuft ERST HIER, NACH
   // allen Boot-Gates (assertConfig/fakeOriginateBootBlocked/hasActiveNumber), unmittelbar

@@ -20,6 +20,7 @@ import {
   emptyUsage,
   emptyUsageMap,
   emptyPlatformTtsUsage,
+  emptyCostCrossCheck,
   BOOTSTRAP_TENANT_ID,
   sanitizeProfile,
   resolveProfileFrom,
@@ -128,6 +129,9 @@ export function makeDefaultState() {
     // rein prozess-lokaler Zaehler wuerde bei jedem Free-Tier-Restart auf 0 fallen und die
     // Kontingent-Wand nie erreichen (dieselbe P4-Asymmetrie-Begruendung wie spendMonthKey).
     platformTtsUsage: emptyPlatformTtsUsage(),
+    // KV-M4: Riegel der monatlichen Gegenprobe (Muster platformTtsUsage - global, keine
+    // Tenant-Dimension). PERSISTIERT (json.js/pg.js), s. emptyCostCrossCheck.
+    costCrossCheck: emptyCostCrossCheck(),
     // sub -> tenantId Resolver-Index (tenant-prolif-b). MERGE-OVERLAY fuer resolveTenant:
     // traegt die per Email-Merge (Phase A) an einen FREMDEN Tenant gebundenen Zweit-subs,
     // die NICHT als tenant.idpSubject gespiegelt sind. pg fuellt ihn bei init() aus account
@@ -2140,9 +2144,10 @@ function turnIncrementsBookable(tokens, microInc) {
 // ---- Spend-Monat-Achse (Budget-Achsen P4): additiv, INERT, kein Gate liest sie ----
 
 // Parst einen ISO-Zeitpunkt zu einem Date oder null, wenn er unlesbar ist. EINZIGE
-// Anker-Pruefung BEIDER periodischer Achsen dieses Moduls (G5): spendMonthKeyOf UND
-// ttsCycleKeyOf leiten ihre Uhr-Anomalie-Behandlung ("unlesbar -> null -> kein Reset")
-// aus dieser einen Stelle ab statt sie zu kopieren. Reine Funktion.
+// Anker-Pruefung ALLER periodischer Achsen dieses Moduls (G5): spendMonthKeyOf,
+// ttsCycleKeyOf UND - seit KV-M4 - previousMonthKeyOf leiten ihre Uhr-Anomalie-Behandlung
+// ("unlesbar -> null -> kein Reset") aus dieser einen Stelle ab statt sie zu kopieren.
+// Reine Funktion.
 function parseValidDate(nowIso) {
   const at = new Date(nowIso);
   return Number.isNaN(at.getTime()) ? null : at;
@@ -2170,15 +2175,29 @@ function spendMonthKeyOf(nowIso) {
   return at ? yearMonthKey(at) : null;
 }
 
+// KV-M4: der zuletzt VOLLSTAENDIG abgeschlossene UTC-Kalendermonat relativ zu nowIso (der
+// Monat VOR dem laufenden - der laufende Monat selbst ist strukturell nie abgeschlossen).
+// Muster ttsCycleKeyOf (Date VOR der Formatierung verschieben, dieselbe yearMonthKey-
+// Zeile). Unlesbarer Anker -> null (fail-closed, Muster spendMonthKeyOf: kein Provider-
+// Aufruf aus einer kaputten Uhr). Reine Funktion.
+function previousMonthKeyOf(nowIso) {
+  const at = parseValidDate(nowIso);
+  if (at === null) return null;
+  const previous = new Date(at.getTime());
+  previous.setUTCMonth(previous.getUTCMonth() - 1);
+  return yearMonthKey(previous);
+}
+
 // Der SPAETERE aus gespeichertem und laufendem periodischen Schluessel. Zwei
 // Schluessel-FORMATE, beide lexikografisch = chronologisch sortierbar -> String-Vergleich
-// genuegt, keine zweite Datums-Arithmetik: 'YYYY-MM' (Spend-Monat, TTS-Zyklus) und
-// ISO-8601 (Stripe-Periodenstart, GAP-01). EINZIGE Monotonie-/Zukunftsschluessel-Regel
-// ALLER DREI periodischer Achsen dieses Moduls (G5): der Spend-Monat der Budget-Achse
+// genuegt, keine zweite Datums-Arithmetik: 'YYYY-MM' (Spend-Monat, TTS-Zyklus, KV-M4-Riegel)
+// und ISO-8601 (Stripe-Periodenstart, GAP-01). EINZIGE Monotonie-/Zukunftsschluessel-Regel
+// ALLER VIER periodischer Achsen dieses Moduls (G5): der Spend-Monat der Budget-Achse
 // (P4/P7, ueber authoritativeSpendMonthKey darunter), der ElevenLabs-Zyklus-Schluessel
-// (LCT P7, ttsCycleKeyOf/recordTtsCharacters weiter unten) UND das Perioden-Fenster des
-// Budget-Gates (GAP-01, stampBudgetPeriod) teilen sich denselben Riegel statt ihn zwei
-// weitere Male zu implementieren.
+// (LCT P7, ttsCycleKeyOf/recordTtsCharacters weiter unten), das Perioden-Fenster des
+// Budget-Gates (GAP-01, stampBudgetPeriod) UND - seit KV-M4 - der Riegel der monatlichen
+// Gegenprobe (markCrossCheckAttempted) teilen sich denselben Riegel statt ihn dreifach zu
+// implementieren.
 //
 // MONOTONIE-RIEGEL (Sicherheitskern): weil das MAXIMUM gebildet wird, kann der
 // Schluessel per Konstruktion NIE rueckwaerts wandern, und ein Schluessel in der
@@ -3158,6 +3177,76 @@ export function platformTtsUsageView(s, cfg, nowIso) {
   const key = ttsCycleWindowKey(row, cfg, nowIso);
   const characters = key === row.cycleKey ? row.characters : 0;
   return { characters, quota: cfg.ttsCharacterQuota, warnPercent: cfg.ttsCharacterQuotaWarnPercent, cycleKey: key };
+}
+
+// ---- KV-M4: monatliche Gegenprobe (Provider-Rechnung/Ist-Kosten/Gate-Buchung) ----
+// REINE BEOBACHTUNG: keine dieser Funktionen mutiert die Gate-Achse (usage.costCents) oder
+// den Ledger - sie LESEN beide nur, exakt wie die Kickoff-Landkarte es verlangt.
+
+// Der faellige Monat der Gegenprobe ('YYYY-MM') oder null, wenn er schon geprueft wurde
+// (Muster ttsCycleWindowKey: Leser und Schreiber teilen sich denselben autoritativen
+// Schluessel ueber laterMonotonicKey). Faellig ist IMMER nur der zuletzt abgeschlossene
+// Monat relativ zu nowIso - kein Nachholen uebersprungener Monate (Owner-Vorgabe TEIL 3/4:
+// eine reine Beobachtung ohne Sperrwirkung rechtfertigt keine Nachhol-Schleife). Unlesbare
+// Uhr -> null (fail-closed: kein Provider-Aufruf aus einer kaputten Uhr). Reine Funktion.
+export function crossCheckDueMonthKey(s, nowIso) {
+  const dueMonthKey = previousMonthKeyOf(nowIso);
+  if (dueMonthKey === null) return null;
+  const checked = laterMonotonicKey(s.costCrossCheck.lastCheckedMonthKey, dueMonthKey);
+  return checked === s.costCrossCheck.lastCheckedMonthKey && checked !== null ? null : dueMonthKey;
+}
+
+// Stempelt monthKey als geprueft - VORWAERTS NUR (laterMonotonicKey-Riegel, kein
+// Rueckwaertsschreiben, G5: dieselbe Monotonie-Regel wie die drei uebrigen periodischen
+// Achsen dieses Moduls). Wird bei JEDEM Versuch aufgerufen, egal ob der Provider-Aufruf
+// gelang - der Aufrufer (billing/cost-cross-check.js) entscheidet das, diese Funktion
+// stempelt nur. Ein Riegel, der nur bei Erfolg stempelt, fragte einen dauerhaft
+// fehlschlagenden Provider stuendlich neu an (TEIL 3 Lastbudget: hoechstens EIN
+// Provider-Aufruf je Kalendermonat).
+export function markCrossCheckAttempted(s, monthKey) {
+  s.costCrossCheck.lastCheckedMonthKey = laterMonotonicKey(s.costCrossCheck.lastCheckedMonthKey, monthKey);
+}
+
+// Summe der abgerufenen Ist-Kosten (actualCostMicroCents, PROVIDER-Waehrung/USD-Mikro-Cent,
+// UNVERAENDERT) aller TELNYX-Calls, deren Buchungsmonat monthKey ist. NUR Telnyx: die
+// Provider-Rechnung (Zahl 1 der Gegenprobe) ist ausschliesslich Telnyx-Verkehr - eine
+// Twilio-Beimischung waere kein Vergleich zwischen gleichen Groessen.
+// Monatsanker ist estimatedCostSpendMonthKey - DERSELBE Anker, unter dem
+// reconcileVoiceBudget/bookCents auf die Gate-Achse gebucht haben (KS-P5 Bucket-Brigade) -
+// NICHT endedAt: Zahl 2 und Zahl 3 der Gegenprobe muessen ueber denselben Zeit-Anker-Typ
+// (Buchungsmonat) partitioniert sein, sonst vergleicht die Gegenprobe zwei verschieden
+// geschnittene Monate. costTruedAt !== null heisst "ein Abgleichsversuch fand statt"
+// (nicht zwingend erfolgreich); NUR ein ganzzahliger, nicht-negativer actualCostMicroCents
+// ist eine echte Messung (G26: kein Fliesskomma, keine erfundene 0 fuer "kein Wert").
+// Reine Query, kein IO.
+export function actualCostMicroCentsForMonth(s, monthKey) {
+  return s.calls
+    .filter(
+      (c) =>
+        c.provider === PROVIDER.TELNYX &&
+        c.costTruedAt !== null &&
+        Number.isSafeInteger(c.actualCostMicroCents) &&
+        c.actualCostMicroCents >= 0 &&
+        c.estimatedCostSpendMonthKey === monthKey,
+    )
+    .reduce((sum, c) => sum + c.actualCostMicroCents, 0);
+}
+
+// Summe der auf die Gate-Achse gebuchten Carrier-Betraege (EUR-Cent) des Kalendermonats
+// monthKey - REKONSTRUIERT aus dem Ledger (usageEvents, kind=VOICE_MINUTE), NICHT direkt
+// von der Gate-Achse gelesen: usage.costCents ist ein einziger, ungetrennter Skalar ueber
+// ALLE Kosten-Arten (Befund A, s. Kickoff/Plan) - es gibt keine persistierte
+// Kosten-Art-Aufschluesselung auf der Gate-Achse selbst.
+// PROXY, KEIN IST-WERT (Befund B): recordVoiceMinuteMeter (dieser Ledger-Schreiber)
+// laeuft NUR unter PAYMENT_ENABLED, waehrend reconcileVoiceBudget IMMER auf die Gate-Achse
+// bucht (call-finish.js) - solange PAYMENT_ENABLED=false gilt, UNTERSCHAETZT diese Summe
+// systematisch die tatsaechliche Gate-Buchung. Das gehoert in JEDEN Log-/Berichtstext, der
+// diese Zahl zeigt (Kickoff-Vorgabe carrierShareReadable), nicht stillschweigend als "die
+// Zahl". Reine Query, kein IO.
+export function carrierGateCostCentsForMonth(s, monthKey) {
+  return s.usageEvents
+    .filter((e) => e.kind === USAGE_EVENT_KIND.VOICE_MINUTE && spendMonthKeyOf(e.occurredAt) === monthKey)
+    .reduce((sum, e) => sum + e.costCents, 0);
 }
 
 // ---- ElevenLabs-Zeichen PRO TENANT (KE-P6) ----
