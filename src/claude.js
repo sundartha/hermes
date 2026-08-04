@@ -648,6 +648,12 @@ export { shapeForSpeech };
 // ZEIT-Achse. null = der Loop lief regulaer zu Ende.
 export const TURN_STOP_DEADLINE = "deadline";
 
+// GQ-P1: der Tool-Loop wurde zugunsten einer VOLLSTAENDIGEREN Fassung derselben Aeusserung
+// abgebrochen. Eigenes Token neben der ZEIT-Achse, damit die Log-Auswertung den Riegel vom
+// Fristablauf trennt. KEINE Geld-Achse - isBudgetAxis (budget-gate.js) erkennt es nicht,
+// der Shim-Notaus bleibt damit unberuehrt.
+export const TURN_STOP_SUPERSEDED = "superseded";
+
 // Die EINE Frage vor JEDER Schleifenrunde: darf sie noch gefahren werden? Liefert den
 // maschinenlesbaren Grund oder null. Zwei Achsen mit bewusst UNTERSCHIEDLICHER Reichweite:
 //   - GELD (Regel 1) gilt ab der ERSTEN Runde. bookTokenUsage laeuft in JEDER Runde;
@@ -777,7 +783,13 @@ function toolResultText({ call, toolUse, consult, lookup }) {
   return execTool(call, toolUse.name, toolUse.input || {});
 }
 
-export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
+// GQ-P1: abortSignal ist der optionale Riegel des Shims (telnyx-turn-supersede.js). Ohne
+// ihn ist dieser Turn byte-identisch zum Bestand - /voice/turn (routes/voice.js) reicht
+// keinen durch. Der Abbruch ist KOOPERATIV: gelesen wird an der Schleifengrenze und vor
+// dem Transkript-Schreiben, NICHT im Modell-Aufruf. Damit bleibt die Kosten-Buchhaltung
+// (completeRound: genau EINE Buchung je Modellrunde) unangetastet. Stumm geschaltet wird
+// der Turn nicht hier, sondern am Sprech-Draht des Shims.
+export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal } = {}) {
   // G3/G26-Fix: das Transkript-Record-Gate ist
   // RICHTUNGSLOS und byte-identisch zum fruehen Master-Stand (41ce40b:
   // "if (callerText) store.addTranscript(...)"). JEDE nicht-leere Anrufer-Aeusserung landet
@@ -892,6 +904,13 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
 
   // Tool-Loop (max. MAX_TOOL_ROUNDS_PER_TURN Runden pro Turn)
   for (let i = 0; i < MAX_TOOL_ROUNDS_PER_TURN; i++) {
+    // GQ-P1: ein verdraengter Turn faehrt KEINE weitere Modellrunde (echte Token-
+    // Ersparnis ab Runde 2). Die bereits laufende Runde laeuft aus - ihr Text wird
+    // verworfen, nicht gesprochen.
+    if (abortSignal?.aborted) {
+      stopReason = TURN_STOP_SUPERSEDED;
+      break;
+    }
     stopReason = roundStopReason({
       call,
       roundIndex: i,
@@ -1082,6 +1101,35 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
   // AL-P7b: shapeForSpeech kann den Text noch veraendern (Schlusspunkt der Transkript-
   // Zeile). speechStreamed bleibt davon unberuehrt - es beantwortet "wurde diese Aeusserung
   // bereits gesprochen", nicht "ist sie byte-gleich zur Leitung" (AL-P7-Bestandsgrenze).
+  // GQ-P1: die PII-freien Zaehler dieses Turns - identisch fuer den regulaeren UND den
+  // verdraengten Ausgang. EINE Quelle (G5) statt zweier Rueckgabe-Literale, die
+  // auseinanderdriften. Liest nur, mutiert nichts (N7).
+  const turnTelemetry = () => ({
+    roundtrips,
+    toolNames: firedTools,
+    offeredToolNames: [...offeredTools],
+    streamArmedRounds,
+    stopReason,
+  });
+
+  // GQ-P1: der Turn wurde verdraengt - eine vollstaendigere Fassung derselben Aeusserung
+  // wird gerade beantwortet. Er hat NICHTS gesprochen (der Sprech-Draht des Shims ist im
+  // Moment der Verdraengung stumm), also darf er auch KEINE agent-Zeile ins Transkript
+  // schreiben: sie waere im naechsten Turn "bereits Gesagtes" in der Message-Kette und im
+  // Dashboard/DSGVO-Export das zweite agent-Segment auf dieselbe Aeusserung - genau der
+  // Befund, den dieser Riegel beseitigt. endCall faellt bewusst weg: die Auflege-
+  // Entscheidung trifft der Turn, der die VOLLSTAENDIGE Aeusserung beantwortet.
+  // stopReason bleibt echt - eine Geld-Achse muss den Shim-Notaus weiter ausloesen.
+  if (abortSignal?.aborted)
+    return {
+      speech: "",
+      speechStreamed: false,
+      thinkingSignalSpoken: thinkingSignal.spoken(),
+      endCall: false,
+      superseded: true,
+      ...turnTelemetry(),
+    };
+
   speech = shapeForSpeech(speech);
   if (!speech) {
     speech = localeFor(call.language).turnFallbackSpeech[call.direction];
@@ -1116,13 +1164,10 @@ export async function agentTurn(call, callerText, { onSpeechChunk } = {}) {
     speechStreamed,
     thinkingSignalSpoken: thinkingSignal.spoken(),
     endCall,
-    roundtrips,
-    toolNames: firedTools,
-    // AL-D1: ANGEBOTEN (Union ueber die Runden) gegen GEFEUERT (toolNames) - erst der
-    // Unterschied macht das Registrierungs-Gate am Live-Log sichtbar.
-    offeredToolNames: [...offeredTools],
-    streamArmedRounds,
-    stopReason,
+    // GQ-P1: der regulaere Ausgang ist ausdruecklich nicht verdraengt - ein Feld, das nur
+    // im Abbruchfall existiert, zwaenge jeden Leser zu einer undefined-Pruefung.
+    superseded: false,
+    ...turnTelemetry(),
   };
 }
 

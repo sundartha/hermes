@@ -17,7 +17,8 @@ import { metrics as defaultMetrics } from "./metrics.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { blockingBudgetAxis, isBudgetAxis } from "./budget-gate.js";
 import { consultClientIsPolling } from "./consult/in-call.js";
-import { makeTurnTextProbe } from "./telnyx-turn-probe.js";
+import { makeTurnTextProbe, TURN_TEXT_RELATION } from "./telnyx-turn-probe.js";
+import { makeInFlightTurnRegistry } from "./telnyx-turn-supersede.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk"; // stream:true (SSE-Delta-Chunks)
@@ -359,6 +360,17 @@ function logShimTurnProbe(payload) {
   console.log(formatShimLine("turn_probe", payload));
 }
 
+// GQ-P1 (Befund B-1): die Entscheidung des Riegels als eigener Kanal (kind="supersede"),
+// console.log wie turn_probe. PII-frei: callId, turnSeq, ein Boolean, ein Grund-Token -
+// nie Wortlaut, nie Rufnummern. Diese Zeile IST das Messinstrument der Abnahme: sie trennt
+// "verdraengt" von "nicht verdraengt, weil der Vorgaenger-Turn schon fertig war"
+// (no_inflight) und von "sein Text war schon auf der Leitung" (already_spoken). Ohne sie
+// waere am naechsten Testanruf nicht entscheidbar, ob der Riegel greift oder ins Leere
+// laeuft - genau die Frage, die diese Phase offen laesst.
+function logShimSupersede(payload) {
+  console.log(formatShimLine("supersede", payload));
+}
+
 // Nur von Telnyx gesetzte Anfrage-Header (Allowlist-Praefix), Name -> nicht umkehrbarer
 // Hash des Wertes. Der WERT wird nie geloggt: identische Hashes belegen "derselbe Request",
 // ohne dass ein zufaellig mitgefuehrtes Geheimnis (z.B. ein Signatur-Header) je im Log
@@ -443,6 +455,10 @@ export function makeTelnyxLlmShim({
   // GQ-S1 Sonde A: EINE Instanz je Shim (kein Modul-Zustand, kein Lazy-Init - P15). Haelt
   // je Call nur {atMs, chars, hash} des letzten Turns, nie Text.
   const observeTurnText = makeTurnTextProbe();
+
+  // GQ-P1: EINE Instanz je Shim (kein Modul-Zustand, kein Lazy-Init - P15), wie die Sonde
+  // daneben. Haelt je Call nur das Abbruch-Signal des laufenden Turns, nie Text.
+  const inFlightTurns = makeInFlightTurnRegistry();
 
   // Fail-safe Call-Control-Hangup ueber das GETEILTE Primitiv (S2/G5, auch der
   // Dead-Air-Watchdog nutzt es). Byte-identisches Verhalten/Log wie zuvor (SHIM_LOG_PREFIX).
@@ -583,10 +599,13 @@ export function makeTelnyxLlmShim({
     // nie. Liest nur; weder turnSeq noch emptyStreak noch das Rate-Fenster werden
     // beruehrt. gapMs+prevRelation trennen die Doppel-Zustellung (gleicher Hash, gleiche
     // Request-ID) vom fortgeschriebenen STT-Ergebnis (Vorgaenger ist Praefix).
+    // GQ-P1: das Sonden-Ergebnis wird jetzt GEBUNDEN statt direkt gespreadet - prevRelation
+    // ist ab hier die Entscheidungsgrundlage des Riegels (Schritt 7), nicht nur Logstoff.
+    const turnText = observeTurnText(call.id, callerText);
     logShimTurnProbe({
       callId: call.id,
       turnSeq,
-      ...observeTurnText(call.id, callerText),
+      ...turnText,
       ...requestOriginShape(req),
     });
 
@@ -628,6 +647,37 @@ export function makeTelnyxLlmShim({
 
     // 7) Kern: agentTurn (in-house Tool-Loop) gegen die per Call-Control-ID gebundene,
     // frische call-Referenz.
+    // GQ-P1 (Befund B-1), der Riegel. REIHENFOLGE IST BINDEND: hier, NACH Loop-Guard,
+    // Rate-Gate und Budget-Gate. Erst jetzt steht fest, dass DIESER Request wirklich einen
+    // Agenten-Turn faehrt; ein frueher verdraengter Vorgaenger haette seine echte Antwort
+    // fuer eine blosse Degradations-/Abschiedsansage geopfert. Der Riegel liest nur -
+    // turnSeq, emptyStreak, Rate-Fenster und Budget-Buchung bleiben unberuehrt.
+    // NUR "extends": "same" ist der Consult-Nachfass (wer ihn mitbehandelt, unterdrueckt
+    // Consult-Antworten), "other" sind zwei echte Aeusserungen.
+    if (
+      config.telnyx.telnyxAssistant.shimSupersedeExtendedTurn &&
+      turnText.prevRelation === TURN_TEXT_RELATION.EXTENDS
+    )
+      logShimSupersede({ callId: call.id, turnSeq, ...inFlightTurns.supersedeTurn(call.id) });
+
+    // GQ-P1: ab hier ist DIESER Turn der laufende Turn des Calls. hasSpokenText ist die
+    // eine Bedingung, die einen Abbruch verbietet: was auf der Leitung war, holt kein
+    // Retract-Event zurueck (Fail-safe-Richtung - lieber zwei Antworten als Stille).
+    const inFlight = inFlightTurns.beginTurn(call.id, {
+      hasSpokenText: () => Boolean(wire) && wire.chunkCount() > 0,
+    });
+
+    // GQ-P1: der Sprech-Draht dieses Turns wird im Moment der Verdraengung stumm. Ohne
+    // diesen Waechter schriebe eine bereits laufende Modellrunde ihre restlichen Saetze
+    // weiter auf die Leitung - der Anrufer hoerte genau die Antwort, die verworfen wird.
+    // Ohne offenen Strom (wire === null) bleibt es null: streamSinkFor (claude.js) steigt
+    // an genau dieser Bedingung aus, das ist byte-identisch zum Bestand.
+    const speakChunk = wire
+      ? (text) => {
+          if (!inFlight.signal.aborted) wire.writeChunk(text);
+        }
+      : null;
+
     let endCall = false;
     let farewellChars = 0; // Basis der Sprechdauer-Schaetzung (Schritt 8)
     try {
@@ -635,7 +685,10 @@ export function makeTelnyxLlmShim({
       // ueber get_consult entscheidet. Nach dem Turn gemessen waere es eine andere Zahl.
       const consultPollFresh = consultClientIsPolling(call);
       const startedAt = Date.now();
-      const turn = await agentTurn(call, callerText, wire ? { onSpeechChunk: wire.writeChunk } : {});
+      const turn = await agentTurn(call, callerText, {
+        onSpeechChunk: speakChunk,
+        abortSignal: inFlight.signal,
+      });
       const latencyMs = Date.now() - startedAt;
       // EIN latencyMs-Wert, zwei Senken: der opt-in metrics-Seam (P10, hinter metricsEnabled,
       // NICHT TTFT sondern Gesamt-Turn) UND das UNCONDITIONAL OBS-1-Betriebssignal (im Vorfall
@@ -683,7 +736,13 @@ export function makeTelnyxLlmShim({
       // der Anrufer haette nach "einen Moment" nur Stille gehoert.
       // Fail-safe-Richtung (=== true): fehlt das Feld, wird der Text GESPROCHEN. Der
       // schlimmste Fall ist eine Wiederholung, nicht eine verschwundene Antwort.
-      respond(turn.speechStreamed === true ? "" : turn.speech);
+      // GQ-P1: ein verdraengter Turn SPRICHT nicht - aber er ANTWORTET. Eine leere,
+      // gueltige Completion ist die einzige Form, die Telnyx nicht als abgebrochenen Turn
+      // liest (Stille waere schlimmer als der Doppel-Turn); es ist exakt dieselbe Form,
+      // die der Bestand seit AL-P7 schickt, wenn der Text bereits gestreamt wurde.
+      // Ein benannter Ausdruck statt eines verschachtelten Ternary (G28).
+      const speechAlreadyHandled = turn.superseded === true || turn.speechStreamed === true;
+      respond(speechAlreadyHandled ? "" : turn.speech);
     } catch (err) {
       // P2 (Resilienz-Bruecke): NIE roher 5xx/leerer Hang - Telnyx liest den als
       // abgebrochenen/stummen Turn. Stattdessen dieselbe Zwei-Klassen-Degradation wie
@@ -719,6 +778,10 @@ export function makeTelnyxLlmShim({
       // Hangup trotzdem versuchen, sonst laeuft der Call trotz bereits gegebenem
       // Abschiedssignal auf Tokenkosten weiter (Regel 1). Wirft dagegen agentTurn selbst,
       // bleibt endCall auf dem Default false - Schritt 8 ist dann ein No-op.
+    } finally {
+      // GQ-P1: dieser Turn laeuft nicht mehr - ein spaeterer "extends"-Request darf ihn
+      // nicht mehr verdraengen. Im finally, damit auch der Fehlerpfad abmeldet.
+      inFlight.endTurn();
     }
 
     // 8) end_call (Wurzel R4): der Abschiedssatz ist als Completion raus - die TTS-

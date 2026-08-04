@@ -176,6 +176,9 @@ export const BASE_ENV = {
   // AL-P7 neutral AUS (= config.js-Fallback), sonst leakt eine lokale .env mit
   // TELNYX_SHIM_TOKEN_STREAMING=true in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_SHIM_TOKEN_STREAMING: "false",
+  // GQ-P1: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
+  // TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN=false in Spawn-Tests (Lehre test-base-env-drift).
+  TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN: "true",
   // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
   // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_API_KEY_REF: "",

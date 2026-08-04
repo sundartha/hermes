@@ -68,6 +68,9 @@ test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duc
     shimApiKeyRef: "",
     shimDebugShape: false,
     shimTokenStreaming: false,
+    // GQ-P1: neuer Schalter, DEFAULT AN (anders als die uebrigen Shim-Flags - der Riegel
+    // ist der korrigierte Bestand, nicht ein Opt-in).
+    shimSupersedeExtendedTurn: true,
   });
 });
 
@@ -87,7 +90,7 @@ test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewa
 });
 
 // Teil 2: telnyxAssistant-Gruppierung (P5, erstes Feature-Grouping).
-test("telnyxAssistant: alle 11 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
+test("telnyxAssistant: alle 12 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
   assert.equal(config.telnyx.telnyxAssistant.enabled, false);
   assert.equal(config.telnyx.telnyxAssistant.assistantId, "");
   assert.equal(config.telnyx.telnyxAssistant.callControlAppId, "");
@@ -99,6 +102,7 @@ test("telnyxAssistant: alle 11 Keys existieren mit den dokumentierten Defaults (
   assert.equal(config.telnyx.telnyxAssistant.shimApiKeyRef, "");
   assert.equal(config.telnyx.telnyxAssistant.shimDebugShape, false);
   assert.equal(config.telnyx.telnyxAssistant.shimTokenStreaming, false);
+  assert.equal(config.telnyx.telnyxAssistant.shimSupersedeExtendedTurn, true);
 });
 
 // Regression: der alte flache Pfad existiert NACHWEISLICH nicht mehr - waere er
