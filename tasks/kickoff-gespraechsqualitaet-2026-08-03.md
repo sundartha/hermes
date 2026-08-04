@@ -147,6 +147,41 @@ scharf zu bekommen, nicht dagegen.
 solange inbound und outbound verschiedene Maschinen sind, gilt jeder Befund oben nur fuer
 eine Richtung, und der Pruefstand aus Schritt 1 misst nur die halbe Wahrheit.
 
+**B-10 — Der Agent scheitert STUMM und niemand merkt es. Live erlebt am 2026-08-04.**
+Ursache des Ausfalls war **kein Code**: das Anthropic-Guthaben war leer, jeder Modell-Turn
+kam mit `400 "Your credit balance is too low"` zurueck. Der Owner hoerte nur die
+Offenlegung (deterministischer Speak-Node, kein Modell) und danach nichts — inbound wie
+outbound. Vier Anrufe, **null** Zusammenfassungen; der Outbound-Anruf lief **52 s mit
+sieben** aufeinanderfolgenden `agentTurn fehlgeschlagen`, waehrend der Owner weitersprach
+und Carrier-Minuten liefen.
+
+Drei eigenstaendige Defekte, die dieser Vorfall freigelegt hat — **alle drei gehoeren in
+die Kette, unabhaengig vom Guthaben:**
+
+1. **Der Degradations-Satz erreicht den Anrufer nicht.** Er ist verdrahtet
+   (`degradedSpeechFor(err, locale)` im Shim-Catch, `src/telnyx-llm-shim.js`, trennt
+   transient -> `llmDegradedSpeech` von 4xx -> `turnErrorSpeech`). Trotzdem hoerte der
+   Owner ueber sieben gescheiterte Turns hinweg **nichts**. Ob der Satz gar nicht auf den
+   Draht ging oder nur nicht gesprochen wurde, ist **ungemessen** — genau die
+   "gesetzt ist nicht wirkt"-Klasse wie D-1. **Zuerst messen, dann fixen.**
+2. **Der Bezahl-Fall ist in der eigenen Telemetrie unsichtbar.** Der Shim prueft
+   `vendorStatusOf(err) === HTTP_PAYMENT_REQUIRED` (402) und loggt dann `vendor_402`.
+   Anthropic liefert fuer leeres Guthaben aber **400** mit `invalid_request_error`. Der
+   Sonderfall "uns ist das Geld ausgegangen" faellt damit in den generischen Fehlerpfad und
+   ist von einem beliebigen technischen Fehler nicht zu unterscheiden.
+3. **Es gibt keine Alarmierung.** Der Dienst war stundenlang stumm; entdeckt wurde es
+   dadurch, dass der Owner selbst anrief. Ein Telefon-Agent, der bei Modell-Ausfall
+   weiterlaeuft, Minuten verbrennt und niemanden benachrichtigt, ist schlimmer als einer,
+   der gar nicht erst abhebt.
+
+**Der Agent soll bei anhaltendem Modell-Ausfall hoerbar und wuerdevoll beenden, statt stumm
+weiterzulaufen** — das zahlt zugleich auf O-3 (Kuerze/Minutenkosten) ein.
+
+**Wichtig fuer die Zuordnung:** dieser Vorfall ist **nicht** der KV-Kette anzulasten. Jeder
+einzelne Fehler im Log ist das Guthaben, kein anderer Fehlertyp trat auf. Ob KV daneben
+etwas gebrochen hat, ist **erst nach dem Aufladen beurteilbar** — bis dahin weder behaupten
+noch ausschliessen.
+
 **B-7 — STT-Kauderwelsch (vorbestehend).** *"Hast Du das im Internet tress passiert?"*,
 *"Bis zum behindert, man."* Nicht von dieser Kette verursacht, nie behoben.
 
