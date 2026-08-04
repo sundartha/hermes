@@ -1306,3 +1306,49 @@ bewusste Verzicht auf einen Backfill belegt. Wer die Altzeilen summiert, misst n
   landet im Abgleich in `no_estimate` und bucht nichts. Gemessen: **alle drei Inbound-Calls
   in Prod haben keine Schaetzung.** Es braucht einen NEUEN Inbound-Anruf nach diesem Deploy.
 - **Befund A und B** brauchen je eine Owner-Entscheidung (Preisfrage bzw. Belegarten-Liste).
+
+### Punkt 5 erledigt - erster Sweep nach dem Deploy (2026-08-04T08:56 UTC)
+
+Drei Zeilen, alle drei neu aus dieser Kette:
+
+```
+[cost-truing] sweep trigger=interval kandidaten=6 gemessen=0 unvollstaendig=0
+              ohne_schaetzung=3 unbestimmt=0 uebersprungen=3 anfragen=11 seiten=11
+              pool=443 vollstaendig=true
+[cost-truing] deckung=100% schwelle=80% ohne_schaetzung=17 nie_beantwortet=11 ausserhalb_fenster=7
+[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=amount_not_exposed_by_provider)
+              ist_calls_usd_micro_cent=51332310 gate_carrier_eur_cent=2700
+```
+
+**KV-M3 wirkt wie entworfen.** Die Quote steht auf 100 % und **verstummt damit den
+Tarif-Untergrenzen-Hinweis** - die von Owner-Entscheidung 5a bewusst getragene
+Nebenwirkung, live eingetreten. Genau daneben stehen die drei Nebenzaehler und machen die
+Aussage ehrlich: 100 % **bei `ohne_schaetzung=17`** ist eine voellig andere Zahl als 100 %
+bei 0. Ohne TOD 8 waere aus einer strukturell roten Warnung eine geschoenigte gruene
+geworden.
+
+**KV-P3 wirkt, ist aber noch nicht vollstaendig belegt.** `ohne_schaetzung=3` im Sweep sind
+exakt die drei Inbound-Calls aus der Vorab-Messung. Sie sind ueberhaupt erst **durch KV-P3**
+Kandidaten geworden - vorher haette der Richtungsfilter sie nie in den Sweep gelassen. Sie
+buchen aber nichts, weil ihnen die Schaetzung fehlt (sie sind aelter als KV-P2). Das ist der
+vorhergesagte `no_estimate`-Pfad, live bestaetigt. Der abschliessende Beleg braucht einen
+neuen Inbound-Anruf.
+
+**Die Lastrechnung aus KV-P3 stimmt.** 11 Anfragen bei 6 Kandidaten gegen eine Schwelle von
+1440 - der Beleg-Pool ist konto-weit, ein zusaetzlicher Kandidat erzeugt keine zusaetzliche
+Anfrage. `pool=443`, `vollstaendig=true`.
+
+**KV-M4 laeuft und meldet seine eigene Grenze.** `telnyx_rechnung=nicht_verfuegbar
+(reason=amount_not_exposed_by_provider)` - die erste der beiden Differenzen bleibt
+strukturell unbeantwortbar, sauber im Log ausgewiesen statt stillschweigend als 0 gefuehrt.
+
+**Zur zweiten Differenz, mit Vorsicht zu lesen:** 51.332.310 USD-Mikro-Cent (= 51,33
+US-Cent) abgerufene Ist-Kosten gegen 2700 EUR-Cent (= 27,00 EUR) auf der Gate-Achse, fuer
+Juli 2026. Das ist **kein Buchungsfehler und kein Alarm**, sondern die erwartete Folge
+duenner Belegdichte: `ist_calls_usd_micro_cent` summiert NUR Calls mit
+`actual_cost_micro_cents`, und im Juli hatten das nur 8 von 31 beendeten Calls (die
+uebrigen liegen vor LCT-P2 und tragen keine Schaetzung, an der ein Abgleich ansetzen
+koennte). Die Gate-Achse traegt dagegen alle Buchungen des Monats, ueberwiegend
+Schaetzungen zum Worst-Case-Tarif. **Aussagekraeftig wird diese Differenz erst fuer einen
+Monat, der vollstaendig nach dieser Kette liegt - also August.** Bis dahin ist die Zeile
+eine Funktionsprobe, keine Messung.
