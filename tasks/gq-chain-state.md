@@ -269,6 +269,43 @@ zweite voellig deplatziert ("warte auf den Anruf oder soll ich jetzt bei der Wer
 anrufen?" — mitten im Anruf). Der Greeting-Schutz verhindert die Unterbrechung des
 Sprechens, nicht den parallelen Start eines Modell-Turns.
 
+## Kettenstand am Ende des 2026-08-04
+
+| Phase | Inhalt | Stand | Wirkung |
+|---|---|---|---|
+| GQ-S1 | Sonden: Turn-Herkunft + Inbound-Feldname | live | **gross** — loeste B-1 und B-9 |
+| GQ-P1 | Verdraengungs-Riegel bei `extends` | live | **keine** — 6 von 6 `no_inflight` |
+| GQ-P2 | Consult: zwei Fristen statt einer | live | ungemessen (braucht Testanruf) |
+| GQ-P3 | Inbound auf den Assistant-Pfad | live | ungemessen (braucht Inbound-Anruf) |
+| GQ-P4 | Stummes Scheitern + Nachrichten-Dedup | live | ungemessen (braucht Ausfall bzw. Anruf) |
+| 4 Provider-Parameter | Offenlegung/Barge-in/Endpointing/Sprache | live | **2 von 4 owner-bestaetigt** |
+
+**Nicht gebaut, mit Begruendung:** B-4 (`look_up` feuert nie) und B-5 (`end_call` feuert
+nie). Beide sind verdrahtungsseitig korrekt und wurden zweimal erfolglos ueber Prompts
+angegangen (AL-P14, AL-D3). Der richtige Hebel ist der Modellwechsel Haiku -> Sonnet als
+A/B-Lauf (O-4), keine dritte Formulierungsrunde.
+
+### Offene Punkte fuer die naechste Sitzung
+
+1. **Abnahme durch Testanrufe.** GQ-P2/P3/P4 sind gruen und live, aber **keine** ihrer
+   Wirkungen ist am Telefon gemessen. Konkret abzulesen:
+   - GQ-P2: `answer_consult` liefert `accepted: true`, `answeredFacts >= 1`
+   - GQ-P3: **Inbound**-Anruf traegt `assistant_id` und `telnyx_conversation_id`
+     (heute NULL), Log zeigt `turn_ok`, `stt_gap` von 13-15 s verschwindet
+   - GQ-P4: `take_message` legt bei Wiederholung nur EIN Item an
+2. **KV-M1 auf dem Assistant-Pfad wiederholen** (Uebergabepunkt 1 des Kickoffs): Inbound
+   kostet jetzt ~5 statt 1,87 US-Cent je angefangener Minute, der Tarif ist neu zu
+   kalibrieren.
+3. **Private Nummer erneut setzen** — ein direktes DB-`UPDATE` wurde vom pg-Store
+   ueberschrieben (`>>WEG<<` nach dem Anruf). Muss ueber das Dashboard laufen. Ohne sie
+   bleibt `diagnostic` false (O-10) und keine Nachricht erreicht den Owner (O-9).
+4. **B-7 (Kauderwelsch) ist offen.** `language: multi -> de` hat **nichts** gebracht
+   ("Eva, Du stoppst zum Kanisch"). Naechster Kandidat waere `keyterm` (Begriffe boosten)
+   oder ein anderes STT-Modell — beides Provider-Konfiguration, kein Code.
+5. **Offenlegung und erster Modell-Turn ueberlappen** (Anruf 3, 380 ms Abstand). Der
+   Greeting-Schutz verhindert die Unterbrechung des Sprechens, nicht den parallelen Start
+   eines Turns. Reproduzierbarkeit noch ungeprueft.
+
 ## Was jetzt gemessen werden muss
 
 **Ein Testanruf des Owners** klaert drei Dinge auf einmal:
