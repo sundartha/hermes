@@ -239,6 +239,36 @@ Feldname, dann der Umbau.
 3890/3890 gruen. Nicht reproduzierbar, also das dokumentierte Volllast-Flake
 ([[suite-flake-p5-gate-proof-spawn-race]]). Die Namen der beiden wurden nicht erfasst.
 
+## Vier Testanrufe am 2026-08-04 — was wirkt und was nicht
+
+Owner-Urteil ist der Massstab, nicht die Testsuite.
+
+| Eingriff | Art | Ergebnis |
+|---|---|---|
+| `disable_greeting_interruption: true` | Provider-Config | **WIRKT** — Owner bestaetigt: Offenlegung laeuft vollstaendig durch, nicht mehr wegdrueckbar |
+| `interrupt_prediction_threshold: 0.4 -> 0.2` | Provider-Config | **WIRKT** — Owner bestaetigt: Unterbrechen reagiert schneller |
+| `language: multi -> de` | Provider-Config | **KEIN GEWINN** — Kauderwelsch unveraendert ("Eva, Du stoppst zum Kanisch") |
+| `eot_threshold: 0.8 -> 0.9` | Provider-Config | unklar — Fragmente kommen weiter, die Antworten darauf sind aber sinnvolle Ueberbrueckungen |
+| **GQ-P1 (Verdraengungs-Riegel)** | **Code** | **WIRKUNGSLOS** — ueber zwei Anrufe **6 von 6** `extends`-Faelle mit `refusal: no_inflight` |
+
+**GQ-P1 ist die teuerste Lehre des Tages.** Der Riegel loest Ueberlappung; es gibt aber keine.
+Der Agent antwortet nach ~1 s, die Fortsetzung der Aeusserung kommt nach 1,4-5,5 s — der
+Vorgaenger-Turn ist also immer schon fertig. **Das war aus den vorliegenden Zeitstempeln
+ablesbar, bevor die Phase startete.** 753k Token und 45 Minuten fuer einen Pfad, der nie
+betreten wird. Der Code bleibt (er schadet nicht, der Pfad ist erreichbar), aber er zaehlt
+nicht als Verbesserung.
+
+**Zwischenbefund fuer die Arbeitsweise:** die beiden einzigen bestaetigten Verbesserungen des
+Tages waren **Provider-Parameter, in Sekunden gesetzt, ohne einen einzigen Agenten**. Die
+Assistant-Konfiguration ist die erste Adresse, nicht die letzte. Siehe
+[[provider-config-needs-doc-before-diagnosis]].
+
+**Neuer Befund aus Anruf 3 (`call_mseupp82iyqm`), noch offen:** Offenlegung und erster
+Modell-Turn ueberlappen. Zwei `agent`-Segmente 380 ms auseinander (16:07:38.063 / .443), das
+zweite voellig deplatziert ("warte auf den Anruf oder soll ich jetzt bei der Werkstatt
+anrufen?" — mitten im Anruf). Der Greeting-Schutz verhindert die Unterbrechung des
+Sprechens, nicht den parallelen Start eines Modell-Turns.
+
 ## Was jetzt gemessen werden muss
 
 **Ein Testanruf des Owners** klaert drei Dinge auf einmal:
