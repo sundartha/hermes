@@ -206,11 +206,52 @@ Achtung bei der Umsetzung: der Provisioner schreibt die GANZE Live-Config aus de
 | Welle | Inhalt | Stand |
 |---|---|---|
 | 0 | Kartierung, 12 Agenten nur lesend | **fertig** |
-| 1 | Pruefstand (allein) + O-10 parallel | offen |
+| S1 | Sonden: Turn-Herkunft (B-1) + Inbound-Feldname (B-9/O-1) | **gemergt + deployt** |
+| 1 | Pruefstand (allein) | offen |
 | 2+ | Befund-Phasen, gruppiert nach Dateimengen aus Welle 0 | offen |
 
-**Offener Owner-Handgriff, blockiert Forensik:** private Nummer hinterlegen (schliesst O-9
-**und** O-10-Wurzel). Ohne sie verliert jeder Testanruf sein Rohtranskript.
+## GQ-S1 — Sonden, gemergt 2026-08-04 (`0d9a23c`)
+
+PASS ohne Fix-Runde, 7 Dateien, +459/-9, 12 neue Tests. Rein additiv: kein Verhalten,
+kein Gate, kein Datenmodell, keine Dependency. Vom Lead gegengeprueft — Basis aktuell,
+Diff eng (kein `config.js`, keine `.env.example`), entfernte Zeilen sind Umbau, keine
+gestrichenen Sicherungen.
+
+**Sonde A** (`src/telnyx-turn-probe.js`, verdrahtet im Shim) merkt sich je Call **nur einen
+Fingerabdruck** des letzten Turn-Textes — Zeichenzahl und Hash, **nie den Text**. Die
+Praefix-Beziehung prueft sie, indem sie das gleich lange Anfangsstueck des *aktuellen*
+Textes hasht. Damit entsteht kein zweiter PII-Speicher neben dem Transkript. Sie loggt
+`turn_probe` mit vier unterscheidbaren Relationen:
+
+| Relation | Bedeutung fuer B-1 |
+|---|---|
+| `same` | identischer Text -> **ein doppelt zugestellter Request** |
+| `extends` | Vorgaenger ist echtes Praefix -> fortgeschriebene Erkennung, zwei Turns |
+| `other` | unabhaengiger Text -> zwei echte Aeusserungen |
+| `first` | erster Turn des Calls |
+
+**Sonde B** protokolliert die **Schluesselnamen** des Inbound-TeXML-Bodys ohne Werte und
+macht den bisher **stillen** Rueckfall auf die Budget-Engine laut (O-1-Auflage). Das
+Scharfschalten des Handoffs ist bewusst nicht Teil dieser Phase — erst der belegte
+Feldname, dann der Umbau.
+
+**Testlauf-Hinweis:** der erste Lauf nach dem Merge meldete 2 rote Tests, zwei Folgelaeufe
+3890/3890 gruen. Nicht reproduzierbar, also das dokumentierte Volllast-Flake
+([[suite-flake-p5-gate-proof-spawn-race]]). Die Namen der beiden wurden nicht erfasst.
+
+## Was jetzt gemessen werden muss
+
+**Ein Testanruf des Owners** klaert drei Dinge auf einmal:
+
+1. **B-1 an der Quelle:** sagt das Log `same`, ist es eine Doppel-Zustellung (Retry/
+   Reconnect) — sagt es `extends`, sind es zwei echte Turns aus der Spracherkennung.
+   Davon haengt ab, ob der Fix bei uns oder beim Provider sitzt.
+2. **B-9/O-1:** wie das Inbound-Feld mit der `call_control_id` wirklich heisst — heute
+   steht dort der geratene Name `"CallControlId"`.
+3. **B-7:** ob das Kauderwelsch nach der Umstellung `language: multi -> de` zurueckgeht.
+
+Voraussetzung fuer die Forensik ist erfuellt: private Nummer gesetzt, Dienst neu gestartet,
+`diagnostic` kann jetzt greifen.
 
 ## Nebenbefunde, nicht Teil des Auftrags
 
