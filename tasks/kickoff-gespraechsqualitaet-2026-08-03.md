@@ -308,7 +308,25 @@ vergroessern**. Kosten-Gates haben Vorrang (CLAUDE.md).
    EIGENE Phase mit Datenmigration, nicht Teil der Twilio-Aufraeumung.** Wer das
    uebersieht, koepft die Kostenzuordnung.
 
-3. **Gemeinsame Dateien.** KV fasst `src/billing/metering.js`, `src/billing/cost-truing.js`,
+3. **ERLEDIGT am 2026-08-04: die KV-Kette ist durch, die Befunde stehen.** Geprueft
+   `ce4df1d..master` auf den gemeinsamen Dateien: KVs Eingriff in `src/claude.js` ist
+   **reiner Kommentar, keine Logik**; funktional geaendert hat KV nur Kosten-Klempnerei
+   (`telephony/adapters/telnyx/voice.js`, `ports.js`, `call-finish.js`). Der Turn-Pfad ist
+   unberuehrt. Empirische Gegenprobe: ein Testanruf am 04.08. (`call_mseip2888klk`)
+   reproduziert **B-1 in Reinform** — `turnSeq 1` und `turnSeq 2` liegen **eine
+   Millisekunde** auseinander (10:31:12.580 / .581). Kein Mensch spricht zweimal in einer
+   Millisekunde.
+
+   **ZWEI NEUE RANDBEDINGUNGEN aus der KV-Kette, die kein Gespraechsdefekt sind:**
+   (a) **Inbound ist seit KV-P2 kosten-gegatet.** Ein Inbound-Anruf kann jetzt mitten im
+   Gespraech abbrechen, wenn die Tenant-Decke erreicht ist — das war vorher unmoeglich.
+   Wer das bei einem Testanruf sieht, sucht den Fehler **nicht** in dieser Kette.
+   (b) **Die Befunde B-1..B-10 wurden auf `ce4df1d` erhoben, also OHNE AL-D3.** `master`
+   traegt AL-D3, die Tool-Beschreibungen sind dort andere. Fuer B-4 (`look_up` feuert nie)
+   ist das gemessen folgenlos (AL-D3-Messung vom 02.08.), fuer die uebrigen ungeprueft —
+   **der Pruefstand misst gegen den aktuellen `master`, nicht gegen `ce4df1d`.**
+
+4. **Gemeinsame Dateien.** KV fasst `src/billing/metering.js`, `src/billing/cost-truing.js`,
    `src/telephony/adapters/telnyx/voice.js` und die Budget-Achsen-Pruefung in
    `src/claude.js` / `src/telnyx-llm-shim.js` an. Diese Kette fasst `src/routes/voice.js`,
    `src/telnyx-inbound.js`, `src/telephony/**`, `src/claude.js` und
