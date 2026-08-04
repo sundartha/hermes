@@ -49,22 +49,62 @@ gelohnt hat.
 
 ### Die drei Lehren daraus, in absteigender Wichtigkeit
 
-**L1 — Eine Aenderung am Anrufpfad wird SOFORT nach dem Deploy mit einem echten Anruf
-geprueft, bevor die naechste Phase startet.** GQ-P3 lief Stunden lang live und machte
-Inbound unbrauchbar (der Anrufer hoerte nur "Technischer Fehler, Entschuldigung"). Aufgefallen
-ist es erst, weil der Owner selbst anrief. Ein einziger Testanruf direkt nach dem Deploy
-haette das in 30 Sekunden gezeigt.
+**L1 — Die eigentliche Frage lautet: warum geht bei fast jeder Aenderung etwas anderes
+kaputt?** Das ist die Owner-Frage vom 2026-08-04, und sie ist die richtige. Ein Testanruf
+nach dem Deploy haette den Inbound-Bruch zwar entdeckt — aber ein Sicherheitsnetz ist keine
+Ursache. **Die Ursache ist Fragilitaet im Code, und die ist am Fall belegbar:**
+
+> GQ-P3 wurde mit **9 gruenen neuen Tests** und **3925 gruenen Bestandstests** abgenommen —
+> und hat den Inbound-Kanal vollstaendig zerstoert. Die Tests prueften, WELCHER Pfad gewaehlt
+> wird. Sie prueften nicht, ob die fremde API in diesem Zustand ueberhaupt aufrufbar ist.
+
+Das ist keine Nachlaessigkeit im Einzelfall, sondern eine **Fehlerklasse**, die dieses Repo
+wiederholt trifft — und `.claude/refs/clean-code.md` benennt sie bereits:
+
+- **P10 (Learning Tests fuer Drittanbieter-Code):** Annahmen ueber fremde APIs werden nirgends
+  festgenagelt. Der Handoff nahm an, Call Control sei sofort aufrufbar; Telnyx antwortete
+  `422 (90034 Call not answered yet)`. Dieselbe Klasse: der geratene Feldname
+  `"CallControlId"` (wochenlang stiller Rueckfall) und, historisch, 297 von 297 wertlosen
+  Kostenbelegen durch geratene Feldnamen.
+- **G31 (verborgene zeitliche Kopplung):** Der Handoff MUSS nach dem `answered`-Ereignis
+  laufen — **nichts im Code erzwingt diese Reihenfolge**, sie stand nur in niemandes Kopf.
+- **G27 (Struktur schlaegt Konvention):** Wo eine Invariante nur per Disziplin gilt, bricht
+  sie beim naechsten Umbau.
+
+**Der erste Arbeitsauftrag der naechsten Session ist deshalb eine Fragilitaets-Analyse, kein
+Feature.** Konkret zu beantworten, am Code, mit Belegen:
+
+1. **Welche Annahmen ueber fremde Systeme (Telnyx, Anthropic, ElevenLabs, Deepgram) stehen
+   ungeprueft im Code?** Suche nach Kommentaren wie "live unbestaetigt", "Doku-Stand",
+   "vermutlich", nach geratenen Feldnamen und nach Aufrufen, deren Vorbedingung nirgends
+   geprueft wird. Jede gefundene Stelle bekommt entweder einen Learning Test oder eine
+   fail-closed Pruefung — **nicht** einen Kommentar.
+2. **Welche Reihenfolge-Abhaengigkeiten gibt es, die keine Signatur erzwingt?** (G31)
+   Besonders im Anrufpfad: annehmen -> begruessen -> Handoff -> Turns -> beenden.
+3. **Welche Dateien sind Hubs?** `src/claude.js`, `src/telnyx-llm-shim.js` und
+   `src/store/state-ops.js` wurden am 2026-08-04 von **je drei bis vier** Phasen angefasst.
+   Jede Aenderung dort trifft alles andere. Das ist die strukturelle Ursache dafuer, dass
+   "irgendwas anderes kaputtgeht".
+4. **Warum waren 3942 Tests gruen, waehrend der Dienst tot war?** Was messen sie, was messen
+   sie nicht? Ein Test, der beim kaputtesten Zustand des Tages nicht rot wird, ist als
+   Regressionsschutz wertlos.
+
+Erst wenn diese vier Fragen beantwortet sind, wird wieder an Gespraechsqualitaet gebaut.
+Ein Testanruf nach jedem Deploy am Anrufpfad bleibt trotzdem Pflicht — als **Netz**, nicht
+als Loesung.
 
 **L2 — Provider-Konfiguration vor Code.** Der Telnyx-Assistant hat ein Dutzend Stellschrauben,
 die sofort wirken, keinen Deploy brauchen und per Snapshot reversibel sind. Die beiden
 einzigen bestaetigten Gewinne des Tages kamen von dort. Der Vorgaenger hat stattdessen zuerst
-Code geschrieben.
+Code geschrieben. **Konfiguration kann auch nichts kaputtmachen, was Code kaputtmachen kann.**
 
 **L3 — Keine Phase ohne vorher benannte Zahl.** Bevor ein Workflow startet, muss beantwortbar
 sein: *welcher Wert in den BEREITS vorliegenden Daten belegt, dass dieser Fix wirkt?* Bei
 GQ-P1 war die Antwort in den Zeitstempeln sichtbar (der Agent antwortet nach ~1 s, die
 Fortsetzung kommt nach 1,4-5,5 s -> die Turns ueberlappen NIE -> ein Verdraengungs-Riegel
 kann nichts verdraengen). Das haette 30 Sekunden Rechnen gekostet statt 45 Minuten Bauen.
+**Toter Code ist auch Fragilitaet:** er wird beim naechsten Umbau mitgeschleppt und
+mitgebrochen.
 
 ---
 
@@ -177,6 +217,12 @@ Startpunkt, aber der INHALT ist ungeprueft.**
 ## Teil 3 — Arbeitsweise (das ist der eigentliche Auftrag)
 
 ### Die Reihenfolge, in der du vorgehst
+
+**Schritt -1 — Fragilitaets-Analyse (siehe L1). Sie geht allem voraus.** Solange jede
+Aenderung etwas anderes umwirft, ist jede weitere Phase ein Gluecksspiel. `clean-code.md` ist
+dabei nicht Zierrat, sondern der Pruefkatalog: **P10** (Learning Tests fuer fremde APIs),
+**G31** (verborgene zeitliche Kopplungen), **G27** (Struktur statt Konvention), **G5/S2**
+(Duplizierung), **G9** (toter Code), **P16** (Nebenlaeufigkeit: Timer gegen Webhook-Events).
 
 **Schritt 0 — Messen, selbst, in Minuten.** Die vier entscheidenden Befunde des Vortags kamen
 alle aus `psql` und Render-Logs, nicht aus Agenten. Der Engpass in diesem Projekt ist
