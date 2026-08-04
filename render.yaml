@@ -124,6 +124,11 @@ services:
       # Ende). Safe-Default false; Owner flippt im Dashboard fuer die Latenz-Abnahme.
       - key: TELNYX_SHIM_TOKEN_STREAMING
         value: "false"
+      # GQ-P1: Riegel gegen zwei gesprochene Antworten auf EINE Aeusserung (Befund B-1).
+      # Default true = Riegel aktiv; Owner flippt im Dashboard auf "false", um ohne Deploy
+      # auf das Bestandsverhalten zurueckzugehen.
+      - key: TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN
+        value: "true"
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,

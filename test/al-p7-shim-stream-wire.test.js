@@ -80,7 +80,11 @@ test("AL-P7-25: Flag AUS -> Bestandskadenz (role, content, finish, [DONE] = 4 Wr
 
   assert.equal(res.chunks.length, 4);
   assert.deepEqual(contentPieces(res), [GANZER_TEXT], "EIN content-Chunk am Ende");
-  assert.equal(agentTurn.calls[0].options.onSpeechChunk, undefined, "kein Abnehmer durchgereicht");
+  // GQ-P1: der Shim reicht seit dem Verdraengungs-Riegel IMMER einen (ggf. no-op)
+  // speakChunk-Wrapper durch, nie mehr das nackte wire.writeChunk. Ohne offenen Strom
+  // (wire===null) ist der Wrapper null statt undefined - fuer streamSinkFor (claude.js,
+  // "if (!onSpeechChunk) return null") byte-identisch, siehe GQ-P1-Umsetzungsplan.
+  assert.equal(agentTurn.calls[0].options.onSpeechChunk, null, "kein Abnehmer durchgereicht");
 });
 
 test("AL-P7-26: Flag AN -> n content-Chunks VOR dem finish-Chunk, Rahmen unveraendert", async () => {

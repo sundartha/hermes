@@ -44,6 +44,9 @@ export function fakeTelnyxShimConfig({
   // AL-P7: Default AUS = Bestandspfad (EIN content-Chunk am Ende) - alle Bestands-Shim-
   // Tests bleiben damit unveraendert gueltig; nur die AL-P7-Tests flippen ihn.
   telnyxShimTokenStreaming = false,
+  // GQ-P1: spiegelt den Prod-Default (true). Bestandstests bleiben gruen - sie erzeugen
+  // nie zwei ueberlappende Turns, der Riegel findet nie einen laufenden Vorgaenger.
+  telnyxShimSupersedeExtendedTurn = true,
 } = {}) {
   return withConfigNamespaces({
     claudeModel,
@@ -53,6 +56,7 @@ export function fakeTelnyxShimConfig({
       shimSharedSecret: telnyxShimSharedSecret,
       shimDebugShape: telnyxShimDebugShape,
       shimTokenStreaming: telnyxShimTokenStreaming,
+      shimSupersedeExtendedTurn: telnyxShimSupersedeExtendedTurn,
     },
   });
 }

@@ -494,6 +494,20 @@ const rawConfig = {
       process.env.TELNYX_SHIM_TOKEN_STREAMING,
       { fallback: false },
     ),
+    // GQ-P1 (Befund B-1): Riegel gegen ZWEI gesprochene Antworten auf EINE Aeusserung.
+    // Die Spracherkennung liefert kumulative Zwischenstaende; ein Request, dessen Text den
+    // Vorgaenger nur fortschreibt (Sonde A: prevRelation "extends"), beantwortet dieselbe
+    // Aeusserung ein zweites Mal. Laeuft der Vorgaenger-Turn dann noch UND hat er noch
+    // nichts gesprochen, wird er verdraengt: er spricht nicht, schreibt keine agent-Zeile
+    // und antwortet mit einer leeren, gueltigen Completion.
+    // DEFAULT AN - bewusst ANDERS als die uebrigen Shim-Flags. Der Schalter entwaffnet
+    // KEINE Sicherung (er entscheidet nur, WELCHER von zwei Turns spricht); "aus" ist der
+    // fehlerhafte Bestand mit Doppelrede. Umlegen stellt den Bestand ohne Deploy wieder her.
+    shimSupersedeExtendedTurn: boolEnv(
+      "TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN",
+      process.env.TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN,
+      { fallback: true },
+    ),
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
