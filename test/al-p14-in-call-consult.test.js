@@ -231,7 +231,7 @@ test("AL-P14-9: das Kontingent ist 1 - die zweite Rueckfrage desselben Calls wir
   await claude.agentTurn(call, SUBSTANTIAL);
   assert.equal(store.getCall("call_alp14_9").consults.length, 1);
   // Antwort einspeisen, damit der offene Consult nicht den Halte-Turn ausloest.
-  store.answerConsult(call.id, { eventId: "c0", facts: ["Freitag geht auch"] });
+  inCall.acceptConsultAnswer(call, { eventId: "c0", facts: ["Freitag geht auch"] });
   bodies = [];
   queue = [
     withTools("", toolCall(CONSULT, { question: "Und darf es auch spaeter sein?" })),
@@ -353,7 +353,7 @@ test("AL-P14-17: der erste Turn innerhalb der Frist spricht LLM-frei den Halte-S
   assert.equal(store.getCall("call_alp14_17").consults[0].status, defaults.CONSULT_STATUS.OPEN);
 });
 
-test("AL-P14-18: der ZWEITE Turn innerhalb der Frist schaltet auf timed_out und traegt den Mandats-Fallback", async () => {
+test("AL-P14-18: der ZWEITE Turn innerhalb der Offen-Frist laesst die Rueckfrage LEBEN und traegt den Pending-Hinweis", async () => {
   bodies = [];
   queue = [withTools("", toolCall(CONSULT, { question: QUESTION }))];
   const call = armCall("call_alp14_18");
@@ -366,24 +366,25 @@ test("AL-P14-18: der ZWEITE Turn innerhalb der Frist schaltet auf timed_out und 
   assert.equal(turn.speech, "Dann nehme ich Freitag.");
   assert.equal(
     store.getCall("call_alp14_18").consults[0].status,
-    defaults.CONSULT_STATUS.TIMED_OUT,
+    defaults.CONSULT_STATUS.OPEN,
+    "die Rueckfrage lebt weiter, W2-Gegenbeweis",
   );
   const lastUser = bodies[0].messages.at(-1);
   assert.equal(lastUser.role, "user");
   assert.ok(
-    lastUser.content.endsWith(LOCALES.de.prompt.turnControl.consultTimeout),
-    `Fallback-Marker fehlt: ${lastUser.content}`,
+    lastUser.content.endsWith(LOCALES.de.prompt.turnControl.consultPending),
+    `Pending-Hinweis fehlt: ${lastUser.content}`,
   );
 });
 
-test("AL-P14-19: nach Fristablauf kommt der Fallback-Marker GENAU EINMAL", async () => {
+test("AL-P14-19: nach Ablauf der Offen-Frist kommt der Fallback-Marker GENAU EINMAL", async () => {
   bodies = [];
   queue = [withTools("", toolCall(CONSULT, { question: QUESTION }))];
   const call = armCall("call_alp14_19");
   await claude.agentTurn(call, SUBSTANTIAL);
   // Frist kuenstlich ablaufen lassen, ohne zu warten (kein Sleep im Test, T9). answeredAt
   // wandert mit, sonst faellt der Consult aus der In-Call-Klassifikation (askedAt >= answeredAt).
-  const askedAtMs = Date.now() - inCall.CONSULT_TIMEOUT_MS - 1;
+  const askedAtMs = Date.now() - inCall.CONSULT_OPEN_MS - 1;
   const stored = store.getCall("call_alp14_19");
   stored.answeredAt = new Date(askedAtMs - 1000).toISOString();
   stored.consults[0].askedAt = new Date(askedAtMs).toISOString();
@@ -407,7 +408,7 @@ test("AL-P14-20: eine eingetroffene Antwort erzeugt weder Halte-Turn noch Fallba
   queue = [withTools("", toolCall(CONSULT, { question: QUESTION }))];
   const call = armCall("call_alp14_20");
   await claude.agentTurn(call, SUBSTANTIAL);
-  store.answerConsult(call.id, { eventId: "c0", facts: ["Freitag ist in Ordnung"] });
+  inCall.acceptConsultAnswer(call, { eventId: "c0", facts: ["Freitag ist in Ordnung"] });
   bodies = [];
   queue = [textOnly("Dann nehmen wir Freitag.")];
   const turn = await claude.agentTurn(call, "Und?");

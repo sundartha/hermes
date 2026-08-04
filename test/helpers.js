@@ -275,6 +275,10 @@ export const BASE_ENV = {
   // leakt eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);
   // al-p14-in-call-consult.test.js setzt es explizit auf "true".
   IN_CALL_CONSULT_ENABLED: "false",
+  // GQ-P2: die zwei Consult-Fristen neutral gepinnt, sonst leakt eine lokale .env via
+  // dotenv in die Spawn-Tests (Lehre test-base-env-drift).
+  CONSULT_WAIT_MS: "4000",
+  CONSULT_OPEN_MS: "47000",
   // AL-P7b: Denk-Signal in Spawn-Tests neutral AUS (Default). Ohne diese Zeile leakt eine
   // lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);
   // al-p7b-*.test.js setzen es explizit auf "true".

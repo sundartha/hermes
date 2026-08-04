@@ -24,6 +24,7 @@ import { VOICE_ENGINE } from "../config.js";
 import { normNum, PROVIDER, CONSULT_ANSWER } from "../store/defaults.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
+import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { isConsultEventId } from "../store/state-ops.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
@@ -347,9 +348,16 @@ export function makeCallRoutes({
     const validated = validateAssistantContext({ key_facts: answers });
     if (validated.error || !validated.value)
       return res.status(400).json({ error: validated.error || "answers ist Pflicht" });
+    // GQ-P2: die Offen-Frist-KONSTANTE kommt aus dem Consult-Modul (G22/EINE Quelle),
+    // der DB-Zugriff bleibt am injizierten store (DIP) - anders als claude.js/der Shim ist
+    // diese Route Factory-basiert und wird mit einem Store-Double getestet (P4); ein
+    // direkter Aufruf von in-call.js's acceptConsultAnswer wuerde am Test-Double vorbei
+    // immer den echten Singleton-Store treffen.
     const { outcome, mergedFacts } = store.answerConsult(call.id, {
       eventId,
       facts: validated.value.key_facts,
+      nowMs: Date.now(),
+      openMs: CONSULT_OPEN_MS,
     });
     audit(
       "consult_answered",

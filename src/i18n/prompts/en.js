@@ -201,9 +201,16 @@ At the end, say goodbye in one sentence and then call end_call.`,
     consultDeclined:
       "A follow-up question is not possible right now. Decide within your mandate or " +
       "record the request via take_message.",
+    // GQ-P2: s. DE - the channel is still alive, honest control text instead of silence.
+    consultPending:
+      "[The answer to your follow-up question is not in yet. Keep talking and decide " +
+      "provisionally within your mandate; once it arrives you'll find it in the " +
+      "BACKGROUND and can bring it up. Never say a follow-up question isn't possible - " +
+      "it's in progress.]",
     consultTimeout:
       "[No answer came back to your question. Decide within your mandate or record the " +
-      "request as a message.]",
+      "request as a message. Never say a follow-up question isn't possible - at most, " +
+      "that the answer is still pending.]",
     // AL-P10b: s. DE.
     lookUpDeclined:
       "Looking something up is not possible right now. Answer from your task and your " +

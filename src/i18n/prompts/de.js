@@ -228,11 +228,20 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     consultDeclined:
       "Rückfrage jetzt nicht möglich. Entscheide im Rahmen deines Mandats oder nimm das " +
       "Anliegen über take_message auf.",
-    // AL-P14 (Mandats-Fallback): eckig geklammerter Steuertext wie silentTurn - er haengt
-    // sich an den letzten user-Turn und erscheint genau EINMAL.
+    // GQ-P2: die Antwort steht noch aus, der Kanal LEBT. Ehrlicher Steuertext statt
+    // Schweigen - und ein ausdrueckliches Verbot der Falschaussage, die live gemessen
+    // wurde ("Ich habe leider keine Funktion, um ... zu konsultieren").
+    consultPending:
+      "[Auf deine Rückfrage ist die Antwort noch nicht da. Sprich weiter und entscheide " +
+      "vorläufig im Rahmen deines Mandats; kommt die Antwort, findest du sie im " +
+      "HINTERGRUND und reichst sie nach. Sage NIE, dass dir eine Rückfrage nicht möglich " +
+      "sei - sie läuft.]",
+    // AL-P14/GQ-P2 (Mandats-Fallback): eckig geklammerter Steuertext wie silentTurn -
+    // haengt sich an den letzten user-Turn und erscheint genau EINMAL.
     consultTimeout:
       "[Auf deine Rückfrage kam keine Antwort. Entscheide im Rahmen deines Mandats oder " +
-      "nimm das Anliegen als Nachricht auf.]",
+      "nimm das Anliegen als Nachricht auf. Sage NIE, dass dir eine Rückfrage nicht " +
+      "möglich sei - höchstens, dass die Antwort noch aussteht.]",
     // AL-P10b: die drei deterministischen tool_result-Texte des Nachschlags. Server-
     // eigener Text, keine fremde Rede - der TREFFER selbst geht ausschliesslich ueber
     // key_facts in den HINTERGRUND-Block.
