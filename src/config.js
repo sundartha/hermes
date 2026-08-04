@@ -40,6 +40,15 @@ const NUM_ENV_DECIMAL_PATTERN = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
 // Dauerlauf im Millisekundentakt. Deshalb wird geklemmt statt durchgereicht.
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
+// GQ-P2: Obergrenzen der beiden Consult-Fristen. numEnv klemmt (kein Fatal) - eine zu
+// gross gesetzte Frist darf keine abgeschaltete Sicherung werden. Die kurze Frist wird in
+// der laufenden Abrechnungsminute RESERVIERT (consultFitsBillingMinute): ueber einer
+// Minute passt sie in keine mehr, die Rueckfrage waere strukturell tot (fail-closed). Die
+// lange Frist begrenzt, wie alt eine noch angenommene Antwort sein darf - was spaeter
+// kommt, gehoert in einen anderen Gespraechsabschnitt (Kein Fail-open).
+const CONSULT_WAIT_MAX_MS = 60_000;
+const CONSULT_OPEN_MAX_MS = 300_000;
+
 // Sentinel fuer einen Boot ohne Deploy-Metadatum (lokal / fremder Host). Exportiert,
 // damit Boot-Banner-, /healthz- und Testcode denselben Wert nutzen (G25/G5).
 export const DEPLOYED_COMMIT_UNKNOWN = "unbekannt";
@@ -1002,6 +1011,27 @@ const rawConfig = {
   inCallConsultEnabled: boolEnv("IN_CALL_CONSULT_ENABLED", process.env.IN_CALL_CONSULT_ENABLED, {
     fallback: false,
   }),
+  // GQ-P2 (W1): WARTEN und STERBEN sind zwei Fristen. Dies ist die kurze - so lange darf
+  // der naechste Turn den LLM-freien Halte-Satz sprechen, statt zu antworten (Repo-Lehre:
+  // 4 s Warten sind OK, Stille nicht). Dieselbe Zahl reserviert
+  // consultFitsBillingMinute in der laufenden Abrechnungsminute.
+  consultWaitMs: numEnv("CONSULT_WAIT_MS", process.env.CONSULT_WAIT_MS, {
+    fallback: 4000,
+    min: 0,
+    max: CONSULT_WAIT_MAX_MS,
+  }),
+  // GQ-P2 (W2): die lange Frist - so lange bleibt eine Rueckfrage OFFEN und nimmt eine
+  // eintreffende Antwort noch an. HERGELEITET, nicht geraten: eine Rueckfrage kann genau
+  // dann entstehen, wenn ein Long-Poll gerade erst begonnen hat; der Client sieht sie erst
+  // nach dessen Haltezeit, braucht die Abbruchmarge fuer den naechsten Poll und danach
+  // eine zweite Haltezeit, um zu antworten. Zwei volle Poll-Zyklen plus Marge = 47 s. Die
+  // Beziehung zu CONSULT_POLL_HOLD_MS ist in test/gq-p2-consult-deadline.test.js
+  // festgenagelt statt hier importiert - config.js bleibt frei von Domaenen-Modulen.
+  consultOpenMs: numEnv("CONSULT_OPEN_MS", process.env.CONSULT_OPEN_MS, {
+    fallback: 47000,
+    min: 0,
+    max: CONSULT_OPEN_MAX_MS,
+  }),
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
   // Routen existieren ohne das Flag schlicht nicht (404) -> heutiges Admin-Dashboard
@@ -1385,7 +1415,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled"],
   telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge", "machineDetection"],
-  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled"],
+  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],

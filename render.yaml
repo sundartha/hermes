@@ -333,6 +333,12 @@ services:
       # Datenschutzerklaerung anschalten.
       - key: IN_CALL_CONSULT_ENABLED
         value: "false"
+      # ---- Fristen der Rueckfrage (GQ-P2) ---- Warten (kurz) und Offenbleiben (lang)
+      # sind zwei Fristen; die alten Werte (4000/4000) stellen das Vor-GQ-P2-Verhalten her.
+      - key: CONSULT_WAIT_MS
+        value: "4000"
+      - key: CONSULT_OPEN_MS
+        value: "47000"
       # ---- Denk-Signal (AL-P7b) ---- Default AUS (fail-closed): kein Prompt-Block, kein
       # zusaetzliches SSE-Fragment. Braucht TELNYX_SHIM_TOKEN_STREAMING=true, um zu wirken.
       - key: THINKING_SIGNAL_ENABLED

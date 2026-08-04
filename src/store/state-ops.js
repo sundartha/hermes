@@ -730,11 +730,25 @@ function mergeContextFacts(call, facts) {
   return taken.length;
 }
 
+// GQ-P2: Alter eines Consults an der Wanduhr. NaN bei unlesbarem Zeitstempel - jeder
+// Aufrufer entscheidet darauf fail-closed.
+function consultAgeMs(consult, nowMs) {
+  return nowMs - Date.parse(consult?.askedAt ?? "");
+}
+
+// GQ-P2: nimmt eine Rueckfrage dieses Alters noch eine Antwort an? EINE Quelle (G5) fuer
+// den Turn-Schritt (advanceInCallConsult) und die Antwort-Kante (answerConsult) - mit
+// zwei Praedikaten koennte answerConsult eine Antwort annehmen, die der Turn-Schritt
+// Millisekunden spaeter verwirft. Unlesbares Alter ODER fehlende Frist -> false.
+function consultAlive(ageMs, openMs) {
+  return Number.isFinite(ageMs) && Number.isFinite(openMs) && ageMs < openMs;
+}
+
 // Antwort einspeisen. facts sind BEREITS validiert (validateAssistantContext an der
 // Route) - diese Ebene kennt keine Validierung, sie fuehrt Buch (G30/G34: eine
 // Abstraktionsebene). Reihenfolge der Ablehnungen ist bindend: Call vorbei ->
-// unbekanntes Ereignis -> schon beantwortet.
-export function answerConsult(s, callId, { eventId, facts }) {
+// unbekanntes Ereignis -> schon beantwortet -> Frist abgelaufen.
+export function answerConsult(s, callId, { eventId, facts, nowMs, openMs }) {
   const call = getCall(s, callId);
   const reject = (outcome) => ({ call: call || null, changed: false, outcome, mergedFacts: 0 });
   if (!call || call.status !== "active") return reject(CONSULT_ANSWER.CALL_ENDED);
@@ -743,6 +757,12 @@ export function answerConsult(s, callId, { eventId, facts }) {
     : null;
   if (!consult) return reject(CONSULT_ANSWER.UNKNOWN_EVENT);
   if (consult.status !== CONSULT_STATUS.OPEN) return reject(CONSULT_ANSWER.ALREADY_ANSWERED);
+  // GQ-P2: NUR der In-Call-Consult hat eine Wanduhr-Frist. Consult #0 (Klingelzeit,
+  // AL-P13) wartet ausschliesslich auf den Client und darf nie an der Uhr sterben - er
+  // ueberspringt dieses Gate vollstaendig (Bestandsverhalten byte-identisch). Fuer den
+  // In-Call-Fall ist es fail-closed: fehlt die Frist, wird NICHT eingespeist.
+  if (isInCallConsult(call, consult) && !consultAlive(consultAgeMs(consult, nowMs), openMs))
+    return reject(CONSULT_ANSWER.DEADLINE_PASSED);
   const mergedFacts = mergeContextFacts(call, facts);
   consult.status = CONSULT_STATUS.ANSWERED;
   consult.answeredAt = new Date().toISOString();
@@ -817,26 +837,39 @@ export function noteConsultPoll(s, callId, nowMs = Date.now()) {
   if (call) call.consultPolledAtMs = nowMs;
 }
 
-// AL-P14: der EINE Zustandsschritt der laufenden Rueckfrage, einmal je Turn.
-// HOLD  = Frist laeuft noch und dies ist der erste Turn seither (held wird gesetzt);
-// TIMED_OUT = Frist abgelaufen ODER schon einmal gehalten -> Status timed_out (einmalig,
-//             ein zweiter Aufruf liefert NONE, das ist der Einmal-Riegel des Fallbacks);
-// NONE  = nichts offen. Nebeneffekt im Namen (N7).
-// Betrachtet NUR In-Call-Consults: Consult #0 (Klingelzeit) hat keine Gespraechs-Frist -
-// er wartet ausschliesslich auf den Client und darf nie einen Halte-Satz ausloesen.
-export function advanceInCallConsult(s, callId, { nowMs, timeoutMs }) {
+// AL-P14/GQ-P2: der EINE Zustandsschritt der laufenden Rueckfrage, einmal je Turn.
+// HOLD      = die kurze Wartefrist laeuft und dies ist der erste Turn seither
+//             (LLM-freier Halte-Satz, hoechstens EINER je Consult);
+// PENDING   = die Wartefrist ist um, die OFFEN-Frist nicht - der Consult LEBT weiter und
+//             nimmt eine Antwort noch an; der Turn laeuft normal und traegt einmalig den
+//             ehrlichen Hinweis;
+// TIMED_OUT = die OFFEN-Frist ist abgelaufen (oder der Zeitstempel unlesbar, fail-closed)
+//             -> Status timed_out, Mandats-Fallback, einmalig;
+// NONE      = nichts offen ODER beide Marker bereits gesetzt.
+// GQ-P2 (W2): der Abbruch haengt an der WANDUHR, nicht am Turn-Zaehler. Vorher setzte der
+// ZWEITE Aufruf bedingungslos timed_out - Telefon-Turns folgen schneller aufeinander, als
+// ein Antwortender tippen kann, deshalb starb der Kanal praktisch immer. Nebeneffekt im
+// Namen (N7). Betrachtet NUR In-Call-Consults: Consult #0 hat keine Gespraechs-Frist.
+export function advanceInCallConsult(s, callId, { nowMs, waitMs, openMs }) {
   const call = getCall(s, callId);
   const idle = { call: call || null, changed: false, wait: CONSULT_WAIT.NONE };
   if (!call) return idle;
   const consult = inCallConsults(call).find((c) => c.status === CONSULT_STATUS.OPEN);
   if (!consult) return idle;
-  const deadlinePassed = nowMs - Date.parse(consult.askedAt) >= timeoutMs;
-  if (!deadlinePassed && !consult.held) {
+  const ageMs = consultAgeMs(consult, nowMs);
+  if (!consultAlive(ageMs, openMs)) {
+    consult.status = CONSULT_STATUS.TIMED_OUT;
+    return { call, changed: true, wait: CONSULT_WAIT.TIMED_OUT };
+  }
+  if (!consult.held && ageMs < waitMs) {
     consult.held = true;
     return { call, changed: true, wait: CONSULT_WAIT.HOLD };
   }
-  consult.status = CONSULT_STATUS.TIMED_OUT;
-  return { call, changed: true, wait: CONSULT_WAIT.TIMED_OUT };
+  if (!consult.pendingNoted) {
+    consult.pendingNoted = true;
+    return { call, changed: true, wait: CONSULT_WAIT.PENDING };
+  }
+  return idle;
 }
 
 // P3.2: konsekutiven Leer-Gather-Turn mitzaehlen und den NEUEN Streak liefern (Nebeneffekt

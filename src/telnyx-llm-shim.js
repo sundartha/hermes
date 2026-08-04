@@ -16,7 +16,7 @@ import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { blockingBudgetAxis, isBudgetAxis } from "./budget-gate.js";
-import { consultClientIsPolling } from "./consult/in-call.js";
+import { consultClientIsPolling, consultPollAgeMs } from "./consult/in-call.js";
 import { makeTurnTextProbe, TURN_TEXT_RELATION } from "./telnyx-turn-probe.js";
 import { makeInFlightTurnRegistry } from "./telnyx-turn-supersede.js";
 
@@ -683,7 +683,10 @@ export function makeTelnyxLlmShim({
     try {
       // AL-D1: Momentaufnahme VOR dem Turn - genau der Zeitpunkt, zu dem agentTools()
       // ueber get_consult entscheidet. Nach dem Turn gemessen waere es eine andere Zahl.
-      const consultPollFresh = consultClientIsPolling(call);
+      // GQ-P2/B-2: EINE Uhrzeit fuer beide Felder, sonst koennten sie sich widersprechen.
+      const pollMeasuredAtMs = Date.now();
+      const consultPollFresh = consultClientIsPolling(call, pollMeasuredAtMs);
+      const consultPollAge = consultPollAgeMs(call, pollMeasuredAtMs);
       const startedAt = Date.now();
       const turn = await agentTurn(call, callerText, {
         onSpeechChunk: speakChunk,
@@ -710,6 +713,9 @@ export function makeTelnyxLlmShim({
         streamChunks: wire ? wire.chunkCount() : 0,
         // AL-D1: wartete zu Turn-Beginn ueberhaupt ein MCP-Client? Ein Boolean, kein Text.
         consultPollFresh,
+        // GQ-P2/B-2: WIE alt der Poll war. Der Boolean allein kann "nie gepollt" (-1) nicht
+        // von "um Millisekunden zu alt" trennen - genau daran scheiterte die B-2-Diagnose.
+        consultPollAgeMs: consultPollAge,
         ...turnDiagnostics(turn, callerText),
       });
       // P5 (OBS/R6): unter demselben default-off TELNYX_SHIM_DEBUG_SHAPE-Flag und demselben

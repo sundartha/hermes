@@ -314,6 +314,10 @@ export const CONSULT_STATUS = Object.freeze({
 export const CONSULT_WAIT = Object.freeze({
   NONE: "none",
   HOLD: "hold",
+  // GQ-P2: die Rueckfrage LEBT, die Antwort steht nur noch aus. Der Turn laeuft normal
+  // (Modellrunde, kein Halte-Satz) und traegt genau EINMAL den ehrlichen Hinweis.
+  // Bewusst NICHT "hold": hold ueberspringt die Modellrunde, pending nicht.
+  PENDING: "pending",
   TIMED_OUT: "timed_out",
 });
 
@@ -324,6 +328,10 @@ export const CONSULT_ANSWER = Object.freeze({
   UNKNOWN_EVENT: "unknown_event",
   ALREADY_ANSWERED: "already_answered",
   CALL_ENDED: "call_ended",
+  // GQ-P2: die Offen-Frist des In-Call-Consults ist abgelaufen. Bewusst eigener Wert
+  // neben ALREADY_ANSWERED: im Audit-Log muss "zu spaet" von "schon beantwortet"
+  // unterscheidbar bleiben - genau daran haengt die Diagnose des Rueckkanals.
+  DEADLINE_PASSED: "deadline_passed",
 });
 // Konservativster der drei Wege: ohne ausdrueckliche Angabe gibt der Agent ein Angebot
 // ausserhalb seines Spielraums als Nachricht weiter, statt ab- oder zuzusagen.

@@ -20,16 +20,18 @@ import { sanitizeConsultQuestion } from "./question.js";
 // Riegel im Tool-Loop.
 export const GET_CONSULT_TOOL_NAME = "get_consult";
 
-// Wie lange der Agent auf die Antwort wartet, bevor er im Rahmen seines Mandats
-// entscheidet. KEIN Env-Knopf (Praezedenz CONSULT_POLL_HOLD_MS/MAX_OPEN_POLLS_*): ein zu
-// gross gesetzter Wert waere genau die Klasse "neue abgeschaltete Sicherung", die
-// CLAUDE.md verbietet - er liesse den Angerufenen beliebig lange in der Leitung haengen.
-// HERLEITUNG, ehrlich als UNBESTAETIGT markiert: die einzige Zahl im Code ist
-// PROVIDER_WEBHOOK_HARDCUT_MS (turn-budget.js), aus der Twilio-Doku abgeleitet und fuer
-// den Shim-Pfad live unbestaetigt; die Messung dazu (AL-P2) ist bis heute nicht gelaufen.
-// 4000 ms sind gut ein Viertel davon und decken sich mit der Repo-Lehre "4 s Wartezeit
-// sind OK, Stille nicht" - deshalb spricht der Fueller, statt zu schweigen.
-export const CONSULT_TIMEOUT_MS = 4000;
+// GQ-P2: die kurze Frist - wie lange der Agent im laufenden Turn auf die Antwort WARTET,
+// bevor er ueberbrueckt. Sie reserviert zugleich Platz in der laufenden Abrechnungsminute
+// (consultFitsBillingMinute). Der Wert liegt in config.js (Rueckweg der Phase: alter Wert
+// = altes Verhalten) und ist dort nach oben geklemmt - er kann keine Sicherung abschalten.
+export const CONSULT_WAIT_MS = config.tenancy.consultWaitMs;
+
+// GQ-P2 (W2): die lange Frist - wie lange die Rueckfrage OFFEN bleibt und eine
+// eintreffende Antwort noch annimmt. Getrennt von CONSULT_WAIT_MS, weil "warten" und
+// "sterben" zwei verschiedene Dinge sind: der Agent spricht laengst weiter, waehrend der
+// Kanal noch offen ist. Ein laenger offener Consult verlaengert KEIN Gespraech - es wird
+// nirgends gewartet, und expireOpenConsults schliesst ihn spaetestens am Call-Ende.
+export const CONSULT_OPEN_MS = config.tenancy.consultOpenMs;
 
 // Wie frisch ein Client-Poll sein muss, damit das Werkzeug ueberhaupt angeboten wird.
 // Dieselbe Zahl wie die Abbruchgrenze des Polls (G5): ein Client in der Schleife
@@ -57,6 +59,15 @@ export function consultClientIsPolling(call, nowMs = Date.now()) {
   return nowMs - (call.consultPolledAtMs || 0) <= CONSULT_POLL_FRESH_MS;
 }
 
+// GQ-P2/B-2: WIE ALT ist der letzte Client-Poll? Der Boolean consultClientIsPolling kann
+// "nie gepollt" nicht von "um Millisekunden zu alt" trennen - genau diese Mehrdeutigkeit
+// liess B-2 nach dem Live-Anruf offen. Eine Zahl, kein Text (PII-Freiheit der Log-Zeile
+// unberuehrt). Reiner Leser.
+export const CONSULT_POLL_NEVER = -1;
+export function consultPollAgeMs(call, nowMs = Date.now()) {
+  return call.consultPolledAtMs ? nowMs - call.consultPolledAtMs : CONSULT_POLL_NEVER;
+}
+
 // Registrierungs-Gate: darf get_consult in DIESEM Turn ueberhaupt im Werkzeugsatz stehen?
 // Schnittmenge, fail-closed in jedem Faktor. Der Flag-Vergleich steht vorn, damit bei
 // ausgeschaltetem Feature nicht einmal der Store gelesen wird (Bestand byte-identisch).
@@ -80,12 +91,12 @@ export function consultAvailableFor(call, nowMs = Date.now()) {
 export function consultFitsBillingMinute(call, nowMs = Date.now()) {
   const anchorMs = callStartAnchorMs(call);
   if (!Number.isFinite(anchorMs) || nowMs < anchorMs) return false;
-  return ((nowMs - anchorMs) % MS_PER_MINUTE) + CONSULT_TIMEOUT_MS <= MS_PER_MINUTE;
+  return ((nowMs - anchorMs) % MS_PER_MINUTE) + CONSULT_WAIT_MS <= MS_PER_MINUTE;
 }
 
-// PII-frei: server-generierte callId + Frist. Nie die Frage, nie eine Nummer.
+// PII-frei: server-generierte callId + Fristen. Nie die Frage, nie eine Nummer.
 function logConsultAsked(callId) {
-  console.log(`[consult] gestellt call=${callId} frist_ms=${CONSULT_TIMEOUT_MS}`);
+  console.log(`[consult] gestellt call=${callId} warte_ms=${CONSULT_WAIT_MS} offen_ms=${CONSULT_OPEN_MS}`);
 }
 
 /**
@@ -126,6 +137,19 @@ export function advanceConsultWait(call) {
   if (config.tenancy.inCallConsultEnabled !== true) return CONSULT_WAIT.NONE;
   return store.advanceInCallConsult(call.id, {
     nowMs: Date.now(),
-    timeoutMs: CONSULT_TIMEOUT_MS,
+    waitMs: CONSULT_WAIT_MS,
+    openMs: CONSULT_OPEN_MS,
+  });
+}
+
+// GQ-P2: das Gegenstueck zu advanceConsultWait auf der ANTWORT-Seite. Die Frist lebt an
+// EINER Stelle (G5/G22) - die Route kennt den Kanal, nicht die Uhr. Nebeneffekt im Namen
+// (N7): bei Annahme wandern die Fakten in call.context.key_facts.
+export function acceptConsultAnswer(call, { eventId, facts }) {
+  return store.answerConsult(call.id, {
+    eventId,
+    facts,
+    nowMs: Date.now(),
+    openMs: CONSULT_OPEN_MS,
   });
 }

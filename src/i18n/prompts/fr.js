@@ -199,9 +199,16 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
     consultDeclined:
       "Une question de clarification n'est pas possible maintenant. Décide dans le cadre de " +
       "ton mandat ou consigne la demande via take_message.",
+    // GQ-P2: s. DE - le canal reste vivant, texte de contrôle honnête plutôt que le silence.
+    consultPending:
+      "[La réponse à ta question de clarification n'est pas encore arrivée. Continue à " +
+      "parler et décide provisoirement dans le cadre de ton mandat ; dès qu'elle arrive, " +
+      "tu la trouveras dans le CONTEXTE et pourras la reprendre. Ne dis jamais qu'une " +
+      "question de clarification est impossible - elle est en cours.]",
     consultTimeout:
       "[Aucune réponse n'est venue à ta question. Décide dans le cadre de ton mandat ou " +
-      "consigne la demande comme un message.]",
+      "consigne la demande comme un message. Ne dis jamais qu'une question de " +
+      "clarification est impossible - tout au plus que la réponse est encore en attente.]",
     // AL-P10b: s. DE.
     lookUpDeclined:
       "Consulter quelque chose n'est pas possible maintenant. Réponds à partir de ta " +

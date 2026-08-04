@@ -783,6 +783,15 @@ function toolResultText({ call, toolUse, consult, lookup }) {
   return execTool(call, toolUse.name, toolUse.input || {});
 }
 
+// GQ-P2: der Steuertext-Marker dieses Turns, abgeleitet aus dem Zustandsschritt der
+// Rueckfrage. EINE Zuordnung statt zweier paralleler if-Ketten (G5/G23); NONE und HOLD
+// tragen keinen Marker (HOLD spricht statt zu schreiben).
+function consultTurnMarker(consultWait, turnControl) {
+  if (consultWait === CONSULT_WAIT.PENDING) return turnControl.consultPending;
+  if (consultWait === CONSULT_WAIT.TIMED_OUT) return turnControl.consultTimeout;
+  return "";
+}
+
 // GQ-P1: abortSignal ist der optionale Riegel des Shims (telnyx-turn-supersede.js). Ohne
 // ihn ist dieser Turn byte-identisch zum Bestand - /voice/turn (routes/voice.js) reicht
 // keinen durch. Der Abbruch ist KOOPERATIV: gelesen wird an der Schleifengrenze und vor
@@ -841,16 +850,15 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     });
   }
 
-  // AL-P14 (Mandats-Fallback): auf die Rueckfrage kam nichts. Der Hinweis ist
-  // server-eigener, eckig geklammerter Steuertext - dieselbe Klasse wie silentTurn, KEIN
-  // fremder Text (die ANTWORT wandert weiterhin ausschliesslich ueber key_facts in den
-  // HINTERGRUND-Block, Gate 5). Der Block darueber garantiert, dass die letzte Message
-  // ein user-Turn ist; der Marker haengt sich an genau ihn. Er erscheint genau EINMAL -
-  // der Einmal-Riegel ist die Zustandsumschaltung im Store, nicht eine Zaehlung hier.
-  if (consultWait === CONSULT_WAIT.TIMED_OUT) {
-    const tc = localeFor(call.language).prompt.turnControl;
+  // AL-P14/GQ-P2: server-eigener, eckig geklammerter Steuertext - dieselbe Klasse wie
+  // silentTurn, KEIN fremder Text (die ANTWORT wandert weiterhin ausschliesslich ueber
+  // key_facts in den HINTERGRUND-Block, Gate 5). Der Block darueber garantiert, dass die
+  // letzte Message ein user-Turn ist; der Marker haengt sich an genau ihn. Je Zustand
+  // genau EINMAL - der Einmal-Riegel ist die Latch im Store, keine Zaehlung hier.
+  const consultMarker = consultTurnMarker(consultWait, localeFor(call.language).prompt.turnControl);
+  if (consultMarker) {
     const last = history[history.length - 1];
-    last.content = `${last.content}\n${tc.consultTimeout}`;
+    last.content = `${last.content}\n${consultMarker}`;
   }
 
   // T1-Sicherungsboden: siehe shouldSuppressEndCall oben (EINE Quelle,
