@@ -10,13 +10,14 @@
 // KEINE Safety-Gate-Umgehung, KEINE llm.js-Aenderung, KEIN Direktimport von execTool/
 // toolDefs (agentTurn ruft sie in-house auf -> S2-Anti-Duplizierung).
 import { randomUUID } from "node:crypto";
-import { safeEqual } from "./util.js";
+import { safeEqual, hashText } from "./util.js";
 import { degradedSpeechFor } from "./llm.js";
 import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { blockingBudgetAxis, isBudgetAxis } from "./budget-gate.js";
 import { consultClientIsPolling } from "./consult/in-call.js";
+import { makeTurnTextProbe } from "./telnyx-turn-probe.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk"; // stream:true (SSE-Delta-Chunks)
@@ -97,16 +98,31 @@ function lastUserText(body) {
 // verknuepft mit dem Turn-Ergebnis. NUR Counts/Typ-Namen/Laengen/Booleans - NIE
 // Nachrichtentext, keine E.164, kein Secret.
 
+// Die drei OpenAI-Rollen, die der Shim kennt; jede andere/fehlende faellt auf "other"
+// (bounded - kein angreiferkontrollierter Rollen-String geraet je in den Log). EINE Quelle
+// (G5) fuer roleCounts UND lastMessageRole.
+const KNOWN_MESSAGE_ROLES = Object.freeze(["system", "user", "assistant"]);
+const OTHER_ROLE = "other";
+const MISSING_ROLE = "missing"; // leeres messages-Array (Konvention wie lastUserContentShape)
+
+function boundedRole(message) {
+  const role = message && message.role;
+  return KNOWN_MESSAGE_ROLES.includes(role) ? role : OTHER_ROLE;
+}
+
 // Nachrichten je bekannter Rolle; unbekannte/fehlende Rollen -> "other" (bounded, damit
 // kein angreiferkontrollierter Rollen-String in den Log geraet).
 function roleCounts(messages) {
   const counts = { system: 0, user: 0, assistant: 0, other: 0 };
-  for (const m of messages) {
-    const role = m && m.role;
-    if (role === "system" || role === "user" || role === "assistant") counts[role] += 1;
-    else counts.other += 1;
-  }
+  for (const m of messages) counts[boundedRole(m)] += 1;
   return counts;
+}
+
+// GQ-S1 Sonde A: Rolle der LETZTEN Nachricht des Payloads (nicht der letzten user-
+// Nachricht). Sie trennt "derselbe Request kam erneut" von "der Verlauf ist
+// fortgeschrieben".
+function lastMessageRole(messages) {
+  return messages.length ? boundedRole(messages[messages.length - 1]) : MISSING_ROLE;
 }
 
 // Roh-Content-Form der LETZTEN user-Message: Typ-Name + Laenge (Zahl), nie der Wert.
@@ -335,6 +351,39 @@ function logShimReattach(payload) {
   console.log(formatShimLine("reattached", payload));
 }
 
+// GQ-S1 Sonde A (B-1): eine PII-freie Zeile JE Shim-Request, eigener Kanal (kind=
+// "turn_probe"), console.log wie turn_ok. Sie beantwortet genau eine Frage: sind zwei POSTs
+// fuer dieselbe Aeusserung zwei Sprech-Turns oder EIN doppelt zugestellter Request. Nur
+// Laengen, Hashes, Namen, Zeitstempel - NIE Wortlaut, NIE Rufnummern, NIE Header-Werte.
+function logShimTurnProbe(payload) {
+  console.log(formatShimLine("turn_probe", payload));
+}
+
+// Nur von Telnyx gesetzte Anfrage-Header (Allowlist-Praefix), Name -> nicht umkehrbarer
+// Hash des Wertes. Der WERT wird nie geloggt: identische Hashes belegen "derselbe Request",
+// ohne dass ein zufaellig mitgefuehrtes Geheimnis (z.B. ein Signatur-Header) je im Log
+// steht. authorization ist durch die Praefix-Allowlist strukturell ausgeschlossen.
+const TELNYX_HEADER_PREFIX = "x-telnyx-";
+
+function telnyxHeaderFingerprints(headers) {
+  const fingerprints = {};
+  for (const name of Object.keys(headers || {}).sort())
+    if (name.toLowerCase().startsWith(TELNYX_HEADER_PREFIX))
+      fingerprints[name] = hashText(headers[name]);
+  return fingerprints;
+}
+
+// Die Request-Fakten der Sonde: wie viele Nachrichten, welche Rolle zuletzt, welche
+// Telnyx-Header. Reine Form, keine Inhalte.
+function requestOriginShape(req) {
+  const messages = messagesArray(req.body);
+  return {
+    messagesCount: messages.length,
+    lastRole: lastMessageRole(messages),
+    telnyxHeaders: telnyxHeaderFingerprints(req.headers),
+  };
+}
+
 // OBS-FLAG (TELNYX_SHIM_DEBUG_SHAPE, default aus): Shape-Dump als eigenes Watched-Token
 // (kind="shape"), in den Logs vom gate-Token unterscheidbar. Wie logShimGate console.warn,
 // keys-only Payload (Regel 4).
@@ -390,6 +439,10 @@ export function makeTelnyxLlmShim({
     limit: config.telnyx.telnyxAssistant.shimMaxTurnsPerMin,
     sweepMs: SHIM_RATE_SWEEP_MS,
   });
+
+  // GQ-S1 Sonde A: EINE Instanz je Shim (kein Modul-Zustand, kein Lazy-Init - P15). Haelt
+  // je Call nur {atMs, chars, hash} des letzten Turns, nie Text.
+  const observeTurnText = makeTurnTextProbe();
 
   // Fail-safe Call-Control-Hangup ueber das GETEILTE Primitiv (S2/G5, auch der
   // Dead-Air-Watchdog nutzt es). Byte-identisches Verhalten/Log wie zuvor (SHIM_LOG_PREFIX).
@@ -524,6 +577,18 @@ export function makeTelnyxLlmShim({
     // EOT-Kostensichtbarkeit, K8).
     const callerText = lastUserText(req.body);
     const { loopExceeded, turnSeq } = watchdog.observeTurn(call.id, callerText);
+
+    // GQ-S1 Sonde A (B-1): VOR jedem folgenden Gate (Loop-Guard/Rate/Budget), damit die
+    // Zeile auch dann steht, wenn der Turn gleich terminiert wird - turn_ok feuert dort
+    // nie. Liest nur; weder turnSeq noch emptyStreak noch das Rate-Fenster werden
+    // beruehrt. gapMs+prevRelation trennen die Doppel-Zustellung (gleicher Hash, gleiche
+    // Request-ID) vom fortgeschriebenen STT-Ergebnis (Vorgaenger ist Praefix).
+    logShimTurnProbe({
+      callId: call.id,
+      turnSeq,
+      ...observeTurnText(call.id, callerText),
+      ...requestOriginShape(req),
+    });
 
     // EINE Stelle (G5) fuer den Budget-Notaus: Abschluss-Ansage ZUERST, dann realer Hangup
     // (Weg iii, telnyx-p6). Genutzt vom Gate VOR dem Turn (Schritt 6) UND vom Abbruch

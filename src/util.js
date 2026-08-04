@@ -17,6 +17,7 @@ export function safeEqual(a, b) {
 const MASK_VISIBLE_TAIL = 4; // sichtbare End-Zeichen einer maskierten Nummer
 const MASK_HASH_LEN = 6;     // Hex-Stellen des Korrelations-Hash bei Nummern
 const EMAIL_HASH_LEN = 8;    // Hex-Stellen des E-Mail-Hash (Vorgabe T-P0-7)
+const TEXT_HASH_LEN = 8;     // Hex-Stellen des Text-Korrelations-Hash (Diagnose-Sonden)
 
 function sha256Hex(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
@@ -39,6 +40,17 @@ export function hashEmail(value) {
   const s = String(value ?? "").trim().toLowerCase();
   if (!s) return "-";
   return sha256Hex(s).slice(0, EMAIL_HASH_LEN);
+}
+
+// GQ-S1: beliebigen Text auf ein nicht umkehrbares SHA256-Praefix reduzieren - gleicher
+// Text ergibt dasselbe Token, ueber Logzeilen vergleichbar, ohne den Wortlaut zu zeigen.
+// Anders als hashEmail BEWUSST ohne trim/lowercase: die Sonden muessen "identischer Text"
+// von "erweitertem Text" unterscheiden, jede Normalisierung wuerde genau das verwischen.
+// Leerwert -> "-" (gleiche Konvention wie maskNumber/hashEmail).
+export function hashText(value) {
+  const s = String(value ?? "");
+  if (!s) return "-";
+  return sha256Hex(s).slice(0, TEXT_HASH_LEN);
 }
 
 // Audit-Logzeile fuer sicherheitsrelevante Aktionen (Call-Ausloesung, Cancel,

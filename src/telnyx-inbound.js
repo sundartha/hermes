@@ -9,12 +9,51 @@ import { bindAssistantToCall } from "./telnyx-origination.js";
 // Telnyx-TeXML-Inbound-Body-Feld mit der call_control_id des Inbound-Legs. Doku-Stand,
 // live unbestaetigt (wie der ganze P4-Adapter) - mit dem Owner in P0/P11 fixen. Fehlt es
 // -> null: der Aufrufer faellt fail-safe auf den bestehenden TeXML-Greeting-Pfad zurueck
-// (byte-identisch), kein kaputter Assistant-Pfad.
+// (byte-identisch), kein kaputter Assistant-Pfad. GQ-S1 Sonde B macht genau diesen
+// Rueckfall LAUT - bis hierher war er still, und der Dienst meldete "Assistant-Pfad:
+// AKTIV", waehrend jeder Inbound-Anruf ueber die Budget-Engine lief (Befund B-9).
 const INBOUND_CALL_CONTROL_ID_FIELD = "CallControlId";
 
 export function inboundCallControlId(body) {
   const v = body && body[INBOUND_CALL_CONTROL_ID_FIELD];
   return typeof v === "string" && v ? v : null;
+}
+
+// ---- GQ-S1 Sonde B (B-9/O-1): Feldname messen statt raten -------------------------
+const INBOUND_LOG_PREFIX = "[telnyx-inbound]";
+// Was der Betreiber tun soll - eine Fehlerzeile ohne Handlungsanweisung ist nur Laerm.
+const HANDOFF_FALLBACK_ACTION =
+  "Inbound laeuft auf der Budget-Engine; echten Feldnamen aus bodyKeys ablesen und INBOUND_CALL_CONTROL_ID_FIELD anpassen";
+
+// Namens-Normalform fuer den Aehnlichkeitsvergleich: klein, ohne Trennzeichen
+// (CallControlId / call_control_id / call-control-id -> callcontrolid).
+function normalizedKey(key) {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+const CALL_CONTROL_ID_SHAPE = normalizedKey(INBOUND_CALL_CONTROL_ID_FIELD);
+
+// Der Befund zum ausbleibenden Handoff - null, wenn das erwartete Feld da ist (das ist die
+// Gegenprobe der Abnahme). Ausschliesslich SCHLUESSELNAMEN, nie Werte: der TeXML-Body
+// traegt Rufnummern (Regel 4). Kein Rekursions-Dump, nur die oberste Ebene.
+export function inboundHandoffFallbackFinding(body) {
+  if (inboundCallControlId(body)) return null;
+  const keys = body && typeof body === "object" ? Object.keys(body).sort() : [];
+  return {
+    expectedField: INBOUND_CALL_CONTROL_ID_FIELD,
+    bodyKeys: keys,
+    // Mehrzahl bewusst: "der erste Treffer ist der einzige" waere eine Annahme (G26).
+    lookalikeFields: keys.filter((k) => normalizedKey(k) === CALL_CONTROL_ID_SHAPE),
+  };
+}
+
+// Macht den frueher stummen Rueckfall laut (Nebeneffekt im Namen, N7). Kein Befund ->
+// keine Zeile: der Erfolgsfall bleibt geraeuschlos.
+export function logInboundHandoffFallback({ callId, body }) {
+  const finding = inboundHandoffFallbackFinding(body);
+  if (!finding) return;
+  console.warn(
+    `${INBOUND_LOG_PREFIX} handoff_fallback ${JSON.stringify({ callId, ...finding })} -> ${HANDOFF_FALLBACK_ACTION}`,
+  );
 }
 
 // Startet den AI-Assistant fuer einen Inbound-Leg: (1) assistantId + callControlId binden,
