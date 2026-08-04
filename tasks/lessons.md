@@ -280,3 +280,19 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   auch wenn die Skill-Beschreibung einen Fliesstext-Aufruf zeigt.
 - **Das ist der gute Fall:** kein Default-Phase-Bau, kein stiller Misfire an der falschen
   Phase, null verbrauchte Token. Genau so soll ein Args-Vertrag scheitern.
+
+## Der Lead selbst hat die Stale-Base-Regel gebrochen (2026-08-04, GQ-P2)
+
+- Waehrend GQ-P2 im Worktree lief, habe ich einen **Doku-Commit nach `master`** gesetzt
+  (Messergebnisse der Testanrufe). Ergebnis: `git merge-base --is-ancestor master <branch>`
+  schlug fehl, und `git diff --stat master..<branch>` haette meine eigenen Doku-Aenderungen
+  als **Loeschungen** ausgewiesen.
+- Die Regel stand woertlich im Kickoff und ich hatte sie im selben Gespraech noch zitiert.
+  Sie gilt fuer **jeden** `master`-Commit, auch fuer reine Dokumentation — der Blocker
+  entsteht aus dem Divergieren, nicht aus dem Inhalt.
+- **Rettung ohne Rebase:** `git diff master...<branch>` (DREI Punkte) vergleicht gegen den
+  gemeinsamen Vorfahren und zeigt genau die Branch-Aenderungen. Danach `git merge --no-ff`
+  wie ueblich — git loest das ueber den merge-base, solange die Dateimengen disjunkt sind.
+- **Regel fuer den Lead:** Notizen und Kettenstand waehrend eines laufenden Laufs in der
+  Datei sammeln, aber **erst nach dem Merge der Phase committen**. Ein Lauf ist erst zu Ende,
+  wenn sein Branch gemergt ist — nicht, wenn die Benachrichtigung eintrifft.
