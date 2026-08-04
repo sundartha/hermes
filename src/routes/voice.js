@@ -36,7 +36,11 @@ import { isBudgetAxis } from "../budget-gate.js";
 import { remainingMaxDurationMs } from "../store/state-ops.js";
 import { noSpeechEscalation } from "../no-speech-escalation.js";
 import { metrics } from "../metrics.js";
-import { startInboundAiAssistant, inboundCallControlId } from "../telnyx-inbound.js";
+import {
+  startInboundAiAssistant,
+  inboundCallControlId,
+  logInboundHandoffFallback,
+} from "../telnyx-inbound.js";
 import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
 import { ANSWERED_BY } from "../telephony/answered-by.js";
 
@@ -167,7 +171,15 @@ export function makeVoiceRoutes({
   async function inboundAssistantHandoffXml({ call, provider, body, greeting, voiceProfile }) {
     if (!(config.telnyx.telnyxAssistant.enabled && providerSupports(provider, CAPABILITY.AI_ASSISTANT))) return null;
     const callControlId = inboundCallControlId(body);
-    if (!callControlId) return null;
+    if (!callControlId) {
+      // GQ-S1 Sonde B (B-9/O-1): Flag UND Capability sind hier bereits an - fehlt jetzt
+      // noch das Feld, ist das der Defektfall, nicht die gewollte Abschaltung. Genau EINE
+      // laute Zeile mit der gescheiterten Bedingung, den echten Body-SCHLUESSELNAMEN
+      // (keine Werte) und der Handlungsanweisung. Verhalten unveraendert: der Rueckfall
+      // auf den TeXML-Gather-Pfad bleibt exakt wie zuvor.
+      logInboundHandoffFallback({ callId: call.id, body });
+      return null;
+    }
     await startInboundAiAssistant({ store, voiceControl, config, call, callControlId, greeting, voiceProfile });
     return render(INBOUND_ASSISTANT_HANDOFF, provider);
   }
