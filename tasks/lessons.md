@@ -238,3 +238,45 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
 - **Regel:** ein Textmuster-Riegel zaehlt Vorkommen, nicht Dateien. Und die Mutationsprobe
   muss BEIDE Faelle fahren (gleiche Datei / andere Datei) - der erste Lauf hatte nur den
   zweiten geprueft und den Riegel deshalb faelschlich fuer wirksam gehalten.
+
+## Erst die Anbieter-Doku, dann die Diagnose (2026-08-04, GQ-Welle 0)
+
+- **Zweimal in einer Stunde eine plausible Wurzel fuer B-1 behauptet, zweimal an einer
+  Messung gestorben.** Erst "Endpointing steht auf 0,8 s" - der Wert existiert live gar
+  nicht (`start_speaking_plan: null`, der Provisioner-Lauf hat ihn nie gesetzt). Dann
+  "`eager_eot_threshold` wurde aktiv gesetzt, um Latenz zu sparen" - 0.8 ist der
+  Telnyx-**Default**, und dieselbe Doku sagt: `eager_eot_threshold == eot_threshold`
+  deaktiviert den eager-Modus bereits.
+- **Der zweite Fehlschluss war teurer, weil schon gehandelt wurde:** die Live-Config war
+  bereits gepatcht, als die Doku die Begruendung widerlegte. Ein Snapshot lag vor, der
+  Schaden blieb null - aber nur wegen des Snapshots, nicht wegen der Vorsicht.
+- **Regel:** ein Konfigurationswert ist erst dann ein Befund, wenn seine **Bedeutung** aus
+  der Anbieter-Doku belegt ist - nicht schon, wenn er auffaellig aussieht. "Der Wert ist
+  gesetzt" und "der Wert bewirkt X" sind zwei Behauptungen; die zweite braucht eine Quelle.
+  Insbesondere: **ein Default sieht aus wie eine Entscheidung.** Vor jeder "jemand hat das
+  absichtlich gesetzt"-Erzaehlung den Default nachschlagen.
+- **Was richtig lief:** vor dem Eingriff `GET` auf die Live-Config und Snapshot nach
+  `data/evidence/telnyx-config/` gesichert. Das ist der Grund, warum die widerlegte
+  Diagnose folgenlos blieb. Bei Provider-Konfiguration IMMER erst lesen und sichern.
+
+## Die Kartierung raet nicht - der Lead misst nach (2026-08-04, GQ-Welle 0)
+
+- Drei von zwoelf Karten trugen eine Erklaerung, die die Nachmessung widerlegt hat. Alle
+  drei Agenten hatten sauber gearbeitet und ihre Annahme als Bedingung formuliert
+  ("falls der Testanruf inbound war", "Anruf an ein Fremdziel faellt strukturell durch").
+  Die Bedingung war jeweils in einer SQL-Abfrage oder einer Owner-Frage pruefbar.
+- **B-4:** Der Beleg-Anruf ist outbound - das angebotene Inbound-Gate greift dort nicht.
+- **O-10:** Der Owner hatte nur sich selbst angerufen; die Wurzel war die leere
+  `private_number`, eine Zeile ueber der geprueften Bedingung.
+- **Regel:** ein Kartierungs-Schema braucht ein Feld wie `wurzel_belegt` mit dem Wert
+  "hypothese-messbar" - und der Lead muss jede so markierte Karte VOR der Phasenplanung
+  gegenmessen. Eine Phase auf einer ungeprueften Bedingung zu bauen kostet die ganze Phase.
+
+## Ein Skill-Aufruf mit Fliesstext-args stirbt fail-closed (2026-08-04, GQ-S1)
+
+- `Workflow({name: "phase-impl-lean", args: "Phase GQ-S1, Spec: ..."})` bricht mit
+  `args.phaseId fehlt -> fail-closed Abbruch` ab, bevor ein Agent laeuft. Das Skript
+  erwartet ein **Objekt** (`{phaseId, branch, baseBranch, planDoc, specFile, maxFixRounds}`),
+  auch wenn die Skill-Beschreibung einen Fliesstext-Aufruf zeigt.
+- **Das ist der gute Fall:** kein Default-Phase-Bau, kein stiller Misfire an der falschen
+  Phase, null verbrauchte Token. Genau so soll ein Args-Vertrag scheitern.
