@@ -351,19 +351,9 @@ zuerst**: solange jede zweite Antwort auf einen halben Satz reagiert, misst du b
 anderen Befunden Rauschen. Danach B-5/B-6 (sie zahlen direkt auf die Kuerze-Vorgabe ein),
 dann B-2/B-3, dann B-4.
 
-**Schritt 3 — Umsetzung je Phase.** Der etablierte Weg ist ein Lean-Phasen-Workflow
-(`.claude/skills/phase-impl-lean`, Vorlage `.claude/workflows/runs/al-d3.js`): Spec ->
-Plan -> Impl im Worktree -> dualer Review (Safety + Clean-Code) -> Self-Fix bis PASS ->
-Report. Modellpolitik: Plan/Safety auf `opus`, Impl/Audit/Fix/Report auf `sonnet`, Pins
-explizit pro `agent()`. **Eine Bahn zur Zeit** (zwei parallele Workflows ueberlasten die
-Maschine). **Vor jedem Merge `git diff --stat master..<branch>`** — ein PASS ist keine
-Merge-Freigabe.
-
-**Das ist eine Vorlage, kein Dogma.** Der Owner ist ausdruecklich offen fuer einen besseren
-Ablauf. Was sich als **nicht** verhandelbar erwiesen hat, ist etwas anderes: **jede Phase
-endet mit einer Messung auf dem Pruefstand aus Schritt 1, und die Kette endet mit einem
-echten Testanruf, den der Owner beurteilt.** Gruene Tests sind eine Vorbedingung, kein
-Ergebnis.
+**Schritt 3 — Umsetzung je Phase, als LEANER LEAD.** Ausfuehrliche Betriebsanleitung
+unten im Abschnitt "Arbeitsweise des Leads". Kurz: du liest keinen Code, du spezifizierst,
+startest, pruefst das Diff und merged.
 
 **Schritt 4 — Die Modellfrage.** Wenn der Pruefstand steht, ist Haiku vs. Sonnet ein
 A/B-Lauf, keine Phasenkette. Vorher nicht anfassen.
@@ -438,3 +428,96 @@ Die Rohtranskripte der vier relevanten Anrufe liegen als Textdateien unter
 Damit ist der Pruefstand aus Schritt 1 auch dann noch baubar, wenn die
 `EVIDENCE_RETENTION_DAYS=7` in der DB abgelaufen sind. **Zieh dir trotzdem am Anfang
 frische Kopien, falls seither weitere Anrufe stattgefunden haben.**
+
+
+---
+
+## Arbeitsweise des Leads — token-effizient und parallel, wo es geht
+
+### Deine Rolle
+
+**Du liest keinen Produktionscode.** Du schreibst Specs, startest Workflows, pruefst Diffs,
+merged und berichtest. Jede Zeile Code, die du selbst liest, ist Kontext, der dir spaeter
+fuer die Entscheidungen fehlt, die nur du treffen kannst.
+
+**Konkret verboten:** ganze Plan-Dateien am Stueck lesen (`PLAN-*.md`, Kettenstaende sind
+40-80 KB), Datei-Inhalte zusammenfassen, die du gerade gelesen hast, Optionen aufzaehlen,
+die du nicht verfolgst, Agenten-Rueckgaben woertlich in den Chat kippen.
+
+**Erlaubt und erwuenscht:** `grep -n` mit engem Muster, `git diff --stat`, strukturierte
+Agenten-Rueckgaben (`schema`), Berichte in Dateien statt im Chat.
+
+### Der Ablauf in drei Wellen
+
+**Welle 0 — Kartierung (billig, parallel, NUR LESEND).**
+EIN Workflow-Lauf mit einem Plan-Agenten **je Befund**, alle parallel. Jeder bekommt genau
+einen Befund (B-1 … B-10 bzw. O-1/O-2/O-10) und liefert per `schema` zurueck:
+
+```
+{ phase, befund, dateien[], abhaengt_von[], risiko, messgroesse_am_pruefstand, aufwand }
+```
+
+**`dateien[]` ist der Zweck dieser Welle.** Daraus — nicht aus Bauchgefuehl — berechnest du,
+welche Phasen parallel laufen duerfen: **disjunkte Dateimengen = parallel, jede
+Ueberschneidung = seriell.** Diese Welle kostet fast nichts (kein Test-Lauf, kein Worktree)
+und ersetzt das Raten.
+
+**Welle 1 — Der Pruefstand, allein.**
+Er blockiert alles andere und laeuft deshalb als einzige Phase. Abnahme: er reproduziert
+B-1, B-4, B-5 und B-6 **ROT**. Parallel dazu darf **O-10** laufen (`diagnostic:true`
+reparieren) — andere Dateien, und ohne O-10 ist jeder kuenftige Testanruf forensisch
+wertlos, weil das Rohtranskript nach der Zusammenfassung geloescht wird.
+
+**Welle 2+ — Die Befund-Phasen, gruppenweise parallel.**
+Nach der Dateimenge aus Welle 0 gruppiert. **B-1 (Doppel-Turns) kommt zuerst und allein** —
+solange jede zweite Antwort auf einen halben Satz reagiert, misst du bei allen anderen
+Befunden Rauschen.
+
+### Die Parallelitaets-Regel, die dieses Repo teuer bezahlt hat
+
+**Parallelisiere INNERHALB eines Workflow-Laufs, niemals zwei Laeufe nebeneinander.**
+
+Zwei gleichzeitige Workflow-Laeufe erzeugten ~35 gleichzeitige `node --test`-Prozesse und
+Systemlast 32 auf 15 Kernen — die Maschine stand. Ein einzelner Lauf deckelt seine
+Nebenlaeufigkeit selbst (`min(16, Kerne-2)`); mehrere Phasen in **einem** `parallel()`- oder
+`pipeline()`-Aufruf sind deshalb sicher, zwei `Workflow`-Aufrufe nicht.
+
+Zweiter Grund: jeder `master`-Commit waehrend eines laufenden Laufs erzeugt im anderen einen
+**falsch-positiven Stale-Base-Blocker**. Also: **waehrend eine Welle laeuft, nicht nach
+`master` mergen.**
+
+### Token-Disziplin im Workflow-Skript
+
+- **Per-Run-Skript** unter `.claude/workflows/runs/<kette>.js`, Phase **hart gepinnt**
+  (`PHASE`, `BRANCH`, `SPEC_FILE`, `REPORT_PATH`) — **nicht** ueber `args`. Args-Misfires
+  sind eine dokumentierte Falle. Vorlage: `.claude/workflows/runs/al-d3.js`.
+- **Modellpolitik, explizit pro `agent()` gepinnt, nie erben lassen:** Plan und Safety-Review
+  auf `opus`, Impl/Audit/Fix/Report auf `sonnet`. Kartierungs-Agenten (Welle 0) auf `sonnet`
+  mit `effort: "low"` — sie lesen und listen, sie entscheiden nicht.
+- **`schema` bei jedem Agenten**, der etwas zurueckgibt, das du auswertest. Freitext-
+  Rueckgaben zwingen dich zum Lesen; ein Schema laesst dich rechnen.
+- **Berichte gehen in Dateien**, nicht in die Rueckgabe. Die Rueckgabe traegt Zahlen und
+  Pfade.
+
+### Merge-Disziplin (jede Zeile hier wurde einmal bezahlt)
+
+1. **Vor JEDEM Merge `git diff --stat master..<branch>`.** Ein PASS des Workflows ist keine
+   Merge-Freigabe — ein toter Impl-Agent hinterlaesst einen leeren Branch und meldet
+   trotzdem PASS.
+2. **`git merge-base --is-ancestor master <branch>`** vor dem Merge. Schlaegt es fehl, ist
+   der Branch auf veralteter Basis — und das Diff gegen `master` zeigt dir dann fremde
+   Aenderungen als vermeintliche Loeschungen.
+3. **Niemals `git add -A`** (untrackte Dateien mit Kundendaten im Repo), **niemals
+   `git stash`** (`refs/stash` ist zwischen Worktrees geteilt).
+4. Nach vollen Laeufen `ps -eo pid,command | grep "[n]ode src/server.js"` — Spawn-Tests
+   lassen Server zurueck.
+
+### Abnahme je Phase
+
+`npm test` gruen ist die **Vorbedingung**, nicht das Ergebnis. Das Ergebnis ist die
+**Messung auf dem Pruefstand**. Und die Kette endet mit einem echten Testanruf, den der
+Owner beurteilt — er ist der einzige Messwert, der bisher immer recht hatte.
+
+**Behaupte keinen Gewinn, den du nicht gemessen hast.** Sagt die Messung, dass deine Arbeit
+nichts gebracht hat, schreib genau das hin. Das ist am 02.08. einmal passiert und war
+wertvoller als jede gruene Suite.
