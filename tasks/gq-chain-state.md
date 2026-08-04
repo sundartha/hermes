@@ -363,3 +363,96 @@ der Tarif neu zu kalibrieren.
 dessen Praesenz, der Cap-Hangup eines Inbound-Legs laeuft damit ueber
 `endCallViaCallControl` statt `endCall` (Bestandsverhalten von `hangUpAction`, bereits von
 `test/telnyx-p6-cap-callcontrol.test.js` gepinnt — hier entsteht nur ein neuer Erreicher).
+
+---
+
+## Messung 2026-08-04 abends: die Wurzel von N-1 ist ein Provider-Parameter
+
+Gemessen am Beleg-Anruf `call_msf0epenyv9g` (Rohmaterial gesichert unter
+`data/evidence/db-2026-08-04b/`, Live-Config unter
+`data/evidence/telnyx-config/assistant-snapshot-2026-08-04-abend.json`).
+Kein Agent, kein Workflow — `psql`, Render-Logs, ein `GET` auf die Assistant-Config.
+
+### Der Befund
+
+`turn_probe` zeigt fuer die sieben `same`-Turns durchgehend **`lastRole: "system"`**:
+
+| turnSeq | prevRelation | lastRole | gesprochener Satz |
+|---:|---|---|---|
+| 4 | same | **system** | "Gerne, ich warte geduldig." |
+| 5 | same | **system** | "Gerne, ich warte." |
+| 8 | same | **system** | "Ich bin still und warte auf die Auskunft…" |
+| 9 | same | **system** | "Sie haben recht - ich sage nichts mehr…" |
+| 10 | same | **system** | "Ich warte still." |
+| 17 | same | **system** | "Ich kann Antonio leider nicht erreichen…" |
+
+Das sind **keine wiederholten Nutzer-Aeusserungen.** Telnyx schickt einen POST, dessen
+letzte Nachricht eine **System**-Nachricht ist. Der Gegenbeleg steht im Transkript: um
+18:47:47 sagt die Gegenstelle woertlich *"Ich hab nix gesagt, Digger. Was laberst Du?"*
+
+### Die Ursache, an der Anbieter-Doku belegt
+
+Live-Config: `telephony_settings.user_idle_reply_secs = 4`.
+Telnyx-OpenAPI-Schema (`GET /api-reference/assistants/get-an-assistant`), woertlich:
+
+> *"Duration in seconds of end user silence before the assistant checks in on the user.
+> When this limit is reached the assistant will prompt the user to respond."* — **Default: 10**
+
+**4 ist nicht der Default.** Der Wert wurde aktiv gesetzt (nicht von uns — `grep -rn
+"user_idle" src/` ist leer, also ueber das Telnyx-Dashboard) und ist schaerfer als der Default.
+
+Dazu kommt unsere Seite: `lastUserContent()` (`src/telnyx-llm-shim.js:88-95`) laeuft das
+`messages`-Array rueckwaerts und nimmt die letzte Nachricht mit `role === "user"`. **Eine
+System-Nachricht ist fuer den Shim unsichtbar.** Er beantwortet also die *alte* Aeusserung
+noch einmal — mit vollem Modell-Roundtrip und gesprochenem Satz.
+
+### Warum daraus eine Schleife wird
+
+Der gesprochene Satz ist selbst wieder Stille aus Sicht des Nutzers -> nach 4 s der naechste
+Anstoss -> naechster Satz. Gemessene Abstaende: 7,1 / 7,7 / 10,1 / 8,3 / 9,4 s
+(4 s Stille + eigene TTS-Dauer). Die Schleife bricht erst, wenn der Mensch spricht.
+
+### Warum genau bei der Rueckfrage
+
+In den drei anderen Anrufen des Tages (`call_msetewtfmvpb`, `call_mseupp82iyqm`,
+`call_mseuv52c7b0e`) gibt es **null** `lastRole: "system"`-Turns — dort hat die Gegenstelle
+durchgehend geredet. Der Anstoss feuert nur bei echter Stille. Das ist exakt der Zustand, den
+`get_consult` herstellt: der Agent bittet um Geduld und wartet. **Der 4-Sekunden-Anstoss und
+die Rueckfrage-Wartezeit sind strukturell unvertraeglich.**
+
+### Derselbe Mechanismus erklaert den offenen Punkt 5
+
+`call_mseupp82iyqm` turnSeq 1: `chars: 0`, `lastRole: "system"`, `messagesCount: 2`. Der
+allererste POST traegt **gar keine** Nutzer-Nachricht. Der Shim faehrt trotzdem einen
+Modell-Turn und spricht ihn aus — das ist der deplatzierte zweite Agenten-Satz 380 ms nach
+der Offenlegung. Kein zweiter Defekt, dieselbe Wurzel.
+
+### Fehlerklasse: P10 (Learning Tests fuer Drittanbieter-Code)
+
+Der Shim nimmt an, jeder POST auf `/v1/chat/completions` sei eine neue Nutzer-Aeusserung.
+Diese Annahme steht nirgends als Test, nirgends als fail-closed Pruefung. Sie ist falsch, und
+sie war es von Anfang an. Gleiche Klasse wie der geratene Feldname `"CallControlId"` und die
+297 wertlosen Kostenbelege.
+
+## Drei Korrekturen an den Kickoff-Befunden
+
+- **B-5 ist falsch.** `end_call` **hat** gefeuert: turnSeq 19, `toolNames: ["end_call"]`.
+  Die Aussage "0 von 19" stammt aus einem aelteren Anruf.
+- **N-3 ist kein Defekt, sondern ein Riegel.** `MAX_IN_CALL_CONSULTS_PER_CALL = 1`
+  (`src/consult/in-call.js:43`). Nach c0 faellt `get_consult` aus `offeredToolNames`
+  (ab turnSeq 4 belegt). Das Modell ruft es in turnSeq 17 **trotzdem** auf, bekommt
+  `consultDeclined` — und sagt der Gegenstelle "Ich kann Antonio nicht erreichen".
+  Der Riegel ist gewollt; dass seine Ablehnung als Ausrede beim Kunden landet, ist es nicht.
+- **B-4 bestaetigt sich.** `look_up` in 19 von 19 Turns angeboten, **0 mal** gefeuert.
+
+## Ein vierter Befund: die Rueckfrage-Antwort hat kein Ankunfts-Signal
+
+`c0` war um **18:47:37.346** beantwortet (`answeredFacts: 1`), die Antwort stand ab da als
+vierter Eintrag in `call.context.key_facts` und damit im HINTERGRUND-Block des Systemprompts.
+Benutzt hat das Modell sie erst um **18:48:33** — 56 Sekunden spaeter.
+
+Grund am Code: `consultTurnMarker` (`src/claude.js:793-795`) kennt genau zwei Zustaende,
+`consultPending` und `consultTimeout`. **Fuer "die Antwort ist JETZT da" gibt es keinen
+Marker.** Der Fakt erscheint stumm in einer Hintergrund-Liste, waehrend der sichtbare
+Turn-Text eine alte, wiederholte Aeusserung ist und der Anstoss aus einer System-Nachricht
+kommt, die der Shim gar nicht liest.

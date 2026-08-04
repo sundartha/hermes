@@ -47,6 +47,11 @@ export function fakeTelnyxShimConfig({
   // GQ-P1: spiegelt den Prod-Default (true). Bestandstests bleiben gruen - sie erzeugen
   // nie zwei ueberlappende Turns, der Riegel findet nie einen laufenden Vorgaenger.
   telnyxShimSupersedeExtendedTurn = true,
+  // GQ-P5: spiegelt den Prod-Default (true). Bestandstests bleiben gruen - ihr
+  // messages-Array endet auf einer user-Rolle oder fehlt ganz ("missing"), der Riegel
+  // greift dort nie. Ausnahme ist P5-4 (telnyx-llm-shim.test.js), das den Nudge-Payload
+  // als Praemisse hat und den Schalter deshalb ausdruecklich umlegt.
+  telnyxShimIgnoreProviderNudge = true,
   // GQ-P4: spiegelt die Prod-Defaults. Bestandstests bleiben gruen - keiner erzeugt drei
   // gescheiterte Turns in Folge; die A2-Tests setzen den Wert explizit herunter.
   telnyxMaxConsecutiveFailedTurns = 3,
@@ -61,6 +66,7 @@ export function fakeTelnyxShimConfig({
       shimDebugShape: telnyxShimDebugShape,
       shimTokenStreaming: telnyxShimTokenStreaming,
       shimSupersedeExtendedTurn: telnyxShimSupersedeExtendedTurn,
+      shimIgnoreProviderNudge: telnyxShimIgnoreProviderNudge,
       maxConsecutiveFailedTurns: telnyxMaxConsecutiveFailedTurns,
       failedTurnFarewellText: telnyxFailedTurnFarewellText,
     },

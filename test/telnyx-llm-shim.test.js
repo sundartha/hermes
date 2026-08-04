@@ -1132,9 +1132,16 @@ test("P5-3: Array-Content bei der letzten user-Message -> contentType=array, las
   assert.ok(!line.includes("GEHEIM"), "kein Array-Content-Wert (PII)");
 });
 
+// GQ-P5: dieser Payload (letzte Nachricht = System-Rolle) IST der Provider-Anstoss. Seit
+// dem Anstoss-Riegel erreicht er in Prod gar keinen agentTurn mehr und erzeugt daher auch
+// keine turn-shape-Zeile. Der Test pinnt weiterhin die Shape-Diagnose selbst und legt den
+// Riegel dafuer ausdruecklich um - sonst pruefte er stillschweigend nichts mehr.
 test("P5-4: keine user-Message im Payload -> contentType=missing, lastUserLength=0, lastUserTextPresent=false", async () => {
   const store = fakeStore({ call: makeCall() });
-  const config = fakeTelnyxShimConfig({ telnyxShimDebugShape: true });
+  const config = fakeTelnyxShimConfig({
+    telnyxShimDebugShape: true,
+    telnyxShimIgnoreProviderNudge: false,
+  });
   const agentTurn = agentTurnSpy({ speech: "Antwort", endCall: false });
   const handler = makeHandler({ store, config, agentTurn });
   const res = fakeRes();

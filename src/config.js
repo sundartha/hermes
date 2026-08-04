@@ -517,6 +517,24 @@ const rawConfig = {
       process.env.TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN,
       { fallback: true },
     ),
+    // GQ-P5 (Befund N-1): Riegel gegen den Provider-Anstoss. Telnyx stoesst nach
+    // telephony_settings.user_idle_reply_secs Sekunden Anrufer-Stille selbst einen Turn an
+    // (Anbieter-Schema: "the assistant will prompt the user to respond"); dieser POST traegt
+    // keine neue Aeusserung, sondern endet auf einer System-Nachricht. Der Shim las nur die
+    // letzte user-Rolle, beantwortete die ALTE Aeusserung erneut und sprach sie aus - die
+    // eigene Sprechzeit ist wieder Stille, also folgte der naechste Anstoss. Am Live-Anruf
+    // call_msf0epenyv9g sechs Runden ("Ich warte still.").
+    // DEFAULT AN - bewusst wie shimSupersedeExtendedTurn, anders als die uebrigen
+    // Shim-Flags: "aus" ist der gemessene Fehlerzustand, nicht der sichere Bestand.
+    // Umlegen stellt ihn ohne Deploy wieder her (Render-Dashboard).
+    // Er entwaffnet KEINE Sicherung: Loop-Guard, Rate-Gate und die pro-Tenant-Kostendecke
+    // liegen VOR dieser Entscheidung, der Dead-Air-Notaus wird weiter gefuettert (der
+    // Anstoss bleibt ein Lebenszeichen) -> kein assertConfig-/Footgun-Eintrag.
+    shimIgnoreProviderNudge: boolEnv(
+      "TELNYX_SHIM_IGNORE_PROVIDER_NUDGE",
+      process.env.TELNYX_SHIM_IGNORE_PROVIDER_NUDGE,
+      { fallback: true },
+    ),
     // GQ-P3 (Befund B-9, Owner-Entscheidung O-1): schaltet den INBOUND-Handoff auf den
     // Call-Control-Assistant. Der Master-Schalter oben (TELNYX_AI_ASSISTANT_ENABLED) hat
     // Inbound nie erreicht - er stand live auf true, waehrend jeder eingehende Anruf ueber
