@@ -179,6 +179,9 @@ export const BASE_ENV = {
   // GQ-P1: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
   // TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN=false in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN: "true",
+  // GQ-P5: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
+  // TELNYX_SHIM_IGNORE_PROVIDER_NUDGE=false in Spawn-Tests (Lehre test-base-env-drift).
+  TELNYX_SHIM_IGNORE_PROVIDER_NUDGE: "true",
   // GQ-P3: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
   // TELNYX_INBOUND_HANDOFF_ENABLED=false via dotenv in Spawn-Tests (Lehre
   // test-base-env-drift). Wirkt ohnehin nur bei TELNYX_AI_ASSISTANT_ENABLED=true.

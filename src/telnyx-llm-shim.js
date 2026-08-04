@@ -102,7 +102,11 @@ function lastUserText(body) {
 // Die drei OpenAI-Rollen, die der Shim kennt; jede andere/fehlende faellt auf "other"
 // (bounded - kein angreiferkontrollierter Rollen-String geraet je in den Log). EINE Quelle
 // (G5) fuer roleCounts UND lastMessageRole.
-const KNOWN_MESSAGE_ROLES = Object.freeze(["system", "user", "assistant"]);
+// GQ-P5: eigene Konstante, weil "system" ab jetzt nicht mehr nur Log-Stoff ist, sondern
+// die Entscheidungsgrundlage des Provider-Anstoss-Riegels (Schritt 6.5) - EINE Quelle (G5)
+// fuer die Rollen-Liste UND den Vergleich.
+const MESSAGE_ROLE_SYSTEM = "system";
+const KNOWN_MESSAGE_ROLES = Object.freeze([MESSAGE_ROLE_SYSTEM, "user", "assistant"]);
 const OTHER_ROLE = "other";
 const MISSING_ROLE = "missing"; // leeres messages-Array (Konvention wie lastUserContentShape)
 
@@ -636,12 +640,16 @@ export function makeTelnyxLlmShim({
     // Request-ID) vom fortgeschriebenen STT-Ergebnis (Vorgaenger ist Praefix).
     // GQ-P1: das Sonden-Ergebnis wird jetzt GEBUNDEN statt direkt gespreadet - prevRelation
     // ist ab hier die Entscheidungsgrundlage des Riegels (Schritt 7), nicht nur Logstoff.
+    // GQ-P5: das Sonden-Ergebnis wird jetzt GEBUNDEN statt direkt gespreadet - lastRole ist
+    // ab hier die Entscheidungsgrundlage des Anstoss-Riegels (Schritt 6.5), nicht nur
+    // Logstoff. EINE Auswertung des Payloads, kein zweiter, driftender Leser (G5).
     const turnText = observeTurnText(call.id, callerText);
+    const origin = requestOriginShape(req);
     logShimTurnProbe({
       callId: call.id,
       turnSeq,
       ...turnText,
-      ...requestOriginShape(req),
+      ...origin,
     });
 
     // EINE Stelle (G5) fuer den Budget-Notaus: Abschluss-Ansage ZUERST, dann realer Hangup
@@ -679,6 +687,36 @@ export function makeTelnyxLlmShim({
     // P4.5 onHangup (EIN idempotenter Pfad ueber den ausgeloesten call.hangup-Event).
     const budgetAxis = blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId });
     if (budgetAxis) return await killCallForBudget(budgetAxis);
+
+    // 6.5) GQ-P5: der Provider-Anstoss-Riegel. Telnyx stoesst nach
+    // telephony_settings.user_idle_reply_secs Sekunden Stille von sich aus einen Turn an
+    // ("the assistant will prompt the user to respond", Anbieter-Schema; Live-Wert 4).
+    // Dieser POST traegt KEINE neue Aeusserung - seine letzte Nachricht ist eine
+    // System-Nachricht. lastUserText liest aber nur die letzte user-Rolle und liefert
+    // deshalb die ALTE Aeusserung: der Shim beantwortet sie ein zweites Mal, spricht die
+    // Antwort aus, und die eigene Sprechzeit ist aus Anrufersicht wieder Stille -> der
+    // naechste Anstoss. Am Beleg-Anruf call_msf0epenyv9g sechs Runden dieser Schleife
+    // ("Gerne, ich warte." / "Ich warte still.", turnSeq 4/5/8/9/10/17), waehrend die
+    // Gegenstelle woertlich sagte "Ich hab nix gesagt".
+    //
+    // Der Riegel antwortet mit einer LEEREN, gueltigen Completion - exakt die Form, die der
+    // Bestand seit AL-P7/GQ-P1 fuer den bereits gestreamten und den verdraengten Turn
+    // schickt und die Telnyx nicht als abgebrochenen Turn liest. Kein agentTurn-Aufruf:
+    // kein Token-Burn, kein gesprochener Satz.
+    //
+    // REIHENFOLGE IST BINDEND: NACH observeTurn (Schritt 4.6). Der Anstoss IST ein
+    // Lebenszeichen - die Leitung steht. Wuerde er den Dead-Air-Timer nicht mehr
+    // zuruecksetzen, terminierte der Notaus genau waehrend einer laufenden Rueckfrage, in
+    // der der Anrufer absichtlich schweigt und auf Auskunft wartet. Ein aufgelegtes
+    // Gespraech waere schlimmer als der Satz zu viel, den dieser Riegel verhindert.
+    // Die Kosten-Backstops fuer den WIRKLICH verlassenen Anruf liegen unberuehrt daneben:
+    // die pro-Tenant-Kostendecke (Schritt 6, direkt darueber) und Telnyx'
+    // telephony_settings.time_limit_secs.
+    const providerNudge = origin.lastRole === MESSAGE_ROLE_SYSTEM;
+    if (config.telnyx.telnyxAssistant.shimIgnoreProviderNudge && providerNudge) {
+      logShimGate({ reason: "provider_nudge", callId: call.id, turnSeq });
+      return respond("");
+    }
 
     // 7) Kern: agentTurn (in-house Tool-Loop) gegen die per Call-Control-ID gebundene,
     // frische call-Referenz.

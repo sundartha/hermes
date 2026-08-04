@@ -71,6 +71,10 @@ test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duc
     // GQ-P1: neuer Schalter, DEFAULT AN (anders als die uebrigen Shim-Flags - der Riegel
     // ist der korrigierte Bestand, nicht ein Opt-in).
     shimSupersedeExtendedTurn: true,
+    // GQ-P5: Riegel gegen den Provider-Anstoss (Telnyx' user_idle_reply_secs). DEFAULT AN
+    // wie shimSupersedeExtendedTurn - "aus" ist der gemessene Fehlerzustand, in dem der
+    // Shim die alte Aeusserung erneut beantwortet und ausspricht.
+    shimIgnoreProviderNudge: true,
     // GQ-P3: der Rueckweg fuer den Inbound-Handoff. DEFAULT AUS seit 2026-08-04 - am
     // Live-Anruf gemessen feuert der Handoff VOR dem answered-Ereignis und Telnyx lehnt
     // mit 422 (90034 Call not answered yet) ab; der Anrufer hoert nur die Fehleransage.
@@ -98,7 +102,7 @@ test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewa
 });
 
 // Teil 2: telnyxAssistant-Gruppierung (P5, erstes Feature-Grouping).
-test("telnyxAssistant: alle 15 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
+test("telnyxAssistant: alle 16 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
   assert.equal(config.telnyx.telnyxAssistant.enabled, false);
   assert.equal(config.telnyx.telnyxAssistant.assistantId, "");
   assert.equal(config.telnyx.telnyxAssistant.callControlAppId, "");
@@ -111,6 +115,7 @@ test("telnyxAssistant: alle 15 Keys existieren mit den dokumentierten Defaults (
   assert.equal(config.telnyx.telnyxAssistant.shimDebugShape, false);
   assert.equal(config.telnyx.telnyxAssistant.shimTokenStreaming, false);
   assert.equal(config.telnyx.telnyxAssistant.shimSupersedeExtendedTurn, true);
+  assert.equal(config.telnyx.telnyxAssistant.shimIgnoreProviderNudge, true);
   assert.equal(config.telnyx.telnyxAssistant.inboundHandoffEnabled, false);
   assert.equal(config.telnyx.telnyxAssistant.maxConsecutiveFailedTurns, 3);
   assert.equal(config.telnyx.telnyxAssistant.failedTurnFarewellText, "");
