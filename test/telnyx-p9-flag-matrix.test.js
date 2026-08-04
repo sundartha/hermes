@@ -57,7 +57,7 @@ test("Flag AUS + Telnyx: Outbound=TeXML, Inbound=Gather, Shim=404 (Bestand, byte
     assert.doesNotMatch(c.twilioSid, /^fake_cc_/);
     assert.equal(c.callControlId, null);
 
-    const xml = await (await postTelnyxIncoming(srv, { callControlId: "cc_x" })).text();
+    const xml = await (await postTelnyxIncoming(srv, { callSid: "cc_x" })).text();
     assert.match(xml, /<Gather/, "Bestand-Inbound (Flag aus)");
 
     assert.equal(await probeShim(srv), HTTP_NOT_FOUND, "Shim dunkel");
@@ -86,7 +86,7 @@ test("Flag AN + Telnyx: Outbound=Call-Control, Inbound(Telnyx)=Handoff, Inbound(
     );
     assert.equal(c.twilioSid, null);
 
-    const handoff = await (await postTelnyxIncoming(srv, { callControlId: "cc_in" })).text();
+    const handoff = await (await postTelnyxIncoming(srv, { callSid: "cc_in" })).text();
     assert.doesNotMatch(handoff, /<Gather/, "Assistant uebernimmt den Leg (kein TeXML-Gather)");
 
     // NEU-2 (Orthogonalitaet): kein Telnyx-Header -> providerFromHeaders faellt auf

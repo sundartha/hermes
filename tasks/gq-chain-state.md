@@ -291,3 +291,38 @@ Voraussetzung fuer die Forensik ist erfuellt: private Nummer gesetzt, Dienst neu
 - `place_call` verlangt E.164 (`+49...`), obwohl die Werkzeugbeschreibung eine Aufloesung
   der fuehrenden 0 ueber das Heimatland behauptet (aus dem Kickoff uebernommen, hier nicht
   nachgemessen).
+
+## GQ-P3 — Inbound auf den Assistant-Pfad (umgesetzt)
+
+**Gemessener Feldname (Beleg):** Sonde B protokollierte am echten Inbound-Anruf
+`call_mseqcvoh8bcx` die vollstaendige Schluesselliste des TeXML-Bodys — `"CallControlId"`
+(der geratene Name aus B-9/O-1) kam darin **nicht** vor, `lookalikeFields` war leer. Telnyx
+liefert die call_control_id im Feld `CallSid`. Gegenprobe: `GET /v2/calls/<CallSid>`
+antwortete HTTP 200 mit `call_leg_id`/`call_session_id`, Format `v3:...` (57 Zeichen) —
+identisch zur call_control_id eines Outbound-Legs. `INBOUND_CALL_CONTROL_ID_FIELD` in
+`src/telnyx-inbound.js` steht jetzt auf `"CallSid"`.
+
+**Pfadwahl benannt:** `inboundHandoffDecision` (`src/telnyx-inbound.js`) entscheidet je
+Inbound-Leg zwischen `INBOUND_PATH.ASSISTANT` und `INBOUND_PATH.BUDGET` (mit einem der vier
+`INBOUND_BUDGET_REASON`-Gruende) und wird ueber `logInboundPathDecision` **je Leg** geloggt
+(`[telnyx-inbound] inbound_path {...}`) — das Boot-Banner allein hatte B-9 wochenlang
+verdeckt ("Assistant-Pfad: AKTIV" im Banner, Budget-Engine an jedem Inbound-Leg).
+
+**Rueckweg-Schalter:** `TELNYX_INBOUND_HANDOFF_ENABLED` (Default `true`, in
+`config.telnyx.telnyxAssistant.inboundHandoffEnabled`). `false` stellt Inbound ohne Deploy
+auf die Budget-Engine zurueck (Render-Dashboard). Boot-Banner traegt die eigene Zeile
+`Inbound-Handoff: AKTIV/aus (...)`, getrennt vom Master-Schalter-Banner.
+
+**Erwartetes Verhalten, kein neuer Defekt (Pre-Mortem 2):** ein Inbound-Gespraech kann jetzt
+frueher an der Tenant-Kostendecke abbrechen als vorher — der Assistant-Pfad kostet nach
+KV-M1 ~5 US-Cent/Minute gegen 1,87 auf der Budget-Engine (rund dreimal teurer). Beim
+naechsten Testanruf nicht als neuen Bug fehldeuten.
+
+**Uebergabepunkt:** KV-M1 ist nach dieser Phase **auf dem Assistant-Pfad** zu wiederholen und
+der Tarif neu zu kalibrieren.
+
+**Nebenbefund (kein Code-Eingriff, gepinnt in Test statt geaendert):** derselbe Wert, der
+`call.twilioSid` fuellt, fuellt jetzt auch `call.callControlId` — `hangUpAction` verzweigt an
+dessen Praesenz, der Cap-Hangup eines Inbound-Legs laeuft damit ueber
+`endCallViaCallControl` statt `endCall` (Bestandsverhalten von `hangUpAction`, bereits von
+`test/telnyx-p6-cap-callcontrol.test.js` gepinnt — hier entsteht nur ein neuer Erreicher).
