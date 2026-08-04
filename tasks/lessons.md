@@ -296,3 +296,27 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
 - **Regel fuer den Lead:** Notizen und Kettenstand waehrend eines laufenden Laufs in der
   Datei sammeln, aber **erst nach dem Merge der Phase committen**. Ein Lauf ist erst zu Ende,
   wenn sein Branch gemergt ist — nicht, wenn die Benachrichtigung eintrifft.
+
+## Der Anstoss kam vom Provider, nicht vom Anrufer (2026-08-04, GQ-P5)
+
+- **Der schlimmste Defekt des Gespraechs war kein Modell-Problem.** Sechsmal "ich warte
+  still" sah aus wie eine Prompt-Schwaeche. Tatsaechlich stoesst Telnyx nach
+  `user_idle_reply_secs` Sekunden Stille selbst einen Turn an, und der Shim las nur die
+  letzte `user`-Rolle - also die ALTE Aeusserung, die er dann erneut beantwortete.
+  Der Gegenbeleg stand woertlich im Transkript: *"Ich hab nix gesagt, Digger."*
+- **Ein Feld im Log hat es entschieden, nicht eine Hypothese.** `turn_probe` trug
+  `lastRole` bereits seit GQ-S1 - niemand hatte es gelesen. Sechs `same`-Turns trugen
+  durchgehend `lastRole: "system"`. **Wer eine Sonde baut, muss ihre Felder auch auswerten;
+  eine ungelesene Sonde ist so gut wie keine.**
+- **Beinahe-Fehler, teuer:** die erste Zuschnitt-Idee war "waehrend einer laufenden
+  Rueckfrage nicht antworten". Nachgerechnet an den Zeitstempeln deckt das **1 von 6**
+  Faellen ab - die Rueckfrage war bei den uebrigen fuenf laengst beantwortet. Die Regel aus
+  dem Kickoff (erst die Zahl, dann die Phase) fing das ab, **bevor** Code entstand.
+- **Reihenfolge schlaegt Riegel.** Der naheliegende Platz (ganz vorn, vor allen Gates) waere
+  falsch gewesen: der Anstoss ist ein Lebenszeichen. Vor `observeTurn` platziert, haette der
+  Dead-Air-Notaus genau waehrend einer Rueckfrage aufgelegt, in der der Anrufer absichtlich
+  schweigt. Ein Riegel braucht immer die Frage: *was haengt sonst noch an diesem Signal?*
+- **Zwei Kickoff-Befunde waren falsch und wurden am Log widerlegt:** B-5 ("`end_call` feuert
+  nie") - er feuerte in turnSeq 19. N-3 ("zweiter Consult kommt nicht zustande") - kein
+  Defekt, sondern `MAX_IN_CALL_CONSULTS_PER_CALL = 1`. **Auch ein Befundkatalog ist eine
+  Behauptung, kein Messwert.**
