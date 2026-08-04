@@ -12,7 +12,7 @@
 // mit EINER kanonischen Heimat (normNum/DEFAULT_PROVIDER, providerSupports/CAPABILITY
 // (P5, registry.js), sayD/hangupD, SPEAK_OUTCOME, localeFor, callFailureReason,
 // degradedSpeechFor, agentTurn/openingText/callerHasSpoken, remainingMaxDurationMs,
-// noSpeechEscalation, metrics, startInboundAiAssistant/inboundCallControlId,
+// noSpeechEscalation, metrics, startInboundAiAssistant/inboundHandoffDecision,
 // makeCallControlIngest) werden direkt importiert (G5 "eine Quelle"). Laufzeit-Instanzen
 // (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall/watchdog, INV-7), der
 // Provider-Dispatch-Seam (voiceControl/webhookEvents/providerFromHeaders/
@@ -38,8 +38,9 @@ import { noSpeechEscalation } from "../no-speech-escalation.js";
 import { metrics } from "../metrics.js";
 import {
   startInboundAiAssistant,
-  inboundCallControlId,
-  logInboundHandoffFallback,
+  inboundHandoffDecision,
+  logInboundPathDecision,
+  INBOUND_PATH,
 } from "../telnyx-inbound.js";
 import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
 import { ANSWERED_BY } from "../telephony/answered-by.js";
@@ -161,26 +162,36 @@ export function makeVoiceRoutes({
   // fuer einen Inbound-Leg und liefert die Handoff-TeXML; sonst null (Aufrufer faellt fail-safe
   // auf den bestehenden TeXML-Gather-Pfad zurueck). ERBT Signatur (app.use "/voice"), Tenant-
   // Resolve (numberRecordByE164) UND Budget-Gate vom Aufrufer - KEIN neuer Gate, dieser Helper
-  // fuegt keinen hinzu. Nur bei aktivem Flag + signatur-authentifiziertem Telnyx-Provider
-  // (Anti-Spoof: provider stammt aus dem Signatur-Header, nicht aus To/Body). callControlId
-  // fehlt (Twilio ODER TeXML-Feld absent) -> null, kein kaputter Assistant-Pfad. Der Max-Dauer-
-  // Timer ist beim Aufrufer BEREITS armiert; terminateCappedCall liest den Call frisch und
-  // trifft via hangUpAction(callControlId) den Call-Control-Hangup, sobald callControlId
-  // persistiert ist (P6) - KEIN Re-Arm (zweiter Timer = Leak). Exakte Handoff-Direktive live
-  // unbestaetigt (wie P4-Adapter-Body-Form) - mit dem Owner in P0/P11 fixen.
+  // fuegt keinen hinzu. Nur bei beiden aktiven Schaltern (Master-Flag + GQ-P3-Inbound-Schalter)
+  // + signatur-authentifiziertem Telnyx-Provider (Anti-Spoof: provider stammt aus dem Signatur-
+  // Header, nicht aus To/Body). callControlId fehlt (Twilio ODER TeXML-Feld absent) -> null,
+  // kein kaputter Assistant-Pfad. Der Max-Dauer-Timer ist beim Aufrufer BEREITS armiert;
+  // terminateCappedCall liest den Call frisch und trifft via hangUpAction(callControlId) den
+  // Call-Control-Hangup, sobald callControlId persistiert ist (P6) - KEIN Re-Arm (zweiter Timer
+  // = Leak). Exakte Handoff-Direktive live unbestaetigt (wie P4-Adapter-Body-Form) - mit dem
+  // Owner in P0/P11 fixen.
   async function inboundAssistantHandoffXml({ call, provider, body, greeting, voiceProfile }) {
-    if (!(config.telnyx.telnyxAssistant.enabled && providerSupports(provider, CAPABILITY.AI_ASSISTANT))) return null;
-    const callControlId = inboundCallControlId(body);
-    if (!callControlId) {
-      // GQ-S1 Sonde B (B-9/O-1): Flag UND Capability sind hier bereits an - fehlt jetzt
-      // noch das Feld, ist das der Defektfall, nicht die gewollte Abschaltung. Genau EINE
-      // laute Zeile mit der gescheiterten Bedingung, den echten Body-SCHLUESSELNAMEN
-      // (keine Werte) und der Handlungsanweisung. Verhalten unveraendert: der Rueckfall
-      // auf den TeXML-Gather-Pfad bleibt exakt wie zuvor.
-      logInboundHandoffFallback({ callId: call.id, body });
-      return null;
-    }
-    await startInboundAiAssistant({ store, voiceControl, config, call, callControlId, greeting, voiceProfile });
+    // GQ-P3: die Bedingung lebt als benannte Entscheidung in telnyx-inbound.js (dort, wo
+    // auch der gemessene Feldname wohnt) - hier bleibt nur Verdrahtung. Die Sonde laeuft
+    // VOR der Verzweigung und meldet jeden Leg, nicht nur den Defekt (Punkt 4 der Spec);
+    // im Feldname-Defektfall setzt sie die laute GQ-S1-Zeile obendrauf.
+    const decision = inboundHandoffDecision({
+      assistantEnabled: config.telnyx.telnyxAssistant.enabled,
+      handoffEnabled: config.telnyx.telnyxAssistant.inboundHandoffEnabled,
+      providerCapable: providerSupports(provider, CAPABILITY.AI_ASSISTANT),
+      body,
+    });
+    logInboundPathDecision({ callId: call.id, decision, body });
+    if (decision.path !== INBOUND_PATH.ASSISTANT) return null;
+    await startInboundAiAssistant({
+      store,
+      voiceControl,
+      config,
+      call,
+      callControlId: decision.callControlId,
+      greeting,
+      voiceProfile,
+    });
     return render(INBOUND_ASSISTANT_HANDOFF, provider);
   }
 

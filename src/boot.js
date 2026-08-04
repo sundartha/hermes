@@ -394,6 +394,20 @@ export function assistantPathLabel(assistantEnabled) {
   return envFlagState("TELNYX_AI_ASSISTANT_ENABLED", assistantEnabled);
 }
 
+// GQ-P3: der Master-Schalter darueber meldete "AKTIV", waehrend INBOUND ueber die
+// Budget-Engine lief - diese Luege darf nicht zurueckkehren. Beide Schalter getrennt,
+// unkonditional (Muster capabilityProbeLines): eine im Aus-Zustand verschwindende Zeile
+// waere im Live-Log nicht von einem Deploy ohne Sonde zu unterscheiden.
+// Die Zeile faellt KEIN Gesamturteil - Provider und Body-Feld entscheiden je Anruf und
+// stehen in der inbound_path-Zeile je Leg (telnyx-inbound.js).
+export function inboundHandoffProbeLine(telnyxAssistant) {
+  return probeLine(
+    "Inbound-Handoff",
+    envFlagState("TELNYX_INBOUND_HANDOFF_ENABLED", telnyxAssistant.inboundHandoffEnabled),
+    `wirkt nur mit TELNYX_AI_ASSISTANT_ENABLED=${telnyxAssistant.enabled} und Telnyx als Inbound-Provider`,
+  );
+}
+
 // AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den
 // MCP-Host. Ein solcher Schalter darf nicht unbemerkt scharf sein (Muster
 // assistantPathLabel). Aus -> keine Zeile, Banner byte-identisch.
@@ -604,6 +618,7 @@ function logBootBanner(config, port) {
     `  Voice-Engine:   ${config.voice.voiceEngine}${config.voice.voiceEngine === VOICE_ENGINE.REALTIME && !config.voice.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
   );
   console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
+  console.log(`  ${inboundHandoffProbeLine(config.telnyx.telnyxAssistant)}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
   if (inCallConsult) console.log(`  ${inCallConsult}`);
   const tokenStreaming = tokenStreamingBannerLine(config.telnyx.telnyxAssistant);

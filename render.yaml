@@ -129,6 +129,11 @@ services:
       # auf das Bestandsverhalten zurueckzugehen.
       - key: TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN
         value: "true"
+      # GQ-P3: Inbound-Handoff auf den Call-Control-Assistant (Befund B-9). Default true;
+      # Owner flippt im Dashboard auf "false", um Inbound ohne Deploy auf die Budget-Engine
+      # zurueckzustellen. KOSTEN: Inbound wird auf dem Assistant-Pfad rund dreimal teurer.
+      - key: TELNYX_INBOUND_HANDOFF_ENABLED
+        value: "true"
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,

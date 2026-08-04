@@ -179,6 +179,10 @@ export const BASE_ENV = {
   // GQ-P1: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
   // TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN=false in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN: "true",
+  // GQ-P3: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
+  // TELNYX_INBOUND_HANDOFF_ENABLED=false via dotenv in Spawn-Tests (Lehre
+  // test-base-env-drift). Wirkt ohnehin nur bei TELNYX_AI_ASSISTANT_ENABLED=true.
+  TELNYX_INBOUND_HANDOFF_ENABLED: "true",
   // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
   // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_API_KEY_REF: "",
@@ -855,20 +859,21 @@ export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
 
 // POST /voice/incoming (Inbound-Webhook-Trigger). telnyx (bool, Default true): Ed25519-
 // Signatur-Header setzen - ohne sie faellt providerFromHeaders auf Twilio/DEFAULT_PROVIDER
-// zurueck (Anti-Spoof-Provider-Klassifikation). callControlId (optional): Telnyx-TeXML-Feld
-// im Body, nur gesetzt wenn explizit uebergeben. Liefert die rohe fetch-Response.
+// zurueck (Anti-Spoof-Provider-Klassifikation). callSid: das Telnyx-TeXML-Feld, das die
+// call_control_id des Inbound-Legs TRAEGT (GQ-P3, gemessen) - es gibt kein separates
+// CallControlId-Feld mehr. callSid: null laesst das Feld WEG und erzeugt damit den
+// Defektfall, gegen den der laute Rueckfall sichert. Liefert die rohe fetch-Response.
 export function postTelnyxIncoming(
   srv,
   {
     telnyx = true,
-    callControlId,
     callSid = "CAtest",
     from = TELNYX_TEST_PEER_NUMBER,
     to = TELNYX_TEST_TENANT_NUMBER,
   } = {},
 ) {
-  const body = { CallSid: callSid, From: from, To: to };
-  if (callControlId !== undefined) body.CallControlId = callControlId;
+  const body = { From: from, To: to };
+  if (callSid) body.CallSid = callSid;
   return fetch(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
     headers: telnyx ? TELNYX_TEST_SIGNATURE_HEADERS : {},

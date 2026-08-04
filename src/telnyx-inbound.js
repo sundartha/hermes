@@ -6,13 +6,18 @@
 // testbar), Schwester von originateAiAssistantCall.
 import { bindAssistantToCall } from "./telnyx-origination.js";
 
-// Telnyx-TeXML-Inbound-Body-Feld mit der call_control_id des Inbound-Legs. Doku-Stand,
-// live unbestaetigt (wie der ganze P4-Adapter) - mit dem Owner in P0/P11 fixen. Fehlt es
-// -> null: der Aufrufer faellt fail-safe auf den bestehenden TeXML-Greeting-Pfad zurueck
-// (byte-identisch), kein kaputter Assistant-Pfad. GQ-S1 Sonde B macht genau diesen
-// Rueckfall LAUT - bis hierher war er still, und der Dienst meldete "Assistant-Pfad:
-// AKTIV", waehrend jeder Inbound-Anruf ueber die Budget-Engine lief (Befund B-9).
-const INBOUND_CALL_CONTROL_ID_FIELD = "CallControlId";
+// Telnyx-TeXML-Inbound-Body-Feld mit der call_control_id des Inbound-Legs. GEMESSEN
+// (GQ-P3, B-9/O-1), nicht aus der Doku uebernommen: Sonde B protokollierte am echten
+// Inbound-Anruf call_mseqcvoh8bcx die vollstaendige Schluesselliste des TeXML-Bodys -
+// "CallControlId" kam darin NICHT vor, und lookalikeFields war leer. Telnyx liefert
+// CallSid. Gegenprobe, dass der Wert wirklich eine Call-Control-ID ist und nicht nur so
+// aussieht: GET /v2/calls/<CallSid> antwortete HTTP 200 mit call_leg_id/call_session_id,
+// Format "v3:..." (57 Zeichen) - identisch zur call_control_id eines Outbound-Legs.
+// Derselbe Wert fuellt seit jeher call.twilioSid und armiert den Max-Dauer-Timer
+// (/voice/incoming): Telnyx bedient mit EINEM Wert die Twilio-kompatible SID UND die
+// Call-Control-ID. Fehlt das Feld -> null: der Aufrufer faellt fail-safe auf den
+// TeXML-Greeting-Pfad zurueck (byte-identisch), kein kaputter Assistant-Pfad.
+const INBOUND_CALL_CONTROL_ID_FIELD = "CallSid";
 
 export function inboundCallControlId(body) {
   const v = body && body[INBOUND_CALL_CONTROL_ID_FIELD];
@@ -54,6 +59,71 @@ export function logInboundHandoffFallback({ callId, body }) {
   console.warn(
     `${INBOUND_LOG_PREFIX} handoff_fallback ${JSON.stringify({ callId, ...finding })} -> ${HANDOFF_FALLBACK_ACTION}`,
   );
+}
+
+// ---- GQ-P3: welchen Pfad ein Inbound-Leg WIRKLICH gefahren ist ---------------------
+// Das Boot-Banner kann diese Frage nicht beantworten - es kennt den Schalter, nicht den
+// einzelnen Anruf. Genau diese Luecke hat B-9 wochenlang gedeckt: "Assistant-Pfad: AKTIV"
+// im Banner, Budget-Engine an jedem Inbound-Leg. Die Entscheidung wird deshalb BENANNT
+// (statt null/Wert) und je Leg protokolliert.
+export const INBOUND_PATH = Object.freeze({
+  ASSISTANT: "assistant",
+  BUDGET: "budget",
+});
+
+// Warum die Budget-Engine lief - genau EIN Grund je Anruf, in Pruefreihenfolge.
+export const INBOUND_BUDGET_REASON = Object.freeze({
+  ASSISTANT_DISABLED: "assistant_disabled",
+  HANDOFF_DISABLED: "handoff_disabled",
+  PROVIDER_UNSUPPORTED: "provider_unsupported",
+  NO_CALL_CONTROL_ID: "no_call_control_id",
+});
+
+function budgetEnginePath(reason) {
+  return { path: INBOUND_PATH.BUDGET, reason, callControlId: null };
+}
+
+/**
+ * Die Pfadwahl EINES Inbound-Legs, rein (DI: Schalter und Capability kommen als Booleans
+ * herein, kein config-Import) - dieselbe Bedingung, die zuvor inline in /voice/incoming
+ * stand, nur mit benanntem Ergebnis. Fuegt KEIN Gate hinzu und ueberspringt keines: der
+ * Aufrufer hat Signatur, Tenant-Resolve und Kostendecke bereits durchlaufen.
+ *
+ * REIHENFOLGE IST SICHERHEIT, nicht Geschmack: der Body wird erst gelesen, wenn der
+ * Provider die Faehigkeit UEBERHAUPT hat. Ein Twilio-CallSid ("AC...") ist KEINE
+ * call_control_id - wuerde das Feld zuerst gelesen, waere er ab dem Tag, an dem jemand
+ * CAPABILITY.AI_ASSISTANT fuer Twilio eintraegt, still eine.
+ */
+export function inboundHandoffDecision({
+  assistantEnabled,
+  handoffEnabled,
+  providerCapable,
+  body,
+}) {
+  if (!assistantEnabled) return budgetEnginePath(INBOUND_BUDGET_REASON.ASSISTANT_DISABLED);
+  if (!handoffEnabled) return budgetEnginePath(INBOUND_BUDGET_REASON.HANDOFF_DISABLED);
+  if (!providerCapable) return budgetEnginePath(INBOUND_BUDGET_REASON.PROVIDER_UNSUPPORTED);
+  const callControlId = inboundCallControlId(body);
+  if (!callControlId) return budgetEnginePath(INBOUND_BUDGET_REASON.NO_CALL_CONTROL_ID);
+  return { path: INBOUND_PATH.ASSISTANT, reason: null, callControlId };
+}
+
+// Die Turn-Sonde (Nebeneffekt im Namen, N7): GENAU EINE Zeile je Inbound-Leg, IMMER -
+// auch im Erfolgsfall. Eine Sonde, die nur den Defekt meldet, ist im Live-Log nicht von
+// einem Deploy ohne Sonde zu unterscheiden (dieselbe Begruendung wie die AL-P16-
+// Boot-Sonden). PII-frei: callId ist server-generiert, path/reason sind feste Token.
+// Im Feldname-Defektfall kommt die laute GQ-S1-Zeile DAZU - zwei Zeilen, zwei Zwecke:
+// die Sonde sagt WELCHER Pfad lief, die Forensik sagt WIE der Body wirklich aussah.
+export function logInboundPathDecision({ callId, decision, body }) {
+  console.log(
+    `${INBOUND_LOG_PREFIX} inbound_path ${JSON.stringify({
+      callId,
+      path: decision.path,
+      reason: decision.reason,
+    })}`,
+  );
+  if (decision.reason === INBOUND_BUDGET_REASON.NO_CALL_CONTROL_ID)
+    logInboundHandoffFallback({ callId, body });
 }
 
 // Startet den AI-Assistant fuer einen Inbound-Leg: (1) assistantId + callControlId binden,

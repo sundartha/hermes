@@ -156,17 +156,19 @@ test("GAP-24 (SOLL, rot) - Inbound-startAssistant traegt den Sprach-Hint des Cal
   );
 });
 
+// Feldname gemessen (GQ-P3), nicht Doku: Telnyx liefert die call_control_id des Inbound-
+// Legs im TeXML-Feld "CallSid" (Beleg im Kommentar von INBOUND_CALL_CONTROL_ID_FIELD).
 test("inboundCallControlId: Feld gesetzt -> Wert; fehlend/leer/nicht-string -> null", () => {
-  assert.equal(inboundCallControlId({ CallControlId: "cc_1" }), "cc_1");
+  assert.equal(inboundCallControlId({ CallSid: "cc_1" }), "cc_1");
   assert.equal(inboundCallControlId({}), null, "Feld fehlt");
-  assert.equal(inboundCallControlId({ CallControlId: "" }), null, "leerer String");
-  assert.equal(inboundCallControlId({ CallControlId: 123 }), null, "nicht-string");
+  assert.equal(inboundCallControlId({ CallSid: "" }), null, "leerer String");
+  assert.equal(inboundCallControlId({ CallSid: 123 }), null, "nicht-string");
   assert.equal(inboundCallControlId(null), null, "body null");
 });
 
 // === B: Spawn - Pfadwahl ueber /voice/incoming =========================================
 
-test("Flag an + Telnyx + unter Budget + callControlId im Body -> Handoff, Call-Control-Felder persistiert", async () => {
+test("Flag an + Telnyx + unter Budget + CallSid im Body (= call_control_id) -> Handoff, Call-Control-Felder persistiert", async () => {
   const srv = await startServer({
     env: {
       FAKE_ORIGINATE: "true",
@@ -176,7 +178,7 @@ test("Flag an + Telnyx + unter Budget + callControlId im Body -> Handoff, Call-C
     seed: seedWithTelnyxNumber(),
   });
   try {
-    const res = await postTelnyxIncoming(srv, { callControlId: "cc_inbound_9" });
+    const res = await postTelnyxIncoming(srv, { callSid: "cc_inbound_9" });
     assert.equal(res.status, 200);
     const xml = await res.text();
     assert.doesNotMatch(xml, /<Gather/, "kein TeXML-Gather - der Assistant uebernimmt den Leg");
@@ -214,7 +216,7 @@ test("Flag an + Telnyx + ueber Budget -> Hangup, kein Call-Record, startAssistan
     })(),
   });
   try {
-    const res = await postTelnyxIncoming(srv, { callControlId: "cc_inbound_9" });
+    const res = await postTelnyxIncoming(srv, { callSid: "cc_inbound_9" });
     assert.equal(res.status, 200);
     const xml = await res.text();
     assert.match(xml, /<Hangup/, "Budget-Gate greift VOR dem Assistant-Branch");
@@ -245,7 +247,7 @@ test("Flag an + Telnyx + bogus Ed25519-Signatur -> 403, kein Routing/Call-Record
     seed: seedWithTelnyxNumber(),
   });
   try {
-    const res = await postTelnyxIncoming(srv, { callControlId: "cc_inbound_9" });
+    const res = await postTelnyxIncoming(srv, { callSid: "cc_inbound_9" });
     assert.equal(res.status, 403, "ohne gueltige Signatur kein Zugriff aufs Routing");
     assert.equal(srv.readStore().calls.length, 0);
   } finally {
@@ -259,7 +261,7 @@ test("Flag aus (byte-identisch): TeXML-Gather-Pfad auch bei Telnyx-Provider, kei
     seed: seedWithTelnyxNumber(),
   });
   try {
-    const res = await postTelnyxIncoming(srv, { callControlId: "cc_inbound_9" });
+    const res = await postTelnyxIncoming(srv, { callSid: "cc_inbound_9" });
     assert.equal(res.status, 200);
     const xml = await res.text();
     assert.match(xml, /<Gather/, "Flag aus -> Bestandspfad unveraendert");
@@ -272,7 +274,7 @@ test("Flag aus (byte-identisch): TeXML-Gather-Pfad auch bei Telnyx-Provider, kei
   }
 });
 
-test("Flag an + Telnyx + callControlId ABWESEND -> fail-safe TeXML-Gather-Pfad, kein Assistant-Start", async () => {
+test("Flag an + Telnyx + CallSid ABWESEND -> fail-safe TeXML-Gather-Pfad, kein Assistant-Start", async () => {
   const srv = await startServer({
     env: {
       FAKE_ORIGINATE: "true",
@@ -282,13 +284,13 @@ test("Flag an + Telnyx + callControlId ABWESEND -> fail-safe TeXML-Gather-Pfad, 
     seed: seedWithTelnyxNumber(),
   });
   try {
-    const res = await postTelnyxIncoming(srv); // kein callControlId im Body
+    const res = await postTelnyxIncoming(srv, { callSid: null }); // kein CallSid im Body
     assert.equal(res.status, 200);
     const xml = await res.text();
     assert.match(
       xml,
       /<Gather/,
-      "fehlendes CallControlId-Feld -> Bestandspfad, kein kaputter Assistant-Pfad",
+      "fehlendes CallSid-Feld -> Bestandspfad, kein kaputter Assistant-Pfad",
     );
 
     const call = srv.readStore().calls[0];

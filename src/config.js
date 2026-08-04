@@ -517,6 +517,26 @@ const rawConfig = {
       process.env.TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN,
       { fallback: true },
     ),
+    // GQ-P3 (Befund B-9, Owner-Entscheidung O-1): schaltet den INBOUND-Handoff auf den
+    // Call-Control-Assistant. Der Master-Schalter oben (TELNYX_AI_ASSISTANT_ENABLED) hat
+    // Inbound nie erreicht - er stand live auf true, waehrend jeder eingehende Anruf ueber
+    // die Budget-Engine lief, weil der erwartete TeXML-Feldname geraten und falsch war.
+    // DEFAULT AN - bewusst wie shimSupersedeExtendedTurn, anders als die uebrigen
+    // Shim-Flags: dieser Schalter ist der RUECKWEG der Phase, nicht ihr Ausloeser. "aus"
+    // stellt die Budget-Engine fuer Inbound OHNE Deploy wieder her (Render-Dashboard).
+    // Er entwaffnet KEINE Sicherung: Kostendecke (beide Richtungen), OUTBOUND_FROZEN,
+    // Denylist, Land-Gate, Stundenlimit, Max-Dauer und die Ed25519-Signaturpruefung
+    // liegen samt und sonders VOR dieser Entscheidung und sind von ihr unerreichbar ->
+    // kein assertConfig-/Footgun-Eintrag (Muster shimTokenStreaming).
+    // KOSTENFOLGE, ausdruecklich: der Assistant-Pfad kostet nach eigener Messung (KV-M1)
+    // ~5 US-Cent je angefangener Minute gegen 1,87 auf der Budget-Engine - Inbound wird
+    // rund dreimal teurer. Vom Owner am 2026-08-04 zugestimmt; gedeckelt bleibt es allein
+    // durch die pro-Tenant-Kostendecke, die seit KV-P2 auch Inbound sperrt.
+    inboundHandoffEnabled: boolEnv(
+      "TELNYX_INBOUND_HANDOFF_ENABLED",
+      process.env.TELNYX_INBOUND_HANDOFF_ENABLED,
+      { fallback: true },
+    ),
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
