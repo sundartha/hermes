@@ -537,6 +537,30 @@ const rawConfig = {
       process.env.TELNYX_INBOUND_HANDOFF_ENABLED,
       { fallback: true },
     ),
+    // GQ-P4 (Befund B-10, A2): wie viele Modell-Turns desselben Calls UNMITTELBAR
+    // nacheinander scheitern duerfen, bevor der Agent hoerbar und hoeflich beendet.
+    // Am 2026-08-04 lief ein Anruf 52 Sekunden mit SIEBEN gescheiterten Turns weiter -
+    // stumm fuer den Owner, teuer auf der Carrier-Achse.
+    // KONSEKUTIV: jeder erfolgreiche Turn setzt zurueck.
+    // min 2 ist die harte Untergrenze der Phase ("ein einzelner Ausrutscher darf kein
+    // Gespraech beenden"); max 10, weil der Notaus darueber inert waere (Muster
+    // loopGuardMaxEmptyTurns). Fallback 3: bei den live gemessenen ~11 s je erschoepftem
+    // Turn ([metrics] llm retries-exhausted latencyMs 11215) sind das rund 35 s Ausfall -
+    // lang genug fuer einen Ausrutscher, kurz genug gegen die 52 s des Vorfalls.
+    // Der Wert SCHWAECHT KEINE Sicherung (er beendet ZUSAETZLICH; Max-Dauer, Dead-Air und
+    // Budget-Kill bleiben unberuehrt) -> kein assertConfig-/Footgun-Eintrag.
+    maxConsecutiveFailedTurns: numEnv(
+      "TELNYX_MAX_CONSECUTIVE_FAILED_TURNS",
+      process.env.TELNYX_MAX_CONSECUTIVE_FAILED_TURNS,
+      { fallback: 3, min: 2, max: 10 },
+    ),
+    // GQ-P4 (A2): Abschiedssatz bei anhaltendem Ausfall. LEER = der sprachabhaengige
+    // Default aus dem Locale-Bundle (locales.js llmGiveUpFarewell, korrekte Umlaute je
+    // Sprache) - das ist der empfohlene Betrieb. Ein gesetzter Wert ueberschreibt ihn fuer
+    // JEDE Sprache; im mehrsprachigen Betrieb also nur mit Bedacht setzen.
+    // GESPROCHENER Text: korrekte Umlaute, kein Fachjargon, keine Schuldzuweisung, keine
+    // technischen Codes gegenueber der Gegenstelle.
+    failedTurnFarewellText: process.env.TELNYX_FAILED_TURN_FAREWELL_TEXT || "",
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----

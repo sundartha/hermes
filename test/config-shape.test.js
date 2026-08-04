@@ -74,6 +74,10 @@ test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duc
     // GQ-P3: der Rueckweg fuer den Inbound-Handoff, DEFAULT AN (Muster
     // shimSupersedeExtendedTurn - Rueckweg der Phase, nicht ihr Ausloeser).
     inboundHandoffEnabled: true,
+    // GQ-P4: max. konsekutive Turn-Fehlschlaege vor dem hoerbaren Abschied (Default 3)
+    // + optionaler Ueberschreib-Text (Default leer = sprachabhaengiger Locale-Default).
+    maxConsecutiveFailedTurns: 3,
+    failedTurnFarewellText: "",
   });
 });
 
@@ -93,7 +97,7 @@ test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewa
 });
 
 // Teil 2: telnyxAssistant-Gruppierung (P5, erstes Feature-Grouping).
-test("telnyxAssistant: alle 13 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
+test("telnyxAssistant: alle 15 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
   assert.equal(config.telnyx.telnyxAssistant.enabled, false);
   assert.equal(config.telnyx.telnyxAssistant.assistantId, "");
   assert.equal(config.telnyx.telnyxAssistant.callControlAppId, "");
@@ -107,6 +111,8 @@ test("telnyxAssistant: alle 13 Keys existieren mit den dokumentierten Defaults (
   assert.equal(config.telnyx.telnyxAssistant.shimTokenStreaming, false);
   assert.equal(config.telnyx.telnyxAssistant.shimSupersedeExtendedTurn, true);
   assert.equal(config.telnyx.telnyxAssistant.inboundHandoffEnabled, true);
+  assert.equal(config.telnyx.telnyxAssistant.maxConsecutiveFailedTurns, 3);
+  assert.equal(config.telnyx.telnyxAssistant.failedTurnFarewellText, "");
 });
 
 // Regression: der alte flache Pfad existiert NACHWEISLICH nicht mehr - waere er

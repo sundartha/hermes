@@ -75,6 +75,44 @@ export function degradedSpeechFor(err, locale) {
   return err instanceof LlmUnavailableError ? locale.llmDegradedSpeech : locale.turnErrorSpeech;
 }
 
+// --- Bezahl-/Guthaben-Fall (GQ-P4/A1) -----------------------------------------------
+// Anbieter mit eigenem Bezahl-Status (Telnyx) melden 402. ANTHROPIC NICHT: ein leeres
+// Guthaben kommt als HTTP 400 mit error.type "invalid_request_error" - derselbe Typ wie
+// jeder Formfehler (am SDK belegt: APIError.generate mappt 400 -> BadRequestError,
+// this.type = body.error.type). Am strukturierten Typ allein ist der Fall also NICHT
+// erkennbar; genau deshalb fiel er am 04.08. in den generischen Fehlerpfad.
+const HTTP_PAYMENT_REQUIRED = 402;
+// Anthropic-Fehlertyp fuer Abrechnungsprobleme. Er existiert (403-Klasse), deckt den
+// beobachteten Guthaben-400 aber NICHT ab - er steht hier NEBEN, nicht STATT der Textpruefung.
+const BILLING_ERROR_TYPE = "billing_error";
+// FRAGIL, bewusst und eng gefasst: fuer den 400-Fall gibt es kein strukturiertes
+// Unterscheidungsmerkmal, nur den Meldungstext ("Your credit balance is too low to access
+// the Anthropic API ..."). Geprueft wird deshalb genau diese eine Wendung, klein
+// geschrieben. Aendert der Anbieter den Wortlaut, faellt der Fall in den generischen
+// Fehlerpfad zurueck - er wird nie falsch POSITIV, und es haengt KEIN Gate daran
+// (nur eine Logzeile). Kein Praefix-/Fuzzy-Match.
+const CREDIT_EXHAUSTED_MARKER = "credit balance is too low";
+
+// HTTP-Status eines Anbieter-Fehlers (Anthropic err.status ODER Telnyx err.providerStatus),
+// sonst null. Vorher privat im Telnyx-Shim (vendorStatusOf) - jetzt EINE Quelle (G5)
+// neben der Klassifikation, die ihn braucht. Rein.
+export function providerStatusOf(err) {
+  const status = err && (err.providerStatus ?? err.status);
+  return typeof status === "number" ? status : null;
+}
+
+// "Uns ist beim Anbieter das Geld ausgegangen" als EIGENER Zustand - unabhaengig davon,
+// ob der Anbieter ihn als 402 oder als 400 verpackt. Rein (N7), ohne Nebeneffekt; der
+// Aufrufer entscheidet, was er damit tut (der Shim: eine Alarm-Zeile, A4). Aendert KEINE
+// Degradation, KEIN Retry-Verhalten und KEIN Gate.
+export function isProviderBillingError(err) {
+  if (!err) return false;
+  if (providerStatusOf(err) === HTTP_PAYMENT_REQUIRED) return true;
+  if (err.type === BILLING_ERROR_TYPE) return true;
+  const message = typeof err.message === "string" ? err.message : "";
+  return message.toLowerCase().includes(CREDIT_EXHAUSTED_MARKER);
+}
+
 // AL-P9/AL-P7: EIN Praedikat "der Versuch war nachweislich auf der Leitung" (G5) - die
 // Token-Schaetzung des abgebrochenen Briefings (precall-briefing.js) und die des
 // abgerissenen Turn-Streams (claude.js) haengen an derselben Unterscheidung. NUR

@@ -138,7 +138,7 @@ test("addTranscript rekonstruiert transcript[] in Reihenfolge", async () => {
 test("addActionItem haengt id an call.actionItemIds + persistiert", async () => {
   const { store, db } = await makePgTestStore();
   const call = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
-  const item = store.addActionItem(call.id, "Rueckruf", "todo");
+  const { item } = store.addActionItem(call.id, "Rueckruf", "todo");
   assert.deepEqual(store.getCall(call.id).actionItemIds, [item.id]);
   await store.save();
   const reopened = await reopen(db);
@@ -149,7 +149,7 @@ test("addActionItem haengt id an call.actionItemIds + persistiert", async () => 
 test("toggleActionItem kippt done und persistiert", async () => {
   const { store, db } = await makePgTestStore();
   const call = store.createCall({ direction: "outbound", from: "+49", to: "+49", tenantId: BOOTSTRAP_TENANT_ID });
-  const item = store.addActionItem(call.id, "x");
+  const { item } = store.addActionItem(call.id, "x");
   assert.equal(item.done, false);
   store.toggleActionItem(item.id);
   await store.save();
@@ -286,8 +286,8 @@ test("pruneOldData: Keep-Praedikate (aktiv/offen bleiben, alt+beendet weg)", asy
   store.endCallRecord(doneOld.id, "completed");
   // Alters-Stempel direkt im Spiegel setzen (wie der Retention-Test alte Daten seedet)
   store.getCall(doneOld.id).endedAt = old;
-  const openItem = store.addActionItem(doneOld.id, "offen");
-  const doneItem = store.addActionItem(doneOld.id, "erledigt");
+  const { item: openItem } = store.addActionItem(doneOld.id, "offen");
+  const { item: doneItem } = store.addActionItem(doneOld.id, "erledigt");
   store.toggleActionItem(doneItem.id);
   store.load().actionItems.find((a) => a.id === doneItem.id).createdAt = old;
   store.addNotification("alt", "", null);

@@ -47,6 +47,10 @@ export function fakeTelnyxShimConfig({
   // GQ-P1: spiegelt den Prod-Default (true). Bestandstests bleiben gruen - sie erzeugen
   // nie zwei ueberlappende Turns, der Riegel findet nie einen laufenden Vorgaenger.
   telnyxShimSupersedeExtendedTurn = true,
+  // GQ-P4: spiegelt die Prod-Defaults. Bestandstests bleiben gruen - keiner erzeugt drei
+  // gescheiterte Turns in Folge; die A2-Tests setzen den Wert explizit herunter.
+  telnyxMaxConsecutiveFailedTurns = 3,
+  telnyxFailedTurnFarewellText = "",
 } = {}) {
   return withConfigNamespaces({
     claudeModel,
@@ -57,6 +61,8 @@ export function fakeTelnyxShimConfig({
       shimDebugShape: telnyxShimDebugShape,
       shimTokenStreaming: telnyxShimTokenStreaming,
       shimSupersedeExtendedTurn: telnyxShimSupersedeExtendedTurn,
+      maxConsecutiveFailedTurns: telnyxMaxConsecutiveFailedTurns,
+      failedTurnFarewellText: telnyxFailedTurnFarewellText,
     },
   });
 }

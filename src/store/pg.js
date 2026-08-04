@@ -358,9 +358,10 @@ export function makePgStore(runner) {
     tenantLanguage: (tenantId) => tenantLanguageOf(requireState(), tenantId),
 
     addActionItem(callId, text, type = "todo") {
-      const item = ops.addActionItem(requireState(), callId, text, type);
-      save();
-      return item;
+      const result = ops.addActionItem(requireState(), callId, text, type);
+      // GQ-P4: eine Dublette hat NICHTS geaendert - kein Flush (Muster wie oben).
+      if (!result.duplicate) save();
+      return result;
     },
     toggleActionItem(id) {
       const item = ops.toggleActionItem(requireState(), id);

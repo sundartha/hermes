@@ -523,8 +523,12 @@ export function execTool(call, name, input) {
   const tc = localeFor(call.language).prompt.turnControl;
   switch (name) {
     case TAKE_MESSAGE_TOOL_NAME: {
-      store.addActionItem(call.id, input.message, "todo");
-      return tc.takeMessageResult;
+      // GQ-P4 (Befund B-6): der Store legt eine inhaltsgleiche Nachricht desselben Calls
+      // kein zweites Mal an. Das Werkzeug-Ergebnis sagt dem Modell genau das - vorher war
+      // der Ergebnistext eine statische Konstante, die "das ist schon notiert" NIE
+      // signalisieren konnte. Einzige Prompt-nahe Aenderung dieser Phase.
+      const { duplicate } = store.addActionItem(call.id, input.message, "todo");
+      return duplicate ? tc.takeMessageDuplicateResult : tc.takeMessageResult;
     }
     case END_CALL_TOOL_NAME:
       return "OK";

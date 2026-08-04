@@ -222,6 +222,10 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     silentTurn: "[Es kam keine Antwort.]",
     endCallWait: "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.",
     takeMessageResult: "Nachricht ist notiert.",
+    // GQ-P4 (Befund B-6): das Tool-Ergebnis sagt die WAHRHEIT. Bisher bekam das Modell bei
+    // jedem der acht take_message-Aufrufe denselben Satz "Nachricht ist notiert." und hatte
+    // im Gespraech keinerlei Information darueber, was schon notiert war.
+    takeMessageDuplicateResult: "Diese Nachricht ist bereits notiert. Nimm sie nicht noch einmal auf.",
     unknownTool: "Unbekanntes Tool.",
     // AL-P14: deterministische Ablehnung der Rueckfrage (Richtung/Kontingent/Zeitfenster/
     // Form). Server-eigener Text, keine fremde Rede.

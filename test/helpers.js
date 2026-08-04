@@ -183,6 +183,10 @@ export const BASE_ENV = {
   // TELNYX_INBOUND_HANDOFF_ENABLED=false via dotenv in Spawn-Tests (Lehre
   // test-base-env-drift). Wirkt ohnehin nur bei TELNYX_AI_ASSISTANT_ENABLED=true.
   TELNYX_INBOUND_HANDOFF_ENABLED: "true",
+  // GQ-P4: neutral auf dem Code-Fallback gepinnt, sonst leakt eine lokale .env via dotenv
+  // in die Spawn-Tests (Lehre test-base-env-drift).
+  TELNYX_MAX_CONSECUTIVE_FAILED_TURNS: "3",
+  TELNYX_FAILED_TURN_FAREWELL_TEXT: "",
   // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
   // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_API_KEY_REF: "",

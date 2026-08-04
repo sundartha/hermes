@@ -194,6 +194,8 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
     silentTurn: "[Il n'y a pas eu de réponse.]",
     endCallWait: "La personne appelée n'a encore rien dit. Ne raccroche pas - attends sa réponse.",
     takeMessageResult: "Message noté.",
+    // GQ-P4: s. DE.
+    takeMessageDuplicateResult: "Ce message est déjà noté. Ne le note pas une seconde fois.",
     unknownTool: "Outil inconnu.",
     // AL-P14: s. DE.
     consultDeclined:
