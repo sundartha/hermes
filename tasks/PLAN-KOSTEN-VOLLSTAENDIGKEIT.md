@@ -1223,3 +1223,86 @@ Merge-Commits auf `master`: `22f625c` (P0), `8ffd6ab` (M0), `b8ba31c` (P1+P1b),
 `--test-name-pattern` keinen seiner Testnamen matcht - also bei jedem `npm run test:gates`.
 Ursache: file-scope `before()/after()` mit geteiltem `startServer()`-Spawn ohne `if (srv)`-Guard.
 Macht den Gates-Lauf praktisch nicht end-to-end durchlaufbar. Eine kleine eigene Fix-Phase wert.
+
+---
+
+## DEPLOY 2026-08-04: gemessene Live-Werte (Punkt 1, 3 erledigt)
+
+Live-Commit `886a3b2` seit 2026-08-04T07:56:37Z (`/healthz` + Boot-Banner, beide geprueft).
+`ADMIN_EMAILS` vor dem Deploy gesetzt (Owner-Entscheidung: antonio + jonas) - ohne das
+waeren die Betreiber-Routen nach AUTH-P6 auf 404 gelaufen, weil in der Prod-DB **kein
+Account `role='admin'`** hat (beide `member`, am 2026-08-04 gemessen).
+
+### Die sieben Banner-Werte (loest U6, Abnahme von KV-M0)
+
+| Wert | LIVE gemessen | Bewertung |
+|---|---|---|
+| `PAYMENT_ENABLED` | **true** | wie in N3 erschlossen, jetzt direkt belegt |
+| `SMS_COST_CENTS` | **0 ct** | L3 live bestaetigt - ein fehlender Preis IST hier eine 0. KV-P5 bleibt an U3 blockiert (noch nie eine SMS gesendet), die Luecke ist latent. |
+| `BILLING_FLUSH_EPOCH` | **nicht gesetzt** | gewollt. Owner-Entscheidung 2a: keine Weiterbelastung -> der Riegel ist zu, `flushMeters` meldet nichts. NICHT setzen. |
+| `COST_TRUING_REQUIRED_RECORD_TYPES` | **sip-trunking,call-control** | **NUR ZWEI von sechs** - s. Befund unten |
+| `CLAUDE_MODEL` | claude-haiku-4-5 | |
+| `PRECALL_BRIEFING_MODEL` | claude-sonnet-5 | |
+| `ELEVENLABS_PLAY_TTS_ENABLED` | **true** | **Play-TTS ist AN** - s. Befund unten |
+
+Zusaetzlich abgelesen: `BUDGET_MONTH_ENABLED=true` (beide Achsen im Perioden-Fenster),
+Tenant-Decke 1500 ct, Plattform-Warnschwelle 3000 ct, Worst-Case-Tarif 30 ct/min,
+`TTS_CHARACTER_QUOTA=39981` Zeichen/Zyklus, `VOICE_ENGINE=budget`,
+`FORCE_NUMBER_COUNTRY=US`.
+
+### BEFUND A - Play-TTS laeuft live, der Plan hielt den Pfad fuer aus
+
+Der KV-P7-Guard hat beim ersten Boot sofort angeschlagen. Der Plan fuehrte diesen Pfad
+durchgehend als *latent, weil abgeschaltet* (`config.js` Default `false`) - **live steht er
+auf `true`**. Die von ihm selbst synthetisierten Zeichen erzeugen KEINEN Telnyx-Beleg,
+erreichen also weder Ledger noch Gate-Achse; der Ist-Abgleich sieht nur, was der Provider
+abrechnet. Das ist keine latente, sondern eine **laufende** ungedeckte Kostenart.
+
+Gedeckt sind heute nur: die ElevenLabs-Monatsgebuehr als Fixkosten-ANZEIGE
+(`PLATFORM_FIXED_COST_CENTS_PER_MONTH`) und der Zeichenzaehler `TTS_CHARACTER_QUOTA`.
+Die Guard-Handlungsempfehlung lautet, `ELEVENLABS_PLAY_TTS_ENABLED=false` zu lassen, bis
+entschieden ist, wie die Monatsgebuehr auf Anrufe umgelegt wird - das ist eine **Preisfrage
+und damit Owner-Sache**, ausdruecklich nicht Gegenstand dieses Plans. Der Guard tut genau,
+wofuer er gebaut wurde: er macht das Einschalten laut statt still.
+
+### BEFUND B - die Vollstaendigkeits-Liste kennt nur zwei von sechs Belegarten
+
+`COST_TRUING_REQUIRED_RECORD_TYPES=sip-trunking,call-control`. KV-M1 hat sechs zuordenbare
+Typen vermessen; **`speech-to-text` allein trug 71 % der Inbound-Kosten** und steht nicht in
+der Liste.
+
+**Der gebuchte BETRAG ist davon nicht betroffen** - `sumRecordMicroCents` ist typ-blind und
+summiert alles Zugeordnete (`cost-truing.js`, `classifyRecords`). Betroffen ist
+ausschliesslich das ETIKETT: `complete` entscheidet zwischen `detail_records` (vollstaendig
+belegt) und `incomplete`. Die Folge ist trotzdem eine Untererfassung mit falscher
+Fail-Richtung: sobald sip-trunking und call-control eingetroffen sind, gilt der Call als
+vollstaendig belegt und wird geschlossen - trifft der STT-Beleg spaeter ein, wird er nicht
+mehr nachgebucht. Wie oft das passiert, haengt daran, ob die Belegarten zeitversetzt
+eintreffen; **das ist ungemessen.**
+
+Nicht eigenmaechtig geaendert, weil eine falsch erweiterte Liste die Deckungsquote dauerhaft
+auf 0 druecken wuerde: `ai-voice-assistant` erzeugte am KV-M1-Anruf **null** Belege (der
+Assistant-Pfad beantwortet Inbound nicht). Ein Typ, der nie eintrifft, macht jeden Call
+`incomplete`. Belegt eintreffend waren: `sip-trunking`, `call-control`, `speech-to-text`,
+`text-to-speech`, `recording` (0 ct).
+
+### Punkt 3 erledigt - Schema und Nicht-Backfill live belegt
+
+Vor dem Deploy gemessen (Baseline): Spalte und Tabelle existierten NICHT. Danach:
+
+- `usage_event.cost_micro_cents` existiert, Typ **bigint**
+- Tabelle `cost_cross_check` existiert
+- 176 Bestands-`usage_event`-Zeilen des Haupt-Tenants: **0 davon** tragen einen Wert
+
+Damit ist die **automatische Migration live bewiesen** (kein `psql`-Handgriff) und der
+bewusste Verzicht auf einen Backfill belegt. Wer die Altzeilen summiert, misst nichts.
+
+### Offen aus diesem Deploy
+
+- **Punkt 5** (erste Sweep-Zeile mit Quote + drei Nebenzaehlern, erste Gegenprobe-Zeile):
+  der Sweep laeuft im Stundentakt, beim Boot 07:56 war er noch nicht dran.
+- **Punkt 4** (Live-Abnahme KV-P3): **am KV-M1-Anruf nicht erfuellbar.** `call_msczw0irl06s`
+  traegt `estimated_cost_cents = NULL`, weil er vor dem Deploy von KV-P2 stattfand - er
+  landet im Abgleich in `no_estimate` und bucht nichts. Gemessen: **alle drei Inbound-Calls
+  in Prod haben keine Schaetzung.** Es braucht einen NEUEN Inbound-Anruf nach diesem Deploy.
+- **Befund A und B** brauchen je eine Owner-Entscheidung (Preisfrage bzw. Belegarten-Liste).
