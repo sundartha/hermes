@@ -905,7 +905,10 @@ test("OBS-1 turn_ok feuert NICHT im Fehler-/Gate-Pfad", async () => {
   assert.equal(turnOkLines(lines).length, 0);
 });
 
-test("OBS-1 vendor_402: agentTurn wirft err mit status 402 -> gate reason=vendor_402 {callId}, PII-frei, weiter gueltige Degradation", async () => {
+// GQ-P4/A1: der Bezahl-Fall hat einen EIGENEN Kanal (ALARM_LLM_BILLING) statt eines
+// generischen gate-Tokens - er wird jetzt auch erkannt, wenn der Anbieter ihn als 400
+// verpackt (siehe test/gq-p4-shim-failure-streak.test.js).
+test("OBS-1/GQ-P4 vendor 402: agentTurn wirft err mit status 402 -> ALARM_LLM_BILLING {callId}, PII-frei, weiter gueltige Degradation", async () => {
   const store = fakeStore({ call: makeCall() });
   async function throwingAgentTurn() {
     throw Object.assign(new Error("payment required"), { status: 402 });
@@ -915,10 +918,9 @@ test("OBS-1 vendor_402: agentTurn wirft err mit status 402 -> gate reason=vendor
 
   const lines = await withConsoleCapture(() => handler(reqWith({ auth: VALID_AUTH, ccid: "cc_x" }), res));
 
-  const gates = gateLines(lines);
-  assert.equal(gates.length, 1);
-  assert.ok(gates[0].includes('"reason":"vendor_402"'));
-  assert.ok(gates[0].includes('"callId":"call_x"'));
+  const alarms = lines.filter((l) => l.includes("[telnyx-shim] ALARM_LLM_BILLING"));
+  assert.equal(alarms.length, 1);
+  assert.ok(alarms[0].includes('"callId":"call_x"'));
   assert.ok(sseEndsWithDone(res), "trotz Vendor-402 eine gueltige Degradations-Completion (kein Abbruch)");
   assert.ok(!lines.join("\n").includes("shim-secret"), "kein Secret im Log");
 });

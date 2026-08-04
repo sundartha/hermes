@@ -974,7 +974,44 @@ function memoryEntryOf(call) {
 }
 
 // ---- Action Items ----
+// GQ-P4 (Befund B-6): am Beleg-Anruf call_msczdf1aadbw feuerte take_message ACHT MAL mit
+// derselben Nachricht (Segmente 18/23/24/26/30/32/34/38). Grund: execTool legte
+// bedingungslos an, und diese Funktion prueft nie, ob fuer denselben Call bereits ein
+// inhaltsgleiches Item existiert.
+//
+// "Inhaltsgleich" ist bewusst eine NORMALISIERTE GLEICHHEIT, keine Aehnlichkeit: robust
+// gegen belanglose Abweichungen (Whitespace-Menge, Gross-/Kleinschreibung, Satzzeichen am
+// Ende), aber jedes andere abweichende Zeichen trennt weiter zwei Nachrichten. Eine
+// Praefix-/Aehnlichkeitsregel wuerde das Gegenteil riskieren - zwei echte, verschiedene
+// Nachrichten verschmelzen und eine davon VERLIEREN. Datenverlust waere schlimmer als ein
+// Duplikat, deshalb faellt die Regel im Zweifel auf "sind verschieden".
+const ACTION_ITEM_TRAILING_PUNCTUATION = /[.,;:!?\s]+$/;
+
+// Vergleichsform einer Nachricht. Rein, ohne Nebeneffekt. toLowerCase statt
+// toLocaleLowerCase: die Vergleichsform darf nicht von der Server-Locale abhaengen.
+function actionItemKey(text) {
+  return String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(ACTION_ITEM_TRAILING_PUNCTUATION, "");
+}
+
+// Das bereits vorhandene inhaltsgleiche Item DIESES Calls, sonst null. Der Scan laeuft
+// ueber s.actionItems wie toggleActionItem daneben (gleiche Groessenordnung, gleicher Stil);
+// neben einem LLM-Roundtrip faellt er nicht ins Gewicht. Der TYP geht bewusst NICHT in den
+// Vergleich ein: dieselbe Nachricht ist dieselbe Nachricht.
+function existingActionItem(s, callId, key) {
+  return s.actionItems.find((a) => a.callId === callId && actionItemKey(a.text) === key) || null;
+}
+
+// Legt ein Action Item an - ODER liefert das bereits vorhandene inhaltsgleiche Item
+// desselben Calls zurueck, OHNE ein zweites anzulegen. Der Rueckgabewert traegt seit GQ-P4
+// zusaetzlich `duplicate`: nur so kann der Aufrufer (execTool, claude.js) dem Modell die
+// Wahrheit sagen. Rein additiv, keine Datenmigration - Bestandsdaten bleiben unberuehrt.
 export function addActionItem(s, callId, text, type = "todo") {
+  const existing = existingActionItem(s, callId, actionItemKey(text));
+  if (existing) return { item: existing, duplicate: true };
   const item = {
     id: newId("ai"),
     callId,
@@ -986,7 +1023,7 @@ export function addActionItem(s, callId, text, type = "todo") {
   s.actionItems.unshift(item);
   const call = getCall(s, callId);
   if (call) call.actionItemIds.push(item.id);
-  return item;
+  return { item, duplicate: false };
 }
 
 export function toggleActionItem(s, id) {

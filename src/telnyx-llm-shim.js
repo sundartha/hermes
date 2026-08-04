@@ -11,7 +11,7 @@
 // toolDefs (agentTurn ruft sie in-house auf -> S2-Anti-Duplizierung).
 import { randomUUID } from "node:crypto";
 import { safeEqual, hashText } from "./util.js";
-import { degradedSpeechFor } from "./llm.js";
+import { degradedSpeechFor, isProviderBillingError } from "./llm.js";
 import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
@@ -19,6 +19,7 @@ import { blockingBudgetAxis, isBudgetAxis } from "./budget-gate.js";
 import { consultClientIsPolling, consultPollAgeMs } from "./consult/in-call.js";
 import { makeTurnTextProbe, TURN_TEXT_RELATION } from "./telnyx-turn-probe.js";
 import { makeInFlightTurnRegistry } from "./telnyx-turn-supersede.js";
+import { makeConsecutiveFailureCounter } from "./telnyx-turn-failures.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk"; // stream:true (SSE-Delta-Chunks)
@@ -32,7 +33,6 @@ const BEARER_PREFIX = "Bearer ";
 const MS_PER_SECOND = 1000;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
-const HTTP_PAYMENT_REQUIRED = 402;
 // P5: per-callId-Fenster fuer den Shim-Turn-Rate-Limiter, unabhaengig vom globalen
 // Per-IP-Fenster (middleware.js RATE_WINDOW_MS) - eigene Achse, eigenes Sweep-Intervall.
 const SHIM_RATE_WINDOW_MS = 60_000;
@@ -423,12 +423,36 @@ function forwardMetadataShape(body) {
   };
 }
 
-// Vendor-HTTP-Status eines gefangenen Fehlers (Anthropic err.status ODER Telnyx
-// err.providerStatus), sonst null - fuer das 402-Watched-Token (stiller Guthaben-Killer).
-function vendorStatusOf(err) {
-  const status = err && (err.providerStatus ?? err.status);
-  return typeof status === "number" ? status : null;
+// GQ-P4/A4 (Owner-Entscheidung 2026-08-04): der Bezahl-/Guthaben-Fall ist KEIN
+// gewoehnlicher Turn-Fehler - er legt den Agenten fuer JEDEN Anruf gleichzeitig still.
+// Eigener, eindeutig greppbarer Kanal (console.error, Token ALARM_LLM_BILLING) und die
+// HANDLUNG im Payload: eine Zeile, die nur "Fehler" sagt, hat den Vorfall am 04.08. genau
+// nicht sichtbar gemacht (P8). BEWUSST KEINE Alarm-SMS - sie kostet Geld und kann in eine
+// Schleife geraten; die Alarmregel haengt der Betreiber ausserhalb des Repos an dieses Token.
+// PII-frei: nur callId/turnSeq/Zaehler + ein fester deutscher Handlungstext.
+const BILLING_ALARM_ACTION =
+  "KI-Guthaben beim Anbieter aufgebraucht - sofort aufladen, sonst antwortet KEIN Anruf mehr";
+
+function logShimBillingAlarm(payload) {
+  console.error(formatShimLine("ALARM_LLM_BILLING", { ...payload, handlung: BILLING_ALARM_ACTION }));
 }
+
+// GQ-P4/A3 - MESSPUNKT, kein Fix. Der Degradations-Satz ist im Catch verdrahtet, trotzdem
+// hoerte der Owner ueber sieben gescheiterte Turns hinweg nichts. Ob der Satz gar nicht auf
+// den Draht ging oder nur nicht gesprochen wurde, war ungemessen. Diese Zeile beantwortet
+// die erste Haelfte deterministisch: WELCHER der drei Sendewege lief und WIE VIELE Zeichen
+// ihn verlassen haben. Zeichenzahl, NIE Wortlaut.
+function logShimDegraded(payload) {
+  console.warn(formatShimLine("degraded", payload));
+}
+
+// Die drei Sendewege der Degradation (G25: benannte Token statt gestreuter Strings - die
+// Log-Auswertung greift genau diese Werte ab).
+const DEGRADED_PATH = Object.freeze({
+  STREAM_TAIL: "stream_tail",           // offener SSE-Strom -> Satz als LETZTER Chunk
+  FRESH_COMPLETION: "fresh_completion", // noch nichts geschrieben -> frische Completion
+  WIRE_LOST: "wire_lost",               // Strom fertig/gerissen -> nur end(), NULL Zeichen
+});
 
 export function makeTelnyxLlmShim({
   store,
@@ -459,6 +483,17 @@ export function makeTelnyxLlmShim({
   // GQ-P1: EINE Instanz je Shim (kein Modul-Zustand, kein Lazy-Init - P15), wie die Sonde
   // daneben. Haelt je Call nur das Abbruch-Signal des laufenden Turns, nie Text.
   const inFlightTurns = makeInFlightTurnRegistry();
+
+  // GQ-P4/A2: EINE Instanz je Shim (kein Modul-Zustand, kein Lazy-Init - P15), wie die
+  // Sonde und der Riegel daneben. Haelt je Call nur eine Zahl, nie Text.
+  const { countFailedTurn, clearFailedTurns } = makeConsecutiveFailureCounter();
+
+  // GQ-P4/A2: der Abschiedssatz bei anhaltendem Ausfall. Default kommt SPRACHABHAENGIG aus
+  // dem Locale-Bundle (korrekte Umlaute je Sprache); ein gesetzter Config-Wert ueberschreibt
+  // ihn fuer JEDE Sprache (dokumentierte Betreiber-Entscheidung, .env.example). Rein.
+  function farewellSpeechFor(locale) {
+    return config.telnyx.telnyxAssistant.failedTurnFarewellText || locale.llmGiveUpFarewell;
+  }
 
   // Fail-safe Call-Control-Hangup ueber das GETEILTE Primitiv (S2/G5, auch der
   // Dead-Air-Watchdog nutzt es). Byte-identisches Verhalten/Log wie zuvor (SHIM_LOG_PREFIX).
@@ -680,6 +715,11 @@ export function makeTelnyxLlmShim({
 
     let endCall = false;
     let farewellChars = 0; // Basis der Sprechdauer-Schaetzung (Schritt 8)
+    // GQ-P4/A2: hat agentTurn SELBST geliefert? Der Catch unten faengt AUCH Fehler des
+    // Antwort-Schreibwegs NACH einem erfolgreichen Turn (das dokumentierte T1-Szenario).
+    // Die duerfen den Fehlschlag-Zaehler nicht fuettern - ein faelschlich beendetes
+    // Gespraech ist schlimmer als ein Turn zu viel (harte Randbedingung dieser Phase).
+    let modelAnswered = false;
     try {
       // AL-D1: Momentaufnahme VOR dem Turn - genau der Zeitpunkt, zu dem agentTools()
       // ueber get_consult entscheidet. Nach dem Turn gemessen waere es eine andere Zahl.
@@ -693,6 +733,10 @@ export function makeTelnyxLlmShim({
         abortSignal: inFlight.signal,
       });
       const latencyMs = Date.now() - startedAt;
+      // GQ-P4/A2: ein erfolgreicher Turn loescht die Fehlschlag-Staffel - gezaehlt werden
+      // NUR echte Fehlschlaege IN FOLGE.
+      modelAnswered = true;
+      clearFailedTurns(call.id);
       // EIN latencyMs-Wert, zwei Senken: der opt-in metrics-Seam (P10, hinter metricsEnabled,
       // NICHT TTFT sondern Gesamt-Turn) UND das UNCONDITIONAL OBS-1-Betriebssignal (im Vorfall
       // war metricsEnabled AUS = kein Lebenszeichen). Bewusst getrennte Kanaele/Prefixe.
@@ -759,9 +803,15 @@ export function makeTelnyxLlmShim({
       // geloggt (nur err.name, secret-frei), nur die Antwort ist eine gueltige Completion.
       // KEIN Retry hier (der llm.js-Seam hat bereits begrenzt+selektiv retried).
       console.error(`${SHIM_LOG_PREFIX} agentTurn fehlgeschlagen (turnSeq=${turnSeq}):`, err && err.name); // secret-frei
-      if (vendorStatusOf(err) === HTTP_PAYMENT_REQUIRED)
-        logShimGate({ reason: "vendor_402", callId: call.id, turnSeq });
-      const content = degradedSpeechFor(err, locale);
+      // GQ-P4/A1: der Bezahl-/Guthaben-Fall ist ein EIGENER Zustand - unabhaengig davon,
+      // ob der Anbieter ihn als 402 oder (Anthropic) als 400 verpackt. Klassifikation in
+      // llm.js (EINE Quelle, G5); hier nur der Alarm (A4).
+      const billingBlocked = isProviderBillingError(err);
+      if (billingBlocked) logShimBillingAlarm({ callId: call.id, turnSeq });
+      // GQ-P4/A2: N Fehlschlaege IN FOLGE -> wuerdevoll beenden statt stumm weiterlaufen.
+      const failedTurns = modelAnswered ? 0 : countFailedTurn(call.id);
+      const giveUp = failedTurns >= config.telnyx.telnyxAssistant.maxConsecutiveFailedTurns;
+      const content = giveUp ? farewellSpeechFor(locale) : degradedSpeechFor(err, locale);
       // Dieser Catch faengt AUCH Fehler aus writeCompletion selbst (kein eigener
       // try/catch dort): wirft der Happy-Path-writeCompletion NACH einem Teil-Write
       // (z.B. Socket bricht zwischen den SSE-res.write-Aufrufen weg), ist
@@ -775,15 +825,49 @@ export function makeTelnyxLlmShim({
       //    strukturell unerreichbar; ein LLM-freier Satz ist es nicht.
       //  - Strom bereits abgeschlossen ODER mitten im Schreiben gerissen (headersSent, T1)
       //    -> nur end(). Ein zweiter Schreibversuch ginge in denselben kaputten Strom.
-      if (wire && !wire.isFinished()) wire.finish(content);
-      else if (!res.headersSent) writeCompletion(res, { model, content, stream: wantsStream });
-      else res.end();
+      // GQ-P4/A3: welcher Zweig lief, wird MITGESCHRIEBEN - der Sendepfad selbst bleibt
+      // unveraendert (die Spec verbietet ausdruecklich, ihn auf Verdacht zu aendern).
+      let degradedPath = DEGRADED_PATH.WIRE_LOST;
+      if (wire && !wire.isFinished()) {
+        wire.finish(content);
+        degradedPath = DEGRADED_PATH.STREAM_TAIL;
+      } else if (!res.headersSent) {
+        writeCompletion(res, { model, content, stream: wantsStream });
+        degradedPath = DEGRADED_PATH.FRESH_COMPLETION;
+      } else res.end();
+      logShimDegraded({
+        callId: call.id,
+        turnSeq,
+        path: degradedPath,
+        // Zeichen, die den Shim WIRKLICH verlassen haben: auf dem wire_lost-Weg sind es null.
+        chars: degradedPath === DEGRADED_PATH.WIRE_LOST ? 0 : content.length,
+        // War vor der Degradation schon Text auf der Leitung? Trennt "der Anrufer hoerte
+        // gar nichts" von "er hoerte den Anfang und dann den Abbruchsatz".
+        streamChunks: wire ? wire.chunkCount() : 0,
+        billingBlocked,
+        failedTurns,
+        giveUp,
+      });
+      // GQ-P4/A2: der Abschied laeuft ueber GENAU DENSELBEN Weg wie ein end_call des
+      // Modells (Schritt 8): Satz zuerst, Hangup verzoegert um die geschaetzte Sprechdauer,
+      // abblasbar durch einen neuen Turn oder einen externen call.hangup. Kein zweiter
+      // Terminierungspfad (G5). ZUSAETZLICHES Ende - die Max-Dauer-Notbremse, der
+      // Dead-Air-Watchdog und der Budget-Kill bleiben unberuehrt.
+      // Der Zaehler wird hier BEWUSST NICHT geloescht: blaest ein neuer Turn den Abschied
+      // ab und scheitert erneut, soll sofort wieder beendet werden - nicht erst nach
+      // weiteren N Fehlschlaegen.
+      if (giveUp) {
+        endCall = true;
+        farewellChars = content.length;
+      }
       // KEIN return hier (G3/T5): agentTurn kann VOR diesem Fehler bereits erfolgreich
       // endCall=true geliefert haben - der Fehler stammt dann aus writeCompletion selbst
       // (Zeile oben, exakt das T1-Szenario), NICHT aus agentTurn. Schritt 8 unten muss den
       // Hangup trotzdem versuchen, sonst laeuft der Call trotz bereits gegebenem
       // Abschiedssignal auf Tokenkosten weiter (Regel 1). Wirft dagegen agentTurn selbst,
-      // bleibt endCall auf dem Default false - Schritt 8 ist dann ein No-op.
+      // bleibt endCall auf dem Default false - AUSSER die Fehlschlag-Staffel ist voll
+      // (GQ-P4/A2), dann setzt der Zweig oben endCall/farewellChars und Schritt 8 spricht
+      // den Abschied und legt verzoegert auf.
     } finally {
       // GQ-P1: dieser Turn laeuft nicht mehr - ein spaeterer "extends"-Request darf ihn
       // nicht mehr verdraengen. Im finally, damit auch der Fehlerpfad abmeldet.

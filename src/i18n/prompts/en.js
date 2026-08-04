@@ -196,6 +196,8 @@ At the end, say goodbye in one sentence and then call end_call.`,
     silentTurn: "[There was no reply.]",
     endCallWait: "The other person hasn't said anything yet. Don't hang up - wait for their reply.",
     takeMessageResult: "Message noted.",
+    // GQ-P4: s. DE.
+    takeMessageDuplicateResult: "This message is already noted. Do not record it again.",
     unknownTool: "Unknown tool.",
     // AL-P14: s. DE.
     consultDeclined:

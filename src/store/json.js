@@ -563,9 +563,10 @@ export function tenantLanguage(tenantId) {
 
 // ---- Action Items ----
 export function addActionItem(callId, text, type = "todo") {
-  const item = ops.addActionItem(load(), callId, text, type);
-  save();
-  return item;
+  const result = ops.addActionItem(load(), callId, text, type);
+  // GQ-P4: eine Dublette hat NICHTS geaendert - kein Grund, die Datei neu zu schreiben.
+  if (!result.duplicate) save();
+  return result;
 }
 
 export function toggleActionItem(id) {

@@ -165,6 +165,12 @@ export const LOCALES = Object.freeze({
     // LLM-Text - er muss auch dann kommen, wenn das Modell gerade klemmt.
     capFarewellSpeech:
       "Ich muss das Gespräch jetzt leider beenden. Vielen Dank für Ihre Zeit. Auf Wiederhören.",
+    // GQ-P4 (Befund B-10, A2): Abschied bei ANHALTENDEM Modell-Ausfall - kein LLM-Text
+    // (das Modell ist ja gerade die Fehlerquelle). Keine Schuldzuweisung, kein Fachjargon,
+    // keine technischen Codes gegenueber der Gegenstelle. Ueberschreibbar ueber
+    // TELNYX_FAILED_TURN_FAREWELL_TEXT (dann fuer ALLE Sprachen).
+    llmGiveUpFarewell:
+      "Es tut mir leid, ich habe gerade technische Schwierigkeiten und kann Ihnen nicht weiterhelfen. Ich melde mich später noch einmal. Auf Wiederhören.",
     budgetExhaustedHangup: "Das Demo-Budget ist aufgebraucht. Auf Wiederhören.",
     greetingDefault: DEFAULT_GREETING,
     // Inbound-Pflichtsatz (GAP-14/O7): fest verdrahtet, durch kein Setting abschaltbar.
@@ -253,6 +259,9 @@ export const LOCALES = Object.freeze({
       "Je ne vous entends malheureusement pas. Je réessaierai plus tard. Au revoir.",
     capFarewellSpeech:
       "Je dois malheureusement terminer l'appel maintenant. Merci pour votre temps. Au revoir.",
+    // GQ-P4 (A2): s. DE.
+    llmGiveUpFarewell:
+      "Je suis désolé, j'ai un problème technique et je ne peux pas continuer. Je vous recontacterai plus tard. Au revoir.",
     budgetExhaustedHangup: "Le budget de démonstration est épuisé. Au revoir.",
     // FR-Greeting-Default: {owner} wird zur Laufzeit ersetzt (wie DE). Nur fuer FR-Tenants
     // relevant; der Bestands-/Owner-Tenant traegt weiter den DE-Seed (kein Backfill).
@@ -328,6 +337,9 @@ export const LOCALES = Object.freeze({
     noSpeechRepromptAgain: "I still can't hear you. Are you still there?",
     noSpeechFarewell: "I'm afraid I can't hear you. I'll try again later. Goodbye.",
     capFarewellSpeech: "I have to end the call now. Thank you for your time. Goodbye.",
+    // GQ-P4 (A2): s. DE.
+    llmGiveUpFarewell:
+      "I'm sorry, I'm having technical trouble and can't continue right now. I'll try again later. Goodbye.",
     budgetExhaustedHangup: "The demo budget has been used up. Goodbye.",
     // P3/WEB-04: das Terminversprechen ("arrange an appointment") ist raus - seit P1b/E1
     // hat der Agent kein Buchungs-Tool mehr, ein waehlbarer Text darf das nicht mehr zusagen.
