@@ -71,9 +71,10 @@ test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duc
     // GQ-P1: neuer Schalter, DEFAULT AN (anders als die uebrigen Shim-Flags - der Riegel
     // ist der korrigierte Bestand, nicht ein Opt-in).
     shimSupersedeExtendedTurn: true,
-    // GQ-P3: der Rueckweg fuer den Inbound-Handoff, DEFAULT AN (Muster
-    // shimSupersedeExtendedTurn - Rueckweg der Phase, nicht ihr Ausloeser).
-    inboundHandoffEnabled: true,
+    // GQ-P3: der Rueckweg fuer den Inbound-Handoff. DEFAULT AUS seit 2026-08-04 - am
+    // Live-Anruf gemessen feuert der Handoff VOR dem answered-Ereignis und Telnyx lehnt
+    // mit 422 (90034 Call not answered yet) ab; der Anrufer hoert nur die Fehleransage.
+    inboundHandoffEnabled: false,
     // GQ-P4: max. konsekutive Turn-Fehlschlaege vor dem hoerbaren Abschied (Default 3)
     // + optionaler Ueberschreib-Text (Default leer = sprachabhaengiger Locale-Default).
     maxConsecutiveFailedTurns: 3,
@@ -110,7 +111,7 @@ test("telnyxAssistant: alle 15 Keys existieren mit den dokumentierten Defaults (
   assert.equal(config.telnyx.telnyxAssistant.shimDebugShape, false);
   assert.equal(config.telnyx.telnyxAssistant.shimTokenStreaming, false);
   assert.equal(config.telnyx.telnyxAssistant.shimSupersedeExtendedTurn, true);
-  assert.equal(config.telnyx.telnyxAssistant.inboundHandoffEnabled, true);
+  assert.equal(config.telnyx.telnyxAssistant.inboundHandoffEnabled, false);
   assert.equal(config.telnyx.telnyxAssistant.maxConsecutiveFailedTurns, 3);
   assert.equal(config.telnyx.telnyxAssistant.failedTurnFarewellText, "");
 });

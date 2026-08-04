@@ -532,10 +532,17 @@ const rawConfig = {
     // ~5 US-Cent je angefangener Minute gegen 1,87 auf der Budget-Engine - Inbound wird
     // rund dreimal teurer. Vom Owner am 2026-08-04 zugestimmt; gedeckelt bleibt es allein
     // durch die pro-Tenant-Kostendecke, die seit KV-P2 auch Inbound sperrt.
+    // DEFAULT AUS seit 2026-08-04: der Handoff feuert zu FRUEH. Am Live-Anruf gemessen
+    // (call_msf0q18o473z / call_msf0qch6nect): auf `inbound_path path=assistant` folgt
+    // 370 ms spaeter `HTTP 422 (90034 Call not answered yet)` - die Call-Control-API
+    // verlangt einen bereits ANGENOMMENEN Anruf, waehrend TeXML beim Inbound implizit
+    // annimmt. Der Anrufer hoert daraufhin nur die Fehleransage. Der Handoff muss auf
+    // das answered-Ereignis warten, bevor er startet; bis dahin bleibt Inbound auf der
+    // Budget-Engine (Bestandsverhalten, funktionsfaehig).
     inboundHandoffEnabled: boolEnv(
       "TELNYX_INBOUND_HANDOFF_ENABLED",
       process.env.TELNYX_INBOUND_HANDOFF_ENABLED,
-      { fallback: true },
+      { fallback: false },
     ),
     // GQ-P4 (Befund B-10, A2): wie viele Modell-Turns desselben Calls UNMITTELBAR
     // nacheinander scheitern duerfen, bevor der Agent hoerbar und hoeflich beendet.
