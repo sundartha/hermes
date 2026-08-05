@@ -242,6 +242,11 @@ export function systemPrompt(call) {
     // P6: rote Linien (GRENZEN) zuerst, dann der gruene Bereich. Ohne Mandat "" ->
     // filter(Boolean) haelt den Bestandsprompt byte-identisch (Muster D8).
     mandateSection(p),
+    // GQ-P10 (Befund N-2): eigener Listeneintrag statt Teil von assignmentBlock - der
+    // haengt an call.goal und rendert NUR outbound. Nachrichten entstehen aber gerade
+    // inbound (das ist der Hauptzweck eingehender Anrufe). Nichts notiert -> "" ->
+    // filter(Boolean) haelt den Bestandsprompt byte-identisch (Muster mandateSection).
+    recordedMessagesSection(p),
     p.isInbound ? p.loc.prompt.outcomeInbound : p.loc.prompt.outcomeOutbound,
   ]
     .filter(Boolean)
@@ -265,6 +270,24 @@ function assistantContextSection({ call, loc }) {
   if (Array.isArray(c.key_facts) && c.key_facts.length) lines.push(`${b.facts}${c.key_facts.join("; ")}`);
   if (!lines.length) return "";
   return `\n${b.heading}\n${lines.join("\n")}\n${b.guardrail}`;
+}
+
+// GQ-P10 (Befund N-2): was in DIESEM Gespraech bereits notiert ist.
+//
+// Live entstanden drei Eintraege fuer einen Sachverhalt, weil das Modell jedes Mal neu
+// formuliert und der Inhaltsgleichheits-Riegel aus GQ-P4 deshalb nie greift. Die Wurzel
+// ist nicht die Aehnlichkeitsschwelle, sondern dass das Modell nie erfaehrt, was es schon
+// notiert hat - es entscheidet ueber take_message ohne Gedaechtnis. Dieselbe Blindheit wie
+// bei der eingetroffenen Rueckfrage-Antwort (GQ-P8).
+//
+// Leerer Fall -> "" wie assistantContextSection daneben: solange nichts notiert ist, bleibt
+// der Prompt byte-identisch zum Bestand (Golden-Master-Pins). Der Block ist SERVER-Text
+// ueber eigene Notizen, keine fremde Rede - er speist weder Offenlegung noch Persona.
+function recordedMessagesSection({ call, loc }) {
+  const items = store.callActionItems(call.id);
+  if (!items.length) return "";
+  const b = loc.prompt.recorded;
+  return `\n${b.heading}\n${items.map((item) => `- ${item.text}`).join("\n")}\n${b.guardrail}`;
 }
 
 // WAS-BISHER-GESCHAH-Sektion (AL-P12): die Ergebnisse/Fakten der letzten Anrufe an

@@ -371,6 +371,8 @@ export function makePgStore(runner) {
       if (!result.duplicate) save();
       return result;
     },
+    // GQ-P10: reiner Leser - kein save (Muster pendingConsult).
+    callActionItems: (callId) => ops.callActionItems(requireState(), callId),
     toggleActionItem(id) {
       const item = ops.toggleActionItem(requireState(), id);
       if (item) save();

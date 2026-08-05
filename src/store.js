@@ -143,6 +143,10 @@ export const {
   // Laufzeit einen TypeError. Muster wie resolveCallLanguage.
   tenantLanguage,
   addActionItem,
+  // GQ-P10: die bereits notierten Nachrichten DIESES Calls. OHNE diesen Re-Export waere
+  // store.callActionItems auf der Fassade undefined -> systemPrompt wuerfe zur Laufzeit
+  // einen TypeError (Muster counterpartyMemory).
+  callActionItems,
   toggleActionItem,
   getCalendar,
   addCalendarEvent,

@@ -1068,6 +1068,22 @@ export function addActionItem(s, callId, text, type = "todo") {
   return { item, duplicate: false };
 }
 
+// GQ-P10 (Befund N-2): die in DIESEM Gespraech bereits notierten Nachrichten, in der
+// Reihenfolge ihrer Entstehung. Reiner Leser.
+//
+// GQ-P4 entdoppelt nur INHALTSGLEICHE Nachrichten (actionItemKey). Das Modell formuliert
+// aber jedes Mal neu, also greift der Riegel nie - live entstanden drei Eintraege fuer
+// einen Sachverhalt ("Fahrzeugschein mitbringen", "Die Werkstatt bittet Antonio, den
+// Fahrzeugschein mitzubringen", ...). Die Wurzel ist nicht die Aehnlichkeitsschwelle,
+// sondern dass das Modell NIE erfaehrt, was es schon notiert hat. Dieselbe Blindheit wie
+// bei der eingetroffenen Rueckfrage-Antwort (GQ-P8).
+//
+// s.actionItems traegt die neuesten zuerst (unshift in addActionItem) - hier umgedreht,
+// damit der Prompt die Gespraechs-Chronologie zeigt und nicht ihre Umkehrung.
+export function callActionItems(s, callId) {
+  return s.actionItems.filter((item) => item.callId === callId).reverse();
+}
+
 export function toggleActionItem(s, id) {
   const item = s.actionItems.find((a) => a.id === id);
   if (item) item.done = !item.done;
