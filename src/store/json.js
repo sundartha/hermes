@@ -577,6 +577,11 @@ export function addActionItem(callId, text, type = "todo") {
   return result;
 }
 
+// GQ-P10: reiner Leser - kein save (Muster pendingConsult).
+export function callActionItems(callId) {
+  return ops.callActionItems(load(), callId);
+}
+
 export function toggleActionItem(id) {
   const item = ops.toggleActionItem(load(), id);
   if (item) save();
