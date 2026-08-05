@@ -361,11 +361,29 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 >
 > **Diagnose-Retention (Scope):** `call.diagnostic` wird AUSSCHLIESSLICH serverseitig
 > gesetzt (`src/diagnostic-retention.js`, aufgerufen in `POST /api/calls`) und NUR, wenn
-> das normalisierte Ziel exakt der `privateNumber` des anrufenden Tenants entspricht. Der
-> Body-/MCP-Wert ist ein Wunsch, keine Wahrheit; die Pruefung ist strikt (`=== true`,
-> String-Truthiness kann sie nicht aufweichen). Fremde Gespraechsinhalte koennen damit
-> nicht laenger liegen als versprochen. Fail-closed in jeder Richtung: kein Flag, kein
-> Treffer oder `DIAGNOSTIC_RETENTION_DAYS=0` ergibt exakt das Bestandsverhalten.
+> das normalisierte Ziel exakt der `privateNumber` des anrufenden Tenants entspricht.
+> Diese ZIEL-Pruefung ist die Datenschutz-Grenze - sie ist unveraendert und traegt die
+> gesamte Rechtfertigung: fremde Gespraechsinhalte koennen nicht laenger liegen als
+> versprochen.
+>
+> **GQ-P11 (2026-08-06, Owner-Entscheidung O-B) - Opt-in wurde Opt-out:** Der Body-/MCP-Wert
+> verlangte bis dahin ein ausdrueckliches `=== true`, das das Client-Modell selbst setzen
+> musste. Messung: 58 Calls in Produktion, kein einziger markiert - die Aufbewahrung war
+> faktisch nie scharf, und jeder sauber beendete Testanruf verlor sein Roh-Transkript. Der
+> Server entscheidet die Markierung seither selbst; der Body-Wert ist nur noch der
+> Widerspruch. Die Ablehnung wird gegen `false` UND den String `"false"` geprueft (beide
+> Body-Typen sind geparst, `app.js`), NIE per Truthiness - sonst wuerde ein urlencodetes
+> `"false"` die Aufbewahrung genau dann verlaengern, wenn ihr widersprochen wurde.
+> Datenschutz-Argument der Umkehrung: bei `to === ownNumber` gehoeren BEIDE Seiten der
+> Leitung demselben Tenant; es entstehen keine fremden Rohdaten.
+>
+> Fail-closed in jeder Richtung unveraendert: fehlende `privateNumber`, fremdes Ziel oder
+> `DIAGNOSTIC_RETENTION_DAYS=0` ergibt exakt das Bestandsverhalten.
+>
+> **Beobachtbarkeit (GQ-P11):** Der Live-Wert von `DIAGNOSTIC_RETENTION_DAYS` war im
+> Boot-Log nicht lesbar (`runRetention` druckt nur, wenn der Sweep etwas geloescht hat).
+> `capabilityProbeLines` traegt jetzt die Zeile `Diagnose-Transkripte: ...` in beiden
+> Richtungen.
 >
 > **Frist + Loeschpfad:** `DIAGNOSTIC_RETENTION_DAYS` (Default 7, `min: 0`), strikt
 > getrennt von `RETENTION_DAYS` (30). Der bestehende Retention-Sweep (`boot.js

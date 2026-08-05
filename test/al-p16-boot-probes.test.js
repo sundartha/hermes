@@ -26,7 +26,7 @@ function probeConfig({ tenancy = {}, research = {}, privacy = {} } = {}) {
       ...tenancy,
     },
     research: { researchEnabled: false, lookupEnabled: false, exaApiKey: "", ...research },
-    privacy: { evidenceRetentionDays: 0, ...privacy },
+    privacy: { evidenceRetentionDays: 0, diagnosticRetentionDays: 0, ...privacy },
   };
 }
 
@@ -130,6 +130,17 @@ test("AL-P16-6: Ergebnis-Zitate tragen die Frist als Wert, nicht ein Bool", () =
   );
 });
 
+test("AL-P16-10: Diagnose-Transkripte tragen die Frist als Wert und verschwinden im Aus-Zustand nicht", () => {
+  const off = probe("Diagnose-Transkripte", probeConfig());
+  assert.equal(off, "Diagnose-Transkripte: aus (DIAGNOSTIC_RETENTION_DAYS=0) - 0 = kein Rohtranskript ueberlebt");
+
+  const on = probe("Diagnose-Transkripte", probeConfig({ privacy: { diagnosticRetentionDays: 7 } }));
+  assert.equal(
+    on,
+    "Diagnose-Transkripte: AKTIV (DIAGNOSTIC_RETENTION_DAYS=7) - Rohtranskript ueberlebt die Summary bei Anrufen an die eigene Nummer, Loeschung nach 7 Tagen",
+  );
+});
+
 test("AL-P16-7: die Sonden folgen der geparsten Konfiguration, NICHT der Rohumgebung", () => {
   // Die Umgebung wird auf das GEGENTEIL der uebergebenen Konfiguration gestellt: eine
   // Sonde, die process.env liest, liefert dann die falsche Zeile.
@@ -139,6 +150,7 @@ test("AL-P16-7: die Sonden folgen der geparsten Konfiguration, NICHT der Rohumge
     LOOKUP_ENABLED: "true",
     CONSULT_ENABLED: "true",
     EVIDENCE_RETENTION_DAYS: "9",
+    DIAGNOSTIC_RETENTION_DAYS: "9",
   };
   const before = Object.fromEntries(Object.keys(opposite).map((k) => [k, process.env[k]]));
   Object.assign(process.env, opposite);
@@ -154,7 +166,7 @@ test("AL-P16-7: die Sonden folgen der geparsten Konfiguration, NICHT der Rohumge
   }
 });
 
-test("AL-P16-8: der echte Boot druckt jede der fuenf Sonden genau einmal (Aus-Zustand)", async () => {
+test("AL-P16-8: der echte Boot druckt jede der sechs Sonden genau einmal (Aus-Zustand)", async () => {
   const srv = await startServer({});
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
@@ -166,6 +178,7 @@ test("AL-P16-8: der echte Boot druckt jede der fuenf Sonden genau einmal (Aus-Zu
       "In-Call-Nachschlag",
       "Consult-Kanal",
       "Ergebnis-Zitate",
+      "Diagnose-Transkripte",
     ]) {
       const hits = srv.stdout.match(new RegExp(`${label}: `, "g"));
       assert.equal(hits ? hits.length : 0, 1, `erwartet genau eine ${label}-Zeile:\n${srv.stdout}`);

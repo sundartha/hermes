@@ -137,7 +137,8 @@ export function makeCallRoutes({
     // normalize_target aufgeloeste Nummer - die lokale `to` bleibt roh und wird ab hier NICHT
     // mehr gelesen.
     const language = store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
-    // P2b (Diagnose-Retention): der Body-Wert ist ein WUNSCH, keine Wahrheit. Die
+    // P2b (Diagnose-Retention): der Body-Wert ist keine Wahrheit - seit GQ-P11 ist er ein
+    // OPT-OUT (nur ein ausdrueckliches false/"false" verhindert die Aufbewahrung). Die
     // Scope-Pruefung liegt hier, serverseitig, gegen ctx.to (das NORMALISIERTE Ziel nach
     // dem normalize_target-Gate) und die eigene verifizierte Nummer des Tenants. Kein
     // Treffer -> still false, kein Fehler (der Anruf laeuft normal, nur ohne Retention).

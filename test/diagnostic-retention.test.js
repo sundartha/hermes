@@ -72,7 +72,7 @@ test("P2b-03: Tenant ohne privateNumber (ownNumber=null) -> verweigert", () => {
   );
 });
 
-test("P2b-04: requested als String (urlencoded 'true') -> verweigert (strikte === true-Pruefung)", () => {
+test("P2b-04: requested als String 'true' -> gewaehrt (GQ-P11: die Strenge sitzt jetzt auf der Ablehnungsseite)", () => {
   assert.equal(
     diagnosticRetentionGranted({
       requested: "true",
@@ -80,7 +80,7 @@ test("P2b-04: requested als String (urlencoded 'true') -> verweigert (strikte ==
       ownNumber: OWN,
       privacy: { diagnosticRetentionDays: 7 },
     }),
-    false,
+    true,
   );
 });
 
@@ -96,12 +96,95 @@ test("P2b-05: DIAGNOSTIC_RETENTION_DAYS=0 -> Feature aus, kein Flag wird gewaehr
   );
 });
 
-test("P2b-06: requested=undefined -> verweigert (kein ungewollter Default-Grant)", () => {
+test("P2b-06: requested=undefined -> gewaehrt (GQ-P11: kein Modell-Opt-in mehr noetig)", () => {
   assert.equal(
     diagnosticRetentionGranted({
       requested: undefined,
       to: OWN,
       ownNumber: OWN,
+      privacy: { diagnosticRetentionDays: 7 },
+    }),
+    true,
+  );
+});
+
+// GQ-P11: die Umkehrung. Opt-in wurde Opt-out - der Server gewaehrt von sich aus, ein
+// ausdruecklicher Widerspruch (false/"false") verweigert.
+
+test("GQ-P11-1: das Feld fehlt ganz im Objekt -> gewaehrt (der Kern der Phase)", () => {
+  assert.equal(
+    diagnosticRetentionGranted({
+      to: OWN,
+      ownNumber: OWN,
+      privacy: { diagnosticRetentionDays: 7 },
+    }),
+    true,
+  );
+});
+
+test("GQ-P11-2: requested=false -> verweigert (die Ablehnung wirkt)", () => {
+  assert.equal(
+    diagnosticRetentionGranted({
+      requested: false,
+      to: OWN,
+      ownNumber: OWN,
+      privacy: { diagnosticRetentionDays: 7 },
+    }),
+    false,
+  );
+});
+
+test("GQ-P11-3: requested='false' (urlencoded) -> verweigert (die umgekehrte Falle)", () => {
+  assert.equal(
+    diagnosticRetentionGranted({
+      requested: "false",
+      to: OWN,
+      ownNumber: OWN,
+      privacy: { diagnosticRetentionDays: 7 },
+    }),
+    false,
+  );
+});
+
+test("GQ-P11-4: requested=null -> gewaehrt (null ist kein Widerspruch)", () => {
+  assert.equal(
+    diagnosticRetentionGranted({
+      requested: null,
+      to: OWN,
+      ownNumber: OWN,
+      privacy: { diagnosticRetentionDays: 7 },
+    }),
+    true,
+  );
+});
+
+test("GQ-P11-5: fremdes Ziel OHNE requested -> verweigert (das Ziel-Gate traegt jetzt allein)", () => {
+  assert.equal(
+    diagnosticRetentionGranted({
+      to: FOREIGN,
+      ownNumber: OWN,
+      privacy: { diagnosticRetentionDays: 7 },
+    }),
+    false,
+  );
+});
+
+test("GQ-P11-6: Frist 0 OHNE requested -> verweigert (Feature-Aus schlaegt den Default-Grant)", () => {
+  assert.equal(
+    diagnosticRetentionGranted({
+      to: OWN,
+      ownNumber: OWN,
+      privacy: { diagnosticRetentionDays: 0 },
+    }),
+    false,
+  );
+});
+
+test("GQ-P11-7: ownNumber='' (leer) -> verweigert (Boolean-Guard, kein '' === '' -Treffer)", () => {
+  assert.equal(
+    diagnosticRetentionGranted({
+      to: "",
+      ownNumber: "",
       privacy: { diagnosticRetentionDays: 7 },
     }),
     false,
