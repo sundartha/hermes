@@ -340,3 +340,26 @@ test("GQ-P7-6: eine noch OFFENE Rueckfrage oeffnet kein Fenster - es gibt nichts
   assert.equal(spy.calls.length, 0);
   assert.equal(lines.filter((l) => l.includes(NUDGE_GATE_MARKER)).length, 1);
 });
+
+// GQ-P13: der zweite Aufrufer des Praedikats end-to-end. answerConsult setzt "answered"
+// UNBEDINGT, auch wenn mergeContextFacts am Deckel KEY_FACTS_LIMITS null Fakten
+// uebernommen hat - eine eingetroffene Antwort ohne Fakten steht nirgends im Prompt und
+// darf dem Agenten kein Zustellfenster oeffnen (sonst bekaeme er die Anweisung, eine
+// Auskunft zu nennen, die er nicht hat).
+test("GQ-P13-8: eingetroffene Antwort OHNE Fakten oeffnet dem Anstoss kein Fenster", async () => {
+  const call = callWithUndeliveredConsultAnswer({ answeredFacts: 0 });
+  const store = fakeStore({ call });
+  const spy = agentTurnSpy();
+  const handler = makeHandler({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn: spy.agentTurn,
+    watchdog: noopWatchdog(),
+  });
+
+  const lines = await captureConsole(() => handler(nudgeReq(call), fakeRes()));
+
+  assert.equal(spy.calls.length, 0, "kein Turn - es gibt nichts auszuliefern");
+  assert.equal(lines.filter((l) => l.includes(NUDGE_GATE_MARKER)).length, 1);
+  assert.deepEqual(store.consultDeliveryMarks, [], "kein verbrauchtes Zustellfenster");
+});
