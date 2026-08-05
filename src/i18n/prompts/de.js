@@ -137,6 +137,12 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     heading: "SCHON NOTIERT (in diesem Gespräch, geht automatisch an deinen Auftraggeber):",
     guardrail:
       "Das ist bereits festgehalten und erreicht deinen Auftraggeber. Nimm dasselbe Anliegen NICHT ein zweites Mal auf, auch nicht anders formuliert oder ergänzt. Kommt dein Gegenüber darauf zurück, bestätige kurz, dass es notiert ist. Nur ein WIRKLICH neuer Sachverhalt gehört in eine neue Nachricht.",
+    // GQ-P14: derselbe Block in der NACHBEREITUNG. Die Ueberschrift ist geteilt (eine
+    // Quelle), die Anweisung nicht: hier entscheidet das Modell ueber den JSON-Key
+    // actionItems, nicht ueber take_message. Der Key wird woertlich genannt, weil er
+    // sprachunabhaengig ist und im selben Prompt (summarySystem) vorkommt.
+    summaryGuardrail:
+      "Diese Einträge sind bereits gespeichert und erreichen deinen Auftraggeber. Nimm sie NICHT erneut in actionItems auf, auch nicht anders formuliert, zusammengefasst oder ergänzt. In actionItems gehört NUR ein WIRKLICH neuer Sachverhalt, der oben nicht steht; gibt es keinen, bleibt die Liste leer.",
   },
 
   tools: {

@@ -124,6 +124,9 @@ At the end, say goodbye in one sentence and then call end_call.`,
     heading: "ALREADY RECORDED (in this call, goes to your principal automatically):",
     guardrail:
       "This is already on record and reaches your principal. Do NOT record the same matter a second time, not even reworded or expanded. If the other person comes back to it, briefly confirm it's noted. Only a GENUINELY new matter belongs in a new message.",
+    // GQ-P14: s. DE - the summary decides about actionItems, not about take_message.
+    summaryGuardrail:
+      "These entries are already recorded and reach your principal. Do NOT put them into actionItems again, not even reworded, condensed or expanded. Only a GENUINELY new matter that is not listed above belongs in actionItems; if there is none, leave the list empty.",
   },
 
   tools: {
