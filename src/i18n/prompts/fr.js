@@ -203,7 +203,7 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
       inbound: "[L'appelant est en ligne. Salue-le.]",
     },
     silentTurn: "[Il n'y a pas eu de réponse.]",
-    endCallWait: "La personne appelée n'a encore rien dit. Ne raccroche pas - attends sa réponse.",
+    endCallWait: "Ton interlocuteur n'a encore rien dit. Ne raccroche pas - attends sa réponse.",
     takeMessageResult: "Message noté.",
     // GQ-P4: s. DE.
     takeMessageDuplicateResult: "Ce message est déjà noté. Ne le note pas une seconde fois.",

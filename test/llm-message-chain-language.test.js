@@ -20,7 +20,7 @@ const OUTBOUND_OPENING_BOOTSTRAP = "[Der Angerufene hat abgenommen. Beginne das 
 const SILENT_TURN_MARKER = "[Es kam keine Antwort.]";
 const TAKE_MESSAGE_RESULT = "Nachricht ist notiert.";
 const END_CALL_WAIT_INSTRUCTION_TEXT =
-  "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.";
+  "Dein Gegenüber hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.";
 
 function textMessage(text) {
   return {
