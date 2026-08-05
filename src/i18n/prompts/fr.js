@@ -122,6 +122,9 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
     heading: "DÉJÀ CONSIGNÉ (dans cet appel, transmis automatiquement à ton donneur d'ordre) :",
     guardrail:
       "C'est déjà consigné et cela parvient à ton donneur d'ordre. Ne consigne PAS la même demande une seconde fois, même reformulée ou complétée. Si ton interlocuteur y revient, confirme brièvement que c'est noté. Seule une demande VRAIMENT nouvelle mérite un nouveau message.",
+    // GQ-P14: s. DE - la synthese decide de actionItems, pas de take_message.
+    summaryGuardrail:
+      "Ces entrées sont déjà consignées et parviennent à ton donneur d'ordre. Ne les reprends PAS dans actionItems, même reformulées, résumées ou complétées. Seule une demande VRAIMENT nouvelle qui ne figure pas ci-dessus a sa place dans actionItems ; s'il n'y en a aucune, laisse la liste vide.",
   },
 
   tools: {

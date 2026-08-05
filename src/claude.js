@@ -286,11 +286,23 @@ function assistantContextSection({ call, loc }) {
 // KEIN fuehrendes "\n" (anders als assistantContextSection/callMemorySection): die beiden
 // werden per String-+ konkateniert und tragen ihren Separator selbst, dieser Block haengt
 // im Top-Level-Array von systemPrompt und bekommt seinen "\n\n" vom join.
-function recordedMessagesSection({ call, loc }) {
-  const items = store.callActionItems(call.id);
+// GQ-P14: DIE Form des Notiz-Blocks - eine Quelle fuer beide Pfade (G5). Gespraech
+// (recordedMessagesSection) und Nachbereitung (summarizeCall) zeigen dieselbe Liste in
+// derselben Form; nur die Handlungsanweisung darunter unterscheidet sich, weil das
+// Gespraech ueber take_message entscheidet und die Nachbereitung ueber den JSON-Key
+// actionItems. Leere Liste -> "": beide Aufrufer bleiben dann byte-identisch zum Bestand.
+function recordedItemsBlock({ items, heading, guardrail }) {
   if (!items.length) return "";
+  return `${heading}\n${items.map((item) => `- ${item.text}`).join("\n")}\n${guardrail}`;
+}
+
+function recordedMessagesSection({ call, loc }) {
   const b = loc.prompt.recorded;
-  return `${b.heading}\n${items.map((item) => `- ${item.text}`).join("\n")}\n${b.guardrail}`;
+  return recordedItemsBlock({
+    items: store.callActionItems(call.id),
+    heading: b.heading,
+    guardrail: b.guardrail,
+  });
 }
 
 // WAS-BISHER-GESCHAH-Sektion (AL-P12): die Ergebnisse/Fakten der letzten Anrufe an
@@ -1236,6 +1248,26 @@ export async function summarizeCall(call) {
     .map((t) => `${t.role === "agent" ? si.agentRole : si.callerRole}: ${t.text}`)
     .join("\n");
 
+  // GQ-P14 (Befund N-2, Messung M-6): was in DIESEM Anruf bereits notiert ist - dieselbe
+  // Liste, die GQ-P10 dem Gespraech gibt, mit der Anweisung fuer die Nachbereitung. Ohne
+  // sie entscheidet die Zusammenfassung ueber actionItems, ohne zu wissen, was
+  // take_message schon angelegt hat: live wurden daraus drei Eintraege fuer einen
+  // Sachverhalt (call_msg0swwfhe5e). GELESEN VOR dem Nachtrag am Ende dieser Funktion -
+  // die Liste zeigt den Stand des GESPRAECHS, nie den eigenen Output dieses Laufs.
+  const alreadyRecorded = recordedItemsBlock({
+    items: store.callActionItems(call.id),
+    heading: loc.prompt.recorded.heading,
+    guardrail: loc.prompt.recorded.summaryGuardrail,
+  });
+  // Der Block haengt HINTER dem Transkript: transcriptLabel und convo bleiben ein
+  // zusammenhaengender Block, und die Anweisung steht unmittelbar vor der Generierung.
+  // Leerer Block -> kein Separator -> byte-identisch zum Bestand (Golden-Master-Pin).
+  const summaryInputText =
+    `${si.directionLabel} ${call.direction}` +
+    (call.goal ? `\n${si.goalLabel} ${call.goal}` : "") +
+    `\n\n${si.transcriptLabel}\n${convo}` +
+    (alreadyRecorded ? `\n\n${alreadyRecorded}` : "");
+
   const model = config.llm.claudeModel;
   // O5: die Zitat-Aufforderung existiert nur, wenn die kurze Frist scharf ist. Sonst
   // steht sie nicht einmal im Prompt (kein Zitat, das man verwerfen muesste).
@@ -1251,7 +1283,7 @@ export async function summarizeCall(call) {
     messages: [
       {
         role: "user",
-        content: `${si.directionLabel} ${call.direction}${call.goal ? `\n${si.goalLabel} ${call.goal}` : ""}\n\n${si.transcriptLabel}\n${convo}`,
+        content: summaryInputText,
       },
     ],
     callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
