@@ -683,3 +683,88 @@ abgerechnete Minute.** Der Befund ist als Defekt erledigt.
 Der Rest von F5 bleibt wahr und harmlos: `callDurationS` ist ein geparster Wert ohne Leser.
 Er im Code zu lesen brachte nach dieser Messung **nichts** — die richtige Konsequenz ist
 also, ihn zu lassen, wo er ist (Diagnose-Feld im Log), und den Befund zu schliessen.
+
+---
+
+## Testanruf `call_msgf3r21x0w0`, 2026-08-05 18:25 UTC — die erste auswertbare Messung
+
+Stand `4ccec82` (P11/P13/P15/P16 live). Owner spielte die Werkstatt. Owner-Urteil:
+*"Absolute Katastrophe... mit Abstand das Schlimmste, was ich bisher erlebt habe."*
+
+### GQ-P11 ist LIVE BEWIESEN
+
+`diagnostic = true` — **ohne dass der Aufrufer das Flag gesetzt hat.** Der Server hat selbst
+entschieden. Und zum ersten Mal ueberhaupt traegt ein Call **Summary UND Segmente**
+(16 Stueck). Vorher: 0 von 58. Das ist exakt die Zahl, die die Spec vorher benannt hatte.
+
+### Der Supersede-Riegel ist in der Praxis WIRKUNGSLOS
+
+Die entscheidende Log-Zeile, zweimal:
+
+```
+turn_probe turnSeq 8  gapMs 2691  prevRelation "extends"
+supersede  turnSeq 8  superseded:false  refusal:"no_inflight"
+turn_probe turnSeq 9  gapMs 2077  prevRelation "extends"
+supersede  turnSeq 9  superseded:false  refusal:"no_inflight"
+```
+
+`no_inflight` = **es gab nichts mehr zu verdraengen.** Modell-Latenz 1107/1325/1972 ms,
+Fortsetzung des Anrufers nach 2077/2691 ms. Der Riegel kommt **strukturell** zu spaet.
+Folge im Transkript: **drei Agenten-Antworten in fuenf Sekunden** (18:26:51/:53/:55) auf
+eine einzige, wachsende Aeusserung.
+
+**Korrektur an der Diagnose von heute Vormittag:** dort stand "der Riegel feuert korrekt,
+der Code ist an dieser Stelle richtig". Das war aus `messagesCount` geschlossen (die Nachricht
+wird nicht doppelt angehaengt) — stimmt, aber der Turn laeuft trotzdem und spricht. Der
+Riegel verhindert die doppelte NACHRICHT, nicht die doppelte ANTWORT.
+
+### B-4, zum vierten Mal: `get_consult` 0 von 4
+
+`offeredToolNames` enthielt in **jedem** Turn (7, 8, 9, 10) `get_consult` und `look_up`.
+`toolNames` war **jedes Mal leer** — waehrend der Agent die Gegenstelle wiederholt nach
+Informationen ueber den Auftraggeber fragte. Genau der Fall, fuer den das Werkzeug existiert.
+
+### GQ-P9 ist wirkungslos — die Phase von gestern hat ihr Ziel verfehlt
+
+Fuenf Verstoesse gegen genau die Regel, die P9 eingefuehrt hat:
+*"Welches Fahrzeugmodell hat Antonios Auto denn?"*, *"kann ich ihn kurz sprechen?"*,
+*"Ist er erreichbar?"*, *"Kann ich Antonio kurz ans Telefon bekommen?"*, *"Kann ich ihn
+erreichen?"* — bestaetigt M-4: **eine Prompt-Zeile steuert dieses Verhalten nicht.**
+
+### Neuer Befund: Identitaets-Kollaps
+
+Der Agent hielt die Gegenstelle fuer den Auftraggeber: *"Hallo Antonio, ich bin Hermes, dein
+persoenlicher Assistent"* — an die Werkstatt. Danach *"Jetzt bin ich am Telefon mit dir,
+Antonio."* Erst nach *"Ich bin die Werkstatt"* korrigiert. In keinem Befundkatalog bisher.
+
+### Eroeffnung: 13,6 s Monolog, danach 6 s Stille
+
+`speak.started` 18:25:51,5 -> `speak.ended status=completed` 18:26:05,1. Der Provider meldet
+die Eroeffnung als **vollstaendig gesprochen**. Der Owner berichtet dennoch, die Offenlegung
+sei nicht zu 100 % gekommen. Aus dem Log ist die Zustellung NICHT belegbar; es existiert eine
+Telnyx-Aufnahme (`call.recording.saved`). **Unabhaengig davon ist ein 13,6-Sekunden-Monolog
+vor dem ersten Wort der Gegenstelle fuer sich ein Defekt.**
+
+Erste Anrufer-Aeusserung 18:26:12: *"Ja, Du hast aufgehoert zu reden. Was ist denn?"*
+
+### Fehler des Leads in diesem Anruf
+
+Auf die Eroeffnungs-Rueckfrage nach der Rueckrufnummer antwortete der Lead *"Antonio meldet
+sich selbst."* Das ging als Fakt in den Kontext (`answeredFacts: 3`) und hat die
+"Kann ich Antonio sprechen?"-Schleife mit hoher Wahrscheinlichkeit gefuettert. **Eine
+Consult-Antwort ist Prompt-Inhalt, kein Formular** — sie muss so formuliert sein, wie der
+Agent sie der Gegenstelle gegenueber verwenden koennte.
+
+### D-2 live bestaetigt
+
+`await_call_event` lieferte `event:"done"` mit
+*"(Noch keine Zusammenfassung verfuegbar)"* — die Zusammenfassung wurde danach geschrieben und
+erreichte den Client nie. Genau der Befund D-2, bisher "Ursache unbekannt".
+
+### Was daraus fuer die Reihenfolge folgt
+
+1. **Das Haken** — der Riegel muss VOR dem Sprechen greifen. Code plus `eot_threshold`.
+   Vorher-Zahl steht: 3 Antworten in 5 s, 2x `refusal:"no_inflight"`.
+2. **O-4 (Haiku -> Sonnet)** — Vorher-Zahl steht: `get_consult` 0 von 4 bei 4/4 angeboten.
+3. **Persona/Identitaet** — nicht ueber eine weitere Prompt-Zeile (P9 ist der Gegenbeweis).
+4. Eroeffnungs-Laenge und D-2.
