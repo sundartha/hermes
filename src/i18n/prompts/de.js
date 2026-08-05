@@ -238,7 +238,7 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       inbound: "[Der Anrufer ist in der Leitung. Begruesse ihn.]",
     },
     silentTurn: "[Es kam keine Antwort.]",
-    endCallWait: "Der Angerufene hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.",
+    endCallWait: "Dein Gegenüber hat noch nichts gesagt. Lege nicht auf - warte auf seine Antwort.",
     takeMessageResult: "Nachricht ist notiert.",
     // GQ-P4 (Befund B-6): das Tool-Ergebnis sagt die WAHRHEIT. Bisher bekam das Modell bei
     // jedem der acht take_message-Aufrufe denselben Satz "Nachricht ist notiert." und hatte
