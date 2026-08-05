@@ -644,3 +644,42 @@ Nebenbei ist damit auch die Reichweite von "Live != render.yaml" praezisiert: fu
 `EVIDENCE_RETENTION_DAYS` weichen sie ab (live 7, Datei 0), fuer
 `DIAGNOSTIC_RETENTION_DAYS` nicht (beide 0). **Die Datei ist also weder verlaesslich noch
 durchgehend falsch — nur unbelegt.** Genau dafuer sind die Sonden da.
+
+## GQ-M1 — F5 gemessen und gefallen (2026-08-06)
+
+Die Fragilitaets-Analyse fand: `CallDuration` wird geparst
+(`webhook-events.js:44-46`) und hat im gesamten `src/`-Baum **null Leser**; abgerechnet wird
+`Math.ceil((endedAt - answeredAt)/60000)` aus der Serveruhr. Weil der Pfad in die
+pro-Tenant-Kostendecke bucht, war das ausdruecklich eine **Mess-**, keine Fix-Phase.
+
+Quelle: der `[voice/status]`-Log-Dump (`src/routes/voice.js:531`) traegt `diagnostics`
+vollstaendig — der Wert ist also lesbar, obwohl ihn kein Code liest. Sieben Anrufe im
+Log-Fenster:
+
+| Call | Provider `callDurationS` | unsere Sekunden | Diff | abgerechnete Minute |
+|---|---:|---:|---:|---|
+| `call_msczw0irl06s` | 79 | 80 | +1 | 2 vs. 2 |
+| `call_msegs822qyuo` | 29 | 29 | 0 | 1 vs. 1 |
+| `call_msegtel31iqp` | 10 | 10 | 0 | 1 vs. 1 |
+| `call_mseguri8r6gp` | 24 | 24 | 0 | 1 vs. 1 |
+| `call_mseqcvoh8bcx` | 59 | 60 | +1 | 1 vs. 1 |
+| `call_msf0q18o473z` | 7 | 7 | 0 | 1 vs. 1 |
+| `call_msf0qch6nect` | 6 | 6 | 0 | 1 vs. 1 |
+
+**Median 0, Maximum 1 s (Rundung an der Sekundengrenze), in KEINEM Fall aendert sich die
+abgerechnete Minute.** Der Befund ist als Defekt erledigt.
+
+**Zwei Einschraenkungen, damit die Messung nicht mehr behauptet, als sie zeigt:**
+
+1. Alle sieben Anrufe sind **inbound**. Ein Outbound-Beleg liegt im Log-Fenster nicht vor.
+2. Die urspruengliche Hypothese ("die Zustellverzoegerung wirkt sich auf die gebuchte
+   Minute aus") ist aber **strukturell unmoeglich**: wir rechnen ab `answeredAt`, Klingelzeit
+   kann in unsere Zahl gar nicht einfliessen. Sie koennte nur in die Zahl des **Providers**
+   einfliessen — und das ist eine Frage der Kostendeckung (zahlen wir mehr an Telnyx, als wir
+   dem Tenant anrechnen), nicht eine Frage der Kostendecken-Ueberziehung. Diese Richtung
+   deckt die bestehende Ist-Kosten-Kette (`actual_cost_micro_cents`, `cost_trued_at`) ab,
+   nicht dieser Befund.
+
+Der Rest von F5 bleibt wahr und harmlos: `callDurationS` ist ein geparster Wert ohne Leser.
+Er im Code zu lesen brachte nach dieser Messung **nichts** — die richtige Konsequenz ist
+also, ihn zu lassen, wo er ist (Diagnose-Feld im Log), und den Befund zu schliessen.
