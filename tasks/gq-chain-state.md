@@ -456,3 +456,68 @@ Grund am Code: `consultTurnMarker` (`src/claude.js:793-795`) kennt genau zwei Zu
 Marker.** Der Fakt erscheint stumm in einer Hintergrund-Liste, waehrend der sichtbare
 Turn-Text eine alte, wiederholte Aeusserung ist und der Anstoss aus einer System-Nachricht
 kommt, die der Shim gar nicht liest.
+
+---
+
+## Tagesstand 2026-08-05 — drei Phasen, alle live, alle am Telefon gemessen
+
+Kein Workflow, keine Agenten. `psql`, Render-Logs, Anbieter-Doku, drei echte Testanrufe.
+
+| Phase | Inhalt | Live | Wirkung |
+|---|---|---|---|
+| GQ-P5 | Provider-Anstoss-Riegel | `53a8d4d` | **gemessen wirksam** — 11/11 Anstoesse abgefangen, 0 gesprochene Saetze |
+| GQ-P6 | Klingelfrist 30 -> 60 s | `69a8ee8` | ungemessen (braucht einen langsam zugestellten Anruf) |
+| GQ-P7 | Zustellfenster der Rueckfrage-Antwort | `62d2e0a` | ungemessen (braucht Testanruf mit Rueckfrage) |
+
+### GQ-P5 — Beweis und Nebenwirkung in einem Anruf
+
+`call_msfqk80elik1`: elf Anstoesse, Abstaende **4047–4058 ms** — das ist
+`user_idle_reply_secs: 4` auf die Millisekunde. Alle elf per `gate reason=provider_nudge`
+abgefangen. Struktureller Gegenbeleg: `messagesCount` wuchs je Anstoss um **1** statt um 2
+wie am Vortag — es wird keine Antwort mehr angehaengt.
+
+**Die Nebenwirkung kostete den naechsten Anruf.** `call_msfwfmf7thof`: Antwort um 09:44:24
+eingetroffen, danach sieben blockierte Anstoesse, Ende 09:44:52, `objective_achieved=false`.
+Der Agent hatte die Auskunft 28 Sekunden im Prompt und keinen Turn, um sie auszusprechen.
+GQ-P7 loest genau das. **Lehre: "im Prompt" und "ausgeliefert" sind zwei Zustaende.**
+
+### GQ-P6 — die Klippe, statistisch belegt
+
+Alle nie angenommenen Outbound-Anrufe, Gesamtdauer: **31,3 / 30,8 / 30,9 / 31,6 / 31,7 s**
+(19.07. bis 05.08.). Fuenf unabhaengige Anrufe, kein Streuen — ein Timer bei 30 s.
+Gegenprobe: die laengste Klingelzeit unter allen ANGENOMMENEN Anrufen ist **30,7 s**, kein
+einziger darueber. Die Verteilung ist sauber abgeschnitten.
+
+Wichtig fuer die Einordnung: **das ist ein seltener Randfall, keine Dauerbremse.** Von rund
+45 Anrufen sind fuenf hineingelaufen (~11 %); der Rest klingelt nach 5–6 Sekunden. Deshalb
+hat es "wochenlang funktioniert" — es hat funktioniert, meistens. Die Ursache der
+schwankenden Zustellung (4,8 bis 30,7 s) bleibt die US-Absendernummer.
+
+## Neue offene Befunde aus diesem Tag
+
+1. **Wir loggen `hangup_cause` nicht.** Der Call-Control-Webhook loggt nur `event_type` und
+   `status`. Deshalb musste die Timeout-Diagnose ueber Zeitstempel erschlossen werden, wo ein
+   Feld sie direkt beantwortet haette. Gleiche Fehlerklasse wie der geratene Feldname.
+2. **Fuenf stille Fehlanrufe ueber drei Wochen sind niemandem aufgefallen.** Ein Anruf, der
+   nie ankommt, erzeugt bei uns keine sichtbare Spur.
+3. **Der verlassene Anruf terminiert nicht.** Der Anstoss ist Lebenszeichen und setzt den
+   Dead-Air-Timer zurueck; bei dauerhaftem Schweigen laeuft der Call bis `time_limit_secs`
+   (30 min) oder bis zur Tenant-Kostendecke. Bestandsverhalten, in GQ-P7 bewusst NICHT
+   mitgeaendert: Dead-Air waehrend einer laufenden Rueckfrage zu schaerfen wuerde mitten im
+   Warten auflegen. Eigene Phase mit eigener Messung.
+4. **`diagnostic` greift weiterhin nie** — die private Nummer ist immer noch leer (O-10).
+   Am 05.08. erneut bestaetigt: das Rohtranskript von `call_msfwfmf7thof` war weg.
+
+## Zwei Kickoff-Befunde sind widerlegt
+
+- **B-5** ("`end_call` feuert nie"): feuerte in `call_msf0epenyv9g` turnSeq 19.
+- **N-3** ("zweiter Consult kommt nicht zustande"): kein Defekt, sondern
+  `MAX_IN_CALL_CONSULTS_PER_CALL = 1`. Das Modell ruft das entzogene Werkzeug trotzdem auf
+  und die Ablehnung landet als Ausrede beim Kunden ("Ich kann Antonio nicht erreichen") —
+  DAS ist der echte, noch offene Teil.
+
+## Unveraendert offen
+
+Fragilitaets-Analyse (Schritt -1, **nie angefangen**), N-2 (drei `take_message`-Eintraege),
+B-4 (`look_up` feuert nie -> O-4 Modell-A/B), B-7 (STT-Kauderwelsch), GQ-P3-Rest
+(Inbound-Handoff feuert vor `answered`), Owner-Hypothese "zu wenig Kontext".
