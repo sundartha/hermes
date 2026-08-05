@@ -235,6 +235,14 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     // GQ-P2: die Antwort steht noch aus, der Kanal LEBT. Ehrlicher Steuertext statt
     // Schweigen - und ein ausdrueckliches Verbot der Falschaussage, die live gemessen
     // wurde ("Ich habe leider keine Funktion, um ... zu konsultieren").
+    // GQ-P8: die Antwort ist DA. Der Live-Anruf call_msfx9pruzjvc vom 2026-08-05 zeigt,
+    // warum dieser Marker noetig ist: die Auskunft stand im HINTERGRUND, das Modell bekam
+    // keinen Hinweis darauf und sagte stattdessen "ich frage mal und rufe später an" -
+    // plus take_message. Die drei Verbote unten sind genau diese gemessenen Fehlreaktionen.
+    consultAnswered:
+      "[Die Antwort auf deine Rückfrage ist DA - sie steht im HINTERGRUND. Nenne sie JETZT " +
+      "in deiner nächsten Äußerung, ohne Umweg. Frage NICHT erneut nach, kündige KEINEN " +
+      "Rückruf an und nimm dafür KEINE Nachricht auf - du hast die Auskunft bereits.]",
     consultPending:
       "[Auf deine Rückfrage ist die Antwort noch nicht da. Sprich weiter und entscheide " +
       "vorläufig im Rahmen deines Mandats; kommt die Antwort, findest du sie im " +

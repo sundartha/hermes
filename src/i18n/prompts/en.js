@@ -203,6 +203,12 @@ At the end, say goodbye in one sentence and then call end_call.`,
     consultDeclined:
       "A follow-up question is not possible right now. Decide within your mandate or " +
       "record the request via take_message.",
+    // GQ-P8: s. DE - the answer HAS arrived; the three prohibitions are the failure
+    // modes measured live (asking again, promising a call back, filing a message).
+    consultAnswered:
+      "[The answer to your follow-up question is HERE - it's in the BACKGROUND. Say it " +
+      "NOW in your next utterance, no detour. Do NOT ask again, do NOT promise a call " +
+      "back and do NOT record a message about it - you already have the answer.]",
     // GQ-P2: s. DE - the channel is still alive, honest control text instead of silence.
     consultPending:
       "[The answer to your follow-up question is not in yet. Keep talking and decide " +

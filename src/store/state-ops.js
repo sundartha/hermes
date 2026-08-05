@@ -888,6 +888,14 @@ export function advanceInCallConsult(s, callId, { nowMs, waitMs, openMs }) {
   const call = getCall(s, callId);
   const idle = { call: call || null, changed: false, wait: CONSULT_WAIT.NONE };
   if (!call) return idle;
+  // GQ-P8: die EINGETROFFENE Antwort hat Vorrang vor jeder offenen Rueckfrage. Sie ist der
+  // Zustand, den der Bestand gar nicht kannte: nach dem Eintreffen steht der Consult auf
+  // "answered", die Suche unten nach OFFENEN Rueckfragen findet nichts, und der Turn lief
+  // ohne jeden Steuertext. Kein Zustandswechsel hier (changed:false) - der Einmal-Riegel
+  // ist deliveredAt, das der Shim NACH dem Turn setzt (GQ-P7). Beide Mechanismen teilen
+  // sich damit EINEN Zustand statt zweier, die auseinanderlaufen koennen (G5).
+  if (consultAnswerAwaitingDelivery(call))
+    return { call, changed: false, wait: CONSULT_WAIT.ANSWERED };
   const consult = inCallConsults(call).find((c) => c.status === CONSULT_STATUS.OPEN);
   if (!consult) return idle;
   const ageMs = consultAgeMs(consult, nowMs);
