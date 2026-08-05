@@ -318,6 +318,14 @@ export function makePgStore(runner) {
       if (result.changed) save();
       return result;
     },
+    // GQ-P7: saved wie answerConsult - deliveredAt liegt in derselben consults-Spalte und
+    // muss einen Instanzwechsel ueberleben (sonst oeffnet dieselbe Antwort ein zweites
+    // Zustellfenster).
+    markConsultAnswerDelivered(callId) {
+      const result = ops.markConsultAnswerDelivered(requireState(), callId);
+      if (result.changed) save();
+      return result;
+    },
     expireOpenConsults(callId) {
       const { call, changed } = ops.expireOpenConsults(requireState(), callId);
       if (changed) save();

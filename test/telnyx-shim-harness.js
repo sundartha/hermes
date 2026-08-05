@@ -60,9 +60,26 @@ export function fakeRes() {
 export function fakeStore({ call, budgetExceeded = false } = {}) {
   const getCallIds = [];
   const settlementCalls = [];
+  // GQ-P7: Zustell-Marker der eingetroffenen Rueckfrage-Antwort. MUSS auf dem Fake liegen -
+  // fehlt er, wirft der Shim einen TypeError, sobald ein Turn mit wartender Antwort laeuft
+  // (dieselbe Falle, vor der die Re-Export-Kommentare in src/store.js warnen). Bildet die
+  // echte Operation nach: setzt deliveredAt auf den beantworteten In-Call-Consults.
+  const consultDeliveryMarks = [];
   return {
     getCallIds,
     settlementCalls,
+    consultDeliveryMarks,
+    markConsultAnswerDelivered(id) {
+      consultDeliveryMarks.push(id);
+      const consults = call && call.id === id && Array.isArray(call.consults) ? call.consults : [];
+      let marked = 0;
+      for (const consult of consults)
+        if (consult.status === "answered" && !consult.deliveredAt) {
+          consult.deliveredAt = new Date().toISOString();
+          marked += 1;
+        }
+      return { call: call || null, changed: marked > 0, marked };
+    },
     getCallByControlId(ccid) {
       return call && call.callControlId === ccid ? call : null;
     },

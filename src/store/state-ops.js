@@ -829,6 +829,40 @@ export function inCallConsults(call) {
   return call.consults.filter((consult) => isInCallConsult(call, consult));
 }
 
+// GQ-P7: Wartet eine EINGETROFFENE Rueckfrage-Antwort noch darauf, dass sie ein Modell-Turn
+// ueberhaupt zu sehen bekommt? Reiner Leser.
+//
+// Der Unterschied zu "beantwortet" ist der Kern des Befunds vom 2026-08-05: die Antwort lag
+// um 09:44:24 in call.context.key_facts und damit im Systemprompt - aber der Agent bekam bis
+// zum Gespraechsende (09:44:52) keinen einzigen Turn mehr, in dem er sie haette aussprechen
+// koennen. Die Gegenstelle schwieg, also kam jeder weitere Turn als Provider-Anstoss, und
+// den blockiert der Riegel (GQ-P5). "Im Prompt" und "ausgeliefert" sind zwei Zustaende.
+export function consultAnswerAwaitingDelivery(call) {
+  return inCallConsults(call).some(
+    (consult) => consult.status === CONSULT_STATUS.ANSWERED && !consult.deliveredAt,
+  );
+}
+
+// GQ-P7: Gegenstueck - ein Modell-Turn IST gelaufen, die wartende Antwort war dabei im
+// Prompt. Markiert alle eingetroffenen, noch nicht ausgelieferten Rueckfrage-Antworten.
+// Nebeneffekt im Namen (N7).
+//
+// Persistent (kein ephemerer Zaehler): faellt die Instanz mitten im Gespraech aus, darf die
+// Antwort NICHT ein zweites Mal ein Anstoss-Fenster oeffnen - sonst kann aus dem einmaligen
+// Zustellfenster doch wieder eine Schleife werden.
+export function markConsultAnswerDelivered(s, callId) {
+  const call = getCall(s, callId);
+  if (!call) return { call: null, changed: false, marked: 0 };
+  const deliveredAt = new Date().toISOString();
+  let marked = 0;
+  for (const consult of inCallConsults(call))
+    if (consult.status === CONSULT_STATUS.ANSWERED && !consult.deliveredAt) {
+      consult.deliveredAt = deliveredAt;
+      marked += 1;
+    }
+  return { call, changed: marked > 0, marked };
+}
+
 // AL-P14: der Client hat auf diesen Call gepollt. EPHEMER (kein save, keine Spalte -
 // Muster countNoSpeechTurn): das ist eine Beobachtung ueber das JETZT, kein Zustand,
 // der einen Deploy ueberleben duerfte. Nebeneffekt im Namen (N7).

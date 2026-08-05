@@ -13,7 +13,11 @@ import { MS_PER_MINUTE } from "../utils/timer.js";
 import { CONSULT_POLL_ABORT_MS } from "./delivery.js";
 import { consultAllowedFor } from "./gate.js";
 import { CONSULT_WAIT } from "../store/defaults.js";
-import { callStartAnchorMs, inCallConsults } from "../store/state-ops.js";
+import {
+  callStartAnchorMs,
+  consultAnswerAwaitingDelivery as consultAnswerAwaitingDeliveryOp,
+  inCallConsults,
+} from "../store/state-ops.js";
 import { sanitizeConsultQuestion } from "./question.js";
 
 // Sprachinvarianter Tool-Name (G25): EINE Quelle fuer Schema, Registrierung und den
@@ -66,6 +70,13 @@ export function consultClientIsPolling(call, nowMs = Date.now()) {
 export const CONSULT_POLL_NEVER = -1;
 export function consultPollAgeMs(call, nowMs = Date.now()) {
   return call.consultPolledAtMs ? nowMs - call.consultPolledAtMs : CONSULT_POLL_NEVER;
+}
+
+// GQ-P7: Wartet eine eingetroffene Rueckfrage-Antwort noch auf ihren ersten Modell-Turn?
+// Durchreichung der Store-Operation, damit der Shim das Consult-Modul befragt und nicht
+// direkt state-ops (dieselbe Schichtung wie consultClientIsPolling). Reiner Leser.
+export function consultAnswerAwaitingDelivery(call) {
+  return consultAnswerAwaitingDeliveryOp(call);
 }
 
 // Registrierungs-Gate: darf get_consult in DIESEM Turn ueberhaupt im Werkzeugsatz stehen?

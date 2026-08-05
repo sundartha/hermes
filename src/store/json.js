@@ -484,6 +484,14 @@ export function answerConsult(callId, input) {
   return result;
 }
 
+// GQ-P7: saved wie answerConsult - deliveredAt liegt in derselben consults-Spalte und muss
+// einen Instanzwechsel ueberleben (sonst oeffnet dieselbe Antwort ein zweites Zustellfenster).
+export function markConsultAnswerDelivered(callId) {
+  const result = ops.markConsultAnswerDelivered(load(), callId);
+  if (result.changed) save();
+  return result;
+}
+
 export function expireOpenConsults(callId) {
   const { call, changed } = ops.expireOpenConsults(load(), callId);
   if (changed) save();
