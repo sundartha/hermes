@@ -30,6 +30,10 @@ import { PROMPT_FR } from "./prompts/fr.js";
 import { PROMPT_EN } from "./prompts/en.js";
 import { MCP_TEXTS } from "./mcp-texts.js";
 import { GATE_TEXTS } from "./gate-texts.js";
+// GQ-P15 (F4): Ausfall-Gruende + die Faktorei, die daraus den Notification-Body baut.
+// Beides lebt in failure-reason-texts.js, weil dort die Token-Grammatik (failureReasonBase)
+// konsumiert wird - locales.js bleibt reine Verdrahtung.
+import { FAILURE_REASON_TEXTS, makeStatusBody } from "./failure-reason-texts.js";
 
 // Logische Voice-Profile (Strings) als Forward-Referenz fuer den Telephonie-Renderer
 // (Phase 3 mappt sie auf provider-spezifische Voice-Namen Polly/Azure). Im Bundle steht
@@ -215,7 +219,9 @@ export const LOCALES = Object.freeze({
     postCall: Object.freeze({
       cancelledTitle: "Anruf abgebrochen",
       failedTitle: "Anruf nicht zustande gekommen",
-      statusBody: (target, status) => `${target} (Status: ${status})`,
+      // GQ-P15 (F4): dritter Parameter ist der bereits gefilterte Grund-Token (optional).
+      // Ohne Grund BYTE-IDENTISCH zum Bestand `${target} (Status: ${status})`.
+      statusBody: makeStatusBody("Status:", FAILURE_REASON_TEXTS.de),
       summaryTitle: "Neue Call Summary",
       subjectOutbound: (to) => `Anruf bei ${to}`,
       subjectInbound: (from) => `Anruf von ${from}`,
@@ -293,7 +299,7 @@ export const LOCALES = Object.freeze({
     postCall: Object.freeze({
       cancelledTitle: "Appel annulé",
       failedTitle: "Appel non abouti",
-      statusBody: (target, status) => `${target} (statut : ${status})`,
+      statusBody: makeStatusBody("statut :", FAILURE_REASON_TEXTS.fr),
       summaryTitle: "Nouveau résumé d'appel",
       subjectOutbound: (to) => `Appel vers ${to}`,
       subjectInbound: (from) => `Appel de ${from}`,
@@ -368,7 +374,7 @@ export const LOCALES = Object.freeze({
     postCall: Object.freeze({
       cancelledTitle: "Call cancelled",
       failedTitle: "Call did not connect",
-      statusBody: (target, status) => `${target} (status: ${status})`,
+      statusBody: makeStatusBody("status:", FAILURE_REASON_TEXTS.en),
       summaryTitle: "New call summary",
       subjectOutbound: (to) => `Call to ${to}`,
       subjectInbound: (from) => `Call from ${from}`,
