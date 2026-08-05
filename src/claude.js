@@ -283,11 +283,14 @@ function assistantContextSection({ call, loc }) {
 // Leerer Fall -> "" wie assistantContextSection daneben: solange nichts notiert ist, bleibt
 // der Prompt byte-identisch zum Bestand (Golden-Master-Pins). Der Block ist SERVER-Text
 // ueber eigene Notizen, keine fremde Rede - er speist weder Offenlegung noch Persona.
+// KEIN fuehrendes "\n" (anders als assistantContextSection/callMemorySection): die beiden
+// werden per String-+ konkateniert und tragen ihren Separator selbst, dieser Block haengt
+// im Top-Level-Array von systemPrompt und bekommt seinen "\n\n" vom join.
 function recordedMessagesSection({ call, loc }) {
   const items = store.callActionItems(call.id);
   if (!items.length) return "";
   const b = loc.prompt.recorded;
-  return `\n${b.heading}\n${items.map((item) => `- ${item.text}`).join("\n")}\n${b.guardrail}`;
+  return `${b.heading}\n${items.map((item) => `- ${item.text}`).join("\n")}\n${b.guardrail}`;
 }
 
 // WAS-BISHER-GESCHAH-Sektion (AL-P12): die Ergebnisse/Fakten der letzten Anrufe an
