@@ -51,6 +51,10 @@ import { numberOriginDecoupled } from "./telephony/outbound-gates.js";
 // AL-P16: der Aus-Zustand der Ergebnis-Zitate hat bereits eine Quelle - die Sonde
 // wiederholt die Schwelle nicht, sie fragt dieselbe Entscheidung (G5).
 import { evidenceRetentionEnabled } from "./call-result.js";
+// GQ-P11: dieselbe Richtung fuer die Diagnose-Frist - die Sonde fragt die Entscheidung,
+// die auch der Anlege- und der Purge-Pfad fragen (G5). Kein Zyklus: diagnostic-retention.js
+// importiert nichts.
+import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -516,6 +520,23 @@ function evidenceProbeLine(privacy) {
   );
 }
 
+// GQ-P11: ebenfalls kein Bool, sondern eine Frist (Muster evidenceProbeLine). Bis hierher
+// war der Live-Wert nicht ablesbar - die einzige andere Zeile (runRetention) druckt NUR,
+// wenn der Sweep etwas geloescht hat, ihre Abwesenheit beweist also nichts. Der
+// Aus-Zustand kommt aus diagnosticRetentionEnabled, damit dieselbe Entscheidung die Sonde
+// traegt wie den Code.
+function diagnosticRetentionProbeLine(privacy) {
+  const days = privacy.diagnosticRetentionDays;
+  const keeping = diagnosticRetentionEnabled(privacy);
+  return probeLine(
+    "Diagnose-Transkripte",
+    envState("DIAGNOSTIC_RETENTION_DAYS", days, keeping),
+    keeping
+      ? `Rohtranskript ueberlebt die Summary bei Anrufen an die eigene Nummer, Loeschung nach ${days} Tagen`
+      : "0 = kein Rohtranskript ueberlebt",
+  );
+}
+
 /**
  * Die AL-P16-Sonden in Banner-Reihenfolge (vor dem Anruf -> im Anruf -> nach dem Anruf).
  * Rein: Konfiguration rein, Zeilen raus - gedruckt wird ausschliesslich in logBootBanner.
@@ -530,6 +551,7 @@ export function capabilityProbeLines({ tenancy, research, privacy }) {
     lookupProbeLine(research),
     consultProbeLine(tenancy),
     evidenceProbeLine(privacy),
+    diagnosticRetentionProbeLine(privacy),
   ];
 }
 

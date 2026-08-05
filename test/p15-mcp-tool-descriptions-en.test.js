@@ -83,7 +83,11 @@ const EXPECTED_MARKERS = {
   // nachgezogen statt die Emphase wegzuschreiben: die Aussage ist die eigentliche
   // Verhaltensgarantie dieses Feldes.
   "place_call.max_duration_s": ["SHORTER"],
-  "place_call.diagnostic": ["ONLY", "OWN"],
+  // GQ-P11: aus dem Opt-in wurde ein Opt-out. Die Emphase wandert entsprechend mit -
+  // OWN (die Grenze, die der Server prueft), NOT (das Modell muss nichts mehr setzen),
+  // ONLY (der Widerspruch ist der eng begrenzte Fall). Bewusst nachgezogen statt die
+  // Emphase wegzuschreiben, Praezedenz max_duration_s/KS-P3.
+  "place_call.diagnostic": ["OWN", "NOT", "ONLY"],
   get_call_status: [],
   "get_call_status.call_id": [],
   get_transcript: ["NOT"],

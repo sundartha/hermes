@@ -630,14 +630,17 @@ export function registerTools(
               "effective limit from the remaining credit and only ever applies a SHORTER value " +
               "than that; it never extends a call.",
           ),
-        // P2b (Diagnose-Retention): reiner WUNSCH. Der Server gewaehrt ihn NUR, wenn das
-        // Ziel die eigene verifizierte Nummer des Nutzers ist - sonst still ignoriert.
-        // Ohne dieses Feld erreichte das Flag /api/calls nie (Zod strippt unbekannte Keys).
+        // P2b + GQ-P11 (Diagnose-Retention): OPT-OUT statt Opt-in. Der Server entscheidet
+        // selbst, ob das Roh-Transkript die Summary ueberlebt - und nur beim Ziel "eigene
+        // verifizierte Nummer des Nutzers"; dieses Feld ist ausschliesslich der
+        // Widerspruch dagegen. Der Grund fuer die Umkehrung steht in
+        // src/diagnostic-retention.js. Ohne diesen Eintrag erreichte das Feld /api/calls
+        // nie (Zod strippt unbekannte Keys).
         diagnostic: z
           .boolean()
           .optional()
           .describe(
-            "Set this ONLY when the user explicitly wants to make a test call to their OWN number and analyse the conversation afterwards. Keeps the raw transcript for a limited period. For any other destination the server ignores the field. Never set it unasked.",
+            "Leave this unset in normal use. The server keeps the raw transcript of a call to the user's OWN verified number for a limited period on its own, so the conversation can be analysed afterwards - you do NOT have to ask for it. Set it to false ONLY when the user explicitly does not want that transcript kept. For any other destination the field has no effect.",
           ),
       },
       outputSchema: CALL_OUTPUT,

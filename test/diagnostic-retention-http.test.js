@@ -63,7 +63,7 @@ test("P2b-41 (Scope-Beweis): to=fremde Nummer + diagnostic=true -> still verworf
   }
 });
 
-test("P2b-42: to=eigene Nummer OHNE diagnostic-Feld -> Default false (Bestandsverhalten)", async () => {
+test("P2b-42: to=eigene Nummer OHNE diagnostic-Feld -> gewaehrt (GQ-P11)", async () => {
   const srv = await startServer({
     env: { ALLOWED_COUNTRY_CODES: "+49", FAKE_ORIGINATE: "true", DIAGNOSTIC_RETENTION_DAYS: "7" },
     seed,
@@ -72,7 +72,26 @@ test("P2b-42: to=eigene Nummer OHNE diagnostic-Feld -> Default false (Bestandsve
     const res = await postCall(srv.localUrl, { to: OWN });
     assert.equal(res.status, 200);
     const json = await res.json();
+    assert.equal(json.diagnostic, true);
+    const call = srv.readStore().calls.find((c) => c.id === json.callId);
+    assert.equal(call.diagnostic, true);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("GQ-P11-8: to=eigene Nummer + diagnostic=false -> still verworfen (Opt-out wirkt bis in den Store)", async () => {
+  const srv = await startServer({
+    env: { ALLOWED_COUNTRY_CODES: "+49", FAKE_ORIGINATE: "true", DIAGNOSTIC_RETENTION_DAYS: "7" },
+    seed,
+  });
+  try {
+    const res = await postCall(srv.localUrl, { to: OWN, diagnostic: false });
+    assert.equal(res.status, 200);
+    const json = await res.json();
     assert.equal(json.diagnostic, false);
+    const call = srv.readStore().calls.find((c) => c.id === json.callId);
+    assert.equal(call.diagnostic, false);
   } finally {
     await srv.stop();
   }
