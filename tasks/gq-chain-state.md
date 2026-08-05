@@ -626,3 +626,21 @@ abgerechnet wird aus der Serveruhr. Dass die Zahl deshalb falsch ist, ist **unbe
 
 Du/Sie-Mischung im Agenten-Text: **1 von 12 Anrufen** (dort spiegelte er das Register der
 Gegenstelle), 0 in den uebrigen 11. Kein systemischer Defekt, keine Phase.
+
+### M-3 ist geschlossen: die Sonde hat live geantwortet
+
+Drei Minuten nach dem GQ-P11-Deploy, Boot-Log 2026-08-05 14:40:42Z:
+
+```
+Diagnose-Transkripte: aus (DIAGNOSTIC_RETENTION_DAYS=0) - 0 = kein Rohtranskript ueberlebt
+```
+
+**Der Live-Wert ist 0.** Damit ist D-1 endgueltig aufgeklaert: von den drei Bedingungen in
+`diagnosticRetentionGranted` fielen **zwei** durch (Modell-Opt-in UND Frist), nicht die
+dritte, die der Vorgaenger als einzige geprueft hat. GQ-P11 hat die erste beseitigt; die
+zweite ist ein Dashboard-Wert mit rechtlicher Vorbedingung und liegt beim Owner.
+
+Nebenbei ist damit auch die Reichweite von "Live != render.yaml" praezisiert: fuer
+`EVIDENCE_RETENTION_DAYS` weichen sie ab (live 7, Datei 0), fuer
+`DIAGNOSTIC_RETENTION_DAYS` nicht (beide 0). **Die Datei ist also weder verlaesslich noch
+durchgehend falsch — nur unbelegt.** Genau dafuer sind die Sonden da.
