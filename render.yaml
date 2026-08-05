@@ -134,6 +134,18 @@ services:
       # zurueckzustellen. KOSTEN: Inbound wird auf dem Assistant-Pfad rund dreimal teurer.
       - key: TELNYX_INBOUND_HANDOFF_ENABLED
         value: "true"
+      # GQ-P5: Riegel gegen den Provider-Anstoss. Telnyx stoesst nach
+      # telephony_settings.user_idle_reply_secs Sekunden Anrufer-Stille selbst einen Turn an,
+      # dessen Request KEINE neue Aeusserung traegt. Default true = der Shim antwortet leer
+      # und gueltig; Owner flippt im Dashboard auf "false" fuer das Bestandsverhalten (die
+      # ALTE Aeusserung wird erneut beantwortet und ausgesprochen).
+      - key: TELNYX_SHIM_IGNORE_PROVIDER_NUDGE
+        value: "true"
+      # GQ-P6: Klingelfrist beim Waehlen (Telnyx POST /v2/calls, timeout_secs; min 5, max
+      # 600). Default 60 statt Anbieter-Default 30 - der war zu knapp, wenn die Zustellung
+      # selbst ~30 s braucht (US-DID nach DE). Owner tunt im Dashboard ohne Deploy.
+      - key: TELNYX_DIAL_TIMEOUT_SECS
+        value: "60"
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,
