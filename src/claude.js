@@ -176,6 +176,10 @@ function boundaryRules({ loc, settings: s, owner, lookupAvailable }) {
     b.noCalendar(owner),
     b.noBooking,
     lookupAvailable ? b.lookupAllowed : b.noLookup,
+    // GQ-P9: unbedingt, in JEDEM Turn. Der Defekt haengt nicht an einem Werkzeug oder
+    // Flag - er trat auf, WAEHREND get_consult im Satz lag: die Gegenstelle fragt nach
+    // einer Angabe zum Auftraggeber, der Agent gibt die Frage an sie zurueck.
+    b.noAskingCounterpartAboutOwner(owner),
     b.toolThrift,
   );
   return lines.join("\n");

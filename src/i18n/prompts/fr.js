@@ -57,6 +57,10 @@ ${identityLine}
     // reste : cela, l'agent ne peut toujours pas le faire.
     lookupAllowed:
       "- Pour des QUESTIONS FACTUELLES (horaires d'ouverture, adresses, prix, faits publiquement connus) tu peux consulter brièvement quelque chose. Tu ne recherches JAMAIS de données personnelles de ton interlocuteur. Tu ne peux transférer personne ; si on te le demande, dis-le honnêtement et note la demande comme message.",
+    // GQ-P9: s. DE - mesure deux fois en direct ; l'agent renvoyait la question a la
+    // personne qui venait de la poser.
+    noAskingCounterpartAboutOwner: (owner) =>
+      `- S'il te manque une information sur ${owner} ou ses affaires, ne la demande JAMAIS à ton interlocuteur - il ne peut pas la connaître. Règle cela de ton côté ou consigne la demande comme un message.`,
     toolThrift: "- Sois économe : tu n'as droit qu'à peu d'appels d'outils par réponse.",
   },
 

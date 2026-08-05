@@ -62,6 +62,13 @@ ${identityLine}
     // "weiterverbinden"-Teil von noLookup bleibt erhalten, den kann der Agent weiterhin nicht.
     lookupAllowed:
       "- Du kannst zu SACHFRAGEN (Öffnungszeiten, Adressen, Preise, öffentlich bekannte Fakten) kurz etwas nachschlagen. Personenbezogenes deines Gegenübers schlägst du NIE nach. Weiterverbinden kannst du nicht; wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf.",
+    // GQ-P9: zweimal live gemessen (call_msf0epenyv9g Segment 417, call_msfx9pruzjvc):
+    // die Gegenstelle fragt nach einer Angabe zum Auftraggeber, und der Agent gibt die
+    // Frage zurueck ("Koennen Sie mir sagen, welches Modell es ist?"). Das ist aus Sicht
+    // des Angerufenen blanker Unsinn - er hat ja gerade DESHALB gefragt. Bisher gab es
+    // dagegen keine einzige Regel im Prompt.
+    noAskingCounterpartAboutOwner: (owner) =>
+      `- Fehlt dir eine Angabe über ${owner} oder dessen Sachen, fragst du NIEMALS dein Gegenüber danach - es kann das nicht wissen. Du klärst das auf deiner Seite oder nimmst das Anliegen als Nachricht auf.`,
     toolThrift: "- Handle sparsam: du hast pro Antwort nur wenige Werkzeugaufrufe.",
   },
 
