@@ -558,3 +558,71 @@ Dreimal dieselbe Fehlerklasse an drei verschiedenen Stellen: ein Zustand wird ko
 gefuehrt, aber nie an den Entscheidungspunkt getragen. Das ist ein Kandidat fuer die noch
 offene Fragilitaets-Analyse — nicht "fehlende Features", sondern **fehlende Kanten zwischen
 vorhandenem Zustand und der Stelle, die ihn braucht.**
+
+---
+
+## Tagesstand 2026-08-06 — Zustand geradegezogen, sieben Messungen, GQ-P11 live
+
+Vollstaendig in `tasks/gq-strategie-2026-08-06.md` (Messungen M-1..M-7, Owner-Entscheidungen
+O-A/O-B/O-C, Phasenplan) und `tasks/gq-fragilitaet-2026-08-06.md` (7 bestaetigte Befunde).
+Hier nur, was der Kettenstand tragen muss.
+
+### Drei Kickoff-Aussagen sind widerlegt
+
+1. **"Ohne Rohtranskript ist nichts belegbar."** 222 Segmente liegen in der Prod-DB.
+   **Kein Call hat Summary UND Segmente** (t/t = 0 von 58) — der Purge haengt an der
+   Summary. Umkehrung: **ein sauber beendeter Anruf verliert sein Transkript, ein
+   abgebrochener behaelt es.**
+2. **"`diagnostic` — Ursache unbekannt."** Nicht kaputt, dreifach zugesperrt. Bedingung 1
+   war, dass das CLIENT-Modell das Flag setzt — dieselbe Fehlerklasse (B-4), die
+   diagnostiziert werden sollte. Der Vorgaenger hatte nur Bedingung 3 geprueft.
+3. **"Die GQ-P9-Zeile ist die Herkunft des Persona-Defekts."** Der Satz "Ich frage Antonio,
+   ob zehn Uhr passt" steht im Transkript vom **2026-08-01**; die Zeile entstand am
+   2026-08-05 um 10:26 UTC. **Das Verhalten ist vier Tage aelter als seine angebliche
+   Ursache.** GQ-P12 muss gegen das Verhalten gebaut werden, nicht gegen die Zeile.
+
+### Zwei Belege, die der Kickoff fuer verloren hielt
+
+`call_msfx9pruzjvc` hat sein Rohtranskript (10 Segmente). Damit ist **GQ-P7 als wirksam
+belegt** (genau ein Fenster, genau ein Satz darin) und **GQ-P8 hat einen woertlichen
+Vorher-Zustand**: der Agent hatte die Consult-Antwort seit 6 s im Prompt und kuendigte im
+Zustellfenster einen Rueckruf an. GQ-P8 war zu dem Zeitpunkt nicht live (Deploy 10:35 UTC).
+
+**Harte Grenze:** fuer **keinen** Anruf nach dem P8/P9/P10-Deploy existiert ein Transkript.
+Die drei Phasen sind nachtraeglich nicht messbar — nur mit neuen Anrufen.
+
+### GQ-P11 — gemergt und live
+
+`b55aaf9` (Merge), Deploy `dep-d9pkme7lk1mc73eaes20`. Dualer Review PASS, 0 Fix-Runden,
+3959/3959 gruen.
+
+- `diagnosticRetentionGranted` ist **Opt-out** statt Opt-in: der Server markiert jeden Anruf
+  an die eigene verifizierte Nummer selbst. Ziel-Gate (`to === ownNumber`) und Frist-Gate
+  unveraendert — sie sind die Datenschutz-Grenze. Ablehnung prueft gegen `false` UND
+  `"false"` (die Truthiness-Falle des Bestands, spiegelbildlich).
+- Sechste Boot-Sonde `Diagnose-Transkripte:` — der Live-Wert war bis dahin nicht ablesbar.
+
+**Offen und Owner-pflichtig:** `DIAGNOSTIC_RETENTION_DAYS` im Render-Dashboard auf >0 und
+die Datenschutzerklaerung. Ohne beides greift die Phase nicht. Gegenprobe im Boot-Log:
+die neue Sonden-Zeile nennt den Live-Wert.
+
+### Fragilitaets-Analyse (nie begonnen -> erledigt)
+
+Workflow `wf_b6f0223d-338`, 11 Agenten. **7 bestaetigt, 1 widerlegt.** Die Klasse zerfaellt
+in zwei Formen: *Projektion enger als der Zustand* (F1/F2/F4 — echte Fixes) und *Wert ohne
+jeden Leser* (F3/F5/F6/F7 — Loeschung, Sonde oder Messung, nie ein Fix).
+
+**F4 erklaert einen offenen Kickoff-Befund:** `failureReason` ist bei jedem Fehlanruf
+gespeichert (`state-ops.js:608-618`), die passive Nachricht baut aber nur auf `call.status`
+(`call-finish.js:59-66`) — no-answer, besetzt, Fehler, Cap und Budget sind darin nicht
+unterscheidbar. Das ist die Ursache fuer "fuenf stille Fehlanrufe sind niemandem
+aufgefallen".
+
+**F5 beruehrt die pro-Tenant-Kostendecke** und ist deshalb ausdruecklich eine Mess-, keine
+Fix-Phase: `CallDuration` wird geparst und hat im gesamten `src/`-Baum **null Leser**;
+abgerechnet wird aus der Serveruhr. Dass die Zahl deshalb falsch ist, ist **unbelegt**.
+
+### Nebenbefund, gemessen und dadurch entschaerft
+
+Du/Sie-Mischung im Agenten-Text: **1 von 12 Anrufen** (dort spiegelte er das Register der
+Gegenstelle), 0 in den uebrigen 11. Kein systemischer Defekt, keine Phase.
