@@ -58,6 +58,11 @@ function stubFetch(response) {
 // config-Objekt gebunden (s. Kommentar bei makeConfigOverrides).
 const { withConfig, withBlankedConfig } = makeConfigOverrides(config);
 
+// Der dokumentierte Telnyx-Default fuer timeout_secs (POST /v2/calls). Genau dieser Wert war
+// die Ursache des Live-Bugs vom 2026-08-05 - er steht hier als benannte Konstante, damit der
+// Test die Aussage "wir liegen ueber dem Default" ausdrueckt statt einer nackten Zahl.
+const TELNYX_DEFAULT_ANSWER_TIMEOUT_SECS = 30;
+
 const CC_ORIGINATE = {
   from: "+13125550100",
   to: "+4917312345678",
@@ -83,6 +88,23 @@ test("originateViaCallControl: /v2/calls, JSON-Body-Felder, Bearer, returns call
   assert.equal(body.webhook_url, CC_ORIGINATE.webhookUrl);
   assert.equal(body.webhook_url_method, "POST");
   assert.equal(body.time_limit_secs, 180);
+});
+
+// 1a) GQ-P6 (Live-Bug 2026-08-05): die KLINGELfrist muss im Body stehen. Ohne das Feld gilt
+// der Telnyx-Default von 30 s - und der lief in den Timeout, bevor das Ziel ueberhaupt
+// klingelte (US-DID nach DE braucht rund 30 s bis zur Zustellung; call_msftumfim338 gab bei
+// 31,7 s unangenommen auf, call_msfqk80elik1 wurde bei 30,5 s gerade noch angenommen).
+// timeout_secs ist bewusst KEIN Aufrufer-Parameter, sondern kommt aus der Konfiguration -
+// deshalb wird hier auch geprueft, dass es OHNE Zutun des Aufrufers gesetzt ist.
+test("GQ-P6 originateViaCallControl: setzt timeout_secs aus der Konfiguration (nicht Telnyx' 30-s-Default)", async () => {
+  const calls = stubFetch({ json: { data: { call_control_id: "cc_1" } } });
+  await telnyxVoice.originateViaCallControl(CC_ORIGINATE);
+  const body = JSON.parse(calls[0].body);
+  assert.equal(body.timeout_secs, config.telephony.telnyxDialTimeoutSecs);
+  assert.ok(
+    body.timeout_secs > TELNYX_DEFAULT_ANSWER_TIMEOUT_SECS,
+    `Klingelfrist muss ueber dem Telnyx-Default von ${TELNYX_DEFAULT_ANSWER_TIMEOUT_SECS} s liegen`,
+  );
 });
 
 // 1b) Regression (Live-Bug 2026-07-10): /v2/calls bekommt die Call-Control-App-ID, NIE die

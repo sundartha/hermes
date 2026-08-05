@@ -353,6 +353,23 @@ const rawConfig = {
   // Telnyx-Account-ID (Mission-Control-Portal): Pflicht fuer den Telnyx-Hangup
   // (POST /v2/texml/Accounts/{account_sid}/Calls/{call_sid}). Leer -> endCall wirft.
   telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
+  // GQ-P6: wie lange Telnyx auf das Abheben wartet, bevor es mit hangup_cause=timeout
+  // aufgibt (POST /v2/calls, Feld timeout_secs). Anbieter-Doku: "Minimum value is 5
+  // seconds. Maximum value is 600 seconds", **Default 30**.
+  // Wir haben das Feld nie gesetzt und liefen damit auf den 30-s-Default. Live gemessen
+  // am 2026-08-05: die Zustellung von der US-DID nach DE braucht rund 30 Sekunden, bis es
+  // beim Ziel ueberhaupt klingelt - call_msfqk80elik1 wurde bei 30,5 s gerade noch
+  // angenommen, call_msftumfim338 lief bei 31,7 s in den Timeout, ohne je zu klingeln.
+  // Die Provider-Frist und die Zustelldauer kollidierten also frontal.
+  // Das ist eine MILDERUNG, nicht die Wurzel: die eigentliche Ursache der langsamen
+  // Zustellung ist die US-Absendernummer (FORCE_NUMBER_COUNTRY=US), Abhilfe waere eine
+  // +49-DID (siehe telnyx-fresh-did-no-de-routing). Laenger warten kostet nichts, solange
+  // niemand abhebt - Telnyx berechnet erst ab dem Abheben.
+  telnyxDialTimeoutSecs: numEnv("TELNYX_DIAL_TIMEOUT_SECS", process.env.TELNYX_DIAL_TIMEOUT_SECS, {
+    fallback: 60,
+    min: 5,
+    max: 600,
+  }),
   // ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme, optional). Gate im
   // Telnyx-Renderer (via Registry injiziert): ElevenLabs-Say NUR wenn apiKeyRef
   // UND voiceId gesetzt sind - sonst Azure-Bestand byte-identisch. apiKeyRef =
@@ -1483,7 +1500,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled"],
-  telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "twilioEdge", "machineDetection"],
+  telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "twilioEdge", "machineDetection"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],

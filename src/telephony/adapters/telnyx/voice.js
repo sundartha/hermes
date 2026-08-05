@@ -756,6 +756,11 @@ export const telnyxVoice = {
     // Defense-in-Depth wie originateCall: server.js setzt zusaetzlich den harten Max-Dauer-
     // Timer (Absolute Regel). time_limit_secs greift zusaetzlich, falls Telnyx es honoriert.
     if (timeLimit) payload.time_limit_secs = timeLimit;
+    // GQ-P6: Klingelfrist explizit setzen. Ohne das Feld gilt der Telnyx-Default von 30 s
+    // ("Minimum value is 5 seconds. Maximum value is 600 seconds", Anbieter-Doku) - und der
+    // reicht nicht, wenn die Zustellung selbst schon rund 30 s braucht (US-DID nach DE, am
+    // 2026-08-05 live gemessen). Kein Kostenrisiko: berechnet wird erst ab dem Abheben.
+    payload.timeout_secs = config.telephony.telnyxDialTimeoutSecs;
     if (config.telephony.machineDetection.enabled) payload[CALL_CONTROL_AMD_FIELD] = AMD_MODE_DETECT;
     const res = await fetch(`${config.telephony.telnyxApiBase}${CALL_CONTROL_BASE}`, {
       method: "POST",
