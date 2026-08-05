@@ -791,6 +791,8 @@ function toolResultText({ call, toolUse, consult, lookup }) {
 // Rueckfrage. EINE Zuordnung statt zweier paralleler if-Ketten (G5/G23); NONE und HOLD
 // tragen keinen Marker (HOLD spricht statt zu schreiben).
 function consultTurnMarker(consultWait, turnControl) {
+  // GQ-P8: die Ankunft steht VORN - sie ist der Zustand, auf den es ankommt.
+  if (consultWait === CONSULT_WAIT.ANSWERED) return turnControl.consultAnswered;
   if (consultWait === CONSULT_WAIT.PENDING) return turnControl.consultPending;
   if (consultWait === CONSULT_WAIT.TIMED_OUT) return turnControl.consultTimeout;
   return "";

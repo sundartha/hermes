@@ -201,6 +201,13 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
     consultDeclined:
       "Une question de clarification n'est pas possible maintenant. Décide dans le cadre de " +
       "ton mandat ou consigne la demande via take_message.",
+    // GQ-P8: s. DE - la reponse EST arrivee ; les trois interdictions sont les reactions
+    // erronees mesurees en direct (redemander, promettre un rappel, consigner un message).
+    consultAnswered:
+      "[La réponse à ta question de clarification est LÀ - elle est dans le CONTEXTE. " +
+      "Dis-la MAINTENANT dans ta prochaine phrase, sans détour. Ne redemande PAS, ne " +
+      "promets AUCUN rappel et ne consigne AUCUN message à ce sujet - tu as déjà la " +
+      "réponse.]",
     // GQ-P2: s. DE - le canal reste vivant, texte de contrôle honnête plutôt que le silence.
     consultPending:
       "[La réponse à ta question de clarification n'est pas encore arrivée. Continue à " +

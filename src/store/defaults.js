@@ -319,6 +319,13 @@ export const CONSULT_WAIT = Object.freeze({
   // Bewusst NICHT "hold": hold ueberspringt die Modellrunde, pending nicht.
   PENDING: "pending",
   TIMED_OUT: "timed_out",
+  // GQ-P8: die Antwort ist EINGETROFFEN und hat noch keinen Turn gesehen. Der bisher
+  // fehlende dritte Zustand - und die Wurzel des Live-Befunds vom 2026-08-05: nach dem
+  // Eintreffen steht der Consult auf "answered", die Suche nach OFFENEN Rueckfragen findet
+  // nichts, der Turn bekommt GAR KEINEN Steuertext. Das Modell sah nur dieselbe
+  // HINTERGRUND-Liste wie vorher und sagte "ich frage mal und rufe spaeter an" - waehrend
+  // die Auskunft seit Sekunden in genau dieser Liste stand.
+  ANSWERED: "answered",
 });
 
 // AL-P13: Ergebnis von answerConsult - maschinenlesbar, damit die Route den HTTP-Status
