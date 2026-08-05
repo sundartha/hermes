@@ -199,3 +199,144 @@ test("GQ-P5-6: Loop-Guard schlaegt den Riegel - gerissener Guard terminiert auch
   assert.ok(!lines.some((l) => l.includes(NUDGE_GATE_MARKER)), "kein provider_nudge-Gate danach");
   assert.equal(spy.calls.length, 0);
 });
+
+// ---------- GQ-P7: das Zustellfenster der Rueckfrage-Antwort ----------
+//
+// Der Riegel oben darf nicht absolut sein. Am Live-Anruf call_msfwfmf7thof gemessen: die
+// Antwort traf um 09:44:24 ein, danach sieben blockierte Anstoesse in Folge, Gespraechsende
+// um 09:44:52 - der Agent hatte die Auskunft 28 Sekunden im Prompt und nie einen Turn, um
+// sie auszusprechen. objective_achieved war false.
+
+// Ein Call mit eingetroffener, aber noch nicht ausgelieferter Rueckfrage-Antwort.
+// askedAt/answeredAt liegen NACH call.answeredAt - nur dann zaehlt der Consult als
+// In-Call-Consult (isInCallConsult), und nur In-Call-Consults oeffnen das Fenster.
+function callWithUndeliveredConsultAnswer(overrides = {}) {
+  const answeredAt = new Date(Date.now() - 60_000).toISOString();
+  return makeCall({
+    answeredAt,
+    consults: [
+      {
+        id: "c0",
+        seq: 0,
+        status: "answered",
+        askedAt: new Date(Date.now() - 20_000).toISOString(),
+        answeredAt: new Date(Date.now() - 5_000).toISOString(),
+        answeredFacts: 1,
+        ...overrides,
+      },
+    ],
+  });
+}
+
+test("GQ-P7-1: wartende Rueckfrage-Antwort -> der Anstoss kommt DURCH, der Agent bekommt seinen Turn", async () => {
+  const call = callWithUndeliveredConsultAnswer();
+  const store = fakeStore({ call });
+  const spy = agentTurnSpy({ speech: "Das Modell ist ein VW Golf 7.", endCall: false });
+  const handler = makeHandler({
+    store,
+    config: fakeTelnyxShimConfig({ telnyxShimTokenStreaming: true }),
+    agentTurn: spy.agentTurn,
+    watchdog: noopWatchdog(),
+  });
+  const res = fakeRes();
+
+  const lines = await captureConsole(() => handler(nudgeReq(call), res));
+
+  assert.equal(spy.calls.length, 1, "der Turn MUSS laufen - sonst bleibt die Auskunft ungesagt");
+  assert.equal(sseContent(res), "Das Modell ist ein VW Golf 7.");
+  assert.ok(!lines.some((l) => l.includes(NUDGE_GATE_MARKER)), "kein provider_nudge-Gate");
+});
+
+test("GQ-P7-2: der ausgelieferte Turn schliesst das Fenster - der NAECHSTE Anstoss wird wieder blockiert", async () => {
+  const call = callWithUndeliveredConsultAnswer();
+  const store = fakeStore({ call });
+  const spy = agentTurnSpy({ speech: "Das Modell ist ein VW Golf 7.", endCall: false });
+  const handler = makeHandler({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn: spy.agentTurn,
+    watchdog: noopWatchdog(),
+  });
+
+  await handler(nudgeReq(call), fakeRes());
+  const lines = await captureConsole(() => handler(nudgeReq(call), fakeRes()));
+
+  assert.deepEqual(store.consultDeliveryMarks, [call.id], "genau EINMAL markiert");
+  assert.equal(spy.calls.length, 1, "der zweite Anstoss darf KEINEN zweiten Turn ausloesen");
+  assert.equal(lines.filter((l) => l.includes(NUDGE_GATE_MARKER)).length, 1);
+});
+
+test("GQ-P7-3: wirft agentTurn, bleibt die Antwort unausgeliefert - das Fenster oeffnet erneut", async () => {
+  const call = callWithUndeliveredConsultAnswer();
+  const store = fakeStore({ call });
+  let attempts = 0;
+  async function agentTurn() {
+    attempts += 1;
+    throw new Error("Modell kaputt");
+  }
+  const handler = makeHandler({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn,
+    watchdog: noopWatchdog(),
+  });
+
+  await handler(nudgeReq(call), fakeRes());
+  await handler(nudgeReq(call), fakeRes());
+
+  assert.equal(attempts, 2, "fail-safe: lieber ein Turn zu viel als eine verlorene Auskunft");
+  assert.deepEqual(store.consultDeliveryMarks, [], "nie als zugestellt markiert");
+});
+
+test("GQ-P7-4: auch ein ECHTER Sprecher-Turn verbraucht das Fenster (er traegt die Antwort genauso)", async () => {
+  const call = callWithUndeliveredConsultAnswer();
+  const store = fakeStore({ call });
+  const spy = agentTurnSpy({ speech: "Antwort", endCall: false });
+  const handler = makeHandler({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn: spy.agentTurn,
+    watchdog: noopWatchdog(),
+  });
+
+  await handler(callerReq(call), fakeRes());
+  const lines = await captureConsole(() => handler(nudgeReq(call), fakeRes()));
+
+  assert.deepEqual(store.consultDeliveryMarks, [call.id]);
+  assert.equal(spy.calls.length, 1, "der Anstoss danach oeffnet kein zweites Fenster");
+  assert.equal(lines.filter((l) => l.includes(NUDGE_GATE_MARKER)).length, 1);
+});
+
+test("GQ-P7-5: eine BEREITS ausgelieferte Antwort oeffnet kein Fenster", async () => {
+  const call = callWithUndeliveredConsultAnswer({ deliveredAt: new Date().toISOString() });
+  const store = fakeStore({ call });
+  const spy = agentTurnSpy();
+  const handler = makeHandler({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn: spy.agentTurn,
+    watchdog: noopWatchdog(),
+  });
+
+  const lines = await captureConsole(() => handler(nudgeReq(call), fakeRes()));
+
+  assert.equal(spy.calls.length, 0);
+  assert.equal(lines.filter((l) => l.includes(NUDGE_GATE_MARKER)).length, 1);
+});
+
+test("GQ-P7-6: eine noch OFFENE Rueckfrage oeffnet kein Fenster - es gibt nichts auszuliefern", async () => {
+  const call = callWithUndeliveredConsultAnswer({ status: "open", answeredAt: null, answeredFacts: 0 });
+  const store = fakeStore({ call });
+  const spy = agentTurnSpy();
+  const handler = makeHandler({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn: spy.agentTurn,
+    watchdog: noopWatchdog(),
+  });
+
+  const lines = await captureConsole(() => handler(nudgeReq(call), fakeRes()));
+
+  assert.equal(spy.calls.length, 0);
+  assert.equal(lines.filter((l) => l.includes(NUDGE_GATE_MARKER)).length, 1);
+});

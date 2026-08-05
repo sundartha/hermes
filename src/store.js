@@ -111,6 +111,10 @@ export const {
   // -> die Consult-Routen wuerfen zur Laufzeit einen TypeError (Muster countCallerTurn).
   emitConsult,
   answerConsult,
+  // GQ-P7: Zustell-Marker der eingetroffenen Rueckfrage-Antwort. OHNE diesen Re-Export
+  // waere store.markConsultAnswerDelivered auf der Fassade undefined -> der Shim wuerfe
+  // zur Laufzeit einen TypeError (Muster answerConsult).
+  markConsultAnswerDelivered,
   expireOpenConsults,
   pendingConsult,
   // AL-P14: In-Call-Rueckfrage. OHNE diese Re-Exports waeren sie auf der Fassade

@@ -16,7 +16,11 @@ import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { blockingBudgetAxis, isBudgetAxis } from "./budget-gate.js";
-import { consultClientIsPolling, consultPollAgeMs } from "./consult/in-call.js";
+import {
+  consultAnswerAwaitingDelivery,
+  consultClientIsPolling,
+  consultPollAgeMs,
+} from "./consult/in-call.js";
 import { makeTurnTextProbe, TURN_TEXT_RELATION } from "./telnyx-turn-probe.js";
 import { makeInFlightTurnRegistry } from "./telnyx-turn-supersede.js";
 import { makeConsecutiveFailureCounter } from "./telnyx-turn-failures.js";
@@ -712,8 +716,20 @@ export function makeTelnyxLlmShim({
     // Die Kosten-Backstops fuer den WIRKLICH verlassenen Anruf liegen unberuehrt daneben:
     // die pro-Tenant-Kostendecke (Schritt 6, direkt darueber) und Telnyx'
     // telephony_settings.time_limit_secs.
+    // GQ-P7: der Riegel darf NICHT absolut sein. Am Live-Anruf call_msfwfmf7thof gemessen:
+    // die Rueckfrage-Antwort traf um 09:44:24 ein, danach kamen SIEBEN Anstoesse in Folge
+    // (turnSeq 5..11) - alle blockiert, der Agent bekam bis zum Gespraechsende um 09:44:52
+    // keinen einzigen Turn, in dem er die Antwort haette aussprechen koennen. Die Gegenstelle
+    // schwieg ja, also gab es keinen user-Turn mehr. Ergebnis: objective_achieved=false,
+    // obwohl die Auskunft seit 28 Sekunden im Prompt stand.
+    //
+    // Genau EIN Anstoss darf deshalb durch, wenn eine eingetroffene Antwort noch keinen Turn
+    // gesehen hat. Einmalig, nicht dauerhaft: der ausgefuehrte Turn setzt unten deliveredAt,
+    // ab dann greift der Riegel wieder. Die Schleife bleibt tot (hoechstens ein zusaetzlicher
+    // Turn je Rueckfrage-Antwort), der Zustell-Moment lebt.
     const providerNudge = origin.lastRole === MESSAGE_ROLE_SYSTEM;
-    if (config.telnyx.telnyxAssistant.shimIgnoreProviderNudge && providerNudge) {
+    const consultDeliveryDue = consultAnswerAwaitingDelivery(call);
+    if (config.telnyx.telnyxAssistant.shimIgnoreProviderNudge && providerNudge && !consultDeliveryDue) {
       logShimGate({ reason: "provider_nudge", callId: call.id, turnSeq });
       return respond("");
     }
@@ -775,6 +791,13 @@ export function makeTelnyxLlmShim({
       // NUR echte Fehlschlaege IN FOLGE.
       modelAnswered = true;
       clearFailedTurns(call.id);
+      // GQ-P7: dieser Turn HAT die wartende Rueckfrage-Antwort im Prompt gesehen - damit ist
+      // ihr Zustellfenster verbraucht. Bewusst NACH dem await: wirft agentTurn, bleibt die
+      // Antwort unausgeliefert und oeffnet beim naechsten Anstoss erneut (fail-safe-Richtung,
+      // lieber ein Turn zu viel als eine verlorene Auskunft). Gilt fuer JEDEN ausgefuehrten
+      // Turn, nicht nur den Anstoss: spricht die Gegenstelle von selbst weiter, traegt ihr
+      // Turn die Antwort genauso - ein spaeteres Zustellfenster waere dann sinnlos.
+      if (consultDeliveryDue) store.markConsultAnswerDelivered(call.id);
       // EIN latencyMs-Wert, zwei Senken: der opt-in metrics-Seam (P10, hinter metricsEnabled,
       // NICHT TTFT sondern Gesamt-Turn) UND das UNCONDITIONAL OBS-1-Betriebssignal (im Vorfall
       // war metricsEnabled AUS = kein Lebenszeichen). Bewusst getrennte Kanaele/Prefixe.
