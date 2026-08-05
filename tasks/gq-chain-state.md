@@ -521,3 +521,40 @@ schwankenden Zustellung (4,8 bis 30,7 s) bleibt die US-Absendernummer.
 Fragilitaets-Analyse (Schritt -1, **nie angefangen**), N-2 (drei `take_message`-Eintraege),
 B-4 (`look_up` feuert nie -> O-4 Modell-A/B), B-7 (STT-Kauderwelsch), GQ-P3-Rest
 (Inbound-Handoff feuert vor `answered`), Owner-Hypothese "zu wenig Kontext".
+
+## GQ-P8 bis P10 — die drei Blindheiten, gebaut am 2026-08-05
+
+Alle drei Befunde haben DIESELBE Form: **der Zustand existierte, nur sah ihn niemand.**
+Nicht eine fehlende Faehigkeit, sondern ein fehlendes Signal.
+
+| Phase | Was das Modell nicht sah | Live-Beleg |
+|---|---|---|
+| GQ-P8 | dass die Rueckfrage-Antwort EINGETROFFEN ist | `call_msfx9pruzjvc`: sagte "ich frage mal und rufe spaeter an", Antwort lag seit 4 s im Prompt |
+| GQ-P9 | dass die Gegenstelle nichts ueber den Auftraggeber wissen kann | zweimal: "Koennen Sie mir sagen, welches Modell es ist?" |
+| GQ-P10 | was es in diesem Gespraech schon notiert hat | drei `take_message`-Eintraege fuer einen Sachverhalt |
+
+**GQ-P8:** `advanceInCallConsult` suchte nur nach OFFENEN Rueckfragen. Nach dem Eintreffen
+steht der Consult auf `answered` -> keine offene Rueckfrage -> `CONSULT_WAIT.NONE` ->
+`consultTurnMarker` liefert `""` -> der Turn trug **gar keinen** Steuertext. Fuer "laeuft
+noch" und "abgelaufen" gab es je einen Hinweis, fuer "die Antwort ist DA" keinen. Neu ist
+der dritte Zustand `CONSULT_WAIT.ANSWERED`. Er teilt sich `deliveredAt` mit GQ-P7 statt
+einen zweiten Einmal-Riegel zu fuehren.
+
+**GQ-P9:** dagegen gab es bis dahin **keine einzige Regel** im Prompt. Neue Grenzen-Zeile,
+unbedingt in jedem Turn — der Defekt trat auf, WAEHREND `get_consult` im Werkzeugsatz lag.
+Ausdruecklich KEINE dritte Formulierungsrunde im Sinne von O-4: dort geht es um ein
+angebotenes Werkzeug, das nicht gewaehlt wird. Hier fehlte die Regel schlicht.
+
+**GQ-P10:** neuer Prompt-Block SCHON NOTIERT aus den Action Items des Calls. Eigener
+Listeneintrag in `systemPrompt`, NICHT in `assignmentBlock` — der haengt an `call.goal` und
+rendert nur outbound, waehrend Nachrichten gerade **inbound** entstehen.
+
+**Alle drei ungemessen** — sie brauchen je einen Testanruf. Owner hat Testanrufe vorerst
+gestoppt ("keine Testcalls mehr, bau").
+
+### Was diese drei Phasen ueber das Repo sagen
+
+Dreimal dieselbe Fehlerklasse an drei verschiedenen Stellen: ein Zustand wird korrekt
+gefuehrt, aber nie an den Entscheidungspunkt getragen. Das ist ein Kandidat fuer die noch
+offene Fragilitaets-Analyse — nicht "fehlende Features", sondern **fehlende Kanten zwischen
+vorhandenem Zustand und der Stelle, die ihn braucht.**
