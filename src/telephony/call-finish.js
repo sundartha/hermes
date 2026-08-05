@@ -58,9 +58,16 @@ export function makeCallFinish({
 
     if (call.status !== "completed" || !call.transcript.length) {
       const target = call.direction === "outbound" ? call.to : call.from;
+      // GQ-P15 (F4): die EINZIGE passive Nachricht nennt jetzt auch den GRUND, wenn einer
+      // gespeichert ist. Der Grund steht bereits am Record, bevor finishCall den Call sieht:
+      // /voice/status ruft recordFailureReason VOR terminateAndBillCall, der Cap-/Budget-Pfad
+      // schreibt ihn gemeinsam mit dem Endzustand, und billThunk laedt den Call frisch aus dem
+      // Store. Weitergereicht wird ausschliesslich das bereits gefilterte, PII-freie Token
+      // (callFailureReason bzw. CAP_/BUDGET_FAILURE_REASON) - kein Provider-Rohtext. Ohne
+      // Grund bleibt der Text byte-identisch zum Bestand.
       store.addNotification(
         call.status === "cancelled" ? t.cancelledTitle : t.failedTitle,
-        t.statusBody(target, call.status),
+        t.statusBody(target, call.status, call.failureReason),
         call.id,
       );
       return;
