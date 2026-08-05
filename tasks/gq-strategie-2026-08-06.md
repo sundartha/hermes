@@ -263,3 +263,58 @@ gemacht hat.
 - **Keine Phase ohne vorher benannte Zahl.** Steht oben je Zeile.
 - **Kein behaupteter Gewinn ohne Messung.** M-7 ist das Muster: gemessen, entschaerft,
   nicht als Fortschritt verkauft.
+
+---
+
+## Teil 5 — Owner-Entscheidungen vom 2026-08-06
+
+| ID | Frage | Entscheidung |
+|---|---|---|
+| **O-A** | dritter Persona-Fall (spaeter statt jetzt) | **"Das klaere ich und melde mich bei Ihnen zurueck."** — kein Dritter wird genannt, kein "meine Seite", der Rueckruf bleibt moeglich |
+| **O-B** | Umfang der Diagnose-Phase | **beides**: Owner setzt `DIAGNOSTIC_RETENTION_DAYS` im Dashboard und zieht die Datenschutzerklaerung nach; der Code hoert auf, das Modell-Opt-in zu verlangen |
+| **O-C** | Testanrufe | **frei, aber erst nach Phase 1** — danach traegt jeder Anruf ein Rohtranskript, ein Anruf belegt mehrere Phasen |
+
+## Teil 6 — Ergebnis der Fragilitaets-Analyse (Workflow, 11 Agenten)
+
+Bericht: `tasks/gq-fragilitaet-2026-08-06.md`. **7 bestaetigt, 1 widerlegt.**
+
+Die Fehlerklasse zerfaellt in zwei Formen, und das aendert den Zuschnitt:
+
+- **Projektion enger als der Zustand** (F1 `endCallWait` direction-blind, F2 Consult-ANSWERED
+  ohne Fakten, F4 `failureReason` erreicht die Ausfall-Nachricht nicht) -> je ein Feldzugriff
+  bzw. eine Bedingung. Echte Fixes.
+- **Wert ohne jeden Leser** (F3 `gapMs`, F5 `CallDuration`, F6 `DASHBOARD_PASSWORD`,
+  F7 `WORLD_DEFAULT_LANGUAGE_ENABLED`) -> Loeschung, Sonde oder Messung. **Nie ein Fix** —
+  ohne Leser gibt es keine Entscheidung, die man richtig machen koennte.
+
+**Zwei Befunde erklaeren offene Kickoff-Punkte, statt neue aufzumachen:**
+
+- **F4** ist die Code-Erklaerung fuer *"fuenf stille Fehlanrufe ueber drei Wochen sind
+  niemandem aufgefallen"*: `failureReason` war jedes Mal gespeichert
+  (`state-ops.js:608-618`), die passive Nachricht baut aber ausschliesslich auf
+  `call.status` (`call-finish.js:59-66`). no-answer, besetzt, Fehler, Dauer-Cap und
+  Budget-Abbruch sind darin nicht unterscheidbar.
+- **F7** ist derselbe Blindfleck wie M-3, nur an einer Absoluten Regel: die Sprache, in der
+  die **Offenlegung** gesprochen wird, haengt an einem Wert ohne jede Spur im Boot-Log.
+
+**F5 ist die einzige Zeile, die ein geschuetztes Gate beruehrt** und deshalb ausdruecklich
+keine Fix-Phase: `CallDuration` wird geparst und hat im gesamten `src/`-Baum **null Leser**;
+abgerechnet wird `Math.ceil((endedAt - answeredAt)/60000)` aus der **Serveruhr**. Belegt ist
+der fehlende Leser — **unbelegt**, dass die abgerechnete Zahl falsch ist. Erst messen.
+
+## Teil 7 — Phasenplan nach den Entscheidungen
+
+| # | Phase | Inhalt | Anruf noetig |
+|---|---|---|---|
+| **GQ-P11** | Diagnose-Aufbewahrung | Modell-Opt-in faellt weg; Boot-Sonde fuer `DIAGNOSTIC_RETENTION_DAYS` | nein |
+| GQ-P12 | Persona/Wortwahl | Teil 1 + O-A, de/en/fr; gebaut gegen das **Verhalten**, nicht gegen die eine Zeile (M-4) | Beleg ja |
+| GQ-P13 | F2 Consult-ANSWERED ohne Fakten | `answeredFacts > 0` in `consultAnswerAwaitingDelivery` | nein |
+| GQ-P14 | N-2 / GQ-P10 auf den richtigen Pfad | `claude.js:1277`, Zusammenfassung statt `take_message` | nein |
+| GQ-P15 | F4 Ausfall-Grund in die Nachricht | `call-finish.js:59-66` | nein |
+| GQ-P16 | F1 `endCallWait` direction-neutral (de/fr) | zwei i18n-Strings + ein Test | nein |
+| GQ-M1 | F5 Messphase Provider-Dauer vs. abgerechnete Dauer | nur messen, kein Fix | nein |
+| GQ-P17 | D-2 `await_call_event` meldet `done` zu frueh | | Beleg ja |
+| GQ-P18 | O-4 Modellwechsel A/B | erst nach P11 auswertbar | ja |
+
+**GQ-P11 zuerst, ohne Alternative:** solange sie nicht steht, verliert jeder erfolgreich
+beendete Testanruf sein Transkript (M-1) — und O-C haengt ausdruecklich daran.

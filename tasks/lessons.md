@@ -320,3 +320,24 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   nie") - er feuerte in turnSeq 19. N-3 ("zweiter Consult kommt nicht zustande") - kein
   Defekt, sondern `MAX_IN_CALL_CONSULTS_PER_CALL = 1`. **Auch ein Befundkatalog ist eine
   Behauptung, kein Messwert.**
+
+## Ein Join ueber ein modell-formuliertes Feld ist kein Join (2026-08-06, GQ-Fragilitaet)
+
+- Das Workflow-Skript hat Befund und Skeptiker-Urteil ueber den **Titel** gejoint:
+  `r.urteile.find(u => u.titel === f.titel)`. Die Skeptiker haben ihre Titel mit
+  `"BEFUND 1: "` praefixiert - fachlich voellig in Ordnung, das Schema verlangte nur
+  "ein String". Sechs von acht Urteilen fielen aus dem Join.
+- **Der Fehler ist still und faellt in die falsche Richtung:** ein nicht gefundenes Urteil
+  wurde als "kein Urteil" gewertet, also als *nicht bestaetigt*. Der Lauf meldete
+  "2 bestaetigt, 6 gefallen"; tatsaechlich waren es **7 bestaetigt, 1 widerlegt**. Ein
+  Orchestrierungs-Bug hat fuenf belegte Befunde unsichtbar gemacht.
+- **Regel:** Agenten-Ausgaben werden ueber einen **vom Skript vergebenen** Schluessel
+  verbunden (Index oder eine ID, die im Prompt woertlich mitgegeben und im Schema als
+  `enum` gepinnt wird) - NIE ueber ein Feld, das das Modell selbst formuliert. Wenn ein
+  Join fachlich noetig ist, gehoert die Trefferquote in ein `log()`:
+  `log(\`${matched}/${expected} Urteile zugeordnet\`)` haette es sofort gezeigt.
+- **Zweite Lehre, teurer:** ich habe die Skript-Zahl im ersten Zug geglaubt. Die
+  Diagnose-Zeile des Werkzeugs sagt woertlich, man solle vor der Interpretation eines
+  unerwarteten Ergebnisses `journal.jsonl` lesen. Der Synthese-Agent hat den Widerspruch
+  uebrigens selbst bemerkt ("alle 6 trugen kein Urteil mit leerem Leser-Feld, sind also
+  unbewertet, nicht widerlegt") - der Agent war misstrauischer als sein Lead.
