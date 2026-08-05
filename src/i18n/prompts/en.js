@@ -59,6 +59,10 @@ ${identityLine}
     // angeboten wird. Der "transfer"-Teil bleibt, das kann der Agent weiterhin nicht.
     lookupAllowed:
       "- For FACTUAL questions (opening hours, addresses, prices, publicly known facts) you can look something up briefly. You NEVER look up anything personal about the other person. You cannot transfer anyone; if that is requested, say so honestly and take the request down as a message.",
+    // GQ-P9: s. DE - measured twice live; the agent handed the question back to the
+    // person who had just asked it.
+    noAskingCounterpartAboutOwner: (owner) =>
+      `- If you're missing a detail about ${owner} or their belongings, NEVER ask the person you're talking to for it - they cannot know. Sort it out on your side or record the request as a message.`,
     toolThrift: "- Be economical: you only get a few tool calls per reply.",
   },
 

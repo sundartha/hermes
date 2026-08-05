@@ -179,3 +179,43 @@ test("GQ-P8-6: jede unterstuetzte Sprache traegt den Ankunfts-Steuertext", () =>
     assert.ok(marker.endsWith("]"), `${language}: Steuertext muss eckig geklammert sein`);
   }
 });
+
+// ---------- GQ-P9: die Gegenstelle ist nicht die Auskunftsstelle ----------
+//
+// Zweimal live gemessen. call_msf0epenyv9g Segment 417: "Entschuldigung, ich habe keinen
+// Zugriff auf Antonios Fahrzeugdaten - Können Sie mir sagen, welches Modell es ist?" Und am
+// 2026-08-05 laut Owner erneut: er fragte nach dem Modell, der Agent gab die Frage zurueck.
+// Aus Sicht des Angerufenen blanker Unsinn - er hat ja gerade DESHALB gefragt.
+//
+// Der Prompt hatte dagegen keine einzige Regel. Das ist ausdruecklich KEINE dritte
+// Formulierungsrunde am selben Hebel (B-4/AL-D3, Owner-Entscheidung O-4): dort ging es um
+// ein angebotenes Werkzeug, das nicht gewaehlt wird. Hier fehlte die Regel schlicht.
+
+test("GQ-P9-1: der Systemprompt verbietet, die Gegenstelle nach Auftraggeber-Angaben zu fragen", async () => {
+  const { systemPrompt } = claude;
+  const call = callWithArrivedAnswer();
+  const prompt = systemPrompt(call);
+  const owner = LOCALES.de.prompt.boundaries.noAskingCounterpartAboutOwner("Jonas Beispiel");
+
+  assert.ok(prompt.includes("fragst du NIEMALS dein Gegenüber danach"), "Regel fehlt im Prompt");
+  assert.match(owner, /NIEMALS dein Gegenüber/);
+});
+
+test("GQ-P9-2: die Regel steht in JEDEM Turn - sie haengt an keinem Flag und keinem Werkzeug", async () => {
+  // Der Defekt trat auf, WAEHREND get_consult im Werkzeugsatz lag. Eine Regel, die nur bei
+  // fehlendem Werkzeug greift, haette ihn nicht verhindert.
+  const withConsult = claude.systemPrompt(callWithArrivedAnswer());
+  const plain = claude.systemPrompt(callWithArrivedAnswer({ status: "open", answeredAt: null }));
+  for (const prompt of [withConsult, plain])
+    assert.ok(prompt.includes("fragst du NIEMALS dein Gegenüber danach"));
+});
+
+test("GQ-P9-3: jede unterstuetzte Sprache traegt die Regel", () => {
+  for (const language of SUPPORTED_LANGUAGES) {
+    const rule = LOCALES[language].prompt.boundaries.noAskingCounterpartAboutOwner;
+    assert.equal(typeof rule, "function", `${language}: noAskingCounterpartAboutOwner fehlt`);
+    const rendered = rule("Jonas Beispiel");
+    assert.ok(rendered.startsWith("-"), `${language}: Grenzen-Zeile beginnt mit Spiegelstrich`);
+    assert.ok(rendered.includes("Jonas Beispiel"), `${language}: Auftraggeber-Name eingesetzt`);
+  }
+});
