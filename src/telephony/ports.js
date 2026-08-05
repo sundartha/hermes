@@ -26,6 +26,10 @@
  * @property {string} [webhookUrl] - Call-Control-Event-Webhook (call.answered/speak.ended/hangup, P4.5)
  * @property {string} [method]     - HTTP-Methode fuer den Webhook ("POST")
  * @property {number} [timeLimit]  - Max-Gespraechsdauer in Sek. (Defense-in-Depth; harter Timer bleibt server.js)
+ *
+ * Die KLINGELfrist (timeout_secs) ist bewusst KEIN Parameter: sie ist eine Provider-
+ * Eigenschaft und kommt im Adapter aus der Konfiguration (config.telephony.telnyxDialTimeoutSecs),
+ * damit kein Aufrufer sie versehentlich unterbietet.
  */
 
 /**

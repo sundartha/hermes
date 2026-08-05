@@ -52,7 +52,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // AL-P7b: thinkingSignalEnabled ergaenzt (Denk-Signal-Flag) -> 11.
   voice: 11,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
-  telephony: 9,
+  // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
+  // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
+  telephony: 10,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
   // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
   // AL-P14: inCallConsultEnabled ergaenzt (Rueckfrage IM Gespraech, Default aus) -> 8.
@@ -72,9 +74,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // unveraendert) -> 7.
   research: 7,
 };
-const EXPECTED_TOTAL_KEYS = 142;
+const EXPECTED_TOTAL_KEYS = 143;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (142 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (143 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -169,7 +171,7 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // KV-P2: voiceTariffInboundCents ist primitiv (Zahl, kein Array/nested Objekt) -> 131.
   // GQ-P2: consultWaitMs + consultOpenMs sind beide primitiv (Zahl, kein Array/nested
   // Objekt) -> 133.
-  assert.equal(checked, 133, "alle primitiven Blaetter (142 - 4 Arrays - 5 nested Objekte) geprueft");
+  assert.equal(checked, 134, "alle primitiven Blaetter (143 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

@@ -182,6 +182,9 @@ export const BASE_ENV = {
   // GQ-P5: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
   // TELNYX_SHIM_IGNORE_PROVIDER_NUDGE=false in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_SHIM_IGNORE_PROVIDER_NUDGE: "true",
+  // GQ-P6: Prod-Default (60) explizit gepinnt, sonst leakt eine lokale .env mit einem
+  // abweichenden TELNYX_DIAL_TIMEOUT_SECS in Spawn-Tests (Lehre test-base-env-drift).
+  TELNYX_DIAL_TIMEOUT_SECS: "60",
   // GQ-P3: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
   // TELNYX_INBOUND_HANDOFF_ENABLED=false via dotenv in Spawn-Tests (Lehre
   // test-base-env-drift). Wirkt ohnehin nur bei TELNYX_AI_ASSISTANT_ENABLED=true.
