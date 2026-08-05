@@ -829,6 +829,28 @@ export function inCallConsults(call) {
   return call.consults.filter((consult) => isInCallConsult(call, consult));
 }
 
+// GQ-P13: wartet GENAU DIESE Antwort noch auf ihren ersten Modell-Turn? EINE Quelle (G5)
+// fuer BEIDE Mechanismen, die auf diesem Zustand sitzen: den Steuertext
+// (advanceInCallConsult -> CONSULT_WAIT.ANSWERED) und das Zustellfenster des
+// Anstoss-Riegels (markConsultAnswerDelivered, GQ-P7). Vorher stand die Bedingung zweimal
+// im Modul; zwei Kopien koennen auseinanderlaufen und ein Fenster oeffnen, in dem es
+// nichts zu sagen gibt.
+//
+// answeredFacts > 0 ist der Kern der Phase: answerConsult setzt den Status UNBEDINGT auf
+// "answered" - auch dann, wenn mergeContextFacts am geteilten Deckel KEY_FACTS_LIMITS
+// null Fakten uebernommen hat. Ohne diese Bedingung bekaeme das Modell die Anweisung, eine
+// Auskunft JETZT zu nennen, die nirgends im Prompt steht, waehrend derselbe Steuertext ihm
+// jeden ehrlichen Ausweg verbietet (nicht nachfragen, kein Rueckruf, keine Nachricht).
+// Fehlendes Feld (Alt-/Fremddatensatz, hydrierte Zeile) -> false: fail-closed wie
+// isInCallConsult. Reiner Leser.
+function answerAwaitsDelivery(consult) {
+  return (
+    consult.status === CONSULT_STATUS.ANSWERED &&
+    !consult.deliveredAt &&
+    consult.answeredFacts > 0
+  );
+}
+
 // GQ-P7: Wartet eine EINGETROFFENE Rueckfrage-Antwort noch darauf, dass sie ein Modell-Turn
 // ueberhaupt zu sehen bekommt? Reiner Leser.
 //
@@ -838,9 +860,7 @@ export function inCallConsults(call) {
 // koennen. Die Gegenstelle schwieg, also kam jeder weitere Turn als Provider-Anstoss, und
 // den blockiert der Riegel (GQ-P5). "Im Prompt" und "ausgeliefert" sind zwei Zustaende.
 export function consultAnswerAwaitingDelivery(call) {
-  return inCallConsults(call).some(
-    (consult) => consult.status === CONSULT_STATUS.ANSWERED && !consult.deliveredAt,
-  );
+  return inCallConsults(call).some(answerAwaitsDelivery);
 }
 
 // GQ-P7: Gegenstueck - ein Modell-Turn IST gelaufen, die wartende Antwort war dabei im
@@ -856,7 +876,7 @@ export function markConsultAnswerDelivered(s, callId) {
   const deliveredAt = new Date().toISOString();
   let marked = 0;
   for (const consult of inCallConsults(call))
-    if (consult.status === CONSULT_STATUS.ANSWERED && !consult.deliveredAt) {
+    if (answerAwaitsDelivery(consult)) {
       consult.deliveredAt = deliveredAt;
       marked += 1;
     }
