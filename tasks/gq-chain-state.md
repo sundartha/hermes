@@ -881,3 +881,52 @@ Latenz-Aussage abzuleiten** — belegt ist nur, dass der Fix keinen Wartepunkt e
 - **Du/Sie-Mischung** in Anruf 2 (der Agent wechselte auf "Sie", der Owner blieb bei "du").
 - `supersede refusal:"no_inflight"` erscheint weiter — der Riegel aus GQ-P1 laeuft wie
   erwartet ins Leere und ist durch H1-a fachlich abgeloest.
+
+---
+
+## Die zwei offenen Punkte nach B-7 — Owner-Vorgaben, dauerhaft hier statt im Kickoff
+
+Diese Abschnitte lagen bisher nur im verbrauchten Kickoff. Sie sind **bindend** und gehoeren
+in den Kettenstand, damit kein Verweis ins Leere zeigt.
+
+### P2 — Modellwechsel Haiku -> Sonnet (Owner-Entscheidung O-4, bindend)
+
+Vorher-Zahl steht (s. Abschnitt "B-4, zum vierten Mal"): `get_consult` **0 von 4** bei 4/4
+angeboten; frueher `look_up` 0/19, `get_consult` 0/4 (`call_msg0swwfhe5e`).
+
+**O-4 ist bindend: dagegen hilft der Modellwechsel als A/B-Lauf mit Messung, NICHT die
+naechste Prompt-Runde.** Prompt-Runden wurden dreimal versucht (AL-P14, AL-D3, GQ-P9) und
+haben nie gewirkt.
+
+### P3 — Persona und Identitaet
+
+**GQ-P9 ist wirkungslos, am Log belegt.** Die Phase vom 2026-08-05 fuehrte die Regel ein, die
+Gegenstelle nicht ueber den Auftraggeber auszufragen. Im Testanruf danach: fuenf Verstoesse.
+Zweiter Beleg gegen die Prompt-These: das Verhalten ist **aelter als die Regel**
+(`call_msabz9975sph`, 2026-08-01; die Regel entstand am 2026-08-05 10:26 UTC).
+
+**Owner-Vorgabe (bindend), gilt in de/en/fr, sinngemaess uebersetzt:**
+
+| Situation | Was Hermes sagt |
+|---|---|
+| Er weiss etwas nicht und klaert es jetzt | „Warten Sie kurz, ich schaue einmal nach." |
+| Er findet es nicht | „Tut mir leid, ich kann die Information momentan nicht finden." |
+| Er kann es erst spaeter klaeren | „Das klaere ich und melde mich bei Ihnen zurueck." |
+
+**Verboten:** „auf meiner Seite", „bei meinem Auftraggeber", jede Nennung des Auftraggebers
+als Auskunftsquelle gegenueber der Gegenstelle.
+
+**Nicht als vierte Prompt-Runde bauen.** Hier ist ein Judge-Panel angebracht: mehrere
+unabhaengige Mechanismus-Ansaetze (z. B. Werkzeug-Zwang statt Formulierung, Rollenbindung im
+Turn-Kontext, Nachbearbeitung der Antwort), parallel bewertet, bester umgesetzt.
+
+### Was ausserdem offen bleibt
+
+| ID | Befund | Beleg |
+|---|---|---|
+| **Eroeffnung** | 13,6 s Monolog vor dem ersten Wort der Gegenstelle, danach 6 s Stille | Log |
+| **Offenlegung** | Owner berichtet, sie sei nicht zu 100 % gekommen; Provider meldet den Speak als vollstaendig. Aus dem Log NICHT entscheidbar — es existiert eine Aufnahme. **Absolute Regel 2 hat Vorrang, sobald es einen Beleg gibt** | unbelegt |
+| **D-2** | `await_call_event` liefert `done` mit "(Noch keine Zusammenfassung verfuegbar)"; die Summary entsteht danach und erreicht den Client nie | live bestaetigt, zuletzt `call_mshbrhnc7nfp` |
+| F6 | `DASHBOARD_PASSWORD` ohne Konsument, blockiert aber weiter den Boot (`config.js:966`, `:1610-1614`) | am Code belegt |
+| F7 | `WORLD_DEFAULT_LANGUAGE_ENABLED` ohne Boot-Sonde — trifft die Sprache der Offenlegung | am Code belegt |
+| F3 | `turnText.gapMs` wird berechnet, aber von keiner Entscheidung gelesen | am Code belegt |
