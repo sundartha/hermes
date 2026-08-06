@@ -4,7 +4,8 @@
 // (triggerTenantProvisioning) UND die Tests rufen dieselbe Funktion, keine Replik.
 // Pure: kein store.save, kein config-Zugriff, kein Audit/Log (Command-Query-Trennung,
 // P5/P6) - Caps + Fallback-Land + Kauf-Land-Override kommen als Argumente herein (testbar
-// mit makeDefaultState). provider TELNYX explizit, weil DEFAULT_PROVIDER = TWILIO.
+// mit makeDefaultState). provider TELNYX explizit statt geerbt: der Kauf-/Geld-Pfad nennt
+// seinen Carrier selbst und bleibt damit unabhaengig von DEFAULT_PROVIDER.
 // KAUF-Land entkoppelt: forceNumberCountry (z.B. "US") ueberschreibt NUR number.country,
 // nie die Sprache - leer = byte-identisch. A1 (PLAN-I18N-FIX): Kauf-Land und Sprache sind
 // ZWEI getrennte Achsen, die vorher EINE Variable teilten - das Kauf-Land darf auf

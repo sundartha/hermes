@@ -5,7 +5,13 @@
 // gueltige Signatur erreicht das Routing nie (403). Build-Operate-Check je Konzept.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, waitForLog, OWNER_TEST_NUMBER, seedState } from "./helpers.js";
+import {
+  startServer,
+  waitForLog,
+  OWNER_TEST_NUMBER,
+  seedState,
+  TWILIO_TEST_SIGNATURE_HEADERS,
+} from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const UNKNOWN_TO = "+49999999999"; // nicht geseedet -> nicht routbar
@@ -132,9 +138,13 @@ test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
 
 // ---- F1 P4: Inbound-Wiring (Nummer -> Sprache) ----
 
+// Die geseedeten Nummern (geoSeed) tragen provider: "twilio" - seit C-P1 (DEFAULT_PROVIDER=
+// telnyx) muss der Request das ausdruecklich sagen, sonst rendert der Telnyx-Renderer statt
+// des hier gepruefte Twilio-TwiML (der Test meint Sprach-Routing, nicht den Carrier).
 async function postIncoming(srv, to) {
   const res = await fetch(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
+    headers: TWILIO_TEST_SIGNATURE_HEADERS,
     body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: to }),
   });
   assert.equal(res.status, 200);

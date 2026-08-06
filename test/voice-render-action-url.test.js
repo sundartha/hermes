@@ -48,3 +48,12 @@ test("S3: streamDirectives -> telnyx-Media-Pfad", () => {
   const [stream] = streamDirectives({ id: "call_10", provider: "telnyx", streamToken: "tok10" });
   assert.equal(stream.url, "wss://agent.test/media/telnyx");
 });
+
+// C-P1: der vierte DEFAULT_PROVIDER-Leser (MEDIA_PATH-Rueckfall) war bisher ungetestet -
+// beide Tests oben setzen provider explizit. Literal statt MEDIA_PATH[DEFAULT_PROVIDER],
+// damit die Assertion beim Zurueckdrehen des Flips ROT wird statt mitzuwandern.
+test("C-P1: streamDirectives ohne call.provider -> Media-Pfad des Rueckfalls (Telnyx)", () => {
+  const { streamDirectives } = makeVoiceRender({ config: fakeConfig });
+  const [stream] = streamDirectives({ id: "call_11", streamToken: "tok11" });
+  assert.equal(stream.url, "wss://agent.test/media/telnyx");
+});

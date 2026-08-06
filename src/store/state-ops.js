@@ -185,7 +185,8 @@ export function createCall(
     twilioSid: twilioSid || null,
     // Provider, ueber den dieser Call laeuft (P6a). Inbound: aus dem Signatur-
     // Header abgeleitet (server.js); Outbound: ungesetzt -> DEFAULT_PROVIDER
-    // (Twilio-only). Folge-Webhooks + finishCall lesen call.provider (Single
+    // (seit C-P1 Telnyx; der Live-Aufrufer api-calls.js setzt ihn ohnehin explizit
+    // aus der Absendernummer). Folge-Webhooks + finishCall lesen call.provider (Single
     // Source of Truth, kein erneutes Header-Parsen).
     provider: provider || DEFAULT_PROVIDER,
     direction, // "inbound" | "outbound"
@@ -1195,8 +1196,8 @@ export function resolveCallLanguage(s, { tenantId, numberRecord }) {
 // Stellt die config-abgeleitete Owner-Nummer idempotent im Spiegel sicher (json
 // load() ruft makeDefaultState nicht auf bestehenden Stores, seedState()-Tests
 // seeden ohne numbers). Leere Nummer -> kein Seed (env-gating). Vorhandene e164
-// gewinnt. provider default DEFAULT_PROVIDER (Twilio) -> bestehende Aufrufe
-// (3 Args) verhaltens-erhaltend; Telnyx-Seed reicht provider=telnyx mit.
+// gewinnt. provider default DEFAULT_PROVIDER (seit C-P1 Telnyx); ein Twilio-Seed
+// reicht provider=twilio explizit mit.
 // e164 wird normalisiert (normNum) BEVOR der Idempotenz-Check + das Speichern
 // laufen, damit die gespeicherte Form mit dem normalisierten Inbound-To-Lookup
 // (findTenantByNumber) uebereinstimmt - sonst routet eine Owner-Nummer mit

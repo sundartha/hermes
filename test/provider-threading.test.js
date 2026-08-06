@@ -10,7 +10,11 @@ import assert from "node:assert/strict";
 import { providerFromHeaders } from "../src/telephony/registry.js";
 import { makeDefaultState, createCall } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, PROVIDER, DEFAULT_PROVIDER } from "../src/store/defaults.js";
-import { startServer, OWNER_TEST_NUMBER } from "./helpers.js";
+import {
+  startServer,
+  OWNER_TEST_NUMBER,
+  TWILIO_TEST_SIGNATURE_HEADERS,
+} from "./helpers.js";
 
 const TELNYX_NR = "+13125550100";
 const TELNYX_HEADERS = { "telnyx-signature-ed25519": "sig", "telnyx-timestamp": "1" };
@@ -31,6 +35,14 @@ test("providerFromHeaders: kein erkannter Header -> null (Aufrufer faellt auf De
   assert.equal(providerFromHeaders({ "telnyx-timestamp": "1" }), null);
 });
 
+// ---- C-P1: der Rueckfall-Default selbst (Zusicherung A) ----
+// Eine Zeile, eine Aussage: welcher Provider gilt, wenn NICHTS ihn nennt. Alle
+// DEFAULT_PROVIDER-Leser haengen daran; ohne diesen Test waere ein Zurueckdrehen
+// des Flips nur indirekt sichtbar.
+test("C-P1 A: DEFAULT_PROVIDER ist Telnyx (Rueckfall bewusst gesetzt)", () => {
+  assert.equal(DEFAULT_PROVIDER, PROVIDER.TELNYX);
+});
+
 // ---- call.provider: Default + gesetzt (json-Pfad via state-ops) ----
 test("createCall: Inbound mit provider=telnyx -> call.provider=telnyx", () => {
   const s = makeDefaultState();
@@ -44,7 +56,7 @@ test("createCall: Inbound mit provider=telnyx -> call.provider=telnyx", () => {
   assert.equal(call.provider, PROVIDER.TELNYX);
 });
 
-test("createCall: ohne provider (Outbound) -> DEFAULT_PROVIDER (twilio)", () => {
+test("createCall: ohne provider (Outbound) -> DEFAULT_PROVIDER (Telnyx)", () => {
   const s = makeDefaultState();
   const call = createCall(s, {
     direction: "outbound",
@@ -106,6 +118,7 @@ test("Twilio-Inbound -> TwiML-Greeting (speechModel) + call.provider=twilio (byt
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",
+      headers: TWILIO_TEST_SIGNATURE_HEADERS,
       body: new URLSearchParams({
         CallSid: "tw1",
         From: "+4915112345678",
@@ -117,7 +130,28 @@ test("Twilio-Inbound -> TwiML-Greeting (speechModel) + call.provider=twilio (byt
     assert.match(body, /speechModel/, "Twilio-Pfad rendert unveraendert TwiML");
     const calls = srv.readStore().calls;
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].provider, DEFAULT_PROVIDER, "ohne Provider-Header -> Default twilio");
+    assert.equal(calls[0].provider, PROVIDER.TWILIO, "Twilio-Header -> call.provider=twilio");
+  } finally {
+    await srv.stop();
+  }
+});
+
+// C-P1 (Zusicherung B): ein Inbound-Webhook OHNE erkennbaren Provider-Header laeuft auf
+// den Telnyx-Pfad. Diskriminator in BEIDE Richtungen: TeXML traegt transcriptionEngine,
+// TwiML traegt speechModel - so kann der Test nicht gruen bleiben, wenn der Rueckfall
+// zurueck auf Twilio kippt.
+test("C-P1 B: Inbound ohne Provider-Header -> Telnyx-Pfad (TeXML, kein speechModel)", async () => {
+  const srv = await startServer({ ownerNumber: { e164: TELNYX_NR, provider: PROVIDER.TELNYX } });
+  try {
+    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+      method: "POST", // BEWUSST ohne Signatur-/Provider-Header
+      body: new URLSearchParams({ CallSid: "dp1", From: "+4915112345678", To: TELNYX_NR }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.match(body, /transcriptionEngine="Deepgram"/, "Rueckfall rendert TeXML (Telnyx)");
+    assert.ok(!body.includes("speechModel"), "kein Twilio-TwiML-Attribut");
+    assert.equal(srv.readStore().calls[0].provider, PROVIDER.TELNYX);
   } finally {
     await srv.stop();
   }
