@@ -768,3 +768,79 @@ erreichte den Client nie. Genau der Befund D-2, bisher "Ursache unbekannt".
 2. **O-4 (Haiku -> Sonnet)** — Vorher-Zahl steht: `get_consult` 0 von 4 bei 4/4 angeboten.
 3. **Persona/Identitaet** — nicht ueber eine weitere Prompt-Zeile (P9 ist der Gegenbeweis).
 4. Eroeffnungs-Laenge und D-2.
+
+---
+
+## GQ-H1: die Praemisse des Hakens traegt nicht (2026-08-06, am Log belegt)
+
+**Der Anrufer hat nie drei Antworten gehoert.** Telnyx verwirft die ueberzaehligen Turns,
+bevor sie gesprochen werden. Die "drei Antworten in fuenf Sekunden" stammen aus **unserem**
+`transcript_segment` — wir schreiben jeden Shim-Turn mit, auch die nie gesprochenen.
+
+### Beleg, zweifach und unabhaengig
+
+1. **Telnyx' Gespraechsprotokoll** (`GET /v2/ai/conversations/59553cc6-7e81-4f49-8ca9-815ff5ab2b1f/messages`):
+   **12 Nachrichten, davon 5 vom Assistenten** — bei 8 substanziellen Turns auf unserer Seite.
+2. **Unser eigenes Render-Log** (`turn_probe`, derselbe Anruf): `messagesCount` waechst genau
+   dort NICHT, wo eine Antwort fehlt.
+
+| turnSeq | chars | prevRelation | messagesCount | Antwort |
+|---|---|---|---|---|
+| 4 | 25 | other | 6 | **verworfen** |
+| 5 | 51 | extends | 6 | behalten |
+| 6 | 23 | other | 8 | behalten |
+| 7 | 33 | other | 10 | **verworfen** |
+| 8 | 68 | extends | 10 | **verworfen** |
+| 9 | 106 | extends | 10 | behalten |
+| 10 | 42 | other | 12 | — |
+
+Die Zeichenzahlen passen lueckenlos: turn 4 = 25 Zeichen *"Was wuerde ich das wissen?"*,
+turn 5 = 51 Zeichen derselbe Satz zu Ende gesprochen.
+
+### Widerlegt
+
+- **"Eager-EOT ist aus, weil `eot_threshold == eager_eot_threshold`."** Telnyx' Doku behauptet
+  das; live stehen beide auf 0.9 **und Eager feuert trotzdem**. Anbieter-Aussage und
+  Anbieter-Verhalten widersprechen sich.
+- **`eot_threshold` hat keinen Spielraum** — Deepgram-Bereich 0.5-0.9, live steht das Maximum.
+- **Eine Haltefrist im Code (P1b) waere der falsche Hebel** — sie tauschte Latenz gegen ein
+  Doppelsprechen, das es nicht gibt.
+- **`eager_eot_threshold` laesst sich per API nicht loeschen:** `PATCH` mit `null` liefert 200,
+  legt eine neue Version an, aendert den Wert nicht (Telnyx merged tief). Weg bleibt das
+  Mission-Control-Portal oder der Support. Snapshot:
+  `data/evidence/telnyx-config/assistant-snapshot-2026-08-06-gq-h1.json`.
+
+### Was der Owner wirklich gehoert hat — und warum das P3 ist, nicht P1
+
+Alle fuenf tatsaechlich gespielten Antworten:
+
+| # | Wortlaut |
+|---|---|
+| 1 | „Welches Fahrzeugmodell hat **Antonios** Auto denn?" |
+| 2 | „Ich habe das Fahrzeugmodell leider nicht, aber **Antonio kann mir das gleich sagen**, wenn ich ihn spreche. Ist er erreichbar?" |
+| 3 | „Gerne — kann ich **Antonio kurz ans Telefon** bekommen?" |
+| 4 | „Jetzt bin ich am Telefon mit dir, **Antonio**." (zur Werkstatt gesagt) |
+| 5 | „Ah, entschuldige — dann bin ich ja wieder bei dir in der Werkstatt. … **Kann ich ihn erreichen?**" |
+
+**5 von 5 verstossen gegen die bindende Owner-Vorgabe** (Auftraggeber als Auskunftsquelle,
+Gegenstelle ueber ihn ausfragen); Nr. 4 ist der Identitaets-Kollaps. Kein Doppelsprechen dabei.
+Das Owner-Urteil *"absolute Katastrophe"* ist vollstaendig durch **P3** erklaert.
+
+### Folge fuer die Reihenfolge
+
+Der Kickoff wollte P2 zurueckstellen, *"solange der Agent dreimal auf einen Satz antwortet"*.
+Er tut es nicht — **P2 ist ab sofort messbar**. Owner-Entscheidung 2026-08-06:
+**H1-a -> P2 -> P3**.
+
+### GQ-H1-a: umgesetzt (9fb40bb), noch NICHT deployt
+
+Verworfene Antworten werden aus dem Transkript genommen, sobald Telnyx' gespiegelte
+Nachrichtenliste beim naechsten Request nicht gewachsen ist. Ausgenommen `prevRelation "same"`
+(doppelte Zustellung — dort ist die Antwort gesprochen). Mitgefixt: `flushTranscript`
+(`store/pg.js`) hing index-basiert an und haette bei einem schrumpfenden Transkript still
+jedes weitere Segment des Calls verloren; der Abgleich laeuft jetzt ueber den Inhalt.
+
+Neues Messinstrument im Log: `discarded_answer` (PII-frei, `callId` + `turnSeq`). Im
+Testanruf waeren es **3 von 8 substanziellen Turns** gewesen.
+
+**Offen:** Deploy + ein Testanruf zur Bestaetigung; `discarded_answer` je Anruf auszaehlen.

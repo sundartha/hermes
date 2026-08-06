@@ -341,3 +341,39 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   unerwarteten Ergebnisses `journal.jsonl` lesen. Der Synthese-Agent hat den Widerspruch
   uebrigens selbst bemerkt ("alle 6 trugen kein Urteil mit leerem Leser-Feld, sind also
   unbewertet, nicht widerlegt") - der Agent war misstrauischer als sein Lead.
+
+## Ein gebuendelter Schreibpfad kann den Defekt vor dem Test verstecken (2026-08-06, GQ-H1-a)
+
+- Die Lehre "der Test muss den Defekt reproduzieren" war bekannt — und hat trotzdem fast
+  nicht gegriffen. Sieben frische pg-Tests waren gruen **und blieben gruen, als ich den Fix
+  probeweise wieder ausbaute**. Sie haben nichts gemessen.
+- **Ursache:** `save()` ist im pg-Store fire-and-forget und wird **zusammengefasst**. Die
+  Tests schrieben, loeschten und lasen in einem Zug; es lief genau EIN Flush ganz am Ende.
+  Der Zwischenstand, an dem der Defekt haengt (die verworfene Zeile ist bereits persistiert),
+  erreichte die DB nie. Live liegen zwischen dem Schreiben der Antwort und ihrem Verwerfen
+  Sekunden und mindestens ein Flush.
+- **Regel:** Bei asynchroner/gebuendelter Persistenz muss der Test den **Zeitpunkt**
+  nachstellen, nicht nur die Reihenfolge der Aufrufe. Ein `await store.save()` an der Stelle,
+  an der live ein Flush laege, ist Teil des Aufbaus — nicht Kosmetik.
+- **Und die Gegenprobe bleibt Pflicht, auch wenn man sie schon kennt:** Fix ausbauen, Test
+  laufen lassen, Rot sehen, Fix zurueck. Erst dann ist ein gruener Test ein Beleg. Hier
+  brachte sie zusaetzlich einen echten Design-Fehler ans Licht — der erste Fix (Zeilen
+  ZAEHLEN) war falsch, weil Schrumpfen-dann-Wachsen ohne Flush dazwischen die Zahl zufaellig
+  wieder stimmen laesst, waehrend Zeile i und Segment i auseinanderlaufen. Der Abgleich muss
+  ueber den INHALT gehen.
+
+## Beim Aufraeumen eines Sonden-Signals zuerst fragen, wer das Signal sonst noch erzeugt (2026-08-06, GQ-H1-a)
+
+- Der Riegel haengt an "Telnyx' Nachrichtenliste ist nicht gewachsen". Das ist ein sauberer
+  Anbieter-Beleg — hat aber einen **zweiten Erzeuger**: die doppelte Zustellung desselben
+  Requests. Dort ist die Liste ebenfalls unveraendert, die Antwort des Vorgaengers aber
+  gesprochen. Der Riegel haette genau dort eine echte Aeusserung geloescht.
+- Bitter: die doppelte Zustellung ist **der Befund, fuer den diese Sonde ueberhaupt gebaut
+  wurde** (`prevRelation "same"`, turnSeq 1 und 2 eine Millisekunde auseinander, 04.08.).
+  Das Gegenbeispiel stand im Kopfkommentar der Datei, die ich gerade aenderte.
+- **Regel:** Bevor ein beobachtetes Signal eine Entscheidung traegt, die Faelle aufzaehlen,
+  in denen dasselbe Signal aus einem ANDEREN Grund entsteht — und den Ausschluss so bauen,
+  dass er die Bedingung nur strenger macht (er kann dann keine neuen Fehlalarme erzeugen,
+  nur welche verhindern).
+- Gefunden hat es nicht der Test, sondern das kritische Gegenlesen des eigenen Diffs vor dem
+  Commit. Der Test kam danach — und ist ohne den Ausschluss rot.
