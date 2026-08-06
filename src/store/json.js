@@ -380,8 +380,14 @@ export function addTranscript(callId, role, text) {
 // Roh-Transkript-Purge (#7): leert das Transkript des Calls + persistiert (save()
 // GQ-H1-a: verworfene Antwort aus dem Transkript nehmen. Muster identisch zu
 // addTranscript (changed -> save).
+// LIEFERT den Befund zurueck - anders als addTranscript/purgeTranscript, die nichts
+// zurueckgeben. Der Shim verzweigt darauf (nur eine tatsaechliche Entfernung erzeugt die
+// discarded_answer-Zeile). Ohne das return meldet die Operation still undefined, die
+// Entfernung passiert - und das Messinstrument der Phase bleibt blind.
 export function dropLastAgentTranscript(callId) {
-  if (ops.dropLastAgentTranscript(load(), callId)) save();
+  const entfernt = ops.dropLastAgentTranscript(load(), callId);
+  if (entfernt) save();
+  return entfernt;
 }
 
 // schreibt den Gesamt-Store). Muster identisch zu addTranscript (changed -> save).

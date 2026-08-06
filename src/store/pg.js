@@ -240,8 +240,12 @@ export function makePgStore(runner) {
     },
     // GQ-H1-a: verworfene Antwort aus dem Transkript nehmen. Muster identisch zu
     // addTranscript (changed -> save); flushTranscript raeumt die DB-Zeile mit ab.
+    // LIEFERT den Befund zurueck (Muster json.js, NICHT addTranscript): der Shim verzweigt
+    // darauf, nur eine tatsaechliche Entfernung erzeugt die discarded_answer-Zeile.
     dropLastAgentTranscript(callId) {
-      if (ops.dropLastAgentTranscript(requireState(), callId)) save();
+      const entfernt = ops.dropLastAgentTranscript(requireState(), callId);
+      if (entfernt) save();
+      return entfernt;
     },
     purgeTranscript(callId) {
       if (ops.purgeTranscript(requireState(), callId)) save();

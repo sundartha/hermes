@@ -154,3 +154,21 @@ test("GQ-H1-PG-7: beide Backends bieten dropLastAgentTranscript an", async () =>
   assert.equal(typeof store.dropLastAgentTranscript, "function");
   assert.equal(typeof json.dropLastAgentTranscript, "function");
 });
+
+test("GQ-H1-PG-8: der ECHTE Store meldet zurueck, OB er etwas entfernt hat", async () => {
+  // Live am Testanruf call_mshb9v7btbsp aufgefallen: die Entfernung lief, aber KEINE
+  // discarded_answer-Zeile stand im Log. Der Wrapper folgte dem fire-and-forget-Muster von
+  // addTranscript und lieferte undefined - der Shim verzweigt aber darauf. Die Repro-Tests
+  // haben es nicht gefangen, weil ihr fakeStore ein Boolean liefert: DER FAKE KONNTE MEHR
+  // ALS DER ECHTE STORE. Deshalb steht diese Zusicherung hier, am echten Backend.
+  const { store } = await makePgTestStore();
+  const call = seedCall(store);
+
+  assert.equal(store.dropLastAgentTranscript(call.id), false, "leeres Transkript");
+
+  store.addTranscript(call.id, "caller", "Fragment");
+  assert.equal(store.dropLastAgentTranscript(call.id), false, "caller-Zeile am Ende");
+
+  store.addTranscript(call.id, "agent", "nie gesprochen");
+  assert.equal(store.dropLastAgentTranscript(call.id), true, "agent-Zeile am Ende");
+});
