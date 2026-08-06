@@ -7,7 +7,7 @@
 // dienen nur dem Provider-Dispatch wie in provider-threading.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState } from "./helpers.js";
+import { startServer, seedState, TWILIO_TEST_SIGNATURE_HEADERS } from "./helpers.js";
 
 const TENANT_B = "B";
 const B_NUMBER = "+4915255555555";
@@ -41,7 +41,7 @@ function seedWithTelnyxNumber() {
 async function inbound(srv, { telnyx, callSid }) {
   const res = await fetch(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
-    headers: telnyx ? TELNYX_HEADERS : {},
+    headers: telnyx ? TELNYX_HEADERS : TWILIO_TEST_SIGNATURE_HEADERS,
     body: new URLSearchParams({ CallSid: callSid, From: "+4915112345678", To: B_NUMBER }),
   });
   assert.equal(res.status, 200);

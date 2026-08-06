@@ -31,13 +31,20 @@ export const MAX_NOTIFICATIONS = 50;
 // benannte Konstante (G25), eine Quelle (G5/G13). Die telephony-registry importiert
 // dieselben Werte fuer den Header-Dispatch.
 export const PROVIDER = Object.freeze({ TWILIO: "twilio", TELNYX: "telnyx" });
-export const DEFAULT_PROVIDER = PROVIDER.TWILIO;
+// C-P1 (Track C, Schritt 2): der Rueckfall ist TELNYX, nicht mehr Twilio. Belegt am
+// 2026-08-07 gegen die Produktions-DB (RLS je Tenant gesetzt): 3 Nummern, 67 Anrufe,
+// keine einzige Zeile auf Twilio - der Flip leitet keinen echten Verkehr um. Diese eine
+// Zeile bewegt ZEHN Leser auf einmal (resolveSeedProvider, Inbound-Header-Rueckfall,
+// /voice/status, Media-Pfad, createCall, drei Seed-/Kauf-Default-Argumente, zwei
+// pg-Flush-Rueckfaelle) - deshalb haengen an ihr eigene Tests
+// (test/provider-threading.test.js: "C-P1 A"/"C-P1 B").
+export const DEFAULT_PROVIDER = PROVIDER.TELNYX;
 
 // Provider fuer den Owner-Number-Autoseed aufloesen (render-owner-autoseed, AC4 /
 // Pre-Mortem R1 - stiller Falsch-Carrier). PURE Entscheidung (providerRaw als Arg,
 // lowercase erwartet wie config.provisioning.ownerNumberProvider), bewusst getrennt vom IO-Wrapper
-// in json.js und so direkt unit-testbar: ungesetzt/leer -> DEFAULT_PROVIDER (Twilio,
-// haeufigste Konfiguration, Zero-Config); gesetzt + gueltig (twilio|telnyx) -> dieser
+// in json.js und so direkt unit-testbar: ungesetzt/leer -> DEFAULT_PROVIDER (Telnyx, der
+// einzige live betriebene Carrier, Zero-Config); gesetzt + gueltig (twilio|telnyx) -> dieser
 // Provider; gesetzt + ungueltig (z.B. Tippfehler "twillio") -> null (fail-closed -> der
 // Aufrufer seedet NICHT, der Boot-Guard greift, statt still den falschen Carrier zu
 // schreiben). Die Trennung leer<->Muell ist gewollt: nur Muell ist ein Refusal-Grund.

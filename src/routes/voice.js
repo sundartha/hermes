@@ -256,9 +256,10 @@ export function makeVoiceRoutes({
   // nichts).
   router.post("/voice/incoming", async (req, res) => {
     // Provider EINMAL aus dem (bereits fail-closed signatur-geprueften) Header
-    // ableiten. Skip-Signature/lokale curl-Tests ohne Provider-Header -> Default
-    // twilio -> byte-identisch zum Bestand. Quelle ist der Signatur-Header, nicht
-    // To/provider (Anti-Spoof: liegt strukturell HINTER der Signatur).
+    // ableiten. Skip-Signature/lokale curl-Tests ohne Provider-Header -> DEFAULT_PROVIDER,
+    // seit C-P1 also der Telnyx-Pfad - bewusst und getestet ("C-P1 B",
+    // test/provider-threading.test.js), kein Zufall des Bestands. Quelle ist der
+    // Signatur-Header, nicht To/provider (Anti-Spoof: liegt strukturell HINTER der Signatur).
     const provider = providerFromHeaders(req.headers) ?? DEFAULT_PROVIDER;
     // S1-1: kompletter Handler-Body in try/catch. Seit await synthesizeDirectiveAudio
     // ist dieser Handler async - Express 4 faengt Promise-Rejections aus async-Handlern

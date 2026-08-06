@@ -919,10 +919,10 @@ const rawConfig = {
   // frueher private OWNER_NUMBER-SMS-Empfaenger (D1: keine Konflation). Leer = kein Seed
   // -> Boot-Guard bleibt fail-closed.
   ownerNumberSeed: process.env.OWNER_NUMBER_SEED || "",
-  // Provider der geseedeten Owner-Betriebsnummer (twilio|telnyx). Leer (Default) -> Twilio
-  // (DEFAULT_PROVIDER, haeufigste Konfiguration); ein gesetzter, aber ungueltiger Wert
+  // Provider der geseedeten Owner-Betriebsnummer (twilio|telnyx). Leer (Default) -> Telnyx
+  // (DEFAULT_PROVIDER, der live betriebene Carrier); ein gesetzter, aber ungueltiger Wert
   // (Tippfehler) -> KEIN Seed -> Boot-Refusal (fail-closed, kein stiller Falsch-Carrier,
-  // R1). Telnyx-Owner MUSS OWNER_NUMBER_PROVIDER=telnyx setzen. Lowercase-normalisiert.
+  // R1). Ein Twilio-Owner MUSS OWNER_NUMBER_PROVIDER=twilio setzen. Lowercase-normalisiert.
   ownerNumberProvider: (process.env.OWNER_NUMBER_PROVIDER || "").toLowerCase(),
 
   // GAP-38: Bootstrap-Parameter des Deploys (frueher nur vom preDeploy-Kommando gelesen,

@@ -17,9 +17,9 @@ const SEED_E164 = "+491701234567";
 // resolveSeedProvider entscheidet leer->Default / gueltig->Wert / Muell->null. Direkt
 // getestet (nicht nur ueber Boot-Erfolg), damit ein Mapping-Bug telnyx->twilio NICHT still
 // durchrutscht (waere ein gruener Boot mit falschem Carrier).
-test("resolveSeedProvider: leer -> DEFAULT_PROVIDER (Twilio, Zero-Config)", () => {
+test("resolveSeedProvider: leer -> DEFAULT_PROVIDER (Telnyx, Zero-Config)", () => {
   assert.equal(resolveSeedProvider(""), DEFAULT_PROVIDER);
-  assert.equal(resolveSeedProvider(""), PROVIDER.TWILIO);
+  assert.equal(resolveSeedProvider(""), PROVIDER.TELNYX);
 });
 
 test("resolveSeedProvider: 'twilio' -> twilio", () => {
@@ -42,7 +42,7 @@ test("resolveSeedProvider: Muell -> null (fail-closed)", () => {
 test("AC1: kein Store-Seed + gueltige OWNER_NUMBER_SEED -> Boot OK, /healthz 200, Owner-Nummer aktiv", async () => {
   // ownerNumber:null -> Spawn-Store OHNE aktive Nummer (Render-Situation: fluechtiges FS,
   // data/store.json weg). Ohne den Env-Seed griffe der Boot-Guard (exit 1). Kein
-  // OWNER_NUMBER_PROVIDER -> Default Twilio (resolveSeedProvider).
+  // OWNER_NUMBER_PROVIDER -> Default Telnyx (resolveSeedProvider).
   const srv = await startServer({ ownerNumber: null, env: { OWNER_NUMBER_SEED: SEED_E164 } });
   try {
     const health = await fetch(`${srv.localUrl}/healthz`);

@@ -89,8 +89,8 @@ test("Flag AN + Telnyx: Outbound=Call-Control, Inbound(Telnyx)=Handoff, Inbound(
     const handoff = await (await postTelnyxIncoming(srv, { callSid: "cc_in" })).text();
     assert.doesNotMatch(handoff, /<Gather/, "Assistant uebernimmt den Leg (kein TeXML-Gather)");
 
-    // NEU-2 (Orthogonalitaet): kein Telnyx-Header -> providerFromHeaders faellt auf
-    // DEFAULT_PROVIDER (Twilio) zurueck, obwohl das Flag an ist.
+    // NEU-2 (Orthogonalitaet): expliziter Twilio-Header -> NICHT-Telnyx-Pfad, obwohl das
+    // Flag an ist.
     const fallback = await (await postTelnyxIncoming(srv, { telnyx: false })).text();
     assert.match(
       fallback,

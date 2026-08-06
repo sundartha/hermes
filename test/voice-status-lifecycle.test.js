@@ -4,11 +4,12 @@
 // Dieser Test pinnt:
 //   a) Telnyx completed + CallDuration   -> diagnostics.callDurationS === 45 + Call endet
 //   b) Telnyx answered ohne CallDuration -> diagnostics === {} + markAnswered
-//   c) Twilio in-progress (provider-Default twilio) -> diagnostics === {} + markAnswered
+//   c) Twilio in-progress (provider explizit twilio) -> diagnostics === {} + markAnswered
 //   d) Telnyx unbekannter CallStatus -> kein Fehler, kein Status-Effekt; diagnostics
 //      NUR bei vorhandener CallDuration
 //   e) Handler-Effekt auf den Store (markAnswered/endCallRecord) per readStore()
 //      + unbekannter Call erzeugt KEINE Logzeile + kein PII (Telefonnummern) im Log
+//   f) Call ganz ohne provider -> DEFAULT_PROVIDER (C-P1: Telnyx)
 //
 // Rein offline, KEIN echtes Telefonie-Netz. Der completed-Pfad ruft finishCall, das bei
 // LEEREM Transkript VOR jedem Anthropic-Call early-returnt (server.js, finishCall) ->
@@ -48,9 +49,10 @@ test("/voice/status provider-bewusst: Telnyx/Twilio-Lifecycle + Diagnose + Store
       calls: [
         seedCall({ id: "st_tnx_done", provider: "telnyx", status: "active" }),
         seedCall({ id: "st_tnx_ans", provider: "telnyx", status: "active" }),
-        seedCall({ id: "st_tw_prog", status: "active" }), // kein provider -> Default twilio
+        seedCall({ id: "st_tw_prog", provider: "twilio", status: "active" }),
         seedCall({ id: "st_tnx_unk", provider: "telnyx", status: "active" }),
         seedCall({ id: "st_tnx_unk_dur", provider: "telnyx", status: "active" }),
+        seedCall({ id: "st_default_prog", status: "active" }), // kein provider -> DEFAULT_PROVIDER
       ],
     }),
   });
@@ -78,7 +80,7 @@ test("/voice/status provider-bewusst: Telnyx/Twilio-Lifecycle + Diagnose + Store
     assert.equal(ev.provider, "telnyx");
     assert.deepEqual(ev.diagnostics, {});
 
-    // c) Twilio in-progress (provider absent -> Default twilio) -> diagnostics === {}.
+    // c) Twilio in-progress (provider explizit twilio) -> diagnostics === {}.
     r = await postStatus(srv, "st_tw_prog", { CallStatus: "in-progress" });
     assert.equal(r.status, 200);
     ev = await statusEvent(srv, "st_tw_prog");
@@ -96,6 +98,14 @@ test("/voice/status provider-bewusst: Telnyx/Twilio-Lifecycle + Diagnose + Store
     assert.equal(r.status, 200);
     ev = await statusEvent(srv, "st_tnx_unk_dur");
     assert.deepEqual(ev.diagnostics, { callDurationS: 12 });
+
+    // f) Call ganz ohne provider -> DEFAULT_PROVIDER (C-P1: Telnyx). Nur provider wird
+    // assertiert, nicht Status/Diagnostics - der Rueckfall ist die Aussage dieses Blocks,
+    // nicht die Telnyx-Lifecycle-Semantik (die deckt Fall a/b bereits ab).
+    r = await postStatus(srv, "st_default_prog", { CallStatus: "in-progress" });
+    assert.equal(r.status, 200);
+    ev = await statusEvent(srv, "st_default_prog");
+    assert.equal(ev.provider, "telnyx", "Call ohne provider faellt bewusst auf DEFAULT_PROVIDER");
 
     // e) Handler-Effekt auf den Store (Quelle der Wahrheit: persistierter Store).
     const calls = Object.fromEntries(srv.readStore().calls.map((c) => [c.id, c]));

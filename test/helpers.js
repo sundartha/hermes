@@ -846,6 +846,12 @@ export const TELNYX_TEST_SIGNATURE_HEADERS = Object.freeze({
   "telnyx-signature-ed25519": "sig",
   "telnyx-timestamp": "1",
 });
+// Gegenstueck zu TELNYX_TEST_SIGNATURE_HEADERS: die blosse PRAESENZ von x-twilio-signature
+// klassifiziert einen Inbound-Request als Twilio (providerFromHeaders); der Wert ist
+// belanglos, weil SKIP_TWILIO_SIGNATURE_CHECK (BASE_ENV) die Kryptopruefung ueberspringt.
+// Seit C-P1 (DEFAULT_PROVIDER=telnyx) muss jeder Test, der den TWILIO-Renderer meint, das
+// SAGEN - sonst prueft er still den Telnyx-Pfad.
+export const TWILIO_TEST_SIGNATURE_HEADERS = Object.freeze({ "x-twilio-signature": "sig" });
 
 // P10: assertConfig verlangt bei aktivem TELNYX_AI_ASSISTANT_ENABLED-Flag zusaetzlich
 // ASSISTANT_ID/API_KEY/CONNECTION_ID (fail-closed Boot) - Flag-an-Spawn-Tests brauchen
@@ -872,8 +878,9 @@ export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
 }
 
 // POST /voice/incoming (Inbound-Webhook-Trigger). telnyx (bool, Default true): Ed25519-
-// Signatur-Header setzen - ohne sie faellt providerFromHeaders auf Twilio/DEFAULT_PROVIDER
-// zurueck (Anti-Spoof-Provider-Klassifikation). callSid: das Telnyx-TeXML-Feld, das die
+// Signatur-Header setzen; telnyx:false setzt stattdessen den Twilio-Header - der
+// NICHT-Telnyx-Fall wird damit explizit benannt statt aus DEFAULT_PROVIDER geerbt (C-P1).
+// callSid: das Telnyx-TeXML-Feld, das die
 // call_control_id des Inbound-Legs TRAEGT (GQ-P3, gemessen) - es gibt kein separates
 // CallControlId-Feld mehr. callSid: null laesst das Feld WEG und erzeugt damit den
 // Defektfall, gegen den der laute Rueckfall sichert. Liefert die rohe fetch-Response.
@@ -890,7 +897,7 @@ export function postTelnyxIncoming(
   if (callSid) body.CallSid = callSid;
   return fetch(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
-    headers: telnyx ? TELNYX_TEST_SIGNATURE_HEADERS : {},
+    headers: telnyx ? TELNYX_TEST_SIGNATURE_HEADERS : TWILIO_TEST_SIGNATURE_HEADERS,
     body: new URLSearchParams(body),
   });
 }
