@@ -136,9 +136,47 @@ Mal in dieser Kette.
   (`VOICE_ENGINE=realtime`, nicht der Live-Default), **eine** Fundstelle. Keine Duplizierung,
   **ausdruecklich nicht** Teil dieser Phase.
 
-## Schritt 6 — Die Phase. **OFFEN**
+## Schritt 6 — Die Phase. **GEMERGT auf master (`2b3f741`), NICHT deployt**
 
-Spezifikation: `tasks/stt-a1-spec.md`. Umsetzung ueber `phase-impl-lean`.
+Umgesetzt ueber `phase-impl-lean` (Spec und Report sind nach dem Merge geraeumt, s. Historie).
+
+**Was steht:** `src/telephony/stt-profile.js` (neutrales Enum, heute ein Mitglied),
+`src/telephony/adapters/telnyx/stt-model.js` (EINE Telnyx-Tabelle, von Gather UND Assistant
+genutzt), Twilio-Tabelle in dessen `render.js`, `config.voice.sttProfile` als EINZIGER
+Schluessel, lazy von der Registry injiziert, Boot-Guard gegen ungueltige Werte,
+`scripts/telnyx-stt-drift.mjs` fuer den vierten Ort.
+
+**Ergebnis der Abnahme durch den Lead (nicht nur durch das Gate):**
+
+| Prüfung | Ergebnis |
+|---|---|
+| `npm test` | **4057/4057 gruen**, Exit 0 (drei eigene Volllaeufe; ein vierter hatte einen Flake — bekanntes ~12 %-Volllast-Muster, isoliert gruen) |
+| Verhaltens-Erhaltung | **keine** Snapshot-Testdatei angefasst; Smoke-Test rendert beide Pfade byte-gleich, Attributreihenfolge unveraendert |
+| Gegenprobe Zusicherung A | fail-closed entfernt -> **rot**; Durchreichen gekappt -> **rot**. Echter Verhaltens-Beleg |
+| Gegenprobe Zusicherung B | in **beiden** Sabotagen gruen -> als Fangnetz umbenannt (`dc84238`), nicht als Beleg |
+| Clean-Code-Audit | keine S1, keine S2 |
+| Safety-Review | approved, Gates unberuehrt |
+| Drift-Probe scharf gelaufen | **2 Befunde**, Exit 0 |
+
+**Ein Defekt, den erst das scharfe Ausfuehren gefunden hat** (`e56b304`): die Probe las
+`Object.keys(transcription)` statt `transcription.settings` — die Einstellungen liegen eine
+Ebene tiefer. Sie konnte damit **nie** eine inerte Einstellung finden und endete stumm mit
+Exit 0, was wie "alles in Ordnung" aussah. Der Test war blind, weil seine Fixtures dieselbe
+falsche Verschachtelung benutzten wie der Code. Beides gefixt, Lehre in `tasks/lessons.md`.
+
+**Was die Probe jetzt live meldet:**
+
+```
+[telnyx-stt-drift] geprueft: transcription.model='deepgram/nova-3' gegen Profil 'accurate' -> 2 Befund(e)
+[telnyx-stt-drift] info: 'eot_threshold'=0.9 ist fuer Modell 'deepgram/nova-3' inert (gilt laut Spec nur fuer: deepgram/flux)
+[telnyx-stt-drift] info: 'eot_timeout_ms'=5000 ist fuer Modell 'deepgram/nova-3' inert (gilt laut Spec nur fuer: deepgram/flux)
+```
+
+**Offen: Deploy + Abnahme-Anruf.** Render deployt `upstream/master` mit `autoDeploy: no`;
+live laeuft weiter `b073e8d`. Erwartung nach dem Deploy: `node scripts/stt-wer.mjs
+<call_session_id>` **unveraendert** gegenueber 8,9 % (`call_mshgg6ijtyul`), Eigenrauschen
+~±1,5 Punkte — die Phase aendert keinen gesendeten Wert. Eine Verschlechterung waere ein
+Defekt, keine Messschwankung.
 
 **Abweichung vom Kickoff, bewusst und begruendet:** Kickoff-Punkt 3 ("die Kopplung Modell <->
 gueltige Einstellungen an einer Stelle abbilden, ihr Bruch macht einen Test rot") ist als
