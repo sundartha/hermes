@@ -76,15 +76,24 @@ const ADAPTERS = Object.freeze({
   // Sonderfall: Twilio-Provisioning ist NICHT im Scope -> Eintrag fehlt BEWUSST,
   // pick wirft dann fail-closed (kein stiller Twilio-Fallback fuer einen Geld-Pfad).
   [PORT.NUMBER_PROVISIONING]: { [PROVIDER.TELNYX]: telnyxNumberProvisioning },
-  // Sonderfall (b): Eintrag = fertiger VoiceRenderer. Telnyx bekommt die globale
-  // ElevenLabs-Plattform-Config LAZY zur Render-Zeit injiziert - der Arrow liest
-  // config.telnyx.telnyxElevenLabs erst beim Aufruf, NICHT zur Import-Zeit (P15: kein
-  // Lazy-Init-Singleton, config-Bindung an der Kompositionsstelle).
+  // Sonderfall (b): Eintrag = fertiger VoiceRenderer. BEIDE Renderer bekommen ihre
+  // Plattform-Config LAZY zur Render-Zeit injiziert - die Arrows lesen config erst beim
+  // Aufruf, NICHT zur Import-Zeit (P15: kein Lazy-Init-Singleton, config-Bindung an der
+  // Kompositionsstelle). sttProfile ist die neutrale STT-Wahl und geht als PROFIL durch,
+  // nicht als aufgeloester Anbieter-String: die Uebersetzung gehoert in den Adapter.
+  // Beide Telnyx-Pfade (Gather hier, Assistant in adapters/telnyx/voice.js) speisen sich
+  // aus DEMSELBEN Config-Schluessel - zwei Schluessel waeren die alte Duplizierung,
+  // nur von den Modell-Strings auf die Env-Namen verschoben.
   [PORT.VOICE_RENDERER]: {
-    [PROVIDER.TWILIO]: { renderDirectives: twilioRenderDirectives },
+    [PROVIDER.TWILIO]: {
+      renderDirectives: (d) => twilioRenderDirectives(d, { sttProfile: config.voice.sttProfile }),
+    },
     [PROVIDER.TELNYX]: {
       renderDirectives: (d) =>
-        telnyxRenderDirectives(d, { elevenLabs: config.telnyx.telnyxElevenLabs }),
+        telnyxRenderDirectives(d, {
+          elevenLabs: config.telnyx.telnyxElevenLabs,
+          sttProfile: config.voice.sttProfile,
+        }),
     },
   },
 });

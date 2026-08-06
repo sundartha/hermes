@@ -6,6 +6,7 @@
 import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
 import { sttLocaleForVoiceProfile } from "../../voice-locale.js";
 import { elevenLabsVoiceNameFor, hasElevenLabsVoice } from "./elevenlabs-voice.js";
+import { sttAttrs } from "./stt-model.js";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 
@@ -93,10 +94,11 @@ function renderSay(d, opts) {
 // Telnyx-TeXML-Gather-Attribute (Spracherkennung). transcriptionEngine ist PFLICHT,
 // damit Telnyx ueberhaupt transkribiert: ohne Engine erkennt `<Gather input="speech">`
 // keine Sprache und sendet kein SpeechResult zurueck (Telnyx-TeXML-Spec) - das war der
-// Inbound-Audio-Bug (Agent hoerte den Angerufenen nie). "Deepgram" + model
-// "deepgram/nova-3" = hoechste Erkennungsgenauigkeit (Owner-Wahl 2026-06-16; Premium-
-// Add-on, ersetzt die in-house-Engine); Nova-3 ist mehrsprachig (DE+FR), der model-Vendor
-// MUSS zu transcriptionEngine passen (Telnyx-Doku). language kommt aus dem voiceProfile
+// Inbound-Audio-Bug (Agent hoerte den Angerufenen nie). Engine UND Modell kommen als EIN
+// Datensatz aus stt-model.js (dieselbe Quelle wie der Call-Control-Assistant-Pfad, G5):
+// der model-Vendor MUSS zu transcriptionEngine passen, deshalb duerfen sie nie zwei
+// getrennt gewaehlte Groessen werden. Fehlt opts.sttProfile (arg-loser Aufruf), greift das
+// Default-Profil -> byte-identisch. language kommt aus dem voiceProfile
 // des Gathers (ueber voiceAttrs aus dem Locale-Buendel, dieselbe Quelle wie der
 // Say-Voice), nicht hartkodiert: so transkribiert STT IMMER in der Sprache, in der
 // gesprochen wird; der Snapshot-Wert bleibt derselbe. R9: language MUSS das
@@ -112,18 +114,19 @@ function renderSay(d, opts) {
 // speechModel/actionOnEmptyResult bleiben Twilio-spezifisch und ungesetzt. Attribut-
 // Reihenfolge ist vertraglich (Einfuege-Reihenfolge); der Snapshot-Test nagelt sie fest
 // (DE bleibt dadurch byte-identisch).
-function gatherAttrs(d) {
+function gatherAttrs(d, opts) {
+  const stt = sttAttrs(opts.sttProfile);
   return {
     input: "speech",
     language: voiceAttrs(d.voiceProfile).language,
-    transcriptionEngine: "Deepgram",
-    model: "deepgram/nova-3",
+    transcriptionEngine: stt.engine,
+    model: stt.model,
     speechTimeout: d.speechTimeoutSec === undefined ? "auto" : String(d.speechTimeoutSec),
   };
 }
 
 function renderGather(d, opts) {
-  const open = `<Gather${attrString(gatherAttrs(d))} action="${escapeXml(d.action)}" method="POST">`;
+  const open = `<Gather${attrString(gatherAttrs(d, opts))} action="${escapeXml(d.action)}" method="POST">`;
   const prompt = gatherPrompt(d, opts);
   if (!prompt) return open.replace(/>$/, "/>");
   return `${open}${prompt}</Gather>`;
@@ -165,9 +168,10 @@ function renderDirective(d, opts) {
   }
 }
 
-// opts (optional, Telnyx-eigene Erweiterung ueber den Port hinaus): { elevenLabs }
+// opts (optional, Telnyx-eigene Erweiterung ueber den Port hinaus): { elevenLabs, sttProfile }
 // - die Registry injiziert config.telnyx.telnyxElevenLabs, Aufrufe ohne opts bleiben
-// byte-identisch zum Bestand (Azure).
+// byte-identisch zum Bestand (Azure). sttProfile ist die neutrale STT-Wahl (stt-profile.js);
+// fehlt sie, greift das Default-Profil.
 /** @type {import("../../ports.js").VoiceRenderer["renderDirectives"]} */
 export function renderDirectives(directives, opts = {}) {
   return XML_DECL + "<Response>" + directives.map((d) => renderDirective(d, opts)).join("") + "</Response>";

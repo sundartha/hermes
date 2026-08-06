@@ -31,6 +31,7 @@ import {
   createCall,
   seedBootstrapNumberFromConfig,
 } from "../src/store/state-ops.js";
+import { DIRECTIVE, VOICE_PROFILE } from "../src/telephony/directives.js";
 
 const FULL_COVERAGE = [
   ["voiceControl", voiceControl],
@@ -48,7 +49,14 @@ test("pick liefert die exakte Adapter-Instanz je Provider", () => {
   assert.equal(mediaTransport(PROVIDER.TELNYX), telnyxMedia);
   assert.equal(mediaTransport(PROVIDER.TWILIO), twilioMedia);
   assert.equal(numberProvisioning(PROVIDER.TELNYX), telnyxNumberProvisioning);
-  assert.equal(voiceRenderer(PROVIDER.TWILIO).renderDirectives, twilioRenderDirectives);
+  // STT-A1: beide Renderer sind jetzt hinter einem Lazy-Arrow registriert (config-Bindung
+  // an der Kompositionsstelle, P15) - Referenz-Identitaet ist kein Kriterium mehr.
+  // Geprueft wird die AUSGABE: die Registry liefert den Twilio-Renderer und injiziert das
+  // Default-Profil, also exakt das arg-lose Bestandsergebnis.
+  const probe = [
+    { kind: DIRECTIVE.GATHER, action: "/voice/turn?callId=c1", voiceProfile: VOICE_PROFILE.DE_FEMALE_NEURAL },
+  ];
+  assert.equal(voiceRenderer(PROVIDER.TWILIO).renderDirectives(probe), twilioRenderDirectives(probe));
 });
 
 // ---- Default-Byte-Identitaet: arg-los -> Twilio (numberProvisioning -> Telnyx) ----

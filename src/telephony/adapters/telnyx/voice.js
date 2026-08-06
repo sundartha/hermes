@@ -13,6 +13,7 @@
 import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
 import { voiceAttrs } from "./render.js";
+import { sttAttrs } from "./stt-model.js";
 import { elevenLabsVoiceName, hasElevenLabsVoice } from "./elevenlabs-voice.js";
 import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.js";
 import { createMinuteWindowThrottle } from "./rate-limit.js";
@@ -226,19 +227,6 @@ const ELEVENLABS_COST_RECORD_PROVIDER = "elevenlabs";
 // flaches voice_settings OHNE type - deshalb lebt der Token hier, nicht im Provisioner).
 const ELEVENLABS_VOICE_SETTINGS_TYPE = "elevenlabs";
 
-// STT-Sprach-Hint pro Call (RCA-Wurzel R2). Modell MUSS mitgesendet werden - TranscriptionConfig.model
-// hat laut Telnyx-OpenAPI den Default "distil-whisper/distil-large-v2" (ENGLISCH-ONLY, non-streaming);
-// ein transcription-Block ohne model koennte die STT still auf Englisch kippen. Der Wert spiegelt das
-// STT-Modell des Assistant-Objekts.
-//
-// B-7 (2026-08-06): war deepgram/flux, jetzt deepgram/nova-3. GEMESSEN an zwei echten Anrufen
-// (Dual-Channel-Aufnahme, Gegenstellen-Kanal isoliert, Wortfehlerrate gegen eine unabhaengige
-// Referenz-Abschrift, s. tasks/todo.md): flux liefert auf deutschem Telefon-Audio ENGLISCHEN
-// Kauderwelsch (95,7 % / 97,0 % WER) und ignoriert dabei den Sprach-Hint - "de" und "multi"
-// ergeben byte-identische Ausgabe. nova-3 kam auf denselben Aufnahmen auf 12,9 % / 18,8 %.
-// Der Preis ist bewusst bezahlt: eot_threshold/eager_eot_threshold/eot_timeout_ms sind laut
-// Telnyx-Doku FLUX-ONLY, mit nova-3 bestimmt Telnyx die Turn-Grenzen selbst.
-const STT_MODEL = "deepgram/nova-3";
 // Sprach-Hints, fuer die wir die Sprache explizit setzen statt sie raten zu lassen (Telnyx-OpenAPI,
 // TranscriptionConfig.language). Die Liste deckt die drei Gespraechssprachen (de/fr/en) mit ab;
 // alles ausserhalb -> "auto", damit Telnyx' Spracherkennung den Hint setzt. "multi" bedeutet dort
@@ -345,10 +333,18 @@ export function assistantVoiceConfigured() {
 // Der Ohne-language-Zweig bleibt der Grenzfall (Sprache nicht aufloesbar): dann KEIN
 // transcription-Feld, Body byte-identisch zum Bestand.
 // Sprache ausserhalb der Hint-Liste (auch "multi") -> "auto": Telnyx-Detection statt Hint-los.
+//
+// Das MODELL muss mitgesendet werden - TranscriptionConfig.model hat laut Telnyx-OpenAPI
+// den Default "distil-whisper/distil-large-v2" (ENGLISCH-ONLY, non-streaming); ein
+// transcription-Block ohne model kippt die STT still auf Englisch. Es kommt aus derselben
+// Quelle wie der TeXML-Gather (stt-model.js) und aus DEMSELBEN Config-Schluessel - zwei
+// Schluessel haetten die Duplizierung nur von den Modell-Strings auf die Env-Namen
+// verschoben. Ein Engine-Feld gibt es hier NICHT: Call-Control-JSON kennt keines.
 function transcriptionFields(language) {
   if (!language) return {};
   const hint = STT_LANGUAGE_HINTS.includes(language) ? language : STT_LANGUAGE_AUTO;
-  return { transcription: { model: STT_MODEL, language: hint } };
+  const { model } = sttAttrs(config.voice.sttProfile);
+  return { transcription: { model, language: hint } };
 }
 
 // ---- CDR/Ist-Kosten Helfer (PLAN-LIVE-COST-TRACING P1) ----

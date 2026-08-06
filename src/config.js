@@ -3,9 +3,10 @@ import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { CENTS_PER_EUR, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
-// GAP-07: boot-guard.js hat KEINE Imports -> kein Zyklus, obwohl der Boot-Guard sonst
-// downstream von config.js sitzt.
+// GAP-07: boot-guard.js und telephony/stt-profile.js importieren ihrerseits nur
+// import-freie bzw. Blatt-Module -> kein Zyklus, obwohl beide sonst downstream sitzen.
 import { alertChannelFindings } from "./boot-guard.js";
+import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Tests laufen mit sauberem Env (wie CI, ohne lokale .env) - verhindert, dass eine
@@ -1373,6 +1374,17 @@ const rawConfig = {
   realtimeVoice: process.env.REALTIME_VOICE || "alloy",
   twilioEdge: process.env.TWILIO_EDGE || "frankfurt",
 
+  // ---- Spracherkennung (STT) ----
+  // Neutrale Wahl der Erkennungs-Engine, EINMAL fuer alle Pfade. Jeder Telefonie-Adapter
+  // uebersetzt sie in seine eigene Schreibweise. Vorher stand der Anbieter-String an drei
+  // Code-Orten roh nebeneinander: der Gather-Pfad lief auf nova-3, der Assistant-Pfad vier
+  // Wochen auf einem Modell, das deutsches Telefon-Audio als Englisch erkannte, und kein
+  // Mechanismus machte den Widerspruch sichtbar (B-7). Preis war zusaetzlich ein Deploy je
+  // Modellwechsel. Gueltige Werte: STT_PROFILE in telephony/stt-profile.js; ein unbekannter
+  // Wert bricht den BOOT ab (boot-guard sttProfileFindings) - nicht erst den Render-Pfad
+  // eines laufenden Anrufs.
+  sttProfile: (process.env.STT_PROFILE || DEFAULT_STT_PROFILE).trim(),
+
   // ---- Anrufbeantworter-Erkennung (GAP-21) ----
   // DEFAULT AUS (Muster PAYMENT_ENABLED): die Feldnamen der Provider-Origination sind
   // erst mit einem Objekt-GET der Live-API belegt; ein falsches Feld quittiert Telnyx mit
@@ -1499,7 +1511,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
-  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled"],
+  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled"],
   telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "twilioEdge", "machineDetection"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
