@@ -333,6 +333,28 @@ export function addTranscript(s, callId, role, text) {
   return true;
 }
 
+// GQ-H1-a: Telnyx hat die zuletzt erzeugte Antwort verworfen, bevor sie gesprochen wurde
+// (seine gespiegelte Nachrichtenliste ist zwischen zwei Requests nicht gewachsen). Sie darf
+// nicht als "bereits gesagt" im Kontext des naechsten Turns, in der Zusammenfassung oder in
+// der Nachricht an den Owner stehen - ein Agent, dessen Kontext behauptet, er habe etwas
+// gesagt, verhaelt sich zwangslaeufig unsinnig.
+//
+// Entfernt NUR eine ABSCHLIESSENDE agent-Zeile. Steht dort etwas anderes (caller-Zeile,
+// leeres Transkript), passiert nichts: fail-safe-Richtung, lieber eine Zeile zu viel im
+// Transkript als eine echte, gesprochene Aeusserung geloescht. Die caller-Zeile des
+// verworfenen Turns bleibt bewusst stehen - der Anrufer HAT diese Worte gesagt (sie sind
+// ein Praefix der vollstaendigen Aeusserung), sie behauptet also nichts Falsches.
+//
+// Reine Mutation, kein IO. Liefert true, wenn etwas entfernt wurde -> der Backend-Wrapper
+// save()t nur dann.
+export function dropLastAgentTranscript(s, callId) {
+  const call = getCall(s, callId);
+  if (!call || call.transcript.length === 0) return false;
+  if (call.transcript[call.transcript.length - 1].role !== "agent") return false;
+  call.transcript.pop();
+  return true;
+}
+
 // Loescht das Roh-Transkript EINES Calls (DSGVO-Datenminimierung, #7): nach
 // erfolgreicher Summary bleibt nur Summary + Action Items at rest. Reine Mutation,
 // kein IO. Liefert true, wenn etwas geaendert wurde (Call existiert + hatte

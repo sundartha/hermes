@@ -87,6 +87,17 @@ export function fakeStore({ call, budgetExceeded = false } = {}) {
       getCallIds.push(id);
       return call && call.id === id ? call : null;
     },
+    // GQ-H1-a: MUSS auf dem Fake liegen - der Shim ruft die Operation bei JEDEM Request,
+    // dessen Anbieter-Nachrichtenliste nicht gewachsen ist (dieselbe Falle wie bei
+    // markConsultAnswerDelivered oben). Bildet die echte Operation nach: entfernt NUR eine
+    // abschliessende agent-Zeile und meldet, ob etwas entfernt wurde.
+    dropLastAgentTranscript(id) {
+      const transcript = call && call.id === id ? call.transcript : null;
+      if (!Array.isArray(transcript) || transcript.length === 0) return false;
+      if (transcript[transcript.length - 1].role !== "agent") return false;
+      transcript.pop();
+      return true;
+    },
     // KS-P2: blockingBudgetAxis fragt die LIVE-Achse. Der Fake behaelt EINEN Schalter -
     // budgetExceeded steht unveraendert fuer "die Geld-Achse sperrt", gleich ob der Anteil
     // gebucht oder gerade laufend ist; die Aufteilung entscheidet keiner dieser Tests.
@@ -150,6 +161,9 @@ export function makeCall(overrides = {}) {
     // Pruefung. answeredAt bewusst gesetzt (nicht null): ein realer Shim-Turn existiert
     // nur auf einem abgenommenen Leg.
     direction: "outbound",
+    // GQ-H1-a: der Shim raeumt verworfene agent-Zeilen aus dem Transkript - ohne dieses
+    // Feld liefe jeder Fake ueber undefined statt kontrolliert durch die neue Pruefung.
+    transcript: [],
     from: "+15005550006",
     to: "+4915112345678",
     startedAt: new Date().toISOString(),

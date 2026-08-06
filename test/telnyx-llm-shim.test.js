@@ -74,6 +74,17 @@ function fakeStore({ call = null, budgetExceeded = false } = {}) {
     getCall(id) {
       return call && call.id === id ? call : null;
     },
+    // GQ-H1-a: MUSS auf dem Fake liegen - der Shim ruft die Operation bei jedem Request,
+    // dessen Anbieter-Nachrichtenliste nicht gewachsen ist. Diese Datei prueft das Verhalten
+    // nicht (kein Transkript in ihren Fixtures), braucht die Methode aber, sonst wirft der
+    // Shim einen TypeError.
+    dropLastAgentTranscript(id) {
+      const transcript = call && call.id === id ? call.transcript : null;
+      if (!Array.isArray(transcript) || transcript.length === 0) return false;
+      if (transcript[transcript.length - 1].role !== "agent") return false;
+      transcript.pop();
+      return true;
+    },
     // KS-P2: blockingBudgetAxis fragt die LIVE-Achse. Diese Datei hat den Live-Term NICHT
     // im Blick (kein laufender Leg) - die Basis bleibt leer, der eine budgetExceeded-
     // Schalter steht weiter fuer "die Geld-Achse sperrt".

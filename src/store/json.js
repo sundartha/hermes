@@ -378,6 +378,12 @@ export function addTranscript(callId, role, text) {
 }
 
 // Roh-Transkript-Purge (#7): leert das Transkript des Calls + persistiert (save()
+// GQ-H1-a: verworfene Antwort aus dem Transkript nehmen. Muster identisch zu
+// addTranscript (changed -> save).
+export function dropLastAgentTranscript(callId) {
+  if (ops.dropLastAgentTranscript(load(), callId)) save();
+}
+
 // schreibt den Gesamt-Store). Muster identisch zu addTranscript (changed -> save).
 export function purgeTranscript(callId) {
   if (ops.purgeTranscript(load(), callId)) save();

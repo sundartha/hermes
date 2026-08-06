@@ -379,6 +379,14 @@ function logShimSupersede(payload) {
   console.log(formatShimLine("supersede", payload));
 }
 
+// GQ-H1-a: eigener Kanal (kind="discarded_answer"), console.log wie turn_probe. PII-frei:
+// callId und turnSeq, nie Wortlaut. Diese Zeile IST das Messinstrument der Abnahme - sie
+// zaehlt, wie viele nie gesprochene Antworten je Anruf aus dem Transkript genommen wurden
+// (am Testanruf call_msgf3r21x0w0 waeren es 3 von 8 substanziellen Turns gewesen).
+function logShimDiscardedAnswer(payload) {
+  console.log(formatShimLine("discarded_answer", payload));
+}
+
 // Nur von Telnyx gesetzte Anfrage-Header (Allowlist-Praefix), Name -> nicht umkehrbarer
 // Hash des Wertes. Der WERT wird nie geloggt: identische Hashes belegen "derselbe Request",
 // ohne dass ein zufaellig mitgefuehrtes Geheimnis (z.B. ein Signatur-Header) je im Log
@@ -647,14 +655,41 @@ export function makeTelnyxLlmShim({
     // GQ-P5: das Sonden-Ergebnis wird jetzt GEBUNDEN statt direkt gespreadet - lastRole ist
     // ab hier die Entscheidungsgrundlage des Anstoss-Riegels (Schritt 6.5), nicht nur
     // Logstoff. EINE Auswertung des Payloads, kein zweiter, driftender Leser (G5).
-    const turnText = observeTurnText(call.id, callerText);
     const origin = requestOriginShape(req);
+    const turnText = observeTurnText(call.id, callerText, origin.messagesCount);
     logShimTurnProbe({
       callId: call.id,
       turnSeq,
       ...turnText,
       ...origin,
     });
+
+    // GQ-H1-a: Telnyx' gespiegelte Nachrichtenliste ist seit dem letzten Request dieses
+    // Calls NICHT gewachsen - es hat die Antwort des Vorgaenger-Turns verworfen, bevor sie
+    // gesprochen wurde (Eager-EOT-Rueckfall). Sie steht aber schon in unserem Transkript
+    // (claude.js schreibt sie unbedingt am Turn-Ende) und wuerde ab hier als "bereits
+    // gesagt" in den Kontext DIESES Turns, in die Zusammenfassung und in die Nachricht an
+    // den Owner wandern. Deshalb VOR dem Turn und vor jedem Gate: was nie gesprochen wurde,
+    // darf den Agenten nicht glauben machen, er habe es gesagt.
+    //
+    // Das Nichtwachsen ist Telnyx' eigene Aussage darueber, was es behalten hat - kein
+    // Rateschluss auf seine Absicht. providerMessagesGrew === null (erster Request des
+    // Calls, fehlende Zahl) faellt bewusst durch: null heisst "nicht entscheidbar", nie
+    // "verworfen".
+    //
+    // AUSGENOMMEN "same" - die DOPPELTE ZUSTELLUNG desselben Requests (der Befund, fuer den
+    // diese Sonde ueberhaupt gebaut wurde: turnSeq 1 und 2 lagen am 04.08. eine Millisekunde
+    // auseinander). Dort ist die Nachrichtenliste ebenfalls unveraendert, die Antwort des
+    // Vorgaengers aber sehr wohl gesprochen. Ohne diese Ausnahme loeschte der Riegel genau
+    // dort eine echte Aeusserung - Risiko 1 des Pre-Mortems. Der Ausschluss kann nur
+    // Fehlalarme verhindern, nie welche erzeugen: er macht die Bedingung strenger. Preis
+    // ist der Grenzfall "verworfen UND identischer Folgetext", der die Zeile stehen laesst -
+    // der Bestandszustand, und damit die harmlose Richtung.
+    const discardedAnswerDropped =
+      turnText.providerMessagesGrew === false &&
+      turnText.prevRelation !== TURN_TEXT_RELATION.SAME &&
+      store.dropLastAgentTranscript(call.id);
+    if (discardedAnswerDropped) logShimDiscardedAnswer({ callId: call.id, turnSeq });
 
     // EINE Stelle (G5) fuer den Budget-Notaus: Abschluss-Ansage ZUERST, dann realer Hangup
     // (Weg iii, telnyx-p6). Genutzt vom Gate VOR dem Turn (Schritt 6) UND vom Abbruch

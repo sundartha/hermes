@@ -117,6 +117,10 @@ test("K0-5: zwei verschiedene Calls im selben Shim fuehren eigene turnSeq-Reihen
     // KS-P2: der Shim fragt die Live-Achse; K0-5 misst turnSeq, nicht Geld -> Achse frei.
     activeCallsFor: () => [],
     liveBudgetExceeded: () => false,
+    // GQ-H1-a: der Shim raeumt verworfene agent-Zeilen ab und ruft die Operation bei jedem
+    // Request, dessen Anbieter-Nachrichtenliste nicht gewachsen ist. K0-5 misst turnSeq und
+    // fuehrt kein Transkript - die Methode muss aber da sein, sonst wirft der Shim.
+    dropLastAgentTranscript: () => false,
   };
   const voiceControl = () => ({ endCallViaCallControl: async () => {} });
   const agentTurn = agentTurnSpy();

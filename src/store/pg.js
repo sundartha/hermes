@@ -238,6 +238,11 @@ export function makePgStore(runner) {
     addTranscript(callId, role, text) {
       if (ops.addTranscript(requireState(), callId, role, text)) save();
     },
+    // GQ-H1-a: verworfene Antwort aus dem Transkript nehmen. Muster identisch zu
+    // addTranscript (changed -> save); flushTranscript raeumt die DB-Zeile mit ab.
+    dropLastAgentTranscript(callId) {
+      if (ops.dropLastAgentTranscript(requireState(), callId)) save();
+    },
     purgeTranscript(callId) {
       if (ops.purgeTranscript(requireState(), callId)) save();
     },
@@ -1599,11 +1604,34 @@ async function flushTranscript(client, tenantId, call) {
     ]);
     return;
   }
-  const existing = Number(
-    (await client.query(`SELECT count(*) AS n FROM transcript_segment WHERE call_id=$1`, [call.id]))
-      .rows[0].n,
-  );
-  for (let i = existing; i < call.transcript.length; i++) {
+  // GQ-H1-a: seit dropLastAgentTranscript kann das Transkript auch SCHRUMPFEN - vorher
+  // wuchs es nur, und ein blosser ZEILENZAEHLER genuegte, um die fehlenden anzuhaengen.
+  // Er genuegt nicht mehr: schrumpft der Spiegel und waechst danach wieder, BEVOR ein
+  // Flush laeuft, stimmt die Zahl zufaellig wieder, waehrend Zeile i und Segment i
+  // auseinanderlaufen - die verworfene Antwort bliebe stehen und die echte landete an
+  // ihrer Stelle. Deshalb wird ueber den INHALT abgeglichen: bis zur ersten Abweichung
+  // ist die DB gueltig, ab dort wird sie neu geschrieben. Das heilt auch Altbestand.
+  const persisted = (
+    await client.query(
+      `SELECT id, role, text FROM transcript_segment WHERE call_id=$1 ORDER BY id ASC`,
+      [call.id],
+    )
+  ).rows;
+  let gemeinsam = 0;
+  while (
+    gemeinsam < persisted.length &&
+    gemeinsam < call.transcript.length &&
+    persisted[gemeinsam].role === call.transcript[gemeinsam].role &&
+    persisted[gemeinsam].text === call.transcript[gemeinsam].text
+  )
+    gemeinsam += 1;
+  // Tenant-Schutz doppelt verankert wie oben (expliziter Filter + RLS-GUC als zweite Linie).
+  if (gemeinsam < persisted.length)
+    await client.query(
+      `DELETE FROM transcript_segment WHERE tenant_id=$1 AND call_id=$2 AND id = ANY($3)`,
+      [tenantId, call.id, persisted.slice(gemeinsam).map((r) => r.id)],
+    );
+  for (let i = gemeinsam; i < call.transcript.length; i++) {
     const seg = call.transcript[i];
     await client.query(
       `INSERT INTO transcript_segment (call_id, tenant_id, role, text, at) VALUES ($1,$2,$3,$4,$5)`,

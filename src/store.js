@@ -93,6 +93,11 @@ export const {
   // getCallByControlId). Beide Backends exportieren die Methode.
   attachActiveCallByControlId,
   addTranscript,
+  // GQ-H1-a: eine von Telnyx verworfene, nie gesprochene Antwort wieder aus dem Transkript
+  // nehmen. Beide Backends exportieren die Methode -> die Fassade ist die EINE Quelle;
+  // ohne diesen Re-Export waere store.dropLastAgentTranscript undefined und der Shim-Pfad
+  // wuerfe zur Laufzeit einen TypeError.
+  dropLastAgentTranscript,
   purgeTranscript,
   markAnswered,
   endCallRecord,
