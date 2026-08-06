@@ -55,6 +55,11 @@ Die Erkennungs-Engine wird an **vier Orten** gewaehlt, ohne dass einer vom ander
 | **`src/telephony/adapters/twilio/render.js:40` (Twilio-Gather)** | **`deepgram_nova-2-general`** | **Twilio** |
 | Telnyx-Assistant-Objekt (`GET/PATCH /v2/ai/assistants/<id>`, Feld `transcription`) | am 2026-08-06 mitgezogen | Anbieter-seitig |
 
+> **Achtung, Wechselwirkung mit Track C:** die Twilio-Zeile faellt mit C1 weg. Danach bleiben
+> **drei** Wahl-Orte innerhalb von Telnyx — die Duplizierung besteht fort, nur ohne das
+> Anbieter-uebergreifende Argument. **Track A bleibt richtig, egal wie C ausgeht**; wer A nach
+> C macht, streicht die Twilio-Zeile und begruendet mit den verbleibenden drei Orten.
+
 **Derselbe Hersteller darunter (Deepgram), zwei Anbieter-Schreibweisen, zwei Generationen.**
 Der Gather-Pfad bei Telnyx lief seit Juni auf `nova-3`, der Assistant-Pfad vier Wochen auf
 einem Modell, das deutsches Telefon-Audio als **Englisch** erkennt (gemessen: 97,0 % / 95,7 %
@@ -304,18 +309,49 @@ Ebenso pruefen: sind `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN` in der Render-Umge
 6. **`npm test` gruen, Smoke-Test, echter Anruf.** Ein Provider-Ausbau ohne echten Anruf ist
    nicht abgenommen.
 
-## Die Spannung, die bewusst entschieden gehoert
+## Zwei Entscheidungen, NICHT eine — und nur die erste ist belegt
 
-Der Owner will **Anbieter-Austauschbarkeit** (Track B) und gleichzeitig **den einzigen zweiten
-Telefonie-Anbieter loeschen**. Das ist kein Widerspruch, aber es muss bewusst entschieden sein:
+### C1 — Den Twilio-Adapter loeschen: entschieden, gut begruendet
 
-- **Empfehlung: `ports.js` + `registry.js` BLEIBEN.** Sie sind eine gewachsene, funktionierende
-  Naht; ihr Rueckbau waere ein tiefer Eingriff mit null Gewinn, und der naechste Carrier
-  (Redundanz, ein Land ohne Telnyx-Abdeckung) muesste sie neu bauen.
-- **Geloescht wird die ungenutzte Implementierung, nicht die Struktur.**
-- Preis dieser Wahl, ausdruecklich: die Naht traegt danach genau eine Implementierung. Das ist
-  vertretbar, weil Austauschbarkeit ein **erklaertes Produktziel** ist — nicht, weil eine
-  Abstraktion an sich gut waere.
+**Owner-Aussage, bindend:** es existiert **kein verbundener Twilio-Account**. Damit ist Twilio
+nicht "ein zweiter Anbieter, den wir gerade nicht nutzen", sondern **Code, der nicht
+funktionieren wuerde, wenn man ihn anspraeche**.
+
+Das entwertet zwei Rechtfertigungen, die in frueheren Fassungen dieses Dokuments standen und
+hiermit **gestrichen** sind:
+
+- *"Twilio als Rueckfall/Redundanz"* — **Fiktion.** Ein Carrier-Failover braucht Account,
+  gekaufte Nummern, Webhooks, Signaturschluessel und eine Nummern-Migration pro Tenant. Ein
+  Provider-Feld umzuschalten leistet davon nichts.
+- *"Twilio als Vorbild fuer den naechsten Adapter"* — **schaedlich.** Ein Adapter, der nie
+  gegen eine echte API laeuft, ist keine Vorlage, sondern irrefuehrende Doku: der naechste
+  Leser nimmt an, er funktioniere.
+
+### C2 — Die Indirektion (`ports.js` + `registry.js`) zurueckbauen: OFFEN, spaeter entscheiden
+
+**Nicht im selben Zug mit C1 erledigen.** Gemessene Ausgangslage:
+
+| | |
+|---|---|
+| `src/telephony/ports.js` | 281 Zeilen, ueberwiegend Vertrags-/Typbeschreibung |
+| `src/telephony/registry.js` | 183 Zeilen |
+| Importstellen ueber die Registry | 9 |
+| Registry als Hausmuster auch anderswo | `src/research/registry.js`, `src/geo/registry.js` |
+
+**Dafuer (zurueckbauen):** mit genau einer Implementierung ist eine Verzweigung nach Anbieter
+eine Auswahl mit einem Fall — Indirektion ohne Mehrwert (Clean Code S4), plus ein
+Verstaendnis-Aufschlag fuer jeden kuenftigen Leser.
+
+**Dagegen (belassen):** der Rueckbau aendert 9 Importstellen im **Live-Sprechpfad** ohne jeden
+nutzbaren Gewinn, waehrend die Beibehaltung zur Laufzeit praktisch nichts kostet. Und der
+`ports.js`-Vertrag hat eigenstaendigen Wert als Beschreibung dessen, was ein Telefonie-Anbieter
+koennen muss — unabhaengig davon, wie viele es sind.
+
+**Regel fuer die naechste Session: C1 zuerst, C2 danach mit dem tatsaechlich verbleibenden Code
+vor Augen — als eigener, ausdruecklich entschiedener Schritt, nie als Nebenwirkung von C1.**
+Zwei Aenderungen gleichzeitig am Sprechpfad sind genau die Art, wie man etwas kaputtmacht,
+ohne es zu merken. C2 braucht ohnehin keine Eile: nach C1 ist der Code korrekt, nur
+moeglicherweise umstaendlicher als noetig.
 
 ## Pre-Mortem Track C
 
@@ -325,8 +361,9 @@ Telefonie-Anbieter loeschen**. Das ist kein Widerspruch, aber es muss bewusst en
   Abdeckung vorher/nachher vergleichen, nicht nur Farbe.
 - *"Eine `/voice/twilio`-Route blieb stehen, ohne Signaturpruefung."* -> Schritt 4,
   `route-auth-inventory` ist der Faenger.
-- *"Zwei Jahre spaeter brauchten wir einen zweiten Carrier und mussten die Abstraktion neu
-  bauen."* -> Deshalb bleibt die Naht; nur die Implementierung geht.
+- *"Wir haben in einem Zug den Adapter geloescht UND die Indirektion zurueckgebaut — danach
+  war unklar, welche der beiden Aenderungen den Anruf gebrochen hat."* -> C1 und C2 sind
+  getrennte Schritte mit je eigener Abnahme.
 
 ---
 
