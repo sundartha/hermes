@@ -40,7 +40,42 @@ Das sind die **Vorher-Werte**. Jede kuenftige Konfiguration wird gegen sie gemes
 | H9 | Barge-in: die Live-Strecke verliert den Anfang, wenn der Mensch dem Agenten ins Wort faellt | **widerlegt** — Beginn waehrend Agentenrede 31 % mittlere WER, Beginn in Stille 33 % |
 | H10 | Die Erkennung hoert den Agenten mit (Echo/Mischung) | **widerlegt** — beide Kanaele gemischt durch dieselbe Engine liefert saubere Transkripte BEIDER Sprecher, keinen Salat |
 
-## Schritt 3 — Der Hebel: `deepgram/flux` -> `deepgram/nova-3` **UMGESETZT, Abnahme offen**
+## Schritt 3 — Der Hebel: `deepgram/flux` -> `deepgram/nova-3` **UMGESETZT UND LIVE ABGENOMMEN**
+
+**Abnahme 2026-08-06, live gemessen** (`b073e8d` per `/healthz` bestaetigt, danach zwei
+Testanrufe an die Owner-Nummer):
+
+| Messung | WER |
+|---|---|
+| vorher, `flux`, `call_mshb9v7btbsp` | 21,8 % |
+| vorher, `flux`, `call_mshbrhnc7nfp` | 45,7 % |
+| **nachher, `nova-3`, `call_mshgg6ijtyul`** | **8,9 %** (157 Referenzwoerter) |
+| Kontrolle auf demselben Anruf | 9,3 % |
+
+Die Erkennung liegt damit auf dem Niveau der Messgenauigkeit — diese Methode kann keinen
+Gewinn mehr aufloesen. Qualitativ: *"Ich möchte, dass du jetzt mal recherchierst, was der
+aktuelle Kader von Portugal ist"* kam wortgenau an; keine erfundenen Namen, keine Halbsaetze.
+
+**Einschraenkung, ausdruecklich:** die Vorher-Werte stammen aus EINGEHENDEN Anrufen, der
+Nachher-Wert aus einem AUSGEHENDEN. Nicht perfekt vergleichbar — der Abstand ist aber um ein
+Vielfaches groesser als jeder plausible Richtungseffekt.
+
+**Der erste Testanruf (`call_mshgd8jt83di`) hat nichts gemessen** und ist kein Beleg:
+er landete auf der Mailbox, 2 Referenzwoerter (*"Ja, hallo?"*), kein einziger Agenten-Turn.
+
+### Aus dem Testanruf mitgenommen (NICHT B-7)
+
+- **`look_up` feuert weiterhin nicht.** Der Agent bestritt erst, Internetzugriff zu haben,
+  raeumte die Funktion dann ein und benutzte sie trotzdem nicht. Bekannter Befund B-4/AL-D3;
+  bindende Owner-Entscheidung O-4 (Modellwechsel Haiku -> Sonnet als A/B) ist der naechste
+  Punkt.
+- **Erkannter Text kommt jetzt ohne Satzzeichen und kleingeschrieben.** Unser Pro-Call-Block
+  ueberschreibt die gesamte `transcription`-Konfiguration und setzt `smart_format`/`numerals`
+  nicht mit; die gelten fuer nova-3 und stehen am Assistant-Objekt auf `true`. Fuer die WER
+  irrelevant (wird wegnormalisiert), fuer das Sprachmodell moeglicherweise nicht.
+  Kandidat fuer die naechste Ein-Aenderung-Messung.
+
+### Wie es umgesetzt wurde
 
 Owner-Entscheidung 2026-08-06: nova-3 setzen, danach ein Testanruf an die Owner-Nummer,
 normal gesprochen (nicht ueberdeutlich, kein Skript).

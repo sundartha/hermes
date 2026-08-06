@@ -1015,3 +1015,40 @@ laut Telnyx-Doku **flux-only**. Mit nova-3 bestimmt Telnyx die Turn-Grenzen selb
 Gespraechs-Timing kann sich spuerbar aendern und gehoert in die Abnahme des Testanrufs.
 Nebenwirkung: `eager_eot_threshold` steht seit dem Wechsel auf `null` — das Feld, das sich
 laut GQ-H1 per API "nicht loeschen" liess, ist mit dem Modellwechsel verschwunden.
+
+### B-7 live abgenommen (2026-08-06, `b073e8d`)
+
+Deploy per `/healthz` gemessen, danach zwei ausgehende Testanrufe an die Owner-Nummer.
+
+| Messung | WER |
+|---|---|
+| vorher, `flux`, `call_mshb9v7btbsp` | 21,8 % |
+| vorher, `flux`, `call_mshbrhnc7nfp` | 45,7 % |
+| **nachher, `nova-3`, `call_mshgg6ijtyul`** | **8,9 %** (157 Referenzwoerter) |
+| Kontrolle auf demselben Anruf | 9,3 % |
+
+Die Erkennung liegt auf dem Niveau der Messgenauigkeit — **diese Methode kann keinen weiteren
+Gewinn mehr aufloesen.** Wer B-7 weiter optimieren will, braucht erst eine genauere Referenz
+(z. B. eine von Hand erstellte Abschrift). Qualitativ eindeutig: *"Ich möchte, dass du jetzt
+mal recherchierst, was der aktuelle Kader von Portugal ist"* kam wortgenau an.
+
+**Einschraenkung:** Vorher eingehend, nachher ausgehend — nicht perfekt vergleichbar. Der
+Abstand ist um ein Vielfaches groesser als jeder plausible Richtungseffekt.
+
+**Der erste Testanruf (`call_mshgd8jt83di`) ist KEIN Beleg** — Mailbox, 2 Referenzwoerter
+(*"Ja, hallo?"*), kein einziger Agenten-Turn. Er steht hier, damit niemand ihn spaeter als
+Fehlschlag der Umstellung liest.
+
+**Gespraechs-Timing:** im 169-s-Anruf keine Beschwerde ueber Unterbrechungen oder Wartezeiten,
+aber das ist eine Beobachtung an EINEM Anruf, keine Messung. Der Wegfall der flux-Turn-Regler
+bleibt zu beobachten.
+
+**Zwei Befunde aus dem Testanruf, die NICHT B-7 sind:**
+
+- **`look_up` feuert weiterhin nicht** (B-4/AL-D3). Der Agent bestritt erst, Internetzugriff
+  zu haben, raeumte die Funktion dann ein und benutzte sie trotzdem nicht. Das war das
+  eigentliche Aergernis des Owners in diesem Anruf. Naechster Punkt ist O-4 (Haiku -> Sonnet).
+- **Erkannter Text kommt jetzt ohne Satzzeichen und kleingeschrieben.** Unser Pro-Call-Block
+  ueberschreibt die GANZE `transcription`-Konfiguration und setzt `smart_format`/`numerals`
+  nicht mit — die gelten fuer nova-3 (nicht fuer flux) und stehen am Assistant-Objekt auf
+  `true`. Fuer die WER irrelevant, fuer das Sprachmodell moeglicherweise nicht.
