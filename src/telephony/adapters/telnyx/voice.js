@@ -229,12 +229,22 @@ const ELEVENLABS_VOICE_SETTINGS_TYPE = "elevenlabs";
 // STT-Sprach-Hint pro Call (RCA-Wurzel R2). Modell MUSS mitgesendet werden - TranscriptionConfig.model
 // hat laut Telnyx-OpenAPI den Default "distil-whisper/distil-large-v2" (ENGLISCH-ONLY, non-streaming);
 // ein transcription-Block ohne model koennte die STT still auf Englisch kippen. Der Wert spiegelt das
-// STT-Modell des Assistant-Objekts (deepgram/flux = das einzige Telnyx-Modell mit Turn-Taking-Features).
-const STT_MODEL = "deepgram/flux";
-// Von deepgram/flux unterstuetzte Sprach-Hints (Telnyx-OpenAPI, TranscriptionConfig.language).
-// "auto" = Telnyx-Spracherkennung setzt den Hint. "multi" bedeutet dort woertlich "no language hint"
-// und ist der LIVE-DEFEKT (R2: Deutsch kam als NL/EN-Kauderwelsch an) - dieser Adapter sendet es NIE.
-const STT_FLUX_HINTS = Object.freeze(["en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"]);
+// STT-Modell des Assistant-Objekts.
+//
+// B-7 (2026-08-06): war deepgram/flux, jetzt deepgram/nova-3. GEMESSEN an zwei echten Anrufen
+// (Dual-Channel-Aufnahme, Gegenstellen-Kanal isoliert, Wortfehlerrate gegen eine unabhaengige
+// Referenz-Abschrift, s. tasks/todo.md): flux liefert auf deutschem Telefon-Audio ENGLISCHEN
+// Kauderwelsch (95,7 % / 97,0 % WER) und ignoriert dabei den Sprach-Hint - "de" und "multi"
+// ergeben byte-identische Ausgabe. nova-3 kam auf denselben Aufnahmen auf 12,9 % / 18,8 %.
+// Der Preis ist bewusst bezahlt: eot_threshold/eager_eot_threshold/eot_timeout_ms sind laut
+// Telnyx-Doku FLUX-ONLY, mit nova-3 bestimmt Telnyx die Turn-Grenzen selbst.
+const STT_MODEL = "deepgram/nova-3";
+// Sprach-Hints, fuer die wir die Sprache explizit setzen statt sie raten zu lassen (Telnyx-OpenAPI,
+// TranscriptionConfig.language). Die Liste deckt die drei Gespraechssprachen (de/fr/en) mit ab;
+// alles ausserhalb -> "auto", damit Telnyx' Spracherkennung den Hint setzt. "multi" bedeutet dort
+// woertlich "no language hint" und ist der LIVE-DEFEKT (R2: Deutsch kam als NL/EN-Kauderwelsch
+// an) - dieser Adapter sendet es NIE.
+const STT_LANGUAGE_HINTS = Object.freeze(["en", "es", "fr", "de", "hi", "ru", "pt", "ja", "it", "nl"]);
 const STT_LANGUAGE_AUTO = "auto";
 
 // HTTP-Fehler werfen MIT Status (P8) und - falls vorhanden - dem Telnyx-Fehlercode/-titel,
@@ -334,10 +344,10 @@ export function assistantVoiceConfigured() {
 // Ingest- UND Inbound-Pfad genutzt wird; beide reichen call.language durch (GAP-24).
 // Der Ohne-language-Zweig bleibt der Grenzfall (Sprache nicht aufloesbar): dann KEIN
 // transcription-Feld, Body byte-identisch zum Bestand.
-// Sprache ausserhalb der flux-Hint-Liste (auch "multi") -> "auto": Telnyx-Detection statt Hint-los.
+// Sprache ausserhalb der Hint-Liste (auch "multi") -> "auto": Telnyx-Detection statt Hint-los.
 function transcriptionFields(language) {
   if (!language) return {};
-  const hint = STT_FLUX_HINTS.includes(language) ? language : STT_LANGUAGE_AUTO;
+  const hint = STT_LANGUAGE_HINTS.includes(language) ? language : STT_LANGUAGE_AUTO;
   return { transcription: { model: STT_MODEL, language: hint } };
 }
 

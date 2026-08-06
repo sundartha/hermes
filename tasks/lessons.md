@@ -377,3 +377,55 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   nur welche verhindern).
 - Gefunden hat es nicht der Test, sondern das kritische Gegenlesen des eigenen Diffs vor dem
   Commit. Der Test kam danach — und ist ohne den Ausschluss rot.
+
+## Ein ignorierter Parameter ist unsichtbar, bis man Fingerabdruecke vergleicht (2026-08-06, B-7)
+
+- Die Replay-Bank schickte dieselbe Aufnahme durch `flux`, `nova-2` und `nova-3` und bekam
+  dreimal **12,9 %** WER. Ich hatte den Parameter `transcription_model` gesetzt — er heisst
+  aber `model`. Der falsche Name wird still ignoriert, alle drei Laeufe liefen auf demselben
+  Default. Eine Minute lang stand da eine plausible, vollstaendig falsche Aussage
+  ("alle Deepgram-Modelle sind gleich gut, das Problem liegt woanders").
+- **Aufgefallen ist es nur am SHA der Ausgabe.** Drei angeblich verschiedene Modelle lieferten
+  byte-identischen Text — bei bloss gleicher *Prozentzahl* haette ich es fuer Zufall gehalten.
+- **Regel:** Wenn ein Lauf eine Variable variieren SOLL, muss die Auswertung beweisen, dass
+  sie variiert hat. Fingerabdruck (Hash) je Ergebnis mitloggen und auf Kollisionen pruefen.
+  Zwei identische Ergebnisse bei verschiedener Eingabe sind ein **Fehleralarm**, kein Befund.
+- Verwandt, gleiche Wurzel: die Zusatzparameter `eot_threshold`/`eager_eot_threshold` an
+  dieselbe Schnittstelle aenderten nichts. Ich habe daraus NICHT "die Schwellen wirken nicht"
+  geschlossen — bei einer Schnittstelle, die unbekannte Parameter still schluckt, ist
+  "kein Unterschied" kein Messergebnis, sondern eine offene Frage.
+
+## Ein Selbsttest, der denselben Parser benutzt wie der Code, prueft nichts (2026-08-06, B-7)
+
+- `scripts/stt-wer.mjs` hatte eine eingebaute Plausibilitaetspruefung: Aufnahme-Start und
+  Konversations-Start duerfen nicht weiter als 3 s auseinanderliegen. Sie meldete **0,47 s** —
+  waehrend die Turn-Tabelle Fenster von **7207 s** auswarf.
+- **Ursache:** Telnyx liefert `created_at` bei Aufnahmen OHNE Zonenanteil
+  (`2026-08-06T09:41:32`), bei Nachrichten MIT `Z`. `Date.parse` liest den ersten als
+  **Ortszeit** — in Europa/Berlin 2 h daneben. Die Anker-Pruefung verglich zwei gleich falsch
+  geparste Werte und war deshalb blind fuer genau den Fehler, gegen den sie gebaut war.
+- **Regel:** Eine Konsistenzpruefung muss ihre beiden Seiten aus **unterschiedlichen** Quellen
+  ziehen, sonst prueft sie nur sich selbst. Und: fremde Zeitstempel laufen durch EINE
+  Parse-Stelle, die einen fehlenden Zonenanteil ausdruecklich behandelt — nie durch das
+  blosse `Date.parse` an mehreren Stellen.
+- Gefunden hat es nicht die Pruefung, sondern eine Zahl in der Ausgabe, die offensichtlich
+  nicht sein konnte (7207 s in einem 75-s-Anruf). **Ausgaben, deren Groessenordnung ein Mensch
+  sofort beurteilen kann, sind mehr wert als eine stille Zusicherung.**
+
+## Das Gefuehlte messbar machen war der ganze Fortschritt (2026-08-06, B-7)
+
+- Fuenf Phasen und drei Prompt-Runden hatten an der Gespraechsqualitaet nichts Hoerbares
+  bewirkt. Was B-7 in einer Sitzung geloest hat, war kein besserer Fix, sondern eine
+  **Messlatte**: Telnyx zeichnet dual-channel auf, also laesst sich der Kanal der Gegenstelle
+  isolieren, von einem zweiten Erkenner abschreiben und als Wortfehlerrate gegen das stellen,
+  was der Anbieter verstanden hat.
+- **Die Kontrolle macht die Zahl erst belastbar:** der Agentenkanal hat eine ECHTE Ground
+  Truth (wir wissen aus dem Protokoll, was der Agent gesagt hat). Dass die Referenz dort
+  94-96 % zurueckholt, ist der Beweis, dass 45,7 % auf dem anderen Kanal nicht der Messung
+  anzulasten sind. Eine Referenz ohne Kontrolle ist eine zweite Meinung, keine Messung.
+- **Und sie hat eine eigene Streuung:** zwei Laeufe derselben Aufnahme ergaben 45,7 % und
+  47,1 %. Ein Unterschied unter ~2 Punkten ist damit kein Ergebnis.
+- **Regel fuer die naechste "der Agent versteht mich nicht"-Frage:** zuerst fragen, welche
+  Aufzeichnung der Anbieter ohnehin schon anlegt — und ob sich daraus ein Vorher-Wert bauen
+  laesst, BEVOR jemand eine Konfiguration anfasst. Ein Testanruf kostet einen Menschen,
+  ein Messlauf kostet Sekunden.

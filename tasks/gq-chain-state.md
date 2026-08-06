@@ -930,3 +930,88 @@ Turn-Kontext, Nachbearbeitung der Antwort), parallel bewertet, bester umgesetzt.
 | F6 | `DASHBOARD_PASSWORD` ohne Konsument, blockiert aber weiter den Boot (`config.js:966`, `:1610-1614`) | am Code belegt |
 | F7 | `WORLD_DEFAULT_LANGUAGE_ENABLED` ohne Boot-Sonde — trifft die Sprache der Offenlegung | am Code belegt |
 | F3 | `turnText.gapMs` wird berechnet, aber von keiner Entscheidung gelesen | am Code belegt |
+
+---
+
+## B-7: das Kauderwelsch, gemessen statt gehoert (2026-08-06)
+
+**Die Wurzel ist das STT-Modell `deepgram/flux`. Das Audio ist einwandfrei.**
+
+### Wie das messbar wurde
+
+Die Telnyx-Aufnahme ist **Dual-Channel**: die Gegenstelle liegt auf einem eigenen Kanal.
+Damit laesst sich das bisher Ungreifbare zu einer Zahl machen:
+
+1. Aufnahme holen (`GET /v2/recordings`, Zuordnung ueber `call_session_id`),
+2. Kanal der Gegenstelle mit `ffmpeg` isolieren,
+3. von einem **zweiten, unabhaengigen** Erkenner abschreiben lassen (Referenz),
+4. Wortfehlerrate gegen das rechnen, was Telnyx' Erkenner verstanden hat
+   (`GET /v2/ai/conversations/<uuid>/messages`, Rolle `user`).
+
+Der **Agentenkanal** liefert die Kontrolle: dort kennen wir die Wahrheit (der Agententext
+steht im Protokoll). Die Referenz holt daraus 94-96 % der Woerter zurueck — aus demselben
+8-kHz-MP3. Ohne diese Kontrolle waere die Hauptzahl nicht interpretierbar.
+
+Werkzeug: `scripts/stt-wer.mjs <call_session_id|recording_id>`. Belege und Turn-fuer-Turn-
+Gegenueberstellung: `data/evidence/stt-wer-2026-08-06/befund.md` (gitignored, lokal).
+
+### Die Zahlen (alle auf denselben zwei echten Anrufen)
+
+| Erkenner | `call_mshb9v7btbsp` | `call_mshbrhnc7nfp` |
+|---|---|---|
+| **live im Einsatz: `deepgram/flux` + `de`** | 21,8 % | **45,7 %** |
+| `deepgram/flux` + `de`, direkt gemessen | **97,0 %** | **95,7 %** |
+| `deepgram/nova-2` + `de` | 24,1 % | 24,3 % |
+| **`deepgram/nova-3` + `de`** | **18,8 %** | **12,9 %** |
+| Referenz gegen bekannten Agententext (Messgenauigkeit) | 4,3 % | 5,7 % |
+
+`deepgram/flux` erkennt deutsches Telefon-Audio als **Englisch** (*"Yeah. Zippon. this one,
+we can't see good thing."*) und **ignoriert den Sprach-Hint**: `language=de` und
+`language=multi` liefern byte-identische Ausgabe. Die Telnyx-Doku behauptet ausdruecklich
+Deutsch-Unterstuetzung seit 2026-04-29. Anbieter-Aussage und Anbieter-Verhalten
+widersprechen sich — zum zweiten Mal in dieser Kette bei genau diesem Modell.
+
+### Wie die Replay-Bank funktioniert (und die Falle darin)
+
+Telnyx hat neben den AI Assistants eine **eigenstaendige** Streaming-STT:
+`wss://api.telnyx.com/v2/speech-to-text/transcription?transcription_engine=…&model=…&language=…&input_format=wav&sample_rate=…`,
+Bearer-Auth. Aufgezeichnetes Audio im Echtzeit-Takt hineinschicken, `is_final`-Transkripte
+sammeln — damit sind Kandidaten vergleichbar, **ohne** einen Menschen anrufen zu lassen.
+
+**Die Falle, fast hineingelaufen:** der Parameter heisst `model`, nicht `transcription_model`.
+Mit dem falschen Namen liefern flux, nova-2 und nova-3 **byte-identische** Ergebnisse — der
+Parameter wird still ignoriert und alles laeuft auf demselben Default. Der erste Bank-Lauf
+sah dadurch so aus, als seien alle drei Modelle gleich gut (12,9 %). Aufgefallen ist es nur,
+weil drei angeblich verschiedene Modelle exakt dieselbe Zeichenkette lieferten —
+**Fingerabdruck je Ergebnis mitloggen, sonst ist ein ignorierter Parameter unsichtbar.**
+
+### Widerlegt (nicht nochmal untersuchen)
+
+- **Audio-Weg (H1)** — die Referenz holt aus dem staerker komprimierten 8-kHz-MP3 sauberes
+  Deutsch. Der Kanal traegt die Information.
+- **Barge-in/Ueberlappung** — Aeusserungen, die WAEHREND der Agent spricht beginnen: 31 %
+  mittlere WER; Aeusserungen in Stille: 33 %. Kein Effekt.
+- **Echo/Mithoeren des Agenten** — beide Kanaele gemischt durch dieselbe Engine ergibt
+  saubere Transkripte BEIDER Sprecher, keinen Salat.
+- **Aeusserungslaenge** — <=6 Woerter: 33 %, laenger: 32 %.
+- **"Der erfundene Name kam aus einer zerschnittenen Aeusserung"** — falsch. Zwischen
+  *"Du bist"* und *"ein Idiot"* liegen **2,0 s echte Pause** (Wort-Zeitmarken der Referenz).
+  Die Turn-Trennung war korrekt; *"ein Idiot"* -> *"Anil Jones"* ist ein reiner
+  Erkennungsfehler. Fragmentierung (a) und Wortsalat (b) bleiben getrennte Befunde.
+
+### Umgesetzt
+
+`STT_MODEL` in `src/telephony/adapters/telnyx/voice.js` von `deepgram/flux` auf
+`deepgram/nova-3`. **Das Modell wird pro Call mitgesendet** (`transcriptionFields`, Zeile
+~338) — eine Aenderung nur am Assistant-Objekt haette der naechste Anruf ueberschrieben.
+Das Assistant-Objekt ist zusaetzlich gepatcht (Fallback, wenn die Sprache nicht aufloesbar
+ist und kein `transcription`-Block mitgeht).
+
+Snapshots: `data/evidence/telnyx-config/assistant-snapshot-2026-08-06-vor-nova3.json` und
+`-nach-nova3.json`.
+
+**Bewusst bezahlter Preis:** `eot_threshold`, `eager_eot_threshold` und `eot_timeout_ms` sind
+laut Telnyx-Doku **flux-only**. Mit nova-3 bestimmt Telnyx die Turn-Grenzen selbst; das
+Gespraechs-Timing kann sich spuerbar aendern und gehoert in die Abnahme des Testanrufs.
+Nebenwirkung: `eager_eot_threshold` steht seit dem Wechsel auf `null` — das Feld, das sich
+laut GQ-H1 per API "nicht loeschen" liess, ist mit dem Modellwechsel verschwunden.

@@ -240,24 +240,24 @@ test("startAssistant: transcription={model,language} bei bekannter Sprache (de)"
   const calls = stubFetch({ json: {} });
   await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "de" });
   const body = JSON.parse(calls[0].body);
-  assert.deepEqual(body.transcription, { model: "deepgram/flux", language: "de" });
+  assert.deepEqual(body.transcription, { model: "deepgram/nova-3", language: "de" });
   assert.equal(body.assistant.id, "a");
 });
 
 // VOICE-17 (tasks/i18n-tests/03-telefonie-render.md): der Telnyx-Assistant-STT-Sprachhint
-// deckt "en" explizit ab (in STT_FLUX_HINTS) statt fail-open auf "auto" zu fallen - bislang
+// deckt "en" explizit ab (in STT_LANGUAGE_HINTS) statt fail-open auf "auto" zu fallen - bislang
 // ungetestet (grep-Negativbefund im Katalog). Ergaenzt die bestehende "de"-Abdeckung oben
 // um den fuer diesen Testkatalog-Block relevanten EN-Fall.
 test("startAssistant: transcription={model,language} bei bekannter Sprache EN (VOICE-17)", async () => {
   const calls = stubFetch({ json: {} });
   await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "en" });
   const body = JSON.parse(calls[0].body);
-  assert.deepEqual(body.transcription, { model: "deepgram/flux", language: "en" });
+  assert.deepEqual(body.transcription, { model: "deepgram/nova-3", language: "en" });
   assert.equal(body.assistant.id, "a");
 });
 
-// afix-p2 (P2-T2): Sprache ausserhalb der flux-Hint-Liste -> "auto" (Telnyx-Detection statt
-// Hint-los), Modell bleibt deepgram/flux.
+// afix-p2 (P2-T2): Sprache ausserhalb der Hint-Liste -> "auto" (Telnyx-Detection statt
+// Hint-los), Modell bleibt deepgram/nova-3.
 // VOICE-18 (tasks/i18n-tests/03-telefonie-render.md): Katalog-Erwartung 07-22 war "rot",
 // ist seit der Assistant-Fix-Kette ueberholt (tasks/i18n-tests/19-w2-baseline.md §3.4) -
 // Fail-open auf "auto" ist bereits hier UND im "multi"-Test darunter belegt.
@@ -266,7 +266,7 @@ test("startAssistant: unbekannte Sprache -> transcription.language=auto", async 
   await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "tr" });
   const body = JSON.parse(calls[0].body);
   assert.equal(body.transcription.language, "auto");
-  assert.equal(body.transcription.model, "deepgram/flux");
+  assert.equal(body.transcription.model, "deepgram/nova-3");
 });
 
 // afix-p2 (P2-T3): Invariante der Phase - "multi" bedeutet laut Telnyx-Doku woertlich
