@@ -994,6 +994,10 @@ weil drei angeblich verschiedene Modelle exakt dieselbe Zeichenkette lieferten �
 - **Echo/Mithoeren des Agenten** — beide Kanaele gemischt durch dieselbe Engine ergibt
   saubere Transkripte BEIDER Sprecher, keinen Salat.
 - **Aeusserungslaenge** — <=6 Woerter: 33 %, laenger: 32 %.
+- **Sprachmischung kippt das Modell** — widerlegt als Erklaerung: *"What the fuck"* wurde
+  korrekt erkannt, der Salat steht rundherum.
+- **Fehler konzentriert am Anfang der Aeusserung** — nur teilweise: erste drei Woerter 39 %
+  Fehler (14/36), Rest 24 % (37/155). Erhoeht, aber nicht die Erklaerung.
 - **"Der erfundene Name kam aus einer zerschnittenen Aeusserung"** — falsch. Zwischen
   *"Du bist"* und *"ein Idiot"* liegen **2,0 s echte Pause** (Wort-Zeitmarken der Referenz).
   Die Turn-Trennung war korrekt; *"ein Idiot"* -> *"Anil Jones"* ist ein reiner

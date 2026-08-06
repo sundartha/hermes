@@ -1,104 +1,200 @@
-# B-7 — Der Agent versteht den Menschen am Telefon nicht
+# Track A — STT-Modellwahl: vier Orte, eine Entscheidung
 
-Auftrag aus `tasks/kickoff-kauderwelsch-2026-08-07.md`. Regel: nur Gemessenes; jede Aussage
-traegt einen Beleg oder ist als **unbelegt** markiert.
+Auftrag aus `tasks/kickoff-anbieter-austauschbarkeit-2026-08-07.md`, Track A.
+Regel: nur Gemessenes; jede Aussage traegt einen Beleg oder ist als **unbelegt** markiert.
 
-## Schritt 1 — Die Weggabelung: Audio oder Erkennung? **ERLEDIGT, entschieden**
+Der Vorgaenger-Auftrag (B-7, Kauderwelsch) ist erledigt und live abgenommen; sein Stand liegt
+in `tasks/gq-chain-state.md`, Abschnitt "B-7". Track B/C (LLM-Anbieter-Port, Twilio-Ausbau)
+sind **nicht** Teil dieser Datei — sie brauchen laut Kickoff zuerst ein gemeinsames
+Plandokument (`PLAN-ANBIETER-PORT.md`), das dem Owner vorgelegt wird, bevor Code entsteht.
 
-**Erwartetes Ergebnis (vorab formuliert):** eine unabhaengige Transkription des isolierten
-Gegenstellen-Kanals ist entweder ebenfalls Salat (-> Audio-Weg ist die Wurzel) oder sauber
-(-> Erkennung ist die Wurzel).
+## Schritt 1 — Die offene Frage belegen. **ERLEDIGT, mit Ueberraschung**
 
-**Verifikationsmethode:** Dual-Channel-Aufnahme von Telnyx holen, Kanal L (Gegenstelle) mit
-`ffmpeg` isolieren, mit einem zweiten, unabhaengigen Erkenner abschreiben, Wortfehlerrate
-gegen Telnyx' eigenes Gespraechsprotokoll rechnen.
+**Erwartetes Ergebnis (vorab formuliert):** Anbieter-Doku/OpenAPI beantwortet, ob der
+Pro-Call-`transcription`-Block die Konfiguration des Assistant-Objekts ersetzt oder
+zusammenfuehrt — und damit, ob der Fix "die gueltigen Einstellungen mitfuehren" moeglich ist.
 
-**Ergebnis, gemessen:** Die Aufnahme ist sauber. Beleg in
-`data/evidence/stt-wer-2026-08-06/befund.md` (gitignored, bleibt lokal).
+**Verifikationsmethode:** OpenAPI-Spezifikation von Telnyx abrufen und die beiden Schemata
+gegenueberstellen; zusaetzlich Live-GETs gegen die Assistant- und Konversations-API.
 
-| Messung | WER |
-|---|---|
-| Telnyx `deepgram/flux` + `de`, Anruf 1 (`call_mshb9v7btbsp`) | **21,8 %** |
-| Telnyx `deepgram/flux` + `de`, Anruf 2 (`call_mshbrhnc7nfp`) | **45,7 %** |
-| Kontrolle: Referenz-Erkenner gegen bekannten Agententext | 4,3 % / 5,7 % |
+**Ergebnis, gemessen** (Quelle `team-telnyx/openapi`, `spec3.json`, openapi 3.1.0):
 
-Das sind die **Vorher-Werte**. Jede kuenftige Konfiguration wird gegen sie gemessen.
-
-## Schritt 2 — Hypothesen-Landkarte: Urteile
-
-| # | Hypothese | Urteil |
+| | Assistant-Objekt (`Assistant.transcription`) | Pro Call (`AIAssistantStartRequest.transcription`) |
 |---|---|---|
-| H1 | Audio-Weg verstuemmelt (US-DID, Transcoding, Paketverlust) | **widerlegt** — ein zweiter Erkenner holt aus demselben (verlustbehafteteren) 8-kHz-MP3 94-96 % der Woerter zurueck |
-| H2 | STT-Modell ungeeignet fuer Deutsch (`deepgram/flux`) | **BESTAETIGT — das ist die Wurzel.** flux liefert auf deutschem Telefon-Audio englischen Kauderwelsch (97,0 % / 95,7 % WER) und ignoriert den Sprach-Hint (`de` und `multi` byte-identisch). `nova-3` auf denselben Aufnahmen: 18,8 % / 12,9 % |
-| H3 | STT-Konfiguration unvollstaendig (`keyterm`, `smart_format`, `numerals` = `null`) | **hinfaellig** — `smart_format`/`numerals` gelten laut Doku fuer Deepgram AUSSER flux; mit dem Wechsel auf nova-3 stehen beide auf `true`. `keyterm` bleibt ein ungenutzter Hebel fuer spaeter |
-| H4 | Eager-EOT schneidet Aeusserungen ab | **widerlegt am Beleg, den ich zuerst falsch gelesen hatte** — zwischen *"Du bist"* und *"ein Idiot"* liegen **2,0 s echte Pause**. Die Turn-Trennung war korrekt; *"ein Idiot"* -> *"Anil Jones"* ist reiner Erkennungsfehler |
-| H5 | Sprachmischung kippt das Modell | **widerlegt als Erklaerung** — *"What the fuck"* wurde korrekt erkannt; der Salat steht rundherum |
-| H6 | Aufnahmesituation der Gegenstelle | **widerlegt** — derselbe Kanal ist fuer den Referenz-Erkenner sauber |
-| H7 | Fehler konzentriert am Anfang der Aeusserung | **teilweise** — erste drei Woerter 39 % Fehler (14/36), Rest 24 % (37/155); erhoeht, aber nicht die Erklaerung |
-| H8 | Kurze Aeusserungen sind schlechter | **widerlegt als alleinige Erklaerung** — <=6 Woerter: 33 %, laenger: 32 % |
+| Schema | `TranscriptionSettings` | `TranscriptionConfig` |
+| Felder | `model, language, api_key_ref, region, settings` | **nur `model, language`** |
+| Modell-Enum | 12 Werte | 17 Werte |
 
-| H9 | Barge-in: die Live-Strecke verliert den Anfang, wenn der Mensch dem Agenten ins Wort faellt | **widerlegt** — Beginn waehrend Agentenrede 31 % mittlere WER, Beginn in Stille 33 % |
-| H10 | Die Erkennung hoert den Agenten mit (Echo/Mischung) | **widerlegt** — beide Kanaele gemischt durch dieselbe Engine liefert saubere Transkripte BEIDER Sprecher, keinen Salat |
+**Der Pro-Call-Block kann `settings` gar nicht tragen.** Der im Kickoff erwogene Fix
+("der Pro-Call-Block muss die gueltigen Einstellungen mitfuehren") ist an dieser API-Version
+**strukturell unmoeglich** — unabhaengig davon, ob ersetzt oder gemerged wird.
 
-## Schritt 3 — Der Hebel: `deepgram/flux` -> `deepgram/nova-3` **UMGESETZT UND LIVE ABGENOMMEN**
+**Ersetzen vs. zusammenfuehren bleibt OFFEN.** Die Doku sagt dazu nichts; der einzige
+dokumentierte Fallback-Satz ("assistant's stored configuration will be used as fallback for
+any omitted fields") steht ausdruecklich am `assistant`-Unterobjekt, NICHT am gleichrangigen
+`transcription`. Entscheidbar bleibt sie — s. Schritt 7.
 
-**Abnahme 2026-08-06, live gemessen** (`b073e8d` per `/healthz` bestaetigt, danach zwei
-Testanrufe an die Owner-Nummer):
+## Schritt 2 — Kontrolle und Gegenerklaerungen. **ERLEDIGT**
 
-| Messung | WER |
+**Erwartetes Ergebnis:** die Beobachtung "erkannter Text kleingeschrieben, ohne Satzzeichen"
+ist entweder echte STT-Ausgabe oder ein Darstellungsartefakt.
+
+**Verifikationsmethode:** dieselbe Konversation, beide Rollen. Der Agentenkanal ist die
+Kontrolle — dort kennen wir die Wahrheit (derselbe Kunstgriff wie bei der WER-Messung).
+
+**Ergebnis, gemessen** (Konversation `93eab7b6-…`, 2026-08-06T11:51:27Z, Assistant-Version
+`20260806T113555798821`):
+
+- `role:user` (STT): *"ja genau und darum geht es ja dass du dass ich hier teste …"*
+- `role:assistant` (unser Text): *"Ah, verstanden - du möchtest testen, ob ich die
+  lookup-Funktion richtig nutze."*
+
+Gross-/Kleinschreibung und Satzzeichen ueberleben die API. **Die Beobachtung ist echt.**
+(Feldname ist `text`, nicht `content` — ein `m.content`-Zugriff liefert still Leerstring.)
+
+| Gegenerklaerung | Urteil |
 |---|---|
-| vorher, `flux`, `call_mshb9v7btbsp` | 21,8 % |
-| vorher, `flux`, `call_mshbrhnc7nfp` | 45,7 % |
-| **nachher, `nova-3`, `call_mshgg6ijtyul`** | **8,9 %** (157 Referenzwoerter) |
-| Kontrolle auf demselben Anruf | 9,3 % |
+| Die Nachrichten-API normalisiert Text | **widerlegt** (Kontrolle oben) |
+| Wir normalisieren im Repo | **widerlegt** — einziges `toLowerCase` auf Transkripttext ist `comparableWords` (`src/utils/text.js:42-49`), reiner Zitatvergleich, veraendert kein gespeichertes Transkript |
+| `smart_format` war am Assistant-Objekt nie `true` | **widerlegt durch Live-Messung**, s. u. |
 
-Die Erkennung liegt damit auf dem Niveau der Messgenauigkeit — diese Methode kann keinen
-Gewinn mehr aufloesen. Qualitativ: *"Ich möchte, dass du jetzt mal recherchierst, was der
-aktuelle Kader von Portugal ist"* kam wortgenau an; keine erfundenen Namen, keine Halbsaetze.
+**Live-Messung der Assistant-Versionen** (`GET /v2/ai/assistants/<id>/versions/<ver>`):
 
-**Einschraenkung, ausdruecklich:** die Vorher-Werte stammen aus EINGEHENDEN Anrufen, der
-Nachher-Wert aus einem AUSGEHENDEN. Nicht perfekt vergleichbar — der Abstand ist aber um ein
-Vielfaches groesser als jeder plausible Richtungseffekt.
+| Version | model | language | settings.smart_format |
+|---|---|---|---|
+| 20260722T084506642573 | deepgram/flux | multi | null |
+| 20260804T161002024484 | deepgram/flux | de | null |
+| 20260806T074913520989 | deepgram/flux | de | null |
+| **20260806T113555798821** | **deepgram/nova-3** | de | **true** |
 
-**Der erste Testanruf (`call_mshgd8jt83di`) hat nichts gemessen** und ist kein Beleg:
-er landete auf der Mailbox, 2 Referenzwoerter (*"Ja, hallo?"*), kein einziger Agenten-Turn.
+`smart_format: true` galt bei genau den Anrufen, deren Transkript roh ankam. Die Kickoff-
+Praemisse stimmt — sie war bis zu dieser Messung nur unbelegt. Nebenbefund: es gibt **keinen**
+historischen Gegenversuch, denn `smart_format` wurde erst mit dem nova-3-Patch gesetzt.
 
-### Aus dem Testanruf mitgenommen (NICHT B-7)
+**Was NICHT widerlegt ist und offen bleibt:** ob `smart_format` bei `deepgram/nova-3` auf
+deutschem Telefon-Audio ueberhaupt wirkt. Solange das offen ist, ist "der Pro-Call-Block
+ersetzt alles" die wahrscheinlichere, aber **nicht** die einzige Erklaerung.
 
-- **`look_up` feuert weiterhin nicht.** Der Agent bestritt erst, Internetzugriff zu haben,
-  raeumte die Funktion dann ein und benutzte sie trotzdem nicht. Bekannter Befund B-4/AL-D3;
-  bindende Owner-Entscheidung O-4 (Modellwechsel Haiku -> Sonnet als A/B) ist der naechste
-  Punkt.
-- **Erkannter Text kommt jetzt ohne Satzzeichen und kleingeschrieben.** Unser Pro-Call-Block
-  ueberschreibt die gesamte `transcription`-Konfiguration und setzt `smart_format`/`numerals`
-  nicht mit; die gelten fuer nova-3 und stehen am Assistant-Objekt auf `true`. Fuer die WER
-  irrelevant (wird wegnormalisiert), fuer das Sprachmodell moeglicherweise nicht.
-  Kandidat fuer die naechste Ein-Aenderung-Messung.
+## Schritt 3 — Tote Messung, festgehalten damit sie niemand wiederholt
 
-### Wie es umgesetzt wurde
+`POST /v2/calls/<ungueltige-ccid>/actions/start_ai_assistant` mit (a) nur `model`+`language`,
+(b) zusaetzlich `settings.smart_format`, (c) einem frei erfundenen Unsinnsfeld liefert
+**dreimal identisch HTTP 404 / code 10005**. Telnyx prueft die Ressource **vor** dem Body.
+Eine Schema-Validierung ohne aktiven Anruf ist ueber diesen Weg nicht zu bekommen.
 
-Owner-Entscheidung 2026-08-06: nova-3 setzen, danach ein Testanruf an die Owner-Nummer,
-normal gesprochen (nicht ueberdeutlich, kein Skript).
+## Schritt 4 — Kopplung Modell <-> Einstellung, aus der Spezifikation. **ERLEDIGT**
 
-Der Wechsel ist **kein reiner Konfigurations-Schalter**: das Modell geht bei JEDEM Anruf mit
-(`transcriptionFields` in `src/telephony/adapters/telnyx/voice.js`). Geaendert wurden daher
-beide Stellen — die Konstante `STT_MODEL` im Adapter und das Assistant-Objekt.
+Quelle: `TranscriptionSettingsConfig`, Feld-Beschreibungen "Available only for …".
 
-**Erwartetes Ergebnis:** die WER des Testanrufs liegt deutlich unter 21,8 % / 45,7 % und in
-der Naehe der Bank-Werte (12,9 % / 18,8 %). Der Agent spricht keine erfundenen Namen aus.
+| Einstellung | gilt fuer |
+|---|---|
+| `eot_threshold`, `eot_timeout_ms`, `eager_eot_threshold` | `deepgram/flux` |
+| `keyterm` | `deepgram/nova-3` **und** `deepgram/flux` |
+| `end_of_turn_confidence_threshold`, `min_turn_silence`, `max_turn_silence` | `assemblyai/universal-streaming` |
+| `interim_results`, `enable_endpoint_detection`, `max_endpoint_delay_ms` | `soniox/stt-rt-v4` |
+| `smart_format`, `numerals` | **keine Einschraenkung in der Spec** |
 
-**Verifikationsmethode:** `node scripts/stt-wer.mjs <call_session_id>` nach dem Anruf.
+Zwei Korrekturen an der Kickoff-Tabelle:
 
-**Zusaetzlich zu beurteilen (nicht die WER):** das Gespraechs-Timing. `eot_threshold`,
-`eager_eot_threshold` und `eot_timeout_ms` sind flux-only; mit nova-3 bestimmt Telnyx die
-Turn-Grenzen selbst. Faellt der Agent haeufiger ins Wort oder wartet er spuerbar laenger, ist
-das eine Folge dieses Wechsels und gehoert in die Abnahme.
+1. Kickoff und `tasks/gq-chain-state.md` (H3) behaupten, `smart_format`/`numerals` gelten
+   "Deepgram **ausser** flux". **Die Spec sagt dazu nichts.** Die Einschraenkung steht nur auf
+   der Doku-SEITE, und dort als Aussage ueber das **Portal** ("the Portal exposes these
+   settings and enables both by default when you select the model") — also ueber die
+   Bedienoberflaeche, nicht ueber die API-Semantik.
+2. Die drei `soniox`-Felder fehlen im Kickoff. Sie stehen als `null` in unserer Live-Config.
 
-**Rueckweg:** ein `PATCH` auf das Assistant-Objekt plus ein Revert der Konstante.
-Snapshot vorher: `data/evidence/telnyx-config/assistant-snapshot-2026-08-06-vor-nova3.json`.
+**Konkreter Befund aus der Live-Config:** das Assistant-Objekt traegt `eot_threshold: 0.9` und
+`eot_timeout_ms: 5000` — laut Spec **flux-only** — an einem `nova-3`-Objekt. Konfiguration,
+die aussieht wie eine Entscheidung und keine Wirkung hat. **Kein Repo-Test kann das je sehen.**
+
+Zusaetzlich gefunden: `GET /v2/speech-to-text/providers` ist eine **live abrufbare** Inventur
+(18 Modelle mit `service_types` und Sprachlisten, u. a. `ai_assistant` und `in_call`). Sie
+weicht an zwei Stellen von der OpenAPI ab — `nvidia/parakeet-v3` steht im Assistant-Enum der
+Spec, hat live aber **keinen** `ai_assistant`-Diensttyp; `speechmatics/standard` hat ihn live,
+fehlt aber im Assistant-Enum der Spec. Anbieter-Aussage gegen Anbieter-Verhalten, zum dritten
+Mal in dieser Kette.
+
+## Schritt 5 — Inventur gegengeprueft. **ERLEDIGT**
+
+| Ort | Wert | Urteil |
+|---|---|---|
+| `src/telephony/adapters/telnyx/voice.js:241` (`STT_MODEL`, Assistant-Pfad) | `deepgram/nova-3` | bestaetigt |
+| `src/telephony/adapters/telnyx/render.js:119-120` (TeXML-Gather) | `Deepgram` + `deepgram/nova-3` | bestaetigt |
+| `src/telephony/adapters/twilio/render.js:40` (Twilio-Gather) | `deepgram_nova-2-general` | bestaetigt |
+| Telnyx-Assistant-Objekt (`transcription`) | `deepgram/nova-3` | bestaetigt (Live-GET) |
+
+**Korrekturen an der Kickoff-Fassung:**
+
+- *"Kein einziger STT-Wert steht in `src/config.js`"* ist zu pauschal: `sttSpeechTimeoutSec`
+  / `STT_SPEECH_TIMEOUT_SEC` steht dort (`config.js:1231`, `.env.example`). Praezise ist:
+  **kein STT-MODELL-Wert**.
+- **Keine fuenfte Fundstelle.** `scripts/telnyx-assistant-provision.mjs:141` fuehrt
+  `transcription` in `PRESERVED_SAFETY_FIELDS` und sendet es **nie** — mit "vorher == nachher"-
+  Guard. Der Provisionierer ist kein Drift-Erzeuger; das Assistant-Objekt wird ausschliesslich
+  von Hand gepflegt. Genau deshalb ist es der Ort ohne jedes Netz.
+- `src/bridge.js:197` setzt `model: "whisper-1"` — anderer Hersteller (OpenAI), andere Engine
+  (`VOICE_ENGINE=realtime`, nicht der Live-Default), **eine** Fundstelle. Keine Duplizierung,
+  **ausdruecklich nicht** Teil dieser Phase.
+
+## Schritt 6 — Die Phase. **OFFEN**
+
+Spezifikation: `tasks/stt-a1-spec.md`. Umsetzung ueber `phase-impl-lean`.
+
+**Abweichung vom Kickoff, bewusst und begruendet:** Kickoff-Punkt 3 ("die Kopplung Modell <->
+gueltige Einstellungen an einer Stelle abbilden, ihr Bruch macht einen Test rot") ist als
+Produktionstabelle **nicht baubar** — kein Code im Repo sendet je eine dieser Einstellungen
+(gegruept ueber `src/` und `scripts/`), und der Pro-Call-Block kann sie nicht tragen. Eine
+Tabelle ohne Aufrufer waere Vorratshaltung (Clean Code P15). Die Absicht dahinter bleibt und
+bekommt einen echten Aufrufer: die **Drift-Probe** liest die Kopplung und meldet inerte
+Einstellungen am Live-Objekt.
+
+**Erwartetes Ergebnis, deterministisch:**
+
+1. `npm test` gruen, und die gerenderten TeXML-/TwiML-Bytes sind **unveraendert** — die Phase
+   ist verhaltens-erhaltend by construction (dieselben Strings, eine Quelle).
+2. Ein neuer Test ist **ohne** den Fix rot: eine unbekannte STT-Wahl, in die Adapter injiziert,
+   muss werfen (`assert.throws`). Heute ignorieren beide Renderer jede solche Angabe und
+   rendern klaglos weiter — das ist ein Verhaltens-Rot, kein "Modul fehlt noch"-Rot.
+3. Ein Test iteriert ueber **alle** Mitglieder des neutralen Enums und laesst jeden Adapter
+   jedes Mitglied aufloesen. Ein neues Enum-Mitglied ohne Adapter-Uebersetzung macht ihn rot.
+4. Boot mit ungueltigem `STT_PROFILE` bricht ab (Spawn-Test), Boot mit gueltigem kommt hoch.
+5. `node scripts/telnyx-stt-drift.mjs` meldet Abweichungen zwischen konfigurierter Wahl und
+   Live-Assistant-Objekt und endet dann mit Exit != 0.
+
+**Verifikationsmethode:** `npm test`; Gegenprobe (Fix ausbauen -> Test rot -> Fix zurueck);
+`node --check`; lokaler Smoke-Test (`PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start` +
+`curl /healthz` + betroffene `/voice`-Routen); der Drift-Probe-Lauf gegen die echte API.
+
+**Abnahme mit Zahl (nach Deploy, braucht einen Testanruf des Owners):**
+`node scripts/stt-wer.mjs <call_session_id>`. Vorher-Wert **8,9 %** (`call_mshgg6ijtyul`,
+2026-08-06), Eigenrauschen ~±1,5 Punkte. Erwartung: **unveraendert** — die Phase aendert keinen
+gesendeten Wert. Eine Verschlechterung waere ein Defekt, keine Messschwankung.
+
+## Schritt 7 — Das Experiment fuer den naechsten Testanruf. **OFFEN, nicht Teil der Phase**
+
+"Ersetzt der Pro-Call-Block oder wird gemerged" ist mit **einem** Anruf entscheidbar: den Anruf
+einmal **ohne** den Pro-Call-`transcription`-Block fuehren (der Code tut das heute schon, wenn
+die Sprache nicht aufloesbar ist — `voice.js:349`). Kommt das Transkript dann mit Satzzeichen
+und Gross-/Kleinschreibung, greifen die Einstellungen des Assistant-Objekts, und der
+Pro-Call-Block **ersetzt** sie. Kommt es weiter roh, wirkt `smart_format` bei `nova-3` nicht —
+dann liegt die Ursache beim Anbieter, nicht bei uns.
+
+**Der Preis, ausdruecklich:** ohne den Block faellt `TranscriptionConfig.model` auf den
+Spec-Default `distil-whisper/distil-large-v2` (**englisch-only**). Der Versuchsanruf wird also
+mit hoher Wahrscheinlichkeit schlecht erkannt — das ist erwartet und **kein** Fehlschlag;
+gemessen wird nur die FORMATIERUNG, nicht die Erkennungsgenauigkeit.
+
+## Offen / geparkt
+
+| Punkt | Stand |
+|---|---|
+| `smart_format`/`numerals` sind vom Pro-Call-Pfad aus **unerreichbar** | belegt; kein Fix in dieser Phase moeglich, s. Schritt 7 |
+| `keyterm` (laut Spec gueltig fuer nova-3) ist ungenutzt | ungenutzter Hebel, nicht Teil dieser Phase |
+| `eot_threshold`/`eot_timeout_ms` stehen inert an einem nova-3-Objekt | die Drift-Probe macht es sichtbar |
+| ~70 verwaiste Worktrees unter `.claude/worktrees/` | Altlast abgebrochener Laeufe, ausserhalb dieses Auftrags |
 
 ## Nicht vergessen
 
 - Aufnahmen liegen NUR im Scratchpad, nie im Repo, nach Gebrauch loeschen (Absolute Regel 5).
 - Eine Messung gilt nur fuer die Konfiguration, in der sie erhoben wurde.
-- Nach B-7: P2 (Modellwechsel Haiku -> Sonnet, A/B), danach P3 (Persona/Identitaet).
+- Ein gruener Test ist erst ein Beleg, wenn er OHNE den Fix rot ist.
