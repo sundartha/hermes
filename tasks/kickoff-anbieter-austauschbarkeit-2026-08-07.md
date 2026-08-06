@@ -39,19 +39,45 @@ will, kann A ueberspringen; A ist nur billiger und liefert sofort Wert.
 
 ## Der Befund
 
-Das STT-Modell wird an **drei Orten** gewaehlt, ohne dass einer vom anderen weiss:
+Die Erkennungs-Engine wird an **vier Orten** gewaehlt, ohne dass einer vom anderen weiss —
+**ueber zwei Telefonie-Anbieter hinweg**:
 
-| Ort | Wert |
-|---|---|
-| `src/telephony/adapters/telnyx/voice.js` (`STT_MODEL`, Assistant-Pfad) | seit 2026-08-06 `deepgram/nova-3`, davor `deepgram/flux` |
-| `src/telephony/adapters/telnyx/render.js:120` (TeXML-/Gather-Pfad) | `deepgram/nova-3`, Kommentar "Owner-Wahl 2026-06-16" |
-| Telnyx-Assistant-Objekt (`GET/PATCH /v2/ai/assistants/<id>`, Feld `transcription`) | am 2026-08-06 mitgezogen |
+| Ort | Wert | Schreibweise |
+|---|---|---|
+| `src/telephony/adapters/telnyx/voice.js` (`STT_MODEL`, Assistant-Pfad) | seit 2026-08-06 `deepgram/nova-3`, davor `deepgram/flux` | Telnyx |
+| `src/telephony/adapters/telnyx/render.js:120` (TeXML-/Gather-Pfad) | `deepgram/nova-3`, Kommentar "Owner-Wahl 2026-06-16" | Telnyx |
+| **`src/telephony/adapters/twilio/render.js:40` (Twilio-Gather)** | **`deepgram_nova-2-general`** | **Twilio** |
+| Telnyx-Assistant-Objekt (`GET/PATCH /v2/ai/assistants/<id>`, Feld `transcription`) | am 2026-08-06 mitgezogen | Anbieter-seitig |
 
-Der Gather-Pfad lief seit Juni auf dem guten Modell, der Assistant-Pfad vier Wochen auf einem
-Modell, das deutsches Telefon-Audio als **Englisch** erkennt (gemessen: 97,0 % / 95,7 %
-Wortfehlerrate; nach dem Wechsel 8,9 %). **Der Widerspruch war unsichtbar.** Das ist die
-Wurzel von B-7 eine Ebene unter dem falschen Modellnamen: nicht die falsche Wahl, sondern
-dieselbe Entscheidung mehrfach, mit Erlaubnis auseinanderzulaufen (Clean Code **G5/G22**).
+**Derselbe Hersteller darunter (Deepgram), zwei Anbieter-Schreibweisen, zwei Generationen.**
+Der Gather-Pfad bei Telnyx lief seit Juni auf `nova-3`, der Assistant-Pfad vier Wochen auf
+einem Modell, das deutsches Telefon-Audio als **Englisch** erkennt (gemessen: 97,0 % / 95,7 %
+Wortfehlerrate; nach dem Wechsel 8,9 %), und Twilio steht bis heute auf `nova-2`.
+**Kein Mechanismus macht diesen Widerspruch sichtbar.** Das ist die Wurzel von B-7 eine Ebene
+unter dem falschen Modellnamen: nicht die falsche Wahl, sondern dieselbe Entscheidung
+mehrfach, mit Erlaubnis auseinanderzulaufen (Clean Code **G5/G22**).
+
+### Das Entscheidende: das Muster existiert hier bereits — nur nicht fuer STT
+
+Der Code hat den Entwurf, um den es geht, **schon**, und zwar fuer Stimmen:
+
+- **Neutrales Profil statt Anbieter-String:** `VOICE_PROFILE.DE_FEMALE_NEURAL` wird von jedem
+  Adapter in seine eigene Schreibweise uebersetzt — `TWILIO_VOICE_NAME[profile]` bei Twilio,
+  `"Azure.de-DE-KatjaNeural"` bei Telnyx (`render.js:22-24`).
+- **Eine Quelle fuer die Sprache:** `src/voice-locale.js` liefert das Locale-Buendel fuer
+  Say-TTS UND Spracherkennung (`sttLocaleForVoiceProfile`), ausdruecklich fail-closed bei
+  unbekanntem Profil.
+
+**Fuer die Erkennungs-Engine fehlt genau dieses Stueck** — deshalb steht der Anbieter-String
+viermal roh im Code. Track A ist damit **kein neuer Architektur-Entwurf**, sondern
+Konsistenz mit einem Muster, das in diesem Repo bereits traegt: eine neutrale Wahl an einer
+Stelle, pro Adapter uebersetzt.
+
+**Das ist auch die Antwort auf "koennen STT/TTS ueberhaupt einen Adapter haben":** ja — fuer
+die *Wahl*. Nicht fuer die *Ausfuehrung*. Welche Engines zur Auswahl stehen, bestimmt der
+Telefonie-Anbieter (Telnyx bietet acht, Twilio seine eigenen); dass wir aus dieser Liste
+sauber, einmal und sichtbar waehlen, bestimmen wir. Ein eigener Medien-Stack ist dafuer
+**nicht** noetig und ausdruecklich **nicht** Ziel.
 
 Zusaetzlich: **kein einziger STT-Wert steht in `src/config.js`** (nachgeprueft). Verstoesst
 gegen CLAUDE.md (*"Env-Variablen immer in `src/config.js` zentralisieren UND in `.env.example`
@@ -83,9 +109,17 @@ Anrufs nach dem Wechsel.
 
 ## Was Track A liefert
 
-Eine Phase ueber `phase-impl-lean`: STT-Modell **und** die zugehoerigen Einstellungen aus
-`config.js` + `.env.example`, **eine** Quelle der Wahrheit fuer beide Pfade, die Kopplung
-Modell<->gueltige Einstellungen an einer Stelle abgebildet, mit Test.
+Eine Phase ueber `phase-impl-lean`, gebaut **nach dem Vorbild von `VOICE_PROFILE`**:
+
+1. Eine **neutrale Wahl** an einer Stelle (`config.js` + `.env.example`) — nicht der
+   Anbieter-String, sondern die Absicht.
+2. **Pro Adapter eine Uebersetzung** in dessen Schreibweise (`deepgram/nova-3` bei Telnyx,
+   `deepgram_nova-2-general` bei Twilio), fail-closed bei unbekannter Wahl — wie
+   `voiceAttrs` heute bei unbekanntem Profil wirft, statt still auf Deutsch zu fallen.
+3. Die Kopplung **Modell <-> gueltige Einstellungen** an einer Stelle abgebildet (Tabelle
+   unten), mit Datum und Doku-Link, und ihr Bruch macht einen **Test** rot.
+4. Ein Test, der das **Auseinanderlaufen** faengt — genau der Mechanismus, der vier Wochen
+   gefehlt hat. Ohne ihn ist der Rest Kosmetik.
 
 **Die Kopplung, die abzubilden ist** (Anbieter-Doku
 `developers.telnyx.com/docs/inference/ai-assistants/transcription-settings`):
@@ -142,6 +176,24 @@ nicht mittraegt, tauscht Austauschbarkeit gegen ein blindes Sicherheits-Gate. Di
 Verbrauchsmeldung gehoert **in den Port-Vertrag**, nicht daneben. Ebenso die Token-Zaehlung:
 `billedTokens` nimmt heute die **angeforderte** Modell-ID, nicht die vom Anbieter
 zurueckgemeldete (`src/llm-usage.js`) — ein fremder Anbieter kann hier abweichen.
+
+**Owner-Vorgabe dazu, woertlich und bindend:** *"Es darf nicht sein, dass ich den LLM wechsle
+und ploetzlich werden die Kosten nicht mehr richtig getrackt."*
+
+Daraus folgen drei Abnahmekriterien, die im Plan stehen muessen — **keines davon ist
+optional**:
+
+1. **Ein Anbieterwechsel ohne hinterlegte Preise ist unmoeglich, nicht nur teuer.** Heute
+   faellt ein unbekanntes Modell auf die teuerste Rate zurueck (fail-closed, richtig) — aber
+   still. Bei einem fremden Anbieter ist "teuerste Anthropic-Rate" keine sinnvolle Schaetzung
+   mehr. Der Boot muss fail-closed abbrechen, wenn das konfigurierte Modell keine Preise hat.
+2. **Ein Test, der beweist, dass gebucht wird — je Adapter.** Nicht "die Funktion wurde
+   aufgerufen", sondern: nach einem Turn mit Adapter X steht auf der Budget-Achse der
+   erwartete Betrag. Und die Gegenprobe: ohne die Buchung ist der Test rot.
+3. **Die Token-Semantik je Anbieter belegen, nicht annehmen.** Was zaehlt als Eingabe-Token,
+   wie werden Cache-Anteile gemeldet, liefert der Anbieter ueberhaupt eine Verbrauchsangabe?
+   Fehlt sie, braucht der Port eine dokumentierte Schaetzung — und die Schaetzung darf nur
+   die Budget-Achse treffen, nie den Kundenbeleg (bestehende Regel in `llm-usage.js`).
 
 ## Was der Plan beantworten muss
 
