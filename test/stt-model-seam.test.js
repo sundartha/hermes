@@ -1,7 +1,22 @@
-// STT-A1: EINE neutrale STT-Wahl (stt-profile.js), pro Adapter uebersetzt. Belegt drei
-// Aussagen: (A) unbekannte Wahl wirft in JEDEM der drei Aufrufer fail-closed, (B) EIN
-// Profil ergibt drei adaptertypische Schreibweisen, (C/D) zwei Fangnetze (jedes
-// Enum-Mitglied loest ueberall auf; Sprach-Kontrast Gather/Assistant bleibt bestehen).
+// STT-A1: EINE neutrale STT-Wahl (stt-profile.js), pro Adapter uebersetzt.
+//
+// WAS HIER BELEG IST UND WAS FANGNETZ - die Unterscheidung ist gemessen, nicht behauptet
+// (Gegenprobe 2026-08-07, zwei gezielte Sabotagen am fertigen Branch):
+//
+//   Sabotage                                  | A    | B     | C/D
+//   fail-closed aus sttAttrs/speechModelFor    | ROT  | gruen | gruen
+//   Durchreichen der Wahl gekappt (arg-los)    | ROT  | gruen | gruen
+//
+// (A) ist damit der EINZIGE Beleg dieser Datei - und er deckt BEIDE Bruchstellen ab:
+//     ohne fail-closed wirft niemand, und ohne Durchreichen erreicht die ungueltige Wahl
+//     die Tabelle gar nicht erst. Verhaltens-Rot, kein "Modul fehlt"-Rot.
+// (B) ist ein reiner WERTEVERGLEICH und bleibt ohne den Fix gruen, weil das Enum heute nur
+//     EIN Mitglied hat - eine ignorierte Wahl liefert denselben Wert wie eine beachtete.
+//     Es ist ein Fangnetz gegen kuenftige Drift zwischen den drei Schreibweisen, KEIN
+//     Beleg. Bekommt das Enum je ein zweites Mitglied, wird B zum echten
+//     Durchreich-Beleg - dann diesen Kommentar streichen.
+// (C/D) Fangnetze: jedes Enum-Mitglied loest ueberall auf; Sprach-Kontrast
+//     Gather ("de-DE") vs. Assistant ("de") bleibt bestehen.
 // Config VOR dem Import gesetzt -> echte .env beeinflusst den Test nicht (Muster
 // telnyx-call-control.test.js). Kein pglite/Server-Spawn ausser in Test E (eigener Spawn).
 import { test } from "node:test";
@@ -64,7 +79,7 @@ test("A: unbekannte STT-Wahl -> jeder der drei Aufrufer wirft (fail-closed)", as
   }
 });
 
-test("B: EIN Profil -> drei adaptertypische Schreibweisen", async () => {
+test("B (Fangnetz, gruen): EIN Profil -> drei adaptertypische Schreibweisen", async () => {
   const profile = STT_PROFILE.ACCURATE;
 
   const telnyxOut = renderTelnyx([gatherDE()], { sttProfile: profile });
