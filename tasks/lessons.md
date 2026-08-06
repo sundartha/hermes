@@ -429,3 +429,41 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   Aufzeichnung der Anbieter ohnehin schon anlegt — und ob sich daraus ein Vorher-Wert bauen
   laesst, BEVOR jemand eine Konfiguration anfasst. Ein Testanruf kostet einen Menschen,
   ein Messlauf kostet Sekunden.
+
+## Eine Probe, die bei null Befunden schweigt, ist nicht von einer kaputten zu unterscheiden (2026-08-07, STT-A1)
+
+- `scripts/telnyx-stt-drift.mjs` lief gegen die echte API, endete mit **Exit 0 und komplett
+  leerer Ausgabe**. Das las sich wie "alles in Ordnung". Tatsaechlich hatte die Probe ihre
+  halbe Aufgabe nie erledigt: die Telnyx-Einstellungen liegen unter `transcription.settings`,
+  die Schleife iterierte aber `Object.keys(transcription)` — dort stehen nur
+  `model/language/api_key_ref/region/settings`. **Kein Schluessel konnte je treffen.**
+- Am Live-Objekt standen zu diesem Zeitpunkt `eot_threshold: 0.9` und `eot_timeout_ms: 5000`
+  flux-only an einem nova-3-Modell. Die Probe war genau dafuer gebaut und hat es uebersehen.
+- **Der Test hat es nicht gefangen, weil seine Fixtures dieselbe falsche Verschachtelung
+  benutzten wie der Code** (`transcription: { model, eot_threshold: 0.9 }`). Beide Seiten
+  waren gleich falsch — dieselbe Wurzel wie beim Zeitzonen-Selbsttest in B-7: eine Pruefung,
+  die ihre beiden Seiten aus derselben Quelle zieht, prueft nur sich selbst.
+- **Zwei Regeln:**
+  1. Die Fixture einer Fremd-Datenform stammt aus einem **echten** Aufruf (Momentaufnahme,
+     Datum, Feldliste im Kopfkommentar) — nie aus dem Kopf des Implementierers und nie aus
+     dem Code, der sie liest.
+  2. Ein Pruefwerkzeug gibt **immer** eine Zeile aus, auch bei null Befunden ("geprueft X
+     gegen Y -> 0 Befunde"). Stille als Erfolgssignal verschluckt genau den Fall, in dem gar
+     nicht geprueft wurde.
+- Gefunden hat es nicht das Gate (Safety-Review approved, Clean-Code keine S1/S2) und nicht
+  die Suite, sondern **das tatsaechliche Ausfuehren gegen die echte API** in der Abnahme.
+  Ein Werkzeug, das in der Phase gebaut, aber nie scharf laufen gelassen wird, ist unbelegt.
+
+## Ein Wertevergleich mit einwertigem Enum ist kein Durchreich-Beleg (2026-08-07, STT-A1)
+
+- Die Spezifikation hatte woertlich gewarnt: Zusicherung B ("dasselbe Profil ergibt drei
+  adaptertypische Schreibweisen") ist nur dann ein Beleg, wenn sie die Wahl als **Eingabe
+  durchreicht**; als reiner Wertevergleich ist sie ohne den Fix gruen. Der Implementierer
+  schrieb trotzdem die gruene Variante.
+- **Gemessen** (zwei gezielte Sabotagen am fertigen Branch): fail-closed entfernt -> nur A
+  rot. Durchreichen gekappt -> **wieder nur A rot**, B blieb beide Male gruen. Mit genau
+  einem Enum-Mitglied liefert eine ignorierte Wahl denselben Wert wie eine beachtete.
+- **Regel:** bevor ein Test als Beleg gilt, die Sabotage benennen, die ihn rot machen SOLL,
+  und sie ausfuehren. Bei einwertigen Aufzaehlungen ist "Ausgabe hat den richtigen Wert"
+  grundsaetzlich kein Beleg fuer "Eingabe wurde beachtet" — dafuer braucht es einen
+  ungueltigen Wert (der wirft) oder ein zweites Mitglied.
