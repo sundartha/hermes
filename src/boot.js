@@ -21,6 +21,7 @@ import {
   bootstrapHealDecision,
   BOOTSTRAP_HEAL,
   latentCostPathFindings,
+  sttProfileFindings,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
@@ -135,6 +136,16 @@ function warnUnpricedModels(config) {
 // Guard). Muster assertSpendCapCoherence.
 function assertProviderRateInBand(config) {
   const fatal = providerRateOutOfBand(config.billing.providerToBucketRateMicro).find((f) => f.fatal);
+  if (!fatal) return;
+  console.error(`[boot] Start abgebrochen: ${fatal.message}`);
+  process.exit(1);
+}
+
+// STT-A1: ungueltiges STT_PROFILE -> Boot-Refusal (sttProfileFindings, s. boot-guard.js).
+// exit(1) statt WARN, weil der Renderer mit ungueltigem Profil erst IM laufenden Anruf
+// wirft - der teuerstmoegliche Zeitpunkt fuer einen Konfigurations-Tippfehler.
+function assertSttProfile(config) {
+  const fatal = sttProfileFindings(config.voice.sttProfile).find((f) => f.fatal);
   if (!fatal) return;
   console.error(`[boot] Start abgebrochen: ${fatal.message}`);
   process.exit(1);
@@ -302,10 +313,11 @@ function warnLatentCostPaths(config) {
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
-// das fuenfte, assertProviderRateInBand (LCT P4) das sechste und assertCostTruingBooking
-// (LCT P4) das siebte, das noch process.exit(1) rufen kann - warnUnpricedModels/
-// warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
-// warnMissingProvisioningConnection/warnLatentCostPaths sind reine Diagnose (nie fatal).
+// das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertCostTruingBooking
+// (LCT P4) das siebte und assertSttProfile (STT-A1) das achte, das noch process.exit(1)
+// rufen kann - warnUnpricedModels/warnAlertChannelUnset/warnTariffDrift/
+// warnNumberOriginDecoupled/warnMissingProvisioningConnection/warnLatentCostPaths sind
+// reine Diagnose (nie fatal).
 function assertBootGates(config, store) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -364,6 +376,7 @@ function assertBootGates(config, store) {
   warnUnpricedModels(config);
   assertProviderRateInBand(config);
   assertCostTruingBooking(config, store);
+  assertSttProfile(config);
   warnAlertChannelUnset(config);
   warnTariffDrift(config, store);
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN

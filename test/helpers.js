@@ -121,6 +121,10 @@ export const BASE_ENV = {
   FAKE_ORIGINATE: "false", // OUT-05 F2: Test-Seam AUS; einzelne Tests setzen ihn explizit
   SHUTDOWN_DRAIN_TIMEOUT_MS: "8000", // A6 F11: neutraler Default, sonst leakt lokales .env in Spawn-Tests
   STT_SPEECH_TIMEOUT_SEC: "2", // G3: neutraler Default, sonst leakt lokales .env in Spawn-Tests (test-base-env-drift)
+  // STT-A1: neutral auf das Default-Profil gepinnt, sonst leakt eine lokale .env via
+  // dotenv in Spawn-Tests (Lehre test-base-env-drift). stt-model-seam.test.js setzt den
+  // Wert gezielt auf Muell, um den Boot-Refusal zu belegen.
+  STT_PROFILE: "accurate",
   // stab-p7: Turn-Guard-Schwellen neutral auf den config-Default gepinnt (sonst leakt eine
   // lokale .env via dotenv in Spawn-Tests -> Baseline-Drift, Lehre test-base-env-drift).
   MAX_EMPTY_TURNS: "3",

@@ -3,6 +3,7 @@
 import twilio from "twilio";
 import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
 import { sttLocaleForVoiceProfile } from "../../voice-locale.js";
+import { DEFAULT_STT_PROFILE, STT_PROFILE } from "../../stt-profile.js";
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
@@ -32,24 +33,44 @@ function voiceAttrs(profile) {
 // Fail-closed: unbekanntes Profil wirft (via voiceAttrs), kein stiller DE-Fallback.
 // Attribut-Reihenfolge ist vertraglich: Twilio serialisiert in Einfuege-Reihenfolge,
 // der Snapshot-Test nagelt sie fest (DE bleibt dadurch byte-identisch).
-function gatherOpts(profile) {
+//
+// Neutrale STT-Wahl -> Twilio-speechModel. Eigene Tabelle, eigene Schreibweise: Twilio
+// bietet nova-3 nicht an, deshalb bildet DASSELBE Profil hier auf die nova-2-Generation ab -
+// eine Absicht in zwei Anbieter-Schreibweisen, genau wie DE_FEMALE_NEURAL auf Polly.Vicki
+// bzw. Azure.KatjaNeural. Ein Aufrufer, eine Datei (kein eigenes Modul noetig).
+// Fail-closed wie voiceAttrs; ohne Argument greift das Default-Profil (byte-identisch).
+const TWILIO_SPEECH_MODEL = Object.freeze({
+  [STT_PROFILE.ACCURATE]: "deepgram_nova-2-general",
+});
+
+function speechModelFor(sttProfile = DEFAULT_STT_PROFILE) {
+  const model = TWILIO_SPEECH_MODEL[sttProfile];
+  if (!model) throw new Error(`unbekanntes sttProfile: ${sttProfile}`);
+  return model;
+}
+
+function gatherOpts(voiceProfile, sttProfile) {
   return {
     input: "speech",
-    language: voiceAttrs(profile).language,
+    language: voiceAttrs(voiceProfile).language,
     speechTimeout: "auto",
-    speechModel: "deepgram_nova-2-general",
+    speechModel: speechModelFor(sttProfile),
     actionOnEmptyResult: true,
   };
 }
 
 // Eine Direktive an den VoiceResponse-Knoten haengen (eine Abstraktionsebene, G34).
-function applyDirective(vr, d) {
+function applyDirective(vr, d, opts) {
   switch (d.kind) {
     case DIRECTIVE.SAY:
       vr.say(voiceAttrs(d.voiceProfile), d.text);
       break;
     case DIRECTIVE.GATHER: {
-      const g = vr.gather({ ...gatherOpts(d.voiceProfile), action: d.action, method: "POST" });
+      const g = vr.gather({
+        ...gatherOpts(d.voiceProfile, opts.sttProfile),
+        action: d.action,
+        method: "POST",
+      });
       if (d.promptText) g.say(voiceAttrs(d.voiceProfile), d.promptText);
       break;
     }
@@ -69,9 +90,12 @@ function applyDirective(vr, d) {
   }
 }
 
+// opts (optional, Erweiterung ueber den Port hinaus): { sttProfile } - die Registry
+// injiziert config.voice.sttProfile lazy zur Render-Zeit; der Renderer bleibt config-frei
+// und pur (Snapshot-Tests ohne Env). Aufrufe ohne opts bleiben byte-identisch.
 /** @type {import("../../ports.js").VoiceRenderer["renderDirectives"]} */
-export function renderDirectives(directives) {
+export function renderDirectives(directives, opts = {}) {
   const vr = new VoiceResponse();
-  for (const d of directives) applyDirective(vr, d);
+  for (const d of directives) applyDirective(vr, d, opts);
   return vr.toString();
 }

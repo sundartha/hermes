@@ -1,6 +1,7 @@
 // Datenkonstanten des Store-Blatt-Moduls (Format-/Provider-Wahrheit, kein IO, keine
 // config) - die einzige Abhaengigkeit dieser Datei. Genutzt von bootstrapHealDecision.
 import { E164, PROVIDER, RESERVE_LEAD_MINUTES, normNum, outboundReserveCents } from "./store/defaults.js";
+import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
 
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
 // Blast-Radius: faengt jeden Fehler, loggt ihn laut + secret-frei (nur err.message)
@@ -69,6 +70,25 @@ export function bootstrapHealDecision({
 // prozessweit).
 export function fakeOriginateBootBlocked({ fakeOriginate, skipTwilioSignatureCheck }) {
   return fakeOriginate === true && skipTwilioSignatureCheck !== true;
+}
+
+// STT-A1: ungueltiges STT_PROFILE bricht den Boot ab. PFLICHT, nicht Kuer: ohne diese
+// Pruefung traefe ein Tippfehler in der Hosting-Umgebung erst den fail-closed Wurf IM
+// RENDER-PFAD des laufenden Anrufs - jeder Anruf staerbe am Greeting, und zwar erst nach
+// dem Deploy. Solange der Wert im Code stand, war das unmoeglich; die Env-Variable darf
+// das Risiko nicht neu einfuehren. Der Wert ist ein Enum-Name, kein Secret -> er darf in
+// die Diagnose (Regel 4 unberuehrt). Reine Entscheidung (arg-injiziert, config-frei,
+// testbar; Findings-Form wie providerRateOutOfBand): leere Liste = gueltig.
+export function sttProfileFindings(sttProfile) {
+  if (isSttProfile(sttProfile)) return [];
+  return [
+    {
+      message:
+        `STT_PROFILE='${sttProfile}' ist unbekannt. Gueltig: ` +
+        `${Object.values(STT_PROFILE).join("|")}.`,
+      fatal: true,
+    },
+  ];
 }
 
 // S1-7: Vollstaendigkeit der Stripe-Meter-Abbildung. JEDE usage_event-Sorte MUSS ein
