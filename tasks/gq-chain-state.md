@@ -844,3 +844,40 @@ Neues Messinstrument im Log: `discarded_answer` (PII-frei, `callId` + `turnSeq`)
 Testanruf waeren es **3 von 8 substanziellen Turns** gewesen.
 
 **Offen:** Deploy + ein Testanruf zur Bestaetigung; `discarded_answer` je Anruf auszaehlen.
+
+### GQ-H1-a live abgenommen (2026-08-06, `14073ff`)
+
+Deploy per `/healthz` gemessen, nicht aus einer Notiz. Zwei Testanrufe an die Owner-Nummer.
+
+**Anruf 1 (`call_mshb9v7btbsp`, 183 s)** — die Erkennung lief (viermal
+`providerMessagesGrew:false`, turnSeq 4/5/7/13), aber **keine einzige `discarded_answer`-Zeile**.
+Ursache: beide Backend-Wrapper folgten dem fire-and-forget-Muster von `addTranscript` und
+lieferten `undefined`; der Shim verzweigt auf den Rueckgabewert. Die Entfernung passierte,
+das Messinstrument blieb blind. Die Repro-Tests haben es nicht gefangen, weil ihr `fakeStore`
+ein Boolean liefert — **der Fake konnte mehr als der echte Store**. Gefixt in `14073ff`,
+abgesichert an BEIDEN echten Backends plus Paritaets-Test (alle vier ohne den Fix rot).
+
+**Anruf 2 (`call_mshbrhnc7nfp`)** — lueckenlose Zuordnung, keine Fehlalarme:
+
+| turnSeq | prevRelation | messagesCount | providerMessagesGrew | Aktion |
+|---|---|---|---|---|
+| 1 | first | 2 | `null` | nichts (nicht entscheidbar) |
+| 2 | extends | 2 (unveraendert) | `false` | **discarded_answer** |
+| 3 | other | 4 (gewachsen) | `true` | nichts |
+| 4 | extends | 4 (unveraendert) | `false` | **discarded_answer** |
+
+Kein Drop dort, wo die Liste gewachsen ist. Kein Drop beim ersten Request.
+
+**Latenz:** die Entfernung ist ein `pop()` auf einem Array im Speicher plus ein ohnehin
+faelliges `save()` — sie liegt nicht im Sprechpfad. Die `shim_turn`-Werte streuen zwischen
+den Anrufen (Anruf 1: 1008-2101 ms ohne Werkzeug; Anruf 2: 2589-2900 ms, dazu ein Ausreisser
+5297 ms mit `attempts:2`, also einem LLM-Retry). **Bei n=2 Anrufen ist daraus keine
+Latenz-Aussage abzuleiten** — belegt ist nur, dass der Fix keinen Wartepunkt einfuegt.
+
+**Offen aus diesen Anrufen (nicht H1-a):**
+- **B-7 STT-Kauderwelsch, deutlich verschaerft**: *"Es geht dich in Schwesterkanne"*,
+  *"Weiss ich jetzt an Nile? What the fuck?"* — in Anruf 2 hat der Agent aus dem Kauderwelsch
+  einen Namen erfunden (*"Anil Jones"*) und die Gegenstelle danach so angesprochen.
+- **Du/Sie-Mischung** in Anruf 2 (der Agent wechselte auf "Sie", der Owner blieb bei "du").
+- `supersede refusal:"no_inflight"` erscheint weiter — der Riegel aus GQ-P1 laeuft wie
+  erwartet ins Leere und ist durch H1-a fachlich abgeloest.
