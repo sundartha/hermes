@@ -29,9 +29,15 @@ Twilio<->Telnyx), und ein konkreter zweiter Anbieter ist benannt (DeepSeek).
 |---|---|---|---|
 | **A** | STT-Stellschrauben aufraeumen | eine Phase | belegter Defekt, klein, sofort machbar |
 | **B** | LLM-Anbieter-Port + erster Fremdadapter | Plandokument mit Phasen | beruehrt **Absolute Regel 1** (Kostendecke) und die Werkzeug-Schleife |
+| **C** | Twilio-Pfad entfernen | **gehoert in dasselbe Plandokument wie B** | Owner-Entscheidung; die Flaeche ist viel groesser als der Adapter |
 
 Track A ist **kein** Vorlauf fuer B — es ist ein eigener, unabhaengiger Defekt. Wer B zuerst
 will, kann A ueberspringen; A ist nur billiger und liefert sofort Wert.
+
+**Reihenfolge-Hinweis:** C aendert die Begruendung von A. Solange Twilio existiert, treffen
+ZWEI Adapter dieselbe STT-Wahl (der zweite Nutzer, der die Naht rechtfertigt). Faellt Twilio
+weg, bleiben immer noch drei Wahl-Orte innerhalb von Telnyx — die Duplizierung besteht fort,
+das Argument wird nur schmaler. **A bleibt richtig, egal wie C ausgeht.**
 
 ---
 
@@ -233,14 +239,108 @@ optional**:
 
 ---
 
+---
+
+# Track C — Twilio entfernen
+
+## Die Owner-Entscheidung
+
+> *"Twilio benutzen wir ueberhaupt nicht. Eigentlich kann alles, was mit Twilio zu tun hat,
+> geloescht werden."* — und danach ausdruecklich: **nicht ad hoc loeschen, sondern als Teil
+> des Plandokuments, damit richtig geloescht wird und nichts versehentlich kaputtgeht.**
+
+Diese Vorsicht ist berechtigt. Die Messung widerlegt "toter Code":
+
+| | |
+|---|---|
+| Adapter selbst | 7 Dateien, **233 Zeilen** |
+| Quelldateien ausserhalb des Adapters mit Twilio-Bezug | **~20** (`boot.js`, `server.js`, `registry.js`, `ports.js`, `route-policy.js`, `middleware.js`, `bridge.js`, `turn-budget.js`, `release-reconcile.js`, `call-termination.js`, `voice-locale.js`, `answered-by.js`, `failure-reason.js`, `reattach.js`, `mcp-tools.js`, `app.js`, `config.js`, `boot-guard.js`, `telnyx-inbound.js`, `telnyx-origination.js`) |
+| **Testdateien mit Twilio-Bezug** | **124** |
+
+**Twilio ist nicht ein ungenutzter Zweig, sondern der Rueckfall-Default:**
+
+- `src/config.js:921` — *"Provider der geseedeten Owner-Betriebsnummer (twilio\|telnyx).
+  Leer (Default) -> **Twilio**"*
+- `test/helpers.js:24/30` — `OWNER_TEST_NUMBER` und `DOMESTIC_TEST_NUMBER` tragen
+  `provider: "twilio"`; `BASE_ENV` setzt `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+  `TWILIO_EDGE`, `SKIP_TWILIO_SIGNATURE_CHECK`
+- `test/helpers.js:871` — *"ohne sie faellt `providerFromHeaders` auf Twilio/DEFAULT_PROVIDER"*
+
+Ein unbedachtes Loeschen aendert damit **still**, was bei leerer Konfiguration passiert, und
+erzwingt die Migration von 124 Testdateien — bei der man die Telnyx-Abdeckung schwaechen kann,
+**ohne dass ein Test rot wird**. Genau der Schaden, den der Owner ausschliessen will.
+
+## Zuerst: die Praemisse belegen (ungeklaert)
+
+**Steht in der Produktions-Datenbank irgendeine Nummer oder ein Tenant auf
+`provider = 'twilio'`?** Das ist **nicht** geprueft: direkter `psql`-Zugang haengt an einer
+IP-Allowlist, und der Umweg ueber das Render-MCP scheiterte an TLS
+(`FATAL: SSL/TLS required`). **Ohne diese Antwort wird nichts geloescht** — eine Nummer auf
+Twilio bedeutet, dass Loeschen echte Anrufe bricht.
+
+Abfrage (RLS ist FORCE, erst `set_config('app.current_tenant', …, false)` in DERSELBEN Sitzung):
+`select provider, count(*) from number group by provider;`
+Ebenso pruefen: sind `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN` in der Render-Umgebung gesetzt?
+
+## Reihenfolge, damit nichts still kippt
+
+1. **Praemisse belegen** (oben). Ergebnis "es gibt Twilio-Nummern" -> Track C stoppt, Owner fragen.
+2. **Die Default-Eigenschaft zuerst nehmen, nicht zuletzt.** `config.js:921` auf Telnyx
+   explizit umstellen, `providerFromHeaders`-Rueckfall explizit machen — als **eigener**,
+   verhaltens-sichtbarer Schritt mit Test. Erst danach kann Code verschwinden, ohne dass ein
+   Default lautlos wandert.
+3. **Testsuite migrieren, bevor der Adapter faellt.** `OWNER_TEST_NUMBER`/`DOMESTIC_TEST_NUMBER`
+   auf Telnyx, BASE_ENV bereinigen. **Gegenprobe zwingend:** die Suite muss nach der Migration
+   dieselben Invarianten pruefen wie vorher — nicht bloss gruen sein. Wo ein Test bisher den
+   Twilio-Zweig abdeckte, braucht der Telnyx-Zweig einen aequivalenten Test, sonst sinkt die
+   Abdeckung unsichtbar.
+4. **Routen und Gates.** `/voice/twilio/*` verschwindet **zusammen** mit seiner
+   Signaturpruefung — nie die Pruefung ohne die Route. `src/route-policy.js` fuehrt die
+   Oeffentlich-Liste, `test/route-auth-inventory.test.js` erzwingt sie; dieser Test ist hier
+   das wichtigste Sicherheitsnetz (Absolute Regel 3).
+5. **Adapter, Config, `.env.example`, `render.yaml`, Doku.** Env-Keys aus `config.js`
+   entfernen heisst auch: `BASE_ENV` in `test/helpers.js` nachziehen (bekannte Drift-Falle —
+   eine vergessene Variable laesst die echte `.env` in Spawn-Tests lecken).
+6. **`npm test` gruen, Smoke-Test, echter Anruf.** Ein Provider-Ausbau ohne echten Anruf ist
+   nicht abgenommen.
+
+## Die Spannung, die bewusst entschieden gehoert
+
+Der Owner will **Anbieter-Austauschbarkeit** (Track B) und gleichzeitig **den einzigen zweiten
+Telefonie-Anbieter loeschen**. Das ist kein Widerspruch, aber es muss bewusst entschieden sein:
+
+- **Empfehlung: `ports.js` + `registry.js` BLEIBEN.** Sie sind eine gewachsene, funktionierende
+  Naht; ihr Rueckbau waere ein tiefer Eingriff mit null Gewinn, und der naechste Carrier
+  (Redundanz, ein Land ohne Telnyx-Abdeckung) muesste sie neu bauen.
+- **Geloescht wird die ungenutzte Implementierung, nicht die Struktur.**
+- Preis dieser Wahl, ausdruecklich: die Naht traegt danach genau eine Implementierung. Das ist
+  vertretbar, weil Austauschbarkeit ein **erklaertes Produktziel** ist — nicht, weil eine
+  Abstraktion an sich gut waere.
+
+## Pre-Mortem Track C
+
+- *"Wir haben Twilio geloescht — und ein leerer Env-Wert faellt jetzt irgendwohin, wo vorher
+  Twilio stand."* -> Schritt 2 zuerst, mit eigenem Test.
+- *"Die Suite war nach der Migration gruen und hat trotzdem weniger geprueft."* -> Schritt 3:
+  Abdeckung vorher/nachher vergleichen, nicht nur Farbe.
+- *"Eine `/voice/twilio`-Route blieb stehen, ohne Signaturpruefung."* -> Schritt 4,
+  `route-auth-inventory` ist der Faenger.
+- *"Zwei Jahre spaeter brauchten wir einen zweiten Carrier und mussten die Abstraktion neu
+  bauen."* -> Deshalb bleibt die Naht; nur die Implementierung geht.
+
+---
+
 ## Arbeitsweise
 
 - **Track A:** ein dynamischer Workflow mit lesenden Subagenten fuer die offene Frage
   (ersetzen vs. zusammenfuehren) und die Gegenpruefung der Inventur, danach **eine** Phase
   ueber `phase-impl-lean`. **Kein** Plandokument.
-- **Track B:** zuerst ein **Plandokument** (`PLAN-LLM-PORT.md`) mit Phasen und Pre-Mortem je
-  Phase — dieser Track rechtfertigt es, weil er ein Sicherheits-Gate beruehrt. Danach
-  `phase-impl-lean` pro Phase. **Erst den Plan dem Owner vorlegen, bevor Code entsteht.**
+- **Track B und C:** zuerst ein **gemeinsames Plandokument** (`PLAN-ANBIETER-PORT.md`) mit
+  Phasen und Pre-Mortem je Phase — beide rechtfertigen es: B beruehrt ein Sicherheits-Gate,
+  C entfernt einen Rueckfall-Default quer durch 124 Testdateien. Danach `phase-impl-lean` pro
+  Phase. **Erst den Plan dem Owner vorlegen, bevor Code entsteht.** Sie gehoeren in EIN
+  Dokument, weil sie sich beruehren: C loescht die zweite Implementierung der Naht, die B
+  ausbaut.
 - **Anbieter-Aussagen immer am Verhalten pruefen.** Doku ist eine Behauptung: bei B-7 stand
   "unterstuetzt Deutsch" in der Doku, waehrend das Modell Englisch ausgab.
 - **Befunde adversarisch gegenlesen** — ein Befund gilt erst, wenn ein unabhaengiger Pruefer
