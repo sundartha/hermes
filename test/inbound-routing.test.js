@@ -1,7 +1,7 @@
 // P3c: fail-closed Inbound-To-Routing. Eine unbekannte/fehlende To wird auf KEINEN
 // Tenant aufgeloest (kein Default-Tenant) -> hoeflicher Hangup + Audit, KEIN
 // Call-Record. Nur die geseedete Owner-Store-Nummer (OWNER_TEST_NUMBER) routet. Die
-// Twilio-Signatur wird VOR To geprueft (Anti-Spoof) - eine gespoofte To ohne
+// Provider-Signatur wird VOR To geprueft (Anti-Spoof) - eine gespoofte To ohne
 // gueltige Signatur erreicht das Routing nie (403). Build-Operate-Check je Konzept.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -10,7 +10,7 @@ import {
   waitForLog,
   OWNER_TEST_NUMBER,
   seedState,
-  TWILIO_TEST_SIGNATURE_HEADERS,
+  TELNYX_TEST_SIGNATURE_HEADERS,
 } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
@@ -30,7 +30,7 @@ function geoSeed(extraSettings = {}) {
         id: "num_owner_de",
         e164: OWNER_TEST_NUMBER.e164,
         tenantId: BOOTSTRAP_TENANT_ID,
-        provider: "twilio",
+        provider: "telnyx",
         status: "active",
         country: "DE",
         language: "de",
@@ -39,7 +39,7 @@ function geoSeed(extraSettings = {}) {
         id: "num_fr",
         e164: FR_NUMBER,
         tenantId: BOOTSTRAP_TENANT_ID,
-        provider: "twilio",
+        provider: "telnyx",
         status: "active",
         country: "FR",
         language: "fr",
@@ -48,7 +48,7 @@ function geoSeed(extraSettings = {}) {
         id: "num_en",
         e164: EN_NUMBER,
         tenantId: BOOTSTRAP_TENANT_ID,
-        provider: "twilio",
+        provider: "telnyx",
         status: "active",
         country: "GB",
         language: "en",
@@ -138,50 +138,52 @@ test("bekannte Owner-To -> normaler Greeting + Call-Record", async () => {
 
 // ---- F1 P4: Inbound-Wiring (Nummer -> Sprache) ----
 
-// Die geseedeten Nummern (geoSeed) tragen provider: "twilio" - seit C-P1 (DEFAULT_PROVIDER=
-// telnyx) muss der Request das ausdruecklich sagen, sonst rendert der Telnyx-Renderer statt
-// des hier gepruefte Twilio-TwiML (der Test meint Sprach-Routing, nicht den Carrier).
+// C-P3: der Gegenstand dieser Tests ist die SPRACHWAHL (de/fr/en), nicht der Carrier.
+// Der Twilio-Inbound-Pfad existiert nicht mehr, die Faelle ziehen deshalb geschlossen
+// auf den Telnyx-Pfad um - die Sprach-Zusicherung bleibt woertlich erhalten, nur die
+// Stimmen-Tabelle wechselt (Polly -> Azure). Das language-Attribut kommt fuer beide
+// Renderer aus DERSELBEN Quelle (voice-locale.js) und aendert sich nicht.
 async function postIncoming(srv, to) {
   const res = await fetch(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
-    headers: TWILIO_TEST_SIGNATURE_HEADERS,
+    headers: TELNYX_TEST_SIGNATURE_HEADERS,
     body: new URLSearchParams({ CallSid: "CAtest", From: "+4915112345678", To: to }),
   });
   assert.equal(res.status, 200);
   return { twiml: await res.text(), call: srv.readStore().calls[0] };
 }
 
-test("DE-Nummer -> call.language=de + DE-Voice byte-identisch (Polly.Vicki/de-DE)", async () => {
+test("DE-Nummer -> call.language=de + DE-Voice (Azure.de-DE-Katja/de-DE)", async () => {
   const srv = await startServer({ seed: geoSeed() });
   try {
     const { twiml, call } = await postIncoming(srv, OWNER_TEST_NUMBER.e164);
     assert.equal(call.language, "de");
     assert.match(twiml, /language="de-DE"/, "DE-STT-Locale");
-    assert.match(twiml, /voice="Polly\.Vicki-Neural"/, "DE-Voice byte-identisch");
+    assert.match(twiml, /voice="Azure\.de-DE-KatjaNeural"/, "DE-Voice");
   } finally {
     await srv.stop();
   }
 });
 
-test("FR-Nummer -> call.language=fr + FR-Voice (Polly.Lea/fr-FR)", async () => {
+test("FR-Nummer -> call.language=fr + FR-Voice (Azure.fr-FR-Denise/fr-FR)", async () => {
   const srv = await startServer({ seed: geoSeed() });
   try {
     const { twiml, call } = await postIncoming(srv, FR_NUMBER);
     assert.equal(call.language, "fr", "Inbound-Sprache aus number.language (FR)");
     assert.match(twiml, /language="fr-FR"/, "FR-STT-Locale");
-    assert.match(twiml, /voice="Polly\.Lea-Neural"/, "FR-Voice");
+    assert.match(twiml, /voice="Azure\.fr-FR-DeniseNeural"/, "FR-Voice");
   } finally {
     await srv.stop();
   }
 });
 
-test("EN-Nummer -> call.language=en + EN-Voice (Polly.Amy/en-GB)", async () => {
+test("EN-Nummer -> call.language=en + EN-Voice (Azure.en-GB-Sonia/en-GB)", async () => {
   const srv = await startServer({ seed: geoSeed() });
   try {
     const { twiml, call } = await postIncoming(srv, EN_NUMBER);
     assert.equal(call.language, "en", "Inbound-Sprache aus number.language (EN)");
     assert.match(twiml, /language="en-GB"/, "EN-STT-Locale");
-    assert.match(twiml, /voice="Polly\.Amy-Neural"/, "EN-Voice");
+    assert.match(twiml, /voice="Azure\.en-GB-SoniaNeural"/, "EN-Voice");
   } finally {
     await srv.stop();
   }

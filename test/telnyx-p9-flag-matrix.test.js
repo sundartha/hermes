@@ -7,8 +7,8 @@
 // Der Befund-1-Boot-Re-Arm/hangUp-ID-Beweis (callControlId gewinnt, endCall NIE)
 // ist Eigentum von telnyx-p6-cap-callcontrol (T1/T2/T5) + telnyx-p6-boot-rearm
 // (R1/R2, beide flag-aus zur Boot-Zeit) - hier nur per Quelltext-Wiring-Guard
-// gegen Drift gesichert. Netto-neu: die zwei Orthogonalitaets-Zellen flag-an +
-// NICHT-Telnyx -> Bestand (Outbound & Inbound). Spawn/Fake, kein Netz.
+// gegen Drift gesichert. Netto-neu: die Orthogonalitaets-Zelle flag-an + NICHT-
+// Telnyx -> Bestand (Outbound; die Inbound-Zelle entfiel mit C-P3). Spawn/Fake, kein Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -67,7 +67,7 @@ test("Flag AUS + Telnyx: Outbound=TeXML, Inbound=Gather, Shim=404 (Bestand, byte
   }
 });
 
-test("Flag AN + Telnyx: Outbound=Call-Control, Inbound(Telnyx)=Handoff, Inbound(NICHT-Telnyx)=Gather, Shim=403", async () => {
+test("Flag AN + Telnyx: Outbound=Call-Control, Inbound(Telnyx)=Handoff, Shim=403", async () => {
   const srv = await startServer({
     env: {
       FAKE_ORIGINATE: "true",
@@ -89,15 +89,6 @@ test("Flag AN + Telnyx: Outbound=Call-Control, Inbound(Telnyx)=Handoff, Inbound(
 
     const handoff = await (await postTelnyxIncoming(srv, { callSid: "cc_in" })).text();
     assert.doesNotMatch(handoff, /<Gather/, "Assistant uebernimmt den Leg (kein TeXML-Gather)");
-
-    // NEU-2 (Orthogonalitaet): expliziter Twilio-Header -> NICHT-Telnyx-Pfad, obwohl das
-    // Flag an ist.
-    const fallback = await (await postTelnyxIncoming(srv, { telnyx: false })).text();
-    assert.match(
-      fallback,
-      /<Gather/,
-      "NICHT-Telnyx faellt trotz Flag AN auf den Bestandspfad zurueck",
-    );
 
     assert.equal(
       await probeShim(srv),

@@ -3,6 +3,7 @@
 // externe Interface-IP (fuer Tests, die NICHT als localhost gelten sollen).
 import assert from "node:assert/strict";
 import { spawn } from "child_process";
+import crypto from "node:crypto";
 import fs from "fs";
 import http from "node:http";
 import os from "os";
@@ -24,8 +25,9 @@ const STARTUP_TIMEOUT_MS = 15000;
 // C-P2: der PROVIDER ist telnyx, die NUMMER bleibt die US-DID. Telnyx ist der einzige
 // Anbieter, auf dem real telefoniert wird (Praemisse belegt: 3 Nummern, 67 Anrufe, 0 auf
 // Twilio) - eine zufaellig auf Twilio stehende Default-Fixture liesse die Suite einen
-// Pfad pruefen, den niemand faehrt. Wer den TWILIO-Pfad meint, sagt das ausdruecklich
-// (TWILIO_TEST_OWNER_NUMBER / TWILIO_TEST_SIGNATURE_HEADERS weiter unten).
+// Pfad pruefen, den niemand faehrt. Wer den TWILIO-OUTBOUND-Pfad meint, sagt das
+// ausdruecklich (TWILIO_TEST_OWNER_NUMBER weiter unten) - einen Twilio-INBOUND-Pfad
+// gibt es seit C-P3 nicht mehr.
 export const OWNER_TEST_NUMBER = Object.freeze({ e164: "+15005550006", provider: "telnyx" });
 
 // Inlands-DID fuer Tests, die ausdruecklich ein INLANDS-Leg fahren (P5-Herkunfts-Achse:
@@ -851,12 +853,31 @@ export const TELNYX_TEST_SIGNATURE_HEADERS = Object.freeze({
   "telnyx-signature-ed25519": "sig",
   "telnyx-timestamp": "1",
 });
-// Gegenstueck zu TELNYX_TEST_SIGNATURE_HEADERS: die blosse PRAESENZ von x-twilio-signature
-// klassifiziert einen Inbound-Request als Twilio (providerFromHeaders); der Wert ist
-// belanglos, weil SKIP_TWILIO_SIGNATURE_CHECK (BASE_ENV) die Kryptopruefung ueberspringt.
-// Seit C-P1 (DEFAULT_PROVIDER=telnyx) muss jeder Test, der den TWILIO-Renderer meint, das
-// SAGEN - sonst prueft er still den Telnyx-Pfad.
-export const TWILIO_TEST_SIGNATURE_HEADERS = Object.freeze({ "x-twilio-signature": "sig" });
+
+// Ed25519-Rohstoff fuer Telnyx-Inbound-Webhooks: Wegwerf-Schluesselpaar, der
+// oeffentliche Teil in BEIDEN Formen, die der Adapter akzeptiert (base64-raw-32-Byte
+// wie Telnyx ihn ausliefert, und PEM), plus der Signierer ueber `${ts}|${rawBody}`.
+// EINE Quelle (G5/S2): zuvor in telnyx-signature.test.js und signature-dispatch.test.js
+// kopiert; C-P3 braucht das Rezept ein drittes Mal (e2e ueber die HTTP-Route).
+const ED25519_RAW_KEY_LEN = 32;
+const MS_PER_S = 1000;
+
+export const nowSeconds = () => Math.floor(Date.now() / MS_PER_S);
+
+export function makeTelnyxSigner() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+  return {
+    publicKeyBase64: publicKey
+      .export({ format: "der", type: "spki" })
+      .subarray(-ED25519_RAW_KEY_LEN)
+      .toString("base64"),
+    publicKeyPem: publicKey.export({ format: "pem", type: "spki" }).toString(),
+    sign(ts, rawBody) {
+      const signed = Buffer.concat([Buffer.from(`${ts}|`), Buffer.from(rawBody)]);
+      return crypto.sign(null, signed, privateKey).toString("base64");
+    },
+  };
+}
 
 // Gegenstueck zu OWNER_TEST_NUMBER fuer Tests, deren GEGENSTAND "der Owner ist NICHT
 // Telnyx" ist (C-P2 Fall C). Dieselbe Nummer wie OWNER_TEST_NUMBER - EINE Quelle fuer die
@@ -893,27 +914,23 @@ export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
   });
 }
 
-// POST /voice/incoming (Inbound-Webhook-Trigger). telnyx (bool, Default true): Ed25519-
-// Signatur-Header setzen; telnyx:false setzt stattdessen den Twilio-Header - der
-// NICHT-Telnyx-Fall wird damit explizit benannt statt aus DEFAULT_PROVIDER geerbt (C-P1).
+// POST /voice/incoming (Inbound-Webhook-Trigger). Setzt die Telnyx-Signatur-Header (der
+// WERT ist belanglos, SKIP_TWILIO_SIGNATURE_CHECK ueberspringt die Krypto - die PRAESENZ
+// waehlt den Provider). C-P3: der frueher vorhandene telnyx:false-Zweig (Twilio-Header)
+// ist entfallen, es gibt keinen NICHT-Telnyx-Inbound-Pfad mehr.
 // callSid: das Telnyx-TeXML-Feld, das die
 // call_control_id des Inbound-Legs TRAEGT (GQ-P3, gemessen) - es gibt kein separates
 // CallControlId-Feld mehr. callSid: null laesst das Feld WEG und erzeugt damit den
 // Defektfall, gegen den der laute Rueckfall sichert. Liefert die rohe fetch-Response.
 export function postTelnyxIncoming(
   srv,
-  {
-    telnyx = true,
-    callSid = "CAtest",
-    from = TELNYX_TEST_PEER_NUMBER,
-    to = TELNYX_TEST_TENANT_NUMBER,
-  } = {},
+  { callSid = "CAtest", from = TELNYX_TEST_PEER_NUMBER, to = TELNYX_TEST_TENANT_NUMBER } = {},
 ) {
   const body = { From: from, To: to };
   if (callSid) body.CallSid = callSid;
   return fetch(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
-    headers: telnyx ? TELNYX_TEST_SIGNATURE_HEADERS : TWILIO_TEST_SIGNATURE_HEADERS,
+    headers: TELNYX_TEST_SIGNATURE_HEADERS,
     body: new URLSearchParams(body),
   });
 }

@@ -18,7 +18,6 @@ import { twilioVoice } from "./adapters/twilio/voice.js";
 import { telnyxVoice } from "./adapters/telnyx/voice.js";
 import { twilioMessaging } from "./adapters/twilio/messaging.js";
 import { renderDirectives as twilioRenderDirectives } from "./adapters/twilio/render.js";
-import { verifyInboundSignature as twilioVerify } from "./adapters/twilio/signature.js";
 import { telnyxMessaging } from "./adapters/telnyx/messaging.js";
 import { renderDirectives as telnyxRenderDirectives } from "./adapters/telnyx/render.js";
 import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signature.js";
@@ -172,9 +171,12 @@ export const voiceRenderer = (provider = DEFAULT_PROVIDER) => pick(PORT.VOICE_RE
 // auf einen Provider abbildet: der Signatur-Verifier dispatcht darueber UND
 // server.js leitet daraus den Inbound-Provider ab (Single Source of Truth, G5).
 // Kein erkannter Header -> null (Aufrufer entscheidet ueber den Fallback).
+// C-P3: x-twilio-signature wird BEWUSST nicht mehr erkannt. Ein Request mit diesem
+// Header laeuft ueber null in den fail-closed-Zweig des Verifizierers (403) - der
+// Header hier wieder einzutragen, ohne gleichzeitig einen Twilio-Verifizierer zu
+// registrieren, oeffnet einen Zweig OHNE Signaturpruefung (Absolute Regel 1).
 export function providerFromHeaders(headers) {
   const h = headers || {};
-  if (h["x-twilio-signature"] !== undefined) return PROVIDER.TWILIO;
   if (h["telnyx-signature-ed25519"] !== undefined && h["telnyx-timestamp"] !== undefined)
     return PROVIDER.TELNYX;
   return null;
@@ -183,10 +185,9 @@ export function providerFromHeaders(headers) {
 /** @returns {import("./ports.js").InboundSignatureVerifier} */
 export const inboundSignatureVerifier = () => ({
   verifyInboundSignature(req) {
-    // Provider aus den Headern; der Twilio-Pfad bleibt exakt der bestehende Aufruf
-    // (Hot-Path byte-identisch). Unbekannt -> fail-closed.
+    // Provider aus den Headern. Seit C-P3 gibt es genau EINEN Inbound-Verifizierer;
+    // alles andere (auch ein Twilio-Signatur-Header) faellt fail-closed durch.
     const provider = providerFromHeaders(req.headers);
-    if (provider === PROVIDER.TWILIO) return twilioVerify(req);
     if (provider === PROVIDER.TELNYX) return telnyxVerify(req);
     return false;
   },
