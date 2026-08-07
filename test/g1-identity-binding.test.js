@@ -64,7 +64,7 @@ test("Offenlegung rendert nie '...von .' (kein leerer Name)", () => {
 // (4) /voice/outbound (LLM-frei) offenlegt mit dem registrierten Owner-Namen (voll),
 // als Say IM Gather (G2). Beweis am echten Renderer (TwiML), nicht nur am Prompt.
 test("/voice/outbound rendert die Offenlegung mit registriertem ownerName im Gather", async () => {
-  const { body, status } = await runOutbound({ provider: "twilio" });
+  const { body, status } = await runOutbound({ provider: "telnyx" });
   assert.equal(status, 200);
   assertDisclosureInGather(body);
   assert.ok(!body.includes("im Auftrag von ."), "Outbound-Body darf keinen leeren Namen tragen");

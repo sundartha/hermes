@@ -1,15 +1,14 @@
 // P9 - Regressionsschutz fuer die EINE Locale-Quelle und die sprach-aufgeloeste
 // ElevenLabs-Stimme. Zwei Verhaltensaenderungen werden hier gepinnt:
-// (1) beide Renderer holen das `language`-Attribut aus dem Locale-Buendel
+// (1) der Renderer holt das `language`-Attribut aus dem Locale-Buendel
 //     (src/i18n/locales.js) statt aus einer eigenen Voice-Tabelle - gemessen gegen den
-//     BUENDELWERT, nicht gegen ein Literal: aendert jemand LOCALES.fr.sttLocale, folgen
-//     beide Renderer oder dieser Test ist rot (das ist der Drift-Faenger);
+//     BUENDELWERT, nicht gegen ein Literal: aendert jemand LOCALES.fr.sttLocale, folgt
+//     der Renderer oder dieser Test ist rot (das ist der Drift-Faenger);
 // (2) die ElevenLabs-Voice-ID folgt der Sprache (Owner-Entscheidung 2026-07-27), DE bleibt
 //     die global konfigurierte Plattform-Stimme.
 // Pur, offline, kein Env, kein Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderDirectives as renderTwilio } from "../src/telephony/adapters/twilio/render.js";
 import { renderDirectives as renderTelnyx } from "../src/telephony/adapters/telnyx/render.js";
 import { elevenLabsVoiceName } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
 import { sttLocaleForVoiceProfile } from "../src/telephony/voice-locale.js";
@@ -23,15 +22,10 @@ const OPTS = { elevenLabs: EL };
 const FR_VOICE_ID = "FFXYdAYPzn8Tw8KiHZqg";
 const EN_VOICE_ID = "wOPou4MhRIYEqQHVxjmp";
 
-test("Voice-Tabellen fuehren die STT-Locale nicht mehr selbst - beide Renderer folgen dem Locale-Buendel", () => {
+test("Voice-Tabellen fuehren die STT-Locale nicht mehr selbst - der Renderer folgt dem Locale-Buendel", () => {
   for (const language of SUPPORTED_LANGUAGES) {
     const { voiceProfile, sttLocale } = LOCALES[language];
     const dirs = [gather({ promptText: "Hallo?", action: "/x", voiceProfile })];
-    assert.match(
-      renderTwilio(dirs),
-      new RegExp(`<Gather\\b[^>]*\\blanguage="${sttLocale}"`),
-      `Twilio-Gather ${language} -> ${sttLocale}`,
-    );
     assert.match(
       renderTelnyx(dirs),
       new RegExp(`<Gather\\b[^>]*\\blanguage="${sttLocale}"`),

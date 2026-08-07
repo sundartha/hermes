@@ -25,10 +25,11 @@ import { callMaxDurationMs } from "./call-duration.js";
 // server.js importiert MEDIA_PATH fuer die <Stream>-URL, der upgrade-Handler
 // leitet daraus den Provider ab. KEIN Feld-Sniffing am Frame - die Adapter-Wahl
 // muss VOR dem ersten Frame feststehen (start parsen). Unbekannter Pfad -> null ->
-// Verbindung wird verworfen (kein stiller Twilio-Default fuer einen fremden
-// Stream-Pfad, Tenant-Verwechslungs-Risiko).
+// Verbindung wird verworfen (kein stiller Default fuer einen fremden Stream-Pfad,
+// Tenant-Verwechslungs-Risiko). C-P4: der frueher hier gefuehrte Twilio-Pfad "/media"
+// ist mit dem Adapter entfallen und wird seither NICHT mehr angenommen - er faellt in
+// genau diesen fail-closed-Zweig.
 export const MEDIA_PATH = Object.freeze({
-  [PROVIDER.TWILIO]: "/media",
   [PROVIDER.TELNYX]: "/media/telnyx",
 });
 

@@ -25,12 +25,21 @@ const DEMO_EVENTS = [
 // Hoechstens so viele Notifications behalten (Ring-Puffer, neueste zuerst).
 export const MAX_NOTIFICATIONS = 50;
 
-// Telefonie-Provider fuer den config-derived Nummern-Seed (number-Tabelle). Bisher
-// als "twilio" an mehreren Stellen hardcodet (state-ops.seedBootstrapNumber,
-// pg.flushNumbers, migrate.seedDefaults); ab P5 (zweiter Provider Telnyx) eine
-// benannte Konstante (G25), eine Quelle (G5/G13). Die telephony-registry importiert
-// dieselben Werte fuer den Header-Dispatch.
-export const PROVIDER = Object.freeze({ TWILIO: "twilio", TELNYX: "telnyx" });
+// Telefonie-Provider fuer den config-derived Nummern-Seed (number-Tabelle). Benannte
+// Konstante (G25), eine Quelle (G5/G13) fuer state-ops.seedBootstrapNumber,
+// pg.flushNumbers, migrate.seedDefaults; die telephony-registry importiert dieselben
+// Werte als Schluessel ihrer ADAPTERS-Tabelle.
+//
+// C-P4 (Track C, Schritt 5): TWILIO ist RAUS - gemeinsam mit den Adapter-Eintraegen,
+// nicht davor und nicht danach. Ein Enum-Wert ohne Adapter haette die
+// Vollstaendigkeits-Invariante (test/telephony-registry.test.js) zu Recht rot gemacht;
+// ein Adapter ohne Enum-Wert waere unerreichbarer Code gewesen. Die Enum-FORM bleibt
+// bei einem Wert bestehen: sie ist die Stelle, an der ein zweiter Carrier eintraegt,
+// und `Object.values(PROVIDER)` ist die Validierungsquelle von resolveSeedProvider.
+// Datenseitig unbedenklich: `provider TEXT` in schema.sql traegt KEINEN CHECK, ein
+// gespeichertes 'twilio' bricht nichts; resolveSeedProvider("twilio") liefert danach
+// null - fail-closed und fachlich korrekt, denn Twilio ist kein Anbieter mehr.
+export const PROVIDER = Object.freeze({ TELNYX: "telnyx" });
 // C-P1 (Track C, Schritt 2): der Rueckfall ist TELNYX, nicht mehr Twilio. Belegt am
 // 2026-08-07 gegen die Produktions-DB (RLS je Tenant gesetzt): 3 Nummern, 67 Anrufe,
 // keine einzige Zeile auf Twilio - der Flip leitet keinen echten Verkehr um. Diese eine
@@ -44,8 +53,8 @@ export const DEFAULT_PROVIDER = PROVIDER.TELNYX;
 // Pre-Mortem R1 - stiller Falsch-Carrier). PURE Entscheidung (providerRaw als Arg,
 // lowercase erwartet wie config.provisioning.ownerNumberProvider), bewusst getrennt vom IO-Wrapper
 // in json.js und so direkt unit-testbar: ungesetzt/leer -> DEFAULT_PROVIDER (Telnyx, der
-// einzige live betriebene Carrier, Zero-Config); gesetzt + gueltig (twilio|telnyx) -> dieser
-// Provider; gesetzt + ungueltig (z.B. Tippfehler "twillio") -> null (fail-closed -> der
+// einzige live betriebene Carrier, Zero-Config); gesetzt + gueltig (telnyx) -> dieser
+// Provider; gesetzt + ungueltig (z.B. Tippfehler "telnix") -> null (fail-closed -> der
 // Aufrufer seedet NICHT, der Boot-Guard greift, statt still den falschen Carrier zu
 // schreiben). Die Trennung leer<->Muell ist gewollt: nur Muell ist ein Refusal-Grund.
 // Validierungs-Quelle ist dasselbe Object.values(PROVIDER) wie in seedBootstrapNumberFromConfig (G5).

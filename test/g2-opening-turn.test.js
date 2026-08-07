@@ -25,7 +25,10 @@ before(async () => {
   ({ systemPrompt, openingText, disclosureSentence } = await import("../src/claude.js"));
 });
 
-for (const provider of ["twilio", "telnyx"]) {
+// C-P4: die Schleife lief ueber BEIDE Budget-Engine-Renderer ("robust ueber beide
+// Renderer"). Twilio ist entfallen; die Schleifenform bleibt bewusst stehen - sie ist
+// die Stelle, an der ein zweiter Carrier ohne Umbau der Testkoerper wieder eintritt.
+for (const provider of ["telnyx"]) {
   // (1) Offenlegung ZUERST, dann Anliegen, beides in EINEM Say IM Gather; kein Hangup.
   test(`G2 (${provider}): Offenlegung vor Anliegen, EIN Say im Gather, kein Hangup`, async () => {
     const goal = "einen Friseurtermin zu vereinbaren";
@@ -47,7 +50,7 @@ for (const provider of ["twilio", "telnyx"]) {
 
 // (2) Kein LLM-Pull im Erst-Turn: Status 200 ohne Anthropic-Mock, keine LLM-Diagnose.
 test("G2: /voice/outbound bleibt LLM-frei (kein [outbound]-Log, kein Anthropic-Call)", async () => {
-  const { status, stdout } = await runOutbound({ provider: "twilio" });
+  const { status, stdout } = await runOutbound({ provider: "telnyx" });
   assert.equal(status, 200);
   assert.ok(!stdout.includes("[outbound]"), `kein Outbound-LLM-Log erwartet: ${stdout}`);
   assert.ok(!stdout.includes("[outbound-recv]"), `kein Outbound-LLM-Log erwartet: ${stdout}`);
@@ -60,7 +63,7 @@ test("G2: ueberlanges Anliegen wird im Erst-Turn gekappt (Wortgrenze, kein Satzz
     longGoal.length > OPENING_GOAL_MAX_CHARS,
     "Test-Setup: goal muss laenger als die Kappe sein",
   );
-  const { body, status } = await runOutbound({ provider: "twilio", call: { goal: longGoal } });
+  const { body, status } = await runOutbound({ provider: "telnyx", call: { goal: longGoal } });
   assert.equal(status, 200);
   // Das vollstaendige lange Anliegen darf NICHT komplett gerendert werden.
   assert.ok(

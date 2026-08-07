@@ -15,6 +15,11 @@ import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say, gather, hangup, VOICE_PROFILE } from "../src/telephony/directives.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
+// Ein Provider-Wert ohne CAPABILITY.PLAY_AUDIO_TTS. 'twilio' als Wert, weil genau dieser
+// String seit C-P4 kein Anbieter mehr ist, aber als Altzeile in einer Bestands-DB stehen
+// kann (`provider TEXT` ohne CHECK-Constraint).
+const UNSUPPORTED_PROVIDER = "twilio";
+
 const PUBLIC_URL = "https://agent.test";
 const FIXED_TOKEN = "fixed-token-abc";
 
@@ -104,7 +109,12 @@ test("Flag AUS -> Direktiven referenz-identisch zurueck, kein put, kein fetch", 
   assert.equal(ttsStore.putCalls.length, 0);
 });
 
-test("Nicht-Telnyx (Flag AN) -> Direktiven unveraendert, kein put, kein fetch", async () => {
+// C-P4: der Gegenstand ist "ein Anbieter OHNE die Play-TTS-Faehigkeit synthetisiert NICHT".
+// Er ueberlebt den Twilio-Ausbau, weil directive-synth.js NUR providerSupports() fragt
+// (reine Tabellen-Abfrage, fail-closed) und nie pick() - ein unbekannter Provider wirft
+// hier also nicht, er faellt durch. Damit ist das hier die KOSTEN-Zusicherung fuer eine
+// Altzeile provider='twilio' in einer Bestands-DB: kein Request an ElevenLabs, kein put.
+test("Anbieter ohne Play-TTS-Faehigkeit (Flag AN) -> Direktiven unveraendert, kein put, kein fetch", async () => {
   const ttsStore = fakeTtsStore();
   const { synthesizeDirectiveAudio } = makeDirectiveSynth({
     config: fakeConfig({ enabled: true }),
@@ -113,7 +123,7 @@ test("Nicht-Telnyx (Flag AN) -> Direktiven unveraendert, kein put, kein fetch", 
     onQuotaWarning: noopQuotaWarning,
   });
   const directives = [say("Hallo")];
-  const call = { provider: "twilio" };
+  const call = { provider: UNSUPPORTED_PROVIDER };
   await withFakeFetch(throwingFetch, async () => {
     const out = await synthesizeDirectiveAudio(call, directives);
     assert.equal(out, directives, "referenz-identisch");

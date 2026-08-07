@@ -44,7 +44,7 @@ const CALL_SID = "CAtest";
 // voice-play-tts.test.js, S2). call-Overrides ergaenzen den seedCall; seed-Overrides
 // ergaenzen den Store. Liefert das srv-Handle + die fuer den Fetch noetige id;
 // Schliessen des Servers ist Sache der Aufrufer unten.
-async function startOutboundServer({ provider = "twilio", call = {}, seed = {}, env = {} } = {}) {
+async function startOutboundServer({ provider = "telnyx", call = {}, seed = {}, env = {} } = {}) {
   const id = call.id || DEFAULT_CALL_ID;
   const srv = await startServer({
     env,
@@ -98,7 +98,7 @@ export async function runOutboundKeepOpen(opts = {}) {
 // geschlossen (kein srv-Handle nach aussen, G31). Liefert beide Bodies, den
 // Turn-Status und stdout.
 export async function runOutboundThenTurn({
-  provider = "twilio",
+  provider = "telnyx",
   call = {},
   speechResult,
   mockUrl,

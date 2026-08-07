@@ -31,7 +31,7 @@ before(async () => {
         id: "num_b",
         e164: B_NUMBER,
         tenantId: TENANT_B,
-        provider: "twilio",
+        provider: "telnyx",
         status: "active",
         providerNumberId: null,
       },

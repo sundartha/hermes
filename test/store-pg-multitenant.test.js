@@ -75,7 +75,7 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
     id: "num_b",
     e164: "+49999000111",
     tenantId: TENANT_B,
-    provider: PROVIDER.TWILIO,
+    provider: PROVIDER.TELNYX,
     status: NUMBER_STATUS.ACTIVE,
     providerNumberId: null,
   });
@@ -219,7 +219,7 @@ function makeNumberRow(overrides) {
     id: "num",
     e164: "+49900000000",
     tenantId: TENANT_B,
-    provider: PROVIDER.TWILIO,
+    provider: PROVIDER.TELNYX,
     status: NUMBER_STATUS.ACTIVE,
     providerNumberId: null,
     paymentIntentId: null,

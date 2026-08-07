@@ -144,7 +144,7 @@ function baseCtx(overrides = {}) {
     requestedBy: "owner",
     reserveCents: 60,
     fromNumber: "+491700000000",
-    outboundProvider: "twilio",
+    outboundProvider: "telnyx",
     ...overrides,
   };
 }

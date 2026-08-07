@@ -55,7 +55,7 @@ function makeDriftCalls(state, prefix, costCts, n) {
 
 // LCT P5: aktive Bootstrap-Nummer im Store - der Absender des Drift-Alarms. Ohne sie
 // (P5-S5) sendet sendDriftAlertSms fail-closed keine SMS.
-function withBootstrapNumber(state, { e164 = "+15005550006", provider = "twilio" } = {}) {
+function withBootstrapNumber(state, { e164 = "+15005550006", provider = "telnyx" } = {}) {
   state.numbers.push({ id: "num_owner", e164, tenantId: BOOTSTRAP_TENANT_ID, provider, status: NUMBER_STATUS.ACTIVE });
   return state;
 }

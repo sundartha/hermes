@@ -63,7 +63,7 @@ test("G3/G26 Runde 2: Rausch-Turn dann echte Dauerstille - der R4-Deadlock-Schut
   const srv = await startServer({
     env: { ANTHROPIC_BASE_URL: mock.url, MAX_EMPTY_TURNS: "2" },
     seed: seedState({
-      calls: [seedCall({ id, provider: "twilio", status: "active", direction: "outbound" })],
+      calls: [seedCall({ id, provider: "telnyx", status: "active", direction: "outbound" })],
     }),
   });
   try {

@@ -15,7 +15,7 @@ import { BOOTSTRAP_HEAL } from "../src/boot-guard.js";
 // aber NICHT ueber den Store-Seed, sondern ueber die Env - genau das ist der Prueffall.
 const BOOTSTRAP_ENV = Object.freeze({
   BOOTSTRAP_E164: "+15005550006",
-  BOOTSTRAP_PROVIDER: "twilio",
+  BOOTSTRAP_PROVIDER: "telnyx",
 });
 
 // Die geseedete Nummer darf NIE im Log stehen (Absolute Regel 4/PII). Praefix statt
@@ -93,7 +93,7 @@ test("healBootstrapStore reicht einen Store-Ladefehler hoch und schreibt nichts"
       bootstrapCalls += 1;
     },
   };
-  const config = { provisioning: { bootstrapE164: "+15005550006", bootstrapProvider: "twilio" } };
+  const config = { provisioning: { bootstrapE164: "+15005550006", bootstrapProvider: "telnyx" } };
   await assert.rejects(
     () => healBootstrapStore({ config, store, messaging: () => ({}) }),
     /Store nicht ladbar/,
@@ -108,7 +108,7 @@ test("OWNER_NUMBER_SEED gewinnt gegen die Heilung (kein Doppel-Seed)", async () 
   // aktive Nummern und die aktive Owner-Nummer waere die aus BOOTSTRAP_E164.
   const srv = await startServer({
     ownerNumber: null,
-    env: { ...BOOTSTRAP_ENV, OWNER_NUMBER_SEED: JSON_SEED_E164, OWNER_NUMBER_PROVIDER: "twilio" },
+    env: { ...BOOTSTRAP_ENV, OWNER_NUMBER_SEED: JSON_SEED_E164, OWNER_NUMBER_PROVIDER: "telnyx" },
   });
   try {
     const state = await (await fetch(`${srv.localUrl}/api/state`)).json();

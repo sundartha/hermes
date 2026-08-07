@@ -22,16 +22,21 @@ test("resolveSeedProvider: leer -> DEFAULT_PROVIDER (Telnyx, Zero-Config)", () =
   assert.equal(resolveSeedProvider(""), PROVIDER.TELNYX);
 });
 
-test("resolveSeedProvider: 'twilio' -> twilio", () => {
-  assert.equal(resolveSeedProvider("twilio"), PROVIDER.TWILIO);
+// C-P4: bis hierher stand "'twilio' -> twilio". Seit dem Adapter-Ausbau ist 'twilio' KEIN
+// unterstuetzter Anbieter mehr, und der Resolver muss ihn genauso ablehnen wie einen
+// Tippfehler. Das ist die scharfe Kante des Ausbaus: OWNER_NUMBER_PROVIDER=twilio in einer
+// alten Render-Umgebung darf NICHT still eine Nummer auf einem Carrier seeden, fuer den es
+// keinen Adapter gibt - dann lieber kein Seed und der Boot-Guard greift.
+test("resolveSeedProvider: 'twilio' -> null (seit C-P4 kein Anbieter mehr, fail-closed)", () => {
+  assert.equal(resolveSeedProvider("twilio"), null);
 });
 
-test("resolveSeedProvider: 'telnyx' -> telnyx (R1: NICHT still twilio)", () => {
+test("resolveSeedProvider: 'telnyx' -> telnyx", () => {
   assert.equal(resolveSeedProvider("telnyx"), PROVIDER.TELNYX);
 });
 
-test("resolveSeedProvider: Tippfehler 'twillio' -> null (fail-closed)", () => {
-  assert.equal(resolveSeedProvider("twillio"), null);
+test("resolveSeedProvider: Tippfehler 'telnix' -> null (fail-closed)", () => {
+  assert.equal(resolveSeedProvider("telnix"), null);
 });
 
 test("resolveSeedProvider: Muell -> null (fail-closed)", () => {

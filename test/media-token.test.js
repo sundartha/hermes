@@ -4,6 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import WebSocket from "ws";
 import { startServer, seedState, seedCall, OWNER_TEST_NUMBER } from "./helpers.js";
+import { MEDIA_PATH } from "../src/bridge.js";
+import { PROVIDER } from "../src/store/defaults.js";
 
 const TOKEN = "a".repeat(32);
 const CALL_ID = "call_test1";
@@ -27,15 +29,17 @@ function closedWithin(ws, ms) {
   });
 }
 
+// C-P4: Telnyx-Frame-Form (stream_id statt streamSid) - der frueher hier benutzte
+// Twilio-Frame gehoert zu einem Adapter, den es nicht mehr gibt.
 function sendStart(ws, customParameters) {
-  ws.send(JSON.stringify({ event: "start", start: { streamSid: "MZtest", customParameters } }));
+  ws.send(JSON.stringify({ event: "start", start: { stream_id: "STtest", customParameters } }));
 }
 
 test("/media-WebSocket: stream_token-Pruefung", async (t) => {
   const srv = await startServer({
     seed: seedState({ calls: [seedCall({ id: CALL_ID, streamToken: TOKEN })] }),
   });
-  const mediaUrl = `ws://127.0.0.1:${srv.port}/media`;
+  const mediaUrl = `ws://127.0.0.1:${srv.port}${MEDIA_PATH[PROVIDER.TELNYX]}`;
   try {
     await t.test("falsches Token -> Socket wird getrennt", async () => {
       const ws = await wsConnect(mediaUrl);

@@ -39,7 +39,7 @@ test("Cap-Grund: terminateCappedCall persistiert das Cap-Token gemeinsam mit dem
   const call = {
     id: "call_cap",
     status: "active",
-    provider: "twilio",
+    provider: "telnyx",
     twilioSid: "CA_1",
     startedAt: new Date(Date.now() - LONG_AGO_MS).toISOString(),
     maxDurationS: MAX_DURATION_S,

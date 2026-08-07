@@ -24,6 +24,12 @@ const {
 
 // Kandidatenzahl der D1-Kernzusage: gross genug, um "einmal je Typ" von "einmal je
 // Kandidat" scharf zu unterscheiden (6 vs. 35), klein genug, um lesbar zu bleiben.
+// Ein Provider, fuer den die Registry KEINEN Adapter mit Beleg-Methoden liefert. Der
+// Test faehrt gegen ein Double (fakeVoiceControl), nicht gegen die echte Registry -
+// der Name steht hier fuer die Rolle, nicht fuer einen Carrier. 'twilio' als Wert, weil
+// genau dieser String als Altzeile in einer Bestands-DB stehen kann.
+const NO_PROOF_PROVIDER = "twilio";
+
 const CANDIDATE_COUNT = 5;
 
 // Fake-Adapter im NEUEN Port-Zuschnitt. recordsFor(legId) spielt genau die Rolle, die
@@ -163,26 +169,26 @@ test("(P2-6) je Provider genau EIN Pool-Abruf; Adapter ohne die Methoden bleibt 
   const state = makeDefaultState();
   makeDueOutboundCall(state, { nowMs, provider: "telnyx", legRef: { callControlId: "cc_t1" } });
   makeDueOutboundCall(state, { nowMs, provider: "telnyx", legRef: { callControlId: "cc_t2" } });
-  const twilioA = makeDueOutboundCall(state, { nowMs, provider: "twilio", legRef: { twilioSid: "CA_t1" } });
-  const twilioB = makeDueOutboundCall(state, { nowMs, provider: "twilio", legRef: { twilioSid: "CA_t2" } });
+  const noProofA = makeDueOutboundCall(state, { nowMs, provider: NO_PROOF_PROVIDER, legRef: { twilioSid: "CA_t1" } });
+  const noProofB = makeDueOutboundCall(state, { nowMs, provider: NO_PROOF_PROVIDER, legRef: { twilioSid: "CA_t2" } });
   const store = makeStubStore(state);
   const trace = [];
   const telnyxControl = fakePoolAdapter({ recordsFor: () => [], trace });
   const { runCostTruingSweep } = makeCostTruing({
-    store, config: fakeConfig(), voiceControl: fakeVoiceControl({ telnyx: telnyxControl, twilio: {} }),
+    store, config: fakeConfig(), voiceControl: fakeVoiceControl({ telnyx: telnyxControl, [NO_PROOF_PROVIDER]: {} }),
     audit: () => {}, now: () => nowMs,
   });
 
   const res = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
   assert.equal(trace.filter((t) => t === "pool").length, 1, "genau EIN Pool-Abruf fuer den einzigen Telnyx-Provider im Sweep");
-  assert.equal(res.skippedCalls, 2, "beide Twilio-Kandidaten bleiben No-op");
-  for (const call of [twilioA, twilioB]) {
+  assert.equal(res.skippedCalls, 2, "beide Kandidaten ohne Beleg-Methoden bleiben No-op");
+  for (const call of [noProofA, noProofB]) {
     assert.equal(call.costTruingAttempts, 0);
     assert.equal(call.costTruedSource, null);
   }
   assert.equal(
-    store.writes.some((w) => w.callId === twilioA.id || w.callId === twilioB.id),
+    store.writes.some((w) => w.callId === noProofA.id || w.callId === noProofB.id),
     false,
     "Twilio-Kandidaten bekommen keinen Schreibzugriff",
   );

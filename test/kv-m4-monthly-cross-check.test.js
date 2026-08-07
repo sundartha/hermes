@@ -22,6 +22,11 @@ import { captureConsole } from "./helpers.js";
 
 // Feste Uhr: der faellige Monat ist IMMER der zuletzt VOLLSTAENDIG abgeschlossene
 // UTC-Kalendermonat relativ zu NOW_ISO - 2026-08-15 -> faellig ist 2026-07.
+// Ein Provider-Wert, den die Registry NICHT kennt. Bewusst 'twilio' statt eines
+// Phantasienamens: genau dieser String kann als ALTZEILE in einer Bestands-DB stehen
+// (`provider TEXT` ohne CHECK-Constraint) - der Filter muss ihn dort aussortieren.
+const NON_TELNYX_PROVIDER = "twilio";
+
 const NOW_ISO = "2026-08-15T12:00:00.000Z";
 const DUE_MONTH_KEY = "2026-07";
 const OTHER_MONTH_KEY = "2026-06";
@@ -56,7 +61,10 @@ test("KV-M4-1 Rechnungstest mit gestellten Zahlen: drei Rohwerte und zwei Differ
   // Rauschen: falscher Monat, falscher Provider, nicht abgeglichen - jedes wuerde die
   // Summe verfaelschen, wenn der jeweilige Filter fehlte.
   makeTruedCall(state, { monthKey: OTHER_MONTH_KEY, actualCostMicroCents: 999_000_000 });
-  makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 777_000_000, provider: PROVIDER.TWILIO });
+  // C-P4: der Gegenstand dieser Zeile IST "nicht Telnyx" (Provider-Filter). Der Wert steht
+  // deshalb als Literal da, nicht als Enum-Verweis - PROVIDER.TWILIO waere nach dem Ausbau
+  // still zu `undefined` geworden und haette den Filter gegen etwas anderes geprueft.
+  makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 777_000_000, provider: NON_TELNYX_PROVIDER });
   makeTruedCall(state, { monthKey: DUE_MONTH_KEY, actualCostMicroCents: 555_000_000, costTruedAt: null });
 
   // Zwei VOICE_MINUTE-Belege im faelligen Monat -> Summe 920 EUR-Cent (Gate-Ledger-Proxy).

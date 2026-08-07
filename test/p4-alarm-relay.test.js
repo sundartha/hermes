@@ -47,7 +47,7 @@ function fakeStore(sender) {
 const BOOTSTRAP_SENDER = {
   tenantId: BOOTSTRAP_TENANT_ID,
   status: NUMBER_STATUS.ACTIVE,
-  provider: "twilio",
+  provider: "telnyx",
   e164: "+491700000000",
 };
 

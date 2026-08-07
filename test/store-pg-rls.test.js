@@ -55,11 +55,11 @@ async function setup() {
   // Je eine number-Zeile pro Tenant (id=e164), um den number-Lookup tenant-isoliert
   // zu pruefen (P3c): die fremde Nummer darf unter der Owner-GUC nicht sichtbar sein.
   await db.query(
-    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ('+49owner', $1, '+49owner', 'twilio')`,
+    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ('+49owner', $1, '+49owner', 'telnyx')`,
     [BOOTSTRAP_TENANT_ID],
   );
   await db.query(
-    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ('+49other', $1, '+49other', 'twilio')`,
+    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ('+49other', $1, '+49other', 'telnyx')`,
     [OTHER_TENANT_ID],
   );
 

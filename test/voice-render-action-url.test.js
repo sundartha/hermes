@@ -1,7 +1,12 @@
 // S1-14: makeVoiceRender direkt (kein Server-Spawn) - turnDirectives() liefert
 // [gather, redirect]; nur die action/url-Felder werden geprueft (Werte, kein Byte-
-// Markup -> flakefrei). twilio -> relative Action-URL; telnyx -> absolute URL (TeXML
-// loest relative URLs anders auf als Twilio, config.publicUrl zur Laufzeit gelesen).
+// Markup -> flakefrei). Telnyx -> absolute URL (TeXML loest relative URLs anders auf,
+// config.publicUrl zur Laufzeit gelesen).
+//
+// C-P4: hier standen zwei Tests, deren Gegenstand der UNTERSCHIED zwischen zwei Anbietern
+// war ("twilio -> relative Action-URL", "streamDirectives -> Twilio-Media-Pfad"). Mit dem
+// Ausbau haben sie keinen Gegenstand mehr und sind entfallen. Beim Entfernen ist ein
+// BEFUND aufgefallen, der weiter unten als Charakterisierung festgehalten ist.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeVoiceRender } from "../src/telephony/voice-render.js";
@@ -10,16 +15,6 @@ const fakeConfig = {
   server: { publicUrl: "https://agent.test" },
   voice: { sttSpeechTimeoutSec: 2 },
 };
-
-test("S1-14a: twilio-Call -> relative Action-URL (Bestand)", () => {
-  const { turnDirectives } = makeVoiceRender({ config: fakeConfig });
-  const [gatherD, redirectD] = turnDirectives(
-    { id: "call_1", provider: "twilio", language: "de" },
-    "Hallo",
-  );
-  assert.equal(gatherD.action, "/voice/turn?callId=call_1");
-  assert.equal(redirectD.url, "/voice/turn?callId=call_1");
-});
 
 test("S1-14b: telnyx-Call -> absolute Action-URL (config.publicUrl-Praefix)", () => {
   const { turnDirectives } = makeVoiceRender({ config: fakeConfig });
@@ -31,29 +26,51 @@ test("S1-14b: telnyx-Call -> absolute Action-URL (config.publicUrl-Praefix)", ()
   assert.equal(redirectD.url, "https://agent.test/voice/turn?callId=call_2");
 });
 
-// S3 (P8-Testluecke): streamDirectives() - https->wss-Ersetzung + provider-abhaengiger
-// MEDIA_PATH (twilio/telnyx) + Param-Form (call_id/stream_token). Bisher ungetestet.
-test("S3: streamDirectives -> wss-URL + Provider-Pfad (twilio)", () => {
-  const { streamDirectives } = makeVoiceRender({ config: fakeConfig });
-  const [stream] = streamDirectives({ id: "call_9", provider: "twilio", streamToken: "tok9" });
-  assert.equal(stream.url, "wss://agent.test/media");
-  assert.deepEqual(stream.params, [
-    { name: "call_id", value: "call_9" },
-    { name: "stream_token", value: "tok9" },
-  ]);
-});
-
-test("S3: streamDirectives -> telnyx-Media-Pfad", () => {
+// S3 (P8-Testluecke): streamDirectives() - https->wss-Ersetzung + MEDIA_PATH + Param-Form
+// (call_id/stream_token).
+test("S3: streamDirectives -> telnyx-Media-Pfad + Param-Form", () => {
   const { streamDirectives } = makeVoiceRender({ config: fakeConfig });
   const [stream] = streamDirectives({ id: "call_10", provider: "telnyx", streamToken: "tok10" });
   assert.equal(stream.url, "wss://agent.test/media/telnyx");
+  assert.deepEqual(stream.params, [
+    { name: "call_id", value: "call_10" },
+    { name: "stream_token", value: "tok10" },
+  ]);
 });
 
 // C-P1: der vierte DEFAULT_PROVIDER-Leser (MEDIA_PATH-Rueckfall) war bisher ungetestet -
-// beide Tests oben setzen provider explizit. Literal statt MEDIA_PATH[DEFAULT_PROVIDER],
+// der Test oben setzt provider explizit. Literal statt MEDIA_PATH[DEFAULT_PROVIDER],
 // damit die Assertion beim Zurueckdrehen des Flips ROT wird statt mitzuwandern.
 test("C-P1: streamDirectives ohne call.provider -> Media-Pfad des Rueckfalls (Telnyx)", () => {
   const { streamDirectives } = makeVoiceRender({ config: fakeConfig });
   const [stream] = streamDirectives({ id: "call_11", streamToken: "tok11" });
   assert.equal(stream.url, "wss://agent.test/media/telnyx");
+});
+
+// CHARAKTERISIERUNG (C-P4-Befund, BEWUSST NICHT GEFIXT - Scope).
+//
+// Die drei provider-lesenden Stellen in voice-render.js sind sich NICHT einig, was bei
+// einem Call OHNE provider-Feld gilt:
+//   - render()          -> voiceRenderer(undefined) -> DEFAULT_PROVIDER = Telnyx -> TeXML
+//   - streamDirectives  -> MEDIA_PATH[undefined] || MEDIA_PATH[DEFAULT_PROVIDER] -> Telnyx
+//   - turnDirectives    -> call.provider === PROVIDER.TELNYX ist FALSE -> base = ""
+//                          -> RELATIVE Action-URL
+// Ergebnis: TeXML mit relativer Action-URL - genau die Kombination, die der Kommentar an
+// turnDirectives ausschliesst ("Telnyx-TeXML loest relative URLs anders auf").
+//
+// Das ist dieselbe Fehlerklasse wie C-P1b (ein Anbieter-Default, der nicht DEFAULT_PROVIDER
+// folgt), nur an einer sechsten Stelle, die C-P1b nicht erwischt hat. Bis C-P4 war der
+// Zweig harmlos: base="" galt fuer Twilio, und Twilio rendert relative URLs korrekt.
+//
+// LIVE-WIRKUNG heute: keine. createCall setzt provider IMMER auf DEFAULT_PROVIDER
+// (test/telephony-registry.test.js, "call.provider-Eintrittspfade"), ein Call ohne Feld
+// entsteht also nicht mehr - nur Bestandszeilen koennten ihn tragen.
+//
+// Dieser Test pinnt den IST-Zustand, damit der Befund nicht still verschwindet oder still
+// kippt. Wer ihn behebt, macht diesen Test rot - und das ist die Absicht.
+test("BEFUND (Charakterisierung): Call ohne provider -> TeXML-Renderer, aber RELATIVE Action-URL", () => {
+  const { turnDirectives } = makeVoiceRender({ config: fakeConfig });
+  const [gatherD, redirectD] = turnDirectives({ id: "call_12", language: "de" }, "Hallo");
+  assert.equal(gatherD.action, "/voice/turn?callId=call_12");
+  assert.equal(redirectD.url, "/voice/turn?callId=call_12");
 });

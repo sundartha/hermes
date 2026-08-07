@@ -55,7 +55,7 @@ test("Geld-Achse: Re-Attach eines Calls mit erschoepfter Decke terminalisiert ue
     id: "call_budget",
     tenantId: "tenant_budget",
     status: "active",
-    provider: "twilio",
+    provider: "telnyx",
     twilioSid: "CA_budget_1",
     direction: "outbound",
     startedAt: new Date(Date.now() - RECENTLY_STARTED_MS).toISOString(),

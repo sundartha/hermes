@@ -1,31 +1,17 @@
 // P4: WebhookEvents (Port 5) - Charakterisierungs-/Dichtheits-Tests. Rein, offline,
-// KEIN Server-Spawn, KEIN pglite. Pinnt Twilio- und Telnyx-Parsing byte-identisch zum
+// KEIN Server-Spawn, KEIN pglite. Pinnt das Telnyx-Parsing byte-identisch zum
 // vorherigen server.js-Verhalten (extractSpeech/extractLifecycleEvent/extractSpeakOutcome)
 // + den Registry-Dispatch (Port 5, analog voiceControl/messaging).
+// C-P4: der Twilio-Block ist mit dem Adapter entfallen. Seine drei Aussagen waren
+// ausschliesslich Twilio-Parsing (SpeechResult ohne Transcript-Vorrang, leere
+// diagnostics, speak-Outcome konstant NONE) - sie beschreiben keinen Port-Vertrag,
+// sondern die Eigenheiten eines Anbieters, den es nicht mehr gibt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { twilioWebhookEvents } from "../src/telephony/adapters/twilio/webhook-events.js";
 import { telnyxWebhookEvents } from "../src/telephony/adapters/telnyx/webhook-events.js";
 import { webhookEvents } from "../src/telephony/registry.js";
 import { SPEAK_OUTCOME } from "../src/telephony/adapters/telnyx/speak-events.js";
 import { DEFAULT_PROVIDER, PROVIDER } from "../src/store/defaults.js";
-
-// ---- Twilio ----
-test("Twilio parseSpeechResult: SpeechResult getrimmt, fehlend -> \"\"", () => {
-  assert.equal(twilioWebhookEvents.parseSpeechResult({ SpeechResult: "hallo " }), "hallo");
-  assert.equal(twilioWebhookEvents.parseSpeechResult({}), "");
-});
-
-test("Twilio parseLifecycleEvent: diagnostics immer leer (keine Telnyx-Diagnose-Felder)", () => {
-  assert.deepEqual(
-    twilioWebhookEvents.parseLifecycleEvent({ CallStatus: "completed", CallDuration: "45", HangupCause: "x" }),
-    { status: "completed", diagnostics: {} },
-  );
-});
-
-test("Twilio parseSpeakOutcome: immer NONE (kennt keine Speak-Command-Events)", () => {
-  assert.deepEqual(twilioWebhookEvents.parseSpeakOutcome({}), { outcome: SPEAK_OUTCOME.NONE, reason: null });
-});
 
 // ---- Telnyx ----
 test("Telnyx parseSpeechResult: Transcript hat Vorrang vor SpeechResult, sonst Fallback", () => {
@@ -82,7 +68,10 @@ test("webhookEvents(): kein Arg -> DEFAULT_PROVIDER (kein eigener Anbieter-Defau
   assert.equal(webhookEvents(), webhookEvents(DEFAULT_PROVIDER));
 });
 
-test("webhookEvents('telnyx') -> telnyxWebhookEvents; webhookEvents('twilio') -> twilioWebhookEvents", () => {
+test("webhookEvents('telnyx') -> telnyxWebhookEvents; unbekannter Provider wirft fail-closed", () => {
   assert.equal(webhookEvents(PROVIDER.TELNYX), telnyxWebhookEvents);
-  assert.equal(webhookEvents(PROVIDER.TWILIO), twilioWebhookEvents);
+  // C-P4: der Dispatch traegt nur noch EINEN Eintrag. Damit das kein "liefert immer
+  // dasselbe, egal was man fragt" wird, steht hier die Gegenprobe - ein Nicht-Enum-Wert
+  // (inkl. der Altzeile 'twilio') bekommt keinen Adapter, sondern einen Wurf.
+  assert.throws(() => webhookEvents("twilio"), /nicht unterstuetzt/);
 });

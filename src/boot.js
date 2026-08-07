@@ -735,7 +735,7 @@ export async function healBootstrapStore({ config, store, messaging }) {
     if (config.provisioning.bootstrapE164)
       console.error(
         "[bootstrap-heal] BOOTSTRAP_E164/BOOTSTRAP_PROVIDER unbrauchbar " +
-          "(E.164 + twilio|telnyx erwartet) - keine Heilung.",
+          "(E.164 + telnyx erwartet) - keine Heilung.",
       );
     return decision;
   }

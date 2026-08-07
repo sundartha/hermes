@@ -250,7 +250,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   await t.test("DE-DID als Heimatland-Fallback ohne privateNumber -> 500", async () => {
     const srv = await startServer({
       env: HTTP_ENV,
-      ownerNumber: { e164: "+4915799990001", provider: "twilio" },
+      ownerNumber: { e164: "+4915799990001", provider: "telnyx" },
     });
     try {
       const res = await postCall(srv.localUrl, DE_TARGET_NATIONAL);
@@ -404,7 +404,7 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
     const srv = await startServer({
       env: { ALLOWED_COUNTRY_CODES: "+1,+49", TWILIO_ACCOUNT_SID: "x" },
       seed,
-      ownerNumber: { e164: FOREIGN_DE_DID, provider: "twilio" },
+      ownerNumber: { e164: FOREIGN_DE_DID, provider: "telnyx" },
     });
     try {
       const res = await postCall(srv.localUrl, DE_NATIONAL_TARGET);
