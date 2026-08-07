@@ -21,6 +21,7 @@ import {
   seedWithTelnyxNumber,
   TELNYX_TEST_OWNER_NUMBER,
   TELNYX_ASSISTANT_BOOT_ENV,
+  TWILIO_TEST_OWNER_NUMBER,
 } from "./helpers.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -115,7 +116,11 @@ test("Flag AN + NICHT-Telnyx (Twilio-Owner): Outbound faellt auf TeXML/Bestand z
       TELNYX_AI_ASSISTANT_ENABLED: "true",
       ...TELNYX_ASSISTANT_BOOT_ENV,
     },
-    // kein ownerNumber -> Default OWNER_TEST_NUMBER (Twilio) -> outboundProvider=twilio
+    // C-P2: der Gegenstand dieses Tests IST "der Owner ist NICHT Telnyx" - der Provider
+    // wird deshalb ausdruecklich gesagt, nicht aus dem Fixture-Default geerbt. Vorher
+    // hing die Aussage daran, dass OWNER_TEST_NUMBER zufaellig auf Twilio stand; mit der
+    // Migration auf Telnyx waere dieser Test still zur Tautologie geworden.
+    ownerNumber: TWILIO_TEST_OWNER_NUMBER,
   });
   try {
     const { callId } = await (await placeCall(srv)).json();
