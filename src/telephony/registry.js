@@ -2,15 +2,16 @@
 // + pick(port, provider) (P5). Ein dritter Provider wird HIER an EINER Datenstruktur
 // registriert statt an mehreren Ternaries - pick() wirft fail-closed, wenn (port,
 // provider) fehlt. voiceRenderer/messaging waehlen ueber einen optionalen
-// provider-Param (Default twilio -> bestehende arg-lose Call-Sites in server.js
-// byte-identisch). inboundSignatureVerifier dispatcht NACH Signatur-Header (nicht
+// provider-Param. Der Default ist DEFAULT_PROVIDER - EINE Quelle (G5) mit dem
+// Rueckfall in routes/voice.js und state-ops.js. Ein eigener, hier hartkodierter
+// Anbieter waere eine zweite Antwort auf dieselbe Frage "wer gilt, wenn nichts es
+// sagt" und lief nach C-P1 kurzzeitig auseinander (siehe C-P1b). inboundSignatureVerifier dispatcht NACH Signatur-Header (nicht
 // nach provider/To): die Signatur ist die erste fail-closed-Stufe und liegt
 // strukturell VOR dem To-Routing (P3c) - To/provider vor gueltiger Signatur zu
 // lesen waere Tenant-Spoofing. providerFromHeaders ist die EINZIGE Header->Provider-
 // Karte: der Verifier dispatcht darueber, server.js (P6a) leitet daraus den
 // Inbound-Provider ab (Single Source of Truth). voiceControl ist provider-aware
-// (Telnyx-Outbound, Onboarding-Phase): Default twilio -> arg-lose Call-Sites
-// byte-identisch. providerSupports/CAPABILITY (P5) sind eine zweite, davon
+// (Telnyx-Outbound, Onboarding-Phase): Default = DEFAULT_PROVIDER wie oben. providerSupports/CAPABILITY (P5) sind eine zweite, davon
 // getrennte Tabelle: Ja/Nein-Metadaten statt Adapter-Instanzen (ersetzt die
 // verstreuten provider===PROVIDER.TELNYX-Capability-Checks in den Routen).
 import { twilioVoice } from "./adapters/twilio/voice.js";
@@ -26,7 +27,7 @@ import { twilioMedia } from "./adapters/twilio/media.js";
 import { telnyxMedia } from "./adapters/telnyx/media.js";
 import { twilioWebhookEvents } from "./adapters/twilio/webhook-events.js";
 import { telnyxWebhookEvents } from "./adapters/telnyx/webhook-events.js";
-import { PROVIDER } from "../store/defaults.js";
+import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
 import { config } from "../config.js";
 import crypto from "node:crypto";
 
@@ -129,28 +130,28 @@ export function providerSupports(provider, capability) {
 }
 
 /** @returns {import("./ports.js").VoiceControl} */
-export const voiceControl = (provider = PROVIDER.TWILIO) => {
+export const voiceControl = (provider = DEFAULT_PROVIDER) => {
   // Sonderfall (a): fakeOriginate-Override VOR pick (Test-Seam, boot-gehaertet).
   if (config.safety.fakeOriginate) return fakeVoice;
   return pick(PORT.VOICE_CONTROL, provider);
 };
 
 /** @returns {import("./ports.js").Messaging} */
-export const messaging = (provider = PROVIDER.TWILIO) => pick(PORT.MESSAGING, provider);
+export const messaging = (provider = DEFAULT_PROVIDER) => pick(PORT.MESSAGING, provider);
 
 // MediaTransport (Port 4, Realtime-WS-Frame-Schicht, Aufrufer bridge.js). Provider-
-// aware wie voiceControl: Default twilio -> bestehender Realtime-Pfad byte-identisch.
+// aware wie voiceControl: Default = DEFAULT_PROVIDER (eine Quelle, G5).
 /** @returns {import("./ports.js").MediaTransport} */
-export const mediaTransport = (provider = PROVIDER.TWILIO) => pick(PORT.MEDIA_TRANSPORT, provider);
+export const mediaTransport = (provider = DEFAULT_PROVIDER) => pick(PORT.MEDIA_TRANSPORT, provider);
 
 // WebhookEvents (Port 5, reines Parsing VOR den Safety-Gates). Provider-aware wie
-// mediaTransport: Default twilio -> bestehende Call-Sites (server.js) byte-identisch.
+// mediaTransport: Default = DEFAULT_PROVIDER (eine Quelle, G5).
 // Dispatch bewusst per provider-Param (NICHT header-basiert wie inboundSignatureVerifier):
 // alle 3 Call-Sites kennen provider bereits vertrauenswuerdig aus dem Store bzw. aus
 // providerFromHeaders+erfolgreicher Signaturpruefung weiter oben im Request-Pfad -
 // header-basiert waere hier unnoetige Spoof-Flaeche (Provider-Wahl VOR Signatur-Trust).
 /** @returns {import("./ports.js").WebhookEvents} */
-export const webhookEvents = (provider = PROVIDER.TWILIO) => pick(PORT.WEBHOOK_EVENTS, provider);
+export const webhookEvents = (provider = DEFAULT_PROVIDER) => pick(PORT.WEBHOOK_EVENTS, provider);
 
 // NumberProvisioning (Port 3, Onboarding/Geld-Pfad): nur Telnyx implementiert
 // (Twilio-Provisioning ist nicht im Scope dieser Phase). Fail-closed: ein nicht
@@ -165,7 +166,7 @@ export const numberProvisioning = (provider = PROVIDER.TELNYX) =>
 // (apiKeyRef+voiceId leer -> Azure byte-identisch). Twilio-Zweig unveraendert (kein
 // ElevenLabs ueber Twilio-Say).
 /** @returns {import("./ports.js").VoiceRenderer} */
-export const voiceRenderer = (provider = PROVIDER.TWILIO) => pick(PORT.VOICE_RENDERER, provider);
+export const voiceRenderer = (provider = DEFAULT_PROVIDER) => pick(PORT.VOICE_RENDERER, provider);
 
 // Header -> Provider (rein, IO-frei). EINZIGE Stelle, die Inbound-Signatur-Header
 // auf einen Provider abbildet: der Signatur-Verifier dispatcht darueber UND

@@ -8,7 +8,7 @@ import { twilioWebhookEvents } from "../src/telephony/adapters/twilio/webhook-ev
 import { telnyxWebhookEvents } from "../src/telephony/adapters/telnyx/webhook-events.js";
 import { webhookEvents } from "../src/telephony/registry.js";
 import { SPEAK_OUTCOME } from "../src/telephony/adapters/telnyx/speak-events.js";
-import { PROVIDER } from "../src/store/defaults.js";
+import { DEFAULT_PROVIDER, PROVIDER } from "../src/store/defaults.js";
 
 // ---- Twilio ----
 test("Twilio parseSpeechResult: SpeechResult getrimmt, fehlend -> \"\"", () => {
@@ -74,8 +74,12 @@ test("Telnyx parseSpeakOutcome: Delegation an parseSpeakEvent (call.speak.failed
 });
 
 // ---- Registry-Dispatch (Port 5, analog voiceControl/messaging) ----
-test("webhookEvents(): kein Arg -> twilioWebhookEvents (Default)", () => {
-  assert.equal(webhookEvents(), twilioWebhookEvents);
+// C-P1b: der arg-lose Zweig folgt DEFAULT_PROVIDER statt einem eigenen Twilio-Literal.
+// Diese Stelle war die gefaehrlichste der fuenf: routes/voice.js:398 reicht `call.provider`
+// roh durch - bei einem Call ohne Provider-Feld griff der Parameter-Default und lieferte
+// Twilio, waehrend derselbe Fall in /voice/status ueber DEFAULT_PROVIDER auf Telnyx lief.
+test("webhookEvents(): kein Arg -> DEFAULT_PROVIDER (kein eigener Anbieter-Default)", () => {
+  assert.equal(webhookEvents(), webhookEvents(DEFAULT_PROVIDER));
 });
 
 test("webhookEvents('telnyx') -> telnyxWebhookEvents; webhookEvents('twilio') -> twilioWebhookEvents", () => {

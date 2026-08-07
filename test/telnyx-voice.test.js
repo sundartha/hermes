@@ -20,7 +20,7 @@ process.env.TELNYX_ACCOUNT_SID = ACCOUNT_SID;
 // Dynamischer Import NACH dem Env-Setzen (config liest process.env beim Eval).
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
 const { voiceControl } = await import("../src/telephony/registry.js");
-const { PROVIDER } = await import("../src/store/defaults.js");
+const { DEFAULT_PROVIDER, PROVIDER } = await import("../src/store/defaults.js");
 const { twilioVoice } = await import("../src/telephony/adapters/twilio/voice.js");
 const { config } = await import("../src/config.js");
 
@@ -174,9 +174,18 @@ test("endCall: fail-closed bei fehlendem TELNYX_ACCOUNT_SID", async () => {
   );
 });
 
-test("voiceControl(provider): telnyx -> telnyxVoice, twilio/Default -> twilioVoice", () => {
+// C-P1b: der arg-lose Zweig folgt DEFAULT_PROVIDER, nicht mehr einem eigenen
+// Twilio-Literal. Vorher stand hier "arg-los -> Twilio-Default (byte-identisch)" - das
+// war seit C-P1 (DEFAULT_PROVIDER = Telnyx) eine ZWEITE, abweichende Antwort auf
+// dieselbe Frage. Gegen DEFAULT_PROVIDER formuliert, damit der Test bei einem kuenftigen
+// Wechsel nicht wieder von Hand nachgezogen werden muss.
+test("voiceControl(provider): telnyx -> telnyxVoice, twilio -> twilioVoice, arg-los -> DEFAULT_PROVIDER", () => {
   assert.equal(voiceControl(PROVIDER.TELNYX), telnyxVoice);
   assert.equal(voiceControl(PROVIDER.TWILIO), twilioVoice);
-  assert.equal(voiceControl(), twilioVoice, "arg-los -> Twilio-Default (byte-identisch)");
-  assert.equal(voiceControl(undefined), twilioVoice, "fail-safe: undefined -> Twilio");
+  assert.equal(voiceControl(), voiceControl(DEFAULT_PROVIDER), "arg-los folgt DEFAULT_PROVIDER");
+  assert.equal(
+    voiceControl(undefined),
+    voiceControl(DEFAULT_PROVIDER),
+    "undefined folgt DEFAULT_PROVIDER (kein eigener Anbieter-Default)",
+  );
 });

@@ -60,11 +60,24 @@ test("pick liefert die exakte Adapter-Instanz je Provider", () => {
 });
 
 // ---- Default-Byte-Identitaet: arg-los -> Twilio (numberProvisioning -> Telnyx) ----
-test("arg-lose Factories defaulten byte-identisch", () => {
+// C-P1b: JEDE Factory defaultet auf DEFAULT_PROVIDER - es darf keinen zweiten,
+// eigenen Anbieter-Default geben. Genau das war nach C-P1 kurzzeitig kaputt: die fuenf
+// Parameter-Defaults standen hartkodiert auf Twilio, waehrend DEFAULT_PROVIDER schon
+// Telnyx war. Ein Aufrufer, der `call.provider` durchreicht und dort `undefined` hat
+// (Call ohne Provider-Feld), bekam damit einen ANDEREN Anbieter als der Rueckfall in
+// routes/voice.js - zwei Antworten auf dieselbe Frage.
+//
+// Bewusst gegen DEFAULT_PROVIDER formuliert und NICHT gegen "telnyx": so bleibt der Test
+// gueltig, wenn der Rueckfall je wieder wechselt, und faengt trotzdem jeden neuen
+// hartkodierten Default.
+test("arg-lose Factories defaulten auf DEFAULT_PROVIDER (kein zweiter Anbieter-Default)", () => {
   config.safety.fakeOriginate = false;
-  assert.equal(voiceControl(), twilioVoice);
-  assert.equal(voiceControl(undefined), twilioVoice);
-  assert.equal(mediaTransport(), twilioMedia);
+  for (const [name, factory] of FULL_COVERAGE) {
+    assert.equal(factory(), factory(DEFAULT_PROVIDER), `${name}: arg-los weicht ab`);
+    assert.equal(factory(undefined), factory(DEFAULT_PROVIDER), `${name}: undefined weicht ab`);
+  }
+  // numberProvisioning hat nur EINE Implementierung (Telnyx) und keinen Provider-Param -
+  // Bestand, hier nur mitgefuehrt, damit die Aussage vollstaendig bleibt.
   assert.equal(numberProvisioning(), telnyxNumberProvisioning);
 });
 
