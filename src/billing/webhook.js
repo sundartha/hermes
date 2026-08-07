@@ -1,5 +1,5 @@
 // Stripe-Webhook-Signaturpruefung + Event-Interpretation (W4). Trennt die Krypto +
-// reine Event-Interpretation von der Route (wie der Twilio-Signatur-Adapter die
+// reine Event-Interpretation von der Route (wie der Telnyx-Signatur-Adapter die
 // Krypto vom /voice-Gate trennt). Kein express, kein store - reine Funktionen ->
 // unit-testbar ohne Server. Kein Stripe-SDK (Regel: wenige Deps); node:crypto reicht.
 import crypto from "node:crypto";

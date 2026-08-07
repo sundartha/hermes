@@ -61,7 +61,7 @@ export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
 }
 
 // Fixed-Window-Rate-Limiter pro Client-IP. Die Ausnahmen (localhost-Socket,
-// /voice mit eigener Twilio-Signaturpruefung) entscheidet der Aufrufer in server.js.
+// /voice mit eigener Provider-Signaturpruefung) entscheidet der Aufrufer in server.js.
 export function createRateLimiter(limitPerMin) {
   const rateHit = makeFixedWindowCounter({
     windowMs: RATE_WINDOW_MS,

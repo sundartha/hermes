@@ -1,7 +1,7 @@
 // Telnyx-Adapter: renderDirectives - uebersetzt neutrale Direktiven (directives.js)
 // in TeXML. EINZIGER Telnyx-Ort mit Provider-Voice-Namen + TeXML-Markup. Kein SDK:
 // TeXML wird als String gebaut (Telnyx liefert keinen TwiML-aequivalenten Builder).
-// Fail-closed wie der Twilio-Renderer (unbekanntes voiceProfile -> wirft). STREAM
+// Fail-closed: unbekanntes voiceProfile -> wirft. STREAM
 // rendert seit P7 echtes <Connect><Stream> (Telnyx-Realtime ueber Port 4).
 import { DIRECTIVE, VOICE_PROFILE } from "../../directives.js";
 import { sttLocaleForVoiceProfile } from "../../voice-locale.js";
@@ -18,7 +18,7 @@ const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 // Say-Voice UND die STT-Locale des Gathers (siehe gatherAttrs), kein Drift zwischen
 // Buendel und Adapter. EN = GB-Englisch (Azure Sonia); Nova-3 deckt EN mit ab (kein
 // model-Override noetig). Fail-closed: unbekanntes Profil ist ein Programmierfehler
-// (wirft), kein stiller Default-Voice-Fallback. Twilio-Renderer bleibt bewusst auf Polly.
+// (wirft), kein stiller Default-Voice-Fallback.
 const TELNYX_VOICE_NAME = Object.freeze({
   [VOICE_PROFILE.DE_FEMALE_NEURAL]: "Azure.de-DE-KatjaNeural",
   [VOICE_PROFILE.FR_FEMALE_NEURAL]: "Azure.fr-FR-DeniseNeural",
@@ -141,7 +141,6 @@ function gatherPrompt(d, opts) {
 }
 
 // Realtime-Media-Stream als TeXML <Connect><Stream> mit <Parameter>-Kindern.
-// Symmetrisch zum Twilio-Renderer (connect().stream({url}) + parameter(p)).
 // Parameter-Reihenfolge ist vertraglich (Snapshot-Test).
 function renderStream(d) {
   const params = d.params

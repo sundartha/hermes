@@ -178,8 +178,8 @@ export function createCall(
 ) {
   const call = {
     id: newId("call"),
-    // Zugangsgeheimnis fuer den /media-WebSocket (steht im TwiML, das nur Twilio
-    // sieht). Wird von der Bridge beim start-Event geprueft und darf NIE ueber
+    // Zugangsgeheimnis fuer den /media-WebSocket (steht im TeXML, das nur der
+    // Provider sieht). Wird von der Bridge beim start-Event geprueft und darf NIE ueber
     // die API ausgegeben werden (server.js publicCall).
     streamToken: crypto.randomBytes(16).toString("hex"),
     twilioSid: twilioSid || null,
@@ -1196,8 +1196,7 @@ export function resolveCallLanguage(s, { tenantId, numberRecord }) {
 // Stellt die config-abgeleitete Owner-Nummer idempotent im Spiegel sicher (json
 // load() ruft makeDefaultState nicht auf bestehenden Stores, seedState()-Tests
 // seeden ohne numbers). Leere Nummer -> kein Seed (env-gating). Vorhandene e164
-// gewinnt. provider default DEFAULT_PROVIDER (seit C-P1 Telnyx); ein Twilio-Seed
-// reicht provider=twilio explizit mit.
+// gewinnt. provider default DEFAULT_PROVIDER (seit C-P1 Telnyx).
 // e164 wird normalisiert (normNum) BEVOR der Idempotenz-Check + das Speichern
 // laufen, damit die gespeicherte Form mit dem normalisierten Inbound-To-Lookup
 // (findTenantByNumber) uebereinstimmt - sonst routet eine Owner-Nummer mit
@@ -2117,7 +2116,8 @@ export const RELEASE_VERDICT = Object.freeze({ RELEASE: "release", HOLD: "hold",
 // den Live-Recheck im Reconcile-Executor. Regel (Invariante 1):
 //   release: Nummer active + Tenant suspendiert (suspended_at gesetzt) +
 //            nowMs - suspendedAt > graceMs + provider==="telnyx".
-//   hold   : dieselbe Release-Reife, aber provider!=="telnyx" (manuell - kein Twilio-Release).
+//   hold   : dieselbe Release-Reife, aber provider!=="telnyx" (manuell - fuer fremde/
+//            Alt-Provider gibt es keinen Release-Pfad).
 //   skip   : nicht active / nicht suspendiert / Grace nicht erreicht / suspended_at
 //            unparsebar (fail-closed - NIE auf Muell releasen).
 export function numberReleaseVerdict(s, number, { nowMs, graceMs }) {
@@ -2154,7 +2154,7 @@ export function classifyNumbersForRelease(s, { nowMs, graceMs }) {
 // Liefert die Nummern EINES Tenants, die eine Art.-17-Loeschung freigeben darf: status
 // active + provider telnyx. GRACE-FREI - anders als numberReleaseVerdict, das den Suspend-
 // Grace prueft: bei Loeschung existiert der Tenant nicht mehr, es gibt keine Reaktivierung.
-// Weiterhin Telnyx-only (Twilio hat keinen releaseNumber-Pfad -> non-telnyx bleibt
+// Weiterhin Telnyx-only (nur Telnyx hat einen releaseNumber-Pfad -> non-telnyx bleibt
 // unangetastet) und active-only. Der active-Filter IST die Idempotenz-Garantie: ein zweiter
 // Erase-Lauf findet die schon released-en Nummern NICHT mehr -> kein zweiter Provider-DELETE.
 // REIN + IO-frei (mutiert s NICHT, kein Date.now): der eigentliche Release (Provider-DELETE +
@@ -3413,7 +3413,8 @@ export function markCrossCheckAttempted(s, monthKey) {
 // Summe der abgerufenen Ist-Kosten (actualCostMicroCents, PROVIDER-Waehrung/USD-Mikro-Cent,
 // UNVERAENDERT) aller TELNYX-Calls, deren Buchungsmonat monthKey ist. NUR Telnyx: die
 // Provider-Rechnung (Zahl 1 der Gegenprobe) ist ausschliesslich Telnyx-Verkehr - eine
-// Twilio-Beimischung waere kein Vergleich zwischen gleichen Groessen.
+// Beimischung von Altzeilen fremder Anbieter waere kein Vergleich zwischen gleichen
+// Groessen.
 // Monatsanker ist estimatedCostSpendMonthKey - DERSELBE Anker, unter dem
 // reconcileVoiceBudget/bookCents auf die Gate-Achse gebucht haben (KS-P5 Bucket-Brigade) -
 // NICHT endedAt: Zahl 2 und Zahl 3 der Gegenprobe muessen ueber denselben Zeit-Anker-Typ

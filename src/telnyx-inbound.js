@@ -90,9 +90,10 @@ function budgetEnginePath(reason) {
  * Aufrufer hat Signatur, Tenant-Resolve und Kostendecke bereits durchlaufen.
  *
  * REIHENFOLGE IST SICHERHEIT, nicht Geschmack: der Body wird erst gelesen, wenn der
- * Provider die Faehigkeit UEBERHAUPT hat. Ein Twilio-CallSid ("AC...") ist KEINE
- * call_control_id - wuerde das Feld zuerst gelesen, waere er ab dem Tag, an dem jemand
- * CAPABILITY.AI_ASSISTANT fuer Twilio eintraegt, still eine.
+ * Provider die Faehigkeit UEBERHAUPT hat. Ein fremder Provider-CallSid (Twilio-Form
+ * "AC...") ist KEINE call_control_id - wuerde das Feld zuerst gelesen, waere er ab dem
+ * Tag, an dem jemand CAPABILITY.AI_ASSISTANT fuer einen zweiten Carrier eintraegt,
+ * still eine.
  */
 export function inboundHandoffDecision({
   assistantEnabled,

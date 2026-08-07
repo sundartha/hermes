@@ -1,4 +1,4 @@
-// Voice-Gateway: Twilio-Webhooks (Inbound/Outbound), Audio-Bridge (Realtime),
+// Voice-Gateway: Provider-Webhooks (Inbound/Outbound), Audio-Bridge (Realtime),
 // MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
 // MUSS erste Importzeile bleiben (vor store.js) - globales Crash-Netz, ESM-Eval-Order (T-P0-07).
 import "./process-guards.js";

@@ -1,4 +1,5 @@
-// P5: Telnyx-Ed25519-Verifikation, fail-closed-Paritaet zum Twilio-Verifier. In-Test
+// P5: Telnyx-Ed25519-Verifikation, fail-closed (seit C-P3 der einzige Inbound-
+// Verifizierer). In-Test
 // generiertes Ed25519-Schluesselpaar; der Public-Key wird (als Telnyx-base64-raw-32-
 // Byte UND als PEM) in config.telephony.telnyxPublicKey injiziert. Korrekt signierter
 // `${ts}|${rawBody}` -> true; manipuliert/abgelaufen/fehlend/kein-Key -> false.

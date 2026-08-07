@@ -1,6 +1,7 @@
 // CDF1 (Report #2 5.4): maschinenlesbarer, PII-freier Fehlergrund aus dem normalisierten
 // Provider-Lifecycle ({status, diagnostics} aus extractLifecycleEvent). Provider-agnostisch:
-// Telnyx UND Twilio senden dieselbe CallStatus-Vokabel; der SIP-Cause verfeinert NUR den
+// die CallStatus-Vokabel ist Twilio-Konvention, die Telnyx' TeXML spiegelt; der SIP-Cause
+// verfeinert NUR den
 // generischen "failed"-Fall. PII-frei by construction (nur Status-/Cause-Token, NIE Nummern/
 // Namen - diagnostics.sipHangupCause ist bereits ueber safeCauseToken gefiltert).
 

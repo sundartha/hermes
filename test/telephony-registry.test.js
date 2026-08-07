@@ -69,7 +69,7 @@ test("pick liefert die exakte Adapter-Instanz je Provider", () => {
   );
 });
 
-// ---- Default-Byte-Identitaet: arg-los -> Twilio (numberProvisioning -> Telnyx) ----
+// ---- Default-Byte-Identitaet: arg-los -> DEFAULT_PROVIDER ----
 // C-P1b: JEDE Factory defaultet auf DEFAULT_PROVIDER - es darf keinen zweiten,
 // eigenen Anbieter-Default geben. Genau das war nach C-P1 kurzzeitig kaputt: die fuenf
 // Parameter-Defaults standen hartkodiert auf Twilio, waehrend DEFAULT_PROVIDER schon

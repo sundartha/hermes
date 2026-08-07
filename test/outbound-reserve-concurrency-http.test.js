@@ -2,7 +2,7 @@
 // Code (reine reserveExceedsBudget-Query ohne Reserve-Effekt): dort wuerden zwei gleichzeitige
 // place_call gegen einen engen Cap BEIDE 200 liefern (keiner der beiden Requests sieht den
 // anderen). Mit atomarem Check+Reserve unter store.withStoreLock passiert genau EINER.
-// FAKE_ORIGINATE haelt den Test netzfrei (kein echter Twilio-Client).
+// FAKE_ORIGINATE haelt den Test netzfrei (kein echter Provider-Client).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, DOMESTIC_TEST_NUMBER } from "./helpers.js";

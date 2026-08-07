@@ -2,8 +2,8 @@
 // KEINE rohe Provider-Fehlermeldung / kein Secret an den Client geben (Regel 4/5).
 // NEU: Bei einer Provider-HTTP-Ablehnung antwortet der Handler kategorisiert mit
 // 502 (Upstream) + sichtbarer STATUSKLASSE (kein Secret) statt nacktem 500, und der
-// Twilio-Trial-Hint erscheint NUR bei Provider Twilio (vorher hartkodiert -> bei
-// einem Telnyx-Call irrefuehrend). Offline + deterministisch: ein lokaler Telnyx-
+// frueher hartkodierte Twilio-Trial-Hint ist mit dem Adapter entfallen (C-P4); der Test
+// pinnt, dass KEIN hint-Feld mehr kommt. Offline + deterministisch: ein lokaler Telnyx-
 // Mock antwortet mit Fehler-Status -> der Telnyx-Adapter wirft -> Handler-catch.
 // Geprueft wird der HTTP-Body, nicht das Netz. Provider=telnyx, sobald TELNYX_NUMBER
 // gesetzt ist (wie onboarding-outbound). ALLOWED_NUMBERS=TARGET, damit der Call die
@@ -45,7 +45,7 @@ const TELNYX_ENV = (mockUrl) => ({
 test("T-P2-11: Originate-Fehler -> kategorisierte 502 (Statusklasse sichtbar), kein Secret/Provider-Name/Twilio-Hint bei Telnyx", async () => {
   const mock = await startTelnyxErrorMock();
   // Provider kommt aus der aktiven Owner-Nummer (nicht mehr aus TELNYX_NUMBER-Env):
-  // explizit eine Telnyx-Nummer seeden, sonst liefe der Default (Twilio) und der
+  // explizit eine Telnyx-Nummer seeden, sonst liefe der Default (DEFAULT_PROVIDER) und der
   // Telnyx-Mock/-Pfad wuerde gar nicht getroffen.
   const srv = await startServer({
     env: TELNYX_ENV(mock.url),

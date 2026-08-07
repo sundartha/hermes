@@ -162,7 +162,7 @@ test("POST /api/billing/cost-truing/sweep mit Store-Daten: echter Sweep (Kandida
       incomplete: 0,
       noEstimate: 0,
       unavailable: 0,
-      skippedCalls: 1, // Twilio-Adapter ohne Beleg-Methoden -> sauberes No-op
+      skippedCalls: 1, // nicht unterstuetzter Provider -> costRecordControlFor null -> sauberes No-op
       failed: 0,
     });
     const raw = JSON.stringify(body);

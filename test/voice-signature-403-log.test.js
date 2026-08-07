@@ -1,4 +1,4 @@
-// OBS-3: Ein fehlgeschlagener Provider-Signatur-Check (Twilio ODER Telnyx) an der
+// OBS-3: Ein fehlgeschlagener Provider-Signatur-Check (Telnyx bzw. unbekannter Provider) an der
 // app.use("/voice")-Middleware war bisher STUMM (nur 403) - gedrehte Keys, ein falsch
 // signierender Client oder gestoerte Zustellung blieben in den Render-Logs unsichtbar
 // (CLAUDE.md Regel 7). Pinnt: jeder !ok-403 hinterlaesst genau EINE Zeile mit Provider-

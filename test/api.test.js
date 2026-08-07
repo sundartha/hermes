@@ -53,7 +53,7 @@ test("Body-Size-Limit 100kb", async (t) => {
 
 test("Eingabe-Validierung /api/calls", async (t) => {
   // Allowlist gesetzt: Validierungsfehler (400) muessen VOR dem Gate (403) greifen,
-  // der Twilio-Erfolgspfad wird bewusst nicht getestet (echter API-Call).
+  // der Provider-Erfolgspfad wird bewusst nicht getestet (echter API-Call).
   const srv = await startServer({ env: { ALLOWED_NUMBERS: "+4915112345678" } });
   const call = (body) => postJson(`${srv.localUrl}/api/calls`, body);
   try {

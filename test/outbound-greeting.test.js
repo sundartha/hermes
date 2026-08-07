@@ -3,7 +3,7 @@
 // und ohne Anthropic-Call die Pflicht-Offenlegung + ein <Gather> (Vorbild Inbound).
 // Damit kollabieren die frueheren drei Faelle (normaler Turn / endCall / agentTurn
 // wirft): das Outbound-Markup haengt nicht mehr am LLM und ist mock-unabhaengig.
-// Dieser Test pinnt fuer BEIDE Provider (Twilio + Telnyx): Offenlegung als Say
+// Dieser Test pinnt fuer den Telnyx-Renderer: Offenlegung als Say
 // INNERHALB des <Gather> (G2: Erst-Turn nennt Offenlegung + Anliegen, Mikrofon sofort
 // offen), kein <Hangup> (der Call bleibt offen). Es findet KEIN LLM-Call statt -> kein
 // Anthropic-Mock noetig. Spawn/POST + Marker leben in test/_outbound-harness.js (G0).

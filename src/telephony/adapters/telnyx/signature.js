@@ -2,7 +2,8 @@
 // nach der Standard-Webhooks-Spezifikation: telnyx-signature-ed25519 ist die
 // base64-Ed25519-Signatur ueber `${telnyx-timestamp}|${rawBody}`, telnyx-timestamp
 // ist der Unix-Sekunden-Stempel (Replay-Schutz). FAIL-CLOSED: fehlende Config/
-// Header/abgelaufen/manipuliert -> false (wirft nie), Paritaet zum Twilio-Verifier.
+// Header/abgelaufen/manipuliert -> false (wirft nie) - seit C-P3 der EINZIGE
+// Inbound-Verifizierer.
 // Kein neues Paket: node:crypto kann Ed25519 ueber crypto.verify(null, ...).
 import crypto from "node:crypto";
 import { config } from "../../../config.js";

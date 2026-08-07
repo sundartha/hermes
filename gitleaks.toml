@@ -26,7 +26,7 @@ useDefault = true
   paths = [
     # Defensiv: Doku-Vorlage sk-ant-..., ACxxxxxx..., leere Werte — kein echtes Secret.
     '''\.env\.example$''',
-    # Defensiv: Test-Helfer ACtest..., test-anthropic-key, test-twilio-auth-token (deterministisch).
+    # Defensiv: Test-Helfer test-anthropic-key (deterministisch).
     '''test/helpers\.js$''',
     # Real noetig: const SECRET = "test-secret-0123..." -> generic-api-key False-Positive.
     '''test/web-auth-middleware\.test\.js$''',

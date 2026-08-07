@@ -283,14 +283,14 @@ test("(e) 20 ct geschaetzt vs. 5 ct gemessen (75% Abweichung) -> genau eine WARN
   assert.doesNotMatch(allOutput, /Geburtsdatum/, "kein Transkript-Fragment im Log");
 });
 
-// ---- (f) Adapter ohne Beleg-Methoden (Twilio-Form) -> sauberer No-op ----
+// ---- (f) Adapter ohne Beleg-Methoden -> sauberer No-op ----
 
 test("(f) Adapter ohne Beleg-Methoden -> wirft nicht, KEIN Feld geschrieben, skippedCalls zaehlt", async () => {
   const nowMs = Date.now();
   const state = makeDefaultState();
   const call = makeDueOutboundCall(state, { nowMs, provider: "twilio", legRef: { twilioSid: "CA_1" } });
   const store = makeStubStore(state);
-  const control = {}; // Twilio-Form: keine fetchCostRecordPool/assignCostRecords-Methoden
+  const control = {}; // Control-Objekt ohne fetchCostRecordPool/assignCostRecords (beide OPTIONAL am Port)
   const config = fakeConfig();
   const { runCostTruingSweep } = makeCostTruing({
     store, config, voiceControl: fakeVoiceControl({ twilio: control }), audit: () => {}, now: () => nowMs,

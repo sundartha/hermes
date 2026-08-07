@@ -15,7 +15,7 @@
 // fuer response.create) und summarySystem (LLM-Prompt, dessen Output als JSON geparst
 // wird) - siehe test/de-umlaut-orthography.test.js, das diese Grenze festhaelt.
 // Franzoesische Strings tragen ebenfalls die korrekten Akzente ("resume" != "résumé").
-// Die Render-Pfade sind UTF-8 (TeXML <?xml encoding="UTF-8"?>, Twilio-SDK); Umlaute und
+// Die Render-Pfade sind UTF-8 (TeXML <?xml encoding="UTF-8"?>); Umlaute und
 // Akzente sind keine XML-Sonderzeichen und passieren die Escaper unveraendert.
 // P5 (PLAN-CONVERSATION-QUALITY-V2): die Prompt-Bausteine dieses Bundles (speechClause,
 // STYLE_CLAUSES_DE) tragen seit P5 ebenfalls korrekte Umlaute - sie fliessen in den von
@@ -108,7 +108,7 @@ export const LOCALES = Object.freeze({
   de: Object.freeze({
     language: "de",
     dateLocale: "de-DE", // Date#toLocaleString-Locale (claude.js fmtDate + now)
-    sttLocale: "de-DE", // STT BCP-47 (Phase 3: twilio/telnyx Gather-Render)
+    sttLocale: "de-DE", // STT BCP-47 (Phase 3: Telnyx-Gather-Render)
     voiceProfile: VOICE_PROFILE_DE, // TTS-Voice-Profil (Phase 3: render TTS)
     // OpenAI-Realtime (Phase 5, NUR VOICE_ENGINE=realtime). null -> Bridge nutzt
     // config.voice.realtimeVoice bzw. laesst Whisper-language weg (DE byte-identisch).

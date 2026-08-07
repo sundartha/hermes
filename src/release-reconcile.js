@@ -135,7 +135,8 @@ export async function runReleaseReconcile({ store, provisioner, audit, logger = 
 // DENSELBEN Release-Kern wie Phase D (performNumberRelease): idempotent + audit-gedeckt.
 // Idempotenz: der Selektor (tenantNumbersForErase) liefert NUR active-e Nummern -> ein zweiter
 // Erase-Lauf findet die schon released-en NICHT mehr (kein zweiter Provider-DELETE). non-telnyx
-// bleibt unangetastet (Twilio hat keinen releaseNumber). Latenz-Hinweis: in dieser Phase gibt
+// bleibt unangetastet (nur der Telnyx-Adapter hat releaseNumber; eine Altzeile mit fremdem
+// provider bleibt manuell). Latenz-Hinweis: in dieser Phase gibt
 // es BEWUSST NOCH KEINEN Live-Aufrufer (kein neuer Endpunkt, Scope) - die Freigabe wird vorab
 // verdrahtet; die kuenftige Erase-Route komponiert store.eraseTenantData (Daten) + diese Fn
 // (Nummern). Kein toter Code: exportierter Seam mit Testabdeckung (der Test ist der Aufrufer).

@@ -1,6 +1,6 @@
 // tenant-prolif-d: Executor runReleaseReconcile mit Fake-Store + Fake-Provisioner -
 // reine In-Process-Unit, kein Spawn, kein pglite, kein Netz (F.I.R.S.T.). Deckt:
-// scharfer Happy-Path, Idempotenz, Twilio-safe, Live-Recheck-Abbruch, 404-Konvergenz,
+// scharfer Happy-Path, Idempotenz, non-telnyx-safe, Live-Recheck-Abbruch, 404-Konvergenz,
 // harter Provider-Fehler und den Observe-Only-Default (grace=0 -> NIE ein DELETE).
 import { test } from "node:test";
 import assert from "node:assert/strict";

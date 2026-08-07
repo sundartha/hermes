@@ -108,7 +108,7 @@ export function makeVoiceRoutes({
   // kein Turn mehr kommt.
   // TURN-basiert statt Timer-basiert, weil nur hier ein Request offen ist, in den sich
   // rendern laesst; dadurch laeuft der Pfad ueber voiceRender/directives und bedient beide
-  // Provider ohne den optionalen speak-Port (den Twilio gar nicht hat).
+  // Provider ohne den optionalen speak-Port.
   // Der Satz ist ein Locale-String, KEIN LLM-Text - er muss auch kommen, wenn das Modell
   // klemmt. Genug Restzeit ODER capFarewellLeadMs=0 (Aus-Schalter) -> null.
   function capFarewellOutcome(call) {
@@ -164,7 +164,7 @@ export function makeVoiceRoutes({
   // Resolve (numberRecordByE164) UND Budget-Gate vom Aufrufer - KEIN neuer Gate, dieser Helper
   // fuegt keinen hinzu. Nur bei beiden aktiven Schaltern (Master-Flag + GQ-P3-Inbound-Schalter)
   // + signatur-authentifiziertem Telnyx-Provider (Anti-Spoof: provider stammt aus dem Signatur-
-  // Header, nicht aus To/Body). callControlId fehlt (Twilio ODER TeXML-Feld absent) -> null,
+  // Header, nicht aus To/Body). callControlId fehlt (TeXML-Feld absent) -> null,
   // kein kaputter Assistant-Pfad. Der Max-Dauer-Timer ist beim Aufrufer BEREITS armiert;
   // terminateCappedCall liest den Call frisch und trifft via hangUpAction(callControlId) den
   // Call-Control-Hangup, sobald callControlId persistiert ist (P6) - KEIN Re-Arm (zweiter Timer

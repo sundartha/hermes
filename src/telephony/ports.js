@@ -1,5 +1,5 @@
-// Telefonie-Ports: Vertraege fuer Provider-unabhaengige Telefonie. P0 hat genau
-// einen Adapter (Twilio). Reine JSDoc-Typdefs, keine Laufzeit-Logik.
+// Telefonie-Ports: Vertraege fuer Provider-unabhaengige Telefonie. Heute genau
+// ein Adapter (Telnyx). Reine JSDoc-Typdefs, keine Laufzeit-Logik.
 
 /**
  * @typedef {Object} OriginateParams
@@ -14,7 +14,7 @@
 
 /**
  * @typedef {Object} OriginateResult
- * @property {string} sid - Provider-seitige Call-ID (Twilio CallSid)
+ * @property {string} sid - Provider-seitige Call-ID (CallSid im TeXML-Pfad)
  */
 
 /**
@@ -51,10 +51,9 @@
 
 /**
  * @typedef {Object} InboundRequest
- * @property {Object<string,string>} headers - Request-Header (lowercase keys, z.B. x-twilio-signature)
- * @property {Buffer} rawBody  - unveraenderter Roh-Body; fuer Twilio-HMAC ungenutzt,
- *                               fuer die Telnyx-Ed25519-Pruefung (signiert ueber
- *                               `${telnyx-timestamp}|${rawBody}`) noetig
+ * @property {Object<string,string>} headers - Request-Header (lowercase keys, z.B. telnyx-signature-ed25519)
+ * @property {Buffer} rawBody  - unveraenderter Roh-Body; fuer die Telnyx-Ed25519-Pruefung
+ *                               (signiert ueber `${telnyx-timestamp}|${rawBody}`) noetig
  * @property {string} url      - vollstaendige signierte URL (publicUrl + originalUrl)
  * @property {Object<string,string>} params - geparste Form-Params (req.body) fuer den HMAC
  */
@@ -66,7 +65,6 @@
  *   fehlender/falscher Signatur oder fehlender Config -> false (wirft nie). Die
  *   registry waehlt den Adapter HEADER-basiert (nicht ueber provider/To), weil die
  *   Signatur die erste fail-closed-Stufe ist und VOR dem To-Routing laeuft.
- *   Twilio: HMAC-SHA1 ueber url + sortierte params (rawBody ungenutzt).
  *   Telnyx: Ed25519 ueber `${telnyx-timestamp}|${rawBody}` (base64) + Replay-Fenster.
  */
 
@@ -132,7 +130,7 @@
  *   Beendet einen laufenden Call (TeXML). Heute: calls(sid).update({status:"completed"}).
  * @property {(params: CallControlOriginateParams) => Promise<CallControlResult>} [originateViaCallControl]
  *   Call-Control-Variante der Origination (AI-Assistant-Pfad, P4). Aktuell NUR Telnyx
- *   implementiert (wie NumberProvisioning); Twilio hat kein Call-Control-Pendant. Liefert callControlId.
+ *   implementiert (wie NumberProvisioning) - deshalb OPTIONAL am Port. Liefert callControlId.
  * @property {(callControlId: string) => Promise<void>} [endCallViaCallControl]
  *   Call-Control-Hangup (POST /v2/calls/{id}/actions/hangup). ZUSAETZLICH zu endCall (TeXML,
  *   unveraendert). Telnyx-only.
@@ -191,7 +189,7 @@
  * @typedef {Object} VoiceRenderer
  * @property {(directives: object[]) => string} renderDirectives
  *   Uebersetzt eine Liste neutraler Direktiven (directives.js) in einen
- *   Provider-Antwort-Body (Twilio: TwiML). Der einzige Ort mit Provider-Markup.
+ *   Provider-Antwort-Body (Telnyx: TeXML). Der einzige Ort mit Provider-Markup.
  */
 
 /**
@@ -256,7 +254,8 @@
  *   Neutrale Audio-Payload -> Provider-WS-Objekt (KI-Audio raus). Twilio braucht streamRef, Telnyx nicht.
  * @property {(params: {streamRef?: string}) => object} clearPlayback
  *   Barge-in: Provider-WS-Objekt, das die gepufferte Wiedergabe verwirft
- *   ({event:"clear"} bei beiden Providern; Twilio mit streamSid, Telnyx ohne).
+ *   ({event:"clear"}; Telnyx ohne stream_id - streamRef bleibt optional, weil Twilio
+ *   Media Streams dort streamSid verlangt).
  */
 
 /**

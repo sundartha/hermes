@@ -15,14 +15,15 @@ import { startServer, seedState, seedCall } from "./helpers.js";
 // helpers.js). callerName entfaellt komplett (nicht mehr per Call setzbar).
 export const DISCLOSURE_JONAS =
   "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Jonas Beispiel.";
-// Beide Renderer oeffnen den Sprach-Turn mit "<Gather" (Twilio-TwiML + Telnyx-TeXML).
+// Der Renderer oeffnet den Sprach-Turn mit "<Gather" (Telnyx-TeXML).
 export const GATHER_OPEN = "<Gather";
 export const HANGUP_TAG = "<Hangup";
 
 // G2: Die Offenlegung wird als Say INNERHALB des Gather gerendert (Erst-Turn nennt
 // Offenlegung + Anliegen, Mikrofon sofort offen). Das Gather oeffnet also VOR der
 // Offenlegung (gatherIdx < discIdx). Eine Quelle statt der byte-identischen Kopien in
-// drei Testdateien (G5/S2). Marker GATHER_OPEN ist providerneutral (Twilio + Telnyx).
+// drei Testdateien (G5/S2). Marker GATHER_OPEN ist providerneutral ("<Gather" ist TwiML
+// und TeXML gemeinsam).
 export function assertDisclosureInGather(body, disclosure = DISCLOSURE_JONAS) {
   const gatherIdx = body.indexOf(GATHER_OPEN);
   const discIdx = body.indexOf(disclosure);
