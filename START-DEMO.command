@@ -1,5 +1,5 @@
 #!/bin/bash
-# Vodafone Agent - Ein-Klick-Start: ngrok + Server + Twilio-Webhooks + Check
+# Vodafone Agent - Ein-Klick-Start: ngrok + Server + PUBLIC_URL + Check
 set -u
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 cd "$(dirname "$0")"
@@ -28,8 +28,10 @@ URL=$(curl -s localhost:4040/api/tunnels | node -e "let d='';process.stdin.on('d
 if [ -z "$URL" ]; then echo "FEHLER: ngrok-URL nicht gefunden (siehe /tmp/ngrok-vodafone.log)"; read -r; exit 1; fi
 echo "Tunnel aktiv: $URL"
 
-# 4. .env patchen + Twilio-Webhooks automatisch setzen
-node scripts/set-webhooks.js "$URL" || { read -r; exit 1; }
+# 4. .env patchen (PUBLIC_URL). Die Provider-Voice-URL setzt das Skript NICHT mehr:
+#    Telnyx haelt sie an der TeXML-Application, nicht je Nummer.
+node scripts/set-public-url.js "$URL" || { read -r; exit 1; }
+echo "! Telnyx-TeXML-App voice_url auf $URL/voice/incoming stellen (Portal), sonst klingelt nichts."
 
 # 5. Server (neu) starten, damit PUBLIC_URL greift
 pkill -f "node src/server.js" 2>/dev/null; sleep 1

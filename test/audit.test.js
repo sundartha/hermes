@@ -15,11 +15,10 @@ const postJson = (url, body) =>
 const countMatches = (text, re) => (text.match(new RegExp(re, "g")) || []).length;
 
 test("Audit-Zeilen fuer Call-Aktionen und Settings", async (t) => {
-  // Nicht-AC TWILIO_ACCOUNT_SID ("x"): der Twilio-Client wirft synchron VOR jedem
-  // Netzzugriff - die Audit-Zeile steht da schon im Log. Nicht-leer, damit der
-  // fail-closed-Boot (OT-4) trotzdem startet.
+  // Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
+  // TELNYX_API_KEY, s. BASE_ENV in helpers.js) - die Audit-Zeile steht da schon im Log.
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "+4915112345678", TWILIO_ACCOUNT_SID: "x" },
+    env: { ALLOWED_NUMBERS: "+4915112345678" },
     seed: seedState({ calls: [seedCall({ id: "call_audit1" })] }),
   });
   try {

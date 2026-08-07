@@ -17,11 +17,37 @@ test("T-P2-06: NaN-Budget (MAX_BUDGET_EUR=acht) -> Boot verweigert (exit 1), nen
   assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
-test("T-P2-07: fehlender TWILIO_AUTH_TOKEN -> Boot verweigert (exit 1), nennt Var", async () => {
-  const { code, output } = await startServerExpectExit({ env: { TWILIO_AUTH_TOKEN: "" } });
-  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
-  assert.match(output, /TWILIO_AUTH_TOKEN/);
-  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+// C-P5: die Boot-Pflicht auf TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN ist gefallen (kein
+// Codepfad liest sie seit C-P4). Leer GESETZT, nicht bloss ungesetzt: dotenv fuellt nur
+// ungesetzte Variablen - eine lokale .env wuerde sie sonst still nachliefern.
+test("T-P2-07: leere TWILIO_*-Env verhindert den Boot NICHT mehr -> GET /healthz 200", async () => {
+  const srv = await startServer({
+    env: { TWILIO_ACCOUNT_SID: "", TWILIO_AUTH_TOKEN: "", TWILIO_EDGE: "" },
+  });
+  try {
+    assert.equal((await fetch(`${srv.localUrl}/healthz`)).status, 200);
+    assert.doesNotMatch(srv.stdout, /Boot wird verweigert/);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// Uebergangszustand: Render traegt die Keys noch. Ein gesetzter, ungelesener Key MUSS
+// harmlos bleiben - sonst legt der naechste Neustart den Live-Dienst still.
+test("T-P2-07b: gesetzte TWILIO_*-Env bootet unveraendert -> GET /healthz 200", async () => {
+  const srv = await startServer({
+    env: {
+      TWILIO_ACCOUNT_SID: "ACtest00000000000000000000000000",
+      TWILIO_AUTH_TOKEN: "test-twilio-auth-token",
+      TWILIO_EDGE: "frankfurt",
+    },
+  });
+  try {
+    assert.equal((await fetch(`${srv.localUrl}/healthz`)).status, 200);
+    assert.doesNotMatch(srv.stdout, /Boot wird verweigert/);
+  } finally {
+    await srv.stop();
+  }
 });
 
 test("Boot-Guard: keine aktive Nummer im Store -> Boot verweigert (exit 1), nennt CLI", async () => {

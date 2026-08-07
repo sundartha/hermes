@@ -274,7 +274,8 @@ test("AUTH-P3-13: POST /api/calls, MULTI_TENANT=false, externer Aufrufer (XFF) -
   const srv = await startServer({
     env: {
       MULTI_TENANT: "false",
-      TWILIO_ACCOUNT_SID: "x", // nicht-AC -> Twilio-Client wirft sync -> ein durchgelassener Call waere 500
+      // Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
+      // TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403 = ein Gate hat gesperrt.
       ALLOWED_COUNTRY_CODES: "+49",
     },
     seed: seedState({}),

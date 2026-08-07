@@ -3,9 +3,8 @@
 // effektiven Tenant-Cap geprueft; uebersteigt er ihn -> 402 (kein Originate). Der Owner
 // (Tenant Null) haelt keine tenant_budget-Zeile -> effektiver Cap = MAX_BUDGET_EUR.
 //
-// Offline-Diskriminator (wie number-gate.test.js): nicht-AC TWILIO_ACCOUNT_SID ("x")
-// laesst den Twilio-Client synchron VOR jedem Netzzugriff werfen -> ein durchgelassener
-// Call endet als 500 (alle Gates passiert, bis Originate), eine Reserve-Sperre als 402.
+// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
+// TELNYX_API_KEY, s. BASE_ENV in helpers.js), eine Reserve-Sperre 402.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, DOMESTIC_TEST_NUMBER } from "./helpers.js";
@@ -36,7 +35,6 @@ test("Reserve-Gate: internationaler Worst-Case -> 402 vor Dial, Inland passiert"
       MAX_BUDGET_EUR: "6",
       VOICE_TARIFF_DOMESTIC_CENTS: "20",
       VOICE_TARIFF_DEFAULT_CENTS: "400",
-      TWILIO_ACCOUNT_SID: "x",
     },
   });
   try {

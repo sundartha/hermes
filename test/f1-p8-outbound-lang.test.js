@@ -39,8 +39,8 @@ function ownerSeed({ numberLanguage, settingsLanguage } = {}) {
 }
 
 // Owner-Outbound ueber localhost (kein Identitaets-Header -> Tenant Null). ALLOWED_NUMBERS
-// enthaelt das Ziel; Land-Gate neutral (* aus BASE_ENV), TWILIO_ACCOUNT_SID nicht-AC ("x"),
-// damit der durchgelassene Call offline synchron als 500 endet (alle Gates passiert).
+// enthaelt das Ziel; Land-Gate neutral (* aus BASE_ENV). Offline-Diskriminator: 500 = alle
+// Gates passiert (originateCall wirft ohne TELNYX_API_KEY, s. BASE_ENV in helpers.js).
 function placeCall(srv) {
   return fetch(`${srv.localUrl}/api/calls`, {
     method: "POST",
@@ -49,7 +49,7 @@ function placeCall(srv) {
   });
 }
 
-const ENV = { ALLOWED_NUMBERS: TO, TWILIO_ACCOUNT_SID: "x" };
+const ENV = { ALLOWED_NUMBERS: TO };
 const outboundCall = (srv) =>
   srv.readStore().calls.find((c) => c.direction === "outbound" && c.to === TO);
 

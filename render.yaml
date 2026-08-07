@@ -47,13 +47,9 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: TWILIO_ACCOUNT_SID
-        sync: false
-      - key: TWILIO_AUTH_TOKEN
-        sync: false
-      # Hinweis: Absendernummern (Twilio/Telnyx) sind KEINE Env-Var mehr. Der Owner
+      # Hinweis: Absendernummern sind KEINE Env-Var mehr. Der Owner
       # ist Tenant Null und haelt seine Nummer(n) im Store - einmalig eintragen via
-      # "npm run seed-owner-number -- <e164> <twilio|telnyx>" (gegen STORE_BACKEND=pg)
+      # "npm run seed-owner-number -- <e164> telnyx" (gegen STORE_BACKEND=pg)
       # VOR dem ersten Boot; der Boot-Guard verlangt eine aktive Owner-Nummer.
       # ---- Telnyx (zweiter Provider, optional - P5) ----
       - key: TELNYX_API_KEY
@@ -153,7 +149,7 @@ services:
       # frischer Store endet dann im fail-closed Boot-Refusal (unveraendert).
       - key: BOOTSTRAP_E164
         sync: false
-      # Provider der Bootstrap-Nummer: twilio | telnyx.
+      # Provider der Bootstrap-Nummer: telnyx.
       - key: BOOTSTRAP_PROVIDER
         value: "telnyx"
       # Globaler Outbound-Kill-Switch (outbound-p3). true = ALLE Outbounds sofort 403.
@@ -519,8 +515,6 @@ services:
       # Boot-Refusal (config.js: WEB_DIST_DIR gesetzt aber kein dist/index.html).
       - key: WEB_DIST_DIR
         value: "apps/web/dist"
-      - key: TWILIO_EDGE
-        value: frankfurt
       # ---- Anrufbeantworter-Erkennung (GAP-21) ----
       - key: MACHINE_DETECTION_ENABLED
         value: "false"

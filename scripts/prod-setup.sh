@@ -6,7 +6,7 @@
 # angehaengt, falls sie noch keinen sslmode traegt (sonst scheitert die Verbindung).
 #
 # Reihenfolge:
-#   1) scripts/prod-setup.sh number [+e164] [twilio|telnyx]   # Bootstrap-Tenant + Nummer
+#   1) scripts/prod-setup.sh number [+e164] [telnyx]   # Bootstrap-Tenant + Nummer
 #   2) Render: Manual Deploy / Restart                        # Dienst bootet jetzt durch
 #   3) einmal per WorkOS einloggen                            # erzeugt deinen Account-Row
 #   4) scripts/prod-setup.sh admin <deine-email>             # Account -> Admin
@@ -70,7 +70,7 @@ EOF
     cat >&2 <<EOF
 Live-Erst-Setup (Owner-Removal P2b) gegen Render-Prod-Postgres.
 
-  scripts/prod-setup.sh number [+e164] [twilio|telnyx]
+  scripts/prod-setup.sh number [+e164] [telnyx]
       Schritt 1: legt Bootstrap-Tenant + aktive Nummer an.
       Default: +18643028341 telnyx (deine Telnyx-DID; NICHT die +49-Privatnummer).
       Bricht den Boot-Refusal -> danach Render-Restart.

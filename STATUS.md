@@ -43,7 +43,7 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
    Absendernummer(n) wie jeder Tenant im Store; `outboundFrom` liest fuer ALLE Tenants via
    `findActiveNumber`, ein Boot-Guard verlangt fail-closed eine aktive Owner-Nummer.
    **Owner-Aktion:** Bestandsnummer setzen - lokal per
-   `npm run seed-owner-number -- <e164> <twilio|telnyx>` gegen `data/store.json`; in Prod
+   `npm run seed-owner-number -- <e164> telnyx` gegen `data/store.json`; in Prod
    genuegt jetzt die Env (`OWNER_NUMBER` + `OWNER_NUMBER_PROVIDER`, in `render.yaml` gesetzt), die
    beim Boot idempotent geseedet wird (s.u.). **Offen (Owner):** passt die hinterlegte Nummer
    (Provider/Land) zum DE-Launch (`PROVISIONING_COUNTRY=DE`)?
@@ -73,7 +73,7 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
 6. **`MCP_AUTH=oauth`** end-to-end gegen claude.ai im Dauerbetrieb; **Secrets-Hygiene**.
    - **Secrets-Hygiene ERLEDIGT (2026-06-21, Doku):** Secrets-Inventar (Blast-Radius pro Secret),
      Token-Rotations-Prozedur (Ueberlappung/Zero-Downtime + Besonderheiten pro Secret) und
-     Twilio-Subaccount-/Telnyx-Scoped-Key-Minimalrechte-Checkliste stehen vollstaendig in
+     Telnyx-Scoped-Key-Minimalrechte-Checkliste stehen vollstaendig in
      `PLAN-SECURITY.md`, Abschnitt `SECRETS-HYGIENE`. Der OAuth-Code ist test-gedeckt
      (`test/oauth.test.js`).
    - **Live-Infra VERIFIZIERT (2026-06-21):** Render-Env steht auf `MCP_AUTH=oauth`; gegen

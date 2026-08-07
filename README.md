@@ -8,9 +8,9 @@ Ein echtes, funktionierendes Produkt (keine Simulation): Der Agent hat eine **ei
 Claude (Chat) ──MCP Streamable HTTP (ngrok)──► /mcp ─┐
 Claude Desktop ──MCP stdio──► src/mcp-server.js ─────┤   Gateway (dieser Node-Prozess)
 Dashboard (Browser) ──REST──► /api/* ────────────────┘        │
-                                                              │ Twilio REST: calls.create
+                                                              │ Telnyx REST: originateCall
                                                               ▼
-Angerufenes Handy ◄──Mobilfunknetz──► Twilio ◄──┬── Budget-Engine: <Gather>/<Say> (STT/TTS de-DE)
+Angerufenes Handy ◄──Mobilfunknetz──► Telnyx ◄──┬── Budget-Engine: <Gather>/<Say> (STT/TTS de-DE)
                                                 │        └► Claude Haiku = Gehirn + Tools
                                                 └── Realtime-Engine: Media-Streams-WS /media
                                                          └► OpenAI Realtime (g711_ulaw 1:1,
@@ -21,9 +21,9 @@ Angerufenes Handy ◄──Mobilfunknetz──► Twilio ◄──┬── Budg
 
 |                    | `VOICE_ENGINE=budget` (Default)      | `VOICE_ENGINE=realtime`             |
 | ------------------ | ------------------------------------ | ----------------------------------- |
-| Sprachverarbeitung | Twilio STT/TTS (Polly Neural, de-DE) | OpenAI Realtime, Speech-to-Speech   |
+| Sprachverarbeitung | Telnyx TeXML STT/TTS (Azure-Stimmen, de-DE) | OpenAI Realtime, Speech-to-Speech |
 | Gesprächsgefühl    | Walkie-Talkie-Takt, 1–3 s Latenz     | natürlich, unterbrechbar (Barge-in) |
-| Kosten pro Call    | ~0,5–2 Cent Claude + Twilio-Guthaben | zusätzlich ~0,30–0,50 €/min OpenAI  |
+| Kosten pro Call    | ~0,5–2 Cent Claude + Telnyx-Guthaben | zusätzlich ~0,30–0,50 €/min OpenAI  |
 | Voraussetzungen    | nur Claude-Key                       | OpenAI-Key mit Guthaben             |
 
 Audio läuft **niemals durch MCP**. Realtime nutzt G.711 μ-law 8 kHz **1:1 durchgereicht** (kein Transcoding). Call-Records liegen in `data/store.json` (bewusst ohne Datenbank).
@@ -42,7 +42,7 @@ NACH verifiziertem Deploy, Rollback = Flag aus).
 ## Sicherheits-Gates (fest eingebaut)
 
 - **Outbound-Freigabe:** per-Tenant-Verifikation (aktives Abo + KYC). Globaler Not-Aus: `OUTBOUND_FROZEN`.
-- **Max-Dauer:** `MAX_CALL_DURATION_S` (Default 180 s, Max 300) beendet jeden Call hart (Twilio `timeLimit` + Timer).
+- **Max-Dauer:** `MAX_CALL_DURATION_S` (Default 180 s, Max 300) beendet jeden Call hart (Provider-Zeitlimit + Timer).
 - **Disclosure-Pflicht:** Erster gesprochener Satz bei Outbound ist fest verdrahtet: _„Guten Tag, hier spricht ein KI-Assistent im Auftrag von [Name]. Das Gespräch wird für meinen Auftraggeber zusammengefasst."_
 - **Budget-Guard:** die **pro-Tenant-Kostendecke** (`DEFAULT_TENANT_BUDGET_CENTS` bzw. die aus dem Plan abgeleitete `tenant_budget`-Zeile) stoppt neue Calls, Verbrauch live im Dashboard. `MAX_BUDGET_EUR` ist seit KS-P9/E10 **kein Gate mehr**, sondern Plattform-Beobachtung mit Schwellenwarnung (`PLATFORM_SPEND_WARN_PERCENT`).
 - **Permissions:** Kalender / Buchen / persönliche Daten / Bankdaten pro Toggle im Dashboard — wirkt sofort auf die Tools des Agenten.
@@ -51,19 +51,21 @@ NACH verifiziertem Deploy, Rollback = Flag aus).
 
 | Posten                     | Kosten                                                       |
 | -------------------------- | ------------------------------------------------------------ |
-| Twilio Trial               | **gratis** (~15 $ Startguthaben, Rufnummer inklusive)        |
+| Telefonie (Telnyx)         | Prepaid-Guthaben: DID-Miete + Minutenpreis                   |
 | Budget-Engine komplett     | ~0,5–2 Cent Claude pro Call → 10 € ≈ **hunderte Demo-Calls** |
 | Realtime-Engine (optional) | + ~0,30–0,50 €/min vom OpenAI-Guthaben                       |
 | ngrok                      | gratis                                                       |
 
 ## Setup (~20 Minuten)
 
-### 1. Twilio-Trial-Account (gratis)
+### 1. Telnyx-Konto + DID
 
-1. https://www.twilio.com/try-twilio (keine Kreditkarte nötig)
-2. Console → **Get a Trial Number**. Eine **US-Nummer (+1)** geht sofort und ruft deutsche Handys an; eine deutsche Nummer braucht einen Adressnachweis (Bundesnetzagentur, 1–2 Tage) — fürs Erste unnötig.
-3. **Trial-Einschränkung:** Anrufe/SMS nur an **verifizierte Nummern** → Console → Phone Numbers → **Verified Caller IDs** → alle Demo-Handys eintragen. (Alternativ: Account-Upgrade ~20 €, dann entfällt auch die Trial-Ansage am Gesprächsbeginn.)
-4. `Account SID` + `Auth Token` kopieren.
+1. Telnyx-Mission-Control-Portal: Konto anlegen, Guthaben aufladen, eine DID kaufen.
+2. **API-Key** (`TELNYX_API_KEY`) und **Ed25519-Public-Key** des Accounts (`TELNYX_PUBLIC_KEY`, Webhook-Signaturprüfung — fail-closed) anlegen bzw. kopieren.
+3. **TeXML-Application** anlegen (Voice → TeXML): `voice_url = <PUBLIC_URL>/voice/incoming` (POST). Ihre ID ist `TELNYX_CONNECTION_ID`; die gekaufte Nummer auf diese App routen.
+4. **Account-ID** von der Portal-Startseite als `TELNYX_ACCOUNT_SID` eintragen (Pflicht für den Hangup).
+
+Alle vier Werte sind in `.env.example` dokumentiert.
 
 ### 2. Projekt starten
 
@@ -88,7 +90,7 @@ Angezeigte URL als `PUBLIC_URL` in `.env` eintragen, Server neu starten. (Free-U
 npm run check
 ```
 
-Prüft automatisch: Keys gültig, Twilio-Nummer + Webhooks korrekt, Allowlist-/Owner-Nummern im Trial verifiziert, ngrok-Tunnel zeigt auf dieses Gateway, OpenAI-Key (bei realtime). Erst demoen, wenn alles grün ist.
+Prüft automatisch: Anthropic-Key gültig + Modell verfügbar, aktive Owner-Nummer im Store, `PUBLIC_URL` gesetzt, Land-Gate/Stundenlimit plausibel, MCP-Auth-Modus, ngrok-Tunnel zeigt auf dieses Gateway, OpenAI-Key (bei realtime), MCP-OAuth (bei `MCP_AUTH=oauth`). Erst demoen, wenn alles grün ist.
 
 ### 3c. Tests
 
@@ -99,12 +101,14 @@ npm run test:gates # i18n-Launch-Testkatalog, darf rot sein (sinkt Richtung 0 bi
 
 Beide Laeufe partitionieren dieselbe Suite automatisch nach Katalog-ID im Testnamen (kein manuell gepflegter Ausschluss) — Details in `CLAUDE.md` unter "Befehle".
 
-### 4. Twilio-Webhooks setzen
+### 4. Provider-Webhooks setzen
 
-Console → Phone Numbers → deine Nummer → **Voice Configuration**:
+Telnyx-Portal → Voice → **TeXML Application** (die aus Schritt 1):
 
-- **A call comes in** → Webhook, `POST` → `https://<ngrok>/voice/incoming`
-- **Call status changes** → `POST` → `https://<ngrok>/voice/status`
+- **Voice URL** → `POST` → `https://<ngrok>/voice/incoming`
+- **Status Callback** → `POST` → `https://<ngrok>/voice/status`
+
+Die URL hängt an der TeXML-Application, **nicht** an der einzelnen Nummer.
 
 ### 5. MCP mit Claude verbinden — Variante A: Custom Connector (empfohlen)
 
@@ -175,9 +179,8 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calend
 
 ## Bekannte Stolpersteine
 
-- **Twilio Trial:** nur verifizierte Zielnummern; Ansage vor jedem Gespräch (Upgrade ~20 € entfernt beides). Eingehend darf jeder anrufen.
 - **ngrok Free:** URL wechselt bei jedem Start → `PUBLIC_URL` + Connector-Eintrag aktualisieren.
-- **Latenz:** `TWILIO_EDGE=frankfurt` ist gesetzt, hält den EU-Pfad kurz. Budget-Engine bleibt Turn-basiert (1–3 s); für natürliches Unterbrechen Realtime-Engine nutzen.
+- **Latenz:** Budget-Engine bleibt Turn-basiert (1–3 s); für natürliches Unterbrechen Realtime-Engine nutzen.
 - **Realtime-Engine:** braucht `OPENAI_API_KEY` mit Guthaben; Modell per `REALTIME_MODEL` (Default `gpt-realtime`, Fallback `gpt-4o-realtime-preview`).
 - **Frische Demo:** `data/store.json` löschen setzt Calls/Items/Budgetzähler zurück.
 
@@ -187,7 +190,7 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calend
 - Modernes JavaScript (ESM) statt TypeScript: kein Build-Step, maximale Demo-Velocity.
 - Kalender = lokaler Speicher mit Beispielterminen statt Google/Outlook.
 - Keine Nummern-Provisionierung, kein Multi-User, kein Billing, keine CAMARA-Anbindung, keine Datenbank.
-- Spracherkennung (Budget-Engine, `<Gather input="speech">`): Twilio nutzt `speechModel=deepgram_nova-2-general`, Telnyx den eigenen `transcriptionEngine="Telnyx"` (in-house, günstiger als Google) — provider-spezifisch im jeweiligen Renderer fest verdrahtet. Telnyx transkribiert **ohne** `transcriptionEngine` gar nicht (das Weglassen war der Inbound-Audio-Bug: Agent hörte den Angerufenen nie). **Restrisiko:** die de-DE-Reife der Telnyx-in-house-Engine ist live noch unbestätigt; falls Deutsch schlecht erkannt wird, ist `transcriptionEngine="Google"` (akzeptiert `de-DE`) der Fallback — 1-Zeilen-Änderung im Telnyx-Renderer.
+- Spracherkennung (Budget-Engine, `<Gather input="speech">`): Telnyx nutzt `transcriptionEngine="Deepgram"` + `model="deepgram/nova-3"` (neutral gewählt über `STT_PROFILE`, im Telnyx-Renderer übersetzt). Telnyx transkribiert **ohne** `transcriptionEngine` gar nicht (das Weglassen war der Inbound-Audio-Bug: Agent hörte den Angerufenen nie). **Restrisiko:** die de-DE-Reife der Telnyx-in-house-Engine ist live noch unbestätigt; falls Deutsch schlecht erkannt wird, ist `transcriptionEngine="Google"` (akzeptiert `de-DE`) der Fallback — 1-Zeilen-Änderung im Telnyx-Renderer.
 - Datenminimierung (DSGVO): Roh-Transkripte werden nach erfolgreicher Zusammenfassung gelöscht — nur Summary + Action Items bleiben gespeichert. `get_transcript` liefert für abgeschlossene Calls kein Volltranskript mehr. Datenresidenz EU (`render.yaml` `region: frankfurt`; Region ist per Blueprint nur für frische Deploys setzbar).
 - Consult-Kanal am Call (`CONSULT_ENABLED`, Default aus): Rückfragen während der Klingelzeit laufen als **Stufe 0** über einen kurzen, vom Client gezogenen Long-Poll (`GET /api/calls/:id/consult`) — der MCP-Rückkanal (Sampling/Elicitation/MRTR/Tasks) ist in claude.ai und ChatGPT unbrauchbar. Stufe 1 (Tasks-Extension) bzw. Stufe 2 (MRTR) tauschen später **nur** `src/consult/delivery.js`; Vertrag (`src/consult/ports.js`), Zustand (`call.consults`) und Aufrufer bleiben unberührt.
 - Nachschlagen **im** Gespräch (`LOOKUP_ENABLED`, Default aus): das Werkzeug `look_up` schickt eine kurze Sachfrage an **Exa** — ein **neues Secret** (`EXA_API_KEY`) und ein **zweiter Auftragsverarbeiter**. Das durchbricht bewusst die Randbedingung im Kopf von `src/precall-briefing.js` („kein eigener Such-Client, kein zweites Secret"), die für die Vorab-Recherche (AL-P10, Anthropics serverseitiges `web_search`) weiter gilt. **Was rausgeht:** ausschließlich die vom Server gefilterte Sachfrage (`src/research/lookup-guard.js`). **Was nicht rausgeht:** die Rufnummer des Angerufenen, E-Mail-Adressen, Ziffernfolgen ab 5 Stellen und wörtliche Übernahmen aus dem Transkript. Ein Namens-Filter existiert bewusst NICHT (`call.callerName` ist seit der Identitäts-Bindung G1 hart `null`, ein Filter darauf wäre toter Code mit einer falschen Schutzbehauptung) — das Verbot, Personenbezogenes des Gegenübers nachzuschlagen, trägt hier die Tool-Description. Wirksam nur als Schnittmenge mit `ASSISTANT_CONTEXT_ENABLED`, dem Per-Tenant-Recht `allowLookup`, Outbound-Richtung, einem gesetzten Key und der Budget-Engine (unter `VOICE_ENGINE=realtime` gibt es das Werkzeug nicht — und deshalb auch die entsprechende Prompt-Zeile nicht); Treffer landen ausschließlich als `context.key_facts` im HINTERGRUND-Block. Details und die ehrliche Grenze des Filters: `PLAN-SECURITY.md`.
@@ -197,8 +200,8 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calend
 ## Dateien
 
 ```
-src/server.js      Gateway: Twilio-Webhooks, REST-API, MCP ueber HTTP (/mcp), Dashboard-Hosting
-src/bridge.js      Realtime-Audio-Bridge: Twilio Media Streams <-> OpenAI Realtime (Barge-in, end_call)
+src/server.js      Gateway: Provider-Webhooks, REST-API, MCP ueber HTTP (/mcp), Dashboard-Hosting
+src/bridge.js      Realtime-Audio-Bridge: Telnyx Media Streams <-> OpenAI Realtime (Barge-in, end_call)
 src/claude.js      Gespraechslogik Budget-Engine + System-Prompts, Tools, Disclosure, Summary
 src/mcp-tools.js   MCP-Tool-Definitionen (gemeinsam fuer HTTP- und stdio-Transport)
 src/mcp-server.js  MCP stdio-Einstieg fuer Claude Desktop

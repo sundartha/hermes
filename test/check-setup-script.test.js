@@ -6,7 +6,7 @@
 // Operator-Befehls "npm run check". npm test deckt das NICHT automatisch ab (kein Aufrufer
 // importiert check-setup.js) -> eigener Kindprozess-Test, der das Skript real ausfuehrt.
 //
-// Lauf OHNE Anthropic-/Twilio-Credentials: die einzigen await-fetch-Bloecke im Skript sind
+// Lauf OHNE Anthropic-Credentials: die einzigen await-fetch-Bloecke im Skript sind
 // per if (config.xxx) gegated und bleiben damit unbetreten -> deterministisch, kein Netz,
 // keine Wartezeit (siehe CLAUDE.md "Tests ... ohne Netz und ohne .env").
 import { test } from "node:test";
@@ -48,12 +48,11 @@ test("npm run check crasht nicht mehr am toten config.ownerNumber (Proxy-Guard-R
   assert.equal(code, 1);
 });
 
-// Review-Blocker C-P4 Runde 1: PROVIDER.TWILIO ist seit dem Twilio-Adapter-Ausbau
-// `undefined`. findActiveNumber(s, tenantId, provider) hat die Kurzschluss-Bedingung
-// `provider === undefined || n.provider === provider` (src/store/views.js) - mit
-// undefined ist der Provider-Filter ABGESCHALTET statt leer. Ein Store mit NUR einer
-// aktiven Telnyx-Nummer duerfte den "Owner-Twilio-Nummer"-Check also NICHT gruen melden.
-test("npm run check meldet KEINE Owner-Twilio-Nummer, wenn im Store nur Telnyx aktiv ist", async () => {
+// C-P5: der Provider-Filter ist entfallen (es gibt genau einen Anbieter). Damit dreht die
+// Aussage: eine aktive Telnyx-Nummer im Store IST die Owner-Nummer und muss gemeldet werden.
+// Gepinnt bleibt die Betreiber-Oberflaeche - was `npm run check` dem Betreiber ueber die
+// Owner-Nummer sagt.
+test("npm run check meldet die aktive Owner-Nummer aus dem Store (C-P5: kein Provider-Filter mehr)", async () => {
   const seed = seedState({
     numbers: [
       {
@@ -69,8 +68,6 @@ test("npm run check meldet KEINE Owner-Twilio-Nummer, wenn im Store nur Telnyx a
   });
   const dataDir = tempDataDir(seed);
   const { output } = await runCheckSetup({ DATA_DIR: dataDir });
-  // Der Check muss rot bleiben (bad()) statt die Telnyx-Nummer faelschlich als
-  // "Owner-Twilio-Nummer" gruen zu melden.
-  assert.match(output, /Keine aktive Owner-Twilio-Nummer im Store/);
-  assert.doesNotMatch(output, /Owner-Twilio-Nummer \(Store\): \+4915199999/);
+  assert.match(output, /Owner-Nummer \(Store\): \+4915199999/);
+  assert.doesNotMatch(output, /Keine aktive Owner-Nummer im Store/);
 });

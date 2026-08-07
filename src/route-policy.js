@@ -60,8 +60,8 @@ export const ROUTE_CLASS = Object.freeze({
 // Begruendungen, die sich mehrere Routen teilen - EINE Quelle (G5), damit eine
 // Praezisierung nicht an fuenf Stellen nachgezogen werden muss.
 const VOICE_SIGNATURE_REASON =
-  "PRAEFIX-MIDDLEWARE (Runbook-Fall 3): Provider-Signaturpruefung (Twilio HMAC / Telnyx " +
-  "Ed25519, fail-closed) sitzt vor allen /voice-Handlern, nicht an der einzelnen Route.";
+  "PRAEFIX-MIDDLEWARE (Runbook-Fall 3): Provider-Signaturpruefung (Telnyx Ed25519, " +
+  "fail-closed) sitzt vor allen /voice-Handlern, nicht an der einzelnen Route.";
 const MCP_METHOD_NOT_ALLOWED_REASON =
   "Fester 405 (der Transport ist POST-only). Kein Zustand, kein Inhalt.";
 const ALIAS_REASON =

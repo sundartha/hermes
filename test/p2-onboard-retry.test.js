@@ -147,8 +147,8 @@ test("(c) suspendierter/unbekannter Tenant -> 403 (Geld-Safety, kein Kauf)", asy
 
 // ---- (d): UNVERAENDERT (echter Spawn-Server, misst das Gate) ------------------------
 
-// nicht-AC TWILIO_ACCOUNT_SID -> Twilio-Client wirft synchron VOR Netzzugriff (offline).
-const OFFLINE = { TWILIO_ACCOUNT_SID: "x" };
+// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
+// TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403/429/400 = ein Gate hat gesperrt.
 const PW = "retry-secret";
 
 const env = (idp) => ({
@@ -158,7 +158,6 @@ const env = (idp) => ({
   DASHBOARD_PASSWORD: PW,
   MAX_NUMBERS: "100",
   MAX_NUMBERS_PER_TENANT: "100",
-  ...OFFLINE,
 });
 
 const retry = (srv, body, headers = {}) =>

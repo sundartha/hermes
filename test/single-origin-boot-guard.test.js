@@ -32,8 +32,6 @@ function captureConsoleError(fn) {
 // variieren. Restore am Ende.
 const REQUIRED_OK = {
   anthropicApiKey: "x",
-  twilioSid: "x",
-  twilioToken: "x",
   publicUrl: "https://example.test",
   mcpAuth: "",
   storeBackend: "json",

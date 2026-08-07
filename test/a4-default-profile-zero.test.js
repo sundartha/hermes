@@ -13,10 +13,9 @@ import { resolveProfileFrom, BOOTSTRAP_TENANT_ID, KYC_LEVEL } from "../src/store
 import { planProfileFor } from "../src/plans.js";
 
 const TO = "+4915112345678"; // erlaubtes Ziel, kein Premium/Notruf
-// nicht-AC TWILIO_ACCOUNT_SID -> der Twilio-Client wirft synchron VOR jedem Netzzugriff
-// -> ein durchgelassener Call endet als 500 (alle Gates passiert), eine Sperre als 429.
-const OFFLINE = { TWILIO_ACCOUNT_SID: "x" };
-const MT = { MULTI_TENANT: "true", ALLOWED_COUNTRY_CODES: "*", ...OFFLINE };
+// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
+// TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403/429/400 = ein Gate hat gesperrt.
+const MT = { MULTI_TENANT: "true", ALLOWED_COUNTRY_CODES: "*" };
 
 const postCall = (url, to, identity) =>
   fetch(`${url}/api/calls`, {

@@ -333,9 +333,7 @@ const rawConfig = {
   // KEINE Disclosure, KEINE Resilienz-Werte. Tests pinnen das via BASE_ENV.
   metricsEnabled: boolEnv("METRICS_ENABLED", process.env.METRICS_ENABLED, { fallback: false }),
 
-  twilioSid: process.env.TWILIO_ACCOUNT_SID || "",
-  twilioToken: process.env.TWILIO_AUTH_TOKEN || "",
-  // Absendernummern (Twilio/Telnyx) kommen NICHT mehr aus der config: der Owner ist
+  // Absendernummern kommen NICHT mehr aus der config: der Owner ist
   // Tenant Null und haelt seine Nummer(n) wie jeder Tenant im Store (s.numbers),
   // einmalig eingetragen via scripts/seed-owner-number.js. Boot-Guard in server.js
   // verlangt fail-closed eine aktive Owner-Nummer.
@@ -346,7 +344,7 @@ const rawConfig = {
   telnyxApiBase: stripTrailingSlash(process.env.TELNYX_API_BASE || "https://api.telnyx.com"),
   // TeXML-Application/Connection-ID: haelt die Voice-URL beim Provider, Pflicht fuer
   // Telnyx-Outbound (originateCall POST /v2/texml/calls/{connection_id}). Leer ->
-  // Telnyx-Outbound wirft (fail-closed), Twilio-Outbound unberuehrt.
+  // Telnyx-Outbound wirft (fail-closed).
   // NICHT verwechseln mit telnyxCallControlAppId (s.u.): Telnyx kennt ZWEI getrennte
   // Objekttypen (TeXML-Application vs. Call-Control-Application) mit eigenen IDs. Die
   // TeXML-ID hier traegt zusaetzlich das Voice-Routing gekaufter Nummern (provisioning-geo).
@@ -1230,7 +1228,7 @@ const rawConfig = {
   // internen Sprechpause -> Satz-Truncation ("geht" statt ganzem Satz). Ein fester,
   // konservativer Wert toleriert kurze Pausen. NUR Folge-Gathers; das Outbound-Erst-
   // Gather (G2) + Inbound-Greeting bleiben bewusst auf "auto" (End-of-Speech-Erkennung
-  // noetig, sonst Erst-Turn-Deadlock, render.js-Doku). Telnyx-only (Twilio byte-identisch).
+  // noetig, sonst Erst-Turn-Deadlock, render.js-Doku).
   sttSpeechTimeoutSec: numEnv("STT_SPEECH_TIMEOUT_SEC", process.env.STT_SPEECH_TIMEOUT_SEC, {
     fallback: 2,
     min: 1,
@@ -1265,8 +1263,9 @@ const rawConfig = {
   thinkingSignalEnabled: boolEnv("THINKING_SIGNAL_ENABLED", process.env.THINKING_SIGNAL_ENABLED, {
     fallback: false,
   }),
-  // Rate-Limit pro IP und Minute fuer alle Nicht-Twilio-Routen (localhost-Socket
-  // ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min) plus Interaktionen.
+  // Rate-Limit pro IP und Minute fuer alle Routen ausser /voice (Provider-Webhooks;
+  // localhost-Socket ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min)
+  // plus Interaktionen.
   rateLimitPerMin: numEnv("RATE_LIMIT_PER_MIN", process.env.RATE_LIMIT_PER_MIN, {
     fallback: 120,
     min: 0,
@@ -1279,7 +1278,7 @@ const rawConfig = {
   ),
   // OUT-05 (F2): Test-Seam. true -> voiceControl liefert den fakeVoice-Adapter (synthetischer
   // Originate-Erfolg, endCall No-op), damit der Reserve-Atomaritaets-/Freigabepfad OFFLINE
-  // testbar ist (der echte Twilio-Client wirft synchron ohne AC-SID). BOOT-GEHAERTET
+  // testbar ist (der echte Telnyx-Adapter wirft synchron ohne TELNYX_API_KEY). BOOT-GEHAERTET
   // (boot-guard.js): nur zulaessig mit SKIP_TWILIO_SIGNATURE_CHECK=true -> in Prod (Signatur-
   // pruefung fail-closed AN, Regel 1) fuehrt es zum Boot-Refusal, NIE zu stillem Nicht-Waehlen.
   // KEINE abgeschaltete Sicherung: alle Gates laufen unveraendert VOR voiceControl.
@@ -1368,13 +1367,12 @@ const rawConfig = {
   }),
 
   // ---- Voice-Engine ----
-  // "budget"  = Provider-eigene STT/TTS (Twilio TwiML bzw. Telnyx TeXML, je call.provider) + Claude Haiku (quasi gratis, Default)
+  // "budget"  = Provider-eigene STT/TTS (Telnyx TeXML) + Claude Haiku (quasi gratis, Default)
   // "realtime"= OpenAI Realtime API (Speech-to-Speech, Barge-in, ~0,30-0,50 EUR/min)
   voiceEngine: process.env.VOICE_ENGINE || VOICE_ENGINE.BUDGET,
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   realtimeModel: process.env.REALTIME_MODEL || "gpt-realtime",
   realtimeVoice: process.env.REALTIME_VOICE || "alloy",
-  twilioEdge: process.env.TWILIO_EDGE || "frankfurt",
 
   // ---- Spracherkennung (STT) ----
   // Neutrale Wahl der Erkennungs-Engine, EINMAL fuer alle Pfade. Jeder Telefonie-Adapter
@@ -1514,7 +1512,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled"],
-  telephony: ["twilioSid", "twilioToken", "telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "twilioEdge", "machineDetection"],
+  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
@@ -1668,12 +1666,13 @@ export function isSelfServiceLive(cfg) {
 export function assertConfig() {
   const missing = [];
   if (!config.llm.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
-  if (!config.telephony.twilioSid) missing.push("TWILIO_ACCOUNT_SID");
-  if (!config.telephony.twilioToken) missing.push("TWILIO_AUTH_TOKEN");
   // Absendernummer + Owner-Identitaet sind keine Boot-Pflicht-Env mehr (P2b): sie leben
   // im Store (Bootstrap-CLI/Onboarding/Self-Service), nicht in der Env. Stattdessen
   // verlangt der Boot-Guard in server.js fail-closed eine aktive Nummer im Store
   // (assertConfig bleibt storefrei).
+  // C-P5: TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN sind KEINE Boot-Pflicht mehr - seit dem
+  // Adapter-Ausbau liest sie kein Codepfad. In Render stehen sie uebergangsweise noch und
+  // werden ignoriert; ein gesetzter, ungelesener Key ist harmlos.
   if (!config.server.publicUrl || config.server.publicUrl.includes("CHANGE-ME"))
     missing.push("PUBLIC_URL");
   if (config.auth.mcpAuth === "oauth" && !config.auth.oauthIssuerUrl)

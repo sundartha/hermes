@@ -94,7 +94,7 @@ function captureConsoleError(fn) {
 // Pflichtfelder erfuellt, damit NUR der Footgun den Boot stoppt (nicht ein fehlendes
 // Presence-Feld). mcpAuth/skip/issuer entschaerft, dashboardPassword bewusst leer.
 const REQUIRED_OK_PROD = {
-  anthropicApiKey: "x", twilioSid: "x", twilioToken: "x",
+  anthropicApiKey: "x",
   publicUrl: "https://agent.onrender.com", storeBackend: "json", paymentEnabled: false,
   mcpAuth: "", skipTwilioSignatureCheck: false, oauthIssuerUrl: "", dashboardPassword: "",
 };

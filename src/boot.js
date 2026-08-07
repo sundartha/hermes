@@ -344,7 +344,7 @@ function assertBootGates(config, store) {
   // "telefonbar", sobald IRGENDEIN Tenant eine aktive Nummer hat (kein OWNER/BOOTSTRAP-Pin
   // mehr). Nach lokalem Reset (data/store.json geloescht) oder frischem Postgres ohne Seed
   // waere keine aktive Nummer da -> Outbound + SMS still tot. Fail-closed wie die fruehere
-  // TWILIO_NUMBER-Boot-Pflicht: leerer Store -> kein Start. Loggt KEINE Nummer (kein Leak),
+  // Nummern-Boot-Pflicht aus der Env: leerer Store -> kein Start. Loggt KEINE Nummer (kein Leak),
   // verweist auf das Bootstrap-CLI.
   if (!hasActiveNumber(store.load())) {
     console.error(
@@ -666,7 +666,7 @@ function logBootBanner(config, port) {
   console.log(
     `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
   );
-  console.log(`  Twilio-Webhook: ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
+  console.log(`  Voice-Webhook:  ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
   console.log(`  Status-Callback:${config.server.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
   // Outbound-Freigabe (outbound-p3): keine statische ALLOWED_NUMBERS-Liste mehr - Permit ist
   // die per-Tenant-Verifikation (Abo+KYC, Pfad 2). OUTBOUND_FROZEN zeigt den globalen

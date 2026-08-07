@@ -16,7 +16,8 @@ import assert from "node:assert/strict";
 import { startServer, seedState, startIdp } from "./helpers.js";
 import { KYC_LEVEL } from "../src/store/defaults.js";
 
-const OFFLINE = { TWILIO_ACCOUNT_SID: "x" };
+// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
+// TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403/429/400 = ein Gate hat gesperrt.
 const PW = "did-07-retry-secret";
 
 const env = (idp) => ({
@@ -26,7 +27,6 @@ const env = (idp) => ({
   DASHBOARD_PASSWORD: PW,
   MAX_NUMBERS: "100",
   MAX_NUMBERS_PER_TENANT: "100",
-  ...OFFLINE,
 });
 
 function subscriberTenant(id, idpSubject) {

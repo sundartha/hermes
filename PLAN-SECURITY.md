@@ -294,9 +294,9 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
   der dritte war ein Review-Fund). pg: `rowToTenant` hydriert das Feld (i8-Landmine), sonst
   Verlust beim Flush.
 - **Nur Telnyx (Phase D/E):** der Release gilt ausschliesslich `provider==="telnyx"`; alles andere
-  -> `hold` (manuell). Es gibt keinen `adapters/twilio/numbers.js`, also nie einen Twilio-Release-
-  Versuch. Der Release laeuft ueber den bestehenden NumberProvisioning-Port (registry-Dispatch),
-  kein neuer Provider-Einstieg.
+  -> `hold` (manuell). Telnyx ist seit C-P4 der einzige registrierte Anbieter; jeder andere Wert
+  am Nummern-Record fiele in den Hold-Zweig. Der Release laeuft ueber den bestehenden
+  NumberProvisioning-Port (registry-Dispatch), kein neuer Provider-Einstieg.
 - **Live-Recheck vor JEDEM DELETE (Phase D):** unmittelbar vor dem Provider-DELETE wird der Tenant
   frisch geladen und das Release-Verdikt neu berechnet (`numberReleaseVerdict`); reaktivierte der
   Kunde zwischenzeitlich -> Abbruch. Schliesst den Reaktivierungs-Race.
@@ -820,7 +820,7 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 >    Zustand, fremder Tenant neben dem Code-Default-Bootstrap-Tenant, Call-Historie) → **NIE**
 >    heilen; der bestehende fail-closed Refusal greift stattdessen. Das ist der Riegel gegen
 >    Tenant-/Nummern-Proliferation.
-> 3. `BLOCKED_PARAMS` — leere ODER unbrauchbare Parameter (E.164-Regex + `twilio|telnyx`).
+> 3. `BLOCKED_PARAMS` — leere ODER unbrauchbare Parameter (E.164-Regex + `telnyx`).
 >    Pflicht, kein Stil: `seedBootstrapNumber` **normalisiert nur, es validiert nicht** — ein
 >    Tippfehler wuerde sonst als "aktive Nummer" geseedet und der Boot liefe gruen mit totem
 >    Routing (Lehre `seedOwnerNumberFromEnv`).
@@ -995,7 +995,6 @@ Secrets mit `openssl rand -hex 32` (gilt fuer `MCP_AUTH_TOKEN`, `SESSION_SECRET`
 | Secret (Env)         | Anbieter / Quelle               | Gewaehrt bei Leak                                              | Blast-Radius                                     |
 | -------------------- | ------------------------------- | -------------------------------------------------------------- | ------------------------------------------------ |
 | `ANTHROPIC_API_KEY`  | console.anthropic.com           | LLM-Calls auf deine Kosten                                     | Kosten (kein Daten-Leak)                         |
-| `TWILIO_AUTH_TOKEN`  | Twilio Console                  | Voice/SMS-API **und** Webhook-HMAC-Schluessel                  | Calls/SMS auf deine Kosten + Signatur-Faelschung |
 | `TELNYX_API_KEY`     | Telnyx Portal                   | Voice/SMS-API (Telnyx)                                         | Calls/SMS auf deine Kosten                       |
 | `TELNYX_PUBLIC_KEY`  | Telnyx Portal                   | **KEIN Secret** (Ed25519-Verify), aber falsch = Inbound bricht | Verfuegbarkeit (kein Leak)                       |
 | `OPENAI_API_KEY`     | platform.openai.com             | Realtime-API (nur `VOICE_ENGINE=realtime`)                     | Kosten                                           |
@@ -1019,7 +1018,7 @@ Generisches 5-Schritt-Muster fuer jedes Secret oben:
 1. **Neuen Wert erzeugen** beim Anbieter — der **alte bleibt zunaechst gueltig** (Ueberlappung).
 2. **Render-Dashboard → Service → Environment** → Wert ersetzen → speichern (loest Re-Deploy aus).
 3. **Verifizieren:** `/healthz` gruen, `[boot]`-Banner = erwarteter Commit, betroffene Route
-   testen (z.B. Test-Call fuer Twilio/Telnyx, Login fuer OIDC).
+   testen (z.B. Test-Call fuer Telnyx, Login fuer OIDC).
 4. **Alten Wert widerrufen/loeschen** beim Anbieter — erst NACH bestaetigter Verifikation.
 5. **Rotation protokollieren** (Datum + welches Secret + Anlass) im privaten Rotation-Log
    (nie ins Repo). Anlass = Quartals-Routine **oder** Verdacht/Personalwechsel.
@@ -1031,7 +1030,6 @@ ausgeschiedenem Teammitglied oder kompromittiertem Geraet.
 
 | Secret                                 | Rotations-Besonderheit                                                                                                                                                                                                                                                        |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TWILIO_AUTH_TOKEN`                    | Twilio fuehrt **Primary + Secondary Auth Token**. Secondary erzeugen → in Env eintragen → Primary "promote/regenerate". Echtes Zero-Downtime, da kurzzeitig beide gueltig sind. Achtung: derselbe Token validiert auch die Webhook-HMAC — nach Rotation Test-Inbound pruefen. |
 | `STRIPE_SECRET_KEY`                    | Im Stripe-Dashboard **"Roll key"** mit Ablauf-Frist (alter Key laeuft kontrolliert aus) statt Sofort-Widerruf. Test- (`sk_test`) und Live-Key (`sk_live`) **getrennt** rotieren.                                                                                              |
 | `SESSION_SECRET`                       | Rotation **invalidiert alle aktiven Browser-Sessions** (User muessen neu einloggen). Geplant ausserhalb der Stosszeit, ggf. ankuendigen. Kein Ueberlappungs-Mechanismus.                                                                                                      |
 | `DATABASE_URL`                         | Postgres-Passwort in Render rotieren (Render Postgres → Rotate) → URL in der Env des Web-Service nachziehen. Kurzer Reconnect; Pool baut neu auf.                                                                                                                             |
@@ -1039,20 +1037,10 @@ ausgeschiedenem Teammitglied oder kompromittiertem Geraet.
 | `OIDC_CLIENT_SECRET`                   | In WorkOS AuthKit ein neues Client-Secret erzeugen (WorkOS erlaubt Ueberlappung) → Env tauschen → altes in WorkOS loeschen.                                                                                                                                                   |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Zweiten Key erstellen → Env tauschen → ersten widerrufen. Ueberlappung trivial.                                                                                                                                                                                               |
 
-### Twilio-/Telnyx-Subaccount auf minimale Rechte
+### Telnyx-Scoped-Key auf minimale Rechte
 
 **Ziel:** Hermes laeuft nie mit Master-/Account-weiten Vollrechten — ein geleaktes Token darf nur
 den Hermes-Kontext betreffen, nicht den ganzen Provider-Account.
-
-**Twilio:**
-
-- [ ] **Subaccount** anlegen (Twilio Console → Account → Subaccounts); Hermes nutzt **nur** dessen
-      `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN`. Master-Auth-Token nie in Hermes.
-- [ ] Im Subaccount **nur** die genutzten Produkte aktiv: **Voice** + **Messaging**. Ungenutzte
-      (Verify, Lookup, etc.) nicht freischalten.
-- [ ] **Usage-Trigger / Spend-Limit** auf dem Subaccount setzen (zweite Kostenbremse zusaetzlich
-      zum app-internen Budget-Guard — die Provider-Add-on-Minuten laufen ausserhalb).
-- [ ] Geo-Permissions auf die benoetigten Laender beschraenken (passt zum Kauf-Land-Gate).
 
 **Telnyx:**
 
@@ -1064,7 +1052,7 @@ den Hermes-Kontext betreffen, nicht den ganzen Provider-Account.
 - [ ] Spend-/Concurrency-Limits im Telnyx-Portal als zweite Bremse.
 
 **Akzeptanz:** Inventar oben stimmt mit der gesetzten Render-Env ueberein; fuer jedes Secret ist
-die Rotations-Besonderheit verstanden; Twilio-Subaccount + Telnyx-Scoped-Key sind mit Spend-Limit
+die Rotations-Besonderheit verstanden; der Telnyx-Scoped-Key ist mit Spend-Limit
 aktiv und Master-Credentials nirgends in der Hermes-Env.
 
 ## AL-P11 — Ergebnis-Karte statt Prosa (2026-07-29)

@@ -76,12 +76,13 @@ export const BASE_ENV = {
   // leakt eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift).
   // gap-36-healthz-fingerprint.test.js setzt ihn explizit.
   RENDER_GIT_COMMIT: "",
-  TWILIO_ACCOUNT_SID: "ACtest00000000000000000000000000",
-  TWILIO_AUTH_TOKEN: "test-twilio-auth-token",
   // Absendernummern sind keine Env-Var mehr: die Owner-Nummer kommt ueber
   // ensureOwnerNumber in den Spawn-Store (OWNER_TEST_NUMBER). Provider-spezifische
   // Tests reichen ownerNumber:{e164,provider} an startServer durch.
-  TWILIO_EDGE: "frankfurt",
+  // C-P5: TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_EDGE sind hier ENTFALLEN, weil es die
+  // Variablen nicht mehr gibt (config.js). Umkehrung der BASE_ENV-Drift-Lehre, Praezedenz
+  // KS-P3 (b) weiter unten: eine gepinnte, aber tote Env-Zeile taeuscht kuenftigen Lesern eine
+  // wirksame Klemme vor und schuetzt vor nichts.
   // GAP-21: Default AUS neutral gepinnt (Lehre test-base-env-drift). Einzelne Tests
   // setzen MACHINE_DETECTION_ENABLED gezielt auf "true".
   MACHINE_DETECTION_ENABLED: "false",
@@ -152,6 +153,13 @@ export const BASE_ENV = {
   // ---- Telnyx (zweiter Provider) ----
   // Nummern sind keine Env-Var mehr (s.o.). Keys/IDs neutral leer; Tests, die
   // Telnyx-Outbound brauchen, seeden eine Telnyx-Owner-Nummer via ownerNumber.
+  // OFFLINE-DISKRIMINATOR der Outbound-Tests (gemessen 2026-08-07 am Server-Log des
+  // Spawn-Kindes): leer gepinnt -> originateCall (adapters/telnyx/voice.js) wirft SYNCHRON
+  // vor jedem Netzzugriff ("Telnyx originateCall: TELNYX_API_KEY fehlt"). POST /api/calls
+  // faengt das ohne err.providerStatus -> HTTP 500. 500 heisst deshalb "alle Gates passiert,
+  // bis zum Provider-Aufruf durchgekommen"; 400/402/403/429 heisst "ein Gate hat gesperrt".
+  // (Bis C-P4 trug ein nicht-AC TWILIO_ACCOUNT_SID diese Rolle - seit dem Adapter-Ausbau war
+  // dieser Wert inert und die Begruendung falsch, obwohl die Tests gruen blieben.)
   TELNYX_API_KEY: "",
   TELNYX_PUBLIC_KEY: "",
   TELNYX_API_BASE: "",
@@ -829,8 +837,6 @@ export function makeStripeStub(configObj, secret) {
 // zusaetzlichen Anforderungen (z.B. PAYMENT_ENABLED-Pfad) spreaden + ueberschreiben lokal.
 export const CONFIG_REQUIRED_OK = Object.freeze({
   anthropicApiKey: "x",
-  twilioSid: "x",
-  twilioToken: "x",
   publicUrl: "https://example.test",
   mcpAuth: "",
   storeBackend: "json",

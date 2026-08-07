@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Hermes
 
-Autonomer Telefon-KI-Agent: Twilio + Telnyx Voice, Claude (Haiku) als Gespraechs-Gehirn, optional OpenAI Realtime (Streaming-Audio), MCP-Server. Node.js (ESM), Express, kein Build-Step, kein TypeScript. Multi-Tenant, JSON- oder Postgres-Store, OAuth/OIDC-Auth. Nimmt echte Anrufe an und loest echte Anrufe/SMS aus (Kosten!), speichert Gespraechs-Transkripte.
+Autonomer Telefon-KI-Agent: Telnyx Voice, Claude (Haiku) als Gespraechs-Gehirn, optional OpenAI Realtime (Streaming-Audio), MCP-Server. Node.js (ESM), Express, kein Build-Step, kein TypeScript. Multi-Tenant, JSON- oder Postgres-Store, OAuth/OIDC-Auth. Nimmt echte Anrufe an und loest echte Anrufe/SMS aus (Kosten!), speichert Gespraechs-Transkripte.
 
 ## Kontext
 
@@ -12,7 +12,7 @@ Hermes ist ein persoenlicher KI-Telefonassistent, der Inbound-Anrufe entgegennim
 
 **Vision: ein Produkt, das diesen Assistenten Millionen Menschen zugaenglich machen soll.** Jede nicht-triviale Entscheidung wird an diesem Anspruch gemessen — nachhaltig, sauber, skalierbar, kein Wegwerf-Code. Die einfachste funktionsfaehige Loesung bleibt das Ziel (kein BDUF, inkrementell), aber Seams/Abstraktionen werden so gebaut, dass sie Skala tragen.
 
-Der Dienst laeuft oeffentlich erreichbar (Render) und telefoniert mit echten Menschen. Deshalb gilt erst recht bei Millionen-Skala: Sicherheits- und Kosten-Gates haben Prioritaet vor Features. Das Fundament ist Richtung Produktion gebaut (Provider-Abstraktion Twilio+Telnyx, Postgres-Store, Multi-Tenancy, OAuth/OIDC, Stripe-Billing, Onboarding/Provisioning). Verbliebene bewusste Vereinfachungen sind in README und `PLAN-SECURITY.md` dokumentiert und werden schrittweise gehaertet, nicht als dauerhaft akzeptiert — neue Abweichungen ebenfalls dort festhalten.
+Der Dienst laeuft oeffentlich erreichbar (Render) und telefoniert mit echten Menschen. Deshalb gilt erst recht bei Millionen-Skala: Sicherheits- und Kosten-Gates haben Prioritaet vor Features. Das Fundament ist Richtung Produktion gebaut (Provider-Abstraktion (Telnyx), Postgres-Store, Multi-Tenancy, OAuth/OIDC, Stripe-Billing, Onboarding/Provisioning). Verbliebene bewusste Vereinfachungen sind in README und `PLAN-SECURITY.md` dokumentiert und werden schrittweise gehaertet, nicht als dauerhaft akzeptiert — neue Abweichungen ebenfalls dort festhalten.
 
 > Naming: **Hermes** = Produkt/Agent (so nennt sich der Assistent), **Sundartha** = Firma dahinter (`sundartha.com`). Der Code-/Doku-Rebrand (Track A) ist erledigt — kein `vodafone` mehr in `src/`. Repo-Verzeichnis, Render-Service, Brand-URL und einige Env-/Pfadnamen tragen aber noch `vodafone-agent`; der Infra-/URL-Cutover (Track B) steht separat aus und ist nicht Teil normaler Tasks.
 
@@ -59,7 +59,7 @@ Hart verboten: Magic Numbers (ausser 0/1/-1) ohne benannte Konstante, toter Code
 Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (turn-basiert, Gather/STT — der heute live laufende Default) und `realtime` (Streaming-Audio ueber `bridge.js`).
 
 - `src/server.js` — Gateway: Provider-Webhooks (`/voice/*`), REST-API (`/api/*`), MCP ueber Streamable HTTP (`/mcp`), Auth-Middleware, Onboarding-/Self-Service-Routen
-- `src/telephony/` — Provider-Abstraktion (DIP): `ports.js` (Schnittstellen), `registry.js` (Dispatch nach Provider), `directives.js`/`media-events.js`; Adapter unter `adapters/twilio/*` und `adapters/telnyx/*` (voice, render, media, messaging, numbers; `signature` nur noch bei Telnyx, s. Absolute Regel 1). Neue Telefonie-/Provider-Logik laeuft ueber die Ports, NICHT direkt im Server.
+- `src/telephony/` — Provider-Abstraktion (DIP): `ports.js` (Schnittstellen), `registry.js` (Dispatch nach Provider), `directives.js`/`media-events.js`; Adapter unter `adapters/telnyx/*` (voice, render, media, messaging, numbers, signature). Neue Telefonie-/Provider-Logik laeuft ueber die Ports, NICHT direkt im Server.
 - `src/bridge.js` — Audio-Bridge Media-Streams <-> OpenAI Realtime (nur `VOICE_ENGINE=realtime`); enthaelt als `HEIKLE STELLE` markierte Abschnitte (Barge-in, Call-Ende) — dort besonders vorsichtig editieren
 - `src/claude.js` — Gespraechslogik (System-Prompts, Tool-Loop, Summaries), pro-Tenant ueber `tenantContext`; enthaelt den fest verdrahteten Offenlegungssatz. Der resiliente LLM-Seam `src/llm.js` (Timeout/Retry/Circuit-Breaker, P3b-R) sitzt davor.
 - `src/mcp-tools.js` — MCP-Tool-Definitionen (sprechen mit der REST-API), `src/mcp-server.js` — stdio-Transport
@@ -128,7 +128,7 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
 4. **SECRETS**: Nur ueber `.env` (lokal) bzw. Render-Dashboard. Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.
 5. **AUDIO**: Audio laeuft NIEMALS durch MCP — nur Transkripte/Status.
 6. **SCOPE**: NUR implementieren, was gefragt wurde.
-7. **DEBUG**: IMMER erst Runtime-Output lesen (Server-Log, Twilio-Debugger). Nie raten.
+7. **DEBUG**: IMMER erst Runtime-Output lesen (Server-Log, Telnyx-Portal-Debugger). Nie raten.
 
 ## Pre-Mortem vor Entscheidungen
 
