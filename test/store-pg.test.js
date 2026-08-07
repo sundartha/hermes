@@ -367,8 +367,8 @@ test("Re-init ist idempotent: keine Default-Duplikate (Kalender bleibt 3)", asyn
 });
 
 test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null", async () => {
-  // number direkt in die DB seeden (deterministisch, ohne config.twilioNumber-
-  // Kopplung: der Contract-Test bekommt config nicht ueber BASE_ENV), dann
+  // number direkt in die DB seeden (deterministisch, ohne Config-Kopplung fuer die
+  // Owner-Nummer: der Contract-Test bekommt config nicht ueber BASE_ENV), dann
   // reopen -> Hydrierung+Lookup wie im Inbound-Pfad.
   const { db } = await makePgTestStore();
   const seededE164 = "+15005550006";

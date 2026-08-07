@@ -3,7 +3,7 @@
 // setzt, waehrend das Outbound-ERST-Gather (G2-Invariante) bewusst auf "auto"
 // bleibt - und dass der Wert config-getrieben tunebar ist (kein Code-Diff). Baut
 // auf der gebuendelten Outbound-/Turn-Harness auf (_outbound-harness.js). Telnyx,
-// weil der Override Telnyx-only ist (Twilio byte-identisch, siehe directive-render).
+// weil der Override am TeXML-Gather haengt (dem einzigen Renderer).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

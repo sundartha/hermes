@@ -188,7 +188,7 @@ test("Gate 6 Land: Ziel ausserhalb ALLOWED_COUNTRY_CODES blockt auch mit Flag an
 test("Gate 7 Stundenlimit: MAX_CALLS_PER_HOUR erreicht blockt auch mit Flag an (429)", async () => {
   const res = await placeCallFlagOn({
     env: { MAX_CALLS_PER_HOUR: "1" },
-    seed: seedState({ calls: [seedCall({ id: "c_recent" })] }), // ownerNumber-Default (Twilio) reicht
+    seed: seedState({ calls: [seedCall({ id: "c_recent" })] }), // ownerNumber-Default reicht
     status: 429,
     grund: "stundenlimit",
   });

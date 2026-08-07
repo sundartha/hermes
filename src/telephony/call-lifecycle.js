@@ -61,8 +61,8 @@ export function makeCallLifecycle({
 
   // F10 (A6): der EINZIGE Terminalisierungspfad des Max-Dauer-Caps - kein zweiter Bucht-freier
   // Weg (K1/K2). Provider-aware ueber call.provider (P6a): ein Telnyx-Call wird ueber Telnyx
-  // beendet, nicht ueber Twilio. Fuer Telnyx-Outbound ist dieser Cap der EINZIGE harte
-  // Max-Dauer-Cap (TimeLimit-Honorierung unbestaetigt) - Absolute Regel Max-Dauer. Setzt den
+  // beendet, nicht ueber einen fremden Anbieter. Fuer Telnyx-Outbound ist dieser Cap der EINZIGE
+  // harte Max-Dauer-Cap (TimeLimit-Honorierung unbestaetigt) - Absolute Regel Max-Dauer. Setzt den
   // gekappten End-Anker (cappedEndedAtMs, nie Boot-Zeit), beendet den Provider-Leg ZUERST
   // (awaited) und bucht die Voice-Minuten idempotent ERST DANACH ueber finishCall (billedAt-
   // Guard, F9) - via terminateAndBillCall (F10 Runde 2, G5: derselbe Helper wie cancel_call).
@@ -97,7 +97,7 @@ export function makeCallLifecycle({
           store.recordFailureReason(callId, failureReason); // GAP-26, s.o.
         },
         // P6 (Befund 1): call ist frisch (getCall oben) -> Call-Control-Call (callControlId
-        // gesetzt) wird via endCallViaCallControl beendet, TeXML/Twilio byte-identisch ueber
+        // gesetzt) wird via endCallViaCallControl beendet, TeXML byte-identisch ueber
         // endCall(providerCallSid). Damit sind rearm/reattach/scheduleMaxDurationEnd AUTOMATISCH
         // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird bei C-Telnyx ignoriert).
         hangUp: hangUpAction(voiceControl, call, providerCallSid),

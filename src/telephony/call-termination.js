@@ -71,7 +71,7 @@ export function billThunk(finishCall, store, callId) {
 
 // P6 (Regel 1 / Befund 1): waehlt Hangup-Endpunkt+ID anhand der Call-FORM, NICHT der
 // voiceEngine. Ein Call-Control-Call (callControlId gesetzt, C-Telnyx) wird ueber
-// endCallViaCallControl(callControlId) beendet; ein TeXML/Twilio-Call ueber endCall(
+// endCallViaCallControl(callControlId) beendet; ein TeXML-Call ueber endCall(
 // providerCallSid) - byte-identisch zum Bestand. EINE Quelle (G5) fuer terminateCappedCall
 // UND cancel_call, damit die ID-/Endpunkt-Entscheidung nicht an zwei Stellen driftet.
 // Rein (DI: voiceControl kommt herein) -> offline mit Spy-voiceControl unit-testbar.

@@ -1,4 +1,4 @@
-// Audio-Bridge: Twilio Media Streams <-> OpenAI Realtime API (VOICE_ENGINE=realtime).
+// Audio-Bridge: Provider-Media-Streams (Telnyx) <-> OpenAI Realtime API (VOICE_ENGINE=realtime).
 // Audio laeuft als G.711 u-law 8kHz base64 in BEIDE Richtungen 1:1 durch
 // (input_audio_format = output_audio_format = g711_ulaw) -> kein Transcoding, minimale Latenz.
 // Audio laeuft NIEMALS durch MCP.
@@ -127,13 +127,13 @@ export function attachMediaBridge(httpServer, onCallEnded) {
     const log = (...a) => console.log("[bridge]", call?.id || "?", ...a);
 
     function hangup(reason) {
-      // HEIKLE STELLE 2: Call-Ende. Vier Ausloeser: (a) Gegenseite legt auf (Twilio 'stop'),
+      // HEIKLE STELLE 2: Call-Ende. Vier Ausloeser: (a) Gegenseite legt auf (Media-Event 'stop'),
       // (b) Max-Dauer-Timer, (c) cancel_call via API, (d) die KI ruft das end_call-Tool auf.
       // Bei (d) warten wir kurz, damit der letzte Audio-Puffer (Verabschiedung) noch abgespielt wird.
       log("hangup:", reason);
       const sid = call?.twilioSid;
       // Provider-aware: ueber denselben Provider beenden, ueber den der Call laeuft
-      // (call.provider). Fehlender Provider -> Twilio-Default (byte-identisch).
+      // (call.provider). Fehlender Provider -> DEFAULT_PROVIDER (Telnyx).
       if (sid)
         voiceControl(call?.provider)
           .endCall(sid)

@@ -1,6 +1,6 @@
 // Anrufbeantworter-Klassifikation (GAP-21). Provider-NEUTRAL (die AnsweredBy-Werte sind
 // Twilio-Konvention, die Telnyx' TeXML spiegelt) - bewusst nicht im Telnyx-Adapter wie
-// SPEAK_OUTCOME, weil beide Adapter denselben Feldnamen lesen und ein Adapter-lokaler
+// SPEAK_OUTCOME, weil der Feldname nicht adapter-eigen ist und ein Adapter-lokaler
 // Enum den Import-Pfeil falsch herum drehen wuerde.
 
 export const ANSWERED_BY = Object.freeze({ MACHINE: "machine", HUMAN: "human", UNKNOWN: "unknown" });
@@ -17,9 +17,10 @@ export function classifyAnsweredBy(raw) {
   return ANSWERED_BY.UNKNOWN;
 }
 
-// GAP-21: Ergebnis der Anrufbeantworter-Erkennung aus dem /voice/outbound-Body. Beide
-// Adapter (Twilio + Telnyx/TeXML) liefern denselben Feldnamen `AnsweredBy` - EINE Quelle
-// (G5, Review-Fix Runde 2) statt einer byte-identischen Kopie in beiden webhook-events.js.
+// GAP-21: Ergebnis der Anrufbeantworter-Erkennung aus dem /voice/outbound-Body. Der
+// TeXML-Pfad liefert den Feldnamen `AnsweredBy` (Twilio-Konvention). Der Parser sitzt
+// bewusst NEUTRAL hier und nicht im Adapter, damit ein zweiter Carrier eintritt statt
+// zu kopieren (G5, Review-Fix Runde 2).
 export function parseAnsweredBy(body) {
   return classifyAnsweredBy(body.AnsweredBy);
 }

@@ -20,7 +20,7 @@ import { startServer, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const TO = "+4915112345678"; // erlaubtes Ziel (steht in ALLOWED_NUMBERS), kein Premium/Notruf
-const OWNER_NUMBER = "+15005550006"; // = BASE_ENV.TWILIO_NUMBER (config-basierte Owner-Absendernummer)
+const OWNER_NUMBER = "+15005550006"; // = OWNER_TEST_NUMBER (Owner-Absendernummer aus dem Spawn-Store, test/helpers.js)
 
 const A = "tenant-a",
   SUB_A = "sub-a",

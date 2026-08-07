@@ -1,4 +1,4 @@
-// Phase 2.1: Rate-Limiting fuer Nicht-Twilio-Routen (RATE_LIMIT_PER_MIN).
+// Phase 2.1: Rate-Limiting fuer alle Routen ausser /voice (RATE_LIMIT_PER_MIN).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, externalIp } from "./helpers.js";

@@ -114,7 +114,7 @@ test("Telnyx-Inbound -> TeXML-Greeting (kein speechModel) + call.provider=telnyx
 // C-P1 (Zusicherung B): ein Inbound-Webhook OHNE erkennbaren Provider-Header laeuft auf
 // den Telnyx-Pfad. Diskriminator in BEIDE Richtungen: TeXML traegt transcriptionEngine,
 // TwiML traegt speechModel - so kann der Test nicht gruen bleiben, wenn der Rueckfall
-// zurueck auf Twilio kippt.
+// auf einen anderen (TwiML-)Renderer kippt.
 test("C-P1 B: Inbound ohne Provider-Header -> Telnyx-Pfad (TeXML, kein speechModel)", async () => {
   const srv = await startServer({ ownerNumber: { e164: TELNYX_NR, provider: PROVIDER.TELNYX } });
   try {

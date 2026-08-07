@@ -22,8 +22,8 @@ import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
 
 export function makeVoiceRender({ config }) {
   // Kurz-Helfer fuer Direktiven-Listen -> Provider-Markup (TwiML/TeXML). provider
-  // wird vom Aufrufer durchgereicht; undefined -> voiceRenderer-Default twilio ->
-  // jeder arg-lose render(x)-Aufruf bleibt byte-identisch (Hot-Path, R5).
+  // wird vom Aufrufer durchgereicht; undefined -> voiceRenderer-Default DEFAULT_PROVIDER
+  // (Telnyx) -> jeder arg-lose render(x)-Aufruf bleibt byte-identisch (Hot-Path, R5).
   const render = (directives, provider) => voiceRenderer(provider).renderDirectives(directives);
 
   // Direktiven fuer einen Sprach-Turn (Budget-Engine): Gather mit optionalem Prompt +
@@ -57,8 +57,8 @@ export function makeVoiceRender({ config }) {
   }
 
   // Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. Der WS-Pfad ist
-  // provider-aware (Twilio /media byte-identisch, Telnyx eigener Pfad) - der upgrade-
-  // Handler leitet daraus fail-closed den Provider ab. stream_token authentifiziert
+  // provider-aware ueber MEDIA_PATH; ein unbekannter Pfad wird fail-closed verworfen
+  // (bridge.js). Der upgrade-Handler leitet daraus den Provider ab. stream_token authentifiziert
   // den WebSocket (Bridge prueft beim start-Event, bridge.js).
   function streamDirectives(call) {
     const path = MEDIA_PATH[call.provider] || MEDIA_PATH[DEFAULT_PROVIDER];

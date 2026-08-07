@@ -725,7 +725,7 @@ export const telnyxVoice = {
   // Laufenden Call beenden (Twilio-kompatibel: Status=completed). Braucht den
   // account_sid (config.telephony.telnyxAccountSid) zusaetzlich zum CallSid - account-weite
   // Konstante, daher aus config statt durch den Port-Vertrag gereicht (endCall
-  // bekommt nur den CallSid, byte-identisch zum Twilio-Adapter).
+  // bekommt nur den CallSid).
   async endCall(callSid) {
     if (!config.telephony.telnyxApiKey) throw new Error("Telnyx endCall: TELNYX_API_KEY fehlt");
     if (!config.telephony.telnyxAccountSid)

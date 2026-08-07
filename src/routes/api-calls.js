@@ -241,9 +241,9 @@ export function makeCallRoutes({
         });
         call.twilioSid = tw.sid;
         store.save();
-        // Max-Dauer hart durchsetzen (Budget-Engine). Fuer Twilio redundant zum
-        // timeLimit-Param, fuer Telnyx (TeXML-Pfad) der einzige verlaessliche Cap. Erst NACH
-        // erfolgreichem Originate armen (vorher gibt es keinen providerCallSid).
+        // Max-Dauer hart durchsetzen (Budget-Engine). Fuer den TeXML-Pfad der EINZIGE
+        // verlaessliche Cap. Erst NACH erfolgreichem Originate armen (vorher gibt es
+        // keinen providerCallSid).
         if (config.voice.voiceEngine !== VOICE_ENGINE.REALTIME) armMaxDurationTimer(call, tw.sid);
       }
       armReserveReleaseTimer(call); // OUT-05 (F2): Reserve-Backstop, BEIDE Pfade, nach erfolgreichem Originate
@@ -376,8 +376,8 @@ export function makeCallRoutes({
     const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar
     audit("cancel_call", req, `call=${call.id} requestedBy=${requestedBy}`);
     // F10 Runde 2 (G5): derselbe Terminierungspfad wie der Max-Dauer-Cap - erst auflegen
-    // (awaited, provider-aware ueber call.provider - sonst Twilio-endCall auf einem
-    // Telnyx-Call), dann buchen (fire-and-forget).
+    // (awaited, provider-aware ueber call.provider - sonst endCall ueber den falschen
+    // Anbieter), dann buchen (fire-and-forget).
     await terminateAndBillCall({
       persistEnd: () => store.endCallRecord(call.id, "cancelled"),
       // P6 (Check 5): dieselbe callControlId-/twilioSid-Auswahl wie terminateCappedCall (G5,

@@ -20,7 +20,7 @@ for (const provider of ["telnyx"]) {
     const { body, status } = await runOutbound({ provider });
     assert.equal(status, 200);
     // Genau EIN Say (Offenlegung + Bruecke + Anliegen verschmolzen), robust ueber
-    // beide Renderer (kein Festnageln an self-closing-vs-paired-Gather-Syntax).
+    // den Renderer (kein Festnageln an self-closing-vs-paired-Gather-Syntax).
     const sayCount = (body.match(/<Say[ >]/g) || []).length;
     assert.equal(sayCount, EXPECTED_SAY_COUNT, `genau ein Say erwartet: ${body}`);
     // Der Say steht INNERHALB des Gather: <Gather ...><Say ...>... -> gatherIdx < sayIdx.

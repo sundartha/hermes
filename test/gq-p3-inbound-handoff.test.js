@@ -67,8 +67,8 @@ test("GQ-P3-2: die vier Budget-Gruende, je einzeln erzeugt - callControlId immer
 });
 
 test("GQ-P3-3: Reihenfolge-Gate - providerCapable:false + Body MIT CallSid -> provider_unsupported, kein Wert gelesen", () => {
-  // Ein Twilio-CallSid ("AC...") wird nie zur call_control_id: die Faehigkeitspruefung
-  // laeuft VOR dem Feld-Lesen, nicht danach.
+  // Ein fremder Provider-CallSid (Twilio-Form "AC...") wird nie zur call_control_id:
+  // die Faehigkeitspruefung laeuft VOR dem Feld-Lesen, nicht danach.
   const decision = inboundHandoffDecision({
     assistantEnabled: true,
     handoffEnabled: true,

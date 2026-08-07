@@ -45,7 +45,7 @@ import {
 // APP_ALIAS_PATHS (AUTH-P7): die sieben eingetippten Sackgassen, s. registerPathRedirects.
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
 
-// Body-Groesse begrenzen: kein Endpunkt braucht mehr als 100kb (Twilio-Webhooks
+// Body-Groesse begrenzen: kein Endpunkt braucht mehr als 100kb (Provider-Webhooks
 // und API-Payloads sind klein) - schuetzt vor Memory-Druck durch Riesen-Bodies.
 const BODY_LIMIT = "100kb";
 // P5: Ziel des Landing-Redirects (kein Magic-String, G25). "/" hat kein Index ->
@@ -58,9 +58,9 @@ const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
 // /voice-Praefix als EINE Quelle (G5): rawBody-Capture und der Rate-Limit-Bypass
 // teilen denselben Praefix.
 const VOICE_PATH_PREFIX = "/voice";
-// rawBody fuer /voice (Twilio/Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
-// gegen den unveraenderten Body. Der Twilio-HMAC nutzt weiterhin nur die geparsten
-// Params - die Erfassung aendert das Parsen NICHT (verify laeuft VOR dem Parsen, additiv).
+// rawBody fuer /voice (Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
+// gegen den unveraenderten Body. Die Erfassung aendert das Parsen NICHT (verify
+// laeuft VOR dem Parsen, additiv).
 const captureRawBody = (req, _res, buf) => {
   if (req.path.startsWith(VOICE_PATH_PREFIX) || req.path === STRIPE_WEBHOOK_PATH) req.rawBody = buf;
 };
@@ -68,8 +68,8 @@ const captureRawBody = (req, _res, buf) => {
 export function installGlobalMiddleware({ app, config }) {
   app.use(securityHeaders);
 
-  // ---- Rate-Limit fuer alle Nicht-Twilio-Routen (vor Auth: bremst auch Brute-Force).
-  // /voice/* ist ausgenommen (kommt von Twilio, eigene Signaturpruefung), ebenso
+  // ---- Rate-Limit fuer alle Routen ausser /voice (vor Auth: bremst auch Brute-Force).
+  // /voice/* ist ausgenommen (kommt vom Provider, eigene Signaturpruefung), ebenso
   // vertrauenswuerdige lokale In-Process-Aufrufe (interne MCP-Tools): echtes Loopback OHNE
   // Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render erscheint auch
   // externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen Internet-
@@ -80,7 +80,7 @@ export function installGlobalMiddleware({ app, config }) {
     rateLimiter(req, res, next);
   });
 
-  app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })); // Twilio-Webhooks
+  app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })); // Provider-Webhooks (form-encoded)
   app.use(express.json({ limit: BODY_LIMIT, verify: captureRawBody })); // eigene API + MCP
 
   // Body-Parser-Fehler (413 zu gross, 400 kaputtes JSON) als JSON statt HTML beantworten

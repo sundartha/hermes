@@ -1,7 +1,7 @@
 // tenant-prolif-e: Art.-17-Erase gibt Nummern frei. Reiner Selektor (tenantNumbersForErase)
 // + Orchestrator (releaseTenantNumbersOnErase) mit Fake-Store + Fake-Provisioner - reine
 // In-Process-Unit, kein Spawn, kein pglite, kein Netz (F.I.R.S.T.). Deckt: Selektor-Filter,
-// Happy-Path, Twilio-safe, Idempotenz, 404-Konvergenz, harter Provider-Fehler, cross-tenant.
+// Happy-Path, non-telnyx-safe, Idempotenz, 404-Konvergenz, harter Provider-Fehler, cross-tenant.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { releaseTenantNumbersOnErase } from "../src/release-reconcile.js";
