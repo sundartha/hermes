@@ -218,8 +218,11 @@ export function makeVoiceRoutes({
   // ---- Inbound-Signaturpruefung fuer alle /voice-Webhooks (fail-closed) ----
   // Der Provider signiert jeden Request. Ohne diese Pruefung kann jeder, der die URL
   // kennt, Anrufe/Transkripte faelschen und Claude-Turns (=Kosten) ausloesen. Die
-  // Krypto (Twilio-HMAC) lebt im Adapter; hier bleibt nur das Skip-Gate (Local/Test)
-  // und die fail-closed-Antwort. rawBody (req.rawBody) ist fuer kuenftige Provider da.
+  // Krypto (Telnyx-Ed25519) lebt im Adapter; hier bleibt nur das Skip-Gate (Local/Test)
+  // und die fail-closed-Antwort. rawBody (req.rawBody) traegt die signierten Bytes.
+  // C-P3: es gibt genau EINEN Verifizierer. Alles, was providerFromHeaders nicht als
+  // Telnyx erkennt (auch ein Twilio-Signatur-Header), faellt hier auf 403 - die Kette
+  // wurde dadurch strenger, nicht schwaecher (s. CLAUDE.md, Absolute Regel 1).
   router.use("/voice", (req, res, next) => {
     if (config.safety.skipTwilioSignatureCheck) return next();
     const ok = inboundSignatureVerifier().verifyInboundSignature({
@@ -248,8 +251,8 @@ export function makeVoiceRoutes({
   });
 
   // ---------------- INBOUND ----------------
-  // Twilio-Nummer -> "A call comes in" -> POST {PUBLIC_URL}/voice/incoming
-  // Die Twilio-Signatur ist hier bereits fail-closed geprueft (app.use("/voice")).
+  // Provider-Nummer -> "A call comes in" -> POST {PUBLIC_URL}/voice/incoming
+  // Die Provider-Signatur ist hier bereits fail-closed geprueft (app.use("/voice")).
   // Erst danach wird To gelesen und auf einen Tenant aufgeloest (Anti-Spoof: To
   // vor der Signatur waere Tenant-Spoofing). Unbekannte/fehlende To -> hoeflicher
   // Hangup, KEIN Default-Tenant, KEIN aktiver Call (nicht-routbare Nummer kostet

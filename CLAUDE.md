@@ -59,7 +59,7 @@ Hart verboten: Magic Numbers (ausser 0/1/-1) ohne benannte Konstante, toter Code
 Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (turn-basiert, Gather/STT — der heute live laufende Default) und `realtime` (Streaming-Audio ueber `bridge.js`).
 
 - `src/server.js` — Gateway: Provider-Webhooks (`/voice/*`), REST-API (`/api/*`), MCP ueber Streamable HTTP (`/mcp`), Auth-Middleware, Onboarding-/Self-Service-Routen
-- `src/telephony/` — Provider-Abstraktion (DIP): `ports.js` (Schnittstellen), `registry.js` (Dispatch nach Provider), `directives.js`/`media-events.js`; Adapter unter `adapters/twilio/*` und `adapters/telnyx/*` (voice, render, signature, media, messaging, numbers). Neue Telefonie-/Provider-Logik laeuft ueber die Ports, NICHT direkt im Server.
+- `src/telephony/` — Provider-Abstraktion (DIP): `ports.js` (Schnittstellen), `registry.js` (Dispatch nach Provider), `directives.js`/`media-events.js`; Adapter unter `adapters/twilio/*` und `adapters/telnyx/*` (voice, render, media, messaging, numbers; `signature` nur noch bei Telnyx, s. Absolute Regel 1). Neue Telefonie-/Provider-Logik laeuft ueber die Ports, NICHT direkt im Server.
 - `src/bridge.js` — Audio-Bridge Media-Streams <-> OpenAI Realtime (nur `VOICE_ENGINE=realtime`); enthaelt als `HEIKLE STELLE` markierte Abschnitte (Barge-in, Call-Ende) — dort besonders vorsichtig editieren
 - `src/claude.js` — Gespraechslogik (System-Prompts, Tool-Loop, Summaries), pro-Tenant ueber `tenantContext`; enthaelt den fest verdrahteten Offenlegungssatz. Der resiliente LLM-Seam `src/llm.js` (Timeout/Retry/Circuit-Breaker, P3b-R) sitzt davor.
 - `src/mcp-tools.js` — MCP-Tool-Definitionen (sprechen mit der REST-API), `src/mcp-server.js` — stdio-Transport
@@ -71,7 +71,40 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
 
 ## Absolute Regeln
 
-1. **SAFETY-GATES**: die per-Tenant-Verifikation als Outbound-Permit (Abo+KYC) und der globale Kill-Switch `OUTBOUND_FROZEN`, Denylist/Land-Gate/Stundenlimit, **die pro-Tenant-Kostendecke**, Max-Gespraechsdauer und die Provider-Signaturpruefung (Twilio HMAC + Telnyx Ed25519, fail-closed) duerfen NIEMALS entfernt, aufgeweicht oder per Default umgangen werden. Neue Endpunkte, die Calls/SMS ausloesen koennen, brauchen dieselben Gates. (`ALLOWED_NUMBERS` ist seit dem outbound-p3-Cutover wirkungslos — der Key wird nicht mehr gelesen, s. `.env.example` und `src/config.js`. Die statische Allowlist ist NICHT das Gate, das hier geschuetzt wird.)
+1. **SAFETY-GATES**: die per-Tenant-Verifikation als Outbound-Permit (Abo+KYC) und der globale Kill-Switch `OUTBOUND_FROZEN`, Denylist/Land-Gate/Stundenlimit, **die pro-Tenant-Kostendecke**, Max-Gespraechsdauer und die Provider-Signaturpruefung (Telnyx Ed25519, fail-closed) duerfen NIEMALS entfernt, aufgeweicht oder per Default umgangen werden. Neue Endpunkte, die Calls/SMS ausloesen koennen, brauchen dieselben Gates. (`ALLOWED_NUMBERS` ist seit dem outbound-p3-Cutover wirkungslos — der Key wird nicht mehr gelesen, s. `.env.example` und `src/config.js`. Die statische Allowlist ist NICHT das Gate, das hier geschuetzt wird.)
+
+   **Owner-Entscheidung 2026-08-07 (C-P3): die Twilio-HMAC-Pruefung ist entfernt, das Gate
+   selbst bleibt unangetastet.** Es existiert kein verbundener Twilio-Account; der
+   Twilio-Zweig war Code, der nicht funktionieren wuerde, wenn man ihn anspraeche.
+   Entfernt wurden gemeinsam: der Twilio-Zweig in `providerFromHeaders`, der Twilio-Zweig
+   in `inboundSignatureVerifier` und `adapters/twilio/signature.js`.
+
+   **Die Schutzwirkung sinkt dadurch nicht, sie steigt** — am laufenden Server gemessen
+   (frisches Ed25519-Schluesselpaar, echte Signatur):
+
+   | Request an `/voice/incoming` | vorher | nachher |
+   |---|---|---|
+   | kein Provider-Header | 403 | 403 |
+   | `x-twilio-signature` | **200**, wenn der HMAC stimmte | **403, immer** |
+   | Telnyx, Muell-Signatur | 403 | 403 |
+   | Telnyx, gueltige Signatur | 200 | 200 |
+
+   Es kommen strikt WENIGER Requests durch; kein unverifizierter Request wird angenommen.
+   `providerFromHeaders` liefert fuer alles Unbekannte `null`, der Verifizierer `false`,
+   die Middleware 403 — die fail-closed-Kette ist unveraendert.
+
+   Zusaetzlich ist die Abdeckung dieses Gates **gestiegen**: den End-to-End-Beleg
+   "gueltige Signatur -> 200" gab es bisher NUR Twilio-basiert. Er existiert jetzt erstmals
+   fuer Telnyx ueber die echte HTTP-Route (`test/security.test.js`). Das ist die Haelfte,
+   die kein Negativ-Test liefern kann: ein Gate, das alles ablehnt, besteht jeden
+   Negativ-Test.
+
+   **Preis, bewusst akzeptiert:** kommt je wieder ein Twilio-Account dazu, muss der
+   Verifizierer neu gebaut werden (Historie: dieser Commit).
+
+   `SKIP_TWILIO_SIGNATURE_CHECK` bleibt trotz des Namens: der Schalter ist der **globale**
+   `/voice`-Bypass (`routes/voice.js`), kein Twilio-Schalter, und `boot-guard.js` haengt
+   daran. Ein Rename ist eine eigene Entscheidung.
 
    **Owner-Entscheidung 2026-07-30 (E10): `MAX_BUDGET_EUR` ist KEIN geschuetztes Gate mehr.** Die
    Plattform-Achse wird zur Beobachtung (Messung + Schwellenwarnung); ihre Sperrwirkung entfaellt
