@@ -21,13 +21,18 @@ const STARTUP_TIMEOUT_MS = 15000;
 // (TWILIO_NUMBER), seit der Owner seine Nummer wie jeder Tenant im Store haelt.
 // Ohne sie greift der Boot-Guard (kein Owner-Outbound -> Exit). +15005550006 =
 // bisherige BASE_ENV-Nummer + seedCall.from (byte-identisch zum Altbestand).
-export const OWNER_TEST_NUMBER = Object.freeze({ e164: "+15005550006", provider: "twilio" });
+// C-P2: der PROVIDER ist telnyx, die NUMMER bleibt die US-DID. Telnyx ist der einzige
+// Anbieter, auf dem real telefoniert wird (Praemisse belegt: 3 Nummern, 67 Anrufe, 0 auf
+// Twilio) - eine zufaellig auf Twilio stehende Default-Fixture liesse die Suite einen
+// Pfad pruefen, den niemand faehrt. Wer den TWILIO-Pfad meint, sagt das ausdruecklich
+// (TWILIO_TEST_OWNER_NUMBER / TWILIO_TEST_SIGNATURE_HEADERS weiter unten).
+export const OWNER_TEST_NUMBER = Object.freeze({ e164: "+15005550006", provider: "telnyx" });
 
 // Inlands-DID fuer Tests, die ausdruecklich ein INLANDS-Leg fahren (P5-Herkunfts-Achse:
 // Inlandssatz nur bei gleicher Vorwahl an beiden Enden). BEWUSST kein neuer Default fuer
 // OWNER_TEST_NUMBER: die ausgelieferte Default-DID ist US, und genau das muss der
 // Live-Messpunkt test/prod-config-smoke.test.js weiter fahren.
-export const DOMESTIC_TEST_NUMBER = Object.freeze({ e164: "+4930111222333", provider: "twilio" });
+export const DOMESTIC_TEST_NUMBER = Object.freeze({ e164: "+4930111222333", provider: "telnyx" });
 
 // Owner-Identitaet fuer Spawn-Tests: ersetzt den frueheren config-derived Identitaets-
 // Seed (OWNER_FIRST_NAME/OWNER_LAST_NAME, P2b entfernt). Die Identitaet lebt jetzt im
@@ -852,6 +857,17 @@ export const TELNYX_TEST_SIGNATURE_HEADERS = Object.freeze({
 // Seit C-P1 (DEFAULT_PROVIDER=telnyx) muss jeder Test, der den TWILIO-Renderer meint, das
 // SAGEN - sonst prueft er still den Telnyx-Pfad.
 export const TWILIO_TEST_SIGNATURE_HEADERS = Object.freeze({ "x-twilio-signature": "sig" });
+
+// Gegenstueck zu OWNER_TEST_NUMBER fuer Tests, deren GEGENSTAND "der Owner ist NICHT
+// Telnyx" ist (C-P2 Fall C). Dieselbe Nummer wie OWNER_TEST_NUMBER - EINE Quelle fuer die
+// US-DID (G5); abweichend ist ausschliesslich der Provider, und genau das ist die Aussage.
+// Waehrend der Signatur-Header den INBOUND-Renderer waehlt (providerFromHeaders), waehlt
+// diese Fixture den OUTBOUND-Provider (Owner-Nummern-Record -> outboundFrom ->
+// ctx.outboundProvider). Faellt der Twilio-Adapter, faellt diese Fixture mit ihm.
+export const TWILIO_TEST_OWNER_NUMBER = Object.freeze({
+  e164: OWNER_TEST_NUMBER.e164,
+  provider: "twilio",
+});
 
 // P10: assertConfig verlangt bei aktivem TELNYX_AI_ASSISTANT_ENABLED-Flag zusaetzlich
 // ASSISTANT_ID/API_KEY/CONNECTION_ID (fail-closed Boot) - Flag-an-Spawn-Tests brauchen
