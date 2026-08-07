@@ -236,3 +236,50 @@ gemessen wird nur die FORMATIERUNG, nicht die Erkennungsgenauigkeit.
 - Aufnahmen liegen NUR im Scratchpad, nie im Repo, nach Gebrauch loeschen (Absolute Regel 5).
 - Eine Messung gilt nur fuer die Konfiguration, in der sie erhoben wurde.
 - Ein gruener Test ist erst ein Beleg, wenn er OHNE den Fix rot ist.
+
+---
+
+# Track C — Restarbeit nach Session-Abbruch 2026-08-07 (Lead: Session 2bd10950)
+
+Rekonstruiert: Session 8ec76d98 baute C-P4 DIREKT im Working-Tree (scope-bereinigt,
+2x npm test 4025/4025 Exit 0), starb aber VOR Commit/Review/Report an einem API-Fehler.
+
+## C-P4a — Stand sichern. ERLEDIGT
+- Erwartet: Working-Tree committet auf `phase/c-p4-adapter-raus`, nur src/+test/.
+- Verifikation: `git log --oneline master..phase/c-p4-adapter-raus` zeigt genau 310c78a;
+  `git status` sauber (bis auf neue Prozessdateien). BEOBACHTET: 90 Dateien, +489/-1013.
+
+## C-P4b — Nachgelagerter dualer Review. LAEUFT (Workflow wf_ff179540-31e)
+- Skript: `.claude/workflows/runs/c-p4-review.js` (Review-only-Derivat von phase-impl-lean:
+  Safety=opus/high + Clean-Code=sonnet, Self-Fix max 2 Runden, Report sonnet).
+- Erwartet: gate=PASS, registryInvariantUntouched=true, gegenprobeDone=true,
+  unabhaengige Testzahl genannt; Report in `tasks/c-p4-report.md` inkl. Behandlungs-Tabelle.
+- Verifikation Lead (VOR Merge, Pflicht): `git log master..<finalBranch>` +
+  `git diff master...<finalBranch> --stat` selbst ansehen (Lehre C-P2: PASS != Merge-Freigabe).
+
+## C-P4c — Merge auf lokalen master. OFFEN (nach PASS)
+- Erwartet: Merge-Commit auf master, KEIN Push auf upstream (Deploy wartet auf Track-A-Abnahmeanruf,
+  Begruendung: Messisolation — s. Uebergabe/Session 8ec76d98).
+- Verifikation: `npm test` auf master gruen; Zahl im Merge-Umfeld notiert.
+
+## C-P5a — Spezifikation. ERLEDIGT (tasks/c-p5-spec.md, 429 Zeilen)
+- BEOBACHTET: 685 twilio-Treffer, alle klassifiziert (197 C-P5 / 268 bleiben bewusst /
+  220 -> neue Phase C-P6 Kommentar-Nachlese). Abnahme enthaelt den Boot-Smoke OHNE
+  TWILIO_*-Env (Punkt 4, leer GESETZT wegen dotenv) + Uebergangszustand MIT Keys (Punkt 5).
+- Spec korrigiert die Uebergabe am Bestand: check-setup.js/set-webhooks.js/START-DEMO.command
+  + npm-Dependency `twilio` MUESSEN in C-P5 (Config-Proxy-Guard wirft sonst TypeError,
+  test/check-setup-script.test.js wird rot). Phasen-Schnitt neu: C-P6=Kommentar-Nachlese,
+  C-P7=Abnahme mit echtem Anruf.
+- Nebenbefund umgesetzt: veraltete "Twilio-Signaturpruefung"-Zeile (Falsch-Blocker-Quelle)
+  aus phase-impl-lean.js/phase-impl.js/runs/c-p5.js entfernt (Telnyx Ed25519 + Verweis auf
+  Owner-Entscheidung C-P3). Uncommittet bis nach der Welle.
+
+## C-P5b — Umsetzung via phase-impl-lean. OFFEN (nach C-P4c + Spec)
+- HIGH_STAKES=true (Boot-Pflicht = Live-Dienst-Risiko): Impl auf opus, Safety xhigh.
+- Erwartet: Server bootet lokal OHNE TWILIO_*-Env; npm test gruen; BASE_ENV ohne Twilio-Keys.
+- Verifikation: Abnahme-Abschnitt der Spec, ausgefuehrt vom Reviewer + Lead-Stichprobe.
+
+## Danach offen (braucht Owner)
+- Track-A-Abnahmeanruf (+1 706 710 1188), DANN Deploy von Track C (push upstream).
+- Render-Env: TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN loeschen ERST nach Deploy+Verify von C-P5.
+- Track B (LLM-Anbieter-Port): blockiert an DeepSeek-Key + Kostenmodell-Gespraech.

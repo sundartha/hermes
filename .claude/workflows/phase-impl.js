@@ -61,7 +61,7 @@ const CLEAN_CODE_REQ = `CLEAN-CODE (PFLICHT, kein Optional): Lies "${REPO}/.clau
 const ABS_RULES = `ABSOLUTE REGELN (unantastbar, siehe CLAUDE.md):
 - Safety-Gates (numberGateError: Denylist/Allowlist/Land/Stundenlimit/Budget/Max-Dauer/KYC/Subscriber/Minuten) NIE entfernen/aufweichen/per-Default umgehen. Neue Endpunkte, die Calls/SMS ausloesen, brauchen dieselben Gates.
 - Disclosure-Satz (disclosureSentence, claude.js + bridge.js) bleibt fest verdrahtet, unveraendert.
-- Auth fail-closed: Signaturpruefung (/voice), Basic-Auth (Dashboard/API), MCP-Auth - timing-sichere Vergleiche (safeEqual). Neue Endpunkte standardmaessig hinter Auth.
+- Auth fail-closed: Provider-Signaturpruefung /voice (Telnyx Ed25519; die Twilio-HMAC-Pruefung ist seit C-P3 per Owner-Entscheidung entfernt, ihr Fehlen ist KEIN Befund), Browser-Session (webAuthMw/adminMw) bzw. internalOnly, MCP-Auth - timing-sichere Vergleiche (safeEqual). Neue Endpunkte standardmaessig hinter Auth.
 - Secrets nur via env, nie loggen/in Responses oder MCP-Ausgaben leaken. Audio nie durch MCP.
 - SCOPE: NUR diese Phase. Keine ungefragten Extras.`;
 

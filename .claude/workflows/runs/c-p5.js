@@ -18,7 +18,7 @@
 // BRANCH-fixN sein), NICHT blind BRANCH.
 
 export const meta = {
-  name: "phase-impl-lean",
+  name: "phase-impl-lean-c-p5",
   description:
     "Schlankes selbst-fixendes Phasen-Workflow: Plan -> Impl (Worktree) -> dualer Review -> Self-Fix bis PASS -> kompakter Return + Report-Datei. Lead bleibt duenn.",
   phases: [
@@ -37,34 +37,27 @@ export const meta = {
   ],
 };
 
-// Spawn-fest: im ACP-/Spawn-Kontext gibt es kein process-Global. Dann faellt REPO
-// auf '.' zurueck (Spawn-cwd ist der Worktree-Root, relative Pfade greifen korrekt).
-const REPO =
-  typeof process !== "undefined" && process.env && process.env.OCLAW_REPO
-    ? process.env.OCLAW_REPO
-    : typeof process !== "undefined" && typeof process.cwd === "function"
-      ? process.cwd()
-      : ".";
+// HART GEPINNT auf das Haupt-Repo. Der fruehere cwd-Fallback lieferte im Spawn-Kontext
+// ".", was im Agent-Worktree einen SELBSTREFERENZIELLEN node_modules-Symlink erzeugte
+// ("Too many levels of symbolic links", npm test Exit 0 bei 4 Zeilen Output) -
+// beobachtet und aufgedeckt im C-P4-Review-Lauf wf_ff179540-31e.
+const REPO = "/Users/antonio/Mein Unternehmen/MCP/vodafone-agent";
 const NODE_MODULES = `${REPO}/node_modules`;
 
-// Spawn-fest: der Spawn-Harness liefert args als JSON-String -> tolerant parsen.
-const _argsObj =
-  typeof args === "string"
-    ? (() => {
-        try {
-          return JSON.parse(args);
-        } catch {
-          return null;
-        }
-      })()
-    : args;
-// FAIL-CLOSED: keine Phase ohne explizite args.phaseId. Verhindert den I2-Unfall.
-const A = typeof _argsObj === "object" && _argsObj && _argsObj.phaseId ? _argsObj : null;
-if (!A) {
-  throw new Error(
-    "phase-impl-lean: args.phaseId fehlt -> fail-closed Abbruch (kein Default-Phase-Bau). Aufruf: Workflow({scriptPath, args:{phaseId, branch, baseBranch, planDoc, specFile, maxFixRounds}}).",
-  );
-}
+// PER-RUN-SKRIPT C-P5: Phase HART GEPINNT.
+// highStakes=true: die unbedingte Boot-Pflicht in assertConfig faellt - ein Fehler hier
+// ist kein haesslicher Code, sondern ein Live-Dienst, der nicht mehr startet.
+// VORAUSSETZUNG vor dem Start: C-P4 ist auf master gemergt UND tasks/c-p5-spec.md existiert.
+const A = {
+  phaseId: "C-P5",
+  phaseTitle: "Twilio: Config, Boot-Pflicht, Env, Doku (Track C, Schritt 5b)",
+  branch: "phase/c-p5-config-boot",
+  baseBranch: "master",
+  planDoc: "PLAN-ANBIETER-PORT.md",
+  specFile: "tasks/c-p5-spec.md",
+  maxFixRounds: 2,
+  highStakes: true,
+};
 
 const PHASE = A.phaseId;
 const PHASE_TITLE = A.phaseTitle || "";
@@ -104,11 +97,12 @@ const REPORT_AGENT = { model: MODEL_SONNET, effort: "low" };
 const CLEAN_CODE_REQ = `CLEAN-CODE (PFLICHT): Lies "${REPO}/.claude/refs/clean-code.md" (verbindlicher Prueftkatalog) und befolge ihn bei JEDER Code-Entscheidung. Insbesondere: keine Duplizierung (G5/S2, gemeinsame Logik extrahieren); keine Magic Numbers ausser 0/1/-1 (G25, benannte Konstante, in config.js wenn konfigurierbar G35); kein toter/auskommentierter Code (C5/G9), keine ungenutzten Imports (G12); intentions-ausdrueckende Namen, Nebeneffekte im Namen sichtbar (N7); eine Aufgabe + eine Abstraktionsebene pro Funktion (G30/G34), <=3 Argumente (F1, sonst Objekt); Lazy-Init-Antipattern vermeiden (P15); keine brittle Datei:Zeile-Kommentare (C2); ESM, kein Build-Step, kein TypeScript, Kommentare deutsch OHNE Umlaute (ue/oe/ae); neues Verhalten braucht einen automatisierten Test (P11/T-Serie), reiner Refactor laesst die Bestandssuite OHNE Test-Aenderung gruen.`;
 
 const ABS_RULES = `ABSOLUTE REGELN (unantastbar, siehe CLAUDE.md):
-- Safety-Gates (numberGateError: Denylist/Allowlist/Land/Stundenlimit/Budget/Max-Dauer) NIE entfernen/aufweichen/per-Default umgehen. Neue Endpunkte, die Calls/SMS/Geld ausloesen, brauchen dieselben Gates.
+- Safety-Gates (Outbound-Permit Abo+KYC, OUTBOUND_FROZEN, Denylist/Land-Gate/Stundenlimit, pro-Tenant-Kostendecke, Max-Dauer) NIE entfernen/aufweichen/per-Default umgehen. Neue Endpunkte, die Calls/SMS/Geld ausloesen, brauchen dieselben Gates.
+- Provider-Signaturpruefung: Telnyx Ed25519, fail-closed (die Twilio-HMAC-Pruefung ist seit C-P3 per Owner-Entscheidung entfernt - ihr Fehlen ist KEIN Befund; CLAUDE.md Regel 1, Eintrag 2026-08-07). SKIP_TWILIO_SIGNATURE_CHECK ist trotz des Namens der globale /voice-Bypass und bleibt unangetastet.
 - Disclosure-Satz (disclosureSentence, claude.js + bridge.js) bleibt fest verdrahtet, unveraendert.
-- Auth fail-closed: Provider-Signaturpruefung /voice (Telnyx Ed25519; die Twilio-HMAC-Pruefung ist seit C-P3 per Owner-Entscheidung entfernt, ihr Fehlen ist KEIN Befund), Browser-Session (webAuthMw/adminMw) bzw. internalOnly, MCP-Auth - timing-sichere Vergleiche (safeEqual). Neue Endpunkte standardmaessig hinter Auth.
+- Auth fail-closed: Browser-Session (webAuthMw/adminMw) bzw. internalOnly; timing-sichere Vergleiche (safeEqual). Neue Endpunkte standardmaessig hinter Auth; Ausnahmen brauchen route-policy.js-Eintrag.
 - Secrets nur via env, nie loggen/in Responses oder MCP-Ausgaben leaken. Audio nie durch MCP.
-- SCOPE: NUR diese Phase. Keine ungefragten Extras. Keine neuen npm-Dependencies ohne explizite Freigabe in der Spec.`;
+- SCOPE: NUR diese Phase gemaess tasks/c-p5-spec.md (Abschnitt 4 = Was NICHT). Der Ausbau der Dependency "twilio" ist in der Spec freigegeben (Abschnitt 2); package-lock.json per npm install regenerieren, nie von Hand.`;
 
 const specInstruction = SPEC_FILE
   ? `Lies "${REPO}/${SPEC_FILE}" und finde den Abschnitt fuer ${PHASE} - das ist die AUTORITATIVE Scope-/Design-/Invarianten-/Abgrenzungs-Definition dieser Phase (verbindlich vor dem Plan-Doc).`
