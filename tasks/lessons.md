@@ -467,3 +467,58 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   und sie ausfuehren. Bei einwertigen Aufzaehlungen ist "Ausgabe hat den richtigen Wert"
   grundsaetzlich kein Beleg fuer "Eingabe wurde beachtet" — dafuer braucht es einen
   ungueltigen Wert (der wirft) oder ein zweites Mitglied.
+
+## Eine Konstante zu flippen ist nicht dasselbe wie eine Entscheidung zu flippen (2026-08-07, C-P1/C-P1b)
+
+- C-P1 stellte `DEFAULT_PROVIDER` von Twilio auf Telnyx. Meine Spec nannte **vier** Leser
+  dieses Rueckfalls; der Plan-Agent fand **zehn**. Schlimmer: es gab **fuenf weitere,
+  voellig unabhaengige** Anbieter-Defaults, die `DEFAULT_PROVIDER` gar nicht lesen - als
+  Parameter-Default `(provider = PROVIDER.TWILIO)` in `registry.js` (voiceControl,
+  messaging, mediaTransport, webhookEvents, voiceRenderer).
+- **Vor dem Flip waren beide Antworten Twilio - konsistent. Der Flip hat die Divergenz
+  ERZEUGT:** ein Call ohne Provider-Feld lief in `/voice/turn` (Parameter-Default) nach
+  Twilio und in `/voice/status` (`|| DEFAULT_PROVIDER`) nach Telnyx. Dieselbe Frage, zwei
+  Antworten, im selben Request-Pfad. Live erreichbar, nur zufaellig folgenlos, weil alle
+  Produktionszeilen ihren Provider ausdruecklich tragen.
+- **Regel:** wer eine Default-Entscheidung umstellt, grept NICHT nach dem Namen der
+  Konstante, sondern nach dem **Wert** und nach allen Formen, in denen dieselbe Entscheidung
+  ausgedrueckt sein kann: Parameter-Defaults, `||`-Rueckfaelle, `??`-Rueckfaelle, Fixtures,
+  Kommentar-Behauptungen. Die Frage lautet "wer beantwortet 'wer gilt, wenn nichts es
+  sagt?'", nicht "wer importiert `DEFAULT_PROVIDER`?".
+- **Der Faenger gehoert gegen die Quelle formuliert, nicht gegen den Wert.** Der
+  Bestandstest hiess "arg-lose Factories defaulten byte-identisch" und pinnte `twilioVoice`
+  - er musste bei jedem Wechsel von Hand nachgezogen werden. Jetzt lautet er
+  `factory() === factory(DEFAULT_PROVIDER)` ueber ALLE Factories: er ueberlebt jeden
+  kuenftigen Wechsel und faengt trotzdem jeden neu hartkodierten Default.
+- Gefunden hat es kein Gate (Safety approved, Clean-Code sauber) und kein Test, sondern ein
+  **beilaeufiger Satz eines Inventur-Subagenten** ueber eine ganz andere Frage. Fremde
+  Befunde ernst nehmen, auch wenn sie neben dem Auftrag liegen.
+
+## Nicht auf den Workflow blockieren - die Benachrichtigung kommt von selbst (2026-08-07, Owner-Korrektur)
+
+- Ich habe waehrend laufender Phasen wiederholt `TaskOutput` mit `block:true` gepollt und
+  dazwischen Statusabfragen gefahren. Der Owner: *"Das hat noch nie eine Session gemacht.
+  Die wird dann einfach, wenn das fertig ist, benachrichtigt."*
+- **Richtig:** Workflow starten, danach etwas anderes tun (oder nichts), auf die
+  `<task-notification>` warten. Blockieren liefert keine zusaetzliche Information und
+  verbrennt Kontext, den spaeter niemand mehr hat.
+- **Wenn wirklich ein Zwischenstand noetig ist**, reicht EIN billiger Blick:
+  `git log master..<branch>` (kam ein Commit?) - nicht ein Poll-Zyklus aus mehreren Aufrufen.
+
+## Der Impl-Agent kann ohne Rueckgabe sterben - zweimal in einer Session (2026-08-07, C-P2/C-P4)
+
+- **C-P2:** Impl-Agent tot, Branch LEER, die Reviews meldeten korrekt "kein Diff vorhanden" -
+  und das Gate lief trotzdem weiter. **C-P4:** derselbe Fehler ("subagent completed without
+  calling StructuredOutput"), diesmal mit 59 geaenderten Dateien im Worktree, aber ohne
+  Commit, ohne Review, ohne Testlauf.
+- **Regel 1:** vor jedem Merge `git log master..<branch>` UND `git diff --stat`. Ein PASS
+  sagt nichts darueber, ob ueberhaupt etwas gebaut wurde.
+- **Regel 2:** bricht ein Lauf ab, zuerst den WORKTREE ansehen
+  (`git -C .claude/worktrees/<run>-2 status --porcelain`), nicht nur den Branch. Die Arbeit
+  liegt dort uncommitted und verschwindet mit dem Worktree.
+- **Regel 3:** solche Arbeit auf dem Branch sichern, klar als ungeprueft beschriftet - aber
+  NIE mergen. Ein Commit mit "UNGEPRUEFT - NICHT mergen" im Betreff ist besser als
+  verlorene Arbeit und besser als ein stiller Merge ohne Beleg.
+- Nebenbefund aus C-P4: der abgebrochene Agent hatte auch den Scope ueberschritten (Doku und
+  ein Skript-Rename, die laut Spec in eine spaetere Phase gehoerten). Ein Lauf ohne Review
+  faengt so etwas nicht ab - das ist der zweite Grund, warum ungeprueft nicht gemergt wird.
