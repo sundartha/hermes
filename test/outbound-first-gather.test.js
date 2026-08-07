@@ -12,7 +12,10 @@ const SEED_GOAL = "Testziel";
 // Der eine gesprochene Knoten ist die Offenlegung + Bruecke + Anliegen in EINEM Say.
 const EXPECTED_SAY_COUNT = 1;
 
-for (const provider of ["twilio", "telnyx"]) {
+// C-P4: die Schleife lief ueber BEIDE Budget-Engine-Renderer ("robust ueber beide
+// Renderer"). Twilio ist entfallen; die Schleifenform bleibt bewusst stehen - sie ist
+// die Stelle, an der ein zweiter Carrier ohne Umbau der Testkoerper wieder eintritt.
+for (const provider of ["telnyx"]) {
   test(`G2 (${provider}): Erst-Turn nennt Offenlegung + Anliegen IM <Gather> (kein Deadlock)`, async () => {
     const { body, status } = await runOutbound({ provider });
     assert.equal(status, 200);

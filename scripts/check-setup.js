@@ -5,12 +5,15 @@ import twilio from "twilio";
 import { config } from "../src/config.js";
 import * as store from "../src/store.js";
 import { findActiveNumber } from "../src/store/views.js";
-import { BOOTSTRAP_TENANT_ID, PROVIDER } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 // Owner-Twilio-Nummer kommt aus dem Store (nicht mehr aus TWILIO_NUMBER): der Owner
 // ist Tenant Null. Leer -> Hinweis aufs Seed-CLI.
+// Provider als String-Literal, NICHT PROVIDER.TWILIO: seit C-P4 gibt es keinen
+// Twilio-Eintrag mehr im Enum, PROVIDER.TWILIO waere `undefined` und wuerde den
+// Provider-Filter in findActiveNumber abschalten statt ihn leer laufen zu lassen.
 const ownerTwilioNumber =
-  findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID, PROVIDER.TWILIO)?.e164 || "";
+  findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID, "twilio")?.e164 || "";
 
 let pass = 0,
   fail = 0,

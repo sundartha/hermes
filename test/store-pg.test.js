@@ -373,7 +373,7 @@ test("findTenantByNumber: number ueberlebt Re-Hydrierung, unbekannte To -> null"
   const { db } = await makePgTestStore();
   const seededE164 = "+15005550006";
   await db.query(
-    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, 'twilio')`,
+    `INSERT INTO number (id, tenant_id, e164, provider) VALUES ($1, $2, $1, 'telnyx')`,
     [seededE164, BOOTSTRAP_TENANT_ID],
   );
   const reopened = await reopen(db);

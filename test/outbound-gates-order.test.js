@@ -61,7 +61,7 @@ function defaultStore() {
     // spiegelt die reale Kontraktflaeche, damit ein Test die Kette bis zum Ende fahren kann.
     tenantGeo: () => ({ country: "DE" }),
     load: () => ({
-      numbers: [{ tenantId: "T", status: "active", provider: "twilio", e164: "+491700000000" }],
+      numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: "+491700000000" }],
     }),
     kycReached: () => true,
     tenantContext: () => ({ ownerName: "Alice" }),
@@ -495,7 +495,7 @@ test("resolve_outbound: Glueckspfad - eigene DE-DID zum DE-Ziel bleibt erlaubt",
   const ctx = baseCtx();
   assert.equal(await gateBy(gates, "resolve_outbound").run(ctx), null);
   assert.equal(ctx.fromNumber, "+491700000000");
-  assert.equal(ctx.outboundProvider, "twilio");
+  assert.equal(ctx.outboundProvider, "telnyx");
   assert.ok(ctx.numberRecord, "numberRecord bleibt der Geo-Anker der Sprachaufloesung");
 });
 

@@ -18,7 +18,7 @@ const E164 = "+15005550006";
 test("bootstrapTenant: legt den Bootstrap-Tenant (active) an + aktive Nummer", () => {
   const s = makeDefaultState();
   s.tenants = []; // leerer Store: kein vorbelegter Tenant
-  bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TWILIO);
+  bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
   const tenant = findTenant(s, BOOTSTRAP_TENANT_ID);
   assert.ok(tenant, "Tenant angelegt");
   assert.equal(tenant.status, "active");
@@ -28,8 +28,8 @@ test("bootstrapTenant: legt den Bootstrap-Tenant (active) an + aktive Nummer", (
 test("bootstrapTenant: idempotent (zweiter Lauf, gleiche e164) - genau 1 Tenant/Nummer", () => {
   const s = makeDefaultState();
   s.tenants = [];
-  bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TWILIO);
-  bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TWILIO);
+  bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
+  bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
   assert.equal(s.tenants.filter((t) => t.id === BOOTSTRAP_TENANT_ID).length, 1);
   assert.equal(s.numbers.filter((n) => n.e164 === E164).length, 1);
 });
@@ -49,14 +49,14 @@ test("bootstrapTenant: optionale tenantId -> Tenant unter diesem Key", () => {
 test("bootstrapTenant(owner): Owner wird auf kyc_level=id_verified geheilt", () => {
   const s = makeDefaultState();
   s.tenants = [];
-  bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TWILIO);
+  bootstrapTenant(s, E164, BOOTSTRAP_TENANT_ID, PROVIDER.TELNYX);
   assert.equal(findTenant(s, BOOTSTRAP_TENANT_ID).kycLevel, KYC_LEVEL.ID_VERIFIED);
 });
 
 test("bootstrapTenant(fremd): Nicht-Owner-tenantId bleibt UNGESEEDET (KYC-Gate sperrt fail-closed)", () => {
   const s = makeDefaultState();
   s.tenants = [];
-  bootstrapTenant(s, E164, "user_fremd", PROVIDER.TWILIO);
+  bootstrapTenant(s, E164, "user_fremd", PROVIDER.TELNYX);
   const tenant = findTenant(s, "user_fremd");
   assert.ok(tenant, "Tenant existiert");
   assert.equal(tenant.status, "active");
@@ -94,7 +94,7 @@ test("Boot-Gate: aktive Nummer eines BELIEBIGEN Tenants (nicht Bootstrap) -> Boo
     profiles: {},
     tenants: [{ id: "t_x", status: "active" }],
     numbers: [
-      { id: "num_x", e164: E164, tenantId: "t_x", provider: "twilio", status: "active", providerNumberId: null },
+      { id: "num_x", e164: E164, tenantId: "t_x", provider: "telnyx", status: "active", providerNumberId: null },
     ],
   };
   const srv = await startServer({ seed, ownerNumber: null });

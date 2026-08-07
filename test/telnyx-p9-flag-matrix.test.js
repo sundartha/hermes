@@ -21,7 +21,6 @@ import {
   seedWithTelnyxNumber,
   TELNYX_TEST_OWNER_NUMBER,
   TELNYX_ASSISTANT_BOOT_ENV,
-  TWILIO_TEST_OWNER_NUMBER,
 } from "./helpers.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -100,33 +99,13 @@ test("Flag AN + Telnyx: Outbound=Call-Control, Inbound(Telnyx)=Handoff, Shim=403
   }
 });
 
-test("Flag AN + NICHT-Telnyx (Twilio-Owner): Outbound faellt auf TeXML/Bestand zurueck (Orthogonalitaet)", async () => {
-  const srv = await startServer({
-    env: {
-      FAKE_ORIGINATE: "true",
-      TELNYX_AI_ASSISTANT_ENABLED: "true",
-      ...TELNYX_ASSISTANT_BOOT_ENV,
-    },
-    // C-P2: der Gegenstand dieses Tests IST "der Owner ist NICHT Telnyx" - der Provider
-    // wird deshalb ausdruecklich gesagt, nicht aus dem Fixture-Default geerbt. Vorher
-    // hing die Aussage daran, dass OWNER_TEST_NUMBER zufaellig auf Twilio stand; mit der
-    // Migration auf Telnyx waere dieser Test still zur Tautologie geworden.
-    ownerNumber: TWILIO_TEST_OWNER_NUMBER,
-  });
-  try {
-    const { callId } = await (await placeCall(srv)).json();
-    const c = outboundCall(srv, callId);
-    assert.match(
-      c.twilioSid,
-      /^fake_/,
-      "TeXML trotz Flag AN (Provider entscheidet, nicht das Flag allein)",
-    );
-    assert.doesNotMatch(c.twilioSid, /^fake_cc_/);
-    assert.equal(c.callControlId, null);
-  } finally {
-    await srv.stop();
-  }
-});
+// C-P4: hier stand die Zelle "Flag AN + NICHT-Telnyx (Twilio-Owner) -> Outbound faellt auf
+// TeXML zurueck". Ihre Aussage war die ORTHOGONALITAET von Flag und Anbieter: das Flag
+// allein entscheidet nicht, der Provider auch. Mit genau EINEM Anbieter gibt es zwischen
+// beiden keine Orthogonalitaet mehr - die Zelle hat keinen Gegenstand und ist entfallen,
+// nicht "gruen gemacht". Die verbleibenden Zellen (Flag AUS -> TeXML, Flag AN + Telnyx ->
+// Call-Control) tragen die Flag-Achse unveraendert. TWILIO_TEST_OWNER_NUMBER
+// (test/helpers.js, C-P2) war die Fixture NUR dieser Zelle und ist mit ihr gefallen.
 
 // ---- Regressions-Lock (Quelltext-Wiring, Muster T6/T8 telnyx-p6-cap-callcontrol) ----
 // Kein Klon der P6-Runtime-Tests: sichert nur, dass rearmActiveCallTimers die

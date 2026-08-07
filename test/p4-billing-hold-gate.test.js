@@ -18,7 +18,7 @@ function defaultStore(overrides = {}) {
     countOutboundCallsSince: () => 0,
     tenantPrivateNumber: () => null,
     load: () => ({
-      numbers: [{ tenantId: "T", status: "active", provider: "twilio", e164: "+491700000000" }],
+      numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: "+491700000000" }],
     }),
     kycReached: () => true,
     tenantContext: () => ({ ownerName: "Alice" }),

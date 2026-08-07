@@ -107,7 +107,7 @@ test("KS-P3: /voice/incoming persistiert eine guthaben-abgeleitete maxDurationS 
           id: "num_owner",
           e164: OWNER_TEST_NUMBER.e164,
           tenantId: BOOTSTRAP_TENANT_ID,
-          provider: "twilio",
+          provider: "telnyx",
           status: "active",
           country: "US",
           language: "en",

@@ -35,7 +35,7 @@ const activeNumber = (id, e164, tenantId, status = "active") => ({
   id,
   e164,
   tenantId,
-  provider: "twilio",
+  provider: "telnyx",
   status,
   providerNumberId: null,
 });

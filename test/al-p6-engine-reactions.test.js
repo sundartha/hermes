@@ -132,7 +132,7 @@ test("AL-P6-10: Budget-Engine - der im Turn gerissene Cap beendet den Call mit A
   );
   const srv = await startServer({
     env: { ANTHROPIC_BASE_URL: mock.url },
-    seed: seedState({ calls: [seedCall({ id, provider: "twilio", direction: "outbound" })] }),
+    seed: seedState({ calls: [seedCall({ id, provider: "telnyx", direction: "outbound" })] }),
   });
   try {
     const body = await runTurn(srv, id);
@@ -156,7 +156,7 @@ test("AL-P6-11: Budget-Engine - normaler Verbrauch laesst das Gespraech weiterla
   const mock = await startAnthropicMock(anthropicMessage([{ type: "text", text: speech }], 12));
   const srv = await startServer({
     env: { ANTHROPIC_BASE_URL: mock.url },
-    seed: seedState({ calls: [seedCall({ id, provider: "twilio", direction: "outbound" })] }),
+    seed: seedState({ calls: [seedCall({ id, provider: "telnyx", direction: "outbound" })] }),
   });
   try {
     const body = await runTurn(srv, id);

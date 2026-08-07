@@ -25,8 +25,8 @@ import http from "node:http";
 import { register, createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { BASE_ENV, tempDataDir } from "./helpers.js";
-import { twilioMedia } from "../src/telephony/adapters/twilio/media.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { telnyxMedia } from "../src/telephony/adapters/telnyx/media.js";
+import { BOOTSTRAP_TENANT_ID, PROVIDER } from "../src/store/defaults.js";
 
 // ---- Umgebung deterministisch fixieren, BEVOR config.js (via bridge.js) laedt ----
 // BASE_ENV ist der gleiche neutrale Satz wie bei den Spawn-Tests (keine .env-Leaks).
@@ -54,7 +54,11 @@ register("data:text/javascript," + encodeURIComponent(loaderSrc), import.meta.ur
 
 // Erst NACH register() + gesetztem Env laden (sonst greift der Redirect nicht bzw.
 // config.js wuerde mit falschem Env eingefroren).
-const { attachMediaBridge } = await import("../src/bridge.js");
+// C-P4: der WS-Pfad kommt aus MEDIA_PATH statt als Literal "/media" im Test. Vorher lief
+// diese Datei ueber den Twilio-Pfad; ein Literal haette den Ausbau still ueberlebt und
+// waere erst am toten Socket aufgefallen. Dynamisch importiert wie attachMediaBridge -
+// bridge.js zieht config.js, das erst NACH dem Env-Setzen laden darf (s. Datei-Kopf).
+const { attachMediaBridge, MEDIA_PATH } = await import("../src/bridge.js");
 const store = await import("../src/store.js");
 const { disclosureSentence, endCallWaitInstruction } = await import("../src/claude.js");
 const {
@@ -63,7 +67,7 @@ const {
   default: WebSocket,
 } = await import("./helpers/ws-openai-shim.mjs");
 
-const STREAM_REF = "MZ1"; // Twilio streamSid aus dem start-Frame == bridge-interner streamRef
+const STREAM_REF = "ST1"; // Telnyx stream_id aus dem start-Frame == bridge-interner streamRef
 const TAKE_MESSAGE_RESULT = "Nachricht ist notiert."; // execTool(take_message) heute
 
 // Ein OpenAI-Event als ws-Frame (Buffer, wie es die echte ws emittiert) in den
@@ -137,19 +141,19 @@ async function setupCall(callOverrides = {}, onCallEnded = () => {}) {
     ...callOverrides,
   });
 
-  const client = new WebSocket(`ws://127.0.0.1:${port}/media`);
+  const client = new WebSocket(`ws://127.0.0.1:${port}${MEDIA_PATH[PROVIDER.TELNYX]}`);
   await new Promise((resolve, reject) => {
     client.on("open", resolve);
     client.on("error", reject);
   });
 
-  // start-Frame BEWUSST OHNE callSid -> call.twilioSid bleibt null -> hangup() ruft
-  // NIE den echten Twilio-Adapter (kein Netz). streamSid -> streamRef.
+  // start-Frame BEWUSST OHNE call_control_id -> call.twilioSid bleibt null -> hangup()
+  // ruft NIE den echten Provider-Adapter (kein Netz). stream_id -> streamRef.
   client.send(
     JSON.stringify({
       event: "start",
       start: {
-        streamSid: STREAM_REF,
+        stream_id: STREAM_REF,
         customParameters: { call_id: call.id, stream_token: call.streamToken },
       },
     }),
@@ -288,11 +292,11 @@ test("Audio-Delta -> providerWs.send(buildMediaFrame), beta + GA", async () => {
     assert.deepStrictEqual(sends, [
       [
         "provider",
-        JSON.stringify(twilioMedia.buildMediaFrame({ payload: "AAA", streamRef: STREAM_REF })),
+        JSON.stringify(telnyxMedia.buildMediaFrame({ payload: "AAA" })),
       ],
       [
         "provider",
-        JSON.stringify(twilioMedia.buildMediaFrame({ payload: "BBB", streamRef: STREAM_REF })),
+        JSON.stringify(telnyxMedia.buildMediaFrame({ payload: "BBB" })),
       ],
     ]);
   } finally {
@@ -321,7 +325,7 @@ test("Barge-in: response.created dann speech_started -> cancel (openai) VOR clea
     // Absolute Regel 1: response.cancel ZUERST, dann clearPlayback.
     assert.deepStrictEqual(sends, [
       ["openai", JSON.stringify({ type: "response.cancel" })],
-      ["provider", JSON.stringify(twilioMedia.clearPlayback({ streamRef: STREAM_REF }))],
+      ["provider", JSON.stringify(telnyxMedia.clearPlayback())],
     ]);
   } finally {
     await cleanup();
@@ -333,7 +337,7 @@ test("Barge-in ohne aktive Response -> nur clearPlayback, kein cancel", async ()
   try {
     feed(fake, { type: "input_audio_buffer.speech_started" });
     assert.deepStrictEqual(sends, [
-      ["provider", JSON.stringify(twilioMedia.clearPlayback({ streamRef: STREAM_REF }))],
+      ["provider", JSON.stringify(telnyxMedia.clearPlayback())],
     ]);
   } finally {
     await cleanup();
@@ -349,7 +353,7 @@ test("Barge-in bei geschlossenem OpenAI-Socket -> kein cancel trotz aktiver Resp
     feed(fake, { type: "input_audio_buffer.speech_started" });
     // canSend-Guard greift: kein cancel, aber clearPlayback (nur an streamRef gebunden).
     assert.deepStrictEqual(sends, [
-      ["provider", JSON.stringify(twilioMedia.clearPlayback({ streamRef: STREAM_REF }))],
+      ["provider", JSON.stringify(telnyxMedia.clearPlayback())],
     ]);
   } finally {
     await cleanup();
@@ -547,7 +551,7 @@ test("response.done setzt activeResponse=false (danach kein Barge-in-cancel)", a
     sends.length = 0;
     feed(fake, { type: "input_audio_buffer.speech_started" });
     assert.deepStrictEqual(sends, [
-      ["provider", JSON.stringify(twilioMedia.clearPlayback({ streamRef: STREAM_REF }))],
+      ["provider", JSON.stringify(telnyxMedia.clearPlayback())],
     ]);
   } finally {
     await cleanup();
@@ -596,7 +600,7 @@ test("unterdrueckter end_call: response.create-Roundtrip + folgender Barge-in ko
     feed(fake, { type: "input_audio_buffer.speech_started" });
     assert.deepStrictEqual(sends, [
       ["openai", JSON.stringify({ type: "response.cancel" })],
-      ["provider", JSON.stringify(twilioMedia.clearPlayback({ streamRef: STREAM_REF }))],
+      ["provider", JSON.stringify(telnyxMedia.clearPlayback())],
     ]);
   } finally {
     await cleanup();

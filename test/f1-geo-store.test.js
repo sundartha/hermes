@@ -350,7 +350,7 @@ test("pg: Bestands-Nummer ohne country/language (pre-migration) hydriert zu null
   // Hydrierungs-Shape, nicht das Fehlen des Backfills.
   const { db } = await makePgTestStore();
   await db.query(
-    `INSERT INTO number (id, tenant_id, e164, provider, status) VALUES ($1,$2,$3,'twilio','active')`,
+    `INSERT INTO number (id, tenant_id, e164, provider, status) VALUES ($1,$2,$3,'telnyx','active')`,
     ["num_legacy", BOOTSTRAP_TENANT_ID, "+15005550006"],
   );
   const reopened = await reopen(db);

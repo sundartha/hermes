@@ -40,7 +40,7 @@ function midCallSeed() {
         id: "num_owner_de",
         e164: OWNER_TEST_NUMBER.e164,
         tenantId: BOOTSTRAP_TENANT_ID,
-        provider: "twilio",
+        provider: "telnyx",
         status: "active",
         country: "DE",
         language: "de",

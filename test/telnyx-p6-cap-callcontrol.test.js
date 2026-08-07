@@ -65,15 +65,15 @@ test("T2: callControlId UND providerCallSid gesetzt -> callControlId gewinnt (Pr
 
 test("T3: kein callControlId, providerCallSid gesetzt -> Thunk ruft endCall (TeXML byte-identisch)", async () => {
   const spy = voiceControlSpy();
-  const thunk = hangUpAction(spy, { provider: "twilio" }, "CA_x");
+  const thunk = hangUpAction(spy, { provider: "telnyx" }, "CA_x");
   await thunk();
 
-  assert.deepEqual(spy.calls, [{ op: "endCall", provider: "twilio", arg: "CA_x" }]);
+  assert.deepEqual(spy.calls, [{ op: "endCall", provider: "telnyx", arg: "CA_x" }]);
 });
 
 test("T4: weder callControlId noch providerCallSid -> null (Hangup wird fail-safe uebersprungen)", () => {
   const spy = voiceControlSpy();
-  const thunk = hangUpAction(spy, { provider: "twilio" }, null);
+  const thunk = hangUpAction(spy, { provider: "telnyx" }, null);
 
   assert.equal(thunk, null);
   assert.equal(spy.calls.length, 0);

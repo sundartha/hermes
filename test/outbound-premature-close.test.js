@@ -34,7 +34,10 @@ const LLM_DEGRADED_MARKER = "Ich melde mich, sobald es wieder möglich ist";
 // Teilstring von TURN_ERROR_SPEECH (server.js): pinnt das generische technische Ende.
 const TURN_ERROR_MARKER = "technisches Problem";
 
-for (const provider of ["twilio", "telnyx"]) {
+// C-P4: die Schleife lief ueber BEIDE Budget-Engine-Renderer ("robust ueber beide
+// Renderer"). Twilio ist entfallen; die Schleifenform bleibt bewusst stehen - sie ist
+// die Stelle, an der ein zweiter Carrier ohne Umbau der Testkoerper wieder eintritt.
+for (const provider of ["telnyx"]) {
   // A - /voice/outbound ist LLM-frei: Offenlegung + <Gather>, KEIN LLM-Call.
   test(`A (${provider}): /voice/outbound ist LLM-frei (Offenlegung + Gather, kein [outbound]-Log)`, async () => {
     const mock = await startCountingAnthropicMock({ failFirst: 1 });

@@ -74,7 +74,7 @@ function truedOutboundCall(state, { to, actualCostMicroCents, minutesAgo }) {
     from: PII_PHONE,
     to,
     tenantId: BOOTSTRAP_TENANT_ID,
-    provider: PROVIDER.TWILIO,
+    provider: PROVIDER.TELNYX,
   });
   call.status = "completed";
   call.answeredAt = new Date(Date.now() - (minutesAgo + 1) * MS_PER_MINUTE).toISOString();

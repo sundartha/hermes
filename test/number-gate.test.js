@@ -240,7 +240,7 @@ test("Denylist-Audit nennt die getroffene Sub-Range (GAP-18)", async () => {
       countOutboundCallsSince: () => 0,
       tenantPrivateNumber: () => null,
       load: () => ({
-        numbers: [{ tenantId: "T", status: "active", provider: "twilio", e164: "+1700000000" }],
+        numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: "+1700000000" }],
       }),
       kycReached: () => true,
       tenantContext: () => ({ ownerName: "Alice" }),
@@ -276,7 +276,7 @@ test("OUT-25: vollstaendig freigeschalteter US-Tenant passiert ALLE 17 Gates (50
   const US_TARGET = "+12025550123";
   const srv = await startServer({
     env: { ALLOWED_COUNTRY_CODES: "+1", TWILIO_ACCOUNT_SID: "x" },
-    ownerNumber: { e164: "+12025557000", provider: "twilio" },
+    ownerNumber: { e164: "+12025557000", provider: "telnyx" },
   });
   try {
     const res = await postCall(srv.localUrl, US_TARGET);

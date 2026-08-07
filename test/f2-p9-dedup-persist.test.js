@@ -22,7 +22,7 @@ import { makeDefaultState, createCall, markSummarySmsSent } from "../src/store/s
 import { NUMBER_STATUS, PROVIDER, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-const PROV = PROVIDER.TWILIO;
+const PROV = PROVIDER.TELNYX;
 
 // Baut auf einer BESTEHENDEN pglite-Instanz einen frischen Store (re-hydriert den
 // Spiegel aus der DB) -> simuliert den Prozess-Restart zwischen zwei Callbacks.

@@ -1,4 +1,6 @@
-// STT-A1: EINE neutrale STT-Wahl (stt-profile.js), pro Adapter uebersetzt.
+// STT-A1: EINE neutrale STT-Wahl (stt-profile.js), pro Pfad uebersetzt. C-P4: das waren
+// drei Uebersetzer (Twilio-Gather, Telnyx-Gather, Telnyx-Assistant), jetzt sind es zwei -
+// die Naht selbst ist unveraendert, ihr wurde ein Konsument entzogen.
 //
 // WAS HIER BELEG IST UND WAS FANGNETZ - die Unterscheidung ist gemessen, nicht behauptet
 // (Gegenprobe 2026-08-07, zwei gezielte Sabotagen am fertigen Branch):
@@ -12,7 +14,7 @@
 //     die Tabelle gar nicht erst. Verhaltens-Rot, kein "Modul fehlt"-Rot.
 // (B) ist ein reiner WERTEVERGLEICH und bleibt ohne den Fix gruen, weil das Enum heute nur
 //     EIN Mitglied hat - eine ignorierte Wahl liefert denselben Wert wie eine beachtete.
-//     Es ist ein Fangnetz gegen kuenftige Drift zwischen den drei Schreibweisen, KEIN
+//     Es ist ein Fangnetz gegen kuenftige Drift zwischen den zwei Schreibweisen, KEIN
 //     Beleg. Bekommt das Enum je ein zweites Mitglied, wird B zum echten
 //     Durchreich-Beleg - dann diesen Kommentar streichen.
 // (C/D) Fangnetze: jedes Enum-Mitglied loest ueberall auf; Sprach-Kontrast
@@ -31,13 +33,9 @@ process.env.TELNYX_API_KEY = API_KEY;
 
 // Dynamischer Import NACH dem Env-Setzen (config liest process.env beim Eval).
 const { renderDirectives: renderTelnyx } = await import("../src/telephony/adapters/telnyx/render.js");
-const { renderDirectives: renderTwilio } = await import("../src/telephony/adapters/twilio/render.js");
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
 const { STT_PROFILE } = await import("../src/telephony/stt-profile.js");
-const { sttAttrs } = await import("../src/telephony/adapters/telnyx/stt-model.js");
 const { config } = await import("../src/config.js");
-
-const TWILIO_SPEECH_MODEL_ACCURATE = "deepgram_nova-2-general";
 
 function stubFetch() {
   const calls = [];
@@ -52,15 +50,11 @@ function gatherDE(extra = {}) {
   return gather({ promptText: "", action: "/voice/turn?callId=c1", ...extra });
 }
 
-test("A: unbekannte STT-Wahl -> jeder der drei Aufrufer wirft (fail-closed)", async () => {
-  // ohne den Fix ignorieren beide Renderer jede solche Angabe und rendern klaglos
+test("A: unbekannte STT-Wahl -> beide Aufrufer werfen (fail-closed)", async () => {
+  // ohne den Fix ignoriert der Renderer jede solche Angabe und rendert klaglos
   // "deepgram/nova-3" - das ist Verhaltens-Rot, kein "Modul fehlt"-Rot.
   assert.throws(
     () => renderTelnyx([gatherDE()], { sttProfile: "nicht-existent" }),
-    /unbekanntes sttProfile/,
-  );
-  assert.throws(
-    () => renderTwilio([gatherDE()], { sttProfile: "nicht-existent" }),
     /unbekanntes sttProfile/,
   );
 
@@ -79,7 +73,7 @@ test("A: unbekannte STT-Wahl -> jeder der drei Aufrufer wirft (fail-closed)", as
   }
 });
 
-test("B (Fangnetz, gruen): EIN Profil -> drei adaptertypische Schreibweisen", async () => {
+test("B (Fangnetz, gruen): EIN Profil -> zwei pfadtypische Schreibweisen", async () => {
   const profile = STT_PROFILE.ACCURATE;
 
   const telnyxOut = renderTelnyx([gatherDE()], { sttProfile: profile });
@@ -101,18 +95,10 @@ test("B (Fangnetz, gruen): EIN Profil -> drei adaptertypische Schreibweisen", as
   } finally {
     config.voice.sttProfile = original;
   }
-
-  const twilioOut = renderTwilio([gatherDE()], { sttProfile: profile });
-  assert.match(twilioOut, /speechModel="deepgram_nova-2-general"/);
-  assert.doesNotMatch(twilioOut, /transcriptionEngine/);
-
-  // strukturelle Kernaussage: dasselbe Profil, zwei Schreibweisen, zwei Generationen -
-  // das ist Absicht, keine Drift.
-  assert.notEqual(sttAttrs(profile).model, TWILIO_SPEECH_MODEL_ACCURATE);
 });
 
-// FANGNETZ, kein Beleg - faengt ein kuenftiges Enum-Mitglied ohne Adapter-Uebersetzung.
-test("C (Fangnetz, gruen): jedes Enum-Mitglied loest in JEDEM Adapter auf", async () => {
+// FANGNETZ, kein Beleg - faengt ein kuenftiges Enum-Mitglied ohne Pfad-Uebersetzung.
+test("C (Fangnetz, gruen): jedes Enum-Mitglied loest in BEIDEN Pfaden auf", async () => {
   const original = config.voice.sttProfile;
   try {
     for (const profile of Object.values(STT_PROFILE)) {
@@ -124,9 +110,6 @@ test("C (Fangnetz, gruen): jedes Enum-Mitglied loest in JEDEM Adapter auf", asyn
       await assert.doesNotReject(
         telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "de" }),
       );
-
-      const twilioOut = renderTwilio([gatherDE()], { sttProfile: profile });
-      assert.ok(twilioOut.length > 0);
     }
   } finally {
     config.voice.sttProfile = original;

@@ -12,7 +12,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "child_process";
-import { ROOT, tempDataDir } from "./helpers.js";
+import { ROOT, tempDataDir, seedState } from "./helpers.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 function runCheckSetup(env) {
   const child = spawn(process.execPath, ["scripts/check-setup.js"], {
@@ -45,4 +46,31 @@ test("npm run check crasht nicht mehr am toten config.ownerNumber (Proxy-Guard-R
   assert.match(output, /Ergebnis:/);
   // Ohne Credentials sind mehrere Checks erwartbar rot -> Exit 1 ist HIER normal (kein Crash-Indiz).
   assert.equal(code, 1);
+});
+
+// Review-Blocker C-P4 Runde 1: PROVIDER.TWILIO ist seit dem Twilio-Adapter-Ausbau
+// `undefined`. findActiveNumber(s, tenantId, provider) hat die Kurzschluss-Bedingung
+// `provider === undefined || n.provider === provider` (src/store/views.js) - mit
+// undefined ist der Provider-Filter ABGESCHALTET statt leer. Ein Store mit NUR einer
+// aktiven Telnyx-Nummer duerfte den "Owner-Twilio-Nummer"-Check also NICHT gruen melden.
+test("npm run check meldet KEINE Owner-Twilio-Nummer, wenn im Store nur Telnyx aktiv ist", async () => {
+  const seed = seedState({
+    numbers: [
+      {
+        id: "num_telnyx_only",
+        e164: "+4915199999",
+        tenantId: BOOTSTRAP_TENANT_ID,
+        provider: "telnyx",
+        status: "active",
+        providerNumberId: null,
+      },
+    ],
+    tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Test" }],
+  });
+  const dataDir = tempDataDir(seed);
+  const { output } = await runCheckSetup({ DATA_DIR: dataDir });
+  // Der Check muss rot bleiben (bad()) statt die Telnyx-Nummer faelschlich als
+  // "Owner-Twilio-Nummer" gruen zu melden.
+  assert.match(output, /Keine aktive Owner-Twilio-Nummer im Store/);
+  assert.doesNotMatch(output, /Owner-Twilio-Nummer \(Store\): \+4915199999/);
 });

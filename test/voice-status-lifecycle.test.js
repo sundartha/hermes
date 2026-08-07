@@ -1,10 +1,10 @@
 // Phase 1 (#tk_tu9zt9a): /voice/status liest den Call-Lifecycle jetzt PROVIDER-bewusst
-// (analog extractSpeech). Twilio-Verhalten bleibt byte-identisch; Telnyx-Lifecycle-
+// (analog extractSpeech). Telnyx-Lifecycle-
 // Events + CallDuration werden als PII-freie Diagnose im [voice/status]-Log sichtbar.
 // Dieser Test pinnt:
 //   a) Telnyx completed + CallDuration   -> diagnostics.callDurationS === 45 + Call endet
 //   b) Telnyx answered ohne CallDuration -> diagnostics === {} + markAnswered
-//   c) Twilio in-progress (provider explizit twilio) -> diagnostics === {} + markAnswered
+//   c) entfallen mit C-P4 (war: Call auf einem anderen Anbieter als Telnyx), s.u.
 //   d) Telnyx unbekannter CallStatus -> kein Fehler, kein Status-Effekt; diagnostics
 //      NUR bei vorhandener CallDuration
 //   e) Handler-Effekt auf den Store (markAnswered/endCallRecord) per readStore()
@@ -43,13 +43,12 @@ const postStatus = (srv, callId, fields) =>
     body: new URLSearchParams(fields),
   });
 
-test("/voice/status provider-bewusst: Telnyx/Twilio-Lifecycle + Diagnose + Store-Effekt + PII-frei", async () => {
+test("/voice/status provider-bewusst: Telnyx-Lifecycle + Diagnose + Store-Effekt + PII-frei", async () => {
   const srv = await startServer({
     seed: seedState({
       calls: [
         seedCall({ id: "st_tnx_done", provider: "telnyx", status: "active" }),
         seedCall({ id: "st_tnx_ans", provider: "telnyx", status: "active" }),
-        seedCall({ id: "st_tw_prog", provider: "twilio", status: "active" }),
         seedCall({ id: "st_tnx_unk", provider: "telnyx", status: "active" }),
         seedCall({ id: "st_tnx_unk_dur", provider: "telnyx", status: "active" }),
         seedCall({ id: "st_default_prog", status: "active" }), // kein provider -> DEFAULT_PROVIDER
@@ -80,12 +79,15 @@ test("/voice/status provider-bewusst: Telnyx/Twilio-Lifecycle + Diagnose + Store
     assert.equal(ev.provider, "telnyx");
     assert.deepEqual(ev.diagnostics, {});
 
-    // c) Twilio in-progress (provider explizit twilio) -> diagnostics === {}.
-    r = await postStatus(srv, "st_tw_prog", { CallStatus: "in-progress" });
-    assert.equal(r.status, 200);
-    ev = await statusEvent(srv, "st_tw_prog");
-    assert.equal(ev.provider, "twilio");
-    assert.deepEqual(ev.diagnostics, {});
+    // c) C-P4: hier stand "Twilio in-progress (provider explizit twilio) -> diagnostics
+    // === {}". Ihr Gegenstand war ein Call auf einem ANDEREN Anbieter als Telnyx; den
+    // gibt es nicht mehr. Der Fall ist entfallen, nicht gruen gemacht - der Rueckfall
+    // ohne provider-Feld (f, st_default_prog) traegt die Default-Aufloesung weiter.
+    // BEFUND fuer C-P5, hier bewusst NICHT gefixt (Scope): steht in einer Bestands-DB
+    // noch eine Zeile mit provider='twilio', wirft webhookEvents() in diesem Handler
+    // (routes/voice.js:510-528) und /voice/status antwortet 500 statt 200. In der
+    // Produktions-DB gibt es keine solche Zeile (gemessen 2026-08-07: 3 Nummern,
+    // 67 Anrufe, alle telnyx) - deshalb kein Live-Risiko, aber eine offene Kante.
 
     // d) Telnyx unbekannter CallStatus: kein Fehler, diagnostics nur bei CallDuration.
     r = await postStatus(srv, "st_tnx_unk", { CallStatus: "ringing" });
@@ -115,7 +117,9 @@ test("/voice/status provider-bewusst: Telnyx/Twilio-Lifecycle + Diagnose + Store
     // answered/in-progress -> markAnswered (answeredAt), Status bleibt active.
     assert.ok(calls.st_tnx_ans.answeredAt, "answered: answeredAt muss gesetzt sein");
     assert.equal(calls.st_tnx_ans.status, "active");
-    assert.ok(calls.st_tw_prog.answeredAt, "in-progress: answeredAt muss gesetzt sein");
+    // in-progress -> markAnswered: seit C-P4 am provider-losen Call (Fall f) gemessen,
+    // nachdem der frueher hierfuer benutzte Twilio-Call entfallen ist.
+    assert.ok(calls.st_default_prog.answeredAt, "in-progress: answeredAt muss gesetzt sein");
     // unbekannter Status -> KEIN Effekt (weder answered noch beendet).
     assert.equal(calls.st_tnx_unk.answeredAt, null);
     assert.equal(calls.st_tnx_unk.status, "active");

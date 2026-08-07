@@ -14,7 +14,7 @@ async function fetchOutbound(env, answeredBy) {
   const srv = await startServer({
     env,
     seed: seedState({
-      calls: [seedCall({ id: CALL_ID, provider: "twilio", status: "active", direction: "outbound" })],
+      calls: [seedCall({ id: CALL_ID, provider: "telnyx", status: "active", direction: "outbound" })],
     }),
   });
   try {

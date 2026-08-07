@@ -1,11 +1,17 @@
 // P5: ADAPTERS-Tabelle + pick(port, provider) im Registry-Kern. Beweist: pick() liefert
 // die exakte, importierte Adapter-Bindung (Identitaet, keine Kopie), defaultet arg-los
-// byte-identisch auf Twilio (numberProvisioning -> Telnyx), wirft fail-closed bei einem
-// unbekannten Provider (Fehlertext OHNE Secret), und der fakeOriginate-Override (Sonderfall
-// a) greift weiterhin VOR pick(). Die Vollstaendigkeits-Invariante faengt einen kuenftig
-// vergessenen dritten Provider VOR Deploy. Zusaetzlich: die realen call.provider-
-// Eintrittspfade (Header, createCall-Default, Number-Seed) liefern fail-closed nur Enum-
-// Werte VOR der Registry (Safety-Auflage PLAN-CLEAN-CODE.md P5). Offline (F.I.R.S.T.).
+// auf DEFAULT_PROVIDER, wirft fail-closed bei einem unbekannten Provider (Fehlertext OHNE
+// Secret), und der fakeOriginate-Override (Sonderfall a) greift weiterhin VOR pick(). Die
+// Vollstaendigkeits-Invariante faengt einen kuenftig vergessenen zweiten Provider VOR
+// Deploy. Zusaetzlich: die realen call.provider-Eintrittspfade (Header, createCall-Default,
+// Number-Seed) liefern fail-closed nur Enum-Werte VOR der Registry (Safety-Auflage
+// PLAN-CLEAN-CODE.md P5). Offline (F.I.R.S.T.).
+//
+// C-P4: die Vollstaendigkeits-Invariante weiter unten ist BEWUSST unveraendert geblieben.
+// Sie ist der Grund, warum PROVIDER.TWILIO und die ADAPTERS-Eintraege GEMEINSAM fallen
+// mussten: haette man den Enum-Wert stehen lassen, waere sie zu Recht rot geworden. Sie
+// abzuschwaechen, um die Suite gruen zu bekommen, waere der Fehler gewesen, den sie
+// verhindern soll.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { config } from "../src/config.js";
@@ -20,11 +26,9 @@ import {
   inboundSignatureVerifier,
 } from "../src/telephony/registry.js";
 import { PROVIDER, DEFAULT_PROVIDER, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-import { twilioVoice } from "../src/telephony/adapters/twilio/voice.js";
 import { telnyxVoice } from "../src/telephony/adapters/telnyx/voice.js";
-import { twilioMedia } from "../src/telephony/adapters/twilio/media.js";
 import { telnyxMedia } from "../src/telephony/adapters/telnyx/media.js";
-import { renderDirectives as twilioRenderDirectives } from "../src/telephony/adapters/twilio/render.js";
+import { renderDirectives as telnyxRenderDirectives } from "../src/telephony/adapters/telnyx/render.js";
 import { telnyxNumberProvisioning } from "../src/telephony/adapters/telnyx/numbers.js";
 import {
   makeDefaultState,
@@ -45,18 +49,24 @@ const FULL_COVERAGE = [
 test("pick liefert die exakte Adapter-Instanz je Provider", () => {
   config.safety.fakeOriginate = false;
   assert.equal(voiceControl(PROVIDER.TELNYX), telnyxVoice);
-  assert.equal(voiceControl(PROVIDER.TWILIO), twilioVoice);
   assert.equal(mediaTransport(PROVIDER.TELNYX), telnyxMedia);
-  assert.equal(mediaTransport(PROVIDER.TWILIO), twilioMedia);
   assert.equal(numberProvisioning(PROVIDER.TELNYX), telnyxNumberProvisioning);
-  // STT-A1: beide Renderer sind jetzt hinter einem Lazy-Arrow registriert (config-Bindung
-  // an der Kompositionsstelle, P15) - Referenz-Identitaet ist kein Kriterium mehr.
-  // Geprueft wird die AUSGABE: die Registry liefert den Twilio-Renderer und injiziert das
-  // Default-Profil, also exakt das arg-lose Bestandsergebnis.
+  // STT-A1: der Renderer ist hinter einem Lazy-Arrow registriert (config-Bindung an der
+  // Kompositionsstelle, P15) - Referenz-Identitaet ist kein Kriterium mehr. Geprueft wird
+  // die AUSGABE gegen den Adapter mit GENAU den Plattform-Werten, die die Registry
+  // injiziert. Bewusst gegen die config-Werte formuliert statt gegen den arg-losen
+  // Aufruf: sonst waere der Test nur so lange gruen, wie die Env leer ist - und beliese
+  // still, sobald jemand eine ElevenLabs-Stimme setzt.
   const probe = [
     { kind: DIRECTIVE.GATHER, action: "/voice/turn?callId=c1", voiceProfile: VOICE_PROFILE.DE_FEMALE_NEURAL },
   ];
-  assert.equal(voiceRenderer(PROVIDER.TWILIO).renderDirectives(probe), twilioRenderDirectives(probe));
+  assert.equal(
+    voiceRenderer(PROVIDER.TELNYX).renderDirectives(probe),
+    telnyxRenderDirectives(probe, {
+      elevenLabs: config.telnyx.telnyxElevenLabs,
+      sttProfile: config.voice.sttProfile,
+    }),
+  );
 });
 
 // ---- Default-Byte-Identitaet: arg-los -> Twilio (numberProvisioning -> Telnyx) ----
@@ -85,10 +95,10 @@ test("arg-lose Factories defaulten auf DEFAULT_PROVIDER (kein zweiter Anbieter-D
 test("fakeOriginate-Override greift vor pick, fuer jeden Provider inkl. unbekannt", async () => {
   config.safety.fakeOriginate = true;
   try {
-    const a = voiceControl(PROVIDER.TWILIO);
-    assert.equal(a, voiceControl(PROVIDER.TELNYX)); // dieselbe Fake-Instanz
+    const a = voiceControl(PROVIDER.TELNYX);
+    assert.equal(a, voiceControl()); // dieselbe Fake-Instanz, auch arg-los
     assert.equal(a, voiceControl("nonsense")); // Override -> KEIN pick-Wurf
-    assert.notEqual(a, twilioVoice);
+    assert.notEqual(a, telnyxVoice);
     assert.match((await a.originateCall()).sid, /^fake_/);
   } finally {
     config.safety.fakeOriginate = false;
@@ -106,7 +116,11 @@ test("unbekannter Provider -> Wurf mit Provider-Namen, ohne Secret", () => {
       return true;
     });
   }
-  assert.throws(() => numberProvisioning(PROVIDER.TWILIO), /nicht unterstuetzt/);
+  // numberProvisioning steht NICHT in FULL_COVERAGE (eigener Default, Geld-Pfad) und
+  // braucht deshalb seine eigene fail-closed-Gegenprobe. 'twilio' ist seit C-P4 kein
+  // Enum-Wert mehr, kann aber als Altzeile in einer Bestands-DB stehen - genau dieser
+  // Weg darf keinen Nummernkauf ausloesen.
+  assert.throws(() => numberProvisioning("twilio"), /nicht unterstuetzt/);
 });
 
 // ---- Signatur-Gate wirft NIE (Sonderfall c) ----

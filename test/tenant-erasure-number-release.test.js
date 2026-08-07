@@ -9,6 +9,12 @@ import { tenantNumbersForErase } from "../src/store/state-ops.js";
 import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { fakeProvisioner } from "./helpers.js";
 
+// Ein Provider-Wert, den die Registry NICHT kennt. Bewusst 'twilio' statt eines
+// Phantasienamens: genau dieser String kann als ALTZEILE in einer Bestands-DB stehen
+// (`provider TEXT` ohne CHECK-Constraint) - und eine Altzeile darf der Release-Pfad
+// NICHT anfassen (kein Provider, bei dem man sie freigeben koennte).
+const NON_TELNYX_PROVIDER = "twilio";
+
 const fakeAudit = () => ({
   records: [],
   record(entry) {
@@ -44,7 +50,7 @@ test("(1) Selektor: active+telnyx des Tenants ja, alles andere nein", () => {
       { id: "n1", tenantId: "t1", status: NUMBER_STATUS.ACTIVE, provider: PROVIDER.TELNYX },
       { id: "n2", tenantId: "t1", status: NUMBER_STATUS.PROVISIONING, provider: PROVIDER.TELNYX },
       { id: "n3", tenantId: "t1", status: NUMBER_STATUS.RELEASED, provider: PROVIDER.TELNYX },
-      { id: "n4", tenantId: "t1", status: NUMBER_STATUS.ACTIVE, provider: PROVIDER.TWILIO },
+      { id: "n4", tenantId: "t1", status: NUMBER_STATUS.ACTIVE, provider: NON_TELNYX_PROVIDER },
       { id: "n5", tenantId: "t2", status: NUMBER_STATUS.ACTIVE, provider: PROVIDER.TELNYX },
     ],
   });
@@ -75,8 +81,8 @@ test("(2) Happy: 1 active telnyx -> released, Store+Assignment+Audit konsistent 
   assert.equal(rec.actorSub, "system:erase-release");
 });
 
-test("(3) non-telnyx (twilio) bleibt unangetastet", async () => {
-  const s = seed({ numbers: [{ ...seed().numbers[0], provider: PROVIDER.TWILIO }] });
+test("(3) non-telnyx bleibt unangetastet", async () => {
+  const s = seed({ numbers: [{ ...seed().numbers[0], provider: NON_TELNYX_PROVIDER }] });
   const prov = fakeProvisioner();
   const audit = fakeAudit();
   const result = await releaseTenantNumbersOnErase({

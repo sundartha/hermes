@@ -550,7 +550,8 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   }
 
   // "Kein Abgleich moeglich": unbekannter Provider (die Registry wirft fail-closed) oder ein
-  // Adapter ohne die beiden Beleg-Methoden (Twilio: price deckt nur Connectivity). EINE
+  // Adapter ohne die beiden Beleg-Methoden - sie sind OPTIONAL am Port, nicht jeder Carrier
+  // liefert Einzelbelege (bis C-P4 war Twilio genau dieser Fall). EINE
   // Entscheidung an EINER Stelle (G5). SYNCHRON und ohne Netz - genau deshalb steht die
   // Aufloesung ab KE-P9 VOR dem Abruf zur Verfuegung, statt als dessen Nebenprodukt zu
   // entstehen; ein zweiter Netz-Zugriff kommt dadurch NICHT hinzu (PM-5).

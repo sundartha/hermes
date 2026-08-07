@@ -7,9 +7,12 @@
 // AUTH-P6: cost-truing/sweep ist seither eine Betreiber-Route (webAuthMw+adminMw, nur
 // MIT operatorAuth gemountet). (A)-(B) migriert auf In-Process-Mount von
 // makeBillingRoutes MIT einer ECHTEN makeCostTruing()-Instanz (kein Sweep-Stub) - die
-// Fixturen benutzen weiterhin bewusst provider=twilio: der Twilio-Adapter hat keine
-// Beleg-Methoden (fetchCostRecordPool/assignCostRecords) -> trueOneCall zaehlt den Call
-// als uebersprungen, ohne je einen Provider zu kontaktieren (netzfrei, wie bisher).
+// Fixturen benutzen bewusst einen NICHT unterstuetzten Provider: trueOneCall zaehlt den
+// Call als uebersprungen, ohne je einen Provider zu kontaktieren (netzfrei, wie bisher).
+// C-P4: der Weg in diesen Zweig hat sich geaendert, das Ergebnis nicht - bis dahin lag
+// ein Twilio-ADAPTER OHNE die beiden Beleg-Methoden vor, jetzt wirft schon die Registry
+// (costRecordControlFor faengt den Wurf und liefert null). Beide Wege enden in
+// 'nicht abgleichbar'.
 // (C) misst, dass ohne Admin-Sitzungs-Infra (json-Spawn, kein SESSION_SECRET) die
 // Route gar nicht gemountet ist (404) - seit AUTH-P7 kein Gate mehr, das antworten
 // koennte. Bleibt darum ein echter Spawn-Test, UNVERAENDERT.
@@ -24,6 +27,11 @@ import { operatorAuthPassThrough } from "./operator-route-app.js";
 import { makeStubStore, fakeConfig } from "./cost-truing-harness.js";
 import { makeDefaultState, createCall } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, PROVIDER, COST_TRUING_SOURCE } from "../src/store/defaults.js";
+
+// Ein Provider-Wert, den die Registry NICHT kennt -> costRecordControlFor liefert null
+// -> der Call ist strukturell nicht abgleichbar und wird netzfrei uebersprungen. Genau
+// das braucht dieser HTTP-Test: eine echte makeCostTruing()-Instanz OHNE Netzzugriff.
+const UNSUPPORTED_PROVIDER = "twilio";
 
 const EXTERNAL_IP = externalIp();
 const MS_PER_MINUTE = 60 * 1000;
@@ -80,7 +88,7 @@ function endedOutboundCall(state, { minutesAgo = ENDED_MINUTES_AGO } = {}) {
     from: PII_PHONE,
     to: PII_PHONE,
     tenantId: BOOTSTRAP_TENANT_ID,
-    provider: PROVIDER.TWILIO,
+    provider: UNSUPPORTED_PROVIDER,
   });
   call.status = "completed";
   call.answeredAt = new Date(Date.now() - (minutesAgo + 1) * MS_PER_MINUTE).toISOString();

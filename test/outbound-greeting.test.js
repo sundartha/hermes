@@ -15,7 +15,10 @@ import {
   assertDisclosureInGather,
 } from "./_outbound-harness.js";
 
-for (const provider of ["twilio", "telnyx"]) {
+// C-P4: die Schleife lief ueber BEIDE Budget-Engine-Renderer ("robust ueber beide
+// Renderer"). Twilio ist entfallen; die Schleifenform bleibt bewusst stehen - sie ist
+// die Stelle, an der ein zweiter Carrier ohne Umbau der Testkoerper wieder eintritt.
+for (const provider of ["telnyx"]) {
   test(`/voice/outbound (${provider}): LLM-frei -> Offenlegung im <Gather>, kein <Hangup> (G2)`, async () => {
     const { body, status, contentType } = await runOutbound({ provider });
     assert.equal(status, 200);

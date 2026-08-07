@@ -40,7 +40,7 @@ test("Blueprint (GAP-38): ein leerer Store + gesetzte BOOTSTRAP_E164/BOOTSTRAP_P
   await assert.doesNotReject(
     async () => {
       srv = await startServer({
-        env: { BOOTSTRAP_E164: "+15005550006", BOOTSTRAP_PROVIDER: "twilio" },
+        env: { BOOTSTRAP_E164: "+15005550006", BOOTSTRAP_PROVIDER: "telnyx" },
         ownerNumber: null, // bewusst KEINE aktive Nummer seeden - "leerer Store"
       });
     },

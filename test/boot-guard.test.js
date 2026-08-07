@@ -187,7 +187,7 @@ const FRESH_STORE = Object.freeze({
   foreignTenantCount: 0,
   callCount: 0,
   e164: "+15005550006",
-  provider: "twilio",
+  provider: "telnyx",
 });
 
 test("Boot-Heilung (GAP-38): aktive Nummer vorhanden -> NOT_NEEDED (Parameter egal)", () => {

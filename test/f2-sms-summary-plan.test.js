@@ -11,7 +11,7 @@ import { planSummarySms } from "../src/sms-summary.js";
 import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
-const PROV = PROVIDER.TWILIO;
+const PROV = PROVIDER.TELNYX;
 
 // Fake-Store: pro Tenant privateNumber (Ziel), sender (aktive Absender-Nummer) und optIn.
 // Bildet exakt die drei Reads ab, die planSummarySms macht (Vertrag dokumentiert).

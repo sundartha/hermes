@@ -8,7 +8,7 @@ import twilio from "twilio";
 import { config } from "../src/config.js";
 import * as store from "../src/store.js";
 import { findActiveNumber } from "../src/store/views.js";
-import { BOOTSTRAP_TENANT_ID, PROVIDER } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const url = (process.argv[2] || "").replace(/\/$/, "");
 if (!/^https:\/\/[a-z0-9.-]+/i.test(url)) {
@@ -25,8 +25,11 @@ console.log("✓ .env: PUBLIC_URL =", url);
 
 // 2. Twilio-Webhooks setzen
 // Owner-Twilio-Nummer aus dem Store (Owner = Tenant Null, keine TWILIO_NUMBER-Env mehr).
+// Provider als String-Literal, NICHT PROVIDER.TWILIO: seit C-P4 gibt es keinen
+// Twilio-Eintrag mehr im Enum, PROVIDER.TWILIO waere `undefined` und wuerde den
+// Provider-Filter in findActiveNumber abschalten statt ihn leer laufen zu lassen.
 const ownerTwilioNumber =
-  findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID, PROVIDER.TWILIO)?.e164 || "";
+  findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID, "twilio")?.e164 || "";
 if (!ownerTwilioNumber) {
   console.error(
     "✗ Keine aktive Owner-Twilio-Nummer im Store. Erst: npm run seed-owner-number -- <e164> twilio",

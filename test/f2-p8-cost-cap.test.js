@@ -78,7 +78,7 @@ function planStore({
   optIn = true,
 } = {}) {
   const numbers = sender
-    ? [{ tenantId: A, e164: sender, status: NUMBER_STATUS.ACTIVE, provider: PROVIDER.TWILIO }]
+    ? [{ tenantId: A, e164: sender, status: NUMBER_STATUS.ACTIVE, provider: PROVIDER.TELNYX }]
     : [];
   return {
     tenantPrivateNumber: () => to,
@@ -87,7 +87,7 @@ function planStore({
     dailySmsCount: () => smsCount,
   };
 }
-const call = { id: "call_a", tenantId: A, provider: PROVIDER.TWILIO };
+const call = { id: "call_a", tenantId: A, provider: PROVIDER.TELNYX };
 const cfg = (dailySmsCap = 20) => withConfigNamespaces({ sendSmsSummary: true, dailySmsCap });
 
 test("planSummarySms: Cap NICHT erreicht (count < cap) -> send=true", () => {

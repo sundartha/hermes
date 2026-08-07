@@ -26,7 +26,7 @@ function ownerSeed({ numberLanguage, settingsLanguage } = {}) {
     id: "num_owner",
     e164: OWNER_FR_NUMBER,
     tenantId: BOOTSTRAP_TENANT_ID,
-    provider: "twilio",
+    provider: "telnyx",
     status: "active",
     country: "FR",
   };

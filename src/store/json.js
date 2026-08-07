@@ -264,7 +264,7 @@ function seedOwnerNumberFromEnv() {
   const provider = resolveSeedProvider(config.provisioning.ownerNumberProvider);
   if (provider === null) {
     console.error(
-      "[owner-number] OWNER_NUMBER_PROVIDER ungueltig (erwartet twilio|telnyx) - ignoriert",
+      "[owner-number] OWNER_NUMBER_PROVIDER ungueltig (erwartet telnyx) - ignoriert",
     );
     return; // AC4: kein Seed -> Guard greift
   }

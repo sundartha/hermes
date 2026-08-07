@@ -268,7 +268,7 @@ test("KS-P2-11: Budget-Engine - der Live-Verbrauch beendet den Call mit Ansage u
         calls: [
           seedCall({
             id,
-            provider: "twilio",
+            provider: "telnyx",
             direction: "outbound",
             // Der Live-Term braucht Spielraum bis zum Max-Dauer-Cap, sonst terminalisiert
             // der Boot-Re-Arm das 90 s alte Leg, bevor der Turn ueberhaupt ankommt.

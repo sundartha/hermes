@@ -46,7 +46,7 @@ test("AM6: geseedeter Owner-sub -> Gateway-Tenant=owner (auch mit email-Claim)",
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
-    ownerNumber: { e164: OWNER_NUM, provider: "twilio" },
+    ownerNumber: { e164: OWNER_NUM, provider: "telnyx" },
   });
   try {
     // Token traegt sub UND email: die email-Achse (Profile) divergiert frueher von der
@@ -68,7 +68,7 @@ test("AM6 e2e: Owner-Token MIT email -> get_my_number traegt die aktive Nummer (
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
-    ownerNumber: { e164: OWNER_NUM, provider: "twilio" },
+    ownerNumber: { e164: OWNER_NUM, provider: "telnyx" },
   });
   try {
     // DER Test, der die email/sub-Divergenz als gefixt beweist: trotz email-Claim
@@ -85,7 +85,7 @@ test("AM6 fail-closed: unbekannter sub -> tenant=reject + get_my_number leer (ke
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
-    ownerNumber: { e164: OWNER_NUM, provider: "twilio" },
+    ownerNumber: { e164: OWNER_NUM, provider: "telnyx" },
   });
   try {
     const token = await idp.sign({ sub: "fremd-sub", email: "fremd@team.test" });
@@ -107,7 +107,7 @@ test("AM6 fail-closed: verifiziertes Token OHNE sub -> tenant=reject + get_my_nu
   const idp = await startIdp();
   const srv = await startServer({
     env: oauthEnv(idp),
-    ownerNumber: { e164: OWNER_NUM, provider: "twilio" },
+    ownerNumber: { e164: OWNER_NUM, provider: "telnyx" },
   });
   try {
     const token = await idp.sign({ email: "evil@attacker.test" }, { noSubject: true });
@@ -137,7 +137,7 @@ test("AM6 set-if-absent: bestehende idpSubject-Bindung gewinnt gegen OWNER_IDP_S
   const srv = await startServer({
     env: oauthEnv(idp, { OWNER_IDP_SUBJECT: "other-sub" }),
     seed,
-    ownerNumber: { e164: OWNER_NUM, provider: "twilio" },
+    ownerNumber: { e164: OWNER_NUM, provider: "telnyx" },
   });
   try {
     const boundTok = await idp.sign({ sub: "bound-sub" });

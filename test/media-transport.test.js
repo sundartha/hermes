@@ -1,50 +1,14 @@
 // P7: MediaTransport (Port 4) - Charakterisierungs-/Dichtheits-Tests. Rein, offline,
-// KEIN Server-Spawn, KEIN pglite. Pinnt den Twilio-Frame-Aufbau byte-identisch
-// (Verhaltens-Erhaltung der aus bridge.js gezogenen Inline-Objekte) und das neue,
-// doku-basierte Telnyx-Mapping (snake_case stream_id, Outbound/clear ohne stream_id).
+// KEIN Server-Spawn, KEIN pglite. Pinnt das doku-basierte Telnyx-Mapping (snake_case
+// stream_id, Outbound/clear ohne stream_id).
+//
+// C-P4: die Twilio-Haelfte ist mit dem Adapter entfallen. Zwei Aussagen, die es NUR
+// dort gab, sind hier auf Telnyx uebernommen statt geloescht worden - sie gehoeren dem
+// PORT, nicht dem Anbieter: das neutrale Event-Mapping fuer media/stop/unbekannt und
+// die Haertung T-P3-01 (malformter start-Frame).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { twilioMedia } from "../src/telephony/adapters/twilio/media.js";
 import { telnyxMedia } from "../src/telephony/adapters/telnyx/media.js";
-
-test("Twilio buildMediaFrame/clearPlayback byte-identisch (Dichtheit Realtime)", () => {
-  assert.deepEqual(twilioMedia.buildMediaFrame({ payload: "AAA", streamRef: "MZ1" }), {
-    event: "media",
-    streamSid: "MZ1",
-    media: { payload: "AAA" },
-  });
-  assert.deepEqual(twilioMedia.clearPlayback({ streamRef: "MZ1" }), {
-    event: "clear",
-    streamSid: "MZ1",
-  });
-});
-
-test("Twilio parseMediaFrame start -> neutrales MediaFrame", () => {
-  const frame = twilioMedia.parseMediaFrame({
-    event: "start",
-    start: {
-      streamSid: "MZ1",
-      callSid: "CA1",
-      customParameters: { call_id: "c1", stream_token: "t1" },
-    },
-  });
-  assert.deepEqual(frame, {
-    event: "start",
-    streamRef: "MZ1",
-    callId: "c1",
-    streamToken: "t1",
-    providerCallRef: "CA1",
-  });
-});
-
-test("Twilio parseMediaFrame media/stop/unbekannt", () => {
-  assert.deepEqual(twilioMedia.parseMediaFrame({ event: "media", media: { payload: "X" } }), {
-    event: "media",
-    payload: "X",
-  });
-  assert.deepEqual(twilioMedia.parseMediaFrame({ event: "stop" }), { event: "stop" });
-  assert.deepEqual(twilioMedia.parseMediaFrame({ event: "mark" }), { event: "other" });
-});
 
 test("Telnyx Outbound-Frames OHNE stream_id (Doku-Symmetrie)", () => {
   assert.deepEqual(telnyxMedia.buildMediaFrame({ payload: "X" }), {
@@ -54,7 +18,7 @@ test("Telnyx Outbound-Frames OHNE stream_id (Doku-Symmetrie)", () => {
   assert.deepEqual(telnyxMedia.clearPlayback(), { event: "clear" });
 });
 
-test("Telnyx parseMediaFrame start -> dasselbe neutrale MediaFrame wie Twilio", () => {
+test("Telnyx parseMediaFrame start -> neutrales MediaFrame", () => {
   const fromCustom = telnyxMedia.parseMediaFrame({
     event: "start",
     start: {
@@ -84,26 +48,33 @@ test("Telnyx parseMediaFrame start -> dasselbe neutrale MediaFrame wie Twilio", 
   });
 });
 
-test("Frame-Roundtrip beide Adapter: u-law base64 unveraendert", () => {
-  const payload = "//79/Pv6+fj39g=="; // beispielhaftes u-law base64
-  const twilioOut = twilioMedia.buildMediaFrame({
-    payload: twilioMedia.parseMediaFrame({ event: "media", media: { payload } }).payload,
-    streamRef: "MZ1",
+// Aus der Twilio-Haelfte uebernommen (C-P4): das neutrale Event-Vokabular ist eine
+// PORT-Aussage - media traegt die Payload durch, stop bleibt stop, alles Unbekannte
+// faellt auf OTHER statt einen Roh-Event nach oben zu lassen.
+test("Telnyx parseMediaFrame media/stop/unbekannt -> neutrales Vokabular", () => {
+  assert.deepEqual(telnyxMedia.parseMediaFrame({ event: "media", media: { payload: "X" } }), {
+    event: "media",
+    payload: "X",
   });
-  assert.equal(twilioOut.media.payload, payload);
+  assert.deepEqual(telnyxMedia.parseMediaFrame({ event: "stop" }), { event: "stop" });
+  assert.deepEqual(telnyxMedia.parseMediaFrame({ event: "mark" }), { event: "other" });
+});
 
+test("Frame-Roundtrip: u-law base64 unveraendert", () => {
+  const payload = "//79/Pv6+fj39g=="; // beispielhaftes u-law base64
   const telnyxOut = telnyxMedia.buildMediaFrame({
     payload: telnyxMedia.parseMediaFrame({ event: "media", media: { payload } }).payload,
   });
   assert.equal(telnyxOut.media.payload, payload);
 });
 
-// T-P3-01 (OT-2): malformter Twilio-start-Frame OHNE .start-Objekt darf NICHT werfen
-// (vorher: msg.start.streamSid -> TypeError -> entkommt zum ws-Emitter -> Prozess-Crash).
-// Nach Haertung liefert er ein wohlgeformtes neutrales Frame mit undefined-Feldern, genau
-// wie der bereits gehaertete Telnyx-Adapter (dynamic_variables-Fall oben, providerCallRef:undefined).
-test("Twilio parseMediaFrame start OHNE .start -> kein Throw, neutrales Frame (T-P3-01)", () => {
-  assert.deepEqual(twilioMedia.parseMediaFrame({ event: "start" }), {
+// T-P3-01 (OT-2): malformter start-Frame OHNE .start-Objekt darf NICHT werfen (der
+// TypeError entkaeme sonst zum ws-Emitter -> Prozess-Crash). Bis C-P4 stand diese ID am
+// Twilio-Adapter, weil DORT die Haertung nachgezogen wurde; die Aussage gilt dem Port und
+// steht seither hier. Der Adapter liefert ein wohlgeformtes neutrales Frame mit
+// undefined-Feldern.
+test("Telnyx parseMediaFrame start OHNE .start -> kein Throw, neutrales Frame (T-P3-01)", () => {
+  assert.deepEqual(telnyxMedia.parseMediaFrame({ event: "start" }), {
     event: "start",
     streamRef: undefined,
     callId: undefined,

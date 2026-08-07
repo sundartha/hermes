@@ -75,27 +75,11 @@ test("Flag AUS: /voice/outbound (Telnyx) bleibt byte-identisch auf dem Azure-<Sa
   assert.match(body, /<Say voice="Azure\.de-DE-KatjaNeural"/, "Azure-Bestand unveraendert");
   assert.doesNotMatch(body, /<Play>/, "Gate aus -> kein Play-Zweig");
 });
-
-// S1-2: das Provider-Gate in synthesizeDirectiveAudio (call.provider !== PROVIDER.TELNYX
-// -> kein ElevenLabs-Call) war bislang ungetestet. Flag AN, aber provider=twilio: der
-// Twilio-Renderer bleibt byte-identisch auf Polly-<Say> (Twilio hat gar kein Azure/
-// ElevenLabs-Voice-Profil), UND am Fake-ElevenLabs-Origin darf KEIN Request ankommen -
-// das Gate darf niemals Twilio-Calls an ElevenLabs synthetisieren lassen (Kosten/Scope).
-test("Flag AN + provider=twilio: Renderer-Bestand unveraendert, KEIN Request an ElevenLabs (Twilio-Gate)", async () => {
-  const origin = await startFakeElevenLabsOrigin();
-  try {
-    const { body } = await runOutbound({
-      provider: "twilio",
-      env: {
-        ...PLAY_TTS_ENV_BASE,
-        ELEVENLABS_PLAY_TTS_ENABLED: "true",
-        ELEVENLABS_API_BASE: origin.url,
-      },
-    });
-    assert.match(body, /<Say voice="Polly\.Vicki-Neural"/, "Twilio-Bestand unveraendert (kein Azure/ElevenLabs)");
-    assert.doesNotMatch(body, /<Play>/, "Twilio-Gate: kein Play-Zweig, auch bei Flag AN");
-    assert.equal(origin.requests.length, 0, "Twilio-Gate: KEIN Synth-Request an ElevenLabs ausgeloest");
-  } finally {
-    await origin.close();
-  }
-});
+// C-P4: hier stand "Flag AN + provider=twilio -> Renderer-Bestand unveraendert, KEIN
+// Request an ElevenLabs (Twilio-Gate)". Das Gate ist providerSupports(PLAY_AUDIO_TTS);
+// seine Aussage war "ein Anbieter OHNE diese Faehigkeit loest keine Synthese aus".
+// Twilio war der einzige solche Anbieter - mit seinem Ausbau hat der Test keinen
+// Gegenpol mehr und ist entfallen, nicht gruen gemacht. Die Kosten-Seite des Gates
+// bleibt gedeckt: der Flag-AUS-Test daneben belegt, dass ohne Flag KEINE Synthese
+// laeuft, und test/provider-capabilities.test.js pinnt fail-closed=false fuer jeden
+// unbekannten Anbieter (inkl. der Altzeile 'twilio').

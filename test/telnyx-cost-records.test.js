@@ -50,7 +50,6 @@ const {
   DETAIL_RECORDS_RESERVE_PER_MINUTE,
   DETAIL_RECORDS_BUDGET_PER_MINUTE,
 } = await import("../src/telephony/adapters/telnyx/voice.js");
-const { twilioVoice } = await import("../src/telephony/adapters/twilio/voice.js");
 const { config } = await import("../src/config.js");
 
 const { withBlankedConfig } = makeConfigOverrides(config);
@@ -1364,12 +1363,11 @@ test("(P4-R2) fetchCostRecordPool OHNE injizierte Drossel haelt nach der produkt
   }
 });
 
-// ---- (f) Twilio-Riegel ----
-
-test("twilioVoice.fetchCostRecordPool/assignCostRecords sind NICHT implementiert (bewusst, Twilio-price deckt nur Connectivity)", () => {
-  assert.equal(twilioVoice.fetchCostRecordPool, undefined);
-  assert.equal(twilioVoice.assignCostRecords, undefined);
-});
+// C-P4: hier stand ein Abschnitt (f), der am KONKRETEN Twilio-Adapter zeigte, dass die
+// beiden Beleg-Methoden OPTIONAL am Port sind. Sein Gegenstand war Twilio und ist mit ihm
+// entfallen. Die EIGENSCHAFT bleibt belegt, und zwar adapter-unabhaengig: ein Control-
+// Objekt ohne die Methoden fuehrt zu keinem Abgleich (test/cost-truing-observe.test.js,
+// `const control = {}`) - ein Stub sagt das allgemeiner als ein zweiter echter Adapter.
 
 // ---- (g) Aufrufer-Riegel ----
 

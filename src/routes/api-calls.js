@@ -14,14 +14,14 @@
 // Kategorisierung, kein Roh-Provider-/Secret-Leak an den Client) wandert unveraendert.
 // Hinter `internalOnly` (Loopback ohne X-Forwarded-For, seit AUTH-P5; seit AUTH-P7 die
 // einzige Sicherung), an unveraenderter Mount-Position (vor makeReadRoutes).
-// normNum/PROVIDER (store/defaults) und isTrunkZeroFormatError/E164_FORMAT_ERROR
+// normNum (store/defaults) und isTrunkZeroFormatError/E164_FORMAT_ERROR
 // (outbound-gates) kommen direkt aus ihrer Heimat (eine Quelle, G5 - wie
 // eurText/spendMonthEndDate in outbound-gates.js); die Laufzeit-Instanzen
 // (Gate-Array, Timer, Terminierung, finishCall) und die request-tenant-Resolver werden
 // injiziert (EINE Quelle, INV-7).
 import { Router } from "express";
 import { VOICE_ENGINE } from "../config.js";
-import { normNum, PROVIDER, CONSULT_ANSWER } from "../store/defaults.js";
+import { normNum, CONSULT_ANSWER } from "../store/defaults.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
@@ -280,18 +280,16 @@ export function makeCallRoutes({
       );
       // Der Adapter haengt bei einer Provider-HTTP-Ablehnung err.providerStatus an
       // (secret-frei). Liegt sie vor -> kategorisierte, provider-NEUTRALE Meldung mit
-      // Statusklasse (502 Upstream), damit der Aufrufer den echten Grund erkennt statt
-      // einer irrefuehrenden Twilio-Meldung bei einem Telnyx-Call. Der Twilio-Trial-Hint
-      // nur bei Provider Twilio. Kein Roh-Body/Key an den Client (Regel 4/5).
+      // Statusklasse (502 Upstream), damit der Aufrufer den echten Grund erkennt.
+      // C-P4: der frueher hier angehaengte Twilio-Trial-Hint ist mit dem Adapter
+      // entfallen - er haette nur fuer einen Anbieter gegolten, den es nicht mehr gibt.
+      // Kein Roh-Body/Key an den Client (Regel 4/5).
       const providerStatus = err?.providerStatus;
       const body = providerStatus
         ? {
             error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.`,
           }
         : { error: "Anruf konnte nicht gestartet werden." };
-      if (ctx.outboundProvider === PROVIDER.TWILIO) {
-        body.hint = "Twilio-Trial: Die Zielnummer muss unter 'Verified Caller IDs' verifiziert sein.";
-      }
       res.status(providerStatus ? 502 : 500).json(body);
     }
   });

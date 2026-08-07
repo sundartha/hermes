@@ -21,7 +21,6 @@ process.env.TELNYX_ACCOUNT_SID = ACCOUNT_SID;
 const { telnyxVoice } = await import("../src/telephony/adapters/telnyx/voice.js");
 const { voiceControl } = await import("../src/telephony/registry.js");
 const { DEFAULT_PROVIDER, PROVIDER } = await import("../src/store/defaults.js");
-const { twilioVoice } = await import("../src/telephony/adapters/twilio/voice.js");
 const { config } = await import("../src/config.js");
 
 // Fehlende Config simulieren (Adapter liest config bei jedem Aufruf): Wert leeren,
@@ -179,9 +178,8 @@ test("endCall: fail-closed bei fehlendem TELNYX_ACCOUNT_SID", async () => {
 // war seit C-P1 (DEFAULT_PROVIDER = Telnyx) eine ZWEITE, abweichende Antwort auf
 // dieselbe Frage. Gegen DEFAULT_PROVIDER formuliert, damit der Test bei einem kuenftigen
 // Wechsel nicht wieder von Hand nachgezogen werden muss.
-test("voiceControl(provider): telnyx -> telnyxVoice, twilio -> twilioVoice, arg-los -> DEFAULT_PROVIDER", () => {
+test("voiceControl(provider): telnyx -> telnyxVoice, arg-los -> DEFAULT_PROVIDER", () => {
   assert.equal(voiceControl(PROVIDER.TELNYX), telnyxVoice);
-  assert.equal(voiceControl(PROVIDER.TWILIO), twilioVoice);
   assert.equal(voiceControl(), voiceControl(DEFAULT_PROVIDER), "arg-los folgt DEFAULT_PROVIDER");
   assert.equal(
     voiceControl(undefined),

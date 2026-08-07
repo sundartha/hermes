@@ -219,7 +219,11 @@ test("fail-closed: ohne TELNYX_API_KEY wirft jede Methode (kein Live-Call)", asy
 test("registry.numberProvisioning: telnyx -> Adapter, unbekannt -> wirft (fail-closed)", () => {
   assert.equal(numberProvisioning(PROVIDER.TELNYX), prov);
   assert.equal(numberProvisioning(), prov, "Default telnyx");
-  assert.throws(() => numberProvisioning(PROVIDER.TWILIO), /nicht unterstuetzt/);
+  // C-P4: bewusst ein Nicht-Enum-Literal statt PROVIDER.TWILIO. Waere hier nach dem
+  // Ausbau `PROVIDER.TWILIO` stehen geblieben, haette der Ausdruck `undefined` geliefert -
+  // der Test waere GRUEN geblieben und haette ab da geprueft, dass `undefined` wirft,
+  // nicht mehr, dass ein nicht unterstuetzter Anbieter wirft.
+  assert.throws(() => numberProvisioning("twilio"), /nicht unterstuetzt/);
 });
 
 const PAYMENT_402_BODY = JSON.stringify({
