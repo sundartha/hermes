@@ -6,9 +6,35 @@ Track A (STT-Modellwahl) laeuft getrennt, s. `tasks/todo.md` und `tasks/stt-a1-s
 **Regel: nur Gemessenes.** Jede Aussage traegt einen Beleg (Datei:Zeile, Anbieter-Doku,
 API-Antwort) oder ist ausdruecklich als **unbelegt** markiert.
 
-**Status: ENTWURF, dem Owner vorzulegen. Es entsteht kein Code, bevor der Owner
-zugestimmt hat.** B und C stehen in EINEM Dokument, weil sie sich beruehren: C loescht die
-zweite Implementierung der Naht, die B ausbaut.
+B und C stehen in EINEM Dokument, weil sie sich beruehren: C loescht die zweite
+Implementierung der Naht, die B ausbaut.
+
+## Stand (2026-08-07)
+
+Der Owner hat **Track C zuerst** entschieden. **Track B ist nicht begonnen** und bleibt es,
+bis der DeepSeek-API-Schluessel vorliegt (Phase B1 ist eine Messung an der echten API, keine
+Lektuere) und O-3/O-5 entschieden sind.
+
+| Phase | Stand |
+|---|---|
+| **C-P1** Rueckfall-Default explizit auf Telnyx | **gemergt** (`f0c5b8d`) |
+| **C-P1b** fuenf Parameter-Defaults in `registry.js` nachgezogen | **gemergt** — Korrektur eines von C-P1 verursachten Defekts, s. u. |
+| **C-P2** Testsuite-Fixtures auf Telnyx + Inventur | **gemergt** (`86c1fac`) |
+| **C-P3** Header-Dispatch + Signaturpruefung | offen |
+| **C-P4** Adapter, Config, Boot-Pflicht, Doku | offen |
+| **C-P5** Abnahme mit echtem Anruf | **braucht den Owner** |
+| **C2** Indirektion zurueckbauen | offene Entscheidung O-4, Empfehlung: nein |
+
+**Nichts davon ist deployt.** Live laeuft der STT-A1-Stand (`5865b96`); Track C liegt auf
+lokalem `master`. Ein Provider-Ausbau ohne echten Anruf ist nicht abgenommen.
+
+**Lehre aus C-P1/C-P1b, die fuer C-P3 und C-P4 gilt:** die Spec von C-P1 nannte vier Leser
+des Rueckfalls. Es waren zehn — plus fuenf **weitere**, unabhaengige Anbieter-Defaults, die
+als Parameter-Default in `registry.js` standen und nicht `DEFAULT_PROVIDER` lasen. C-P1 hat
+dadurch kurzzeitig eine Divergenz erzeugt (`/voice/turn` -> Twilio, `/voice/status` ->
+Telnyx). **Vor jedem weiteren Schritt breiter grepen als nach dem offensichtlichen Symbol:**
+nicht nur `DEFAULT_PROVIDER`, sondern auch `PROVIDER.TWILIO`, `"twilio"`, `twilio` als
+Parameter-Default, Fixture und Kommentar-Behauptung.
 
 ---
 
@@ -278,9 +304,38 @@ hiermit gestrichen sind:
 | 1 | **Praemisse belegt** (1.5) | ERLEDIGT: 3 Nummern, 67 Anrufe, alle telnyx |
 | 2 | **Die Default-Eigenschaft zuerst nehmen.** `config.js:921` explizit auf Telnyx, `providerFromHeaders`-Rueckfall explizit machen — eigener Schritt mit Test | sonst wandert ein Default lautlos, waehrend Code verschwindet |
 | 3 | **Testsuite migrieren, BEVOR der Adapter faellt.** `OWNER_TEST_NUMBER`/`DOMESTIC_TEST_NUMBER` auf Telnyx, `BASE_ENV` bereinigen | **Gegenprobe zwingend:** die Suite muss nach der Migration dieselben Invarianten pruefen, nicht bloss gruen sein. Wo ein Test den Twilio-Zweig abdeckte, braucht der Telnyx-Zweig einen aequivalenten Test — sonst sinkt die Abdeckung unsichtbar |
-| 4 | **Routen und Gates.** `/voice/twilio/*` verschwindet **zusammen** mit seiner Signaturpruefung — nie die Pruefung ohne die Route | `src/route-policy.js` + `test/route-auth-inventory.test.js` sind hier das wichtigste Netz (Absolute Regel 3) |
+| 4 | **Der Header-Dispatch und die Signaturpruefung — zusammen.** *(korrigiert 2026-08-07, s. u.)* Der Twilio-Zweig faellt in `providerFromHeaders` (`registry.js:176`) UND in `inboundSignatureVerifier` (`registry.js:188`) im selben Zug, dazu `adapters/twilio/signature.js` | nie die Pruefung ohne den Dispatch. `src/route-policy.js` + `test/route-auth-inventory.test.js` bleiben das Netz (Absolute Regel 3) |
 | 5 | **Adapter, Config, `.env.example`, `render.yaml`, Doku** | Env-Keys aus `config.js` entfernen heisst auch `BASE_ENV` in `test/helpers.js` nachziehen (bekannte Drift-Falle) |
 | 6 | **`npm test` gruen, Smoke-Test, echter Anruf** | ein Provider-Ausbau ohne echten Anruf ist nicht abgenommen |
+
+### Korrektur zu Schritt 4 (gemessen 2026-08-07)
+
+**Es gibt keine `/voice/twilio/*`-Routen.** Die fruehere Fassung dieses Plans nahm sie an;
+gegruept existieren sie nicht. Die `/voice`-Routen sind **geteilt**
+(`/voice/incoming`, `/voice/turn`, `/voice/outbound`, `/voice/status`,
+`/voice/call-control`, `/voice/tts/:token` — alle in `src/route-policy.js` gelistet), und der
+Provider wird aus den **Headern** bestimmt, nicht aus dem Pfad:
+
+```js
+// src/telephony/registry.js:174-180
+export function providerFromHeaders(headers) {
+  if (h["x-twilio-signature"] !== undefined) return PROVIDER.TWILIO;
+  if (h["telnyx-signature-ed25519"] !== undefined && h["telnyx-timestamp"] !== undefined)
+    return PROVIDER.TELNYX;
+  return null;
+}
+```
+
+Der Verifier (`registry.js:182-192`) verzweigt auf genau dieses Ergebnis und liefert bei
+unbekanntem Provider `false` — **fail-closed**. Daraus folgt der richtige Schnitt: faellt der
+Twilio-Zweig in **beiden** Funktionen gemeinsam, landet ein Request mit
+`x-twilio-signature` bei `providerFromHeaders -> null -> verifier false -> 403`. Genau das
+gewuenschte Verhalten, ohne dass eine Route stehen bleibt.
+
+**Die Gefahr, die die Reihenfolge erzwingt:** wer nur `signature.js` entfernt und
+`providerFromHeaders` stehen laesst, schickt Twilio-Header in einen Zweig ohne Verifizierer.
+Deshalb: beides in EINEM Schritt, mit einem Test, der einen `x-twilio-signature`-Request auf
+403 festnagelt.
 
 ### Pre-Mortem Track C
 
