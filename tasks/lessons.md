@@ -522,3 +522,23 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
 - Nebenbefund aus C-P4: der abgebrochene Agent hatte auch den Scope ueberschritten (Doku und
   ein Skript-Rename, die laut Spec in eine spaetere Phase gehoerten). Ein Lauf ohne Review
   faengt so etwas nicht ab - das ist der zweite Grund, warum ungeprueft nicht gemergt wird.
+
+## 2026-08-07 (Session 2bd10950, Track-C-Abschluss C-P4-C-P6)
+
+- **Selbstreferenzieller node_modules-Symlink im Worktree = Exit 0 ohne Messung.** Der
+  REPO-Fallback der per-run-Skripte (`process.cwd()`) lieferte im Spawn-Kontext `.`;
+  `ln -s "./node_modules" node_modules` im Worktree zeigt dann auf sich selbst
+  ("Too many levels of symbolic links") und `npm test` beendet mit Exit 0 bei 4 Zeilen
+  Output. Wer Exit-Codes statt Testzahlen liest, haette "gruen" gemeldet. Regel: REPO in
+  per-run-Skripten HART pinnen (absoluter Pfad); ein Testlauf ohne gemeldete ZAHL zaehlt
+  nicht als Lauf. (Entdeckt vom C-P4-Safety-Reviewer, wf_ff179540-31e.)
+- **`timeout` existiert auf macOS nicht.** Ein Smoke-Test, der ihn nutzt, startet den
+  Server NIE und misst 000 - das sieht aus wie "Dienst kaputt", ist aber "nie gestartet".
+  Erst das Log lesen (Regel 7), dann urteilen: der echte Boot-Refusal kam von einem
+  UNVERWANDTEN Guard (COST_TRUING_REQUIRED_RECORD_TYPES fehlt in der lokalen .env -
+  vorbestehend, kein Phasen-Defekt).
+- **Zwei unabhaengige Wege zum selben Befund sind ein starkes Signal.** Der
+  C-P5-Spec-Agent (Weisse-Flecken-Erhebung) und der C-P4-Safety-Reviewer fanden
+  UNABHAENGIG denselben Defekt (Betreiber-Skripte mit PROVIDER.TWILIO=undefined ->
+  Provider-Filter still abgeschaltet). Parallele Spec-Erhebung neben dem Review kostet
+  wenig und verdoppelt die Fangchance fuer genau die Klasse "stille Bedeutungsumkehr".

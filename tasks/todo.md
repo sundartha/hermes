@@ -279,6 +279,38 @@ Rekonstruiert: Session 8ec76d98 baute C-P4 DIREKT im Working-Tree (scope-bereini
 - Erwartet: Server bootet lokal OHNE TWILIO_*-Env; npm test gruen; BASE_ENV ohne Twilio-Keys.
 - Verifikation: Abnahme-Abschnitt der Spec, ausgefuehrt vom Reviewer + Lead-Stichprobe.
 
+## C-P4c — Merge auf lokalen master. ERLEDIGT (eccbafd + Doku 9ddf1df)
+- BEOBACHTET: Review-Gate PASS (1 Fix-Runde: Betreiber-Skripte lasen PROVIDER.TWILIO=undefined,
+  Filter still abgeschaltet - gefixt + Regressionstest); eigener Volllauf auf master
+  danach 4026/4026, Exit 0 (deckungsgleich mit unabhaengiger Reviewer-Messung).
+
+## C-P5b — Umsetzung. ERLEDIGT (gemergt 90db553, Impl 6f871eb)
+- BEOBACHTET: Gate PASS ohne Fix-Runde (wf_1db9f4b1-6c9); 50 Dateien, +267/-719;
+  Boot-Pflicht gefallen, npm-Dependency twilio raus (Lock regeneriert),
+  set-webhooks.js -> set-public-url.js, BASE_ENV im selben Commit (Drift-Falle vermieden).
+- Lead-Stichprobe: Boot OHNE TWILIO_*-Env -> /healthz 200 nach 2 s; einziger
+  Twilio-Treffer im Log ist die SKIP_TWILIO_SIGNATURE_CHECK-Warnung (bleibt bewusst).
+  Achtung Messmethode: erster Versuch scheiterte an fehlendem COST_TRUING_REQUIRED_RECORD_TYPES
+  in der lokalen .env (vorbestehend, KEIN C-P5-Defekt; gueltige Werte z.B. call-control).
+- Eigener Volllauf auf master nach Merge: 4027/4027, Exit 0 (= Workflow-Messung).
+
+## C-P6a — Spezifikation Kommentar-Nachlese. ERLEDIGT (tasks/c-p6-spec.md, 526 Zeilen)
+- BEOBACHTET: 198 Treffer einzeln klassifiziert (125 BLEIBT / 4 FAELLT / 69 UMFORMULIEREN),
+  abgeschlossene Liste, Baseline 9ddf1df (beim Bau neu erheben - C-P5 verkleinert die Menge).
+- Nebenbefund: 4 Kommentare behaupten "Default = Twilio" ueber lebenden Code, der auf
+  DEFAULT_PROVIDER=Telnyx defaultet (in der UMFORMULIEREN-Liste).
+
+## C-P6b — Umsetzung. ERLEDIGT (gemergt f1bdee5, Impl bb88482)
+- BEOBACHTET: Gate PASS ohne Fix-Runde (wf_e2278554-d37); 44 Dateien, +99/-93, reine
+  Kommentar-Phase. Lead-Gegenprobe: 12 Nicht-Kommentar-Praefix-Zeilen = 6 Zeilenend-
+  Kommentar-Paare mit zeichengleichem Code-Anteil.
+- Rest-Erhebung auf master danach: verbliebene twilio-Treffer in src/scripts/Env sind
+  ausschliesslich Kategorie (b) (Bypass-Schalter, twilioSid-Feldname) plus wahre
+  Protokoll-/Historien-Kommentare gemaess C-P6-Spec-BLEIBT-Liste.
+
+## Kettenstand Track C (2026-08-07): C-P1 bis C-P6 KOMPLETT auf lokalem master, NICHT deployt.
+Kein funktionaler Twilio-Code mehr im Repo. Naechster Schritt ist C-P7 = Owner.
+
 ## Danach offen (braucht Owner)
 - Track-A-Abnahmeanruf (+1 706 710 1188), DANN Deploy von Track C (push upstream).
 - Render-Env: TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN loeschen ERST nach Deploy+Verify von C-P5.
