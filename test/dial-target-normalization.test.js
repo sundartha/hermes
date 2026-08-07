@@ -6,9 +6,8 @@
 //
 // Zwei Sektionen wie e164-trunk-zero-reject.test.js: (1) reine Helfer (offline,
 // deterministisch); (2) der Producer POST /api/calls ueber HTTP. Offline-Diskriminator:
-// eine NICHT mit "AC" beginnende TWILIO_ACCOUNT_SID ("x") laesst den Twilio-Client
-// synchron VOR jedem Netzzugriff werfen -> ein durchgelassener Call endet als 500
-// (alle Gates passiert), ein Format-Reject als 400 (Short-Circuit vor createCall).
+// 500 = alle Gates passiert (originateCall wirft ohne TELNYX_API_KEY, s. BASE_ENV in
+// helpers.js), ein Format-Reject 400 (Short-Circuit vor createCall).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -218,7 +217,6 @@ const DE_TARGET_NATIONAL = "01737252163";
 const HTTP_ENV = {
   ALLOWED_NUMBERS: DE_TARGET_E164,
   ALLOWED_COUNTRY_CODES: "+49",
-  TWILIO_ACCOUNT_SID: "x",
 };
 
 // Owner-Tenant mit DE-privateNumber, Identitaet wie ensureOwnerIdentity (ownerName
@@ -314,7 +312,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   });
 
   await t.test("NANP-Tenant: 10-stellige Eingabe wird zu +1 und durchlaeuft ALLE Gates", async () => {
-    const srv = await startServer({ env: { TWILIO_ACCOUNT_SID: "x" }, seed: seedNanpTenant });
+    const srv = await startServer({ seed: seedNanpTenant });
     try {
       const res = await postCall(srv.localUrl, "2125550123");
       assert.equal(res.status, 500, "normalisiertes +1-Ziel muss ALLE Gates passieren");
@@ -326,7 +324,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
   });
 
   await t.test("NANP-Tenant: 9005550123 wird zu +1900... und dort von der Denylist gestoppt", async () => {
-    const srv = await startServer({ env: { TWILIO_ACCOUNT_SID: "x" }, seed: seedNanpTenant });
+    const srv = await startServer({ seed: seedNanpTenant });
     try {
       const res = await postCall(srv.localUrl, "9005550123");
       assert.equal(res.status, 403);
@@ -358,7 +356,7 @@ test("POST /api/calls: nationale Schreibweise wird deterministisch normalisiert"
           },
         ],
       });
-      const srv = await startServer({ env: { TWILIO_ACCOUNT_SID: "x" }, seed: seedEuTenant });
+      const srv = await startServer({ seed: seedEuTenant });
       try {
         const res = await postCall(srv.localUrl, "8912345678");
         assert.equal(res.status, 400, "kein NANP-Fremdanruf-Pfad ohne bestaetigtes Tenant-Herkunftsland");
@@ -402,7 +400,7 @@ test("US-Tenant mit fremder DE-DID waehlt eine fuehrende 0 NICHT mehr als stille
 
   await t.test("Format-Gate lehnt ab (400), KEIN Call-Record mit dem falschen +49-Ziel", async () => {
     const srv = await startServer({
-      env: { ALLOWED_COUNTRY_CODES: "+1,+49", TWILIO_ACCOUNT_SID: "x" },
+      env: { ALLOWED_COUNTRY_CODES: "+1,+49" },
       seed,
       ownerNumber: { e164: FOREIGN_DE_DID, provider: "telnyx" },
     });
@@ -449,7 +447,6 @@ test("Tenant ohne privateNumber + US-DID: ITU-Wahl geht, unplausible NANP-Form n
   const HTTP_ENV_ITU = {
     ALLOWED_NUMBERS: DE_TARGET_E164,
     ALLOWED_COUNTRY_CODES: "+1,+49",
-    TWILIO_ACCOUNT_SID: "x",
   };
 
   await t.test("'0049...' (ITU-Wahl) passiert alle Gates trotz NANP-Heimatland (500)", async () => {

@@ -18,8 +18,8 @@
 // Klammern - alle sechs Aussagen sind gruen und gehoeren damit in den Regressionslauf
 // (npm test), nicht mehr ins Launch-Gate (npm run test:gates). Praezedenz: P4/GAP-04, P6.
 //
-// Signal fuer (4): TWILIO_ACCOUNT_SID ist ein Dummy ohne "AC"-Praefix (PROD_DUMMY_SECRETS),
-// der Twilio-Client wirft damit synchron VOR jedem Netzzugriff. 500 = alle Gates passiert,
+// Signal fuer (4): TELNYX_API_KEY bleibt leer (PROD_DUMMY_SECRETS), originateCall wirft
+// damit synchron VOR jedem Netzzugriff. 500 = alle Gates passiert,
 // 403/429/402 = ein Gate hat gesperrt. Kein Netz, kein echter Anruf.
 import { test } from "node:test";
 import assert from "node:assert/strict";

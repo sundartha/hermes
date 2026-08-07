@@ -12,16 +12,14 @@ import { makeDefaultState, setProfile, resolveProfile } from "../src/store/state
 import { KYC_LEVEL } from "../src/store/defaults.js";
 import { planProfileFor } from "../src/plans.js";
 
-// nicht-AC TWILIO_ACCOUNT_SID -> der Twilio-Client wirft synchron VOR jedem Netzzugriff;
-// ein durchgelassener Call endet als 500 (alle Gates passiert), eine Sperre als 403/429.
-const OFFLINE = { TWILIO_ACCOUNT_SID: "x" };
+// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
+// TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403/429/400 = ein Gate hat gesperrt.
 
 const oauthEnv = (idp, extra = {}) => ({
   MCP_AUTH: "oauth",
   OAUTH_ISSUER_URL: idp.issuer,
   MULTI_TENANT: "true",
   ALLOWED_COUNTRY_CODES: "*",
-  ...OFFLINE,
   ...extra,
 });
 

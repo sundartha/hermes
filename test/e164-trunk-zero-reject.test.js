@@ -4,11 +4,9 @@
 // (erste Ziffer 4 != 0) und wuerde unveraendert gewaehlt - das wird abgewiesen.
 //
 // Zwei Sektionen: (1) reines Praedikat (offline, deterministisch); (2) der Producer
-// POST /api/calls ueber HTTP. Offline-Diskriminator wie number-gate.test.js: eine
-// NICHT mit "AC" beginnende TWILIO_ACCOUNT_SID ("x") laesst den Twilio-Client synchron
-// VOR jedem Netzzugriff werfen -> ein durchgelassener Call endet als 500 (alle Gates
-// passiert), ein Trunk-0-Reject als 400 (Short-Circuit vor createCall), eine Denylist-
-// Sperre als 403.
+// POST /api/calls ueber HTTP. Offline-Diskriminator: 500 = alle Gates passiert
+// (originateCall wirft ohne TELNYX_API_KEY, s. BASE_ENV in helpers.js), ein
+// Trunk-0-Reject 400 (Short-Circuit vor createCall), eine Denylist-Sperre 403.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { E164, hasTrunkZeroAfterCountryCode } from "../src/store/defaults.js";
@@ -89,7 +87,6 @@ test("POST /api/calls: Trunk-0 -> 400, korrekte Nummer passiert (C4)", async (t)
     env: {
       ALLOWED_NUMBERS: [...TRUNK_ZERO, ...CLEAN].join(","),
       ALLOWED_COUNTRY_CODES: "+49,+33,+44",
-      TWILIO_ACCOUNT_SID: "x",
     },
   });
   try {
@@ -120,7 +117,7 @@ test("POST /api/calls: Trunk-0 -> 400, korrekte Nummer passiert (C4)", async (t)
 // wahrt die Denylist-Praezedenz (Regel 1), kein Kippen auf 400.
 test("POST /api/calls: denied UND trunk-0-foermig bleibt 403 denylist (C4-Bypass-Schutz)", async (t) => {
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "+4915112345678", ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
+    env: { ALLOWED_NUMBERS: "+4915112345678", ALLOWED_COUNTRY_CODES: "*" },
   });
   const blockedByDenylist = async (to) => {
     const res = await postCall(srv.localUrl, to);

@@ -5,7 +5,7 @@
 // Direkt 'active' (die EINE legitime Ausnahme zur Transition-Kette; kein Provider-Kauf,
 // kein 'requested'-Vorzustand). Idempotent: zweiter Lauf mit derselben E.164 = No-Op.
 // Funktioniert fuer beide Backends (STORE_BACKEND json|pg) ueber die Store-Fassade.
-// Aufruf: node scripts/seed-owner-number.js <e164> <twilio|telnyx>
+// Aufruf: node scripts/seed-owner-number.js <e164> telnyx
 import * as store from "../src/store.js";
 import { BOOTSTRAP_TENANT_ID, PROVIDER } from "../src/store/defaults.js";
 

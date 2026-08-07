@@ -4,9 +4,8 @@
 // tenantId - die Gate-Narrowing-Tests laufen darum unter MULTI_TENANT=true mit geseedeten
 // Tenants (idpSubject, kyc=card, ownerName, Profil unter tenantId) + eigener aktiver Nummer.
 //
-// Offline-Twilio-Trick (wie number-gate/audit): eine NICHT mit "AC" beginnende
-// TWILIO_ACCOUNT_SID ("x") laesst den Twilio-Client synchron VOR jedem Netzzugriff werfen ->
-// ein durchgelassener Call endet als 500 (alle Gates passiert), eine Sperre als 403/429.
+// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
+// TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403/429 = ein Gate hat gesperrt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -23,7 +22,6 @@ import { hashEmail } from "../src/util.js";
 import { makeDefaultState, updateSettings } from "../src/store/state-ops.js";
 import { defaultSettings, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-const OFFLINE = { TWILIO_ACCOUNT_SID: "x" }; // nicht-AC -> Twilio-Client wirft sync -> durchgelassen = 500
 const postCall = (url, to, identity) =>
   fetch(`${url}/api/calls`, {
     method: "POST",
@@ -64,7 +62,7 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
     TO_BODY = "+4915777777772",
     TO_EXT = "+4915777777773";
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49", ...OFFLINE },
+    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" },
     seed: seedState({}),
   });
   try {
@@ -128,7 +126,7 @@ test("(b) Identitaet nur vom localhost-Header, extern ignoriert (kein Spoof)", a
 // MULTI_TENANT=true -> das Profil (unter der tenantId) wird wirklich konsultiert.
 test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", async (t) => {
   const srv = await startServer({
-    env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49", ...OFFLINE },
+    env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" },
     seed: seedState({
       tenants: [subTenant("t_alice", "alice@team.test")],
       numbers: [activeNum("num_alice", "+4915110000011", "t_alice")],
@@ -158,7 +156,7 @@ test("(c) Profil-Land * widened nicht; unrestricted lockert nur die Allowlist", 
 // ---- (d) MAX_CALLS_PER_HOUR bleibt harte Obergrenze (ueber dem Profil-Limit) ----
 test("(d) Config-Limit deckelt ein hoeheres Profil-Limit -> 429", async () => {
   const srv = await startServer({
-    env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "1", ...OFFLINE },
+    env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "1" },
     seed: seedState({
       // 1 Outbound DIESES Tenants in der letzten Stunde -> min(config=1, profil=100) = 1 erschoepft
       calls: [seedCall({ id: "g1", tenantId: "t_fresh" })],
@@ -179,7 +177,7 @@ test("(d) Config-Limit deckelt ein hoeheres Profil-Limit -> 429", async () => {
 
 test("pro-Nutzer-Stundenlimit: Profil kann nur senken (min global/profil)", async () => {
   const srv = await startServer({
-    env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "100", ...OFFLINE },
+    env: { MULTI_TENANT: "true", ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", MAX_CALLS_PER_HOUR: "100" },
     seed: seedState({
       calls: [seedCall({ id: "u1", requestedBy: "bob@team.test", tenantId: "t_bob" })],
       tenants: [subTenant("t_bob", "bob@team.test")],
@@ -223,7 +221,6 @@ test("PROFILES_JSON seedet Profile beim Start", async (t) => {
       PROFILES_JSON: JSON.stringify({ t_persist: { unrestricted: true, maxCallsPerHour: null, evil: "x" } }),
       ALLOWED_NUMBERS: "",
       ALLOWED_COUNTRY_CODES: "*",
-      ...OFFLINE,
     },
     seed: seedState({
       tenants: [subTenant("t_persist", "persist-sub")],
@@ -272,7 +269,6 @@ test("e2e /mcp: JWT-Identitaet -> requestedBy im Audit (nicht spoof-/fail-open-b
       MULTI_TENANT: "true",
       ALLOWED_NUMBERS: "",
       ALLOWED_COUNTRY_CODES: "*",
-      ...OFFLINE,
     },
     seed: seedState({
       tenants: [subTenant("t_alice", "alice-sub"), subTenant("t_prod", "user_01PROD")],

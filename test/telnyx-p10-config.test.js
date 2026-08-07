@@ -32,8 +32,6 @@ function captureConsoleError(fn) {
 // jeweils mutierte Telnyx-Var entscheidet ueber das Urteil (Isolation).
 const REQUIRED_OK = {
   anthropicApiKey: "x",
-  twilioSid: "x",
-  twilioToken: "x",
   publicUrl: "https://example.test",
   mcpAuth: "",
   storeBackend: "json",

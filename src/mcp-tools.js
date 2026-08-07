@@ -862,7 +862,7 @@ export function registerTools(
   uiTool(
     "get_my_number",
     {
-      description: "Returns the phone number of the phone agent (the Twilio number).",
+      description: "Returns the phone number of the phone agent.",
       inputSchema: {},
       outputSchema: MY_NUMBER_OUTPUT,
       ...enableWidgetUi(WIDGET_MY_NUMBER),

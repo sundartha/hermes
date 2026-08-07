@@ -167,7 +167,7 @@ HTTP-Endpunkte, weil die Profiles-Zeile drei Methoden buendelt).
 | --- | --- | --- | --- |
 | `express.static(publicDir)` | `app.js:265` | Gate davor | **(c)** liefert nur `favicon.ico` + `brand/*`, beide schon exempt (`auth-gate.js:54,61`) |
 | `/voice/tts/:token` | `routes/voice.js:162` | Einmal-Token | **(a)** Token+TTL, PLAY-TTS in PLAN-SECURITY.md |
-| `/voice/*` | `routes/voice.js:173` | Signaturpruefung | **(a)** Twilio-HMAC / Telnyx-Ed25519, fail-closed |
+| `/voice/*` | `routes/voice.js:173` | Signaturpruefung | **(a)** Telnyx-Ed25519, fail-closed |
 | `POST /api/calls` | `routes/api-calls.js:81` | **nur Gate** | **(b1)** |
 | `GET /api/calls/:id/consult` | `routes/api-calls.js:306` | **nur Gate** | **(b1)** |
 | `POST /api/calls/:id/consult/answer` | `routes/api-calls.js:331` | **nur Gate** | **(b1)** |

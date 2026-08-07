@@ -93,15 +93,14 @@ export const LIVE_UNMEASURED = Object.freeze({
 export const LIVE_ENV = Object.freeze({ ...RENDER_ENV, ...LIVE_MEASURED });
 
 // Secrets tragen in render.yaml bewusst keinen Wert (`sync: false`). Fuer einen
-// offline-Spawn ersetzt sie GAP-33 durch Dummies - ausdruecklich NUR Secrets, nie ein
-// Gate. TWILIO_ACCOUNT_SID bewusst NICHT mit "AC" beginnend: der Twilio-Client wirft
-// dann synchron VOR jedem Netzzugriff, ein durchgelassener Call endet als 500. 500 ist
-// damit das Signal "alle Gates passiert, bis zum Provider-Aufruf durchgekommen" -
-// dasselbe Muster wie test/number-gate.test.js.
+// offline-Spawn ersetzt sie GAP-33 durch Dummies - ausdruecklich NUR Secrets, nie ein Gate.
+// TELNYX_API_KEY bleibt bewusst LEER: das ist der Offline-Diskriminator (gemessen
+// 2026-08-07). originateCall wirft dann synchron vor jedem Netzzugriff, POST /api/calls
+// antwortet 500 -> 500 = "alle Gates passiert, bis zum Provider-Aufruf durchgekommen",
+// 403/429/402 = "ein Gate hat gesperrt". Kein Netz, kein echter Anruf.
 export const PROD_DUMMY_SECRETS = Object.freeze({
   ANTHROPIC_API_KEY: "test-anthropic-key",
-  TWILIO_ACCOUNT_SID: "x",
-  TWILIO_AUTH_TOKEN: "test-twilio-auth-token",
+  TELNYX_API_KEY: "",
   DASHBOARD_PASSWORD: "",
   MCP_AUTH_TOKEN: "",
   ALLOWED_NUMBERS: "",

@@ -144,7 +144,7 @@ async function startAllSevenSetServer() {
       // beweist, dass NICHTS davon im Boot-Log landet, unabhaengig davon, dass sie hier
       // gesetzt sind (Regel 4).
       ANTHROPIC_API_KEY: "sk-ant-kv-m0-secret-darf-nirgends-auftauchen",
-      TWILIO_AUTH_TOKEN: "kv-m0-twilio-token-darf-nirgends-auftauchen",
+      TELNYX_API_KEY: "kv-m0-telnyx-key-darf-nirgends-auftauchen",
     },
   });
   const res = await fetch(`${srv.localUrl}/healthz`);

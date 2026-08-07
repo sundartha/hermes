@@ -20,9 +20,11 @@ Lektuere) und O-3/O-5 entschieden sind.
 | **C-P1** Rueckfall-Default explizit auf Telnyx | **gemergt** (`f0c5b8d`) |
 | **C-P1b** fuenf Parameter-Defaults in `registry.js` nachgezogen | **gemergt** — Korrektur eines von C-P1 verursachten Defekts, s. u. |
 | **C-P2** Testsuite-Fixtures auf Telnyx + Inventur | **gemergt** (`86c1fac`) |
-| **C-P3** Header-Dispatch + Signaturpruefung | offen |
-| **C-P4** Adapter, Config, Boot-Pflicht, Doku | offen |
-| **C-P5** Abnahme mit echtem Anruf | **braucht den Owner** |
+| **C-P3** Header-Dispatch + Signaturpruefung | **gemergt** |
+| **C-P4** Adapter, Enum, Registry, Bridge, Testsuite | **gemergt** |
+| **C-P5** Config, Boot-Pflicht, Env, Betriebs-Skripte, Setup-Doku | **gemergt** |
+| **C-P6** Kommentar-Nachlese in `src/` und `test/` | offen |
+| **C-P7** Abnahme mit echtem Anruf | **braucht den Owner** |
 | **C2** Indirektion zurueckbauen | offene Entscheidung O-4, Empfehlung: nein |
 
 **Nichts davon ist deployt.** Live laeuft der STT-A1-Stand (`5865b96`); Track C liegt auf
@@ -149,10 +151,11 @@ RLS ist FORCE, `app.current_tenant` je Tenant gesetzt):
 `select count(*) from tenant` = 3; die Tenant-Tabelle traegt keine RLS, die Zaehlung ist
 vollstaendig.
 
-**Noch offen (Owner oder Render-Dashboard):** sind `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`
-in der Render-Umgebung gesetzt? Das Render-MCP bietet nur einen **schreibenden** Env-Zugang;
-read-only ist die Frage mit den vorhandenen Werkzeugen nicht beantwortbar. Sie blockiert C
-nicht (ein gesetzter Key ohne Account ist harmlos), gehoert aber in die Abnahme von C4.
+**BEANTWORTET (C-P5):** sind `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` in der
+Render-Umgebung gesetzt? **Ja, mit Sicherheit.** `assertConfig` verlangte beide bis C-P5
+unbedingt (gemessener Boot-Refusal bei leerem Wert) und der Live-Dienst laeuft. Seit C-P5
+liest sie kein Codepfad mehr; das Loeschen im Render-Dashboard ist Ops-Arbeit **nach**
+verifiziertem Deploy des C-P5-Stands (gesetzt+ungelesen = harmlos, geloescht+verlangt = Ausfall).
 
 ## 1.6 Twilio ist kein toter Zweig, sondern ein Rueckfall-Default
 

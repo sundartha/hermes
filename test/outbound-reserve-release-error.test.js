@@ -1,6 +1,6 @@
-// OUT-05 (F2): Freigabe auf dem catch-Pfad (werfender Originate). OHNE FAKE_ORIGINATE: ein
-// nicht-AC TWILIO_ACCOUNT_SID laesst den echten Twilio-Client synchron VOR jedem Netzzugriff
-// werfen (Muster wie outbound-reserve-gate.test.js). Zwei identische place_call (je eigenes
+// OUT-05 (F2): Freigabe auf dem catch-Pfad (werfender Originate). OHNE FAKE_ORIGINATE:
+// Offline-Diskriminator - originateCall wirft ohne TELNYX_API_KEY synchron vor jedem
+// Netzzugriff (s. BASE_ENV in helpers.js). Zwei identische place_call (je eigenes
 // Ziel, damit KEIN anderes Gate als die Reserve interferiert) muessen BEIDE den Originate-
 // Pfad erreichen (5xx) - waere die Reserve aus #1 nicht im catch freigegeben worden, wuerde
 // #2 am Reserve-Gate 402 statt am Originate 5xx scheitern.
@@ -18,7 +18,6 @@ const post = (url, to) =>
 test("OUT-05 F2: catch-Pfad gibt die Reserve frei (zweiter Call erreicht wieder den Originate)", async () => {
   const srv = await startServer({
     env: {
-      TWILIO_ACCOUNT_SID: "x",
       // MAX_BUDGET_EUR wirkt hier als Pro-Tenant-Fallback (effectiveCapCents Stufe 3 - der
       // Owner hat keine tenant_budget-Zeile). Beide Calls
       // erwarten hier ohnehin 5xx (Reserve greift nicht) - der genaue Cap-Wert ist fuer

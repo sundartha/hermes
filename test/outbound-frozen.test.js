@@ -5,8 +5,8 @@
 // Reiner Spawn (startServer + readStore), KEIN pglite (Lehre p6a-Stall). Owner-Kontext ueber
 // localhost ohne Identitaets-Header (Tenant Null) - der Owner ist via Boot-Seed ein aktiver
 // Subscriber und telefonierte sonst ueber Pfad 2 (vgl. w5-abo-allowlist-gate.test.js W5-5a).
-// TWILIO_ACCOUNT_SID "x" (nicht-AC): der Twilio-Client wirft synchron VOR jedem Netzzugriff,
-// ein durchgelassener Call endet deterministisch offline als 500.
+// Offline-Diskriminator: 500 = alle Gates passiert (originateCall wirft ohne
+// TELNYX_API_KEY, s. BASE_ENV in helpers.js), 403 = ein Gate hat gesperrt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startServer, waitForLog } from "./helpers.js";
@@ -21,7 +21,7 @@ const post = (url, to = TO) =>
 const outbound = (srv) => srv.readStore().calls.filter((c) => c.direction === "outbound");
 
 test("OUTBOUND_FROZEN=true sperrt jeden Outbound sofort (403, kein Originate)", async () => {
-  const srv = await startServer({ env: { OUTBOUND_FROZEN: "true", TWILIO_ACCOUNT_SID: "x" } });
+  const srv = await startServer({ env: { OUTBOUND_FROZEN: "true" } });
   try {
     const res = await post(srv.localUrl);
     assert.equal(res.status, 403);
@@ -34,7 +34,7 @@ test("OUTBOUND_FROZEN=true sperrt jeden Outbound sofort (403, kein Originate)", 
 });
 
 test("OUTBOUND_FROZEN default (false): Owner erreicht den Originate (Pfad 2, 500)", async () => {
-  const srv = await startServer({ env: { TWILIO_ACCOUNT_SID: "x" } });
+  const srv = await startServer({});
   try {
     assert.equal((await post(srv.localUrl)).status, 500);
   } finally {

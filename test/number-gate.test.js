@@ -1,8 +1,7 @@
 // Phase 0: Nummern-Gates fuer Outbound-Calls (Denylist, Laender-Gate,
-// Pro-Stunde-Limit) + Pruefreihenfolge. Offline: eine NICHT mit "AC" beginnende
-// TWILIO_ACCOUNT_SID ("x") laesst den Twilio-Client synchron VOR jedem Netzzugriff
-// werfen -> ein durchgelassener Call endet als 500 (= alle Gates passiert), eine
-// Sperre als 403/429. Nicht-leer, damit der fail-closed-Boot (OT-4) trotzdem startet.
+// Pro-Stunde-Limit) + Pruefreihenfolge. Offline-Diskriminator: 500 = alle Gates
+// passiert (originateCall wirft ohne TELNYX_API_KEY, s. BASE_ENV in helpers.js),
+// 403/429/400 = ein Gate hat gesperrt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
@@ -18,10 +17,9 @@ const postCall = (url, to) =>
 
 // ---- 0.1 Denylist (Notruf/Premium, hardcoded) ----
 test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
-  // Land + Allowlist grosszuegig: NUR die Denylist kann hier greifen. Nicht-AC
-  // TWILIO_ACCOUNT_SID ("x"), damit der Positiv-Fall synchron als 500 endet.
+  // Land + Allowlist grosszuegig: NUR die Denylist kann hier greifen.
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
+    env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "*" },
   });
   try {
     // OUT-10 (P0, i18n-Testkatalog 05-auslandstelefonie.md): "911" muss unabhaengig vom
@@ -68,7 +66,7 @@ test("Denylist (Notruf-/Premium-/Service-Nummern)", async (t) => {
 test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
   await t.test("Default +49: +49 passiert, +1 -> 403 grund=land", async () => {
     const srv = await startServer({
-      env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "+49", TWILIO_ACCOUNT_SID: "x" },
+      env: { ALLOWED_NUMBERS: ALLOWED, ALLOWED_COUNTRY_CODES: "+49" },
     });
     try {
       const blocked = await postCall(srv.localUrl, "+12025550123"); // US
@@ -94,7 +92,6 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
       env: {
         ALLOWED_NUMBERS: `${FR},${UK},${US}`,
         ALLOWED_COUNTRY_CODES: "+49,+33,+44",
-        TWILIO_ACCOUNT_SID: "x",
       },
     });
     try {
@@ -123,7 +120,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
   // Zustand - kein neuer Test noetig (G5), nur die Katalog-Zuordnung dokumentiert.
   await t.test("* erlaubt alle Laender", async () => {
     const srv = await startServer({
-      env: { ALLOWED_NUMBERS: "+12025550123", ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
+      env: { ALLOWED_NUMBERS: "+12025550123", ALLOWED_COUNTRY_CODES: "*" },
     });
     try {
       const res = await postCall(srv.localUrl, "+12025550123");
@@ -140,7 +137,7 @@ test("Laender-Gate (ALLOWED_COUNTRY_CODES)", async (t) => {
 // greifen (403 denylist, nicht 400 Format).
 test("OUT-15 (Mechanismus, gruen) - die Notruf-Denylist gewinnt auch bei explizit erlaubtem Land (+1)", async () => {
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+1", TWILIO_ACCOUNT_SID: "x" },
+    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+1" },
   });
   try {
     for (const to of EMERGENCY_SHORT_CODES) {
@@ -178,7 +175,6 @@ test("NANP-Sub-Ranges (1-900/1-976 + Karibik) bleiben gesperrt, auch wenn +1 erl
     env: {
       ALLOWED_NUMBERS: NANP_PREMIUM_TARGETS.join(","),
       ALLOWED_COUNTRY_CODES: "+1",
-      TWILIO_ACCOUNT_SID: "x",
     },
   });
   try {
@@ -209,7 +205,6 @@ test("gewoehnliche NANP-Nummern passieren die Denylist (GAP-18, Ueberblockierung
     env: {
       ALLOWED_NUMBERS: ORDINARY_NANP_TARGETS.join(","),
       ALLOWED_COUNTRY_CODES: "+1",
-      TWILIO_ACCOUNT_SID: "x",
     },
   });
   try {
@@ -275,7 +270,7 @@ test("Denylist-Audit nennt die getroffene Sub-Range (GAP-18)", async () => {
 test("OUT-25: vollstaendig freigeschalteter US-Tenant passiert ALLE 17 Gates (500, kein 403/429/400)", async () => {
   const US_TARGET = "+12025550123";
   const srv = await startServer({
-    env: { ALLOWED_COUNTRY_CODES: "+1", TWILIO_ACCOUNT_SID: "x" },
+    env: { ALLOWED_COUNTRY_CODES: "+1" },
     ownerNumber: { e164: "+12025557000", provider: "telnyx" },
   });
   try {
@@ -297,7 +292,6 @@ test("Pro-Stunde-Limit (MAX_CALLS_PER_HOUR)", async (t) => {
     ALLOWED_NUMBERS: ALLOWED,
     ALLOWED_COUNTRY_CODES: "*",
     MAX_CALLS_PER_HOUR: "2",
-    TWILIO_ACCOUNT_SID: "x",
   };
 
   await t.test("N+1-ter Outbound-Call innerhalb 1h -> 429 grund=stundenlimit", async () => {
@@ -398,10 +392,8 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
   // UNVERIFIZIERTEN Tenant ist jetzt das vorgelagerte KYC-Gate (siehe kyc-gate-outbound.test.js,
   // null-kyc -> 403). Die harten Ziel-Gates (Denylist/Land) bleiben davor (s.o.).
   await t.test("verifizierter Owner/Subscriber passiert die leere Allowlist (Pfad 2 -> 500)", async () => {
-    // TWILIO_ACCOUNT_SID "x" (nicht-AC): der Twilio-Client wirft synchron VOR jedem
-    // Netzzugriff -> ein durchgelassener Call endet deterministisch offline als 500.
     const srv = await startServer({
-      env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49", TWILIO_ACCOUNT_SID: "x" },
+      env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "+49" },
     });
     try {
       const res = await postCall(srv.localUrl, ALLOWED);
@@ -415,12 +407,12 @@ test("Pruefreihenfolge der Nummern-Gates", async (t) => {
 // ---- outbound-p1b: globale Best-effort-IRSF-Blockliste (neue Ranges) ----
 // Jeder NEU aufgenommene Premium-/Service-Range muss am DENYLIST-Gate (grund=denylist,
 // vor Format/Land) 403 + /gesperrt/ liefern; gewoehnliche internationale Nummern
-// (DE-Mobil, US, ES) duerfen die Denylist passieren. Land *, Allowlist grosszuegig,
-// TWILIO_ACCOUNT_SID "x" -> ein durchgelassener Call endet offline deterministisch als 500.
+// (DE-Mobil, US, ES) duerfen die Denylist passieren. Land *, Allowlist grosszuegig;
+// ein durchgelassener Call endet offline deterministisch als 500.
 test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound-p1b)", async (t) => {
   const PASS = ["+4915112345678", "+12025550123", "+34600000000"]; // DE-Mobil, US, ES
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: PASS.join(","), ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
+    env: { ALLOWED_NUMBERS: PASS.join(","), ALLOWED_COUNTRY_CODES: "*" },
   });
   const blockedByDenylist = async (to) => {
     const res = await postCall(srv.localUrl, to);
@@ -478,7 +470,7 @@ test("IRSF-Blockliste: neue Premium-Ranges -> 403, Intl-Mobil passiert (outbound
 // test/ks-p7-high-cost-denylist.test.js (G5: kein zweiter Spawn je Praefix).
 test("KS-P7: Hochpreis-Laendercode (+53 Kuba) -> 403 grund=denylist trotz Land-Gate '*'", async () => {
   const srv = await startServer({
-    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*", TWILIO_ACCOUNT_SID: "x" },
+    env: { ALLOWED_NUMBERS: "", ALLOWED_COUNTRY_CODES: "*" },
   });
   try {
     const res = await postCall(srv.localUrl, "+5352345678");

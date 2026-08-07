@@ -4,7 +4,7 @@
 // scripts/grant-admin.js (P1) ist das der komplette Erst-Setup ohne env-Seed (P2b
 // loest den fruehen config-derived Boot-Seed ab). Idempotent (zweiter Lauf = No-Op).
 // Funktioniert fuer beide Backends (STORE_BACKEND json|pg) ueber die Store-Fassade.
-// Aufruf: node scripts/bootstrap-tenant.js <e164> <twilio|telnyx> [tenantId]
+// Aufruf: node scripts/bootstrap-tenant.js <e164> telnyx [tenantId]
 import * as store from "../src/store.js";
 import { BOOTSTRAP_TENANT_ID, PROVIDER } from "../src/store/defaults.js";
 

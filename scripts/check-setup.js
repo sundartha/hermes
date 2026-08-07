@@ -1,19 +1,15 @@
 #!/usr/bin/env node
 // Setup-Checker: prueft VOR der ersten Demo alle bekannten Stolpersteine.
 // Aufruf: npm run check   (Gateway muss fuer den Tunnel-Check laufen: npm start)
-import twilio from "twilio";
 import { config } from "../src/config.js";
 import * as store from "../src/store.js";
 import { findActiveNumber } from "../src/store/views.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
-// Owner-Twilio-Nummer kommt aus dem Store (nicht mehr aus TWILIO_NUMBER): der Owner
-// ist Tenant Null. Leer -> Hinweis aufs Seed-CLI.
-// Provider als String-Literal, NICHT PROVIDER.TWILIO: seit C-P4 gibt es keinen
-// Twilio-Eintrag mehr im Enum, PROVIDER.TWILIO waere `undefined` und wuerde den
-// Provider-Filter in findActiveNumber abschalten statt ihn leer laufen zu lassen.
-const ownerTwilioNumber =
-  findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID, "twilio")?.e164 || "";
+// Owner-Nummer kommt aus dem Store (der Owner ist Tenant Null). Ohne Provider-Filter:
+// seit C-P4 gibt es genau einen Anbieter, ein Filter waere eine Aussage ohne Alternative.
+// Leer -> Hinweis aufs Seed-CLI.
+const ownerNumber = findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID)?.e164 || "";
 
 let pass = 0,
   fail = 0,
@@ -31,19 +27,15 @@ const wrn = (m, hint) => {
   console.log("  \x1b[33m!\x1b[0m " + m + (hint ? "\n      → " + hint : ""));
 };
 const h = (t) => console.log("\n\x1b[1m" + t + "\x1b[0m");
-const norm = (n) => (n || "").replace(/[\s\-()]/g, "");
 
 console.log("\n═══ Hermes — Setup-Check ═══");
 
 // ---------- 1. .env Grundlagen ----------
 h("1. Konfiguration (.env)");
 config.llm.anthropicApiKey ? ok("ANTHROPIC_API_KEY gesetzt") : bad("ANTHROPIC_API_KEY fehlt");
-config.telephony.twilioSid && config.telephony.twilioToken
-  ? ok("Twilio-Credentials gesetzt")
-  : bad("TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN fehlen");
-ownerTwilioNumber
-  ? ok(`Owner-Twilio-Nummer (Store): ${ownerTwilioNumber}`)
-  : bad("Keine aktive Owner-Twilio-Nummer im Store", "npm run seed-owner-number -- <e164> twilio");
+ownerNumber
+  ? ok(`Owner-Nummer (Store): ${ownerNumber}`)
+  : bad("Keine aktive Owner-Nummer im Store", "npm run seed-owner-number -- <e164> telnyx");
 config.server.publicUrl && !config.server.publicUrl.includes("CHANGE-ME")
   ? ok(`PUBLIC_URL: ${config.server.publicUrl}`)
   : bad(
@@ -72,9 +64,9 @@ if (config.voice.voiceEngine === "realtime") {
     ? ok("Voice-Engine: realtime, OPENAI_API_KEY gesetzt")
     : bad("VOICE_ENGINE=realtime, aber OPENAI_API_KEY fehlt");
 } else {
-  ok("Voice-Engine: budget (Twilio STT/TTS + Claude Haiku)");
+  ok("Voice-Engine: budget (Telnyx TeXML STT/TTS + Claude Haiku)");
 }
-// MCP-Auth-Modus melden (Detailpruefung fuer oauth weiter unten in Abschnitt 6)
+// MCP-Auth-Modus melden (Detailpruefung fuer oauth weiter unten in Abschnitt 5)
 if (config.auth.mcpAuth === "oauth") {
   config.auth.oauthIssuerUrl
     ? ok(`MCP-Auth: oauth (Issuer ${config.auth.oauthIssuerUrl})`)
@@ -114,58 +106,9 @@ if (config.llm.anthropicApiKey) {
   }
 }
 
-// ---------- 3. Twilio ----------
-h("3. Twilio");
-let trialAccount = false;
-if (config.telephony.twilioSid && config.telephony.twilioToken) {
-  const client = twilio(config.telephony.twilioSid, config.telephony.twilioToken, { edge: config.telephony.twilioEdge });
-  try {
-    const acct = await client.api.v2010.accounts(config.telephony.twilioSid).fetch();
-    ok(`Credentials gueltig (Account: ${acct.friendlyName})`);
-    trialAccount = acct.type === "Trial";
-    trialAccount
-      ? wrn(
-          "Trial-Account",
-          "Nur verifizierte Zielnummern + Ansage vor jedem Call. Upgrade ~20 EUR entfernt beides.",
-        )
-      : ok("Voll-Account (keine Trial-Einschraenkungen)");
-
-    // Nummer vorhanden + Webhooks korrekt?
-    const nums = await client.incomingPhoneNumbers.list({ limit: 20 });
-    const mine = nums.find((n) => norm(n.phoneNumber) === norm(ownerTwilioNumber));
-    if (!mine) {
-      bad(
-        `Owner-Twilio-Nummer ${ownerTwilioNumber} gehoert nicht zu diesem Account`,
-        "Nummer in der Twilio-Console pruefen",
-      );
-    } else {
-      ok("Owner-Twilio-Nummer gehoert zum Account");
-      const wantVoice = `${config.server.publicUrl}/voice/incoming`;
-      const wantStatus = `${config.server.publicUrl}/voice/status`;
-      norm(mine.voiceUrl) === norm(wantVoice)
-        ? ok("Voice-Webhook korrekt gesetzt")
-        : bad(
-            `Voice-Webhook ist '${mine.voiceUrl || "(leer)"}'`,
-            `In der Console auf ${wantVoice} (POST) setzen`,
-          );
-      norm(mine.statusCallback) === norm(wantStatus)
-        ? ok("Status-Callback korrekt gesetzt")
-        : wrn(
-            `Status-Callback ist '${mine.statusCallback || "(leer)"}'`,
-            `Empfohlen: ${wantStatus} (POST) - sonst keine Summaries bei Inbound-Calls`,
-          );
-      mine.capabilities?.sms === false && config.voice.sendSmsSummary
-        ? wrn("Nummer kann kein SMS", "SEND_SMS_SUMMARY=false setzen oder SMS-faehige Nummer holen")
-        : null;
-    }
-  } catch (e) {
-    bad("Twilio-Credentials abgelehnt oder API nicht erreichbar: " + e.message);
-  }
-}
-
-// ---------- 4. OpenAI (nur bei realtime) ----------
+// ---------- 3. OpenAI (nur bei realtime) ----------
 if (config.voice.voiceEngine === "realtime" && config.voice.openaiApiKey) {
-  h("4. OpenAI (Realtime-Engine)");
+  h("3. OpenAI (Realtime-Engine)");
   try {
     const r = await fetch("https://api.openai.com/v1/models", {
       headers: { Authorization: `Bearer ${config.voice.openaiApiKey}` },
@@ -185,8 +128,8 @@ if (config.voice.voiceEngine === "realtime" && config.voice.openaiApiKey) {
   }
 }
 
-// ---------- 5. Tunnel: erreicht die Aussenwelt DIESEN Server? ----------
-h("5. Oeffentlicher Tunnel (ngrok)");
+// ---------- 4. Tunnel: erreicht die Aussenwelt DIESEN Server? ----------
+h("4. Oeffentlicher Tunnel (ngrok)");
 if (config.server.publicUrl && !config.server.publicUrl.includes("CHANGE-ME")) {
   try {
     const [pub, loc] = await Promise.all([
@@ -205,7 +148,9 @@ if (config.server.publicUrl && !config.server.publicUrl.includes("CHANGE-ME")) {
         "Laeuft ngrok? URL gewechselt? (ngrok-Free-URLs aendern sich bei jedem Start)",
       );
     } else if (pub.agent?.number === loc.agent?.number && pub.usage?.calls === loc.usage?.calls) {
-      ok("Tunnel zeigt auf dieses Gateway - Twilio & Claude-Connector koennen durchgreifen");
+      ok(
+        "Tunnel zeigt auf dieses Gateway - Telefonie-Provider & Claude-Connector koennen durchgreifen",
+      );
     } else {
       wrn(
         "PUBLIC_URL antwortet, scheint aber ein anderer Server zu sein",
@@ -217,9 +162,9 @@ if (config.server.publicUrl && !config.server.publicUrl.includes("CHANGE-ME")) {
   }
 }
 
-// ---------- 6. MCP-OAuth (nur bei MCP_AUTH=oauth) ----------
+// ---------- 5. MCP-OAuth (nur bei MCP_AUTH=oauth) ----------
 if (config.auth.mcpAuth === "oauth") {
-  h("6. MCP-OAuth (Resource Server)");
+  h("5. MCP-OAuth (Resource Server)");
   // (a) Issuer erreichbar + Metadata mit jwks_uri (OIDC oder OAuth-2.1-Stil)
   if (config.auth.oauthIssuerUrl) {
     let jwksUri = null;
