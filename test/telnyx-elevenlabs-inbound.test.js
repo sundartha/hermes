@@ -1,13 +1,12 @@
 // ElevenLabs-TTS end-to-end am /voice/incoming-Pfad (Server-Spawn, json-Store):
 // mit gesetzten TELNYX_ELEVENLABS_*-Envs rendert der Telnyx-Inbound das Greeting
 // mit ElevenLabs-Voice + api_key_ref, die STT-Attribute (Deepgram) bleiben
-// unveraendert; Twilio-Inbound bleibt ElevenLabs-frei (nur der Telnyx-Renderer
-// kennt den Zweig); ohne Env bleibt der Azure-Bestand. Provider-Wahl laeuft ueber
+// unveraendert; ohne Env bleibt der Azure-Bestand. Provider-Wahl laeuft ueber
 // die Telnyx-Signatur-Header (Signaturpruefung im Test uebersprungen, die Header
 // dienen nur dem Provider-Dispatch wie in provider-threading.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, TWILIO_TEST_SIGNATURE_HEADERS } from "./helpers.js";
+import { startServer, seedState } from "./helpers.js";
 
 const TENANT_B = "B";
 const B_NUMBER = "+4915255555555";
@@ -38,20 +37,20 @@ function seedWithTelnyxNumber() {
   });
 }
 
-async function inbound(srv, { telnyx, callSid }) {
+async function inbound(srv, { callSid }) {
   const res = await fetch(`${srv.localUrl}/voice/incoming`, {
     method: "POST",
-    headers: telnyx ? TELNYX_HEADERS : TWILIO_TEST_SIGNATURE_HEADERS,
+    headers: TELNYX_HEADERS,
     body: new URLSearchParams({ CallSid: callSid, From: "+4915112345678", To: B_NUMBER }),
   });
   assert.equal(res.status, 200);
   return res.text();
 }
 
-test("ElevenLabs-Env gesetzt: Telnyx-Inbound spricht ElevenLabs (STT bleibt Deepgram), Twilio bleibt frei davon", async () => {
+test("ElevenLabs-Env gesetzt: Telnyx-Inbound spricht ElevenLabs (STT bleibt Deepgram)", async () => {
   const srv = await startServer({ seed: seedWithTelnyxNumber(), env: EL_ENV });
   try {
-    const telnyxXml = await inbound(srv, { telnyx: true, callSid: "CAel1" });
+    const telnyxXml = await inbound(srv, { callSid: "CAel1" });
     assert.match(
       telnyxXml,
       /<Say voice="ElevenLabs\.Default\.abc123" api_key_ref="elevenlabs_prod">/,
@@ -59,9 +58,6 @@ test("ElevenLabs-Env gesetzt: Telnyx-Inbound spricht ElevenLabs (STT bleibt Deep
     );
     assert.match(telnyxXml, /transcriptionEngine="Deepgram"/, "STT unveraendert Deepgram");
     assert.doesNotMatch(telnyxXml, /Azure\./, "keine gemischten Stimmen");
-
-    const twilioXml = await inbound(srv, { telnyx: false, callSid: "CAel2" });
-    assert.doesNotMatch(twilioXml, /ElevenLabs/, "Twilio-Renderer kennt den Zweig nicht");
   } finally {
     await srv.stop();
   }
@@ -70,7 +66,7 @@ test("ElevenLabs-Env gesetzt: Telnyx-Inbound spricht ElevenLabs (STT bleibt Deep
 test("Ohne ElevenLabs-Env: Telnyx-Inbound bleibt byte-identisch auf dem Azure-Bestand", async () => {
   const srv = await startServer({ seed: seedWithTelnyxNumber() });
   try {
-    const xml = await inbound(srv, { telnyx: true, callSid: "CAel3" });
+    const xml = await inbound(srv, { callSid: "CAel3" });
     assert.match(xml, /voice="Azure\.de-DE-KatjaNeural"/, "Azure-Default unveraendert");
     assert.doesNotMatch(xml, /ElevenLabs/, "Gate aus -> kein ElevenLabs-Attribut");
   } finally {

@@ -1,9 +1,9 @@
-// Phase-1-Regressionstests: Twilio-Signatur, Auth fail-closed (internalOnly, kein
-// Header-Spoofing), MCP-Auth fail-closed. Diese Gates duerfen nie aufweichen.
+// Phase-1-Regressionstests: Provider-Signatur (Telnyx/Ed25519), Auth fail-closed
+// (internalOnly, kein Header-Spoofing), MCP-Auth fail-closed. Diese Gates duerfen nie
+// aufweichen.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import twilio from "twilio";
-import { startServer, externalIp, BASE_ENV, OWNER_TEST_NUMBER } from "./helpers.js";
+import { startServer, externalIp, OWNER_TEST_NUMBER, makeTelnyxSigner, nowSeconds } from "./helpers.js";
 
 const EXTERNAL_IP = externalIp();
 
@@ -22,35 +22,51 @@ test("healthz ist offen erreichbar", async () => {
   }
 });
 
-test("Twilio-Signaturpruefung fuer /voice/*", async (t) => {
-  const srv = await startServer({ env: { SKIP_TWILIO_SIGNATURE_CHECK: "false" } });
+// C-P3: Signaturpruefung des EINZIGEN verbliebenen Inbound-Verifizierers (Telnyx,
+// Ed25519), end-to-end ueber die echte HTTP-Route. Loest den Twilio-Aequivalenttest ab.
+// Der dritte Unterfall ist der Grund fuer diesen Test: er ist der EINZIGE Beleg, dass
+// das Gate legitimen Verkehr NICHT blockiert - ein Gate, das alles ablehnt, besteht
+// jeden Negativ-Test. Unterfall 2 ist seine eingebaute Gegenprobe (gleiche Route,
+// gleicher Schluessel, nur die Signatur ist Muell -> 403 statt 200).
+test("Provider-Signaturpruefung (Telnyx/Ed25519) fuer /voice/*", async (t) => {
+  const signer = makeTelnyxSigner();
+  const srv = await startServer({
+    env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", TELNYX_PUBLIC_KEY: signer.publicKeyBase64 },
+  });
   try {
-    const url = `${BASE_ENV.PUBLIC_URL}/voice/incoming`;
-    const params = { CallSid: "CAtest123", From: "+4915112345678", To: OWNER_TEST_NUMBER.e164 };
+    // Signiert werden die EXAKTEN Bytes auf der Leitung -> Body einmal als String bauen,
+    // denselben String signieren und senden. Content-Type explizit: ohne ihn greift
+    // express.urlencoded nicht, req.rawBody bliebe leer und der Verifizierer haette
+    // nichts zu pruefen - der 403 kaeme aus dem falschen Grund.
+    const body = new URLSearchParams({
+      CallSid: "CAtest123",
+      From: "+4915112345678",
+      To: OWNER_TEST_NUMBER.e164,
+    }).toString();
+    const post = (extraHeaders = {}) =>
+      fetch(`${srv.localUrl}/voice/incoming`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", ...extraHeaders },
+        body,
+      });
 
     await t.test("ohne Signatur -> 403", async () => {
-      const res = await fetch(`${srv.localUrl}/voice/incoming`, {
-        method: "POST",
-        body: new URLSearchParams(params),
-      });
-      assert.equal(res.status, 403);
+      assert.equal((await post()).status, 403);
     });
 
     await t.test("mit falscher Signatur -> 403", async () => {
-      const res = await fetch(`${srv.localUrl}/voice/incoming`, {
-        method: "POST",
-        headers: { "X-Twilio-Signature": "invalid" },
-        body: new URLSearchParams(params),
+      const res = await post({
+        "telnyx-signature-ed25519": "invalid",
+        "telnyx-timestamp": String(nowSeconds()),
       });
       assert.equal(res.status, 403);
     });
 
-    await t.test("mit gueltiger Signatur -> 200 + TwiML", async () => {
-      const signature = twilio.getExpectedTwilioSignature(BASE_ENV.TWILIO_AUTH_TOKEN, url, params);
-      const res = await fetch(`${srv.localUrl}/voice/incoming`, {
-        method: "POST",
-        headers: { "X-Twilio-Signature": signature },
-        body: new URLSearchParams(params),
+    await t.test("mit gueltiger Signatur -> 200 + TeXML", async () => {
+      const ts = String(nowSeconds());
+      const res = await post({
+        "telnyx-signature-ed25519": signer.sign(ts, body),
+        "telnyx-timestamp": ts,
       });
       assert.equal(res.status, 200);
       assert.match(await res.text(), /<Response>/);

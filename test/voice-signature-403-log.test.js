@@ -2,7 +2,7 @@
 // app.use("/voice")-Middleware war bisher STUMM (nur 403) - gedrehte Keys, ein falsch
 // signierender Client oder gestoerte Zustellung blieben in den Render-Logs unsichtbar
 // (CLAUDE.md Regel 7). Pinnt: jeder !ok-403 hinterlaesst genau EINE Zeile mit Provider-
-// HERKUNFT (twilio|telnyx|unknown) + query-freiem Pfad, PII-/secret-frei (nie Signatur-
+// HERKUNFT (telnyx|unknown) + query-freiem Pfad, PII-/secret-frei (nie Signatur-
 // Wert, Timestamp, rawBody, E.164); eine uebersprungene Pruefung erzeugt KEINE Zeile.
 // Spawn-basiert (helpers.startServer), offline: alle 403 fallen VOR jedem Handler.
 import { test } from "node:test";
@@ -32,10 +32,13 @@ test("OBS-3: ungueltige Inbound-Signatur -> 403 + PII-freie Logzeile mit Provide
     assert.equal(rTelnyx.status, 403);
     await waitForLog(srv, /\[voice-signature\][^\n]*path=\/voice\/call-control[^\n]*provider=telnyx/);
 
-    // b) Twilio-Header, bogus Signatur -> 403 + provider=twilio
+    // b) C-P3: ein Twilio-Signatur-Header ist keine Provider-Quelle mehr -> die Herkunft
+    // ist unknown und der Request faellt fail-closed durch. Bleibt eigener Fall (nicht
+    // in c) zusammengezogen), weil genau DAS die C-P3-Invariante am HTTP-Rand ist:
+    // ein alter Twilio-Webhook erreicht keinen Zweig ohne Signaturpruefung.
     const rTwilio = await post(srv, "/voice/incoming", { "x-twilio-signature": BOGUS_TWILIO_SIG });
     assert.equal(rTwilio.status, 403);
-    await waitForLog(srv, /\[voice-signature\][^\n]*path=\/voice\/incoming[^\n]*provider=twilio/);
+    await waitForLog(srv, /\[voice-signature\][^\n]*path=\/voice\/incoming[^\n]*provider=unknown/);
 
     // c) kein erkennbarer Provider-Header -> 403 + provider=unknown
     const rUnknown = await post(srv, "/voice/status", {});
