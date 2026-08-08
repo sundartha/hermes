@@ -308,8 +308,14 @@ Rekonstruiert: Session 8ec76d98 baute C-P4 DIREKT im Working-Tree (scope-bereini
   ausschliesslich Kategorie (b) (Bypass-Schalter, twilioSid-Feldname) plus wahre
   Protokoll-/Historien-Kommentare gemaess C-P6-Spec-BLEIBT-Liste.
 
-## Kettenstand Track C (2026-08-07): C-P1 bis C-P6 KOMPLETT auf lokalem master, NICHT deployt.
-Kein funktionaler Twilio-Code mehr im Repo. Naechster Schritt ist C-P7 = Owner.
+## Kettenstand Track C (2026-08-08): C-P1 bis C-P6 KOMPLETT und LIVE.
+Deploy 2026-08-08 (manuell durch den Owner, dep-d9re8fqjnfac73fh3p30), verifiziert:
+/healthz liefert commit 27c8579, Boot-Banner der neuen Instanz ohne Twilio, alle
+Flags aktiv. Kein funktionaler Twilio-Code mehr im Repo oder im Betrieb.
+Die drei TWILIO_*-Keys in der Render-Env sind seither KOSMETIK (gesetzt+ungelesen
+= harmlos) - loeschen jederzeit moeglich, Dashboard-Handgriff des Owners.
+WER-Nachmessung (Track A) vom Owner zurueckgestellt; ab jetzt misst jeder Anruf
+den Stand mit BEIDEN Aenderungen (STT-A1 + Track C) - bewusst akzeptiert.
 
 ## Danach offen (braucht Owner)
 - Track-A-Abnahmeanruf (+1 706 710 1188), DANN Deploy von Track C (push upstream).
