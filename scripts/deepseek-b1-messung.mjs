@@ -159,9 +159,11 @@ const BALANCE_POLL_INTERVAL_SECONDS = 60;
 const BALANCE_POLL_INTERVAL_MS = BALANCE_POLL_INTERVAL_SECONDS * MS_PER_SECOND;
 
 // Block E - Stream + Werkzeug (M7). Kreuzprodukt {Stream, kein Stream} x {Werkzeug, kein
-// Werkzeug} x {include_usage, kein include_usage} = 8 Aufrufe. Modell FLASH (guenstigstes) -
-// die Mechanik (usage im Stream, tool_calls-Feldpfad) ist modellunabhaengig, s. Bericht.
-const BLOCK_E_MODEL = MODEL_FLASH;
+// Werkzeug} x {include_usage, kein include_usage} = 8 Aufrufe, JE MODELL (wie A/B/C).
+// Owner-Entscheidung 2026-08-08: die Spec-Tabelle nennt bei E eine flache Zahl ohne
+// "je Modell"; das war eine Zahl im Messplan, keine technische Grenze. Nur mit beiden
+// Modellen ist die Zelle "pro x stream" belegt - und genau die ist der Live-Sprechpfad,
+// fuer den B2 die Verbrauchsfelder braucht.
 const BLOCK_E_MAX_TOKENS = 64;
 const BLOCK_E_PROMPT =
   "Ein Anrufer sagt: Bitte richten Sie aus, dass ich um 15 Uhr zurueckgerufen werden moechte. " +
@@ -179,6 +181,10 @@ function buildBlockECombos() {
   return combos;
 }
 const BLOCK_E_COMBOS_COUNT = buildBlockECombos().length;
+
+// Fehlerproben (M5): brauchen irgendein gueltiges Modell, gemessen wird der Fehlerweg,
+// nicht das Modell. Das guenstigste genuegt.
+const ERROR_PROBE_MODEL = MODEL_FLASH;
 
 // Block F - Off-Peak (M4, optional)
 const BLOCK_F_MODEL = MODEL_FLASH;
@@ -205,7 +211,8 @@ const APPROX_INPUT_TOKENS_BLOCK_B =
   (CACHE_PROMPT_MIN_CHARS * BLOCK_B_CALLS_PER_MODEL * CONFIGURED_MODELS.length) / CHARS_PER_TOKEN_ESTIMATE;
 const APPROX_INPUT_TOKENS_BLOCK_C =
   (RESOLUTION_TARGET_CHARS * RESOLUTION_MAX_CALLS_PER_MODEL * CONFIGURED_MODELS.length) / CHARS_PER_TOKEN_ESTIMATE;
-const APPROX_INPUT_TOKENS_BLOCK_E = (BLOCK_E_PROMPT.length * BLOCK_E_COMBOS_COUNT) / CHARS_PER_TOKEN_ESTIMATE;
+const APPROX_INPUT_TOKENS_BLOCK_E =
+  (BLOCK_E_PROMPT.length * BLOCK_E_COMBOS_COUNT * CONFIGURED_MODELS.length) / CHARS_PER_TOKEN_ESTIMATE;
 const APPROX_INPUT_TOKENS_BLOCK_F = (BLOCK_A_TARGET_CHARS * BLOCK_F_CALLS) / CHARS_PER_TOKEN_ESTIMATE;
 
 const EXIT_OK = 0;
@@ -700,6 +707,28 @@ function selftestDeltaOutcomeClassification() {
   ]);
 }
 
+// M1-Kreuzabdeckung: eine leere Zelle MUSS "nicht beantwortet" ergeben und die Zelle
+// namentlich nennen. Die Sabotage, die diese Gruppe rot machen soll: `crossCoverage` nur
+// ueber die Randverteilungen rechnen lassen - dann bleibt der Fall "pro fehlt im Stream"
+// unentdeckt, obwohl beide Randsummen ungleich 0 sind.
+function selftestM1CrossCoverage() {
+  const call = (model, stream) => ({ model_requested: model, stream, usage_raw: { prompt_tokens: 1 }, usage_keys: [] });
+  const [flash, pro] = CONFIGURED_MODELS;
+  const alleZellen = [];
+  for (const m of CONFIGURED_MODELS) for (const s of [false, true]) alleZellen.push(call(m, s));
+  const vollstaendig = Array.from({ length: M1_MIN_SAMPLES }, (unused, i) => alleZellen[i % alleZellen.length]);
+  // Randsummen beide ungleich 0, aber "pro x stream" leer - das faengt nur das Kreuzprodukt.
+  const zelleFehlt = vollstaendig.map((c) => (c.model_requested === pro && c.stream ? call(flash, true) : c));
+  return runChecks([
+    () => assert.strictEqual(typeof computeM1Answer(vollstaendig), "object"),
+    () => assert.strictEqual(Object.keys(crossCoverage(alleZellen)).length, CONFIGURED_MODELS.length * OPERATING_MODES.length),
+    () => assert.ok(Object.values(crossCoverage(alleZellen)).every((n) => n > 0)),
+    () => assert.strictEqual(typeof computeM1Answer(zelleFehlt), "string"),
+    () => assert.ok(computeM1Answer(zelleFehlt).includes(`${pro} x ${MODE_STREAM}`)),
+    () => assert.ok(computeM1Answer([]).startsWith("nicht beantwortet")),
+  ]);
+}
+
 function runSelftest() {
   const groups = [
     ["Ganzzahl-Delta aus Guthaben-Strings", selftestMoneyDelta],
@@ -712,6 +741,7 @@ function runSelftest() {
     ["Vorzeichen in buildOverallComparison (M2/F11)", selftestOverallComparisonSign],
     ["Aufloesungs-Klassifikation je Guthaben-Eintrag (S2-2)", selftestBalanceResolutionClassification],
     ["Delta-Ausgang bewegt/null-aber-messbar/nicht-messbar (S2-3)", selftestDeltaOutcomeClassification],
+    ["M1-Kreuzabdeckung Modell x Betriebsart", selftestM1CrossCoverage],
   ];
   let checked = 0;
   let failed = 0;
@@ -1229,7 +1259,7 @@ async function runErrorProbes(state) {
   const wrongKeyRecord = await performChatMeasurement(state, {
     block: "ERR",
     seq: "wrong_key",
-    model: BLOCK_E_MODEL,
+    model: ERROR_PROBE_MODEL,
     prompt: BLOCK_A_PROMPT,
     maxTokens: BLOCK_A_MAX_TOKENS,
     stream: false,
@@ -1242,7 +1272,7 @@ async function runErrorProbes(state) {
   const invalidParamRecord = await performChatMeasurement(state, {
     block: "ERR",
     seq: "invalid_param",
-    model: BLOCK_E_MODEL,
+    model: ERROR_PROBE_MODEL,
     prompt: BLOCK_A_PROMPT,
     maxTokens: INVALID_MAX_TOKENS,
     stream: false,
@@ -1419,20 +1449,24 @@ async function runBlockD(state) {
 
 async function runBlockE(state) {
   let seq = 0;
-  for (const combo of buildBlockECombos()) {
-    seq += 1;
-    await performChatMeasurement(state, {
-      block: "E",
-      seq,
-      model: BLOCK_E_MODEL,
-      prompt: BLOCK_E_PROMPT,
-      maxTokens: BLOCK_E_MAX_TOKENS,
-      stream: combo.stream,
-      includeUsage: combo.includeUsage,
-      withTool: combo.withTool,
-    });
+  for (const model of CONFIGURED_MODELS) {
+    for (const combo of buildBlockECombos()) {
+      seq += 1;
+      await performChatMeasurement(state, {
+        block: "E",
+        seq,
+        model,
+        prompt: BLOCK_E_PROMPT,
+        maxTokens: BLOCK_E_MAX_TOKENS,
+        stream: combo.stream,
+        includeUsage: combo.includeUsage,
+        withTool: combo.withTool,
+      });
+    }
   }
-  console.log(`Block E: ${seq} Aufrufe (Stream x Werkzeug x include_usage, Modell ${BLOCK_E_MODEL}).`);
+  console.log(
+    `Block E: ${seq} Aufrufe (Stream x Werkzeug x include_usage, je Modell: ${CONFIGURED_MODELS.join(", ")}).`,
+  );
 }
 
 async function runBlockF(state) {
@@ -1492,32 +1526,43 @@ async function runRequestedBlocks(state, options) {
 
 const M1_MIN_SAMPLES = 30;
 
+const MODE_STREAM = "stream";
+const MODE_NON_STREAM = "nicht-stream";
+const OPERATING_MODES = Object.freeze([MODE_STREAM, MODE_NON_STREAM]);
+
 function operatingModeLabel(call) {
-  return call.stream ? "stream" : "nicht-stream";
+  return call.stream ? MODE_STREAM : MODE_NON_STREAM;
 }
 
-// F13: M1 prueft jetzt die von der Spec verlangte Abdeckung ueber BEIDE Modelle UND BEIDE
-// Betriebsarten (Spec-Wortlaut: "verteilt ueber beide Modelle und beide Betriebsarten"),
-// nicht nur die Gesamtzahl >= 30 (die Gesamtzahl allein liesse z.B. 30 Nicht-Stream-Aufrufe
-// eines einzigen Modells durchgehen). Geprueft wird JE DIMENSION (jedes Modell >= 1 Treffer,
-// jede Betriebsart >= 1 Treffer) statt des vollen Kreuzprodukts: Block E streamt laut
-// Blockdesign NUR das guenstigste Modell (BLOCK_E_MODEL) - "PRO x stream" waere im
-// Kreuzprodukt IMMER leer und M1 damit strukturell unbeantwortbar, was am Blockdesign liegt,
-// nicht an einem Messdefekt.
+// M1 prueft die von der Spec verlangte Abdeckung "verteilt ueber beide Modelle und beide
+// Betriebsarten" als VOLLES KREUZPRODUKT (Modell x Betriebsart), nicht nur je Dimension.
+// Das war frueher unerfuellbar, weil Block E nur ein Modell streamte - "pro x stream" blieb
+// per Blockdesign leer. Seit Block E beide Modelle faehrt (Owner-Entscheidung 2026-08-08),
+// ist jede der vier Zellen erreichbar, und eine leere Zelle ist wieder das, was sie sein
+// soll: ein Befund. Sie wird namentlich genannt, nicht weggemittelt.
+function crossCoverage(withUsage) {
+  const zellen = {};
+  for (const model of CONFIGURED_MODELS) {
+    for (const mode of OPERATING_MODES) zellen[`${model} x ${mode}`] = 0;
+  }
+  for (const c of withUsage) zellen[`${c.model_requested} x ${operatingModeLabel(c)}`] += 1;
+  return zellen;
+}
+
 function computeM1Answer(calls) {
   const withUsage = calls.filter((c) => c.usage_raw);
   const jeModell = {};
   for (const model of CONFIGURED_MODELS) jeModell[model] = withUsage.filter((c) => c.model_requested === model).length;
-  const jeBetriebsart = { stream: 0, "nicht-stream": 0 };
+  const jeBetriebsart = {};
+  for (const mode of OPERATING_MODES) jeBetriebsart[mode] = 0;
   for (const c of withUsage) jeBetriebsart[operatingModeLabel(c)] += 1;
-  const fehlendeModelle = Object.entries(jeModell).filter(([, n]) => n === 0).map(([k]) => k);
-  const fehlendeBetriebsarten = Object.entries(jeBetriebsart).filter(([, n]) => n === 0).map(([k]) => k);
-  if (withUsage.length < M1_MIN_SAMPLES || fehlendeModelle.length > 0 || fehlendeBetriebsarten.length > 0) {
+  const zellen = crossCoverage(withUsage);
+  const leereZellen = Object.entries(zellen).filter(([, n]) => n === 0).map(([k]) => k);
+  if (withUsage.length < M1_MIN_SAMPLES || leereZellen.length > 0) {
     return (
       `nicht beantwortet, Grund: ${withUsage.length} Antworten mit usage (Minimum ${M1_MIN_SAMPLES}), ` +
-      `je Modell: ${JSON.stringify(jeModell)}, je Betriebsart: ${JSON.stringify(jeBetriebsart)}` +
-      (fehlendeModelle.length > 0 ? `, ohne jede Antwort (Modell): ${fehlendeModelle.join(", ")}` : "") +
-      (fehlendeBetriebsarten.length > 0 ? `, ohne jede Antwort (Betriebsart): ${fehlendeBetriebsarten.join(", ")}` : "")
+      `Abdeckung je Modell x Betriebsart: ${JSON.stringify(zellen)}` +
+      (leereZellen.length > 0 ? `, ohne jede Antwort: ${leereZellen.join(", ")}` : "")
     );
   }
   const eqPromptViolations = withUsage.filter((c) => c.eq_prompt === false);
@@ -1528,6 +1573,7 @@ function computeM1Answer(calls) {
     samples: withUsage.length,
     abdeckung_je_modell: jeModell,
     abdeckung_je_betriebsart: jeBetriebsart,
+    abdeckung_modell_x_betriebsart: zellen,
     eq_prompt_violations: eqPromptViolations.length,
     eq_prompt_beispiel: eqPromptViolations[0]?.usage_raw ?? null,
     eq_total_violations: eqTotalViolations.length,
@@ -1961,8 +2007,8 @@ function plannedCallsForBlock(block) {
       return { count: 0, note: `${BALANCE_POLL_COUNT} Guthaben-Abfragen, keine Chat-Aufrufe`, estUsd: 0 };
     case "E":
       return {
-        count: BLOCK_E_COMBOS_COUNT,
-        note: `Stream x Werkzeug x include_usage, Modell ${BLOCK_E_MODEL}`,
+        count: BLOCK_E_COMBOS_COUNT * CONFIGURED_MODELS.length,
+        note: "Stream x Werkzeug x include_usage, je Modell",
         estUsd: estimateBlockCostUsd(APPROX_INPUT_TOKENS_BLOCK_E),
       };
     case "F":
