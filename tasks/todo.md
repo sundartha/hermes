@@ -607,3 +607,55 @@ Nenner ist **72, nicht 80**; `look_up` ist **2/72 statt 3/80**. Beide Szenarien 
 dem B3b-Vergleich neu erhoben werden. Als **vierter Bench-Bestandsdefekt** dokumentiert:
 ein Lauf, der am LLM-Fehler stirbt, meldet gruene Checks statt eines Fehlers — er produziert
 ein falsches Ergebnis, das wie ein perfektes aussieht.
+
+## B3a — Antwortseite neutralisiert. ERLEDIGT + GEMERGT (2026-08-08, Merge a8a8733)
+
+Gate PASS **ohne Fix-Runde** (5 Agenten, ~1,05 M Subagent-Token). Ergebnis: der LLM-Seam ist
+anbieter-frei — `src/llm.js` importiert das Anthropic-SDK nicht mehr, das Anbieter-Wissen der
+Antwortseite liegt in `src/llm/adapters/anthropic.js` (neu, 244 Zeilen).
+
+### Lead-Verifikation, selbst gefahren (PASS ist keine Freigabe)
+
+| Abnahme | Ergebnis |
+|---|---|
+| A2 Suite | **4026/4026** gefiltert (roh 4046), Exit 0 — Baseline 4007, also **+19**, nicht gesunken |
+| A3 **Byte-Gleichheit** | derselbe Golden-Master ist gruen gegen den **alten** Produktionscode (`42a2fe5` = master + nur der Test) UND gegen den neuen |
+| A3 **Rotprobe selbst gefahren** | `max_tokens` 300 -> 999 im Adapter-Body macht ihn **rot** (`deepStrictEqual` auf dem rohen Body-String inkl. System-Prompt), zuruecknehmen -> wieder gruen |
+| A4 sieben Draht-/Buchungs-Pins | **leerer Diff** |
+| A5 Antwortseiten-Marker | `claude.js` **0**, `precall-briefing.js` **0**, `llm.js` **0** |
+| A5 **Positiv-Kontrolle** | Adapter **9** — die Null ist echt, nicht ein defekter Ausdruck (B2-Lehre angewandt) |
+
+**Der Golden-Master ist die eigentliche Leistung dieser Phase.** Er wurde in einem eigenen,
+VORHERIGEN Commit gegen den unveraenderten Bestandscode aufgenommen — dadurch ist "der Draht
+hat sich nicht verschoben" nicht behauptet, sondern beweisbar, und der Beweis laesst sich von
+jedem nachvollziehen, der beide Commits auscheckt.
+
+**Eine begruendungspflichtige Testaenderung, geprueft und akzeptiert:**
+`test/kv-p1-cost-ledger-map.test.js` (Geldpfad) stellt die Fixture auf die neutrale
+Verbrauchsform um — **dieselben Zahlen** (5 Eingabe / 5 Ausgabe), `billingModelId` ersetzt den
+`model`-Parameter von `bookTokenUsage`. Die eigentliche Assertion gegen `aiCostCents` bleibt
+unveraendert. Signaturanpassung, kein Aufweichen.
+
+**E5 ist umgesetzt und geschlossen:** `searchCount` nimmt die opake Ruecktrage statt der
+Verbrauchsform. `test/al-p10-precall-research.test.js` ist unveraendert und gruen — und wird
+rot, sobald man die Umstellung zurueckdreht. Damit ist belegt, dass die Recherche-Gebuehr
+weiter die Ist-Zahl bucht und nicht still auf den Deckel faellt.
+
+### Was B3b uebernimmt (die Grenztabelle, vollstaendig in `tasks/b3a-report.md`)
+
+Jeder in B3a stehengelassene Marker ist namentlich mit Grund gefuehrt — Kurzfassung:
+
+| Datei | Marker | Grund |
+|---|---|---|
+| `claude.js` | `input_schema` (4x), `cache_control` (2x), `max_tokens` (2x), `system` als Blockliste | Anfrageseite; `input_schema` zieht `bridge.js` `realtimeTools` zwingend mit |
+| `precall-briefing.js` | `input_schema`, `tool_choice` (dreiwertig!), `max_tokens` | Anfrageseite |
+| `research/adapters/anthropic-web-search.js` | `web_search_20250305`, `server_tool_use` | **benannte Ausnahme**: anbieter-spezifisch IST der Zweck dieser Datei |
+| `src/llm/ports.js` | **kein `cachePrefix`** | Lead-Auflage eingehalten: was B3a nicht braucht, gehoert nach B3b. In B3a hat es keinen Aufrufer |
+
+Bewusst NICHT gebaut: Registry/`LLM_PROVIDER` (B5), `LlmProvider.limits` (B5), Preisstaffel je
+Token-Sorte (B4), Umbenennung der zwei Metrik-Schluessel (E7 — zwei Bestandstests pinnen sie
+woertlich).
+
+**B3b bleibt blockiert**, bis Anthropic-Guthaben da ist (Nachher-Bench ~2,1 USD). Zusaetzlich
+muessen `d3-fremde-recherche` und `d3-nachschlag-auftrag` **vor** dem Vergleich neu erhoben
+werden — ihre Vorher-Werte sind Artefakte gestorbener Laeufe.
