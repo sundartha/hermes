@@ -257,6 +257,19 @@ export function isCorrectionCents(x) {
 // gleich aussehenden MICRO_CENTS_PER_CENT zu tun haben.
 export const TOKENS_PER_M_TOK = 1_000_000;
 
+// B4a: die vier Raten EINER Preisstaffel (USD je 1 Mio. Token), je Token-Sorte aus
+// llm/ports.js LlmTokenUsage. EINE Liste (G5) fuer die zwei Stellen, die ueber ALLE
+// Raten laufen: die Boot-Validierung (resolveModelPrices, config.js) und die
+// Fail-closed-Obergrenze (worstCasePrice, state-ops.js). Die Preisformel selbst
+// (tokenCostUsd) nennt die Felder bewusst EINZELN - sie PAART jede Rate mit ihrer
+// Token-Sorte; das sind vier Summanden, keine Liste.
+export const MODEL_PRICE_RATE_FIELDS = Object.freeze([
+  "inPerMTok",
+  "cacheWritePerMTok",
+  "cacheReadPerMTok",
+  "outPerMTok",
+]);
+
 // Plattform-Bezugsgroesse in GANZZAHL Cents (G5: eine Quelle fuer das Rechnen in Cents).
 // cfg.platformSpendCapCents ist bereits Cents -> reiner benannter Seam, kein Einheiten-Mix.
 // ZWEI Verwendungen seit KS-P9/E10: die Warnschwelle der Plattform-Beobachtung

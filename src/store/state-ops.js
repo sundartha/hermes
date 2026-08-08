@@ -48,6 +48,7 @@ import {
   CENTS_PER_EUR,
   MICRO_CENTS_PER_CENT,
   TOKENS_PER_M_TOK,
+  MODEL_PRICE_RATE_FIELDS,
   isBookableCents,
   isCorrectionCents,
   PROVIDER_RATE_SCALE,
@@ -2211,25 +2212,30 @@ export function globalUsageTotals(s) {
   };
 }
 
-// Teuerste hinterlegte Rate - das Fail-closed-Ziel fuer ein unbekanntes Modell (P7a).
-// "Teuerste" = groesster Output-Preis, bei Gleichstand groesster Input-Preis: Output
-// dominiert die Rechnung in jeder bekannten Claude-Staffel (out = 5x in). Eine LEERE
-// Tabelle wirft benannt statt still - ein Startwert 0 waere fail-OPEN (Preis 0 = Gate
-// blind, Regel 1). Reine Funktion.
-function mostExpensivePrice(prices) {
+// Punktweise Obergrenze ueber ALLE hinterlegten Staffeln: je Rate das Maximum. Das
+// Fail-closed-Ziel fuer eine Modell-ID ohne eigenen Eintrag (P7a, seit B4a punktweise).
+// "Der teuerste EINTRAG" genuegte, solange genau EINE Preiswelt hinterlegt war; mit vier
+// Raten und einem zweiten Anbieter kann kein einzelner Eintrag mehr garantieren, in JEDER
+// Rate der teuerste zu sein - das punktweise Maximum kann es: keine hinterlegte Staffel
+// ist in irgendeiner Rate teurer als diese Obergrenze.
+//
+// Setzt VOLLSTAENDIGE Staffeln voraus. Dafuer sorgt der Boot-Abbruch (resolveModelPrices,
+// src/config.js), nicht eine zweite Pruefung hier: ein throw an dieser Stelle killte einen
+// laufenden Anruf mit 500, ein NaN liesse den Turn ungebucht (fail-OPEN am Gate).
+// Eine LEERE Tabelle wirft weiterhin benannt - ein Startwert 0 waere fail-open (Preis 0 =
+// Gate blind, Regel 1). Reine Funktion.
+function worstCasePrice(prices) {
   const rates = Object.values(prices);
   if (!rates.length)
     throw new Error("modelPricesUsd ist leer - keine Preisquelle fuer den Budget-Guard (Regel 1)");
-  return rates.reduce((max, p) =>
-    p.outPerMTok > max.outPerMTok ||
-    (p.outPerMTok === max.outPerMTok && p.inPerMTok > max.inPerMTok)
-      ? p
-      : max,
-  );
+  const worst = {};
+  for (const field of MODEL_PRICE_RATE_FIELDS)
+    worst[field] = rates.reduce((max, price) => (price[field] > max ? price[field] : max), 0);
+  return worst;
 }
 
 // Preis-Aufloesung PRO MODELL (P7a). Fail-closed: ein Modell, das NICHT in der
-// Preistabelle steht, wird mit der TEUERSTEN hinterlegten Rate gebucht - nie mit 0,
+// Preistabelle steht, wird mit der punktweisen Obergrenze gebucht - nie mit 0,
 // nie mit dem Haiku-Default (Regel 1: ein zu niedriger Preis macht die KI-Kosten-Achse
 // des Budget-Gates blind, ein zu hoher ist hoechstens zu streng).
 //
@@ -2238,17 +2244,31 @@ function mostExpensivePrice(prices) {
 // Ein Roh-Index wuerde den Turn also mit 500 killen statt konservativ zu buchen; hasOwn
 // laeuft ueber die has-Trap und damit ungefiltert ans Target. Reine Funktion.
 function priceForModel(model, prices) {
-  return Object.hasOwn(prices, model) ? prices[model] : mostExpensivePrice(prices);
+  return Object.hasOwn(prices, model) ? prices[model] : worstCasePrice(prices);
+}
+
+// Tatsaechlich verarbeitete Eingabe-Token EINES Aufrufs ueber ALLE Eingabe-Preisklassen.
+// Aus llm-usage.js hierher gezogen (B4a), weil die Summe seit der Aufschluesselung ZWEI
+// Leser hat: den Bucket-Zaehler (trackUsage, unten) und die Ledger-MENGE (meterAiTokens,
+// llm-usage.js). Zwei Kopien waeren G5. Ausdruecklich NICHT die Preisbasis - der Preis
+// entsteht seit B4a je Sorte (tokenCostUsd). Reine Funktion.
+export function inputTokensOf(tokens) {
+  return tokens.inputUncachedTokens + tokens.inputCacheWriteTokens + tokens.inputCacheReadTokens;
 }
 
 // USD-Kosten EINES Token-Verbrauchs unter der Preisstaffel des buchenden Modells.
 // EINE Quelle (G5) der Preisformel: trackUsage (Live-Bucket, Mikro-Cent-Akkumulator)
 // UND aiCostCents (Stripe-Meter, Ganzzahl Cents) leiten ihren Betrag hieraus ab.
-// tokens = {inputTokens, outputTokens, model}.
+// tokens = {inputUncachedTokens, inputCacheWriteTokens, inputCacheReadTokens,
+// outputTokens, model} - je Token-Sorte (llm/ports.js LlmTokenUsage) ihre eigene Rate.
+// Bis B4a wurden alle drei Eingabe-Sorten zur vollen Eingabe-Rate gebucht; bei einem
+// Cache-Treffer war das um ein Vielfaches zu teuer (Cache-Lesen kostet ein Zehntel).
 function tokenCostUsd(tokens, cfg) {
   const price = priceForModel(tokens.model, cfg.modelPricesUsd);
   return (
-    (tokens.inputTokens / TOKENS_PER_M_TOK) * price.inPerMTok +
+    (tokens.inputUncachedTokens / TOKENS_PER_M_TOK) * price.inPerMTok +
+    (tokens.inputCacheWriteTokens / TOKENS_PER_M_TOK) * price.cacheWritePerMTok +
+    (tokens.inputCacheReadTokens / TOKENS_PER_M_TOK) * price.cacheReadPerMTok +
     (tokens.outputTokens / TOKENS_PER_M_TOK) * price.outPerMTok
   );
 }
@@ -2297,16 +2317,21 @@ function denyCorruptUsage(kante, feld, wert) {
   return true;
 }
 
-// Sind ALLE drei Inkremente eines Turns buchbar (G28: zusammengesetzte Bedingung
+// Sind ALLE Inkremente eines Turns buchbar (G28: zusammengesetzte Bedingung
 // eingekapselt)? isBookableCents traegt "Cents" im Namen, ist inhaltlich aber der EINE
 // Riegel "endlich, ganzzahlig und nicht negativ" und gilt fuer Token-Zaehler genauso: ein
-// NaN-Zaehler vergiftet den Bucket auf demselben Weg. Bewusst EIN Praedikat statt drei
-// Inline-Kopien. Token-Zaehler (inputTokens/outputTokens) und microInc sind
-// produktionsseitig immer Ganzzahlen (API-Zaehler bzw. Math.round) - die Ganzzahl-Pruefung
-// aendert hier nichts am Bestandsverhalten.
+// NaN-Zaehler vergiftet den Bucket auf demselben Weg. Bewusst EIN Praedikat statt fuenf
+// Inline-Kopien. Die vier Token-Sorten (llm/ports.js) und microInc sind produktionsseitig
+// immer Ganzzahlen (API-Zaehler bzw. Math.round) - die Ganzzahl-Pruefung aendert hier
+// nichts am Bestandsverhalten.
+//
+// Seit B4a JE SORTE geprueft, nicht auf ihrer Summe: ein +NaN/-NaN-Paar koennte sich in
+// einer Summe aufheben, die Reichweite der D7-Sicherung darf nicht schrumpfen.
 function turnIncrementsBookable(tokens, microInc) {
   return (
-    isBookableCents(tokens.inputTokens) &&
+    isBookableCents(tokens.inputUncachedTokens) &&
+    isBookableCents(tokens.inputCacheWriteTokens) &&
+    isBookableCents(tokens.inputCacheReadTokens) &&
     isBookableCents(tokens.outputTokens) &&
     isBookableCents(microInc)
   );
@@ -2510,7 +2535,7 @@ function carryMicroRemainder(remMicro, incrementMicro, divisor) {
 }
 
 // Bucht KI-Token-Verbrauch + Kosten auf den Usage-Bucket des Tenants (P4).
-// tokens = {inputTokens, outputTokens, model}; das Modell entscheidet die Preisstaffel
+// tokens = die vier Token-Sorten + model (s. tokenCostUsd); das Modell entscheidet die Preisstaffel
 // (P7a, fail-closed bei unbekannter ID). P1 Safety-BLOCKER: kein Per-Inkrement-Cent-
 // Rounding - ein einzelner Haiku-Turn kostet oft << 0,5 Cent und wuerde bei einer
 // Pro-Inkrement-Rundung IMMER auf 0 fallen (das Budget-Gate saehe den KI-Kostenanteil
@@ -2529,7 +2554,9 @@ export function trackUsage(s, tenantId, tokens, cfg, nowIso) {
   // Alles-oder-nichts, kein Teil-Schreibeffekt.
   if (!turnIncrementsBookable(tokens, microInc))
     return discardCorruptWrite(usage, `trackUsage tenant:${tenantId}`, microInc);
-  usage.inputTokens += tokens.inputTokens;
+  // Summe der drei Eingabe-Sorten - Zahlenwert unveraendert zum Bestand (B4a schluesselt
+  // die PREISRECHNUNG auf, nicht den Bucket-Zaehler).
+  usage.inputTokens += inputTokensOf(tokens);
   usage.outputTokens += tokens.outputTokens;
   const { carryCents, remMicro } = carryMicroRemainder(usage.costMicroCentsRem, microInc, MICRO_CENTS_PER_CENT);
   // Der volle Cent-Uebertrag geht ueber die EINE Buchungsstelle auf BEIDE Achsen; der

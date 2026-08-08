@@ -95,6 +95,17 @@ Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scri
    P5** (`POST /api/self-service/private-number`, gemergt `f3cef86`, 854/854) - die eigentliche
    **Inbound-SMS-Zusammenfassung an die private Tenant-Nummer** (das Versenden selbst) ist noch
    nicht gebaut.
+9. **KALENDERZEILE 2026-09-01: den Dienst an dem Tag einmal neu deployen/neustarten** (B4a).
+   Die Sonnet-5-Staffel wechselt an diesem Datum von 2.00/10.00 auf 3.00/15.00 USD je 1 Mio.
+   Token. Die Aufloesung passiert GENAU EINMAL, beim Boot (`resolveModelPrices`,
+   `src/config.js`) - ein Prozess, der ohne Neustart darueber hinweg laeuft, bucht danach ZU
+   WENIG, und "zu wenig" ist auf der Gate-Achse die unsichere Richtung. Welche Staffel ein
+   laufender Prozess faehrt, steht in seiner Boot-Banner-Zeile `Preisstaffeln: ... ab
+   <validFrom> (naechste: <validFrom>)`.
+   **Vor jedem Deploy ausserdem (B4a, einmalig relevant):** die im Render-Dashboard gesetzten
+   Werte von `CLAUDE_MODEL`/`PRECALL_BRIEFING_MODEL` muessen in `MODEL_PRICE_SCHEDULES`
+   stehen - seit B4a startet der Dienst sonst NICHT (Boot-Abbruch, auch bei datierter
+   Snapshot-ID und auch bei `PRECALL_BRIEFING_ENABLED=false`).
 
 > Hinweis: Deepgram-STT und Azure-NTTS sind im Telnyx-Account bereits aktiv/abgerechnet -
 > das ist KEIN offenes Gate mehr (per Account-Records 2026-06-20 verifiziert).

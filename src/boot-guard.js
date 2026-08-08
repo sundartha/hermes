@@ -185,7 +185,9 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
 }
 
 // P3 (Boot-Guards Modellpreise): Modelle OHNE Eintrag in der Preistabelle (leer = alles
-// bepreist). Reine Funktion (Muster meterMappingGaps).
+// bepreist). Reine Funktion (Muster meterMappingGaps). Seit B4a ist der Befund FATAL
+// (assertPricedModels, boot.js) - die Funktion selbst bleibt eine reine Praedikat-Funktion
+// und entscheidet die Schwere nicht.
 //
 // Object.hasOwn statt modelPricesUsd[id] ist PFLICHT, kein Stil: in Produktion ist
 // modelPricesUsd ein guardedConfig-PROXY, dessen get-Trap bei einem unbekannten
@@ -195,6 +197,26 @@ export function spendCapCoherence({ tenantDefaultCents, platformCapCents, maxTar
 // in src/store/state-ops.js nutzt dasselbe Muster fuer denselben Proxy.
 export function unpricedModels(modelIds, modelPricesUsd) {
   return modelIds.filter((id) => !Object.hasOwn(modelPricesUsd, id));
+}
+
+// B4a: Veralterung der Preisliste sichtbar machen. asOf ist unser Abrufdatum; wird es alt,
+// ist die Tabelle eine ANNAHME ohne Beleg. WARN, NIE fatal - ein Kalendertag darf die
+// Telefonie nicht lahmlegen. Ein Quartal ist derselbe Takt, in dem usdToEur laut
+// src/config.js ohnehin von Hand gepflegt wird; bewusst KEINE Env-Var (Praezedenz
+// researchMaxUses: eine Stellschraube, die niemand betrieblich dreht, zoege .env.example,
+// render.yaml und BASE_ENV nach). Reine Funktion (Muster alertChannelFindings).
+export const MODEL_PRICE_MAX_AGE_DAYS = 90;
+const MS_PER_DAY = 86_400_000;
+
+export function stalePriceFindings(modelPricesUsd, todayIso) {
+  return Object.entries(modelPricesUsd)
+    .filter(([, price]) => (Date.parse(todayIso) - Date.parse(price.asOf)) / MS_PER_DAY > MODEL_PRICE_MAX_AGE_DAYS)
+    .map(([modelId, price]) => ({
+      fatal: false,
+      message:
+        `Preisstaffel '${modelId}' wurde am ${price.asOf} abgerufen (aelter als ` +
+        `${MODEL_PRICE_MAX_AGE_DAYS} Tage) - Raten gegen ${price.source} pruefen.`,
+    }));
 }
 
 // LCT P4b: Vollkosten-Boot-Guard (WARN). Sichert die spaetere Owner-Tarifsenkung ab.

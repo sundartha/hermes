@@ -76,7 +76,9 @@ export const COST_LEDGER_MAP = Object.freeze({
     gate: true,
     preisquelle:
       "tokenCostUsd (state-ops.js) ueber config.llm.modelPricesUsd; unbekannte Modell-ID " +
-      "faellt fail-closed auf die teuerste Rate (priceForModel/mostExpensivePrice). " +
+      "faellt fail-closed auf die punktweise Obergrenze ueber alle Staffeln " +
+      "(priceForModel/worstCasePrice, B4a); der Preis entsteht seit B4a je Token-Sorte " +
+      "(vier Raten). " +
       "Ledger rundet pro Buchung auf volle EUR-Cent (aiCostCents, Math.round) - ein " +
       "einzelner kleiner Turn kann als 0-Cent-Event erscheinen. Gate (trackUsage) " +
       "akkumuliert denselben Betrag in Mikro-Cent (costMicroCentsRem) und verliert den " +

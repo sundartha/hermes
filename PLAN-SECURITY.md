@@ -453,6 +453,11 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
 
 ## P7A-MODELPRICE — Budget-Guard rechnet pro Modell (fail-closed, 2026-07-19)
 
+> **Durch B4A ueberholt (2026-08-08):** die Betriebs-Auflage ist ein BOOT-GATE geworden
+> (`assertPricedModels`, `src/boot.js`), und die Preis-Politik "LISTENPREISE statt
+> Einfuehrungsrabatt" ist durch datierte Staffeln (`validFrom`) ersetzt. Der Rest des
+> Abschnitts (Proxy-Fallen, Fail-closed-Prinzip) gilt unveraendert; s. B4A am Dateiende.
+
 > **Geschlossene Luecke:** `tokenCostUsd` rechnete mit EINER globalen Formel
 > (`priceInPerMTokUsd`/`priceOutPerMTokUsd`, faktisch Haiku-Preise). Jedes andere
 > Modell - auch ein teureres - wurde zu Haiku-Preisen gebucht. Auf der KI-Kosten-Achse
@@ -2867,3 +2872,69 @@ Deploy und kann in der Umsetzungs-Session nicht erbracht werden.
 >
 > **Rollback.** `coverageBucketOf` durch eine Fassung ersetzen, die fuer jeden beendeten Call
 > `ELIGIBLE` liefert (= alte Formel). Keine Datenwirkung, reine Log-/WARN-Verhaltensaenderung.
+
+## B4A — Preisstaffel je Token-Sorte + Boot-Abbruch (2026-08-08)
+
+> **Geschlossene Luecke (zwei Haelften):**
+> 1. Die Preistabelle kannte GENAU ZWEI Raten (Eingabe/Ausgabe). Alle drei Eingabe-Sorten
+>    des Port-Vertrags (`src/llm/ports.js` `LlmTokenUsage`) wurden zur vollen Eingabe-Rate
+>    gebucht - bei einem Cache-Treffer um ein Vielfaches zu teuer (Cache-Lesen kostet ein
+>    Zehntel der Eingabe-Rate).
+> 2. Eine flache Tabelle kann einen TERMINIERTEN Preiswechsel nicht ausdruecken. Fuer
+>    `claude-sonnet-5` gibt es keine einzelne Zahl, die heute richtig ist: 2.00/10.00 gilt
+>    bis 2026-08-31, 3.00/15.00 ab 2026-09-01. Der Befund war nie "eine Zahl ist falsch".
+>
+> **Neu:** `MODEL_PRICE_SCHEDULES` (`src/config.js`) haelt je Modell-ID eine Liste von
+> Staffeln mit `validFrom`/`asOf`/`source` und VIER Pflicht-Raten (`inPerMTok`,
+> `cacheWritePerMTok`, `cacheReadPerMTok`, `outPerMTok`). `resolveModelPrices` loest sie
+> GENAU EINMAL, beim Boot, auf den heutigen Kalendertag auf; `config.llm.modelPricesUsd`
+> bleibt fuer alle Leser eine flache Abbildung Modell-ID -> Raten. Die Buchungskante bleibt
+> zeitfrei (kein `nowIso` in `tokenCostUsd` - das waere eine zweite Uhr an derselben
+> Buchung). Die Schreib-Rate ist die 5-MINUTEN-Rate, weil `CACHE_CONTROL_EPHEMERAL`
+> (`src/claude.js`) kein `ttl` traegt; ein Gate-Test liest dafuer den Quelltext.
+>
+> **Boot-Abbruch, Ausloeser ABSCHLIESSEND** (ein Dienst, der nicht startet, nimmt keine
+> Anrufe an):
+> - `CLAUDE_MODEL` oder `PRECALL_BRIEFING_MODEL` ohne Staffel - letzteres AUCH bei
+>   `PRECALL_BRIEFING_ENABLED=false` (unveraendertes Bestandsverhalten der geprueften
+>   Liste, nur die Schwere aendert sich); eine datierte Snapshot-ID ist ein anderer
+>   Schluessel. `assertPricedModels`, `exit(1)`.
+> - Unvollstaendige/formfremde Staffel, kein faelliger `validFrom`, leere Staffel-Tabelle:
+>   `resolveModelPrices` wirft beim Modul-Laden von `config.js`. Diese drei sind ueber die
+>   Umgebung NICHT erreichbar (nur per Quelltext-Aenderung) - deshalb bewusst ein `throw`
+>   an der fruehestmoeglichen Stelle statt eines zweiten Meldekanals.
+>
+> **Ausdrueckliche NICHT-Ausloeser** (je ein Test): ein ueberzaehliger Tabellen-Eintrag;
+> `REALTIME_MODEL` ohne Preis (dieser Pfad bucht keine Token - ein Abbruch waere ein
+> Abbruch ohne Schutzwirkung, s. WF-4); eine noch nicht faellige spaetere Staffel; ein
+> veraltetes `asOf` (WARN, nie fatal - ein Kalendertag darf die Telefonie nicht lahmlegen).
+>
+> **Fail-closed geschaerft:** `mostExpensivePrice` ("der teuerste EINTRAG") ist
+> `worstCasePrice` geworden - das PUNKTWEISE Maximum jeder der vier Raten ueber alle
+> Staffeln. Mit vier Raten und einem zweiten Anbieter kann kein einzelner Eintrag mehr
+> garantieren, in jeder Rate der teuerste zu sein; die Obergrenze kann es. Die leere
+> Tabelle wirft weiterhin benannt (Preis 0 waere fail-open).
+>
+> **Kein Store-Eingriff (keine Migration, kein Backfill, keine Schema-Aenderung).** Tragende
+> Tatsache, am Code verifiziert: die Gate-Kette (`budgetExceeded` -> `liveBudgetExceeded` ->
+> `tenantSpendOrDeny` -> `tenantUsageAxes`) liest ausschliesslich CENT-Achsen
+> (`gateUsageCents`, `usageFor(...).costCents`) - kein Token-Zaehler kommt darin vor. Die
+> Bucket-Zaehler `usage.inputTokens`/`outputTokens` und `usage_event.quantity` bleiben
+> Summen mit IDENTISCHEM Zahlenwert; aufgeschluesselt wird nur die Preisrechnung.
+>
+> **Akzeptierte Restrisiken:**
+> - Der gebuchte Betrag SINKT bei Cache-Treffern (Fixture-Probe: 6975 statt 14880
+>   Mikro-Cent, -53 %). Auf der Gate-Achse heisst "weniger" spaeter sperren. Das ist
+>   gewollt (der bisherige Betrag war schlicht falsch), aber die unsichere Richtung -
+>   deshalb bleibt die Messung an echtem Verkehr (B4b) Pflicht, sobald wieder Verkehr
+>   laeuft. Zusaetzliche Deckung unabhaengig davon: Outbound setzt Abo+KYC voraus,
+>   `OUTBOUND_FROZEN` bleibt der Notaus.
+> - Ein Prozess, der ohne Neustart ueber den 2026-08-31 hinweg laeuft, bucht weiter mit
+>   2.00/10.00 - zu wenig. Gegenmassnahmen: die Banner-Zeile `Preisstaffeln:` (gewaehlte +
+>   naechste `validFrom`), ein Test auf `todayIso = "2026-09-01"` und die Kalenderzeile in
+>   `STATUS.md`.
+>
+> **Unberuehrt:** die pro-Tenant-Kostendecke (sperrt weiter BEIDE Richtungen, Inbound
+> eingeschlossen), `OUTBOUND_FROZEN`, Denylist/Land-Gate/Stundenlimit, Max-Dauer,
+> Signaturpruefung, `disclosureSentence`, `usdToEur`, `MAX_BUDGET_EUR`, `src/bridge.js`.
+> Keine neue Env-Variable.
