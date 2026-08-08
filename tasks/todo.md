@@ -542,3 +542,68 @@ und bricht sichtbar; eine verrottete Zeilennummer zeigt still auf die falsche Ze
 Symbol-Variante ist also robuster, nicht nur konventionstreuer. Die Zeilenangaben der Spec
 werden trotzdem EINZELN am Code nachgeschlagen (Abnahme-Punkt 4); Abweichungen sind
 Befunde und kommen in den Report, nicht in einen stillen Fix.
+
+## B3 — Die Werkzeug-Schleife neutralisieren. SPEC STEHT, B3a LAEUFT (2026-08-08)
+
+Spec: `tasks/b3-spec.md` (1018 Zeilen, code-gegroundet).
+
+### BLOCKER (Owner informiert 2026-08-08): das Anthropic-Guthaben ist leer
+
+Gemessen: ein minimaler Live-Call gegen `claude-haiku-4-5` liefert **HTTP 400 "Your credit
+balance is too low to access the Anthropic API"**. Render-Logs zeigen dasselbe Symptom am
+**2026-08-04** bei echten Anrufen (`[turn] 400`, `[summary] 400`); seither gab es **keinen
+einzigen Anruf**, der Live-Zustand ist also ungeprueft, nicht gesund. Der Basismess-Bench
+heute hat 1,84 USD Anthropic-Token verbraucht und ist an genau diesem Fehler gestorben.
+
+**Owner-Entscheidung: "B3 bauen, Abnahme spaeter."** Der Code braucht kein Guthaben, nur der
+Nachher-Bench (~2,1 USD) und B5s echter Anruf.
+
+**Der Spec-Zuschnitt loest den Blocker groesstenteils auf:**
+
+| Schnitt | Abnahme | Guthaben noetig? |
+|---|---|---|
+| **B3a** — Antwortseite, Seam+Adapter, `LlmTurn`/`LlmTokenUsage`, E5. Der Adapter baut den Body weiter aus den heutigen Anthropic-Strukturen. | A1-A5 + A9 (Suite, Byte-Gleichheit des Drahts, Greps, Smoke) | **NEIN** — voll abnehmbar und mergefaehig |
+| **B3b** — Anfrageseite neutral (`system`/`messages`/`tools`/`toolChoice`/`cachePrefix`), `bridge.js`-Nachzug | A1-A5 + **A6-A8 (Bench)** + A9 | **JA** — wartet |
+
+B3a ist ausserdem die **Vorbedingung fuer B4** (Raten je Token-Sorte brauchen die
+aufgeschluesselte Verbrauchsform). Faellt B3b spaeter aus, war B3a kein Verlust.
+
+### Drei Lead-Entscheidungen, die die Spec ausdruecklich angefordert hat
+
+**E6 — `LlmRequest.cachePrefix` (Boolean, Default false): GENEHMIGT.**
+B2 hatte Cache-Steuerung als *"Vorratshaltung ohne zweiten Aufrufer"* ausgeschlossen. B3 misst
+am Code das Gegenteil: es gibt genau **einen** heutigen Aufrufer (`claude.js agentTurn` setzt
+`cache_control`, `summarizeCall` und `fetchPrecallBriefing` **nicht**) und einen zweiten
+Anbieter mit belegter Semantik (DeepSeek cacht ohne client-seitigen Marker, B1-gemessen).
+Damit ist das B2-Kriterium "nichts ohne Aufrufer" **erfuellt, nicht umgangen**. Die
+Alternative — eine adapter-interne Faustregel — wuerde den Draht-Body von `summarizeCall`
+und `fetchPrecallBriefing` veraendern und damit die Kernabnahme A3 (Byte-Gleichheit) brechen.
+**Auflage:** die Ergaenzung wird in `src/llm/ports.js` mit Aufrufer (Datei+Symbolname) UND
+mit diesem Grund dokumentiert — sonst entfernt sie spaeter jemand mit Verweis auf B2.
+
+**E5 — `PrecallResearchProvider.searchCount(providerTurn)` statt `searchCount(usage)`:
+GENEHMIGT.** Ohne die Aenderung liest `searchCount` gegen eine neutrale `LlmTokenUsage`
+immer `null` (das Feld `server_tool_use.web_search_requests` existiert dort nicht) — und
+`null` heisst vertraglich "unbekannt", also bucht **jedes** Briefing den harten Deckel
+`config.research.researchMaxUses` statt der Ist-Zahl, auf `addResearchFeeCostCents`, also auf
+**dieselbe Tenant-Achse wie die Kostendecke** (Absolute Regel 1). Die Fail-safe-Richtung
+bliebe zwar sicher (ueberbuchen), aber Ueberbuchung ist auf dem Kundenbeleg ein
+Abrechnungsdefekt — dieselbe Begruendung, mit der B2 die Faltung `inputTokensOf` verworfen
+hat. Der Bestandstest `test/al-p10-precall-research.test.js` bleibt **unveraendert** und ist
+damit der Beweis, dass die Umstellung die Buchung nicht verschiebt.
+
+**providerTurn traegt die GANZE Anbieter-Antwort, nicht nur die `content`-Liste: ENTSCHIEDEN.**
+E5 braucht `usage.server_tool_use`; ein Feld, das nur `content` traegt, erzwaenge einen
+zweiten Rohform-Kanal. Vertragskonform bleibt es, weil B2 nur dem **Aufrufer** das Lesen
+verbietet: `precall-briefing.js` reicht die Struktur durch, gelesen wird sie ausschliesslich
+von anbieter-spezifischen Adaptern (`anthropic-web-search.js`, LLM-Adapter).
+
+### Die Vorher-Werte waren teilweise falsch — korrigiert
+
+`tasks/b3-vorher-werte.md`: **8 der 80 Basismess-Laeufe sind keine Messung** (Guthaben lief
+mitten im Lauf leer). `d3-fremde-recherche` starb 5/5 mit `turns: 0` und meldete trotzdem
+`checks 10/10` = **100 %**; `d3-nachschlag-auftrag` hat nur 2 gueltige Laeufe. Gueltiger
+Nenner ist **72, nicht 80**; `look_up` ist **2/72 statt 3/80**. Beide Szenarien muessen vor
+dem B3b-Vergleich neu erhoben werden. Als **vierter Bench-Bestandsdefekt** dokumentiert:
+ein Lauf, der am LLM-Fehler stirbt, meldet gruene Checks statt eines Fehlers — er produziert
+ein falsches Ergebnis, das wie ein perfektes aussieht.
