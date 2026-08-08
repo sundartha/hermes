@@ -47,12 +47,29 @@
  *     sie separat bepreist, braucht eine Vertragsaenderung und darf sie nicht in
  *     outputTokens verstecken.
  *
- * @property {number} inputUncachedTokens   - Eingabe-Token zur vollen Eingabe-Rate
+ *   Vom Anbieter gemeldete Felder, die bewusst KEINER Sorte zugeordnet sind, mit Grund
+ *   - damit spaeter niemand meint, sie seien uebersehen worden:
+ *   - DeepSeek `prompt_tokens` - ableitbar als hit+miss, dient nur als Pruefsumme
+ *     gegen die Vollstaendigkeits-Invariante, nicht als Quelle.
+ *   - DeepSeek `total_tokens` - ebenfalls ableitbar, eine zweite Quelle fuer dieselbe
+ *     Tatsache waere Duplizierung.
+ *   - DeepSeek `prompt_tokens_details.cached_tokens` (undokumentiert) - spiegelt
+ *     `prompt_cache_hit_tokens` (B1: in allen Stichproben wertgleich); das
+ *     undokumentierte Feld ist die schwaechere Zusage und wird deshalb NICHT gelesen.
+ *   - DeepSeek `completion_tokens_details.reasoning_tokens` - in `completion_tokens`
+ *     bereits enthalten, nicht additiv; siehe Erweiterungsregel oben.
+ *
+ * @property {number} inputUncachedTokens   - Eingabe-Token zur vollen Eingabe-Rate.
+ *   Anthropic `input_tokens`, DeepSeek `prompt_cache_miss_tokens`.
  * @property {number} inputCacheWriteTokens - Eingabe-Token zur Cache-SCHREIB-Rate.
- *   0 ist die richtige Angabe fuer einen Anbieter ohne eigene Schreib-Rate - der
- *   Schreibvorgang steckt dann bereits in der Fehltreffer-Zahl und ist dort bepreist.
- * @property {number} inputCacheReadTokens  - Eingabe-Token zur Cache-LESE-Rate
- * @property {number} outputTokens          - Ausgabe-Token
+ *   Anthropic `cache_creation_input_tokens`. 0 ist die richtige Angabe fuer einen
+ *   Anbieter ohne eigene Schreib-Rate (DeepSeek) - der Schreibvorgang steckt dann
+ *   bereits in der Fehltreffer-Zahl (`prompt_cache_miss_tokens`) und ist dort bepreist.
+ * @property {number} inputCacheReadTokens  - Eingabe-Token zur Cache-LESE-Rate.
+ *   Anthropic `cache_read_input_tokens`, DeepSeek `prompt_cache_hit_tokens`.
+ * @property {number} outputTokens          - Ausgabe-Token. Anthropic `output_tokens`,
+ *   DeepSeek `completion_tokens` - dessen `reasoning_tokens` sind darin ENTHALTEN,
+ *   nicht additiv zu lesen (siehe bewusst-ungelesen-Liste unten).
  * @property {boolean} estimated - false = vom Anbieter gemeldet, true = pessimistische
  *   Obergrenze. Notfall-Regel: verletzt eine Antwort die Vollstaendigkeits-Invariante
  *   oder fehlt eine Zahl, bildet der Adapter alle Eingabe-Token auf
