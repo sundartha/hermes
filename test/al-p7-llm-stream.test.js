@@ -55,14 +55,20 @@ const jsonDelta = (partial) => ({
 
 // Fake-MessageStream: AsyncIterable ueber eine feste Event-Folge + finalMessage().
 // throwAt = Index, an dem die Iteration stattdessen wirft (Abriss mitten im Strom).
-function fakeStream({ events, final, throwAt = -1, error }) {
+// pauseMs = echte Wartezeit VOR diesem Wurf - nur so kann eine kurz gestellte Wanduhr
+// des Seams tatsaechlich ablaufen (AL-P7-14).
+function fakeStream({ events, final, throwAt = -1, error, pauseMs = 0 }) {
+  const breakOff = async () => {
+    if (pauseMs) await new Promise((r) => setTimeout(r, pauseMs));
+    throw error;
+  };
   return {
     async *[Symbol.asyncIterator]() {
       for (const [i, event] of events.entries()) {
-        if (i === throwAt) throw error;
+        if (i === throwAt) await breakOff();
         yield event;
       }
-      if (throwAt === events.length) throw error;
+      if (throwAt === events.length) await breakOff();
     },
     async finalMessage() {
       return final;
@@ -70,9 +76,20 @@ function fakeStream({ events, final, throwAt = -1, error }) {
   };
 }
 
+const MODEL = "claude-haiku-4-5";
 const FINAL = {
   content: [{ type: "text", text: "Guten Tag. Wie kann ich helfen?" }],
   usage: { input_tokens: 11, output_tokens: 20 },
+};
+// B3a: completeStream liefert per Vertrag ein LlmTurn (src/llm/ports.js), nicht mehr die
+// Anbieter-Endnachricht. Die Rohform steht unveraendert als opake Ruecktrage daneben.
+const FINAL_USAGE = {
+  inputUncachedTokens: 11,
+  inputCacheWriteTokens: 0,
+  inputCacheReadTokens: 0,
+  outputTokens: 20,
+  estimated: false,
+  billingModelId: MODEL,
 };
 
 // Fabrik fuer den injizierten Seam: liefert nacheinander die uebergebenen Streams und
@@ -100,11 +117,14 @@ test("AL-P7-9: Text-Deltas kommen in Reihenfolge am Sink an, finalMessage wird d
     callId: "call_1",
     sink,
     streamBudgetMs: 5000,
-    model: "claude-haiku-4-5",
+    model: MODEL,
     messages: [],
   });
   assert.deepEqual(sink.pushed, ["Guten Tag. ", "Wie kann ich helfen?"]);
-  assert.deepEqual(resp, FINAL);
+  assert.equal(resp.text, "Guten Tag. Wie kann ich helfen?");
+  assert.deepEqual(resp.toolCalls, []);
+  assert.deepEqual(resp.usage, FINAL_USAGE);
+  assert.equal(resp.providerTurn, FINAL, "die Endnachricht bleibt als opake Ruecktrage erhalten");
   // callId wird wie bei complete abgestreift, bevor params an den SDK-Seam geht.
   assert.equal(messagesStream.calls[0].params.callId, undefined);
   assert.equal(messagesStream.calls[0].params.sink, undefined);
@@ -157,7 +177,8 @@ test("AL-P7-12: transienter Fehler VOR dem ersten Fragment wird wie im Bestand w
   const resp = await client.completeStream({ sink, streamBudgetMs: 5000, messages: [] });
   assert.equal(messagesStream.calls.length, 2, "genau ein Retry");
   assert.deepEqual(sink.pushed, ["Zweiter Versuch."]);
-  assert.deepEqual(resp, FINAL);
+  assert.equal(resp.text, "Guten Tag. Wie kann ich helfen?");
+  assert.equal(resp.providerTurn, FINAL);
 });
 
 test("AL-P7-13: derselbe Fehler NACH dem ersten Fragment wird NICHT wiederholt (kein halber Satz zweimal)", async () => {
@@ -183,15 +204,27 @@ test("AL-P7-13: derselbe Fehler NACH dem ersten Fragment wird NICHT wiederholt (
   assert.deepEqual(sink.pushed, ["Guten Tag."]);
 });
 
+// B3a: der Abbruch wird nicht mehr am ANBIETER-Fehlertyp erkannt, sondern daran, dass
+// UNSERE Wanduhr abgelaufen ist (llm.js: deadline.aborted) - genau die Unterscheidung,
+// die der Seam ohne Anbieter-Wissen treffen kann. Der Stream muss dafuer real ueber die
+// kurz gestellte Frist hinauslaufen; ein Wurf allein sagt nichts ueber die Uhr.
+const STREAM_BUDGET_MS = 1;
+const BREAK_OFF_AFTER_MS = 20;
+
 test("AL-P7-14: ein Abbruch der eigenen Wanduhr wird zu LlmUnavailableError(stream-aborted)", async () => {
   const sink = sinkSpy();
   const abort = new Anthropic.APIUserAbortError();
   const messagesStream = streamFactory(
-    fakeStream({ events: [textBlockStart, textDelta("Guten")], throwAt: 2, error: abort }),
+    fakeStream({
+      events: [textBlockStart, textDelta("Guten")],
+      throwAt: 2,
+      error: abort,
+      pauseMs: BREAK_OFF_AFTER_MS,
+    }),
   );
   const client = createLlmClient({ config: llmConfig(), sleep: noSleep, messagesStream });
   await assert.rejects(
-    () => client.completeStream({ sink, streamBudgetMs: 5000, messages: [] }),
+    () => client.completeStream({ sink, streamBudgetMs: STREAM_BUDGET_MS, messages: [] }),
     (err) => {
       assert.ok(err instanceof LlmUnavailableError);
       assert.equal(err.reason, LLM_UNAVAILABLE_REASON.STREAM_ABORTED);
@@ -229,6 +262,22 @@ test("AL-P7-16: offener Breaker wirft VOR dem Stream (kein openStream-Aufruf)", 
     (err) => err instanceof LlmUnavailableError && err.reason === LLM_UNAVAILABLE_REASON.CIRCUIT_OPEN,
   );
   assert.equal(messagesStream.calls.length, nachErstemFehler, "kein zweiter Stream geoeffnet");
+});
+
+test("AL-P7-18: auch das Fugenzeichen sperrt den Retry (jedes Fragment zaehlt)", async () => {
+  // B3a: der Riegel haengt am Sink des Seams, nicht mehr am Ereignistyp - ein
+  // Fugen-Leerzeichen, das den Seam verlassen hat, ist genauso wenig zurueckholbar wie
+  // ein Text-Delta. Erreichbar nur, wenn ein ZWEITER Textblock beginnt, bevor je ein
+  // Delta kam.
+  const sink = sinkSpy();
+  const transient = new Anthropic.APIConnectionError({ message: "connection failed" });
+  const messagesStream = streamFactory(
+    fakeStream({ events: [textBlockStart, textBlockStart], throwAt: 2, error: transient }),
+  );
+  const client = createLlmClient({ config: llmConfig(), sleep: noSleep, messagesStream });
+  await assert.rejects(() => client.completeStream({ sink, streamBudgetMs: 5000, messages: [] }));
+  assert.equal(messagesStream.calls.length, 1, "kein zweiter Versuch nach dem Fugenzeichen");
+  assert.deepEqual(sink.pushed, [" "]);
 });
 
 test("AL-P7-17: attemptReachedProvider trennt 'nie rausgegangen' von 'war auf der Leitung'", () => {

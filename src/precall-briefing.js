@@ -194,11 +194,11 @@ function ownerMessage({ objective, ownerNotes, constraints, to }) {
     .join("\n");
 }
 
-// Extrahiert den Tool-Input aus der (per tool_choice) erzwungenen tool_use-Antwort.
-// undefined, wenn das Modell entgegen tool_choice dennoch keinen passenden Tool-Block
+// Extrahiert die Argumente des erzwungenen Briefing-Werkzeugs aus der Modellrunde.
+// undefined, wenn das Modell entgegen der Werkzeugwahl dennoch keinen passenden Aufruf
 // liefert - sanitizedBriefing faengt das ab (raw == null -> null). Rein (N7).
-function briefingInput(resp) {
-  return resp.content.find((b) => b.type === "tool_use" && b.name === BRIEFING_TOOL_NAME)?.input;
+function briefingInput(turn) {
+  return turn.toolCalls.find((tc) => tc.name === BRIEFING_TOOL_NAME)?.input;
 }
 
 // D8-Nachriegel (Defense-in-depth): selbst wenn das Modell entgegen dem Schema-Enum doch
@@ -237,11 +237,16 @@ function briefingTooling(provider) {
 }
 
 // AL-P10: zu buchende Suchen aus einer erfolgreichen Antwort. Zaehler unbekannt
-// (Anbieter meldet server_tool_use nicht) -> pessimistisch der harte Deckel, NIE 0
+// (Anbieter meldet seinen Zaehler nicht) -> pessimistisch der harte Deckel, NIE 0
 // (Regel 1). Ohne Provider 0 -> bookResearchSearchFee no-oppt. Rein (N7).
-function searchesToBook(provider, usage) {
+//
+// B3a/E5: uebergeben wird die OPAKE Ruecktrage der Modellrunde (llm/ports.js
+// LlmTurn.providerTurn), nicht die neutrale Verbrauchsform - ein serverseitiger
+// Such-Zaehler ist keine Token-Preisklasse und stuende dort nie drin. Diese Stelle
+// REICHT die Rohform durch und LIEST sie nicht; lesen darf sie nur der Anbieter-Adapter.
+function searchesToBook(provider, providerTurn) {
   if (!provider) return 0;
-  return provider.searchCount(usage) ?? config.research.researchMaxUses;
+  return provider.searchCount(providerTurn) ?? config.research.researchMaxUses;
 }
 
 // Bucht die Schaetzung NUR, wenn der Versuch nachweislich auf der Leitung war:
@@ -252,11 +257,15 @@ function searchesToBook(provider, usage) {
 // Budget abziehen, bis Outbound einfriert). Nebeneffekt im Namen (N7).
 function bookAbortedAttempt({ err, tenantId, promptChars }) {
   if (!attemptReachedProvider(err)) return;
-  const usage = estimatedAbortUsage({ promptChars, maxTokens: BRIEFING_MAX_TOKENS });
-  bookEstimatedTokenUsage({ tenantId, usage, model: config.llm.briefingModel });
+  const usage = estimatedAbortUsage({
+    promptChars,
+    maxTokens: BRIEFING_MAX_TOKENS,
+    billingModelId: config.llm.briefingModel,
+  });
+  bookEstimatedTokenUsage({ tenantId, usage });
   console.warn(
     `[precall-briefing] geschaetzte Kosten gebucht (grund=${err.reason}, ` +
-      `in~${usage.input_tokens}, out~${usage.output_tokens})`,
+      `in~${usage.inputUncachedTokens}, out~${usage.outputTokens})`,
   );
 }
 
@@ -278,9 +287,9 @@ export async function fetchPrecallBriefing({ objective, ownerNotes, constraints,
     ? ownerMessage(researchEgressInput({ objective, ownerNotes, constraints }))
     : ownerMessage({ objective, ownerNotes, constraints, to });
   const tooling = briefingTooling(provider);
-  let resp;
+  let turn;
   try {
-    resp = await briefingLlm.complete({
+    turn = await briefingLlm.complete({
       model: config.llm.briefingModel,
       max_tokens: BRIEFING_MAX_TOKENS,
       system,
@@ -304,18 +313,18 @@ export async function fetchPrecallBriefing({ objective, ownerNotes, constraints,
     console.warn(`[precall-briefing] uebersprungen: ${err?.message || String(err)}`);
     return null;
   }
-  bookTokenUsage({ tenantId, callId: null, usage: resp.usage, model: config.llm.briefingModel });
-  const searches = searchesToBook(provider, resp.usage);
+  bookTokenUsage({ tenantId, callId: null, usage: turn.usage });
+  const searches = searchesToBook(provider, turn.providerTurn);
   bookResearchSearchFee({ tenantId, searches });
   // AL-P10: Gegenprobe (Plan) - weicht die Ist-Zahl vom kalibrierten Deckel ab, ist die
   // Pauschale falsch kalibriert. Nur Zahlen, kein Prompt-Inhalt, kein Secret.
   if (provider)
     console.warn(
       `[precall-briefing] recherche (suchen=${searches}, ` +
-        `max=${config.research.researchMaxUses}, stop=${resp.stop_reason})`,
+        `max=${config.research.researchMaxUses}, stop=${turn.stopReason})`,
     );
-  // stop_reason "pause_turn" (serverseitige Werkzeug-Schleife am Limit) braucht KEINEN
-  // Sonderpfad: es gibt dann keinen hintergrund-Block -> briefingInput undefined ->
-  // sanitizedBriefing null -> Bestandspfad. Die Gebuehr ist oben trotzdem gebucht.
-  return sanitizedBriefing(briefingInput(resp));
+  // Der Abbruchgrund "pause_turn" (serverseitige Werkzeug-Schleife am Limit) braucht
+  // KEINEN Sonderpfad: es gibt dann keinen hintergrund-Aufruf -> briefingInput undefined
+  // -> sanitizedBriefing null -> Bestandspfad. Die Gebuehr ist oben trotzdem gebucht.
+  return sanitizedBriefing(briefingInput(turn));
 }
