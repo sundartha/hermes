@@ -321,3 +321,86 @@ den Stand mit BEIDEN Aenderungen (STT-A1 + Track C) - bewusst akzeptiert.
 - Track-A-Abnahmeanruf (+1 706 710 1188), DANN Deploy von Track C (push upstream).
 - Render-Env: TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN loeschen ERST nach Deploy+Verify von C-P5.
 - Track B (LLM-Anbieter-Port): blockiert an DeepSeek-Key + Kostenmodell-Gespraech.
+
+---
+
+# Track B — Phase B1: DeepSeek an der echten API messen
+
+Spec: `tasks/b1-spec.md` (autoritativ). Umbrella: `PLAN-ANBIETER-PORT.md` Teil 2.
+Bindend: es zaehlt, **was der Anbieter dem Schluessel tatsaechlich abbucht** (Owner-Korrektur
+2026-08-07), nicht die Form der Preistabelle.
+
+## B1-a — Weisse Flecken der Spec schliessen. ERLEDIGT (Lead, 2026-08-08)
+- Die Spec nennt nur die Preis-STUFEN `v4-flash`/`v4-pro`, keine API-Modell-IDs.
+- BEOBACHTET (WebFetch https://api-docs.deepseek.com/quick_start/pricing, 2026-08-08):
+  IDs sind `deepseek-v4-flash` und `deepseek-v4-pro`; Preise je 1M USD deckungsgleich mit
+  Spec Abschnitt 4 (0.0028 / 0.14 / 0.28 bzw. 0.003625 / 0.435 / 0.87); kein Off-Peak-Fenster.
+- BEOBACHTET (api/list-models, api/create-chat-completion): `GET /models` ->
+  `{object:"list", data:[{id,object,owned_by}]}`; `POST /chat/completions`;
+  `usage.completion_tokens_details.reasoning_tokens`; `stream_options:{include_usage}`;
+  Werkzeug-Rueckgabe `{id,type:"function",function:{name,arguments}}`, im Stream in `delta`.
+
+## B1-b — Messskript bauen. FIX-RUNDE LAEUFT (Branch phase/b1-messung)
+- Impl (3b355a5, Sonnet): 1347 Zeilen, 1 Datei. Lead-Gegenprobe reproduziert:
+  node --check Exit 0; --selftest 22 Zusicherungen 0 Fehler; --dry-run 0 Netzaufrufe,
+  80 Aufrufe geplant, ~0,1446 USD; scharf mit Falsch-Schluessel -> GET /models 401 ->
+  Abbruch fail-closed, Verzeichnis blieb LEER.
+- Safety-Review (Opus, Offline-Attrappe der DeepSeek-API, 14 Sabotage-Gegenproben):
+  **NICHT SCHARFSCHALTEN**, 5x S1, 9x S2. Die drei schwersten, alle GEMESSEN:
+  (1) Skala wird abgeschnitten - dieselbe Abbuchung erscheint als -1000000 je Aufruf und
+      -6 gesamt (Faktor 10^6), wenn der Anbieter zwischen 2 und 8 Nachkommastellen
+      wechselt; M2a meldet dann faelschlich {"USD":2}. Trifft die Kernzahl der Phase.
+  (2) /user/balance durchgehend HTTP 500 -> Exit 0, key_leak_check clean, M2
+      "beantwortet" mit leeren Objekten = liest sich als Entscheidungszweig 3
+      ("keine Ist-Quelle"), obwohl nie gemessen wurde.
+  (3) Verbindungsabbruch beim 3. Aufruf -> Exit 1, KEIN summary.json, KEINE Leak-Pruefung.
+- BELEGT SAUBER (nicht kaputtmachen): minorUnitsDelta rechnet korrekt in BigInt, kein
+  parseFloat auf Geld; genau 2 Schreibstellen, beide mit Redaktor intern (end-to-end an
+  einem Anbieter belegt, der den Authorization-Header spiegelt); Bremse als Choke-Point
+  vor dem Aufruf; kein Retry; M3-Verdrahtung (base 12144 Zeichen, Kontrolle A teilt 12098,
+  Kontrolle B teilt 0, 10 Wiederholungen byte-identisch).
+- Operativ: die 30-min-Cache-Pause steht INNERHALB der Modellschleife -> laeuft zweimal.
+  Lauf dauert ~80-95 min statt 45-60. Fix zieht sie hinter beide Schleifen.
+- Fix-Runde 1 (bb61de7, Sonnet): alle 5 S1 + 9 S2 + operativ behoben, 1348 -> 1949 Zeilen.
+  Selftest 22 -> 41 Zusicherungen. Schlafzeit 71 -> 41 min (Lauf ~45-55 min).
+- Re-Review (Opus, dieselbe Attrappe, 16 Gegenproben): **SCHARFSCHALTEN OK**, kein S1 mehr.
+  Alle fuenf S1 einzeln gegengemessen, u.a.: Guthaben-Endpunkt 500 -> M2 "nicht beantwortet,
+  Grund: in 96 von 96 Abfragen keinen Erfolg"; 2<->8 Nachkommastellen -> je Aufruf
+  {minor_units:-1000000, scale:8} und gesamt {minor_units:-6, scale:2} rechnen jetzt AUF;
+  Verbindungsabbruch -> Fehlversuch protokolliert, Lauf laeuft zu Ende, Exit 0, und Block A
+  meldet weiter 6 Aufrufe (kein Retry eingeschlichen).
+- Regressionsflaeche geprueft: alle 5 "belegt sauber"-Punkte halten. Verbessert: die
+  M5-Fehlerproben laufen jetzt ueber denselben Bremsen-Choke-Point, der letzte Bypass ist weg.
+- SPEC-KONFLIKT, benannt statt still abgesenkt: M1s Abnahme verlangt Verteilung "ueber beide
+  Modelle und beide Betriebsarten". Ein Kreuzprodukt ist per Konstruktion unerfuellbar -
+  Block E streamt nur BLOCK_E_MODEL (=flash), `pro x stream` kommt NIE vor (empirisch
+  23/17/4/0). Umgesetzt sind zwei Randpruefungen (die woertliche Lesart). Folge fuer B2:
+  **M1s Aussage ueber deepseek-v4-pro ruht ausschliesslich auf Nicht-Stream-Aufrufen** -
+  gehoert in die Uebergabeliste (Spec Abschnitt 8), NICHT stillschweigend akzeptieren.
+- Fix-Runde 2 LAEUFT: 4 verbliebene S2 (M6-Leermenge, M2a-Parserkonsistenz,
+  messbar/nicht-messbar, SSE-Doppelung) + 3 S3.
+
+## B1-b (alt) — Auftrag an den Impl-Agenten
+- Erwartetes Ergebnis (deterministisch): genau EINE neue Datei
+  `scripts/deepseek-b1-messung.mjs`; `git status --porcelain` zeigt nichts sonst.
+- Verifikation (Lead fuehrt selbst aus, VOR dem Scharfschalten):
+  1. `node --check scripts/deepseek-b1-messung.mjs` -> Exit 0
+  2. `node scripts/deepseek-b1-messung.mjs --selftest` -> Exit 0, Anzahl Zusicherungen > 0
+  3. `DEEPSEEK_API_KEY=sk-testdummy... --dry-run` -> Exit 0, 0 Netzaufrufe, Kostenplan
+  4. `git log master..phase/b1-messung` + `git diff --stat` (Lehre C-P2: PASS != Diff)
+- Lead-Zusatz zur Spec: `--selftest` im Skript selbst. Begruendung: Spec verbietet einen Test
+  unter `test/`, aber die Ganzzahl-Guthaben-Arithmetik darf nicht unbelegt bleiben
+  (Pre-Mortem 3 + Regel "kein parseFloat auf Geld").
+
+## B1-c — Scharfer Lauf. BLOCKIERT (Owner: DEEPSEEK_API_KEY fehlt in der lokalen .env)
+- GEMESSEN 2026-08-08: `dotenv` + `process.env.DEEPSEEK_API_KEY` -> FEHLT.
+  Der Key liegt in der Render-Env, ist dort aber unlesbar (MCP-Zugang schreibend) und
+  ungelesen (kein Code liest ihn).
+- Erwartetes Ergebnis: Protokoll unter `data/evidence/deepseek-probe/<ts>/` mit
+  `summary.json`, das fuer M1-M8 je ein `answer`-Feld traegt; `key_leak_check: clean`;
+  Ist-Ausgabe unter 1 USD, belegt durch die Guthaben-Differenz (nicht die Schaetzung).
+- Verifikation: Spec Abschnitt 7 (sechs Punkte), Punkt fuer Punkt abgehakt.
+
+## B1-d — Entscheidungsvorlage an den Owner. OFFEN (nach B1-c)
+- Messergebnisse gegen die Wenn-Dann-Tabelle der Spec (Abschnitt 10) halten.
+- Liefert KEINE Empfehlung (Spec Abschnitt 7: "Nicht Teil der Abnahme: eine Empfehlung").
