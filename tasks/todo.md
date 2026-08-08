@@ -444,3 +444,101 @@ des Anbieters - das existiert nicht (alle 90 Antworten rekursiv geprueft, nur To
 Guthaben loest nur 0,01 USD auf). Es heisst: anbieter-gemeldete Token-Zahlen je Sorte
 (0 Verletzungen beider Summengleichungen ueber 88 Aufrufe) mal veroeffentlichte Rate = reine
 Arithmetik, plus die Gegenprobe als Beleg, dass die Rate stimmt.
+
+## B2 — Der LLM-Port-Vertrag. ERLEDIGT + GEMERGT (2026-08-08, Merge 50ba426)
+
+`src/llm/ports.js`, 233 Zeilen, reine JSDoc-Typdefs + `export {};`. Gate PASS nach 2
+Fix-Runden (11 Agenten, ~1,08 M Subagent-Token). Lead-Verifikation selbst gefahren:
+1 Datei / +233 / -0, `node --check` Exit 0, **einzige Nicht-Kommentar-Zeile ist Zeile 233
+`export {};`**, alle 7 genannten Aufrufer-Symbole per `grep` im Bestand gefunden, alle 11
+B1-usage-Feldnamen erwaehnt, 0 Zeilenverweise, keine Secrets, keine Umlaute,
+`prettier --check` gruen.
+
+**Plan-Grounding: 0 falsche Belege** ueber 60+ Spec-Angaben (5 Bereichsangaben um 1-2
+Zeilen zu weit/eng, keine Aussage dadurch veraendert). Details: `tasks/b2-report.md`
+(im Merge-Commit, danach geloescht — Historie in `git`).
+
+### Die drei Befunde, die WEITERWIRKEN
+
+1. **BEFUND 1 — `toolChoice` ist DREIWERTIG, nicht zweiwertig.** Die Spec 3.2 schrieb
+   `"auto" | "required"` vor und belegte das mit `precall-briefing.js:236`. Gemessen:
+   `:236` ist `tool_choice:{type:"any"}`, aber **`:235` ist `{type:"tool", name:
+   BRIEFING_TOOL_NAME}`** — ein BENANNTER Werkzeug-Zwang, den ein zweiwertiges Feld nicht
+   ausdruecken koennte. Der Vertrag traegt jetzt `"auto"|"required"|{tool:string}`.
+   *Das ist kein Vorratsfeld, sondern ein Live-Aufrufer, den die Spec uebersehen hat.*
+   **Fuer B5 bindend:** ein Adapter, der `toolChoice` nur zweiwertig umsetzt, bricht das
+   Precall-Briefing.
+2. **Die groesste offene Kante des Vertrags (Safety-Concern 1) — der B3-Auftrag im
+   Klartext:** `LlmRequest.system/messages/tools` sind als `*` typisiert, mit dem Zusatz
+   "innere Form ist NICHT Teil dieses Vertrags". **An genau dieser Kante ist der Port heute
+   noch nicht anbieter-neutral** — ein zweiter Adapter bekaeme Anthropic-geformte
+   Strukturen durchgereicht. Bewusst nach B3 verschoben; es ist die Stelle, an der der
+   Vertrag reisst, wenn B3 sie nicht schliesst.
+3. **`npm run lint` ist repo-weit kaputt** (Bestandsbefund, NICHT von B2 verursacht):
+   `npx eslint src/llm/ports.js` bricht mit `ERR_MODULE_NOT_FOUND: Cannot find package
+   '@eslint/js' imported from eslint.config.js` ab. `@eslint/js` steht in `package.json`
+   (devDependency), ist aber nicht installiert. **Gegenprobe gefahren:** `npx eslint
+   src/llm.js` scheitert identisch — es ist also kein Worktree-Artefakt, wie der
+   Safety-Review vermutete, und kein Befund dieser Phase. Abdeckung fuer die neue Datei
+   liefern `node --check` (Exit 0) und `prettier --check` (gruen).
+
+### Offene Punkte, die aus `tasks/b2-spec.md` in den Kettenstand gerettet wurden
+
+Die Spec wird nach diesem Commit geloescht (CLAUDE.md-Aufraeumregel); ihre weissen Flecken
+sind Befunde und bleiben deshalb hier stehen:
+
+| # | Offen | Wer beantwortet es |
+|---|---|---|
+| W1 | Taugt der Eingangs-Uebersetzer des Shims fuer die AUSGANGS-Seite? `grep -c tool_calls src/telnyx-llm-shim.js` = **0** — er uebersetzt heute nur die Eingangsseite | **B3**, erste Frage |
+| W2 | Was passiert bei unparsebaren Werkzeug-Argumenten? B1 hat den Fall nie beobachtet | **B5** (erster Adapter, der wirklich parst) |
+| W3 | **Anthropics Raten je Token-Sorte stehen im Repo NIRGENDS.** Nur die Faustformel "rund ein Zehntel" in `PLAN-ANBIETER-PORT.md` 1.2 — eine Faustformel ist kein Preis | **B4**: frisch abrufen, mit `asOf` + `source` |
+| W4 | Gehoeren alle Anbieter in EINE `modelPricesUsd`-Tabelle? `mostExpensivePrice` ist nur INNERHALB einer Preiswelt eine Obergrenze | **B4** |
+| W5 | Wie weit muss die Aufschluesselung in den Store reichen? Bucket kennt 2 Zaehler (`defaults.js` `emptyUsage`), `usage_event.quantity` ist eine Summe. Beruehrt `src/db/schema.sql` | **B4** |
+| W6 | Schwaecht der Betrag-Rueckgang bei Anthropic das Gate praktisch? Richtung klar, Groesse nicht — haengt am realen Cache-Treffer-Anteil im Live-Verkehr | **B4**, Vorher/Nachher an echtem Verkehr |
+| W7 | Der Perioden-Gegenprobe fehlt ein TRAEGER. Render-Tarif hat keinen Cron | **B4** oder eigene Phase |
+| W8 | Tragen `deepseek-v4-flash`/`-pro` das Gespraech ueberhaupt? B1 konnte das nicht messen (`max_tokens` war 64) | **B5** (`convo-bench`, n>=5, plus echter Anruf) |
+
+**Form der Preistabelle, die B4 bauen muss** (Vertragsfolge, damit B4 keinen Vier-Sorten-
+Bericht in eine Zwei-Raten-Tabelle kippt): je Modell-ID `inPerMTok`, `cacheWritePerMTok`,
+`cacheReadPerMTok`, `outPerMTok`, `asOf`, `source`. **Vier Raten sind Pflicht je Eintrag,
+kein Feld optional** — additiv-nullable ist verworfen, weil der vergessene Eintrag dann
+still im alten, falschen Verhalten weiterliefe (dieses Repo hat den Fall schon bezahlt:
+alle Bestandsnummern ohne `monthlyCostCents`).
+
+**B4s gefaehrlichster Schritt, vorab benannt:** sobald Anthropic vier Raten hat, wird
+`cache_read_input_tokens` nicht mehr zur vollen Eingabe-Rate gebucht. **Der live gebuchte
+Betrag SINKT** — auf dem Kundenbeleg richtiger, auf dem Budget-Gate aber spaeter greifend,
+also weniger schuetzend (Absolute Regel 1). Eigener gemessener Schritt mit Vorher/Nachher
+an echtem Verkehr, Owner sieht die Zahl. **Kein Seiteneffekt von "wir haben DeepSeek
+dazugebaut".**
+
+## B2 — Auftrag (erledigt, Verifikation unten belegt)
+
+Spec: `tasks/b2-spec.md` (autoritativ). Skript: `.claude/workflows/runs/b2.js`.
+Ausgangsstand gemessen: master = origin = upstream `5f296ef`, Suite 4007/4007 Exit 0,
+live `6aec118`, 1 Worktree, `DEEPSEEK_API_KEY` in der lokalen `.env` vorhanden.
+
+- **Erwartetes Ergebnis (deterministisch):** genau EINE neue Datei `src/llm/ports.js`;
+  `git diff --stat master..<branch>` zeigt nichts sonst; die Datei enthaelt ausser
+  `export {};` keine Anweisung.
+- **Verifikation (Lead fuehrt sie SELBST aus, vor dem Merge - Lehre C-P2: PASS != Diff):**
+  1. `git log master..<finalBranch>` + `git diff --stat` selbst ansehen
+  2. `node --check src/llm/ports.js` -> Exit 0
+  3. `grep -nE "function|=>|\bconst\b|\blet\b" src/llm/ports.js` -> jeder Treffer liegt
+     in einem Kommentar
+  4. `npm test` -> 4007/4007, Exit 0 (beweist nur, dass nichts kaputt ist; die Spec haelt
+     ausdruecklich fest, dass gruene Tests die Richtigkeit des Vertrags NICHT belegen)
+  5. jede im Vertrag genannte Aufrufer-Bezeichnung per `grep` im echten Code auffindbar
+
+### Lead-Entscheidung zur Belegform (Abweichung von der Spec, bewusst)
+
+Spec-Abnahme Punkt 4 verlangt Aufrufer-Belege als `datei.js:zeile`. **Gemessen:**
+`grep -cE '\.js:[0-9]' src/telephony/ports.js` -> **0** - der Nachbar-Port fuehrt KEINE
+Zeilenverweise, und clean-code C2 verbietet brittle Datei:Zeile-Kommentare.
+
+**Aufgeloest zugunsten der Bestandspraxis:** die Vertragsdatei nennt Datei + SYMBOLNAME
+(`claude.js` `agentTurn`), die Zeilenbelege stehen im Report. Ein Symbolname ist grepbar
+und bricht sichtbar; eine verrottete Zeilennummer zeigt still auf die falsche Zeile - die
+Symbol-Variante ist also robuster, nicht nur konventionstreuer. Die Zeilenangaben der Spec
+werden trotzdem EINZELN am Code nachgeschlagen (Abnahme-Punkt 4); Abweichungen sind
+Befunde und kommen in den Report, nicht in einen stillen Fix.

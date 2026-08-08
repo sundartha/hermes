@@ -588,3 +588,37 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   ueber die vier Zellen). Der Fixer waehlte die woertliche Lesart (zwei Randpruefungen) und
   **meldete die Abweichung samt Aussagekraft-Verlust**. Genau so gehoert es: die schwaechere
   Aussage kommt in die Uebergabeliste, nicht in eine Fussnote.
+
+## Ein Pruefkommando ohne Positiv-Kontrolle kann still 0 melden (2026-08-08, B2)
+
+Die B2-Spec schrieb den Abnahme-Grep fuer "keine Laufzeit-Logik" so aus:
+`grep -nE "function\|=>\|\bconst\b\|\blet\b" src/llm/ports.js` — und verlangte, dass er
+**keine** Treffer ausserhalb von Kommentaren liefert.
+
+- **Das Kommando war defekt.** In einem ERE ist `\|` das LITERAL "|", kein
+  Alternations-Operator. Der Ausdruck suchte also nach der Zeichenkette
+  `function|=>|\bconst\b|\blet\b` am Stueck — die es nirgends gibt. **Der Grep haette bei
+  JEDER Datei 0 Treffer gemeldet**, auch bei einer voller Laufzeit-Logik.
+- **Die Abnahme haette also gruen gemeldet, ohne irgendetwas zu pruefen.** Das ist genau
+  die Klasse aus [[Ein Messwerkzeug braucht eine Attrappe]]: nicht die Rechnung war falsch,
+  sondern die Meldung.
+- **Gefangen hat es die Positiv-Kontrolle.** Der Impl-Agent liess denselben Grep gegen
+  `src/telephony/ports.js` laufen — eine Datei, von der bekannt ist, dass sie viele
+  JSDoc-Treffer traegt. Erwartet ~23, geliefert 0. Erst dieser Widerspruch entlarvte das
+  Kommando; die Zieldatei allein haette nie widersprochen.
+- **Regel:** ein Pruefkommando, dessen Erfolgsfall "leere Ausgabe" ist, muss **einmal gegen
+  einen bekannten Positiv-Fall** laufen, bevor man seiner Null glaubt. Ohne diesen Lauf ist
+  "keine Treffer" nicht von "sucht nichts" zu unterscheiden — und beides sieht im Protokoll
+  identisch aus.
+- **Ersatz war nicht der reparierte Grep, sondern die staerkere Frage.** Statt "kommen
+  verbotene Zeichenketten vor?" wurde gepruefte: Kommentare entfernen, und der Rest der
+  Datei muss **exakt** `export {};` sein. Das ist eine Positiv-Aussage ueber den
+  Gesamtinhalt statt einer Negativ-Aussage ueber eine Musterliste — sie kann nicht dadurch
+  gruen werden, dass das Muster nicht passt.
+
+**Zweiter Befund derselben Phase, andere Wurzel:** die Spec belegte `toolChoice "auto" |
+"required"` mit `precall-briefing.js:236`. Die Zeile stimmte, die Aussage nicht — direkt
+darueber, in `:235`, steht ein **benannter** Werkzeug-Zwang (`{type:"tool", name}`), den
+ein zweiwertiges Feld nicht ausdruecken kann. **Eine korrekt zitierte Zeile belegt nur, was
+in ihr steht, nicht die Vollstaendigkeit der Aufzaehlung.** Wer eine Enum-Wertemenge aus
+einem Zitat ableitet, muss alle Rueckgaben der Funktion ansehen, nicht eine.
