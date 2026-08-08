@@ -2,11 +2,9 @@
 // ein Anbieter (Anthropic, im bestehenden Seam src/llm.js). Reine JSDoc-Typdefs,
 // keine Laufzeit-Logik.
 //
-// Besitzverhaeltnis: Circuit-Breaker, Retry-Schleife, Backoff, das Praedikat "der
-// Versuch war auf der Leitung", der Unavailable-Fehlertyp und die Degradations-Wahl
-// bleiben im Seam (llm.js). Ein Adapter, der davon etwas mitbringt, dupliziert Logik,
-// die genau einmal existieren darf; er liefert Klassifikation (LlmErrorClassification)
-// und seine eigenen Zahlen (limits), sonst nichts.
+// Besitzverhaeltnis: bleibt im Seam (llm.js), Begruendung bei LlmErrorClassification.
+// Ein Adapter liefert Klassifikation (LlmErrorClassification) und seine eigenen Zahlen
+// (limits), sonst nichts.
 //
 // Bewusst NICHT Teil dieses Vertrags, mit Grund:
 // - Preise, Waehrung, Geldbetraege: der Port meldet Token, nie Geld. Woertlicher
