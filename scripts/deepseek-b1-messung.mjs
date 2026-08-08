@@ -12,7 +12,7 @@
 //   node scripts/deepseek-b1-messung.mjs --dry-run
 //   node scripts/deepseek-b1-messung.mjs [--blocks=A,B,C,D,E] [--max-usd=1.00]
 import assert from "node:assert/strict";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
@@ -52,7 +52,9 @@ const DOC_PRICES_USD_PER_MTOK = Object.freeze({
 });
 
 // usage-Objekt laut Doku (Quelle wie oben): 5 flache Felder + ein verschachteltes
-// completion_tokens_details mit reasoning_tokens (-> M8).
+// completion_tokens_details mit reasoning_tokens (-> M8). Als PFADE gefuehrt (nicht nur
+// oberste Ebene), damit ein neues Feld auf JEDER Verschachtelungstiefe auffaellt (F10:
+// ein Geldfeld unter completion_tokens_details waere sonst unsichtbar geblieben).
 const DOCUMENTED_USAGE_KEYS = new Set([
   "prompt_tokens",
   "completion_tokens",
@@ -60,6 +62,7 @@ const DOCUMENTED_USAGE_KEYS = new Set([
   "prompt_cache_miss_tokens",
   "total_tokens",
   "completion_tokens_details",
+  "completion_tokens_details.reasoning_tokens",
 ]);
 
 // Fehlercodes laut https://api-docs.deepseek.com/quick_start/error_codes (abgerufen 2026-08-08):
@@ -71,6 +74,8 @@ const REDACTED_PLACEHOLDER = "***";
 const HTTP_OK = 200;
 const HTTP_ERROR_THRESHOLD = 400;
 const HTTP_TIMEOUT_MS = 60_000;
+// Grobe Heuristik: ~4 Zeichen pro Token bei lateinischer Schrift (vorher 5x unbenannt, G25).
+const CHARS_PER_TOKEN_ESTIMATE = 4;
 
 // ============================================================================
 // Kopie der Produktions-Werkzeugdefinition (src/claude.js:465-477, take_message).
@@ -162,6 +167,19 @@ const BLOCK_E_PROMPT =
   "Ein Anrufer sagt: Bitte richten Sie aus, dass ich um 15 Uhr zurueckgerufen werden moechte. " +
   "Nutze bei Bedarf das verfuegbare Werkzeug, um eine Nachricht zu hinterlassen.";
 
+// Kreuzprodukt-Aufbau vor die Kostenschaetzung gezogen (vorher weiter unten definiert),
+// damit APPROX_INPUT_TOKENS_BLOCK_E die echte Konstante nutzt statt "* 8" zu duplizieren (G25).
+function buildBlockECombos() {
+  const combos = [];
+  for (const stream of [false, true]) {
+    for (const withTool of [false, true]) {
+      for (const includeUsage of [false, true]) combos.push({ stream, withTool, includeUsage });
+    }
+  }
+  return combos;
+}
+const BLOCK_E_COMBOS_COUNT = buildBlockECombos().length;
+
 // Block F - Off-Peak (M4, optional)
 const BLOCK_F_MODEL = MODEL_FLASH;
 const BLOCK_F_CALLS = 24;
@@ -169,28 +187,35 @@ const HOURS_PER_BLOCK_F_STEP = 1;
 const MINUTES_PER_HOUR = 60;
 const BLOCK_F_INTERVAL_MS = HOURS_PER_BLOCK_F_STEP * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
-// M5 - Latenz/Fehlerform (keine eigene Blockbuchstabe: Verteilung aggregiert ueber ALLE
-// Aufrufe; die beiden Fehlerproben laufen einmal separat, s. runErrorProbes)
+// M5 - Latenz/Fehlerform. Verteilung wird JE (Modell x Betriebsart) gebildet (F9), nicht
+// gepoolt; die gepoolte Zahl steht zusaetzlich, aber benannt. Die Fehlerproben laufen einmal,
+// unabhaengig von --blocks, ueber denselben Choke-Point wie alle anderen Aufrufe.
 const SEAM_TIMEOUT_MS = 3500;
 const PERCENTILE_MEDIAN = 50;
 const PERCENTILE_P95 = 95;
+const PERCENTILE_MIN_RELIABLE_N = 20; // unter dieser Groesse ist p95 == max (Interpolationsartefakt)
 const INVALID_MAX_TOKENS = -1; // -1 ist per Ausnahme erlaubte Zahl (0/1/-1)
 
 // Grobe Dry-Run-Kostenschaetzung: konservativ auf v4-pro-Cache-Fehltreffer gerechnet
 // (Spec 6.4), Ausgabeseite als kleiner Anteil der Eingabeseite angenommen.
 const OUTPUT_TOKEN_ESTIMATE_RATIO = 0.02;
-const APPROX_INPUT_TOKENS_BLOCK_A = BLOCK_A_TARGET_CHARS * BLOCK_A_CALLS_PER_MODEL * CONFIGURED_MODELS.length / 4;
+const APPROX_INPUT_TOKENS_BLOCK_A =
+  (BLOCK_A_TARGET_CHARS * BLOCK_A_CALLS_PER_MODEL * CONFIGURED_MODELS.length) / CHARS_PER_TOKEN_ESTIMATE;
 const APPROX_INPUT_TOKENS_BLOCK_B =
-  (CACHE_PROMPT_MIN_CHARS * BLOCK_B_CALLS_PER_MODEL * CONFIGURED_MODELS.length) / 4;
+  (CACHE_PROMPT_MIN_CHARS * BLOCK_B_CALLS_PER_MODEL * CONFIGURED_MODELS.length) / CHARS_PER_TOKEN_ESTIMATE;
 const APPROX_INPUT_TOKENS_BLOCK_C =
-  (RESOLUTION_TARGET_CHARS * RESOLUTION_MAX_CALLS_PER_MODEL * CONFIGURED_MODELS.length) / 4;
-const APPROX_INPUT_TOKENS_BLOCK_E = (BLOCK_E_PROMPT.length * 8) / 4;
-const APPROX_INPUT_TOKENS_BLOCK_F = (BLOCK_A_TARGET_CHARS * BLOCK_F_CALLS) / 4;
+  (RESOLUTION_TARGET_CHARS * RESOLUTION_MAX_CALLS_PER_MODEL * CONFIGURED_MODELS.length) / CHARS_PER_TOKEN_ESTIMATE;
+const APPROX_INPUT_TOKENS_BLOCK_E = (BLOCK_E_PROMPT.length * BLOCK_E_COMBOS_COUNT) / CHARS_PER_TOKEN_ESTIMATE;
+const APPROX_INPUT_TOKENS_BLOCK_F = (BLOCK_A_TARGET_CHARS * BLOCK_F_CALLS) / CHARS_PER_TOKEN_ESTIMATE;
 
 const EXIT_OK = 0;
 const EXIT_ERROR = 1;
 const EXIT_KEY_LEAK = 2;
 const EXIT_BUDGET_STOPPED = 3;
+
+// M7: Feldpfad-Konstante fuer Aufrufe, die ueberhaupt keine Auswertung zulassen (Aufruf
+// scheiterte). Eigener String statt null, damit computeM7Answer damit rechnen kann.
+const TOOL_CALL_PFAD_FAILED = "nicht ermittelbar (Aufruf gescheitert)";
 
 // ============================================================================
 // Reine Hilfsfunktionen - keine I/O, keine Zeit-/Zufallsabhaengigkeit. Das ist die
@@ -206,28 +231,45 @@ function decimalPartsOf(str) {
   return { negative, intPart: intPart || "0", fracPart };
 }
 
+// Strikte Format-Pruefung (eigenes Regex statt sich auf decimalPartsOf zu verlassen):
+// decimalPartsOf ist bewusst lenient (fuer die Aufloesungs-Zaehlung in queryBalanceLogged,
+// wo ein seltsamer Wert nur einen seltsamen Zaehlerstand ergeben darf, nie einen Absturz).
+// Fuer eine tatsaechliche Geld-Differenz muss dagegen JEDES Format ausser einer reinen
+// Dezimalzahl explizit scheitern - sonst wuerden Tausendertrennzeichen ("1,234.56"), ein
+// leerer String oder "null" still als 0 durchgehen statt als "nicht parsebar" aufzufallen.
+const DECIMAL_STRING_PATTERN = /^\d+(\.\d+)?$|^\.\d+$/;
+
 function decimalStringToMinorUnits(str, scale) {
-  const { negative, intPart, fracPart } = decimalPartsOf(str);
+  const trimmed = String(str).trim();
+  const negative = trimmed.startsWith("-");
+  const unsigned = negative ? trimmed.slice(1) : trimmed;
+  if (!DECIMAL_STRING_PATTERN.test(unsigned)) {
+    throw new Error(`Ungueltiges Zahlenformat fuer Guthaben-Wert: "${str}"`);
+  }
+  const [intPart, fracPart = ""] = unsigned.split(".");
   const paddedFrac = fracPart.padEnd(scale, "0").slice(0, scale);
-  const value = BigInt(`${intPart}${paddedFrac}`);
+  const value = BigInt(`${intPart || "0"}${paddedFrac}`);
   return negative ? -value : value;
 }
 
 // Ganzzahl-Differenz zweier Guthaben-Strings in der kleinsten Einheit. NIE parseFloat/
 // Number auf Geldbetraege (Spec M2 + Pre-Mortem 3) - sonst IEEE-Rauschen statt Abbuchung.
+// F3(c): Anbieter-Strings mit Tausendertrennzeichen/leer/null wuerden BigInt() zum Werfen
+// bringen (Absturz eines bezahlten Laufs wegen einer Formatierungsfrage). Das darf nicht
+// den Prozess toeten - stattdessen ein ausdrueckliches "nicht parsebar" zurueckgeben.
 export function minorUnitsDelta(beforeStr, afterStr) {
-  const scale = Math.max(decimalPartsOf(beforeStr).fracPart.length, decimalPartsOf(afterStr).fracPart.length);
-  const before = decimalStringToMinorUnits(beforeStr, scale);
-  const after = decimalStringToMinorUnits(afterStr, scale);
-  return { deltaMinorUnits: after - before, scale };
-}
-
-// Zugriff auf balance_infos AUSSCHLIESSLICH ueber currency, nie ueber Index
-// (Pre-Mortem 3: CNY an Index 0, USD an Index 1 - ein Index-Zugriff waere Faktor ~7 falsch).
-export function pickBalanceByCurrency(balanceInfos, currency) {
-  const match = (balanceInfos || []).find((entry) => entry.currency === currency);
-  if (!match) throw new Error(`Keine Guthaben-Eintrag fuer Waehrung ${currency}`);
-  return match;
+  try {
+    const scale = Math.max(decimalPartsOf(beforeStr).fracPart.length, decimalPartsOf(afterStr).fracPart.length);
+    const before = decimalStringToMinorUnits(beforeStr, scale);
+    const after = decimalStringToMinorUnits(afterStr, scale);
+    return { deltaMinorUnits: after - before, scale, parseError: null };
+  } catch (err) {
+    return {
+      deltaMinorUnits: null,
+      scale: null,
+      parseError: `nicht parsebar: "${beforeStr}" -> "${afterStr}" (${err.message})`,
+    };
+  }
 }
 
 export function computeDeltasByCurrency(beforeInfos, afterInfos) {
@@ -240,42 +282,78 @@ export function computeDeltasByCurrency(beforeInfos, afterInfos) {
   return result;
 }
 
-function mapDeltasToMinorUnitStrings(deltas) {
+// Traegt die Skala (Nachkommastellen) IMMER mit (F2): eine Ganzzahl ohne ihre Skala ist
+// keine Geldangabe - der Anbieter kann zwischen Aufrufen die Aufloesung wechseln.
+export function mapDeltasToRecords(deltas) {
   const out = {};
-  for (const [currency, delta] of Object.entries(deltas)) out[currency] = delta.deltaMinorUnits.toString();
+  for (const [currency, delta] of Object.entries(deltas)) {
+    out[currency] = delta.parseError ?? { minor_units: delta.deltaMinorUnits.toString(), scale: delta.scale };
+  }
   return out;
 }
 
-function balanceResolutionByCurrency(balanceInfos) {
-  const result = {};
-  for (const entry of balanceInfos || []) result[entry.currency] = decimalPartsOf(entry.total_balance).fracPart.length;
-  return result;
-}
-
 // M1-Gleichungen. usage-Felder sind laut Doku Zahlen (nur Guthaben ist String) - normale
-// Arithmetik ist hier zulaessig, anders als bei Geldbetraegen.
+// Arithmetik ist hier zulaessig, anders als bei Geldbetraegen. Beide Gleichungen behandeln
+// fehlende Felder gleich (Number(x || 0)) - vorher war nur checkPromptEquation so geschrieben.
 export function checkPromptEquation(usage) {
+  const promptTokens = Number(usage.prompt_tokens || 0);
   const hit = Number(usage.prompt_cache_hit_tokens || 0);
   const miss = Number(usage.prompt_cache_miss_tokens || 0);
-  return usage.prompt_tokens === hit + miss;
+  return promptTokens === hit + miss;
 }
 
 export function checkTotalEquation(usage) {
-  return usage.total_tokens === usage.prompt_tokens + usage.completion_tokens;
+  const total = Number(usage.total_tokens || 0);
+  const prompt = Number(usage.prompt_tokens || 0);
+  const completion = Number(usage.completion_tokens || 0);
+  return total === prompt + completion;
 }
 
 // Kostenschaetzung aus einem usage-Objekt gegen die Doku-Preistabelle. Dies ist die
 // SCHAETZUNG (est_usd_from_doc_prices), nie die Ist-Quelle - die ist die Guthaben-
 // Differenz aus minorUnitsDelta.
-export function estimateCostUsd(usage, prices) {
+//
+// F6: haengt NICHT ausschliesslich an den Cache-Feldern - genau deren Existenz soll M1 ja
+// erst falsifizieren. Rueckfall-Kette: prompt_cache_miss_tokens -> (prompt_tokens - hit) ->
+// bei voelligem Fehlen beider: fail-safe TEUER aus der Prompt-Zeichenlaenge (promptChars),
+// NIE 0 (0 waere die gefaehrliche Richtung fuer eine Kostenbremse).
+export function estimateCostUsd(usage, prices, promptChars = 0) {
   const hit = Number(usage.prompt_cache_hit_tokens || 0);
-  const miss = Number(usage.prompt_cache_miss_tokens || 0);
+  const hasMiss = usage.prompt_cache_miss_tokens != null;
+  const hasPromptTokens = usage.prompt_tokens != null;
+  let miss;
+  let inputUnbekannt = false;
+  if (hasMiss) {
+    miss = Number(usage.prompt_cache_miss_tokens);
+  } else if (hasPromptTokens) {
+    miss = Math.max(Number(usage.prompt_tokens) - hit, 0);
+  } else {
+    miss = promptChars / CHARS_PER_TOKEN_ESTIMATE;
+    inputUnbekannt = true;
+  }
   const completion = Number(usage.completion_tokens || 0);
-  return (
+  const usd =
     (hit / TOKENS_PER_MILLION) * prices.cacheHit +
     (miss / TOKENS_PER_MILLION) * prices.cacheMiss +
-    (completion / TOKENS_PER_MILLION) * prices.output
-  );
+    (completion / TOKENS_PER_MILLION) * prices.output;
+  return { usd, inputUnbekannt };
+}
+
+// Sammelt alle Schluessel eines Objekts als PFADE, rekursiv (F10). Ein flacher
+// Object.keys() saehe ein Feld wie completion_tokens_details.cost_usd nie - genau auf
+// dieser Verschachtelungstiefe fuehrt DeepSeek heute schon ein Feld (reasoning_tokens).
+export function collectKeyPaths(obj, prefix = "") {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return prefix ? [prefix] : [];
+  const paths = [];
+  for (const [key, value] of Object.entries(obj)) {
+    const currentPath = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      paths.push(currentPath, ...collectKeyPaths(value, currentPath));
+    } else {
+      paths.push(currentPath);
+    }
+  }
+  return paths;
 }
 
 // Redaktionsfilter (Spec 6.5): jede Datei-/Konsolenausgabe laeuft an der Schreibstelle
@@ -296,17 +374,6 @@ export function createRedactor(secrets) {
     }
     return value;
   };
-}
-
-function deepStringifyBigInt(value) {
-  if (typeof value === "bigint") return value.toString();
-  if (Array.isArray(value)) return value.map(deepStringifyBigInt);
-  if (value && typeof value === "object") {
-    const out = {};
-    for (const [key, v] of Object.entries(value)) out[key] = deepStringifyBigInt(v);
-    return out;
-  }
-  return value;
 }
 
 function deriveWrongApiKey(apiKey) {
@@ -339,17 +406,6 @@ export function sharedPrefixLength(a, b) {
   while (i < max && a[i] === b[i]) i += 1;
   return i;
 }
-
-function buildBlockECombos() {
-  const combos = [];
-  for (const stream of [false, true]) {
-    for (const withTool of [false, true]) {
-      for (const includeUsage of [false, true]) combos.push({ stream, withTool, includeUsage });
-    }
-  }
-  return combos;
-}
-const BLOCK_E_COMBOS_COUNT = buildBlockECombos().length;
 
 // ============================================================================
 // CLI
@@ -447,6 +503,16 @@ function selftestMoneyDelta() {
       assert.notStrictEqual(parseFloat("0.30") - parseFloat("0.10"), 0.2);
       assert.strictEqual(minorUnitsDelta("0.10", "0.30").deltaMinorUnits, 20n);
     },
+    // F2: die Skala wird IMMER mitgefuehrt, auch wenn beide Seiten gleich viele Stellen haben
+    () => assert.strictEqual(minorUnitsDelta("10.00", "10.05").scale, 2),
+    // F2 Kernfall: Anbieter wechselt zwischen 2 und 8 Nachkommastellen - Skala folgt der
+    // laengeren Seite, das Delta bleibt in DERSELBEN kleinsten Einheit vergleichbar
+    () => assert.strictEqual(minorUnitsDelta("10.00", "10.00000001").scale, 8),
+    // F3(c): Tausendertrennzeichen darf den Prozess nicht toeten (BigInt("1,23456") wirft)
+    () => assert.ok(minorUnitsDelta("1,234.56", "1,234.55").parseError?.startsWith("nicht parsebar:")),
+    () => assert.strictEqual(minorUnitsDelta("1,234.56", "1,234.55").deltaMinorUnits, null),
+    // leer/null duerfen ebenfalls nicht werfen
+    () => assert.ok(minorUnitsDelta("", "10.00").parseError !== null),
   ]);
 }
 
@@ -469,15 +535,23 @@ function selftestEquations() {
 
 function selftestCurrencySelection() {
   // Pre-Mortem 3: CNY an Index 0, USD an Index 1 - ein Index-Zugriff waere falsch.
-  const balanceInfos = [
+  // computeDeltasByCurrency ist der PRODUKTIVPFAD (buildCallRecord); die vier
+  // Zusicherungen haengen hier statt an totem Code (F15: pickBalanceByCurrency entfernt,
+  // war ausschliesslich vom Selftest aufgerufen).
+  const before = [
     { currency: "CNY", total_balance: "700.00" },
     { currency: "USD", total_balance: "100.00" },
   ];
+  const after = [
+    { currency: "CNY", total_balance: "693.00" }, // CNY sinkt um 7.00
+    { currency: "USD", total_balance: "100.01" }, // USD steigt um 0.01
+  ];
+  const deltas = computeDeltasByCurrency(before, after);
   return runChecks([
-    () => assert.strictEqual(pickBalanceByCurrency(balanceInfos, "USD").total_balance, "100.00"),
-    () => assert.strictEqual(pickBalanceByCurrency(balanceInfos, "CNY").total_balance, "700.00"),
-    () => assert.notStrictEqual(pickBalanceByCurrency(balanceInfos, "USD"), balanceInfos[0]),
-    () => assert.throws(() => pickBalanceByCurrency(balanceInfos, "EUR")),
+    () => assert.strictEqual(deltas.USD.deltaMinorUnits, 1n),
+    () => assert.strictEqual(deltas.CNY.deltaMinorUnits, -700n),
+    () => assert.notStrictEqual(deltas.USD, deltas.CNY),
+    () => assert.strictEqual(Object.keys(deltas).length, 2),
   ]);
 }
 
@@ -494,10 +568,25 @@ function selftestRedaction() {
 }
 
 function selftestCostEstimate() {
-  const usage = { prompt_cache_hit_tokens: 1_000_000, prompt_cache_miss_tokens: 0, completion_tokens: 1_000_000 };
   const prices = DOC_PRICES_USD_PER_MTOK[MODEL_FLASH];
-  const expected = prices.cacheHit + prices.output;
-  return runChecks([() => assert.strictEqual(estimateCostUsd(usage, prices), expected)]);
+  const withCacheFields = { prompt_cache_hit_tokens: 1_000_000, prompt_cache_miss_tokens: 0, completion_tokens: 1_000_000 };
+  const withoutCacheFieldsButPromptTokens = { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 };
+  const totallyUnknown = { completion_tokens: 0 };
+  return runChecks([
+    () => assert.strictEqual(estimateCostUsd(withCacheFields, prices).usd, prices.cacheHit + prices.output),
+    () => assert.strictEqual(estimateCostUsd(withCacheFields, prices).inputUnbekannt, false),
+    // F6-Rueckfall: keine Cache-Felder, aber prompt_tokens vorhanden -> miss = prompt_tokens - hit(0)
+    () =>
+      assert.strictEqual(
+        estimateCostUsd(withoutCacheFieldsButPromptTokens, prices).usd,
+        prices.cacheMiss + prices.output,
+      ),
+    () => assert.strictEqual(estimateCostUsd(withoutCacheFieldsButPromptTokens, prices).inputUnbekannt, false),
+    // F6 Fail-safe: WEDER Cache-Felder NOCH prompt_tokens -> NICHT 0 (das waere die
+    // gefaehrliche Richtung fuer die Bremse), sondern teure Schaetzung aus promptChars
+    () => assert.ok(estimateCostUsd(totallyUnknown, prices, 4000).usd > 0),
+    () => assert.strictEqual(estimateCostUsd(totallyUnknown, prices, 4000).inputUnbekannt, true),
+  ]);
 }
 
 function selftestPrefixControls() {
@@ -512,6 +601,39 @@ function selftestPrefixControls() {
   ]);
 }
 
+function selftestKeyPaths() {
+  // F10: ein Geldfeld unter completion_tokens_details.cost_usd muss auf DIESER Tiefe
+  // auftauchen, nicht nur als "completion_tokens_details" auf oberster Ebene.
+  const usage = {
+    prompt_tokens: 100,
+    completion_tokens_details: { reasoning_tokens: 5, cost_usd: "0.000123" },
+  };
+  const paths = collectKeyPaths(usage);
+  return runChecks([
+    () => assert.ok(paths.includes("prompt_tokens")),
+    () => assert.ok(paths.includes("completion_tokens_details")),
+    () => assert.ok(paths.includes("completion_tokens_details.reasoning_tokens")),
+    () => assert.ok(paths.includes("completion_tokens_details.cost_usd")),
+    () => assert.ok(!DOCUMENTED_USAGE_KEYS.has("completion_tokens_details.cost_usd")),
+  ]);
+}
+
+function selftestOverallComparisonSign() {
+  // F11: buildOverallComparison darf das Vorzeichen NICHT mit Math.abs wegwerfen - eine
+  // Guthaben-ERHOEHUNG (Aufladung waehrend des Laufs) muss als solche erkennbar bleiben,
+  // nicht als (kleinere) Ausgabe verkleidet.
+  const increase = { USD: { deltaMinorUnits: 500n, scale: 2, parseError: null } }; // Guthaben +5.00 USD
+  const decrease = { USD: { deltaMinorUnits: -500n, scale: 2, parseError: null } }; // Guthaben -5.00 USD
+  const resultIncrease = buildOverallComparison(increase, 1.23);
+  const resultDecrease = buildOverallComparison(decrease, 1.23);
+  return runChecks([
+    () => assert.ok(resultIncrease.USD.delta_usd_approx > 0),
+    () => assert.ok(String(resultIncrease.USD.richtung).includes("erhoeht")),
+    () => assert.ok(resultDecrease.USD.delta_usd_approx < 0),
+    () => assert.ok(String(resultDecrease.USD.richtung).includes("gesunken")),
+  ]);
+}
+
 function runSelftest() {
   const groups = [
     ["Ganzzahl-Delta aus Guthaben-Strings", selftestMoneyDelta],
@@ -520,6 +642,8 @@ function runSelftest() {
     ["Redaktionsfilter", selftestRedaction],
     ["Kostenschaetzung aus usage", selftestCostEstimate],
     ["Praefix-Kontrollen Block B", selftestPrefixControls],
+    ["Rekursive Schluesselpfade (M1/F10)", selftestKeyPaths],
+    ["Vorzeichen in buildOverallComparison (M2/F11)", selftestOverallComparisonSign],
   ];
   let checked = 0;
   let failed = 0;
@@ -661,12 +785,67 @@ function extractStreamSummary(chunks) {
   return { usage, model };
 }
 
+// F5: Feldpfad bis zu Werkzeugname/Argumenten NAMENTLICH, fuer beide Betriebsarten.
+// Nicht-Stream: der Werkzeugaufruf steht komplett in einer message. Stream: er kommt in
+// delta-Fragmenten ueber mehrere Chunks, akkumuliert (Name meist im ersten Fragment,
+// Argumente ueber mehrere Fragmente verteilt) - fuer B1s Zweck (Feldpfad + Beobachtung
+// dokumentieren, nicht produktionsreif parsen) reicht simples Aneinanderhaengen.
+function extractToolCallInfo(message) {
+  const toolCalls = message?.tool_calls;
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) return null;
+  const first = toolCalls[0];
+  return {
+    feldpfad: "choices[0].message.tool_calls[0].function.name",
+    name: first?.function?.name ?? null,
+    argumente: first?.function?.arguments ?? null,
+  };
+}
+
+function extractStreamToolCallInfo(chunks) {
+  let name = null;
+  let argumentsText = "";
+  let found = false;
+  for (const rawEvent of chunks) {
+    for (const dataLine of parseSseDataLines(rawEvent)) {
+      if (dataLine === "[DONE]") continue;
+      const parsed = safeJsonParse(dataLine);
+      const toolCalls = parsed?.choices?.[0]?.delta?.tool_calls;
+      if (!Array.isArray(toolCalls) || toolCalls.length === 0) continue;
+      found = true;
+      for (const call of toolCalls) {
+        if (call?.function?.name) name = call.function.name;
+        if (call?.function?.arguments) argumentsText += call.function.arguments;
+      }
+    }
+  }
+  if (!found) return null;
+  return {
+    feldpfad: "choices[0].delta.tool_calls[0].function.(name|arguments), ueber Chunks akkumuliert",
+    name,
+    argumente: argumentsText,
+  };
+}
+
 function normalizeChatResult(raw, stream) {
   if (!stream) {
-    return { status: raw.status, ttfbMs: raw.ttfbMs, totalMs: raw.totalMs, model: raw.json?.model ?? null, usage: raw.json?.usage ?? null };
+    return {
+      status: raw.status,
+      ttfbMs: raw.ttfbMs,
+      totalMs: raw.totalMs,
+      model: raw.json?.model ?? null,
+      usage: raw.json?.usage ?? null,
+      toolCall: extractToolCallInfo(raw.json?.choices?.[0]?.message),
+    };
   }
   const summary = extractStreamSummary(raw.chunks);
-  return { status: raw.status, ttfbMs: raw.ttfbMs, totalMs: raw.totalMs, model: summary.model, usage: summary.usage };
+  return {
+    status: raw.status,
+    ttfbMs: raw.ttfbMs,
+    totalMs: raw.totalMs,
+    model: summary.model,
+    usage: summary.usage,
+    toolCall: extractStreamToolCallInfo(raw.chunks),
+  };
 }
 
 async function validateModelsAvailable(apiKey) {
@@ -694,16 +873,18 @@ async function validateModelsAvailable(apiKey) {
 // ============================================================================
 // Ausgabe (Spec 6.3): JSONL-Dateien unter data/evidence/deepseek-probe/<ts>/.
 // Jede Schreibstelle laeuft durch redact() - das ist die Schutzlinie, nicht die
-// Aufrufstellen (Spec 6.5).
+// Aufrufstellen (Spec 6.5). Kein deepStringifyBigInt mehr: jede Stelle, die einen
+// BigInt erzeugt (minorUnitsDelta), wandelt ihn VOR dem Verlassen der Funktion in einen
+// String (mapDeltasToRecords) - kein rohes BigInt erreicht je appendJsonLine/writeJsonFile.
 // ============================================================================
 
 async function appendJsonLine(outputDir, filename, obj, redact) {
-  const line = `${JSON.stringify(redact(deepStringifyBigInt(obj)))}\n`;
+  const line = `${JSON.stringify(redact(obj))}\n`;
   await appendFile(path.join(outputDir, filename), line, "utf8");
 }
 
 async function writeJsonFile(filePath, obj, redact) {
-  await writeFile(filePath, JSON.stringify(redact(deepStringifyBigInt(obj)), null, 2), "utf8");
+  await writeFile(filePath, JSON.stringify(redact(obj), null, 2), "utf8");
 }
 
 async function prepareOutputDir() {
@@ -728,9 +909,14 @@ function createRunState({ outputDir, redact, maxUsd, apiKey, wrongApiKey }) {
     wrongApiKey,
     cumEstUsd: 0,
     calls: [],
+    failedCallCount: 0,
     firstBalanceInfos: null,
     lastBalanceInfos: null,
-    balancePollCount: 0,
+    balanceQueryCount: 0, // ALLE Guthaben-Abfragen (F7: getrennt von blockDPollCount)
+    balanceQuerySuccessCount: 0,
+    blockDPollCount: 0,
+    blockDSeries: [], // M2(iii) Nachbuchungs-Zeitreihe
+    resolutionObservedByCurrency: {}, // F2/M2a: beobachtete Aufloesungen ueber ALLE Abfragen
     resolutionFindings: null,
     comparableWindow: { start_utc: null, end_utc: null },
     modelsRaw: null,
@@ -749,19 +935,43 @@ function assertBudgetNotExceeded(state) {
   }
 }
 
+// F1: haelt http_status fest (Aufrufer entscheidet, ob die Antwort verwertbar ist) und
+// setzt firstBalanceInfos/lastBalanceInfos NUR bei echtem Erfolg (Status 200 UND
+// balance_infos nicht leer) - vorher machte json?.balance_infos ?? [] jede Fehlantwort zu
+// einem stillschweigend "leeren, aber gueltigen" Ergebnis.
 async function queryBalanceLogged(state, { block, seq, purpose }) {
   const { status, json } = await queryBalance(state.apiKey);
   const balanceInfos = json?.balance_infos ?? [];
-  if (!state.firstBalanceInfos) state.firstBalanceInfos = balanceInfos;
-  state.lastBalanceInfos = balanceInfos;
-  state.balancePollCount += 1;
+  const success = status === HTTP_OK && balanceInfos.length > 0;
+  state.balanceQueryCount += 1;
+  if (success) {
+    state.balanceQuerySuccessCount += 1;
+    if (!state.firstBalanceInfos) state.firstBalanceInfos = balanceInfos;
+    state.lastBalanceInfos = balanceInfos;
+    for (const entry of balanceInfos) {
+      const scale = decimalPartsOf(entry.total_balance).fracPart.length;
+      if (!state.resolutionObservedByCurrency[entry.currency]) {
+        state.resolutionObservedByCurrency[entry.currency] = new Set();
+      }
+      state.resolutionObservedByCurrency[entry.currency].add(scale);
+    }
+  }
+  if (block === "D") state.blockDPollCount += 1;
   await appendJsonLine(
     state.outputDir,
     "balance.jsonl",
-    { ts_utc: new Date().toISOString(), block, seq, purpose, http_status: status, is_available: json?.is_available ?? null, balance_infos: balanceInfos },
+    {
+      ts_utc: new Date().toISOString(),
+      block,
+      seq,
+      purpose,
+      http_status: status,
+      is_available: json?.is_available ?? null,
+      balance_infos: balanceInfos,
+    },
     state.redact,
   );
-  return { balance_infos: balanceInfos };
+  return { balance_infos: balanceInfos, http_status: status };
 }
 
 async function recordCallError(state, { block, seq, status, body }) {
@@ -784,52 +994,112 @@ async function writeStreamChunks(state, { block, seq, chunks }) {
   }
 }
 
-// calls.jsonl-Feld-Allowlist (Spec 6.3) - NIE das Anfrageobjekt samt Kopfzeilen.
-function buildCallRecord({ block, seq, modelRequested, normalized, stream, includeUsage, withTool, balanceBefore, balanceAfter }) {
-  const usage = normalized.usage;
-  const deltas = computeDeltasByCurrency(balanceBefore.balance_infos, balanceAfter.balance_infos);
+// F1: eine Guthaben-Differenz ist nur verwertbar, wenn BEIDE Seiten (vorher/nachher)
+// Status 200 mit nicht-leeren balance_infos lieferten.
+function balanceMeasurable(before, after) {
+  return (
+    before.http_status === HTTP_OK &&
+    after.http_status === HTTP_OK &&
+    before.balance_infos.length > 0 &&
+    after.balance_infos.length > 0
+  );
+}
+
+// F1 + F3(c): liefert entweder die Skala-tragenden Deltas je Waehrung, oder die
+// ausdrueckliche Zeichenkette "nicht messbar" (Guthaben-Endpunkt lieferte keinen Erfolg -
+// nicht dasselbe wie ein Delta von 0, das waere die falsche Aussage "kostet nichts").
+function computeDeltaFields(before, after) {
+  if (!balanceMeasurable(before, after)) return { delta_minor_units: "nicht messbar", currency: [] };
+  const deltas = computeDeltasByCurrency(before.balance_infos, after.balance_infos);
+  const delta_minor_units = mapDeltasToRecords(deltas);
+  return { delta_minor_units, currency: Object.keys(delta_minor_units) };
+}
+
+// calls.jsonl-Zeile. Deckt sowohl erfolgreiche als auch gescheiterte Aufrufe ab (F3a:
+// error != null bei Netz-/Abbruchfehlern) - EINE Funktion statt zweier fast identischer,
+// damit Feld-Set und Redaktionspfad garantiert gleich bleiben (G5).
+function buildCallRecord({
+  block,
+  seq,
+  modelRequested,
+  normalized,
+  stream,
+  includeUsage,
+  withTool,
+  balanceBefore,
+  balanceAfter,
+  error,
+  promptChars,
+  variante,
+}) {
+  const usage = normalized?.usage ?? null;
+  const { delta_minor_units, currency } = computeDeltaFields(balanceBefore, balanceAfter);
   const prices = DOC_PRICES_USD_PER_MTOK[modelRequested] ?? DOC_PRICES_USD_PER_MTOK[MODEL_PRO];
+  const costEstimate = usage ? estimateCostUsd(usage, prices, promptChars) : { usd: 0, inputUnbekannt: false };
   return {
     ts_utc: new Date().toISOString(),
     block,
     seq,
+    variante: variante ?? null,
     model_requested: modelRequested,
-    model_returned: normalized.model ?? null,
+    model_returned: normalized?.model ?? null,
     stream,
     include_usage: includeUsage,
     tools: withTool,
-    http_status: normalized.status,
-    ttfb_ms: Math.round(normalized.ttfbMs),
-    total_ms: Math.round(normalized.totalMs),
+    http_status: normalized?.status ?? null,
+    fehler: error ? `${error.name}: ${error.message}` : null,
+    ttfb_ms: normalized ? Math.round(normalized.ttfbMs) : null,
+    total_ms: normalized ? Math.round(normalized.totalMs) : null,
     usage_raw: usage,
-    usage_keys: usage ? Object.keys(usage).sort() : [],
+    usage_keys: usage ? collectKeyPaths(usage).sort() : [],
     eq_prompt: usage ? checkPromptEquation(usage) : null,
     eq_total: usage ? checkTotalEquation(usage) : null,
+    tool_call_pfad: normalized?.toolCall?.feldpfad ?? null,
+    tool_call_name: normalized?.toolCall?.name ?? null,
+    tool_call_argumente: normalized?.toolCall?.argumente ?? null,
+    balance_before_http_status: balanceBefore.http_status,
+    balance_after_http_status: balanceAfter.http_status,
     balance_before: balanceBefore.balance_infos,
     balance_after: balanceAfter.balance_infos,
-    delta_minor_units: mapDeltasToMinorUnitStrings(deltas),
-    currency: Object.keys(deltas),
-    est_usd_from_doc_prices: usage ? estimateCostUsd(usage, prices) : 0,
+    delta_minor_units,
+    currency,
+    est_usd_from_doc_prices: costEstimate.usd,
+    est_usd_input_unbekannt: costEstimate.inputUnbekannt,
     cum_est_usd: 0, // wird direkt nach dem Aufruf in performChatMeasurement gesetzt
   };
 }
 
-// EINZIGER Choke-Point fuer echte Chat-Aufrufe: Budget-Pruefung -> Guthaben vorher ->
-// Aufruf -> Guthaben nachher -> Protokoll. Kein Retry (Spec 6.2).
+// EINZIGER Choke-Point fuer echte Chat-Aufrufe (jetzt auch fuer die M5-Fehlerproben, s.
+// runErrorProbes - F: vorher liefen sie an Bremse und Call-Zeile vorbei): Budget-Pruefung
+// -> Guthaben vorher -> Aufruf -> Guthaben nachher -> Protokoll. Kein Retry (Spec 6.2).
+// F3(a): der Netzaufruf selbst steht in try/catch - ein Verbindungsabbruch wird als
+// Fehlversuch protokolliert und gezaehlt, der Lauf laeuft weiter (statt Exit 1 ohne jedes
+// Protokoll).
 async function performChatMeasurement(state, args) {
   assertBudgetNotExceeded(state);
-  const { block, seq, model, prompt, maxTokens, stream, includeUsage, withTool } = args;
+  const { block, seq, model, prompt, maxTokens, stream, includeUsage, withTool, variante, apiKeyOverride } = args;
+  const apiKey = apiKeyOverride ?? state.apiKey;
   const balanceBefore = await queryBalanceLogged(state, { block, seq, purpose: "vor_aufruf" });
   const body = buildChatRequestBody({ model, prompt, maxTokens, stream, includeUsage, withTool });
-  const raw = stream ? await postChatStream({ apiKey: state.apiKey, body }) : await postChatNonStream({ apiKey: state.apiKey, body });
-  const balanceAfter = await queryBalanceLogged(state, { block, seq, purpose: "nach_aufruf" });
 
-  if (stream && raw.chunks.length > 0) await writeStreamChunks(state, { block, seq, chunks: raw.chunks });
-  if (raw.status >= HTTP_ERROR_THRESHOLD) {
-    await recordCallError(state, { block, seq, status: raw.status, body: raw.json ?? raw.rawText });
+  let raw = null;
+  let error = null;
+  try {
+    raw = stream ? await postChatStream({ apiKey, body }) : await postChatNonStream({ apiKey, body });
+  } catch (err) {
+    error = err;
   }
 
-  const normalized = normalizeChatResult(raw, stream);
+  const balanceAfter = await queryBalanceLogged(state, { block, seq, purpose: error ? "nach_fehlversuch" : "nach_aufruf" });
+
+  if (raw) {
+    if (stream && raw.chunks.length > 0) await writeStreamChunks(state, { block, seq, chunks: raw.chunks });
+    if (raw.status >= HTTP_ERROR_THRESHOLD) {
+      await recordCallError(state, { block, seq, status: raw.status, body: raw.json ?? raw.rawText });
+    }
+  }
+
+  const normalized = raw ? normalizeChatResult(raw, stream) : null;
   const record = buildCallRecord({
     block,
     seq,
@@ -840,7 +1110,11 @@ async function performChatMeasurement(state, args) {
     withTool,
     balanceBefore,
     balanceAfter,
+    error,
+    promptChars: prompt.length,
+    variante,
   });
+  if (error) state.failedCallCount += 1;
   state.cumEstUsd += record.est_usd_from_doc_prices;
   record.cum_est_usd = state.cumEstUsd;
   await appendJsonLine(state.outputDir, "calls.jsonl", record, state.redact);
@@ -854,27 +1128,44 @@ function delay(ms) {
 
 // ============================================================================
 // M5-Fehlerproben: absichtlich falscher Schluessel, absichtlich ungueltiger Parameter.
-// Laufen einmal, unabhaengig von --blocks (M5 hat keine eigene Blockbuchstabe).
+// Laufen einmal, unabhaengig von --blocks (M5 hat keine eigene Blockbuchstabe). Laufen
+// jetzt UEBER performChatMeasurement (denselben Choke-Point wie alle anderen Aufrufe),
+// statt postChatNonStream direkt aufzurufen - Bremse und Call-Zeile gelten auch hier.
 // ============================================================================
 
 async function runErrorProbes(state) {
-  const wrongKeyResult = await postChatNonStream({
-    apiKey: state.wrongApiKey,
-    body: buildChatRequestBody({ model: BLOCK_E_MODEL, prompt: BLOCK_A_PROMPT, maxTokens: BLOCK_A_MAX_TOKENS, stream: false, withTool: false }),
+  const wrongKeyRecord = await performChatMeasurement(state, {
+    block: "ERR",
+    seq: "wrong_key",
+    model: BLOCK_E_MODEL,
+    prompt: BLOCK_A_PROMPT,
+    maxTokens: BLOCK_A_MAX_TOKENS,
+    stream: false,
+    includeUsage: null,
+    withTool: false,
+    apiKeyOverride: state.wrongApiKey,
   });
-  const wrongKeyBody = state.redact(wrongKeyResult.json ?? wrongKeyResult.rawText ?? null);
-  await recordCallError(state, { block: "ERR", seq: "wrong_key", status: wrongKeyResult.status, body: wrongKeyBody });
-  state.wrongKeyError = { status: wrongKeyResult.status, body: wrongKeyBody };
+  state.wrongKeyError = { http_status: wrongKeyRecord.http_status, fehlerkoerper_hinweis: "siehe errors.jsonl (block=ERR, seq=wrong_key)" };
 
-  const invalidParamResult = await postChatNonStream({
-    apiKey: state.apiKey,
-    body: { model: BLOCK_E_MODEL, messages: [{ role: "user", content: BLOCK_A_PROMPT }], max_tokens: INVALID_MAX_TOKENS },
+  const invalidParamRecord = await performChatMeasurement(state, {
+    block: "ERR",
+    seq: "invalid_param",
+    model: BLOCK_E_MODEL,
+    prompt: BLOCK_A_PROMPT,
+    maxTokens: INVALID_MAX_TOKENS,
+    stream: false,
+    includeUsage: null,
+    withTool: false,
   });
-  const invalidParamBody = state.redact(invalidParamResult.json ?? invalidParamResult.rawText ?? null);
-  await recordCallError(state, { block: "ERR", seq: "invalid_param", status: invalidParamResult.status, body: invalidParamBody });
-  state.invalidParamError = { status: invalidParamResult.status, body: invalidParamBody };
+  state.invalidParamError = {
+    http_status: invalidParamRecord.http_status,
+    fehlerkoerper_hinweis: "siehe errors.jsonl (block=ERR, seq=invalid_param)",
+  };
 
-  console.log(`M5-Fehlerproben: falscher Schluessel -> HTTP ${wrongKeyResult.status}, ungueltiger Parameter -> HTTP ${invalidParamResult.status}.`);
+  console.log(
+    `M5-Fehlerproben: falscher Schluessel -> HTTP ${wrongKeyRecord.http_status}, ` +
+      `ungueltiger Parameter -> HTTP ${invalidParamRecord.http_status}.`,
+  );
 }
 
 // ============================================================================
@@ -902,35 +1193,62 @@ async function runBlockA(state) {
   console.log(`Block A: ${count} Aufrufe abgeschlossen.`);
 }
 
-function cacheCallArgs(model, seq, variant) {
-  return { block: "B", seq, model, prompt: buildCachePrompt(variant), maxTokens: CACHE_MAX_TOKENS, stream: false, includeUsage: null, withTool: false };
+// F14: variante-Feld je Block-B-Zeile (base | wiederholung | nach-30min | kontrolle-a |
+// kontrolle-b) - vorher nur ueber die Positionsordnung in calls.jsonl rekonstruierbar.
+// contentVariant steuert den PROMPT-INHALT (nur 3 Auspraegungen, s. buildCachePrompt);
+// labelVariante ist die feinere Beschriftung fuer das Protokoll.
+function cacheCallArgs(model, seq, contentVariant, labelVariante) {
+  return {
+    block: "B",
+    seq,
+    model,
+    prompt: buildCachePrompt(contentVariant),
+    maxTokens: CACHE_MAX_TOKENS,
+    stream: false,
+    includeUsage: null,
+    withTool: false,
+    variante: labelVariante,
+  };
 }
 
 function hasCacheHit(record) {
   return Number(record.usage_raw?.prompt_cache_hit_tokens || 0) > 0;
 }
 
+// Operativ-Fix: die 30-Minuten-Pause lief vorher INNERHALB der Modellschleife (zweimal,
+// einmal je Modell = 60 min gesamt). Sie steht jetzt HINTER beiden Modellschleifen (einmal,
+// 30 min gesamt) - jedes Modell bekommt weiterhin genau 1 Wiederholung nach 30 Minuten
+// (Spec-Anforderung unveraendert), nur die Wartezeit wird nicht dupliziert.
 async function runBlockB(state) {
   let seq = 0;
   let cacheHits = 0;
   for (const model of CONFIGURED_MODELS) {
     for (let i = 1; i <= CACHE_REPEATS_IMMEDIATE; i += 1) {
       seq += 1;
-      if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "base")))) cacheHits += 1;
+      const label = i === 1 ? "base" : "wiederholung";
+      if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "base", label)))) cacheHits += 1;
     }
-    await delay(CACHE_REPEAT_DELAY_MS);
+  }
+  await delay(CACHE_REPEAT_DELAY_MS); // EINE Pause fuer beide Modelle (vorher zweimal)
+  for (const model of CONFIGURED_MODELS) {
     seq += 1;
-    if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "base")))) cacheHits += 1;
+    if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "base", "nach-30min")))) cacheHits += 1;
     seq += 1;
-    if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "control-a")))) cacheHits += 1;
+    if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "control-a", "kontrolle-a")))) cacheHits += 1;
     seq += 1;
-    if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "control-b")))) cacheHits += 1;
+    if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "control-b", "kontrolle-b")))) cacheHits += 1;
   }
   console.log(`Block B: ${seq} Aufrufe, ${cacheHits} mit Cache-Treffer (prompt_cache_hit_tokens > 0).`);
 }
 
+// F1-Nebenschaden behoben: delta_minor_units ist jetzt entweder ein Objekt je Waehrung
+// ({minor_units, scale}) oder die Zeichenkette "nicht messbar" - niemals ein String, dessen
+// Zeichen man aus Versehen iteriert.
 function hasNonZeroDelta(record) {
-  return Object.values(record.delta_minor_units || {}).some((v) => v !== "0");
+  if (typeof record.delta_minor_units !== "object" || record.delta_minor_units === null) return false;
+  return Object.values(record.delta_minor_units).some(
+    (entry) => entry && typeof entry === "object" && entry.minor_units !== undefined && entry.minor_units !== "0",
+  );
 }
 
 async function runBlockC(state) {
@@ -961,9 +1279,23 @@ async function runBlockC(state) {
   console.log(`Block C: ${seq} Aufrufe. Guthaben-Einheit bewegt bei Iteration je Modell: ${JSON.stringify(resolutionFindings)}.`);
 }
 
+// M2(iii): die Nachbuchungs-Zeitreihe (nicht nur eine Momentaufnahme) - jeder Punkt traegt
+// sein Delta zum VORHERIGEN Punkt, damit man sieht, ob/wann eine Buchung nachtraeglich
+// einschlaegt.
 async function runBlockD(state) {
+  let previousInfos = null;
   for (let i = 1; i <= BALANCE_POLL_COUNT; i += 1) {
-    await queryBalanceLogged(state, { block: "D", seq: i, purpose: "periodisch" });
+    const result = await queryBalanceLogged(state, { block: "D", seq: i, purpose: "periodisch" });
+    const deltaSincePrevious = previousInfos
+      ? mapDeltasToRecords(computeDeltasByCurrency(previousInfos, result.balance_infos))
+      : null;
+    state.blockDSeries.push({
+      ts_utc: new Date().toISOString(),
+      http_status: result.http_status,
+      balance_infos: result.balance_infos,
+      delta_seit_vorherigem_minor_units: deltaSincePrevious,
+    });
+    if (result.balance_infos.length > 0) previousInfos = result.balance_infos;
     if (i < BALANCE_POLL_COUNT) await delay(BALANCE_POLL_INTERVAL_MS);
   }
   const minutesSpanned = ((BALANCE_POLL_COUNT - 1) * BALANCE_POLL_INTERVAL_MS) / MS_PER_SECOND / SECONDS_PER_MINUTE;
@@ -1007,10 +1339,17 @@ async function runBlockF(state) {
 
 const BLOCK_RUNNERS = Object.freeze({ A: runBlockA, B: runBlockB, C: runBlockC, D: runBlockD, E: runBlockE, F: runBlockF });
 
+// Operativ-Fix: uebersprungene Bloecke (nicht angefordert ODER nach Budget-Abbruch
+// uebersprungen) schweigen nicht mehr - je Block eine Zeile mit Grund.
 async function runRequestedBlocks(state, options) {
   const toRun = FIXED_BLOCK_ORDER.filter((b) => options.blocks.includes(b));
+  const notRequested = FIXED_BLOCK_ORDER.filter((b) => !options.blocks.includes(b));
+  for (const block of notRequested) {
+    console.log(`Block ${block}: uebersprungen, Grund: nicht in --blocks angefordert.`);
+  }
   const lastComparable = [...toRun].reverse().find((b) => COMPARABLE_BLOCKS.includes(b));
-  for (const block of toRun) {
+  for (let i = 0; i < toRun.length; i += 1) {
+    const block = toRun[i];
     if (COMPARABLE_BLOCKS.includes(block) && !state.comparableWindow.start_utc) {
       state.comparableWindow.start_utc = new Date().toISOString();
     }
@@ -1020,6 +1359,9 @@ async function runRequestedBlocks(state, options) {
       if (err instanceof BudgetExceededError) {
         console.log(`ABBRUCH: ${err.message}`);
         state.budgetAbortReason = err.message;
+        for (const skipped of toRun.slice(i + 1)) {
+          console.log(`Block ${skipped}: uebersprungen, Grund: Budget-Abbruch vor diesem Block.`);
+        }
         break;
       }
       throw err;
@@ -1035,10 +1377,33 @@ async function runRequestedBlocks(state, options) {
 
 const M1_MIN_SAMPLES = 30;
 
+function operatingModeLabel(call) {
+  return call.stream ? "stream" : "nicht-stream";
+}
+
+// F13: M1 prueft jetzt die von der Spec verlangte Abdeckung ueber BEIDE Modelle UND BEIDE
+// Betriebsarten (Spec-Wortlaut: "verteilt ueber beide Modelle und beide Betriebsarten"),
+// nicht nur die Gesamtzahl >= 30 (die Gesamtzahl allein liesse z.B. 30 Nicht-Stream-Aufrufe
+// eines einzigen Modells durchgehen). Geprueft wird JE DIMENSION (jedes Modell >= 1 Treffer,
+// jede Betriebsart >= 1 Treffer) statt des vollen Kreuzprodukts: Block E streamt laut
+// Blockdesign NUR das guenstigste Modell (BLOCK_E_MODEL) - "PRO x stream" waere im
+// Kreuzprodukt IMMER leer und M1 damit strukturell unbeantwortbar, was am Blockdesign liegt,
+// nicht an einem Messdefekt.
 function computeM1Answer(calls) {
   const withUsage = calls.filter((c) => c.usage_raw);
-  if (withUsage.length < M1_MIN_SAMPLES) {
-    return `nicht beantwortet, Grund: nur ${withUsage.length} Antworten mit usage vorliegend (< ${M1_MIN_SAMPLES})`;
+  const jeModell = {};
+  for (const model of CONFIGURED_MODELS) jeModell[model] = withUsage.filter((c) => c.model_requested === model).length;
+  const jeBetriebsart = { stream: 0, "nicht-stream": 0 };
+  for (const c of withUsage) jeBetriebsart[operatingModeLabel(c)] += 1;
+  const fehlendeModelle = Object.entries(jeModell).filter(([, n]) => n === 0).map(([k]) => k);
+  const fehlendeBetriebsarten = Object.entries(jeBetriebsart).filter(([, n]) => n === 0).map(([k]) => k);
+  if (withUsage.length < M1_MIN_SAMPLES || fehlendeModelle.length > 0 || fehlendeBetriebsarten.length > 0) {
+    return (
+      `nicht beantwortet, Grund: ${withUsage.length} Antworten mit usage (Minimum ${M1_MIN_SAMPLES}), ` +
+      `je Modell: ${JSON.stringify(jeModell)}, je Betriebsart: ${JSON.stringify(jeBetriebsart)}` +
+      (fehlendeModelle.length > 0 ? `, ohne jede Antwort (Modell): ${fehlendeModelle.join(", ")}` : "") +
+      (fehlendeBetriebsarten.length > 0 ? `, ohne jede Antwort (Betriebsart): ${fehlendeBetriebsarten.join(", ")}` : "")
+    );
   }
   const eqPromptViolations = withUsage.filter((c) => c.eq_prompt === false);
   const eqTotalViolations = withUsage.filter((c) => c.eq_total === false);
@@ -1046,6 +1411,8 @@ function computeM1Answer(calls) {
   for (const c of withUsage) for (const k of c.usage_keys) if (!DOCUMENTED_USAGE_KEYS.has(k)) unexpectedKeys.add(k);
   return {
     samples: withUsage.length,
+    abdeckung_je_modell: jeModell,
+    abdeckung_je_betriebsart: jeBetriebsart,
     eq_prompt_violations: eqPromptViolations.length,
     eq_prompt_beispiel: eqPromptViolations[0]?.usage_raw ?? null,
     eq_total_violations: eqTotalViolations.length,
@@ -1054,9 +1421,15 @@ function computeM1Answer(calls) {
   };
 }
 
-function buildOverallComparison(deltas, formulaSumUsd) {
+// F11: Vorzeichen bleibt erhalten (vorher Math.abs) - eine Guthaben-ERHOEHUNG waehrend des
+// Laufs (z.B. eine Aufladung) muss als solche erkennbar sein, nicht als kleinere Ausgabe.
+export function buildOverallComparison(deltas, formulaSumUsd) {
   const out = {};
   for (const [currency, delta] of Object.entries(deltas)) {
+    if (delta.parseError) {
+      out[currency] = `nicht vergleichbar (${delta.parseError})`;
+      continue;
+    }
     if (currency !== "USD") {
       out[currency] = "nicht vergleichbar (Waehrung ungleich USD, kein Wechselkurs im Skript - Spec Nicht-Ziele)";
       continue;
@@ -1064,23 +1437,53 @@ function buildOverallComparison(deltas, formulaSumUsd) {
     // Naeherung NUR fuer die menschenlesbare Prozent-Gegenprobe - die exakte Ganzzahl-
     // Differenz bleibt in delta.deltaMinorUnits (BigInt) unangetastet erhalten.
     const deltaUsdApprox = Number(delta.deltaMinorUnits) / 10 ** delta.scale;
-    const abweichungProzent = formulaSumUsd === 0 ? null : ((Math.abs(deltaUsdApprox) - formulaSumUsd) / formulaSumUsd) * 100;
-    out[currency] = { delta_usd_approx: deltaUsdApprox, formel_summe_usd: formulaSumUsd, abweichung_prozent: abweichungProzent };
+    const ausgabeUsd = -deltaUsdApprox; // Ausgabe positiv, wenn das Guthaben SANK
+    const abweichungProzent = formulaSumUsd === 0 ? null : ((ausgabeUsd - formulaSumUsd) / formulaSumUsd) * 100;
+    out[currency] = {
+      delta_usd_approx: deltaUsdApprox, // Vorzeichen erhalten: negativ = Ausgabe, positiv = Aufladung
+      richtung:
+        deltaUsdApprox > 0
+          ? "guthaben_erhoeht (vermutlich Aufladung waehrend des Laufs)"
+          : deltaUsdApprox < 0
+            ? "guthaben_gesunken (Ausgabe)"
+            : "unveraendert",
+      formel_summe_usd: formulaSumUsd,
+      abweichung_prozent: abweichungProzent,
+    };
   }
   return out;
 }
 
+// F1 + F7 + M2(iii): meldet explizit, wenn der Guthaben-Endpunkt in keiner Abfrage einen
+// verwertbaren Erfolg lieferte (statt stillschweigend mit leeren Daten weiterzurechnen);
+// zaehlt Block-D-Abfragen getrennt von der Gesamtzahl; traegt die Nachbuchungs-Zeitreihe.
 function computeM2Answer(state) {
+  const balanceFailures = state.balanceQueryCount - state.balanceQuerySuccessCount;
+  if (state.balanceQuerySuccessCount === 0) {
+    return (
+      `nicht beantwortet, Grund: Guthaben-Endpunkt lieferte in ${balanceFailures} von ` +
+      `${state.balanceQueryCount} Abfragen keinen Erfolg`
+    );
+  }
   if (!state.firstBalanceInfos || !state.lastBalanceInfos) {
-    return "nicht beantwortet, Grund: keine Guthaben-Abfragen protokolliert (Bloecke A/B/C/D nicht gelaufen)";
+    return "nicht beantwortet, Grund: keine verwertbaren Guthaben-Abfragen protokolliert";
   }
   const overallDeltas = computeDeltasByCurrency(state.firstBalanceInfos, state.lastBalanceInfos);
   const formulaSumUsd = state.calls.reduce((sum, c) => sum + (c.est_usd_from_doc_prices || 0), 0);
+  // F2/M2a: die BEOBACHTETE MENGE aller vorgekommenen Nachkommastellen ueber ALLE
+  // Abfragen (z.B. [2, 8]), nicht die Momentaufnahme der ersten Abfrage.
+  const aufloesungJeWaehrung = {};
+  for (const [currency, scales] of Object.entries(state.resolutionObservedByCurrency)) {
+    aufloesungJeWaehrung[currency] = [...scales].sort((a, b) => a - b);
+  }
   return {
-    aufloesung_nachkommastellen_je_waehrung: balanceResolutionByCurrency(state.firstBalanceInfos),
+    aufloesung_nachkommastellen_je_waehrung_beobachtet: aufloesungJeWaehrung,
     einzelaufruf_bewegt_bei_iteration_je_modell: state.resolutionFindings ?? "nicht beantwortet, Grund: Block C nicht gelaufen",
-    block_d_anzahl_abfragen: state.balancePollCount,
-    gesamt_delta_je_waehrung: mapDeltasToMinorUnitStrings(overallDeltas),
+    block_d_abfragen: state.blockDPollCount,
+    nachbuchungs_zeitreihe: state.blockDSeries.length > 0 ? state.blockDSeries : "nicht beantwortet, Grund: Block D nicht gelaufen",
+    guthaben_abfragen_erfolgreich: state.balanceQuerySuccessCount,
+    guthaben_abfragen_gesamt: state.balanceQueryCount,
+    gesamt_delta_je_waehrung: mapDeltasToRecords(overallDeltas),
     hinweis_delta_0:
       '"unterhalb der Aufloesung ODER noch nicht gebucht" - NIE als "kostet nichts" zu lesen (bindende Auswertungsregel)',
     formel_summe_usd: formulaSumUsd,
@@ -1101,15 +1504,28 @@ function cachePriceDifferenceUsd(calls, model) {
   return { alles_fehltreffer_usd: allMissUsd, gemessener_split_usd: measuredUsd, differenz_usd: allMissUsd - measuredUsd };
 }
 
+// F4: "0 Treffer" ist nur dann ein gueltiges Ergebnis, wenn es ERFOLGREICHE Aufrufe mit
+// usage gab. 0 Aufrufe (z.B. Budget-Abbruch nach Modell 1) oder lauter HTTP-Fehler
+// (usage_raw fehlt ueberall) sind KEIN Befund, sondern "nicht beantwortet".
 function summarizeCacheCalls(calls, model) {
-  const hitTokens = calls.map((c) => Number(c.usage_raw?.prompt_cache_hit_tokens || 0));
+  if (calls.length === 0) {
+    return "nicht beantwortet, Grund: 0 Aufrufe fuer dieses Modell (Budget-Abbruch oder Block nicht gelaufen)";
+  }
+  const successCalls = calls.filter((c) => c.http_status === HTTP_OK && c.usage_raw);
+  if (successCalls.length === 0) {
+    return `nicht beantwortet, Grund: ${calls.length} Aufrufe, aber keiner lieferte usage (HTTP-Fehler oder unvollstaendige Antwort)`;
+  }
+  const hitTokens = successCalls.map((c) => Number(c.usage_raw?.prompt_cache_hit_tokens || 0));
   const anyHit = hitTokens.some((v) => v > 0);
   return {
     aufrufe: calls.length,
+    erfolgreiche_aufrufe: successCalls.length,
     hit_tokens_je_aufruf: hitTokens,
     treffer_beobachtet: anyHit,
-    hinweis: anyHit ? null : "0 Treffer - gueltiges Ergebnis, Cache ist laut Doku best-effort",
-    preisdifferenz: cachePriceDifferenceUsd(calls, model),
+    hinweis: anyHit
+      ? null
+      : "0 Treffer - gueltiges Ergebnis, Cache ist laut Doku best-effort (nur unter erfolgreichen Aufrufen bewertet)",
+    preisdifferenz: cachePriceDifferenceUsd(successCalls, model),
   };
 }
 
@@ -1117,7 +1533,12 @@ function computeM3Answer(calls) {
   const blockBCalls = calls.filter((c) => c.block === "B");
   if (blockBCalls.length === 0) return "nicht beantwortet, Grund: Block B nicht gelaufen";
   const perModel = {};
-  for (const model of CONFIGURED_MODELS) perModel[model] = summarizeCacheCalls(blockBCalls.filter((c) => c.model_requested === model), model);
+  for (const model of CONFIGURED_MODELS) {
+    perModel[model] = summarizeCacheCalls(
+      blockBCalls.filter((c) => c.model_requested === model),
+      model,
+    );
+  }
   return perModel;
 }
 
@@ -1134,38 +1555,118 @@ function computeM4Answer(state, options) {
   return { stundenwerte, groesster_unterschied_usd: Math.max(...stundenwerte) - Math.min(...stundenwerte) };
 }
 
+// F9: p95 == max fuer n < PERCENTILE_MIN_RELIABLE_N ist ein Interpolationsartefakt, kein
+// Befund - wird ab dann ausdruecklich als unzuverlaessig gekennzeichnet statt stillschweigend
+// zurueckgegeben.
 function percentile(sortedValues, p) {
   if (sortedValues.length === 0) return null;
   const index = Math.min(sortedValues.length - 1, Math.floor((p / 100) * sortedValues.length));
   return sortedValues[index];
 }
 
-function computeM5Answer(state) {
-  const durations = state.calls.map((c) => c.total_ms).sort((a, b) => a - b);
-  if (durations.length === 0) return "nicht beantwortet, Grund: keine Aufrufe mit Zeitmessung vorhanden";
-  const overThreshold = durations.filter((v) => v > SEAM_TIMEOUT_MS).length;
+function computeDistribution(durations) {
+  if (durations.length === 0) return null;
+  const sorted = [...durations].sort((a, b) => a - b);
+  const overThreshold = sorted.filter((v) => v > SEAM_TIMEOUT_MS).length;
+  const p95Unreliable = sorted.length < PERCENTILE_MIN_RELIABLE_N;
   return {
-    min_ms: durations[0],
-    median_ms: percentile(durations, PERCENTILE_MEDIAN),
-    p95_ms: percentile(durations, PERCENTILE_P95),
-    max_ms: durations[durations.length - 1],
-    anteil_ueber_3500ms: overThreshold / durations.length,
+    n: sorted.length,
+    min_ms: sorted[0],
+    median_ms: percentile(sorted, PERCENTILE_MEDIAN),
+    p95_ms: p95Unreliable ? null : percentile(sorted, PERCENTILE_P95),
+    p95_unzuverlaessig_n_zu_klein: p95Unreliable,
+    max_ms: sorted[sorted.length - 1],
+    anteil_ueber_3500ms: overThreshold / sorted.length,
+  };
+}
+
+// F9: Verteilung JE (Modell x Betriebsart), gescheiterte Aufrufe ausgeschlossen und
+// getrennt gezaehlt. Die gepoolte Zahl bleibt zusaetzlich stehen, aber klar benannt -
+// vorher war NUR die gepoolte Zahl da, ueber Bloecke/Modelle/Erfolg/Misserfolg hinweg vermischt.
+function computeM5Answer(state) {
+  const successCalls = state.calls.filter((c) => c.http_status === HTTP_OK && c.total_ms != null);
+  const failedCalls = state.calls.length - successCalls.length;
+  if (successCalls.length === 0) return "nicht beantwortet, Grund: keine erfolgreichen Aufrufe mit Zeitmessung vorhanden";
+
+  const jeModellUndBetriebsart = {};
+  for (const model of CONFIGURED_MODELS) {
+    for (const mode of ["stream", "nicht-stream"]) {
+      const subset = successCalls.filter((c) => c.model_requested === model && operatingModeLabel(c) === mode);
+      if (subset.length > 0) jeModellUndBetriebsart[`${model}__${mode}`] = computeDistribution(subset.map((c) => c.total_ms));
+    }
+  }
+
+  return {
+    je_modell_und_betriebsart: jeModellUndBetriebsart,
+    gepoolt_alle_erfolgreichen_aufrufe: computeDistribution(successCalls.map((c) => c.total_ms)),
+    ausgeschlossen_gescheiterte_aufrufe: failedCalls,
     falscher_schluessel: state.wrongKeyError ?? "nicht beantwortet, Grund: Fehlerprobe nicht ausgefuehrt",
     ungueltiger_parameter: state.invalidParamError ?? "nicht beantwortet, Grund: Fehlerprobe nicht ausgefuehrt",
   };
 }
 
+// F8: nur ueber HTTP 200 vergleichen - ein 429 (Ratenbegrenzung) liefert kein model-Feld
+// und wurde vorher als "Modell-Abweichung" (requested != returned=null) gezaehlt.
+// Gescheiterte Aufrufe werden getrennt als nicht_vergleichbar ausgewiesen.
 function computeM6Answer(state) {
-  const pairs = state.calls.map((c) => ({ requested: c.model_requested, returned: c.model_returned }));
-  if (pairs.length === 0) return "nicht beantwortet, Grund: keine Aufrufe protokolliert";
+  if (state.calls.length === 0) return "nicht beantwortet, Grund: keine Aufrufe protokolliert";
+  const comparable = state.calls.filter((c) => c.http_status === HTTP_OK);
+  const pairs = comparable.map((c) => ({ requested: c.model_requested, returned: c.model_returned }));
   const mismatches = pairs.filter((p) => p.requested !== p.returned);
-  return { anzahl_aufrufe: pairs.length, abweichungen: mismatches.length, beispiel_abweichung: mismatches[0] ?? null, models_endpoint_raw: state.modelsRaw };
+  return {
+    anzahl_aufrufe: state.calls.length,
+    vergleichbare_aufrufe: comparable.length,
+    nicht_vergleichbar: state.calls.length - comparable.length,
+    abweichungen: mismatches.length,
+    beispiel_abweichung: mismatches[0] ?? null,
+    models_endpoint_raw: state.modelsRaw,
+  };
 }
 
+function buildM7ComboRecord(call) {
+  const failed = call.http_status !== HTTP_OK;
+  return {
+    stream: call.stream,
+    include_usage: call.include_usage,
+    tools: call.tools,
+    http_status: call.http_status,
+    usage_vorhanden: !!call.usage_raw,
+    usage_raw: call.usage_raw,
+    tool_call_pfad: failed
+      ? TOOL_CALL_PFAD_FAILED
+      : call.tools
+        ? (call.tool_call_pfad ?? "kein Werkzeugaufruf beobachtet (Feld im Antwortobjekt fehlt)")
+        : "nicht angefordert (tools:false)",
+    tool_call_name: call.tool_call_name ?? null,
+    tool_call_argumente: call.tool_call_argumente ?? null,
+  };
+}
+
+// F5: meldet nur dann "beantwortet", wenn fuer JEDE der vier Kombinationen {Stream,
+// Nicht-Stream} x {mit Werkzeug, ohne} ein Feldpfad ODER ein ausdrueckliches Fehlen
+// vorliegt - vorher zaehlten fehlende tool_calls (weil nur usage/model geparst wurden)
+// als "0 Treffer, gueltiges Ergebnis" und M7 meldete trotzdem beantwortet.
 function computeM7Answer(calls) {
   const blockE = calls.filter((c) => c.block === "E");
   if (blockE.length === 0) return "nicht beantwortet, Grund: Block E nicht gelaufen";
-  return blockE.map((c) => ({ stream: c.stream, include_usage: c.include_usage, tools: c.tools, usage_vorhanden: !!c.usage_raw, usage_raw: c.usage_raw }));
+  const perCall = blockE.map(buildM7ComboRecord);
+  const requiredCombos = [
+    { stream: false, tools: false },
+    { stream: false, tools: true },
+    { stream: true, tools: false },
+    { stream: true, tools: true },
+  ];
+  const unresolved = requiredCombos.filter((req) => {
+    const matches = perCall.filter((c) => c.stream === req.stream && c.tools === req.tools);
+    return matches.length === 0 || matches.every((c) => c.tool_call_pfad === TOOL_CALL_PFAD_FAILED);
+  });
+  if (unresolved.length > 0) {
+    return (
+      `nicht beantwortet, Grund: ${unresolved.length} von 4 Stream x Werkzeug-Kombinationen ` +
+      `ohne Pfad oder ausdrueckliches Fehlen (${JSON.stringify(unresolved)})`
+    );
+  }
+  return { kombinationen: perCall };
 }
 
 function computeM8Answer(calls) {
@@ -1174,12 +1675,30 @@ function computeM8Answer(calls) {
     return "bei diesem Aufrufprofil nie beobachtet (completion_tokens_details.reasoning_tokens war in allen Aufrufen 0 oder fehlend)";
   }
   const example = withReasoning[0];
+  const reasoningTokens = Number(example.usage_raw.completion_tokens_details.reasoning_tokens);
+  const completionTokens = Number(example.usage_raw.completion_tokens);
+  const promptTokens = Number(example.usage_raw.prompt_tokens);
+  const totalTokens = Number(example.usage_raw.total_tokens);
+  // F11-Geschwisterfix (M8): beide Gleichungen rechnen statt nur eine zu unterstellen.
+  const eqEnthalten = totalTokens === promptTokens + completionTokens;
+  const eqAdditiv = totalTokens === promptTokens + completionTokens + reasoningTokens;
+  let zugehoerigkeit;
+  if (eqEnthalten && !eqAdditiv) {
+    zugehoerigkeit = "enthalten (total_tokens-Gleichung stimmt ohne Zusatzaddition)";
+  } else if (eqAdditiv && !eqEnthalten) {
+    zugehoerigkeit = "additiv (Gleichung stimmt nur mit reasoning_tokens addiert)";
+  } else {
+    zugehoerigkeit =
+      `nicht entscheidbar, Grund: beide Gleichungen stimmen gleichermassen ` +
+      `(enthalten=${eqEnthalten}, additiv=${eqAdditiv})`;
+  }
   return {
     beispiele: withReasoning.length,
-    reasoning_tokens_beispiel: example.usage_raw.completion_tokens_details.reasoning_tokens,
-    completion_tokens_beispiel: example.usage_raw.completion_tokens,
-    // Die total_tokens-Gleichung aus M1 entscheidet die Zugehoerigkeit (Spec M8-Messverfahren).
-    zugehoerigkeit: example.eq_total ? "enthalten (total_tokens-Gleichung stimmt ohne Zusatzaddition)" : "additiv (Gleichung stimmt nur mit reasoning_tokens addiert)",
+    reasoning_tokens_beispiel: reasoningTokens,
+    completion_tokens_beispiel: completionTokens,
+    prompt_tokens_beispiel: promptTokens,
+    total_tokens_beispiel: totalTokens,
+    zugehoerigkeit,
   };
 }
 
@@ -1194,6 +1713,8 @@ function buildSummary(state, options) {
       max_usd: state.maxUsd,
       cum_est_usd_final: state.cumEstUsd,
       budget_abbruch: state.budgetAbortReason,
+      fehlgeschlagene_aufrufe: state.failedCallCount,
+      angeforderte_bloecke: options.blocks,
     },
     M1: { frage: "Stimmen die Verbrauchsfelder mit der Doku ueberein?", answer: computeM1Answer(state.calls) },
     M2: { frage: "Taugt das Guthaben als Quelle fuer tatsaechlich abgebucht?", answer: computeM2Answer(state) },
@@ -1206,11 +1727,29 @@ function buildSummary(state, options) {
   };
 }
 
+// Operativ-Fix: ein Antwortobjekt ohne verwertbaren Inhalt (z.B. jedes Modell in M3 meldet
+// "nicht beantwortet") gilt als NICHT beantwortet - vorher zeigte printConsoleSummary
+// "beantwortet (siehe summary.json)", sobald der answer-Typ kein String war, unabhaengig
+// vom Inhalt.
+function isHollowAnswer(value) {
+  if (typeof value === "string") return true;
+  if (Array.isArray(value)) return value.length === 0 || value.every(isHollowAnswer);
+  if (value && typeof value === "object") {
+    const entries = Object.values(value);
+    if (entries.length === 0) return true;
+    return entries.every(isHollowAnswer);
+  }
+  return false; // Zahlen/Booleans/null zaehlen als Inhalt (null kann ein gueltiger Befund sein)
+}
+
 function printConsoleSummary(summary) {
   console.log("\n=== B1-Zusammenfassung ===");
   for (const key of ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8"]) {
     const entry = summary[key];
-    const short = typeof entry.answer === "string" ? entry.answer : "beantwortet (siehe summary.json)";
+    let short;
+    if (typeof entry.answer === "string") short = entry.answer;
+    else if (isHollowAnswer(entry.answer)) short = "nicht beantwortet (Antwortobjekt ohne verwertbaren Inhalt, siehe summary.json)";
+    else short = "beantwortet (siehe summary.json)";
     console.log(`${key}: ${short}`);
   }
 }
@@ -1220,20 +1759,45 @@ function printConsoleSummary(summary) {
 // echten und den absichtlich falschen Schluessel pruefen.
 // ============================================================================
 
+// F12: liest das Ausgabeverzeichnis per readdir statt einer fest verdrahteten Dateiliste
+// (die nicht mitwaechst), und unterscheidet "nichts gefunden" von "nichts geprueft" -
+// 0 Dateien (leeres oder nicht existentes Verzeichnis) ist NIEMALS "clean", sondern ein
+// eigener Status mit Begruendung (tasks/lessons.md: eine Probe, die bei null Befunden
+// schweigt, ist nicht von einer kaputten zu unterscheiden).
 async function keyLeakCheck(outputDir, secrets) {
-  const files = ["calls.jsonl", "balance.jsonl", "stream-chunks.jsonl", "errors.jsonl", "summary.json"];
+  let entries;
+  try {
+    entries = await readdir(outputDir, { withFileTypes: true });
+  } catch (err) {
+    return { status: "unueberprueft", grund: `Verzeichnis nicht lesbar: ${err.message}`, dateien_geprueft: 0, bytes_geprueft: 0 };
+  }
+  const files = entries.filter((e) => e.isFile()).map((e) => e.name).sort();
+  let filesChecked = 0;
+  let bytesChecked = 0;
   for (const file of files) {
     let content;
     try {
       content = await readFile(path.join(outputDir, file), "utf8");
     } catch {
-      continue; // Datei wurde in diesem Lauf nicht angelegt (z.B. kein Fehler -> errors.jsonl fehlt)
+      continue;
     }
+    filesChecked += 1;
+    bytesChecked += Buffer.byteLength(content, "utf8");
     for (const secret of secrets.filter(Boolean)) {
-      if (content.includes(secret)) return "DIRTY";
+      if (content.includes(secret)) {
+        return { status: "DIRTY", grund: `Fund in ${file}`, dateien_geprueft: filesChecked, bytes_geprueft: bytesChecked };
+      }
     }
   }
-  return "clean";
+  if (filesChecked === 0) {
+    return {
+      status: "unueberprueft",
+      grund: "0 Dateien im Ausgabeverzeichnis - ein Null-Befund ist nicht von einer kaputten Probe zu unterscheiden",
+      dateien_geprueft: 0,
+      bytes_geprueft: 0,
+    };
+  }
+  return { status: "clean", dateien_geprueft: filesChecked, bytes_geprueft: bytesChecked };
 }
 
 // ============================================================================
@@ -1251,7 +1815,11 @@ function estimateBlockCostUsd(approxInputTokens) {
 function plannedCallsForBlock(block) {
   switch (block) {
     case "A":
-      return { count: BLOCK_A_CALLS_PER_MODEL * CONFIGURED_MODELS.length, note: "3 je Modell", estUsd: estimateBlockCostUsd(APPROX_INPUT_TOKENS_BLOCK_A) };
+      return {
+        count: BLOCK_A_CALLS_PER_MODEL * CONFIGURED_MODELS.length,
+        note: "3 je Modell",
+        estUsd: estimateBlockCostUsd(APPROX_INPUT_TOKENS_BLOCK_A),
+      };
     case "B":
       return {
         count: BLOCK_B_CALLS_PER_MODEL * CONFIGURED_MODELS.length,
@@ -1267,16 +1835,25 @@ function plannedCallsForBlock(block) {
     case "D":
       return { count: 0, note: `${BALANCE_POLL_COUNT} Guthaben-Abfragen, keine Chat-Aufrufe`, estUsd: 0 };
     case "E":
-      return { count: BLOCK_E_COMBOS_COUNT, note: `Stream x Werkzeug x include_usage, Modell ${BLOCK_E_MODEL}`, estUsd: estimateBlockCostUsd(APPROX_INPUT_TOKENS_BLOCK_E) };
+      return {
+        count: BLOCK_E_COMBOS_COUNT,
+        note: `Stream x Werkzeug x include_usage, Modell ${BLOCK_E_MODEL}`,
+        estUsd: estimateBlockCostUsd(APPROX_INPUT_TOKENS_BLOCK_E),
+      };
     case "F":
-      return { count: BLOCK_F_CALLS, note: `ein Aufruf je Stunde ueber 24h, Modell ${BLOCK_F_MODEL}`, estUsd: estimateBlockCostUsd(APPROX_INPUT_TOKENS_BLOCK_F) };
+      return {
+        count: BLOCK_F_CALLS,
+        note: `ein Aufruf je Stunde ueber 24h, Modell ${BLOCK_F_MODEL}`,
+        estUsd: estimateBlockCostUsd(APPROX_INPUT_TOKENS_BLOCK_F),
+      };
     default:
       return { count: 0, note: "unbekannter Block", estUsd: 0 };
   }
 }
 
-function printDryRunPlan(options) {
-  console.log("Trockenlauf: 0 Netzaufrufe.");
+// Operativ-Fix: dieselbe Planausgabe laeuft jetzt auch vor dem SCHARFEN Lauf (vorher nur
+// bei --dry-run) - extrahiert, damit main() sie ohne Duplizierung wiederverwenden kann.
+function printBlockPlan(options) {
   const ordered = FIXED_BLOCK_ORDER.filter((b) => options.blocks.includes(b));
   console.log(`Geplante Bloecke (feste Ausfuehrungsreihenfolge, gefiltert auf --blocks): ${ordered.join(", ")}`);
   let totalCost = 0;
@@ -1287,8 +1864,13 @@ function printDryRunPlan(options) {
   }
   console.log(`Geschaetzte Gesamtkosten: ~${totalCost.toFixed(4)} USD (Obergrenze --max-usd=${options.maxUsd}).`);
   if (totalCost > options.maxUsd) {
-    console.log("WARNUNG: geschaetzte Kosten liegen ueber --max-usd - der echte Lauf wuerde vorzeitig abbrechen.");
+    console.log("WARNUNG: geschaetzte Kosten liegen ueber --max-usd - der Lauf wuerde vorzeitig abbrechen.");
   }
+}
+
+function printDryRunPlan(options) {
+  console.log("Trockenlauf: 0 Netzaufrufe.");
+  printBlockPlan(options);
   console.log("Trockenlauf beendet - keine Ausgabedatei wurde angelegt.");
 }
 
@@ -1308,32 +1890,52 @@ async function main(options) {
   }
 
   validateOptions(options);
-  const apiKey = preflightKeyCheck();
 
+  // Operativ-Fix: --dry-run VOR preflightKeyCheck - ein Lauf, der per Definition nicht
+  // ins Netz geht, braucht keinen Schluessel.
   if (options.dryRun) {
     printDryRunPlan(options);
     process.exit(EXIT_OK);
     return;
   }
 
+  const apiKey = preflightKeyCheck();
   const wrongApiKey = deriveWrongApiKey(apiKey);
   const redact = createRedactor([apiKey, wrongApiKey]);
   const outputDir = await prepareOutputDir();
   console.log(`Ausgabeverzeichnis: ${outputDir}`);
+  console.log("Scharfer Lauf - Plan:");
+  printBlockPlan(options);
 
   const state = createRunState({ outputDir, redact, maxUsd: options.maxUsd, apiKey, wrongApiKey });
-  state.modelsRaw = await validateModelsAvailable(apiKey); // fail-closed bei Modell-Drift
 
-  await runErrorProbes(state);
-  await runRequestedBlocks(state, options);
+  // F3(b): summary.json + keyLeakCheck laufen in einem finally - ein Absturz nach dem
+  // ersten bezahlten Aufruf (z.B. GET /models faellt aus, ein unerwarteter Fehler in
+  // einem Block) hinterlaesst trotzdem ein Protokoll und die Regel-4-Selbstpruefung,
+  // statt Exit 1 ohne jede Spur.
+  let runError = null;
+  let leakResult = { status: "unueberprueft", grund: "keyLeakCheck nicht erreicht", dateien_geprueft: 0, bytes_geprueft: 0 };
+  try {
+    state.modelsRaw = await validateModelsAvailable(apiKey); // fail-closed bei Modell-Drift
+    await runErrorProbes(state);
+    await runRequestedBlocks(state, options);
+  } catch (err) {
+    runError = err;
+    console.error(`Lauf abgebrochen: ${err.name}: ${err.message}`);
+  } finally {
+    const summary = buildSummary(state, options);
+    if (runError) summary.lauf_meta.abbruch_grund = `${runError.name}: ${runError.message}`;
+    await writeJsonFile(path.join(state.outputDir, "summary.json"), summary, redact);
+    printConsoleSummary(summary);
+    leakResult = await keyLeakCheck(state.outputDir, [apiKey, wrongApiKey]);
+    console.log(
+      `key_leak_check: ${leakResult.status} (${leakResult.dateien_geprueft} Dateien, ${leakResult.bytes_geprueft} Bytes geprueft)` +
+        (leakResult.grund ? ` - ${leakResult.grund}` : ""),
+    );
+  }
 
-  const summary = buildSummary(state, options);
-  await writeJsonFile(path.join(state.outputDir, "summary.json"), summary, redact);
-  printConsoleSummary(summary);
-
-  const leak = await keyLeakCheck(state.outputDir, [apiKey, wrongApiKey]);
-  console.log(`key_leak_check: ${leak}`);
-  if (leak === "DIRTY") process.exit(EXIT_KEY_LEAK);
+  if (leakResult.status !== "clean") process.exit(EXIT_KEY_LEAK);
+  if (runError) process.exit(EXIT_ERROR);
   process.exit(state.budgetAbortReason ? EXIT_BUDGET_STOPPED : EXIT_OK);
 }
 
@@ -1341,7 +1943,7 @@ const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMainModule) {
   const options = parseArgs(process.argv.slice(2));
   main(options).catch((err) => {
-    console.error(err.message);
+    console.error(`Unerwarteter Fehler ausserhalb der Lauf-Absicherung: ${err.name}: ${err.message}\n${err.stack}`);
     process.exit(EXIT_ERROR);
   });
 }
