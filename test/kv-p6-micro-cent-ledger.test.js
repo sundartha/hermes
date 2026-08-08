@@ -21,6 +21,7 @@ import {
   aiCostCents,
   tokenCostMicroCents,
   usageFor,
+  inputTokensOf,
 } from "../src/store/state-ops.js";
 import { USAGE_EVENT_KIND, MICRO_CENTS_PER_CENT } from "../src/store/defaults.js";
 import { PRICES, TEST_MODEL_CHEAP, tokensOf } from "./_prices.js";
@@ -40,7 +41,7 @@ test("KV-P6-1 Kerntest: 100 Turns unterhalb eines halben Cents - Ledger-Summe co
     recordUsageEvent(s, {
       tenantId: TENANT,
       kind: USAGE_EVENT_KIND.AI_TOKEN,
-      quantity: SUBCENT_TOKENS.inputTokens + SUBCENT_TOKENS.outputTokens,
+      quantity: inputTokensOf(SUBCENT_TOKENS) + SUBCENT_TOKENS.outputTokens,
       costCents: aiCostCents(SUBCENT_TOKENS, PRICES),
       costMicroCents,
     });
@@ -65,7 +66,7 @@ test("KV-P6-2 cost_cents bleibt unveraendert (gerundeter Betrag, byte-identisch 
   const ev = recordUsageEvent(s, {
     tenantId: TENANT,
     kind: USAGE_EVENT_KIND.AI_TOKEN,
-    quantity: SUBCENT_TOKENS.inputTokens + SUBCENT_TOKENS.outputTokens,
+    quantity: inputTokensOf(SUBCENT_TOKENS) + SUBCENT_TOKENS.outputTokens,
     costCents: erwartet,
     costMicroCents: tokenCostMicroCents(SUBCENT_TOKENS, PRICES),
   });
@@ -95,7 +96,7 @@ test("KV-P6-4 Grenzfall: Betrag rundet auf 0 Cent, traegt aber Mikro-Cent > 0 (d
   const ev = recordUsageEvent(s, {
     tenantId: TENANT,
     kind: USAGE_EVENT_KIND.AI_TOKEN,
-    quantity: SUBCENT_TOKENS.inputTokens + SUBCENT_TOKENS.outputTokens,
+    quantity: inputTokensOf(SUBCENT_TOKENS) + SUBCENT_TOKENS.outputTokens,
     costCents: aiCostCents(SUBCENT_TOKENS, PRICES),
     costMicroCents: tokenCostMicroCents(SUBCENT_TOKENS, PRICES),
   });

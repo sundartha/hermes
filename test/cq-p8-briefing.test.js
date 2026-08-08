@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { readFileSync } from "node:fs";
 import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, MICRO_CENTS_PER_CENT } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
 const PEER_NUMBER = "+4915112345678";
@@ -342,10 +342,18 @@ test("AL-P9-3 nicht-transienter Fehler (HTTP 400) bucht NICHT", async () => {
 test("AL-P9-4 Schaetzung ist kein Kundenbeleg: kein usage_event trotz PAYMENT_ENABLED", async () => {
   mode = "delay";
   const eventsBefore = store.load().usageEvents.length;
-  const costBefore = store.usageOf(BOOTSTRAP_TENANT_ID).costCents;
+  // EXAKTE Gate-Achse (Cent-Uebertrag + Sub-Cent-Rest): seit B4a liegt EINE
+  // Briefing-Schaetzung unter einem ganzen Cent (korrigierte Sonnet-Rate) - genau der
+  // Fall, fuer den der Mikro-Cent-Akkumulator gebaut ist (P1-Safety-BLOCKER). Nur
+  // costCents zu lesen saehe die Buchung nicht.
+  const gateMicroCents = () => {
+    const usage = store.usageOf(BOOTSTRAP_TENANT_ID);
+    return usage.costCents * MICRO_CENTS_PER_CENT + usage.costMicroCentsRem;
+  };
+  const costBefore = gateMicroCents();
   await withConfig("paymentEnabled", true, () => fetchPrecallBriefing(briefingArgs()));
   assert.equal(store.load().usageEvents.length, eventsBefore, "kein Ledger-Beleg fuer eine Schaetzung");
-  assert.ok(store.usageOf(BOOTSTRAP_TENANT_ID).costCents > costBefore, "Budget-Achse bucht trotzdem");
+  assert.ok(gateMicroCents() > costBefore, "Budget-Achse bucht trotzdem");
 });
 
 test("AL-P9-5 open_questions kommt durch", async () => {

@@ -782,7 +782,7 @@ export function streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs, con
 // deterministischen, pessimistischen Ersatzwert (Input aus der bekannten Prompt-Laenge,
 // Output fail-closed auf TURN_MAX_TOKENS). Nie 0, nie "kein Beleg", nie zwei Belege. Die
 // Ueberbuchung im Abrissfall ist bewusst akzeptiert - dieselbe Fehlerrichtung wie
-// priceForModel -> mostExpensivePrice.
+// priceForModel -> worstCasePrice.
 //
 // WARUM HIER bookTokenUsage (beide Achsen) und NICHT bookEstimatedTokenUsage wie beim
 // Briefing (AL-P9): dort hat der Kunde nie ein Ergebnis gesehen, ein Beleg waere ein

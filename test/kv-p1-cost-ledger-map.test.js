@@ -204,11 +204,14 @@ test("KV-P1-2 voice_minute_inbound: Ledger UND Gate tragen den kalibrierten Inbo
 });
 
 test("KV-P1-3 ai_token: jede Buchung landet 0-gerundet im Ledger, das Gate akkumuliert den Mikro-Cent-Rest weiter", () => {
-  // aiCostCents erwartet die BEREITS KONVERTIERTE Form {inputTokens, outputTokens, model}
-  // (billedTokens in llm-usage.js), nicht die Verbrauchsform des Ports - dieselbe
-  // Umrechnung, die bookTokenUsage intern vornimmt.
+  // aiCostCents erwartet die BEREITS KONVERTIERTE Form (billedTokens in llm-usage.js):
+  // seit B4a die VIER Token-Sorten + die Modell-ID, nicht die Verbrauchsform des Ports
+  // (die zusaetzlich estimated/billingModelId traegt) - dieselbe Umrechnung, die
+  // bookTokenUsage intern vornimmt.
   const billedForm = {
-    inputTokens: AI_TOKEN_TURN.inputUncachedTokens,
+    inputUncachedTokens: AI_TOKEN_TURN.inputUncachedTokens,
+    inputCacheWriteTokens: AI_TOKEN_TURN.inputCacheWriteTokens,
+    inputCacheReadTokens: AI_TOKEN_TURN.inputCacheReadTokens,
     outputTokens: AI_TOKEN_TURN.outputTokens,
     model: AI_TOKEN_MODEL,
   };

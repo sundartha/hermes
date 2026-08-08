@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import { existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { CENTS_PER_EUR, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
+import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
 // GAP-07: boot-guard.js und telephony/stt-profile.js importieren ihrerseits nur
 // import-freie bzw. Blatt-Module -> kein Zyklus, obwohl beide sonst downstream sitzen.
 import { alertChannelFindings } from "./boot-guard.js";
@@ -211,8 +211,140 @@ const EXCHANGE_RATE_DEFAULTS = Object.freeze({
   usdToEur: 0.92,
 });
 
+// ---- Preisstaffeln der Sprachmodelle (B4a) ----------------------------------------
+// Quelle und Abrufdatum EINMAL, damit `source` nicht je Eintrag abweichen kann (G5).
+const ANTHROPIC_PRICING_SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing.md";
+
+// Preisstaffeln je Modell-ID. Vier Raten je Staffel, KEIN Feld optional. Zwei
+// Datumsfelder mit VERSCHIEDENER Bedeutung:
+//   asOf      = wann WIR die Zahl gelesen haben (unsere Belegkette)
+//   validFrom = ab wann der ANBIETER sie berechnet (seine Ankuendigung)
+// Die Anker-Staffel traegt validFrom == asOf: wir behaupten kein Startdatum, das wir
+// nicht beobachtet haben. Die Schreib-Rate ist die 5-MINUTEN-Rate, weil
+// CACHE_CONTROL_EPHEMERAL (src/claude.js) KEIN ttl-Feld traegt und damit der
+// Anbieter-Default gilt; die 1h-Rate wird bewusst NICHT mitgefuehrt (kein Aufrufer -
+// eine Rate, die niemand liest, pflegt auch niemand). Ein ttl im Quelltext macht den
+// Gate-Test in test/b4a-model-prices.test.js rot.
+//
+// Object.freeze ist hier unbedenklich - anders als an der AUFGELOESTEN Tabelle unten
+// (s. modelPricesUsd): resolveModelPrices kopiert jede Staffel, nur die Kopie wird ein
+// Blatt des guardedConfig-Proxys.
+const MODEL_PRICE_SCHEDULES = Object.freeze({
+  "claude-haiku-4-5": [
+    {
+      validFrom: "2026-08-08",
+      inPerMTok: 1.0,
+      cacheWritePerMTok: 1.25,
+      cacheReadPerMTok: 0.1,
+      outPerMTok: 5.0,
+      asOf: "2026-08-08",
+      source: ANTHROPIC_PRICING_SOURCE,
+    },
+  ],
+  "claude-sonnet-5": [
+    {
+      validFrom: "2026-08-08",
+      inPerMTok: 2.0,
+      cacheWritePerMTok: 2.5,
+      cacheReadPerMTok: 0.2,
+      outPerMTok: 10.0,
+      asOf: "2026-08-08",
+      source: ANTHROPIC_PRICING_SOURCE,
+    },
+    {
+      validFrom: "2026-09-01",
+      inPerMTok: 3.0,
+      cacheWritePerMTok: 3.75,
+      cacheReadPerMTok: 0.3,
+      outPerMTok: 15.0,
+      asOf: "2026-08-08",
+      source: ANTHROPIC_PRICING_SOURCE,
+    },
+  ],
+});
+
+// Ein ISO-Kalendertag "YYYY-MM-DD" (G25). Der String-Vergleich auf GENAU dieser Form ist
+// ordnungserhaltend - deshalb kommt in der Staffel-Aufloesung KEIN Date-Objekt und keine
+// Zeitzonen-Rechnung vor (teuer gelernte Repo-Lehre zu fremden Uhrzeiten). Geprueft wird
+// die FORM, nicht bloss die Laenge: "08.08.2026" ist ebenfalls 10 Zeichen lang und wuerde
+// still falsch einsortiert - auf einer Geld-Achse ist "still falsch" der teuerste Ausgang.
+const ISO_DATE_LENGTH = 10;
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+// Der heutige Kalendertag (UTC). Die EINZIGE Uhr dieser Achse: sie tickt genau einmal,
+// beim Bau von rawConfig. Die Buchungskante bleibt zeitfrei - ein nowIso in
+// tokenCostUsd/aiCostCents haette zwei Uhren an derselben Buchung (trackUsage bekommt
+// nowIso vom Aufrufer, recordUsageEvent stempelt selbst), und an einer Monatsgrenze
+// koennten Gate-Achse und Ledger verschiedene Staffeln waehlen.
+export function todayIsoDate() {
+  return new Date().toISOString().slice(0, ISO_DATE_LENGTH);
+}
+
+// Wirft benannt (P8), wenn eine Staffel nicht vollstaendig ist. Vier Raten sind PFLICHT:
+// eine fehlende Rate ergaebe in tokenCostUsd NaN (0 * undefined), und NaN >= cap ist
+// immer false - das Budget-Gate waere still AUS (Absolute Regel 1). Deshalb faellt der
+// Fall hier auf, beim Boot, nicht im laufenden Anruf.
+function assertScheduleEntry(modelId, entry) {
+  if (!ISO_DATE_PATTERN.test(entry?.validFrom ?? ""))
+    throw new Error(`modelPricesUsd: Staffel '${modelId}' ohne gueltiges validFrom (YYYY-MM-DD)`);
+  for (const field of MODEL_PRICE_RATE_FIELDS) {
+    const rate = entry[field];
+    if (!Number.isFinite(rate) || rate < 0)
+      throw new Error(
+        `modelPricesUsd: Staffel '${modelId}' ab ${entry.validFrom} hat keine gueltige Rate ` +
+          `${field} (${rate}) - vier Raten sind Pflicht`,
+      );
+  }
+}
+
+// Die heute geltende Staffel: die mit dem GROESSTEN validFrom, das nicht in der Zukunft
+// liegt. Bewusst nicht "die letzte im Array" - eine Sortier-Konvention, die niemand
+// erzwingt, waere Disziplin statt Struktur (G27). null = keine faellige Staffel.
+function activeSchedule(entries, todayIso) {
+  return entries
+    .filter((entry) => entry.validFrom <= todayIso)
+    .reduce((latest, entry) => (latest === null || entry.validFrom > latest.validFrom ? entry : latest), null);
+}
+
+// Die naechste noch nicht faellige Staffel - REINE DIAGNOSE fuers Boot-Banner, kein
+// Rechner liest sie. null = keine weitere hinterlegt.
+function nextValidFrom(entries, todayIso) {
+  const future = entries.filter((entry) => entry.validFrom > todayIso).map((entry) => entry.validFrom);
+  return future.length ? future.reduce((min, date) => (date < min ? date : min)) : null;
+}
+
+// Loest die Staffeln auf EINEN Kalendertag auf: Modell-ID -> vier Raten + Diagnosefelder
+// (validFrom/asOf/source/nextValidFrom). Rein (die Uhr ist Parameter) und damit ohne Uhr
+// testbar. Wirft benannt, wenn nichts hinterlegt ist, ein Modell fuer heute keine Staffel
+// hat oder eine Staffel unvollstaendig ist - jeder dieser Faelle ist ein Boot-Abbruch,
+// kein stiller Rueckfall. Alle drei sind nur durch eine Quelltext-Aenderung erreichbar,
+// nicht ueber die Umgebung; deshalb ist der Abbruch bewusst ein throw beim Modul-Laden
+// (fruehestmoeglich, fail-closed) und keine [boot]-formatierte Zeile.
+export function resolveModelPrices(schedules, todayIso) {
+  const modelIds = Object.keys(schedules);
+  if (!modelIds.length)
+    throw new Error(
+      "modelPricesUsd: keine Preisstaffel hinterlegt - keine Preisquelle fuer den Budget-Guard (Regel 1)",
+    );
+  const resolved = {};
+  for (const modelId of modelIds) {
+    const entries = schedules[modelId];
+    for (const entry of entries) assertScheduleEntry(modelId, entry);
+    const active = activeSchedule(entries, todayIso);
+    if (!active)
+      throw new Error(
+        `modelPricesUsd: Modell '${modelId}' hat am ${todayIso} keine gueltige Preisstaffel ` +
+          "(kein validFrom liegt in der Vergangenheit)",
+      );
+    resolved[modelId] = { ...active, nextValidFrom: nextValidFrom(entries, todayIso) };
+  }
+  return resolved;
+}
+
 const rawConfig = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
+  // B4a: MUSS eine Preisstaffel in MODEL_PRICE_SCHEDULES haben - sonst bricht der Boot ab
+  // (assertPricedModels, src/boot.js). Eine DATIERTE Snapshot-ID ist ein ANDERER Schluessel.
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
   // Ganzzahl-Cents (G26: Geld nie als Fliesskomma) - Env-Name bleibt MAX_BUDGET_EUR
   // (Operator gibt weiter EUR ein), interne Einheit ist Cents wie defaultTenantBudgetCents/
@@ -262,9 +394,10 @@ const rawConfig = {
   }),
 
   // ---- Pre-Call-Briefing (P8, src/precall-briefing.js) ----
-  // Modell des briefenden Aufrufs. MUSS in modelPricesUsd stehen, sonst bucht das
-  // Budget-Gate fail-closed zur TEUERSTEN Rate (priceForModel, P7a). Sonnet statt Opus:
-  // das Briefing ist eine Struktur-Extraktion aus kurzem Owner-Text.
+  // Modell des briefenden Aufrufs. MUSS eine Preisstaffel haben - seit B4a bricht der
+  // Boot sonst ab (assertPricedModels), statt fail-closed zur teuersten Rate zu buchen.
+  // Geprueft wird UNABHAENGIG von precallBriefingEnabled. Sonnet statt Opus: das
+  // Briefing ist eine Struktur-Extraktion aus kurzem Owner-Text.
   briefingModel: process.env.PRECALL_BRIEFING_MODEL || "claude-sonnet-5",
   // Eigener kurzer Per-Request-Timeout: POST /api/calls wartet synchron darauf, BEVOR
   // gewaehlt wird; kein Retry (maxRetries 0) -> das ist die gesamte Wartezeit im
@@ -1403,30 +1536,39 @@ const rawConfig = {
     }),
   },
 
-  // Preise pro 1M Tokens in USD, PRO MODELL-ID. Nur fuer den Budget-Guard (Regel 1).
-  // EINZIGE Preisquelle: das Live-Gate (trackUsage) UND der Stripe-Ledger (aiCostCents)
-  // leiten ihren Betrag hieraus ab (G5). Ein Modell, das hier NICHT steht, wird mit der
-  // TEUERSTEN hinterlegten Rate gebucht (fail-closed, priceForModel in state-ops.js) -
-  // nie mit 0, nie mit dem Haiku-Default. Jedes neue Modell MUSS hier eingetragen werden,
-  // BEVOR CLAUDE_MODEL darauf gestellt wird (siehe PLAN-SECURITY.md, P7A-MODELPRICE).
+  // Preise pro 1M Tokens in USD, PRO MODELL-ID und - seit B4a - PRO TOKEN-SORTE (vier
+  // Raten, llm/ports.js LlmTokenUsage). Nur fuer den Budget-Guard (Regel 1). EINZIGE
+  // Preisquelle: das Live-Gate (trackUsage) UND der Stripe-Ledger (aiCostCents) leiten
+  // ihren Betrag hieraus ab (G5). Ein Modell, das hier NICHT steht, wird mit der
+  // punktweisen Obergrenze ueber alle Staffeln gebucht (fail-closed, priceForModel/
+  // worstCasePrice in state-ops.js) - nie mit 0, nie mit dem Haiku-Default.
   //
-  // LISTENPREISE, bewusst NICHT der Sonnet-5-Einfuehrungsrabatt (2/10 USD, laeuft
-  // 2026-08-31 aus): ein zu NIEDRIGER Preis macht das Budget-Gate blind, ein zu hoher
-  // ist hoechstens zu streng. Achtung: eine DATIERTE Snapshot-ID
-  // ("claude-haiku-4-5-20251001") ist ein ANDERER Schluessel als der Alias und wuerde
-  // in den Fail-closed-Zweig laufen.
+  // Die Tabelle ist die AUFLOESUNG der Staffeln (MODEL_PRICE_SCHEDULES, oben) auf den
+  // heutigen Kalendertag. Ein terminierter Preiswechsel steht damit als validFrom in den
+  // Daten statt im Kopf eines Menschen: eine flache Tabelle koennte "2.00 bis 31.08.,
+  // 3.00 ab 01.09." nicht ausdruecken, weil keine der beiden Zahlen heute richtig ist.
   //
-  // BEWUSST NICHT Object.freeze(...): guardedConfig (unten) wrapt jeden Objekt-Wert bei
-  // JEDEM Zugriff frisch in einen NEUEN Proxy. Fuer eine per Object.freeze non-configurable
-  // GEMACHTE Eigenschaft verlangt die Sprache aber, dass [[Get]] denselben (SameValue)
-  // Rueckgabewert liefert wie am Target - ein frischer Wrapper verletzt diese Invariante und
-  // die Engine wirft TypeError bei JEDEM Zugriff (auch auf bekannte Modelle), nicht nur bei
-  // unbekannten. Genau der Fail-open-durch-Crash, den priceForModel verhindern soll. Muster
-  // wie die bestehenden ungefreezten Objekt-Bloecke telnyxElevenLabs/telnyxAssistant oben.
-  modelPricesUsd: {
-    "claude-haiku-4-5": { inPerMTok: 1.0, outPerMTok: 5.0 },
-    "claude-sonnet-5": { inPerMTok: 3.0, outPerMTok: 15.0 },
-  },
+  // RESTRISIKO, bewusst akzeptiert: die Aufloesung passiert GENAU EINMAL, beim Boot. Ein
+  // Prozess, der ohne Neustart ueber einen validFrom-Termin hinweg laeuft, bucht bis zum
+  // Neustart die alte Staffel - bei Sonnet ab 2026-09-01 also ZU WENIG, die unsichere
+  // Richtung. Gegenmassnahmen: die Boot-Banner-Zeile "Preisstaffeln:" (gewaehlte +
+  // naechste validFrom) und die Kalenderzeile in STATUS.md. Die Alternative (Uhr an der
+  // Buchungskante) haette zwei Uhren an derselben Buchung und traefe JEDE Buchung.
+  //
+  // Ein Modell ohne Staffel bricht seit B4a den BOOT ab (assertPricedModels, src/boot.js).
+  // Achtung: eine DATIERTE Snapshot-ID ("claude-haiku-4-5-20251001") ist ein ANDERER
+  // Schluessel als der Alias und laeuft damit in den Boot-Abbruch, nicht mehr in den
+  // Fail-closed-Zweig.
+  //
+  // BEWUSST NICHT Object.freeze(...) auf dem AUFGELOESTEN Ergebnis: guardedConfig (unten)
+  // wrapt jeden Objekt-Wert bei JEDEM Zugriff frisch in einen NEUEN Proxy. Fuer eine per
+  // Object.freeze non-configurable GEMACHTE Eigenschaft verlangt die Sprache aber, dass
+  // [[Get]] denselben (SameValue) Rueckgabewert liefert wie am Target - ein frischer
+  // Wrapper verletzt diese Invariante und die Engine wirft TypeError bei JEDEM Zugriff
+  // (auch auf bekannte Modelle), nicht nur bei unbekannten. Genau der
+  // Fail-open-durch-Crash, den priceForModel verhindern soll. resolveModelPrices liefert
+  // deshalb frische, ungefrorene Objekte (die gefrorene QUELLE bleibt davon unberuehrt).
+  modelPricesUsd: resolveModelPrices(MODEL_PRICE_SCHEDULES, todayIsoDate()),
   // KI-Kosten-Achse des Budget-Gates (trackUsage) UND des Stripe-Ledgers (aiCostCents):
   // USD-Token-Preise -> EUR. DIESELBE Umgebungsvariable, derselbe Default und dasselbe
   // Minimum wie providerToBucketRateMicro oben (GAP-08: ein Kurs, eine Stellschraube) -

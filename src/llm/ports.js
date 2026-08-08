@@ -73,7 +73,10 @@
  * @property {boolean} estimated - false = vom Anbieter gemeldet, true = pessimistische
  *   Obergrenze. Notfall-Regel: verletzt eine Antwort die Vollstaendigkeits-Invariante
  *   oder fehlt eine Zahl, bildet der Adapter alle Eingabe-Token auf
- *   inputUncachedTokens ab (teuerste Eingabeklasse) und setzt estimated:true. Der
+ *   inputUncachedTokens ab (die UNGECACHTE Eingabeklasse) und setzt estimated:true.
+ *   Bewusst nicht "die teuerste": die Cache-SCHREIB-Rate liegt bei den hinterlegten
+ *   Staffeln ueber der Eingabe-Rate. Eine Schaetzung auf inputCacheWriteTokens haette
+ *   eine Token-Sorte behauptet, die nie geflossen ist (Vollstaendigkeits-Invariante). Der
  *   Vertrag entscheidet NICHT, auf welche Buchungs-Achse eine Schaetzung geht, nur
  *   dass sie erkennbar ist - diese Wahl bleibt beim Aufrufer und ist heute bewusst
  *   uneinheitlich (Abriss-Schaetzung mit bereits gesprochenem Text vs. Schaetzung ohne

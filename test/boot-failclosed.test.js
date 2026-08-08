@@ -104,6 +104,9 @@ test("KS-P9: DEFAULT_TENANT_BUDGET_CENTS=5000 ueber MAX_BUDGET_EUR=30 bootet gru
 // bis auf die eine A0-Konfig-Warnung (Sentinel 0 ist dokumentiertes Bestandsverhalten)
 // plus die seit P8 unbedingte Deckungs-WARN (0 Calls -> 0% < 80%); die A0-Zeile bleibt
 // die einzige `DEFAULT_TENANT_BUDGET_CENTS=0`-Warnung.
+//
+// Seit B4a ist dieser Test zugleich die GEGENPROBE zum Boot-Abbruch (B4A-BOOT-1..3): ohne
+// ihn belegten jene Tests nur, dass der Server ueberhaupt nie startet.
 test("T-P3-11: BASE_ENV (Default=0) bootet gruen, genau eine A0-Konfig-Warnung (plus die seit P8 unbedingte Deckungs-WARN)", async () => {
   const srv = await startServer({});
   try {
@@ -223,6 +226,65 @@ test("KS-P3a: Boot mit dem Live-Satz (30 ct/min) bleibt gruen - Plan-Decken trag
     assert.equal(res.status, 200);
     assert.doesNotMatch(srv.stdout, /Start abgebrochen/);
     assert.doesNotMatch(srv.stdout, /Plan-Decke/, "kein Plan-Decken-Befund bei kohaerenter Konfiguration");
+  } finally {
+    await srv.stop();
+  }
+});
+
+// ---- B4a: Boot-Abbruch bei unbepreistem Modell (und seine Nicht-Ausloeser) -----------
+//
+// Ein Dienst, der nicht startet, nimmt keine Anrufe an. Die Ausloeser-Liste ist deshalb
+// ABSCHLIESSEND: genau die zwei konfigurierten Modelle (claudeModel, briefingModel). Jeder
+// benannte NICHT-Ausloeser bekommt hier seinen eigenen Beleg - sonst weitet der naechste
+// Umbau den Abbruch still aus. Die Gegenprobe "ohne die Fehlkonfiguration startet der
+// Dienst" liefert T-P3-11 oben plus B4A-BOOT-5 unten.
+const UNPRICED_MODEL = "modell-ohne-preis";
+
+test("B4A-BOOT-1: CLAUDE_MODEL ohne Preisstaffel -> Boot bricht ab (exit 1), nennt die ID", async () => {
+  const { code, output } = await startServerExpectExit({ env: { CLAUDE_MODEL: UNPRICED_MODEL } });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, new RegExp(`\\[boot\\] Start abgebrochen: Modell\\(e\\) ohne Preis in modelPricesUsd: ${UNPRICED_MODEL}`));
+  assert.doesNotMatch(output, /Gateway laeuft/, "kein offener Port");
+});
+
+test("B4A-BOOT-2: PRECALL_BRIEFING_MODEL ohne Preisstaffel bricht ab - AUCH bei abgeschaltetem Briefing", async () => {
+  const { code, output } = await startServerExpectExit({
+    env: { PRECALL_BRIEFING_MODEL: "briefing-ohne-preis", PRECALL_BRIEFING_ENABLED: "false" },
+  });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /briefing-ohne-preis/);
+  assert.doesNotMatch(output, /Gateway laeuft/, "kein offener Port");
+});
+
+test("B4A-BOOT-3: eine DATIERTE Snapshot-ID ist ein anderer Schluessel -> Boot bricht ab", async () => {
+  const { code, output } = await startServerExpectExit({
+    env: { CLAUDE_MODEL: "claude-haiku-4-5-20251001" },
+  });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /claude-haiku-4-5-20251001/);
+});
+
+test("B4A-BOOT-4 (N-2): REALTIME_MODEL ohne Preiseintrag startet NORMAL - dieser Pfad bucht keine Token", async () => {
+  const srv = await startServer({ env: { REALTIME_MODEL: "irgendwas-ohne-preis" } });
+  try {
+    assert.equal((await fetch(`${srv.localUrl}/healthz`)).status, 200);
+    assert.doesNotMatch(srv.stdout, /Start abgebrochen/, "ein Abbruch dafuer waere ein Abbruch ohne Schutzwirkung");
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("B4A-BOOT-5: die ausgelieferte Konfiguration startet und nennt im Banner ihre Preisstaffeln", async () => {
+  const srv = await startServer({});
+  try {
+    assert.equal((await fetch(`${srv.localUrl}/healthz`)).status, 200);
+    // Banner-Zeile im Stil ihrer Nachbarn (eingerueckt, ohne [boot]-Praefix - die Praefixe
+    // tragen nur die Guard-Meldungen davor).
+    assert.match(
+      srv.stdout,
+      /^ {2}Preisstaffeln: claude-haiku-4-5 ab \d{4}-\d{2}-\d{2} \(naechste: .+\) \| claude-sonnet-5 ab \d{4}-\d{2}-\d{2}/m,
+      "welche Staffel dieser PROZESS faehrt, muss am Log ablesbar sein",
+    );
   } finally {
     await srv.stop();
   }

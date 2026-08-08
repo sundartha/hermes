@@ -5,7 +5,7 @@
 // Log-Zeilen, exit-Codes). INV-5: rearmActiveCallTimers NACH allen exit1-Gates,
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
 // "Hermes Gateway laeuft auf ..."-Zeile erst im listen-Callback (nach vollem Boot).
-import { assertConfig, gatewayUrlForPort, VOICE_ENGINE } from "./config.js";
+import { assertConfig, gatewayUrlForPort, todayIsoDate, VOICE_ENGINE } from "./config.js";
 import { configFingerprint } from "./config-fingerprint.js";
 import {
   fakeOriginateBootBlocked,
@@ -22,6 +22,7 @@ import {
   BOOTSTRAP_HEAL,
   latentCostPathFindings,
   sttProfileFindings,
+  stalePriceFindings,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
@@ -118,17 +119,37 @@ function assertSpendCapCoherence(config) {
   for (const finding of all) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
-// P3: Modelle ohne Preistabellen-Eintrag (unpricedModels, src/boot-guard.js) buchen
-// fail-closed zur TEUERSTEN Rate (priceForModel, state-ops.js) - Folge ist reine
-// Ueber-Bepreisung (bis 3x), nie Ueber-Ausgabe. NUR WARN, kein exit(1): ein Boot-
-// Refusal tauschte hier ein Kostenproblem gegen einen Totalausfall der Telefonie.
-function warnUnpricedModels(config) {
+// B4a: ein konfiguriertes Modell OHNE Preisstaffel bricht den Start ab. Bis dahin war das
+// eine WARN, mit der Begruendung "reine Ueber-Bepreisung (bis 3x), nie Ueber-Ausgabe".
+// Diese Begruendung haengt an EINER Voraussetzung: dass die Fail-closed-Rate
+// (worstCasePrice, state-ops.js) eine sinnvolle Obergrenze ist. Das gilt, solange genau
+// EINE Preiswelt hinterlegt ist - mit einem zweiten Anbieter faellt die Praemisse, nicht
+// durch Meinung, sondern durch Wegfall. Zweitens ist ein console.warn auf einem Dienst,
+// den niemand liest, die stille Fehlkonfiguration auf einer Geld-Achse - dieselbe Klasse,
+// gegen die LCT P4 den Kurs-Guard fatal gemacht hat (assertProviderRateInBand, unten -
+// das Muster).
+//
+// Geprueft werden GENAU zwei Werte, unveraendert: claudeModel und briefingModel (letzterer
+// UNABHAENGIG von precallBriefingEnabled). NICHT geprueft wird realtimeModel: der
+// Realtime-Pfad bucht keine Token (kein bookTokenUsage-Aufrufer in bridge.js) - ein
+// Abbruch dafuer waere ein Abbruch ohne Schutzwirkung.
+function assertPricedModels(config) {
   const unpriced = unpricedModels([config.llm.claudeModel, config.llm.briefingModel], config.llm.modelPricesUsd);
   if (!unpriced.length) return;
-  console.warn(
-    `[boot] Konfig-Warnung: Modell(e) ohne Preis in modelPricesUsd: ${unpriced.join(",")} - ` +
-      "bucht fail-closed zur teuersten hinterlegten Rate (Ueber-Bepreisung, priceForModel).",
+  console.error(
+    `[boot] Start abgebrochen: Modell(e) ohne Preis in modelPricesUsd: ${unpriced.join(",")} - ` +
+      "jedes konfigurierte Modell braucht eine Staffel in MODEL_PRICE_SCHEDULES (src/config.js), " +
+      "BEVOR CLAUDE_MODEL/PRECALL_BRIEFING_MODEL darauf gestellt wird. Eine DATIERTE " +
+      "Snapshot-ID ist ein ANDERER Schluessel als der Alias.",
   );
+  process.exit(1);
+}
+
+// B4a: Veralterung der Preisliste (stalePriceFindings, boot-guard.js). WARN, kein exit(1)
+// - Muster warnTariffDrift.
+function warnStaleModelPrices(config) {
+  for (const finding of stalePriceFindings(config.llm.modelPricesUsd, todayIsoDate()))
+    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // LCT P4: Umrechnungskurs gegen das Toleranzband - seit dieser Phase FATAL (in P2 war
@@ -170,7 +191,7 @@ function currentCoverage(config, store) {
 // zuordenbaren Belegtypen - Begruendung s. ASSIGNABLE_COST_RECORD_TYPES
 // (telephony/adapters/telnyx/voice.js). Quote unter der Schwelle = WARN, kein exit(1) -
 // ein Boot-Refusal tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall (Praezedenz
-// warnUnpricedModels); die laute Linie ist der Befund coverage_below_threshold aus dem Sweep.
+// warnTariffDrift); die laute Linie ist der Befund coverage_below_threshold aus dem Sweep.
 function assertCostTruingBooking(config, store) {
   const findings = costTruingBookingFindings({
     requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
@@ -199,7 +220,7 @@ function warnAlertChannelUnset(config) {
 // wenn ueberhaupt ein Befund vorliegt; ein durchweg im Band liegender Zustand loggt ruhig.
 // KEIN SMS-Alarm hier: der Boot feuert einmal je Prozessstart, der laufende Alarm haengt am
 // Sweep (src/billing/cost-truing.js). KEIN Audit: der Befund aendert nichts daran, WAS der
-// Dienst ablehnt - Muster warnUnpricedModels.
+// Dienst ablehnt - Muster warnAlertChannelUnset.
 function warnTariffDrift(config, store) {
   const report = tariffDriftReportFromConfig(store.load().calls, config.billing);
   const line = `[boot] Tarif-Drift: ${report.map(driftLine).join(" | ")}`;
@@ -267,7 +288,7 @@ function warnTurnOutlivesDeadAir(config) {
 // GAP-19 (erste Haelfte): FORCE_NUMBER_COUNTRY entkoppelt das Kauf-Land vom Herkunftsland -
 // jeder neue Tenant telefoniert dann unter auslaendischer Absenderkennung. WARN, kein exit(1):
 // das IST der gewollte Live-Zustand (render.yaml), ein Boot-Refusal waere ein selbst
-// verursachter Totalausfall der Telefonie (Praezedenz warnUnpricedModels). Die Zeile ist der
+// verursachter Totalausfall der Telefonie (Praezedenz warnTariffDrift). Die Zeile ist der
 // Betriebs-Ack, den GAP-19 verlangt: sie erscheint bei JEDEM Start, solange der Override
 // steht - und genau derselbe Zustand schaltet in der Outbound-Kette das Herkunfts-Gate ab
 // (numberOriginDecoupled, EINE Quelle). Landescodes sind kein Secret und kein PII.
@@ -288,7 +309,7 @@ function warnNumberOriginDecoupled(config) {
 // Voice-Routing, waehrend activateNumber sie auf 'active' hebt. Der Guard unterscheidet
 // 'fehlt' von 'gesetzt' und feuert nur, wenn ueberhaupt gekauft werden kann. WARN, kein
 // exit(1): der Fehlausgang trifft KUENFTIGE Kaeufe, ein Boot-Refusal legte den gesamten
-// laufenden Telefoniebetrieb still - der teuerste Fehlausgang (Praezedenz warnUnpricedModels).
+// laufenden Telefoniebetrieb still - der teuerste Fehlausgang (Praezedenz warnTariffDrift).
 function warnMissingProvisioningConnection(config) {
   if (!config.provisioning.provisioningEnabled || config.telephony.telnyxConnectionId) return;
   console.warn(
@@ -299,7 +320,7 @@ function warnMissingProvisioningConnection(config) {
 
 // KV-P7: zwei latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
 // boot-guard.js fuer die Begruendung je Befund). WARN, kein exit(1) - Muster
-// warnUnpricedModels. realtimeMidCallBudgetCheck kommt aus GENAU EINER Quelle
+// warnAlertChannelUnset. realtimeMidCallBudgetCheck kommt aus GENAU EINER Quelle
 // (REALTIME_MID_CALL_BUDGET_CHECK, src/bridge.js) - kein zweites Flag hier.
 function warnLatentCostPaths(config) {
   const findings = latentCostPathFindings({
@@ -314,10 +335,10 @@ function warnLatentCostPaths(config) {
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertCostTruingBooking
-// (LCT P4) das siebte und assertSttProfile (STT-A1) das achte, das noch process.exit(1)
-// rufen kann - warnUnpricedModels/warnAlertChannelUnset/warnTariffDrift/
-// warnNumberOriginDecoupled/warnMissingProvisioningConnection/warnLatentCostPaths sind
-// reine Diagnose (nie fatal).
+// (LCT P4) das siebte, assertSttProfile (STT-A1) das achte und assertPricedModels (B4a)
+// das neunte, das noch process.exit(1) rufen kann - warnStaleModelPrices/
+// warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
+// warnMissingProvisioningConnection/warnLatentCostPaths sind reine Diagnose (nie fatal).
 function assertBootGates(config, store) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -373,7 +394,8 @@ function assertBootGates(config, store) {
   // NOCH process.exit(1) rufen (assertSpendCapCoherence bei Klausel B) - deshalb MUESSEN
   // sie vor rearmActiveCallTimers() stehen (INV-5, s.u. in bootServer).
   assertSpendCapCoherence(config);
-  warnUnpricedModels(config);
+  assertPricedModels(config); // B4a: FATAL, s. dort
+  warnStaleModelPrices(config); // B4a: WARN
   assertProviderRateInBand(config);
   assertCostTruingBooking(config, store);
   assertSttProfile(config);
@@ -626,6 +648,25 @@ export function costConfigBannerLines({ billing, llm, voice }) {
   ];
 }
 
+// B4a: welche Preisstaffel faehrt dieser PROZESS? Ohne diese Zeile ist der einzige
+// Restfall der Boot-Aufloesung unsichtbar: ein Prozess, der ueber einen validFrom-Termin
+// hinweg laeuft, bucht bis zum Neustart die alte Staffel. Eigene reine Funktion statt
+// einer Faltung in costConfigBannerLines (G30: eine Aufgabe je Funktion) - jene wird in
+// den Bestandstests mit einer llm-Attrappe OHNE modelPricesUsd gefahren. Gegen die
+// AUFGELOESTE Config, nicht process.env.
+//
+// Der Zugriff ist per Konstruktion sicher: assertPricedModels hat den Prozess vorher
+// beendet, falls ein konfiguriertes Modell fehlt - kein defensiver Zweig (waere G9).
+const NO_NEXT_SCHEDULE_LABEL = "keine";
+
+export function modelPriceScheduleBannerLine(llm) {
+  const label = (modelId) => {
+    const price = llm.modelPricesUsd[modelId];
+    return `${modelId} ab ${price.validFrom} (naechste: ${price.nextValidFrom || NO_NEXT_SCHEDULE_LABEL})`;
+  };
+  return `Preisstaffeln: ${label(llm.claudeModel)} | ${label(llm.briefingModel)}`;
+}
+
 // KV-P7: Deckungshinweis des ElevenLabs-Kontingents - PERMANENT im Banner, unabhaengig von
 // jedem Flag (Play-TTS an/aus, Relay an/aus). Der Zaehler ist seit dieser Phase nicht mehr
 // blind (Massnahme 3, recordRelayTtsCharacters), bleibt aber eine UNTERGRENZE: Zeichen
@@ -699,6 +740,8 @@ function logBootBanner(config, port) {
   // KV-M0: sieben in Prod bisher nicht lesbare Werte - entsperrt jede Zahl der
   // Kosten-Vollstaendigkeits-Rechnung fuer kuenftige Untersuchungen (Muster capabilityProbeLines).
   for (const line of costConfigBannerLines(config)) console.log(`  ${line}`);
+  // B4a: welche Preisstaffel dieser Prozess faehrt (gewaehlte + naechste validFrom).
+  console.log(`  ${modelPriceScheduleBannerLine(config.llm)}`);
   // KV-P7: eigene Zeile, NICHT Teil der KV-M0-Dreiergruppe oben (die bleibt unangetastet) -
   // permanenter Deckungshinweis des ElevenLabs-Kontingents, unkonditional gedruckt.
   console.log(`  ${ttsQuotaCoverageBannerLine(config.billing)}`);

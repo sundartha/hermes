@@ -13,7 +13,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, MICRO_CENTS_PER_CENT } from "../src/store/defaults.js";
 
 const OWNER = "Jonas Beispiel";
 const CALL_ID = "call_p8_breaker";
@@ -112,8 +112,15 @@ test("BR1 ein fehlschlagender Briefing-Aufruf oeffnet den Briefing-Breaker: zwei
   const afterFirst = requestCount;
   assert.equal(afterFirst, before + 1, "erster Aufruf loest genau EINEN Request aus");
   // AL-P9: der 500er ging raus (retries-exhausted) -> die Schaetzung wird gebucht.
+  // Gemessen auf der EXAKTEN Gate-Achse (Cent-Uebertrag + Sub-Cent-Rest): seit B4a liegt
+  // EINE Briefing-Schaetzung unter einem ganzen Cent (korrigierte Sonnet-Rate), und genau
+  // dafuer existiert der Mikro-Cent-Akkumulator (P1-Safety-BLOCKER). Ein Blick allein auf
+  // costCents saehe die Buchung nicht und behauptete ein Loch, das es nicht gibt.
   const usageAfterFirst = { ...store.usageOf(BOOTSTRAP_TENANT_ID) };
-  assert.ok(usageAfterFirst.costCents > 0, "der gesendete 500er bucht eine Schaetzung");
+  assert.ok(
+    usageAfterFirst.costCents * MICRO_CENTS_PER_CENT + usageAfterFirst.costMicroCentsRem > 0,
+    "der gesendete 500er bucht eine Schaetzung",
+  );
 
   const second = await fetchPrecallBriefing(briefingArgs());
   assert.equal(second, null, "zweiter Aufruf ist sofort null (Breaker offen)");

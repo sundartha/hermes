@@ -14,7 +14,7 @@ import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall, makeConfigOverrides } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, MICRO_CENTS_PER_CENT } from "../src/store/defaults.js";
 import { RESEARCH_EGRESS_FIELDS, researchEgressInput } from "../src/research/sanitize.js";
 
 const OWNER = "Jonas Beispiel";
@@ -226,24 +226,39 @@ test("AL-P10-8 Zaehler fehlt -> pessimistisch der harte Deckel (nie 0)", async (
   assert.equal(after - before, config.research.researchMaxUses * config.research.researchSearchFeeCents);
 });
 
+// Gemessen wird die EXAKTE Gate-Achse (voller Cent-Uebertrag + Sub-Cent-Rest), nicht der
+// gerundete Cent-Zaehler allein: seit B4a kostet EINE Briefing-Schaetzung unter einem
+// ganzen Cent (korrigierte Sonnet-Rate), und genau fuer diesen Fall existiert der
+// Mikro-Cent-Akkumulator (P1-Safety-BLOCKER). Ein Blick nur auf costCents saehe die
+// Buchung nicht - er wuerde ein Loch behaupten, das es nicht gibt.
+function gateMicroCents() {
+  const usage = store.usageOf(BOOTSTRAP_TENANT_ID);
+  return usage.costCents * MICRO_CENTS_PER_CENT + usage.costMicroCentsRem;
+}
+
 test("AL-P10-9 Abbruchpfad: Token-Schaetzung UND Suchgebuehr kommen oben drauf (null zurueck)", async () => {
   mode = "delay";
   let withoutProviderDelta;
   await withConfig("researchEnabled", false, async () => {
-    const before = store.usageOf(BOOTSTRAP_TENANT_ID).costCents;
+    const before = gateMicroCents();
     const result = await fetchPrecallBriefing(briefingArgs());
     assert.equal(result, null);
-    withoutProviderDelta = store.usageOf(BOOTSTRAP_TENANT_ID).costCents - before;
+    withoutProviderDelta = gateMicroCents() - before;
   });
   assert.ok(withoutProviderDelta > 0, "die Token-Schaetzung (AL-P9) bucht weiterhin");
 
-  const before = store.usageOf(BOOTSTRAP_TENANT_ID).costCents;
+  const before = gateMicroCents();
   const result = await fetchPrecallBriefing(briefingArgs());
   assert.equal(result, null);
-  const withProviderDelta = store.usageOf(BOOTSTRAP_TENANT_ID).costCents - before;
-  assert.equal(
-    withProviderDelta - withoutProviderDelta,
-    config.research.researchMaxUses * config.research.researchSearchFeeCents,
+  const withProviderDelta = gateMicroCents() - before;
+  // MINDESTENS die Gebuehr, nicht exakt: mit aktivierter Recherche steht das Such-Werkzeug
+  // im Prompt, die Zeichen-basierte Schaetzung (estimatedAbortUsage) faellt dadurch selbst
+  // etwas groesser aus. Auf dem gerundeten Cent-Zaehler fiel dieser Unterschied bis B4a
+  // unter den Tisch; auf der exakten Achse ist er sichtbar. Die Aussage des Tests bleibt:
+  // ohne die Gebuehren-Buchung waere die Differenz um Groessenordnungen kleiner.
+  assert.ok(
+    withProviderDelta - withoutProviderDelta >=
+      config.research.researchMaxUses * config.research.researchSearchFeeCents * MICRO_CENTS_PER_CENT,
     "die Suchgebuehr kommt zusaetzlich zur Token-Schaetzung oben drauf",
   );
 });

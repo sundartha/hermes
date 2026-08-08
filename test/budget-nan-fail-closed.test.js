@@ -20,7 +20,7 @@ import { isBookableCents, USAGE_CORRUPT_REASON, BOOTSTRAP_TENANT_ID } from "../s
 import { makeMetering } from "../src/billing/metering.js";
 import { makePgStore } from "../src/store/pg.js";
 import { makePgTestStore } from "./pg-helpers.js";
-import { PRICES, tokensOf } from "./_prices.js";
+import { PRICES, tokensOf, tokensWithCache } from "./_prices.js";
 
 const TENANT_A = "tenant_a";
 const CAP_CENTS = PRICES.platformSpendCapCents; // 800
@@ -112,6 +112,18 @@ test("trackUsage(NaN-Input) verwirft alles-oder-nichts, liefert BIT-IDENTISCH de
   const ret = trackUsage(s, TENANT_A, tokensOf(NaN, 0), PRICES);
   assert.deepEqual(usageFor(s, TENANT_A), before, "kein Teil-Schreibeffekt (weder Tokens noch Cents)");
   assert.equal(ret, usageFor(s, TENANT_A), "Rueckgabevertrag bleibt der Bucket");
+});
+
+// B4a: der D7-Riegel prueft seit der Aufschluesselung JEDE der vier Token-Sorten einzeln,
+// nicht ihre Summe - ein +NaN/-NaN-Paar koennte sich in einer Summe aufheben und die
+// Reichweite der Sicherung heimlich verkleinern.
+test("B4A-D7-1: NaN in JEDER der vier Token-Sorten verwirft den Turn, Bucket bleibt bit-identisch", () => {
+  for (const sorte of ["uncached", "cacheWrite", "cacheRead", "output"]) {
+    const s = makeDefaultState();
+    const before = { ...usageFor(s, TENANT_A) };
+    trackUsage(s, TENANT_A, tokensWithCache({ uncached: 10, output: 10, [sorte]: NaN }), PRICES);
+    assert.deepEqual(usageFor(s, TENANT_A), before, `NaN in ${sorte} muss den ganzen Turn verwerfen`);
+  }
 });
 
 // ---- T5-Raender: isBookableCents + die Schreib-/Reserve-Kanten je Randwert ----
