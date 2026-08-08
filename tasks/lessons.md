@@ -542,3 +542,49 @@ bricht jetzt einen TEST statt lautlos einen entfernten Pfad.
   UNABHAENGIG denselben Defekt (Betreiber-Skripte mit PROVIDER.TWILIO=undefined ->
   Provider-Filter still abgeschaltet). Parallele Spec-Erhebung neben dem Review kostet
   wenig und verdoppelt die Fangchance fuer genau die Klasse "stille Bedeutungsumkehr".
+
+## Ein Messwerkzeug braucht eine Attrappe, sonst prueft man nur die Rechnung (2026-08-08, B1)
+
+- Das B1-Messskript bestand `node --check`, 22 Selftest-Zusicherungen, den Trockenlauf und
+  einen scharfen Lauf mit Falsch-Schluessel (fail-closed, Verzeichnis blieb leer). Alles
+  gruen. Der adversarische Review fand danach **fuenf S1** - jeden einzelnen an einer
+  selbstgebauten **Offline-Attrappe** der Anbieter-API, die er in ~15 min hochgezogen hat
+  (lokaler HTTP-Server fuer die drei Endpunkte, Skript-Kopie mit Basis-URL aus Env und
+  skaliertem `delay()`; das sind zwei geaenderte Zeilen).
+- **Die Attrappe ist der eigentliche Hebel, nicht der Review.** Ohne sie kann man ein
+  Messwerkzeug nur gegen den Gutfall pruefen - und der Gutfall ist nie das Problem. Alle
+  fuenf S1 lagen im Fehlerfall: Endpunkt antwortet 500, Verbindung bricht ab, Zahlenformat
+  wechselt, Bremse feuert mittendrin. **Diese Faelle kann kein Trockenlauf und kein
+  Selftest erzeugen.** Regel: wer ein Werkzeug gegen eine fremde API baut, baut die
+  Attrappe im selben Zug - sie kostet weniger als eine Fehlmessung.
+- **Die Fehlerklasse war jedes Mal dieselbe: nicht die Rechnung war falsch, sondern die
+  Meldung.** Die BigInt-Geldarithmetik war handnachgerechnet korrekt; trotzdem erschien
+  dieselbe Abbuchung als `-1000000` je Aufruf und `-6` gesamt, weil beide Konsumenten die
+  von der Funktion korrekt gelieferte `scale` wegwarfen. **Eine Ganzzahl ohne ihre Skala
+  ist keine Geldangabe.** Wer Geld als Ganzzahl fuehrt, fuehrt die Skala mit, ueberall.
+- **Der teuerste Befund war ein Exit 0.** Guthaben-Endpunkt durchgehend HTTP 500 ->
+  Exit 0, `key_leak_check: clean`, M2 "beantwortet" mit leeren Objekten. Das liest sich
+  als "es gibt keine Ist-Kosten-Quelle" - woertlich ein Entscheidungszweig der Spec. Eine
+  Messung, die nie stattfand, waere als Messergebnis dem Owner vorgelegt worden. Dieselbe
+  Wurzel wie bei der STT-Drift-Sonde: **eine Probe, die bei null Befunden schweigt, ist
+  nicht von einer kaputten zu unterscheiden** - hier in der Variante "eine Auswertung, die
+  fehlende Daten nicht von unauffaelligen Daten unterscheidet".
+- **Der Fix dagegen ist immer derselbe und gehoert in jede Auswertung:** die leere Menge
+  ist ein eigener Fall. `0 Treffer` ist nur dann ein Ergebnis, wenn es erfolgreiche
+  Aufrufe gab; `0 Abweichungen` nur bei nicht-leerer Vergleichsmenge; `key_leak_check:
+  clean` nur bei > 0 geprueften Dateien. Die Meldung nennt die Grundgesamtheit mit
+  ("clean (5 Dateien, 812345 Bytes geprueft)"), sonst kann der Leser beides nicht trennen.
+- **Was die Gates NICHT gefangen haetten:** kein Test (die Spec verbot einen), keine Suite,
+  kein `node --check`, kein Trockenlauf. Gefangen hat es allein die Frage *"welche Sabotage
+  muesste diese Zusicherung rot machen - und wird sie es?"*, 14-mal gestellt und
+  ausgefuehrt. Bei der Re-Verifikation belegte dieselbe Suite die Behebung.
+- **Nebenbefund, der Zeit spart:** eine Pause innerhalb einer Modellschleife laeuft je
+  Modell einmal. 2 x 30 min statt 1 x 30 min hat die Laufzeit fast verdoppelt (80-95 statt
+  45-55 min) - gefunden nicht durch Nachdenken, sondern weil der Reviewer die Schlafzeit
+  ausgerechnet hat.
+- **Spec-Konflikte benennen statt still absenken.** M1s Abnahme verlangte Verteilung "ueber
+  beide Modelle und beide Betriebsarten"; ein Kreuzprodukt war per Konstruktion
+  unerfuellbar (nur EIN Block streamt, und der faehrt nur ein Modell - empirisch 23/17/4/0
+  ueber die vier Zellen). Der Fixer waehlte die woertliche Lesart (zwei Randpruefungen) und
+  **meldete die Abweichung samt Aussagekraft-Verlust**. Genau so gehoert es: die schwaechere
+  Aussage kommt in die Uebergabeliste, nicht in eine Fussnote.
