@@ -210,7 +210,11 @@ const APPROX_INPUT_TOKENS_BLOCK_F = (BLOCK_A_TARGET_CHARS * BLOCK_F_CALLS) / CHA
 
 const EXIT_OK = 0;
 const EXIT_ERROR = 1;
-const EXIT_KEY_LEAK = 2;
+// S3-1: Name deckt beide Faelle ab, die diesen Exit-Code ausloesen - ein tatsaechlicher
+// Schluesselfund (status "DIRTY") UND eine Pruefung, die gar nicht stattfinden konnte
+// (status "unueberprueft", z.B. leeres Ausgabeverzeichnis). Beide sind fail-closed richtig,
+// "KEY_LEAK" nannte aber nur den ersten Fall.
+const EXIT_SECRET_CHECK_FAILED = 2;
 const EXIT_BUDGET_STOPPED = 3;
 
 // M7: Feldpfad-Konstante fuer Aufrufe, die ueberhaupt keine Auswertung zulassen (Aufruf
@@ -231,12 +235,13 @@ function decimalPartsOf(str) {
   return { negative, intPart: intPart || "0", fracPart };
 }
 
-// Strikte Format-Pruefung (eigenes Regex statt sich auf decimalPartsOf zu verlassen):
-// decimalPartsOf ist bewusst lenient (fuer die Aufloesungs-Zaehlung in queryBalanceLogged,
-// wo ein seltsamer Wert nur einen seltsamen Zaehlerstand ergeben darf, nie einen Absturz).
-// Fuer eine tatsaechliche Geld-Differenz muss dagegen JEDES Format ausser einer reinen
-// Dezimalzahl explizit scheitern - sonst wuerden Tausendertrennzeichen ("1,234.56"), ein
-// leerer String oder "null" still als 0 durchgehen statt als "nicht parsebar" aufzufallen.
+// Strikte Format-Pruefung. Fuer eine tatsaechliche Geld-Differenz muss JEDES Format ausser
+// einer reinen Dezimalzahl explizit scheitern - sonst wuerden Tausendertrennzeichen
+// ("1,234.56"), ein leerer String oder "null" still als 0 durchgehen statt als "nicht
+// parsebar" aufzufallen. S2-2-Fix: dieselbe Pruefung gilt jetzt (ueber isParseableDecimalString
+// weiter unten) AUCH fuer die Aufloesungs-Zaehlung in queryBalanceLogged - decimalPartsOf
+// dient dort nur noch der Nachkommastellen-Extraktion NACH bestandener Pruefung, nie mehr
+// als alleiniger Torwaechter fuer einen Zaehlerstand.
 const DECIMAL_STRING_PATTERN = /^\d+(\.\d+)?$|^\.\d+$/;
 
 function decimalStringToMinorUnits(str, scale) {
@@ -250,6 +255,16 @@ function decimalStringToMinorUnits(str, scale) {
   const paddedFrac = fracPart.padEnd(scale, "0").slice(0, scale);
   const value = BigInt(`${intPart || "0"}${paddedFrac}`);
   return negative ? -value : value;
+}
+
+// S2-2-Fix: derselbe Formatbegriff wie decimalStringToMinorUnits (DECIMAL_STRING_PATTERN),
+// aber als eigenstaendige Pruefung OHNE Umrechnung - fuer Stellen, die nur wissen muessen
+// "ist das ueberhaupt eine reine Dezimalzahl", nicht die Ganzzahl-Differenz selbst brauchen
+// (queryBalanceLogged). decimalStringToMinorUnits (Kernrechnung) bleibt unangetastet.
+export function isParseableDecimalString(str) {
+  const trimmed = String(str).trim();
+  const unsigned = trimmed.startsWith("-") ? trimmed.slice(1) : trimmed;
+  return DECIMAL_STRING_PATTERN.test(unsigned);
 }
 
 // Ganzzahl-Differenz zweier Guthaben-Strings in der kleinsten Einheit. NIE parseFloat/
@@ -634,6 +649,57 @@ function selftestOverallComparisonSign() {
   ]);
 }
 
+// S2-2: Aufloesungszaehlung und Geld-Differenz teilen jetzt denselben Formatbegriff
+// (DECIMAL_STRING_PATTERN) statt zweier Parser - ein unparsebarer Wert zaehlt NICHT in die
+// Aufloesung ein und wird als solcher erkennbar (parseable: false), statt eine seltsame
+// Nachkommastellen-Zahl aus einem Wert abzuleiten, den der Geldpfad verweigert.
+function selftestBalanceResolutionClassification() {
+  return runChecks([
+    () =>
+      assert.deepStrictEqual(classifyBalanceEntryForResolution({ currency: "USD", total_balance: "12.34" }), {
+        currency: "USD",
+        parseable: true,
+        scale: 2,
+      }),
+    () =>
+      assert.strictEqual(
+        classifyBalanceEntryForResolution({ currency: "USD", total_balance: "1,234.56" }).parseable,
+        false,
+      ),
+    // Waehrung bleibt auch im Fehlerfall erhalten - sonst verschwindet die Zahl spurlos
+    () =>
+      assert.strictEqual(
+        classifyBalanceEntryForResolution({ currency: "USD", total_balance: "1,234.56" }).currency,
+        "USD",
+      ),
+    () => assert.strictEqual(classifyBalanceEntryForResolution({ currency: "CNY", total_balance: "" }).parseable, false),
+  ]);
+}
+
+// S2-3: "echtes 0-Delta" (messbar, aber unbewegt) und "nicht messbar" (Parse-Fehler oder
+// fehlgeschlagene Guthaben-Abfrage) sind zwei verschiedene Kategorien - hasNonZeroDelta
+// warf beide vorher gleichermassen auf `false`.
+function selftestDeltaOutcomeClassification() {
+  const bewegt = { delta_minor_units: { USD: { minor_units: "5", scale: 2 } } };
+  const nullAberMessbar = { delta_minor_units: { USD: { minor_units: "0", scale: 2 } } };
+  const nichtMessbarGanz = { delta_minor_units: "nicht messbar" };
+  const nichtMessbarParseFehler = { delta_minor_units: { USD: 'nicht parsebar: "1,234.56" -> "1,234.57"' } };
+  return runChecks([
+    () => assert.strictEqual(classifyDeltaOutcome(bewegt), "bewegt"),
+    () => assert.strictEqual(classifyDeltaOutcome(nullAberMessbar), "null-aber-messbar"),
+    () => assert.strictEqual(classifyDeltaOutcome(nichtMessbarGanz), "nicht-messbar"),
+    () => assert.strictEqual(classifyDeltaOutcome(nichtMessbarParseFehler), "nicht-messbar"),
+    // gemischt: eine Waehrung parsebar (und bewegt), eine nicht -> insgesamt "bewegt"
+    () =>
+      assert.strictEqual(
+        classifyDeltaOutcome({
+          delta_minor_units: { USD: { minor_units: "5", scale: 2 }, CNY: "nicht parsebar: x" },
+        }),
+        "bewegt",
+      ),
+  ]);
+}
+
 function runSelftest() {
   const groups = [
     ["Ganzzahl-Delta aus Guthaben-Strings", selftestMoneyDelta],
@@ -644,6 +710,8 @@ function runSelftest() {
     ["Praefix-Kontrollen Block B", selftestPrefixControls],
     ["Rekursive Schluesselpfade (M1/F10)", selftestKeyPaths],
     ["Vorzeichen in buildOverallComparison (M2/F11)", selftestOverallComparisonSign],
+    ["Aufloesungs-Klassifikation je Guthaben-Eintrag (S2-2)", selftestBalanceResolutionClassification],
+    ["Delta-Ausgang bewegt/null-aber-messbar/nicht-messbar (S2-3)", selftestDeltaOutcomeClassification],
   ];
   let checked = 0;
   let failed = 0;
@@ -770,18 +838,28 @@ function parseSseDataLines(rawEvent) {
     .map((line) => line.slice("data:".length).trim());
 }
 
-function extractStreamSummary(chunks) {
-  let usage = null;
-  let model = null;
+// S2-4-Fix: gemeinsames Geruest fuer beide SSE-Konsumenten unten (vorher zweimal dasselbe
+// for-chunks -> parseSseDataLines -> [DONE] ueberspringen -> safeJsonParse). Reine
+// Iterationshilfe ohne eigenen Zustand - ruft cb(parsedEvent) fuer jedes geparste,
+// nicht-[DONE]-Ereignis auf; ungueltiges JSON wird uebersprungen, nicht an cb gereicht.
+function forEachStreamEvent(chunks, cb) {
   for (const rawEvent of chunks) {
     for (const dataLine of parseSseDataLines(rawEvent)) {
       if (dataLine === "[DONE]") continue;
       const parsed = safeJsonParse(dataLine);
       if (!parsed) continue;
-      if (parsed.model) model = parsed.model;
-      if (parsed.usage) usage = parsed.usage;
+      cb(parsed);
     }
   }
+}
+
+function extractStreamSummary(chunks) {
+  let usage = null;
+  let model = null;
+  forEachStreamEvent(chunks, (parsed) => {
+    if (parsed.model) model = parsed.model;
+    if (parsed.usage) usage = parsed.usage;
+  });
   return { usage, model };
 }
 
@@ -805,19 +883,15 @@ function extractStreamToolCallInfo(chunks) {
   let name = null;
   let argumentsText = "";
   let found = false;
-  for (const rawEvent of chunks) {
-    for (const dataLine of parseSseDataLines(rawEvent)) {
-      if (dataLine === "[DONE]") continue;
-      const parsed = safeJsonParse(dataLine);
-      const toolCalls = parsed?.choices?.[0]?.delta?.tool_calls;
-      if (!Array.isArray(toolCalls) || toolCalls.length === 0) continue;
-      found = true;
-      for (const call of toolCalls) {
-        if (call?.function?.name) name = call.function.name;
-        if (call?.function?.arguments) argumentsText += call.function.arguments;
-      }
+  forEachStreamEvent(chunks, (parsed) => {
+    const toolCalls = parsed?.choices?.[0]?.delta?.tool_calls;
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) return;
+    found = true;
+    for (const call of toolCalls) {
+      if (call?.function?.name) name = call.function.name;
+      if (call?.function?.arguments) argumentsText += call.function.arguments;
     }
-  }
+  });
   if (!found) return null;
   return {
     feldpfad: "choices[0].delta.tool_calls[0].function.(name|arguments), ueber Chunks akkumuliert",
@@ -917,6 +991,7 @@ function createRunState({ outputDir, redact, maxUsd, apiKey, wrongApiKey }) {
     blockDPollCount: 0,
     blockDSeries: [], // M2(iii) Nachbuchungs-Zeitreihe
     resolutionObservedByCurrency: {}, // F2/M2a: beobachtete Aufloesungen ueber ALLE Abfragen
+    resolutionUnparseableByCurrency: {}, // S2-2: Werte, die DECIMAL_STRING_PATTERN NICHT bestehen, getrennt gezaehlt statt stillschweigend zu verschwinden
     resolutionFindings: null,
     comparableWindow: { start_utc: null, end_utc: null },
     modelsRaw: null,
@@ -935,6 +1010,18 @@ function assertBudgetNotExceeded(state) {
   }
 }
 
+// S2-2-Fix: EIN Formatbegriff fuer die Aufloesungs-Zaehlung (DECIMAL_STRING_PATTERN ueber
+// isParseableDecimalString), statt des vorherigen nachsichtigen decimalPartsOf-Alleinganges.
+// Ein Wert, der das strenge Format nicht besteht, zaehlt NICHT in die Aufloesung ein (sonst
+// waere M2a still falsch, s. Befund S2-2) - er wird stattdessen als "nicht parsebar"
+// ausgewiesen, damit die Zahl nicht kommentarlos verschwindet.
+export function classifyBalanceEntryForResolution(entry) {
+  if (!isParseableDecimalString(entry.total_balance)) {
+    return { currency: entry.currency, parseable: false };
+  }
+  return { currency: entry.currency, parseable: true, scale: decimalPartsOf(entry.total_balance).fracPart.length };
+}
+
 // F1: haelt http_status fest (Aufrufer entscheidet, ob die Antwort verwertbar ist) und
 // setzt firstBalanceInfos/lastBalanceInfos NUR bei echtem Erfolg (Status 200 UND
 // balance_infos nicht leer) - vorher machte json?.balance_infos ?? [] jede Fehlantwort zu
@@ -949,11 +1036,16 @@ async function queryBalanceLogged(state, { block, seq, purpose }) {
     if (!state.firstBalanceInfos) state.firstBalanceInfos = balanceInfos;
     state.lastBalanceInfos = balanceInfos;
     for (const entry of balanceInfos) {
-      const scale = decimalPartsOf(entry.total_balance).fracPart.length;
-      if (!state.resolutionObservedByCurrency[entry.currency]) {
-        state.resolutionObservedByCurrency[entry.currency] = new Set();
+      const classified = classifyBalanceEntryForResolution(entry);
+      if (!classified.parseable) {
+        state.resolutionUnparseableByCurrency[classified.currency] =
+          (state.resolutionUnparseableByCurrency[classified.currency] || 0) + 1;
+        continue;
       }
-      state.resolutionObservedByCurrency[entry.currency].add(scale);
+      if (!state.resolutionObservedByCurrency[classified.currency]) {
+        state.resolutionObservedByCurrency[classified.currency] = new Set();
+      }
+      state.resolutionObservedByCurrency[classified.currency].add(classified.scale);
     }
   }
   if (block === "D") state.blockDPollCount += 1;
@@ -1197,7 +1289,9 @@ async function runBlockA(state) {
 // kontrolle-b) - vorher nur ueber die Positionsordnung in calls.jsonl rekonstruierbar.
 // contentVariant steuert den PROMPT-INHALT (nur 3 Auspraegungen, s. buildCachePrompt);
 // labelVariante ist die feinere Beschriftung fuer das Protokoll.
-function cacheCallArgs(model, seq, contentVariant, labelVariante) {
+// S3-2-Fix: ein Objekt-Argument statt vier positioneller (contentVariant/labelVariante waren
+// zum Verwechseln aehnlich, s. Aufrufstellen in runBlockB) - Richtwert <= 3 Argumente.
+function cacheCallArgs({ model, seq, contentVariant, labelVariante }) {
   return {
     block: "B",
     seq,
@@ -1226,29 +1320,41 @@ async function runBlockB(state) {
     for (let i = 1; i <= CACHE_REPEATS_IMMEDIATE; i += 1) {
       seq += 1;
       const label = i === 1 ? "base" : "wiederholung";
-      if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "base", label)))) cacheHits += 1;
+      const args = cacheCallArgs({ model, seq, contentVariant: "base", labelVariante: label });
+      if (hasCacheHit(await performChatMeasurement(state, args))) cacheHits += 1;
     }
   }
   await delay(CACHE_REPEAT_DELAY_MS); // EINE Pause fuer beide Modelle (vorher zweimal)
   for (const model of CONFIGURED_MODELS) {
     seq += 1;
-    if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "base", "nach-30min")))) cacheHits += 1;
+    const nach30min = cacheCallArgs({ model, seq, contentVariant: "base", labelVariante: "nach-30min" });
+    if (hasCacheHit(await performChatMeasurement(state, nach30min))) cacheHits += 1;
     seq += 1;
-    if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "control-a", "kontrolle-a")))) cacheHits += 1;
+    const kontrolleA = cacheCallArgs({ model, seq, contentVariant: "control-a", labelVariante: "kontrolle-a" });
+    if (hasCacheHit(await performChatMeasurement(state, kontrolleA))) cacheHits += 1;
     seq += 1;
-    if (hasCacheHit(await performChatMeasurement(state, cacheCallArgs(model, seq, "control-b", "kontrolle-b")))) cacheHits += 1;
+    const kontrolleB = cacheCallArgs({ model, seq, contentVariant: "control-b", labelVariante: "kontrolle-b" });
+    if (hasCacheHit(await performChatMeasurement(state, kontrolleB))) cacheHits += 1;
   }
   console.log(`Block B: ${seq} Aufrufe, ${cacheHits} mit Cache-Treffer (prompt_cache_hit_tokens > 0).`);
 }
 
-// F1-Nebenschaden behoben: delta_minor_units ist jetzt entweder ein Objekt je Waehrung
-// ({minor_units, scale}) oder die Zeichenkette "nicht messbar" - niemals ein String, dessen
-// Zeichen man aus Versehen iteriert.
-function hasNonZeroDelta(record) {
-  if (typeof record.delta_minor_units !== "object" || record.delta_minor_units === null) return false;
-  return Object.values(record.delta_minor_units).some(
-    (entry) => entry && typeof entry === "object" && entry.minor_units !== undefined && entry.minor_units !== "0",
+// S2-3-Fix: liefert drei Kategorien statt eines Booleans, der "echtes 0-Delta" und "gar
+// nicht messbar" (Parse-Fehler oder fehlgeschlagene Guthaben-Abfrage) beide auf `false`
+// abbildete. delta_minor_units ist entweder die Zeichenkette "nicht messbar" (komplettes
+// Paar unverwertbar, s. computeDeltaFields), oder ein Objekt je Waehrung, dessen Eintraege
+// wiederum entweder {minor_units, scale} (gemessen) oder ein "nicht parsebar"-String
+// (Parse-Fehler, s. mapDeltasToRecords) sein koennen. Die bindende Auswertungsregel aus
+// Spec M2 (ein Delta von 0 heisst "unterhalb der Aufloesung ODER noch nicht gebucht", NIE
+// "keine Kosten") bleibt unangetastet - "nicht-messbar" ist eine eigene, dritte Kategorie.
+export function classifyDeltaOutcome(record) {
+  const delta = record.delta_minor_units;
+  if (typeof delta !== "object" || delta === null) return "nicht-messbar";
+  const measurable = Object.values(delta).filter(
+    (entry) => entry && typeof entry === "object" && entry.minor_units !== undefined,
   );
+  if (measurable.length === 0) return "nicht-messbar"; // jede Waehrung hatte einen Parse-Fehler
+  return measurable.some((entry) => entry.minor_units !== "0") ? "bewegt" : "null-aber-messbar";
 }
 
 async function runBlockC(state) {
@@ -1256,6 +1362,8 @@ async function runBlockC(state) {
   const resolutionFindings = {};
   for (const model of CONFIGURED_MODELS) {
     let movedAtIteration = null;
+    let messbareIterationen = 0;
+    let nichtMessbareIterationen = 0;
     for (let i = 1; i <= RESOLUTION_MAX_CALLS_PER_MODEL; i += 1) {
       seq += 1;
       const record = await performChatMeasurement(state, {
@@ -1268,15 +1376,22 @@ async function runBlockC(state) {
         includeUsage: null,
         withTool: false,
       });
-      if (hasNonZeroDelta(record)) {
+      const outcome = classifyDeltaOutcome(record);
+      if (outcome === "nicht-messbar") nichtMessbareIterationen += 1;
+      else messbareIterationen += 1;
+      if (outcome === "bewegt") {
         movedAtIteration = i;
         break;
       }
     }
-    resolutionFindings[model] = movedAtIteration;
+    resolutionFindings[model] = {
+      bewegt_bei_iteration: movedAtIteration,
+      messbare_iterationen: messbareIterationen,
+      nicht_messbare_iterationen: nichtMessbareIterationen,
+    };
   }
   state.resolutionFindings = resolutionFindings;
-  console.log(`Block C: ${seq} Aufrufe. Guthaben-Einheit bewegt bei Iteration je Modell: ${JSON.stringify(resolutionFindings)}.`);
+  console.log(`Block C: ${seq} Aufrufe. Guthaben-Bewegung je Modell: ${JSON.stringify(resolutionFindings)}.`);
 }
 
 // M2(iii): die Nachbuchungs-Zeitreihe (nicht nur eine Momentaufnahme) - jeder Punkt traegt
@@ -1478,6 +1593,10 @@ function computeM2Answer(state) {
   }
   return {
     aufloesung_nachkommastellen_je_waehrung_beobachtet: aufloesungJeWaehrung,
+    // S2-2: nicht parsebare Guthaben-Strings fliessen NICHT in die Aufloesung ein - stattdessen
+    // hier getrennt ausgewiesen, damit die Zahl bei einem seltsamen Anbieter-Format nicht
+    // kommentarlos verschwindet.
+    aufloesung_nicht_parsebar_je_waehrung: { ...state.resolutionUnparseableByCurrency },
     einzelaufruf_bewegt_bei_iteration_je_modell: state.resolutionFindings ?? "nicht beantwortet, Grund: Block C nicht gelaufen",
     block_d_abfragen: state.blockDPollCount,
     nachbuchungs_zeitreihe: state.blockDSeries.length > 0 ? state.blockDSeries : "nicht beantwortet, Grund: Block D nicht gelaufen",
@@ -1611,6 +1730,12 @@ function computeM5Answer(state) {
 function computeM6Answer(state) {
   if (state.calls.length === 0) return "nicht beantwortet, Grund: keine Aufrufe protokolliert";
   const comparable = state.calls.filter((c) => c.http_status === HTTP_OK);
+  // S2-1-Fix: 0 vergleichbare Aufrufe darf NICHT als "abweichungen: 0" durchgehen - das laesst
+  // sich als "die Modell-ID stimmte immer" lesen, obwohl gar keine Antwort ueberhaupt HTTP 200
+  // war (z.B. alle Aufrufe 429). Eine leere Vergleichsmenge ist unbeantwortet, kein Befund.
+  if (comparable.length === 0) {
+    return `nicht beantwortet, Grund: 0 von ${state.calls.length} Aufrufen mit HTTP 200`;
+  }
   const pairs = comparable.map((c) => ({ requested: c.model_requested, returned: c.model_returned }));
   const mismatches = pairs.filter((p) => p.requested !== p.returned);
   return {
@@ -1934,7 +2059,7 @@ async function main(options) {
     );
   }
 
-  if (leakResult.status !== "clean") process.exit(EXIT_KEY_LEAK);
+  if (leakResult.status !== "clean") process.exit(EXIT_SECRET_CHECK_FAILED);
   if (runError) process.exit(EXIT_ERROR);
   process.exit(state.budgetAbortReason ? EXIT_BUDGET_STOPPED : EXIT_OK);
 }
