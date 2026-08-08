@@ -371,12 +371,22 @@ Bindend: es zaehlt, **was der Anbieter dem Schluessel tatsaechlich abbucht** (Ow
   meldet weiter 6 Aufrufe (kein Retry eingeschlichen).
 - Regressionsflaeche geprueft: alle 5 "belegt sauber"-Punkte halten. Verbessert: die
   M5-Fehlerproben laufen jetzt ueber denselben Bremsen-Choke-Point, der letzte Bypass ist weg.
-- SPEC-KONFLIKT, benannt statt still abgesenkt: M1s Abnahme verlangt Verteilung "ueber beide
-  Modelle und beide Betriebsarten". Ein Kreuzprodukt ist per Konstruktion unerfuellbar -
-  Block E streamt nur BLOCK_E_MODEL (=flash), `pro x stream` kommt NIE vor (empirisch
-  23/17/4/0). Umgesetzt sind zwei Randpruefungen (die woertliche Lesart). Folge fuer B2:
-  **M1s Aussage ueber deepseek-v4-pro ruht ausschliesslich auf Nicht-Stream-Aufrufen** -
-  gehoert in die Uebergabeliste (Spec Abschnitt 8), NICHT stillschweigend akzeptieren.
+- SPEC-KONFLIKT M1 - ERLEDIGT durch Owner-Entscheidung 2026-08-08 (0d76e99).
+  Befund war: M1s Abnahme verlangt Verteilung "ueber beide Modelle und beide Betriebsarten",
+  ein Kreuzprodukt war aber unerfuellbar, weil Block E nur BLOCK_E_MODEL (=flash) streamte -
+  `pro x stream` kam NIE vor (empirisch 23/17/4/0). Zwischenloesung waren zwei Randpruefungen.
+  **Owner: "ich verstehe den Sinn nicht, dass man pro Modell irgendwie was machen muss".**
+  Praemisse am Code geprueft und WIDERLEGT: es gab nie Code pro Modell. `BLOCK_E_MODEL =
+  MODEL_FLASH` war EINE Konstante; das Modell ist ein durchgereichter Wert, A/B/C fahren
+  laengst beide ueber dieselbe Schleife. Die Festlegung kam allein daher, dass die
+  Spec-Tabelle bei E "8 Aufrufe" ohne den Zusatz "je Modell" nennt.
+  Umgesetzt: Block E faehrt beide Modelle (8 -> 16 Aufrufe, 0.1446 -> 0.1447 USD),
+  `ERROR_PROBE_MODEL` fuer die M5-Fehlerproben abgetrennt, M1 prueft wieder das VOLLE
+  Kreuzprodukt und nennt eine leere Zelle namentlich. Neue Selftest-Gruppe
+  "M1-Kreuzabdeckung" (6 Zusicherungen, gesamt 50 -> 56).
+  Sabotage-Beleg (Zelle startet bei 1 statt 0): manipuliert 2 Fehler/Exit 1, Original
+  0 Fehler. Suite nach dem Commit 4007/4007 Exit 0.
+  **Die B2-Uebergabe-Luecke "M1 gilt fuer pro nur nicht-stream" ist damit GESCHLOSSEN.**
 - Fix-Runde 2 LAEUFT: 4 verbliebene S2 (M6-Leermenge, M2a-Parserkonsistenz,
   messbar/nicht-messbar, SSE-Doppelung) + 3 S3.
 
