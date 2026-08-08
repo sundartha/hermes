@@ -659,3 +659,78 @@ woertlich).
 **B3b bleibt blockiert**, bis Anthropic-Guthaben da ist (Nachher-Bench ~2,1 USD). Zusaetzlich
 muessen `d3-fremde-recherche` und `d3-nachschlag-auftrag` **vor** dem Vergleich neu erhoben
 werden — ihre Vorher-Werte sind Artefakte gestorbener Laeufe.
+
+## B4 — Preisquelle und Gate. SPEC STEHT, B4a LAEUFT (2026-08-08)
+
+Spec: `tasks/b4-spec.md` (807 Zeilen).
+
+### W3 ist GESCHLOSSEN — Anthropics Raten sind abgerufen, nicht abgeleitet
+
+Quelle `https://platform.claude.com/docs/en/about-claude/pricing.md`, `asOf` **2026-08-08**.
+Die Seite druckt alle vier Sorten je Modell explizit aus (USD je 1 Mio. Token):
+
+| Modell | Input | 5m Cache Write | 1h Cache Write | Cache Read | Output |
+|---|---|---|---|---|---|
+| `claude-haiku-4-5` | 1.00 | 1.25 | 2.00 | 0.10 | 5.00 |
+| `claude-sonnet-5` **bis 2026-08-31** | **2.00** | **2.50** | 4.00 | **0.20** | **10.00** |
+| `claude-sonnet-5` **ab 2026-09-01** | 3.00 | 3.75 | 6.00 | 0.30 | 15.00 |
+
+Die 5m-Rate ist die richtige: `CACHE_CONTROL_EPHEMERAL` (`claude.js`) traegt kein `ttl`.
+Nebenbefund: Cache-Read ist exakt 0,1x der Basisrate — die Faustformel des Plans stimmte,
+ist aber jetzt erstmals belegt statt geraten.
+
+### DREI BEFUNDE, vom Lead am Code nachgeprueft
+
+**1. `claude-sonnet-5` wird derzeit 50 % zu hoch gebucht.** `config.js` fuehrt 3.0/15.0 —
+das ist der Preis AB dem 2026-09-01. Bis dahin gilt 2.00/10.00. Betroffen ist das
+**Precall-Briefing** (`briefingModel`), das vor Outbound-Anrufen live laeuft; die
+Ueberbuchung trifft Budget-Gate UND Stripe-Kundenbeleg (auf dem Beleg ein
+Abrechnungsdefekt — dieselbe Begruendung, mit der B2 `inputTokensOf` verworfen hat).
+Groessenordnung ~0,32 ct je Outbound-Anruf. **Realisierter Schaden heute: 0 EUR** — seit
+2026-08-04 gab es keinen Anruf. Am 2026-09-01 wird die Zahl von selbst richtig.
+
+**2. F-1: der gerade gemergte B2-Vertrag enthaelt eine falsche Behauptung.**
+`src/llm/ports.js:76` nennt `inputUncachedTokens` die *"teuerste Eingabeklasse"*. Mit den
+echten Raten ist das falsch — die 5m-Schreibrate liegt in **allen drei** Preiszeilen
+darueber (1.25>1.00, 2.50>2.00, 3.75>3.00). Das Verhalten bleibt richtig, die Aussage nicht.
+
+**3. WF-4: der Realtime-Pfad bucht seine Token ueberhaupt nicht.** `grep -c
+"bookTokenUsage\|trackUsage\|meterAiTokens" src/bridge.js` -> **0**. Gebucht wird nur aus
+`llm-usage.js`, `claude.js`, `precall-briefing.js`. **Nicht scharf**, weil `VOICE_ENGINE`
+per Default `budget` ist und live auch so laeuft — aber wer auf `realtime` umstellt, faehrt
+mit einer blinden Gate-Achse. Bestandsbefund, gehoert NICHT in B4, braucht eine
+Owner-Entscheidung.
+
+**Zusatzfund des Leads:** `tokenCostUsd` (`state-ops.js:2249-2252`) liest `price.inPerMTok`
+**ohne Null-Check**. Ohne Preis-Fallback endet ein unbekanntes Modell dort im `TypeError`
+(Ausfall im Buchungspfad) oder in `NaN` — und `NaN > limit` ist immer `false`, also
+**fail-open am Gate**. Genau deshalb wird der Fallback nicht gestrichen (s. W4).
+
+### Lead-Entscheidungen
+
+- **Zuschnitt B4a / B4b: ANGENOMMEN.** B4a (Tabellenform, vier Raten, Boot-Abbruch,
+  `worstCasePrice`, alle Tests inkl. Gegenprobe) laeuft vollstaendig gegen Attrappen und ist
+  **jetzt abnehmbar**. B4b (der gemessene Betrag-Rueckgang an echtem Verkehr, W6) ist
+  blockiert — kein Verkehr seit 08-04, kein Anthropic-Guthaben — und braucht laut Spec
+  **keinen neuen Code**: die vier Sorten stehen je Aufruf schon in der LLM-Metrik.
+- **W4 `worstCasePrice` (punktweises Maximum jeder der vier Raten): ANGENOMMEN.** Eine
+  Tabelle je Anbieter scheidet aus (der B2-Vertrag kennt nur `billingModelId`, kein
+  Anbieterfeld). Fallback streichen scheidet aus (fail-open, s. Zusatzfund). Heute
+  verhaltens-identisch, weil Sonnet in allen vier Raten dominiert; ab dem zweiten Anbieter
+  garantiert es die obere Schranke, die `mostExpensivePrice` nur zufaellig hatte.
+- **W5 keine Store-Migration: ANGENOMMEN.** Die Aufschluesselung reicht bis zur
+  Preisrechnung; Bucket-Zaehler und `usage_event.quantity` bleiben Summen mit identischem
+  Zahlenwert. Tragende Tatsache: die Gate-Kette (`budgetExceeded` -> `tenantSpendOrDeny`)
+  liest ausschliesslich Cent-Achsen — kein Token-Zaehler kommt darin vor.
+- **Sonnet-Korrektur bleibt IN B4a, kein Sonderschritt.** Der Befund ist nicht "eine Zahl
+  ist falsch", sondern "die Tabelle kann keinen terminierten Wechsel ausdruecken"; ein
+  Einzelfix verfehlt die Wurzel. **Auflage:** geht vor dem B4a-Merge wieder Verkehr live,
+  wird die Korrektur als Ein-Zeilen-Fix vorgezogen (Owner-Entscheidung).
+- **F-1 wird in B4a mitkorrigiert** — eine falsche Behauptung im bindenden Vertrag ist
+  teurer als der Ein-Zeilen-Fix.
+- **WF-4 und der fehlende Null-Check in `tokenCostUsd`** kommen in den Kettenstand, nicht in
+  den B4a-Scope. WF-4 braucht den Owner.
+- **W7 (Traeger der Perioden-Gegenprobe): NICHT in B4.** Die Praemisse "Render hat keinen
+  Cron" ist am Code widerlegt — `setInterval().unref()` ist Hausmuster (`boot.js`). Es
+  fehlen Endpunkt (DeepSeek -> B5; ein Anthropic-Aequivalent ist **unbelegt**) und
+  Verbraucher.
