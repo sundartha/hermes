@@ -411,6 +411,36 @@ Bindend: es zaehlt, **was der Anbieter dem Schluessel tatsaechlich abbucht** (Ow
   Ist-Ausgabe unter 1 USD, belegt durch die Guthaben-Differenz (nicht die Schaetzung).
 - Verifikation: Spec Abschnitt 7 (sechs Punkte), Punkt fuer Punkt abgehakt.
 
-## B1-d — Entscheidungsvorlage an den Owner. OFFEN (nach B1-c)
-- Messergebnisse gegen die Wenn-Dann-Tabelle der Spec (Abschnitt 10) halten.
-- Liefert KEINE Empfehlung (Spec Abschnitt 7: "Nicht Teil der Abnahme: eine Empfehlung").
+## B1-c — Scharfer Lauf. ERLEDIGT (2026-08-08, 11:03-11:47 UTC)
+- Abnahme 6/6. 90 Aufrufe, 0 Fehlversuche, Ist-Ausgabe 0,01 USD (1,12 -> 1,11),
+  key_leak_check clean (5 Dateien, 393990 Bytes). Protokoll gitignored unter
+  data/evidence/deepseek-probe/2026-08-08T11-03-09-007Z/.
+
+## B1-d — Entscheidungsvorlage. ERLEDIGT (tasks/b1-report.md, b85072d)
+
+## OWNER-ENTSCHEIDUNG 2026-08-08 (bindend fuer B2/B4)
+> "ich will dass die echten kosten abgebucht werden keine [...] annahmen"
+
+1. **Raten je Token-Sorte** (Cache-Treffer / Cache-Fehltreffer / Ausgabe) statt der einen
+   pauschalen Eingabe-Rate. Begruendung: `inputTokensOf` faltet drei Sorten auf eine Rate
+   und liegt damit GEMESSEN um Faktor 5,1x (flash) / 6,0x (pro) daneben. Cache-Treffer sind
+   der NORMALFALL (11 von 13), nicht die Ausnahme - pauschal-teuer waere kein konservatives
+   Polster, sondern ein systematischer Abrechnungsfehler auf jeder Rechnung.
+2. **Taegliche Perioden-Gegenprobe** gegen `GET /user/balance`. Je Anruf ausgeschlossen
+   (Aufloesung 0,01 USD, Verzug ~2 min). Zweck: die veroeffentlichte Preisliste ist die
+   EINZIGE verbleibende Annahme - die Gegenprobe prueft genau sie. Die Anbieterseite
+   kuendigt eine deutliche Preiserhoehung an.
+3. **Modellwahl (flash vs. pro) VERTAGT bis B5.** B1 kann Qualitaet nicht messen
+   (max_tokens war 64, Antworten abgeschnitten). Praezedenz B-7: dokumentierte
+   Deutsch-Unterstuetzung, gemessen 97 % Wortfehlerrate.
+
+Nicht mehr zu entscheiden (durch die Messung erledigt): Buchungs-ID = angeforderte ID
+(0/88 Abweichungen); `reasoning_tokens` sind enthalten, nicht additiv; kein Off-Peak-Fenster;
+`include_usage` wird erzwungen (kostet nichts, auch wenn es gemessen ohne ginge);
+Timeout-Werte je Adapter statt global (pro erreicht 3183 ms bei 3500 ms Seam-Timeout).
+
+**Wichtig fuers Verstaendnis der Owner-Vorgabe:** "echte Kosten" heisst NICHT ein Kostenfeld
+des Anbieters - das existiert nicht (alle 90 Antworten rekursiv geprueft, nur Token-Zaehler;
+Guthaben loest nur 0,01 USD auf). Es heisst: anbieter-gemeldete Token-Zahlen je Sorte
+(0 Verletzungen beider Summengleichungen ueber 88 Aufrufe) mal veroeffentlichte Rate = reine
+Arithmetik, plus die Gegenprobe als Beleg, dass die Rate stimmt.
