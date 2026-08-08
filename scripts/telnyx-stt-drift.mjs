@@ -101,7 +101,7 @@ async function main() {
   const { telnyxApiKey } = config.telephony;
   if (!assistantId || !telnyxApiKey) {
     console.error(
-      "[telnyx-stt-drift] TELNYX_AI_ASSISTANT_ID oder TELNYX_API_KEY fehlt - Probe uebersprungen.",
+      "[telnyx-stt-drift] TELNYX_ASSISTANT_ID oder TELNYX_API_KEY fehlt - Probe uebersprungen.",
     );
     process.exit(2);
   }
