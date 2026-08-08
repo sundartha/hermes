@@ -21,7 +21,9 @@ export const anthropicWebSearch = {
       max_uses: config.research.researchMaxUses,
     },
   ],
-  // Gegenprobe fuer die Gebuehrenbuchung. Fehlt das Feld, ist der Zaehler UNBEKANNT
-  // (null) - NICHT 0. Der Aufrufer bucht dann pessimistisch (Regel 1).
-  searchCount: (usage) => usage?.server_tool_use?.web_search_requests ?? null,
+  // Gegenprobe fuer die Gebuehrenbuchung, gelesen aus der opaken Ruecktrage der
+  // Modellrunde (llm/ports.js LlmTurn.providerTurn - hier die Anthropic-Antwort selbst).
+  // Fehlt das Feld, ist der Zaehler UNBEKANNT (null) - NICHT 0. Der Aufrufer bucht dann
+  // pessimistisch (Regel 1).
+  searchCount: (providerTurn) => providerTurn?.usage?.server_tool_use?.web_search_requests ?? null,
 };

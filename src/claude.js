@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import * as store from "./store.js";
 import { CONSULT_WAIT, MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
 import { bookTokenUsage, estimatedAbortUsage } from "./llm-usage.js";
+import { providerTurnMessage, toolResultsMessage } from "./llm/messages.js";
 import { makeSentenceChunker } from "./speech-chunker.js";
 import { makeThinkingSignal } from "./thinking-signal.js";
 import { shapeForSpeech } from "./speech-shape.js";
@@ -21,11 +22,7 @@ import {
   consultAvailableFor,
   decideConsultRequest,
 } from "./consult/in-call.js";
-import {
-  LOOK_UP_TOOL_NAME,
-  lookupAvailableFor,
-  performLookupRequest,
-} from "./research/in-call.js";
+import { LOOK_UP_TOOL_NAME, lookupAvailableFor, performLookupRequest } from "./research/in-call.js";
 
 // Resilienter LLM-Seam (src/llm.js): EINE Stelle fuer Timeout/
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top, Fachcode ruft nur
@@ -211,10 +208,12 @@ function mandateSection({ call, owner, loc }) {
   const m = call.mandate;
   if (!hasMandateContent(m)) return "";
   const mp = loc.prompt.mandate;
-  const outOfScope = mp.outOfScopeSentence[m.on_out_of_scope] || mp.outOfScopeSentence[MANDATE_OUT_OF_SCOPE_DEFAULT];
+  const outOfScope =
+    mp.outOfScopeSentence[m.on_out_of_scope] || mp.outOfScopeSentence[MANDATE_OUT_OF_SCOPE_DEFAULT];
   const precedence = call.constraints ? mp.constraintsPrecedence : "";
   const blocks = [];
-  if (m.decide_freely) blocks.push(`${mp.scopeLabel} ${m.decide_freely}\n${mp.scopeRules}${precedence}`);
+  if (m.decide_freely)
+    blocks.push(`${mp.scopeLabel} ${m.decide_freely}\n${mp.scopeRules}${precedence}`);
   if (m.fallback_order) blocks.push(`${mp.fallbackLabel} ${m.fallback_order}\n${mp.fallbackRules}`);
   blocks.push(`${mp.outOfScopeLabel} ${outOfScope(owner)}\n${mp.outOfScopeRules}`);
   return blocks.join("\n\n");
@@ -267,7 +266,8 @@ function assistantContextSection({ call, loc }) {
   if (c.summary) lines.push(`${b.summary}${c.summary}`);
   if (c.recipient_relationship) lines.push(`${b.relationship}${c.recipient_relationship}`);
   if (c.desired_outcome) lines.push(`${b.outcome}${c.desired_outcome}`);
-  if (Array.isArray(c.key_facts) && c.key_facts.length) lines.push(`${b.facts}${c.key_facts.join("; ")}`);
+  if (Array.isArray(c.key_facts) && c.key_facts.length)
+    lines.push(`${b.facts}${c.key_facts.join("; ")}`);
   if (!lines.length) return "";
   return `\n${b.heading}\n${lines.join("\n")}\n${b.guardrail}`;
 }
@@ -714,7 +714,11 @@ function roundStopReason({ call, roundIndex, elapsedMs, deadlineMs }) {
   const axis = blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId });
   if (axis) return axis;
   if (roundIndex === 0) return null;
-  const fits = roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs: config.llm.llmRequestTimeoutMs });
+  const fits = roundFitsDeadline({
+    elapsedMs,
+    deadlineMs,
+    requestTimeoutMs: config.llm.llmRequestTimeoutMs,
+  });
   return fits ? null : TURN_STOP_DEADLINE;
 }
 
@@ -763,7 +767,9 @@ function promptCharsOf({ system, tools, messages }) {
 export function streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs, continuesStream }) {
   if (!onSpeechChunk) return null;
   if (!tools.every((t) => isStreamSafeTool(t.name))) return null;
-  if (!roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs: config.llm.llmRequestTimeoutMs }))
+  if (
+    !roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs: config.llm.llmRequestTimeoutMs })
+  )
     return null;
   return makeSentenceChunker({ onChunk: onSpeechChunk, continuesStream });
 }
@@ -787,27 +793,32 @@ export function streamSinkFor({ onSpeechChunk, tools, elapsedMs, deadlineMs, con
 // Der Nicht-Stream-Zweig ist byte-identisch zum Bestand (kein Buchen bei Fehlern) - das
 // ist die Zusage "Flag aus = Bestand".
 async function completeRound({ call, params, stream }) {
-  const bookReal = (usage) =>
-    bookTokenUsage({ tenantId: call.tenantId, callId: call.id, usage, model: params.model });
+  const bookReal = (usage) => bookTokenUsage({ tenantId: call.tenantId, callId: call.id, usage });
   if (!stream) {
-    const resp = await llm.complete(params);
-    bookReal(resp.usage);
-    return resp;
+    const turn = await llm.complete(params);
+    bookReal(turn.usage);
+    return turn;
   }
   const promptChars = promptCharsOf(params);
   try {
-    const resp = await llm.completeStream({
+    const turn = await llm.completeStream({
       ...params,
       sink: stream.sink,
       streamBudgetMs: stream.budgetMs,
     });
-    bookReal(resp.usage);
-    return resp;
+    bookReal(turn.usage);
+    return turn;
   } catch (err) {
     // Der Anbieter hat gerechnet, wenn der Versuch auf der Leitung war ODER wenn schon ein
     // Fragment ankam (z.B. ein Schreibfehler des Abnehmers - kein LLM-Fehlertyp).
     if (attemptReachedProvider(err) || stream.sink.receivedText())
-      bookReal(estimatedAbortUsage({ promptChars, maxTokens: TURN_MAX_TOKENS }));
+      bookReal(
+        estimatedAbortUsage({
+          promptChars,
+          maxTokens: TURN_MAX_TOKENS,
+          billingModelId: params.model,
+        }),
+      );
     throw err;
   }
 }
@@ -817,16 +828,16 @@ async function completeRound({ call, params, stream }) {
 // dieser Turn byte-identisch zum Bestand (die Budget-Engine in routes/voice.js reicht
 // keinen durch). Drittes Argument als OBJEKT, damit spaetere Abnehmer keine weitere
 // Positions-Stelle brauchen (F1).
-// Das tool_result EINES Werkzeugs dieser Runde. get_consult (AL-P14) und look_up
+// Der Ergebnistext EINES Werkzeugs dieser Runde. get_consult (AL-P14) und look_up
 // (AL-P10b) laufen NIE durch execTool - dort gibt es bewusst keinen Case, das ist der
 // zweite Riegel fuer die Realtime-Bridge, die execTool direkt ruft und beide Werkzeuge
 // nicht bedienen kann (sie bekommt tc.unknownTool). Beide Ergebnisse stehen fest, bevor
 // diese Funktion laeuft; ihr jeweiliger Entscheider liefert garantiert non-null, wenn
 // der Name in dieser Runde vorkam. Ein Objekt statt vier Positionen (F1).
-function toolResultText({ call, toolUse, consult, lookup }) {
-  if (toolUse.name === GET_CONSULT_TOOL_NAME) return consult.toolResult;
-  if (toolUse.name === LOOK_UP_TOOL_NAME) return lookup.toolResult;
-  return execTool(call, toolUse.name, toolUse.input || {});
+function toolResultText({ call, toolCall, consult, lookup }) {
+  if (toolCall.name === GET_CONSULT_TOOL_NAME) return consult.toolResult;
+  if (toolCall.name === LOOK_UP_TOOL_NAME) return lookup.toolResult;
+  return execTool(call, toolCall.name, toolCall.input);
 }
 
 // GQ-P2: der Steuertext-Marker dieses Turns, abgeleitet aus dem Zustandsschritt der
@@ -1003,7 +1014,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       messages,
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
     };
-    const resp = await completeRound({
+    const turn = await completeRound({
       call,
       params,
       stream: sink && { sink, budgetMs: deadlineMs - elapsedMs },
@@ -1020,25 +1031,27 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       if (sink.chunkCount() > 0) wireHasSpeech = true;
     }
 
-    const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
-    if (textParts.length) {
-      speech = textParts.join(" ").trim();
+    // Der zusammengesetzte, getrimmte Antworttext der Runde (llm/ports.js LlmTurn.text) -
+    // leerer String heisst "diese Runde hat nichts gesagt" und laesst den zuletzt
+    // gesprochenen Text stehen.
+    if (turn.text) {
+      speech = turn.text;
       // AL-P7b: nur eine armierte Runde (streamSinkFor, AL-P7) hat ihren Text bereits
       // satzweise gesprochen. Eine unarmierte Runde ueberschreibt einen frueher gesetzten
       // true-Wert korrekt mit false - ihr Text steht noch aus.
       speechStreamed = Boolean(sink);
     }
 
-    const toolUses = resp.content.filter((b) => b.type === "tool_use");
-    firedTools.push(...toolUses.map((tu) => tu.name)); // L0: Tools dieses Roundtrips
-    if (!toolUses.length) break;
+    const toolCalls = turn.toolCalls;
+    firedTools.push(...toolCalls.map((tc) => tc.name)); // L0: Tools dieses Roundtrips
+    if (!toolCalls.length) break;
 
     // AL-P14: die Rueckfrage ist das EINZIGE Werkzeug, das den Turn selbst beendet -
     // deshalb wird sie VOR dem generischen Tool-Mapping ausgewertet. Angenommen: kein
     // zweiter llm.complete, gesprochen wird der deterministische Ueberbrueckungssatz.
     // Abgelehnt: ein deterministisches tool_result, das Kontingent bleibt unberuehrt,
     // der Loop laeuft weiter wie bei jedem informationsliefernden Werkzeug.
-    const consult = decideConsultRequest(call, toolUses);
+    const consult = decideConsultRequest(call, toolCalls);
     if (consult?.accepted) {
       // AL-P17 (E3, Owner-Entscheidung O-D1-B vom 2026-08-01): der deterministische
       // Consult-Fueller spricht nur noch, wenn dieser Turn noch NICHTS gesprochen hat.
@@ -1062,7 +1075,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     // execTool feststeht, ob der Loop weiterlaeuft. Genau das braucht das Denk-Signal:
     // sobald ein Werkzeug selbst wartet (AL-P10b look_up), waere eine Ueberbrueckung NACH
     // der Ausfuehrung zu spaet. Nebenbei tut das Mapping jetzt nur noch eine Sache (G30).
-    if (toolUses.some((tu) => tu.name === END_CALL_TOOL_NAME)) {
+    if (toolCalls.some((tc) => tc.name === END_CALL_TOOL_NAME)) {
       if (suppressEndCall) suppressedEndCall = true;
       else endCall = true;
     }
@@ -1078,7 +1091,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     // nie verengt: der end_call-Arm bleibt eigenstaendig stehen, damit ein end_call NEBEN
     // einem unbekannten Werkzeug weiterhin auflegt statt eine Runde nachzulegen.
     // Bei leerem speech aendert sich nichts - der schlechteste Fall ist Bestandsverhalten.
-    const sideEffectOnlyRound = toolUses.every((tu) => isSideEffectOnlyTool(tu.name));
+    const sideEffectOnlyRound = toolCalls.every((tc) => isSideEffectOnlyTool(tc.name));
     // EIN benannter Ausdruck (G5) statt derselben Bedingung an zwei Stellen: er steuert das
     // Denk-Signal UND den Ausstieg unten. Wortlaut byte-identisch zum Bestands-Ausstieg.
     const loopContinues = !(speech && (endCall || suppressedEndCall || sideEffectOnlyRound));
@@ -1115,29 +1128,27 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     // synchron - die Realtime-Bridge ruft es unveraendert direkt auf.
     // loopContinues wird durchgereicht: endet der Zug ohnehin, wird KEINE Suche
     // ausgeloest und KEINE Gebuehr gebucht (Regel 1).
-    const lookup = await performLookupRequest({ call, toolUses, loopContinues });
+    const lookup = await performLookupRequest({ call, toolUses: toolCalls, loopContinues });
 
+    // Die Ruecktrage dieser Runde geht OPAK zurueck (llm/ports.js LlmTurn.providerTurn) -
+    // ihre Form gehoert dem Adapter, nicht dieser Schleife. Daneben die Ergebnisse aller
+    // Werkzeuge der Runde in Aufruf-Reihenfolge.
     messages = [
       ...messages,
-      { role: "assistant", content: resp.content },
-      {
-        role: "user",
-        content: toolUses.map((tu) => {
+      providerTurnMessage(turn.providerTurn),
+      toolResultsMessage(
+        toolCalls.map((tc) => {
           // end_call ignorieren und das Modell anweisen, auf die Antwort zu warten. Die
           // ZUSTANDS-Entscheidung ist oben gefallen; hier entsteht nur noch der Text.
-          if (tu.name === END_CALL_TOOL_NAME && suppressEndCall)
-            return {
-              type: "tool_result",
-              tool_use_id: tu.id,
-              content: endCallWaitInstruction(call),
-            };
+          const waitsForAnswer = tc.name === END_CALL_TOOL_NAME && suppressEndCall;
           return {
-            type: "tool_result",
-            tool_use_id: tu.id,
-            content: toolResultText({ call, toolUse: tu, consult, lookup }),
+            toolCallId: tc.id,
+            text: waitsForAnswer
+              ? endCallWaitInstruction(call)
+              : toolResultText({ call, toolCall: tc, consult, lookup }),
           };
         }),
-      },
+      ),
     ];
     if (!loopContinues) break;
   }
@@ -1272,7 +1283,7 @@ export async function summarizeCall(call) {
   // O5: die Zitat-Aufforderung existiert nur, wenn die kurze Frist scharf ist. Sonst
   // steht sie nicht einmal im Prompt (kein Zitat, das man verwerfen muesste).
   const evidenceAllowed = evidenceRetentionEnabled(config.privacy);
-  const resp = await llm.complete({
+  const turn = await llm.complete({
     model,
     // AL-P11: die Karte kostet ~250 zusaetzliche Output-Token an einer Anfrage, die
     // ohnehin laeuft - 500 reichten dafuer nicht mehr zuverlaessig.
@@ -1288,14 +1299,14 @@ export async function summarizeCall(call) {
     ],
     callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
   });
-  bookTokenUsage({ tenantId: call.tenantId, callId: call.id, usage: resp.usage, model });
+  bookTokenUsage({ tenantId: call.tenantId, callId: call.id, usage: turn.usage });
 
   let parsed = { summary: "", actionItems: [] };
   try {
-    const raw = resp.content.find((b) => b.type === "text")?.text || "{}";
+    const raw = turn.text || "{}";
     parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
   } catch {
-    parsed.summary = resp.content.find((b) => b.type === "text")?.text || "";
+    parsed.summary = turn.text;
   }
 
   call.summary = parsed.summary || null;

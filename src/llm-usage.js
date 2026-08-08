@@ -1,5 +1,5 @@
 // P8 (PLAN-CONVERSATION-QUALITY-V2): aus src/claude.js hierher gezogen (reiner Move,
-// Verhalten unveraendert). EINE Stelle, die den Verbrauch EINER Anthropic-Antwort auf
+// Verhalten unveraendert). EINE Stelle, die den Verbrauch EINER Modellantwort auf
 // beide Kosten-Achsen bucht: Live-Budget-Bucket (Regel 1) und - nur bei PAYMENT_ENABLED
 // - den Stripe-Ledger. Der Pre-Call-Briefing-Aufruf (src/precall-briefing.js) hat noch
 // KEINEN call (er laeuft vor store.createCall) - deshalb nimmt bookTokenUsage
@@ -12,21 +12,17 @@ import * as store from "./store.js";
 import { USAGE_EVENT_KIND } from "./store/defaults.js";
 import { aiCostCents, tokenCostMicroCents } from "./store/state-ops.js";
 
-// L3: tatsaechlich verarbeitete Input-Token EINES Anthropic-Aufrufs inkl. Cache. Mit
-// Prompt-Caching zaehlt usage.input_tokens nur den UNGECACHTEN Rest; der gecachte
-// Praefix erscheint separat als cache_creation_/cache_read_input_tokens. Summe =
-// voller Umfang -> Budget-Gate (Regel 1) und Stripe-Meter zaehlen weiter den vollen
-// Verbrauch (fail-safe: NIE weniger als ohne Caching). Felder fehlen ohne Cache
-// (summarizeCall ohne Tools, Praefix < Modell-Minimum) -> identisch zu input_tokens.
+// L3: tatsaechlich verarbeitete Input-Token EINES Aufrufs ueber ALLE Eingabe-Preisklassen
+// (llm/ports.js LlmTokenUsage). Mit Prompt-Caching traegt die ungecachte Sorte nur den
+// Rest; der gecachte Praefix steht in den beiden Cache-Sorten. Summe = voller Umfang ->
+// Budget-Gate (Regel 1) und Stripe-Meter zaehlen weiter den vollen Verbrauch (fail-safe:
+// NIE weniger als ohne Caching). Ohne Cache sind die beiden Cache-Sorten 0 -> identisch
+// zur ungecachten Zahl.
 function inputTokensOf(usage) {
-  return (
-    usage.input_tokens +
-    (usage.cache_creation_input_tokens || 0) +
-    (usage.cache_read_input_tokens || 0)
-  );
+  return usage.inputUncachedTokens + usage.inputCacheWriteTokens + usage.inputCacheReadTokens;
 }
 
-// AI-Token-Meter EINES Anthropic-Aufrufs (P6b3, Meter 3). NUR im Metering-Pfad
+// AI-Token-Meter EINES Modell-Aufrufs (P6b3, Meter 3). NUR im Metering-Pfad
 // (PAYMENT_ENABLED) - der Nebeneffekt (recordUsageEvent) steht im Namen. Laeuft
 // PARALLEL zum trackUsage-Live-Gate (getrennte Quellen, kein Doppelzaehlen):
 // trackUsage fuettert den Budget-Bucket, dieser Meter den Stripe-Ledger. quantity =
@@ -48,55 +44,61 @@ function meterAiTokens({ tenantId, callId, tokens }) {
   });
 }
 
-// Verbrauchs-Tripel EINER Anthropic-Antwort in der Form, die beide Kosten-Achsen
-// erwarten: Tokens inkl. Cache-Anteil (inputTokensOf) + die Modell-ID, unter deren
-// Preisstaffel gebucht wird (P7a).
-//
-// Modell-Quelle ist die ANGEFORDERTE ID - dieselbe, die an llm.complete geht -, NICHT
-// resp.model: Anthropic antwortet mit der aufgeloesten, DATIERTEN Snapshot-ID, die in
-// der Preistabelle nicht steht. Jeder Turn liefe damit in den Fail-closed-Zweig
-// (teuerste Rate) und das Budget waere systematisch zu frueh erschoepft. Reine Funktion.
-function billedTokens(usage, model) {
-  return { inputTokens: inputTokensOf(usage), outputTokens: usage.output_tokens, model };
+// Verbrauchs-Tripel EINER Modellantwort in der Form, die beide Kosten-Achsen erwarten:
+// Tokens inkl. Cache-Anteil (inputTokensOf) + die Modell-ID, unter deren Preisstaffel
+// gebucht wird (P7a). Die ID kommt aus der Verbrauchsform selbst - EINE Quelle (G5);
+// welche ID ein Anbieter dort meldet und warum, begruendet sein Adapter
+// (llm/ports.js LlmTokenUsage.billingModelId). Reine Funktion.
+function billedTokens(usage) {
+  return {
+    inputTokens: inputTokensOf(usage),
+    outputTokens: usage.outputTokens,
+    model: usage.billingModelId,
+  };
 }
 
-// Bucht den Verbrauch EINER Anthropic-Antwort auf BEIDE Kosten-Achsen: den Live-
+// Bucht den Verbrauch EINER Modellantwort auf BEIDE Kosten-Achsen: den Live-
 // Budget-Bucket (Regel 1) und - nur bei PAYMENT_ENABLED - den Stripe-Ledger. EINE
 // Stelle (G5) fuer ALLE drei Aufrufer (agentTurn, summarizeCall in claude.js UND
 // fetchPrecallBriefing in precall-briefing.js). Reihenfolge (trackUsage vor
 // meterAiTokens) unveraendert. Nebeneffekte im Namen (N7).
 // KV-P1: diese Buchung ist die Zeile ai_token der Kosten-Landkarte
 // (src/billing/cost-ledger-map.js).
-export function bookTokenUsage({ tenantId, callId, usage, model }) {
-  const tokens = billedTokens(usage, model);
+export function bookTokenUsage({ tenantId, callId, usage }) {
+  const tokens = billedTokens(usage);
   store.trackUsage(tenantId, tokens, config.llm);
   meterAiTokens({ tenantId, callId, tokens });
 }
 
-// AL-P9: GESCHAETZTER Verbrauch eines ABGEBROCHENEN Anthropic-Aufrufs (Timeout /
+// AL-P9: GESCHAETZTER Verbrauch eines ABGEBROCHENEN Modell-Aufrufs (Timeout /
 // erschoepfte Retries). Bucht bewusst NUR die Live-Budget-Achse (Regel 1: das Gate darf
 // nie 0 sehen, wo Token geflossen sein koennen) und NICHT den Stripe-Ledger: eine
 // Schaetzung ist kein Kundenbeleg, und der Kunde hat kein Ergebnis bekommen.
 // Unterbuchung im Ledger ist Umsatzverlust bei uns, kein Schutzverlust. Nebeneffekt im
 // Namen (N7); der Aufrufer entscheidet, OB gebucht wird, diese Stelle nur WOHIN.
-export function bookEstimatedTokenUsage({ tenantId, usage, model }) {
-  store.trackUsage(tenantId, billedTokens(usage, model), config.llm);
+export function bookEstimatedTokenUsage({ tenantId, usage }) {
+  store.trackUsage(tenantId, billedTokens(usage), config.llm);
 }
 
 // AL-P9/AL-P7: pessimistische Zeichen-je-Token-Annahme (G25). Deutscher Text liegt beim
 // Anthropic-Tokenizer bei rund 3,5-4 Zeichen je Token; 3 rundet bewusst nach oben.
 const ESTIMATE_CHARS_PER_TOKEN = 3;
 
-// Deterministische, bewusst PESSIMISTISCHE Obergrenze eines ABGEBROCHENEN Anthropic-
+// Deterministische, bewusst PESSIMISTISCHE Obergrenze eines ABGEBROCHENEN Modell-
 // Aufrufs aus zwei bekannten Groessen: Prompt-Laenge und harter Ausgabe-Deckel. EINE
 // Quelle (G5) fuer den Briefing-Abbruch (AL-P9) und den Stream-Abriss (AL-P7).
 // Ueberbuchung ist die etablierte Fehlerrichtung (priceForModel -> teuerste Rate), eine
-// 0-Buchung waere ein Loch im Budget-Gate (Regel 1). Form wie eine Anthropic-usage
-// (inputTokensOf vertraegt die fehlenden Cache-Felder). Rein (N7).
-export function estimatedAbortUsage({ promptChars, maxTokens }) {
+// 0-Buchung waere ein Loch im Budget-Gate (Regel 1). Liefert eine vollstaendige
+// LlmTokenUsage mit estimated:true - alle Eingabe-Token auf der teuersten Sorte, wie es
+// die Notfall-Regel des Vertrags vorsieht (llm/ports.js). Rein (N7).
+export function estimatedAbortUsage({ promptChars, maxTokens, billingModelId }) {
   return {
-    input_tokens: Math.ceil(promptChars / ESTIMATE_CHARS_PER_TOKEN),
-    output_tokens: maxTokens,
+    inputUncachedTokens: Math.ceil(promptChars / ESTIMATE_CHARS_PER_TOKEN),
+    inputCacheWriteTokens: 0,
+    inputCacheReadTokens: 0,
+    outputTokens: maxTokens,
+    estimated: true,
+    billingModelId,
   };
 }
 

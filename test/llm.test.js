@@ -28,6 +28,14 @@ function apiError(status) {
 function connError() {
   return new Anthropic.APIConnectionError({ message: "connection failed" });
 }
+// Minimale Anbieter-Antwort. Seit B3a liefert complete() ein LlmTurn (llm/ports.js), also
+// wird auf turn.text geprueft statt auf ein durchgereichtes Rohfeld.
+function okResponse() {
+  return {
+    content: [{ type: "text", text: "ok" }],
+    usage: { input_tokens: 1, output_tokens: 1 },
+  };
+}
 
 // sleep-Fake: zaehlt Aufrufe + Delays, schlaeft NICHT real (synchron resolved).
 function fakeSleep() {
@@ -188,14 +196,14 @@ test("T-CP2-10: Breaker open -> nach Cooldown half-open eine Probe -> Erfolg sch
     create: () => {
       attempt += 1;
       if (attempt === 1) return Promise.reject(prematureClose());
-      return Promise.resolve({ id: "ok" });
+      return Promise.resolve(okResponse());
     },
   });
   await assert.rejects(() => client.complete({}), LlmUnavailableError); // oeffnet (threshold=1)
   const probe = await client.complete({}); // half-open-Probe geht durch -> closed
-  assert.equal(probe.id, "ok");
+  assert.equal(probe.text, "ok");
   const again = await client.complete({}); // wieder normal verfuegbar
-  assert.equal(again.id, "ok");
+  assert.equal(again.text, "ok");
 });
 
 test("T-CP2-11: complete mappt erschoepfte transiente Fehler auf LlmUnavailableError(retries-exhausted)", async () => {

@@ -69,8 +69,17 @@ const TTS_CHARACTERS_FIXTURE = 42;
 // je Mio. Token, usdToEur 0,92) auf 0 EUR-Cent - das demonstriert die ai_token-Zeile. Die
 // Fixture-Behauptung wird unten GEGEN DIE ECHTE FORMEL (aiCostCents) geprueft, nicht
 // hart erwartet - aendern sich die Preise, faellt genau diese Assertion zuerst auf.
-const AI_TOKEN_TURN = Object.freeze({ input_tokens: 5, output_tokens: 5 });
 const AI_TOKEN_MODEL = "claude-haiku-4-5";
+// B3a: die neutrale Verbrauchsform (src/llm/ports.js LlmTokenUsage) - dieselben Zahlen
+// wie zuvor, nur nach Preisklasse benannt; die Modell-ID reist darin mit.
+const AI_TOKEN_TURN = Object.freeze({
+  inputUncachedTokens: 5,
+  inputCacheWriteTokens: 0,
+  inputCacheReadTokens: 0,
+  outputTokens: 5,
+  estimated: false,
+  billingModelId: AI_TOKEN_MODEL,
+});
 const AI_TOKEN_TURNS_COUNT = 3; // mind. 2 (Plan-Vorgabe): die Divergenz ist ein Verlauf, kein Einzelwert
 
 const TENANT_VOICE_OUT = "kvp1_voice_out";
@@ -196,11 +205,11 @@ test("KV-P1-2 voice_minute_inbound: Ledger UND Gate tragen den kalibrierten Inbo
 
 test("KV-P1-3 ai_token: jede Buchung landet 0-gerundet im Ledger, das Gate akkumuliert den Mikro-Cent-Rest weiter", () => {
   // aiCostCents erwartet die BEREITS KONVERTIERTE Form {inputTokens, outputTokens, model}
-  // (billedTokens in llm-usage.js), nicht die rohe Anthropic-usage {input_tokens,
-  // output_tokens} - dieselbe Umbenennung, die bookTokenUsage intern vornimmt.
+  // (billedTokens in llm-usage.js), nicht die Verbrauchsform des Ports - dieselbe
+  // Umrechnung, die bookTokenUsage intern vornimmt.
   const billedForm = {
-    inputTokens: AI_TOKEN_TURN.input_tokens,
-    outputTokens: AI_TOKEN_TURN.output_tokens,
+    inputTokens: AI_TOKEN_TURN.inputUncachedTokens,
+    outputTokens: AI_TOKEN_TURN.outputTokens,
     model: AI_TOKEN_MODEL,
   };
   assert.equal(
@@ -211,7 +220,7 @@ test("KV-P1-3 ai_token: jede Buchung landet 0-gerundet im Ledger, das Gate akkum
 
   const microRestVerlauf = [];
   for (let turn = 0; turn < AI_TOKEN_TURNS_COUNT; turn++) {
-    bookTokenUsage({ tenantId: TENANT_AI, callId: "kvp1_call_ai", usage: AI_TOKEN_TURN, model: AI_TOKEN_MODEL });
+    bookTokenUsage({ tenantId: TENANT_AI, callId: "kvp1_call_ai", usage: AI_TOKEN_TURN });
     microRestVerlauf.push(store.usageOf(TENANT_AI).costMicroCentsRem);
   }
 

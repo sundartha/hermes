@@ -1,42 +1,17 @@
-// Resilienter LLM-Client-Seam: EINE Stelle, die weiss, WIE robust
-// mit Anthropic gesprochen wird - Timeout, selektiver Jitter-Retry, Connection-
-// Hygiene, Circuit-Breaker. Alle Aufrufer (claude.js) haengen an dieser
-// Abstraktion (DIP), nicht am rohen SDK. Beruehrt KEINE Safety-Gates und nicht die
-// Disclosure - messages.create ist ein reiner, statusloser LLM-Call (idempotent,
-// kein Toll-Fraud bei Retry).
+// Resilienter LLM-Client-Seam: EINE Stelle, die weiss, WIE robust mit einem
+// Sprachmodell-Anbieter gesprochen wird - Timeout/Wanduhr, selektiver Jitter-Retry,
+// Circuit-Breaker, Metrik. Alle Aufrufer (claude.js, precall-briefing.js) haengen an
+// dieser Abstraktion (DIP), nicht am rohen SDK. Beruehrt KEINE Safety-Gates und nicht
+// die Disclosure - eine Modellrunde ist ein reiner, statusloser Call (idempotent, kein
+// Toll-Fraud bei Retry).
 //
-// Connection-Hygiene: Das SDK 0.105 nutzt native fetch (undici unter Node) statt
-// node-fetch/agentkeepalive. Ein expliziter undici-Dispatcher mit kurzem
-// keepAliveTimeout (Umbrella 3.3) bleibt VORERST aussen vor: undici ist in Node 22
-// NICHT als importierbares Modul freigegeben (nur intern fuer global fetch; empirisch
-// belegt: import "undici"/"node:undici" werfen ERR_MODULE_NOT_FOUND/ERR_UNKNOWN_BUILTIN_MODULE,
-// kein globalThis.getGlobalDispatcher). Ein eigener Dispatcher braeuchte daher undici
-// als neue Dependency - ausserhalb des aktuellen Scopes (Owner-Freigabe noetig). Die Hygiene
-// wirkt weiter ueber das Retry selbst: maxRetries:0 am SDK + manueller Retry holt beim
-// Re-Request eine frische fetch-Connection (vergifteter Socket wird nicht im selben
-// fetch wiederverwendet). Zusaetzlich faengt isTransient den neuen undici-Premature-
-// close (UND_ERR_SOCKET) sowohl ueber APIConnectionError als auch als Defense-in-Depth.
-import Anthropic from "@anthropic-ai/sdk";
+// B3a: das gesamte ANBIETER-Wissen (SDK-Konstruktion, Antwort-Bloecke, Stream-
+// Ereignisse, Fehler-Marken) liegt im Adapter src/llm/adapters/anthropic.js. Der Seam
+// kennt nur noch den Port-Vertrag aus src/llm/ports.js. Eine Anbieter-AUSWAHL
+// (Registry) gibt es bewusst noch nicht - eine Tabelle mit einem Eintrag waere
+// Indirektion ohne Mehrwert.
+import { anthropicErrors, createAnthropicProvider } from "./llm/adapters/anthropic.js";
 
-// Transiente HTTP-Status: Verbindungs-/Lastklasse, vom Server gefahrlos wiederholbar.
-// 408 Timeout, 409 Conflict, 429 RateLimit, >=500 Server. NICHT 400/401/403/404/422.
-const RETRYABLE_STATUS = new Set([408, 409, 429]);
-const SERVER_ERROR_MIN = 500;
-// Rohe Transport-Fehlercodes (Verbindungsklasse, gefahrlos wiederholbar).
-// UND_ERR_SOCKET = undici "other side closed": Unter dem SDK 0.105 (native fetch)
-// erscheint der Premature close als APIConnectionError (von isTransient ueber branch 1
-// gefangen); dessen verschachtelte cause traegt diesen undici-Code. Hier defensiv im
-// Set, falls der instanceof-Pfad je ausfaellt (Defense-in-Depth, empirisch belegt).
-// ERR_STREAM_PREMATURE_CLOSE bleibt als node-fetch-Erbe (Bedrock/aeltere Pfade).
-const TRANSIENT_CODES = new Set([
-  "ERR_STREAM_PREMATURE_CLOSE",
-  "UND_ERR_SOCKET",
-  "ECONNRESET",
-  "ETIMEDOUT",
-  "ECONNREFUSED",
-  "EPIPE",
-]);
-const PREMATURE_CLOSE_MESSAGE = "Premature close";
 // Voll-Jitter-Backoff verdoppelt die Basis pro Versuch (gegen Thundering Herd).
 const BACKOFF_FACTOR = 2;
 
@@ -82,21 +57,11 @@ export function degradedSpeechFor(err, locale) {
 // this.type = body.error.type). Am strukturierten Typ allein ist der Fall also NICHT
 // erkennbar; genau deshalb fiel er am 04.08. in den generischen Fehlerpfad.
 const HTTP_PAYMENT_REQUIRED = 402;
-// Anthropic-Fehlertyp fuer Abrechnungsprobleme. Er existiert (403-Klasse), deckt den
-// beobachteten Guthaben-400 aber NICHT ab - er steht hier NEBEN, nicht STATT der Textpruefung.
-const BILLING_ERROR_TYPE = "billing_error";
-// FRAGIL, bewusst und eng gefasst: fuer den 400-Fall gibt es kein strukturiertes
-// Unterscheidungsmerkmal, nur den Meldungstext ("Your credit balance is too low to access
-// the Anthropic API ..."). Geprueft wird deshalb genau diese eine Wendung, klein
-// geschrieben. Aendert der Anbieter den Wortlaut, faellt der Fall in den generischen
-// Fehlerpfad zurueck - er wird nie falsch POSITIV, und es haengt KEIN Gate daran
-// (nur eine Logzeile). Kein Praefix-/Fuzzy-Match.
-const CREDIT_EXHAUSTED_MARKER = "credit balance is too low";
 
-// HTTP-Status eines Anbieter-Fehlers (Anthropic err.status ODER Telnyx err.providerStatus),
+// HTTP-Status eines Anbieter-Fehlers (LLM err.status ODER Telnyx err.providerStatus),
 // sonst null. Vorher privat im Telnyx-Shim (vendorStatusOf) - jetzt EINE Quelle (G5)
 // neben der Klassifikation, die ihn braucht. Rein.
-export function providerStatusOf(err) {
+function providerStatusOf(err) {
   const status = err && (err.providerStatus ?? err.status);
   return typeof status === "number" ? status : null;
 }
@@ -105,12 +70,14 @@ export function providerStatusOf(err) {
 // ob der Anbieter ihn als 402 oder als 400 verpackt. Rein (N7), ohne Nebeneffekt; der
 // Aufrufer entscheidet, was er damit tut (der Shim: eine Alarm-Zeile, A4). Aendert KEINE
 // Degradation, KEIN Retry-Verhalten und KEIN Gate.
+//
+// Die 402 ist anbieter-UNABHAENGIG (Telnyx meldet sie ueber providerStatus) und bleibt
+// deshalb hier; welche EIGENEN Marken ein LLM-Anbieter fuer denselben Fall verwendet,
+// weiss nur sein Adapter (llm/ports.js LlmErrorClassification.isBillingError).
 export function isProviderBillingError(err) {
   if (!err) return false;
   if (providerStatusOf(err) === HTTP_PAYMENT_REQUIRED) return true;
-  if (err.type === BILLING_ERROR_TYPE) return true;
-  const message = typeof err.message === "string" ? err.message : "";
-  return message.toLowerCase().includes(CREDIT_EXHAUSTED_MARKER);
+  return anthropicErrors.isBillingError(err);
 }
 
 // AL-P9/AL-P7: EIN Praedikat "der Versuch war nachweislich auf der Leitung" (G5) - die
@@ -124,24 +91,11 @@ export function attemptReachedProvider(err) {
   return err instanceof LlmUnavailableError && err.reason !== LLM_UNAVAILABLE_REASON.CIRCUIT_OPEN;
 }
 
-// Klassifiziert, ob ein Fehler transient (retrybar) ist. PURE Funktion, exportiert
-// fuer den Unit-Test. Transient: Premature-close-FetchError, APIConnectionError,
-// ECONNRESET & Co., HTTP 408/409/429/>=500. NICHT transient: 4xx (ausser 408/409/429),
-// invalid_request, Auth -> sofort werfen (kein Over-Retry maskiert einen Config-Fehler).
-export function isTransient(err) {
-  if (!err) return false;
-  // 1) APIConnectionError/-Timeout (status undefined) -> transient.
-  if (err instanceof Anthropic.APIConnectionError) return true;
-  // 2) APIError mit status -> nur die retrybare Klasse.
-  if (typeof err.status === "number")
-    return RETRYABLE_STATUS.has(err.status) || err.status >= SERVER_ERROR_MIN;
-  // 3) Rohe Transportfehler (Premature close & Co.) ueber code/message.
-  if (err.code && TRANSIENT_CODES.has(err.code)) return true;
-  if (err.message === PREMATURE_CLOSE_MESSAGE) return true;
-  // 4) Verschachtelter Transportfehler (z.B. APIConnectionError.cause = ECONNRESET).
-  if (err.cause && err.cause !== err) return isTransient(err.cause);
-  return false; // 4xx/invalid_request/Auth/unbekannt -> sofort werfen
-}
+// "Ist dieser Fehler transient (retrybar)?" - die Klassifikation selbst gehoert dem
+// Adapter (llm/ports.js LlmErrorClassification), weil sie Anbieter-Wissen ist. Der
+// Bestandsname bleibt hier als Seam-Export stehen: die Retry-ENTSCHEIDUNG faellt in
+// diesem Modul, und die Unit-Tests des Seams pinnen ihn.
+export const isTransient = (err) => anthropicErrors.isTransient(err);
 
 // Exponentieller Voll-Jitter-Backoff. random injiziert -> deterministisch testbar
 // (kein Math.random im Hot-Path-Test). 0/1 als Exponent erlaubt.
@@ -216,31 +170,28 @@ const noopMetrics = { llmCall() {} };
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // I13 (call-quality Impl-1): additive Metrik-Felder, NUR wenn tatsaechlich vorhanden -
-// kein Rauschen im Breaker-open-/Fehlerpfad (dort gibt es weder eine Response noch
-// immer einen callId). callId korreliert den Anthropic-Request mit dem Call (PII-frei,
-// wie metrics.logTurn schon callId traegt); die Cache-Zaehler kommen 1:1 aus resp.usage
-// (dieselbe Quelle wie claude.js inputTokensOf) und dienen NUR der Bench-/Latenz-
-// Auswertung (L1) - NIE dem Budget-Gate (das bleibt unveraendert an trackUsage haengen).
+// kein Rauschen im Breaker-open-/Fehlerpfad (dort gibt es weder eine Antwort noch immer
+// einen callId). callId korreliert den Request mit dem Call (PII-frei, wie metrics.logTurn
+// schon callId traegt); die Cache-Zaehler kommen aus der neutralen Verbrauchsform
+// (LlmTokenUsage) und dienen NUR der Bench-/Latenz-Auswertung (L1) - NIE dem Budget-Gate
+// (das bleibt unveraendert an trackUsage haengen).
+//
+// SCHLUESSELNAMEN bleiben die Anthropic-Namen (test/llm.test.js und test/l0-metrics.test.js
+// pinnen den Payload-Schluesselsatz woertlich); ein Rename ist eine eigene Entscheidung.
+// Gemeldet wird nur ein Wert > 0: LlmTokenUsage kennt kein "abwesend", 0 heisst dort
+// "keine Token dieser Preisklasse" - und genau das ist keine Meldung wert.
 function metricsExtra(callId, usage) {
   const extra = {};
   if (callId !== undefined) extra.callId = callId;
-  if (usage?.cache_creation_input_tokens !== undefined)
-    extra.cache_creation_input_tokens = usage.cache_creation_input_tokens;
-  if (usage?.cache_read_input_tokens !== undefined)
-    extra.cache_read_input_tokens = usage.cache_read_input_tokens;
+  if (usage?.inputCacheWriteTokens) extra.cache_creation_input_tokens = usage.inputCacheWriteTokens;
+  if (usage?.inputCacheReadTokens) extra.cache_read_input_tokens = usage.inputCacheReadTokens;
   return extra;
-}
-
-// Ein Text-Delta des Anthropic-Streams (G28: die zusammengesetzte Bedingung bekommt
-// einen Namen statt im if zu stehen). Rein (N7).
-function isTextDelta(event) {
-  return event.type === "content_block_delta" && event.delta.type === "text_delta";
 }
 
 // Factory (P15: Konstruktion/Verdrahtung getrennt vom Fachcode). Benannte Felder in
 // EINEM Optionsobjekt (F1). messagesCreate/messagesStream sind optionale Test-Seams
-// (DIP): gesetzt -> ersetzen sdk.messages.create bzw. sdk.messages.stream; sonst = der
-// echte Prod-Pfad (kein toter Code).
+// (DIP), die an den Adapter durchgereicht werden; sonst laeuft der echte Prod-Pfad
+// (kein toter Code).
 export function createLlmClient({
   apiKey,
   config,
@@ -249,21 +200,12 @@ export function createLlmClient({
   messagesCreate,
   messagesStream,
 } = {}) {
-  const sdk = new Anthropic({
+  const provider = createAnthropicProvider({
     apiKey,
-    timeout: config.llm.llmRequestTimeoutMs, // expliziter Per-Request-Timeout (Pflicht; SDK-Default 10 min waere webhook-toedlich)
-    maxRetries: 0, // manueller Retry ERSETZT den SDK-Retry (sonst doppelte Backoffs)
+    requestTimeoutMs: config.llm.llmRequestTimeoutMs,
+    messagesCreate,
+    messagesStream,
   });
-  const create = messagesCreate || ((params) => sdk.messages.create(params));
-  // AL-P7 (Test-Seam wie create, DIP). WANDUHR: der SDK-Per-Request-Timeout deckt bei
-  // stream:true NUR die Zeit bis zu den Antwort-Headern (der Timer wird direkt danach
-  // geloescht) - die Generierung selbst liefe sonst unbegrenzt weiter und der Turn hinge
-  // bis zum Dead-Air-Watchdog. Massstab ist die Restfrist des Tool-Loops (AL-P6), kein
-  // neuer Knopf.
-  const openStream = (params, budgetMs) =>
-    (messagesStream || ((p, o) => sdk.messages.stream(p, o)))(params, {
-      signal: AbortSignal.timeout(budgetMs),
-    });
   const breaker = makeBreaker(
     {
       threshold: config.llm.llmBreakerThreshold,
@@ -289,7 +231,7 @@ export function createLlmClient({
     const startedAt = Date.now();
     let attempts = 0;
     try {
-      const resp = await withRetry(
+      const turn = await withRetry(
         () => {
           attempts += 1;
           return attempt();
@@ -309,9 +251,9 @@ export function createLlmClient({
         attempts,
         latencyMs: Date.now() - startedAt,
         breakerState: breaker.state(),
-        ...metricsExtra(callId, resp.usage),
+        ...metricsExtra(callId, turn.usage),
       });
-      return resp;
+      return turn;
     } catch (err) {
       const exhausted = isTransient(err); // transient + durch withRetry geworfen -> Retries erschoepft
       metrics.llmCall({
@@ -326,11 +268,15 @@ export function createLlmClient({
     }
   }
 
-  // I13: callId ist ein additiver Bench-/Metrik-Begleiter, KEIN Anthropic-Request-Feld -
-  // er wird hier abgestreift (Rest-Destrukturierung), bevor params an create()/das SDK
-  // geht (kein Leak eines unbekannten Feldes in den Provider-Request-Body).
+  // I13: callId ist ein additiver Bench-/Metrik-Begleiter, KEIN Anbieter-Request-Feld -
+  // er wird hier abgestreift (Rest-Destrukturierung), bevor die Parameter an den Adapter
+  // gehen (kein Leak eines unbekannten Feldes in den Provider-Request-Body).
   async function complete({ callId, ...params } = {}) {
-    return runResilient({ callId, attempt: () => create(params), retryable: isTransient });
+    return runResilient({
+      callId,
+      attempt: () => provider.complete(params),
+      retryable: isTransient,
+    });
   }
 
   // AL-P7: dieselbe Resilienz, andere Draht-Form. Der Aufrufer bekommt die Text-Fragmente
@@ -338,7 +284,7 @@ export function createLlmClient({
   //   sink.pushText(delta)   jedes Text-Fragment in Reihenfolge
   //   sink.toolUseStarted()  ein Werkzeug-Block hat begonnen (der Abnehmer entscheidet)
   //
-  // NEUE RESILIENZ-SEMANTIK (bindend): ein Retry ist verboten, sobald das erste Fragment
+  // RESILIENZ-SEMANTIK (bindend): ein Retry ist verboten, sobald das erste Fragment
   // den Seam verlassen hat - gestreamter Text ist nicht zurueckholbar. Davor bleibt der
   // Aufruf idempotent und wird wie bisher selektiv wiederholt. Die Kehrseite ist bewusst:
   // ein transienter Abriss NACH dem ersten Fragment meldet dem Breaker keinen Fehlversuch
@@ -346,26 +292,29 @@ export function createLlmClient({
   // den Nicht-Stream-Pfad und alle frueheren Abrisse gefuettert.
   async function completeStream({ callId, sink, streamBudgetMs, ...params } = {}) {
     let forwardedText = false;
+    // Der Merker gehoert dem SEAM (llm/ports.js): der Adapter sieht nur diesen Sink und
+    // bringt keine eigene Stream-Schleife mit Wiederholung mit. Er kippt bei JEDEM
+    // Fragment - auch beim Fugenzeichen zwischen zwei Textbloecken, das den Seam ebenso
+    // verlaesst wie ein Text-Delta.
+    const guardedSink = {
+      pushText: (delta) => {
+        forwardedText = true;
+        sink.pushText(delta);
+      },
+      toolUseStarted: () => sink.toolUseStarted(),
+    };
     const attempt = async () => {
-      let textBlocks = 0;
-      const stream = openStream(params, streamBudgetMs);
+      // WANDUHR des AUFRUFERS, je Versuch frisch armiert: der Per-Request-Timeout des
+      // Anbieters deckt bei stream:true NUR die Zeit bis zu den Antwort-Headern - die
+      // Generierung selbst liefe sonst unbegrenzt weiter und der Turn hinge bis zum
+      // Dead-Air-Watchdog. Massstab ist die Restfrist des Tool-Loops (AL-P6).
+      const deadline = AbortSignal.timeout(streamBudgetMs);
       try {
-        for await (const event of stream) {
-          if (event.type === "content_block_start") {
-            if (event.content_block.type === "tool_use") sink.toolUseStarted();
-            // Fugenzeichen zwischen zwei Textbloecken: haelt die gestreamte Zeichenfolge
-            // identisch zu der, die der Aufrufer aus resp.content zusammensetzt
-            // (textParts.join(" ") in claude.js).
-            else if (event.content_block.type === "text" && textBlocks++ > 0) sink.pushText(" ");
-          } else if (isTextDelta(event)) {
-            forwardedText = true;
-            sink.pushText(event.delta.text);
-          }
-        }
-        return await stream.finalMessage();
+        return await provider.completeStream({ ...params, signal: deadline }, guardedSink);
       } catch (err) {
-        if (err instanceof Anthropic.APIUserAbortError)
-          throw new LlmUnavailableError(LLM_UNAVAILABLE_REASON.STREAM_ABORTED);
+        // NUR unsere eigene Uhr macht aus einem Abriss einen STREAM_ABORTED - dafuer
+        // braucht der Seam keinen Anbieter-Fehlertyp.
+        if (deadline.aborted) throw new LlmUnavailableError(LLM_UNAVAILABLE_REASON.STREAM_ABORTED);
         throw err;
       }
     };

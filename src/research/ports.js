@@ -13,9 +13,14 @@
  * @property {() => object[]} researchTools
  *   Werkzeug-Definitionen, die dem briefenden Modell-Aufruf beigestellt werden.
  *   Rein (N7), kein IO - die Suche fuehrt der Anbieter INNERHALB des Modell-Aufrufs aus.
- * @property {(usage: object|undefined) => number|null} searchCount
- *   Tatsaechlich ausgefuehrte Suchen aus der Antwort-usage. null = unbekannt
- *   (Anbieter meldet den Zaehler nicht) -> der Aufrufer bucht pessimistisch.
+ * @property {(providerTurn: *) => number|null} searchCount
+ *   Tatsaechlich ausgefuehrte Suchen aus der OPAKEN Ruecktrage der Modellrunde
+ *   (LlmTurn.providerTurn, llm/ports.js) - NICHT aus LlmTokenUsage: die neutrale
+ *   Verbrauchsform kennt bewusst nur vier Token-Sorten, ein serverseitiger Such-Zaehler
+ *   ist keine davon. Kaeme hier die neutrale Form an, lieferte jeder Adapter dauerhaft
+ *   null und der Aufrufer buchte JEDES Briefing mit dem harten Deckel.
+ *   null = unbekannt (Anbieter meldet den Zaehler nicht) -> der Aufrufer bucht
+ *   pessimistisch.
  */
 
 /**
