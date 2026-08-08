@@ -734,3 +734,65 @@ Owner-Entscheidung.
   Cron" ist am Code widerlegt — `setInterval().unref()` ist Hausmuster (`boot.js`). Es
   fehlen Endpunkt (DeepSeek -> B5; ein Anthropic-Aequivalent ist **unbelegt**) und
   Verbraucher.
+
+## B4a — Preisstaffel + Boot-Abbruch. ERLEDIGT + GEMERGT (2026-08-08, Merge 1edf66c)
+
+Gate PASS **ohne Fix-Runde** (5 Agenten, ~1,1 M Subagent-Token). 23 Dateien, +1063/-128.
+
+### Was gebaut wurde
+
+- **`MODEL_PRICE_SCHEDULES`** in `config.js`: je Modell-ID eine Liste von Staffeln mit
+  `validFrom` + `asOf` + `source` und **vier Pflichtraten**. `resolveModelPrices` loest sie
+  **genau einmal beim Boot** auf den heutigen Kalendertag auf; `config.llm.modelPricesUsd`
+  bleibt fuer alle Leser eine flache Abbildung — kleiner Blast-Radius.
+  **Die Buchungskante bleibt zeitfrei.** Ein `nowIso` in `tokenCostUsd` waere eine zweite Uhr
+  an derselben Buchung gewesen. Der Staffel-Vergleich laeuft ueber ISO-Strings **mit
+  Formpruefung** (Regex, nicht Laenge — "08.08.2026" ist auch 10 Zeichen), ohne `Date`-Objekt
+  und ohne Zeitzonenrechnung (Repo-Lehre zu fremden Uhrzeiten angewandt).
+- **Damit traegt die Tabelle den terminierten Preiswechsel**: `claude-sonnet-5` bis
+  2026-08-31 auf 2.00/2.50/0.20/10.00, ab 2026-09-01 auf 3.00/3.75/0.30/15.00. Die
+  50-Prozent-Ueberbuchung des Briefing-Modells ist damit behoben — als Folge der Form, nicht
+  als Einzelfix.
+- **`worstCasePrice`** statt `mostExpensivePrice`: punktweises Maximum JEDER der vier Raten.
+- **Boot-Abbruch** bei `claudeModel`/`briefingModel` ohne Staffel. **`realtimeModel` ist
+  bewusster Nicht-Ausloeser** — der Pfad bucht keine Token (WF-4), ein Abbruch dafuer haette
+  keine Schutzwirkung und wuerde jeden normalen Start verhindern.
+- **F-1 korrigiert** — und zusaetzlich begruendet, warum das Verhalten richtig bleibt: eine
+  Schaetzung auf `inputCacheWriteTokens` wuerde eine Token-Sorte behaupten, die nie geflossen
+  ist (Vollstaendigkeits-Invariante).
+
+### Lead-Verifikation, selbst gefahren
+
+| Probe | Ergebnis |
+|---|---|
+| Suite | **4057/4057**, fail 0, Exit 0 (vorher 4026, also **+31**) |
+| **A-3 Owner-Abnahme, Gegenprobe** | Buchung entfernt -> **3 Tests rot**, darunter `B4A-BUCH-4`: die Kostendecke greift auf dem NEU gerechneten Betrag |
+| **A-4 Rotprobe** | `exit(1)` entschaerft -> **3 Boot-Tests rot**, u.a. "eine DATIERTE Snapshot-ID ist ein anderer Schluessel" |
+| **A-5 Rotprobe (die wichtigste)** | Abbruch auf `realtimeModel` ausgeweitet -> **SIEBEN Bestandstests rot**, darunter "vollstaendige Config bootet, kein Fehl-Refusal" |
+| W5 | `git diff -- src/db/` **leer** — keine Migration, kein Schema-Diff |
+| Scope | `bridge.js` unberuehrt |
+
+**A-5 ist der wertvollste Beleg dieser Phase:** ein zu breiter Boot-Abbruch wird nicht von
+einem Spezialtest gefangen, sondern von der gesamten Bestands-Boot-Suite. Ein Dienst, der
+nicht hochkommt, nimmt keine Anrufe an — dieses Risiko ist jetzt siebenfach vernagelt.
+
+### Ein offener Rest, ehrlich benannt
+
+Der **erste** Suite-Lauf auf dem Branch meldete `fail 1`. Der Wiederholungslauf war gruen
+(4057/4057). **Welcher Test rot war, ist unbekannt** — das Hintergrund-Kommando hatte
+`| tail -10`, damit war die `not ok`-Zeile weg (Lehre in `tasks/lessons.md`). Das Repo hat
+einen dokumentierten Volllast-Flake (~12 %), und der Lauf lief unter paralleler Last, aber
+**"Flake oder Regression?" ist fuer diesen Vorfall dauerhaft unbeantwortbar.** Kein Blocker
+(zweiter Lauf gruen, alle Rotproben bestanden), aber es bleibt ein Datenpunkt, kein Beweis.
+
+### Was offen bleibt
+
+- **B4b** (gemessener Betrag-Rueckgang an echtem Verkehr, W6): blockiert — kein Anruf seit
+  2026-08-04, Anthropic-Guthaben leer. Braucht laut Spec **keinen neuen Code**: die vier
+  Sorten stehen je Aufruf schon in der LLM-Metrik.
+- **WF-4** (Realtime-Pfad bucht keine Token): Bestandsbefund, braucht den Owner. Wer auf
+  `VOICE_ENGINE=realtime` umstellt, faehrt mit blinder Gate-Achse.
+- **W7** (Traeger der Perioden-Gegenprobe): nicht in B4. Die Praemisse "Render hat keinen
+  Cron" ist widerlegt (`setInterval().unref()` ist Hausmuster) — es fehlen Endpunkt und
+  Verbraucher.
+- **B3b** (Anfrageseite) und **B5** (DeepSeek-Adapter): warten auf Guthaben.

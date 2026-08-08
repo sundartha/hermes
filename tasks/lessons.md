@@ -622,3 +622,28 @@ darueber, in `:235`, steht ein **benannter** Werkzeug-Zwang (`{type:"tool", name
 ein zweiwertiges Feld nicht ausdruecken kann. **Eine korrekt zitierte Zeile belegt nur, was
 in ihr steht, nicht die Vollstaendigkeit der Aufzaehlung.** Wer eine Enum-Wertemenge aus
 einem Zitat ableitet, muss alle Rueckgaben der Funktion ansehen, nicht eine.
+
+## `tail` im Hintergrund-Kommando vernichtet die Diagnose (2026-08-08, B4a)
+
+Ein Hintergrund-Testlauf wurde als `npm test 2>&1 | tail -10` gestartet. Er meldete
+**`fail 1`** — und die Identitaet des roten Tests war damit **unwiederbringlich weg**: in der
+Ausgabedatei standen nur die zehn Zeilen der Zusammenfassung, nicht die `not ok`-Zeile.
+
+- **Der Grund ist der Zeitpunkt.** Bei einem Vordergrund-Lauf ist `| tail` harmlos: sieht man
+  eine rote Zahl, wiederholt man den Lauf ungefiltert. Ein Hintergrund-Lauf dauert 100 s, und
+  bis die Zahl auftaucht, ist der Kontext, in dem er rot wurde (Systemlast, parallele
+  Kommandos), nicht mehr herstellbar. Der Wiederholungslauf war gruen — und damit ist die
+  Frage "Flake oder Regression?" **dauerhaft unbeantwortbar**.
+- **Regel:** Hintergrund-Laeufe schreiben die VOLLE Ausgabe in eine Datei
+  (`npm test > lauf.log 2>&1`) und filtern erst beim Lesen (`grep -E "^not ok|^# fail"
+  lauf.log`). Speicherplatz ist billiger als ein zweiter Lauf, der die Bedingung nicht mehr
+  trifft.
+- **Was hier gerettet hat:** die Zahl selbst stand in der Zusammenfassung, also war der
+  Fehlschlag ueberhaupt sichtbar. Haette ich auf `| tail -3` gefiltert, waere er unbemerkt
+  geblieben — der Workflow hatte `testsPass: true` gemeldet.
+
+**Der Nebenbefund ist der wichtigere:** der Workflow meldete Gate PASS **ohne Fix-Runde**, und
+der Safety-Reviewer hatte die Suite laut Schema unabhaengig gefahren. Der eigene Lauf des
+Leads widersprach dem trotzdem. Genau dafuer existiert die Regel "PASS ist keine Freigabe" —
+sie greift nicht nur gegen leere Branches (C-P2) und tote Impl-Agenten (C-P4), sondern auch
+gegen einen Reviewer, der auf einem gluecklicheren Lauf sass.
