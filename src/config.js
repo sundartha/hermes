@@ -810,6 +810,27 @@ const rawConfig = {
     // GESPROCHENER Text: korrekte Umlaute, kein Fachjargon, keine Schuldzuweisung, keine
     // technischen Codes gegenueber der Gegenstelle.
     failedTurnFarewellText: process.env.TELNYX_FAILED_TURN_FAREWELL_TEXT || "",
+    // GQ-P17: Haltefrist in Millisekunden, bevor ein Shim-Turn das Modell ruft. Die
+    // Spracherkennung (deepgram/nova-3) liefert eine Aeusserung in mehreren POSTs; jeder
+    // POST loeste bisher einen vollen Turn aus - am 2026-08-09 zwei unabhaengige
+    // look_up-Recherchen und zwei gesprochene Wetterberichte mit widersprechenden Zahlen.
+    // Fuer nova-3 existiert KEIN Turn-End-Regler beim Anbieter (die eot_*-Werte unserer
+    // Live-Config gelten nur fuer deepgram/flux), also liegt der Hebel bei uns.
+    // Kommt in dieser Zeit ein Request, dessen Text den gehaltenen nur fortschreibt,
+    // schweigt der gehaltene Turn und der laengere Text gewinnt.
+    // 3000 = die weiteste gemessene Fragment-Luecke (1314-2926 ms) ist gedeckt. PREIS:
+    // JEDE Antwort kommt um diese Frist spaeter - der Wert ist zum Trimmen gedacht, die
+    // hold-Log-Zeile liefert die Datengrundlage. 0 = aus (Rueckweg ohne Deploy).
+    // max 3500, weil die Frist sonst in Telnyx' eigenes Anstoss-Fenster laeuft
+    // (telephony_settings.user_idle_reply_secs, Live-Wert 4 s).
+    // Sie entwaffnet KEINE Sicherung: Loop-Guard, Rate-Gate, Kostendecke und Anstoss-Riegel
+    // liegen VOR ihr, der Dead-Air-Notaus wurde bereits gefuettert (observeTurn) -> kein
+    // assertConfig-/Footgun-Eintrag (Muster shimTokenStreaming); der Clamp deckelt den Rest.
+    shimExtendHoldMs: numEnv("TELNYX_SHIM_EXTEND_HOLD_MS", process.env.TELNYX_SHIM_EXTEND_HOLD_MS, {
+      fallback: 3000,
+      min: 0,
+      max: 3500,
+    }),
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----

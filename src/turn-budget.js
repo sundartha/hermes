@@ -76,7 +76,17 @@ export function roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs }) {
 // volle Retry-Kette; mehr als MAX_TOOL_ROUNDS_PER_TURN Ketten gibt es ohnehin nie. Ohne
 // die Frist waere es schlicht Runden * Kette (mit Defaults 48 500 ms) - genau die Zahl,
 // die den Dead-Air-Watchdog reisst.
-export function enforcedTurnWorstCaseMs({ requestTimeoutMs, maxRetries, backoffMs, synthTimeoutMs }) {
+// GQ-P17: holdMs ist die Haltefrist des Shims VOR dem Turn (telnyx-turn-hold.js). Sie
+// laeuft auf derselben Wanduhr und verkuerzt die Tool-Loop-Frist NICHT (die misst ab
+// agentTurn-Start) - sie addiert sich schlicht davor. Default 0: ohne gesetzte Frist ist
+// die Rechnung identisch zum Bestand.
+export function enforcedTurnWorstCaseMs({
+  requestTimeoutMs,
+  maxRetries,
+  backoffMs,
+  synthTimeoutMs,
+  holdMs = 0,
+}) {
   const chainMs = llmTurnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs });
   const lastRoundStartMs = Math.max(
     0,
@@ -85,7 +95,7 @@ export function enforcedTurnWorstCaseMs({ requestTimeoutMs, maxRetries, backoffM
       (MAX_TOOL_ROUNDS_PER_TURN - 1) * chainMs,
     ),
   );
-  return lastRoundStartMs + chainMs + turnOverheadMs(synthTimeoutMs);
+  return holdMs + lastRoundStartMs + chainMs + turnOverheadMs(synthTimeoutMs);
 }
 
 // null = haelt; sonst { worstCaseMs, limitMs, overrunMs } fuer die Boot-Warnung.
@@ -93,8 +103,21 @@ export function enforcedTurnWorstCaseMs({ requestTimeoutMs, maxRetries, backoffM
 // er beendet den Call, wenn zwischen zwei Lebenszeichen zu viel Zeit vergeht - ein
 // einzelner, zu langer Turn reisst genau ihn. Der Telnyx-EIGENE LLM-Timeout ist die zweite
 // Bezugsgroesse; solange AL-P2 ihn nicht gemessen hat, wird er hier NICHT geraten.
-export function deadAirOverrun({ deadAirTimeoutMs, requestTimeoutMs, maxRetries, backoffMs, synthTimeoutMs }) {
-  const worstCaseMs = enforcedTurnWorstCaseMs({ requestTimeoutMs, maxRetries, backoffMs, synthTimeoutMs });
+export function deadAirOverrun({
+  deadAirTimeoutMs,
+  requestTimeoutMs,
+  maxRetries,
+  backoffMs,
+  synthTimeoutMs,
+  holdMs = 0,
+}) {
+  const worstCaseMs = enforcedTurnWorstCaseMs({
+    requestTimeoutMs,
+    maxRetries,
+    backoffMs,
+    synthTimeoutMs,
+    holdMs,
+  });
   if (worstCaseMs <= deadAirTimeoutMs) return null;
   return { worstCaseMs, limitMs: deadAirTimeoutMs, overrunMs: worstCaseMs - deadAirTimeoutMs };
 }

@@ -204,6 +204,11 @@ export const BASE_ENV = {
   // GQ-P1: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
   // TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN=false in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN: "true",
+  // GQ-P17: in Spawn-Tests neutral AUS (0). Nicht der Prod-Default: eine echte
+  // Haltefrist verlangsamte jeden End-to-End-Shim-Turn um Sekunden und liesse zugleich
+  // eine lokale .env in die Spawn-Tests leaken (Lehre test-base-env-drift). Die Frist
+  // wird unit-nah gefahren (test/gq-p17-turn-hold.test.js, injizierte Timer).
+  TELNYX_SHIM_EXTEND_HOLD_MS: "0",
   // GQ-P5: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
   // TELNYX_SHIM_IGNORE_PROVIDER_NUDGE=false in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_SHIM_IGNORE_PROVIDER_NUDGE: "true",
