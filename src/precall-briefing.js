@@ -34,6 +34,7 @@ import {
   bookResearchSearchFee,
 } from "./llm-usage.js";
 import { agentToolNames } from "./claude.js";
+import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.js";
 import { validateAssistantContext, validateMandate } from "./routes/_validation.js";
 import { MANDATE_OUT_OF_SCOPE, MANDATE_OUT_OF_SCOPE_VALUES } from "./store/defaults.js";
 import * as store from "./store.js";
@@ -57,7 +58,7 @@ const briefingTool = {
   description:
     "Gibt den strukturierten Hintergrund fuer den Telefonassistenten zurueck - " +
     "keine gesprochenen Saetze, nur Formulardaten.",
-  input_schema: {
+  parameters: {
     type: "object",
     properties: {
       summary: {
@@ -225,15 +226,22 @@ function sanitizedBriefing(raw) {
   return { context: ctx.value, mandate: withoutSelfGrantedAcceptBest(mandate.value) };
 }
 
-// AL-P10: Werkzeuge + tool_choice EINES Briefing-Aufrufs. OHNE Provider byte-identisch
-// zum Bestand. MIT Provider kommt das Such-Werkzeug dazu UND tool_choice lockert auf
-// "any": ein auf hintergrund ERZWUNGENES tool_choice laesst dem Modell keinen Zug fuer
-// die Suche - es muesste sofort das Formular ausfuellen. "any" statt "auto", weil "auto"
-// eine reine Text-Antwort erlaubt und der Kontext dann verloren geht. Rein (N7).
+// AL-P10: Werkzeuge + Werkzeugwahl EINES Briefing-Aufrufs. OHNE Provider ist das
+// hintergrund-Werkzeug NAMENTLICH erzwungen - der dritte, live erreichbare Wert des
+// Vertrags (llm/tool-choice.js), ohne den dieser Pfad nicht ausdrueckbar waere.
+// MIT Provider kommt das Such-Werkzeug dazu UND die Wahl lockert auf REQUIRED: ein auf
+// hintergrund ERZWUNGENES Werkzeug laesst dem Modell keinen Zug fuer die Suche - es
+// muesste sofort das Formular ausfuellen. REQUIRED statt AUTO, weil AUTO eine reine
+// Text-Antwort erlaubt und der Kontext dann verloren geht.
+// Die Uebersetzung in Anthropics Formen ({type:"tool"} / {type:"any"}) macht der
+// Adapter - der Draht bleibt byte-identisch zum Bestand. Rein (N7).
 function briefingTooling(provider) {
   if (!provider)
-    return { tools: [briefingTool], tool_choice: { type: "tool", name: BRIEFING_TOOL_NAME } };
-  return { tools: [briefingTool, ...provider.researchTools()], tool_choice: { type: "any" } };
+    return { tools: [briefingTool], toolChoice: forcedTool(BRIEFING_TOOL_NAME) };
+  return {
+    tools: [briefingTool, ...provider.researchTools()],
+    toolChoice: LLM_TOOL_CHOICE.REQUIRED,
+  };
 }
 
 // AL-P10: zu buchende Suchen aus einer erfolgreichen Antwort. Zaehler unbekannt
@@ -291,11 +299,11 @@ export async function fetchPrecallBriefing({ objective, ownerNotes, constraints,
   try {
     turn = await briefingLlm.complete({
       model: config.llm.briefingModel,
-      max_tokens: BRIEFING_MAX_TOKENS,
+      maxTokens: BRIEFING_MAX_TOKENS,
       system,
       messages: [{ role: "user", content: userText }],
       tools: tooling.tools,
-      tool_choice: tooling.tool_choice,
+      toolChoice: tooling.toolChoice,
     });
   } catch (err) {
     // Fail-Soft fuer den Aufrufer, ABER nicht kostenlos: AL-P9 bucht eine pessimistische

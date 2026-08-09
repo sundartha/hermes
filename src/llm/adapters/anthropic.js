@@ -3,9 +3,16 @@
 // Definition Duplizierung (G5/S2). Wer hier etwas sucht, sucht Anbieter-Wissen; wer
 // Resilienz sucht (Breaker, Retry, Backoff, Wanduhr, Metrik), sucht im Seam src/llm.js.
 //
-// B3a neutralisiert die ANTWORTSEITE. Die Anfrage (system/tools/max_tokens/tool_choice/
-// cache_control) reicht der Adapter in B3a noch unveraendert durch, bis auf die
-// Nachrichten-Kette: dort uebersetzt er die zwei neutralen Formen aus llm/messages.js.
+// B3a hat die ANTWORTSEITE neutralisiert, B3b die ANFRAGESEITE: Systemanweisung,
+// Werkzeugform, Ausgabe-Deckel, Werkzeugwahl und die Cache-Marken entstehen seither
+// HIER und nicht mehr beim Aufrufer. Damit kennt kein Fachcode mehr Anthropic-Vokabular.
+//
+// UNANTASTBAR: toAnthropicRequest uebersetzt SCHLUESSELWEISE an Ort und Stelle und baut
+// das Body-Objekt NICHT neu. Grund: die Aufrufer haben verschiedene Feldreihenfolgen
+// (agentTurn: tools VOR messages, das Briefing: messages VOR tools), JSON.stringify
+// serialisiert in Einfuegereihenfolge, und der ausgehende Body ist als Golden Master
+// gepinnt (test/b3-wire-golden-master.test.js). Ein {...request, tools} zoege tools ans
+// Ende und veraenderte den Draht.
 //
 // providerTurn traegt die GANZE Anbieter-Antwort, nicht nur ihre content-Liste:
 // src/research/adapters/anthropic-web-search.js liest daraus usage.server_tool_use, um
@@ -27,6 +34,7 @@
 // close (UND_ERR_SOCKET) sowohl ueber APIConnectionError als auch als Defense-in-Depth.
 import Anthropic from "@anthropic-ai/sdk";
 import { TOOL_RESULTS_ROLE } from "../messages.js";
+import { LLM_TOOL_CHOICE } from "../tool-choice.js";
 
 // Transiente HTTP-Status: Verbindungs-/Lastklasse, vom Server gefahrlos wiederholbar.
 // 408 Timeout, 409 Conflict, 429 RateLimit, >=500 Server. NICHT 400/401/403/404/422.
@@ -66,6 +74,18 @@ const TEXT_BLOCK_JOINER = " ";
 const TEXT_BLOCK = "text";
 const TOOL_USE_BLOCK = "tool_use";
 const TOOL_RESULT_BLOCK = "tool_result";
+
+// Anthropic-Marke fuer das Ende eines cachefaehigen Praefix-Blocks. "ephemeral" = die
+// 5-min-Schreibrate; sie ist die EINZIGE, die die Preisstaffel (B4a) traegt - ein `ttl`
+// waehlte still eine andere Rate und buchte zu wenig (Regel 1). Eingefroren -> sichere
+// Mehrfach-Referenz (System-Block + letztes Werkzeug), kein gestreuter Magic-String (G25).
+const CACHE_CONTROL_EPHEMERAL = Object.freeze({ type: "ephemeral" });
+
+// Anthropics Werkzeugwahl-Formen (G25). "any" heisst bei Anthropic, was der Vertrag
+// "required" nennt: irgendein Werkzeug, aber eines.
+const TOOL_CHOICE_ANY = Object.freeze({ type: "any" });
+const TOOL_CHOICE_AUTO = Object.freeze({ type: "auto" });
+const TOOL_CHOICE_NAMED = "tool";
 
 // --- Fehlerklassifikation (LlmErrorClassification): pur, ohne Client ---------------
 
@@ -164,7 +184,7 @@ function toLlmTurn(resp, billingModelId) {
   };
 }
 
-// --- Neutrale Nachrichten -> Anthropic-Form ---------------------------------------
+// --- Neutrale Anfrage -> Anthropic-Form -------------------------------------------
 
 const toolResultBlock = (result) => ({
   type: TOOL_RESULT_BLOCK,
@@ -183,14 +203,71 @@ function anthropicMessage(message) {
   return message;
 }
 
-// Ersetzt NUR das messages-Feld und laesst die Schluessel-REIHENFOLGE unangetastet:
-// JSON.stringify serialisiert in Einfuegereihenfolge, und der ausgehende Body muss
-// byte-identisch zum Bestand bleiben (Abnahme A3). Ein {...request, messages} wuerde
-// messages ans Ende ziehen und damit den Draht veraendern.
-function withAnthropicMessages(request) {
+// Ein neutrales Werkzeug in Anthropic-Form. Ein Eintrag OHNE parameters gehoert bereits
+// Anthropic (serverseitiges web_search aus research/adapters/) und geht unveraendert
+// durch - dieselbe Durchreich-Regel wie bei anthropicMessage (G11).
+function anthropicTool(tool) {
+  if (!tool.parameters) return tool;
+  return { name: tool.name, description: tool.description, input_schema: tool.parameters };
+}
+
+// Anthropic braucht den Cache-Breakpoint am LETZTEN Werkzeug: er rendert
+// tools -> system -> messages, ein Breakpoint dort cacht den ganzen Werkzeugblock.
+// Leere Liste -> last = -1 -> kein Treffer, kein Sonderfall noetig. Rein (N7).
+function anthropicTools(tools, cachePrefix) {
+  const last = tools.length - 1;
+  return tools.map((tool, i) => {
+    const mapped = anthropicTool(tool);
+    return cachePrefix && i === last
+      ? { ...mapped, cache_control: CACHE_CONTROL_EPHEMERAL }
+      : mapped;
+  });
+}
+
+// Die zweite Anthropic-Cache-Marke: der Systemtext wird zum 1-Element-Textblock, damit
+// er ein cache_control tragen kann. Ohne Cache-Hinweis bleibt der reine String (das ist
+// die Form, die summarizeCall und das Briefing senden).
+function anthropicSystem(system, cachePrefix) {
+  if (!cachePrefix) return system;
+  return [{ type: TEXT_BLOCK, text: system, cache_control: CACHE_CONTROL_EPHEMERAL }];
+}
+
+// Die drei Vertragswerte (llm/tool-choice.js) in Anthropics Formen. Fail-closed statt
+// still falsch: ein unbekannter Wert wuerde als {type:"tool", name:undefined} auf dem
+// Draht landen und als HTTP 400 zurueckkommen - ohne Hinweis, wo er entstand (P8).
+function anthropicToolChoice(choice) {
+  if (choice === LLM_TOOL_CHOICE.AUTO) return TOOL_CHOICE_AUTO;
+  if (choice === LLM_TOOL_CHOICE.REQUIRED) return TOOL_CHOICE_ANY;
+  if (typeof choice?.tool === "string") return { type: TOOL_CHOICE_NAMED, name: choice.tool };
+  throw new Error(`Anthropic-Adapter: unbekannte Werkzeugwahl ${JSON.stringify(choice)}`);
+}
+
+// cachePrefix wird VOR der Schleife abgestreift: er ist ein Hinweis an DIESEN Adapter,
+// kein Anthropic-Feld, und darf den Draht nie erreichen. Unbekannte Schluessel gehen
+// unveraendert durch (default) - anbieter-eigene Knoepfe brauchen keine Vertragsaenderung.
+function toAnthropicRequest({ cachePrefix, ...request }) {
   const out = {};
-  for (const [key, value] of Object.entries(request))
-    out[key] = key === "messages" ? value.map(anthropicMessage) : value;
+  for (const [key, value] of Object.entries(request)) {
+    switch (key) {
+      case "maxTokens":
+        out.max_tokens = value;
+        break;
+      case "system":
+        out.system = anthropicSystem(value, cachePrefix);
+        break;
+      case "tools":
+        out.tools = anthropicTools(value, cachePrefix);
+        break;
+      case "toolChoice":
+        out.tool_choice = anthropicToolChoice(value);
+        break;
+      case "messages":
+        out.messages = value.map(anthropicMessage);
+        break;
+      default:
+        out[key] = value;
+    }
+  }
   return out;
 }
 
@@ -220,7 +297,7 @@ export function createAnthropicProvider({
   const openStream = messagesStream || ((params, options) => sdk.messages.stream(params, options));
 
   async function complete(request) {
-    return toLlmTurn(await create(withAnthropicMessages(request)), request.model);
+    return toLlmTurn(await create(toAnthropicRequest(request)), request.model);
   }
 
   // signal ist die WANDUHR DES SEAMS (llm.js), nicht der Per-Versuch-Timeout dieses
@@ -228,7 +305,7 @@ export function createAnthropicProvider({
   // den Anbieter. Der Adapter DEUTET einen Abbruch nicht; das tut der Seam, dem die Uhr
   // gehoert (llm/ports.js: der Unavailable-Fehlertyp bleibt im Seam).
   async function completeStream({ signal, ...request }, sink) {
-    const stream = openStream(withAnthropicMessages(request), { signal });
+    const stream = openStream(toAnthropicRequest(request), { signal });
     let textBlocks = 0;
     for await (const event of stream) {
       if (event.type === "content_block_start") {

@@ -23,6 +23,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { tempDataDir, seedState, seedCall } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { anthropicToolsOnWire } from "./anthropic-wire-fixtures.js";
 
 const OWNER = "Jonas Beispiel";
 // Hebt suppressEndCall auf (isSubstantialCallerText) - ohne substanzielle Anrufer-Zeile
@@ -185,10 +186,9 @@ test("AL-P14-6: ohne erfuellte Bedingung geht der Werkzeugsatz BYTE-IDENTISCH zu
   call.consultPolledAtMs = 0;
   assert.equal(inCall.consultAvailableFor(call), false);
   await claude.agentTurn(call, SUBSTANTIAL);
-  // Erwartung = Bestands-toolDefs mit dem cache_control-Marker am LETZTEN Eintrag (L3).
-  const expected = claude.toolDefs("de").map((tool, i, all) =>
-    i === all.length - 1 ? { ...tool, cache_control: { type: "ephemeral" } } : tool,
-  );
+  // Erwartung = Bestands-toolDefs in Anthropic-Draht-Form mit dem cache_control-Marker
+  // am LETZTEN Eintrag (L3).
+  const expected = anthropicToolsOnWire(claude.toolDefs("de"));
   assert.equal(JSON.stringify(bodies[0].tools), JSON.stringify(expected));
 });
 

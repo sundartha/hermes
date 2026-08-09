@@ -6,10 +6,11 @@
 // Gate (Regel 1) die Cache-Token mitzaehlt (input + cache_creation + cache_read) und
 // (4) dass es ohne Cache-Felder byte-identisch zum Bestand zaehlt (|| 0-Fallback).
 //
-// CALLER-CHECK: NUR die Budget-Engine (agentTurn) wird hier markiert - lokal an der
-// Anthropic-Call-Site. systemPrompt()/toolDefs() selbst bleiben unveraendert; die
-// Realtime-Bridge konsumiert sie ueber instructions()/realtimeTools() weiter ohne
-// cache_control -> kein Regress (abgedeckt durch das gruene bridge-openai-event).
+// CALLER-CHECK: NUR die Budget-Engine (agentTurn) wird hier markiert - im Anthropic-
+// Adapter, ausgeloest durch LlmRequest.cachePrefix an der Call-Site. systemPrompt()/
+// toolDefs() selbst bleiben unveraendert; die Realtime-Bridge konsumiert sie ueber
+// instructions()/realtimeTools() weiter ohne cache_control -> kein Regress (abgedeckt
+// durch das gruene bridge-openai-event).
 //
 // Rein in-process (kein Server-Spawn, kein pglite) - dieselbe Naht wie l2-calendar-
 // prefetch: ANTHROPIC_BASE_URL + DATA_DIR vor dem ersten config-Import, dann
@@ -106,9 +107,14 @@ test("T-L3-2 Request-Form Tools: nur der letzte Tool traegt cache_control, Inhal
   }
   // Der letzte traegt cache_control ...
   assert.deepEqual(lastBody.tools[last].cache_control, EPHEMERAL, "letzter Tool traegt cache_control");
-  // ... und ist OHNE diese Markierung byte-identisch zum toolDefs-Eintrag.
+  // ... und ist OHNE diese Markierung byte-identisch zum toolDefs-Eintrag - die Wire-
+  // Form heisst weiterhin input_schema, die neutrale Quelle heisst seit B3b parameters.
   const { cache_control, ...withoutMarker } = lastBody.tools[last];
-  assert.deepEqual(withoutMarker, defs[last], "Tool-Inhalt (ohne cache_control) byte-identisch");
+  assert.deepEqual(
+    withoutMarker,
+    { name: defs[last].name, description: defs[last].description, input_schema: defs[last].parameters },
+    "Tool-Inhalt (ohne cache_control) byte-identisch",
+  );
 });
 
 test("T-L3-3 Metering zaehlt Cache-Token (Budget-Gate, Regel 1)", async () => {

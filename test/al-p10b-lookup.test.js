@@ -40,6 +40,7 @@ import { LOOKUP_MAX_FACTS } from "../src/research/lookup-guard.js";
 // beruehrt. MOCK_USAGE dort ist identisch zu der lokalen message()-Fixture (10/5), die
 // Kostendifferenz-Assertionen bleiben damit gueltig.
 import { makeJsonMessage, makeWriteSse, MOCK_USAGE } from "./anthropic-sse-fixtures.js";
+import { anthropicToolsOnWire } from "./anthropic-wire-fixtures.js";
 
 const OWNER = "Jonas Beispiel";
 // Hebt suppressEndCall auf (isSubstantialCallerText) - ohne substanzielle Anrufer-Zeile
@@ -213,10 +214,9 @@ test("AL-P10b-1: Flag aus -> kein look_up im tools-Array, GRENZEN-Zeile bleibt n
     assert.ok(!prompt.includes(LOCALES.de.prompt.boundaries.lookupAllowed));
     await claude.agentTurn(call, SUBSTANTIAL);
   });
-  // Erwartung = Bestands-toolDefs mit dem cache_control-Marker am LETZTEN Eintrag (L3).
-  const expected = claude.toolDefs("de").map((tool, i, all) =>
-    i === all.length - 1 ? { ...tool, cache_control: { type: "ephemeral" } } : tool,
-  );
+  // Erwartung = Bestands-toolDefs in Anthropic-Draht-Form mit dem cache_control-Marker
+  // am LETZTEN Eintrag (L3).
+  const expected = anthropicToolsOnWire(claude.toolDefs("de"));
   assert.equal(JSON.stringify(bodies[0].tools), JSON.stringify(expected));
   assert.equal(exaRequests.length, 0);
 });
