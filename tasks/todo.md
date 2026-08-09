@@ -1082,3 +1082,50 @@ Beide Fixes sind **ungemessen am echten Gespraech**. Der naechste Testanruf muss
    unterscheiden,
 3. alle vier Token-Sorten in den `[metrics] llm`-Zeilen,
 4. das Owner-Urteil zur Latenz (3000 ms sind zum Trimmen gedacht).
+
+### GQ-P17 LIVE-ABNAHME: Mechanismus wirkt, Latenz vom Owner ABGELEHNT (2026-08-09)
+
+Anruf `call_mslz71hv6ogm` auf dem Stand `97c7b95`.
+
+**Der Mechanismus wirkt:** 6 `hold`-Zeilen, davon **2 `outcome: extended`** (turnSeq 5+6,
+~2 s auseinander) — zwei Fragment-Turns unterdrueckt, keine zweite `look_up`-Recherche.
+
+**Der Preis ist inakzeptabel.** Owner woertlich: *"latenz war extrem lange absolut
+inakzepatable"*. 4 von 6 Fristen liefen komplett ab (`elapsed`), und **`shim_turn` misst die
+Frist NICHT mit**:
+
+| `shim_turn` | + Frist | tatsaechliche Wartezeit |
+|---|---|---|
+| 1321 ms | 3000 | 4,3 s |
+| 5099 ms | 3000 | 8,1 s |
+| **7607 ms** | 3000 | **10,6 s** |
+
+Vorher (ohne GQ-P17): `shim_turn` 1306-4911 ms ohne Aufschlag.
+
+**Sofortmassnahme:** `TELNYX_SHIM_EXTEND_HOLD_MS=0` in der Render-Env gesetzt (per
+`mcp__render__update_environment_variables`, merged, loest Restart aus). Der Rueckweg war
+dafuer eingebaut.
+
+**Der Denkfehler des Leads, benannt:** die Annahme, die Frist sei "nur spuerbar, wenn der
+Anrufer fertig geredet hat". Genau dann kostet sie voll — und das ist der Normalfall (4 von
+6). Sie zahlt sich nur in den 2 Faellen aus, in denen wirklich ein Fragment nachkam. Eine
+pauschale Frist bestraft die Mehrheit fuer die Minderheit.
+
+**Umbau-Ansaetze (ungeprueft, in `tasks/kickoff-latenz-und-gespraech-2026-08-10.md`):**
+adaptiv statt pauschal; deutlich kuerzer (800-1200 ms); Satzzeichen als Fragment-Signal —
+dafuer muesste `smart_format` bis in den Call kommen, was der Pro-Call-Block
+(`voice.js:343`, nur `{model, language}`) heute verhindert.
+
+### FIX-1 LIVE ABGENOMMEN — beide Teile belegt
+
+1. **Die Zusammenfassung kommt wieder.** `get_transcript` lieferte einen echten
+   `result_summary` (inhaltlich ein vernichtendes Urteil ueber das Gespraech — aber DASS er
+   kommt, ist der Beleg; vorher kam gar nichts).
+2. **Alle vier Token-Sorten stehen im Log**, am Anruf gemessen: `input_tokens: 4207`,
+   `output_tokens: 49`, an anderen Zeilen `cache_creation_input_tokens: 4192` und
+   **`cache_read_input_tokens: 4192`**.
+
+**Damit ist eine frueher notierte Vermutung WIDERLEGT:** es gibt sehr wohl Cache-Treffer.
+Die Annahme "kein einziger Cache-Treffer" vom selben Tag beruhte auf der Abwesenheit der
+Felder — die aber schlicht nicht geloggt wurden. **B4b ist ab jetzt messbar und braucht
+keinen neuen Code mehr.**
