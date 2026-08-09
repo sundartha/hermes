@@ -1197,9 +1197,14 @@ muss warten — die einzige freie Variable ist, WORAUF gewartet wird.
 | Fragment-Abdeckung | 7 von 11 | dieselben 7 |
 | Kosten je gefangenem Fragment | 0 | eine Modellrunde + ggf. eine Recherche |
 
-**Live-Abnahme (braucht Deploy + einen Anruf):** `TELNYX_SHIM_EXTEND_HOLD_MS` steht in der
-Render-Env auf `0` und **muss dort bleiben, bis der neue Code live ist** — auf dem alten Stand
-reaktiviert jeder Wert > 0 exakt die abgelehnte serielle Frist. Danach Wert setzen, ein Anruf,
+**DEPLOYT 2026-08-09:** `14601a0` ist live (`/healthz`, gegen `git rev-parse master`
+geprueft; Shim-Route antwortet 403 ohne Bearer). Die Sperre ist damit im Code, aber
+**noch AUS** — `TELNYX_SHIM_EXTEND_HOLD_MS` steht weiter auf `0`, der `configHash` ist
+unveraendert. Das Verhalten ist bis zum Setzen des Wertes byte-identisch zum Vorstand.
+
+**Naechster Schritt (Owner, im Dashboard):** `TELNYX_SHIM_EXTEND_HOLD_MS=3000`. Die
+Reihenfolge-Warnung ist mit dem Deploy **erledigt** — der Wert steuert jetzt die Sperre, nicht
+mehr die alte serielle Frist. Danach ein Anruf,
 `[telnyx-shim] hold` nach `outcome` auswerten: `silenced` = Fragment gefangen (der Gewinn),
 `released` = die Sperre hat das erste Wort gekostet (der Preis), `flushed` = sie war gratis.
 
