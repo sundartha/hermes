@@ -710,3 +710,58 @@ Beide Testanrufe hatten ein `objective` ueber `OPENING_GOAL_MAX_CHARS` (75) — 
 Zeichen. Beide wurden mitten im Satz gekappt, und der Owner meldete das als Defekt. Wer einen
 Sprechpfad testet, prueft VORHER die Kappungsgrenzen des Pfades, sonst misst er sein eigenes
 Eingabefehler-Verhalten.
+
+## B3b-Abnahme: zwei Fallen, die eine gruene Zahl vorgetaeuscht haetten
+
+### 1. `git checkout <branch>` scheitert STILL, wenn ein Worktree den Branch belegt
+
+Zur Abnahme von B3b sollte die Suite auf dem Phasen-Branch laufen:
+
+```
+git checkout phase/b3b-anfrageseite 2>&1 | tail -2 && npm test > lauf.log
+```
+
+Der `checkout` schlug fehl (der Workflow-Worktree hielt den Branch), `tail -2` schluckte die
+Meldung, und `&&` sah trotzdem Exit 0 — **`npm test` lief auf `master`**. Ergebnis: 4077 pass,
+fail 0. Eine vollkommen plausible gruene Zahl, die ueber den Branch NICHTS aussagt.
+
+**Was gerettet hat:** nicht die Testzahl, sondern eine zweite, unabhaengige Frage —
+*"kommen die NEUEN Tests ueberhaupt vor?"*:
+
+```
+grep -cE "^ok [0-9]+ - B3B-" lauf.log   # -> 0
+```
+
+**Regel:** ein Testlauf, der eine Aenderung belegen soll, wird IMMER gegen ein Merkmal der
+Aenderung geprueft, nicht nur gegen `fail 0`. Eine Gesamtzahl kann nicht zwischen "gruen auf dem
+richtigen Stand" und "gruen auf dem falschen Stand" unterscheiden. Das ist dieselbe Logik wie
+[[pruefkommando-ohne-positiv-kontrolle]]: der Erfolgsfall und der Nicht-Fall sehen gleich aus.
+
+**Zusatzregel:** Worktrees nach dem Workflow entfernen, BEVOR man auf den Branch wechselt —
+oder gleich im Worktree testen (`cd .claude/worktrees/<run>-2 && npm test`). Der Symlink auf
+`node_modules` ist dort bereits gesetzt.
+
+### 2. Workflow meldete `fail 0`, der eigene Lauf fand `fail 1` — zum ZWEITEN Mal
+
+Der Workflow gab `gate: PASS`, `testPassCount: 4086`, `fixRounds: 0`. Der eigene Lauf im
+Worktree: **4086 tests, 4085 pass, fail 1** (`AM6: geseedeter Owner-sub -> Gateway-Tenant`).
+
+Isoliert nachgefahren: **5/5 gruen, Exit 0**. Der Beleg fuer "Flake" ist dabei nicht das gruene
+Ergebnis allein, sondern die **Laufzeit**: 321 ms isoliert gegen 3449 ms unter Volllast. Der
+Test wartet auf eine Log-Zeile und lief unter Last in sein Timeout. Dazu kommt das
+Bereichsargument: B3b hat OAuth/MCP nicht angefasst.
+
+**Regel bestaetigt:** rot zaehlt nur, wenn isoliert rot — aber "isoliert gruen" allein ist noch
+kein Freispruch. Es braucht einen MECHANISMUS (hier: Timing unter Last, an der Laufzeit
+ablesbar) plus das Argument, dass der rote Bereich vom Diff gar nicht beruehrt wird.
+
+### 3. Auch der Lead verliert Testergebnisse durch eine Pipe
+
+Der `test:gates`-Lauf dieser Session lief ueber eine Stunde und lieferte **kein** Ergebnis: das
+Kommando war `npm run test:gates 2>&1 | grep -E "^# (tests|pass|fail)"`. Beim Uebergang ins
+Hintergrund-Backgrounding war die Pipe weg, die Datei endete nach dem Header.
+
+Das ist exakt die Lehre, die weiter oben in diesem Dokument steht ("Hintergrund-Testlaeufe NIE
+mit `| tail`") — im selben Arbeitstag verletzt, weil `grep` harmloser aussieht als `tail`.
+**Jede** Filterung in der Pipe eines Hintergrundlaufs ist derselbe Fehler. Volle Ausgabe in die
+Datei, filtern erst beim Lesen.

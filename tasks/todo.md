@@ -883,3 +883,57 @@ deutsche Modellantwort).
 - **Testzahl-Differenz zum Kickoff:** `npm test` meldet **4077** (fail 0, Exit 0), der Kickoff
   behauptete 4057. Der Katalog-Filter ist intakt (0 Katalog-IDs im Regressionslauf gemessen),
   die Suite ist gruen — die Zahl in der Kickoff-Notiz ist ungenau, kein Defekt.
+
+## B3b — Anfrageseite neutralisiert. ERLEDIGT + GEMERGT (2026-08-09, Merge 48b9617)
+
+Gate PASS **ohne Fix-Runde** (5 Agenten, ~756k Subagent-Token, ~70 min). 13 Dateien, +441/-84.
+Spec: `tasks/b3b-spec.md`. Impl-Commit `f2b3920`.
+
+### Was gebaut wurde
+
+- **Der Adapter uebersetzt jetzt auch die ANFRAGE.** `toAnthropicRequest` (vormals
+  `withAnthropicMessages`) bildet `system` / `tools` / `maxTokens` / `toolChoice` /
+  `cachePrefix` schluesselweise an Ort und Stelle ab. `claude.js` und `precall-briefing.js`
+  sprechen **kein Anthropic-Vokabular mehr**.
+- **`src/llm/tool-choice.js`** — dreiwertiges `LlmRequest.toolChoice` (`AUTO` / `REQUIRED` /
+  `forcedTool`) als eigene kleine Quelle.
+- **`LlmRequest.cachePrefix`** (E6) — ein boolescher Anbieter-HINWEIS statt Anthropics
+  `cache_control`-Marker im Fachcode. Der Fachcode sagt "cache diesen Vorspann", der Adapter
+  weiss, wie das bei Anthropic aussieht.
+- **`bridge.js`** folgt dem K22-Nachzug (`realtimeTools` liefert `parameters` statt
+  `input_schema`).
+
+### Lead-Verifikation, selbst gefahren
+
+| Probe | Ergebnis |
+|---|---|
+| Restmenge `claude.js` | `input_schema`/`cache_control`/`max_tokens`/`tool_choice` = **0/0/0/0** |
+| Restmenge `precall-briefing.js` | **0/0/0/0** |
+| `bridge.js` | `input_schema` 0; das eine `tool_choice` ist **OpenAI-Realtime**-Vokabular am OpenAI-Draht (kommentiert), kein Anthropic-Leck |
+| **Golden-Master `42a2fe5`** | **NICHT angefasst und gruen** — der ausgehende Body ist byte-identisch geblieben trotz Komplettumbau |
+| Suite im Worktree | 4086 tests, **fail 1** -> `AM6` isoliert **5/5 gruen** |
+| B3B-Tests | **9/9**, inkl. Positiv-Kontrolle (B3B-1) und fail-closed bei unbekannter Wahl (B3B-4) |
+| Syntax | `node --check` auf allen sechs Produktionsdateien ok |
+| Auf `master` nachgefahren | B3b + Golden-Master **17/17 gruen** |
+
+**Der Golden-Master ist der wertvollste Beleg dieser Phase:** eine Datei, die NICHT im Diff
+steht und trotzdem gruen bleibt, beweist mehr als jeder neu geschriebene Test — der Draht nach
+aussen hat sich nicht bewegt.
+
+### Zwei Fallen bei der Abnahme (Lehren in `tasks/lessons.md`)
+
+1. `git checkout <branch>` scheiterte STILL am belegten Worktree -> `npm test` lief auf
+   `master` und meldete 4077 gruen. Aufgefallen nur durch die Gegenfrage "kommen die NEUEN
+   B3B-Tests ueberhaupt vor?" (`grep -c` -> 0).
+2. Workflow meldete `fail 0`, eigener Lauf fand `fail 1` — **zum zweiten Mal in diesem Repo.**
+   Flake-Beleg ist nicht das gruene Isoliert-Ergebnis, sondern die Laufzeit (321 ms isoliert
+   gegen 3449 ms unter Volllast) plus das Bereichsargument (B3b fasst OAuth/MCP nicht an).
+
+### Was jetzt noch fehlt, damit der Anbieterwechsel real ist
+
+**Nur noch B5**: DeepSeek-Adapter + Registry (`LLM_PROVIDER`), also K20/K21 der Grenztabelle.
+Bindend aus dem Spike (2026-08-09): `deepseek-v4-pro` lehnt im Thinking-Mode
+`tool_choice:"required"` UND die benannte Form mit **HTTP 400** ab; Abhilfe
+`thinking:{"type":"disabled"}` ist belegt, aber nur isoliert (n=2). Ausserdem kommen
+`tool_calls` beim Streaming **fragmentiert ueber viele SSE-Chunks** und muessen ueber `index`
+zusammengesetzt werden — eine durchreichende Sink gaebe kaputte JSON-Fragmente weiter.
