@@ -281,6 +281,36 @@ test("T-I13-4: Fehlerpfad traegt callId, aber KEINE Cache-Zaehler (keine Respons
   assert.ok(!("cache_read_input_tokens" in m));
 });
 
+test("FIX1-6: die Metrik traegt alle vier Token-Sorten aus resp.usage - >0-Regel unveraendert", async () => {
+  const { client, metricCalls } = clientWith({
+    create: () =>
+      Promise.resolve({
+        id: "x",
+        usage: {
+          input_tokens: 5,
+          output_tokens: 7,
+          cache_creation_input_tokens: 20,
+          cache_read_input_tokens: 100,
+        },
+      }),
+  });
+  await client.complete({ callId: "call_42" });
+  const m = metricCalls[0];
+  assert.equal(m.input_tokens, 5);
+  assert.equal(m.output_tokens, 7);
+  assert.equal(m.cache_creation_input_tokens, 20);
+  assert.equal(m.cache_read_input_tokens, 100);
+
+  // Gegenprobe der >0-Regel: 0-Werte werden NICHT gemeldet (Bestandsregel unveraendert).
+  const zero = clientWith({
+    create: () =>
+      Promise.resolve({ id: "y", usage: { input_tokens: 0, output_tokens: 0 } }),
+  });
+  await zero.client.complete({});
+  assert.ok(!("input_tokens" in zero.metricCalls[0]));
+  assert.ok(!("output_tokens" in zero.metricCalls[0]));
+});
+
 // S1-10: Der Breaker-open-Zweig in complete() emittiert eine STRUKTURELL abweichende
 // Metrik-Payload (outcome/attempts/breakerState, OHNE latencyMs) - anders als success/
 // non-transient (die immer latencyMs tragen, da eine echte Messung stattfand). Diese

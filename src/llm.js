@@ -184,13 +184,22 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 //
 // SCHLUESSELNAMEN bleiben die Anthropic-Namen (test/llm.test.js und test/l0-metrics.test.js
 // pinnen den Payload-Schluesselsatz woertlich); ein Rename ist eine eigene Entscheidung.
-// Gemeldet wird nur ein Wert > 0: LlmTokenUsage kennt kein "abwesend", 0 heisst dort
-// "keine Token dieser Preisklasse" - und genau das ist keine Meldung wert.
+// input_tokens ist - wie bei Anthropic - die UNGECACHTE Eingabeklasse; die Gesamteingabe
+// ist die Summe der drei Eingabe-Sorten.
+// FIX-1: alle VIER Sorten, die die Buchung kennt (llm-usage.js billedTokens), erreichen
+// jetzt auch das Log. Vorher trugen nur die beiden Cache-Zaehler durch - aus einer
+// Live-Zeile liess sich der gebuchte Betrag deshalb nicht rekonstruieren.
+// Gemeldet wird weiterhin nur ein Wert > 0, fuer alle vier gleich: LlmTokenUsage kennt
+// kein "abwesend", 0 heisst dort "keine Token dieser Preisklasse" (der Fall "gar nicht
+// gemeldet" traegt seine eigene Marke estimated:true) - ein weggelassenes Feld ist damit
+// eindeutig als 0 lesbar, kein Informationsverlust und keine Falschaussage.
 function metricsExtra(callId, usage) {
   const extra = {};
   if (callId !== undefined) extra.callId = callId;
+  if (usage?.inputUncachedTokens) extra.input_tokens = usage.inputUncachedTokens;
   if (usage?.inputCacheWriteTokens) extra.cache_creation_input_tokens = usage.inputCacheWriteTokens;
   if (usage?.inputCacheReadTokens) extra.cache_read_input_tokens = usage.inputCacheReadTokens;
+  if (usage?.outputTokens) extra.output_tokens = usage.outputTokens;
   return extra;
 }
 
@@ -335,4 +344,29 @@ export function createLlmClient({
   }
 
   return { complete, completeStream };
+}
+
+// Zweite Client-Instanz NEBEN dem Sprechpfad (precall-briefing.js: das Briefing;
+// claude.js: die Zusammenfassung). EINE Quelle (G5) fuer die Regel, was so eine Instanz
+// selbst mitbringt und was sie erbt:
+//   eigen  - Timeout + Retry-Obergrenze: ihre Frist ist eine andere als die des
+//            Gespraechs-Turns (kein Provider-Webhook wartet auf sie).
+//   eigen  - der Breaker (jede Instanz baut ihren eigenen). Bewusste Konsequenz: ein
+//            Ausfall eines Nebenpfads kippt den Gespraechs-Breaker NICHT und umgekehrt.
+//   geerbt - Backoff-Basis + Breaker-Schwellen (kein zweiter Env-Var-Satz).
+//   nie    - ein zweiter ANBIETER: den waehlt die Registry prozessweit aus LLM_PROVIDER.
+export function createSecondaryLlmClient({ config, requestTimeoutMs, maxRetries, metrics }) {
+  return createLlmClient({
+    config: {
+      llm: {
+        llmRequestTimeoutMs: requestTimeoutMs,
+        llmMaxRetries: maxRetries,
+        llmBackoffMs: config.llm.llmBackoffMs,
+        llmBreakerThreshold: config.llm.llmBreakerThreshold,
+        llmBreakerWindowMs: config.llm.llmBreakerWindowMs,
+        llmBreakerCooldownMs: config.llm.llmBreakerCooldownMs,
+      },
+    },
+    metrics,
+  });
 }
