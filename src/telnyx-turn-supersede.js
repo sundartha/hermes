@@ -42,15 +42,32 @@ export function makeInFlightTurnRegistry() {
     };
   }
 
+  // Warum dieser Call gerade NICHT verdraengbar ist - null heisst: er ist es. Rein, ohne
+  // Nebeneffekt. EINE Quelle (G5) fuer die drei Bedingungen: der Riegel selbst und die
+  // Abfrage darunter beantworten damit zwangslaeufig dasselbe, statt auseinanderzudriften.
+  function refusalFor(callId) {
+    const entry = running.get(callId);
+    if (!entry) return SUPERSEDE_REFUSAL.NO_INFLIGHT;
+    if (entry.controller.signal.aborted) return SUPERSEDE_REFUSAL.ALREADY_SUPERSEDED;
+    if (entry.hasSpokenText()) return SUPERSEDE_REFUSAL.ALREADY_SPOKEN;
+    return null;
+  }
+
   // Der Riegel. Liefert die Entscheidung samt Grund - der Aufrufer loggt sie, er raet nicht.
   function supersedeTurn(callId) {
-    const entry = running.get(callId);
-    if (!entry) return refused(SUPERSEDE_REFUSAL.NO_INFLIGHT);
-    if (entry.controller.signal.aborted) return refused(SUPERSEDE_REFUSAL.ALREADY_SUPERSEDED);
-    if (entry.hasSpokenText()) return refused(SUPERSEDE_REFUSAL.ALREADY_SPOKEN);
-    entry.controller.abort();
+    const refusal = refusalFor(callId);
+    if (refusal) return refused(refusal);
+    running.get(callId).controller.abort();
     return { superseded: true, refusal: null };
   }
 
-  return { beginTurn, supersedeTurn };
+  // Reine Abfrage, KEIN Nebeneffekt (P5 Command-Query-Trennung): laeuft ein Turn dieses
+  // Calls, der noch nichts gesprochen hat - also einer, den supersedeTurn gleich abbrechen
+  // WUERDE? Der Shim braucht die Antwort VOR seinen Gates (GQ-H1-a entscheidet dort, ob eine
+  // agent-Zeile verworfen werden darf), verdraengen darf er aber erst DANACH.
+  function hasSilentTurn(callId) {
+    return refusalFor(callId) === null;
+  }
+
+  return { beginTurn, supersedeTurn, hasSilentTurn };
 }

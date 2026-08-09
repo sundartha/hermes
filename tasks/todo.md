@@ -1129,3 +1129,152 @@ dafuer muesste `smart_format` bis in den Call kommen, was der Pro-Call-Block
 Die Annahme "kein einziger Cache-Treffer" vom selben Tag beruhte auf der Abwesenheit der
 Felder — die aber schlicht nicht geloggt wurden. **B4b ist ab jetzt messbar und braucht
 keinen neuen Code mehr.**
+
+---
+
+# GQ-P18 — Sprechsperre statt Wartezeit (Umbau der Haltefrist)
+
+Auftrag: `tasks/kickoff-latenz-und-gespraech-2026-08-10.md`, Abschnitt 3.
+Regel dieser Datei: **GEMESSEN traegt ein Kommando.** Alles andere ist als Vermutung markiert.
+
+## Schritt 0 — Die drei Kickoff-Ansaetze an Daten gemessen. **ERLEDIGT**
+
+**Verifikationsmethode:** alle `turn_probe`-Zeilen der vier Anrufe mit fragmentierter
+Erkennung aus dem Render-Log ziehen (`mcp__render__list_logs`, `text:["turn_probe"]`,
+2026-08-08/09) und die `EXTENDS`-Ereignisse nach `gapMs` und `chars` auswerten.
+
+**Datenbasis:** 4 Anrufe, 27 Shim-POSTs, **11 `extends`-Ereignisse**.
+
+| Luecke bis zum Fragment (`gapMs`, ms) | 1314 · 1633 · 1983 · 2239 · 2508 · 2604 · 2926 · 3212 · 3814 · 4054 · 5476 |
+|---|---|
+
+| Ansatz (Kickoff) | Urteil, belegt |
+|---|---|
+| **2. Deutlich kuerzer (800-1200 ms)** | **tot.** Die kleinste gemessene Luecke ist 1314 ms — eine Frist von 1200 ms faengt **0 von 11**. 1500 ms faengt 1, 2000 ms faengt 2, 2500 ms faengt 4, 3000 ms faengt 7. |
+| **3. Satzzeichen als Signal** | **strukturell unmoeglich**, jetzt aus der Spec belegt (nicht aus Erinnerung): `AIAssistantStartRequest.transcription` hat **genau zwei** Eigenschaften, `model` und `language`. Kein `settings`, also kein `smart_format`. Dieselbe Grenze sperrt die Turn-End-Regler von AssemblyAI und Soniox. |
+| **1. Adaptiv (nur halten, wenn dieser Call schon fragmentiert hat)** | **schlechter als pauschal.** Am Anruf `call_mslm38yfw5xb` durchgerechnet: pauschal 2 Doppelantworten bei 15 s Aufschlag, adaptiv 4 Doppelantworten bei 12 s. Fragmentierung beginnt jedes Mal an einem `other`-Turn — die Regel kommt per Konstruktion zu spaet. |
+
+**Zusatzbefund, verworfen als Signal:** Textlaenge trennt nicht. Fragment-Turns im Mittel
+52,1 Zeichen, Final-Turns 73,6 — die Verteilungen ueberlappen fast vollstaendig
+(Fragmente 2..120, Finals 23..150).
+
+**Die Wurzel, benannt:** die gemessenen Luecken (1,3-5,5 s) sind **Sprechpausen eines
+Menschen**, keine Zerhackung durch die Erkennung. `deepgram/nova-3` beendet den Turn nach
+kurzer Stille und hat laut Spec **keinen** Regler dagegen. Ein Textsignal, das "Pause" von
+"fertig" trennt, existiert nicht. **Wer Fragmente fangen will, muss warten — die einzige
+freie Variable ist, WORAUF gewartet wird.**
+
+## Schritt 1 — Der Umbau. **PLAN**
+
+**Die Einsicht:** die Frist wartete **vor** dem Turn und addierte sich deshalb auf jede
+Antwort. Sie muss aber gar nicht vor dem Turn liegen — sie muss nur verhindern, dass
+**gesprochen** wird, solange ein Fragment den Turn noch stumm ueberholen kann. Genau diesen
+Riegel gibt es schon: GQ-P1 (`telnyx-turn-supersede.js`) bricht einen laufenden Turn ab,
+**solange er nichts gesprochen hat** — er gibt nur deshalb auf (`already_spoken`), weil der
+Streaming-Pfad (AL-P7) sofort das erste Fragment auf die Leitung schreibt.
+
+**Der Umbau ist deshalb ein Vorzeichenwechsel, kein neuer Mechanismus:** nicht den Turn
+anhalten, sondern den **Sprech-Draht** die ersten `holdMs` zurueckhalten. Der Turn laeuft
+sofort los; das Warten geschieht *neben* der Arbeit statt davor.
+
+- **Verzoegert nie eine Antwort.** Spaetestens wenn der Turn fertig ist, geht alles raus
+  (`respond` leert den Puffer). Ein Turn, der schneller fertig ist als `holdMs`, wird
+  **ueberhaupt nicht** ausgebremst.
+- **Preis, ausdruecklich:** bei Turns, die laenger dauern als `holdMs`, kommt das **erste
+  Wort** um bis zu `holdMs` spaeter (die Gesamtantwort nicht). Und: der ueberholte Turn hat
+  seine erste Modellrunde bereits gefahren — er verbrennt **eine Runde + ggf. eine
+  `look_up`-Recherche**, die GQ-P17 gespart hat. Bewusst akzeptiert: der Owner hat Latenz
+  abgelehnt, nicht Token.
+- `holdMs = 0` bleibt der Rueckweg und ist byte-identisch zum Bestand.
+
+**Bausteine:**
+1. **neu** `src/telnyx-speech-gate.js` — puffert die Sprech-Fragmente eines Turns, gibt sie
+   frei bei Fristablauf ODER Turn-Ende, und verwirft sie, wenn der Turn verdraengt wurde.
+   Injizierbare Timer (Muster `telnyx-turn-hold.js`), PII-frei (nur Zaehler).
+2. `src/telnyx-llm-shim.js` — Schritt 7.5 (`await holdTurn`) entfaellt ersatzlos; der Draht
+   laeuft ab jetzt durch die Sperre; neue `hold`-Log-Zeile mit den vier Ausgaengen.
+3. `src/telnyx-turn-supersede.js` — reine Abfrage `hasSilentTurn(callId)` (P5), ersetzt
+   `heldTurns.hasHeldTurn` in der GQ-H1-a-Konjunktion.
+4. **geloescht** `src/telnyx-turn-hold.js` + `test/gq-p17-turn-hold.test.js` (der Mechanismus
+   existiert nicht mehr; sein Vertrag wird von den neuen Tests uebernommen).
+5. `src/turn-budget.js` / `src/boot.js` — `holdMs` faellt aus `enforcedTurnWorstCaseMs`
+   und `deadAirOverrun`: die Sperre verlaengert den Turn nicht mehr.
+6. `src/config.js`, `.env.example` — Bedeutung des Schluessels nachziehen (Name und Clamp
+   bleiben: der Betriebswert ist unveraendert "wie lange halten wir zurueck, in ms").
+
+**Erwartetes Ergebnis, deterministisch und pruefbar:**
+
+| # | Erwartung | Verifikation |
+|---|---|---|
+| 1 | Ein Turn wird durch die Sperre **nicht** verzoegert: bei `holdMs=3000` und einem Turn, der in Testzeit sofort fertig ist, ist die Antwort da, **ohne** dass der Timer je feuert | neuer Test mit injiziertem Timer, der NICHT ausgeloest wird |
+| 2 | Ein `extends`-Request waehrend der Sperre macht den Vorgaenger stumm: **0** Chunks auf dem Draht, leere gueltige Completion, **keine** `agent`-Zeile im Transkript | neuer Test (Handler-Ebene, Fake-Timer) |
+| 3 | Nach Fristablauf fliesst der Puffer in Reihenfolge auf den Draht, und ab dann ist der Turn **nicht** mehr verdraengbar (`already_spoken`) | neuer Test |
+| 4 | `holdMs=0` = Bestand: jedes Fragment geht sofort raus | neuer Test (pinnt den Rueckweg) |
+| 5 | `enforcedTurnWorstCaseMs` ohne `holdMs`-Aufschlag | Bestandstest angepasst + Gegenprobe |
+| 6 | Kein Verweis auf `telnyx-turn-hold` mehr im Repo | `grep -rn "turn-hold" src/ test/` liefert nichts |
+| 7 | Volle Suite gruen | `npm test` (Basis 4135/4135, Exit 0, gemessen 2026-08-09) |
+
+**Gegenprobe (Pflicht):** Sperre ausbauen (Puffer direkt durchreichen) -> Test 2 und 3
+muessen **rot** werden. Ein gruener Test, der ohne den Fix gruen bleibt, ist kein Beleg.
+
+**Live-Abnahme (braucht Deploy + einen Anruf, NICHT autonom):**
+`TELNYX_SHIM_EXTEND_HOLD_MS` steht in der Render-Env auf `0` und **muss dort stehen
+bleiben, bis der neue Code live ist** — auf dem alten Stand wuerde ein Wert > 0 exakt die
+abgelehnte serielle Frist reaktivieren. Danach Wert setzen, ein Anruf, und
+`[telnyx-shim] hold` nach `outcome` auswerten (`silenced` = Fragment gefangen,
+`released` = die Sperre hat das erste Wort gekostet, `flushed` = sie war gratis).
+
+## Schritt 2 — Umsetzung. **ERLEDIGT** (Branch `phase/gq-p18-sprechsperre`)
+
+Gebaut wie geplant, mit **einer Abweichung und einem Selbstfund**.
+
+| Erwartung (Schritt 1) | Ergebnis, gemessen |
+|---|---|
+| 1 Turn wird nicht verzoegert | **belegt**: GQ-P18-9 laeuft ohne `timers.fireAll()` durch. Unter GQ-P17 haette derselbe Test ewig gehangen — das ist der Beweis, kein Kommentar. |
+| 2 `extends` waehrend der Sperre -> Vorgaenger stumm | **belegt**: GQ-P18-8/10/11 (0 Zeichen auf dem Draht, gueltige leere Completion, keine agent-Zeile) |
+| 3 nach Fristablauf nicht mehr verdraengbar | **belegt**: GQ-P18-6/15 (Fail-safe-Richtung von GQ-P1 unveraendert) |
+| 4 `holdMs=0` = Bestand | **belegt**: GQ-P18-1/12 |
+| 5 keine Frist in `enforcedTurnWorstCaseMs` | **belegt**: GQ-P18-18; am Smoke gegengeprueft (keine Dead-Air-Boot-Warnung trotz `holdMs=3000`) |
+| 6 kein Verweis auf `telnyx-turn-hold` | **belegt**: `grep -rn "turn-hold" src/ test/` leer |
+| 7 volle Suite gruen | **4135/4135, Exit 0** — exakt die Basiszahl (19 alte Tests geloescht, 19 neue dazu; kein Test still verloren) |
+
+**Gegenprobe (Pflicht), scharf gefahren:** `const gated = holdMs > 0` auf `false` sabotiert
+-> **9 von 18 Tests rot**, darunter alle Verhaltens-Tests (4/8/10/11/16). Nach Ruecknahme
+wieder gruen. Der Fix ist damit belegt, nicht nur behauptet.
+
+**Selbstfund beim Diff-Lesen (haette still ausgeliefert werden koennen):** `turn_ok` loggt
+`streamChunks` **vor** dem Schreiben der Antwort. Haette die Sperre erst in `respond`
+geendet, meldete jeder gepufferte Turn `streamChunks: 0` — ausgerechnet die Sonde, an der
+die Streaming-Faehigkeit (AL-P7) live abgenommen wird, waere still falsch geworden. Die
+Freigabe liegt deshalb am **Turn-Ende** (direkt nach `agentTurn`), nicht am Antwort-Ende.
+Eigener Test GQ-P18-17 + eigene Gegenprobe: ohne den Fix rot, **alle anderen Tests gruen** —
+genau die Klasse Defekt, die eine Suite nicht faengt.
+
+**Abweichung vom Plan (1):** `respond` und der Degradations-Catch schliessen die Sperre ueber
+**eine** gemeinsame Stelle (`endSpeechGate`) ab. Der Plan sah nur `respond` vor — dann waere
+ein bereits erzeugter Satz auf dem Fehlerweg still verschwunden, statt wie im Bestand vor dem
+Abbruchsatz zu stehen. Zusaetzlich zusammengefuehrt: `supersedeTurn` und die neue Abfrage
+`hasSilentTurn` lesen jetzt **eine** Bedingungsquelle (`refusalFor`) — zwei Kopien derselben
+drei Bedingungen waeren genau die Duplizierung, die auseinanderdriftet (G5).
+
+**Smoke (lokal, `PORT=3999`):** Boot ok, `/healthz` 200, `/v1/chat/completions` ohne Bearer
+**403**, Antwortzeit 0,7 ms (die Sperre haengt nichts auf). **Keine** Dead-Air-Boot-Warnung
+trotz `TELNYX_SHIM_EXTEND_HOLD_MS=3000` — der Turn ist wieder so lang wie ohne Frist.
+Der Sperr-Pfad selbst ist per Smoke **nicht** erreichbar (er braucht zwei gleichzeitige
+Requests desselben korrelierten Calls) — dieselbe Grenze wie bei GQ-P17, abgedeckt durch die
+19 Unit-/Handler-Tests.
+
+**Was NICHT gemessen ist und einen Anruf braucht:** die Wirkung am echten Gespraech. Erwartet
+wird am Live-Log: `hold`-Zeilen mit `outcome:"silenced"` (Fragment gefangen) und
+`outcome:"flushed"` (Sperre war gratis); `released` zaehlt die Faelle, in denen sie das erste
+Wort gekostet hat. Sinkt `silenced` auf 0, ist die Frist zu kurz; steigt `released`, ist sie
+zu lang. **Erst der Anruf entscheidet den Wert, nicht die Rechnung.**
+
+**Bilanz gegen GQ-P17, ehrlich:**
+
+| | GQ-P17 (abgelehnt) | GQ-P18 |
+|---|---|---|
+| Aufschlag auf die fertige Antwort | **+3000 ms auf JEDEN Turn** | **0 ms, immer** |
+| Aufschlag auf das erste Wort | +3000 ms auf jeden Turn | bis zu 3000 ms, aber **nur** bei Turns, die ohnehin laenger dauern |
+| Fragment-Abdeckung | 7 von 11 gemessenen Luecken | dieselben 7 (gleiches Fenster, gleicher Startpunkt) |
+| Kosten eines gefangenen Fragments | 0 | **eine Modellrunde + ggf. eine Recherche** (der Preis des Umbaus) |

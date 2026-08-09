@@ -276,17 +276,13 @@ function warnTurnOutlivesDeadAir(config) {
     maxRetries: config.llm.llmMaxRetries,
     backoffMs: config.llm.llmBackoffMs,
     synthTimeoutMs: config.voice.elevenLabsPlayTts.synthTimeoutMs,
-    // GQ-P17: die Shim-Haltefrist liegt VOR dem Turn auf derselben Wanduhr - ohne sie
-    // rechnete der Waechter den Turn zu kurz und uebersaehe genau die Konfiguration, die
-    // ihn reisst.
-    holdMs: config.telnyx.telnyxAssistant.shimExtendHoldMs,
   });
   if (!finding) return;
   console.warn(
     `[boot] Konfig-Warnung: ein Turn kann ${finding.worstCaseMs} ms dauern und reisst den ` +
       `Dead-Air-Watchdog ${finding.limitMs} ms um ${finding.overrunMs} ms ` +
       "(TELNYX_DEAD_AIR_TIMEOUT_S/LLM_REQUEST_TIMEOUT_MS/LLM_MAX_RETRIES/LLM_BACKOFF_MS/" +
-      "ELEVENLABS_SYNTH_TIMEOUT_MS/TELNYX_SHIM_EXTEND_HOLD_MS).",
+      "ELEVENLABS_SYNTH_TIMEOUT_MS).",
   );
 }
 
