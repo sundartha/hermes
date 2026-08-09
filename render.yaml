@@ -129,11 +129,12 @@ services:
       # auf das Bestandsverhalten zurueckzugehen.
       - key: TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN
         value: "true"
-      # GQ-P17: Haltefrist (ms), bevor ein Shim-Turn das Modell ruft. Fuer deepgram/nova-3
-      # existiert beim Anbieter KEIN Turn-End-Regler; ein fortschreibender Request laesst
-      # den gehaltenen Turn schweigen. PREIS: jede Antwort kommt um diese Frist spaeter -
-      # der Wert ist zum Trimmen gedacht (hold-Log-Zeile, outcome extended/elapsed).
-      # "0" = ohne Deploy zurueck auf das Bestandsverhalten.
+      # GQ-P18: Sprechsperre (ms) am Anfang eines Shim-Turns. Fuer deepgram/nova-3
+      # existiert beim Anbieter KEIN Turn-End-Regler; solange nichts gesprochen wurde, laesst
+      # ein fortschreibender Request den laufenden Turn stumm ueberholen. Die Sperre
+      # verzoegert KEINE Antwort (am Turn-Ende geht alles raus); der Preis faellt nur beim
+      # ERSTEN Wort langer Turns an. Zum Trimmen: hold-Log-Zeile, outcome
+      # silenced/released/flushed. "0" = ohne Deploy zurueck auf das Bestandsverhalten.
       - key: TELNYX_SHIM_EXTEND_HOLD_MS
         value: "3000"
       # GQ-P3: Inbound-Handoff auf den Call-Control-Assistant (Befund B-9). Default true;

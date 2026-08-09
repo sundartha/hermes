@@ -76,16 +76,15 @@ export function roundFitsDeadline({ elapsedMs, deadlineMs, requestTimeoutMs }) {
 // volle Retry-Kette; mehr als MAX_TOOL_ROUNDS_PER_TURN Ketten gibt es ohnehin nie. Ohne
 // die Frist waere es schlicht Runden * Kette (mit Defaults 48 500 ms) - genau die Zahl,
 // die den Dead-Air-Watchdog reisst.
-// GQ-P17: holdMs ist die Haltefrist des Shims VOR dem Turn (telnyx-turn-hold.js). Sie
-// laeuft auf derselben Wanduhr und verkuerzt die Tool-Loop-Frist NICHT (die misst ab
-// agentTurn-Start) - sie addiert sich schlicht davor. Default 0: ohne gesetzte Frist ist
-// die Rechnung identisch zum Bestand.
+// GQ-P18: die Shim-Frist taucht hier NICHT mehr auf. Bis GQ-P17 hielt sie den Turn an und
+// addierte sich auf dieselbe Wanduhr; die Sprechsperre (telnyx-speech-gate.js) haelt nur
+// noch das SPRECHEN zurueck und laesst den Turn unveraendert schnell laufen - ein Aufschlag
+// hier waere seit dem Umbau eine Luege ueber die Turn-Dauer.
 export function enforcedTurnWorstCaseMs({
   requestTimeoutMs,
   maxRetries,
   backoffMs,
   synthTimeoutMs,
-  holdMs = 0,
 }) {
   const chainMs = llmTurnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs });
   const lastRoundStartMs = Math.max(
@@ -95,7 +94,7 @@ export function enforcedTurnWorstCaseMs({
       (MAX_TOOL_ROUNDS_PER_TURN - 1) * chainMs,
     ),
   );
-  return holdMs + lastRoundStartMs + chainMs + turnOverheadMs(synthTimeoutMs);
+  return lastRoundStartMs + chainMs + turnOverheadMs(synthTimeoutMs);
 }
 
 // null = haelt; sonst { worstCaseMs, limitMs, overrunMs } fuer die Boot-Warnung.
@@ -109,14 +108,12 @@ export function deadAirOverrun({
   maxRetries,
   backoffMs,
   synthTimeoutMs,
-  holdMs = 0,
 }) {
   const worstCaseMs = enforcedTurnWorstCaseMs({
     requestTimeoutMs,
     maxRetries,
     backoffMs,
     synthTimeoutMs,
-    holdMs,
   });
   if (worstCaseMs <= deadAirTimeoutMs) return null;
   return { worstCaseMs, limitMs: deadAirTimeoutMs, overrunMs: worstCaseMs - deadAirTimeoutMs };

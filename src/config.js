@@ -810,17 +810,21 @@ const rawConfig = {
     // GESPROCHENER Text: korrekte Umlaute, kein Fachjargon, keine Schuldzuweisung, keine
     // technischen Codes gegenueber der Gegenstelle.
     failedTurnFarewellText: process.env.TELNYX_FAILED_TURN_FAREWELL_TEXT || "",
-    // GQ-P17: Haltefrist in Millisekunden, bevor ein Shim-Turn das Modell ruft. Die
-    // Spracherkennung (deepgram/nova-3) liefert eine Aeusserung in mehreren POSTs; jeder
-    // POST loeste bisher einen vollen Turn aus - am 2026-08-09 zwei unabhaengige
-    // look_up-Recherchen und zwei gesprochene Wetterberichte mit widersprechenden Zahlen.
-    // Fuer nova-3 existiert KEIN Turn-End-Regler beim Anbieter (die eot_*-Werte unserer
-    // Live-Config gelten nur fuer deepgram/flux), also liegt der Hebel bei uns.
-    // Kommt in dieser Zeit ein Request, dessen Text den gehaltenen nur fortschreibt,
-    // schweigt der gehaltene Turn und der laengere Text gewinnt.
-    // 3000 = die weiteste gemessene Fragment-Luecke (1314-2926 ms) ist gedeckt. PREIS:
-    // JEDE Antwort kommt um diese Frist spaeter - der Wert ist zum Trimmen gedacht, die
-    // hold-Log-Zeile liefert die Datengrundlage. 0 = aus (Rueckweg ohne Deploy).
+    // GQ-P18: wie lange der Sprech-Draht eines Shim-Turns zurueckgehalten wird, in
+    // Millisekunden. Die Spracherkennung (deepgram/nova-3) liefert eine Aeusserung in
+    // mehreren POSTs; jeder POST loeste einen vollen Turn aus - am 2026-08-09 zwei
+    // unabhaengige look_up-Recherchen und zwei gesprochene Wetterberichte mit
+    // widersprechenden Zahlen. Fuer nova-3 existiert KEIN Turn-End-Regler beim Anbieter (die
+    // eot_*-Werte unserer Live-Config gelten nur fuer deepgram/flux, und der Pro-Call-Block
+    // kann laut OpenAPI ueberhaupt nur model+language tragen), also liegt der Hebel bei uns.
+    // Solange nichts gesprochen wurde, kann ein Request mit fortgeschriebenem Text den
+    // laufenden Turn stumm ueberholen (telnyx-turn-supersede.js) - genau dieses Fenster
+    // haelt der Wert offen.
+    // Er VERZOEGERT KEINE ANTWORT: spaetestens am Turn-Ende geht alles raus. Der Preis
+    // faellt nur bei Turns an, die laenger dauern als die Frist - dort kommt das ERSTE Wort
+    // um bis zu diese Frist spaeter. 0 = aus (Rueckweg ohne Deploy, Bestandsverhalten).
+    // 3000 deckt 7 der 11 gemessenen Fragment-Luecken (1314-5476 ms); die hold-Log-Zeile
+    // (outcome silenced/released/flushed) ist die Datengrundlage zum Trimmen.
     // max 3500, weil die Frist sonst in Telnyx' eigenes Anstoss-Fenster laeuft
     // (telephony_settings.user_idle_reply_secs, Live-Wert 4 s).
     // Sie entwaffnet KEINE Sicherung: Loop-Guard, Rate-Gate, Kostendecke und Anstoss-Riegel
