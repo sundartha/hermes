@@ -83,6 +83,10 @@ test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duc
     // + optionaler Ueberschreib-Text (Default leer = sprachabhaengiger Locale-Default).
     maxConsecutiveFailedTurns: 3,
     failedTurnFarewellText: "",
+    // GQ-P17: Haltefrist (ms) vor dem Modell-Aufruf gegen die fragmentierte
+    // Spracherkennung. Default 3000 = die weiteste gemessene Fragment-Luecke ist gedeckt;
+    // 0 waere der Rueckweg auf das Bestandsverhalten (zwei Antworten).
+    shimExtendHoldMs: 3000,
   });
 });
 

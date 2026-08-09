@@ -56,6 +56,10 @@ export function fakeTelnyxShimConfig({
   // gescheiterte Turns in Folge; die A2-Tests setzen den Wert explizit herunter.
   telnyxMaxConsecutiveFailedTurns = 3,
   telnyxFailedTurnFarewellText = "",
+  // GQ-P17: Default 0 = Frist AUS, bewusst NICHT der Prod-Default (3000). Eine gesetzte
+  // Frist liesse jeden Bestands-Shim-Test warten, ohne sein Verhalten zu pruefen; die
+  // GQ-P17-Tests setzen den Wert explizit und fahren ihn ueber injizierte Timer.
+  telnyxShimExtendHoldMs = 0,
 } = {}) {
   return withConfigNamespaces({
     claudeModel,
@@ -69,6 +73,7 @@ export function fakeTelnyxShimConfig({
       shimIgnoreProviderNudge: telnyxShimIgnoreProviderNudge,
       maxConsecutiveFailedTurns: telnyxMaxConsecutiveFailedTurns,
       failedTurnFarewellText: telnyxFailedTurnFarewellText,
+      shimExtendHoldMs: telnyxShimExtendHoldMs,
     },
   });
 }

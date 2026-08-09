@@ -182,6 +182,9 @@ export function makeHandler({
   // haelt sie byte-identisch (Miss -> logUnknown:true -> 403 wie zuvor). Wer den Pfad
   // wirklich prueft, reicht einen Spy durch (test/ks-p1b-shim-reattach.test.js).
   reattachActiveCallByControlId = async () => ({ call: null, logUnknown: true }),
+  // GQ-P17: nur die GQ-P17-Tests reichen eine Registry mit injizierten Timern durch; ohne
+  // Angabe greift der Factory-Default des Shims (Bestandsaufrufer bleiben unveraendert).
+  heldTurns,
 }) {
   return makeTelnyxLlmShim({
     store,
@@ -191,6 +194,7 @@ export function makeHandler({
     voiceControl,
     watchdog,
     reattachActiveCallByControlId,
+    ...(heldTurns ? { heldTurns } : {}),
   });
 }
 

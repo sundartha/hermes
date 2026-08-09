@@ -23,6 +23,7 @@ import {
 } from "./consult/in-call.js";
 import { makeTurnTextProbe, TURN_TEXT_RELATION } from "./telnyx-turn-probe.js";
 import { makeInFlightTurnRegistry } from "./telnyx-turn-supersede.js";
+import { makeTurnHoldRegistry, TURN_HOLD_OUTCOME } from "./telnyx-turn-hold.js";
 import { makeConsecutiveFailureCounter } from "./telnyx-turn-failures.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
@@ -387,6 +388,18 @@ function logShimDiscardedAnswer(payload) {
   console.log(formatShimLine("discarded_answer", payload));
 }
 
+// GQ-P17: die Entscheidung der Haltefrist als eigener Kanal (kind="hold"), console.log wie
+// turn_probe. PII-frei: callId, turnSeq, die konfigurierte Frist und ein Grund-Token - nie
+// Wortlaut, nie Rufnummern. Diese Zeile IST das Messinstrument der Abnahme: outcome
+// "extended" zaehlt die unterdrueckten Fragment-Turns, "elapsed" belegt, dass die Frist
+// ueberhaupt armiert ist. Ohne den zweiten Wert waere "wirkungslos" von "nicht scharf"
+// nicht unterscheidbar - genau der Zustand, in dem GQ-P1 zwei Monate lang war.
+// Bei ausgeschalteter Frist (holdMs=0) feuert sie NICHT: der Bestandslauf bleibt
+// log-identisch.
+function logShimHold(payload) {
+  console.log(formatShimLine("hold", payload));
+}
+
 // Nur von Telnyx gesetzte Anfrage-Header (Allowlist-Praefix), Name -> nicht umkehrbarer
 // Hash des Wertes. Der WERT wird nie geloggt: identische Hashes belegen "derselbe Request",
 // ohne dass ein zufaellig mitgefuehrtes Geheimnis (z.B. ein Signatur-Header) je im Log
@@ -482,6 +495,10 @@ export function makeTelnyxLlmShim({
   // verboten ist.
   reattachActiveCallByControlId,
   metrics = defaultMetrics,
+  // GQ-P17: eigene Instanz je Shim, wie Sonde/Verdraengungs-Riegel daneben (kein
+  // Modul-Zustand, kein Lazy-Init - P15). Als Parameter mit Default, damit Tests die
+  // Frist ueber injizierte Timer deterministisch fahren (Muster metrics oben).
+  heldTurns = makeTurnHoldRegistry(),
 }) {
   // P5 (Scope 4, Carryover aus P4): per-callId-Fixed-Window - Toll-/Token-Fraud-Bremse
   // VOR agentTurn, zusaetzlich zum globalen Per-IP-Limiter + Budget-Cap. EINE Quelle
@@ -685,9 +702,17 @@ export function makeTelnyxLlmShim({
     // Fehlalarme verhindern, nie welche erzeugen: er macht die Bedingung strenger. Preis
     // ist der Grenzfall "verworfen UND identischer Folgetext", der die Zeile stehen laesst -
     // der Bestandszustand, und damit die harmlose Richtung.
+    // GQ-P17: haelt dieser Call gerade einen Turn, den DIESER Request gleich ueberholt,
+    // dann hat der Vorgaenger nie geantwortet - es gibt keine verworfene Antwort zu
+    // raeumen, und ein Drop traefe die zuvor GESPROCHENE agent-Zeile. Reine Abfrage: das
+    // Ueberholen selbst passiert erst NACH allen Gates (Schritt 7.5). Ohne gesetzte Frist
+    // ist der Wert immer false -> Bestandsverhalten byte-identisch.
+    const extendsPreviousTurn = turnText.prevRelation === TURN_TEXT_RELATION.EXTENDS;
+    const predecessorIsHeld = extendsPreviousTurn && heldTurns.hasHeldTurn(call.id);
     const discardedAnswerDropped =
       turnText.providerMessagesGrew === false &&
       turnText.prevRelation !== TURN_TEXT_RELATION.SAME &&
+      !predecessorIsHeld &&
       store.dropLastAgentTranscript(call.id);
     if (discardedAnswerDropped) logShimDiscardedAnswer({ callId: call.id, turnSeq });
 
@@ -778,11 +803,41 @@ export function makeTelnyxLlmShim({
     // turnSeq, emptyStreak, Rate-Fenster und Budget-Buchung bleiben unberuehrt.
     // NUR "extends": "same" ist der Consult-Nachfass (wer ihn mitbehandelt, unterdrueckt
     // Consult-Antworten), "other" sind zwei echte Aeusserungen.
-    if (
-      config.telnyx.telnyxAssistant.shimSupersedeExtendedTurn &&
-      turnText.prevRelation === TURN_TEXT_RELATION.EXTENDS
-    )
+    if (config.telnyx.telnyxAssistant.shimSupersedeExtendedTurn && extendsPreviousTurn)
       logShimSupersede({ callId: call.id, turnSeq, ...inFlightTurns.supersedeTurn(call.id) });
+
+    // 7.5) GQ-P17: die Haltefrist. deepgram/nova-3 hat KEINEN Turn-End-Regler - Telnyx
+    // liefert eine Aeusserung in mehreren POSTs (am 2026-08-09: 61 -> 100 Zeichen, 2508 ms
+    // auseinander, prevRelation "extends"), und jeder POST fuhr einen vollen Turn mit
+    // eigener look_up-Recherche. Der Owner hoerte zwei Wetterberichte mit widersprechenden
+    // Zahlen. Der Verdraengungs-Riegel darueber kann das nicht mehr fangen: er verweigert
+    // bei already_spoken, und gesprochen hatte der Vorgaenger laengst.
+    //
+    // Deshalb erst der Riegel gegen den GEHALTENEN Vorgaenger (er hat nichts gesagt, nichts
+    // gebucht, nichts geschrieben - sein Schweigen kostet nichts), dann die eigene Frist.
+    //
+    // REIHENFOLGE IST BINDEND: hier, NACH Loop-Guard, Rate-Gate, Kostendecke und
+    // Anstoss-Riegel. Kein Gate wird umgangen und keines verzoegert - die Frist kostet
+    // ausschliesslich den eigenen Turn. Der Dead-Air-Notaus wurde in Schritt 4.6 bereits
+    // gefuettert, die Frist verlaengert also kein Schweigen aus seiner Sicht.
+    if (extendsPreviousTurn) heldTurns.supersedeHeldTurn(call.id);
+    const holdMs = config.telnyx.telnyxAssistant.shimExtendHoldMs;
+    const holdOutcome = await heldTurns.holdTurn(call.id, holdMs);
+    if (holdOutcome !== TURN_HOLD_OUTCOME.OFF)
+      logShimHold({ callId: call.id, turnSeq, holdMs, outcome: holdOutcome });
+    // Ein ueberholter Turn SPRICHT nicht, aber er ANTWORTET: eine leere, gueltige
+    // Completion ist die einzige Form, die Telnyx nicht als abgebrochenen Turn liest -
+    // exakt dieselbe, die der Bestand fuer den verdraengten Turn (GQ-P1) und den
+    // Provider-Anstoss (GQ-P5) schickt. KEIN agentTurn: kein Token-Burn, keine zweite
+    // Recherche, keine Transkript-Zeile, kein Abschied.
+    if (holdOutcome === TURN_HOLD_OUTCOME.EXTENDED) return respond("");
+    // Die Frist ist ein neues Zeitfenster, in dem der Anrufer auflegen kann. Sie schliesst
+    // es selbst: ein beendeter Call darf keinen Modell-Turn mehr ausloesen (dieselbe Regel
+    // wie Schritt 4, nur eine Wartezeit spaeter). Strikt strenger, nie fail-open.
+    if (call.status !== "active") {
+      logShimGate({ reason: "call_ended_during_hold", callId: call.id, turnSeq });
+      return respond("");
+    }
 
     // GQ-P1: ab hier ist DIESER Turn der laufende Turn des Calls. hasSpokenText ist die
     // eine Bedingung, die einen Abbruch verbietet: was auf der Leitung war, holt kein
