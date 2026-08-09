@@ -1,12 +1,22 @@
-// LLM-Ports: Vertraege fuer anbieter-unabhaengige Sprachmodell-Aufrufe. Heute genau
-// ein Anbieter (Anthropic, im bestehenden Seam src/llm.js). Reine JSDoc-Typdefs,
+// LLM-Ports: Vertraege fuer anbieter-unabhaengige Sprachmodell-Aufrufe. Seit B5 zwei
+// Adapter (Anthropic, DeepSeek), ausgewaehlt in src/llm/registry.js. Reine JSDoc-Typdefs,
 // keine Laufzeit-Logik.
 //
 // Besitzverhaeltnis: bleibt im Seam (llm.js), Begruendung bei LlmErrorClassification.
-// Ein Adapter liefert Klassifikation (LlmErrorClassification) und seine eigenen Zahlen
-// (limits), sonst nichts.
+// Ein Adapter liefert die Fehler-Klassifikation (LlmErrorClassification), sonst nichts.
 //
 // Bewusst NICHT Teil dieses Vertrags, mit Grund:
+// - Die ZAHLEN eines Anbieters (Per-Versuch-Timeout, Retry-Obergrenze, Backoff). Bis B5
+//   stand hier eine limits-Pflicht, die kein Adapter je erfuellt hat - und es gibt bis
+//   heute keinen Konsumenten, der sie lesen koennte, ohne eine ZWEITE Quelle fuer
+//   dieselbe Zahl zu schaffen: llmRequestTimeoutMs/llmMaxRetries/llmBackoffMs sind
+//   Env-Werte, gegen die src/turn-budget.js beim Boot das Webhook-Budget nachrechnet
+//   (Provider-Hardcut 15 s). Ein Adapter-Konstantensatz, der den Env-Wert ueberschreibt,
+//   umginge genau diesen Waechter still (G5 + Regel-1-Nachbarschaft). Das dahinterliegende
+//   Risiko bleibt real und ist BEWUSST akzeptiert, nicht geloest: B1 hat fuer
+//   deepseek-v4-pro eine maximale Antwortzeit von 3183 ms gemessen, der ausgelieferte
+//   Default ist 3500 ms - 9 % Luft. Die Kalibrierung gehoert zur Umstellung des
+//   Live-Anbieters (siehe .env.example, LLM_PROVIDER), nicht zum Vertrag.
 // - Preise, Waehrung, Geldbetraege: der Port meldet Token, nie Geld. Woertlicher
 //   Praezedenzfall am Nachbar-Port telephony/ports.js (VoiceCostRecord): die
 //   Umrechnung ist dort ausdruecklich NICHT Teil des Ports. usdToEur bleibt die eine
@@ -94,9 +104,11 @@
  * @property {object} input - bereits GEPARSTE Argumente als Objekt. Das Parsen
  *   gehoert in den Adapter - ein Anbieter liefert die Argumente als JSON-String, ein
  *   anderer bereits als Objekt; dieser Unterschied darf den Aufrufer nie erreichen.
- *   Offen, ausdruecklich nicht hier entschieden: was bei unparsebaren Argumenten
- *   passiert - der Fall wurde bislang nie beobachtet, eine Regel ohne Beobachtung
- *   waere geraten.
+ *   B5 entscheidet den Fehlerfall (W2), fail-closed: unparsebare Argumente lassen den
+ *   Adapter BENANNT werfen. Weder undefined noch ein ersatzweises {} verlaesst ihn - ein
+ *   still verschluckter Parse-Fehler waere ein Werkzeug-Aufruf mit falschen Argumenten,
+ *   im Telefonpfad also eine falsche Handlung. Die leere Argumentmenge bleibt {} und ist
+ *   ein anderer Fall: dort MELDET der Anbieter nichts, statt Unlesbares zu melden.
  */
 
 /**
@@ -181,9 +193,9 @@
  * @property {string} [callId] - Bench-/Metrik-Korrelation, KEIN Anbieter-Feld: der
  *   Seam streift ihn ab, bevor die Parameter an den Anbieter gehen.
  * @property {number} [streamBudgetMs] - nur fuer completeStream: Restfrist des Turns
- *   (Wanduhr des AUFRUFERS). Bleibt Aufrufer-Parameter, waehrend der Per-Versuch-
- *   Timeout Adapter-Eigenschaft ist und nicht uebergeben wird (siehe
- *   LlmProvider.limits) - zwei Uhren, zwei Besitzer, beide existieren heute im Seam.
+ *   (Wanduhr des AUFRUFERS). Bleibt Aufrufer-Parameter, waehrend der Per-Versuch-Timeout
+ *   dem Adapter beim Bau mitgegeben wird und nicht je Anfrage - zwei Uhren, zwei
+ *   Besitzer, beide existieren heute im Seam.
  *   Muster: die Klingelfrist am Telefonie-Port (telephony/ports.js,
  *   CallControlOriginateParams) ist aus demselben Grund kein Parameter, "damit kein
  *   Aufrufer sie versehentlich unterbietet".
@@ -237,13 +249,6 @@
  *   Kehrseite: ein transienter Abriss NACH dem ersten Fragment meldet dem Breaker
  *   keinen Fehlversuch.
  * @property {LlmErrorClassification} errors
- * @property {{requestTimeoutMs: number, maxRetries: number, backoffMs: number}}
- *   limits - die Zahlen DIESES Anbieters, OHNE Vorgabewert. Ein Adapter ohne sie
- *   darf nicht in Betrieb gehen. Begruendung: der heutige Per-Versuch-Timeout ist an
- *   einem Anbieter kalibriert und fuer einen anderen Anbieter gemessen zu knapp. Ein
- *   stillschweigend geerbter falscher Wert schneidet unter Last lebende Anfragen ab -
- *   Token entstehen, Antworten kommen nie, und die Schaetzbuchung verbrennt Budget
- *   ohne eine einzige Antwort.
  */
 
 export {};

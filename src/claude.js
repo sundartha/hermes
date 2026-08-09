@@ -28,7 +28,9 @@ import { LOOK_UP_TOOL_NAME, lookupAvailableFor, performLookupRequest } from "./r
 // selektiven Retry/Breaker. Verdrahtung am Modul-Top, Fachcode ruft nur
 // llm.complete(...). Wirft bei Breaker-open/Retries-erschoepft LlmUnavailableError
 // (Aufrufer faengt das, degradedSpeechFor aus llm.js); 4xx/Auth propagieren unveraendert.
-const llm = createLlmClient({ apiKey: config.llm.anthropicApiKey, config, metrics });
+// WELCHER Anbieter das ist, entscheidet die Registry aus LLM_PROVIDER (src/llm/
+// registry.js) - nicht dieser Aufrufer, der deshalb auch keinen Schluessel mehr kennt.
+const llm = createLlmClient({ config, metrics });
 
 // ---------- System-Prompts ----------
 // P5 (PLAN-CONVERSATION-QUALITY-V2, Anhang A): Aufbau Situation -> Auftrag ->

@@ -47,6 +47,10 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
+      # B5: Schluessel des Fremdadapters (Secret, deshalb kein value:). Nur noetig,
+      # wenn LLM_PROVIDER=deepseek gesetzt wird - dann ist er Boot-Pflicht.
+      - key: DEEPSEEK_API_KEY
+        sync: false
       # Hinweis: Absendernummern sind KEINE Env-Var mehr. Der Owner
       # ist Tenant Null und haelt seine Nummer(n) im Store - einmalig eintragen via
       # "npm run seed-owner-number -- <e164> telnyx" (gegen STORE_BACKEND=pg)
@@ -314,6 +318,10 @@ services:
       # das Self-Service-Dashboard (nach dem Bootstrap-CLI), nicht ueber die Env.
       - key: CLAUDE_MODEL
         value: claude-haiku-4-5
+      # B5: Anbieter-Wahl. Default anthropic - B5 liefert die Faehigkeit zu wechseln,
+      # nicht die Umstellung. Mitzieh-Pflichten stehen in .env.example.
+      - key: LLM_PROVIDER
+        value: anthropic
       # ---- Pre-Call-Briefing (P8) ---- Default AUS; Anschalten ist Owner-Arbeit.
       - key: PRECALL_BRIEFING_ENABLED
         value: "false"

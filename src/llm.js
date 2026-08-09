@@ -6,11 +6,17 @@
 // Toll-Fraud bei Retry).
 //
 // B3a: das gesamte ANBIETER-Wissen (SDK-Konstruktion, Antwort-Bloecke, Stream-
-// Ereignisse, Fehler-Marken) liegt im Adapter src/llm/adapters/anthropic.js. Der Seam
-// kennt nur noch den Port-Vertrag aus src/llm/ports.js. Eine Anbieter-AUSWAHL
-// (Registry) gibt es bewusst noch nicht - eine Tabelle mit einem Eintrag waere
-// Indirektion ohne Mehrwert.
-import { anthropicErrors, createAnthropicProvider } from "./llm/adapters/anthropic.js";
+// Ereignisse, Fehler-Marken) liegt in den Adaptern unter src/llm/adapters/. Der Seam
+// kennt nur noch den Port-Vertrag aus src/llm/ports.js.
+//
+// B5: WELCHER Adapter faehrt, entscheidet die Registry (src/llm/registry.js) aus
+// LLM_PROVIDER - nicht dieser Seam und nicht seine Aufrufer. Die Wahl kommt dort aus dem
+// config-SINGLETON, nicht aus dem hier uebergebenen config-Objekt: der Anbieter ist eine
+// prozessweite Tatsache, die Resilienz-ZAHLEN sind es nicht (precall-briefing.js baut
+// bewusst eine zweite Instanz mit eigenem Timeout/Retry - aber nie mit einem zweiten
+// Anbieter). Deshalb nimmt createLlmClient auch keinen apiKey mehr entgegen: welcher
+// Schluessel zum Anbieter gehoert, weiss die Registry.
+import { activeLlmErrors, createLlmProvider } from "./llm/registry.js";
 
 // Voll-Jitter-Backoff verdoppelt die Basis pro Versuch (gegen Thundering Herd).
 const BACKOFF_FACTOR = 2;
@@ -77,7 +83,7 @@ function providerStatusOf(err) {
 export function isProviderBillingError(err) {
   if (!err) return false;
   if (providerStatusOf(err) === HTTP_PAYMENT_REQUIRED) return true;
-  return anthropicErrors.isBillingError(err);
+  return activeLlmErrors().isBillingError(err);
 }
 
 // AL-P9/AL-P7: EIN Praedikat "der Versuch war nachweislich auf der Leitung" (G5) - die
@@ -95,7 +101,7 @@ export function attemptReachedProvider(err) {
 // Adapter (llm/ports.js LlmErrorClassification), weil sie Anbieter-Wissen ist. Der
 // Bestandsname bleibt hier als Seam-Export stehen: die Retry-ENTSCHEIDUNG faellt in
 // diesem Modul, und die Unit-Tests des Seams pinnen ihn.
-export const isTransient = (err) => anthropicErrors.isTransient(err);
+export const isTransient = (err) => activeLlmErrors().isTransient(err);
 
 // Exponentieller Voll-Jitter-Backoff. random injiziert -> deterministisch testbar
 // (kein Math.random im Hot-Path-Test). 0/1 als Exponent erlaubt.
@@ -191,21 +197,24 @@ function metricsExtra(callId, usage) {
 // Factory (P15: Konstruktion/Verdrahtung getrennt vom Fachcode). Benannte Felder in
 // EINEM Optionsobjekt (F1). messagesCreate/messagesStream sind optionale Test-Seams
 // (DIP), die an den Adapter durchgereicht werden; sonst laeuft der echte Prod-Pfad
-// (kein toter Code).
+// (kein toter Code). Welcher Adapter das ist, entscheidet die Registry - ein Adapter
+// ignoriert die Seam-Namen, die er nicht kennt.
 export function createLlmClient({
-  apiKey,
   config,
   sleep = defaultSleep,
   metrics = noopMetrics,
   messagesCreate,
   messagesStream,
 } = {}) {
-  const provider = createAnthropicProvider({
-    apiKey,
+  const provider = createLlmProvider({
     requestTimeoutMs: config.llm.llmRequestTimeoutMs,
     messagesCreate,
     messagesStream,
   });
+  // Der Client fragt SEINEN Adapter, nicht noch einmal die Registry: eine zweite
+  // Aufloesung waere eine zweite Quelle fuer dieselbe Frage (G5). Der Modul-Export
+  // isTransient bleibt fuer Aufrufer OHNE Instanz (Seam-Unit-Tests, Bestandsvertrag).
+  const providerIsTransient = (err) => provider.errors.isTransient(err);
   const breaker = makeBreaker(
     {
       threshold: config.llm.llmBreakerThreshold,
@@ -255,7 +264,7 @@ export function createLlmClient({
       });
       return turn;
     } catch (err) {
-      const exhausted = isTransient(err); // transient + durch withRetry geworfen -> Retries erschoepft
+      const exhausted = providerIsTransient(err); // transient + durch withRetry geworfen -> Retries erschoepft
       metrics.llmCall({
         outcome: exhausted ? "retries-exhausted" : "non-transient",
         attempts,
@@ -275,7 +284,7 @@ export function createLlmClient({
     return runResilient({
       callId,
       attempt: () => provider.complete(params),
-      retryable: isTransient,
+      retryable: providerIsTransient,
     });
   }
 
@@ -321,7 +330,7 @@ export function createLlmClient({
     return runResilient({
       callId,
       attempt,
-      retryable: (err) => !forwardedText && isTransient(err),
+      retryable: (err) => !forwardedText && providerIsTransient(err),
     });
   }
 

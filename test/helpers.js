@@ -50,6 +50,13 @@ export const BASE_ENV = {
   PORT: "0",
   DATA_DIR: "", // wird pro Server durch ein Temp-Verzeichnis ersetzt
   ANTHROPIC_API_KEY: "test-anthropic-key",
+  // B5: Anbieter-Wahl neutral auf den Default gepinnt, sonst leakt eine lokale .env via
+  // dotenv in Spawn-Tests. test/b5-llm-registry.test.js setzt den Wert gezielt auf Muell.
+  LLM_PROVIDER: "anthropic",
+  // B5: leer, NICHT ein Dummy - die lokale .env traegt inzwischen einen ECHTEN Schluessel
+  // (B1), der sonst in jeden Spawn-Prozess wandert. Bei LLM_PROVIDER=anthropic ist leer
+  // der Normalfall; b5-Tests, die den Fremdadapter booten, setzen ihn explizit.
+  DEEPSEEK_API_KEY: "",
   CLAUDE_MODEL: "claude-haiku-4-5",
   // 30 spiegelt den Live-Wert (Entscheidung 8, PLAN-LIVE-COST-TRACING); seit P7 traegt der
   // CODE-Fallback in src/config.js dieselbe Zahl (der Pin hier bleibt trotzdem, Lehre
