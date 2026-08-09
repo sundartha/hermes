@@ -796,3 +796,90 @@ einen dokumentierten Volllast-Flake (~12 %), und der Lauf lief unter paralleler 
   Cron" ist widerlegt (`setInterval().unref()` ist Hausmuster) — es fehlen Endpunkt und
   Verbraucher.
 - **B3b** (Anfrageseite) und **B5** (DeepSeek-Adapter): warten auf Guthaben.
+
+## Track B — Stand nach der Live-Abnahme (2026-08-09)
+
+### Deploy + Live-Abnahme: ERLEDIGT
+
+`ee8e43b` ist live (Owner hat manuell deployt). Beleg: `/healthz` liefert
+`commit=ee8e43b...` = `git rev-parse master`, und das Boot-Log traegt
+`deployed commit=ee8e43b...` **ohne** `[boot] Start abgebrochen`.
+
+**Der Deploy-Blocker V-3 war unkritisch:** Render-Env traegt `CLAUDE_MODEL=claude-haiku-4-5`
+(Alias, bepreist), `PRECALL_BRIEFING_MODEL` ist NICHT gesetzt -> Code-Default
+`claude-sonnet-5`, ebenfalls bepreist. `assertPricedModels` ist damit erstmals gegen die echte
+Render-Env gelaufen und hat gehalten.
+
+**B3a/B4a sind live abgenommen** (zwei echte Outbound-Anrufe, Sprechpfad laeuft, keine
+`[turn] 400`, `look_up` und Exa funktionieren).
+
+**Kein Vorher-Anruf gefahren, bewusst.** Ein Vorher-Anruf liefert ANDERE Token als der
+Nachher-Anruf; aus einem Anruf auf dem neuen Stand lassen sich beide Betraege (alte Faltung,
+neue Aufschluesselung) auf DERSELBEN Token-Basis rechnen. Sauberer, nicht nur billiger.
+
+### B4b — BLOCKIERT, und die Kickoff-Praemisse war falsch
+
+Der Kickoff behauptet: *"Braucht keinen neuen Code. Die vier Token-Sorten stehen je Aufruf
+schon in der LLM-Metrik (`llm.js`, `metricsExtra`)."* **Am Code widerlegt:**
+
+| Token-Sorte | erreicht das Log? | Beleg |
+|---|---|---|
+| `inputCacheWriteTokens` | ja | `metrics.js:47` |
+| `inputCacheReadTokens` | ja | `metrics.js:49` |
+| `inputUncachedTokens` | **nein** | fehlt in der Whitelist `metrics.js:35-43` |
+| `outputTokens` | **nein** | dito |
+
+`metrics.llmCall` hat eine bewusste Feld-Whitelist. Die Buchung selbst kennt alle vier
+(`llm-usage.js` `billedTokens`), aber sie gehen in `store.trackUsage` und werden dort laut
+W5-Entscheidung zu Summen gefaltet. `convo-bench` gibt gar keine Token aus (geprueft: kein
+`usage`-Feld in 183 Zeilen). **Ohne die zwei fehlenden Sorten ist weder der alte noch der neue
+Betrag rechenbar.**
+
+**Zweiter, wichtigerer Befund:** ueber den ganzen Anruf `call_mslm38yfw5xb` traegt **keine
+einzige** der 9 erfolgreichen `[metrics] llm`-Zeilen ein Cache-Feld. Die Metrik meldet
+Cache-Zaehler nur, wenn sie > 0 sind — es gab also **keinen einzigen Cache-Treffer**.
+Falls das reproduzierbar ist, ist W6 damit beantwortet: der gebuchte Betrag sinkt um **null**,
+weil nichts gecacht wird, und die Kostendecke wird nicht geschwaecht. Das deckt sich mit dem
+Altbefund "Prompt-Caching tot" ([[conversation-optimization-plan]]). **Noch nicht bewiesen** —
+ein Schluss aus Abwesenheit, n=1 Anruf.
+
+### B3-Spike (W8): GO, mit einem scharfen Vorbehalt fuer B5
+
+Branch `spike/b3-deepseek-toolloop` (`5e0ee0c`), **wird NIE gemergt**. Report:
+`git show spike/b3-deepseek-toolloop:tasks/b3-spike-report.md` (323 Zeilen, zitiert jede rohe
+deutsche Modellantwort).
+
+- **`deepseek-v4-pro` traegt den deutschen Mehrrunden-Werkzeug-Loop** (6 Runden, fluessiges
+  Deutsch, keine Abschneidung, 8/8 Werkzeug-Aufrufe mit parsebarem JSON). B-7 wiederholt sich
+  hier NICHT.
+- **BLOCKER fuer B5:** das Modell laeuft per Default im *Thinking mode*, und dort scheitern
+  `tool_choice: "required"` **und** die namentlich erzwungene Form mit **HTTP 400
+  "Thinking mode does not support this tool_choice"** (reproduzierbar 2/2). Genau darauf
+  stuetzt sich `precall-briefing.js:235` live. Abhilfe belegt: `thinking:{"type":"disabled"}`
+  im Body -> beides HTTP 200, dazu 7-10x weniger Latenz (2,1-3,1 s -> ~0,31 s). **Nur isoliert
+  getestet (n=2), nicht ueber den vollen Loop**, und in dem Modus kam kein gesprochener
+  Fuelltext neben dem erzwungenen Aufruf (stille Leitung waehrend der Werkzeug-Ausfuehrung).
+- **B3-W4 beantwortet:** mit `stream:true` kommen `tool_calls` **fragmentiert ueber viele
+  SSE-Chunks** und muessen ueber `index` zusammengesetzt werden — eine durchreichende Sink
+  wuerde kaputte JSON-Fragmente weitergeben. `reasoning_content` streamt als eigener Kanal
+  VOR dem sichtbaren Text (undokumentiert).
+- **Verbrauchsfelder:** `prompt_cache_hit_tokens`, `prompt_cache_miss_tokens`,
+  `prompt_tokens_details.cached_tokens`, `completion_tokens_details.reasoning_tokens`
+  (nur im Thinking mode, Teilmenge von `completion_tokens`, zum normalen Output-Satz).
+- **W2 (unparsebare Werkzeug-Argumente) weiter unbeobachtet** — nicht widerlegt, nur nie
+  eingetreten.
+- Kosten des Spikes: **~0,0017 USD**.
+
+### Neu offen (aus der Live-Abnahme, NICHT aus Track B)
+
+- **Precall-Briefing und Gespraechs-Zusammenfassung sterben beide an `retries-exhausted`.**
+  Briefing: 1 Versuch, 6007 ms -> das ist ein **Timeout**, kein Fehler. Summary: 3 Versuche,
+  10766 ms. Folge: `get_transcript` liefert keine Zusammenfassung. **Und es werden
+  GESCHAETZTE Kosten gebucht** (`grund=retries-exhausted, in~816, out~700`) fuer einen
+  Aufruf, der nichts geliefert hat.
+- **`configHash` deckt die Preistabelle nicht ab.** Der Hash ist ueber ALLE Deploys hinweg
+  identisch (`90c7d824...`), auch ueber diesen, der `config.js` um 194 Zeilen Preisstaffeln
+  geaendert hat. Er taugt damit nicht als Drift-Anzeiger fuer Preise.
+- **Testzahl-Differenz zum Kickoff:** `npm test` meldet **4077** (fail 0, Exit 0), der Kickoff
+  behauptete 4057. Der Katalog-Filter ist intakt (0 Katalog-IDs im Regressionslauf gemessen),
+  die Suite ist gruen — die Zahl in der Kickoff-Notiz ist ungenau, kein Defekt.

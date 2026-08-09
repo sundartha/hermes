@@ -647,3 +647,66 @@ der Safety-Reviewer hatte die Suite laut Schema unabhaengig gefahren. Der eigene
 Leads widersprach dem trotzdem. Genau dafuer existiert die Regel "PASS ist keine Freigabe" —
 sie greift nicht nur gegen leere Branches (C-P2) und tote Impl-Agenten (C-P4), sondern auch
 gegen einen Reviewer, der auf einem gluecklicheren Lauf sass.
+
+## Live-Abnahme 2026-08-09: fuenf Lehren aus einer Fremd-Diagnose
+
+### 1. Eine widerlegte Wurzel bleibt im Kettenstand stehen und leitet die naechste Session fehl
+
+`tasks/gq-chain-state.md` fuehrte `eager_eot_threshold` als Wurzel des Kappens und notierte,
+es lasse sich per API nicht loeschen. Beim Nachmessen am Live-Assistant stand es auf `null` —
+laengst entfernt, und der Defekt war trotzdem staerker geworden. Waere ich der Notiz gefolgt,
+haette ich Stunden an einem bereits geschlossenen Feld verloren.
+
+**Regel:** eine dokumentierte Wurzel ist eine Hypothese mit Verfallsdatum. Vor JEDER
+Weiterarbeit daran den Ist-Zustand am lebenden System messen (`GET`, Snapshot), nicht die
+Notiz lesen. Das ist dieselbe Regel wie "Deploy-Stand nie aus einer Notiz lesen", nur fuer
+Provider-Config.
+
+### 2. Der Agent erfindet im Gespraech technische Diagnosen — und sie klingen glaubwuerdig
+
+Woertlich gesprochen: *"Ich gebe das an Antonio weiter, damit er die Audio-Pipeline
+ueberprueft."* Es gab kein Audio-Pipeline-Problem. Der Verlust passierte bei Telnyx, nachweisbar
+NACH unserer Auslieferung. Haette der Owner diese Aussage als Befund weitergereicht, waere die
+Diagnose in die voellig falsche Richtung gelaufen.
+
+**Regel:** was der Agent IM Gespraech ueber sich selbst behauptet, ist Gespraechsinhalt, kein
+Messwert. Es gehoert nie in eine Ursachenanalyse.
+
+### 3. Sprechdauer gegen Zeichenzahl ist ein Abbruch-Detektor — und braucht eine Kontrolle
+
+Telnyx' Gespraechsprotokoll traegt `sent_at` und `ended_at`. `len(text)/Dauer` liefert
+Zeichen/s. Die intakten Antworten lagen bei 17,6 und 17,7 — die gekappte fiel durch **beides**
+auf: unnatuerliche 20,1 Zeichen/s UND ein Text, der ohne Satzzeichen endet.
+
+Die intakten Antworten sind dabei die eigentliche Leistung der Methode: **ohne sie waere 20,1
+nur eine Zahl.** Erst die enge Streuung der Kontrollgruppe macht den Ausreisser lesbar. Eine
+Messung ohne Kontrollwert kann keinen Ausreisser nachweisen.
+
+### 4. Ein Feldname wird belegt, nie geraten — auch wenn er "offensichtlich" ist
+
+Ich habe `content` angenommen (OpenAI-Konvention). Telnyx nennt es `text`. Alle sechs
+Nachrichten kamen mit 0 Zeichen zurueck. Gerettet hat NUR, dass "0 Zeichen bei allen sechs"
+unmoeglich sein kann — die Ausgabe war selbst-widerlegend.
+
+**Das ist exakt der Fehler, der die LCT-Kette 297 von 297 Belegen gekostet hat**
+([[cost-truing-leg-join-root-cause]]). Er ist diesmal in einer Minute aufgefallen, weil das
+Messskript die Zeichenzahl mit ausgab. **Ein Messwert ohne Plausibilitaets-Anker ist blind:**
+haette ich nur den Text ausgegeben, waeren sechs leere Zeilen als "keine Nachrichten" durchgegangen.
+
+### 5. Ein Subagent ohne Worktree-Zwang wechselt den Branch im HAUPT-Verzeichnis
+
+Auftrag lautete *"erst `git checkout -b <branch> master`, dann arbeiten"* — ohne
+`isolation: worktree`. Der Agent hat den Haupt-Worktree auf seinen Spike-Branch gezogen. Es
+ging gut aus (gleicher Commit, sauberer Baum), aber jeder Lead-Commit waere in dieser Zeit auf
+dem Spike-Branch gelandet.
+
+**Regel:** ein Agent, der einen Branch anlegt, bekommt entweder `isolation: worktree` oder den
+ausdruecklichen Auftrag, `git worktree add` zu benutzen. "checkout -b" im Agent-Prompt ist ein
+Eingriff in das Verzeichnis, in dem der Lead selbst steht.
+
+### Nebenlehre: ein Test-Anruf misst nur, was ins Zeichenlimit passt
+
+Beide Testanrufe hatten ein `objective` ueber `OPENING_GOAL_MAX_CHARS` (75) — 157 bzw. 87
+Zeichen. Beide wurden mitten im Satz gekappt, und der Owner meldete das als Defekt. Wer einen
+Sprechpfad testet, prueft VORHER die Kappungsgrenzen des Pfades, sonst misst er sein eigenes
+Eingabefehler-Verhalten.

@@ -1056,3 +1056,114 @@ bleibt zu beobachten.
   ueberschreibt die GANZE `transcription`-Konfiguration und setzt `smart_format`/`numerals`
   nicht mit — die gelten fuer nova-3 (nicht fuer flux) und stehen am Assistant-Objekt auf
   `true`. Fuer die WER irrelevant, fuer das Sprachmodell moeglicherweise nicht.
+
+---
+
+## GQ-H2 — Die Wurzel des Kappens war Telnyx' Barge-in-Schwelle (2026-08-09, GEFIXT)
+
+Owner-Urteil vor dem Fix: *"jeder dritte bis vierte Satz war komplett abgehakt und es war mir
+nicht moeglich, mit dem KI-Agenten ein Gespraech zu fuehren."*
+
+### Was widerlegt wurde
+
+**Eager-EOT ist NICHT (mehr) die Wurzel.** Der Kettenstand vom 08-06 fuehrte
+`eager_eot_threshold` als Ursache und notierte, es lasse sich per API nicht loeschen. Am
+Live-Assistant gemessen (`GET /v2/ai/assistants/...`, HTTP 200): der Wert steht auf `null`,
+ist also geloescht — und der Defekt war am 08-09 trotzdem **staerker** als am 08-06
+(5 von 8 `extends`-Turns gegen 4 von 13). Eine Wurzel, die entfernt ist, kann nicht die
+Wurzel sein.
+
+Ebenso widerlegt: die Behauptung des Agenten IM Gespraech, es liege an "der Audio-Pipeline".
+Der Agent hat das erfunden; unsere Pipeline lieferte den vollen Text.
+
+### Die Wurzel, dreifach belegt
+
+Live-Config des Assistants trug ein **im API-Schema undokumentiertes** Feld:
+
+```
+interruption_settings: { enable: true, interrupt_prediction_threshold: 0.2 }
+telephony_settings:    { noise_suppression: "disabled" }
+```
+
+Telnyx' Release-Notes (Primaerquelle) zu `interrupt_prediction_threshold`: *"Range 0.0 to
+1.0, default 0.0 (off), 0.4 is a good starting point"* und *"adjust up for stricter gating or
+down for more permissive barge-in"*. **0.2 ist also eingeschaltet und halb so streng wie der
+empfohlene Startwert** — kombiniert mit abgeschalteter Rauschunterdrueckung.
+
+**Beleg 1 — Telnyx' eigenes Gespraechsprotokoll** (`/v2/ai/conversations/<id>/messages`; das
+Textfeld heisst `text`, NICHT `content`). Zeichenzahl gegen `sent_at`/`ended_at` gerechnet:
+
+| Zeichen | Sprechdauer | Zeichen/s | `audio_first_token_ms` | Ergebnis |
+|---|---|---|---|---|
+| 245 | 13,9 s | 17,6 | 127 | vollstaendig |
+| **78** | **3,9 s** | 20,1 | **2558** | **gekappt, endet auf "...die ich sehe, laeuft"** |
+| 234 | 13,2 s | 17,7 | 322 | vollstaendig |
+
+Die gekappte Antwort ist die mit der langsamsten Sprachausgabe (2558 ms bis zum ersten Ton
+statt 127-322 ms) — es war der Turn mit `look_up`. **Je laenger bis zum ersten Ton, desto
+groesser das Fenster, in dem ein Geraeusch die Ausgabe kippt.**
+
+**Beleg 2 — unser Store gegen Telnyx' Store.** Hermes hatte den vollstaendigen Satz erzeugt
+(~290 Zeichen, im MCP-Transkript nachlesbar). Telnyx sprach 78 davon. Die Differenz beweist:
+der Verlust passiert NACH unserer Auslieferung.
+
+**Beleg 3 — Vorher/Nachher an zwei echten Anrufen.**
+
+| Signal | `call_mslm38yfw5xb` (vor Fix) | `call_mslml7vvy1oe` (nach Fix) |
+|---|---|---|
+| Turns | 8 | 3 |
+| `discarded_answer` | 2 | **0** |
+| `superseded: true` | 1 | **0** |
+| `[turn] abbruch grund=superseded` | 1 | **0** |
+| gekappte Antwort | 1 von 3 | **0 von 2** |
+| laengste Antwort am Stueck | 245 Zeichen | **680 Zeichen / 39,4 s** |
+
+### Der Eingriff (Live-Config, kein Code, kein Deploy)
+
+`PATCH /v2/ai/assistants/<id>` mit **nur** den zwei Teilobjekten (Telnyx merged tief):
+
+```
+interruption_settings.interrupt_prediction_threshold: 0.2 -> 0.4
+telephony_settings.noise_suppression: "disabled" -> "deepfilternet"
+```
+
+Danach per GET verifiziert — **nicht der 200 vertraut**, denn genau die hatte beim
+`eager_eot_threshold` getaeuscht. Gegengeprueft, dass Stimme, STT-Modell, TeXML-App,
+`user_idle_reply_secs` und `eot_threshold` unveraendert blieben.
+Neue `version_id`: `20260809T095319385426`.
+
+**Engine-Wahl begruendet:** Enum ist `krisp` / `deepfilternet` / `disabled`. `deepfilternet`
+ist quelloffen und ohne belegbare Zusatzkosten; Krisps Preis bei Telnyx ist unbelegt. In
+einem Repo mit Kosten-Gates gewinnt die belegbar kostenfreie Variante.
+
+Snapshots: `data/evidence/telnyx-config/assistant-snapshot-2026-08-09-{vor,nach}-bargein-fix.json`
+(gitignored, lokal).
+
+### Was BLEIBT — die Doppelantwort
+
+Ein `extends`-Fall ueberlebt den Fix: Telnyx lieferte die Nutzer-Aeusserung in zwei Haeppchen
+(61 -> 100 Zeichen, 2,5 s Abstand, `providerMessagesGrew:false`), und Hermes hat **auf beide
+geantwortet** — mit je einer eigenen `look_up`-Recherche. Folge fuer den Owner hoerbar: zwei
+Wetterberichte mit **widersprechenden Zahlen** (16-21 Grad und 30-33 Grad). Das ist keine
+Halluzination, das sind zwei unabhaengige Abfragen.
+
+GQ-P1 (Verdraengungs-Riegel) bleibt damit wirkungslos, aber aus einem ANDEREN Grund als
+notiert: der Riegel meldet jetzt `already_spoken` statt `no_inflight` — die erste Antwort lief
+bereits. Naechste Kandidaten (unbelegt, erst messen): Deepgrams `min_turn_silence`/
+`max_turn_silence` (beide `null`), `eot_timeout_ms` (5000), `user_idle_reply_secs` (4).
+
+### Zwei Korrekturen am Bestand dieses Dokuments
+
+1. **`look_up` feuert.** Der letzte Abschnitt oben behauptet das Gegenteil. Am 08-09 in beiden
+   Anrufen belegt: `[lookup] fertig ok=true dauer_ms=1233 fakten=3` (mehrfach), und der Owner
+   hat die Recherche-Antwort inhaltlich bestaetigt. **B-4/AL-D3 ist an diesem Punkt erledigt** —
+   ohne dass der dafuer vorgesehene Modellwechsel O-4 stattgefunden haette.
+2. **Der Offenlegungs-Abbruch ist KEIN Defekt.** Owner hoerte den Erst-Turn auf *"...ohne"*
+   enden. Ursache: `OPENING_GOAL_MAX_CHARS = 75` (`claude.js:350`) kappt das Anliegen an der
+   Wortgrenze; das per MCP geschickte `objective` war 87 Zeichen lang, verloren ging
+   *"Abbrueche durchlaeuft"*. Gegenprobe: 129 (Offenlegung) + 22 (Bruecke) + 66 = 217 Zeichen
+   bei gemessenen 12,0 s = 18,1 Zeichen/s, im AL-P1-Band 17,3-20,3. **Offener Produktbefund:**
+   die Kappe schneidet hart mitten im Satz, statt sauber abzuschliessen — fuer den Angerufenen
+   klingt jeder etwas laengere Auftrag nach Verbindungsabbruch. Der Code nennt den Hebel
+   selbst (*"Klingt der Erst-Turn live trotzdem unvollstaendig, wird DIESE Zahl angehoben"*),
+   die Abwaegung gegen das Auflege-Fenster ist eine Owner-Entscheidung.
