@@ -5,6 +5,13 @@ Prompt fuer die naechste Session. Autor: Lead-Session c600bc69 (Track-B-Abschlus
 
 ---
 
+> **STAND 2026-08-09, spaetere Session:** Abschnitt 3 (die Hauptaufgabe) ist **erledigt und
+> gemergt** — GQ-P18, Merge `4d4a18c`; alle drei hier vorgeschlagenen Ansaetze wurden an
+> Live-Daten gemessen und **alle drei verworfen**, der Umbau ging einen vierten Weg. Punkt 6.2
+> (B4b/W6) ist **beantwortet** (`fd8d7c9`). Details: `tasks/gq-chain-state.md` (GQ-P18) und
+> `tasks/todo.md`. **Offen bleiben 6.3 bis 6.6** — sie brauchen einen Testanruf bzw. eine
+> Owner-Entscheidung. Abschnitt 7 (Betriebswissen) gilt unveraendert weiter.
+
 ## 1. Der Auftrag in einem Satz
 
 **GQ-P17 (die Haltefrist) ist live, wirkt mechanisch — und ist wegen der Latenz vom Owner

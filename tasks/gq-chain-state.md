@@ -1167,3 +1167,38 @@ bereits. Naechste Kandidaten (unbelegt, erst messen): Deepgrams `min_turn_silenc
    klingt jeder etwas laengere Auftrag nach Verbindungsabbruch. Der Code nennt den Hebel
    selbst (*"Klingt der Erst-Turn live trotzdem unvollstaendig, wird DIESE Zahl angehoben"*),
    die Abwaegung gegen das Auflege-Fenster ist eine Owner-Entscheidung.
+
+---
+
+## GQ-P18 — Sprechsperre statt Wartezeit. **GEMERGT** (`4d4a18c`), Live-Abnahme offen
+
+Ersetzt GQ-P17 vollstaendig (`src/telnyx-turn-hold.js` ist geloescht). Die abgelehnte
+Latenz kam daher, dass die Haltefrist **vor** dem Turn lag und sich auf jede Antwort
+addierte. Jetzt laeuft der Turn sofort los und nur das **Sprechen** wird zurueckgehalten —
+solange nichts auf der Leitung war, kann der Riegel GQ-P1 den Turn stumm ueberholen.
+
+**Zuerst wurden die drei Kickoff-Ansaetze an Live-Daten gemessen und ALLE DREI verworfen**
+(11 `extends`-Ereignisse aus 4 Anrufen, Luecken **1314-5476 ms**):
+
+| Ansatz | warum tot |
+|---|---|
+| kuerzere Frist (800-1200 ms) | faengt **0 von 11** — die kleinste gemessene Luecke ist 1314 ms |
+| Satzzeichen (`smart_format`) | `AIAssistantStartRequest.transcription` hat laut OpenAPI **genau zwei** Felder (`model`, `language`). Kein `settings` — dieselbe Grenze sperrt auch die Turn-End-Regler von AssemblyAI und Soniox |
+| adaptiv | schlechter als pauschal: Fragmentierung beginnt immer an einem `other`-Turn, die Regel kommt per Konstruktion zu spaet |
+
+**Die Wurzel, benannt:** die Luecken sind **Sprechpausen eines Menschen**, keine Zerhackung.
+Ein Textsignal, das "Pause" von "fertig" trennt, existiert nicht. Wer Fragmente fangen will,
+muss warten — die einzige freie Variable ist, WORAUF gewartet wird.
+
+| | GQ-P17 | GQ-P18 |
+|---|---|---|
+| Aufschlag auf die fertige Antwort | +3000 ms auf **jeden** Turn | **0 ms, immer** |
+| Aufschlag auf das erste Wort | +3000 ms auf jeden Turn | bis 3000 ms, nur bei Turns, die ohnehin laenger dauern |
+| Fragment-Abdeckung | 7 von 11 | dieselben 7 |
+| Kosten je gefangenem Fragment | 0 | eine Modellrunde + ggf. eine Recherche |
+
+**Live-Abnahme (braucht Deploy + einen Anruf):** `TELNYX_SHIM_EXTEND_HOLD_MS` steht in der
+Render-Env auf `0` und **muss dort bleiben, bis der neue Code live ist** — auf dem alten Stand
+reaktiviert jeder Wert > 0 exakt die abgelehnte serielle Frist. Danach Wert setzen, ein Anruf,
+`[telnyx-shim] hold` nach `outcome` auswerten: `silenced` = Fragment gefangen (der Gewinn),
+`released` = die Sperre hat das erste Wort gekostet (der Preis), `flushed` = sie war gratis.
