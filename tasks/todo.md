@@ -937,3 +937,77 @@ Bindend aus dem Spike (2026-08-09): `deepseek-v4-pro` lehnt im Thinking-Mode
 `thinking:{"type":"disabled"}` ist belegt, aber nur isoliert (n=2). Ausserdem kommen
 `tool_calls` beim Streaming **fragmentiert ueber viele SSE-Chunks** und muessen ueber `index`
 zusammengesetzt werden — eine durchreichende Sink gaebe kaputte JSON-Fragmente weiter.
+
+## B5 — DeepSeek-Adapter + Registry. ERLEDIGT + GEMERGT (2026-08-09, Merge f2f4927)
+
+Gate PASS **ohne Fix-Runde** (5 Agenten, ~897k Subagent-Token, `highStakes:true`).
+17 Dateien, +1376/-72. Spec: `tasks/b5-spec.md`. Impl-Commit `ca8a14f`.
+
+### TRACK B IST DAMIT ABGESCHLOSSEN
+
+Der Anbieterwechsel ist eine **reine Env-Operation**: `LLM_PROVIDER=anthropic|deepseek`.
+Default `anthropic` — der Live-Betrieb aendert sich durch diese Kette NICHT.
+
+### Was gebaut wurde
+
+- **`src/llm/adapters/deepseek.js`** — zweiter Adapter, nacktes `fetch` + eigener SSE-Leser,
+  **KEINE neue Dependency** (`package.json` unberuehrt).
+- **`src/llm/registry.js`** — Wahl aus dem config-Singleton, Schluessel lazy je Anbieter,
+  fail-closed ueber `Object.hasOwn` (faengt auch `__proto__`).
+- **`src/llm/provider.js`** (Enum) und **`src/llm/transient-errors.js`** — die
+  anbieter-unabhaengige Fehlerklassifikation, aus dem Anthropic-Adapter extrahiert (G5/S2).
+- **`createLlmClient` verliert den `apiKey`-Parameter.** Der Fachcode kennt keinen Schluessel
+  mehr; die Registry entscheidet. Das ist die gesamte Aenderung an `claude.js` (2 Zeilen).
+
+### Lead-Verifikation, selbst gefahren
+
+| Probe | Ergebnis |
+|---|---|
+| Suite **im Worktree** | **4110/4110**, fail 0, 0 `not ok` |
+| **Merkmal der Aenderung** | 24 B5-Tests gruen — der Lauf lief nachweislich auf dem richtigen Stand |
+| Golden-Master `42a2fe5` | nicht im Diff, **8/8 Formen gruen** — der Anthropic-Draht hat sich nicht bewegt |
+| Fachcode anbieter-frei | `claude.js`/`precall-briefing.js`: alle vier Marker **0** (case-sensitiv) |
+| Syntax | `node --check` auf allen neun Produktionsdateien ok |
+| Offline-Invariante | keine echte URL, kein direkter `fetch`-Aufruf in den Tests |
+| Regel 1 (Preis) | `deepseek-v4-pro` hat eine Staffel mit `source`; `cacheWrite==in` ist begruendet, **kein Platzhalter** |
+
+### Der Smoke-Test, der die Phase beweist (Dreierprobe am laufenden Dienst)
+
+| `LLM_PROVIDER` | Ergebnis |
+|---|---|
+| `deepseek` | **laeuft**, `/healthz` 200 |
+| nicht gesetzt (Default) | **laeuft** |
+| `anthropic` | **laeuft** |
+| `nicht-existent` | **Boot abgebrochen**: `LLM_PROVIDER="nicht-existent" ist unbekannt (gueltig: anthropic\|deepseek)` |
+
+Die Gegenproben sind der eigentliche Beleg: ein Boot-Abbruch allein zeigt nur, dass der Dienst
+nie startet. Erst die drei laufenden Faelle machen den vierten aussagekraeftig.
+
+**Nebenbefund aus dem Smoke-Test (kein B5-Defekt):** die lokale `.env` setzt
+`COST_TRUING_REQUIRED_RECORD_TYPES` nicht — der Boot bricht deshalb ab. `BASE_ENV`
+(`test/helpers.js`) setzt `"sip-trunking,call-control"`. Wer lokal einen Server startet,
+braucht den Wert; `.env.example` fuehrt ihn leer.
+
+### W2 ist ENTSCHIEDEN
+
+Unparsebare Werkzeug-Argumente werden **fail-closed abgelehnt**, mit benanntem Werkzeug in
+der Meldung (B5-6), inkl. Randfall "parst zu einem Nicht-Objekt" (B5-7). Begruendung: B5 ist
+der erste Adapter, der Argumente wirklich parst (Anthropic liefert Objekte, DeepSeek
+JSON-Strings). Ein still verschluckter Parse-Fehler waere im Telefonpfad eine falsche
+Handlung.
+
+### Die Spike-Befunde sind im ADAPTER geloest, nicht im Vertrag
+
+- `thinking:{"type":"disabled"}` gegen den HTTP-400 der Werkzeugwahl im Thinking-Mode
+- `tool_calls` werden ueber `index` aus SSE-Fragmenten zusammengesetzt (B5-11)
+- `reasoning_content` erreicht **weder Sink noch `turn.text`** (B5-12) — der Anrufer hoert
+  keinen Denk-Text
+- `reasoning_tokens` sind Teilmenge von `completion_tokens`, werden **nicht doppelt gebucht**
+
+### Gates-Lauf (2026-08-09, auf dem B3b-Stand)
+
+`npm run test:gates` -> 603 Tests, **5 rot**, Exit 0. Alle fuenf sind **Bestandsbefunde**,
+keiner beruehrt LLM/Adapter/Anbieter: `auth-p9a-cache-headers`, `GAP-05`
+(Stripe-Promo-Codes), **`GAP-15` zweimal (traegt "SOLL rot" im Namen** — fehlende
+EN-Rechtstexte/Platzhalter), `E2E-03` (Sprachumstellung im Anruf). Rot ist hier der
+dokumentierte Sollzustand, kein Regressionsfang.
