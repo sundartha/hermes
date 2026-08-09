@@ -115,8 +115,11 @@ const briefingTool = {
 // alle Anrufe toeten). Breaker-SCHWELLEN werden aus config.llm.llmBreaker* wiederver-
 // wendet (kein zusaetzlicher Env-Var-Satz); Timeout/Retries sind eigens (kurz, kein
 // Retry - place_call wartet synchron auf das Ergebnis).
+//
+// B5: eigene Instanz heisst eigener Breaker und eigene Fristen - aber NIE ein zweiter
+// ANBIETER. Den waehlt die Registry prozessweit aus LLM_PROVIDER; das synthetische
+// config-Objekt unten traegt deshalb nur Resilienz-Zahlen und keinen Schluessel.
 const briefingLlm = createLlmClient({
-  apiKey: config.llm.anthropicApiKey,
   config: {
     llm: {
       llmRequestTimeoutMs: config.llm.briefingTimeoutMs,

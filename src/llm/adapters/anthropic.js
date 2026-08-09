@@ -35,26 +35,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { TOOL_RESULTS_ROLE } from "../messages.js";
 import { LLM_TOOL_CHOICE } from "../tool-choice.js";
+import { makeTransientClassifier } from "../transient-errors.js";
 
-// Transiente HTTP-Status: Verbindungs-/Lastklasse, vom Server gefahrlos wiederholbar.
-// 408 Timeout, 409 Conflict, 429 RateLimit, >=500 Server. NICHT 400/401/403/404/422.
-const RETRYABLE_STATUS = new Set([408, 409, 429]);
-const SERVER_ERROR_MIN = 500;
-// Rohe Transport-Fehlercodes (Verbindungsklasse, gefahrlos wiederholbar).
-// UND_ERR_SOCKET = undici "other side closed": Unter dem SDK 0.105 (native fetch)
-// erscheint der Premature close als APIConnectionError (von isTransient ueber branch 1
-// gefangen); dessen verschachtelte cause traegt diesen undici-Code. Hier defensiv im
-// Set, falls der instanceof-Pfad je ausfaellt (Defense-in-Depth, empirisch belegt).
-// ERR_STREAM_PREMATURE_CLOSE bleibt als node-fetch-Erbe (Bedrock/aeltere Pfade).
-const TRANSIENT_CODES = new Set([
-  "ERR_STREAM_PREMATURE_CLOSE",
-  "UND_ERR_SOCKET",
-  "ECONNRESET",
-  "ETIMEDOUT",
-  "ECONNREFUSED",
-  "EPIPE",
-]);
-const PREMATURE_CLOSE_MESSAGE = "Premature close";
 // Anthropic-Fehlertyp fuer Abrechnungsprobleme. Er existiert (403-Klasse), deckt den
 // beobachteten Guthaben-400 aber NICHT ab - er steht NEBEN, nicht STATT der Textpruefung.
 const BILLING_ERROR_TYPE = "billing_error";
@@ -92,20 +74,13 @@ const TOOL_CHOICE_NAMED = "tool";
 // Transient = retrybar. Transient: Premature-close-FetchError, APIConnectionError,
 // ECONNRESET & Co., HTTP 408/409/429/>=500. NICHT transient: 4xx (ausser 408/409/429),
 // invalid_request, Auth -> sofort werfen (kein Over-Retry maskiert einen Config-Fehler).
-function isTransient(err) {
-  if (!err) return false;
-  // 1) APIConnectionError/-Timeout (status undefined) -> transient.
-  if (err instanceof Anthropic.APIConnectionError) return true;
-  // 2) APIError mit status -> nur die retrybare Klasse.
-  if (typeof err.status === "number")
-    return RETRYABLE_STATUS.has(err.status) || err.status >= SERVER_ERROR_MIN;
-  // 3) Rohe Transportfehler (Premature close & Co.) ueber code/message.
-  if (err.code && TRANSIENT_CODES.has(err.code)) return true;
-  if (err.message === PREMATURE_CLOSE_MESSAGE) return true;
-  // 4) Verschachtelter Transportfehler (z.B. APIConnectionError.cause = ECONNRESET).
-  if (err.cause && err.cause !== err) return isTransient(err.cause);
-  return false; // 4xx/invalid_request/Auth/unbekannt -> sofort werfen
-}
+//
+// Nur der ANBIETER-eigene Anteil steht hier: der SDK-Fehlertyp. Statusklasse und rohe
+// Transportfehler sind anbieter-unabhaengig und stehen seit B5 genau einmal
+// (llm/transient-errors.js) - der DeepSeek-Adapter beantwortet sie identisch, eine
+// zweite Kopie waere G5/S2. Die cause-Rekursion laeuft weiterhin durch DIESELBE Closure
+// und damit auch durch dieses Praedikat (verhaltenserhaltend).
+const isTransient = makeTransientClassifier((err) => err instanceof Anthropic.APIConnectionError);
 
 // "Uns ist bei ANTHROPIC das Geld ausgegangen" - nur die anbieter-eigenen Marken. Den
 // anbieter-unabhaengigen Bezahl-Status (HTTP 402) beurteilt der Seam, nicht dieser

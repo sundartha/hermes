@@ -7,6 +7,7 @@ import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled 
 // import-freie bzw. Blatt-Module -> kein Zyklus, obwohl beide sonst downstream sitzen.
 import { alertChannelFindings } from "./boot-guard.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
+import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Tests laufen mit sauberem Env (wie CI, ohne lokale .env) - verhindert, dass eine
@@ -106,6 +107,27 @@ export function boolEnv(name, raw, { fallback }) {
   fatalConfigErrors.push(
     `${name}="${raw}" ist kein gueltiger Boolean (erwartet: "true" oder "false").`,
   );
+  return fallback;
+}
+
+// ---- Aufzaehlungs-Env-Validierung (fail-closed, B5) ----
+// Vierter Geschwister-Parser zu numEnv/boolEnv/isoInstantEnv, fuer Env-Werte aus einer
+// geschlossenen Wertemenge. Gleiche Regel wie dort: abwesend/leer -> dokumentierter
+// Default (KEIN Fatal), gesetzt-aber-unbekannt -> Fatal-Push + Fallback, also
+// Boot-Refusal statt stillem Rueckfall. Ein vertipptes LLM_PROVIDER liefe sonst weiter
+// auf dem Default-Anbieter, waehrend alle glauben, der andere sei aktiv.
+//
+// BEWUSSTE ABWEICHUNG von STT_PROFILE (das seine Pruefung in boot-guard.js hat, kein
+// Versehen): das STT-Profil wird LAZY zur Render-Zeit gelesen, ein Guard nach den Imports
+// reicht dort. Der LLM-Anbieter wird beim IMPORT von src/claude.js gelesen (Modul-Top:
+// createLlmClient). In ESM laufen alle statischen Imports von server.js VOR jedem
+// Boot-Code - ein Guard kaeme zu spaet, und der Operator saehe einen Stacktrace statt
+// der [Konfiguration fatal]-Ausgabe.
+export function enumEnv(name, raw, { allowed, fallback }) {
+  if (raw === undefined || raw === "") return fallback;
+  const trimmed = raw.trim();
+  if (allowed.includes(trimmed)) return trimmed;
+  fatalConfigErrors.push(`${name}="${raw}" ist unbekannt (gueltig: ${allowed.join("|")}).`);
   return fallback;
 }
 
@@ -214,6 +236,7 @@ const EXCHANGE_RATE_DEFAULTS = Object.freeze({
 // ---- Preisstaffeln der Sprachmodelle (B4a) ----------------------------------------
 // Quelle und Abrufdatum EINMAL, damit `source` nicht je Eintrag abweichen kann (G5).
 const ANTHROPIC_PRICING_SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing.md";
+const DEEPSEEK_PRICING_SOURCE = "https://api-docs.deepseek.com/quick_start/pricing";
 
 // Preisstaffeln je Modell-ID. Vier Raten je Staffel, KEIN Feld optional. Zwei
 // Datumsfelder mit VERSCHIEDENER Bedeutung:
@@ -259,6 +282,31 @@ const MODEL_PRICE_SCHEDULES = Object.freeze({
       outPerMTok: 15.0,
       asOf: "2026-08-08",
       source: ANTHROPIC_PRICING_SOURCE,
+    },
+  ],
+  // B5: der Fremdanbieter. Raten abgerufen 2026-08-07 (PLAN-ANBIETER-PORT.md 1.2), am
+  // 2026-08-08 im B1-Lauf gegen dieselbe Seite gegengelesen. Nur deepseek-v4-pro:
+  // -flash unterstuetzt keine Werkzeuge (Anbieter-Doku) und koennte unsere Schleife
+  // nicht fahren - eine Rate, die niemand waehlen kann, pflegt auch niemand.
+  //
+  // cacheWritePerMTok == inPerMTok ist KEINE Platzhalterzahl: DeepSeek hat keine eigene
+  // Schreib-Rate, der Schreibvorgang steckt in prompt_cache_miss_tokens und ist dort zur
+  // Fehltreffer-Rate bepreist (llm/ports.js LlmTokenUsage.inputCacheWriteTokens). Der
+  // Adapter meldet auf dieser Sorte konstant 0; die Rate steht trotzdem ehrlich da, weil
+  // worstCasePrice (state-ops.js) punktweise ueber ALLE Staffeln maximiert - eine 0
+  // waere dort eine Behauptung, kein Messwert.
+  //
+  // Die Anbieterseite kuendigt eine Erhoehung an ("significant increase expected") -
+  // stalePriceFindings (90 Tage) ist der Waechter, kein Ersatz fuer Nachpflegen.
+  "deepseek-v4-pro": [
+    {
+      validFrom: "2026-08-07",
+      inPerMTok: 0.435,
+      cacheWritePerMTok: 0.435,
+      cacheReadPerMTok: 0.003625,
+      outPerMTok: 0.87,
+      asOf: "2026-08-07",
+      source: DEEPSEEK_PRICING_SOURCE,
     },
   ],
 });
@@ -343,6 +391,16 @@ export function resolveModelPrices(schedules, todayIso) {
 
 const rawConfig = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
+  // B5: WELCHER Sprachmodell-Anbieter faehrt diesen Prozess (llm/provider.js). Ein
+  // unbekannter Wert bricht den Boot ab (enumEnv -> fatalConfigErrors -> assertConfig),
+  // er faellt NICHT still auf den Default zurueck.
+  llmProvider: enumEnv("LLM_PROVIDER", process.env.LLM_PROVIDER, {
+    allowed: LLM_PROVIDER_VALUES,
+    fallback: DEFAULT_LLM_PROVIDER,
+  }),
+  // B5: Schluessel des Fremdadapters. Boot-Pflicht NUR bei LLM_PROVIDER=deepseek
+  // (assertConfig) - sonst ist leer der Normalfall.
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY || "",
   // B4a: MUSS eine Preisstaffel in MODEL_PRICE_SCHEDULES haben - sonst bricht der Boot ab
   // (assertPricedModels, src/boot.js). Eine DATIERTE Snapshot-ID ist ein ANDERER Schluessel.
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -1651,7 +1709,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
-  llm: ["anthropicApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
+  llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection"],
@@ -1808,6 +1866,12 @@ export function isSelfServiceLive(cfg) {
 export function assertConfig() {
   const missing = [];
   if (!config.llm.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
+  // B5: der Fremdadapter ohne Schluessel wuerde JEDEN Aufruf mit 401 beantworten -
+  // nicht-transient, also Degradation in jedem Turn, und das erst im Anruf sichtbar.
+  // ANTHROPIC_API_KEY bleibt bewusst UNBEDINGT Pflicht (eine Lockerung waere das
+  // Aufweichen einer bestehenden Pruefung ohne Not - B5 stellt den Live-Anbieter nicht um).
+  if (config.llm.llmProvider === LLM_PROVIDER.DEEPSEEK && !config.llm.deepseekApiKey)
+    missing.push("DEEPSEEK_API_KEY (weil LLM_PROVIDER=deepseek)");
   // Absendernummer + Owner-Identitaet sind keine Boot-Pflicht-Env mehr (P2b): sie leben
   // im Store (Bootstrap-CLI/Onboarding/Self-Service), nicht in der Env. Stattdessen
   // verlangt der Boot-Guard in server.js fail-closed eine aktive Nummer im Store

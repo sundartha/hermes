@@ -154,7 +154,6 @@ test("T-CP2-8: withRetry-Jitter-Backoff ist via injiziertem random deterministis
 function clientWith({ create, config = llmConfig() } = {}) {
   const metricCalls = [];
   const client = createLlmClient({
-    apiKey: "test-key",
     config,
     sleep: fakeSleep(),
     metrics: { llmCall: (m) => metricCalls.push(m) },

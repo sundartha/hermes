@@ -47,7 +47,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // einer Preistabelle pro Modell-ID zusammengefasst (modelPricesUsd, 1 nested Key statt
   // 2 primitiver Keys) -> 10 statt 11.
   // P8: briefingModel + briefingTimeoutMs ergaenzt (Pre-Call-Briefing-Modell + -Timeout) -> 12.
-  llm: 12,
+  // B5: llmProvider + deepseekApiKey ergaenzt (Anbieter-Wahl + Schluessel des
+  // Fremdadapters) -> 14.
+  llm: 14,
   telnyx: 2,
   // AL-P7b: thinkingSignalEnabled ergaenzt (Denk-Signal-Flag) -> 11.
   // STT-A1: sttProfile ergaenzt (neutrale STT-Wahl, EIN Config-Schluessel fuer alle
@@ -77,9 +79,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // unveraendert) -> 7.
   research: 7,
 };
-const EXPECTED_TOTAL_KEYS = 141;
+// B5: llmProvider + deepseekApiKey ergaenzt -> 143.
+const EXPECTED_TOTAL_KEYS = 143;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (141 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (143 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -176,7 +179,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // Objekt) -> 133.
   // STT-A1: sttProfile ist primitiv (String, kein Array/nested Objekt) -> 134.
   // C-P5: twilioSid/twilioToken/twilioEdge waren drei primitive Blaetter -> 132.
-  assert.equal(checked, 132, "alle primitiven Blaetter (141 - 4 Arrays - 5 nested Objekte) geprueft");
+  // B5: llmProvider + deepseekApiKey sind beide primitiv (String, kein Array/nested
+  // Objekt) -> 134.
+  assert.equal(checked, 134, "alle primitiven Blaetter (143 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {
