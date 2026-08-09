@@ -1011,3 +1011,74 @@ keiner beruehrt LLM/Adapter/Anbieter: `auth-p9a-cache-headers`, `GAP-05`
 (Stripe-Promo-Codes), **`GAP-15` zweimal (traegt "SOLL rot" im Namen** — fehlende
 EN-Rechtstexte/Platzhalter), `E2E-03` (Sprachumstellung im Anruf). Rot ist hier der
 dokumentierte Sollzustand, kein Regressionsfang.
+
+## FIX-1 + GQ-P17 — ERLEDIGT + GEMERGT (2026-08-09)
+
+Beide Gate PASS ohne Fix-Runde. Merges `cd23fc9` (FIX-1) und `6ef065c` (GQ-P17).
+
+### FIX-1: die Zusammenfassung konnte strukturell nie gelingen
+
+An der echten API gemessen: 800 Output-Token brauchen **7745 / 8856 / 8985 ms**, der
+Timeout war **3500 ms** je Versuch. Drei Versuche scheiterten IMMER, wenn die Antwort den
+Platz ausnutzte — im Live-Anruf als `attempts:3, latencyMs:10766` sichtbar. Der Defekt traf
+genau die LANGEN Gespraeche, wo die Zusammenfassung am wertvollsten ist; kurze Antworten
+kamen durch, deshalb fiel es nie als "immer kaputt" auf.
+
+Die 3500 ms sind mit dem 15-s-Webhook-Hardcut begruendet — aber `summarizeCall` laeuft gar
+nicht im Webhook-Antwortpfad (`bill()` ist fire-and-forget, `call-termination.js:31`).
+**Loesung: eigener `CALL_SUMMARY_TIMEOUT_MS` (Default 20000, 1 Retry).** Sprechpfad-Timeout
+unveraendert 3500, `briefingTimeoutMs` unveraendert 6000, `turn-budget.js` unberuehrt.
+
+Teil 2: die Metrik-Whitelist trug nur zwei der vier Token-Sorten. `input_tokens` und
+`output_tokens` ergaenzt — **damit ist W6 (B4b) ueberhaupt erst beantwortbar.** Die Whitelist
+BLEIBT eine Whitelist (`LLM_OPTIONAL_FIELDS`); `FIX1-5` belegt, dass weiterhin nur Zahlen
+durchkommen, nie Transkript/Prompt/Modelltext.
+
+### GQ-P17: die Doppelantwort — Wurzel war NICHT konfigurierbar
+
+Belegt an der Telnyx-Doku: `eot_threshold`/`eot_timeout_ms`/`eager_eot_threshold` gelten
+**nur fuer `deepgram/flux`**, `min_turn_silence`/`max_turn_silence` **nur fuer AssemblyAI**.
+**Fuer `deepgram/nova-3` existiert KEIN Turn-End-Regler.** Die Werte in unserer Live-Config
+sind Flux-Parameter und tun seit dem STT-Wechsel am 08-08 nichts. Das erklaert die
+Verschaerfung: 4 Fragmentierungen auf 13 Turns mit Flux, **5 auf 8** mit nova-3.
+
+Verworfen: zurueck auf Flux (englisch-only, 97 % WER auf Deutsch, B-7), AssemblyAI
+(Modellwechsel mit ungemessener Deutsch-Qualitaet — braeuchte erst eine WER-Messung).
+
+**Gebaut: `src/telnyx-turn-hold.js` + Schritt 7.5 im Shim.** Ein Request, dessen Text den
+gehaltenen Vorgaenger fortschreibt, ueberholt ihn; der Vorgaenger ruft NIE `agentTurn` und
+antwortet mit einer leeren, gueltigen Completion — kein Token-Burn, keine zweite Recherche,
+keine Transkriptzeile. Die Registry speichert je Call **nur den Freigeber**, nie Text.
+
+`TELNYX_SHIM_EXTEND_HOLD_MS`: Default **3000** (deckt die weiteste gemessene Fragment-Luecke
+von 2926 ms), max 3500 (darueber liefe die Frist in Telnyx' eigenes Anstoss-Fenster,
+`user_idle_reply_secs`=4 s), **0 = aus als Rueckweg ohne Code-Deploy**.
+**PREIS: jede FERTIGE Aeusserung wird um die Frist spaeter beantwortet.**
+
+### Die widerlegte Praemisse — bindend festgehalten
+
+`gq-chain-state.md` nannte eine Haltefrist *"den falschen Hebel — sie tauschte Latenz gegen
+ein Doppelsprechen, das es nicht gibt"*. **Es gibt es** (zwei gesprochene Wetterberichte mit
+widersprechenden Zahlen, in Telnyx' Protokoll nachweisbar). Die alte Begruendung galt fuer
+den Flux-Stand, auf dem der Provider die Fragmente selbst zusammenhielt.
+
+### Lead-Verifikation, selbst gefahren
+
+| Probe | FIX-1 | GQ-P17 |
+|---|---|---|
+| Suite im Worktree | **4116/4116**, fail 0 | **4135/4135**, fail 0 |
+| Merkmal der Aenderung | 6 FIX1-Tests | **19/19** GQ-P17-Tests |
+| Rueckweg belegt | — | `GQ-P17-12`: Frist 0 -> Bestandsverhalten |
+| Gate nicht verzoegert | — | `GQ-P17-14`: gesperrte Kostendecke antwortet SOFORT |
+| nichts verschluckt | — | `GQ-P17-10` (`same`), `GQ-P17-16` (gesprochene Zeile ueberlebt) |
+| Boot-Probe am neuen Stand | — | Dienst startet, `/healthz` 200, keine neue Startpflicht |
+
+### Offen: die Abnahme braucht einen Anruf
+
+Beide Fixes sind **ungemessen am echten Gespraech**. Der naechste Testanruf muss liefern:
+1. eine Zusammenfassung (vorher: keine),
+2. `hold`-Zeilen mit `outcome extended` (unterdrueckte Fragment-Turns) UND `elapsed`
+   (Frist scharf) — ohne den zweiten Wert ist "wirkungslos" von "nicht scharf" nicht zu
+   unterscheiden,
+3. alle vier Token-Sorten in den `[metrics] llm`-Zeilen,
+4. das Owner-Urteil zur Latenz (3000 ms sind zum Trimmen gedacht).
