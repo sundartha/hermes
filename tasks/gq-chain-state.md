@@ -1202,3 +1202,21 @@ Render-Env auf `0` und **muss dort bleiben, bis der neue Code live ist** — auf
 reaktiviert jeder Wert > 0 exakt die abgelehnte serielle Frist. Danach Wert setzen, ein Anruf,
 `[telnyx-shim] hold` nach `outcome` auswerten: `silenced` = Fragment gefangen (der Gewinn),
 `released` = die Sperre hat das erste Wort gekostet (der Preis), `flushed` = sie war gratis.
+
+### Nebenbefund aus der Spec-Pruefung: ein ungemessener Kandidat gegen die Wurzel
+
+Die Pruefung der Telnyx-OpenAPI (GQ-P18) hat zwei Dinge ergeben, die ueber die
+`smart_format`-Frage hinausgehen:
+
+1. **Auch die Turn-End-Regler sind vom Pro-Call-Pfad unerreichbar.** `min_turn_silence`/
+   `max_turn_silence` (AssemblyAI) und `enable_endpoint_detection`/`max_endpoint_delay_ms`
+   (Soniox) liegen alle unter `settings`. Ein Anbieterwechsel gegen die Fragmentierung
+   braucht deshalb ZUERST die Klaerung "ersetzt der Pro-Call-Block die `settings` des
+   Assistant-Objekts oder merged er?" (`tasks/todo.md`, Track A, Schritt 7).
+2. **`reson8/turns` steht im Modell-Enum** — laut Spec *"live streaming **turn-based**
+   transcription of 10 European languages with automatic language detection"*, die
+   Sprachliste enthaelt `de`. Das ist genau die Eigenschaft, wegen der `deepgram/flux`
+   gewaehlt wurde, ohne dessen Englisch-Falle (B-7: 97 % WER auf Deutsch). **Voellig
+   ungemessen** — vor jedem Wechsel eine WER-Messung (`scripts/stt-wer.mjs`), sonst
+   wiederholt sich B-7. Kickoff-Abschnitt 4 kannte diesen Kandidaten nicht; seine Aussage
+   "verworfen: zurueck auf Flux / offen: AssemblyAI" ist damit unvollstaendig, nicht falsch.
