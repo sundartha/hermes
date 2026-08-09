@@ -293,6 +293,13 @@ export const BASE_ENV = {
   PRECALL_BRIEFING_ENABLED: "false",
   PRECALL_BRIEFING_MODEL: "claude-sonnet-5",
   PRECALL_BRIEFING_TIMEOUT_MS: "6000",
+  // FIX-1: eigener Timeout der Zusammenfassung, auf den ausgelieferten Wert gepinnt -
+  // sonst leakt eine lokale .env via dotenv in Spawn-Tests (Lehre test-base-env-drift).
+  // Unkritisch fuer die Laufzeit der Suite: jeder Spawn-Test, der summarizeCall wirklich
+  // ausloest, lenkt den Anbieter per ANTHROPIC_BASE_URL auf einen sofort antwortenden
+  // Mock (test/_outbound-harness.js); ohne Mock antwortet der echte Endpunkt mit 401 -
+  // nicht-transient, also ohne Retry und ohne Wartezeit.
+  CALL_SUMMARY_TIMEOUT_MS: "20000",
   // AL-P10: Vorab-Recherche in Spawn-Tests neutral AUS + Gebuehr auf den Code-Default
   // gepinnt. Ohne diese Zeilen leckt eine lokale .env via dotenv in die Spawn-Tests
   // (Lehre test-base-env-drift).

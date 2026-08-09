@@ -4,8 +4,9 @@
 // Telnyx-onHangup - Reihenfolge fest: erst persistieren, dann den Provider-
 // Leg auflegen (awaited), ERST DANACH billing/summary/SMS anstossen (fire-and-forget). Die
 // umgekehrte Reihenfolge hielte den Anruf beim Provider technisch live, waehrend die
-// Buchungskette (echter LLM-Roundtrip in summarizeCall ueber src/llm.js, Retry-Budget bis
-// ~12s, danach der SMS-Versand) laeuft - Verstoss gegen den harten Max-Dauer-Cap (Absolute
+// Buchungskette (echter LLM-Roundtrip in summarizeCall ueber src/llm.js mit EIGENEM
+// Retry-Budget aus config.llm.summaryTimeoutMs - nicht dem Sprechpfad-Timeout -, danach
+// der SMS-Versand) laeuft - Verstoss gegen den harten Max-Dauer-Cap (Absolute
 // Regel 1, CLAUDE.md). Reine Ablauf-Orchestrierung: alle I/O-Effekte kommen als bereits
 // gebundene Thunks rein (persistEnd/hangUp/bill), keine Abhaengigkeit auf store/
 // voiceControl/finishCall aus server.js -> offline ohne Server/Store/Netz unit-

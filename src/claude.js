@@ -1,6 +1,6 @@
 // Das "Gehirn": Claude fuehrt das Gespraech, nutzt Tools (Nachricht aufnehmen,
 // auflegen) und schreibt am Ende Summary + Action Items.
-import { attemptReachedProvider, createLlmClient } from "./llm.js";
+import { attemptReachedProvider, createLlmClient, createSecondaryLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import * as store from "./store.js";
 import { CONSULT_WAIT, MANDATE_OUT_OF_SCOPE_DEFAULT, resolveTimezone } from "./store/defaults.js";
@@ -1236,6 +1236,26 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
 // Ergebnis-Karte kommt mit ~250 Output-Token dazu.
 const SUMMARY_MAX_TOKENS = 800;
 
+// FIX-1: GENAU EIN Wiederholversuch - nicht llmMaxRetries (2). Der gemessene Fehlgrund
+// war die zu kurze Frist, kein flackerndes Netz; dagegen hilft der eigene Timeout, nicht
+// ein dritter Versuch. Jeder weitere Versuch laesst den Anbieter erneut bis zu
+// SUMMARY_MAX_TOKENS Ausgabe-Token erzeugen, und ein GESCHEITERTER Versuch wird hier -
+// anders als beim Briefing - NICHT geschaetzt gebucht (bookTokenUsage laeuft erst nach
+// der Antwort). Diese unsichtbaren Kosten verdreifacht man nicht.
+const SUMMARY_MAX_RETRIES = 1;
+
+// Eigene Instanz => eigene Frist UND eigener Breaker (Muster precall-briefing.js). Die
+// Zusammenfassung laeuft detached (call-termination.js stoesst bill() fire-and-forget an),
+// sie unterliegt also nicht dem Webhook-Hardcut, an dem llmRequestTimeoutMs haengt.
+// Bewusste Konsequenz des eigenen Breakers: eine Stoerung der Nachbereitung kann keinen
+// laufenden Anruf toeten - und ein Gespraechs-Brownout keine Zusammenfassung verhindern.
+const summaryLlm = createSecondaryLlmClient({
+  config,
+  requestTimeoutMs: config.llm.summaryTimeoutMs,
+  maxRetries: SUMMARY_MAX_RETRIES,
+  metrics,
+});
+
 export async function summarizeCall(call) {
   const ctx = store.tenantContext(call.tenantId);
   const s = ctx.settings;
@@ -1276,7 +1296,7 @@ export async function summarizeCall(call) {
   // O5: die Zitat-Aufforderung existiert nur, wenn die kurze Frist scharf ist. Sonst
   // steht sie nicht einmal im Prompt (kein Zitat, das man verwerfen muesste).
   const evidenceAllowed = evidenceRetentionEnabled(config.privacy);
-  const turn = await llm.complete({
+  const turn = await summaryLlm.complete({
     model,
     // AL-P11: die Karte kostet ~250 zusaetzliche Output-Token an einer Anfrage, die
     // ohnehin laeuft - 500 reichten dafuer nicht mehr zuverlaessig.

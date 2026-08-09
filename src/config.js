@@ -466,6 +466,23 @@ const rawConfig = {
     min: 1,
   }),
 
+  // ---- Gespraechs-Zusammenfassung (FIX-1, src/claude.js summarizeCall) ----
+  // Eigener Per-Request-Timeout der NACHBEREITUNG. Bewusst NICHT llmRequestTimeoutMs:
+  // dort regiert der 15-s-Hardcut eines laufenden Provider-Webhooks (src/turn-budget.js).
+  // Die Zusammenfassung laeuft aber DETACHED - telephony/call-termination.js stoesst
+  // bill() fire-and-forget an, der Webhook ist da laengst beantwortet. Der geerbte
+  // 3500-ms-Wert konnte eine 800-Token-Antwort strukturell nie tragen: gegen die echte
+  // Anbieter-API mit exakt den Parametern von summarizeCall gemessen 7745/8856/8985 ms
+  // (drei Laeufe, stop_reason max_tokens). 20000 ms sind gut das Doppelte des
+  // schlechtesten Messwerts - Reserve fuer Lastspitzen, ohne dass ein haengender Aufruf
+  // beliebig lange einen Socket haelt.
+  // Dieser Wert geht in KEINE Webhook-Budget-Rechnung ein: src/turn-budget.js und die
+  // Boot-Waechter in src/boot.js lesen ausschliesslich llmRequestTimeoutMs.
+  summaryTimeoutMs: numEnv("CALL_SUMMARY_TIMEOUT_MS", process.env.CALL_SUMMARY_TIMEOUT_MS, {
+    fallback: 20000,
+    min: 1,
+  }),
+
   // ---- Vorab-Recherche (AL-P10, src/research/) ----
   // Master-Schalter fuer die Web-Recherche IM Pre-Call-Briefing. DEFAULT AUS
   // (fail-closed): das Such-Werkzeug erscheint gar nicht erst im tools-Array, der
@@ -1709,7 +1726,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
-  llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs"],
+  llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection"],

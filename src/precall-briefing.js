@@ -24,7 +24,7 @@
 // kein zweiter Auftragsverarbeiter. Mit aktivem Flag wandert Auftragsmaterial an einen
 // Suchindex; Riegel ist eine Feld-Whitelist (src/research/sanitize.js): `to` - die
 // Rufnummer des Angerufenen - bleibt bei aktiver Recherche draussen (O3, fail-closed).
-import { attemptReachedProvider, createLlmClient } from "./llm.js";
+import { attemptReachedProvider, createSecondaryLlmClient } from "./llm.js";
 import { config } from "./config.js";
 import { metrics } from "./metrics.js";
 import {
@@ -110,26 +110,13 @@ const briefingTool = {
 };
 
 // Modul-Top-Verdrahtung (P15: Konstruktion getrennt vom Fachcode, Muster claude.js).
-// EIGENE Instanz => EIGENER Breaker: ein Briefing-Ausfall kippt den Gespraechs-Breaker
-// (die llm-Instanz in claude.js) NICHT (Pre-Mortem: ein Anthropic-Brownout darf nicht
-// alle Anrufe toeten). Breaker-SCHWELLEN werden aus config.llm.llmBreaker* wiederver-
-// wendet (kein zusaetzlicher Env-Var-Satz); Timeout/Retries sind eigens (kurz, kein
-// Retry - place_call wartet synchron auf das Ergebnis).
-//
-// B5: eigene Instanz heisst eigener Breaker und eigene Fristen - aber NIE ein zweiter
-// ANBIETER. Den waehlt die Registry prozessweit aus LLM_PROVIDER; das synthetische
-// config-Objekt unten traegt deshalb nur Resilienz-Zahlen und keinen Schluessel.
-const briefingLlm = createLlmClient({
-  config: {
-    llm: {
-      llmRequestTimeoutMs: config.llm.briefingTimeoutMs,
-      llmMaxRetries: BRIEFING_MAX_RETRIES,
-      llmBackoffMs: config.llm.llmBackoffMs,
-      llmBreakerThreshold: config.llm.llmBreakerThreshold,
-      llmBreakerWindowMs: config.llm.llmBreakerWindowMs,
-      llmBreakerCooldownMs: config.llm.llmBreakerCooldownMs,
-    },
-  },
+// Nebeninstanz mit eigener Frist: kurz und OHNE Retry, weil place_call synchron auf das
+// Ergebnis wartet. Was so eine Instanz sonst erbt (Backoff, Breaker-Schwellen) und was sie
+// nie mitbringt (einen zweiten Anbieter), steht EINMAL bei createSecondaryLlmClient.
+const briefingLlm = createSecondaryLlmClient({
+  config,
+  requestTimeoutMs: config.llm.briefingTimeoutMs,
+  maxRetries: BRIEFING_MAX_RETRIES,
   metrics,
 });
 

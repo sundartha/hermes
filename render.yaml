@@ -329,6 +329,10 @@ services:
         value: claude-sonnet-5
       - key: PRECALL_BRIEFING_TIMEOUT_MS
         value: "6000"
+      # FIX-1: eigener Timeout der Nachbereitung (summarizeCall), getrennt vom
+      # Sprechpfad-Timeout. Begruendung + Messwerte stehen in .env.example.
+      - key: CALL_SUMMARY_TIMEOUT_MS
+        value: "20000"
       # ---- Vorab-Recherche im Briefing (AL-P10) ---- Default AUS; Anschalten ist
       # Owner-Arbeit (mit RESEARCH_ENABLED=true wandert Auftragsmaterial an einen Suchindex).
       - key: RESEARCH_ENABLED

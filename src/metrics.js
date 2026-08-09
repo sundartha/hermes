@@ -12,6 +12,21 @@ const LOG_PREFIX = "[metrics]";
 // operativ getunter Wert -> Modul-Konstante statt config (kein neuer Tuning-Knopf).
 const MAX_TRACKED_CALLS = 10000;
 
+// Die ADDITIVEN Felder der llm-Metrik: eine Korrelations-ID und die vier Token-Sorten der
+// neutralen Verbrauchsform (llm/ports.js LlmTokenUsage), in der Reihenfolge der
+// Preisklassen. Sie stehen NUR im Payload, wenn der Seam sie tatsaechlich mitgibt (kein
+// Rauschen im Breaker-open-/Fehlerpfad, der weder Antwort noch immer eine callId hat).
+// Das hier IST die Whitelist: was nicht in dieser Liste steht, erreicht das Log nie -
+// egal, was ein Aufrufer sonst mitgibt. Alle Werte sind Zahlen bzw. eine server-generierte
+// callId; NIE Transkript, Prompt oder Modelltext (Absolute Regel 4).
+const LLM_OPTIONAL_FIELDS = Object.freeze([
+  "callId",
+  "input_tokens",
+  "cache_creation_input_tokens",
+  "cache_read_input_tokens",
+  "output_tokens",
+]);
+
 const defaultLog = (kind, payload) =>
   console.log(`${LOG_PREFIX} ${kind} ${JSON.stringify(payload)}`);
 
@@ -26,28 +41,20 @@ export function createMetrics({
 
   // Metrik-Hook fuer den LLM-Seam (llm.js ruft .llmCall mit der fixierten Form).
   // Whitelist der Basis-Felder -> selbst wenn der Seam je mehr mitgaebe, leakt nichts.
-  // I13 (call-quality Impl-1): callId + die beiden Cache-Zaehler sind ADDITIV und NUR
-  // im Payload, wenn der Seam sie tatsaechlich mitgibt (kein Rauschen im Breaker-open-/
-  // Fehlerpfad, der weder Response noch immer einen callId hat) - deshalb kein simples
-  // Passthrough-Feld, sondern ein bedingtes Anhaengen. callId ist PII-frei (wie bei
-  // logTurn); die Cache-Zaehler kommen 1:1 aus resp.usage und dienen NUR der Bench-/
-  // Latenz-Auswertung (L1), NIE dem Budget-Gate.
-  function llmCall({
-    outcome,
-    attempts,
-    latencyMs,
-    breakerState,
-    callId,
-    cache_creation_input_tokens,
-    cache_read_input_tokens,
-  }) {
+  // I13 (call-quality Impl-1): callId + Cache-Zaehler sind ADDITIV und NUR im Payload,
+  // wenn der Seam sie tatsaechlich mitgibt (kein Rauschen im Breaker-open-/Fehlerpfad,
+  // der weder Response noch immer einen callId hat) - deshalb kein simples
+  // Passthrough-Feld, sondern ein bedingtes Anhaengen ueber LLM_OPTIONAL_FIELDS.
+  // callId ist PII-frei (wie bei logTurn); die Token-Sorten kommen 1:1 aus resp.usage
+  // und dienen der Bench-/Latenz-Auswertung (L1), NIE dem Budget-Gate.
+  // FIX-1: vier statt zwei Token-Sorten (input_tokens/output_tokens ergaenzt) - die
+  // Buchung (llm-usage.js billedTokens) kannte schon immer alle vier.
+  function llmCall({ outcome, attempts, latencyMs, breakerState, ...optional }) {
     if (!enabled) return;
     const payload = { outcome, attempts, latencyMs, breakerState };
-    if (callId !== undefined) payload.callId = callId;
-    if (cache_creation_input_tokens !== undefined)
-      payload.cache_creation_input_tokens = cache_creation_input_tokens;
-    if (cache_read_input_tokens !== undefined)
-      payload.cache_read_input_tokens = cache_read_input_tokens;
+    for (const field of LLM_OPTIONAL_FIELDS) {
+      if (optional[field] !== undefined) payload[field] = optional[field];
+    }
     log("llm", payload);
   }
 

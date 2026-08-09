@@ -69,6 +69,82 @@ test("T-L0-1b (I13): llmCall traegt callId + Cache-Zaehler additiv, NUR wenn mit
   assert.ok(!("secret" in entries[0].payload));
 });
 
+test("FIX1-4: llmCall traegt ALLE VIER Token-Sorten additiv (Whitelist erweitert, Bestandsform sonst unveraendert)", () => {
+  const { log, entries } = collector();
+  const m = createMetrics({ enabled: true, log });
+
+  m.llmCall({
+    outcome: "success",
+    attempts: 1,
+    latencyMs: 5,
+    breakerState: "closed",
+    callId: "c1",
+    input_tokens: 5,
+    cache_creation_input_tokens: 20,
+    cache_read_input_tokens: 100,
+    output_tokens: 7,
+  });
+
+  assert.equal(entries.length, 1);
+  assert.deepEqual(Object.keys(entries[0].payload).sort(), [
+    "attempts",
+    "breakerState",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "callId",
+    "input_tokens",
+    "latencyMs",
+    "outcome",
+    "output_tokens",
+  ]);
+  assert.equal(entries[0].payload.input_tokens, 5);
+  assert.equal(entries[0].payload.cache_creation_input_tokens, 20);
+  assert.equal(entries[0].payload.cache_read_input_tokens, 100);
+  assert.equal(entries[0].payload.output_tokens, 7);
+});
+
+test("FIX1-5: kein Leck - Transkript/Prompt/Modelltext erreichen die llm-Metrik nie, nur Zahlen", () => {
+  const { log, entries } = collector();
+  const m = createMetrics({ enabled: true, log });
+
+  m.llmCall({
+    outcome: "success",
+    attempts: 1,
+    latencyMs: 5,
+    breakerState: "closed",
+    callId: "c1",
+    input_tokens: 5,
+    cache_creation_input_tokens: 20,
+    cache_read_input_tokens: 100,
+    output_tokens: 7,
+    transcript: "ich haette gern einen Termin",
+    system: "Du bist Hermes",
+    text: "Modelltext",
+    messages: [{ role: "user", content: "geheim" }],
+    apiKey: "sk-ant-geheim",
+  });
+
+  assert.equal(entries.length, 1);
+  assert.deepEqual(Object.keys(entries[0].payload).sort(), [
+    "attempts",
+    "breakerState",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+    "callId",
+    "input_tokens",
+    "latencyMs",
+    "outcome",
+    "output_tokens",
+  ]);
+  const serialized = JSON.stringify(entries[0].payload);
+  assert.ok(!serialized.includes("Termin"));
+  assert.ok(!serialized.includes("Hermes"));
+  assert.ok(!serialized.includes("sk-ant"));
+  for (const field of ["input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens"]) {
+    assert.equal(typeof entries[0].payload[field], "number");
+  }
+});
+
 test("T-L0-2: Master-Schalter aus -> keine der sechs Funktionen loggt (byte-identisch)", () => {
   const { log, entries } = collector();
   const m = createMetrics({ enabled: false, log });
