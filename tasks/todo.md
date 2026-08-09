@@ -1278,3 +1278,57 @@ zu lang. **Erst der Anruf entscheidet den Wert, nicht die Rechnung.**
 | Aufschlag auf das erste Wort | +3000 ms auf jeden Turn | bis zu 3000 ms, aber **nur** bei Turns, die ohnehin laenger dauern |
 | Fragment-Abdeckung | 7 von 11 gemessenen Luecken | dieselben 7 (gleiches Fenster, gleicher Startpunkt) |
 | Kosten eines gefangenen Fragments | 0 | **eine Modellrunde + ggf. eine Recherche** (der Preis des Umbaus) |
+
+---
+
+# B4b / W6 — der Betrag-Rueckgang durch Prompt-Caching. **BEANTWORTET, n=1**
+
+Auftrag: `tasks/kickoff-latenz-und-gespraech-2026-08-10.md`, Punkt 2. Laut Kickoff ohne neuen
+Code messbar — **stimmt**, seit FIX-1 alle vier Token-Sorten loggt.
+
+**Datenbasis:** Anruf `call_mslz71hv6ogm` (2026-08-09), **alle 7** erfolgreichen
+`[metrics] llm`-Zeilen aus dem Render-Log. Preise: `claude-haiku-4-5`, Staffel `validFrom
+2026-08-08` (1,00 / 1,25 / 0,10 / 5,00 USD je M Token).
+
+| Sorte | Summe ueber den Anruf |
+|---|---|
+| `input_tokens` (ungecacht) | 19 194 |
+| `cache_creation_input_tokens` | 4 192 |
+| `cache_read_input_tokens` | 4 192 |
+| `output_tokens` | 945 |
+
+**Antwort auf W6:**
+
+| | USD |
+|---|---|
+| gebucht (vier Raten, wie live) | **0,029578** |
+| dieselben Token ohne jedes Caching | 0,032303 |
+| **Rueckgang** | **0,002725 = 8,44 %** (nur Input-Achse: **9,88 %**) |
+
+**Schwaecht das die Kostendecke? NEIN — und zwar strukturell, nicht zufaellig.** Die
+Vier-Raten-Buchung bepreist genau das, was der Anbieter berechnet; ein Cache-Treffer macht den
+Anruf wirklich billiger, er macht ihn nicht scheinbar billiger. Die Decke liest dieselben
+Cents, die real anfallen. Die gefaehrliche Richtung waere die umgekehrte (buchen, als sei
+gecacht, obwohl voll bezahlt wird) — die tritt hier nicht auf.
+
+**Nebenbefund, wichtiger als die Zahl: das "stabile Praefix" ist nicht stabil.**
+**Nur 2 der 7 Aufrufe** tragen ueberhaupt ein Cache-Feld (einer schreibt, einer liest). Die
+uebrigen fuenf senden ihre 3 861-4 666 Token Praefix **voll bezahlt**. Am Code liegt die
+Ursache offen und ist an zwei Stellen sogar als KOSTEN-HINWEIS kommentiert, nur nie beziffert:
+
+- `systemPrompt` (`claude.js:232`) enthaelt **veraenderlichen Per-Call-Zustand** —
+  `recordedMessagesSection` waechst, sobald eine Nachricht notiert wird, `mandateSection`
+  haengt am Rueckfrage-Zustand. Jede Aenderung verschiebt das Praefix.
+- `agentTools` (`claude.js:507`) nimmt `get_consult`/`look_up` je nach Kontingent und Frische
+  **mitten im Call** auf oder heraus.
+
+Beides ist als bewusst in Kauf genommen dokumentiert. **Der Preis dieser Inkaufnahme steht
+jetzt zum ersten Mal da.** Eine Sanierung (unveraenderlicher Praefix-Block, Veraenderliches in
+die Messages) ist eine eigene Phase und braucht einen Anruf zur Abnahme — **nicht Teil dieses
+Auftrags**.
+
+**Grenzen der Messung, ausdruecklich:** n=1 Anruf. Welche der sieben Aufrufe Gespraechs-Turns
+und welche Nachbereitung (Zusammenfassung/Action-Items) sind, ist aus dem Log **nicht
+zuverlaessig trennbar** — deshalb wird hier **keine** Obergrenze des moeglichen Einsparpotenzials
+gerechnet. Eine Zahl, die auf geratener Zuordnung steht, waere genau die Sorte Beleg, die diese
+Kette schon einmal 297 Messwerte gekostet hat.
