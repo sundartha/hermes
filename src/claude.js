@@ -456,7 +456,7 @@ export function toolDefs(language) {
     {
       name: END_CALL_TOOL_NAME,
       description: t.endCallDescription,
-      input_schema: {
+      parameters: {
         type: "object",
         properties: { reason: { type: "string", description: t.endCallReasonParam } },
         required: [],
@@ -469,7 +469,7 @@ export function toolDefs(language) {
       // GENAU HIER an der Tool-Description (Lehre call-quality-chain: breite Stil-
       // regeln im Prompt-Rumpf kippen bei Haiku in Ueberkorrektur).
       description: t.takeMessageDescription,
-      input_schema: {
+      parameters: {
         type: "object",
         properties: { message: { type: "string", description: t.takeMessageParam } },
         required: ["message"],
@@ -487,7 +487,7 @@ function getConsultToolDef(language) {
   return {
     name: GET_CONSULT_TOOL_NAME,
     description: t.getConsultDescription,
-    input_schema: {
+    parameters: {
       type: "object",
       properties: { question: { type: "string", description: t.getConsultQuestionParam } },
       required: ["question"],
@@ -498,18 +498,18 @@ function getConsultToolDef(language) {
 // Werkzeugsatz DIESES Turns. toolDefs bleibt der feste Satz beider Engines (die
 // Realtime-Bridge und agentToolNames lesen weiter dort); nur der Budget-/Shim-Turn
 // bekommt den Notausgang dazu, und nur wenn er in diesem Call auch bedient werden kann.
-// KOSTEN-HINWEIS: der cache_control-Breakpoint sitzt am LETZTEN Tool - taucht das
-// Werkzeug mitten im Call auf oder verschwindet es, faellt der Tool-Block-Cache genau
-// einmal. Bewusst in Kauf genommen; die Alternative waere ein dauerhaft angebotenes
-// Werkzeug ohne Empfaenger.
+// KOSTEN-HINWEIS: Werkzeugangebot + Systemanweisung sind das cachefaehige Praefix
+// (LlmRequest.cachePrefix) - taucht das Werkzeug mitten im Call auf oder verschwindet
+// es, faellt dieses Praefix genau einmal. Bewusst in Kauf genommen; die Alternative
+// waere ein dauerhaft angebotenes Werkzeug ohne Empfaenger.
 function agentTools(call) {
   const tools = toolDefs(call.language);
   if (consultAvailableFor(call)) tools.push(getConsultToolDef(call.language));
   // AL-P10b: dieselbe Sperre wie get_consult - outbound-only, aktiver Call, Kontingent,
   // Flag x Tenant-Recht x Secret. Erschoepftes Kontingent laesst das Werkzeug aus dem
   // tools-Array des NAECHSTEN Zuges verschwinden (der Agent faellt auf sein Mandat
-  // zurueck). KOSTEN-HINWEIS wie oben: der cache_control-Breakpoint sitzt am letzten
-  // Tool, ein Auftauchen/Verschwinden mitten im Call kostet einmal den Tool-Block-Cache.
+  // zurueck). KOSTEN-HINWEIS wie oben: Werkzeugangebot + Systemanweisung sind das
+  // cachefaehige Praefix, ein Auftauchen/Verschwinden mitten im Call kostet es einmal.
   if (lookupAvailableFor(call)) tools.push(lookUpToolDef(call.language));
   return tools;
 }
@@ -522,7 +522,7 @@ function lookUpToolDef(language) {
   return {
     name: LOOK_UP_TOOL_NAME,
     description: t.lookUpDescription,
-    input_schema: {
+    parameters: {
       type: "object",
       properties: { query: { type: "string", description: t.lookUpQueryParam } },
       required: ["query"],
@@ -536,24 +536,6 @@ function lookUpToolDef(language) {
 // Ohne Sprach-Argument, weil die NAMEN sprachinvariant sind (D4) - der Weltdefault-
 // Schalter faerbt hier also nicht ab.
 export const agentToolNames = () => toolDefs().map((t) => t.name);
-
-// Anthropic Prompt-Caching-Marker (L3): markiert das Ende eines stabilen Praefix-
-// Blocks fuer Caching. "ephemeral" = 5-min-TTL. Eingefroren -> sichere Mehrfach-
-// Referenz (System-Block + letzter Tool-Eintrag), kein gestreuter Magic-String (G25).
-const CACHE_CONTROL_EPHEMERAL = Object.freeze({ type: "ephemeral" });
-
-// L3: markiert NUR den letzten Tool-Eintrag mit cache_control (Render-Reihenfolge
-// tools->system->messages -> ein Breakpoint am letzten Tool cacht den ganzen Tool-
-// Block). REINER Transform ohne Nebeneffekt: liefert eine NEUE Liste und mutiert die
-// toolDefs-Ausgabe NICHT (die auch die Realtime-Bridge ueber realtimeTools konsumiert).
-// Tool-Inhalt byte-identisch (nur das additive cache_control-Feld am letzten Eintrag).
-function toolsWithCacheControl(tools) {
-  if (!tools.length) return tools;
-  const last = tools.length - 1;
-  return tools.map((tool, i) =>
-    i === last ? { ...tool, cache_control: CACHE_CONTROL_EPHEMERAL } : tool,
-  );
-}
 
 // Tool-Dispatch beider Engines. Kein Kalender-/Buchungs-Case mehr (P1b), und seit
 // AUTH-P4 auch keine HTTP-Schreibflaeche mehr - in den Kalender schreibt nichts mehr
@@ -736,6 +718,12 @@ const TURN_MAX_TOKENS = 300;
 
 // Zeichenumfang des VOLLSTAENDIG gebauten Prompts einer Runde - die eine Groesse, aus der
 // sich ein abgerissener Aufruf noch deterministisch schaetzen laesst. Rein (N7).
+//
+// Gemessen wird die NEUTRALE Anfrage, nicht der Anbieter-Body: die Anbieter-Huelle
+// (System-Blockliste, Feldnamen) ist Draht-Syntax, kein Prompt-Inhalt. Die Zahl liegt
+// dadurch rund 60 Zeichen (~20 Token) unter der bis B3a gemessenen - weit innerhalb der
+// eingebauten Pessimismus-Reserve (ESTIMATE_CHARS_PER_TOKEN = 3 gegen real 3,5-4, also
+// 17-33 % Aufschlag). Die Schaetzung bleibt eine Obergrenze (Regel 1).
 function promptCharsOf({ system, tools, messages }) {
   return (
     JSON.stringify(system).length + JSON.stringify(tools).length + JSON.stringify(messages).length
@@ -995,7 +983,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       break;
     }
 
-    const tools = toolsWithCacheControl(agentTools(call));
+    const tools = agentTools(call);
     for (const tool of tools) offeredTools.add(tool.name);
     const elapsedMs = Date.now() - loopStartedAt;
     const sink = streamSinkFor({
@@ -1008,10 +996,13 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
     if (sink) streamArmedRounds += 1;
     const params = {
       model,
-      max_tokens: TURN_MAX_TOKENS,
-      system: [{ type: "text", text: systemPrompt(call), cache_control: CACHE_CONTROL_EPHEMERAL }],
+      maxTokens: TURN_MAX_TOKENS,
+      system: systemPrompt(call),
       tools,
       messages,
+      // L3: Werkzeugangebot + Systemanweisung sind der stabile Praefix dieses Turns.
+      // WELCHE Marken ein Anbieter dafuer braucht, weiss nur sein Adapter.
+      cachePrefix: true,
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
     };
     const turn = await completeRound({
@@ -1287,7 +1278,7 @@ export async function summarizeCall(call) {
     model,
     // AL-P11: die Karte kostet ~250 zusaetzliche Output-Token an einer Anfrage, die
     // ohnehin laeuft - 500 reichten dafuer nicht mehr zuverlaessig.
-    max_tokens: SUMMARY_MAX_TOKENS,
+    maxTokens: SUMMARY_MAX_TOKENS,
     // Zusammenfassungs-Prompt sprachabhaengig (F1 Phase 2): die Summary entsteht in der
     // Gespraechssprache (de byte-identisch); die JSON-Keys bleiben sprachunabhaengig.
     system: loc.summarySystem(owner) + (evidenceAllowed ? loc.summaryEvidenceClause : ""),

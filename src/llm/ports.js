@@ -15,10 +15,6 @@
 //   Betriebslauf, kein Aufruf im Gespraechspfad, und hat heute keinen Aufrufer.
 // - Modell-Auswahl/Modell-Liste: die Modell-ID kommt heute direkt aus der
 //   Konfiguration; welches Modell gewaehlt wird, ist eine spaetere Entscheidung.
-// - Prompt-Caching-Steuerung: die cache_control-Marker setzt heute der Aufrufer
-//   (claude.js) in Anthropic-Form. Ein neutraler Cache-Hinweis haette eine
-//   Implementierung und einen No-op fuer jeden Anbieter ohne eigene Schreib-Rate -
-//   Vorratshaltung ohne zweiten Aufrufer.
 // - Embeddings, Bildeingaben, JSON-Modus, Denk-Budget, Batch-API: kein heutiger
 //   Aufrufer. Jede dieser Faehigkeiten waere eine Wette auf einen Bedarf, den niemand
 //   heute hat.
@@ -153,10 +149,18 @@
  *   summarizeCall, precall-briefing.js fetchPrecallBriefing.
  * @property {string} model - Modell-ID aus der Konfiguration
  * @property {number} maxTokens - harter Ausgabe-Deckel
- * @property {*} system - Systemanweisung; innere Form ist NICHT Teil dieses Vertrags
+ * @property {string} system - Systemanweisung als reiner Text. Ein Anbieter, der sie
+ *   als Blockliste erwartet, baut sie in seinem Adapter - der Aufrufer schreibt Text.
  * @property {*} messages - Gespraechsverlauf; innere Form ist NICHT Teil dieses
- *   Vertrags
- * @property {*} tools - Werkzeugangebot; innere Form ist NICHT Teil dieses Vertrags
+ *   Vertrags (K19: {role, content:<String>} plus die zwei neutralen Formen aus
+ *   llm/messages.js - in beiden Anbieterwelten gueltig, der Adapter reicht sie durch)
+ * @property {{name: string, description: string, parameters: object}[]} tools -
+ *   Werkzeugangebot. `parameters` ist ein JSON-Schema-Objekt; wie der Anbieter das
+ *   Feld nennt, weiss nur sein Adapter.
+ *   Ein Eintrag OHNE `parameters` ist ein anbieter-EIGENES Serverwerkzeug (heute
+ *   Anthropics web_search aus research/adapters/) und geht unveraendert durch: es
+ *   gehoert bereits dem Anbieter, den dieser Adapter bedient. Ein Adapter, der es
+ *   nicht kennt, darf es nicht stillschweigend umformen.
  * @property {"auto"|"required"|{tool: string}} [toolChoice] - Steuerung der
  *   Werkzeugwahl. Drei Werte, nicht zwei: "auto" und "required" reichen fuer die
  *   Steuerung ueber ein Werkzeugangebot, aber precall-briefing.js briefingTooling hat
@@ -165,6 +169,15 @@
  *   einzige Angebot). Weder "auto" noch "required" kann das ausdruecken; ein
  *   zweiwertiger Vertrag zwaenge diesen Aufrufer, entweder die Erzwingung aufzugeben
  *   oder am Vertrag vorbei zu bauen.
+ * @property {boolean} [cachePrefix] - HINWEIS des Aufrufers: "Werkzeugangebot und
+ *   Systemanweisung dieser Anfrage sind ein STABILES Praefix und lohnen einen
+ *   Cache-Eintrag". Fehlt das Feld, wird nichts markiert.
+ *   Bewusst ein Hinweis und keine Anweisung: WIE ein Anbieter das ausnutzt, ist seine
+ *   Sache - Anthropic braucht zwei Breakpoints (System-Block + letztes Werkzeug, weil
+ *   er tools->system->messages rendert), DeepSeek cacht ohne jede Marke und der
+ *   Adapter macht dann einen No-op. Bewusst OHNE TTL und ohne Breakpoint-Zahl: beides
+ *   ist Anbieter-Vokabular, und die hinterlegte Preisstaffel (B4a) kennt genau EINE
+ *   Schreib-Rate - eine waehlbare TTL waehlte still eine andere Rate.
  * @property {string} [callId] - Bench-/Metrik-Korrelation, KEIN Anbieter-Feld: der
  *   Seam streift ihn ab, bevor die Parameter an den Anbieter gehen.
  * @property {number} [streamBudgetMs] - nur fuer completeStream: Restfrist des Turns

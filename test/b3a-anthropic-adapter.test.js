@@ -9,6 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { anthropicErrors, createAnthropicProvider } from "../src/llm/adapters/anthropic.js";
 import { providerTurnMessage, toolResultsMessage } from "../src/llm/messages.js";
+import { LLM_TOOL_CHOICE } from "../src/llm/tool-choice.js";
 
 const MODEL = "claude-haiku-4-5";
 // Anthropic antwortet mit der aufgeloesten, DATIERTEN Snapshot-ID - genau der Wert, der
@@ -140,11 +141,11 @@ test("B3A-9: die Schluessel-Reihenfolge der Anfrage bleibt erhalten, auch wenn m
   const { provider, seen } = providerReturning({ content: [] });
   await provider.complete({
     model: MODEL,
-    max_tokens: 300,
+    maxTokens: 300,
     system: "s",
     messages: [],
     tools: [],
-    tool_choice: { type: "any" },
+    toolChoice: LLM_TOOL_CHOICE.REQUIRED,
   });
   assert.deepEqual(Object.keys(seen[0]), [
     "model",

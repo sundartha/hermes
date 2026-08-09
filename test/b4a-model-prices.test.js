@@ -202,18 +202,25 @@ test("B4A-STALE-2: einen Tag VOR der Hoechstdauer schweigt der Guard (T5-Rand)",
 
 // ---- Struktur statt Disziplin: die 5m-Schreibrate ist die richtige --------------------
 
-const CLAUDE_SOURCE = fs.readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src", "claude.js"),
+const ADAPTER_SOURCE = fs.readFileSync(
+  path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "src",
+    "llm",
+    "adapters",
+    "anthropic.js",
+  ),
   "utf8",
 );
 
 test("B4A-TTL-1: die Cache-Markierung traegt KEIN ttl - sonst gilt eine andere Schreib-Rate als die hinterlegte", () => {
   assert.ok(
-    CLAUDE_SOURCE.includes('const CACHE_CONTROL_EPHEMERAL = Object.freeze({ type: "ephemeral" });'),
+    ADAPTER_SOURCE.includes('const CACHE_CONTROL_EPHEMERAL = Object.freeze({ type: "ephemeral" });'),
     "Ein `ttl` an der Cache-Markierung waehlt eine ANDERE Schreib-Rate; die Preistabelle " +
       "traegt nur die 5m-Rate - sonst wird still zu wenig gebucht (Regel 1).",
   );
-  const marks = CLAUDE_SOURCE.match(/cache_control:\s*\S+/g) || [];
+  const marks = ADAPTER_SOURCE.match(/cache_control:\s*\S+/g) || [];
   assert.ok(marks.length > 0, "ohne Cache-Markierung waere dieser Riegel eine leere Behauptung");
   for (const mark of marks)
     assert.equal(

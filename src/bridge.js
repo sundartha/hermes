@@ -70,7 +70,9 @@ function sendFunctionOutput(openaiWs, callId, output) {
   openaiWs.send(JSON.stringify({ type: "response.create" }));
 }
 
-// Claude-Tool-Schema (input_schema) -> Realtime-Function-Schema (parameters). P11:
+// Neutrale Werkzeugform (claude.js toolDefs: name/description/parameters) -> OpenAI-
+// Realtime-Function-Schema. Seit B3b sind die Felder namensgleich; die Uebersetzung
+// besteht nur noch aus dem type-Marker, den die Realtime-API verlangt. P11:
 // sprachabhaengig (toolDefs(language)) - call ist an beiden Call-Sites in Scope.
 // Exportiert, weil AL-P10b-fix genau die Relation "Realtime-Werkzeugsatz <-> GRENZEN-
 // Zeile im Realtime-Prompt" pinnt - die Praemisse muss direkt pruefbar sein, nicht
@@ -80,7 +82,7 @@ export function realtimeTools(language) {
     type: "function",
     name: t.name,
     description: t.description,
-    parameters: t.input_schema,
+    parameters: t.parameters,
   }));
 }
 
@@ -209,6 +211,8 @@ export function attachMediaBridge(httpServer, onCallEnded) {
               input_audio_transcription: transcription,
               turn_detection: { type: "server_vad" },
               tools: realtimeTools(call.language),
+              // OpenAI-Realtime-Vokabular, NICHT LlmRequest.toolChoice: dieser Draht
+              // geht direkt an OpenAI, nicht durch den LLM-Port (llm/ports.js).
               tool_choice: "auto",
             },
           }),
