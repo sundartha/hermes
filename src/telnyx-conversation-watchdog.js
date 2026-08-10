@@ -193,6 +193,14 @@ export function makeConversationWatchdog({
   }
   function restartDeadAirTimer(callId, s) {
     clearNamedTimer(s, "deadAirTimer"); // Fuettern = Lebenszeichen gesehen
+    // dead-air-speech (Review-Fund DAS-1): ein echtes Lebenszeichen schliesst die
+    // Buchfuehrung der letzten Vertagung ab. Ohne diesen Reset traegt eine SPAETERE,
+    // wirklich ungedeckte Terminierung im dead_air-Log noch die Vertagung eines frueheren
+    // Turns - das Feld, das genau diesen Fall erklaeren soll, wuerde in eben diesem Fall
+    // luegen (derselbe Anlass wie der hangup_cause-Nachtrag vom 10.08.). Die laufende
+    // Vertagung selbst ist nicht betroffen: extendForSpeech stellt seinen Timer direkt und
+    // laeuft nie ueber diesen Pfad.
+    s.speechExtendedMs = 0;
     s.deadAirTimer = setTimer(() => onDeadAir(callId), deadAirMs);
   }
   // Gemeinsamer Kern von onDeadAir/onFarewellDue (G5/S2): genau EIN terminate, State vorher

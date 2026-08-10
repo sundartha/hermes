@@ -712,3 +712,45 @@ test("T20: kein geleakter State gewaehrt einem spaeteren arm() derselben callId 
     "keine speech_extend-Zeile - der State darf nicht aus dem geleakten Aufruf stammen",
   );
 });
+
+// DAS-1 (Review-Fund): speechExtendedMs ist ein FORENSIK-Feld - es beantwortet beim Feuern
+// "war eine Sprech-Vertagung im Spiel?". Ueberlebt der Wert ein echtes Lebenszeichen, meldet
+// eine spaetere, wirklich ungedeckte Terminierung eine Vertagung, die fuer SIE nie stattfand.
+// Das Feld wuerde dann genau in dem Fall luegen, fuer den es eingebaut wurde - dieselbe Klasse
+// Defekt wie der fehlende hangup_cause, der den Vorfall vom 10.08. undiagnostizierbar machte.
+test("T21: ein echtes Lebenszeichen nach einer Vertagung setzt speechExtendedMs zurueck (spaeteres dead_air luegt nicht)", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const timers = fakeTimers();
+  const clock = fakeClock();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers, now: clock.now });
+
+  watchdog.arm(call.id);
+  watchdog.observeTurn(call.id, SUBSTANTIAL_TEXT);
+  watchdog.noteAgentSpeech(call.id, { speechChars: 1000, language: "de" }); // Sprechende bei 65500
+
+  // 1. Die Vertagung wird gewaehrt - ab hier traegt der State speechExtendedMs=65500.
+  clock.advance(DEAD_AIR_TEST_MS);
+  timers.fireAll();
+  assert.deepEqual(timers.pendingDelays(), [LONG_SPEECH_MS], "Vorbedingung: die Vertagung laeuft");
+
+  // 2. Der Anrufer meldet sich, BEVOR der vertagte Timer feuert. Das ist ein echtes
+  //    Lebenszeichen: die Vertagung ist damit erledigt und geht niemanden mehr etwas an.
+  //    Die Uhr steht hinter dem geschaetzten Sprechende - der Agent redet nachweislich nicht mehr.
+  clock.advance(LONG_SPEECH_MS);
+  watchdog.observeTurn(call.id, SUBSTANTIAL_TEXT);
+
+  // 3. Jetzt stirbt die Leitung wirklich - ohne jede Sprech-Vertagung fuer DIESE Terminierung.
+  clock.advance(DEAD_AIR_TEST_MS);
+  const lines = await captureConsole(() => {
+    timers.fireAll();
+    return Promise.resolve();
+  });
+
+  assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 1, "die tote Leitung wird beendet");
+  assert.ok(
+    lines.some((l) => l.startsWith(WATCHDOG_LOG_PREFIX) && l.includes("dead_air") && l.includes('"speechExtendedMs":0')),
+    "dead_air muss speechExtendedMs:0 melden - die Vertagung gehoerte zu einem frueheren Turn",
+  );
+});
