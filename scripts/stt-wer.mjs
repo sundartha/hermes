@@ -22,12 +22,29 @@
 // Aufruf: node scripts/stt-wer.mjs <call_session_id> [--keep-audio]
 //         node scripts/stt-wer.mjs --recording <aufnahme-id>
 //         node scripts/stt-wer.mjs <...> --conversation <telnyx-conversation-uuid>
+//
+// --live-stt [--smart-format] [--numerals]
+//   Zusatzmessung (STT-A2, tasks/todo.md): schickt den bereits isolierten Gegenstelle-Kanal
+//   im Echtzeit-Takt an Telnyx' EIGENSTAENDIGE Streaming-STT
+//   (wss://api.telnyx.com/v2/speech-to-text/transcription, Doku
+//   developers.telnyx.com/docs/voice/stt/websocket-streaming) und vergleicht das Ergebnis
+//   gegen dieselbe ElevenLabs-Referenz wie der Hauptlauf. Rein additiv - ohne --live-stt
+//   bleibt der bisherige Ablauf byte-identisch.
+//
+//   Falle, an der dieses Projekt schon einmal war (B-7, tasks/gq-chain-state.md): der
+//   Modell-Parameter dieser WS-API heisst `model` und ist getrennt von `transcription_engine`
+//   (Beispiel: engine=Deepgram, model=nova-3) - NICHT `deepgram/nova-3` als ein String wie am
+//   Assistant-Objekt, und NICHT `transcription_model`. Ein falscher Name wird still ignoriert;
+//   deshalb geht mit jedem Ergebnis ein Fingerabdruck (SHA-256) mit.
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import WebSocket from "ws";
 
 import { config } from "../src/config.js";
 import { assertTelnyxOk } from "../src/telephony/adapters/telnyx/errors.js";
@@ -66,6 +83,127 @@ const MAX_ANCHOR_DRIFT_SECS = 3;
 const TURN_WINDOW_LEAD_SECS = 0.4;
 
 const HTTP_TIMEOUT_MS = 300_000;
+
+// --live-stt: dieselben Werte, die Live am Assistant-Objekt/Pro-Call-Block stehen
+// (src/telephony/adapters/telnyx/stt-model.js, test/telnyx-call-control.test.js) - engine und
+// Modell aber GETRENNT, so verlangt es die Standalone-WS-API (siehe Kopf-Kommentar).
+const LIVE_STT_WS_PATH = "/v2/speech-to-text/transcription";
+const LIVE_STT_ENGINE = "Deepgram";
+const LIVE_STT_MODEL = "nova-3";
+const LIVE_STT_LANGUAGE = "de";
+// Der isolierte Kanal ist PCM16-Mono-WAV bei REFERENCE_SAMPLE_RATE_HZ (ffmpeg-Ausgabe von
+// splitChannels) - daraus folgt die Byte-Rate fuer den Echtzeit-Takt beim Senden.
+const PCM16_BYTES_PER_SAMPLE = 2;
+const LIVE_STT_CHUNK_BYTES = 4096; // Groesse aus Telnyx' eigenem Beispielcode
+const LIVE_STT_CONNECT_TIMEOUT_MS = 15_000;
+const LIVE_STT_TRAILING_WAIT_MS = 2_500; // Nachlauf fuer das letzte is_final nach dem letzten Chunk
+const LIVE_STT_OVERALL_TIMEOUT_MS = 120_000;
+
+// Fingerabdruck statt Volltext im Log dieser Zeile - der Volltext steht separat als
+// TRANSKRIPT-Zeile, der Hash ist der schnelle Beleg "A und B haben wirklich verschieden
+// geantwortet" (bzw. eben nicht, siehe Kopf-Kommentar zur Namensfalle).
+export function fingerprint(text) {
+  return createHash("sha256").update(String(text || "")).digest("hex").slice(0, 12);
+}
+
+// Satzzeichen/Grossschreibung werden HIER geprueft, nicht ueber normalizeWords() - die
+// Normalisierung fuer die WER wirft genau das bewusst weg (Kommentar bei PUNCTUATION oben).
+export function hasPunctuation(text) {
+  return /[.,!?]/.test(String(text || ""));
+}
+export function hasUppercase(text) {
+  return /\p{Lu}/u.test(String(text || ""));
+}
+
+// Nur is_final-Ergebnisse zaehlen (Doku: "Partials are best-effort and may revise"; ein
+// Interim-Ergebnis in die Referenz zu mischen wuerde Woerter doppelt oder revidiert zaehlen).
+async function transcribeLiveWs(wavPath, { apiKey, apiBase, smartFormat, numerals }) {
+  const wsBase = apiBase.replace(/^http/, "ws");
+  const url = new URL(`${wsBase}${LIVE_STT_WS_PATH}`);
+  url.searchParams.set("transcription_engine", LIVE_STT_ENGINE);
+  url.searchParams.set("model", LIVE_STT_MODEL);
+  url.searchParams.set("input_format", "wav");
+  url.searchParams.set("language", LIVE_STT_LANGUAGE);
+  url.searchParams.set("interim_results", "true");
+  if (smartFormat) url.searchParams.set("smart_format", "true");
+  if (numerals) url.searchParams.set("numerals", "true");
+
+  const audio = await readFile(wavPath);
+  const bytesPerSecond = REFERENCE_SAMPLE_RATE_HZ * PCM16_BYTES_PER_SAMPLE;
+  const chunkDelayMs = (LIVE_STT_CHUNK_BYTES / bytesPerSecond) * 1000;
+
+  return new Promise((resolve, reject) => {
+    const finals = [];
+    let settled = false;
+    const done = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(overallTimeout);
+      fn(value);
+    };
+    const overallTimeout = setTimeout(() => {
+      done(reject, new Error("Live-STT-WebSocket: Timeout ohne Abschluss"));
+      ws.terminate();
+    }, LIVE_STT_OVERALL_TIMEOUT_MS);
+
+    const ws = new WebSocket(url.toString(), {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      handshakeTimeout: LIVE_STT_CONNECT_TIMEOUT_MS,
+    });
+
+    ws.on("open", async () => {
+      try {
+        for (let offset = 0; offset < audio.length; offset += LIVE_STT_CHUNK_BYTES) {
+          ws.send(audio.subarray(offset, offset + LIVE_STT_CHUNK_BYTES));
+          await sleep(chunkDelayMs);
+        }
+        await sleep(LIVE_STT_TRAILING_WAIT_MS);
+        ws.send(JSON.stringify({ type: "CloseStream" }));
+      } catch (err) {
+        done(reject, err);
+        ws.terminate();
+      }
+    });
+
+    ws.on("message", (raw) => {
+      let msg;
+      try {
+        msg = JSON.parse(raw.toString());
+      } catch {
+        return; // kein JSON - kein Transkript-Event, ignorieren statt zu raten
+      }
+      if (msg.errors) {
+        done(reject, new Error(`Live-STT-WebSocket meldet Fehler: ${JSON.stringify(msg.errors)}`));
+        ws.terminate();
+        return;
+      }
+      if (msg.is_final && msg.transcript) finals.push(msg.transcript);
+    });
+
+    ws.on("close", () => done(resolve, finals.join(" ").trim()));
+    ws.on("error", (err) => done(reject, err));
+    ws.on("unexpected-response", (_req, res) => {
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => done(reject, new Error(
+        `Live-STT-WebSocket: Handshake abgelehnt, HTTP ${res.statusCode} ${body.slice(0, 300)}`,
+      )));
+    });
+  });
+}
+
+async function reportLiveWsComparison(wavPath, reference, telnyx, { smartFormat, numerals }) {
+  console.log(
+    `\n--- Live-STT ueber Telnyx-Standalone-WebSocket (${LIVE_STT_ENGINE} ${LIVE_STT_MODEL}, ` +
+      `smart_format=${smartFormat ? "true" : "aus"}, numerals=${numerals ? "true" : "aus"}) ---`,
+  );
+  const transcript = await transcribeLiveWs(wavPath, { ...telnyx, smartFormat, numerals });
+  const wer = wordErrorRate(normalizeWords(reference.text), normalizeWords(transcript));
+  console.log(`Fingerabdruck (SHA-256/12): ${fingerprint(transcript)}`);
+  console.log(`Satzzeichen: ${hasPunctuation(transcript) ? "ja" : "nein"}   Grossschreibung: ${hasUppercase(transcript) ? "ja" : "nein"}`);
+  console.log(`WER gegen ElevenLabs-Referenz: ${formatRate(wer)}`);
+  console.log(`TRANSKRIPT: ${transcript}`);
+}
 
 // Satzzeichen weg, Kleinschreibung - Umlaute BLEIBEN, sie sind bedeutungstragend
 // ("Vaters" vs. "Vater"). Ein Erkenner, der Umlaute verliert, soll dafuer bestraft werden.
@@ -315,6 +453,10 @@ async function measure(options) {
     );
     console.log(`\nERGEBNIS   Anbieter-Erkenner auf der Gegenstelle: ${formatRate(main)}`);
 
+    if (options.liveStt) {
+      await reportLiveWsComparison(wavPaths[counterpart], references[counterpart], telnyx, options);
+    }
+
     const { turns, trailing } = assignTurnWindows(
       userMessages,
       references[counterpart].words,
@@ -341,12 +483,15 @@ export function parseArgs(argv) {
     recordingId: flagValue("--recording"),
     conversationOverride: flagValue("--conversation"),
     keepAudio: argv.includes("--keep-audio"),
+    liveStt: argv.includes("--live-stt"),
+    smartFormat: argv.includes("--smart-format"),
+    numerals: argv.includes("--numerals"),
   };
 }
 
 const USAGE =
   "Aufruf: node scripts/stt-wer.mjs <call_session_id> [--recording <id>] " +
-  "[--conversation <uuid>] [--keep-audio]";
+  "[--conversation <uuid>] [--keep-audio] [--live-stt [--smart-format] [--numerals]]";
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const options = parseArgs(process.argv.slice(2));

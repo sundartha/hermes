@@ -7,6 +7,9 @@ import assert from "node:assert/strict";
 
 import {
   assignTurnWindows,
+  fingerprint,
+  hasPunctuation,
+  hasUppercase,
   normalizeWords,
   parseProviderTime,
   pickCounterpartChannel,
@@ -70,6 +73,38 @@ test("wordErrorRate: leere Referenz liefert NaN statt Division durch null", () =
 test("pickCounterpartChannel: waehlt den Kanal, der NICHT der Agent ist", () => {
   assert.equal(pickCounterpartChannel([0.9, 0.05]), 0);
   assert.equal(pickCounterpartChannel([0.05, 0.9]), 1);
+});
+
+// fingerprint ist das Messinstrument fuer "hat der Anbieter den Query-Parameter ueberhaupt
+// gelesen?" (Kopf-Kommentar zur Namensfalle in scripts/stt-wer.mjs). Beide Richtungen muessen
+// belegt sein: eine konstante Funktion (() => "abc") wuerde nur die erste Haelfte bestehen.
+test("fingerprint: gleicher Text ergibt gleichen Hash", () => {
+  const text = "koennen sie das bitte wiederholen";
+  assert.equal(fingerprint(text), fingerprint(text));
+});
+
+test("fingerprint: unterschiedlicher Text ergibt unterschiedlichen Hash", () => {
+  const eins = fingerprint("ich habe sie leider nicht verstanden");
+  const zwei = fingerprint("der techniker kommt am dienstag vorbei");
+  assert.notEqual(eins, zwei);
+});
+
+// Satzzeichen/Grossschreibung werden separat von normalizeWords geprueft - die WER wirft
+// beides bewusst weg, hier soll es sichtbar bleiben (Kommentar bei PUNCTUATION im Skript).
+test("hasPunctuation: erkennt Satzzeichen", () => {
+  assert.equal(hasPunctuation("Guten Tag, wie kann ich helfen?"), true);
+});
+
+test("hasPunctuation: Text ohne Satzzeichen liefert false", () => {
+  assert.equal(hasPunctuation("guten tag wie kann ich helfen"), false);
+});
+
+test("hasUppercase: erkennt Grossbuchstaben", () => {
+  assert.equal(hasUppercase("Guten Tag"), true);
+});
+
+test("hasUppercase: durchgehend kleingeschriebener Text liefert false", () => {
+  assert.equal(hasUppercase("guten tag"), false);
 });
 
 test("assignTurnWindows: schneidet die Referenzwoerter an den Erkennungs-Zeitpunkten", () => {
