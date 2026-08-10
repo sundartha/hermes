@@ -171,7 +171,9 @@ export function makeConversationWatchdog({
         // dead-air-speech: geschaetztes Ende der laufenden Agentensprache, ABSOLUT (0 = keine).
         // Absolut statt Restdauer, weil sich zwei Turns damit strukturell nicht aufaddieren
         // koennen (Auflage 4): ein neuer Turn ERSETZT den Zeitstempel, ein abgelaufener wirkt
-        // von selbst nicht mehr. Faellt mit dem State beim clear/terminateOnce weg (kein Leck).
+        // von selbst nicht mehr. Faellt mit dem State beim clear/terminateOnce weg (kein Leck) -
+        // vorausgesetzt noteAgentSpeech legt den State nicht selbst neu an (Review-Fund Runde 2,
+        // s. dortiger Kommentar).
         speechEndsAtMs: 0,
         // dead-air-speech: die einmal gewaehrte Vertagung, NUR fuer das dead_air-Log
         // (Auflage 6) - beim Feuern muss sichtbar sein, ob eine Sprech-Verlaengerung aktiv war
@@ -291,8 +293,22 @@ export function makeConversationWatchdog({
   // der Zeitstempel verfaellt von selbst, und ein ueberlappender Anstoss-Request (GQ-P5) duerfte
   // die laufende Sprechschaetzung des Vorgaenger-Turns nicht loeschen - das waere genau der
   // Fall, den diese Phase behebt. Aufaddieren kann er nicht, er wird ersetzt.
+  //
+  // Review-Fund (dead-air-speech, 2. Runde): states.get() statt ensureState() - dieser Aufruf
+  // legt bewusst KEINEN neuen State an. Alle anderen Aufrufer (arm/observeTurn ueber
+  // restartDeadAirTimer, scheduleFarewellHangup ueber farewellTimer) armieren im selben Zug
+  // einen Timer, der den Eintrag ueber terminateOnce/clear wieder entfernt. noteAgentSpeech tut
+  // das nicht - mit ensureState() haette ein noteAgentSpeech NACH einem externen clear() (Legt-
+  // waehrend-der-Agent-antwortet, Shim-Reihenfolge: observeTurn -> await agentTurn -> Hangup-
+  // Webhook raeumt via watchdog.clear -> noteAgentSpeech) den State timer-los NEU angelegt -
+  // ein Leck, weil ihn danach nichts mehr entfernt (der Call ist beendet, es kommt kein
+  // observeTurn und kein zweites clear mehr). Der Shim ruft je Turn immer erst observeTurn
+  // (armiert den State), noteAgentSpeech folgt erst danach - der State existiert im
+  // Normalfall also bereits. Ein bereits terminal geraeumter Call braucht keine
+  // Sprech-Schaetzung mehr, deshalb hier fruehes Verlassen statt Neuanlage.
   function noteAgentSpeech(callId, { speechChars, language } = {}) {
-    const s = ensureState(callId);
+    const s = states.get(callId);
+    if (!s) return; // bereits terminal geraeumt (clear bei hangup) - kein Leck anlegen
     const spokenMs = Math.min(estimatedSpeechMs(speechChars, language), SPEECH_EXTENSION_MAX_MS);
     s.speechEndsAtMs = spokenMs > 0 ? now() + spokenMs : 0;
   }

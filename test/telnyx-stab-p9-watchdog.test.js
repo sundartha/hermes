@@ -650,3 +650,65 @@ test("T18: der Deckel der Sprech-Verlaengerung greift AUCH bei Turn-Latenz zwisc
     "speech_extend-Log muss den geklammerten Wert tragen, nicht den unklammerten 90500",
   );
 });
+
+// T19/T20 (Review-Blocker Runde 2, dead-air-speech): noteAgentSpeech() ist der einzige
+// ensureState()-Aufrufer ohne eigenen Timer. Legt der Anrufer waehrend des await agentTurn()
+// auf (haeufigster Gespraechsabschluss), raeumt der call.hangup-Webhook den State via clear()
+// - das darauffolgende noteAgentSpeech() legte ihn VOR dem Fix timer-los neu an: ein Leck
+// (nichts entfernt ihn mehr) UND, bei Wiederverwendung derselben callId, eine Sprech-
+// Verlaengerung, die der neue Call nie verdient hat (T20). states.get() statt ensureState()
+// in noteAgentSpeech() behebt beides gemeinsam - ein Test pro Symptom, dieselbe Wurzel.
+test("T19: noteAgentSpeech() nach clear() legt keinen neuen State an (kein Leck, Review-Blocker Runde 2)", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const timers = fakeTimers();
+  const clock = fakeClock();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers, now: clock.now });
+
+  watchdog.arm(call.id);
+  watchdog.observeTurn(call.id, SUBSTANTIAL_TEXT);
+  watchdog.clear(call.id); // Anrufer legt auf, waehrend der Agent noch antwortet
+  assert.deepEqual(timers.pendingDelays(), [], "clear() raeumt den Dead-Air-Timer");
+
+  watchdog.noteAgentSpeech(call.id, { speechChars: 1000, language: "de" }); // darf keinen State anlegen
+  assert.deepEqual(
+    timers.pendingDelays(),
+    [],
+    "noteAgentSpeech() nach clear() darf keinen Timer stellen (kein neu angelegter State)",
+  );
+});
+
+test("T20: kein geleakter State gewaehrt einem spaeteren arm() derselben callId eine unverdiente Sprech-Verlaengerung", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const timers = fakeTimers();
+  const clock = fakeClock();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers, now: clock.now });
+
+  watchdog.arm(call.id);
+  watchdog.observeTurn(call.id, SUBSTANTIAL_TEXT);
+  watchdog.clear(call.id); // hangup mitten in der Antwort
+  watchdog.noteAgentSpeech(call.id, { speechChars: 1000, language: "de" }); // vor dem Fix: Leck mit speechEndsAtMs in der Zukunft
+
+  // Wiederverwendung derselben callId (Simulation - Telnyx-IDs sind eindeutig, aber der
+  // Fix darf sich nicht auf Eindeutigkeit verlassen): ein frischer arm() muss einen frischen
+  // State bekommen, keinen mit fremdem speechEndsAtMs.
+  watchdog.arm(call.id);
+  clock.advance(DEAD_AIR_TEST_MS);
+  const lines = await captureConsole(() => {
+    timers.fireAll();
+    return Promise.resolve();
+  });
+
+  assert.equal(
+    voiceControl.calls.filter((c) => c.op === "hangup").length,
+    1,
+    "der neue Call terminiert planmaessig bei Dead-Air, keine geerbte Sprech-Verlaengerung",
+  );
+  assert.ok(
+    !lines.some((l) => l.includes("speech_extend")),
+    "keine speech_extend-Zeile - der State darf nicht aus dem geleakten Aufruf stammen",
+  );
+});
