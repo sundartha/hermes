@@ -227,6 +227,17 @@ byte-identisch. Neue Angriffsflaechen + Mitigationen:
   Akzeptiertes Restrisiko: ein Prozess-Restart mid-Delay verliert den Timer; der Call laeuft
   dann bis zum naechsten Backstop (Dead-Air-Re-Arm beim naechsten Turn, Max-Dauer,
   `time_limit_secs`, Budget-Cap) — bewusst akzeptiert, kein Persistenz-Timer.
+- **Sprech-Verlaengerung des Dead-Air-Notaus (dead-air-speech, bewusste Abweichung):** der
+  Dead-Air-Timer terminiert nicht mehr bedingungslos, wenn er feuert — steht laut
+  Sprechdauer-Schaetzung des letzten Turns noch Agentensprache aus, vertagt er sich **einmalig**
+  um deren Rest plus die volle Frist (`TELNYX_DEAD_AIR_TIMEOUT_S`). Grund: die Achse mass
+  "Anrufer schweigt" statt "Leitung tot" und beendete aktive Gespraeche mitten im Satz
+  (Live-Beleg `call_msn34lpf77wg`, 86 s, `hangup_source=caller`). Kosten-Effekt: hoechstens
+  `SPEECH_EXTENSION_MAX_MS` (90 s) zusaetzlich je Call, HART gedeckelt, keine Env-Var, nicht
+  kumulativ (absoluter Zeitstempel, wird ersetzt statt summiert). Backstops unveraendert:
+  Max-Gespraechsdauer-Cap, pro-Tenant-Kostendecke, `OUTBOUND_FROZEN`, Telnyx
+  `time_limit_secs=1800`. Notaus-Pfade (Loop-Guard, Mid-Call-Budget-Kill) terminieren weiterhin
+  SOFORT.
 
 ## TENANT-IDENTITY — Email-verifizierte Dedup + synchroner sub->Tenant-Resolver (Fix 1, A+B)
 

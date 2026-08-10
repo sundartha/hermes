@@ -883,7 +883,7 @@ export function makeTelnyxLlmShim({
     const speakChunk = speechGate ? (text) => speechGate.write(text) : null;
 
     let endCall = false;
-    let farewellChars = 0; // Basis der Sprechdauer-Schaetzung (Schritt 8)
+    let spokenChars = 0; // Zeichen, die dieser Turn spricht - Basis beider Sprechdauer-Schaetzungen
     // GQ-P4/A2: hat agentTurn SELBST geliefert? Der Catch unten faengt AUCH Fehler des
     // Antwort-Schreibwegs NACH einem erfolgreichen Turn (das dokumentierte T1-Szenario).
     // Die duerfen den Fehlschlag-Zaehler nicht fuettern - ein faelschlich beendetes
@@ -959,7 +959,7 @@ export function makeTelnyxLlmShim({
       // gueltige Antwort, das Gespraech laeuft normal weiter.
       if (isBudgetAxis(turn.stopReason)) return await killCallForBudget(turn.stopReason);
       endCall = turn.endCall === true;
-      farewellChars = speechTextOf(turn).length;
+      spokenChars = speechTextOf(turn).length;
       // AL-P7: hat der Turn seinen Text bereits satzweise gesprochen, fehlt nur noch der
       // Abschluss - ihn ein zweites Mal zu senden waere Doppelrede. Der Abschiedssatz geht
       // weiterhin ZUERST raus, nur frueher.
@@ -974,7 +974,18 @@ export function makeTelnyxLlmShim({
       // liest (Stille waere schlimmer als der Doppel-Turn); es ist exakt dieselbe Form,
       // die der Bestand seit AL-P7 schickt, wenn der Text bereits gestreamt wurde.
       // Ein benannter Ausdruck statt eines verschachtelten Ternary (G28).
-      const speechAlreadyHandled = turn.superseded === true || turn.speechStreamed === true;
+      const superseded = turn.superseded === true;
+      const speechAlreadyHandled = superseded || turn.speechStreamed === true;
+      // dead-air-speech: der Dead-Air-Notaus kannte bisher nur den ANRUFER als Lebenszeichen
+      // und kappte lange Antworten mitten im Satz. Basis ist der Text, den DIESER Turn
+      // spricht - NICHT das, was respond gleich schreibt: ein bereits gestreamter Turn gibt
+      // dort "" ab und haette ausgerechnet im gefaehrlichen Fall (lange Antwort) 0 gemeldet.
+      // Ein verdraengter Turn (GQ-P1) spricht nicht - seine Laenge darf die Wache nicht
+      // lockern. Keine eigene Kalibrierung hier: der Waechter besitzt sie (Auflage 1).
+      watchdog.noteAgentSpeech(call.id, {
+        speechChars: superseded ? 0 : spokenChars,
+        language: call.language,
+      });
       respond(speechAlreadyHandled ? "" : turn.speech);
     } catch (err) {
       // P2 (Resilienz-Bruecke): NIE roher 5xx/leerer Hang - Telnyx liest den als
@@ -1045,7 +1056,7 @@ export function makeTelnyxLlmShim({
       // weiteren N Fehlschlaegen.
       if (giveUp) {
         endCall = true;
-        farewellChars = content.length;
+        spokenChars = content.length;
       }
       // KEIN return hier (G3/T5): agentTurn kann VOR diesem Fehler bereits erfolgreich
       // endCall=true geliefert haben - der Fehler stammt dann aus writeCompletion selbst
@@ -1053,7 +1064,7 @@ export function makeTelnyxLlmShim({
       // Hangup trotzdem versuchen, sonst laeuft der Call trotz bereits gegebenem
       // Abschiedssignal auf Tokenkosten weiter (Regel 1). Wirft dagegen agentTurn selbst,
       // bleibt endCall auf dem Default false - AUSSER die Fehlschlag-Staffel ist voll
-      // (GQ-P4/A2), dann setzt der Zweig oben endCall/farewellChars und Schritt 8 spricht
+      // (GQ-P4/A2), dann setzt der Zweig oben endCall/spokenChars und Schritt 8 spricht
       // den Abschied und legt verzoegert auf.
     } finally {
       // GQ-P1: dieser Turn laeuft nicht mehr - ein spaeterer "extends"-Request darf ihn
@@ -1076,7 +1087,7 @@ export function makeTelnyxLlmShim({
       // sonst Fallback = altes Verhalten). Ohne dieses Feld haette JEDER Call die de-
       // Kalibrierung bekommen - fuer en/fr zu knapp geschaetzt, genau R4.
       const { delayMs } = watchdog.scheduleFarewellHangup(call.id, {
-        speechChars: farewellChars,
+        speechChars: spokenChars,
         language: call.language,
       });
       logShimFarewell({ callId: call.id, delayMs, turnSeq });

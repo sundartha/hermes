@@ -3,6 +3,13 @@
 //  1. Dead-Air: nach ai_assistant_start (arm) muss binnen N Sekunden ein Lebenszeichen
 //     (Shim-Turn -> observeTurn) kommen; bleibt es aus, gilt die Telnyx-interne TTS als
 //     stumm/haengend -> kontrollierte Terminierung (Minuten-/Kosten-Notaus).
+//     dead-air-speech: das einzige Lebenszeichen war bis dahin der ANRUFER (observeTurn laeuft
+//     nur bei einem eingehenden Shim-Request). Die Achse mass damit "Anrufer schweigt" statt
+//     "Leitung tot" und kappte lange Agentenantworten mitten im Satz (Live-Beleg: ein Anruf
+//     endete nach 86 s, hangup_source=caller). Deshalb hinterlegt ein Turn mit Sprechtext ueber
+//     noteAgentSpeech das geschaetzte Sprechende; feuert der Timer waehrend dieser Zeit,
+//     terminiert er nicht, sondern vertagt sich EINMAL. Eine wirklich tote Leitung wird
+//     unveraendert beendet - nur gemessen ab dem geschaetzten Sprechende.
 //  2. Loop-Guard: M KONSEKUTIVE nicht-substanzielle Turns (leere/Echo-Eingabe im Sinne
 //     von stab-p7) -> Re-Prompt-Leerlauf -> kontrollierte Terminierung (Token-Notaus,
 //     ZUSAETZLICH zum per-Minute-Rate-Limiter im Shim).
@@ -24,6 +31,13 @@ import { isSubstantialCallerText } from "./claude.js";
 import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
 
 export const WATCHDOG_LOG_PREFIX = "[telnyx-watchdog]";
+
+// EINE Quelle fuer das Zeilenformat dieser Achse (G5, Muster telnyx-llm-shim.js
+// formatShimLine): Prefix + kind + JSON(payload). PII-frei - nur die interne callId, Zahlen
+// und Grund-Token, nie Wortlaut, nie Rufnummern.
+function formatWatchdogLine(kind, payload) {
+  return `${WATCHDOG_LOG_PREFIX} ${kind} ${JSON.stringify(payload)}`;
+}
 
 // afix-p3 (R4): Sprechdauer-Schaetzung fuer den Abschiedssatz. Synthese-/Playback-Latenz vor
 // dem ersten Ton (BASE) plus Sprechzeit (MS_PER_CHAR je Zeichen).
@@ -78,24 +92,53 @@ export const WATCHDOG_LOG_PREFIX = "[telnyx-watchdog]";
 // Calls (Kosten-Notaus, gilt sprachunabhaengig); Max-Gespraechsdauer und Budget-Gates bleiben
 // davon unberuehrt.
 const FAREWELL_MAX_MS = 15_000;
+// dead-air-speech, Deckel der Sprech-Verlaengerung (Auflage 3). Bemessen am laengsten Text,
+// den ein Turn ueberhaupt sprechen kann: TURN_MAX_TOKENS (claude.js) deckelt eine Modellrunde
+// auf 300 Token, deutsch grob 4 Zeichen/Token -> ~1200 Zeichen -> ~78 s bei 65 ms/Zeichen;
+// 90 s decken das mit Reserve ab.
+// RISIKO, bewusst begrenzt (Pre-Mortem der Spec): die 65 ms/Zeichen sind an ElevenLabs
+// gemessen, NICHT an Telnyx' eigener Stimme. Schaetzt die Kalibrierung zu lang, laeuft eine
+// wirklich tote Leitung hoechstens um diesen Deckel laenger (bei 5,4 ct/min gut 8 Cent) -
+// EINMAL je Call, nicht kumulativ. Max-Gespraechsdauer, pro-Tenant-Kostendecke und Telnyx'
+// time_limit_secs bleiben unberuehrt; sie sind der Rueckhalt, falls die Schaetzung versagt.
+const SPEECH_EXTENSION_MAX_MS = 90_000;
 // FALLBACK = EXAKT das alte, in Produktion bewaehrte Bestandsverhalten (1500ms Basis + 70ms/
 // Zeichen + 3000ms Sockel) - unveraendert fuer jede Sprache ausser 'de'.
-const FAREWELL_FALLBACK_CALIBRATION = { baseMs: 1500, msPerChar: 70, minMs: 3000 };
-const FAREWELL_CALIBRATION_BY_LANGUAGE = Object.freeze({
-  de: { baseMs: 500, msPerChar: 65, minMs: 1500 },
+// Die Tabelle hat seit dead-air-speech ZWEI Verbraucher (Abschieds-Delay + Sprech-
+// Verlaengerung), heisst deshalb nicht mehr FAREWELL_*. farewellMinMs behaelt den Praefix,
+// weil der Sockel NUR den Abschiedssatz vor dem Abschneiden schuetzt - die Sprech-
+// Verlaengerung hat keinen Sockel (sie darf nichts erfinden, was nicht gesprochen wird).
+const SPEECH_FALLBACK_CALIBRATION = { baseMs: 1500, msPerChar: 70, farewellMinMs: 3000 };
+const SPEECH_CALIBRATION_BY_LANGUAGE = Object.freeze({
+  de: { baseMs: 500, msPerChar: 65, farewellMinMs: 1500 },
 });
 
-// Geschaetzte Sprechdauer -> Hangup-Delay, hart geklammert. language waehlt die Kalibrierung
-// INKLUSIVE ihres minMs (s. Tabellenkommentar oben, MAJOR-1) - unbekannt/fehlend ->
-// FAREWELL_FALLBACK_CALIBRATION. Nicht-numerische/negative Laengen (defekter Turn) fallen auf
-// 0 -> minMs der gewaehlten Kalibrierung: Math.min/max reicht NaN durch, und setTimeout(NaN)
-// feuert SOFORT = genau der Defekt (abgeschnittener Abschied), den P3 behebt.
-function farewellDelayMs(speechChars, language) {
+function calibrationFor(language) {
+  return SPEECH_CALIBRATION_BY_LANGUAGE[language] || SPEECH_FALLBACK_CALIBRATION;
+}
+
+// EINE Quelle fuer die Sprechdauer-Schaetzung (Auflage 1): Anlauf + Zeichen mal Rate, roh und
+// UNGEKLAMMERT - jeder Aufrufer klammert mit SEINEN Grenzen (Abschied: farewellMinMs/
+// FAREWELL_MAX_MS; Verlaengerung: SPEECH_EXTENSION_MAX_MS). Ein zweiter Zeichen-pro-Sekunde-
+// Wert im Code waere ein Fehler.
+// Nicht-numerische/negative Laengen (defekter Turn) fallen auf 0 Zeichen: Math.min/max reicht
+// NaN durch, und setTimeout(NaN) feuert SOFORT = genau der Defekt (abgeschnittener Abschied),
+// den afix-p3 behoben hat. 0 Zeichen heisst "nichts gesprochen" -> 0 ms, nicht einmal der
+// Anlauf: ein Turn ohne Text darf keine Wache lockern. Fuer den Abschieds-Delay aendert das
+// nichts, dessen Sockel greift ohnehin (0 -> farewellMinMs, wie bisher).
+function estimatedSpeechMs(speechChars, language) {
   const chars = Number.isFinite(speechChars) && speechChars > 0 ? speechChars : 0;
-  const { baseMs, msPerChar, minMs } =
-    FAREWELL_CALIBRATION_BY_LANGUAGE[language] || FAREWELL_FALLBACK_CALIBRATION;
-  const spokenMs = baseMs + chars * msPerChar;
-  return Math.min(Math.max(spokenMs, minMs), FAREWELL_MAX_MS);
+  if (chars === 0) return 0;
+  const { baseMs, msPerChar } = calibrationFor(language);
+  return baseMs + chars * msPerChar;
+}
+
+// Geschaetzte Sprechdauer -> Hangup-Delay, hart geklammert. language waehlt die Kalibrierung
+// INKLUSIVE ihres farewellMinMs (s. Tabellenkommentar oben, MAJOR-1) - unbekannt/fehlend ->
+// SPEECH_FALLBACK_CALIBRATION.
+function farewellDelayMs(speechChars, language) {
+  const { farewellMinMs } = calibrationFor(language);
+  return Math.min(Math.max(estimatedSpeechMs(speechChars, language), farewellMinMs), FAREWELL_MAX_MS);
 }
 
 export function makeConversationWatchdog({
@@ -103,6 +146,10 @@ export function makeConversationWatchdog({
   terminate,
   setTimer = defaultSetTimer,
   clearTimer = clearTimeout,
+  // dead-air-speech: injiziert wie setTimer/clearTimer - der Waechter fragt beim Feuern, wie
+  // viel der geschaetzten Sprechdauer noch aussteht. Mit der Wanduhr waere das nicht
+  // deterministisch pruefbar (P12 Repeatable).
+  now = Date.now,
 }) {
   const deadAirMs = config.telnyx.telnyxAssistant.deadAirTimeoutS * MS_PER_SECOND;
   const maxEmptyTurns = config.telnyx.telnyxAssistant.loopGuardMaxEmptyTurns;
@@ -114,7 +161,21 @@ export function makeConversationWatchdog({
   function ensureState(callId) {
     let s = states.get(callId);
     if (!s) {
-      s = { deadAirTimer: null, farewellTimer: null, emptyStreak: 0, turnSeq: 0 };
+      s = {
+        deadAirTimer: null,
+        farewellTimer: null,
+        emptyStreak: 0,
+        turnSeq: 0,
+        // dead-air-speech: geschaetztes Ende der laufenden Agentensprache, ABSOLUT (0 = keine).
+        // Absolut statt Restdauer, weil sich zwei Turns damit strukturell nicht aufaddieren
+        // koennen (Auflage 4): ein neuer Turn ERSETZT den Zeitstempel, ein abgelaufener wirkt
+        // von selbst nicht mehr. Faellt mit dem State beim clear/terminateOnce weg (kein Leck).
+        speechEndsAtMs: 0,
+        // dead-air-speech: die einmal gewaehrte Vertagung, NUR fuer das dead_air-Log
+        // (Auflage 6) - beim Feuern muss sichtbar sein, ob eine Sprech-Verlaengerung aktiv war
+        // und wie lang. 0 = es gab keine. Muster turnSeq (existiert ebenfalls fuers Log).
+        speechExtendedMs: 0,
+      };
       states.set(callId, s);
     }
     return s;
@@ -146,14 +207,46 @@ export function makeConversationWatchdog({
     if (onBeforeTerminate) onBeforeTerminate(s);
     Promise.resolve(terminate(callId)).catch(() => {}); // Timer-Callback -> keine unhandled rejection
   }
+  // dead-air-speech: die Achse soll "Leitung tot" erkennen, nicht "Anrufer schweigt". Spricht
+  // der Agent laut Schaetzung noch, wird EINMAL vertagt statt terminiert - um den Rest der
+  // Sprechdauer PLUS die volle Frist, damit die Frist ab dem geschaetzten Sprechende laeuft
+  // (wie im Bestand ab dem letzten Lebenszeichen). Nach der Vertagung liegt speechEndsAtMs in
+  // der Vergangenheit: die Bedingung ist strukturell einmalig, nichts addiert sich auf
+  // (Auflage 4). Eine kurze Antwort ist beim Feuern laengst fertig -> der Bestandspfad,
+  // unveraendert, ohne zusaetzlichen Timer und ohne zusaetzliche Logzeile.
   function onDeadAir(callId) {
+    const s = states.get(callId);
+    if (!s) return; // bereits terminal geraeumt (clear bei hangup)
+    const remainingSpeechMs = s.speechEndsAtMs - now();
+    if (remainingSpeechMs > 0) return extendForSpeech(callId, s, remainingSpeechMs);
     terminateOnce(callId, "deadAirTimer", {
       // MINOR-2 (Review-Fund): turnSeq dokumentiert, wie viele Shim-Turns dieser Call bereits
       // erreicht hat, bevor der Notaus terminiert - ohne sie war der einzige Anhaltspunkt der
       // reine Umstand "dead_air trat auf", nicht "nach wie vielen Turns".
-      onBeforeTerminate: (s) =>
-        console.warn(`${WATCHDOG_LOG_PREFIX} dead_air ${JSON.stringify({ callId, turnSeq: s.turnSeq })}`), // PII-frei
+      onBeforeTerminate: (state) =>
+        console.warn(
+          formatWatchdogLine("dead_air", {
+            callId,
+            turnSeq: state.turnSeq,
+            // dead-air-speech (Auflage 6): war eine Sprech-Verlaengerung aktiv, und wie lang?
+            // 0 = keine - dann ist es der unveraenderte Bestandsfall.
+            speechExtendedMs: state.speechExtendedMs,
+          }),
+        ), // PII-frei
     });
+  }
+  // Die Vertagung ist KEIN Notaus, sondern sein Aufschub: eigener Kanal, console.log statt
+  // warn (Betriebs-Ereignis, Muster logShimReattach). Der kind-Name traegt bewusst NICHT
+  // "dead_air" - die Abnahme dieser Phase liest genau diese Zeichenkette im Live-Log als
+  // "gekappt", und ein Substring-Treffer waere ein falscher Alarm.
+  // Der gefeuerte Timer ist erledigt; das Feld wird ersetzt, nicht geloescht.
+  function extendForSpeech(callId, s, remainingSpeechMs) {
+    const extendedMs = remainingSpeechMs + deadAirMs;
+    s.speechExtendedMs = extendedMs;
+    s.deadAirTimer = setTimer(() => onDeadAir(callId), extendedMs);
+    console.log(
+      formatWatchdogLine("speech_extend", { callId, turnSeq: s.turnSeq, speechExtendedMs: extendedMs }),
+    );
   }
   function arm(callId) {
     // ai_assistant_start ist raus (Ingest). Idempotent.
@@ -175,6 +268,22 @@ export function makeConversationWatchdog({
     }
     s.emptyStreak += 1;
     return { loopExceeded: s.emptyStreak >= maxEmptyTurns, turnSeq: s.turnSeq };
+  }
+  // dead-air-speech: dieser Turn gibt Sprechtext auf die Leitung - bis zum geschaetzten
+  // Sprechende ist die Leitung nachweislich NICHT tot. Nebeneffekt im Namen (N7): merkt sich
+  // den Zeitstempel, ruehrt aber KEINEN Timer an - die Frist dieses Turns bleibt damit
+  // byte-identisch zum Bestand, und erst das Feuern des Waechters fragt die Schaetzung ab.
+  // Kein Text -> 0 -> keine Verlaengerung (der Zeitstempel wird geloescht, nicht gesetzt).
+  // Objekt-Parameter wie scheduleFarewellHangup: speechChars und language gehoeren zusammen
+  // und die Funktion bleibt bei zwei Argumenten (F1).
+  // Bewusst OHNE Rueckstellung von speechEndsAtMs bei jedem Aufruf ausser dem geschaetzten Ende:
+  // der Zeitstempel verfaellt von selbst, und ein ueberlappender Anstoss-Request (GQ-P5) duerfte
+  // die laufende Sprechschaetzung des Vorgaenger-Turns nicht loeschen - das waere genau der
+  // Fall, den diese Phase behebt. Aufaddieren kann er nicht, er wird ersetzt.
+  function noteAgentSpeech(callId, { speechChars, language } = {}) {
+    const s = ensureState(callId);
+    const spokenMs = Math.min(estimatedSpeechMs(speechChars, language), SPEECH_EXTENSION_MAX_MS);
+    s.speechEndsAtMs = spokenMs > 0 ? now() + spokenMs : 0;
   }
   // afix-p3 (R4): end_call ist gefallen - der Abschiedssatz ist als Completion raus, die
   // TTS-Synthese laeuft aber erst an. Statt sofort aufzulegen (Live-Messung: Hangup 81 ms nach
@@ -214,5 +323,5 @@ export function makeConversationWatchdog({
     }
     states.delete(callId);
   }
-  return { arm, observeTurn, scheduleFarewellHangup, clear };
+  return { arm, observeTurn, noteAgentSpeech, scheduleFarewellHangup, clear };
 }

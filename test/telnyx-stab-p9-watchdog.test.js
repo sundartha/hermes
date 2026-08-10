@@ -20,8 +20,10 @@ import {
   sseContent,
   agentTurnSpy,
   fakeTimers,
+  fakeClock,
   makeTestWatchdog,
   ingestTimeoutDeps,
+  DEAD_AIR_TEST_MS,
 } from "./telnyx-shim-harness.js";
 import { captureConsole, makeConfigOverrides } from "./helpers.js";
 import { fakeTelnyxShimConfig } from "./config-namespaces-helper.js";
@@ -404,5 +406,200 @@ test("T11: Retry-Pfad mit konfigurierter Assistant-Stimme armiert den Opening-Sp
     openingTimers.pendingCount(),
     1,
     "Opening-Speak-Timer nach dem Retry armiert - ohne config wuerde dieser Aufruf VOR setTimer werfen und der Timer bliebe unarmiert",
+  );
+});
+
+// T12-T17 (dead-air-speech): der Dead-Air-Notaus kannte bisher nur den ANRUFER als
+// Lebenszeichen und kappte lange Agentenantworten mitten im Satz. Diese Tests fahren den
+// ECHTEN Shim + echten Watchdog mit einer STEUERBAREN Uhr (fakeClock) - der Waechter fragt
+// beim Feuern, wie viel der geschaetzten Sprechdauer noch aussteht.
+
+// 1000 Zeichen: mit der de-Kalibrierung (500 ms Anlauf + 65 ms/Zeichen) 65,5 s Sprechzeit -
+// weit ueber der 30-s-Testfrist, also genau der Live-Fall (ein Vorlesen/Aufzaehlen).
+const LONG_SPEECH = "A".repeat(1000);
+const LONG_SPEECH_MS = 65_500;
+// Deckel der Sprech-Verlaengerung (Modul-Konstante SPEECH_EXTENSION_MAX_MS, nicht exportiert -
+// hier als Erwartungswert dupliziert, weil ausschliesslich dieser Test ihn braucht).
+const SPEECH_EXTENSION_MAX_MS_EXPECTED = 90_000;
+
+// Baut Call/Store/VoiceControl/Uhr/Timer/Watchdog/Handler fuer die Sprech-Verlaengerungs-
+// Tests (P13) - ein Turn mit dem gegebenen Sprechtext ist der einzige variable Teil.
+function setupSpeechTurn(speech) {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const agentTurn = agentTurnSpy({ speech, endCall: false });
+  const timers = fakeTimers();
+  const clock = fakeClock();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers, now: clock.now });
+  const handler = makeTelnyxLlmShim({
+    store,
+    config: fakeTelnyxShimConfig(),
+    agentTurn,
+    localeFor,
+    voiceControl,
+    watchdog,
+  });
+  return { call, voiceControl, timers, clock, watchdog, handler };
+}
+
+test("T12: Dead-Air kappt nicht waehrend der Sprechdauer - vertagt sich einmalig (Spec-Verifikation 1)", async () => {
+  const { call, voiceControl, timers, clock, handler } = setupSpeechTurn(LONG_SPEECH);
+
+  await handler(validReq(call, { messages: [{ role: "user", content: SUBSTANTIAL_TEXT }] }), fakeRes());
+  assert.deepEqual(timers.pendingDelays(), [DEAD_AIR_TEST_MS], "der Turn armiert die Standard-Frist wie im Bestand");
+
+  clock.advance(DEAD_AIR_TEST_MS);
+  const lines = await captureConsole(() => {
+    timers.fireAll();
+    return Promise.resolve();
+  });
+
+  assert.equal(
+    voiceControl.calls.filter((c) => c.op === "hangup").length,
+    0,
+    "kein Hangup waehrend der geschaetzten Sprechdauer",
+  );
+  assert.deepEqual(
+    timers.pendingDelays(),
+    [LONG_SPEECH_MS], // Rest 35500 (65500 - 30000) + Frist 30000
+    "Vertagung deckt Rest der Sprechdauer plus die volle Frist",
+  );
+  assert.ok(
+    lines.some(
+      (l) => l.startsWith(WATCHDOG_LOG_PREFIX) && l.includes("speech_extend") && l.includes('"speechExtendedMs":65500'),
+    ),
+    "speech_extend-Log fehlt",
+  );
+  assert.ok(
+    !lines.some((l) => l.includes("dead_air")),
+    "kein dead_air-Log, solange die Sprech-Verlaengerung aktiv ist (Abnahmekriterium)",
+  );
+});
+
+test("T13: nach Ablauf der Sprech-Verlaengerung terminiert der Watchdog genau einmal (Rueckversicherung, Verifikation 2)", async () => {
+  const { call, voiceControl, timers, clock, handler } = setupSpeechTurn(LONG_SPEECH);
+
+  await handler(validReq(call, { messages: [{ role: "user", content: SUBSTANTIAL_TEXT }] }), fakeRes());
+  clock.advance(DEAD_AIR_TEST_MS);
+  await captureConsole(() => {
+    timers.fireAll();
+    return Promise.resolve();
+  });
+
+  clock.advance(LONG_SPEECH_MS);
+  const lines = await captureConsole(() => {
+    timers.fireAll();
+    return Promise.resolve();
+  });
+
+  assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 1, "genau ein Hangup nach der Vertagung");
+  assert.ok(
+    lines.some(
+      (l) =>
+        l.startsWith(WATCHDOG_LOG_PREFIX) &&
+        l.includes("dead_air") &&
+        l.includes('"turnSeq":1') &&
+        l.includes('"speechExtendedMs":65500'),
+    ),
+    "dead_air-Log nach der Vertagung fehlt oder traegt die falschen Felder",
+  );
+
+  timers.fireAll(); // nichts mehr pending -> No-op
+  assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 1, "kein zweiter (spurioser) Hangup");
+});
+
+test("T14: kein Aufaddieren ueber Turns (Verifikation 3 / Auflage 4) - der Zeitstempel wird ersetzt, nicht summiert", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const timers = fakeTimers();
+  const clock = fakeClock();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers, now: clock.now });
+
+  watchdog.arm(call.id);
+  watchdog.observeTurn(call.id, SUBSTANTIAL_TEXT);
+  watchdog.noteAgentSpeech(call.id, { speechChars: 1000, language: "de" });
+
+  clock.advance(10_000);
+  watchdog.observeTurn(call.id, SUBSTANTIAL_TEXT);
+  watchdog.noteAgentSpeech(call.id, { speechChars: 1000, language: "de" });
+
+  clock.advance(30_000);
+  timers.fireAll();
+
+  assert.deepEqual(
+    timers.pendingDelays(),
+    [LONG_SPEECH_MS], // NICHT 131000 - der zweite Turn ERSETZT den Zeitstempel des ersten
+    "zwei Turns duerfen sich nicht aufaddieren",
+  );
+
+  clock.advance(LONG_SPEECH_MS);
+  timers.fireAll();
+  assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 1, "genau ein Hangup, kein Leck");
+});
+
+test("T15: kurze Antwort ist byte-identisch zum Bestand (Verifikation 4, strukturell statt praktisch)", async () => {
+  const { call, voiceControl, timers, clock, handler } = setupSpeechTurn("Hallo Welt");
+
+  await handler(validReq(call, { messages: [{ role: "user", content: SUBSTANTIAL_TEXT }] }), fakeRes());
+  assert.deepEqual(timers.pendingDelays(), [DEAD_AIR_TEST_MS], "keine zusaetzliche Timer-Stellung durch noteAgentSpeech");
+
+  clock.advance(DEAD_AIR_TEST_MS);
+  const lines = await captureConsole(() => {
+    timers.fireAll();
+    return Promise.resolve();
+  });
+
+  assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 1, "eine laengst fertige Antwort terminiert wie im Bestand");
+  assert.ok(
+    lines.some((l) => l.startsWith(WATCHDOG_LOG_PREFIX) && l.includes("dead_air") && l.includes('"speechExtendedMs":0')),
+    "dead_air-Log fehlt oder speechExtendedMs ist nicht 0",
+  );
+  assert.ok(!lines.some((l) => l.includes("speech_extend")), "keine speech_extend-Zeile fuer eine kurze Antwort");
+});
+
+test("T16: der Deckel der Sprech-Verlaengerung greift (Auflage 3, Grenzfall)", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const timers = fakeTimers();
+  const clock = fakeClock();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers, now: clock.now });
+
+  watchdog.arm(call.id);
+  watchdog.noteAgentSpeech(call.id, { speechChars: 100_000, language: "de" });
+
+  clock.advance(DEAD_AIR_TEST_MS);
+  timers.fireAll();
+
+  assert.deepEqual(
+    timers.pendingDelays(),
+    [SPEECH_EXTENSION_MAX_MS_EXPECTED], // Rest 60000 + Frist 30000, gedeckelt auf 90000
+    "die Vertagung darf den Deckel nicht ueberschreiten",
+  );
+});
+
+test("T17: kein Text -> keine Verlaengerung (Grenzfall 0/leer)", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const timers = fakeTimers();
+  const clock = fakeClock();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers, now: clock.now });
+
+  watchdog.arm(call.id);
+  watchdog.noteAgentSpeech(call.id, { speechChars: 0, language: "de" });
+  watchdog.noteAgentSpeech(call.id);
+
+  clock.advance(DEAD_AIR_TEST_MS);
+  const lines = await captureConsole(() => {
+    timers.fireAll();
+    return Promise.resolve();
+  });
+
+  assert.equal(voiceControl.calls.filter((c) => c.op === "hangup").length, 1, "terminiert sofort wie im Bestand");
+  assert.ok(
+    lines.some((l) => l.startsWith(WATCHDOG_LOG_PREFIX) && l.includes("dead_air") && l.includes('"speechExtendedMs":0')),
   );
 });

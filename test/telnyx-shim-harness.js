@@ -306,14 +306,28 @@ export function ingestTimeoutDeps() {
   return { config, setTimer: t.setTimer, clearTimer: t.clearTimer };
 }
 
+// dead-air-speech: steuerbare Uhr. Der Waechter fragt beim Feuern, wie viel der geschaetzten
+// Sprechdauer noch aussteht - gegen die Wanduhr waere das nicht wiederholbar (P12).
+export function fakeClock(startMs = 1_700_000_000_000) {
+  let nowMs = startMs;
+  return { now: () => nowMs, advance: (ms) => { nowMs += ms; } };
+}
+
 // Baut Watchdog + geteiltes Terminierungs-Primitiv aus den ECHTEN Factories (kein Mock der
 // Kern-Logik) gegen einen gegebenen Fake-Store/-VoiceControl/-Timer (Build-Schritt, P13).
-export function makeTestWatchdog({ store, voiceControl, timers, config = WATCHDOG_TEST_CONFIG }) {
+export function makeTestWatchdog({
+  store,
+  voiceControl,
+  timers,
+  config = WATCHDOG_TEST_CONFIG,
+  now = Date.now,
+}) {
   const terminate = makeCallControlTerminator({ store, voiceControl, logPrefix: WATCHDOG_LOG_PREFIX });
   return makeConversationWatchdog({
     config,
     terminate,
     setTimer: timers.setTimer,
     clearTimer: timers.clearTimer,
+    now,
   });
 }
