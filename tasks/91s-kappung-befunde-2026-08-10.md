@@ -78,6 +78,19 @@ terminiert — das bestaetigt die Portal-Meldung aus Abschnitt 3 unabhaengig.
 Carrier-Eskalation (Entwurf mit allen 13 Session-IDs erstellt) und ein Test gegen eine
 ANDERE Zielnummer/einen anderen Carrier.
 
+**Zweite Telnyx-Antwort (10.08.), Fall ist beim NOC in der Warteschlange.** Telnyx hat den
+gekappten Anruf gegen den 190-s-Anruf gelegt — beide ueber dieselbe Connection
+(`3000979485014098987`), dieselbe Route, dieselbe DID, dasselbe Ziel. **Entscheidend: der
+190-s-Anruf endete EBENFALLS mit `hangup_source=callee` / `normal_clearing`.** Er wurde also
+nicht anders beendet, nur spaeter — genau das Bild, das entsteht, wenn der Session-Refresh
+dort durchkam und das Gespraech normal endete. Telnyx' Lesart deckt sich damit: Carrier
+verhandelt vermutlich `Session-Expires`=90 s, der Refresh scheitert intermittierend; gelingt
+er, laeuft der Anruf weiter.
+
+Die SIP-Ebene (Session-Expires-Header, re-INVITE/UPDATE und deren Antworten) ist auch fuer
+den Telnyx-Support selbst nicht einsehbar — nur fuer das NOC. **Von unserer Seite ist hier
+nichts mehr zu messen.**
+
 **Die Owner-Praemisse "der Fehler liegt zu 100 % bei uns" war fuer die 91-s-Kappung nicht
 zutreffend — fuer den parallel laufenden Dead-Air-Defekt (Abschnitt 5b) aber sehr wohl.**
 Beide erzeugen dasselbe Erlebnis am Telefon (Agent bricht ab, Leitung reagiert nicht mehr).
