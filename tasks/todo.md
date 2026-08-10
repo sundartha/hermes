@@ -88,6 +88,15 @@ nur den gepufferten Teil / Ueberbrueckungssatz). Die Wahl ist eine Owner-Entsche
   gebuchte Betrag liegt dadurch nur 8,44 % unter dem ungecachten. Wurzel am Code belegt:
   `systemPrompt` traegt veraenderlichen Per-Call-Zustand, `agentTools` nimmt Werkzeuge mitten
   im Call auf und heraus — das "stabile Praefix" ist nicht stabil. Eigene Phase.
+- **Satzzeichen-Regression seit nova-3**: der erkannte Anrufer-Text erreicht das Sprachmodell
+  zu **0 %** mit Satzzeichen/Grossschreibung (vorher unter `flux`: 93–97 %), zwei unabhaengige
+  Quellen, n=50. `smart_format` ist als Fix **doppelt ausgeschlossen** (im Call-Schema nicht
+  vorhanden; am Modell wirkungslos). Verbleibende Hypothese: der Pro-Call-Block ersetzt die
+  `transcription` des Assistant-Objekts. **Erwartetes Ergebnis:** ein Call ohne
+  Pro-Call-`transcription`-Block traegt wieder Satzzeichen. **Verifikationsmethode:** ein
+  Testanruf mit reversiblem Schalter, danach `transcript_segment` auszaehlen.
+  Vollstaendiger Befundstand + benanntes Risiko: `tasks/gq-chain-state.md`, Abschnitt
+  "Satzzeichen-Regression seit nova-3". **Unbelegt bleibt, ob es dem Gespraech schadet.**
 - **GAP-15** (2 rote Gates): englische Rechtstexte fehlen. **Rechtstexte nicht auf eigene
   Faust schreiben** — Owner fragen.
 - Offene Punkte der laufenden Gespraechsqualitaets-Kette: `tasks/gq-chain-state.md`.
@@ -105,3 +114,9 @@ nur den gepufferten Teil / Ueberbrueckungssatz). Die Wahl ist eine Owner-Entsche
   liefen eine Session lang unter einem Label — die wiederkehrende Falle dieses Projekts.
 - Repo aufgeraeumt: 74 -> 1 Branch (14 ungemergte als `archiv/2026-08-10/*` getaggt, nichts
   verloren), alle Worktrees entfernt, `origin` und `upstream` auf demselben Stand.
+- **`smart_format`-Phase abgesagt, bevor eine Zeile Produktivcode entstand.** Vier Messungen
+  (OpenAPI-Schema, WS-Replay-Bank A/B, Produktionstext flux vs. nova-3, Live-Assistant-Versionen)
+  haben den geplanten Fix widerlegt und den Befund gleichzeitig geschaerft. Kein Testanruf noetig.
+- **WS-Replay-Bank committet** (`d9c95f8`, `scripts/stt-wer.mjs --live-stt`): STT-Kandidaten
+  sind damit ohne Testanruf messbar — auch der noch ungemessene `reson8/turns`. Sie existierte
+  seit dem 06.08. nur als Prosa im Kettenstand.

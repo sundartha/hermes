@@ -1310,3 +1310,111 @@ nicht zu Ende gelesen, realer `remainingCents` nicht gemessen).
 **Naechster Schritt (Uebergabe `tasks/kickoff-91s-und-restarbeit-2026-08-10.md`):** die Dauer
 ALLER historischen Anrufe aus dem Render-Log rechnen und nach einer Stufenfunktion suchen —
 ab wann kappt es? Diese Zeitreihe beantwortet die Frage schneller als jedes Codelesen.
+
+---
+
+## Satzzeichen-Regression seit nova-3 — `smart_format` ist NICHT der Hebel (2026-08-10)
+
+Der Nebenbefund aus der B-7-Abnahme (*"Erkannter Text kommt jetzt ohne Satzzeichen und
+kleingeschrieben"*, s.o.) ist nachgemessen. **Der Befund ist real, hart und aktuell — seine
+vermutete Ursache ist widerlegt.** Vier Messungen, keine davon kostete einen Testanruf.
+
+### M-C: der Befund selbst, zwei unabhaengige Quellen
+
+Telnyx (`GET /v2/ai/conversations/<uuid>/messages`, Rolle `user`) und Prod-DB
+(`transcript_segment`, Rolle `caller`, RLS gesetzt) stimmen ueberein:
+
+| Zeitraum | Quelle | n | Satzzeichen | Grossbuchstabe am Anfang |
+|---|---|---:|---:|---:|
+| bis 05.08. (`flux`) | Telnyx | 78 | 94 % | 97 % |
+| bis 05.08. (`flux`) | DB | 116 | 93 % | 96 % |
+| 09./10.08. (`nova-3`) | Telnyx | 18 | **0 %** | **0 %** |
+| 09./10.08. (`nova-3`) | DB | 32 | **0 %** | **0 %** |
+
+Beispiele vorher: *"Ja, das ist ja meine Frage"* — nachher: *"kannst wieso kannst du nicht die"*.
+Der Umschlag korreliert exakt mit dem Modellwechsel `b073e8d`.
+
+### M-A: ueber den Pro-Call-Block ist `smart_format` gar nicht sendbar
+
+Rohe OpenAPI-Spec (`team-telnyx/openapi`, `openapi/spec3.json`):
+`AIAssistantStartRequest.transcription` referenziert `TranscriptionConfig` mit **ausschliesslich**
+`{model, language}`. Der settingsfaehige Zwilling `TranscriptionSettings` (mit
+`settings.smart_format`) wird nur von `CreateAssistantRequest`/`UpdateAssistantRequest`
+referenziert — also nur vom **Assistant-Objekt**, nie vom Call-Control-Start.
+
+Nebenbefund: der Kommentar in `voice.js:803` behauptet, der Pro-Call-Block *"gewinnt laut
+Telnyx-OpenAPI"*. **Die Spec deckt das nicht** — sie definiert die Feldform, keine
+Vorrangregel. Eine unbelegte Behauptung in Kommentarform, gleiche Klasse wie der geratene
+Feldname `"CallControlId"`.
+
+### M-B: `smart_format` aendert an `nova-3` nichts, weil es ohnehin formatiert
+
+WS-Replay-Bank auf echter Aufnahme, A/B auf demselben Audio:
+Ergebnis-Hash **byte-identisch** (`3981678183cc`), WER identisch (52,1 %), **beide Laeufe mit
+Satzzeichen und Grossschreibung**. Positiv-Kontrolle `language=en` ergab einen anderen Hash —
+die Query-Parameter werden auf diesem Endpunkt also nachweislich gelesen. Damit ist "wirkt
+nicht" sauber von "still ignoriert" getrennt (die Falle, an der der erste Bank-Lauf am 06.08.
+gescheitert war).
+
+**Reichweite:** gemessen wurde die **Standalone-STT**, live laeuft der **Assistant-Pfad**.
+Die Messung belegt "nova-3 KANN formatieren", nicht "im Assistant-Pfad kommt es an".
+
+### M-D: die Einstellung ist live gesetzt und war nie weg
+
+`GET /v2/ai/assistants/<id>` + `/versions` (10 Revisionen):
+`settings.smart_format: true`, `numerals: true` — **durchgehend seit dem nova-3-Wechsel**
+(Version `20260806T113555798821`, 06.08. 11:35:55Z). Der Barge-in-PATCH vom 09.08. hat nur
+`noise_suppression` und `interrupt_prediction_threshold` angefasst. Kein Merge-Verlust.
+Beide lokalen Snapshots sind byte-identisch zum Live-Block.
+
+**Die Zeile, auf die es ankommt:** die Vorgaengerversion (`flux`) trug
+`settings.smart_format: null` — **und lieferte 94 % Satzzeichen.** Heute steht der Wert auf
+`true` und liefert 0 %.
+
+### Was daraus folgt
+
+Die Einstellung am Assistant-Objekt steht in **umgekehrter** Beziehung zum Ergebnis. Sie ist
+also fuer den ausgelieferten Text wirkungslos. Es bleibt genau eine Erklaerung, die alle vier
+Messungen widerspruchsfrei traegt:
+
+> **Der Pro-Call-Block ersetzt die `transcription` des Assistant-Objekts, statt in sie hinein
+> zu mergen.** `transcriptionFields` (`voice.js:343-348`) sendet je Call `{model, language}`
+> ohne `settings` — damit faellt `smart_format` fuer die Dauer des Calls weg. `flux`
+> formatierte intrinsisch und war davon unbeeindruckt; `nova-3` haengt an der Einstellung.
+
+**Diese Erklaerung ist noch NICHT belegt.** Die konkurrierende Lesart: Telnyx' Assistant-Pfad
+formatiert mit `nova-3` grundsaetzlich nicht, unabhaengig von jeder Einstellung. F2
+(ersetzt/merged) ist laut M-A auch aus der Anbieter-Doku nicht zu beantworten.
+
+### Der eine Test, der die beiden Lesarten trennt
+
+Einen Call **ohne** Pro-Call-`transcription`-Block fahren: dann gilt zwingend die
+Assistant-Config. Kommen Satzzeichen -> Ersetzen bestaetigt, der Fix ist klein und liegt bei
+uns. Kommen keine -> die Ursache liegt bei Telnyx und `smart_format` ist auch dort tot.
+
+**Kostet einen Testanruf** und beruehrt Produktivcode im Telefonie-Pfad. Der Grenzfall
+existiert im Code bereits (`transcriptionFields` liefert `{}`, wenn die Sprache nicht
+aufloesbar ist). **Risiko, das vorher benannt sein muss:** faellt der Block weg, greift laut
+`voice.js:337-342` der OpenAPI-Default `distil-whisper/distil-large-v2` — englisch-only —
+**falls** der Block ersetzt und das Assistant-Modell nicht zieht. Genau die Unsicherheit, die
+der Test aufloest. Deshalb: reversibler Schalter, ein Anruf, sofort zurueck.
+
+### Was NICHT zu tun ist
+
+Eine Phase bauen, die `smart_format` "mitsendet". Sie ist doppelt tot: das Feld existiert im
+Call-Schema nicht (M-A), und der Schalter aendert am Modell nichts (M-B).
+
+### Offen und unbelegt: schadet es ueberhaupt?
+
+Der Kettenstand sagt oben selbst nur *"fuer das Sprachmodell moeglicherweise nicht
+[irrelevant]"*. Das ist bis heute niemandes Messung. Der Befund ist mit 0 % gegen 94 % hart
+genug, um ihn zu verfolgen — aber ein belegter Schaden am Gespraechsergebnis ist er nicht.
+Wer die Phase priorisiert, priorisiert eine Plausibilitaet.
+
+### Werkzeug gesichert (`d9c95f8`)
+
+Die WS-Replay-Bank war am 06.08. gebaut, benutzt und **nie committet** worden; der Kettenstand
+fuehrte sie seither als vorhandenes Werkzeug. Sie ist jetzt in `scripts/stt-wer.mjs`
+(`--live-stt`), mit Tests fuer den Ergebnis-Hash in beiden Richtungen. **Lehre: ein
+Messwerkzeug, das nur in einem Bericht steht, existiert nicht** — das Aufraeum-Gebot fuer
+Prozessmuell darf keine Werkzeuge mitreissen.
