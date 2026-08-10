@@ -1225,3 +1225,59 @@ Die Pruefung der Telnyx-OpenAPI (GQ-P18) hat zwei Dinge ergeben, die ueber die
    ungemessen** — vor jedem Wechsel eine WER-Messung (`scripts/stt-wer.mjs`), sonst
    wiederholt sich B-7. Kickoff-Abschnitt 4 kannte diesen Kandidaten nicht; seine Aussage
    "verworfen: zurueck auf Flux / offen: AssemblyAI" ist damit unvollstaendig, nicht falsch.
+
+---
+
+## VORFALL 2026-08-10 — Anruf riss mitten im Satz ab, Leitung blieb offen
+
+**Anruf `call_msmwx6iro92m`** (Telnyx-Konversation `2728634e-0a22-4104-a943-21ad8034c480`,
+Leg `7391027a-948d-11f1-bb20-02420a1f0b69`), gefahren mit GQ-P18 live und
+`TELNYX_SHIM_EXTEND_HOLD_MS=3000`.
+
+**Owner-Beobachtung:** der Agent hat seinen letzten Satz abgehakt und danach nicht mehr
+reagiert. Der Anruf lief auf dem Telefon **normal weiter**; der Owner sprach, es kam nichts.
+Fuer den MCP-Client sah der Anruf beendet aus (`await_call_event` -> `done`).
+
+### Belegt
+
+| Befund | Beleg |
+|---|---|
+| Wir haben NICHT aufgelegt | kein `end_call`, kein Abschied, keine Watchdog-Terminierung, keine Gate-Zeile im Fenster 07:32:36-07:36:30 |
+| Telnyx registrierte nach 07:32:35 **keine** Anrufer-Aeusserung mehr | Telnyx-Konversation hat 6 Nachrichten, letzte ist die Assistant-Antwort 07:32:38.427 |
+| Der Agent **sprach** bis zum Abriss, er schwieg nicht | 159 Zeichen ab 07:32:38.4; bei gemessenen ~17,6 Zeichen/s endet das ~07:32:47,4 — Hangup 07:32:47,60 |
+| Das Abriss-Muster ist **nicht neu** | Kontrolle `call_mslz71hv6ogm` (09.08., GQ-P18 noch nicht live): identische Event-Kette `call.hangup` -> `conversation.ended` -> `recording.saved` -> `insights.generated` |
+| Leere Completions auf echte Anrufer-Turns sind **nicht neu** | 09.08. `turnSeq 8`: `speechEmpty:true, streamChunks:0`, dazu `supersede superseded:true` — unter dem ALTEN Mechanismus |
+| Leere Completions allgemein sind Routine | Anstoss-Riegel schickt sie seit 05.08. in Serien (z.B. `call_msg0swwfhe5e` neunmal in Folge), Anrufe liefen weiter |
+
+### NICHT belegt — und nicht geraten
+
+**Warum Telnyx um 07:32:47 abgerissen hat.** Der Grund steht als `hangup_cause`/
+`hangup_source`/`sip_hangup_cause` in der `call.hangup`-Nutzlast und wurde **weggeworfen** —
+wir loggten nur den `event_type`. **Behoben** (`bd8610c`): die drei Felder stehen jetzt in der
+Roh-Zeile, Feldnamen aus dem OpenAPI-Schema `CallHangup`, nicht geraten.
+
+### Zwei Lesarten, die der naechste Vorfall trennt
+
+1. **Telnyx' Hangup war wahr** — das Leg war weg, nur das BYE erreichte das Handy des Owners
+   nicht. Dann ist die haengende Leitung ein Signalisierungs-Problem bei Carrier/Handy, und
+   serverseitig ist **nichts** zu reparieren (man kann nichts aufllegen, was schon weg ist).
+2. **Telnyx' Hangup war verfrueht** — Medien flossen weiter. Dann haben wir eine echte
+   blinde Stelle: `finishCall` raeumt beim Hangup ALLE Timer inkl. Dead-Air-Notaus; niemand
+   auf unserer Seite wuerde das Leg je beenden.
+
+**Die Frage, die 1 von 2 entscheidet und nur der Owner beantworten kann:** lief auf dem Telefon
+der Gespraechs-Timer sichtbar weiter, und hat der Owner am Ende **selbst** aufgelegt?
+
+### Korrekturen an eigenen Behauptungen dieser Session
+
+- *"erste erfolgreiche Verdraengung auf dem Streaming-Pfad ueberhaupt"* — **falsch**, siehe
+  09.08. `turnSeq 9`. GQ-P18 macht Verdraengungen haeufiger, hat sie nicht erfunden.
+- *"9 Sekunden Stille vor dem Hangup"* — **falsch**, der Agent sprach in diesem Fenster.
+
+### Verdachtslage gegen GQ-P18
+
+**Nicht entlastet, nicht ueberfuehrt.** Neu ist allein die Ueberlappung: Turn 7 antwortete leer,
+286 ms nachdem Turn 8 bereits lief. Ein Bogen von dort zu einem Abriss 9 s spaeter ist ohne
+Provider-Beleg nicht zu schlagen. Empfehlung bis zur Klaerung:
+`TELNYX_SHIM_EXTEND_HOLD_MS=0` — nicht als Schuldspruch, sondern weil es die juengste
+unbewiesene Variable an einem Live-Telefonsystem mit offenem Vorfall ist.
