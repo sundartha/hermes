@@ -55,6 +55,35 @@ Hangup den Agenten mitten im Wort; beim Anruf 08:24 hatte er ausgeredet und schw
   es enthaelt **kein** SIP-Header-Feld und kein `Session-Expires`.
 - Render-Logretention beginnt faktisch am 03.08. (Abfrage 12.07.–03.08. liefert `logs: null`).
 
+## 3b. GEKLAERT durch Telnyx (2026-08-10): das BYE kommt vom Ziel-Carrier
+
+Telnyx hat auf Anfrage des Owners die carrier-seitigen Daten zu
+`e86335bd-ee8a-442e-bb7b-1ed33c2256e0` ausgewertet. **Entscheidend ist ein Feld, das die
+oeffentliche API NICHT herausgibt:**
+
+    hangup_source  = callee
+    hangup_details = recv_bye      <- Telnyx hat das BYE EMPFANGEN
+    hangup_code    = 16 (NORMAL_CLEARING)
+    sip_hangup_cause = 200
+
+**`recv_bye` ist der Beleg:** das BYE kam von aussen, nicht von Telnyx und nicht von uns.
+Telnyx' Einschaetzung: Muster konsistent mit einem **nicht aufgefrischten 90-s-Session-Timer
+(RFC 4028)** auf der Seite des deutschen Mobilfunk-Carriers. Kein Telnyx-seitiges Limit
+(`time_limit_secs=1800` wird nicht ausgeloest), keine Kontobeschraenkung.
+
+SIP-Reason-Header und PCAP bleiben unzugaenglich, weil der Call zu einem PSTN-Carrier
+terminiert — das bestaetigt die Portal-Meldung aus Abschnitt 3 unabhaengig.
+
+**Konsequenz: in unserem Code nicht behebbar.** Offene Wege: Support-Ticket zur
+Carrier-Eskalation (Entwurf mit allen 13 Session-IDs erstellt) und ein Test gegen eine
+ANDERE Zielnummer/einen anderen Carrier.
+
+**Die Owner-Praemisse "der Fehler liegt zu 100 % bei uns" war fuer die 91-s-Kappung nicht
+zutreffend — fuer den parallel laufenden Dead-Air-Defekt (Abschnitt 5b) aber sehr wohl.**
+Beide erzeugen dasselbe Erlebnis am Telefon (Agent bricht ab, Leitung reagiert nicht mehr).
+Genau deshalb wurden sie eine Session lang als EIN Sachverhalt gefuehrt. Das ist die
+wiederkehrende Falle dieses Projekts: zwei Sachverhalte auf einem Label.
+
 ## 4. Der naechste Schritt: die fehlende Kontrollgruppe
 
 **Alle 51 Anrufe liefen ueber den ASSISTANT-Pfad.** Es existiert keine Messung des anderen
