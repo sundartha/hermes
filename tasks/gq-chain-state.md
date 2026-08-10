@@ -1281,3 +1281,32 @@ der Gespraechs-Timer sichtbar weiter, und hat der Owner am Ende **selbst** aufge
 Provider-Beleg nicht zu schlagen. Empfehlung bis zur Klaerung:
 `TELNYX_SHIM_EXTEND_HOLD_MS=0` — nicht als Schuldspruch, sondern weil es die juengste
 unbewiesene Variable an einem Live-Telefonsystem mit offenem Vorfall ist.
+
+### NACHTRAG 2026-08-10, spaeter: die Ursache ist eine ~91-Sekunden-Kappung
+
+Die `hangup_cause`-Zeile (`bd8610c`) hat beim naechsten Anruf sofort geliefert:
+`hangup_cause=normal_clearing hangup_source=callee sip_hangup_cause=200` — ein sauberer,
+absichtlicher Abbau, kein Absturz.
+
+**Der eigentliche Fund kam aus der Dauer-Rechnung ueber drei Anrufe** (`call.answered` ->
+`call.hangup`): **90,99 s · 90,92 s · 91,28 s**, Streuung 0,36 s. Einer davon lief **vor**
+GQ-P18. Damit ist die Sprechsperre als Ursache **ausgeschlossen**, und der Abriss "mitten im
+Satz" ist kein Gespraechsdefekt, sondern eine feste Zeitgrenze, die trifft, was der Agent
+gerade sagt.
+
+**Owner-Aussage, bindend:** Telnyx-Konto ist komplett verifiziert, die US-DID-Spur ist
+Unsinn, es hat vorher funktioniert — **der Fehler liegt auf UNSERER Seite.** Die in dieser
+Session aufgemachten Hypothesen (Trial-Limit, internationale Zustellung) sind damit erledigt
+und nicht neu zu erheben.
+
+Ausgeschlossen ist ausserdem: Telnyx `time_limit_secs` (1800), `user_idle_timeout_secs`
+(null), ein Telnyx-Hangup-Werkzeug (`tools: []`), unser Abschieds-Hangup (kein
+`farewell_scheduled` bei allen drei Anrufen, Positiv-Kontrolle bestanden).
+
+**Teil-geprueft, offen:** die KS-P3-Notbremse (`emergencyBrakeSeconds`) rechnet in GANZEN
+Minuten und ergaebe 60/120 s, nicht 91 — geschwaecht, aber nicht erledigt (Puffer und Cap
+nicht zu Ende gelesen, realer `remainingCents` nicht gemessen).
+
+**Naechster Schritt (Uebergabe `tasks/kickoff-91s-und-restarbeit-2026-08-10.md`):** die Dauer
+ALLER historischen Anrufe aus dem Render-Log rechnen und nach einer Stufenfunktion suchen —
+ab wann kappt es? Diese Zeitreihe beantwortet die Frage schneller als jedes Codelesen.
