@@ -230,11 +230,13 @@ byte-identisch. Neue Angriffsflaechen + Mitigationen:
 - **Sprech-Verlaengerung des Dead-Air-Notaus (dead-air-speech, bewusste Abweichung):** der
   Dead-Air-Timer terminiert nicht mehr bedingungslos, wenn er feuert — steht laut
   Sprechdauer-Schaetzung des letzten Turns noch Agentensprache aus, vertagt er sich **einmalig**
-  um deren Rest plus die volle Frist (`TELNYX_DEAD_AIR_TIMEOUT_S`). Grund: die Achse mass
-  "Anrufer schweigt" statt "Leitung tot" und beendete aktive Gespraeche mitten im Satz
-  (Live-Beleg `call_msn34lpf77wg`, 86 s, `hangup_source=caller`). Kosten-Effekt: hoechstens
-  `SPEECH_EXTENSION_MAX_MS` (90 s) zusaetzlich je Call, HART gedeckelt, keine Env-Var, nicht
-  kumulativ (absoluter Zeitstempel, wird ersetzt statt summiert). Backstops unveraendert:
+  um deren Rest plus die volle Frist (`TELNYX_DEAD_AIR_TIMEOUT_S`), explizit geklammert
+  (`Math.min`) auf `SPEECH_EXTENSION_MAX_MS`. Grund: die Achse mass "Anrufer schweigt" statt
+  "Leitung tot" und beendete aktive Gespraeche mitten im Satz (Live-Beleg `call_msn34lpf77wg`,
+  86 s, `hangup_source=caller`). Kosten-Effekt: hoechstens `SPEECH_EXTENSION_MAX_MS` (90 s)
+  zusaetzlich je Call, HART gedeckelt (durchgesetzt unabhaengig von der Turn-Latenz zwischen
+  Timer-Stellung und Sprech-Schaetzung, Review-Fix Runde 1), keine Env-Var, nicht kumulativ
+  (absoluter Zeitstempel, wird ersetzt statt summiert). Backstops unveraendert:
   Max-Gespraechsdauer-Cap, pro-Tenant-Kostendecke, `OUTBOUND_FROZEN`, Telnyx
   `time_limit_secs=1800`. Notaus-Pfade (Loop-Guard, Mid-Call-Budget-Kill) terminieren weiterhin
   SOFORT.

@@ -25,6 +25,7 @@ import { makeTurnTextProbe, TURN_TEXT_RELATION } from "./telnyx-turn-probe.js";
 import { makeInFlightTurnRegistry } from "./telnyx-turn-supersede.js";
 import { makeSpeechGate, SPEECH_GATE_OUTCOME } from "./telnyx-speech-gate.js";
 import { makeConsecutiveFailureCounter } from "./telnyx-turn-failures.js";
+import { formatLogLine } from "./utils/log-line.js";
 
 // OpenAI-SSE-Konstanten (G25, keine Magic-Strings gestreut):
 const OPENAI_CHUNK_OBJECT = "chat.completion.chunk"; // stream:true (SSE-Delta-Chunks)
@@ -322,8 +323,11 @@ function writeCompletion(res, { model, content, stream }) {
 // (objectKeys statt Werte, kein Rekursions-Dump). SAFE-1 sichert das dauerhaft ab.
 const SHIM_LOG_PREFIX = "[telnyx-shim]";
 
+// Zeilenformat ueber die gemeinsame Quelle formatLogLine (G5, Muster
+// telnyx-conversation-watchdog.js formatWatchdogLine - beide riefen bis dahin dieselbe
+// Form unabhaengig auf).
 function formatShimLine(kind, payload) {
-  return `${SHIM_LOG_PREFIX} ${kind} ${JSON.stringify(payload)}`;
+  return formatLogLine(SHIM_LOG_PREFIX, kind, payload);
 }
 
 // Ein greifendes Gate / eine Degradation / ein Vendor-Fehler wird LAUT statt stumm 403.

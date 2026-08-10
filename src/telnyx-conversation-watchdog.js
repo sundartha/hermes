@@ -29,14 +29,16 @@
 // clear()/terminateOnce() mit entsorgt (kein separates Aufraeumen, kein Leck).
 import { isSubstantialCallerText } from "./claude.js";
 import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
+import { formatLogLine } from "./utils/log-line.js";
 
 export const WATCHDOG_LOG_PREFIX = "[telnyx-watchdog]";
 
-// EINE Quelle fuer das Zeilenformat dieser Achse (G5, Muster telnyx-llm-shim.js
-// formatShimLine): Prefix + kind + JSON(payload). PII-frei - nur die interne callId, Zahlen
-// und Grund-Token, nie Wortlaut, nie Rufnummern.
+// Zeilenformat dieser Achse ueber die gemeinsame Quelle formatLogLine (G5, Muster
+// telnyx-llm-shim.js formatShimLine - beide riefen bis dahin dieselbe Form unabhaengig
+// auf). PII-frei - nur die interne callId, Zahlen und Grund-Token, nie Wortlaut, nie
+// Rufnummern.
 function formatWatchdogLine(kind, payload) {
-  return `${WATCHDOG_LOG_PREFIX} ${kind} ${JSON.stringify(payload)}`;
+  return formatLogLine(WATCHDOG_LOG_PREFIX, kind, payload);
 }
 
 // afix-p3 (R4): Sprechdauer-Schaetzung fuer den Abschiedssatz. Synthese-/Playback-Latenz vor
@@ -240,8 +242,17 @@ export function makeConversationWatchdog({
   // "dead_air" - die Abnahme dieser Phase liest genau diese Zeichenkette im Live-Log als
   // "gekappt", und ein Substring-Treffer waere ein falscher Alarm.
   // Der gefeuerte Timer ist erledigt; das Feld wird ersetzt, nicht geloescht.
+  //
+  // Review-Fund (dead-air-speech, 1. Runde): remainingSpeechMs + deadAirMs OHNE Klammerung
+  // war NICHT der dokumentierte Deckel. remainingSpeechMs errechnet sich aus speechEndsAtMs,
+  // und speechEndsAtMs wird in noteAgentSpeech relativ zu DESSEN now() gesetzt - das liegt um
+  // die volle Turn-Latenz (LLM/Tool-Zeit, siehe agentTurn) SPAETER als der Zeitpunkt, zu dem
+  // observeTurn den Dead-Air-Timer zuletzt gestellt hat. Ohne explizite Klammerung waechst die
+  // tatsaechliche Vertagung um genau diese Latenz ueber SPEECH_EXTENSION_MAX_MS hinaus - der
+  // Kommentar/PLAN-SECURITY.md behauptete "HART gedeckelt", der Code hat es nicht durchgesetzt.
+  // Math.min erzwingt den Deckel jetzt unabhaengig von der Turn-Latenz.
   function extendForSpeech(callId, s, remainingSpeechMs) {
-    const extendedMs = remainingSpeechMs + deadAirMs;
+    const extendedMs = Math.min(remainingSpeechMs + deadAirMs, SPEECH_EXTENSION_MAX_MS);
     s.speechExtendedMs = extendedMs;
     s.deadAirTimer = setTimer(() => onDeadAir(callId), extendedMs);
     console.log(

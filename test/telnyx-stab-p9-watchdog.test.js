@@ -603,3 +603,50 @@ test("T17: kein Text -> keine Verlaengerung (Grenzfall 0/leer)", async () => {
     lines.some((l) => l.startsWith(WATCHDOG_LOG_PREFIX) && l.includes("dead_air") && l.includes('"speechExtendedMs":0')),
   );
 });
+
+// T18 (Review-Fund Runde 1, dead-air-speech): T16 kappte "zufaellig" bei exakt
+// SPEECH_EXTENSION_MAX_MS, weil arm() und noteAgentSpeech() dort auf DERSELBEN Uhrzeit
+// liefen (keine Turn-Latenz) - remainingSpeechMs+deadAirMs ergibt in diesem Sonderfall
+// IMMER genau spokenMs, unabhaengig von einer Klammerung. Dieser Test legt echte
+// Turn-Latenz zwischen die Dead-Air-Armierung (observeTurn-Zeitpunkt) und noteAgentSpeech
+// (Ende von agentTurn()) - genau die Luecke, die der Review fand: ohne Math.min in
+// extendForSpeech waere die Vertagung um die Latenz LAENGER als der dokumentierte Deckel.
+test("T18: der Deckel der Sprech-Verlaengerung greift AUCH bei Turn-Latenz zwischen Armierung und Sprech-Schaetzung", async () => {
+  const call = makeCall();
+  const store = fakeStore({ call });
+  const voiceControl = fakeVoiceControl();
+  const timers = fakeTimers();
+  const clock = fakeClock();
+  const watchdog = makeTestWatchdog({ store, voiceControl, timers, now: clock.now });
+
+  // T0: observeTurn/arm stellt den Dead-Air-Timer auf T0+DEAD_AIR_TEST_MS (30000).
+  watchdog.arm(call.id);
+
+  // Turn-Latenz L=25000ms bis agentTurn() fertig ist - NOCH vor dem Feuern des Timers
+  // (25000 < 30000), aber nahe genug daran, dass die Luecke sichtbar wird.
+  const TURN_LATENCY_MS = 25_000;
+  clock.advance(TURN_LATENCY_MS);
+  // noteAgentSpeech setzt speechEndsAtMs relativ zu SEINEM (spaeteren) now(): 25000+65500.
+  watchdog.noteAgentSpeech(call.id, { speechChars: 1000, language: "de" }); // LONG_SPEECH_MS=65500
+
+  // Der Timer feuert planmaessig bei T0+30000.
+  clock.advance(DEAD_AIR_TEST_MS - TURN_LATENCY_MS);
+  const lines = await captureConsole(() => {
+    timers.fireAll();
+    return Promise.resolve();
+  });
+
+  // OHNE Klammerung waere extendedMs 90500 (remainingSpeechMs 60500 + deadAirMs 30000) -
+  // 500ms UEBER dem dokumentierten Deckel. Mit dem Fix bleibt es bei genau 90000.
+  assert.deepEqual(
+    timers.pendingDelays(),
+    [90_000],
+    "die Vertagung darf den Deckel auch bei Turn-Latenz nicht ueberschreiten",
+  );
+  assert.ok(
+    lines.some(
+      (l) => l.startsWith(WATCHDOG_LOG_PREFIX) && l.includes("speech_extend") && l.includes('"speechExtendedMs":90000'),
+    ),
+    "speech_extend-Log muss den geklammerten Wert tragen, nicht den unklammerten 90500",
+  );
+});
