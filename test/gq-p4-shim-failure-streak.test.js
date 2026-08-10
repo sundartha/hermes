@@ -45,6 +45,7 @@ function watchdogSpy() {
     farewellCalls,
     arm() {},
     observeTurn: () => ({ loopExceeded: false, turnSeq: 0 }),
+    noteAgentSpeech() {},
     clear() {},
     scheduleFarewellHangup(callId, opts) {
       farewellCalls.push({ callId, ...opts });
