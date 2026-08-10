@@ -1047,3 +1047,93 @@ test("afix-timeout (Review-Blocker Runde 3, AFIX-TIMEOUT-STALE-CALL): Call exter
     );
   });
 });
+
+// ---------- HANGUP-URSACHE (Vorfall 2026-08-10) ----------
+// Am 2026-08-10 riss ein Live-Anruf ab, waehrend der Agent noch sprach; die Leitung des
+// Angerufenen blieb offen. "Wer hat aufgelegt und warum" war nicht beantwortbar - der Grund
+// stand in der call.hangup-Nutzlast und wurde weggeworfen. Feldnamen NICHT geraten, sondern
+// aus dem Telnyx-OpenAPI-Schema CallHangup entnommen.
+
+test("HANGUP-1: call.hangup -> Roh-Log traegt hangup_cause, hangup_source und sip_hangup_cause", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    openingText: () => OPENING_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
+  });
+  const body = {
+    data: {
+      event_type: "call.hangup",
+      payload: {
+        call_control_id: "cc_1",
+        hangup_cause: "time_limit",
+        hangup_source: "callee",
+        sip_hangup_cause: "480",
+      },
+    },
+  };
+  const lines = await captureConsole(() => handler({ query: { callId: "call_1" }, body }, fakeRes()));
+
+  const rawLine = lines.find((l) => l.includes("event empfangen"));
+  assert.ok(rawLine, "Roh-Log-Zeile fehlt");
+  assert.match(rawLine, /hangup_cause=time_limit/);
+  assert.match(rawLine, /hangup_source=callee/);
+  assert.match(rawLine, /sip_hangup_cause=480/);
+});
+
+test("HANGUP-2: Event OHNE Ursachenfelder -> Zeile bleibt byte-identisch zum Bestand", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    openingText: () => OPENING_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
+  });
+  const body = {
+    data: { event_type: "call.playback.ended", payload: { call_control_id: "cc_1", status: "finished" } },
+  };
+  const lines = await captureConsole(() => handler({ query: { callId: "call_1" }, body }, fakeRes()));
+
+  const rawLine = lines.find((l) => l.includes("event empfangen"));
+  assert.equal(
+    rawLine,
+    "[voice/call-control] event empfangen (call=call_1) event_type=call.playback.ended status=finished",
+    "kein Anhang an Events ohne Ursachenfelder",
+  );
+});
+
+test("HANGUP-3: teilweise gefuellte Ursache -> nur die vorhandenen Felder stehen in der Zeile", async () => {
+  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  const store = fakeStore(call);
+  const vc = fakeVoiceControl();
+  const handler = makeCallControlIngest({
+    store,
+    voiceControl: vc.voiceControl,
+    finishCall: async () => {},
+    openingText: () => OPENING_TEXT,
+    localeFor: () => ({ voiceProfile: "de_female_neural" }),
+    watchdog: NOOP_WATCHDOG,
+  });
+  // Inbound-Legs liefern laut Schema oft KEIN sip_hangup_cause - der Anhang darf dann kein
+  // "none" erfinden, das waere eine Aussage ueber etwas, das der Provider nicht gesagt hat.
+  const body = {
+    data: {
+      event_type: "call.hangup",
+      payload: { call_control_id: "cc_1", hangup_cause: "normal_clearing", hangup_source: "caller" },
+    },
+  };
+  const lines = await captureConsole(() => handler({ query: { callId: "call_1" }, body }, fakeRes()));
+
+  const rawLine = lines.find((l) => l.includes("event empfangen"));
+  assert.match(rawLine, /hangup_cause=normal_clearing hangup_source=caller$/);
+  assert.equal(rawLine.includes("sip_hangup_cause"), false, "kein erfundenes Feld");
+});

@@ -35,6 +35,27 @@ function rawToken(value) {
   return value == null ? "none" : String(value).slice(0, EVENT_TOKEN_MAX_LEN);
 }
 
+// Warum ein Call geendet hat - die drei Felder, die Telnyx auf call.hangup mitschickt
+// (OpenAPI-Schema CallHangup): hangup_cause (Enum normal_clearing|time_limit|timeout|...),
+// hangup_source (caller|callee|unknown) und sip_hangup_cause (SIP-Antwortcode). Alles
+// Ursachen-Codes, kein Freitext und kein PII - dieselbe Klasse wie event_type/status.
+//
+// WARUM SIE HIER STEHEN MUESSEN: am 2026-08-10 riss ein Live-Anruf ab, waehrend der Agent
+// noch sprach, und die Leitung des Angerufenen blieb offen. Die Frage "wer hat aufgelegt und
+// warum" war NICHT beantwortbar - der Grund stand in genau dieser Nutzlast und wurde
+// weggeworfen, wir loggten nur den event_type. Ein Vorfall, dessen Ursache das eigene Log
+// systematisch verschweigt, ist nicht diagnostizierbar.
+const HANGUP_CAUSE_FIELDS = Object.freeze(["hangup_cause", "hangup_source", "sip_hangup_cause"]);
+
+// Leerer String, wenn das Event keines dieser Felder traegt - jede andere Event-Zeile bleibt
+// damit byte-identisch zum Bestand.
+function hangupCauseSuffix(payload) {
+  const parts = HANGUP_CAUSE_FIELDS.filter((f) => payload?.[f] != null).map(
+    (f) => `${f}=${rawToken(payload[f])}`,
+  );
+  return parts.length ? ` ${parts.join(" ")}` : "";
+}
+
 // OBS-2: EIN roher Protokoll-Log pro Event (call.id = interne ID, kein PII). Macht die real
 // gelieferten event_type/status-Formen (alle "LIVE UNBESTAETIGT") sichtbar, damit P1a-FIX die
 // echte Token-Form kennt - NICHT auf eine completed/failed-Allowlist geklemmt (sonst verschluckt
@@ -43,7 +64,8 @@ function rawToken(value) {
 function logEventReceived(callId, body) {
   const env = eventEnvelope(body);
   console.log(
-    `${CALL_CONTROL_LOG_PREFIX} event empfangen (call=${callId}) event_type=${rawToken(env?.event_type)} status=${rawToken(env?.payload?.status)}`,
+    `${CALL_CONTROL_LOG_PREFIX} event empfangen (call=${callId}) event_type=${rawToken(env?.event_type)} status=${rawToken(env?.payload?.status)}` +
+      hangupCauseSuffix(env?.payload),
   );
 }
 
