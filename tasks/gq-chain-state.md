@@ -1411,6 +1411,51 @@ Der Kettenstand sagt oben selbst nur *"fuer das Sprachmodell moeglicherweise nic
 genug, um ihn zu verfolgen — aber ein belegter Schaden am Gespraechsergebnis ist er nicht.
 Wer die Phase priorisiert, priorisiert eine Plausibilitaet.
 
+---
+
+## Abnahme 2026-08-11 — vier Phasen belegt, und warum sie es vorher nicht sein KONNTEN
+
+Zwei Testanrufe. Der eigentliche Fund kam vor dem ersten Anruf: **die Consult-Phasen waren am
+Tenant des Owners nie scharf.** `consultAllowed` (`consult/gate.js:21-23`) ist eine
+Schnittmenge aus drei Faktoren; die beiden Env-Flags standen laengst auf `true`, aber das
+Tenant-Recht `allowConsult` stand auf `false` — `PAID_PLAN_PROFILE` trug es fest verdrahtet,
+mit der Begruendung "bleibt Owner-Faehigkeit, bis die Abnahme durch ist".
+
+**Diese Sperre zementierte sich selbst:** die Abnahme konnte nicht stattfinden, weil sie
+gesperrt war. Symptom war ein fehlendes Werkzeug (`await_call_event` -> "Tool not found"),
+nicht ein Fehlverhalten — deshalb stand in diesem Dokument tagelang "live, ungemessen" fuer
+etwas, das gar nicht laufen konnte. Owner-Entscheidung 2026-08-11: der Rueckfrage-Kanal ist
+Kernfunktion, `allowConsult: true` fuer alle Plaene (`8bb47c3`).
+
+**Der Weg dahin war nicht der Deploy allein.** `resolveProfileFrom` (`store/defaults.js:976`)
+liest fuer Nicht-Bootstrap-Tenants NUR das gespeicherte Profil und schaut den Plan nie an.
+Der DB-Snapshot gewinnt gegen `plans.js`. Noetig war: Deploy -> `scripts/backfill-plan-profiles.js
+--apply` (schreibt ueber `setProfile`, faktisch Voll-Replace auf Plan-Stand, 2 von 3
+Tenants) -> Neustart. **Merksatz: ein Plan-Recht zu aendern wirkt nicht rueckwirkend auf
+Bestandsprofile.**
+
+### Ergebnisse (`call_msobxt824yjy` Zaehl-Anruf, `call_msoem5d1qpsf` Werkstatt-Anruf)
+
+| Phase | Zahl, vorher benannt | Ergebnis |
+|---|---|---|
+| Dead-Air-Fix (`95bf1f2`) | keine `dead_air`-Zeile, Hangup nicht von uns | **belegt** — `hangup_source=callee` statt `caller` (10.08.: 86,05 s Abbruch durch uns) |
+| GQ-P2 | `accepted:true`, `answeredFacts>=1` | **belegt** — `merged_facts: 1` |
+| GQ-P7 | genau EIN Zustellfenster, ein Satz darin | **belegt** — turnSeq 13, ein Satz, kein weiterer Turn |
+| GQ-P8 | Antwort verwenden statt Rueckruf ankuendigen | **belegt** — "Es ist ein VW Golf." im Gespraech (05.08. Gegenbeleg: Rueckruf angekuendigt, Antwort lag 6 s im Prompt) |
+| GQ-P13 | ANSWERED nur mit uebernommenen Fakten | **teilweise** — positiver Fall (`fakten=1`) belegt, der Gegenfall (facts=0 -> kein ANSWERED) kam nicht vor |
+| GQ-P18 | `hold`-Verteilung | **0 `silenced`**, 7x `flushed` — der Verwurf-Defekt vom 10.08. trat nicht auf |
+
+### Unveraendert offen, an beiden Anrufen bestaetigt
+
+- **91-s-Kappung**: 91,09 s und 91,21 s, beide `hangup_source=callee`. Die Owner-Mobilnummer
+  ist als Teststrecke auf ~91 s begrenzt; laengere Messungen brauchen eine andere Nummer.
+- **Satzzeichen 0 %** — jetzt n=7 statt n=1. Der Test gegen
+  `TELNYX_PER_CALL_TRANSCRIPTION_ENABLED=false` steht noch aus; dieser Anruf ist sein Vorher.
+- **D-2 live reproduziert**: erster `await_call_event`-Abruf lieferte `done` mit "(Noch keine
+  Zusammenfassung verfuegbar)", erst der zweite trug sie. Immerhin mit Hinweistext statt
+  stillem Fehlschlag.
+- **SMS scheitert nach JEDEM Anruf** (`40305 Invalid 'from' address`), an beiden bestaetigt.
+
 ### Werkzeug gesichert (`d9c95f8`)
 
 Die WS-Replay-Bank war am 06.08. gebaut, benutzt und **nie committet** worden; der Kettenstand
