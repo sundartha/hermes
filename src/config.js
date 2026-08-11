@@ -1588,6 +1588,14 @@ const rawConfig = {
   // client_id + API-Key unterschieden, NICHT ueber den Host -> derselbe Host fuer Staging
   // und Produktion. Konstanter Default; nur fuer Tests/Self-Hosting ueberschreibbar.
   workosApiBase: stripTrailingSlash(process.env.WORKOS_API_BASE || "https://api.workos.com"),
+  // 312k-Phase 4: EIGENER Schluessel fuer die WorkOS-Nutzerloeschung beim Vertragsende
+  // (workos-management.js) - NICHT oidcClientSecret: der Anmeldeschluessel ist fuer den
+  // Login-Flow bestimmt, ob er ueberhaupt Loeschrechte traegt ist ungeklaert, und ein
+  // Anmeldeschluessel gehoert nicht auf einen unwiderruflichen Loeschpfad. Leer (Default) =
+  // die Loeschung wird NICHT versucht (fail-closed: kein Aufruf ohne eigens dafuer
+  // vergebenen Schluessel), der Tenant wird stattdessen am Vertragsende als offen vermerkt
+  // und bei einem spaeteren Sweep erneut versucht. SECRET - nie loggen.
+  workosManagementApiKey: process.env.WORKOS_MANAGEMENT_API_KEY || "", // SECRET
   // Admin-Allowlist (kommasepariert, E-Mails). Nur diese duerfen approve/suspend.
   adminEmails: (process.env.ADMIN_EMAILS || "")
     .split(",")
@@ -1763,7 +1771,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
-  auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
+  auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled"],

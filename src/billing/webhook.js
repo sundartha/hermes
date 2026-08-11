@@ -10,6 +10,7 @@ import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
 import { isKnownPlanSlug } from "../plans.js";
 import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./money-events.js";
+import { attemptContractEndCleanup } from "./contract-end-cleanup.js";
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -252,7 +253,25 @@ function planSlugOf(object) {
 // Nebeneffekt (Status-/Abo-/KYC-Schreibung + Provisioning) im Namen.
 export async function applyStripeWebhook(
   event,
-  { store, accounts, sessions, audit, req, provision, billing },
+  {
+    store,
+    accounts,
+    sessions,
+    audit,
+    req,
+    provision,
+    billing,
+    // 312k-Phase 4 (Vertragsende-Aufraeumarbeiten): NUR im SUSPEND-Zweig gelesen, NUR wenn
+    // der Vertrag durch eine Kuendigung endete (s. dort). numberProvisioner = derselbe
+    // Telnyx-NumberProvisioning-Port wie der DID-Release-Reconciler; workos = der WorkOS-
+    // Management-Adapter (null, wenn WORKOS_MANAGEMENT_API_KEY nicht gesetzt ist - die
+    // Loeschung wird dann nicht versucht); auditStore = der durable Postgres-audit_log-
+    // Nachweis (Default No-Op, Muster self-service-routes.js makeSelfServiceRoutes) fuer
+    // Aufrufer/Tests, die diesen Pfad nicht beruehren.
+    numberProvisioner,
+    workos,
+    auditStore = { record: async () => {} },
+  },
 ) {
   const interpreted = interpretStripeEvent(event);
   const {
@@ -372,6 +391,17 @@ export async function applyStripeWebhook(
   }
   // SUSPEND (Zahlung gescheitert / Abo geloescht): Status + Sessions sperren (gesperrter
   // Kunde kann nicht bis Cookie-Expiry weiterlesen).
+  //
+  // 312k-Phase 4 (die eine Bedingung, die alles traegt): customer.subscription.deleted UND
+  // invoice.payment_failed fuehren BEIDE hierher (Spec: nur diese beiden suspenden) - ob
+  // NUR gesperrt wird oder ZUSAETZLICH die Rufnummer freigegeben + die WorkOS-Identitaet
+  // geloescht werden, entscheidet AUSSCHLIESSLICH der gespeicherte Kuendigungszustand
+  // (cancelAtPeriodEnd), gelesen VOR jeder Mutation dieses Zweigs. War er gesetzt, endete
+  // der Vertrag durch eine KUENDIGUNG (312k-P1 CANCEL_SCHEDULED hat ihn gesetzt, nichts hat
+  // ihn seither zurueckgenommen) - dann UND NUR dann greift das Aufraeumen. Ein Zahlungs-
+  // ausfall OHNE vorherige Kuendigung liefert hier IMMER false (das Feld wurde nie gesetzt)
+  // -> Identitaet und Nummer bleiben unangetastet, byte-identisches Bestandsverhalten.
+  const endedViaCancellation = store.tenantSubscription(tenant).cancelAtPeriodEnd;
   await accounts.setStatus(tenant, "suspended");
   // tenant-prolif-c: Grace-Anker fuer den spaeteren DID-Release (Phase D). SET-IF-ABSENT stempelt
   // den Zeitpunkt der ERSTEN Suspendierung; ein Dunning-Retry (weiteres invoice.payment_failed)
@@ -380,6 +410,19 @@ export async function applyStripeWebhook(
   store.setSuspendedAtIfAbsent(tenant);
   await sessions.invalidateByTenant(tenant);
   audit("stripe_webhook_suspend", req, `tenant=${tenant}`);
+  // Die Sperre ist an dieser Stelle bereits VOLLZOGEN (setStatus/setSuspendedAtIfAbsent/
+  // invalidateByTenant sind oben durchgelaufen) - das Aufraeumen laeuft danach, best-effort,
+  // und darf die Antwort NIE blockieren (try/catch: attemptContractEndCleanup ist selbst
+  // schon fail-soft, dies ist ein zusaetzlicher Riegel gegen einen unerwarteten Fehler in
+  // der Verdrahtung). Was nicht klappt, bleibt am Tenant offen vermerkt (durabler Audit-
+  // Nachweis in attemptContractEndCleanup) und wird vom periodischen Sweep erneut versucht.
+  if (endedViaCancellation) {
+    try {
+      await attemptContractEndCleanup({ store, numberProvisioner, workos, auditStore, tenantId: tenant });
+    } catch (e) {
+      console.error(`[contract-end] Aufraeumen fehlgeschlagen tenant=${tenant}: ${e.message}`);
+    }
+  }
   return { suspended: true };
 }
 

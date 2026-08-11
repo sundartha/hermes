@@ -19,6 +19,11 @@ function fakeDeps({ tenantBySub = null } = {}) {
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
       // tenant-prolif-c: Suspend stempelt den Grace-Anker.
       setSuspendedAtIfAbsent: (tenant) => calls.suspend.push(tenant),
+      // 312k-Phase 4: der SUSPEND-Zweig liest cancelAtPeriodEnd VOR jeder Mutation (Muster
+      // p3-payment-webhook.test.js/stripe-webhook-race.test.js fakeDeps). false (kein
+      // gesetzter Vermerk) haelt dieses File auf dem Bestandsverhalten - hier wird nicht
+      // gekuendigt, nur die Suspend-Wirkung selbst geprueft.
+      tenantSubscription: () => ({ planSlug: null, cancelAtPeriodEnd: false }),
     },
     accounts: { setStatus: async (tenant, status) => calls.setStatus.push([tenant, status]) },
     sessions: { invalidateByTenant: async (tenant) => calls.invalidate.push(tenant) },

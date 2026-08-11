@@ -266,6 +266,15 @@ export const {
   setBillingHold,
   clearBillingHold,
   billingHoldActive,
+  // 312k-Phase 4: Vertragsende-Aufraeumarbeiten nach KUENDIGUNG (Rufnummer freigeben +
+  // WorkOS-Identitaet loeschen) - Fortschritts-Speicher + Retry-Selektor + Identitaets-
+  // Leser. OHNE diese Re-Exports waeren sie auf der Fassade undefined -> billing/
+  // contract-end-cleanup.js wuerfe zur Laufzeit einen TypeError. Beide Backends
+  // exportieren sie -> die Fassade ist die EINE Quelle (Muster billingHoldActive).
+  setContractEndCleanupPending,
+  contractEndCleanupPending,
+  tenantsPendingContractEndCleanup,
+  tenantIdpSubject,
   // F2: private Summary-Nummer - Setter (Onboard/Self-Service P4/P5) + Reader (finishCall
   // P7 via planSummarySms). Muster wie setTenantStripe/tenantStripe. OHNE diese Re-Exports
   // sind sie auf der Fassade undefined -> self-service-routes UND planSummarySms werfen zur

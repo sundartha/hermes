@@ -39,10 +39,20 @@ import { PROVIDER } from "../store/defaults.js";
 import { stripeBilling } from "../billing/stripe.js";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
 import { isSelfServiceLive } from "../config.js";
+import { makeWorkosManagement } from "../workos-management.js";
+import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.js";
 
 // tenant-prolif-d: Sweep-Kadenz des DID-Release-Reconcilers (interne Kadenz, kein
 // Operator-Knopf -> Modul-Konstante; der Sicherheits-Knopf ist RELEASE_GRACE_DAYS/config).
 const RELEASE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+// 312k-Phase 4: Sweep-Kadenz des Vertragsende-Aufraeumens (Rufnummer freigeben + WorkOS-
+// Identitaet loeschen) - EIGENSTAENDIG von RELEASE_RECONCILE_INTERVAL_MS (kein geteilter
+// Timer: ein haengender Provider-Call in dem einen Sweep darf den anderen nie verzoegern).
+// Selbe Grosse wie der DID-Release-Reconciler (Muster), kein Operator-Knopf noetig - anders
+// als RELEASE_GRACE_DAYS ist hier kein Beobachtungsmodus vorgesehen: die Owner-Entscheidung
+// (nur bei KUENDIGUNG) ist bereits die Sicherung, kein weiterer Schalter noetig.
+const CONTRACT_END_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 // Boot-Lauf + periodischer Sweep des DID-Release-Reconcilers. fire-and-forget; nowMs
 // pro Lauf injiziert -> reiner Klassifizierer/Executor bleibt Date.now-frei. (byte-
@@ -54,6 +64,16 @@ function scheduleReleaseReconcile(deps) {
     );
   run();
   setInterval(run, RELEASE_RECONCILE_INTERVAL_MS).unref();
+}
+
+// Boot-Lauf + periodischer Sweep des Vertragsende-Aufraeumens (312k-Phase 4). Muster
+// scheduleReleaseReconcile: fire-and-forget, eigener catch-Riegel (ein Fehler hier darf den
+// Boot nie stoppen), unref() (der Timer haelt den Prozess/Test-Runner nicht am Beenden).
+function scheduleContractEndCleanup(deps) {
+  const run = () =>
+    void runContractEndCleanupSweep(deps).catch((e) => console.error("[contract-end]", e.message));
+  run();
+  setInterval(run, CONTRACT_END_CLEANUP_INTERVAL_MS).unref();
 }
 
 export async function wireWebLogin({
@@ -77,14 +97,35 @@ export async function wireWebLogin({
   });
   const sessions = makeSessions(portalRunner);
   const auditStore = makeAuditStore(portalRunner);
+  // EINE Instanz (G5), geteilt vom DID-Release-Reconciler UND dem 312k-Phase-4-
+  // Vertragsende-Aufraeumen - beide releasen ausschliesslich Telnyx-DIDs ueber denselben Port.
+  const telnyxProvisioner = numberProvisioning(PROVIDER.TELNYX);
   // tenant-prolif-d: DID-Release-Reconcile scharfschalten (Boot-Lauf + Sweep). Der
   // Provider laeuft ueber den bestehenden NumberProvisioning-Port (nur Telnyx). graceMs=0
   // (Default) = Observe-Only -> loggt nur Kandidaten, gibt nichts frei.
   scheduleReleaseReconcile({
     store,
-    provisioner: numberProvisioning(PROVIDER.TELNYX),
+    provisioner: telnyxProvisioner,
     audit: auditStore,
     graceMs: config.provisioning.releaseGraceMs,
+  });
+  // 312k-Phase 4: WorkOS-Management-Adapter NUR konstruieren, wenn ein eigens dafuer
+  // vergebener Schluessel gesetzt ist (config.auth.workosManagementApiKey) - NICHT
+  // oidcClientSecret (der Anmeldeschluessel gehoert nicht auf einen Loeschpfad, s.
+  // workos-management.js). Ungesetzt (Auslieferungszustand) -> null: die Loeschung wird
+  // gar nicht erst versucht, attemptContractEndCleanup vermerkt sie offen + protokolliert.
+  const workosManagement = config.auth.workosManagementApiKey
+    ? makeWorkosManagement(config)
+    : null;
+  // Boot-Lauf + Sweep des Vertragsende-Aufraeumens (Rufnummer freigeben + WorkOS-Identitaet
+  // loeschen, NUR fuer Tenants mit noch offenem Teilschritt - s. tenantsPendingContractEnd-
+  // Cleanup, state-ops.js). Der direkte Aufruf sitzt in billing/webhook.js (SUSPEND-Zweig);
+  // dieser Sweep ist NUR der Retry-Pfad fuer einen zuvor fehlgeschlagenen Versuch.
+  scheduleContractEndCleanup({
+    store,
+    numberProvisioner: telnyxProvisioner,
+    workos: workosManagement,
+    auditStore,
   });
   const portalStore = makePortalStore(portalRunner);
   const webAuthMw = webAuth({ secret: config.auth.sessionSecret, sessions, accounts });
@@ -211,6 +252,11 @@ export async function wireWebLogin({
     stripeWebhookPath,
     makeStripeWebhookRoute({
       config, store, audit, accounts, sessions, billing: stripeBilling, provision, messaging,
+      // 312k-Phase 4: derselbe Telnyx-Port/WorkOS-Adapter/durable Nachweis wie der
+      // periodische Sweep oben (scheduleContractEndCleanup) - EINE Quelle, kein Drift.
+      numberProvisioner: telnyxProvisioner,
+      workos: workosManagement,
+      auditStore,
     }),
   );
 

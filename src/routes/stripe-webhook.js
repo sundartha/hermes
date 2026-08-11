@@ -19,10 +19,14 @@ import { verifyStripeSignature, applyStripeWebhookSerialized } from "../billing/
 import { requirePaymentEnabled } from "../billing/payment-gate.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 
-// deps: { config, store, audit, accounts, sessions, billing, provision, messaging }.
-// GAP-03/GAP-04: messaging ist die EINE Provider-Registry-Dispatch-Funktion (DIP) fuer den
-// Plattform-Alarm-Relais - der SMS-Versand lebt HIER (Route, IO-erlaubt), NICHT in
-// billing/webhook.js (das bleibt IO-frei/testbar ohne echten Netz-Call).
+// deps: { config, store, audit, accounts, sessions, billing, provision, messaging,
+// numberProvisioner, workos, auditStore }. GAP-03/GAP-04: messaging ist die EINE Provider-
+// Registry-Dispatch-Funktion (DIP) fuer den Plattform-Alarm-Relais - der SMS-Versand lebt
+// HIER (Route, IO-erlaubt), NICHT in billing/webhook.js (das bleibt IO-frei/testbar ohne
+// echten Netz-Call). numberProvisioner/workos/auditStore (312k-Phase 4, optional -
+// applyStripeWebhook faellt fail-soft aus, s. dort) reicht wireWebLogin durch: derselbe
+// Telnyx-Port wie der DID-Release-Reconciler, der WorkOS-Management-Adapter (null ohne
+// WORKOS_MANAGEMENT_API_KEY) und der durable Postgres-audit_log-Nachweis.
 export function makeStripeWebhookRoute({
   config,
   store,
@@ -32,6 +36,9 @@ export function makeStripeWebhookRoute({
   billing,
   provision,
   messaging,
+  numberProvisioner,
+  workos,
+  auditStore,
 }) {
   return async (req, res) => {
     if (!requirePaymentEnabled(res, config, "payment disabled")) return;
@@ -54,6 +61,7 @@ export function makeStripeWebhookRoute({
     }
     const outcome = await applyStripeWebhookSerialized(event, {
       store, accounts, sessions, audit, req, provision, billing,
+      numberProvisioner, workos, auditStore,
     });
     // Plattform-Alarm (GAP-03/GAP-04): sendBootstrapAlertSms ist fail-soft - ohne
     // konfigurierten Empfaenger passiert nichts, ein Fehler bricht die Webhook-Antwort NIE ab.

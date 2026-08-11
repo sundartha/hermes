@@ -42,7 +42,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
   // den Weltdefault-Flip, s. src/store/defaults.js) -> 14.
   provisioning: 14,
-  auth: 15,
+  // 312k-Phase 4: workosManagementApiKey ergaenzt (eigener Schluessel fuer die WorkOS-
+  // Nutzerloeschung beim Vertragsende, getrennt vom Anmeldeschluessel oidcClientSecret) -> 16.
+  auth: 16,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
   // einer Preistabelle pro Modell-ID zusammengefasst (modelPricesUsd, 1 nested Key statt
   // 2 primitiver Keys) -> 10 statt 11.
@@ -82,9 +84,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 };
 // B5: llmProvider + deepseekApiKey ergaenzt -> 143.
 // FIX-1: summaryTimeoutMs ergaenzt -> 144.
-const EXPECTED_TOTAL_KEYS = 144;
+// 312k-Phase 4: workosManagementApiKey ergaenzt -> 145.
+const EXPECTED_TOTAL_KEYS = 145;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (144 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (145 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -184,7 +187,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // B5: llmProvider + deepseekApiKey sind beide primitiv (String, kein Array/nested
   // Objekt) -> 134.
   // FIX-1: summaryTimeoutMs ist primitiv (Zahl, kein Array/nested Objekt) -> 135.
-  assert.equal(checked, 135, "alle primitiven Blaetter (144 - 4 Arrays - 5 nested Objekte) geprueft");
+  // 312k-Phase 4: workosManagementApiKey ist primitiv (String, kein Array/nested Objekt) -> 136.
+  assert.equal(checked, 136, "alle primitiven Blaetter (145 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {
