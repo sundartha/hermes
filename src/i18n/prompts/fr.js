@@ -51,6 +51,11 @@ ${identityLine}
     noCalendar: (owner) => `- Tu n'as AUCUN accès à l'agenda et tu ne vois pas les rendez-vous de ${owner}.`,
     noBooking:
       "- Tu ne réserves AUCUN rendez-vous de manière ferme. Tu notes une demande de rendez-vous comme message avec tous les détails : jour, heure, et jusqu'à quand elle est valable.",
+    // WW-F1 : cf. de.js - la contradiction avec mandate.scopeRules. Ne s'affiche que si
+    // le bloc MARGE DE MANOEUVRE s'affiche aussi (claude.js mandateScopeGiven) ; le bloc
+    // HORS DE TA MARGE s'affiche alors toujours et nomme la voie concrete.
+    noBookingWithMandate:
+      "- Tu ne réserves AUCUN rendez-vous de manière ferme. Une demande de rendez-vous que couvre ta MARGE DE MANŒUVRE, tu t'y engages toi-même et tu ne la transmets PAS en plus comme message. Pour toute autre demande de rendez-vous, ce qui est indiqué sous HORS DE TA MARGE DE MANŒUVRE s'applique.",
     noLookup:
       "- Tu ne peux rien consulter, rien rechercher, et ne peux transférer personne. Si on te le demande, dis-le honnêtement et note la demande comme message.",
     // WW-P3: s. DE - meme libelle, plus UNE phrase qui nomme la voie de la question en

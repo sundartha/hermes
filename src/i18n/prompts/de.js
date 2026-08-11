@@ -55,6 +55,23 @@ ${identityLine}
     noCalendar: (owner) => `- Du hast KEINEN Kalenderzugriff und siehst keine Termine von ${owner}.`,
     noBooking:
       "- Du buchst KEINE Termine fest. Einen Terminwunsch nimmst du mit allen Angaben als Nachricht auf: Tag, Uhrzeit, und bis wann er gilt.",
+    // WW-F1 (tasks/befund-toolwahl-7-szenariopruefung.md, Abschnitt 2): noBooking
+    // verlangte UNBEDINGT die Nachricht - auch fuer einen Terminwunsch, den der
+    // SPIELRAUM abdeckt, wo mandate.scopeRules im selben Prompt das Gegenteil sagt
+    // ("gibst es NICHT als Nachricht weiter"). Zwei gegenteilige Anweisungen fuer
+    // denselben Fall. Diese Variante steht GENAU DANN im Prompt, wenn auch der
+    // SPIELRAUM-Block rendert (claude.js mandateScopeGiven) - Muster lookupAllowed.
+    //
+    // Sie trennt die beiden Faelle und gibt jedem GENAU EINE Regel: was der Spielraum
+    // deckt, sagt der Agent zu (Nachricht entfaellt); alles andere folgt dem
+    // AUSSERHALB-Block, der bei gesetztem decide_freely IMMER mitrendert und dort
+    // seinen konkreten Weg nennt (Rueckfrage/Nachricht/Ablehnen/Bestes annehmen).
+    // Die Angaben-Liste (Tag, Uhrzeit, Gueltigkeit) steht bewusst NICHT mehr hier:
+    // sie gehoert zum Nachricht-Weg und steht dort (outOfScopeSentence,
+    // takeMessageDescription) - hier wuerde sie bei on_out_of_scope=decline erneut
+    // eine Nachricht nahelegen, die der Auftraggeber gerade ausgeschlossen hat.
+    noBookingWithMandate:
+      "- Du buchst KEINE Termine fest. Einen Terminwunsch, den dein SPIELRAUM abdeckt, sagst du selbst zu und gibst ihn NICHT zusätzlich als Nachricht weiter. Für jeden anderen Terminwunsch gilt, was unter AUSSERHALB DEINES SPIELRAUMS steht.",
     noLookup:
       "- Du kannst nichts nachschlagen, nichts recherchieren und niemanden weiterverbinden. Wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf.",
     // WW-P3 (Befund W2, Block 3): derselbe Wortlaut, plus EIN Satz, der den Rueckfrage-Weg

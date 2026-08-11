@@ -86,6 +86,14 @@ function promptInputs(call) {
     // Der Prompt darf NIE auf ein Werkzeug zeigen, das im selben Zug fehlt: Kontingent
     // erschoepft, Poll nicht frisch, Tenant-Recht fehlt -> Bestandswortlaut.
     consultAvailable: consultAvailableFor(call),
+    // WW-F1: EINE Quelle (G5) fuer "steht in DIESEM Prompt ein SPIELRAUM?" - dieselbe
+    // Frage entscheidet ueber den SPIELRAUM-Block (mandateSection) UND ueber die
+    // Buchungs-Zeile in den GRENZEN (boundaryRules). Bisher entschied jede Stelle fuer
+    // sich, und beide sagten fuer denselben Terminwunsch Gegenteiliges: der Block
+    // "entscheidest du selbst ... gibst es NICHT als Nachricht weiter", die Zeile
+    // "einen Terminwunsch nimmst du als Nachricht auf" (Befund
+    // tasks/befund-toolwahl-7-szenariopruefung.md, Abschnitt 2).
+    mandateScopeGiven: Boolean(call.mandate && call.mandate.decide_freely),
     now: new Date().toLocaleString(loc.dateLocale, {
       timeZone,
       weekday: "long",
@@ -178,7 +186,14 @@ function researchBoundaryLine(b, { lookupAvailable, consultAvailable }) {
 // geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit + Werkzeug-Sparsamkeit). Die
 // Verzweigung bleibt hier (EINE Quelle, P11 D1) - nur die Zeilen kommen aus dem
 // Sprach-Baustein.
-function boundaryRules({ loc, settings: s, owner, lookupAvailable, consultAvailable }) {
+function boundaryRules({
+  loc,
+  settings: s,
+  owner,
+  lookupAvailable,
+  consultAvailable,
+  mandateScopeGiven,
+}) {
   const b = loc.prompt.boundaries;
   const lines = [b.heading];
   if (!s.allowPersonalData) lines.push(b.personalData(owner));
@@ -188,7 +203,10 @@ function boundaryRules({ loc, settings: s, owner, lookupAvailable, consultAvaila
   // byte-identisch zum Bestand.
   lines.push(
     b.noCalendar(owner),
-    b.noBooking,
+    // WW-F1: die Zeile bleibt unbedingt (E1: "du buchst KEINE Termine fest" steht in
+    // BEIDEN Varianten), nur ihr Terminwunsch-Weg folgt dem SPIELRAUM. Ohne Spielraum
+    // -> Bestandswortlaut, byte-identisch.
+    mandateScopeGiven ? b.noBookingWithMandate : b.noBooking,
     researchBoundaryLine(b, { lookupAvailable, consultAvailable }),
     // GQ-P9: unbedingt, in JEDEM Turn. Der Defekt haengt nicht an einem Werkzeug oder
     // Flag - er trat auf, WAEHREND get_consult im Satz lag: die Gegenstelle fragt nach
@@ -236,14 +254,16 @@ function outOfScopeSentenceFor(mp, onOutOfScope, consultAvailable) {
   return withConsult || mp.outOfScopeSentence[key];
 }
 
-function mandateSection({ call, owner, loc, consultAvailable }) {
+function mandateSection({ call, owner, loc, consultAvailable, mandateScopeGiven }) {
   const m = call.mandate;
   if (!hasMandateContent(m)) return "";
   const mp = loc.prompt.mandate;
   const outOfScope = outOfScopeSentenceFor(mp, m.on_out_of_scope, consultAvailable);
   const precedence = call.constraints ? mp.constraintsPrecedence : "";
   const blocks = [];
-  if (m.decide_freely)
+  // WW-F1: dasselbe Praedikat wie die Buchungs-Zeile in boundaryRules (G27: Struktur
+  // statt Konvention) - die beiden koennen nicht mehr auseinanderlaufen.
+  if (mandateScopeGiven)
     blocks.push(`${mp.scopeLabel} ${m.decide_freely}\n${mp.scopeRules}${precedence}`);
   if (m.fallback_order) blocks.push(`${mp.fallbackLabel} ${m.fallback_order}\n${mp.fallbackRules}`);
   blocks.push(`${mp.outOfScopeLabel} ${outOfScope(owner)}\n${mp.outOfScopeRules}`);

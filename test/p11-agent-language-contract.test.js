@@ -79,6 +79,10 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
       "bankData",
       "noCalendar",
       "noBooking",
+      // WW-F1: die Mandats-Variante der Buchungs-Zeile. Fehlt sie einer neuen Sprache,
+      // faellt deren Prompt auf die unbedingte Zeile zurueck - und die widerspricht
+      // mandate.scopeRules fuer jeden Terminwunsch innerhalb des Spielraums.
+      "noBookingWithMandate",
       "noLookup",
       "noLookupWithConsult",
       "noAskingCounterpartAboutOwnerWithConsult",

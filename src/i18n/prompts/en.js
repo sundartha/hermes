@@ -53,6 +53,11 @@ ${identityLine}
     noCalendar: (owner) => `- You have NO calendar access and cannot see ${owner}'s appointments.`,
     noBooking:
       "- You do NOT book appointments firmly. You take an appointment request down as a message with all details: day, time, and how long it's valid.",
+    // WW-F1: s. DE - der Selbstwiderspruch zu mandate.scopeRules. Rendert genau dann,
+    // wenn auch der LEEWAY-Block rendert (claude.js mandateScopeGiven); der
+    // AUSSERHALB-Block rendert dann immer mit und nennt den konkreten Weg.
+    noBookingWithMandate:
+      "- You do NOT book appointments firmly. An appointment request your LEEWAY covers, you commit to yourself and do NOT additionally hand off as a message. For every other appointment request, what is stated under OUTSIDE YOUR LEEWAY applies.",
     noLookup:
       "- You cannot look anything up, research anything, or transfer anyone. If that is requested, say so honestly and take the request down as a message.",
     // WW-P3: s. DE - derselbe Wortlaut plus EIN Satz, der den Rueckfrage-Weg nennt.
