@@ -131,6 +131,18 @@ export function startBillingSubscribe(plan) {
   return apiRequest("/api/self-service/billing/subscribe", { method: "POST", body: { plan } });
 }
 
+// 312k-P3: Vormerkung/Ruecknahme der Kuendigung zum Periodenende (§ 312k BGB). Beide
+// POST same-origin, KEIN Body (die Identitaet kommt aus der Session, nie aus dem Client -
+// Muster startBillingSubscribe ohne Body-Identitaet). Erfolg (auch beim idempotenten
+// Doppelklick, s. Gateway self-service-routes.js): { cancelAtPeriodEnd, currentPeriodEnd }.
+// Wirft ApiError bei non-2xx (409 no_subscription, 401 abgelaufene Session).
+export function startBillingCancel() {
+  return apiRequest("/api/self-service/billing/cancel", { method: "POST" });
+}
+export function startBillingResume() {
+  return apiRequest("/api/self-service/billing/resume", { method: "POST" });
+}
+
 // Liest den schlanken Billing-Status (GET, webAuthPendingMw -> auch fuer suspendierte
 // Tenants erreichbar). NUR Lifecycle-Flags { paymentEnabled, hasCard, planSlug, status }
 // -- keine PII/Secrets, keine active-only /state-Felder. Der Aktivierungs-Pfad (suspended)
@@ -219,9 +231,17 @@ export function cardStatus(data) {
 // die Form `data.subscription` annimmt (Contract-Grenze, R5). Fehlt das Feld
 // (PAYMENT_ENABLED aus / kein Abo) -> { planSlug:"", currentPeriodEnd:0 } (neutral,
 // nie undefined). currentPeriodEnd ist ein Unix-Sekunden-Epoch (Backend, store.tenantSubscription).
+// 312k-P1/P3: cancelAtPeriodEnd zusaetzlich zu planSlug/currentPeriodEnd -- fehlt das
+// Feld (aelterer Server) -> false (fail-closed neutral: "nicht gekuendigt" ist der
+// unauffaellige Default, nie true ohne Beleg vom Server, Muster der uebrigen booleschen
+// Server-Flags in dieser Datei, z.B. hasCard/isNumberProvisioning).
 export function subscriptionFrom(data) {
   const sub = (data && data.subscription) || {};
-  return { planSlug: sub.planSlug || "", currentPeriodEnd: sub.currentPeriodEnd || 0 };
+  return {
+    planSlug: sub.planSlug || "",
+    currentPeriodEnd: sub.currentPeriodEnd || 0,
+    cancelAtPeriodEnd: !!sub.cancelAtPeriodEnd,
+  };
 }
 
 // Liest das Minuten-Kontingent aus der state-Antwort (BK4). Nur ein Objekt mit den

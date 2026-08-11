@@ -188,6 +188,12 @@ export async function wireWebLogin({
         billing: stripeBilling,
         accounts,
         provision,
+        // 312k-P3: Nachweis auf dauerhaftem Datentraeger (§ 312k BGB) fuer die
+        // Kuendigung/Ruecknahme - derselbe auditStore, den makeAdminRoutes oben schon
+        // fuer tenant_approve/tenant_suspend nutzt (EINE Postgres-audit_log-Quelle,
+        // KEIN zweiter Schreibpfad). util.audit (Parameter audit oben) bleibt reiner
+        // console.log und ist fuer den gesetzlich verlangten Nachweis untauglich.
+        auditStore,
       }),
     );
   }

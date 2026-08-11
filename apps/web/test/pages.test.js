@@ -36,6 +36,8 @@ const MARKETING_PAGES = [
   "preise/index.html",
   "registrieren/index.html",
   "404.html",
+  // 312k-P3: oeffentliche Kuendigungsseite, dieselbe Hermes-Huelle wie so-funktionierts.
+  "kuendigen/index.html",
 ];
 const LEGAL_PAGES = [
   "impressum/index.html",
@@ -48,6 +50,7 @@ const LEGAL_PAGES = [
 const DE_PAGES = [
   "so-funktionierts/index.html",
   "preise/index.html",
+  "kuendigen/index.html",
   ...LEGAL_PAGES,
 ];
 const EN_PAGES = ["registrieren/index.html", "404.html"];

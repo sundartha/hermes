@@ -251,6 +251,11 @@ const legalDocs = [
               {legalDocs.map((entry) => (
                 <a class="site-footer__link" href={entry.href} data-legal-open={entry.slug} data-i18n={entry.i18n}>{entry.label}</a>
               ))}
+              <!-- § 312k BGB: gesetzlich vorgegebener Wortlaut, staendig verfuegbar im
+                   Fussband. KEIN data-i18n - die Beschriftung bleibt Deutsch, auch wenn
+                   der Sprachschalter auf EN steht (der Wortlaut ist nicht frei waehlbar,
+                   s. Bericht). -->
+              <a class="site-footer__link" href="/kuendigen">Verträge kündigen</a>
               <a class="site-footer__link" href={`mailto:${CONTACT}`} data-i18n="contact">Kontakt</a>
             </span>
           </footer>
@@ -535,6 +540,9 @@ const legalDocs = [
           {legalDocs.map((entry) => (
             <a class="menu-foot__link" href={entry.href} data-legal-open={entry.slug} data-i18n={entry.i18n}>{entry.label}</a>
           ))}
+          <!-- § 312k BGB: derselbe gesetzlich vorgegebene Wortlaut wie im Fussband oben,
+               KEIN data-i18n (s. dort). -->
+          <a class="menu-foot__link" href="/kuendigen">Verträge kündigen</a>
           <a class="menu-foot__link" href={`mailto:${CONTACT}`} data-i18n="contact">Kontakt</a>
         </div>
         <span class="menu-foot__copy" data-i18n="footerCopy">© Sundartha — Hermes, dein Telefonassistent</span>

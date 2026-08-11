@@ -1,0 +1,58 @@
+---
+// § 312k BGB verlangt eine staendig verfuegbare, unmittelbar und leicht zugaengliche
+// Kuendigungsmoeglichkeit - im eingeloggten Kundenbereich allein waere das strittig.
+// Diese Seite ist deshalb OEFFENTLICH (kein Login noetig, um sie zu ERREICHEN) und
+// erklaert den Weg; der eigentliche Kuendigungsvorgang selbst braucht weiterhin eine
+// Identitaet (POST /api/self-service/billing/cancel hinter webAuthMw) - OHNE
+// Identitaetspruefung koennte sonst jeder fremde Vertraege kuendigen. Ruhende Fassung
+// im Stil von so-funktionierts.astro/impressum.astro (Hermes-Huelle, KEIN eigener
+// Login-Flow hier).
+import Hermes from "../layouts/Hermes.astro";
+import { LOGIN_URL } from "../lib/routes.js";
+
+const CONTACT = "kontakt@sundartha.com";
+---
+
+<Hermes
+  title="Verträge kündigen — Hermes von Sundartha"
+  description="So kündigst du deinen Hermes-Vertrag: über die Schaltfläche im Kundenbereich oder formlos per E-Mail."
+>
+  <h1 class="doc-title">Verträge <em>kündigen</em>.</h1>
+  <p class="doc-lead">
+    Du kannst deinen Hermes-Vertrag jederzeit kündigen — über deinen Kundenbereich oder
+    formlos per E-Mail. Die Kündigung wirkt zum Ende des laufenden
+    Abrechnungszeitraums; bis dahin bleibt dein Assistent wie gewohnt erreichbar.
+  </p>
+
+  <div class="doc-block doc-steps">
+    <div class="sheet__card">
+      <span class="step">
+        <span class="step__num">01</span>
+        <span class="step__body">
+          <span class="step__title">Im Kundenbereich</span>
+          <span class="step__text">
+            Melde dich an und klicke im Abschnitt „Payment method“ auf
+            „Verträge kündigen“. Nach einer kurzen Bestätigung — mit dem genauen
+            Termin, zu dem die Kündigung wirkt — ist der Vertrag gekündigt.
+          </span>
+        </span>
+      </span>
+      <span class="rule" aria-hidden="true"></span>
+      <span class="step">
+        <span class="step__num">02</span>
+        <span class="step__body">
+          <span class="step__title">Formlos per E-Mail</span>
+          <span class="step__text">
+            Alternativ genügt eine E-Mail an <a href={`mailto:${CONTACT}`}>{CONTACT}</a> —
+            ganz ohne Anmeldung. Wir bestätigen die Kündigung und den Termin, zu dem sie wirkt.
+          </span>
+        </span>
+      </span>
+    </div>
+  </div>
+
+  <p class="doc-note">
+    <a href={LOGIN_URL}>Zum Kundenbereich</a> — dort findest du die Schaltfläche
+    „Verträge kündigen“.
+  </p>
+</Hermes>

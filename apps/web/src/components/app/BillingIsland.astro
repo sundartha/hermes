@@ -16,6 +16,12 @@
 // meldet ihn per AUTH_EVENT -- diese Insel hoert mit. Nach erfolgreicher Buchung re-fetcht
 // sie den State selbst und re-dispatcht AUTH_EVENT (so gehen ALLE Inseln auf den frischen
 // Stand: aktiver Plan, ggf. Nummer). Anzeige-Strings nur ueber textContent (XSS-Schutz).
+import {
+  CANCEL_BUTTON_LABEL,
+  CONFIRM_CANCEL_BUTTON_LABEL,
+  CANCEL_ABORT_LABEL,
+  RESUME_BUTTON_LABEL,
+} from "../../lib/subscribe.js";
 ---
 
 <!-- Default versteckt: ohne PAYMENT_ENABLED (hasCard kein Boolean) bleibt der
@@ -33,6 +39,23 @@
     <p id="sub-quota" class="muted" hidden></p>
     <div id="sub-tiles" class="plans"></div>
     <p id="sub-msg" class="billing-msg" hidden></p>
+
+    <!-- 312k-P3: zweistufiger Kuendigungsweg (§ 312k BGB). Sichtbar NUR mit aktivem
+         Abo (renderSubscription blendet den Block sonst aus). Stufe 1: CANCEL_BUTTON_LABEL
+         (gesetzlich vorgegebener Wortlaut). Stufe 2: cancel-confirm nennt WAS/WANN und
+         bietet CONFIRM_CANCEL_BUTTON_LABEL (ebenfalls gesetzlich vorgegeben) sowie den
+         Abbruch. Bereits gekuendigt -> cancel-status + Ruecknahme-Schaltflaeche. -->
+    <div id="cancel-block" class="cancel-block" hidden>
+      <p id="cancel-status" class="muted" hidden></p>
+      <button id="cancel-open" class="btn" type="button" hidden>{CANCEL_BUTTON_LABEL}</button>
+      <div id="cancel-confirm" class="cancel-confirm" hidden>
+        <p id="cancel-confirm-text"></p>
+        <button id="cancel-confirm-btn" class="btn" type="button">{CONFIRM_CANCEL_BUTTON_LABEL}</button>
+        <button id="cancel-abort" class="plan-skip" type="button">{CANCEL_ABORT_LABEL}</button>
+      </div>
+      <button id="resume-btn" class="btn" type="button" hidden>{RESUME_BUTTON_LABEL}</button>
+      <p id="cancel-msg" class="billing-msg" hidden></p>
+    </div>
   </div>
 </section>
 
@@ -49,7 +72,15 @@
     fetchTenantState,
     startBillingSetupCheckout,
   } from "../../lib/api.js";
-  import { planTiles, subscriptionLine, quotaLine, wireSubscribe } from "../../lib/subscribe.js";
+  import {
+    planTiles,
+    subscriptionLine,
+    quotaLine,
+    wireSubscribe,
+    cancelConfirmText,
+    cancelStatusLine,
+    wireCancelControls,
+  } from "../../lib/subscribe.js";
 
   // Rueckkehr-Parameter (kein Magic-String an den Vergleichsstellen).
   const RETURN_PARAM_CARD = "card";
@@ -71,6 +102,17 @@
   const subTilesEl = document.getElementById("sub-tiles");
   const subMsgEl = document.getElementById("sub-msg");
 
+  // 312k-P3: die vier festen Kuendigungs-Steuerelemente + Nebenbereiche.
+  const cancelBlockEl = document.getElementById("cancel-block");
+  const cancelStatusEl = document.getElementById("cancel-status");
+  const cancelOpenEl = document.getElementById("cancel-open");
+  const cancelConfirmEl = document.getElementById("cancel-confirm");
+  const cancelConfirmTextEl = document.getElementById("cancel-confirm-text");
+  const cancelConfirmBtnEl = document.getElementById("cancel-confirm-btn");
+  const cancelAbortEl = document.getElementById("cancel-abort");
+  const resumeBtnEl = document.getElementById("resume-btn");
+  const cancelMsgEl = document.getElementById("cancel-msg");
+
   function showMessage(text) {
     msgEl.textContent = text;
     msgEl.hidden = false;
@@ -81,10 +123,38 @@
     subMsgEl.hidden = !text;
   }
 
+  function showCancelMessage(text) {
+    cancelMsgEl.textContent = text;
+    cancelMsgEl.hidden = !text;
+  }
+
   // Kontingent-Zeile (text==null -> verstecken; sonst zeigen).
   function renderQuota(text) {
     subQuotaEl.textContent = text || "";
     subQuotaEl.hidden = !text;
+  }
+
+  // 312k-P3: Kuendigungs-Region. NUR mit aktivem Abo sichtbar (kein Abo -> nichts zu
+  // kuendigen, Block bleibt versteckt). cancelAtPeriodEnd -> Zustand + Ruecknahme;
+  // sonst die zweistufige Kuendigung (Stufe 1 sichtbar, Stufe 2 erst nach Klick).
+  // Der Bestaetigungstext wird bei JEDEM Render neu gesetzt (aktueller Plan/Termin),
+  // die Sichtbarkeit der zweiten Stufe bleibt dabei unberuehrt (kein Zuklappen mitten
+  // im Bestaetigungs-Dialog durch einen Hintergrund-Re-Render).
+  function renderCancelBlock(sub) {
+    cancelBlockEl.hidden = !sub.planSlug;
+    if (!sub.planSlug) return;
+    cancelConfirmTextEl.textContent = cancelConfirmText(sub);
+    if (sub.cancelAtPeriodEnd) {
+      cancelStatusEl.textContent = cancelStatusLine(sub);
+      cancelStatusEl.hidden = false;
+      cancelOpenEl.hidden = true;
+      cancelConfirmEl.hidden = true;
+      resumeBtnEl.hidden = false;
+    } else {
+      cancelStatusEl.hidden = true;
+      resumeBtnEl.hidden = true;
+      if (cancelConfirmEl.hidden) cancelOpenEl.hidden = false; // Stufe 2 nicht schon offen
+    }
   }
 
   // Abo-Region: aktiver Plan -> Plan-Zeile + Kontingent, Kacheln aus; sonst no-sub
@@ -102,6 +172,7 @@
       subTilesEl.replaceChildren(...planTiles(document, numberSetupFeeFrom(data)));
       subTilesEl.hidden = false;
     }
+    renderCancelBlock(sub);
   }
 
   // Sichtbarkeit + Status aus genau dem state, den die Auth-Insel ermittelt hat.
@@ -148,6 +219,21 @@
   // EIN delegierter Subscribe-Listener am stabilen Kachel-Container (G5). Die Kacheln
   // werden bei jedem Render ersetzt -> kein Binding pro Button, kein Listener-Leak.
   wireSubscribe(subTilesEl, { onSubscribed: refreshState, onMessage: showSubMessage });
+
+  // 312k-P3: die vier festen Kuendigungs-Steuerelemente. onDone re-fetcht denselben Weg
+  // wie onSubscribed (der Webhook bestaetigt den geschriebenen Zustand ohnehin kurz
+  // danach noch einmal - der Re-Fetch hier zeigt nur schneller, was der Server bereits
+  // gespeichert hat, s. self-service-routes.js setSubscriptionCancellation).
+  wireCancelControls(
+    {
+      openBtn: cancelOpenEl,
+      confirmPanel: cancelConfirmEl,
+      confirmBtn: cancelConfirmBtnEl,
+      abortBtn: cancelAbortEl,
+      resumeBtn: resumeBtnEl,
+    },
+    { onDone: refreshState, onMessage: showCancelMessage },
+  );
 
   // Rueckkehr von Stripe Checkout: kurze Rueckmeldung. Der echte Status kommt ohnehin
   // aus dem naechsten state-Fetch (AUTH_EVENT). ?card=ok|canceled|error = reiner

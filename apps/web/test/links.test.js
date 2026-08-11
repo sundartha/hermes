@@ -42,6 +42,8 @@ const PAGES = [
   "impressum/index.html",
   "datenschutz/index.html",
   "agb/index.html",
+  // 312k-P3: oeffentliche Kuendigungsseite.
+  "kuendigen/index.html",
 ];
 
 // Gilt eine interne Route als existent? (gebauter Pfad pro href-Ziel)

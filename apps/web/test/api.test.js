@@ -20,6 +20,9 @@ import {
   numberSetupFeeFrom,
   shouldPollNumberStatus,
   startBillingSetupCheckout,
+  startBillingCancel,
+  startBillingResume,
+  subscriptionFrom,
 } from "../src/lib/api.js";
 // Backend-Quelle der Wahrheit fuer die Anzeige-Status-Werte (Drift-Test, G22): der
 // Frontend-Spiegel NUMBER_STATUS muss exakt NUMBER_DISPLAY_STATUS entsprechen.
@@ -369,4 +372,71 @@ test("numberSetupFeeFrom: fehlend/0/negativ/nicht-numerisch -> null", () => {
   assert.equal(numberSetupFeeFrom({ numberSetupFeeCents: 0 }), null);
   assert.equal(numberSetupFeeFrom({ numberSetupFeeCents: -5 }), null);
   assert.equal(numberSetupFeeFrom({ numberSetupFeeCents: "500" }), null);
+});
+
+// 312k-P1/P3: subscriptionFrom liest jetzt zusaetzlich cancelAtPeriodEnd.
+test("subscriptionFrom: befuellte Felder inkl. cancelAtPeriodEnd unveraendert durch", () => {
+  assert.deepEqual(
+    subscriptionFrom({ subscription: { planSlug: "starter", currentPeriodEnd: 123, cancelAtPeriodEnd: true } }),
+    { planSlug: "starter", currentPeriodEnd: 123, cancelAtPeriodEnd: true },
+  );
+});
+
+test("subscriptionFrom: fehlendes Feld/fehlender Block -> neutrale Defaults, cancelAtPeriodEnd fail-closed false", () => {
+  assert.deepEqual(subscriptionFrom(undefined), { planSlug: "", currentPeriodEnd: 0, cancelAtPeriodEnd: false });
+  assert.deepEqual(subscriptionFrom({ subscription: { planSlug: "starter", currentPeriodEnd: 1 } }), {
+    planSlug: "starter",
+    currentPeriodEnd: 1,
+    cancelAtPeriodEnd: false,
+  });
+});
+
+// 312k-P3: startBillingCancel/startBillingResume -- POST same-origin, KEIN Body (die
+// Identitaet kommt aus der Session, Muster startBillingSetupCheckout ohne Body).
+test("startBillingCancel postet same-origin ohne Body, KEIN Authorization-Header", async () => {
+  const f = stubFetch(() =>
+    fakeResponse({ ok: true, status: 200, json: { cancelAtPeriodEnd: true, currentPeriodEnd: 123 } }),
+  );
+  try {
+    const result = await startBillingCancel();
+    assert.deepEqual(result, { cancelAtPeriodEnd: true, currentPeriodEnd: 123 });
+    const { path, options } = f.calls[0];
+    assert.equal(path, "/api/self-service/billing/cancel");
+    assert.equal(options.method, "POST");
+    assert.equal(options.credentials, "same-origin");
+    assert.equal(options.body, undefined, "kein Body -- Identitaet kommt aus der Session");
+    assert.equal(options.headers.Authorization, undefined);
+  } finally {
+    f.restore();
+  }
+});
+
+test("startBillingCancel wirft ApiError bei non-2xx (409 no_subscription)", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 409, json: { error: "no_subscription" } }));
+  try {
+    await assert.rejects(startBillingCancel(), (err) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.status, 409);
+      assert.equal(err.code, "no_subscription");
+      return true;
+    });
+  } finally {
+    f.restore();
+  }
+});
+
+test("startBillingResume postet same-origin ohne Body", async () => {
+  const f = stubFetch(() =>
+    fakeResponse({ ok: true, status: 200, json: { cancelAtPeriodEnd: false, currentPeriodEnd: 123 } }),
+  );
+  try {
+    const result = await startBillingResume();
+    assert.deepEqual(result, { cancelAtPeriodEnd: false, currentPeriodEnd: 123 });
+    const { path, options } = f.calls[0];
+    assert.equal(path, "/api/self-service/billing/resume");
+    assert.equal(options.method, "POST");
+    assert.equal(options.body, undefined);
+  } finally {
+    f.restore();
+  }
 });

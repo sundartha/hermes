@@ -10,7 +10,15 @@
 // ueber innerHTML. Plan-Daten stammen aus dem eingefrorenen Build-Spiegel
 // (lib/plans.js), kein Tenant-Input; der textContent-only-Bau ist dennoch die Regel.
 
-import { ApiError, HTTP_CONFLICT, HTTP_UNAUTHORIZED, startBillingSubscribe, startBillingSetupCheckout } from "./api.js";
+import {
+  ApiError,
+  HTTP_CONFLICT,
+  HTTP_UNAUTHORIZED,
+  startBillingSubscribe,
+  startBillingSetupCheckout,
+  startBillingCancel,
+  startBillingResume,
+} from "./api.js";
 import { PLAN_CATALOG, formatPlanPrice, findPlan } from "./plans.js";
 import { el } from "./render.js";
 
@@ -239,4 +247,104 @@ export function dismissPlanChoice(els) {
   els.subtitle.textContent = PLAN_CHOICE_COPY.bannerText;
   els.tiles.replaceChildren();
   els.skip.hidden = true;
+}
+
+// ---- 312k-P3: Kuendigungs-Weg (§ 312k BGB) ------------------------------------
+// Zwei Schaltflaechen-Beschriftungen sind GESETZLICH VORGEGEBEN, nicht frei waehlbar
+// (Auftragsnotiz) - deshalb Deutsch, obwohl das Dashboard sonst durchgaengig Englisch ist
+// (SPRACHBRUCH IST GEWOLLT, kein Versehen; s. Bericht). EINE Quelle (G25) je Text: die
+// Astro-Insel importiert diese Konstanten statt den Wortlaut ein zweites Mal zu tragen.
+export const CANCEL_BUTTON_LABEL = "Verträge kündigen";
+export const CONFIRM_CANCEL_BUTTON_LABEL = "Jetzt kündigen";
+// Die uebrigen Beschriftungen sind NICHT gesetzlich vorgegeben -> Englisch, Muster der
+// Nachbartexte (SUBSCRIBE_LABEL usw. oben).
+export const CANCEL_ABORT_LABEL = "Never mind";
+export const RESUME_BUTTON_LABEL = "Resume subscription";
+
+const DATE_LOCALE_DE = "de-DE";
+
+// § 312k verlangt Klarheit ueber den Wirkungstermin der Kuendigung; das deutsche
+// Datumsformat (TT.MM.JJJJ) ist hier Teil dieser Eindeutigkeit und bewusst getrennt vom
+// sonstigen Dashboard-Datum (renewDate oben, en-US) - nur fuer die Kuendigungs-Anzeige/
+// -Bestaetigung. Fehlend/ungueltig -> "" (der Aufrufer zeigt dann einen datumslosen Satz).
+function germanDate(epochSeconds) {
+  if (!epochSeconds) return "";
+  const d = new Date(epochSeconds * MS_PER_SECOND);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(DATE_LOCALE_DE);
+}
+
+// Zweite Stufe (Bestaetigungsansicht): WAS gekuendigt wird (Plan-Name) + WANN es wirkt
+// (Periodenende, deutsch formatiert) - die beiden Pflichtangaben aus dem Auftrag.
+export function cancelConfirmText(sub) {
+  const name = planName(sub.planSlug);
+  const date = germanDate(sub.currentPeriodEnd);
+  return date
+    ? `Your ${name} subscription will end on ${date}. Hermes keeps working as usual until then.`
+    : `Your ${name} subscription will end at the close of the current billing period.`;
+}
+
+// Zustand, wenn bereits gekuendigt: Datum, bis zu dem der Dienst noch laeuft (deutsch
+// formatiert, s. germanDate). Reiner String (DOM-frei, testbar); der Aufrufer setzt ihn
+// via textContent (Muster subscriptionLine/quotaLine).
+export function cancelStatusLine(sub) {
+  const date = germanDate(sub.currentPeriodEnd);
+  return date ? `Cancelled — active until ${date}.` : "Cancelled.";
+}
+
+// Rueckmeldungen der Kuendigungs-/Ruecknahme-Zustandsmaschine (Muster SUBSCRIBE_MESSAGES).
+export const CANCEL_MESSAGES = Object.freeze({
+  cancelled: "Subscription cancelled.",
+  resumed: "Subscription resumed.",
+  sessionExpired: SUBSCRIBE_MESSAGES.sessionExpired,
+  noSubscription: "No active subscription to cancel.",
+  cancelFailed: "Couldn't cancel your subscription. Please try again.",
+  resumeFailed: "Couldn't resume your subscription. Please try again.",
+});
+
+// Ein Kuendigungs-/Ruecknahme-Lauf: POST ohne Body (die Identitaet kommt aus der Session,
+// s. api.js). Erfolg (AUCH beim idempotenten Doppelklick - der Gateway antwortet dann mit
+// demselben Body, s. self-service-routes.js) -> Rueckmeldung + onDone(result) (Aufrufer
+// re-fetcht /state, Muster onSubscribed). 409 no_subscription -> Hinweis (die Insel zeigt
+// die Schaltflaeche ohnehin nur bei vorhandenem Abo, dies ist das Sicherheitsnetz gegen ein
+// zwischenzeitlich beendetes Abo in einem zweiten Tab). 401 -> Session abgelaufen.
+async function runCancellationStep(op, messages, opts) {
+  try {
+    const result = await op();
+    opts.onMessage(messages.ok, true);
+    await opts.onDone(result);
+  } catch (err) {
+    if (isConflict(err)) return opts.onMessage(messages.conflict, false);
+    if (isUnauthorized(err)) return opts.onMessage(CANCEL_MESSAGES.sessionExpired, false);
+    return opts.onMessage(messages.failed, false);
+  }
+}
+
+// Verdrahtet die vier festen Kuendigungs-Steuerelemente (KEINE dynamische Liste wie die
+// Plan-Kacheln -> direkte Listener statt Delegation). els = { openBtn, confirmPanel,
+// confirmBtn, abortBtn, resumeBtn }. openBtn/abortBtn schalten NUR Sichtbarkeit (rein DOM,
+// kein Netz - die zweite Stufe ist noch keine Kuendigung). confirmBtn/resumeBtn loesen den
+// jeweiligen Stripe-Call aus. onMessage(text, ok) + onDone(result) wie wireSubscribe.
+export function wireCancelControls(els, { onMessage, onDone } = {}) {
+  els.openBtn.addEventListener("click", () => {
+    els.confirmPanel.hidden = false;
+    els.openBtn.hidden = true;
+  });
+  els.abortBtn.addEventListener("click", () => {
+    els.confirmPanel.hidden = true;
+    els.openBtn.hidden = false;
+  });
+  els.confirmBtn.addEventListener("click", () =>
+    runCancellationStep(
+      startBillingCancel,
+      { ok: CANCEL_MESSAGES.cancelled, conflict: CANCEL_MESSAGES.noSubscription, failed: CANCEL_MESSAGES.cancelFailed },
+      { onMessage, onDone },
+    ),
+  );
+  els.resumeBtn.addEventListener("click", () =>
+    runCancellationStep(
+      startBillingResume,
+      { ok: CANCEL_MESSAGES.resumed, conflict: CANCEL_MESSAGES.noSubscription, failed: CANCEL_MESSAGES.resumeFailed },
+      { onMessage, onDone },
+    ),
+  );
 }
