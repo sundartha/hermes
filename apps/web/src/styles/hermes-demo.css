@@ -16,12 +16,19 @@
  * fuellt die breite Buehne am Desktop und die hohe Kachel am Handy.
  * ========================================================================== */
 
-@keyframes hdA1 { 0% { opacity: 0; transform: translateY(14px); } 1.7%, 10.5% { opacity: 1; transform: none; } 12.5%, 100% { opacity: 0; transform: translateY(-14px); } }
-@keyframes hdA2 { 0%, 13.9% { opacity: 0; transform: translateY(14px); } 15.7%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; transform: translateY(-14px); } }
-@keyframes hdA3 { 0%, 29.7% { opacity: 0; transform: translateY(14px); } 31.4%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; transform: translateY(-14px); } }
-@keyframes hdA4 { 0%, 42.9% { opacity: 0; transform: translateY(14px); } 44.6%, 51.3% { opacity: 1; transform: none; } 53.3%, 100% { opacity: 0; transform: translateY(-14px); } }
-@keyframes hdA5 { 0%, 54.7% { opacity: 0; transform: translateY(14px); } 56.4%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; transform: translateY(-14px); } }
-@keyframes hdA6 { 0%, 86.3% { opacity: 0; transform: translateY(14px); } 88%, 97.4% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+/* visibility wandert mit: alle sechs Akte liegen uebereinander im selben
+ * Rahmen. Nur mit opacity:0 bleibt ein abgeblendeter Akt trotzdem
+ * klickbar und faengt die Klicks des sichtbaren Akts ab (die Kopieren-
+ * Knoepfe in Akt 2 lagen so unter den Ergebniszeilen von Akt 6).
+ * visibility ist in Animationen absichtlich "unscharf": sobald ein Ende
+ * des Intervalls visible ist, gilt visible fuer das ganze Intervall — die
+ * Ein-/Ausblende bleibt also sichtbar, nur die Ruhephasen sind wirklich weg. */
+@keyframes hdA1 { 0% { opacity: 0; visibility: visible; transform: translateY(14px); } 1.7%, 10.5% { opacity: 1; visibility: visible; transform: none; } 12.5%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
+@keyframes hdA2 { 0%, 13.9% { opacity: 0; visibility: hidden; transform: translateY(14px); } 15.7%, 26.3% { opacity: 1; visibility: visible; transform: none; } 28.3%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
+@keyframes hdA3 { 0%, 29.7% { opacity: 0; visibility: hidden; transform: translateY(14px); } 31.4%, 39.5% { opacity: 1; visibility: visible; transform: none; } 41.4%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
+@keyframes hdA4 { 0%, 42.9% { opacity: 0; visibility: hidden; transform: translateY(14px); } 44.6%, 51.3% { opacity: 1; visibility: visible; transform: none; } 53.3%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
+@keyframes hdA5 { 0%, 54.7% { opacity: 0; visibility: hidden; transform: translateY(14px); } 56.4%, 82.9% { opacity: 1; visibility: visible; transform: none; } 84.9%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
+@keyframes hdA6 { 0%, 86.3% { opacity: 0; visibility: hidden; transform: translateY(14px); } 88%, 97.4% { opacity: 1; visibility: visible; transform: none; } 100% { opacity: 0; visibility: hidden; } }
 
 @keyframes hdS1 { 0%, 15.8% { opacity: 0; transform: translateY(9px); } 17.1%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; } }
 @keyframes hdS2 { 0%, 18.4% { opacity: 0; transform: translateY(9px); } 19.7%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; } }
@@ -245,6 +252,12 @@
   flex-direction: column;
   gap: clamp(9px, 2cqh, 15px);
   padding: 0 clamp(16px, 4cqw, 44px) clamp(18px, 3.6cqh, 28px);
+  /* Eine Groesse fuer beides: die Pause-Taste steht links neben der Zeitachse,
+     Schrittzeile und Leiste beginnen darum an derselben Kante. Nur so kann
+     eine Ueberschrift ueber ihrem Abschnitt der Leiste stehen. */
+  --hd-pause-size: clamp(30px, 3.4cqw, 42px);
+  --hd-ctrl-gap: clamp(10px, 2.6cqw, 34px);
+  --hd-rail-inset: calc(var(--hd-pause-size) + var(--hd-ctrl-gap));
 }
 
 .hd-step {
@@ -273,6 +286,8 @@
   height: 22px;
   cursor: pointer;
   touch-action: none;
+  /* Beginnt buendig mit der Schrittzeile, nicht unter der Pause-Taste. */
+  margin-left: var(--hd-rail-inset, 0px);
 }
 .hd-track > span:first-child {
   flex: 1 1 auto;
@@ -310,7 +325,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(30px, 3.4cqw, 42px);
+  width: var(--hd-pause-size, clamp(30px, 3.4cqw, 42px));
   aspect-ratio: 1;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.4);
@@ -398,10 +413,13 @@
      aneinanderzustossen. */
   .hd-steps {
     display: grid !important;
-    grid-template-columns: 1fr;
+    /* Schmale Kachel: kein Platz fuer drei Spalten — die Schritte liegen
+       uebereinander und blenden nacheinander ein (hdStep*m). */
+    grid-template-columns: 1fr !important;
   }
   .hd-step {
     grid-area: 1 / 1;
+    justify-self: center;
     font-size: clamp(12px, 3.6cqw, 15px);
     letter-spacing: 0.1em;
     white-space: nowrap;
@@ -685,14 +703,23 @@
 .hd-controls {
   display: flex;
   align-items: center;
-  gap: clamp(10px, 2.6cqw, 34px);
+  gap: var(--hd-ctrl-gap, clamp(10px, 2.6cqw, 34px));
 }
+/* Die drei Ueberschriften stehen ueber IHREM Abschnitt der Zeitachse, nicht
+ * gleichmaessig verteilt: die Spaltenbreiten sind exakt die Abstaende der
+ * Aktwechsel-Marken (12,5 % und 41,4 % — dieselben Werte wie data-hd-tick).
+ * Schritt 1 = Akt 1, Schritt 2 = Akt 2+3, Schritt 3 = Akt 4-6. */
 .hd-steps {
   flex: 1 1 auto;
-  display: flex;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 12.5% 28.9% 58.6%;
   align-items: center;
-  justify-content: space-between;
-  gap: clamp(10px, 2.6cqw, 34px);
+  gap: 0;
+}
+.hd-step {
+  justify-self: center;
+  white-space: nowrap;
 }
 .hd-rail {
   display: block;
