@@ -36,6 +36,13 @@ test("5.1: starter und business sind feld-gleich (nur includedMinutes unterschei
   }
 });
 
+test("Owner-Entscheidung 2026-08-11: allowConsult ist fuer JEDEN Katalog-Slug true (Kernfunktion, kein Owner-Vorbehalt mehr)", () => {
+  for (const slug of CATALOG_SLUGS) {
+    const profile = planProfileFor(slug);
+    assert.equal(profile.allowConsult, true, `${slug}: allowConsult != true`);
+  }
+});
+
 test("Toll-Fraud-Invariante: nie unrestricted, nie eigene Allowlists je Slug", () => {
   for (const slug of CATALOG_SLUGS) {
     const profile = planProfileFor(slug);

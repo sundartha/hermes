@@ -86,8 +86,8 @@ export function findPlan(slug) {
 //   allowedCountryCodes=[]   - kein per-Profil-Land-Freibrief; globales Land-Gate bleibt
 //                              Schnittmenge (so restriktiv wie heute)
 //   allowCalendar/Booking=false - Funktion bewusst verworfen
-//   allowConsult=false       - AL-P13: der Consult-Kanal bleibt eine Owner-Faehigkeit,
-//                              bis die Abnahme durch ist (kein Plan-Freibrief)
+//   allowConsult=true        - Owner-Entscheidung 2026-08-11: Kernfunktion des Produkts,
+//                              fuer alle Plaene freigeschaltet (kein Owner-Vorbehalt mehr)
 //   allowLookup=false        - AL-P10b: dasselbe fuer den In-Call-Nachschlag (er bringt
 //                              einen ZWEITEN Auftragsverarbeiter mit)
 //   maxCallsPerHour=null     - keine Profil-Senkung; faellt auf den Pro-Tenant-Default
@@ -107,9 +107,11 @@ const PAID_PLAN_PROFILE = Object.freeze({
   allowedCountryCodes: Object.freeze([]),
   unrestricted: false,
   allowCalendar: false,
-  // AL-P13: Consult-Kanal ist eine Owner-Faehigkeit bis die Abnahme (10 echte
-  // place_call aus claude.ai + 5 aus ChatGPT, O9) durch ist - kein Plan-Freibrief.
-  allowConsult: false,
+  // Owner-Entscheidung 2026-08-11: der Consult-Kanal ist Kernfunktion des
+  // Produkts und steht ab sofort allen Plaenen offen. Der Rueckfrage-Kanal ist
+  // das, wofuer der Assistent gebaut ist - er fragt waehrend des Anrufs beim
+  // Auftraggeber nach, statt das Gespraech scheitern zu lassen.
+  allowConsult: true,
   // AL-P10b: der Nachschlag bleibt eine Owner-Faehigkeit, bis Testanruf und
   // Datenschutzerklaerung durch sind (zweiter Auftragsverarbeiter) - kein Plan-Freibrief.
   allowLookup: false,
