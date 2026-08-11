@@ -20,6 +20,7 @@ import {
   OWNER_TEST_NUMBER,
 } from "../../test/helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
+import { LLM_PROVIDER } from "../../src/llm/provider.js";
 import { DRIVERS } from "./drivers.mjs";
 import { nextCalleeTurn } from "./persona.mjs";
 import { judgeConversation } from "./judge.mjs";
@@ -28,11 +29,15 @@ import { parseMetricsLog } from "./metrics-parse.mjs";
 import { startExaFake } from "./exa-fake.mjs";
 import { startConsultPump } from "./consult-pump.mjs";
 
-// Produktions-Default (Spec §0: "Kein Wechsel von claude-haiku-4-5 ... im Produktions-
-// Pfad") - die Bench setzt CLAUDE_MODEL fuer den gespawnten Server explizit auf
-// denselben Wert wie config.js' eigener Default, statt sich auf den Default zu
-// verlassen (Absicht im Code sichtbar, G16).
-const PRODUCTION_CLAUDE_MODEL = "claude-haiku-4-5";
+// Vorgabewert (Spec §0: "Kein Wechsel von claude-haiku-4-5 ... im Produktions-Pfad")
+// - byte-identisch zu config.js' eigenem CLAUDE_MODEL-Default. AL-P0 (Werkzeugwahl):
+// vorher war das eine harte Konstante, die JEDEN Lauf auf Anthropic Haiku pinnte,
+// unabhaengig von Shell/.env/CLI - jede DeepSeek-Messung war strukturell eine
+// Anthropic-Messung (tasks/befund-toolwahl-5-bench.md). Jetzt nur noch der Fallback,
+// wenn --agent-model/--llm-provider nicht gesetzt sind (Bestandslaeufe bleiben
+// byte-identisch).
+export const DEFAULT_AGENT_MODEL = "claude-haiku-4-5";
+export const DEFAULT_LLM_PROVIDER_FOR_BENCH = LLM_PROVIDER.ANTHROPIC;
 // Defensive Anhebung des Bench-Budgets (Spec §3-1): der Store-Default (BASE_ENV) waere
 // zu knapp fuer mehrere Repeats/Turns in einem Lauf.
 const BENCH_MAX_BUDGET_EUR = "20";
@@ -50,6 +55,10 @@ const SUMMARY_POLL_INTERVAL_MS = 150;
 const PRICE_TABLE = Object.freeze({
   "claude-haiku-4-5": { in: 1.0, out: 5.0 },
   "claude-sonnet-5": { in: 2.0, out: 10.0 },
+  // AL-P0: Rate identisch zu src/config.js MODEL_PRICE_SCHEDULES["deepseek-v4-pro"]
+  // (in/out, ohne Cache-Raten - dieselbe bewusste Vereinfachung wie die zwei
+  // Anthropic-Zeilen oben). Rein informativer Bench-Schaetzwert, kein Budget-Gate.
+  "deepseek-v4-pro": { in: 0.435, out: 0.87 },
 });
 
 function gitRev() {
@@ -68,10 +77,20 @@ function gitRev() {
 // pinnt das.
 // PRAEZEDENZ, bewusst: scenario.env < driverEnv (der Treiber besitzt seinen Transport) <
 // searchEnv (der Runner besitzt die Adresse des selbst gestarteten Fakes).
-function buildEnv({ apiKey, scenario, driverEnv, searchEnv }) {
+//
+// AL-P0 (Werkzeugwahl): llmProvider/agentModel/deepseekApiKey sind jetzt STEUERBARE
+// Werte statt hart gepinnter Konstanten (Namen mirror die config.js-Env-Variablen
+// LLM_PROVIDER/CLAUDE_MODEL/DEEPSEEK_API_KEY) - ohne das lief JEDER Bench-Lauf
+// strukturell gegen Anthropic Haiku, egal was Shell/CLI verlangten
+// (tasks/befund-toolwahl-5-bench.md). ANTHROPIC_API_KEY bleibt UNBEDINGT gesetzt (Persona/
+// Judge/assertConfig brauchen ihn immer, auch bei llmProvider=deepseek, s. config.js
+// assertConfig-Kommentar "ANTHROPIC_API_KEY bleibt bewusst UNBEDINGT Pflicht").
+export function buildEnv({ apiKey, deepseekApiKey, llmProvider, agentModel, scenario, driverEnv, searchEnv }) {
   return {
     ANTHROPIC_API_KEY: apiKey,
-    CLAUDE_MODEL: PRODUCTION_CLAUDE_MODEL,
+    LLM_PROVIDER: llmProvider,
+    DEEPSEEK_API_KEY: deepseekApiKey || "",
+    CLAUDE_MODEL: agentModel,
     METRICS_ENABLED: "true",
     ASSISTANT_CONTEXT_ENABLED: scenario.assistantContextEnabled ? "true" : "false",
     MAX_BUDGET_EUR: BENCH_MAX_BUDGET_EUR,
@@ -88,10 +107,13 @@ const DEFAULT_SEARCH_FACTS = Object.freeze([{ title: "Bench-Treffer", highlight:
 
 // F1: Objekt statt drittem losem Argument - extra (treiber-eigene Seed-Felder, z.B.
 // callControlId/assistantId des Shim-Treibers) geht ans Ende von seedCall durch.
-function buildCallSeed({ scenario, provider, extra }) {
+// AL-P0: tenantId kommt jetzt vom Aufrufer (Default BOOTSTRAP_TENANT_ID, s.
+// runScenarioRepeat) statt hart im Objekt zu stehen - Voraussetzung fuer
+// scenario.tenantId/scenario.profile (s. benchTenantsFor/assertProfileTenantIsSettable).
+function buildCallSeed({ scenario, provider, tenantId, extra }) {
   return seedCall({
     id: `${BENCH_CALL_ID_PREFIX}_${scenario.id}`,
-    tenantId: BOOTSTRAP_TENANT_ID,
+    tenantId,
     provider,
     direction: "outbound",
     goal: scenario.goal,
@@ -105,22 +127,56 @@ function buildCallSeed({ scenario, provider, extra }) {
   });
 }
 
+// AL-P0 (Werkzeugwahl, tasks/befund-toolwahl-2-angebot.md): ein Szenario mit eigenem
+// tenantId braucht eine minimale Tenant-Identitaet, sonst faellt disclosureSentence()
+// auf ownerName="" zurueck (tenantContext ohne Tenant-Record, P2b) - kein Absturz, aber
+// ein kaputter Offenlegungssatz. Der Owner-Tenant bleibt unberuehrt (ensureOwnerNumber
+// pflegt ihn bereits selbst, test/helpers.js) - deshalb null fuer BOOTSTRAP_TENANT_ID,
+// damit seedState() keinen tenants-Key bekommt (byte-identischer Seed zum Bestand).
+export function benchTenantsFor(tenantId) {
+  if (tenantId === BOOTSTRAP_TENANT_ID) return null;
+  return [{ id: tenantId, status: "active", ownerName: `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}` }];
+}
+
+// AL-P0: resolveProfileFrom pinnt BOOTSTRAP_TENANT_ID hart auf OWNER_PROFILE (R2,
+// src/store/defaults.js) und liest ein gespeichertes Profil dort NIE - ein
+// scenario.profile ohne abweichendes scenario.tenantId waere also totes Verhalten
+// (G2, stiller No-op). Failt laut und VOR dem ersten Server-Spawn statt eine
+// Rechte-Messung zu liefern, die in Wahrheit nichts gemessen hat.
+export function assertProfileTenantIsSettable(scenario, tenantId) {
+  if (scenario.profile && tenantId === BOOTSTRAP_TENANT_ID) {
+    throw new Error(
+      `Szenario "${scenario.id}": profile gesetzt, aber tenantId ist der Owner ` +
+        `(BOOTSTRAP_TENANT_ID) - resolveProfileFrom pinnt den Owner hart auf ` +
+        `OWNER_PROFILE und liest das gespeicherte Profil dort nie. Setze ` +
+        `scenario.tenantId auf einen Nicht-Owner-Wert.`,
+    );
+  }
+}
+
 // AL-P12: Vor-Anrufe desselben Ziels + optionale Tenant-Settings. Ohne beides ist der
 // Seed byte-identisch zum Bestand (scenario.priorCalls/settings sind undefined).
-function buildSeed({ scenario, call, isInbound }) {
+// AL-P0: scenario.profile seedet s.profiles[tenantId] (Tenant-Rechte wie allowLookup/
+// allowConsult, tasks/befund-toolwahl-2-angebot.md); benchTenantsFor traegt die dafuer
+// noetige Tenant-Identitaet nach. Beides bleibt weg (kein Key im seedState-Aufruf), wenn
+// tenantId der Owner ist - Bestandslaeufe bleiben byte-identisch.
+function buildSeed({ scenario, call, isInbound, tenantId }) {
   const priors = (scenario.priorCalls || []).map((prior, i) =>
     seedCall({
       id: `${BENCH_CALL_ID_PREFIX}_${scenario.id}_prior${i}`,
-      tenantId: BOOTSTRAP_TENANT_ID,
+      tenantId,
       direction: "outbound",
       status: "completed",
       endedAt: new Date().toISOString(),
       ...prior,
     }),
   );
+  const tenants = benchTenantsFor(tenantId);
   return seedState({
     calls: isInbound ? [] : [call, ...priors],
     ...(scenario.settings ? { settings: scenario.settings } : {}),
+    ...(scenario.profile ? { profiles: { [tenantId]: scenario.profile } } : {}),
+    ...(tenants ? { tenants } : {}),
   });
 }
 
@@ -177,14 +233,18 @@ function summarizeMetrics(metricsParsed) {
 
 function usdCost(model, usage) {
   if (!usage) return 0;
-  const price = PRICE_TABLE[model] || PRICE_TABLE[PRODUCTION_CLAUDE_MODEL];
+  const price = PRICE_TABLE[model] || PRICE_TABLE[DEFAULT_AGENT_MODEL];
   return (usage.input_tokens / 1e6) * price.in + (usage.output_tokens / 1e6) * price.out;
 }
 
 const round4 = (n) => Math.round(n * 1e4) / 1e4;
 
-function estimateCost({ agentUsageBucket, personaUsages, personaModel, judgeUsage, judgeModel }) {
-  const agentUsd = usdCost(PRODUCTION_CLAUDE_MODEL, {
+// AL-P0: agentModel kommt vom Aufrufer (das TATSAECHLICH an CLAUDE_MODEL gesendete
+// env.CLAUDE_MODEL, s. runScenarioRepeat) statt der frueheren Konstante - sonst
+// bepreist ein DeepSeek-Lauf sich weiter mit Haiku-Raten (falsch etikettiert, genau
+// die Fehlerklasse, die diese Phase beheben soll).
+function estimateCost({ agentModel, agentUsageBucket, personaUsages, personaModel, judgeUsage, judgeModel }) {
+  const agentUsd = usdCost(agentModel, {
     input_tokens: agentUsageBucket?.inputTokens || 0,
     output_tokens: agentUsageBucket?.outputTokens || 0,
   });
@@ -213,11 +273,22 @@ export async function runScenarioRepeat({
   provider,
   driverId,
   apiKey,
+  // AL-P0: Default = Live-Default (Anthropic/Haiku, Spec §0) - ein Aufrufer, der die
+  // drei neuen Felder weglaesst (heute nur convo-bench.mjs), erhaelt den byte-
+  // identischen Bestandslauf.
+  llmProvider = DEFAULT_LLM_PROVIDER_FOR_BENCH,
+  agentModel = DEFAULT_AGENT_MODEL,
+  deepseekApiKey,
 }) {
   const startedAt = new Date().toISOString();
   const isInbound = scenario.direction === "inbound";
   const activeOwnerNumber = provider === "telnyx" ? BENCH_TELNYX_OWNER : OWNER_TEST_NUMBER;
   const ownerNumber = provider === "telnyx" ? BENCH_TELNYX_OWNER : undefined;
+  // AL-P0: tenantId + Tenant-Rechte (allowLookup/allowConsult) sind jetzt je Szenario
+  // setzbar (tasks/befund-toolwahl-2-angebot.md) - Default bleibt der Owner-Tenant
+  // (byte-identisch zum Bestand, s. benchTenantsFor/assertProfileTenantIsSettable).
+  const tenantId = scenario.tenantId ?? BOOTSTRAP_TENANT_ID;
+  assertProfileTenantIsSettable(scenario, tenantId);
 
   // Der Treiber-Transport lebt VOR startServer (ein evtl. lokaler Provider-Fake muss
   // laufen, bevor der Server-Env darauf zeigt) und wird im aeusseren finally NACH
@@ -228,9 +299,11 @@ export async function runScenarioRepeat({
     ? await startExaFake({ facts: scenario.searchFacts ?? DEFAULT_SEARCH_FACTS })
     : null;
   const searchEnv = searchFake ? { EXA_API_BASE: searchFake.url } : {};
-  const call = isInbound ? null : buildCallSeed({ scenario, provider, extra: transport.seedOverrides });
-  const env = buildEnv({ apiKey, scenario, driverEnv: transport.env, searchEnv });
-  const seed = buildSeed({ scenario, call, isInbound });
+  const call = isInbound
+    ? null
+    : buildCallSeed({ scenario, provider, tenantId, extra: transport.seedOverrides });
+  const env = buildEnv({ apiKey, deepseekApiKey, llmProvider, agentModel, scenario, driverEnv: transport.env, searchEnv });
+  const seed = buildSeed({ scenario, call, isInbound, tenantId });
 
   const transcript = [];
   const agentSamples = [];
@@ -304,8 +377,8 @@ export async function runScenarioRepeat({
       await waitForSummary(srv, callId); // best-effort, Timeout -> summary=null (Bestand)
     }
     const store = srv.readStore();
-    const storeSnapshot = extractStoreSnapshot(store, BOOTSTRAP_TENANT_ID, callId);
-    const agentUsageBucket = store.usage?.[BOOTSTRAP_TENANT_ID];
+    const storeSnapshot = extractStoreSnapshot(store, tenantId, callId);
+    const agentUsageBucket = store.usage?.[tenantId];
 
     const runResult = {
       call: call || { direction: "inbound", language: "de" },
@@ -326,7 +399,19 @@ export async function runScenarioRepeat({
       judge = { error: err.message };
     }
 
-    const cost = estimateCost({ agentUsageBucket, personaUsages, personaModel, judgeUsage: judge?.usage, judgeModel });
+    // AL-P0: agentModel kommt aus dem FINAL gemergten env-Objekt (env.CLAUDE_MODEL),
+    // nicht aus dem rohen Funktionsargument - so bleibt das Label auch dann korrekt,
+    // wenn ein Szenario CLAUDE_MODEL/LLM_PROVIDER selbst ueber scenario.env/driverEnv
+    // ueberschreibt (Praezedenz s. buildEnv). Das genau ist der Zweck dieser Phase:
+    // eine Zahl darf nie wieder falsch etikettiert sein.
+    const cost = estimateCost({
+      agentModel: env.CLAUDE_MODEL,
+      agentUsageBucket,
+      personaUsages,
+      personaModel,
+      judgeUsage: judge?.usage,
+      judgeModel,
+    });
 
     return {
       meta: {
@@ -334,7 +419,8 @@ export async function runScenarioRepeat({
         repeat_index: repeatIndex,
         label,
         started_at: startedAt,
-        agent_model: PRODUCTION_CLAUDE_MODEL,
+        agent_model: env.CLAUDE_MODEL,
+        llm_provider: env.LLM_PROVIDER,
         persona_model: personaModel,
         judge_model: judgeModel,
         provider,
