@@ -1,24 +1,23 @@
 ---
-// Marketing: 404 (SSG). Gestylte Fehlerseite im Marken-Look mit Rueckweg.
-import Site from "../layouts/Site.astro";
+// Marketing: 404 (SSG). Gestylte Fehlerseite im Marken-Look mit Rückweg.
+// Sprache und Rückwege wie in der Vorfassung — nur die Hülle ist neu.
+import Hermes from "../layouts/Hermes.astro";
 ---
 
-<Site
+<Hermes
   title="Page not found — Sundartha Hermes"
   description="This page does not exist. Back to the Sundartha Hermes homepage."
+  lang="en"
+  noindex
 >
-  <section class="hero">
-    <div class="container error-page">
-      <span class="error-page__code">404</span>
-      <h1 class="hero__title">Page not <span class="highlight">found</span></h1>
-      <p class="hero__lead">
-        This page does not exist (any more). Maybe the way back to the start or a
-        look at the pricing helps.
-      </p>
-      <div class="hero__actions">
-        <a class="button button--primary" href="/">To the homepage</a>
-        <a class="button button--ghost" href="/so-funktionierts">How it works</a>
-      </div>
-    </div>
-  </section>
-</Site>
+  <span class="doc-eyebrow">404</span>
+  <h1 class="doc-title">Page not <em>found</em>.</h1>
+  <p class="doc-lead">
+    This page does not exist (any more). Maybe the way back to the start or a
+    look at the pricing helps.
+  </p>
+  <div class="doc-actions">
+    <a class="btn-solid" href="/">To the homepage</a>
+    <a class="btn-ghost" href="/so-funktionierts">How it works</a>
+  </div>
+</Hermes>

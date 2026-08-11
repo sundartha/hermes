@@ -1,15 +1,42 @@
 ---
-// Marketing: Datenschutz (SSG), verbindliche deutsche Fassung. Text und
-// Metadaten stehen in src/data/legal/privacy.de.json; fehlt die Datei oder ist
-// sie unvollstaendig, bricht der Build ab.
-import Site from "../layouts/Site.astro";
-import LegalDocument from "../components/site/LegalDocument.astro";
-import { LEGAL_CONTENT } from "../lib/legal-content.js";
-import { requireLegalDocument } from "../lib/legal.js";
+// Datenschutz — verbindliche deutsche Fassung. Der Text kommt aus
+// src/data/legal/privacy.de.json, NICHT aus dieser Datei: dieselbe Quelle, aus der auch
+// das Rechts-Blatt der Startseite gebaut wird. Ein zweiter Textstand kann so
+// nicht entstehen.
+import Hermes from "../layouts/Hermes.astro";
+import doc from "../data/legal/privacy.de.json";
 
-const doc = requireLegalDocument(LEGAL_CONTENT, "privacy", "de");
+const pills = [
+  { href: "/datenschutz", label: "Datenschutz" },
+  { href: "/impressum", label: "Impressum" },
+  { href: "/agb", label: "AGB" },
+];
+const CONTACT = "kontakt@sundartha.com";
 ---
 
-<Site lang="de" title={doc.metaTitle} description={doc.metaDescription}>
-  <LegalDocument doc={doc} note={doc.note} />
-</Site>
+<Hermes title={doc.metaTitle} description={doc.metaDescription} lang="de">
+  <h1 class="doc-title">{doc.title}</h1>
+  <div class="doc-pills">
+    {pills.map((pill) => (
+      <a
+        class="legal-pill"
+        href={pill.href}
+        aria-current={pill.href === "/datenschutz" ? "page" : undefined}
+      >{pill.label}</a>
+    ))}
+    <a class="legal-pill" href={`mailto:${CONTACT}`}>Kontakt</a>
+  </div>
+
+  <div class="doc-block doc-legal">
+    <div class="legal-card">
+      {doc.sections.map((section) => (
+        <div class="legal-section">
+          <span class="legal-eyebrow">{section.heading}</span>
+          <span class="legal-text">{section.text}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <p class="doc-note">{doc.note}</p>
+</Hermes>

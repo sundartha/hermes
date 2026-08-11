@@ -1,0 +1,304 @@
+/* =============================================================================
+ * hermes-page.css — Ruhende Unterseiten im Look der Startseite
+ *
+ * Die Startseite ist eine angepinnte Scroll-Buehne. Die Unterseiten (Preise,
+ * So funktioniert's, Rechtstexte) sind normale, scrollende Dokumente — sie
+ * brauchen denselben Hintergrund, dieselbe Leiste und dasselbe Fussband, aber
+ * ohne Pin-Track und ohne Ebenen-Choreografie.
+ *
+ * Baut auf hermes.css auf (Marken-Lockup, Knoepfe, Tarifkarten, Rechts-Karten
+ * werden von dort geerbt) und ergaenzt nur die Huelle.
+ * ========================================================================== */
+
+.doc-shell {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(150% 74% at 50% 4%, #1b4f86 0%, #0f2d52 50%, #0a2245 100%);
+}
+
+/* Das Wolkenmeer bleibt beim Scrollen stehen, wie auf der Startseite ab
+   Ebene 2. Kein zweites Bild, dieselbe Datei. */
+.doc-bg,
+.doc-veil {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.doc-bg {
+  background-image: url("/assets/howto_clouds.png");
+  background-size: cover;
+  background-position: 50% 42%;
+  filter: saturate(0.88) brightness(0.9) contrast(1.02);
+}
+.doc-veil {
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 22, 48, 0.52) 0%,
+    rgba(8, 22, 48, 0.62) 46%,
+    rgba(8, 20, 44, 0.82) 100%
+  );
+}
+
+.doc-nav {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 28px 44px;
+}
+
+.doc-main {
+  position: relative;
+  z-index: 3;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vh, 72px) 44px clamp(48px, 9vh, 96px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Titel und Vorlauf sitzen mittig wie auf den Ebenen der Startseite, nur
+   etwas ruhiger — hier gibt es keine Bewegung, die Groesse tragen muesste. */
+.doc-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(38px, 5.4vw, 76px);
+  line-height: 1;
+  letter-spacing: -0.025em;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 2px 44px rgba(7, 16, 38, 0.8);
+  text-wrap: pretty;
+}
+.doc-title em {
+  font-style: italic;
+}
+.doc-lead {
+  margin: 22px 0 0;
+  max-width: 620px;
+  font-size: clamp(15px, 1.5vw, 20px);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.94);
+  text-align: center;
+  text-shadow: 0 1px 16px rgba(7, 16, 38, 0.9);
+  text-wrap: pretty;
+}
+.doc-lead strong {
+  font-weight: 600;
+  color: #fff;
+}
+.doc-note {
+  margin: clamp(18px, 3vh, 30px) 0 0;
+  font: 400 clamp(12px, 1.1vw, 15px) / 1.5 var(--sans);
+  color: rgba(255, 255, 255, 0.78);
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.doc-block {
+  width: 100%;
+  margin-top: clamp(30px, 5vh, 56px);
+}
+
+/* Auf den Unterseiten dürfen die Tarifkarten ihre Höhe aus dem Inhalt nehmen
+   statt aus der Bildschirmhöhe — hier ist Platz zum Scrollen. */
+.doc-block .price-grid {
+  margin-top: 0;
+  max-width: 980px;
+  margin-inline: auto;
+}
+.doc-block .plan {
+  padding: clamp(24px, 3vw, 40px) clamp(22px, 2.6vw, 38px);
+}
+.doc-block .plan__features {
+  gap: 12px;
+  font-size: clamp(14px, 1.15vw, 17px);
+}
+.doc-block .plan__cta {
+  height: 54px;
+}
+
+/* Drei Schritte als ruhige Liste (So funktioniert's). */
+.doc-steps {
+  width: 100%;
+  max-width: 820px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.doc-steps .sheet__card {
+  gap: 0;
+}
+.doc-steps .step {
+  padding: clamp(16px, 2.4vh, 24px) 0;
+}
+.doc-steps .step:first-child {
+  padding-top: 0;
+}
+.doc-steps .step:last-child {
+  padding-bottom: 0;
+}
+.doc-steps .step__title {
+  font-size: clamp(20px, 1.9vw, 26px);
+}
+.doc-steps .step__text {
+  font-size: clamp(14px, 1.15vw, 17px);
+}
+
+/* Rechtstexte: eine Spalte, gut lesbare Maße. */
+.doc-legal {
+  width: 100%;
+  max-width: 820px;
+  margin-inline: auto;
+}
+.doc-legal .legal-card {
+  gap: 22px;
+  padding: clamp(24px, 3vw, 38px) clamp(22px, 2.6vw, 38px);
+  border-radius: 20px;
+}
+.doc-legal .legal-text {
+  font-size: clamp(15px, 1.2vw, 17.5px);
+  line-height: 1.6;
+}
+
+.doc-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.doc-footer {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(16px, 2vw, 28px);
+  flex-wrap: wrap;
+  padding: 22px 44px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(5, 14, 32, 0.55);
+}
+
+@media (max-width: 1180px) {
+  .doc-nav {
+    padding: clamp(18px, 2.4vw, 28px) clamp(20px, 3.4vw, 44px);
+    gap: clamp(12px, 1.8vw, 28px);
+  }
+  .doc-main,
+  .doc-footer {
+    padding-left: clamp(20px, 3.4vw, 44px);
+    padding-right: clamp(20px, 3.4vw, 44px);
+  }
+  .doc-footer {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 900px) {
+  .doc-block .price-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+/* Handy: die Leiste bricht um, damit Marke und CTA nicht kollidieren. */
+@media (max-width: 700px), (pointer: coarse) and (max-width: 1024px) {
+  .doc-nav {
+    flex-wrap: wrap;
+    row-gap: 14px;
+    padding-top: 22px;
+  }
+  .doc-nav .nav-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .doc-nav .btn-solid {
+    margin-left: auto;
+  }
+  .doc-title {
+    font-size: clamp(30px, 8.6vw, 44px);
+  }
+  .doc-footer {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* Rahmen der Erklär-Animation auf der Unterseite. Fixes Seitenverhältnis statt
+   Bildschirmhöhe: hier wird gescrollt, die Bühne muss nicht ins Bild passen. */
+.doc-demo {
+  position: relative;
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
+  aspect-ratio: 16 / 7;
+  min-height: 320px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: rgba(10, 28, 56, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+}
+
+@media (max-width: 700px), (pointer: coarse) and (max-width: 1024px) {
+  .doc-demo {
+    aspect-ratio: 3 / 4;
+    min-height: 420px;
+  }
+}
+
+/* Kleine Überschrift über dem Titel (404, Registrieren). */
+.doc-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  font: 500 clamp(11px, 1.1vw, 13px) / 1 var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(143, 182, 227, 0.92);
+}
+.doc-eyebrow::before {
+  content: "";
+  width: 26px;
+  height: 1px;
+  background: rgba(143, 182, 227, 0.5);
+}
+
+.doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 32px;
+}
+.doc-actions .btn-solid,
+.doc-actions .btn-ghost {
+  padding: 15px 30px;
+}
+
+@media (max-width: 700px), (pointer: coarse) and (max-width: 1024px) {
+  .doc-actions {
+    flex-direction: column;
+    align-self: stretch;
+    width: 100%;
+  }
+  .doc-actions .btn-solid,
+  .doc-actions .btn-ghost {
+    width: 100%;
+    height: 52px;
+    padding-block: 0;
+  }
+}

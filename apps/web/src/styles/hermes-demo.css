@@ -1,0 +1,769 @@
+/* =============================================================================
+ * hermes-demo.css — Erklär-Animation (40s-Schleife, sechs Akte)
+ *
+ * Herkunft: "Hermes Demo.dc.html". Das Quell-CSS war dort bereits
+ * klassenbasiert und konnte fast unveraendert uebernommen werden — nur die
+ * wenigen inline style="..."-Attribute des Entwurfs sind hier Klassen
+ * geworden (.hd-glow--a / .hd-glow--b), weil die Produktions-CSP
+ * (default-src 'self') Style-Attribute im Markup blockiert.
+ *
+ * Die Animation laeuft rein ueber CSS-Keyframes. Der Zeitversatz haengt an
+ * der Variablen --hd-t, die das Modul per CSSOM (element.style.setProperty)
+ * setzt — CSSOM ist von der CSP nicht betroffen, nur Style-Attribute im
+ * HTML-Quelltext sind es.
+ *
+ * Groessen haengen am Container (cqw/cqh), nicht am Fenster: dieselbe Datei
+ * fuellt die breite Buehne am Desktop und die hohe Kachel am Handy.
+ * ========================================================================== */
+
+@keyframes hdA1 { 0% { opacity: 0; transform: translateY(14px); } 1.7%, 10.5% { opacity: 1; transform: none; } 12.5%, 100% { opacity: 0; transform: translateY(-14px); } }
+@keyframes hdA2 { 0%, 13.9% { opacity: 0; transform: translateY(14px); } 15.7%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; transform: translateY(-14px); } }
+@keyframes hdA3 { 0%, 29.7% { opacity: 0; transform: translateY(14px); } 31.4%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; transform: translateY(-14px); } }
+@keyframes hdA4 { 0%, 42.9% { opacity: 0; transform: translateY(14px); } 44.6%, 51.3% { opacity: 1; transform: none; } 53.3%, 100% { opacity: 0; transform: translateY(-14px); } }
+@keyframes hdA5 { 0%, 54.7% { opacity: 0; transform: translateY(14px); } 56.4%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; transform: translateY(-14px); } }
+@keyframes hdA6 { 0%, 86.3% { opacity: 0; transform: translateY(14px); } 88%, 97.4% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+@keyframes hdS1 { 0%, 15.8% { opacity: 0; transform: translateY(9px); } 17.1%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; } }
+@keyframes hdS2 { 0%, 18.4% { opacity: 0; transform: translateY(9px); } 19.7%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; } }
+
+@keyframes hdW1 { 0%, 31.6% { opacity: 0; transform: translateY(9px); } 32.8%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; } }
+@keyframes hdW2 { 0%, 33.6% { opacity: 0; transform: translateY(9px); } 34.7%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; } }
+@keyframes hdW3 { 0%, 35.5% { opacity: 0; transform: translateY(9px); } 36.7%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; } }
+@keyframes hdW4 { 0%, 37.5% { opacity: 0; transform: translateY(9px); } 38.7%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; } }
+
+@keyframes hdT1 { 0%, 57.9% { opacity: 0; transform: translateY(10px); } 59.2%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
+@keyframes hdT2 { 0%, 63.2% { opacity: 0; transform: translateY(10px); } 64.5%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
+@keyframes hdT3 { 0%, 68.4% { opacity: 0; transform: translateY(10px); } 69.7%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
+@keyframes hdT4 { 0%, 73.7% { opacity: 0; transform: translateY(10px); } 75%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
+@keyframes hdT5 { 0%, 78.9% { opacity: 0; transform: translateY(10px); } 80.3%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
+@keyframes hdT1s { 0%, 57.9% { opacity: 0; transform: translateY(10px); } 59.2%, 67% { opacity: 1; transform: none; } 68.4%, 100% { opacity: 0; } }
+@keyframes hdT2s { 0%, 63.2% { opacity: 0; transform: translateY(10px); } 64.5%, 72.3% { opacity: 1; transform: none; } 73.7%, 100% { opacity: 0; } }
+@keyframes hdT3s { 0%, 68.4% { opacity: 0; transform: translateY(10px); } 69.7%, 77.5% { opacity: 1; transform: none; } 78.9%, 100% { opacity: 0; } }
+
+@keyframes hdR1 { 0%, 88.2% { opacity: 0; transform: translateY(10px); } 89.3%, 97.4% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes hdR2 { 0%, 90.8% { opacity: 0; transform: translateY(10px); } 92%, 97.4% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes hdR3 { 0%, 93.4% { opacity: 0; transform: translateY(10px); } 94.6%, 97.4% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+@keyframes hdStep1 { 0% { opacity: 0.36; } 1.7%, 10.5% { opacity: 1; } 12.5%, 100% { opacity: 0.36; } }
+@keyframes hdStep2 { 0%, 13.9% { opacity: 0.36; } 15.7%, 39.5% { opacity: 1; } 41.4%, 100% { opacity: 0.36; } }
+@keyframes hdStep3 { 0%, 42.9% { opacity: 0.36; } 44.6%, 97.4% { opacity: 1; } 100% { opacity: 1; } }
+@keyframes hdStep1m { 0% { opacity: 0; } 1.7%, 10.5% { opacity: 1; } 12.5%, 100% { opacity: 0; } }
+@keyframes hdStep2m { 0%, 13.9% { opacity: 0; } 15.7%, 39.5% { opacity: 1; } 41.4%, 100% { opacity: 0; } }
+@keyframes hdStep3m { 0%, 42.9% { opacity: 0; } 44.6%, 97.4% { opacity: 1; } 100% { opacity: 1; } }
+
+@keyframes hdProgress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+@keyframes hdRing { 0% { box-shadow: 0 0 0 0 rgba(143, 182, 227, 0.5); } 70% { box-shadow: 0 0 0 30px rgba(143, 182, 227, 0); } 100% { box-shadow: 0 0 0 0 rgba(143, 182, 227, 0); } }
+@keyframes hdBar { 0%, 100% { transform: scaleY(0.2); } 50% { transform: scaleY(1); } }
+@keyframes hdCaret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes hdGlow { 0%, 100% { opacity: 0.32; } 50% { opacity: 0.6; } }
+
+/* Fuellt die Kachel der Elternseite (.demo-frame bzw. .sheet__demo). */
+.hd-mount {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+
+.hd-stage {
+  container-type: size;
+  container-name: hd;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-family: "Space Grotesk", sans-serif;
+  background: radial-gradient(120% 100% at 76% 6%, #1a4a7d 0%, #123a68 34%, #0e2a4e 64%, #0a1f3d 100%);
+  --hd-t: 0s;
+}
+
+.hd-glow {
+  position: absolute;
+  width: 56%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(143, 182, 227, 0.5) 0%, rgba(143, 182, 227, 0) 68%);
+  filter: blur(10px);
+  pointer-events: none;
+  animation: hdGlow 7s ease-in-out infinite;
+}
+/* Im Entwurf waren diese beiden Positionen inline gesetzt. */
+.hd-glow--a {
+  top: -24%;
+  right: -10%;
+}
+.hd-glow--b {
+  bottom: -30%;
+  left: -14%;
+  animation-delay: 3.5s;
+}
+
+.hd-act {
+  animation-delay: var(--hd-t);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: calc(var(--hd-foot, 86px) + clamp(6px, 1.4cqh, 16px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  justify-items: start;
+  gap: clamp(10px, 2.4cqh, 18px);
+  padding: clamp(14px, 3.4cqh, 30px) clamp(16px, 4cqw, 44px) clamp(10px, 2.2cqh, 18px);
+  opacity: 0;
+  animation-duration: 76s;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.hd-anim {
+  opacity: 0;
+  animation-delay: var(--hd-t);
+  animation-duration: 76s;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* Akte und Einzelelemente holen ihre Kurve ueber diese Klassen. */
+.hd-act--1 { animation-name: hdA1; }
+.hd-act--2 { animation-name: hdA2; }
+.hd-act--3 { animation-name: hdA3; }
+.hd-act--4 { animation-name: hdA4; }
+.hd-act--5 { animation-name: hdA5; }
+.hd-act--6 { animation-name: hdA6; }
+.hd-s1 { animation-name: hdS1; }
+.hd-s2 { animation-name: hdS2; }
+.hd-w1 { animation-name: hdW1; }
+.hd-w2 { animation-name: hdW2; }
+.hd-w3 { animation-name: hdW3; }
+.hd-w4 { animation-name: hdW4; }
+.hd-t1 { animation-name: hdT1; }
+.hd-t2 { animation-name: hdT2; }
+.hd-t3 { animation-name: hdT3; }
+.hd-t4 { animation-name: hdT4; }
+.hd-t5 { animation-name: hdT5; }
+.hd-r1 { animation-name: hdR1; }
+.hd-r2 { animation-name: hdR2; }
+.hd-r3 { animation-name: hdR3; }
+
+.hd-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: 500 clamp(11px, 1.55cqw, 16px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(143, 182, 227, 0.92);
+}
+.hd-eyebrow::before {
+  content: "";
+  width: clamp(16px, 2.4cqw, 30px);
+  height: 1px;
+  background: rgba(143, 182, 227, 0.5);
+}
+
+.hd-head {
+  margin: 0;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(24px, 4.5cqw, 62px);
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+  color: #fff;
+  text-wrap: pretty;
+}
+
+.hd-sub {
+  margin: 0;
+  max-width: 32ch;
+  font: 400 clamp(14px, 1.8cqw, 24px) / 1.45 "Space Grotesk", sans-serif;
+  color: rgba(255, 255, 255, 0.76);
+  text-wrap: pretty;
+}
+
+.hd-panel {
+  width: 100%;
+  border-radius: clamp(12px, 1.5cqw, 18px);
+  background: rgba(6, 18, 42, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 18px 40px -26px rgba(3, 10, 26, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.hd-mono {
+  font: 400 clamp(11.5px, 1.4cqw, 19px) / 1.5 var(--mono, ui-monospace, Menlo, monospace);
+  color: #cfe4fa;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.hd-tool {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.2cqw, 14px);
+  padding: clamp(10px, 2.4cqh, 20px) clamp(12px, 1.6cqw, 22px);
+  border-radius: clamp(10px, 1.2cqw, 14px);
+  background: rgba(9, 26, 54, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.hd-tool .hd-mono {
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: rgba(143, 182, 227, 0.13);
+}
+
+.hd-chat {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px, #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 26px, #000 100%);
+}
+
+.hd-bubble {
+  box-shadow: 0 14px 34px -24px rgba(3, 10, 26, 0.95);
+  max-width: min(100%, 52ch);
+  padding: clamp(11px, 2.4cqh, 20px) clamp(14px, 1.9cqw, 24px);
+  border-radius: clamp(12px, 1.5cqw, 18px);
+  font: 400 clamp(14px, 1.75cqw, 23px) / 1.4 "Space Grotesk", sans-serif;
+  text-wrap: pretty;
+}
+
+.hd-bar {
+  width: clamp(4px, 0.55cqw, 7px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  transform-origin: 50% 50%;
+  animation: hdBar 1.05s ease-in-out infinite;
+}
+
+.hd-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(9px, 2cqh, 15px);
+  padding: 0 clamp(16px, 4cqw, 44px) clamp(18px, 3.6cqh, 28px);
+}
+
+.hd-step {
+  animation-delay: var(--hd-t);
+  font: 500 clamp(10px, 1.3cqw, 15px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.hd-step:nth-of-type(1) { animation-name: hdStep1; }
+.hd-step:nth-of-type(2) { animation-name: hdStep2; }
+.hd-step:nth-of-type(3) { animation-name: hdStep3; }
+
+.hd-split {
+  display: none;
+}
+
+.hd-stage[data-paused="1"] * {
+  animation-play-state: paused !important;
+}
+
+.hd-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  cursor: pointer;
+  touch-action: none;
+}
+.hd-track > span:first-child {
+  flex: 1 1 auto;
+  height: 3px;
+  transition: height 0.18s ease;
+}
+.hd-track:hover > span:first-child {
+  height: 5px;
+}
+.hd-tick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 9px;
+  margin-top: -4.5px;
+  background: rgba(255, 255, 255, 0.34);
+  pointer-events: none;
+}
+
+.hd-copy {
+  flex: none;
+  padding: clamp(6px, 1.1cqh, 10px) clamp(11px, 1.4cqw, 17px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  font: 600 clamp(11.5px, 1.35cqw, 17px) / 1 "Space Grotesk", sans-serif;
+  color: #10305a;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  border: 0;
+}
+
+.hd-pause {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(30px, 3.4cqw, 42px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(6, 18, 42, 0.6);
+  color: #fff;
+  font: 400 clamp(11px, 1.3cqw, 15px) / 1 "Space Grotesk", sans-serif;
+  cursor: pointer;
+  animation: none !important;
+  opacity: 1 !important;
+}
+
+/* ---------------------------------------------------- Container-Groessen */
+
+@container hd (min-width: 620px) {
+  /* Breite Buehne: links die Aussage, rechts das Bild. */
+  .hd-act {
+    grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.18fr);
+    align-items: center;
+    column-gap: clamp(24px, 4.4cqw, 72px);
+    row-gap: clamp(6px, 1.4cqh, 14px);
+  }
+  .hd-say {
+    grid-column: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(10px, 2.6cqh, 22px);
+  }
+  .hd-show {
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(16px, 3.4cqh, 30px);
+    width: 100%;
+  }
+  .hd-wide {
+    grid-column: 1 / -1;
+  }
+  .hd-split {
+    display: block;
+  }
+}
+
+@container hd (max-height: 480px) {
+  .hd-act {
+    gap: clamp(7px, 1.6cqh, 11px);
+    padding-top: clamp(10px, 2.2cqh, 18px);
+    padding-bottom: 6px;
+  }
+  .hd-head { font-size: clamp(20px, 3.4cqw, 34px); }
+  .hd-sub { font-size: clamp(12.5px, 1.6cqw, 17px); line-height: 1.4; }
+  .hd-say { gap: clamp(6px, 1.5cqh, 10px); }
+  .hd-show { gap: clamp(8px, 1.8cqh, 12px); }
+  .hd-tool { padding: 8px clamp(11px, 1.4cqw, 15px); }
+  .hd-tool > span:last-child { font-size: 14px; }
+  .hd-bubble { padding: 8px 14px; font-size: 14px; line-height: 1.38; }
+  .hd-chat { gap: 7px; }
+  .hd-connected { display: none; }
+}
+
+@container hd (max-height: 330px) {
+  /* Flacher Rahmen: alles enger, damit die vier Werkzeugzeilen und die
+     Fussleiste ohne Ueberlappung passen. */
+  .hd-act { padding: 8px clamp(16px, 4cqw, 44px) 4px; gap: 7px; }
+  .hd-head { font-size: clamp(20px, 3.2cqw, 32px); }
+  .hd-sub { font-size: clamp(12.5px, 1.5cqw, 16px); line-height: 1.4; }
+  .hd-say { gap: 7px !important; }
+  .hd-show { gap: 10px !important; }
+  .hd-tool { padding: 5px 12px !important; font-size: 13px; }
+  .hd-tool > span:last-child { font-size: 13px !important; }
+  .hd-connected { display: none !important; }
+  .hd-bubble { padding: 6px 13px !important; font-size: 13px !important; line-height: 1.35 !important; }
+  .hd-chat { gap: 6px !important; margin-top: 0 !important; }
+  .hd-chat > :nth-child(1) { animation-name: hdT1s; }
+  .hd-chat > :nth-child(2) { animation-name: hdT2s; }
+  .hd-chat > :nth-child(3) { animation-name: hdT3s; }
+  .hd-panel { border-radius: 12px; }
+  .hd-foot { gap: 7px; padding-bottom: 11px; }
+  .hd-track { height: 18px; }
+}
+
+@container hd (max-width: 430px) {
+  /* Schmale Kachel: die drei Schritte duerfen zweizeilig werden, ohne
+     aneinanderzustossen. */
+  .hd-steps {
+    display: grid !important;
+    grid-template-columns: 1fr;
+  }
+  .hd-step {
+    grid-area: 1 / 1;
+    font-size: clamp(12px, 3.6cqw, 15px);
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+  .hd-step:nth-of-type(1) { animation-name: hdStep1m !important; }
+  .hd-step:nth-of-type(2) { animation-name: hdStep2m !important; }
+  .hd-step:nth-of-type(3) { animation-name: hdStep3m !important; }
+  .hd-foot { gap: 9px; padding-bottom: 12px; }
+  .hd-pause { width: 30px; }
+}
+
+@container hd (max-width: 619px) {
+  /* Hochkant: Inhalt ueber die ganze Hoehe verteilen statt mittig mit
+     Leerraum oben und unten. */
+  .hd-act {
+    align-content: space-evenly;
+    padding-block: clamp(14px, 3.4cqh, 26px) clamp(8px, 1.8cqh, 16px);
+  }
+  .hd-connected { display: none !important; }
+  .hd-say { display: flex; flex-direction: column; gap: clamp(8px, 2cqh, 14px); }
+  .hd-show { display: flex; flex-direction: column; gap: clamp(14px, 3cqh, 24px); width: 100%; }
+  .hd-head { font-size: clamp(26px, 7.8cqw, 44px); }
+  .hd-sub { max-width: none; font-size: clamp(15px, 4.5cqw, 20px); line-height: 1.45; }
+  .hd-eyebrow { font-size: clamp(11px, 3.3cqw, 15px); }
+  .hd-bubble {
+    font-size: clamp(15px, 4.7cqw, 20px);
+    line-height: 1.4;
+    padding: clamp(9px, 1.9cqh, 14px) clamp(14px, 4cqw, 18px);
+  }
+  .hd-chat { gap: clamp(8px, 1.7cqh, 15px); }
+  .hd-mono { font-size: clamp(12.5px, 3.7cqw, 16px); }
+  .hd-tool { padding: clamp(10px, 2.2cqh, 15px) clamp(12px, 3.4cqw, 16px); }
+  .hd-tool > span:last-child { font-size: clamp(15px, 4.4cqw, 19px); }
+  .hd-copy {
+    font-size: clamp(12.5px, 3.6cqw, 15px);
+    padding: clamp(7px, 1.6cqh, 10px) clamp(12px, 3.4cqw, 16px);
+  }
+  .hd-step { font-size: clamp(10px, 2.9cqw, 13px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hd-act,
+  .hd-anim,
+  .hd-bar,
+  .hd-glow {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+ * Die Bausteine der sechs Akte. Im Entwurf waren all diese Werte inline
+ * gesetzt; unter der Produktions-CSP muessen sie Klassen sein.
+ * ------------------------------------------------------------------------ */
+
+/* Nummern-/Anruf-Karte (Akt 1 und 4) */
+.hd-callcard {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 1.8cqw, 22px);
+  padding: clamp(14px, 3cqh, 26px) clamp(14px, 2cqw, 26px);
+}
+.hd-callcard--in {
+  padding: clamp(13px, 2.6cqh, 24px) clamp(14px, 2cqw, 26px);
+}
+.hd-avatar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(38px, 4.6cqw, 58px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(143, 182, 227, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+}
+.hd-avatar--ringing {
+  animation: hdRing 1.6s ease-out infinite;
+}
+.hd-avatar__glyph {
+  display: block;
+  width: 38%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  background: #8fb6e3;
+}
+.hd-callcard__text {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, 0.9cqh, 8px);
+  min-width: 0;
+}
+.hd-label {
+  font: 500 clamp(10.5px, 1.35cqw, 16px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+.hd-number {
+  font: 500 clamp(19px, 2.9cqw, 42px) / 1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+.hd-callee {
+  font: 500 clamp(16px, 2.2cqw, 30px) / 1.1 "Space Grotesk", sans-serif;
+  color: #fff;
+}
+
+/* Aktiv-Punkt unter der Nummer */
+.hd-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 500 clamp(10px, 1.15cqw, 14px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(143, 182, 227, 0.9);
+}
+.hd-active__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8fb6e3;
+}
+
+/* Fensterkopf der beiden Anschluss-Wege (Akt 2) */
+.hd-winbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: clamp(7px, 1.4cqh, 12px) clamp(11px, 1.4cqw, 17px);
+  background: rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+.hd-windot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.32);
+}
+.hd-wintitle {
+  margin-left: 6px;
+  font: 500 clamp(10.5px, 1.35cqw, 16px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+.hd-winrow {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.2cqw, 14px);
+  padding: clamp(10px, 1.9cqh, 17px) clamp(11px, 1.4cqw, 17px);
+}
+.hd-winrow .hd-mono {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.hd-panel--term {
+  background: rgba(4, 12, 30, 0.78);
+}
+.hd-termbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: clamp(6px, 1.2cqh, 11px) clamp(9px, 1.2cqw, 14px) clamp(6px, 1.2cqh, 11px)
+    clamp(11px, 1.4cqw, 17px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.hd-termbar .hd-copy {
+  margin-left: auto;
+}
+.hd-termbody {
+  display: block;
+  padding: clamp(10px, 1.9cqh, 17px) clamp(11px, 1.4cqw, 17px);
+}
+.hd-prompt {
+  color: rgba(143, 182, 227, 0.75);
+}
+.hd-caret {
+  display: inline-block;
+  width: 0.55em;
+  margin-left: 2px;
+  color: #8fb6e3;
+  animation: hdCaret 1s step-end infinite;
+}
+.hd-caret--dark {
+  width: 0.5em;
+  color: #10305a;
+}
+
+/* Verbunden-Pille + Werkzeugzeilen (Akt 3) */
+.hd-connected {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 9px;
+  padding: clamp(7px, 1.3cqh, 11px) clamp(12px, 1.5cqw, 18px);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+}
+.hd-connected__check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(16px, 1.7cqw, 21px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #10305a;
+  font: 600 clamp(9px, 1cqw, 12px) / 1 "Space Grotesk", sans-serif;
+  color: #fff;
+}
+.hd-connected__text {
+  font: 600 clamp(11px, 1.25cqw, 15px) / 1 "Space Grotesk", sans-serif;
+  color: #10305a;
+}
+.hd-tool .hd-mono {
+  flex: none;
+  color: #8fb6e3;
+}
+.hd-tool__desc {
+  font: 400 clamp(13px, 1.6cqw, 21px) / 1.35 "Space Grotesk", sans-serif;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Pegel-Balken (Akt 4) */
+.hd-levels {
+  margin-left: auto;
+  padding-left: clamp(10px, 1.6cqw, 22px);
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(4px, 0.6cqw, 8px);
+  height: clamp(28px, 6.4cqh, 52px);
+}
+.hd-levels .hd-bar {
+  height: 100%;
+}
+.hd-levels .hd-bar:nth-child(1) { animation-delay: 0s; }
+.hd-levels .hd-bar:nth-child(2) { animation-delay: 0.12s; }
+.hd-levels .hd-bar:nth-child(3) { animation-delay: 0.4s; }
+.hd-levels .hd-bar:nth-child(4) { animation-delay: 0.36s; }
+.hd-levels .hd-bar:nth-child(5) { animation-delay: 0.48s; }
+
+/* Gespraechsverlauf (Akt 5) */
+.hd-act--chat {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+.hd-act--chat .hd-say {
+  align-items: flex-start;
+  flex: none;
+  padding-top: clamp(6px, 2cqh, 20px);
+}
+.hd-chat {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: clamp(9px, 2.4cqh, 20px);
+  width: 100%;
+  margin-top: clamp(4px, 1.4cqh, 12px);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.hd-bubble--me {
+  align-self: flex-end;
+  background: rgba(255, 255, 255, 0.94);
+  color: #10305a;
+}
+.hd-bubble--them {
+  align-self: flex-start;
+  background: rgba(9, 26, 54, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+
+/* Steuerung (Fussleiste der Buehne) */
+.hd-controls {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 2.6cqw, 34px);
+}
+.hd-steps {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(10px, 2.6cqw, 34px);
+}
+.hd-rail {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+.hd-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #8fb6e3;
+  transform-origin: 0 50%;
+  animation: hdProgress 76s linear infinite;
+  animation-delay: var(--hd-t);
+}
+.hd-track:focus-visible {
+  outline: 2px solid rgba(143, 182, 227, 0.9);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+/* Ergebniszeilen (Akt 6) */
+.hd-tool--result {
+  align-items: flex-start;
+}
+.hd-result__dot {
+  flex: none;
+  margin-top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8fb6e3;
+}
+.hd-result__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.hd-result__key {
+  font: 500 clamp(10.5px, 1.3cqw, 15px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(143, 182, 227, 0.85);
+}
+.hd-result__value {
+  font: 400 clamp(13.5px, 1.7cqw, 22px) / 1.35 "Space Grotesk", sans-serif;
+  color: #fff;
+}
+.hd-tool--done {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.94);
+}
+.hd-done__text {
+  font: 500 clamp(13.5px, 1.7cqw, 22px) / 1.35 "Space Grotesk", sans-serif;
+  color: #10305a;
+}
+
+/* Die Kachel der Startseite ist flacher als die Buehne im Blatt — dort duerfen
+   die Ergebniszeilen enger sitzen. */
+@container hd (max-height: 330px) {
+  .hd-result__value,
+  .hd-done__text {
+    font-size: 13px !important;
+  }
+  .hd-result__key {
+    font-size: 10px !important;
+  }
+  .hd-result__dot {
+    margin-top: 4px;
+  }
+}

@@ -1,272 +1,551 @@
 ---
-// Hermes-Startseite — 1:1-Umsetzung des verbindlichen Claude-Design-Entwurfs
-// "Hermes Hero.dc.html". Das Quell-Design nutzt das x-dc-Framework (Inline-Styles,
-// style-hover, {{ }}-Platzhalter, Google-Fonts-CDN). Unter der strikten Produktions-
-// CSP des Static-Service (default-src 'self', KEIN style-src 'unsafe-inline'; siehe
-// render.yaml) waere das alles blockiert -> ungestyltes HTML. Darum hier pixelgenau
-// nachgebaut: identische Schrift/Farbe/Layout, aber CSP-konform als externe,
-// same-origin Stylesheets (Astro build.inlineStylesheets:"never") + selbst gehostete
-// Fonts (src/styles/fonts.css) + externes Modul-Script. Ergebnis ist identisch.
+// Hermes-Startseite — Scroll-Fassung. Umsetzung des verbindlichen Design-
+// Entwurfs "Hermes Scroll.dc.html" aus dem Design-Projekt.
 //
-// Standalone-Dokument (KEIN Marketing-Layout): der Entwurf ist ein Vollbild-Hero mit
-// eigener, transparent ueberlagerter Navigation.
+// Das Quell-Design nutzt das x-dc-Framework und stylt ausschliesslich ueber
+// inline style="..."-Attribute. Unter der Produktions-CSP des Static-Service
+// (default-src 'self' — also weder style-src 'unsafe-inline' noch
+// style-src-attr) waere davon nichts wirksam. Darum hier dieselbe Seite mit
+// externem Stylesheet (src/styles/hermes.css) und externem Modul-Script
+// (src/scripts/hermes-scroll.js). Gleiche Klassennamen wie im Entwurf.
+//
+// Standalone-Dokument (KEIN Site-Layout): der Entwurf ist eine Vollbild-Buehne
+// mit eigener, transparent ueberlagerter Navigation und eigenem Fussband.
 import "../styles/fonts.css";
+import "../styles/hermes.css";
 import { LOGIN_URL } from "../lib/routes.js";
 
-const title = "Hermes — The phone line for your AI agents";
-const description = "Give your AI wings. The phone line for your AI agents — works with Claude & Gemini via the Model Context Protocol.";
+// Rechtstexte direkt aus dem Content-Verzeichnis — DIESELBE Quelle, aus der
+// auch /datenschutz, /impressum und /agb gebaut werden. Kein zweiter Textstand.
+import HermesDemo from "../components/HermesDemo.astro";
+import privacy from "../data/legal/privacy.de.json";
+import imprint from "../data/legal/imprint.de.json";
+import terms from "../data/legal/terms.de.json";
 
-// Nav-Ziele identisch zu Site.astro/den Unterseiten (W2: tote #product/#pricing
-// durch die echten Unterseiten ersetzt). Der Hero bleibt bewusst standalone
-// (pixelgleicher Vollbild-Look) -> hier nur die Link-Ziele angeglichen, nicht
-// das Layout.
-const productHref = "/so-funktionierts";
-const pricingHref = "/preise";
+const title = "Hermes — Gib deiner KI eine Telefonnummer";
+const description =
+  "Hermes nimmt Anrufe an und führt sie für dich. Ein Anschluss über MCP — und deine KI hat eine Stimme.";
+
+const MCP_URL = "https://app.sundartha.com/mcp";
+const MCP_CMD = `claude mcp add --transport http hermes ${MCP_URL}`;
+const CONTACT = "kontakt@sundartha.com";
+
+// Die drei Rechtsdokumente im Blatt. "Kontakt" ist im Repo kein eigenes
+// Dokument (kein contact.de.json) — dafuer steht der mailto-Link, so wie es
+// die heutige Fussnavigation in Site.astro auch haelt.
+const legalDocs = [
+  { slug: "privacy", href: "/datenschutz", label: "Datenschutz", i18n: "privacy", doc: privacy },
+  { slug: "imprint", href: "/impressum", label: "Impressum", i18n: "imprint", doc: imprint },
+  { slug: "terms", href: "/agb", label: "AGB", i18n: "terms", doc: terms },
+];
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <link rel="canonical" href={Astro.url.pathname} />
-    <!-- Favicon explizit deklarieren: Standalone-Head OHNE Layout (Site.astro
-         traegt den Link bereits selbst). Ohne den Link findet Googles
-         Favicon-Crawler kein Icon fuer die Domain - und dessen Cache speist
-         u.a. das Connector-Icon in claude.ai (app.sundartha.com serviert
-         dieselbe Seite als Gateway-Wurzel).
-
-         Reihenfolge ist Absicht: ICO zuerst, SVG danach. Googles
-         Favicon-Crawler nimmt das erste verwertbare Icon; er verarbeitet SVG
-         nicht zuverlaessig - stand SVG vorn, konnte er ohne Icon abziehen.
-         apple-touch-icon deckt die Rasterfall-Heuristik (Bitmap statt ICO)
-         mit ab. Das aendert den heutigen (vergifteten) Cache-Eintrag nicht,
-         sorgt aber dafuer, dass ein spaeterer Recrawl garantiert die
-         Fluegel-Marke aufnimmt. -->
+    <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sundartha" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={new URL(Astro.url.pathname, Astro.site)} />
+    <meta property="og:locale" content="de_DE" />
+    <meta name="twitter:card" content="summary" />
   </head>
   <body>
-    <div class="hero-root">
-      <!-- BACKGROUND: Mount Olympus (Standbild, mit Farbverlauf-Fallback) -->
-      <div class="hero-bg"></div>
+    <div class="page">
+      <div class="pin-track">
+        <div class="stage">
+          <div class="hero-bg" aria-hidden="true"></div>
+          <div class="howto-bg" aria-hidden="true"></div>
+          <div class="scrim-side" aria-hidden="true"></div>
+          <div class="scrim-veil" aria-hidden="true"></div>
 
-      <!-- BACKGROUND: langsam treibende Wolken (Video, ohne Ton); poster faellt
-           auf das Standbild zurueck, falls das Video (noch) fehlt -->
-      <video
-        id="hermesSky"
-        class="hero-sky"
-        autoplay
-        muted
-        loop
-        playsinline
-        preload="auto"
-        poster="/assets/olymp_3.jpg"
-      >
-        <source src="/assets/hermes_olymp_v2.mp4" type="video/mp4" />
-      </video>
+          <!-- ------------------------------------------------ Navigation -->
+          <nav class="nav-desktop" aria-label="Hauptnavigation">
+            <a class="lockup" href="/" aria-label="Hermes — Startseite">
+              <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
+              <span class="lockup__text">
+                <span class="lockup__name">HERMES</span>
+                <span class="lockup__by">by Sundartha</span>
+              </span>
+            </a>
+            <span class="nav-actions">
+              <button class="nav-link" type="button" data-goto="howto:1" data-i18n="howItWorks">So funktioniert's</button>
+              <button class="nav-link" type="button" data-goto="price:2" data-i18n="pricing">Preise</button>
+              <button class="nav-link" type="button" data-goto="dev:3" data-i18n="forDevs">Für Entwickler</button>
+              <span class="lang">
+                <button class="lang__opt" type="button" data-lang="de" aria-pressed="true">DE</button>
+                <span class="lang__sep" aria-hidden="true">/</span>
+                <button class="lang__opt" type="button" data-lang="en" aria-pressed="false">EN</button>
+              </span>
+              <a class="btn-solid" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
+            </span>
+          </nav>
 
-      <!-- Lesbarkeit: weiches oberes Band + sanftes unteres Scrim -->
-      <div class="scrim scrim--top"></div>
-      <div class="scrim scrim--bottom"></div>
-
-      <!-- NAV -->
-      <nav class="hero-nav">
-        <div class="nav-brand">
-          <img class="nav-logo" src="/assets/hermes-wing.png" alt="Hermes wing" />
-          <div class="brand-text">
-            <span class="brand-name">HERMES</span>
-            <span class="brand-by">by Sundartha</span>
+          <div class="nav-mobile">
+            <a class="lockup" href="/" aria-label="Hermes — Startseite">
+              <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
+              <span class="lockup__text">
+                <span class="lockup__name">HERMES</span>
+                <span class="lockup__by">by Sundartha</span>
+              </span>
+            </a>
+            <button class="burger" type="button" data-open-sheet="menu" aria-label="Menü öffnen">
+              <span aria-hidden="true"></span>
+              <span aria-hidden="true"></span>
+            </button>
           </div>
-        </div>
-        <div class="nav-center">
-          <a class="nav-link" href={productHref}>How it works</a>
-          <a class="nav-link" href={pricingHref}>Pricing</a>
-        </div>
-        <div class="nav-right">
-          <a class="nav-link nav-login" href={LOGIN_URL}>Log in</a>
-          <a class="btn btn--nav" href={LOGIN_URL}>Get your wings
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10305a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
-          </a>
-        </div>
-      </nav>
 
-      <!-- HERO-CONTENT -->
-      <div class="hero-content">
-        <div class="hero-inner">
-          <h1 class="hero-title">Give your AI <em>wings</em>.</h1>
-          <p class="hero-sub">The phone number for your AI agents.</p>
-          <a class="btn btn--hero" href={LOGIN_URL}>Get your wings
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10305a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13"></path><path d="M12 5l7 7-7 7"></path></svg>
-          </a>
+          <!-- ------------------------------------------------------ Hero -->
+          <div class="hero-inner">
+            <div class="hero-pad">
+              <div class="hero-copy">
+                <h1 class="hero-title" data-i18n="heroTitle"><span class="l1">Gib deiner KI</span> <span>eine <em>Telefonnummer</em>.</span></h1>
+                <p class="hero-lead" data-i18n="heroLead">Hermes nimmt Anrufe an und führt sie für dich. Ein Anschluss über <strong>MCP</strong> — und deine KI hat eine Stimme.</p>
+                <div class="hero-actions">
+                  <a class="btn-solid btn-solid--hero" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
+                  <button class="btn-ghost" type="button" data-goto="howto:1" data-i18n="howItWorks">So funktioniert's</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ------------------------------------ Ebene 2: So funktioniert's -->
+          <section class="howto-layer" aria-label="So funktioniert's">
+            <h2 class="layer-title" data-i18n="howtoTitle">Ein Anschluss, <em>zwei Minuten</em>.</h2>
+            <p class="layer-lead" data-i18n="howtoLead">Ein Anschluss über <strong>MCP</strong>, kein Setup — deine KI ist in unter zwei Minuten unter einer echten Nummer erreichbar.</p>
+            <div class="demo-frame">
+              <HermesDemo />
+            </div>
+          </section>
+
+          <!-- ------------------------------------------- Ebene 3: Preise -->
+          <section class="price-layer" aria-label="Preise">
+            <h2 class="layer-title" data-i18n="priceTitle">Zwei Tarife, <em>keine Überraschungen</em>.</h2>
+            <p class="layer-lead" data-i18n="priceLead">Wähle das Paket, welches zu dir passt. <strong>Monatlich kündbar</strong>, <strong>keine versteckten Kosten</strong>.</p>
+            <div class="price-grid">
+              <div class="plan">
+                <span class="plan__head">
+                  <span class="plan__label" data-i18n="starterLabel">Starter</span>
+                </span>
+                <span class="plan__price">4,99 €<span class="plan__per" data-i18n="perMonth">/ Monat</span></span>
+                <span class="plan__features">
+                  <span data-i18n="starterF1"><strong>30 Minuten</strong> Gespräche pro Monat</span>
+                  <span data-i18n="starterF2">Nimmt jeden Anruf für dich an</span>
+                  <span data-i18n="starterF3">Fasst jedes Gespräch für dich zusammen</span>
+                  <span data-i18n="starterF4">E-Mail-Support</span>
+                </span>
+                <a class="plan__cta" href={LOGIN_URL} data-i18n="starterCta">Starter wählen</a>
+              </div>
+              <div class="plan plan--featured">
+                <span class="plan__head">
+                  <span class="plan__label" data-i18n="businessLabel">Business</span>
+                  <span class="plan__badge" data-i18n="popular">Beliebt</span>
+                </span>
+                <span class="plan__price">9,99 €<span class="plan__per" data-i18n="perMonth">/ Monat</span></span>
+                <span class="plan__features">
+                  <span data-i18n="businessF1"><strong>120 Minuten</strong> Gespräche pro Monat</span>
+                  <span data-i18n="businessF2">Nimmt an <em>und</em> telefoniert für dich raus</span>
+                  <span data-i18n="businessF3">Erledigt Aufgaben eigenständig für dich</span>
+                  <span data-i18n="businessF4">Priorisierter Support</span>
+                </span>
+                <a class="plan__cta" href={LOGIN_URL} data-i18n="businessCta">Business wählen</a>
+              </div>
+            </div>
+            <p class="layer-note" data-i18n="footnote">Minuten aufgebraucht? Du bekommst einen Hinweis — kein automatischer Aufpreis.</p>
+          </section>
+
+          <!-- -------------------------------------- Ebene 4: Entwickler -->
+          <section class="dev-layer" aria-label="Für Entwickler">
+            <h2 class="layer-title" data-i18n="devTitle">Ein Endpoint, <em>zwei Wege</em>.</h2>
+            <p class="layer-lead" data-i18n="devLead">Hermes ist ein <strong>MCP</strong>-Server. Verbinde ihn im KI-Tool deiner Wahl oder direkt aus dem Terminal.</p>
+            <div class="dev-grid">
+              <div class="dev-card" data-dev-card="a">
+                <span class="dev-card__head">
+                  <span class="dev-num">01</span>
+                  <span class="dev-card__titles">
+                    <span class="dev-eyebrow" data-i18n="devWayA">Im KI-Tool</span>
+                    <span class="dev-card__title" data-i18n="devWayATitle">Als Konnektor hinzufügen</span>
+                  </span>
+                </span>
+                <span class="dev-window">
+                  <span class="dev-bar">
+                    <span class="dev-dot" aria-hidden="true"></span>
+                    <span class="dev-dot" aria-hidden="true"></span>
+                    <span class="dev-dot" aria-hidden="true"></span>
+                    <span class="dev-bar__title" data-i18n="devWindowTitle">Einstellungen › Konnektoren</span>
+                  </span>
+                  <span class="dev-form-body">
+                    <span class="dev-addrow">
+                      <span class="dev-addrow__plus" aria-hidden="true">+</span><span data-i18n="devAddRow">Benutzerdefinierten Connector</span>
+                    </span>
+                    <span class="dev-arrow dev-arrow--1" aria-hidden="true"><span>↓</span></span>
+                    <span class="dev-field dev-field--1">
+                      <span class="dev-field__label" data-i18n="devFieldName">Name</span>
+                      <span class="dev-field__typed">Hermes</span>
+                    </span>
+                    <span class="dev-arrow dev-arrow--2" aria-hidden="true"><span>↓</span></span>
+                    <span class="dev-field dev-field--2">
+                      <span class="dev-field__label" data-i18n="devFieldUrl">Server-URL</span>
+                      <span class="dev-field__url">{MCP_URL}</span>
+                      <button class="dev-copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Kopieren</button>
+                    </span>
+                    <span class="dev-connect" data-i18n="devConnectBtn">Verbinden</span>
+                  </span>
+                </span>
+              </div>
+
+              <div class="dev-card" data-dev-card="b">
+                <span class="dev-card__head">
+                  <span class="dev-num">02</span>
+                  <span class="dev-card__titles">
+                    <span class="dev-eyebrow" data-i18n="devWayB">Im Terminal</span>
+                    <span class="dev-card__title" data-i18n="devWayBTitle">Mit einem Befehl</span>
+                  </span>
+                </span>
+                <span class="dev-window dev-window--dark">
+                  <span class="dev-bar dev-bar--split">
+                    <span class="dev-bar__group">
+                      <span class="dev-dot" aria-hidden="true"></span>
+                      <span class="dev-dot" aria-hidden="true"></span>
+                      <span class="dev-dot" aria-hidden="true"></span>
+                      <span class="dev-bar__title" data-i18n="devTerminalTitle">zsh — hermes</span>
+                    </span>
+                    <button class="dev-copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Kopieren</button>
+                  </span>
+                  <span class="dev-term-body">
+                    <span class="dev-term-out">
+                      <span class="dev-cmd"><span class="dev-cmd__prompt">$ </span>claude mcp add --transport http hermes \</span>
+                      <span class="dev-cmd2"><span class="dev-cmd2__text">&nbsp;&nbsp;&nbsp;&nbsp;{MCP_URL}</span><span class="dev-caret" aria-hidden="true"></span></span>
+                      <span class="dev-out dev-out--1" data-i18n="devOut1">✓ MCP-Server „hermes“ hinzugefügt</span>
+                      <span class="dev-out dev-out--2" data-i18n="devOut2">✓ Verbunden · Tools verfügbar</span>
+                    </span>
+                    <span class="dev-ask">
+                      <span class="dev-ask__label" data-i18n="devToolsLabel">Frag danach — zum Beispiel</span>
+                      <span class="dev-ask__line dev-ask-1" data-i18n="devAsk1">„Wer hat heute angerufen und was wollten sie?“</span>
+                      <span class="dev-ask__line dev-ask-2" data-i18n="devAsk2">„Ruf Herrn Müller an und verschiebe den Termin auf Donnerstag.“</span>
+                    </span>
+                  </span>
+                </span>
+              </div>
+            </div>
+            <p class="layer-note" data-i18n="devFootnote">Streamable HTTP, OAuth beim ersten Verbinden. Läuft mit Claude, Codex und jedem MCP-Client.</p>
+          </section>
+
+          <!-- -------------------------------------------------- Fussband -->
+          <footer class="site-footer">
+            <span class="site-footer__copy" data-i18n="footerCopy">© Sundartha — Hermes, dein Telefonassistent</span>
+            <span class="site-footer__nav">
+              <button class="site-footer__link" type="button" data-goto="howto:1" data-i18n="howItWorks">So funktioniert's</button>
+              <button class="site-footer__link" type="button" data-goto="price:2" data-i18n="pricing">Preise</button>
+              <button class="site-footer__link" type="button" data-goto="dev:3" data-i18n="forDevs">Für Entwickler</button>
+              <a class="site-footer__link" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
+              {legalDocs.map((entry) => (
+                <a class="site-footer__link" href={entry.href} data-legal-open={entry.slug} data-i18n={entry.i18n}>{entry.label}</a>
+              ))}
+              <a class="site-footer__link" href={`mailto:${CONTACT}`} data-i18n="contact">Kontakt</a>
+            </span>
+          </footer>
+
+          <div class="scroll-hint" aria-hidden="true">
+            <span class="scroll-hint__rail"></span>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Externes Script aus /public (same-origin) statt eines gebundelten Astro-
-         Skripts: letzteres wuerde Astro inline einbetten und unter der CSP
-         (script-src 'self', kein 'unsafe-inline') blockiert. -->
-    <script is:inline src="/assets/hero.js" defer></script>
+    <!-- ============================================ Vollbild-Blaetter ===== -->
 
-    <style is:global>
-      * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; background: #0f2d52; }
+    <!-- Am Handy wird nicht gescrollt: die drei Sektionen und das Menue
+         oeffnen sich als Vollbild. Auf dem Desktop dient nur das Rechts-Blatt. -->
+    <div class="sheet" data-sheet="howto" data-open="0" role="dialog" aria-modal="true" aria-label="So funktioniert's">
+      <div class="sheet__bg" aria-hidden="true"></div>
+      <div class="sheet__veil" aria-hidden="true"></div>
+      <div class="sheet__top" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <span class="lockup">
+          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
+          <span class="lockup__text">
+            <span class="lockup__name">HERMES</span>
+            <span class="lockup__by">by Sundartha</span>
+          </span>
+        </span>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+      </div>
+      <span class="sheet__title" data-i18n="howtoTitle">Ein Anschluss, <em>zwei Minuten</em>.</span>
+      <p class="sheet__lead" data-i18n="howtoLead">Ein Anschluss über <strong>MCP</strong>, kein Setup — deine KI ist in unter zwei Minuten unter einer echten Nummer erreichbar.</p>
+      <div class="sheet__demo">
+        <HermesDemo />
+      </div>
+      <div class="sheet__card">
+        <span class="step">
+          <span class="step__num">01</span>
+          <span class="step__body">
+            <span class="step__title" data-i18n="step1Title">Nummer holen</span>
+            <span class="step__text" data-i18n="step1Desc">Eine echte Rufnummer, in zwei Minuten aktiv. Kein Vertrag, keine Hardware.</span>
+          </span>
+        </span>
+        <span class="rule" aria-hidden="true"></span>
+        <span class="step">
+          <span class="step__num">02</span>
+          <span class="step__body">
+            <span class="step__title" data-i18n="step2Title">KI verbinden</span>
+            <span class="step__text" data-i18n="step2Desc">Ein Anschluss über MCP. Deine KI weiß danach, wer angerufen hat und was zu tun ist.</span>
+          </span>
+        </span>
+        <span class="rule" aria-hidden="true"></span>
+        <span class="step">
+          <span class="step__num">03</span>
+          <span class="step__body">
+            <span class="step__title" data-i18n="step3Title">Abnehmen lassen</span>
+            <span class="step__text" data-i18n="step3Desc">Hermes spricht, hört zu, vereinbart Termine und schreibt mit. Du liest das Protokoll.</span>
+          </span>
+        </span>
+      </div>
+      <a class="sheet__cta" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
+    </div>
 
-      .hero-root {
-        position: relative;
-        width: 100%;
-        min-height: 100vh;
-        overflow: hidden;
-        background: #0f2d52;
-        font-family: "Space Grotesk", sans-serif;
-      }
+    <div class="sheet" data-sheet="price" data-open="0" role="dialog" aria-modal="true" aria-label="Preise">
+      <div class="sheet__bg" aria-hidden="true"></div>
+      <div class="sheet__veil" aria-hidden="true"></div>
+      <div class="sheet__top" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <span class="lockup">
+          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
+          <span class="lockup__text">
+            <span class="lockup__name">HERMES</span>
+            <span class="lockup__by">by Sundartha</span>
+          </span>
+        </span>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+      </div>
+      <span class="sheet__title" data-i18n="priceTitle">Zwei Tarife, <em>keine Überraschungen</em>.</span>
+      <p class="sheet__lead" data-i18n="priceLead">Wähle das Paket, welches zu dir passt. <strong>Monatlich kündbar</strong>, <strong>keine versteckten Kosten</strong>.</p>
+      <div class="sheet-plans">
+        <div class="sheet-plan">
+          <span class="sheet-plan__head">
+            <span class="sheet-plan__labels">
+              <span class="sheet-plan__label" data-i18n="starterLabel">Starter</span>
+            </span>
+            <span class="sheet-plan__price">4,99 €<span class="sheet-plan__per" data-i18n="perMonth">/ Monat</span></span>
+          </span>
+          <span class="sheet-plan__features">
+            <span data-i18n="starterF1"><strong>30 Minuten</strong> Gespräche pro Monat</span>
+            <span data-i18n="starterF2">Nimmt jeden Anruf für dich an</span>
+            <span data-i18n="starterF3">Fasst jedes Gespräch für dich zusammen</span>
+            <span data-i18n="starterF4">E-Mail-Support</span>
+          </span>
+          <a class="sheet-plan__cta" href={LOGIN_URL} data-i18n="starterCta">Starter wählen</a>
+        </div>
+        <div class="sheet-plan sheet-plan--featured">
+          <span class="sheet-plan__head">
+            <span class="sheet-plan__labels">
+              <span class="sheet-plan__label" data-i18n="businessLabel">Business</span>
+              <span class="sheet-plan__badge" data-i18n="popular">Beliebt</span>
+            </span>
+            <span class="sheet-plan__price">9,99 €<span class="sheet-plan__per" data-i18n="perMonth">/ Monat</span></span>
+          </span>
+          <span class="sheet-plan__features">
+            <span data-i18n="businessF1"><strong>120 Minuten</strong> Gespräche pro Monat</span>
+            <span data-i18n="businessF2">Nimmt an <em>und</em> telefoniert für dich raus</span>
+            <span data-i18n="businessF3">Erledigt Aufgaben eigenständig für dich</span>
+            <span data-i18n="businessF4">Priorisierter Support</span>
+          </span>
+          <a class="sheet-plan__cta" href={LOGIN_URL} data-i18n="businessCta">Business wählen</a>
+        </div>
+      </div>
+      <p class="sheet__note" data-i18n="footnote">Minuten aufgebraucht? Du bekommst einen Hinweis — kein automatischer Aufpreis.</p>
+    </div>
 
-      /* Hintergrund: Olymp-Standbild + Farbverlauf-Fallback (greift, solange das
-         grosse Foto noch nicht in /public/assets liegt) */
-      .hero-bg {
-        position: absolute;
-        inset: 0;
-        z-index: 0;
-        background:
-          url("/assets/olymp_3.jpg") center / cover no-repeat,
-          radial-gradient(120% 90% at 50% 0%, #1b4f86 0%, #0f2d52 55%, #0a2245 100%);
-      }
-      .hero-sky {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        z-index: 0;
-        opacity: 1;
-      }
+    <div class="sheet dev-sheet" data-sheet="dev" data-open="0" role="dialog" aria-modal="true" aria-label="Für Entwickler">
+      <div class="sheet__bg" aria-hidden="true"></div>
+      <div class="sheet__veil" aria-hidden="true"></div>
+      <div class="sheet__top" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <span class="lockup">
+          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
+          <span class="lockup__text">
+            <span class="lockup__name">HERMES</span>
+            <span class="lockup__by">by Sundartha</span>
+          </span>
+        </span>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+      </div>
+      <span class="sheet__title" data-i18n="devTitle">Ein Endpoint, <em>zwei Wege</em>.</span>
+      <p class="sheet__lead" data-i18n="devLead">Hermes ist ein <strong>MCP</strong>-Server. Verbinde ihn im KI-Tool deiner Wahl oder direkt aus dem Terminal.</p>
 
-      .scrim { position: absolute; left: 0; right: 0; z-index: 1; pointer-events: none; }
-      .scrim--top {
-        top: 0;
-        height: 42%;
-        background: linear-gradient(to bottom, rgba(8,22,48,.52) 0%, rgba(8,22,48,.18) 40%, rgba(8,22,48,0) 100%);
-      }
-      .scrim--bottom {
-        bottom: 0;
-        height: 40%;
-        background: linear-gradient(to top, rgba(8,20,44,.6) 0%, rgba(8,20,44,.14) 55%, rgba(8,20,44,0) 100%);
-      }
+      <div class="sheet__card">
+        <span class="dev-card__head">
+          <span class="dev-num">01</span>
+          <span class="dev-card__titles">
+            <span class="dev-eyebrow" data-i18n="devWayA">Im KI-Tool</span>
+            <span class="dev-card__title" data-i18n="devWayATitle">Als Konnektor hinzufügen</span>
+          </span>
+        </span>
+        <span class="dev-window">
+          <span class="dev-bar">
+            <span class="dev-dot" aria-hidden="true"></span>
+            <span class="dev-dot" aria-hidden="true"></span>
+            <span class="dev-dot" aria-hidden="true"></span>
+            <span class="dev-bar__title" data-i18n="devWindowTitle">Einstellungen › Konnektoren</span>
+          </span>
+          <span class="dev-form-body">
+            <span class="dev-addrow">
+              <span class="dev-addrow__plus" aria-hidden="true">+</span><span data-i18n="devAddRow">Benutzerdefinierten Connector</span>
+            </span>
+            <span class="dev-arrow dev-arrow--1" aria-hidden="true"><span>↓</span></span>
+            <span class="dev-field dev-field--1">
+              <span class="dev-field__label" data-i18n="devFieldName">Name</span>
+              <span class="dev-field__typed">Hermes</span>
+            </span>
+            <span class="dev-arrow dev-arrow--2" aria-hidden="true"><span>↓</span></span>
+            <span class="dev-field dev-field--2 dev-field--url">
+              <span class="dev-field__label" data-i18n="devFieldUrl">Server-URL</span>
+              <span class="dev-field__row">
+                <span class="dev-field__url">{MCP_URL}</span>
+                <button class="dev-copy" type="button" data-copy={MCP_URL} data-i18n="copyLabel">Kopieren</button>
+              </span>
+            </span>
+            <span class="dev-connect" data-i18n="devConnectBtn">Verbinden</span>
+          </span>
+        </span>
+      </div>
 
-      /* NAV */
-      .hero-nav {
-        position: absolute;
-        top: 0; left: 0; right: 0;
-        z-index: 3;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 26px 46px;
-      }
-      .nav-brand { display: flex; align-items: center; gap: 12px; }
-      .nav-logo {
-        width: auto; height: 42px; display: block;
-        filter: drop-shadow(0 2px 9px rgba(7,18,40,.6));
-        transform-origin: 26% 86%;
-        animation: navWingDrift 6.8s ease-in-out infinite;
-      }
-      /* Sanftes Treiben des Fluegel-Logos (reine CSS-Keyframes, CSP-konform). */
-      @keyframes navWingDrift {
-        0%   { transform: translate(0, 0) rotate(0deg); }
-        22%  { transform: translate(-0.7%, -1.1%) rotate(-1deg); }
-        48%  { transform: translate(0.5%, 0.5%) rotate(0.6deg); }
-        74%  { transform: translate(0.8%, -0.7%) rotate(1.3deg); }
-        100% { transform: translate(0, 0) rotate(0deg); }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .nav-logo { animation: none; }
-      }
-      .brand-text { display: flex; flex-direction: column; line-height: 1.05; }
-      .brand-name {
-        font-family: "Space Grotesk", sans-serif;
-        font-weight: 600; font-size: 20px; letter-spacing: .3em;
-        color: #ffffff; text-shadow: 0 1px 12px rgba(7,18,40,.7);
-      }
-      .brand-by {
-        margin-top: 3px; font-size: 9.5px; font-weight: 400;
-        letter-spacing: .24em; text-transform: uppercase;
-        color: rgba(255,255,255,.82);
-      }
-      .nav-center {
-        display: flex; gap: 32px; align-items: center;
-        font-size: 15px; font-weight: 500; letter-spacing: .01em;
-        color: rgba(255,255,255,.94); text-shadow: 0 1px 10px rgba(7,18,40,.6);
-      }
-      .nav-right { display: flex; gap: 20px; align-items: center; }
-      /* Doppel-Selektor (.nav-login.nav-login) wie im Design: hoehere Spezifitaet
-         als .nav-link { color: inherit }, das sonst (gleiche Spezifitaet, spaeter
-         im Stylesheet) gewinnt -> "Log in" wuerde sonst Default-Schwarz erben
-         (.nav-right setzt keine Farbe, anders als .nav-center). */
-      .nav-login.nav-login {
-        font-size: 15px; font-weight: 500;
-        color: #ffffff;
-        text-shadow: 0 1px 10px rgba(7,18,40,.6);
-      }
-      .nav-link {
-        cursor: pointer; text-decoration: none; color: inherit;
-        transition: opacity .18s;
-      }
-      .nav-link:hover { opacity: .7; }
+      <div class="sheet__card">
+        <span class="dev-card__head">
+          <span class="dev-num">02</span>
+          <span class="dev-card__titles">
+            <span class="dev-eyebrow" data-i18n="devWayB">Im Terminal</span>
+            <span class="dev-card__title" data-i18n="devWayBTitle">Mit einem Befehl</span>
+          </span>
+        </span>
+        <span class="dev-window dev-window--dark">
+          <span class="dev-bar dev-bar--split">
+            <span class="dev-bar__group">
+              <span class="dev-dot" aria-hidden="true"></span>
+              <span class="dev-dot" aria-hidden="true"></span>
+              <span class="dev-dot" aria-hidden="true"></span>
+              <span class="dev-bar__title" data-i18n="devTerminalTitle">zsh — hermes</span>
+            </span>
+            <button class="dev-copy" type="button" data-copy={MCP_CMD} data-i18n="copyLabel">Kopieren</button>
+          </span>
+          <span class="dev-term-body">
+            <span class="dev-term-out">
+              <span class="dev-cmd"><span class="dev-cmd__prompt">$ </span>claude mcp add --transport http hermes \</span>
+              <span class="dev-cmd2"><span class="dev-cmd2__text">&nbsp;&nbsp;&nbsp;&nbsp;{MCP_URL}</span><span class="dev-caret" aria-hidden="true"></span></span>
+              <span class="dev-out dev-out--1" data-i18n="devOut1">✓ MCP-Server „hermes“ hinzugefügt</span>
+              <span class="dev-out dev-out--2" data-i18n="devOut2">✓ Verbunden · Tools verfügbar</span>
+            </span>
+            <span class="dev-ask">
+              <span class="dev-ask__label" data-i18n="devToolsLabel">Frag danach — zum Beispiel</span>
+              <span class="dev-ask__line dev-ask-1" data-i18n="devAsk1">„Wer hat heute angerufen und was wollten sie?“</span>
+              <span class="dev-ask__line dev-ask-2" data-i18n="devAsk2">„Ruf Herrn Müller an und verschiebe den Termin auf Donnerstag.“</span>
+            </span>
+          </span>
+        </span>
+      </div>
 
-      /* Buttons (weisse Pille) */
-      .btn {
-        border: none; cursor: pointer; text-decoration: none;
-        background: #ffffff; color: #10305a;
-        font-family: "Space Grotesk", sans-serif; font-weight: 600; letter-spacing: .01em;
-        border-radius: 999px;
-        display: inline-flex; align-items: center;
-        transition: transform .18s, box-shadow .18s;
-      }
-      .btn--nav {
-        font-size: 14px; padding: 11px 20px; gap: 7px;
-        box-shadow: 0 10px 26px -12px rgba(7,18,40,.7);
-      }
-      .btn--nav:hover { transform: translateY(-1px); box-shadow: 0 14px 32px -12px rgba(7,18,40,.85); }
-      .btn--hero {
-        margin-top: 30px;
-        font-size: 15px; padding: 15px 32px; gap: 9px;
-        box-shadow: 0 18px 44px -16px rgba(7,16,38,.8);
-      }
-      .btn--hero:hover { transform: translateY(-2px); box-shadow: 0 24px 54px -16px rgba(7,16,38,.9); }
+      <p class="sheet__note" data-i18n="devFootnote">Streamable HTTP, OAuth beim ersten Verbinden. Läuft mit Claude, Codex und jedem MCP-Client.</p>
+    </div>
 
-      /* HERO-CONTENT */
-      .hero-content {
-        position: relative; z-index: 2;
-        min-height: 100vh;
-        display: flex; flex-direction: column;
-        align-items: center; justify-content: flex-start;
-        text-align: center;
-        padding: clamp(118px, 15vh, 190px) 24px 64px;
-      }
-      .hero-inner { display: flex; flex-direction: column; align-items: center; max-width: 700px; }
-      .hero-title {
-        margin: 0; white-space: nowrap;
-        /* Norse (runisch); Bruecke auf Instrument Serif bis die Norse-Datei vorliegt. */
-        font-family: "Norse", "Instrument Serif", serif; font-weight: 400;
-        font-size: clamp(50px, 7.4vw, 98px); line-height: 0.98; letter-spacing: .004em;
-        color: #ffffff; text-shadow: 0 2px 40px rgba(7,16,38,.55);
-      }
-      .hero-title em { font-style: italic; font-weight: 400; }
-      .hero-sub {
-        margin: 16px 0 0;
-        font-family: "Space Grotesk", sans-serif; font-weight: 500;
-        font-size: clamp(16px, 1.5vw, 19px); line-height: 1.5;
-        color: rgba(255,255,255,.96); text-shadow: 0 1px 16px rgba(7,16,38,.6);
-      }
-      /* Kleine Viewports: H1 darf umbrechen, Mittel-Nav weicht */
-      @media (max-width: 560px) {
-        .hero-title { white-space: normal; }
-        .hero-nav { padding: 20px 22px; }
-        .nav-center { display: none; }
-      }
-    </style>
+    <!-- Rechts-Blatt. Die Texte stammen aus src/data/legal/ — derselben Quelle
+         wie /datenschutz, /impressum und /agb. Die Seiten bleiben unter ihrer
+         URL erreichbar (Pflicht), das Blatt ist der schnelle Weg von hier. -->
+    <div class="sheet legal-sheet" data-sheet="legal" data-open="0" role="dialog" aria-modal="true" aria-label="Rechtliches">
+      <div class="sheet__bg" aria-hidden="true"></div>
+      <div class="sheet__veil" aria-hidden="true"></div>
+      <div class="sheet__top" aria-hidden="true"></div>
+      <div class="legal-head">
+        <span class="lockup">
+          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
+          <span class="lockup__text">
+            <span class="lockup__name">HERMES</span>
+            <span class="lockup__by">by Sundartha</span>
+          </span>
+        </span>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+      </div>
+      <div class="legal-body">
+        <div class="legal-topper">
+          {legalDocs.map((entry) => (
+            <span class="legal-title" data-legal-doc={entry.slug} hidden={entry.slug !== "privacy"}>{entry.doc.title}</span>
+          ))}
+          <div class="legal-pills">
+            {legalDocs.map((entry) => (
+              <button class="legal-pill" type="button" data-legal-pill={entry.slug} data-i18n={entry.i18n}>{entry.label}</button>
+            ))}
+            <a class="legal-pill" href={`mailto:${CONTACT}`} data-i18n="contact">Kontakt</a>
+          </div>
+        </div>
+        {legalDocs.map((entry) => (
+          <div data-legal-doc={entry.slug} hidden={entry.slug !== "privacy"}>
+            <div class="legal-card">
+              {entry.doc.sections.map((section) => (
+                <div class="legal-section">
+                  <span class="legal-eyebrow">{section.heading}</span>
+                  <span class="legal-text">{section.text}</span>
+                </div>
+              ))}
+            </div>
+            <p class="legal-note">
+              {entry.doc.note} — <a href={entry.href}>Als eigene Seite öffnen</a>
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div class="sheet menu-sheet" data-sheet="menu" data-open="0" role="dialog" aria-modal="true" aria-label="Menü">
+      <div class="sheet__bg" aria-hidden="true"></div>
+      <div class="sheet__veil" aria-hidden="true"></div>
+      <div class="sheet__top" aria-hidden="true"></div>
+      <div class="sheet__head">
+        <span class="lockup">
+          <img class="nav-wing" src="/assets/hermes-wing.png" alt="" />
+          <span class="lockup__text">
+            <span class="lockup__name">HERMES</span>
+            <span class="lockup__by">by Sundartha</span>
+          </span>
+        </span>
+        <button class="sheet__close" type="button" data-close-sheet aria-label="Schließen">×</button>
+      </div>
+      <div class="menu-list">
+        <button class="menu-item" type="button" data-goto="howto:1" data-from-menu data-i18n="howItWorks">So funktioniert's</button>
+        <button class="menu-item" type="button" data-goto="price:2" data-from-menu data-i18n="pricing">Preise</button>
+        <button class="menu-item" type="button" data-goto="dev:3" data-from-menu data-i18n="forDevs">Für Entwickler</button>
+      </div>
+      <div class="menu-block">
+        <span class="menu-label" data-i18n="language">Sprache</span>
+        <div class="menu-langs">
+          <button class="menu-lang" type="button" data-lang="de" aria-pressed="true">Deutsch</button>
+          <button class="menu-lang" type="button" data-lang="en" aria-pressed="false">English</button>
+        </div>
+      </div>
+      <a class="sheet__cta" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
+      <div class="menu-foot">
+        <div class="menu-foot__links">
+          {legalDocs.map((entry) => (
+            <a class="menu-foot__link" href={entry.href} data-legal-open={entry.slug} data-i18n={entry.i18n}>{entry.label}</a>
+          ))}
+          <a class="menu-foot__link" href={`mailto:${CONTACT}`} data-i18n="contact">Kontakt</a>
+        </div>
+        <span class="menu-foot__copy" data-i18n="footerCopy">© Sundartha — Hermes, dein Telefonassistent</span>
+      </div>
+    </div>
+
+    <script>
+      // Hoisted script: Astro buendelt es als externes, same-origin Modul
+      // (assetsInlineLimit 0) — CSP-konform ohne script-src 'unsafe-inline'.
+      import "../scripts/hermes-scroll.js";
+      import "../scripts/hermes-demo.js";
+    </script>
   </body>
 </html>
