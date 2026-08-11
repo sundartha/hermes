@@ -4,13 +4,14 @@
 // (src/self-service.js, NUR-Lese-Vertrag). Die UI bietet AUSSCHLIESSLICH die
 // erlaubten Felder an:
 //   - agentName  (Freitext)
-//   - allowCalendar / allowBooking      (Toggle, frei kippbar)
+//   - agentStyle (Dropdown, NUR wenn state.personaStyleIds vorliegt)
 //   - allowPersonalData / allowBankData (Toggle, NUR restriktiver: true->false)
 //   - greeting   (NUR Template-Auswahl aus state.greetingTemplates -- KEIN
 //                 Freitext-Eingabefeld; ein solches existiert hier bewusst nicht)
 //   - language   ("" automatisch / de / fr / en)
-// allowSummaries, Disclosure-Felder und alles Unbekannte fehlen bewusst -- der
-// Self-Service-Pfad lehnt sie ohnehin ab (kein UI-Schreibpfad fuer rejected-Felder).
+// allowCalendar/allowBooking, allowSummaries, Disclosure-Felder und alles
+// Unbekannte fehlen bewusst -- der Self-Service-Pfad lehnt sie ohnehin ab (kein
+// UI-Schreibpfad fuer rejected-Felder).
 //
 // Nach Speichern: "Gespeichert", listet changed/rejected (aus der Antwort
 // abgeleitet, settingsOutcome) und RE-FETCHt den State (fetchTenantState ->
@@ -23,6 +24,12 @@
 // Zustand einmal und dispatcht AUTH_EVENT -- diese Insel hoert darauf und befuellt
 // das Formular. Tenant-/Vorlagen-Strings gehen NUR ueber textContent/option.value
 // in den DOM (nie innerHTML) -- kein XSS-Pfad (Leitplanke).
+//
+// Die private Rufnummer ist ein ZWEITES Formular mit EIGENEM Endpunkt, kein
+// Settings-Feld: sie ist Kontakt-PII am Tenant-Record (nicht in settings, die
+// komplett ueber /api/state + MCP leaken, H4). Angezeigt wird ausschliesslich die
+// Server-Maske (maskPrivateNumber); der volle Wert wird nie ins Eingabefeld
+// zurueckgeschrieben.
 import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.js";
 ---
 
@@ -33,6 +40,17 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   <form id="settings-form" class="settings-form">
     <label class="field-label" for="settings-name">Agent name</label>
     <input id="settings-name" class="field-input" type="text" autocomplete="off" />
+
+    <!-- P13/WEB-07: Stil-Auswahl. Optionen + gueltige IDs liefert der Server
+         (state.personaStyleIds); bleibt versteckt, solange das Feld fehlt. -->
+    <div id="settings-style-row" hidden>
+      <label class="field-label" for="settings-style">Agent style</label>
+      <select id="settings-style" class="field-input"></select>
+      <p class="muted">
+        Sets the tone of every call. The disclosure sentence at the start of outbound
+        calls never changes.
+      </p>
+    </div>
 
     <fieldset class="settings-perms">
       <legend class="field-label">Permissions</legend>
@@ -65,6 +83,27 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
       <span id="settings-msg" class="settings-msg" hidden></span>
     </div>
   </form>
+
+  <!-- P13/WEB-19: eigene Naht (eigener Endpunkt, PII am Tenant-Record) - deshalb
+       ein EIGENES form-Element neben dem Settings-Formular. Das Eingabefeld wird
+       NIE vorbefuellt: angezeigt wird ausschliesslich die Server-Maske, und die
+       waere als Eingabe ohnehin ungueltig. -->
+  <form id="private-number-form" class="settings-form">
+    <label class="field-label" for="private-number-input">Summary SMS number</label>
+    <p id="private-number-status" class="muted">—</p>
+    <input id="private-number-input" class="field-input" type="tel" inputmode="tel"
+           autocomplete="off" placeholder="+1 555 0100" />
+    <p class="muted">
+      Your own number, in international format. Hermes texts you a summary after each
+      call. It is never used as the caller ID and never shown to the people your agent
+      calls.
+    </p>
+    <div class="settings-actions">
+      <button id="private-number-save" class="btn" type="submit">Save number</button>
+      <button id="private-number-clear" class="btn" type="button">Remove</button>
+      <span id="private-number-msg" class="settings-msg" hidden></span>
+    </div>
+  </form>
 </section>
 
 <script>
@@ -73,9 +112,13 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     AUTH_STATE,
     AUTH_EVENT,
     HTTP_UNAUTHORIZED,
+    ERROR_INVALID_PRIVATE_NUMBER,
     buildSettingsPatch,
     fetchTenantState,
+    personaStyleOptions,
+    privateNumberStatusText,
     saveSettings,
+    savePrivateNumber,
     settingsFrom,
     settingsOutcome,
   } from "../../lib/api.js";
@@ -83,44 +126,62 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   const cardEl = document.getElementById("settings-card");
   const formEl = document.getElementById("settings-form");
   const nameEl = document.getElementById("settings-name");
+  const styleRowEl = document.getElementById("settings-style-row");
+  const styleEl = document.getElementById("settings-style");
   const greetingEl = document.getElementById("settings-greeting");
   const languageEl = document.getElementById("settings-language");
   const saveBtn = document.getElementById("settings-save");
   const msgEl = document.getElementById("settings-msg");
 
+  const privateFormEl = document.getElementById("private-number-form");
+  const privateInputEl = document.getElementById("private-number-input");
+  const privateStatusEl = document.getElementById("private-number-status");
+  const privateSaveBtn = document.getElementById("private-number-save");
+  const privateClearBtn = document.getElementById("private-number-clear");
+  const privateMsgEl = document.getElementById("private-number-msg");
+
   const MSG_OK_CLASS = "settings-msg--ok";
   const MSG_ERR_CLASS = "settings-msg--err";
 
-  // Kurze Rueckmeldung mit Erfolgs-/Fehler-Faerbung. text leer -> verstecken.
-  function showMessage(text, ok) {
-    msgEl.textContent = text;
-    msgEl.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok);
-    msgEl.classList.toggle(MSG_ERR_CLASS, Boolean(text) && !ok);
-    msgEl.hidden = !text;
+  // Kurze Rueckmeldung mit Erfolgs-/Fehler-Faerbung, an ein beliebiges Meldungs-
+  // Element (EINE Implementierung fuer settings- UND private-number-Formular, G5).
+  // text leer -> verstecken.
+  function showMessage(el, text, ok) {
+    el.textContent = text;
+    el.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok);
+    el.classList.toggle(MSG_ERR_CLASS, Boolean(text) && !ok);
+    el.hidden = !text;
   }
 
-  // greeting-Dropdown NUR aus den Server-Vorlagen (kein Freitext-Input). Optionen
-  // via createElement + textContent/value -- kein innerHTML mit Tenant-/Vorlagen-
-  // Strings (XSS-Schutz, Leitplanke). Aktuelle Vorlage vorausgewaehlt.
-  function renderGreetingOptions(templates, current) {
-    greetingEl.replaceChildren(
-      ...templates.map((tpl) => {
+  // EINE Options-Fabrik fuer greeting UND Stil (G5): {value,label}-Paare -> <option>
+  // per createElement/textContent - Server-/Tenant-Strings werden nie als HTML
+  // interpretiert (XSS-Leitplanke).
+  function renderOptions(selectEl, options, current) {
+    selectEl.replaceChildren(
+      ...options.map(({ value, label }) => {
         const option = document.createElement("option");
-        option.value = tpl;
-        option.textContent = tpl;
-        option.selected = tpl === current;
+        option.value = value;
+        option.textContent = label;
+        option.selected = value === current;
         return option;
-      })
+      }),
     );
   }
 
+  // greeting-Vorlagen sind rohe Strings: Wert == Beschriftung.
+  const asOption = (value) => ({ value, label: value });
+
   // Formular aus dem state befuellen. Permission-Toggles ueber data-perm; greeting
-  // nur aus den Vorlagen; language leer/null -> "Automatisch".
+  // nur aus den Vorlagen; agentStyle nur, wenn der Server Optionen liefert;
+  // language leer/null -> "Automatisch".
   function fillForm(data) {
     const { settings, greetingTemplates } = settingsFrom(data);
     nameEl.value = settings.agentName || "";
     languageEl.value = settings.language || "";
-    renderGreetingOptions(greetingTemplates, settings.greeting);
+    renderOptions(greetingEl, greetingTemplates.map(asOption), settings.greeting);
+    const styleOptions = personaStyleOptions(data);
+    styleRowEl.hidden = !styleOptions;
+    if (styleOptions) renderOptions(styleEl, styleOptions, settings.agentStyle || "");
     for (const input of formEl.querySelectorAll("[data-perm]")) {
       input.checked = Boolean(settings[input.dataset.perm]);
     }
@@ -130,6 +191,9 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   // dort, nicht hier). Toggles ueber data-perm einsammeln.
   function readForm() {
     const form = { agentName: nameEl.value, greeting: greetingEl.value, language: languageEl.value };
+    // agentStyle NUR, wenn das Dropdown ueberhaupt bedienbar ist - ein verstecktes,
+    // leeres Dropdown wuerde sonst einen gespeicherten Stil still zuruecksetzen.
+    if (!styleRowEl.hidden) form.agentStyle = styleEl.value;
     for (const input of formEl.querySelectorAll("[data-perm]")) {
       form[input.dataset.perm] = input.checked;
     }
@@ -165,16 +229,61 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     const patch = buildSettingsPatch(readForm());
     try {
       const saved = await saveSettings(patch);
-      showMessage(outcomeText(settingsOutcome(patch, saved)), true);
+      showMessage(msgEl, outcomeText(settingsOutcome(patch, saved)), true);
       await refetchState(); // frischen Stand ziehen + an alle Inseln verteilen
     } catch (err) {
-      showMessage(saveErrorText(err), false);
+      showMessage(msgEl, saveErrorText(err), false);
     } finally {
       saveBtn.disabled = false;
     }
   }
 
   formEl.addEventListener("submit", submit);
+
+  const MSG_NUMBER_SAVED = "Number saved.";
+  const MSG_NUMBER_REMOVED = "Number removed.";
+  const MSG_NUMBER_MISSING = "Enter a number first, or use Remove.";
+  const MSG_NUMBER_INVALID =
+    "That number isn't valid or isn't allowed. Use the international format, for example +1 555 0100.";
+
+  // Fehlertext der Nummern-Route. Der eingegebene Wert wird NIE zurueckgespiegelt
+  // (keine PII in Meldungen); nur der stabile Server-Code entscheidet den Text.
+  function privateNumberErrorText(err) {
+    if (err instanceof ApiError && err.code === ERROR_INVALID_PRIVATE_NUMBER)
+      return MSG_NUMBER_INVALID;
+    return saveErrorText(err);
+  }
+
+  // Schreibt die Nummer und synchronisiert danach den State ueber DIESELBE eine
+  // Refetch-Naht wie das Settings-Speichern (G5). Nebeneffekt im Namen (N7).
+  async function submitPrivateNumber(value, okText) {
+    privateSaveBtn.disabled = true;
+    privateClearBtn.disabled = true;
+    try {
+      await savePrivateNumber(value);
+      privateInputEl.value = ""; // das Eingabefeld traegt nie einen gespeicherten Wert
+      showMessage(privateMsgEl, okText, true);
+      await refetchState();
+    } catch (err) {
+      showMessage(privateMsgEl, privateNumberErrorText(err), false);
+    } finally {
+      privateSaveBtn.disabled = false;
+      privateClearBtn.disabled = false;
+    }
+  }
+
+  privateFormEl.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const value = privateInputEl.value.trim();
+    // Leeres Feld ist KEIN implizites Loeschen - Loeschen ist der eigene Knopf.
+    if (!value) {
+      showMessage(privateMsgEl, MSG_NUMBER_MISSING, false);
+      return;
+    }
+    submitPrivateNumber(value, MSG_NUMBER_SAVED);
+  });
+
+  privateClearBtn.addEventListener("click", () => submitPrivateNumber("", MSG_NUMBER_REMOVED));
 
   // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
   // eingeloggten Zustand traegt die Antwort settings/greetingTemplates. Listener
@@ -185,6 +294,7 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) {
       fillForm(data);
+      privateStatusEl.textContent = privateNumberStatusText(data);
       cardEl.hidden = false;
     } else {
       cardEl.hidden = true;

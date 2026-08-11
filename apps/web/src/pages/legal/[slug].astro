@@ -1,0 +1,23 @@
+---
+// Informative EN-Fassung der Rechtsdokumente (Owner-Entscheidung O13). Gebaut
+// wird NUR, was als Content-Datei geliefert ist: ohne Datei entsteht keine Seite,
+// die Route liefert 404 statt einer falschen Zusicherung. noindex, weil die
+// deutsche Fassung die verbindliche und die zu indexierende ist.
+import Site from "../../layouts/Site.astro";
+import LegalDocument from "../../components/site/LegalDocument.astro";
+import { LEGAL_CONTENT } from "../../lib/legal-content.js";
+import { legalRouteEntries, LEGAL_TRANSLATION_NOTICE } from "../../lib/legal.js";
+
+export function getStaticPaths() {
+  return legalRouteEntries(LEGAL_CONTENT, "en").map(({ slug, doc }) => ({
+    params: { slug },
+    props: { doc },
+  }));
+}
+
+const { doc } = Astro.props;
+---
+
+<Site lang="en" noindex title={doc.metaTitle} description={doc.metaDescription}>
+  <LegalDocument doc={doc} note={LEGAL_TRANSLATION_NOTICE} />
+</Site>

@@ -157,6 +157,8 @@ export const NUMBER_STATUS = Object.freeze({
   ACTIVE: "active",
   PROVISIONING: "provisioning",
   REQUESTED: "requested",
+  FAILED: "failed",
+  BLOCKED: "blocked",
   NONE: "none",
 });
 
@@ -165,6 +167,41 @@ export const NUMBER_STATUS = Object.freeze({
 export function isNumberProvisioning(data) {
   const { numberStatus } = agentInfo(data);
   return numberStatus === NUMBER_STATUS.PROVISIONING || numberStatus === NUMBER_STATUS.REQUESTED;
+}
+
+// Hintergrund-Poll waehrend "Setting up...": ohne das haengt der Chip auf dem
+// Platzhalter fest, bis der Nutzer die Seite manuell neu laedt (Bug, Jul 2026).
+// Intervall + Deckel hier benannt statt als Magic Number an der Aufrufstelle.
+export const NUMBER_POLL_INTERVAL_MS = 4000;
+export const NUMBER_POLL_MAX_ATTEMPTS = 90; // ~6 Minuten Deckel -> kein Endlos-Timer bei nie fertiger Nummer
+
+// Ob die Auth-Insel nach diesem refresh() einen weiteren Poll ansetzen soll: nur
+// waehrend eine Nummer eingerichtet wird (isNumberProvisioning) UND innerhalb des
+// Attempt-Deckels. attemptCount ist die Anzahl bereits verstrichener Polls (0-basiert).
+export function shouldPollNumberStatus(result, attemptCount) {
+  if (!result || result.state !== AUTH_STATE.AUTHENTICATED) return false;
+  if (!isNumberProvisioning(result.data)) return false;
+  return attemptCount < NUMBER_POLL_MAX_ATTEMPTS;
+}
+
+// Chip-Platzhaltertexte (Fix C, PLAN-VOUCHER-SETUP-FEE-GAP.md) - EINE Quelle (G5) statt
+// einer zweiten Kopie im Astro-Script. Wortlaut ist ein Vorschlag (siehe Plan §6).
+const NUMBER_TEXT_NO_NUMBER = "No number assigned yet";
+const NUMBER_TEXT_SETTING_UP = "Setting up your number…";
+const NUMBER_TEXT_SETUP_FAILED = "Number setup failed";
+const NUMBER_TEXT_SETUP_BLOCKED = "Number setup delayed — capacity limit reached";
+
+// Platzhaltertext fuer eine NICHT-aktive Nummer: failed/blocked bekommen jetzt einen
+// eigenen Hinweis statt im generischen "No number assigned yet" zu verschwinden (Bug B -
+// der Tenant sah bisher keinen Unterschied zu "noch nicht bestellt"). Rein (kein DOM) ->
+// mit node:test unit-testbar, anders als die DOM-Verdrahtung in AgentChip.astro. Aktive
+// Nummer kommt hier nie an (der Aufrufer zeigt dann die echte e164 statt eines Platzhalters).
+export function numberPlaceholderText(data) {
+  if (isNumberProvisioning(data)) return NUMBER_TEXT_SETTING_UP;
+  const { numberStatus } = agentInfo(data);
+  if (numberStatus === NUMBER_STATUS.FAILED) return NUMBER_TEXT_SETUP_FAILED;
+  if (numberStatus === NUMBER_STATUS.BLOCKED) return NUMBER_TEXT_SETUP_BLOCKED;
+  return NUMBER_TEXT_NO_NUMBER;
 }
 
 // Liest den Karten-Status aus der state-Antwort -- die EINE Stelle, an der das
@@ -201,6 +238,17 @@ export function quotaFrom(data) {
     return null;
   }
   return { includedMinutes: quota.includedMinutes, remainingMinutes: quota.remainingMinutes };
+}
+
+// Liest die Einrichtungsgebuehr aus der state-/billing-status-Antwort (Phase A,
+// PLAN-VOUCHER-SETUP-FEE-GAP.md) -- die EINE Stelle, an der das Frontend die Form
+// `data.numberSetupFeeCents`/`data.currency` annimmt (Contract-Grenze, R5). Fehlendes/
+// nicht-numerisches/<=0-Feld (PAYMENT_ENABLED aus, altes Backend, Fee=0 konfiguriert)
+// -> null (die Kachel zeigt dann keine Gebuehren-Zeile, byte-identisch zum Bestand).
+export function numberSetupFeeFrom(data) {
+  const cents = data && data.numberSetupFeeCents;
+  if (typeof cents !== "number" || !Number.isFinite(cents) || cents <= 0) return null;
+  return { amountCents: cents, currency: (data && data.currency) || "eur" };
 }
 
 // ---- W4: read-only Datensicht (Calls / ActionItems / Kalender) ----------------
@@ -388,15 +436,18 @@ export function formatCallDuration(totalSec) {
 // anbieten, was es nicht gibt). Freitext-greeting ist gar nicht erst baubar:
 // greeting ist KEIN Free-Field, sondern nur eine Template-Auswahl.
 
-// Frei setzbare Felder (Typ-Check macht updateSettings serverseitig). 1:1 zu
-// SELF_SERVICE_FREE_FIELDS in src/self-service.js -- driftet das auseinander,
-// schlaegt das Backend den Wert ohnehin als rejected zurueck (fail-closed).
-export const SETTINGS_FREE_FIELDS = Object.freeze([
-  "agentName",
-  "allowCalendar",
-  "allowBooking",
-  "language",
-]);
+// Frei setzbare Felder, 1:1 zu SELF_SERVICE_FREE_FIELDS in src/self-service.js
+// (Typ-/Enum-Check macht updateSettings serverseitig). Das ist DIE EINE Feldliste
+// dieses Clients: buildSettingsPatch laeuft ueber genau sie, die Insel haelt kein
+// zweites Set (G5/S2). Gesichert wird der Spiegel von zwei Tests, die BEIDE Listen
+// importieren und vergleichen (apps/web/test/settings.test.js und
+// test/dashboard-i18n-surface.test.js) - dasselbe Muster wie beim Plan-Katalog-
+// Spiegel apps/web/src/lib/plans.js <-> src/plans.js. Server-Code wandert bewusst
+// NICHT ins Browser-Bundle (duenner Client, Strategie 2.3).
+// allowCalendar/allowBooking sind seit P1b KEINE Self-Service-Felder mehr (der
+// Telefon-Agent hat weder Kalender- noch Buchungs-Tool). Sie standen hier zuletzt
+// als Angebot ohne Wirkung: der Server meldete sie bei JEDEM Speichern als rejected.
+export const SETTINGS_FREE_FIELDS = Object.freeze(["agentName", "language", "agentStyle"]);
 
 // Permission-Flags, die ein Tenant NUR restriktiver setzen darf (true->false ja,
 // false->true NEIN -- Aktivieren bleibt Plattform-Admin). 1:1 zu
@@ -415,37 +466,52 @@ export const SETTINGS_LANGUAGES = Object.freeze([
   { value: "en", label: "English" },
 ]);
 
-// Die Permission-Toggles der UI (Reihenfolge + Beschriftung). Free-Toggles
-// (allowCalendar/allowBooking) duerfen frei kippen; restrict-only-Toggles
-// (allowPersonalData/allowBankData) nur restriktiver -- dieselbe Semantik wie
-// das Backend, hier nur fuer die Anzeige zentralisiert. agentName/greeting/
-// language sind eigene Controls (Text/Dropdowns), kein Toggle.
+// Die Permission-Toggles der UI (Reihenfolge + Beschriftung). Es sind GENAU die
+// restrict-only-Flags: ein Tenant darf sie nur restriktiver setzen (true->false ja,
+// false->true NEIN - Aktivieren bleibt Plattform-Admin). Ein eigenes restrictOnly-
+// Feld traegt die Liste deshalb nicht mehr: es waere ueberall true und wurde von
+// keinem Steuerelement gelesen (toter Datensatz, G9). agentName/greeting/language/
+// agentStyle sind eigene Controls (Text/Dropdowns), kein Toggle.
 export const SETTINGS_PERMISSION_TOGGLES = Object.freeze([
-  {
-    key: "allowCalendar",
-    label: "Calendar access",
-    hint: "Agent may view appointments",
-    restrictOnly: false,
-  },
-  {
-    key: "allowBooking",
-    label: "Book appointments",
-    hint: "Agent may create appointments",
-    restrictOnly: false,
-  },
-  {
-    key: "allowPersonalData",
-    label: "Personal data",
-    hint: "Share address, email, etc.",
-    restrictOnly: true,
-  },
-  {
-    key: "allowBankData",
-    label: "Bank details",
-    hint: "Share payment data (not recommended)",
-    restrictOnly: true,
-  },
+  { key: "allowPersonalData", label: "Personal data", hint: "Share address, email, etc." },
+  { key: "allowBankData", label: "Bank details", hint: "Share payment data (not recommended)" },
 ]);
+
+// Englische Beschriftungen der kuratierten Stil-IDs (PERSONA_STYLE_IDS,
+// src/i18n/locales.js). Die IDs sind historisch deutschsprachig, /app ist englisch
+// (Produktentscheidung 7.15) - eine aus der ID abgeleitete Beschriftung truege den
+// deutschen Wortstamm. Die GUELTIGEN IDs kommen weiterhin AUSSCHLIESSLICH vom Server
+// (state.personaStyleIds); dieser Katalog liefert nur den Anzeigetext, kein zweites
+// ID-Set (G5/S2). Drift gegen PERSONA_STYLE_IDS faengt apps/web/test/settings.test.js.
+export const PERSONA_STYLE_LABELS = Object.freeze({
+  "warm-persoenlich": "Warm and personal",
+  "formell-professionell": "Formal and professional",
+});
+
+// "" = kein Override -> neutraler Bestandsstil (updateSettings speichert "" als null).
+const PERSONA_STYLE_DEFAULT_OPTION = Object.freeze({ value: "", label: "Default (neutral)" });
+
+// Beschriftung einer Stil-ID; eine dem Client unbekannte Server-ID faellt fail-soft auf
+// die rohe ID zurueck (das Dropdown verschluckt keine Server-Option). hasOwnProperty
+// statt [] - eine Server-ID darf nie ein Prototyp-Feld treffen (wie callStatusKind).
+function personaStyleLabel(id) {
+  return Object.prototype.hasOwnProperty.call(PERSONA_STYLE_LABELS, id)
+    ? PERSONA_STYLE_LABELS[id]
+    : id;
+}
+
+// Optionen des Stil-Dropdowns aus der state-Antwort -- die EINE Stelle, an der das
+// Frontend die Form `data.personaStyleIds` annimmt (Contract-Grenze, R5). Fehlt das
+// Feld (alter Server) -> null = "Steuerelement verstecken" (I9-Muster wie hasCard);
+// dann reist agentStyle auch NICHT im Patch mit (s. buildSettingsPatch).
+export function personaStyleOptions(data) {
+  const ids = data && data.personaStyleIds;
+  if (!Array.isArray(ids)) return null;
+  return [
+    PERSONA_STYLE_DEFAULT_OPTION,
+    ...ids.map((id) => ({ value: id, label: personaStyleLabel(id) })),
+  ];
+}
 
 // Settings + greeting-Vorlagen aus der state-Antwort -- die EINE Stelle, an der
 // das Frontend die Form `data.settings`/`data.greetingTemplates` annimmt
@@ -458,17 +524,23 @@ export function settingsFrom(data) {
 }
 
 // Baut den Schreib-Patch aus dem rohen Formular-Snapshot: NUR Whitelist-Felder.
-// `form` = { agentName, greeting, language, allowCalendar, allowBooking,
-// allowPersonalData, allowBankData }. greeting ist ein gewaehlter Template-String
-// (kein Freitext-Eingabefeld existiert). Unbekannte Schluessel werden NICHT
-// uebernommen -- die UI sendet erst gar nichts ausserhalb der Whitelist.
+// `form` = { agentName, language, agentStyle?, greeting, allowPersonalData,
+// allowBankData }. greeting ist ein gewaehlter Template-String (kein Freitext-
+// Eingabefeld existiert). Unbekannte Schluessel werden NICHT uebernommen -- die
+// UI sendet erst gar nichts ausserhalb der Whitelist.
 export function buildSettingsPatch(form) {
   const src = form || {};
-  const patch = {
-    agentName: String(src.agentName ?? ""),
-    greeting: String(src.greeting ?? ""),
-    language: String(src.language ?? ""),
-  };
+  // greeting steht bewusst NICHT in SETTINGS_FREE_FIELDS: der Server prueft es gegen
+  // den Vorlagenkatalog (selfServicePatch), nicht ueber die Free-Field-Liste.
+  const patch = { greeting: String(src.greeting ?? "") };
+  for (const key of SETTINGS_FREE_FIELDS) {
+    // Ein Feld, dessen Steuerelement die Insel gar nicht gerendert hat (undefined),
+    // reist NICHT mit: "" ist fuer die optionalen Enum-Overrides (language,
+    // agentStyle) ein RESET - ein nie sichtbares Dropdown wuerde sonst einen
+    // gespeicherten Wert still loeschen.
+    if (src[key] === undefined) continue;
+    patch[key] = String(src[key] ?? "");
+  }
   for (const { key } of SETTINGS_PERMISSION_TOGGLES) patch[key] = Boolean(src[key]);
   return patch;
 }
@@ -481,12 +553,21 @@ export function buildSettingsPatch(form) {
 // sonst als abgelehnt (rejected) -- exakt der serverseitige selfServicePatch-
 // Effekt (z.B. ein false->true-Versuch auf ein restrict-only-Flag erscheint hier
 // als rejected, weil der gespeicherte Wert beim alten Wert bleibt). Reine Logik.
+// Gilt der gespeicherte Wert als "so uebernommen wie angefragt"? Ein zurueckgesetztes
+// optionales Override (language/agentStyle) reist als "" im Patch und liegt danach als
+// null im Store (updateSettings: "" -> null). Ohne diese eine Glaettung meldete die UI
+// ein erfolgreiches Zuruecksetzen als "rejected". Ein gar nicht vorhandenes Feld
+// (undefined) bleibt eine echte Ablehnung.
+function isSavedAsRequested(savedValue, requestedValue) {
+  return savedValue === requestedValue || (savedValue === null && requestedValue === "");
+}
+
 export function settingsOutcome(patch, savedSettings) {
   const saved = savedSettings || {};
   const changed = [];
   const rejected = [];
   for (const [key, value] of Object.entries(patch || {})) {
-    if (saved[key] === value) changed.push(key);
+    if (isSavedAsRequested(saved[key], value)) changed.push(key);
     else rejected.push(key);
   }
   return { changed, rejected };
@@ -498,6 +579,44 @@ export function settingsOutcome(patch, savedSettings) {
 // (Strategie 2.3). Wirft ApiError bei non-2xx (z.B. 401 abgelaufene Session).
 export function saveSettings(patch) {
   return apiRequest("/api/self-service/settings", { method: "POST", body: patch });
+}
+
+// ---- P13: private Rufnummer (eigene Naht, NICHT der settings-Patch) -----------
+// Kontakt-PII am Tenant-Record, nicht in settings (settings leakt komplett ueber
+// /api/state + MCP, H4). Der Server liefert das Feld AUSSCHLIESSLICH maskiert
+// (maskPrivateNumber) und nimmt es ueber eine eigene Route entgegen.
+
+// Die maskierte eigene Rufnummer aus der state-Antwort -- die EINE Stelle, an der das
+// Frontend die Form `data.privateNumber` annimmt (Contract-Grenze, R5). Kein
+// String/kein Wert -> "" (die UI zeigt den Leerzustand).
+function maskedPrivateNumberFrom(data) {
+  const value = data && data.privateNumber;
+  return typeof value === "string" ? value : "";
+}
+
+// Statuszeile der Nummern-Karte. Die Maske ist der EINZIGE Wert, den die UI je
+// anzeigt; der volle Wert verlaesst den Server nicht und wird nirgends gehalten.
+const PRIVATE_NUMBER_TEXT_NONE = "No number saved yet.";
+const PRIVATE_NUMBER_TEXT_PREFIX = "Currently saved: ";
+export function privateNumberStatusText(data) {
+  const masked = maskedPrivateNumberFrom(data);
+  return masked ? `${PRIVATE_NUMBER_TEXT_PREFIX}${masked}` : PRIVATE_NUMBER_TEXT_NONE;
+}
+
+// Stabiler Fehlercode der Schreib-Route bei ungueltiger/gesperrter Nummer
+// (src/self-service-routes.js). Hier benannt, damit die Insel keinen Magic-String haelt.
+export const ERROR_INVALID_PRIVATE_NUMBER = "invalid_private_number";
+
+// Schreibt die private Rufnummer (POST same-origin, EIGENER Endpunkt - nicht der
+// settings-Patch). "" loescht den Eintrag (dokumentierter Opt-Out des Servers).
+// Antwort: { ok, hasPrivateNumber } - NIE die Nummer. Wirft ApiError bei non-2xx
+// (400 = ERROR_INVALID_PRIVATE_NUMBER, 401 = abgelaufene Session). Wie der ganze
+// Client: KEIN Authorization-Header, das Session-Cookie autorisiert (Strategie 2.3).
+export function savePrivateNumber(privateNumber) {
+  return apiRequest("/api/self-service/private-number", {
+    method: "POST",
+    body: { privateNumber: String(privateNumber ?? "") },
+  });
 }
 
 // Leitet den UI-Auth-Zustand aus genau EINEM state-Fetch ab -- die einzige

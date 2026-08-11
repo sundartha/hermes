@@ -12,7 +12,6 @@
 // eigener, transparent ueberlagerter Navigation.
 import "../styles/fonts.css";
 import { LOGIN_URL } from "../lib/routes.js";
-import AiAgentsSection from "../components/marketing/AiAgentsSection.astro";
 
 const title = "Hermes — The phone line for your AI agents";
 const description = "Give your AI wings. The phone line for your AI agents — works with Claude & Gemini via the Model Context Protocol.";
@@ -37,9 +36,18 @@ const pricingHref = "/preise";
          traegt den Link bereits selbst). Ohne den Link findet Googles
          Favicon-Crawler kein Icon fuer die Domain - und dessen Cache speist
          u.a. das Connector-Icon in claude.ai (app.sundartha.com serviert
-         dieselbe Seite als Gateway-Wurzel). -->
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+         dieselbe Seite als Gateway-Wurzel).
+
+         Reihenfolge ist Absicht: ICO zuerst, SVG danach. Googles
+         Favicon-Crawler nimmt das erste verwertbare Icon; er verarbeitet SVG
+         nicht zuverlaessig - stand SVG vorn, konnte er ohne Icon abziehen.
+         apple-touch-icon deckt die Rasterfall-Heuristik (Bitmap statt ICO)
+         mit ab. Das aendert den heutigen (vergifteten) Cache-Eintrag nicht,
+         sorgt aber dafuer, dass ein spaeterer Recrawl garantiert die
+         Fluegel-Marke aufnimmt. -->
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
   </head>
   <body>
     <div class="hero-root">
@@ -102,9 +110,6 @@ const pricingHref = "/preise";
          Skripts: letzteres wuerde Astro inline einbetten und unter der CSP
          (script-src 'self', kein 'unsafe-inline') blockiert. -->
     <script is:inline src="/assets/hero.js" defer></script>
-
-    <!-- Neue Sektion unter dem Vollbild-Hero (Referenz-Analyse heycall-e.com): Mini-Motion-Karten + KI-Modell-Badges + GSAP-Scroll-Reveal, siehe Komponenten-Kopfkommentar. -->
-    <AiAgentsSection></AiAgentsSection>
 
     <style is:global>
       * { box-sizing: border-box; }

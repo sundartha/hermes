@@ -20,6 +20,11 @@ const SUBSCRIBE_LABEL = "Subscribe";
 const POPULAR_BADGE = "Popular";
 const ACTIVE_PLAN_PREFIX = "Active plan: ";
 const PLAN_ATTR = "plan"; // data-plan: Slug am Subscribe-Button (delegierter Klick)
+// Phase A (PLAN-VOUCHER-SETUP-FEE-GAP.md): Hinweis auf die ZWEITE, separate Abbuchung
+// (src/onboarding.js placeHold), die dem Abo-Checkout folgt - ohne Hinweis sah der Kunde
+// sie nur als ueberraschenden 402 danach (Problem A im Plan-Dokument).
+const FEE_NOTICE_PREFIX = "+ ";
+const FEE_NOTICE_SUFFIX = " one-time number setup fee";
 // AM4: Funnel-Hinweis aus dem no_card-Response (Feld next). Spiegelt NEXT_SETUP_CHECKOUT in
 // src/self-service-routes.js -- ein Contract-String ueber die Origin-Grenze (kein gemeinsames
 // Modul im Build-freien Frontend, wie die gespiegelten Settings-/error-Strings).
@@ -55,6 +60,15 @@ function featureList(doc, features) {
   return list;
 }
 
+// Setup-Gebuehr-Zeile einer Kachel. fee = { amountCents, currency } | null (Phase A,
+// numberSetupFeeFrom in api.js). null -> keine Zeile (kein Fee/Payment aus, byte-
+// identisch zum Bestand). Wiederverwendet formatPlanPrice (G5, EINE Preis-Formatierung).
+function feeLine(doc, fee) {
+  if (!fee) return null;
+  const price = formatPlanPrice(fee.amountCents, fee.currency);
+  return el(doc, "div", "plan-fee", `${FEE_NOTICE_PREFIX}${price}${FEE_NOTICE_SUFFIX}`);
+}
+
 // Subscribe-Button mit data-plan=<slug>. Der delegierte Klick-Listener (wireSubscribe)
 // liest den Slug aus dataset.plan -> kein Binding pro Button (G5, kein Listener-Leak).
 function subscribeButton(doc, slug) {
@@ -65,23 +79,25 @@ function subscribeButton(doc, slug) {
 }
 
 // Eine Plan-Kachel. featured -> "Popular"-Badge (Parity zu preise.astro/tenant.html).
-function planTile(doc, plan) {
+// fee (Phase A) optional: { amountCents, currency } | null -> zusaetzliche Gebuehren-
+// Zeile zwischen Features und Subscribe-Button (feeLine, null -> keine Zeile).
+function planTile(doc, plan, fee) {
   const tile = el(doc, "div", plan.featured ? "plan plan--featured" : "plan");
   if (plan.featured) tile.append(el(doc, "span", "plan-badge", POPULAR_BADGE));
-  tile.append(
-    el(doc, "div", "plan-name", plan.name),
-    priceLine(doc, plan),
-    featureList(doc, plan.features),
-    subscribeButton(doc, plan.slug),
-  );
+  tile.append(el(doc, "div", "plan-name", plan.name), priceLine(doc, plan), featureList(doc, plan.features));
+  const feeEl = feeLine(doc, fee);
+  if (feeEl) tile.append(feeEl);
+  tile.append(subscribeButton(doc, plan.slug));
   return tile;
 }
 
 // Die Plan-Kacheln aus dem eingefrorenen Build-Spiegel (SPIEGEL-PFLICHT: KEIN
 // runtime /api/plans-Fetch; lib/plans.js ist 1:1-Kopie von src/plans.js). Liefert
 // die Knoten-Liste; der Aufrufer haengt sie in seinen Container (replaceChildren).
-export function planTiles(doc) {
-  return PLAN_CATALOG.map((plan) => planTile(doc, plan));
+// fee (Phase A) optional: { amountCents, currency } | null. Default null haelt
+// bestehende Aufrufer ohne Fee-Kenntnis unveraendert (keine Zeile).
+export function planTiles(doc, fee = null) {
+  return PLAN_CATALOG.map((plan) => planTile(doc, plan, fee));
 }
 
 // Anzeige-Datum aus dem currentPeriodEnd-Epoch (Unix-Sekunden) -> "M/D/YYYY"
@@ -205,12 +221,13 @@ export const PLAN_CHOICE_COPY = Object.freeze({
 
 // Rahmt die suspended-Region als prominente Plan-Auswahl: aktivierende H1, erklaerender
 // Untertitel, Plan-Kacheln aus dem Build-Spiegel, sichtbarer Skip-Link. REIN DOM (doc + els),
-// kein Netz. els = { title, subtitle, tiles, skip }. NUR bei PAYMENT_ENABLED aufgerufen
+// kein Netz. els = { title, subtitle, tiles, skip }. fee (Phase A) optional, an planTiles
+// durchgereicht (numberSetupFeeFrom, null -> keine Gebuehren-Zeile). NUR bei PAYMENT_ENABLED aufgerufen
 // (Aufrufer-Guard) -> ohne Payment byte-identisch.
-export function renderPlanChoice(doc, els) {
+export function renderPlanChoice(doc, els, fee = null) {
   els.title.textContent = PLAN_CHOICE_COPY.title;
   els.subtitle.textContent = PLAN_CHOICE_COPY.subtitle;
-  els.tiles.replaceChildren(...planTiles(doc));
+  els.tiles.replaceChildren(...planTiles(doc, fee));
   els.skip.hidden = false;
 }
 

@@ -313,6 +313,13 @@
   font-weight: var(--weight-emphasis);
 }
 
+/* Phase A (PLAN-VOUCHER-SETUP-FEE-GAP.md): Setup-Gebuehr-Hinweis, ruhig/muted wie eine
+   Fussnote, keine eigene Betonung. */
+.plan-fee {
+  font-size: var(--text-body);
+  color: var(--color-muted);
+}
+
 .plan-cta {
   margin-top: auto;
   align-self: flex-start;

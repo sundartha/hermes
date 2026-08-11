@@ -10,9 +10,7 @@
     "preview": "astro preview",
     "test": "PUBLIC_GATEWAY_URL=https://vodafone-agent.onrender.com node --test \"test/**/*.test.js\""
   },
-  "dependencies": {
-    "gsap": "^3.15.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "astro": "^7.0.0"
   }

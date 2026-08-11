@@ -25,11 +25,9 @@
     AUTH_EVENT,
     agentInfo,
     isAgentLive,
-    isNumberProvisioning,
+    numberPlaceholderText,
   } from "../../lib/api.js";
 
-  const NO_NUMBER_TEXT = "No number assigned yet";
-  const SETTING_UP_TEXT = "Setting up your number…";
   const DOT_OFF_CLASS = "live-dot--off";
 
   const chipEl = document.getElementById("agent-chip");
@@ -38,9 +36,10 @@
 
   function showChip(data) {
     const { number } = agentInfo(data);
-    // Noch keine aktive Nummer, aber Provisioning laeuft -> "wird eingerichtet..."
-    // statt "keine Nummer". Tenant-Werte weiter ausschliesslich via textContent (XSS).
-    numberEl.textContent = number || (isNumberProvisioning(data) ? SETTING_UP_TEXT : NO_NUMBER_TEXT);
+    // Aktive Nummer -> ihre e164; sonst ein statusabhaengiger Platzhalter (Fix C: jetzt
+    // inkl. failed/blocked statt beide auf "No number assigned yet" zu buendeln). Tenant-
+    // Werte weiter ausschliesslich via textContent (XSS).
+    numberEl.textContent = number || numberPlaceholderText(data);
     dotEl.classList.toggle(DOT_OFF_CLASS, !isAgentLive(data));
     chipEl.hidden = false;
   }
