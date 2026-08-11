@@ -101,6 +101,13 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_billing_hold_due_at TEXT;
 -- der laufenden Periode sind 0 (kein Hard-Suspend). Reversibel (webhook.js ACTIVATE-Zweig).
 -- Additiv NULLABLE, kein CHECK (Muster stripe_number_setup_fee_exempt).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_period_credit_revoked BOOLEAN;
+-- 312k-P1 (Kuendigungsbutton, Phase 1): true zwischen "Kuendigung zum Periodenende
+-- vorgemerkt" (Stripe cancel_at_period_end=true) und deren Ruecknahme/tatsaechlichem
+-- Vertragsende. Der Tenant bleibt bis dahin aktiv (er hat fuer die laufende Periode
+-- bezahlt) - stripe_current_period_end (bereits vorhanden) traegt das Datum, zu dem die
+-- Kuendigung wirkt. NULL/false = keine Kuendigung vorgemerkt. Additiv NULLABLE, kein CHECK
+-- (Muster stripe_period_credit_revoked).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_cancel_at_period_end BOOLEAN;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

@@ -1574,6 +1574,7 @@ export function setTenantSubscription(
     numberSetupFeeExempt,
     activationPending,
     periodCreditRevoked,
+    cancelAtPeriodEnd,
   } = {},
 ) {
   const tenant = findTenant(s, tenantId);
@@ -1602,6 +1603,10 @@ export function setTenantSubscription(
   // numberSetupFeeExempt.
   if (activationPending !== undefined) tenant.stripeActivationPending = activationPending;
   if (periodCreditRevoked !== undefined) tenant.stripePeriodCreditRevoked = periodCreditRevoked;
+  // 312k-P1 Teil B: Kuendigungsvormerkung zum Periodenende (true) bzw. deren Ruecknahme
+  // (false) - selektiver Patch-Key wie die uebrigen Felder oben (webhook.js setzt ihn
+  // explizit, nie implizit ueber ein anderes Feld).
+  if (cancelAtPeriodEnd !== undefined) tenant.stripeCancelAtPeriodEnd = cancelAtPeriodEnd;
   return tenant;
 }
 
@@ -1697,6 +1702,9 @@ export function tenantSubscription(s, tenantId) {
     // fail-closed Default false (nie undefined), Muster numberSetupFeeExempt.
     activationPending: tenant?.stripeActivationPending ?? false,
     periodCreditRevoked: tenant?.stripePeriodCreditRevoked ?? false,
+    // 312k-P1 Teil B: Kuendigungsvormerkung zum Periodenende. Fail-closed Default false
+    // (nie undefined) - Muster numberSetupFeeExempt/activationPending.
+    cancelAtPeriodEnd: tenant?.stripeCancelAtPeriodEnd ?? false,
   };
 }
 

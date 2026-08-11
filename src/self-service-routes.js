@@ -73,10 +73,13 @@ function maskPrivateNumber(e164) {
 // die Browser-View). Reine Praesentation.
 function paymentView(store, config, tenant) {
   if (!config.billing.paymentEnabled) return {};
-  const { planSlug, currentPeriodEnd } = store.tenantSubscription(tenant);
+  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = store.tenantSubscription(tenant);
   return {
     hasCard: hasCardOnFile(store.tenantStripe(tenant)),
-    subscription: { planSlug, currentPeriodEnd },
+    // 312k-P1 Teil B: cancelAtPeriodEnd + currentPeriodEnd zusammen tragen genug, damit
+    // die Oberflaeche spaeter "gekuendigt zum TT.MM." anzeigen kann (sprachneutraler
+    // Feldname, kein UI/Route in dieser Phase).
+    subscription: { planSlug, currentPeriodEnd, cancelAtPeriodEnd },
     // BK4/B3 (Kommentar-Bestand bleibt) ... KS-P8: die Zusammenstellung der quotaView-
     // Argumente liegt seit dieser Phase EINMAL in billing/meter.js (tenantQuotaView) -
     // /api/state braucht dieselbe Sicht, und zwei Kopien der Destrukturierung wuerden
