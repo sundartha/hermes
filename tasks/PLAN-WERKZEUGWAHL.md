@@ -214,11 +214,16 @@ als Consult-Fall erkennbar werden.
   akzeptiert dokumentiert, mit Begruendung.
 - Diese Phase ist die einzige, die auch ohne Fix abschliessbar ist — als benannte Entscheidung.
 
-### P6 — OWNER-ENTSCHEIDUNG: `allowLookup` freischalten
+### P6 — `allowLookup` freischalten (OWNER-ENTSCHEIDUNG GEFALLEN 2026-08-11)
 
-**Nicht autonom.** Die Sperre traegt den Vermerk "bis Testanruf + Datenschutzerklaerung durch
-sind"; die Datenschutzerklaerung ist an anderer Stelle als offener Punkt gefuehrt. Das ist eine
-Rechts- und Produktentscheidung, keine technische.
+Die Sperre trug den Vermerk "bis Testanruf + Datenschutzerklaerung durch sind". Das ist eine
+Rechts- und Produktentscheidung, keine technische — sie lag deshalb beim Owner.
+
+> **Owner-Entscheidung 2026-08-11: freischalten, aber ERST NACH P1.** `allowLookup` wird fuer den
+> bezahlten Plan auf `true` gesetzt, sobald der Blindgaenger W4 gemergt ist. Die Datenschutzfrage
+> traegt der Owner selbst; sie ist damit ausdruecklich KEIN Blocker mehr fuer diese Phase.
+> Die Datenschutzerklaerung selbst bleibt offener Punkt und wird jetzt nicht angegangen
+> (Repo-Regel: Rechtstexte nicht auf eigene Faust schreiben).
 
 - **Harte Vorbedingung:** P1 ist gemergt. Sonst laeuft `look_up` live in HTTP 400.
 - **Erwartetes Ergebnis nach Freigabe:** `look_up` steht im angebotenen Satz eines echten

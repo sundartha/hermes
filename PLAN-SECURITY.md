@@ -2951,3 +2951,56 @@ Deploy und kann in der Umsetzungs-Session nicht erbracht werden.
 > eingeschlossen), `OUTBOUND_FROZEN`, Denylist/Land-Gate/Stundenlimit, Max-Dauer,
 > Signaturpruefung, `disclosureSentence`, `usdToEur`, `MAX_BUDGET_EUR`, `src/bridge.js`.
 > Keine neue Env-Variable.
+
+## P6 (Werkzeugwahl) — `allowLookup` fuer beide bezahlten Tarife (2026-08-11, Owner-Entscheidung)
+
+**Was sich aendert:** `PAID_PLAN_PROFILE.allowLookup` geht von `false` auf `true`
+(`src/plans.js`). Der Vorbehalt aus AL-P10b ("bleibt Owner-Faehigkeit, bis Testanruf und
+Datenschutzerklaerung durch sind") ist damit aufgehoben. `starter` und `business` teilen ein
+Profil-Objekt — die Freischaltung trifft **beide** Tarife und alle kuenftigen Aktivierungen.
+Owner-Entscheidung, bewusst so gewaehlt.
+
+**Warum das nicht als Gate-Aufweichung zaehlt:** `look_up` ist keine Sicherung, sondern eine
+Faehigkeit. Kein geschuetztes Gate wird beruehrt — Outbound-Permit (Abo+KYC), `OUTBOUND_FROZEN`,
+Denylist/Land-Gate/Stundenlimit, pro-Tenant-Kostendecke, Max-Gespraechsdauer,
+Signaturpruefung und `disclosureSentence` bleiben unveraendert. Inbound ist strukturell
+ausgeschlossen (`research/in-call.js` verlangt `direction === "outbound"`).
+
+**Kostenflaeche, gedeckelt:** ~1 Cent je Suche, Deckel `LOOKUP_MAX_PER_CALL = 2` ohne
+Env-Knopf, also hoechstens ~2 Cent je Anruf. Gebucht wird **vor** dem Absenden auf genau die
+Achse, die die pro-Tenant-Kostendecke liest (`llm-usage.js`) — die Decke sperrt also auch
+diesen Verbrauch. Notaus bleibt `LOOKUP_ENABLED=false` (Env, wirkt sofort).
+
+### BEWUSST AKZEPTIERTE RESTFLAECHE: kein Namensfilter in der Suchanfrage
+
+Exa ist ein **zweiter Auftragsverarbeiter**. `sanitizeLookupQuery`
+(`src/research/lookup-guard.js`) verwirft Ziffernfolgen ab fuenf Stellen, E-Mails, die
+Zielrufnummer und woertliche Transkript-Zitate und kappt auf 120 Zeichen. Es gibt aber
+**keinen Namensfilter und keine Schlagwortliste** — ein Personenname kann die Suchanfrage
+erreichen. Die Datei dokumentiert diese Restflaeche selbst.
+
+> **Owner-Entscheidung 2026-08-11: so belassen, Risiko notiert.** Ein Namensfilter wurde
+> ausdruecklich NICHT zur Vorbedingung der Freischaltung gemacht. Die Datenschutzabwaegung
+> traegt der Owner; die Datenschutzerklaerung bleibt offener Punkt und wurde bewusst nicht
+> im selben Zug angefasst (Repo-Regel: Rechtstexte nicht auf eigene Faust schreiben).
+
+Was den Dienst erreicht: `{query, type, numResults: 3, contents}` an `api.exa.ai/search`.
+Kein Transkript, keine Rufnummer, keine Tenant-IDs. Zurueck kommen hoechstens drei Zeilen
+"Titel: Auszug" ohne URL.
+
+**Wenn diese Restflaeche spaeter geschlossen werden soll,** ist der Ort `sanitizeLookupQuery`
+— nicht das Plan-Profil.
+
+### Wirksamkeit: der Flip allein tut NICHTS
+
+`resolveProfileFrom` (`src/store/defaults.js`) liest `PLAN_PROFILE` **nie**. Bestehende Tenants
+behalten ihr gespeichertes Profil, bis es neu geschrieben wird (`billing/activation.js` bei
+Stripe `customer.subscription.created/updated`+active bzw. Self-Service-Subscribe, oder
+`scripts/backfill-plan-profiles.js`). Ein Code-Flip ohne diesen Rewrite ist ein Schein-Fix —
+und derselbe Vorbehalt gilt fuer den **Rueckweg**: ein Code-Rollback ohne Rewrite ist ebenso
+wirkungslos. Der sofort wirksame Notaus ist deshalb `LOOKUP_ENABLED=false`, nicht der Rollback.
+
+**Harte Reihenfolge-Bedingung:** P1 (rekonstruierte `tool_calls` tragen `type:"function"`,
+`src/llm/adapters/deepseek.js`) MUSS vorher live sein. Ohne P1 laeuft `look_up` in Runde 2 in
+einen HTTP 400 des Anbieters — fuer den Anrufer Stille, und der Fehler sieht aus wie ein
+Modellproblem. Beide Aenderungen liegen deshalb auf demselben Branch und gehen zusammen live.
