@@ -17,6 +17,7 @@ import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { LEGAL_SLUGS, LEGAL_TRANSLATION_NOTICE } from "../src/lib/legal.js";
+import { PLAN_CATALOG } from "../src/lib/plans.js";
 
 const WEB_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST_DIR = join(WEB_ROOT, "dist-test");
@@ -25,8 +26,10 @@ const LEGAL_CONTENT_DIR = join(WEB_ROOT, "src/data/legal");
 // Markenrot darf im gerenderten Output der Unterseiten NICHT auftauchen.
 const BRAND_RED = "#e60000";
 
-// Beleg, dass eine Seite das geteilte Site-Chrome nutzt (Hero-Marke + Logo).
-const SITE_CHROME_MARKERS = ["by Sundartha", "sandal_solid.png"];
+// Beleg, dass eine Seite das geteilte Site-Chrome nutzt (Marke + Flügel-Logo).
+// Seit dem Hermes-Neubau traegt die Hülle (layouts/Hermes.astro) den Flügel
+// statt der Sandale — die Sandale ist mit layouts/Site.astro verwaist.
+const SITE_CHROME_MARKERS = ["by Sundartha", "hermes-wing.png"];
 
 const MARKETING_PAGES = [
   "so-funktionierts/index.html",
@@ -39,6 +42,15 @@ const LEGAL_PAGES = [
   "datenschutz/index.html",
   "agb/index.html",
 ];
+
+// Sprachen nach dem Neubau (Owner-Entscheidung: Deutsch ist die Standardsprache
+// der Marketing-Seiten; nur die beiden Rand-Seiten blieben englisch wie zuvor).
+const DE_PAGES = [
+  "so-funktionierts/index.html",
+  "preise/index.html",
+  ...LEGAL_PAGES,
+];
+const EN_PAGES = ["registrieren/index.html", "404.html"];
 
 function readDist(relativePath) {
   return readFileSync(join(DIST_DIR, relativePath), "utf8");
@@ -83,21 +95,34 @@ test("jede Unterseite nutzt das geteilte Site-Chrome", () => {
   }
 });
 
-test("Marketing-Seiten sind englisch (lang=en), Legal-Seiten deutsch (lang=de)", () => {
-  for (const page of MARKETING_PAGES) {
-    assert.match(readDist(page), /<html lang="en"/, `${page} sollte lang=en sein`);
-  }
-  for (const page of LEGAL_PAGES) {
+test("Sprachen: DE-Seiten lang=de, die beiden EN-Rand-Seiten lang=en", () => {
+  for (const page of DE_PAGES) {
     assert.match(readDist(page), /<html lang="de"/, `${page} sollte lang=de sein`);
+  }
+  for (const page of EN_PAGES) {
+    assert.match(readDist(page), /<html lang="en"/, `${page} sollte lang=en sein`);
   }
 });
 
 test("Pricing rendert EUR aus dem Katalog (beide Tarife)", () => {
   // BK0/AM3: Preise kommen aus lib/plans.js (Spiegel der Backend-SSoT), seit dem
-  // Stripe-Live-Cutover EUR. Das gebaute preise/index.html rendert "€4.99"/"€9.99".
+  // Stripe-Live-Cutover EUR. Die Seite ist seit dem Neubau deutsch und schreibt
+  // die Betraege in deutscher Notation ("4,99 €"), abgeleitet aus amountCents —
+  // der Test bleibt damit an den Katalog gekoppelt, nicht an eine Zahl im Text.
   const html = readDist("preise/index.html");
-  assert.ok(html.includes("€4.99") && html.includes("€9.99"), "EUR-Katalog-Preise fehlen");
-  assert.ok(html.includes("Starter") && html.includes("Business"), "Tarifnamen fehlen");
+  for (const plan of PLAN_CATALOG) {
+    const major = Math.floor(plan.amountCents / 100);
+    const minor = String(plan.amountCents % 100).padStart(2, "0");
+    assert.ok(
+      html.includes(`${major},${minor} €`),
+      `preise: Katalogpreis ${major},${minor} € (${plan.slug}) fehlt`,
+    );
+    assert.ok(
+      html.includes(`${plan.includedMinutes} Minuten`),
+      `preise: Inklusivminuten ${plan.includedMinutes} (${plan.slug}) fehlen`,
+    );
+    assert.ok(html.includes(plan.name), `preise: Tarifname ${plan.name} fehlt`);
+  }
 });
 
 // P14/GAP-15: der Waechter fuer den Liefertag der englischen Rechtsdokumente.

@@ -7,12 +7,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PLAN_CATALOG, formatPlanPrice } from "../src/lib/plans.js";
 
-test("formatPlanPrice: Ganzzahl-Cents -> EUR-Anzeige (Punkt-Trenner, Symbol vorn)", () => {
-  assert.equal(formatPlanPrice(499, "eur"), "€4.99");
-  assert.equal(formatPlanPrice(999, "eur"), "€9.99");
-  assert.equal(formatPlanPrice(99, "eur"), "€0.99"); // Sub-Euro-Grenzwert (T5)
-  assert.equal(formatPlanPrice(100, "eur"), "€1.00"); // runder Euro, Minor-Padding
-  // usd bleibt in der Symbol-Map (Deckung des verbliebenen Branches, fail-soft).
+test("formatPlanPrice: Ganzzahl-Cents -> EUR-Anzeige (Komma-Trenner, Symbol nachgestellt)", () => {
+  assert.equal(formatPlanPrice(499, "eur"), "4,99 €");
+  assert.equal(formatPlanPrice(999, "eur"), "9,99 €");
+  assert.equal(formatPlanPrice(99, "eur"), "0,99 €"); // Sub-Euro-Grenzwert (T5)
+  assert.equal(formatPlanPrice(100, "eur"), "1,00 €"); // runder Euro, Minor-Padding
+  // usd bleibt in der alten Notation (Symbol vorn, Punkt-Trenner, Deckung des verbliebenen Branches).
   assert.equal(formatPlanPrice(499, "usd"), "$4.99");
 });
 

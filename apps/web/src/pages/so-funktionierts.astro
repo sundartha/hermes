@@ -1,48 +1,83 @@
 ---
-// Marketing: "How it works" (SSG). Statisches HTML, kein Client-Fetch.
-// Drei Schritte vom MCP-Anschluss bis zum laufenden Agenten. Visuell 1:1 zum
-// Claude-Design (How-it-works-Band): Wolken-Band + Glas-Karten (sections.css),
-// eingebettet ins gemeinsame Site-Chrome (Nav mit Fluegel-Logo + Footer).
-import Site from "../layouts/Site.astro";
-import "../styles/sections.css";
+// So funktioniert's — ruhende Fassung der zweiten Ebene der Startseite.
+import Hermes from "../layouts/Hermes.astro";
+import HermesDemo from "../components/HermesDemo.astro";
+import { LOGIN_URL } from "../lib/routes.js";
+
+const MCP_URL = "https://app.sundartha.com/mcp";
 
 const steps = [
   {
-    title: "Connect your AI assistant via MCP",
-    text: "Attach Hermes as an MCP server to your agent — Claude, a custom assistant or a workflow. No telephony stack of your own required.",
+    num: "01",
+    title: "Nummer holen",
+    text: "Eine echte Rufnummer, in zwei Minuten aktiv. Kein Vertrag, keine Hardware.",
   },
   {
-    title: "Pick a number and plan",
-    text: "Choose a phone number and the plan that fits. You decide what your agent may do — view appointments, book them or ask follow-up questions.",
+    num: "02",
+    title: "KI verbinden",
+    text: "Ein Anschluss über MCP. Deine KI weiß danach, wer angerufen hat und was zu tun ist.",
   },
   {
-    title: "Hermes makes the calls",
-    text: "Hermes answers incoming calls and places outgoing ones on your behalf — and clearly states up front that an assistant is speaking.",
+    num: "03",
+    title: "Abnehmen lassen",
+    text: "Hermes spricht, hört zu, vereinbart Termine und schreibt mit. Du liest das Protokoll.",
   },
 ];
 ---
 
-<Site
-  title="How Hermes works — Sundartha"
-  description="Your own phone assistant in three steps: connect via MCP, pick a number and plan, let Hermes make the calls."
+<Hermes
+  title="So funktioniert's — Hermes von Sundartha"
+  description="Ein Anschluss über MCP, kein Setup — deine KI ist in unter zwei Minuten unter einer echten Nummer erreichbar."
 >
-  <section class="band band--center" id="how">
-    <div class="band__inner">
-      <p class="band__eyebrow">In three steps</p>
-      <h1 class="band__title">How <em>Hermes</em> works</h1>
-      <p class="band__lead">
-        From the MCP connection to the finished call log — no hardware of your
-        own, no waiting.
-      </p>
-      <div class="steps">
-        {steps.map((step, index) => (
-          <article class="step">
-            <span class="step__num" aria-hidden="true">{index + 1}</span>
-            <h2 class="step__heading">{step.title}</h2>
-            <p class="step__copy">{step.text}</p>
-          </article>
-        ))}
-      </div>
+  <h1 class="doc-title">Ein Anschluss, <em>zwei Minuten</em>.</h1>
+  <p class="doc-lead">
+    Ein Anschluss über <strong>MCP</strong>, kein Setup — deine KI ist in unter
+    zwei Minuten unter einer echten Nummer erreichbar.
+  </p>
+
+  <div class="doc-block doc-demo">
+    <HermesDemo />
+  </div>
+
+  <div class="doc-block doc-steps">
+    <div class="sheet__card">
+      {steps.map((step, index) => (
+        <>
+          {index > 0 && <span class="rule" aria-hidden="true"></span>}
+          <span class="step">
+            <span class="step__num">{step.num}</span>
+            <span class="step__body">
+              <span class="step__title">{step.title}</span>
+              <span class="step__text">{step.text}</span>
+            </span>
+          </span>
+        </>
+      ))}
     </div>
-  </section>
-</Site>
+  </div>
+
+  <div class="doc-block doc-steps">
+    <div class="sheet__card">
+      <span class="dev-card__head">
+        <span class="dev-num">→</span>
+        <span class="dev-card__titles">
+          <span class="dev-eyebrow">Für Entwickler</span>
+          <span class="dev-card__title">Ein Endpoint, zwei Wege</span>
+        </span>
+      </span>
+      <span class="step__text">
+        Hermes ist ein MCP-Server. Trag <span class="dev-field__url">{MCP_URL}</span>
+        als Konnektor im KI-Tool deiner Wahl ein — oder verbinde direkt aus dem
+        Terminal. Streamable HTTP, OAuth beim ersten Verbinden.
+      </span>
+    </div>
+  </div>
+
+  <p class="doc-note">
+    <a href={LOGIN_URL}>Nummer holen</a> und in zwei Minuten telefonieren lassen.
+  </p>
+</Hermes>
+
+<script>
+  import "../scripts/hermes-demo.js";
+</script>

@@ -3,19 +3,39 @@
   "metaDescription": "Anbieterkennzeichnung und Kontaktangaben zu Sundartha Hermes.",
   "eyebrow": "Rechtliches",
   "title": "Impressum",
-  "note": "Platzhalter-Fassung. Die rechtsverbindliche Anbieterkennzeichnung liefert Sundartha.",
+  "note": "Unvollständig: die mit [OFFEN] markierten Angaben nach § 5 DDG (Firmenname, Rechtsform, ladungsfähige Anschrift, Vertretung, Register, Umsatzsteuer-Identifikationsnummer) liegen noch nicht vor und werden ergänzt, sobald die Gesellschaft gegründet ist.",
   "sections": [
     {
       "heading": "Anbieter",
-      "text": "Sundartha — Anbieter des Telefon-Assistenten Hermes. Die vollstaendige Anschrift und Rechtsform ergaenzt der finale Impressums-Text."
+      "text": "Sundartha — Anbieter des Telefon-Assistenten Hermes. [OFFEN: vollständiger Firmenname einschließlich Rechtsform] [OFFEN: ladungsfähige Anschrift — Straße, Hausnummer, Postleitzahl, Ort, Land]"
+    },
+    {
+      "heading": "Vertreten durch",
+      "text": "[OFFEN: Name der vertretungsberechtigten Person oder Personen — bei einer Gesellschaft die Geschäftsführung, bei einem Einzelunternehmen der Inhaber]"
     },
     {
       "heading": "Kontakt",
-      "text": "E-Mail: kontakt@sundartha.com. Weitere Kontaktwege folgen mit der finalen Fassung."
+      "text": "E-Mail: kontakt@sundartha.com. Anfragen zu Vertrag, Abrechnung und Datenschutz erreichen uns unter dieser Adresse. [OFFEN: Telefonnummer — § 5 DDG verlangt eine Angabe, die unmittelbare Kommunikation ermöglicht; die E-Mail-Adresse allein genügt nach der Rechtsprechung nicht zwingend]"
     },
     {
-      "heading": "Verantwortlich fuer den Inhalt",
-      "text": "Die verantwortliche Person nach den geltenden Vorgaben benennt Sundartha in der finalen Fassung."
+      "heading": "Registereintrag",
+      "text": "[OFFEN: Registergericht und Registernummer, sofern eine Eintragung besteht. Besteht keine Eintragung, entfällt dieser Abschnitt ersatzlos.]"
+    },
+    {
+      "heading": "Umsatzsteuer-Identifikationsnummer",
+      "text": "[OFFEN: Umsatzsteuer-Identifikationsnummer nach § 27a Umsatzsteuergesetz, sofern vorhanden. Bei Kleinunternehmerregelung nach § 19 UStG entfällt die Angabe; stattdessen ist ein Hinweis auf die Kleinunternehmerregelung sinnvoll.]"
+    },
+    {
+      "heading": "Verantwortlich für den Inhalt",
+      "text": "[OFFEN: Name und Anschrift der nach § 18 Abs. 2 Medienstaatsvertrag verantwortlichen Person. Die Angabe ist erforderlich, sobald auf der Seite journalistisch-redaktionelle Inhalte erscheinen, etwa ein Blog oder ein Nachrichtenbereich.]"
+    },
+    {
+      "heading": "Verbraucherstreitbeilegung",
+      "text": "[OFFEN: Entscheidung des Betreibers.] Üblich ist die Erklärung, ob eine Teilnahme an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle erfolgt. Ein Verweis auf die frühere Online-Streitbeilegungsplattform der Europäischen Kommission entfällt — sie wurde eingestellt."
+    },
+    {
+      "heading": "Hinweis zu diesem Text",
+      "text": "Dieser Entwurf ist aus dem tatsächlichen Verhalten des Dienstes abgeleitet und ersetzt keine Rechtsberatung. Solange die oben markierten Angaben fehlen, erfüllt die Seite die Anbieterkennzeichnung nach § 5 DDG nicht vollständig."
     }
   ]
 }

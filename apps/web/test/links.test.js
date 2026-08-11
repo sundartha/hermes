@@ -87,7 +87,9 @@ test("jeder interne href zeigt auf eine echte Route, LOGIN_URL oder mailto:", ()
       if (
         href.startsWith("/assets/") ||
         href.startsWith("/_astro/") ||
-        href === "/favicon.svg"
+        href === "/favicon.svg" ||
+        href === "/favicon.ico" ||
+        href === "/apple-touch-icon.png"
       ) {
         continue;
       }
@@ -142,11 +144,21 @@ test("Build ist fail-closed: ohne PUBLIC_GATEWAY_URL bricht er ab (kein stiller 
   assert.match(output, /PUBLIC_GATEWAY_URL/, "Build-Fehler nennt die fehlende Var nicht");
 });
 
-test("Pricing listet Business mit 1 Nummer (Q-ABO), nicht 3", () => {
+// Q-ABO: ein Abo = genau EINE Nummer. Der alte englische Tier-Text versprach
+// bei Business drei. Die deutsche Neubau-Fassung nennt gar keine Nummernzahl
+// mehr (Merkmale = Minuten + Faehigkeiten), darum bleibt hier der negative
+// Waechter: kein Mehrzahl-Versprechen darf zurueckkommen — weder deutsch noch
+// englisch. Sobald die Seite wieder eine Zahl nennt, muss sie 1 sein.
+test("Pricing verspricht keine Mehrfach-Nummern (Q-ABO: ein Abo = eine Nummer)", () => {
   const html = readFileSync(join(DIST_DIR, "preise/index.html"), "utf8");
-  assert.ok(html.includes("1 phone number"), "preise: '1 phone number' fehlt");
-  assert.ok(
-    !html.includes("3 phone number"),
-    "preise: alter '3 phone numbers'-Tier noch vorhanden",
-  );
+  for (const claim of [
+    /\b([2-9]|\d{2,})\s+phone numbers?\b/i,
+    /\b([2-9]|\d{2,})\s+(Rufnummern|Nummern)\b/i,
+  ]) {
+    assert.ok(!claim.test(html), `preise: Mehrfach-Nummern-Versprechen (${claim}) im Output`);
+  }
+  const numberClaim = html.match(/\b(\d+)\s+(phone numbers?|Rufnummern?|Nummern?)\b/i);
+  if (numberClaim) {
+    assert.equal(numberClaim[1], "1", `preise: Nummernzahl ${numberClaim[0]} widerspricht Q-ABO`);
+  }
 });

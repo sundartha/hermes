@@ -1,21 +1,81 @@
 {
   "metaTitle": "AGB — Sundartha Hermes",
-  "metaDescription": "Allgemeine Geschaeftsbedingungen fuer die Nutzung von Sundartha Hermes.",
+  "metaDescription": "Allgemeine Geschäftsbedingungen für die Nutzung von Sundartha Hermes: Leistungen, Tarife, Laufzeit, Pflichten und Haftung.",
   "eyebrow": "Rechtliches",
-  "title": "Allgemeine Geschaeftsbedingungen",
-  "note": "Platzhalter-Fassung. Die rechtsverbindlichen AGB liefert Sundartha.",
+  "title": "Allgemeine Geschäftsbedingungen",
+  "note": "Dieser Entwurf gibt den tatsächlichen Leistungsumfang und die technischen Grenzen des Dienstes wieder. Die mit [OFFEN] markierten Punkte hängen an der noch nicht gegründeten Gesellschaft oder an einer Entscheidung des Betreibers.",
   "sections": [
     {
-      "heading": "Geltungsbereich",
-      "text": "Diese Bedingungen gelten fuer die Nutzung des Telefon-Assistenten Hermes von Sundartha. Der finale Text praezisiert Vertragsgegenstand und Parteien."
+      "heading": "Geltungsbereich und Vertragspartner",
+      "text": "Diese Bedingungen gelten für die Nutzung des Telefon-Assistenten Hermes. Vertragspartner ist Sundartha, [OFFEN: vollständiger Firmenname, Rechtsform und Anschrift — siehe Impressum]. Abweichende Bedingungen des Nutzers gelten nur, soweit wir ihnen ausdrücklich zugestimmt haben."
     },
     {
-      "heading": "Leistungen",
-      "text": "Hermes nimmt Anrufe an und fuehrt Anrufe im Auftrag des Nutzers — mit Offenlegung am Gespraechsanfang. Umfang und Grenzen regelt die finale Fassung."
+      "heading": "Gegenstand der Leistung",
+      "text": "Wir stellen dem Nutzer eine Rufnummer bereit und betreiben dazu einen Assistenten, der eingehende Anrufe entgegennimmt und im Auftrag des Nutzers ausgehende Anrufe führt. Der Assistent versteht gesprochene Sprache, antwortet gesprochen, fasst Gespräche zusammen und stellt Zusammenfassungen, Aufgaben und Termine im Kundenbereich bereit. Der Assistent lässt sich über eine Schnittstelle an eine KI-Anwendung des Nutzers anbinden."
     },
     {
-      "heading": "Verguetung und Laufzeit",
-      "text": "Tarife und Abrechnung folgen den auf der Preise-Seite genannten Konditionen. Verbindliche Details ergaenzt der finale AGB-Text."
+      "heading": "Zustandekommen des Vertrages",
+      "text": "Der Vertrag kommt zustande, wenn der Nutzer im Kundenbereich einen Tarif auswählt, ein Zahlungsmittel hinterlegt und der Buchungsvorgang abgeschlossen ist. Die Darstellung der Tarife auf der Website ist kein bindendes Angebot, sondern eine Aufforderung zur Bestellung."
+    },
+    {
+      "heading": "Tarife und Vergütung",
+      "text": "Es gelten die auf der Preisseite genannten Tarife: Starter zu 4,99 € je Monat mit 30 Gesprächsminuten, Business zu 9,99 € je Monat mit 120 Gesprächsminuten. Beide Tarife umfassen eine Rufnummer. Die Beträge sind monatlich im Voraus zur Zahlung fällig. [OFFEN: Angabe, ob die Preise Umsatzsteuer enthalten — das hängt von Rechtsform und Steuerstatus ab und muss vor dem Verkauf an Verbraucher zweifelsfrei ausgewiesen sein.]"
+    },
+    {
+      "heading": "Abrechnung",
+      "text": "Die Zahlung wird über unseren Zahlungsdienstleister abgewickelt. Der Nutzer hinterlegt dafür ein Zahlungsmittel. Bei der Einrichtung kann eine Freigabe des Zahlungsmittels erfolgen. Schlägt eine Zahlung fehl oder endet das Abonnement beim Zahlungsdienstleister, wird der Zugang gesperrt und der Assistent nimmt keine Anrufe mehr an."
+    },
+    {
+      "heading": "Inklusivminuten",
+      "text": "Die im Tarif enthaltenen Gesprächsminuten gelten je Abrechnungszeitraum und verfallen mit dessen Ende. Ist das Kontingent aufgebraucht, erhält der Nutzer einen Hinweis; ein automatischer Aufpreis entsteht nicht. Weitere Gespräche sind dann bis zum Beginn des nächsten Abrechnungszeitraums nicht mehr möglich."
+    },
+    {
+      "heading": "Laufzeit und Kündigung",
+      "text": "Der Vertrag läuft einen Monat und verlängert sich um jeweils einen weiteren Monat, solange er nicht gekündigt wird. Eine Kündigung ist zum Ende des laufenden Abrechnungszeitraums möglich. [OFFEN: Im Dienst gibt es derzeit keine Schaltfläche zum Kündigen — die Kündigung erfolgt bis auf Weiteres formlos per E-Mail an kontakt@sundartha.com. Für Verbraucherverträge über eine Website verlangt § 312k BGB einen Kündigungsknopf; dieser sollte nachgerüstet werden.]"
+    },
+    {
+      "heading": "Widerrufsrecht für Verbraucher",
+      "text": "[OFFEN: Verbindliche Widerrufsbelehrung nebst Muster-Widerrufsformular. Verbrauchern steht ein Widerrufsrecht von 14 Tagen zu. Soll der Dienst schon vor Ablauf dieser Frist nutzbar sein, ist dafür eine ausdrückliche Zustimmung des Verbrauchers und ein Hinweis auf das Erlöschen des Widerrufsrechts erforderlich. Text und Ablauf sollten anwaltlich erstellt werden.]"
+    },
+    {
+      "heading": "Pflichten des Nutzers",
+      "text": "Der Nutzer ist dafür verantwortlich, dass die von ihm veranlassten Anrufe zulässig sind. Untersagt sind insbesondere Werbeanrufe ohne die erforderliche vorherige Einwilligung des Angerufenen, belästigende oder täuschende Anrufe sowie jede Nutzung, die gegen geltendes Recht verstößt. Der Nutzer stellt sicher, dass er zur Angabe der von ihm hinterlegten Daten berechtigt ist, und hält seine Zugangsdaten geheim."
+    },
+    {
+      "heading": "Grenzen der Nutzung",
+      "text": "Aus Gründen der Betriebssicherheit und der Missbrauchsabwehr gelten technische Grenzen: eine Obergrenze für Anrufe je Zeitraum, eine Obergrenze für wiederholte Anrufe bei derselben Gegenstelle, eine Beschränkung ausgehender Anrufe auf freigegebene Länder sowie Budgetgrenzen. Wir dürfen diese Grenzen anpassen, soweit das für den sicheren Betrieb erforderlich ist."
+    },
+    {
+      "heading": "Sperrung",
+      "text": "Wir dürfen den Zugang vorübergehend sperren, wenn ein Zahlungsverzug vorliegt, ein begründeter Verdacht auf missbräuchliche oder rechtswidrige Nutzung besteht oder der sichere Betrieb dies erfordert. Über eine Sperrung informieren wir den Nutzer, soweit dem nichts entgegensteht."
+    },
+    {
+      "heading": "Verfügbarkeit",
+      "text": "Wir bemühen uns um einen durchgehenden Betrieb, schulden aber keine bestimmte Verfügbarkeit. Wartungsarbeiten, Störungen bei vorgelagerten Telefonie- oder Sprachdiensten sowie Ereignisse außerhalb unseres Einflussbereichs können den Dienst vorübergehend einschränken. [OFFEN: Entscheidung, ob eine zugesicherte Verfügbarkeit angeboten werden soll.]"
+    },
+    {
+      "heading": "Grenzen des Assistenten",
+      "text": "Der Assistent führt Gespräche mit Hilfe von Sprachmodellen. Er kann Gesprochenes falsch verstehen, Sachverhalte unzutreffend wiedergeben oder ein Gesprächsziel nicht erreichen. Der Dienst ist nicht für Notrufe geeignet und darf nicht als Ersatz für einen Notruf verwendet werden. Der Nutzer prüft Zusammenfassungen und daraus abgeleitete Termine eigenverantwortlich."
+    },
+    {
+      "heading": "Haftung",
+      "text": "Wir haften unbeschränkt bei Vorsatz und grober Fahrlässigkeit sowie bei Verletzung von Leben, Körper und Gesundheit und nach dem Produkthaftungsgesetz. Bei einfacher Fahrlässigkeit haften wir nur für die Verletzung wesentlicher Vertragspflichten und der Höhe nach begrenzt auf den vertragstypischen, vorhersehbaren Schaden. Im Übrigen ist die Haftung ausgeschlossen. [OFFEN: anwaltliche Prüfung der Klausel — Haftungsbeschränkungen in Allgemeinen Geschäftsbedingungen sind fehleranfällig und im Zweifel unwirksam.]"
+    },
+    {
+      "heading": "Datenschutz",
+      "text": "Wie wir Konto-, Anruf- und Abrechnungsdaten verarbeiten, steht in der Datenschutzerklärung. Sie ist Bestandteil der Information zum Vertrag, jedoch keine Vertragsbedingung."
+    },
+    {
+      "heading": "Änderungen dieser Bedingungen",
+      "text": "Wir dürfen diese Bedingungen ändern, soweit dies zur Anpassung an geänderte Rechtslage, Rechtsprechung oder an eine geänderte Leistung erforderlich ist und der Nutzer dadurch nicht unangemessen benachteiligt wird. Über Änderungen informieren wir mit angemessener Frist vor ihrem Wirksamwerden; der Nutzer kann bis zu diesem Zeitpunkt kündigen."
+    },
+    {
+      "heading": "Schlussbestimmungen",
+      "text": "[OFFEN: anwendbares Recht und Gerichtsstand — beides hängt vom Sitz der Gesellschaft ab und ist bei Verträgen mit Verbrauchern nur eingeschränkt frei wählbar.] Sollte eine Bestimmung unwirksam sein, bleibt der Vertrag im Übrigen wirksam."
+    },
+    {
+      "heading": "Hinweis zu diesem Text",
+      "text": "Dieser Entwurf gibt den tatsächlichen Leistungsumfang wieder und ersetzt keine Rechtsberatung. Vor dem Verkauf an Verbraucher sollten insbesondere Widerrufsbelehrung, Preisangaben, Kündigungsweg und Haftungsklausel anwaltlich geprüft werden."
     }
   ]
 }

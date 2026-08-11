@@ -66,7 +66,7 @@ test("planTiles: eine Kachel je Katalog-Plan mit Name, Preis, /month, Features, 
   const starterTile = tiles[0];
   const text = textOf([starterTile]);
   assert.ok(text.includes("Starter"));
-  assert.ok(text.includes("€4.99")); // EUR-Cutover (Stripe live, 2026-07-03)
+  assert.ok(text.includes("4,99 €")); // EUR-Cutover (Stripe live, 2026-07-03), deutsche Notation
   assert.ok(text.includes("/month"));
   for (const feature of starter.features) assert.ok(text.includes(feature), `Feature fehlt: ${feature}`);
 
@@ -91,7 +91,7 @@ test("planTiles: mit fee -> jede Kachel traegt die Setup-Gebuehr-Zeile", () => {
   const fee = { amountCents: 500, currency: "eur" };
   const tiles = planTiles(fakeDocument, fee);
   for (const tile of tiles) {
-    assert.ok(textOf([tile]).includes("€5.00"));
+    assert.ok(textOf([tile]).includes("5,00 €"));
     assert.ok(textOf([tile]).includes("one-time number setup fee"));
   }
 });
@@ -276,7 +276,7 @@ test("renderPlanChoice: mit fee -> Kacheln tragen die Gebuehren-Zeile", () => {
     tiles: { _k: null, replaceChildren(...n) { this._k = n; } }, skip: { hidden: true },
   };
   renderPlanChoice(fakeDocument, els, { amountCents: 999, currency: "eur" });
-  assert.ok(els.tiles._k.some((t) => textOf([t]).includes("€9.99")));
+  assert.ok(els.tiles._k.some((t) => textOf([t]).includes("9,99 €")));
 });
 
 test("dismissPlanChoice: Pending-Banner, Kacheln+Skip weg, KEIN subscribe/setStatus", () => {
