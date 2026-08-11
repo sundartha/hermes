@@ -43,12 +43,19 @@ export const PLAN_CATALOG = Object.freeze([
 const CENTS_PER_MAJOR = 100;
 const CURRENCY_SYMBOLS = Object.freeze({ eur: "€", usd: "$" });
 
-// Formatiert GANZZAHL-Cents als Anzeige (kein Float, G26): 499 -> "$4.99",
-// 99 -> "$0.99". Englische Marketing-Seite -> Punkt-Dezimaltrenner, Symbol
-// vorangestellt. Unbekannte Waehrung -> ohne Symbol (fail-soft, nie Muell-Glyph).
+// Formatiert GANZZAHL-Cents als Anzeige (kein Float, G26): 499 -> "4,99 €",
+// 99 -> "0,99 €". EUR -> deutsche Notation (Komma-Dezimaltrenner, Symbol
+// NACHgestellt mit normalem Leerzeichen davor) - so schreibt es auch die
+// Preisseite/Startseite, das Dashboard soll dieselbe Notation zeigen wie der
+// Kunde sie beim Tarifwaehlen schon gesehen hat. Andere Waehrungen (z.B. usd)
+// behalten die bisherige Notation (Symbol vorangestellt, Punkt-Trenner).
+// Unbekannte Waehrung -> ohne Symbol (fail-soft, nie Muell-Glyph).
 export function formatPlanPrice(amountCents, currency) {
   const major = Math.floor(amountCents / CENTS_PER_MAJOR);
   const minor = String(amountCents % CENTS_PER_MAJOR).padStart(2, "0");
+  if (currency === "eur") {
+    return `${major},${minor} €`;
+  }
   return `${CURRENCY_SYMBOLS[currency] || ""}${major}.${minor}`;
 }
 
