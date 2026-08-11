@@ -80,6 +80,12 @@ function promptInputs(call) {
     // research/in-call.js lookupProviderFor). Vorher stimmte der Satz nur fuer die
     // Budget-Engine - der Realtime-Prompt versprach eine Faehigkeit ohne Werkzeug.
     lookupAvailable: lookupAvailableFor(call),
+    // WW-P3: dieselbe Regel wie lookupAvailable, EINE Quelle (G5) fuer "wird get_consult
+    // in diesem Zug angeboten?" - dieselbe Frage entscheidet ueber den Werkzeugsatz
+    // (agentTools) UND ueber die drei Prompt-Stellen, die den Rueckfrage-Fall routen.
+    // Der Prompt darf NIE auf ein Werkzeug zeigen, das im selben Zug fehlt: Kontingent
+    // erschoepft, Poll nicht frisch, Tenant-Recht fehlt -> Bestandswortlaut.
+    consultAvailable: consultAvailableFor(call),
     now: new Date().toLocaleString(loc.dateLocale, {
       timeZone,
       weekday: "long",
@@ -156,6 +162,15 @@ function clarificationRules(p) {
   return p.loc.prompt.clarificationRules(p);
 }
 
+// WW-P3: die Nachschlag-Zeile kennt jetzt DREI Lagen statt zwei. Wird nachgeschlagen,
+// gilt unveraendert lookupAllowed (die Zeile spricht dort ohnehin nur noch das
+// Weiterverbinden ab, das auch get_consult nicht kann). Ohne Nachschlag entscheidet die
+// Rueckfrage-Verfuegbarkeit, ob der Satz den Fall exklusiv auf die Nachricht schickt.
+function researchBoundaryLine(b, { lookupAvailable, consultAvailable }) {
+  if (lookupAvailable) return b.lookupAllowed;
+  return consultAvailable ? b.noLookupWithConsult : b.noLookup;
+}
+
 // Grenzen. Die beiden allow*-Gates behalten exakt ihre fail-closed-Semantik (Zeile
 // steht, SOLANGE nicht ausdruecklich erlaubt) - nur die Leerzeile bei "erlaubt" faellt
 // weg (D8). Die beiden Kalender-/Buchungs-Zeilen sind seit P1b unbedingt (Owner-
@@ -163,7 +178,7 @@ function clarificationRules(p) {
 // geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit + Werkzeug-Sparsamkeit). Die
 // Verzweigung bleibt hier (EINE Quelle, P11 D1) - nur die Zeilen kommen aus dem
 // Sprach-Baustein.
-function boundaryRules({ loc, settings: s, owner, lookupAvailable }) {
+function boundaryRules({ loc, settings: s, owner, lookupAvailable, consultAvailable }) {
   const b = loc.prompt.boundaries;
   const lines = [b.heading];
   if (!s.allowPersonalData) lines.push(b.personalData(owner));
@@ -174,11 +189,15 @@ function boundaryRules({ loc, settings: s, owner, lookupAvailable }) {
   lines.push(
     b.noCalendar(owner),
     b.noBooking,
-    lookupAvailable ? b.lookupAllowed : b.noLookup,
+    researchBoundaryLine(b, { lookupAvailable, consultAvailable }),
     // GQ-P9: unbedingt, in JEDEM Turn. Der Defekt haengt nicht an einem Werkzeug oder
     // Flag - er trat auf, WAEHREND get_consult im Satz lag: die Gegenstelle fragt nach
     // einer Angabe zum Auftraggeber, der Agent gibt die Frage an sie zurueck.
-    b.noAskingCounterpartAboutOwner(owner),
+    // WW-P3: die Regel bleibt unbedingt, nur ihr AUSWEG folgt dem Werkzeugsatz - bisher
+    // nannte sie zwei Auswege, von denen einer vage war und der andere die Nachricht.
+    consultAvailable
+      ? b.noAskingCounterpartAboutOwnerWithConsult(owner)
+      : b.noAskingCounterpartAboutOwner(owner),
     b.toolThrift,
   );
   return lines.join("\n");
@@ -206,12 +225,22 @@ function hasMandateContent(mandate) {
 // take_message). Unbekannter on_out_of_scope-Wert (Legacy-/Fremddatensatz) faellt
 // fail-safe auf den Default zurueck, statt den laufenden Turn zu werfen. Texte kommen
 // aus dem Sprach-Baustein (loc.prompt.mandate, P11).
-function mandateSection({ call, owner, loc }) {
+// WW-P3: der AUSSERHALB-Ausgang folgt dem Werkzeugsatz. Eine Consult-Variante gibt es NUR
+// dort, wo der Sprach-Baustein eine anbietet - heute allein fuer den Default-Ausgang
+// (Nachricht). DECLINE/ACCEPT_BEST tragen bewusst keine: beide sind ausdrueckliche
+// Owner-Anweisungen, gerade NICHT zurueckzufragen. Welcher Ausgang eine Variante hat,
+// entscheidet damit der Sprach-Baustein, nicht diese Funktion (kein Enum-Wissen hier).
+function outOfScopeSentenceFor(mp, onOutOfScope, consultAvailable) {
+  const key = mp.outOfScopeSentence[onOutOfScope] ? onOutOfScope : MANDATE_OUT_OF_SCOPE_DEFAULT;
+  const withConsult = consultAvailable ? mp.outOfScopeSentenceWithConsult[key] : null;
+  return withConsult || mp.outOfScopeSentence[key];
+}
+
+function mandateSection({ call, owner, loc, consultAvailable }) {
   const m = call.mandate;
   if (!hasMandateContent(m)) return "";
   const mp = loc.prompt.mandate;
-  const outOfScope =
-    mp.outOfScopeSentence[m.on_out_of_scope] || mp.outOfScopeSentence[MANDATE_OUT_OF_SCOPE_DEFAULT];
+  const outOfScope = outOfScopeSentenceFor(mp, m.on_out_of_scope, consultAvailable);
   const precedence = call.constraints ? mp.constraintsPrecedence : "";
   const blocks = [];
   if (m.decide_freely)
@@ -229,6 +258,15 @@ function thinkingSignalRules(p) {
   return config.voice.thinkingSignalEnabled ? p.loc.prompt.thinkingSignal : "";
 }
 
+// WW-P3/P4: der Rueckfrage-Weg im Prompt-Rumpf. get_consult stand bisher in KEINEM
+// gerenderten Prompt woertlich (Befund W2) - es existierte fuer das Modell nur als
+// Eintrag im tools-Array, waehrend drei Prompt-Bloecke denselben Fall woertlich auf
+// take_message schickten. Werkzeug nicht im Zug -> "" -> filter(Boolean) in systemPrompt
+// haelt den Bestandsprompt byte-identisch (Muster thinkingSignalRules/mandateSection).
+function consultRules(p) {
+  return p.consultAvailable ? p.loc.prompt.consultRules(p.owner) : "";
+}
+
 export function systemPrompt(call) {
   const p = promptInputs(call);
   return [
@@ -240,6 +278,10 @@ export function systemPrompt(call) {
     // AL-P7b: steht direkt hinter den GRENZEN, weil es eine Regel ueber das Verhalten AM
     // Werkzeugaufruf ist (Nachbar von toolThrift). Flag aus -> "" -> Prompt byte-identisch.
     thinkingSignalRules(p),
+    // WW-P3: steht VOR dem SPIELRAUM, weil der Mandats-Block die Ausnahme dazu ist ("in
+    // diesem Rahmen entscheidest du selbst, fragst NICHT nach") - erst die Regel, dann der
+    // ausdruecklich freigegebene Bereich. Werkzeug nicht im Zug -> "" -> byte-identisch.
+    consultRules(p),
     // P6: rote Linien (GRENZEN) zuerst, dann der gruene Bereich. Ohne Mandat "" ->
     // filter(Boolean) haelt den Bestandsprompt byte-identisch (Muster D8).
     mandateSection(p),

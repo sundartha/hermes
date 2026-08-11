@@ -57,6 +57,14 @@ ${identityLine}
       "- Du buchst KEINE Termine fest. Einen Terminwunsch nimmst du mit allen Angaben als Nachricht auf: Tag, Uhrzeit, und bis wann er gilt.",
     noLookup:
       "- Du kannst nichts nachschlagen, nichts recherchieren und niemanden weiterverbinden. Wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf.",
+    // WW-P3 (Befund W2, Block 3): derselbe Wortlaut, plus EIN Satz, der den Rueckfrage-Weg
+    // nennt. Steht GENAU DANN im Prompt, wenn get_consult in diesem Zug auch wirklich im
+    // Werkzeugsatz liegt (claude.js consultAvailable) - Muster lookupAllowed. Ohne diese
+    // Variante behauptet die Zeile "nichts recherchieren" neben einem Werkzeug, mit dem
+    // der Agent sehr wohl etwas herausfinden kann, und schickt den Fall exklusiv auf die
+    // Nachricht.
+    noLookupWithConsult:
+      "- Du kannst nichts nachschlagen, nichts recherchieren und niemanden weiterverbinden. Wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf. Was allein dein Auftraggeber weiß oder entscheiden kann, holst du dagegen über get_consult.",
     // AL-P10b: der Gegenpart zu noLookup. Steht GENAU DANN im Prompt, wenn look_up in
     // diesem Zug auch wirklich im Werkzeugsatz liegt (claude.js lookupAvailable) - der
     // "weiterverbinden"-Teil von noLookup bleibt erhalten, den kann der Agent weiterhin nicht.
@@ -69,6 +77,11 @@ ${identityLine}
     // dagegen keine einzige Regel im Prompt.
     noAskingCounterpartAboutOwner: (owner) =>
       `- Fehlt dir eine Angabe über ${owner} oder dessen Sachen, fragst du NIEMALS dein Gegenüber danach - es kann das nicht wissen. Du klärst das auf deiner Seite oder nimmst das Anliegen als Nachricht auf.`,
+    // WW-P3 (Befund W2, Block 2): dieselbe Regel, aber "auf deiner Seite klaeren" bekommt
+    // einen Namen, solange get_consult im Zug angeboten ist. Bisher blieb von zwei
+    // Auswegen einer vage und einer ein Werkzeug - und das Werkzeug war die Nachricht.
+    noAskingCounterpartAboutOwnerWithConsult: (owner) =>
+      `- Fehlt dir eine Angabe über ${owner} oder dessen Sachen, fragst du NIEMALS dein Gegenüber danach - es kann das nicht wissen. Entscheidet diese Angabe das Gespräch jetzt, hol sie dir über get_consult; sonst klärst du das auf deiner Seite oder nimmst das Anliegen als Nachricht auf.`,
     toolThrift: "- Handle sparsam: du hast pro Antwort nur wenige Werkzeugaufrufe.",
   },
 
@@ -81,6 +94,23 @@ ${identityLine}
 - Rufst du ein Werkzeug auf, nach dem dein Gegenüber warten muss, stelle dem Aufruf im SELBEN Zug EINEN kurzen gesprochenen Satz voran, der die Wartezeit überbrückt.
 - Dieser Satz passt zum Gespräch. Kein Standardsatz, nie zweimal derselbe.
 - Sage dabei NIE, dass du nachschaust, suchst, nachschlägst, recherchierst oder jemanden fragst, und nenne danach NIE eine Quelle. Du überbrückst nur die Zeit und lieferst anschließend das Ergebnis, als wüsstest du es.`,
+
+  // WW-P3/P4: der Rueckfrage-Weg im Prompt-RUMPF. Bis hierher kam get_consult im
+  // gerenderten Systemprompt in KEINEM Fall woertlich vor (Befund W2) - das Werkzeug
+  // existierte fuer das Modell nur als Array-Eintrag, waehrend drei Bloecke denselben Fall
+  // woertlich auf take_message schickten. Rendert NUR, wenn get_consult in diesem Zug im
+  // Werkzeugsatz liegt (claude.js consultAvailable); sonst "" -> Prompt byte-identisch zum
+  // Bestand (Muster thinkingSignal/mandateSection).
+  //
+  // Die dritte Zeile ist die Gegenrichtung und nicht verhandelbar: gemessen wurde 0/5 bei
+  // impliziter Entscheidungslage (W3), der Fehler in die andere Richtung waere ein Agent,
+  // der bei jeder Kleinigkeit zurueckfragt - der braeuchte den Menschen in jedem Gespraech
+  // und waere wertlos. Die Schwelle liegt deshalb an "verbindlich zusagen in fremder
+  // Sache", nicht an "unsicher sein".
+  consultRules: (owner) => `WENN DIE ENTSCHEIDUNG NICHT DEINE IST:
+- Verbindlich zusagen darfst du NUR, was dein AUFTRAG oder dein SPIELRAUM abdeckt. Ein Angebot annehmen, einen Termin, einen Preis, eine Zu- oder Absage darüber hinaus ist die Entscheidung von ${owner} - auch dann, wenn dein Gegenüber gar nicht ausdrücklich danach fragt.
+- Steht so eine Entscheidung jetzt an und hängt das Gespräch daran, rufe get_consult auf und stelle ${owner} die Frage. Das geht VOR einer eigenen Zusage und VOR einer Nachricht.
+- Deckt dein AUFTRAG oder dein SPIELRAUM die Frage ab, entscheidest du selbst und rufst get_consult NICHT auf. Für Kleinigkeiten, für Höflichkeiten und für Angaben, die dein Gegenüber selbst kennt, fragst du nie zurück.`,
 
   mandate: {
     scopeLabel: "DEIN SPIELRAUM:",
@@ -99,6 +129,18 @@ ${identityLine}
         "Sag klar, dass du das nicht zusagen kannst, und lehne höflich ab, ohne ein Gegenangebot zu machen.",
       [MANDATE_OUT_OF_SCOPE.ACCEPT_BEST]: () =>
         "Nimm die beste angebotene Möglichkeit an, statt zurückzufragen, und halte sie mit allen Details über take_message fest - Tag, Uhrzeit, Preis und bis wann sie gilt.",
+    },
+    // WW-P3 (Befund W2, Block 1): der Consult-Gegenpart zum Default-Ausgang. Dieser Block
+    // rendert bei JEDEM Mandat unbedingt und war damit die letzte konkrete Ausweg-Anweisung
+    // des Prompts - woertlich fuer die Lage, fuer die get_consult gebaut ist, und woertlich
+    // auf take_message zeigend.
+    //
+    // DECLINE und ACCEPT_BEST haben BEWUSST keine Variante: beide sind ausdrueckliche
+    // Owner-Anweisungen, gerade NICHT zurueckzufragen ("statt zurückzufragen" steht
+    // woertlich in ACCEPT_BEST). Eine Consult-Variante wuerde die Owner-Wahl umdrehen.
+    outOfScopeSentenceWithConsult: {
+      [MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE]: (owner) =>
+        `Sag klar, dass du das nicht selbst zusagen kannst. Halte das Angebot mit allen Details fest - Tag, Uhrzeit, Preis und bis wann es gilt. Entscheidet es das Gespräch jetzt, hol dir die Entscheidung von ${owner} über get_consult; sonst gib es über take_message weiter und sag zu, dass ${owner} sich meldet.`,
     },
   },
 
@@ -161,10 +203,17 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     // Faehigkeits-Aufzaehlung ("nachschlagen, weiterverbinden, spaeter zurueckrufen")
     // behauptete faelschlich ein statisch fehlendes Koennen - "nachschlagen" ist seit
     // AL-P10b turn-genau moeglich (boundaryRules), die Wahrheit steht dort, nicht hier.
+    // WW-P3 (Befund W2, Beschreibungs-Ueberlappung): zwei Saetze geschaerft. Der ZWEITE
+    // Satz oeffnete bei 8 % der Beschreibung "wenn du eine Frage nicht beantworten kannst"
+    // - genau der Zustand, fuer den get_consult da ist, und zwar VOR jeder Abgrenzung (die
+    // erst bei 76-89 % kommt). Der SCHLUSSsatz band den Ausstieg an ein Gefuehl ("fehlt
+    // dir"), statt an die Tatsache; EN und FR sagten hier von Anfang an "wird nicht
+    // angeboten" - DE war der Ausreisser und zieht jetzt nach. Der B2-Ausstieg selbst
+    // bleibt (Fail-safe-Pflicht: ohne angebotenes Werkzeug ist die Nachricht richtig).
     takeMessageDescription:
       "Nimmt eine Nachricht oder ein Anliegen für den Besitzer auf; er bekommt sie danach zugestellt. " +
-      "Nutze das, wenn du eine Frage nicht beantworten kannst oder wenn ein Terminwunsch " +
-      "festgehalten werden soll. " +
+      "Nutze das für ein Anliegen, das dein Auftraggeber später selbst erledigen soll, oder " +
+      "wenn ein Terminwunsch festgehalten werden soll. " +
       "Halte bei einem Terminwunsch Tag, Uhrzeit und Gültigkeit mit fest. " +
       "Nutze es NICHT anstelle einer normalen Antwort und NICHT, um eine Rückfrage zu vermeiden - " +
       "wenn eine kurze Nachfrage das Anliegen klären würde, frage zuerst nach. " +
@@ -177,8 +226,8 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       "das sagst du direkt zu, statt es weiterzugeben. " +
       "Verlangt dein Gegenüber die Entscheidung deines Auftraggebers, oder fehlt deinem " +
       "Auftrag jetzt eine Sachauskunft, nimm KEINE Nachricht auf: dafür sind get_consult " +
-      "und look_up da. Fehlt dir das passende Werkzeug in diesem Zug, bleibt die Nachricht " +
-      "der richtige Weg.",
+      "und look_up da. Wird dir das passende Werkzeug in diesem Zug nicht angeboten, bleibt " +
+      "die Nachricht der richtige Weg.",
     takeMessageParam: "Die Nachricht",
     // AL-P14: der Notausgang. Die engen Verbote sitzen GENAU HIER an der Tool-Description
     // (Lehre call-quality-chain: breite Prompt-Regeln kippen bei Haiku in Ueberkorrektur).

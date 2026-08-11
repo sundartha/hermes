@@ -43,7 +43,9 @@ const CONTRACT = Object.freeze({
     r2_lookUp: ["die Antwort deinen AUFTRAG jetzt weiterbringt"],
     r3: ["NICHT auf", "deinen Auftrag nicht", "Das ist richtig so"],
     r4: ["SELBEN Zug", "look_up", "Sage NIE, dass du nachschaust"],
-    b2_exit: "Fehlt dir das passende Werkzeug in diesem Zug, bleibt die Nachricht der richtige Weg.",
+    // WW-P3: derselbe Ausstieg, aber an die TATSACHE gebunden statt an ein Gefuehl -
+    // EN und FR sagten von Anfang an "wird nicht angeboten", DE war der Ausreisser.
+    b2_exit: "Wird dir das passende Werkzeug in diesem Zug nicht angeboten, bleibt die Nachricht der richtige Weg.",
   }),
   en: Object.freeze({
     r1_exclusion: ["your principal's decision", "do NOT record a message", "get_consult"],
