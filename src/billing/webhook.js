@@ -10,6 +10,7 @@ import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
 import { isKnownPlanSlug } from "../plans.js";
 import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./money-events.js";
+import { attemptContractEndCleanup } from "./contract-end-cleanup.js";
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -32,6 +33,11 @@ export const WEBHOOK_ACTION = Object.freeze({
   IGNORE: "ignore",
   // GAP-03 (O2): eines der vier bisher wirkungslosen Geld-Ereignisse (money-events.js).
   MONEY: "money_event",
+  // 312k-P1 (Teil A): cancel_at_period_end=true bei einer BESTAETIGTEN Subscription.
+  // Der Tenant bleibt aktiv (er hat fuer die laufende Periode bezahlt) - nur der
+  // Kuendigungszustand wird gespeichert, KEINE der drei ACTIVATE-Wirkungen (KYC-Hebung/
+  // Provisioning/Statuswechsel) laeuft (s. applyStripeWebhook).
+  CANCEL_SCHEDULED: "cancel_scheduled",
 });
 
 // Plattform-Alarm-SMS-Praefixe (kein Magic-String, G25). GAP-04: die Aktivierung wartet auf
@@ -116,8 +122,7 @@ export function interpretStripeEvent(event) {
       // API-Versionen tragen die Felder NUR am Item - ohne Fallback bliebe der
       // Quota-/Gate-Anker leer (fail-closed 0 Minuten).
       const period = periodFieldsOf(object);
-      return {
-        action: WEBHOOK_ACTION.ACTIVATE,
+      const shared = {
         tenantRef: tenantRefOf(object),
         subscriptionId: object.id ?? null,
         planSlug: planSlugOf(object),
@@ -128,6 +133,27 @@ export function interpretStripeEvent(event) {
         // auf den Browser-Return zu warten (s. applyStripeWebhook).
         customerId: object.customer ?? null,
         paymentMethodId: paymentMethodIdOf(object.default_payment_method),
+      };
+      // 312k-P1 (Teil A, der gefaehrliche Befund): Stripe setzt bei "kuendigt zum
+      // Periodenende" status weiterhin auf active/trialing UND cancel_at_period_end=true.
+      // Der Bestandscode las das als ACTIVATE und haette ueber activatePaidTenant
+      // clearSuspendedAt/clearBillingHold ausgeloest - der gerade gesetzte Kuendigungs-
+      // zustand waere im selben Atemzug wieder geloescht. Eigener Zweig: Tenant bleibt
+      // aktiv (er hat fuer die laufende Periode bezahlt), NUR der Kuendigungszustand wird
+      // gespeichert (s. applyStripeWebhook - keine der drei ACTIVATE-Wirkungen laeuft).
+      if (object.cancel_at_period_end === true) {
+        return { action: WEBHOOK_ACTION.CANCEL_SCHEDULED, ...shared, cancelAtPeriodEnd: true };
+      }
+      // cancel_at_period_end===false ist eine EXPLIZITE Ruecknahme (Kunde hat es sich
+      // anders ueberlegt, oder der Betreiber hat die Kuendigung im Stripe-Dashboard
+      // zurueckgenommen) -> der Store-Vermerk wird aktiv geloescht (selektiver Patch-Key
+      // unten in applyStripeWebhook). Fehlt das Feld (undefined, aeltere/synthetische
+      // Events ohne diese Property) bleibt der Key bewusst weg - kein "nicht gekuendigt"
+      // ohne Beleg, Bestandsverhalten fuer alle Aufrufer, die das Feld nie gesetzt hatten.
+      return {
+        action: WEBHOOK_ACTION.ACTIVATE,
+        ...shared,
+        ...(object.cancel_at_period_end === false ? { cancelAtPeriodEnd: false } : {}),
       };
     }
     case SUBSCRIPTION_EVENT.DELETED:
@@ -220,17 +246,37 @@ function planSlugOf(object) {
 // Plan/Periode nachziehen, KYC auf CARD heben (store.setKycLevel - oeffnet das Outbound-Gate
 // nach bestaetigter Zahlung) und ueber accounts.setStatus aktivieren (DERSELBE Status-Seam
 // wie webAuthMw/Admin-approve - eine Schreibquelle, kein Drift); danach stoesst der injizierte
-// provision-Seam das (idempotente, payment-gegatete) Nummern-Provisioning an. suspend setzt
+// provision-Seam das (idempotente, payment-gegatete) Nummern-Provisioning an. cancel_scheduled
+// (312k-P1) patcht NUR Plan/Periode + den Kuendigungsvermerk - KEINEN der drei ACTIVATE-
+// Effekte (der Tenant war/bleibt aktiv, er hat bezahlt). suspend setzt
 // suspended + invalidiert alle Sessions des Tenants und ruft provision NIE. ignore = No-Op.
 // Nebeneffekt (Status-/Abo-/KYC-Schreibung + Provisioning) im Namen.
 export async function applyStripeWebhook(
   event,
-  { store, accounts, sessions, audit, req, provision, billing },
+  {
+    store,
+    accounts,
+    sessions,
+    audit,
+    req,
+    provision,
+    billing,
+    // 312k-Phase 4 (Vertragsende-Aufraeumarbeiten): NUR im SUSPEND-Zweig gelesen, NUR wenn
+    // der Vertrag durch eine Kuendigung endete (s. dort). numberProvisioner = derselbe
+    // Telnyx-NumberProvisioning-Port wie der DID-Release-Reconciler; workos = der WorkOS-
+    // Management-Adapter (null, wenn WORKOS_MANAGEMENT_API_KEY nicht gesetzt ist - die
+    // Loeschung wird dann nicht versucht); auditStore = der durable Postgres-audit_log-
+    // Nachweis (Default No-Op, Muster self-service-routes.js makeSelfServiceRoutes) fuer
+    // Aufrufer/Tests, die diesen Pfad nicht beruehren.
+    numberProvisioner,
+    workos,
+    auditStore = { record: async () => {} },
+  },
 ) {
   const interpreted = interpretStripeEvent(event);
   const {
     action, tenantRef, subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart,
-    customerId, paymentMethodId,
+    customerId, paymentMethodId, cancelAtPeriodEnd,
   } = interpreted;
   if (action === WEBHOOK_ACTION.IGNORE) return;
   // GAP-03: Geld-Ereignisse ausserhalb der Subscription-Lifecycle-Allowlist auditieren SICH
@@ -241,6 +287,32 @@ export async function applyStripeWebhook(
   if (!tenant) {
     audit("stripe_webhook_ignored", req, `action=${action} no_tenant`);
     return;
+  }
+  if (action === WEBHOOK_ACTION.CANCEL_SCHEDULED) {
+    // 312k-P1: derselbe Fail-closed-Riegel wie ACTIVATE (S1-1) - ein GESETZTER, aber
+    // unbekannter Plan-Slug erreicht den Store nicht.
+    if (planSlug != null && !isKnownPlanSlug(planSlug)) {
+      audit("stripe_webhook_ignored", req, `action=${action} tenant=${tenant} unknown_plan`);
+      return;
+    }
+    // Selektiver Patch wie im ACTIVATE-Zweig: nur die tatsaechlich gelieferten Felder
+    // nachziehen, damit "gekuendigt zum TT.MM." (currentPeriodEnd) aktuell bleibt.
+    const patch = { cancelAtPeriodEnd: true };
+    if (subscriptionId != null) patch.subscriptionId = subscriptionId;
+    if (planSlug != null) patch.planSlug = planSlug;
+    if (currentPeriodEnd != null) patch.currentPeriodEnd = currentPeriodEnd;
+    if (currentPeriodStart != null) patch.currentPeriodStart = currentPeriodStart;
+    store.setTenantSubscription(tenant, patch);
+    // Bewusst KEIN accounts.setStatus, KEIN clearSuspendedAt/clearBillingHold, KEIN
+    // activatePaidTenant (KYC/Provisioning): der Tenant war/bleibt aktiv (er hat fuer die
+    // laufende Periode bezahlt) - dieser Zweig speichert NUR den Kuendigungszustand
+    // (Owner-Entscheidung: Kuendigung wirkt zum Ende des bezahlten Zeitraums).
+    audit(
+      "stripe_webhook_cancel_scheduled",
+      req,
+      `tenant=${tenant} current_period_end=${currentPeriodEnd ?? "unknown"}`,
+    );
+    return { cancelScheduled: true };
   }
   if (action === WEBHOOK_ACTION.ACTIVATE) {
     // S1-1 (G11): einen GESETZTEN, aber unbekannten Plan-Slug NIE an den Store weiterreichen
@@ -262,6 +334,11 @@ export async function applyStripeWebhook(
     if (planSlug != null) patch.planSlug = planSlug;
     if (currentPeriodEnd != null) patch.currentPeriodEnd = currentPeriodEnd;
     if (currentPeriodStart != null) patch.currentPeriodStart = currentPeriodStart;
+    // 312k-P1 (Teil A): cancel_at_period_end===false ist die EXPLIZITE Ruecknahme einer
+    // vorher vermerkten Kuendigung - nur dann patchen (interpretStripeEvent liefert den Key
+    // nur bei echtem false, s. dort); fehlt das Feld (undefined), bleibt ein bestehender
+    // Vermerk unberuehrt (kein falsches "nicht gekuendigt" ohne Beleg).
+    if (cancelAtPeriodEnd != null) patch.cancelAtPeriodEnd = cancelAtPeriodEnd;
     store.setTenantSubscription(tenant, patch);
     // Race-Fix (Abo-ohne-Nummer): der Webhook gewinnt das Rennen gegen den Checkout-
     // Return regelmaessig (Stripe stellt in ms zu, der Browser-Redirect braucht
@@ -314,6 +391,17 @@ export async function applyStripeWebhook(
   }
   // SUSPEND (Zahlung gescheitert / Abo geloescht): Status + Sessions sperren (gesperrter
   // Kunde kann nicht bis Cookie-Expiry weiterlesen).
+  //
+  // 312k-Phase 4 (die eine Bedingung, die alles traegt): customer.subscription.deleted UND
+  // invoice.payment_failed fuehren BEIDE hierher (Spec: nur diese beiden suspenden) - ob
+  // NUR gesperrt wird oder ZUSAETZLICH die Rufnummer freigegeben + die WorkOS-Identitaet
+  // geloescht werden, entscheidet AUSSCHLIESSLICH der gespeicherte Kuendigungszustand
+  // (cancelAtPeriodEnd), gelesen VOR jeder Mutation dieses Zweigs. War er gesetzt, endete
+  // der Vertrag durch eine KUENDIGUNG (312k-P1 CANCEL_SCHEDULED hat ihn gesetzt, nichts hat
+  // ihn seither zurueckgenommen) - dann UND NUR dann greift das Aufraeumen. Ein Zahlungs-
+  // ausfall OHNE vorherige Kuendigung liefert hier IMMER false (das Feld wurde nie gesetzt)
+  // -> Identitaet und Nummer bleiben unangetastet, byte-identisches Bestandsverhalten.
+  const endedViaCancellation = store.tenantSubscription(tenant).cancelAtPeriodEnd;
   await accounts.setStatus(tenant, "suspended");
   // tenant-prolif-c: Grace-Anker fuer den spaeteren DID-Release (Phase D). SET-IF-ABSENT stempelt
   // den Zeitpunkt der ERSTEN Suspendierung; ein Dunning-Retry (weiteres invoice.payment_failed)
@@ -322,6 +410,19 @@ export async function applyStripeWebhook(
   store.setSuspendedAtIfAbsent(tenant);
   await sessions.invalidateByTenant(tenant);
   audit("stripe_webhook_suspend", req, `tenant=${tenant}`);
+  // Die Sperre ist an dieser Stelle bereits VOLLZOGEN (setStatus/setSuspendedAtIfAbsent/
+  // invalidateByTenant sind oben durchgelaufen) - das Aufraeumen laeuft danach, best-effort,
+  // und darf die Antwort NIE blockieren (try/catch: attemptContractEndCleanup ist selbst
+  // schon fail-soft, dies ist ein zusaetzlicher Riegel gegen einen unerwarteten Fehler in
+  // der Verdrahtung). Was nicht klappt, bleibt am Tenant offen vermerkt (durabler Audit-
+  // Nachweis in attemptContractEndCleanup) und wird vom periodischen Sweep erneut versucht.
+  if (endedViaCancellation) {
+    try {
+      await attemptContractEndCleanup({ store, numberProvisioner, workos, auditStore, tenantId: tenant });
+    } catch (e) {
+      console.error(`[contract-end] Aufraeumen fehlgeschlagen tenant=${tenant}: ${e.message}`);
+    }
+  }
   return { suspended: true };
 }
 

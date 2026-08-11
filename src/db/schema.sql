@@ -101,6 +101,23 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_billing_hold_due_at TEXT;
 -- der laufenden Periode sind 0 (kein Hard-Suspend). Reversibel (webhook.js ACTIVATE-Zweig).
 -- Additiv NULLABLE, kein CHECK (Muster stripe_number_setup_fee_exempt).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_period_credit_revoked BOOLEAN;
+-- 312k-P1 (Kuendigungsbutton, Phase 1): true zwischen "Kuendigung zum Periodenende
+-- vorgemerkt" (Stripe cancel_at_period_end=true) und deren Ruecknahme/tatsaechlichem
+-- Vertragsende. Der Tenant bleibt bis dahin aktiv (er hat fuer die laufende Periode
+-- bezahlt) - stripe_current_period_end (bereits vorhanden) traegt das Datum, zu dem die
+-- Kuendigung wirkt. NULL/false = keine Kuendigung vorgemerkt. Additiv NULLABLE, kein CHECK
+-- (Muster stripe_period_credit_revoked).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_cancel_at_period_end BOOLEAN;
+-- 312k-Phase 4 (Vertragsende-Aufraeumarbeiten nach KUENDIGUNG): true = der jeweilige
+-- Teilschritt (Rufnummer freigeben bzw. WorkOS-Identitaet loeschen) ist noch OFFEN - ein
+-- fehlgeschlagener Versuch (Provider-Fehler/Netz/fehlender WORKOS_MANAGEMENT_API_KEY) wird
+-- so nicht verloren, sondern von einem spaeteren Sweep erneut versucht. Beide Felder werden
+-- AUSSCHLIESSLICH gesetzt, wenn der Vertrag durch eine Kuendigung endete (cancelAtPeriodEnd
+-- war zuvor gesetzt) - bei Zahlungsausfall bleiben sie NULL/false fuer immer (s.
+-- billing/webhook.js SUSPEND-Zweig). NULL/false = nichts (mehr) offen. Additiv NULLABLE,
+-- kein CHECK (Muster stripe_cancel_at_period_end).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS number_release_pending BOOLEAN;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS workos_delete_pending BOOLEAN;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

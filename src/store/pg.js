@@ -600,6 +600,18 @@ export function makePgStore(runner) {
     billingHoldActive: (tenantId) =>
       ops.billingHoldActive(requireState(), tenantId, new Date().toISOString()),
 
+    // ---- 312k-Phase 4: Vertragsende-Aufraeumarbeiten (Wrapper-Parity zu json.js) ----
+    setContractEndCleanupPending(tenantId, patch) {
+      const tenant = ops.setContractEndCleanupPending(requireState(), tenantId, patch);
+      save();
+      return tenant;
+    },
+    contractEndCleanupPending: (tenantId) =>
+      ops.contractEndCleanupPending(requireState(), tenantId),
+    tenantsPendingContractEndCleanup: () =>
+      ops.tenantsPendingContractEndCleanup(requireState()),
+    tenantIdpSubject: (tenantId) => ops.tenantIdpSubject(requireState(), tenantId),
+
     // ---- Private Summary-Nummer pro Tenant (F2): Wrapper-Parity zu json.js ----
     setPrivateNumber(tenantId, raw) {
       const tenant = ops.setPrivateNumber(requireState(), tenantId, raw);
@@ -860,7 +872,8 @@ const TENANT_COLUMNS =
   "stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, " +
   "country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, " +
   "suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, " +
-  "stripe_period_credit_revoked";
+  "stripe_period_credit_revoked, stripe_cancel_at_period_end, " +
+  "number_release_pending, workos_delete_pending";
 
 // Eine tenant-Zeile -> Tenant-Record. Alle optionalen Felder NUR-nicht-null hydrieren:
 // owner_name/idp_subject/first_name sonst -> leeres Feld, das den leeren tenantContext-
@@ -902,6 +915,14 @@ function rowToTenant(r) {
   if (r.stripe_billing_hold_due_at != null) tenant.billingHoldDueAt = r.stripe_billing_hold_due_at;
   if (r.stripe_period_credit_revoked != null)
     tenant.stripePeriodCreditRevoked = r.stripe_period_credit_revoked;
+  // 312k-P1 (Teil B): Muster stripe_period_credit_revoked (ALTER-only, nullable, kein
+  // Backfill - Bestand ohne Wert -> tenantSubscription() faellt fail-closed auf false zurueck).
+  if (r.stripe_cancel_at_period_end != null)
+    tenant.stripeCancelAtPeriodEnd = r.stripe_cancel_at_period_end;
+  // 312k-Phase 4: Vertragsende-Aufraeumarbeiten (ALTER-only, nullable, kein Backfill -
+  // Bestand ohne Wert -> contractEndCleanupPending() faellt fail-closed auf false zurueck).
+  if (r.number_release_pending != null) tenant.numberReleasePending = r.number_release_pending;
+  if (r.workos_delete_pending != null) tenant.workosDeletePending = r.workos_delete_pending;
   return tenant;
 }
 
@@ -1332,8 +1353,8 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
@@ -1354,7 +1375,10 @@ async function flushTenants(client, tenants) {
          stripe_activation_pending=EXCLUDED.stripe_activation_pending,
          stripe_billing_hold=EXCLUDED.stripe_billing_hold,
          stripe_billing_hold_due_at=EXCLUDED.stripe_billing_hold_due_at,
-         stripe_period_credit_revoked=EXCLUDED.stripe_period_credit_revoked`,
+         stripe_period_credit_revoked=EXCLUDED.stripe_period_credit_revoked,
+         stripe_cancel_at_period_end=EXCLUDED.stripe_cancel_at_period_end,
+         number_release_pending=EXCLUDED.number_release_pending,
+         workos_delete_pending=EXCLUDED.workos_delete_pending`,
       [
         t.id,
         t.status,
@@ -1380,6 +1404,9 @@ async function flushTenants(client, tenants) {
         t.billingHold ?? null,
         t.billingHoldDueAt ?? null,
         t.stripePeriodCreditRevoked ?? null,
+        t.stripeCancelAtPeriodEnd ?? null,
+        t.numberReleasePending ?? null,
+        t.workosDeletePending ?? null,
       ],
     );
   }

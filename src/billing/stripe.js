@@ -13,6 +13,10 @@
 //   capture: POST /v1/payment_intents/{id}/capture  {amount_to_capture}
 //   cancel:  POST /v1/payment_intents/{id}/cancel
 //   meter:   POST /v1/billing/meter_events  {event_name, payload[value], ...}  (P6b3)
+//   subscription-cancel-toggle: POST /v1/subscriptions/{id}  {cancel_at_period_end}  (312k-P2;
+//     scheduleCancellation=true, unscheduleCancellation=false - DIESELBE Operation, KEIN
+//     eigener Stripe-Endpunkt fuer "kuendigen"; nicht zu verwechseln mit cancel oben, das
+//     storniert eine PaymentIntent-Reserve, kein Abo)
 import { config } from "../config.js";
 import { paymentMethodIdOf, periodFieldsOf } from "./webhook.js"; // G5: EINE Normalisierung (pm + Perioden)
 import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.js";
@@ -420,4 +424,44 @@ export const stripeBilling = {
       numberSetupFeeExempt: typeof invoiceTotal === "number" ? invoiceTotal === 0 : false,
     };
   },
+
+  // 312k-P2: vermerkt/nimmt eine Kuendigung-zum-Periodenende zurueck (Owner-Entscheidung:
+  // Kuendigung wirkt zum Ende des bezahlten Zeitraums). EINE Quelle (G5) fuer beide
+  // Richtungen - Stripe kennt keine eigene "cancel"-Operation dafuer, nur denselben PATCH
+  // auf die bestehende Subscription (POST /v1/subscriptions/{id}, Stripe-REST-Konvention:
+  // Update via POST) mit cancel_at_period_end auf true bzw. false. Fehlerstufe 1 (assertOk,
+  // wie cancelHold): anders als placeHold/createSubscription loest dieser Call KEIN Geld
+  // aus - keiner der beiden bestehenden klassifizierten Fehlertypen (Authentication-
+  // Required/CustomerMissing) entsteht an einem reinen Flag-Patch auf ein bestehendes Abo,
+  // und Phase 2 hat noch KEINEN Aufrufer (Route/UI folgt erst P3), der einen Stripe-
+  // Fehlercode braucht - der HTTP-Status reicht zum Abbrechen. Der Roh-Fehlerkoerper wird
+  // bewusst NICHT gelesen (kein assertOkWithDetail): das haelt jede Fehlermeldung auf
+  // Status+Op begrenzt, ohne jeden Fall einzeln pruefen zu muessen, ob der Provider-Body
+  // PII traegt (Regel 4). subscriptionId + der GESETZTE cancel_at_period_end-Wert + die
+  // Periodenfelder verlassen den Adapter - KEIN Stripe-Objekt (Muster createSubscription).
+  async scheduleCancellation({ subscriptionId, idempotencyKey }) {
+    return await patchCancelAtPeriodEnd(subscriptionId, true, idempotencyKey);
+  },
+  async unscheduleCancellation({ subscriptionId, idempotencyKey }) {
+    return await patchCancelAtPeriodEnd(subscriptionId, false, idempotencyKey);
+  },
 };
+
+// 312k-P2: geteilte Implementierung (G5) fuer scheduleCancellation/unscheduleCancellation -
+// beide sind DERSELBE Stripe-Call mit umgekehrtem cancel_at_period_end-Wert. Der GESETZTE
+// Wert (nicht Stripes Antwort) bestimmt cancelAtPeriodEnd im Ergebnis: Stripe spiegelt das
+// gesendete Flag im Response-Body, ein zusaetzliches Parsen daraus waere ein zweiter,
+// redundanter Vertrag mit dem Provider (nie raten, G26 - Muster AUTHENTICATION_REQUIRED_CODE-
+// Kommentar). periodFieldsOf liest dieselbe Normalisierung wie ueberall sonst im Adapter.
+async function patchCancelAtPeriodEnd(subscriptionId, cancelAtPeriodEnd, idempotencyKey) {
+  const headers = idempotentHeaders(idempotencyKey);
+  const body = new URLSearchParams({ cancel_at_period_end: String(cancelAtPeriodEnd) });
+  const res = await fetch(`${url(SUBSCRIPTIONS_PATH)}/${subscriptionId}`, {
+    method: "POST",
+    headers,
+    body,
+  });
+  assertOk(res, cancelAtPeriodEnd ? "scheduleCancellation" : "unscheduleCancellation");
+  const json = await res.json().catch(() => ({}));
+  return { subscriptionId: json.id ?? subscriptionId, cancelAtPeriodEnd, ...periodFieldsOf(json) };
+}

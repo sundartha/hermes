@@ -1574,6 +1574,7 @@ export function setTenantSubscription(
     numberSetupFeeExempt,
     activationPending,
     periodCreditRevoked,
+    cancelAtPeriodEnd,
   } = {},
 ) {
   const tenant = findTenant(s, tenantId);
@@ -1602,6 +1603,10 @@ export function setTenantSubscription(
   // numberSetupFeeExempt.
   if (activationPending !== undefined) tenant.stripeActivationPending = activationPending;
   if (periodCreditRevoked !== undefined) tenant.stripePeriodCreditRevoked = periodCreditRevoked;
+  // 312k-P1 Teil B: Kuendigungsvormerkung zum Periodenende (true) bzw. deren Ruecknahme
+  // (false) - selektiver Patch-Key wie die uebrigen Felder oben (webhook.js setzt ihn
+  // explizit, nie implizit ueber ein anderes Feld).
+  if (cancelAtPeriodEnd !== undefined) tenant.stripeCancelAtPeriodEnd = cancelAtPeriodEnd;
   return tenant;
 }
 
@@ -1697,6 +1702,9 @@ export function tenantSubscription(s, tenantId) {
     // fail-closed Default false (nie undefined), Muster numberSetupFeeExempt.
     activationPending: tenant?.stripeActivationPending ?? false,
     periodCreditRevoked: tenant?.stripePeriodCreditRevoked ?? false,
+    // 312k-P1 Teil B: Kuendigungsvormerkung zum Periodenende. Fail-closed Default false
+    // (nie undefined) - Muster numberSetupFeeExempt/activationPending.
+    cancelAtPeriodEnd: tenant?.stripeCancelAtPeriodEnd ?? false,
   };
 }
 
@@ -2167,6 +2175,56 @@ export function tenantNumbersForErase(s, tenantId) {
       n.status === NUMBER_STATUS.ACTIVE &&
       n.provider === PROVIDER.TELNYX,
   );
+}
+
+// ---- 312k-Phase 4: Vertragsende-Aufraeumarbeiten nach KUENDIGUNG ----
+// Owner-Entscheidung: Rufnummer freigeben + WorkOS-Identitaet loeschen duerfen NUR
+// erfolgen, wenn der Vertrag durch eine KUENDIGUNG endete (cancelAtPeriodEnd war zuvor
+// gesetzt) - NIE bei blossem Zahlungsausfall. Diese Unterscheidung selbst lebt in
+// billing/webhook.js (liest cancelAtPeriodEnd VOR dem Suspend); hier nur der Fortschritts-
+// Speicher der beiden Teilschritte, damit ein fehlgeschlagener Versuch (Provider-Fehler/
+// Netz/fehlender Schluessel) NICHT verloren geht, sondern ein spaeterer Sweep ihn erneut
+// versucht (Muster suspended_at/billingHold: selektiver Patch, reine Mutation, kein IO).
+//
+// numberReleasePending/workosDeletePending sind UNABHAENGIG: der eine Teilschritt kann
+// gelingen, waehrend der andere offen bleibt - getrennte Felder statt eines einzelnen
+// Sammel-Flags, damit ein spaeterer Sweep gezielt nur den noch offenen Teil erneut anstoesst.
+export function setContractEndCleanupPending(
+  s,
+  tenantId,
+  { numberReleasePending, workosDeletePending } = {},
+) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) return null;
+  if (numberReleasePending !== undefined) tenant.numberReleasePending = numberReleasePending;
+  if (workosDeletePending !== undefined) tenant.workosDeletePending = workosDeletePending;
+  return tenant;
+}
+
+// Fail-closed Default false (nie undefined) - Muster tenantSubscription/activationPending.
+export function contractEndCleanupPending(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  return {
+    numberReleasePending: tenant?.numberReleasePending ?? false,
+    workosDeletePending: tenant?.workosDeletePending ?? false,
+  };
+}
+
+// Selektor fuer den periodischen Retry-Sweep (Muster classifyNumbersForRelease-Aufrufer):
+// NUR Tenants, bei denen mindestens ein Teilschritt noch offen ist. Ein Tenant, dessen
+// Vertrag durch Zahlungsausfall endete, hat BEIDE Felder nie gesetzt (false) und taucht
+// hier folglich NIE auf - die Felder werden ausschliesslich vom Kuendigungs-Pfad gesetzt.
+export function tenantsPendingContractEndCleanup(s) {
+  return tenantsOf(s).filter((t) => t.numberReleasePending || t.workosDeletePending);
+}
+
+// Liest die WorkOS-Identitaet (sub, aus dem verifizierten IdP-Profil beim Login gebunden,
+// s. registerTenant/resolveOrCreateTenant idp_subject) eines Tenants. Reine Query, kein IO.
+// Genutzt vom Vertragsende-Aufraeumen (312k-Phase 4): die Nutzer-Kennung fuer die WorkOS-
+// Loeschung kommt AUSSCHLIESSLICH aus diesem beim Login gespeicherten Feld, nie aus einem
+// Request-Body (kein Spoofing).
+export function tenantIdpSubject(s, tenantId) {
+  return findTenant(s, tenantId)?.idpSubject ?? null;
 }
 
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----

@@ -73,10 +73,13 @@ function maskPrivateNumber(e164) {
 // die Browser-View). Reine Praesentation.
 function paymentView(store, config, tenant) {
   if (!config.billing.paymentEnabled) return {};
-  const { planSlug, currentPeriodEnd } = store.tenantSubscription(tenant);
+  const { planSlug, currentPeriodEnd, cancelAtPeriodEnd } = store.tenantSubscription(tenant);
   return {
     hasCard: hasCardOnFile(store.tenantStripe(tenant)),
-    subscription: { planSlug, currentPeriodEnd },
+    // 312k-P1 Teil B: cancelAtPeriodEnd + currentPeriodEnd zusammen tragen genug, damit
+    // die Oberflaeche spaeter "gekuendigt zum TT.MM." anzeigen kann (sprachneutraler
+    // Feldname, kein UI/Route in dieser Phase).
+    subscription: { planSlug, currentPeriodEnd, cancelAtPeriodEnd },
     // BK4/B3 (Kommentar-Bestand bleibt) ... KS-P8: die Zusammenstellung der quotaView-
     // Argumente liegt seit dieser Phase EINMAL in billing/meter.js (tenantQuotaView) -
     // /api/state braucht dieselbe Sicht, und zwei Kopien der Destrukturierung wuerden
@@ -151,6 +154,51 @@ async function subscribeAndActivate({ store, billing, config, accounts, provisio
   return { ...result, profile, provisioned };
 }
 
+// 312k-P3: geteilte Kuendigungs-/Ruecknahme-Sequenz hinter BEIDEN Richtungen (G5) -
+// scheduleCancellation/unscheduleCancellation (312k-P2, billing/ports.js) sind DERSELBE
+// Stripe-Call mit umgekehrtem Wert, hier gilt dasselbe fuer den Route-Layer. KEIN HTTP/
+// Audit hier (G34, Muster subscribeAndActivate).
+//
+// Idempotenz (Doppelklick/zwei Tabs): der aktuelle Zustand wird VOR jedem Stripe-Call
+// gelesen. Steht er dem angeforderten Wert bereits gleich, macht dieser Aufruf GAR
+// KEINEN Stripe-Call und GAR KEINEN zweiten Store-Write - derselbe Endzustand, den ein
+// vorheriger Erfolg schon hergestellt hat, kommt einfach zurueck (alreadyApplied:true).
+// Der Aufrufer (Route) liest daran ab, ob eine NEUE durable Bestaetigung noetig ist.
+//
+// Konfliktfreiheit mit dem Webhook (312k-P1, billing/webhook.js CANCEL_SCHEDULED/
+// ACTIVATE): BEIDE Wege schreiben cancelAtPeriodEnd (+ optional currentPeriodEnd)
+// AUSSCHLIESSLICH ueber denselben Setter store.setTenantSubscription mit demselben
+// Feldnamen. Es gibt keinen zweiten Zustands-Ort, den einer der beiden Wege staendig
+// zuruecksetzen koennte - der Webhook bestaetigt binnen Millisekunden denselben Wert,
+// den diese Route soeben gesetzt hat (letzter Schreiber gewinnt, beide schreiben
+// denselben Wert -> kein sichtbarer Unterschied, kein Gegeneinander-Schreiben).
+async function setSubscriptionCancellation({ store, billing, tenant, cancel }) {
+  const before = store.tenantSubscription(tenant);
+  if (!before.subscriptionId) return { ok: false, reason: "no_subscription" };
+  if (before.cancelAtPeriodEnd === cancel) {
+    return {
+      ok: true,
+      cancelAtPeriodEnd: before.cancelAtPeriodEnd,
+      currentPeriodEnd: before.currentPeriodEnd,
+      alreadyApplied: true,
+    };
+  }
+  const idempotencyKey = (cancel ? "cancel_sched_" : "cancel_unsched_") + before.subscriptionId;
+  const op = cancel ? billing.scheduleCancellation : billing.unscheduleCancellation;
+  const result = await op({ subscriptionId: before.subscriptionId, idempotencyKey });
+  // Selektiver Patch (Muster webhook.js CANCEL_SCHEDULED/ACTIVATE): nur die vom Provider
+  // tatsaechlich gelieferten Felder, s. Kommentar oben (Konfliktfreiheit mit dem Webhook).
+  const patch = { cancelAtPeriodEnd: result.cancelAtPeriodEnd };
+  if (result.currentPeriodEnd != null) patch.currentPeriodEnd = result.currentPeriodEnd;
+  store.setTenantSubscription(tenant, patch);
+  return {
+    ok: true,
+    cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+    currentPeriodEnd: result.currentPeriodEnd ?? before.currentPeriodEnd,
+    alreadyApplied: false,
+  };
+}
+
 // Express 4 leitet abgelehnte Promises aus async-Handlern NICHT an die Fehler-Kette ->
 // ein geworfener Stripe-/Netzwerkfehler liesse die Anfrage HAENGEN (nie ein Response,
 // haengende Verbindung = Verfuegbarkeitsrisiko bei Skala). Dieser Wrapper faengt den
@@ -176,6 +224,10 @@ const billingUnavailable = (res) => res.status(502).json({ error: "billing_unava
 // fuer die W4-Aktivierung) werden injiziert (P4/DIP): derselbe Handler in Produktion
 // (server.js) UND im in-process pglite-Test mit Fake-Billing, ohne echten Stripe-Call.
 // Bleibt EIN Objekt-Argument (kein F1-Verstoss).
+// 312k-P3: auditStore ist OPTIONAL injiziert (Default {} -> record() bleibt unaufgerufen,
+// wenn ein Aufrufer/Test es weglaesst - Muster accounts/provision in
+// self-service-error-codes.test.js, die dort ebenfalls fehlen, weil die dort gepruefte
+// Route sie nie beruehrt). NUR die Kuendigungs-/Ruecknahme-Route greift darauf zu.
 export function makeSelfServiceRoutes({
   store,
   webAuthMw,
@@ -185,6 +237,7 @@ export function makeSelfServiceRoutes({
   billing,
   accounts,
   provision,
+  auditStore = { record: async () => {} },
 }) {
   const router = Router();
 
@@ -482,6 +535,85 @@ export function makeSelfServiceRoutes({
           `tenant=${tenant} plan=${planSlug} ${profileAuditDetail(result.profile)} ${provisionAuditDetail(result.provisioned)}`,
         );
         res.json({ plan: result.planSlug, currentPeriodEnd: result.currentPeriodEnd });
+      },
+      billingUnavailable,
+    ),
+  );
+
+  // ---- 312k-P3: Kuendigung zum Periodenende (§ 312k BGB) --------------------------
+  // webAuthMw (NICHT webAuthPendingMw wie subscribe/setup-checkout): nur ein AKTIVER
+  // Tenant hat ueberhaupt etwas zu kuendigen - suspended (Zahlung ausstehend) und closed
+  // (Abo bereits vollstaendig beendet, webhook.js SUSPEND) kommen fail-closed gar nicht
+  // erst durch die Middleware (403), bevor der Handler ueberhaupt laeuft. Gate VOR jedem
+  // Stripe-Call: kein Abo -> 409 no_subscription (sprachneutraler Token, Muster
+  // no_card/already_subscribed). Bereits vorgemerkt -> idempotent (setSubscriptionCancellation
+  // liest den Zustand VOR dem Stripe-Call): derselbe Endzustand, derselbe Antwortkoerper,
+  // kein zweiter Stripe-Call, kein zweiter Audit-Nachweis - ein Doppelklick erzeugt keinen
+  // zweiten Vorgang. Nachweis auf dauerhaftem Datentraeger (§ 312k): auditStore.record
+  // (Postgres audit_log), NICHT util.audit (reiner console.log, s. Auftragsbeschreibung) -
+  // NUR bei einer tatsaechlich NEUEN Vormerkung (alreadyApplied:false), sonst traegen zwei
+  // Nachweise fuer EINEN einzigen Kuendigungsvorgang.
+  router.post(
+    "/api/self-service/billing/cancel",
+    webAuthMw,
+    asyncBilling(
+      async (req, res) => {
+        if (!requirePaymentEnabled(res, config)) return;
+        const tenant = req.tenant.tenantId;
+        const result = await setSubscriptionCancellation({ store, billing, tenant, cancel: true });
+        if (!result.ok) {
+          audit("self_service_cancel_rejected", req, `tenant=${tenant} reason=${result.reason}`);
+          return res.status(409).json({ error: result.reason });
+        }
+        if (!result.alreadyApplied) {
+          await auditStore.record({
+            actorSub: req.tenant.sub,
+            tenantId: tenant,
+            action: "self_service_cancel_scheduled",
+            detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
+          });
+        }
+        audit(
+          "self_service_cancel",
+          req,
+          `tenant=${tenant} already_applied=${result.alreadyApplied}`,
+        );
+        res.json({ cancelAtPeriodEnd: true, currentPeriodEnd: result.currentPeriodEnd });
+      },
+      billingUnavailable,
+    ),
+  );
+
+  // ---- 312k-P3: Ruecknahme einer vorgemerkten Kuendigung --------------------------
+  // Spiegelbild der cancel-Route (dieselben Gates/dieselbe Idempotenz, s. dort): kein
+  // Abo -> 409 no_subscription; nicht (mehr) vorgemerkt -> idempotenter Erfolg ohne
+  // zweiten Stripe-Call/Nachweis. webAuthMw: derselbe aktiv-only-Gate wie cancel.
+  router.post(
+    "/api/self-service/billing/resume",
+    webAuthMw,
+    asyncBilling(
+      async (req, res) => {
+        if (!requirePaymentEnabled(res, config)) return;
+        const tenant = req.tenant.tenantId;
+        const result = await setSubscriptionCancellation({ store, billing, tenant, cancel: false });
+        if (!result.ok) {
+          audit("self_service_resume_rejected", req, `tenant=${tenant} reason=${result.reason}`);
+          return res.status(409).json({ error: result.reason });
+        }
+        if (!result.alreadyApplied) {
+          await auditStore.record({
+            actorSub: req.tenant.sub,
+            tenantId: tenant,
+            action: "self_service_cancel_resumed",
+            detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
+          });
+        }
+        audit(
+          "self_service_resume",
+          req,
+          `tenant=${tenant} already_applied=${result.alreadyApplied}`,
+        );
+        res.json({ cancelAtPeriodEnd: false, currentPeriodEnd: result.currentPeriodEnd });
       },
       billingUnavailable,
     ),

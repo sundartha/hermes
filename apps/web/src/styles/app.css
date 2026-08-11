@@ -236,6 +236,21 @@
   margin-top: var(--space-stack);
 }
 
+/* 312k-P3: Kuendigungs-Region (§ 312k BGB). Reiner Abstand -- AUSSCHLIESSLICH
+   semantische Tokens (Strategie 2.5); die Karten-Optik kommt bereits vom umgebenden
+   Billing-Karten-Rahmen, hier braucht es keine eigene. */
+.cancel-block {
+  margin-top: var(--space-stack);
+}
+
+.cancel-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-cozy);
+  margin-top: var(--space-stack);
+}
+
 .plans {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

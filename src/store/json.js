@@ -906,6 +906,27 @@ export function billingHoldActive(tenantId) {
   return ops.billingHoldActive(load(), tenantId, new Date().toISOString());
 }
 
+// ---- 312k-Phase 4: Vertragsende-Aufraeumarbeiten (Wrapper-Parity zu pg.js) ----
+// setContractEndCleanupPending mutiert -> save (Muster setBillingHold); die uebrigen
+// sind reine Queries (kein save, analog billingHoldActive/tenantSubscription).
+export function setContractEndCleanupPending(tenantId, patch) {
+  const tenant = ops.setContractEndCleanupPending(load(), tenantId, patch);
+  save();
+  return tenant;
+}
+
+export function contractEndCleanupPending(tenantId) {
+  return ops.contractEndCleanupPending(load(), tenantId);
+}
+
+export function tenantsPendingContractEndCleanup() {
+  return ops.tenantsPendingContractEndCleanup(load());
+}
+
+export function tenantIdpSubject(tenantId) {
+  return ops.tenantIdpSubject(load(), tenantId);
+}
+
 // ---- Private Summary-Nummer pro Tenant (F2) ----
 // setPrivateNumber mutiert -> save (Muster wie setTenantStripe); tenantPrivateNumber
 // ist reine Query (kein save, analog tenantStripe). PII: der Wert wird hier nie geloggt.

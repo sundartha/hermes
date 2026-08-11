@@ -83,6 +83,27 @@
  */
 
 /**
+ * @typedef {Object} SubscriptionCancellationParams
+ * @property {string} subscriptionId  - opake Stripe-Subscription-Referenz (sub_...)
+ * @property {string} idempotencyKey  - subscriptionId+Richtung-basiert ('cancel_sched_'+subscriptionId
+ *   bzw. 'cancel_unsched_'+subscriptionId, s. scheduleCancellation/unscheduleCancellation weiter
+ *   unten): ein Doppelklick auf DENSELBEN Vorgang bekommt DENSELBEN Key (Stripe haelt nie
+ *   doppelt); ein spaeterer ECHTER Gegenteil-Vorgang (Kunde nimmt zurueck, kuendigt dann
+ *   erneut) traegt die JEWEILS ANDERE Richtung im Key und geht damit durch (Muster
+ *   'subcs_'+tenant+'_'+plan+'_'+price: die Richtung ist Teil des Schluessels, nicht nur
+ *   die Ressourcen-ID).
+ */
+
+/**
+ * @typedef {Object} SubscriptionCancellationResult
+ * @property {string} subscriptionId     - opake Stripe-Subscription-Referenz (sub_...); KEIN Stripe-Objekt
+ * @property {boolean} cancelAtPeriodEnd - Zustand NACH dem Patch (true=vorgemerkt, false=zurueckgenommen)
+ * @property {number} currentPeriodEnd   - Ende der laufenden Abrechnungsperiode (Unix-Sekunden) - der
+ *   Aufrufer kennt Zustand UND Termin aus EINER Antwort, ohne erneut retrieveSubscription
+ *   nachfragen zu muessen
+ */
+
+/**
  * @typedef {Object} CheckoutResult
  * @property {string} customerId       - opake Stripe-Customer-Referenz (cus_...)
  * @property {string} paymentMethodId  - opake payment_method-Referenz (pm_...)
@@ -130,5 +151,17 @@
  * @property {(subscriptionId: string) => Promise<SubscriptionAmountCheck>} retrieveSubscription
  *   Liest Plan-Slug + Fix-B-Hold-Befreiung eines BESTEHENDEN Abos (GET, expand latest_invoice).
  *   Genutzt vom A3-Reconcile-Backfill UND von activation.js (syncNumberSetupFeeExemption).
+ * @property {(params: SubscriptionCancellationParams) => Promise<SubscriptionCancellationResult>} scheduleCancellation
+ *   312k-P2: vermerkt am BESTEHENDEN Stripe-Abo "kuendigt zum Periodenende" (PATCH
+ *   cancel_at_period_end=true, POST /v1/subscriptions/{id}). Loest KEIN Geld aus und
+ *   aendert am Abo selbst NICHTS Physisches - der Tenant bleibt bis currentPeriodEnd
+ *   bedient (Owner-Entscheidung 312k: Kuendigung wirkt zum Ende des bezahlten Zeitraums).
+ *   NICHT zu verwechseln mit cancelHold (das storniert eine Zahlungsmittel-Reserve, kein Abo).
+ * @property {(params: SubscriptionCancellationParams) => Promise<SubscriptionCancellationResult>} unscheduleCancellation
+ *   312k-P2: nimmt eine zuvor vermerkte Kuendigung zurueck (PATCH cancel_at_period_end=false) -
+ *   DIESELBE Stripe-Operation wie scheduleCancellation, nur mit umgekehrtem Wert. Billig zu
+ *   haben (identischer Call, ein Flag) und erspart jeden Support-Fall "ich habe mir das anders
+ *   ueberlegt". Aktiviert NICHTS neu (der Tenant war ohnehin aktiv, s. webhook.js
+ *   CANCEL_SCHEDULED).
  */
 export {};
