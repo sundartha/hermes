@@ -1,78 +1,69 @@
 ---
 // Marketing: Sign up (SSG). KEIN Self-Service-Registrierungsformular —
 // das Backend kennt keinen Signup-Endpunkt (Strategie R2): ein Konto entsteht
-// beim ersten Login ueber den Gateway-OIDC-Flow (LOGIN_URL). Aktiv wird es ueber
+// beim ersten Login über den Gateway-OIDC-Flow (LOGIN_URL). Aktiv wird es über
 // den Q-APPROVAL-Flow (erst Abo, dann live) — kein Admin-Review. Diese Seite
-// erklaert genau diesen Ablauf und funnelt nach LOGIN_URL. KEIN Client-Fetch,
+// erklärt genau diesen Ablauf und funnelt nach LOGIN_URL. KEIN Client-Fetch,
 // kein Formular, das gegen einen nicht existierenden Endpunkt liefe.
-import Site from "../layouts/Site.astro";
+//
+// Texte wortgleich aus der Vorfassung übernommen — nur die Hülle ist neu.
+import Hermes from "../layouts/Hermes.astro";
 import { LOGIN_URL } from "../lib/routes.js";
 
 const steps = [
   {
+    num: "01",
     title: "Sign in",
     text: "You start by signing in through our secure login. There is no password form of your own — sign-in runs through your linked account.",
   },
   {
+    num: "02",
     title: "Choose your plan",
     text: "After your first sign-in we create your account. To activate it you pick a plan and start your monthly subscription — your assistant goes live once the subscription is set up.",
   },
   {
+    num: "03",
     title: "Activation",
     text: "With an active subscription your assistant appears in your area. You set the phone number, permissions and greeting, and you are ready to go.",
   },
 ];
 ---
 
-<Site
+<Hermes
   title="Sign up — Sundartha Hermes"
   description="How to set up your Hermes account: sign in, a short review, activation. Then you connect your AI agent to a real phone line."
+  lang="en"
 >
-  <section class="hero">
-    <div class="container">
-      <span class="hero__eyebrow">Create account</span>
-      <h1 class="hero__title">Up and running in <span class="highlight">minutes</span></h1>
-      <p class="hero__lead">
-        Hermes has no classic registration form. You sign in, choose a plan and
-        start your subscription — then the phone assistant is yours.
-      </p>
-      <div class="hero__actions">
-        <a class="button button--primary" href={LOGIN_URL}>Sign in now</a>
-        <a class="button button--ghost" href="/preise">View pricing</a>
-      </div>
-    </div>
-  </section>
+  <span class="doc-eyebrow">Create account</span>
+  <h1 class="doc-title">Up and running in <em>minutes</em>.</h1>
+  <p class="doc-lead">
+    Hermes has no classic registration form. You sign in, choose a plan and
+    start your subscription — then the phone assistant is yours.
+  </p>
+  <div class="doc-actions">
+    <a class="btn-solid" href={LOGIN_URL}>Sign in now</a>
+    <a class="btn-ghost" href="/preise">View pricing</a>
+  </div>
 
-  <section class="section">
-    <div class="container">
-      <div class="section__head">
-        <span class="eyebrow">How it goes</span>
-        <h2 class="section__title">From login to your own agent</h2>
-      </div>
-      <div class="grid grid--three">
-        {steps.map((step, index) => (
-          <article class="card">
-            <span class="step__index" aria-hidden="true">{index + 1}</span>
-            <h3 class="card__title">{step.title}</h3>
-            <p class="card__text">{step.text}</p>
-          </article>
-        ))}
-      </div>
+  <div class="doc-block doc-steps">
+    <div class="sheet__card">
+      {steps.map((step, index) => (
+        <>
+          {index > 0 && <span class="rule" aria-hidden="true"></span>}
+          <span class="step">
+            <span class="step__num">{step.num}</span>
+            <span class="step__body">
+              <span class="step__title">{step.title}</span>
+              <span class="step__text">{step.text}</span>
+            </span>
+          </span>
+        </>
+      ))}
     </div>
-  </section>
+  </div>
 
-  <section class="section section--surface">
-    <div class="container">
-      <div class="section__head">
-        <h2 class="section__title">Already have an account?</h2>
-        <p class="section__lead">
-          Sign in and manage your assistant directly in your area.
-        </p>
-      </div>
-      <div class="hero__actions">
-        <a class="button button--primary" href={LOGIN_URL}>Sign in</a>
-        <a class="button button--action" href="/so-funktionierts">How it works</a>
-      </div>
-    </div>
-  </section>
-</Site>
+  <p class="doc-note">
+    Already have an account? <a href={LOGIN_URL}>Sign in</a> and manage your
+    assistant directly in your area.
+  </p>
+</Hermes>

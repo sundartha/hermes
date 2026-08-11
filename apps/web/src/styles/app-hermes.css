@@ -1,0 +1,589 @@
+/* =============================================================================
+ * app-hermes.css — Dashboard im Look der neuen Website
+ *
+ * WICHTIG: Dies ist ein RESTYLING, kein Umbau. Markup, Islands, api.js,
+ * subscribe.js und die Testsuite bleiben unangetastet — `/app` ist eine
+ * funktionierende Anwendung (Auth, Stripe, Einstellungen), kein Schaubild.
+ *
+ * Möglich wird das, weil `app.css` ausschließlich semantische Tokens
+ * konsumiert (Strategie 2.5). Der größte Teil dieser Datei ist darum nur eine
+ * Neubelegung der Farb-Rollen von "helle Karten auf Grau" nach "Glaskarten auf
+ * Wolkenmeer". Erst danach kommen die wenigen Struktur-Angleichungen, die sich
+ * über Tokens nicht ausdrücken lassen (Hintergrundebenen, Glas-Effekt,
+ * Serif-Überschriften, Pillen-Navigation).
+ *
+ * Import NACH `app.css` (siehe App.astro) — gleiche Spezifität, spätere Regel
+ * gewinnt. Darum stehen hier fast keine `!important`.
+ *
+ * Vorlage: "Hermes Dashboard.dc.html". Dessen Inline-Styles wären unter der
+ * Produktions-CSP (default-src 'self') unwirksam, darum hier als Stylesheet.
+ * ========================================================================== */
+
+/* -------------------------------------------------------- 1. Farb-Rollen neu */
+
+:root {
+  /* Schrift auf dunklem Grund. Der Entwurf nutzt reines Weiß für Aussagen und
+     gedecktes Weiß für Beiwerk — nicht Grautöne, die auf Navy schmutzig wirken. */
+  --color-text: #ffffff;
+  --color-muted: rgba(255, 255, 255, 0.62);
+
+  /* Glaskarte statt weißer Fläche. */
+  --color-card: rgba(10, 28, 56, 0.52);
+  --color-surface: rgba(10, 28, 56, 0.34);
+  --color-border: rgba(255, 255, 255, 0.2);
+  --color-divider: rgba(255, 255, 255, 0.14);
+
+  /* Der Haupt-Knopf ist die weiße Pille der Website, mit Navy-Schrift. */
+  --color-action: #ffffff;
+  --color-action-hover: #eaf2fb;
+  --color-on-action: #10305a;
+  --color-accent: #8fb6e3;
+  --color-action-surface: rgba(143, 182, 227, 0.16);
+
+  --color-field-border: rgba(143, 182, 227, 0.3);
+  --color-field-border-focus: rgba(143, 182, 227, 0.85);
+
+  /* Status bleibt monochrom (kein Rot/Grün, wie in der Vorfassung) — aber jetzt
+     als helle Töne auf durchscheinendem Grund. */
+  --color-status-positive: #a9e0c4;
+  --color-status-positive-surface: rgba(120, 200, 160, 0.16);
+  --color-status-critical: #ffffff;
+  --color-status-critical-surface: rgba(255, 255, 255, 0.14);
+  --color-status-info: #cfe4fa;
+  --color-status-info-surface: rgba(143, 182, 227, 0.18);
+  --color-status-neutral: rgba(255, 255, 255, 0.6);
+  --color-status-neutral-surface: rgba(255, 255, 255, 0.08);
+
+  --color-indicator-live: #8fb6e3;
+  --color-indicator-off: rgba(255, 255, 255, 0.28);
+
+  /* Weichere Kanten und ein tieferer Schatten — auf dunklem Grund trägt der
+     Schatten die Karte, nicht der Rand. */
+  --radius-card: 20px;
+  --radius-control: 12px;
+  --shadow-card: 0 28px 60px -34px rgba(3, 10, 26, 0.9);
+
+  /* IBM Plex Mono liegt nicht auf dem Server (siehe HANDOVER) — System-Mono. */
+  --app-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+/* ------------------------------------------------- 2. Bühne (Hintergrund) */
+
+body {
+  min-height: 100vh;
+  background: radial-gradient(150% 74% at 50% 4%, #1b4f86 0%, #0f2d52 46%, #0a2245 100%);
+  color: var(--color-text);
+}
+
+/* Drei feste Ebenen wie auf der Website: Wolkenmeer, Schleier, Kopfverlauf.
+   `position: fixed` — sie bleiben beim Scrollen stehen. */
+.app-bg,
+.app-veil,
+.app-top {
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+}
+.app-bg {
+  inset: 0;
+  background-image: url("/assets/howto_clouds.png");
+  background-size: cover;
+  background-position: 50% 42%;
+  filter: saturate(0.88) brightness(0.9) contrast(1.02);
+}
+.app-veil {
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 22, 48, 0.34) 0%,
+    rgba(8, 22, 48, 0.5) 46%,
+    rgba(8, 20, 44, 0.72) 100%
+  );
+}
+.app-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background: linear-gradient(
+    to bottom,
+    rgba(6, 16, 36, 0.6) 0%,
+    rgba(6, 16, 36, 0.18) 70%,
+    transparent 100%
+  );
+}
+
+/* Alles Echte liegt über den Ebenen. */
+.app-header,
+.app-main {
+  position: relative;
+  z-index: 2;
+}
+
+/* ------------------------------------------------------------- 3. Kopfzeile */
+
+/* Der Header ist auf der Website transparent — keine weiße Leiste, kein Rand. */
+.app-header {
+  background: transparent;
+  border-bottom: 0;
+  padding: 28px clamp(20px, 3.4vw, 44px);
+}
+
+.app-brand {
+  color: #ffffff;
+  gap: 12px;
+}
+
+/* Der Flügel steht frei, ohne Navy-Kachel: auf dunklem Grund braucht er keinen
+   Träger mehr — die Kachel war nur nötig, weil der Header weiß war. */
+.app-brand__mark {
+  width: auto;
+  height: 42px;
+  border-radius: 0;
+  background: none;
+}
+.app-brand__wing {
+  width: auto;
+  height: 42px;
+  filter: drop-shadow(0 2px 9px rgba(7, 18, 40, 0.6));
+}
+
+.app-brand__name {
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  color: #ffffff;
+  text-shadow: 0 1px 12px rgba(7, 18, 40, 0.7);
+}
+.app-brand__by {
+  margin-top: 4px;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: 0 1px 10px rgba(7, 18, 40, 0.6);
+}
+
+.auth-who {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* -------------------------------------------------------------- 4. Inhalt */
+
+.app-main {
+  max-width: 1320px;
+  padding: clamp(22px, 3.4vh, 34px) clamp(20px, 3vw, 40px) 56px;
+  gap: 16px;
+}
+
+/* Glaskarte. `backdrop-filter` ist der Kern des Looks: die Wolken scheinen
+   gedämpft durch. */
+.card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: clamp(20px, 2.6vw, 32px);
+  backdrop-filter: blur(6px);
+}
+
+/* Abschnitts-Überschrift in der Serif der Marke, wie im Entwurf. */
+.dash-head__title {
+  font-family: var(--font-heading);
+  font-size: clamp(30px, 3.6vw, 44px);
+  line-height: 1.02;
+  color: #ffffff;
+  text-shadow: 0 2px 30px rgba(7, 16, 38, 0.6);
+}
+
+/* Die Augenbraue ist im Entwurf eine Pille mit Punkt — nicht nur Kleintext. */
+.dash-head__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px 7px 11px;
+  border-radius: 999px;
+  background: rgba(10, 28, 56, 0.46);
+  border: 1px solid rgba(143, 182, 227, 0.34);
+  backdrop-filter: blur(6px);
+  font-family: var(--app-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  color: #cfe4fa;
+}
+.dash-head__eyebrow::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #8fb6e3;
+}
+
+/* ------------------------------------------------ 5. Bereichs-Navigation */
+
+/* Aus den Ankerlinks wird die Pillenleiste des Entwurfs. */
+.dash-nav {
+  gap: 3px;
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(10, 28, 56, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+}
+
+.dash-nav__link {
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14.5px;
+  font-weight: 500;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.dash-nav__link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+/* ------------------------------------------------------------ 6. Kennzahlen */
+
+.stat {
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(6, 18, 40, 0.42);
+}
+.stat__value {
+  font-family: var(--font-heading);
+  font-size: clamp(26px, 2.6vw, 36px);
+  font-weight: 400;
+  line-height: 1;
+  color: #ffffff;
+}
+.stat__label {
+  font-family: var(--app-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.stat-note,
+.billing-msg {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* --------------------------------------------------------------- 7. Knöpfe */
+
+.btn {
+  border-radius: 999px;
+  background: #ffffff;
+  color: #10305a;
+  font-weight: 600;
+  box-shadow: 0 10px 26px -12px rgba(7, 18, 40, 0.7);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.btn:hover {
+  background: #eaf2fb;
+  transform: translateY(-1px);
+  box-shadow: 0 14px 32px -12px rgba(7, 18, 40, 0.85);
+}
+.btn:disabled {
+  transform: none;
+  box-shadow: none;
+}
+
+.plan-skip {
+  color: rgba(255, 255, 255, 0.6);
+}
+.plan-skip:hover {
+  color: #ffffff;
+}
+
+/* ------------------------------------------------------------- 8. Tarife */
+
+/* Die Tarifkacheln der App folgen jetzt denen der Website: hervorgehobene
+   Kachel etwas heller, weiße Pille als Abschluss. */
+.plan {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px;
+  background: rgba(10, 28, 56, 0.5);
+  backdrop-filter: blur(6px);
+  transition: border-color 0.28s ease, background 0.28s ease, transform 0.28s ease;
+}
+.plan:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(10, 28, 56, 0.62);
+  transform: translateY(-3px);
+}
+.plan--featured {
+  background: rgba(14, 38, 74, 0.62);
+  border-color: rgba(255, 255, 255, 0.46);
+  box-shadow: 0 20px 50px -30px rgba(4, 14, 34, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.plan-badge {
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  color: #ffffff;
+}
+.plan-name {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+.plan-price {
+  font-family: var(--font-heading);
+  font-size: clamp(30px, 3vw, 42px);
+  font-weight: 400;
+  line-height: 1;
+  color: #ffffff;
+}
+.plan-per {
+  color: rgba(255, 255, 255, 0.72);
+}
+.plan-feature {
+  color: rgba(255, 255, 255, 0.9);
+}
+.plan-feature::before {
+  color: #8fb6e3;
+}
+.plan-fee {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ------------------------------------------------------- 9. Einstellungen */
+
+/* Eingabefelder wie im Entwurf (.fld): höher, weicher, dunkler Grund. */
+.field-input {
+  height: 50px;
+  padding: 0 15px;
+  border: 1px solid var(--color-field-border);
+  border-radius: 12px;
+  background: rgba(4, 14, 32, 0.66);
+  color: #ffffff;
+  font-size: 15.5px;
+}
+.field-input:focus {
+  border-color: var(--color-field-border-focus);
+}
+.field-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+/* Mehrzeilige Felder dürfen wachsen — die feste Höhe gilt nur für eine Zeile. */
+textarea.field-input,
+select.field-input[multiple] {
+  height: auto;
+  min-height: 50px;
+  padding: 14px 15px;
+  line-height: 1.5;
+}
+/* Aufklapplisten erben auf dunklem Grund sonst die weiße Systemliste. */
+select.field-input {
+  appearance: none;
+  cursor: pointer;
+}
+select.field-input option {
+  background: #0d2a4d;
+  color: #ffffff;
+}
+
+.field-label {
+  font-family: var(--app-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.perm-row {
+  padding: 14px 12px;
+  border-radius: 12px;
+  border-bottom: 1px solid var(--color-divider);
+  transition: background 0.2s ease;
+}
+.perm-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.perm-title {
+  color: #ffffff;
+}
+.perm-hint {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.switch-slider::before {
+  background: #ffffff;
+}
+.switch input:checked + .switch-slider {
+  background: #8fb6e3;
+}
+
+.settings-msg {
+  color: rgba(255, 255, 255, 0.62);
+}
+.settings-msg--ok {
+  color: #a9e0c4;
+}
+.settings-msg--err {
+  color: #ffc9c9;
+}
+
+/* ------------------------------------------------------- 10. Datenlisten */
+
+.data-empty {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.agent-chip__label {
+  font-family: var(--app-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.5);
+}
+.agent-chip__number {
+  font-size: 18px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+/* Anrufzeile: Trennlinie oben statt unten (wie im Entwurf) und eine ruhige
+   Aufhellung beim Überfahren. */
+.call-row {
+  padding: 16px 12px;
+  border-bottom: 1px solid var(--color-divider);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+.call-row:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+.call-dir {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(143, 182, 227, 0.5);
+  background: transparent;
+}
+.call-dir--in {
+  color: #cfe4fa;
+}
+.call-dir--out {
+  color: #ffffff;
+}
+.call-who {
+  font-size: 16px;
+  color: #ffffff;
+}
+.call-sub {
+  font-family: var(--app-mono);
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.status-badge {
+  padding: 7px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.ai-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.ai-text {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.cal-date {
+  background: rgba(6, 18, 40, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+}
+.cal-date__day {
+  font-family: var(--font-heading);
+  font-size: 20px;
+  color: #ffffff;
+}
+.cal-date__month {
+  font-family: var(--app-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.55);
+}
+.cal-when {
+  font-family: var(--app-mono);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.kv dt {
+  font-family: var(--app-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.kv dd {
+  color: #ffffff;
+}
+
+.muted {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* Links auf dunklem Grund. */
+.app-main a:not(.btn):not(.dash-nav__link) {
+  color: #8fb6e3;
+}
+.app-main a:not(.btn):not(.dash-nav__link):hover {
+  color: #cfe4fa;
+}
+
+/* --------------------------------------------------------- 11. Schmal */
+
+@media (max-width: 768px) {
+  .app-header {
+    flex-wrap: wrap;
+    row-gap: 14px;
+    padding: 22px 20px;
+  }
+  .app-brand__mark,
+  .app-brand__wing {
+    height: 38px;
+  }
+  .app-brand__name {
+    font-size: 18px;
+  }
+  .app-brand__by {
+    font-size: 11px;
+  }
+  /* Vier Reiter über die Breite statt einer umbrechenden Linkliste. */
+  .dash-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    padding: 5px;
+    border-radius: 14px;
+  }
+  .dash-nav__link {
+    justify-content: center;
+    text-align: center;
+    padding: 11px 8px;
+    font-size: 13.5px;
+  }
+  .card {
+    padding: 18px 16px 16px;
+    border-radius: 16px;
+  }
+  .stat__value {
+    font-size: 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .plan,
+  .call-row,
+  .perm-row,
+  .dash-nav__link {
+    transition: none;
+  }
+}

@@ -1,0 +1,974 @@
+---
+// "Works with any AI agent" — Sektion fuer die Startseite, direkt unter dem
+// Vollbild-Hero.
+//
+// V4 (Jonas-Feedback, dritte Runde): V3s Higgsfield-Videos sahen zwar
+// "produziert" aus, waren aber inhaltsleer — abstrakte Stimmungsclips ohne
+// Bezug zur jeweiligen Karten-Aussage, plus ein KI-generierter Fantasie-
+// Fluegel statt des echten Hermes-Logos. Zurueck zur handgebauten Loesung
+// (wie V2), aber diesmal konkret/beschriftet (zeigt explizit Claude/Gemini/
+// Custom-Agent, ein echtes Anruf-Ablauf-Display, eine echte Sprach-Waveform)
+// UND handwerklich hochwertiger: Glasoptik mit echter Tiefe (Schatten,
+// Blur-Layer), das echte /assets/hermes-wing.png statt eines Ersatz-Icons,
+// dauerhaft laufende statt einmalige Bewegung.
+import "../../styles/tokens/hero.css";
+import "../../styles/sections.css";
+
+const cards = [
+  {
+    stage: "connect",
+    heading: "Any agent, one number",
+    copy: "Attach Hermes as an MCP server to Claude, Gemini or your own stack — the phone line just works.",
+  },
+  {
+    stage: "call",
+    heading: "Give it a goal, it calls",
+    copy: "Tell your agent what needs doing on the phone. Hermes dials, talks and follows up — then reports back.",
+  },
+  {
+    stage: "voice",
+    heading: "Sounds human, every time",
+    copy: "Natural pacing and graceful interruptions — callers hear a conversation, not a script.",
+  },
+] as const;
+---
+
+<section class="band band--alt agents band--center" id="works-with">
+  <!-- V5 (Jonas-Feedback, fuenfte Runde): Hintergrund soll die Hero-Sektion direkt
+       darueber optisch fortsetzen (hell, blau, Nebel-Atmosphaere), nicht eine neue,
+       abstrakte Higgsfield-Textur sein. Ergebnis nach Live-Analyse des gerenderten
+       Hero (Foto + Video + Scrims im Zusammenspiel): dieselben zwei Assets wie im
+       Hero (`olymp_3.jpg` + `hermes_olymp_v2.mp4`) werden hier wiederverwendet, aber
+       auf den unteren, wolkenreicheren Bildausschnitt positioniert (statt den oberen,
+       himmelslastigen Ausschnitt den der Hero zeigt) -- garantiert echte fotografische
+       Kontinuitaet statt eine neu generierte Naeherung. Die Scrims bleiben bewusst
+       leicht (wie im Hero, ca. 0.5 max) statt der alten, fast deckenden 0.82/0.9
+       Verdunklung von .band--alt -- die vorherige Version wirkte dadurch flach/dunkel
+       statt hell/luftig wie der Hero. -->
+  <div class="agents__bg" aria-hidden="true"></div>
+  <video
+    class="agents__sky"
+    autoplay
+    muted
+    loop
+    playsinline
+    preload="none"
+    poster="/assets/olymp_3.jpg"
+    aria-hidden="true"
+  >
+    <source src="/assets/hermes_olymp_v2.mp4" type="video/mp4" />
+  </video>
+  <div class="agents__scrim agents__scrim--top" aria-hidden="true"></div>
+  <div class="agents__scrim agents__scrim--bottom" aria-hidden="true"></div>
+  <div class="agents__glow" aria-hidden="true"></div>
+  <div class="band__inner">
+    <p class="band__eyebrow reveal">Works with</p>
+    <h2 class="band__title reveal">One phone line. <em>Any</em> AI agent.</h2>
+    <p class="band__lead reveal">
+      Hermes speaks Model Context Protocol — connect Claude, Gemini or your
+      own agent stack. No telephony build of your own required.
+    </p>
+
+    <div class="steps agents__steps">
+      {cards.map((card) => (
+        <article class="step reveal">
+          <div class={`step__stage step__stage--${card.stage}`} aria-hidden="true">
+            {card.stage === "connect" && (
+              <div class="scene-connect">
+                <div class="scene-connect__chips">
+                  <span class="model-chip model-chip--a"><span class="model-orb" aria-hidden="true"></span>Claude</span>
+                  <span class="model-chip model-chip--b"><span class="model-orb" aria-hidden="true"></span>Gemini</span>
+                  <span class="model-chip model-chip--c"><span class="model-orb" aria-hidden="true"></span>Your agent</span>
+                </div>
+                <svg class="scene-connect__lines" viewBox="0 0 220 160" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+                  <path class="flow flow--a" d="M40 34 C 120 34, 150 80, 190 80" />
+                  <path class="flow flow--b" d="M40 80 L 190 80" />
+                  <path class="flow flow--c" d="M40 126 C 120 126, 150 80, 190 80" />
+                </svg>
+                <div class="scene-connect__hub">
+                  <span class="hub-aura" aria-hidden="true"></span>
+                  <span class="hub-pulse"></span>
+                  <span class="hub-pulse hub-pulse--b"></span>
+                  <img class="hub-wing" src="/assets/hermes-wing.png" alt="" />
+                </div>
+              </div>
+            )}
+            {card.stage === "call" && (
+              <div class="scene-call">
+                <div class="scene-call__ring">
+                  <span class="ring-sweep" aria-hidden="true"></span>
+                  <span class="ring-pulse"></span>
+                  <span class="ring-pulse ring-pulse--b"></span>
+                  <svg class="scene-call__glyph" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6.6 10.8c1.3 2.6 3.4 4.7 6 6l2-2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.5.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.9c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.5.1.4 0 .8-.2 1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+                  </svg>
+                </div>
+                <div class="scene-call__log">
+                  <span class="call-line call-line--a"><i class="call-dot"></i>Dialing front desk…</span>
+                  <span class="call-line call-line--b"><i class="call-dot"></i>Connected</span>
+                  <span class="call-line call-line--c">
+                    <svg class="call-check" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M4 10.5l4 4L16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Goal reached
+                  </span>
+                </div>
+              </div>
+            )}
+            {card.stage === "voice" && (
+              <div class="scene-voice">
+                <div class="scene-voice__wave3d">
+                  <div class="scene-voice__wave">
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span><span></span>
+                    <span></span><span></span>
+                  </div>
+                </div>
+                <div class="scene-voice__bubble">
+                  <span class="voice-bubble__label">Hermes</span>
+                  <span class="voice-bubble__text">"Hi, this is Hermes calling on behalf of Alex — is now a good time?"</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <h3 class="step__heading">{card.heading}</h3>
+          <p class="step__copy">{card.copy}</p>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  // Hoisted Module-Script (kein is:inline): Astro/Vite buendeln das inkl.
+  // gsap als externes same-origin JS -> CSP-konform (script-src 'self'),
+  // kein CDN-Load zur Laufzeit (siehe astro.config.mjs Kommentar).
+  import { gsap } from "gsap";
+  import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+  const prefersReduced = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  ).matches;
+  const section = document.getElementById("works-with");
+
+  // Ohne JS oder bei reduzierter Bewegung bleibt der Inhalt einfach sichtbar
+  // (kein FOUC, kein Hidden-Content) — progressive enhancement. Die
+  // dauerhaften Szenen-Loops laufen unabhaengig davon rein per CSS.
+  //
+  // V6 (Jonas-Feedback, sechste Runde): "Texte sehen nicht so geil aus" --
+  // simples opacity+y-Fade ersetzt durch Blur-Reveal (typo-effects.md,
+  // Muster 3): Elemente kommen unscharf/leicht verkleinert rein und werden
+  // beim Reinscrollen scharf -- deutlich hochwertigerer Eindruck als ein
+  // reines Fade. filter:blur() ist GPU-teuer, deshalb nur auf die Text-
+  // Elemente/Badges angewendet, NICHT auf die Karten (die haben ihre eigene,
+  // schwerere Video-Buehne -- doppelte Blur-Animation waere zu viel).
+  if (section && !prefersReduced) {
+    gsap.registerPlugin(ScrollTrigger);
+    const textTargets = Array.from(
+      section.querySelectorAll(".reveal:not(.step)")
+    );
+    const cardTargets = Array.from(section.querySelectorAll(".step.reveal"));
+
+    gsap.set(textTargets, { opacity: 0, y: 22, scale: 0.97, filter: "blur(10px)" });
+    ScrollTrigger.batch(textTargets, {
+      start: "top 88%",
+      once: true,
+      onEnter: (batch) =>
+        gsap.to(batch, {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          filter: "blur(0px)",
+          duration: 0.9,
+          ease: "power2.out",
+          stagger: 0.1,
+        }),
+    });
+
+    // Karten bleiben beim einfacheren Fade+Y (kein Blur) -- lesbarer neben
+    // dem bereits bewegten Video-Hintergrund der Buehne.
+    gsap.set(cardTargets, { opacity: 0, y: 22 });
+    ScrollTrigger.batch(cardTargets, {
+      start: "top 88%",
+      once: true,
+      onEnter: (batch) =>
+        gsap.to(batch, {
+          opacity: 1,
+          y: 0,
+          duration: 0.7,
+          ease: "power2.out",
+          stagger: 0.12,
+        }),
+    });
+  }
+</script>
+
+<style>
+  /* Bleibt strikt in der bestehenden Farbfamilie (Navy/Blau/Weiss) — keine
+   * neuen Akzentfarben, nur var(--hero-*) aus tokens/hero.css. */
+  .agents {
+    position: relative;
+    padding-top: clamp(72px, 10vw, 128px);
+    padding-bottom: clamp(88px, 11vw, 140px);
+    overflow: hidden;
+    /* Ersetzt die geerbte .band--alt-Textur (clouds_band.jpg + 0.82/0.9 Navy-
+       Verdunklung aus sections.css) komplett -- diese Regel gewinnt durch Astros
+       Scoping (hoehere Selektor-Spezifitaet) automatisch gegen die globale Regel.
+       Feste Navy-Fallbackfarbe, identisch zum Hero-Fallback, falls Bild/Video
+       (noch) nicht geladen sind. */
+    background: #0f2d52;
+  }
+
+  /* Hero-Fortsetzung: dieselben Assets wie .hero-bg/.hero-sky (siehe pages/index.astro),
+     aber auf den unteren, wolkigeren Bildausschnitt positioniert -- nicht den oberen,
+     himmelslastigen Ausschnitt, den der Hero direkt darueber bereits zeigt. */
+  .agents__bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      url("/assets/olymp_3.jpg") center 92% / cover no-repeat,
+      radial-gradient(120% 90% at 50% 0%, #1b4f86 0%, #0f2d52 55%, #0a2245 100%);
+  }
+  .agents__sky {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 92%;
+    z-index: 0;
+    opacity: 1;
+  }
+
+  /* Leichte Scrims wie im Hero -- aber der obere Scrim startet bewusst so
+     dunkel wie der Bottom-Scrim des Hero endet (rgba(8,20,44,.6) bei 0%),
+     damit die Naht zwischen den beiden Sektionen nicht als harter Farbsprung
+     (dunkler Hero-Boden -> heller Himmel) auffaellt, sondern weich ineinander
+     uebergeht. Danach faellt er schnell auf einen leichten Wert ab, der nur
+     noch fuer Text-Kontrast sorgt (nicht die flaechendeckende 0.82/0.9-
+     Verdunklung der alten .band--alt-Version). */
+  .agents__scrim {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .agents__scrim--top {
+    top: 0;
+    height: 42%;
+    background: linear-gradient(to bottom, rgba(8, 20, 44, 0.62) 0%, rgba(8, 20, 44, 0.24) 32%, rgba(8, 20, 44, 0) 100%);
+  }
+  .agents__scrim--bottom {
+    bottom: 0;
+    /* V6-Fix ("Hintergrund bricht super schnell ab"): die Seite endet
+       strukturell direkt nach den drei Karten (kein Footer, keine weitere
+       Section, siehe hermes-lab-live.md-Analyse -- Gesamtseite ist nur
+       Hero + diese Section). Ohne Footer braeuchte es einen bewussten
+       Seiten-Abschluss statt eines harten Kante: der Scrim reicht jetzt bis
+       auf fast volle Deckkraft (0.94 statt vorher 0.5) am allerletzten
+       Pixel und ist grosszuegiger (58% statt 34% Hoehe) ausgezogen, damit
+       das Foto weich zur Navy-Grundfarbe der Seite (#0f2d52, siehe .agents-
+       Fallback) ausklingt statt abrupt am Viewport-Rand aufzuhoeren. */
+    height: 58%;
+    background: linear-gradient(to top,
+      rgba(8, 20, 44, 0.94) 0%,
+      rgba(8, 20, 44, 0.55) 28%,
+      rgba(8, 20, 44, 0.18) 62%,
+      rgba(8, 20, 44, 0) 100%);
+  }
+
+  /* Ueber den neuen Foto/Video-Layern: band__inner (Text/Karten) muss sicher
+     oben liegen, wie hero-content (z-index 2) ueber den Hero-Scrims (z-index 1). */
+  .band__inner {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Text-Schatten wie im Hero (hero-title/hero-sub): sections.css definiert
+     Eyebrow/Titel/Lead ohne Schatten, weil sie urspruenglich auf einem fast
+     deckend abgedunkelten Hintergrund standen. Gegen den jetzt hellen Foto-
+     Hintergrund brauchen sie dieselbe Absicherung wie der Hero-Text. */
+  .band__eyebrow {
+    text-shadow: 0 1px 14px rgba(7, 16, 38, 0.7);
+    /* Klarere Distanz zum Titel im Squint-Test: kleiner, luftiger getrackt,
+       gedaempfter -- das Auge soll eindeutig beim Titel landen, nicht bei
+       zwei gleich lauten Elementen haengen bleiben. */
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.68);
+  }
+  .band__title {
+    text-shadow: 0 2px 40px rgba(7, 16, 38, 0.6), 0 1px 4px rgba(7, 16, 38, 0.5);
+    /* Etwas groesser + straffer als die geerbte Basis, damit der Titel im
+       Squint-Test unangefochten das dominante Element der Section bleibt. */
+    font-size: clamp(40px, 5.4vw, 68px);
+    letter-spacing: -0.005em;
+  }
+  .band__lead {
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow: 0 1px 16px rgba(7, 16, 38, 0.7), 0 1px 3px rgba(7, 16, 38, 0.6);
+    /* Lesbare Zeilenlaenge (45-75 Zeichen) statt der geerbten 620px, die bei
+       den zwei kurzen Saetzen hier eher zufaellig als bewusst wirkte. */
+    max-width: 54ch;
+  }
+
+  .agents__glow {
+    position: absolute;
+    top: -14%;
+    left: 50%;
+    width: min(1100px, 140%);
+    height: 620px;
+    transform: translateX(-50%);
+    background: radial-gradient(
+      closest-side,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(27, 79, 134, 0.1) 45%,
+      rgba(27, 79, 134, 0) 72%
+    );
+    filter: blur(10px);
+    pointer-events: none;
+    animation: glow-drift 18s ease-in-out infinite;
+  }
+  @keyframes glow-drift {
+    0%,
+    100% {
+      transform: translateX(-54%) translateY(0) scale(1);
+    }
+    50% {
+      transform: translateX(-46%) translateY(20px) scale(1.06);
+    }
+  }
+
+  .band__title {
+    font-size: clamp(38px, 5vw, 64px);
+  }
+
+  .agents__steps {
+    margin-top: var(--space-block);
+  }
+</style>
+
+<style>
+  /* --- Buehne: Glasoptik mit echter Tiefe statt flacher Box --- */
+  .step__stage {
+    position: relative;
+    height: 280px;
+    margin: -6px -4px var(--space-card);
+    border-radius: var(--radius-control);
+    overflow: hidden;
+    background:
+      radial-gradient(120% 100% at 50% -10%, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0) 55%),
+      linear-gradient(165deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)),
+      var(--hero-navy-900);
+    box-shadow:
+      0 24px 50px -24px rgba(3, 10, 26, 0.75),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  }
+
+  /* Higgsfield-Textur pro Karte: eigene, zum jeweiligen Motiv passende
+   * Hintergrund-Grafik (navy/blau/weiss-Palette, per Higgsfield generiert)
+   * als unterste Layer hinter den handgebauten Szenen. Die zwei Glas-
+   * Gradienten + ein Verdunkelungs-Layer bleiben on top, damit Text/Chips/
+   * Waveform lesbar bleiben — die Fotografie liefert nur Tiefe/Textur,
+   * nicht die eigentliche Aussage der Karte (die kommt weiterhin aus den
+   * echten .scene-* Elementen). */
+  .step__stage--connect {
+    background-image:
+      radial-gradient(120% 100% at 50% -10%, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 55%),
+      linear-gradient(165deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01) 45%),
+      linear-gradient(180deg, rgba(6,16,36,0.32) 0%, rgba(6,16,36,0.8) 100%),
+      url("/assets/images/agents-connect-bg.jpg");
+    background-size: auto, auto, auto, cover;
+    background-position: center, center, center, center;
+    background-repeat: no-repeat;
+  }
+  .step__stage--call {
+    background-image:
+      radial-gradient(120% 100% at 50% -10%, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 55%),
+      linear-gradient(165deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01) 45%),
+      linear-gradient(180deg, rgba(6,16,36,0.28) 0%, rgba(6,16,36,0.76) 100%),
+      url("/assets/images/agents-call-bg.jpg");
+    background-size: auto, auto, auto, cover;
+    background-position: center, center, center, center;
+    background-repeat: no-repeat;
+  }
+  .step__stage--voice {
+    background-image:
+      radial-gradient(120% 100% at 50% -10%, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 55%),
+      linear-gradient(165deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01) 45%),
+      linear-gradient(180deg, rgba(6,16,36,0.3) 0%, rgba(6,16,36,0.78) 100%),
+      url("/assets/images/agents-voice-bg.jpg");
+    background-size: auto, auto, auto, cover;
+    background-position: center, center, center, center;
+    background-repeat: no-repeat;
+  }
+
+  @media (max-width: 560px) {
+    .step__stage {
+      height: 240px;
+    }
+  }
+</style>
+
+<style>
+  /* --- Szene 1: Claude/Gemini/Custom-Agent fliessen zum echten Hermes-Fluegel --- */
+  .scene-connect {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: 22px;
+  }
+  .scene-connect__chips {
+    position: absolute;
+    left: 22px;
+    top: 22px;
+    bottom: 22px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    z-index: 2;
+  }
+  .model-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: var(--radius-badge);
+    background: rgba(10, 26, 54, 0.72);
+    border: var(--border-width) solid rgba(255, 255, 255, 0.16);
+    box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.6);
+    color: var(--text-on-dark-strong);
+    font-family: var(--font-grotesk);
+    font-size: 12.5px;
+    font-weight: var(--weight-medium);
+    animation: chip-breathe 3.6s ease-in-out infinite;
+  }
+
+  /* V7 (Jonas-Feedback, siebte/achte Runde): "3D-Animationen sind nicht gut"
+   * + Wunsch nach animierten 3D-Marken fuer die KI-Modelle. Keine Higgsfield-
+   * Generierung mehr moeglich (Guthaben aufgebraucht) -- deshalb echtes 3D
+   * per CSS statt eines vorgerenderten Clips.
+   *
+   * Erster Versuch (verworfen): zwei flache Kreis-Flaechen mit rotateY(360deg)
+   * "flip card". Bug: ein flacher Kreis OHNE echte Kugelform kollabiert bei
+   * 90°/270° auf eine Linie (Nullbreite) -- sah wie ein kaputter Rendering-
+   * Fehler aus statt wie eine rotierende Kugel, weil eine echte Kugel beim
+   * Drehen ihre Silhouette gar nicht veraendert (nur die Lichtreflexion
+   * wandert). Deshalb jetzt: EIN Element, Silhouette bleibt immer rund
+   * (Wobble-Bereich bewusst eng: max. ±22°, cos(22°) ≈ 0.93 -- nie nahe an
+   * der Kante), 3D-Tiefe kommt aus einer wandernden Glanzreflexion
+   * (radial-gradient-Position) + leichtem rotateX/rotateY-Kippen, wie eine
+   * Glasmurmel, die im Licht leicht hin- und herwiegt. */
+  .model-orb {
+    position: relative;
+    display: inline-block;
+    width: 26px;
+    height: 26px;
+    flex: none;
+    border-radius: 50%;
+    /* V8 (Jonas-Feedback: "3D-Animation kann noch viel geiler sein"): groessere
+       Kugel, zweite Ambient-Occlusion-Ebene unten-rechts fuer echte Rundung im
+       Stand-Frame (nicht nur beim Wackeln sichtbar), plus staerkerer Aussen-Glow. */
+    background:
+      radial-gradient(circle at 64% 72%, rgba(8, 20, 44, 0.55) 0%, rgba(8, 20, 44, 0) 55%),
+      radial-gradient(circle at 40% 36%, rgba(157, 195, 245, 0.9) 0%, rgba(46, 98, 163, 0.95) 48%, rgba(8, 20, 44, 0.98) 100%);
+    box-shadow:
+      inset -5px -6px 9px rgba(4, 10, 26, 0.7),
+      inset 2px 3px 5px rgba(255, 255, 255, 0.3),
+      0 8px 16px -6px rgba(4, 12, 28, 0.6),
+      0 0 16px rgba(157, 195, 245, 0.4);
+    animation: orb-wobble 4.6s ease-in-out infinite;
+  }
+  /* Wandernde Glanzreflexion, unabhaengig von der Wobble-Rotation -- macht aus
+     der Kugel eine Glasmurmel, auf der das Licht ueber die Oberflaeche laeuft,
+     statt einer starr aufgemalten Reflexion, die nur mitkippt. */
+  .model-orb::after {
+    content: "";
+    position: absolute;
+    top: 8%;
+    left: 14%;
+    width: 44%;
+    height: 44%;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 70%);
+    mix-blend-mode: screen;
+    animation: orb-glint 4.6s ease-in-out infinite;
+  }
+  .model-chip--b .model-orb {
+    animation-duration: 3.8s;
+    animation-direction: reverse;
+  }
+  .model-chip--b .model-orb::after {
+    animation-duration: 3.8s;
+    animation-direction: reverse;
+  }
+  .model-chip--c .model-orb {
+    animation-duration: 5.6s;
+  }
+  .model-chip--c .model-orb::after {
+    animation-duration: 5.6s;
+  }
+  @keyframes orb-wobble {
+    0%,
+    100% {
+      transform: perspective(60px) rotateY(-22deg) rotateX(7deg);
+    }
+    50% {
+      transform: perspective(60px) rotateY(22deg) rotateX(-7deg);
+    }
+  }
+  @keyframes orb-glint {
+    0%,
+    100% {
+      top: 8%;
+      left: 14%;
+      opacity: 0.95;
+    }
+    50% {
+      top: 42%;
+      left: 46%;
+      opacity: 0.5;
+    }
+  }
+  .model-chip--b {
+    animation-delay: 0.6s;
+  }
+  .model-chip--c {
+    animation-delay: 1.2s;
+  }
+  @keyframes chip-breathe {
+    0%,
+    100% {
+      transform: translateX(0);
+      box-shadow: 0 8px 18px -10px rgba(0, 0, 0, 0.6);
+    }
+    50% {
+      transform: translateX(3px);
+      box-shadow: 0 8px 22px -8px rgba(255, 255, 255, 0.12);
+    }
+  }
+
+  .scene-connect__lines {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+  .scene-connect__lines .flow {
+    stroke: rgba(255, 255, 255, 0.45);
+    stroke-width: 1.5;
+    fill: none;
+    stroke-dasharray: 6 10;
+    animation: flow-run 2.4s linear infinite;
+  }
+  .flow--b {
+    animation-delay: -0.4s;
+  }
+  .flow--c {
+    animation-delay: -0.8s;
+  }
+  @keyframes flow-run {
+    to {
+      stroke-dashoffset: -160;
+    }
+  }
+
+  .scene-connect__hub {
+    position: absolute;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 74px;
+    height: 74px;
+  }
+  /* Rotierende Aura hinter dem Fluegel -- gibt dem Hub ein staendiges
+     "Energiefeld" statt nur der beiden auslaufenden Ping-Kreise, macht die
+     Szene insgesamt praesenter/hochwertiger. */
+  .hub-aura {
+    position: absolute;
+    inset: -22px;
+    border-radius: 50%;
+    background: conic-gradient(
+      from 0deg,
+      rgba(157, 195, 245, 0) 0%,
+      rgba(157, 195, 245, 0.45) 22%,
+      rgba(157, 195, 245, 0) 48%,
+      rgba(255, 255, 255, 0.3) 74%,
+      rgba(157, 195, 245, 0) 100%
+    );
+    filter: blur(9px);
+    animation: hub-aura-spin 7s linear infinite;
+  }
+  @keyframes hub-aura-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .hub-pulse {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      rgba(255, 255, 255, 0.22) 0%,
+      rgba(255, 255, 255, 0) 70%
+    );
+    animation: hub-ping 3s ease-out infinite;
+  }
+  .hub-pulse--b {
+    animation-delay: 1.5s;
+  }
+  @keyframes hub-ping {
+    0% {
+      transform: scale(0.7);
+      opacity: 0.9;
+    }
+    100% {
+      transform: scale(1.9);
+      opacity: 0;
+    }
+  }
+  .hub-wing {
+    position: relative;
+    z-index: 1;
+    width: 40px;
+    height: auto;
+    filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.55));
+  }
+</style>
+
+<style>
+  /* --- Szene 2: Anruf-Ablauf mit echtem Status-Text --- */
+  .scene-call {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    width: 100%;
+    height: 100%;
+  }
+  .scene-call__ring {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 68px;
+    height: 68px;
+    /* V7: echte 3D-Tiefe statt flacher Kreise -- die Ringe kippen in den Raum
+       (perspective + rotateX), wie eine Radar-Schuessel von schraeg oben,
+       und drehen sich dabei langsam weiter (rotateZ). Rein CSS, kein neues
+       JS/Bundle. */
+    perspective: 260px;
+  }
+  /* Rotierender Radar-Sweep unter den auslaufenden Ping-Ringen -- ein
+     Leuchtkeil, der sich kontinuierlich um die gekippte Flaeche dreht, statt
+     nur zwei sich weitenden Kreisen. Macht die "Radar von schraeg oben"-
+     Metapher aus dem V7-Kommentar tatsaechlich sichtbar/lebendig statt nur
+     angedeutet. */
+  .ring-sweep {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(
+      from 0deg,
+      rgba(157, 195, 245, 0.6) 0%,
+      rgba(157, 195, 245, 0) 26%
+    );
+    transform: rotateX(62deg) rotateZ(0deg);
+    transform-style: preserve-3d;
+    mix-blend-mode: screen;
+    animation: ring-sweep-spin 2.6s linear infinite;
+  }
+  @keyframes ring-sweep-spin {
+    to {
+      transform: rotateX(62deg) rotateZ(360deg);
+    }
+  }
+  .ring-pulse {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.4);
+    transform: rotateX(62deg);
+    transform-style: preserve-3d;
+    animation: ring-out 2.6s ease-out infinite;
+  }
+  .ring-pulse--b {
+    animation-delay: 1.3s;
+  }
+  @keyframes ring-out {
+    0% {
+      transform: rotateX(62deg) rotateZ(0deg) scale(0.6);
+      opacity: 0.8;
+    }
+    100% {
+      transform: rotateX(62deg) rotateZ(140deg) scale(1.8);
+      opacity: 0;
+    }
+  }
+  .scene-call__glyph {
+    position: relative;
+    z-index: 1;
+    width: 26px;
+    height: 26px;
+    color: #fff;
+    animation: glyph-shake 3.2s ease-in-out infinite;
+  }
+  @keyframes glyph-shake {
+    0%,
+    80%,
+    100% {
+      transform: rotate(0deg);
+    }
+    82% {
+      transform: rotate(-8deg);
+    }
+    85% {
+      transform: rotate(8deg);
+    }
+    88% {
+      transform: rotate(-6deg);
+    }
+    91% {
+      transform: rotate(0deg);
+    }
+  }
+
+  .scene-call__log {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-grotesk);
+    font-size: 13.5px;
+    color: var(--text-on-dark-muted);
+    min-height: 24px;
+  }
+  .call-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    animation: call-step 4.8s ease-in-out infinite;
+  }
+  .call-line--a {
+    animation-delay: 0s;
+  }
+  .call-line--b {
+    animation-delay: 1.6s;
+  }
+  .call-line--c {
+    animation-delay: 3.2s;
+    color: #fff;
+    font-weight: 600;
+  }
+  @keyframes call-step {
+    0%,
+    100% {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    8%,
+    28% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    38% {
+      opacity: 0;
+    }
+  }
+  .call-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.6);
+  }
+  .call-check {
+    width: 16px;
+    height: 16px;
+    color: #fff;
+  }
+</style>
+
+<style>
+  /* --- Szene 3: echte Waveform + Beispiel-Satz in Sprechblase --- */
+  .scene-voice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    width: 100%;
+    height: 100%;
+    padding: 0 20px;
+  }
+  /* V7: 3D-Buehne fuer die Waveform statt flacher Balken -- perspective auf
+     dem Wrapper, die Reihe selbst um die X-Achse gekippt ("3D-Equalizer von
+     schraeg oben"), jeder Balken zusaetzlich leicht in Z versetzt fuer echte
+     Tiefenstaffelung statt einer nur gedrehten flachen Ebene. */
+  .scene-voice__wave3d {
+    perspective: 340px;
+  }
+  .scene-voice__wave {
+    display: flex;
+    align-items: flex-end;
+    gap: 5px;
+    height: 46px;
+    transform: rotateX(38deg);
+    transform-style: preserve-3d;
+  }
+  .scene-voice__wave span {
+    display: block;
+    width: 4px;
+    border-radius: 2px;
+    /* V8: Glas-Gradient statt Flachweiss -- jeder Balken hat jetzt eine helle
+       Kuppe und einen dunkleren Fuss, wie ein beleuchteter Glasstab statt ein
+       plattes Rechteck. */
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(157, 195, 245, 0.85) 55%,
+      rgba(70, 120, 190, 0.65) 100%
+    );
+    box-shadow: 0 0 12px rgba(157, 195, 245, 0.6), 0 0 3px rgba(255, 255, 255, 0.7);
+    animation: wave-pulse 1.3s ease-in-out infinite;
+  }
+  .scene-voice__wave span:nth-child(1) { height: 30%; animation-delay: 0s; }
+  .scene-voice__wave span:nth-child(2) { height: 55%; animation-delay: 0.08s; }
+  .scene-voice__wave span:nth-child(3) { height: 85%; animation-delay: 0.16s; }
+  .scene-voice__wave span:nth-child(4) { height: 45%; animation-delay: 0.24s; }
+  .scene-voice__wave span:nth-child(5) { height: 100%; animation-delay: 0.32s; }
+  .scene-voice__wave span:nth-child(6) { height: 60%; animation-delay: 0.4s; }
+  .scene-voice__wave span:nth-child(7) { height: 90%; animation-delay: 0.48s; }
+  .scene-voice__wave span:nth-child(8) { height: 40%; animation-delay: 0.56s; }
+  .scene-voice__wave span:nth-child(9) { height: 70%; animation-delay: 0.64s; }
+  .scene-voice__wave span:nth-child(10) { height: 35%; animation-delay: 0.72s; }
+  .scene-voice__wave span:nth-child(11) { height: 58%; animation-delay: 0.8s; }
+  .scene-voice__wave span:nth-child(12) { height: 28%; animation-delay: 0.88s; }
+  /* Z-Staffelung ueber transform-origin + Skalierung im Keyframe kombiniert
+     (scaleY UND translateZ leben in derselben transform-Eigenschaft -- als
+     zwei getrennte Regeln wuerde die Animation die statische Z-Position
+     ueberschreiben). Jeder Balken kriegt daher seine eigene Keyframe-Regel
+     mit fest einprogrammiertem Z-Versatz. */
+  .scene-voice__wave span:nth-child(1) { animation-name: wave-pulse-1; }
+  .scene-voice__wave span:nth-child(2) { animation-name: wave-pulse-2; }
+  .scene-voice__wave span:nth-child(3) { animation-name: wave-pulse-3; }
+  .scene-voice__wave span:nth-child(4) { animation-name: wave-pulse-4; }
+  .scene-voice__wave span:nth-child(5) { animation-name: wave-pulse-5; }
+  .scene-voice__wave span:nth-child(6) { animation-name: wave-pulse-6; }
+  .scene-voice__wave span:nth-child(7) { animation-name: wave-pulse-5; }
+  .scene-voice__wave span:nth-child(8) { animation-name: wave-pulse-4; }
+  .scene-voice__wave span:nth-child(9) { animation-name: wave-pulse-3; }
+  .scene-voice__wave span:nth-child(10) { animation-name: wave-pulse-2; }
+  .scene-voice__wave span:nth-child(11) { animation-name: wave-pulse-1; }
+  .scene-voice__wave span:nth-child(12) { animation-name: wave-pulse-1; }
+  @keyframes wave-pulse-1 {
+    0%, 100% { transform: translateZ(-14px) scaleY(0.45); }
+    50% { transform: translateZ(-14px) scaleY(1); }
+  }
+  @keyframes wave-pulse-2 {
+    0%, 100% { transform: translateZ(-8px) scaleY(0.45); }
+    50% { transform: translateZ(-8px) scaleY(1); }
+  }
+  @keyframes wave-pulse-3 {
+    0%, 100% { transform: translateZ(-2px) scaleY(0.45); }
+    50% { transform: translateZ(-2px) scaleY(1); }
+  }
+  @keyframes wave-pulse-4 {
+    0%, 100% { transform: translateZ(4px) scaleY(0.45); }
+    50% { transform: translateZ(4px) scaleY(1); }
+  }
+  @keyframes wave-pulse-5 {
+    0%, 100% { transform: translateZ(10px) scaleY(0.45); }
+    50% { transform: translateZ(10px) scaleY(1); }
+  }
+  @keyframes wave-pulse-6 {
+    0%, 100% { transform: translateZ(16px) scaleY(0.45); }
+    50% { transform: translateZ(16px) scaleY(1); }
+  }
+  @keyframes wave-pulse {
+    0%,
+    100% {
+      transform: scaleY(0.45);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+
+  .scene-voice__bubble {
+    max-width: 260px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(10, 26, 54, 0.72);
+    border: var(--border-width) solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.6);
+    text-align: center;
+  }
+  .voice-bubble__label {
+    display: block;
+    margin-bottom: 4px;
+    font-family: var(--font-grotesk);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-on-dark-faint);
+  }
+  .voice-bubble__text {
+    font-family: var(--font-grotesk);
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text-on-dark-strong);
+    font-style: italic;
+  }
+</style>
+
+<style>
+  @media (prefers-reduced-motion: reduce) {
+    .model-chip,
+    .model-orb,
+    .model-orb::after,
+    .flow,
+    .hub-aura,
+    .hub-pulse,
+    .ring-sweep,
+    .ring-pulse,
+    .scene-call__glyph,
+    .call-line,
+    .scene-voice__wave span,
+    .agents__glow {
+      animation: none !important;
+    }
+    .hub-aura,
+    .ring-sweep {
+      opacity: 0.3;
+    }
+    .flow {
+      stroke-dasharray: none;
+    }
+    .call-line {
+      opacity: 1;
+    }
+    .scene-voice__wave span {
+      transform: scaleY(0.7);
+    }
+    /* Statischer Endzustand statt Dauerwiegen/-kippung: Orb/Ring/Waveform
+       bleiben in ihrer 3D-Neigung stehen, ohne zu wackeln/rotieren -- Tiefe
+       bleibt sichtbar, Bewegung faellt weg. */
+    .model-orb {
+      transform: perspective(60px) rotateY(0deg) rotateX(4deg);
+    }
+    .ring-pulse {
+      transform: rotateX(62deg) scale(1.1);
+      opacity: 0.35;
+    }
+  }
+</style>
