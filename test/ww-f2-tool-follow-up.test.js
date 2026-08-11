@@ -258,8 +258,11 @@ test("WW-F2-9 Sprach-Paritaet: markers und nudge existieren in jeder Sprache, de
   const TOOL_NAMES = ["end_call", "take_message", "get_consult", "look_up"];
   for (const lang of LANGUAGES) {
     const followUp = LOCALES[lang].prompt.followUp;
-    assert.ok(Array.isArray(followUp.markers) && followUp.markers.length > 0, `${lang}: markers`);
-    for (const parts of followUp.markers)
+    // WW-F4: die Marker liegen nach Zielwerkzeug partitioniert vor - fuer die Form-Zusage
+    // dieses Tests zaehlt die Vereinigung, genau wie fuer announcesToolAction.
+    const markers = [...followUp.consultMarkers, ...followUp.messageMarkers];
+    assert.ok(markers.length > 0, `${lang}: markers`);
+    for (const parts of markers)
       assert.ok(
         Array.isArray(parts) && parts.length > 0 && parts.every((p) => typeof p === "string" && p),
         `${lang}: ein Marker ist keine nicht-leere Teile-Liste`,

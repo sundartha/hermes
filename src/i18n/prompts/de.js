@@ -371,19 +371,47 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     // Bewusst ENG: jeder Marker steht fuer eine Handlung, die eines unserer Werkzeuge
     // ausfuehrt (weitergeben/notieren -> take_message, Rücksprache/nachfragen ->
     // get_consult). Ein breiter Marker waere die Ueberkorrektur, vor der der Auftrag warnt.
-    markers: Object.freeze([
+    //
+    // WW-F4: die Marker sind nach ZIELWERKZEUG PARTITIONIERT. Die Erkennung
+    // (announcesToolAction) liest die Vereinigung beider Listen - an ihr aendert die
+    // Aufteilung nichts; die Werkzeugwahl des Nachfass-Zuges (followUpToolChoiceFor) liest
+    // NUR consultMarkers. Partition statt "Vereinigungsliste plus Teilmengenliste": sonst
+    // stuenden dieselben Zeichenketten zweimal je Sprache (G5) und koennten auseinander
+    // laufen; so kann jeder Marker strukturell nur in EINER Klasse stehen (G27).
+    //
+    // consultMarkers - eine Handlung, die auf eine ENTSCHEIDUNG des Auftraggebers
+    // hinauslaeuft (get_consult). Nur EINDEUTIGE Formen: was auch blosses Informieren
+    // heissen kann, steht unten und behaelt damit das Bestandsverhalten (freie Wahl unter
+    // Zwang). Das ist die fail-closed-Richtung dieser Phase - eine Nachricht wird NIE in
+    // eine Rueckfrage umgebogen.
+    consultMarkers: Object.freeze([
       ["Rücksprache"],
       ["abklär"],
       ["abstimmen"],
+      ["nachfrag"],
+      ["frage", "nach"],
+      ["erkundig"],
+    ]),
+    // messageMarkers - eine Handlung, die den Auftraggeber informiert oder das Anliegen
+    // festhaelt (take_message). Hier wird nichts benannt erzwungen.
+    messageMarkers: Object.freeze([
       ["weitergeb"],
       ["gebe", "weiter"],
       ["leite", "weiter"],
       ["weiterleit"],
-      ["nachfrag"],
-      ["frage", "nach"],
-      ["erkundig"],
       ["notier"],
       ["melde mich"],
+      // WW-F4 (Erkennungsluecke aus tasks/werkzeugwahl-fix2-messung.md 3.6, Lauf #4):
+      // "Ich gebe Jonas aber gerne Bescheid: ..." - inhaltlich dieselbe Weitergabe wie
+      // "weitergeben", nur als Redewendung "Bescheid geben/sagen", in der das Wort
+      // "weiter" fehlt. Drei Oberflaechenformen derselben Redewendung (gebe/sage/werde),
+      // jede auf die ERSTE PERSON verankert: ohne diesen Anker traefe "Bescheid" auch die
+      // an die Gegenstelle gerichtete Bitte ("Geben Sie mir Bescheid"), die gar keine
+      // eigene Handlung ankuendigt - und "Bescheid wissen" faellt aus demselben Grund
+      // nicht darunter.
+      ["ich gebe", "Bescheid"],
+      ["ich sage", "Bescheid"],
+      ["ich werde", "Bescheid"],
     ]),
     // Server-eigener, eckig geklammerter Steuertext - dieselbe Klasse wie silentTurn.
     // WERKZEUG-AGNOSTISCH: er nennt KEIN Werkzeug beim Namen, weil im Nachfass-Zug nicht

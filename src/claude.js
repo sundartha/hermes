@@ -9,8 +9,7 @@ import { providerTurnMessage, toolResultsMessage } from "./llm/messages.js";
 import { makeSentenceChunker } from "./speech-chunker.js";
 import { makeThinkingSignal } from "./thinking-signal.js";
 import { shapeForSpeech } from "./speech-shape.js";
-import { followUpToolsFor } from "./tool-follow-up.js";
-import { LLM_TOOL_CHOICE } from "./llm/tool-choice.js";
+import { followUpToolChoiceFor, followUpToolsFor } from "./tool-follow-up.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
@@ -1023,11 +1022,14 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   const deadlineMs = turnLoopDeadlineMs(config.voice.elevenLabsPlayTts.synthTimeoutMs);
   let stopReason = null;
 
-  // WW-F2: die zwei Zustaende des Nachfassens. pendingFollowUpTools traegt den
-  // Werkzeugsatz der NAECHSTEN Runde (null = regulaere Runde, byte-identischer Draht);
+  // WW-F2: die zwei Zustaende des Nachfassens. pendingFollowUp traegt den Nachfass-Zug der
+  // NAECHSTEN Runde (null = regulaere Runde, byte-identischer Draht);
   // followUpUsed ist die Obergrenze aus B2 und wird NIE zurueckgesetzt - hoechstens EIN
   // Nachfassen je Zug, egal wie die erzwungene Runde ausgeht.
-  let pendingFollowUpTools = null;
+  // WW-F4: Werkzeugsatz UND Werkzeugwahl stehen in EINEM Objekt - zwei getrennte
+  // Zustaende muessten immer gemeinsam gesetzt und gemeinsam zurueckgenommen werden
+  // (verborgene zeitliche Kopplung, G31).
+  let pendingFollowUp = null;
   let followUpUsed = false;
 
   // Tool-Loop (max. MAX_TOOL_ROUNDS_PER_TURN Runden pro Turn)
@@ -1056,12 +1058,12 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       break;
     }
 
-    // WW-F2: der armierte Nachfass-Satz gilt fuer GENAU DIESE Runde und wird sofort
+    // WW-F2: der armierte Nachfass-Zug gilt fuer GENAU DIESE Runde und wird sofort
     // zurueckgenommen. Ohne das Zuruecknehmen liefe eine Folgerunde (z.B. nach look_up)
     // ebenfalls erzwungen - ein zweiter Zwang, den B2 ausschliesst.
-    const forcedTools = pendingFollowUpTools;
-    pendingFollowUpTools = null;
-    const tools = forcedTools ?? agentTools(call);
+    const followUp = pendingFollowUp;
+    pendingFollowUp = null;
+    const tools = followUp?.tools ?? agentTools(call);
     for (const tool of tools) offeredTools.add(tool.name);
     const elapsedMs = Date.now() - loopStartedAt;
     const sink = streamSinkFor({
@@ -1084,7 +1086,10 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
       // WW-F2: NUR im Nachfass-Zug gesetzt. Fehlt das Feld, bleibt der Draht
       // byte-identisch zum Bestand (Anbieter-Default) - das ist die Zusage aus B1.
-      ...(forcedTools ? { toolChoice: LLM_TOOL_CHOICE.REQUIRED } : {}),
+      // WW-F4: WELCHE Wahl der Nachfass-Zug traegt (Sammel-Zwang oder benanntes
+      // Rueckfrage-Werkzeug), entscheidet followUpToolChoiceFor - hier steht nur noch,
+      // DASS sie ausschliesslich im Nachfass-Zug auf dem Draht steht.
+      ...(followUp ? { toolChoice: followUp.toolChoice } : {}),
     };
     let turn;
     try {
@@ -1100,7 +1105,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       // regulaerer Rundenfehler propagiert unveraendert: dort kennt der Aufrufer seinen
       // Degradations-Satz (llm.js degradedSpeechFor). PII-frei protokolliert, ohne den
       // Fehlertext des Anbieters.
-      if (!forcedTools) throw err;
+      if (!followUp) throw err;
       console.warn(`[turn] nachfassen-fehlgeschlagen call=${call.id} runden=${roundtrips}`);
       break;
     }
@@ -1145,7 +1150,18 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       });
       if (!followUpTools) break;
       followUpUsed = true;
-      pendingFollowUpTools = followUpTools;
+      // WW-F4: kuendigt der Text eine Entscheidung des Auftraggebers an UND liegt das
+      // Rueckfrage-Werkzeug in diesem Zug, wird es BENANNT erzwungen - sonst bleibt es
+      // beim Sammel-Zwang des Bestands.
+      pendingFollowUp = {
+        tools: followUpTools,
+        toolChoice: followUpToolChoiceFor({
+          text: turn.text,
+          language: call.language,
+          candidateTools: followUpTools,
+          consultToolName: GET_CONSULT_TOOL_NAME,
+        }),
+      };
       // Die eigene Aeusserung der Runde MUSS in die Kette, sonst fasst der naechste Zug
       // ins Leere nach; der Steuertext dahinter haelt die Kette auf einem user-Turn
       // (dieselbe Klasse wie silentTurn/consultPending, kein fremder Text).

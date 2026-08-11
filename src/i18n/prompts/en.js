@@ -276,10 +276,9 @@ At the end, say goodbye in one sentence and then call end_call.`,
   followUp: {
     // Englisch hat feste Wortstellung - anders als im Deutschen reicht hier fast immer EIN
     // Teil je Marker. "look forward to" ist der Grund, warum kein blosses "forward" steht.
-    markers: Object.freeze([
-      ["check with"],
-      ["check back with"],
-      ["confirm with"],
+    // WW-F4: Partition nach Zielwerkzeug, Begruendung s. prompts/de.js followUp.
+    consultMarkers: Object.freeze([["check with"], ["check back with"], ["confirm with"]]),
+    messageMarkers: Object.freeze([
       ["get back to you"],
       ["pass", "on to"],
       ["pass it on"],
@@ -291,7 +290,16 @@ At the end, say goodbye in one sentence and then call end_call.`,
       ["note that down"],
       ["take a message"],
       ["let you know"],
+      // "follow up with X" kann fragen ODER blosses Nachhaken sein - mehrdeutig, also
+      // Nachrichten-Klasse (Bestandsverhalten), nicht benannter Zwang.
       ["follow up with"],
+      // WW-F4: das englische "Bescheid geben" in der DRITTEN Person ("I'll let Jonas
+      // know") - "let you know" oben deckt nur die Gegenstelle ab. Der Teil "ll let" ist
+      // bewusst so geschnitten: er traegt "I'll let" UND "I will let" (in "will let"
+      // steckt "ll let"), unabhaengig davon, welches Apostroph-Zeichen das Modell
+      // schreibt - waehrend die an die Gegenstelle gerichtete Bitte "let me know" nicht
+      // darunter faellt.
+      ["ll let", "know"],
     ]),
     nudge:
       "[You just announced an action but did not call any tool. Carry out exactly that " +

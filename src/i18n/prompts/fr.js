@@ -274,17 +274,24 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
 
   // WW-F2: FR-Achse des Nachfassens (Begruendung und Regeln s. prompts/de.js followUp).
   followUp: {
-    markers: Object.freeze([
-      ["vérifier auprès"],
-      ["confirmer auprès"],
+    // WW-F4: Partition nach Zielwerkzeug, Begruendung s. prompts/de.js followUp.
+    consultMarkers: Object.freeze([["vérifier auprès"], ["confirmer auprès"], ["demander à"]]),
+    messageMarkers: Object.freeze([
+      // "en parler à" / "faire le point" koennen fragen ODER blosses Informieren heissen -
+      // mehrdeutig, also Nachrichten-Klasse (Bestandsverhalten), kein benannter Zwang.
       ["en parler à"],
       ["transmet"],
       ["je note"],
       ["prendre note"],
       ["recontacte"],
       ["revenir vers"],
-      ["demander à"],
       ["faire le point"],
+      // WW-F4: das franzoesische "Bescheid geben". "tiens au courant" traegt die erste
+      // Person direkt ("je vous / je le tiens au courant"); die Futur-proche-Form braucht
+      // den Anker "vais", weil "tenir au courant" sonst auch die an die Gegenstelle
+      // gerichtete Bitte traefe ("pouvez-vous me tenir au courant").
+      ["tiens au courant"],
+      ["vais", "tenir au courant"],
     ]),
     nudge:
       "[Tu viens d'annoncer une action sans appeler d'outil. Exécute maintenant exactement " +

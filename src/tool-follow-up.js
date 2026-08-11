@@ -26,6 +26,7 @@
 // Rein (N7): kein Store, kein config, kein IO. Alle Schalter kommen als Argument, damit
 // die Entscheidung an EINER Stelle vollstaendig pinnbar ist.
 import { localeFor } from "./i18n/locales.js";
+import { LLM_TOOL_CHOICE, forcedTool } from "./llm/tool-choice.js";
 
 // Vergleichsform der Marker-Suche. Deutsche Transliteration (ae/oe/ue/ss) und
 // franzoesische Akzente sind die zwei Stellen, an denen derselbe Wortstamm zwei
@@ -48,18 +49,31 @@ function comparableText(text) {
   return out.normalize("NFD").replace(COMBINING_MARKS, "");
 }
 
+// Trifft einer dieser Marker den Text? EIN Marker ist eine Liste von TEILEN, die ALLE
+// vorkommen muessen (i18n/prompts/de.js followUp): das deutsche trennbare Verb reisst
+// sonst auseinander ("Ich gebe das an Jonas weiter") und bliebe unerkannt.
+function matchesAnyMarker(text, markers) {
+  if (!text) return false;
+  const haystack = comparableText(text);
+  return markers.some((parts) => parts.every((part) => haystack.includes(comparableText(part))));
+}
+
 // Kuendigt dieser Modelltext eine Handlung an, die eines unserer Werkzeuge ausfuehrt?
-// EIN Marker ist eine Liste von TEILEN, die ALLE vorkommen muessen (i18n/prompts/de.js
-// followUp.markers): das deutsche trennbare Verb reisst sonst auseinander ("Ich gebe das
-// an Jonas weiter") und bliebe unerkannt.
+// Gelesen wird die VEREINIGUNG beider Marker-Klassen - die WW-F4-Partition der
+// Sprachdateien aendert an dieser Frage nichts, sie beantwortet nur die zweite (welches
+// Werkzeug erzwungen wird).
 // Exportiert, weil die Erkennung der eigentliche Gegenstand dieser Phase ist und je
 // Sprache direkt pinnbar sein muss (dieselbe Begruendung wie isSideEffectOnlyTool).
 export function announcesToolAction(text, language) {
-  if (!text) return false;
-  const haystack = comparableText(text);
-  return localeFor(language).prompt.followUp.markers.some((parts) =>
-    parts.every((part) => haystack.includes(comparableText(part))),
-  );
+  const followUp = localeFor(language).prompt.followUp;
+  return matchesAnyMarker(text, [...followUp.consultMarkers, ...followUp.messageMarkers]);
+}
+
+// WW-F4: Kuendigt der Text eine Handlung an, die auf eine ENTSCHEIDUNG des Auftraggebers
+// hinauslaeuft (Ruecksprache, nachfragen, abstimmen)? Echte Teilmenge von
+// announcesToolAction - eine angekuendigte NACHRICHT liefert hier false.
+export function announcesConsultAction(text, language) {
+  return matchesAnyMarker(text, localeFor(language).prompt.followUp.consultMarkers);
 }
 
 // Der Werkzeugsatz des Nachfass-Zuges - oder null, wenn NICHT nachgefasst wird. Die EINE
@@ -79,4 +93,37 @@ export function followUpToolsFor({ enabled, alreadyUsed, text, language, candida
   if (!candidateTools.length) return null;
   if (!announcesToolAction(text, language)) return null;
   return candidateTools;
+}
+
+// WW-F4: die WERKZEUGWAHL des Nachfass-Zuges - Sammel-Zwang oder benannter Zwang?
+//
+// BEFUND (tasks/werkzeugwahl-fix2-messung.md 3.4): in einer FRISCHEN Runde waehlt das
+// Modell unter Zwang 5/5 get_consult. Im Nachfass-Zug ist die Runde aber NICHT frisch -
+// die eigene Aeusserung der Vorrunde steht als providerTurnMessage mit in der Kette, und
+// unter dem Sammel-Zwang (required) holt das Modell genau die Handlung ab, die es selbst
+// angekuendigt hat. Im einzigen live gemessenen Eingriff war das take_message, obwohl
+// eine Entscheidung des Auftraggebers anstand: das Nachfassen ERBTE die Absicht, statt
+// sie zu korrigieren. Der benannte Zwang bricht genau diese Vererbung.
+//
+// Fail-closed in jeder anderen Lage - der Bestand ist immer der Rueckfallwert:
+//   - get_consult nicht im Zug (Kontingent, Poll, Recht, Inbound) -> required wie heute
+//   - Ankuendigung einer NACHRICHT -> required wie heute. Eine legitime Nachricht wird
+//     NIE in eine Rueckfrage umgebogen; das waere die Ueberkorrektur, die diese Kette
+//     ausdruecklich vermeidet.
+// Traegt ein Text BEIDE Klassen ("Ich frage bei Jonas nach und gebe Ihnen Bescheid"),
+// gewinnt die Rueckfrage: die offene Frage ist der Teil, der sonst verloren geht - die
+// Nachricht kann der Agent danach immer noch aufnehmen.
+//
+// end_call kann hier strukturell nie herauskommen: benannt wird ausschliesslich das
+// Rueckfrage-Werkzeug, und der Sammel-Zwang laeuft ueber candidateTools, aus denen der
+// Aufrufer end_call bereits entfernt hat (B6).
+//
+// consultToolName kommt als ARGUMENT (wie alle Schalter dieser Datei): der Name lebt in
+// consult/in-call.js, das config und store importiert - ein Import von dort machte dieses
+// reine Modul von beidem abhaengig und braeche den direkten Import im Test.
+export function followUpToolChoiceFor({ text, language, candidateTools, consultToolName }) {
+  const consultOffered = candidateTools.some((tool) => tool.name === consultToolName);
+  if (!consultOffered) return LLM_TOOL_CHOICE.REQUIRED;
+  if (!announcesConsultAction(text, language)) return LLM_TOOL_CHOICE.REQUIRED;
+  return forcedTool(consultToolName);
 }
