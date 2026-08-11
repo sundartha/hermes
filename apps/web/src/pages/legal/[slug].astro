@@ -17,22 +17,10 @@ export function getStaticPaths() {
 }
 
 const { doc } = Astro.props;
-
-// Gegenstücke auf Deutsch: die verbindliche Fassung ist immer einen Klick weit weg.
-const pills = [
-  { href: "/datenschutz", label: "Datenschutz (DE)" },
-  { href: "/impressum", label: "Impressum (DE)" },
-  { href: "/agb", label: "AGB (DE)" },
-];
 ---
 
 <Hermes lang="en" noindex title={doc.metaTitle} description={doc.metaDescription}>
   <h1 class="doc-title">{doc.title}</h1>
-  <div class="doc-pills">
-    {pills.map((pill) => (
-      <a class="legal-pill" href={pill.href}>{pill.label}</a>
-    ))}
-  </div>
 
   <div class="doc-block doc-legal">
     <div class="legal-card">

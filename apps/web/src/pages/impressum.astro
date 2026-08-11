@@ -5,27 +5,10 @@
 // nicht entstehen.
 import Hermes from "../layouts/Hermes.astro";
 import doc from "../data/legal/imprint.de.json";
-
-const pills = [
-  { href: "/datenschutz", label: "Datenschutz" },
-  { href: "/impressum", label: "Impressum" },
-  { href: "/agb", label: "AGB" },
-];
-const CONTACT = "kontakt@sundartha.com";
 ---
 
 <Hermes title={doc.metaTitle} description={doc.metaDescription} lang="de">
   <h1 class="doc-title">{doc.title}</h1>
-  <div class="doc-pills">
-    {pills.map((pill) => (
-      <a
-        class="legal-pill"
-        href={pill.href}
-        aria-current={pill.href === "/impressum" ? "page" : undefined}
-      >{pill.label}</a>
-    ))}
-    <a class="legal-pill" href={`mailto:${CONTACT}`}>Kontakt</a>
-  </div>
 
   <div class="doc-block doc-legal">
     <div class="legal-card">
