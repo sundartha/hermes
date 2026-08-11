@@ -47,7 +47,17 @@ const STRING_FIELDS = [
   "outcomeInbound",
   "realtimeSpeechStyle",
 ];
-const FUNCTION_FIELDS = ["persona", "situationOutbound", "situationInbound", "speechRules", "clarificationRules"];
+// WW-P3: consultRules gehoert dazu - der Rueckfrage-Block ist Prompt-Rumpf, keine
+// Tool-Beschreibung, und eine vierte Sprache ohne ihn haette den Defekt aus Befund W2
+// sofort wieder (get_consult kommt im Prompt nicht vor).
+const FUNCTION_FIELDS = [
+  "persona",
+  "situationOutbound",
+  "situationInbound",
+  "speechRules",
+  "clarificationRules",
+  "consultRules",
+];
 
 test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag", () => {
   for (const lang of SUPPORTED_LANGUAGES) {
@@ -60,7 +70,24 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
     for (const f of FUNCTION_FIELDS) {
       assert.equal(typeof p[f], "function", `${lang}: prompt.${f} ist keine Funktion`);
     }
-    for (const f of ["heading", "personalData", "bankData", "noCalendar", "noBooking", "noLookup", "toolThrift"]) {
+    // WW-P3: die beiden Consult-Varianten stehen mit in der Liste - fehlt eine, faellt der
+    // Prompt einer neuen Sprache auf eine Zeile zurueck, die den Rueckfrage-Fall exklusiv
+    // auf die Nachricht schickt.
+    for (const f of [
+      "heading",
+      "personalData",
+      "bankData",
+      "noCalendar",
+      "noBooking",
+      // WW-F1: die Mandats-Variante der Buchungs-Zeile. Fehlt sie einer neuen Sprache,
+      // faellt deren Prompt auf die unbedingte Zeile zurueck - und die widerspricht
+      // mandate.scopeRules fuer jeden Terminwunsch innerhalb des Spielraums.
+      "noBookingWithMandate",
+      "noLookup",
+      "noLookupWithConsult",
+      "noAskingCounterpartAboutOwnerWithConsult",
+      "toolThrift",
+    ]) {
       assert.ok(f in p.boundaries, `${lang}: prompt.boundaries.${f} fehlt`);
     }
     for (const f of [
@@ -72,6 +99,10 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
       "outOfScopeLabel",
       "outOfScopeRules",
       "outOfScopeSentence",
+      // WW-P3: die Consult-Variante des AUSSERHALB-Ausgangs. Sie deckt bewusst NICHT alle
+      // drei Ausgaenge ab (DECLINE/ACCEPT_BEST sind Owner-Anweisungen, nicht
+      // zurueckzufragen) - geprueft wird deshalb nur die Existenz der Tabelle.
+      "outOfScopeSentenceWithConsult",
     ]) {
       assert.ok(f in p.mandate, `${lang}: prompt.mandate.${f} fehlt`);
     }

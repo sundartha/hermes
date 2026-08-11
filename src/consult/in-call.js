@@ -6,7 +6,7 @@
 //
 // Diese Datei haelt die ENTSCHEIDUNGEN (darf/passt/gesaeubert), nicht die Turn-Mechanik -
 // die bleibt in claude.js, dem einzigen Ort mit Turn-Kontrolle.
-import { config } from "../config.js";
+import { config, VOICE_ENGINE } from "../config.js";
 import * as store from "../store.js";
 import { localeFor } from "../i18n/locales.js";
 import { MS_PER_MINUTE } from "../utils/timer.js";
@@ -84,9 +84,17 @@ export function consultAnswerAwaitingDelivery(call) {
 // ausgeschaltetem Feature nicht einmal der Store gelesen wird (Bestand byte-identisch).
 // Das Richtungs-Gate ist der Sicherheitskern: ein fremder Inbound-Anrufer darf seine
 // Aeusserungen NIE als "Rueckfrage" in den Kontext des Tenants exportieren.
+//
+// WW-P3: der Engine-Faktor ist derselbe wie in research/in-call.js (AL-P10b-fix), aus
+// demselben Grund. Beide Konsumenten dieses Praedikats liegen im Budget-Turn (agentTools,
+// decideConsultRequest) - die Realtime-Bridge baut ihren Werkzeugsatz aus toolDefs und
+// bietet get_consult NIE an, teilt sich den systemPrompt aber mit der Budget-Engine. Ohne
+// diesen Faktor wuerde der Realtime-Prompt seit WW-P3 einen Rueckfrage-Weg versprechen,
+// den es dort nicht gibt. Fuer den Budget-Pfad aendert der Faktor nichts.
 export function consultAvailableFor(call, nowMs = Date.now()) {
   return (
     config.tenancy.inCallConsultEnabled === true &&
+    config.voice.voiceEngine !== VOICE_ENGINE.REALTIME &&
     consultAllowedFor(store.resolveProfile(call.tenantId)) &&
     call.direction === "outbound" &&
     call.status === "active" &&

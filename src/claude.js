@@ -9,6 +9,7 @@ import { providerTurnMessage, toolResultsMessage } from "./llm/messages.js";
 import { makeSentenceChunker } from "./speech-chunker.js";
 import { makeThinkingSignal } from "./thinking-signal.js";
 import { shapeForSpeech } from "./speech-shape.js";
+import { followUpToolChoiceFor, followUpToolsFor } from "./tool-follow-up.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
@@ -80,6 +81,20 @@ function promptInputs(call) {
     // research/in-call.js lookupProviderFor). Vorher stimmte der Satz nur fuer die
     // Budget-Engine - der Realtime-Prompt versprach eine Faehigkeit ohne Werkzeug.
     lookupAvailable: lookupAvailableFor(call),
+    // WW-P3: dieselbe Regel wie lookupAvailable, EINE Quelle (G5) fuer "wird get_consult
+    // in diesem Zug angeboten?" - dieselbe Frage entscheidet ueber den Werkzeugsatz
+    // (agentTools) UND ueber die drei Prompt-Stellen, die den Rueckfrage-Fall routen.
+    // Der Prompt darf NIE auf ein Werkzeug zeigen, das im selben Zug fehlt: Kontingent
+    // erschoepft, Poll nicht frisch, Tenant-Recht fehlt -> Bestandswortlaut.
+    consultAvailable: consultAvailableFor(call),
+    // WW-F1: EINE Quelle (G5) fuer "steht in DIESEM Prompt ein SPIELRAUM?" - dieselbe
+    // Frage entscheidet ueber den SPIELRAUM-Block (mandateSection) UND ueber die
+    // Buchungs-Zeile in den GRENZEN (boundaryRules). Bisher entschied jede Stelle fuer
+    // sich, und beide sagten fuer denselben Terminwunsch Gegenteiliges: der Block
+    // "entscheidest du selbst ... gibst es NICHT als Nachricht weiter", die Zeile
+    // "einen Terminwunsch nimmst du als Nachricht auf" (Befund
+    // tasks/befund-toolwahl-7-szenariopruefung.md, Abschnitt 2).
+    mandateScopeGiven: Boolean(call.mandate && call.mandate.decide_freely),
     now: new Date().toLocaleString(loc.dateLocale, {
       timeZone,
       weekday: "long",
@@ -156,6 +171,15 @@ function clarificationRules(p) {
   return p.loc.prompt.clarificationRules(p);
 }
 
+// WW-P3: die Nachschlag-Zeile kennt jetzt DREI Lagen statt zwei. Wird nachgeschlagen,
+// gilt unveraendert lookupAllowed (die Zeile spricht dort ohnehin nur noch das
+// Weiterverbinden ab, das auch get_consult nicht kann). Ohne Nachschlag entscheidet die
+// Rueckfrage-Verfuegbarkeit, ob der Satz den Fall exklusiv auf die Nachricht schickt.
+function researchBoundaryLine(b, { lookupAvailable, consultAvailable }) {
+  if (lookupAvailable) return b.lookupAllowed;
+  return consultAvailable ? b.noLookupWithConsult : b.noLookup;
+}
+
 // Grenzen. Die beiden allow*-Gates behalten exakt ihre fail-closed-Semantik (Zeile
 // steht, SOLANGE nicht ausdruecklich erlaubt) - nur die Leerzeile bei "erlaubt" faellt
 // weg (D8). Die beiden Kalender-/Buchungs-Zeilen sind seit P1b unbedingt (Owner-
@@ -163,7 +187,14 @@ function clarificationRules(p) {
 // geschlossene Telefonie-Luecke (Faehigkeits-Ehrlichkeit + Werkzeug-Sparsamkeit). Die
 // Verzweigung bleibt hier (EINE Quelle, P11 D1) - nur die Zeilen kommen aus dem
 // Sprach-Baustein.
-function boundaryRules({ loc, settings: s, owner, lookupAvailable }) {
+function boundaryRules({
+  loc,
+  settings: s,
+  owner,
+  lookupAvailable,
+  consultAvailable,
+  mandateScopeGiven,
+}) {
   const b = loc.prompt.boundaries;
   const lines = [b.heading];
   if (!s.allowPersonalData) lines.push(b.personalData(owner));
@@ -173,12 +204,19 @@ function boundaryRules({ loc, settings: s, owner, lookupAvailable }) {
   // byte-identisch zum Bestand.
   lines.push(
     b.noCalendar(owner),
-    b.noBooking,
-    lookupAvailable ? b.lookupAllowed : b.noLookup,
+    // WW-F1: die Zeile bleibt unbedingt (E1: "du buchst KEINE Termine fest" steht in
+    // BEIDEN Varianten), nur ihr Terminwunsch-Weg folgt dem SPIELRAUM. Ohne Spielraum
+    // -> Bestandswortlaut, byte-identisch.
+    mandateScopeGiven ? b.noBookingWithMandate : b.noBooking,
+    researchBoundaryLine(b, { lookupAvailable, consultAvailable }),
     // GQ-P9: unbedingt, in JEDEM Turn. Der Defekt haengt nicht an einem Werkzeug oder
     // Flag - er trat auf, WAEHREND get_consult im Satz lag: die Gegenstelle fragt nach
     // einer Angabe zum Auftraggeber, der Agent gibt die Frage an sie zurueck.
-    b.noAskingCounterpartAboutOwner(owner),
+    // WW-P3: die Regel bleibt unbedingt, nur ihr AUSWEG folgt dem Werkzeugsatz - bisher
+    // nannte sie zwei Auswege, von denen einer vage war und der andere die Nachricht.
+    consultAvailable
+      ? b.noAskingCounterpartAboutOwnerWithConsult(owner)
+      : b.noAskingCounterpartAboutOwner(owner),
     b.toolThrift,
   );
   return lines.join("\n");
@@ -206,15 +244,27 @@ function hasMandateContent(mandate) {
 // take_message). Unbekannter on_out_of_scope-Wert (Legacy-/Fremddatensatz) faellt
 // fail-safe auf den Default zurueck, statt den laufenden Turn zu werfen. Texte kommen
 // aus dem Sprach-Baustein (loc.prompt.mandate, P11).
-function mandateSection({ call, owner, loc }) {
+// WW-P3: der AUSSERHALB-Ausgang folgt dem Werkzeugsatz. Eine Consult-Variante gibt es NUR
+// dort, wo der Sprach-Baustein eine anbietet - heute allein fuer den Default-Ausgang
+// (Nachricht). DECLINE/ACCEPT_BEST tragen bewusst keine: beide sind ausdrueckliche
+// Owner-Anweisungen, gerade NICHT zurueckzufragen. Welcher Ausgang eine Variante hat,
+// entscheidet damit der Sprach-Baustein, nicht diese Funktion (kein Enum-Wissen hier).
+function outOfScopeSentenceFor(mp, onOutOfScope, consultAvailable) {
+  const key = mp.outOfScopeSentence[onOutOfScope] ? onOutOfScope : MANDATE_OUT_OF_SCOPE_DEFAULT;
+  const withConsult = consultAvailable ? mp.outOfScopeSentenceWithConsult[key] : null;
+  return withConsult || mp.outOfScopeSentence[key];
+}
+
+function mandateSection({ call, owner, loc, consultAvailable, mandateScopeGiven }) {
   const m = call.mandate;
   if (!hasMandateContent(m)) return "";
   const mp = loc.prompt.mandate;
-  const outOfScope =
-    mp.outOfScopeSentence[m.on_out_of_scope] || mp.outOfScopeSentence[MANDATE_OUT_OF_SCOPE_DEFAULT];
+  const outOfScope = outOfScopeSentenceFor(mp, m.on_out_of_scope, consultAvailable);
   const precedence = call.constraints ? mp.constraintsPrecedence : "";
   const blocks = [];
-  if (m.decide_freely)
+  // WW-F1: dasselbe Praedikat wie die Buchungs-Zeile in boundaryRules (G27: Struktur
+  // statt Konvention) - die beiden koennen nicht mehr auseinanderlaufen.
+  if (mandateScopeGiven)
     blocks.push(`${mp.scopeLabel} ${m.decide_freely}\n${mp.scopeRules}${precedence}`);
   if (m.fallback_order) blocks.push(`${mp.fallbackLabel} ${m.fallback_order}\n${mp.fallbackRules}`);
   blocks.push(`${mp.outOfScopeLabel} ${outOfScope(owner)}\n${mp.outOfScopeRules}`);
@@ -229,6 +279,15 @@ function thinkingSignalRules(p) {
   return config.voice.thinkingSignalEnabled ? p.loc.prompt.thinkingSignal : "";
 }
 
+// WW-P3/P4: der Rueckfrage-Weg im Prompt-Rumpf. get_consult stand bisher in KEINEM
+// gerenderten Prompt woertlich (Befund W2) - es existierte fuer das Modell nur als
+// Eintrag im tools-Array, waehrend drei Prompt-Bloecke denselben Fall woertlich auf
+// take_message schickten. Werkzeug nicht im Zug -> "" -> filter(Boolean) in systemPrompt
+// haelt den Bestandsprompt byte-identisch (Muster thinkingSignalRules/mandateSection).
+function consultRules(p) {
+  return p.consultAvailable ? p.loc.prompt.consultRules(p.owner) : "";
+}
+
 export function systemPrompt(call) {
   const p = promptInputs(call);
   return [
@@ -240,6 +299,10 @@ export function systemPrompt(call) {
     // AL-P7b: steht direkt hinter den GRENZEN, weil es eine Regel ueber das Verhalten AM
     // Werkzeugaufruf ist (Nachbar von toolThrift). Flag aus -> "" -> Prompt byte-identisch.
     thinkingSignalRules(p),
+    // WW-P3: steht VOR dem SPIELRAUM, weil der Mandats-Block die Ausnahme dazu ist ("in
+    // diesem Rahmen entscheidest du selbst, fragst NICHT nach") - erst die Regel, dann der
+    // ausdruecklich freigegebene Bereich. Werkzeug nicht im Zug -> "" -> byte-identisch.
+    consultRules(p),
     // P6: rote Linien (GRENZEN) zuerst, dann der gruene Bereich. Ohne Mandat "" ->
     // filter(Boolean) haelt den Bestandsprompt byte-identisch (Muster D8).
     mandateSection(p),
@@ -959,6 +1022,16 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   const deadlineMs = turnLoopDeadlineMs(config.voice.elevenLabsPlayTts.synthTimeoutMs);
   let stopReason = null;
 
+  // WW-F2: die zwei Zustaende des Nachfassens. pendingFollowUp traegt den Nachfass-Zug der
+  // NAECHSTEN Runde (null = regulaere Runde, byte-identischer Draht);
+  // followUpUsed ist die Obergrenze aus B2 und wird NIE zurueckgesetzt - hoechstens EIN
+  // Nachfassen je Zug, egal wie die erzwungene Runde ausgeht.
+  // WW-F4: Werkzeugsatz UND Werkzeugwahl stehen in EINEM Objekt - zwei getrennte
+  // Zustaende muessten immer gemeinsam gesetzt und gemeinsam zurueckgenommen werden
+  // (verborgene zeitliche Kopplung, G31).
+  let pendingFollowUp = null;
+  let followUpUsed = false;
+
   // Tool-Loop (max. MAX_TOOL_ROUNDS_PER_TURN Runden pro Turn)
   for (let i = 0; i < MAX_TOOL_ROUNDS_PER_TURN; i++) {
     // GQ-P1: ein verdraengter Turn faehrt KEINE weitere Modellrunde (echte Token-
@@ -985,7 +1058,12 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       break;
     }
 
-    const tools = agentTools(call);
+    // WW-F2: der armierte Nachfass-Zug gilt fuer GENAU DIESE Runde und wird sofort
+    // zurueckgenommen. Ohne das Zuruecknehmen liefe eine Folgerunde (z.B. nach look_up)
+    // ebenfalls erzwungen - ein zweiter Zwang, den B2 ausschliesst.
+    const followUp = pendingFollowUp;
+    pendingFollowUp = null;
+    const tools = followUp?.tools ?? agentTools(call);
     for (const tool of tools) offeredTools.add(tool.name);
     const elapsedMs = Date.now() - loopStartedAt;
     const sink = streamSinkFor({
@@ -1006,12 +1084,31 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       // WELCHE Marken ein Anbieter dafuer braucht, weiss nur sein Adapter.
       cachePrefix: true,
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
+      // WW-F2: NUR im Nachfass-Zug gesetzt. Fehlt das Feld, bleibt der Draht
+      // byte-identisch zum Bestand (Anbieter-Default) - das ist die Zusage aus B1.
+      // WW-F4: WELCHE Wahl der Nachfass-Zug traegt (Sammel-Zwang oder benanntes
+      // Rueckfrage-Werkzeug), entscheidet followUpToolChoiceFor - hier steht nur noch,
+      // DASS sie ausschliesslich im Nachfass-Zug auf dem Draht steht.
+      ...(followUp ? { toolChoice: followUp.toolChoice } : {}),
     };
-    const turn = await completeRound({
-      call,
-      params,
-      stream: sink && { sink, budgetMs: deadlineMs - elapsedMs },
-    });
+    let turn;
+    try {
+      turn = await completeRound({
+        call,
+        params,
+        stream: sink && { sink, budgetMs: deadlineMs - elapsedMs },
+      });
+    } catch (err) {
+      // WW-F2 (B5): scheitert AUSSCHLIESSLICH der Nachfass-Zug (z.B. ein Anbieter, der
+      // die erzwungene Werkzeugwahl in seiner aktuellen Betriebsart ablehnt), endet der
+      // Zug mit der Textantwort der Vorrunde - genau wie heute, nie in Stille. Ein
+      // regulaerer Rundenfehler propagiert unveraendert: dort kennt der Aufrufer seinen
+      // Degradations-Satz (llm.js degradedSpeechFor). PII-frei protokolliert, ohne den
+      // Fehlertext des Anbieters.
+      if (!followUp) throw err;
+      console.warn(`[turn] nachfassen-fehlgeschlagen call=${call.id} runden=${roundtrips}`);
+      break;
+    }
     roundtrips += 1;
     // AL-P7: der Rest des Puffers geht als letzter Chunk raus. Zulaessig ohne weitere
     // Pruefung, weil streamSinkFor nur Runden armiert, deren Text nachweislich der Text
@@ -1037,7 +1134,44 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
 
     const toolCalls = turn.toolCalls;
     firedTools.push(...toolCalls.map((tc) => tc.name)); // L0: Tools dieses Roundtrips
-    if (!toolCalls.length) break;
+    if (!toolCalls.length) {
+      // WW-F2: die Runde hat NUR geredet. Kuendigt ihr Text eine Handlung an, holt GENAU
+      // EIN erzwungener Nachfass-Zug die Ausfuehrung nach; sonst endet der Zug hier wie
+      // im Bestand - ohne zusaetzlichen Roundtrip (B1) und ohne erzwungenes Werkzeug (B3).
+      const followUpTools = followUpToolsFor({
+        enabled: config.voice.toolFollowUpEnabled,
+        alreadyUsed: followUpUsed,
+        text: turn.text,
+        language: call.language,
+        // B6: end_call ist im Nachfass-Zug NIE waehlbar. Ein Nachfassen, das auflegt,
+        // waere ein neuer Defekt - der Riegel ist der Werkzeugsatz selbst, nicht ein Satz
+        // im Prompt (G27: Struktur schlaegt Disziplin).
+        candidateTools: tools.filter((t) => t.name !== END_CALL_TOOL_NAME),
+      });
+      if (!followUpTools) break;
+      followUpUsed = true;
+      // WW-F4: kuendigt der Text eine Entscheidung des Auftraggebers an UND liegt das
+      // Rueckfrage-Werkzeug in diesem Zug, wird es BENANNT erzwungen - sonst bleibt es
+      // beim Sammel-Zwang des Bestands.
+      pendingFollowUp = {
+        tools: followUpTools,
+        toolChoice: followUpToolChoiceFor({
+          text: turn.text,
+          language: call.language,
+          candidateTools: followUpTools,
+          consultToolName: GET_CONSULT_TOOL_NAME,
+        }),
+      };
+      // Die eigene Aeusserung der Runde MUSS in die Kette, sonst fasst der naechste Zug
+      // ins Leere nach; der Steuertext dahinter haelt die Kette auf einem user-Turn
+      // (dieselbe Klasse wie silentTurn/consultPending, kein fremder Text).
+      messages = [
+        ...messages,
+        providerTurnMessage(turn.providerTurn),
+        { role: "user", content: localeFor(call.language).prompt.followUp.nudge },
+      ];
+      continue;
+    }
 
     // AL-P14: die Rueckfrage ist das EINZIGE Werkzeug, das den Turn selbst beendet -
     // deshalb wird sie VOR dem generischen Tool-Mapping ausgewertet. Angenommen: kein

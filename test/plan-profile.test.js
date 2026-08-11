@@ -43,6 +43,13 @@ test("Owner-Entscheidung 2026-08-11: allowConsult ist fuer JEDEN Katalog-Slug tr
   }
 });
 
+test("Owner-Entscheidung 2026-08-11 (P6 Werkzeugwahl): allowLookup ist fuer JEDEN Katalog-Slug true - der Vorbehalt aus AL-P10b ist aufgehoben", () => {
+  for (const slug of CATALOG_SLUGS) {
+    const profile = planProfileFor(slug);
+    assert.equal(profile.allowLookup, true, `${slug}: allowLookup != true`);
+  }
+});
+
 test("Toll-Fraud-Invariante: nie unrestricted, nie eigene Allowlists je Slug", () => {
   for (const slug of CATALOG_SLUGS) {
     const profile = planProfileFor(slug);

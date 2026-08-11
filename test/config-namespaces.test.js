@@ -55,7 +55,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // AL-P7b: thinkingSignalEnabled ergaenzt (Denk-Signal-Flag) -> 11.
   // STT-A1: sttProfile ergaenzt (neutrale STT-Wahl, EIN Config-Schluessel fuer alle
   // Telefonie-Adapter) -> 12.
-  voice: 12,
+  // WW-F2: toolFollowUpEnabled ergaenzt (Nachfass-Zug bei angekuendigter, aber nicht
+  // ausgefuehrter Handlung) -> 13.
+  voice: 13,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
@@ -82,9 +84,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 };
 // B5: llmProvider + deepseekApiKey ergaenzt -> 143.
 // FIX-1: summaryTimeoutMs ergaenzt -> 144.
-const EXPECTED_TOTAL_KEYS = 144;
+// WW-F2: toolFollowUpEnabled ergaenzt -> 145.
+const EXPECTED_TOTAL_KEYS = 145;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (144 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (145 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -184,7 +187,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // B5: llmProvider + deepseekApiKey sind beide primitiv (String, kein Array/nested
   // Objekt) -> 134.
   // FIX-1: summaryTimeoutMs ist primitiv (Zahl, kein Array/nested Objekt) -> 135.
-  assert.equal(checked, 135, "alle primitiven Blaetter (144 - 4 Arrays - 5 nested Objekte) geprueft");
+  // WW-F2: toolFollowUpEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 136.
+  assert.equal(checked, 136, "alle primitiven Blaetter (145 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

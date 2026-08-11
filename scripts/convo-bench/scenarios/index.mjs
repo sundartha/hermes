@@ -16,6 +16,7 @@ import zweiterAnrufGedaechtnis from "./zweiter-anruf-gedaechtnis.mjs";
 import rueckfrageNotausgang from "./rueckfrage-notausgang.mjs";
 import anrufbeantworter from "./anrufbeantworter.mjs";
 import d3ConsultVerlangt from "./d3-consult-verlangt.mjs";
+import d3ConsultImplizit from "./d3-consult-implizit.mjs";
 import d3NachschlagAuftrag from "./d3-nachschlag-auftrag.mjs";
 import d3FremdeRecherche from "./d3-fremde-recherche.mjs";
 
@@ -36,6 +37,7 @@ export const SCENARIOS = Object.freeze({
   [rueckfrageNotausgang.id]: rueckfrageNotausgang,
   [anrufbeantworter.id]: anrufbeantworter,
   [d3ConsultVerlangt.id]: d3ConsultVerlangt,
+  [d3ConsultImplizit.id]: d3ConsultImplizit,
   [d3NachschlagAuftrag.id]: d3NachschlagAuftrag,
   [d3FremdeRecherche.id]: d3FremdeRecherche,
 });

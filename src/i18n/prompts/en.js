@@ -53,8 +53,17 @@ ${identityLine}
     noCalendar: (owner) => `- You have NO calendar access and cannot see ${owner}'s appointments.`,
     noBooking:
       "- You do NOT book appointments firmly. You take an appointment request down as a message with all details: day, time, and how long it's valid.",
+    // WW-F1: s. DE - der Selbstwiderspruch zu mandate.scopeRules. Rendert genau dann,
+    // wenn auch der LEEWAY-Block rendert (claude.js mandateScopeGiven); der
+    // AUSSERHALB-Block rendert dann immer mit und nennt den konkreten Weg.
+    noBookingWithMandate:
+      "- You do NOT book appointments firmly. An appointment request your LEEWAY covers, you commit to yourself and do NOT additionally hand off as a message. For every other appointment request, what is stated under OUTSIDE YOUR LEEWAY applies.",
     noLookup:
       "- You cannot look anything up, research anything, or transfer anyone. If that is requested, say so honestly and take the request down as a message.",
+    // WW-P3: s. DE - derselbe Wortlaut plus EIN Satz, der den Rueckfrage-Weg nennt.
+    // Rendert nur, wenn get_consult im Zug wirklich angeboten wird.
+    noLookupWithConsult:
+      "- You cannot look anything up, research anything, or transfer anyone. If that is requested, say so honestly and take the request down as a message. What only your principal knows or can decide, you get via get_consult instead.",
     // AL-P10b: s. DE - Gegenpart zu noLookup, rendert nur wenn look_up im Zug wirklich
     // angeboten wird. Der "transfer"-Teil bleibt, das kann der Agent weiterhin nicht.
     lookupAllowed:
@@ -63,6 +72,10 @@ ${identityLine}
     // person who had just asked it.
     noAskingCounterpartAboutOwner: (owner) =>
       `- If you're missing a detail about ${owner} or their belongings, NEVER ask the person you're talking to for it - they cannot know. Sort it out on your side or record the request as a message.`,
+    // WW-P3: s. DE - "sort it out on your side" bekommt einen Namen, solange get_consult
+    // im Zug angeboten ist.
+    noAskingCounterpartAboutOwnerWithConsult: (owner) =>
+      `- If you're missing a detail about ${owner} or their belongings, NEVER ask the person you're talking to for it - they cannot know. If that detail decides the conversation right now, get it via get_consult; otherwise sort it out on your side or record the request as a message.`,
     toolThrift: "- Be economical: you only get a few tool calls per reply.",
   },
 
@@ -72,6 +85,14 @@ ${identityLine}
 - When you call a tool that makes the other person wait, put ONE short spoken sentence in front of that call, in the SAME turn, to bridge the wait.
 - That sentence fits the conversation. No stock phrase, never the same one twice.
 - NEVER say that you are looking something up, searching, checking or asking someone, and NEVER name a source afterwards. You only bridge the wait and then simply give the result.`,
+
+  // WW-P3/P4: s. DE - der Rueckfrage-Weg im Prompt-Rumpf, plus die Entscheidungsschwelle.
+  // Rendert nur, wenn get_consult im Zug angeboten ist; die dritte Zeile ist die
+  // Gegenrichtung gegen Ueberkorrektur.
+  consultRules: (owner) => `WHEN THE DECISION IS NOT YOURS:
+- You may only firmly commit to what your TASK or your LEEWAY covers. Accepting an offer, an appointment, a price, a yes or a no beyond that is ${owner}'s decision - even when the other person does not explicitly ask for it.
+- If such a decision is due now and the conversation hangs on it, call get_consult and put the question to ${owner}. That comes BEFORE committing yourself and BEFORE recording a message.
+- If your TASK or your LEEWAY covers the question, decide yourself and do NOT call get_consult. For small things, for courtesies and for details the other person knows themselves, you never check back.`,
 
   mandate: {
     scopeLabel: "YOUR LEEWAY:",
@@ -90,6 +111,12 @@ ${identityLine}
         "Say clearly that you cannot commit to this, and decline politely without making a counteroffer.",
       [MANDATE_OUT_OF_SCOPE.ACCEPT_BEST]: () =>
         "Accept the best option offered instead of asking back, and note it down with all details via take_message - day, time, price and how long it's valid.",
+    },
+    // WW-P3: s. DE - Consult-Gegenpart NUR zum Default-Ausgang. DECLINE/ACCEPT_BEST
+    // bleiben ohne Variante (ausdrueckliche Owner-Anweisung, NICHT zurueckzufragen).
+    outOfScopeSentenceWithConsult: {
+      [MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE]: (owner) =>
+        `Say clearly that you cannot commit to this yourself. Note down the offer with all details - day, time, price and how long it's valid. If it decides the conversation right now, get ${owner}'s decision via get_consult; otherwise pass it on via take_message and promise that ${owner} will get back to them.`,
     },
   },
 
@@ -140,8 +167,8 @@ At the end, say goodbye in one sentence and then call end_call.`,
     // Faehigkeits-Falschaussage entfernt).
     takeMessageDescription:
       "Takes a message or request for the owner; it gets delivered to them afterwards. " +
-      "Use this when you cannot answer a question or when an appointment request should be " +
-      "recorded. " +
+      "Use this for a request your principal is meant to handle themselves later, or when " +
+      "an appointment request should be recorded. " +
       "For an appointment request, keep the day, time and validity on record. " +
       "Do NOT use this instead of a normal reply, and NOT to avoid a follow-up question - " +
       "if a short question would clarify the request, ask first. " +
@@ -243,6 +270,40 @@ At the end, say goodbye in one sentence and then call end_call.`,
     lookUpResult:
       "Your BACKGROUND now contains the facts that were found. Use them in your reply, " +
       "without reading them out and without naming a source.",
+  },
+
+  // WW-F2: EN-Achse des Nachfassens (Begruendung und Regeln s. prompts/de.js followUp).
+  followUp: {
+    // Englisch hat feste Wortstellung - anders als im Deutschen reicht hier fast immer EIN
+    // Teil je Marker. "look forward to" ist der Grund, warum kein blosses "forward" steht.
+    // WW-F4: Partition nach Zielwerkzeug, Begruendung s. prompts/de.js followUp.
+    consultMarkers: Object.freeze([["check with"], ["check back with"], ["confirm with"]]),
+    messageMarkers: Object.freeze([
+      ["get back to you"],
+      ["pass", "on to"],
+      ["pass it on"],
+      ["pass that on"],
+      ["pass this on"],
+      ["forward it"],
+      ["forward that"],
+      ["make a note"],
+      ["note that down"],
+      ["take a message"],
+      ["let you know"],
+      // "follow up with X" kann fragen ODER blosses Nachhaken sein - mehrdeutig, also
+      // Nachrichten-Klasse (Bestandsverhalten), nicht benannter Zwang.
+      ["follow up with"],
+      // WW-F4: das englische "Bescheid geben" in der DRITTEN Person ("I'll let Jonas
+      // know") - "let you know" oben deckt nur die Gegenstelle ab. Der Teil "ll let" ist
+      // bewusst so geschnitten: er traegt "I'll let" UND "I will let" (in "will let"
+      // steckt "ll let"), unabhaengig davon, welches Apostroph-Zeichen das Modell
+      // schreibt - waehrend die an die Gegenstelle gerichtete Bitte "let me know" nicht
+      // darunter faellt.
+      ["ll let", "know"],
+    ]),
+    nudge:
+      "[You just announced an action but did not call any tool. Carry out exactly that " +
+      "action now, with the tool meant for it. Do not repeat your sentence.]",
   },
 
   realtimeSpeechStyle: "SPEAKING STYLE: natural, brisk, short sentences.",

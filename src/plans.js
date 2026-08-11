@@ -88,8 +88,10 @@ export function findPlan(slug) {
 //   allowCalendar/Booking=false - Funktion bewusst verworfen
 //   allowConsult=true        - Owner-Entscheidung 2026-08-11: Kernfunktion des Produkts,
 //                              fuer alle Plaene freigeschaltet (kein Owner-Vorbehalt mehr)
-//   allowLookup=false        - AL-P10b: dasselbe fuer den In-Call-Nachschlag (er bringt
-//                              einen ZWEITEN Auftragsverarbeiter mit)
+//   allowLookup=true         - Owner-Entscheidung 2026-08-11 (P6 Werkzeugwahl): der
+//                              In-Call-Nachschlag ist fuer beide bezahlten Tarife frei.
+//                              Der ZWEITE Auftragsverarbeiter (Exa) bleibt bewusst
+//                              akzeptiert, s. Kommentar am Feld
 //   maxCallsPerHour=null     - keine Profil-Senkung; faellt auf den Pro-Tenant-Default
 //                              config.safety.maxCallsPerHour (telephony/outbound-gates.js
 //                              tenantHourReached). Minuten-Quota (GAP B) + Budget sind die
@@ -112,9 +114,22 @@ const PAID_PLAN_PROFILE = Object.freeze({
   // das, wofuer der Assistent gebaut ist - er fragt waehrend des Anrufs beim
   // Auftraggeber nach, statt das Gespraech scheitern zu lassen.
   allowConsult: true,
-  // AL-P10b: der Nachschlag bleibt eine Owner-Faehigkeit, bis Testanruf und
-  // Datenschutzerklaerung durch sind (zweiter Auftragsverarbeiter) - kein Plan-Freibrief.
-  allowLookup: false,
+  // Owner-Entscheidung 2026-08-11 (P6 der Werkzeugwahl-Kette): der In-Call-Nachschlag
+  // steht beiden bezahlten Tarifen offen. Der Vorbehalt aus AL-P10b ("bis Testanruf und
+  // Datenschutzerklaerung durch sind") ist damit aufgehoben; die Datenschutzfrage traegt
+  // der Owner ausdruecklich selbst.
+  //
+  // BEWUSST AKZEPTIERTE RESTFLAECHE (Owner-Entscheidung, s. PLAN-SECURITY.md): Exa ist ein
+  // zweiter Auftragsverarbeiter. sanitizeLookupQuery (research/lookup-guard.js) verwirft
+  // Ziffernfolgen ab fuenf Stellen, E-Mails, die Zielrufnummer und woertliche
+  // Transkript-Zitate und kappt auf 120 Zeichen - hat aber KEINEN Namensfilter. Ein
+  // Personenname kann die Suchanfrage erreichen.
+  //
+  // WIRKSAMKEIT: dieser Wert ist nur ein Schnappschuss zum Aktivierungszeitpunkt.
+  // resolveProfileFrom (store/defaults.js) liest PLAN_PROFILE NIE - bestehende Tenants
+  // behalten ihr gespeichertes Profil, bis es neu geschrieben wird (billing/activation.js
+  // oder scripts/backfill-plan-profiles.js). Ein Flip hier allein aendert fuer sie nichts.
+  allowLookup: true,
   allowBooking: false,
   maxCallsPerHour: null,
 });

@@ -7,15 +7,17 @@
 // Aufruf: node scripts/convo-bench.mjs run --scenario <id>|--all [--repeat 3]
 //         [--label ...] [--persona-model ...] [--judge-model ...] [--max-turns 10]
 //         [--provider telnyx] [--driver texml|shim] [--out data/convo-bench/<run-id>]
+//         [--llm-provider anthropic|deepseek] [--agent-model ...]
 //         node scripts/convo-bench.mjs compare <reportDirA> <reportDirB>
 import path from "path";
 import { fileURLToPath } from "url";
 import { SCENARIOS, SCENARIO_IDS } from "./convo-bench/scenarios/index.mjs";
 import { DRIVERS, DRIVER_IDS, DEFAULT_DRIVER_ID, scenarioSupportsDriver } from "./convo-bench/drivers.mjs";
-import { runScenarioRepeat } from "./convo-bench/runner.mjs";
+import { runScenarioRepeat, DEFAULT_AGENT_MODEL, DEFAULT_LLM_PROVIDER_FOR_BENCH } from "./convo-bench/runner.mjs";
 import { PERSONA_MODEL_DEFAULT } from "./convo-bench/persona.mjs";
 import { JUDGE_MODEL_DEFAULT } from "./convo-bench/judge.mjs";
 import { writeReport, writeSummary, printSummaryTable, printCompareTable, readReportDir } from "./convo-bench/report.mjs";
+import { LLM_PROVIDER, LLM_PROVIDER_VALUES } from "../src/llm/provider.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Kosten-Bremse (Spec §Risiken: "MAX_TURNS-Kappe verbindlich") - globaler, harter Cap
@@ -26,6 +28,16 @@ const DEFAULT_REPEAT = 3;
 // Default-Provider = Live-Provider (Spec §3-1).
 const DEFAULT_PROVIDER = "telnyx";
 const DEFAULT_LABEL = "default";
+// AL-P0 (Werkzeugwahl): --agent-model-Default HAENGT vom gewaehlten --llm-provider ab -
+// ohne diese Zuordnung muesste jeder DeepSeek-Lauf den Modellnamen von Hand mitgeben,
+// und ein vergessenes --agent-model liefe still auf einem Anthropic-Modellnamen gegen
+// den DeepSeek-Adapter. EIGENER Namensraum (--llm-provider, NICHT --provider - das ist
+// bereits die Telefonie-Provider-Wahl, telnyx/twilio) und eigener Flag (--agent-model,
+// NICHT --model - mirror --persona-model/--judge-model).
+const AGENT_MODEL_DEFAULT_FOR_LLM_PROVIDER = Object.freeze({
+  [LLM_PROVIDER.ANTHROPIC]: DEFAULT_AGENT_MODEL,
+  [LLM_PROVIDER.DEEPSEEK]: "deepseek-v4-pro",
+});
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -94,7 +106,9 @@ function resolveOutDir(args) {
 }
 
 // ANTHROPIC_API_KEY nur aus process.env, NIE geloggt (auch nicht in Fehlerpfaden) -
-// Regel 4 (CLAUDE.md) + Spec §0/§6.
+// Regel 4 (CLAUDE.md) + Spec §0/§6. Bleibt UNBEDINGT Pflicht (auch bei --llm-provider
+// deepseek): Persona/Judge laufen immer gegen Anthropic, und der gespawnte Server
+// verlangt den Key selbst unbedingt (assertConfig, src/config.js).
 function requireApiKey() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -104,6 +118,29 @@ function requireApiKey() {
   return apiKey;
 }
 
+// AL-P0: --llm-provider validieren, BEVOR irgendein bezahlter Request rausgeht (reiner
+// Konfigurationsfehler, mirror resolveDriverId oben).
+function resolveLlmProvider(args) {
+  const value = typeof args["llm-provider"] === "string" ? args["llm-provider"] : DEFAULT_LLM_PROVIDER_FOR_BENCH;
+  if (!LLM_PROVIDER_VALUES.includes(value))
+    throw new Error(`Unbekannter --llm-provider "${value}" (verfuegbar: ${LLM_PROVIDER_VALUES.join(", ")})`);
+  return value;
+}
+
+// AL-P0: DEEPSEEK_API_KEY nur aus process.env, NIE geloggt (Regel 4) - nur Pflicht bei
+// --llm-provider deepseek (mirror requireApiKey). Failt LAUT und VOR dem Server-Spawn,
+// statt den Boot-Refusal im Kindprozess-Log suchen zu lassen (der gespawnte Server
+// wuerde ohnehin denselben Fehler werfen, assertConfig src/config.js:1928).
+function requireDeepseekKeyIfNeeded(llmProvider) {
+  if (llmProvider !== LLM_PROVIDER.DEEPSEEK) return "";
+  const key = process.env.DEEPSEEK_API_KEY;
+  if (!key) {
+    console.error("[convo-bench] DEEPSEEK_API_KEY fehlt in process.env (noetig fuer --llm-provider deepseek). Abbruch.");
+    process.exit(1);
+  }
+  return key;
+}
+
 async function runCommand(args) {
   // AL-P8: Treiber-/Szenario-Validierung VOR dem API-Key-Gate - ein falscher --driver
   // oder ein Szenario auf dem falschen Treiber ist ein reiner Konfigurationsfehler und
@@ -111,17 +148,22 @@ async function runCommand(args) {
   const provider = typeof args.provider === "string" ? args.provider : DEFAULT_PROVIDER;
   const driverId = resolveDriverId(args, provider);
   const scenarioIds = resolveScenarioIds(args, driverId);
+  const llmProvider = resolveLlmProvider(args);
   const apiKey = requireApiKey();
+  const deepseekApiKey = requireDeepseekKeyIfNeeded(llmProvider);
   const repeat = Number(args.repeat) || DEFAULT_REPEAT;
   const label = typeof args.label === "string" ? args.label : DEFAULT_LABEL;
   const personaModel = typeof args["persona-model"] === "string" ? args["persona-model"] : PERSONA_MODEL_DEFAULT;
   const judgeModel = typeof args["judge-model"] === "string" ? args["judge-model"] : JUDGE_MODEL_DEFAULT;
+  const agentModel =
+    typeof args["agent-model"] === "string" ? args["agent-model"] : AGENT_MODEL_DEFAULT_FOR_LLM_PROVIDER[llmProvider];
   const maxTurnsCap = Number(args["max-turns"]) || DEFAULT_MAX_TURNS_CAP;
   const outDir = resolveOutDir(args);
 
   console.log(
     `[convo-bench] Lauf: scenarios=${scenarioIds.join(",")} repeat=${repeat} provider=${provider} driver=${driverId} ` +
-      `persona=${personaModel} judge=${judgeModel} max-turns=${maxTurnsCap} out=${outDir}`,
+      `llm-provider=${llmProvider} agent-model=${agentModel} persona=${personaModel} judge=${judgeModel} ` +
+      `max-turns=${maxTurnsCap} out=${outDir}`,
   );
 
   const results = [];
@@ -139,6 +181,9 @@ async function runCommand(args) {
         provider,
         driverId,
         apiKey,
+        llmProvider,
+        agentModel,
+        deepseekApiKey,
       });
       const file = writeReport(outDir, result);
       results.push(result);

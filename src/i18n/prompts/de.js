@@ -55,8 +55,33 @@ ${identityLine}
     noCalendar: (owner) => `- Du hast KEINEN Kalenderzugriff und siehst keine Termine von ${owner}.`,
     noBooking:
       "- Du buchst KEINE Termine fest. Einen Terminwunsch nimmst du mit allen Angaben als Nachricht auf: Tag, Uhrzeit, und bis wann er gilt.",
+    // WW-F1 (tasks/befund-toolwahl-7-szenariopruefung.md, Abschnitt 2): noBooking
+    // verlangte UNBEDINGT die Nachricht - auch fuer einen Terminwunsch, den der
+    // SPIELRAUM abdeckt, wo mandate.scopeRules im selben Prompt das Gegenteil sagt
+    // ("gibst es NICHT als Nachricht weiter"). Zwei gegenteilige Anweisungen fuer
+    // denselben Fall. Diese Variante steht GENAU DANN im Prompt, wenn auch der
+    // SPIELRAUM-Block rendert (claude.js mandateScopeGiven) - Muster lookupAllowed.
+    //
+    // Sie trennt die beiden Faelle und gibt jedem GENAU EINE Regel: was der Spielraum
+    // deckt, sagt der Agent zu (Nachricht entfaellt); alles andere folgt dem
+    // AUSSERHALB-Block, der bei gesetztem decide_freely IMMER mitrendert und dort
+    // seinen konkreten Weg nennt (Rueckfrage/Nachricht/Ablehnen/Bestes annehmen).
+    // Die Angaben-Liste (Tag, Uhrzeit, Gueltigkeit) steht bewusst NICHT mehr hier:
+    // sie gehoert zum Nachricht-Weg und steht dort (outOfScopeSentence,
+    // takeMessageDescription) - hier wuerde sie bei on_out_of_scope=decline erneut
+    // eine Nachricht nahelegen, die der Auftraggeber gerade ausgeschlossen hat.
+    noBookingWithMandate:
+      "- Du buchst KEINE Termine fest. Einen Terminwunsch, den dein SPIELRAUM abdeckt, sagst du selbst zu und gibst ihn NICHT zusätzlich als Nachricht weiter. Für jeden anderen Terminwunsch gilt, was unter AUSSERHALB DEINES SPIELRAUMS steht.",
     noLookup:
       "- Du kannst nichts nachschlagen, nichts recherchieren und niemanden weiterverbinden. Wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf.",
+    // WW-P3 (Befund W2, Block 3): derselbe Wortlaut, plus EIN Satz, der den Rueckfrage-Weg
+    // nennt. Steht GENAU DANN im Prompt, wenn get_consult in diesem Zug auch wirklich im
+    // Werkzeugsatz liegt (claude.js consultAvailable) - Muster lookupAllowed. Ohne diese
+    // Variante behauptet die Zeile "nichts recherchieren" neben einem Werkzeug, mit dem
+    // der Agent sehr wohl etwas herausfinden kann, und schickt den Fall exklusiv auf die
+    // Nachricht.
+    noLookupWithConsult:
+      "- Du kannst nichts nachschlagen, nichts recherchieren und niemanden weiterverbinden. Wird das verlangt, sagst du das ehrlich und nimmst das Anliegen als Nachricht auf. Was allein dein Auftraggeber weiß oder entscheiden kann, holst du dagegen über get_consult.",
     // AL-P10b: der Gegenpart zu noLookup. Steht GENAU DANN im Prompt, wenn look_up in
     // diesem Zug auch wirklich im Werkzeugsatz liegt (claude.js lookupAvailable) - der
     // "weiterverbinden"-Teil von noLookup bleibt erhalten, den kann der Agent weiterhin nicht.
@@ -69,6 +94,11 @@ ${identityLine}
     // dagegen keine einzige Regel im Prompt.
     noAskingCounterpartAboutOwner: (owner) =>
       `- Fehlt dir eine Angabe über ${owner} oder dessen Sachen, fragst du NIEMALS dein Gegenüber danach - es kann das nicht wissen. Du klärst das auf deiner Seite oder nimmst das Anliegen als Nachricht auf.`,
+    // WW-P3 (Befund W2, Block 2): dieselbe Regel, aber "auf deiner Seite klaeren" bekommt
+    // einen Namen, solange get_consult im Zug angeboten ist. Bisher blieb von zwei
+    // Auswegen einer vage und einer ein Werkzeug - und das Werkzeug war die Nachricht.
+    noAskingCounterpartAboutOwnerWithConsult: (owner) =>
+      `- Fehlt dir eine Angabe über ${owner} oder dessen Sachen, fragst du NIEMALS dein Gegenüber danach - es kann das nicht wissen. Entscheidet diese Angabe das Gespräch jetzt, hol sie dir über get_consult; sonst klärst du das auf deiner Seite oder nimmst das Anliegen als Nachricht auf.`,
     toolThrift: "- Handle sparsam: du hast pro Antwort nur wenige Werkzeugaufrufe.",
   },
 
@@ -81,6 +111,23 @@ ${identityLine}
 - Rufst du ein Werkzeug auf, nach dem dein Gegenüber warten muss, stelle dem Aufruf im SELBEN Zug EINEN kurzen gesprochenen Satz voran, der die Wartezeit überbrückt.
 - Dieser Satz passt zum Gespräch. Kein Standardsatz, nie zweimal derselbe.
 - Sage dabei NIE, dass du nachschaust, suchst, nachschlägst, recherchierst oder jemanden fragst, und nenne danach NIE eine Quelle. Du überbrückst nur die Zeit und lieferst anschließend das Ergebnis, als wüsstest du es.`,
+
+  // WW-P3/P4: der Rueckfrage-Weg im Prompt-RUMPF. Bis hierher kam get_consult im
+  // gerenderten Systemprompt in KEINEM Fall woertlich vor (Befund W2) - das Werkzeug
+  // existierte fuer das Modell nur als Array-Eintrag, waehrend drei Bloecke denselben Fall
+  // woertlich auf take_message schickten. Rendert NUR, wenn get_consult in diesem Zug im
+  // Werkzeugsatz liegt (claude.js consultAvailable); sonst "" -> Prompt byte-identisch zum
+  // Bestand (Muster thinkingSignal/mandateSection).
+  //
+  // Die dritte Zeile ist die Gegenrichtung und nicht verhandelbar: gemessen wurde 0/5 bei
+  // impliziter Entscheidungslage (W3), der Fehler in die andere Richtung waere ein Agent,
+  // der bei jeder Kleinigkeit zurueckfragt - der braeuchte den Menschen in jedem Gespraech
+  // und waere wertlos. Die Schwelle liegt deshalb an "verbindlich zusagen in fremder
+  // Sache", nicht an "unsicher sein".
+  consultRules: (owner) => `WENN DIE ENTSCHEIDUNG NICHT DEINE IST:
+- Verbindlich zusagen darfst du NUR, was dein AUFTRAG oder dein SPIELRAUM abdeckt. Ein Angebot annehmen, einen Termin, einen Preis, eine Zu- oder Absage darüber hinaus ist die Entscheidung von ${owner} - auch dann, wenn dein Gegenüber gar nicht ausdrücklich danach fragt.
+- Steht so eine Entscheidung jetzt an und hängt das Gespräch daran, rufe get_consult auf und stelle ${owner} die Frage. Das geht VOR einer eigenen Zusage und VOR einer Nachricht.
+- Deckt dein AUFTRAG oder dein SPIELRAUM die Frage ab, entscheidest du selbst und rufst get_consult NICHT auf. Für Kleinigkeiten, für Höflichkeiten und für Angaben, die dein Gegenüber selbst kennt, fragst du nie zurück.`,
 
   mandate: {
     scopeLabel: "DEIN SPIELRAUM:",
@@ -99,6 +146,18 @@ ${identityLine}
         "Sag klar, dass du das nicht zusagen kannst, und lehne höflich ab, ohne ein Gegenangebot zu machen.",
       [MANDATE_OUT_OF_SCOPE.ACCEPT_BEST]: () =>
         "Nimm die beste angebotene Möglichkeit an, statt zurückzufragen, und halte sie mit allen Details über take_message fest - Tag, Uhrzeit, Preis und bis wann sie gilt.",
+    },
+    // WW-P3 (Befund W2, Block 1): der Consult-Gegenpart zum Default-Ausgang. Dieser Block
+    // rendert bei JEDEM Mandat unbedingt und war damit die letzte konkrete Ausweg-Anweisung
+    // des Prompts - woertlich fuer die Lage, fuer die get_consult gebaut ist, und woertlich
+    // auf take_message zeigend.
+    //
+    // DECLINE und ACCEPT_BEST haben BEWUSST keine Variante: beide sind ausdrueckliche
+    // Owner-Anweisungen, gerade NICHT zurueckzufragen ("statt zurückzufragen" steht
+    // woertlich in ACCEPT_BEST). Eine Consult-Variante wuerde die Owner-Wahl umdrehen.
+    outOfScopeSentenceWithConsult: {
+      [MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE]: (owner) =>
+        `Sag klar, dass du das nicht selbst zusagen kannst. Halte das Angebot mit allen Details fest - Tag, Uhrzeit, Preis und bis wann es gilt. Entscheidet es das Gespräch jetzt, hol dir die Entscheidung von ${owner} über get_consult; sonst gib es über take_message weiter und sag zu, dass ${owner} sich meldet.`,
     },
   },
 
@@ -161,10 +220,17 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     // Faehigkeits-Aufzaehlung ("nachschlagen, weiterverbinden, spaeter zurueckrufen")
     // behauptete faelschlich ein statisch fehlendes Koennen - "nachschlagen" ist seit
     // AL-P10b turn-genau moeglich (boundaryRules), die Wahrheit steht dort, nicht hier.
+    // WW-P3 (Befund W2, Beschreibungs-Ueberlappung): zwei Saetze geschaerft. Der ZWEITE
+    // Satz oeffnete bei 8 % der Beschreibung "wenn du eine Frage nicht beantworten kannst"
+    // - genau der Zustand, fuer den get_consult da ist, und zwar VOR jeder Abgrenzung (die
+    // erst bei 76-89 % kommt). Der SCHLUSSsatz band den Ausstieg an ein Gefuehl ("fehlt
+    // dir"), statt an die Tatsache; EN und FR sagten hier von Anfang an "wird nicht
+    // angeboten" - DE war der Ausreisser und zieht jetzt nach. Der B2-Ausstieg selbst
+    // bleibt (Fail-safe-Pflicht: ohne angebotenes Werkzeug ist die Nachricht richtig).
     takeMessageDescription:
       "Nimmt eine Nachricht oder ein Anliegen für den Besitzer auf; er bekommt sie danach zugestellt. " +
-      "Nutze das, wenn du eine Frage nicht beantworten kannst oder wenn ein Terminwunsch " +
-      "festgehalten werden soll. " +
+      "Nutze das für ein Anliegen, das dein Auftraggeber später selbst erledigen soll, oder " +
+      "wenn ein Terminwunsch festgehalten werden soll. " +
       "Halte bei einem Terminwunsch Tag, Uhrzeit und Gültigkeit mit fest. " +
       "Nutze es NICHT anstelle einer normalen Antwort und NICHT, um eine Rückfrage zu vermeiden - " +
       "wenn eine kurze Nachfrage das Anliegen klären würde, frage zuerst nach. " +
@@ -177,8 +243,8 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       "das sagst du direkt zu, statt es weiterzugeben. " +
       "Verlangt dein Gegenüber die Entscheidung deines Auftraggebers, oder fehlt deinem " +
       "Auftrag jetzt eine Sachauskunft, nimm KEINE Nachricht auf: dafür sind get_consult " +
-      "und look_up da. Fehlt dir das passende Werkzeug in diesem Zug, bleibt die Nachricht " +
-      "der richtige Weg.",
+      "und look_up da. Wird dir das passende Werkzeug in diesem Zug nicht angeboten, bleibt " +
+      "die Nachricht der richtige Weg.",
     takeMessageParam: "Die Nachricht",
     // AL-P14: der Notausgang. Die engen Verbote sitzen GENAU HIER an der Tool-Description
     // (Lehre call-quality-chain: breite Prompt-Regeln kippen bei Haiku in Ueberkorrektur).
@@ -290,6 +356,72 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     lookUpResult:
       "Der HINTERGRUND ist um die gefundenen Fakten ergänzt. Nutze sie in deiner Antwort, " +
       "ohne sie vorzulesen und ohne eine Quelle zu nennen.",
+  },
+
+  // WW-F2 (tasks/PLAN-WERKZEUGWAHL.md, W3): die zwei Sprach-Artefakte des Nachfassens.
+  // Eigener Block neben turnControl, weil sie ein eigener Mechanismus sind: markers ist
+  // ERKENNUNGS-Text (wird nie gesendet), nudge ist Steuertext an das Modell.
+  followUp: {
+    // Ankuendigungs-Marker dieser Sprache. EIN Marker ist eine Liste von TEILEN, die ALLE
+    // im Text vorkommen muessen - flache Zeichenketten genuegen im Deutschen nicht: das
+    // trennbare Verb reisst auseinander ("Ich gebe das an Jonas weiter"), und genau diese
+    // Form kommt live vor. Verglichen wird als Teilzeichenkette gegen eine kanonisierte
+    // Fassung des Modelltextes (klein, Umlaute ausgeschrieben, Akzente entfernt) - deshalb
+    // genuegt der Wortstamm: "abklär" trifft abklären/abkläre/abklärt.
+    // Bewusst ENG: jeder Marker steht fuer eine Handlung, die eines unserer Werkzeuge
+    // ausfuehrt (weitergeben/notieren -> take_message, Rücksprache/nachfragen ->
+    // get_consult). Ein breiter Marker waere die Ueberkorrektur, vor der der Auftrag warnt.
+    //
+    // WW-F4: die Marker sind nach ZIELWERKZEUG PARTITIONIERT. Die Erkennung
+    // (announcesToolAction) liest die Vereinigung beider Listen - an ihr aendert die
+    // Aufteilung nichts; die Werkzeugwahl des Nachfass-Zuges (followUpToolChoiceFor) liest
+    // NUR consultMarkers. Partition statt "Vereinigungsliste plus Teilmengenliste": sonst
+    // stuenden dieselben Zeichenketten zweimal je Sprache (G5) und koennten auseinander
+    // laufen; so kann jeder Marker strukturell nur in EINER Klasse stehen (G27).
+    //
+    // consultMarkers - eine Handlung, die auf eine ENTSCHEIDUNG des Auftraggebers
+    // hinauslaeuft (get_consult). Nur EINDEUTIGE Formen: was auch blosses Informieren
+    // heissen kann, steht unten und behaelt damit das Bestandsverhalten (freie Wahl unter
+    // Zwang). Das ist die fail-closed-Richtung dieser Phase - eine Nachricht wird NIE in
+    // eine Rueckfrage umgebogen.
+    consultMarkers: Object.freeze([
+      ["Rücksprache"],
+      ["abklär"],
+      ["abstimmen"],
+      ["nachfrag"],
+      ["frage", "nach"],
+      ["erkundig"],
+    ]),
+    // messageMarkers - eine Handlung, die den Auftraggeber informiert oder das Anliegen
+    // festhaelt (take_message). Hier wird nichts benannt erzwungen.
+    messageMarkers: Object.freeze([
+      ["weitergeb"],
+      ["gebe", "weiter"],
+      ["leite", "weiter"],
+      ["weiterleit"],
+      ["notier"],
+      ["melde mich"],
+      // WW-F4 (Erkennungsluecke aus tasks/werkzeugwahl-fix2-messung.md 3.6, Lauf #4):
+      // "Ich gebe Jonas aber gerne Bescheid: ..." - inhaltlich dieselbe Weitergabe wie
+      // "weitergeben", nur als Redewendung "Bescheid geben/sagen", in der das Wort
+      // "weiter" fehlt. Drei Oberflaechenformen derselben Redewendung (gebe/sage/werde),
+      // jede auf die ERSTE PERSON verankert: ohne diesen Anker traefe "Bescheid" auch die
+      // an die Gegenstelle gerichtete Bitte ("Geben Sie mir Bescheid"), die gar keine
+      // eigene Handlung ankuendigt - und "Bescheid wissen" faellt aus demselben Grund
+      // nicht darunter.
+      ["ich gebe", "Bescheid"],
+      ["ich sage", "Bescheid"],
+      ["ich werde", "Bescheid"],
+    ]),
+    // Server-eigener, eckig geklammerter Steuertext - dieselbe Klasse wie silentTurn.
+    // WERKZEUG-AGNOSTISCH: er nennt KEIN Werkzeug beim Namen, weil im Nachfass-Zug nicht
+    // feststeht, welche Werkzeuge angeboten sind (Kontingent, Frische, Tenant-Recht). Ein
+    // Steuertext, der auf ein fehlendes Werkzeug zeigt, ist genau die Prompt-Asymmetrie
+    // aus W2. Das Wiederhol-Verbot verhindert, dass der Anrufer denselben Satz zweimal hoert.
+    nudge:
+      "[Du hast gerade eine Handlung angekündigt, aber kein Werkzeug aufgerufen. Führe " +
+      "genau diese Handlung jetzt mit dem Werkzeug aus, das dafür vorgesehen ist. " +
+      "Wiederhole deinen Satz nicht.]",
   },
 
   realtimeSpeechStyle: "SPRECHWEISE: natuerlich, zuegig, kurze Saetze.",

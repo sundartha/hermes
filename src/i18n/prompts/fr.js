@@ -51,8 +51,17 @@ ${identityLine}
     noCalendar: (owner) => `- Tu n'as AUCUN accès à l'agenda et tu ne vois pas les rendez-vous de ${owner}.`,
     noBooking:
       "- Tu ne réserves AUCUN rendez-vous de manière ferme. Tu notes une demande de rendez-vous comme message avec tous les détails : jour, heure, et jusqu'à quand elle est valable.",
+    // WW-F1 : cf. de.js - la contradiction avec mandate.scopeRules. Ne s'affiche que si
+    // le bloc MARGE DE MANOEUVRE s'affiche aussi (claude.js mandateScopeGiven) ; le bloc
+    // HORS DE TA MARGE s'affiche alors toujours et nomme la voie concrete.
+    noBookingWithMandate:
+      "- Tu ne réserves AUCUN rendez-vous de manière ferme. Une demande de rendez-vous que couvre ta MARGE DE MANŒUVRE, tu t'y engages toi-même et tu ne la transmets PAS en plus comme message. Pour toute autre demande de rendez-vous, ce qui est indiqué sous HORS DE TA MARGE DE MANŒUVRE s'applique.",
     noLookup:
       "- Tu ne peux rien consulter, rien rechercher, et ne peux transférer personne. Si on te le demande, dis-le honnêtement et note la demande comme message.",
+    // WW-P3: s. DE - meme libelle, plus UNE phrase qui nomme la voie de la question en
+    // retour. Ne s'affiche que si get_consult est reellement propose dans ce tour.
+    noLookupWithConsult:
+      "- Tu ne peux rien consulter, rien rechercher, et ne peux transférer personne. Si on te le demande, dis-le honnêtement et note la demande comme message. Ce que seul ton donneur d'ordre sait ou peut décider, tu l'obtiens en revanche via get_consult.",
     // AL-P10b: s. DE - contrepartie de noLookup (kuratiert, R8). Le volet "transférer"
     // reste : cela, l'agent ne peut toujours pas le faire.
     lookupAllowed:
@@ -61,6 +70,10 @@ ${identityLine}
     // personne qui venait de la poser.
     noAskingCounterpartAboutOwner: (owner) =>
       `- S'il te manque une information sur ${owner} ou ses affaires, ne la demande JAMAIS à ton interlocuteur - il ne peut pas la connaître. Règle cela de ton côté ou consigne la demande comme un message.`,
+    // WW-P3: s. DE - "regle cela de ton cote" recoit un nom tant que get_consult est
+    // propose dans ce tour.
+    noAskingCounterpartAboutOwnerWithConsult: (owner) =>
+      `- S'il te manque une information sur ${owner} ou ses affaires, ne la demande JAMAIS à ton interlocuteur - il ne peut pas la connaître. Si cette information décide la conversation maintenant, obtiens-la via get_consult ; sinon règle cela de ton côté ou consigne la demande comme un message.`,
     toolThrift: "- Sois économe : tu n'as droit qu'à peu d'appels d'outils par réponse.",
   },
 
@@ -70,6 +83,14 @@ ${identityLine}
 - Si tu appelles un outil qui fait attendre ton interlocuteur, place UNE phrase courte devant cet appel, dans le MÊME tour, pour combler l'attente.
 - Cette phrase colle à la conversation. Pas de formule toute faite, jamais deux fois la même.
 - Ne dis JAMAIS que tu vérifies, que tu cherches, que tu consultes ou que tu demandes à quelqu'un, et ne cite JAMAIS de source ensuite. Tu combles simplement l'attente, puis tu donnes le résultat.`,
+
+  // WW-P3/P4 : cf. de.js - la voie de la question en retour dans le corps du prompt, plus
+  // le seuil de decision. Ne s'affiche que si get_consult est propose dans ce tour ; la
+  // troisieme ligne est le contrepoids contre la surcorrection.
+  consultRules: (owner) => `QUAND LA DÉCISION N'EST PAS LA TIENNE :
+- Tu ne peux t'engager fermement que sur ce que couvrent ta MISSION ou ta MARGE DE MANŒUVRE. Accepter une offre, un rendez-vous, un prix, un oui ou un non au-delà de cela, c'est la décision de ${owner} - même si ton interlocuteur ne le demande pas explicitement.
+- Si une telle décision se pose maintenant et que la conversation en dépend, appelle get_consult et pose la question à ${owner}. Cela passe AVANT un engagement de ta part et AVANT un message.
+- Si ta MISSION ou ta MARGE DE MANŒUVRE couvre la question, décide toi-même et n'appelle PAS get_consult. Pour les broutilles, les formules de politesse et ce que ton interlocuteur sait lui-même, tu ne redemandes jamais.`,
 
   mandate: {
     scopeLabel: "TA MARGE DE MANŒUVRE :",
@@ -88,6 +109,13 @@ ${identityLine}
         "Dis clairement que tu ne peux pas t'engager sur ce point, et décline poliment sans faire de contre-proposition.",
       [MANDATE_OUT_OF_SCOPE.ACCEPT_BEST]: () =>
         "Accepte la meilleure option proposée plutôt que de redemander, et note-la avec tous les détails via take_message - jour, heure, prix et jusqu'à quand elle est valable.",
+    },
+    // WW-P3 : cf. de.js - contrepartie consult UNIQUEMENT pour la sortie par defaut.
+    // DECLINE/ACCEPT_BEST restent sans variante (consigne explicite du donneur d'ordre de
+    // NE PAS redemander).
+    outOfScopeSentenceWithConsult: {
+      [MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE]: (owner) =>
+        `Dis clairement que tu ne peux pas t'engager toi-même sur ce point. Note l'offre avec tous les détails - jour, heure, prix et jusqu'à quand elle est valable. Si cela décide la conversation maintenant, obtiens la décision de ${owner} via get_consult ; sinon transmets-la via take_message, et promets que ${owner} recontactera la personne.`,
     },
   },
 
@@ -138,8 +166,8 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
     // Faehigkeits-Falschaussage entfernt).
     takeMessageDescription:
       "Prend un message ou une demande pour le propriétaire ; il lui sera transmis ensuite. " +
-      "Utilise cet outil quand tu ne peux pas répondre à une question ou quand une demande " +
-      "de rendez-vous doit être consignée. " +
+      "Utilise cet outil pour une demande que ton donneur d'ordre doit traiter lui-même plus " +
+      "tard, ou quand une demande de rendez-vous doit être consignée. " +
       "Pour une demande de rendez-vous, consigne le jour, l'heure et la validité. " +
       "Ne l'utilise PAS à la place d'une réponse normale, ni PAS pour éviter une question de clarification - " +
       "si une brève question permettrait de clarifier la demande, pose-la d'abord. " +
@@ -242,6 +270,32 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
     lookUpResult:
       "Ton CONTEXTE contient désormais les faits trouvés. Utilise-les dans ta réponse, " +
       "sans les lire à voix haute et sans citer de source.",
+  },
+
+  // WW-F2: FR-Achse des Nachfassens (Begruendung und Regeln s. prompts/de.js followUp).
+  followUp: {
+    // WW-F4: Partition nach Zielwerkzeug, Begruendung s. prompts/de.js followUp.
+    consultMarkers: Object.freeze([["vérifier auprès"], ["confirmer auprès"], ["demander à"]]),
+    messageMarkers: Object.freeze([
+      // "en parler à" / "faire le point" koennen fragen ODER blosses Informieren heissen -
+      // mehrdeutig, also Nachrichten-Klasse (Bestandsverhalten), kein benannter Zwang.
+      ["en parler à"],
+      ["transmet"],
+      ["je note"],
+      ["prendre note"],
+      ["recontacte"],
+      ["revenir vers"],
+      ["faire le point"],
+      // WW-F4: das franzoesische "Bescheid geben". "tiens au courant" traegt die erste
+      // Person direkt ("je vous / je le tiens au courant"); die Futur-proche-Form braucht
+      // den Anker "vais", weil "tenir au courant" sonst auch die an die Gegenstelle
+      // gerichtete Bitte traefe ("pouvez-vous me tenir au courant").
+      ["tiens au courant"],
+      ["vais", "tenir au courant"],
+    ]),
+    nudge:
+      "[Tu viens d'annoncer une action sans appeler d'outil. Exécute maintenant exactement " +
+      "cette action, avec l'outil prévu pour cela. Ne répète pas ta phrase.]",
   },
 
   realtimeSpeechStyle: "STYLE ORAL : naturel, dynamique, phrases courtes.",
