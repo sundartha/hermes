@@ -11,8 +11,10 @@ import { LOGIN_URL } from "../lib/routes.js";
 >
   <h1 class="doc-title">Zwei Tarife, <em>keine Überraschungen</em>.</h1>
   <p class="doc-lead">
-    Wähle das Paket, welches zu dir passt. <strong>Monatlich kündbar</strong>,
-    <strong>keine versteckten Kosten</strong>.
+    {/* Beide Halbsätze bewusst auf EINER Zeile: der Zeilenumbruch zwischen
+        </strong>, und <strong> wird beim Bauen verschluckt, im Ergebnis stand
+        „kündbar,keine" ohne Leerzeichen. */}
+    Wähle das Paket, welches zu dir passt. <strong>Monatlich kündbar</strong>, <strong>keine versteckten Kosten</strong>.
   </p>
 
   <div class="doc-block">

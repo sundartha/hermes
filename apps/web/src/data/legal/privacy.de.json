@@ -1,21 +1,61 @@
 {
   "metaTitle": "Datenschutz — Sundartha Hermes",
-  "metaDescription": "Datenschutzhinweise zu Sundartha Hermes: verantwortliche Stelle, verarbeitete Daten und deine Rechte.",
+  "metaDescription": "Datenschutzhinweise zu Sundartha Hermes: verantwortliche Stelle, verarbeitete Daten, Empfänger, Speicherdauer und deine Rechte.",
   "eyebrow": "Rechtliches",
   "title": "Datenschutz",
-  "note": "Platzhalter-Fassung. Die rechtsverbindliche Datenschutzerklaerung liefert Sundartha.",
+  "note": "Dieser Text beschreibt die tatsächliche Verarbeitung im Dienst. Die mit [OFFEN] markierten Angaben — Anschrift der verantwortlichen Stelle und die vertragliche Absicherung der eingesetzten Dienstleister — werden ergänzt, sobald sie vorliegen.",
   "sections": [
     {
       "heading": "Verantwortliche Stelle",
-      "text": "Verantwortlich fuer die Datenverarbeitung ist Sundartha. Die vollstaendigen Kontaktdaten findest du im Impressum."
+      "text": "Verantwortlich für die Verarbeitung ist Sundartha, [OFFEN: vollständiger Firmenname, Rechtsform und ladungsfähige Anschrift — siehe Impressum]. Kontakt in allen Datenschutzfragen: kontakt@sundartha.com. [OFFEN: Prüfung, ob ein Datenschutzbeauftragter zu benennen ist — für kleine Unternehmen ist das in der Regel nicht der Fall.]"
     },
     {
-      "heading": "Welche Daten wir verarbeiten",
-      "text": "Fuer den Betrieb des Telefon-Assistenten verarbeiten wir Konto- und Anrufdaten (z.B. Rufnummern, Gespraechs-Zusammenfassungen). Details ergaenzt der finale Datenschutztext."
+      "heading": "Was Hermes ist",
+      "text": "Hermes ist ein Telefon-Assistent. Nutzer erhalten eine eigene Rufnummer. Der Assistent nimmt eingehende Anrufe entgegen und führt im Auftrag des Nutzers auch ausgehende Anrufe. Er versteht gesprochene Sprache, antwortet gesprochen und fasst das Gespräch anschließend zusammen. Damit werden zwangsläufig auch Daten der Gesprächspartner verarbeitet, nicht nur Daten des Nutzers."
+    },
+    {
+      "heading": "Daten des Kontos",
+      "text": "Bei der Anmeldung entstehen: E-Mail-Adresse, eine Kennung des Anmeldedienstes, Sitzungsdaten und der Name, den der Assistent im Gespräch nennt. Hinzu kommen die zugeteilte Rufnummer, die gewählte Sprache, das Land sowie — sofern der Nutzer sie hinterlegt — eine private Mobilnummer, an die Gesprächszusammenfassungen per SMS gehen können."
+    },
+    {
+      "heading": "Daten aus Anrufen",
+      "text": "Zu jedem Anruf entstehen: Richtung des Anrufs, die beteiligten Rufnummern, Zeitpunkt und Dauer, Status, Sprache, ein etwaiger Name des Anrufers, der Gesprächsauftrag, eine Zusammenfassung und daraus abgeleitete Aufgaben und Termine. Während des Gesprächs entsteht zusätzlich ein Wortprotokoll (Transkript). Nach Codestand werden keine Tonaufzeichnungen der Gespräche gespeichert; verarbeitet wird der aus dem Gesprochenen erzeugte Text."
+    },
+    {
+      "heading": "Nutzungs- und Zahlungsdaten",
+      "text": "Für Abrechnung und Kostenkontrolle werden verbrauchte Gesprächsminuten und die zugehörigen Kosten erfasst. Zahlungsdaten verarbeitet unser Zahlungsdienstleister. In unserem System liegen dazu ausschließlich Verweise (Kunden-, Zahlungsmittel- und Abonnement-Kennungen), keine vollständigen Kartendaten."
+    },
+    {
+      "heading": "Zwecke und Rechtsgrundlagen",
+      "text": "Konto-, Anruf- und Abrechnungsdaten verarbeiten wir zur Erfüllung des Vertrages (Art. 6 Abs. 1 lit. b DSGVO). Auf ein berechtigtes Interesse (Art. 6 Abs. 1 lit. f DSGVO) stützen wir Schutz vor Missbrauch, Betrugs- und Kostenkontrolle, Fehlersuche und Betriebssicherheit — etwa Anruf-Obergrenzen, Länderbeschränkungen für ausgehende Anrufe und Budgetgrenzen. Steuerlich aufbewahrungspflichtige Rechnungsdaten verarbeiten wir nach Art. 6 Abs. 1 lit. c DSGVO. [OFFEN: Prüfung, ob für einzelne Verarbeitungen eine Einwilligung nach lit. a einzuholen ist.]"
+    },
+    {
+      "heading": "Gesprächspartner",
+      "text": "Bei ausgehenden Anrufen nennt der Assistent zu Beginn des Gesprächs unaufgefordert, dass es sich um einen KI-Assistenten im Auftrag des Nutzers handelt und dass das Gespräch für den Auftraggeber zusammengefasst wird. Dieser Hinweis ist im System fest hinterlegt und wird nicht vom Sprachmodell erzeugt. Verantwortlich für die Rechtmäßigkeit eines veranlassten Anrufs bleibt der Nutzer, der ihn beauftragt."
+    },
+    {
+      "heading": "Empfänger und Auftragsverarbeiter",
+      "text": "Wir setzen Dienstleister ein, die in unserem Auftrag verarbeiten: Telefonie und Sprache-zu-Text (Telefonieanbieter mit angeschlossener Spracherkennung), Sprachsynthese für die Stimme des Assistenten, Sprachmodelle für Gesprächsführung und Zusammenfassung, Zahlungsabwicklung, Anmeldung und Kontoverwaltung sowie Hosting und Datenbank. Die Anwendung läuft in Frankfurt am Main. [OFFEN: namentliche Auflistung der Dienstleister mit Zweck sowie Bestätigung der abgeschlossenen Verträge zur Auftragsverarbeitung nach Art. 28 DSGVO — die technische Einbindung ist belegt, die vertragliche Absicherung muss der Betreiber dokumentieren.]"
+    },
+    {
+      "heading": "Übermittlung in Drittländer",
+      "text": "Ein Teil der eingesetzten Dienste wird von Anbietern mit Sitz außerhalb der Europäischen Union erbracht, insbesondere in den Vereinigten Staaten. Dabei können Gesprächsinhalte in Textform, Rufnummern und Kontodaten in ein Drittland gelangen. [OFFEN: Angabe der Garantien je Anbieter — Angemessenheitsbeschluss, Standardvertragsklauseln nach Art. 46 DSGVO oder eine andere Grundlage. Diese Angabe muss stimmen und ist je Vertrag zu prüfen.]"
+    },
+    {
+      "heading": "Speicherdauer",
+      "text": "Das Wortprotokoll eines Gesprächs wird gelöscht, sobald die Zusammenfassung erstellt ist; erhalten bleiben Zusammenfassung, Aufgaben und Termine. Abgeschlossene Anrufe, Benachrichtigungen und erledigte Aufgaben werden nach 30 Tagen automatisch gelöscht. Kontodaten bleiben für die Dauer des Vertragsverhältnisses gespeichert. Rechnungs- und Buchungsdaten bewahren wir für die gesetzlichen Fristen auf."
     },
     {
       "heading": "Deine Rechte",
-      "text": "Du hast das Recht auf Auskunft, Berichtigung, Loeschung und Datenuebertragbarkeit. Anfragen richtest du an kontakt@sundartha.com."
+      "text": "Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch gegen Verarbeitungen, die auf einem berechtigten Interesse beruhen. Eine Auskunft über die zu deinem Konto gespeicherten Daten kannst du im Dienst abrufen; eine vollständige Löschung deiner Anruf- und Kontodaten führen wir auf Anfrage durch. Wende dich dafür an kontakt@sundartha.com. Außerdem steht dir ein Beschwerderecht bei einer Datenschutz-Aufsichtsbehörde zu, üblicherweise am Ort deines Wohnsitzes."
+    },
+    {
+      "heading": "Erforderlichkeit der Angaben",
+      "text": "Die Angaben zu Konto, Rufnummer und Zahlungsmittel sind für die Nutzung des Dienstes erforderlich. Ohne sie kann kein Anschluss bereitgestellt und kein Gespräch geführt werden. Die private Mobilnummer für Zusammenfassungen per SMS ist freiwillig."
+    },
+    {
+      "heading": "Hinweis zu diesem Text",
+      "text": "Dieser Entwurf beschreibt die Verarbeitung so, wie sie im System tatsächlich stattfindet. Er ersetzt keine Rechtsberatung und sollte vor dem Einsatz anwaltlich geprüft werden — insbesondere die Angaben zu Drittlandübermittlung und Auftragsverarbeitung."
     }
   ]
 }
