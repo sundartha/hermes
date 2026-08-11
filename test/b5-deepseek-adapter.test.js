@@ -379,6 +379,46 @@ test("B5-11: Streaming - ueber vier Chunks fragmentierte tool_calls werden nach 
   assert.equal(turn.stopReason, "tool_calls");
 });
 
+test("B5-17: Streaming - rekonstruierte tool_calls tragen type:function in providerTurn und ueberleben unveraendert eine zweite Runde (W4, tasks/befund-toolwahl-1-draht.md Abschnitt 4: ohne das Feld lehnt der Anbieter Runde 2 mit HTTP 400 'missing field type' ab)", async () => {
+  const events = [
+    streamDelta({ tool_calls: [{ index: 0, id: "c1", function: { name: "take_", arguments: "" } }] }),
+    streamDelta({
+      tool_calls: [{ index: 0, function: { name: "message", arguments: '{"msg":"Rueckruf erbeten"}' } }],
+    }),
+    { choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] },
+    { choices: [], usage: usageOf(0, 10, 5) },
+    "[DONE]",
+  ];
+  const { provider } = providerReturning(sseResponse(events));
+  const firstTurn = await provider.completeStream(
+    { model: MODEL, system: "S", messages: [] },
+    recordingSink(),
+  );
+  const expectedToolCall = {
+    id: "c1",
+    type: "function",
+    function: { name: "take_message", arguments: '{"msg":"Rueckruf erbeten"}' },
+  };
+  assert.deepEqual(
+    firstTurn.providerTurn.tool_calls,
+    [expectedToolCall],
+    "die aus SSE-Fragmenten rekonstruierte Ruecktrage muss dieselbe Form tragen wie ein Anbieter-tool_call - inkl. type",
+  );
+
+  // Runde 2: die rekonstruierte Ruecktrage geht unveraendert auf den Draht, genau wie sie
+  // ein echter Aufrufer (claude.js agentTurn) zurueckschickt.
+  const { provider: providerRound2, seen } = providerReturning(jsonResponse(chatResponse()));
+  await providerRound2.complete({
+    model: MODEL,
+    system: "S",
+    messages: [
+      providerTurnMessage(firstTurn.providerTurn),
+      toolResultsMessage([{ toolCallId: "c1", text: "notiert" }]),
+    ],
+  });
+  assert.deepEqual(sentBody(seen).messages[1].tool_calls, [expectedToolCall]);
+});
+
 test("B5-12: Streaming - reasoning_content erreicht weder den Sink noch turn.text; die Fragmente ergeben EXAKT turn.text", async () => {
   const events = [
     streamDelta({ reasoning_content: "Die Anruferin " }),

@@ -307,10 +307,20 @@ function sseDataLines(rawEvent) {
 // Fragmente fuer EINEN Aufruf). Ohne Buendelung nach index gaebe der Adapter kaputte
 // JSON-Bruchstuecke weiter. Das toolUseStarted-Signal faellt genau einmal je index -
 // beim ersten Fragment, also so frueh wie moeglich.
+//
+// type:FUNCTION_TOOL_TYPE ist FEST verdrahtet, nicht aus fragment.type gelesen: dieser
+// Adapter unterstuetzt ausschliesslich Funktionswerkzeuge (deepseekTool wirft benannt bei
+// jedem Werkzeug ohne parameters, s.o.) - ein anderer Wert ist hier nie moeglich. Ohne
+// das Feld geht die aus dem Strom rekonstruierte Ruecktrage (providerTurn) als
+// tool_calls-Eintrag OHNE type in die naechste Runde und der Anbieter lehnt sie mit HTTP
+// 400 "missing field `type`" ab (live isoliert, tasks/befund-toolwahl-1-draht.md
+// Abschnitt 4). Nicht-Stream-Antworten tragen type bereits vom Anbieter (toolCallsOf
+// liest es zwar nirgends, aber es steht unveraendert in rawCall und geht so unveraendert
+// zurueck) - nur der hier selbst zusammengebaute Fall braucht die Nachruestung.
 function mergeToolCallFragment(fragment, acc, sink) {
   let call = acc.toolCalls.get(fragment.index);
   if (!call) {
-    call = { id: "", function: { name: "", arguments: "" } };
+    call = { id: "", type: FUNCTION_TOOL_TYPE, function: { name: "", arguments: "" } };
     acc.toolCalls.set(fragment.index, call);
     sink.toolUseStarted();
   }
