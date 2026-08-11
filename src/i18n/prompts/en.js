@@ -272,5 +272,31 @@ At the end, say goodbye in one sentence and then call end_call.`,
       "without reading them out and without naming a source.",
   },
 
+  // WW-F2: EN-Achse des Nachfassens (Begruendung und Regeln s. prompts/de.js followUp).
+  followUp: {
+    // Englisch hat feste Wortstellung - anders als im Deutschen reicht hier fast immer EIN
+    // Teil je Marker. "look forward to" ist der Grund, warum kein blosses "forward" steht.
+    markers: Object.freeze([
+      ["check with"],
+      ["check back with"],
+      ["confirm with"],
+      ["get back to you"],
+      ["pass", "on to"],
+      ["pass it on"],
+      ["pass that on"],
+      ["pass this on"],
+      ["forward it"],
+      ["forward that"],
+      ["make a note"],
+      ["note that down"],
+      ["take a message"],
+      ["let you know"],
+      ["follow up with"],
+    ]),
+    nudge:
+      "[You just announced an action but did not call any tool. Carry out exactly that " +
+      "action now, with the tool meant for it. Do not repeat your sentence.]",
+  },
+
   realtimeSpeechStyle: "SPEAKING STYLE: natural, brisk, short sentences.",
 });

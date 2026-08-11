@@ -272,5 +272,24 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
       "sans les lire à voix haute et sans citer de source.",
   },
 
+  // WW-F2: FR-Achse des Nachfassens (Begruendung und Regeln s. prompts/de.js followUp).
+  followUp: {
+    markers: Object.freeze([
+      ["vérifier auprès"],
+      ["confirmer auprès"],
+      ["en parler à"],
+      ["transmet"],
+      ["je note"],
+      ["prendre note"],
+      ["recontacte"],
+      ["revenir vers"],
+      ["demander à"],
+      ["faire le point"],
+    ]),
+    nudge:
+      "[Tu viens d'annoncer une action sans appeler d'outil. Exécute maintenant exactement " +
+      "cette action, avec l'outil prévu pour cela. Ne répète pas ta phrase.]",
+  },
+
   realtimeSpeechStyle: "STYLE ORAL : naturel, dynamique, phrases courtes.",
 });

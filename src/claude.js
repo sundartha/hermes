@@ -9,6 +9,8 @@ import { providerTurnMessage, toolResultsMessage } from "./llm/messages.js";
 import { makeSentenceChunker } from "./speech-chunker.js";
 import { makeThinkingSignal } from "./thinking-signal.js";
 import { shapeForSpeech } from "./speech-shape.js";
+import { followUpToolsFor } from "./tool-follow-up.js";
+import { LLM_TOOL_CHOICE } from "./llm/tool-choice.js";
 import { localeFor } from "./i18n/locales.js";
 import { metrics } from "./metrics.js";
 import { MAX_TOOL_ROUNDS_PER_TURN, roundFitsDeadline, turnLoopDeadlineMs } from "./turn-budget.js";
@@ -1021,6 +1023,13 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   const deadlineMs = turnLoopDeadlineMs(config.voice.elevenLabsPlayTts.synthTimeoutMs);
   let stopReason = null;
 
+  // WW-F2: die zwei Zustaende des Nachfassens. pendingFollowUpTools traegt den
+  // Werkzeugsatz der NAECHSTEN Runde (null = regulaere Runde, byte-identischer Draht);
+  // followUpUsed ist die Obergrenze aus B2 und wird NIE zurueckgesetzt - hoechstens EIN
+  // Nachfassen je Zug, egal wie die erzwungene Runde ausgeht.
+  let pendingFollowUpTools = null;
+  let followUpUsed = false;
+
   // Tool-Loop (max. MAX_TOOL_ROUNDS_PER_TURN Runden pro Turn)
   for (let i = 0; i < MAX_TOOL_ROUNDS_PER_TURN; i++) {
     // GQ-P1: ein verdraengter Turn faehrt KEINE weitere Modellrunde (echte Token-
@@ -1047,7 +1056,12 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       break;
     }
 
-    const tools = agentTools(call);
+    // WW-F2: der armierte Nachfass-Satz gilt fuer GENAU DIESE Runde und wird sofort
+    // zurueckgenommen. Ohne das Zuruecknehmen liefe eine Folgerunde (z.B. nach look_up)
+    // ebenfalls erzwungen - ein zweiter Zwang, den B2 ausschliesst.
+    const forcedTools = pendingFollowUpTools;
+    pendingFollowUpTools = null;
+    const tools = forcedTools ?? agentTools(call);
     for (const tool of tools) offeredTools.add(tool.name);
     const elapsedMs = Date.now() - loopStartedAt;
     const sink = streamSinkFor({
@@ -1068,12 +1082,28 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
       // WELCHE Marken ein Anbieter dafuer braucht, weiss nur sein Adapter.
       cachePrefix: true,
       callId: call.id, // I13: Bench-Korrelation (llm.js streift callId vor dem SDK-Call ab)
+      // WW-F2: NUR im Nachfass-Zug gesetzt. Fehlt das Feld, bleibt der Draht
+      // byte-identisch zum Bestand (Anbieter-Default) - das ist die Zusage aus B1.
+      ...(forcedTools ? { toolChoice: LLM_TOOL_CHOICE.REQUIRED } : {}),
     };
-    const turn = await completeRound({
-      call,
-      params,
-      stream: sink && { sink, budgetMs: deadlineMs - elapsedMs },
-    });
+    let turn;
+    try {
+      turn = await completeRound({
+        call,
+        params,
+        stream: sink && { sink, budgetMs: deadlineMs - elapsedMs },
+      });
+    } catch (err) {
+      // WW-F2 (B5): scheitert AUSSCHLIESSLICH der Nachfass-Zug (z.B. ein Anbieter, der
+      // die erzwungene Werkzeugwahl in seiner aktuellen Betriebsart ablehnt), endet der
+      // Zug mit der Textantwort der Vorrunde - genau wie heute, nie in Stille. Ein
+      // regulaerer Rundenfehler propagiert unveraendert: dort kennt der Aufrufer seinen
+      // Degradations-Satz (llm.js degradedSpeechFor). PII-frei protokolliert, ohne den
+      // Fehlertext des Anbieters.
+      if (!forcedTools) throw err;
+      console.warn(`[turn] nachfassen-fehlgeschlagen call=${call.id} runden=${roundtrips}`);
+      break;
+    }
     roundtrips += 1;
     // AL-P7: der Rest des Puffers geht als letzter Chunk raus. Zulaessig ohne weitere
     // Pruefung, weil streamSinkFor nur Runden armiert, deren Text nachweislich der Text
@@ -1099,7 +1129,33 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
 
     const toolCalls = turn.toolCalls;
     firedTools.push(...toolCalls.map((tc) => tc.name)); // L0: Tools dieses Roundtrips
-    if (!toolCalls.length) break;
+    if (!toolCalls.length) {
+      // WW-F2: die Runde hat NUR geredet. Kuendigt ihr Text eine Handlung an, holt GENAU
+      // EIN erzwungener Nachfass-Zug die Ausfuehrung nach; sonst endet der Zug hier wie
+      // im Bestand - ohne zusaetzlichen Roundtrip (B1) und ohne erzwungenes Werkzeug (B3).
+      const followUpTools = followUpToolsFor({
+        enabled: config.voice.toolFollowUpEnabled,
+        alreadyUsed: followUpUsed,
+        text: turn.text,
+        language: call.language,
+        // B6: end_call ist im Nachfass-Zug NIE waehlbar. Ein Nachfassen, das auflegt,
+        // waere ein neuer Defekt - der Riegel ist der Werkzeugsatz selbst, nicht ein Satz
+        // im Prompt (G27: Struktur schlaegt Disziplin).
+        candidateTools: tools.filter((t) => t.name !== END_CALL_TOOL_NAME),
+      });
+      if (!followUpTools) break;
+      followUpUsed = true;
+      pendingFollowUpTools = followUpTools;
+      // Die eigene Aeusserung der Runde MUSS in die Kette, sonst fasst der naechste Zug
+      // ins Leere nach; der Steuertext dahinter haelt die Kette auf einem user-Turn
+      // (dieselbe Klasse wie silentTurn/consultPending, kein fremder Text).
+      messages = [
+        ...messages,
+        providerTurnMessage(turn.providerTurn),
+        { role: "user", content: localeFor(call.language).prompt.followUp.nudge },
+      ];
+      continue;
+    }
 
     // AL-P14: die Rueckfrage ist das EINZIGE Werkzeug, das den Turn selbst beendet -
     // deshalb wird sie VOR dem generischen Tool-Mapping ausgewertet. Angenommen: kein

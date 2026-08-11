@@ -358,5 +358,43 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       "ohne sie vorzulesen und ohne eine Quelle zu nennen.",
   },
 
+  // WW-F2 (tasks/PLAN-WERKZEUGWAHL.md, W3): die zwei Sprach-Artefakte des Nachfassens.
+  // Eigener Block neben turnControl, weil sie ein eigener Mechanismus sind: markers ist
+  // ERKENNUNGS-Text (wird nie gesendet), nudge ist Steuertext an das Modell.
+  followUp: {
+    // Ankuendigungs-Marker dieser Sprache. EIN Marker ist eine Liste von TEILEN, die ALLE
+    // im Text vorkommen muessen - flache Zeichenketten genuegen im Deutschen nicht: das
+    // trennbare Verb reisst auseinander ("Ich gebe das an Jonas weiter"), und genau diese
+    // Form kommt live vor. Verglichen wird als Teilzeichenkette gegen eine kanonisierte
+    // Fassung des Modelltextes (klein, Umlaute ausgeschrieben, Akzente entfernt) - deshalb
+    // genuegt der Wortstamm: "abklär" trifft abklären/abkläre/abklärt.
+    // Bewusst ENG: jeder Marker steht fuer eine Handlung, die eines unserer Werkzeuge
+    // ausfuehrt (weitergeben/notieren -> take_message, Rücksprache/nachfragen ->
+    // get_consult). Ein breiter Marker waere die Ueberkorrektur, vor der der Auftrag warnt.
+    markers: Object.freeze([
+      ["Rücksprache"],
+      ["abklär"],
+      ["abstimmen"],
+      ["weitergeb"],
+      ["gebe", "weiter"],
+      ["leite", "weiter"],
+      ["weiterleit"],
+      ["nachfrag"],
+      ["frage", "nach"],
+      ["erkundig"],
+      ["notier"],
+      ["melde mich"],
+    ]),
+    // Server-eigener, eckig geklammerter Steuertext - dieselbe Klasse wie silentTurn.
+    // WERKZEUG-AGNOSTISCH: er nennt KEIN Werkzeug beim Namen, weil im Nachfass-Zug nicht
+    // feststeht, welche Werkzeuge angeboten sind (Kontingent, Frische, Tenant-Recht). Ein
+    // Steuertext, der auf ein fehlendes Werkzeug zeigt, ist genau die Prompt-Asymmetrie
+    // aus W2. Das Wiederhol-Verbot verhindert, dass der Anrufer denselben Satz zweimal hoert.
+    nudge:
+      "[Du hast gerade eine Handlung angekündigt, aber kein Werkzeug aufgerufen. Führe " +
+      "genau diese Handlung jetzt mit dem Werkzeug aus, das dafür vorgesehen ist. " +
+      "Wiederhole deinen Satz nicht.]",
+  },
+
   realtimeSpeechStyle: "SPRECHWEISE: natuerlich, zuegig, kurze Saetze.",
 });

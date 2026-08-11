@@ -334,6 +334,10 @@ export const BASE_ENV = {
   // lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);
   // al-p7b-*.test.js setzen es explizit auf "true".
   THINKING_SIGNAL_ENABLED: "false",
+  // WW-F2: Nachfassen in Spawn-Tests neutral AUS (Default). Ohne diese Zeile leakt eine
+  // lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);
+  // ww-f2-tool-follow-up.test.js setzt es explizit auf "true".
+  TOOL_FOLLOW_UP_ENABLED: "false",
   // ---- Payment/Billing (P6b1) ----
   // Neutral + fail-closed: kein Hold/Capture. Ohne diese Zeilen leakt eine lokale
   // .env mit PAYMENT_ENABLED=true via dotenv in Spawn-Tests -> Baseline-Drift.
