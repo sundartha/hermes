@@ -87,6 +87,10 @@ test("Proxy-Guard: JSON.stringify auf eine Config-Gruppe wirft nicht (toJSON-Duc
     // Spracherkennung. Default 3000 = die weiteste gemessene Fragment-Luecke ist gedeckt;
     // 0 waere der Rueckweg auf das Bestandsverhalten (zwei Antworten).
     shimExtendHoldMs: 3000,
+    // Messschalter (transcriptionFields, adapters/telnyx/voice.js): DEFAULT AN = Bestand
+    // byte-identisch (Pro-Call-transcription-Block wird gesendet). "false" ist NUR fuer
+    // einen begleiteten Testanruf gedacht.
+    perCallTranscriptionEnabled: true,
   });
 });
 
@@ -106,7 +110,7 @@ test("Proxy-Guard: then/toJSON bleiben fuer echte unbekannte Keys weiterhin bewa
 });
 
 // Teil 2: telnyxAssistant-Gruppierung (P5, erstes Feature-Grouping).
-test("telnyxAssistant: alle 16 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
+test("telnyxAssistant: alle 18 Keys existieren mit den dokumentierten Defaults (NODE_ENV=test, keine Env gesetzt)", () => {
   assert.equal(config.telnyx.telnyxAssistant.enabled, false);
   assert.equal(config.telnyx.telnyxAssistant.assistantId, "");
   assert.equal(config.telnyx.telnyxAssistant.callControlAppId, "");
@@ -123,6 +127,8 @@ test("telnyxAssistant: alle 16 Keys existieren mit den dokumentierten Defaults (
   assert.equal(config.telnyx.telnyxAssistant.inboundHandoffEnabled, false);
   assert.equal(config.telnyx.telnyxAssistant.maxConsecutiveFailedTurns, 3);
   assert.equal(config.telnyx.telnyxAssistant.failedTurnFarewellText, "");
+  assert.equal(config.telnyx.telnyxAssistant.shimExtendHoldMs, 3000);
+  assert.equal(config.telnyx.telnyxAssistant.perCallTranscriptionEnabled, true);
 });
 
 // Regression: der alte flache Pfad existiert NACHWEISLICH nicht mehr - waere er

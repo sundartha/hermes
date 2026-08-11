@@ -137,6 +137,13 @@ services:
       # silenced/released/flushed. "0" = ohne Deploy zurueck auf das Bestandsverhalten.
       - key: TELNYX_SHIM_EXTEND_HOLD_MS
         value: "3000"
+      # Messschalter fuer EINE unbelegte Anbieter-Frage (transcriptionFields, adapters/
+      # telnyx/voice.js): ob der Pro-Call-transcription-Block das Assistant-eigene
+      # transcription-Objekt ersetzt oder in es hineinmerged, sagt die Telnyx-Doku nicht.
+      # Default true = Bestand byte-identisch. Owner flippt im Dashboard NUR fuer EINEN
+      # begleiteten Testanruf auf "false", danach sofort zurueckstellen - kein Dauerbetrieb.
+      - key: TELNYX_PER_CALL_TRANSCRIPTION_ENABLED
+        value: "true"
       # GQ-P3: Inbound-Handoff auf den Call-Control-Assistant (Befund B-9). Default true;
       # Owner flippt im Dashboard auf "false", um Inbound ohne Deploy auf die Budget-Engine
       # zurueckzustellen. KOSTEN: Inbound wird auf dem Assistant-Pfad rund dreimal teurer.

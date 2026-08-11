@@ -835,6 +835,19 @@ const rawConfig = {
       min: 0,
       max: 3500,
     }),
+    // Messschalter fuer EINE unbelegte Anbieter-Frage (s. transcriptionFields, adapters/
+    // telnyx/voice.js): ob der Pro-Call-transcription-Block das Assistant-eigene
+    // transcription-Objekt ERSETZT oder in es hineinMERGED, sagt die Telnyx-Doku nicht.
+    // DEFAULT AN = Bestand byte-identisch (der Block wird weiter gesendet). "false" bringt
+    // transcriptionFields dazu, IMMER {} zu liefern - ausschliesslich fuer EINEN begleiteten
+    // Testanruf, danach zurueckstellen. Kein Dauerbetrieb, kein assertConfig-/Footgun-
+    // Eintrag: der Schalter entwaffnet keine Sicherung, er aendert nur, ob ein optionales
+    // JSON-Feld mitgesendet wird.
+    perCallTranscriptionEnabled: boolEnv(
+      "TELNYX_PER_CALL_TRANSCRIPTION_ENABLED",
+      process.env.TELNYX_PER_CALL_TRANSCRIPTION_ENABLED,
+      { fallback: true },
+    ),
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----

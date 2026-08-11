@@ -244,6 +244,51 @@ test("startAssistant: transcription={model,language} bei bekannter Sprache (de)"
   assert.equal(body.assistant.id, "a");
 });
 
+// Messschalter (s. Kommentar bei transcriptionFields, adapters/telnyx/voice.js): pinnt
+// BEIDE Richtungen, sonst wuerde ein Test, der nur eine Richtung prueft, eine Funktion
+// durchwinken, die immer dasselbe liefert. Default-Test zuerst - er belegt zugleich, dass
+// der Schalter unveraendert (Bestand) den Block weiter sendet.
+test("startAssistant: TELNYX_PER_CALL_TRANSCRIPTION_ENABLED default (true) sendet weiterhin den Block", async () => {
+  assert.equal(
+    config.telnyx.telnyxAssistant.perCallTranscriptionEnabled,
+    true,
+    "Bestandsverhalten: Default ist true",
+  );
+  const calls = stubFetch({ json: {} });
+  await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "de" });
+  const body = JSON.parse(calls[0].body);
+  assert.deepEqual(body.transcription, { model: "deepgram/nova-3", language: "de" });
+});
+
+test("startAssistant: TELNYX_PER_CALL_TRANSCRIPTION_ENABLED=false -> KEIN transcription-Feld, Rest byte-identisch", async () => {
+  const saved = config.telnyx.telnyxAssistant.perCallTranscriptionEnabled;
+  config.telnyx.telnyxAssistant.perCallTranscriptionEnabled = false;
+  try {
+    const calls = stubFetch({ json: {} });
+    await telnyxVoice.startAssistant({ callControlId: "cc_1", assistantId: "a", language: "de" });
+    const body = JSON.parse(calls[0].body);
+    assert.ok(!("transcription" in body), "kein transcription-Feld, obwohl language bekannt ist");
+    assert.deepEqual(body, { assistant: { id: "a" } });
+  } finally {
+    config.telnyx.telnyxAssistant.perCallTranscriptionEnabled = saved;
+  }
+});
+
+// Boot-Sonde (Muster GQ-P3-7/inboundHandoffProbeLine): "gesetzt" ist nicht dasselbe wie
+// "wirkt" - ohne diese Zeile waere der Live-Wert am Log nicht ablesbar (CLAUDE.md,
+// wiederholt aufgetretenes Problem in diesem Projekt).
+test("perCallTranscriptionProbeLine meldet beide Richtungen woertlich", async () => {
+  const { perCallTranscriptionProbeLine } = await import("../src/boot.js");
+  assert.equal(
+    perCallTranscriptionProbeLine({ perCallTranscriptionEnabled: true }),
+    "Pro-Call-Transkription: AKTIV (TELNYX_PER_CALL_TRANSCRIPTION_ENABLED=true) - aus -> kein transcription-Feld im Call-Control-Body, Assistant-Config entscheidet allein",
+  );
+  assert.equal(
+    perCallTranscriptionProbeLine({ perCallTranscriptionEnabled: false }),
+    "Pro-Call-Transkription: aus (TELNYX_PER_CALL_TRANSCRIPTION_ENABLED=false) - aus -> kein transcription-Feld im Call-Control-Body, Assistant-Config entscheidet allein",
+  );
+});
+
 // VOICE-17 (tasks/i18n-tests/03-telefonie-render.md): der Telnyx-Assistant-STT-Sprachhint
 // deckt "en" explizit ab (in STT_LANGUAGE_HINTS) statt fail-open auf "auto" zu fallen - bislang
 // ungetestet (grep-Negativbefund im Katalog). Ergaenzt die bestehende "de"-Abdeckung oben

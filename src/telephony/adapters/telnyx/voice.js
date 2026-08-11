@@ -340,7 +340,18 @@ export function assistantVoiceConfigured() {
 // Quelle wie der TeXML-Gather (stt-model.js) und aus DEMSELBEN Config-Schluessel - zwei
 // Schluessel haetten die Duplizierung nur von den Modell-Strings auf die Env-Namen
 // verschoben. Ein Engine-Feld gibt es hier NICHT: Call-Control-JSON kennt keines.
+//
+// TELNYX_PER_CALL_TRANSCRIPTION_ENABLED (Default true, Bestand byte-identisch): schaltet
+// AUS, ob dieser Block ueberhaupt gesendet wird - nicht die Sprachaufloesung selbst.
+// UNBELEGT ist, ob Telnyx den Pro-Call-Block gegen das Assistant-eigene transcription-
+// Objekt (inkl. settings.smart_format) MERGED oder es damit ERSETZT; die Anbieter-Doku
+// sagt dazu nichts. Faellt der Block weg (Schalter aus) UND ersetzt Telnyx tatsaechlich
+// statt zu mergen, greift der oben beschriebene OpenAPI-Default distil-whisper/
+// distil-large-v2 (ENGLISCH-ONLY) - genau das ist die zu messende Unsicherheit. Der
+// Schalter ist ausschliesslich fuer EINEN begleiteten Testanruf gedacht, danach wieder auf
+// "true" (bzw. ungesetzt) zurueckstellen - kein Dauerbetrieb.
 function transcriptionFields(language) {
+  if (!config.telnyx.telnyxAssistant.perCallTranscriptionEnabled) return {};
   if (!language) return {};
   const hint = STT_LANGUAGE_HINTS.includes(language) ? language : STT_LANGUAGE_AUTO;
   const { model } = sttAttrs(config.voice.sttProfile);
@@ -798,8 +809,9 @@ export const telnyxVoice = {
   // Telnyx-AI-Assistant an den laufenden Call-Control-Call anhaengen (ai_assistant_start).
   // Provider-neutraler Transport: assistantId liefert der Caller (P5/P7); der Adapter erzeugt/
   // persistiert KEINE Assistant-Config/Secrets. Voice/Greeting/interruption_settings sind
-  // Assistant-Config (P7), NICHT hier. Der per-Call-transcription-Block gewinnt laut
-  // Telnyx-OpenAPI ueber das Assistant-Objekt; language ist OPTIONAL - fehlt sie, sendet der
+  // Assistant-Config (P7), NICHT hier. Ob der per-Call-transcription-Block das Assistant-
+  // eigene transcription-Objekt ERSETZT oder in es hineinMERGED, ist UNBELEGT (Doku sagt
+  // nichts dazu, s. transcriptionFields); language ist OPTIONAL - fehlt sie, sendet der
   // Adapter KEIN transcription-Feld und der Body bleibt Bestand. Beide Aufrufer reichen
   // call.language durch: telnyx-call-control-ingest.js (Outbound-Ingest) und
   // telnyx-inbound.js (Inbound, GAP-24).

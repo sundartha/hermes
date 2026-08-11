@@ -448,6 +448,21 @@ export function inboundHandoffProbeLine(telnyxAssistant) {
   );
 }
 
+// Messschalter (transcriptionFields, adapters/telnyx/voice.js): welcher Wert live steht,
+// war in diesem Projekt mehrfach nicht ablesbar - ein Schalter ohne Sonde ist eine neue
+// blinde Stelle (Muster inboundHandoffProbeLine, unkonditional). Fuer EINEN begleiteten
+// Testanruf gedacht, kein Dauerbetrieb.
+export function perCallTranscriptionProbeLine(telnyxAssistant) {
+  return probeLine(
+    "Pro-Call-Transkription",
+    envFlagState(
+      "TELNYX_PER_CALL_TRANSCRIPTION_ENABLED",
+      telnyxAssistant.perCallTranscriptionEnabled,
+    ),
+    "aus -> kein transcription-Feld im Call-Control-Body, Assistant-Config entscheidet allein",
+  );
+}
+
 // AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den
 // MCP-Host. Ein solcher Schalter darf nicht unbemerkt scharf sein (Muster
 // assistantPathLabel). Aus -> keine Zeile, Banner byte-identisch.
@@ -696,6 +711,7 @@ function logBootBanner(config, port) {
   );
   console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
   console.log(`  ${inboundHandoffProbeLine(config.telnyx.telnyxAssistant)}`);
+  console.log(`  ${perCallTranscriptionProbeLine(config.telnyx.telnyxAssistant)}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
   if (inCallConsult) console.log(`  ${inCallConsult}`);
   const tokenStreaming = tokenStreamingBannerLine(config.telnyx.telnyxAssistant);
