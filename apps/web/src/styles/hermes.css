@@ -1168,6 +1168,23 @@ a:hover {
   border: 1px solid rgba(255, 255, 255, 0.26);
 }
 
+/* Ohne Animation stehen die sechs Akte untereinander (hermes-demo.css). Das
+   Blatt scrollt ohnehin, also darf der Rahmen mitwachsen statt ein zweites
+   Scrollfenster im Scrollfenster aufzumachen. */
+@media (prefers-reduced-motion: reduce) {
+  .sheet__demo {
+    height: auto;
+  }
+  .sheet__demo .hd-mount {
+    position: static;
+    inset: auto;
+  }
+  .sheet__demo .hd-stage {
+    height: auto;
+    overflow: visible;
+  }
+}
+
 .sheet__card {
   display: flex;
   flex-direction: column;

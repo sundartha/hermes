@@ -259,6 +259,27 @@
   }
 }
 
+/* Ohne Animation stehen die sechs Akte untereinander (siehe hermes-demo.css).
+   Auf dieser ruhenden Seite darf der Rahmen dafuer einfach mitwachsen — dann
+   liest sich die Erklaerung als Teil der Seite, statt in einem eigenen kleinen
+   Scrollfenster zu stecken. Steht bewusst NACH der Handy-Abfrage oben, sonst
+   holt die das feste Seitenverhaeltnis zurueck. */
+@media (prefers-reduced-motion: reduce) {
+  .doc-demo {
+    aspect-ratio: auto;
+    min-height: 0;
+    height: auto;
+  }
+  .doc-demo .hd-mount {
+    position: static;
+    inset: auto;
+  }
+  .doc-demo .hd-stage {
+    height: auto;
+    overflow: visible;
+  }
+}
+
 /* Kleine Überschrift über dem Titel (404, Registrieren). */
 .doc-eyebrow {
   display: inline-flex;

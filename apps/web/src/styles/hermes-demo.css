@@ -467,7 +467,35 @@
   .hd-glow {
     animation: none !important;
     opacity: 1 !important;
+    visibility: visible !important;
     transform: none !important;
+  }
+
+  /* Ohne Animation kann die Buehne die sechs Akte nicht nacheinander zeigen.
+     Gestapelt (position:absolute) laegen sie dann alle sichtbar uebereinander.
+     Darum wird die Kachel hier zum ruhigen, scrollbaren Dokument: die Akte
+     stehen untereinander, jeder fuer sich lesbar. Steuerleiste und Zeitachse
+     entfallen — sie steuern eine Animation, die es nicht gibt. */
+  .hd-stage {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    /* size-Containment misst die Buehne OHNE ihren Inhalt — mit height:auto
+       (ruhende Seite, mobiles Blatt) fiele sie damit auf 0 zusammen. Nur die
+       Breite eingrenzen: die Hoehe darf aus den Akten kommen. Die wenigen
+       hoehenbasierten Container-Abfragen greifen dann nicht mehr; ohne
+       Animation braucht die Buehne diese Feinabstufung ohnehin nicht. */
+    container-type: inline-size;
+  }
+  .hd-act {
+    position: static;
+    inset: auto;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .hd-act:first-of-type {
+    border-top: 0;
+  }
+  .hd-foot {
+    display: none;
   }
 }
 
