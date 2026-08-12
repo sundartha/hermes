@@ -1,0 +1,18 @@
+{
+  "minTokens": 50,
+  "reporters": ["console"],
+  "gitignore": false,
+  "absolute": true,
+  "ignore": [
+    "**/node_modules/**",
+    "**/coverage/**",
+    "**/data/**",
+    "**/public/**",
+    "**/.claude/**",
+    "**/apps/web/dist/**",
+    "**/apps/web/dist-test/**",
+    "**/apps/web/dist-test-links/**",
+    "**/apps/web/dist-clean-test/**",
+    "**/apps/web/.astro/**"
+  ]
+}

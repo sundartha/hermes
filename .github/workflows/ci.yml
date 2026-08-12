@@ -32,6 +32,8 @@ jobs:
       - name: Syntax-Check
         run: |
           for f in src/*.js scripts/*.js; do node --check "$f"; done
+      - name: Lint (eslint, blockierend)
+        run: npm run lint
       # Coverage-Gate ersetzt den reinen Test-Lauf (kein Doppellauf): node --test fuehrt
       # ohnehin alle Tests aus und bricht zusaetzlich mit exit 1 ab, sobald eine Schwelle
       # reisst. Schwellen kalibriert am schwellenlosen Lauf auf node 22 (= CI-Runtime,

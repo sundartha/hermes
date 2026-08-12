@@ -1,0 +1,6638 @@
+{
+  ".claude/workflows/phase-impl-lean.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  ".claude/workflows/phase-impl.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/BitmapFont-C3Dv8a0F.js": {
+    "complexity": {
+      "count": 14
+    },
+    "id-length": {
+      "count": 629
+    },
+    "max-depth": {
+      "count": 3
+    },
+    "max-params": {
+      "count": 12
+    },
+    "no-magic-numbers": {
+      "count": 43
+    },
+    "no-negated-condition": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 41
+    },
+    "no-restricted-syntax": {
+      "count": 5
+    },
+    "no-undef": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 4
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/BufferResource-CywB6O1i.js": {
+    "id-length": {
+      "count": 90
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 17
+    },
+    "no-param-reassign": {
+      "count": 5
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/CanvasPool-ysPWCHUw.js": {
+    "id-length": {
+      "count": 22
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-param-reassign": {
+      "count": 4
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/CanvasRenderer-DWKL4hCQ.js": {
+    "complexity": {
+      "count": 7
+    },
+    "id-length": {
+      "count": 341
+    },
+    "max-depth": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 48
+    },
+    "no-param-reassign": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 7
+    },
+    "no-useless-constructor": {
+      "count": 1
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/Filter-DBeAqr_A.js": {
+    "id-length": {
+      "count": 19
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/RenderTargetSystem-Bupxdzqt.js": {
+    "complexity": {
+      "count": 3
+    },
+    "id-length": {
+      "count": 615
+    },
+    "max-params": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 24
+    },
+    "no-negated-condition": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 87
+    },
+    "no-restricted-syntax": {
+      "count": 28
+    },
+    "no-undef": {
+      "count": 7
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/WebGLRenderer-BsAP4Axg.js": {
+    "complexity": {
+      "count": 6
+    },
+    "id-length": {
+      "count": 809
+    },
+    "max-params": {
+      "count": 16
+    },
+    "no-magic-numbers": {
+      "count": 53
+    },
+    "no-negated-condition": {
+      "count": 4
+    },
+    "no-param-reassign": {
+      "count": 129
+    },
+    "no-restricted-syntax": {
+      "count": 19
+    },
+    "no-useless-escape": {
+      "count": 3
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/WebGPURenderer-B0XIGrYy.js": {
+    "complexity": {
+      "count": 2
+    },
+    "id-length": {
+      "count": 526
+    },
+    "max-params": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 38
+    },
+    "no-negated-condition": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 26
+    },
+    "no-restricted-syntax": {
+      "count": 26
+    },
+    "no-undef": {
+      "count": 18
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/browserAll-D9ed4oWc.js": {
+    "complexity": {
+      "count": 10
+    },
+    "id-length": {
+      "count": 504
+    },
+    "max-params": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 9
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 92
+    },
+    "no-restricted-syntax": {
+      "count": 7
+    },
+    "no-undef": {
+      "count": 16
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/canvasUtils-j1-R_yL_.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 142
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 34
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 7
+    },
+    "no-undef": {
+      "count": 2
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/index-BoA7Nxbu.js": {
+    "complexity": {
+      "count": 103
+    },
+    "id-length": {
+      "count": 6815
+    },
+    "max-depth": {
+      "count": 13
+    },
+    "max-params": {
+      "count": 164
+    },
+    "no-cond-assign": {
+      "count": 7
+    },
+    "no-constant-binary-expression": {
+      "count": 1
+    },
+    "no-extra-boolean-cast": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 952
+    },
+    "no-negated-condition": {
+      "count": 30
+    },
+    "no-param-reassign": {
+      "count": 883
+    },
+    "no-restricted-syntax": {
+      "count": 84
+    },
+    "no-self-assign": {
+      "count": 1
+    },
+    "no-unassigned-vars": {
+      "count": 2
+    },
+    "no-undef": {
+      "count": 68
+    },
+    "no-useless-escape": {
+      "count": 10
+    },
+    "unicorn/error-message": {
+      "count": 1
+    }
+  },
+  "apps/hermes-animation-lab/dist/assets/webworkerAll-Czwtding.js": {
+    "complexity": {
+      "count": 3
+    },
+    "id-length": {
+      "count": 262
+    },
+    "max-params": {
+      "count": 6
+    },
+    "no-extra-boolean-cast": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 17
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 16
+    },
+    "no-restricted-syntax": {
+      "count": 9
+    }
+  },
+  "apps/hermes-animation-lab/scripts/capture-keyposes.mjs": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-undef": {
+      "count": 5
+    }
+  },
+  "apps/hermes-studio/dist/assets/BitmapFont-B2Qf1IWr.js": {
+    "complexity": {
+      "count": 14
+    },
+    "id-length": {
+      "count": 629
+    },
+    "max-depth": {
+      "count": 3
+    },
+    "max-params": {
+      "count": 12
+    },
+    "no-magic-numbers": {
+      "count": 43
+    },
+    "no-negated-condition": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 41
+    },
+    "no-restricted-syntax": {
+      "count": 5
+    },
+    "no-undef": {
+      "count": 1
+    },
+    "no-useless-escape": {
+      "count": 4
+    }
+  },
+  "apps/hermes-studio/dist/assets/BufferResource-D97uasj6.js": {
+    "id-length": {
+      "count": 90
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 17
+    },
+    "no-param-reassign": {
+      "count": 5
+    }
+  },
+  "apps/hermes-studio/dist/assets/CanvasPool--lR_jxob.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 168
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 38
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 11
+    },
+    "no-undef": {
+      "count": 2
+    }
+  },
+  "apps/hermes-studio/dist/assets/CanvasPool-CCWM6PdD.js": {
+    "id-length": {
+      "count": 22
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-param-reassign": {
+      "count": 4
+    }
+  },
+  "apps/hermes-studio/dist/assets/CanvasRenderer-3LY9E3nT.js": {
+    "complexity": {
+      "count": 7
+    },
+    "id-length": {
+      "count": 341
+    },
+    "max-depth": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 48
+    },
+    "no-param-reassign": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 7
+    },
+    "no-useless-constructor": {
+      "count": 1
+    }
+  },
+  "apps/hermes-studio/dist/assets/RenderTargetSystem-B2D1vnxn.js": {
+    "complexity": {
+      "count": 3
+    },
+    "id-length": {
+      "count": 615
+    },
+    "max-params": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 24
+    },
+    "no-negated-condition": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 87
+    },
+    "no-restricted-syntax": {
+      "count": 28
+    },
+    "no-undef": {
+      "count": 7
+    }
+  },
+  "apps/hermes-studio/dist/assets/WebGLRenderer-BWGooPuL.js": {
+    "complexity": {
+      "count": 6
+    },
+    "id-length": {
+      "count": 820
+    },
+    "max-params": {
+      "count": 16
+    },
+    "no-magic-numbers": {
+      "count": 53
+    },
+    "no-negated-condition": {
+      "count": 4
+    },
+    "no-param-reassign": {
+      "count": 129
+    },
+    "no-restricted-syntax": {
+      "count": 19
+    },
+    "no-useless-escape": {
+      "count": 3
+    }
+  },
+  "apps/hermes-studio/dist/assets/WebGPURenderer-Dy8k1ut6.js": {
+    "complexity": {
+      "count": 2
+    },
+    "id-length": {
+      "count": 526
+    },
+    "max-params": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 38
+    },
+    "no-negated-condition": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 26
+    },
+    "no-restricted-syntax": {
+      "count": 26
+    },
+    "no-undef": {
+      "count": 18
+    }
+  },
+  "apps/hermes-studio/dist/assets/browserAll-BzdDRkbZ.js": {
+    "complexity": {
+      "count": 10
+    },
+    "id-length": {
+      "count": 504
+    },
+    "max-params": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 9
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 92
+    },
+    "no-restricted-syntax": {
+      "count": 7
+    },
+    "no-undef": {
+      "count": 16
+    }
+  },
+  "apps/hermes-studio/dist/assets/browserAll-DxwuvMSZ.js": {
+    "complexity": {
+      "count": 10
+    },
+    "id-length": {
+      "count": 504
+    },
+    "max-params": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 9
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 92
+    },
+    "no-restricted-syntax": {
+      "count": 7
+    },
+    "no-undef": {
+      "count": 16
+    }
+  },
+  "apps/hermes-studio/dist/assets/canvasUtils-B7peiHI3.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 142
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 34
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 7
+    },
+    "no-undef": {
+      "count": 2
+    }
+  },
+  "apps/hermes-studio/dist/assets/index-eiLBGVtH.js": {
+    "complexity": {
+      "count": 155
+    },
+    "id-length": {
+      "count": 10957
+    },
+    "max-depth": {
+      "count": 19
+    },
+    "max-params": {
+      "count": 280
+    },
+    "no-cond-assign": {
+      "count": 8
+    },
+    "no-constant-binary-expression": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1729
+    },
+    "no-negated-condition": {
+      "count": 43
+    },
+    "no-param-reassign": {
+      "count": 1511
+    },
+    "no-restricted-syntax": {
+      "count": 112
+    },
+    "no-self-assign": {
+      "count": 2
+    },
+    "no-unassigned-vars": {
+      "count": 4
+    },
+    "no-undef": {
+      "count": 84
+    },
+    "no-useless-escape": {
+      "count": 14
+    },
+    "unicorn/error-message": {
+      "count": 2
+    }
+  },
+  "apps/hermes-studio/dist/assets/webworkerAll-BOmt7Ai9.js": {
+    "complexity": {
+      "count": 3
+    },
+    "id-length": {
+      "count": 262
+    },
+    "max-params": {
+      "count": 6
+    },
+    "no-extra-boolean-cast": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 17
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 16
+    },
+    "no-restricted-syntax": {
+      "count": 9
+    }
+  },
+  "apps/hermes-studio/dist/assets/webworkerAll-CWmhizgB.js": {
+    "complexity": {
+      "count": 3
+    },
+    "id-length": {
+      "count": 286
+    },
+    "max-params": {
+      "count": 7
+    },
+    "no-extra-boolean-cast": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 18
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 17
+    },
+    "no-restricted-syntax": {
+      "count": 9
+    }
+  },
+  "apps/hermes-studio/server.mjs": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 32
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-clean-test/.prerender/chunks/_noop-middleware_CQ50ikAJ.mjs": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-clean-test/.prerender/chunks/preise_9nM0po8n.mjs": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-clean-test/.prerender/chunks/routes_UuhyGX_C.mjs": {
+    "id-length": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-clean-test/.prerender/chunks/server_4J8OVMhQ.mjs": {
+    "complexity": {
+      "count": 18
+    },
+    "id-length": {
+      "count": 37
+    },
+    "max-depth": {
+      "count": 3
+    },
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "max-params": {
+      "count": 20
+    },
+    "no-extra-boolean-cast": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 21
+    },
+    "no-negated-condition": {
+      "count": 8
+    },
+    "no-param-reassign": {
+      "count": 25
+    },
+    "no-prototype-builtins": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 8
+    },
+    "no-undef": {
+      "count": 2
+    },
+    "no-useless-escape": {
+      "count": 7
+    }
+  },
+  "apps/web/dist-clean-test/.prerender/prerender-entry.DbCC4HAk.mjs": {
+    "complexity": {
+      "count": 31
+    },
+    "getter-return": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 40
+    },
+    "max-depth": {
+      "count": 11
+    },
+    "max-params": {
+      "count": 20
+    },
+    "no-magic-numbers": {
+      "count": 43
+    },
+    "no-negated-condition": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 44
+    },
+    "no-restricted-syntax": {
+      "count": 17
+    },
+    "no-unsafe-optional-chaining": {
+      "count": 1
+    },
+    "preserve-caught-error": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-clean-test/_astro/ActionItemsIsland.astro_astro_type_script_index_0_lang.zgDUgFjz.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-clean-test/_astro/AgentChip.astro_astro_type_script_index_0_lang.CNPSRyxU.js": {
+    "id-length": {
+      "count": 19
+    }
+  },
+  "apps/web/dist-clean-test/_astro/AuthIsland.astro_astro_type_script_index_0_lang.Dv8OfdmL.js": {
+    "id-length": {
+      "count": 24
+    }
+  },
+  "apps/web/dist-clean-test/_astro/BillingIsland.astro_astro_type_script_index_0_lang.DOi4XlKf.js": {
+    "id-length": {
+      "count": 67
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-clean-test/_astro/CalendarIsland.astro_astro_type_script_index_0_lang.CKQq1y6W.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-clean-test/_astro/CallsIsland.astro_astro_type_script_index_0_lang.Bu0HjOlO.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-clean-test/_astro/DashboardStats.astro_astro_type_script_index_0_lang.BOJCMmG-.js": {
+    "id-length": {
+      "count": 26
+    }
+  },
+  "apps/web/dist-clean-test/_astro/SettingsIsland.astro_astro_type_script_index_0_lang.RKT0fQoP.js": {
+    "id-length": {
+      "count": 59
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-clean-test/_astro/Site.astro_astro_type_script_index_0_lang.DPUZCA2_.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "apps/web/dist-clean-test/_astro/api.450tSYXq.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 141
+    },
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "apps/web/dist-clean-test/_astro/index.astro_astro_type_script_index_0_lang.DgE73NDG.js": {
+    "id-length": {
+      "count": 33
+    }
+  },
+  "apps/web/dist-clean-test/_astro/render.C3rSecy_.js": {
+    "id-length": {
+      "count": 75
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-clean-test/_astro/subscribe.CxMIVOao.js": {
+    "id-length": {
+      "count": 84
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 6
+    }
+  },
+  "apps/web/dist-clean-test/assets/hero.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "apps/web/dist-test-links/_astro/ActionItemsIsland.astro_astro_type_script_index_0_lang.DYEiB_YY.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-test-links/_astro/AgentChip.astro_astro_type_script_index_0_lang.a5h-Sqjg.js": {
+    "id-length": {
+      "count": 19
+    }
+  },
+  "apps/web/dist-test-links/_astro/AuthIsland.astro_astro_type_script_index_0_lang.BKtXS7Xx.js": {
+    "id-length": {
+      "count": 28
+    }
+  },
+  "apps/web/dist-test-links/_astro/BillingIsland.astro_astro_type_script_index_0_lang.D7VrkNQP.js": {
+    "id-length": {
+      "count": 67
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-test-links/_astro/CalendarIsland.astro_astro_type_script_index_0_lang.BJKguEGD.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-test-links/_astro/CallsIsland.astro_astro_type_script_index_0_lang.BD1eRAmg.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-test-links/_astro/DashboardStats.astro_astro_type_script_index_0_lang.DZ2aGMcl.js": {
+    "id-length": {
+      "count": 25
+    }
+  },
+  "apps/web/dist-test-links/_astro/SettingsIsland.astro_astro_type_script_index_0_lang.D6DIF4Gb.js": {
+    "id-length": {
+      "count": 58
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-test-links/_astro/Site.astro_astro_type_script_index_0_lang.DPUZCA2_.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "apps/web/dist-test-links/_astro/api.B0SZVzvz.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 151
+    },
+    "no-magic-numbers": {
+      "count": 11
+    }
+  },
+  "apps/web/dist-test-links/_astro/index.astro_astro_type_script_index_0_lang.Bqm91tLQ.js": {
+    "id-length": {
+      "count": 33
+    }
+  },
+  "apps/web/dist-test-links/_astro/render.29ZhXL_g.js": {
+    "id-length": {
+      "count": 77
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-test-links/_astro/subscribe.Du__xz2i.js": {
+    "id-length": {
+      "count": 92
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 6
+    }
+  },
+  "apps/web/dist-test-links/assets/hero.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "apps/web/dist-test/_astro/ActionItemsIsland.astro_astro_type_script_index_0_lang.DYEiB_YY.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-test/_astro/AgentChip.astro_astro_type_script_index_0_lang.a5h-Sqjg.js": {
+    "id-length": {
+      "count": 19
+    }
+  },
+  "apps/web/dist-test/_astro/AuthIsland.astro_astro_type_script_index_0_lang.BKtXS7Xx.js": {
+    "id-length": {
+      "count": 28
+    }
+  },
+  "apps/web/dist-test/_astro/BillingIsland.astro_astro_type_script_index_0_lang.D7VrkNQP.js": {
+    "id-length": {
+      "count": 67
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-test/_astro/CalendarIsland.astro_astro_type_script_index_0_lang.BJKguEGD.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-test/_astro/CallsIsland.astro_astro_type_script_index_0_lang.BD1eRAmg.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-test/_astro/DashboardStats.astro_astro_type_script_index_0_lang.DZ2aGMcl.js": {
+    "id-length": {
+      "count": 25
+    }
+  },
+  "apps/web/dist-test/_astro/SettingsIsland.astro_astro_type_script_index_0_lang.D6DIF4Gb.js": {
+    "id-length": {
+      "count": 58
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "apps/web/dist-test/_astro/Site.astro_astro_type_script_index_0_lang.DPUZCA2_.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "apps/web/dist-test/_astro/api.B0SZVzvz.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 151
+    },
+    "no-magic-numbers": {
+      "count": 11
+    }
+  },
+  "apps/web/dist-test/_astro/index.astro_astro_type_script_index_0_lang.Bqm91tLQ.js": {
+    "id-length": {
+      "count": 33
+    }
+  },
+  "apps/web/dist-test/_astro/render.29ZhXL_g.js": {
+    "id-length": {
+      "count": 77
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "apps/web/dist-test/_astro/subscribe.Du__xz2i.js": {
+    "id-length": {
+      "count": 92
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 6
+    }
+  },
+  "apps/web/dist-test/assets/hero.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "apps/web/dist/_astro/ActionItemsIsland.astro_astro_type_script_index_0_lang.DYEiB_YY.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "apps/web/dist/_astro/AgentChip.astro_astro_type_script_index_0_lang.a5h-Sqjg.js": {
+    "id-length": {
+      "count": 19
+    }
+  },
+  "apps/web/dist/_astro/AuthIsland.astro_astro_type_script_index_0_lang.BKtXS7Xx.js": {
+    "id-length": {
+      "count": 28
+    }
+  },
+  "apps/web/dist/_astro/BillingIsland.astro_astro_type_script_index_0_lang.D7VrkNQP.js": {
+    "id-length": {
+      "count": 67
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "apps/web/dist/_astro/CalendarIsland.astro_astro_type_script_index_0_lang.BJKguEGD.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "apps/web/dist/_astro/CallsIsland.astro_astro_type_script_index_0_lang.BD1eRAmg.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "apps/web/dist/_astro/DashboardStats.astro_astro_type_script_index_0_lang.DZ2aGMcl.js": {
+    "id-length": {
+      "count": 25
+    }
+  },
+  "apps/web/dist/_astro/SettingsIsland.astro_astro_type_script_index_0_lang.D6DIF4Gb.js": {
+    "id-length": {
+      "count": 58
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "apps/web/dist/_astro/Site.astro_astro_type_script_index_0_lang.DPUZCA2_.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "apps/web/dist/_astro/api.B0SZVzvz.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 151
+    },
+    "no-magic-numbers": {
+      "count": 11
+    }
+  },
+  "apps/web/dist/_astro/index.astro_astro_type_script_index_0_lang.Bqm91tLQ.js": {
+    "id-length": {
+      "count": 33
+    }
+  },
+  "apps/web/dist/_astro/render.29ZhXL_g.js": {
+    "id-length": {
+      "count": 77
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "apps/web/dist/_astro/subscribe.Du__xz2i.js": {
+    "id-length": {
+      "count": 92
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 6
+    }
+  },
+  "apps/web/dist/assets/hero.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "apps/web/public/assets/hero.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "apps/web/src/lib/api.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "apps/web/src/lib/plans.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "apps/web/src/lib/render.js": {
+    "id-length": {
+      "count": 2
+    },
+    "max-params": {
+      "count": 1
+    }
+  },
+  "apps/web/src/lib/routes.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "apps/web/src/lib/subscribe.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 6
+    }
+  },
+  "apps/web/src/scripts/hermes-demo.js": {
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "apps/web/src/scripts/hermes-scroll.js": {
+    "complexity": {
+      "count": 2
+    },
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 60
+    }
+  },
+  "apps/web/test/api.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "apps/web/test/hero-loop.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "apps/web/test/links.test.js": {
+    "no-restricted-properties": {
+      "count": 5
+    }
+  },
+  "apps/web/test/pages.test.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "apps/web/test/plans.test.js": {
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "apps/web/test/render.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "apps/web/test/settings.test.js": {
+    "id-length": {
+      "count": 11
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "apps/web/test/stats.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 16
+    }
+  },
+  "apps/web/test/subscribe.test.js": {
+    "id-length": {
+      "count": 18
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "design-system/_ds_bundle.js": {
+    "complexity": {
+      "count": 3
+    },
+    "id-length": {
+      "count": 78
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-func-assign": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 55
+    },
+    "no-param-reassign": {
+      "count": 13
+    },
+    "no-restricted-syntax": {
+      "count": 18
+    },
+    "no-undef": {
+      "count": 65
+    }
+  },
+  "design-system/assets/imagery/hero.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-undef": {
+      "count": 4
+    }
+  },
+  "design-system/components/brand/wing-canvas-engine.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 47
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 106
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 16
+    },
+    "no-undef": {
+      "count": 15
+    },
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "design-system/components/brand/wing-engine.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 43
+    },
+    "no-param-reassign": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 17
+    },
+    "no-undef": {
+      "count": 24
+    }
+  },
+  "scripts/backfill-plan-profiles.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "scripts/call-abandon-rate.mjs": {
+    "id-length": {
+      "count": 4
+    }
+  },
+  "scripts/check-setup.js": {
+    "id-length": {
+      "count": 19
+    },
+    "max-depth": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "scripts/convo-bench.mjs": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "scripts/convo-bench/checks.mjs": {
+    "id-length": {
+      "count": 17
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "scripts/convo-bench/driver-shim.mjs": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "scripts/convo-bench/driver-texml.mjs": {
+    "no-negated-condition": {
+      "count": 1
+    }
+  },
+  "scripts/convo-bench/judge.mjs": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "scripts/convo-bench/metrics-parse.mjs": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "scripts/convo-bench/persona.mjs": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "scripts/convo-bench/report.mjs": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 16
+    },
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "scripts/convo-bench/runner.mjs": {
+    "complexity": {
+      "count": 2
+    },
+    "id-length": {
+      "count": 12
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-unsafe-finally": {
+      "count": 1
+    }
+  },
+  "scripts/convo-bench/scenarios/anrufbeantworter.mjs": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "scripts/convo-bench/scenarios/hold-warteschleife.mjs": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "scripts/convo-bench/telnyx-fake.mjs": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "scripts/convo-bench/texml.mjs": {
+    "id-length": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "scripts/deepseek-b1-messung.mjs": {
+    "complexity": {
+      "count": 7
+    },
+    "id-length": {
+      "count": 60
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 26
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 15
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "scripts/prod-read.mjs": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "scripts/stt-wer.mjs": {
+    "id-length": {
+      "count": 11
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 11
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "scripts/telnyx-assistant-provision.mjs": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "scripts/telnyx-call-latency.mjs": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-negated-condition": {
+      "count": 1
+    }
+  },
+  "scripts/telnyx-stt-drift.mjs": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "seed-card-test-payment.mjs": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "seed-test-payment.mjs": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/app.js": {
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "src/audit-store.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/auth.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "src/billing/activation.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/billing/backfill-profiles.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/billing/cost-calibration.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "src/billing/cost-cross-check.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/billing/cost-truing.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 7
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 9
+    }
+  },
+  "src/billing/meter.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "src/billing/metering.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/billing/money-events.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "src/billing/payment-gate.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "src/billing/provision-trigger.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "src/billing/webhook.js": {
+    "complexity": {
+      "count": 2
+    },
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/boot-guard.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/boot.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "src/bridge.js": {
+    "complexity": {
+      "count": 2
+    },
+    "id-length": {
+      "count": 6
+    },
+    "max-lines-per-function": {
+      "count": 2
+    }
+  },
+  "src/call-memory.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "src/call-result.js": {
+    "complexity": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "src/claude.js": {
+    "complexity": {
+      "count": 2
+    },
+    "id-length": {
+      "count": 30
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "src/config.js": {
+    "complexity": {
+      "count": 3
+    },
+    "id-length": {
+      "count": 8
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 13
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 7
+    }
+  },
+  "src/db/migrate.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/i18n/greeting-catalog.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/i18n/mcp-texts.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "src/i18n/prompts/de.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/i18n/prompts/en.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/i18n/prompts/fr.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/llm.js": {
+    "id-length": {
+      "count": 1
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/llm/adapters/anthropic.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/llm/adapters/deepseek.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-param-reassign": {
+      "count": 3
+    }
+  },
+  "src/llm/transient-errors.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "src/mcp-tools.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 28
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-restricted-syntax": {
+      "count": 18
+    }
+  },
+  "src/middleware.js": {
+    "id-length": {
+      "count": 2
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "src/onboarding.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "src/plans.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/portal-pool.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "src/precall-briefing.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/queue/adapters/memory/queue.js": {
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "src/release-reconcile.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "src/research/adapters/exa-search.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/research/lookup-guard.js": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "src/route-policy.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/routes/_tenant.js": {
+    "complexity": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "src/routes/_validation.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "src/routes/api-billing.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "src/routes/api-calls.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 3
+    },
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 12
+    }
+  },
+  "src/routes/api-onboard.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 3
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "src/routes/api-read.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "src/routes/mcp.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "src/routes/stripe-webhook.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "src/routes/voice.js": {
+    "complexity": {
+      "count": 3
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "src/self-service-routes.js": {
+    "complexity": {
+      "count": 2
+    },
+    "id-length": {
+      "count": 2
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 10
+    }
+  },
+  "src/sms-summary.js": {
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "src/speech-shape.js": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/store.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/store/defaults.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 13
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "src/store/greeting-notice-migration.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/store/json.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 8
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "src/store/pg.js": {
+    "complexity": {
+      "count": 4
+    },
+    "id-length": {
+      "count": 41
+    },
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "max-params": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 3
+    }
+  },
+  "src/store/portal.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/store/state-ops.js": {
+    "complexity": {
+      "count": 3
+    },
+    "id-length": {
+      "count": 215
+    },
+    "max-params": {
+      "count": 24
+    },
+    "no-magic-numbers": {
+      "count": 10
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 32
+    },
+    "no-restricted-syntax": {
+      "count": 12
+    }
+  },
+  "src/store/views.js": {
+    "id-length": {
+      "count": 15
+    }
+  },
+  "src/telephony/adapters/telnyx/cost-parse.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/telephony/adapters/telnyx/errors.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "src/telephony/adapters/telnyx/media.js": {
+    "complexity": {
+      "count": 1
+    }
+  },
+  "src/telephony/adapters/telnyx/numbers.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/telephony/adapters/telnyx/render.js": {
+    "id-length": {
+      "count": 11
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/telephony/adapters/telnyx/voice.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "src/telephony/alert-sms.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/telephony/call-finish.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 4
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "src/telephony/call-lifecycle.js": {
+    "id-length": {
+      "count": 2
+    },
+    "max-lines-per-function": {
+      "count": 1
+    }
+  },
+  "src/telephony/call-termination.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/telephony/number-denylist.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/telephony/outbound-gates.js": {
+    "id-length": {
+      "count": 14
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 17
+    },
+    "no-param-reassign": {
+      "count": 13
+    }
+  },
+  "src/telephony/registry.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "src/telnyx-call-control-ingest.js": {
+    "id-length": {
+      "count": 2
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/telnyx-conversation-watchdog.js": {
+    "id-length": {
+      "count": 19
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 5
+    }
+  },
+  "src/telnyx-inbound.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "src/telnyx-llm-shim.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 3
+    },
+    "max-lines-per-function": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-negated-condition": {
+      "count": 1
+    }
+  },
+  "src/telnyx-origination.js": {
+    "no-param-reassign": {
+      "count": 2
+    }
+  },
+  "src/telnyx-turn-failures.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "src/telnyx-turn-probe.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "src/tts/directive-synth.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "src/tts/store.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/tts/synth.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "src/ui/widget-bind.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "src/ui/widget-i18n.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "src/ui/wing-canvas-engine.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 47
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 106
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 16
+    },
+    "no-undef": {
+      "count": 15
+    },
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "src/ui/wing-canvas-mount-idle.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-undef": {
+      "count": 6
+    }
+  },
+  "src/util.js": {
+    "id-length": {
+      "count": 5
+    }
+  },
+  "src/utils/text.js": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "src/utils/timer.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "src/web-auth.js": {
+    "id-length": {
+      "count": 18
+    },
+    "no-magic-numbers": {
+      "count": 22
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "src/wiring/internal-only.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "src/wiring/web-login.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "src/worker/provisioning-orchestrator.js": {
+    "id-length": {
+      "count": 10
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-negated-condition": {
+      "count": 1
+    }
+  },
+  "src/worker/provisioning.js": {
+    "id-length": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    }
+  },
+  "test/_outbound-harness.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 3
+    }
+  },
+  "test/a4-default-profile-zero.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/admin-approval.test.js": {
+    "id-length": {
+      "count": 19
+    },
+    "no-magic-numbers": {
+      "count": 11
+    }
+  },
+  "test/afix-p4-end-call-discipline.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/al-d1-cause-diagnostics.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 8
+    }
+  },
+  "test/al-d1-shim-diagnostics.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/al-d2-thinking-signal-diagnostics.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 10
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/al-d3-consult-pump.test.js": {
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/al-d3-http-fake-helpers.test.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/al-p1-agent-turn-callerturns.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/al-p1-conversation-event.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/al-p1-forensics-scripts.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/al-p1-store-fields.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/al-p1-turn-observability.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/al-p10-precall-research.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 9
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/al-p10-tenant-setting.test.js": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/al-p10b-lookup-guard.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/al-p10b-lookup-hooks.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/al-p10b-lookup.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 8
+    },
+    "no-restricted-syntax": {
+      "count": 13
+    }
+  },
+  "test/al-p11-result-card.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 8
+    },
+    "no-restricted-properties": {
+      "count": 8
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/al-p12-call-memory.test.js": {
+    "id-length": {
+      "count": 25
+    },
+    "no-magic-numbers": {
+      "count": 13
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/al-p13-consult-channel.test.js": {
+    "id-length": {
+      "count": 54
+    },
+    "max-params": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 36
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 9
+    },
+    "no-restricted-syntax": {
+      "count": 28
+    }
+  },
+  "test/al-p13-consult-persist-pg.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/al-p14-in-call-consult.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 8
+    },
+    "no-restricted-properties": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 18
+    }
+  },
+  "test/al-p16-boot-probes.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "test/al-p17-first-round-audible.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 10
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/al-p4-side-effect-tool-loop.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/al-p5-opening.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/al-p6-engine-reactions.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/al-p6-turn-deadline-budget.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 9
+    },
+    "no-restricted-properties": {
+      "count": 13
+    }
+  },
+  "test/al-p7-llm-stream.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "test/al-p7-shim-stream-wire.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/al-p7-speech-chunker.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/al-p7-turn-streaming.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-restricted-properties": {
+      "count": 7
+    }
+  },
+  "test/al-p7b-prompt.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/al-p7b-shim-bridge.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/al-p7b-thinking-signal.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/al-p7b-turn-bridge.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-restricted-properties": {
+      "count": 8
+    }
+  },
+  "test/al-p8-bench-checks.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/al-p8-bench-shim-driver.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/al-p8-bench-shim-gates.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/alert-sms.test.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "test/am6-oauth-tenant.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/answered-by.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/anthropic-sse-fixtures.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/api-cost-drift.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/api-cost-truing-sweep.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/api-flush-meters.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/api-platform-costs.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/api-read-parity.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 15
+    }
+  },
+  "test/api-state-usage-axis.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/api.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 19
+    }
+  },
+  "test/assistant-context-default.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/assistant-context-http.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 14
+    }
+  },
+  "test/assistant-context-persist-pg.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/assistant-context-render.test.js": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "test/audit-store.test.js": {
+    "id-length": {
+      "count": 4
+    }
+  },
+  "test/audit.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/auth-mcp-bypass.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/auth-p3-bootstrap-fallback.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/auth-p4-deleted-routes.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/auth-p5-internal-only.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 8
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/auth-p6-mount-gate.test.js": {
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/auth-p6-operator-routes.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 11
+    }
+  },
+  "test/auth-p7-gate-removed.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 15
+    }
+  },
+  "test/auth-p9a-cache-headers.test.js": {
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/b1a-period-anchor-pg.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 11
+    }
+  },
+  "test/b1a-period-anchor.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/b1a-period-shared.test.js": {
+    "no-magic-numbers": {
+      "count": 13
+    }
+  },
+  "test/b1b-plan-minutes-exceeded.test.js": {
+    "id-length": {
+      "count": 18
+    },
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "test/b2-quota-gate.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 14
+    }
+  },
+  "test/b3-wire-golden-master.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-restricted-properties": {
+      "count": 7
+    }
+  },
+  "test/b3b-request-neutrality.test.js": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "test/b4a-model-prices.test.js": {
+    "no-magic-numbers": {
+      "count": 16
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/b5-deepseek-adapter.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 36
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/b5-llm-registry.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/billing-card-setup.test.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/billing-hold-capture.test.js": {
+    "id-length": {
+      "count": 15
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/billing-payment-gate.test.js": {
+    "id-length": {
+      "count": 13
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/billing-setup-checkout-route.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/billing-subscribe.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/bk2-checkout-return-plan.test.js": {
+    "id-length": {
+      "count": 46
+    },
+    "no-magic-numbers": {
+      "count": 17
+    },
+    "no-param-reassign": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 7
+    }
+  },
+  "test/bk3-auto-provision.test.js": {
+    "id-length": {
+      "count": 22
+    }
+  },
+  "test/bk4-quota-view.test.js": {
+    "id-length": {
+      "count": 21
+    },
+    "no-magic-numbers": {
+      "count": 12
+    }
+  },
+  "test/bk4-self-service-quota.test.js": {
+    "id-length": {
+      "count": 20
+    },
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "test/bk5-smoke-e2e.test.js": {
+    "id-length": {
+      "count": 27
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-param-reassign": {
+      "count": 5
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/boot-decoupling.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/boot-failclosed.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 10
+    }
+  },
+  "test/boot-guard.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/boot-prod-footguns.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/bootstrap-heal-boot.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/bootstrap-tenant.test.js": {
+    "id-length": {
+      "count": 16
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/bridge-event-unit.test.js": {
+    "id-length": {
+      "count": 4
+    }
+  },
+  "test/bridge-hardening.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/bridge-openai-event.test.js": {
+    "id-length": {
+      "count": 22
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/budget-failure-reason.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 3
+    }
+  },
+  "test/budget-month-flip.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "test/budget-nan-fail-closed.test.js": {
+    "id-length": {
+      "count": 16
+    },
+    "no-magic-numbers": {
+      "count": 13
+    }
+  },
+  "test/budget-period-window.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 19
+    }
+  },
+  "test/c1-auftragstreue.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/call-actual-cost-roundtrip.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 13
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/call-duration.test.js": {
+    "no-magic-numbers": {
+      "count": 16
+    }
+  },
+  "test/call-termination-order.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/cap-failure-reason.test.js": {
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-param-reassign": {
+      "count": 3
+    }
+  },
+  "test/characterization-marking.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/check-setup-script.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/claude-identity.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/claude-turn-guard.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-restricted-properties": {
+      "count": 5
+    }
+  },
+  "test/config-boolenv.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 8
+    }
+  },
+  "test/config-failclosed.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 13
+    },
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "test/config-gateway.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 9
+    }
+  },
+  "test/config-namespaces-helper.js": {
+    "complexity": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/config-namespaces.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "test/config-prod-footguns.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "test/config-shape.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 9
+    },
+    "no-restricted-properties": {
+      "count": 8
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/cost-calibration.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 51
+    }
+  },
+  "test/cost-drift-boot.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/cost-origin-axis.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/cost-truing-booking-guard.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/cost-truing-booking.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 36
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/cost-truing-cadence.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 6
+    }
+  },
+  "test/cost-truing-harness.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "test/cost-truing-observe.test.js": {
+    "id-length": {
+      "count": 23
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 37
+    }
+  },
+  "test/cost-truing-pool.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 13
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/cost-truing-retrievable.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/cost-truing-since.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-restricted-properties": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/cost-truing-sweep-log.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/cost-truing-tts-characters.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/cq-p2a-dashboard-visibility.test.js": {
+    "id-length": {
+      "count": 19
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/cq-p3-cap-farewell.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/cq-p4-bench-hardening.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/cq-p5-prompt-redesign.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/cq-p6-bench-mandate.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/cq-p6-mandate-http.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/cq-p6-mandate-persist.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/cq-p6-mandate.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/cq-p8-briefing-breaker.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 6
+    }
+  },
+  "test/cq-p8-briefing-http.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/cq-p8-briefing.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-param-reassign": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 7
+    },
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "test/dashboard-i18n-surface.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/de-umlaut-orthography.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/deny-diagnosability.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 12
+    }
+  },
+  "test/diagnostic-retention-http.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/diagnostic-retention.test.js": {
+    "id-length": {
+      "count": 11
+    },
+    "no-magic-numbers": {
+      "count": 17
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/dial-target-normalization.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "max-lines-per-function": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 13
+    }
+  },
+  "test/did-07-onboard-retry-owner-gate.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/directive-synth.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/disclosure-outbound.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/disclosure-regression.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/e164-trunk-zero-reject.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/e2e-01-tenant-country-change.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/e2e-02-two-tenant-two-language.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/e2e-04-no-geo-tenant-full-chain.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/e2e-05-us-launch-full-chain.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/e2e-06-en-purity-aggregate.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/effective-cap-fallback.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/env-docs-spend-cap-coherence.test.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "test/erase-tenant-cli.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/error-handler.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/f1-geo-onboard.test.js": {
+    "id-length": {
+      "count": 19
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "test/f1-geo-store.test.js": {
+    "id-length": {
+      "count": 39
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/f1-i18n-locale.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/f1-p8-outbound-lang.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/f1-provisioning-geo.test.js": {
+    "id-length": {
+      "count": 25
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-negated-condition": {
+      "count": 2
+    }
+  },
+  "test/f2-p10-dsgvo-export-erase.test.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "test/f2-p8-cost-cap.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/f2-p9-dedup-persist.test.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "test/f2-self-service-private-number.test.js": {
+    "id-length": {
+      "count": 25
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/f2-self-service-state-private-number.test.js": {
+    "id-length": {
+      "count": 17
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/f2-sms-opt-in-persist.test.js": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/f2-sms-summary-plan.test.js": {
+    "id-length": {
+      "count": 8
+    }
+  },
+  "test/finishcall-billing-once.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/fix1-summary-timeout.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-restricted-properties": {
+      "count": 7
+    }
+  },
+  "test/fmt-11-onboard-privatenumber-country-gate.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/fx-single-source-fallback-wiring.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/fx-single-source.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/g1-identity-binding.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/g1-owner-identity-seed.test.js": {
+    "id-length": {
+      "count": 12
+    }
+  },
+  "test/g2-opening-turn.test.js": {
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/g326-turn-shortcut-empty-guard.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/g4-no-speech-reprompt.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/gap-01-period-budget-axis.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "test/gap-04-activation-transaction.test.js": {
+    "id-length": {
+      "count": 11
+    }
+  },
+  "test/gap-05-number-hold.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/gap-07-alert-channel-fatal.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/gap-10-hour-limit-per-tenant.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/gap-15-legal-pages-no-placeholder-en-routes.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/gap-32-worst-case-fatal.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/gap-35-metrics-country.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/gap-36-healthz-fingerprint.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/gap-38-plan-free-predeploy.test.js": {
+    "no-sparse-arrays": {
+      "count": 1
+    }
+  },
+  "test/geo-registry.test.js": {
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "test/gq-h1-haken-repro.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/gq-h1-transcript-shrink-pg.test.js": {
+    "id-length": {
+      "count": 4
+    }
+  },
+  "test/gq-p1-agent-turn-abort.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "test/gq-p1-turn-supersede.test.js": {
+    "id-length": {
+      "count": 10
+    }
+  },
+  "test/gq-p10-recorded-messages.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/gq-p13-consult-answer-without-facts.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/gq-p14-summary-recorded-items.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/gq-p16-end-call-wait-direction.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/gq-p18-speech-gate.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/gq-p2-consult-deadline.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 10
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 16
+    }
+  },
+  "test/gq-p3-inbound-handoff.test.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/gq-p4-action-item-dedup.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/gq-p4-shim-failure-streak.test.js": {
+    "id-length": {
+      "count": 12
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/gq-p5-provider-nudge.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/gq-p8-consult-arrival-marker.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 7
+    }
+  },
+  "test/gq-s1-inbound-field-probe.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/gq-s1-turn-origin-probe.test.js": {
+    "id-length": {
+      "count": 8
+    }
+  },
+  "test/graceful-shutdown.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/grant-admin.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/greeting-notice-migration.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/headers.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/helpers.js": {
+    "id-length": {
+      "count": 19
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-param-reassign": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/helpers/characterization-scan.mjs": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 2
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/helpers/ws-openai-shim.mjs": {
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/i18n-catalog-run.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/i6-write-scope.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/i9-self-service.test.js": {
+    "id-length": {
+      "count": 51
+    },
+    "no-magic-numbers": {
+      "count": 25
+    },
+    "no-restricted-syntax": {
+      "count": 25
+    }
+  },
+  "test/inbound-disclosure-mandatory.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/inbound-routing.test.js": {
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/ks-p1b-shim-reattach.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/ks-p2-live-carrier-spend.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/ks-p3-brake-wiring.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/ks-p3-emergency-brake.test.js": {
+    "no-magic-numbers": {
+      "count": 24
+    }
+  },
+  "test/ks-p3-reserve-decoupled.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/ks-p3a-plan-cap-reserve-guard.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/ks-p4-snapshot-gate-axis.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 13
+    }
+  },
+  "test/ks-p5-current-period-credits.test.js": {
+    "id-length": {
+      "count": 11
+    },
+    "no-magic-numbers": {
+      "count": 10
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/ks-p5a-plan-cap-carries-sold-minutes.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/ks-p7-high-cost-denylist.test.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "test/ks-p8-percent-projection.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/ks-p9-platform-axis-observation.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/kv-m0-boot-banner-config.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "test/kv-m3-coverage-denominator.test.js": {
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/kv-m4-monthly-cross-check.test.js": {
+    "id-length": {
+      "count": 5
+    }
+  },
+  "test/kv-p0-flush-epoch.test.js": {
+    "id-length": {
+      "count": 16
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-restricted-properties": {
+      "count": 7
+    }
+  },
+  "test/kv-p1-cost-ledger-map.test.js": {
+    "id-length": {
+      "count": 13
+    },
+    "no-restricted-properties": {
+      "count": 5
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/kv-p2-inbound-budget.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-restricted-properties": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/kv-p3-inbound-truing.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 8
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/kv-p6-json-durchstich.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "test/kv-p6-micro-cent-ledger.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/kv-p7-latent-paths.test.js": {
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "test/kyc-gate-outbound.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/kyc-gate.test.js": {
+    "id-length": {
+      "count": 12
+    }
+  },
+  "test/l0-metrics.test.js": {
+    "id-length": {
+      "count": 12
+    },
+    "no-magic-numbers": {
+      "count": 14
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/l3-prompt-caching.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/language-switch-midcall.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/legal-content.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/llm-booking.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/llm-message-chain-language.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/llm-sdk-learning.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 2
+    }
+  },
+  "test/llm.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 30
+    }
+  },
+  "test/machine-detection.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 6
+    }
+  },
+  "test/max-duration-live-cap.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/max-duration-pure.test.js": {
+    "id-length": {
+      "count": 15
+    },
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "test/max-duration-rearm.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/mcp-method-not-allowed.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/mcp-server-icon.test.js": {
+    "no-magic-numbers": {
+      "count": 15
+    }
+  },
+  "test/mcp-tools-i18n.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 8
+    }
+  },
+  "test/mcp-tools-language.test.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 17
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/mcp-tools.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 36
+    }
+  },
+  "test/mcp-ui-i18n-divergence.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "test/mcp-ui-p5-token-sync.test.js": {
+    "id-length": {
+      "count": 5
+    }
+  },
+  "test/mcp-ui-w1-bind.test.js": {
+    "id-length": {
+      "count": 19
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 12
+    }
+  },
+  "test/mcp-ui-w1-call-widget.test.js": {
+    "id-length": {
+      "count": 17
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/mcp-ui-widget-i18n.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/mcp-ui-wing-canvas-mount-idle.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/mcp-ui-wing-canvas-mount.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 13
+    },
+    "no-param-reassign": {
+      "count": 2
+    }
+  },
+  "test/mcp-ui-wing-canvas-physics.test.js": {
+    "id-length": {
+      "count": 13
+    },
+    "no-magic-numbers": {
+      "count": 72
+    }
+  },
+  "test/mcp-ui-wing-canvas-sync.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/mcp-ui.test.js": {
+    "id-length": {
+      "count": 29
+    },
+    "max-params": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 38
+    },
+    "sonarjs/no-commented-code": {
+      "count": 1
+    }
+  },
+  "test/media-token.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/metering-unit.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/model-price-gate.test.js": {
+    "id-length": {
+      "count": 11
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/no-speech-escalation.test.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/number-gate.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 29
+    }
+  },
+  "test/number-lifecycle.test.js": {
+    "id-length": {
+      "count": 24
+    }
+  },
+  "test/number-status-view.test.js": {
+    "id-length": {
+      "count": 13
+    }
+  },
+  "test/oauth.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 12
+    }
+  },
+  "test/onboard-persist-failure.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/onboarding-identity.test.js": {
+    "id-length": {
+      "count": 13
+    },
+    "no-magic-numbers": {
+      "count": 8
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/onboarding-outbound.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/onboarding-route.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 11
+    }
+  },
+  "test/onboarding-service.test.js": {
+    "id-length": {
+      "count": 8
+    }
+  },
+  "test/operator-route-app.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/orig-01-05-cost-origin.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/outbound-budget-concurrency.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/outbound-first-gather.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/outbound-frozen.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/outbound-gates-order.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 28
+    }
+  },
+  "test/outbound-gates.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/outbound-greeting.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/outbound-identity-gate.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/outbound-per-target-cap.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/outbound-premature-close.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/outbound-reserve-backstop.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/outbound-reserve-concurrency-http.test.js": {
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/outbound-reserve-gate.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/outbound-reserve-reconcile.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 14
+    }
+  },
+  "test/outbound-reserve-release-error.test.js": {
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/outbound-reserve-release-success.test.js": {
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/outbound-tenant-default-budget.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/outbound-tenant.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 10
+    }
+  },
+  "test/owner-number-seed.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/owner-p5-profiles-global.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/p0-tenant-identity.test.js": {
+    "id-length": {
+      "count": 10
+    }
+  },
+  "test/p10-world-default-language-onboard.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/p11-agent-language-contract.test.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 17
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/p11-post-call-language.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/p12-server-error-codes.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/p14-checkout-return-app-shell.test.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "test/p15-gate-denial-language.test.js": {
+    "id-length": {
+      "count": 16
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/p15-mcp-tool-descriptions-en.test.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/p15b-format-locale.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/p15b-gate-texts-no-config-names.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/p1b-no-booking.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/p2-onboard-retry.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/p3-payment-webhook.test.js": {
+    "id-length": {
+      "count": 5
+    }
+  },
+  "test/p4-activation-order.test.js": {
+    "id-length": {
+      "count": 20
+    }
+  },
+  "test/p4-alarm-relay.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/p4-billing-hold-gate.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/p4-money-events.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/p4-number-request-eligibility.test.js": {
+    "id-length": {
+      "count": 9
+    }
+  },
+  "test/p4-period-credit.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/p4-setup-fee-hold.test.js": {
+    "id-length": {
+      "count": 8
+    }
+  },
+  "test/p5-onboarding-funnel.test.js": {
+    "id-length": {
+      "count": 23
+    },
+    "no-magic-numbers": {
+      "count": 10
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/p6-onboarding-funnel.test.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "test/p8-private-number-country-gate.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/p8-prompt-timezone.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/p8-self-service-country-locked.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/p8-tenant-geo-timezone.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/p8-timezone-no-gate.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/p9-voice-locale-source.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/pay-04-starter-reserve-charakterisierung.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/pay4-smoke-guard.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/persona-style-pg.test.js": {
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/persona-style.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/personal-assistant-characterization.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/pg-helpers.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/pii-mask.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/place-call-context-bridge.test.js": {
+    "max-params": {
+      "count": 1
+    }
+  },
+  "test/place-call-error.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/plan-cap-derivation.test.js": {
+    "id-length": {
+      "count": 40
+    },
+    "no-magic-numbers": {
+      "count": 24
+    },
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "test/plan-cap-unclamped.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "test/plan-profile-resolver.test.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "test/plans-catalog.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/plans-route.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/platform-spend-warning.test.js": {
+    "id-length": {
+      "count": 12
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/portal-pool-assertion.test.js": {
+    "id-length": {
+      "count": 4
+    }
+  },
+  "test/portal-rls-killer.test.js": {
+    "id-length": {
+      "count": 12
+    }
+  },
+  "test/portal-route.test.js": {
+    "id-length": {
+      "count": 11
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/probe-auth-table.test.js": {
+    "complexity": {
+      "count": 1
+    },
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/process-guards.test.js": {
+    "id-length": {
+      "count": 4
+    }
+  },
+  "test/prod-config-smoke.test.js": {
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/profile-a2-activation.test.js": {
+    "id-length": {
+      "count": 22
+    }
+  },
+  "test/profile-a3-backfill-pg.test.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "test/profile-a3-backfill.test.js": {
+    "id-length": {
+      "count": 27
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/profile-tenant-key-migration-pg.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/profile-tenant-key.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/profiles.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 12
+    }
+  },
+  "test/prompt-en-call-e2e.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/prompt-en-scaffolding.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/prov01-boot-reconcile.test.js": {
+    "id-length": {
+      "count": 18
+    },
+    "max-params": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "test/prov01-capture-idempotent.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-param-reassign": {
+      "count": 2
+    }
+  },
+  "test/prov01-classify.test.js": {
+    "id-length": {
+      "count": 12
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/prov01-createdat.test.js": {
+    "id-length": {
+      "count": 7
+    }
+  },
+  "test/prov01-drain-singleflight.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/prov01-retry-redrive-http.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/prov01-retry-redrive.test.js": {
+    "id-length": {
+      "count": 13
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/provider-rate-guard.test.js": {
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/provider-threading.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/provisioning-enqueue-order.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/provisioning-worker.test.js": {
+    "id-length": {
+      "count": 12
+    },
+    "max-params": {
+      "count": 2
+    }
+  },
+  "test/rate-limit.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 13
+    }
+  },
+  "test/rate-window.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/read-scope-tenant.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/reattach-active-call.test.js": {
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/render-auth-redirect.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/render-buildfilter.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/render-owner-autoseed.test.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "test/request-tenant-unit.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/request-tenant.test.js": {
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/reservation-json-ephemeral.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/reservation-ledger.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 15
+    }
+  },
+  "test/resolve-tenant.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/retention.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/rls-with-check.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/root-redirect.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/route-auth-inventory.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 6
+    }
+  },
+  "test/schema-foundation.test.js": {
+    "id-length": {
+      "count": 4
+    }
+  },
+  "test/scripts-config-namespace.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/security.test.js": {
+    "id-length": {
+      "count": 5
+    },
+    "no-magic-numbers": {
+      "count": 14
+    }
+  },
+  "test/self-service-error-codes.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/self-service-flag-gate.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/self-service-mirror-hydration.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/shape-for-speech.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/single-origin-auth.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 5
+    }
+  },
+  "test/single-origin-serving.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/spend-cap-coherence.test.js": {
+    "id-length": {
+      "count": 1
+    }
+  },
+  "test/state-ops-set-once-timestamp.test.js": {
+    "id-length": {
+      "count": 7
+    }
+  },
+  "test/state-ops-tenant-stripe.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/store-backend-parity.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/store-integrity.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/store-json-migrate-shapes.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/store-lock-reentrancy.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/store-pg-billing-idempotent.test.js": {
+    "id-length": {
+      "count": 6
+    }
+  },
+  "test/store-pg-drain-flushes.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/store-pg-idp-seed.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/store-pg-json-parity.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/store-pg-kyc-seed.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/store-pg-multitenant.test.js": {
+    "id-length": {
+      "count": 36
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-restricted-syntax": {
+      "count": 3
+    }
+  },
+  "test/store-pg-reattach-active-call.test.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "test/store-pg-reconcile-active-call.test.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "test/store-pg-rls.test.js": {
+    "id-length": {
+      "count": 13
+    },
+    "max-params": {
+      "count": 1
+    }
+  },
+  "test/store-pg-tenant-budget.test.js": {
+    "id-length": {
+      "count": 15
+    },
+    "no-magic-numbers": {
+      "count": 23
+    }
+  },
+  "test/store-pg.test.js": {
+    "id-length": {
+      "count": 30
+    },
+    "no-magic-numbers": {
+      "count": 32
+    },
+    "no-restricted-syntax": {
+      "count": 17
+    }
+  },
+  "test/store-purge.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/stripe-setup-checkout.test.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/stripe-webhook-race.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/stripe-webhook-route-secret.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/stripe-webhook-signature.test.js": {
+    "id-length": {
+      "count": 8
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/stt-drift-probe.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/stt-model-seam.test.js": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "test/stt-wer-metric.test.js": {
+    "no-magic-numbers": {
+      "count": 26
+    }
+  },
+  "test/subindex-json-ephemeral.test.js": {
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/telephony-registry.test.js": {
+    "id-length": {
+      "count": 4
+    }
+  },
+  "test/telnyx-afix-p3-farewell.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 16
+    }
+  },
+  "test/telnyx-assistant-config.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/telnyx-assistant-merge-guard.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/telnyx-call-control.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 7
+    },
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/telnyx-call-latency.test.js": {
+    "no-magic-numbers": {
+      "count": 21
+    }
+  },
+  "test/telnyx-cost-records.test.js": {
+    "id-length": {
+      "count": 50
+    },
+    "no-magic-numbers": {
+      "count": 60
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/telnyx-cost-throttle.test.js": {
+    "no-magic-numbers": {
+      "count": 13
+    }
+  },
+  "test/telnyx-elevenlabs-inbound.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/telnyx-elevenlabs-render.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/telnyx-errors.test.js": {
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/telnyx-event-ingest-machine.test.js": {
+    "id-length": {
+      "count": 38
+    },
+    "no-magic-numbers": {
+      "count": 27
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/telnyx-event-ingest-route.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 7
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/telnyx-k0-turn-seq.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/telnyx-llm-shim.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 26
+    },
+    "no-negated-condition": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 9
+    }
+  },
+  "test/telnyx-numbers.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "test/telnyx-observability-secret-guard.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 6
+    }
+  },
+  "test/telnyx-p5-gate-proof.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/telnyx-p5-origination.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/telnyx-p5-token-protection.test.js": {
+    "id-length": {
+      "count": 5
+    }
+  },
+  "test/telnyx-p6-boot-rearm.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/telnyx-p6-cap-callcontrol.test.js": {
+    "no-magic-numbers": {
+      "count": 3
+    }
+  },
+  "test/telnyx-p6-midcall-budget-kill.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/telnyx-p8-inbound.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 6
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/telnyx-p8-opening-contract.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/telnyx-p9-flag-matrix.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/telnyx-seed.test.js": {
+    "id-length": {
+      "count": 9
+    }
+  },
+  "test/telnyx-shim-endcall.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/telnyx-shim-harness.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "test/telnyx-shim-route.test.js": {
+    "no-magic-numbers": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/telnyx-signature.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/telnyx-stab-p9-watchdog.test.js": {
+    "id-length": {
+      "count": 34
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/telnyx-voice.test.js": {
+    "id-length": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
+  "test/tenant-budget-cap.test.js": {
+    "id-length": {
+      "count": 13
+    },
+    "no-magic-numbers": {
+      "count": 36
+    }
+  },
+  "test/tenant-context.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/tenant-erasure-number-release.test.js": {
+    "id-length": {
+      "count": 16
+    },
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/tenant-erasure-pg.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 11
+    }
+  },
+  "test/tenant-erasure.test.js": {
+    "id-length": {
+      "count": 14
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/tenant-prolif-b.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/tenant-prolif-d-classify.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 8
+    }
+  },
+  "test/tenant-prolif-d-reconcile.test.js": {
+    "id-length": {
+      "count": 13
+    },
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "test/tenant-resolver-parity.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/tenant-settings-calendar-map.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/tenant-suspended-at-pg.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/tenant-suspended-at.test.js": {
+    "id-length": {
+      "count": 3
+    }
+  },
+  "test/tts-quota-counter.test.js": {
+    "id-length": {
+      "count": 20
+    },
+    "no-magic-numbers": {
+      "count": 46
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/tts-store.test.js": {
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/tts-synth.test.js": {
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/turn-budget.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 14
+    }
+  },
+  "test/turn-fallback-locale.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/turn-latency-budget.test.js": {
+    "no-restricted-properties": {
+      "count": 2
+    }
+  },
+  "test/usage-correction-booking.test.js": {
+    "id-length": {
+      "count": 10
+    },
+    "no-magic-numbers": {
+      "count": 16
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/usage-event-meter.test.js": {
+    "id-length": {
+      "count": 20
+    },
+    "no-magic-numbers": {
+      "count": 12
+    }
+  },
+  "test/usage-spend-month-axis.test.js": {
+    "id-length": {
+      "count": 11
+    },
+    "no-magic-numbers": {
+      "count": 26
+    },
+    "no-restricted-properties": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/voice-budget-reconcile-finishcall.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "test/voice-greeting-tenant.test.js": {
+    "no-magic-numbers": {
+      "count": 2
+    }
+  },
+  "test/voice-incoming-catch-path.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/voice-outbound-machine-detection.test.js": {
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/voice-play-tts.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/voice-signature-403-log.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/voice-speak-status.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "max-params": {
+      "count": 1
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/voice-status-lifecycle.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 11
+    }
+  },
+  "test/voice-tariff-full-cost-guard.test.js": {
+    "no-magic-numbers": {
+      "count": 10
+    }
+  },
+  "test/voice-unknown-call-log.test.js": {
+    "id-length": {
+      "count": 2
+    },
+    "no-magic-numbers": {
+      "count": 4
+    }
+  },
+  "test/voucher-fee-b-exempt-flag-pg.test.js": {
+    "id-length": {
+      "count": 2
+    }
+  },
+  "test/voucher-fee-b-exempt-flag.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-restricted-properties": {
+      "count": 1
+    }
+  },
+  "test/w4-self-service-subscribe.test.js": {
+    "id-length": {
+      "count": 28
+    },
+    "no-magic-numbers": {
+      "count": 12
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/w5-abo-allowlist-gate.test.js": {
+    "id-length": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 7
+    }
+  },
+  "test/w5-tenant-subscriber-ops.test.js": {
+    "id-length": {
+      "count": 12
+    }
+  },
+  "test/web-auth-middleware.test.js": {
+    "id-length": {
+      "count": 13
+    },
+    "no-magic-numbers": {
+      "count": 9
+    }
+  },
+  "test/web-auth-pg.test.js": {
+    "id-length": {
+      "count": 17
+    },
+    "no-magic-numbers": {
+      "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 19
+    }
+  },
+  "test/web-auth.test.js": {
+    "id-length": {
+      "count": 21
+    },
+    "no-magic-numbers": {
+      "count": 40
+    },
+    "no-param-reassign": {
+      "count": 1
+    }
+  },
+  "test/web-greeting-templates-i18n.test.js": {
+    "id-length": {
+      "count": 7
+    }
+  },
+  "test/web-login-wiring.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-magic-numbers": {
+      "count": 5
+    }
+  },
+  "test/webhook-events.test.js": {
+    "no-magic-numbers": {
+      "count": 1
+    }
+  },
+  "test/ww-f1-booking-mandate-contradiction.test.js": {
+    "id-length": {
+      "count": 7
+    },
+    "no-restricted-properties": {
+      "count": 3
+    }
+  },
+  "test/ww-f2-tool-follow-up.test.js": {
+    "id-length": {
+      "count": 9
+    },
+    "no-magic-numbers": {
+      "count": 8
+    },
+    "no-param-reassign": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 4
+    },
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "test/ww-f4-targeted-follow-up.test.js": {
+    "id-length": {
+      "count": 6
+    },
+    "no-magic-numbers": {
+      "count": 5
+    },
+    "no-restricted-properties": {
+      "count": 7
+    }
+  },
+  "test/ww-p3-consult-prompt-routing.test.js": {
+    "id-length": {
+      "count": 3
+    },
+    "no-magic-numbers": {
+      "count": 1
+    },
+    "no-restricted-properties": {
+      "count": 5
+    }
+  }
+}

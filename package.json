@@ -8,6 +8,7 @@
     "i18nCatalogPattern": "^(Charakterisierung )?(DID|E2E|FMT|GAP|LANG|LAW|MCP|ORIG|OUT|PAY|PROMPT|UI|VOICE|WEB|WORLD)-[0-9]"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
     "start": "node src/server.js",
     "mcp": "node src/mcp-server.js",
     "check": "node scripts/check-setup.js",
@@ -20,8 +21,12 @@
     "test:gates": "NODE_ENV=test node test/i18n-catalog-run.mjs gates",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:strict": "eslint . --suppressions-location eslint-suppressions.empty.json",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "dup": "jscpd .",
+    "deadcode": "knip",
+    "coverage": "c8 npm test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
@@ -39,8 +44,13 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.2",
     "@eslint/js": "^10.0.1",
+    "c8": "^12.0.0",
     "eslint": "^10.5.0",
+    "eslint-plugin-sonarjs": "^4.2.0",
+    "eslint-plugin-unicorn": "^73.0.0",
     "globals": "^17.7.0",
+    "jscpd": "^5.0.14",
+    "knip": "^6.32.2",
     "prettier": "^3.8.4"
   }
 }

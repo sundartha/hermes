@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/server.js",
+    "src/mcp-server.js",
+    "scripts/check-setup.js",
+    "scripts/grant-admin.js",
+    "scripts/seed-owner-number.js",
+    "scripts/bootstrap-tenant.js",
+    "scripts/check-token-sync.js",
+    "scripts/convo-bench.mjs",
+    "scripts/backfill-plan-profiles.js",
+    "scripts/call-abandon-rate.mjs",
+    "scripts/deepseek-b1-messung.mjs",
+    "scripts/erase-tenant.js",
+    "scripts/prod-read.mjs",
+    "scripts/set-public-url.js",
+    "scripts/smoke-stripe-payment.mjs",
+    "scripts/stt-wer.mjs",
+    "scripts/telnyx-assistant-provision.mjs",
+    "scripts/telnyx-call-latency.mjs",
+    "scripts/telnyx-stt-drift.mjs",
+    "scripts/telnyx-ws-echo.mjs",
+    "test/i18n-catalog-run.mjs"
+  ],
+  "project": ["*.{js,mjs}", "src/**/*.js", "scripts/**/*.{js,mjs}", "test/**/*.js"],
+  "ignore": ["coverage/**", "data/**"]
+}

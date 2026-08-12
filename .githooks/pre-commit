@@ -1,0 +1,42 @@
+#!/bin/sh
+# Pre-Commit-Hook: erzwingt den Linter vor jedem Commit.
+# Aktivierung ueber "git config core.hooksPath .githooks" (siehe package.json prepare-Skript).
+# Volle Variante (npm run lint), keine Beschraenkung auf vorgemerkte Dateien:
+# gemessene Laufzeit liegt bei ca. 4-5 Sekunden, weit unter der 30-Sekunden-Schwelle.
+#
+# Vorab-Pruefung: npm run lint lintet den ARBEITSBAUM, nicht den Index. Hat
+# eine vorgemerkte .js/.mjs-Datei zusaetzlich unvorgemerkte Aenderungen im
+# Arbeitsbaum, sagt der Lint-Lauf ueber den vorgemerkten Inhalt nichts aus -
+# der Commit koennte kaputten Code vorgemerkt haben, waehrend der Arbeitsbaum
+# zufaellig sauber ist. Bewusst KEIN "git stash" (refs/stash ist zwischen
+# Arbeitsbaeumen geteilt, s. CLAUDE.md/MEMORY): stattdessen Verweigerung.
+staged_js=$(git diff --cached --name-only --diff-filter=ACM -- '*.js' '*.mjs')
+if [ -n "$staged_js" ]; then
+  dirty_staged=$(printf '%s\n' "$staged_js" | while IFS= read -r f; do
+    git diff --name-only -- "$f"
+  done)
+  if [ -n "$dirty_staged" ]; then
+    echo ""
+    echo "Commit abgebrochen: folgende vorgemerkte Dateien haben zusaetzlich"
+    echo "unvorgemerkte Aenderungen im Arbeitsbaum. Der Lint-Lauf prueft den"
+    echo "Arbeitsbaum, nicht den vorgemerkten Inhalt - eine Aussage ueber das,"
+    echo "was tatsaechlich committet wuerde, ist damit nicht moeglich:"
+    echo "$dirty_staged" | sort -u
+    echo ""
+    echo "Bitte die Datei(en) vollstaendig vormerken (git add) oder die"
+    echo "unvorgemerkten Aenderungen verwerfen, dann erneut committen."
+    exit 1
+  fi
+fi
+
+npm run lint
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo ""
+  echo "Commit abgebrochen: der Linter (npm run lint) hat Verstoesse gefunden."
+  echo "Bitte die gemeldeten Probleme beheben (oder mit npm run lint:fix versuchen) und erneut committen."
+  exit 1
+fi
+
+exit 0
