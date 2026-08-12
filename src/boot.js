@@ -57,12 +57,13 @@ import { evidenceRetentionEnabled } from "./call-result.js";
 // die auch der Anlege- und der Purge-Pfad fragen (G5). Kein Zyklus: diagnostic-retention.js
 // importiert nichts.
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
-// smtp-boot-probe: der Versand ist fail-soft (smtp-mail.js/billing/cancellation-mail.js)
-// - ein Fehlschlag bleibt lautlos, bis sich ein Kunde beschwert. Import HIER statt in
-// wiring/web-login.js (wo der Mailer selbst konstruiert wird): jener Block laeuft NUR bei
-// STORE_BACKEND=pg (app.js), die Sonde soll den SMTP-Zustand aber unconditional melden,
-// Muster PROV-01 (reconcileOrphanedProvisioning, s.u.).
-import { probeSmtpBoot } from "./smtp-mail.js";
+// mail-boot-probe: der Versand ist fail-soft (brevo-mail.js/smtp-mail.js/billing/
+// cancellation-mail.js) - ein Fehlschlag bleibt lautlos, bis sich ein Kunde beschwert.
+// Import HIER statt in wiring/web-login.js (wo der Mailer selbst konstruiert wird): jener
+// Block laeuft NUR bei STORE_BACKEND=pg (app.js), die Sonde soll den Mail-Zustand (Brevo/
+// HTTP oder SMTP) aber unconditional melden, Muster PROV-01 (reconcileOrphanedProvisioning,
+// s.u.).
+import { probeMailBoot } from "./mail-boot-probe.js";
 
 const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -932,17 +933,17 @@ export async function bootServer({
     // den Boot-Logs - blockiert weder listen noch Healthcheck; der Boot-Guard (hasActiveNumber)
     // lief bereits davor. Gated auf PROVISIONING_ENABLED, Default Observe-Only (maxAge=0).
     void provisioning.reconcileOrphanedProvisioning();
-    // smtp-boot-probe: EINE Zeile, die den sonst lautlosen Fehlschlag des fail-soft
-    // SMTP-Versands meldet (falsche Zugangsdaten, beim Anbieter nicht verifizierte
+    // mail-boot-probe: EINE Zeile, die den sonst lautlosen Fehlschlag des fail-soft
+    // Mailversands meldet (falsche Zugangsdaten, beim Anbieter nicht verifizierte
     // Absenderadresse) - sonst merkt der Betreiber es erst, wenn sich ein Kunde
     // beschwert. Fire-and-forget NACH den Boot-Logs (Muster PROV-01 direkt darueber):
-    // blockiert weder listen noch Healthcheck - ein nicht erreichbarer Mailserver darf
-    // den Start nie verzoegern, der Dienst telefoniert live. probeSmtpBoot faengt
-    // bereits selbst jeden Fehler (verify() sendet keine Mail); das .catch() hier ist
-    // die zweite Linie (Muster runSweepTick oben) - NIE e.message loggen (Regel 4:
-    // eine SMTP-Fehlermeldung kann Zugangsdaten tragen).
-    void probeSmtpBoot(config).catch((e) =>
-      console.error("[smtp] Sonde unerwartet gescheitert", e?.code ?? e?.name ?? "unbekannt"),
+    // blockiert weder listen noch Healthcheck - ein nicht erreichbarer Mail-Anbieter darf
+    // den Start nie verzoegern, der Dienst telefoniert live. probeMailBoot faengt bereits
+    // selbst jeden Fehler (verschickt nie eine Mail); das .catch() hier ist die zweite
+    // Linie (Muster runSweepTick oben) - NIE e.message loggen (Regel 4: eine Mail-
+    // Fehlermeldung kann Zugangsdaten tragen).
+    void probeMailBoot(config).catch((e) =>
+      console.error("[mail] Sonde unerwartet gescheitert", e?.code ?? e?.name ?? "unbekannt"),
     );
   });
 

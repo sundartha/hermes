@@ -42,6 +42,7 @@ import { isSelfServiceLive } from "../config.js";
 import { makeWorkosManagement } from "../workos-management.js";
 import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.js";
 import { makeSmtpMailer } from "../smtp-mail.js";
+import { makeBrevoMailer } from "../brevo-mail.js";
 import { runCancellationMailSweep } from "../billing/cancellation-mail.js";
 
 // tenant-prolif-d: Sweep-Kadenz des DID-Release-Reconcilers (interne Kadenz, kein
@@ -93,6 +94,25 @@ function scheduleCancellationMailSweep(deps) {
   setInterval(run, CANCELLATION_MAIL_SWEEP_INTERVAL_MS).unref();
 }
 
+// Mail-Adapter-Auswahl (312k-Phase 5, HTTP-Fortsetzung): EINE Stelle, EINE Rangfolge (G5) -
+// kein zweiter Auswahl-Codepfad irgendwo sonst (die Boot-Sonde, mail-boot-probe.js,
+// bildet dieselbe Rangfolge NUR fuer die Diagnose nach, konstruiert aber keinen Mailer).
+// Brevo (HTTP ueber Port 443, den Render auf kostenlosen Web-Diensten NICHT sperrt) hat
+// Vorrang vor SMTP (Render sperrt SMTP 25/465/587 dort, ETIMEDOUT in Produktion). SMTP
+// bleibt als Fallback bestehen - sobald der Dienst auf einen bezahlten Plan wechselt,
+// reicht das Setzen von SMTP_* ohne BREVO_API_KEY. Kein Schluessel gesetzt -> kein Mailer
+// (Muster workosManagementApiKey): die Kuendigungsbestaetigung bleibt offen vermerkt.
+// Konstruktoren injizierbar (DIP-Seam) fuer den isolierten Auswahl-Test ohne echtes
+// nodemailer/fetch.
+export function selectMailer(
+  config,
+  { _makeBrevoMailer = makeBrevoMailer, _makeSmtpMailer = makeSmtpMailer } = {},
+) {
+  if (config.mail.brevoApiKey) return _makeBrevoMailer(config);
+  if (config.mail.smtpHost) return _makeSmtpMailer(config);
+  return null;
+}
+
 export async function wireWebLogin({
   app,
   config,
@@ -134,15 +154,15 @@ export async function wireWebLogin({
   const workosManagement = config.auth.workosManagementApiKey
     ? makeWorkosManagement(config)
     : null;
-  // 312k-Phase 5: SMTP-Mailer NUR konstruieren, wenn ein Host gesetzt ist
-  // (config.mail.smtpHost) - Muster workosManagement. Ungesetzt (Auslieferungszustand) ->
-  // null: die Kuendigungsbestaetigung wird gar nicht erst versucht,
-  // attemptCancellationMailConfirm vermerkt sie offen + protokolliert.
-  const mailer = config.mail.smtpHost ? makeSmtpMailer(config) : null;
-  // smtp-boot-probe: die Boot-Sonde selbst haengt NICHT an diesem pg-gated Block (der bei
+  // 312k-Phase 5 (HTTP-Fortsetzung): Mailer ueber die EINE Rangfolge oben auswaehlen
+  // (selectMailer) - Brevo/HTTP vor SMTP, keiner gesetzt -> null (Muster workosManagement).
+  // Ungesetzt (Auslieferungszustand) -> null: die Kuendigungsbestaetigung wird gar nicht
+  // erst versucht, attemptCancellationMailConfirm vermerkt sie offen + protokolliert.
+  const mailer = selectMailer(config);
+  // mail-boot-probe: die Boot-Sonde selbst haengt NICHT an diesem pg-gated Block (der bei
   // STORE_BACKEND=json gar nicht laeuft, s. app.js) - sie sitzt unconditional in boot.js
   // (bootServer), Muster PROV-01 (reconcileOrphanedProvisioning), damit der Betreiber den
-  // SMTP-Zustand auch ohne laufendes Portal/pg-Backend sieht.
+  // Mail-Zustand (Brevo/HTTP oder SMTP) auch ohne laufendes Portal/pg-Backend sieht.
   // Boot-Lauf + Sweep des Vertragsende-Aufraeumens (Rufnummer freigeben + WorkOS-Identitaet
   // loeschen, NUR fuer Tenants mit noch offenem Teilschritt - s. tenantsPendingContractEnd-
   // Cleanup, state-ops.js). Der direkte Aufruf sitzt in billing/webhook.js (SUSPEND-Zweig);

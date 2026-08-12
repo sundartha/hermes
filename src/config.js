@@ -1630,14 +1630,18 @@ const rawConfig = {
     min: 0,
   }),
 
-  // ---- Mail (SMTP, 312k-Phase 5: Kuendigungsbestaetigung) ----
-  // Eigenes Postfach ueber SMTP - KEIN neuer Dienstleister (Owner-Entscheidung): die Domain
-  // liegt bei Zoho in der EU (mx.zoho.eu, SPF include:zohomail.eu bereits gesetzt). TLS wird
-  // im Adapter erzwungen (smtp-mail.js) - nie unverschluesselter Versand. Leer (Default) =
-  // kein Mailer konstruiert (wiring/web-login.js, Muster workosManagementApiKey): die
-  // Kuendigungsbestaetigung bleibt offen vermerkt, ein spaeterer Sweep versucht es erneut,
-  // sobald die Variablen gesetzt sind. smtpPassword ist SECRET - nie loggen/leaken, nie in
-  // eine Fehlermeldung, nie in ein Audit-Detail (eine Email-Adresse ist ebenso PII, Regel 4).
+  // ---- Mail (312k-Phase 5: Kuendigungsbestaetigung; HTTP-Fortsetzung) ----
+  // ZWEI moegliche Kanaele, EINE Rangfolge (wiring/web-login.js selectMailer): Brevo/HTTP
+  // vor SMTP. Grund: Render sperrt auf kostenlosen Web-Diensten den ausgehenden Verkehr auf
+  // allen SMTP-Ports (25/465/587, ETIMEDOUT in Produktion) - Brevo laeuft ueber HTTP auf
+  // Port 443, den Render nicht sperrt. Der urspruengliche SMTP-Weg (eigenes Postfach bei
+  // Zoho EU, mx.zoho.eu) bleibt bestehen, TLS bleibt im Adapter erzwungen (smtp-mail.js) -
+  // nie unverschluesselter Versand. Kein Schluessel gesetzt -> kein Mailer konstruiert
+  // (Muster workosManagementApiKey): die Kuendigungsbestaetigung bleibt offen vermerkt, ein
+  // spaeterer Sweep versucht es erneut, sobald die Variablen gesetzt sind. brevoApiKey UND
+  // smtpPassword sind SECRET - nie loggen/leaken, nie in eine Fehlermeldung, nie in ein
+  // Audit-Detail (eine Email-Adresse ist ebenso PII, Regel 4).
+  brevoApiKey: process.env.BREVO_API_KEY || "", // SECRET - nie loggen/leaken
   smtpHost: process.env.SMTP_HOST || "",
   smtpPort: numEnv("SMTP_PORT", process.env.SMTP_PORT, { fallback: 465, min: 1 }),
   smtpUser: process.env.SMTP_USER || "",
@@ -1796,10 +1800,11 @@ export const CONFIG_NAMESPACES = Object.freeze({
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
-  // 312k-Phase 5: SMTP-Versand der Kuendigungsbestaetigung (eigenes Postfach, Zoho EU) -
+  // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
   // eigener Namespace statt Anhaengsel an auth/billing (eigenstaendige Domaene, s.
-  // smtp-mail.js/billing/cancellation-mail.js).
-  mail: ["smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom"],
+  // brevo-mail.js/smtp-mail.js/billing/cancellation-mail.js). HTTP-Fortsetzung:
+  // brevoApiKey ergaenzt (Render sperrt SMTP auf kostenlosen Plaenen) -> 6.
+  mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled"],
