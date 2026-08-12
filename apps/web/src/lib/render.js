@@ -1,14 +1,14 @@
-// W4: DOM-Bau der read-only Datensicht (Anrufe / Action Items / Kalender).
-// BEWUSST getrennt von den Inseln, damit der Bau testbar ist (ohne Browser-DOM,
-// ohne Astro) UND die el()-Boilerplate genau EINMAL existiert (G5, kein Drift
-// ueber drei Inseln). Die Inseln liefern nur `document` + den state und haengen
-// die fertigen Knoten in ihren Container.
+// W4: DOM-Bau der read-only Anrufliste (inkl. aufklappbarer Chat-Historie je
+// Anruf). BEWUSST getrennt von der Insel, damit der Bau testbar ist (ohne
+// Browser-DOM, ohne Astro) UND die el()-Boilerplate genau EINMAL existiert
+// (G5). Die Insel liefert nur `document` + den state und haengt die fertigen
+// Knoten in ihren Container.
 //
-// XSS-SCHUTZ (Leitplanke): Tenant-Strings (Gegenstelle, goal, Item-Text,
-// Kalender-Titel) gehen AUSSCHLIESSLICH ueber node.textContent in den DOM --
-// NIE ueber innerHTML. textContent interpretiert nie HTML, daher kann kein
-// "<script>"/Attribut-Ausbruch aus Tenant-Daten entstehen. Dieses Modul nutzt
-// kein innerHTML; der Beleg ist ein Test (render.test.js) + ein grep-Gate.
+// XSS-SCHUTZ (Leitplanke): Tenant-Strings (Gegenstelle, goal, Transkript-Text,
+// Summary) gehen AUSSCHLIESSLICH ueber node.textContent in den DOM -- NIE ueber
+// innerHTML. textContent interpretiert nie HTML, daher kann kein "<script>"/
+// Attribut-Ausbruch aus Tenant-Daten entstehen. Dieses Modul nutzt kein
+// innerHTML; der Beleg ist ein Test (render.test.js) + ein grep-Gate.
 
 import {
   AUTH_STATE,
@@ -19,25 +19,23 @@ import {
   callSubtitle,
   callStatusLabel,
   callStatusKind,
-  actionItemsFrom,
-  isAppointment,
-  calendarFrom,
-  calendarDateParts,
+  transcriptFrom,
+  isAgentTurn,
+  turnRoleLabel,
+  turnTimeLabel,
+  callSummary,
 } from "./api.js";
-
-// Anzeige-Grenzen wie im Bestand (tenant.html): nur die ersten N Eintraege.
-const MAX_ACTION_ITEMS = 12;
-const MAX_CALENDAR_EVENTS = 6;
 
 // Beschriftungen/Glyphen (keine Magic-Strings an den Verwendungsstellen, G25).
 const EMPTY_CALLS = "No calls yet — connect your first agent!";
-const EMPTY_ACTION_ITEMS = "No action items yet.";
-const EMPTY_CALENDAR = "No appointments yet.";
-const APPOINTMENT_TAG = "Appointment";
+const EMPTY_TRANSCRIPT = "No conversation recorded.";
+const SUMMARY_LABEL = "Summary";
 // Richtungs-Pfeile als echte Unicode-Zeichen (kein roher HTML-Entity-String;
 // textContent-sicher). Out = nach oben rechts, In = nach unten links.
 const ARROW_OUT = "↗";
 const ARROW_IN = "↙";
+// Aufklapp-Pfeil des Anruf-Triggers (dreht sich per CSS ueber aria-expanded).
+const CARET = "▾";
 
 // Element-Fabrik: setzt className optional, Text NUR ueber textContent. `doc`
 // ist injiziert (DIP) -> derselbe Bau in Produktion (document) UND im Test
@@ -54,7 +52,7 @@ function emptyRow(doc, text) {
   return el(doc, "li", "data-empty", text);
 }
 
-// ---- Anrufe ----
+// ---- Anrufe (Zeile + aufklappbare Chat-Historie) ------------------------------
 function directionIcon(doc, call) {
   const isOutbound = call.direction === CALL_DIRECTION.OUTBOUND;
   return el(
@@ -74,75 +72,111 @@ function callBody(doc, call) {
   return body;
 }
 
-function callRow(doc, call) {
+function statusBadge(doc, call) {
+  return el(doc, "span", `status-badge status-badge--${callStatusKind(call)}`, callStatusLabel(call));
+}
+
+// Trigger-Knopf einer Anrufzeile: ein ECHTER <button> (nicht nur ein klickbares
+// div) -- so bleibt die Zeile per Tastatur bedienbar (Enter/Space) ohne
+// zusaetzliche Keydown-Verdrahtung. aria-expanded/aria-controls tragen den
+// Aufklapp-Zustand fuer Screenreader; dieselben Attribute steuert auch das
+// scoped CSS der Insel (Caret-Rotation), kein zweiter State.
+function callTrigger(doc, call, panelId, index) {
+  const button = el(doc, "button", "call-row__trigger");
+  button.type = "button";
+  button.id = `call-trigger-${index}`;
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-controls", panelId);
+  button.append(directionIcon(doc, call), callBody(doc, call), statusBadge(doc, call));
+  button.append(el(doc, "span", "call-row__caret", CARET));
+  return button;
+}
+
+// Eine Chat-Blase je Turn. role unterscheidet Agent/Gegenstelle optisch
+// (chat-bubble--agent/--counterparty); die Uhrzeit fehlt einfach, wenn `at`
+// fehlt/ungueltig ist (turnTimeLabel liefert dann "").
+function chatBubble(doc, turn) {
+  const bubble = el(doc, "li", `chat-bubble chat-bubble--${isAgentTurn(turn) ? "agent" : "counterparty"}`);
+  bubble.append(el(doc, "span", "chat-bubble__role", turnRoleLabel(turn)));
+  bubble.append(el(doc, "p", "chat-bubble__text", (turn && turn.text) || ""));
+  const time = turnTimeLabel(turn);
+  if (time) bubble.append(el(doc, "span", "chat-bubble__time", time));
+  return bubble;
+}
+
+// Turns als Liste -- kein leeres Loch, wenn (noch) kein Transkript vorliegt
+// (z.B. Anruf ohne Aufzeichnung/laeuft noch): eine ruhige Hinweiszeile statt
+// eines leeren <ul>.
+function chatLog(doc, call) {
+  const turns = transcriptFrom(call);
+  if (!turns.length) return el(doc, "p", "call-panel__empty muted", EMPTY_TRANSCRIPT);
+  const list = el(doc, "ul", "chat-log");
+  list.append(...turns.map((t) => chatBubble(doc, t)));
+  return list;
+}
+
+// Summary abgesetzt ueber der Chat-Historie -- nur, wenn eine existiert
+// (summarizeCall setzt sie nachtraeglich; initial null).
+function callSummaryBlock(doc, call) {
+  const summary = callSummary(call);
+  if (!summary) return null;
+  const block = el(doc, "p", "call-summary");
+  block.append(el(doc, "span", "call-summary__label", SUMMARY_LABEL));
+  block.append(el(doc, "span", "call-summary__text", summary));
+  return block;
+}
+
+// Das aufklappbare Panel unter dem Trigger: Summary (optional) + Chat-Log.
+// Startet IMMER geschlossen (hidden) -- der Trigger-Klick oeffnet es.
+function callPanel(doc, call, panelId) {
+  const panel = el(doc, "div", "call-panel");
+  panel.id = panelId;
+  panel.hidden = true;
+  const summaryBlock = callSummaryBlock(doc, call);
+  if (summaryBlock) panel.append(summaryBlock);
+  panel.append(chatLog(doc, call));
+  return panel;
+}
+
+function setPanelOpen(entry, open) {
+  entry.panel.hidden = !open;
+  entry.button.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+// Accordion: GENAU ein Anruf offen. Bei vielen Anrufen bleibt die Liste
+// uebersichtlich statt dass mehrere lange Transkripte gleichzeitig die Seite
+// strecken; ein zweiter Klick auf die offene Zeile klappt sie wieder zu.
+function wireAccordion(entries) {
+  for (const entry of entries) {
+    entry.button.addEventListener("click", () => {
+      const wasOpen = entry.button.getAttribute("aria-expanded") === "true";
+      for (const other of entries) setPanelOpen(other, false);
+      setPanelOpen(entry, !wasOpen);
+    });
+  }
+}
+
+function callRow(doc, call, index) {
   const row = el(doc, "li", "call-row");
-  const badge = el(
-    doc,
-    "span",
-    `status-badge status-badge--${callStatusKind(call)}`,
-    callStatusLabel(call),
-  );
-  row.append(directionIcon(doc, call), callBody(doc, call), badge);
-  return row;
+  const panelId = `call-panel-${index}`;
+  const button = callTrigger(doc, call, panelId, index);
+  const panel = callPanel(doc, call, panelId);
+  row.append(button, panel);
+  return { row, entry: { button, panel } };
 }
 
 export function callRows(doc, data) {
   const calls = callsFrom(data);
-  return calls.length ? calls.map((c) => callRow(doc, c)) : [emptyRow(doc, EMPTY_CALLS)];
-}
-
-// ---- Action Items ----
-function actionItemRow(doc, item) {
-  const rowClass = item.done ? "ai-row ai-row--done" : "ai-row";
-  const row = el(doc, "li", rowClass);
-  row.append(el(doc, "span", "ai-text", item.text || ""));
-  if (isAppointment(item)) row.append(el(doc, "span", "tag tag--appointment", APPOINTMENT_TAG));
-  return row;
-}
-
-export function actionItemRows(doc, data) {
-  const items = actionItemsFrom(data).slice(0, MAX_ACTION_ITEMS);
-  return items.length
-    ? items.map((i) => actionItemRow(doc, i))
-    : [emptyRow(doc, EMPTY_ACTION_ITEMS)];
-}
-
-// ---- Kalender ----
-function calendarDateBlock(doc, parts) {
-  const block = el(doc, "div", "cal-date");
-  block.append(
-    el(doc, "strong", "cal-date__day", parts.day),
-    el(doc, "small", "cal-date__month", parts.month),
-  );
-  return block;
-}
-
-function calendarBody(doc, event, parts) {
-  const body = el(doc, "div", "cal-body");
-  body.append(
-    el(doc, "strong", "cal-title", event.title || ""),
-    el(doc, "span", "cal-when", parts.when),
-  );
-  return body;
-}
-
-function calendarRow(doc, event) {
-  const parts = calendarDateParts(event);
-  const row = el(doc, "li", "cal-row");
-  row.append(calendarDateBlock(doc, parts), calendarBody(doc, event, parts));
-  return row;
-}
-
-export function calendarRows(doc, data) {
-  const events = calendarFrom(data).slice(0, MAX_CALENDAR_EVENTS);
-  return events.length ? events.map((e) => calendarRow(doc, e)) : [emptyRow(doc, EMPTY_CALENDAR)];
+  if (!calls.length) return [emptyRow(doc, EMPTY_CALLS)];
+  const built = calls.map((call, index) => callRow(doc, call, index));
+  wireAccordion(built.map((b) => b.entry));
+  return built.map((b) => b.row);
 }
 
 // ---- Insel-Verdrahtung ------------------------------------------------------
 // Bindet eine Datensicht-Insel an den EINEN state-Fetch: hoert auf AUTH_EVENT
-// und fuellt das Container-Element mit den von `rowsFn` gebauten Zeilen. Genau
-// EINE Stelle (G5), statt die identische 3-Zeilen-Verdrahtung in jeder der drei
-// Inseln zu wiederholen. `doc` injiziert (DIP), damit der Bau testbar bleibt.
+// und fuellt das Container-Element mit den von `rowsFn` gebauten Zeilen. `doc`
+// injiziert (DIP), damit der Bau testbar bleibt.
 //
 // Stale-Daten-Schutz: nur im AUTHENTICATED-Zustand wird gerendert; jeder andere
 // Zustand (anonym/pending/Fehler bzw. data==null) LEERT den Container -- kein

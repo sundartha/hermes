@@ -972,6 +972,19 @@ export function tenantGeo(tenantId) {
   return ops.tenantGeo(load(), tenantId);
 }
 
+// ---- Newsletter-Einwilligung pro Tenant (Opt-in, DSGVO Art. 7 Abs. 1) ----
+// setNewsletterConsent mutiert -> save (Muster wie setPrivateNumber/setTenantStripe);
+// tenantNewsletterConsent ist reine Query (kein save, analog tenantPrivateNumber).
+export function setNewsletterConsent(tenantId, consent) {
+  const tenant = ops.setNewsletterConsent(load(), tenantId, consent);
+  save();
+  return tenant;
+}
+
+export function tenantNewsletterConsent(tenantId) {
+  return ops.tenantNewsletterConsent(load(), tenantId);
+}
+
 // Leser des Tenant-Felds timezone (P8, nur Anzeige). Reine Query, kein save.
 export function tenantTimezone(tenantId) {
   return ops.tenantTimezone(load(), tenantId);

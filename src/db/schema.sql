@@ -128,6 +128,21 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS workos_delete_pending BOOLEAN;
 -- eines neuen "jetzt". NULL/false = nichts (mehr) offen. Additiv NULLABLE, kein CHECK.
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS cancellation_mail_pending BOOLEAN;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS cancellation_mail_received_at TEXT;
+-- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1): lebt am Tenant-Record, NICHT in
+-- settings - sie ist eine Einwilligung der PERSON/des Accounts (wie private_number), keine
+-- Agent-Verhaltens-Einstellung (settings leakt ausserdem komplett ueber /api/state + MCP,
+-- H4-Begruendung wie bei private_number). newsletter_consent additiv NULLABLE, KEIN DEFAULT
+-- TRUE (Muster stripe_cancel_at_period_end/stripe_period_credit_revoked): NULL/false
+-- bedeuten identisch "nicht eingewilligt" - ein Bestands-/Neu-Tenant ohne Zeile ist NIE
+-- vorangekreuzt (kein Opt-out-Trick, reines Opt-in). newsletter_consent_at ist der
+-- ISO-Zeitstempel des LETZTEN Zustandswechsels (Opt-in ODER Widerruf setzen ihn
+-- gleichermassen) - reine Praesenz-/Lese-Info fuers Dashboard, WANN zuletzt gewechselt
+-- wurde. Der VOLLE, unveraenderliche Nachweis (wer, welcher Zustand, wann - Art. 7 Abs. 1)
+-- liegt zusaetzlich im audit_log (Muster 312k-P3 Kuendigungs-Nachweis); die Spalte hier
+-- ersetzt den Audit-Trail nicht, sie ist nur die schnelle Lese-Sicht. Additiv, kein CHECK
+-- (Validierung lebt fail-closed im Setter, Muster private_number/kyc_level).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS newsletter_consent    BOOLEAN;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS newsletter_consent_at TEXT;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

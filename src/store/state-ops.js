@@ -2260,6 +2260,44 @@ export function tenantsPendingCancellationMail(s) {
   return tenantsOf(s).filter((t) => t.cancellationMailPending);
 }
 
+// ---- Newsletter-Einwilligung pro Tenant (Opt-in, DSGVO Art. 7 Abs. 1) ----
+// Setzt die Newsletter-Einwilligung eines Tenants. Lebt am Tenant-RECORD (NICHT in
+// settings): sie ist eine Einwilligung der Person/des Accounts, keine Agent-Verhaltens-
+// Einstellung - dieselbe H4-Begruendung wie bei privateNumber (settings leakt komplett
+// ueber /api/state + MCP; eine Einwilligung gehoert nicht in diesen Strahl, s. schema.sql).
+// NUR strikt boolean: fail-closed wie setKycLevel/setPrivateNumber - jeder andere Wert
+// (Freitext/Zahl/undefined/null) wirft VOR jeder Mutation, statt einen Muell-Wert zu
+// persistieren, der spaeter als "eingewilligt" fehlinterpretiert werden koennte (Opt-in
+// darf NIE stillschweigend entstehen). newsletterConsentAt traegt den ISO-Zeitstempel
+// DIESES Zustandswechsels (Opt-in ODER Widerruf setzen ihn gleichermassen, EINE
+// Schreibstelle - Muster setOnceTimestamp-Nachbarn, aber bewusst NICHT set-once: jeder
+// Wechsel soll den Stand ueberschreiben). Der vollstaendige, unveraenderliche Nachweis
+// (wer/wann/welcher Zustand, Art. 7 Abs. 1) liegt zusaetzlich im audit_log (Route-Layer,
+// Muster 312k-P3 Kuendigungs-Nachweis) - dieses Feld ist nur die schnelle Lese-Sicht.
+// Fehlender Tenant -> throw (Muster setKycLevel/setPrivateNumber, kein stilles No-Op).
+// Reine Mutation, kein IO (Wrapper saved). Liefert den Tenant.
+export function setNewsletterConsent(s, tenantId, consent) {
+  if (typeof consent !== "boolean")
+    throw new Error("setNewsletterConsent: consent muss boolean sein");
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`setNewsletterConsent: Tenant ${tenantId} nicht gefunden`);
+  tenant.newsletterConsent = consent;
+  tenant.newsletterConsentAt = new Date().toISOString();
+  return tenant;
+}
+
+// Lese-Query der Newsletter-Einwilligung (Muster tenantPrivateNumber/cancellationMailPending):
+// fail-closed Default { consent: false, consentAt: null } - ein Tenant ohne Zeile/Feld ist
+// NIE "eingewilligt" (der Opt-in-Grundsatz gilt auch beim Lesen, kein stiller Vorangekreuzt-
+// Zustand). Reine Query, kein IO.
+export function tenantNewsletterConsent(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  return {
+    consent: tenant?.newsletterConsent === true,
+    consentAt: tenant?.newsletterConsentAt ?? null,
+  };
+}
+
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----
 // Liefert den Usage-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (Nebeneffekt
 // im Kommentar; der Aufrufer reicht stets eine konkrete tenantId). So lebt der

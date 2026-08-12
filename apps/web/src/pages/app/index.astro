@@ -2,24 +2,26 @@
 // App-Shell (/app): Einstiegspunkt nach dem Login. Hostet die Auth-Insel und
 // zeigt -- je nach gemeldetem Auth-Zustand -- genau eine Region: Laden / anonym /
 // wartet auf Freigabe / Fehler / eingeloggte Shell. Die Shell zeigt echte
-// Tenant-Daten aus /api/self-service/state (Begruessung, Statistik, Verlauf,
-// Einstellungen, Karte). KEIN eigener state-Fetch je Insel -- die Auth-Insel
-// ermittelt den Zustand einmal und verteilt ihn per AUTH_EVENT.
+// Tenant-Daten aus /api/self-service/state (Begruessung, Verlauf, Einstellungen,
+// Karte). KEIN eigener state-Fetch je Insel -- die Auth-Insel ermittelt den
+// Zustand einmal und verteilt ihn per AUTH_EVENT.
+//
+// Entschlackung (Aug 2026): Overview/DashboardStats sowie die Action-Items- und
+// Kalender-Spalte sind raus -- der Agent hat kein Kalender-/Buchungs-Tool (P1b)
+// und die Kennzahlen dopplten nur die Anrufliste. AgentChip (Rufnummer + Live-
+// Punkt) bleibt, er ist der einzige Blick "geht der Agent gerade?" auf einen
+// Schlag.
 import App from "../../layouts/App.astro";
 import { LOGIN_URL } from "../../lib/routes.js";
 import AuthIsland from "../../components/app/AuthIsland.astro";
 import BillingIsland from "../../components/app/BillingIsland.astro";
 import SettingsIsland from "../../components/app/SettingsIsland.astro";
 import AgentChip from "../../components/app/AgentChip.astro";
-import DashboardStats from "../../components/app/DashboardStats.astro";
 import CallsIsland from "../../components/app/CallsIsland.astro";
-import ActionItemsIsland from "../../components/app/ActionItemsIsland.astro";
-import CalendarIsland from "../../components/app/CalendarIsland.astro";
 
 // In-App-Navigation: Anker auf die Bereiche der Shell (reine Links, kein JS). Die
 // #anrufe/#einstellungen/#abrechnung-Anker bleiben (interne ids, nicht user-facing).
 const dashNav = [
-  { href: "#stats", label: "Overview" },
   { href: "#anrufe", label: "Calls" },
   { href: "#einstellungen", label: "Settings" },
   { href: "#abrechnung", label: "Billing" },
@@ -62,7 +64,7 @@ const dashNav = [
     <button id="error-retry" class="btn" type="button">Try again</button>
   </section>
 
-  <!-- Eingeloggte Shell: Begruessung + Statistik + Verlauf + Einstellungen + Karte. -->
+  <!-- Eingeloggte Shell: Begruessung + Verlauf + Einstellungen + Karte. -->
   <div id="region-shell" hidden>
     <header class="dash-head card">
       <div class="dash-head__intro">
@@ -79,16 +81,10 @@ const dashNav = [
       ))}
     </nav>
 
-    <!-- W3: abgeleitete Kennzahlen (Anzahl/Woche/Monat/Dauer) aus dem state. -->
-    <DashboardStats />
-
-    <!-- W4: read-only Anruf-Verlauf aus dem EINEN state-Fetch (AUTH_EVENT). -->
+    <!-- W4: read-only Anruf-Verlauf (inkl. aufklappbarer Chat-Historie je Anruf)
+         aus dem EINEN state-Fetch (AUTH_EVENT). -->
     <div id="anrufe">
       <CallsIsland />
-    </div>
-    <div class="shell-cols">
-      <ActionItemsIsland />
-      <CalendarIsland />
     </div>
 
     <!-- W5: Settings-Editor (der EINZIGE Schreibpfad), nur Whitelist-Felder. -->

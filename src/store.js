@@ -300,6 +300,13 @@ export const {
   // P2b: Bootstrap-Tenant-Setup (CLI scripts/bootstrap-tenant.js). OHNE diesen Re-Export
   // ist store.bootstrapTenant undefined -> das CLI wuerfe einen TypeError.
   bootstrapTenant,
+  // Newsletter-Einwilligung pro Tenant (Opt-in, DSGVO Art. 7 Abs. 1) - Setter (Self-Service-
+  // Route) + Reader (Self-Service-State-View). Muster wie setPrivateNumber/tenantPrivateNumber.
+  // OHNE diese Re-Exports sind sie auf der Fassade undefined -> self-service-routes wuerfe
+  // zur Laufzeit einen TypeError (die Backends json.js/pg.js exportieren beide; die Fassade
+  // ist die EINE Quelle fuer server.js).
+  setNewsletterConsent,
+  tenantNewsletterConsent,
 } = backend;
 
 // withStoreLock(fn) - prozess-lokaler Single-Writer-Guard (OT-3 AC2). Serialisiert

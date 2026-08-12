@@ -54,6 +54,10 @@ a:hover {
   color: var(--sky-light);
 }
 
+/* [hidden] gewinnt gegen jede Klassenregel: das Rechts-Blatt schaltet die
+   Dokumente per hidden um, und .legal-title & Co. setzen display. */
+[hidden] { display: none !important; }
+
 /* ---------------------------------------------------------------- Keyframes */
 
 @keyframes hintFall {

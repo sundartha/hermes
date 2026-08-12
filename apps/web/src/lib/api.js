@@ -271,10 +271,10 @@ export function numberSetupFeeFrom(data) {
   return { amountCents: cents, currency: (data && data.currency) || "eur" };
 }
 
-// ---- W4: read-only Datensicht (Calls / ActionItems / Kalender) ----------------
+// ---- W4: read-only Anrufliste (inkl. Gespraechsverlauf) -----------------------
 // Reine, DOM-freie Helfer fuer die Render-Logik. Sie tragen die Contract-Grenze
 // zur API (welche Felder die state-Antwort hat, R5) UND die Beschriftungs-/
-// Status-Logik -- testbar ohne DOM (P1/T1). Die Inseln bauen daraus den DOM
+// Status-Logik -- testbar ohne DOM (P1/T1). Die Insel baut daraus den DOM
 // ausschliesslich mit textContent/createElement (kein innerHTML mit Tenant-
 // Strings -> kein XSS-Pfad, Leitplanke). Tenant-Werte werden NIE als HTML
 // interpretiert; diese Helfer geben nur rohe Strings/Strukturen zurueck.
@@ -282,17 +282,15 @@ export function numberSetupFeeFrom(data) {
 // Richtungen eines Calls (kein Magic-String an den Vergleichsstellen, G25).
 export const CALL_DIRECTION = Object.freeze({ INBOUND: "inbound", OUTBOUND: "outbound" });
 
-// Listen aus der state-Antwort -- jeweils nur, wenn es wirklich ein Array ist
-// (fail-closed gegen fehlende/null-Felder: leere Liste statt Absturz, G26).
-// EINE Stelle, an der das Frontend die Form `data.calls/actionItems/calendar`
-// annimmt (Contract-Grenze, R5). data==null/undefined -> ueberall leere Listen.
+// Liste aus der state-Antwort -- nur, wenn es wirklich ein Array ist (fail-
+// closed gegen fehlende/null-Felder: leere Liste statt Absturz, G26). EINE
+// Stelle, an der das Frontend die Form `data.calls` annimmt (Contract-Grenze,
+// R5). data==null/undefined -> leere Liste.
 function listFrom(data, key) {
   const value = data && data[key];
   return Array.isArray(value) ? value : [];
 }
 export const callsFrom = (data) => listFrom(data, "calls");
-export const actionItemsFrom = (data) => listFrom(data, "actionItems");
-export const calendarFrom = (data) => listFrom(data, "calendar");
 
 // Live-Dot: der Agent gilt als "live", sobald MINDESTENS ein Call aktiv ist.
 // Gleiche Bedingung wie im Bestand (tenant.html: calls.some status==="active").
@@ -340,108 +338,57 @@ export function callStatusKind(call) {
   return Object.prototype.hasOwnProperty.call(CALL_STATUS_LABELS, status) ? status : "failed";
 }
 
-// Ist ein Action Item ein Termin (Tag "Termin")? Gleiche Bedingung wie der
-// Bestand (tenant.html: a.type==="appointment").
-export function isAppointment(item) {
-  return Boolean(item) && item.type === "appointment";
+// ---- W4b: Gespraechsverlauf (Transkript) eines Calls --------------------------
+// Die Daten sind schon im state (views.js publicCall strippt transcript/summary
+// NICHT) -- kein neuer Endpunkt. Turns kommen 1:1 aus dem Store (state-ops.js
+// addTranscript/pg.js): {role, text, at}. role ist "agent" oder "caller" (kein
+// drittes Enum bisher, siehe src/claude.js); unbekannte/fehlende Rollen fallen
+// fail-closed auf die Gegenstelle-Beschriftung zurueck (gleiche Handschrift wie
+// callStatusLabel/callStatusKind oben).
+export const TRANSCRIPT_ROLE_AGENT = "agent";
+
+// Turn-Liste eines Calls -- nur, wenn wirklich ein Array (fail-closed, G26).
+export function transcriptFrom(call) {
+  const t = call && call.transcript;
+  return Array.isArray(t) ? t : [];
 }
 
-// Kalender-Datumsteile fuer die Anzeige (Tag / Monat-Kurz / Wochentag+Uhrzeit),
-// aus dem ISO-start. Reine Formatierung (en-US), DOM-frei und damit testbar.
-// Ungueltiges/fehlendes Datum -> leere Teile (kein "Invalid Date" in der UI).
-const CAL_LOCALE = "en-US";
-export function calendarDateParts(event) {
-  const start = event && event.start;
-  const d = start ? new Date(start) : null;
-  if (!d || Number.isNaN(d.getTime())) return { day: "", month: "", when: "" };
-  return {
-    day: String(d.getDate()),
-    month: d.toLocaleString(CAL_LOCALE, { month: "short" }),
-    when: d.toLocaleString(CAL_LOCALE, { weekday: "short", hour: "2-digit", minute: "2-digit" }),
-  };
+export function isAgentTurn(turn) {
+  return Boolean(turn) && turn.role === TRANSCRIPT_ROLE_AGENT;
 }
 
-// ---- W3: Dashboard-Statistik (clientseitig aus calls[] abgeleitet) ------------
-// Reine, DOM-freie Helfer. WICHTIG (Strategie R3): Roh-Nutzung (Minuten-
-// Kontingent, Guthaben, Tarif) ist NICHT im /state. Wir leiten ausschliesslich
-// aus den real vorhandenen Call-Feldern ab (direction, summary, startedAt,
-// answeredAt, endedAt) — KEIN erfundenes Kontingent. Eine praezise
-// "Rest-Minuten"-Anzeige braucht ein neues /state-Feld (Backend-Follow-up).
-
-// Gespraechsdauer EINES Calls in Sekunden: answeredAt -> endedAt. Fehlt einer
-// der Zeitstempel (nicht beantwortet / noch aktiv) oder ist er ungueltig/negativ
-// -> 0 (fail-closed, kein NaN/keine Negativdauer in der Summe, G26).
-const MS_PER_SECOND = 1000;
-export function callDurationSec(call) {
-  const c = call || {};
-  if (!c.answeredAt || !c.endedAt) return 0;
-  const answered = new Date(c.answeredAt).getTime();
-  const ended = new Date(c.endedAt).getTime();
-  if (Number.isNaN(answered) || Number.isNaN(ended) || ended <= answered) return 0;
-  return Math.round((ended - answered) / MS_PER_SECOND);
+// "Counterparty" statt "Caller": bei outbound-Calls ruft der Agent an, die
+// Gegenstelle nimmt ab -- dasselbe Vokabular wie callCounterparty() oben, kein
+// zweiter Begriff fuer dieselbe Sache.
+const TURN_ROLE_LABELS = Object.freeze({ agent: "Agent", caller: "Counterparty" });
+export function turnRoleLabel(turn) {
+  const role = (turn && turn.role) || "";
+  return Object.prototype.hasOwnProperty.call(TURN_ROLE_LABELS, role)
+    ? TURN_ROLE_LABELS[role]
+    : TURN_ROLE_LABELS.caller;
 }
 
-// Liegt ein ISO-Zeitstempel im aktuellen Kalendermonat von `ref`? Fehlend/
-// ungueltig -> false. Reine Zeit-Logik (ref injiziert -> testbar, P12-R).
-function isSameMonth(iso, ref) {
-  if (!iso) return false;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return false;
-  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
+// Uhrzeit eines Turns (HH:MM, 24h) aus dem ISO-Zeitstempel `at`. BEWUSST ohne
+// toLocaleString/Intl -- der WEB-18-Drift-Test (test/dashboard-i18n-surface.
+// test.js) zaehlt jede Locale-Aufrufstelle in apps/web/src durch; ein simples
+// Zeit-Padding braucht keine Locale und haelt die Zaehlung unangetastet.
+// Fehlend/ungueltig -> "" (der Aufrufer zeigt dann einfach keine Uhrzeit).
+export function turnTimeLabel(turn) {
+  const at = turn && turn.at;
+  if (!at) return "";
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return "";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
-// Liegt ein ISO-Zeitstempel innerhalb der letzten 7 Tage vor `ref` (nicht in der
-// Zukunft)? Fehlend/ungueltig -> false.
-const DAYS_PER_WEEK = 7;
-const MS_PER_DAY = 24 * 60 * 60 * MS_PER_SECOND;
-function isWithinWeek(iso, refMs) {
-  if (!iso) return false;
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return false;
-  return t <= refMs && refMs - t <= DAYS_PER_WEEK * MS_PER_DAY;
-}
-
-// Abgeleitete Anruf-Statistik aus dem state. `now` ist injiziert (Default: jetzt)
-// -> die Zeit-abhaengigen Zahlen (Woche/Monat) sind deterministisch testbar.
-// Liefert nur Zahlen, die aus echten Feldern stammen (kein erfundenes Kontingent).
-export function callStats(data, now = new Date()) {
-  const calls = callsFrom(data);
-  const refMs = now instanceof Date ? now.getTime() : new Date(now).getTime();
-  const ref = new Date(refMs);
-  const stats = {
-    total: 0,
-    thisWeek: 0,
-    thisMonth: 0,
-    inbound: 0,
-    outbound: 0,
-    withSummary: 0,
-    durationSec: 0,
-  };
-  for (const call of calls) {
-    stats.total += 1;
-    if (call && call.direction === CALL_DIRECTION.OUTBOUND) stats.outbound += 1;
-    else stats.inbound += 1;
-    if (call && call.summary) stats.withSummary += 1;
-    stats.durationSec += callDurationSec(call);
-    const startedAt = call && call.startedAt;
-    if (isWithinWeek(startedAt, refMs)) stats.thisWeek += 1;
-    if (isSameMonth(startedAt, ref)) stats.thisMonth += 1;
-  }
-  return stats;
-}
-
-// Formatiert eine Dauer in Sekunden fuer die Anzeige (en): "0 min" / "< 1 min" /
-// "N min" / "H h" / "H h M min". Reine Formatierung, DOM-frei.
-const SECONDS_PER_MINUTE = 60;
-const MINUTES_PER_HOUR = 60;
-export function formatCallDuration(totalSec) {
-  const sec = Number.isFinite(totalSec) && totalSec > 0 ? Math.round(totalSec) : 0;
-  if (sec < SECONDS_PER_MINUTE) return sec === 0 ? "0 min" : "< 1 min";
-  const minutes = Math.floor(sec / SECONDS_PER_MINUTE);
-  if (minutes < MINUTES_PER_HOUR) return `${minutes} min`;
-  const hours = Math.floor(minutes / MINUTES_PER_HOUR);
-  const remMinutes = minutes % MINUTES_PER_HOUR;
-  return remMinutes ? `${hours} h ${remMinutes} min` : `${hours} h`;
+// Zusammenfassung eines Calls (summarizeCall setzt sie nachtraeglich; initial
+// null). Nur ein echter String zaehlt -- sonst "" (die UI zeigt dann keinen
+// Summary-Block, kein "null" im DOM).
+export function callSummary(call) {
+  const summary = call && call.summary;
+  return typeof summary === "string" ? summary : "";
 }
 
 // ---- W5: Settings-Editor (der EINZIGE existierende Schreibpfad) ---------------
@@ -467,6 +414,12 @@ export function formatCallDuration(totalSec) {
 // allowCalendar/allowBooking sind seit P1b KEINE Self-Service-Felder mehr (der
 // Telefon-Agent hat weder Kalender- noch Buchungs-Tool). Sie standen hier zuletzt
 // als Angebot ohne Wirkung: der Server meldete sie bei JEDEM Speichern als rejected.
+// Settings-Redesign (Aug 2026): SettingsIsland.astro bietet fuer agentName/
+// agentStyle KEIN Steuerelement mehr (Fokus auf Sprachwahl) -- die Liste bleibt
+// TROTZDEM 1:1 zum Server-Vertrag (s.o., Drift-Tests vergleichen exakt gegen
+// SELF_SERVICE_FREE_FIELDS). Ein Feld ohne Steuerelement reist einfach nie im
+// Formular-Snapshot mit (readForm liefert nur, was es rendert) -- buildSettingsPatch
+// unten ueberspringt es dann per "src[key] === undefined", kein Sonderfall noetig.
 export const SETTINGS_FREE_FIELDS = Object.freeze(["agentName", "language", "agentStyle"]);
 
 // Permission-Flags, die ein Tenant NUR restriktiver setzen darf (true->false ja,
@@ -524,6 +477,12 @@ function personaStyleLabel(id) {
 // Frontend die Form `data.personaStyleIds` annimmt (Contract-Grenze, R5). Fehlt das
 // Feld (alter Server) -> null = "Steuerelement verstecken" (I9-Muster wie hasCard);
 // dann reist agentStyle auch NICHT im Patch mit (s. buildSettingsPatch).
+// Settings-Redesign (Aug 2026): SettingsIsland.astro ruft diese Funktion NICHT mehr
+// auf (das Stil-Dropdown ist aus der UI entfernt). Bewusst stehen gelassen statt
+// geloescht: reine, DOM-freie Logik mit eigenem Drift-Test gegen das Server-Enum
+// PERSONA_STYLE_IDS (apps/web/test/settings.test.js) -- kein anderer Verbraucher im
+// Frontend (grep-geprueft), aber kein Aufwand, sie zu entfernen, und ein zukuenftiges
+// Comeback des Stil-Dropdowns braucht dann keinen neuen Drift-Test.
 export function personaStyleOptions(data) {
   const ids = data && data.personaStyleIds;
   if (!Array.isArray(ids)) return null;
@@ -544,15 +503,21 @@ export function settingsFrom(data) {
 }
 
 // Baut den Schreib-Patch aus dem rohen Formular-Snapshot: NUR Whitelist-Felder.
-// `form` = { agentName, language, agentStyle?, greeting, allowPersonalData,
+// `form` = { language, agentName?, agentStyle?, greeting?, allowPersonalData,
 // allowBankData }. greeting ist ein gewaehlter Template-String (kein Freitext-
-// Eingabefeld existiert). Unbekannte Schluessel werden NICHT uebernommen -- die
-// UI sendet erst gar nichts ausserhalb der Whitelist.
+// Eingabefeld existiert) -- seit dem Settings-Redesign (Aug 2026) baut die Insel
+// gar kein greeting-Steuerelement mehr, darum reist das Feld NUR mit, wenn ein
+// Aufrufer es explizit liefert (z.B. ein Test). Unbekannte Schluessel werden
+// NICHT uebernommen -- die UI sendet erst gar nichts ausserhalb der Whitelist.
 export function buildSettingsPatch(form) {
   const src = form || {};
   // greeting steht bewusst NICHT in SETTINGS_FREE_FIELDS: der Server prueft es gegen
-  // den Vorlagenkatalog (selfServicePatch), nicht ueber die Free-Field-Liste.
-  const patch = { greeting: String(src.greeting ?? "") };
+  // den Vorlagenkatalog (selfServicePatch), nicht ueber die Free-Field-Liste. Wie bei
+  // den FREE_FIELDS unten gilt: fehlt es im Snapshot (undefined), reist es nicht mit --
+  // sonst wuerde jedes Speichern ein stilles greeting:"" senden, das der Server als
+  // rejected zurueckmeldet (kein Template), weil die Insel keine Vorlagenauswahl mehr hat.
+  const patch = {};
+  if (src.greeting !== undefined) patch.greeting = String(src.greeting ?? "");
   for (const key of SETTINGS_FREE_FIELDS) {
     // Ein Feld, dessen Steuerelement die Insel gar nicht gerendert hat (undefined),
     // reist NICHT mit: "" ist fuer die optionalen Enum-Overrides (language,

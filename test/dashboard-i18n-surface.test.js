@@ -46,23 +46,52 @@ test("WEB-07 (SOLL, rot) - das englische Dashboard bindet agentStyle/personaStyl
   assert.ok(hits.length > 0, "kein Treffer im gesamten apps/web/src-Baum - agentStyle fehlt der englischen UI");
 });
 
-test("WEB-18 (Regressions-Baseline, gruen) - apps/web formatiert Datum durchgaengig en-US", () => {
+// Geschrumpfte Erwartung (Dashboard-Neubau, feat/dashboard-neubau): Overview-
+// Statistik, Action Items und Kalender wurden ersatzlos aus apps/web gestrichen
+// (DashboardStats.astro, ActionItemsIsland.astro, CalendarIsland.astro entfernt;
+// lib/api.js verlor dabei CAL_LOCALE + calendarDateParts/callStats/... - es gibt
+// dafuer keine Ersatzflaeche). Die CAL_LOCALE-Pruefung entfaellt daher ganz (es
+// gibt nichts mehr zu pruefen, kein stillschweigender Ersatz). Die Schutzabsicht
+// selbst - GENAU EIN benannter, en-US-fester Locale-Kanal pro Zweck, KEIN
+// inline-Literal an einer Aufrufstelle, KEIN unbemerktes de-DE/fr-FR-Literal -
+// bleibt erhalten und wird unten enger gefasst statt entkernt.
+test("WEB-18 (Regressions-Baseline, gruen) - apps/web formatiert Datum durchgaengig en-US (mit dokumentierter § 312k-Ausnahme)", () => {
   const files = sourceFilesUnder(WEB_SRC);
-  const calLocale = files.find(({ file }) => file.endsWith("lib/api.js"));
   const dateLocale = files.find(({ file }) => file.endsWith("lib/subscribe.js"));
-  assert.match(calLocale.source, /const CAL_LOCALE = "en-US";/, "CAL_LOCALE muss en-US sein");
   assert.match(dateLocale.source, /const DATE_LOCALE = "en-US";/, "DATE_LOCALE muss en-US sein");
 
-  const foreignLocaleLiterals = filesMatching(files, /["'](de-DE|fr-FR)["']/);
-  assert.deepEqual(foreignLocaleLiterals, [], "kein de-DE/fr-FR-Literal unter apps/web/src erlaubt");
+  // Bewusste, bereits VOR dem Dashboard-Neubau eingefuehrte Ausnahme (Commit
+  // 6abfcb0, 312k-P3): subscribe.js traegt zusaetzlich DATE_LOCALE_DE = "de-DE"
+  // fuer die Kuendigungs-Anzeige/-Bestaetigung (§ 312k BGB verlangt das deutsche
+  // Datumsformat TT.MM.JJJJ dort, s. germanDate()). Das ist die EINZIGE erlaubte
+  // Stelle - jedes de-DE/fr-FR-Literal ausserhalb von subscribe.js bleibt verboten,
+  // und auch subscribe.js selbst darf GENAU dieses eine Literal tragen (kein
+  // zweites, kein fr-FR).
+  const otherFiles = files.filter(({ file }) => file !== dateLocale.file);
+  const foreignLocaleLiteralsElsewhere = filesMatching(otherFiles, /["'](de-DE|fr-FR)["']/);
+  assert.deepEqual(
+    foreignLocaleLiteralsElsewhere,
+    [],
+    "kein de-DE/fr-FR-Literal ausserhalb der dokumentierten § 312k-Ausnahme (subscribe.js) erlaubt",
+  );
+  const foreignLocaleLiteralsInSubscribe = dateLocale.source.match(/["'](de-DE|fr-FR)["']/g) || [];
+  assert.deepEqual(
+    foreignLocaleLiteralsInSubscribe,
+    ['"de-DE"'],
+    "subscribe.js darf GENAU EIN de-DE-Literal tragen (DATE_LOCALE_DE, § 312k) - kein zweites, kein fr-FR",
+  );
 
   const localeCallSites = [...files.flatMap(({ source }) => [...source.matchAll(/\.(?:toLocale\w*|toString)\(([A-Z_]+)/g)])]
     .filter((m) => /toLocale/.test(m[0]));
   const intlCallSites = files.flatMap(({ source }) => [...source.matchAll(/Intl\.\w+\(([A-Z_]+)/g)]);
   const allCallSites = [...localeCallSites, ...intlCallSites];
-  assert.equal(allCallSites.length, 3, "unerwartete Anzahl Locale-Aufrufstellen - Extraktion pruefen");
+  assert.equal(allCallSites.length, 2, "unerwartete Anzahl Locale-Aufrufstellen - Extraktion pruefen");
   for (const call of allCallSites)
-    assert.match(call[1], /^(CAL_LOCALE|DATE_LOCALE)$/, `Aufrufstelle "${call[0]}" reicht kein inline-Locale-Literal durch`);
+    assert.match(
+      call[1],
+      /^(DATE_LOCALE|DATE_LOCALE_DE)$/,
+      `Aufrufstelle "${call[0]}" reicht kein inline-Locale-Literal durch`,
+    );
 });
 
 test("WEB-19 (SOLL, rot) - die private Rufnummer hat in mindestens einem Dashboard eine UI", () => {

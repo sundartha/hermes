@@ -2,8 +2,11 @@
 // CallsIsland (W4): read-only Anrufliste aus der state-Antwort. Pro Call:
 // Richtung (Pfeil-Glyph + Farbe), Gegenstelle, Untertitel (goal bzw.
 // Standardtext) und ein Status-Badge (Live/Beendet/Abgebrochen/Fehlgeschlagen).
-// 1:1-Verhalten zu public/tenant.html (renderCalls), portiert als Insel mit
-// W1-Tokens.
+// Jede Zeile ist ein aufklappbarer Trigger (echter <button>, aria-expanded/
+// aria-controls): ein Klick zeigt darunter die Chat-Historie des Gespraechs
+// (Turns als Blasen, Agent/Gegenstelle optisch unterschieden) plus die
+// Zusammenfassung, falls vorhanden. Die Daten (transcript/summary) sind schon
+// im state -- kein neuer Endpunkt (views.js publicCall strippt sie nicht).
 //
 // KEIN eigener state-Fetch (AUTH_EVENT). READ-ONLY: kein POST/PUT/DELETE.
 // Stale-Daten-Schutz: bei jedem Nicht-authenticated-Zustand wird die Liste
@@ -13,7 +16,7 @@
 
 <section class="card">
   <h2>Calls</h2>
-  <p class="muted">Your recent calls (read-only).</p>
+  <p class="muted">Your recent calls. Tap a row to see the conversation.</p>
   <ul id="calls-list" class="data-list" aria-live="polite"></ul>
 </section>
 
@@ -24,3 +27,144 @@
   // Auth-Verlust (kein stale Tenant-Datenleck) -- gemeinsame Verdrahtung (G5).
   bindList(document, "calls-list", callRows);
 </script>
+
+<style is:global>
+  /* Aufklappbare Anrufzeile (W4b). is:global BEWUSST: die Zeilen/Panels werden
+     client-seitig aus render.js gebaut (document.createElement), NICHT im
+     Astro-Template dieser Datei. Astros Standard-Scoping haengt ein
+     data-astro-cid-Attribut nur an Markup, das schon beim Bau im Template
+     stand -- ein scoped <style> wuerde dynamisch erzeugte Knoten NIE treffen
+     (stille No-Op-Regeln). Die Klassennamen (call-row__*, call-panel*,
+     chat-*) sind eigens fuer diese Insel benannt, kein Kollisionsrisiko mit
+     anderen Komponenten. Farben/Abstaende ausschliesslich ueber die
+     bestehenden semantischen Tokens (app.css/app-hermes.css) -- kein neuer
+     fester Wert, damit sich das Panel in den Hermes-Look einfuegt. Diese
+     Datei bleibt trotzdem eine ECHTE, von Astro ausgelagerte CSS-Datei (CSP
+     'self', kein Inline-Style-Attribut, kein Inline-Script). */
+
+  /* app.css setzt .call-row auf display:flex fuer die frueher flache Zeile --
+     hier traegt jetzt der Trigger-Button den Flex, damit das Panel darunter
+     (nicht daneben) erscheint. Hoehere Spezifitaet (#id .klasse) ueberschreibt
+     gezielt NUR display; Padding/Border/Hover/Radius aus app.css/app-hermes.css
+     bleiben unangetastet und wirken weiter auf die Zeile.  */
+  #calls-list .call-row {
+    display: block;
+  }
+
+  .call-row__trigger {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: var(--space-inline);
+    padding: var(--space-cozy) 0;
+    background: none;
+    border: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .call-row__trigger:focus-visible {
+    outline: 2px solid var(--color-accent, var(--color-status-info));
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+
+  .call-row__caret {
+    margin-left: auto;
+    flex-shrink: 0;
+    color: var(--color-muted);
+    transition: transform 0.2s ease;
+  }
+
+  .call-row__trigger[aria-expanded="true"] .call-row__caret {
+    transform: rotate(180deg);
+  }
+
+  .call-panel {
+    padding: 0 0 var(--space-cozy);
+  }
+
+  .call-panel__empty {
+    padding: var(--space-tight) 0 0;
+  }
+
+  .call-summary {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-hairline);
+    padding: var(--space-cozy);
+    margin: 0 0 var(--space-cozy);
+    background: var(--color-surface);
+    border: var(--border-width) solid var(--color-divider);
+    border-radius: var(--radius-control);
+  }
+
+  .call-summary__label {
+    font-family: var(--app-mono);
+    font-size: var(--text-eyebrow);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .call-summary__text {
+    color: var(--color-text);
+  }
+
+  .chat-log {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-tight);
+  }
+
+  .chat-bubble {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-hairline);
+    max-width: 80%;
+    padding: var(--space-cozy);
+    border: var(--border-width) solid var(--color-divider);
+    border-radius: var(--radius-control);
+  }
+
+  .chat-bubble--agent {
+    align-self: flex-start;
+    background: var(--color-status-info-surface);
+  }
+
+  .chat-bubble--counterparty {
+    align-self: flex-end;
+    background: var(--color-surface);
+  }
+
+  .chat-bubble__role {
+    font-family: var(--app-mono);
+    font-size: var(--text-eyebrow);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .chat-bubble__text {
+    margin: 0;
+    color: var(--color-text);
+    white-space: pre-wrap;
+  }
+
+  .chat-bubble__time {
+    font-family: var(--app-mono);
+    font-size: var(--text-eyebrow);
+    color: var(--color-muted);
+  }
+
+  @media (max-width: 768px) {
+    .chat-bubble {
+      max-width: 92%;
+    }
+  }
+</style>

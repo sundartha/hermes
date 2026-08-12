@@ -1,8 +1,8 @@
 // W4-Tests: die reinen Render-/Status-/Escaping-Helfer (lib/api.js) und der
 // DOM-Bau (lib/render.js). Reine Logik, kein Browser-DOM: ein winziges Fake-
 // `document` bildet exakt die im Bau genutzten DOM-Operationen nach
-// (createElement, className, textContent, append). So laeuft alles mit
-// node:test ohne Netz/DOM-Library.
+// (createElement, className, textContent, append, setAttribute,
+// addEventListener). So laeuft alles mit node:test ohne Netz/DOM-Library.
 //
 // XSS-BELEG (Leitplanke): das Fake-Element wirft, sobald jemand innerHTML mit
 // einem Wert setzt -> ein Test mit einem Tenant-String, der `<`, `"` und
@@ -16,18 +16,19 @@ import {
   AUTH_EVENT,
   CALL_DIRECTION,
   callsFrom,
-  actionItemsFrom,
-  calendarFrom,
   isAgentLive,
   callCounterparty,
   callSubtitle,
   callStatusLabel,
   callStatusKind,
-  isAppointment,
-  calendarDateParts,
+  transcriptFrom,
+  isAgentTurn,
+  turnRoleLabel,
+  turnTimeLabel,
+  callSummary,
 } from "../src/lib/api.js";
 
-import { callRows, actionItemRows, calendarRows, bindList } from "../src/lib/render.js";
+import { callRows, bindList } from "../src/lib/render.js";
 
 // ---- Fake-DOM ---------------------------------------------------------------
 // Nur die Operationen, die lib/render.js wirklich nutzt. `innerHTML` ist eine
@@ -38,6 +39,8 @@ class FakeElement {
     this.className = "";
     this.textContent = "";
     this.children = [];
+    this.attrs = {};
+    this.listeners = {};
   }
   set innerHTML(_value) {
     throw new Error("innerHTML darf nie gesetzt werden (XSS-Schutz, nur textContent)");
@@ -50,14 +53,38 @@ class FakeElement {
   replaceChildren(...nodes) {
     this.children = nodes;
   }
+  setAttribute(name, value) {
+    this.attrs[name] = String(value);
+  }
+  getAttribute(name) {
+    return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null;
+  }
+  addEventListener(type, handler) {
+    (this.listeners[type] ??= []).push(handler);
+  }
+  click() {
+    for (const handler of this.listeners.click || []) handler();
+  }
   // Hilfs-Sicht fuer die Tests: der gesamte sichtbare Text dieses Teilbaums.
+  // Ausgeblendete Knoten (hidden) tragen nichts zum sichtbaren Text bei --
+  // spiegelt das echte DOM ([hidden] { display:none } in app.css).
   allText() {
+    if (this.hidden) return "";
     return this.textContent + this.children.map((c) => c.allText()).join("");
   }
   // Hilfs-Sicht: existiert irgendwo im Teilbaum die gesuchte className?
   hasClass(name) {
     if (this.className.split(" ").includes(name)) return true;
     return this.children.some((c) => c.hasClass(name));
+  }
+  // Findet den ersten Nachfahren (oder sich selbst) mit der gesuchten className.
+  find(name) {
+    if (this.className.split(" ").includes(name)) return this;
+    for (const child of this.children) {
+      const hit = child.find(name);
+      if (hit) return hit;
+    }
+    return undefined;
   }
 }
 
@@ -94,13 +121,10 @@ function textOf(nodes) {
 }
 
 // ---- Listen-Extraktion (Contract-Grenze, fail-closed) -----------------------
-test("callsFrom/actionItemsFrom/calendarFrom: leere Liste bei fehlenden/null Feldern", () => {
+test("callsFrom: leere Liste bei fehlenden/null Feldern", () => {
   for (const input of [undefined, null, {}, { calls: null }, { calls: "x" }]) {
     assert.deepEqual(callsFrom(input), []);
   }
-  assert.deepEqual(actionItemsFrom(undefined), []);
-  assert.deepEqual(calendarFrom(null), []);
-  // Echte Arrays werden unveraendert durchgereicht.
   const calls = [{ direction: "inbound" }];
   assert.equal(callsFrom({ calls }), calls);
 });
@@ -144,41 +168,51 @@ test("callStatusLabel/callStatusKind: bekannte Status + fail-closed auf failed",
   assert.equal(callStatusKind({ status: "weird" }), "failed");
 });
 
-// ---- Action-Item-Helfer -----------------------------------------------------
-test("isAppointment: nur type==='appointment'", () => {
-  assert.equal(isAppointment({ type: "appointment" }), true);
-  assert.equal(isAppointment({ type: "todo" }), false);
-  assert.equal(isAppointment(null), false);
+// ---- Transkript-Helfer (W4b) -------------------------------------------------
+test("transcriptFrom: leere Liste bei fehlendem/kein Array-Transkript", () => {
+  assert.deepEqual(transcriptFrom({}), []);
+  assert.deepEqual(transcriptFrom(null), []);
+  assert.deepEqual(transcriptFrom({ transcript: "x" }), []);
+  const transcript = [{ role: "agent", text: "Hallo", at: "2026-06-23T09:00:00.000Z" }];
+  assert.equal(transcriptFrom({ transcript }), transcript);
 });
 
-// ---- Kalender-Helfer --------------------------------------------------------
-test("calendarDateParts: Tag/Monat/Wochentag aus ISO-start, ungueltig -> leer", () => {
-  const parts = calendarDateParts({ start: "2026-06-23T09:30:00.000Z" });
-  assert.equal(parts.day, "23");
-  assert.ok(parts.month.length > 0);
-  assert.ok(parts.when.length > 0);
-  assert.deepEqual(calendarDateParts({ start: "nope" }), { day: "", month: "", when: "" });
-  assert.deepEqual(calendarDateParts({}), { day: "", month: "", when: "" });
-  assert.deepEqual(calendarDateParts(null), { day: "", month: "", when: "" });
+test("isAgentTurn/turnRoleLabel: agent vs. Gegenstelle, fail-closed auf Counterparty", () => {
+  assert.equal(isAgentTurn({ role: "agent" }), true);
+  assert.equal(isAgentTurn({ role: "caller" }), false);
+  assert.equal(isAgentTurn(null), false);
+  assert.equal(turnRoleLabel({ role: "agent" }), "Agent");
+  assert.equal(turnRoleLabel({ role: "caller" }), "Counterparty");
+  assert.equal(turnRoleLabel({ role: "weird" }), "Counterparty");
+  assert.equal(turnRoleLabel(null), "Counterparty");
+});
+
+test("turnTimeLabel: HH:MM aus at, fehlend/ungueltig -> leer (kein Locale-Aufruf)", () => {
+  const d = new Date("2026-06-23T09:05:00.000Z");
+  const expected = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  assert.equal(turnTimeLabel({ at: "2026-06-23T09:05:00.000Z" }), expected);
+  assert.equal(turnTimeLabel({}), "");
+  assert.equal(turnTimeLabel({ at: "nope" }), "");
+  assert.equal(turnTimeLabel(null), "");
+});
+
+test("callSummary: nur ein echter String zaehlt, sonst leer", () => {
+  assert.equal(callSummary({ summary: "Termin bestaetigt" }), "Termin bestaetigt");
+  assert.equal(callSummary({ summary: null }), "");
+  assert.equal(callSummary({}), "");
+  assert.equal(callSummary(null), "");
 });
 
 // ---- DOM-Bau: Empty-States --------------------------------------------------
-test("callRows/actionItemRows/calendarRows: leere Daten -> genau eine Empty-Zeile", () => {
-  for (const rows of [
-    callRows(fakeDocument, {}),
-    actionItemRows(fakeDocument, {}),
-    calendarRows(fakeDocument, {}),
-  ]) {
-    assert.equal(rows.length, 1);
-    assert.ok(rows[0].hasClass("data-empty"));
-  }
-  assert.equal(textOf(callRows(fakeDocument, {})), "No calls yet — connect your first agent!");
-  assert.equal(textOf(actionItemRows(fakeDocument, {})), "No action items yet.");
-  assert.equal(textOf(calendarRows(fakeDocument, {})), "No appointments yet.");
+test("callRows: leere Daten -> genau eine Empty-Zeile", () => {
+  const rows = callRows(fakeDocument, {});
+  assert.equal(rows.length, 1);
+  assert.ok(rows[0].hasClass("data-empty"));
+  assert.equal(textOf(rows), "No calls yet — connect your first agent!");
 });
 
-// ---- DOM-Bau: Normalfall + Begrenzung --------------------------------------
-test("callRows rendert pro Call eine Zeile mit Gegenstelle, Untertitel und Status", () => {
+// ---- DOM-Bau: Normalfall + Trigger-Attribute --------------------------------
+test("callRows rendert pro Call einen Trigger-Button (Gegenstelle, Untertitel, Status) + Panel", () => {
   const data = {
     calls: [
       {
@@ -199,49 +233,111 @@ test("callRows rendert pro Call eine Zeile mit Gegenstelle, Untertitel und Statu
   assert.ok(all.includes("+49302")); // inbound -> from
   assert.ok(all.includes("Inbound call")); // kein goal -> Standardtext
   assert.ok(rows[1].hasClass("status-badge--active"));
+
+  // Trigger ist ein echter <button> mit aria-expanded/aria-controls, das Panel
+  // traegt genau die referenzierte id -- Tastatur-/Screenreader-Zugaenglichkeit.
+  const trigger = rows[0].find("call-row__trigger");
+  assert.equal(trigger.tag, "button");
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  const panel = rows[0].find("call-panel");
+  assert.equal(trigger.getAttribute("aria-controls"), panel.id);
 });
 
-test("actionItemRows begrenzt auf 12 und taggt Termine", () => {
-  const items = Array.from({ length: 15 }, (_, i) => ({ text: `Item ${i}`, type: "todo" }));
-  items[0] = { text: "Mit Tag", type: "appointment" };
-  const rows = actionItemRows(fakeDocument, { actionItems: items });
-  assert.equal(rows.length, 12); // MAX_ITEMS
-  assert.ok(rows[0].hasClass("tag--appointment"));
-  assert.ok(textOf([rows[0]]).includes("Appointment"));
+test("callRows: Anruf ohne Transkript zeigt eine ruhige Leerzustand-Zeile, kein leeres <ul>", () => {
+  const rows = callRows(fakeDocument, { calls: [{ direction: "inbound", status: "completed" }] });
+  const panel = rows[0].find("call-panel");
+  assert.ok(panel.hasClass("call-panel"));
+  const empty = panel.find("call-panel__empty");
+  assert.ok(empty, "Leerzustand-Element fehlt");
+  assert.equal(empty.textContent, "No conversation recorded.");
+  assert.ok(!panel.find("chat-log"), "chat-log sollte bei leerem Transkript nicht gebaut werden");
 });
 
-test("calendarRows begrenzt auf 6 Termine", () => {
-  const events = Array.from({ length: 9 }, (_, i) => ({
-    title: `Event ${i}`,
-    start: "2026-06-23T09:00:00.000Z",
-  }));
-  const rows = calendarRows(fakeDocument, { calendar: events });
-  assert.equal(rows.length, 6); // MAX_EVENTS
-  assert.ok(textOf(rows).includes("Event 0"));
+test("callRows: Turns werden als Chat-Blasen gerendert, Agent/Gegenstelle unterschieden", () => {
+  const data = {
+    calls: [
+      {
+        direction: "inbound",
+        status: "completed",
+        summary: "Rueckruf vereinbart",
+        transcript: [
+          { role: "agent", text: "Guten Tag, wie kann ich helfen?", at: "2026-06-23T09:00:00.000Z" },
+          { role: "caller", text: "Ich haette gern einen Rueckruf.", at: "2026-06-23T09:00:05.000Z" },
+        ],
+      },
+    ],
+  };
+  const rows = callRows(fakeDocument, data);
+  const panel = rows[0].find("call-panel");
+  const summaryBlock = panel.find("call-summary");
+  assert.ok(summaryBlock, "Summary-Block fehlt, obwohl summary gesetzt ist");
+  assert.ok(summaryBlock.allText().includes("Rueckruf vereinbart"));
+
+  const log = panel.find("chat-log");
+  assert.equal(log.children.length, 2);
+  assert.ok(log.children[0].hasClass("chat-bubble--agent"));
+  assert.ok(log.children[1].hasClass("chat-bubble--counterparty"));
+  assert.ok(log.children[0].allText().includes("Guten Tag, wie kann ich helfen?"));
+  assert.ok(log.children[1].allText().includes("Ich haette gern einen Rueckruf."));
+});
+
+test("callRows: Klick auf den Trigger toggelt Panel + aria-expanded; Accordion laesst nur eins offen", () => {
+  const data = {
+    calls: [
+      { direction: "inbound", status: "completed", transcript: [{ role: "agent", text: "A" }] },
+      { direction: "inbound", status: "completed", transcript: [{ role: "agent", text: "B" }] },
+    ],
+  };
+  const rows = callRows(fakeDocument, data);
+  const trigger0 = rows[0].find("call-row__trigger");
+  const panel0 = rows[0].find("call-panel");
+  const trigger1 = rows[1].find("call-row__trigger");
+  const panel1 = rows[1].find("call-panel");
+
+  assert.equal(panel0.hidden, true);
+  assert.equal(panel1.hidden, true);
+
+  trigger0.click();
+  assert.equal(panel0.hidden, false);
+  assert.equal(trigger0.getAttribute("aria-expanded"), "true");
+  assert.equal(panel1.hidden, true);
+
+  // Ein zweiter Anruf oeffnen -> der erste klappt zu (nur einer offen).
+  trigger1.click();
+  assert.equal(panel1.hidden, false);
+  assert.equal(trigger1.getAttribute("aria-expanded"), "true");
+  assert.equal(panel0.hidden, true);
+  assert.equal(trigger0.getAttribute("aria-expanded"), "false");
+
+  // Erneuter Klick auf den offenen Trigger klappt zu (Toggle).
+  trigger1.click();
+  assert.equal(panel1.hidden, true);
+  assert.equal(trigger1.getAttribute("aria-expanded"), "false");
 });
 
 // ---- XSS-Beleg: Tenant-Strings landen als Text, nie als HTML -----------------
 test('Tenant-Strings mit </>/" und <script> landen ausschliesslich als textContent', () => {
   const attack = '<script>alert("x")</script><img src="y" onerror="z">';
   // Der boese String in jeder Tenant-Quelle: Gegenstelle (from), goal,
-  // Item-Text, Kalender-Titel. Wuerde irgendwo innerHTML gesetzt, wirft das
+  // Transkript-Text, Summary. Wuerde irgendwo innerHTML gesetzt, wirft das
   // Fake-Element -> der Test scheitert. Hier passiert das NICHT, und der Wort-
   // laut taucht woertlich (un-escaped, aber als Text) im Teilbaum auf.
-  const calls = callRows(fakeDocument, {
-    calls: [{ direction: "inbound", from: attack, goal: attack, status: "completed" }],
-  });
-  const items = actionItemRows(fakeDocument, {
-    actionItems: [{ text: attack, type: "appointment" }],
-  });
-  const cal = calendarRows(fakeDocument, {
-    calendar: [{ title: attack, start: "2026-06-23T09:00:00.000Z" }],
+  const rows = callRows(fakeDocument, {
+    calls: [
+      {
+        direction: "inbound",
+        from: attack,
+        goal: attack,
+        status: "completed",
+        summary: attack,
+        transcript: [{ role: "caller", text: attack }],
+      },
+    ],
   });
 
   // Der rohe String steht woertlich im textContent (Beleg: er ging durch
   // textContent, nicht durch innerHTML -> der Browser parst ihn nie als HTML).
-  assert.ok(textOf(calls).includes(attack));
-  assert.ok(textOf(items).includes(attack));
-  assert.ok(textOf(cal).includes(attack));
+  assert.ok(textOf(rows).includes(attack));
 });
 
 test("Fake-Element: jeder innerHTML-Schreibzugriff wuerde werfen (Tripwire ist scharf)", () => {

@@ -1,17 +1,22 @@
 ---
 // SettingsIsland (W5): der EINZIGE existierende Schreibpfad des Frontends.
 // POST /api/self-service/settings mit der bekannten ENGEN Whitelist
-// (src/self-service.js, NUR-Lese-Vertrag). Die UI bietet AUSSCHLIESSLICH die
-// erlaubten Felder an:
-//   - agentName  (Freitext)
-//   - agentStyle (Dropdown, NUR wenn state.personaStyleIds vorliegt)
+// (src/self-service.js, NUR-Lese-Vertrag). Settings-Redesign (Aug 2026): der
+// Bereich fokussiert sich auf die Sprachwahl -- die UI bietet nur noch:
+//   - language   ("" automatisch / de / fr / en) -- das Hauptelement der Karte,
+//                als Pillenleiste (echte Radio-Inputs), kein <select> mehr
 //   - allowPersonalData / allowBankData (Toggle, NUR restriktiver: true->false)
-//   - greeting   (NUR Template-Auswahl aus state.greetingTemplates -- KEIN
-//                 Freitext-Eingabefeld; ein solches existiert hier bewusst nicht)
-//   - language   ("" automatisch / de / fr / en)
+// Agent-Name (Freitext), Agent-Stil (Dropdown, agentStyle) und die Begruessungs-
+// Vorlagenauswahl (greeting) sind aus der UI entfernt. Die SERVER-WHITELIST
+// BLEIBT UNVERAENDERT (SELF_SERVICE_FREE_FIELDS traegt weiterhin agentName/
+// agentStyle, src/self-service.js) -- der Client bietet die Felder nur nicht
+// mehr an. buildSettingsPatch (lib/api.js) sendet ein Feld nur, wenn das
+// Formular es ueberhaupt liefert; da readForm() unten kein agentName/agentStyle/
+// greeting mehr liefert, reisen diese Keys gar nicht erst im POST-Body mit --
+// kein Serverabgleich noetig, keine Aenderung an /src.
 // allowCalendar/allowBooking, allowSummaries, Disclosure-Felder und alles
-// Unbekannte fehlen bewusst -- der Self-Service-Pfad lehnt sie ohnehin ab (kein
-// UI-Schreibpfad fuer rejected-Felder).
+// Unbekannte fehlten schon vorher bewusst -- der Self-Service-Pfad lehnt sie
+// ohnehin ab (kein UI-Schreibpfad fuer rejected-Felder).
 //
 // Nach Speichern: "Gespeichert", listet changed/rejected (aus der Antwort
 // abgeleitet, settingsOutcome) und RE-FETCHt den State (fetchTenantState ->
@@ -22,14 +27,24 @@
 //
 // KEIN eigener Auth-/state-Fetch im Normalfall: die Auth-Insel ermittelt den
 // Zustand einmal und dispatcht AUTH_EVENT -- diese Insel hoert darauf und befuellt
-// das Formular. Tenant-/Vorlagen-Strings gehen NUR ueber textContent/option.value
-// in den DOM (nie innerHTML) -- kein XSS-Pfad (Leitplanke).
+// das Formular. Tenant-Werte gehen NUR ueber [checked]/textContent in den DOM
+// (nie innerHTML) -- kein XSS-Pfad (Leitplanke).
 //
 // Die private Rufnummer ist ein ZWEITES Formular mit EIGENEM Endpunkt, kein
 // Settings-Feld: sie ist Kontakt-PII am Tenant-Record (nicht in settings, die
 // komplett ueber /api/state + MCP leaken, H4). Angezeigt wird ausschliesslich die
 // Server-Maske (maskPrivateNumber); der volle Wert wird nie ins Eingabefeld
 // zurueckgeschrieben.
+//
+// Optik (Hermes-Look): die Sprachauswahl ist eine ruhige Pillenleiste, das
+// Hauptelement der Karte -- die Permission-Toggles fuegen sich optisch unter,
+// unveraendert in ihrer Logik. is:global-Style-Block wie in CallsIsland.astro
+// (gleiche Handschrift dieser App): die Pillen-/Toggle-Zustaende ([checked])
+// werden von diesem Script gesetzt, nicht neu in den DOM gebaut, aber die Klasse
+// bleibt eine ECHTE, ausgelagerte CSS-Datei (CSP 'self', kein Inline-Style-
+// Attribut, kein Inline-Script). Farben/Abstaende ausschliesslich ueber die
+// bestehenden semantischen Tokens (app.css/app-hermes.css) -- kein neuer fester
+// Wert.
 import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.js";
 ---
 
@@ -38,19 +53,20 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   <p class="muted">Takes effect on the next call.</p>
 
   <form id="settings-form" class="settings-form">
-    <label class="field-label" for="settings-name">Agent name</label>
-    <input id="settings-name" class="field-input" type="text" autocomplete="off" />
-
-    <!-- P13/WEB-07: Stil-Auswahl. Optionen + gueltige IDs liefert der Server
-         (state.personaStyleIds); bleibt versteckt, solange das Feld fehlt. -->
-    <div id="settings-style-row" hidden>
-      <label class="field-label" for="settings-style">Agent style</label>
-      <select id="settings-style" class="field-input"></select>
-      <p class="muted">
-        Sets the tone of every call. The disclosure sentence at the start of outbound
-        calls never changes.
-      </p>
-    </div>
+    <fieldset class="settings-lang">
+      <legend class="field-label">Language</legend>
+      <div class="lang-picker">
+        {
+          SETTINGS_LANGUAGES.map(({ value, label }) => (
+            <label class="lang-pill">
+              <input type="radio" name="settings-language" class="lang-pill__input" value={value} />
+              <span class="lang-pill__fill" aria-hidden="true" />
+              <span class="lang-pill__label">{label}</span>
+            </label>
+          ))
+        }
+      </div>
+    </fieldset>
 
     <fieldset class="settings-perms">
       <legend class="field-label">Permissions</legend>
@@ -69,14 +85,6 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
         ))
       }
     </fieldset>
-
-    <label class="field-label" for="settings-greeting">Greeting (inbound) — {"{owner}"} is replaced</label>
-    <select id="settings-greeting" class="field-input"></select>
-
-    <label class="field-label" for="settings-language">Language</label>
-    <select id="settings-language" class="field-input">
-      {SETTINGS_LANGUAGES.map(({ value, label }) => <option value={value}>{label}</option>)}
-    </select>
 
     <div class="settings-actions">
       <button id="settings-save" class="btn" type="submit">Save</button>
@@ -115,7 +123,6 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     ERROR_INVALID_PRIVATE_NUMBER,
     buildSettingsPatch,
     fetchTenantState,
-    personaStyleOptions,
     privateNumberStatusText,
     saveSettings,
     savePrivateNumber,
@@ -125,11 +132,6 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
 
   const cardEl = document.getElementById("settings-card");
   const formEl = document.getElementById("settings-form");
-  const nameEl = document.getElementById("settings-name");
-  const styleRowEl = document.getElementById("settings-style-row");
-  const styleEl = document.getElementById("settings-style");
-  const greetingEl = document.getElementById("settings-greeting");
-  const languageEl = document.getElementById("settings-language");
   const saveBtn = document.getElementById("settings-save");
   const msgEl = document.getElementById("settings-msg");
 
@@ -153,47 +155,28 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     el.hidden = !text;
   }
 
-  // EINE Options-Fabrik fuer greeting UND Stil (G5): {value,label}-Paare -> <option>
-  // per createElement/textContent - Server-/Tenant-Strings werden nie als HTML
-  // interpretiert (XSS-Leitplanke).
-  function renderOptions(selectEl, options, current) {
-    selectEl.replaceChildren(
-      ...options.map(({ value, label }) => {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = label;
-        option.selected = value === current;
-        return option;
-      }),
-    );
-  }
-
-  // greeting-Vorlagen sind rohe Strings: Wert == Beschriftung.
-  const asOption = (value) => ({ value, label: value });
-
-  // Formular aus dem state befuellen. Permission-Toggles ueber data-perm; greeting
-  // nur aus den Vorlagen; agentStyle nur, wenn der Server Optionen liefert;
-  // language leer/null -> "Automatisch".
+  // Formular aus dem state befuellen: die Sprach-Pille auswaehlen (fehlend/leer
+  // -> "Automatic", die erste Pille mit value="") und die Permission-Toggles
+  // ueber data-perm setzen. Kein clientseitiger DOM-Bau mehr (agentStyle/greeting
+  // waren die einzigen Stellen, die Optionen zur Laufzeit erzeugten).
   function fillForm(data) {
-    const { settings, greetingTemplates } = settingsFrom(data);
-    nameEl.value = settings.agentName || "";
-    languageEl.value = settings.language || "";
-    renderOptions(greetingEl, greetingTemplates.map(asOption), settings.greeting);
-    const styleOptions = personaStyleOptions(data);
-    styleRowEl.hidden = !styleOptions;
-    if (styleOptions) renderOptions(styleEl, styleOptions, settings.agentStyle || "");
+    const { settings } = settingsFrom(data);
+    const language = settings.language || "";
+    for (const input of formEl.querySelectorAll('input[name="settings-language"]')) {
+      input.checked = input.value === language;
+    }
     for (const input of formEl.querySelectorAll("[data-perm]")) {
       input.checked = Boolean(settings[input.dataset.perm]);
     }
   }
 
   // Roher Formular-Snapshot fuer buildSettingsPatch (die Whitelist-Grenze lebt
-  // dort, nicht hier). Toggles ueber data-perm einsammeln.
+  // dort, nicht hier). Sprache aus der gecheckten Pille (keine Auswahl -> "",
+  // sollte praktisch nicht vorkommen, da immer genau eine Pille checked ist);
+  // Toggles ueber data-perm einsammeln.
   function readForm() {
-    const form = { agentName: nameEl.value, greeting: greetingEl.value, language: languageEl.value };
-    // agentStyle NUR, wenn das Dropdown ueberhaupt bedienbar ist - ein verstecktes,
-    // leeres Dropdown wuerde sonst einen gespeicherten Stil still zuruecksetzen.
-    if (!styleRowEl.hidden) form.agentStyle = styleEl.value;
+    const checkedLang = formEl.querySelector('input[name="settings-language"]:checked');
+    const form = { language: checkedLang ? checkedLang.value : "" };
     for (const input of formEl.querySelectorAll("[data-perm]")) {
       form[input.dataset.perm] = input.checked;
     }
@@ -301,3 +284,94 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     }
   });
 </script>
+
+<style is:global>
+  /* Sprachwahl als ruhige Pillenleiste (Settings-Redesign, Aug 2026). is:global
+     aus derselben Begruendung wie in CallsIsland.astro: eine Datei, eine
+     CSS-Handschrift fuer diese App-Schicht -- die Klassennamen (lang-picker,
+     lang-pill*, settings-lang) sind eigens fuer diese Insel benannt, kein
+     Kollisionsrisiko. Farben/Abstaende ausschliesslich ueber die bestehenden
+     semantischen Tokens (app.css/app-hermes.css) -- kein neuer fester Wert.
+     ECHTE, von Astro ausgelagerte CSS-Datei (CSP 'self', kein Inline-Style-
+     Attribut, kein Inline-Script). */
+
+  .settings-lang {
+    border: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .lang-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-tight);
+    margin-top: var(--space-cozy);
+  }
+
+  /* Der <label> traegt das sichtbare Pillen-Gehaeuse; das Radio-Input bleibt
+     unsichtbar aber fokussierbar (Tastatur-/Screenreader-Semantik echter Radios,
+     kein nachgebautes ARIA-Widget). */
+  .lang-pill {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    overflow: hidden;
+    padding: var(--space-cozy) var(--space-gap);
+    border: var(--border-width) solid var(--color-field-border);
+    border-radius: var(--radius-badge);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+  }
+
+  .lang-pill:hover {
+    border-color: var(--color-field-border-focus);
+  }
+
+  .lang-pill:focus-within {
+    outline: 2px solid var(--color-accent, var(--color-status-info));
+    outline-offset: 2px;
+  }
+
+  .lang-pill__input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  /* Fuellflaeche statt Label-Hintergrund: eine einfache Geschwister-Selektor-
+     Ueberblendung (kein :has() noetig, breiter Browser-Support). */
+  .lang-pill__fill {
+    position: absolute;
+    inset: 0;
+    background: var(--color-action);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .lang-pill__input:checked ~ .lang-pill__fill {
+    opacity: 1;
+  }
+
+  .lang-pill__label {
+    position: relative;
+    z-index: 1;
+    font-size: var(--text-lead);
+    font-weight: var(--weight-label);
+    color: var(--color-text);
+    transition: color 0.2s ease;
+  }
+
+  .lang-pill__input:checked ~ .lang-pill__label {
+    color: var(--color-on-action);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lang-pill,
+    .lang-pill__fill,
+    .lang-pill__label {
+      transition: none;
+    }
+  }
+</style>

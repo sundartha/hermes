@@ -289,6 +289,12 @@ export function makeSelfServiceRoutes({
       // Dedizierter Record-Reader, Schluessel req.tenant.tenantId (nie fremd, H3) - NIE
       // ueber settings/tenantContext, die ueber /api/state + MCP komplett leaken (H4).
       privateNumber: maskPrivateNumber(store.tenantPrivateNumber(tenant)),
+      // Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1): dedizierter Record-Reader
+      // (Muster privateNumber oben), NIE ueber settings/tenantContext (H4). consent ist
+      // NIE vorangekreuzt (Default false, s. schema.sql); consentAt ist der Zeitstempel
+      // des letzten Wechsels (Opt-in ODER Widerruf) oder null, wenn nie gesetzt. Die UI
+      // haengt hier spaeter nur noch eine Checkbox an - dieses Feld traegt ihren Zustand.
+      newsletter: store.tenantNewsletterConsent(tenant),
       // Pay3/W4: Karten- + Abo-Status. KEIN id-Leak (cus_/pm_/sub_ sind keine Secrets,
       // gehoeren aber nicht in die UI-View) - nur "Karte liegt vor ja/nein" + der aktive
       // Plan/Periode. Bei PAYMENT_ENABLED aus: Felder fehlen -> UI versteckt den Block,
@@ -366,6 +372,46 @@ export function makeSelfServiceRoutes({
     const stored = store.tenantPrivateNumber(tenant) != null;
     audit("self_service_private_number", req, `outcome=${stored ? "set" : "cleared"}`);
     res.json({ ok: true, hasPrivateNumber: stored });
+  });
+
+  // ---- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) ----------------------
+  // DEDIZIERTE Route (NICHT die settings-Whitelist selfServicePatch/updateSettings,
+  // Muster private-number oben): die Einwilligung ist eine Erklaerung der Person/des
+  // Accounts, keine Agent-Verhaltens-Einstellung, und lebt am Tenant-RECORD (NICHT in
+  // settings - settings leakt komplett ueber /api/state + MCP, H4). NUR strikt boolean:
+  // der Setter wirft fail-closed VOR jeder Mutation bei jedem anderen Wert (kein
+  // Freitext/Zahl/undefined als "eingewilligt" fehlinterpretierbar) -> 400, alter Wert
+  // bleibt (H2, Muster private-number). Identitaet = Web-Session (req.tenant.tenantId),
+  // NIE ein fremder Tenant. Zusaetzlich zum schnellen Lese-Feld am Tenant-Record wird
+  // JEDER tatsaechliche Zustandswechsel als unveraenderlicher Nachweis in audit_log
+  // geschrieben (auditStore.record, Muster 312k-P3 Kuendigungs-Nachweis) - Art. 7 Abs. 1
+  // verlangt mehr Nachweisbarkeit, als ein blankes Boolean liefern kann. Ein Fehlschlag
+  // des Audit-Schreibens blockt die Antwort NICHT (die Einwilligung selbst ist bereits
+  // persistiert; der Fehler wird geloggt, kein haengender Request).
+  router.post("/api/self-service/newsletter-consent", webAuthMw, async (req, res) => {
+    const tenant = req.tenant.tenantId;
+    const { consent } = req.body || {};
+    try {
+      store.setNewsletterConsent(tenant, consent);
+    } catch {
+      audit("self_service_newsletter_consent", req, "outcome=rejected");
+      // Stabiler, sprachneutraler Code statt deutschem Klartext - gleiche Vokabelform
+      // wie invalid_private_number/no_card/already_subscribed in dieser Datei.
+      return res.status(400).json({ error: "invalid_newsletter_consent" });
+    }
+    try {
+      await auditStore.record({
+        actorSub: req.tenant.sub,
+        tenantId: tenant,
+        action: consent
+          ? "self_service_newsletter_consent_granted"
+          : "self_service_newsletter_consent_revoked",
+      });
+    } catch (err) {
+      console.error(`self-service newsletter-consent audit write failed: ${err.message}`);
+    }
+    audit("self_service_newsletter_consent", req, `outcome=${consent ? "granted" : "revoked"}`);
+    res.json({ ok: true, newsletterConsent: consent });
   });
 
   // ---- P5: schlanker Billing-Status fuer die gefuehrte Aktivierung -----------------

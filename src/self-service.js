@@ -31,6 +31,13 @@ export const SELF_SERVICE_RESTRICT_ONLY_FIELDS = ["allowPersonalData", "allowBan
 // Deshalb eine EIGENE, sichtbare Ablehnung statt der stillen rejected-Liste.
 export const SELF_SERVICE_LOCKED_FIELDS = ["country"];
 
+// Newsletter-Einwilligung ist ABSICHTLICH NICHT in SELF_SERVICE_FREE_FIELDS: sie ist keine
+// Agent-Verhaltens-Einstellung (agentName/language/agentStyle betreffen den Telefon-Agenten),
+// sondern eine Erklaerung der Person/des Accounts und lebt am Tenant-RECORD (Muster
+// privateNumber, H4 - settings leakt komplett ueber /api/state + MCP). Eigene, dedizierte
+// Route POST /api/self-service/newsletter-consent (self-service-routes.js) mit eigenem
+// fail-closed Setter (store.setNewsletterConsent, state-ops.js) statt dieser Whitelist.
+
 // Die im Patch enthaltenen gesperrten Keys (leer = frei). Reine Query, kein Nebeneffekt.
 export function lockedSelfServiceKeys(patch) {
   return Object.keys(patch || {}).filter((k) => SELF_SERVICE_LOCKED_FIELDS.includes(k));
