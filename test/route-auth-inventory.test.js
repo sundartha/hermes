@@ -211,6 +211,7 @@ const ROUTE_FINGERPRINT = [
   "POST /api/self-service/billing/resume",
   "POST /api/self-service/billing/setup-checkout",
   "POST /api/self-service/billing/subscribe",
+  "POST /api/self-service/newsletter-consent",
   "POST /api/self-service/private-number",
   "POST /api/self-service/settings",
   "POST /auth/logout",

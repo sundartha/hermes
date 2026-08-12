@@ -207,12 +207,20 @@ function browserNavigate(url) {
 //   onMessage(text, ok): Rueckmeldung anzeigen.
 //   navigate(url): Browser-Redirect (Default window.location; injizierbar fuer Tests).
 export function wireSubscribe(container, { onSubscribed, onMessage, navigate = browserNavigate } = {}) {
+  // Doppelklick-Schutz (Payment-Neugestaltung): waehrend ein Subscribe-Request laeuft,
+  // ignoriert der Listener JEDEN weiteren Klick (auf jede Kachel) - kein zweiter POST,
+  // bevor der erste beantwortet ist. busy lebt im Closure DIESES Aufrufs (ein Container
+  // = eine Maschine, gleiches Muster wie wireCancelControls unten).
+  let busy = false;
   // Listener gibt das runSubscribe-Promise zurueck (vom Browser ignoriert) -> der
   // Lauf ist deterministisch await-bar (Test), kein Verlass auf Microtask-Timing.
   container.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-plan]");
-    if (!btn) return undefined;
-    return runSubscribe(btn.dataset[PLAN_ATTR], { onSubscribed, onMessage, navigate });
+    if (!btn || busy) return undefined;
+    busy = true;
+    return runSubscribe(btn.dataset[PLAN_ATTR], { onSubscribed, onMessage, navigate }).finally(() => {
+      busy = false;
+    });
   });
 }
 
@@ -333,18 +341,174 @@ export function wireCancelControls(els, { onMessage, onDone } = {}) {
     els.confirmPanel.hidden = true;
     els.openBtn.hidden = false;
   });
+  // Doppelklick-Schutz (Payment-Neugestaltung): EIN busy-Flag fuer beide Netz-
+  // Schaltflaechen (confirm/resume sind nie gleichzeitig sichtbar, s. renderCancelBlock
+  // in BillingIsland.astro) - waehrend ein Cancel/Resume-Request laeuft, ignoriert ein
+  // zweiter Klick ihn komplett (kein zweiter Client-Call, ergaenzt die serverseitige
+  // Idempotenz aus self-service-routes.js setSubscriptionCancellation).
+  let busy = false;
+  function guardedStep(op, messages) {
+    if (busy) return undefined;
+    busy = true;
+    return runCancellationStep(op, messages, { onMessage, onDone }).finally(() => {
+      busy = false;
+    });
+  }
   els.confirmBtn.addEventListener("click", () =>
-    runCancellationStep(
-      startBillingCancel,
-      { ok: CANCEL_MESSAGES.cancelled, conflict: CANCEL_MESSAGES.noSubscription, failed: CANCEL_MESSAGES.cancelFailed },
-      { onMessage, onDone },
-    ),
+    guardedStep(startBillingCancel, {
+      ok: CANCEL_MESSAGES.cancelled,
+      conflict: CANCEL_MESSAGES.noSubscription,
+      failed: CANCEL_MESSAGES.cancelFailed,
+    }),
   );
   els.resumeBtn.addEventListener("click", () =>
-    runCancellationStep(
-      startBillingResume,
-      { ok: CANCEL_MESSAGES.resumed, conflict: CANCEL_MESSAGES.noSubscription, failed: CANCEL_MESSAGES.resumeFailed },
-      { onMessage, onDone },
-    ),
+    guardedStep(startBillingResume, {
+      ok: CANCEL_MESSAGES.resumed,
+      conflict: CANCEL_MESSAGES.noSubscription,
+      failed: CANCEL_MESSAGES.resumeFailed,
+    }),
   );
+}
+
+// ---- Status-Zusammenfassung (Payment-Neugestaltung) --------------------------
+// EIN gemeinsamer, oben im Zahlungsbereich sichtbarer Zustand aus Karten-/Abo-Lage:
+// kein Abo / Karte fehlt / aktiv / gekuendigt-zum-Periodenende - je EIN Satz, was als
+// Naechstes passiert (Auftrag). "Fehler" ist bewusst KEIN fuenfter, hier abgeleiteter
+// Zustand: er entsteht aus einer fehlgeschlagenen AKTION (Checkout/Subscribe/Cancel/
+// Newsletter), nicht aus der Karten-/Abo-LAGE, und lebt in den bestehenden Ruecklauf-/
+// Fehlermeldungen (SUBSCRIBE_MESSAGES/CANCEL_MESSAGES/NEWSLETTER_MESSAGES/
+// returnMessageText), die BillingIsland.astro jetzt farblich absetzt (ok/err).
+export const BILLING_STATUS = Object.freeze({
+  NO_CARD: "no_card",
+  NO_SUB: "no_sub",
+  ACTIVE: "active",
+  CANCELLED: "cancelled",
+});
+
+// Kurze Pillen-Beschriftung je Zustand.
+const BILLING_STATUS_BADGE = Object.freeze({
+  [BILLING_STATUS.NO_CARD]: "No card",
+  [BILLING_STATUS.NO_SUB]: "No plan",
+  [BILLING_STATUS.ACTIVE]: "Active",
+  [BILLING_STATUS.CANCELLED]: "Cancelling",
+});
+
+// CSS-Klassen-Suffix je Zustand (billing-status-badge--<suffix> in BillingIsland.astro).
+// active/cancelled nutzen dieselben Token-ROLLEN wie die Anruf-Status-Badges (app.css
+// .status-badge--active/--cancelled: positive bzw. critical), pending ist eine ruhige
+// neutrale Zwischenfarbe fuer die beiden Vorbereitungs-Zustaende.
+const BILLING_STATUS_BADGE_CLASS = Object.freeze({
+  [BILLING_STATUS.NO_CARD]: "pending",
+  [BILLING_STATUS.NO_SUB]: "pending",
+  [BILLING_STATUS.ACTIVE]: "active",
+  [BILLING_STATUS.CANCELLED]: "cancelled",
+});
+
+const NO_CARD_STATUS_TEXT = "Add a payment method to unlock a plan.";
+const NO_SUB_STATUS_TEXT = "Choose a plan below to activate Hermes.";
+
+// Leitet den sichtbaren Zustand aus Karten-/Abo-Lage ab. Eindeutig - keine zwei
+// Zustaende treffen je gleichzeitig zu: ein Abo setzt zwingend eine Karte voraus
+// (createTenantSubscription gated no_card, s. self-service-routes.js), darum sticht
+// ein aktives/gekuendigtes Abo automatisch vor der Karten-Frage.
+export function billingStatusKind({ hasCard, sub }) {
+  if (sub.planSlug) return sub.cancelAtPeriodEnd ? BILLING_STATUS.CANCELLED : BILLING_STATUS.ACTIVE;
+  return hasCard ? BILLING_STATUS.NO_SUB : BILLING_STATUS.NO_CARD;
+}
+
+export function billingStatusBadge(kind) {
+  return BILLING_STATUS_BADGE[kind] || "";
+}
+
+export function billingStatusBadgeClass(kind) {
+  return BILLING_STATUS_BADGE_CLASS[kind] || "pending";
+}
+
+// Der EINE Satz "was als Naechstes passiert" fuer den aktuellen Zustand. aktiv/
+// gekuendigt nutzen die bereits vorhandenen dynamischen Saetze (subscriptionLine/
+// cancelStatusLine, EINE Quelle, G5) - Cancelled haengt zusaetzlich den Plan-Namen
+// DAVOR an (cancelStatusLine selbst bleibt unveraendert, ihr Wortlaut ist per Test
+// gepinnt: "Cancelled - active until ...").
+export function billingStatusText(kind, sub) {
+  if (kind === BILLING_STATUS.ACTIVE) return subscriptionLine(sub);
+  if (kind === BILLING_STATUS.CANCELLED) return `${planName(sub.planSlug)} — ${cancelStatusLine(sub)}`;
+  if (kind === BILLING_STATUS.NO_CARD) return NO_CARD_STATUS_TEXT;
+  return NO_SUB_STATUS_TEXT;
+}
+
+// ---- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) --------------------
+// Route: POST /api/self-service/newsletter-consent, strikt boolean (src/self-
+// service-routes.js). Der Zustand reist additiv in der state-Antwort unter
+// data.newsletter (state-ops.js tenantNewsletterConsent) -- KEIN Settings-Feld,
+// kein Teil der SELF_SERVICE_FREE_FIELDS-Whitelist (Muster privateNumber, H4:
+// eigener Record, eigene Route).
+
+// EIGENER kleiner Request statt eines Imports aus lib/api.js: apiRequest ist dort
+// NICHT exportiert (G17-Kapselung fuer den Rest-Client), und dieser Endpunkt gehoert
+// nicht zum settings-Schreibpfad. Gleiche Form wie die uebrigen Requests dieses
+// Clients (Strategie 2.3: same-origin, JSON, ApiError bei non-2xx).
+async function postNewsletterConsent(consent) {
+  const res = await fetch("/api/self-service/newsletter-consent", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ consent }),
+  });
+  if (!res.ok) {
+    let code;
+    try {
+      const body = await res.json();
+      if (body && typeof body.error === "string") code = body.error;
+    } catch {
+      // kein/kein gueltiger JSON-Body -> code bleibt undefined, Status entscheidet
+    }
+    throw new ApiError(res.status, `POST newsletter-consent -> ${res.status}`, { code });
+  }
+  return res.json();
+}
+
+// Liest die Einwilligung aus der state-Antwort -- die EINE Stelle, an der dieses
+// Modul die Form `data.newsletter.consent` annimmt (Contract-Grenze, R5). NIE
+// vorangekreuzt: fehlt das Feld (aelterer Server) oder ist consent nicht strikt
+// true -> false (fail-closed neutral, Muster subscriptionFrom/cardStatus in api.js).
+export function newsletterConsentFrom(data) {
+  const newsletter = (data && data.newsletter) || {};
+  return newsletter.consent === true;
+}
+
+// Rueckmeldungen des Newsletter-Schalters (Muster SUBSCRIBE_MESSAGES/CANCEL_MESSAGES).
+export const NEWSLETTER_MESSAGES = Object.freeze({
+  optedIn: "You're subscribed to product updates.",
+  optedOut: "You're unsubscribed from product updates.",
+  sessionExpired: SUBSCRIBE_MESSAGES.sessionExpired,
+  failed: "Couldn't save your choice. Please try again.",
+});
+
+// Verdrahtet den Newsletter-Toggle: Umschalten schreibt SOFORT gegen die Route
+// (kein separater Speichern-Knopf noetig, eine einzelne Einwilligungs-Erklaerung).
+// Erfolg -> das Haekchen bleibt auf dem SERVER-bestaetigten Wert (result.newsletter-
+// Consent, kein blinder Vertrauensvorschuss auf den gesendeten Wert) + Bestaetigung.
+// Fehler -> das Haekchen springt zurueck auf den vorherigen Zustand (kein
+// vorgetaeuschter Erfolg) + Meldung. toggleEl = die Checkbox.
+export function wireNewsletterToggle(toggleEl, { onMessage } = {}) {
+  toggleEl.addEventListener("change", async () => {
+    const requested = toggleEl.checked;
+    toggleEl.disabled = true;
+    try {
+      const result = await postNewsletterConsent(requested);
+      toggleEl.checked = Boolean(result && result.newsletterConsent === true);
+      onMessage(
+        toggleEl.checked ? NEWSLETTER_MESSAGES.optedIn : NEWSLETTER_MESSAGES.optedOut,
+        true,
+      );
+    } catch (err) {
+      toggleEl.checked = !requested; // Rueckfall: Haekchen springt zurueck
+      onMessage(
+        isUnauthorized(err) ? NEWSLETTER_MESSAGES.sessionExpired : NEWSLETTER_MESSAGES.failed,
+        false,
+      );
+    } finally {
+      toggleEl.disabled = false;
+    }
+  });
 }

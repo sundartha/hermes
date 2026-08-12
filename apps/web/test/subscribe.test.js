@@ -28,6 +28,14 @@ import {
   cancelConfirmText,
   cancelStatusLine,
   wireCancelControls,
+  BILLING_STATUS,
+  billingStatusKind,
+  billingStatusBadge,
+  billingStatusBadgeClass,
+  billingStatusText,
+  newsletterConsentFrom,
+  NEWSLETTER_MESSAGES,
+  wireNewsletterToggle,
 } from "../src/lib/subscribe.js";
 
 // ---- Fake-DOM ---------------------------------------------------------------
@@ -494,4 +502,212 @@ test("wireCancelControls: resumeBtn 409 -> 'no active subscription' Hinweis (eig
 test("CANCEL_ABORT_LABEL/RESUME_BUTTON_LABEL: nicht gesetzlich vorgegeben, Englisch (Dashboard-Sprache)", () => {
   assert.equal(CANCEL_ABORT_LABEL, "Never mind");
   assert.equal(RESUME_BUTTON_LABEL, "Resume subscription");
+});
+
+// ---- Doppelklick-Schutz (Payment-Neugestaltung) --------------------------------
+
+test("wireSubscribe: Doppelklick waehrend ein Request laeuft macht nur EINEN Fetch (Guard)", async () => {
+  let resolveFetch;
+  const f = stubFetch(
+    () =>
+      new Promise((resolve) => {
+        resolveFetch = () =>
+          resolve(fakeResponse({ ok: true, status: 200, json: { plan: "starter", currentPeriodEnd: 1 } }));
+      }),
+  );
+  try {
+    const container = fakeContainer();
+    const opts = spyOpts();
+    wireSubscribe(container, opts);
+    const first = container.click("starter");
+    const second = container.click("starter"); // waehrend der erste Request noch offen ist
+    resolveFetch();
+    await first;
+    await second;
+    assert.equal(f.calls.length, 1, "der zweite Klick waehrend eines laufenden Requests darf keinen Fetch ausloesen");
+  } finally {
+    f.restore();
+  }
+});
+
+test("wireSubscribe: nach Abschluss eines Requests loest ein neuer Klick wieder einen Fetch aus", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { plan: "starter", currentPeriodEnd: 1 } }));
+  try {
+    const container = fakeContainer();
+    const opts = spyOpts();
+    wireSubscribe(container, opts);
+    await container.click("starter");
+    await container.click("starter");
+    assert.equal(f.calls.length, 2, "der Guard darf nur WAEHREND eines laufenden Requests blocken");
+  } finally {
+    f.restore();
+  }
+});
+
+test("wireCancelControls: Doppelklick auf confirmBtn waehrend ein Request laeuft macht nur EINEN Fetch (Guard)", async () => {
+  let resolveFetch;
+  const f = stubFetch(
+    () =>
+      new Promise((resolve) => {
+        resolveFetch = () =>
+          resolve(fakeResponse({ ok: true, status: 200, json: { cancelAtPeriodEnd: true, currentPeriodEnd: 1 } }));
+      }),
+  );
+  try {
+    const els = fakeCancelEls();
+    const messages = [];
+    wireCancelControls(els, { onMessage: (text, ok) => messages.push({ text, ok }), onDone: async () => {} });
+    const first = els.confirmBtn.click();
+    const second = els.confirmBtn.click();
+    resolveFetch();
+    await first;
+    await second;
+    assert.equal(f.calls.length, 1, "der zweite Klick waehrend eines laufenden Requests darf keinen Fetch ausloesen");
+  } finally {
+    f.restore();
+  }
+});
+
+// ---- Status-Zusammenfassung (Payment-Neugestaltung) ----------------------------
+
+test("billingStatusKind: kein Abo + keine Karte -> no_card", () => {
+  assert.equal(billingStatusKind({ hasCard: false, sub: { planSlug: "" } }), BILLING_STATUS.NO_CARD);
+});
+
+test("billingStatusKind: kein Abo + Karte vorhanden -> no_sub", () => {
+  assert.equal(billingStatusKind({ hasCard: true, sub: { planSlug: "" } }), BILLING_STATUS.NO_SUB);
+});
+
+test("billingStatusKind: aktives Abo -> active (unabhaengig von hasCard)", () => {
+  assert.equal(
+    billingStatusKind({ hasCard: true, sub: { planSlug: "starter", cancelAtPeriodEnd: false } }),
+    BILLING_STATUS.ACTIVE,
+  );
+});
+
+test("billingStatusKind: Abo mit cancelAtPeriodEnd -> cancelled", () => {
+  assert.equal(
+    billingStatusKind({ hasCard: true, sub: { planSlug: "starter", cancelAtPeriodEnd: true } }),
+    BILLING_STATUS.CANCELLED,
+  );
+});
+
+test("billingStatusBadge/-BadgeClass: eine kurze Beschriftung + ein bekannter CSS-Suffix je Zustand", () => {
+  for (const kind of Object.values(BILLING_STATUS)) {
+    assert.ok(billingStatusBadge(kind).length > 0, `Badge-Text fehlt fuer ${kind}`);
+    assert.match(billingStatusBadgeClass(kind), /^(pending|active|cancelled)$/);
+  }
+});
+
+test("billingStatusText: aktiv/cancelled nutzen subscriptionLine/cancelStatusLine (EINE Quelle)", () => {
+  const epoch = 1781000000;
+  const activeSub = { planSlug: "starter", currentPeriodEnd: epoch, cancelAtPeriodEnd: false };
+  assert.equal(billingStatusText(BILLING_STATUS.ACTIVE, activeSub), subscriptionLine(activeSub));
+
+  const cancelledSub = { planSlug: "business", currentPeriodEnd: epoch, cancelAtPeriodEnd: true };
+  const text = billingStatusText(BILLING_STATUS.CANCELLED, cancelledSub);
+  assert.ok(text.includes("Business"), "Plan-Name fehlt in der Cancelled-Statuszeile");
+  assert.ok(text.includes(cancelStatusLine(cancelledSub)), "cancelStatusLine-Wortlaut fehlt");
+});
+
+test("billingStatusText: no_card/no_sub tragen einen statischen naechsten Schritt", () => {
+  const noCardText = billingStatusText(BILLING_STATUS.NO_CARD, { planSlug: "" });
+  const noSubText = billingStatusText(BILLING_STATUS.NO_SUB, { planSlug: "" });
+  assert.match(noCardText, /payment method/i);
+  assert.match(noSubText, /plan/i);
+  assert.notEqual(noCardText, noSubText, "no_card und no_sub muessen unterscheidbare Saetze zeigen");
+});
+
+// ---- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) ---------------------
+
+test("newsletterConsentFrom: Default nicht eingewilligt (fehlendes/kaputtes Feld -> false, NIE vorangekreuzt)", () => {
+  assert.equal(newsletterConsentFrom({}), false);
+  assert.equal(newsletterConsentFrom(null), false);
+  assert.equal(newsletterConsentFrom(undefined), false);
+  assert.equal(newsletterConsentFrom({ newsletter: {} }), false);
+  assert.equal(newsletterConsentFrom({ newsletter: { consent: "true" } }), false); // kein strikter Boolean
+  assert.equal(newsletterConsentFrom({ newsletter: { consent: 1 } }), false);
+  assert.equal(newsletterConsentFrom({ newsletter: { consent: true } }), true);
+});
+
+// Fake-Checkbox: bildet nur die im Bau genutzten DOM-Operationen nach (Muster
+// fakeToggle oben), aber mit "change" statt "click" + checked/disabled-Property.
+function fakeCheckbox(initialChecked) {
+  let handler = null;
+  return {
+    checked: initialChecked,
+    disabled: false,
+    addEventListener(name, fn) {
+      assert.equal(name, "change");
+      handler = fn;
+    },
+    // Simuliert, was der Browser vor dem "change"-Event bereits getan hat: checked
+    // ist zum Zeitpunkt des Events schon der NEUE Wert (native Checkbox-Semantik).
+    change(nextChecked) {
+      this.checked = nextChecked;
+      return handler();
+    },
+  };
+}
+
+test("wireNewsletterToggle: Umschalten sendet einen STRIKTEN Boolean an newsletter-consent, Erfolg -> Bestaetigung", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { ok: true, newsletterConsent: true } }));
+  try {
+    const toggle = fakeCheckbox(false);
+    const messages = [];
+    wireNewsletterToggle(toggle, { onMessage: (text, ok) => messages.push({ text, ok }) });
+    await toggle.change(true);
+    assert.equal(f.calls[0].path, "/api/self-service/newsletter-consent");
+    assert.equal(f.calls[0].options.method, "POST");
+    const body = JSON.parse(f.calls[0].options.body);
+    assert.deepEqual(body, { consent: true });
+    assert.equal(typeof body.consent, "boolean", "consent muss ein strikter Boolean sein, kein String/Zahl");
+    assert.equal(toggle.checked, true, "Haekchen bleibt auf dem SERVER-bestaetigten Wert");
+    assert.deepEqual(messages, [{ text: NEWSLETTER_MESSAGES.optedIn, ok: true }]);
+    assert.equal(toggle.disabled, false);
+  } finally {
+    f.restore();
+  }
+});
+
+test("wireNewsletterToggle: Widerruf sendet consent:false", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { ok: true, newsletterConsent: false } }));
+  try {
+    const toggle = fakeCheckbox(true);
+    wireNewsletterToggle(toggle, { onMessage: () => {} });
+    await toggle.change(false);
+    assert.deepEqual(JSON.parse(f.calls[0].options.body), { consent: false });
+    assert.equal(toggle.checked, false);
+  } finally {
+    f.restore();
+  }
+});
+
+test("wireNewsletterToggle: Server-Fehler setzt das Haekchen zurueck + Fehlermeldung", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 500, json: {} }));
+  try {
+    const toggle = fakeCheckbox(false);
+    const messages = [];
+    wireNewsletterToggle(toggle, { onMessage: (text, ok) => messages.push({ text, ok }) });
+    await toggle.change(true); // Nutzer versucht einzuwilligen, der Server lehnt ab
+    assert.equal(toggle.checked, false, "Haekchen springt auf den vorherigen Zustand zurueck");
+    assert.deepEqual(messages, [{ text: NEWSLETTER_MESSAGES.failed, ok: false }]);
+    assert.equal(toggle.disabled, false, "Checkbox bleibt nach dem Fehlschlag bedienbar");
+  } finally {
+    f.restore();
+  }
+});
+
+test("wireNewsletterToggle: 401 -> Session abgelaufen, Haekchen faellt zurueck", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 401, json: {} }));
+  try {
+    const toggle = fakeCheckbox(true);
+    const messages = [];
+    wireNewsletterToggle(toggle, { onMessage: (text, ok) => messages.push({ text, ok }) });
+    await toggle.change(false); // Nutzer versucht zu widerrufen, Session ist abgelaufen
+    assert.equal(toggle.checked, true);
+    assert.deepEqual(messages, [{ text: NEWSLETTER_MESSAGES.sessionExpired, ok: false }]);
+  } finally {
+    f.restore();
+  }
 });
