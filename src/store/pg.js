@@ -612,6 +612,17 @@ export function makePgStore(runner) {
       ops.tenantsPendingContractEndCleanup(requireState()),
     tenantIdpSubject: (tenantId) => ops.tenantIdpSubject(requireState(), tenantId),
 
+    // ---- 312k-Phase 5: Kuendigungsbestaetigung per E-Mail (Wrapper-Parity zu json.js) ----
+    setCancellationMailPending(tenantId, patch) {
+      const tenant = ops.setCancellationMailPending(requireState(), tenantId, patch);
+      save();
+      return tenant;
+    },
+    cancellationMailPending: (tenantId) =>
+      ops.cancellationMailPending(requireState(), tenantId),
+    tenantsPendingCancellationMail: () =>
+      ops.tenantsPendingCancellationMail(requireState()),
+
     // ---- Private Summary-Nummer pro Tenant (F2): Wrapper-Parity zu json.js ----
     setPrivateNumber(tenantId, raw) {
       const tenant = ops.setPrivateNumber(requireState(), tenantId, raw);
@@ -873,7 +884,8 @@ const TENANT_COLUMNS =
   "country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, " +
   "suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, " +
   "stripe_period_credit_revoked, stripe_cancel_at_period_end, " +
-  "number_release_pending, workos_delete_pending";
+  "number_release_pending, workos_delete_pending, " +
+  "cancellation_mail_pending, cancellation_mail_received_at";
 
 // Eine tenant-Zeile -> Tenant-Record. Alle optionalen Felder NUR-nicht-null hydrieren:
 // owner_name/idp_subject/first_name sonst -> leeres Feld, das den leeren tenantContext-
@@ -923,6 +935,11 @@ function rowToTenant(r) {
   // Bestand ohne Wert -> contractEndCleanupPending() faellt fail-closed auf false zurueck).
   if (r.number_release_pending != null) tenant.numberReleasePending = r.number_release_pending;
   if (r.workos_delete_pending != null) tenant.workosDeletePending = r.workos_delete_pending;
+  // 312k-Phase 5: Kuendigungsbestaetigung per E-Mail (ALTER-only, nullable, kein Backfill -
+  // Bestand ohne Wert -> cancellationMailPending() faellt fail-closed auf false zurueck).
+  if (r.cancellation_mail_pending != null) tenant.cancellationMailPending = r.cancellation_mail_pending;
+  if (r.cancellation_mail_received_at != null)
+    tenant.cancellationMailReceivedAt = r.cancellation_mail_received_at;
   return tenant;
 }
 
@@ -1353,8 +1370,8 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending, cancellation_mail_pending, cancellation_mail_received_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
@@ -1378,7 +1395,9 @@ async function flushTenants(client, tenants) {
          stripe_period_credit_revoked=EXCLUDED.stripe_period_credit_revoked,
          stripe_cancel_at_period_end=EXCLUDED.stripe_cancel_at_period_end,
          number_release_pending=EXCLUDED.number_release_pending,
-         workos_delete_pending=EXCLUDED.workos_delete_pending`,
+         workos_delete_pending=EXCLUDED.workos_delete_pending,
+         cancellation_mail_pending=EXCLUDED.cancellation_mail_pending,
+         cancellation_mail_received_at=EXCLUDED.cancellation_mail_received_at`,
       [
         t.id,
         t.status,
@@ -1407,6 +1426,8 @@ async function flushTenants(client, tenants) {
         t.stripeCancelAtPeriodEnd ?? null,
         t.numberReleasePending ?? null,
         t.workosDeletePending ?? null,
+        t.cancellationMailPending ?? null,
+        t.cancellationMailReceivedAt ?? null,
       ],
     );
   }

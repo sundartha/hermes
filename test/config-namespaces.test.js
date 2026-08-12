@@ -45,6 +45,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // 312k-Phase 4: workosManagementApiKey ergaenzt (eigener Schluessel fuer die WorkOS-
   // Nutzerloeschung beim Vertragsende, getrennt vom Anmeldeschluessel oidcClientSecret) -> 16.
   auth: 16,
+  // 312k-Phase 5: eigener Namespace fuer den SMTP-Versand der Kuendigungsbestaetigung
+  // (smtpHost/smtpPort/smtpUser/smtpPassword/mailFrom) -> 5, neuer 15. Namespace.
+  mail: 5,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
   // einer Preistabelle pro Modell-ID zusammengefasst (modelPricesUsd, 1 nested Key statt
   // 2 primitiver Keys) -> 10 statt 11.
@@ -90,9 +93,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // 312k-Phase 4: workosManagementApiKey ergaenzt -> 146. (Beide Aenderungen sind
 // unabhaengig voneinander entstanden und im Merge zusammengefallen - die Summe
 // traegt daher beide, nicht eine von beiden.)
-const EXPECTED_TOTAL_KEYS = 146;
+// 312k-Phase 5: neuer mail-Namespace (5 Keys: smtpHost/smtpPort/smtpUser/smtpPassword/
+// mailFrom) -> 151.
+const EXPECTED_TOTAL_KEYS = 151;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (146 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (151 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -113,7 +118,7 @@ test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkt
   );
 });
 
-test("Oberflaeche: config traegt GENAU die 14 Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
+test("Oberflaeche: config traegt GENAU die 15 Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
   assert.equal(new Set(Object.keys(config)).size, Object.keys(CONFIG_NAMESPACES).length);
   assert.deepEqual(Object.keys(config).sort(), Object.keys(CONFIG_NAMESPACES).sort());
   for (const namespace of Object.keys(CONFIG_NAMESPACES)) {
@@ -194,7 +199,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // FIX-1: summaryTimeoutMs ist primitiv (Zahl, kein Array/nested Objekt) -> 135.
   // WW-F2: toolFollowUpEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 136.
   // 312k-Phase 4: workosManagementApiKey ist primitiv (String, kein Array/nested Objekt) -> 137.
-  assert.equal(checked, 137, "alle primitiven Blaetter (146 - 4 Arrays - 5 nested Objekte) geprueft");
+  // 312k-Phase 5: smtpHost/smtpPort/smtpUser/smtpPassword/mailFrom sind alle fuenf primitiv
+  // (String/Zahl/String/String/String, kein Array/nested Objekt) -> 142.
+  assert.equal(checked, 142, "alle primitiven Blaetter (151 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

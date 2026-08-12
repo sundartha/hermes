@@ -41,6 +41,8 @@ import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
 import { isSelfServiceLive } from "../config.js";
 import { makeWorkosManagement } from "../workos-management.js";
 import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.js";
+import { makeSmtpMailer } from "../smtp-mail.js";
+import { runCancellationMailSweep } from "../billing/cancellation-mail.js";
 
 // tenant-prolif-d: Sweep-Kadenz des DID-Release-Reconcilers (interne Kadenz, kein
 // Operator-Knopf -> Modul-Konstante; der Sicherheits-Knopf ist RELEASE_GRACE_DAYS/config).
@@ -74,6 +76,21 @@ function scheduleContractEndCleanup(deps) {
     void runContractEndCleanupSweep(deps).catch((e) => console.error("[contract-end]", e.message));
   run();
   setInterval(run, CONTRACT_END_CLEANUP_INTERVAL_MS).unref();
+}
+
+// 312k-Phase 5: Sweep-Kadenz der Kuendigungsbestaetigung per E-Mail - EIGENSTAENDIG von
+// den anderen beiden Sweeps (kein geteilter Timer). Gleiche Groesse (Muster), kein
+// Operator-Knopf noetig (dieselbe Owner-Entscheidung wie bei der Kuendigung selbst).
+const CANCELLATION_MAIL_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+// Boot-Lauf + periodischer Sweep der Kuendigungsbestaetigung (312k-Phase 5). Muster
+// scheduleContractEndCleanup: fire-and-forget, eigener catch-Riegel, unref() (der Timer
+// haelt den Prozess/Test-Runner nicht am Beenden).
+function scheduleCancellationMailSweep(deps) {
+  const run = () =>
+    void runCancellationMailSweep(deps).catch((e) => console.error("[cancellation-mail]", e.message));
+  run();
+  setInterval(run, CANCELLATION_MAIL_SWEEP_INTERVAL_MS).unref();
 }
 
 export async function wireWebLogin({
@@ -117,6 +134,11 @@ export async function wireWebLogin({
   const workosManagement = config.auth.workosManagementApiKey
     ? makeWorkosManagement(config)
     : null;
+  // 312k-Phase 5: SMTP-Mailer NUR konstruieren, wenn ein Host gesetzt ist
+  // (config.mail.smtpHost) - Muster workosManagement. Ungesetzt (Auslieferungszustand) ->
+  // null: die Kuendigungsbestaetigung wird gar nicht erst versucht,
+  // attemptCancellationMailConfirm vermerkt sie offen + protokolliert.
+  const mailer = config.mail.smtpHost ? makeSmtpMailer(config) : null;
   // Boot-Lauf + Sweep des Vertragsende-Aufraeumens (Rufnummer freigeben + WorkOS-Identitaet
   // loeschen, NUR fuer Tenants mit noch offenem Teilschritt - s. tenantsPendingContractEnd-
   // Cleanup, state-ops.js). Der direkte Aufruf sitzt in billing/webhook.js (SUSPEND-Zweig);
@@ -127,6 +149,11 @@ export async function wireWebLogin({
     workos: workosManagement,
     auditStore,
   });
+  // Boot-Lauf + Sweep der Kuendigungsbestaetigung per E-Mail (312k-Phase 5, NUR fuer
+  // Tenants mit noch offenem Vermerk - s. tenantsPendingCancellationMail, state-ops.js).
+  // Der direkte Ausloeser sitzt in self-service-routes.js (cancel-Route); dieser Sweep
+  // ist NUR der Retry-Pfad fuer einen zuvor fehlgeschlagenen/uebersprungenen Versuch.
+  scheduleCancellationMailSweep({ store, mailer, accounts, config, auditStore });
   const portalStore = makePortalStore(portalRunner);
   const webAuthMw = webAuth({ secret: config.auth.sessionSecret, sessions, accounts });
   // P5: pending-Variante fuer die Self-Aktivierungs-Routen (suspended erreichbar, sonst
@@ -235,6 +262,9 @@ export async function wireWebLogin({
         // KEIN zweiter Schreibpfad). util.audit (Parameter audit oben) bleibt reiner
         // console.log und ist fuer den gesetzlich verlangten Nachweis untauglich.
         auditStore,
+        // 312k-Phase 5: derselbe SMTP-Mailer wie der periodische Sweep oben
+        // (scheduleCancellationMailSweep) - EINE Quelle, kein Drift.
+        mailer,
       }),
     );
   }

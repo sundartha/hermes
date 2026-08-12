@@ -1630,6 +1630,20 @@ const rawConfig = {
     min: 0,
   }),
 
+  // ---- Mail (SMTP, 312k-Phase 5: Kuendigungsbestaetigung) ----
+  // Eigenes Postfach ueber SMTP - KEIN neuer Dienstleister (Owner-Entscheidung): die Domain
+  // liegt bei Zoho in der EU (mx.zoho.eu, SPF include:zohomail.eu bereits gesetzt). TLS wird
+  // im Adapter erzwungen (smtp-mail.js) - nie unverschluesselter Versand. Leer (Default) =
+  // kein Mailer konstruiert (wiring/web-login.js, Muster workosManagementApiKey): die
+  // Kuendigungsbestaetigung bleibt offen vermerkt, ein spaeterer Sweep versucht es erneut,
+  // sobald die Variablen gesetzt sind. smtpPassword ist SECRET - nie loggen/leaken, nie in
+  // eine Fehlermeldung, nie in ein Audit-Detail (eine Email-Adresse ist ebenso PII, Regel 4).
+  smtpHost: process.env.SMTP_HOST || "",
+  smtpPort: numEnv("SMTP_PORT", process.env.SMTP_PORT, { fallback: 465, min: 1 }),
+  smtpUser: process.env.SMTP_USER || "",
+  smtpPassword: process.env.SMTP_PASSWORD || "", // SECRET - nie loggen/leaken
+  mailFrom: process.env.MAIL_FROM || "",
+
   // ---- Voice-Engine ----
   // "budget"  = Provider-eigene STT/TTS (Telnyx TeXML) + Claude Haiku (quasi gratis, Default)
   // "realtime"= OpenAI Realtime API (Speech-to-Speech, Barge-in, ~0,30-0,50 EUR/min)
@@ -1782,6 +1796,10 @@ export const CONFIG_NAMESPACES = Object.freeze({
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
+  // 312k-Phase 5: SMTP-Versand der Kuendigungsbestaetigung (eigenes Postfach, Zoho EU) -
+  // eigener Namespace statt Anhaengsel an auth/billing (eigenstaendige Domaene, s.
+  // smtp-mail.js/billing/cancellation-mail.js).
+  mail: ["smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled"],

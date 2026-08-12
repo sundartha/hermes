@@ -923,6 +923,21 @@ export function tenantsPendingContractEndCleanup() {
   return ops.tenantsPendingContractEndCleanup(load());
 }
 
+// ---- 312k-Phase 5: Kuendigungsbestaetigung per E-Mail (Wrapper-Parity zu pg.js) ----
+export function setCancellationMailPending(tenantId, patch) {
+  const tenant = ops.setCancellationMailPending(load(), tenantId, patch);
+  save();
+  return tenant;
+}
+
+export function cancellationMailPending(tenantId) {
+  return ops.cancellationMailPending(load(), tenantId);
+}
+
+export function tenantsPendingCancellationMail() {
+  return ops.tenantsPendingCancellationMail(load());
+}
+
 export function tenantIdpSubject(tenantId) {
   return ops.tenantIdpSubject(load(), tenantId);
 }

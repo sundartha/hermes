@@ -2227,6 +2227,39 @@ export function tenantIdpSubject(s, tenantId) {
   return findTenant(s, tenantId)?.idpSubject ?? null;
 }
 
+// ---- 312k-Phase 5: Kuendigungsbestaetigung per E-Mail (§ 312k BGB) ----
+// Fortschritts-Speicher EXAKT im Muster von setContractEndCleanupPending/
+// contractEndCleanupPending/tenantsPendingContractEndCleanup (312k-Phase 4, oben): ein
+// fehlgeschlagener/uebersprungener Versandversuch (SMTP nicht erreichbar, nicht
+// konfiguriert, keine Adresse) geht NICHT verloren, sondern bleibt am Tenant offen
+// vermerkt und wird von einem spaeteren Sweep erneut versucht (billing/cancellation-mail.js).
+//
+// receivedAt (ISO-Zeitstempel des Kuendigungs-EINGANGS, § 312k verlangt genau diesen
+// Zeitpunkt in der Bestaetigung) wird EINMAL beim Ausloesen der Kuendigung gesetzt
+// (self-service-routes.js cancel-Route) und bleibt danach unveraendert stehen - jeder
+// Sweep-Versuch liest denselben Eingangszeitpunkt, NIE ein neues "jetzt" der Retry-Zeit.
+export function setCancellationMailPending(s, tenantId, { pending, receivedAt } = {}) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) return null;
+  if (pending !== undefined) tenant.cancellationMailPending = pending;
+  if (receivedAt !== undefined) tenant.cancellationMailReceivedAt = receivedAt;
+  return tenant;
+}
+
+// Fail-closed Default false (nie undefined) - Muster contractEndCleanupPending.
+export function cancellationMailPending(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  return {
+    pending: tenant?.cancellationMailPending ?? false,
+    receivedAt: tenant?.cancellationMailReceivedAt ?? null,
+  };
+}
+
+// Selektor fuer den periodischen Retry-Sweep - Muster tenantsPendingContractEndCleanup.
+export function tenantsPendingCancellationMail(s) {
+  return tenantsOf(s).filter((t) => t.cancellationMailPending);
+}
+
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----
 // Liefert den Usage-Bucket eines Tenants und LEGT IHN BEI BEDARF AN (Nebeneffekt
 // im Kommentar; der Aufrufer reicht stets eine konkrete tenantId). So lebt der
