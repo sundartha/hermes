@@ -275,6 +275,13 @@ export const {
   contractEndCleanupPending,
   tenantsPendingContractEndCleanup,
   tenantIdpSubject,
+  // 312k-Phase 5: Kuendigungsbestaetigung per E-Mail - Fortschritts-Speicher + Retry-
+  // Selektor (Muster setContractEndCleanupPending/Nachbarn). OHNE diese Re-Exports waeren
+  // sie auf der Fassade undefined -> billing/cancellation-mail.js wuerfe zur Laufzeit
+  // einen TypeError. Beide Backends exportieren sie -> die Fassade ist die EINE Quelle.
+  setCancellationMailPending,
+  cancellationMailPending,
+  tenantsPendingCancellationMail,
   // F2: private Summary-Nummer - Setter (Onboard/Self-Service P4/P5) + Reader (finishCall
   // P7 via planSummarySms). Muster wie setTenantStripe/tenantStripe. OHNE diese Re-Exports
   // sind sie auf der Fassade undefined -> self-service-routes UND planSummarySms werfen zur

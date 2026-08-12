@@ -16,6 +16,11 @@ const TZ_PATTERN = /timezone|timeZone/;
 
 // Relativ zu src/. Reihenfolge alphabetisch (Lesbarkeit).
 const ALLOWED_FILES = [
+  // 312k-Phase 5: reine Anzeige-Formatierung (Europe/Berlin) fuer die zwei Datums-
+  // angaben in der Kuendigungsbestaetigungs-Mail - KEIN Anrufzeit-Gate, keine
+  // Tenant-Zeitzone gelesen (billing/cancellation-mail.js nutzt Intl.DateTimeFormat
+  // mit einer FESTEN Zeitzone, nicht store.tenantTimezone).
+  "billing/cancellation-mail.js",
   "claude.js",
   "db/schema.sql",
   "geo/resolve.js",

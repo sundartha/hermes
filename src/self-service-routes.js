@@ -26,6 +26,7 @@ import {
   checkoutSessionIdempotencyKey,
 } from "./billing/subscribe.js";
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
+import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.js";
 import { provisionAuditDetail } from "./billing/provision-outcome.js";
 import {
   publicCall,
@@ -228,6 +229,9 @@ const billingUnavailable = (res) => res.status(502).json({ error: "billing_unava
 // wenn ein Aufrufer/Test es weglaesst - Muster accounts/provision in
 // self-service-error-codes.test.js, die dort ebenfalls fehlen, weil die dort gepruefte
 // Route sie nie beruehrt). NUR die Kuendigungs-/Ruecknahme-Route greift darauf zu.
+// 312k-Phase 5: mailer ist OPTIONAL injiziert (Default null -> attemptCancellationMailConfirm
+// erkennt "kein Mailer konstruiert" fail-soft, Muster workos in contract-end-cleanup.js).
+// NUR die cancel-Route greift darauf zu (resume bekommt bewusst KEINE Mail, s. Auftrag).
 export function makeSelfServiceRoutes({
   store,
   webAuthMw,
@@ -238,6 +242,7 @@ export function makeSelfServiceRoutes({
   accounts,
   provision,
   auditStore = { record: async () => {} },
+  mailer = null,
 }) {
   const router = Router();
 
@@ -572,6 +577,34 @@ export function makeSelfServiceRoutes({
             action: "self_service_cancel_scheduled",
             detail: `current_period_end=${result.currentPeriodEnd ?? "unknown"}`,
           });
+          // 312k-Phase 5 (§ 312k BGB): Kuendigungsbestaetigung UNVERZUEGLICH ausloesen -
+          // NUR bei einer tatsaechlich NEUEN Vormerkung (Muster des Nachweises oben, sonst
+          // liefe ein Doppelklick in eine zweite Mail). receivedAt EINMAL hier gesetzt
+          // (Eingangszeitpunkt, den § 312k in der Bestaetigung verlangt) - der Sweep liest
+          // spaeter denselben Wert, nie ein neues "jetzt". Die Kuendigung ist an dieser
+          // Stelle bereits VOLLZOGEN (Stripe-Call + durabler Nachweis oben sind
+          // durchgelaufen) - das Ausloesen der Mail laeuft danach, best-effort, und darf
+          // die Antwort NIE blockieren (try/catch: attemptCancellationMailConfirm ist
+          // selbst schon fail-soft, dies ist ein zusaetzlicher Riegel gegen einen
+          // unerwarteten Fehler in der Verdrahtung, Muster billing/webhook.js SUSPEND-
+          // Zweig). Was nicht klappt, bleibt am Tenant offen vermerkt und wird vom
+          // periodischen Sweep erneut versucht.
+          try {
+            store.setCancellationMailPending(tenant, {
+              pending: true,
+              receivedAt: new Date().toISOString(),
+            });
+            await attemptCancellationMailConfirm({
+              store,
+              mailer,
+              accounts,
+              config,
+              auditStore,
+              tenantId: tenant,
+            });
+          } catch (e) {
+            console.error(`[cancellation-mail] Ausloesen fehlgeschlagen tenant=${tenant}: ${e.message}`);
+          }
         }
         audit(
           "self_service_cancel",

@@ -56,6 +56,10 @@ const baseConfig = {
   server: { publicUrl: "http://localhost", webDistDir: "" },
   provisioning: { releaseGraceMs: 0 },
   billing: { paymentEnabled: false },
+  // 312k-Phase 5: wireWebLogin liest jetzt zusaetzlich config.mail.smtpHost (Gate fuer den
+  // SMTP-Mailer-Bau, s. wiring/web-login.js) - leer = kein Mailer (Auslieferungszustand,
+  // Muster workosManagementApiKey oben).
+  mail: { smtpHost: "" },
 };
 
 const fakeStore = {

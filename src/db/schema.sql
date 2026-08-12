@@ -118,6 +118,16 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_cancel_at_period_end BOOLEAN;
 -- kein CHECK (Muster stripe_cancel_at_period_end).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS number_release_pending BOOLEAN;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS workos_delete_pending BOOLEAN;
+-- 312k-Phase 5 (Kuendigungsbestaetigung per E-Mail, § 312k BGB): true = die Bestaetigung
+-- ist noch OFFEN - ein fehlgeschlagener/uebersprungener Versandversuch (SMTP nicht
+-- erreichbar, nicht konfiguriert, keine Empfaengeradresse) wird so nicht verloren, sondern
+-- von einem spaeteren Sweep erneut versucht (Muster number_release_pending/
+-- workos_delete_pending). cancellation_mail_received_at haelt den EINGANGS-Zeitpunkt der
+-- Kuendigung fest (den § 312k in der Bestaetigung verlangt) - EINMAL beim Ausloesen
+-- gesetzt, danach unveraendert, damit jeder Retry denselben Zeitpunkt bestaetigt statt
+-- eines neuen "jetzt". NULL/false = nichts (mehr) offen. Additiv NULLABLE, kein CHECK.
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS cancellation_mail_pending BOOLEAN;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS cancellation_mail_received_at TEXT;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (
