@@ -139,6 +139,10 @@ export async function wireWebLogin({
   // null: die Kuendigungsbestaetigung wird gar nicht erst versucht,
   // attemptCancellationMailConfirm vermerkt sie offen + protokolliert.
   const mailer = config.mail.smtpHost ? makeSmtpMailer(config) : null;
+  // smtp-boot-probe: die Boot-Sonde selbst haengt NICHT an diesem pg-gated Block (der bei
+  // STORE_BACKEND=json gar nicht laeuft, s. app.js) - sie sitzt unconditional in boot.js
+  // (bootServer), Muster PROV-01 (reconcileOrphanedProvisioning), damit der Betreiber den
+  // SMTP-Zustand auch ohne laufendes Portal/pg-Backend sieht.
   // Boot-Lauf + Sweep des Vertragsende-Aufraeumens (Rufnummer freigeben + WorkOS-Identitaet
   // loeschen, NUR fuer Tenants mit noch offenem Teilschritt - s. tenantsPendingContractEnd-
   // Cleanup, state-ops.js). Der direkte Aufruf sitzt in billing/webhook.js (SUSPEND-Zweig);
