@@ -414,6 +414,7 @@ test("retrieveSubscription: GET /v1/subscriptions/<id>?expand[]=latest_invoice, 
       return okJson({
         metadata: { plan_slug: "starter" },
         latest_invoice: { total: 0 },
+        status: "active",
       });
     },
     () => stripeBilling.retrieveSubscription("sub_1"),
@@ -422,7 +423,9 @@ test("retrieveSubscription: GET /v1/subscriptions/<id>?expand[]=latest_invoice, 
   assert.ok(captured.url.includes("expand[]=latest_invoice"), "latest_invoice wird expandiert");
   assert.equal(captured.opts.method, "GET");
   assert.equal(captured.opts.headers.Authorization, `Bearer ${SECRET}`);
-  assert.deepEqual(result, { planSlug: "starter", numberSetupFeeExempt: true });
+  // status: additiv fuer den Stripe-Abgleich-Sweep (stripe-reconcile.js) - opaker
+  // Stripe-Wert, durchgereicht wie geliefert.
+  assert.deepEqual(result, { planSlug: "starter", numberSetupFeeExempt: true, status: "active" });
 });
 
 test("retrieveSubscription: latest_invoice.total>0 -> numberSetupFeeExempt:false", async () => {
@@ -431,7 +434,8 @@ test("retrieveSubscription: latest_invoice.total>0 -> numberSetupFeeExempt:false
       okJson({ metadata: { plan_slug: "business" }, latest_invoice: { total: 2900 } }),
     () => stripeBilling.retrieveSubscription("sub_2"),
   );
-  assert.deepEqual(result, { planSlug: "business", numberSetupFeeExempt: false });
+  // status fehlt im Stub -> null (nie raten, G26; der Sweep heilt bei null NICHT).
+  assert.deepEqual(result, { planSlug: "business", numberSetupFeeExempt: false, status: null });
 });
 
 test("retrieveSubscription: fehlendes latest_invoice -> numberSetupFeeExempt:false (fail-closed, nie raten)", async () => {
@@ -439,7 +443,7 @@ test("retrieveSubscription: fehlendes latest_invoice -> numberSetupFeeExempt:fal
     async () => okJson({ metadata: { plan_slug: "starter" } }),
     () => stripeBilling.retrieveSubscription("sub_3"),
   );
-  assert.deepEqual(result, { planSlug: "starter", numberSetupFeeExempt: false });
+  assert.deepEqual(result, { planSlug: "starter", numberSetupFeeExempt: false, status: null });
 });
 
 test("retrieveSubscription: fehlender plan_slug -> planSlug:null (Bestand unveraendert)", async () => {
@@ -447,7 +451,7 @@ test("retrieveSubscription: fehlender plan_slug -> planSlug:null (Bestand unvera
     async () => okJson({ latest_invoice: { total: 0 } }),
     () => stripeBilling.retrieveSubscription("sub_4"),
   );
-  assert.deepEqual(result, { planSlug: null, numberSetupFeeExempt: true });
+  assert.deepEqual(result, { planSlug: null, numberSetupFeeExempt: true, status: null });
 });
 
 test("placeHold: POST /v1/payment_intents mit customer + payment_method + off_session=true, manual capture", async () => {

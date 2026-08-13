@@ -80,6 +80,9 @@
  * @typedef {Object} SubscriptionAmountCheck
  * @property {string|null} planSlug         - Katalog-Slug aus der Subscription-Metadata (fehlt -> null)
  * @property {boolean} numberSetupFeeExempt - true NUR wenn das aktuelle Invoice-total nachweislich 0 ist (unbekannt -> false, fail-closed)
+ * @property {string|null} status           - Abo-Status laut Stripe (opak, z.B. "active"/"canceled"; fehlt -> null, nie raten).
+ *   Genutzt vom Stripe-Abgleich-Sweep (billing/stripe-reconcile.js), um verlorene
+ *   customer.subscription.deleted-Webhooks zu erkennen und zu heilen.
  */
 
 /**

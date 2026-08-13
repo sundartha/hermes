@@ -2260,6 +2260,21 @@ export function tenantsPendingCancellationMail(s) {
   return tenantsOf(s).filter((t) => t.cancellationMailPending);
 }
 
+// ---- Stripe-Abgleich-Sweep (verlorene Webhooks selbstheilen) ----
+// Selektor fuer runStripeSubscriptionReconcile (billing/stripe-reconcile.js): NUR Tenants,
+// die ein gespeichertes Abo haben UND nicht bereits suspendiert sind. Hintergrund (Betreiber-
+// Befund 2026-08-13, Stripe-Dashboard): auf dem kostenlosen Render-Plan schlaeft der Dienst,
+// das Aufwachen dauert laenger als Stripes Webhook-Timeout - nachweislich sind Events nach
+// Ablauf ALLER Stripe-Retries (~3 Tage) endgueltig verloren gegangen. Ein verlorenes
+// customer.subscription.deleted hiesse sonst: Kunde nie gesperrt, Rufnummer nie freigegeben.
+// suspendedAt als Ausschluss (nicht ein eigenes Flag): der Suspend-Zweig stempelt es immer
+// (setSuspendedAtIfAbsent), ACTIVATE loescht es - ein geheilter Tenant faellt damit von
+// selbst aus dem Selektor (Idempotenz, Muster tenantsPendingContractEndCleanup), ein
+// reaktivierter kommt von selbst wieder hinein. REIN + IO-frei (mutiert s NICHT).
+export function tenantsForStripeReconcile(s) {
+  return tenantsOf(s).filter((t) => t.stripeSubscriptionId && !t.suspendedAt);
+}
+
 // ---- Newsletter-Einwilligung pro Tenant (Opt-in, DSGVO Art. 7 Abs. 1) ----
 // Setzt die Newsletter-Einwilligung eines Tenants. Lebt am Tenant-RECORD (NICHT in
 // settings): sie ist eine Einwilligung der Person/des Accounts, keine Agent-Verhaltens-
