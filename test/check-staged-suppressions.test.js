@@ -2,6 +2,24 @@
 // Auswahl-Logik auf einer Attrappe, nie auf der echten eslint-suppressions.json
 // (die ist gross und aendert sich mit jedem Aufraeumen). Beide Richtungen:
 // eine vorgemerkte Datei mit Eintraegen wird gemeldet, eine ohne wird nicht.
+//
+// ALTLAST-LISTE: der zweite describe-Block nagelt einen Vertrag fest, den es
+// im Skript NOCH NICHT gibt - diese Faelle sind ABSICHTLICH ROT, bis der
+// Ausweg gebaut ist. Hintergrund: das Gate hat einen Fall ohne Ausweg
+// (src/store/state-ops.js, src/store/pg.js tragen Schuld, deren Aufraeumen ein
+// eigenes Refactoring waere). Der Eigentuemer hat entschieden: der Ausweg ist
+// eine ausdrueckliche Altlast-Liste, nicht "git commit --no-verify".
+//
+// Der Vertrag, den diese Tests pinnen, ist die NAHT, nicht der Speicherort:
+//   findSuppressedStagedFiles({ stagedFiles, suppressions, legacyExceptions })
+// legacyExceptions ist eine Abbildung Dateipfad -> { reason, date }:
+//   reason: nicht-leerer Text, warum die Datei noch nicht geraeumt ist
+//   date:   Kalenderdatum im Format YYYY-MM-DD, wann die Ausnahme entstand
+// Ein Eintrag, dem eines von beidem fehlt oder der es nur leer/unlesbar
+// fuehrt, ist UNGUELTIG und entschuldigt nichts - die Liste ist eine bewusste
+// Ausnahme, kein Abstellgleis. WO die Liste liegt (eigene Datei, Abschnitt
+// einer bestehenden Konfiguration, Feld in eslint-suppressions.json), legt
+// dieser Test bewusst nicht fest; das Einlesen ist Sache des CLI-Teils.
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
@@ -70,5 +88,94 @@ describe("findSuppressedStagedFiles (Attrappe)", () => {
       suppressions: DUMMY_SUPPRESSIONS,
     });
     assert.deepEqual(offenders, []);
+  });
+});
+
+// Eigene Attrappe fuer die Altlast-Faelle, damit die Bestandsfaelle oben
+// unveraendert bleiben. "geraeumt.js" fehlt hier absichtlich: sie steht auf
+// der Liste, traegt aber keine Unterdrueckungen mehr.
+const LEGACY_SUPPRESSIONS = {
+  "src/dummy/altlast.js": { "id-length": { count: 3 }, "max-params": { count: 2 } },
+  "src/dummy/ohne-grund.js": { "id-length": { count: 1 } },
+  "src/dummy/ohne-datum.js": { "id-length": { count: 1 } },
+  "src/dummy/leere-felder.js": { "id-length": { count: 1 } },
+  "src/dummy/krummes-datum.js": { "id-length": { count: 1 } },
+  "src/dummy/nicht-gelistet.js": { "no-magic-numbers": { count: 2 } },
+};
+
+// Genau ein Eintrag ist gueltig (altlast.js). Er steht in jedem Fall mit im
+// Spiel, damit jeder Test die Entschuldigung UND die Positiv-Kontrolle
+// zugleich prueft: ein Gate, das alles durchlaesst, faellt hier auf.
+const LEGACY_EXCEPTIONS = {
+  "src/dummy/altlast.js": {
+    reason: "Aufraeumen waere ein eigenes Refactoring des Zustandsmoduls",
+    date: "2026-08-13",
+  },
+  "src/dummy/ohne-grund.js": { date: "2026-08-13" },
+  "src/dummy/ohne-datum.js": { reason: "steht noch aus" },
+  "src/dummy/leere-felder.js": { reason: "   ", date: "   " },
+  "src/dummy/krummes-datum.js": { reason: "steht noch aus", date: "bald" },
+  "src/dummy/geraeumt.js": {
+    reason: "war Altlast, ist inzwischen geraeumt",
+    date: "2026-08-13",
+  },
+};
+
+// Prueft die Auswahl gegen die Altlast-Attrappe und liefert nur die Pfade der
+// Treffer - die Regel-Anzahlen decken die Bestandsfaelle oben bereits ab.
+function offendingFiles(stagedFiles) {
+  const offenders = findSuppressedStagedFiles({
+    stagedFiles,
+    suppressions: LEGACY_SUPPRESSIONS,
+    legacyExceptions: LEGACY_EXCEPTIONS,
+  });
+  return offenders.map((offender) => offender.file);
+}
+
+describe("Altlast-Liste im Aufraeum-Gate (Attrappe, absichtlich rot)", () => {
+  it("entschuldigt eine gelistete Datei, meldet die ungelistete weiterhin", () => {
+    assert.deepEqual(
+      offendingFiles(["src/dummy/altlast.js", "src/dummy/nicht-gelistet.js"]),
+      ["src/dummy/nicht-gelistet.js"],
+    );
+  });
+
+  it("entschuldigt nicht, wenn dem Eintrag der Grund fehlt", () => {
+    assert.deepEqual(
+      offendingFiles(["src/dummy/altlast.js", "src/dummy/ohne-grund.js"]),
+      ["src/dummy/ohne-grund.js"],
+    );
+  });
+
+  it("entschuldigt nicht, wenn dem Eintrag das Datum fehlt", () => {
+    assert.deepEqual(
+      offendingFiles(["src/dummy/altlast.js", "src/dummy/ohne-datum.js"]),
+      ["src/dummy/ohne-datum.js"],
+    );
+  });
+
+  it("entschuldigt nicht, wenn Grund und Datum nur aus Leerzeichen bestehen", () => {
+    assert.deepEqual(
+      offendingFiles(["src/dummy/altlast.js", "src/dummy/leere-felder.js"]),
+      ["src/dummy/leere-felder.js"],
+    );
+  });
+
+  it("entschuldigt nicht, wenn das Datum kein Kalenderdatum ist", () => {
+    assert.deepEqual(
+      offendingFiles(["src/dummy/altlast.js", "src/dummy/krummes-datum.js"]),
+      ["src/dummy/krummes-datum.js"],
+    );
+  });
+
+  it("laesst eine gelistete, inzwischen geraeumte Datei unauffaellig", () => {
+    assert.deepEqual(
+      offendingFiles([
+        "src/dummy/geraeumt.js",
+        "src/dummy/altlast.js",
+        "src/dummy/nicht-gelistet.js",
+      ]),
+      ["src/dummy/nicht-gelistet.js"],
+    );
   });
 });
