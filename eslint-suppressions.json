@@ -3300,14 +3300,6 @@
       "count": 2
     }
   },
-  "test/config-namespaces.test.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 2
-    }
-  },
   "test/config-prod-footguns.test.js": {
     "no-magic-numbers": {
       "count": 1
