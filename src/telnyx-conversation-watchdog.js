@@ -33,6 +33,23 @@ import { formatLogLine } from "./utils/log-line.js";
 
 export const WATCHDOG_LOG_PREFIX = "[telnyx-watchdog]";
 
+// Boot-Re-Arm (rearmActiveCalls, s.u.): Status eines Legs, das noch laeuft. Benannte
+// Konstante statt Literal im Rumpf; dieselbe Vokabel wie telephony/call-lifecycle.js.
+const ACTIVE_CALL_STATUS = "active";
+
+// Die Merkmale AM CALL, an denen ein laufendes Assistant-Leg auch nach einem Neustart
+// erkennbar bleibt: assistantId (bei der Origination persistiert) und callControlId (der
+// Griff, ueber den dieser Waechter ueberhaupt terminiert - ohne sie legt das Hangup-
+// Primitiv nichts auf, telnyx-call-terminate.js).
+// BEWUSST NICHT das Flag TELNYX_AI_ASSISTANT_ENABLED: legt ein Deploy es um, waehrend ein
+// Gespraech laeuft, verloere genau dieses Leg seine Deckung - der Zustand am Call, nicht
+// der Zustand der Konfiguration, entscheidet (G28: die Bedingung hat einen Namen).
+function isRunningAssistantLeg(call) {
+  return (
+    call.status === ACTIVE_CALL_STATUS && Boolean(call.assistantId) && Boolean(call.callControlId)
+  );
+}
+
 // Zeilenformat dieser Achse ueber die gemeinsame Quelle formatLogLine (G5, Muster
 // telnyx-llm-shim.js formatShimLine - beide riefen bis dahin dieselbe Form unabhaengig
 // auf). PII-frei - nur die interne callId, Zahlen und Grund-Token, nie Wortlaut, nie
@@ -273,6 +290,37 @@ export function makeConversationWatchdog({
     // ai_assistant_start ist raus (Ingest). Idempotent.
     restartDeadAirTimer(callId, ensureState(callId));
   }
+  // Boot-Re-Arm der Dead-Air-Wache - dieselbe Frage, die rearmActiveCallTimers
+  // (telephony/call-lifecycle.js) fuer die Zeit-Achse beantwortet, fuer diese Achse
+  // gestellt. Die Timer oben leben als setTimeout im Prozess; ein Deploy/Restart nimmt sie
+  // mit, und der EINZIGE arm()-Aufrufer (Call-Control-Ingest beim ai_assistant_start) ist
+  // ein per-Call-Webhook, das fuer ein bereits laufendes Gespraech nie wieder kommt. Ohne
+  // diesen Re-Arm bleibt einem ueberlebenden Leg allein der Max-Dauer-Cap (Groessenordnung
+  // 1800 s) statt der Dead-Air-Frist (Default 45 s) - bei minutengenauer Abrechnung der
+  // Unterschied zwischen Cent und Euro.
+  //
+  // KONSERVATIV PER KONSTRUKTION: armiert wird die VOLLE Frist ab dem Neustart, nie eine
+  // aus einem alten Zeitstempel zurueckgerechnete Restfrist. Der fluechtige Zustand
+  // (speechEndsAtMs/emptyStreak/turnSeq) ist mit dem Prozess weg und wird NICHT geraten -
+  // arm() ist exakt derselbe Aufruf, den ai_assistant_start macht. Der Neustart liegt nie
+  // VOR dem letzten Lebenszeichen, die neue Frist laeuft also nie kuerzer als die, die der
+  // Prozess ohne Neustart gestellt hatte; ein Leg, das im Moment des Neustarts gerade
+  // sprach, wird deshalb nicht sofort gekappt, sondern bekommt die ganze Frist neu.
+  // Nicht rekonstruierbar bleibt allein die EINMALIGE Sprech-Vertagung (extendForSpeech):
+  // sie haengt an der Schaetzung eines laufenden Turns, den der Neustart selbst beendet
+  // hat, und lebt beim ersten Shim-Turn nach dem Boot ueber observeTurn/noteAgentSpeech
+  // wieder auf.
+  //
+  // calls ist der Store-Schnappschuss des Aufrufers: dieser Waechter kennt keinen Store
+  // (reine Zustands-/Timer-Logik, s. Kopfkommentar), WELCHE Zeilen ein laufendes
+  // Assistant-Leg sind, entscheidet er selbst (isRunningAssistantLeg). Idempotent wie arm().
+  function rearmActiveCalls(calls) {
+    const legs = calls.filter(isRunningAssistantLeg);
+    for (const leg of legs) arm(leg.id);
+    // Nur wenn wirklich etwas gedeckt wurde - ein Boot ohne laufendes Gespraech bleibt in
+    // der Ausgabe unveraendert (Muster rearmActiveCallTimers). PII-frei: nur Zahlen.
+    if (legs.length) console.log(formatWatchdogLine("boot_rearm", { legs: legs.length, deadAirMs }));
+  }
   function observeTurn(callId, callerText) {
     const s = ensureState(callId);
     // K0: jeder Aufruf ist EIN Shim-Request fuer diesen Call - unabhaengig davon, ob der
@@ -358,5 +406,5 @@ export function makeConversationWatchdog({
     }
     states.delete(callId);
   }
-  return { arm, observeTurn, noteAgentSpeech, scheduleFarewellHangup, clear };
+  return { arm, rearmActiveCalls, observeTurn, noteAgentSpeech, scheduleFarewellHangup, clear };
 }

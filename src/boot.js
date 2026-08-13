@@ -848,6 +848,10 @@ export async function bootServer({
   config,
   store,
   lifecycle,
+  // Boot-Re-Arm der Dead-Air-Wache (s. unten bei rearmActiveCallTimers). Dieselbe EINE
+  // Instanz, die Shim und Call-Control-Ingest teilen (INV-7) - server.js reicht sie im
+  // deps-Buendel bereits durch, hier wird sie nur ausgepackt.
+  conversationWatchdog,
   callFinish,
   provisioning,
   costTruing,
@@ -915,6 +919,19 @@ export async function bootServer({
   // stehen. Das widerspraeche dem Boot-Gate-Versprechen "GAR NICHT gestartet" (Regel 1/
   // OT-4). Kein Gate danach darf mehr process.exit(1) rufen.
   lifecycle.rearmActiveCallTimers();
+
+  // Zweite Achse desselben Boot-Problems: der Cap-Re-Arm darueber deckt ein ueberlebendes
+  // Leg mit Groessenordnung MAX_CALL_DURATION_CAP_S, die Dead-Air-Frist des Gespraechs-
+  // Waechters mit Groessenordnung 45 s - dessen Timer nimmt ein Deploy genauso mit, und
+  // sein einziger Armierer (ai_assistant_start, Call-Control-Ingest) kommt fuer ein bereits
+  // laufendes Gespraech nie wieder. UNMITTELBAR NACH dem Cap-Re-Arm und aus DESSEN
+  // Ergebnis: der Zombie-Zweig dort setzt den Endstatus synchron (persistEnd laeuft vor dem
+  // ersten await in terminateAndBillCall), der Schnappschuss traegt also nur noch Zeilen,
+  // die wirklich weiterlaufen; welche davon ein Assistant-Leg sind, entscheidet der
+  // Waechter an den Merkmalen AM CALL, nicht an einem Flag (isRunningAssistantLeg).
+  // Setzt ausschliesslich Timer - INV-5 (kein exit(1) nach dem Re-Arm) bleibt unberuehrt,
+  // der Max-Dauer-Cap und sein Re-Arm sind unveraendert.
+  conversationWatchdog.rearmActiveCalls(store.load().calls);
 
   const httpServer = app.listen(config.server.port, () => {
     // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
