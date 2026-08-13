@@ -127,6 +127,17 @@ export const PUBLIC_ROUTES = Object.freeze([
       "HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET (fail-closed); ohne PAYMENT_ENABLED 404.",
   },
   {
+    method: "POST",
+    path: "/webhooks/elevenlabs/consult",
+    reason:
+      "HANDLER-INTERNE AUTH (Runbook-Fall 2): der ElevenLabs-Agent ruft das Werkzeug " +
+      "get_consult serverseitig, kann keinen Session-Cookie senden - und ElevenLabs " +
+      "SIGNIERT Werkzeug-Webhooks nicht (nur frei konfigurierbare Header). Absicherung im " +
+      "Handler: timing-sicherer Vergleich (safeEqual) des Headers x-hermes-tool-token gegen " +
+      "ELEVENLABS_TOOL_TOKEN, leerer Wert lehnt JEDEN Aufruf ab; danach Bindung an einen " +
+      "laufenden Anruf (404 sonst), Consult-Faehigkeits-Gate und die pro-Tenant-Kostendecke.",
+  },
+  {
     method: "GET",
     path: LEGACY_PORTAL_PATH,
     reason:

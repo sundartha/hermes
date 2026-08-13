@@ -661,6 +661,16 @@ const rawConfig = {
     }),
   },
 
+  // Rueckfrage-Webhook des ElevenLabs-Conversational-Agents (Werkzeug get_consult,
+  // POST /webhooks/elevenlabs/consult): das geteilte Geheimnis, das der Agent im Header
+  // x-hermes-tool-token schickt. SECRET - nie loggen, nie in eine Antwort. LEER =
+  // fail-closed: der Endpunkt lehnt JEDEN Aufruf ab. Er braucht dieses Geheimnis, weil
+  // ElevenLabs Werkzeug-Webhooks NICHT signiert (es gibt nur frei konfigurierbare Header) -
+  // es ist die einzige Sicherung eines von aussen erreichbaren Endpunkts, der in ein
+  // laufendes, kostendes Gespraech hineinwirkt. .trim() wie bei den ElevenLabs-Schluesseln
+  // oben: ein eingefuegtes Newline waere sonst ein Geheimnis, das nie passt.
+  elevenLabsToolToken: (process.env.ELEVENLABS_TOOL_TOKEN || "").trim(),
+
   // ---- Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1; optional) ----
   // C6a (P5): gruppiert (10 zusammengehoerige Keys, Praezedenzfall telnyxElevenLabs) -
   // erste Grouping-Phase hinter dem Config-Proxy-Guard. Zugriff ausschliesslich ueber
@@ -1809,7 +1819,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
-  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled"],
+  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],

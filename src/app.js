@@ -25,6 +25,8 @@ import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-
 import { originateAiAssistantCall } from "./telnyx-origination.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
+import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";
+import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
@@ -489,6 +491,25 @@ export async function buildApp(deps) {
       terminateAndBillCall,
       billThunk,
       watchdog: conversationWatchdog,
+    }),
+  );
+
+  // ---- Rueckfrage-Webhook des ElevenLabs-Laufwerks --------------------------------
+  // AUTH-AUSNAHME (Regel 3, begruendet): der Agent des Anbieters ruft serverseitig und
+  // kann keinen Session-Cookie senden; ElevenLabs signiert Werkzeug-Webhooks nicht.
+  // Absicherung im Handler: timing-sicherer Vergleich (safeEqual) des Headers
+  // x-hermes-tool-token gegen ELEVENLABS_TOOL_TOKEN, fail-closed bei leerem Wert - dann
+  // Bindung an einen laufenden Anruf, Faehigkeits-Gate und die pro-Tenant-Kostendecke
+  // (volle Begruendung im Routenmodul + src/route-policy.js). NICHT unter /voice: die
+  // Ed25519-Signaturpruefung dort bleibt unberuehrt. Die Wirkung laeuft ueber den
+  // BESTEHENDEN Consult-Kanal (call.consults, AL-P13); makeConsultRaised ist zustandslos
+  // (keine Zaehler, kein Drain-Flag - anders als consultDelivery) und wird deshalb hier
+  // in der Kompositionswurzel gebaut, wie makeTelnyxLlmShim.
+  app.use(
+    makeElevenLabsWebhookRoutes({
+      store,
+      config,
+      onConsultRaised: makeConsultRaised({ store }),
     }),
   );
 
