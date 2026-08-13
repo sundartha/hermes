@@ -16,6 +16,7 @@
     "seed-owner-number": "node scripts/seed-owner-number.js",
     "bootstrap-tenant": "node scripts/bootstrap-tenant.js",
     "check:tokens": "node scripts/check-token-sync.js",
+    "elevenlabs:check": "node scripts/check-elevenlabs-tests.js",
     "convo-bench": "node scripts/convo-bench.mjs",
     "test": "NODE_ENV=test node test/i18n-catalog-run.mjs regression",
     "test:gates": "NODE_ENV=test node test/i18n-catalog-run.mjs gates",

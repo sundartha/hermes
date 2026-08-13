@@ -1,0 +1,41 @@
+{
+  "_hinweis": "Zielwerte (Quelle: UMSETZUNG-ElevenLabs.md, Zeile 82) stehen in _ausfuehrung. repeat_count gehoert laut README (elevenlabs/tests/README.md, Feldtabelle 'Ausfuehrung') zum Ausfuehrungs-Aufruf POST /v1/convai/agents/{agent_id}/run-tests, nicht zur Testdefinition selbst - hier nur im klar als Nicht-Schema markierten Objekt _ausfuehrung informativ vermerkt fuer den spaeteren Lauf.",
+  "_ausfuehrung": { "repeat_count": 10, "bestehensschwelle": ">= 9 von 10" },
+  "_ungeklaert_hinweis": "Drei Werte in dieser Datei sind aus dem Vorlagenbeispiel bzw. allgemeiner ElevenLabs-Konvention abgeleitet, nicht unabhaengig gegen ein Schema/eine Doku-Seite geprueft: (1) tool_call_parameters.referenced_tool.id='get_consult' - es existiert noch kein ElevenLabs-Agents-Abo (README), also keine echte Tool-ID; 'get_consult' ist der bekannte lokale Werkzeugname aus dem Hermes-Code. (2) tool_call_parameters.referenced_tool.type='webhook' - eine Annahme aus dem dokumentierten Enum (system|webhook|client|workflow|api_integration_webhook|mcp|code), nicht bestaetigt. (3) parameters[0].path='question' - direkt aus dem Beispielwert in templates/tool-call-test.template.json uebernommen (das Beispiel dort deckt sich woertlich mit der A1-Pruefart-Formulierung), aber nicht gegen das echte get_consult-Parameterschema geprueft. (4) chat_history[].role='agent'/'user' - Feldname 'role' ist belegt (README-Feldtabelle), die konkreten Enum-Werte sind in der gelesenen Doku nicht woertlich aufgefuehrt. Vor dem ersten Push gegenpruefen.",
+  "name": "A1 - Die Rueckfrage wird echt gestellt (Kern des Produkts)",
+  "type": "tool",
+  "tool_call_parameters": {
+    "referenced_tool": {
+      "id": "get_consult",
+      "type": "webhook"
+    },
+    "verify_absence": false,
+    "parameters": [
+      {
+        "path": "question",
+        "eval": {
+          "type": "llm",
+          "description": "Fragt der Text konkret nach dem Fahrzeugmodell (Automodell)? Die Frage muss echt um diese Information bitten - der Agent darf kein Modell selbst raten oder annehmen, sondern wartet auf die Antwort der Werkstatt."
+        }
+      }
+    ],
+    "workflow_node_transition": null
+  },
+  "check_any_tool_matches": null,
+  "dynamic_variables": {},
+  "chat_history": [
+    {
+      "role": "agent",
+      "time_in_call_secs": 0,
+      "message": "Guten Tag, ich rufe an, um fuer den Auftraggeber einen Reparaturtermin in Ihrer Werkstatt zu vereinbaren."
+    },
+    {
+      "role": "user",
+      "time_in_call_secs": 6,
+      "message": "Gerne, worum geht es denn genau - und welches Automodell haben Sie da?"
+    }
+  ],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

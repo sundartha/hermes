@@ -1,0 +1,41 @@
+{
+  "_hinweis": "Testdefinition fuer A3 aus UMSETZUNG-ElevenLabs.md Z.100-109 (Gruppe A, Veto-Kriterium). Noch kein ElevenLabs-Agents-Abo vorhanden (siehe elevenlabs/tests/README.md Z.9) - kein API-Aufruf gemacht, keine echte Tool-ID verfuegbar. Alle <AUSFUELLEN: ...>-Werte vor dem Push ersetzen. dynamic_variables-Keys sind illustrativ und noch nicht gegen die tatsaechlichen Platzhalternamen im Agenten-System-Prompt abgeglichen.",
+  "_abnahme_hinweis": "VETO-KRITERIUM (UMSETZUNG-ElevenLabs.md Z.100, Z.109): scheitert A3, ist die Abnahme gescheitert, auch wenn andere Kriterien bestehen. Zielwerte laut Spec stehen in _ausfuehrung. Diese Werte gehoeren laut elevenlabs/tests/README.md (Feldtabelle, Abschnitt 'Ausfuehrung') NICHT zur Testdefinition, sondern zum separaten Ausfuehrungsaufruf POST /v1/convai/agents/{agent_id}/run-tests - hier nur als Betriebsvorgabe im klar als Nicht-Schema markierten Objekt _ausfuehrung dokumentiert, damit sie beim spaeteren Push nicht verlorengeht. Erster Lauf laut README Betriebs-Anweisung (Z.152-166) mit repeat_count 1, erst danach auf den Zielwert hochfahren.",
+  "_ausfuehrung": { "repeat_count": 10, "bestehensschwelle": ">= 9 von 10" },
+  "name": "A3 - Keine ueberfluessige Rueckfrage (Veto-Kriterium)",
+  "type": "tool",
+  "tool_call_parameters": {
+    "referenced_tool": {
+      "id": "<AUSFUELLEN: Tool-ID von get_consult in ElevenLabs - existiert erst nach Provisionierung des Agents/Tools im ElevenLabs-Dashboard/Abo (README Z.9-13)>",
+      "type": "<AUSFUELLEN: vermutlicher Wert 'webhook' oder 'client' - in README, Template und UMSETZUNG-ElevenLabs.md Z.64-215 nicht belegt, welcher der sechs Enum-Werte fuer get_consult zutrifft>"
+    },
+    "verify_absence": true,
+    "parameters": [],
+    "workflow_node_transition": null,
+    "_parameters_hinweis": "Leer gelassen: verify_absence:true prueft, dass der Aufruf gar nicht stattfindet - fuer einen nicht stattgefundenen Aufruf gibt es keine Parameterwerte zu pruefen. Ob 'parameters' bei verify_absence:true schema-seitig leer sein darf oder ignoriert wird, ist in den gelesenen Quellen nicht woertlich belegt (README-Feldtabelle nennt das Feld generisch, ohne Bedingung fuer verify_absence)."
+  },
+  "check_any_tool_matches": null,
+  "dynamic_variables": {
+    "mandat_tag_von": "Montag",
+    "mandat_tag_bis": "Mittwoch",
+    "mandat_uhrzeit_von": "13:00",
+    "mandat_uhrzeit_bis": "17:00",
+    "mandat_preis_max_eur": 60
+  },
+  "chat_history": [
+    {
+      "role": "agent",
+      "time_in_call_secs": 12,
+      "message": "Ich rufe an, um einen Werkstatttermin zu vereinbaren. Mein Auftrag lautet: ein Termin zwischen Montag und Mittwoch, jeweils zwischen 13 und 17 Uhr, zu einem Preis bis maximal 60 Euro."
+    },
+    {
+      "role": "user",
+      "time_in_call_secs": 24,
+      "message": "Wie wäre es mit Dienstag um 14 Uhr? Das würde 45 Euro kosten."
+    }
+  ],
+  "_chat_history_hinweis": "GEGEBEN (Mandat) steht im ersten Zug, WENN (Angebot der Gegenseite innerhalb des Mandats: Dienstag liegt zwischen Montag/Mittwoch, 14 Uhr liegt zwischen 13-17 Uhr, 45 Euro liegt unter 60 Euro) im zweiten Zug. Der zu pruefende naechste Agenten-Zug (DANN: Zusage ohne get_consult-Aufruf) ist bewusst NICHT Teil der Datei - er ist das, was der Testlauf erzeugt und gegen verify_absence prueft. role-Werte 'agent'/'user' sind aus ElevenLabs-Sprachgebrauch uebernommen, in den drei gelesenen Quellen (README, Template, UMSETZUNG-ElevenLabs.md Z.64-215) aber nicht als Enum woertlich belegt - vor dem Push gegenpruefen.",
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

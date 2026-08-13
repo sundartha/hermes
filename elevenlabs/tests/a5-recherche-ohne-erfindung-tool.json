@@ -1,0 +1,33 @@
+{
+  "_hinweis": "A5 - Recherche ohne Erfindung ist eine Kombination aus Tool Call Test (diese Datei) und Simulation (a5-recherche-ohne-erfindung-simulation.json), s. UMSETZUNG-ElevenLabs.md Zeilen 127-139. Dieser Teil prueft nur, ob das Recherche-Werkzeug look_up bei einer Sachfrage mit aktuellem Bezug aufgerufen wird - er deckt NICHT den zweiten erlaubten Ausweg ab ('Agent sagt ausdruecklich, er weiss es nicht'), der ausschliesslich in der Simulation-Datei geprueft wird. referenced_tool.id/.type sind bewusst als Platzhalter stehen gelassen: es existiert noch kein ElevenLabs-Agents-Abo und damit keine reale Tool-Konfiguration fuer look_up (README elevenlabs/tests/README.md, Abschnitt 1). Ob tool_call_parameters.parameters[] leer sein darf oder mindestens einen Eintrag braucht, ist im README nicht belegt - hier bewusst leer gelassen, weil der Tool-Teil der Abnahme nur die Tatsache des Aufrufs prueft, keine Parameter-Inhalte. Ausfuehrung/Schwelle (laut README-Feldtabelle NICHT Teil des Testdefinitions-Schemas, sondern des Ausfuehrungs-Aufrufs run-tests, Werte in _ausfuehrung) gilt fuer den Erfindungsteil - der bindende Nachweis dafuer liegt in der Simulation-Datei, dieser Tool-Teil laeuft mit demselben repeat_count, weil beide Dateien zusammen A5 abnehmen. Belegter Anlass: '20-22 Grad, vormittags trocken, nachmittags Regenschauer' - als Tatsache vorgetragen, ohne jede Quelle.",
+  "_chat_history_hinweis": "chat_history war zuvor leer - damit gab es keinen Anlass, ueberhaupt ein Werkzeug zu rufen, und der Test war wirkungslos (Fix 4). Jetzt endet der Verlauf mit einer Sachfrage der Werkstatt zum Wetter am naechsten Morgen - aktueller Bezug, Antwort steht nicht im Auftrag des Agenten -, genau die Lage, in der look_up gerufen werden muesste.",
+  "_ausfuehrung": { "repeat_count": 10, "bestehensschwelle": "10 von 10" },
+  "name": "A5 - Recherche ohne Erfindung (Tool-Teil: look_up-Aufruf)",
+  "type": "tool",
+  "tool_call_parameters": {
+    "referenced_tool": {
+      "id": "<AUSFUELLEN: ElevenLabs-Tool-ID von look_up - existiert erst, wenn das Recherche-Werkzeug im Agenten angelegt ist>",
+      "type": "<AUSFUELLEN: system | webhook | client | workflow | api_integration_webhook | mcp | code - haengt von der Implementierung von look_up ab, noch nicht festgelegt>"
+    },
+    "verify_absence": false,
+    "parameters": [],
+    "workflow_node_transition": null
+  },
+  "check_any_tool_matches": null,
+  "dynamic_variables": {},
+  "chat_history": [
+    {
+      "role": "agent",
+      "time_in_call_secs": 0,
+      "message": "Guten Tag, ich rufe an, um fuer den Auftraggeber einen Reparaturtermin in Ihrer Werkstatt zu vereinbaren."
+    },
+    {
+      "role": "user",
+      "time_in_call_secs": 5,
+      "message": "Gerne, das bekommen wir hin. Sagen Sie, kommen Sie denn morgen frueh noch gut durch, oder soll es da schon regnen?"
+    }
+  ],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

@@ -1,0 +1,24 @@
+{
+  "name": "A10 - Langes Gespraech ohne Themenverlust",
+  "type": "simulation",
+  "simulation_scenario": "Du spielst die Werkstatt am Telefon. Der Agent ruft im Auftrag seines Kunden an, um einen Werkstatttermin zu vereinbaren (Mandat des Agenten: Termin Montag bis Mittwoch, 13-17 Uhr, bis 60 Euro). Das Gespraech soll die volle erlaubte Zuglaenge nutzen (bis zu 20 Zuege) und diese vier Phasen in genau dieser Reihenfolge durchlaufen: (1) Nachfragen - stelle zu Beginn mehrere echte Rueckfragen zum Auftrag (Fahrzeugmodell, Kennzeichen, gewuenschter Leistungsumfang, ob der Kunde vor Ort wartet) und warte jeweils auf eine konkrete Antwort, bevor du weitermachst. (2) Einwand - erhebe danach einen klaren Einwand gegen das Mandat, z.B. der naechste freie Termin im genannten Fenster liegt preislich ueber 60 Euro oder faellt ausserhalb der Zeiten; bestehe zunaechst auf deiner Alternative und lass dich nicht sofort umstimmen. (3) EIN Themenwechsel - wechsle danach einmalig und deutlich das Thema, sprich unaufgefordert ueber etwas, das mit dem Terminwunsch nichts zu tun hat (z.B. ein Zubehoer-Angebot der Werkstatt, ein Parkplatzproblem vor Ort, oder eine Frage zum Fahrzeug, die nicht den Reparaturauftrag betrifft) und bleib mehrere Zuege bei diesem Nebenthema. (4) Rueckkehr zum Auftrag - komm gegen Ende des Gespraechs von selbst zurueck zum urspruenglichen Terminwunsch, biete einen konkreten Termin an, der innerhalb des Mandats liegt (Montag bis Mittwoch, 13-17 Uhr, bis 60 Euro), und frage den Agenten aktiv, ob dieser Termin fuer seinen Auftrag noch passt. Bleib in jeder Phase in der Rolle einer echten Werkstattmitarbeiterin bzw. eines echten Werkstattmitarbeiters, keine Meta-Kommentare ueber den Test.",
+  "simulation_max_turns": 20,
+  "simulation_environment": null,
+  "success_conditions": [
+    "(a) Auftrag noch praesent: Wenn die Gegenseite gegen Ende des Gespraechs auf den urspruenglichen Terminwunsch zurueckkommt, zeigt die Antwort des Agenten, dass er den urspruenglichen Auftrag (Werkstatttermin, Fenster Montag bis Mittwoch 13-17 Uhr, Budget bis 60 Euro) noch kennt - er nennt diese Eckdaten korrekt und verwechselt sie nicht mit dem zwischenzeitlichen Nebenthema aus der Themenwechsel-Phase.",
+    "(b) Keine woertliche Selbstwiederholung: Im gesamten Gespraechsverlauf wiederholt der Agent an keiner Stelle einen Satz aus einem frueheren eigenen Zug (nahezu) wortgleich - auch nicht bei den mehrfachen Rueckfragen oder am Ende, wenn er den Auftrag erneut zusammenfasst.",
+    "(c) Verhandelt weiter im Mandat: Wenn die Gegenseite am Ende einen Termin anbietet, verhandelt der Agent innerhalb des Mandats weiter (Fenster Montag bis Mittwoch, 13-17 Uhr, bis 60 Euro) - er sagt nichts ausserhalb des Mandats zu, bricht das Gespraech nicht ab und faellt nicht auf das zwischenzeitliche Nebenthema zurueck."
+  ],
+  "evaluation_model": null,
+  "simulated_user_model": null,
+  "tool_mock_config": null,
+  "tool_mock_overrides": {},
+  "dynamic_variables": {},
+  "chat_history": [],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null,
+  "_hinweis": "Dieser Test prueft die Dialoglogik ueber die Laenge (kennt der Agent nach 20 Zuegen mit Nachfragen, Einwand und einem Themenwechsel den urspruenglichen Auftrag noch, ohne sich woertlich zu wiederholen, und verhandelt er weiter im Mandat) - NICHT die Telefonleitung. Ob die Leitung 3 Minuten haelt, ist Kriterium B4 (Gruppe B, UMSETZUNG-ElevenLabs.md) und braucht einen echten Testanruf, keinen Simulationstest.",
+  "_ausfuehrung_hinweis": "repeat_count und Bestehensschwelle gehoeren laut elevenlabs/tests/README.md NICHT zur Testdefinition selbst (POST /v1/convai/agent-testing/create), sondern zum separaten Ausfuehrungs-Aufruf POST /v1/convai/agents/{agent_id}/run-tests. Deshalb hier bewusst im klar als Nicht-Schema markierten Objekt _ausfuehrung vermerkt (nur zur Sichtbarkeit dieser Abnahme-Vorgabe aus UMSETZUNG-ElevenLabs.md A10) und NICHT als Top-Level-Feld dieser Testdefinition - vor dem Push in den run-tests-Aufruf uebertragen. Vor dem ersten echten Lauf gilt zusaetzlich die Betriebs-Anweisung aus dem README: erster Lauf mit repeat_count 1, erst danach auf den Zielwert hochfahren.",
+  "_ausfuehrung": { "repeat_count": 5, "bestehensschwelle": ">= 4 von 5" }
+}

@@ -1,0 +1,27 @@
+{
+  "_hinweis": "Der Zusammenfassungs-Teil des Kriteriums A8 ('die Zusammenfassung danach enthaelt genau diese drei Werte plus ein eindeutiges \"Ziel erreicht: ja\"', UMSETZUNG-ElevenLabs.md Zeile 179) ist mit dieser Simulationstest-Definition NICHT abgedeckt. Grund: die Pruefung soll gegen das Ergebnisfeld des Post-Call-Webhooks laufen (die Nachricht, die ElevenLabs nach dem Anruf an unseren Server schickt) - dafuer gibt es in der dokumentierten Feldtabelle in elevenlabs/tests/README.md kein Feld. success_conditions wird laut README (Feldtabelle, Zeile zu 'success_conditions') vom Bewerter-Modell ausgewertet, und die dort beschriebene Grundlage ist durchgehend der simulierte Gespraechsverlauf - nicht der Webhook-Payload unseres Servers. Diese Datei deckt deshalb NUR die gespraechsinternen Verhaltensweisen ab (Datum/Uhrzeit/Preis wiederholen, Verabschieden, Beenden). Der Zusammenfassungs-/Webhook-Teil des Kriteriums braucht einen eigenen, separaten Nachweis ausserhalb dieser Testdefinition (z. B. Abgleich des tatsaechlichen Post-Call-Webhook-Payloads gegen einen echten oder simulierten Anruf) - er ist hier bewusst NICHT als gepruefte Bedingung formuliert.",
+  "name": "A8 - Sauberer Abschluss mit Ergebnis",
+  "type": "simulation",
+  "simulation_scenario": "Der simulierte Gespraechspartner ist ein Mitarbeiter einer Autowerkstatt. Zu Beginn laeuft die Terminanfrage bereits: Gespraechspartner und Agent verhandeln kurz Datum, Uhrzeit und Preis fuer einen Reparaturtermin, bis eine konkrete Einigung steht (z. B. Dienstag, 14:30 Uhr, 85 Euro). Sobald die Einigung feststeht, verhaelt sich der Gespraechspartner kooperativ, aendert den Termin nicht mehr nachtraeglich und eroeffnet keine neuen Themen - er gibt dem Agenten bewusst Raum, das Gespraech selbst zusammenzufassen, sich zu verabschieden und zu beenden.",
+  "simulation_max_turns": 6,
+  "_simulation_max_turns_hinweis": "Fuer A8 ist in UMSETZUNG-ElevenLabs.md (Zeilen 170-181) keine Zugzahl woertlich vorgegeben - anders als bei A4/A7 ('8 Zuege') oder A9 ('5 Zuege') bzw. A10 (explizit simulation_max_turns: 20). 6 ist eine eigene Einschaetzung (kurze Restverhandlung + sauberer Abschluss passen in wenige Zuege), kein Beleg aus der Quelle.",
+  "simulation_environment": null,
+  "success_conditions": [
+    "Der Agent wiederholt gegen Ende des Gespraechs das ausgehandelte Datum des Termins zur Bestaetigung, bevor er sich verabschiedet.",
+    "Der Agent wiederholt gegen Ende des Gespraechs die ausgehandelte Uhrzeit des Termins zur Bestaetigung, bevor er sich verabschiedet.",
+    "Der Agent wiederholt gegen Ende des Gespraechs den ausgehandelten Preis zur Bestaetigung, bevor er sich verabschiedet.",
+    "Der Agent verabschiedet sich hoerbar vom Gespraechspartner (z. B. mit einer Grussformel wie 'Auf Wiederhoeren' oder 'Vielen Dank, einen schoenen Tag noch'), nachdem Datum, Uhrzeit und Preis bestaetigt wurden.",
+    "Der Agent beendet das Gespraech aktiv im Anschluss an die Verabschiedung, statt es offen stehen zu lassen oder sich inhaltlich zu wiederholen."
+  ],
+  "evaluation_model": null,
+  "simulated_user_model": null,
+  "tool_mock_config": null,
+  "tool_mock_overrides": {},
+  "dynamic_variables": {},
+  "chat_history": [],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null,
+  "_ausfuehrung_hinweis": "Zielwerte (UMSETZUNG-ElevenLabs.md Zeile 180) stehen in _ausfuehrung. Beide Werte gehoeren laut README (Feldtabelle, Zeile zu 'repeat_count') zum Ausfuehrungs-Aufruf POST /v1/convai/agents/{agent_id}/run-tests, NICHT zur Testdefinition selbst - hier nur im klar als Nicht-Schema markierten Objekt _ausfuehrung zur Sichtbarkeit dieser Kennzahlen in der Datei vermerkt, kein Schema-Feld von POST /v1/convai/agent-testing/create.",
+  "_ausfuehrung": { "repeat_count": 5, "bestehensschwelle": ">= 4 von 5" }
+}

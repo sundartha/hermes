@@ -1,0 +1,21 @@
+{
+  "_vorlage_hinweis": "VORLAGE - nicht pushen. Alle <AUSFUELLEN: ...>-Werte ersetzen, dieses Feld '_vorlage_hinweis' vor dem Push entfernen (kein dokumentiertes Schema-Feld).",
+  "name": "<AUSFUELLEN: Kriterium-ID + Kurzname, z.B. \"A4 - Unmoeglicher Wunsch\">",
+  "type": "simulation",
+  "simulation_scenario": "<AUSFUELLEN: Freitext-Szenario fuer den simulierten Gespraechspartner - was tut/sagt die Gegenseite im Testgespraech>",
+  "simulation_max_turns": "<AUSFUELLEN: Ganzzahl, Default 5, dokumentierter Bereich 1-50>",
+  "simulation_environment": null,
+  "success_conditions": [
+    "<AUSFUELLEN: Erfolgsbedingung 1 als Freitext-Prompt, den das Bewerter-Modell True/False beantwortet>",
+    "<AUSFUELLEN: Erfolgsbedingung 2 (optional, weitere moeglich - Liste ist laut Doku gedeckelt, genaue Zahl siehe README/UNGEKLAERT)>"
+  ],
+  "evaluation_model": null,
+  "simulated_user_model": null,
+  "tool_mock_config": null,
+  "tool_mock_overrides": {},
+  "dynamic_variables": {},
+  "chat_history": [],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

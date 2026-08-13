@@ -1,0 +1,29 @@
+{
+  "_vorlage_hinweis": "VORLAGE - nicht pushen. Alle <AUSFUELLEN: ...>-Werte ersetzen, dieses Feld '_vorlage_hinweis' vor dem Push entfernen (kein dokumentiertes Schema-Feld).",
+  "_eval_varianten_hinweis": "eval.type kennt 4 Auspraegungen - hier ist nur 'llm' als Beispiel gesetzt. Andere Formen: {\"type\":\"exact\",\"expected_value\":\"...\"} / {\"type\":\"regex\",\"pattern\":\"...\"} / {\"type\":\"anything\"} (keine weiteren Felder). Siehe README-Feldtabelle.",
+  "name": "<AUSFUELLEN: Kriterium-ID + Kurzname, z.B. \"A1 - Die Rueckfrage wird echt gestellt\">",
+  "type": "tool",
+  "tool_call_parameters": {
+    "referenced_tool": {
+      "id": "<AUSFUELLEN: Tool-ID des zu pruefenden Werkzeugs, z.B. die ID von get_consult>",
+      "type": "<AUSFUELLEN: system | webhook | client | workflow | api_integration_webhook | mcp | code>"
+    },
+    "verify_absence": "<AUSFUELLEN: false = Aufruf MUSS stattfinden (z.B. A1, A2) | true = Aufruf DARF NICHT stattfinden (z.B. A3)>",
+    "parameters": [
+      {
+        "path": "<AUSFUELLEN: Pfad/Name des zu pruefenden Parameters, z.B. \"question\">",
+        "eval": {
+          "type": "llm",
+          "description": "<AUSFUELLEN: Freitext-Kriterium fuer das Bewerter-Modell, z.B. \"fragt der Text nach dem Fahrzeugmodell?\">"
+        }
+      }
+    ],
+    "workflow_node_transition": null
+  },
+  "check_any_tool_matches": null,
+  "dynamic_variables": {},
+  "chat_history": [],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}
