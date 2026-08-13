@@ -1964,11 +1964,6 @@
       "count": 5
     }
   },
-  "src/route-policy.js": {
-    "id-length": {
-      "count": 2
-    }
-  },
   "src/routes/_tenant.js": {
     "complexity": {
       "count": 1

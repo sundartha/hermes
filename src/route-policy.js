@@ -208,8 +208,8 @@ export const GATE_ONLY_ROUTES = Object.freeze([]);
 // Schluessel einer Route. EINE Quelle fuer beide Listen und den Test (G5).
 export const routeKey = (method, path) => `${String(method).toUpperCase()} ${path}`;
 
-const PUBLIC_KEYS = new Set(PUBLIC_ROUTES.map((r) => routeKey(r.method, r.path)));
-const GATE_ONLY_KEYS = new Set(GATE_ONLY_ROUTES.map((r) => routeKey(r.method, r.path)));
+const PUBLIC_KEYS = new Set(PUBLIC_ROUTES.map((route) => routeKey(route.method, route.path)));
+const GATE_ONLY_KEYS = new Set(GATE_ONLY_ROUTES.map((route) => routeKey(route.method, route.path)));
 
 // Einordnung einer einzelnen Route. Reine Funktion (kein Express, kein Zustand) -
 // damit sie mit synthetischen Eingaben pruefbar ist, ohne die App zu bauen.
