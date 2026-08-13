@@ -45,7 +45,7 @@ import { CATALOG_SLUGS } from "./plans.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
 import { deadAirOverrun, turnBudgetOverrun } from "./turn-budget.js";
-import { MS_PER_SECOND } from "./utils/timer.js";
+import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
 // GAP-19: EIN Praedikat fuer beide Haelften - der Boot meldet genau die Konstellation, die
 // in der Outbound-Kette das Herkunfts-Gate abschaltet (G5). Kein Zyklus: outbound-gates.js
 // importiert boot.js nicht.
@@ -58,7 +58,12 @@ import { evidenceRetentionEnabled } from "./call-result.js";
 // importiert nichts.
 import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
 
-const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// G25: benannte Faktoren statt Literalen im Rumpf. Der Takt selbst ist unveraendert
+// (sechs Stunden); MS_PER_MINUTE ist die bestehende Quelle der Zeit-Umrechnung
+// (utils/timer.js), die Stunde bekommt hier ihren Namen.
+const MINUTES_PER_HOUR = 60;
+const RETENTION_SWEEP_INTERVAL_HOURS = 6;
+const RETENTION_SWEEP_INTERVAL_MS = RETENTION_SWEEP_INTERVAL_HOURS * MINUTES_PER_HOUR * MS_PER_MINUTE;
 
 // GAP-38: Praefix der Plattform-SMS, die eine In-Prozess-Heilung meldet (G25: benannte
 // Konstante statt Literal im Rumpf; Muster TTS_QUOTA_SMS_PREFIX in src/server.js).
@@ -111,7 +116,7 @@ function assertSpendCapCoherence(config) {
     ...planCapReserveFindings({ slugs: CATALOG_SLUGS, capForSlug, ...worstCase }),
   ];
   const all = [...findings, ...planCapFindings];
-  const fatal = all.find((f) => f.fatal);
+  const fatal = all.find((finding) => finding.fatal);
   if (fatal) {
     console.error(`[boot] Start abgebrochen: ${fatal.message}`);
     process.exit(1);
@@ -156,7 +161,7 @@ function warnStaleModelPrices(config) {
 // derselbe Befund eine WARN). UNKONDITIONAL: an kein Flag gekoppelt (Begruendung im
 // Guard). Muster assertSpendCapCoherence.
 function assertProviderRateInBand(config) {
-  const fatal = providerRateOutOfBand(config.billing.providerToBucketRateMicro).find((f) => f.fatal);
+  const fatal = providerRateOutOfBand(config.billing.providerToBucketRateMicro).find((finding) => finding.fatal);
   if (!fatal) return;
   console.error(`[boot] Start abgebrochen: ${fatal.message}`);
   process.exit(1);
@@ -166,7 +171,7 @@ function assertProviderRateInBand(config) {
 // exit(1) statt WARN, weil der Renderer mit ungueltigem Profil erst IM laufenden Anruf
 // wirft - der teuerstmoegliche Zeitpunkt fuer einen Konfigurations-Tippfehler.
 function assertSttProfile(config) {
-  const fatal = sttProfileFindings(config.voice.sttProfile).find((f) => f.fatal);
+  const fatal = sttProfileFindings(config.voice.sttProfile).find((finding) => finding.fatal);
   if (!fatal) return;
   console.error(`[boot] Start abgebrochen: ${fatal.message}`);
   process.exit(1);
@@ -198,12 +203,12 @@ function assertCostTruingBooking(config, store) {
     assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
     ...currentCoverage(config, store),
   });
-  const fatal = findings.find((f) => f.fatal);
+  const fatal = findings.find((finding) => finding.fatal);
   if (fatal) {
     console.error(`[boot] Start abgebrochen: ${fatal.message}`);
     process.exit(1);
   }
-  for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+  for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // LCT P5: Alarmkanal-Guard (alertChannelFindings). Loggt NIE den Wert (der besetzte Fall
@@ -211,8 +216,8 @@ function assertCostTruingBooking(config, store) {
 // per Konstruktion unerreichbar: assertConfig() faltet ihn in seine Fatal-Menge und hat den
 // Prozess bei diesem Zustand laengst mit exit(1) beendet - hier bleibt nur die WARN.
 function warnAlertChannelUnset(config) {
-  for (const f of alertChannelFindings(config.billing))
-    console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+  for (const finding of alertChannelFindings(config.billing))
+    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // LCT P5: Drift-Waechter, Ausloeser 1 von 2 (Boot). GENAU EINE Zeile fuer ALLE Praefixe -
@@ -224,7 +229,7 @@ function warnAlertChannelUnset(config) {
 function warnTariffDrift(config, store) {
   const report = tariffDriftReportFromConfig(store.load().calls, config.billing);
   const line = `[boot] Tarif-Drift: ${report.map(driftLine).join(" | ")}`;
-  if (report.some((e) => e.code !== null)) console.warn(line);
+  if (report.some((entry) => entry.code !== null)) console.warn(line);
   else console.log(line);
 }
 
@@ -239,7 +244,7 @@ function warnVoiceTariffBelowFullCost(config, store) {
     fullCostFloorCents: config.billing.voiceTariffFullCostFloorCents,
     ...currentCoverage(config, store),
   });
-  for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+  for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // GAP-22: Turn-Budget gegen den Provider-Hardcut. WARN, kein exit(1) - eine gesprengte
@@ -329,7 +334,7 @@ function warnLatentCostPaths(config) {
     realtimeEngineSelected: config.voice.voiceEngine === VOICE_ENGINE.REALTIME,
     realtimeMidCallBudgetCheck: REALTIME_MID_CALL_BUDGET_CHECK,
   });
-  for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+  for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
@@ -697,6 +702,13 @@ export function ttsQuotaCoverageBannerLine(billing) {
   );
 }
 
+// G5/G28: derselbe Fallback stand dreimal im Banner-Rumpf (MCP, Voice-Webhook,
+// Status-Callback) - EIN Name dafuer, eine Stelle. Wortlaut unveraendert; die drei Zeilen
+// bleiben Zeichen fuer Zeichen dieselben.
+function publicUrlOrHint(server) {
+  return server.publicUrl || "PUBLIC_URL fehlt!";
+}
+
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -722,10 +734,10 @@ function logBootBanner(config, port) {
   // capabilityProbeLines).
   for (const line of capabilityProbeLines(config)) console.log(`  ${line}`);
   console.log(
-    `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
+    `  MCP (HTTP):     ${publicUrlOrHint(config.server)}/mcp  <- als Custom Connector in Claude eintragen`,
   );
-  console.log(`  Voice-Webhook:  ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
-  console.log(`  Status-Callback:${config.server.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
+  console.log(`  Voice-Webhook:  ${publicUrlOrHint(config.server)}/voice/incoming`);
+  console.log(`  Status-Callback:${publicUrlOrHint(config.server)}/voice/status`);
   // Outbound-Freigabe (outbound-p3): keine statische ALLOWED_NUMBERS-Liste mehr - Permit ist
   // die per-Tenant-Verifikation (Abo+KYC, Pfad 2). OUTBOUND_FROZEN zeigt den globalen
   // Kill-Switch-Zustand. Kein PII (Nummern) mehr im Banner.
@@ -772,12 +784,12 @@ function logBootBanner(config, port) {
 // Start" entscheidet (G5). Diese Funktion verweigert nie selbst, sie heilt oder schweigt.
 // Idempotent: nach der Heilung liefert die Entscheidung NOT_NEEDED.
 export async function healBootstrapStore({ config, store, messaging }) {
-  const s = store.load();
+  const state = store.load();
   const decision = bootstrapHealDecision({
-    activeNumberPresent: hasActiveNumber(s),
-    numberCount: s.numbers.length,
-    foreignTenantCount: tenantsOf(s).filter((t) => t.id !== BOOTSTRAP_TENANT_ID).length,
-    callCount: s.calls.length,
+    activeNumberPresent: hasActiveNumber(state),
+    numberCount: state.numbers.length,
+    foreignTenantCount: tenantsOf(state).filter((tenant) => tenant.id !== BOOTSTRAP_TENANT_ID).length,
+    callCount: state.calls.length,
     e164: config.provisioning.bootstrapE164,
     provider: config.provisioning.bootstrapProvider,
   });
@@ -830,17 +842,17 @@ export async function healBootstrapStore({ config, store, messaging }) {
 export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
   void costTruing
     .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
-    .catch((e) => console.error("[cost-truing]", e.message));
+    .catch((err) => console.error("[cost-truing]", err.message));
   void provisioning
     .settleDueNumberMonthMeters()
-    .catch((e) => console.error("[number-month]", e.message));
+    .catch((err) => console.error("[number-month]", err.message));
   // KV-M4: dritter, unabhaengiger Schritt im selben Stunden-Takt - kein zweiter Timer,
   // keine neue Ressource (TEIL 3 des Kickoffs). runMonthlyCrossCheck wirft intern nie
   // (Ergebnis-Objekt), das .catch() hier ist trotzdem die zweite Linie, wie bei den
   // beiden Zweigen darueber.
   void costCrossCheck
     .runMonthlyCrossCheck()
-    .catch((e) => console.error("[cost-cross-check]", e.message));
+    .catch((err) => console.error("[cost-cross-check]", err.message));
 }
 
 // EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter

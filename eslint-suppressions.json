@@ -597,15 +597,6 @@
     }
   },
   "src/boot.js": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 14
-    },
-    "no-magic-numbers": {
-      "count": 4
-    },
     "no-restricted-properties": {
       "count": 1
     }
