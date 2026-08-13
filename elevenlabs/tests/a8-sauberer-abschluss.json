@@ -17,7 +17,13 @@
   "simulated_user_model": null,
   "tool_mock_config": null,
   "tool_mock_overrides": {},
-  "dynamic_variables": {},
+  "dynamic_variables": {
+    "owner_name": "Owen Barrett",
+    "callee": "Hillcrest Auto Repair, service desk (+1 720-555-0136)",
+    "objective": "Schedule a repair appointment for Owen Barrett's car - the rear brake pads need replacing.",
+    "mandate": "Any appointment on Tuesday or Wednesday afternoon, up to $120 for the pad replacement.",
+    "language": "en"
+  },
   "chat_history": [],
   "conversation_initiation_source": null,
   "parent_folder_id": null,

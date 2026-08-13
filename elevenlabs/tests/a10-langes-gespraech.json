@@ -13,7 +13,13 @@
   "simulated_user_model": null,
   "tool_mock_config": null,
   "tool_mock_overrides": {},
-  "dynamic_variables": {},
+  "dynamic_variables": {
+    "owner_name": "Paula Winslow",
+    "callee": "Copper Creek Auto Repair, service desk (+1 208-555-0147)",
+    "objective": "Schedule a repair appointment for Paula Winslow's car - the exhaust has started rattling.",
+    "mandate": "Book an appointment from Monday through Wednesday, between 1 PM and 5 PM, at a price of no more than $60.",
+    "language": "en"
+  },
   "chat_history": [],
   "conversation_initiation_source": null,
   "parent_folder_id": null,

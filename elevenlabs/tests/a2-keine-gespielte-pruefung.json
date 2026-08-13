@@ -18,7 +18,13 @@
     "workflow_node_transition": null
   },
   "check_any_tool_matches": null,
-  "dynamic_variables": {},
+  "dynamic_variables": {
+    "owner_name": "Ruth Halloran",
+    "callee": "Bayview Auto Service, front desk (+1 415-555-0178)",
+    "objective": "Schedule a repair appointment for Ruth Halloran's car - the check engine light has been on since Monday.",
+    "mandate": "Any appointment this week or next, up to $300 for the diagnostics. The vehicle's make and model are not part of the assignment.",
+    "language": "en"
+  },
   "chat_history": [
     {
       "role": "user",

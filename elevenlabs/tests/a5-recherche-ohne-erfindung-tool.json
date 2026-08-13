@@ -14,7 +14,13 @@
     "workflow_node_transition": null
   },
   "check_any_tool_matches": null,
-  "dynamic_variables": {},
+  "dynamic_variables": {
+    "owner_name": "Ellen Prather",
+    "callee": "Northgate Auto Repair, front desk (+1 206-555-0164)",
+    "objective": "Schedule a repair appointment for Ellen Prather's car - the timing belt is due for replacement.",
+    "mandate": "Any appointment within the next three weeks, up to $600 for the belt service. The assignment carries no information about weather, opening hours or part prices.",
+    "language": "en"
+  },
   "chat_history": [
     {
       "role": "agent",
