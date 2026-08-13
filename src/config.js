@@ -1889,16 +1889,33 @@ export const config = guardedConfig(buildNamespaceSurface(rawConfig, CONFIG_NAME
 setWorldDefaultLanguageEnabled(config.provisioning.worldDefaultLanguageEnabled);
 
 // ---- Gateway-URL (G5: EINE Quelle fuer den localhost-Fallback, S2-20) ----
-// Die MCP-Tools/-Server sprechen mit der eigenen REST-API. Ohne gesetztes GATEWAY_URL
-// faellt der Konsument auf http://localhost:<port> zurueck. boot.js setzt GATEWAY_URL
-// beim Listen auf den TATSAECHLICH gebundenen Port (bei PORT=0 vom OS vergeben) und
-// nutzt dafuer gatewayUrlForPort(port). resolveGatewayUrl() liest zur Aufrufzeit
-// GATEWAY_URL (Trailing-Slash gestrippt) oder faellt auf den config-Port zurueck.
+// Die MCP-Tools/-Server sprechen mit der eigenen REST-API. resolveGatewayUrl() liefert
+// zur Aufrufzeit die Adresse dafuer, aus drei Quellen in fester Rangfolge:
+//  1. GATEWAY_URL aus der Umgebung - der KONFIGURIERTE Wert (Trailing-Slash gestrippt),
+//  2. der beim Listen gebundene Port (s. setBoundGatewayPort),
+//  3. der config-Port als Fallback.
 export function gatewayUrlForPort(port) {
   return `http://localhost:${port}`;
 }
+
+// Der zur Laufzeit NACHGETRAGENE Wert: die eigene Adresse steht erst nach app.listen()
+// fest, weil bei PORT=0 (Tests) das Betriebssystem den Port vergibt. Modul-eigener
+// Halter statt process.env als globale Ablage (G35) - das ist keine Konfiguration aus
+// der Umgebung, sondern eine Beobachtung DIESES Prozesses. In jedem Prozess, der nicht
+// selbst listen()t (stdio-MCP-Server), bleibt er null; dort gelten 1. und 3.
+let boundGatewayUrl = null;
+
+// Einmal aus dem listen-Callback gerufen (src/boot.js). Die Rangfolge ist dieselbe wie
+// beim frueheren "process.env.GATEWAY_URL ||= gatewayUrlForPort(port)": ein gesetztes
+// GATEWAY_URL bleibt der staerkere Wert, der gebundene Port fuellt nur die Luecke.
+export function setBoundGatewayPort(port) {
+  boundGatewayUrl = gatewayUrlForPort(port);
+}
+
 export function resolveGatewayUrl() {
-  return stripTrailingSlash(process.env.GATEWAY_URL || gatewayUrlForPort(config.server.port));
+  return stripTrailingSlash(
+    process.env.GATEWAY_URL || boundGatewayUrl || gatewayUrlForPort(config.server.port),
+  );
 }
 
 // Ein http-(non-https-)OAuth-Issuer ist ein SSRF-/MITM-Footgun: Token werden gegen

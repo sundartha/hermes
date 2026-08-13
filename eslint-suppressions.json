@@ -596,11 +596,6 @@
       "count": 2
     }
   },
-  "src/boot.js": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "src/bridge.js": {
     "complexity": {
       "count": 2

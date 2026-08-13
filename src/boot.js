@@ -5,7 +5,13 @@
 // Log-Zeilen, exit-Codes). INV-5: rearmActiveCallTimers NACH allen exit1-Gates,
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
 // "Hermes Gateway laeuft auf ..."-Zeile erst im listen-Callback (nach vollem Boot).
-import { assertConfig, gatewayUrlForPort, todayIsoDate, VOICE_ENGINE } from "./config.js";
+import {
+  assertConfig,
+  gatewayUrlForPort,
+  setBoundGatewayPort,
+  todayIsoDate,
+  VOICE_ENGINE,
+} from "./config.js";
 import { configFingerprint } from "./config-fingerprint.js";
 import {
   fakeOriginateBootBlocked,
@@ -981,8 +987,11 @@ export async function bootServer({
   const httpServer = app.listen(config.server.port, () => {
     // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
     const port = httpServer.address().port;
-    // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
-    process.env.GATEWAY_URL ||= gatewayUrlForPort(port);
+    // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT).
+    // Der Wert geht in den Halter in config.js, NICHT nach process.env (G35): ein erst
+    // nach listen() bekannter Wert ist keine Umgebungs-Konfiguration. Ein gesetztes
+    // GATEWAY_URL bleibt vorrangig - genau wie beim frueheren ||=.
+    setBoundGatewayPort(port);
     logBootBanner(config, port);
     // PROV-01/F5: Crash-verwaiste Provisioning-Jobs beim Boot reconcilen. Fire-and-forget NACH
     // den Boot-Logs - blockiert weder listen noch Healthcheck; der Boot-Guard (hasActiveNumber)
