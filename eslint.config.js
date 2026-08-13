@@ -22,6 +22,20 @@ export default [
       // Wegwerf-Skripte je Workflow-Lauf (CLAUDE.md: nach Merge geloescht) -
       // die dauerhaften Werkzeuge unter .claude/workflows/*.js bleiben gelintet.
       ".claude/workflows/runs/**",
+      // ERZEUGTE AUSGABEN - dieselbe Liste in eslint.config.js, .jscpd.json,
+      // knip.json und .c8rc.json. Ein Messinstrument, das Minifier-Ausgabe
+      // misst, misst den Zufall des letzten Builds statt der Sauberkeit des
+      // Codes (gemessen 2026-08-13: 37.905 der 46.096 eingefrorenen Verstoesse
+      // lagen in gebauten Bundles). Die vier Formate koennen einander nicht
+      // einbinden; die Gleichheit erzwingt
+      // test/messinstrumente-erzeugte-ausgaben.test.js.
+      // Herkunft jedes Eintrags: .gitignore der Wurzel bzw. der App, oder Ziel
+      // eines Build-Skripts (astro build, vite build).
+      "**/dist/**",
+      "**/dist-*/**",
+      "**/build/**",
+      "**/out/**",
+      "**/.astro/**",
     ],
   },
   js.configs.recommended,

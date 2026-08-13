@@ -24,5 +24,13 @@
     "test/i18n-catalog-run.mjs"
   ],
   "project": ["*.{js,mjs}", "src/**/*.js", "scripts/**/*.{js,mjs}", "test/**/*.js"],
-  "ignore": ["coverage/**", "data/**"]
+  "ignore": [
+    "coverage/**",
+    "data/**",
+    "**/dist/**",
+    "**/dist-*/**",
+    "**/build/**",
+    "**/out/**",
+    "**/.astro/**"
+  ]
 }

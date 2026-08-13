@@ -9,10 +9,10 @@
     "**/data/**",
     "**/public/**",
     "**/.claude/**",
-    "**/apps/web/dist/**",
-    "**/apps/web/dist-test/**",
-    "**/apps/web/dist-test-links/**",
-    "**/apps/web/dist-clean-test/**",
-    "**/apps/web/.astro/**"
+    "**/dist/**",
+    "**/dist-*/**",
+    "**/build/**",
+    "**/out/**",
+    "**/.astro/**"
   ]
 }
