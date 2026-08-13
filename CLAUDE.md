@@ -178,7 +178,7 @@ Lokal testen: PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start  + curl
 
 Test-Suite: `node:test` ohne zusaetzliche Dependencies, Tests in `test/*.test.js`. Integrationstests starten den Server als Kindprozess mit `PORT=0` und `DATA_DIR`-Override (Temp-Verzeichnis) — `data/store.json` wird nie angefasst. Neues Verhalten braucht einen Test; der manuelle Smoke-Test bleibt fuer alles, was Tests nicht abdecken (echte Telefonie, Dashboard-Optik).
 
-`npm test` und `npm run test:gates` partitionieren dieselbe Suite ueber `test/i18n-catalog-run.mjs`
+`npm test` und `npm run test:gates` partitionieren dieselbe Suite ueber `test/testbaenke-run.mjs`
 (node:test `--test-skip-pattern`/`--test-name-pattern` gegen `package.json` `config.i18nCatalogPattern`).
 Jeder i18n-Launch-Testkatalog-Test traegt seine Katalog-ID (z.B. `GAP-18`, `PROMPT-01`) am
 Namensanfang — das ist die einzige Zuordnungsregel, keine gepflegte Liste. `npm test` schliesst
@@ -190,6 +190,14 @@ ergeben denselben Testbestand wie ein ungefilterter `node --test "test/*.test.js
 verliert und dupliziert nichts. Bei der Einfuehrung nachgerechnet: 2930 + 114 = 3044 (dazu die 10
 Selbsttests in `test/i18n-catalog-run.test.js`, die die Wrapper-Logik abdecken und
 regressionsseitig mitzaehlen).
+
+Dritte Bahn, derselbe Mechanismus: `npm run test:abnahme` faehrt NUR die Abnahmekriterien
+(Kennung `ABNAHME-<ID>` am Namensanfang, Muster `package.json` `config.abnahmePattern`) und endet
+mit "x von y Abnahmekriterien erfuellt". Sie DARF rot sein — ein noch nicht gebautes Kriterium ist
+keine Regression; jeder Fall nennt seinen Grund im Namen (`| ROT WEIL: ... | FIX: ...`). Wird ein
+Kriterium gruen, legt es die Kennung ab, bekommt das Siegel `[abgenommen <ID>]` und einen Eintrag in
+`test/abnahme-ausgewandert.json`; ab da haelt `npm test` es fest — die Zahl der Ausgewanderten darf
+nie sinken (`.fortschritt.md` D13). Die Invariante oben gilt ueber alle drei Baenke.
 
 ## Referenzen
 
