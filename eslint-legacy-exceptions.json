@@ -1,0 +1,10 @@
+{
+  "src/store/state-ops.js": {
+    "reason": "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration.",
+    "date": "2026-08-13"
+  },
+  "src/store/pg.js": {
+    "reason": "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration.",
+    "date": "2026-08-13"
+  }
+}
