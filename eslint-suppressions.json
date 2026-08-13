@@ -1092,17 +1092,6 @@
       "count": 2
     }
   },
-  "src/telnyx-conversation-watchdog.js": {
-    "id-length": {
-      "count": 19
-    },
-    "max-lines-per-function": {
-      "count": 1
-    },
-    "no-param-reassign": {
-      "count": 5
-    }
-  },
   "src/telnyx-inbound.js": {
     "id-length": {
       "count": 1
