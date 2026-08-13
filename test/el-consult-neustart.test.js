@@ -21,6 +21,9 @@
 //   3 Auftraggeber beim Shutdown   -> 200 event=none nach ~0,3 s                (GRUEN)
 //   4 Datensatz nach dem Drain     -> geschlossen, kein zweites Vorlegen        (GRUEN)
 //   5 Datensatz nach HARTEM Abbruch-> geschlossen, der Anruf laeuft weiter      (GRUEN)
+//   6 KONTINGENT nach HARTEM Abbruch-> der Anruf kann NIE WIEDER rueckfragen    (ROT)
+//   7 Kontingent nach Ablauf ohne Antwort -> bleibt verbraucht                  (GRUEN)
+//   8 Kontingent nach Antwort      -> bleibt verbraucht                         (GRUEN)
 // Faelle 1-3 sind Regressionsschutz (die Drain-Freigabe, delivery.releaseOpenPolls +
 // consult-raised.isDraining, laeuft vor httpServer.close und loest beide Halter auf).
 // Fall 4 war der echte Defekt, den diese Datei gefunden hat: kein Pfad schloss den
@@ -56,9 +59,18 @@ const CONSULT_PATH = "/webhooks/elevenlabs/consult";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 const TOOL_TOKEN = "el-tool-token-testgeheim";
 
-// Angenommen ist in dieser Datei IMMER 200 - jede Ablehnung des Endpunkts (403/404/402)
-// haengt an den Gates und ist in test/elevenlabs-consult-webhook-guards.test.js gepinnt.
+// Angenommen ist in dieser Datei IMMER 200. Die Gate-Ablehnungen des Endpunkts (403/402
+// und das 404 aus Token-/Bindungs-/Slot-Gruenden) sind in
+// test/elevenlabs-consult-webhook-guards.test.js gepinnt und werden hier NICHT wiederholt -
+// mit EINER Ausnahme: in den Faellen 7/8 ist die Faehigkeits-Ablehnung selbst der
+// Messgegenstand (das verbrauchte Kontingent), deshalb steht sie dort samt Grund-Token.
 const HTTP_OK = 200;
+const HTTP_NOT_FOUND = 404;
+// Der Grund-Token, mit dem der Webhook die Faehigkeits-Ablehnung meldet
+// (routes/webhooks-elevenlabs.js). Nur er unterscheidet "das Kontingent ist verbraucht" von
+// irgendeiner anderen Ablehnung - ein blosses "nicht 200" waere in den Faellen 7/8 auch
+// dann gruen, wenn der Aufruf am Token oder an der Bindung gescheitert waere.
+const GATE_ABGELEHNT = "kanal_nicht_freigegeben";
 
 // Der Beleg des Servers, dass die Rueckfrage steht und der Warter haelt (consult-raised.js,
 // PII-frei). EINE Quelle fuer alle Faelle.
@@ -75,6 +87,9 @@ const CONVERSATION_ID = "conv_el_neustart_1";
 const CALL_ID_ZWEI = "call_el_neustart_2";
 const CONVERSATION_ID_ZWEI = "conv_el_neustart_2";
 const EVENT_ID = "c0"; // erste Rueckfrage der Kette (state-ops.consultIdOf)
+// Die ZWEITE Rueckfrage desselben Anrufs (Fall 6). Die Kennung ist der Kettenindex, nicht
+// geraten: emitConsult vergibt "c<Laenge der Kette>" - nach der verwaisten c0 ist das c1.
+const ZWEITES_EVENT_ID = "c1";
 const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
 const ANSWER_FACT = "Donnerstag ab 15 Uhr passt.";
 
@@ -90,6 +105,22 @@ const DRAIN_TIMEOUT_MS = 4000;
 const DRAIN_ANTWORT_MAX_MS = 8000;
 // Nachlauf, bevor in Fall 3 das SIGTERM faellt - Begruendung dort.
 const POLL_ANKUNFT_MS = 300;
+
+// ---- Fristen der Kontingent-Faelle 6-8 ---------------------------------------------
+// Die KURZE Haltefrist fuer Fall 7: dort MUSS die Rueckfrage im laufenden Prozess wirklich
+// ablaufen, weil niemand antwortet - mit OPEN_MS wuerde der Fall 20 s stillstehen. Sie ist
+// zugleich die Gespraechszeit, die diese Rueckfrage gekostet hat, und wird als solche
+// zugesichert; deshalb deutlich ueber CONSULT_POLL_TICK_MS (250 ms), damit die Messung
+// nicht auf einem einzigen Tick steht.
+const KURZ_OFFEN_MS = 1500;
+// Obergrenze fuer eine ABLEHNUNG: sie faellt vor jeder Wirkung und kommt in Millisekunden
+// zurueck. Wuerde der Versuch stattdessen ANGENOMMEN, hielte er die Verbindung bis
+// CONSULT_OPEN_MS offen - darauf wartet kein Fall, er meldet nach dieser Frist genau das.
+const ABLEHNUNG_MAX_MS = 3000;
+// Wie lange auf den Datensatz einer ANGENOMMENEN Rueckfrage gewartet wird (Fall 6), und im
+// welchem Takt. Grosszuegig gegen Last, klein gegen einen stumm haengenden Fall.
+const RUECKFRAGE_WARTE_MS = 4000;
+const RUECKFRAGE_TAKT_MS = 50;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -217,6 +248,58 @@ function hardKill(srv) {
   );
   srv.child.kill("SIGKILL");
   return exited;
+}
+
+// Der Ausgang "der Aufruf haelt weiter offen" - in den Faellen 6-8 die einzige Lage, die
+// weder Annahme noch Ablehnung ist und die deshalb einen eigenen, lesbaren Namen braucht
+// (sonst stuende in der Fehlermeldung nur eine abgelaufene Uhr).
+const HAELT_OFFEN = Object.freeze({ status: null, fehler: "haelt offen statt abzulehnen" });
+
+// Ein Rueckfrage-Versuch, dessen ERGEBNIS gedeckelt ist: eine Ablehnung faellt vor jeder
+// Wirkung und kommt sofort, eine Annahme haelt bis CONSULT_OPEN_MS. Zurueck kommt BEIDES -
+// das gedeckelte Ergebnis fuer die Zusicherung und der Aufruf selbst, damit der Fall ihn im
+// finally abraeumen kann (nach srv.stop() loest die Drain-Freigabe ihn auf, s. Fall 2).
+function gedeckelterVersuch(srv) {
+  const versuch = raiseConsult(srv);
+  const ergebnis = Promise.race([versuch, sleep(ABLEHNUNG_MAX_MS).then(() => HAELT_OFFEN)]);
+  return { versuch, ergebnis };
+}
+
+// Die Zusicherung, die sich die beiden Positiv-Kontrollen TEILEN: das Kontingent dieses
+// Anrufs ist verbraucht, ein zweiter Versuch prallt am Faehigkeits-Gate ab. EINE
+// Formulierung fuer beide Faelle - zwei Kopien koennten auseinanderlaufen, und dann
+// bewiese eine der beiden Kontrollen etwas anderes als die andere.
+async function pruefeKontingentVerbraucht(ctx, srv) {
+  const { versuch, ergebnis } = gedeckelterVersuch(srv);
+  const abgelehnt = await ergebnis;
+  await ctx.test("eine zweite Rueckfrage am selben Anruf wird abgelehnt", () => {
+    assert.equal(
+      abgelehnt.status,
+      HTTP_NOT_FOUND,
+      `Ablehnung erwartet, war ${abgelehnt.fehler ?? abgelehnt.status} - das Kontingent ` +
+        "dieses Anrufs ist verbraucht (MAX_IN_CALL_CONSULTS_PER_CALL=1), und es freizugeben " +
+        "hiesse, den Kosten-Riegel abzuschalten: beliebig viele Rueckfragen, indem man sie " +
+        "ablaufen laesst",
+    );
+    assert.equal(abgelehnt.body.error, GATE_ABGELEHNT, "abgelehnt am Faehigkeits-Gate");
+  });
+  return versuch;
+}
+
+// Wartet, bis GENAU DIESE Rueckfrage auf Platte steht - der Beleg, dass sie ANGENOMMEN
+// wurde: emitConsult schreibt den Datensatz synchron, bevor der Webhook zu warten beginnt.
+// Ein Log-Warter waere hier untauglich: im abgelehnten Fall gibt es keine Zeile, auf die
+// man warten koennte, und waitForLog meldete nur "Pattern nicht gefunden", statt den Grund
+// der Ablehnung zu zeigen. null = kein Datensatz innerhalb der Frist.
+async function warteAufRueckfrage(srv, eventId) {
+  const deadline = Date.now() + RUECKFRAGE_WARTE_MS;
+  for (;;) {
+    const kette = persistedCall(srv)?.consults ?? [];
+    const consult = kette.find((eintrag) => eintrag.id === eventId);
+    if (consult) return consult;
+    if (Date.now() >= deadline) return null;
+    await sleep(RUECKFRAGE_TAKT_MS);
+  }
 }
 
 // GRUEN erwartet (Regressionsschutz). Ohne diesen Fall bestuende ein "Fix", der JEDE
@@ -492,5 +575,179 @@ test("EL-NEUSTART 5: nach einem HARTEN Abbruch schliesst der Neustart die verwai
     // KEIN srv.stop(): der Prozess ist hart gestorben, stop() wartete auf ein exit, das
     // laengst gefallen ist.
     if (neu) await neu.stop();
+  }
+});
+
+// ---- Das KONTINGENT nach dem harten Abbruch (Faelle 6-8) ----------------------------
+// Fall 5 hat belegt, dass das Boot-Netz die verwaiste Rueckfrage schliesst. Es setzt sie
+// dabei nur auf expired - GEZAEHLT wird sie weiter: MAX_IN_CALL_CONSULTS_PER_CALL ist 1 und
+// inCallConsults zaehlt STATUSUNABHAENGIG (consult/in-call.js und
+// routes/webhooks-elevenlabs.js lesen dieselbe Zahl). Das Kontingent haengt damit an
+// "registriert", nicht an "beantwortet": stirbt der Wartende, ist der Platz DAUERHAFT weg.
+// Im Betrieb heisst das bei ElevenLabs nicht "ein Anruf weniger": das Gespraech laeuft beim
+// Anbieter weiter, der Anruf existiert also noch - er kann ab da nur nie wieder rueckfragen
+// und steht stumm, sobald er eine Auskunft braucht.
+//
+// DIE UNTERSCHEIDUNG, die diese drei Faelle ZUSAMMEN erzwingen:
+//   verwaist durch NEUSTART           -> hat KEINE Gespraechszeit gekostet, ihr Wartender
+//                                        starb -> der Platz muss frei werden   (Fall 6)
+//   abgelaufen, weil NIEMAND antwortete-> hat die volle Haltefrist Gespraechszeit gekostet
+//                                        -> der Platz bleibt verbraucht        (Fall 7)
+//   BEANTWORTET                       -> der Grundfall, Platz verbraucht       (Fall 8)
+// Ohne 7 und 8 bestuende ein "Fix", der den Kosten-Riegel schlicht abschaltet, jeden Test
+// dieser Datei - man koennte dann beliebig viele Rueckfragen stellen, indem man sie ablaufen
+// laesst. Beide Kontrollen laufen OHNE Neustart: sie messen die Zaehlregel selbst, nicht das
+// Boot-Netz.
+
+// ROT ERWARTET - der gemessene Befund, absichtlich offen. KEIN Abnahmekriterium (keine
+// ABNAHME-Kennung): der Fall gehoert in den Regressionslauf und faellt dort auf, bis das
+// Boot-Netz den Platz der verwaisten Rueckfrage freigibt, statt sie nur als tot zu
+// markieren.
+//
+// DERSELBE Anruf, nicht ein zweiter: Fall 5 musste seine frische Rueckfrage an einem
+// FREMDEN Anruf stellen, weil genau dieses Kontingent verbrannt ist - hier ist das der
+// Messgegenstand. Die Vorbedingungen von Fall 5 (harter Abbruch, offener Datensatz,
+// laufender Anruf) werden mitgefuehrt: ohne sie waere ein gruenes Ergebnis wertlos.
+test("EL-NEUSTART 6: nach einem HARTEN Abbruch darf DERSELBE Anruf wieder rueckfragen - die verwaiste Rueckfrage verbrennt sein Kontingent nicht", async (ctx) => {
+  const { srv, webhook } = await startWithOpenConsult();
+  let neu = null;
+  let zweite = null;
+  try {
+    const ende = await hardKill(srv);
+    await webhook; // der Warter starb mit dem Prozess - das Ergebnis wird nur abgeraeumt
+
+    await ctx.test("Vorbedingung: der Abbruch war hart, kein Drain ist gelaufen", () => {
+      assert.equal(ende.signal, "SIGKILL");
+      assert.equal(
+        ende.code,
+        null,
+        "vom Signal beendet, NICHT geordnet heruntergefahren - sonst maesse der Fall den " +
+          "Drain-Pfad statt das Netz beim Boot",
+      );
+    });
+
+    await ctx.test("Vorbedingung: die verwaiste Rueckfrage steht offen auf Platte", () => {
+      assert.equal(persistedCall(srv).consults[0].status, CONSULT_STATUS.OPEN);
+    });
+
+    neu = await startServer({ env: CONSULT_ON_ENV, dataDir: srv.dataDir });
+
+    await ctx.test("Vorbedingung: der Anruf laeuft weiter, die verwaiste Frage ist tot", () => {
+      assert.equal(
+        persistedCall(neu).status,
+        "active",
+        "das Gespraech laeuft beim Anbieter weiter - genau deshalb braucht dieser Anruf " +
+          "seine Rueckfrage-Moeglichkeit noch",
+      );
+      assert.equal(persistedCall(neu).consults[0].status, CONSULT_STATUS.EXPIRED);
+    });
+
+    zweite = raiseConsult(neu);
+    const datensatz = await warteAufRueckfrage(neu, ZWEITES_EVENT_ID);
+    // Nur im abgelehnten Fall gelesen - dort ist der Aufruf laengst zurueck. Der Deckel
+    // faengt allein den Rest ab (kein Datensatz UND kein Ergebnis), damit die Zusicherung
+    // nicht stumm bis CONSULT_OPEN_MS haengt.
+    const absage = datensatz
+      ? null
+      : await Promise.race([zweite, sleep(ABLEHNUNG_MAX_MS).then(() => HAELT_OFFEN)]);
+
+    await ctx.test("derselbe Anruf bekommt eine zweite Rueckfrage angelegt", () => {
+      assert.ok(
+        datensatz,
+        `abgewiesen mit ${absage?.status} ${JSON.stringify(absage?.body ?? absage?.fehler)} - ` +
+          "die verwaiste Rueckfrage zaehlt weiter aufs Kontingent, obwohl ihr Wartender mit " +
+          "dem Prozess gestorben ist und sie keine Gespraechszeit gekostet hat. Dieser Anruf " +
+          "kann NIE WIEDER rueckfragen.",
+      );
+    });
+
+    const angenommen = await sendAnswer(neu, ZWEITES_EVENT_ID);
+
+    await ctx.test("die zweite Rueckfrage ist normal beantwortbar", async () => {
+      assert.equal(angenommen.status, HTTP_OK, await angenommen.clone().text());
+    });
+
+    const result = await zweite;
+
+    await ctx.test("der wartende Anbieter-Aufruf bekommt genau diese Antwort", () => {
+      assert.equal(
+        result.status,
+        HTTP_OK,
+        `angenommen erwartet, war ${result.fehler ?? result.status}`,
+      );
+      assert.equal(result.body.status, "answered");
+      assert.equal(result.body.answer, ANSWER_FACT);
+    });
+  } finally {
+    // KEIN srv.stop(): der Prozess ist hart gestorben (Muster Fall 5).
+    if (neu) await neu.stop();
+    if (zweite) await zweite;
+  }
+});
+
+// GRUEN erwartet (Positiv-Kontrolle, Kosten-Riegel). Diese Rueckfrage ist NICHT verwaist:
+// sie lief im laufenden Prozess ab, weil niemand geantwortet hat - der Anruf lief die volle
+// Haltefrist weiter und hat dafuer echte Gespraechszeit bezahlt. Ihr Platz MUSS verbraucht
+// bleiben. Der Code unterscheidet beide Lagen heute nicht: der Datensatz bleibt hier sogar
+// OFFEN stehen (kein Pfad schreibt beim Fristablauf des Anbieter-Warters einen Status), er
+// sieht also aus wie eine frisch verwaiste Rueckfrage.
+test("EL-NEUSTART 7 (Positiv-Kontrolle): eine Rueckfrage, die ABLIEF, weil niemand geantwortet hat, verbraucht das Kontingent ihres Anrufs", async (ctx) => {
+  const srv = await startServer({
+    env: { ...CONSULT_ON_ENV, CONSULT_OPEN_MS: String(KURZ_OFFEN_MS) },
+    seed: seed(),
+  });
+  let zweite = null;
+  try {
+    const webhook = raiseConsult(srv);
+    await waitForLog(srv, CONSULT_RAISED_LOG, LOG_WARTE_MS);
+    const abgelaufen = await webhook; // NIEMAND antwortet - die Haltefrist laeuft aus
+
+    await ctx.test("Vorbedingung: die Rueckfrage lief ab, weil niemand geantwortet hat", () => {
+      assert.equal(
+        abgelaufen.status,
+        HTTP_OK,
+        `beantwortet erwartet, war ${abgelaufen.fehler ?? abgelaufen.status}`,
+      );
+      assert.equal(abgelaufen.body.status, "timeout", "abgelaufen, NICHT beantwortet");
+      assert.ok(
+        abgelaufen.ms >= KURZ_OFFEN_MS,
+        `nach ${abgelaufen.ms} ms zurueck - erst die volle Haltefrist ${KURZ_OFFEN_MS} ms ` +
+          "ist die Gespraechszeit, die diese Rueckfrage gekostet hat. Kaeme die Absage " +
+          "frueher, maesse der Fall einen abgerissenen Warter statt eines Fristablaufs.",
+      );
+    });
+
+    zweite = await pruefeKontingentVerbraucht(ctx, srv);
+  } finally {
+    await srv.stop();
+    if (zweite) await zweite;
+  }
+});
+
+// GRUEN erwartet (Positiv-Kontrolle, Grundfall): der Normalfall des Kosten-Riegels. Ohne
+// ihn bestuende ein "Fix", der das Kontingent gar nicht mehr zaehlt, die Faelle 6 und 7
+// gemeinsam - 7 allein deckt nur die abgelaufene, nicht die beantwortete Rueckfrage.
+test("EL-NEUSTART 8 (Positiv-Kontrolle): eine BEANTWORTETE Rueckfrage verbraucht das Kontingent ihres Anrufs", async (ctx) => {
+  const { srv, webhook } = await startWithOpenConsult();
+  let zweite = null;
+  try {
+    const angenommen = await sendAnswer(srv, EVENT_ID);
+    const beantwortet = await webhook;
+
+    await ctx.test("Vorbedingung: die erste Rueckfrage wurde beantwortet", async () => {
+      assert.equal(angenommen.status, HTTP_OK, await angenommen.clone().text());
+      assert.equal(
+        beantwortet.status,
+        HTTP_OK,
+        `angenommen erwartet, war ${beantwortet.fehler ?? beantwortet.status}`,
+      );
+      assert.equal(beantwortet.body.status, "answered");
+      assert.equal(persistedCall(srv).consults[0].status, CONSULT_STATUS.ANSWERED);
+    });
+
+    zweite = await pruefeKontingentVerbraucht(ctx, srv);
+  } finally {
+    await srv.stop();
+    if (zweite) await zweite;
   }
 });
