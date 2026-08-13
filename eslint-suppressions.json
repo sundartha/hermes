@@ -1797,29 +1797,6 @@
       "count": 6
     }
   },
-  "src/config.js": {
-    "complexity": {
-      "count": 3
-    },
-    "id-length": {
-      "count": 8
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 13
-    },
-    "no-negated-condition": {
-      "count": 1
-    },
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 7
-    }
-  },
   "src/db/migrate.js": {
     "id-length": {
       "count": 2

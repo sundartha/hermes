@@ -8,6 +8,9 @@ import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled 
 import { alertChannelFindings } from "./boot-guard.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
+// G5: die Minute lebt in utils/timer.js (import-freies Blatt, kein Zyklus) - dieselbe
+// Zahl, gegen die Abrechnung und Consult-Fristen rechnen. Stunde/Tag leiten hier ab.
+import { MS_PER_MINUTE } from "./utils/timer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Tests laufen mit sauberem Env (wie CI, ohne lokale .env) - verhindert, dass eine
@@ -60,28 +63,40 @@ export const DEPLOYED_COMMIT_UNKNOWN = "unbekannt";
 // TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS), kein Fehler. Die Diagnose nennt nur Var +
 // Erwartung, NIE einen Wert (numEnv betrifft ausschliesslich numerische, nicht-geheime
 // Vars -> kein Secret-Leak).
+// Die Zahl aus dem GETRIMMTEN Rohwert - oder null, wenn der Wert keine ist.
+// pattern.test faengt teil-numerischen Muell ("120abc"); Number.isFinite faengt
+// zusaetzlich einen Ueberlauf gueltiger Ziffernketten auf Infinity.
+function parseNumEnv(trimmed, integer) {
+  const pattern = integer ? NUM_ENV_INTEGER_PATTERN : NUM_ENV_DECIMAL_PATTERN;
+  const parsed = integer ? parseInt(trimmed, 10) : parseFloat(trimmed);
+  return pattern.test(trimmed) && Number.isFinite(parsed) ? parsed : null;
+}
+
+// Der Erwartungs-Teil der Diagnose. Wortlaut unveraendert; nennt nur Form und Minimum,
+// nie einen Wert (Symmetrie zu boolEnv/enumEnv).
+function numEnvExpectation(integer, min) {
+  const art = integer ? "Ganzzahl" : "Zahl";
+  return min === undefined ? art : `${art}, >= ${min}`;
+}
+
 export function numEnv(name, raw, { fallback, min, max, integer = true } = {}) {
   if (raw === undefined || raw === "") return fallback;
   // .trim() ZUERST: parseInt/parseFloat ignorieren Rand-Whitespace bereits; der
   // Voll-String-Check darf eine gueltige Env mit Trailing-Newline/Spaces NICHT als
   // Muell ablehnen (sonst Boot-Refusal beim naechsten Deploy, PM-4).
-  const trimmed = raw.trim();
-  const pattern = integer ? NUM_ENV_INTEGER_PATTERN : NUM_ENV_DECIMAL_PATTERN;
-  const n = integer ? parseInt(trimmed, 10) : parseFloat(trimmed);
-  // pattern.test faengt teil-numerischen Muell ("120abc"); Number.isFinite faengt
-  // zusaetzlich einen Ueberlauf gueltiger Ziffernketten auf Infinity.
-  if (!pattern.test(trimmed) || !Number.isFinite(n)) {
+  const parsed = parseNumEnv(raw.trim(), integer);
+  if (parsed === null) {
     fatalConfigErrors.push(
-      `${name}="${raw}" ist keine gueltige Zahl (erwartet: ${integer ? "Ganzzahl" : "Zahl"}${min !== undefined ? `, >= ${min}` : ""}).`,
+      `${name}="${raw}" ist keine gueltige Zahl (erwartet: ${numEnvExpectation(integer, min)}).`,
     );
     return fallback;
   }
-  if (min !== undefined && n < min) {
-    fatalConfigErrors.push(`${name}=${n} unterschreitet das Minimum ${min}.`);
+  if (min !== undefined && parsed < min) {
+    fatalConfigErrors.push(`${name}=${parsed} unterschreitet das Minimum ${min}.`);
     return fallback;
   }
-  if (max !== undefined && n > max) return max; // bewusster Clamp auf die Obergrenze
-  return n;
+  if (max !== undefined && parsed > max) return max; // bewusster Clamp auf die Obergrenze
+  return parsed;
 }
 
 // Kopie der bisher gesammelten numerischen Fatal-Befunde (fuer assertConfig + Tests).
@@ -176,7 +191,11 @@ const VOICE_TARIFF_DOMESTIC_PREFIXES = ["+49", "+33", "+44"];
 
 // tenant-prolif-d: Tag->ms-Bruecke fuer RELEASE_GRACE_DAYS (G25/G35: benannte Konstante,
 // eine Quelle). 0 Tage -> 0 ms, damit der Observe-Only-Sentinel erhalten bleibt.
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// Kalender-Faktoren als benannte Konstanten (G25) statt als Zahlenkette im Ausdruck.
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const MS_PER_HOUR = MINUTES_PER_HOUR * MS_PER_MINUTE;
+const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 
 // Reine EUR->Cents-Rundung (G26: Money at rest ist Ganzzahl). Eigene, exportierte
 // Funktion statt Inline-Ausdruck, DAMIT ein Unit-Test die Float-Falle direkt trifft:
@@ -198,6 +217,22 @@ export const VOICE_ENGINE = Object.freeze({ BUDGET: "budget", REALTIME: "realtim
 // Configs. Reine Funktion (kein Nebeneffekt).
 export function stripTrailingSlash(url) {
   return url.replace(/\/$/, "");
+}
+
+// Kommaliste -> getrimmte, nicht-leere Eintraege. EINE Quelle (G5) fuer die drei
+// Listen-Envs (Laendervorwahlen, record_types, Admin-Mails); die Aufrufkette lebt damit
+// hier statt dreimal am Ort (G36, Gesetz von Demeter). Fehlende Var -> leere Liste.
+function csvEnv(raw) {
+  return (raw || "")
+    .split(",")
+    .map((eintrag) => eintrag.trim())
+    .filter(Boolean);
+}
+
+// Getrimmter Grossbuchstaben-Wert (Laendercode). Gleiche Begruendung wie csvEnv:
+// die Kette gehoert in eine benannte Funktion, nicht in den Konfigurations-Ausdruck.
+function trimmedUpper(raw) {
+  return (raw || "").trim().toUpperCase();
 }
 
 // ---- Wechselkurs USD -> EUR: EIN Kurs, EINE Stellschraube (GAP-08) ----
@@ -924,8 +959,8 @@ const rawConfig = {
   // die Calls waeren danach dauerhaft 'unavailable' und nie wieder Kandidat.
   // max: ueber MAX_TIMER_DELAY_MS faellt Nodes Timer lautlos auf 1 ms zurueck.
   costTruingSweepIntervalMs: numEnv("COST_TRUING_SWEEP_INTERVAL_MS", process.env.COST_TRUING_SWEEP_INTERVAL_MS, {
-    fallback: 60 * 60 * 1000,
-    min: 60 * 1000,
+    fallback: MS_PER_HOUR,
+    min: MS_PER_MINUTE,
     max: MAX_TIMER_DELAY_MS,
   }),
   // Obergrenze der Abgleich-Versuche je Call (gezaehlt im PERSISTIERTEN
@@ -940,10 +975,7 @@ const rawConfig = {
   // gesetzt, wenn sie am Live-Beleg gemessen ist (Kandidaten aus der Messung vom
   // 2026-07-20: sip-trunking, call-control, speech-to-text, text-to-speech, recording,
   // inference, ai-voice-assistant - "call" existiert NICHT).
-  costTruingRequiredRecordTypes: (process.env.COST_TRUING_REQUIRED_RECORD_TYPES || "")
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean),
+  costTruingRequiredRecordTypes: csvEnv(process.env.COST_TRUING_REQUIRED_RECORD_TYPES),
   // Vorbedingung des Flips (P4/P4b lesen DIESELBE Schwelle, bewusst keine zweite):
   // Mindest-Deckungsquote in Prozent. Wird sie unterschritten, meldet jeder Sweep den
   // Befund coverage_below_threshold. Die Schwelle wird NIE gesenkt, um die Vorbedingung
@@ -958,7 +990,7 @@ const rawConfig = {
   // Entprellfenster je Befund-Code (Default 24 h). Ohne sie meldete der Sweep denselben
   // Befund in JEDER Kadenz erneut (bei der KE-P6B-Kadenz von 1 h 24-mal am Tag) und
   // trainierte den Kanal taub. P5 nutzt dasselbe Feld.
-  costAlertDebounceMs: numEnv("COST_ALERT_DEBOUNCE_MS", process.env.COST_ALERT_DEBOUNCE_MS, { fallback: 24 * 60 * 60 * 1000, min: 0 }),
+  costAlertDebounceMs: numEnv("COST_ALERT_DEBOUNCE_MS", process.env.COST_ALERT_DEBOUNCE_MS, { fallback: MS_PER_DAY, min: 0 }),
   // ---- Drift-Waechter (LCT P5, misst - justiert NICHT) ----
   // Mindest-Stichprobe je Praefix; darunter gibt es KEINE Tarif-Aussage und KEINEN
   // Alarm, aber den sichtbaren Befund 'insufficient_samples' samt Zahl. Ein Wert oberhalb
@@ -1230,10 +1262,7 @@ const rawConfig = {
   // Default +49,+33,+44 (Deutschland, Frankreich, UK - F1 Phase 8). BEWUSST nur diese
   // drei, NICHT global ("*"): ein zu weites Gate oeffnet teure Ziele (Pre-Mortem R2).
   // "*" = alle Laender erlaubt (Gate effektiv aus). Das Gate prueft weiter das ZIEL.
-  allowedCountryCodes: (process.env.ALLOWED_COUNTRY_CODES || "+49,+33,+44")
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean),
+  allowedCountryCodes: csvEnv(process.env.ALLOWED_COUNTRY_CODES || "+49,+33,+44"),
   // Max. Outbound-Calls pro gleitender Stunde (eigenes Gate, NICHT der Per-IP-Limiter
   // aus rateLimitPerMin). Bremse gegen Toll-Fraud/Kosten-Explosion, falls die Allowlist
   // spaeter gelockert wird. Default 6; 0 = jeder Outbound-Call gesperrt (Not-Aus).
@@ -1390,7 +1419,7 @@ const rawConfig = {
   // tenant.defaultLanguage), NICHT am Kauf-Land. Trennt "wo ist der User" (Sprache)
   // von "welche Nummer kaufen wir". Das Geo-Feature bleibt vollstaendig erhalten -
   // diese Var neutralisiert nur die Kauf-Land-Wahl, nicht die Land-/Sprach-Erkennung.
-  forceNumberCountry: (process.env.FORCE_NUMBER_COUNTRY || "").trim().toUpperCase(),
+  forceNumberCountry: trimmedUpper(process.env.FORCE_NUMBER_COUNTRY),
   // Geo-Quelle bei der Registrierung (F1, Phase 6). DEFAULT AUS (fail-closed, netzfreie
   // CI): aus -> Null-Adapter (loest IP nie auf -> Land-Fallback DE, Onboard byte-identisch).
   // Erst true -> der lokale maxmind-Adapter (IP->Land-VORSCHLAG; die User-Wahl bleibt
@@ -1599,10 +1628,7 @@ const rawConfig = {
   // und Produktion. Konstanter Default; nur fuer Tests/Self-Hosting ueberschreibbar.
   workosApiBase: stripTrailingSlash(process.env.WORKOS_API_BASE || "https://api.workos.com"),
   // Admin-Allowlist (kommasepariert, E-Mails). Nur diese duerfen approve/suspend.
-  adminEmails: (process.env.ADMIN_EMAILS || "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean),
+  adminEmails: csvEnv(process.env.ADMIN_EMAILS).map((email) => email.toLowerCase()),
   // Strengeres Rate-Limit fuer Login/Callback (Brute-Force/Credential-Stuffing).
   loginRateLimitPerMin: numEnv("LOGIN_RATE_LIMIT_PER_MIN", process.env.LOGIN_RATE_LIMIT_PER_MIN, {
     fallback: 10,
@@ -1750,8 +1776,15 @@ function guardedConfig(target, path = "config") {
           "config.<namespace>.<key> nutzen - Gruppierung in src/config.js pruefen).",
       );
     },
-    set(obj, prop, value, receiver) {
-      if (typeof prop === "symbol" || prop in obj) return Reflect.set(obj, prop, value, receiver);
+    // OHNE receiver-Parameter (F1: Obergrenze 3 Argumente): Reflect.set schreibt damit
+    // gegen das ZIEL statt gegen die Proxy. Fuer diese Oberflaeche ist das derselbe
+    // Vorgang - jedes Blatt ist ein Accessor, dessen Setter ueber den rawConfig-Slot
+    // schliesst und `this` gar nicht liest (makeNamespaceGroup); die Namespace-Gruppen
+    // selbst sind nicht-schreibbare Datenfelder, dort schlaegt die Zuweisung so oder so
+    // fehl. Der Setter-Durchschlag ist in test/config-namespaces.test.js fuer JEDES
+    // primitive Blatt festgenagelt.
+    set(obj, prop, value) {
+      if (typeof prop === "symbol" || prop in obj) return Reflect.set(obj, prop, value);
       throw new TypeError(
         `${path}.${String(prop)} kann nicht gesetzt werden (flache Oberflaeche entfernt; ` +
           "config.<namespace>.<key> nutzen).",
@@ -1796,8 +1829,12 @@ function makeNamespaceGroup(keys, storage) {
     Object.defineProperty(group, key, {
       enumerable: true,
       get: () => storage[key],
+      // Object.assign statt storage[key] = value: der Speicher ist ein Parameter, und
+      // die Mutation ist hier der ZWECK der Fabrik (ein Blatt schreibt seinen Slot) -
+      // sie wird deshalb als solche benannt, statt als Parameter-Mutation zu erscheinen
+      // (P6/F2). Gleicher Schreibvorgang, gleicher Slot.
       set: (value) => {
-        storage[key] = value;
+        Object.assign(storage, { [key]: value });
       },
     });
   }
@@ -1881,43 +1918,60 @@ const TELNYX_SHIM_MAX_TURNS_CEILING = 120;
 // dieselben Punkte erlaubte Warnungen. Reine Funktion (cfg + isProduction
 // injizierbar) -> unit-testbar ohne Spawn. Diagnose nennt nur Var-Namen, NIE Werte
 // (kein Secret-Leak; betroffene Vars sind ohnehin Schalter/Presence).
+// Die Footgun-Tabelle: je Eintrag EINE Bedingung und der Text, den sie ausloest. Als
+// Tabelle statt als if-Kette, damit die Liste waechst, ohne dass die pruefende Funktion
+// waechst (G30); Reihenfolge der Ausgabe ist die Reihenfolge dieser Liste und
+// unveraendert.
+const PRODUCTION_FOOTGUNS = Object.freeze([
+  {
+    trifftZu: (cfg) => !cfg.auth.dashboardPassword,
+    befund:
+      "DASHBOARD_PASSWORD fehlt - seit AUTH-P7 liest keine Route mehr diese Variable; " +
+      "Boot-Pflicht bleibt bis AUTH-P8 ausschliesslich als Rollback-Sicherung (ein " +
+      "Rollback auf einen Commit vor AUTH-P7 findet damit ein scharfes Gate vor).",
+  },
+  {
+    trifftZu: (cfg) => cfg.auth.mcpAuth === "off",
+    befund: "MCP_AUTH=off - /mcp ist ohne jede Pruefung offen (im Hosting unzulaessig).",
+  },
+  {
+    trifftZu: (cfg) => cfg.safety.skipTwilioSignatureCheck,
+    befund:
+      "SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).",
+  },
+  {
+    trifftZu: (cfg) => isInsecureHttpIssuer(cfg.auth.oauthIssuerUrl),
+    befund: "OAUTH_ISSUER_URL ist nicht https - SSRF/MITM-Footgun (im Hosting unzulaessig).",
+  },
+  {
+    trifftZu: (cfg) => cfg.store.storeBackend !== "pg",
+    befund:
+      "STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.",
+  },
+  {
+    // DEV_LOGIN_ENABLED ist ein lokaler Login-Shim (umgeht WorkOS) - im Hosting NIE erlaubt.
+    // config.auth.devLoginEnabled ist auf Render ohnehin neutralisiert (=== false); diese zweite,
+    // unabhaengige Sperre liest die ROHE Env, damit eine versehentlich auf Render gesetzte
+    // DEV_LOGIN_ENABLED=true den Boot verweigert statt still ignoriert zu werden (Regel 3).
+    trifftZu: () => process.env.DEV_LOGIN_ENABLED === "true",
+    befund: "DEV_LOGIN_ENABLED=true - Login-Shim umgeht WorkOS (im Hosting unzulaessig).",
+  },
+  {
+    // C-Telnyx: aktiver Assistant + entwaffnete Shim-Rate-Bremse (Regel 1). Nur wenn das
+    // Flag an ist (Flag aus -> Shim 404, Bremse inert -> kein Footgun).
+    trifftZu: (cfg) =>
+      cfg.telnyx?.telnyxAssistant?.enabled &&
+      cfg.telnyx?.telnyxAssistant?.shimMaxTurnsPerMin > TELNYX_SHIM_MAX_TURNS_CEILING,
+    befund:
+      "TELNYX_SHIM_MAX_TURNS_PER_MIN zu hoch - die per-Call-Turn-Bremse (Token-/Toll-Fraud) waere praktisch aus (im Hosting bei aktivem Assistant unzulaessig).",
+  },
+]);
+
 export function productionFootguns(cfg = config, isProduction = detectProduction()) {
   if (!isProduction) return [];
-  const errors = [];
-  if (!cfg.auth.dashboardPassword)
-    errors.push(
-      "DASHBOARD_PASSWORD fehlt - seit AUTH-P7 liest keine Route mehr diese Variable; " +
-        "Boot-Pflicht bleibt bis AUTH-P8 ausschliesslich als Rollback-Sicherung (ein " +
-        "Rollback auf einen Commit vor AUTH-P7 findet damit ein scharfes Gate vor).",
-    );
-  if (cfg.auth.mcpAuth === "off")
-    errors.push("MCP_AUTH=off - /mcp ist ohne jede Pruefung offen (im Hosting unzulaessig).");
-  if (cfg.safety.skipTwilioSignatureCheck)
-    errors.push(
-      "SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks bleiben ungeprueft (im Hosting unzulaessig).",
-    );
-  if (isInsecureHttpIssuer(cfg.auth.oauthIssuerUrl))
-    errors.push("OAUTH_ISSUER_URL ist nicht https - SSRF/MITM-Footgun (im Hosting unzulaessig).");
-  if (cfg.store.storeBackend !== "pg")
-    errors.push(
-      "STORE_BACKEND ist nicht 'pg' - der json-Store liegt auf Renders fluechtigem Dateisystem (Datenverlust bei jedem Deploy/Neustart). Im Hosting STORE_BACKEND=pg + DATABASE_URL Pflicht.",
-    );
-  // DEV_LOGIN_ENABLED ist ein lokaler Login-Shim (umgeht WorkOS) - im Hosting NIE erlaubt.
-  // config.auth.devLoginEnabled ist auf Render ohnehin neutralisiert (=== false); diese zweite,
-  // unabhaengige Sperre liest die ROHE Env, damit eine versehentlich auf Render gesetzte
-  // DEV_LOGIN_ENABLED=true den Boot verweigert statt still ignoriert zu werden (Regel 3).
-  if (process.env.DEV_LOGIN_ENABLED === "true")
-    errors.push("DEV_LOGIN_ENABLED=true - Login-Shim umgeht WorkOS (im Hosting unzulaessig).");
-  // C-Telnyx: aktiver Assistant + entwaffnete Shim-Rate-Bremse (Regel 1). Nur wenn das
-  // Flag an ist (Flag aus -> Shim 404, Bremse inert -> kein Footgun).
-  if (
-    cfg.telnyx?.telnyxAssistant?.enabled &&
-    cfg.telnyx?.telnyxAssistant?.shimMaxTurnsPerMin > TELNYX_SHIM_MAX_TURNS_CEILING
-  )
-    errors.push(
-      "TELNYX_SHIM_MAX_TURNS_PER_MIN zu hoch - die per-Call-Turn-Bremse (Token-/Toll-Fraud) waere praktisch aus (im Hosting bei aktivem Assistant unzulaessig).",
-    );
-  return errors;
+  return PRODUCTION_FOOTGUNS.filter((footgun) => footgun.trifftZu(cfg)).map(
+    (footgun) => footgun.befund,
+  );
 }
 
 // EINE Quelle (G5) fuer das Self-Service-Reifekriterium: nur "scharf", wenn BEIDE Flags
@@ -1928,100 +1982,141 @@ export function isSelfServiceLive(cfg) {
   return Boolean(cfg.tenancy.selfServiceEnabled && cfg.tenancy.multiTenant);
 }
 
-export function assertConfig() {
-  const missing = [];
-  if (!config.llm.anthropicApiKey) missing.push("ANTHROPIC_API_KEY");
-  // B5: der Fremdadapter ohne Schluessel wuerde JEDEN Aufruf mit 401 beantworten -
-  // nicht-transient, also Degradation in jedem Turn, und das erst im Anruf sichtbar.
-  // ANTHROPIC_API_KEY bleibt bewusst UNBEDINGT Pflicht (eine Lockerung waere das
-  // Aufweichen einer bestehenden Pruefung ohne Not - B5 stellt den Live-Anbieter nicht um).
-  if (config.llm.llmProvider === LLM_PROVIDER.DEEPSEEK && !config.llm.deepseekApiKey)
-    missing.push("DEEPSEEK_API_KEY (weil LLM_PROVIDER=deepseek)");
-  // Absendernummer + Owner-Identitaet sind keine Boot-Pflicht-Env mehr (P2b): sie leben
-  // im Store (Bootstrap-CLI/Onboarding/Self-Service), nicht in der Env. Stattdessen
-  // verlangt der Boot-Guard in server.js fail-closed eine aktive Nummer im Store
-  // (assertConfig bleibt storefrei).
-  // C-P5: TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN sind KEINE Boot-Pflicht mehr - seit dem
-  // Adapter-Ausbau liest sie kein Codepfad. In Render stehen sie uebergangsweise noch und
-  // werden ignoriert; ein gesetzter, ungelesener Key ist harmlos.
-  if (!config.server.publicUrl || config.server.publicUrl.includes("CHANGE-ME"))
-    missing.push("PUBLIC_URL");
-  if (config.auth.mcpAuth === "oauth" && !config.auth.oauthIssuerUrl)
-    missing.push("OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)");
-  if (config.store.storeBackend === "pg" && !config.store.databaseUrl)
-    missing.push("DATABASE_URL (weil STORE_BACKEND=pg)");
-  if (config.billing.paymentEnabled && !config.billing.stripeSecretKey)
-    missing.push("STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)");
-  // W4: das Webhook-Signing-Secret ist sicherheitskritisch (ohne ist der Stripe-Webhook
-  // fail-closed unverifizierbar -> kein Abo-Lifecycle). Boot-Pflicht bei aktivem Payment
-  // (Muster STRIPE_SECRET_KEY). Die Price-Ids sind BEWUSST keine Boot-Pflicht: ein Tier
-  // darf unbuchbar bleiben (Route-500), das stoppt den Boot nicht.
-  if (config.billing.paymentEnabled && !config.billing.stripeWebhookSecret)
-    missing.push("STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)");
-  // numEnv() faengt einen nicht-numerischen NUMBER_SETUP_FEE_CENTS bereits am Env-Parse
-  // ab (fatalConfigErrors -> Boot-Refusal). Dieser Check bleibt als Invariante auf dem
-  // config-Wert (> 0 ganzzahlig bei PAYMENT_ENABLED) - direkt geprueft von
-  // config-payment-guard.test.js, das den config-Wert ohne Env-Pfad mutiert.
-  if (
-    config.billing.paymentEnabled &&
-    (!Number.isInteger(config.billing.numberSetupFeeCents) || config.billing.numberSetupFeeCents <= 0)
-  )
-    missing.push("NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)");
-  // Single-Origin (P1): WEB_DIST_DIR gesetzt, aber der Build (<dir>/index.html) fehlt ->
-  // sichtbarer Boot-Fehler statt stiller 404. Ohne index.html faende express.static
-  // nichts, jeder Marketing-Request fiele auf 404 durch statt die Landing zu zeigen.
-  if (config.server.webDistDir && !existsSync(path.join(config.server.webDistDir, "index.html")))
-    missing.push(
-      "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
-    );
+// Boot-Pflicht-Tabelle: je Eintrag EINE Bedingung und der Name, den die Diagnose als
+// "fehlt/ungueltig" nennt. Tabelle statt if-Kette (G30) - die Liste darf wachsen, ohne
+// dass die pruefende Funktion waechst; Reihenfolge der Meldung ist die dieser Liste und
+// unveraendert. Die Bedingungen lesen den config-Singleton erst beim AUFRUF (Arrow),
+// nicht beim Aufbau der Tabelle.
+//
+// Absendernummer + Owner-Identitaet sind keine Boot-Pflicht-Env mehr (P2b): sie leben
+// im Store (Bootstrap-CLI/Onboarding/Self-Service), nicht in der Env. Stattdessen
+// verlangt der Boot-Guard in server.js fail-closed eine aktive Nummer im Store
+// (assertConfig bleibt storefrei).
+// C-P5: TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN sind KEINE Boot-Pflicht mehr - seit dem
+// Adapter-Ausbau liest sie kein Codepfad. In Render stehen sie uebergangsweise noch und
+// werden ignoriert; ein gesetzter, ungelesener Key ist harmlos.
+const REQUIRED_CONFIG = Object.freeze([
+  { fehlt: () => !config.llm.anthropicApiKey, name: "ANTHROPIC_API_KEY" },
+  {
+    // B5: der Fremdadapter ohne Schluessel wuerde JEDEN Aufruf mit 401 beantworten -
+    // nicht-transient, also Degradation in jedem Turn, und das erst im Anruf sichtbar.
+    // ANTHROPIC_API_KEY bleibt bewusst UNBEDINGT Pflicht (eine Lockerung waere das
+    // Aufweichen einer bestehenden Pruefung ohne Not - B5 stellt den Live-Anbieter nicht um).
+    fehlt: () => config.llm.llmProvider === LLM_PROVIDER.DEEPSEEK && !config.llm.deepseekApiKey,
+    name: "DEEPSEEK_API_KEY (weil LLM_PROVIDER=deepseek)",
+  },
+  {
+    fehlt: () => !config.server.publicUrl || config.server.publicUrl.includes("CHANGE-ME"),
+    name: "PUBLIC_URL",
+  },
+  {
+    fehlt: () => config.auth.mcpAuth === "oauth" && !config.auth.oauthIssuerUrl,
+    name: "OAUTH_ISSUER_URL (weil MCP_AUTH=oauth)",
+  },
+  {
+    fehlt: () => config.store.storeBackend === "pg" && !config.store.databaseUrl,
+    name: "DATABASE_URL (weil STORE_BACKEND=pg)",
+  },
+  {
+    fehlt: () => config.billing.paymentEnabled && !config.billing.stripeSecretKey,
+    name: "STRIPE_SECRET_KEY (weil PAYMENT_ENABLED=true)",
+  },
+  {
+    // W4: das Webhook-Signing-Secret ist sicherheitskritisch (ohne ist der Stripe-Webhook
+    // fail-closed unverifizierbar -> kein Abo-Lifecycle). Boot-Pflicht bei aktivem Payment
+    // (Muster STRIPE_SECRET_KEY). Die Price-Ids sind BEWUSST keine Boot-Pflicht: ein Tier
+    // darf unbuchbar bleiben (Route-500), das stoppt den Boot nicht.
+    fehlt: () => config.billing.paymentEnabled && !config.billing.stripeWebhookSecret,
+    name: "STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)",
+  },
+  {
+    // numEnv() faengt einen nicht-numerischen NUMBER_SETUP_FEE_CENTS bereits am Env-Parse
+    // ab (fatalConfigErrors -> Boot-Refusal). Dieser Check bleibt als Invariante auf dem
+    // config-Wert (> 0 ganzzahlig bei PAYMENT_ENABLED) - direkt geprueft von
+    // config-payment-guard.test.js, das den config-Wert ohne Env-Pfad mutiert.
+    fehlt: () => config.billing.paymentEnabled && !isPositiveIntegerFee(config.billing.numberSetupFeeCents),
+    name: "NUMBER_SETUP_FEE_CENTS (weil PAYMENT_ENABLED=true, muss ganzzahlig > 0 sein)",
+  },
+  {
+    // Single-Origin (P1): WEB_DIST_DIR gesetzt, aber der Build (<dir>/index.html) fehlt ->
+    // sichtbarer Boot-Fehler statt stiller 404. Ohne index.html faende express.static
+    // nichts, jeder Marketing-Request fiele auf 404 durch statt die Landing zu zeigen.
+    fehlt: () =>
+      Boolean(config.server.webDistDir) &&
+      !existsSync(path.join(config.server.webDistDir, "index.html")),
+    name: "WEB_DIST_DIR-Build (kein index.html im angegebenen Verzeichnis - 'astro build' in apps/web?)",
+  },
   // C-Telnyx (PLAN-TELNYX-AI-ASSISTANT.md, P10): der AI-Assistant-Pfad braucht bei aktivem
   // Flag die volle Origination-/Shim-Config, sonst bootet der Dienst in einen "Flag an, aber
   // Assistant/Shim unkonfiguriert"-Zustand (Regel 1/3, fail-closed). publicUrl ist bereits
   // oben Pflicht (Custom-LLM-URL des Assistants zeigt dorthin). apiKey/callControlAppId tragen
   // die Call-Control-Origination + Hangup; assistantId feuert ai_assistant_start (P5/P7);
   // connectionId (TeXML) bleibt Pflicht, weil der Inbound-/Nummern-Pfad weiter darueber laeuft.
-  if (config.telnyx.telnyxAssistant.enabled) {
-    if (!config.telnyx.telnyxAssistant.assistantId)
-      missing.push("TELNYX_ASSISTANT_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telephony.telnyxApiKey)
-      missing.push("TELNYX_API_KEY (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telephony.telnyxConnectionId)
-      missing.push("TELNYX_CONNECTION_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telnyx.telnyxAssistant.callControlAppId)
-      missing.push("TELNYX_CALL_CONTROL_APP_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-    if (!config.telnyx.telnyxAssistant.shimSharedSecret)
-      missing.push("TELNYX_SHIM_SHARED_SECRET (weil TELNYX_AI_ASSISTANT_ENABLED=true)");
-  }
-  // Fatal-Befunde, die den Boot stoppen (fail-closed statt stillem Gate-Aus):
-  //  - numerische (AC1/AC2): NaN/Infinity/Bereichsverletzung einer gesetzten Env-Var.
-  //  - Produktions-Footguns (H1): im Hosting (RENDER_EXTERNAL_URL) offene/abgeschaltete
-  //    Auth-/Signatur-Gates. Lokal liefert productionFootguns() ein leeres Array.
-  //  - Alarmkanal (GAP-07): scharfe Spend-Warnung ohne Empfaenger. Die Entscheidung selbst
-  //    lebt NICHT hier, sondern in der einen Wahrheitstabelle (boot-guard.alertChannelFindings) -
-  //    diese Zeile faltet nur ihren fatalen Anteil in dieselbe Ausgabe wie die uebrigen Fatals.
-  const isProduction = detectProduction();
-  const fatal = configFatalErrors()
+  {
+    fehlt: () => assistantEnabled() && !config.telnyx.telnyxAssistant.assistantId,
+    name: "TELNYX_ASSISTANT_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
+  },
+  {
+    fehlt: () => assistantEnabled() && !config.telephony.telnyxApiKey,
+    name: "TELNYX_API_KEY (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
+  },
+  {
+    fehlt: () => assistantEnabled() && !config.telephony.telnyxConnectionId,
+    name: "TELNYX_CONNECTION_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
+  },
+  {
+    fehlt: () => assistantEnabled() && !config.telnyx.telnyxAssistant.callControlAppId,
+    name: "TELNYX_CALL_CONTROL_APP_ID (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
+  },
+  {
+    fehlt: () => assistantEnabled() && !config.telnyx.telnyxAssistant.shimSharedSecret,
+    name: "TELNYX_SHIM_SHARED_SECRET (weil TELNYX_AI_ASSISTANT_ENABLED=true)",
+  },
+]);
+
+const assistantEnabled = () => config.telnyx.telnyxAssistant.enabled === true;
+const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
+
+// Fatal-Befunde, die den Boot stoppen (fail-closed statt stillem Gate-Aus):
+//  - numerische (AC1/AC2): NaN/Infinity/Bereichsverletzung einer gesetzten Env-Var.
+//  - Produktions-Footguns (H1): im Hosting (RENDER_EXTERNAL_URL) offene/abgeschaltete
+//    Auth-/Signatur-Gates. Lokal liefert productionFootguns() ein leeres Array.
+//  - Alarmkanal (GAP-07): scharfe Spend-Warnung ohne Empfaenger. Die Entscheidung selbst
+//    lebt NICHT hier, sondern in der einen Wahrheitstabelle (boot-guard.alertChannelFindings) -
+//    diese Zeile faltet nur ihren fatalen Anteil in dieselbe Ausgabe wie die uebrigen Fatals.
+function fatalConfigFindings(isProduction) {
+  return configFatalErrors()
     .concat(productionFootguns(config, isProduction))
     .concat(
       alertChannelFindings(config.billing)
-        .filter((f) => f.fatal)
-        .map((f) => f.message),
+        .filter((befund) => befund.fatal)
+        .map((befund) => befund.message),
     );
-  if (missing.length || fatal.length) {
-    console.error("\n[Konfiguration fatal] Boot wird verweigert:");
-    for (const m of missing) console.error(`  - fehlt/ungueltig: ${m}`);
-    for (const f of fatal) console.error(`  - ${f}`);
-    console.error("(.env pruefen; .env.example kopieren: cp .env.example .env)\n");
-  }
-  // Footgun-Warnungen NUR im lokalen/Test-Modus: im Hosting (isProduction) sind
-  // dieselben Punkte oben bereits fatal (productionFootguns) -> hier kein
-  // Doppel-Report, lokal aber weiterhin ein sichtbarer Hinweis.
-  if (!isProduction && config.safety.skipTwilioSignatureCheck)
+}
+
+function reportFatalConfig(missing, fatal) {
+  console.error("\n[Konfiguration fatal] Boot wird verweigert:");
+  for (const name of missing) console.error(`  - fehlt/ungueltig: ${name}`);
+  for (const befund of fatal) console.error(`  - ${befund}`);
+  console.error("(.env pruefen; .env.example kopieren: cp .env.example .env)\n");
+}
+
+// Footgun-Warnungen NUR im lokalen/Test-Modus: im Hosting (isProduction) sind
+// dieselben Punkte bereits fatal (productionFootguns) -> kein Doppel-Report, lokal
+// aber weiterhin ein sichtbarer Hinweis.
+function warnLocalOnlyFootguns() {
+  if (config.safety.skipTwilioSignatureCheck)
     console.error(
       "[Sicherheit] SKIP_TWILIO_SIGNATURE_CHECK=true - /voice-Webhooks ungeprueft (nur lokal ok)!",
     );
-  if (!isProduction && config.auth.mcpAuth === "off")
+  if (config.auth.mcpAuth === "off")
     console.error("[Sicherheit] MCP_AUTH=off - /mcp ohne jede Pruefung offen (nur lokale Demos)!");
+}
+
+// Hinweise, die in JEDER Umgebung gelten: wirkungslose bzw. unvollstaendige
+// Kombinationen. Kein Boot-Stopp - der Dienst laeuft, nur eben ohne den Teil, den der
+// Operator vermutlich erwartet.
+function warnConfigurationHints() {
   if (config.billing.paymentEnabled && !config.provisioning.provisioningEnabled)
     console.error(
       "[Konfiguration] PAYMENT_ENABLED ohne PROVISIONING_ENABLED ist wirkungslos (kein echter Kauf -> kein Capture).",
@@ -2031,10 +2126,24 @@ export function assertConfig() {
   // Self-Service ist seit der Login-Konvergenz web-session-only: die Routen sind NUR
   // im Web-Login-Block (SESSION_SECRET + STORE_BACKEND=pg) registriert. Flags an, aber
   // ohne diese Infra -> /api/self-service/* sind nicht erreichbar (404, fail-closed).
-  if (isSelfServiceLive(config) && !(config.auth.sessionSecret && config.store.storeBackend === "pg"))
+  if (isSelfServiceLive(config) && !webLoginInfraReady())
     console.error(
       "[Hinweis] SELF_SERVICE_ENABLED braucht den Web-Login (SESSION_SECRET + STORE_BACKEND=pg) - sonst sind die /api/self-service/*-Routen nicht erreichbar.",
     );
+}
+
+const webLoginInfraReady = () =>
+  Boolean(config.auth.sessionSecret) && config.store.storeBackend === "pg";
+
+export function assertConfig() {
+  const isProduction = detectProduction();
+  const missing = REQUIRED_CONFIG.filter((eintrag) => eintrag.fehlt()).map(
+    (eintrag) => eintrag.name,
+  );
+  const fatal = fatalConfigFindings(isProduction);
+  if (missing.length || fatal.length) reportFatalConfig(missing, fatal);
+  if (!isProduction) warnLocalOnlyFootguns();
+  warnConfigurationHints();
   // http-OIDC-Issuer: lokal nur ein Hinweis (Test-IdP), im Hosting oben bereits fatal.
   if (!isProduction && isInsecureHttpIssuer(config.auth.oauthIssuerUrl))
     console.error(
