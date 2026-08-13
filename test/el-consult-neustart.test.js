@@ -16,18 +16,24 @@
 //      Neustart ueberhaupt ueberlebt - und damit der einzige, der DAUERHAFT haengen kann.
 //
 // MESSERGEBNIS (Stand dieser Datei, am laufenden Dienst gemessen):
-//   1 Normalfall ohne Neustart  -> Rueckfrage kommt durch, wird beantwortet   (GRUEN)
-//   2 Anbieter beim Shutdown    -> 200 mit klarer Absage nach ~0,3 s          (GRUEN)
-//   3 Auftraggeber beim Shutdown-> 200 event=none nach ~0,3 s                 (GRUEN)
-//   4 Datensatz nach Neustart   -> steht WEITER auf "open"                    (ROT)
+//   1 Normalfall ohne Neustart     -> Rueckfrage kommt durch, wird beantwortet  (GRUEN)
+//   2 Anbieter beim Shutdown       -> 200 mit klarer Absage nach ~0,3 s         (GRUEN)
+//   3 Auftraggeber beim Shutdown   -> 200 event=none nach ~0,3 s                (GRUEN)
+//   4 Datensatz nach dem Drain     -> geschlossen, kein zweites Vorlegen        (GRUEN)
+//   5 Datensatz nach HARTEM Abbruch-> geschlossen, der Anruf laeuft weiter      (GRUEN)
 // Faelle 1-3 sind Regressionsschutz (die Drain-Freigabe, delivery.releaseOpenPolls +
 // consult-raised.isDraining, laeuft vor httpServer.close und loest beide Halter auf).
-// Fall 4 ist der echte Defekt: kein Pfad schliesst den Datensatz. expireOpenConsults
-// laeuft nur, wenn der ANRUF terminal wird (state-ops.setCallEndedAt), advanceInCallConsult
-// nur in der Turn-Schleife der Budget-Engine - die beim Anbieter-Gespraech gar nicht
-// laeuft. Die Rueckfrage bleibt also fuer den Rest des Gespraechs offen; der neu
-// gestartete Dienst legt sie dem Auftraggeber erneut als unbeantwortete Frage vor,
-// obwohl niemand mehr auf die Antwort wartet.
+// Fall 4 war der echte Defekt, den diese Datei gefunden hat: kein Pfad schloss den
+// Datensatz. expireOpenConsults laeuft nur, wenn der ANRUF terminal wird
+// (state-ops.setCallEndedAt), advanceInCallConsult nur in der Turn-Schleife der
+// Budget-Engine - die beim Anbieter-Gespraech gar nicht laeuft. Die Rueckfrage blieb also
+// fuer den Rest des Gespraechs offen; der neu gestartete Dienst legte sie dem Auftraggeber
+// erneut als unbeantwortete Frage vor, obwohl niemand mehr auf die Antwort wartete. Seit
+// ca212e1 schliesst der DRAIN sie selbst, unmittelbar vor der Absage (consult-raised.js).
+// Fall 5 misst das Netz DARUNTER: ein harter Abbruch (Absturz, SIGKILL) laesst den Drain
+// gar nicht erst laufen - dann schliesst der BOOT die verwaisten Rueckfragen
+// (expireOrphanedConsults, src/boot.js, vor app.listen). Ohne diesen Fall waere dieses
+// Netz nur einmal von Hand belegt und beim naechsten Umbau still weg.
 //
 // WARUM DER TIMING-RIEGEL IN 2/3 UND NICHT NUR "200": ohne ihn waere auch die natuerliche
 // Frist (CONSULT_OPEN_MS bzw. CONSULT_POLL_HOLD_MS) eine bestandene Messung - dann misst
@@ -61,6 +67,13 @@ const LOG_WARTE_MS = 5000;
 
 const CALL_ID = "call_el_neustart";
 const CONVERSATION_ID = "conv_el_neustart_1";
+// Zweiter laufender Anruf, NUR fuer Fall 5: MAX_IN_CALL_CONSULTS_PER_CALL ist 1
+// (consult/in-call.js) und inCallConsults zaehlt jede Rueckfrage, unabhaengig von ihrem
+// Status - die verwaiste verbraucht das Kontingent IHRES Anrufs dauerhaft. Die frische
+// Rueckfrage der Positiv-Kontrolle kann deshalb nur an einem anderen Anruf entstehen; das
+// belegt zugleich, dass das Netz fremde Anrufe unberuehrt laesst.
+const CALL_ID_ZWEI = "call_el_neustart_2";
+const CONVERSATION_ID_ZWEI = "conv_el_neustart_2";
 const EVENT_ID = "c0"; // erste Rueckfrage der Kette (state-ops.consultIdOf)
 const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
 const ANSWER_FACT = "Donnerstag ab 15 Uhr passt.";
@@ -94,17 +107,24 @@ const CONSULT_ON_ENV = Object.freeze({
 // Boot-Re-Arm (rearmActiveCallTimers) das Leg beim NEUSTART nicht als Zombie
 // terminalisiert - genau das wuerde den Datensatz ueber setCallEndedAt schliessen und
 // Fall 4 aus dem falschen Grund gruen faerben (Fall 4 prueft es zusaetzlich explizit).
-const seed = () =>
+const laufenderAnruf = (id, conversationId) =>
+  seedCall({
+    id,
+    status: "active",
+    direction: "outbound",
+    maxDurationS: 600,
+    answeredAt: new Date().toISOString(),
+    elevenlabsConversationId: conversationId,
+  });
+
+const seed = () => seedState({ calls: [laufenderAnruf(CALL_ID, CONVERSATION_ID)] });
+
+// Fall 5: derselbe Anruf plus ein zweiter, unbeteiligter - Begruendung bei CALL_ID_ZWEI.
+const seedMitZweitemAnruf = () =>
   seedState({
     calls: [
-      seedCall({
-        id: CALL_ID,
-        status: "active",
-        direction: "outbound",
-        maxDurationS: 600,
-        answeredAt: new Date().toISOString(),
-        elevenlabsConversationId: CONVERSATION_ID,
-      }),
+      laufenderAnruf(CALL_ID, CONVERSATION_ID),
+      laufenderAnruf(CALL_ID_ZWEI, CONVERSATION_ID_ZWEI),
     ],
   });
 
@@ -112,12 +132,12 @@ const seed = () =>
 // wird, die Frist ablaeuft oder der Dienst herunterfaehrt - das ist der Messgegenstand.
 // Ein abgerissener Aufruf wird zu einem lesbaren Ergebnis statt zu einem rohen
 // fetch-Fehler, damit die Zusicherung den Grund nennen kann.
-function raiseConsult(srv) {
+function raiseConsult(srv, conversationId = CONVERSATION_ID) {
   const started = Date.now();
   return fetch(`${srv.localUrl}${CONSULT_PATH}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
-    body: JSON.stringify({ conversation_id: CONVERSATION_ID, question: QUESTION }),
+    body: JSON.stringify({ conversation_id: conversationId, question: QUESTION }),
   }).then(
     async (res) => ({ status: res.status, body: await res.json(), ms: Date.now() - started }),
     (err) => ({ status: null, fehler: String(err), ms: Date.now() - started }),
@@ -137,11 +157,34 @@ function pollAfterOpenConsult(srv) {
   );
 }
 
-// Server + eine nachweislich OFFENE Rueckfrage. Die Log-Zeile ist der Beleg, dass der
-// Warter steht - ohne sie koennte das SIGTERM vor der Emission landen und der Fall haette
-// nichts gemessen.
-async function startWithOpenConsult(extra = {}) {
-  const srv = await startServer({ env: { ...CONSULT_ON_ENV, ...extra }, seed: seed() });
+// Derselbe Long-Poll OHNE after-Filter: er bekommt die AELTESTE offene Rueckfrage dieses
+// Anrufs vorgelegt - genau der frische Auftraggeber, den ein verwaister Datensatz
+// faelschlich bedienen wuerde. Er kann sie nicht verpassen: pendingConsult liest den Store,
+// nicht ein Ereignis, und liefert den aeltesten offenen Datensatz, egal wann der Poll
+// ankommt. Ohne offene Rueckfrage haelt er bis CONSULT_POLL_HOLD_MS und meldet dann "none".
+function pollNextConsult(srv, callId = CALL_ID) {
+  return fetch(`${srv.localUrl}/api/calls/${callId}/consult`).then(
+    async (res) => ({ status: res.status, body: await res.json() }),
+    (err) => ({ status: null, fehler: String(err) }),
+  );
+}
+
+// Die Antwort des Auftraggebers auf genau eine Rueckfrage. Rohe Response, damit der
+// Aufrufer bei einer Ablehnung den Body in die Zusicherung schreiben kann.
+function sendAnswer(srv, eventId, callId = CALL_ID) {
+  return fetch(`${srv.localUrl}/api/calls/${callId}/consult/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event_id: eventId, answers: [ANSWER_FACT] }),
+  });
+}
+
+// Server + eine nachweislich OFFENE Rueckfrage an CALL_ID. Die Log-Zeile ist der Beleg,
+// dass der Warter steht - ohne sie koennte das Signal vor der Emission landen und der Fall
+// haette nichts gemessen. Der Startzustand ist parametrisiert, weil Fall 5 einen zweiten,
+// unbeteiligten Anruf braucht (s. CALL_ID_ZWEI).
+async function startWithOpenConsult(state = seed()) {
+  const srv = await startServer({ env: CONSULT_ON_ENV, seed: state });
   const webhook = raiseConsult(srv);
   await waitForLog(srv, CONSULT_RAISED_LOG, LOG_WARTE_MS);
   return { srv, webhook };
@@ -149,8 +192,8 @@ async function startWithOpenConsult(extra = {}) {
 
 // Der Anruf so, wie er WIRKLICH auf Platte steht - der einzige der drei Warteplaetze, der
 // einen Neustart ueberhaupt sieht.
-function persistedCall(srv) {
-  return srv.readStore().calls.find((call) => call.id === CALL_ID);
+function persistedCall(srv, callId = CALL_ID) {
+  return srv.readStore().calls.find((call) => call.id === callId);
 }
 
 // SIGTERM + Wartezeit bis zum Prozessende, ab dem Signal gemessen.
@@ -163,17 +206,26 @@ function shutdown(srv) {
   return { sentAt, exited };
 }
 
+// Der HARTE Abbruch (Absturz, OOM-Kill, SIGKILL): NICHT abfangbar - kein Drain, kein
+// finaler Store-Flush, kein Aufloesen der Warter. Ein SIGTERM waere hier die falsche
+// Messung: er loest genau den Pfad aus, den dieser Fall NICHT meint (Faelle 2/3).
+// Geliefert wird der Ausgang, damit die Haerte des Abbruchs zugesichert werden kann;
+// srv.stop() darf danach NIE laufen (es warten auf ein exit, das schon gefallen ist).
+function hardKill(srv) {
+  const exited = new Promise((resolve) =>
+    srv.child.once("exit", (code, signal) => resolve({ code, signal })),
+  );
+  srv.child.kill("SIGKILL");
+  return exited;
+}
+
 // GRUEN erwartet (Regressionsschutz). Ohne diesen Fall bestuende ein "Fix", der JEDE
 // Rueckfrage sofort absagt, saemtliche Faelle dieser Datei - die Absage ist nur dann
 // richtig, wenn der Normalfall weiter durchkommt.
 test("EL-NEUSTART 1 (Positiv-Kontrolle): ohne Neustart kommt die Rueckfrage durch und wird beantwortet", async (ctx) => {
   const { srv, webhook } = await startWithOpenConsult();
   try {
-    const angenommen = await fetch(`${srv.localUrl}/api/calls/${CALL_ID}/consult/answer`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_id: EVENT_ID, answers: [ANSWER_FACT] }),
-    });
+    const angenommen = await sendAnswer(srv, EVENT_ID);
 
     await ctx.test("die Antwort des Auftraggebers wird angenommen", async () => {
       assert.equal(angenommen.status, HTTP_OK, await angenommen.clone().text());
@@ -277,7 +329,8 @@ test("EL-NEUSTART 3: faehrt der Dienst herunter, wird der wartende Auftraggeber-
   }
 });
 
-// ROT erwartet (echter Defekt): beide Verbindungen enden sauber, der DATENSATZ nicht.
+// GRUEN erwartet, seit ca212e1: beide Verbindungen enden sauber - und der DRAIN schliesst
+// den Datensatz mit, bevor er dem Anbieter absagt (consult-raised.js).
 test("EL-NEUSTART 4: nach dem Neustart steht die verwaiste Rueckfrage nicht mehr als offen im Store", async (ctx) => {
   const { srv, webhook } = await startWithOpenConsult();
   let neu = null;
@@ -306,11 +359,10 @@ test("EL-NEUSTART 4: nach dem Neustart steht die verwaiste Rueckfrage nicht mehr
     });
 
     await ctx.test("der Auftraggeber bekommt die verwaiste Frage nicht erneut vorgelegt", async () => {
-      const res = await fetch(`${neu.localUrl}/api/calls/${CALL_ID}/consult`);
-      assert.equal(res.status, HTTP_OK);
-      const event = await res.json();
+      const vorgelegt = await pollNextConsult(neu);
+      assert.equal(vorgelegt.status, HTTP_OK);
       assert.notEqual(
-        event.event,
+        vorgelegt.body.event,
         "consult",
         "die Antwort auf diese Frage kann niemanden mehr erreichen - sie darf nicht " +
           "noch einmal gestellt werden",
@@ -318,6 +370,127 @@ test("EL-NEUSTART 4: nach dem Neustart steht die verwaiste Rueckfrage nicht mehr
     });
   } finally {
     await srv.stop();
+    if (neu) await neu.stop();
+  }
+});
+
+// GRUEN erwartet: das Netz UNTER dem Drain (expireOrphanedConsults, src/boot.js). Fall 4
+// misst den geordneten Weg; hier faellt der Dienst hart um, der Drain laeuft gar nicht -
+// der Datensatz erreicht den Neustart unangetastet offen (Vorbedingung 2).
+//
+// DIE POSITIV-KONTROLLE STECKT IM SELBEN FALL, dreifach: ein "Netz", das beim Boot pauschal
+// kappt, bestuende die Zusicherungen oben muehelos. Es scheitert an diesen: beide Anrufe
+// laufen weiter, und eine im NEUEN Prozess frisch gestellte Rueckfrage wird normal
+// vorgelegt UND beantwortet. Geschlossen werden darf NUR, was kein Warter mehr erreicht.
+//
+// DIE FRISCHE RUECKFRAGE GEHT AN DEN ZWEITEN ANRUF, nicht an den verwaisten: dessen
+// Kontingent ist verbraucht (MAX_IN_CALL_CONSULTS_PER_CALL = 1, s. CALL_ID_ZWEI). Der
+// verwaiste Anruf traegt dafuer die Gegenprobe - sein Poll laeuft PARALLEL und muss die
+// Haltezeit aussitzen, statt die alte Frage vorzulegen.
+test("EL-NEUSTART 5: nach einem HARTEN Abbruch schliesst der Neustart die verwaiste Rueckfrage, ohne den laufenden Anruf oder den Kanal zu beschaedigen", async (ctx) => {
+  const { srv, webhook } = await startWithOpenConsult(seedMitZweitemAnruf());
+  let neu = null;
+  try {
+    const ende = await hardKill(srv);
+    await webhook; // der Warter starb mit dem Prozess - das Ergebnis wird nur abgeraeumt
+
+    await ctx.test("Vorbedingung: der Abbruch war hart, kein Drain ist gelaufen", () => {
+      assert.equal(ende.signal, "SIGKILL");
+      assert.equal(
+        ende.code,
+        null,
+        "vom Signal beendet, NICHT geordnet heruntergefahren - sonst maesse der Fall den " +
+          "Drain-Pfad aus Fall 4 statt das Netz beim Boot",
+      );
+    });
+
+    await ctx.test("Vorbedingung: die verwaiste Rueckfrage steht offen auf Platte", () => {
+      assert.equal(
+        persistedCall(srv).consults[0].status,
+        CONSULT_STATUS.OPEN,
+        "ohne offenen Datensatz gibt es beim Neustart nichts zu schliessen - der Fall waere " +
+          "gruen, ohne je etwas gemessen zu haben",
+      );
+    });
+
+    neu = await startServer({ env: CONSULT_ON_ENV, dataDir: srv.dataDir });
+
+    // Die Gegenprobe des verwaisten Anrufs laeuft ab hier mit: sie braucht die volle
+    // Haltezeit, die Positiv-Kontrolle darunter nur Millisekunden. Waere die alte Frage
+    // noch offen, kaeme dieser Poll binnen eines Ticks mit ihr zurueck.
+    const verwaisterPoll = pollNextConsult(neu);
+
+    await ctx.test("Positiv-Kontrolle: beide Anrufe laufen nach dem Neustart weiter", () => {
+      assert.equal(
+        persistedCall(neu).status,
+        "active",
+        "das Netz raeumt eine Rueckfrage ab, nicht den Anruf",
+      );
+      assert.equal(persistedCall(neu, CALL_ID_ZWEI).status, "active");
+    });
+
+    await ctx.test("die verwaiste Rueckfrage ist geschlossen, nicht weiter offen", () => {
+      assert.equal(
+        persistedCall(neu).consults[0].status,
+        CONSULT_STATUS.EXPIRED,
+        "abgelaufen, NICHT beantwortet - auf diese Frage wartet niemand mehr, sie hat aber " +
+          "auch nie eine Antwort bekommen",
+      );
+    });
+
+    // Positiv-Kontrolle, zweite Haelfte: eine Rueckfrage DIESES Prozesses, am zweiten
+    // Anruf. Erst stellen, dann pollen - der Poll liest den Store, er kann sie nicht
+    // verpassen.
+    const frischeFrage = raiseConsult(neu, CONVERSATION_ID_ZWEI);
+    await waitForLog(neu, CONSULT_RAISED_LOG, LOG_WARTE_MS);
+    const vorgelegt = await pollNextConsult(neu, CALL_ID_ZWEI);
+
+    await ctx.test("die frische Rueckfrage wird normal vorgelegt", async () => {
+      assert.equal(
+        vorgelegt.status,
+        HTTP_OK,
+        `beantwortet erwartet, war ${vorgelegt.fehler ?? vorgelegt.status}`,
+      );
+      assert.equal(vorgelegt.body.event, "consult", "der Kanal traegt weiter Rueckfragen");
+      assert.equal(vorgelegt.body.eventId, EVENT_ID);
+    });
+
+    const angenommen = await sendAnswer(neu, EVENT_ID, CALL_ID_ZWEI);
+
+    await ctx.test("die frische Rueckfrage ist normal beantwortbar", async () => {
+      assert.equal(angenommen.status, HTTP_OK, await angenommen.clone().text());
+    });
+
+    const result = await frischeFrage;
+
+    await ctx.test("der wartende Anbieter-Aufruf bekommt genau diese Antwort", () => {
+      assert.equal(
+        result.status,
+        HTTP_OK,
+        `angenommen erwartet, war ${result.fehler ?? result.status}`,
+      );
+      assert.equal(result.body.status, "answered");
+      assert.equal(result.body.answer, ANSWER_FACT);
+    });
+
+    const verwaist = await verwaisterPoll;
+
+    await ctx.test("dem frischen Poll wird die verwaiste Frage nicht mehr vorgelegt", () => {
+      assert.equal(
+        verwaist.status,
+        HTTP_OK,
+        `beantwortet erwartet, war ${verwaist.fehler ?? verwaist.status}`,
+      );
+      assert.equal(
+        verwaist.body.event,
+        "none",
+        "die Antwort auf diese Frage kann niemanden mehr erreichen - sie darf nicht noch " +
+          "einmal gestellt werden",
+      );
+    });
+  } finally {
+    // KEIN srv.stop(): der Prozess ist hart gestorben, stop() wartete auf ein exit, das
+    // laengst gefallen ist.
     if (neu) await neu.stop();
   }
 });
