@@ -866,6 +866,40 @@ export function expireOpenConsults(s, callId) {
   return { call, changed };
 }
 
+// EL-NEUSTART-6: dieselbe Schliessung wie oben, PLUS der Verwaisungs-Marker. Ein harter
+// Abbruch (Absturz, SIGKILL) toetet jeden Warter, ohne dass ein Pfad den Datensatz noch
+// anfassen koennte - die Rueckfrage steht beim naechsten Start offen da und hat KEINE
+// Gespraechszeit gekostet. Ihr Kontingent-Platz muss frei werden (consultQuotaUsed), sonst
+// kann ein Anruf, der beim Anbieter weiterlaeuft, nie wieder rueckfragen.
+//
+// DIE UNTERSCHEIDUNG haengt an der Wanduhr, weil sie sonst nirgends steht: nur eine
+// Rueckfrage, deren Haltefrist beim Schliessen noch LIEF, kann einen lebenden Warter
+// gehabt haben. War die Frist bereits um, hat der Anruf sie voll bezahlt (oder der Prozess
+// starb erst danach) - dann bleibt der Platz verbraucht. IM ZWEIFEL BEZAHLT: unlesbarer
+// Zeitstempel oder fehlende Frist -> consultAlive false -> kein Marker (fail-closed, Regel
+// 1: lieber eine Rueckfrage zu wenig als ein umgehbarer Kosten-Riegel).
+//
+// NUR In-Call-Rueckfragen: Consult #0 (Klingelzeit, AL-P13) traegt gar kein Kontingent und
+// hat keine Wanduhr-Frist - ihn an CONSULT_OPEN_MS zu messen waere eine Kategorienfehler.
+// Der Status kommt unveraendert aus expireOpenConsults (EINE Quelle, kein zweiter
+// Schliess-Weg); dieser Aufruf haengt nur den Marker davor. Der Zustands-Parameter heisst
+// state und nicht s wie im Bestand: die kurzen Namen sind eingefrorene Altlast, neue Namen
+// unterschreiten die Mindestlaenge nicht.
+export function expireOrphanedConsults(state, callId, { nowMs, openMs }) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false, orphaned: 0 };
+  const orphanedAt = new Date().toISOString();
+  let orphaned = 0;
+  for (const consult of inCallConsults(call)) {
+    if (consult.status !== CONSULT_STATUS.OPEN) continue;
+    if (!consultAlive(consultAgeMs(consult, nowMs), openMs)) continue;
+    consult.orphanedAt = orphanedAt;
+    orphaned += 1;
+  }
+  const { changed } = expireOpenConsults(state, callId);
+  return { call, changed, orphaned };
+}
+
 // AL-P14: EIN Consult ist ein IN-CALL-Consult, wenn er NACH dem Abnehmen entstand.
 // Abgeleitet statt gespeichert: Consult #0 (AL-P13) entsteht beim Waehlen, also vor
 // markAnswered - ein zusaetzliches Quellenfeld waere ein zweiter, pflegebeduerftiger
@@ -878,10 +912,23 @@ export function isInCallConsult(call, consult) {
   return askedAtMs >= answeredAtMs;
 }
 
-// Alle In-Call-Consults dieses Calls (Kontingent-Zaehlung). Reiner Leser.
+// Alle In-Call-Consults dieses Calls. Reiner Leser.
 export function inCallConsults(call) {
   if (!Array.isArray(call?.consults)) return [];
   return call.consults.filter((consult) => isInCallConsult(call, consult));
+}
+
+// EL-NEUSTART-6: WIE VIEL Kontingent hat dieser Anruf verbraucht? Die EINE Zahl fuer beide
+// Riegel-Leser (consult/in-call.js, routes/webhooks-elevenlabs.js) - zwei Formulierungen
+// koennten auseinanderlaufen und der Riegel wirkte dann auf einem Weg anders als auf dem
+// anderen. Gezaehlt wird STATUSUNABHAENGIG: eine abgelaufene oder beantwortete Rueckfrage
+// hat das kostende Gespraech offen gehalten und ist verbraucht.
+//
+// AUSGENOMMEN ist genau eine Lage, die keine Gespraechszeit gekostet hat: die vom harten
+// Abbruch verwaiste Rueckfrage (expireOrphanedConsults setzt orphanedAt, ausschliesslich
+// beim Start und nur innerhalb ihrer Haltefrist). Reiner Leser.
+export function consultQuotaUsed(call) {
+  return inCallConsults(call).filter((consult) => !consult.orphanedAt).length;
 }
 
 // GQ-P13: wartet GENAU DIESE Antwort noch auf ihren ersten Modell-Turn? EINE Quelle (G5)

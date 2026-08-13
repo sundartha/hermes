@@ -26,7 +26,7 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
 import { localeFor } from "../i18n/locales.js";
-import { inCallConsults } from "../store/state-ops.js";
+import { consultQuotaUsed } from "../store/state-ops.js";
 import { safeEqual } from "../util.js";
 
 // Pfad + Header als benannte Konstanten (G25): beide stehen so in der Agenten-Vorlage.
@@ -101,7 +101,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
   // hier nichts ueber die Faehigkeit). Uebernommen werden deshalb GENAU die beiden
   // Faktoren, die keine Turn-Fakten sind - und zwar als Wiederverwendung ihrer Bausteine,
   // nicht als zweite Formulierung: die EINE Zahl MAX_IN_CALL_CONSULTS_PER_CALL und der
-  // EINE Zaehler inCallConsults (store/state-ops.js).
+  // EINE Zaehler consultQuotaUsed (store/state-ops.js).
   //
   // RICHTUNG ist der Sicherheitskern (consult/in-call.js): die Rede eines fremden
   // Inbound-Anrufers darf NIE als "Rueckfrage" in den Kontext des Tenants exportiert
@@ -112,7 +112,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
       config.tenancy.inCallConsultEnabled === true &&
       consultAllowedFor(store.resolveProfile(call.tenantId)) &&
       call.direction === "outbound" &&
-      inCallConsults(call).length < MAX_IN_CALL_CONSULTS_PER_CALL
+      consultQuotaUsed(call) < MAX_IN_CALL_CONSULTS_PER_CALL
     );
   }
 

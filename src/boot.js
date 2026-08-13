@@ -44,7 +44,15 @@ import {
   normNum,
 } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
-import { hasPrunedSomething, tenantsOf } from "./store/state-ops.js";
+import {
+  expireOrphanedConsults as expireOrphanedConsultsOp,
+  hasPrunedSomething,
+  tenantsOf,
+} from "./store/state-ops.js";
+// EL-NEUSTART-6: die Haltefrist der Rueckfrage, aus der EINEN Quelle (G5) - dieselbe Zahl,
+// gegen die der Anbieter-Warter selbst laeuft. Kein Zyklus: consult/in-call.js importiert
+// boot.js nicht.
+import { CONSULT_OPEN_MS } from "./consult/in-call.js";
 import { SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibration.js";
 import { CATALOG_SLUGS } from "./plans.js";
@@ -872,20 +880,47 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
 // DRITTE Stelle DESSELBEN Mechanismus (Call-Ende: setCallEndedAt; Drain: der Warter selbst),
 // kein zweiter Status: expireOpenConsults heisst abgelaufen, NICHT beantwortet.
 //
+// EL-NEUSTART-6: geschlossen wird beides, GEZAEHLT nicht. Eine Rueckfrage, deren Haltefrist
+// beim Start noch lief, kann ihre Antwort nur von einem Warter erwartet haben, den der
+// Abbruch mitgenommen hat - sie hat KEINE Gespraechszeit gekostet und gibt ihren
+// Kontingent-Platz frei (Marker orphanedAt, gelesen von consultQuotaUsed). Eine Rueckfrage,
+// deren Frist bereits um war, hat der Anruf voll bezahlt: ihr Platz bleibt verbraucht -
+// sonst waere der Kosten-Riegel umgehbar, indem man Rueckfragen ablaufen laesst (Regel 1).
+// Im Zweifel gilt BEZAHLT (fail-closed, s. expireOrphanedConsults in store/state-ops.js).
+//
+// VORBEHALT: CONSULT_OPEN_MS ist Konfiguration und kann sich zwischen zwei Starts geaendert
+// haben - dann misst diese Naht die Rueckfrage an einer Frist, unter der sie nie lief. Die
+// Richtung des Fehlers ist die sichere: eine VERKUERZTE Frist laesst eine verwaiste
+// Rueckfrage als bezahlt gelten (eine Rueckfrage zu wenig), nie umgekehrt einen bezahlten
+// Platz frei werden. Der Fristablauf im laufenden Prozess (conversation/consult-raised.js)
+// schreibt seinen Status ohnehin selbst; diese Ableitung deckt nur den Rest: der Abbruch
+// faellt NACH dem Fristablauf, aber BEVOR der Warter ihn schreiben konnte.
+//
 // Nur laufende Anrufe - bei terminalen hat setCallEndedAt bereits geschlossen. Ein Warter
 // aus dem Vorprozess kann per Definition nicht mehr leben, und ein Consult DIESES Laufs kann
 // es noch nicht geben: die Naht sitzt vor app.listen, es ist noch keine Route erreichbar
 // (Muster rearmActiveCallTimers/rearmActiveCalls, unmittelbar davor). Setzt keine Timer und
 // ruft kein process.exit - INV-5 bleibt unberuehrt. pendingConsult ist der bestehende reine
-// Leser fuer "an diesem Anruf ist noch etwas offen"; die Zeile traegt nur eine Anzahl, nie
-// eine Frage (Regel 4) und erscheint nur, wenn wirklich etwas geschlossen wurde.
+// Leser fuer "an diesem Anruf ist noch etwas offen". Geschrieben wird nach dem bestehenden
+// mutate-then-save()-Muster (store/pg.js; Vorbild applyTenantIdentity in wiring/web-login.js)
+// - ohne Store-Lock, weil vor app.listen kein zweiter Schreiber existiert. Die Zeile traegt
+// nur Anzahlen, nie eine Frage (Regel 4) und erscheint nur, wenn wirklich etwas geschlossen
+// wurde.
 function expireOrphanedConsults(store) {
-  const orphaned = store
-    .load()
-    .calls.filter((call) => call.status === "active" && store.pendingConsult(call.id));
-  for (const call of orphaned) store.expireOpenConsults(call.id);
-  if (orphaned.length)
-    console.log(`[boot] verwaiste Rueckfragen geschlossen: ${orphaned.length} Anrufe`);
+  const state = store.load();
+  const nowMs = Date.now();
+  const orphaned = state.calls.filter(
+    (call) => call.status === "active" && store.pendingConsult(call.id),
+  );
+  if (!orphaned.length) return;
+  let freed = 0;
+  for (const call of orphaned)
+    freed += expireOrphanedConsultsOp(state, call.id, { nowMs, openMs: CONSULT_OPEN_MS }).orphaned;
+  store.save();
+  console.log(
+    `[boot] verwaiste Rueckfragen geschlossen: ${orphaned.length} Anrufe, ` +
+      `${freed} mit freigegebenem Kontingent`,
+  );
 }
 
 export async function bootServer({
