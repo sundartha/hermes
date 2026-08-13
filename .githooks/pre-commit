@@ -29,6 +29,25 @@ if [ -n "$staged_js" ]; then
   fi
 fi
 
+# Aufraeum-Gate: eine vorgemerkte Bestandsdatei mit noch offenen Eintraegen in
+# eslint-suppressions.json (Datei+Regel -> Anzahl, keine Einzel-Fundstellen)
+# wird abgelehnt. Sonst kann derselbe Regelverstoss an anderer Stelle der
+# Datei neu entstehen, waehrend die eingefrorene Zahl unveraendert bleibt und
+# der neue Verstoss still durchrutscht (siehe CLAUDE.md). IFS wird auf
+# Newline verengt, damit Dateinamen mit Leerzeichen nicht auseinanderfallen.
+if [ -n "$staged_js" ]; then
+  old_ifs=$IFS
+  IFS='
+'
+  set -- $staged_js
+  IFS=$old_ifs
+  node scripts/check-staged-suppressions.js "$@"
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    exit 1
+  fi
+fi
+
 npm run lint
 status=$?
 
