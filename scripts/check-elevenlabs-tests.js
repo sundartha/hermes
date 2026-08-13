@@ -8,8 +8,9 @@
 // GARANTIERT erfuellt, das Veto-Kriterium bestuende unabhaengig vom
 // Agentenverhalten. Ein Katalog, der immer gruen ist, misst nichts.
 //
-// (2) VOKABULAR: Agentenkonfiguration und Testdefinitionen muessen dieselben
-// dynamic-variable-Namen benutzen (siehe checkVariableVocabulary unten).
+// (2) VOKABULAR: JEDE einzelne Testdefinition muss jede dynamic-variable der
+// Agentenkonfiguration setzen, und keine, die diese nicht kennt (siehe
+// checkVariableVocabulary unten).
 //
 // elevenlabs/tests/templates/ ist ausgenommen: Vorlagen fuer neue
 // Testdefinitionen duerfen Platzhalter tragen, sie sind keine Abnahmekriterien.
@@ -41,6 +42,14 @@ const DOC_KEY_PREFIX = "_";
 const PATH_ROOT = "$";
 const LOG_PREFIX = "[check-elevenlabs-tests]";
 
+// Der EINE Doku-Schluessel-Test fuer BEIDE Pruefungen. Frueher sprang nur der
+// Vokabular-Abgleich ueber diese Bloecke; die Platzhalter-Pruefung stieg hinein
+// und meldete Prosa wie "Alle <AUSFUELLEN: ...>-Werte vor dem Push ersetzen" als
+// echten Fund - ein Gate, das deshalb nie gruen werden kann, misst nichts.
+function isDocKey(key) {
+  return key.startsWith(DOC_KEY_PREFIX);
+}
+
 // Listet alle .json-Dateien unterhalb von absDir (rel. zu rootDir), rekursiv,
 // ausser unterhalb eines Verzeichnisses namens TEMPLATES_DIR_NAME - dort
 // duerfen Platzhalter stehen (Vorlagen, keine Abnahmekriterien).
@@ -62,6 +71,8 @@ function listJsonFiles(absDir, rootDir) {
 
 // Durchsucht einen geparsten JSON-Wert rekursiv nach Platzhaltern und traegt
 // jeden Fund mit seinem Feldpfad (JSONPath-artig, $.a.b[0]) in findings ein.
+// Doku-Schluessel (isDocKey) bleiben aussen vor: sie sind kein Teil des
+// ElevenLabs-Schemas, nichts darin wird je hochgeladen oder ausgefuellt.
 function walkForPlaceholders(value, path, findings) {
   if (typeof value === "string") {
     for (const match of value.matchAll(PLACEHOLDER_PATTERN)) {
@@ -77,6 +88,7 @@ function walkForPlaceholders(value, path, findings) {
   }
   if (value !== null && typeof value === "object") {
     for (const [key, child] of Object.entries(value)) {
+      if (isDocKey(key)) continue;
       walkForPlaceholders(child, `${path}.${key}`, findings);
     }
   }
@@ -91,12 +103,12 @@ function declaredVariableNames(value) {
   return isPlainObject ? Object.keys(value) : [];
 }
 
-// Laeuft die Eintraege eines Objekts ab: Doku-Schluessel (DOC_KEY_PREFIX)
+// Laeuft die Eintraege eines Objekts ab: Doku-Schluessel (isDocKey)
 // ueberspringen, unter dynamic_variables zusaetzlich die Schluessel als
 // deklarierte Variablen aufnehmen, sonst normal weiter absteigen.
 function walkObjectForVariables(objectValue, acc) {
   for (const [key, child] of Object.entries(objectValue)) {
-    if (key.startsWith(DOC_KEY_PREFIX)) continue;
+    if (isDocKey(key)) continue;
     if (key === DYNAMIC_VARIABLES_KEY) {
       for (const name of declaredVariableNames(child)) acc.declared.add(name);
     }
@@ -138,67 +150,43 @@ function readJsonFile(rootDir, relFile) {
   }
 }
 
-// Vereinigt die Variablennamen aller Testdefinitionen zu einer Menge: fuer den
-// Abgleich zaehlt, ob IRGENDEIN Test die Variable kennt, nicht welcher.
-function unionOfVariableNames(testVariablesByFile) {
-  const names = new Set();
-  for (const fileNames of testVariablesByFile.values()) {
-    for (const name of fileNames) names.add(name);
+// Benutzt ueberhaupt eine Testdefinition Variablen? Entscheidet allein, ob eine
+// fehlende Agentenkonfiguration ein Fund ist (s. checkVariableVocabulary).
+function anyVariableUsed(vocabularyByFile) {
+  for (const { declared, referenced } of vocabularyByFile.values()) {
+    if (declared.size > 0 || referenced.size > 0) return true;
   }
-  return names;
+  return false;
 }
 
-// Gleicht das Platzhalter-Vokabular beider Seiten ab, in BEIDE Richtungen.
-//
-// Wo die Platzhalter stehen, ist belegt, nicht geraten: die Agentenkonfiguration
-// REFERENZIERT sie als {{name}} in prompt/first_message (Beleg s.
-// VARIABLE_PATTERN), eine Testdefinition SETZT sie im Schema-Feld
-// dynamic_variables (elevenlabs/tests/README.md, Feldtabelle: "dynamic_variables
+// Richtung 1: DECKUNG PRO TESTDEFINITION, nicht ueber alle Dateien zusammen.
+// Beim Testlauf rendert ElevenLabs den Prompt mit den dynamic_variables genau
+// DIESER Definition (elevenlabs/tests/README.md, Feldtabelle: "dynamic_variables
 // | Map string->any, alle drei Typen", Quelle
-// https://elevenlabs.io/docs/api-reference/tests/create) und darf sie zusaetzlich
-// im Erwartungstext als {{name}} erwaehnen (so macht es a6 fuer owner_name).
-// Testseitig zaehlen deshalb beide Arten als "kennt die Variable".
-//
-// Beide Abweichungen sind ein Befund:
-//   - Konfiguration kennt sie, kein Test setzt sie -> im Testlauf bleibt der
-//     Platzhalter unersetzt, der Test misst einen anderen Text als Produktion.
-//   - Test kennt sie, Konfiguration nicht -> tote Variable, die nichts befuellt.
-function checkVariableVocabulary(rootDir, testVariablesByFile) {
-  const testVariables = unionOfVariableNames(testVariablesByFile);
-
-  // Fehlt die Agentenkonfiguration, gibt es keine Gegenseite fuer den Abgleich.
-  // Das ist genau dann ein Fund, wenn die Testdefinitionen ueberhaupt Variablen
-  // benutzen: dann waere die Pruefung still ausgefallen, statt zu messen. Ohne
-  // Variablen auf der Testseite gibt es schlicht nichts zu vergleichen - dann
-  // schweigt der Abgleich, statt eine Abweichung zu behaupten.
-  if (!existsSync(join(rootDir, AGENT_CONFIG_REL))) {
-    if (testVariables.size === 0) return [];
-    return [
-      `Datei fehlt (fail-closed): ${AGENT_CONFIG_REL} - Vokabular-Abgleich nicht moeglich`,
-    ];
+// https://elevenlabs.io/docs/api-reference/tests/create). Fehlt eine Variable
+// dort, faehrt dieser Lauf mit leerem Wert - was Nachbardateien setzen, deckt
+// das nicht. Und nur SETZEN deckt: eine blosse {{name}}-Erwaehnung im
+// Erwartungstext befuellt nichts.
+function uncoveredVariableFindings(configVariables, vocabularyByFile) {
+  const findings = [];
+  for (const [relFile, { declared }] of vocabularyByFile) {
+    for (const name of configVariables) {
+      if (declared.has(name)) continue;
+      findings.push(
+        `${relFile}: {{${name}}} - Variable der Agentenkonfiguration, die diese Testdefinition nicht setzt (${DYNAMIC_VARIABLES_KEY}); dieser Testlauf rendert sie leer`,
+      );
+    }
   }
-  const { parsed, error } = readJsonFile(rootDir, AGENT_CONFIG_REL);
-  if (error) return [error];
-
-  return vocabularyDiffFindings(
-    collectVariables(parsed).referenced,
-    testVariablesByFile,
-  );
+  return findings;
 }
 
-// Die beiden Richtungen des Abgleichs als Findings-Texte (Datei + Variablenname
-// im Klartext, damit der Fund ohne Nachschlagen behebbar ist).
-function vocabularyDiffFindings(configVariables, testVariablesByFile) {
-  const testVariables = unionOfVariableNames(testVariablesByFile);
+// Richtung 2: tote Variable - die Testdefinition setzt oder erwaehnt einen
+// Namen, den die Agentenkonfiguration nirgends als {{name}} referenziert (Beleg
+// s. VARIABLE_PATTERN). Er befuellt nichts, egal auf welcher Seite er steht.
+function unknownVariableFindings(configVariables, vocabularyByFile) {
   const findings = [];
-  for (const name of configVariables) {
-    if (testVariables.has(name)) continue;
-    findings.push(
-      `${AGENT_CONFIG_REL}: {{${name}}} - Variable der Agentenkonfiguration, die keine Testdefinition setzt (${DYNAMIC_VARIABLES_KEY}) oder benutzt`,
-    );
-  }
-  for (const [relFile, names] of testVariablesByFile) {
-    for (const name of names) {
+  for (const [relFile, { declared, referenced }] of vocabularyByFile) {
+    for (const name of new Set([...declared, ...referenced])) {
       if (configVariables.has(name)) continue;
       findings.push(
         `${relFile}: {{${name}}} - Variable der Testdefinition, die die Agentenkonfiguration nicht kennt (${AGENT_CONFIG_REL})`,
@@ -206,6 +194,31 @@ function vocabularyDiffFindings(configVariables, testVariablesByFile) {
     }
   }
   return findings;
+}
+
+// Gleicht das Platzhalter-Vokabular beider Seiten ab, in BEIDE Richtungen (s.
+// uncoveredVariableFindings / unknownVariableFindings). Findings nennen Datei
+// und Variablennamen im Klartext, damit sie ohne Nachschlagen behebbar sind.
+function checkVariableVocabulary(rootDir, vocabularyByFile) {
+  // Fehlt die Agentenkonfiguration, gibt es keine Gegenseite fuer den Abgleich.
+  // Das ist genau dann ein Fund, wenn die Testdefinitionen ueberhaupt Variablen
+  // benutzen: dann waere die Pruefung still ausgefallen, statt zu messen. Ohne
+  // Variablen auf der Testseite gibt es schlicht nichts zu vergleichen - dann
+  // schweigt der Abgleich, statt eine Abweichung zu behaupten.
+  if (!existsSync(join(rootDir, AGENT_CONFIG_REL))) {
+    if (!anyVariableUsed(vocabularyByFile)) return [];
+    return [
+      `Datei fehlt (fail-closed): ${AGENT_CONFIG_REL} - Vokabular-Abgleich nicht moeglich`,
+    ];
+  }
+  const { parsed, error } = readJsonFile(rootDir, AGENT_CONFIG_REL);
+  if (error) return [error];
+
+  const configVariables = collectVariables(parsed).referenced;
+  return [
+    ...uncoveredVariableFindings(configVariables, vocabularyByFile),
+    ...unknownVariableFindings(configVariables, vocabularyByFile),
+  ];
 }
 
 // Prueft alle .json-Testdefinitionen unter elevenlabs/tests/ (ausser
@@ -224,7 +237,7 @@ export function checkElevenlabsTests({ rootDir = REPO_ROOT } = {}) {
   }
 
   const findings = [];
-  const testVariablesByFile = new Map();
+  const vocabularyByFile = new Map();
   for (const relFile of listJsonFiles(testDirAbs, rootDir)) {
     const { parsed, error } = readJsonFile(rootDir, relFile);
     if (error) {
@@ -236,11 +249,10 @@ export function checkElevenlabsTests({ rootDir = REPO_ROOT } = {}) {
     for (const { path, marker } of placeholders) {
       findings.push(`${relFile}: ${path} - Platzhalter gefunden (${marker})`);
     }
-    const { referenced, declared } = collectVariables(parsed);
-    testVariablesByFile.set(relFile, new Set([...declared, ...referenced]));
+    vocabularyByFile.set(relFile, collectVariables(parsed));
   }
 
-  findings.push(...checkVariableVocabulary(rootDir, testVariablesByFile));
+  findings.push(...checkVariableVocabulary(rootDir, vocabularyByFile));
 
   return { ok: findings.length === 0, findings };
 }
