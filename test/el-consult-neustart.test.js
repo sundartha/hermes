@@ -21,9 +21,11 @@
 //   3 Auftraggeber beim Shutdown   -> 200 event=none nach ~0,3 s                (GRUEN)
 //   4 Datensatz nach dem Drain     -> geschlossen, kein zweites Vorlegen        (GRUEN)
 //   5 Datensatz nach HARTEM Abbruch-> geschlossen, der Anruf laeuft weiter      (GRUEN)
-//   6 KONTINGENT nach HARTEM Abbruch-> der Anruf kann NIE WIEDER rueckfragen    (ROT)
+//   6 Kontingent nach HARTEM Abbruch-> der Platz wird frei, er kann wieder fragen(GRUEN)
 //   7 Kontingent nach Ablauf ohne Antwort -> bleibt verbraucht                  (GRUEN)
 //   8 Kontingent nach Antwort      -> bleibt verbraucht                         (GRUEN)
+//   9 KONTINGENT nach dem DRAIN    -> der Anruf kann NIE WIEDER rueckfragen     (ROT)
+//  10 Kontingent nach Ablauf VOR dem Drain -> bleibt verbraucht                 (GRUEN)
 // Faelle 1-3 sind Regressionsschutz (die Drain-Freigabe, delivery.releaseOpenPolls +
 // consult-raised.isDraining, laeuft vor httpServer.close und loest beide Halter auf).
 // Fall 4 war der echte Defekt, den diese Datei gefunden hat: kein Pfad schloss den
@@ -37,6 +39,12 @@
 // gar nicht erst laufen - dann schliesst der BOOT die verwaisten Rueckfragen
 // (expireOrphanedConsults, src/boot.js, vor app.listen). Ohne diesen Fall waere dieses
 // Netz nur einmal von Hand belegt und beim naechsten Umbau still weg.
+// Fall 9 misst denselben Kontingent-Platz am HAEUFIGEREN Weg: der harte Abbruch ist die
+// Ausnahme, ein Deploy die Regel - und dort schliesst der Drain seine Rueckfrage SELBST
+// (Fall 4), ohne Verwaisungs-Marker. Das Boot-Netz sieht sie damit beim naechsten Start
+// gar nicht mehr (expireOrphanedConsults sucht ueber pendingConsult, also nur ueber OFFENE
+// Datensaetze), und der Platz bleibt verbraucht: nach jedem Deploy stuende ein laufender
+// Anruf mit offener Rueckfrage dauerhaft stumm.
 //
 // WARUM DER TIMING-RIEGEL IN 2/3 UND NICHT NUR "200": ohne ihn waere auch die natuerliche
 // Frist (CONSULT_OPEN_MS bzw. CONSULT_POLL_HOLD_MS) eine bestandene Messung - dann misst
@@ -134,6 +142,17 @@ const CONSULT_ON_ENV = Object.freeze({
   SHUTDOWN_DRAIN_TIMEOUT_MS: String(DRAIN_TIMEOUT_MS),
 });
 
+// Dieselbe Konfiguration mit der KURZEN Haltefrist - die Umgebung der beiden Ablauf-Faelle
+// (7 und 10). EINE Stelle statt zweier Literale: Fall 10 startet zweimal (vor und nach dem
+// Herunterfahren) und MUSS dieselbe Frist fahren wie Fall 7. Faehrt ein Neustart eine
+// ANDERE Frist, misst das Boot-Netz die Rueckfrage an einer Frist, unter der sie nie lief
+// (der VORBEHALT in src/boot.js) - der Fall waere dann rot aus einem Konfigurations-Grund
+// statt aus dem gemessenen Verhalten.
+const KURZE_FRIST_ENV = Object.freeze({
+  ...CONSULT_ON_ENV,
+  CONSULT_OPEN_MS: String(KURZ_OFFEN_MS),
+});
+
 // Ein laufender Outbound-Anruf mit Anbieter-Kennung. maxDurationS grosszuegig, damit der
 // Boot-Re-Arm (rearmActiveCallTimers) das Leg beim NEUSTART nicht als Zombie
 // terminalisiert - genau das wuerde den Datensatz ueber setCallEndedAt schliessen und
@@ -221,6 +240,17 @@ async function startWithOpenConsult(state = seed()) {
   return { srv, webhook };
 }
 
+// Das Gegenstueck fuer die beiden Ablauf-Faelle (7 und 10): Server mit KURZER Haltefrist
+// plus eine Rueckfrage, die darin wirklich ABGELAUFEN ist, weil niemand geantwortet hat.
+// Der Aufruf wird hier bereits ausgewartet - das Ablaufen IST die Vorbedingung, und was er
+// zurueckgibt, prueft pruefeAblaufOhneAntwort. Gewartet wird hoechstens KURZ_OFFEN_MS.
+async function startWithExpiredConsult() {
+  const srv = await startServer({ env: KURZE_FRIST_ENV, seed: seed() });
+  const webhook = raiseConsult(srv);
+  await waitForLog(srv, CONSULT_RAISED_LOG, LOG_WARTE_MS);
+  return { srv, abgelaufen: await webhook };
+}
+
 // Der Anruf so, wie er WIRKLICH auf Platte steht - der einzige der drei Warteplaetze, der
 // einen Neustart ueberhaupt sieht.
 function persistedCall(srv, callId = CALL_ID) {
@@ -284,6 +314,29 @@ async function pruefeKontingentVerbraucht(ctx, srv) {
     assert.equal(abgelehnt.body.error, GATE_ABGELEHNT, "abgelehnt am Faehigkeits-Gate");
   });
   return versuch;
+}
+
+// Die Vorbedingung, die sich die beiden Ablauf-Faelle TEILEN (7 und 10): diese Rueckfrage
+// ist ABGELAUFEN, weil niemand geantwortet hat - der Anruf lief die volle Haltefrist
+// weiter und hat dafuer echte Gespraechszeit bezahlt. Genau das unterscheidet sie von
+// einer verwaisten. EINE Formulierung fuer beide Faelle (Muster
+// pruefeKontingentVerbraucht): zwei Kopien koennten auseinanderlaufen, und dann bewiese
+// eine der beiden Kontrollen etwas anderes als die andere.
+async function pruefeAblaufOhneAntwort(ctx, abgelaufen) {
+  await ctx.test("Vorbedingung: die Rueckfrage lief ab, weil niemand geantwortet hat", () => {
+    assert.equal(
+      abgelaufen.status,
+      HTTP_OK,
+      `beantwortet erwartet, war ${abgelaufen.fehler ?? abgelaufen.status}`,
+    );
+    assert.equal(abgelaufen.body.status, "timeout", "abgelaufen, NICHT beantwortet");
+    assert.ok(
+      abgelaufen.ms >= KURZ_OFFEN_MS,
+      `nach ${abgelaufen.ms} ms zurueck - erst die volle Haltefrist ${KURZ_OFFEN_MS} ms ` +
+        "ist die Gespraechszeit, die diese Rueckfrage gekostet hat. Kaeme die Absage " +
+        "frueher, maesse der Fall einen abgerissenen Warter statt eines Fristablaufs.",
+    );
+  });
 }
 
 // Wartet, bis GENAU DIESE Rueckfrage auf Platte steht - der Beleg, dass sie ANGENOMMEN
@@ -599,10 +652,10 @@ test("EL-NEUSTART 5: nach einem HARTEN Abbruch schliesst der Neustart die verwai
 // laesst. Beide Kontrollen laufen OHNE Neustart: sie messen die Zaehlregel selbst, nicht das
 // Boot-Netz.
 
-// ROT ERWARTET - der gemessene Befund, absichtlich offen. KEIN Abnahmekriterium (keine
-// ABNAHME-Kennung): der Fall gehoert in den Regressionslauf und faellt dort auf, bis das
-// Boot-Netz den Platz der verwaisten Rueckfrage freigibt, statt sie nur als tot zu
-// markieren.
+// GRUEN erwartet: das Boot-Netz gibt den Kontingent-Platz der verwaisten Rueckfrage frei,
+// statt sie nur als tot zu markieren (Marker orphanedAt, expireOrphanedConsults in
+// store/state-ops.js; consultQuotaUsed ignoriert markierte Datensaetze). Bis zu diesem
+// Netz war der Fall der gemessene Befund und absichtlich rot.
 //
 // DERSELBE Anruf, nicht ein zweiter: Fall 5 musste seine frische Rueckfrage an einem
 // FREMDEN Anruf stellen, weil genau dieses Kontingent verbrannt ist - hier ist das der
@@ -692,30 +745,11 @@ test("EL-NEUSTART 6: nach einem HARTEN Abbruch darf DERSELBE Anruf wieder rueckf
 // OFFEN stehen (kein Pfad schreibt beim Fristablauf des Anbieter-Warters einen Status), er
 // sieht also aus wie eine frisch verwaiste Rueckfrage.
 test("EL-NEUSTART 7 (Positiv-Kontrolle): eine Rueckfrage, die ABLIEF, weil niemand geantwortet hat, verbraucht das Kontingent ihres Anrufs", async (ctx) => {
-  const srv = await startServer({
-    env: { ...CONSULT_ON_ENV, CONSULT_OPEN_MS: String(KURZ_OFFEN_MS) },
-    seed: seed(),
-  });
+  // NIEMAND antwortet - die Haltefrist laeuft im laufenden Prozess aus.
+  const { srv, abgelaufen } = await startWithExpiredConsult();
   let zweite = null;
   try {
-    const webhook = raiseConsult(srv);
-    await waitForLog(srv, CONSULT_RAISED_LOG, LOG_WARTE_MS);
-    const abgelaufen = await webhook; // NIEMAND antwortet - die Haltefrist laeuft aus
-
-    await ctx.test("Vorbedingung: die Rueckfrage lief ab, weil niemand geantwortet hat", () => {
-      assert.equal(
-        abgelaufen.status,
-        HTTP_OK,
-        `beantwortet erwartet, war ${abgelaufen.fehler ?? abgelaufen.status}`,
-      );
-      assert.equal(abgelaufen.body.status, "timeout", "abgelaufen, NICHT beantwortet");
-      assert.ok(
-        abgelaufen.ms >= KURZ_OFFEN_MS,
-        `nach ${abgelaufen.ms} ms zurueck - erst die volle Haltefrist ${KURZ_OFFEN_MS} ms ` +
-          "ist die Gespraechszeit, die diese Rueckfrage gekostet hat. Kaeme die Absage " +
-          "frueher, maesse der Fall einen abgerissenen Warter statt eines Fristablaufs.",
-      );
-    });
+    await pruefeAblaufOhneAntwort(ctx, abgelaufen);
 
     zweite = await pruefeKontingentVerbraucht(ctx, srv);
   } finally {
@@ -748,6 +782,155 @@ test("EL-NEUSTART 8 (Positiv-Kontrolle): eine BEANTWORTETE Rueckfrage verbraucht
     zweite = await pruefeKontingentVerbraucht(ctx, srv);
   } finally {
     await srv.stop();
+    if (zweite) await zweite;
+  }
+});
+
+// ---- Das KONTINGENT nach dem GEORDNETEN Herunterfahren (Faelle 9-10) ----------------
+// DIESELBE Unterscheidung wie in 6-8, am ANDEREN Weg - und am haeufigeren. Der harte
+// Abbruch ist die Ausnahme, ein Deploy die Regel: dort faehrt der Dienst geordnet herunter,
+// der Drain sagt dem wartenden Anbieter-Aufruf ab und schliesst den Datensatz (Fall 4),
+// waehrend die Haltefrist noch laeuft. Der Wartende stirbt genauso wie beim harten
+// Abbruch, Gespraechszeit hat diese Rueckfrage nicht gekostet - ihr Kontingent-Platz muss
+// also genauso frei werden.
+//
+// DAS BOOT-NETZ ERREICHT DIESEN FALL NICHT: expireOrphanedConsults (src/boot.js) sucht
+// ueber pendingConsult, also ueber OFFENE Datensaetze - der Drain hat den seinen bereits
+// geschlossen. WO der Platz freigegeben wird, entscheidet der Fix; diese Faelle pinnen
+// ausschliesslich das Ergebnis.
+
+// ROT ERWARTET - der gemessene Befund, absichtlich offen. KEIN Abnahmekriterium (keine
+// ABNAHME-Kennung): der Fall gehoert in den Regressionslauf und faellt dort auf, bis der
+// Drain-Pfad den Platz seiner Rueckfrage freigibt.
+//
+// SIGTERM, NICHT SIGKILL: der harte Abbruch ist Fall 6 und laeuft ueber eine andere Naht.
+// Ginge hier ein SIGKILL raus, maesse der Fall zum zweiten Mal das Boot-Netz, statt die
+// Luecke im Drain-Pfad zu zeigen. Aufbau sonst identisch zu Fall 6 - DERSELBE Anruf,
+// nicht ein zweiter: genau dessen Kontingent ist der Messgegenstand.
+test("EL-NEUSTART 9: nach einem GEORDNETEN Herunterfahren darf DERSELBE Anruf wieder rueckfragen - die beim Drain geschlossene Rueckfrage verbrennt sein Kontingent nicht", async (ctx) => {
+  const { srv, webhook } = await startWithOpenConsult();
+  let neu = null;
+  let zweite = null;
+  try {
+    const { exited } = shutdown(srv);
+    const abgesagt = await webhook;
+    const ende = await exited;
+
+    await ctx.test("Vorbedingung: geordnet heruntergefahren, waehrend die Haltefrist lief", () => {
+      assert.equal(
+        ende.code,
+        0,
+        "geordnet beendet, NICHT vom Signal getoetet - sonst maesse der Fall das Netz beim " +
+          "Boot statt den Drain-Pfad",
+      );
+      assert.equal(
+        abgesagt.status,
+        HTTP_OK,
+        `beantwortet erwartet, war ${abgesagt.fehler ?? abgesagt.status} - eine gekappte ` +
+          "Verbindung hiesse, der Drain ist gar nicht gelaufen",
+      );
+      assert.equal(abgesagt.body.status, "timeout", "abgelaufen, NICHT beantwortet");
+      assert.ok(
+        abgesagt.ms < OPEN_MS,
+        `erst nach ${abgesagt.ms} ms zurueck - die Haltefrist ist ${OPEN_MS} ms. Nur eine ` +
+          "Rueckfrage, deren Frist beim Schliessen noch LIEF, hat keine Gespraechszeit " +
+          "gekostet; haette sie die volle Frist ausgesessen, waere sie bezahlt und ihr " +
+          "Platz zu Recht verbraucht.",
+      );
+    });
+
+    neu = await startServer({ env: CONSULT_ON_ENV, dataDir: srv.dataDir });
+
+    await ctx.test("Vorbedingung: der Anruf laeuft weiter, die Rueckfrage ist tot", () => {
+      assert.equal(
+        persistedCall(neu).status,
+        "active",
+        "das Gespraech laeuft beim Anbieter weiter - genau deshalb braucht dieser Anruf " +
+          "seine Rueckfrage-Moeglichkeit noch",
+      );
+      const consult = persistedCall(neu).consults[0];
+      assert.notEqual(consult.status, CONSULT_STATUS.OPEN, "auf sie wartet niemand mehr");
+      assert.notEqual(
+        consult.status,
+        CONSULT_STATUS.ANSWERED,
+        "sie hat nie eine Antwort bekommen - waere sie beantwortet, waere ihr Platz zu " +
+          "Recht verbraucht (Fall 8)",
+      );
+    });
+
+    zweite = raiseConsult(neu);
+    const datensatz = await warteAufRueckfrage(neu, ZWEITES_EVENT_ID);
+    // Nur im abgelehnten Fall gelesen, Muster Fall 6: dort ist der Aufruf laengst zurueck.
+    const absage = datensatz
+      ? null
+      : await Promise.race([zweite, sleep(ABLEHNUNG_MAX_MS).then(() => HAELT_OFFEN)]);
+
+    await ctx.test("derselbe Anruf bekommt eine zweite Rueckfrage angelegt", () => {
+      assert.ok(
+        datensatz,
+        `abgewiesen mit ${absage?.status} ${JSON.stringify(absage?.body ?? absage?.fehler)} - ` +
+          "die beim Drain geschlossene Rueckfrage zaehlt weiter aufs Kontingent, obwohl ihr " +
+          "Wartender mit dem Herunterfahren gestorben ist und sie keine Gespraechszeit " +
+          "gekostet hat. Nach JEDEM Deploy kann dieser Anruf nie wieder rueckfragen.",
+      );
+    });
+
+    const angenommen = await sendAnswer(neu, ZWEITES_EVENT_ID);
+
+    await ctx.test("die zweite Rueckfrage ist normal beantwortbar", async () => {
+      assert.equal(angenommen.status, HTTP_OK, await angenommen.clone().text());
+    });
+
+    const result = await zweite;
+
+    await ctx.test("der wartende Anbieter-Aufruf bekommt genau diese Antwort", () => {
+      assert.equal(
+        result.status,
+        HTTP_OK,
+        `angenommen erwartet, war ${result.fehler ?? result.status}`,
+      );
+      assert.equal(result.body.status, "answered");
+      assert.equal(result.body.answer, ANSWER_FACT);
+    });
+  } finally {
+    // srv.stop() ist nach dem SIGTERM oben ein No-op (der Prozess ist beendet), bleibt aber
+    // stehen: bricht der Fall vor dem Signal ab, ist es der einzige Aufraeumweg.
+    await srv.stop();
+    if (neu) await neu.stop();
+    if (zweite) await zweite;
+  }
+});
+
+// GRUEN erwartet (Positiv-Kontrolle, Kosten-Riegel ueber den Neustart hinweg). Fall 7 pinnt
+// dieselbe Regel OHNE Neustart - hier faehrt der Dienst nach dem Ablauf zusaetzlich geordnet
+// herunter und wieder hoch. Ohne diesen Fall bestuende ein "Fix", der beim Start pauschal
+// jede geschlossene, nie beantwortete Rueckfrage als verwaist markiert, den Fall 9 muehelos:
+// der Kosten-Riegel waere dann umgehbar, indem man eine Rueckfrage ablaufen laesst und neu
+// startet. Die Rueckfrage ist beim Herunterfahren bereits geschlossen - der Drain findet
+// nichts mehr vor, gemessen wird also der Zustand, den der Neustart erbt.
+test("EL-NEUSTART 10 (Positiv-Kontrolle): eine Rueckfrage, die VOR dem geordneten Herunterfahren ABLIEF, bleibt auch nach dem Neustart verbraucht", async (ctx) => {
+  const { srv, abgelaufen } = await startWithExpiredConsult();
+  let neu = null;
+  let zweite = null;
+  try {
+    await pruefeAblaufOhneAntwort(ctx, abgelaufen);
+
+    await srv.stop(); // geordnet, mit Drain und finalem Store-Flush
+    neu = await startServer({ env: KURZE_FRIST_ENV, dataDir: srv.dataDir });
+
+    await ctx.test("Vorbedingung: der Anruf laeuft nach dem Neustart weiter", () => {
+      assert.equal(
+        persistedCall(neu).status,
+        "active",
+        "waere der Anruf terminal, kaeme die Ablehnung unten aus der Bindung statt aus dem " +
+          "Kontingent - gruen aus dem falschen Grund",
+      );
+    });
+
+    zweite = await pruefeKontingentVerbraucht(ctx, neu);
+  } finally {
+    await srv.stop();
+    if (neu) await neu.stop();
     if (zweite) await zweite;
   }
 });
