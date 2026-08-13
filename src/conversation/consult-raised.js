@@ -113,7 +113,24 @@ export function makeConsultRaised({
       // Nicht mehr offen und nicht beantwortet = abgelaufen/verfallen (expireOpenConsults,
       // Wartezeit-Schritt). Der Grund-Token ist der Status selbst, PII-frei.
       if (consult.status !== CONSULT_STATUS.OPEN) return timedOut(consult.status);
-      if (Date.now() >= deadlineMs) return timedOut("frist_abgelaufen");
+      // EL-NEUSTART-6: der Fristablauf ist ein ZUSTAND, nicht bloss ein Ergebnis dieses
+      // Aufrufs. Ohne diesen Schritt blieb der Datensatz OPEN stehen, obwohl niemand mehr
+      // auf eine Antwort wartet: ein frischer Long-Poll bekaeme die tote Frage erneut
+      // vorgelegt, answerConsult wiese die Antwort darauf als verfristet ab - und beim
+      // naechsten Start waere eine BEZAHLTE abgelaufene Rueckfrage nicht von einer frisch
+      // verwaisten zu unterscheiden (expireOrphanedConsults, src/boot.js).
+      //
+      // Derselbe Zustandsschritt wie in der Turn-Schleife der Budget-Engine
+      // (consult/in-call.js -> advanceConsultWait) und derselbe Status timed_out: niemand
+      // hat geantwortet, der Anruf ist NICHT beendet. Kein zweiter Schreibweg daneben.
+      // waitMs IST hier holdMs: der Anbieter-Warter kennt keine kurze Ueberbrueckungsfrist,
+      // er wartet die ganze Haltefrist. Erreichbar ist per Konstruktion ohnehin nur der
+      // Fristablauf-Zweig - deadlineMs liegt nie vor askedAt + holdMs.
+      const nowMs = Date.now();
+      if (nowMs >= deadlineMs) {
+        store.advanceInCallConsult(callId, { nowMs, waitMs: holdMs, openMs: holdMs });
+        return timedOut("frist_abgelaufen");
+      }
       // EL-BEFUND-4: Drain-Freigabe, gleiche Stelle und gleicher Grund wie in
       // ConsultDelivery.waitForEvent. Ohne sie haelt dieser Warter beim Deploy
       // httpServer.close() bis zu CONSULT_OPEN_MS auf, der Shutdown-Watchdog kappt mit
