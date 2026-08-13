@@ -3,27 +3,42 @@
 // (die ist gross und aendert sich mit jedem Aufraeumen). Beide Richtungen:
 // eine vorgemerkte Datei mit Eintraegen wird gemeldet, eine ohne wird nicht.
 //
-// ALTLAST-LISTE: der zweite describe-Block nagelt einen Vertrag fest, den es
-// im Skript NOCH NICHT gibt - diese Faelle sind ABSICHTLICH ROT, bis der
-// Ausweg gebaut ist. Hintergrund: das Gate hat einen Fall ohne Ausweg
-// (src/store/state-ops.js, src/store/pg.js tragen Schuld, deren Aufraeumen ein
-// eigenes Refactoring waere). Der Eigentuemer hat entschieden: der Ausweg ist
-// eine ausdrueckliche Altlast-Liste, nicht "git commit --no-verify".
+// ALTLAST-LISTE: der zweite describe-Block prueft den Ausweg aus dem Gate.
+// Hintergrund: das Gate hatte einen Fall ohne Ausweg (src/store/state-ops.js,
+// src/store/pg.js tragen Schuld, deren Aufraeumen ein eigenes Refactoring
+// waere). Der Eigentuemer hat entschieden: der Ausweg ist eine ausdrueckliche
+// Altlast-Liste, nicht "git commit --no-verify".
 //
-// Der Vertrag, den diese Tests pinnen, ist die NAHT, nicht der Speicherort:
+// Der Vertrag, den dieser Block pinnt, ist die NAHT, nicht der Speicherort:
 //   findSuppressedStagedFiles({ stagedFiles, suppressions, legacyExceptions })
 // legacyExceptions ist eine Abbildung Dateipfad -> { reason, date }:
 //   reason: nicht-leerer Text, warum die Datei noch nicht geraeumt ist
 //   date:   Kalenderdatum im Format YYYY-MM-DD, wann die Ausnahme entstand
 // Ein Eintrag, dem eines von beidem fehlt oder der es nur leer/unlesbar
 // fuehrt, ist UNGUELTIG und entschuldigt nichts - die Liste ist eine bewusste
-// Ausnahme, kein Abstellgleis. WO die Liste liegt (eigene Datei, Abschnitt
-// einer bestehenden Konfiguration, Feld in eslint-suppressions.json), legt
-// dieser Test bewusst nicht fest; das Einlesen ist Sache des CLI-Teils.
+// Ausnahme, kein Abstellgleis. WO die Liste liegt, laesst der Auswahl-Block
+// bewusst offen; das Einlesen prueft der dritte Block getrennt davon, der
+// vierte den Bericht, den ein Blockierter zu sehen bekommt.
 import { strict as assert } from "node:assert";
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
-import { findSuppressedStagedFiles } from "../scripts/check-staged-suppressions.js";
+import {
+  findSuppressedStagedFiles,
+  loadLegacyExceptions,
+} from "../scripts/check-staged-suppressions.js";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const LEGACY_EXCEPTIONS_REL = "eslint-legacy-exceptions.json";
+const SUPPRESSIONS_REL = "eslint-suppressions.json";
+const SCRIPT_PATH = resolve(REPO_ROOT, "scripts/check-staged-suppressions.js");
+
+function readRepoFile(relativePath) {
+  return readFileSync(resolve(REPO_ROOT, relativePath), "utf8");
+}
 
 const DUMMY_SUPPRESSIONS = {
   "src/dummy/schmutzig.js": {
@@ -132,7 +147,7 @@ function offendingFiles(stagedFiles) {
   return offenders.map((offender) => offender.file);
 }
 
-describe("Altlast-Liste im Aufraeum-Gate (Attrappe, absichtlich rot)", () => {
+describe("Altlast-Liste im Aufraeum-Gate (Attrappe)", () => {
   it("entschuldigt eine gelistete Datei, meldet die ungelistete weiterhin", () => {
     assert.deepEqual(
       offendingFiles(["src/dummy/altlast.js", "src/dummy/nicht-gelistet.js"]),
@@ -176,6 +191,84 @@ describe("Altlast-Liste im Aufraeum-Gate (Attrappe, absichtlich rot)", () => {
         "src/dummy/nicht-gelistet.js",
       ]),
       ["src/dummy/nicht-gelistet.js"],
+    );
+  });
+});
+
+// Das Einlesen der Liste. Die Lesefunktion ist injizierbar, deshalb braucht
+// dieser Pfad kein Dateisystem. Geprueft wird beides: der Erfolgsfall UND dass
+// eine fehlende oder kaputte Liste abbricht statt still ohne Liste
+// weiterzulaufen. Der stille Weiterlauf waere der gefaehrliche Ausgang: eine
+// leere Liste entschuldigt niemanden, das Gate saehe aus wie funktionierend
+// und wuerde jede gelistete Datei trotzdem ablehnen - Anlass genug, wieder zum
+// verbotenen "--no-verify" zu greifen.
+describe("loadLegacyExceptions (injizierter Leser)", () => {
+  it("liest eine gueltige Liste ueber die injizierte Lesefunktion ein", () => {
+    const angefragtePfade = [];
+    const geladen = loadLegacyExceptions((relativePath) => {
+      angefragtePfade.push(relativePath);
+      return JSON.stringify(LEGACY_EXCEPTIONS);
+    });
+    assert.deepEqual(geladen, LEGACY_EXCEPTIONS);
+    assert.deepEqual(angefragtePfade, [LEGACY_EXCEPTIONS_REL]);
+  });
+
+  it("bricht ab, wenn die Liste fehlt oder unlesbar ist", () => {
+    assert.throws(
+      () =>
+        loadLegacyExceptions(() => {
+          throw new Error("ENOENT: no such file or directory");
+        }),
+      /ENOENT/,
+    );
+  });
+
+  it("bricht ab, wenn die Liste syntaktisch kaputt ist", () => {
+    assert.throws(
+      () => loadLegacyExceptions(() => '{ "src/dummy/altlast.js": '),
+      SyntaxError,
+    );
+  });
+});
+
+// Der Bericht, den ein Blockierter zu sehen bekommt. Wer abgelehnt wird, liest
+// diesen Text - nicht den Quelltext des Skripts. Steht der Ausweg nur im
+// Kopfkommentar, greift der Blockierte zum naechstliegenden Mittel, und das ist
+// "git commit --no-verify". Genau so ist am 2026-08-13 ein Commit still an der
+// Ratsche vorbeigelaufen. Geprueft wird darum am Berichtstext eines echten
+// CLI-Laufs, nicht an einer Innerei der Ausgabe-Funktion.
+//
+// Die abgelehnte Datei wird aus dem Bestand gewaehlt statt fest verdrahtet: ein
+// einzelner Bestandspfad verschwindet mit dem naechsten Aufraeumen, die Frage
+// "gibt es ueberhaupt eine abgelehnte Datei" ist die Positiv-Kontrolle.
+function firstRejectedFile() {
+  const suppressions = JSON.parse(readRepoFile(SUPPRESSIONS_REL));
+  const legacyExceptions = JSON.parse(readRepoFile(LEGACY_EXCEPTIONS_REL));
+  return Object.keys(suppressions).find(
+    (file) =>
+      !legacyExceptions[file] && Object.keys(suppressions[file]).length > 0,
+  );
+}
+
+describe("Ablehnungs-Bericht des Aufraeum-Gates", () => {
+  it("nennt die Altlast-Liste als Ausweg", () => {
+    const rejectedFile = firstRejectedFile();
+    assert.ok(
+      rejectedFile,
+      `Positiv-Kontrolle fehlgeschlagen: keine Datei in ${SUPPRESSIONS_REL}, die das Gate ablehnen wuerde`,
+    );
+    const run = spawnSync(process.execPath, [SCRIPT_PATH, rejectedFile], {
+      encoding: "utf8",
+    });
+    const report = `${run.stdout}${run.stderr}`;
+    assert.equal(run.status, 1, `Gate hat nicht abgelehnt: ${report}`);
+    assert.ok(
+      report.includes(rejectedFile),
+      `Bericht nennt die abgelehnte Datei nicht: ${report}`,
+    );
+    assert.ok(
+      report.includes(LEGACY_EXCEPTIONS_REL),
+      `Bericht nennt den Ausweg (${LEGACY_EXCEPTIONS_REL}) nicht: ${report}`,
     );
   });
 });
