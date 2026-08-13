@@ -2940,11 +2940,6 @@
       "count": 15
     }
   },
-  "test/auth-p9a-cache-headers.test.js": {
-    "no-magic-numbers": {
-      "count": 6
-    }
-  },
   "test/b1a-period-anchor-pg.test.js": {
     "id-length": {
       "count": 2
