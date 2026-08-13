@@ -5677,14 +5677,6 @@
       "count": 1
     }
   },
-  "test/route-auth-inventory.test.js": {
-    "id-length": {
-      "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 6
-    }
-  },
   "test/schema-foundation.test.js": {
     "id-length": {
       "count": 4
