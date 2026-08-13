@@ -872,6 +872,14 @@ export function expireOpenConsults(s, callId) {
 // Gespraechszeit gekostet. Ihr Kontingent-Platz muss frei werden (consultQuotaUsed), sonst
 // kann ein Anruf, der beim Anbieter weiterlaeuft, nie wieder rueckfragen.
 //
+// EL-NEUSTART-9: ZWEI Aufrufer, EINE Naht. Der zweite ist der DRAIN des geordneten
+// Herunterfahrens (conversation/consult-raised.js) - der haeufigere Weg, denn ein Deploy
+// ist die Regel und der Absturz die Ausnahme. Dort stirbt der Wartende genauso, nur
+// schliesst der Prozess den Datensatz noch selbst; das Boot-Netz sieht ihn danach nie
+// wieder (es sucht ueber pendingConsult, also ueber OFFENE Datensaetze). Beide Aufrufer
+// messen mit demselben Praedikat und derselben Frist - eine zweite Formulierung koennte
+// den Kosten-Riegel auf einem Weg anders wirken lassen als auf dem anderen.
+//
 // DIE UNTERSCHEIDUNG haengt an der Wanduhr, weil sie sonst nirgends steht: nur eine
 // Rueckfrage, deren Haltefrist beim Schliessen noch LIEF, kann einen lebenden Warter
 // gehabt haben. War die Frist bereits um, hat der Anruf sie voll bezahlt (oder der Prozess
@@ -924,9 +932,10 @@ export function inCallConsults(call) {
 // anderen. Gezaehlt wird STATUSUNABHAENGIG: eine abgelaufene oder beantwortete Rueckfrage
 // hat das kostende Gespraech offen gehalten und ist verbraucht.
 //
-// AUSGENOMMEN ist genau eine Lage, die keine Gespraechszeit gekostet hat: die vom harten
-// Abbruch verwaiste Rueckfrage (expireOrphanedConsults setzt orphanedAt, ausschliesslich
-// beim Start und nur innerhalb ihrer Haltefrist). Reiner Leser.
+// AUSGENOMMEN ist genau eine Lage, die keine Gespraechszeit gekostet hat: die Rueckfrage,
+// deren Wartender starb, waehrend ihre Haltefrist noch lief - beim harten Abbruch (Marker
+// beim Start) wie beim geordneten Herunterfahren (Marker im Drain). Gesetzt wird er
+// ausschliesslich in expireOrphanedConsults und nur innerhalb der Haltefrist. Reiner Leser.
 export function consultQuotaUsed(call) {
   return inCallConsults(call).filter((consult) => !consult.orphanedAt).length;
 }

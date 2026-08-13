@@ -24,6 +24,11 @@ import { CONSULT_POLL_TICK_MS } from "../consult/delivery.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { sanitizeConsultQuestion } from "../consult/question.js";
 import { CONSULT_STATUS } from "../store/defaults.js";
+// EL-NEUSTART-9: die Schliessung MIT Verwaisungs-Marker. Direkt aus state-ops, wie das
+// Boot-Netz sie ruft (src/boot.js) - die Fassade fuehrt diese Operation nicht, und eine
+// zweite, eigene Formulierung im Drain waere genau der zweite Mechanismus, den der
+// Kosten-Riegel nicht vertraegt (s. closeOrphaned).
+import { expireOrphanedConsults } from "../store/state-ops.js";
 
 // Ergebnis-Diskriminator (ConsultAnswer.kind): feste Menge statt Freitext - "abgelehnt"
 // und "niemand hat geantwortet" sind fuer das Produkt zwei verschiedene Lagen.
@@ -98,6 +103,26 @@ export function makeConsultRaised({
     return keyFactsOf(call).slice(from, from + consult.answeredFacts);
   }
 
+  // EL-NEUSTART-9: die Rueckfrage schliessen UND ihren Kontingent-Platz freigeben. Der
+  // Wartende stirbt hier gleich mit dem Prozess, waehrend seine Haltefrist noch laeuft -
+  // diese Rueckfrage hat KEINE Gespraechszeit gekostet, ihr Platz muss frei werden
+  // (consultQuotaUsed liest den Marker orphanedAt). Das Netz beim Start kann ihn nicht
+  // nachtragen: es sucht ueber pendingConsult und sieht damit nur OFFENE Datensaetze -
+  // diesen hier hat der Drain selbst geschlossen. Ohne den Marker bliebe der Platz nach
+  // JEDEM Deploy verbraucht, und ein beim Anbieter weiterlaufender Anruf koennte nie
+  // wieder rueckfragen.
+  //
+  // Die Unterscheidung "verwaist" gegen "abgelaufen, weil niemand antwortete" trifft die
+  // Naht selbst, an derselben Wanduhr wie beim harten Abbruch - die Frist ist holdMs,
+  // dieselbe Zahl, gegen die dieser Warter laeuft (G5, keine zweite Zahl). Im Zweifel gilt
+  // BEZAHLT, dann bleibt der Platz verbraucht. Geschrieben wird nach dem mutate-then-save()-
+  // Muster des Boot-Netzes; das Zeitfenster des Drains bleibt gewahrt, weil zwischen load(),
+  // Mutation und save() kein await liegt.
+  function closeOrphaned(callId, nowMs) {
+    const { changed } = expireOrphanedConsults(store.load(), callId, { nowMs, openMs: holdMs });
+    if (changed) store.save();
+  }
+
   async function awaitAnswer({ callId, consultId }) {
     const deadlineMs = Date.now() + holdMs;
     for (;;) {
@@ -146,8 +171,11 @@ export function makeConsultRaised({
       // Frage hat nie eine Antwort bekommen. Das Zeitfenster des Drains bleibt gewahrt:
       // der Schreibweg ist synchron (json) bzw. reiht einen Flush ein (pg), die Antwort
       // geht unveraendert im selben Tick raus.
+      //
+      // EL-NEUSTART-9: geschlossen wird MIT Verwaisungs-Marker (closeOrphaned) - dieselbe
+      // Naht wie beim harten Abbruch, kein zweiter Mechanismus.
       if (isDraining()) {
-        store.expireOpenConsults(callId);
+        closeOrphaned(callId, nowMs);
         return timedOut("drain");
       }
       await sleep(tickMs);

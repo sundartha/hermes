@@ -888,6 +888,13 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
 // sonst waere der Kosten-Riegel umgehbar, indem man Rueckfragen ablaufen laesst (Regel 1).
 // Im Zweifel gilt BEZAHLT (fail-closed, s. expireOrphanedConsults in store/state-ops.js).
 //
+// EL-NEUSTART-9: DIESELBE Naht ruft seither auch der Drain des geordneten Herunterfahrens
+// (conversation/consult-raised.js, closeOrphaned) - auf demselben mutate-then-save()-Weg
+// wie hier. Dieses Netz erreicht seinen Fall nicht: der Drain schliesst den Datensatz noch
+// selbst, und pendingConsult unten sieht nur OFFENE. Zwei Ausloeser, EINE Naht - eine
+// zweite Formulierung liesse den Kosten-Riegel auf einem Weg anders wirken als auf dem
+// anderen.
+//
 // VORBEHALT: CONSULT_OPEN_MS ist Konfiguration und kann sich zwischen zwei Starts geaendert
 // haben - dann misst diese Naht die Rueckfrage an einer Frist, unter der sie nie lief. Die
 // Richtung des Fehlers ist die sichere: eine VERKUERZTE Frist laesst eine verwaiste
