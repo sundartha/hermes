@@ -111,7 +111,8 @@ export default [
       "id-length": ["error", { min: 2, exceptions: ["i", "j", "k"] }],
 
       // G35 - alle konfigurierbaren Werte gehoeren nach src/config.js (CLAUDE.md);
-      // Ausnahme fuer genau diese Datei steht unten als eigener Override.
+      // der Geltungsbereich steht unten in zwei eigenen Overrides (src/config.js
+      // als Sammelort, test/** ausserhalb des Produktionscodes).
       "no-restricted-properties": [
         "error",
         {
@@ -169,6 +170,21 @@ export default [
   {
     // G35-Ausnahme: hier LEBT process.env, das ist der vorgesehene Sammelort.
     files: ["src/config.js"],
+    rules: {
+      "no-restricted-properties": "off",
+    },
+  },
+  {
+    // G35 zielt auf PRODUKTIONSCODE: dort duerfen konfigurierbare Werte nicht
+    // direkt aus der Umgebung gelesen werden, sondern nur ueber src/config.js.
+    // Ein Test, der eine Umgebungsvariable absichtlich setzt, um config mit
+    // einem ungueltigen Wert zu bauen, verstoesst nicht dagegen - er prueft
+    // genau den Mechanismus, den G35 schuetzt. Die Regel war fuer src/**
+    // gedacht und hatte test/** versehentlich mit erfasst (Fehlklassifikation,
+    // keine Ausnahme). Das Urteil "ein Test darf nicht vom Zufall der Umgebung
+    // abhaengen" bleibt beim Pruefer - das braucht Urteil, keine Regel.
+    // Fuer src/** (ausser src/config.js) bleibt die Regel unveraendert hart.
+    files: ["test/**"],
     rules: {
       "no-restricted-properties": "off",
     },
