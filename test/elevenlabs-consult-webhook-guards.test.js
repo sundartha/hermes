@@ -91,6 +91,11 @@ const CONSULT_ON_ENV = Object.freeze({
 // Endpunkt die Antwort offen (blockierendes Werkzeug, s. response_timeout_secs in der
 // Agenten-Vorlage), loest der Test in unter zwei Sekunden auf, statt an CONSULT_OPEN_MS
 // (47 s) zu haengen. Der gemessene Sachverhalt haengt an keiner der beiden Zahlen.
+// Sie haengt seit der Mutationsprobe auch an den Faellen, die NUR Ablehnungen messen (S1/S3):
+// reisst dort die gemessene Sicherung, laeuft jeder durchgereichte Angriffs-Request in die
+// volle Haltefrist - S1 brauchte unter Mutation 283 s statt 0,4 s. Ein Testkatalog, der im
+// Fehlerfall in eine Zeitgrenze laeuft statt rot zu werden, meldet den Defekt nicht, er
+// verdeckt ihn. Die Erwartungen der Faelle bleiben davon unberuehrt.
 const SHORT_CONSULT_ENV = Object.freeze({ CONSULT_WAIT_MS: "200", CONSULT_OPEN_MS: "1500" });
 
 const post = (srv, body, headers = {}) =>
@@ -152,6 +157,7 @@ test("EL-CONSULT S1: fehlender/gefaelschter Tool-Token -> 403, nichts aus der Nu
       ...CONSULT_ON_ENV,
       ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN,
       SKIP_TWILIO_SIGNATURE_CHECK: "false",
+      ...SHORT_CONSULT_ENV,
     },
     seed: seedOwnAndForeign(),
   });
@@ -194,7 +200,7 @@ test("EL-CONSULT S1: fehlender/gefaelschter Tool-Token -> 403, nichts aus der Nu
   // ELEVENLABS_TOOL_TOKEN durchreicht ("nichts zu pruefen"), waere fuer das ganze
   // Internet offen. Genau diese Zeile hat AUTH-P7 an anderer Stelle bereits entfernt.
   const offen = await startServer({
-    env: { ...CONSULT_ON_ENV, ELEVENLABS_TOOL_TOKEN: "" },
+    env: { ...CONSULT_ON_ENV, ELEVENLABS_TOOL_TOKEN: "", ...SHORT_CONSULT_ENV },
     seed: seedOwnAndForeign(),
   });
   try {
@@ -298,7 +304,7 @@ test("EL-CONSULT S2: fremde bzw. erfundene conversation_id -> 404, kein Zugriff 
 
 test("EL-CONSULT S3: gerissene Budget-Achse -> 402, die Rueckfrage wird nicht weitergereicht", async (ctx) => {
   const srv = await startServer({
-    env: { ...CONSULT_ON_ENV, ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN },
+    env: { ...CONSULT_ON_ENV, ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN, ...SHORT_CONSULT_ENV },
     // Decke 0 auf dem Tenant des Anrufs: blockingBudgetAxis vergleicht "gebucht + live >=
     // Decke" (state-ops.liveBudgetExceeded), 0 >= 0 sperrt also sofort - deterministisch,
     // ohne Tarif-/Zeit-Abhaengigkeit. Eine ausgeschoepfte Decke ist derselbe Zustand.
