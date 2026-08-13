@@ -200,6 +200,11 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   costTruedSource: null,
   costTruingAttempts: 0,
   telnyxConversationId: null,
+  // EL-BL1: das zweite Provider-Handle (ElevenLabs, json<->pg-Parity - rowToCall
+  // liefert null). Ein Bestands-store.json ohne das Feld hydriert damit strukturell auf
+  // null statt auf undefined; ueber genau dieses Feld bindet der Rueckfrage-Webhook
+  // eine eingehende Kennung an einen laufenden Anruf.
+  elevenlabsConversationId: null,
   callerTurns: 0,
   // AL-P11: Ergebnis-Karte (json<->pg-Parity, rowToCall liefert null).
   result: null,
@@ -472,6 +477,15 @@ export function recordFailureReason(callId, reason) {
 // saven: die Felder liegen persistent auf Platte (migrateCallDiagnosticFields).
 export function recordTelnyxConversationId(callId, conversationId) {
   const { call, changed } = ops.recordTelnyxConversationId(load(), callId, conversationId);
+  if (changed) save();
+  return call;
+}
+
+// EL-BL1: dasselbe fuer das ElevenLabs-Handle - Wrapper-Paritaet zu pg.js. Saved wie
+// recordTelnyxConversationId: das Feld liegt persistent auf Platte, und ohne Save waere
+// die Bindung nach einem Prozess-Neustart weg (der Webhook fiele auf 404 zurueck).
+export function recordElevenlabsConversationId(callId, conversationId) {
+  const { call, changed } = ops.recordElevenlabsConversationId(load(), callId, conversationId);
   if (changed) save();
   return call;
 }

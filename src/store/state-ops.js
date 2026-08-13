@@ -309,6 +309,11 @@ export function createCall(
     // (Abbruch-Achse). Initial null/0 - byte-identisch zur pg-Hydrierung (rowToCall),
     // kein json<->pg-Shape-Drift.
     telnyxConversationId: null,
+    // EL-BL1: die opake Conversation-Kennung des ElevenLabs-Laufwerks. Dasselbe
+    // Provider-Handle-Muster wie telnyxConversationId, und der EINZIGE Weg, ueber den
+    // der Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) einen laufenden Anruf
+    // bindet. Initial null - byte-identisch zur pg-Hydrierung (rowToCall).
+    elevenlabsConversationId: null,
     callerTurns: 0,
     actionItemIds: [],
   };
@@ -641,18 +646,28 @@ export function recordFailureReason(s, callId, reason) {
   return { call, changed };
 }
 
-// AL-P1: Telnyx-Conversation-UUID am Call. Set-once + nur bei truthy Wert (Muster
-// recordFailureReason): ein Webhook-Retry ueberschreibt die erste UUID nicht, ein
-// fehlendes Feld ist ein No-op (changed=false -> kein Save). Wrapper saved bei changed.
-export function recordTelnyxConversationId(s, callId, conversationId) {
-  const call = getCall(s, callId);
+// AL-P1: Provider-Handle am Call. Set-once + nur bei truthy Wert (Muster
+// recordFailureReason): ein Webhook-Retry ueberschreibt die erste Kennung nicht, ein
+// fehlender Wert ist ein No-op (changed=false -> kein Save). Wrapper saved bei changed.
+//
+// EL-BL1: seit dem ElevenLabs-Laufwerk gibt es ZWEI solcher Handles. Eine Fabrik statt
+// zweier strukturgleicher Zwillinge (G5): das Set-once-Verhalten ist die Regel, das Feld
+// nur ihr Parameter - zwei Kopien koennten auseinanderlaufen, und genau daran haengt,
+// dass eine zweite Kennung desselben Anrufs die erste nicht ueberschreibt.
+const recordProviderHandleOnce = (field) => (state, callId, handle) => {
+  const call = getCall(state, callId);
   let changed = false;
-  if (call && conversationId && !call.telnyxConversationId) {
-    call.telnyxConversationId = conversationId;
+  if (call && handle && !call[field]) {
+    call[field] = handle;
     changed = true;
   }
   return { call, changed };
-}
+};
+
+export const recordTelnyxConversationId = recordProviderHandleOnce("telnyxConversationId");
+export const recordElevenlabsConversationId = recordProviderHandleOnce(
+  "elevenlabsConversationId",
+);
 
 // AL-P1: eine substanzlose Nullzeile gibt es hier nicht - der Aufrufer (agentTurn) ruft
 // NUR bei nicht-leerem callerText. Zaehlt den Anrufer-Turn mit und liefert den NEUEN
@@ -742,6 +757,16 @@ export function pendingConsult(s, callId, afterEventId) {
 // Briefing-Fakten stehen vorn), der Ueberhang faellt am GETEILTEN Deckel
 // KEY_FACTS_LIMITS.maxItems; zurueck kommt die tatsaechlich uebernommene Zahl, damit der
 // Aufrufer sie melden kann und nichts still verschwindet.
+// EL-BEFUND-6: WIE VIELE Fakten stehen JETZT in call.context.key_facts? Vor dem Merge
+// gelesen ist das der Index, ab dem die Fakten DIESES Merges liegen - die einzige
+// Angabe, mit der ein Warter seine eigene Antwort spaeter zweifelsfrei wiederfindet.
+// Am Rand nachgerechnet (Stand vor dem Emit + Anzahl) waere sie falsch, sobald ein
+// zweiter Schreiber (addLookupFacts) dazwischen anhaengt.
+function keyFactsCount(call) {
+  const facts = call?.context?.key_facts;
+  return Array.isArray(facts) ? facts.length : 0;
+}
+
 function mergeContextFacts(call, facts) {
   const incoming = Array.isArray(facts) ? facts : [];
   if (!incoming.length) return 0;
@@ -787,10 +812,16 @@ export function answerConsult(s, callId, { eventId, facts, nowMs, openMs }) {
   // In-Call-Fall ist es fail-closed: fehlt die Frist, wird NICHT eingespeist.
   if (isInCallConsult(call, consult) && !consultAlive(consultAgeMs(consult, nowMs), openMs))
     return reject(CONSULT_ANSWER.DEADLINE_PASSED);
+  // EL-BEFUND-6: Startindex VOR dem Merge festhalten. Zusammen mit answeredFacts sagt er
+  // exakt, welcher Ausschnitt von key_facts zu DIESER Antwort gehoert - unabhaengig
+  // davon, was vorher oder nachher sonst noch angehaengt wurde. Eine Zahl, kein zweiter
+  // Freitext-Speicher (dieselbe Begruendung wie bei answeredFacts).
+  const answeredFactsFrom = keyFactsCount(call);
   const mergedFacts = mergeContextFacts(call, facts);
   consult.status = CONSULT_STATUS.ANSWERED;
   consult.answeredAt = new Date().toISOString();
   consult.answeredFacts = mergedFacts;
+  consult.answeredFactsFrom = answeredFactsFrom;
   return { call, changed: true, outcome: CONSULT_ANSWER.ACCEPTED, mergedFacts };
 }
 

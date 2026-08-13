@@ -229,6 +229,11 @@ CREATE TABLE IF NOT EXISTS call (
   -- setzt sie, jeder andere Call bleibt NULL. Speist scripts/telnyx-call-latency.mjs
   -- --call, damit die Latenz-Tabelle ohne Handarbeit erzeugbar ist.
   telnyx_conversation_id TEXT,
+  -- EL-BL1: die opake Conversation-Kennung des ElevenLabs-Laufwerks. Additiv NULLABLE -
+  -- nur der ElevenLabs-Pfad setzt sie, jeder andere Call bleibt NULL. Ueber sie und NUR
+  -- ueber sie bindet der Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) eine
+  -- eingehende Werkzeug-Anfrage an einen laufenden Anruf und damit an seinen Mandanten.
+  elevenlabs_conversation_id TEXT,
   -- AL-P1 (Abbruch-Achse): Anzahl Turns dieses Calls mit nicht-leerer Anrufer-
   -- Aeusserung. PII-FREI (nur ein Zaehler, nie Text) und PURGE-FEST: purgeTranscript
   -- leert call.transcript nach der Summary, "null Anrufer-Zeilen" traefe danach auf
@@ -302,6 +307,11 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_truing_attempts INTEGER NOT NULL 
 -- FORCE-RLS ohnehin nur die Bootstrap-Zeilen).
 ALTER TABLE call ADD COLUMN IF NOT EXISTS telnyx_conversation_id TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS caller_turns INTEGER NOT NULL DEFAULT 0;
+
+-- EL-BL1: ElevenLabs-Handle auf Bestands-call-Tabellen nachziehen (Muster
+-- telnyx_conversation_id). Idempotent; frische DB = No-op. KEIN Backfill noetig: es gibt
+-- keinen einzigen Bestands-Anruf mit dieser Kennung, sie misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS elevenlabs_conversation_id TEXT;
 
 -- AL-P11: Ergebnis-Karte auf Bestands-call-Tabellen nachziehen (Muster context/mandate).
 -- Idempotent; frische DB = No-op.

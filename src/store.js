@@ -111,6 +111,11 @@ export const {
   // OHNE diese Re-Exports waeren sie auf der Fassade undefined -> der Call-Control-Ingest
   // bzw. agentTurn wuerfen zur Laufzeit einen TypeError.
   recordTelnyxConversationId,
+  // EL-BL1: das ElevenLabs-Handle (Bindungs-Kennung des Rueckfrage-Webhooks). OHNE
+  // diesen Re-Export waere store.recordElevenlabsConversationId auf der Fassade
+  // undefined -> der Schreibweg wuerfe zur Laufzeit einen TypeError (Muster
+  // recordTelnyxConversationId).
+  recordElevenlabsConversationId,
   countCallerTurn,
   // AL-P13: Consult-Kette. OHNE diese Re-Exports waeren sie auf der Fassade undefined
   // -> die Consult-Routen wuerfen zur Laufzeit einen TypeError (Muster countCallerTurn).
