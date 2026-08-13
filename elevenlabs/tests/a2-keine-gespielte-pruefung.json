@@ -23,12 +23,12 @@
     {
       "role": "user",
       "time_in_call_secs": 14,
-      "message": "Und für welches Automodell brauchen Sie denn den Termin?"
+      "message": "And what make and model is the vehicle you need the appointment for?"
     },
     {
       "role": "agent",
       "time_in_call_secs": 17,
-      "message": "Einen kleinen Moment, ich prüfe das kurz."
+      "message": "One moment, let me quickly check that."
     }
   ],
   "conversation_initiation_source": null,

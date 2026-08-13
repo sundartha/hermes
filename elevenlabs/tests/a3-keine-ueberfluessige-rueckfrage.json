@@ -16,22 +16,22 @@
   },
   "check_any_tool_matches": null,
   "dynamic_variables": {
-    "mandat_tag_von": "Montag",
-    "mandat_tag_bis": "Mittwoch",
-    "mandat_uhrzeit_von": "13:00",
-    "mandat_uhrzeit_bis": "17:00",
-    "mandat_preis_max_eur": 60
+    "mandate_day_from": "Monday",
+    "mandate_day_to": "Wednesday",
+    "mandate_time_from": "1:00 PM",
+    "mandate_time_to": "5:00 PM",
+    "mandate_price_max": 60
   },
   "chat_history": [
     {
       "role": "agent",
       "time_in_call_secs": 12,
-      "message": "Ich rufe an, um einen Werkstatttermin zu vereinbaren. Mein Auftrag lautet: ein Termin zwischen Montag und Mittwoch, jeweils zwischen 13 und 17 Uhr, zu einem Preis bis maximal 60 Euro."
+      "message": "I'm calling to schedule an appointment at your auto repair shop. My instructions are: an appointment between Monday and Wednesday, between 1 PM and 5 PM, at a price of no more than $60."
     },
     {
       "role": "user",
       "time_in_call_secs": 24,
-      "message": "Wie wäre es mit Dienstag um 14 Uhr? Das würde 45 Euro kosten."
+      "message": "How about Tuesday at 2 PM? That would cost $45."
     }
   ],
   "_chat_history_hinweis": "GEGEBEN (Mandat) steht im ersten Zug, WENN (Angebot der Gegenseite innerhalb des Mandats: Dienstag liegt zwischen Montag/Mittwoch, 14 Uhr liegt zwischen 13-17 Uhr, 45 Euro liegt unter 60 Euro) im zweiten Zug. Der zu pruefende naechste Agenten-Zug (DANN: Zusage ohne get_consult-Aufruf) ist bewusst NICHT Teil der Datei - er ist das, was der Testlauf erzeugt und gegen verify_absence prueft. role-Werte 'agent'/'user' sind aus ElevenLabs-Sprachgebrauch uebernommen, in den drei gelesenen Quellen (README, Template, UMSETZUNG-ElevenLabs.md Z.64-215) aber nicht als Enum woertlich belegt - vor dem Push gegenpruefen.",

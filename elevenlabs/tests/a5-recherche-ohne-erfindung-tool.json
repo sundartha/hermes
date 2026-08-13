@@ -19,12 +19,12 @@
     {
       "role": "agent",
       "time_in_call_secs": 0,
-      "message": "Guten Tag, ich rufe an, um fuer den Auftraggeber einen Reparaturtermin in Ihrer Werkstatt zu vereinbaren."
+      "message": "Hello, I'm calling to schedule a repair appointment at your shop on behalf of the client."
     },
     {
       "role": "user",
       "time_in_call_secs": 5,
-      "message": "Gerne, das bekommen wir hin. Sagen Sie, kommen Sie denn morgen frueh noch gut durch, oder soll es da schon regnen?"
+      "message": "Sure, we can make that work. Say, are you going to have a good drive in tomorrow morning, or is it supposed to rain by then?"
     }
   ],
   "conversation_initiation_source": null,

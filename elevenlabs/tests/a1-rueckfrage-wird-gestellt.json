@@ -15,7 +15,7 @@
         "path": "question",
         "eval": {
           "type": "llm",
-          "description": "Fragt der Text konkret nach dem Fahrzeugmodell (Automodell)? Die Frage muss echt um diese Information bitten - der Agent darf kein Modell selbst raten oder annehmen, sondern wartet auf die Antwort der Werkstatt."
+          "description": "Does the text specifically ask for the vehicle's make and model? The question must be a genuine request for this information - the agent must not guess or assume a model on its own, but wait for the shop's answer."
         }
       }
     ],
@@ -27,12 +27,12 @@
     {
       "role": "agent",
       "time_in_call_secs": 0,
-      "message": "Guten Tag, ich rufe an, um fuer den Auftraggeber einen Reparaturtermin in Ihrer Werkstatt zu vereinbaren."
+      "message": "Hello, I'm calling to schedule a repair appointment at your auto repair shop on behalf of the client."
     },
     {
       "role": "user",
       "time_in_call_secs": 6,
-      "message": "Gerne, worum geht es denn genau - und welches Automodell haben Sie da?"
+      "message": "Sure, what's this regarding - and what's the make and model of the vehicle?"
     }
   ],
   "conversation_initiation_source": null,
