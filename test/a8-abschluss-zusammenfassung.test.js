@@ -195,7 +195,7 @@ test("A8-Gegenfall: ein Gespraech ohne erreichtes Ziel gilt nie als erreicht", a
   assert.notEqual(refusedMapped.objective_achieved, true, "eine Absage gilt NIE als erreicht");
 });
 
-test("A8-Zusammenfassung, OFFENER DEFEKT: Datum, Uhrzeit und Preis sind nur Freitext, keine eigene Angabe", async () => {
+test("ABNAHME-D1: Datum, Uhrzeit und Betrag kommen als eigene Angaben im Ergebnis an | ROT WEIL: Datum, Uhrzeit und Betrag erreichen den Auftraggeber nur als Freitext in der Zusammenfassung, nicht als eigene Angaben | FIX: eigene Felder im Ergebnisschema plus ein Prompt, der sie anfordert - Eigentuemer-Entscheidung noetig, aendert das Schema nach aussen", async () => {
   const mapped = await mappedResultOfSuccessfulCall("a8-structured-values");
   const ownValues = ownValuesOf(mapped);
 
