@@ -2445,9 +2445,6 @@
   "test/afix-p4-end-call-discipline.test.js": {
     "id-length": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/al-d1-cause-diagnostics.test.js": {
@@ -2459,9 +2456,6 @@
     },
     "no-param-reassign": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 8
     }
   },
   "test/al-d1-shim-diagnostics.test.js": {
@@ -2475,9 +2469,6 @@
     },
     "no-magic-numbers": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 10
     },
     "no-restricted-syntax": {
       "count": 2
@@ -2495,9 +2486,6 @@
   },
   "test/al-p1-agent-turn-callerturns.test.js": {
     "id-length": {
-      "count": 3
-    },
-    "no-restricted-properties": {
       "count": 3
     }
   },
@@ -2523,9 +2511,6 @@
     },
     "no-magic-numbers": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/al-p1-turn-observability.test.js": {
@@ -2542,9 +2527,6 @@
     },
     "no-param-reassign": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 9
     },
     "no-restricted-syntax": {
       "count": 1
@@ -2575,9 +2557,6 @@
     "no-magic-numbers": {
       "count": 4
     },
-    "no-restricted-properties": {
-      "count": 8
-    },
     "no-restricted-syntax": {
       "count": 13
     }
@@ -2592,9 +2571,6 @@
     "no-magic-numbers": {
       "count": 8
     },
-    "no-restricted-properties": {
-      "count": 8
-    },
     "no-restricted-syntax": {
       "count": 2
     }
@@ -2605,9 +2581,6 @@
     },
     "no-magic-numbers": {
       "count": 13
-    },
-    "no-restricted-properties": {
-      "count": 1
     },
     "no-restricted-syntax": {
       "count": 4
@@ -2626,9 +2599,6 @@
     "no-param-reassign": {
       "count": 1
     },
-    "no-restricted-properties": {
-      "count": 9
-    },
     "no-restricted-syntax": {
       "count": 28
     }
@@ -2636,9 +2606,6 @@
   "test/al-p13-consult-persist-pg.test.js": {
     "id-length": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/al-p14-in-call-consult.test.js": {
@@ -2647,9 +2614,6 @@
     },
     "no-magic-numbers": {
       "count": 8
-    },
-    "no-restricted-properties": {
-      "count": 6
     },
     "no-restricted-syntax": {
       "count": 18
@@ -2661,9 +2625,6 @@
     },
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 4
     }
   },
   "test/al-p17-first-round-audible.test.js": {
@@ -2672,9 +2633,6 @@
     },
     "no-magic-numbers": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 10
     },
     "no-restricted-syntax": {
       "count": 2
@@ -2686,16 +2644,10 @@
     },
     "no-magic-numbers": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/al-p5-opening.test.js": {
     "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-properties": {
       "count": 1
     }
   },
@@ -2713,9 +2665,6 @@
     },
     "no-magic-numbers": {
       "count": 9
-    },
-    "no-restricted-properties": {
-      "count": 13
     }
   },
   "test/al-p7-llm-stream.test.js": {
@@ -2754,16 +2703,10 @@
     },
     "no-magic-numbers": {
       "count": 6
-    },
-    "no-restricted-properties": {
-      "count": 7
     }
   },
   "test/al-p7b-prompt.test.js": {
     "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-properties": {
       "count": 1
     }
   },
@@ -2789,9 +2732,6 @@
     },
     "no-magic-numbers": {
       "count": 5
-    },
-    "no-restricted-properties": {
-      "count": 8
     }
   },
   "test/al-p8-bench-checks.test.js": {
@@ -2800,9 +2740,6 @@
     },
     "no-magic-numbers": {
       "count": 6
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/al-p8-bench-shim-driver.test.js": {
@@ -2912,11 +2849,6 @@
       "count": 19
     }
   },
-  "test/assistant-context-default.test.js": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "test/assistant-context-http.test.js": {
     "id-length": {
       "count": 3
@@ -2929,15 +2861,7 @@
     "id-length": {
       "count": 3
     },
-    "no-restricted-properties": {
-      "count": 1
-    },
     "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "test/assistant-context-render.test.js": {
-    "no-restricted-properties": {
       "count": 2
     }
   },
@@ -3032,9 +2956,6 @@
   "test/b1a-period-anchor.test.js": {
     "id-length": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/b1a-period-shared.test.js": {
@@ -3067,14 +2988,6 @@
     },
     "no-magic-numbers": {
       "count": 6
-    },
-    "no-restricted-properties": {
-      "count": 7
-    }
-  },
-  "test/b3b-request-neutrality.test.js": {
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "test/b4a-model-prices.test.js": {
@@ -3208,9 +3121,6 @@
   "test/boot-decoupling.test.js": {
     "id-length": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/boot-failclosed.test.js": {
@@ -3267,9 +3177,6 @@
     "no-param-reassign": {
       "count": 1
     },
-    "no-restricted-properties": {
-      "count": 2
-    },
     "no-restricted-syntax": {
       "count": 2
     }
@@ -3309,9 +3216,6 @@
   "test/c1-auftragstreue.test.js": {
     "id-length": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/call-actual-cost-roundtrip.test.js": {
@@ -3320,9 +3224,6 @@
     },
     "no-magic-numbers": {
       "count": 13
-    },
-    "no-restricted-properties": {
-      "count": 1
     },
     "no-restricted-syntax": {
       "count": 1
@@ -3363,14 +3264,6 @@
     },
     "no-magic-numbers": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
-  "test/claude-identity.test.js": {
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/claude-turn-guard.test.js": {
@@ -3379,17 +3272,11 @@
     },
     "no-magic-numbers": {
       "count": 7
-    },
-    "no-restricted-properties": {
-      "count": 5
     }
   },
   "test/config-boolenv.test.js": {
     "id-length": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 8
     }
   },
   "test/config-failclosed.test.js": {
@@ -3398,17 +3285,11 @@
     },
     "no-magic-numbers": {
       "count": 13
-    },
-    "no-restricted-properties": {
-      "count": 4
     }
   },
   "test/config-gateway.test.js": {
     "no-magic-numbers": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 9
     }
   },
   "test/config-namespaces-helper.js": {
@@ -3425,17 +3306,11 @@
     },
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 4
     }
   },
   "test/config-prod-footguns.test.js": {
     "no-magic-numbers": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 4
     }
   },
   "test/config-shape.test.js": {
@@ -3444,9 +3319,6 @@
     },
     "no-magic-numbers": {
       "count": 9
-    },
-    "no-restricted-properties": {
-      "count": 8
     },
     "no-restricted-syntax": {
       "count": 1
@@ -3501,9 +3373,6 @@
     },
     "no-magic-numbers": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 6
     }
   },
   "test/cost-truing-harness.js": {
@@ -3534,9 +3403,6 @@
     },
     "no-magic-numbers": {
       "count": 13
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/cost-truing-retrievable.test.js": {
@@ -3545,9 +3411,6 @@
     },
     "no-magic-numbers": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/cost-truing-since.test.js": {
@@ -3556,9 +3419,6 @@
     },
     "no-magic-numbers": {
       "count": 7
-    },
-    "no-restricted-properties": {
-      "count": 3
     },
     "no-restricted-syntax": {
       "count": 2
@@ -3570,9 +3430,6 @@
     },
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/cost-truing-tts-characters.test.js": {
@@ -3581,9 +3438,6 @@
     },
     "no-magic-numbers": {
       "count": 7
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/cq-p2a-dashboard-visibility.test.js": {
@@ -3610,11 +3464,6 @@
       "count": 3
     }
   },
-  "test/cq-p5-prompt-redesign.test.js": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "test/cq-p6-bench-mandate.test.js": {
     "id-length": {
       "count": 1
@@ -3632,9 +3481,6 @@
     "id-length": {
       "count": 3
     },
-    "no-restricted-properties": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 2
     }
@@ -3642,9 +3488,6 @@
   "test/cq-p6-mandate.test.js": {
     "id-length": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/cq-p8-briefing-breaker.test.js": {
@@ -3653,9 +3496,6 @@
     },
     "no-param-reassign": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 6
     }
   },
   "test/cq-p8-briefing-http.test.js": {
@@ -3678,9 +3518,6 @@
     },
     "no-param-reassign": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 7
     },
     "no-restricted-syntax": {
       "count": 5
@@ -3724,9 +3561,6 @@
     },
     "no-param-reassign": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/dial-target-normalization.test.js": {
@@ -3756,11 +3590,6 @@
   "test/disclosure-outbound.test.js": {
     "no-magic-numbers": {
       "count": 2
-    }
-  },
-  "test/disclosure-regression.test.js": {
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/e164-trunk-zero-reject.test.js": {
@@ -3803,9 +3632,6 @@
   "test/e2e-06-en-purity-aggregate.test.js": {
     "id-length": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     },
     "no-restricted-syntax": {
       "count": 1
@@ -3852,9 +3678,6 @@
     "id-length": {
       "count": 39
     },
-    "no-restricted-properties": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 4
     }
@@ -3862,9 +3685,6 @@
   "test/f1-i18n-locale.test.js": {
     "id-length": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/f1-p8-outbound-lang.test.js": {
@@ -3956,9 +3776,6 @@
   "test/fix1-summary-timeout.test.js": {
     "id-length": {
       "count": 5
-    },
-    "no-restricted-properties": {
-      "count": 7
     }
   },
   "test/fmt-11-onboard-privatenumber-country-gate.test.js": {
@@ -3972,9 +3789,6 @@
   "test/fx-single-source-fallback-wiring.test.js": {
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/fx-single-source.test.js": {
@@ -3984,9 +3798,6 @@
   },
   "test/g1-identity-binding.test.js": {
     "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-properties": {
       "count": 1
     }
   },
@@ -3998,9 +3809,6 @@
   "test/g2-opening-turn.test.js": {
     "no-magic-numbers": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/g326-turn-shortcut-empty-guard.test.js": {
@@ -4025,9 +3833,6 @@
     },
     "no-magic-numbers": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "test/gap-04-activation-transaction.test.js": {
@@ -4084,11 +3889,6 @@
       "count": 1
     }
   },
-  "test/geo-registry.test.js": {
-    "no-restricted-properties": {
-      "count": 4
-    }
-  },
   "test/gq-h1-haken-repro.test.js": {
     "id-length": {
       "count": 3
@@ -4108,9 +3908,6 @@
     },
     "no-magic-numbers": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 4
     }
   },
   "test/gq-p1-turn-supersede.test.js": {
@@ -4124,9 +3921,6 @@
     },
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     },
     "no-restricted-syntax": {
       "count": 2
@@ -4146,14 +3940,6 @@
   "test/gq-p14-summary-recorded-items.test.js": {
     "id-length": {
       "count": 5
-    },
-    "no-restricted-properties": {
-      "count": 3
-    }
-  },
-  "test/gq-p16-end-call-wait-direction.test.js": {
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/gq-p18-speech-gate.test.js": {
@@ -4174,9 +3960,6 @@
     "no-param-reassign": {
       "count": 1
     },
-    "no-restricted-properties": {
-      "count": 6
-    },
     "no-restricted-syntax": {
       "count": 16
     }
@@ -4192,9 +3975,6 @@
     },
     "no-magic-numbers": {
       "count": 5
-    },
-    "no-restricted-properties": {
-      "count": 1
     },
     "no-restricted-syntax": {
       "count": 1
@@ -4225,9 +4005,6 @@
     },
     "no-magic-numbers": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 6
     },
     "no-restricted-syntax": {
       "count": 7
@@ -4294,9 +4071,6 @@
     "no-param-reassign": {
       "count": 2
     },
-    "no-restricted-properties": {
-      "count": 2
-    },
     "no-restricted-syntax": {
       "count": 3
     }
@@ -4320,9 +4094,6 @@
   },
   "test/helpers/ws-openai-shim.mjs": {
     "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-properties": {
       "count": 1
     }
   },
@@ -4374,9 +4145,6 @@
     },
     "no-magic-numbers": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/ks-p3-brake-wiring.test.js": {
@@ -4451,9 +4219,6 @@
     },
     "no-magic-numbers": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/kv-m0-boot-banner-config.test.js": {
@@ -4462,9 +4227,6 @@
     },
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 4
     }
   },
   "test/kv-m3-coverage-denominator.test.js": {
@@ -4483,17 +4245,11 @@
     },
     "no-magic-numbers": {
       "count": 6
-    },
-    "no-restricted-properties": {
-      "count": 7
     }
   },
   "test/kv-p1-cost-ledger-map.test.js": {
     "id-length": {
       "count": 13
-    },
-    "no-restricted-properties": {
-      "count": 5
     },
     "no-restricted-syntax": {
       "count": 1
@@ -4505,9 +4261,6 @@
     },
     "no-magic-numbers": {
       "count": 5
-    },
-    "no-restricted-properties": {
-      "count": 3
     },
     "no-restricted-syntax": {
       "count": 2
@@ -4530,9 +4283,6 @@
     },
     "no-magic-numbers": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "test/kv-p6-micro-cent-ledger.test.js": {
@@ -4578,9 +4328,6 @@
     },
     "no-magic-numbers": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/language-switch-midcall.test.js": {
@@ -4599,9 +4346,6 @@
   "test/llm-booking.test.js": {
     "id-length": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/llm-message-chain-language.test.js": {
@@ -4610,9 +4354,6 @@
     },
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/llm-sdk-learning.test.js": {
@@ -4637,9 +4378,6 @@
     },
     "no-magic-numbers": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 6
     }
   },
   "test/max-duration-live-cap.test.js": {
@@ -4688,9 +4426,6 @@
     },
     "no-param-reassign": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 8
     }
   },
   "test/mcp-tools-language.test.js": {
@@ -4709,9 +4444,6 @@
     "no-param-reassign": {
       "count": 1
     },
-    "no-restricted-properties": {
-      "count": 4
-    },
     "no-restricted-syntax": {
       "count": 4
     }
@@ -4728,9 +4460,6 @@
     },
     "no-param-reassign": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 36
     }
   },
   "test/mcp-ui-i18n-divergence.test.js": {
@@ -4742,9 +4471,6 @@
     },
     "no-param-reassign": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 4
     }
   },
   "test/mcp-ui-p5-token-sync.test.js": {
@@ -4826,9 +4552,6 @@
     },
     "no-param-reassign": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 4
     },
     "no-restricted-syntax": {
       "count": 38
@@ -4943,11 +4666,6 @@
     },
     "no-magic-numbers": {
       "count": 2
-    }
-  },
-  "test/outbound-budget-concurrency.test.js": {
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/outbound-first-gather.test.js": {
@@ -5096,9 +4814,6 @@
     "id-length": {
       "count": 17
     },
-    "no-restricted-properties": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 2
     }
@@ -5153,9 +4868,6 @@
   "test/p1b-no-booking.test.js": {
     "id-length": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/p2-onboard-retry.test.js": {
@@ -5239,11 +4951,6 @@
       "count": 1
     }
   },
-  "test/p8-prompt-timezone.test.js": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "test/p8-self-service-country-locked.test.js": {
     "id-length": {
       "count": 4
@@ -5257,9 +4964,6 @@
       "count": 5
     },
     "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-properties": {
       "count": 1
     }
   },
@@ -5291,14 +4995,6 @@
   "test/persona-style.test.js": {
     "id-length": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
-  "test/personal-assistant-characterization.test.js": {
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/pg-helpers.js": {
@@ -5333,9 +5029,6 @@
     },
     "no-magic-numbers": {
       "count": 24
-    },
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "test/plan-cap-unclamped.test.js": {
@@ -5344,9 +5037,6 @@
     },
     "no-magic-numbers": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "test/plan-profile-resolver.test.js": {
@@ -5430,9 +5120,6 @@
   "test/profile-a3-backfill.test.js": {
     "id-length": {
       "count": 27
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/profile-tenant-key-migration-pg.test.js": {
@@ -5470,9 +5157,6 @@
   "test/prompt-en-scaffolding.test.js": {
     "id-length": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/prov01-boot-reconcile.test.js": {
@@ -5629,9 +5313,6 @@
   "test/reservation-json-ephemeral.test.js": {
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/reservation-ledger.test.js": {
@@ -5645,9 +5326,6 @@
   "test/resolve-tenant.test.js": {
     "id-length": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/retention.test.js": {
@@ -5656,9 +5334,6 @@
     },
     "no-magic-numbers": {
       "count": 5
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/rls-with-check.test.js": {
@@ -5725,20 +5400,12 @@
       "count": 4
     }
   },
-  "test/shape-for-speech.test.js": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "test/single-origin-auth.test.js": {
     "id-length": {
       "count": 6
     },
     "no-magic-numbers": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 5
     }
   },
   "test/single-origin-serving.test.js": {
@@ -5762,14 +5429,6 @@
   "test/state-ops-tenant-stripe.test.js": {
     "id-length": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
-  "test/store-backend-parity.test.js": {
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/store-integrity.test.js": {
@@ -5778,25 +5437,16 @@
     },
     "no-magic-numbers": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/store-json-migrate-shapes.test.js": {
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/store-lock-reentrancy.test.js": {
     "id-length": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/store-pg-billing-idempotent.test.js": {
@@ -5817,9 +5467,6 @@
   "test/store-pg-json-parity.test.js": {
     "id-length": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/store-pg-kyc-seed.test.js": {
@@ -5878,9 +5525,6 @@
   "test/store-purge.test.js": {
     "id-length": {
       "count": 6
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/stripe-setup-checkout.test.js": {
@@ -5920,19 +5564,9 @@
       "count": 1
     }
   },
-  "test/stt-model-seam.test.js": {
-    "no-restricted-properties": {
-      "count": 2
-    }
-  },
   "test/stt-wer-metric.test.js": {
     "no-magic-numbers": {
       "count": 26
-    }
-  },
-  "test/subindex-json-ephemeral.test.js": {
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/telephony-registry.test.js": {
@@ -5968,9 +5602,6 @@
     "no-magic-numbers": {
       "count": 3
     },
-    "no-restricted-properties": {
-      "count": 7
-    },
     "no-restricted-syntax": {
       "count": 4
     }
@@ -5989,9 +5620,6 @@
     },
     "no-negated-condition": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 3
     },
     "no-restricted-syntax": {
       "count": 1
@@ -6070,9 +5698,6 @@
     },
     "no-magic-numbers": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "test/telnyx-observability-secret-guard.test.js": {
@@ -6139,9 +5764,6 @@
   "test/telnyx-p8-opening-contract.test.js": {
     "id-length": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/telnyx-p9-flag-matrix.test.js": {
@@ -6203,9 +5825,6 @@
     },
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 4
     }
   },
   "test/tenant-budget-cap.test.js": {
@@ -6219,9 +5838,6 @@
   "test/tenant-context.test.js": {
     "id-length": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/tenant-erasure-number-release.test.js": {
@@ -6249,9 +5865,6 @@
     },
     "no-magic-numbers": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/tenant-prolif-b.test.js": {
@@ -6287,9 +5900,6 @@
     "no-magic-numbers": {
       "count": 1
     },
-    "no-restricted-properties": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 1
     }
@@ -6310,9 +5920,6 @@
     },
     "no-magic-numbers": {
       "count": 46
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/tts-store.test.js": {
@@ -6335,14 +5942,6 @@
   },
   "test/turn-fallback-locale.test.js": {
     "id-length": {
-      "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 3
-    }
-  },
-  "test/turn-latency-budget.test.js": {
-    "no-restricted-properties": {
       "count": 2
     }
   },
@@ -6371,9 +5970,6 @@
     },
     "no-magic-numbers": {
       "count": 26
-    },
-    "no-restricted-properties": {
-      "count": 1
     },
     "no-restricted-syntax": {
       "count": 1
@@ -6458,9 +6054,6 @@
   "test/voucher-fee-b-exempt-flag.test.js": {
     "id-length": {
       "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "test/w4-self-service-subscribe.test.js": {
@@ -6541,9 +6134,6 @@
   "test/ww-f1-booking-mandate-contradiction.test.js": {
     "id-length": {
       "count": 7
-    },
-    "no-restricted-properties": {
-      "count": 3
     }
   },
   "test/ww-f2-tool-follow-up.test.js": {
@@ -6556,9 +6146,6 @@
     "no-param-reassign": {
       "count": 1
     },
-    "no-restricted-properties": {
-      "count": 4
-    },
     "no-restricted-syntax": {
       "count": 2
     }
@@ -6569,9 +6156,6 @@
     },
     "no-magic-numbers": {
       "count": 5
-    },
-    "no-restricted-properties": {
-      "count": 7
     }
   },
   "test/ww-p3-consult-prompt-routing.test.js": {
@@ -6580,9 +6164,6 @@
     },
     "no-magic-numbers": {
       "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 5
     }
   }
 }
