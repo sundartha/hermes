@@ -91,10 +91,17 @@ function formatOffender({ file, ruleCounts }) {
 // greift er zum naechstliegenden Mittel - am 2026-08-13 ist genau so ein
 // Commit still an der Ratsche vorbeigelaufen. Kurz halten, das liest jemand
 // im Terminal.
+//
+// Der zweite Weg steht bewusst mit seinem Preis da: ohne die Freigabe-Zeile
+// liest ihn ein blockierter Agent als Selbstbedienung und traegt sich ein,
+// statt aufzuraeumen (Eigentuemer-Entscheidung 2026-08-13, .fortschritt.md D11).
 const WAY_OUT_LINES = [
   `Aufraeumen (Normalfall): Verstoesse beheben, danach: ${PRUNE_COMMAND}`,
   `Waere das Aufraeumen ein eigener Umbau: die Datei in ${LEGACY_EXCEPTIONS_REL}`,
   "eintragen, mit reason (warum sie liegen bleibt) und date (YYYY-MM-DD).",
+  "Dieser Eintrag braucht die Freigabe des Eigentuemers - kein Bau-Agent setzt",
+  "einen, um weiterzukommen. Der Grund muss sagen, WARUM das Aufraeumen",
+  "gefaehrlich waere, nicht dass es Arbeit ist.",
   `"${NO_VERIFY_COMMAND}" ist keine Option.`,
 ];
 

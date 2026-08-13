@@ -19,6 +19,26 @@
 // Ausnahme, kein Abstellgleis. WO die Liste liegt, laesst der Auswahl-Block
 // bewusst offen; das Einlesen prueft der dritte Block getrennt davon, der
 // vierte den Bericht, den ein Blockierter zu sehen bekommt.
+//
+// RATSCHE (fuenfter Block): der Inhalt der ECHTEN Liste ist gepinnt. Waechst
+// sie, schrumpft sie oder aendert sich ein Eintrag, wird der Lauf rot - dann
+// muss der aendernde Agent diesen Test anfassen, und die Aenderung steht im
+// Diff statt still im Bestand. Muster: ROUTE_FINGERPRINT in
+// test/route-auth-inventory.test.js.
+//
+// WAS EIN MENSCH PRUEFEN MUSS - die Ratsche kann es nicht (Eigentuemer-
+// Entscheidung 2026-08-13, .fortschritt.md D11):
+//   1. Die FREIGABE selbst. Der Test sieht, DASS jemand die Liste nachgezogen
+//      hat, nie ob Antonio den Eintrag erlaubt hat. Ein Bau-Agent setzt
+//      keinen Eintrag - blockiert ihn der Hook, raeumt er auf oder meldet sich.
+//   2. Ob der Grund WAHR ist: dass das Aufraeumen wirklich gefaehrlich waere
+//      und nicht bloss laestig. Die Maschine misst Substanz (Laenge,
+//      Wortbestand jenseits von Floskeln), nie Wahrheit oder Gefahr.
+//   3. Ob die Unterdrueckungen der Datei ECHTE Schuld sind oder ein
+//      Fehlschnitt der Regel (D9/D10). Beim Fehlschnitt wird die REGEL
+//      korrigiert - der Eintrag gehoert dann gar nicht erst auf die Liste.
+//      Anlass: von 45 Verstoessen der beiden gelisteten Dateien waren 37
+//      reine Umbenennungen.
 import { strict as assert } from "node:assert";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -250,18 +270,31 @@ function firstRejectedFile() {
   );
 }
 
+// Ein echter Ablehnungs-Lauf. Beide Berichts-Faelle teilen ihn sich: der Lauf
+// ist ihre Vorbedingung, nicht ihre Aussage.
+function rejectionReport() {
+  const rejectedFile = firstRejectedFile();
+  assert.ok(
+    rejectedFile,
+    `Positiv-Kontrolle fehlgeschlagen: keine Datei in ${SUPPRESSIONS_REL}, die das Gate ablehnen wuerde`,
+  );
+  const run = spawnSync(process.execPath, [SCRIPT_PATH, rejectedFile], {
+    encoding: "utf8",
+  });
+  const report = `${run.stdout}${run.stderr}`;
+  assert.equal(run.status, 1, `Gate hat nicht abgelehnt: ${report}`);
+  return { rejectedFile, report };
+}
+
+// Der Ausweg darf nicht nach Selbstbedienung klingen. Diese zwei Wendungen
+// tragen die Eigentuemer-Entscheidung in den Text, den ein Blockierter
+// tatsaechlich liest: WER den Eintrag erlaubt (Freigabe) und WORAN sich der
+// Grund messen lassen muss (Gefahr, nicht Arbeit).
+const APPROVAL_TERMS = ["Freigabe des Eigentuemers", "gefaehrlich"];
+
 describe("Ablehnungs-Bericht des Aufraeum-Gates", () => {
   it("nennt die Altlast-Liste als Ausweg", () => {
-    const rejectedFile = firstRejectedFile();
-    assert.ok(
-      rejectedFile,
-      `Positiv-Kontrolle fehlgeschlagen: keine Datei in ${SUPPRESSIONS_REL}, die das Gate ablehnen wuerde`,
-    );
-    const run = spawnSync(process.execPath, [SCRIPT_PATH, rejectedFile], {
-      encoding: "utf8",
-    });
-    const report = `${run.stdout}${run.stderr}`;
-    assert.equal(run.status, 1, `Gate hat nicht abgelehnt: ${report}`);
+    const { rejectedFile, report } = rejectionReport();
     assert.ok(
       report.includes(rejectedFile),
       `Bericht nennt die abgelehnte Datei nicht: ${report}`,
@@ -270,5 +303,187 @@ describe("Ablehnungs-Bericht des Aufraeum-Gates", () => {
       report.includes(LEGACY_EXCEPTIONS_REL),
       `Bericht nennt den Ausweg (${LEGACY_EXCEPTIONS_REL}) nicht: ${report}`,
     );
+  });
+
+  it("nennt die Freigabe des Eigentuemers als Bedingung fuer einen Eintrag", () => {
+    const { report } = rejectionReport();
+    for (const term of APPROVAL_TERMS) {
+      assert.ok(
+        report.includes(term),
+        `Bericht nennt "${term}" nicht - dann liest der Blockierte den Ausweg als ` +
+          `Selbstbedienung und traegt sich im Vorbeigehen ein: ${report}`,
+      );
+    }
+  });
+});
+
+// ---- Ratsche auf die Altlast-Liste ------------------------------------------
+// Anders als die Bloecke oben laeuft dieser gegen die ECHTE Liste - und genau
+// das ist sein Zweck: sie ist klein, sie soll klein bleiben, und jede
+// Bewegung darin gehoert in den Diff. Gelesen wird ueber loadLegacyExceptions,
+// also ueber dieselbe Naht, an der auch der Hook haengt.
+const REAL_LEGACY_EXCEPTIONS = loadLegacyExceptions();
+const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
+
+// Gepinnter Inhalt (Muster ROUTE_FINGERPRINT, test/route-auth-inventory.test.js):
+// ein Eintrag mehr, einer weniger oder ein geaenderter Grund erzwingt eine
+// bewusste Aktualisierung DIESER Stelle. Buchhaltung dazu:
+//   2026-08-13  src/store/state-ops.js, src/store/pg.js aufgenommen (D11).
+//   2026-08-13  src/conversation-watchdog.js, src/boot-guard.js wieder
+//               entfernt: im Vorbeigehen gesetzt, vom Eigentuemer abgelehnt,
+//               danach aufgeraeumt statt gelistet.
+const LEGACY_FINGERPRINT = {
+  "src/store/state-ops.js": {
+    reason:
+      "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration.",
+    date: "2026-08-13",
+  },
+  "src/store/pg.js": {
+    reason:
+      "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration.",
+    date: "2026-08-13",
+  },
+};
+
+// Erfundene Unterdrueckung, mit der jede gelistete Datei gegen die Auswahl
+// gehalten wird: entschuldigt ihr Eintrag nicht, taucht sie als Treffer auf.
+const PROBE_RULE_COUNTS = { "id-length": { count: 1 } };
+
+// Strenges Kalenderdatum: Form YYYY-MM-DD UND ein Tag, den es wirklich gibt.
+// Bewusst nicht ueber die Naht des Gates geprueft, sondern hier nachgerechnet:
+// dessen Date.parse nimmt "2026-02-31" an (V8 rollt still auf den 3. Maerz).
+// Der Hook ist damit nachsichtiger als sein eigener Kommentar behauptet - die
+// Ratsche ist der Ort, an dem die Liste trotzdem sauber bleibt.
+const CALENDAR_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function isStrictCalendarDate(value) {
+  if (typeof value !== "string") return false;
+  const match = CALENDAR_DATE_PATTERN.exec(value);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  return (
+    utc.getUTCFullYear() === year && utc.getUTCMonth() === month - 1 && utc.getUTCDate() === day
+  );
+}
+
+// Wendungen, die fuer sich genommen nichts erklaeren - sie nennen Aufwand,
+// Zeit oder Vorsatz, nicht die Gefahr. Ihr Vorkommen ist nicht verboten;
+// verboten ist eine Begruendung, die NUR daraus besteht.
+const FILLER_PHRASES = [
+  "keine zeit",
+  "zu viel arbeit",
+  "viel aufwand",
+  "zu aufwendig",
+  "aufwendig",
+  "aufwand",
+  "spaeter",
+  "irgendwann",
+  "erstmal",
+  "vorerst",
+  "nicht jetzt",
+  "wird noch",
+  "muss noch",
+  "todo",
+  "tbd",
+];
+
+// Zwei Masse, weil jedes allein zu leicht zu erfuellen waere: die Laenge
+// faengt das blosse "Altlast", der Wortbestand jenseits der Floskeln faengt
+// den langen Satz, der nur Aufwand aufzaehlt.
+const MIN_REASON_LENGTH = 40;
+const MIN_SUBSTANCE_WORDS = 5;
+const MIN_WORD_LENGTH = 4;
+const SUBSTANCE_WORD_PATTERN = new RegExp(`[\\p{L}\\p{N}]{${MIN_WORD_LENGTH},}`, "gu");
+
+function withoutFiller(reason) {
+  return FILLER_PHRASES.reduce(
+    (text, phrase) => text.split(phrase).join(" "),
+    reason.toLowerCase(),
+  );
+}
+
+// Wie viele verschiedene tragende Woerter bleiben uebrig, wenn man die
+// Floskeln streicht? Kurze Fuellwoerter ("der", "ist", "und") zaehlen nicht mit.
+function substanceWordCount(reason) {
+  const words = withoutFiller(reason).match(SUBSTANCE_WORD_PATTERN) || [];
+  return new Set(words).size;
+}
+
+// Ist der Grund substanziell - oder eine Floskel in Satzform? Was der Grund
+// BEHAUPTET, prueft kein Test; das steht im Dateikopf als menschliche Pflicht.
+function isSubstantialReason(reason) {
+  if (typeof reason !== "string") return false;
+  return (
+    reason.trim().length >= MIN_REASON_LENGTH &&
+    substanceWordCount(reason) >= MIN_SUBSTANCE_WORDS
+  );
+}
+
+describe("Altlast-Ratsche (echte Liste)", () => {
+  it("der Inhalt der Altlast-Liste ist unveraendert", () => {
+    assert.deepEqual(
+      REAL_LEGACY_EXCEPTIONS,
+      LEGACY_FINGERPRINT,
+      `${LEGACY_EXCEPTIONS_REL} hat sich geaendert. Ein Eintrag WENIGER ist der Normalfall ` +
+        "(aufgeraeumt) und wird hier einfach nachgezogen. Ein Eintrag MEHR oder ein " +
+        "geaenderter Grund braucht die Freigabe des Eigentuemers - kein Bau-Agent setzt " +
+        "einen Eintrag, um nicht blockiert zu sein.",
+    );
+  });
+
+  it("jeder Eintrag entschuldigt seine Datei am Gate selbst", () => {
+    assert.ok(
+      LISTED_FILES.length > 0,
+      `Positiv-Kontrolle fehlgeschlagen: ${LEGACY_EXCEPTIONS_REL} ist leer, hier wird nichts geprueft`,
+    );
+    const offenders = findSuppressedStagedFiles({
+      stagedFiles: LISTED_FILES,
+      suppressions: Object.fromEntries(LISTED_FILES.map((file) => [file, PROBE_RULE_COUNTS])),
+      legacyExceptions: REAL_LEGACY_EXCEPTIONS,
+    });
+    assert.deepEqual(
+      offenders.map((offender) => offender.file),
+      [],
+      "Diese Eintraege entschuldigen nichts: Grund fehlt/ist leer oder das Datum ist kein " +
+        "Kalenderdatum. Ein halb gefuehrter Eintrag ist ein Abstellgleis - das Gate lehnt " +
+        "die Datei trotz Eintrag ab, der Eintrag taeuscht nur Deckung vor.",
+    );
+  });
+
+  it("jedes Datum ist ein Tag, den es wirklich gibt", () => {
+    for (const [file, entry] of Object.entries(REAL_LEGACY_EXCEPTIONS)) {
+      assert.ok(
+        isStrictCalendarDate(entry.date),
+        `${file}: "${entry.date}" ist kein Kalenderdatum. Das Datum sagt, wie lange die ` +
+          "Ausnahme schon steht - ein krummer Wert macht daraus eine unbefristete.",
+      );
+    }
+  });
+
+  it("weist ein Datum ab, das es im Kalender nicht gibt", () => {
+    assert.equal(isStrictCalendarDate("2026-02-31"), false);
+    assert.equal(isStrictCalendarDate("bald"), false);
+  });
+
+  it("jeder Grund ist substanziell und nicht bloss eine Floskel", () => {
+    for (const [file, entry] of Object.entries(REAL_LEGACY_EXCEPTIONS)) {
+      assert.ok(
+        isSubstantialReason(entry.reason),
+        `${file}: der Grund ist zu duenn. Er muss sagen, WARUM das Aufraeumen gefaehrlich ` +
+          "waere - nicht, dass es Arbeit ist.",
+      );
+    }
+  });
+
+  it("weist einen Grund ab, der nur Aufwand und Zeit nennt", () => {
+    assert.equal(
+      isSubstantialReason("Zu viel Arbeit, keine Zeit, das raeumen wir irgendwann spaeter auf."),
+      false,
+    );
+  });
+
+  it("weist einen zu kurzen Grund ab", () => {
+    assert.equal(isSubstantialReason("Altlast, kommt weg."), false);
   });
 });
