@@ -23,8 +23,10 @@
 import { Router } from "express";
 import { blockingBudgetAxis } from "../budget-gate.js";
 import { consultAllowedFor } from "../consult/gate.js";
+import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
 import { localeFor } from "../i18n/locales.js";
+import { inCallConsults } from "../store/state-ops.js";
 import { safeEqual } from "../util.js";
 
 // Pfad + Header als benannte Konstanten (G25): beide stehen so in der Agenten-Vorlage.
@@ -33,10 +35,12 @@ const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 
 // Die drei Ablehnungscodes. 402 nach dem Bestandsmuster der Geld-Denials
 // (telephony/outbound-gates.js), 404 statt 403 nach dem Bestandsmuster der Call-Routen
-// (kein Existenz-Leck), 403 fuer das Geheimnis.
+// (kein Existenz-Leck), 403 fuer das Geheimnis. 500 ist keine Ablehnung, sondern das
+// letzte Netz (s. Handler): ein unerwarteter Fehler MUSS beantwortet werden.
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
+const HTTP_SERVER_ERROR = 500;
 
 // Was das Laufwerk seinem Modell als Werkzeug-Ergebnis vorlegt. Alle drei Texte sind
 // bestehende, sprachrichtige Steuertexte (i18n/prompts/*) - der Server erfindet hier keine
@@ -50,11 +54,15 @@ function toolResultText(outcome, locale) {
 }
 
 /**
- * @param {{store: object, config: object, onConsultRaised: Function}} deps
+ * @param {{store: object, config: object, onConsultRaised: Function,
+ *   consultSlots: {withOpenSlot: Function}}} deps
  *   onConsultRaised = die Wirkung am bestehenden Consult-Kanal
  *   (conversation/consult-raised.js), als Naht hereingereicht.
+ *   consultSlots = die EINE ConsultDelivery-Instanz des Prozesses (consult/delivery.js).
+ *   Ihre Slot-Zaehler begrenzen, wie viele Verbindungen gleichzeitig an EINEM Anruf bzw.
+ *   EINEM Mandanten haengen duerfen - dieser Webhook ist ein solcher Halter.
  */
-export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised }) {
+export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, consultSlots }) {
   const router = Router();
 
   // Jede greifende Sicherung wird LAUT statt stumm (Diagnose-Muster des Brain-Shims):
@@ -84,14 +92,31 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised }) 
   // dem nie zugestimmt, und genau dafuer existiert IN_CALL_CONSULT_ENABLED getrennt vom
   // Kanal-Flag. Ohne diesen Faktor waere der neue Weg die Umgehung eines Datenschutz-Gates,
   // das der alte Weg respektiert.
+  //
+  // WARUM NICHT consultAvailableFor (consult/in-call.js) IM GANZEN: dieses Praedikat
+  // fordert zusaetzlich callAnswered, consultClientIsPolling und "Engine != realtime".
+  // Alle drei sind TURN-SCHLEIFEN-Fakten der Budget-Engine und an dieser Aufhaengung
+  // strukturell falsch: das Gespraech fuehrt das ElevenLabs-Laufwerk (unsere Turn-Schleife
+  // laeuft gar nicht, unser Abnehme-Zeitstempel und der Poll-Zeitstempel des Clients sagen
+  // hier nichts ueber die Faehigkeit). Uebernommen werden deshalb GENAU die beiden
+  // Faktoren, die keine Turn-Fakten sind - und zwar als Wiederverwendung ihrer Bausteine,
+  // nicht als zweite Formulierung: die EINE Zahl MAX_IN_CALL_CONSULTS_PER_CALL und der
+  // EINE Zaehler inCallConsults (store/state-ops.js).
+  //
+  // RICHTUNG ist der Sicherheitskern (consult/in-call.js): die Rede eines fremden
+  // Inbound-Anrufers darf NIE als "Rueckfrage" in den Kontext des Tenants exportiert
+  // werden. KONTINGENT ist der Kosten-Riegel: jede angenommene Rueckfrage haelt das
+  // kostende Gespraech bis CONSULT_OPEN_MS offen.
   function consultAllowed(call) {
     return (
       config.tenancy.inCallConsultEnabled === true &&
-      consultAllowedFor(store.resolveProfile(call.tenantId))
+      consultAllowedFor(store.resolveProfile(call.tenantId)) &&
+      call.direction === "outbound" &&
+      inCallConsults(call).length < MAX_IN_CALL_CONSULTS_PER_CALL
     );
   }
 
-  router.post(ELEVENLABS_CONSULT_PATH, async (req, res) => {
+  async function handleConsult(req, res) {
     // 1) Geteiltes Geheimnis - VOR jedem Store-Zugriff, jeder Zustandsaenderung und jeder
     // Protokollzeile, die Inhalt tragen koennte. Leerer config-Wert -> 403 statt "nichts
     // zu pruefen" (Empty-Secret-Trap: safeEqual("", "") waere true).
@@ -116,10 +141,40 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised }) 
     });
     if (budgetAxis) return denied(res, HTTP_PAYMENT_REQUIRED, budgetAxis);
 
-    // 5) Wirkung - erst hier entsteht ein Datensatz.
-    const outcome = await onConsultRaised({ callId: call.id, question: req.body?.question });
+    // 5) Gleichzeitigkeit - und erst DANN die Wirkung. Dieser Aufruf ist ein blockierender
+    // Halter: er haelt die Verbindung des Anbieters bis CONSULT_OPEN_MS offen. Ohne
+    // Obergrenze kann derselbe Anruf beliebig viele davon gleichzeitig aufziehen (gemessen:
+    // 8 parallele Aufrufe, alle gehalten). Gezaehlt wird auf den BESTEHENDEN Slot-Zaehlern
+    // des Kanals (MAX_OPEN_POLLS_PER_CALL / MAX_OPEN_POLLS_PER_TENANT, consult/delivery.js),
+    // nicht auf einem zweiten daneben - "wie viele Verbindungen haengen an diesem Anruf"
+    // ist EINE Tatsache. Kein freier Platz -> 404 wie jede andere Faehigkeits-Ablehnung,
+    // OHNE dass ein Datensatz entsteht.
+    const held = await consultSlots.withOpenSlot(call.id, call.tenantId, () =>
+      onConsultRaised({ callId: call.id, question: req.body?.question }),
+    );
+    if (!held.granted) return denied(res, HTTP_NOT_FOUND, "kein_freier_platz");
+    const outcome = held.value;
     console.log(`[el-consult] call=${call.id} ergebnis=${outcome.kind}`);
-    res.json({ status: outcome.kind, answer: toolResultText(outcome, localeFor(call.language)) });
+    return res.json({
+      status: outcome.kind,
+      answer: toolResultText(outcome, localeFor(call.language)),
+    });
+  }
+
+  // Eigenes Fehler-Netz statt des zentralen (app.js): Express 4 reicht die Rejection eines
+  // async-Handlers NICHT an die Error-Middleware weiter - ohne dieses try/catch bliebe der
+  // Aufruf des Anbieters bei einem Store-Fehler unbeantwortet haengen, bis dessen
+  // response_timeout_secs zuschlaegt, und der Agent stuende stumm im laufenden Gespraech.
+  // Die Antwort ist generisch (Regel 4/5): NIE err.message/stack an den Client, nie ein
+  // Stueck der Nutzlast - die Diagnose bleibt server-seitig.
+  router.post(ELEVENLABS_CONSULT_PATH, async (req, res) => {
+    try {
+      return await handleConsult(req, res);
+    } catch (err) {
+      console.error(`[el-consult] fehler: ${err?.stack || err?.message || "unbekannt"}`);
+      if (res.headersSent) return res.end();
+      return res.status(HTTP_SERVER_ERROR).json({ error: "intern" });
+    }
   });
 
   return router;

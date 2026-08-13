@@ -404,6 +404,11 @@ export async function buildApp(deps) {
     directiveSynth,
     voiceRender,
     messaging,
+    // EL-BL4: die EINE ConsultDelivery-Instanz (INV-7). registerApiRoutes nimmt sie fuer
+    // die Poll-Route direkt aus deps; DIESE Ebene braucht sie selbst, weil der
+    // ElevenLabs-Rueckfrage-Webhook hier gemountet wird und auf ihren Slot-Zaehlern und
+    // ihrem Drain-Flag sitzt.
+    consultDelivery,
     // DIP-Seam (PLAN-AUTH-GATE P1) - dieselbe Naht, die wireWebLogin intern schon nutzt,
     // nur eine Ebene hoeher gezogen: der Routen-Inventar-Test
     // (test/route-auth-inventory.test.js) muss den PRODUKTIONS-Routengraph bauen
@@ -502,14 +507,22 @@ export async function buildApp(deps) {
   // Bindung an einen laufenden Anruf, Faehigkeits-Gate und die pro-Tenant-Kostendecke
   // (volle Begruendung im Routenmodul + src/route-policy.js). NICHT unter /voice: die
   // Ed25519-Signaturpruefung dort bleibt unberuehrt. Die Wirkung laeuft ueber den
-  // BESTEHENDEN Consult-Kanal (call.consults, AL-P13); makeConsultRaised ist zustandslos
-  // (keine Zaehler, kein Drain-Flag - anders als consultDelivery) und wird deshalb hier
-  // in der Kompositionswurzel gebaut, wie makeTelnyxLlmShim.
+  // BESTEHENDEN Consult-Kanal (call.consults, AL-P13); makeConsultRaised haelt selbst
+  // keinen Zustand und wird deshalb hier in der Kompositionswurzel gebaut, wie
+  // makeTelnyxLlmShim.
+  //
+  // BEIDE Nahtstellen zeigen auf DIESELBE consultDelivery-Instanz (INV-7), und zwar
+  // aus zwei Gruenden: ihre Slot-Zaehler begrenzen, wie viele Verbindungen gleichzeitig
+  // an einem Anruf/Mandanten haengen duerfen - dieser Webhook ist ein solcher Halter
+  // (EL-BL4) -, und ihr Drain-Flag loest beim Deploy auch den hier wartenden Aufruf auf,
+  // bevor httpServer.close() darauf wartet (EL-BEFUND-4). Eine zweite Instanz haette
+  // zweite Zaehler und damit gar keine Obergrenze.
   app.use(
     makeElevenLabsWebhookRoutes({
       store,
       config,
-      onConsultRaised: makeConsultRaised({ store }),
+      consultSlots: consultDelivery,
+      onConsultRaised: makeConsultRaised({ store, isDraining: consultDelivery.isDraining }),
     }),
   );
 

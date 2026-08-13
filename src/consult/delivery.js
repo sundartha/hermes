@@ -27,6 +27,11 @@ export const MAX_OPEN_POLLS_PER_TENANT = 4;
 // Die drei Ereignisformen des Kanals (G25: kein nacktes String-Literal an fuenf Stellen).
 export const CONSULT_EVENT = Object.freeze({ CONSULT: "consult", DONE: "done", NONE: "none" });
 
+// EL-BL4: die Absage der Slot-Vergabe. Eigenes Ergebnis-Objekt statt null/undefined,
+// damit der Aufrufer "kein Slot frei" nicht mit "Slot bekommen, Ergebnis war leer"
+// verwechseln kann - der Unterschied entscheidet ueber Ablehnung oder Antwort.
+const NO_SLOT = Object.freeze({ granted: false, value: null });
+
 const NO_EVENT = Object.freeze({ event: CONSULT_EVENT.NONE, eventId: null, questions: [] });
 const DONE_EVENT = Object.freeze({ event: CONSULT_EVENT.DONE, eventId: null, questions: [] });
 
@@ -104,14 +109,38 @@ export function makeConsultDelivery({
     }
   }
 
+  // EL-BL4: derselbe Slot fuer einen ZWEITEN blockierenden Halter desselben Kanals - den
+  // Rueckfrage-Webhook des ElevenLabs-Laufwerks, der seinen Request bis CONSULT_OPEN_MS
+  // offen haelt. Er zaehlt auf DIESE Zaehler (kein zweiter, driftender Zaehler daneben,
+  // G5): "wie viele Verbindungen haengen gerade an diesem Anruf" ist EINE Tatsache, egal
+  // ob der Halter ein pollender Client oder ein wartendes Werkzeug ist. Der Slot wird im
+  // finally freigegeben, nicht auf ein Socket-Ereignis hin (Begruendung im Dateikopf) -
+  // deshalb kapselt die Naht das try/finally selbst, statt claim/free herauszureichen:
+  // ein vergessenes free waere eine dauerhaft verbrannte Verbindung, also schlimmer als
+  // gar keine Obergrenze.
+  async function withOpenSlot(callId, tenantId, run) {
+    if (!claimSlot(callId, tenantId)) return NO_SLOT;
+    try {
+      return { granted: true, value: await run() };
+    } finally {
+      freeSlot(callId, tenantId);
+    }
+  }
+
   return {
     waitForEvent,
+    withOpenSlot,
     // Shutdown-Drain: jeder Warter loest binnen einem Tick auf. MUSS vor
     // httpServer.close() laufen - sonst haelt ein 22-s-Poll den Drain auf, der
     // Watchdog kappt mit exit(0) und der finale Store-Flush faellt aus.
     releaseOpenPolls() {
       draining = true;
     },
+    // EL-BEFUND-4: dasselbe Drain-Signal, gelesen statt gesetzt. Jeder Warter, der NICHT
+    // in waitForEvent sitzt (der Rueckfrage-Webhook wartet in conversation/
+    // consult-raised.js), fragt hier nach und loest beim Drain ebenfalls auf - EIN
+    // Flag fuer alle Halter statt eines zweiten, das bootServer separat kennen muesste.
+    isDraining: () => draining,
     openPollCount: (callId) => pollsPerCall.get(callId) || 0,
   };
 }

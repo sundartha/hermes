@@ -56,15 +56,19 @@ function consultById(call, consultId) {
 }
 
 /**
- * @param {{store: object, holdMs?: number, tickMs?: number}} deps
+ * @param {{store: object, isDraining?: () => boolean, holdMs?: number, tickMs?: number}} deps
  *   holdMs/tickMs sind TEST-OVERRIDES nach dem Repo-Idiom von makeConsultDelivery; die
  *   Produktionsverdrahtung uebergibt sie nie.
+ *   isDraining = das Drain-Signal des Consult-Kanals (consult/delivery.js). Default
+ *   "nie" haelt jeden Bestands-Aufrufer unveraendert; die Produktionsverdrahtung reicht
+ *   consultDelivery.isDraining herein (EIN Flag fuer alle Halter, G5).
  * @returns {(request: {callId: string, question: string}) => Promise<{kind: string,
  *   facts: string[], reason?: string}>} WIRFT NIE - jede erwartbare Ablehnung ist ein
  *   Ergebnis (kind), kein Reject.
  */
 export function makeConsultRaised({
   store,
+  isDraining = () => false,
   holdMs = CONSULT_OPEN_MS,
   tickMs = CONSULT_POLL_TICK_MS,
 }) {
@@ -79,14 +83,22 @@ export function makeConsultRaised({
   }
 
   // Die Fakten GENAU DIESER Antwort. Sie leben ausschliesslich in call.context.key_facts
-  // (state-ops: der Consult-Datensatz traegt bewusst nur ihre ANZAHL, kein zweiter
-  // Speicherort desselben Freitexts). answerConsult haengt sie hinten an - der vor der
-  // Emission gemerkte Stand ist deshalb ihr Anfang.
-  function answeredFacts(call, consult, factsOffset) {
-    return keyFactsOf(call).slice(factsOffset, factsOffset + consult.answeredFacts);
+  // (state-ops: der Consult-Datensatz traegt bewusst nur ihre LAGE - Startindex und
+  // Anzahl -, kein zweiter Speicherort desselben Freitexts). Beide Zahlen setzt
+  // answerConsult in DEMSELBEN synchronen Schritt, in dem es die Fakten anhaengt.
+  //
+  // NICHT am Rand nachgerechnet (Stand vor der Emission + Anzahl): addLookupFacts
+  // (state-ops) haengt am SELBEN Anruf ebenfalls key_facts an - waehrend hier gewartet
+  // wird. Ein nachgerechneter Offset lieferte dann fremde Suchtreffer als Antwort ins
+  // laufende Gespraech. Fehlt die Lage (Fremd-/Altdatensatz), gibt es keine Fakten
+  // statt falscher: fail-closed.
+  function answeredFacts(call, consult) {
+    const from = consult.answeredFactsFrom;
+    if (!Number.isSafeInteger(from) || from < 0) return [];
+    return keyFactsOf(call).slice(from, from + consult.answeredFacts);
   }
 
-  async function awaitAnswer({ callId, consultId, factsOffset }) {
+  async function awaitAnswer({ callId, consultId }) {
     const deadlineMs = Date.now() + holdMs;
     for (;;) {
       const call = store.getCall(callId);
@@ -97,11 +109,16 @@ export function makeConsultRaised({
       const consult = consultById(call, consultId);
       if (!consult) return timedOut("consult_verschwunden");
       if (consult.status === CONSULT_STATUS.ANSWERED)
-        return { kind: CONSULT_RESULT.ANSWERED, facts: answeredFacts(call, consult, factsOffset) };
+        return { kind: CONSULT_RESULT.ANSWERED, facts: answeredFacts(call, consult) };
       // Nicht mehr offen und nicht beantwortet = abgelaufen/verfallen (expireOpenConsults,
       // Wartezeit-Schritt). Der Grund-Token ist der Status selbst, PII-frei.
       if (consult.status !== CONSULT_STATUS.OPEN) return timedOut(consult.status);
       if (Date.now() >= deadlineMs) return timedOut("frist_abgelaufen");
+      // EL-BEFUND-4: Drain-Freigabe, gleiche Stelle und gleicher Grund wie in
+      // ConsultDelivery.waitForEvent. Ohne sie haelt dieser Warter beim Deploy
+      // httpServer.close() bis zu CONSULT_OPEN_MS auf, der Shutdown-Watchdog kappt mit
+      // exit(0) - und der finale Store-Flush faellt aus (Datenverlust bei jedem Deploy).
+      if (isDraining()) return timedOut("drain");
       await sleep(tickMs);
     }
   }
@@ -117,10 +134,9 @@ export function makeConsultRaised({
     // caller-Zeilen-Pruefung: fail-OPEN, ohne Fehler, ohne Warnung.
     const asked = sanitizeConsultQuestion(question, call.transcript);
     if (!asked) return rejected("frage_abgelehnt");
-    const factsOffset = keyFactsOf(call).length;
     const consult = raise(callId, asked);
     if (!consult) return rejected("nicht_emittiert");
     logConsultRaised(callId, consult.id, holdMs);
-    return awaitAnswer({ callId, consultId: consult.id, factsOffset });
+    return awaitAnswer({ callId, consultId: consult.id });
   };
 }
