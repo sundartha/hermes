@@ -44,9 +44,24 @@ const ACTIVE_CALL_STATUS = "active";
 // BEWUSST NICHT das Flag TELNYX_AI_ASSISTANT_ENABLED: legt ein Deploy es um, waehrend ein
 // Gespraech laeuft, verloere genau dieses Leg seine Deckung - der Zustand am Call, nicht
 // der Zustand der Konfiguration, entscheidet (G28: die Bedingung hat einen Namen).
+//
+// answeredAt ist das VIERTE Merkmal und tragend: die drei anderen stehen alle schon am Call,
+// BEVOR abgehoben wurde (status ab createCall, assistantId/callControlId ab dem Waehlen,
+// store/state-ops.js) - ein noch klingelndes Leg sah ohne diese Bedingung exakt aus wie ein
+// laufendes Gespraech. Telnyx laesst bis TELNYX_DIAL_TIMEOUT_SECS (60 s) klingeln, laenger als
+// die Dead-Air-Frist (Default 45 s): ein Neustart waehrend des Klingelns kappte damit einen
+// Anruf, den noch niemand angenommen hatte (beobachtet: dead_air {"callId":"...","turnSeq":0}).
+// answeredAt statt telnyxConversationId: markAnswered laeuft im call.answered-Ingest und ist
+// die letzte persistierte Zustandsaenderung VOR arm() (onSpeakEnded, telnyx-call-control-
+// ingest.js). Die Conversation-UUID wird erst bei conversation_created geschrieben, also NACH
+// arm() - an ihr haengend verloere ein bereits armiertes Leg seine Deckung, sobald das Event
+// ausbleibt oder der Neustart genau dazwischen faellt.
 function isRunningAssistantLeg(call) {
   return (
-    call.status === ACTIVE_CALL_STATUS && Boolean(call.assistantId) && Boolean(call.callControlId)
+    call.status === ACTIVE_CALL_STATUS &&
+    Boolean(call.answeredAt) &&
+    Boolean(call.assistantId) &&
+    Boolean(call.callControlId)
   );
 }
 
@@ -299,7 +314,14 @@ export function makeConversationWatchdog({
   // 1800 s) statt der Dead-Air-Frist (Default 45 s) - bei minutengenauer Abrechnung der
   // Unterschied zwischen Cent und Euro.
   //
-  // KONSERVATIV PER KONSTRUKTION: armiert wird die VOLLE Frist ab dem Neustart, nie eine
+  // KONSERVATIV PER KONSTRUKTION - das haengt an ZWEI Teilen, nicht an einem: WELCHE Legs
+  // gedeckt werden (isRunningAssistantLeg, s.o.) und mit WELCHER Frist. Zur Auswahl: fuer ein
+  // noch klingelndes Leg hatte der ungestoerte Prozess ueberhaupt KEINE Frist gestellt (arm()
+  // faellt erst nach startAssistant, also nach dem Abheben) - jede Frist ist kuerzer als gar
+  // keine, und der Re-Arm kappte solche Anrufe mitten im Klingeln. Die Zusicherung "startet die
+  // Uhr nie frueher, als der Prozess es getan haette" traegt deshalb erst mit answeredAt im
+  // Praedikat; der Satz unten galt vorher nur fuer bereits abgenommene Legs.
+  // Zur Frist: armiert wird die VOLLE Frist ab dem Neustart, nie eine
   // aus einem alten Zeitstempel zurueckgerechnete Restfrist. Der fluechtige Zustand
   // (speechEndsAtMs/emptyStreak/turnSeq) ist mit dem Prozess weg und wird NICHT geraten -
   // arm() ist exakt derselbe Aufruf, den ai_assistant_start macht. Der Neustart liegt nie
