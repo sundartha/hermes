@@ -58,12 +58,38 @@ const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
 // /voice-Praefix als EINE Quelle (G5): rawBody-Capture und der Rate-Limit-Bypass
 // teilen denselben Praefix.
 const VOICE_PATH_PREFIX = "/voice";
+// Statuscodes als benannte Konstanten (G25): die Umleitung und die Grenzen, innerhalb
+// derer ein Body-Parser-Fehler als Eingabefehler des Aufrufers gilt (400 einschliesslich
+// bis 500 ausschliesslich).
+const HTTP_FOUND = 302;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_SERVER_ERROR = 500;
 // rawBody fuer /voice (Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
 // gegen den unveraenderten Body. Die Erfassung aendert das Parsen NICHT (verify
 // laeuft VOR dem Parsen, additiv).
+// Object.assign statt direkter Zuweisung: req GEHOERT Express, nicht uns - die Mutation
+// ist der vom verify-Vertrag vorgesehene Weg, ein Rohwert an den Request zu haengen, und
+// sie wird hier als solche benannt statt als Parameter-Mutation geschrieben (P6/F2).
 const captureRawBody = (req, _res, buf) => {
-  if (req.path.startsWith(VOICE_PATH_PREFIX) || req.path === STRIPE_WEBHOOK_PATH) req.rawBody = buf;
+  if (req.path.startsWith(VOICE_PATH_PREFIX) || req.path === STRIPE_WEBHOOK_PATH)
+    Object.assign(req, { rawBody: buf });
 };
+
+// Body-Parser-Fehler (413 zu gross, 400 kaputtes JSON) als JSON statt HTML beantworten.
+// Alles ausserhalb der 4xx-Spanne wandert unveraendert weiter an das Error-Netz.
+function respondToParserError(err, res, next) {
+  if (!err) return next();
+  if (!err.status || err.status < HTTP_BAD_REQUEST || err.status >= HTTP_SERVER_ERROR)
+    return next(err);
+  res.status(err.status).json({ error: err.type || "bad request" });
+}
+
+// Der Parser meldet seinen Fehler an den Callback, den er selbst aufruft - die Antwort
+// entsteht damit DORT, wo der Fehler entsteht. Vorher stand dafuer eine app-weite
+// Fehler-Middleware direkt hinter den beiden Parsern; gleiches Verhalten, aber ohne den
+// Vier-Parameter-Handler, den Express nur an fn.length erkennt (F1: Obergrenze 3).
+const withParserErrors = (parser) => (req, res, next) =>
+  parser(req, res, (err) => respondToParserError(err, res, next));
 
 export function installGlobalMiddleware({ app, config }) {
   app.use(securityHeaders);
@@ -80,14 +106,10 @@ export function installGlobalMiddleware({ app, config }) {
     rateLimiter(req, res, next);
   });
 
-  app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })); // Provider-Webhooks (form-encoded)
-  app.use(express.json({ limit: BODY_LIMIT, verify: captureRawBody })); // eigene API + MCP
-
-  // Body-Parser-Fehler (413 zu gross, 400 kaputtes JSON) als JSON statt HTML beantworten
-  app.use((err, _req, res, next) => {
-    if (!err.status || err.status < 400 || err.status >= 500) return next(err);
-    res.status(err.status).json({ error: err.type || "bad request" });
-  });
+  app.use(
+    withParserErrors(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })),
+  ); // Provider-Webhooks (form-encoded)
+  app.use(withParserErrors(express.json({ limit: BODY_LIMIT, verify: captureRawBody }))); // eigene API + MCP
 }
 
 export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }) {
@@ -144,7 +166,7 @@ export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }
   // Marketing-index.html (dist/index.html, weiter unten gemountet) -> der Landing-Redirect
   // gilt nur OHNE den unified Build (byte-identisch zum Bestand).
   if (!config.server.webDistDir) {
-    app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
+    app.get("/", (_req, res) => res.redirect(HTTP_FOUND, LOGIN_PATH));
   }
 }
 
@@ -160,7 +182,7 @@ export function registerPathRedirects({ app }) {
   // braucht): niemand kommt hier mit sinnvollem Query an, und ein ungeprueft in die
   // Location gereichter Query waere unnoetige Flaeche. Beide Ziele sind Konstanten aus
   // dem Modul - nie aus dem Request abgeleitet (kein Open Redirect).
-  const umleitungAuf = (ziel) => (_req, res) => res.redirect(302, ziel);
+  const umleitungAuf = (ziel) => (_req, res) => res.redirect(HTTP_FOUND, ziel);
   for (const pfad of LOGIN_ALIAS_PATHS) app.get(pfad, umleitungAuf(LOGIN_PATH));
   for (const pfad of APP_ALIAS_PATHS) app.get(pfad, umleitungAuf(APP_PATH));
 }
@@ -223,7 +245,7 @@ export function registerStaticServing({ app, config }) {
     app.get(LEGACY_PORTAL_PATH, (req, res) => {
       const queryAt = req.originalUrl.indexOf("?");
       const search = queryAt === -1 ? "" : req.originalUrl.slice(queryAt);
-      res.redirect(302, APP_PATH + search);
+      res.redirect(HTTP_FOUND, APP_PATH + search);
     });
     // Statische Marketing-Site + App-Shell. extensions:["html"] loest /preise -> preise.html
     // auf; "/" liefert dist/index.html, /app -> app/index.html (express.static-Index-Default).
@@ -248,7 +270,14 @@ export function registerStaticServing({ app, config }) {
   }
 }
 
-export async function buildApp(deps) {
+// ---- REST-API + MCP: die Mount-Sequenz hinter den Voice-Webhooks -------------------
+// Eigener benannter Registrar wie installGlobalMiddleware/registerPublicRoutes/
+// registerStaticServing - REINE Verschiebung aus buildApp, Reihenfolge und Argumente
+// unveraendert (INV-2: die Sequenz bleibt an EINER Stelle sichtbar, sie ist nur eine
+// Ebene tiefer benannt). deps kommt als GANZES herein, damit diese Liste nicht zum
+// zweiten, mitzupflegenden Abbild der buildApp-Signatur wird; operatorAuth entsteht erst
+// im Web-Login-Block darueber und wird deshalb getrennt gereicht.
+export function registerApiRoutes({ app, deps, operatorAuth }) {
   const {
     config,
     store,
@@ -259,104 +288,9 @@ export async function buildApp(deps) {
     outboundGates,
     requestTenant,
     requireTenant,
-    conversationWatchdog,
-    ttsStore,
-    directiveSynth,
-    voiceRender,
     costTruing,
-    messaging,
     consultDelivery,
-    // DIP-Seam (PLAN-AUTH-GATE P1) - dieselbe Naht, die wireWebLogin intern schon nutzt,
-    // nur eine Ebene hoeher gezogen: der Routen-Inventar-Test
-    // (test/route-auth-inventory.test.js) muss den PRODUKTIONS-Routengraph bauen
-    // (sessionSecret + storeBackend "pg" -> Web-Login-Block gemountet), und der einzige
-    // infrastruktur-beruehrende Kollaborator darin ist der pg-Pool. Default = der echte
-    // Runner -> der Produktivpfad (server.js reicht den Dep nicht) bleibt unveraendert.
-    createPortalRunner = defaultCreatePortalRunner,
   } = deps;
-
-  const app = express();
-  // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
-  // per X-Forwarded-For eine beliebige IP vortaeuschen.
-  app.set("trust proxy", 1);
-
-  installGlobalMiddleware({ app, config });
-  registerPublicRoutes({ app, config, store, watchdog: conversationWatchdog, lifecycle });
-  registerPathRedirects({ app });
-
-  // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
-  // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
-  // ohne Secret keine Cookie-Signatur. Muss VOR express.static liegen, damit
-  // /auth/login nicht durch das statische Serving geschattet wird.
-  //
-  // AUTH-P6: operatorAuth traegt die Admin-Sitzungs-Middlewares (webAuthMw+adminMw) fuer
-  // die sechs Betreiber-Routen (makeBillingRoutes/makeOnboardRoutes, s.u.) nach oben.
-  // Initialwert null, Zuweisung NUR im guardedBoot-Callback: wirft ein Schritt davor oder
-  // laeuft der Block gar nicht (kein sessionSecret/pg), bleibt operatorAuth null -
-  // fail-closed by construction, kein Zweig, den man vergessen kann. guardedBoot selbst
-  // bleibt unveraendert (liefert weiterhin boolean, s. INV-11/boot-guard.test.js).
-  let operatorAuth = null;
-  if (config.auth.sessionSecret && config.store.storeBackend === "pg") {
-    // INV-11: der gesamte Web-Login/Portal/Stripe-Webhook/Self-Service-Block (in
-    // src/wiring/web-login.js, wireWebLogin) laeuft in guardedBoot (fail-OPEN). Wirft
-    // createPortalRunner (F5-Rollen-Assertion ODER Portal-DB unerreichbar) oder ein
-    // Wiring-Schritt, faengt guardedBoot es laut + secret-frei ab -> Routen NICHT gemountet
-    // (404), aber /voice, /healthz, /mcp und das Owner-Dashboard leben weiter. Q1: wireWebLogin
-    // loggt im Erfolgsfall "[boot] Web-Login aktiv" (eigene Zeile), sodass der fail-open-
-    // Zustand nicht mehr unsichtbar ist. createPortalRunner injiziert (DIP-Seam, offline
-    // fakebar); STRIPE_WEBHOOK_PATH/APP_PATH bleiben EINE Konstante
-    // (INV-1) und werden hereingereicht. provision = provisioning.triggerTenantProvisioning
-    // (die EINE P6-Orchestrator-Instanz, in server.js konstruiert, TDZ-Vermeidung).
-    await guardedBoot("Web-Login/Portal", async () => {
-      operatorAuth = await wireWebLogin({
-        app,
-        config,
-        store,
-        audit,
-        provision: provisioning.triggerTenantProvisioning,
-        createPortalRunner,
-        stripeWebhookPath: STRIPE_WEBHOOK_PATH,
-        appPath: APP_PATH,
-        messaging,
-      });
-    });
-  }
-
-  registerStaticServing({ app, config });
-  app.use(express.static(config.server.publicDir));
-
-  // Play-TTS-Seam, Voice-Render-Helfer und Directiven-Synth kommen als die EINEN
-  // Wurzel-Instanzen herein (INV-7, in server.js konstruiert).
-
-  // ---- Voice-Webhooks -----------------------------------------------------------------
-  // Alle /voice/* (GET /voice/tts/:token, app.use("/voice",sig-MW), incoming/turn/outbound/
-  // status/call-control) leben in routes/voice.js (makeVoiceRoutes, DI-Muster wie
-  // makeCallRoutes). Mount an UNVERAENDERTER Position: nach express.static(publicDir), vor
-  // makeCallRoutes (INV-2). Sicherung ist die Provider-Signaturpruefung, fail-closed. INV-4: TTS-Route
-  // VOR der Sig-MW (im Router festgehalten). finishCall = die EINE callFinish-Instanz
-  // (INV-7); watchdog = der EINE conversationWatchdog (geteilt mit dem Shim);
-  // voiceRender/directiveSynth/ttsStore/lifecycle = die EINEN Wurzel-Instanzen.
-  app.use(
-    makeVoiceRoutes({
-      store,
-      config,
-      audit,
-      voiceRender,
-      directiveSynth,
-      ttsStore,
-      lifecycle,
-      finishCall: callFinish.finishCall,
-      voiceControl,
-      webhookEvents,
-      providerFromHeaders,
-      inboundSignatureVerifier,
-      terminateAndBillCall,
-      billThunk,
-      watchdog: conversationWatchdog,
-    }),
-  );
-
-  // ================= REST-API (Dashboard + MCP-Tools) =================
 
   // ---- Outbound-Call-Routen -------------------------------------------------------
   // Die Outbound-Call-Route-Gruppe (POST /api/calls, POST /api/calls/:id/cancel) lebt
@@ -451,6 +385,118 @@ export async function buildApp(deps) {
   // (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
   // Wurzel-Instanz (INV-7).
   app.use(makeMcpRoutes({ config, store, requestTenant }));
+}
+
+export async function buildApp(deps) {
+  // Nur, was DIESE Ebene selbst braucht - die Kollaborateure der REST-API-Sequenz nimmt
+  // registerApiRoutes direkt aus deps (kein zweites, mitzupflegendes Abbild).
+  const {
+    config,
+    store,
+    audit,
+    callFinish,
+    lifecycle,
+    provisioning,
+    conversationWatchdog,
+    ttsStore,
+    directiveSynth,
+    voiceRender,
+    messaging,
+    // DIP-Seam (PLAN-AUTH-GATE P1) - dieselbe Naht, die wireWebLogin intern schon nutzt,
+    // nur eine Ebene hoeher gezogen: der Routen-Inventar-Test
+    // (test/route-auth-inventory.test.js) muss den PRODUKTIONS-Routengraph bauen
+    // (sessionSecret + storeBackend "pg" -> Web-Login-Block gemountet), und der einzige
+    // infrastruktur-beruehrende Kollaborator darin ist der pg-Pool. Default = der echte
+    // Runner -> der Produktivpfad (server.js reicht den Dep nicht) bleibt unveraendert.
+    createPortalRunner = defaultCreatePortalRunner,
+  } = deps;
+
+  const app = express();
+  // Genau EIN vertrauenswuerdiger Proxy (Render). Nicht `true`: sonst kann jeder Client
+  // per X-Forwarded-For eine beliebige IP vortaeuschen.
+  app.set("trust proxy", 1);
+
+  installGlobalMiddleware({ app, config });
+  registerPublicRoutes({ app, config, store, watchdog: conversationWatchdog, lifecycle });
+  registerPathRedirects({ app });
+
+  // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
+  // Nur aktiv wenn sessionSecret UND pg-Backend gesetzt: ohne DB kein Session-Store,
+  // ohne Secret keine Cookie-Signatur. Muss VOR express.static liegen, damit
+  // /auth/login nicht durch das statische Serving geschattet wird.
+  //
+  // AUTH-P6: operatorAuth traegt die Admin-Sitzungs-Middlewares (webAuthMw+adminMw) fuer
+  // die sechs Betreiber-Routen (makeBillingRoutes/makeOnboardRoutes, s.u.) nach oben.
+  // Initialwert null, Zuweisung NUR im guardedBoot-Callback: wirft ein Schritt davor oder
+  // laeuft der Block gar nicht (kein sessionSecret/pg), bleibt operatorAuth null -
+  // fail-closed by construction, kein Zweig, den man vergessen kann. guardedBoot selbst
+  // bleibt unveraendert (liefert weiterhin boolean, s. INV-11/boot-guard.test.js).
+  let operatorAuth = null;
+  if (config.auth.sessionSecret && config.store.storeBackend === "pg") {
+    // INV-11: der gesamte Web-Login/Portal/Stripe-Webhook/Self-Service-Block (in
+    // src/wiring/web-login.js, wireWebLogin) laeuft in guardedBoot (fail-OPEN). Wirft
+    // createPortalRunner (F5-Rollen-Assertion ODER Portal-DB unerreichbar) oder ein
+    // Wiring-Schritt, faengt guardedBoot es laut + secret-frei ab -> Routen NICHT gemountet
+    // (404), aber /voice, /healthz, /mcp und das Owner-Dashboard leben weiter. Q1: wireWebLogin
+    // loggt im Erfolgsfall "[boot] Web-Login aktiv" (eigene Zeile), sodass der fail-open-
+    // Zustand nicht mehr unsichtbar ist. createPortalRunner injiziert (DIP-Seam, offline
+    // fakebar); STRIPE_WEBHOOK_PATH/APP_PATH bleiben EINE Konstante
+    // (INV-1) und werden hereingereicht. provision = provisioning.triggerTenantProvisioning
+    // (die EINE P6-Orchestrator-Instanz, in server.js konstruiert, TDZ-Vermeidung).
+    await guardedBoot("Web-Login/Portal", async () => {
+      operatorAuth = await wireWebLogin({
+        app,
+        config,
+        store,
+        audit,
+        provision: provisioning.triggerTenantProvisioning,
+        createPortalRunner,
+        stripeWebhookPath: STRIPE_WEBHOOK_PATH,
+        appPath: APP_PATH,
+        messaging,
+      });
+    });
+  }
+
+  registerStaticServing({ app, config });
+  app.use(express.static(config.server.publicDir));
+
+  // Play-TTS-Seam, Voice-Render-Helfer und Directiven-Synth kommen als die EINEN
+  // Wurzel-Instanzen herein (INV-7, in server.js konstruiert).
+
+  // ---- Voice-Webhooks -----------------------------------------------------------------
+  // Alle /voice/* (GET /voice/tts/:token, app.use("/voice",sig-MW), incoming/turn/outbound/
+  // status/call-control) leben in routes/voice.js (makeVoiceRoutes, DI-Muster wie
+  // makeCallRoutes). Mount an UNVERAENDERTER Position: nach express.static(publicDir), vor
+  // makeCallRoutes (INV-2). Sicherung ist die Provider-Signaturpruefung, fail-closed. INV-4: TTS-Route
+  // VOR der Sig-MW (im Router festgehalten). finishCall = die EINE callFinish-Instanz
+  // (INV-7); watchdog = der EINE conversationWatchdog (geteilt mit dem Shim);
+  // voiceRender/directiveSynth/ttsStore/lifecycle = die EINEN Wurzel-Instanzen.
+  app.use(
+    makeVoiceRoutes({
+      store,
+      config,
+      audit,
+      voiceRender,
+      directiveSynth,
+      ttsStore,
+      lifecycle,
+      finishCall: callFinish.finishCall,
+      voiceControl,
+      webhookEvents,
+      providerFromHeaders,
+      inboundSignatureVerifier,
+      terminateAndBillCall,
+      billThunk,
+      watchdog: conversationWatchdog,
+    }),
+  );
+
+  // ================= REST-API (Dashboard + MCP-Tools) + MCP-Transport ==============
+  // Die Mount-Sequenz selbst steht in registerApiRoutes (oben) - Position, Reihenfolge
+  // und Argumente unveraendert (INV-2). operatorAuth entsteht im Web-Login-Block und
+  // entscheidet dort ueber die sechs Betreiber-Routen (AUTH-P6).
+  registerApiRoutes({ app, deps, operatorAuth });
 
   // ---- Catch-all Error-Net -----------------------------------------------------------
   // MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur

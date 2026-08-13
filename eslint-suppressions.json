@@ -1642,20 +1642,6 @@
       "count": 1
     }
   },
-  "src/app.js": {
-    "max-lines-per-function": {
-      "count": 1
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 5
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
   "src/audit-store.js": {
     "id-length": {
       "count": 1
