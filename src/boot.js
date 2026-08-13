@@ -843,6 +843,33 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
     .catch((e) => console.error("[cost-cross-check]", e.message));
 }
 
+// EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter
+// IN DIESEM Prozess - dem Rueckfrage-Webhook des Laufwerks (conversation/consult-raised.js)
+// oder dem Long-Poll des Auftraggebers (consult/delivery.js). Beide loest der Drain auf und
+// schliesst dabei den Datensatz; ein harter Abbruch (Absturz, SIGKILL) laesst den Drain aber
+// gar nicht erst laufen. Der DATENSATZ ueberlebt trotzdem - und der neu gestartete Dienst
+// legte dieselbe Frage einem frischen Poll erneut vor, obwohl niemand mehr auf die Antwort
+// wartet.
+//
+// DRITTE Stelle DESSELBEN Mechanismus (Call-Ende: setCallEndedAt; Drain: der Warter selbst),
+// kein zweiter Status: expireOpenConsults heisst abgelaufen, NICHT beantwortet.
+//
+// Nur laufende Anrufe - bei terminalen hat setCallEndedAt bereits geschlossen. Ein Warter
+// aus dem Vorprozess kann per Definition nicht mehr leben, und ein Consult DIESES Laufs kann
+// es noch nicht geben: die Naht sitzt vor app.listen, es ist noch keine Route erreichbar
+// (Muster rearmActiveCallTimers/rearmActiveCalls, unmittelbar davor). Setzt keine Timer und
+// ruft kein process.exit - INV-5 bleibt unberuehrt. pendingConsult ist der bestehende reine
+// Leser fuer "an diesem Anruf ist noch etwas offen"; die Zeile traegt nur eine Anzahl, nie
+// eine Frage (Regel 4) und erscheint nur, wenn wirklich etwas geschlossen wurde.
+function expireOrphanedConsults(store) {
+  const orphaned = store
+    .load()
+    .calls.filter((call) => call.status === "active" && store.pendingConsult(call.id));
+  for (const call of orphaned) store.expireOpenConsults(call.id);
+  if (orphaned.length)
+    console.log(`[boot] verwaiste Rueckfragen geschlossen: ${orphaned.length} Anrufe`);
+}
+
 export async function bootServer({
   app,
   config,
@@ -932,6 +959,12 @@ export async function bootServer({
   // Setzt ausschliesslich Timer - INV-5 (kein exit(1) nach dem Re-Arm) bleibt unberuehrt,
   // der Max-Dauer-Cap und sein Re-Arm sind unveraendert.
   conversationWatchdog.rearmActiveCalls(store.load().calls);
+
+  // Dritte Achse desselben Boot-Problems: die beiden Re-Arms darueber holen Timer zurueck,
+  // die der Neustart genommen hat - diese Naht schliesst den Zustand, den kein Timer mehr
+  // erreicht (s. expireOrphanedConsults). NACH dem Cap-Re-Arm, damit ein dort terminalisierter
+  // Zombie hier gar nicht erst als laufender Anruf auftaucht.
+  expireOrphanedConsults(store);
 
   const httpServer = app.listen(config.server.port, () => {
     // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port

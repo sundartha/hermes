@@ -118,7 +118,21 @@ export function makeConsultRaised({
       // ConsultDelivery.waitForEvent. Ohne sie haelt dieser Warter beim Deploy
       // httpServer.close() bis zu CONSULT_OPEN_MS auf, der Shutdown-Watchdog kappt mit
       // exit(0) - und der finale Store-Flush faellt aus (Datenverlust bei jedem Deploy).
-      if (isDraining()) return timedOut("drain");
+      //
+      // EL-NEUSTART-4: von den drei Beteiligten ueberlebt nur der DATENSATZ den Neustart -
+      // der Warter stirbt hier gleich. Deshalb wird der Consult geschlossen, BEVOR
+      // geantwortet wird: danach laeuft in diesem Prozess nichts mehr, was es noch tun
+      // koennte. Ohne diesen Schritt legt der neu gestartete Dienst dieselbe Frage einem
+      // frischen Poll erneut vor, und der Auftraggeber antwortete einem Wartenden, den es
+      // nicht mehr gibt. Derselbe Mechanismus wie am Call-Ende (setCallEndedAt ->
+      // expireOpenConsults) und derselbe Status: abgelaufen, NICHT beantwortet - diese
+      // Frage hat nie eine Antwort bekommen. Das Zeitfenster des Drains bleibt gewahrt:
+      // der Schreibweg ist synchron (json) bzw. reiht einen Flush ein (pg), die Antwort
+      // geht unveraendert im selben Tick raus.
+      if (isDraining()) {
+        store.expireOpenConsults(callId);
+        return timedOut("drain");
+      }
       await sleep(tickMs);
     }
   }
