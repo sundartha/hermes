@@ -31,6 +31,7 @@ const SUPPRESSIONS_REL = "eslint-suppressions.json";
 const LEGACY_EXCEPTIONS_REL = "eslint-legacy-exceptions.json";
 const CALENDAR_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const PRUNE_COMMAND = "npx eslint --prune-suppressions";
+const NO_VERIFY_COMMAND = "git commit --no-verify";
 const LOG_PREFIX = "[check-staged-suppressions]";
 // process.argv[0]=node, [1]=Skriptpfad - die eigentlichen Argumente beginnen danach.
 const CLI_ARGS_OFFSET = 2;
@@ -85,17 +86,29 @@ function formatOffender({ file, ruleCounts }) {
   return `  ${file} -> ${rulesText}`;
 }
 
+// Der Ausweg gehoert in den Bericht, nicht nur in den Kopfkommentar: wer
+// blockiert wird, liest diesen Text und sonst nichts. Fehlt der zweite Weg,
+// greift er zum naechstliegenden Mittel - am 2026-08-13 ist genau so ein
+// Commit still an der Ratsche vorbeigelaufen. Kurz halten, das liest jemand
+// im Terminal.
+const WAY_OUT_LINES = [
+  `Aufraeumen (Normalfall): Verstoesse beheben, danach: ${PRUNE_COMMAND}`,
+  `Waere das Aufraeumen ein eigener Umbau: die Datei in ${LEGACY_EXCEPTIONS_REL}`,
+  "eintragen, mit reason (warum sie liegen bleibt) und date (YYYY-MM-DD).",
+  `"${NO_VERIFY_COMMAND}" ist keine Option.`,
+];
+
+function logLine(text) {
+  console.error(`${LOG_PREFIX} ${text}`);
+}
+
 function printReport(offenders) {
   console.error("");
-  console.error(
-    `${LOG_PREFIX} Commit abgebrochen: folgende vorgemerkte Dateien tragen`,
-  );
-  console.error(`${LOG_PREFIX} noch Eintraege in ${SUPPRESSIONS_REL}:`);
+  logLine("Commit abgebrochen: folgende vorgemerkte Dateien tragen");
+  logLine(`noch Eintraege in ${SUPPRESSIONS_REL}:`);
   for (const offender of offenders) console.error(formatOffender(offender));
   console.error("");
-  console.error(
-    `${LOG_PREFIX} Verstoesse beheben, danach: ${PRUNE_COMMAND}`,
-  );
+  for (const line of WAY_OUT_LINES) logLine(line);
 }
 
 function readRepoFile(relativePath) {
