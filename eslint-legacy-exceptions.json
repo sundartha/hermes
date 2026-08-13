@@ -6,5 +6,13 @@
   "src/store/pg.js": {
     "reason": "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration.",
     "date": "2026-08-13"
+  },
+  "src/telnyx-conversation-watchdog.js": {
+    "reason": "Echte Schuld, kein Fehlschnitt der Regel. Uebrig bleiben no-param-reassign (der per-Call-Zustand wird bewusst als Parameter durchgereicht und mutiert) und die 109 Zeilen der Fabrik - beides raeumt nur ein Umbau der Dead-Air-Zustandsmaschine auf, nicht der Boot-Re-Arm.",
+    "date": "2026-08-13"
+  },
+  "src/boot.js": {
+    "reason": "Echte Schuld, kein Fehlschnitt der Regel. Komplexitaet von logBootBanner, die process.env-Zuweisung im listen-Callback und 14 Kurznamen sind ein eigener Umbau des Boot-Moduls und nicht Teil des Boot-Re-Arms.",
+    "date": "2026-08-13"
   }
 }
