@@ -34,6 +34,24 @@ jobs:
           for f in src/*.js scripts/*.js; do node --check "$f"; done
       - name: Lint (eslint, blockierend)
         run: npm run lint
+      # Vor-dem-Hochladen-Gate fuer die ElevenLabs-Testdefinitionen
+      # (scripts/check-elevenlabs-tests.js): Registry-Kopplung, Platzhalter,
+      # Variablen-Vokabular. Ein Gate, das nur wirkt, wenn ein Mensch das
+      # Kommando tippt, schuetzt nichts - deshalb laeuft es hier bei jedem Push.
+      #
+      # continue-on-error, weil der Lauf heute mit exit 1 endet: vier
+      # <AUSFUELLEN: ...>-Platzhalter in a3-keine-ueberfluessige-rueckfrage.json
+      # und a5-recherche-ohne-erfindung-tool.json warten auf Werte, die erst mit
+      # dem ElevenLabs-Agents-Abo entstehen (Tool-IDs, elevenlabs/tests/README.md,
+      # Abschnitt "WARNUNG vor dem ersten Lauf"). Blockierend waere der Schritt
+      # heute rot auf jedem Push und damit binnen einer Woche abgeschaltet.
+      #
+      # SOBALD DIESE VIER PLATZHALTER AUFGELOEST SIND: continue-on-error hier
+      # entfernen. Ab dann ist jeder Fund ein Push-Blocker - genau dafuer
+      # existiert das Gate, denn hochgeladen wird nur, was fehlerfrei ist.
+      - name: ElevenLabs-Testdefinitionen (informativ, blockiert den Build NICHT)
+        run: npm run elevenlabs:check
+        continue-on-error: true
       # Coverage-Gate ersetzt den reinen Test-Lauf (kein Doppellauf): node --test fuehrt
       # ohnehin alle Tests aus und bricht zusaetzlich mit exit 1 ab, sobald eine Schwelle
       # reisst. Schwellen kalibriert am schwellenlosen Lauf auf node 22 (= CI-Runtime,

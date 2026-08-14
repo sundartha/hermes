@@ -1,10 +1,14 @@
 # ElevenLabs-Testdefinitionen — Format, Beleg, Luecken
 
-Dieses Verzeichnis enthaelt die Vorlagen fuer die Abnahmeliste aus
-`UMSETZUNG-ElevenLabs.md`, Abschnitt 2 (Gruppe A, 10 Kriterien: A1-A10).
-Zehn Agenten fuellen je ein Kriterium in eines der drei Vorlagenformate unter
-`templates/`. Diese Notiz dokumentiert, woher jedes Feld belegt ist, und was
-NICHT belegt werden konnte.
+Diese Notiz gehoert zur Abnahmeliste aus `UMSETZUNG-ElevenLabs.md`,
+Abschnitt 2 (Gruppe A, 10 Kriterien: A1-A10). Zehn Agenten fuellten je ein
+Kriterium in eines der drei Vorlagenformate unter `templates/`. Sie
+dokumentiert, woher jedes Feld belegt ist, und was NICHT belegt werden konnte.
+
+**Die elf ausgefuellten Testdefinitionen liegen seit dem Umzug nicht mehr
+hier, sondern unter `elevenlabs/test_configs/`, die Registry daneben unter
+`elevenlabs/tests.json`** (Begruendung: Abschnitt "Ablage" unten). In diesem
+Verzeichnis stehen nur noch diese Notiz und die Vorlagen unter `templates/`.
 
 **Es existiert noch kein ElevenLabs-Agents-Abo.** Die Definitionen koennen
 erst hochgeladen werden (`elevenlabs tests push`, `POST
@@ -14,10 +18,11 @@ gemacht werden.
 
 ## WARNUNG vor dem ersten Lauf (Pflichtlektuere)
 
-**Kein Test aus diesem Ordner darf laufen, solange auch nur ein einziger
-`<AUSFUELLEN: ...>`-Marker in einer der elf Testdefinitionen steht.** Vor dem
-ersten Push/Lauf pruefen: `grep -rn "AUSFUELLEN" elevenlabs/tests/*.json` —
-jeder Treffer muss durch einen echten Wert ersetzt sein, keine Ausnahme.
+**Kein Test aus `elevenlabs/test_configs/` darf laufen, solange auch nur ein
+einziger `<AUSFUELLEN: ...>`-Marker in einer der elf Testdefinitionen steht.** Vor dem
+ersten Push/Lauf pruefen: `npm run elevenlabs:check` (oder direkt
+`grep -rn "AUSFUELLEN" elevenlabs/test_configs/*.json`) — jeder Treffer muss
+durch einen echten Wert ersetzt sein, keine Ausnahme.
 
 Drei Faelle sind dabei besonders gefaehrlich, weil ein "bestandener" Test
 nichts beweist, solange die Luecke offen ist:
@@ -45,12 +50,9 @@ nichts beweist, solange die Luecke offen ist:
   sicherstellen, dass der Testagent kein Recherche-Werkzeug angehaengt hat,
   sonst prueft A9 nichts.
 
-## Gewaehltes Verzeichnis
+## Ablage: `test_configs/` + `tests.json`
 
-`elevenlabs/tests/` — vorgegeben durch den Auftrag, der diese Recherche
-ausgeloest hat (Schreibrahmen), nicht selbst gewaehlt.
-
-Zum Vergleich, was die ElevenLabs-CLI selbst dokumentiert (belegt,
+Was die ElevenLabs-CLI erwartet (belegt,
 <https://elevenlabs.io/docs/eleven-agents/operate/cli>, Abschnitt
 "Project Structure", woertliches Baumdiagramm):
 
@@ -64,17 +66,118 @@ your_project/
 └── test_configs/
 ```
 
-Die CLI erwartet also eine Registry-Datei `tests.json` im Projekt-Root plus
-einen Ordner `test_configs/` fuer die einzelnen Testdateien — nicht
-`elevenlabs/tests/`. Da der Schreibrahmen dieses Auftrags `elevenlabs/tests/`
-fest vorgibt, uebernehmen wir davon nur das, was formatrelevant ist (JSON,
-ein Ordner mit einer Datei je Test — s.u.), nicht den Ordnernamen selbst.
-**Empfehlung fuer den spaeteren Push:** die ausgefuellten Definitionen der
-zehn Agenten unter `elevenlabs/tests/test_configs/` ablegen (CLI-Unterordner-
-Name, genestet unter dem vorgegebenen Root) und beim `push`/`pull` explizit
-`--output-dir elevenlabs/tests/test_configs` bzw. eine passende `tests.json`
-mitgeben. Eine `tests.json`-Registry wurde hier bewusst NICHT angelegt, weil
-sie nicht Teil des Auftrags ist und mit Platzhalter-IDs nur Muell waere.
+Die CLI erwartet also eine Registry-Datei `tests.json` im Projekt-Wurzel-
+verzeichnis plus einen Ordner `test_configs/` fuer die einzelnen Testdateien.
+`elevenlabs/` IST dieses Wurzelverzeichnis — dort liegt bereits
+`agent_configs/`; `test_configs/` und `tests.json` sind seit dem Umzug seine
+Geschwister. Die frueher hier empfohlene Verschachtelung unter
+`elevenlabs/tests/test_configs/` ist damit hinfaellig: sie haette
+`agent_configs/` und `test_configs/` in zwei verschiedene Wurzeln gelegt,
+also zwei verschiedene Arbeitsverzeichnisse fuer `agents push` und
+`tests push` erzwungen.
+
+CLI-Aufrufe (`elevenlabs tests push|pull`) gehoeren deshalb aus `elevenlabs/`
+heraus abgesetzt: `pushTests` oeffnet den `config`-Pfad einer Registry-Zeile
+unveraendert, also relativ zum Arbeitsverzeichnis (Beleg s.u.).
+
+### Format von `tests.json`
+
+Die Doku zeigt `tests.json` nur im Baumdiagramm, ohne Inhalt. Belegt ist das
+Format deshalb am Quelltext der CLI (<https://github.com/elevenlabs/cli>,
+`src/tests/commands/impl.ts`):
+
+```ts
+interface TestDefinition {
+  config: string;
+  type?: string;
+  id?: string;
+}
+interface TestsConfig {
+  tests: TestDefinition[];
+}
+```
+
+- `config` — Pfad zur Testdatei. `pushTests` benutzt ihn direkt
+  (`const configPath = testDef.config`), ohne `path.resolve` — also relativ
+  zum Arbeitsverzeichnis des Aufrufs.
+- `type` — optional, die VORLAGE, aus der `elevenlabs tests add` die Datei
+  erzeugt hat (`basic-llm`, `tool`, `conversation-flow`, `customer-service`,
+  s. `src/tests/templates.ts`). Unsere elf Dateien stammen aus keiner dieser
+  Vorlagen, deshalb nicht gesetzt. Nicht verwechseln mit dem `type`-Feld IN
+  der Testdatei (`llm` | `tool` | `simulation`, s. Abschnitt "Testarten").
+- `id` — optional, die ElevenLabs-Kennung. Sie entsteht ERST beim ersten Push
+  und wird von der CLI selbst zurueckgeschrieben (`testDef.id = newTestId`).
+  Deshalb hier nicht gesetzt — ein `<AUSFUELLEN: ...>` waere hier falsch: der
+  Wert ist nicht auszufuellen, sondern wird erzeugt.
+- Der Testname steht NICHT in der Registry: `pushTests` liest ihn aus der
+  Testdatei (`testConfig.name || 'Unnamed Test'`).
+
+`tests.json` traegt bewusst KEINEN `_`-Doku-Schluessel, anders als die
+uebrigen JSON-Dateien hier. Grund: die CLI schreibt die Datei selbst neu
+(`writeConfig(testsConfigPath, testsConfig)`), und ob sie Fremdschluessel
+dabei erhaelt oder verwirft, ist nicht belegt. Die Dokumentation steht
+deshalb hier statt in der Datei.
+
+### Eine neue Testdefinition braucht ZWEI Dinge
+
+**Die Datei unter `elevenlabs/test_configs/` UND eine `config`-Zeile in
+`elevenlabs/tests.json`.** Ohne die Registry-Zeile wird sie nie hochgeladen:
+`pushTests` laeuft die Registry ab, nicht den Ordner (Beleg s. Abschnitt
+"Format von `tests.json`"). Eine Definition ohne Zeile sieht geprueft aus und
+laeuft nie — ihr Abnahmekriterium bleibt ungemessen.
+
+### Was das Gate prueft
+
+`npm run elevenlabs:check` (`scripts/check-elevenlabs-tests.js`) haelt genau
+das fest, in drei Pruefungen:
+
+1. **Registry-Kopplung, beidseitig.** Jede Definition unter
+   `elevenlabs/test_configs/` (ohne `templates/`) muss eine `config`-Zeile in
+   `elevenlabs/tests.json` haben — und jede `config`-Zeile muss auf eine
+   vorhandene Datei zeigen, sonst bricht der Push an diesem Pfad ab. Ein
+   fehlender oder leerer `test_configs/`-Ordner ist ein Fund fuer sich
+   (fail-closed), auch wenn anderswo eine Streu-Definition liegt.
+   `elevenlabs/tests/` ist kein Ablageort mehr: eine Definition dort wird
+   namentlich gemeldet. Die Felder `id` und `type`, die die CLI nach dem Push
+   selbst zurueckschreibt, sind ausdruecklich KEIN Fund.
+2. **Platzhalter.** Kein `<AUSFUELLEN: ...>` in einer Testdefinition;
+   Doku-Schluessel mit `_`-Praefix sind ausgenommen, sie sind kein Teil des
+   ElevenLabs-Schemas.
+3. **Vokabular.** Jede einzelne Testdefinition setzt in `dynamic_variables`
+   jede Variable, die die Agentenkonfiguration als `{{name}}` liest — und
+   keine, die diese nicht kennt.
+
+**Geprueft wird die Vereinigung aus Ablage und Registry.** Platzhalter- und
+Vokabular-Pruefung laufen nicht nur ueber die beiden Ablageorte, sondern
+zusaetzlich ueber jeden vorhandenen `config`-Pfad aus `tests.json` — auch wenn
+er an beiden Ablageorten vorbeizeigt (z.B. `agent_configs/streu.json`).
+Hochgeladen wird, was in der Registry steht; genau diese Datei duerfte sonst
+ungeprueft in ElevenLabs landen.
+
+Damit gelten fuer `config`-Pfade drei weitere Regeln, jede ein Fund:
+
+- **Kein absoluter Pfad, kein `..`.** Die CLI oeffnet den Pfad unveraendert
+  relativ zu `elevenlabs/`; beides zeigt aus diesem Verzeichnis heraus.
+- **Kein Pfad zweimal.** Zwei Zeilen auf dieselbe Datei legen den Test doppelt
+  in ElevenLabs an — zwei Kennungen fuer ein Abnahmekriterium.
+- **Gross-/Kleinschreibung exakt.** Der Abgleich laeuft case-sensitiv gegen die
+  Verzeichnis-Eintraege, nicht ueber `existsSync`: auf macOS ist das Dateisystem
+  case-insensitiv, dort saehe `test_configs/A1.json` vorhanden aus, waehrend der
+  Push auf dem Linux-CI an genau diesem Pfad abbricht.
+
+`elevenlabs/tests.json` selbst wird nicht auf Platzhalter oder
+`dynamic_variables` geprueft: es ist eine Registry, keine Testdefinition. Die
+Vorlagen bleiben ausgenommen — aber nur der Ordner `templates/` DIREKT unter
+einem Ablageort und nur, solange die Vorlage in KEINER Registry-Zeile steht.
+Ein `templates/`-Ordner in beliebiger Tiefe waere sonst ein Versteck fuer
+ungepruefte Definitionen, und eine registrierte Vorlage wird gepusht wie jede
+Testdefinition — dann wird sie auch geprueft wie jede.
+
+Das Gate laeuft in der CI bei jedem Push (`.github/workflows/ci.yml`, Schritt
+"ElevenLabs-Testdefinitionen"). Es ist dort vorerst NICHT blockierend
+(`continue-on-error`), weil die vier oben genannten Platzhalter den Lauf heute
+rot enden lassen; sobald sie aufgeloest sind, wird der Schritt blockierend
+geschaltet.
 
 ## Dateiformat
 
@@ -83,9 +186,9 @@ sie nicht Teil des Auftrags ist und mit Platzhalter-IDs nur Muell waere.
 uebertragen werden, ist ueber das Request-Schema von `POST
 /v1/convai/agent-testing/create` belegt (Beleg-URL unten) — der Endpunkt
 nimmt einen JSON-Body mit den unten aufgefuehrten Feldern entgegen, das ist
-die Form, die auch die CLI beim Push/Pull verwendet. Ob einzelne Dateien in
-`test_configs/` exakt `.json` heissen und wie sie benannt sind, steht in der
-CLI-Doku nicht woertlich da — siehe UNGEKLAERT.
+die Form, die auch die CLI beim Push/Pull verwendet. Wie einzelne Dateien in
+`test_configs/` heissen, ist frei: die CLI findet sie nicht ueber ein
+Namensmuster, sondern ueber den `config`-Pfad in `tests.json` (s.o.).
 
 **Datei-Praefix in diesem Ordner:** `templates/*.template.json` — bewusst mit
 `_vorlage_hinweis`/`_eval_varianten_hinweis`-Feldern markiert, die NICHT Teil
@@ -176,11 +279,10 @@ Antwort"). Strukturell eindeutig, aber kein Zitat-Beleg fuer die Namensgleichhei
 - **`bucketing_status`-Feld.** Nur in einer Suchmaschinen-Zusammenfassung
   aufgetaucht (nicht als Zitat aus einer geladenen Doku-Seite bestaetigt).
   Nicht in die Feldtabelle als belegt aufgenommen.
-- **Datei-Namenskonvention innerhalb von `test_configs/`.** Die CLI-Doku
-  zeigt den Ordner im Projektbaum, aber keine Beispiel-Dateinamen fuer
-  einzelne Tests darin (ein `.json` pro Test wird nur aus dem Muster bei
-  `agent_configs/`/`tool_configs/` angenommen, nicht woertlich fuer Tests
-  bestaetigt).
+- ~~**Datei-Namenskonvention innerhalb von `test_configs/`.**~~ Erledigt mit
+  dem Umzug: die CLI sucht nicht nach einem Namensmuster, sie liest den
+  `config`-Pfad aus `tests.json` (Beleg s. Abschnitt "Format von
+  `tests.json`"). Die Dateinamen sind damit frei waehlbar.
 
 ## Betriebs-Anweisung: erster Lauf mit `repeat_count` 1
 
