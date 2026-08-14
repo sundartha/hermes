@@ -43,8 +43,8 @@ import {
 <!-- Default versteckt: ohne PAYMENT_ENABLED (hasCard kein Boolean) bleibt der
      Block verborgen, byte-identisch zum Bestand. JS zeigt ihn nur bei present. -->
 <section id="billing-card" class="card" hidden>
-  <h2>Billing</h2>
-  <p class="muted">Your plan, payment method and usage for Hermes.</p>
+  <h2 data-i18n="billingTitle">Billing</h2>
+  <p class="muted" data-i18n="billingSubtitle">Your plan, payment method and usage for Hermes.</p>
 
   <!-- 1. aktueller Tarif + Status: Serif-Hauptwert + Mono-Nebenangabe (§10). -->
   <div class="billing-status">
@@ -58,14 +58,14 @@ import {
 
   <!-- 2. Zahlungsmittel: Kartensymbol + Text + Ghost-Knopf (§10). -->
   <div class="billing-section">
-    <h3 class="billing-section__title">Payment method</h3>
+    <h3 class="billing-section__title" data-i18n="paymentMethod">Payment method</h3>
     <div class="payment-card">
       <svg class="payment-card__icon" viewBox="0 0 24 16" aria-hidden="true" focusable="false">
         <rect x="1" y="1" width="22" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
         <rect x="1" y="4.5" width="22" height="3" fill="currentColor"></rect>
       </svg>
       <p id="billing-card-status" class="payment-card__status muted"></p>
-      <button id="billing-add" class="payment-card__action" type="button">Add payment method</button>
+      <button id="billing-add" class="payment-card__action" type="button" data-i18n="addPaymentMethod">Add payment method</button>
     </div>
   </div>
 
@@ -75,7 +75,7 @@ import {
        vorliegt"). Die Fuellbreite reist als CSS-Custom-Property (--quota-fill,
        panels.css) statt als style-Attribut -- kein Inline-Style im Markup. -->
   <div id="billing-quota-section" class="billing-section" hidden>
-    <h3 class="billing-section__title">Usage</h3>
+    <h3 class="billing-section__title" data-i18n="usage">Usage</h3>
     <div id="quota-bar" class="quota-bar" hidden>
       <div id="quota-bar-fill" class="quota-bar__fill"></div>
     </div>
@@ -84,7 +84,7 @@ import {
 
   <!-- 4. Tarifwechsel: die Plan-Kacheln, NUR ohne aktives Abo (s. Kopf-Kommentar). -->
   <div class="billing-section">
-    <h3 id="sub-tiles-title" class="billing-section__title" hidden>Choose your plan</h3>
+    <h3 id="sub-tiles-title" class="billing-section__title" hidden data-i18n="choosePlan">Choose your plan</h3>
     <div id="sub-tiles" class="plans" hidden></div>
     <p id="sub-msg" class="billing-msg" hidden></p>
   </div>
@@ -108,7 +108,7 @@ import {
     <p id="cancel-msg" class="billing-msg" hidden></p>
   </div>
 
-  <p class="billing-footnote">Payments are processed securely via Stripe.</p>
+  <p class="billing-footnote" data-i18n="billingFootnote">Payments are processed securely via Stripe.</p>
 </section>
 
 <script>
@@ -137,7 +137,10 @@ import {
     billingStatusBadgeClass,
     billingStatusHeadline,
     billingStatusDetail,
+    cancelAbortLabel,
+    resumeButtonLabel,
   } from "../../lib/subscribe.js";
+  import { t } from "../../lib/i18n.js";
 
   // Rueckkehr-Parameter (kein Magic-String an den Vergleichsstellen).
   const RETURN_PARAM_CARD = "card";
@@ -209,8 +212,8 @@ import {
 
   // 2. Zahlungsmittel: Karten-Status + Button-Text (1:1 zum Bestand).
   function renderCardSection(hasCard) {
-    cardStatusEl.textContent = hasCard ? "Card on file." : "No card on file yet.";
-    addBtn.textContent = hasCard ? "Add a different card" : "Add payment method";
+    cardStatusEl.textContent = hasCard ? t("cardOnFile") : t("noCardOnFile");
+    addBtn.textContent = hasCard ? t("addDifferentCard") : t("addPaymentMethod");
   }
 
   // 3. Kontingent: quotaLine liefert null ohne aktives Abo -> die ganze Sektion UND
@@ -239,6 +242,12 @@ import {
   // (aktueller Plan/Termin), die Sichtbarkeit der zweiten Stufe bleibt dabei unberuehrt
   // (kein Zuklappen mitten im Bestaetigungs-Dialog durch einen Hintergrund-Re-Render).
   function renderCancelBlock(sub) {
+    // CANCEL_ABORT_LABEL/RESUME_BUTTON_LABEL sind serverseitig/englisch aus
+    // subscribe.js in die Karte gerendert (Astro-Frontmatter, ohne Sprachkontext);
+    // renderCancelBlock laeuft bei jedem AUTH_EVENT (inkl. des vom Sprachumschalter
+    // re-dispatchten) und bringt beide zusaetzlich auf die aktuelle Sprache.
+    cancelAbortEl.textContent = cancelAbortLabel();
+    resumeBtnEl.textContent = resumeButtonLabel();
     cancelBlockEl.hidden = !sub.planSlug;
     if (!sub.planSlug) return;
     cancelConfirmTextEl.textContent = cancelConfirmText(sub);
@@ -272,9 +281,8 @@ import {
   // Fehler -> kurze Meldung wie in der Vorlage (tenant.html addCard): 401 sagt
   // "Session expired" (neu anmelden), alles andere die generische Meldung.
   function checkoutErrorText(err) {
-    if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED)
-      return "Session expired - please sign in again.";
-    return "Couldn't start checkout.";
+    if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED) return t("billingSessionExpired");
+    return t("checkoutError");
   }
 
   // Checkout starten: POST liefert die Stripe-URL -> Browser dorthin leiten.
@@ -325,12 +333,11 @@ import {
   // Fehlerfall des Geldwegs fuer den Kunden stumm. Query danach entfernen (kein
   // Wiederholen).
   function returnMessageText(card, sub) {
-    if (card === RETURN_OK) return "Card saved.";
-    if (card === RETURN_CANCELED) return "Cancelled - no card saved.";
-    if (card === RETURN_ERROR) return "Something went wrong - no card was saved. Please try again.";
-    if (sub === RETURN_OK) return "Subscription booked.";
-    if (sub === RETURN_FAILED)
-      return "Card saved, but the subscription couldn't be booked. Please try again.";
+    if (card === RETURN_OK) return t("cardSaved");
+    if (card === RETURN_CANCELED) return t("cardCancelled");
+    if (card === RETURN_ERROR) return t("cardError");
+    if (sub === RETURN_OK) return t("subBooked");
+    if (sub === RETURN_FAILED) return t("subFailed");
     return "";
   }
 

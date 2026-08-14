@@ -18,8 +18,8 @@
 
 <section class="card">
   <div class="calls-head">
-    <h2>Calls</h2>
-    <span class="calls-head__hint">View details</span>
+    <h2 data-i18n="callsTitle">Calls</h2>
+    <span class="calls-head__hint" data-i18n="viewDetails">View details</span>
   </div>
   <ul id="calls-list" class="data-list calls-list" aria-live="polite"></ul>
 </section>
@@ -40,6 +40,7 @@
         id="call-modal-close"
         class="call-modal__close"
         aria-label="Close"
+        data-i18n-attr="aria-label:modalClose"
         data-call-modal-close
       >
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -50,7 +51,7 @@
     <div id="call-modal-contact" class="call-modal__contact"></div>
     <div id="call-modal-summary" class="call-modal__summary" hidden></div>
     <div class="call-modal__transcript">
-      <span class="call-modal__transcript-label">Transcript</span>
+      <span class="call-modal__transcript-label" data-i18n="transcript">Transcript</span>
       <div id="call-modal-transcript-body"></div>
     </div>
   </div>

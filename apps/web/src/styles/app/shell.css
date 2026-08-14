@@ -398,3 +398,53 @@
     animation: none;
   }
 }
+
+/* --------------------------------------------------- 5. Sprachumschalter -- */
+
+/* AuthIsland.astro: DE/EN, links neben Sign out, IMMER sichtbar (auch
+   ausgeloggt) -- .auth-island traegt jetzt den Umschalter UND genau eine der
+   beiden Auth-Steuerungen (auth-login/auth-account togglen sich gegenseitig
+   ueber [hidden], der Umschalter bleibt stehen). Optik 1:1 aus hermes.css
+   .lang uebernommen (Website-Umschalter), nur umbenannt (lang-toggle statt
+   lang -- .lang ist hier nicht vergeben, aber eigener Klassenname vermeidet
+   Verwechslung mit der Marketing-Seite). */
+.auth-island {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.lang-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 500 13px/1 var(--app-mono);
+}
+
+.lang-toggle__sep {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.lang-toggle__opt {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.lang-toggle__opt[aria-pressed="true"] {
+  color: #ffffff;
+}
+
+/* ≤480px: der Kopfbereich wrapt schon ab 768px (app-hermes.css); hier nur
+   der Umschalter selbst etwas kompakter, damit er neben Sign out passt. */
+@media (max-width: 480px) {
+  .auth-island {
+    gap: 12px;
+  }
+  .lang-toggle {
+    font-size: 12px;
+  }
+}

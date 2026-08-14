@@ -24,7 +24,7 @@
      mehr nach oben. -->
 <div id="agent-chip" class="agent-chip card" hidden>
   <span class="agent-chip__body">
-    <span class="agent-chip__label">Your number</span>
+    <span class="agent-chip__label" data-i18n="yourNumber">Your number</span>
     <span class="agent-chip__row">
       <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
       <span id="agent-number" class="agent-chip__number"></span>
@@ -35,6 +35,7 @@
     class="agent-chip__copy"
     type="button"
     aria-label="Copy phone number"
+    data-i18n-attr="aria-label:copyAriaLabel"
   >
     <svg
       class="agent-chip__copy-icon"
@@ -45,7 +46,7 @@
       <rect x="2" y="2" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
       <rect x="5.5" y="5.5" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
     </svg>
-    <span id="agent-copy-label" class="agent-chip__copy-label" aria-live="polite">Copy</span>
+    <span id="agent-copy-label" class="agent-chip__copy-label" data-i18n="copy" aria-live="polite">Copy</span>
   </button>
 </div>
 
@@ -57,6 +58,7 @@
     isAgentLive,
     numberPlaceholderText,
   } from "../../lib/api.js";
+  import { t } from "../../lib/i18n.js";
 
   const DOT_OFF_CLASS = "live-dot--off";
   const COPIED_CLASS = "is-copied";
@@ -119,11 +121,11 @@
     // Reflow erzwingen, damit die Pop-Animation bei schnellem Doppelklick erneut laeuft.
     void copyBtn.offsetWidth;
     copyBtn.classList.add(COPIED_CLASS);
-    copyLabelEl.textContent = "Copied";
+    copyLabelEl.textContent = t("copied");
     clearTimeout(copyResetTimer);
     copyResetTimer = setTimeout(() => {
       copyBtn.classList.remove(COPIED_CLASS);
-      copyLabelEl.textContent = "Copy";
+      copyLabelEl.textContent = t("copy");
     }, COPIED_LABEL_MS);
   }
 

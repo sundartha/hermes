@@ -53,16 +53,21 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
 ---
 
 <section id="settings-card" class="card" hidden>
-  <h2>My agent settings</h2>
-  <p class="muted">Takes effect on the next call.</p>
+  <h2 data-i18n="settingsTitle">My agent settings</h2>
+  <p class="muted" data-i18n="settingsHint">Takes effect on the next call.</p>
 
   <form id="settings-form" class="settings-form">
     <fieldset class="settings-lang">
-      <legend class="field-label">Agent language</legend>
-      <p class="muted settings-lang__hint">
+      <legend class="field-label" data-i18n="agentLanguage">Agent language</legend>
+      <p class="muted settings-lang__hint" data-i18n="agentLanguageHint">
         Choose the language your agent speaks on calls, or leave it automatic.
       </p>
-      <div class="lang-picker" role="radiogroup" aria-label="Agent language">
+      <div
+        class="lang-picker"
+        role="radiogroup"
+        aria-label="Agent language"
+        data-i18n-attr="aria-label:agentLanguage"
+      >
         {
           SETTINGS_LANGUAGES.map(({ value, label }) => (
             <label class="lang-tile">
@@ -71,7 +76,7 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
               <span class="lang-tile__ring" aria-hidden="true">
                 <span class="lang-tile__dot" aria-hidden="true" />
               </span>
-              <span class="lang-tile__label">{label}</span>
+              <span class="lang-tile__label" data-lang-value={value}>{label}</span>
               <span class="lang-tile__code" aria-hidden="true">{value ? value.toUpperCase() : "AUTO"}</span>
             </label>
           ))
@@ -80,13 +85,13 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     </fieldset>
 
     <fieldset class="settings-perms">
-      <legend class="field-label">Permissions</legend>
+      <legend class="field-label" data-i18n="permissions">Permissions</legend>
       {
         SETTINGS_PERMISSION_TOGGLES.map(({ key, label, hint }) => (
           <div class="perm-row">
             <span class="perm-text">
-              <span class="perm-title">{label}</span>
-              <span class="perm-hint muted">{hint}</span>
+              <span class="perm-title" data-perm-key={key}>{label}</span>
+              <span class="perm-hint muted" data-perm-key={key}>{hint}</span>
             </span>
             <label class="switch">
               <input type="checkbox" data-perm={key} />
@@ -98,7 +103,7 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     </fieldset>
 
     <div class="settings-actions">
-      <button id="settings-save" class="btn" type="submit">Save</button>
+      <button id="settings-save" class="btn" type="submit" data-i18n="save">Save</button>
       <span id="settings-msg" class="settings-msg" hidden></span>
     </div>
   </form>
@@ -115,7 +120,11 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     saveSettings,
     settingsFrom,
     settingsOutcome,
+    settingsLanguageLabel,
+    settingsPermissionLabel,
+    settingsPermissionHint,
   } from "../../lib/api.js";
+  import { t } from "../../lib/i18n.js";
 
   const cardEl = document.getElementById("settings-card");
   const formEl = document.getElementById("settings-form");
@@ -149,11 +158,30 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     }
   }
 
+  // Sprachkacheln- und Berechtigungs-Beschriftungen sind serverseitig/englisch aus
+  // SETTINGS_LANGUAGES/SETTINGS_PERMISSION_TOGGLES gerendert (Astro-Frontmatter,
+  // laeuft nur einmal, ohne Sprachkontext) -- diese Funktion bringt sie auf die
+  // aktuelle Sprache. Aufgerufen von fillForm() (jedes AUTH_EVENT, inkl. des vom
+  // Sprachumschalter re-dispatchten -- s. AuthIsland.astro), kein eigener
+  // LANG_EVENT-Listener noetig.
+  function syncSettingsLabels() {
+    for (const node of formEl.querySelectorAll("[data-lang-value]")) {
+      node.textContent = settingsLanguageLabel(node.dataset.langValue);
+    }
+    for (const node of formEl.querySelectorAll(".perm-title[data-perm-key]")) {
+      node.textContent = settingsPermissionLabel(node.dataset.permKey);
+    }
+    for (const node of formEl.querySelectorAll(".perm-hint[data-perm-key]")) {
+      node.textContent = settingsPermissionHint(node.dataset.permKey);
+    }
+  }
+
   // Formular aus dem state befuellen: die Sprach-Kachel auswaehlen (fehlend/leer
   // -> "Automatic", die erste Kachel mit value="") und die Permission-Toggles
   // ueber data-perm setzen. Kein clientseitiger DOM-Bau mehr (agentStyle/greeting
   // waren die einzigen Stellen, die Optionen zur Laufzeit erzeugten).
   function fillForm(data) {
+    syncSettingsLabels();
     const { settings } = settingsFrom(data);
     const language = settings.language || "";
     for (const input of formEl.querySelectorAll('input[name="settings-language"]')) {
@@ -177,10 +205,13 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     return form;
   }
 
-  // changed/rejected fuer die Rueckmeldung formatieren (Schluessel, keine Werte).
+  // changed/rejected fuer die Rueckmeldung formatieren (Schluessel, keine Werte
+  // -- die Feldnamen selbst sind technische Bezeichner, keine natuersprachlichen
+  // Strings, darum unuebersetzt; nur die umgebenden Praefixe kommen aus t()).
   function outcomeText({ changed, rejected }) {
-    const parts = [`Saved. Applied: ${changed.length ? changed.join(", ") : "—"}`];
-    if (rejected.length) parts.push(`rejected: ${rejected.join(", ")}`);
+    const applied = changed.length ? changed.join(", ") : t("settingsAppliedEmpty");
+    const parts = [`${t("settingsAppliedPrefix")} ${applied}`];
+    if (rejected.length) parts.push(`${t("settingsRejectedPrefix")} ${rejected.join(", ")}`);
     return parts.join(" · ");
   }
 
@@ -195,9 +226,8 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   // Fehlertext beim Speichern: 401 = abgelaufene Session (neu anmelden), sonst
   // generisch. Fail-closed: nie als Teil-Erfolg deuten.
   function saveErrorText(err) {
-    if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED)
-      return "Session expired - please sign in again.";
-    return "Not saved.";
+    if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED) return t("settingsSessionExpired");
+    return t("settingsNotSaved");
   }
 
   async function submit(event) {

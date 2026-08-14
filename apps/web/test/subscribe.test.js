@@ -39,7 +39,23 @@ import {
   newsletterConsentFrom,
   NEWSLETTER_MESSAGES,
   wireNewsletterToggle,
+  cancelAbortLabel,
+  resumeButtonLabel,
 } from "../src/lib/subscribe.js";
+
+// Simuliert die DE-Sprachwahl fuer getLang() (lib/i18n.js) ohne setLang() (das
+// greift auf `document` zu, s. render.test.js -- gleiches Muster hier).
+function withLang(lang, fn) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
+  const original = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => lang };
+  try {
+    fn();
+  } finally {
+    if (had) globalThis.localStorage = original;
+    else delete globalThis.localStorage;
+  }
+}
 
 // ---- Fake-DOM ---------------------------------------------------------------
 class FakeElement {
@@ -769,4 +785,82 @@ test("wireNewsletterToggle: 401 -> Session abgelaufen, Haekchen faellt zurueck",
   } finally {
     f.restore();
   }
+});
+
+// ---- Dashboard-i18n Etappe 2: DE-Modus ---------------------------------------
+
+test("DE-Modus: renewDate/subscriptionLine nutzen das deutsche Datumsformat (TT.MM.JJJJ), Woertlichkeit sonst deutsch", () => {
+  withLang("de", () => {
+    const epoch = 1781000000;
+    const expectedDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
+    assert.equal(
+      subscriptionLine({ planSlug: "starter", currentPeriodEnd: epoch }),
+      `Aktiver Tarif: Starter (verlängert sich am ${expectedDate}).`,
+    );
+    assert.equal(subscriptionLine({ planSlug: "business", currentPeriodEnd: 0 }), "Aktiver Tarif: Business.");
+  });
+});
+
+test("DE-Modus: quotaLine/billingStatusBadge/billingStatusText sind deutsch", () => {
+  withLang("de", () => {
+    assert.equal(quotaLine({ remainingMinutes: 5, includedMinutes: 30 }), "5 von 30 Minuten übrig");
+    assert.equal(billingStatusBadge(BILLING_STATUS.NO_CARD), "Keine Karte");
+    assert.equal(billingStatusBadge(BILLING_STATUS.ACTIVE), "Aktiv");
+    assert.match(billingStatusText(BILLING_STATUS.NO_CARD, { planSlug: "" }), /Zahlungsmittel/);
+    assert.match(billingStatusText(BILLING_STATUS.NO_SUB, { planSlug: "" }), /Tarif/);
+  });
+});
+
+test("DE-Modus: SUBSCRIBE_MESSAGES/CANCEL_MESSAGES/NEWSLETTER_MESSAGES/PLAN_CHOICE_COPY laufen ueber wireSubscribe/wireCancelControls/wireNewsletterToggle deutsch", async () => {
+  await withLangAsync("de", async () => {
+    const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { plan: "starter", currentPeriodEnd: 1 } }));
+    try {
+      const container = fakeContainer();
+      const opts = spyOpts();
+      wireSubscribe(container, opts);
+      await container.click("starter");
+      assert.deepEqual(opts.messages, [{ text: "Abo gebucht.", ok: true }]);
+    } finally {
+      f.restore();
+    }
+  });
+});
+
+// wireSubscribe/wireNewsletterToggle sind async -- withLang() (synchron) wuerde die
+// localStorage-Stub-Restauration VOR dem Abschluss des Promises zuruecknehmen. Eigene
+// async-Variante fuer diese Faelle (Muster identisch, nur await statt sofortigem finally).
+async function withLangAsync(lang, fn) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
+  const original = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => lang };
+  try {
+    await fn();
+  } finally {
+    if (had) globalThis.localStorage = original;
+    else delete globalThis.localStorage;
+  }
+}
+
+test("DE-Modus: cancelAbortLabel/resumeButtonLabel deutsch, CANCEL_BUTTON_LABEL/cancelConfirmText/cancelStatusLine bleiben unveraendert deutsch (§ 312k)", () => {
+  const epoch = 1781000000;
+  const expectedGermanDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
+  // Referenzwerte im EN-Default (kein withLang) -- § 312k-Texte sind IMMER deutsch,
+  // unabhaengig von der UI-Sprache.
+  const confirmTextEn = cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch });
+  const statusLineEn = cancelStatusLine({ currentPeriodEnd: epoch });
+  assert.equal(CANCEL_BUTTON_LABEL, "Verträge kündigen");
+  assert.ok(confirmTextEn.includes(expectedGermanDate));
+
+  withLang("de", () => {
+    assert.equal(cancelAbortLabel(), "Doch nicht");
+    assert.equal(resumeButtonLabel(), "Abo fortsetzen");
+    // Unveraendert trotz DE-Modus -- keine "doppelte" Uebersetzung, kein Drift.
+    assert.equal(CANCEL_BUTTON_LABEL, "Verträge kündigen");
+    assert.equal(cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch }), confirmTextEn);
+    assert.equal(cancelStatusLine({ currentPeriodEnd: epoch }), statusLineEn);
+  });
+
+  // Und weiterhin unveraendert im EN-Default danach (kein Leck aus withLang).
+  assert.equal(cancelAbortLabel(), "Never mind");
+  assert.equal(resumeButtonLabel(), "Resume subscription");
 });

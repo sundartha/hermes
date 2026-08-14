@@ -4,6 +4,16 @@
 // same-origin-Modell bei jedem Aufruf automatisch mit -- JS kommt nie an das
 // Cookie und braucht es auch nicht. credentials:"same-origin" ist der einzige
 // defensive Zusatz; ein Authorization-Header wird NIE gesetzt.
+//
+// i18n (Etappe 2): die dynamischen Anzeige-Strings dieses Moduls (Call-
+// Untertitel, Status-/Rollen-Beschriftungen, Sprach-/Berechtigungs-Kacheln,
+// Nummern-Platzhalter) bleiben mit ihrem EN-Wert test-gepinnt; je eine kleine
+// "_DE"-Entsprechung daneben + tPair/tDyn (lib/i18n.js) machen sie sprach-
+// bewusst. Das i18n.js-"localStorage" oben ist NICHT dasselbe wie dieser
+// Kommentar -- getLang() liest NUR den UI-Sprachschalter, kein Session-/Auth-
+// Zustand dieses Clients.
+
+import { tPair, tDyn } from "./i18n.js";
 
 // HTTP-Status, die die fail-closed Auth-Schicht des Gateways (webAuth) liefert:
 // 401 = kein/ungueltiges Session-Cookie, 403 = Tenant noch nicht freigegeben.
@@ -199,9 +209,13 @@ export function shouldPollNumberStatus(result, attemptCount) {
 // Chip-Platzhaltertexte (Fix C, PLAN-VOUCHER-SETUP-FEE-GAP.md) - EINE Quelle (G5) statt
 // einer zweiten Kopie im Astro-Script. Wortlaut ist ein Vorschlag (siehe Plan §6).
 const NUMBER_TEXT_NO_NUMBER = "No number assigned yet";
+const NUMBER_TEXT_NO_NUMBER_DE = "Noch keine Nummer zugewiesen";
 const NUMBER_TEXT_SETTING_UP = "Setting up your number…";
+const NUMBER_TEXT_SETTING_UP_DE = "Deine Nummer wird eingerichtet…";
 const NUMBER_TEXT_SETUP_FAILED = "Number setup failed";
+const NUMBER_TEXT_SETUP_FAILED_DE = "Einrichtung der Nummer fehlgeschlagen";
 const NUMBER_TEXT_SETUP_BLOCKED = "Number setup delayed — capacity limit reached";
+const NUMBER_TEXT_SETUP_BLOCKED_DE = "Einrichtung verzögert — Kapazitätsgrenze erreicht";
 
 // Platzhaltertext fuer eine NICHT-aktive Nummer: failed/blocked bekommen jetzt einen
 // eigenen Hinweis statt im generischen "No number assigned yet" zu verschwinden (Bug B -
@@ -209,11 +223,11 @@ const NUMBER_TEXT_SETUP_BLOCKED = "Number setup delayed — capacity limit reach
 // mit node:test unit-testbar, anders als die DOM-Verdrahtung in AgentChip.astro. Aktive
 // Nummer kommt hier nie an (der Aufrufer zeigt dann die echte e164 statt eines Platzhalters).
 export function numberPlaceholderText(data) {
-  if (isNumberProvisioning(data)) return NUMBER_TEXT_SETTING_UP;
+  if (isNumberProvisioning(data)) return tPair(NUMBER_TEXT_SETTING_UP, NUMBER_TEXT_SETTING_UP_DE);
   const { numberStatus } = agentInfo(data);
-  if (numberStatus === NUMBER_STATUS.FAILED) return NUMBER_TEXT_SETUP_FAILED;
-  if (numberStatus === NUMBER_STATUS.BLOCKED) return NUMBER_TEXT_SETUP_BLOCKED;
-  return NUMBER_TEXT_NO_NUMBER;
+  if (numberStatus === NUMBER_STATUS.FAILED) return tPair(NUMBER_TEXT_SETUP_FAILED, NUMBER_TEXT_SETUP_FAILED_DE);
+  if (numberStatus === NUMBER_STATUS.BLOCKED) return tPair(NUMBER_TEXT_SETUP_BLOCKED, NUMBER_TEXT_SETUP_BLOCKED_DE);
+  return tPair(NUMBER_TEXT_NO_NUMBER, NUMBER_TEXT_NO_NUMBER_DE);
 }
 
 // Liest den Karten-Status aus der state-Antwort -- die EINE Stelle, an der das
@@ -309,25 +323,37 @@ export function callCounterparty(call) {
 // Untertitel eines Calls: das Anrufziel (goal), sonst eine richtungsabhaengige
 // Standardbeschreibung -- 1:1 wie der Bestand (tenant.html renderCalls).
 const CALL_SUBTITLE_INBOUND = "Inbound call";
+const CALL_SUBTITLE_INBOUND_DE = "Eingehender Anruf";
 const CALL_SUBTITLE_OUTBOUND = "Outbound call";
+const CALL_SUBTITLE_OUTBOUND_DE = "Ausgehender Anruf";
 export function callSubtitle(call) {
   const c = call || {};
   if (c.goal) return c.goal;
-  return c.direction === CALL_DIRECTION.INBOUND ? CALL_SUBTITLE_INBOUND : CALL_SUBTITLE_OUTBOUND;
+  return c.direction === CALL_DIRECTION.INBOUND
+    ? tPair(CALL_SUBTITLE_INBOUND, CALL_SUBTITLE_INBOUND_DE)
+    : tPair(CALL_SUBTITLE_OUTBOUND, CALL_SUBTITLE_OUTBOUND_DE);
 }
 
 // Status-Beschriftung eines Calls (Anzeige-Text). Unbekannter/fehlender Status
 // faellt fail-closed auf "Failed" (wie der Bestand: jeder Nicht-
 // active/completed/cancelled-Wert ist die Fehler-Beschriftung).
-const CALL_STATUS_LABELS = Object.freeze({
+// Exportiert NUR fuer den Woerterbuch-Paritaets-Waechter (test/dashboard-i18n-
+// surface.test.js) -- der einzige Verbraucher innerhalb dieses Moduls bleibt
+// callStatusLabel().
+export const CALL_STATUS_LABELS = Object.freeze({
   active: "Live",
   completed: "Completed",
   cancelled: "Cancelled",
   failed: "Failed",
 });
+export const CALL_STATUS_LABELS_DE = Object.freeze({
+  active: "Live",
+  completed: "Abgeschlossen",
+  cancelled: "Abgebrochen",
+  failed: "Fehlgeschlagen",
+});
 export function callStatusLabel(call) {
-  const status = (call && call.status) || "";
-  return CALL_STATUS_LABELS[status] || CALL_STATUS_LABELS.failed;
+  return tDyn({ en: CALL_STATUS_LABELS, de: CALL_STATUS_LABELS_DE }, callStatusKind(call));
 }
 
 // Status-Klassen-Suffix fuer das Badge (active/completed -> eigene Farbe, alles
@@ -360,12 +386,15 @@ export function isAgentTurn(turn) {
 // "Counterparty" statt "Caller": bei outbound-Calls ruft der Agent an, die
 // Gegenstelle nimmt ab -- dasselbe Vokabular wie callCounterparty() oben, kein
 // zweiter Begriff fuer dieselbe Sache.
-const TURN_ROLE_LABELS = Object.freeze({ agent: "Agent", caller: "Counterparty" });
+// Exportiert NUR fuer den Woerterbuch-Paritaets-Waechter (s.o. CALL_STATUS_LABELS).
+export const TURN_ROLE_LABELS = Object.freeze({ agent: "Agent", caller: "Counterparty" });
+// "Gegenstelle" -- dasselbe deutsche Wort, das die Kommentare dieses Moduls
+// bereits durchgaengig fuer "Counterparty" verwenden (kein zweiter Begriff).
+export const TURN_ROLE_LABELS_DE = Object.freeze({ agent: "Agent", caller: "Gegenstelle" });
 export function turnRoleLabel(turn) {
   const role = (turn && turn.role) || "";
-  return Object.prototype.hasOwnProperty.call(TURN_ROLE_LABELS, role)
-    ? TURN_ROLE_LABELS[role]
-    : TURN_ROLE_LABELS.caller;
+  const key = Object.prototype.hasOwnProperty.call(TURN_ROLE_LABELS, role) ? role : "caller";
+  return tDyn({ en: TURN_ROLE_LABELS, de: TURN_ROLE_LABELS_DE }, key);
 }
 
 // Uhrzeit eines Turns (HH:MM, 24h) aus dem ISO-Zeitstempel `at`. BEWUSST ohne
@@ -439,6 +468,30 @@ export const SETTINGS_LANGUAGES = Object.freeze([
   { value: "en", label: "English" },
 ]);
 
+// DE-Entsprechung der Kachel-Beschriftungen oben (Schluessel = value). EN bleibt
+// unveraendert die Quelle der Wahrheit (SETTINGS_LANGUAGES.label, test-gepinnt) --
+// SettingsIsland.astro rendert die Kacheln serverseitig/englisch aus diesem Array
+// und ruft settingsLanguageLabel() zusaetzlich beim Formular-Fuellen (fillForm,
+// auf jedem AUTH_EVENT inkl. des vom Sprachumschalter re-dispatchten), um die
+// sichtbare Beschriftung auf die aktuelle Sprache zu bringen.
+export const SETTINGS_LANGUAGE_LABELS_DE = Object.freeze({
+  "": "Automatisch (nach Nummer)",
+  de: "Deutsch",
+  fr: "Französisch",
+  en: "Englisch",
+});
+// Aus SETTINGS_LANGUAGES abgeleitet statt dupliziert (G5: eine EN-Quelle) --
+// exportiert NUR fuer den Woerterbuch-Paritaets-Waechter (test/dashboard-i18n-
+// surface.test.js).
+export const SETTINGS_LANGUAGE_LABELS_EN = Object.freeze(
+  Object.fromEntries(SETTINGS_LANGUAGES.map((l) => [l.value, l.label])),
+);
+
+// Sprachbewusste Kachel-Beschriftung. Unbekannter Wert -> der rohe Wert (nie leer).
+export function settingsLanguageLabel(value) {
+  return tDyn({ en: SETTINGS_LANGUAGE_LABELS_EN, de: SETTINGS_LANGUAGE_LABELS_DE }, value) || value;
+}
+
 // Die Permission-Toggles der UI (Reihenfolge + Beschriftung). Es sind GENAU die
 // restrict-only-Flags: ein Tenant darf sie nur restriktiver setzen (true->false ja,
 // false->true NEIN - Aktivieren bleibt Plattform-Admin). Ein eigenes restrictOnly-
@@ -449,6 +502,32 @@ export const SETTINGS_PERMISSION_TOGGLES = Object.freeze([
   { key: "allowPersonalData", label: "Personal data", hint: "Share address, email, etc." },
   { key: "allowBankData", label: "Bank details", hint: "Share payment data (not recommended)" },
 ]);
+
+// DE-Entsprechung von label/hint oben (Schluessel = key). Gleiches Muster wie
+// SETTINGS_LANGUAGE_LABELS_*: EN bleibt in SETTINGS_PERMISSION_TOGGLES die
+// Quelle der Wahrheit, SettingsIsland.astro ruft settingsPermissionLabel/-Hint
+// beim Formular-Fuellen (fillForm, jedes AUTH_EVENT).
+export const SETTINGS_PERMISSION_LABELS_EN = Object.freeze(
+  Object.fromEntries(SETTINGS_PERMISSION_TOGGLES.map((t) => [t.key, t.label])),
+);
+export const SETTINGS_PERMISSION_LABELS_DE = Object.freeze({
+  allowPersonalData: "Persönliche Daten",
+  allowBankData: "Bankdaten",
+});
+export const SETTINGS_PERMISSION_HINTS_EN = Object.freeze(
+  Object.fromEntries(SETTINGS_PERMISSION_TOGGLES.map((t) => [t.key, t.hint])),
+);
+export const SETTINGS_PERMISSION_HINTS_DE = Object.freeze({
+  allowPersonalData: "Adresse, E-Mail usw. weitergeben.",
+  allowBankData: "Zahlungsdaten weitergeben (nicht empfohlen).",
+});
+
+export function settingsPermissionLabel(key) {
+  return tDyn({ en: SETTINGS_PERMISSION_LABELS_EN, de: SETTINGS_PERMISSION_LABELS_DE }, key) || key;
+}
+export function settingsPermissionHint(key) {
+  return tDyn({ en: SETTINGS_PERMISSION_HINTS_EN, de: SETTINGS_PERMISSION_HINTS_DE }, key) || "";
+}
 
 // Englische Beschriftungen der kuratierten Stil-IDs (PERSONA_STYLE_IDS,
 // src/i18n/locales.js). Die IDs sind historisch deutschsprachig, /app ist englisch
@@ -582,10 +661,14 @@ function maskedPrivateNumberFrom(data) {
 // Statuszeile der Nummern-Karte. Die Maske ist der EINZIGE Wert, den die UI je
 // anzeigt; der volle Wert verlaesst den Server nicht und wird nirgends gehalten.
 const PRIVATE_NUMBER_TEXT_NONE = "No number saved yet.";
+const PRIVATE_NUMBER_TEXT_NONE_DE = "Noch keine Nummer gespeichert.";
 const PRIVATE_NUMBER_TEXT_PREFIX = "Currently saved: ";
+const PRIVATE_NUMBER_TEXT_PREFIX_DE = "Aktuell gespeichert: ";
 export function privateNumberStatusText(data) {
   const masked = maskedPrivateNumberFrom(data);
-  return masked ? `${PRIVATE_NUMBER_TEXT_PREFIX}${masked}` : PRIVATE_NUMBER_TEXT_NONE;
+  return masked
+    ? `${tPair(PRIVATE_NUMBER_TEXT_PREFIX, PRIVATE_NUMBER_TEXT_PREFIX_DE)}${masked}`
+    : tPair(PRIVATE_NUMBER_TEXT_NONE, PRIVATE_NUMBER_TEXT_NONE_DE);
 }
 
 // Stabiler Fehlercode der Schreib-Route bei ungueltiger/gesperrter Nummer

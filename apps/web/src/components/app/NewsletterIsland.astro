@@ -42,8 +42,8 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
 ---
 
 <section id="newsletter-card" class="card" hidden>
-  <h2>Newsletter</h2>
-  <p class="muted">
+  <h2 data-i18n="newsletterTitle">Newsletter</h2>
+  <p class="muted" data-i18n="newsletterSubtitle">
     Get a short summary emailed to you after every call. Optional -- you can
     unsubscribe anytime.
   </p>
@@ -54,6 +54,7 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
       id="newsletter-toggle"
       class="newsletter-toggle__input"
       aria-label="Subscribe to the newsletter"
+      data-i18n-attr="aria-label:newsletterAriaLabel"
     />
     <div class="newsletter-toggle__state newsletter-toggle__state--off">
       <div class="newsletter-form">
@@ -64,15 +65,16 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
           readonly
           placeholder="you@example.com"
           aria-label="Account email"
+          data-i18n-attr="aria-label:accountEmailAriaLabel"
         />
-        <label for="newsletter-toggle" class="newsletter-toggle__cta">Subscribe</label>
+        <label for="newsletter-toggle" class="newsletter-toggle__cta" data-i18n="subscribe">Subscribe</label>
       </div>
-      <p class="newsletter-form__hint">Sent to your account email.</p>
+      <p class="newsletter-form__hint" data-i18n="newsletterHint">Sent to your account email.</p>
     </div>
     <div class="newsletter-toggle__state newsletter-toggle__state--on">
       <span class="newsletter-toggle__dot" aria-hidden="true"></span>
-      <span aria-hidden="true">Subscribed</span>
-      <button type="button" id="newsletter-unsubscribe" class="newsletter-toggle__unsub">
+      <span aria-hidden="true" data-i18n="subscribed">Subscribed</span>
+      <button type="button" id="newsletter-unsubscribe" class="newsletter-toggle__unsub" data-i18n="unsubscribe">
         Unsubscribe
       </button>
     </div>

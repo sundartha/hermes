@@ -26,11 +26,13 @@ import NewsletterIsland from "../../components/app/NewsletterIsland.astro";
 // nicht user-facing). Dashboard-Redesign (§4): vierter Eintrag "Newsletter"
 // (Schnittstelle Trupp C, NewsletterIsland.astro) + zweistellige Nummer je
 // Eintrag, aus dem Array-Index abgeleitet (kein zweites Nummern-Set).
+// i18n (Etappe 1): key = der data-i18n-Schluessel aus lib/i18n.js, label
+// bleibt der englische Markup-Text (Quelle der Wahrheit).
 const dashNav = [
-  { href: "#anrufe", label: "Calls" },
-  { href: "#einstellungen", label: "Settings" },
-  { href: "#abrechnung", label: "Billing" },
-  { href: "#newsletter", label: "Newsletter" },
+  { href: "#anrufe", label: "Calls", key: "navCalls" },
+  { href: "#einstellungen", label: "Settings", key: "navSettings" },
+  { href: "#abrechnung", label: "Billing", key: "navBilling" },
+  { href: "#newsletter", label: "Newsletter", key: "navNewsletter" },
 ];
 ---
 
@@ -41,33 +43,36 @@ const dashNav = [
        erste state-Fetch antwortet). Die Insel meldet den Zustand per Event. Nur
        die eingeloggte Shell zeigt Tenant-Daten -- das ist das Gate. -->
   <section id="region-loading" class="card">
-    <p class="muted">Loading…</p>
+    <p class="muted" data-i18n="loading">Loading…</p>
   </section>
 
   <section id="region-anonymous" class="card" hidden>
-    <h1>Sign in required</h1>
-    <p>Please sign in to manage your phone assistant.</p>
-    <a class="btn" href={LOGIN_URL}>Sign in</a>
+    <h1 data-i18n="signInRequiredTitle">Sign in required</h1>
+    <p data-i18n="signInRequiredText">Please sign in to manage your phone assistant.</p>
+    <a class="btn" href={LOGIN_URL} data-i18n="signIn">Sign in</a>
   </section>
 
   <!-- Suspended-Pfad (P2): wartet auf Aktivierung. Bei PAYMENT_ENABLED rendert das
        Script die Plan-Kacheln (billing/status, suspended-erreichbar) -> der Tenant
-       aktiviert sich per Abo selbst. Ohne Payment bleibt der Wartetext. -->
+       aktiviert sich per Abo selbst. Ohne Payment bleibt der Wartetext. i18n
+       (Etappe 1): data-i18n uebersetzt den Wartetext-Default; sobald renderPlanChoice/
+       dismissPlanChoice (lib/subscribe.js, Etappe 2, unangetastet) den Titel/Text
+       ueberschreiben, bleibt DIESER Teil bewusst englisch bis Etappe 2. -->
   <section id="region-pending" class="card" hidden>
-    <h1 id="pending-title">Account awaiting activation</h1>
-    <p id="pending-text">Your account has been created and is awaiting activation.
+    <h1 id="pending-title" data-i18n="pendingTitle">Account awaiting activation</h1>
+    <p id="pending-text" data-i18n="pendingText">Your account has been created and is awaiting activation.
       Once it's active, your assistant will appear here.</p>
     <div id="pending-tiles" class="plans"></div>
     <p id="pending-msg" class="billing-msg" hidden></p>
     <!-- AM3: sekundaerer "Maybe later"-Skip, nur im Payment-Aktivierungs-Pfad sichtbar.
          Rein praesentational - aktiviert NICHTS (kein subscribe/setStatus, /state bleibt 403). -->
-    <button id="pending-skip" class="plan-skip" type="button" hidden>Maybe later</button>
+    <button id="pending-skip" class="plan-skip" type="button" hidden data-i18n="pendingSkip">Maybe later</button>
   </section>
 
   <section id="region-error" class="card" hidden>
-    <h1>Something went wrong</h1>
-    <p>The app couldn't load just now. Check your connection and try again.</p>
-    <button id="error-retry" class="btn" type="button">Try again</button>
+    <h1 data-i18n="errorTitle">Something went wrong</h1>
+    <p data-i18n="errorText">The app couldn't load just now. Check your connection and try again.</p>
+    <button id="error-retry" class="btn" type="button" data-i18n="errorRetry">Try again</button>
   </section>
 
   <!-- Eingeloggte Shell: Begruessung + Nummern-Karte + Bereichs-Navigation
@@ -77,8 +82,11 @@ const dashNav = [
   <div id="region-shell" hidden>
     <header class="dash-head">
       <div class="dash-head__intro">
-        <span class="dash-head__eyebrow">Your area</span>
-        <h1 class="dash-head__title">Welcome, <span id="shell-owner">—</span></h1>
+        <span class="dash-head__eyebrow" data-i18n="yourArea">Your area</span>
+        <!-- "Welcome," und der Besitzer-Name sind zwei getrennte Knoten (i18n Etappe 1):
+             data-i18n setzt nur textContent des eigenen Elements -- ein data-i18n auf dem
+             h1 wuerde den #shell-owner-Span mit ueberschreiben. -->
+        <h1 class="dash-head__title"><span data-i18n="welcome">Welcome,</span> <span id="shell-owner">—</span></h1>
       </div>
       <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT) --
            jetzt eine eigenstaendige Glaskarte rechts neben der Begruessung. -->
@@ -89,11 +97,11 @@ const dashNav = [
       <!-- Scroll-Spy (siehe <script> unten): IntersectionObserver markiert den
            Eintrag der gerade obenauf sichtbaren Sektion mit is-active. Alle vier
            Abschnitte bleiben gleichzeitig im DOM (kein Tab-Verstecken). -->
-      <nav class="dash-nav" aria-label="Section navigation">
+      <nav class="dash-nav" aria-label="Section navigation" data-i18n-attr="aria-label:sectionNavAriaLabel">
         {dashNav.map((item, index) => (
           <a class="dash-nav__link" href={item.href} data-target={item.href.slice(1)}>
             <span class="dash-nav__num" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-            <span class="dash-nav__label">{item.label}</span>
+            <span class="dash-nav__label" data-i18n={item.key}>{item.label}</span>
           </a>
         ))}
       </nav>

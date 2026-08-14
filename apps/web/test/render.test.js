@@ -38,6 +38,23 @@ import {
   fillCallModal,
 } from "../src/lib/render.js";
 
+// Simuliert die DE-Sprachwahl fuer getLang() (lib/i18n.js), OHNE setLang() zu rufen --
+// setLang() greift auf `document` zu (document.documentElement.lang, dispatchEvent),
+// das es in node:test nicht gibt. getLang() liest NUR localStorage.getItem, darum
+// reicht ein minimaler Stub. Restauriert globalThis.localStorage danach (auch wenn es
+// vorher gar nicht existierte -- Node hat von Haus aus keinen globalThis.localStorage).
+function withLang(lang, fn) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
+  const original = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => lang };
+  try {
+    fn();
+  } finally {
+    if (had) globalThis.localStorage = original;
+    else delete globalThis.localStorage;
+  }
+}
+
 // ---- Fake-DOM ---------------------------------------------------------------
 // Nur die Operationen, die lib/render.js wirklich nutzt. `innerHTML` ist eine
 // Falle: ein Schreibzugriff wirft -> belegt, dass der Bau ihn nie nutzt.
@@ -477,4 +494,63 @@ test("bindList leert den Container bei JEDEM Nicht-AUTHENTICATED-Zustand (Stale-
     doc.emit({ state, data: null });
     assert.equal(node.children.length, 0, `Container nicht geleert bei ${state}`);
   }
+});
+
+// ---- Dashboard-i18n Etappe 2: DE-Modus (Status-Pillen, Richtung, Datum) -----
+test("DE-Modus: Status-Pillen LIVE/BEENDET/ABGEBROCHEN/FEHLGESCHLAGEN statt der EN-Kurzform", () => {
+  withLang("de", () => {
+    const rows = callRows(fakeDocument, {
+      calls: [
+        { direction: "inbound", from: "+49301", status: "active" },
+        { direction: "inbound", from: "+49302", status: "completed" },
+        { direction: "inbound", from: "+49303", status: "cancelled" },
+        { direction: "inbound", from: "+49304", status: "weird" }, // faellt auf failed
+      ],
+    });
+    assert.equal(rows[0].find("status-badge").textContent, "LIVE");
+    assert.equal(rows[1].find("status-badge").textContent, "BEENDET");
+    assert.equal(rows[2].find("status-badge").textContent, "ABGEBROCHEN");
+    assert.equal(rows[3].find("status-badge").textContent, "FEHLGESCHLAGEN");
+  });
+});
+
+test("DE-Modus: Richtungs-Beschriftung Eingehend/Ausgehend (Detail-Fenster-Kopf)", () => {
+  withLang("de", () => {
+    assert.equal(callDirectionLabel({ direction: CALL_DIRECTION.INBOUND }), "Eingehend");
+    assert.equal(callDirectionLabel({ direction: CALL_DIRECTION.OUTBOUND }), "Ausgehend");
+  });
+});
+
+test("DE-Modus: callTimeLabel zeigt 'Heute' + deutsches Monatskuerzel, weiterhin ohne Intl/toLocale", () => {
+  withLang("de", () => {
+    const now = new Date(2026, 5, 23, 12, 0, 0); // 23. Juni
+    const sameDay = new Date(2026, 5, 23, 9, 5, 0);
+    const expectedSame = `Heute, ${String(sameDay.getHours()).padStart(2, "0")}:${String(sameDay.getMinutes()).padStart(2, "0")}`;
+    assert.equal(callTimeLabel({ startedAt: sameDay.toISOString() }, now), expectedSame);
+
+    const otherDay = new Date(2026, 4, 1, 9, 5, 0); // 1. Mai
+    const expectedOther = `Mai 1, ${String(otherDay.getHours()).padStart(2, "0")}:${String(otherDay.getMinutes()).padStart(2, "0")}`;
+    assert.equal(callTimeLabel({ startedAt: otherDay.toISOString() }, now), expectedOther);
+  });
+});
+
+test("DE-Modus: leere Anrufliste/Transkript und Kontakt-/Zusammenfassungs-Labels sind deutsch", () => {
+  withLang("de", () => {
+    const rows = callRows(fakeDocument, {});
+    assert.equal(textOf(rows), "Noch keine Anrufe — verbinde deinen ersten Agenten!");
+
+    const targets = makeModalTargets();
+    fillCallModal(fakeDocument, targets, { direction: "inbound", from: "+49301", status: "completed", summary: "Rueckruf" });
+    assert.ok(targets.contactEl.allText().includes("KONTAKT"));
+    assert.ok(targets.summaryEl.allText().includes("Zusammenfassung"));
+
+    const empty = makeModalTargets();
+    fillCallModal(fakeDocument, empty, { direction: "inbound", status: "completed" });
+    assert.equal(empty.transcriptEl.find("call-modal__empty").textContent, "Kein Gespräch aufgezeichnet.");
+  });
+});
+
+test("EN bleibt unveraendert Default ausserhalb von withLang (getLang() wirft in Node nicht)", () => {
+  const rows = callRows(fakeDocument, { calls: [{ direction: "inbound", status: "completed" }] });
+  assert.equal(rows[0].find("status-badge").textContent, "ENDED");
 });

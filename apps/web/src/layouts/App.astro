@@ -13,6 +13,11 @@
 // getrennten Stylesheets des Dashboard-Umbaus (Trupp A/B/C); calls.css und
 // panels.css koennen zum Zeitpunkt dieses Commits noch leere Platzhalter
 // sein, falls die jeweiligen Trupps parallel noch nicht geliefert haben.
+//
+// i18n (Etappe 1): das lang="en" unten bleibt woertlich im Quelltext (WEB-03,
+// test/single-origin-serving.test.js prueft den Quelltext) -- es ist der
+// Build-/SSR-Default. Zur LAUFZEIT ueberschreibt setLang() (lib/i18n.js) das
+// Attribut per document.documentElement.lang, sobald der Besitzer DE waehlt.
 import "../styles/fonts.css";
 import "../styles/tokens/index.css";
 import "../styles/app.css";

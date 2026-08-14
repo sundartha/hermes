@@ -25,28 +25,45 @@ import {
   turnTimeLabel,
   callSummary,
 } from "./api.js";
+import { tPair, tDyn } from "./i18n.js";
 
 // Beschriftungen/Glyphen (keine Magic-Strings an den Verwendungsstellen, G25).
+// EN bleibt Quelle der Wahrheit (Name/Wert test-gepinnt); die "_DE"-Geschwister
+// sind Etappe 2 (dynamische Strings, s. lib/i18n.js Kopf-Kommentar zu tPair/tDyn).
 const EMPTY_CALLS = "No calls yet — connect your first agent!";
+const EMPTY_CALLS_DE = "Noch keine Anrufe — verbinde deinen ersten Agenten!";
 const EMPTY_TRANSCRIPT = "No conversation recorded.";
+const EMPTY_TRANSCRIPT_DE = "Kein Gespräch aufgezeichnet.";
 const SUMMARY_LABEL = "Summary";
+const SUMMARY_LABEL_DE = "Zusammenfassung";
 const CONTACT_LABEL = "CONTACT";
+const CONTACT_LABEL_DE = "KONTAKT";
 // Richtungs-Pfeile als echte Unicode-Zeichen (kein roher HTML-Entity-String;
 // textContent-sicher). Out = nach oben rechts, In = nach unten links.
 const ARROW_OUT = "↗";
 const ARROW_IN = "↙";
 const DIRECTION_LABEL_IN = "Incoming";
+const DIRECTION_LABEL_IN_DE = "Eingehend";
 const DIRECTION_LABEL_OUT = "Outgoing";
+const DIRECTION_LABEL_OUT_DE = "Ausgehend";
 
 // Sichtbare Status-Pillentexte (Spec §7-Tabelle) -- eine EIGENE, kurze
 // Beschriftung, unabhaengig von der laenger gefassten API-Beschriftung
 // (callStatusLabel in lib/api.js). lib/api.js ist fuer diesen Umbau gesperrt
 // (Auftrag), darum lebt die Anzeige-Kurzform hier. Schluessel = callStatusKind().
-const STATUS_PILL_LABELS = Object.freeze({
+// Exportiert NUR fuer den Woerterbuch-Paritaets-Waechter (test/dashboard-i18n-
+// surface.test.js) -- kein anderer Verbraucher ausserhalb dieses Moduls.
+export const STATUS_PILL_LABELS = Object.freeze({
   active: "LIVE",
   completed: "ENDED",
   cancelled: "CANCELLED",
   failed: "FAILED",
+});
+export const STATUS_PILL_LABELS_DE = Object.freeze({
+  active: "LIVE",
+  completed: "BEENDET",
+  cancelled: "ABGEBROCHEN",
+  failed: "FEHLGESCHLAGEN",
 });
 
 // Element-Fabrik: setzt className optional, Text NUR ueber textContent. `doc`
@@ -81,9 +98,16 @@ const META_SEPARATOR = " · ";
 // Drift-Test WEB-18 (test/dashboard-i18n-surface.test.js) zaehlt jede
 // toLocale*/Intl-Aufrufstelle im gesamten apps/web/src-Baum und erwartet
 // exakt zwei (beide in lib/subscribe.js) -- ein drittes Vorkommen bricht ihn.
+// Das gilt unveraendert: die deutschen Kuerzel unten sind ein zweites Array,
+// KEIN toLocale-Aufruf.
 const MONTH_LABELS = Object.freeze([
   "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ]);
+const MONTH_LABELS_DE = Object.freeze([
+  "Jan.", "Feb.", "März", "Apr.", "Mai", "Jun.", "Jul.", "Aug.", "Sep.", "Okt.", "Nov.", "Dez.",
+]);
+const TODAY_LABEL = "Today";
+const TODAY_LABEL_DE = "Heute";
 
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -108,7 +132,8 @@ export function callTimeLabel(call, now = new Date()) {
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
   const time = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-  const day = sameDay ? "Today" : `${MONTH_LABELS[d.getMonth()]} ${d.getDate()}`;
+  const month = tDyn({ en: MONTH_LABELS, de: MONTH_LABELS_DE }, d.getMonth());
+  const day = sameDay ? tPair(TODAY_LABEL, TODAY_LABEL_DE) : `${month} ${d.getDate()}`;
   return `${day}, ${time}`;
 }
 
@@ -141,7 +166,10 @@ export function callMetaLabel(call, now = new Date()) {
 // "Outgoing"). Fehlende/unbekannte Richtung faellt wie directionIcon auf
 // eingehend zurueck (kein drittes Enum).
 export function callDirectionLabel(call) {
-  return call && call.direction === CALL_DIRECTION.OUTBOUND ? DIRECTION_LABEL_OUT : DIRECTION_LABEL_IN;
+  const outbound = Boolean(call) && call.direction === CALL_DIRECTION.OUTBOUND;
+  return outbound
+    ? tPair(DIRECTION_LABEL_OUT, DIRECTION_LABEL_OUT_DE)
+    : tPair(DIRECTION_LABEL_IN, DIRECTION_LABEL_IN_DE);
 }
 
 // ---- Anrufzeile (Spec §7) ----------------------------------------------------
@@ -173,7 +201,8 @@ function callBody(doc, call) {
 
 function statusBadge(doc, call) {
   const kind = callStatusKind(call);
-  return el(doc, "span", `status-badge status-badge--${kind}`, STATUS_PILL_LABELS[kind]);
+  const label = tDyn({ en: STATUS_PILL_LABELS, de: STATUS_PILL_LABELS_DE }, kind);
+  return el(doc, "span", `status-badge status-badge--${kind}`, label);
 }
 
 // Eine ganze Anrufzeile als ECHTER <button> (nicht nur ein klickbares div) --
@@ -195,7 +224,7 @@ function callRow(doc, call, onSelect) {
 // pruefen, muessen keinen Handler durchreichen.
 export function callRows(doc, data, onSelect = () => {}) {
   const calls = callsFrom(data);
-  if (!calls.length) return [emptyRow(doc, EMPTY_CALLS)];
+  if (!calls.length) return [emptyRow(doc, tPair(EMPTY_CALLS, EMPTY_CALLS_DE))];
   return calls.map((call) => callRow(doc, call, onSelect));
 }
 
@@ -224,7 +253,7 @@ function chatBubble(doc, turn) {
 // eines leeren <ul>.
 function chatLog(doc, call) {
   const turns = transcriptFrom(call);
-  if (!turns.length) return el(doc, "p", "call-modal__empty muted", EMPTY_TRANSCRIPT);
+  if (!turns.length) return el(doc, "p", "call-modal__empty muted", tPair(EMPTY_TRANSCRIPT, EMPTY_TRANSCRIPT_DE));
   const list = el(doc, "ul", "chat-log");
   list.append(...turns.map((t) => chatBubble(doc, t)));
   return list;
@@ -239,7 +268,7 @@ function contactRowNodes(doc, call) {
   const dot = el(doc, "span", "call-modal__contact-dot");
   dot.setAttribute("aria-hidden", "true");
   const body = el(doc, "span", "call-modal__contact-body");
-  body.append(el(doc, "span", "call-modal__contact-label", CONTACT_LABEL));
+  body.append(el(doc, "span", "call-modal__contact-label", tPair(CONTACT_LABEL, CONTACT_LABEL_DE)));
   const name = el(doc, "span", "call-modal__contact-name", callCounterparty(call));
   name.id = MODAL_CONTACT_NAME_ID;
   body.append(name);
@@ -260,7 +289,7 @@ function fillSummaryBlock(doc, summaryEl, call) {
     return;
   }
   summaryEl.replaceChildren(
-    el(doc, "span", "call-modal__summary-label", SUMMARY_LABEL),
+    el(doc, "span", "call-modal__summary-label", tPair(SUMMARY_LABEL, SUMMARY_LABEL_DE)),
     el(doc, "p", "call-modal__summary-text", summary),
   );
 }

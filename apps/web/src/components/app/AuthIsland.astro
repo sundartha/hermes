@@ -5,14 +5,29 @@
 // den Zustand per AUTH_EVENT an die App-Shell weiter -- so faellt der state-Fetch
 // nur einmal an. KEINE OIDC-/Session-Logik hier (lebt im Gateway): "Anmelden" ist
 // nur ein Link auf LOGIN_URL, "Abmelden" ein POST auf /auth/logout.
+//
+// i18n (Etappe 1): diese Insel ist auch die EINE Stelle fuer den DE/EN-
+// Umschalter (immer sichtbar, auch ausgeloggt -- links neben Sign out, s.
+// shell.css .lang-toggle). Sie ist die einzige Insel, die auf jeder /app-Seite
+// garantiert genau einmal existiert (slot="auth"), darum lebt hier auch der
+// initiale applyStaticTranslations()-Aufruf und die Verteilung an alle
+// anderen Inseln: beim hermes:lang-Event cachen wir das zuletzt ermittelte
+// AUTH_EVENT-Detail und feuern es erneut -- so rendern alle Inseln (Begruessung,
+// AgentChip, Calls/Settings/Billing/Newsletter) in der neuen Sprache neu, ganz
+// ohne Reload und ohne dass jede Insel selbst einen Lang-Listener braucht.
 import { LOGIN_URL } from "../../lib/routes.js";
 ---
 
 <div class="auth-island">
-  <a id="auth-login" class="btn" href={LOGIN_URL}>Sign in</a>
+  <span class="lang-toggle">
+    <button class="lang-toggle__opt" type="button" data-lang="de" aria-pressed="false">DE</button>
+    <span class="lang-toggle__sep" aria-hidden="true">/</span>
+    <button class="lang-toggle__opt" type="button" data-lang="en" aria-pressed="true">EN</button>
+  </span>
+  <a id="auth-login" class="btn" href={LOGIN_URL} data-i18n="signIn">Sign in</a>
   <div id="auth-account" class="auth-account" hidden>
     <span id="auth-who" class="auth-who"></span>
-    <button id="auth-logout" class="btn" type="button">Sign out</button>
+    <button id="auth-logout" class="btn" type="button" data-i18n="signOut">Sign out</button>
   </div>
 </div>
 
@@ -26,11 +41,13 @@ import { LOGIN_URL } from "../../lib/routes.js";
     NUMBER_POLL_INTERVAL_MS,
     shouldPollNumberStatus,
   } from "../../lib/api.js";
+  import { getLang, setLang, t, applyStaticTranslations, LANG_EVENT } from "../../lib/i18n.js";
 
   const loginLink = document.getElementById("auth-login");
   const account = document.getElementById("auth-account");
   const whoEl = document.getElementById("auth-who");
   const logoutBtn = document.getElementById("auth-logout");
+  const langButtons = document.querySelectorAll("[data-lang]");
 
   // Hintergrund-Poll waehrend die Rufnummer eingerichtet wird (requested/provisioning):
   // sonst haengt der Chip auf "Setting up..." fest, bis der Nutzer manuell neu laedt.
@@ -47,10 +64,22 @@ import { LOGIN_URL } from "../../lib/routes.js";
     return state === AUTH_STATE.AUTHENTICATED || state === AUTH_STATE.PENDING;
   }
 
+  // Letztes VERTEILTES AUTH_EVENT-Detail -- der Lang-Umschalter feuert es beim
+  // Sprachwechsel unveraendert erneut (kein zweiter state-Fetch, s. Kopfkommentar).
+  // Gecacht wird ueber den Event-Listener unten, NICHT nur das eigene refresh()-
+  // Ergebnis: auch andere Inseln (z.B. Billing nach einer Aktion) re-fetchen den
+  // State und dispatchen AUTH_EVENT selbst. Wuerde nur das eigene Ergebnis
+  // gecacht, wuerfe ein Sprachwechsel danach alle Inseln auf den aelteren Stand
+  // zurueck.
+  let lastAuthResult = null;
+  document.addEventListener(AUTH_EVENT, (event) => {
+    if (event.detail) lastAuthResult = event.detail;
+  });
+
   function whoText(result) {
-    if (result.state === AUTH_STATE.PENDING) return "Account awaiting activation";
+    if (result.state === AUTH_STATE.PENDING) return t("authPending");
     const { owner } = agentInfo(result.data);
-    return owner ? `Signed in as ${owner}` : "Signed in";
+    return owner ? t("authSignedInAs").replace("{name}", owner) : t("authSignedIn");
   }
 
   function applyControls(result) {
@@ -75,6 +104,33 @@ import { LOGIN_URL } from "../../lib/routes.js";
       pollAttempts = 0;
     }
   }
+
+  // Sprachumschalter: aria-pressed auf beiden Knoepfen mit getLang() synchron
+  // halten (Init UND nach jedem Wechsel).
+  function syncLangButtons() {
+    const lang = getLang();
+    for (const btn of langButtons) btn.setAttribute("aria-pressed", String(btn.dataset.lang === lang));
+  }
+
+  for (const btn of langButtons) {
+    btn.addEventListener("click", () => setLang(btn.dataset.lang));
+  }
+
+  // setLang() (lib/i18n.js) feuert LANG_EVENT. Darauf: Knopf-Zustand + alle
+  // [data-i18n]-Texte neu setzen, Auth-Steuerung (whoText ist sprachabhaengig)
+  // neu berechnen und das zuletzt gecachte AUTH_EVENT erneut an die anderen
+  // Inseln verteilen -- kein Reload, kein zweiter Fetch.
+  document.addEventListener(LANG_EVENT, () => {
+    syncLangButtons();
+    applyStaticTranslations(document);
+    if (!lastAuthResult) return;
+    applyControls(lastAuthResult);
+    document.dispatchEvent(new CustomEvent(AUTH_EVENT, { detail: lastAuthResult }));
+  });
+
+  // Initialer Stand vor dem ersten state-Fetch (Markup ist Englisch-Default).
+  syncLangButtons();
+  applyStaticTranslations(document);
 
   logoutBtn.addEventListener("click", async () => {
     logoutBtn.disabled = true;
