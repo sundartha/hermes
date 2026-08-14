@@ -8,15 +8,19 @@
 //   einer stillen Aenderung. Muster ROUTE_FINGERPRINT aus test/route-auth-inventory.test.js,
 //   samt Buchhaltungs-Kommentar an der Liste. Die Sorge dahinter ist KONFIGURATIONS-DRIFT,
 //   nicht ein bestimmtes Werkzeug: ein Kriterium wird gruen oder rot, weil jemand am
-//   Agenten etwas an- oder abgehaengt hat, und niemand merkt es.
+//   Agenten etwas an- oder abgehaengt hat, und niemand merkt es. Gepinnt sind BEIDE Ablagen,
+//   ueber die ein Werkzeug an den Agenten kommt: die tools-Karte der Vorlage und die
+//   eingebauten Werkzeuge des Anbieters (prompt.built_in_tools). Ein einzelnes Werkzeug, das
+//   ausdruecklich DRAUSSEN bleiben soll, bekommt zusaetzlich einen namentlichen Fall - die
+//   Mengengleichheit allein wuerde beim gemeinsamen Nachziehen von Vorlage und Pin gruen
+//   bleiben und die zurueckgestellte Entscheidung still neu treffen.
 //
-// E-5/E-6 (Regressionsschutz, "npm test", heute ROT): dieselbe Ratsche, angewandt auf die
+// E-5/E-6 (Regressionsschutz, "npm test"): dieselbe Ratsche, angewandt auf die
 //   Sprachwechsel-Entscheidung. Der Prompt verbot den Wechsel ("Speak only in this
 //   language"), das eingebaute language_detection leistet ihn - im Konflikt gewinnt mal das
 //   eine, mal das andere. Die Faelle fordern die Aufloesung ein: Startsprache Englisch,
 //   Wechsel erlaubt, Ziel unveraendert, kein Rueckwechsel-Zwang, Werkzeug und Zusatzsprache
-//   am Agenten. Rot ist hier kein Regressionsfang, sondern die noch offene Aenderung an der
-//   Vorlage; ein Abnahmekriterium ist es aber auch nicht, denn der Zustand muss danach
+//   am Agenten. Ein Abnahmekriterium ist das nicht, denn der Zustand muss ab der Aenderung
 //   dauerhaft gelten - deshalb Regressionslauf, deshalb keine ABNAHME--Kennung.
 //
 // R16 (Abnahmekriterium, "npm run test:abnahme", heute ROT): der Prompt nennt get_consult
@@ -118,7 +122,26 @@ const PROMPT_FIELD_FINGERPRINT = ["built_in_tools", "prompt", "tool_ids"];
 // BUCHHALTUNG:
 //   2026-08-14 angelegt mit language_detection (E-5): das Werkzeug, das den im Prompt
 //   freigegebenen Sprachwechsel waehrend des Anrufs ueberhaupt erkennt.
-const BUILT_IN_TOOL_FINGERPRINT = ["language_detection"];
+//   2026-08-14 end_call dazu (Kriterium A8, "Sauberer Abschluss mit Ergebnis"): dessen
+//   fuenfte Erfolgsbedingung verlangt, dass der Agent den Anruf nach der Verabschiedung
+//   AKTIV beendet - einen zweiten Hebel dafuer gibt es nicht. AUSDRUECKLICH NICHT wegen
+//   R10: R10 ist in R6 aufgegangen, und K5 verlangt weiterhin den Abbruch durch UNSEREN
+//   Zeitgeber - end_call ersetzt den nicht, es beendet nur ein bereits fertiges Gespraech.
+//   2026-08-14 voicemail_detection dazu (Kriterium B5, Fall (c) Anrufbeantworter): ohne das
+//   Werkzeug ist der Fall nicht abnehmbar. Die Faelle (a) niemand hebt ab und (b) besetzt
+//   meldet der Anbieter ueber den Fehler-Webhook, beim Anrufbeantworter ausdruecklich NICHT.
+//   2026-08-14 play_keypad_touch_tone BEWUSST NICHT (DTMF): kein Abnahmekriterium verlangt
+//   es, die Entscheidung ist zurueckgestellt. Weil es am LIVE-Agenten liegt und damit
+//   jederzeit still zurueckkommen kann, hat es unten einen eigenen, namentlichen Fall.
+const BUILT_IN_TOOL_FINGERPRINT = ["end_call", "language_detection", "voicemail_detection"];
+
+// Eingebautes Werkzeug, das die Vorlage bewusst NICHT fuehrt. Der Live-Agent traegt es heute
+// (Drift-Befund 2026-08-14: live end_call, language_detection, play_keypad_touch_tone,
+// voicemail_detection gegen die Vorlage) - eine Rueckkehr in die Vorlage ist also kein
+// theoretischer Fall, sondern der wahrscheinlichere. Eigener Fall statt nur Mengengleichheit
+// oben: der Mengen-Pin sagt "die Menge stimmt nicht", er sagt nicht "hier kommt eine schon
+// getroffene Entscheidung wieder" - und wer ihn nachzieht, trifft sie still neu.
+const DEFERRED_BUILT_IN_TOOL = "play_keypad_touch_tone";
 
 // Zusatzsprachen des Agenten (conversation_config.language_presets). Die SCHLUESSEL dieser
 // Karte sind die Sprachen; ein Eintrag traegt seine Uebersetzungen (overrides,
@@ -156,6 +179,54 @@ test("Werkzeug-Inventar der ElevenLabs-Vorlage: die Konfigurationsflaeche des Pr
     `Das prompt-Objekt in ${TEMPLATE_REL} traegt andere Felder als gepinnt - ein Werkzeug ` +
       `kann auch ueber ein NEUES Feld an den Agenten kommen, ohne in tools aufzutauchen. ` +
       DRIFT_HINT,
+  );
+});
+
+test("Werkzeug-Inventar der ElevenLabs-Vorlage: die eingebauten Werkzeuge sind exakt die gepinnte Menge", () => {
+  assert.ok(
+    BUILT_IN_TOOL_FINGERPRINT.length > 0,
+    "der Fingerprint ist besetzt - sonst misst er nichts",
+  );
+
+  assert.deepEqual(
+    configKeysOf(builtInTools()),
+    BUILT_IN_TOOL_FINGERPRINT,
+    `Die eingebauten Werkzeuge in ${TEMPLATE_REL} (prompt.built_in_tools) sind andere als ` +
+      `gepinnt. ${DRIFT_HINT}`,
+  );
+});
+
+test(`Werkzeug-Inventar der ElevenLabs-Vorlage: ${DEFERRED_BUILT_IN_TOOL} bleibt draussen - es liegt am LIVE-Agenten und wurde bewusst nicht uebernommen, weil kein Abnahmekriterium DTMF verlangt (Entscheidung zurueckgestellt, nicht vergessen)`, () => {
+  const toolNamesEverywhere = [...declaredToolNames(), ...configKeysOf(builtInTools())];
+
+  // Positiv-Kontrollen des Messwerkzeugs, eine je Ablage: ohne sie waere "nicht gefunden"
+  // von "an der falschen Stelle gesucht" nicht zu unterscheiden
+  // (Lehre pruefkommando-ohne-positiv-kontrolle).
+  assert.ok(
+    toolNamesEverywhere.includes(CONSULT_TOOL),
+    "Messwerkzeug defekt: die tools-Karte der Vorlage wird nicht gelesen",
+  );
+  assert.ok(
+    configKeysOf(builtInTools()).length > 0,
+    "Messwerkzeug defekt: die eingebauten Werkzeuge der Vorlage werden nicht gelesen",
+  );
+
+  assert.ok(
+    !toolNamesEverywhere.includes(DEFERRED_BUILT_IN_TOOL),
+    `${TEMPLATE_REL} fuehrt wieder ${DEFERRED_BUILT_IN_TOOL}. Das Werkzeug lag beim Bau der ` +
+      "Vorlage am Live-Agenten und wurde ABSICHTLICH nicht uebernommen: kein Abnahmekriterium " +
+      `verlangt DTMF. ${DRIFT_HINT}`,
+  );
+
+  // Zweite Richtung, und der eigentliche Grund fuer diesen Fall: auch der Pin darf das
+  // Werkzeug nicht tragen. Sonst genuegte es, Vorlage UND Pin gemeinsam zu ergaenzen - die
+  // Mengengleichheit oben bliebe gruen, und die zurueckgestellte Entscheidung waere still
+  // getroffen. Genau das soll hier auffallen.
+  assert.ok(
+    !BUILT_IN_TOOL_FINGERPRINT.includes(DEFERRED_BUILT_IN_TOOL),
+    `Der Pin traegt ${DEFERRED_BUILT_IN_TOOL}. Die Aufnahme ist erlaubt - aber nur als eigene ` +
+      "Entscheidung: erst das Kriterium benennen, das DTMF verlangt, dann diesen Fall hier " +
+      "loeschen und die Buchhaltung am Pin um eine Zeile ergaenzen.",
   );
 });
 
@@ -272,20 +343,6 @@ const CONTROL_VIOLATIONS = Object.freeze([
   "Never switch the language during the call.",
   "If they switch, follow them, but return to English right after.",
 ]);
-
-test("Sprachwechsel in der ElevenLabs-Vorlage: die eingebauten Werkzeuge sind exakt die gepinnte Menge", () => {
-  assert.ok(
-    BUILT_IN_TOOL_FINGERPRINT.length > 0,
-    "der Fingerprint ist besetzt - sonst misst er nichts",
-  );
-
-  assert.deepEqual(
-    configKeysOf(builtInTools()),
-    BUILT_IN_TOOL_FINGERPRINT,
-    `Die eingebauten Werkzeuge in ${TEMPLATE_REL} (prompt.built_in_tools) sind andere als ` +
-      `gepinnt. ${DRIFT_HINT}`,
-  );
-});
 
 test("Sprachwechsel in der ElevenLabs-Vorlage: language_detection gilt den ganzen Anruf, nicht nur zum Start", () => {
   const detection = languageDetection();
