@@ -4,7 +4,7 @@
 // (src/self-service.js, NUR-Lese-Vertrag). Settings-Redesign (Aug 2026): der
 // Bereich fokussiert sich auf die Sprachwahl -- die UI bietet nur noch:
 //   - language   ("" automatisch / de / fr / en) -- das Hauptelement der Karte,
-//                als Pillenleiste (echte Radio-Inputs), kein <select> mehr
+//                als Auswahlkacheln im Radiobutton-Stil (Dashboard-Design-Spec §9)
 //   - allowPersonalData / allowBankData (Toggle, NUR restriktiver: true->false)
 // Agent-Name (Freitext), Agent-Stil (Dropdown, agentStyle) und die Begruessungs-
 // Vorlagenauswahl (greeting) sind aus der UI entfernt. Die SERVER-WHITELIST
@@ -18,50 +18,66 @@
 // Unbekannte fehlten schon vorher bewusst -- der Self-Service-Pfad lehnt sie
 // ohnehin ab (kein UI-Schreibpfad fuer rejected-Felder).
 //
+// DASHBOARD-DESIGN-SPEC §9: die Sprachkacheln ersetzen das fruehere <select>-
+// aehnliche Pillen-Markup (lang-pill). DIE SPRACHLISTE KOMMT UNVERAENDERT AUS
+// SETTINGS_LANGUAGES (lib/api.js) -- keine Sprache hinzugefuegt/entfernt, nur
+// die Kachel-Optik ist neu. Echte input[type=radio] pro Kachel, optisch
+// versteckt via opacity:0; position:absolute (NICHT display:none) -- der
+// Fokusring bleibt sichtbar (Tastaturbedienung/Screenreader-Semantik echter
+// Radios, kein nachgebautes ARIA-Widget). Optik lebt in styles/app/panels.css
+// (Trupp-C-Stylesheet, Muster shell.css/calls.css) -- kein inline-Style-Block
+// mehr hier.
+//
 // Nach Speichern: "Gespeichert", listet changed/rejected (aus der Antwort
 // abgeleitet, settingsOutcome) und RE-FETCHt den State (fetchTenantState ->
 // AUTH_EVENT neu dispatchen, damit ALLE Inseln auf den frischen Server-Stand
-// gehen). Der restriktivere Permission-Toggle greift ueber die Server-Semantik:
-// ein false->true-Versuch auf allowPersonalData/allowBankData kommt als rejected
-// zurueck (der gespeicherte Wert bleibt), die UI zeigt es an und re-fetcht.
+// gehen). Der Bestaetigungstext blendet 2600ms nach dem Speichern aus (§9) --
+// nur bei Erfolg (ok===true), Fehlermeldungen bleiben stehen. Der restriktivere
+// Permission-Toggle greift ueber die Server-Semantik: ein false->true-Versuch
+// auf allowPersonalData/allowBankData kommt als rejected zurueck (der
+// gespeicherte Wert bleibt), die UI zeigt es an und re-fetcht.
 //
 // KEIN eigener Auth-/state-Fetch im Normalfall: die Auth-Insel ermittelt den
 // Zustand einmal und dispatcht AUTH_EVENT -- diese Insel hoert darauf und befuellt
 // das Formular. Tenant-Werte gehen NUR ueber [checked]/textContent in den DOM
 // (nie innerHTML) -- kein XSS-Pfad (Leitplanke).
 //
-// Die private Rufnummer ist ein ZWEITES Formular mit EIGENEM Endpunkt, kein
-// Settings-Feld: sie ist Kontakt-PII am Tenant-Record (nicht in settings, die
-// komplett ueber /api/state + MCP leaken, H4). Angezeigt wird ausschliesslich die
-// Server-Maske (maskPrivateNumber); der volle Wert wird nie ins Eingabefeld
-// zurueckgeschrieben.
-//
-// Optik (Hermes-Look): die Sprachauswahl ist eine ruhige Pillenleiste, das
-// Hauptelement der Karte -- die Permission-Toggles fuegen sich optisch unter,
-// unveraendert in ihrer Logik. is:global-Style-Block wie in CallsIsland.astro
-// (gleiche Handschrift dieser App): die Pillen-/Toggle-Zustaende ([checked])
-// werden von diesem Script gesetzt, nicht neu in den DOM gebaut, aber die Klasse
-// bleibt eine ECHTE, ausgelagerte CSS-Datei (CSP 'self', kein Inline-Style-
-// Attribut, kein Inline-Script). Farben/Abstaende ausschliesslich ueber die
-// bestehenden semantischen Tokens (app.css/app-hermes.css) -- kein neuer fester
-// Wert.
+// Feedback-Runde 2 (Befund 4): der "Summary SMS number"-Block (privates
+// Zweit-Formular, eigener Endpunkt /api/self-service/private-number) ist aus
+// der UI entfernt -- Zusammenfassungen laufen jetzt ueber den Newsletter
+// (NewsletterIsland). NUR die Oberflaeche ist raus: Backend-Route und
+// -Feld bleiben unangetastet, lib/api.js behaelt savePrivateNumber/
+// privateNumberStatusText/ERROR_INVALID_PRIVATE_NUMBER (kein Schreibpfad
+// dorthin mehr, aber kein toter Server-Vertrag).
 import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.js";
 ---
 
 <section id="settings-card" class="card" hidden>
-  <h2>My agent settings</h2>
-  <p class="muted">Takes effect on the next call.</p>
+  <h2 data-i18n="settingsTitle">My agent settings</h2>
+  <p class="muted" data-i18n="settingsHint">Takes effect on the next call.</p>
 
   <form id="settings-form" class="settings-form">
     <fieldset class="settings-lang">
-      <legend class="field-label">Language</legend>
-      <div class="lang-picker">
+      <legend class="field-label" data-i18n="agentLanguage">Agent language</legend>
+      <p class="muted settings-lang__hint" data-i18n="agentLanguageHint">
+        Choose the language your agent speaks on calls, or leave it automatic.
+      </p>
+      <div
+        class="lang-picker"
+        role="radiogroup"
+        aria-label="Agent language"
+        data-i18n-attr="aria-label:agentLanguage"
+      >
         {
           SETTINGS_LANGUAGES.map(({ value, label }) => (
-            <label class="lang-pill">
-              <input type="radio" name="settings-language" class="lang-pill__input" value={value} />
-              <span class="lang-pill__fill" aria-hidden="true" />
-              <span class="lang-pill__label">{label}</span>
+            <label class="lang-tile">
+              <input type="radio" name="settings-language" class="lang-tile__input" value={value} />
+              <span class="lang-tile__fill" aria-hidden="true" />
+              <span class="lang-tile__ring" aria-hidden="true">
+                <span class="lang-tile__dot" aria-hidden="true" />
+              </span>
+              <span class="lang-tile__label" data-lang-value={value}>{label}</span>
+              <span class="lang-tile__code" aria-hidden="true">{value ? value.toUpperCase() : "AUTO"}</span>
             </label>
           ))
         }
@@ -69,13 +85,13 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     </fieldset>
 
     <fieldset class="settings-perms">
-      <legend class="field-label">Permissions</legend>
+      <legend class="field-label" data-i18n="permissions">Permissions</legend>
       {
         SETTINGS_PERMISSION_TOGGLES.map(({ key, label, hint }) => (
           <div class="perm-row">
             <span class="perm-text">
-              <span class="perm-title">{label}</span>
-              <span class="perm-hint muted">{hint}</span>
+              <span class="perm-title" data-perm-key={key}>{label}</span>
+              <span class="perm-hint muted" data-perm-key={key}>{hint}</span>
             </span>
             <label class="switch">
               <input type="checkbox" data-perm={key} />
@@ -87,29 +103,8 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     </fieldset>
 
     <div class="settings-actions">
-      <button id="settings-save" class="btn" type="submit">Save</button>
+      <button id="settings-save" class="btn" type="submit" data-i18n="save">Save</button>
       <span id="settings-msg" class="settings-msg" hidden></span>
-    </div>
-  </form>
-
-  <!-- P13/WEB-19: eigene Naht (eigener Endpunkt, PII am Tenant-Record) - deshalb
-       ein EIGENES form-Element neben dem Settings-Formular. Das Eingabefeld wird
-       NIE vorbefuellt: angezeigt wird ausschliesslich die Server-Maske, und die
-       waere als Eingabe ohnehin ungueltig. -->
-  <form id="private-number-form" class="settings-form">
-    <label class="field-label" for="private-number-input">Summary SMS number</label>
-    <p id="private-number-status" class="muted">—</p>
-    <input id="private-number-input" class="field-input" type="tel" inputmode="tel"
-           autocomplete="off" placeholder="+1 555 0100" />
-    <p class="muted">
-      Your own number, in international format. Hermes texts you a summary after each
-      call. It is never used as the caller ID and never shown to the people your agent
-      calls.
-    </p>
-    <div class="settings-actions">
-      <button id="private-number-save" class="btn" type="submit">Save number</button>
-      <button id="private-number-clear" class="btn" type="button">Remove</button>
-      <span id="private-number-msg" class="settings-msg" hidden></span>
     </div>
   </form>
 </section>
@@ -120,46 +115,73 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     AUTH_STATE,
     AUTH_EVENT,
     HTTP_UNAUTHORIZED,
-    ERROR_INVALID_PRIVATE_NUMBER,
     buildSettingsPatch,
     fetchTenantState,
-    privateNumberStatusText,
     saveSettings,
-    savePrivateNumber,
     settingsFrom,
     settingsOutcome,
+    settingsLanguageLabel,
+    settingsPermissionLabel,
+    settingsPermissionHint,
   } from "../../lib/api.js";
+  import { t } from "../../lib/i18n.js";
 
   const cardEl = document.getElementById("settings-card");
   const formEl = document.getElementById("settings-form");
   const saveBtn = document.getElementById("settings-save");
   const msgEl = document.getElementById("settings-msg");
 
-  const privateFormEl = document.getElementById("private-number-form");
-  const privateInputEl = document.getElementById("private-number-input");
-  const privateStatusEl = document.getElementById("private-number-status");
-  const privateSaveBtn = document.getElementById("private-number-save");
-  const privateClearBtn = document.getElementById("private-number-clear");
-  const privateMsgEl = document.getElementById("private-number-msg");
-
   const MSG_OK_CLASS = "settings-msg--ok";
   const MSG_ERR_CLASS = "settings-msg--err";
+  // §9: der Bestaetigungstext blendet nach dieser Zeit wieder aus (nur bei
+  // Erfolg -- eine Fehlermeldung bleibt stehen, bis der naechste Versuch sie
+  // ersetzt). EIN Timer pro Meldungs-Element (WeakMap, kein Leak).
+  const CONFIRM_HIDE_MS = 2600;
+  const hideTimers = new WeakMap();
 
   // Kurze Rueckmeldung mit Erfolgs-/Fehler-Faerbung, an ein beliebiges Meldungs-
-  // Element (EINE Implementierung fuer settings- UND private-number-Formular, G5).
-  // text leer -> verstecken.
+  // Element. text leer -> verstecken. Erfolgsmeldungen blenden nach
+  // CONFIRM_HIDE_MS aus.
   function showMessage(el, text, ok) {
     el.textContent = text;
     el.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok);
     el.classList.toggle(MSG_ERR_CLASS, Boolean(text) && !ok);
     el.hidden = !text;
+    clearTimeout(hideTimers.get(el));
+    if (text && ok) {
+      hideTimers.set(
+        el,
+        setTimeout(() => {
+          el.hidden = true;
+        }, CONFIRM_HIDE_MS),
+      );
+    }
   }
 
-  // Formular aus dem state befuellen: die Sprach-Pille auswaehlen (fehlend/leer
-  // -> "Automatic", die erste Pille mit value="") und die Permission-Toggles
+  // Sprachkacheln- und Berechtigungs-Beschriftungen sind serverseitig/englisch aus
+  // SETTINGS_LANGUAGES/SETTINGS_PERMISSION_TOGGLES gerendert (Astro-Frontmatter,
+  // laeuft nur einmal, ohne Sprachkontext) -- diese Funktion bringt sie auf die
+  // aktuelle Sprache. Aufgerufen von fillForm() (jedes AUTH_EVENT, inkl. des vom
+  // Sprachumschalter re-dispatchten -- s. AuthIsland.astro), kein eigener
+  // LANG_EVENT-Listener noetig.
+  function syncSettingsLabels() {
+    for (const node of formEl.querySelectorAll("[data-lang-value]")) {
+      node.textContent = settingsLanguageLabel(node.dataset.langValue);
+    }
+    for (const node of formEl.querySelectorAll(".perm-title[data-perm-key]")) {
+      node.textContent = settingsPermissionLabel(node.dataset.permKey);
+    }
+    for (const node of formEl.querySelectorAll(".perm-hint[data-perm-key]")) {
+      node.textContent = settingsPermissionHint(node.dataset.permKey);
+    }
+  }
+
+  // Formular aus dem state befuellen: die Sprach-Kachel auswaehlen (fehlend/leer
+  // -> "Automatic", die erste Kachel mit value="") und die Permission-Toggles
   // ueber data-perm setzen. Kein clientseitiger DOM-Bau mehr (agentStyle/greeting
   // waren die einzigen Stellen, die Optionen zur Laufzeit erzeugten).
   function fillForm(data) {
+    syncSettingsLabels();
     const { settings } = settingsFrom(data);
     const language = settings.language || "";
     for (const input of formEl.querySelectorAll('input[name="settings-language"]')) {
@@ -171,8 +193,8 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   }
 
   // Roher Formular-Snapshot fuer buildSettingsPatch (die Whitelist-Grenze lebt
-  // dort, nicht hier). Sprache aus der gecheckten Pille (keine Auswahl -> "",
-  // sollte praktisch nicht vorkommen, da immer genau eine Pille checked ist);
+  // dort, nicht hier). Sprache aus der gecheckten Kachel (keine Auswahl -> "",
+  // sollte praktisch nicht vorkommen, da immer genau eine Kachel checked ist);
   // Toggles ueber data-perm einsammeln.
   function readForm() {
     const checkedLang = formEl.querySelector('input[name="settings-language"]:checked');
@@ -183,10 +205,13 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     return form;
   }
 
-  // changed/rejected fuer die Rueckmeldung formatieren (Schluessel, keine Werte).
+  // changed/rejected fuer die Rueckmeldung formatieren (Schluessel, keine Werte
+  // -- die Feldnamen selbst sind technische Bezeichner, keine natuersprachlichen
+  // Strings, darum unuebersetzt; nur die umgebenden Praefixe kommen aus t()).
   function outcomeText({ changed, rejected }) {
-    const parts = [`Saved. Applied: ${changed.length ? changed.join(", ") : "—"}`];
-    if (rejected.length) parts.push(`rejected: ${rejected.join(", ")}`);
+    const applied = changed.length ? changed.join(", ") : t("settingsAppliedEmpty");
+    const parts = [`${t("settingsAppliedPrefix")} ${applied}`];
+    if (rejected.length) parts.push(`${t("settingsRejectedPrefix")} ${rejected.join(", ")}`);
     return parts.join(" · ");
   }
 
@@ -201,9 +226,8 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   // Fehlertext beim Speichern: 401 = abgelaufene Session (neu anmelden), sonst
   // generisch. Fail-closed: nie als Teil-Erfolg deuten.
   function saveErrorText(err) {
-    if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED)
-      return "Session expired - please sign in again.";
-    return "Not saved.";
+    if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED) return t("settingsSessionExpired");
+    return t("settingsNotSaved");
   }
 
   async function submit(event) {
@@ -223,51 +247,6 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
 
   formEl.addEventListener("submit", submit);
 
-  const MSG_NUMBER_SAVED = "Number saved.";
-  const MSG_NUMBER_REMOVED = "Number removed.";
-  const MSG_NUMBER_MISSING = "Enter a number first, or use Remove.";
-  const MSG_NUMBER_INVALID =
-    "That number isn't valid or isn't allowed. Use the international format, for example +1 555 0100.";
-
-  // Fehlertext der Nummern-Route. Der eingegebene Wert wird NIE zurueckgespiegelt
-  // (keine PII in Meldungen); nur der stabile Server-Code entscheidet den Text.
-  function privateNumberErrorText(err) {
-    if (err instanceof ApiError && err.code === ERROR_INVALID_PRIVATE_NUMBER)
-      return MSG_NUMBER_INVALID;
-    return saveErrorText(err);
-  }
-
-  // Schreibt die Nummer und synchronisiert danach den State ueber DIESELBE eine
-  // Refetch-Naht wie das Settings-Speichern (G5). Nebeneffekt im Namen (N7).
-  async function submitPrivateNumber(value, okText) {
-    privateSaveBtn.disabled = true;
-    privateClearBtn.disabled = true;
-    try {
-      await savePrivateNumber(value);
-      privateInputEl.value = ""; // das Eingabefeld traegt nie einen gespeicherten Wert
-      showMessage(privateMsgEl, okText, true);
-      await refetchState();
-    } catch (err) {
-      showMessage(privateMsgEl, privateNumberErrorText(err), false);
-    } finally {
-      privateSaveBtn.disabled = false;
-      privateClearBtn.disabled = false;
-    }
-  }
-
-  privateFormEl.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const value = privateInputEl.value.trim();
-    // Leeres Feld ist KEIN implizites Loeschen - Loeschen ist der eigene Knopf.
-    if (!value) {
-      showMessage(privateMsgEl, MSG_NUMBER_MISSING, false);
-      return;
-    }
-    submitPrivateNumber(value, MSG_NUMBER_SAVED);
-  });
-
-  privateClearBtn.addEventListener("click", () => submitPrivateNumber("", MSG_NUMBER_REMOVED));
-
   // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
   // eingeloggten Zustand traegt die Antwort settings/greetingTemplates. Listener
   // synchron beim Modul-Start registrieren, BEVOR die Auth-Insel dispatcht. Im
@@ -277,101 +256,9 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) {
       fillForm(data);
-      privateStatusEl.textContent = privateNumberStatusText(data);
       cardEl.hidden = false;
     } else {
       cardEl.hidden = true;
     }
   });
 </script>
-
-<style is:global>
-  /* Sprachwahl als ruhige Pillenleiste (Settings-Redesign, Aug 2026). is:global
-     aus derselben Begruendung wie in CallsIsland.astro: eine Datei, eine
-     CSS-Handschrift fuer diese App-Schicht -- die Klassennamen (lang-picker,
-     lang-pill*, settings-lang) sind eigens fuer diese Insel benannt, kein
-     Kollisionsrisiko. Farben/Abstaende ausschliesslich ueber die bestehenden
-     semantischen Tokens (app.css/app-hermes.css) -- kein neuer fester Wert.
-     ECHTE, von Astro ausgelagerte CSS-Datei (CSP 'self', kein Inline-Style-
-     Attribut, kein Inline-Script). */
-
-  .settings-lang {
-    border: 0;
-    margin: 0;
-    padding: 0;
-  }
-
-  .lang-picker {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-tight);
-    margin-top: var(--space-cozy);
-  }
-
-  /* Der <label> traegt das sichtbare Pillen-Gehaeuse; das Radio-Input bleibt
-     unsichtbar aber fokussierbar (Tastatur-/Screenreader-Semantik echter Radios,
-     kein nachgebautes ARIA-Widget). */
-  .lang-pill {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    overflow: hidden;
-    padding: var(--space-cozy) var(--space-gap);
-    border: var(--border-width) solid var(--color-field-border);
-    border-radius: var(--radius-badge);
-    background: var(--color-surface);
-    cursor: pointer;
-    transition: border-color 0.2s ease;
-  }
-
-  .lang-pill:hover {
-    border-color: var(--color-field-border-focus);
-  }
-
-  .lang-pill:focus-within {
-    outline: 2px solid var(--color-accent, var(--color-status-info));
-    outline-offset: 2px;
-  }
-
-  .lang-pill__input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  /* Fuellflaeche statt Label-Hintergrund: eine einfache Geschwister-Selektor-
-     Ueberblendung (kein :has() noetig, breiter Browser-Support). */
-  .lang-pill__fill {
-    position: absolute;
-    inset: 0;
-    background: var(--color-action);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-  }
-
-  .lang-pill__input:checked ~ .lang-pill__fill {
-    opacity: 1;
-  }
-
-  .lang-pill__label {
-    position: relative;
-    z-index: 1;
-    font-size: var(--text-lead);
-    font-weight: var(--weight-label);
-    color: var(--color-text);
-    transition: color 0.2s ease;
-  }
-
-  .lang-pill__input:checked ~ .lang-pill__label {
-    color: var(--color-on-action);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .lang-pill,
-    .lang-pill__fill,
-    .lang-pill__label {
-      transition: none;
-    }
-  }
-</style>

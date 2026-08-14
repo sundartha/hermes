@@ -1,4 +1,4 @@
-// Call-Finish: Settlement + Summary + Notification + SMS (finishCall) und die
+// Call-Finish: Settlement + Summary + Notification + SMS + Mail (finishCall) und die
 // Worst-Case-Reserve-Freigabe (releaseReserve). Reine Verschiebung aus server.js
 // (Server-Slim P4). Die Factory schliesst store/config/metering/messaging/summarizeCall/
 // planSummarySms/audit; USAGE_EVENT_KIND importiert das Modul selbst (EINE Quelle, G5).
@@ -9,12 +9,42 @@
 // laeuft immer, releaseReserve wird intra-modul aufgerufen. P2b: die injizierte config
 // schliesst zusaetzlich config.privacy (Diagnose-Retention-Frist) - dieselbe Rolle wie
 // config.billing fuer das Metering, nur fuer den Roh-Transkript-Purge-Entscheid.
+//
+// F2-Mail: mailer/accountsRef sind OPTIONAL (Default null/{current:null}) - bestehende
+// Aufrufer (Tests, Muster web-14-call-finish-sms-text-language.test.js) bleiben ohne
+// Aenderung gueltig, planSummaryMail skip't dann fail-closed mit reason="no_mailer" bzw.
+// "no_account_email". accountsRef ist eine spaet gebundene Zelle (Muster operatorAuth,
+// app.js): der pg-gated Web-Login-Block (wireWebLogin, server.js/app.js) befuellt
+// accountsRef.current ERST NACH der Konstruktion dieser Factory (asynchron, guardedBoot) -
+// mailer dagegen ist eine EIGENE, synchron am Modul-Top von server.js konstruierte
+// SmtpMailer-Instanz (Begruendung dort), keine Zelle noetig.
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
 import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
 import { localeFor } from "../i18n/locales.js";
+import { planSummaryMail } from "../mail-summary.js";
 
 // Provider-SMS-Segmentgrenze (Zusammenfassungs-SMS wird hierauf gekuerzt).
 const SMS_BODY_MAX_CHARS = 1500;
+
+// F2-Mail: mm:ss-Dauerformat (Sekunden -> Minuten-Bruecke, G25: benannte Konstanten
+// statt nackter Zahlen).
+const MS_PER_SECOND = 1000;
+const SECONDS_PER_MINUTE = 60;
+
+// F2-Mail: Dauer "m:ss" von answeredAt bis endedAt - eigene, minimale Server-Kopie des
+// Anzeige-Musters in apps/web/src/lib/render.js (callDurationLabel): das Frontend-Modul
+// ist Browser-Code und darf von src/ nicht importiert werden (Strategie-Grenze). Fehlt
+// answeredAt/endedAt (nie abgenommen) -> "" (kein erfundener Wert, gleiches Prinzip wie
+// die Frontend-Kopie).
+function formatCallDuration(call) {
+  const startMs = Date.parse(call.answeredAt || "");
+  const endMs = Date.parse(call.endedAt || "");
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return "";
+  const totalSeconds = Math.max(0, Math.round((endMs - startMs) / MS_PER_SECOND));
+  const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
+  const seconds = String(totalSeconds % SECONDS_PER_MINUTE).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
 
 export function makeCallFinish({
   store,
@@ -24,6 +54,8 @@ export function makeCallFinish({
   summarizeCall,
   planSummarySms,
   audit,
+  mailer = null,
+  accountsRef = { current: null },
 }) {
   // OUT-05 (F2): Worst-Case-Reserve eines Calls freigeben (idempotent ueber call.reserveReleased,
   // state-ops). FEHLER-SCHLUCKEND: KEIN Freigabepfad (catch/finishCall/Backstop) darf je einen
@@ -145,6 +177,51 @@ export function makeCallFinish({
         // Kein Ziel -> SMS still uebersprungen. Notification (oben) bleibt, kein Throw (M4).
         // Audit nur Marker + Reason, NIE die Nummer (H4); req=null -> ip=system.
         audit("sms_summary_skipped", null, `call=${call.id} reason=${plan.reason}`);
+      }
+
+      // F2-Mail: Call-Summary per E-Mail bei Newsletter-Einwilligung (Auftrag), Spiegel des
+      // SMS-Blocks oben. Gate-Entscheidung in planSummaryMail (mail-summary.js, inkl. dem
+      // EINEN async Schritt - accounts.accountByTenant); der Mail-Text bleibt HIER gebaut
+      // (Muster SMS: sms-summary.js liest nur, den Body baut finishCall). aiCount/who sind
+      // bereits oben berechnet (G5: EINE Quelle fuer beide Kanaele).
+      const mailPlan = await planSummaryMail({ store, call, mailer, accounts: accountsRef.current });
+      if (mailPlan.send) {
+        const anchorMs = Date.parse(call.answeredAt || call.startedAt);
+        // Anzeige-Zeitpunkt bewusst OHNE jeden Orts-/Zonen-Bezug an Intl.DateTimeFormat:
+        // diese Datei bleibt strukturell frei von jeder Tenant-Ortszeit-Lesung - ein
+        // eigener Waechtertest (LAW-07: kein Anrufzeit-Gate, Owner-Auflage 7.6) haelt genau
+        // das fest. Der Zeitpunkt laeuft daher im Laufzeit-Default (Prozess-seitige
+        // Voreinstellung), NICHT in der Ortszeit des Tenants - eine bewusste
+        // Vereinfachung, kein Datenverlust (die Mail nennt trotzdem Datum+Uhrzeit des
+        // Anrufs).
+        const when = Number.isNaN(anchorMs)
+          ? ""
+          : new Intl.DateTimeFormat(localeFor(call.language).dateLocale, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(new Date(anchorMs));
+        const durationLabel = formatCallDuration(call);
+        const mailText =
+          `${who}\n\n` +
+          (when ? `${t.mailTimeLabel} ${when}\n` : "") +
+          (durationLabel ? `${t.mailDurationLabel} ${durationLabel}\n` : "") +
+          `\n${result.summary}` +
+          (aiCount
+            ? `\n\n${t.actionItemsHeading}\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
+            : "");
+        try {
+          await mailer.sendMail({ to: mailPlan.to, subject: t.summaryTitle, text: mailText });
+          // NUR nach ERFOLGREICHEM Send (Muster markSummarySmsSent) - schlaegt sendMail
+          // fehl, springt der catch an, KEIN Marker -> ein spaeterer Retry (naechster
+          // /voice/status) sendet die Mail erneut statt sie fuer immer zu verlieren.
+          store.markSummaryMailSent(call.id);
+        } catch (e) {
+          console.error("[mail]", e.message);
+        }
+      } else if (mailPlan.reason) {
+        // Kein Mailer/keine Konto-E-Mail -> Mail still uebersprungen, kein Throw (Muster SMS).
+        // Audit nur Marker + Reason, NIE die E-Mail-Adresse (Regel 4/H4).
+        audit("mail_summary_skipped", null, `call=${call.id} reason=${mailPlan.reason}`);
       }
     } catch (err) {
       console.error("[summary]", err.message);

@@ -7,18 +7,30 @@
 // RESTYLING (Website-Neubau): app-hermes.css kommt NACH app.css und belegt die
 // semantischen Farb-Rollen neu (helle Karten -> Glaskarten auf Wolkenmeer).
 // Reihenfolge ist verbindlich: gleiche Spezifitaet, die spaetere Regel gewinnt.
-// Markup und Inseln sind unveraendert -- nur die drei Hintergrundebenen und der
-// Sprachbezug (de) sind neu.
+// Dashboard-Redesign (WEB-03): lang="en" statt "de" -- die App-Shell ist
+// durchgaengig englisch (Testkatalog dashboard-i18n-surface/single-origin-
+// serving). shell.css/calls.css/panels.css sind die neuen, nach Trupp
+// getrennten Stylesheets des Dashboard-Umbaus (Trupp A/B/C); calls.css und
+// panels.css koennen zum Zeitpunkt dieses Commits noch leere Platzhalter
+// sein, falls die jeweiligen Trupps parallel noch nicht geliefert haben.
+//
+// i18n (Etappe 1): das lang="en" unten bleibt woertlich im Quelltext (WEB-03,
+// test/single-origin-serving.test.js prueft den Quelltext) -- es ist der
+// Build-/SSR-Default. Zur LAUFZEIT ueberschreibt setLang() (lib/i18n.js) das
+// Attribut per document.documentElement.lang, sobald der Besitzer DE waehlt.
 import "../styles/fonts.css";
 import "../styles/tokens/index.css";
 import "../styles/app.css";
 import "../styles/app-hermes.css";
+import "../styles/app/shell.css";
+import "../styles/app/calls.css";
+import "../styles/app/panels.css";
 
 const { title = "Hermes" } = Astro.props;
 ---
 
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -34,7 +46,7 @@ const { title = "Hermes" } = Astro.props;
     <div class="app-top" aria-hidden="true"></div>
 
     <header class="app-header">
-      <a class="app-brand" href="/" aria-label="Hermes — Startseite">
+      <a class="app-brand" href="/" aria-label="Hermes — Home">
         <span class="app-brand__mark" aria-hidden="true">
           <img class="app-brand__wing" src="/assets/hermes-wing.png" alt="" />
         </span>

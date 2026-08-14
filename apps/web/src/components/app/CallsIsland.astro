@@ -1,170 +1,136 @@
 ---
-// CallsIsland (W4): read-only Anrufliste aus der state-Antwort. Pro Call:
-// Richtung (Pfeil-Glyph + Farbe), Gegenstelle, Untertitel (goal bzw.
-// Standardtext) und ein Status-Badge (Live/Beendet/Abgebrochen/Fehlgeschlagen).
-// Jede Zeile ist ein aufklappbarer Trigger (echter <button>, aria-expanded/
-// aria-controls): ein Klick zeigt darunter die Chat-Historie des Gespraechs
-// (Turns als Blasen, Agent/Gegenstelle optisch unterschieden) plus die
-// Zusammenfassung, falls vorhanden. Die Daten (transcript/summary) sind schon
-// im state -- kein neuer Endpunkt (views.js publicCall strippt sie nicht).
+// CallsIsland (Dashboard-Design-Spec §7+§8): read-only Anrufliste aus der
+// state-Antwort. Pro Call: Richtung (Pfeil-Kreis), Gegenstelle, Mono-Meta
+// (Zeit · Dauer) und die einzeilige Zusammenfassung, rechts eine Status-Pille.
+// Die ganze Zeile ist ein <button> -- ein Klick oeffnet das EINE, statisch
+// hier vorhandene Detail-Fenster (Modal) mit Transkript + Zusammenfassung
+// (Daten sind schon im state -- kein neuer Endpunkt, views.js publicCall
+// strippt sie nicht).
 //
 // KEIN eigener state-Fetch (AUTH_EVENT). READ-ONLY: kein POST/PUT/DELETE.
 // Stale-Daten-Schutz: bei jedem Nicht-authenticated-Zustand wird die Liste
 // geleert. Der DOM-Bau (inkl. textContent-only XSS-Schutz) lebt getestet in
-// lib/render.js -- diese Insel verdrahtet nur DOM-Container + AUTH_EVENT.
+// lib/render.js -- diese Insel verdrahtet nur DOM-Container, AUTH_EVENT und
+// die Modal-Interaktion (Oeffnen/Schliessen/Fokus-Falle) -- Letzteres ist
+// reine Browser-Interaktion (Fokus, Tastatur) und bewusst NICHT in render.js
+// (dort lebt nur, was ohne echtes DOM testbar ist, s. render.test.js).
 ---
 
 <section class="card">
-  <h2>Calls</h2>
-  <p class="muted">Your recent calls. Tap a row to see the conversation.</p>
-  <ul id="calls-list" class="data-list" aria-live="polite"></ul>
+  <div class="calls-head">
+    <h2 data-i18n="callsTitle">Calls</h2>
+    <span class="calls-head__hint" data-i18n="viewDetails">View details</span>
+  </div>
+  <ul id="calls-list" class="data-list calls-list" aria-live="polite"></ul>
 </section>
 
+<div id="call-modal" class="call-modal" aria-hidden="true">
+  <div class="call-modal__backdrop" data-call-modal-close></div>
+  <div
+    id="call-modal-card"
+    class="call-modal__card"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="call-modal-name"
+  >
+    <div class="call-modal__head">
+      <span id="call-modal-direction" class="direction-pill"></span>
+      <button
+        type="button"
+        id="call-modal-close"
+        class="call-modal__close"
+        aria-label="Close"
+        data-i18n-attr="aria-label:modalClose"
+        data-call-modal-close
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M3 3 L13 13 M13 3 L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+        </svg>
+      </button>
+    </div>
+    <div id="call-modal-contact" class="call-modal__contact"></div>
+    <div id="call-modal-summary" class="call-modal__summary" hidden></div>
+    <div class="call-modal__transcript">
+      <span class="call-modal__transcript-label" data-i18n="transcript">Transcript</span>
+      <div id="call-modal-transcript-body"></div>
+    </div>
+  </div>
+</div>
+
 <script>
-  import { bindList, callRows } from "../../lib/render.js";
+  import { bindList, callRows, fillCallModal } from "../../lib/render.js";
+
+  const modalEl = document.getElementById("call-modal");
+  const modalCardEl = document.getElementById("call-modal-card");
+  const closeBtn = document.getElementById("call-modal-close");
+  const modalTargets = {
+    directionEl: document.getElementById("call-modal-direction"),
+    contactEl: document.getElementById("call-modal-contact"),
+    summaryEl: document.getElementById("call-modal-summary"),
+    transcriptEl: document.getElementById("call-modal-transcript-body"),
+  };
+
+  const MODAL_OPEN_CLASS = "is-open";
+  // Fokussierbare Elemente innerhalb der Karte fuer die Tab-Falle (Spec §8).
+  const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+  // Fokus-Rueckkehrpunkt: die Zeile, die das Fenster geoeffnet hat.
+  let triggerEl = null;
+
+  function focusableNodes() {
+    return [...modalCardEl.querySelectorAll(FOCUSABLE_SELECTOR)];
+  }
+
+  // Tab innerhalb der Karte einsperren: am jeweils letzten/ersten Element
+  // springt der Fokus zurueck zum anderen Ende, statt die Karte zu verlassen.
+  function trapFocus(event) {
+    const nodes = focusableNodes();
+    if (!nodes.length) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    const forward = !event.shiftKey;
+    const atEdge = forward ? document.activeElement === last : document.activeElement === first;
+    if (!atEdge) return;
+    event.preventDefault();
+    (forward ? first : last).focus();
+  }
+
+  function onModalKeydown(event) {
+    if (event.key === "Escape") {
+      closeModal();
+      return;
+    }
+    if (event.key === "Tab") trapFocus(event);
+  }
+
+  function openModal(call, rowButton) {
+    fillCallModal(document, modalTargets, call);
+    triggerEl = rowButton;
+    modalEl.classList.add(MODAL_OPEN_CLASS);
+    modalEl.setAttribute("aria-hidden", "false");
+    document.addEventListener("keydown", onModalKeydown);
+    // Fokus beim Oeffnen auf das Schliessen-Kreuz (Spec §8).
+    closeBtn.focus();
+  }
+
+  function closeModal() {
+    modalEl.classList.remove(MODAL_OPEN_CLASS);
+    modalEl.setAttribute("aria-hidden", "true");
+    document.removeEventListener("keydown", onModalKeydown);
+    if (triggerEl) triggerEl.focus();
+    triggerEl = null;
+  }
+
+  // Backdrop-Klick UND Kreuz-Klick tragen beide data-call-modal-close --
+  // ein delegierter Listener statt zwei identischer. closest() faengt Klicks
+  // auf das SVG/den Pfad im Kreuz ab (deren event.target ist NICHT der
+  // <button> selbst).
+  modalEl.addEventListener("click", (event) => {
+    if (event.target.closest("[data-call-modal-close]")) closeModal();
+  });
 
   // bindList hoert auf AUTH_EVENT, rendert read-only und leert die Liste bei
   // Auth-Verlust (kein stale Tenant-Datenleck) -- gemeinsame Verdrahtung (G5).
-  bindList(document, "calls-list", callRows);
+  // Ein Klick auf eine Zeile oeffnet das eine Detail-Fenster (openModal).
+  bindList(document, "calls-list", (doc, data) => callRows(doc, data, openModal));
 </script>
-
-<style is:global>
-  /* Aufklappbare Anrufzeile (W4b). is:global BEWUSST: die Zeilen/Panels werden
-     client-seitig aus render.js gebaut (document.createElement), NICHT im
-     Astro-Template dieser Datei. Astros Standard-Scoping haengt ein
-     data-astro-cid-Attribut nur an Markup, das schon beim Bau im Template
-     stand -- ein scoped <style> wuerde dynamisch erzeugte Knoten NIE treffen
-     (stille No-Op-Regeln). Die Klassennamen (call-row__*, call-panel*,
-     chat-*) sind eigens fuer diese Insel benannt, kein Kollisionsrisiko mit
-     anderen Komponenten. Farben/Abstaende ausschliesslich ueber die
-     bestehenden semantischen Tokens (app.css/app-hermes.css) -- kein neuer
-     fester Wert, damit sich das Panel in den Hermes-Look einfuegt. Diese
-     Datei bleibt trotzdem eine ECHTE, von Astro ausgelagerte CSS-Datei (CSP
-     'self', kein Inline-Style-Attribut, kein Inline-Script). */
-
-  /* app.css setzt .call-row auf display:flex fuer die frueher flache Zeile --
-     hier traegt jetzt der Trigger-Button den Flex, damit das Panel darunter
-     (nicht daneben) erscheint. Hoehere Spezifitaet (#id .klasse) ueberschreibt
-     gezielt NUR display; Padding/Border/Hover/Radius aus app.css/app-hermes.css
-     bleiben unangetastet und wirken weiter auf die Zeile.  */
-  #calls-list .call-row {
-    display: block;
-  }
-
-  .call-row__trigger {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    gap: var(--space-inline);
-    padding: var(--space-cozy) 0;
-    background: none;
-    border: 0;
-    font: inherit;
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .call-row__trigger:focus-visible {
-    outline: 2px solid var(--color-accent, var(--color-status-info));
-    outline-offset: 2px;
-    border-radius: var(--radius-control);
-  }
-
-  .call-row__caret {
-    margin-left: auto;
-    flex-shrink: 0;
-    color: var(--color-muted);
-    transition: transform 0.2s ease;
-  }
-
-  .call-row__trigger[aria-expanded="true"] .call-row__caret {
-    transform: rotate(180deg);
-  }
-
-  .call-panel {
-    padding: 0 0 var(--space-cozy);
-  }
-
-  .call-panel__empty {
-    padding: var(--space-tight) 0 0;
-  }
-
-  .call-summary {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-hairline);
-    padding: var(--space-cozy);
-    margin: 0 0 var(--space-cozy);
-    background: var(--color-surface);
-    border: var(--border-width) solid var(--color-divider);
-    border-radius: var(--radius-control);
-  }
-
-  .call-summary__label {
-    font-family: var(--app-mono);
-    font-size: var(--text-eyebrow);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    color: var(--color-muted);
-  }
-
-  .call-summary__text {
-    color: var(--color-text);
-  }
-
-  .chat-log {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-tight);
-  }
-
-  .chat-bubble {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-hairline);
-    max-width: 80%;
-    padding: var(--space-cozy);
-    border: var(--border-width) solid var(--color-divider);
-    border-radius: var(--radius-control);
-  }
-
-  .chat-bubble--agent {
-    align-self: flex-start;
-    background: var(--color-status-info-surface);
-  }
-
-  .chat-bubble--counterparty {
-    align-self: flex-end;
-    background: var(--color-surface);
-  }
-
-  .chat-bubble__role {
-    font-family: var(--app-mono);
-    font-size: var(--text-eyebrow);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    color: var(--color-muted);
-  }
-
-  .chat-bubble__text {
-    margin: 0;
-    color: var(--color-text);
-    white-space: pre-wrap;
-  }
-
-  .chat-bubble__time {
-    font-family: var(--app-mono);
-    font-size: var(--text-eyebrow);
-    color: var(--color-muted);
-  }
-
-  @media (max-width: 768px) {
-    .chat-bubble {
-      max-width: 92%;
-    }
-  }
-</style>

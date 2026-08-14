@@ -21,18 +21,27 @@ import {
 } from "./api.js";
 import { PLAN_CATALOG, formatPlanPrice, findPlan } from "./plans.js";
 import { el } from "./render.js";
+import { getLang, tPair, tDyn } from "./i18n.js";
 
-// Anzeige-Konstanten (kein Magic-String an den Verwendungsstellen, G25).
+// Anzeige-Konstanten (kein Magic-String an den Verwendungsstellen, G25). EN
+// bleibt Quelle der Wahrheit (Name/Wert test-gepinnt); "_DE"-Geschwister +
+// tPair/tDyn (lib/i18n.js) machen die Verwendungsstellen sprachbewusst
+// (Etappe 2 -- Ausnahme: die 312k-Texte weiter unten, s. dortige Kommentare).
 const PRICE_CADENCE = " /month";
+const PRICE_CADENCE_DE = " /Monat";
 const SUBSCRIBE_LABEL = "Subscribe";
+const SUBSCRIBE_LABEL_DE = "Abonnieren";
 const POPULAR_BADGE = "Popular";
+const POPULAR_BADGE_DE = "Beliebt";
 const ACTIVE_PLAN_PREFIX = "Active plan: ";
+const ACTIVE_PLAN_PREFIX_DE = "Aktiver Tarif: ";
 const PLAN_ATTR = "plan"; // data-plan: Slug am Subscribe-Button (delegierter Klick)
 // Phase A (PLAN-VOUCHER-SETUP-FEE-GAP.md): Hinweis auf die ZWEITE, separate Abbuchung
 // (src/onboarding.js placeHold), die dem Abo-Checkout folgt - ohne Hinweis sah der Kunde
 // sie nur als ueberraschenden 402 danach (Problem A im Plan-Dokument).
-const FEE_NOTICE_PREFIX = "+ ";
+const FEE_NOTICE_PREFIX = "+ "; // sprachneutral (Zahlenpraefix), keine DE-Variante noetig
 const FEE_NOTICE_SUFFIX = " one-time number setup fee";
+const FEE_NOTICE_SUFFIX_DE = " einmalige Einrichtungsgebühr für die Nummer";
 // AM4: Funnel-Hinweis aus dem no_card-Response (Feld next). Spiegelt NEXT_SETUP_CHECKOUT in
 // src/self-service-routes.js -- ein Contract-String ueber die Origin-Grenze (kein gemeinsames
 // Modul im Build-freien Frontend, wie die gespiegelten Settings-/error-Strings).
@@ -42,7 +51,9 @@ const MS_PER_SECOND = 1000;
 const DATE_LOCALE = "en-US";
 
 // Rueckmeldungen der Subscribe-Zustandsmaschine (EINE Quelle, G5: aktiver UND
-// suspended-Pfad zeigen denselben Text). Reine Anzeige-Strings (Englisch).
+// suspended-Pfad zeigen denselben Text). SUBSCRIBE_MESSAGES bleibt der EN-
+// Vertrag (Name/Werte test-gepinnt); subscribeMessage() liest darunter zusaetzlich
+// SUBSCRIBE_MESSAGES_DE fuer die tatsaechlich angezeigte, sprachbewusste Meldung.
 export const SUBSCRIBE_MESSAGES = Object.freeze({
   booked: "Subscription booked.",
   alreadySubscribed: "You already have a subscription.",
@@ -50,6 +61,16 @@ export const SUBSCRIBE_MESSAGES = Object.freeze({
   failed: "Subscription couldn't be booked.",
   checkoutFailed: "Couldn't start checkout.",
 });
+export const SUBSCRIBE_MESSAGES_DE = Object.freeze({
+  booked: "Abo gebucht.",
+  alreadySubscribed: "Du hast bereits ein Abo.",
+  sessionExpired: "Sitzung abgelaufen - bitte erneut anmelden.",
+  failed: "Das Abo konnte nicht gebucht werden.",
+  checkoutFailed: "Checkout konnte nicht gestartet werden.",
+});
+function subscribeMessage(key) {
+  return tDyn({ en: SUBSCRIBE_MESSAGES, de: SUBSCRIBE_MESSAGES_DE }, key);
+}
 
 // ---- reine Builder ----------------------------------------------------------
 
@@ -57,7 +78,7 @@ export const SUBSCRIBE_MESSAGES = Object.freeze({
 // textContent (Preis aus dem Ganzzahl-Cents-Katalog, formatPlanPrice).
 function priceLine(doc, plan) {
   const line = el(doc, "div", "plan-price", formatPlanPrice(plan.amountCents, plan.currency));
-  line.append(el(doc, "span", "plan-per", PRICE_CADENCE));
+  line.append(el(doc, "span", "plan-per", tPair(PRICE_CADENCE, PRICE_CADENCE_DE)));
   return line;
 }
 
@@ -74,13 +95,14 @@ function featureList(doc, features) {
 function feeLine(doc, fee) {
   if (!fee) return null;
   const price = formatPlanPrice(fee.amountCents, fee.currency);
-  return el(doc, "div", "plan-fee", `${FEE_NOTICE_PREFIX}${price}${FEE_NOTICE_SUFFIX}`);
+  const suffix = tPair(FEE_NOTICE_SUFFIX, FEE_NOTICE_SUFFIX_DE);
+  return el(doc, "div", "plan-fee", `${FEE_NOTICE_PREFIX}${price}${suffix}`);
 }
 
 // Subscribe-Button mit data-plan=<slug>. Der delegierte Klick-Listener (wireSubscribe)
 // liest den Slug aus dataset.plan -> kein Binding pro Button (G5, kein Listener-Leak).
 function subscribeButton(doc, slug) {
-  const btn = el(doc, "button", "btn plan-cta", SUBSCRIBE_LABEL);
+  const btn = el(doc, "button", "btn plan-cta", tPair(SUBSCRIBE_LABEL, SUBSCRIBE_LABEL_DE));
   btn.type = "button";
   btn.dataset[PLAN_ATTR] = slug;
   return btn;
@@ -91,7 +113,7 @@ function subscribeButton(doc, slug) {
 // Zeile zwischen Features und Subscribe-Button (feeLine, null -> keine Zeile).
 function planTile(doc, plan, fee) {
   const tile = el(doc, "div", plan.featured ? "plan plan--featured" : "plan");
-  if (plan.featured) tile.append(el(doc, "span", "plan-badge", POPULAR_BADGE));
+  if (plan.featured) tile.append(el(doc, "span", "plan-badge", tPair(POPULAR_BADGE, POPULAR_BADGE_DE)));
   tile.append(el(doc, "div", "plan-name", plan.name), priceLine(doc, plan), featureList(doc, plan.features));
   const feeEl = feeLine(doc, fee);
   if (feeEl) tile.append(feeEl);
@@ -109,11 +131,15 @@ export function planTiles(doc, fee = null) {
 }
 
 // Anzeige-Datum aus dem currentPeriodEnd-Epoch (Unix-Sekunden) -> "M/D/YYYY"
-// (en-US). Fehlend/ungueltig -> "" (die Abo-Zeile zeigt dann nur den Plan-Namen).
+// (en-US) bzw. "TT.MM.JJJJ" (de-DE, s. DATE_LOCALE_DE weiter unten) -- dieselbe
+// EINE toLocaleDateString-Aufrufstelle waehlt nur die Konstante (WEB-18-Drift-
+// Test, test/dashboard-i18n-surface.test.js: KEINE zweite Aufrufstelle).
+// Fehlend/ungueltig -> "" (die Abo-Zeile zeigt dann nur den Plan-Namen).
 function renewDate(epochSeconds) {
   if (!epochSeconds) return "";
   const d = new Date(epochSeconds * MS_PER_SECOND);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(DATE_LOCALE);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(getLang() === "de" ? DATE_LOCALE_DE : DATE_LOCALE);
 }
 
 // Anzeige-Name eines Slugs aus dem Katalog-Spiegel (findPlan, eine Lookup-Quelle).
@@ -130,7 +156,13 @@ function planName(slug) {
 export function subscriptionLine(sub) {
   const name = planName(sub.planSlug);
   const date = renewDate(sub.currentPeriodEnd);
-  return date ? `${ACTIVE_PLAN_PREFIX}${name} (renews ${date}).` : `${ACTIVE_PLAN_PREFIX}${name}.`;
+  if (!date) return `${tPair(ACTIVE_PLAN_PREFIX, ACTIVE_PLAN_PREFIX_DE)}${name}.`;
+  // Voller Satz je Sprache (nicht nur ein Wort ersetzt) -- die Wortstellung
+  // unterscheidet sich zwischen EN und DE. EN bleibt test-gepinnt woertlich.
+  return tPair(
+    `${ACTIVE_PLAN_PREFIX}${name} (renews ${date}).`,
+    `${ACTIVE_PLAN_PREFIX_DE}${name} (verlängert sich am ${date}).`,
+  );
 }
 
 // Kontingent-Zeile: "{remaining} of {included} minutes remaining" oder null, wenn
@@ -138,7 +170,24 @@ export function subscriptionLine(sub) {
 // Aufrufer versteckt die Zeile. Keys gespiegelt aus src/billing/meter.js quotaView.
 export function quotaLine(quota) {
   if (!quota) return null;
-  return `${quota.remainingMinutes} of ${quota.includedMinutes} minutes remaining`;
+  return tPair(
+    `${quota.remainingMinutes} of ${quota.includedMinutes} minutes remaining`,
+    `${quota.remainingMinutes} von ${quota.includedMinutes} Minuten übrig`,
+  );
+}
+
+const PERCENT_MIN = 0;
+const PERCENT_MAX = 100;
+
+// Verbrauchter Anteil in Prozent fuer den Minuten-Fortschrittsbalken (Dashboard-
+// Design-Spec §10). Geklemmt auf [0,100] (Verteidigung gegen inkonsistente Server-
+// Werte, z.B. remainingMinutes > includedMinutes). Kein Kontingent -> 0 (der
+// Aufrufer rendert den Balken ohnehin nur, wenn quotaLine(...) einen Text liefert).
+export function quotaUsedPercent(quota) {
+  if (!quota || !quota.includedMinutes) return PERCENT_MIN;
+  const used = quota.includedMinutes - quota.remainingMinutes;
+  const percent = Math.round((used / quota.includedMinutes) * 100);
+  return Math.min(PERCENT_MAX, Math.max(PERCENT_MIN, percent));
 }
 
 // ---- Subscribe-Zustandsmaschine ---------------------------------------------
@@ -160,7 +209,7 @@ async function guidedCardSetup(plan, { onMessage, navigate }) {
     navigate(url);
   } catch (err) {
     onMessage(
-      isUnauthorized(err) ? SUBSCRIBE_MESSAGES.sessionExpired : SUBSCRIBE_MESSAGES.checkoutFailed,
+      isUnauthorized(err) ? subscribeMessage("sessionExpired") : subscribeMessage("checkoutFailed"),
       false,
     );
   }
@@ -177,9 +226,9 @@ async function handleSubscribeError(err, plan, opts) {
     await guidedCardSetup(plan, opts);
     return;
   }
-  if (isConflict(err)) return opts.onMessage(SUBSCRIBE_MESSAGES.alreadySubscribed, false);
-  if (isUnauthorized(err)) return opts.onMessage(SUBSCRIBE_MESSAGES.sessionExpired, false);
-  return opts.onMessage(SUBSCRIBE_MESSAGES.failed, false);
+  if (isConflict(err)) return opts.onMessage(subscribeMessage("alreadySubscribed"), false);
+  if (isUnauthorized(err)) return opts.onMessage(subscribeMessage("sessionExpired"), false);
+  return opts.onMessage(subscribeMessage("failed"), false);
 }
 
 // Ein Subscribe-Lauf: POST {plan}. Erfolg -> Rueckmeldung + onSubscribed (re-fetch
@@ -187,7 +236,7 @@ async function handleSubscribeError(err, plan, opts) {
 async function runSubscribe(plan, opts) {
   try {
     await startBillingSubscribe(plan);
-    opts.onMessage(SUBSCRIBE_MESSAGES.booked, true);
+    opts.onMessage(subscribeMessage("booked"), true);
     await opts.onSubscribed();
   } catch (err) {
     await handleSubscribeError(err, plan, opts);
@@ -234,6 +283,18 @@ export const PLAN_CHOICE_COPY = Object.freeze({
   bannerTitle: "Account pending",
   bannerText: "You can subscribe anytime to activate your assistant.",
 });
+// DE-Entsprechung (Etappe 2). PLAN_CHOICE_COPY bleibt der EN-Vertrag (test-
+// gepinnt); renderPlanChoice/dismissPlanChoice lesen ueber planChoiceText()
+// die sprachbewusste Fassung.
+export const PLAN_CHOICE_COPY_DE = Object.freeze({
+  title: "Wähle deinen Tarif",
+  subtitle: "Wähle einen Tarif, um deinen Assistenten zu aktivieren und deine Rufnummer zu erhalten.",
+  bannerTitle: "Konto ausstehend",
+  bannerText: "Du kannst jederzeit abonnieren, um deinen Assistenten zu aktivieren.",
+});
+function planChoiceText(key) {
+  return tDyn({ en: PLAN_CHOICE_COPY, de: PLAN_CHOICE_COPY_DE }, key);
+}
 
 // Rahmt die suspended-Region als prominente Plan-Auswahl: aktivierende H1, erklaerender
 // Untertitel, Plan-Kacheln aus dem Build-Spiegel, sichtbarer Skip-Link. REIN DOM (doc + els),
@@ -241,8 +302,8 @@ export const PLAN_CHOICE_COPY = Object.freeze({
 // durchgereicht (numberSetupFeeFrom, null -> keine Gebuehren-Zeile). NUR bei PAYMENT_ENABLED aufgerufen
 // (Aufrufer-Guard) -> ohne Payment byte-identisch.
 export function renderPlanChoice(doc, els, fee = null) {
-  els.title.textContent = PLAN_CHOICE_COPY.title;
-  els.subtitle.textContent = PLAN_CHOICE_COPY.subtitle;
+  els.title.textContent = planChoiceText("title");
+  els.subtitle.textContent = planChoiceText("subtitle");
   els.tiles.replaceChildren(...planTiles(doc, fee));
   els.skip.hidden = false;
 }
@@ -251,23 +312,50 @@ export function renderPlanChoice(doc, els, fee = null) {
 // ruft KEIN subscribe/setStatus (Invariante AM3: aktiviert nichts, /state bleibt 403).
 // Einbahn (Reload bringt die Auswahl zurueck) - bewusst minimal (YAGNI).
 export function dismissPlanChoice(els) {
-  els.title.textContent = PLAN_CHOICE_COPY.bannerTitle;
-  els.subtitle.textContent = PLAN_CHOICE_COPY.bannerText;
+  els.title.textContent = planChoiceText("bannerTitle");
+  els.subtitle.textContent = planChoiceText("bannerText");
   els.tiles.replaceChildren();
   els.skip.hidden = true;
 }
 
 // ---- 312k-P3: Kuendigungs-Weg (§ 312k BGB) ------------------------------------
-// Zwei Schaltflaechen-Beschriftungen sind GESETZLICH VORGEGEBEN, nicht frei waehlbar
-// (Auftragsnotiz) - deshalb Deutsch, obwohl das Dashboard sonst durchgaengig Englisch ist
-// (SPRACHBRUCH IST GEWOLLT, kein Versehen; s. Bericht). EINE Quelle (G25) je Text: die
-// Astro-Insel importiert diese Konstanten statt den Wortlaut ein zweites Mal zu tragen.
+// Der DEUTSCHE Wortlaut der beiden Schaltflaechen ist gesetzlich vorgegeben
+// (§ 312k Abs. 2 BGB: "Vertraege hier kuendigen" oder eine entsprechende
+// eindeutige Formulierung) und bleibt im DE-Modus WOERTLICH unangetastet.
+// Owner-Entscheidung 2026-08-14: der EN-Modus zeigt eine gleichwertig
+// EINDEUTIGE englische Formulierung statt des deutschen Sprachbruchs -- das
+// Gesetz verlangt Eindeutigkeit, nicht deutsche Sprache in einer englischen
+// Oberflaeche. Die EN-Fassungen sind eigene benannte Konstanten (KEIN
+// Woerterbuch-Eintrag -- der Waechtertest dashboard-i18n-surface stellt sicher,
+// dass der deutsche Pflichtwortlaut nie in einem uebersetzbaren Woerterbuch
+// landet). EINE Quelle (G25) je Text: die Astro-Insel importiert Konstanten/
+// Resolver statt den Wortlaut ein zweites Mal zu tragen.
 export const CANCEL_BUTTON_LABEL = "Verträge kündigen";
 export const CONFIRM_CANCEL_BUTTON_LABEL = "Jetzt kündigen";
-// Die uebrigen Beschriftungen sind NICHT gesetzlich vorgegeben -> Englisch, Muster der
-// Nachbartexte (SUBSCRIBE_LABEL usw. oben).
+export const CANCEL_BUTTON_LABEL_EN = "Cancel contracts";
+export const CONFIRM_CANCEL_BUTTON_LABEL_EN = "Cancel now";
+export function cancelButtonLabel() {
+  return tPair(CANCEL_BUTTON_LABEL_EN, CANCEL_BUTTON_LABEL);
+}
+export function confirmCancelButtonLabel() {
+  return tPair(CONFIRM_CANCEL_BUTTON_LABEL_EN, CONFIRM_CANCEL_BUTTON_LABEL);
+}
+// Die uebrigen Beschriftungen sind NICHT gesetzlich vorgegeben -> zweisprachig
+// (Etappe 2), Muster der Nachbartexte (SUBSCRIBE_LABEL usw. oben). EN bleibt
+// der test-gepinnte Vertrag; cancelAbortLabel()/resumeButtonLabel() liefern die
+// sprachbewusste Fassung fuer die Insel (BillingIsland.astro rendert diese
+// beiden Schaltflaechen serverseitig/englisch aus den Konstanten und ruft die
+// Funktionen zusaetzlich bei jedem Render, s. renderCancelBlock dort).
 export const CANCEL_ABORT_LABEL = "Never mind";
+const CANCEL_ABORT_LABEL_DE = "Doch nicht";
 export const RESUME_BUTTON_LABEL = "Resume subscription";
+const RESUME_BUTTON_LABEL_DE = "Abo fortsetzen";
+export function cancelAbortLabel() {
+  return tPair(CANCEL_ABORT_LABEL, CANCEL_ABORT_LABEL_DE);
+}
+export function resumeButtonLabel() {
+  return tPair(RESUME_BUTTON_LABEL, RESUME_BUTTON_LABEL_DE);
+}
 
 const DATE_LOCALE_DE = "de-DE";
 
@@ -282,24 +370,39 @@ function germanDate(epochSeconds) {
 }
 
 // Zweite Stufe (Bestaetigungsansicht): WAS gekuendigt wird (Plan-Name) + WANN es wirkt
-// (Periodenende, deutsch formatiert) - die beiden Pflichtangaben aus dem Auftrag.
+// (Periodenende) - die beiden Pflichtangaben aus dem Auftrag. Sprachbewusst
+// (Owner-Entscheidung 2026-08-14): DE-Satz mit deutschem Datum (germanDate,
+// TT.MM.JJJJ), EN-Satz mit renewDate (en-US) - beides BESTEHENDE Aufrufstellen,
+// der Waechtertest (exakt 2 Locale-Aufrufstellen) bleibt unberuehrt.
 export function cancelConfirmText(sub) {
   const name = planName(sub.planSlug);
-  const date = germanDate(sub.currentPeriodEnd);
+  if (getLang() === "de") {
+    const date = germanDate(sub.currentPeriodEnd);
+    return date
+      ? `Dein ${name}-Abo endet am ${date}. Hermes läuft bis dahin wie gewohnt weiter.`
+      : `Dein ${name}-Abo endet zum Ende des laufenden Abrechnungszeitraums.`;
+  }
+  const date = renewDate(sub.currentPeriodEnd);
   return date
     ? `Your ${name} subscription will end on ${date}. Hermes keeps working as usual until then.`
     : `Your ${name} subscription will end at the close of the current billing period.`;
 }
 
-// Zustand, wenn bereits gekuendigt: Datum, bis zu dem der Dienst noch laeuft (deutsch
-// formatiert, s. germanDate). Reiner String (DOM-frei, testbar); der Aufrufer setzt ihn
-// via textContent (Muster subscriptionLine/quotaLine).
+// Zustand, wenn bereits gekuendigt: Datum, bis zu dem der Dienst noch laeuft
+// (sprachbewusst formatiert, s. cancelConfirmText). Reiner String (DOM-frei,
+// testbar); der Aufrufer setzt ihn via textContent (Muster subscriptionLine/quotaLine).
 export function cancelStatusLine(sub) {
-  const date = germanDate(sub.currentPeriodEnd);
+  if (getLang() === "de") {
+    const date = germanDate(sub.currentPeriodEnd);
+    return date ? `Gekündigt — aktiv bis ${date}.` : "Gekündigt.";
+  }
+  const date = renewDate(sub.currentPeriodEnd);
   return date ? `Cancelled — active until ${date}.` : "Cancelled.";
 }
 
 // Rueckmeldungen der Kuendigungs-/Ruecknahme-Zustandsmaschine (Muster SUBSCRIBE_MESSAGES).
+// CANCEL_MESSAGES bleibt der EN-Vertrag (test-gepinnt); cancelMessage() liest
+// zusaetzlich CANCEL_MESSAGES_DE fuer die sprachbewusste Meldung.
 export const CANCEL_MESSAGES = Object.freeze({
   cancelled: "Subscription cancelled.",
   resumed: "Subscription resumed.",
@@ -308,6 +411,17 @@ export const CANCEL_MESSAGES = Object.freeze({
   cancelFailed: "Couldn't cancel your subscription. Please try again.",
   resumeFailed: "Couldn't resume your subscription. Please try again.",
 });
+export const CANCEL_MESSAGES_DE = Object.freeze({
+  cancelled: "Abo gekündigt.",
+  resumed: "Abo fortgesetzt.",
+  sessionExpired: SUBSCRIBE_MESSAGES_DE.sessionExpired,
+  noSubscription: "Kein aktives Abo zum Kündigen.",
+  cancelFailed: "Dein Abo konnte nicht gekündigt werden. Bitte versuch es erneut.",
+  resumeFailed: "Dein Abo konnte nicht fortgesetzt werden. Bitte versuch es erneut.",
+});
+function cancelMessage(key) {
+  return tDyn({ en: CANCEL_MESSAGES, de: CANCEL_MESSAGES_DE }, key);
+}
 
 // Ein Kuendigungs-/Ruecknahme-Lauf: POST ohne Body (die Identitaet kommt aus der Session,
 // s. api.js). Erfolg (AUCH beim idempotenten Doppelklick - der Gateway antwortet dann mit
@@ -322,7 +436,7 @@ async function runCancellationStep(op, messages, opts) {
     await opts.onDone(result);
   } catch (err) {
     if (isConflict(err)) return opts.onMessage(messages.conflict, false);
-    if (isUnauthorized(err)) return opts.onMessage(CANCEL_MESSAGES.sessionExpired, false);
+    if (isUnauthorized(err)) return opts.onMessage(cancelMessage("sessionExpired"), false);
     return opts.onMessage(messages.failed, false);
   }
 }
@@ -356,16 +470,16 @@ export function wireCancelControls(els, { onMessage, onDone } = {}) {
   }
   els.confirmBtn.addEventListener("click", () =>
     guardedStep(startBillingCancel, {
-      ok: CANCEL_MESSAGES.cancelled,
-      conflict: CANCEL_MESSAGES.noSubscription,
-      failed: CANCEL_MESSAGES.cancelFailed,
+      ok: cancelMessage("cancelled"),
+      conflict: cancelMessage("noSubscription"),
+      failed: cancelMessage("cancelFailed"),
     }),
   );
   els.resumeBtn.addEventListener("click", () =>
     guardedStep(startBillingResume, {
-      ok: CANCEL_MESSAGES.resumed,
-      conflict: CANCEL_MESSAGES.noSubscription,
-      failed: CANCEL_MESSAGES.resumeFailed,
+      ok: cancelMessage("resumed"),
+      conflict: cancelMessage("noSubscription"),
+      failed: cancelMessage("resumeFailed"),
     }),
   );
 }
@@ -385,12 +499,19 @@ export const BILLING_STATUS = Object.freeze({
   CANCELLED: "cancelled",
 });
 
-// Kurze Pillen-Beschriftung je Zustand.
-const BILLING_STATUS_BADGE = Object.freeze({
+// Kurze Pillen-Beschriftung je Zustand. Exportiert NUR fuer den Woerterbuch-
+// Paritaets-Waechter (test/dashboard-i18n-surface.test.js).
+export const BILLING_STATUS_BADGE = Object.freeze({
   [BILLING_STATUS.NO_CARD]: "No card",
   [BILLING_STATUS.NO_SUB]: "No plan",
   [BILLING_STATUS.ACTIVE]: "Active",
   [BILLING_STATUS.CANCELLED]: "Cancelling",
+});
+export const BILLING_STATUS_BADGE_DE = Object.freeze({
+  [BILLING_STATUS.NO_CARD]: "Keine Karte",
+  [BILLING_STATUS.NO_SUB]: "Kein Tarif",
+  [BILLING_STATUS.ACTIVE]: "Aktiv",
+  [BILLING_STATUS.CANCELLED]: "Wird gekündigt",
 });
 
 // CSS-Klassen-Suffix je Zustand (billing-status-badge--<suffix> in BillingIsland.astro).
@@ -405,7 +526,9 @@ const BILLING_STATUS_BADGE_CLASS = Object.freeze({
 });
 
 const NO_CARD_STATUS_TEXT = "Add a payment method to unlock a plan.";
+const NO_CARD_STATUS_TEXT_DE = "Hinterlege ein Zahlungsmittel, um einen Tarif freizuschalten.";
 const NO_SUB_STATUS_TEXT = "Choose a plan below to activate Hermes.";
+const NO_SUB_STATUS_TEXT_DE = "Wähle unten einen Tarif, um Hermes zu aktivieren.";
 
 // Leitet den sichtbaren Zustand aus Karten-/Abo-Lage ab. Eindeutig - keine zwei
 // Zustaende treffen je gleichzeitig zu: ein Abo setzt zwingend eine Karte voraus
@@ -417,7 +540,7 @@ export function billingStatusKind({ hasCard, sub }) {
 }
 
 export function billingStatusBadge(kind) {
-  return BILLING_STATUS_BADGE[kind] || "";
+  return tDyn({ en: BILLING_STATUS_BADGE, de: BILLING_STATUS_BADGE_DE }, kind) || "";
 }
 
 export function billingStatusBadgeClass(kind) {
@@ -432,8 +555,41 @@ export function billingStatusBadgeClass(kind) {
 export function billingStatusText(kind, sub) {
   if (kind === BILLING_STATUS.ACTIVE) return subscriptionLine(sub);
   if (kind === BILLING_STATUS.CANCELLED) return `${planName(sub.planSlug)} — ${cancelStatusLine(sub)}`;
-  if (kind === BILLING_STATUS.NO_CARD) return NO_CARD_STATUS_TEXT;
-  return NO_SUB_STATUS_TEXT;
+  if (kind === BILLING_STATUS.NO_CARD) return tPair(NO_CARD_STATUS_TEXT, NO_CARD_STATUS_TEXT_DE);
+  return tPair(NO_SUB_STATUS_TEXT, NO_SUB_STATUS_TEXT_DE);
+}
+
+// Dashboard-Design-Spec §10: "Serif-Statuswert mit Mono-Nebenangabe" -- die Billing-
+// Insel zeigt den Zustand jetzt zweizeilig statt als EIN Fliesstext. Beide Funktionen
+// sind reine Aufspaltungen der bereits bestehenden, getesteten Bausteine (planName/
+// renewDate/cancelStatusLine/billingStatusBadge/billingStatusText) -- KEINE neue
+// Formulierung, KEIN fuenfter Zustand (G5: dieselbe Quelle, nur anders zusammengesetzt).
+// billingStatusText/subscriptionLine/cancelStatusLine bleiben unveraendert (ihr
+// Wortlaut ist per Test gepinnt) -- die Insel nutzt fuer die zweizeilige Darstellung
+// stattdessen dieses Paar.
+
+// Serif-Hauptwert: Plan-Name bei aktivem/gekuendigtem Abo, sonst dieselbe kurze
+// Beschriftung wie die Status-Pille (billingStatusBadge, EINE Quelle statt eines
+// zweiten "No card"/"No plan"-Textes).
+export function billingStatusHeadline(kind, sub) {
+  if (kind === BILLING_STATUS.ACTIVE || kind === BILLING_STATUS.CANCELLED) return planName(sub.planSlug);
+  return billingStatusBadge(kind);
+}
+
+const RENEWS_PREFIX = "Renews ";
+const RENEWS_PREFIX_DE = "Verlängert am ";
+
+// Mono-Nebenangabe: Verlaengerungsdatum (aktiv) bzw. cancelStatusLine (gekuendigt,
+// "Cancelled — active until ..."), sonst der bestehende erklaerende Satz aus
+// billingStatusText (no_card/no_sub) -- dort ist die Nebenangabe bereits die
+// vollstaendige Aussage, kein Headline/Detail-Split noetig.
+export function billingStatusDetail(kind, sub) {
+  if (kind === BILLING_STATUS.ACTIVE) {
+    const date = renewDate(sub.currentPeriodEnd);
+    return date ? `${tPair(RENEWS_PREFIX, RENEWS_PREFIX_DE)}${date}` : "";
+  }
+  if (kind === BILLING_STATUS.CANCELLED) return cancelStatusLine(sub);
+  return billingStatusText(kind, sub);
 }
 
 // ---- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) --------------------
@@ -476,13 +632,34 @@ export function newsletterConsentFrom(data) {
   return newsletter.consent === true;
 }
 
+// F2-Mail: liest die Konto-E-Mail aus der state-Antwort (data.accountEmail, additiv,
+// src/self-service-routes.js) -- Muster newsletterConsentFrom. Reine Anzeige (readonly
+// Prefill des E-Mail-Felds, KEIN Schreibziel/kein zweiter Endpunkt); fehlt das Feld
+// (aelterer Server) oder ist es kein String -> null, der Aufrufer zeigt dann den
+// Platzhalter statt einer erfundenen Adresse.
+export function accountEmailFrom(data) {
+  const email = data && data.accountEmail;
+  return typeof email === "string" && email ? email : null;
+}
+
 // Rueckmeldungen des Newsletter-Schalters (Muster SUBSCRIBE_MESSAGES/CANCEL_MESSAGES).
+// NEWSLETTER_MESSAGES bleibt der EN-Vertrag (test-gepinnt); newsletterMessage()
+// liest zusaetzlich NEWSLETTER_MESSAGES_DE fuer die sprachbewusste Meldung.
 export const NEWSLETTER_MESSAGES = Object.freeze({
   optedIn: "You're subscribed to product updates.",
   optedOut: "You're unsubscribed from product updates.",
   sessionExpired: SUBSCRIBE_MESSAGES.sessionExpired,
   failed: "Couldn't save your choice. Please try again.",
 });
+export const NEWSLETTER_MESSAGES_DE = Object.freeze({
+  optedIn: "Du hast Produkt-Updates abonniert.",
+  optedOut: "Du hast Produkt-Updates abbestellt.",
+  sessionExpired: SUBSCRIBE_MESSAGES_DE.sessionExpired,
+  failed: "Deine Wahl konnte nicht gespeichert werden. Bitte versuch es erneut.",
+});
+function newsletterMessage(key) {
+  return tDyn({ en: NEWSLETTER_MESSAGES, de: NEWSLETTER_MESSAGES_DE }, key);
+}
 
 // Verdrahtet den Newsletter-Toggle: Umschalten schreibt SOFORT gegen die Route
 // (kein separater Speichern-Knopf noetig, eine einzelne Einwilligungs-Erklaerung).
@@ -498,13 +675,13 @@ export function wireNewsletterToggle(toggleEl, { onMessage } = {}) {
       const result = await postNewsletterConsent(requested);
       toggleEl.checked = Boolean(result && result.newsletterConsent === true);
       onMessage(
-        toggleEl.checked ? NEWSLETTER_MESSAGES.optedIn : NEWSLETTER_MESSAGES.optedOut,
+        toggleEl.checked ? newsletterMessage("optedIn") : newsletterMessage("optedOut"),
         true,
       );
     } catch (err) {
       toggleEl.checked = !requested; // Rueckfall: Haekchen springt zurueck
       onMessage(
-        isUnauthorized(err) ? NEWSLETTER_MESSAGES.sessionExpired : NEWSLETTER_MESSAGES.failed,
+        isUnauthorized(err) ? newsletterMessage("sessionExpired") : newsletterMessage("failed"),
         false,
       );
     } finally {

@@ -33,7 +33,24 @@ import {
   personaStyleOptions,
   privateNumberStatusText,
   savePrivateNumber,
+  settingsLanguageLabel,
+  settingsPermissionLabel,
+  settingsPermissionHint,
 } from "../src/lib/api.js";
+
+// Simuliert die DE-Sprachwahl fuer getLang() (lib/i18n.js) ohne setLang() (das
+// greift auf `document` zu, s. render.test.js -- gleiches Muster hier).
+function withLang(lang, fn) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
+  const original = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => lang };
+  try {
+    fn();
+  } finally {
+    if (had) globalThis.localStorage = original;
+    else delete globalThis.localStorage;
+  }
+}
 
 // Backend-Quelle der Wahrheit fuer Sprachcodes: SUPPORTED_LANGUAGES = Keys von
 // LOCALES (src/i18n/locales.js). Wir importieren die echte Konstante, damit der
@@ -339,6 +356,33 @@ test("savePrivateNumber('') sendet {privateNumber:''} (Loeschen)", async () => {
     assert.deepEqual(JSON.parse(f.calls[0].options.body), { privateNumber: "" });
   } finally {
     f.restore();
+  }
+});
+
+// ---- Dashboard-i18n Etappe 2: DE-Modus (Sprachkacheln + Permission-Toggles) ---
+test("DE-Modus: settingsLanguageLabel deckt genau die SETTINGS_LANGUAGES-Werte deutsch ab", () => {
+  withLang("de", () => {
+    assert.equal(settingsLanguageLabel(""), "Automatisch (nach Nummer)");
+    assert.equal(settingsLanguageLabel("de"), "Deutsch");
+    assert.equal(settingsLanguageLabel("fr"), "Französisch");
+    assert.equal(settingsLanguageLabel("en"), "Englisch");
+    // Unbekannter Wert -> fail-soft der rohe Wert (nie leer/undefined).
+    assert.equal(settingsLanguageLabel("xx"), "xx");
+  });
+  // EN-Default (kein withLang) bleibt 1:1 SETTINGS_LANGUAGES.label.
+  for (const { value, label } of SETTINGS_LANGUAGES) assert.equal(settingsLanguageLabel(value), label);
+});
+
+test("DE-Modus: settingsPermissionLabel/-Hint decken genau die Toggle-Keys deutsch ab", () => {
+  withLang("de", () => {
+    assert.equal(settingsPermissionLabel("allowPersonalData"), "Persönliche Daten");
+    assert.equal(settingsPermissionLabel("allowBankData"), "Bankdaten");
+    assert.equal(settingsPermissionHint("allowPersonalData"), "Adresse, E-Mail usw. weitergeben.");
+    assert.equal(settingsPermissionHint("allowBankData"), "Zahlungsdaten weitergeben (nicht empfohlen).");
+  });
+  for (const { key, label, hint } of SETTINGS_PERMISSION_TOGGLES) {
+    assert.equal(settingsPermissionLabel(key), label);
+    assert.equal(settingsPermissionHint(key), hint);
   }
 });
 

@@ -1,0 +1,131 @@
+---
+// NewsletterIsland (Dashboard-Design-Spec §11, Owner-Feedback-Runde Trupp B):
+// eigener Abschnitt fuer die Newsletter-Einwilligung (Opt-in, DSGVO Art. 7
+// Abs. 1) -- bisher Teil der Billing-Karte, jetzt ein eigenstaendiger vierter
+// Bereich (#newsletter, eingebunden von Trupp A in apps/web/src/pages/app/
+// index.astro). NUR die DARSTELLUNG zog um bzw. wurde ueberarbeitet: die
+// Einwilligungs-Logik (Route POST /api/self-service/newsletter-consent, nie
+// vorangekreuzt, Widerruf jederzeit, Fehler setzt das Haekchen zurueck) lebt
+// unveraendert in lib/subscribe.js (wireNewsletterToggle/newsletterConsentFrom)
+// -- dieselben Funktionen, die vorher BillingIsland.astro verdrahtet hat.
+//
+// Owner-Feedback: "Product updates so nicht -- soll ein Newsletter sein, E-Mail
+// eingeben und subscriben." Die Route nimmt weiterhin NUR {consent:boolean};
+// die Empfaengeradresse ist server-seitig IMMER die Konto-E-Mail des Tenants
+// (nie aus dem Request). Das E-Mail-Feld unten ist deshalb `readonly` und zeigt
+// nur an, wohin gesendet wird -- kein zweiter Endpunkt, kein Freitext-Versand
+// an eine abweichende Adresse. F2-Mail: die Self-Service-state-Antwort (GET
+// /api/self-service/state, src/self-service-routes.js) traegt seither das
+// additive Feld data.accountEmail (dedizierter Lookup, fail-closed null) -- das
+// Feld wird per AUTH_EVENT-Listener befuellt (accountEmailFrom, lib/subscribe.js,
+// Muster newsletterConsentFrom). Kein Wert (null, aelterer Server, kein Account) ->
+// Feld bleibt leer, nur der Platzhalter zeigt.
+//
+// EIN echter input[type=checkbox] bleibt die einzige Datenquelle (Muster
+// lang-tile in SettingsIsland.astro: ein Geschwister-Selektor pro Zustand
+// blendet um). Checkbox optisch versteckt via opacity:0; position:absolute
+// (NICHT display:none) -- Fokusring bleibt sichtbar. "Subscribe" ist ein
+// <label for> auf die Checkbox (kein JS noetig, natives Toggle-Verhalten).
+// "Unsubscribe" (angemeldeter Zustand) ist ein echter <button>, weil ein
+// <label for> hier innerhalb desselben Formularbereichs weniger klar waere --
+// sein Klick-Handler setzt die Checkbox um UND feuert "change" (derselbe
+// wireNewsletterToggle-Listener wie beim direkten Checkbox-Klick, keine
+// zweite Route/kein zweiter Zustandsautomat).
+//
+// KEIN eigener state-Fetch (AUTH_EVENT). Checkbox startet IMMER ungecheckt im
+// Markup -- der tatsaechliche Zustand kommt ausschliesslich aus
+// data.newsletter (newsletterConsentFrom), nie aus einem lokalen Default
+// "true" (kein Dark Pattern, kein Vorankreuzen). Optik lebt in
+// styles/app/panels.css (Trupp-C-Stylesheet, Muster shell.css/calls.css).
+import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe.js";
+---
+
+<section id="newsletter-card" class="card" hidden>
+  <h2 data-i18n="newsletterTitle">Newsletter</h2>
+  <p class="muted" data-i18n="newsletterSubtitle">
+    Get a short summary emailed to you after every call. Optional -- you can
+    unsubscribe anytime.
+  </p>
+
+  <div class="newsletter-toggle">
+    <input
+      type="checkbox"
+      id="newsletter-toggle"
+      class="newsletter-toggle__input"
+      aria-label="Subscribe to the newsletter"
+      data-i18n-attr="aria-label:newsletterAriaLabel"
+    />
+    <div class="newsletter-toggle__state newsletter-toggle__state--off">
+      <div class="newsletter-form">
+        <input
+          type="email"
+          id="newsletter-email"
+          class="field-input newsletter-form__field"
+          readonly
+          placeholder="you@example.com"
+          aria-label="Account email"
+          data-i18n-attr="aria-label:accountEmailAriaLabel"
+        />
+        <label for="newsletter-toggle" class="newsletter-toggle__cta" data-i18n="subscribe">Subscribe</label>
+      </div>
+      <p class="newsletter-form__hint" data-i18n="newsletterHint">Sent to your account email.</p>
+    </div>
+    <div class="newsletter-toggle__state newsletter-toggle__state--on">
+      <span class="newsletter-toggle__dot" aria-hidden="true"></span>
+      <span aria-hidden="true" data-i18n="subscribed">Subscribed</span>
+      <button type="button" id="newsletter-unsubscribe" class="newsletter-toggle__unsub" data-i18n="unsubscribe">
+        Unsubscribe
+      </button>
+    </div>
+  </div>
+  <p id="newsletter-msg" class="billing-msg" hidden></p>
+</section>
+
+<script>
+  import { AUTH_STATE, AUTH_EVENT } from "../../lib/api.js";
+  import { accountEmailFrom, newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe.js";
+
+  const cardEl = document.getElementById("newsletter-card");
+  const toggleEl = document.getElementById("newsletter-toggle");
+  const emailEl = document.getElementById("newsletter-email");
+  const unsubscribeBtn = document.getElementById("newsletter-unsubscribe");
+  const msgEl = document.getElementById("newsletter-msg");
+
+  const MSG_OK_CLASS = "billing-msg--ok";
+  const MSG_ERR_CLASS = "billing-msg--err";
+  function showMessage(text, ok) {
+    msgEl.textContent = text;
+    msgEl.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok === true);
+    msgEl.classList.toggle(MSG_ERR_CLASS, Boolean(text) && ok === false);
+    msgEl.hidden = !text;
+  }
+
+  // Umschalten schreibt sofort gegen die Route (lib/subscribe.js
+  // wireNewsletterToggle) -- kein eigener Speichern-Knopf, eine einzelne
+  // Einwilligungs-Erklaerung (Muster BillingIsland vor dem Umzug).
+  wireNewsletterToggle(toggleEl, { onMessage: showMessage });
+
+  // Der Unsubscribe-Knopf ist bewusst ein <button> statt eines zweiten
+  // <label for>: er stoesst DENSELBEN change-Pfad an wie ein direkter
+  // Checkbox-Klick (kein zweiter Endpunkt, keine eigene Fehlerbehandlung).
+  unsubscribeBtn.addEventListener("click", () => {
+    toggleEl.checked = false;
+    toggleEl.dispatchEvent(new Event("change"));
+  });
+
+  // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
+  // eingeloggten Zustand traegt die Antwort data.newsletter. Listener synchron
+  // beim Modul-Start registrieren, BEVOR die Auth-Insel dispatcht.
+  document.addEventListener(AUTH_EVENT, (event) => {
+    const { state, data } = event.detail;
+    if (state === AUTH_STATE.AUTHENTICATED) {
+      toggleEl.checked = newsletterConsentFrom(data);
+      // F2-Mail: readonly Prefill aus der Konto-E-Mail (kein Schreibziel, s.
+      // Modul-Kommentar oben) -- leer + Platzhalter, wenn der Server keine liefert.
+      emailEl.value = accountEmailFrom(data) ?? "";
+      cardEl.hidden = false;
+    } else {
+      cardEl.hidden = true;
+    }
+  });
+</script>

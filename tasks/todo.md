@@ -1,122 +1,72 @@
-# Offene Arbeit, Stand 2026-08-10
+# Call-Summary per E-Mail nach Newsletter-Einwilligung — Plan (Stand 2026-08-14)
 
 Regel: jeder Punkt traegt sein **erwartetes Ergebnis** und seine **Verifikationsmethode**
-(`.claude/refs/workflow.md`, Regel 7). Nur Gemessenes; Vermutungen sind markiert.
+(`.claude/refs/workflow.md`, Regel 7).
 
----
+## Architektur-Entscheidungen (vor Implementierung fixiert)
 
-## 1. SOFORT: Dead-Air-Fix deployen und abnehmen
+1. **Zwei SmtpMailer-Instanzen.** `callFinish` wird synchron am Modul-Top von `server.js`
+   verdrahtet; der pg-gated `wireWebLogin`-Block (Mailer fuer die Kuendigungsbestaetigung)
+   laeuft asynchron erst spaeter (guardedBoot, `app.js`). `makeSmtpMailer` haengt NUR an
+   `config.mail` (kein pg) und ist laut eigenem Modul-Kopf zustandslos (jeder Aufrufer bekommt
+   seinen EIGENEN Transporter). Eine zweite, frueh konstruierte Instanz in `server.js`
+   (`config.mail.smtpHost ? makeSmtpMailer(config) : null`) loest die Ordering-Kollision ohne
+   Restructuring des Boot-Grafen.
+2. **`accounts` fuer `accountByTenant` per spaet gebundener Zelle.** `accounts` haengt am
+   pg-Portal-Runner (asynchron, NUR im guardedBoot-Block verfuegbar) - eine frueh konstruierte
+   zweite Instanz waere unmoeglich, ohne die INV-11-Fail-open-Garantie zu brechen (ein Portal-
+   Fehler darf die Telefonie nie toeten). Muster `operatorAuth` in `app.js`: `const accountsRef
+   = { current: null }` in `server.js`, durchgereicht bis `wireWebLogin`, das NACH dem Bau von
+   `accounts` `accountsRef.current = accounts` setzt. `finishCall` liest `accountsRef.current`
+   bei JEDEM Call-Ende frisch - bleibt der pg-Block aus, bleibt es fail-closed `null`.
+3. **KEINE Tenant-Zeitzone im Mail-Text.** `test/p8-timezone-no-gate.test.js` fuehrt
+   `telephony/call-finish.js` explizit in `FORBIDDEN_FILES` (LAW-07: kein Anrufzeit-Gate).
+   Die Mail zeigt den Zeitpunkt daher OHNE `timeZone`-Option (Laufzeit-Default), keine
+   `store.tenantTimezone`-Lesung in diesem Modul.
 
-Der Fix ist gemergt (`95bf1f2`), auf `origin` UND `upstream` gepusht, **aber nicht live**.
-Render deployt `upstream` mit `autoDeploy: no` — es braucht den manuellen Deploy im
-Dashboard.
+## Umsetzungsschritte
 
-**Was er behebt:** Der Dead-Air-Waechter mass "Sekunden ohne Shim-Turn", und ein Shim-Turn
-entsteht nur, wenn der ANRUFER spricht. Redete der Agent laenger als 45 s am Stueck, hielt
-der Waechter die aktive Leitung fuer tot und legte auf. Live reproduziert am 10.08.
-(`call_msn34lpf77wg`, 86,05 s, `hangup_source=caller`; Owner-Gegenprobe: Abbruch bei der
-gesprochenen Zahl 70).
+- [ ] `summaryMailSentAt`-Marker (Spiegel `summarySmsSentAt`): state-ops.js, json.js, pg.js
+      (rowToCall + flushCalls INSERT/UPDATE), db/schema.sql (Spalte + ALTER), store.js
+      (Fassade), store/views.js (aus publicCall gestrippt).
+      **Ergebnis:** `node --check` auf allen vier je gruen; bestehende Store-Roundtrip-Tests
+      bleiben gruen. **Verifikation:** `npm test` (siehe unten, gesamt).
+- [ ] `src/mail-summary.js` (neu): `planSummaryMail({ store, call, mailer, accounts })`,
+      Gates (a)-(e) wie im Auftrag, async (accountByTenant ist IO).
+      **Ergebnis:** alle 6 Faelle (5 Gates + Positivfall) deterministisch.
+      **Verifikation:** `test/f2-mail-summary-plan.test.js` (neu), gruen.
+- [ ] `src/telephony/call-finish.js`: `mailer`/`accountsRef` als neue optionale Deps
+      (Default `null`/`{current:null}` - bestehende Aufrufer ohne diese Keys bleiben gueltig),
+      Mail-Block nach dem SMS-Block, Text-Bau lokal (Muster SMS-Body), `markSummaryMailSent`
+      bei Erfolg, `audit("mail_summary_skipped", ...)` bei Reason, fail-soft try/catch.
+      **Ergebnis:** Versand genau einmal, Fehler stoert Billing/Termination nicht, Skip-Audit
+      PII-frei. **Verifikation:** neue Tests + `finishcall-billing-once`,
+      `call-termination-order` bleiben unveraendert gruen.
+- [ ] `src/i18n/locales.js`: 2 neue postCall-Keys (Zeitpunkt-/Dauer-Label) in de/fr/en.
+      **Verifikation:** `npm test` (i18n-Bestandstests bleiben gruen, keine neuen Drift-Treffer).
+- [ ] `src/server.js`: zweite `mailer`-Instanz + `accountsRef`-Zelle vor `makeCallFinish`,
+      beides injiziert; `accountsRef` zusaetzlich in `deps` fuer `buildApp`.
+- [ ] `src/app.js`: `accountsRef` aus deps destrukturiert, an `wireWebLogin` durchgereicht.
+- [ ] `src/wiring/web-login.js`: `accountsRef`-Parameter, nach `makeAccounts(...)` gesetzt.
+- [ ] `src/self-service-routes.js`: `/api/self-service/state`-Handler async, additives Feld
+      `accountEmail` (fail-closed `null` ohne `accounts`).
+      **Verifikation:** neuer Test + bestehende self-service-state-Tests bleiben gruen (kein
+      Full-Body-`deepEqual` betroffen, gruppenweise per Grep verifiziert).
+- [ ] `apps/web/src/lib/subscribe.js`: `accountEmailFrom(data)` (Muster `newsletterConsentFrom`).
+      `apps/web/src/components/app/NewsletterIsland.astro`: E-Mail-Feld aus `accountEmail`
+      vorbefuellen (Platzhalter wenn `null`).
+      **Verifikation:** `npm --prefix apps/web test` gruen + neuer Test in `subscribe.test.js`.
+- [ ] `.env.example`: Halbsatz an der SMTP-Sektion (Mailer traegt auch die Call-Summary-Mail).
+- [ ] Tests: `test/f2-mail-summary-plan.test.js`, Integration in call-finish (Versand einmal,
+      fail-soft, Skip-Audit), `test/f2-self-service-state-account-email.test.js`,
+      `apps/web/test/subscribe.test.js`-Erweiterung.
 
-**Erwartetes Ergebnis:** Ein Anruf, in dem der Agent laenger als 45 s am Stueck spricht,
-laeuft weiter.
+## Gesamt-Verifikation (Pflicht vor Fertigmeldung)
 
-**Verifikationsmethode:** Testanruf mit Zaehl-Auftrag (Vorlage: der Briefing-Text von
-`call_msn34lpf77wg`). Danach in der DB `answered_at -> ended_at` messen: deutlich ueber 86 s,
-und im Render-Log **keine** `[telnyx-watchdog] dead_air`-Zeile, solange der Agent spricht.
-
----
-
-## 2. 91-Sekunden-Kappung — beim Telnyx-NOC, nichts mehr zu messen
-
-**Geklaert:** Das BYE kommt vom deutschen Ziel-Carrier (`hangup_details=recv_bye`, von Telnyx
-bestaetigt), Muster konsistent mit einem nicht aufgefrischten 90-s-Session-Timer nach
-RFC 4028. **In unserem Code nicht behebbar.** Vollstaendiger Befundstand mit 12
-ausgeschlossenen Kandidaten: `tasks/91s-kappung-befunde-2026-08-10.md`.
-
-**Offen:** Support-Ticket an support@telnyx.com (Text steht im Chat-Verlauf der Session vom
-10.08., 2504 Zeichen, mit allen 13 Session-IDs und 6 Gegenbeispielen). Der Fall ist beim NOC
-in der Warteschlange.
-
-**Billiger Eigen-Test, unabhaengig vom NOC:** ein Anruf auf eine ANDERE deutsche Nummer
-(anderes Netz oder Festnetz). Kappt der auch bei ~91 s, ist es nicht carrier-spezifisch.
-Laeuft er durch, ist eine +49-Absender-DID die naheliegende Abhilfe.
-
----
-
-## 3. Zusammenfassungs-SMS scheitert bei JEDEM Anruf
-
-`[sms] Telnyx sendSms fehlgeschlagen: HTTP 400 (40305 Invalid 'from' address)` — im Log am
-10.08. bei beiden Anrufen belegt. Der Owner bekommt nach keinem Anruf eine Zusammenfassung.
-Eindeutig unsere Seite, unabhaengig von allem anderen.
-
-**Vermutung, ungeprueft:** die Absendernummer ist nicht SMS-faehig oder das Land passt nicht.
-**Erst messen, dann fixen** — die Fehlermeldung nennt Twilio, der Dienst laeuft aber auf
-Telnyx (die Meldung selbst ist also schon irrefuehrend).
-
-**Erwartetes Ergebnis:** nach einem Anruf trifft eine Zusammenfassungs-SMS ein.
-**Verifikationsmethode:** Testanruf, danach Log ohne `sendSms fehlgeschlagen` + SMS auf dem
-Geraet.
-
----
-
-## 4. `silenced` verwirft ganze fertige Antworten (GQ-P18)
-
-Seit dem 10.08. belegt (beide Anrufe je einmal). Eine vollstaendig generierte Antwort wird
-verworfen, `agentTurn` liefert `speech:""`, der Transkript-Eintrag entfaellt — fuer den
-Anrufer eine Runde komplette Stille.
-
-**Wurzel am Code belegt:** GQ-P18 stellte `speakChunk` von direktem Schreiben auf Puffern um;
-dadurch bleibt `wire.chunkCount()` bis zur Freigabe 0 und der `ALREADY_SPOKEN`-Schutz greift
-nicht. Das Verwurf-Fenster waechst von ~0 ms auf bis zu `TELNYX_SHIM_EXTEND_HOLD_MS` (3000).
-
-**Owner-Entscheidung 10.08.: die Sperre bleibt an.** Die Notbremse `=0` beseitigt `silenced`
-nachweislich, holt aber den Doppelantwort-Defekt zurueck — **kein Env-Wert vermeidet beide**.
-Ein sauberer Fix braucht Code; vier Optionen sind skizziert (stumm verwerfen / ganz sprechen /
-nur den gepufferten Teil / Ueberbrueckungssatz). Die Wahl ist eine Owner-Entscheidung.
-
----
-
-## 5. Kleinere offene Punkte
-
-- **`number.country` fuer `+18643028341` (Tenant `owner`) steht auf `DE`** — es ist eine
-  US-Nummer. Reiner Datenfehler.
-- **GQ-P2/P7** (Consult-Fristen, Zustellfenster) brauchen einen Anruf **mit echter
-  Rueckfrage**. Am 10.08. gescheitert: `get_consult` war angeboten, der Agent waehlte es nie
-  (bekannter Werkzeugwahl-Defekt der AL-D3-Klasse, NICHT die Consult-Mechanik).
-- **GQ-P3/P6** brauchen einen **eingehenden** Anruf.
-- **Prompt-Caching:** nur 2 von 7 LLM-Aufrufen treffen den Cache (gemessen 09.08.), der
-  gebuchte Betrag liegt dadurch nur 8,44 % unter dem ungecachten. Wurzel am Code belegt:
-  `systemPrompt` traegt veraenderlichen Per-Call-Zustand, `agentTools` nimmt Werkzeuge mitten
-  im Call auf und heraus — das "stabile Praefix" ist nicht stabil. Eigene Phase.
-- **Satzzeichen-Regression seit nova-3**: der erkannte Anrufer-Text erreicht das Sprachmodell
-  zu **0 %** mit Satzzeichen/Grossschreibung (vorher unter `flux`: 93–97 %), zwei unabhaengige
-  Quellen, n=50. `smart_format` ist als Fix **doppelt ausgeschlossen** (im Call-Schema nicht
-  vorhanden; am Modell wirkungslos). Verbleibende Hypothese: der Pro-Call-Block ersetzt die
-  `transcription` des Assistant-Objekts. **Erwartetes Ergebnis:** ein Call ohne
-  Pro-Call-`transcription`-Block traegt wieder Satzzeichen. **Verifikationsmethode:** ein
-  Testanruf mit reversiblem Schalter, danach `transcript_segment` auszaehlen.
-  Vollstaendiger Befundstand + benanntes Risiko: `tasks/gq-chain-state.md`, Abschnitt
-  "Satzzeichen-Regression seit nova-3". **Unbelegt bleibt, ob es dem Gespraech schadet.**
-- **GAP-15** (2 rote Gates): englische Rechtstexte fehlen. **Rechtstexte nicht auf eigene
-  Faust schreiben** — Owner fragen.
-- Offene Punkte der laufenden Gespraechsqualitaets-Kette: `tasks/gq-chain-state.md`.
-
----
-
-## Erledigt am 2026-08-10
-
-- **Dead-Air-Defekt gefunden, reproduziert und behoben** (`95bf1f2`): der Waechter vertagt
-  sich jetzt um die geschaetzte Sprechdauer, statt mitten in die Antwort zu kappen. Der
-  Kosten-Notaus bleibt vollstaendig (T13 pinnt ihn). Suite 4148/4148.
-- **91-Sekunden-Kappung als Carrier-Problem geklaert** und vom Anbieter bestaetigt — zuvor
-  12 eigene Kandidaten mit Belegen ausgeschlossen.
-- **Beide Sachverhalte sauber getrennt.** Sie erzeugen am Telefon dasselbe Erlebnis und
-  liefen eine Session lang unter einem Label — die wiederkehrende Falle dieses Projekts.
-- Repo aufgeraeumt: 74 -> 1 Branch (14 ungemergte als `archiv/2026-08-10/*` getaggt, nichts
-  verloren), alle Worktrees entfernt, `origin` und `upstream` auf demselben Stand.
-- **`smart_format`-Phase abgesagt, bevor eine Zeile Produktivcode entstand.** Vier Messungen
-  (OpenAPI-Schema, WS-Replay-Bank A/B, Produktionstext flux vs. nova-3, Live-Assistant-Versionen)
-  haben den geplanten Fix widerlegt und den Befund gleichzeitig geschaerft. Kein Testanruf noetig.
-- **WS-Replay-Bank committet** (`d9c95f8`, `scripts/stt-wer.mjs --live-stt`): STT-Kandidaten
-  sind damit ohne Testanruf messbar — auch der noch ungemessene `reson8/turns`. Sie existierte
-  seit dem 06.08. nur als Prosa im Kettenstand.
+- `node --check` auf jede geaenderte src-Datei.
+- `npm test` im Root, vollstaendig gruen (Hintergrundprozess + Log, falls Timeout).
+- Gezielt: `finishcall-billing-once`, `call-termination-order`, `f2-sms-summary-plan`,
+  `self-service-newsletter-consent`, `312k-p5-cancellation-mail`, `f2-mail-summary-plan`.
+- `npm --prefix apps/web test` gruen.
+- Smoke: Server lokal starten (kein SMTP konfiguriert), Call-Lebenszyklus/Test-Harness zeigt
+  sauberen `mail_summary_skipped reason=no_mailer`-Audit-Pfad ohne Exception.

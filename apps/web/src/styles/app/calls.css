@@ -1,0 +1,488 @@
+/* =============================================================================
+ * calls.css — Trupp B: Anrufliste + Detail-Fenster (Dashboard-Design-Spec §7+§8)
+ *
+ * Import-Reihenfolge (App.astro): app.css -> app-hermes.css -> shell.css ->
+ * calls.css -> panels.css. Gleiche Spezifitaet ueberall, darum gewinnt hier
+ * (spaeter geladen) alles, was app.css/app-hermes.css bereits fuer dieselben
+ * Selektoren setzen (z.B. .call-row/.call-dir/.status-badge aus der alten
+ * Akkordeon-Fassung) -- ohne dass diese beiden (verbotenen) Dateien angefasst
+ * werden muessen. Nur bereits vorhandene Custom Properties + die in der Spec
+ * woertlich genannten rgba-/Hex-Werte -- keine neuen Farben erfunden.
+ * ========================================================================== */
+
+/* -------------------------------------------------------- 1. Kartenkopf --- */
+
+.calls-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.calls-head__hint {
+  flex-shrink: 0;
+  font-family: var(--app-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.calls-list {
+  margin-top: 14px;
+}
+
+/* ------------------------------------------------------ 2. Anrufzeile --- */
+
+/* Die Zeile selbst traegt nur noch die Trennlinie -- das Padding (und der
+   Hover) wandert auf den <button>, der jetzt die ganze Zeile fuellt. Selektor
+   ueber die Container-id (wie zuvor in CallsIsland.astro): hoehere
+   Spezifitaet als das blosse .call-row aus app-hermes.css. */
+#calls-list .call-row {
+  padding: 0;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: none;
+}
+
+#calls-list .call-row:last-child {
+  border-bottom: 0;
+}
+
+#calls-list .call-row:hover {
+  background: none;
+}
+
+/* Feedback-Runde 2 (Befund 3, Fluchten-Pass): 4px horizontales Polster stiess
+   den Pfeil-Kreis (links) und die Status-Pille (rechts) von der gemeinsamen
+   Flucht mit allen anderen Karten-Kindern (Titel, Legenden, Knoepfe) ab --
+   die Flucht ist ausschliesslich das Kartenpolster (.card), keine Zeile darf
+   zusaetzlich einruecken. */
+.call-row__link {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  align-items: center;
+  width: 100%;
+  gap: 14px;
+  padding: 16px 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.call-row__link:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.call-row__link:focus-visible {
+  outline: 2px solid #8fb6e3;
+  outline-offset: -2px;
+}
+
+/* Pfeil-Kreis 38px (Spec §7): eingehend gruenlich, ausgehend blau. Ueberschreibt
+   die 34px/andersfarbige Fassung aus app-hermes.css (spaeterer Import gewinnt). */
+.call-row__link .call-dir {
+  width: 38px;
+  height: 38px;
+  border-width: 1px;
+  border-style: solid;
+  background: transparent;
+}
+
+.call-row__link .call-dir--in {
+  border-color: rgba(127, 224, 176, 0.42);
+  color: #7fe0b0;
+}
+
+.call-row__link .call-dir--out {
+  border-color: rgba(143, 182, 227, 0.45);
+  color: #8fb6e3;
+}
+
+.call-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.call-who {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.call-meta {
+  font-family: var(--app-mono);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.call-sub {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: normal;
+}
+
+/* Status-Pille (Spec §7-Tabelle): Text kommt aus render.js (LIVE/ENDED/
+   CANCELLED/FAILED), hier nur die vier Farbtoene. Eigene rgba-Werte statt der
+   kraeftigen Ampelfarben aus app.css/app-hermes.css (spaeterer Import gewinnt). */
+.call-row__link .status-badge,
+.call-modal__contact .status-badge {
+  padding: 5px 11px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-family: var(--app-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.status-badge--active {
+  color: #7fe0b0;
+  border-color: rgba(127, 224, 176, 0.42);
+  background: rgba(127, 224, 176, 0.1);
+}
+
+.status-badge--completed {
+  color: #a9c4e4;
+  border-color: rgba(143, 182, 227, 0.4);
+  background: rgba(143, 182, 227, 0.1);
+}
+
+.status-badge--cancelled {
+  color: #e0c48f;
+  border-color: rgba(224, 196, 143, 0.42);
+  background: rgba(224, 196, 143, 0.1);
+}
+
+.status-badge--failed {
+  color: #e8a9a9;
+  border-color: rgba(232, 169, 169, 0.42);
+  background: rgba(232, 169, 169, 0.1);
+}
+
+/* --------------------------------------------------- 3. Detail-Fenster --- */
+
+.call-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0s linear 0.2s;
+}
+
+.call-modal.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s ease, visibility 0s linear;
+}
+
+.call-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 12, 28, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+/* Owner-Feedback: "Chat-Fenster zu klein" -- grosszuegigeres Fenster
+   (clamp statt fester max-width), Grossteil der Hoehe geht an den
+   Transkript-Bereich (eigener Scrollbereich statt Ganze-Karte-Scroll, s.u.). */
+.call-modal__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: clamp(680px, 62vw, 900px);
+  max-height: 88vh;
+  padding: 32px;
+  overflow: hidden;
+  background: rgba(10, 26, 52, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 28px 60px -34px rgba(3, 10, 26, 0.9);
+}
+
+/* Kopf/Anrufer-Zeile/Summary behalten ihre Inhaltshoehe; nur der Transkript-
+   Block waechst mit dem verfuegbaren Platz (Grossteil der Fensterhoehe). */
+.call-modal__head,
+.call-modal__contact,
+.call-modal__summary {
+  flex: 0 0 auto;
+}
+
+.call-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.direction-pill {
+  padding: 5px 12px;
+  border: 1px solid rgba(143, 182, 227, 0.4);
+  border-radius: 999px;
+  background: rgba(143, 182, 227, 0.14);
+  color: #cfe4fa;
+  font-family: var(--app-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.call-modal__close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.call-modal__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.call-modal__close:focus-visible {
+  outline: 2px solid #8fb6e3;
+  outline-offset: 2px;
+}
+
+.call-modal__close svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Anrufer-Zeile: dauerhaft sichtbar ueber dem Gespraech (Spec §8). */
+.call-modal__contact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(8, 22, 46, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+.call-modal__contact-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #8fb6e3;
+}
+
+.call-modal__contact-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.call-modal__contact-label {
+  font-family: var(--app-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.call-modal__contact-name {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.call-modal__contact-meta {
+  font-family: var(--app-mono);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+/* Summary-Box: eingelassenes Feld (Spec §2). */
+.call-modal__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  background: rgba(8, 22, 46, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+.call-modal__summary-label {
+  font-family: var(--app-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.call-modal__summary-text {
+  margin: 0;
+  color: #ffffff;
+}
+
+/* flex:1 -- der Transkript-Block bekommt den Grossteil der Fensterhoehe (Owner-
+   Feedback); min-height:0 ist noetig, damit der innere Scrollbereich (statt
+   der ganzen Karte) tatsaechlich schrumpfen/scrollen darf (Flexbox-Standard-
+   falle sonst: Kind waechst ueber den verfuegbaren Platz hinaus). */
+.call-modal__transcript {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 10px;
+}
+
+.call-modal__transcript-label {
+  flex: 0 0 auto;
+  font-family: var(--app-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+/* Eigener Scrollbereich (Karte selbst scrollt nicht mehr, s. overflow:hidden
+   oben) -- padding-right schafft Luft, damit der Scrollbalken nicht auf dem
+   Blasentext liegt. */
+#call-modal-transcript-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.call-modal__empty {
+  padding: 4px 0;
+}
+
+.chat-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 80%;
+  padding: 12px 16px;
+  border: 1px solid;
+  /* Rhythmus statt einheitlichem gap (s.u.): Standardabstand zwischen zwei
+     Sprecherwechseln, kein Zusammenkleben. */
+  margin-top: 16px;
+}
+
+.chat-bubble:first-child {
+  margin-top: 0;
+}
+
+/* Zusammenhaengende Turns DESSELBEN Sprechers ruecken naeher zusammen (aber
+   nicht 0) -- sichtbar als Gruppe, ohne verklebt zu wirken (Owner-Feedback). */
+.chat-bubble--agent + .chat-bubble--agent,
+.chat-bubble--counterparty + .chat-bubble--counterparty {
+  margin-top: 6px;
+}
+
+/* Hermes links, spitze Ecke unten links; Gegenseite rechts, spitze Ecke unten
+   rechts (Spec §8). */
+.chat-bubble--agent {
+  align-self: flex-start;
+  background: rgba(143, 182, 227, 0.16);
+  border-color: rgba(143, 182, 227, 0.24);
+  border-radius: 16px 16px 16px 4px;
+}
+
+.chat-bubble--counterparty {
+  align-self: flex-end;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 16px 16px 4px 16px;
+}
+
+.chat-bubble__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.chat-bubble__role {
+  font-family: var(--app-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.chat-bubble__time {
+  font-family: var(--app-mono);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.chat-bubble__text {
+  margin: 0;
+  color: #ffffff;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 768px) {
+  .chat-bubble {
+    max-width: 92%;
+  }
+}
+
+/* Owner-Feedback-Vorgabe: unter ~700px nahezu vollflaechig. */
+@media (max-width: 700px) {
+  .call-modal {
+    padding: 12px;
+  }
+  .call-modal__card {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    max-height: 92vh;
+    padding: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-modal {
+    transition: none;
+  }
+  .call-row__link {
+    transition: none;
+  }
+}

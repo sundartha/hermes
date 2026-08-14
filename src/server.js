@@ -16,6 +16,7 @@ import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
+import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
@@ -101,9 +102,32 @@ const costTruing = makeCostTruing({ store, config, voiceControl, audit, messagin
 // keine Buchung wird beruehrt.
 const costCrossCheck = makeCostCrossCheck({ store, config, voiceControl });
 
-// call-finish (P4): finishCall (Settlement/Summary/SMS) + releaseReserve (Reserve-Freigabe)
-// EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler; INV-7).
-// EINE Instanz: dieselbe finishCall-Referenz geht an attachMediaBridge UND - via
+// F2-Mail (Call-Summary per E-Mail bei Newsletter-Einwilligung): EIGENE Mailer-Instanz ueber
+// dieselbe Auswahl-Rangfolge wie wireWebLogin (selectMailer, src/wiring/web-login.js -
+// Brevo/HTTP vor SMTP, G5: EINE Rangfolge, kein zweiter Auswahl-Codepfad), aber bewusst
+// NICHT die dortige Instanz geteilt. Begruendung: callFinish wird HIER, am Modul-Top,
+// SYNCHRON verdrahtet - wireWebLogin dagegen laeuft erst spaeter, ASYNCHRON, innerhalb des
+// pg-gated guardedBoot-Blocks (buildApp/app.js). Eine geteilte Instanz muesste auf diesen
+// Block warten und bliebe bei json-Backend oder einem pg-Ausfall (fail-open, INV-11) fuer
+// immer aus - der Mailversand haette dann eine unnoetige Abhaengigkeit vom Portal-Pool,
+// obwohl selectMailer NUR config.mail braucht (kein pg, reine Funktion). Beide Adapter
+// (makeBrevoMailer/makeSmtpMailer) sind laut eigenem Modul-Kopf zustandslos (jeder Aufrufer
+// bekommt seine EIGENE Instanz) - zwei Instanzen sind unbedenklich, kein Doppel-Zustand.
+const mailer = selectMailer(config);
+
+// F2-Mail: Accounts-Zugriff (Konto-E-Mail) haengt an accounts.accountByTenant (web-auth.js),
+// das NUR existiert, wenn der pg-gated Web-Login-Block durchlaeuft (wireWebLogin, asynchron
+// NACH diesem Modul-Scope - s. app.js guardedBoot). Spaet gebundene, veraenderliche Zelle
+// (Muster operatorAuth in app.js): Initialwert null, Zuweisung NUR im guardedBoot-Callback
+// (wireWebLogin setzt accountsRef.current). callFinish haelt eine Referenz auf DIESE ZELLE
+// (nicht auf accounts selbst) und liest sie bei jedem Call-Ende frisch - faellt der pg-Block
+// aus/weg, bleibt accountsRef.current fuer immer null und planSummaryMail skip't fail-closed
+// mit reason=no_account_email.
+const accountsRef = { current: null };
+
+// call-finish (P4): finishCall (Settlement/Summary/SMS/Mail) + releaseReserve (Reserve-
+// Freigabe) EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler;
+// INV-7). EINE Instanz: dieselbe finishCall-Referenz geht an attachMediaBridge UND - via
 // makeVoiceRoutes - makeCallControlIngest
 // (call._finished/billedAt-Guards verlangen Identitaet). metering ist oben konstruiert (P1);
 // die paymentEnabled-Gating-Bedingung bleibt im finishCall-Body (INV-9), Cents bleiben Ganzzahl.
@@ -115,6 +139,8 @@ const callFinish = makeCallFinish({
   summarizeCall,
   planSummarySms,
   audit,
+  mailer,
+  accountsRef,
 });
 
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper
@@ -232,6 +258,9 @@ const deps = {
   costCrossCheck,
   messaging,
   consultDelivery,
+  // F2-Mail: die spaet gebundene Accounts-Zelle (s. Kommentar oben) - buildApp reicht sie
+  // bis wireWebLogin durch, das accountsRef.current NACH dem Bau von accounts setzt.
+  accountsRef,
 };
 const { app } = await buildApp(deps);
 await bootServer({ app, ...deps });

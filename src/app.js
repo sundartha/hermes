@@ -266,6 +266,9 @@ export async function buildApp(deps) {
     costTruing,
     messaging,
     consultDelivery,
+    // F2-Mail: spaet gebundene Accounts-Zelle (server.js) - an wireWebLogin durchgereicht,
+    // das accountsRef.current NACH dem Bau von accounts setzt (Muster operatorAuth unten).
+    accountsRef,
     // DIP-Seam (PLAN-AUTH-GATE P1) - dieselbe Naht, die wireWebLogin intern schon nutzt,
     // nur eine Ebene hoeher gezogen: der Routen-Inventar-Test
     // (test/route-auth-inventory.test.js) muss den PRODUKTIONS-Routengraph bauen
@@ -318,6 +321,8 @@ export async function buildApp(deps) {
         stripeWebhookPath: STRIPE_WEBHOOK_PATH,
         appPath: APP_PATH,
         messaging,
+        // F2-Mail: wireWebLogin setzt accountsRef.current NACH dem Bau von accounts.
+        accountsRef,
       });
     });
   }

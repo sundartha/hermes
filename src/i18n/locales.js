@@ -226,6 +226,10 @@ export const LOCALES = Object.freeze({
       subjectOutbound: (to) => `Anruf bei ${to}`,
       subjectInbound: (from) => `Anruf von ${from}`,
       actionItemsHeading: "Action Items:",
+      // F2-Mail: Labels der Call-Summary-Mail (Zeitpunkt/Dauer-Zeile). NIE gesprochen
+      // (Muster der uebrigen postCall-Strings).
+      mailTimeLabel: "Zeitpunkt:",
+      mailDurationLabel: "Dauer:",
     }),
   }),
   fr: Object.freeze({
@@ -304,6 +308,9 @@ export const LOCALES = Object.freeze({
       subjectOutbound: (to) => `Appel vers ${to}`,
       subjectInbound: (from) => `Appel de ${from}`,
       actionItemsHeading: "Actions à mener :",
+      // F2-Mail: Labels der Call-Summary-Mail, s. DE.
+      mailTimeLabel: "Heure :",
+      mailDurationLabel: "Durée :",
     }),
   }),
   // EN-Bundle (F1 Phase 4, Owner-Entscheidung #1: DE+FR+EN). GB/IE -> en. Voice/STT
@@ -379,6 +386,9 @@ export const LOCALES = Object.freeze({
       subjectOutbound: (to) => `Call to ${to}`,
       subjectInbound: (from) => `Call from ${from}`,
       actionItemsHeading: "Action items:",
+      // F2-Mail: Labels der Call-Summary-Mail, s. DE.
+      mailTimeLabel: "Time:",
+      mailDurationLabel: "Duration:",
     }),
   }),
 });

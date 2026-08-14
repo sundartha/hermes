@@ -15,6 +15,7 @@ import {
   planTiles,
   subscriptionLine,
   quotaLine,
+  quotaUsedPercent,
   wireSubscribe,
   SUBSCRIBE_MESSAGES,
   PLAN_CHOICE_COPY,
@@ -33,10 +34,31 @@ import {
   billingStatusBadge,
   billingStatusBadgeClass,
   billingStatusText,
+  billingStatusHeadline,
+  billingStatusDetail,
   newsletterConsentFrom,
+  accountEmailFrom,
   NEWSLETTER_MESSAGES,
   wireNewsletterToggle,
+  cancelAbortLabel,
+  cancelButtonLabel,
+  confirmCancelButtonLabel,
+  resumeButtonLabel,
 } from "../src/lib/subscribe.js";
+
+// Simuliert die DE-Sprachwahl fuer getLang() (lib/i18n.js) ohne setLang() (das
+// greift auf `document` zu, s. render.test.js -- gleiches Muster hier).
+function withLang(lang, fn) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
+  const original = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => lang };
+  try {
+    fn();
+  } finally {
+    if (had) globalThis.localStorage = original;
+    else delete globalThis.localStorage;
+  }
+}
 
 // ---- Fake-DOM ---------------------------------------------------------------
 class FakeElement {
@@ -135,6 +157,24 @@ test("quotaLine: 'remaining of included minutes remaining' oder null", () => {
   assert.equal(quotaLine({ remainingMinutes: 0, includedMinutes: 120 }), "0 of 120 minutes remaining");
   assert.equal(quotaLine(null), null);
   assert.equal(quotaLine(undefined), null);
+});
+
+// ---- quotaUsedPercent: Fuellbreite des Minuten-Balkens (Dashboard-Design-Spec §10) --
+test("quotaUsedPercent: verbrauchter Anteil in Prozent, gerundet", () => {
+  assert.equal(quotaUsedPercent({ remainingMinutes: 93, includedMinutes: 120 }), 23);
+  assert.equal(quotaUsedPercent({ remainingMinutes: 120, includedMinutes: 120 }), 0);
+  assert.equal(quotaUsedPercent({ remainingMinutes: 0, includedMinutes: 120 }), 100);
+});
+
+test("quotaUsedPercent: kein Kontingent -> 0 (der Aufrufer rendert den Balken ohnehin nicht)", () => {
+  assert.equal(quotaUsedPercent(null), 0);
+  assert.equal(quotaUsedPercent(undefined), 0);
+  assert.equal(quotaUsedPercent({ remainingMinutes: 0, includedMinutes: 0 }), 0);
+});
+
+test("quotaUsedPercent: geklemmt auf [0,100] gegen inkonsistente Server-Werte", () => {
+  assert.equal(quotaUsedPercent({ remainingMinutes: 150, includedMinutes: 120 }), 0);
+  assert.equal(quotaUsedPercent({ remainingMinutes: -10, includedMinutes: 120 }), 100);
 });
 
 // ---- Subscribe-Zustandsmaschine ---------------------------------------------
@@ -321,12 +361,16 @@ test("CANCEL_BUTTON_LABEL/CONFIRM_CANCEL_BUTTON_LABEL: gesetzlich vorgegebener W
   assert.equal(CONFIRM_CANCEL_BUTTON_LABEL, "Jetzt kündigen");
 });
 
-test("cancelConfirmText: nennt Plan-Name + Wirkungstermin (deutsch formatiert TT.MM.JJJJ)", () => {
+test("cancelConfirmText (EN-Default): nennt Plan-Name + Wirkungstermin (en-US formatiert)", () => {
+  // Owner-Entscheidung 2026-08-14: der EN-Modus formatiert das Wirkungsdatum
+  // wie das uebrige englische Dashboard (renewDate, en-US) - die frueher auch
+  // im EN-Satz erzwungene TT.MM.JJJJ-Schreibweise war fuer en-US-Leser
+  // mehrdeutig (12.9. = Dec 9 oder Sep 12). DE-Modus s. eigener Test unten.
   const epoch = 1781000000; // Unix-Sekunden
-  const expectedDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
+  const expectedDate = new Date(epoch * 1000).toLocaleDateString("en-US");
   const text = cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch });
   assert.ok(text.includes("Starter"), "Plan-Name fehlt");
-  assert.ok(text.includes(expectedDate), "deutsch formatiertes Datum fehlt");
+  assert.ok(text.includes(expectedDate), "en-US formatiertes Datum fehlt");
 });
 
 test("cancelConfirmText: ohne Termin -> Satz ohne Datum, kein 'undefined'/'Invalid Date'", () => {
@@ -336,9 +380,9 @@ test("cancelConfirmText: ohne Termin -> Satz ohne Datum, kein 'undefined'/'Inval
   assert.ok(!text.includes("Invalid Date"));
 });
 
-test("cancelStatusLine: 'Cancelled — active until TT.MM.JJJJ.' (deutsch formatiertes Datum)", () => {
+test("cancelStatusLine (EN-Default): 'Cancelled — active until <en-US-Datum>.'", () => {
   const epoch = 1781000000;
-  const expectedDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
+  const expectedDate = new Date(epoch * 1000).toLocaleDateString("en-US");
   assert.equal(cancelStatusLine({ currentPeriodEnd: epoch }), `Cancelled — active until ${expectedDate}.`);
   assert.equal(cancelStatusLine({ currentPeriodEnd: 0 }), "Cancelled.");
 });
@@ -618,6 +662,44 @@ test("billingStatusText: no_card/no_sub tragen einen statischen naechsten Schrit
   assert.notEqual(noCardText, noSubText, "no_card und no_sub muessen unterscheidbare Saetze zeigen");
 });
 
+// ---- billingStatusHeadline/-Detail: Serif-Wert + Mono-Nebenangabe (§10) -------
+
+test("billingStatusHeadline: aktiv/gekuendigt -> Plan-Name, sonst dieselbe Beschriftung wie die Status-Pille", () => {
+  const activeSub = { planSlug: "starter", currentPeriodEnd: 0, cancelAtPeriodEnd: false };
+  assert.equal(billingStatusHeadline(BILLING_STATUS.ACTIVE, activeSub), "Starter");
+  const cancelledSub = { planSlug: "business", currentPeriodEnd: 0, cancelAtPeriodEnd: true };
+  assert.equal(billingStatusHeadline(BILLING_STATUS.CANCELLED, cancelledSub), "Business");
+  assert.equal(
+    billingStatusHeadline(BILLING_STATUS.NO_CARD, { planSlug: "" }),
+    billingStatusBadge(BILLING_STATUS.NO_CARD),
+  );
+  assert.equal(
+    billingStatusHeadline(BILLING_STATUS.NO_SUB, { planSlug: "" }),
+    billingStatusBadge(BILLING_STATUS.NO_SUB),
+  );
+});
+
+test("billingStatusDetail: aktiv -> Renews-Datum (oder leer ohne Termin)", () => {
+  const epoch = 1781000000;
+  const expectedDate = new Date(epoch * 1000).toLocaleDateString("en-US");
+  assert.equal(
+    billingStatusDetail(BILLING_STATUS.ACTIVE, { planSlug: "starter", currentPeriodEnd: epoch }),
+    `Renews ${expectedDate}`,
+  );
+  assert.equal(billingStatusDetail(BILLING_STATUS.ACTIVE, { planSlug: "starter", currentPeriodEnd: 0 }), "");
+});
+
+test("billingStatusDetail: gekuendigt -> dieselbe Zeile wie cancelStatusLine (EINE Quelle)", () => {
+  const cancelledSub = { planSlug: "business", currentPeriodEnd: 1781000000, cancelAtPeriodEnd: true };
+  assert.equal(billingStatusDetail(BILLING_STATUS.CANCELLED, cancelledSub), cancelStatusLine(cancelledSub));
+});
+
+test("billingStatusDetail: no_card/no_sub -> derselbe erklaerende Satz wie billingStatusText", () => {
+  const sub = { planSlug: "" };
+  assert.equal(billingStatusDetail(BILLING_STATUS.NO_CARD, sub), billingStatusText(BILLING_STATUS.NO_CARD, sub));
+  assert.equal(billingStatusDetail(BILLING_STATUS.NO_SUB, sub), billingStatusText(BILLING_STATUS.NO_SUB, sub));
+});
+
 // ---- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) ---------------------
 
 test("newsletterConsentFrom: Default nicht eingewilligt (fehlendes/kaputtes Feld -> false, NIE vorangekreuzt)", () => {
@@ -628,6 +710,18 @@ test("newsletterConsentFrom: Default nicht eingewilligt (fehlendes/kaputtes Feld
   assert.equal(newsletterConsentFrom({ newsletter: { consent: "true" } }), false); // kein strikter Boolean
   assert.equal(newsletterConsentFrom({ newsletter: { consent: 1 } }), false);
   assert.equal(newsletterConsentFrom({ newsletter: { consent: true } }), true);
+});
+
+// F2-Mail: accountEmailFrom liest data.accountEmail (additiv, src/self-service-routes.js) -
+// reine Anzeige fuers readonly Prefill, Muster newsletterConsentFrom.
+test("accountEmailFrom: liefert die Konto-E-Mail, sonst null (fehlend/kaputt/leer -> nie erfunden)", () => {
+  assert.equal(accountEmailFrom({ accountEmail: "kunde@example.test" }), "kunde@example.test");
+  assert.equal(accountEmailFrom({ accountEmail: null }), null);
+  assert.equal(accountEmailFrom({}), null);
+  assert.equal(accountEmailFrom(null), null);
+  assert.equal(accountEmailFrom(undefined), null);
+  assert.equal(accountEmailFrom({ accountEmail: "" }), null);
+  assert.equal(accountEmailFrom({ accountEmail: 42 }), null); // kein String -> nie erfunden
 });
 
 // Fake-Checkbox: bildet nur die im Bau genutzten DOM-Operationen nach (Muster
@@ -710,4 +804,90 @@ test("wireNewsletterToggle: 401 -> Session abgelaufen, Haekchen faellt zurueck",
   } finally {
     f.restore();
   }
+});
+
+// ---- Dashboard-i18n Etappe 2: DE-Modus ---------------------------------------
+
+test("DE-Modus: renewDate/subscriptionLine nutzen das deutsche Datumsformat (TT.MM.JJJJ), Woertlichkeit sonst deutsch", () => {
+  withLang("de", () => {
+    const epoch = 1781000000;
+    const expectedDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
+    assert.equal(
+      subscriptionLine({ planSlug: "starter", currentPeriodEnd: epoch }),
+      `Aktiver Tarif: Starter (verlängert sich am ${expectedDate}).`,
+    );
+    assert.equal(subscriptionLine({ planSlug: "business", currentPeriodEnd: 0 }), "Aktiver Tarif: Business.");
+  });
+});
+
+test("DE-Modus: quotaLine/billingStatusBadge/billingStatusText sind deutsch", () => {
+  withLang("de", () => {
+    assert.equal(quotaLine({ remainingMinutes: 5, includedMinutes: 30 }), "5 von 30 Minuten übrig");
+    assert.equal(billingStatusBadge(BILLING_STATUS.NO_CARD), "Keine Karte");
+    assert.equal(billingStatusBadge(BILLING_STATUS.ACTIVE), "Aktiv");
+    assert.match(billingStatusText(BILLING_STATUS.NO_CARD, { planSlug: "" }), /Zahlungsmittel/);
+    assert.match(billingStatusText(BILLING_STATUS.NO_SUB, { planSlug: "" }), /Tarif/);
+  });
+});
+
+test("DE-Modus: SUBSCRIBE_MESSAGES/CANCEL_MESSAGES/NEWSLETTER_MESSAGES/PLAN_CHOICE_COPY laufen ueber wireSubscribe/wireCancelControls/wireNewsletterToggle deutsch", async () => {
+  await withLangAsync("de", async () => {
+    const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { plan: "starter", currentPeriodEnd: 1 } }));
+    try {
+      const container = fakeContainer();
+      const opts = spyOpts();
+      wireSubscribe(container, opts);
+      await container.click("starter");
+      assert.deepEqual(opts.messages, [{ text: "Abo gebucht.", ok: true }]);
+    } finally {
+      f.restore();
+    }
+  });
+});
+
+// wireSubscribe/wireNewsletterToggle sind async -- withLang() (synchron) wuerde die
+// localStorage-Stub-Restauration VOR dem Abschluss des Promises zuruecknehmen. Eigene
+// async-Variante fuer diese Faelle (Muster identisch, nur await statt sofortigem finally).
+async function withLangAsync(lang, fn) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
+  const original = globalThis.localStorage;
+  globalThis.localStorage = { getItem: () => lang };
+  try {
+    await fn();
+  } finally {
+    if (had) globalThis.localStorage = original;
+    else delete globalThis.localStorage;
+  }
+}
+
+test("Kuendigungs-Weg sprachbewusst: DE-Modus woertlicher Pflichtwortlaut + deutsche Saetze, EN-Modus eindeutige englische Formulierung", () => {
+  const epoch = 1781000000;
+  const expectedGermanDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
+  const expectedEnDate = new Date(epoch * 1000).toLocaleDateString("en-US");
+
+  // EN-Default: englische Knopf-Beschriftung (Owner-Entscheidung 2026-08-14) --
+  // die KONSTANTEN mit dem deutschen Pflichtwortlaut bleiben davon unberuehrt.
+  assert.equal(CANCEL_BUTTON_LABEL, "Verträge kündigen");
+  assert.equal(cancelButtonLabel(), "Cancel contracts");
+  assert.equal(confirmCancelButtonLabel(), "Cancel now");
+  assert.ok(cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch }).includes(expectedEnDate));
+
+  withLang("de", () => {
+    assert.equal(cancelAbortLabel(), "Doch nicht");
+    assert.equal(resumeButtonLabel(), "Abo fortsetzen");
+    // § 312k: im DE-Modus erscheint der gesetzlich vorgegebene Wortlaut WOERTLICH.
+    assert.equal(cancelButtonLabel(), "Verträge kündigen");
+    assert.equal(confirmCancelButtonLabel(), "Jetzt kündigen");
+    const confirmDe = cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch });
+    assert.ok(confirmDe.includes("Starter"), "Plan-Name fehlt im DE-Satz");
+    assert.ok(confirmDe.includes(expectedGermanDate), "deutsches Datum fehlt im DE-Satz");
+    assert.ok(confirmDe.includes("endet am"), "deutscher Satzbau fehlt");
+    assert.equal(cancelStatusLine({ currentPeriodEnd: epoch }), `Gekündigt — aktiv bis ${expectedGermanDate}.`);
+    assert.equal(cancelStatusLine({ currentPeriodEnd: 0 }), "Gekündigt.");
+  });
+
+  // Und weiterhin unveraendert im EN-Default danach (kein Leck aus withLang).
+  assert.equal(cancelAbortLabel(), "Never mind");
+  assert.equal(resumeButtonLabel(), "Resume subscription");
+  assert.equal(cancelButtonLabel(), "Cancel contracts");
 });

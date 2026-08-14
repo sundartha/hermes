@@ -18,13 +18,21 @@ import BillingIsland from "../../components/app/BillingIsland.astro";
 import SettingsIsland from "../../components/app/SettingsIsland.astro";
 import AgentChip from "../../components/app/AgentChip.astro";
 import CallsIsland from "../../components/app/CallsIsland.astro";
+import NewsletterIsland from "../../components/app/NewsletterIsland.astro";
 
-// In-App-Navigation: Anker auf die Bereiche der Shell (reine Links, kein JS). Die
-// #anrufe/#einstellungen/#abrechnung-Anker bleiben (interne ids, nicht user-facing).
+// In-App-Navigation: Anker auf die Bereiche der Shell (reine Links, kein JS
+// beim Rendern -- die Aktiv-/Scroll-Logik verdrahtet das <script> unten). Die
+// #anrufe/#einstellungen/#abrechnung/#newsletter-Anker bleiben (interne ids,
+// nicht user-facing). Dashboard-Redesign (§4): vierter Eintrag "Newsletter"
+// (Schnittstelle Trupp C, NewsletterIsland.astro) + zweistellige Nummer je
+// Eintrag, aus dem Array-Index abgeleitet (kein zweites Nummern-Set).
+// i18n (Etappe 1): key = der data-i18n-Schluessel aus lib/i18n.js, label
+// bleibt der englische Markup-Text (Quelle der Wahrheit).
 const dashNav = [
-  { href: "#anrufe", label: "Calls" },
-  { href: "#einstellungen", label: "Settings" },
-  { href: "#abrechnung", label: "Billing" },
+  { href: "#anrufe", label: "Calls", key: "navCalls" },
+  { href: "#einstellungen", label: "Settings", key: "navSettings" },
+  { href: "#abrechnung", label: "Billing", key: "navBilling" },
+  { href: "#newsletter", label: "Newsletter", key: "navNewsletter" },
 ];
 ---
 
@@ -35,67 +43,92 @@ const dashNav = [
        erste state-Fetch antwortet). Die Insel meldet den Zustand per Event. Nur
        die eingeloggte Shell zeigt Tenant-Daten -- das ist das Gate. -->
   <section id="region-loading" class="card">
-    <p class="muted">Loading…</p>
+    <p class="muted" data-i18n="loading">Loading…</p>
   </section>
 
   <section id="region-anonymous" class="card" hidden>
-    <h1>Sign in required</h1>
-    <p>Please sign in to manage your phone assistant.</p>
-    <a class="btn" href={LOGIN_URL}>Sign in</a>
+    <h1 data-i18n="signInRequiredTitle">Sign in required</h1>
+    <p data-i18n="signInRequiredText">Please sign in to manage your phone assistant.</p>
+    <a class="btn" href={LOGIN_URL} data-i18n="signIn">Sign in</a>
   </section>
 
   <!-- Suspended-Pfad (P2): wartet auf Aktivierung. Bei PAYMENT_ENABLED rendert das
        Script die Plan-Kacheln (billing/status, suspended-erreichbar) -> der Tenant
-       aktiviert sich per Abo selbst. Ohne Payment bleibt der Wartetext. -->
+       aktiviert sich per Abo selbst. Ohne Payment bleibt der Wartetext. i18n
+       (Etappe 1): data-i18n uebersetzt den Wartetext-Default; sobald renderPlanChoice/
+       dismissPlanChoice (lib/subscribe.js, Etappe 2, unangetastet) den Titel/Text
+       ueberschreiben, bleibt DIESER Teil bewusst englisch bis Etappe 2. -->
   <section id="region-pending" class="card" hidden>
-    <h1 id="pending-title">Account awaiting activation</h1>
-    <p id="pending-text">Your account has been created and is awaiting activation.
+    <h1 id="pending-title" data-i18n="pendingTitle">Account awaiting activation</h1>
+    <p id="pending-text" data-i18n="pendingText">Your account has been created and is awaiting activation.
       Once it's active, your assistant will appear here.</p>
     <div id="pending-tiles" class="plans"></div>
     <p id="pending-msg" class="billing-msg" hidden></p>
     <!-- AM3: sekundaerer "Maybe later"-Skip, nur im Payment-Aktivierungs-Pfad sichtbar.
          Rein praesentational - aktiviert NICHTS (kein subscribe/setStatus, /state bleibt 403). -->
-    <button id="pending-skip" class="plan-skip" type="button" hidden>Maybe later</button>
+    <button id="pending-skip" class="plan-skip" type="button" hidden data-i18n="pendingSkip">Maybe later</button>
   </section>
 
   <section id="region-error" class="card" hidden>
-    <h1>Something went wrong</h1>
-    <p>The app couldn't load just now. Check your connection and try again.</p>
-    <button id="error-retry" class="btn" type="button">Try again</button>
+    <h1 data-i18n="errorTitle">Something went wrong</h1>
+    <p data-i18n="errorText">The app couldn't load just now. Check your connection and try again.</p>
+    <button id="error-retry" class="btn" type="button" data-i18n="errorRetry">Try again</button>
   </section>
 
-  <!-- Eingeloggte Shell: Begruessung + Verlauf + Einstellungen + Karte. -->
+  <!-- Eingeloggte Shell: Begruessung + Nummern-Karte + Bereichs-Navigation
+       (sticky links) + Verlauf/Einstellungen/Abrechnung/Newsletter (scrollend
+       rechts). Dashboard-Redesign §3/§4 -- Markup/Insel-Verhalten sonst
+       unveraendert (Auth-Gate, AUTH_EVENT, [hidden]-Regionen, Anker-ids). -->
   <div id="region-shell" hidden>
-    <header class="dash-head card">
+    <header class="dash-head">
       <div class="dash-head__intro">
-        <span class="dash-head__eyebrow">Your area</span>
-        <h1 class="dash-head__title">Welcome, <span id="shell-owner">—</span></h1>
-        <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT). -->
-        <AgentChip />
+        <span class="dash-head__eyebrow" data-i18n="yourArea">Your area</span>
+        <!-- "Welcome," und der Besitzer-Name sind zwei getrennte Knoten (i18n Etappe 1):
+             data-i18n setzt nur textContent des eigenen Elements -- ein data-i18n auf dem
+             h1 wuerde den #shell-owner-Span mit ueberschreiben. -->
+        <h1 class="dash-head__title"><span data-i18n="welcome">Welcome,</span> <span id="shell-owner">—</span></h1>
       </div>
+      <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT) --
+           jetzt eine eigenstaendige Glaskarte rechts neben der Begruessung. -->
+      <AgentChip />
     </header>
 
-    <nav class="dash-nav" aria-label="Section navigation">
-      {dashNav.map((item) => (
-        <a class="dash-nav__link" href={item.href}>{item.label}</a>
-      ))}
-    </nav>
+    <div class="dash-layout">
+      <!-- Scroll-Spy (siehe <script> unten): IntersectionObserver markiert den
+           Eintrag der gerade obenauf sichtbaren Sektion mit is-active. Alle vier
+           Abschnitte bleiben gleichzeitig im DOM (kein Tab-Verstecken). -->
+      <nav class="dash-nav" aria-label="Section navigation" data-i18n-attr="aria-label:sectionNavAriaLabel">
+        {dashNav.map((item, index) => (
+          <a class="dash-nav__link" href={item.href} data-target={item.href.slice(1)}>
+            <span class="dash-nav__num" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+            <span class="dash-nav__label" data-i18n={item.key}>{item.label}</span>
+          </a>
+        ))}
+      </nav>
 
-    <!-- W4: read-only Anruf-Verlauf (inkl. aufklappbarer Chat-Historie je Anruf)
-         aus dem EINEN state-Fetch (AUTH_EVENT). -->
-    <div id="anrufe">
-      <CallsIsland />
-    </div>
+      <div class="dash-sections">
+        <!-- W4: read-only Anruf-Verlauf (inkl. aufklappbarer Chat-Historie je Anruf)
+             aus dem EINEN state-Fetch (AUTH_EVENT). -->
+        <div id="anrufe">
+          <CallsIsland />
+        </div>
 
-    <!-- W5: Settings-Editor (der EINZIGE Schreibpfad), nur Whitelist-Felder. -->
-    <div id="einstellungen">
-      <SettingsIsland />
-    </div>
+        <!-- W5: Settings-Editor (der EINZIGE Schreibpfad), nur Whitelist-Felder. -->
+        <div id="einstellungen">
+          <SettingsIsland />
+        </div>
 
-    <!-- W3: Billing-Insel (NUR Karte hinterlegen). Versteckt sich selbst, solange
-         der Server kein hasCard liefert (PAYMENT_ENABLED aus). -->
-    <div id="abrechnung">
-      <BillingIsland />
+        <!-- W3: Billing-Insel (NUR Karte hinterlegen). Versteckt sich selbst, solange
+             der Server kein hasCard liefert (PAYMENT_ENABLED aus). -->
+        <div id="abrechnung">
+          <BillingIsland />
+        </div>
+
+        <!-- Newsletter (Schnittstelle Trupp C): eigene Insel, kein Props. -->
+        <div id="newsletter">
+          <NewsletterIsland />
+        </div>
+      </div>
     </div>
   </div>
 
@@ -190,4 +223,54 @@ const dashNav = [
     if (state === AUTH_STATE.PENDING) renderPending();
     showOnly(state);
   });
+
+  // ---- §4: Bereichs-Navigation -- Scroll-Spy + sanftes Scrollen ------------
+  // Alle vier Abschnitte bleiben gleichzeitig im DOM (kein Tab-Verstecken,
+  // Auth-Gate bleibt unberuehrt); ein IntersectionObserver markiert nur, welcher
+  // Nav-Eintrag gerade "dran" ist. SCROLL_OFFSET_PX = wie viel Platz die
+  // Abschnittsueberschrift beim Landen unter der Oberkante laesst (siehe
+  // scroll-margin-top in shell.css -- selber Wert, EINE Quelle fuer den
+  // rootMargin-Offset unten).
+  const SCROLL_OFFSET_PX = 96;
+  const navLinks = Array.from(document.querySelectorAll(".dash-nav__link"));
+  const navSections = navLinks
+    .map((link) => document.getElementById(link.dataset.target))
+    .filter(Boolean);
+
+  function setActiveSection(id) {
+    for (const link of navLinks) {
+      link.classList.toggle("is-active", link.dataset.target === id);
+    }
+  }
+
+  if (navSections.length > 0) {
+    const spy = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting);
+        if (visible.length === 0) return;
+        // Bei mehreren gleichzeitig sichtbaren Abschnitten zaehlt der oberste
+        // (kleinster Abstand zur Betrachtungskante).
+        const top = visible.reduce((a, b) =>
+          a.boundingClientRect.top <= b.boundingClientRect.top ? a : b,
+        );
+        setActiveSection(top.target.id);
+      },
+      { rootMargin: `-${SCROLL_OFFSET_PX}px 0px -60% 0px`, threshold: 0 },
+    );
+    for (const section of navSections) spy.observe(section);
+  }
+
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  for (const link of navLinks) {
+    link.addEventListener("click", (event) => {
+      const target = document.getElementById(link.dataset.target);
+      if (!target) return;
+      event.preventDefault();
+      const top = target.getBoundingClientRect().top + window.scrollY - SCROLL_OFFSET_PX;
+      window.scrollTo({ top, behavior: prefersReducedMotion ? "auto" : "smooth" });
+      setActiveSection(link.dataset.target);
+      history.replaceState(null, "", `#${link.dataset.target}`);
+    });
+  }
 </script>
