@@ -45,6 +45,7 @@ import {
   confirmCancelButtonLabel,
   resumeButtonLabel,
   newsletterRecipientsFrom,
+  hasPendingNewsletterRecipient,
   newsletterRecipientStatusLabel,
   newsletterRecipientBadgeClass,
   newsletterRecipientRows,
@@ -923,6 +924,19 @@ test("newsletterRecipientsFrom: liest data.newsletterRecipients, fail-closed lee
   assert.deepEqual(newsletterRecipientsFrom(null), []);
   assert.deepEqual(newsletterRecipientsFrom(undefined), []);
   assert.deepEqual(newsletterRecipientsFrom({ newsletterRecipients: "not-an-array" }), []);
+});
+
+test("hasPendingNewsletterRecipient: true nur bei mindestens einer pending-Zeile, fail-closed false sonst", () => {
+  const pending = { email: "a@b.test", status: "pending", createdAt: "x" };
+  const confirmed = { email: "c@d.test", status: "confirmed", createdAt: "y" };
+  assert.equal(hasPendingNewsletterRecipient({ newsletterRecipients: [pending] }), true);
+  assert.equal(hasPendingNewsletterRecipient({ newsletterRecipients: [confirmed, pending] }), true);
+  assert.equal(hasPendingNewsletterRecipient({ newsletterRecipients: [confirmed] }), false);
+  assert.equal(hasPendingNewsletterRecipient({ newsletterRecipients: [] }), false);
+  assert.equal(hasPendingNewsletterRecipient({}), false);
+  assert.equal(hasPendingNewsletterRecipient(null), false);
+  // Kaputte Zeilen (kein Objekt/kein status) zaehlen nicht als pending.
+  assert.equal(hasPendingNewsletterRecipient({ newsletterRecipients: [null, {}, "x"] }), false);
 });
 
 test("newsletterRecipientStatusLabel/-BadgeClass: pending -> gelblicher --cancelled-Ton, confirmed -> gruenlicher --active-Ton", () => {
