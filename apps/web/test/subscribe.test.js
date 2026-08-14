@@ -44,6 +44,13 @@ import {
   cancelButtonLabel,
   confirmCancelButtonLabel,
   resumeButtonLabel,
+  newsletterRecipientsFrom,
+  newsletterRecipientStatusLabel,
+  newsletterRecipientBadgeClass,
+  newsletterRecipientRows,
+  wireNewsletterRecipientAdd,
+  newsletterRecipientRemove,
+  NEWSLETTER_RECIPIENT_MESSAGES,
 } from "../src/lib/subscribe.js";
 
 // Simuliert die DE-Sprachwahl fuer getLang() (lib/i18n.js) ohne setLang() (das
@@ -86,6 +93,21 @@ class FakeElement {
   // Flacher Teilbaum (inkl. self): fuer "finde den Subscribe-Button".
   flatten() {
     return [this, ...this.children.flatMap((c) => c.flatten())];
+  }
+  // F2-Newsletter-Recipients: recipientRow() ruft setAttribute (aria-label) und
+  // addEventListener (Remove-Klick) -- beide bisher ungenutzt vom Fake, hier
+  // additiv nachgebildet (bricht keinen bestehenden planTiles-Test).
+  setAttribute(name, value) {
+    this.attrs = this.attrs || {};
+    this.attrs[name] = value;
+  }
+  addEventListener(name, fn) {
+    this.listeners = this.listeners || {};
+    this.listeners[name] = fn;
+  }
+  click() {
+    if (this.listeners && this.listeners.click) return this.listeners.click();
+    return undefined;
   }
 }
 
@@ -890,4 +912,291 @@ test("Kuendigungs-Weg sprachbewusst: DE-Modus woertlicher Pflichtwortlaut + deut
   assert.equal(cancelAbortLabel(), "Never mind");
   assert.equal(resumeButtonLabel(), "Resume subscription");
   assert.equal(cancelButtonLabel(), "Cancel contracts");
+});
+
+// ---- F2-Newsletter-Recipients: Zusatzempfaenger (Double-Opt-in) ---------------
+
+test("newsletterRecipientsFrom: liest data.newsletterRecipients, fail-closed leer bei fehlendem/kaputtem Feld", () => {
+  const list = [{ email: "a@b.test", status: "pending", createdAt: "2026-01-01T00:00:00.000Z" }];
+  assert.deepEqual(newsletterRecipientsFrom({ newsletterRecipients: list }), list);
+  assert.deepEqual(newsletterRecipientsFrom({}), []);
+  assert.deepEqual(newsletterRecipientsFrom(null), []);
+  assert.deepEqual(newsletterRecipientsFrom(undefined), []);
+  assert.deepEqual(newsletterRecipientsFrom({ newsletterRecipients: "not-an-array" }), []);
+});
+
+test("newsletterRecipientStatusLabel/-BadgeClass: pending -> gelblicher --cancelled-Ton, confirmed -> gruenlicher --active-Ton", () => {
+  assert.equal(newsletterRecipientStatusLabel("pending"), "Pending");
+  assert.equal(newsletterRecipientStatusLabel("confirmed"), "Confirmed");
+  assert.equal(newsletterRecipientBadgeClass("pending"), "cancelled");
+  assert.equal(newsletterRecipientBadgeClass("confirmed"), "active");
+});
+
+test("newsletterRecipientRows: leere Liste -> EINE data-empty-Zeile, kein leeres <ul>", () => {
+  const rows = newsletterRecipientRows(fakeDocument, {});
+  assert.equal(rows.length, 1);
+  assert.ok(rows[0].hasClass("data-empty"));
+  assert.ok(textOf(rows).includes("No additional recipients"));
+});
+
+test("newsletterRecipientRows: eine Zeile je Empfaenger mit Status-Pille; Pending traegt den Mono-Hinweis, Confirmed nicht", () => {
+  const data = {
+    newsletterRecipients: [
+      { email: "pend@example.test", status: "pending", createdAt: "x" },
+      { email: "conf@example.test", status: "confirmed", createdAt: "y" },
+    ],
+  };
+  const rows = newsletterRecipientRows(fakeDocument, data);
+  assert.equal(rows.length, 2);
+  assert.ok(textOf([rows[0]]).includes("pend@example.test"));
+  assert.ok(textOf([rows[0]]).includes("Pending"));
+  assert.ok(rows[0].hasClass("billing-status-badge--cancelled"), "pending nutzt denselben Ton wie eine gekuendigte Abo-Pille (gelblich)");
+  assert.ok(textOf([rows[0]]).includes("Confirmation email sent"), "Pending-Zeile traegt den Mono-Hinweis");
+
+  assert.ok(textOf([rows[1]]).includes("conf@example.test"));
+  assert.ok(textOf([rows[1]]).includes("Confirmed"));
+  assert.ok(rows[1].hasClass("billing-status-badge--active"), "confirmed nutzt denselben Ton wie eine aktive Abo-Pille (gruenlich)");
+  assert.ok(!textOf([rows[1]]).includes("Confirmation email sent"), "Confirmed-Zeile traegt KEINEN Bestaetigungs-Hinweis");
+});
+
+test("newsletterRecipientRows: Klick auf das Entfernen-Kreuz ruft onRemove(email)", () => {
+  const data = { newsletterRecipients: [{ email: "pend@example.test", status: "pending", createdAt: "x" }] };
+  const removed = [];
+  const rows = newsletterRecipientRows(fakeDocument, data, (email) => removed.push(email));
+  const removeButtons = rows[0].flatten().filter((n) => n.tag === "button");
+  assert.equal(removeButtons.length, 1);
+  removeButtons[0].click();
+  assert.deepEqual(removed, ["pend@example.test"]);
+});
+
+// ---- wireNewsletterRecipientAdd: echtes <form>, Muster wireCancelControls -----
+function fakeForm() {
+  let handler = null;
+  return {
+    addEventListener(name, fn) {
+      assert.equal(name, "submit");
+      handler = fn;
+    },
+    submit() {
+      return handler({ preventDefault: () => {} });
+    },
+  };
+}
+function fakeField(initialValue = "") {
+  return { value: initialValue };
+}
+function fakeAddBtn() {
+  return { disabled: false };
+}
+
+test("wireNewsletterRecipientAdd: submit postet {email} (getrimmt), leert das Feld, ruft onAdded", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { ok: true, status: "pending" } }));
+  try {
+    const form = fakeForm();
+    const input = fakeField("  freund@example.test  ");
+    const addBtn = fakeAddBtn();
+    const messages = [];
+    let addedCount = 0;
+    wireNewsletterRecipientAdd(
+      { form, input, addBtn },
+      {
+        onMessage: (text, ok) => messages.push({ text, ok }),
+        onAdded: async () => {
+          addedCount += 1;
+        },
+      },
+    );
+    await form.submit();
+    assert.equal(f.calls[0].path, "/api/self-service/newsletter-recipients");
+    assert.equal(f.calls[0].options.method, "POST");
+    assert.deepEqual(JSON.parse(f.calls[0].options.body), { email: "freund@example.test" });
+    assert.equal(input.value, "");
+    assert.deepEqual(messages, [{ text: NEWSLETTER_RECIPIENT_MESSAGES.added, ok: true }]);
+    assert.equal(addedCount, 1);
+    assert.equal(addBtn.disabled, false);
+  } finally {
+    f.restore();
+  }
+});
+
+test("wireNewsletterRecipientAdd: bekannter Server-Code (duplicate) -> passende Meldung, KEIN onAdded, Feld bleibt", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 400, json: { error: "duplicate" } }));
+  try {
+    const form = fakeForm();
+    const input = fakeField("x@example.test");
+    const addBtn = fakeAddBtn();
+    const messages = [];
+    let addedCount = 0;
+    wireNewsletterRecipientAdd(
+      { form, input, addBtn },
+      {
+        onMessage: (text, ok) => messages.push({ text, ok }),
+        onAdded: async () => {
+          addedCount += 1;
+        },
+      },
+    );
+    await form.submit();
+    assert.deepEqual(messages, [{ text: NEWSLETTER_RECIPIENT_MESSAGES.duplicate, ok: false }]);
+    assert.equal(addedCount, 0);
+    assert.equal(input.value, "x@example.test", "Feld bleibt bei einem Fehler unveraendert");
+  } finally {
+    f.restore();
+  }
+});
+
+test("wireNewsletterRecipientAdd: cap_reached/invalid_format/daily_limit -> je eigene Meldung", async () => {
+  for (const reason of ["cap_reached", "invalid_format", "daily_limit"]) {
+    const f = stubFetch(() => fakeResponse({ ok: false, status: 400, json: { error: reason } }));
+    try {
+      const form = fakeForm();
+      const input = fakeField("x@example.test");
+      const addBtn = fakeAddBtn();
+      const messages = [];
+      wireNewsletterRecipientAdd(
+        { form, input, addBtn },
+        { onMessage: (text, ok) => messages.push({ text, ok }), onAdded: async () => {} },
+      );
+      await form.submit();
+      assert.deepEqual(messages, [{ text: NEWSLETTER_RECIPIENT_MESSAGES[reason], ok: false }], `Reason ${reason}`);
+    } finally {
+      f.restore();
+    }
+  }
+});
+
+test("wireNewsletterRecipientAdd: unbekannter Code/5xx -> generischer Fallback", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 500, json: {} }));
+  try {
+    const form = fakeForm();
+    const input = fakeField("x@example.test");
+    const addBtn = fakeAddBtn();
+    const messages = [];
+    wireNewsletterRecipientAdd(
+      { form, input, addBtn },
+      { onMessage: (text, ok) => messages.push({ text, ok }), onAdded: async () => {} },
+    );
+    await form.submit();
+    assert.deepEqual(messages, [{ text: NEWSLETTER_RECIPIENT_MESSAGES.failed, ok: false }]);
+  } finally {
+    f.restore();
+  }
+});
+
+test("wireNewsletterRecipientAdd: 401 -> Session abgelaufen", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 401, json: {} }));
+  try {
+    const form = fakeForm();
+    const input = fakeField("x@example.test");
+    const addBtn = fakeAddBtn();
+    const messages = [];
+    wireNewsletterRecipientAdd(
+      { form, input, addBtn },
+      { onMessage: (text, ok) => messages.push({ text, ok }), onAdded: async () => {} },
+    );
+    await form.submit();
+    assert.deepEqual(messages, [{ text: NEWSLETTER_RECIPIENT_MESSAGES.sessionExpired, ok: false }]);
+  } finally {
+    f.restore();
+  }
+});
+
+test("wireNewsletterRecipientAdd: Doppel-Submit waehrend ein Request laeuft macht nur EINEN Fetch (Guard)", async () => {
+  let resolveFetch;
+  const f = stubFetch(
+    () =>
+      new Promise((resolve) => {
+        resolveFetch = () => resolve(fakeResponse({ ok: true, status: 200, json: { ok: true, status: "pending" } }));
+      }),
+  );
+  try {
+    const form = fakeForm();
+    const input = fakeField("x@example.test");
+    const addBtn = fakeAddBtn();
+    wireNewsletterRecipientAdd({ form, input, addBtn }, { onMessage: () => {}, onAdded: async () => {} });
+    const first = form.submit();
+    const second = form.submit();
+    resolveFetch();
+    await first;
+    await second;
+    assert.equal(f.calls.length, 1, "der zweite Submit waehrend eines laufenden Requests darf keinen Fetch ausloesen");
+  } finally {
+    f.restore();
+  }
+});
+
+// ---- newsletterRecipientRemove: Entfernen-Lauf (Muster runCancellationStep) --
+
+test("newsletterRecipientRemove: Erfolg -> DELETE {email}, Meldung 'removed', ruft onRemoved", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { ok: true, removed: true } }));
+  try {
+    const messages = [];
+    let removedCount = 0;
+    await newsletterRecipientRemove("freund@example.test", {
+      onMessage: (text, ok) => messages.push({ text, ok }),
+      onRemoved: async () => {
+        removedCount += 1;
+      },
+    });
+    assert.equal(f.calls[0].path, "/api/self-service/newsletter-recipients");
+    assert.equal(f.calls[0].options.method, "DELETE");
+    assert.deepEqual(JSON.parse(f.calls[0].options.body), { email: "freund@example.test" });
+    assert.deepEqual(messages, [{ text: NEWSLETTER_RECIPIENT_MESSAGES.removed, ok: true }]);
+    assert.equal(removedCount, 1);
+  } finally {
+    f.restore();
+  }
+});
+
+test("newsletterRecipientRemove: Fehlschlag -> Meldung, KEIN onRemoved", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 500, json: {} }));
+  try {
+    const messages = [];
+    let removedCount = 0;
+    await newsletterRecipientRemove("freund@example.test", {
+      onMessage: (text, ok) => messages.push({ text, ok }),
+      onRemoved: async () => {
+        removedCount += 1;
+      },
+    });
+    assert.deepEqual(messages, [{ text: NEWSLETTER_RECIPIENT_MESSAGES.failed, ok: false }]);
+    assert.equal(removedCount, 0);
+  } finally {
+    f.restore();
+  }
+});
+
+// ---- Dashboard-i18n Etappe 2: DE-Modus (Zusatzempfaenger) ---------------------
+
+test("DE-Modus: newsletterRecipientStatusLabel + newsletterRecipientRows sind deutsch", () => {
+  withLang("de", () => {
+    assert.equal(newsletterRecipientStatusLabel("pending"), "Ausstehend");
+    assert.equal(newsletterRecipientStatusLabel("confirmed"), "Bestätigt");
+    const rows = newsletterRecipientRows(fakeDocument, {});
+    assert.ok(textOf(rows).includes("Noch keine weiteren"));
+    const withData = newsletterRecipientRows(fakeDocument, {
+      newsletterRecipients: [{ email: "a@b.test", status: "pending", createdAt: "x" }],
+    });
+    assert.ok(textOf(withData).includes("Bestätigungs-E-Mail gesendet"));
+  });
+});
+
+test("DE-Modus: wireNewsletterRecipientAdd/newsletterRecipientRemove melden deutsch", async () => {
+  await withLangAsync("de", async () => {
+    const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { ok: true, status: "pending" } }));
+    try {
+      const form = fakeForm();
+      const input = fakeField("x@example.test");
+      const addBtn = fakeAddBtn();
+      const messages = [];
+      wireNewsletterRecipientAdd(
+        { form, input, addBtn },
+        { onMessage: (text, ok) => messages.push({ text, ok }), onAdded: async () => {} },
+      );
+      await form.submit();
+      assert.deepEqual(messages, [{ text: "Bestätigungs-E-Mail gesendet.", ok: true }]);
+    } finally {
+      f.restore();
+    }
+  });
 });

@@ -23,6 +23,8 @@ import {
   startBillingCancel,
   startBillingResume,
   subscriptionFrom,
+  addNewsletterRecipient,
+  removeNewsletterRecipient,
 } from "../src/lib/api.js";
 // Backend-Quelle der Wahrheit fuer die Anzeige-Status-Werte (Drift-Test, G22): der
 // Frontend-Spiegel NUMBER_STATUS muss exakt NUMBER_DISPLAY_STATUS entsprechen.
@@ -436,6 +438,66 @@ test("startBillingResume postet same-origin ohne Body", async () => {
     assert.equal(path, "/api/self-service/billing/resume");
     assert.equal(options.method, "POST");
     assert.equal(options.body, undefined);
+  } finally {
+    f.restore();
+  }
+});
+
+// F2-Newsletter-Recipients: addNewsletterRecipient/removeNewsletterRecipient --
+// kleine, reine POST/DELETE-Wrapper (Muster startBillingCancel).
+test("addNewsletterRecipient postet {email} same-origin, KEIN Authorization-Header", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { ok: true, status: "pending" } }));
+  try {
+    const result = await addNewsletterRecipient("freund@example.test");
+    assert.deepEqual(result, { ok: true, status: "pending" });
+    const { path, options } = f.calls[0];
+    assert.equal(path, "/api/self-service/newsletter-recipients");
+    assert.equal(options.method, "POST");
+    assert.equal(options.credentials, "same-origin");
+    assert.deepEqual(JSON.parse(options.body), { email: "freund@example.test" });
+    assert.equal(options.headers.Authorization, undefined);
+  } finally {
+    f.restore();
+  }
+});
+
+test("addNewsletterRecipient wirft ApiError mit code bei 400 (z.B. duplicate)", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 400, json: { error: "duplicate" } }));
+  try {
+    await assert.rejects(addNewsletterRecipient("x@example.test"), (err) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.status, 400);
+      assert.equal(err.code, "duplicate");
+      return true;
+    });
+  } finally {
+    f.restore();
+  }
+});
+
+test("removeNewsletterRecipient sendet DELETE {email} same-origin", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { ok: true, removed: true } }));
+  try {
+    const result = await removeNewsletterRecipient("freund@example.test");
+    assert.deepEqual(result, { ok: true, removed: true });
+    const { path, options } = f.calls[0];
+    assert.equal(path, "/api/self-service/newsletter-recipients");
+    assert.equal(options.method, "DELETE");
+    assert.equal(options.credentials, "same-origin");
+    assert.deepEqual(JSON.parse(options.body), { email: "freund@example.test" });
+  } finally {
+    f.restore();
+  }
+});
+
+test("removeNewsletterRecipient wirft ApiError bei non-2xx", async () => {
+  const f = stubFetch(() => fakeResponse({ ok: false, status: 401, json: {} }));
+  try {
+    await assert.rejects(removeNewsletterRecipient("x@example.test"), (err) => {
+      assert.ok(err instanceof ApiError);
+      assert.equal(err.status, 401);
+      return true;
+    });
   } finally {
     f.restore();
   }

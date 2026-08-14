@@ -1,8 +1,10 @@
 // F2-Mail - Integration ueber makeCallFinish: Versand genau einmal (Dedup nach Erfolg),
 // ein Mailer-Fehler laesst finishCall/Billing/SMS unberuehrt (fail-soft), Skip wird
-// PII-frei auditiert (keine E-Mail-Adresse im Audit-Detail). Unit-Test mit Fake-
-// Kollaboratoren (Muster test/web-14-call-finish-sms-text-language.test.js), kein
-// Server-Spawn, kein Netz.
+// PII-frei auditiert (keine E-Mail-Adresse im Audit-Detail). F2-Newsletter-Recipients:
+// CONFIRMED-Zusatzempfaenger bekommen eine EIGENE Mail MIT Abmelde-Link-Footer, PENDING
+// keine, ein Teilfehler ist fail-soft (Marker trotzdem gesetzt, s. mail-summary.js/
+// call-finish.js Kommentar "bewusste Vereinfachung"). Unit-Test mit Fake-Kollaboratoren
+// (Muster test/web-14-call-finish-sms-text-language.test.js), kein Server-Spawn, kein Netz.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
@@ -11,8 +13,9 @@ import { seedCall } from "./helpers.js";
 const ANSWERED_AT = "2026-08-14T10:00:00.000Z";
 const ENDED_AT = "2026-08-14T10:05:00.000Z";
 const ACCOUNT_EMAIL = "kunde@example.test";
+const PUBLIC_URL = "https://hermes.example.test";
 
-function makeFakeStore({ consent = true } = {}) {
+function makeFakeStore({ consent = true, recipients = [] } = {}) {
   const calls = { markSummaryMailSent: [], markSummarySmsSent: [] };
   return {
     calls,
@@ -27,6 +30,7 @@ function makeFakeStore({ consent = true } = {}) {
     markBilled: () => {},
     markSummaryMailSent: () => calls.markSummaryMailSent.push(1),
     tenantNewsletterConsent: () => ({ consent }),
+    confirmedNewsletterRecipients: () => recipients,
   };
 }
 
@@ -37,16 +41,20 @@ function fakeAccountsRef(email = ACCOUNT_EMAIL) {
 const SUMMARY_TEXT = "Kurze Zusammenfassung.";
 
 // Fake-summarizeCall MUSS wie die echte Implementierung (claude.js) call.summary als
-// Nebeneffekt setzen, BEVOR sie zurueckkehrt - genau das liest Gate (d) in
+// Nebeneffekt setzen, BEVOR sie zurueckkehrt - genau das liest Gate (c) in
 // planSummaryMail (mail-summary.js). Ein Fake, der nur den Rueckgabewert liefert (wie in
 // test/web-14-*.test.js, wo keine Mail-Gate den call.summary-Nebeneffekt braucht), wuerde
-// hier Gate (d) faelschlich als "keine Summary" auswerten.
+// hier Gate (c) faelschlich als "keine Summary" auswerten.
 async function fakeSummarizeCall(call) {
   call.summary = SUMMARY_TEXT;
   return { summary: SUMMARY_TEXT, actionItems: [] };
 }
 
-const config = { billing: { paymentEnabled: false, smsCostCents: 0 }, privacy: {} };
+const config = {
+  billing: { paymentEnabled: false, smsCostCents: 0 },
+  privacy: {},
+  server: { publicUrl: PUBLIC_URL },
+};
 const noopSms = () => ({ send: false, reason: null });
 
 function makeCompletedCall(over = {}) {
@@ -79,6 +87,7 @@ test("Versand genau einmal: Erfolg -> markSummaryMailSent gesetzt, kein zweiter 
   assert.equal(sendCalls.length, 1, "Mail wird genau einmal verschickt");
   assert.equal(sendCalls[0].to, ACCOUNT_EMAIL);
   assert.match(sendCalls[0].text, /Kurze Zusammenfassung\./);
+  assert.doesNotMatch(sendCalls[0].text, /Abmelden:/, "Konto-Adresse bekommt KEINEN Abmelde-Link");
   assert.equal(store.calls.markSummaryMailSent.length, 1, "Dedup-Marker gesetzt");
 
   // Zweiter Aufruf (z.B. spaeter /voice/status-Retry): call._finished ist bereits gesetzt
@@ -109,7 +118,7 @@ test("Versand-Dedup ueber den persistierten Marker: call.summaryMailSentAt berei
   assert.equal(sendCalls.length, 0, "persistierter Marker unterdrueckt den Versand");
 });
 
-test("fail-soft: Mailer wirft -> finishCall wirft NICHT, Billing/SMS-Pfad bleibt unberuehrt", async () => {
+test("fail-soft: Mailer wirft fuer das EINZIGE Ziel -> finishCall wirft NICHT, Billing/SMS-Pfad bleibt unberuehrt, KEIN Marker", async () => {
   const smsCalls = [];
   const store = makeFakeStore({ consent: true });
   const call = makeCompletedCall();
@@ -158,7 +167,7 @@ test("Skip-Audit: kein Mailer konfiguriert -> audit mail_summary_skipped reason=
   assert.doesNotMatch(skip.detail, new RegExp(ACCOUNT_EMAIL), "keine E-Mail-Adresse im Audit-Detail");
 });
 
-test("Skip-Audit: keine Konto-E-Mail -> reason=no_account_email, kein Throw", async () => {
+test("Skip-Audit: keine Konto-E-Mail, keine Zusatzempfaenger -> reason=no_account_email, kein Throw", async () => {
   const auditCalls = [];
   const store = makeFakeStore({ consent: true });
   const call = makeCompletedCall();
@@ -180,7 +189,7 @@ test("Skip-Audit: keine Konto-E-Mail -> reason=no_account_email, kein Throw", as
   assert.equal(skip.detail, `call=${call.id} reason=no_account_email`);
 });
 
-test("kein Newsletter-Opt-in -> kein Versand, KEIN Audit-Eintrag (kein Ziel-Defizit)", async () => {
+test("kein Newsletter-Opt-in, keine Zusatzempfaenger -> kein Versand, KEIN Audit-Eintrag (kein Ziel-Defizit)", async () => {
   const auditCalls = [];
   const sendCalls = [];
   const store = makeFakeStore({ consent: false });
@@ -217,4 +226,113 @@ test("Default-Aufrufer ohne mailer/accountsRef (Bestandstests) bleiben gueltig -
   });
 
   await assert.doesNotReject(() => callFinish.finishCall(call));
+});
+
+// ---- F2-Newsletter-Recipients: CONFIRMED-Zusatzempfaenger ----------------------------
+
+test("CONFIRMED-Zusatzempfaenger bekommt eine EIGENE Mail MIT Abmelde-Link (Konto-Adresse bleibt ohne)", async () => {
+  const sendCalls = [];
+  const store = makeFakeStore({
+    consent: true,
+    recipients: [{ email: "freund@example.test", unsubToken: "tok_freund" }],
+  });
+  const call = makeCompletedCall();
+  const callFinish = makeCallFinish({
+    store,
+    config,
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
+    messaging: () => ({ sendSms: async () => {} }),
+    summarizeCall: fakeSummarizeCall,
+    planSummarySms: noopSms,
+    audit: () => {},
+    mailer: { sendMail: async (p) => sendCalls.push(p) },
+    accountsRef: fakeAccountsRef(),
+  });
+
+  await callFinish.finishCall(call);
+  assert.equal(sendCalls.length, 2, "Konto-Adresse UND Zusatzempfaenger bekommen je eine Mail");
+  const accountMail = sendCalls.find((m) => m.to === ACCOUNT_EMAIL);
+  const recipientMail = sendCalls.find((m) => m.to === "freund@example.test");
+  assert.ok(accountMail && recipientMail);
+  assert.doesNotMatch(accountMail.text, /Abmelden:/, "Konto-Adresse ohne Abmelde-Link");
+  assert.match(recipientMail.text, /Abmelden:.*\/newsletter\/unsubscribe\?token=tok_freund/s);
+  assert.equal(store.calls.markSummaryMailSent.length, 1, "EIN Marker fuer den gesamten Call (nicht pro Ziel)");
+});
+
+test("nur PENDING-Zusatzempfaenger (nicht bestaetigt) -> store liefert ihn nicht ueber confirmedNewsletterRecipients -> keine Mail an ihn", async () => {
+  // confirmedNewsletterRecipients ist bereits die GEFILTERTE Sicht (state-ops.js) - ein
+  // pending-Eintrag taucht dort nie auf. Dieser Test haelt die Erwartung an der Store-
+  // Fassaden-Grenze fest (Konto-Pfad bleibt der einzige Empfaenger).
+  const sendCalls = [];
+  const store = makeFakeStore({ consent: true, recipients: [] });
+  const call = makeCompletedCall();
+  const callFinish = makeCallFinish({
+    store,
+    config,
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
+    messaging: () => ({ sendSms: async () => {} }),
+    summarizeCall: fakeSummarizeCall,
+    planSummarySms: noopSms,
+    audit: () => {},
+    mailer: { sendMail: async (p) => sendCalls.push(p) },
+    accountsRef: fakeAccountsRef(),
+  });
+
+  await callFinish.finishCall(call);
+  assert.equal(sendCalls.length, 1);
+  assert.equal(sendCalls[0].to, ACCOUNT_EMAIL);
+});
+
+test("Teilfehler fail-soft: EIN Ziel schlaegt fehl, das andere gelingt -> Fehler geloggt, trotzdem EIN Marker (kein gezielter Retry)", async () => {
+  const sendCalls = [];
+  const store = makeFakeStore({
+    consent: true,
+    recipients: [{ email: "kaputt@example.test", unsubToken: "tok_kaputt" }],
+  });
+  const call = makeCompletedCall();
+  const callFinish = makeCallFinish({
+    store,
+    config,
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
+    messaging: () => ({ sendSms: async () => {} }),
+    summarizeCall: fakeSummarizeCall,
+    planSummarySms: noopSms,
+    audit: () => {},
+    mailer: {
+      sendMail: async (p) => {
+        if (p.to === "kaputt@example.test") throw new Error("bounced");
+        sendCalls.push(p);
+      },
+    },
+    accountsRef: fakeAccountsRef(),
+  });
+
+  await assert.doesNotReject(() => callFinish.finishCall(call));
+  assert.equal(sendCalls.length, 1, "nur das erfolgreiche Ziel wurde tatsaechlich zugestellt");
+  assert.equal(store.calls.markSummaryMailSent.length, 1, "Marker gesetzt, weil MINDESTENS ein Ziel erfolgreich war");
+});
+
+test("Consent=false, aber CONFIRMED-Zusatzempfaenger vorhanden -> orthogonale Achse, trotzdem Versand NUR an den Zusatzempfaenger", async () => {
+  const sendCalls = [];
+  const store = makeFakeStore({
+    consent: false,
+    recipients: [{ email: "freund@example.test", unsubToken: "tok_freund" }],
+  });
+  const call = makeCompletedCall();
+  const callFinish = makeCallFinish({
+    store,
+    config,
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
+    messaging: () => ({ sendSms: async () => {} }),
+    summarizeCall: fakeSummarizeCall,
+    planSummarySms: noopSms,
+    audit: () => {},
+    mailer: { sendMail: async (p) => sendCalls.push(p) },
+    accountsRef: fakeAccountsRef(),
+  });
+
+  await callFinish.finishCall(call);
+  assert.equal(sendCalls.length, 1);
+  assert.equal(sendCalls[0].to, "freund@example.test");
+  assert.match(sendCalls[0].text, /Abmelden:/);
 });

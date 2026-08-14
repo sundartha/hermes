@@ -311,6 +311,18 @@ export const {
   // ist die EINE Quelle fuer server.js).
   setNewsletterConsent,
   tenantNewsletterConsent,
+  // Newsletter-Zusatzempfaenger (Double-Opt-in) - Queries + Mutationen + die beiden
+  // oeffentlichen Token-Pfade (confirm/unsubscribe). Muster setPrivateNumber/tenantPrivateNumber.
+  // OHNE diese Re-Exports sind sie auf der Fassade undefined -> self-service-routes wuerfe
+  // zur Laufzeit einen TypeError (die Backends json.js/pg.js exportieren beide; die Fassade
+  // ist die EINE Quelle fuer server.js).
+  tenantNewsletterRecipients,
+  confirmedNewsletterRecipients,
+  dailyNewsletterConfirmMailCount,
+  addNewsletterRecipient,
+  removeNewsletterRecipient,
+  confirmNewsletterRecipientByToken,
+  unsubscribeNewsletterRecipientByToken,
 } = backend;
 
 // withStoreLock(fn) - prozess-lokaler Single-Writer-Guard (OT-3 AC2). Serialisiert

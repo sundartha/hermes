@@ -69,6 +69,9 @@ import { hasInboundNotice } from "../i18n/inbound-notice.js";
 import { isDenied } from "../telephony/number-denylist.js";
 // AL-P11: EINE Mutationsquelle fuer das Entfernen der Ergebnis-Karten-Zitate (G5).
 import { stripResultEvidence } from "../call-result.js";
+// F2-Newsletter-Recipients: timing-sicherer Token-Vergleich fuer die beiden oeffentlichen
+// Token-Scans (confirm/unsubscribe) - Muster call.streamToken-Pruefung in bridge.js.
+import { safeEqual } from "../util.js";
 // AL-P12: K (=3) lebt im Prompt-Modul, weil dort auch das Zeichenbudget haengt - die
 // Query darf nicht mehr Eintraege liefern, als der Prompt je rendern kann (EINE Quelle).
 // call-memory.js ist ein Blatt-Modul (kein Rueckimport, kein Zyklus), Muster call-result.js.
@@ -2322,6 +2325,125 @@ export function tenantNewsletterConsent(s, tenantId) {
     consent: tenant?.newsletterConsent === true,
     consentAt: tenant?.newsletterConsentAt ?? null,
   };
+}
+
+// ---- Newsletter-Zusatzempfaenger (Double-Opt-in) ----
+// Additiv NEBEN dem Boolean-Consent-Pfad oben: newsletterConsent/newsletterConsentAt steuern
+// weiterhin AUSSCHLIESSLICH die Konto-Adresse. newsletterRecipients ist eine EIGENE, zweite
+// Empfaengerliste je Tenant fuer beliebige Zusatzadressen (Owner-Auftrag F2-Newsletter-
+// Recipients) - beide Achsen sind orthogonal, ein Tenant kann Consent=false UND bestaetigte
+// Zusatzempfaenger haben. Jeder Eintrag: { email, status: "pending"|"confirmed", createdAt,
+// confirmedAt, tokenHash, tokenExpiresAt, unsubToken }. tokenHash traegt NUR den SHA256 des
+// Bestaetigungs-Tokens (Einmalverwendung, nach Erfolg geleert). unsubToken ist der KLARTEXT-
+// Abmelde-Token (bewusste Abweichung vom Feldnamen unsubTokenHash im Auftrag - Begruendung
+// src/newsletter-recipients.js newNewsletterTokens).
+//
+// Gate-Entscheidungen (Format/Duplikat/Cap/Tageslimit) leben in src/newsletter-recipients.js
+// (planAddNewsletterRecipient) - hier NUR die Rohdaten-Mutation, kein Fachwissen ueber
+// Grenzwerte (G17: state-ops bleibt die reine Datenschicht, Muster createCall/state-ops-weite
+// Konvention).
+
+// Lese-Query: ALLE Eintraege eines Tenants (pending + confirmed), Muster tenantPrivateNumber.
+// Fail-closed leeres Array (nie undefined) - ein Tenant ohne Zeile hat schlicht keine.
+export function tenantNewsletterRecipients(s, tenantId) {
+  return findTenant(s, tenantId)?.newsletterRecipients ?? [];
+}
+
+// Nur die BESTAETIGTEN Eintraege (mail-summary.js/call-finish.js: Summary-Mail-Ziel).
+export function confirmedNewsletterRecipients(s, tenantId) {
+  return tenantNewsletterRecipients(s, tenantId).filter((r) => r.status === "confirmed");
+}
+
+// Anzahl der ausgeloesten Bestaetigungs-Mails seit sinceIso (Missbrauchsschutz-Tageslimit,
+// s. newsletter-recipients.js NEWSLETTER_CONFIRM_MAIL_DAILY_CAP). Reine Query, kein IO.
+export function dailyNewsletterConfirmMailCount(s, tenantId, sinceIso) {
+  const tenant = findTenant(s, tenantId);
+  return (tenant?.newsletterConfirmMailLog ?? []).filter((t) => t >= sinceIso).length;
+}
+
+// Legt einen neuen pending-Eintrag an UND vermerkt den Bestaetigungs-Mail-Versuch im
+// Tageslimit-Log - EIN Store-Write pro Route-Aufruf (beides gehoert zusammen, s. Aufrufer
+// self-service-routes.js). Das Log wird bei jedem Add auf das rollierende 24h-Fenster
+// geprunt (kein separater Sweep/Retention-Job noetig - es waechst nur bei aktiver Nutzung).
+// Fehlender Tenant -> throw (Muster setKycLevel/setPrivateNumber, kein stilles No-Op). Der
+// AUFRUFER (self-service-routes.js) MUSS vorher planAddNewsletterRecipient() pruefen - diese
+// Funktion validiert NICHT erneut (Trennung Entscheidung/Mutation, Muster planSummaryMail).
+export function addNewsletterRecipient(s, tenantId, { email, tokenHash, tokenExpiresAt, unsubToken, now }) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`addNewsletterRecipient: Tenant ${tenantId} nicht gefunden`);
+  const nowIso = now ?? new Date().toISOString();
+  tenant.newsletterRecipients ??= [];
+  tenant.newsletterRecipients.push({
+    email,
+    status: "pending",
+    createdAt: nowIso,
+    confirmedAt: null,
+    tokenHash,
+    tokenExpiresAt,
+    unsubToken,
+  });
+  const cutoff = new Date(Date.parse(nowIso) - MS_PER_DAY).toISOString();
+  tenant.newsletterConfirmMailLog = (tenant.newsletterConfirmMailLog ?? [])
+    .filter((t) => t >= cutoff)
+    .concat(nowIso);
+  return tenant.newsletterRecipients[tenant.newsletterRecipients.length - 1];
+}
+
+// Entfernt einen Eintrag (pending ODER confirmed) per Self-Service-Aktion. Idempotent: kein
+// Treffer -> No-Op, liefert false (Aufrufer entscheidet ueber die HTTP-Antwort). Fehlender
+// Tenant -> throw (Muster addNewsletterRecipient).
+export function removeNewsletterRecipient(s, tenantId, email) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`removeNewsletterRecipient: Tenant ${tenantId} nicht gefunden`);
+  const before = (tenant.newsletterRecipients ?? []).length;
+  tenant.newsletterRecipients = (tenant.newsletterRecipients ?? []).filter((r) => r.email !== email);
+  return tenant.newsletterRecipients.length !== before;
+}
+
+// Oeffentlicher Bestaetigungs-Pfad (GET /newsletter/confirm): der Request traegt NUR ein
+// Token, keine Tenant-/E-Mail-Identitaet - deshalb linearer Scan ueber ALLE Tenants (Muster
+// findTenantByCustomer), Cap 5 pro Tenant haelt das klein. safeEqual gegen jeden Kandidaten
+// (kein Short-Circuit-String-Vergleich auf einem Secret). Treffer NUR bei status="pending"
+// UND nicht abgelaufen (tokenExpiresAt > nowIso) - ein bereits bestaetigter Eintrag hat
+// tokenHash=null und matcht nie wieder (Einmalverwendung, keine gesonderte Pruefung noetig).
+// Erfolg mutiert (status/confirmedAt gesetzt, tokenHash/tokenExpiresAt geleert) und liefert
+// {tenantId, email}; kein Treffer -> null (der Aufrufer zeigt eine neutrale Fehlseite, OHNE
+// Aufschluss ueber den Grund - Owner-Auftrag).
+export function confirmNewsletterRecipientByToken(s, tokenHash, nowIso) {
+  for (const tenant of tenantsOf(s)) {
+    const match = (tenant.newsletterRecipients ?? []).find(
+      (r) =>
+        r.status === "pending" &&
+        r.tokenHash &&
+        safeEqual(r.tokenHash, tokenHash) &&
+        r.tokenExpiresAt > nowIso,
+    );
+    if (match) {
+      match.status = "confirmed";
+      match.confirmedAt = nowIso;
+      match.tokenHash = null;
+      match.tokenExpiresAt = null;
+      return { tenantId: tenant.id, email: match.email };
+    }
+  }
+  return null;
+}
+
+// Oeffentlicher Abmelde-Pfad (GET /newsletter/unsubscribe): Muster confirmNewsletterRecipient-
+// ByToken (linearer Scan, safeEqual), aber OHNE Ablauf (unsubToken ist permanent) und ueber
+// JEDEN Status (pending ODER confirmed - beide sollen sich jederzeit abmelden koennen). Ein
+// Treffer entfernt den Eintrag vollstaendig (idempotent: ein zweiter Aufruf mit demselben
+// Token findet nichts mehr und liefert null, OHNE zu werfen).
+export function unsubscribeNewsletterRecipientByToken(s, token) {
+  for (const tenant of tenantsOf(s)) {
+    const recipients = tenant.newsletterRecipients ?? [];
+    const idx = recipients.findIndex((r) => r.unsubToken && safeEqual(r.unsubToken, token));
+    if (idx !== -1) {
+      const [removed] = recipients.splice(idx, 1);
+      return { tenantId: tenant.id, email: removed.email };
+    }
+  }
+  return null;
 }
 
 // ---- Usage / Budget-Guard (Daten-Schicht pro-Tenant, P4) ----

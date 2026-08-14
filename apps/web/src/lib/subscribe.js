@@ -18,6 +18,8 @@ import {
   startBillingSetupCheckout,
   startBillingCancel,
   startBillingResume,
+  addNewsletterRecipient,
+  removeNewsletterRecipient,
 } from "./api.js";
 import { PLAN_CATALOG, formatPlanPrice, findPlan } from "./plans.js";
 import { el } from "./render.js";
@@ -688,4 +690,166 @@ export function wireNewsletterToggle(toggleEl, { onMessage } = {}) {
       toggleEl.disabled = false;
     }
   });
+}
+
+// ---- F2-Newsletter-Recipients: Zusatzempfaenger (Double-Opt-in) --------------
+// Additive Liste NEBEN dem Boolean-Consent-Pfad oben (state.newsletterRecipients,
+// src/newsletter-recipients.js) -- eigene Adressen Dritter, eigenes Gate (Format ->
+// Duplikat (auch gegen die Konto-Adresse) -> Cap 5 -> Tageslimit, s. self-service-
+// routes.js planAddNewsletterRecipient). KEIN eigener state-Fetch hier (Muster
+// BillingIsland refreshState): die Insel re-fetcht nach add/remove selbst und
+// re-dispatcht AUTH_EVENT (onAdded/onRemoved unten).
+
+// Liest die additive Empfaengerliste aus der state-Antwort -- die EINE Stelle, an
+// der dieses Modul die Form `data.newsletterRecipients` annimmt (Contract-Grenze,
+// R5). Kein Array (aelterer Server/fehlend) -> leere Liste (Muster listFrom/
+// callsFrom in lib/api.js), nie ein Absturz.
+export function newsletterRecipientsFrom(data) {
+  const list = data && data.newsletterRecipients;
+  return Array.isArray(list) ? list : [];
+}
+
+// Rueckmeldungen (Muster NEWSLETTER_MESSAGES/CANCEL_MESSAGES): Erfolgs- UND
+// Fehler-Schluessel in EINEM Woerterbuch. Die Fehler-Schluessel sind die
+// STABILEN Server-Codes aus planAddNewsletterRecipient (invalid_format/
+// duplicate/cap_reached/daily_limit, self-service-routes.js) -- direkt als
+// Lookup-Schluessel, kein zweites Mapping.
+export const NEWSLETTER_RECIPIENT_MESSAGES = Object.freeze({
+  added: "Confirmation email sent.",
+  removed: "Recipient removed.",
+  invalid_format: "That doesn't look like a valid email address.",
+  duplicate: "That address is already on your list.",
+  cap_reached: "You've reached the limit of 5 recipients.",
+  daily_limit: "Daily limit reached — please try again tomorrow.",
+  sessionExpired: SUBSCRIBE_MESSAGES.sessionExpired,
+  failed: "Couldn't save your change. Please try again.",
+});
+export const NEWSLETTER_RECIPIENT_MESSAGES_DE = Object.freeze({
+  added: "Bestätigungs-E-Mail gesendet.",
+  removed: "Empfänger entfernt.",
+  invalid_format: "Das sieht nicht nach einer gültigen E-Mail-Adresse aus.",
+  duplicate: "Diese Adresse steht bereits auf deiner Liste.",
+  cap_reached: "Du hast das Limit von 5 Empfängern erreicht.",
+  daily_limit: "Tageslimit erreicht — bitte versuch es morgen erneut.",
+  sessionExpired: SUBSCRIBE_MESSAGES_DE.sessionExpired,
+  failed: "Deine Änderung konnte nicht gespeichert werden. Bitte versuch es erneut.",
+});
+function newsletterRecipientMessage(key) {
+  return tDyn({ en: NEWSLETTER_RECIPIENT_MESSAGES, de: NEWSLETTER_RECIPIENT_MESSAGES_DE }, key);
+}
+
+// Fehlertext einer fehlgeschlagenen Add/Remove-Anfrage: 401 -> Session abgelaufen;
+// ein bekannter Server-Code -> die passende Meldung; sonst der generische
+// Fallback (Muster handleSubscribeError, fail-closed nie erfunden).
+function newsletterRecipientErrorText(err) {
+  if (isUnauthorized(err)) return newsletterRecipientMessage("sessionExpired");
+  const code = err instanceof ApiError ? err.code : undefined;
+  if (code && Object.prototype.hasOwnProperty.call(NEWSLETTER_RECIPIENT_MESSAGES, code)) {
+    return newsletterRecipientMessage(code);
+  }
+  return newsletterRecipientMessage("failed");
+}
+
+// Status-Pillen-Beschriftung + CSS-Klassen-Suffix je Empfaenger-Status. Nutzt
+// DIESELBEN Farbtoken wie die Billing-Status-Pille oben (billing-status-badge
+// --active/--cancelled -- EINE Quelle/G5 statt neu erfundener Farben): pending =
+// gelblich (--cancelled-Ton), confirmed = gruenlich (--active-Ton), exakt die im
+// Auftrag genannte Materialsprache der Call-Status-Pillen (calls.css).
+export const NEWSLETTER_RECIPIENT_STATUS_LABELS = Object.freeze({ pending: "Pending", confirmed: "Confirmed" });
+export const NEWSLETTER_RECIPIENT_STATUS_LABELS_DE = Object.freeze({ pending: "Ausstehend", confirmed: "Bestätigt" });
+export function newsletterRecipientStatusLabel(status) {
+  return (
+    tDyn({ en: NEWSLETTER_RECIPIENT_STATUS_LABELS, de: NEWSLETTER_RECIPIENT_STATUS_LABELS_DE }, status) || status
+  );
+}
+export function newsletterRecipientBadgeClass(status) {
+  return status === "confirmed" ? "active" : "cancelled";
+}
+
+const RECIPIENT_EMPTY = "No additional recipients yet.";
+const RECIPIENT_EMPTY_DE = "Noch keine weiteren Empfänger.";
+const RECIPIENT_REMOVE_LABEL = "Remove recipient";
+const RECIPIENT_REMOVE_LABEL_DE = "Empfänger entfernen";
+const RECIPIENT_PENDING_HINT = "Confirmation email sent";
+const RECIPIENT_PENDING_HINT_DE = "Bestätigungs-E-Mail gesendet";
+const RECIPIENT_STATUS_PENDING = "pending";
+
+// Eine Empfaenger-Zeile: Adresse (Sans) + Status-Pille + Ghost-Kreuz zum
+// Entfernen; eine pending-Zeile traegt zusaetzlich den Mono-Hinweis (Auftrag).
+// onRemove(email, button) wird bei jedem Zeilen-eigenen Button-Klick gerufen --
+// kein delegierter Listener noetig, die Liste wird bei jedem AUTH_EVENT komplett
+// ersetzt (Muster callRow in lib/render.js).
+function recipientRow(doc, recipient, onRemove) {
+  const li = el(doc, "li", "newsletter-recipient");
+  const main = el(doc, "div", "newsletter-recipient__main");
+  main.append(el(doc, "span", "newsletter-recipient__email", recipient.email));
+  main.append(
+    el(
+      doc,
+      "span",
+      `billing-status-badge billing-status-badge--${newsletterRecipientBadgeClass(recipient.status)}`,
+      newsletterRecipientStatusLabel(recipient.status),
+    ),
+  );
+  const removeBtn = el(doc, "button", "newsletter-recipient__remove", "×");
+  removeBtn.type = "button";
+  removeBtn.setAttribute("aria-label", tPair(RECIPIENT_REMOVE_LABEL, RECIPIENT_REMOVE_LABEL_DE));
+  removeBtn.addEventListener("click", () => onRemove(recipient.email, removeBtn));
+  main.append(removeBtn);
+  li.append(main);
+  if (recipient.status === RECIPIENT_STATUS_PENDING) {
+    li.append(el(doc, "p", "newsletter-form__hint", tPair(RECIPIENT_PENDING_HINT, RECIPIENT_PENDING_HINT_DE)));
+  }
+  return li;
+}
+
+// Die Empfaengerliste als DOM-Knoten (Muster callRows: (doc, data, onSelect) ->
+// Knoten, direkt mit bindList verdrahtbar). Leere Liste -> EINE ruhige
+// Hinweiszeile (data-empty, dieselbe Optik wie die Anrufliste), kein leeres <ul>.
+export function newsletterRecipientRows(doc, data, onRemove = () => {}) {
+  const recipients = newsletterRecipientsFrom(data);
+  if (!recipients.length) return [el(doc, "li", "data-empty", tPair(RECIPIENT_EMPTY, RECIPIENT_EMPTY_DE))];
+  return recipients.map((r) => recipientRow(doc, r, onRemove));
+}
+
+// Verdrahtet das Hinzufuegen-Formular (echtes <form>, Muster wireNewsletterToggle:
+// schreibt sofort gegen die Route, kein zweiter Speichern-Schritt -- ein <form>
+// gibt native Enter-zum-Absenden-Semantik gratis dazu). Doppel-Submit-Schutz wie
+// wireSubscribe/wireCancelControls (busy-Flag). Erfolg -> Feld geleert + onAdded()
+// (die Insel re-fetcht + re-dispatcht AUTH_EVENT, Muster BillingIsland
+// refreshState). els = { form, input, addBtn }.
+export function wireNewsletterRecipientAdd(els, { onAdded, onMessage } = {}) {
+  let busy = false;
+  els.form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (busy) return undefined;
+    const email = els.input.value.trim();
+    busy = true;
+    els.addBtn.disabled = true;
+    return addNewsletterRecipient(email)
+      .then(async () => {
+        els.input.value = "";
+        onMessage(newsletterRecipientMessage("added"), true);
+        await onAdded();
+      })
+      .catch((err) => onMessage(newsletterRecipientErrorText(err), false))
+      .finally(() => {
+        busy = false;
+        els.addBtn.disabled = false;
+      });
+  });
+}
+
+// Ein Entfernen-Lauf (Klick auf das Ghost-Kreuz einer Zeile): kein Doppelklick-
+// Schutz noetig (jede Zeile traegt ihren eigenen Button, der Server ist ohnehin
+// idempotent -- Muster removeRecipient in self-service-routes.js). Erfolg ->
+// Meldung + onRemoved() (Re-Fetch, Muster wireCancelControls onDone).
+export async function newsletterRecipientRemove(email, { onMessage, onRemoved } = {}) {
+  try {
+    await removeNewsletterRecipient(email);
+    onMessage(newsletterRecipientMessage("removed"), true);
+    await onRemoved();
+  } catch (err) {
+    onMessage(newsletterRecipientErrorText(err), false);
+  }
 }

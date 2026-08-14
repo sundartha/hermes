@@ -167,6 +167,7 @@ const WEB_LOGIN_PROOF = [
 // Gepinnter Fingerprint: jede Route mehr oder weniger erzwingt eine bewusste
 // Aktualisierung dieser Liste - und damit eine Einordnung in src/route-policy.js.
 const ROUTE_FINGERPRINT = [
+  "DELETE /api/self-service/newsletter-recipients",
   "DELETE /mcp",
   "GET /.well-known/oauth-protected-resource",
   "GET /.well-known/oauth-protected-resource/mcp",
@@ -192,6 +193,8 @@ const ROUTE_FINGERPRINT = [
   "GET /healthz",
   "GET /login",
   "GET /mcp",
+  "GET /newsletter/confirm",
+  "GET /newsletter/unsubscribe",
   "GET /portal",
   "GET /sign-in",
   "GET /signin",
@@ -212,6 +215,7 @@ const ROUTE_FINGERPRINT = [
   "POST /api/self-service/billing/setup-checkout",
   "POST /api/self-service/billing/subscribe",
   "POST /api/self-service/newsletter-consent",
+  "POST /api/self-service/newsletter-recipients",
   "POST /api/self-service/private-number",
   "POST /api/self-service/settings",
   "POST /auth/logout",

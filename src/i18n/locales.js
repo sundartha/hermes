@@ -230,6 +230,28 @@ export const LOCALES = Object.freeze({
       // (Muster der uebrigen postCall-Strings).
       mailTimeLabel: "Zeitpunkt:",
       mailDurationLabel: "Dauer:",
+      // F2-Newsletter-Recipients: Abmelde-Link-Zeile am Ende JEDER Summary-Mail an eine
+      // Zusatzadresse (Owner-Auftrag). Die Konto-Mail traegt diese Zeile NICHT (kein
+      // unsubToken fuer den Konto-Pfad, s. mail-summary.js).
+      unsubscribeLinkLabel: "Abmelden:",
+    }),
+    // F2-Newsletter-Recipients: Bestaetigungs-Mail (Double-Opt-in) + die vier oeffentlichen
+    // Seiten-Texte (GET /newsletter/confirm, /newsletter/unsubscribe). NIE gesprochen (Muster
+    // postCall). ownerName/confirmUrl werden vom Aufrufer gebunden (keine Identitaets-Logik
+    // im Bundle, Muster disclosure/bridgePhrase).
+    newsletter: Object.freeze({
+      confirmMailSubject: "Bestätigung: Anruf-Zusammenfassungen erhalten",
+      confirmMailText: (ownerName, confirmUrl) =>
+        `Hallo,\n\n${ownerName} hat diese E-Mail-Adresse eingetragen, um Anruf-Zusammenfassungen ` +
+        `von Hermes zu erhalten. Bitte bestätige die Anmeldung über diesen Link:\n\n${confirmUrl}\n\n` +
+        "Der Link ist 48 Stunden gültig. Wenn du das nicht warst, musst du nichts tun - " +
+        "ohne Bestätigung wird die Adresse nicht verwendet.",
+      confirmedPageTitle: "E-Mail bestätigt",
+      confirmedPageBody: "Du erhältst ab jetzt Anruf-Zusammenfassungen.",
+      invalidPageTitle: "Link ungültig",
+      invalidPageBody: "Dieser Bestätigungslink ist ungültig oder abgelaufen.",
+      unsubscribedPageTitle: "Abgemeldet",
+      unsubscribedPageBody: "Du erhältst keine weiteren Anruf-Zusammenfassungen mehr.",
     }),
   }),
   fr: Object.freeze({
@@ -311,6 +333,23 @@ export const LOCALES = Object.freeze({
       // F2-Mail: Labels der Call-Summary-Mail, s. DE.
       mailTimeLabel: "Heure :",
       mailDurationLabel: "Durée :",
+      // F2-Newsletter-Recipients: Abmelde-Link-Zeile, s. DE.
+      unsubscribeLinkLabel: "Se désabonner :",
+    }),
+    // F2-Newsletter-Recipients: s. DE.
+    newsletter: Object.freeze({
+      confirmMailSubject: "Confirmation : recevoir les résumés d'appel",
+      confirmMailText: (ownerName, confirmUrl) =>
+        `Bonjour,\n\n${ownerName} a inscrit cette adresse e-mail pour recevoir les résumés ` +
+        `d'appel de Hermes. Merci de confirmer votre inscription via ce lien :\n\n${confirmUrl}\n\n` +
+        "Ce lien est valable 48 heures. Si ce n'était pas vous, vous n'avez rien à faire - " +
+        "sans confirmation, l'adresse ne sera pas utilisée.",
+      confirmedPageTitle: "E-mail confirmé",
+      confirmedPageBody: "Vous recevrez désormais les résumés d'appel.",
+      invalidPageTitle: "Lien invalide",
+      invalidPageBody: "Ce lien de confirmation est invalide ou expiré.",
+      unsubscribedPageTitle: "Désabonné",
+      unsubscribedPageBody: "Vous ne recevrez plus de résumés d'appel.",
     }),
   }),
   // EN-Bundle (F1 Phase 4, Owner-Entscheidung #1: DE+FR+EN). GB/IE -> en. Voice/STT
@@ -389,6 +428,23 @@ export const LOCALES = Object.freeze({
       // F2-Mail: Labels der Call-Summary-Mail, s. DE.
       mailTimeLabel: "Time:",
       mailDurationLabel: "Duration:",
+      // F2-Newsletter-Recipients: Abmelde-Link-Zeile, s. DE.
+      unsubscribeLinkLabel: "Unsubscribe:",
+    }),
+    // F2-Newsletter-Recipients: s. DE.
+    newsletter: Object.freeze({
+      confirmMailSubject: "Confirm: receive call summaries",
+      confirmMailText: (ownerName, confirmUrl) =>
+        `Hello,\n\n${ownerName} added this email address to receive call summaries from ` +
+        `Hermes. Please confirm the signup via this link:\n\n${confirmUrl}\n\n` +
+        "This link is valid for 48 hours. If this wasn't you, you don't need to do anything - " +
+        "without confirmation, the address will not be used.",
+      confirmedPageTitle: "Email confirmed",
+      confirmedPageBody: "You will now receive call summaries.",
+      invalidPageTitle: "Link invalid",
+      invalidPageBody: "This confirmation link is invalid or has expired.",
+      unsubscribedPageTitle: "Unsubscribed",
+      unsubscribedPageBody: "You will no longer receive call summaries.",
     }),
   }),
 });

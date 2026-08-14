@@ -508,6 +508,82 @@
   outline-offset: 2px;
 }
 
+/* ---------------------------------------------- 6b. Newsletter: Zusatzempfaenger */
+
+/* F2-Newsletter-Recipients (Double-Opt-in): additive Liste NEBEN dem Konto-
+   Toggle oben, eigener .billing-section-Unterblock (Muster Zahlungsmittel/
+   Kontingent in BillingIsland.astro). Freies E-Mail-Feld + weisse Pille teilen
+   sich bewusst die BESTEHENDE .newsletter-form/__field/.newsletter-toggle__cta-
+   Optik (kein zweites Formular-Aussehen, G5) -- ebenso die Mono-Hinweiszeile
+   (.newsletter-form__hint, wiederverwendet fuer "Confirmation email sent") und
+   die Status-Pille (.billing-status-badge--active/--cancelled oben, dieselben
+   Farbtoken wie die Anruf-Status-Pillen in calls.css -- keine neuen Farben).
+   Hier NUR, was es bisher nicht gab: die Listendarstellung je Zeile + das
+   Ghost-Kreuz zum Entfernen. */
+.newsletter-recipient-list {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.newsletter-recipient {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: rgba(8, 22, 46, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+.newsletter-recipient__main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.newsletter-recipient__email {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: #ffffff;
+}
+
+/* Ghost-Kreis: kleinere Geschwister-Optik von .call-modal__close (calls.css) --
+   gleiche Materialsprache (transparenter Kreis, weisser Rand), passend zur
+   kompakteren Listenzeile statt des Modal-Kopfs. */
+.newsletter-recipient__remove {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: transparent;
+  color: #ffffff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.newsletter-recipient__remove:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.newsletter-recipient__remove:focus-visible {
+  outline: 2px solid var(--color-accent, #8fb6e3);
+  outline-offset: 2px;
+}
+
 /* -------------------------------------------------------------------- 7. Schmal */
 
 @media (max-width: 640px) {

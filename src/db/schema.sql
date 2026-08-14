@@ -143,6 +143,16 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS cancellation_mail_received_at TEXT;
 -- (Validierung lebt fail-closed im Setter, Muster private_number/kyc_level).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS newsletter_consent    BOOLEAN;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS newsletter_consent_at TEXT;
+-- Newsletter-Zusatzempfaenger (Double-Opt-in): ORTHOGONAL zu newsletter_consent oben (der
+-- Boolean steuert weiterhin NUR die Konto-Adresse). newsletter_recipients traegt die Liste
+-- {email, status, createdAt, confirmedAt, tokenHash, tokenExpiresAt, unsubToken} als JSONB
+-- (Muster consults auf der call-Tabelle: Cap 5/Tenant haelt sie klein, keine eigene Tabelle
+-- noetig). newsletter_confirm_mail_log ist das Tageslimit-Log der Bestaetigungs-Mails
+-- (Missbrauchsschutz, JSONB-Array ISO-Zeitstempel, selbstpruned bei jedem Add-Write - kein
+-- separater Sweep). Additiv NULLABLE, kein CHECK (Validierung fail-closed im Code, Muster
+-- newsletter_consent).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS newsletter_recipients JSONB;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS newsletter_confirm_mail_log JSONB;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (
