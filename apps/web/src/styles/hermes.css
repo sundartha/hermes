@@ -1044,6 +1044,10 @@ a:hover {
   position: fixed;
   inset: 0;
   z-index: 20;
+  /* Overlay-Scroll bleibt im Overlay: kein Scroll-Chaining auf die Seite
+     dahinter (ersetzt eine body-Scrollsperre, die die Scrollposition
+     zuruecksetzen wuerde -- s. Handy-Media-Block). */
+  overscroll-behavior: contain;
   flex-direction: column;
   gap: 20px;
   padding: 53px 22px 22px;
@@ -1652,6 +1656,14 @@ a:hover {
   text-align: center;
 }
 
+/* Seitenfuss der gestapelten Handy-Ansicht (Markup nach dem Entwickler-Blatt
+   in index.astro). Auf dem Desktop uebernimmt das aufsteigende Fussband
+   (.site-footer) -- dort bleibt dieser Block aus; sichtbar macht ihn erst der
+   Handy-Media-Block unten. */
+.stack-foot {
+  display: none;
+}
+
 /* ========================================================= Fenstergroessen */
 
 /* Handy ODER Touch bis 1024px: EINE Regel fuer Aussehen und Verhalten. Das
@@ -1667,11 +1679,28 @@ a:hover {
     justify-content: center;
   }
 
+  /* Owner-Feedback 2026-08-14: Am Handy wird jetzt NORMAL gescrollt. Der Hero
+     bleibt ein voller Bildschirm, danach folgen die drei Blaetter (howto/price/
+     dev) als gestapelte Sektionen plus .stack-foot -- das BODY-Scrollen ersetzt
+     die alte "ein Screen + Vollbild-Blaetter"-Fassung, bei der die Seite unter
+     dem Hero abgeschnitten wirkte. Menue- und Rechts-Blatt bleiben Overlays. */
   .page {
-    overflow: hidden !important;
-    height: 100svh !important;
+    overflow: visible !important;
+    height: auto !important;
   }
   .pin-track {
+    height: 100svh !important;
+  }
+  /* Die Buehne muss dieselbe Hoehe wie ihr Track haben (Basis: 100vh) -- sonst
+     ragt sie auf iOS unter den Track und deckt den Kopf der ersten Sektion ab.
+     Und sie darf NICHT sticky bleiben: position:sticky bildet einen Stacking-
+     Context, der den fixierten Burger (z-index 7, in .nav-mobile) auf den
+     z-Wert der Buehne (auto/0) einsperrt -- die Sektionen (z-index 1) laegen
+     darueber. Ohne Pinning braucht der Ein-Screen-Hero kein sticky; statisch
+     ist die Geometrie identisch (.pin-track ist derselbe 100svh-Kasten und
+     als position:relative weiter Bezug fuer die absoluten Hero-Ebenen). */
+  .stage {
+    position: static !important;
     height: 100svh !important;
   }
   .hero-copy {
@@ -1699,10 +1728,36 @@ a:hover {
   .nav-mobile {
     display: flex !important;
   }
+  /* Der Burger schwebt fest im Sichtfenster (das Logo scrollt mit dem Hero
+     weg): Menue und damit Login/Registrieren + Rechtliches bleiben von jeder
+     Scrollposition aus erreichbar. Dunkler Glas-Chip, damit er auch ueber
+     hellen Wolken lesbar ist. */
+  .nav-mobile .burger {
+    position: fixed;
+    top: 53px;
+    right: 22px;
+    z-index: 7;
+    background: rgba(8, 20, 44, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
   html,
   body {
-    overflow: hidden !important;
-    height: 100svh;
+    overflow-x: hidden;
+    height: auto;
+  }
+  /* BEWUSST KEINE body.sheet-open-Scrollsperre: overflow:hidden am body
+     wuerde die Scrollposition auf 0 zuruecksetzen -- nach "Menue oeffnen,
+     Menue schliessen" stuende die Seite wieder am Hero. Das Durchscrollen
+     hinter dem Overlay verhindert stattdessen overscroll-behavior:contain
+     auf .sheet (Basisregel oben). */
+  /* Fuenf Fusslinks passen bei 390px nicht nowrap in eine Zeile ("Kontakt"
+     lief aus dem Bild): umbrechen lassen, zentriert. */
+  .menu-foot__links {
+    flex-wrap: wrap;
+    justify-content: center;
+    column-gap: 18px;
+    row-gap: 12px;
   }
   html {
     scrollbar-width: none;
@@ -1712,6 +1767,59 @@ a:hover {
   }
   .sheet {
     display: flex !important;
+  }
+  /* Die drei Sektions-Blaetter werden Teil des Seitenflusses: relative statt
+     fixed, immer sichtbar (schlaegt data-open="0"), mindestens ein voller
+     Bildschirm hoch, waechst mit dem Inhalt. Kopfzeile (Logo + Schliessen-
+     Kreuz) entfaellt -- eine Sektion schliesst man nicht. */
+  .sheet[data-sheet="howto"],
+  .sheet[data-sheet="price"],
+  .sheet[data-sheet="dev"] {
+    position: relative !important;
+    inset: auto !important;
+    z-index: 1;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    min-height: 100svh;
+    overflow: hidden;
+    padding-top: 44px;
+    background-attachment: scroll;
+  }
+  /* Hintergrund-Ebenen der Sektionen bleiben in ihrer Sektion (fixed wuerde
+     alle drei uebereinander ins Sichtfenster legen). */
+  .sheet[data-sheet="howto"] .sheet__bg,
+  .sheet[data-sheet="price"] .sheet__bg,
+  .sheet[data-sheet="dev"] .sheet__bg,
+  .sheet[data-sheet="howto"] .sheet__veil,
+  .sheet[data-sheet="price"] .sheet__veil,
+  .sheet[data-sheet="dev"] .sheet__veil,
+  .sheet[data-sheet="howto"] .sheet__top,
+  .sheet[data-sheet="price"] .sheet__top,
+  .sheet[data-sheet="dev"] .sheet__top {
+    position: absolute !important;
+  }
+  .sheet[data-sheet="howto"] .sheet__head,
+  .sheet[data-sheet="price"] .sheet__head,
+  .sheet[data-sheet="dev"] .sheet__head {
+    display: none !important;
+  }
+  /* Seitenfuss der gestapelten Ansicht: Rechtliches, § 312k und Kontakt am
+     Ende der Scroll-Strecke (Markup in index.astro, ausserhalb der Blaetter). */
+  .stack-foot {
+    display: flex;
+    position: relative;
+    z-index: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    padding: 28px 22px 40px;
+    background: #071026;
+  }
+  .stack-foot .menu-foot__links {
+    flex-wrap: wrap;
+    justify-content: center;
+    column-gap: 18px;
+    row-gap: 12px;
   }
   .hero-bg {
     inset: 0 0 auto 0 !important;
