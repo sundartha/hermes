@@ -10,6 +10,15 @@
 //   nicht ein bestimmtes Werkzeug: ein Kriterium wird gruen oder rot, weil jemand am
 //   Agenten etwas an- oder abgehaengt hat, und niemand merkt es.
 //
+// E-5/E-6 (Regressionsschutz, "npm test", heute ROT): dieselbe Ratsche, angewandt auf die
+//   Sprachwechsel-Entscheidung. Der Prompt verbot den Wechsel ("Speak only in this
+//   language"), das eingebaute language_detection leistet ihn - im Konflikt gewinnt mal das
+//   eine, mal das andere. Die Faelle fordern die Aufloesung ein: Startsprache Englisch,
+//   Wechsel erlaubt, Ziel unveraendert, kein Rueckwechsel-Zwang, Werkzeug und Zusatzsprache
+//   am Agenten. Rot ist hier kein Regressionsfang, sondern die noch offene Aenderung an der
+//   Vorlage; ein Abnahmekriterium ist es aber auch nicht, denn der Zustand muss danach
+//   dauerhaft gelten - deshalb Regressionslauf, deshalb keine ABNAHME--Kennung.
+//
 // R16 (Abnahmekriterium, "npm run test:abnahme", heute ROT): der Prompt nennt get_consult
 //   nur, wenn das Rueckfrage-Gate (src/consult/gate.js) es zulaesst. Nennt der Prompt ein
 //   Werkzeug, das das Gate sperrt, verspricht der Agent seinem Gegenueber eine Rueckfrage,
@@ -61,10 +70,14 @@ const configKeysOf = (obj) =>
 
 // In Stufen gelesen statt in einer Kette: das Agenten-Objekt ist vier Ebenen tief
 // (G36/Demeter, im Lint dieses Repos ein Fehler).
-const agentSection = () => TEMPLATE.agent?.conversation_config?.agent ?? {};
+const conversationConfig = () => TEMPLATE.agent?.conversation_config ?? {};
+const agentSection = () => conversationConfig().agent ?? {};
 const promptObject = () => agentSection().prompt;
 const promptText = () => promptObject()?.prompt ?? "";
 const toolIds = () => promptObject()?.tool_ids;
+const builtInTools = () => promptObject()?.built_in_tools;
+const languageDetection = () => builtInTools()?.language_detection;
+const languagePresets = () => conversationConfig().language_presets;
 const declaredToolNames = () => configKeysOf(TEMPLATE.tools);
 const toolEntry = (name) => TEMPLATE.tools?.[name] ?? {};
 
@@ -75,6 +88,9 @@ const toolEntry = (name) => TEMPLATE.tools?.[name] ?? {};
 //   2026-08-14 angelegt mit genau EINEM Werkzeug: get_consult, die Rueckfrage an den
 //   Auftraggeber (mit der Vorlage selbst entstanden). Kein Recherche-, kein Nachschlage-,
 //   kein Kalender-Werkzeug - der Agent dieser Vorlage kann ausser sprechen nur genau das.
+//   2026-08-14 BEWUSST UNVERAENDERT, obwohl ein Werkzeug dazukommt: language_detection
+//   (E-5, Sprachwechsel) ist ein EINGEBAUTES Werkzeug des Anbieters und steht nicht in der
+//   tools-Karte, die diese Liste pinnt - es zaehlt im BUILT_IN_TOOL_FINGERPRINT unten.
 const TOOL_FINGERPRINT = ["get_consult"];
 
 // Zweiter Fingerprint, weil ein Werkzeug nicht nur ueber die tools-Karte an den Agenten
@@ -84,8 +100,36 @@ const TOOL_FINGERPRINT = ["get_consult"];
 // stattdessen die KONFIGURATIONSFLAECHE: ein neues Feld im prompt-Objekt ist eine
 // Aenderung am Werkzeugbestand, bis jemand das Gegenteil begruendet.
 //
-// BUCHHALTUNG: 2026-08-14 angelegt mit den zwei Feldern, die die Vorlage traegt.
-const PROMPT_FIELD_FINGERPRINT = ["prompt", "tool_ids"];
+// BUCHHALTUNG:
+//   2026-08-14 angelegt mit den zwei Feldern, die die Vorlage traegt.
+//   2026-08-14 built_in_tools dazu (Eigentuemer-Entscheidung E-5): der Prompt verbot den
+//   Sprachwechsel, ein System-Werkzeug leistet ihn - im Konflikt gewinnt mal das eine, mal
+//   das andere, und genau dieser Nichtdeterminismus ist nicht debuggbar. Aufgeloest wird er
+//   in EINE Richtung: der Prompt gibt den Wechsel frei, das eingebaute language_detection
+//   erkennt ihn. Bis die Vorlage das Feld traegt, ist dieser Pin ROT - so gehoert es sich,
+//   er fordert die Aenderung ein.
+const PROMPT_FIELD_FINGERPRINT = ["built_in_tools", "prompt", "tool_ids"];
+
+// Eingebaute Werkzeuge des Anbieters (prompt.built_in_tools): sie werden nicht deklariert
+// wie die tools-Karte, sondern nur an- oder abgeschaltet. Eigener Fingerprint, damit
+// TOOL_FINGERPRINT weiter genau das misst, was die Vorlage selbst deklariert - und damit
+// ein an- oder abgeschaltetes System-Werkzeug trotzdem nicht still passiert.
+//
+// BUCHHALTUNG:
+//   2026-08-14 angelegt mit language_detection (E-5): das Werkzeug, das den im Prompt
+//   freigegebenen Sprachwechsel waehrend des Anrufs ueberhaupt erkennt.
+const BUILT_IN_TOOL_FINGERPRINT = ["language_detection"];
+
+// Zusatzsprachen des Agenten (conversation_config.language_presets). Die SCHLUESSEL dieser
+// Karte sind die Sprachen; ein Eintrag traegt seine Uebersetzungen (overrides,
+// first_message_translation, soft_timeout_translation), die dieser Pin nicht vorschreibt -
+// gepinnt wird, WELCHE Sprachen der Agent kann, nicht wie sie ausformuliert sind.
+//
+// BUCHHALTUNG:
+//   2026-08-14 angelegt mit "es" (E-5/E-6: language_detection und Spanisch werden am
+//   Agenten gesetzt). Zweibuchstabig wie agent.language ("en"); braucht der Anbieter je
+//   einen Regionalcode ("es-ES"), ist das eine Aenderung mit einer Zeile Begruendung.
+const LANGUAGE_PRESET_FINGERPRINT = ["es"];
 
 const DRIFT_HINT =
   "Das ist erlaubt - aber nur bewusst: Liste in test/elevenlabs-agent-werkzeuge.test.js " +
@@ -141,6 +185,187 @@ test("Werkzeug-Inventar der ElevenLabs-Vorlage: jedes Werkzeug heisst ueberall g
     assert.ok(
       declaredToolNames().some((name) => String(entry).includes(name)),
       `Die Platzhalter-Kennung "${entry}" nennt kein deklariertes Werkzeug.`,
+    );
+  }
+});
+
+// --- Sprachwechsel (E-5/E-6) -----------------------------------------------------------
+//
+// Regressionsschutz, KEIN Abnahmekriterium (deshalb ohne ABNAHME--Kennung): die Faelle
+// fordern einen Zustand ein, der ab der Aenderung dauerhaft gelten muss. Heute rot, weil
+// die Vorlage noch die alte Sprach-Sperre traegt.
+
+// Wo genau only_at_conversation_start unter language_detection sitzt, ist in der belegten
+// Feldliste nicht festgelegt (Konfigurationsobjekt des Werkzeugs, moeglicherweise verschachtelt).
+// Gepinnt wird deshalb die WIRKUNG statt der Verschachtelung: nirgends im Teilbaum steht der
+// Schalter auf true. Fehlt er ganz, gilt die Anbieter-Vorgabe false - auch das ist richtig.
+const ONLY_AT_START_KEY = "only_at_conversation_start";
+const onlyAtStartAnywhere = (node) => {
+  if (node === null || typeof node !== "object") return false;
+  if (node[ONLY_AT_START_KEY] === true) return true;
+  return Object.values(node).some((child) => onlyAtStartAnywhere(child));
+};
+
+// Der Satz, den E-5 streicht - woertlich, weil er woertlich in der Vorlage steht.
+const LOCK_SENTENCE = "Speak only in this language";
+
+// Die Sprachregel im Prompt wird auf ihren KERN geprueft, nicht auf den Wortlaut: jede
+// Zusicherung ist eine Menge von Begriffen, die IN EINEM SATZ zusammen vorkommen muessen.
+// Satzweise statt prompt-weit, weil "Begin the call in English" und "never switch the
+// language" sonst gemeinsam gruen waeren - also genau der Widerspruch, den E-5 aufloest.
+const sentencesOf = (text) =>
+  text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence !== "");
+const anySentenceMatchesAll = (text, concepts) =>
+  sentencesOf(text).some((sentence) => concepts.every((concept) => concept.test(sentence)));
+
+const SWITCH_VERB = /\b(switch|change|move|shift)\w*/i;
+const FOLLOW_VERB = /\b(continue|keep|carry on|follow|proceed|stay)\w*/i;
+const NEGATION = /\b(do not|don't|never|must not|cannot|can't|avoid|refrain)\b/i;
+const LANGUAGE_WORD = /\blanguage/i;
+const ENGLISH = /\benglish\b/i;
+
+const REQUIRED_LANGUAGE_RULES = Object.freeze([
+  {
+    label: "(a) Englisch ist die Startsprache des Anrufs",
+    concepts: [/\b(begin|start|open)\w*/i, ENGLISH],
+  },
+  {
+    label: "(b) wechselt die Gegenseite die Sprache, geht der Agent mit",
+    concepts: [SWITCH_VERB, FOLLOW_VERB, LANGUAGE_WORD],
+  },
+  {
+    label: "(c) das Ziel bleibt dabei unveraendert dasselbe",
+    concepts: [/\b(same|unchanged|identical)\b/i, /\b(objective|goal|task|purpose|mission)\w*/i],
+  },
+]);
+
+const FORBIDDEN_LANGUAGE_RULES = Object.freeze([
+  {
+    label: "Sprach-Sperre (nur eine Sprache erlaubt)",
+    concepts: [/\b(only|exclusively|solely)\b/i, LANGUAGE_WORD],
+    why: "ein Prompt, der auf eine Sprache festnagelt, arbeitet gegen language_detection",
+  },
+  {
+    label: "Wechsel-Verbot",
+    concepts: [NEGATION, SWITCH_VERB, LANGUAGE_WORD],
+    why: "derselbe Widerspruch, nur negativ formuliert",
+  },
+  {
+    label: "Rueckwechsel-Pflicht",
+    concepts: [/\b(back|return|revert)\w*/i, ENGLISH],
+    why: "vom Eigentuemer ausdruecklich benannt: derselbe Fehler in gruen",
+  },
+]);
+
+// Positiv-Kontrollen des Messwerkzeugs (Lehre pruefkommando-ohne-positiv-kontrolle). Die
+// erlaubte Fassung ist bewusst eine PARAPHRASE der Eigentuemer-Formulierung: die
+// Zusicherungen duerfen nicht am Wortlaut kleben, sondern muessen auch anders formulierte
+// Prompts durchlassen - und auf jeder der drei verbotenen Formen anschlagen.
+const CONTROL_OK =
+  "Open the conversation in English. Should your counterpart move to a different " +
+  "language, carry on in that language and keep working toward the same goal.";
+const CONTROL_VIOLATIONS = Object.freeze([
+  "Speak only in this language: {{language}}.",
+  "Never switch the language during the call.",
+  "If they switch, follow them, but return to English right after.",
+]);
+
+test("Sprachwechsel in der ElevenLabs-Vorlage: die eingebauten Werkzeuge sind exakt die gepinnte Menge", () => {
+  assert.ok(
+    BUILT_IN_TOOL_FINGERPRINT.length > 0,
+    "der Fingerprint ist besetzt - sonst misst er nichts",
+  );
+
+  assert.deepEqual(
+    configKeysOf(builtInTools()),
+    BUILT_IN_TOOL_FINGERPRINT,
+    `Die eingebauten Werkzeuge in ${TEMPLATE_REL} (prompt.built_in_tools) sind andere als ` +
+      `gepinnt. ${DRIFT_HINT}`,
+  );
+});
+
+test("Sprachwechsel in der ElevenLabs-Vorlage: language_detection gilt den ganzen Anruf, nicht nur zum Start", () => {
+  const detection = languageDetection();
+  assert.ok(
+    detection !== null && typeof detection === "object",
+    `${TEMPLATE_REL}: prompt.built_in_tools.language_detection traegt eine Konfiguration - ` +
+      "ohne das Werkzeug erkennt niemand, dass die Gegenseite die Sprache gewechselt hat.",
+  );
+
+  assert.equal(
+    onlyAtStartAnywhere(detection),
+    false,
+    `${TEMPLATE_REL}: ${ONLY_AT_START_KEY} steht unter language_detection auf true - dann ` +
+      "erkennt das Werkzeug den Wechsel nur beim Gespraechsstart, waehrend der Prompt ihn " +
+      "fuer den ganzen Anruf freigibt. Genau der Widerspruch, den E-5 aufgeloest hat.",
+  );
+});
+
+test("Sprachwechsel in der ElevenLabs-Vorlage: language_presets traegt exakt die gepinnten Sprachen", () => {
+  assert.ok(
+    LANGUAGE_PRESET_FINGERPRINT.length > 0,
+    "der Fingerprint ist besetzt - sonst misst er nichts",
+  );
+
+  assert.deepEqual(
+    configKeysOf(languagePresets()),
+    LANGUAGE_PRESET_FINGERPRINT,
+    `Die Zusatzsprachen in ${TEMPLATE_REL} (conversation_config.language_presets) sind andere ` +
+      `als gepinnt. Eine Sprache, die der Agent kann oder nicht kann, ist eine Faehigkeit - ` +
+      DRIFT_HINT,
+  );
+});
+
+test("Sprachwechsel in der ElevenLabs-Vorlage: der Prompt setzt die Startsprache, gibt den Wechsel frei und verlangt keinen Rueckwechsel", () => {
+  // 1. Kontrolle am Messwerkzeug: die Paraphrase besteht alle drei Zusicherungen und
+  //    verletzt keines der drei Verbote - die Pruefung haengt nicht am Wortlaut.
+  for (const rule of REQUIRED_LANGUAGE_RULES) {
+    assert.ok(
+      anySentenceMatchesAll(CONTROL_OK, rule.concepts),
+      `Messwerkzeug defekt: die erlaubte Paraphrase erfuellt ${rule.label} nicht - die ` +
+        "Zusicherung klebt am Wortlaut statt am Kern.",
+    );
+  }
+  for (const rule of FORBIDDEN_LANGUAGE_RULES) {
+    assert.ok(
+      !anySentenceMatchesAll(CONTROL_OK, rule.concepts),
+      `Messwerkzeug defekt: die erlaubte Paraphrase schlaegt bei "${rule.label}" an.`,
+    );
+  }
+
+  // 2. Kontrolle in die andere Richtung: jede verbotene Form wird auch erkannt. Ohne sie
+  //    waere ein Verbot, das nie anschlaegt, von einem erfuellten nicht zu unterscheiden.
+  for (const violation of CONTROL_VIOLATIONS) {
+    assert.ok(
+      FORBIDDEN_LANGUAGE_RULES.some((rule) => anySentenceMatchesAll(violation, rule.concepts)),
+      `Messwerkzeug defekt: "${violation}" wird von keinem Verbot erfasst.`,
+    );
+  }
+
+  // 3. Der woertliche Satz, den E-5 streicht.
+  assert.ok(
+    !promptText().toLowerCase().includes(LOCK_SENTENCE.toLowerCase()),
+    `${TEMPLATE_REL}: der Prompt traegt weiter "${LOCK_SENTENCE}". Ein Prompt, der den ` +
+      "Sprachwechsel verbietet, und ein System-Werkzeug, das ihn leistet, arbeiten " +
+      "gegeneinander - mal gewinnt das eine, mal das andere (E-5).",
+  );
+
+  // 4. Der Kern: Startsprache, Wechsel erlaubt, Ziel unveraendert - in beliebiger Formulierung.
+  for (const rule of REQUIRED_LANGUAGE_RULES) {
+    assert.ok(
+      anySentenceMatchesAll(promptText(), rule.concepts),
+      `${TEMPLATE_REL}: der Prompt sagt nicht ${rule.label}. Verlangt ist der Sinn, nicht ` +
+        "der Wortlaut: Startsprache festlegen, Wechsel bei der Gegenseite mitgehen, dasselbe " +
+        "Ziel weiterverfolgen - alles drei in je einem Satz zusammenhaengend.",
+    );
+  }
+  for (const rule of FORBIDDEN_LANGUAGE_RULES) {
+    assert.ok(
+      !anySentenceMatchesAll(promptText(), rule.concepts),
+      `${TEMPLATE_REL}: der Prompt enthaelt "${rule.label}" - ${rule.why}.`,
     );
   }
 });
