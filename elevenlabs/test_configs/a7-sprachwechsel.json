@@ -11,7 +11,6 @@
   ],
   "evaluation_model": null,
   "simulated_user_model": null,
-  "tool_mock_config": null,
   "tool_mock_overrides": {},
   "dynamic_variables": {
     "owner_name": "Nina Caldwell",
