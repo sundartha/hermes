@@ -422,6 +422,12 @@ export const stripeBilling = {
     return {
       planSlug: (json.metadata && json.metadata.plan_slug) || null,
       numberSetupFeeExempt: typeof invoiceTotal === "number" ? invoiceTotal === 0 : false,
+      // Stripe-Abgleich-Sweep (stripe-reconcile.js): der Abo-STATUS laut Stripe (opaker
+      // Stripe-API-Wert, z.B. "active"/"canceled"). Additiv - die Bestandsaufrufer
+      // (activation.js, A3-Backfill) lesen nur planSlug/numberSetupFeeExempt und bleiben
+      // unberuehrt. Fehlt das Feld in der Antwort -> null (nie raten, G26): der Sweep
+      // behandelt null als "nicht beurteilbar" und heilt fail-closed NICHT.
+      status: typeof json.status === "string" ? json.status : null,
     };
   },
 

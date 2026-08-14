@@ -41,7 +41,9 @@ import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
 import { isSelfServiceLive } from "../config.js";
 import { makeWorkosManagement } from "../workos-management.js";
 import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.js";
+import { runStripeSubscriptionReconcile } from "../billing/stripe-reconcile.js";
 import { makeSmtpMailer } from "../smtp-mail.js";
+import { makeBrevoMailer } from "../brevo-mail.js";
 import { runCancellationMailSweep } from "../billing/cancellation-mail.js";
 
 // tenant-prolif-d: Sweep-Kadenz des DID-Release-Reconcilers (interne Kadenz, kein
@@ -93,6 +95,45 @@ function scheduleCancellationMailSweep(deps) {
   setInterval(run, CANCELLATION_MAIL_SWEEP_INTERVAL_MS).unref();
 }
 
+// Stripe-Abgleich-Sweep: Kadenz des Webhook-Verlust-Heilers (stripe-reconcile.js) -
+// EIGENSTAENDIG von den anderen Sweeps (kein geteilter Timer, Muster CONTRACT_END_
+// CLEANUP_INTERVAL_MS). Auf dem kostenlosen Render-Plan ist der Boot-Lauf der eigentliche
+// Traeger: der Dienst schlaeft ohne Traffic ohnehin, und JEDES Aufwachen ist ein
+// Prozess-Start -> Boot-Lauf -> Abgleich. Das Intervall greift nur in Wachphasen.
+const STRIPE_RECONCILE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+// Boot-Lauf + periodischer Sweep des Stripe-Abgleichs. Muster scheduleReleaseReconcile:
+// fire-and-forget, eigener catch-Riegel (ein Fehler hier darf den Boot nie stoppen),
+// unref() (der Timer haelt den Prozess/Test-Runner nicht am Beenden); nowMs pro Lauf
+// injiziert -> der Executor bleibt Date.now-frei.
+function scheduleStripeReconcile(deps) {
+  const run = () =>
+    void runStripeSubscriptionReconcile({ ...deps, nowMs: Date.now() }).catch((e) =>
+      console.error("[stripe-reconcile]", e.message),
+    );
+  run();
+  setInterval(run, STRIPE_RECONCILE_INTERVAL_MS).unref();
+}
+
+// Mail-Adapter-Auswahl (312k-Phase 5, HTTP-Fortsetzung): EINE Stelle, EINE Rangfolge (G5) -
+// kein zweiter Auswahl-Codepfad irgendwo sonst (die Boot-Sonde, mail-boot-probe.js,
+// bildet dieselbe Rangfolge NUR fuer die Diagnose nach, konstruiert aber keinen Mailer).
+// Brevo (HTTP ueber Port 443, den Render auf kostenlosen Web-Diensten NICHT sperrt) hat
+// Vorrang vor SMTP (Render sperrt SMTP 25/465/587 dort, ETIMEDOUT in Produktion). SMTP
+// bleibt als Fallback bestehen - sobald der Dienst auf einen bezahlten Plan wechselt,
+// reicht das Setzen von SMTP_* ohne BREVO_API_KEY. Kein Schluessel gesetzt -> kein Mailer
+// (Muster workosManagementApiKey): die Kuendigungsbestaetigung bleibt offen vermerkt.
+// Konstruktoren injizierbar (DIP-Seam) fuer den isolierten Auswahl-Test ohne echtes
+// nodemailer/fetch.
+export function selectMailer(
+  config,
+  { _makeBrevoMailer = makeBrevoMailer, _makeSmtpMailer = makeSmtpMailer } = {},
+) {
+  if (config.mail.brevoApiKey) return _makeBrevoMailer(config);
+  if (config.mail.smtpHost) return _makeSmtpMailer(config);
+  return null;
+}
+
 export async function wireWebLogin({
   app,
   config,
@@ -142,15 +183,15 @@ export async function wireWebLogin({
   const workosManagement = config.auth.workosManagementApiKey
     ? makeWorkosManagement(config)
     : null;
-  // 312k-Phase 5: SMTP-Mailer NUR konstruieren, wenn ein Host gesetzt ist
-  // (config.mail.smtpHost) - Muster workosManagement. Ungesetzt (Auslieferungszustand) ->
-  // null: die Kuendigungsbestaetigung wird gar nicht erst versucht,
-  // attemptCancellationMailConfirm vermerkt sie offen + protokolliert.
-  const mailer = config.mail.smtpHost ? makeSmtpMailer(config) : null;
-  // smtp-boot-probe: die Boot-Sonde selbst haengt NICHT an diesem pg-gated Block (der bei
+  // 312k-Phase 5 (HTTP-Fortsetzung): Mailer ueber die EINE Rangfolge oben auswaehlen
+  // (selectMailer) - Brevo/HTTP vor SMTP, keiner gesetzt -> null (Muster workosManagement).
+  // Ungesetzt (Auslieferungszustand) -> null: die Kuendigungsbestaetigung wird gar nicht
+  // erst versucht, attemptCancellationMailConfirm vermerkt sie offen + protokolliert.
+  const mailer = selectMailer(config);
+  // mail-boot-probe: die Boot-Sonde selbst haengt NICHT an diesem pg-gated Block (der bei
   // STORE_BACKEND=json gar nicht laeuft, s. app.js) - sie sitzt unconditional in boot.js
   // (bootServer), Muster PROV-01 (reconcileOrphanedProvisioning), damit der Betreiber den
-  // SMTP-Zustand auch ohne laufendes Portal/pg-Backend sieht.
+  // Mail-Zustand (Brevo/HTTP oder SMTP) auch ohne laufendes Portal/pg-Backend sieht.
   // Boot-Lauf + Sweep des Vertragsende-Aufraeumens (Rufnummer freigeben + WorkOS-Identitaet
   // loeschen, NUR fuer Tenants mit noch offenem Teilschritt - s. tenantsPendingContractEnd-
   // Cleanup, state-ops.js). Der direkte Aufruf sitzt in billing/webhook.js (SUSPEND-Zweig);
@@ -301,6 +342,25 @@ export async function wireWebLogin({
       auditStore,
     }),
   );
+
+  // Stripe-Abgleich-Sweep (verlorene Webhooks selbstheilen, s. billing/stripe-reconcile.js):
+  // Boot-Lauf + Sweep. NUR bei aktiver Zahlungsabwicklung (ohne PAYMENT_ENABLED gibt es
+  // keine Stripe-Abos abzugleichen, und stripeBilling wuerde ohne Key werfen - dieselbe
+  // Bedingung, unter der die Webhook-Route oben ueberhaupt Events annimmt). webhookDeps =
+  // EXAKT die Deps der Webhook-Route (EINE Quelle, kein Drift); req=null -> audit()
+  // loggt ip=system (Muster TTS_QUOTA_WARN_EVENT, server.js).
+  if (config.billing.paymentEnabled) {
+    scheduleStripeReconcile({
+      store,
+      billing: stripeBilling,
+      webhookDeps: {
+        store, accounts, sessions, audit, req: null, provision, billing: stripeBilling,
+        numberProvisioner: telnyxProvisioner,
+        workos: workosManagement,
+        auditStore,
+      },
+    });
+  }
 
   // Q1: positiver Boot-Marker im Erfolgsfall - eigene Zeile. Erreicht NUR wenn alle Mounts
   // durchliefen; wirft ein Schritt vorher, faengt guardedBoot es als "deaktiviert" (fail-open)

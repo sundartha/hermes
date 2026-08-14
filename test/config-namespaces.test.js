@@ -45,9 +45,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // 312k-Phase 4: workosManagementApiKey ergaenzt (eigener Schluessel fuer die WorkOS-
   // Nutzerloeschung beim Vertragsende, getrennt vom Anmeldeschluessel oidcClientSecret) -> 16.
   auth: 16,
-  // 312k-Phase 5: eigener Namespace fuer den SMTP-Versand der Kuendigungsbestaetigung
+  // 312k-Phase 5: eigener Namespace fuer den Versand der Kuendigungsbestaetigung
   // (smtpHost/smtpPort/smtpUser/smtpPassword/mailFrom) -> 5, neuer 15. Namespace.
-  mail: 5,
+  // HTTP-Fortsetzung: brevoApiKey ergaenzt (Render sperrt SMTP auf kostenlosen Plaenen,
+  // der Versand wechselt vorrangig auf Brevo per HTTP) -> 6.
+  mail: 6,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
   // einer Preistabelle pro Modell-ID zusammengefasst (modelPricesUsd, 1 nested Key statt
   // 2 primitiver Keys) -> 10 statt 11.
@@ -95,9 +97,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // traegt daher beide, nicht eine von beiden.)
 // 312k-Phase 5: neuer mail-Namespace (5 Keys: smtpHost/smtpPort/smtpUser/smtpPassword/
 // mailFrom) -> 151.
-const EXPECTED_TOTAL_KEYS = 151;
+// HTTP-Fortsetzung: brevoApiKey ergaenzt (mail-Namespace 5 -> 6 Keys) -> 152.
+const EXPECTED_TOTAL_KEYS = 152;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (151 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (152 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -201,7 +204,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // 312k-Phase 4: workosManagementApiKey ist primitiv (String, kein Array/nested Objekt) -> 137.
   // 312k-Phase 5: smtpHost/smtpPort/smtpUser/smtpPassword/mailFrom sind alle fuenf primitiv
   // (String/Zahl/String/String/String, kein Array/nested Objekt) -> 142.
-  assert.equal(checked, 142, "alle primitiven Blaetter (151 - 4 Arrays - 5 nested Objekte) geprueft");
+  // HTTP-Fortsetzung: brevoApiKey ist ebenfalls primitiv (String, kein Array/nested
+  // Objekt) -> 143.
+  assert.equal(checked, 143, "alle primitiven Blaetter (152 - 4 Arrays - 5 nested Objekte) geprueft");
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {

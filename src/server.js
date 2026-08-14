@@ -16,7 +16,7 @@ import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
-import { makeSmtpMailer } from "./smtp-mail.js";
+import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
@@ -102,16 +102,18 @@ const costTruing = makeCostTruing({ store, config, voiceControl, audit, messagin
 // keine Buchung wird beruehrt.
 const costCrossCheck = makeCostCrossCheck({ store, config, voiceControl });
 
-// F2-Mail (Call-Summary per E-Mail bei Newsletter-Einwilligung): EIGENE SmtpMailer-Instanz,
-// bewusst NICHT die aus wireWebLogin (src/wiring/web-login.js) geteilt. Begruendung: callFinish
-// wird HIER, am Modul-Top, SYNCHRON verdrahtet - wireWebLogin dagegen laeuft erst spaeter,
-// ASYNCHRON, innerhalb des pg-gated guardedBoot-Blocks (buildApp/app.js). Eine geteilte
-// Instanz muesste auf diesen Block warten und bliebe bei json-Backend oder einem pg-Ausfall
-// (fail-open, INV-11) fuer immer aus - der Mailversand haette dann eine unnoetige
-// Abhaengigkeit vom Portal-Pool, obwohl makeSmtpMailer NUR config.mail braucht (kein pg,
-// s. smtp-mail.js). makeSmtpMailer ist laut eigenem Modul-Kopf zustandslos (jeder Aufrufer
-// bekommt seinen EIGENEN Transporter) - zwei Instanzen sind unbedenklich, kein Doppel-Zustand.
-const mailer = config.mail.smtpHost ? makeSmtpMailer(config) : null;
+// F2-Mail (Call-Summary per E-Mail bei Newsletter-Einwilligung): EIGENE Mailer-Instanz ueber
+// dieselbe Auswahl-Rangfolge wie wireWebLogin (selectMailer, src/wiring/web-login.js -
+// Brevo/HTTP vor SMTP, G5: EINE Rangfolge, kein zweiter Auswahl-Codepfad), aber bewusst
+// NICHT die dortige Instanz geteilt. Begruendung: callFinish wird HIER, am Modul-Top,
+// SYNCHRON verdrahtet - wireWebLogin dagegen laeuft erst spaeter, ASYNCHRON, innerhalb des
+// pg-gated guardedBoot-Blocks (buildApp/app.js). Eine geteilte Instanz muesste auf diesen
+// Block warten und bliebe bei json-Backend oder einem pg-Ausfall (fail-open, INV-11) fuer
+// immer aus - der Mailversand haette dann eine unnoetige Abhaengigkeit vom Portal-Pool,
+// obwohl selectMailer NUR config.mail braucht (kein pg, reine Funktion). Beide Adapter
+// (makeBrevoMailer/makeSmtpMailer) sind laut eigenem Modul-Kopf zustandslos (jeder Aufrufer
+// bekommt seine EIGENE Instanz) - zwei Instanzen sind unbedenklich, kein Doppel-Zustand.
+const mailer = selectMailer(config);
 
 // F2-Mail: Accounts-Zugriff (Konto-E-Mail) haengt an accounts.accountByTenant (web-auth.js),
 // das NUR existiert, wenn der pg-gated Web-Login-Block durchlaeuft (wireWebLogin, asynchron
