@@ -19,8 +19,7 @@
     "owner_name": "Trevor Nash",
     "callee": "the front desk of a local business",
     "objective": "Ask for the next available appointment for Trevor Nash and take the answer down as a message.",
-    "mandate": "Collect information only - note down dates, times and prices, make no binding commitment.",
-    "language": "en"
+    "mandate": "Collect information only - note down dates, times and prices, make no binding commitment."
   },
   "chat_history": [],
   "conversation_initiation_source": null,

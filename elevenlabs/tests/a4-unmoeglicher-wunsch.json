@@ -19,8 +19,7 @@
     "owner_name": "Greg Tandy",
     "callee": "Cardinal Motors Repair Shop, service advisor (+1 602-555-0182)",
     "objective": "Schedule a repair appointment for Greg Tandy's car - the air conditioning has stopped cooling.",
-    "mandate": "Agree to an appointment within the next two weeks for up to $150. No payment, no bank details, no pickup arrangements and no commitment beyond that amount.",
-    "language": "en"
+    "mandate": "Agree to an appointment within the next two weeks for up to $150. No payment, no bank details, no pickup arrangements and no commitment beyond that amount."
   },
   "chat_history": [],
   "conversation_initiation_source": null,
