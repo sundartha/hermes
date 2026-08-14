@@ -207,37 +207,36 @@
 /* AgentChip wird zur eigenstaendigen Glaskarte (.card liefert die Optik:
    Hintergrund, Rand, Radius, Schatten, Blur -- hier nur Layout + Interaktion).
    Befund 2 (Fix-Runde): EINE Zeile (Spec §5) -- Radiopunkt+Label+Nummer
-   (.agent-chip__row) links, Kopier-Knopf rechts. `flex-direction:column`
+   (.agent-chip__body) links, Kopier-Knopf rechts. `flex-direction:column`
    war der Grund, warum der Knopf auf eine eigene Zeile umbrach; das ist raus. */
-/* Eigenes (kleineres) Polster statt des wachsenden .card-Werts (Abschnitt 0)
-   -- Owner-Befund 2: die Nummernkarte war der Hauptgrund fuer die zu grosse
-   Kopfblock-Hoehe, deshalb bleibt sie bewusst kompakter als andere Karten,
-   auch wenn ihre Schrift (siehe .agent-chip__number) mitwaechst. Untergrenze
-   20px = der bisherige flache Mobil-/Tablet-Wert von .card (clamp(20px,
-   2.6vw,32px) faellt dort auf sein Minimum) -- dort also unveraendert, ab
-   Desktop-Breiten deutlich knapper als die 32px, auf die .card vorher schon
-   um ~1230px saettigte. */
+/* Feedback-Runde 2 (Befund 1): Karte flacher (Richtwert 14-16px vertikal statt
+   der bis 24px wachsenden Kappe) -- Inhalt und Kartenrand fallen enger
+   zusammen, der Punkt wirkt dadurch naeher an der Nummernmitte. Horizontales
+   Polster bleibt unveraendert (kein Befund dazu). */
 .agent-chip {
   display: flex;
   align-items: center;
   gap: 18px;
   margin: 0;
   min-width: 240px;
-  padding: clamp(20px, 1.2vw, 24px) clamp(20px, 1.6vw, 28px);
+  padding: 16px clamp(20px, 1.6vw, 28px);
 }
 
+/* Label ueber Nummer bleibt linksbuendig -- der Block traegt jetzt BEIDES:
+   das Mono-Label (oben) und die Nummern-Zeile (unten, s. .agent-chip__row). */
+.agent-chip__body {
+  align-items: flex-start;
+}
+
+/* Feedback-Runde 2 (Befund 1): die Nummern-Zeile -- NUR Punkt + Nummer, NICHT
+   das Label. align-items:center zentriert den Punkt darum ausschliesslich zur
+   Nummer (Ziffernhoehe), das Label darueber zieht ihn nicht mehr nach oben
+   (vorher war der Punkt Geschwister des gesamten Label+Nummer-Blocks). */
 .agent-chip__row {
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
-}
-
-/* Label ueber Nummer bleibt linksbuendig am Radiopunkt -- explizit statt
-   implizit, damit hier keine Fremd-Regel (app.css/app-hermes.css) je wieder
-   fuer optische Zentrierung sorgen kann. */
-.agent-chip__body {
-  align-items: flex-start;
 }
 
 /* Mono nur fuer das Label darueber (app-hermes.css); die Nummer selbst

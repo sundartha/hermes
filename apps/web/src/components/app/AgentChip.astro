@@ -17,14 +17,19 @@
 // .agent-chip__scratch (shell.css).
 ---
 
+
+<!-- Feedback-Runde 2 (Befund 1): der Radiopunkt sitzt jetzt IN der Nummern-
+     Zeile (agent-chip__row), nicht mehr neben dem ganzen Label+Nummer-Block --
+     so zentriert er sich nur zur Nummer, das Label darueber zieht ihn nicht
+     mehr nach oben. -->
 <div id="agent-chip" class="agent-chip card" hidden>
-  <div class="agent-chip__row">
-    <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
-    <span class="agent-chip__body">
-      <span class="agent-chip__label">Your number</span>
+  <span class="agent-chip__body">
+    <span class="agent-chip__label">Your number</span>
+    <span class="agent-chip__row">
+      <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
       <span id="agent-number" class="agent-chip__number"></span>
     </span>
-  </div>
+  </span>
   <button
     id="agent-copy"
     class="agent-chip__copy"

@@ -11,11 +11,13 @@
  * genannten rgba-/Hex-Werte -- keine neuen Farben erfunden (Vorarbeits-Auflage,
  * Muster shell.css/calls.css).
  *
- * .perm-row (Settings-Toggles, auch von BillingIsland vor dem Newsletter-Umzug
- * genutzt) und .field-input (private Rufnummer) bekommen laut Spec §9 "nur
+ * .perm-row (Settings-Toggles) und .field-input bekommen laut Spec §9 "nur
  * dieselbe Optik" -- app-hermes.css liefert das bereits deckungsgleich zur
- * Spec-§2-Definition eines eingelassenen Felds, darum steht hier NICHTS
- * Zusaetzliches fuer diese beiden Klassen (kein doppelt gepflegter Wert).
+ * Spec-§2-Definition eines eingelassenen Felds, darum steht hier fuer
+ * .field-input NICHTS Zusaetzliches (kein doppelt gepflegter Wert). Fuer
+ * .perm-row s. Abschnitt "Fluchten-Pass" unten -- NUR das horizontale
+ * Polster wird korrigiert (Feedback-Runde 2, Befund 3), die Optik selbst
+ * bleibt app-hermes.css.
  * ========================================================================== */
 
 /* ------------------------------------------------ 1. Settings: Sprachkacheln */
@@ -147,14 +149,67 @@
   }
 }
 
+/* Feedback-Runde 2 (Befund 3, Fluchten-Pass): app-hermes.css belegt .perm-row
+   mit `padding: 14px 12px` (dort nicht anfassbar) -- das horizontale Polster
+   ist ein Stoerer, der Berechtigungs-Zeilen 12px von der Flucht der Legende
+   "Permissions"/der Sprachkacheln abrueckt. Spaeterer Import (panels.css)
+   gewinnt: Polster nur noch vertikal, Toggle rechts damit ebenfalls wieder
+   flush mit der Kartenkante. */
+.perm-row {
+  padding: 14px 0;
+}
+
 /* ---------------------------------------------------------- 2. Billing: Status */
 
+/* Feedback-Runde 2 (Befund 5): align-items:baseline statt flex-start -- der
+   Badge richtet sich jetzt an der ersten Textzeile von .billing-status__body
+   aus (Serif-Wert, oder die Mono-Nebenangabe, wenn der Serif-Wert versteckt
+   ist, s. renderStatus/duplicate in BillingIsland.astro). Vorher klebte der
+   Badge oben an der Zeile, unabhaengig von der (variablen) Hoehe des Serif-
+   Werts -- dadurch wirkte er wie auf halber Hoehe schwebend. */
 .billing-status {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   flex-wrap: wrap;
   gap: 14px;
   margin-top: 18px;
+}
+
+/* .billing-status-badge hatte bisher KEINE Regel (unstyled <span> -- daher der
+   Befund: ohne Pillenform/Farbe "klebte" der rohe Text irgendwo). Gleiche
+   Pillen-Optik wie die Anruf-Status-Pillen (calls.css .status-badge, Spec §7)
+   -- selbe Farbwerte, keine neuen erfunden (aktiv=gruen, gekuendigt=gelb,
+   pending=blau/neutral fuer no_card/no_sub, s. billingStatusBadgeClass). */
+.billing-status-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 5px 11px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-family: var(--app-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.billing-status-badge--active {
+  color: #7fe0b0;
+  border-color: rgba(127, 224, 176, 0.42);
+  background: rgba(127, 224, 176, 0.1);
+}
+
+.billing-status-badge--cancelled {
+  color: #e0c48f;
+  border-color: rgba(224, 196, 143, 0.42);
+  background: rgba(224, 196, 143, 0.1);
+}
+
+.billing-status-badge--pending {
+  color: #a9c4e4;
+  border-color: rgba(143, 182, 227, 0.4);
+  background: rgba(143, 182, 227, 0.1);
 }
 
 .billing-status__body {

@@ -52,13 +52,18 @@
   background: none;
 }
 
+/* Feedback-Runde 2 (Befund 3, Fluchten-Pass): 4px horizontales Polster stiess
+   den Pfeil-Kreis (links) und die Status-Pille (rechts) von der gemeinsamen
+   Flucht mit allen anderen Karten-Kindern (Titel, Legenden, Knoepfe) ab --
+   die Flucht ist ausschliesslich das Kartenpolster (.card), keine Zeile darf
+   zusaetzlich einruecken. */
 .call-row__link {
   display: grid;
   grid-template-columns: 38px 1fr auto;
   align-items: center;
   width: 100%;
   gap: 14px;
-  padding: 16px 4px;
+  padding: 16px 0;
   border: 0;
   border-radius: 10px;
   background: none;

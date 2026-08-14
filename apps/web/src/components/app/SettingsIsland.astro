@@ -42,11 +42,13 @@
 // das Formular. Tenant-Werte gehen NUR ueber [checked]/textContent in den DOM
 // (nie innerHTML) -- kein XSS-Pfad (Leitplanke).
 //
-// Die private Rufnummer ist ein ZWEITES Formular mit EIGENEM Endpunkt, kein
-// Settings-Feld: sie ist Kontakt-PII am Tenant-Record (nicht in settings, die
-// komplett ueber /api/state + MCP leaken, H4). Angezeigt wird ausschliesslich die
-// Server-Maske (maskPrivateNumber); der volle Wert wird nie ins Eingabefeld
-// zurueckgeschrieben.
+// Feedback-Runde 2 (Befund 4): der "Summary SMS number"-Block (privates
+// Zweit-Formular, eigener Endpunkt /api/self-service/private-number) ist aus
+// der UI entfernt -- Zusammenfassungen laufen jetzt ueber den Newsletter
+// (NewsletterIsland). NUR die Oberflaeche ist raus: Backend-Route und
+// -Feld bleiben unangetastet, lib/api.js behaelt savePrivateNumber/
+// privateNumberStatusText/ERROR_INVALID_PRIVATE_NUMBER (kein Schreibpfad
+// dorthin mehr, aber kein toter Server-Vertrag).
 import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.js";
 ---
 
@@ -100,27 +102,6 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
       <span id="settings-msg" class="settings-msg" hidden></span>
     </div>
   </form>
-
-  <!-- P13/WEB-19: eigene Naht (eigener Endpunkt, PII am Tenant-Record) - deshalb
-       ein EIGENES form-Element neben dem Settings-Formular. Das Eingabefeld wird
-       NIE vorbefuellt: angezeigt wird ausschliesslich die Server-Maske, und die
-       waere als Eingabe ohnehin ungueltig. -->
-  <form id="private-number-form" class="settings-form">
-    <label class="field-label" for="private-number-input">Summary SMS number</label>
-    <p id="private-number-status" class="muted">—</p>
-    <input id="private-number-input" class="field-input" type="tel" inputmode="tel"
-           autocomplete="off" placeholder="+1 555 0100" />
-    <p class="muted">
-      Your own number, in international format. Hermes texts you a summary after each
-      call. It is never used as the caller ID and never shown to the people your agent
-      calls.
-    </p>
-    <div class="settings-actions">
-      <button id="private-number-save" class="btn" type="submit">Save number</button>
-      <button id="private-number-clear" class="btn" type="button">Remove</button>
-      <span id="private-number-msg" class="settings-msg" hidden></span>
-    </div>
-  </form>
 </section>
 
 <script>
@@ -129,12 +110,9 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     AUTH_STATE,
     AUTH_EVENT,
     HTTP_UNAUTHORIZED,
-    ERROR_INVALID_PRIVATE_NUMBER,
     buildSettingsPatch,
     fetchTenantState,
-    privateNumberStatusText,
     saveSettings,
-    savePrivateNumber,
     settingsFrom,
     settingsOutcome,
   } from "../../lib/api.js";
@@ -143,13 +121,6 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   const formEl = document.getElementById("settings-form");
   const saveBtn = document.getElementById("settings-save");
   const msgEl = document.getElementById("settings-msg");
-
-  const privateFormEl = document.getElementById("private-number-form");
-  const privateInputEl = document.getElementById("private-number-input");
-  const privateStatusEl = document.getElementById("private-number-status");
-  const privateSaveBtn = document.getElementById("private-number-save");
-  const privateClearBtn = document.getElementById("private-number-clear");
-  const privateMsgEl = document.getElementById("private-number-msg");
 
   const MSG_OK_CLASS = "settings-msg--ok";
   const MSG_ERR_CLASS = "settings-msg--err";
@@ -160,8 +131,8 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   const hideTimers = new WeakMap();
 
   // Kurze Rueckmeldung mit Erfolgs-/Fehler-Faerbung, an ein beliebiges Meldungs-
-  // Element (EINE Implementierung fuer settings- UND private-number-Formular, G5).
-  // text leer -> verstecken. Erfolgsmeldungen blenden nach CONFIRM_HIDE_MS aus.
+  // Element. text leer -> verstecken. Erfolgsmeldungen blenden nach
+  // CONFIRM_HIDE_MS aus.
   function showMessage(el, text, ok) {
     el.textContent = text;
     el.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok);
@@ -246,51 +217,6 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
 
   formEl.addEventListener("submit", submit);
 
-  const MSG_NUMBER_SAVED = "Number saved.";
-  const MSG_NUMBER_REMOVED = "Number removed.";
-  const MSG_NUMBER_MISSING = "Enter a number first, or use Remove.";
-  const MSG_NUMBER_INVALID =
-    "That number isn't valid or isn't allowed. Use the international format, for example +1 555 0100.";
-
-  // Fehlertext der Nummern-Route. Der eingegebene Wert wird NIE zurueckgespiegelt
-  // (keine PII in Meldungen); nur der stabile Server-Code entscheidet den Text.
-  function privateNumberErrorText(err) {
-    if (err instanceof ApiError && err.code === ERROR_INVALID_PRIVATE_NUMBER)
-      return MSG_NUMBER_INVALID;
-    return saveErrorText(err);
-  }
-
-  // Schreibt die Nummer und synchronisiert danach den State ueber DIESELBE eine
-  // Refetch-Naht wie das Settings-Speichern (G5). Nebeneffekt im Namen (N7).
-  async function submitPrivateNumber(value, okText) {
-    privateSaveBtn.disabled = true;
-    privateClearBtn.disabled = true;
-    try {
-      await savePrivateNumber(value);
-      privateInputEl.value = ""; // das Eingabefeld traegt nie einen gespeicherten Wert
-      showMessage(privateMsgEl, okText, true);
-      await refetchState();
-    } catch (err) {
-      showMessage(privateMsgEl, privateNumberErrorText(err), false);
-    } finally {
-      privateSaveBtn.disabled = false;
-      privateClearBtn.disabled = false;
-    }
-  }
-
-  privateFormEl.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const value = privateInputEl.value.trim();
-    // Leeres Feld ist KEIN implizites Loeschen - Loeschen ist der eigene Knopf.
-    if (!value) {
-      showMessage(privateMsgEl, MSG_NUMBER_MISSING, false);
-      return;
-    }
-    submitPrivateNumber(value, MSG_NUMBER_SAVED);
-  });
-
-  privateClearBtn.addEventListener("click", () => submitPrivateNumber("", MSG_NUMBER_REMOVED));
-
   // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
   // eingeloggten Zustand traegt die Antwort settings/greetingTemplates. Listener
   // synchron beim Modul-Start registrieren, BEVOR die Auth-Insel dispatcht. Im
@@ -300,7 +226,6 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) {
       fillForm(data);
-      privateStatusEl.textContent = privateNumberStatusText(data);
       cardEl.hidden = false;
     } else {
       cardEl.hidden = true;
