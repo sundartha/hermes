@@ -14,7 +14,7 @@
 // steht als Datenfeld _besitz.felder in der Vorlage selbst (nicht hier im
 // Skript, nicht als Prosa) - eine Besitz-Liste, die nur ein Mensch liest,
 // driftet genauso wie das, was sie beschreiben soll. Die Arten des Vergleichs
-// (wert | namen | variablen) sind dort an _art_hinweis begruendet.
+// (wert | namen | variablen | texte) sind dort an _art_hinweis begruendet.
 //
 // NEBEN DEM FELDVERGLEICH: Verbote (_besitz.regeln, dort an _regeln_hinweis
 // begruendet). Ein Feldvergleich kann nur zwei bekannte Stellen gegeneinander
@@ -63,6 +63,12 @@ const REGEL_ART_VERBOTEN_JE_EINTRAG = "verboten_je_eintrag";
 const ART_WERT = "wert";
 const ART_NAMEN = "namen";
 const ART_VARIABLEN = "variablen";
+const ART_TEXTE = "texte";
+// Unterpfad je Sammlungs-Eintrag, den art "texte" vergleicht (z.B.
+// "description"). Steht als Datenfeld am Besitz-Eintrag, nicht hier: welcher
+// Text besessen ist, gehoert zur Besitz-Erklaerung, nicht zum Vergleicher.
+const JE_EINTRAG_SCHLUESSEL = "je_eintrag";
+const TEXT_ZUWEISUNG = " = ";
 // Schluessel-Praefix der reinen Entwickler-Doku in diesen JSON-Dateien (Bestand,
 // s. scripts/check-elevenlabs-tests.js): kein Teil des ElevenLabs-Schemas,
 // zaehlt deshalb bei art "namen" nicht als Werkzeug-/Preset-Name mit.
@@ -103,22 +109,42 @@ function wertAnPfad(wurzel, pfad) {
   return { gefunden: true, wert: aktuell };
 }
 
-// Die Namen EINER Sammlung (art "namen"). Zwei Formen, weil Vorlage und
-// Anbieter dieselbe Sache verschieden formen: die Vorlage haelt Werkzeuge als
-// Objekt-Karte, der Live-Agent als Liste. null-Werte zaehlen nicht als
-// vorhanden - der Live-Agent fuehrt jedes bekannte Systemwerkzeug als
+// Die Eintraege EINER Sammlung als [name, inhalt]-Paare. Zwei Formen, weil
+// Vorlage und Anbieter dieselbe Sache verschieden formen: die Vorlage haelt
+// Werkzeuge als Objekt-Karte, der Live-Agent als Liste. null-Werte zaehlen
+// nicht als vorhanden - der Live-Agent fuehrt jedes bekannte Systemwerkzeug als
 // Schluessel und setzt die nicht konfigurierten auf null; ohne diese Regel
 // waere die Live-Menge immer die volle Anbieter-Liste.
-function namenAus(wert) {
+function eintraegeAus(wert) {
   if (Array.isArray(wert)) {
-    return wert.map((eintrag) => eintrag?.name).filter((name) => typeof name === "string");
+    return wert
+      .filter((eintrag) => typeof eintrag?.name === "string")
+      .map((eintrag) => [eintrag.name, eintrag]);
   }
   if (wert === null || typeof wert !== "object") return [];
-  return Object.entries(wert)
-    .filter(([schluessel, kind]) => {
-      return !schluessel.startsWith(DOKU_PRAEFIX) && kind !== null;
-    })
-    .map(([schluessel]) => schluessel);
+  return Object.entries(wert).filter(([schluessel, kind]) => {
+    return !schluessel.startsWith(DOKU_PRAEFIX) && kind !== null;
+  });
+}
+
+// Die Namen EINER Sammlung (art "namen").
+function namenAus(wert) {
+  return eintraegeAus(wert).map(([name]) => name);
+}
+
+// Die Texte an EINEM Unterpfad JEDES Eintrags einer Sammlung (art "texte"), als
+// "name = text". Noetig, wo Namen zu wenig und ein Vollwertvergleich zu viel
+// waeren: der Anbieter haengt an jeden Eintrag Felder, die die Vorlage nicht
+// besitzt (bei data_collection z.B. enum, is_system_provided, llm) - ein
+// Wertvergleich waere dort dauerhaft rot und damit blind. Ein fehlender Text
+// wird als (fehlt) gemeldet und nicht stillschweigend uebersprungen: sonst
+// saehe "Beschreibung geloescht" wie "stimmt ueberein" aus.
+function texteAus(wert, jeEintrag) {
+  return eintraegeAus(wert).map(([name, inhalt]) => {
+    const treffer = wertAnPfad(inhalt, jeEintrag);
+    const text = typeof treffer.wert === "string" ? treffer.wert : FEHLT_MARKE;
+    return `${name}${TEXT_ZUWEISUNG}${text}`;
+  });
 }
 
 // Die {{name}}-Vorkommen EINES Texts (art "variablen"): bei dynamic_variables
@@ -146,9 +172,12 @@ function zeigeWert(wert) {
   return `${anfang}... (gekuerzt, ${text.length} Zeichen)`;
 }
 
-// Die drei Vergleichs-Arten, begruendet in der Vorlage (_besitz._art_hinweis).
+// Die vier Vergleichs-Arten, begruendet in der Vorlage (_besitz._art_hinweis).
 // einPfad: art "wert" vergleicht genau EIN Feld je Seite; die Mengen-Arten
 // duerfen mehrere Ablagen zusammenfassen (z.B. eigene UND eingebaute Werkzeuge).
+// brauchtJeEintrag: art "texte" sagt erst mit einem Unterpfad, WELCHEN Text sie
+// vergleicht - fehlt er, ist der Besitz-Eintrag kaputt und nicht etwa leer.
+// sammle bekommt den Besitz-Eintrag mit, damit dieser Unterpfad Daten bleibt.
 const VERGLEICHS_ARTEN = new Map([
   [ART_WERT, { einPfad: true, sammle: (werte) => werte[0], zeige: zeigeWert }],
   [
@@ -167,16 +196,28 @@ const VERGLEICHS_ARTEN = new Map([
       zeige: zeigeMenge,
     },
   ],
+  [
+    ART_TEXTE,
+    {
+      einPfad: false,
+      brauchtJeEintrag: true,
+      sammle: (werte, eintrag) => {
+        const jeEintrag = eintrag[JE_EINTRAG_SCHLUESSEL];
+        return sortierteMenge(werte.flatMap((wert) => texteAus(wert, jeEintrag)));
+      },
+      zeige: zeigeWert,
+    },
+  ],
 ]);
 
 // --- Form der Besitz-Erklaerung ---
 
+function istPfad(pfad) {
+  return typeof pfad === "string" && pfad !== "";
+}
+
 function istPfadListe(pfade) {
-  return (
-    Array.isArray(pfade) &&
-    pfade.length > 0 &&
-    pfade.every((pfad) => typeof pfad === "string" && pfad !== "")
-  );
+  return Array.isArray(pfade) && pfade.length > 0 && pfade.every(istPfad);
 }
 
 function pfadListeFehler({ feld, seite, pfade, einPfad }) {
@@ -202,6 +243,9 @@ function eintragsFormFehler(eintrag) {
     const bekannt = [...VERGLEICHS_ARTEN.keys()].join(", ");
     return `${feld}: unbekannte Vergleichs-Art "${art}" (bekannt: ${bekannt})`;
   }
+  if (vergleich.brauchtJeEintrag && !istPfad(eintrag[JE_EINTRAG_SCHLUESSEL])) {
+    return `${feld}: art "${art}" braucht "${JE_EINTRAG_SCHLUESSEL}" - ohne den Unterpfad steht nicht fest, WELCHER Text je Eintrag verglichen wird`;
+  }
   const seiten = [
     { seite: "vorlage", pfade: vorlage },
     { seite: "live", pfade: live },
@@ -226,14 +270,14 @@ function fehlendePfade(wurzel, pfade) {
 
 // Der Vergleichswert EINER Seite. vorhanden=false gibt es nur bei art "wert":
 // bei den Mengen-Arten ist die leere Menge ein gueltiger Wert, kein Fehlen.
-function seiteVergleichswert(vergleich, wurzel, pfade) {
+function seiteVergleichswert({ vergleich, eintrag, wurzel, pfade }) {
   const werte = [];
   for (const pfad of pfade) {
     const treffer = wertAnPfad(wurzel, pfad);
     if (treffer.gefunden) werte.push(treffer.wert);
   }
   if (vergleich.einPfad && werte.length === 0) return { vorhanden: false };
-  return { vorhanden: true, wert: vergleich.sammle(werte) };
+  return { vorhanden: true, wert: vergleich.sammle(werte, eintrag) };
 }
 
 // Verglichen wird der VOLLE Wert, nie die gekuerzte Anzeige.
@@ -266,8 +310,8 @@ function vergleicheFeld({ eintrag, vorlage, live }) {
     };
   }
 
-  const links = seiteVergleichswert(vergleich, vorlage, eintrag.vorlage);
-  const rechts = seiteVergleichswert(vergleich, live, eintrag.live);
+  const links = seiteVergleichswert({ vergleich, eintrag, wurzel: vorlage, pfade: eintrag.vorlage });
+  const rechts = seiteVergleichswert({ vergleich, eintrag, wurzel: live, pfade: eintrag.live });
   if (istGleich(links, rechts)) return {};
   return { abweichung: abweichungsZeile({ eintrag, vergleich, links, rechts }) };
 }

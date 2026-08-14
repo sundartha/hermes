@@ -23,7 +23,7 @@
 
   "_besitz": {
     "_hinweis": "BESITZ- UND REGEL-ERKLAERUNG, MASCHINENLESBAR: welche Felder diese Vorlage besitzt ('felder') und was in ihren Sammlungen verboten ist ('regeln', s. _regeln_hinweis). Gelesen von scripts/check-elevenlabs-drift.mjs (npm run elevenlabs:drift), das den Live-Agenten per GET holt, AUSSCHLIESSLICH die hier gelisteten Felder vergleicht und die hier gelisteten Verbote durchsetzt. Der Unterstrich-Praefix sagt hier wie ueberall in dieser Datei nur 'kein Teil des ElevenLabs-API-Schemas' - er sagt NICHT 'nur fuer Menschen': dieser Block ist ein Datenfeld, kein Prosa-Kommentar. Eine Besitz-Liste, die nur ein Mensch liest, driftet genauso wie das, was sie beschreiben soll. WARUM BESITZ STATT VOLLABGLEICH: ein Abgleich ueber alle Felder des Agenten wuerde auch tts.voice_id melden - und beim spaeteren Reparieren ueberschreiben - eine Stimme, die der Eigentuemer im Dashboard gewaehlt hat und die in dieser Vorlage nie stand. Genau so hat in diesem Projekt schon einmal ein Provisionierer die ganze Live-Konfiguration aus lokalen Werten geschrieben und Live-Einstellungen zerstoert. Besitz heisst deshalb: was hier gelistet ist, gehoert der Vorlage; alles andere gehoert dem Dashboard und wird weder gemeldet noch angefasst. Wer der Vorlage ein Feld hinzufuegt, das sie wirklich besitzen soll, traegt es HIER ein - sonst wird es nie verglichen und driftet unbemerkt.",
-    "_art_hinweis": "'art' bestimmt, WIE verglichen wird. 'wert' = exakter Wertvergleich, dafuer genau EIN Pfad je Seite. 'namen' = die Menge der Namen einer Sammlung: Schluessel eines Objekts (Doku-Schluessel mit _-Praefix und null-Werte zaehlen nicht mit) oder das Feld 'name' je Listeneintrag. Diese Art ist noetig, weil Vorlage und Anbieter dieselbe Sache verschieden formen - die Vorlage haelt Werkzeuge als Objekt-Karte und verweist ueber tool_ids, der Live-Agent fuehrt sie als Liste; ein Formvergleich waere immer rot, ohne etwas ueber Drift zu sagen. 'variablen' = die Menge der {{name}}-Vorkommen in den genannten Texten: bei dynamic_variables werden die NAMEN verglichen, nicht die Werte - die Werte sind auftragsspezifisch und bei jedem Anruf andere, ein Wertvergleich waere dort dauerhaft rot und damit blind.",
+    "_art_hinweis": "'art' bestimmt, WIE verglichen wird. 'wert' = exakter Wertvergleich, dafuer genau EIN Pfad je Seite. 'namen' = die Menge der Namen einer Sammlung: Schluessel eines Objekts (Doku-Schluessel mit _-Praefix und null-Werte zaehlen nicht mit) oder das Feld 'name' je Listeneintrag. Diese Art ist noetig, weil Vorlage und Anbieter dieselbe Sache verschieden formen - die Vorlage haelt Werkzeuge als Objekt-Karte und verweist ueber tool_ids, der Live-Agent fuehrt sie als Liste; ein Formvergleich waere immer rot, ohne etwas ueber Drift zu sagen. 'variablen' = die Menge der {{name}}-Vorkommen in den genannten Texten: bei dynamic_variables werden die NAMEN verglichen, nicht die Werte - die Werte sind auftragsspezifisch und bei jedem Anruf andere, ein Wertvergleich waere dort dauerhaft rot und damit blind. 'texte' = die Menge 'name = text' ueber ALLE Eintraege einer Sammlung, wobei der Text an dem Unterpfad steht, den der Eintrag unter 'je_eintrag' nennt (z.B. description). Diese vierte Art kam am 2026-08-14 dazu, weil die beiden vorhandenen genau zwischen den neuen Feldern durchfallen: 'namen' saehe bei data_collection nur die Schluessel und keine einzige deutsche Beschreibung, 'wert' waere dort dauerhaft rot, weil der Anbieter an jeden Eintrag eigene Felder haengt (enum, is_system_provided, dynamic_variable, llm, llm_billed), die diese Vorlage nicht besitzt. Der Unterpfad steht als Datenfeld am Besitz-Eintrag und nicht im Skript - welcher Text besessen ist, gehoert zur Besitz-Erklaerung. Ein fehlender Text wird als (fehlt) gemeldet, damit 'Beschreibung geloescht' nicht wie 'stimmt ueberein' aussieht. WICHTIG bei 'texte': ein Eintrag deckt automatisch auch kuenftig hinzugefuegte Sammlungs-Eintraege ab - genau die Luecke, an der die Besitz-Liste bisher zu schmal war; wer stattdessen je Feld einen eigenen 'wert'-Eintrag anlegt, baut dieselbe Luecke neu.",
     "felder": [
       {
         "feld": "language",
@@ -84,6 +84,70 @@
         "vorlage": ["agent.conversation_config.language_presets"],
         "live": ["conversation_config.language_presets"],
         "_hinweis": "Verglichen wird, WELCHE Zusatzsprachen der Agent fuehrt, nicht der Inhalt ihrer overrides: der Inhalt eines Presets kann Felder tragen, die die Vorlage nicht besitzt (z.B. eine im Dashboard gewaehlte Stimme je Sprache). Wer den Inhalt eines Presets besitzen will, traegt ihn als eigenen Eintrag mit art 'wert' ein. Frei ist der Inhalt damit NICHT: was ein Preset auf keinen Fall setzen darf, steht als Verbot unter 'regeln' - ein Namensvergleich kann das nicht ausdruecken, weil er nur die heutigen Namen kennt und nichts ueber den Inhalt sagt."
+      },
+      {
+        "feld": "suggested_audio_tags",
+        "art": "wert",
+        "vorlage": ["agent.conversation_config.tts.suggested_audio_tags"],
+        "live": ["conversation_config.tts.suggested_audio_tags"],
+        "_hinweis": "Sprachabhaengig, deshalb besessen (Eigentuemer-Entscheidung 2026-08-14: besessen ist ALLES Sprachabhaengige): die Tags und ihre Beschreibungen gehen als Text in den Ausdrucks-Prompt des v3-Modells, das den ENGLISCH sprechenden Agenten steuert. Live stehen dort heute zehn DEUTSCHE Tags samt deutscher Beschreibung (Einfuehlsam, Selbstbewusst, ...), und die language_presets ueberschreiben tts nicht (overrides.tts ist null) - der englische Agent erbt sie also. art 'wert' und nicht 'namen': die Beschreibung sagt, WANN ein Tag benutzt wird, und ist damit genauso sprachabhaengig wie der Tag selbst. Der Vollwertvergleich ist hier gefahrlos, anders als bei data_collection: SuggestedAudioTag hat laut Anbieter-Schema genau zwei Felder (tag, description), der Anbieter haengt keine Defaults dran, die die Vorlage nicht fuehrt. Die Reihenfolge zaehlt damit mit - die Vorlage ist die Wahrheit, ein Push schreibt sie genau so."
+      },
+      {
+        "feld": "soft_timeout_meldung",
+        "art": "wert",
+        "vorlage": ["agent.conversation_config.turn.soft_timeout_config.message"],
+        "live": ["conversation_config.turn.soft_timeout_config.message"],
+        "_hinweis": "Der GESPROCHENE Ueberbrueckungssatz beim Soft-Timeout - sprachabhaengig und live heute deutsch ('[nachdenklich] Genau, dazu sag ich dir gleich mehr...'), inklusive deutschem Audio-Tag. Das ist die Familie, aus der der Eigentuemer-Befund 'Einen Moment bitte.' bei einem englischen Agenten stammt (s. soft_timeout_prompt_override)."
+      },
+      {
+        "feld": "soft_timeout_zusatzmeldungen",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.turn.soft_timeout_config.additional_soft_timeout_messages"
+        ],
+        "live": ["conversation_config.turn.soft_timeout_config.additional_soft_timeout_messages"],
+        "_hinweis": "Dieselbe Sache wie soft_timeout_meldung, nur die Zusatzliste (live: '[geduldig] Ich bin noch dabei, gleich habe ich es...'). Eigener Eintrag statt eines Vergleichs des ganzen soft_timeout_config-Objekts, weil dort auch nicht besessene Stellschrauben liegen (timeout_seconds, randomize_fillers, max_soft_timeouts_per_generation, disable_until_first_user_message) - die gehoeren dem Dashboard."
+      },
+      {
+        "feld": "soft_timeout_prompt_override",
+        "art": "wert",
+        "vorlage": [
+          "agent.conversation_config.turn.soft_timeout_config.llm_generated_message_prompt_override"
+        ],
+        "live": [
+          "conversation_config.turn.soft_timeout_config.llm_generated_message_prompt_override"
+        ],
+        "_hinweis": "GEPRUEFT und JA, sprachabhaengig - und zwar die Wurzel des Eigentuemer-Befunds: der Satz 'Einen Moment bitte.' ist NIRGENDS am Agenten als Text hinterlegt (am 2026-08-14 im gesamten Live-Agenten und in GET /v1/convai/tools gesucht, kein Fund). Er ENTSTEHT hier: soft_timeout_config.use_llm_generated_message ist true, und dieser Anweisungstext ist deutsch ('Generiere eine kurze, natuerliche Uebergangsphrase ...') - ein deutscher Anweisungstext erzeugt deutsche Ueberbrueckungssaetze, egal welche Sprache der Agent spricht. Die Ironie belegt es zusaetzlich: der deutsche Text verbietet woertlich die Floskel 'einen Moment', und genau sie kam dreimal. Deshalb steht hier die englische Fassung als SOLL."
+      },
+      {
+        "feld": "data_collection",
+        "art": "namen",
+        "vorlage": ["platform_settings.data_collection"],
+        "live": ["platform_settings.data_collection"],
+        "_hinweis": "Die SCHLUESSELMENGE der Datenerhebung. Sprachabhaengig, weil die Schluessel selbst deutsche Woerter sind (live heute termindatum, kontaktperson, rueckrufnummer, naechste_schritte) - sie erscheinen in der Auswertung und im Post-Call-Webhook, also in dem, was ein Kunde zu sehen bekommt. Eigener Eintrag NEBEN den Beschreibungen, obwohl 'texte' die Namen mitfuehrt: bei einer Umbenennung sagt dieser Eintrag in EINER Zeile, welche Menge erwartet und welche gefunden wurde, waehrend der Text-Eintrag nur zwei lange Listen gegenueberstellt."
+      },
+      {
+        "feld": "data_collection_beschreibungen",
+        "art": "texte",
+        "je_eintrag": "description",
+        "vorlage": ["platform_settings.data_collection"],
+        "live": ["platform_settings.data_collection"],
+        "_hinweis": "Die Beschreibungen derselben Sammlung - der Text, an dem das Auswertungs-Modell entscheidet, was es aus dem Gespraech zieht. Live sind sie heute deutsch. art 'texte' statt 'wert', weil der Anbieter an jeden Eintrag Felder haengt, die diese Vorlage nicht besitzt (enum, is_system_provided, dynamic_variable, allowed_values_dynamic_variable, constant_value, is_omitted, llm, llm_billed); ein Vollwertvergleich waere dauerhaft rot und damit blind. Nicht besessen bleibt der Typ (type) - der ist keine Sprache."
+      },
+      {
+        "feld": "evaluation_kriterien",
+        "art": "namen",
+        "vorlage": ["platform_settings.evaluation.criteria"],
+        "live": ["platform_settings.evaluation.criteria"],
+        "_hinweis": "GEPRUEFT und JA, sprachabhaengig: die Namen der Auswertungskriterien sind das Etikett, unter dem ein Kunde das Ergebnis eines Anrufs liest (live heute 'Termin vereinbart', 'Anliegen geklaert'). Die Vorlage haelt die Kriterien als LISTE wie der Live-Agent, art 'namen' liest je Eintrag das Feld name. Die Aufnahme in den Besitz ist die Anwendung der Eigentuemer-Regel 'alles Sprachabhaengige' auf ein Feld, das die Regel nicht namentlich nennt - wer das anders sieht, loescht diesen Eintrag und den naechsten, und das Gate hoert sofort auf, sie zu melden."
+      },
+      {
+        "feld": "evaluation_kriterien_prompts",
+        "art": "texte",
+        "je_eintrag": "conversation_goal_prompt",
+        "vorlage": ["platform_settings.evaluation.criteria"],
+        "live": ["platform_settings.evaluation.criteria"],
+        "_hinweis": "Der Bewertungs-Anweisungstext je Kriterium. Sprachabhaengig aus demselben Grund wie der System-Prompt, der laengst besessen ist: es ist Prosa an ein Modell, das ein englisches Transkript beurteilt - live ist sie heute deutsch. NICHT besessen ist die Kennung (id) je Kriterium: sie ist der Schluessel, unter dem bereits ausgewertete Anrufe abgelegt sind, und ein Umbenennen ist eine eigene Entscheidung (s. _nicht_besessen)."
       }
     ],
     "_regeln_hinweis": "REGELN sind Verbote, die fuer JEDEN Eintrag einer Sammlung gelten - auch fuer Eintraege, die es heute noch gar nicht gibt. Sie stehen neben 'felder', weil ein Feldvergleich sie nicht ausdruecken kann: er vergleicht zwei bekannte Stellen, ein Verbot dagegen sagt 'in dieser Sammlung darf NIRGENDS dieser Pfad gesetzt sein'. Wie die Besitz-Liste ist auch das ein Datenfeld und keine Prosa - eine Regel, die nur im Skript stuende, waere fuer den unsichtbar, der die Vorlage pflegt, und eine, die nur ein Mensch liest, wird nicht durchgesetzt. Gelesen von scripts/check-elevenlabs-drift.mjs; eine fehlende oder leere Regel-Liste ist dort ein Fehler (fail-closed), damit ein geloeschtes Verbot nicht als 'gruen' erscheint. 'art' bestimmt die Form der Pruefung: 'verboten_je_eintrag' loest 'live' im Live-Agenten auf, geht jeden Eintrag der Sammlung durch und meldet jeden, der einen der Pfade unter 'verboten' auf einen anderen Wert als null gesetzt hat - namentlich und mit der Begruendung aus 'meldung'. Die Pruefung haengt NICHT daran, ob die Namen der Sammlung gerade abweichen; sie laeuft immer ueber die Eintraege, die live wirklich da sind.",
@@ -100,7 +164,11 @@
     "_nicht_besessen": [
       "tts.voice_id (im Dashboard vom Eigentuemer gewaehlt, stand nie in dieser Vorlage)",
       "tts.model_id (dito)",
-      "alle uebrigen Felder des Agenten, die im Dashboard gesetzt wurden - Turn-/ASR-/Konversationseinstellungen, Stimmen-Feinheiten, Analyse-Konfiguration"
+      "platform_settings.data_collection_scopes - fuehrt DIESELBEN Schluessel wie data_collection (heute deutsch), ist aber keine Sprache, sondern der Erhebungs-Bereich. WER die Schluessel uebersetzt, muss diese Karte im selben Zug mitziehen, sonst zeigt sie auf Felder, die es nicht mehr gibt",
+      "platform_settings.evaluation.criteria[].id - deutsch abgeleitet und teils verstuemmelt (anliegen_geklrt, klarer_gesprchsabschluss), aber der Schluessel bereits ausgewerteter Anrufe; Umbenennen ist eine eigene Entscheidung",
+      "conversation_config.agent.dynamic_variables.dynamic_variable_placeholders - deutsche Beispielwerte (Alex Mueller, einen Beratungstermin); besessen sind laut Eigentuemer die NAMEN der Variablen, nicht ihre Platzhalterwerte",
+      "conversation_config.agent.prompt.timezone (Europe/Berlin) - Zeitzone, nicht Sprache; faellt nicht unter die Besitz-Regel 'alles Sprachabhaengige'",
+      "alle uebrigen Felder des Agenten, die im Dashboard gesetzt wurden - ASR-/Konversationseinstellungen, Stimmen-Feinheiten und die Turn-/Auswertungs-Stellschrauben, soweit sie keinen sprachabhaengigen Text tragen (Zeitgeber, Schwellen, Modellwahl)"
     ]
   },
 
@@ -169,13 +237,68 @@
         "first_message": "Hello, this is an AI assistant calling on behalf of {{owner_name}}. This conversation will be summarised for the person I represent.",
         "language": "en"
       },
+      "_tts_hinweis": "conversation_config.tts ist ein GESCHWISTER von conversation_config.agent, nicht dessen Kind - dieselbe Ebene wie language_presets. Hier steht AUSSCHLIESSLICH suggested_audio_tags. voice_id und model_id bleiben bewusst weg: sie sind im Dashboard gewaehlt, stehen ausdruecklich unter _besitz._nicht_besessen und duerfen von einem spaeteren Push nicht ueberschrieben werden. Belegt am Anbieter-Schema (SuggestedAudioTag: Feld 'tag' Pflicht, 1-30 Zeichen, 'Audio tag to use (for best performance, 1-2 words, e.g., happy, excited)'; Feld 'description' optional, max. 200 Zeichen; die Liste selbst max. 20 Eintraege und laut Schema-Beschreibung nur fuer eleven_v3 und eleven_v3_conversational wirksam - live laeuft eleven_v3_conversational mit expressive_mode true, die Tags greifen also).",
+      "_audio_tags_belegt_hinweis": "ENGLISCHE SOLL-Werte, uebersetzt aus den zehn deutschen Live-Tags (Stand 2026-08-14). Der Anbieter fuehrt KEINE abschliessende Tag-Liste; das API-Schema nennt nur die zwei Beispiele 'happy' und 'excited'. Belegt sind die Tags deshalb ueber die v3-Prompting-Doku (https://elevenlabs.io/docs/best-practices/prompting/eleven-v3), die die Tags woertlich auffuehrt. BELEGT dort woertlich: sympathetic, warmly, excited, delighted, giggles, laughs, sighs. NICHT belegt und deshalb woertliche Uebersetzung: confident (Selbstbewusst), patient (Geduldig), serious (Ernsthaft) - dafuer gibt es in der Doku kein bedeutungsgleiches Tag ([reassuring]/[professional] sagen etwas anderes), und ein bedeutungsaehnliches zu nehmen hiesse den Inhalt zu aendern statt ihn zu uebersetzen. Das Schema haelt das ausdruecklich offen: 'The agent can still use other tags not listed here.'",
+      "tts": {
+        "suggested_audio_tags": [
+          {
+            "tag": "sympathetic",
+            "description": "Use this when the other party mentions worries, stress or a personal concern, to show understanding and compassion."
+          },
+          {
+            "tag": "confident",
+            "description": "Use this when you confirm appointments or make clear suggestions, to convey competence and certainty."
+          },
+          {
+            "tag": "warmly",
+            "description": "Use this for greetings, goodbyes or small talk, to create a friendly, personal atmosphere."
+          },
+          {
+            "tag": "excited",
+            "description": "Use this when an appointment has been agreed or good news is shared, to express delight."
+          },
+          {
+            "tag": "patient",
+            "description": "Use this when the other party hesitates, asks questions or needs more time to think, to convey calm and understanding."
+          },
+          {
+            "tag": "delighted",
+            "description": "Use this when you present a solution or an offer, to show genuine interest and motivation."
+          },
+          {
+            "tag": "serious",
+            "description": "Use this for important details such as appointments, deadlines or sensitive topics, to underline that they matter."
+          },
+          {
+            "tag": "giggles",
+            "description": "Use this sparingly in light, humorous moments of the call, to create rapport and ease."
+          },
+          {
+            "tag": "laughs",
+            "description": "Use this when the other party jokes or makes a light remark, to show natural delight."
+          },
+          {
+            "tag": "sighs",
+            "description": "Use this for small delays or complications, to express sympathetic understanding without sounding unprofessional."
+          }
+        ]
+      },
+      "_turn_hinweis": "conversation_config.turn ist ebenfalls ein GESCHWISTER von conversation_config.agent. Hier stehen NUR die drei sprachabhaengigen Texte des Soft-Timeouts. Die Stellschrauben daneben (timeout_seconds, use_llm_generated_message, randomize_fillers, max_soft_timeouts_per_generation, disable_until_first_user_message, turn_timeout, turn_model ...) fehlen bewusst: sie sind keine Sprache, gehoeren dem Dashboard und stehen unter _besitz._nicht_besessen. WARUM diese drei Texte ueberhaupt hier stehen, obwohl diese Vorlage frueher gar keine Soft-Timeout-Meldung konfiguriert hat: der Live-Agent HAT sie, auf Deutsch, und der Ueberbrueckungssatz ist das, was die Gegenstelle hoert - ein Feld ohne SOLL-Wert kann kein Gate vergleichen.",
+      "_soft_timeout_wortlaut_hinweis": "Uebersetzt aus dem deutschen Live-Stand (2026-08-14), nicht neu erfunden. Die Audio-Tags in den Texten sind dieselben, die oben unter suggested_audio_tags stehen: [thoughtful] (in der v3-Prompting-Doku belegt) und [patient] (nicht belegt, s. _audio_tags_belegt_hinweis). Der Anweisungstext llm_generated_message_prompt_override behaelt sein deutsches Verbot der Floskel 'einen Moment' bei - uebersetzt als 'one moment' - denn genau diese Floskel kam im Befund dreimal woertlich vor. Sie kam, WEIL der Anweisungstext deutsch war: ein deutscher Auftrag erzeugt deutsche Saetze, und ein verbotener Satz auf Deutsch ist immer noch Deutsch. Das Verbot allein hat den Befund nicht verhindert; die Sprache des Auftrags ist der Hebel.",
+      "turn": {
+        "soft_timeout_config": {
+          "message": "[thoughtful] Right, there is a bit more to that...",
+          "additional_soft_timeout_messages": ["[patient] I am still on it, almost there..."],
+          "llm_generated_message_prompt_override": "Generate a short, natural bridging phrase (max. 6-8 words) that ties back to the topic just discussed - for example by briefly picking it up or hinting at what you are about to address. Sound like a person thinking for a second mid-conversation, never like a hold announcement. Avoid stock phrases such as \"one moment\" or \"I am still working on it\". Where it fits, use an audio tag such as [thoughtful] or [curious]."
+        }
+      },
       "_language_presets_hinweis": "conversation_config.language_presets ist ein GESCHWISTER von conversation_config.agent, nicht dessen Kind - es fuehrt die Zusatzsprachen des Agenten. Gesetzt ist genau eine: Spanisch (Eigentuemer-Entscheidung E-5, gemeinsam mit language_detection oben). Der Schluessel ist zweibuchstabig wie agent.language ('en'); braucht der Anbieter je einen Regionalcode ('es-ES'), ist das eine Aenderung mit einer Zeile Begruendung. Die Felder eines Eintrags sind overrides / first_message_translation / soft_timeout_translation - gesetzt ist nur, was belegbar und sinnvoll ist, das Weggelassene ist unten je einzeln begruendet.",
       "language_presets": {
         "es": {
           "overrides": {},
           "_overrides_leer_begruendung": "LEER und zwar absichtlich, nicht unfertig: ohne Uebersteuerung gilt fuer Spanisch die englische Basis-Konfiguration. Der System-Prompt bleibt englisch (er instruiert das Modell, er wird nicht gesprochen), first_message bleibt der englische Offenlegungssatz. Beides ist gewollt - der Anruf BEGINNT laut E-5 auf Englisch, gesprochenes Spanisch entsteht erst, wenn die Gegenseite wechselt und language_detection das erkennt. Eine Stimme wird hier ebenfalls nicht uebersteuert: welche TTS-Stimme fuer Spanisch die richtige ist, ist eine eigene Entscheidung und waere hier geraten.",
           "_weggelassen_first_message_translation": "NICHT gesetzt. first_message ist der Offenlegungssatz, byte-identisch aus src/i18n/locales.js LOCALES.en.disclosure (s. _first_message_hinweis) - an ihm haengt Artikel 50 EU AI Act. Eine spanische Fassung darf NICHT hier uebersetzt werden, sondern nur woertlich aus dem es-Block der Locales uebernommen werden, falls es dort einen gibt; eine selbst uebersetzte Offenlegung waere eine erfundene Rechtsaussage. Hinzu kommt: first_message wird beim Verbindungsaufbau gesprochen, also VOR jedem Sprachwechsel - fuer den heutigen Fall (ausschliesslich US-Rufnummern, Start auf Englisch) traegt eine Uebersetzung nichts.",
-          "_weggelassen_soft_timeout_translation": "NICHT gesetzt, weil es nichts zu uebersetzen gibt: diese Vorlage konfiguriert ueberhaupt keine Soft-Timeout-Meldung. Die Uebersetzung eines nicht existierenden Textes waere ein erfundener Wert - schlechter als ein minimaler Eintrag."
+          "_weggelassen_soft_timeout_translation": "NICHT gesetzt - der Grund hat sich am 2026-08-14 GEAENDERT und lautet nicht mehr 'es gibt nichts zu uebersetzen'. Seitdem fuehrt diese Vorlage sehr wohl Soft-Timeout-Texte (conversation_config.turn.soft_timeout_config, s. _turn_hinweis), weil der Live-Agent sie deutsch fuehrt und sie gesprochen werden. Spanisch erbt sie jetzt auf Englisch - dieselbe Linie wie beim leeren overrides-Objekt darueber: der Anruf beginnt englisch, gesprochenes Spanisch entsteht erst beim Wechsel. Eine spanische Fassung ist eine eigene Entscheidung, weil sie mehr braucht als eine Uebersetzung (welche Audio-Tags in welcher Sprache das v3-Modell erwartet, ist fuer Spanisch nicht belegt); geraten wird sie hier nicht."
         }
       }
     },
@@ -199,7 +322,59 @@
       "retention_days": 0,
       "record_voice": false
     },
-    "_hinweis": "Dieselben zwei Werte wie unter agent._sprache_und_datenschutz.datenschutz, hier zusaetzlich an der ECHTEN Schema-Position (platform_settings ist ein Geschwister von conversation_config im Request-Body von POST /v1/convai/agents/create, kein Kind von agent) - fuer ein direktes Copy-Paste beim echten Push."
+    "_data_collection_hinweis": "ENGLISCHE SOLL-Werte fuer die VIER Felder, die der Live-Agent heute fuehrt - Schluessel UND Beschreibung uebersetzt, kein Feld dazu und keines weg (termindatum -> appointment_date, kontaktperson -> contact_person, rueckrufnummer -> callback_number, naechste_schritte -> next_steps). Ausdruecklich NICHT ergaenzt sind die D1-Felder (appointment_date, appointment_time, amount, currency): das ist ein eigenes Paket. NAEHE ZU D1, damit dieses Paket es nicht verdeckt: appointment_date trifft den D1-Namen woertlich, deckt hier aber MEHR ab (Datum UND Uhrzeit in einem Feld, waehrend D1 auf appointment_date + appointment_time aufteilt) - beim D1-Bau ist das der Punkt, an dem entschieden werden muss, ob dieses Feld geteilt oder umgewidmet wird. Die drei uebrigen (contact_person, callback_number, next_steps) haben in D1 keine Entsprechung, D1s amount/currency hier keine. Die Eintraege fuehren nur type und description: die uebrigen Felder je Eintrag (enum, is_system_provided, dynamic_variable, allowed_values_dynamic_variable, constant_value, is_omitted, llm, llm_billed) setzt der Anbieter selbst, sie sind nicht besessen und wuerden einen Vollwertvergleich dauerhaft rot faerben.",
+    "data_collection": {
+      "appointment_date": {
+        "type": "string",
+        "description": "The agreed appointment date and time, if an appointment was set during the call. Extract date and time from the conversation as precisely as possible."
+      },
+      "contact_person": {
+        "type": "string",
+        "description": "The full name of the person Hermes spoke to, as they introduced themselves or were named during the call."
+      },
+      "callback_number": {
+        "type": "string",
+        "description": "A phone number the other party gave for a callback, if mentioned during the call. Leave empty if none was given."
+      },
+      "next_steps": {
+        "type": "string",
+        "description": "A short summary of the next steps agreed at the end of the call, e.g. an appointment, a callback or further clarification."
+      }
+    },
+    "_evaluation_hinweis": "ENGLISCHE SOLL-Werte fuer die VIER Kriterien, die der Live-Agent heute fuehrt - name und conversation_goal_prompt uebersetzt, kein Kriterium dazu und keines weg. Besessen sind laut _besitz.felder nur diese beiden Textfelder je Kriterium; id, type und scope stehen mit, weil ein spaeterer Push sie braucht, und werden NICHT verglichen. Die englischen ids sind deshalb ein Vorschlag fuer diesen Push und keine Umbenennungs-Entscheidung: die Live-ids (termin_vereinbart, empathischer_und_selbstbewusster_ton, anliegen_geklrt, klarer_gesprchsabschluss) sind der Schluessel bereits ausgewerteter Anrufe, s. _besitz._nicht_besessen. Die beiden verstuemmelten Live-ids zeigen nebenbei, was passiert, wenn deutsche Bezeichner durch eine ASCII-Normalisierung laufen.",
+    "evaluation": {
+      "criteria": [
+        {
+          "id": "appointment_agreed",
+          "name": "Appointment agreed",
+          "type": "prompt",
+          "scope": "conversation",
+          "conversation_goal_prompt": "Rate as successful if a concrete appointment (date and time) was agreed or bindingly confirmed during the call. Rate as unsuccessful if no appointment came about, the call broke off, or the person declined."
+        },
+        {
+          "id": "empathetic_and_confident_tone",
+          "name": "Empathetic and confident tone",
+          "type": "prompt",
+          "scope": "agent",
+          "conversation_goal_prompt": "Rate as successful if the agent sounded empathetic, confident and human throughout the call and engaged actively with the other party. Rate as unsuccessful for a robotic, scripted or inappropriate tone."
+        },
+        {
+          "id": "concern_resolved",
+          "name": "Concern resolved",
+          "type": "prompt",
+          "scope": "conversation",
+          "conversation_goal_prompt": "Rate as successful if the other party's main concern (for example a question, an objection or an appointment request) was fully answered or resolved. Rate as unsuccessful if open questions remained unanswered."
+        },
+        {
+          "id": "clear_call_closing",
+          "name": "Clear call closing",
+          "type": "prompt",
+          "scope": "conversation",
+          "conversation_goal_prompt": "Rate as successful if the agent clearly summarised the agreed next steps at the end of the call and said goodbye politely. Rate as unsuccessful if the call ended abruptly or without a summary."
+        }
+      ]
+    },
+    "_hinweis": "privacy: dieselben zwei Werte wie unter agent._sprache_und_datenschutz.datenschutz, hier zusaetzlich an der ECHTEN Schema-Position (platform_settings ist ein Geschwister von conversation_config im Request-Body von POST /v1/convai/agents/create, kein Kind von agent) - fuer ein direktes Copy-Paste beim echten Push. data_collection und evaluation kamen am 2026-08-14 dazu, s. die beiden Hinweise darueber."
   },
 
   "_spaeter_beim_place_call_umbau": {

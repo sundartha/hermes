@@ -200,15 +200,35 @@ driftet genauso wie das, was sie beschreiben soll. Wer der Vorlage ein Feld
 hinzufuegt, das sie besitzen soll, traegt es **dort** ein, sonst wird es nie
 verglichen.
 
-Besessen sind heute `language`, `first_message`, `prompt`,
-`dynamic_variables` (die **Namen**), `tools` und `language_presets`. **Nicht**
-besessen sind `tts.voice_id`, `tts.model_id` und alles, was im Dashboard
-gesetzt wurde; sie werden weder gemeldet noch angefasst. Der Grund ist kein
-Aufwand, sondern Schaden: ein Vollabgleich ueber alle Felder wuerde eine
-Stimme melden — und beim Reparieren ueberschreiben —, die der Eigentuemer im
-Dashboard gewaehlt hat. In diesem Projekt hat schon einmal ein Provisionierer
-die ganze Live-Konfiguration aus lokalen Werten geschrieben und Live-Werte
-zerstoert.
+**Besessen ist, was sprachabhaengig ist** (Eigentuemer-Entscheidung
+2026-08-14). Heute sind das 15 Felder: `language`, `first_message`,
+`voicemail_message`, `prompt`, `dynamic_variables` (die **Namen**), `tools`,
+`language_presets` — und seit dem 14.08. `suggested_audio_tags`, die drei
+Soft-Timeout-Texte (`message`, `additional_soft_timeout_messages`,
+`llm_generated_message_prompt_override`), `data_collection` (Schluessel **und**
+Beschreibungen, zwei Eintraege) sowie die Auswertungskriterien (Namen **und**
+`conversation_goal_prompt`, zwei Eintraege).
+
+Der Anlass der Erweiterung war kein Einzelfall, sondern dreimal derselbe: ein
+deutscher Ueberbrueckungssatz bei einem englischen Agenten, deutsche
+Audio-Tags, deutsche `data_collection`-Feldnamen. Alle drei lagen **ausserhalb**
+der Besitz-Liste und blieben deshalb beim Sprachwechsel deutsch — die Liste war
+zu schmal, nicht das Gate zu schwach. Merkposten daraus: ein `texte`-Eintrag
+deckt auch **kuenftige** Eintraege einer Sammlung ab; wer stattdessen je Feld
+einen `wert`-Eintrag anlegt, baut dieselbe Luecke neu.
+
+**Nicht** besessen sind `tts.voice_id`, `tts.model_id` und alles, was im
+Dashboard gesetzt wurde; sie werden weder gemeldet noch angefasst. Der Grund
+ist kein Aufwand, sondern Schaden: ein Vollabgleich ueber alle Felder wuerde
+eine Stimme melden — und beim Reparieren ueberschreiben —, die der Eigentuemer
+im Dashboard gewaehlt hat. In diesem Projekt hat schon einmal ein
+Provisionierer die ganze Live-Konfiguration aus lokalen Werten geschrieben und
+Live-Werte zerstoert. Ausdruecklich **nicht** besessen bleiben auch drei
+deutsche Stellen, die es trotzdem gibt (begruendet in der Vorlage unter
+`_besitz._nicht_besessen`): `data_collection_scopes` (dieselben Schluessel, aber
+Erhebungs-Bereich statt Sprache — beim Uebersetzen im selben Zug mitziehen),
+`evaluation.criteria[].id` (Schluessel bereits ausgewerteter Anrufe) und die
+`dynamic_variable_placeholders` (Beispielwerte, nicht Variablennamen).
 
 Je Eintrag legt `art` fest, **wie** verglichen wird (begruendet in der Vorlage
 an `_besitz._art_hinweis`):
@@ -222,6 +242,14 @@ an `_besitz._art_hinweis`):
 - `variablen` — die Menge der `{{name}}`-Vorkommen. Bei `dynamic_variables`
   werden die **Namen** verglichen, nicht die Werte: die Werte sind
   auftragsspezifisch und bei jedem Anruf andere.
+- `texte` — die Menge `name = text` ueber **alle** Eintraege einer Sammlung;
+  welcher Text gemeint ist, sagt der Eintrag selbst unter `je_eintrag` (z. B.
+  `description`). Noetig, wo `namen` zu wenig und `wert` zu viel waere: bei
+  `data_collection` saehe `namen` nur die Schluessel und keine einzige deutsche
+  Beschreibung, waehrend `wert` dauerhaft rot bliebe, weil der Anbieter an jeden
+  Eintrag eigene Felder haengt (`enum`, `is_system_provided`, `llm` …), die die
+  Vorlage nicht besitzt. Ein fehlender Text wird als `(fehlt)` gemeldet — sonst
+  saehe „Beschreibung geloescht" wie „stimmt ueberein" aus.
 
 #### Verbote: was ein Preset NICHT setzen darf
 
