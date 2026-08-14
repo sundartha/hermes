@@ -325,10 +325,27 @@
   outline-offset: 2px;
 }
 
+/* Gekuendigt-Zustand (Owner-Feedback 2026-08-14): Statuszeile ("Cancelled --
+   active until ..."), Resume-Knopf und Stripe-Fussnote sassen praktisch
+   aufeinander -- die Bubble hat Platz, der Block soll atmen. Statuszeile
+   bekommt Luft nach unten zum Knopf; die Fussnote rueckt weiter ab (eigene
+   Regel unten). IDs statt neuer Klassen: #cancel-status/#resume-btn existieren
+   genau einmal (BillingIsland.astro), kein Markup-Anfassen noetig. */
+#cancel-status {
+  margin: 0 0 20px;
+}
+
+/* Der Resume-Knopf haelt zusaetzlich selbst Abstand zur nachfolgenden
+   Fussnote/Meldung -- margin-bottom statt nur footnote-margin-top, damit die
+   Luft auch dann stimmt, wenn dazwischen #cancel-msg eingeblendet wird. */
+#resume-btn {
+  margin-bottom: 6px;
+}
+
 /* ---------------------------------------------------------- 5. Billing: Fussnote */
 
 .billing-footnote {
-  margin-top: 22px;
+  margin-top: 30px;
   font-family: var(--app-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
