@@ -45,6 +45,7 @@ const DEMO = {
     r1k: "Zusammenfassung", r1v: "Kontrolltermin bei Dr. Behrens vereinbart",
     r2k: "Termin", r2v: "Donnerstag, 14. Aug. · 11:30 · Praxis Dr. Behrens",
     r3v: "Liegt in deinem Dashboard",
+    live: "Live",
     step1: "Nummer holen", step2: "Verbinden", step3: "Abnehmen lassen",
   },
   en: {
@@ -79,6 +80,7 @@ const DEMO = {
     r1k: "Summary", r1v: "Check-up booked with Dr. Behrens",
     r2k: "Appointment", r2v: "Thursday, Aug 14 · 11:30 am · Dr. Behrens' practice",
     r3v: "Waiting in your dashboard",
+    live: "Live",
     step1: "Get a number", step2: "Connect", step3: "Let it answer",
   },
 };
@@ -117,6 +119,7 @@ const ticks = ["12.5%", "28.3%", "41.4%", "53.3%", "84.9%"];
 
     <!-- Akt 1 — die Nummer -->
     <div class="hd-act hd-act--1">
+      <span class="hd-actnum" aria-hidden="true">01</span>
       <div class="hd-say">
         <span class="hd-eyebrow">{d.e1}</span>
         <h3 class="hd-head">{d.h1}</h3>
@@ -140,6 +143,7 @@ const ticks = ["12.5%", "28.3%", "41.4%", "53.3%", "84.9%"];
 
     <!-- Akt 2 — der Connector, zwei Wege -->
     <div class="hd-act hd-act--2">
+      <span class="hd-actnum" aria-hidden="true">02</span>
       <div class="hd-say">
         <span class="hd-eyebrow">{d.e2}</span>
         <h3 class="hd-head">{d.h2}</h3>
@@ -172,6 +176,7 @@ const ticks = ["12.5%", "28.3%", "41.4%", "53.3%", "84.9%"];
 
     <!-- Akt 3 — verbunden, die Werkzeuge -->
     <div class="hd-act hd-act--3">
+      <span class="hd-actnum" aria-hidden="true">03</span>
       <div class="hd-say">
         <span class="hd-eyebrow">{d.e3}</span>
         <h3 class="hd-head">{d.h3}</h3>
@@ -193,6 +198,7 @@ const ticks = ["12.5%", "28.3%", "41.4%", "53.3%", "84.9%"];
 
     <!-- Akt 4 — der ausgehende Anruf -->
     <div class="hd-act hd-act--4">
+      <span class="hd-actnum" aria-hidden="true">04</span>
       <div class="hd-say">
         <span class="hd-eyebrow">{d.e4}</span>
         <h3 class="hd-head">{d.h4}</h3>
@@ -220,8 +226,19 @@ const ticks = ["12.5%", "28.3%", "41.4%", "53.3%", "84.9%"];
 
     <!-- Akt 5 — das Gespräch -->
     <div class="hd-act hd-act--5 hd-act--chat">
-      <div class="hd-say">
+      <span class="hd-actnum" aria-hidden="true">05</span>
+      <div class="hd-say hd-say--chat">
         <span class="hd-eyebrow">{d.e5}</span>
+        <span class="hd-callhead">
+          <span class="hd-callhead__dot" aria-hidden="true"></span>
+          <span class="hd-callhead__name">{d.callee}</span>
+          <span class="hd-callhead__live">{d.live}</span>
+          <span class="hd-callhead__bars" aria-hidden="true">
+            <span class="hd-bar"></span>
+            <span class="hd-bar"></span>
+            <span class="hd-bar"></span>
+          </span>
+        </span>
       </div>
       <div class="hd-chat">
         {chat.map((line) => (
@@ -232,6 +249,7 @@ const ticks = ["12.5%", "28.3%", "41.4%", "53.3%", "84.9%"];
 
     <!-- Akt 6 — das Ergebnis -->
     <div class="hd-act hd-act--6">
+      <span class="hd-actnum" aria-hidden="true">06</span>
       <div class="hd-say">
         <span class="hd-eyebrow">{d.e6}</span>
         <h3 class="hd-head">{d.h6}</h3>

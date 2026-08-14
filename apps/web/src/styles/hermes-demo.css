@@ -23,12 +23,15 @@
  * visibility ist in Animationen absichtlich "unscharf": sobald ein Ende
  * des Intervalls visible ist, gilt visible fuer das ganze Intervall — die
  * Ein-/Ausblende bleibt also sichtbar, nur die Ruhephasen sind wirklich weg. */
-@keyframes hdA1 { 0% { opacity: 0; visibility: visible; transform: translateY(14px); } 1.7%, 10.5% { opacity: 1; visibility: visible; transform: none; } 12.5%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
-@keyframes hdA2 { 0%, 13.9% { opacity: 0; visibility: hidden; transform: translateY(14px); } 15.7%, 26.3% { opacity: 1; visibility: visible; transform: none; } 28.3%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
-@keyframes hdA3 { 0%, 29.7% { opacity: 0; visibility: hidden; transform: translateY(14px); } 31.4%, 39.5% { opacity: 1; visibility: visible; transform: none; } 41.4%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
-@keyframes hdA4 { 0%, 42.9% { opacity: 0; visibility: hidden; transform: translateY(14px); } 44.6%, 51.3% { opacity: 1; visibility: visible; transform: none; } 53.3%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
-@keyframes hdA5 { 0%, 54.7% { opacity: 0; visibility: hidden; transform: translateY(14px); } 56.4%, 82.9% { opacity: 1; visibility: visible; transform: none; } 84.9%, 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
-@keyframes hdA6 { 0%, 86.3% { opacity: 0; visibility: hidden; transform: translateY(14px); } 88%, 97.4% { opacity: 1; visibility: visible; transform: none; } 100% { opacity: 0; visibility: hidden; } }
+/* Akt-Wechsel mit leichtem Zoom (scale 0.985) zusaetzlich zum Versatz — die
+ * Buehne "atmet" beim Uebergang, statt hart zu schneiden (Redesign 2026-08-14;
+ * Zeitmarken byte-identisch, nur die transform-Werte sind reicher). */
+@keyframes hdA1 { 0% { opacity: 0; visibility: visible; transform: translateY(16px) scale(0.985); } 1.7%, 10.5% { opacity: 1; visibility: visible; transform: none; } 12.5%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
+@keyframes hdA2 { 0%, 13.9% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 15.7%, 26.3% { opacity: 1; visibility: visible; transform: none; } 28.3%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
+@keyframes hdA3 { 0%, 29.7% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 31.4%, 39.5% { opacity: 1; visibility: visible; transform: none; } 41.4%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
+@keyframes hdA4 { 0%, 42.9% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 44.6%, 51.3% { opacity: 1; visibility: visible; transform: none; } 53.3%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
+@keyframes hdA5 { 0%, 54.7% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 56.4%, 82.9% { opacity: 1; visibility: visible; transform: none; } 84.9%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
+@keyframes hdA6 { 0%, 86.3% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 88%, 97.4% { opacity: 1; visibility: visible; transform: none; } 100% { opacity: 0; visibility: hidden; } }
 
 @keyframes hdS1 { 0%, 15.8% { opacity: 0; transform: translateY(9px); } 17.1%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; } }
 @keyframes hdS2 { 0%, 18.4% { opacity: 0; transform: translateY(9px); } 19.7%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; } }
@@ -63,6 +66,10 @@
 @keyframes hdBar { 0%, 100% { transform: scaleY(0.2); } 50% { transform: scaleY(1); } }
 @keyframes hdCaret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 @keyframes hdGlow { 0%, 100% { opacity: 0.32; } 50% { opacity: 0.6; } }
+/* Redesign 2026-08-14: zusaetzliche Mikro-Animationen. */
+@keyframes hdDrift { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(3cqw, 2cqh, 0); } }
+@keyframes hdPulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes hdRingWave { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(1.9); opacity: 0; } }
 
 /* Fuellt die Kachel der Elternseite (.demo-frame bzw. .sheet__demo). */
 .hd-mount {
@@ -80,8 +87,26 @@
   min-height: 0;
   overflow: hidden;
   font-family: "Space Grotesk", sans-serif;
-  background: radial-gradient(120% 100% at 76% 6%, #1a4a7d 0%, #123a68 34%, #0e2a4e 64%, #0a1f3d 100%);
+  /* Redesign 2026-08-14: mehrschichtiger Nachthimmel statt eines einzelnen
+     Verlaufs — zwei farbige Lichtquellen oben rechts / unten links plus die
+     tiefe Grundflaeche. Die .hd-glow-Kreise treiben zusaetzlich darueber. */
+  background:
+    radial-gradient(90% 130% at 84% -12%, rgba(102, 156, 219, 0.4) 0%, rgba(102, 156, 219, 0) 55%),
+    radial-gradient(72% 100% at 4% 110%, rgba(58, 100, 160, 0.36) 0%, rgba(58, 100, 160, 0) 62%),
+    radial-gradient(120% 100% at 76% 6%, #1b4c80 0%, #123a68 34%, #0c2747 64%, #071a33 100%);
   --hd-t: 0s;
+}
+
+/* Lichtkante oben + leise Vignette an den Raendern — gibt der Buehne Tiefe,
+   ohne den Inhalt anzufassen. Liegt ueber allem, faengt aber keine Klicks. */
+.hd-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0) 9%),
+    radial-gradient(135% 120% at 50% 42%, rgba(0, 0, 0, 0) 64%, rgba(3, 9, 22, 0.4) 100%);
 }
 
 .hd-glow {
@@ -94,15 +119,20 @@
   pointer-events: none;
   animation: hdGlow 7s ease-in-out infinite;
 }
-/* Im Entwurf waren diese beiden Positionen inline gesetzt. */
+/* Im Entwurf waren diese beiden Positionen inline gesetzt. Das Treiben
+   (hdDrift) laeuft auf einem eigenen Element-Paar zu haben waere Markup —
+   stattdessen treibt der Kreis selbst; hdGlow (opacity) wandert in die
+   animation-Liste daneben. */
 .hd-glow--a {
   top: -24%;
   right: -10%;
+  animation: hdGlow 7s ease-in-out infinite, hdDrift 23s ease-in-out infinite;
 }
 .hd-glow--b {
   bottom: -30%;
   left: -14%;
-  animation-delay: 3.5s;
+  animation: hdGlow 7s ease-in-out 3.5s infinite, hdDrift 29s ease-in-out -9s infinite reverse;
+  background: radial-gradient(circle, rgba(96, 140, 205, 0.44) 0%, rgba(96, 140, 205, 0) 68%);
 }
 
 .hd-act {
@@ -179,6 +209,36 @@
   letter-spacing: -0.015em;
   color: #fff;
   text-wrap: pretty;
+  text-shadow: 0 2px 26px rgba(4, 12, 28, 0.5);
+}
+
+/* Ghost-Ziffer des Akts (Redesign 2026-08-14): grosse Serifenzahl hinter der
+   linken Spalte fuellt den vorher toten Raum und gibt jedem Akt eine eigene
+   Buehnenmarke. Verlaufstext, nicht anklickbar, liegt UNTER dem Inhalt
+   (say/show/chat tragen z-index:1). Nur auf der breiten Buehne — in der
+   schmalen/flachen Kachel wuerde sie den gestapelten Inhalt stoeren. */
+.hd-actnum {
+  display: none;
+  position: absolute;
+  left: clamp(2px, 1cqw, 14px);
+  bottom: clamp(-14px, -1cqh, -4px);
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(130px, 40cqh, 280px);
+  line-height: 0.8;
+  letter-spacing: -0.04em;
+  color: transparent;
+  background: linear-gradient(178deg, rgba(143, 182, 227, 0.26) 0%, rgba(143, 182, 227, 0.04) 78%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+}
+.hd-say,
+.hd-show,
+.hd-chat {
+  position: relative;
+  z-index: 1;
 }
 
 .hd-sub {
@@ -192,9 +252,16 @@
 .hd-panel {
   width: 100%;
   border-radius: clamp(12px, 1.5cqw, 18px);
-  background: rgba(6, 18, 42, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 18px 40px -26px rgba(3, 10, 26, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  /* Glas statt Flaeche (Redesign 2026-08-14): Verlauf + backdrop-blur laesst
+     die treibenden Glow-Kreise hinter den Karten durchschimmern. */
+  background: linear-gradient(165deg, rgba(22, 47, 87, 0.6) 0%, rgba(7, 20, 44, 0.66) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 26px 56px -30px rgba(2, 8, 22, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 44px rgba(143, 182, 227, 0.05);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
   overflow: hidden;
 }
 
@@ -211,14 +278,19 @@
   gap: clamp(8px, 1.2cqw, 14px);
   padding: clamp(10px, 2.4cqh, 20px) clamp(12px, 1.6cqw, 22px);
   border-radius: clamp(10px, 1.2cqw, 14px);
-  background: rgba(9, 26, 54, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: linear-gradient(160deg, rgba(21, 45, 84, 0.55) 0%, rgba(8, 22, 46, 0.6) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 16px 34px -24px rgba(2, 8, 22, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
 }
 .hd-tool .hd-mono {
-  padding: 3px 8px;
+  padding: 3px 9px;
   border-radius: 7px;
-  background: rgba(143, 182, 227, 0.13);
+  background: rgba(143, 182, 227, 0.15);
+  border: 1px solid rgba(143, 182, 227, 0.32);
 }
 
 .hd-chat {
@@ -227,9 +299,11 @@
 }
 
 .hd-bubble {
-  box-shadow: 0 14px 34px -24px rgba(3, 10, 26, 0.95);
-  max-width: min(100%, 52ch);
+  box-shadow: 0 16px 36px -24px rgba(3, 10, 26, 0.95);
+  max-width: min(100%, 46ch);
   padding: clamp(11px, 2.4cqh, 20px) clamp(14px, 1.9cqw, 24px);
+  /* Messenger-Ecken (Redesign 2026-08-14): die zur Sprecherseite zeigende
+     untere Ecke ist eng — liest sich sofort als Chat, ohne Dreiecks-Schwanz. */
   border-radius: clamp(12px, 1.5cqw, 18px);
   font: 400 clamp(14px, 1.75cqw, 23px) / 1.4 "Space Grotesk", sans-serif;
   text-wrap: pretty;
@@ -238,7 +312,8 @@
 .hd-bar {
   width: clamp(4px, 0.55cqw, 7px);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
+  background: linear-gradient(to top, rgba(143, 182, 227, 0.95), #ffffff);
+  box-shadow: 0 0 10px rgba(143, 182, 227, 0.4);
   transform-origin: 50% 50%;
   animation: hdBar 1.05s ease-in-out infinite;
 }
@@ -275,7 +350,11 @@
   display: none;
 }
 
-.hd-stage[data-paused="1"] * {
+.hd-stage[data-paused="1"] *,
+.hd-stage[data-paused="1"] *::before,
+.hd-stage[data-paused="1"] *::after {
+  /* Auch Pseudo-Elemente (Klingelwelle ::before) pausieren — der *-Selektor
+     allein erreicht sie nicht. */
   animation-play-state: paused !important;
 }
 
@@ -291,19 +370,20 @@
 }
 .hd-track > span:first-child {
   flex: 1 1 auto;
-  height: 3px;
+  height: 4px;
   transition: height 0.18s ease;
 }
 .hd-track:hover > span:first-child {
-  height: 5px;
+  height: 6px;
 }
 .hd-tick {
   position: absolute;
   top: 50%;
-  width: 1px;
+  width: 2px;
   height: 9px;
   margin-top: -4.5px;
-  background: rgba(255, 255, 255, 0.34);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.42);
   pointer-events: none;
 }
 
@@ -328,13 +408,20 @@
   width: var(--hd-pause-size, clamp(30px, 3.4cqw, 42px));
   aspect-ratio: 1;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(6, 18, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: linear-gradient(165deg, rgba(22, 47, 87, 0.62) 0%, rgba(7, 20, 44, 0.7) 100%);
+  box-shadow: 0 12px 26px -16px rgba(2, 8, 22, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: #fff;
   font: 400 clamp(11px, 1.3cqw, 15px) / 1 "Space Grotesk", sans-serif;
   cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
   animation: none !important;
   opacity: 1 !important;
+}
+.hd-pause:hover {
+  border-color: rgba(255, 255, 255, 0.6);
 }
 
 /* ---------------------------------------------------- Container-Groessen */
@@ -366,6 +453,10 @@
     grid-column: 1 / -1;
   }
   .hd-split {
+    display: block;
+  }
+  /* Ghost-Ziffer nur auf der breiten Buehne (s. .hd-actnum oben). */
+  .hd-actnum {
     display: block;
   }
 }
@@ -464,7 +555,11 @@
   .hd-act,
   .hd-anim,
   .hd-bar,
-  .hd-glow {
+  .hd-glow,
+  .hd-active__dot,
+  .hd-callhead__dot,
+  .hd-avatar--ringing,
+  .hd-avatar--ringing::before {
     animation: none !important;
     opacity: 1 !important;
     visibility: visible !important;
@@ -517,24 +612,43 @@
 }
 .hd-avatar {
   flex: none;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: clamp(38px, 4.6cqw, 58px);
   aspect-ratio: 1;
   border-radius: 50%;
-  background: rgba(143, 182, 227, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.26);
+  /* Licht-Orb statt flacher Scheibe (Redesign 2026-08-14). */
+  background: radial-gradient(120% 120% at 30% 24%, #e8f2fc 0%, #8fb6e3 42%, #2c5f9e 100%);
+  border: 0;
+  box-shadow:
+    0 10px 26px -10px rgba(64, 125, 198, 0.75),
+    inset 0 1px 2px rgba(255, 255, 255, 0.6);
 }
 .hd-avatar--ringing {
   animation: hdRing 1.6s ease-out infinite;
 }
+/* Zweite, konzentrische Klingelwelle — das box-shadow-hdRing bleibt, der
+   Ring darueber macht den Puls sichtbar praeziser. */
+.hd-avatar--ringing::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid rgba(143, 182, 227, 0.6);
+  animation: hdRingWave 1.6s ease-out infinite;
+}
+/* Hermes-Schwinge als Avatar-Zeichen (echtes Site-Asset, CSP-konform unter
+   img-src 'self') — statt des abstrakten Quadrats. drop-shadow setzt sie vom
+   hellen Orb ab; brightness(0) invert(1) macht das Graustufen-PNG rein weiss. */
 .hd-avatar__glyph {
   display: block;
-  width: 38%;
+  width: 60%;
   aspect-ratio: 1;
-  border-radius: 4px;
-  background: #8fb6e3;
+  border-radius: 0;
+  background: url("/assets/hermes-wing.png") center / contain no-repeat;
+  filter: brightness(0) invert(1) drop-shadow(0 1px 3px rgba(10, 34, 66, 0.55));
 }
 .hd-callcard__text {
   display: flex;
@@ -566,13 +680,16 @@
   font: 500 clamp(10px, 1.15cqw, 14px) / 1 var(--mono, ui-monospace, Menlo, monospace);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(143, 182, 227, 0.9);
+  /* Gruen = live (dieselbe Farbfamilie wie die Status-Pillen im Dashboard). */
+  color: rgba(127, 224, 176, 0.95);
 }
 .hd-active__dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #8fb6e3;
+  background: #7fe0b0;
+  box-shadow: 0 0 10px rgba(127, 224, 176, 0.8);
+  animation: hdPulseDot 2.2s ease-in-out infinite;
 }
 
 /* Fensterkopf der beiden Anschluss-Wege (Akt 2) */
@@ -590,6 +707,11 @@
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.32);
 }
+/* Ampel-Trio (Redesign 2026-08-14): macht den Fensterkopf sofort als
+   macOS-Fenster lesbar — gedaempft, damit es die Buehne nicht anschreit. */
+.hd-windot:nth-of-type(1) { background: rgba(255, 95, 87, 0.85); }
+.hd-windot:nth-of-type(2) { background: rgba(254, 188, 46, 0.85); }
+.hd-windot:nth-of-type(3) { background: rgba(40, 200, 64, 0.85); }
 .hd-wintitle {
   margin-left: 6px;
   font: 500 clamp(10.5px, 1.35cqw, 16px) / 1 var(--mono, ui-monospace, Menlo, monospace);
@@ -716,15 +838,67 @@
 }
 .hd-bubble--me {
   align-self: flex-end;
-  background: rgba(255, 255, 255, 0.94);
+  background: linear-gradient(180deg, #ffffff 0%, #e9f2fc 100%);
   color: #10305a;
+  border-bottom-right-radius: 5px;
 }
 .hd-bubble--them {
   align-self: flex-start;
-  background: rgba(9, 26, 54, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(165deg, rgba(24, 50, 92, 0.72) 0%, rgba(10, 26, 54, 0.78) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.94);
+  border-bottom-left-radius: 5px;
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
 }
+
+/* Anruf-Kopf des Gespraechs-Akts (Redesign 2026-08-14): wer spricht mit wem,
+   live, mit Mini-Pegel — gibt den frei schwebenden Blasen einen Rahmen. */
+.hd-callhead {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 10px;
+  padding: clamp(7px, 1.3cqh, 11px) clamp(13px, 1.6cqw, 19px);
+  border-radius: 999px;
+  background: linear-gradient(165deg, rgba(22, 47, 87, 0.62) 0%, rgba(7, 20, 44, 0.68) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 14px 30px -22px rgba(2, 8, 22, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+.hd-callhead__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7fe0b0;
+  box-shadow: 0 0 10px rgba(127, 224, 176, 0.8);
+  animation: hdPulseDot 2.2s ease-in-out infinite;
+}
+.hd-callhead__name {
+  font: 500 clamp(12px, 1.4cqw, 17px) / 1 "Space Grotesk", sans-serif;
+  color: #fff;
+  white-space: nowrap;
+}
+.hd-callhead__live {
+  font: 500 clamp(9.5px, 1.1cqw, 13px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(127, 224, 176, 0.95);
+}
+.hd-callhead__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: clamp(12px, 1.8cqh, 16px);
+}
+.hd-callhead__bars .hd-bar {
+  width: 3px;
+  height: 100%;
+  box-shadow: none;
+}
+.hd-callhead__bars .hd-bar:nth-child(2) { animation-delay: 0.18s; }
+.hd-callhead__bars .hd-bar:nth-child(3) { animation-delay: 0.42s; }
 
 
 /* Steuerung (Fussleiste der Buehne) */
@@ -753,14 +927,16 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 2px rgba(2, 8, 22, 0.5);
   overflow: hidden;
 }
 .hd-fill {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: #8fb6e3;
+  background: linear-gradient(90deg, #6ea3d8 0%, #cfe4fa 100%);
+  box-shadow: 0 0 12px rgba(143, 182, 227, 0.6);
   transform-origin: 0 50%;
   animation: hdProgress 76s linear infinite;
   animation-delay: var(--hd-t);
@@ -774,6 +950,7 @@
 /* Ergebniszeilen (Akt 6) */
 .hd-tool--result {
   align-items: flex-start;
+  background: linear-gradient(160deg, rgba(26, 54, 98, 0.6) 0%, rgba(10, 26, 54, 0.64) 100%);
 }
 .hd-result__dot {
   flex: none;
@@ -781,7 +958,9 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #8fb6e3;
+  /* Gruen = erledigt (Redesign 2026-08-14, Farbfamilie der Status-Pillen). */
+  background: #7fe0b0;
+  box-shadow: 0 0 10px rgba(127, 224, 176, 0.7);
 }
 .hd-result__text {
   display: flex;
@@ -800,8 +979,13 @@
   color: #fff;
 }
 .hd-tool--done {
-  background: rgba(255, 255, 255, 0.94);
+  background: linear-gradient(180deg, #ffffff 0%, #e9f2fc 100%);
   border-color: rgba(255, 255, 255, 0.94);
+}
+/* Der Erledigt-Haken in der weissen Zeile wird gruen — Erfolgssignal statt
+   Marken-Navy (dasselbe Gruen wie hd-active/hd-result__dot). */
+.hd-tool--done .hd-connected__check {
+  background: #157f4f;
 }
 .hd-done__text {
   font: 500 clamp(13.5px, 1.7cqw, 22px) / 1.35 "Space Grotesk", sans-serif;
