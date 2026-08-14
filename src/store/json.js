@@ -992,6 +992,47 @@ export function tenantNewsletterConsent(tenantId) {
   return ops.tenantNewsletterConsent(load(), tenantId);
 }
 
+// ---- Newsletter-Zusatzempfaenger (Double-Opt-in) ----
+// Reine Queries (kein save) - Muster tenantPrivateNumber/tenantNewsletterConsent.
+export function tenantNewsletterRecipients(tenantId) {
+  return ops.tenantNewsletterRecipients(load(), tenantId);
+}
+
+export function confirmedNewsletterRecipients(tenantId) {
+  return ops.confirmedNewsletterRecipients(load(), tenantId);
+}
+
+export function dailyNewsletterConfirmMailCount(tenantId, sinceIso) {
+  return ops.dailyNewsletterConfirmMailCount(load(), tenantId, sinceIso);
+}
+
+// Mutationen -> save (Muster setNewsletterConsent/setPrivateNumber).
+export function addNewsletterRecipient(tenantId, recipientInput) {
+  const recipient = ops.addNewsletterRecipient(load(), tenantId, recipientInput);
+  save();
+  return recipient;
+}
+
+export function removeNewsletterRecipient(tenantId, email) {
+  const changed = ops.removeNewsletterRecipient(load(), tenantId, email);
+  if (changed) save();
+  return changed;
+}
+
+// Oeffentliche Token-Pfade (GET /newsletter/confirm bzw. /unsubscribe) - mutieren nur bei
+// einem Treffer (Muster removeNewsletterRecipient: kein Write ohne echte Aenderung).
+export function confirmNewsletterRecipientByToken(tokenHash, nowIso) {
+  const result = ops.confirmNewsletterRecipientByToken(load(), tokenHash, nowIso);
+  if (result) save();
+  return result;
+}
+
+export function unsubscribeNewsletterRecipientByToken(token) {
+  const result = ops.unsubscribeNewsletterRecipientByToken(load(), token);
+  if (result) save();
+  return result;
+}
+
 // Leser des Tenant-Felds timezone (P8, nur Anzeige). Reine Query, kein save.
 export function tenantTimezone(tenantId) {
   return ops.tenantTimezone(load(), tenantId);

@@ -46,6 +46,22 @@ import { tenantQuotaView } from "./billing/meter.js";
 // (src/portal-paths.js) - dieselbe Konstante nutzt src/routes/api-billing.js fuer
 // seine cancelUrl (frueher ein zweites, driftfaehiges Inline-Literal, G5).
 import { CHECKOUT_RETURN } from "./portal-paths.js";
+// F2-Newsletter-Recipients (Double-Opt-in): Gate-Entscheidung, Token-Bausteine, Seiten-Render
+// - EINE Quelle (G5), geteilt mit call-finish.js (newsletterUnsubscribeUrl).
+import {
+  planAddNewsletterRecipient,
+  newNewsletterTokens,
+  newsletterConfirmUrl,
+  hashNewsletterToken,
+  normalizeEmail,
+  publicNewsletterRecipients,
+  renderNewsletterPage,
+} from "./newsletter-recipients.js";
+// hashEmail: PII-freier Adress-Fingerprint fuers audit_log (Owner-Auftrag: "gehashter
+// Adress-Fingerprint, NIE die Adresse selbst"). safeEqual wird hier NICHT direkt gebraucht -
+// der Token-Vergleich liegt in state-ops.js (confirmNewsletterRecipientByToken/
+// unsubscribeNewsletterRecipientByToken).
+import { hashEmail } from "./util.js";
 
 // AM4: maschinenlesbarer Funnel-Hinweis im no_card-Response. Der Client (lib/subscribe.js)
 // springt bei next==="setup-checkout" deterministisch in die Karten-Erfassung, statt ein
@@ -315,6 +331,10 @@ export function makeSelfServiceRoutes({
       // F2-Mail: Konto-E-Mail (s. Lookup oben) - reine Anzeige fuers Newsletter-Feld
       // (readonly Prefill), NIE ein Schreibziel; fail-closed null (s. oben).
       accountEmail,
+      // F2-Newsletter-Recipients (Double-Opt-in): additive Liste der Zusatzempfaenger.
+      // publicNewsletterRecipients strippt Tokens/Hashes (Owner-Auftrag: "KEINE Tokens/
+      // Hashes in der Antwort") - nur email/status/createdAt verlassen den Server.
+      newsletterRecipients: publicNewsletterRecipients(store.tenantNewsletterRecipients(tenant)),
       // Pay3/W4: Karten- + Abo-Status. KEIN id-Leak (cus_/pm_/sub_ sind keine Secrets,
       // gehoeren aber nicht in die UI-View) - nur "Karte liegt vor ja/nein" + der aktive
       // Plan/Periode. Bei PAYMENT_ENABLED aus: Felder fehlen -> UI versteckt den Block,
@@ -432,6 +452,157 @@ export function makeSelfServiceRoutes({
     }
     audit("self_service_newsletter_consent", req, `outcome=${consent ? "granted" : "revoked"}`);
     res.json({ ok: true, newsletterConsent: consent });
+  });
+
+  // ---- F2-Newsletter-Recipients: Zusatzempfaenger (Double-Opt-in) ------------------
+  // DEDIZIERTE Routen (Muster private-number/newsletter-consent oben), NICHT die settings-
+  // Whitelist: Zusatzempfaenger sind PII eines DRITTEN (nicht des Accounts) und leben am
+  // Tenant-RECORD, NIE in settings (H4). Gates in planAddNewsletterRecipient (newsletter-
+  // recipients.js): Format -> Duplikat (auch gegen die Konto-Adresse) -> Cap (5) ->
+  // Tageslimit Bestaetigungs-Mails (Missbrauchsschutz). Antwort ohne Token (Owner-Auftrag).
+  router.post("/api/self-service/newsletter-recipients", webAuthMw, async (req, res) => {
+    const tenant = req.tenant.tenantId;
+    const rawEmail = (req.body || {}).email;
+    // Konto-E-Mail fuer die Duplikat-Pruefung - derselbe fail-closed Lookup wie oben
+    // (accountEmail-Prefill): ein flackernder Lookup darf den Add-Versuch nicht reissen,
+    // im Zweifel wird ohne Konto-Abgleich geprueft (die Listen-Duplikat-Pruefung bleibt
+    // unberuehrt).
+    let accountEmail = null;
+    if (accounts) {
+      try {
+        const account = await accounts.accountByTenant(tenant);
+        accountEmail = account?.email ?? null;
+      } catch (e) {
+        console.error("[self-service] newsletter-recipients accountEmail lookup:", e.message);
+      }
+    }
+    const plan = planAddNewsletterRecipient({ store, tenantId: tenant, rawEmail, accountEmail });
+    if (!plan.ok) {
+      audit("self_service_newsletter_recipient_add", req, `outcome=rejected reason=${plan.reason}`);
+      return res.status(400).json({ error: plan.reason });
+    }
+    const tokens = newNewsletterTokens();
+    store.addNewsletterRecipient(tenant, {
+      email: plan.email,
+      tokenHash: tokens.tokenHash,
+      tokenExpiresAt: tokens.tokenExpiresAt,
+      unsubToken: tokens.unsubToken,
+    });
+    // Bestaetigungs-Mail auf bestem Bemuehen (fail-soft, Muster attemptCancellationMailConfirm):
+    // der pending-Eintrag ist bereits persistiert, ein Mailer-Fehler darf die Antwort NICHT
+    // blockieren - kein Retry-Sweep in dieser Etappe (Auftrag nennt keinen; das Tageslimit
+    // oben deckt den Missbrauchsfall, ein erneuter Versuch nach Entfernen ist der
+    // Recovery-Pfad des Nutzers). Ohne Mailer (nicht konfiguriert) bleibt der Eintrag
+    // pending, aber ohne Aussicht auf Bestaetigung - dokumentierte, bewusste Grenze.
+    if (mailer) {
+      try {
+        const language = tenantLanguage(store.load(), tenant);
+        const ownerName = store.tenantContext(tenant).ownerName;
+        const t = localeFor(language).newsletter;
+        const confirmUrl = newsletterConfirmUrl(config.server.publicUrl, tokens.confirmToken);
+        await mailer.sendMail({
+          to: plan.email,
+          subject: t.confirmMailSubject,
+          text: t.confirmMailText(ownerName, confirmUrl),
+        });
+      } catch (e) {
+        console.error("[newsletter-confirm-mail]", e.message);
+      }
+    }
+    try {
+      await auditStore.record({
+        actorSub: req.tenant.sub,
+        tenantId: tenant,
+        action: "self_service_newsletter_recipient_added",
+        detail: `email_fp=${hashEmail(plan.email)}`,
+      });
+    } catch (err) {
+      console.error(`self-service newsletter-recipients audit write failed: ${err.message}`);
+    }
+    audit("self_service_newsletter_recipient_add", req, "outcome=pending");
+    res.json({ ok: true, status: "pending" });
+  });
+
+  // Entfernen (pending ODER confirmed) - idempotent, kein Fehler bei unbekannter Adresse
+  // (Muster resume/unschedule: derselbe Endzustand ist kein Fehlschlag).
+  router.delete("/api/self-service/newsletter-recipients", webAuthMw, async (req, res) => {
+    const tenant = req.tenant.tenantId;
+    const email = normalizeEmail((req.body || {}).email);
+    const changed = store.removeNewsletterRecipient(tenant, email);
+    try {
+      await auditStore.record({
+        actorSub: req.tenant.sub,
+        tenantId: tenant,
+        action: "self_service_newsletter_recipient_removed",
+        detail: `email_fp=${hashEmail(email)} changed=${changed}`,
+      });
+    } catch (err) {
+      console.error(`self-service newsletter-recipients audit write failed: ${err.message}`);
+    }
+    audit("self_service_newsletter_recipient_remove", req, `outcome=${changed ? "removed" : "not_found"}`);
+    res.json({ ok: true, removed: changed });
+  });
+
+  // ---- F2-Newsletter-Recipients: oeffentliche Bestaetigung/Abmeldung --------------
+  // AUTH-AUSNAHME (Regel 3, begruendet): der Empfaenger hat KEIN Dashboard/keine Session -
+  // die einzige Absicherung ist der kryptografisch unratbare Token (32 Byte, s. newsletter-
+  // recipients.js), timing-sicher verglichen (safeEqual in state-ops.js). Idempotente GETs
+  // ohne Zustandsaenderung am AUFRUFER (nur am ZIEL-Tenant) -> kein CSRF-Risiko (Muster
+  // /voice/tts/:token). route-policy.js traegt den PUBLIC_ROUTES-Eintrag. Beide Routen
+  // liefern IMMER dieselbe neutrale HTML-Form (Owner-Auftrag: "OHNE Aufschluss, ob die
+  // Adresse existiert"), niemals JSON - kein Dashboard-Client konsumiert sie.
+  router.get("/newsletter/confirm", (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    const result = token
+      ? store.confirmNewsletterRecipientByToken(hashNewsletterToken(token), new Date().toISOString())
+      : null;
+    const language = result ? tenantLanguage(store.load(), result.tenantId) : null;
+    const t = localeFor(language).newsletter;
+    if (!result) {
+      audit("newsletter_recipient_confirm_failed", req, "reason=invalid_or_expired");
+      return res
+        .status(400)
+        .type("html")
+        .send(renderNewsletterPage({ title: t.invalidPageTitle, body: t.invalidPageBody, lang: language || "de" }));
+    }
+    auditStore
+      .record({
+        tenantId: result.tenantId,
+        action: "newsletter_recipient_confirmed",
+        detail: `email_fp=${hashEmail(result.email)}`,
+      })
+      .catch((err) => console.error(`newsletter confirm audit write failed: ${err.message}`));
+    audit("newsletter_recipient_confirmed", req, `tenant=${result.tenantId}`);
+    res
+      .type("html")
+      .send(renderNewsletterPage({ title: t.confirmedPageTitle, body: t.confirmedPageBody, lang: language }));
+  });
+
+  router.get("/newsletter/unsubscribe", (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    const result = token ? store.unsubscribeNewsletterRecipientByToken(token) : null;
+    const language = result ? tenantLanguage(store.load(), result.tenantId) : null;
+    const t = localeFor(language).newsletter;
+    if (!result) {
+      audit("newsletter_recipient_unsubscribe_failed", req, "reason=invalid_or_already_removed");
+      return res
+        .status(400)
+        .type("html")
+        .send(renderNewsletterPage({ title: t.invalidPageTitle, body: t.invalidPageBody, lang: language || "de" }));
+    }
+    auditStore
+      .record({
+        tenantId: result.tenantId,
+        action: "newsletter_recipient_unsubscribed",
+        detail: `email_fp=${hashEmail(result.email)}`,
+      })
+      .catch((err) => console.error(`newsletter unsubscribe audit write failed: ${err.message}`));
+    audit("newsletter_recipient_unsubscribed", req, `tenant=${result.tenantId}`);
+    res
+      .type("html")
+      .send(
+        renderNewsletterPage({ title: t.unsubscribedPageTitle, body: t.unsubscribedPageBody, lang: language }),
+      );
   });
 
   // ---- P5: schlanker Billing-Status fuer die gefuehrte Aktivierung -----------------

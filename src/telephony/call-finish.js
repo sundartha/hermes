@@ -22,6 +22,9 @@ import { USAGE_EVENT_KIND } from "../store/defaults.js";
 import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
 import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
+// F2-Newsletter-Recipients: EINE Quelle fuer den Abmelde-Link-URL-Bau (G5), geteilt mit
+// self-service-routes.js (Bestaetigungs-Mail-Link nutzt das Confirm-Pendant dort).
+import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
 
 // Provider-SMS-Segmentgrenze (Zusammenfassungs-SMS wird hierauf gekuerzt).
 const SMS_BODY_MAX_CHARS = 1500;
@@ -201,7 +204,7 @@ export function makeCallFinish({
               timeStyle: "short",
             }).format(new Date(anchorMs));
         const durationLabel = formatCallDuration(call);
-        const mailText =
+        const mailBody =
           `${who}\n\n` +
           (when ? `${t.mailTimeLabel} ${when}\n` : "") +
           (durationLabel ? `${t.mailDurationLabel} ${durationLabel}\n` : "") +
@@ -209,15 +212,33 @@ export function makeCallFinish({
           (aiCount
             ? `\n\n${t.actionItemsHeading}\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
             : "");
-        try {
-          await mailer.sendMail({ to: mailPlan.to, subject: t.summaryTitle, text: mailText });
-          // NUR nach ERFOLGREICHEM Send (Muster markSummarySmsSent) - schlaegt sendMail
-          // fehl, springt der catch an, KEIN Marker -> ein spaeterer Retry (naechster
-          // /voice/status) sendet die Mail erneut statt sie fuer immer zu verlieren.
-          store.markSummaryMailSent(call.id);
-        } catch (e) {
-          console.error("[mail]", e.message);
+        // F2-Newsletter-Recipients: mailPlan.targets buendelt die Konto-Adresse (Boolean-
+        // Consent, unsubToken=null) UND alle CONFIRMED Zusatzempfaenger (unsubToken gesetzt) -
+        // beide Achsen sind orthogonal (mail-summary.js). NUR Zusatzadressen bekommen den
+        // Abmelde-Link-Footer (Owner-Auftrag: "Abmelde-Link in jeder Mail an Zusatzadressen")
+        // - die Konto-Adresse widerruft weiterhin ueber den Boolean-Consent-Weg, nicht ueber
+        // diesen Kanal. sentCount statt Einzel-Dedup: der bestehende Marker summaryMailSentAt
+        // bleibt EIN Marker pro Call (alle Empfaenger in einem Zug); Teilfehler werden
+        // geloggt, aber NICHT gezielt nachversendet - bewusste Vereinfachung (Auftrag), die
+        // fuer den Konto-only-Fall (Bestand, genau ein Ziel) byte-identisch zum bisherigen
+        // "Marker nur bei Erfolg" bleibt.
+        let sentCount = 0;
+        for (const target of mailPlan.targets) {
+          const mailText = target.unsubToken
+            ? `${mailBody}\n\n${t.unsubscribeLinkLabel} ` +
+              newsletterUnsubscribeUrl(config.server.publicUrl, target.unsubToken)
+            : mailBody;
+          try {
+            await mailer.sendMail({ to: target.email, subject: t.summaryTitle, text: mailText });
+            sentCount += 1;
+          } catch (e) {
+            console.error("[mail]", e.message);
+          }
         }
+        // NUR nach MINDESTENS EINEM erfolgreichen Send (Muster markSummarySmsSent) - bleiben
+        // ALLE Versuche erfolglos, KEIN Marker -> ein spaeterer Retry (naechster
+        // /voice/status) versucht die Mail(s) erneut statt sie fuer immer zu verlieren.
+        if (sentCount > 0) store.markSummaryMailSent(call.id);
       } else if (mailPlan.reason) {
         // Kein Mailer/keine Konto-E-Mail -> Mail still uebersprungen, kein Throw (Muster SMS).
         // Audit nur Marker + Reason, NIE die E-Mail-Adresse (Regel 4/H4).

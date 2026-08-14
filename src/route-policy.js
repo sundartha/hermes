@@ -149,6 +149,24 @@ export const PUBLIC_ROUTES = Object.freeze([
       "ohne Signatur abholt.",
   },
   {
+    method: "GET",
+    path: "/newsletter/confirm",
+    reason:
+      "HANDLER-INTERNE AUTH (F2-Newsletter-Recipients): der Empfaenger hat kein Dashboard/keine " +
+      "Session - Sicherung ist der kryptografisch unratbare Bestaetigungs-Token (32 Byte, nur " +
+      "als SHA256-Hash gespeichert, 48h Ablauf, Einmalverwendung), timing-sicher verglichen " +
+      "(safeEqual, state-ops.js confirmNewsletterRecipientByToken). Idempotenter GET ohne " +
+      "Zustandsaenderung am Aufrufer, kein CSRF-Risiko.",
+  },
+  {
+    method: "GET",
+    path: "/newsletter/unsubscribe",
+    reason:
+      "HANDLER-INTERNE AUTH (F2-Newsletter-Recipients): Muster /newsletter/confirm oben, " +
+      "permanenter Abmelde-Token (kein Ablauf, das Opt-out muss jederzeit moeglich sein), " +
+      "timing-sicher verglichen (safeEqual, state-ops.js unsubscribeNewsletterRecipientByToken).",
+  },
+  {
     method: "POST",
     path: "/voice/incoming",
     reason: VOICE_SIGNATURE_REASON,
