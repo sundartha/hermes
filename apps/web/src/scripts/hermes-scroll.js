@@ -121,6 +121,15 @@ function applyLang(next) {
 const mq = window.matchMedia("(max-width:700px), (pointer:coarse) and (max-width:1024px)");
 const isMobile = () => mq.matches;
 
+/* Owner-Feedback 2026-08-14: Am Handy sind diese drei Blaetter KEINE Overlays
+ * mehr, sondern gestapelte Sektionen der normal scrollbaren Seite (CSS:
+ * Handy-Media-Block in hermes.css). Navigation dorthin = scrollen statt
+ * oeffnen; Menue- und Rechts-Blatt bleiben Overlays. */
+const SECTION_SHEETS = new Set(["howto", "price", "dev"]);
+function sheetEl(name) {
+  return document.querySelector('.sheet[data-sheet="' + name + '"]');
+}
+
 let openedFromMenu = null;
 
 function setSheet(which, cameFromMenu) {
@@ -129,8 +138,10 @@ function setSheet(which, cameFromMenu) {
     sheet.setAttribute("data-open", sheet.dataset.sheet === which ? "1" : "0");
   }
   // Die Mockup-Animationen im Entwickler-Blatt starten bei jedem Oeffnen neu.
-  const devSheet = document.querySelector('.sheet[data-sheet="dev"]');
-  if (devSheet) {
+  // NUR am Desktop: am Handy ist das Dev-Blatt eine gestapelte Sektion, dort
+  // verwaltet der IntersectionObserver in init() die play-Klasse.
+  const devSheet = sheetEl("dev");
+  if (devSheet && !isMobile()) {
     devSheet.classList.remove("play");
     if (which === "dev") {
       void devSheet.offsetWidth;
@@ -340,8 +351,8 @@ function goToSection(index) {
 
 /* ------------------------------------------------------------------ Verdrahtung */
 
-/* Am Handy tritt an die Stelle des Scrollens jeweils ein Vollbild-Blatt, auf
- * dem Desktop scrollt derselbe Knopf zur Sektion. */
+/* Desktop: der Knopf faehrt die Scroll-Choreografie zur Sektion. Handy: die
+ * Sektion steht im Seitenfluss (gestapelt), der Knopf scrollt dorthin. */
 function wireSectionTriggers() {
   for (const el of document.querySelectorAll("[data-goto]")) {
     const [sheet, index] = el.dataset.goto.split(":");
@@ -350,6 +361,20 @@ function wireSectionTriggers() {
       event.preventDefault();
       if (!isMobile()) {
         goToSection(Number(index));
+        return;
+      }
+      // Handy: die Sektions-Blaetter stehen im Seitenfluss -> hinscrollen
+      // (offenes Overlay, z.B. das Menue, vorher schliessen). Nur echte
+      // Overlays (legal) laufen weiter ueber setSheet. Aus dem Menue heraus
+      // springt die Seite SOFORT (der 0.22s-Fade des schliessenden Blatts
+      // verdeckt den Sprung, und ein Smooth-Scroll koennte vom gleichzeitigen
+      // Overlay-Wechsel geschluckt werden); nur sichtbare Seiten-Knoepfe
+      // (Hero) gleiten weich.
+      if (SECTION_SHEETS.has(sheet)) {
+        const smooth = !fromMenu && !reduced;
+        setSheet(null, false);
+        const target = sheetEl(sheet);
+        if (target) target.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
         return;
       }
       setSheet(sheet, fromMenu);
@@ -402,7 +427,10 @@ function wireLegal() {
     trigger.addEventListener("click", (event) => {
       event.preventDefault();
       show(trigger.dataset.legalOpen);
-      setSheet("legal", isMobile());
+      // "Zurueck ins Menue" nur, wenn der Ausloeser wirklich im Menue-Blatt
+      // sitzt — vom .stack-foot oder Desktop-Fussband aus schliesst das
+      // Rechts-Blatt einfach (kein erfundener Menue-Rueckweg).
+      setSheet("legal", Boolean(trigger.closest('.sheet[data-sheet="menu"]')));
     });
   }
   show("privacy");
@@ -486,6 +514,26 @@ function init() {
   wireLegal();
   wireCopy();
   wireKeyboard();
+
+  // Handy (gestapelte Sektionen): die Mockup-Animationen des Entwickler-
+  // Blatts starten, sobald die Sektion ins Bild scrollt — das Gegenstueck
+  // zum Desktop-Pfad (setSheet/apply setzen die play-Klasse dort selbst).
+  // Ohne IntersectionObserver bleibt der Inhalt schlicht statisch sichtbar
+  // (Animationen sind reine Zugabe, .dev-sheet:not(.play) unterdrueckt sie nur).
+  const devSection = sheetEl("dev");
+  if (devSection && "IntersectionObserver" in window) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && isMobile() && !devSection.classList.contains("play")) {
+            devSection.classList.add("play");
+          }
+        }
+      },
+      { threshold: 0.3 },
+    );
+    io.observe(devSection);
+  }
 
   try {
     const saved = localStorage.getItem(LANG_KEY);
