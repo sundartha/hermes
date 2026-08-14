@@ -49,7 +49,7 @@
 // -Feld bleiben unangetastet, lib/api.js behaelt savePrivateNumber/
 // privateNumberStatusText/ERROR_INVALID_PRIVATE_NUMBER (kein Schreibpfad
 // dorthin mehr, aber kein toter Server-Vertrag).
-import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.js";
+import { SETTINGS_LANGUAGES } from "../../lib/api.js";
 ---
 
 <section id="settings-card" class="card" hidden>
@@ -84,23 +84,10 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
       </div>
     </fieldset>
 
-    <fieldset class="settings-perms">
-      <legend class="field-label" data-i18n="permissions">Permissions</legend>
-      {
-        SETTINGS_PERMISSION_TOGGLES.map(({ key, label, hint }) => (
-          <div class="perm-row">
-            <span class="perm-text">
-              <span class="perm-title" data-perm-key={key}>{label}</span>
-              <span class="perm-hint muted" data-perm-key={key}>{hint}</span>
-            </span>
-            <label class="switch">
-              <input type="checkbox" data-perm={key} />
-              <span class="switch-slider" aria-hidden="true"></span>
-            </label>
-          </div>
-        ))
-      }
-    </fieldset>
+    <!-- Owner-Entscheidung 2026-08-14: der Permissions-Block (Personal data /
+         Bank details) ist aus der Oberflaeche entfernt. Die Settings-Felder
+         existieren serverseitig weiter; buildSettingsPatch laesst nicht
+         gerenderte Toggles aus dem Patch (kein stilles Zuruecksetzen). -->
 
     <div class="settings-actions">
       <button id="settings-save" class="btn" type="submit" data-i18n="save">Save</button>
@@ -121,8 +108,6 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     settingsFrom,
     settingsOutcome,
     settingsLanguageLabel,
-    settingsPermissionLabel,
-    settingsPermissionHint,
   } from "../../lib/api.js";
   import { t } from "../../lib/i18n.js";
 
@@ -158,28 +143,20 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     }
   }
 
-  // Sprachkacheln- und Berechtigungs-Beschriftungen sind serverseitig/englisch aus
-  // SETTINGS_LANGUAGES/SETTINGS_PERMISSION_TOGGLES gerendert (Astro-Frontmatter,
-  // laeuft nur einmal, ohne Sprachkontext) -- diese Funktion bringt sie auf die
-  // aktuelle Sprache. Aufgerufen von fillForm() (jedes AUTH_EVENT, inkl. des vom
+  // Sprachkacheln-Beschriftungen sind serverseitig/englisch aus
+  // SETTINGS_LANGUAGES gerendert (Astro-Frontmatter, laeuft nur einmal, ohne
+  // Sprachkontext) -- diese Funktion bringt sie auf die aktuelle Sprache. Aufgerufen von fillForm() (jedes AUTH_EVENT, inkl. des vom
   // Sprachumschalter re-dispatchten -- s. AuthIsland.astro), kein eigener
   // LANG_EVENT-Listener noetig.
   function syncSettingsLabels() {
     for (const node of formEl.querySelectorAll("[data-lang-value]")) {
       node.textContent = settingsLanguageLabel(node.dataset.langValue);
     }
-    for (const node of formEl.querySelectorAll(".perm-title[data-perm-key]")) {
-      node.textContent = settingsPermissionLabel(node.dataset.permKey);
-    }
-    for (const node of formEl.querySelectorAll(".perm-hint[data-perm-key]")) {
-      node.textContent = settingsPermissionHint(node.dataset.permKey);
-    }
   }
 
   // Formular aus dem state befuellen: die Sprach-Kachel auswaehlen (fehlend/leer
-  // -> "Automatic", die erste Kachel mit value="") und die Permission-Toggles
-  // ueber data-perm setzen. Kein clientseitiger DOM-Bau mehr (agentStyle/greeting
-  // waren die einzigen Stellen, die Optionen zur Laufzeit erzeugten).
+  // -> "Automatic", die erste Kachel mit value=""). Kein clientseitiger DOM-Bau
+  // mehr; der Permissions-Block ist entfernt (Owner-Entscheidung 2026-08-14).
   function fillForm(data) {
     syncSettingsLabels();
     const { settings } = settingsFrom(data);
@@ -187,22 +164,14 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     for (const input of formEl.querySelectorAll('input[name="settings-language"]')) {
       input.checked = input.value === language;
     }
-    for (const input of formEl.querySelectorAll("[data-perm]")) {
-      input.checked = Boolean(settings[input.dataset.perm]);
-    }
   }
 
   // Roher Formular-Snapshot fuer buildSettingsPatch (die Whitelist-Grenze lebt
   // dort, nicht hier). Sprache aus der gecheckten Kachel (keine Auswahl -> "",
-  // sollte praktisch nicht vorkommen, da immer genau eine Kachel checked ist);
-  // Toggles ueber data-perm einsammeln.
+  // sollte praktisch nicht vorkommen, da immer genau eine Kachel checked ist).
   function readForm() {
     const checkedLang = formEl.querySelector('input[name="settings-language"]:checked');
-    const form = { language: checkedLang ? checkedLang.value : "" };
-    for (const input of formEl.querySelectorAll("[data-perm]")) {
-      form[input.dataset.perm] = input.checked;
-    }
-    return form;
+    return { language: checkedLang ? checkedLang.value : "" };
   }
 
   // changed/rejected fuer die Rueckmeldung formatieren (Schluessel, keine Werte

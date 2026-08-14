@@ -617,7 +617,16 @@ export function buildSettingsPatch(form) {
     if (src[key] === undefined) continue;
     patch[key] = String(src[key] ?? "");
   }
-  for (const { key } of SETTINGS_PERMISSION_TOGGLES) patch[key] = Boolean(src[key]);
+  // Owner-Entscheidung 2026-08-14: die Permissions-Oberflaeche ist aus dem
+  // Dashboard entfernt. Ein Toggle, den die Insel nicht gerendert hat
+  // (undefined im Snapshot), reist NICHT mit -- sonst wuerde jedes Speichern
+  // die serverseitig gespeicherten Werte still auf false zuruecksetzen.
+  // Explizit uebergebene Booleans reisen weiter (Whitelist-Grenze lebt im
+  // Server, das Feld selbst bleibt gueltig).
+  for (const { key } of SETTINGS_PERMISSION_TOGGLES) {
+    if (src[key] === undefined) continue;
+    patch[key] = Boolean(src[key]);
+  }
   return patch;
 }
 

@@ -149,16 +149,6 @@
   }
 }
 
-/* Feedback-Runde 2 (Befund 3, Fluchten-Pass): app-hermes.css belegt .perm-row
-   mit `padding: 14px 12px` (dort nicht anfassbar) -- das horizontale Polster
-   ist ein Stoerer, der Berechtigungs-Zeilen 12px von der Flucht der Legende
-   "Permissions"/der Sprachkacheln abrueckt. Spaeterer Import (panels.css)
-   gewinnt: Polster nur noch vertikal, Toggle rechts damit ebenfalls wieder
-   flush mit der Kartenkante. */
-.perm-row {
-  padding: 14px 0;
-}
-
 /* ---------------------------------------------------------- 2. Billing: Status */
 
 /* Feedback-Runde 3: Badge und Serif-Wert leben in einer eigenen Kopfzeile

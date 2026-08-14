@@ -148,28 +148,26 @@ test("buildSettingsPatch: greeting ist nur ein String-Wert (Template-Auswahl), k
   assert.equal(typeof patch.greeting, "string");
 });
 
-test("buildSettingsPatch: fehlende Felder -> nicht gerendert = nicht gesendet", () => {
+test("buildSettingsPatch: fehlende Felder -> nicht gerendert = nicht gesendet (auch die Permission-Toggles)", () => {
+  // Owner-Entscheidung 2026-08-14: der Permissions-Block ist aus der UI entfernt.
+  // Nicht gerenderte Toggles duerfen NICHT als false mitreisen -- sonst wuerde
+  // jedes Speichern die serverseitig gespeicherten Werte still zuruecksetzen.
   const patch = buildSettingsPatch({});
-  assert.deepEqual(patch, { allowPersonalData: false, allowBankData: false });
-  assert.equal("agentName" in patch, false);
-  assert.equal("language" in patch, false);
-  assert.equal("agentStyle" in patch, false);
-  assert.equal("greeting" in patch, false);
-  assert.deepEqual(buildSettingsPatch(undefined), {
-    allowPersonalData: false,
-    allowBankData: false,
-  });
+  assert.deepEqual(patch, {});
+  assert.deepEqual(buildSettingsPatch(undefined), {});
+});
+
+test("buildSettingsPatch: explizit uebergebene Permission-Booleans reisen weiter (Feld bleibt gueltig)", () => {
+  const patch = buildSettingsPatch({ allowPersonalData: true, allowBankData: false });
+  assert.deepEqual(patch, { allowPersonalData: true, allowBankData: false });
 });
 
 // ---- Settings-Redesign (Aug 2026): SettingsIsland.astro liefert nur noch --------
-// { language, allowPersonalData, allowBankData } -- kein agentName/agentStyle/
-// greeting mehr im Formular-Snapshot (die Steuerelemente sind aus der UI entfernt).
-test("buildSettingsPatch: das reale Insel-Formular (nur language + Toggles) sendet weder agentName/agentStyle noch greeting", () => {
-  const patch = buildSettingsPatch({ language: "fr", allowPersonalData: false, allowBankData: true });
-  assert.deepEqual(patch, { language: "fr", allowPersonalData: false, allowBankData: true });
-  assert.equal("agentName" in patch, false);
-  assert.equal("agentStyle" in patch, false);
-  assert.equal("greeting" in patch, false);
+// { language } -- kein agentName/agentStyle/greeting und seit 2026-08-14 auch
+// keine Permission-Toggles mehr im Formular-Snapshot (UI entfernt).
+test("buildSettingsPatch: das reale Insel-Formular (nur language) sendet weder agentName/agentStyle/greeting noch Toggles", () => {
+  const patch = buildSettingsPatch({ language: "fr" });
+  assert.deepEqual(patch, { language: "fr" });
 });
 
 test("buildSettingsPatch: Toggle-Werte werden zu Boolean normalisiert", () => {
