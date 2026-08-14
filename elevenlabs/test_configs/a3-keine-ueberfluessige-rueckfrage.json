@@ -8,8 +8,8 @@
   "type": "tool",
   "tool_call_parameters": {
     "referenced_tool": {
-      "id": "<AUSFUELLEN: Tool-ID von get_consult in ElevenLabs - existiert erst nach Provisionierung des Agents/Tools im ElevenLabs-Dashboard/Abo (README Z.9-13)>",
-      "type": "<AUSFUELLEN: vermutlicher Wert 'webhook' oder 'client' - in README, Template und UMSETZUNG-ElevenLabs.md Z.64-215 nicht belegt, welcher der sechs Enum-Werte fuer get_consult zutrifft>"
+      "id": "tool_8801m00mvv3zfxhbcwbszpvfg9ae",
+      "type": "webhook"
     },
     "verify_absence": true,
     "parameters": [],

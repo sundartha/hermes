@@ -10,8 +10,8 @@
   "type": "tool",
   "tool_call_parameters": {
     "referenced_tool": {
-      "id": "get_consult",
-      "type": null
+      "id": "tool_8801m00mvv3zfxhbcwbszpvfg9ae",
+      "type": "webhook"
     },
     "verify_absence": false,
     "parameters": [],
