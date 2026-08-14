@@ -179,6 +179,56 @@ Das Gate laeuft in der CI bei jedem Push (`.github/workflows/ci.yml`, Schritt
 rot enden lassen; sobald sie aufgeloest sind, wird der Schritt blockierend
 geschaltet.
 
+### Drift zum LIVE-Agenten: `npm run elevenlabs:drift`
+
+`elevenlabs:check` haelt Vorlage und Testdefinitionen zusammen. Es sagt
+**nichts** darueber, ob der Agent, der wirklich telefoniert, noch aussieht wie
+die Vorlage. Genau das war der Befund: Vorlage und Live-Agent waren
+auseinandergelaufen, und nichts hat es bemerkt — es fiel nur auf, weil ein Test
+in einen Timeout lief.
+
+`npm run elevenlabs:drift` (`scripts/check-elevenlabs-drift.mjs`) holt den
+Live-Agenten per **GET** und vergleicht ihn mit der Vorlage. Es **patcht
+nichts** — das Reparieren ist eine eigene Entscheidung. Ein anderer Agent als
+der voreingestellte:
+`npm run elevenlabs:drift -- <agent_id>`.
+
+**Verglichen wird nur, was die Vorlage BESITZT.** Die Besitz-Liste steht als
+Datenfeld `_besitz.felder` in `elevenlabs/agent_configs/outbound-agent.template.json`
+— nicht im Skript, nicht als Prosa: eine Liste, die nur ein Mensch liest,
+driftet genauso wie das, was sie beschreiben soll. Wer der Vorlage ein Feld
+hinzufuegt, das sie besitzen soll, traegt es **dort** ein, sonst wird es nie
+verglichen.
+
+Besessen sind heute `language`, `first_message`, `prompt`,
+`dynamic_variables` (die **Namen**), `tools` und `language_presets`. **Nicht**
+besessen sind `tts.voice_id`, `tts.model_id` und alles, was im Dashboard
+gesetzt wurde; sie werden weder gemeldet noch angefasst. Der Grund ist kein
+Aufwand, sondern Schaden: ein Vollabgleich ueber alle Felder wuerde eine
+Stimme melden — und beim Reparieren ueberschreiben —, die der Eigentuemer im
+Dashboard gewaehlt hat. In diesem Projekt hat schon einmal ein Provisionierer
+die ganze Live-Konfiguration aus lokalen Werten geschrieben und Live-Werte
+zerstoert.
+
+Je Eintrag legt `art` fest, **wie** verglichen wird (begruendet in der Vorlage
+an `_besitz._art_hinweis`):
+
+- `wert` — exakter Wertvergleich, genau ein Pfad je Seite.
+- `namen` — die Menge der Namen einer Sammlung. Noetig, weil beide Seiten
+  dieselbe Sache verschieden formen: die Vorlage haelt Werkzeuge als
+  Objekt-Karte, der Live-Agent als Liste. `null` zaehlt nicht als vorhanden —
+  der Anbieter fuehrt jedes bekannte Systemwerkzeug als Schluessel und setzt
+  die nicht konfigurierten auf `null`.
+- `variablen` — die Menge der `{{name}}`-Vorkommen. Bei `dynamic_variables`
+  werden die **Namen** verglichen, nicht die Werte: die Werte sind
+  auftragsspezifisch und bei jedem Anruf andere.
+
+**Fail-closed.** Ohne Schluessel, ohne erreichbare API, ohne Besitz-Erklaerung
+oder bei einem besessenen Pfad, den die Vorlage gar nicht hat, endet der Lauf
+mit einer Meldung und Exit 1 — nie mit OK. Ein gruenes Pruefkommando, das
+nichts geprueft hat, sieht aus wie ein bestandenes. Der Vergleich laeuft immer
+ueber den vollen Wert; gekuerzt ist ausschliesslich die Anzeige in der Meldung.
+
 ## Dateiformat
 
 **JSON, eine Datei pro Test.** Die CLI-Doku bestaetigt das Verzeichnis-Muster
@@ -204,11 +254,11 @@ verwechseln.
 akzeptiert/liefert einen von drei `type`-Werten, jeder mit eigenem
 Feld-Set (Union-Typ):
 
-| `type`-Wert | Vorlage | Abnahme-Notation |
-|---|---|---|
-| `simulation` | `templates/simulation-test.template.json` | **[S]** Simulation Testing |
-| `tool` | `templates/tool-call-test.template.json` | **[T]** Tool Call Testing |
-| `llm` | `templates/next-reply-test.template.json` | **[N]** Next Reply (Scenario) Testing |
+| `type`-Wert  | Vorlage                                   | Abnahme-Notation                      |
+| ------------ | ----------------------------------------- | ------------------------------------- |
+| `simulation` | `templates/simulation-test.template.json` | **[S]** Simulation Testing            |
+| `tool`       | `templates/tool-call-test.template.json`  | **[T]** Tool Call Testing             |
+| `llm`        | `templates/next-reply-test.template.json` | **[N]** Next Reply (Scenario) Testing |
 
 **Einschraenkung zur Zuordnung `llm` = Next Reply/Scenario Testing:** Diese
 Zuordnung ist NICHT woertlich in der Doku als Satz zu finden ("llm heisst
@@ -221,44 +271,44 @@ Antwort"). Strukturell eindeutig, aber kein Zitat-Beleg fuer die Namensgleichhei
 
 ## Feldtabelle
 
-| Feldname | Bedeutung | Beleg-URL |
-|---|---|---|
-| `name` | Testname, Pflichtfeld, alle drei Typen | https://elevenlabs.io/docs/api-reference/tests/create |
-| `type` | Diskriminator: `llm` \| `tool` \| `simulation` | https://elevenlabs.io/docs/api-reference/tests/create |
-| `dynamic_variables` | Map string->any, alle drei Typen | https://elevenlabs.io/docs/api-reference/tests/create |
-| `chat_history` | Liste vorheriger Turns (`role`, `time_in_call_secs`, `message`, optional `tool_calls`/`tool_results`) | https://elevenlabs.io/docs/api-reference/tests/create |
-| `conversation_initiation_source` | Enum, optional, Default `unknown` | https://elevenlabs.io/docs/api-reference/tests/create |
-| `parent_folder_id` | Ordner-Zuordnung, optional | https://elevenlabs.io/docs/api-reference/tests/create |
-| `from_conversation_metadata` | Verknuepfung zu "Create test from this conversation" (Objekt, optional) | https://elevenlabs.io/docs/api-reference/tests/create |
-| **Simulation (`type: simulation`)** | | |
-| `success_conditions` | Liste von Freitext-Erfolgsbedingungen, laut Doku gedeckelt ("Capped at the maximum number of evaluation criteria") | https://elevenlabs.io/docs/api-reference/tests/create |
-| `simulation_scenario` | Freitext-Szenario fuer den simulierten Gespraechspartner | https://elevenlabs.io/docs/api-reference/tests/create |
-| `simulation_max_turns` | Zugzahl der Simulation, Default 5 | https://elevenlabs.io/docs/api-reference/tests/create , Range 1-50: https://elevenlabs.io/docs/conversational-ai/customization/agent-testing |
-| `simulation_environment` | Freitext, optional/nullable | https://elevenlabs.io/docs/api-reference/tests/create |
-| `tool_mock_config` / `tool_mock_overrides` | Werkzeug-Mocking fuer die Simulation | https://elevenlabs.io/docs/api-reference/tests/create |
-| `evaluation_model` | Bewerter-Modell, Default `claude-sonnet-4-6` | https://elevenlabs.io/docs/api-reference/tests/create |
-| `simulated_user_model` | Modell fuer den simulierten Gespraechspartner, Default `claude-sonnet-4-6` | https://elevenlabs.io/docs/api-reference/tests/create |
-| `success_condition` (Singular) | **VERALTET**, auf Simulation-Typ vorhanden aber deprecated — nicht verwenden, `success_conditions` (Plural) nutzen | https://elevenlabs.io/docs/api-reference/tests/create |
-| **Next Reply / Scenario (`type: llm`)** | | |
-| `success_condition` | Freitext-Prompt, bewertet die naechste Agenten-Antwort True/False | https://elevenlabs.io/docs/api-reference/tests/create |
-| `success_examples` | Liste `{response, type:"success"}`, nicht-leer wenn angegeben | https://elevenlabs.io/docs/api-reference/tests/create |
-| `failure_examples` | Liste `{response, type:"failure"}`, nicht-leer wenn angegeben | https://elevenlabs.io/docs/api-reference/tests/create |
-| **Tool Call (`type: tool`)** | | |
-| `tool_call_parameters` | Container-Objekt; leer = Aufruf wird nicht bewertet | https://elevenlabs.io/docs/api-reference/tests/create |
-| `tool_call_parameters.referenced_tool.id` / `.type` | Welches Werkzeug geprueft wird; `type`-Enum: `system, webhook, client, workflow, api_integration_webhook, mcp, code` | https://elevenlabs.io/docs/api-reference/tests/create |
-| `tool_call_parameters.verify_absence` | Boolean, Default `false`. **Das ist das Feld fuer Abwesenheits-Pruefung** (Plan-Begriff `verify_absence`) — `true` heisst: der Aufruf DARF NICHT stattfinden | https://elevenlabs.io/docs/api-reference/tests/create |
-| `tool_call_parameters.parameters[].path` | Pfad/Name des zu pruefenden Parameters | https://elevenlabs.io/docs/api-reference/tests/create |
-| `tool_call_parameters.parameters[].eval.type` | Pruefart-Diskriminator: `anything` \| `exact` \| `llm` \| `regex` | https://elevenlabs.io/docs/api-reference/tests/create |
-| `...eval` bei `type:"exact"` | Feld `expected_value` (string) — exakter Vergleich | https://elevenlabs.io/docs/api-reference/tests/create |
-| `...eval` bei `type:"regex"` | Feld `pattern` (string) — Muster-Vergleich | https://elevenlabs.io/docs/api-reference/tests/create |
-| `...eval` bei `type:"llm"` | Feld `description` (string) — Bewertung durch Modell | https://elevenlabs.io/docs/api-reference/tests/create |
-| `...eval` bei `type:"anything"` | keine weiteren Felder | https://elevenlabs.io/docs/api-reference/tests/create |
-| `tool_call_parameters.workflow_node_transition` | `{agent_id, target_node_id, type}` fuer Workflow-Agenten | https://elevenlabs.io/docs/api-reference/tests/create |
-| `check_any_tool_matches` | Boolean, optional/nullable | https://elevenlabs.io/docs/api-reference/tests/create |
-| **Ausfuehrung (NICHT Teil der Testdefinitions-Datei)** | | |
-| `repeat_count` | Gehoert zum Ausfuehrungs-Aufruf `POST /v1/convai/agents/{agent_id}/run-tests`, nicht zur Testdefinition selbst. Bereich bis 50 (angehoben von 20). Im Ergebnis (Test-Invocation) taucht `repeat_count` mit Default 1 wieder auf. | Bereich/Aenderung: https://elevenlabs.io/docs/changelog/2026/6/22 · Default im Ergebnis: https://elevenlabs.io/docs/api-reference/tests/test-invocations/get |
-| `rationale.messages` / `rationale.summary` | Begruendung im Testergebnis (Test-Invocation), Einzelmeldungen + Zusammenfassung | https://elevenlabs.io/docs/api-reference/tests/test-invocations/get |
-| `result_groups[].buckets[]` | Fehlschlaege gruppiert nach Ursache (`title`, `reason`, `status`: passed/failed/pending) | https://elevenlabs.io/docs/api-reference/tests/test-invocations/get |
+| Feldname                                               | Bedeutung                                                                                                                                                                                                                        | Beleg-URL                                                                                                                                                    |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`                                                 | Testname, Pflichtfeld, alle drei Typen                                                                                                                                                                                           | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `type`                                                 | Diskriminator: `llm` \| `tool` \| `simulation`                                                                                                                                                                                   | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `dynamic_variables`                                    | Map string->any, alle drei Typen                                                                                                                                                                                                 | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `chat_history`                                         | Liste vorheriger Turns (`role`, `time_in_call_secs`, `message`, optional `tool_calls`/`tool_results`)                                                                                                                            | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `conversation_initiation_source`                       | Enum, optional, Default `unknown`                                                                                                                                                                                                | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `parent_folder_id`                                     | Ordner-Zuordnung, optional                                                                                                                                                                                                       | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `from_conversation_metadata`                           | Verknuepfung zu "Create test from this conversation" (Objekt, optional)                                                                                                                                                          | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| **Simulation (`type: simulation`)**                    |                                                                                                                                                                                                                                  |                                                                                                                                                              |
+| `success_conditions`                                   | Liste von Freitext-Erfolgsbedingungen, laut Doku gedeckelt ("Capped at the maximum number of evaluation criteria")                                                                                                               | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `simulation_scenario`                                  | Freitext-Szenario fuer den simulierten Gespraechspartner                                                                                                                                                                         | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `simulation_max_turns`                                 | Zugzahl der Simulation, Default 5                                                                                                                                                                                                | https://elevenlabs.io/docs/api-reference/tests/create , Range 1-50: https://elevenlabs.io/docs/conversational-ai/customization/agent-testing                 |
+| `simulation_environment`                               | Freitext, optional/nullable                                                                                                                                                                                                      | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `tool_mock_config` / `tool_mock_overrides`             | Werkzeug-Mocking fuer die Simulation                                                                                                                                                                                             | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `evaluation_model`                                     | Bewerter-Modell, Default `claude-sonnet-4-6`                                                                                                                                                                                     | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `simulated_user_model`                                 | Modell fuer den simulierten Gespraechspartner, Default `claude-sonnet-4-6`                                                                                                                                                       | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `success_condition` (Singular)                         | **VERALTET**, auf Simulation-Typ vorhanden aber deprecated — nicht verwenden, `success_conditions` (Plural) nutzen                                                                                                               | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| **Next Reply / Scenario (`type: llm`)**                |                                                                                                                                                                                                                                  |                                                                                                                                                              |
+| `success_condition`                                    | Freitext-Prompt, bewertet die naechste Agenten-Antwort True/False                                                                                                                                                                | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `success_examples`                                     | Liste `{response, type:"success"}`, nicht-leer wenn angegeben                                                                                                                                                                    | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `failure_examples`                                     | Liste `{response, type:"failure"}`, nicht-leer wenn angegeben                                                                                                                                                                    | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| **Tool Call (`type: tool`)**                           |                                                                                                                                                                                                                                  |                                                                                                                                                              |
+| `tool_call_parameters`                                 | Container-Objekt; leer = Aufruf wird nicht bewertet                                                                                                                                                                              | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `tool_call_parameters.referenced_tool.id` / `.type`    | Welches Werkzeug geprueft wird; `type`-Enum: `system, webhook, client, workflow, api_integration_webhook, mcp, code`                                                                                                             | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `tool_call_parameters.verify_absence`                  | Boolean, Default `false`. **Das ist das Feld fuer Abwesenheits-Pruefung** (Plan-Begriff `verify_absence`) — `true` heisst: der Aufruf DARF NICHT stattfinden                                                                     | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `tool_call_parameters.parameters[].path`               | Pfad/Name des zu pruefenden Parameters                                                                                                                                                                                           | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `tool_call_parameters.parameters[].eval.type`          | Pruefart-Diskriminator: `anything` \| `exact` \| `llm` \| `regex`                                                                                                                                                                | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `...eval` bei `type:"exact"`                           | Feld `expected_value` (string) — exakter Vergleich                                                                                                                                                                               | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `...eval` bei `type:"regex"`                           | Feld `pattern` (string) — Muster-Vergleich                                                                                                                                                                                       | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `...eval` bei `type:"llm"`                             | Feld `description` (string) — Bewertung durch Modell                                                                                                                                                                             | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `...eval` bei `type:"anything"`                        | keine weiteren Felder                                                                                                                                                                                                            | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `tool_call_parameters.workflow_node_transition`        | `{agent_id, target_node_id, type}` fuer Workflow-Agenten                                                                                                                                                                         | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| `check_any_tool_matches`                               | Boolean, optional/nullable                                                                                                                                                                                                       | https://elevenlabs.io/docs/api-reference/tests/create                                                                                                        |
+| **Ausfuehrung (NICHT Teil der Testdefinitions-Datei)** |                                                                                                                                                                                                                                  |                                                                                                                                                              |
+| `repeat_count`                                         | Gehoert zum Ausfuehrungs-Aufruf `POST /v1/convai/agents/{agent_id}/run-tests`, nicht zur Testdefinition selbst. Bereich bis 50 (angehoben von 20). Im Ergebnis (Test-Invocation) taucht `repeat_count` mit Default 1 wieder auf. | Bereich/Aenderung: https://elevenlabs.io/docs/changelog/2026/6/22 · Default im Ergebnis: https://elevenlabs.io/docs/api-reference/tests/test-invocations/get |
+| `rationale.messages` / `rationale.summary`             | Begruendung im Testergebnis (Test-Invocation), Einzelmeldungen + Zusammenfassung                                                                                                                                                 | https://elevenlabs.io/docs/api-reference/tests/test-invocations/get                                                                                          |
+| `result_groups[].buckets[]`                            | Fehlschlaege gruppiert nach Ursache (`title`, `reason`, `status`: passed/failed/pending)                                                                                                                                         | https://elevenlabs.io/docs/api-reference/tests/test-invocations/get                                                                                          |
 
 ## UNGEKLAERT (nicht belegbar, deshalb NICHT in den Vorlagen als scharfes Feld)
 
