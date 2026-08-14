@@ -15,8 +15,8 @@
   "dynamic_variables": {
     "owner_name": "Nina Caldwell",
     "callee": "Del Sol Auto Repair, front desk (+1 305-555-0128)",
-    "objective": "Schedule a repair appointment for Nina Caldwell's car - four new tires before a road trip.",
-    "mandate": "Any appointment from Thursday through Saturday, between 9 AM and 2 PM, up to $500 for the full set of four tires."
+    "objective": "Schedule a repair appointment for Nina Caldwell's car - four new tires before a road trip. The vehicle is a 2019 Toyota RAV4 LE, silver, with 225/65R17 all-season tires and about 61,000 miles; all four tires are worn down to the wear bars. Nina Caldwell drops the car off herself and does not wait on site.",
+    "mandate": "Any appointment from Thursday through Saturday, between 9 AM and 2 PM, up to $500 for the full set of four tires, mounting and balancing included. Any all-season brand in that size the shop has in stock is acceptable within that price."
   },
   "chat_history": [],
   "conversation_initiation_source": null,
@@ -28,7 +28,8 @@
     "repeat_count (5) und Bestehensschwelle (>= 4 von 5) sind laut elevenlabs/tests/README.md Feldtabelle, Abschnitt 'Ausfuehrung (NICHT Teil der Testdefinitions-Datei)', Teil des separaten Ausfuehrungs-Aufrufs 'POST /v1/convai/agents/{agent_id}/run-tests', nicht der Testdefinition selbst. Der Auftrag verlangt sie trotzdem sichtbar in dieser Datei - deshalb hier als Nicht-Schema-Feld unter '_ausfuehrung' aufgenommen, analog zum '_vorlage_hinweis'-Muster der Vorlage, und vor einem Push wieder zu entfernen bzw. in den run-tests-Aufruf zu uebertragen.",
     "'ab Zug 3' aus UMSETZUNG-ElevenLabs.md Zeile 165 ist nicht praezisiert, ob Gesamt-Zuege (inkl. Agent) oder nur die Zuege der Gegenseite gezaehlt werden. Interpretation hier: der DRITTE Redebeitrag der Gegenseite (simulierter Gespraechspartner) - im simulation_scenario-Text explizit so ausformuliert, damit der Test unabhaengig von dieser Unklarheit etwas Konkretes prueft.",
     "evaluation_model und simulated_user_model auf null belassen (Doku-Default laut README: claude-sonnet-4-6) - keine abweichende Anforderung aus A7 oder der Vorlage belegt.",
-    "Exakte Obergrenze von success_conditions laut README ungeklaert (Doku nennt keine Zahl) - hier bewusst bei den drei aus dem Auftrag verlangten Einzelbedingungen belassen."
+    "Exakte Obergrenze von success_conditions laut README ungeklaert (Doku nennt keine Zahl) - hier bewusst bei den drei aus dem Auftrag verlangten Einzelbedingungen belassen.",
+    "DATENLUECKE GESCHLOSSEN 2026-08-14: objective und mandate tragen jetzt die Fahrzeug- und Auftragsangaben (Modell, Baujahr, Reifengroesse, Laufleistung, Abgabe ohne Warten, Marken-/Montagefreigabe im Preisrahmen). Anlass ist gemessen: ohne diese Angaben legte das starke Modell auf, weil die Werkstatt im ersten Zug nach dem Fahrzeug fragt und der Agent nichts hatte - das Gespraech endete nach 5 von 8 Gegenzuegen, der Auswerter meldete 'criteria cannot be evaluated'. Das schwache Modell erfand an derselben Stelle ein Fahrzeug und spielte weiter. Eine unbeabsichtigte Datenluecke wird also von einem ehrlichen und einem erfindenden Modell verschieden beantwortet: A7 haette den Umgang mit der Luecke gemessen statt des Sprachwechsels - und dabei Erfindung belohnt, das Gegenteil dessen, wofuer A5 und A9 gebaut sind. Ergaenzt sind AUSSCHLIESSLICH Eingangsdaten in den beiden vorhandenen dynamic_variables; simulation_scenario, success_conditions und simulation_max_turns sind unveraendert. Keine neue Variable: das Vokabular ist auf owner_name/callee/objective/mandate festgenagelt (npm run elevenlabs:check, Vokabular-Abgleich in beide Richtungen)."
   ],
   "_ausfuehrung": {
     "repeat_count": 5,
