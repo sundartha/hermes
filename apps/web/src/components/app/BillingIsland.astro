@@ -48,11 +48,11 @@ import {
 
   <!-- 1. aktueller Tarif + Status: Serif-Hauptwert + Mono-Nebenangabe (§10). -->
   <div class="billing-status">
-    <span id="billing-status-badge" class="billing-status-badge"></span>
-    <span class="billing-status__body">
+    <span class="billing-status__head">
+      <span id="billing-status-badge" class="billing-status-badge"></span>
       <span id="billing-status-value" class="billing-status-value"></span>
-      <span id="billing-status-detail" class="billing-status-detail"></span>
     </span>
+    <span id="billing-status-detail" class="billing-status-detail"></span>
   </div>
   <p id="billing-msg" class="billing-msg" hidden></p>
 
@@ -91,11 +91,14 @@ import {
 
   <!-- 5. 312k-P3: zweistufiger Kuendigungsweg (§ 312k BGB), ruhig ganz unten. Sichtbar
        NUR mit aktivem Abo (renderCancelBlock blendet den Block sonst aus). Stufe 1:
-       CANCEL_BUTTON_LABEL (gesetzlich vorgegebener Wortlaut) als ruhiger Text-Link
-       (.cancel-link), kein roter Schreckknopf -- bleibt trotzdem unmittelbar sichtbar
-       und erreichbar. Stufe 2: cancel-confirm nennt WAS/WANN und bietet
-       CONFIRM_CANCEL_BUTTON_LABEL (ebenfalls gesetzlich vorgegeben) sowie den
-       Abbruch. Bereits gekuendigt -> cancel-status + Ruecknahme-Schaltflaeche. -->
+       ruhiger Text-Link (.cancel-link), kein roter Schreckknopf -- bleibt trotzdem
+       unmittelbar sichtbar und erreichbar. Stufe 2: cancel-confirm nennt WAS/WANN
+       sowie den Abbruch. Bereits gekuendigt -> cancel-status + Ruecknahme.
+       Beschriftungen sprachbewusst (renderCancelBlock): DE-Modus zeigt den
+       gesetzlich vorgegebenen deutschen Wortlaut WOERTLICH, EN-Modus die
+       eindeutige englische Formulierung (Owner-Entscheidung 2026-08-14,
+       s. subscribe.js); das SSR-Markup traegt den deutschen Pflichtwortlaut
+       als Default. -->
   <div id="cancel-block" class="billing-section" hidden>
     <p id="cancel-status" class="muted" hidden></p>
     <button id="cancel-open" class="cancel-link" type="button" hidden>{CANCEL_BUTTON_LABEL}</button>
@@ -139,6 +142,8 @@ import {
     billingStatusDetail,
     cancelAbortLabel,
     resumeButtonLabel,
+    cancelButtonLabel,
+    confirmCancelButtonLabel,
   } from "../../lib/subscribe.js";
   import { t } from "../../lib/i18n.js";
 
@@ -242,10 +247,15 @@ import {
   // (aktueller Plan/Termin), die Sichtbarkeit der zweiten Stufe bleibt dabei unberuehrt
   // (kein Zuklappen mitten im Bestaetigungs-Dialog durch einen Hintergrund-Re-Render).
   function renderCancelBlock(sub) {
-    // CANCEL_ABORT_LABEL/RESUME_BUTTON_LABEL sind serverseitig/englisch aus
-    // subscribe.js in die Karte gerendert (Astro-Frontmatter, ohne Sprachkontext);
-    // renderCancelBlock laeuft bei jedem AUTH_EVENT (inkl. des vom Sprachumschalter
-    // re-dispatchten) und bringt beide zusaetzlich auf die aktuelle Sprache.
+    // Die Kuendigungs-Beschriftungen sind serverseitig aus subscribe.js in die
+    // Karte gerendert (Astro-Frontmatter, ohne Sprachkontext); renderCancelBlock
+    // laeuft bei jedem AUTH_EVENT (inkl. des vom Sprachumschalter re-dispatchten)
+    // und bringt alle auf die aktuelle Sprache. cancelButtonLabel()/
+    // confirmCancelButtonLabel() liefern im DE-Modus den gesetzlich vorgegebenen
+    // Wortlaut woertlich, im EN-Modus die eindeutige englische Formulierung
+    // (Owner-Entscheidung 2026-08-14, s. subscribe.js).
+    cancelOpenEl.textContent = cancelButtonLabel();
+    cancelConfirmBtnEl.textContent = confirmCancelButtonLabel();
     cancelAbortEl.textContent = cancelAbortLabel();
     resumeBtnEl.textContent = resumeButtonLabel();
     cancelBlockEl.hidden = !sub.planSlug;

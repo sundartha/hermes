@@ -319,12 +319,27 @@ export function dismissPlanChoice(els) {
 }
 
 // ---- 312k-P3: Kuendigungs-Weg (§ 312k BGB) ------------------------------------
-// Zwei Schaltflaechen-Beschriftungen sind GESETZLICH VORGEGEBEN, nicht frei waehlbar
-// (Auftragsnotiz) - deshalb Deutsch, obwohl das Dashboard sonst durchgaengig Englisch ist
-// (SPRACHBRUCH IST GEWOLLT, kein Versehen; s. Bericht). EINE Quelle (G25) je Text: die
-// Astro-Insel importiert diese Konstanten statt den Wortlaut ein zweites Mal zu tragen.
+// Der DEUTSCHE Wortlaut der beiden Schaltflaechen ist gesetzlich vorgegeben
+// (§ 312k Abs. 2 BGB: "Vertraege hier kuendigen" oder eine entsprechende
+// eindeutige Formulierung) und bleibt im DE-Modus WOERTLICH unangetastet.
+// Owner-Entscheidung 2026-08-14: der EN-Modus zeigt eine gleichwertig
+// EINDEUTIGE englische Formulierung statt des deutschen Sprachbruchs -- das
+// Gesetz verlangt Eindeutigkeit, nicht deutsche Sprache in einer englischen
+// Oberflaeche. Die EN-Fassungen sind eigene benannte Konstanten (KEIN
+// Woerterbuch-Eintrag -- der Waechtertest dashboard-i18n-surface stellt sicher,
+// dass der deutsche Pflichtwortlaut nie in einem uebersetzbaren Woerterbuch
+// landet). EINE Quelle (G25) je Text: die Astro-Insel importiert Konstanten/
+// Resolver statt den Wortlaut ein zweites Mal zu tragen.
 export const CANCEL_BUTTON_LABEL = "Verträge kündigen";
 export const CONFIRM_CANCEL_BUTTON_LABEL = "Jetzt kündigen";
+export const CANCEL_BUTTON_LABEL_EN = "Cancel contracts";
+export const CONFIRM_CANCEL_BUTTON_LABEL_EN = "Cancel now";
+export function cancelButtonLabel() {
+  return tPair(CANCEL_BUTTON_LABEL_EN, CANCEL_BUTTON_LABEL);
+}
+export function confirmCancelButtonLabel() {
+  return tPair(CONFIRM_CANCEL_BUTTON_LABEL_EN, CONFIRM_CANCEL_BUTTON_LABEL);
+}
 // Die uebrigen Beschriftungen sind NICHT gesetzlich vorgegeben -> zweisprachig
 // (Etappe 2), Muster der Nachbartexte (SUBSCRIBE_LABEL usw. oben). EN bleibt
 // der test-gepinnte Vertrag; cancelAbortLabel()/resumeButtonLabel() liefern die
@@ -355,20 +370,33 @@ function germanDate(epochSeconds) {
 }
 
 // Zweite Stufe (Bestaetigungsansicht): WAS gekuendigt wird (Plan-Name) + WANN es wirkt
-// (Periodenende, deutsch formatiert) - die beiden Pflichtangaben aus dem Auftrag.
+// (Periodenende) - die beiden Pflichtangaben aus dem Auftrag. Sprachbewusst
+// (Owner-Entscheidung 2026-08-14): DE-Satz mit deutschem Datum (germanDate,
+// TT.MM.JJJJ), EN-Satz mit renewDate (en-US) - beides BESTEHENDE Aufrufstellen,
+// der Waechtertest (exakt 2 Locale-Aufrufstellen) bleibt unberuehrt.
 export function cancelConfirmText(sub) {
   const name = planName(sub.planSlug);
-  const date = germanDate(sub.currentPeriodEnd);
+  if (getLang() === "de") {
+    const date = germanDate(sub.currentPeriodEnd);
+    return date
+      ? `Dein ${name}-Abo endet am ${date}. Hermes läuft bis dahin wie gewohnt weiter.`
+      : `Dein ${name}-Abo endet zum Ende des laufenden Abrechnungszeitraums.`;
+  }
+  const date = renewDate(sub.currentPeriodEnd);
   return date
     ? `Your ${name} subscription will end on ${date}. Hermes keeps working as usual until then.`
     : `Your ${name} subscription will end at the close of the current billing period.`;
 }
 
-// Zustand, wenn bereits gekuendigt: Datum, bis zu dem der Dienst noch laeuft (deutsch
-// formatiert, s. germanDate). Reiner String (DOM-frei, testbar); der Aufrufer setzt ihn
-// via textContent (Muster subscriptionLine/quotaLine).
+// Zustand, wenn bereits gekuendigt: Datum, bis zu dem der Dienst noch laeuft
+// (sprachbewusst formatiert, s. cancelConfirmText). Reiner String (DOM-frei,
+// testbar); der Aufrufer setzt ihn via textContent (Muster subscriptionLine/quotaLine).
 export function cancelStatusLine(sub) {
-  const date = germanDate(sub.currentPeriodEnd);
+  if (getLang() === "de") {
+    const date = germanDate(sub.currentPeriodEnd);
+    return date ? `Gekündigt — aktiv bis ${date}.` : "Gekündigt.";
+  }
+  const date = renewDate(sub.currentPeriodEnd);
   return date ? `Cancelled — active until ${date}.` : "Cancelled.";
 }
 

@@ -161,18 +161,22 @@
 
 /* ---------------------------------------------------------- 2. Billing: Status */
 
-/* Feedback-Runde 2 (Befund 5): align-items:baseline statt flex-start -- der
-   Badge richtet sich jetzt an der ersten Textzeile von .billing-status__body
-   aus (Serif-Wert, oder die Mono-Nebenangabe, wenn der Serif-Wert versteckt
-   ist, s. renderStatus/duplicate in BillingIsland.astro). Vorher klebte der
-   Badge oben an der Zeile, unabhaengig von der (variablen) Hoehe des Serif-
-   Werts -- dadurch wirkte er wie auf halber Hoehe schwebend. */
+/* Feedback-Runde 3: Badge und Serif-Wert leben in einer eigenen Kopfzeile
+   (.billing-status__head) mit echter vertikaler Zentrierung -- baseline
+   liess die Pille optisch zu hoch neben dem grossen Serif-Wert sitzen.
+   Die Mono-Nebenangabe steht darunter auf der Karten-Innenkante. */
 .billing-status {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 18px;
+}
+
+.billing-status__head {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 14px;
-  margin-top: 18px;
 }
 
 /* .billing-status-badge hatte bisher KEINE Regel (unstyled <span> -- daher der
@@ -210,12 +214,6 @@
   color: #a9c4e4;
   border-color: rgba(143, 182, 227, 0.4);
   background: rgba(143, 182, 227, 0.1);
-}
-
-.billing-status__body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 .billing-status-value {

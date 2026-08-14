@@ -40,6 +40,8 @@ import {
   NEWSLETTER_MESSAGES,
   wireNewsletterToggle,
   cancelAbortLabel,
+  cancelButtonLabel,
+  confirmCancelButtonLabel,
   resumeButtonLabel,
 } from "../src/lib/subscribe.js";
 
@@ -358,12 +360,16 @@ test("CANCEL_BUTTON_LABEL/CONFIRM_CANCEL_BUTTON_LABEL: gesetzlich vorgegebener W
   assert.equal(CONFIRM_CANCEL_BUTTON_LABEL, "Jetzt kündigen");
 });
 
-test("cancelConfirmText: nennt Plan-Name + Wirkungstermin (deutsch formatiert TT.MM.JJJJ)", () => {
+test("cancelConfirmText (EN-Default): nennt Plan-Name + Wirkungstermin (en-US formatiert)", () => {
+  // Owner-Entscheidung 2026-08-14: der EN-Modus formatiert das Wirkungsdatum
+  // wie das uebrige englische Dashboard (renewDate, en-US) - die frueher auch
+  // im EN-Satz erzwungene TT.MM.JJJJ-Schreibweise war fuer en-US-Leser
+  // mehrdeutig (12.9. = Dec 9 oder Sep 12). DE-Modus s. eigener Test unten.
   const epoch = 1781000000; // Unix-Sekunden
-  const expectedDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
+  const expectedDate = new Date(epoch * 1000).toLocaleDateString("en-US");
   const text = cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch });
   assert.ok(text.includes("Starter"), "Plan-Name fehlt");
-  assert.ok(text.includes(expectedDate), "deutsch formatiertes Datum fehlt");
+  assert.ok(text.includes(expectedDate), "en-US formatiertes Datum fehlt");
 });
 
 test("cancelConfirmText: ohne Termin -> Satz ohne Datum, kein 'undefined'/'Invalid Date'", () => {
@@ -373,9 +379,9 @@ test("cancelConfirmText: ohne Termin -> Satz ohne Datum, kein 'undefined'/'Inval
   assert.ok(!text.includes("Invalid Date"));
 });
 
-test("cancelStatusLine: 'Cancelled — active until TT.MM.JJJJ.' (deutsch formatiertes Datum)", () => {
+test("cancelStatusLine (EN-Default): 'Cancelled — active until <en-US-Datum>.'", () => {
   const epoch = 1781000000;
-  const expectedDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
+  const expectedDate = new Date(epoch * 1000).toLocaleDateString("en-US");
   assert.equal(cancelStatusLine({ currentPeriodEnd: epoch }), `Cancelled — active until ${expectedDate}.`);
   assert.equal(cancelStatusLine({ currentPeriodEnd: 0 }), "Cancelled.");
 });
@@ -841,26 +847,34 @@ async function withLangAsync(lang, fn) {
   }
 }
 
-test("DE-Modus: cancelAbortLabel/resumeButtonLabel deutsch, CANCEL_BUTTON_LABEL/cancelConfirmText/cancelStatusLine bleiben unveraendert deutsch (§ 312k)", () => {
+test("Kuendigungs-Weg sprachbewusst: DE-Modus woertlicher Pflichtwortlaut + deutsche Saetze, EN-Modus eindeutige englische Formulierung", () => {
   const epoch = 1781000000;
   const expectedGermanDate = new Date(epoch * 1000).toLocaleDateString("de-DE");
-  // Referenzwerte im EN-Default (kein withLang) -- § 312k-Texte sind IMMER deutsch,
-  // unabhaengig von der UI-Sprache.
-  const confirmTextEn = cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch });
-  const statusLineEn = cancelStatusLine({ currentPeriodEnd: epoch });
+  const expectedEnDate = new Date(epoch * 1000).toLocaleDateString("en-US");
+
+  // EN-Default: englische Knopf-Beschriftung (Owner-Entscheidung 2026-08-14) --
+  // die KONSTANTEN mit dem deutschen Pflichtwortlaut bleiben davon unberuehrt.
   assert.equal(CANCEL_BUTTON_LABEL, "Verträge kündigen");
-  assert.ok(confirmTextEn.includes(expectedGermanDate));
+  assert.equal(cancelButtonLabel(), "Cancel contracts");
+  assert.equal(confirmCancelButtonLabel(), "Cancel now");
+  assert.ok(cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch }).includes(expectedEnDate));
 
   withLang("de", () => {
     assert.equal(cancelAbortLabel(), "Doch nicht");
     assert.equal(resumeButtonLabel(), "Abo fortsetzen");
-    // Unveraendert trotz DE-Modus -- keine "doppelte" Uebersetzung, kein Drift.
-    assert.equal(CANCEL_BUTTON_LABEL, "Verträge kündigen");
-    assert.equal(cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch }), confirmTextEn);
-    assert.equal(cancelStatusLine({ currentPeriodEnd: epoch }), statusLineEn);
+    // § 312k: im DE-Modus erscheint der gesetzlich vorgegebene Wortlaut WOERTLICH.
+    assert.equal(cancelButtonLabel(), "Verträge kündigen");
+    assert.equal(confirmCancelButtonLabel(), "Jetzt kündigen");
+    const confirmDe = cancelConfirmText({ planSlug: "starter", currentPeriodEnd: epoch });
+    assert.ok(confirmDe.includes("Starter"), "Plan-Name fehlt im DE-Satz");
+    assert.ok(confirmDe.includes(expectedGermanDate), "deutsches Datum fehlt im DE-Satz");
+    assert.ok(confirmDe.includes("endet am"), "deutscher Satzbau fehlt");
+    assert.equal(cancelStatusLine({ currentPeriodEnd: epoch }), `Gekündigt — aktiv bis ${expectedGermanDate}.`);
+    assert.equal(cancelStatusLine({ currentPeriodEnd: 0 }), "Gekündigt.");
   });
 
   // Und weiterhin unveraendert im EN-Default danach (kein Leck aus withLang).
   assert.equal(cancelAbortLabel(), "Never mind");
   assert.equal(resumeButtonLabel(), "Resume subscription");
+  assert.equal(cancelButtonLabel(), "Cancel contracts");
 });

@@ -20,9 +20,15 @@
 // Ausnahme, s. dort). Zwei neue Tests (ohne Katalog-Praefix, laufen also mit den
 // uebrigen Regressionstests in "npm test", nicht erst mit "npm run test:gates")
 // nageln die neuen Konventionen fest: Schluesselparitaet zwischen jedem EN/DE-
-// Woerterbuchpaar, und dass die gesetzlich vorgegebenen 312k-Knopftexte
-// (CANCEL_BUTTON_LABEL/CONFIRM_CANCEL_BUTTON_LABEL) in KEINEM dieser Woerterbuecher
-// als Wert auftauchen (Schutz gegen versehentliche Uebersetzung).
+// Woerterbuchpaar, und dass die 312k-Knopftexte (CANCEL_BUTTON_LABEL/
+// CONFIRM_CANCEL_BUTTON_LABEL) in KEINEM dieser Woerterbuecher als Wert
+// auftauchen. Owner-Entscheidung 2026-08-14: der EN-Modus zeigt eine
+// gleichwertig eindeutige ENGLISCHE Formulierung (CANCEL_BUTTON_LABEL_EN/
+// CONFIRM_CANCEL_BUTTON_LABEL_EN, eigene benannte Konstanten + Resolver
+// cancelButtonLabel()/confirmCancelButtonLabel(), s. subscribe.js) -- der
+// Woerterbuch-Ausschluss hier schuetzt weiterhin, dass der DEUTSCHE
+// Pflichtwortlaut nie in einem frei uebersetzbaren Woerterbuch landet und im
+// DE-Modus woertlich erscheint.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
