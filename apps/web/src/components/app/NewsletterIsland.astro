@@ -37,7 +37,29 @@
 // data.newsletter (newsletterConsentFrom), nie aus einem lokalen Default
 // "true" (kein Dark Pattern, kein Vorankreuzen). Optik lebt in
 // styles/app/panels.css (Trupp-C-Stylesheet, Muster shell.css/calls.css).
-import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe.js";
+//
+// F2-Newsletter-Recipients (Double-Opt-in, Etappe 2): NEUER Unterabschnitt fuer
+// additive Zusatzempfaenger (state.newsletterRecipients), NEBEN dem Boolean-
+// Konto-Toggle oben -- beide Mechanismen bleiben unabhaengig (server-seitig
+// getrennte Routen/Gates, s. src/self-service-routes.js). Freies E-Mail-Feld
+// (editierbar) + weisse "Add"-Pille + Liste mit Status-Pille/Entfernen-Kreuz je
+// Zeile. UX-Entscheidung (Owner-Vorgabe nennt zwei Optionen): die Konto-Adresse
+// erscheint als PLATZHALTER im freien Feld, NICHT als synthetische erste
+// Listenzeile -- die additive Liste bleibt eine reine Projektion der Server-
+// Antwort (kein erfundener Eintrag, der den bereits vorhandenen Boolean-Pillen-
+// Zustand ein zweites Mal darstellen wuerde, G5). Tippt jemand versehentlich die
+// eigene Konto-Adresse ein, liefert der Server ohnehin "duplicate" (dieselbe
+// Meldung wie bei einem doppelten Zusatzempfaenger). KEIN eigener state-Fetch
+// hier ausser nach einer Aktion (Muster BillingIsland refreshState): add/remove
+// re-fetchen den State und re-dispatchen AUTH_EVENT, alle Inseln ziehen nach.
+import {
+  accountEmailFrom,
+  newsletterConsentFrom,
+  wireNewsletterToggle,
+  newsletterRecipientRows,
+  wireNewsletterRecipientAdd,
+  newsletterRecipientRemove,
+} from "../../lib/subscribe.js";
 ---
 
 <section id="newsletter-card" class="card" hidden>
@@ -79,11 +101,42 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
     </div>
   </div>
   <p id="newsletter-msg" class="billing-msg" hidden></p>
+
+  <!-- F2-Newsletter-Recipients: additive Zusatzempfaenger (Double-Opt-in), NEBEN
+       dem Konto-Toggle oben. Freies E-Mail-Feld (echtes <form>, Enter-zum-
+       Absenden inklusive) + weisse Pille, darunter die Liste. -->
+  <div class="billing-section">
+    <h3 class="billing-section__title" data-i18n="newsletterRecipientsTitle">Recipients</h3>
+    <form id="newsletter-recipient-form" class="newsletter-form">
+      <input
+        type="email"
+        id="newsletter-recipient-email"
+        class="field-input newsletter-form__field"
+        placeholder="you@example.com"
+        aria-label="Recipient email"
+        data-i18n-attr="aria-label:newsletterRecipientAriaLabel"
+        required
+      />
+      <button type="submit" id="newsletter-recipient-add" class="newsletter-toggle__cta" data-i18n="newsletterAdd">
+        Add
+      </button>
+    </form>
+    <p id="newsletter-recipient-msg" class="billing-msg" hidden></p>
+    <ul id="newsletter-recipient-list" class="data-list newsletter-recipient-list" aria-live="polite"></ul>
+  </div>
 </section>
 
 <script>
-  import { AUTH_STATE, AUTH_EVENT } from "../../lib/api.js";
-  import { accountEmailFrom, newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe.js";
+  import { AUTH_STATE, AUTH_EVENT, fetchTenantState } from "../../lib/api.js";
+  import {
+    accountEmailFrom,
+    newsletterConsentFrom,
+    wireNewsletterToggle,
+    newsletterRecipientRows,
+    wireNewsletterRecipientAdd,
+    newsletterRecipientRemove,
+  } from "../../lib/subscribe.js";
+  import { bindList } from "../../lib/render.js";
 
   const cardEl = document.getElementById("newsletter-card");
   const toggleEl = document.getElementById("newsletter-toggle");
@@ -91,19 +144,29 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
   const unsubscribeBtn = document.getElementById("newsletter-unsubscribe");
   const msgEl = document.getElementById("newsletter-msg");
 
+  // F2-Newsletter-Recipients: Hinzufuegen-Formular + eigene Meldungszeile.
+  const recipientFormEl = document.getElementById("newsletter-recipient-form");
+  const recipientInputEl = document.getElementById("newsletter-recipient-email");
+  const recipientAddBtn = document.getElementById("newsletter-recipient-add");
+  const recipientMsgEl = document.getElementById("newsletter-recipient-msg");
+
   const MSG_OK_CLASS = "billing-msg--ok";
   const MSG_ERR_CLASS = "billing-msg--err";
-  function showMessage(text, ok) {
-    msgEl.textContent = text;
-    msgEl.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok === true);
-    msgEl.classList.toggle(MSG_ERR_CLASS, Boolean(text) && ok === false);
-    msgEl.hidden = !text;
+  // Generalisiert auf ein Ziel-Element (Muster BillingIsland showMessage): EIN
+  // Meldungs-Bau fuer Konto-Toggle UND Zusatzempfaenger statt einer zweiten Kopie.
+  function showMessage(el, text, ok) {
+    el.textContent = text;
+    el.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok === true);
+    el.classList.toggle(MSG_ERR_CLASS, Boolean(text) && ok === false);
+    el.hidden = !text;
   }
+  const showToggleMsg = (text, ok) => showMessage(msgEl, text, ok);
+  const showRecipientMsg = (text, ok) => showMessage(recipientMsgEl, text, ok);
 
   // Umschalten schreibt sofort gegen die Route (lib/subscribe.js
   // wireNewsletterToggle) -- kein eigener Speichern-Knopf, eine einzelne
   // Einwilligungs-Erklaerung (Muster BillingIsland vor dem Umzug).
-  wireNewsletterToggle(toggleEl, { onMessage: showMessage });
+  wireNewsletterToggle(toggleEl, { onMessage: showToggleMsg });
 
   // Der Unsubscribe-Knopf ist bewusst ein <button> statt eines zweiten
   // <label for>: er stoesst DENSELBEN change-Pfad an wie ein direkter
@@ -112,6 +175,31 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
     toggleEl.checked = false;
     toggleEl.dispatchEvent(new Event("change"));
   });
+
+  // Re-Fetch nach add/remove: den State neu laden und per AUTH_EVENT an ALLE
+  // Inseln (inkl. dieser) verteilen -- Muster BillingIsland refreshState.
+  async function refreshState() {
+    const data = await fetchTenantState();
+    document.dispatchEvent(
+      new CustomEvent(AUTH_EVENT, { detail: { state: AUTH_STATE.AUTHENTICATED, data } }),
+    );
+  }
+
+  wireNewsletterRecipientAdd(
+    { form: recipientFormEl, input: recipientInputEl, addBtn: recipientAddBtn },
+    { onAdded: refreshState, onMessage: showRecipientMsg },
+  );
+
+  function handleRemoveRecipient(email) {
+    return newsletterRecipientRemove(email, { onMessage: showRecipientMsg, onRemoved: refreshState });
+  }
+
+  // bindList hoert selbst auf AUTH_EVENT und rendert die Liste read-only (Muster
+  // CallsIsland) -- diese Insel re-fetcht NUR nach einer eigenen Aktion (oben),
+  // nicht bei jedem Render.
+  bindList(document, "newsletter-recipient-list", (doc, data) =>
+    newsletterRecipientRows(doc, data, handleRemoveRecipient),
+  );
 
   // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
   // eingeloggten Zustand traegt die Antwort data.newsletter. Listener synchron
@@ -123,6 +211,10 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
       // F2-Mail: readonly Prefill aus der Konto-E-Mail (kein Schreibziel, s.
       // Modul-Kommentar oben) -- leer + Platzhalter, wenn der Server keine liefert.
       emailEl.value = accountEmailFrom(data) ?? "";
+      // F2-Newsletter-Recipients (UX-Entscheidung, s. Kopf-Kommentar/Bericht): die
+      // Konto-Adresse erscheint NICHT als synthetische Listenzeile, sondern als
+      // Platzhalter im freien Empfaenger-Feld.
+      recipientInputEl.placeholder = accountEmailFrom(data) || "you@example.com";
       cardEl.hidden = false;
     } else {
       cardEl.hidden = true;

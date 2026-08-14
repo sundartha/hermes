@@ -187,6 +187,9 @@ export const STRINGS = {
     subscribed: "Subscribed",
     unsubscribe: "Unsubscribe",
     newsletterHint: "Sent to your account email.",
+    newsletterRecipientsTitle: "Recipients",
+    newsletterRecipientAriaLabel: "Recipient email",
+    newsletterAdd: "Add",
   },
   de: {
     // Auth (AuthIsland)
@@ -269,5 +272,8 @@ export const STRINGS = {
     subscribed: "Angemeldet",
     unsubscribe: "Abbestellen",
     newsletterHint: "Wird an deine Konto-E-Mail gesendet.",
+    newsletterRecipientsTitle: "Empfänger",
+    newsletterRecipientAriaLabel: "E-Mail-Adresse des Empfängers",
+    newsletterAdd: "Hinzufügen",
   },
 };

@@ -161,6 +161,18 @@ export function fetchBillingStatus() {
   return apiRequest("/api/self-service/billing/status");
 }
 
+// ---- F2-Newsletter-Recipients: Zusatzempfaenger (Double-Opt-in) ---------------
+// POST/DELETE {email} same-origin -- kleine, reine Wrapper (Muster startBillingCancel:
+// KEINE eigene Fehlerbehandlung hier, die liegt bei lib/subscribe.js). Wirft ApiError
+// bei non-2xx; err.code traegt den stabilen Server-Grund (400 invalid_format/duplicate/
+// cap_reached/daily_limit, 401 abgelaufene Session -- s. self-service-routes.js).
+export function addNewsletterRecipient(email) {
+  return apiRequest("/api/self-service/newsletter-recipients", { method: "POST", body: { email } });
+}
+export function removeNewsletterRecipient(email) {
+  return apiRequest("/api/self-service/newsletter-recipients", { method: "DELETE", body: { email } });
+}
+
 // Liest die Agent-Eckdaten (Nummer, Besitzer, numberStatus) aus der state-Antwort --
 // die EINE Stelle, an der das Frontend die Form `data.agent` annimmt (Contract-Grenze
 // zur API, R5: Annahme nicht ueber mehrere Dateien streuen). Fehlende Felder -> leere
