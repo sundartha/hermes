@@ -632,6 +632,16 @@ export function newsletterConsentFrom(data) {
   return newsletter.consent === true;
 }
 
+// F2-Mail: liest die Konto-E-Mail aus der state-Antwort (data.accountEmail, additiv,
+// src/self-service-routes.js) -- Muster newsletterConsentFrom. Reine Anzeige (readonly
+// Prefill des E-Mail-Felds, KEIN Schreibziel/kein zweiter Endpunkt); fehlt das Feld
+// (aelterer Server) oder ist es kein String -> null, der Aufrufer zeigt dann den
+// Platzhalter statt einer erfundenen Adresse.
+export function accountEmailFrom(data) {
+  const email = data && data.accountEmail;
+  return typeof email === "string" && email ? email : null;
+}
+
 // Rueckmeldungen des Newsletter-Schalters (Muster SUBSCRIBE_MESSAGES/CANCEL_MESSAGES).
 // NEWSLETTER_MESSAGES bleibt der EN-Vertrag (test-gepinnt); newsletterMessage()
 // liest zusaetzlich NEWSLETTER_MESSAGES_DE fuer die sprachbewusste Meldung.

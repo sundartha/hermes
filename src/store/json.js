@@ -438,6 +438,13 @@ export function markSummarySmsSent(callId) {
   return call;
 }
 
+// F2-Mail: persistierter Dedup-Marker fuer die Call-Summary-Mail (Muster markSummarySmsSent).
+export function markSummaryMailSent(callId) {
+  const { call, changed } = ops.markSummaryMailSent(load(), callId);
+  if (changed) save();
+  return call;
+}
+
 // F9 (A6): persistierter Bucht-Marker - mutiert -> save bei changed (Muster markSummarySmsSent).
 export function markBilled(callId) {
   const { call, changed } = ops.markBilled(load(), callId);

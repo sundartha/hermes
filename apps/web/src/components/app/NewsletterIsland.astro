@@ -14,13 +14,12 @@
 // die Empfaengeradresse ist server-seitig IMMER die Konto-E-Mail des Tenants
 // (nie aus dem Request). Das E-Mail-Feld unten ist deshalb `readonly` und zeigt
 // nur an, wohin gesendet wird -- kein zweiter Endpunkt, kein Freitext-Versand
-// an eine abweichende Adresse. GEPRUEFT: die state-Antwort (GET /api/state,
-// src/routes/api-read.js) traegt aktuell KEIN E-Mail-Feld (weder
-// data.account.email noch data.email o.ae. -- agent.owner ist der Anzeigename,
-// keine Adresse). Darum bleibt das Feld ohne Vorbefuellung, nur Platzhalter --
-// sobald der Server einmal eine Konto-E-Mail in den state-Payload aufnimmt,
-// kann sie hier per AUTH_EVENT-Listener eingetragen werden (kein toter Code
-// fuer ein heute nicht existierendes Feld).
+// an eine abweichende Adresse. F2-Mail: die Self-Service-state-Antwort (GET
+// /api/self-service/state, src/self-service-routes.js) traegt seither das
+// additive Feld data.accountEmail (dedizierter Lookup, fail-closed null) -- das
+// Feld wird per AUTH_EVENT-Listener befuellt (accountEmailFrom, lib/subscribe.js,
+// Muster newsletterConsentFrom). Kein Wert (null, aelterer Server, kein Account) ->
+// Feld bleibt leer, nur der Platzhalter zeigt.
 //
 // EIN echter input[type=checkbox] bleibt die einzige Datenquelle (Muster
 // lang-tile in SettingsIsland.astro: ein Geschwister-Selektor pro Zustand
@@ -84,10 +83,11 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
 
 <script>
   import { AUTH_STATE, AUTH_EVENT } from "../../lib/api.js";
-  import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe.js";
+  import { accountEmailFrom, newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe.js";
 
   const cardEl = document.getElementById("newsletter-card");
   const toggleEl = document.getElementById("newsletter-toggle");
+  const emailEl = document.getElementById("newsletter-email");
   const unsubscribeBtn = document.getElementById("newsletter-unsubscribe");
   const msgEl = document.getElementById("newsletter-msg");
 
@@ -120,6 +120,9 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) {
       toggleEl.checked = newsletterConsentFrom(data);
+      // F2-Mail: readonly Prefill aus der Konto-E-Mail (kein Schreibziel, s.
+      // Modul-Kommentar oben) -- leer + Platzhalter, wenn der Server keine liefert.
+      emailEl.value = accountEmailFrom(data) ?? "";
       cardEl.hidden = false;
     } else {
       cardEl.hidden = true;

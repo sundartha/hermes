@@ -37,6 +37,7 @@ import {
   billingStatusHeadline,
   billingStatusDetail,
   newsletterConsentFrom,
+  accountEmailFrom,
   NEWSLETTER_MESSAGES,
   wireNewsletterToggle,
   cancelAbortLabel,
@@ -709,6 +710,18 @@ test("newsletterConsentFrom: Default nicht eingewilligt (fehlendes/kaputtes Feld
   assert.equal(newsletterConsentFrom({ newsletter: { consent: "true" } }), false); // kein strikter Boolean
   assert.equal(newsletterConsentFrom({ newsletter: { consent: 1 } }), false);
   assert.equal(newsletterConsentFrom({ newsletter: { consent: true } }), true);
+});
+
+// F2-Mail: accountEmailFrom liest data.accountEmail (additiv, src/self-service-routes.js) -
+// reine Anzeige fuers readonly Prefill, Muster newsletterConsentFrom.
+test("accountEmailFrom: liefert die Konto-E-Mail, sonst null (fehlend/kaputt/leer -> nie erfunden)", () => {
+  assert.equal(accountEmailFrom({ accountEmail: "kunde@example.test" }), "kunde@example.test");
+  assert.equal(accountEmailFrom({ accountEmail: null }), null);
+  assert.equal(accountEmailFrom({}), null);
+  assert.equal(accountEmailFrom(null), null);
+  assert.equal(accountEmailFrom(undefined), null);
+  assert.equal(accountEmailFrom({ accountEmail: "" }), null);
+  assert.equal(accountEmailFrom({ accountEmail: 42 }), null); // kein String -> nie erfunden
 });
 
 // Fake-Checkbox: bildet nur die im Bau genutzten DOM-Operationen nach (Muster

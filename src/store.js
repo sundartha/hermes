@@ -103,6 +103,10 @@ export const {
   endCallRecord,
   setCallEndedAt, // F9 (A6): Seam fuer F10/F12 (expliziter End-Anker)
   markSummarySmsSent,
+  // F2-Mail: persistierter Dedup-Marker fuer die Call-Summary-Mail (Muster markSummarySmsSent).
+  // OHNE diesen Re-Export waere store.markSummaryMailSent undefined -> finishCall wuerfe zur
+  // Laufzeit einen TypeError.
+  markSummaryMailSent,
   markBilled, // F9 (A6): Bucht-Idempotenz-Marker
   recordCallEstimatedCostCents, // LCT P2: gebuchter Schaetzbetrag am Call
   recordCallCostTruingResult, // LCT P3: Ergebnis des Kosten-Abgleichs am Call

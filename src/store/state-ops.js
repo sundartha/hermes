@@ -237,6 +237,10 @@ export function createCall(
     // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
     // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
     summarySmsSentAt: null,
+    // F2-Mail: persistierter Dedup-Marker fuer die Call-Summary-Mail (Spiegel
+    // summarySmsSentAt, ISO-Zeit nach erfolgreichem Send, sonst null). NIE nach aussen
+    // (publicCall strippt ihn wie summarySmsSentAt).
+    summaryMailSentAt: null,
     // CDF1: maschinenlesbarer Fehlergrund (mapped Token), gesetzt im /voice/status-Callback
     // bei nicht erfolgreichem Call. Initial null - byte-identisch zur pg-Hydrierung (rowToCall),
     // kein json<->pg-Shape-Drift.
@@ -499,6 +503,13 @@ export function endCallRecord(s, callId, status = "completed") {
 // via setOnceTimestamp (gesetzter Marker gewinnt); Wrapper saved bei changed.
 export function markSummarySmsSent(s, callId) {
   return setOnceTimestamp(getCall(s, callId), "summarySmsSentAt");
+}
+
+// F2-Mail: persistierter Dedup-Marker fuer die Call-Summary-Mail (Spiegel
+// markSummarySmsSent). Set-once via setOnceTimestamp (gesetzter Marker gewinnt); Wrapper
+// saved bei changed.
+export function markSummaryMailSent(s, callId) {
+  return setOnceTimestamp(getCall(s, callId), "summaryMailSentAt");
 }
 
 // F9 (A6): persistierter Bucht-Marker. Set-once via setOnceTimestamp (gesetzter gewinnt):

@@ -29,6 +29,9 @@ export function publicCall({
   streamToken,
   _finished,
   summarySmsSentAt,
+  // F2-Mail: der Summary-Mail-Dedup-Marker ist wie summarySmsSentAt rein intern (kein
+  // API-Leak, Muster oben).
+  summaryMailSentAt,
   telnyxConversationId,
   callerTurns,
   estimatedCostCents,

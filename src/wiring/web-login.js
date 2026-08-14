@@ -103,6 +103,10 @@ export async function wireWebLogin({
   stripeWebhookPath,
   appPath,
   messaging,
+  // F2-Mail: spaet gebundene Accounts-Zelle (server.js, Muster operatorAuth in app.js).
+  // Optional (Default undefined) - der Routen-Inventar-Test (route-auth-inventory.test.js)
+  // baut den Graph ohne sie; der Guard unten macht das No-op statt eines TypeErrors.
+  accountsRef,
 }) {
   const portalRunner = await createPortalRunner();
   const oidc = makeOidc(config);
@@ -112,6 +116,10 @@ export async function wireWebLogin({
   const accounts = makeAccounts(portalRunner, {
     defaultCountry: config.provisioning.provisioningCountry,
   });
+  // F2-Mail: die Zelle NACH dem Bau von accounts befuellen - callFinish (server.js,
+  // synchron VOR diesem asynchronen Block konstruiert) liest accountsRef.current bei
+  // jedem Call-Ende frisch und findet ab hier die echte accounts-Instanz.
+  if (accountsRef) accountsRef.current = accounts;
   const sessions = makeSessions(portalRunner);
   const auditStore = makeAuditStore(portalRunner);
   // EINE Instanz (G5), geteilt vom DID-Release-Reconciler UND dem 312k-Phase-4-

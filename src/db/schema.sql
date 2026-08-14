@@ -284,7 +284,11 @@ CREATE TABLE IF NOT EXISTS call (
   result JSONB,
   -- AL-P13: Consult-Kette am Call (A2: Zustand am Call, NICHT in einem Prozess-Broker -
   -- ueberlebt Deploy/Instanzwechsel und faellt automatisch unter Erase/Export/Retention).
-  consults JSONB
+  consults JSONB,
+  -- F2-Mail (Call-Summary per E-Mail bei Newsletter-Einwilligung): persistierter Dedup-
+  -- Marker (ISO-Zeit), Muster summary_sms_sent_at. Additiv NULLABLE: gesetzt NACH
+  -- erfolgreichem Mail-Send, sonst NULL -> Bestand byte-identisch.
+  summary_mail_sent_at TEXT
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -307,6 +311,9 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS billed_at TEXT;
 -- call-Tabelle nachziehen. Idempotent; frische DB = No-op (CREATE TABLE oben hat die
 -- Spalten schon).
 ALTER TABLE call ADD COLUMN IF NOT EXISTS ai_assistant_token TEXT;
+-- F2-Mail: Summary-Mail-Dedup-Marker-Spalte auf Bestands-call-Tabellen nachziehen
+-- (Muster summary_sms_sent_at). Idempotent; frische DB = No-op.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS summary_mail_sent_at TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS call_control_id TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS assistant_id TEXT;
 -- P2b: Diagnose-Markierung auf einer schon existierenden call-Tabelle nachziehen.

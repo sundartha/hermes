@@ -249,7 +249,7 @@ export function makeSelfServiceRoutes({
   // Tenant-Lese-Sicht: dieselbe tenant-gefilterte Quelle wie /api/state, aber NUR
   // ueber die Web-Session-Identitaet. + die kuratierten greeting-Vorlagen, damit die
   // UI ein Dropdown statt Freitext zeigt (Decision #7).
-  router.get("/api/self-service/state", webAuthMw, (req, res) => {
+  router.get("/api/self-service/state", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
     const data = store.exportTenantData(tenant);
     const ctx = store.tenantContext(tenant);
@@ -259,6 +259,23 @@ export function makeSelfServiceRoutes({
     // P9 (WEB-01/WEB-04): EINE Sprachaufloesung fuer diese Antwort (G5) - sie speist die
     // Vorlagenmenge UND das Sprach-Feld, aus dem das Dashboard sein lang-Attribut setzt.
     const language = tenantLanguage(agentState, tenant);
+    // F2-Mail: Konto-E-Mail als additives Feld (Dashboard-Prefill fuer das Newsletter-
+    // Feld, kein Schreibpfad). Dedizierter Lookup, Schluessel req.tenant.tenantId (nie
+    // fremd, H3). Fail-closed: kein accounts-Adapter (pg-Web-Login-Block nicht gemountet,
+    // Muster f2-self-service-state-private-number.test.js) ODER kein/mehrdeutiger Account
+    // ODER ein IO-Fehler beim Lookup -> null. Ein flackernder Adress-Lookup darf die
+    // gesamte Dashboard-Ansicht nicht reissen - die eigentliche Autoritaet fuer die
+    // Empfaengeradresse bleibt accounts.accountByTenant selbst (Muster
+    // billing/cancellation-mail.js), hier ist es nur eine Anzeige.
+    let accountEmail = null;
+    if (accounts) {
+      try {
+        const account = await accounts.accountByTenant(tenant);
+        accountEmail = account?.email ?? null;
+      } catch (e) {
+        console.error("[self-service] accountEmail lookup:", e.message);
+      }
+    }
     res.json({
       settings: ctx.settings,
       // WEB-01: die aufgeloeste Sprache dieses Tenants als eigenes, additives Feld.
@@ -295,6 +312,9 @@ export function makeSelfServiceRoutes({
       // des letzten Wechsels (Opt-in ODER Widerruf) oder null, wenn nie gesetzt. Die UI
       // haengt hier spaeter nur noch eine Checkbox an - dieses Feld traegt ihren Zustand.
       newsletter: store.tenantNewsletterConsent(tenant),
+      // F2-Mail: Konto-E-Mail (s. Lookup oben) - reine Anzeige fuers Newsletter-Feld
+      // (readonly Prefill), NIE ein Schreibziel; fail-closed null (s. oben).
+      accountEmail,
       // Pay3/W4: Karten- + Abo-Status. KEIN id-Leak (cus_/pm_/sub_ sind keine Secrets,
       // gehoeren aber nicht in die UI-View) - nur "Karte liegt vor ja/nein" + der aktive
       // Plan/Periode. Bei PAYMENT_ENABLED aus: Felder fehlen -> UI versteckt den Block,

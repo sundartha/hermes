@@ -273,6 +273,14 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // F2-Mail: persistierter Dedup-Marker fuer die Call-Summary-Mail - Wrapper-Parity zu
+    // json.js. Der Flush schreibt summary_mail_sent_at am call-Record (Muster
+    // markSummarySmsSent).
+    markSummaryMailSent(callId) {
+      const { call, changed } = ops.markSummaryMailSent(requireState(), callId);
+      if (changed) save();
+      return call;
+    },
     // F9 (A6): persistierter Bucht-Marker - Flush schreibt billed_at (INSERT + ON CONFLICT).
     markBilled(callId) {
       const { call, changed } = ops.markBilled(requireState(), callId);
@@ -1200,6 +1208,9 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // ein spaeter /voice/status-Retry sendete eine zweite Summary-SMS. NULL -> null
     // (kein Marker, byte-identisch zur createCall-Initialisierung + json-Hydrierung).
     summarySmsSentAt: r.summary_sms_sent_at ?? null,
+    // F2-Mail: persistierten Summary-Mail-Dedup-Marker hydrieren (Muster summary_sms_sent_at).
+    // NULL -> null (kein Marker, byte-identisch zur createCall-Initialisierung).
+    summaryMailSentAt: r.summary_mail_sent_at ?? null,
     // CDF1: persistierten Fehlergrund hydrieren (NULL -> null, json-Parity). Ohne diese Zeile
     // ginge er beim Restart verloren UND der naechste Flush wuerde ihn ueberschreiben.
     failureReason: r.failure_reason ?? null,
@@ -1556,8 +1567,9 @@ async function flushCalls(client, tenantId, calls) {
           call_control_id, assistant_id, diagnostic, mandate,
           estimated_cost_cents, actual_cost_micro_cents, cost_trued_at,
           cost_trued_source, cost_truing_attempts, telnyx_conversation_id, caller_turns, result,
-          consults, estimated_cost_spend_month_key, estimated_cost_period_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40)
+          consults, estimated_cost_spend_month_key, estimated_cost_period_key,
+          summary_mail_sent_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1573,7 +1585,8 @@ async function flushCalls(client, tenantId, calls) {
          caller_turns=EXCLUDED.caller_turns, result=EXCLUDED.result,
          consults=EXCLUDED.consults, context=EXCLUDED.context,
          estimated_cost_spend_month_key=EXCLUDED.estimated_cost_spend_month_key,
-         estimated_cost_period_key=EXCLUDED.estimated_cost_period_key`,
+         estimated_cost_period_key=EXCLUDED.estimated_cost_period_key,
+         summary_mail_sent_at=EXCLUDED.summary_mail_sent_at`,
       [
         c.id,
         tenantId,
@@ -1655,6 +1668,9 @@ async function flushCalls(client, tenantId, calls) {
         // spaetere Gutschrift wirkte nur noch auf der Lebenszeit-Achse.
         c.estimatedCostSpendMonthKey ?? null,
         c.estimatedCostPeriodKey ?? null,
+        // F2-Mail ($41): IM ON CONFLICT DO UPDATE SET (Muster summary_sms_sent_at) - der
+        // Marker entsteht NACH dem Create in finishCall (Mail-Versand).
+        c.summaryMailSentAt ?? null,
       ],
     );
     await flushTranscript(client, tenantId, c);
