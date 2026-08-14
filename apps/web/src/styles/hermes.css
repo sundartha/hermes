@@ -1217,6 +1217,33 @@ a:hover {
   color: var(--deep);
 }
 
+/* Login/Registrieren im Mobil-Menue (Owner-Feedback 2026-08-14): zwei CTAs
+ * nebeneinander statt eines einzelnen "Nummer holen". Die Reihe uebernimmt
+ * das margin-top:auto des Einzel-CTA (ans Blattende ruecken); die CTAs darin
+ * teilen sich die Breite. Ghost-Variante = Materialsprache von .btn-ghost
+ * (transparente Pille, weisser Rand), gleiche Hoehe wie .sheet__cta. */
+.menu-cta-row {
+  flex: none;
+  margin-top: auto;
+  display: flex;
+  gap: 12px;
+}
+.menu-cta-row .sheet__cta {
+  margin-top: 0;
+  flex: 1;
+}
+.sheet__cta--ghost {
+  background: none;
+  color: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  box-shadow: none;
+  transition: border-color 0.18s, color 0.18s;
+}
+.sheet__cta--ghost:hover {
+  color: #fff;
+  border-color: #fff;
+}
+
 .step {
   display: flex;
   align-items: flex-start;
