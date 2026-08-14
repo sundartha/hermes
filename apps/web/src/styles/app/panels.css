@@ -448,6 +448,11 @@
 .newsletter-toggle__cta {
   flex-shrink: 0;
   padding: 10px 22px;
+  /* border:0 (Owner-Feedback 2026-08-14): die Klasse sass urspruenglich auf
+     einem <label> (rahmenlos); der Empfaenger-"Add" ist ein echter <button>
+     und bekam ohne diese Zeile den Browser-Default-Rahmen (graue Umrandung).
+     Gleiches Muster wie .btn in app.css. */
+  border: 0;
   border-radius: 999px;
   background: #ffffff;
   color: #10305a;
