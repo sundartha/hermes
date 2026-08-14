@@ -127,7 +127,7 @@ import {
 </section>
 
 <script>
-  import { AUTH_STATE, AUTH_EVENT, fetchTenantState } from "../../lib/api.js";
+  import { AUTH_STATE, AUTH_EVENT, fetchTenantState, ApiError, HTTP_UNAUTHORIZED } from "../../lib/api.js";
   import {
     accountEmailFrom,
     newsletterConsentFrom,
@@ -135,6 +135,7 @@ import {
     newsletterRecipientRows,
     wireNewsletterRecipientAdd,
     newsletterRecipientRemove,
+    hasPendingNewsletterRecipient,
   } from "../../lib/subscribe.js";
   import { bindList } from "../../lib/render.js";
 
@@ -185,6 +186,52 @@ import {
     );
   }
 
+  // Pending-Watch: solange mindestens ein Zusatzempfaenger "pending" ist, zieht
+  // die Insel den State selbst nach, damit "Ausstehend" nach dem Klick auf den
+  // Bestaetigungslink OHNE manuellen Reload auf "Bestätigt" umspringt. Zwei
+  // Ausloeser: (1) Rueckkehr in den Tab (typischer Fluss: Mail-Programm ->
+  // Link klicken -> zurueck) refresht SOFORT, (2) ein Intervall als Fallback,
+  // pausiert bei verstecktem Tab. Start/Stopp haengen ausschliesslich am
+  // AUTH_EVENT-Datenstand (jede refreshState-Antwort re-dispatcht AUTH_EVENT,
+  // der Listener unten entscheidet neu) -- steht nichts mehr aus, endet das
+  // Polling von selbst. Kein Dauer-Polling im Normalzustand.
+  const PENDING_POLL_MS = 15000;
+  let pendingTimer = null;
+  let pendingRefreshRunning = false;
+
+  async function refreshPending() {
+    if (pendingRefreshRunning || document.hidden) return;
+    pendingRefreshRunning = true;
+    try {
+      await refreshState();
+    } catch (err) {
+      // Abgelaufene Session -> Watch beenden (401 wuerde sonst alle 15 s
+      // wiederholt); transiente Fehler (Netz) -> still bleiben, naechster
+      // Tick/Fokus versucht es erneut. Fail-soft, keine Fehlermeldung: der
+      // sichtbare Zustand bleibt einfach der letzte bekannte.
+      if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED) stopPendingWatch();
+    } finally {
+      pendingRefreshRunning = false;
+    }
+  }
+
+  function startPendingWatch() {
+    if (pendingTimer !== null) return;
+    pendingTimer = setInterval(refreshPending, PENDING_POLL_MS);
+  }
+
+  function stopPendingWatch() {
+    if (pendingTimer === null) return;
+    clearInterval(pendingTimer);
+    pendingTimer = null;
+  }
+
+  function onReturnToTab() {
+    if (!document.hidden && pendingTimer !== null) refreshPending();
+  }
+  document.addEventListener("visibilitychange", onReturnToTab);
+  window.addEventListener("focus", onReturnToTab);
+
   wireNewsletterRecipientAdd(
     { form: recipientFormEl, input: recipientInputEl, addBtn: recipientAddBtn },
     { onAdded: refreshState, onMessage: showRecipientMsg },
@@ -216,8 +263,16 @@ import {
       // Platzhalter im freien Empfaenger-Feld.
       recipientInputEl.placeholder = accountEmailFrom(data) || "you@example.com";
       cardEl.hidden = false;
+      // Pending-Watch nach Datenlage: steht eine Bestaetigung aus -> beobachten;
+      // alles bestaetigt/entfernt -> Polling beenden (s. Kommentar oben).
+      if (hasPendingNewsletterRecipient(data)) {
+        startPendingWatch();
+      } else {
+        stopPendingWatch();
+      }
     } else {
       cardEl.hidden = true;
+      stopPendingWatch();
     }
   });
 </script>

@@ -709,6 +709,15 @@ export function newsletterRecipientsFrom(data) {
   return Array.isArray(list) ? list : [];
 }
 
+// Steht mindestens eine Bestaetigung aus? Grundlage fuer den Auto-Refresh der
+// NewsletterIsland (Pending-Watch): solange hier true, zieht die Insel den
+// State selbst nach, damit "Ausstehend" -> "Bestätigt" ohne manuellen Reload
+// umspringt. Fail-closed: kaputte/fehlende Liste oder Zeilen ohne status -> false
+// (kein Polling ins Leere bei aelterem Server).
+export function hasPendingNewsletterRecipient(data) {
+  return newsletterRecipientsFrom(data).some((r) => r && r.status === RECIPIENT_STATUS_PENDING);
+}
+
 // Rueckmeldungen (Muster NEWSLETTER_MESSAGES/CANCEL_MESSAGES): Erfolgs- UND
 // Fehler-Schluessel in EINEM Woerterbuch. Die Fehler-Schluessel sind die
 // STABILEN Server-Codes aus planAddNewsletterRecipient (invalid_format/
