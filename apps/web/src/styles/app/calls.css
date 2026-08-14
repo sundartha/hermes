@@ -197,21 +197,32 @@
   backdrop-filter: blur(8px);
 }
 
+/* Owner-Feedback: "Chat-Fenster zu klein" -- grosszuegigeres Fenster
+   (clamp statt fester max-width), Grossteil der Hoehe geht an den
+   Transkript-Bereich (eigener Scrollbereich statt Ganze-Karte-Scroll, s.u.). */
 .call-modal__card {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
   width: 100%;
-  max-width: 620px;
-  max-height: 82vh;
-  padding: 26px;
-  overflow-y: auto;
+  max-width: clamp(680px, 62vw, 900px);
+  max-height: 88vh;
+  padding: 32px;
+  overflow: hidden;
   background: rgba(10, 26, 52, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
   backdrop-filter: blur(14px);
   box-shadow: 0 28px 60px -34px rgba(3, 10, 26, 0.9);
+}
+
+/* Kopf/Anrufer-Zeile/Summary behalten ihre Inhaltshoehe; nur der Transkript-
+   Block waechst mit dem verfuegbaren Platz (Grossteil der Fensterhoehe). */
+.call-modal__head,
+.call-modal__contact,
+.call-modal__summary {
+  flex: 0 0 auto;
 }
 
 .call-modal__head {
@@ -333,18 +344,35 @@
   color: #ffffff;
 }
 
+/* flex:1 -- der Transkript-Block bekommt den Grossteil der Fensterhoehe (Owner-
+   Feedback); min-height:0 ist noetig, damit der innere Scrollbereich (statt
+   der ganzen Karte) tatsaechlich schrumpfen/scrollen darf (Flexbox-Standard-
+   falle sonst: Kind waechst ueber den verfuegbaren Platz hinaus). */
 .call-modal__transcript {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 10px;
 }
 
 .call-modal__transcript-label {
+  flex: 0 0 auto;
   font-family: var(--app-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.46);
+}
+
+/* Eigener Scrollbereich (Karte selbst scrollt nicht mehr, s. overflow:hidden
+   oben) -- padding-right schafft Luft, damit der Scrollbalken nicht auf dem
+   Blasentext liegt. */
+#call-modal-transcript-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .call-modal__empty {
@@ -357,16 +385,29 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .chat-bubble {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   max-width: 80%;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border: 1px solid;
+  /* Rhythmus statt einheitlichem gap (s.u.): Standardabstand zwischen zwei
+     Sprecherwechseln, kein Zusammenkleben. */
+  margin-top: 16px;
+}
+
+.chat-bubble:first-child {
+  margin-top: 0;
+}
+
+/* Zusammenhaengende Turns DESSELBEN Sprechers ruecken naeher zusammen (aber
+   nicht 0) -- sichtbar als Gruppe, ohne verklebt zu wirken (Owner-Feedback). */
+.chat-bubble--agent + .chat-bubble--agent,
+.chat-bubble--counterparty + .chat-bubble--counterparty {
+  margin-top: 6px;
 }
 
 /* Hermes links, spitze Ecke unten links; Gegenseite rechts, spitze Ecke unten
@@ -408,6 +449,8 @@
 .chat-bubble__text {
   margin: 0;
   color: #ffffff;
+  font-size: 15px;
+  line-height: 1.5;
   white-space: pre-wrap;
 }
 
@@ -417,13 +460,16 @@
   }
 }
 
-@media (max-width: 640px) {
+/* Owner-Feedback-Vorgabe: unter ~700px nahezu vollflaechig. */
+@media (max-width: 700px) {
   .call-modal {
     padding: 12px;
   }
   .call-modal__card {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    max-height: 92vh;
     padding: 20px;
-    max-height: 88vh;
   }
 }
 

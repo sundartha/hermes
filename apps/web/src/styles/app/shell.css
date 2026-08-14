@@ -10,7 +10,44 @@
  * Nur bereits vorhandene Custom Properties + die in der Auftragsspezifikation
  * woertlich genannten rgba-/Hex-Werte werden hier verwendet -- keine neuen
  * Farben erfunden (Vorarbeits-Auflage).
+ *
+ * Fullscreen-Feedback (Owner, Trupp A): auf sehr breiten Screens (1920px+)
+ * blieb die Inhaltsspalte schmal und die Schrift wirkte klein -- viele der
+ * bestehenden clamp()-Werte aus app.css/app-hermes.css erreichen ihre
+ * Obergrenze (dritter clamp()-Wert) schon um ~1200-1500px Viewportbreite,
+ * danach bleibt alles flach und der Rest des Screens wird zu Leerraum.
+ * Strategie unten (Abschnitt 0): NUR die Obergrenze anheben, Untergrenze und
+ * vw-Anteil unveraendert lassen. Dadurch ist die Kurve unterhalb der
+ * bisherigen Saettigung mathematisch identisch zu vorher -- Mobil/Tablet
+ * aendert sich nicht sichtbar --, oberhalb waechst sie stetig weiter statt
+ * zu kappen. Kein fester Breakpoint noetig, clamp() macht den Uebergang
+ * selbst weich.
  * ========================================================================== */
+
+/* --------------------------------------------- 0. Fullscreen-Skalierung --- */
+
+:root {
+  /* Gemeinsamer vertikaler Takt (Kopf -> erste Karte, Karte -> Karte, siehe
+     Abschnitt 1 #region-shell / .dash-sections) -- eine Groesse statt
+     verschiedener margins (Owner-Befund 2: Begruessungsbereich kompakter). */
+  --dash-rhythm: clamp(16px, 1.3vw, 24px);
+  /* Nav-Spaltenbreite, geteilt zwischen .dash-layout und .dash-nav (Abschnitt 2). */
+  --dash-nav-w: clamp(200px, 12vw, 240px);
+}
+
+/* .app-main (app-hermes.css) saettigte bei ~1333px Breite / ~1000px Hoehe --
+   Basiswerte (1320px / 3.4vh / 3vw) unveraendert, nur die Kappen wachsen. */
+.app-main {
+  max-width: clamp(1320px, 75vw, 1440px);
+  padding: clamp(22px, 3.4vh, 44px) clamp(20px, 3vw, 56px) 56px;
+}
+
+/* Kartenpolster global (.card, app-hermes.css) -- wirkt einheitlich auf alle
+   Abschnitte (Calls/Settings/Billing/Newsletter + Nummernkarte), ohne
+   calls.css/panels.css anzufassen (.card ist dort nicht neu belegt). */
+.card {
+  padding: clamp(20px, 2.6vw, 42px);
+}
 
 /* --------------------------------------------------- 1. Seitenkopf-Grid --- */
 
@@ -23,22 +60,34 @@
   gap: 28px;
 }
 
+/* Owner-Befund 2: kompaktere Stapelung Eyebrow/Begruessung (kleinerer Abstand
+   als vorher) traegt zur geringeren Kopfblock-Hoehe bei. */
 .dash-head__intro {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
 }
 
 /* Sektions-Ueberschriften (h2) innerhalb der App-Shell: Serif statt Space
-   Grotesk, ruhige Groesse -- reine Rollen-/Schriftfamilien-Regel, kein neuer
-   Wert. */
+   Grotesk, ruhige Groesse -- reine Rollen-/Schriftfamilien-Regel, Kappe
+   angehoben (Abschnitt 0: Fullscreen-Skalierung). */
 .app-main h2 {
   font-family: var(--font-heading);
   font-weight: var(--weight-normal);
-  font-size: clamp(20px, 2vw, 26px);
+  font-size: clamp(20px, 2vw, 36px);
   letter-spacing: 0;
   color: #ffffff;
+}
+
+/* Begruessung ("Welcome, ..."): app-hermes.css saettigte bei ~1222px (Kappe
+   44px via 3.6vw) -- nur die Kappe waechst (Abschnitt 0). Owner-Befund 2:
+   margin-top aus app.css entfernt, der Abstand zur Eyebrow kommt jetzt
+   ausschliesslich aus dem flex-gap von .dash-head__intro oben -- ein Takt
+   statt margin + gap addiert. */
+.dash-head__title {
+  font-size: clamp(30px, 3.6vw, 60px);
+  margin-top: 0;
 }
 
 /* Kleinlabels/Codes/Zeitstempel: System-Mono (--app-mono), NICHT IBM Plex
@@ -56,13 +105,25 @@
   width: fit-content;
 }
 
+/* Owner-Befund 2: einheitlicher vertikaler Rhythmus. #region-shell
+   (App.astro) umschliesst .dash-head und .dash-layout, hatte bisher keine
+   eigene Regel -- Kopf und erste Karte stiessen ohne Abstand aneinander.
+   Jetzt derselbe Takt wie zwischen den Karten selbst (.dash-sections gap
+   unten, gleiche Custom Property) statt eines eigenen margin-Werts. */
+#region-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dash-rhythm);
+}
+
 /* -------------------------------------------------- 2. Bereichs-Navigation */
 
 /* Zweispaltiges Layout: sticky linke Spalte (Navigation) + scrollende
-   Inhaltsspalte (die vier Abschnitte). */
+   Inhaltsspalte (die vier Abschnitte). Spaltenbreite aus Abschnitt 0
+   (--dash-nav-w), geteilt mit .dash-nav weiter unten. */
 .dash-layout {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: var(--dash-nav-w) minmax(0, 1fr);
   align-items: start;
   gap: 28px;
 }
@@ -70,7 +131,7 @@
 .dash-sections {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--dash-rhythm);
   min-width: 0;
 }
 
@@ -93,7 +154,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: 200px;
+  width: var(--dash-nav-w);
   padding: 6px;
   align-self: start;
   background: rgba(8, 22, 46, 0.52);
@@ -101,15 +162,17 @@
   border-radius: 16px;
 }
 
+/* Eintraege wachsen mit der Spalte (Abschnitt 0-Prinzip: nur die Kappe hebt
+   an, Untergrenze/vw-Anteil identisch zu vorher -- unter ~1200px flach). */
 .dash-nav__link {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 12px;
+  padding: clamp(11px, 0.9vw, 15px) clamp(12px, 1vw, 16px);
   border-radius: 12px;
   background: transparent;
   color: rgba(255, 255, 255, 0.62);
-  font-size: 14.5px;
+  font-size: clamp(14.5px, 1vw, 17px);
   font-weight: 500;
   text-decoration: none;
   transition: background 0.2s ease, color 0.2s ease;
@@ -129,7 +192,7 @@
 
 .dash-nav__num {
   font-family: var(--app-mono);
-  font-size: 10px;
+  font-size: clamp(10px, 0.7vw, 12px);
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.42);
   flex-shrink: 0;
@@ -146,12 +209,21 @@
    Befund 2 (Fix-Runde): EINE Zeile (Spec §5) -- Radiopunkt+Label+Nummer
    (.agent-chip__row) links, Kopier-Knopf rechts. `flex-direction:column`
    war der Grund, warum der Knopf auf eine eigene Zeile umbrach; das ist raus. */
+/* Eigenes (kleineres) Polster statt des wachsenden .card-Werts (Abschnitt 0)
+   -- Owner-Befund 2: die Nummernkarte war der Hauptgrund fuer die zu grosse
+   Kopfblock-Hoehe, deshalb bleibt sie bewusst kompakter als andere Karten,
+   auch wenn ihre Schrift (siehe .agent-chip__number) mitwaechst. Untergrenze
+   20px = der bisherige flache Mobil-/Tablet-Wert von .card (clamp(20px,
+   2.6vw,32px) faellt dort auf sein Minimum) -- dort also unveraendert, ab
+   Desktop-Breiten deutlich knapper als die 32px, auf die .card vorher schon
+   um ~1230px saettigte. */
 .agent-chip {
   display: flex;
   align-items: center;
   gap: 18px;
   margin: 0;
   min-width: 240px;
+  padding: clamp(20px, 1.2vw, 24px) clamp(20px, 1.6vw, 28px);
 }
 
 .agent-chip__row {
@@ -171,9 +243,11 @@
 /* Mono nur fuer das Label darueber (app-hermes.css); die Nummer selbst
    Mono 22px weiss (Spec §5) -- app-hermes.css liefert nur 18px, hier
    nachgezogen (spaeterer Import gewinnt bei gleicher Spezifitaet). */
+/* 22px ist jetzt die Untergrenze statt Festwert -- waechst auf grossen
+   Screens mit (Abschnitt 0-Prinzip: unter ~1200px identisch zu vorher). */
 .agent-chip__number {
   font-family: var(--app-mono);
-  font-size: 22px;
+  font-size: clamp(22px, 1.83vw, 30px);
 }
 
 .agent-chip__copy {
@@ -183,13 +257,13 @@
   gap: 7px;
   flex-shrink: 0;
   margin-left: auto;
-  padding: 10px 18px;
+  padding: clamp(10px, 0.9vw, 14px) clamp(18px, 1.6vw, 24px);
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: clamp(14px, 1vw, 16px);
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }

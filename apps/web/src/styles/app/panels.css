@@ -294,11 +294,15 @@
 
 /* -------------------------------------------------------------- 6. Newsletter */
 
-/* Der <label> ist der EINZIGE Bedienbereich: ein Klick irgendwo darin schaltet
-   das echte, dahinterliegende input[type=checkbox] um (native Label-Semantik)
-   -- keine JS-Klick-Weiterleitung noetig. Nur EIN Zustand (--off/--on) ist je
-   Checkbox-Stand sichtbar, per Geschwister-Selektor (Muster .lang-tile__fill
-   oben), kein :has() noetig. */
+/* Owner-Feedback-Runde (Trupp B): echtes Anmelde-Formular statt Ein-Klick-
+   Pille. Die Checkbox bleibt die EINE Datenquelle (Muster .lang-tile__fill
+   oben, Geschwister-Selektor je Zustand, kein :has() noetig) -- "Subscribe"
+   ist ein <label for> auf die Checkbox (natives Toggle), "Unsubscribe" ein
+   echter <button> (Klick-Handler in NewsletterIsland.astro spiegelt ihn auf
+   dieselbe Checkbox+change-Route). Das E-Mail-Feld ist `readonly` -- die
+   Route adressiert serverseitig IMMER die Konto-E-Mail, hier steht nur die
+   Anzeige (s. Komponentenkopf: state traegt aktuell keine E-Mail, Feld bleibt
+   bis dahin leer+Platzhalter). */
 /* Zwischenueberschriften im Abrechnungs-Block liegen eine Ebene unter dem
    Abschnittstitel -- dieselbe leise Mono-Label-Ebene wie AGENT LANGUAGE /
    PERMISSIONS im Settings-Block (Spec §3), nicht fett gesetzte Sans-Zeilen. */
@@ -318,9 +322,8 @@
 
 .newsletter-toggle {
   position: relative;
-  display: inline-flex;
+  display: block;
   margin-top: 18px;
-  cursor: pointer;
 }
 
 .newsletter-toggle__input {
@@ -330,41 +333,60 @@
   height: 0;
 }
 
+/* Checkbox bleibt Tab-Stopp (Space togglet sie); der Fokusring erscheint auf
+   dem jeweils sichtbaren Zustandsblock, nicht auf der (0x0-)Checkbox selbst. */
 .newsletter-toggle__input:focus-visible ~ .newsletter-toggle__state {
   outline: 2px solid var(--color-accent, #8fb6e3);
-  outline-offset: 2px;
+  outline-offset: 4px;
+  border-radius: 16px;
 }
 
 .newsletter-toggle__state {
   display: none;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-radius: 999px;
 }
 
-/* Zustand "nicht angemeldet": leises Mono-Label und die weisse Pille stehen
-   nebeneinander mit Luft dazwischen -- KEIN gemeinsamer Rahmen, sonst sieht es
-   aus wie ein zusammengeklebtes Steuerelement (Spec §11). */
+/* Zustand "nicht angemeldet" (Spec §11): eingelassenes E-Mail-Feld (readonly,
+   Konto-Adresse) + weisse Subscribe-Pille nebeneinander, Mono-Hinweis darunter. */
 .newsletter-toggle__state--off {
   display: flex;
-  gap: 16px;
-  padding: 0;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .newsletter-toggle__input:checked ~ .newsletter-toggle__state--off {
   display: none;
 }
 
-.newsletter-toggle__field {
+.newsletter-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* .field-input liefert schon das eingelassene Feld (Spec §2, app-hermes.css);
+   hier nur die Breite freigeben (Basis ist width:100% fuer Einzelfelder) und
+   den readonly-Zustand optisch leicht daempfen. */
+.newsletter-form__field {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
+.newsletter-form__field[readonly] {
+  color: rgba(255, 255, 255, 0.7);
+  cursor: default;
+}
+
+.newsletter-form__hint {
+  margin: 0;
   font-family: var(--app-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.04em;
   color: rgba(255, 255, 255, 0.46);
 }
 
 .newsletter-toggle__cta {
+  flex-shrink: 0;
   padding: 10px 22px;
   border-radius: 999px;
   background: #ffffff;
@@ -372,10 +394,28 @@
   font-family: var(--font-sans);
   font-size: 13.5px;
   font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-/* Zustand "angemeldet": gruene Pille mit Punkt (Spec §11, exakte Farbwerte). */
+/* Zustand "angemeldet" (Spec §11): gruene Pille mit Punkt (exakte Farbwerte)
+   + Ghost-Knopf zum Abmelden daneben, dieselbe Optik wie der Kopier-Knopf der
+   Nummern-Karte (shell.css .agent-chip__copy). */
 .newsletter-toggle__state--on {
+  align-items: center;
+  gap: 12px;
+}
+
+.newsletter-toggle__input:checked ~ .newsletter-toggle__state--on {
+  display: flex;
+}
+
+.newsletter-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 999px;
   background: rgba(127, 224, 176, 0.12);
   border: 1px solid rgba(127, 224, 176, 0.4);
   color: #7fe0b0;
@@ -384,16 +424,35 @@
   font-weight: 500;
 }
 
-.newsletter-toggle__input:checked ~ .newsletter-toggle__state--on {
-  display: flex;
-}
-
 .newsletter-toggle__dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
   background: #7fe0b0;
   flex-shrink: 0;
+}
+
+.newsletter-toggle__unsub {
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: transparent;
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.newsletter-toggle__unsub:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.newsletter-toggle__unsub:focus-visible {
+  outline: 2px solid var(--color-accent, #8fb6e3);
+  outline-offset: 2px;
 }
 
 /* -------------------------------------------------------------------- 7. Schmal */
@@ -406,4 +465,31 @@
     width: 100%;
     text-align: center;
   }
+  .newsletter-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .newsletter-toggle__cta {
+    text-align: center;
+  }
+}
+
+/* ------------------------------------------- 8. Toggle-Schalter zentrieren */
+
+/* Owner-Feedback: "die An/Aus-Buttons sind offcenter mit dem weissen Kreis."
+   Ursache in app.css/app-hermes.css (.switch/.switch-slider, unveraendert
+   lassen -- ausserhalb dieser Datei verboten): die Spur ist --space-6 (24px)
+   hoch, der Knopf --space-5 (20px) im Durchmesser, aber der Knopf sitzt per
+   `top: var(--space-1)` (4px) -- macht 4px Rand oben, 0px Rand unten, der
+   Kreis klebt an der Unterkante der Spur.
+   Richtiger Rand oben=unten ist (Spurhoehe - Knopf) / 2 = (24px-20px)/2 = 2px
+   -- ueber dieselben Tokens berechnet, keine neue Magic Number. Die
+   horizontale Geometrie (Rand links = --space-1 = Rand rechts im An-Zustand,
+   Verschiebe-Distanz translateX(--space-5) = Spurbreite - Knopf - 2xRand) war
+   bereits korrekt und bleibt unangetastet -- nur `top` wird ueberschrieben,
+   spaeterer Import (calls.css -> panels.css) gewinnt gegen app.css/
+   app-hermes.css. Gilt fuer BEIDE Zustaende (aus/an teilen dieselbe
+   ::before-Basisposition, :checked haengt nur den translateX an). */
+.switch-slider::before {
+  top: calc((var(--space-6) - var(--space-5)) / 2);
 }

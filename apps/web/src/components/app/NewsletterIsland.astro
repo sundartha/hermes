@@ -1,21 +1,37 @@
 ---
-// NewsletterIsland (Dashboard-Design-Spec §11): eigener Abschnitt fuer die
-// Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) -- bisher Teil der
-// Billing-Karte, jetzt ein eigenstaendiger vierter Bereich (#newsletter,
-// eingebunden von Trupp A in apps/web/src/pages/app/index.astro). NUR die
-// DARSTELLUNG zog um: die Einwilligungs-Logik (Route POST /api/self-service/
-// newsletter-consent, nie vorangekreuzt, Widerruf jederzeit, Fehler setzt das
-// Haekchen zurueck) lebt unveraendert in lib/subscribe.js
-// (wireNewsletterToggle/newsletterConsentFrom) -- dieselben Funktionen, die
-// vorher BillingIsland.astro verdrahtet hat.
+// NewsletterIsland (Dashboard-Design-Spec §11, Owner-Feedback-Runde Trupp B):
+// eigener Abschnitt fuer die Newsletter-Einwilligung (Opt-in, DSGVO Art. 7
+// Abs. 1) -- bisher Teil der Billing-Karte, jetzt ein eigenstaendiger vierter
+// Bereich (#newsletter, eingebunden von Trupp A in apps/web/src/pages/app/
+// index.astro). NUR die DARSTELLUNG zog um bzw. wurde ueberarbeitet: die
+// Einwilligungs-Logik (Route POST /api/self-service/newsletter-consent, nie
+// vorangekreuzt, Widerruf jederzeit, Fehler setzt das Haekchen zurueck) lebt
+// unveraendert in lib/subscribe.js (wireNewsletterToggle/newsletterConsentFrom)
+// -- dieselben Funktionen, die vorher BillingIsland.astro verdrahtet hat.
 //
-// Zwei Zustaende (Spec §11), EIN echter input[type=checkbox] als einzige
-// Datenquelle (Muster lang-tile in SettingsIsland.astro: ein Geschwister-
-// Selektor pro Zustand blendet um, kein zweiter Endpunkt/kein Freitext-E-Mail-
-// Feld -- die Route nimmt nur {consent:boolean}, adressiert wird die
-// registrierte Tenant-E-Mail). Checkbox optisch versteckt via opacity:0;
-// position:absolute (NICHT display:none) -- Fokusring bleibt sichtbar,
-// Klick auf die Kachel (natives <label>) schaltet um.
+// Owner-Feedback: "Product updates so nicht -- soll ein Newsletter sein, E-Mail
+// eingeben und subscriben." Die Route nimmt weiterhin NUR {consent:boolean};
+// die Empfaengeradresse ist server-seitig IMMER die Konto-E-Mail des Tenants
+// (nie aus dem Request). Das E-Mail-Feld unten ist deshalb `readonly` und zeigt
+// nur an, wohin gesendet wird -- kein zweiter Endpunkt, kein Freitext-Versand
+// an eine abweichende Adresse. GEPRUEFT: die state-Antwort (GET /api/state,
+// src/routes/api-read.js) traegt aktuell KEIN E-Mail-Feld (weder
+// data.account.email noch data.email o.ae. -- agent.owner ist der Anzeigename,
+// keine Adresse). Darum bleibt das Feld ohne Vorbefuellung, nur Platzhalter --
+// sobald der Server einmal eine Konto-E-Mail in den state-Payload aufnimmt,
+// kann sie hier per AUTH_EVENT-Listener eingetragen werden (kein toter Code
+// fuer ein heute nicht existierendes Feld).
+//
+// EIN echter input[type=checkbox] bleibt die einzige Datenquelle (Muster
+// lang-tile in SettingsIsland.astro: ein Geschwister-Selektor pro Zustand
+// blendet um). Checkbox optisch versteckt via opacity:0; position:absolute
+// (NICHT display:none) -- Fokusring bleibt sichtbar. "Subscribe" ist ein
+// <label for> auf die Checkbox (kein JS noetig, natives Toggle-Verhalten).
+// "Unsubscribe" (angemeldeter Zustand) ist ein echter <button>, weil ein
+// <label for> hier innerhalb desselben Formularbereichs weniger klar waere --
+// sein Klick-Handler setzt die Checkbox um UND feuert "change" (derselbe
+// wireNewsletterToggle-Listener wie beim direkten Checkbox-Klick, keine
+// zweite Route/kein zweiter Zustandsautomat).
 //
 // KEIN eigener state-Fetch (AUTH_EVENT). Checkbox startet IMMER ungecheckt im
 // Markup -- der tatsaechliche Zustand kommt ausschliesslich aus
@@ -26,28 +42,41 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
 ---
 
 <section id="newsletter-card" class="card" hidden>
-  <h2>Product updates</h2>
+  <h2>Newsletter</h2>
   <p class="muted">
-    Occasional email about new Hermes features. Not required for your subscription —
-    you can change your mind anytime.
+    Get a short summary emailed to you after every call. Optional -- you can
+    unsubscribe anytime.
   </p>
 
-  <label class="newsletter-toggle">
+  <div class="newsletter-toggle">
     <input
       type="checkbox"
       id="newsletter-toggle"
       class="newsletter-toggle__input"
-      aria-label="Subscribe to product updates"
+      aria-label="Subscribe to the newsletter"
     />
-    <span class="newsletter-toggle__state newsletter-toggle__state--off" aria-hidden="true">
-      <span class="newsletter-toggle__field">Not subscribed</span>
-      <span class="newsletter-toggle__cta">Subscribe</span>
-    </span>
-    <span class="newsletter-toggle__state newsletter-toggle__state--on" aria-hidden="true">
-      <span class="newsletter-toggle__dot"></span>
-      Subscribed
-    </span>
-  </label>
+    <div class="newsletter-toggle__state newsletter-toggle__state--off">
+      <div class="newsletter-form">
+        <input
+          type="email"
+          id="newsletter-email"
+          class="field-input newsletter-form__field"
+          readonly
+          placeholder="you@example.com"
+          aria-label="Account email"
+        />
+        <label for="newsletter-toggle" class="newsletter-toggle__cta">Subscribe</label>
+      </div>
+      <p class="newsletter-form__hint">Sent to your account email.</p>
+    </div>
+    <div class="newsletter-toggle__state newsletter-toggle__state--on">
+      <span class="newsletter-toggle__dot" aria-hidden="true"></span>
+      <span aria-hidden="true">Subscribed</span>
+      <button type="button" id="newsletter-unsubscribe" class="newsletter-toggle__unsub">
+        Unsubscribe
+      </button>
+    </div>
+  </div>
   <p id="newsletter-msg" class="billing-msg" hidden></p>
 </section>
 
@@ -57,6 +86,7 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
 
   const cardEl = document.getElementById("newsletter-card");
   const toggleEl = document.getElementById("newsletter-toggle");
+  const unsubscribeBtn = document.getElementById("newsletter-unsubscribe");
   const msgEl = document.getElementById("newsletter-msg");
 
   const MSG_OK_CLASS = "billing-msg--ok";
@@ -72,6 +102,14 @@ import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe
   // wireNewsletterToggle) -- kein eigener Speichern-Knopf, eine einzelne
   // Einwilligungs-Erklaerung (Muster BillingIsland vor dem Umzug).
   wireNewsletterToggle(toggleEl, { onMessage: showMessage });
+
+  // Der Unsubscribe-Knopf ist bewusst ein <button> statt eines zweiten
+  // <label for>: er stoesst DENSELBEN change-Pfad an wie ein direkter
+  // Checkbox-Klick (kein zweiter Endpunkt, keine eigene Fehlerbehandlung).
+  unsubscribeBtn.addEventListener("click", () => {
+    toggleEl.checked = false;
+    toggleEl.dispatchEvent(new Event("change"));
+  });
 
   // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
   // eingeloggten Zustand traegt die Antwort data.newsletter. Listener synchron
