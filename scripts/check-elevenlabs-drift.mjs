@@ -16,6 +16,13 @@
 // driftet genauso wie das, was sie beschreiben soll. Die Arten des Vergleichs
 // (wert | namen | variablen) sind dort an _art_hinweis begruendet.
 //
+// NEBEN DEM FELDVERGLEICH: Verbote (_besitz.regeln, dort an _regeln_hinweis
+// begruendet). Ein Feldvergleich kann nur zwei bekannte Stellen gegeneinander
+// halten; ein Verbot sagt "in dieser Sammlung darf NIRGENDS dieser Pfad
+// gesetzt sein" und gilt damit auch fuer Eintraege, die es heute nicht gibt.
+// Auch sie stehen als Daten in der Vorlage und nicht hier - fest verdrahtet
+// waere die Regel fuer den unsichtbar, der die Vorlage pflegt.
+//
 // DIESES SKRIPT LIEST NUR (GET). Es patcht den Live-Agenten NICHT - das
 // Reparieren ist eine eigene Entscheidung mit eigenem Paket.
 //
@@ -46,7 +53,13 @@ const ARG_INDEX_AGENT_ID = 2;
 
 const BESITZ_SCHLUESSEL = "_besitz";
 const FELDER_SCHLUESSEL = "felder";
+const REGELN_SCHLUESSEL = "regeln";
 const NICHT_BESESSEN_SCHLUESSEL = "_nicht_besessen";
+// Einzige heute bekannte Form eines Verbots: "kein Eintrag dieser Sammlung darf
+// einen dieser Pfade gesetzt haben". Eine unbekannte art ist ein Fehler und
+// kein stilles Ueberspringen - sonst pruefte das Gate genau das Verbot nicht
+// mehr, das es zu pruefen behauptet.
+const REGEL_ART_VERBOTEN_JE_EINTRAG = "verboten_je_eintrag";
 const ART_WERT = "wert";
 const ART_NAMEN = "namen";
 const ART_VARIABLEN = "variablen";
@@ -158,12 +171,16 @@ const VERGLEICHS_ARTEN = new Map([
 
 // --- Form der Besitz-Erklaerung ---
 
-function pfadListeFehler({ feld, seite, pfade, einPfad }) {
-  const istPfadListe =
+function istPfadListe(pfade) {
+  return (
     Array.isArray(pfade) &&
     pfade.length > 0 &&
-    pfade.every((pfad) => typeof pfad === "string" && pfad !== "");
-  if (!istPfadListe) {
+    pfade.every((pfad) => typeof pfad === "string" && pfad !== "")
+  );
+}
+
+function pfadListeFehler({ feld, seite, pfade, einPfad }) {
+  if (!istPfadListe(pfade)) {
     return `${feld}: "${seite}" ist keine nicht-leere Liste von Pfaden`;
   }
   if (einPfad && pfade.length !== 1) {
@@ -255,15 +272,11 @@ function vergleicheFeld({ eintrag, vorlage, live }) {
   return { abweichung: abweichungsZeile({ eintrag, vergleich, links, rechts }) };
 }
 
-// Vergleicht Vorlage und Live-Agenten ueber die BESESSENEN Felder und nur ueber
-// sie. Wirft nie an den Aufrufer weiter: jedes erwartbare Problem wird zu einem
-// Eintrag in fehler[] oder abweichungen[] (fail-closed). ok = beides leer.
-export function vergleicheBesitz({ vorlage, live }) {
-  const besitz = vorlage?.[BESITZ_SCHLUESSEL];
+// Alle BESESSENEN Felder und nur sie.
+function vergleicheFelder(besitz, vorlage, live) {
   const eintraege = besitz?.[FELDER_SCHLUESSEL];
   if (!Array.isArray(eintraege) || eintraege.length === 0) {
     return {
-      ok: false,
       geprueft: 0,
       abweichungen: [],
       fehler: [
@@ -279,10 +292,123 @@ export function vergleicheBesitz({ vorlage, live }) {
     if (ergebnis.fehler) fehler.push(ergebnis.fehler);
     if (ergebnis.abweichung) abweichungen.push(ergebnis.abweichung);
   }
+  return { geprueft: eintraege.length, abweichungen, fehler };
+}
+
+// --- Verbote (_besitz.regeln) ---
+
+// Prueft die FORM eines Verbots. Wie bei den Feldern gilt: ein kaputter Eintrag
+// darf nicht still als "kein Fund" durchgehen - sonst pruefte das Gate genau
+// das Verbot nicht mehr, das es zu pruefen behauptet.
+function regelFormFehler(eintrag) {
+  const { regel, art, live, verboten, meldung } = eintrag ?? {};
+  if (typeof regel !== "string" || regel === "") {
+    return `${BESITZ_SCHLUESSEL}.${REGELN_SCHLUESSEL}: Eintrag ohne "regel"-Namen`;
+  }
+  if (art !== REGEL_ART_VERBOTEN_JE_EINTRAG) {
+    return `${regel}: unbekannte Regel-Art "${art}" (bekannt: ${REGEL_ART_VERBOTEN_JE_EINTRAG})`;
+  }
+  if (typeof live !== "string" || live === "") {
+    return `${regel}: "live" ist kein Pfad auf die gepruefte Sammlung`;
+  }
+  if (!istPfadListe(verboten)) {
+    return `${regel}: "verboten" ist keine nicht-leere Liste von Pfaden`;
+  }
+  if (typeof meldung !== "string" || meldung === "") {
+    return `${regel}: "meldung" fehlt - ein Fund wuerde seinen Grund nicht nennen`;
+  }
+  return null;
+}
+
+// "Gesetzt" heisst: der Pfad existiert UND traegt nicht null. Der Anbieter
+// fuehrt die Felder eines Presets vollstaendig und setzt die ungenutzten auf
+// null. Ein LEERER Text zaehlt dagegen als gesetzt - eine geleerte Offenlegung
+// ist der schlimmste Fall des Verbots, nicht sein harmloser.
+function istGesetzt(wurzel, pfad) {
+  const treffer = wertAnPfad(wurzel, pfad);
+  return treffer.gefunden && treffer.wert !== null;
+}
+
+// Nennt den Eintrag beim Namen und traegt die Begruendung aus der Vorlage mit:
+// eine Verletzung ist kein Feldunterschied, den man wegvergleichen kann,
+// sondern eine Aussage darueber, was hier ueberhaupt nicht stehen darf.
+function verletzungsZeile({ eintrag, name, gesetzt }) {
+  const pfade = gesetzt.join(PFAD_VERBINDER);
+  return `VERLETZUNG ${eintrag.regel} | Live ${eintrag.live}."${name}" setzt ${pfade} | ${eintrag.meldung}`;
+}
+
+// EIN Verbot gegen EINE Sammlung des Live-Agenten. Geprueft wird jeder Eintrag,
+// den der Agent wirklich fuehrt - damit auch kuenftig hinzugefuegte und
+// unabhaengig davon, ob die Namen der Sammlung gerade abweichen.
+function pruefeRegel(eintrag, live) {
+  const formFehler = regelFormFehler(eintrag);
+  if (formFehler) return { geprueft: 0, verletzungen: [], fehler: [formFehler] };
+
+  const treffer = wertAnPfad(live, eintrag.live);
+  const sammlung = treffer.wert;
+  const istSammlung = treffer.gefunden && sammlung !== null && typeof sammlung === "object";
+  if (!istSammlung) {
+    return {
+      geprueft: 0,
+      verletzungen: [],
+      fehler: [
+        `${eintrag.regel}: Sammlung ${eintrag.live} fehlt im Live-Agenten oder ist kein Objekt - dieses Verbot wuerde nichts pruefen`,
+      ],
+    };
+  }
+
+  const verletzungen = [];
+  const eintraege = Object.entries(sammlung);
+  for (const [name, wert] of eintraege) {
+    const gesetzt = eintrag.verboten.filter((pfad) => istGesetzt(wert, pfad));
+    if (gesetzt.length > 0) verletzungen.push(verletzungsZeile({ eintrag, name, gesetzt }));
+  }
+  return { geprueft: eintraege.length, verletzungen, fehler: [] };
+}
+
+// Alle Verbote. geprueft zaehlt die wirklich angesehenen Paare (Regel x
+// Eintrag) - eine Zahl, die 0 bleibt, waere sonst von "nichts gefunden" nicht
+// zu unterscheiden.
+function pruefeRegeln(besitz, live) {
+  const regeln = besitz?.[REGELN_SCHLUESSEL];
+  if (!Array.isArray(regeln) || regeln.length === 0) {
+    return {
+      geprueft: 0,
+      verletzungen: [],
+      fehler: [
+        `${VORLAGE_REL}: keine Regeln (${BESITZ_SCHLUESSEL}.${REGELN_SCHLUESSEL}) mit mindestens einem Verbot - ohne sie wuerde KEIN Verbot durchgesetzt`,
+      ],
+    };
+  }
+
+  const verletzungen = [];
+  const fehler = [];
+  let geprueft = 0;
+  for (const eintrag of regeln) {
+    const ergebnis = pruefeRegel(eintrag, live);
+    verletzungen.push(...ergebnis.verletzungen);
+    fehler.push(...ergebnis.fehler);
+    geprueft += ergebnis.geprueft;
+  }
+  return { geprueft, verletzungen, fehler };
+}
+
+// Vergleicht Vorlage und Live-Agenten ueber die BESESSENEN Felder und setzt die
+// Verbote der Vorlage durch. Wirft nie an den Aufrufer weiter: jedes erwartbare
+// Problem wird zu einem Eintrag in fehler[], abweichungen[] oder
+// verletzungen[] (fail-closed). ok = alle drei leer.
+export function vergleicheBesitz({ vorlage, live }) {
+  const besitz = vorlage?.[BESITZ_SCHLUESSEL];
+  const felder = vergleicheFelder(besitz, vorlage, live);
+  const regeln = pruefeRegeln(besitz, live);
+  const fehler = [...felder.fehler, ...regeln.fehler];
+  const sauber = felder.abweichungen.length === 0 && regeln.verletzungen.length === 0;
   return {
-    ok: abweichungen.length === 0 && fehler.length === 0,
-    geprueft: eintraege.length,
-    abweichungen,
+    ok: sauber && fehler.length === 0,
+    geprueft: felder.geprueft,
+    geprueftRegeln: regeln.geprueft,
+    abweichungen: felder.abweichungen,
+    verletzungen: regeln.verletzungen,
     fehler,
   };
 }
@@ -344,8 +470,8 @@ function ladeVorlage() {
 }
 
 function melde({ ergebnis, agentId, ausserhalb }) {
-  const { ok, geprueft, abweichungen, fehler } = ergebnis;
-  for (const zeile of [...fehler, ...abweichungen]) {
+  const { ok, geprueft, geprueftRegeln, abweichungen, verletzungen, fehler } = ergebnis;
+  for (const zeile of [...fehler, ...verletzungen, ...abweichungen]) {
     console.error(`${LOG_PREFIX} ${zeile}`);
   }
   if (ausserhalb.length > 0) {
@@ -353,14 +479,16 @@ function melde({ ergebnis, agentId, ausserhalb }) {
       `${LOG_PREFIX} nicht verglichen, weil die Vorlage es nicht besitzt: ${ausserhalb.join(LISTEN_TRENNER)}`,
     );
   }
+  // Beide Zahlen stehen auch im gruenen Fall da: ein Pruefkommando, das nichts
+  // findet, sieht sonst aus wie eines, das nichts sucht.
   if (ok) {
     console.log(
-      `${LOG_PREFIX} OK - alle ${geprueft} besessenen Felder stimmen mit dem Live-Agenten ${agentId} ueberein.`,
+      `${LOG_PREFIX} OK - alle ${geprueft} besessenen Felder stimmen mit dem Live-Agenten ${agentId} ueberein, ${geprueftRegeln} Verbots-Pruefungen (Regel x Eintrag) ohne Verletzung.`,
     );
     return 0;
   }
   console.error(
-    `${LOG_PREFIX} ROT - ${abweichungen.length} von ${geprueft} besessenen Feldern weichen ab, ${fehler.length} Fehler in der Besitz-Erklaerung. Der Live-Agent wurde NICHT veraendert; das Reparieren ist eine eigene Entscheidung.`,
+    `${LOG_PREFIX} ROT - ${abweichungen.length} von ${geprueft} besessenen Feldern weichen ab, ${verletzungen.length} von ${geprueftRegeln} Verbots-Pruefungen (Regel x Eintrag) verletzt, ${fehler.length} Fehler in der Besitz-/Regel-Erklaerung. Der Live-Agent wurde NICHT veraendert; das Reparieren ist eine eigene Entscheidung.`,
   );
   return 1;
 }

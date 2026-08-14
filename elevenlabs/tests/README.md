@@ -223,11 +223,48 @@ an `_besitz._art_hinweis`):
   werden die **Namen** verglichen, nicht die Werte: die Werte sind
   auftragsspezifisch und bei jedem Anruf andere.
 
-**Fail-closed.** Ohne Schluessel, ohne erreichbare API, ohne Besitz-Erklaerung
-oder bei einem besessenen Pfad, den die Vorlage gar nicht hat, endet der Lauf
-mit einer Meldung und Exit 1 — nie mit OK. Ein gruenes Pruefkommando, das
-nichts geprueft hat, sieht aus wie ein bestandenes. Der Vergleich laeuft immer
-ueber den vollen Wert; gekuerzt ist ausschliesslich die Anzeige in der Meldung.
+#### Verbote: was ein Preset NICHT setzen darf
+
+Ein Feldvergleich haelt zwei bekannte Stellen gegeneinander. Er kann nicht
+sagen: „in dieser Sammlung darf **nirgends** dieser Pfad gesetzt sein" — und
+genau das braucht es bei den `language_presets`. Der Namensvergleich oben
+prueft nur, **welche** Sprachen der Agent fuehrt; ueber den Inhalt eines
+Presets sagt er nichts, und ueber ein Preset, das es morgen erst gibt, schon
+gar nichts.
+
+Deshalb traegt `_besitz` neben `felder` eine Liste `regeln` (begruendet in der
+Vorlage an `_besitz._regeln_hinweis`). Ein Eintrag der Art
+`verboten_je_eintrag` loest seinen `live`-Pfad im Live-Agenten auf, geht
+**jeden** Eintrag der Sammlung durch und meldet jeden, der einen der Pfade
+unter `verboten` auf etwas anderes als `null` gesetzt hat — namentlich und mit
+der Begruendung aus `meldung`. Das laeuft unabhaengig davon, ob die Namen der
+Sammlung gerade abweichen.
+
+Das eine Verbot heute:
+**kein `language_preset` ueberschreibt `first_message`.** `first_message` ist
+der Offenlegungssatz nach **Artikel 50 EU AI Act**; ein Preset, das ihn je
+Sprache still ersetzt, ist genau der Weg, auf dem eine gesetzliche Pflicht
+lautlos verschwindet. Verboten sind beide Wege dorthin —
+`overrides.agent.first_message` (von Hand gesetzt) und
+`first_message_translation.text` (vom Anbieter erzeugt); ein Verbot, das nur
+den ersten kennt, waere nach dem ersten Klick im Dashboard umgangen. Braucht
+eine Sprache einen eigenen Offenlegungssatz, kommt er **woertlich** aus
+`src/i18n/locales.js` (`LOCALES.<sprache>.disclosure`) — nie als
+Preset-Override und nie als Uebersetzung, die im Dashboard entsteht.
+
+Der heutige Befund: die drei Live-Presets `en`, `es` und `fr` verletzen das
+Verbot alle drei, samt der toten Platzhalter `{{user_name}}`/`{{call_purpose}}`.
+Das **Zurueckschneiden** der Presets ist eine eigene Entscheidung mit eigenem
+Paket — dieses Kommando meldet es nur.
+
+**Fail-closed.** Ohne Schluessel, ohne erreichbare API, ohne Besitz-Erklaerung,
+ohne Regel-Liste, bei einem besessenen Pfad, den die Vorlage gar nicht hat,
+oder bei einer verbotenen Sammlung, die es live nicht gibt, endet der Lauf mit
+einer Meldung und Exit 1 — nie mit OK. Ein gruenes Pruefkommando, das nichts
+geprueft hat, sieht aus wie ein bestandenes; deshalb nennt auch die
+OK-Meldung, wie viele Felder verglichen und wie viele Verbots-Pruefungen
+(Regel x Eintrag) gefahren wurden. Der Vergleich laeuft immer ueber den vollen
+Wert; gekuerzt ist ausschliesslich die Anzeige in der Meldung.
 
 ## Dateiformat
 
