@@ -25,6 +25,8 @@ const EN = {
   pricing: "Pricing",
   forDevs: "For developers",
   getNumber: "Get a number",
+  logIn: "Log in",
+  signUp: "Sign up",
   heroTitle: '<span class="l1">Give your AI</span> <span>a <em>phone number</em>.</span>',
   heroLead:
     "Hermes answers calls and handles them for you. One connection over <strong>MCP</strong> — and your AI gets a voice.",
