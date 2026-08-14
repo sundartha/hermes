@@ -18,13 +18,19 @@ import BillingIsland from "../../components/app/BillingIsland.astro";
 import SettingsIsland from "../../components/app/SettingsIsland.astro";
 import AgentChip from "../../components/app/AgentChip.astro";
 import CallsIsland from "../../components/app/CallsIsland.astro";
+import NewsletterIsland from "../../components/app/NewsletterIsland.astro";
 
-// In-App-Navigation: Anker auf die Bereiche der Shell (reine Links, kein JS). Die
-// #anrufe/#einstellungen/#abrechnung-Anker bleiben (interne ids, nicht user-facing).
+// In-App-Navigation: Anker auf die Bereiche der Shell (reine Links, kein JS
+// beim Rendern -- die Aktiv-/Scroll-Logik verdrahtet das <script> unten). Die
+// #anrufe/#einstellungen/#abrechnung/#newsletter-Anker bleiben (interne ids,
+// nicht user-facing). Dashboard-Redesign (§4): vierter Eintrag "Newsletter"
+// (Schnittstelle Trupp C, NewsletterIsland.astro) + zweistellige Nummer je
+// Eintrag, aus dem Array-Index abgeleitet (kein zweites Nummern-Set).
 const dashNav = [
   { href: "#anrufe", label: "Calls" },
   { href: "#einstellungen", label: "Settings" },
   { href: "#abrechnung", label: "Billing" },
+  { href: "#newsletter", label: "Newsletter" },
 ];
 ---
 
@@ -64,38 +70,57 @@ const dashNav = [
     <button id="error-retry" class="btn" type="button">Try again</button>
   </section>
 
-  <!-- Eingeloggte Shell: Begruessung + Verlauf + Einstellungen + Karte. -->
+  <!-- Eingeloggte Shell: Begruessung + Nummern-Karte + Bereichs-Navigation
+       (sticky links) + Verlauf/Einstellungen/Abrechnung/Newsletter (scrollend
+       rechts). Dashboard-Redesign §3/§4 -- Markup/Insel-Verhalten sonst
+       unveraendert (Auth-Gate, AUTH_EVENT, [hidden]-Regionen, Anker-ids). -->
   <div id="region-shell" hidden>
-    <header class="dash-head card">
+    <header class="dash-head">
       <div class="dash-head__intro">
         <span class="dash-head__eyebrow">Your area</span>
         <h1 class="dash-head__title">Welcome, <span id="shell-owner">—</span></h1>
-        <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT). -->
-        <AgentChip />
       </div>
+      <!-- W4: Rufnummer + Live-Dot als eigene Insel (hoert auf AUTH_EVENT) --
+           jetzt eine eigenstaendige Glaskarte rechts neben der Begruessung. -->
+      <AgentChip />
     </header>
 
-    <nav class="dash-nav" aria-label="Section navigation">
-      {dashNav.map((item) => (
-        <a class="dash-nav__link" href={item.href}>{item.label}</a>
-      ))}
-    </nav>
+    <div class="dash-layout">
+      <!-- Scroll-Spy (siehe <script> unten): IntersectionObserver markiert den
+           Eintrag der gerade obenauf sichtbaren Sektion mit is-active. Alle vier
+           Abschnitte bleiben gleichzeitig im DOM (kein Tab-Verstecken). -->
+      <nav class="dash-nav" aria-label="Section navigation">
+        {dashNav.map((item, index) => (
+          <a class="dash-nav__link" href={item.href} data-target={item.href.slice(1)}>
+            <span class="dash-nav__num" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+            <span class="dash-nav__label">{item.label}</span>
+          </a>
+        ))}
+      </nav>
 
-    <!-- W4: read-only Anruf-Verlauf (inkl. aufklappbarer Chat-Historie je Anruf)
-         aus dem EINEN state-Fetch (AUTH_EVENT). -->
-    <div id="anrufe">
-      <CallsIsland />
-    </div>
+      <div class="dash-sections">
+        <!-- W4: read-only Anruf-Verlauf (inkl. aufklappbarer Chat-Historie je Anruf)
+             aus dem EINEN state-Fetch (AUTH_EVENT). -->
+        <div id="anrufe">
+          <CallsIsland />
+        </div>
 
-    <!-- W5: Settings-Editor (der EINZIGE Schreibpfad), nur Whitelist-Felder. -->
-    <div id="einstellungen">
-      <SettingsIsland />
-    </div>
+        <!-- W5: Settings-Editor (der EINZIGE Schreibpfad), nur Whitelist-Felder. -->
+        <div id="einstellungen">
+          <SettingsIsland />
+        </div>
 
-    <!-- W3: Billing-Insel (NUR Karte hinterlegen). Versteckt sich selbst, solange
-         der Server kein hasCard liefert (PAYMENT_ENABLED aus). -->
-    <div id="abrechnung">
-      <BillingIsland />
+        <!-- W3: Billing-Insel (NUR Karte hinterlegen). Versteckt sich selbst, solange
+             der Server kein hasCard liefert (PAYMENT_ENABLED aus). -->
+        <div id="abrechnung">
+          <BillingIsland />
+        </div>
+
+        <!-- Newsletter (Schnittstelle Trupp C): eigene Insel, kein Props. -->
+        <div id="newsletter">
+          <NewsletterIsland />
+        </div>
+      </div>
     </div>
   </div>
 
@@ -190,4 +215,54 @@ const dashNav = [
     if (state === AUTH_STATE.PENDING) renderPending();
     showOnly(state);
   });
+
+  // ---- §4: Bereichs-Navigation -- Scroll-Spy + sanftes Scrollen ------------
+  // Alle vier Abschnitte bleiben gleichzeitig im DOM (kein Tab-Verstecken,
+  // Auth-Gate bleibt unberuehrt); ein IntersectionObserver markiert nur, welcher
+  // Nav-Eintrag gerade "dran" ist. SCROLL_OFFSET_PX = wie viel Platz die
+  // Abschnittsueberschrift beim Landen unter der Oberkante laesst (siehe
+  // scroll-margin-top in shell.css -- selber Wert, EINE Quelle fuer den
+  // rootMargin-Offset unten).
+  const SCROLL_OFFSET_PX = 96;
+  const navLinks = Array.from(document.querySelectorAll(".dash-nav__link"));
+  const navSections = navLinks
+    .map((link) => document.getElementById(link.dataset.target))
+    .filter(Boolean);
+
+  function setActiveSection(id) {
+    for (const link of navLinks) {
+      link.classList.toggle("is-active", link.dataset.target === id);
+    }
+  }
+
+  if (navSections.length > 0) {
+    const spy = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting);
+        if (visible.length === 0) return;
+        // Bei mehreren gleichzeitig sichtbaren Abschnitten zaehlt der oberste
+        // (kleinster Abstand zur Betrachtungskante).
+        const top = visible.reduce((a, b) =>
+          a.boundingClientRect.top <= b.boundingClientRect.top ? a : b,
+        );
+        setActiveSection(top.target.id);
+      },
+      { rootMargin: `-${SCROLL_OFFSET_PX}px 0px -60% 0px`, threshold: 0 },
+    );
+    for (const section of navSections) spy.observe(section);
+  }
+
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  for (const link of navLinks) {
+    link.addEventListener("click", (event) => {
+      const target = document.getElementById(link.dataset.target);
+      if (!target) return;
+      event.preventDefault();
+      const top = target.getBoundingClientRect().top + window.scrollY - SCROLL_OFFSET_PX;
+      window.scrollTo({ top, behavior: prefersReducedMotion ? "auto" : "smooth" });
+      setActiveSection(link.dataset.target);
+      history.replaceState(null, "", `#${link.dataset.target}`);
+    });
+  }
 </script>

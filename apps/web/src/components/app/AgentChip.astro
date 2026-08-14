@@ -1,7 +1,7 @@
 ---
-// AgentChip (W4): zeigt die Agent-Rufnummer + einen Live-Dot (gruen, sobald
-// mindestens ein Call aktiv ist; sonst grau). Read-only aus genau dem state,
-// den die Auth-Insel ermittelt -- KEIN eigener state-Fetch (AUTH_EVENT).
+// AgentChip (W4, Dashboard-Redesign §3): eigenstaendige Nummern-Karte im
+// Seitenkopf -- Live-Dot + Rufnummer + Kopier-Knopf. Read-only aus genau dem
+// state, den die Auth-Insel ermittelt -- KEIN eigener state-Fetch (AUTH_EVENT).
 //
 // Stale-Daten-Schutz: bei jedem Nicht-authenticated-Zustand (anonym/pending/
 // Fehler bzw. data==null) wird die Nummer geleert und der Dot auf "off" gesetzt
@@ -9,14 +9,39 @@
 //
 // Tenant-Werte (die Nummer) gehen ausschliesslich ueber textContent in den DOM
 // -- nie als HTML interpretiert (XSS-Schutz, Leitplanke).
+//
+// .card liefert die Glasoptik (Hintergrund/Rand/Radius/Schatten/Blur,
+// app.css + app-hermes.css); shell.css ergaenzt nur Layout + Puls/Copy-
+// Interaktion. Kein Inline-Style, kein Inline-Script (CSP) -- Kopier-Fallback
+// positioniert sein Scratch-Element ausschliesslich ueber die Klasse
+// .agent-chip__scratch (shell.css).
 ---
 
-<div id="agent-chip" class="agent-chip" hidden>
-  <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
-  <span class="agent-chip__body">
-    <span class="agent-chip__label">Agent number</span>
-    <span id="agent-number" class="agent-chip__number"></span>
-  </span>
+<div id="agent-chip" class="agent-chip card" hidden>
+  <div class="agent-chip__row">
+    <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
+    <span class="agent-chip__body">
+      <span class="agent-chip__label">Your number</span>
+      <span id="agent-number" class="agent-chip__number"></span>
+    </span>
+  </div>
+  <button
+    id="agent-copy"
+    class="agent-chip__copy"
+    type="button"
+    aria-label="Copy phone number"
+  >
+    <svg
+      class="agent-chip__copy-icon"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="2" y="2" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+      <rect x="5.5" y="5.5" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+    </svg>
+    <span id="agent-copy-label" class="agent-chip__copy-label" aria-live="polite">Copy</span>
+  </button>
 </div>
 
 <script>
@@ -29,10 +54,16 @@
   } from "../../lib/api.js";
 
   const DOT_OFF_CLASS = "live-dot--off";
+  const COPIED_CLASS = "is-copied";
+  const COPIED_LABEL_MS = 1800;
 
   const chipEl = document.getElementById("agent-chip");
   const dotEl = document.getElementById("agent-dot");
   const numberEl = document.getElementById("agent-number");
+  const copyBtn = document.getElementById("agent-copy");
+  const copyLabelEl = document.getElementById("agent-copy-label");
+
+  let copyResetTimer = null;
 
   function showChip(data) {
     const { number } = agentInfo(data);
@@ -56,4 +87,57 @@
     if (state === AUTH_STATE.AUTHENTICATED) showChip(data);
     else clearChip();
   });
+
+  // Copy-to-clipboard: navigator.clipboard mit document.execCommand-Fallback
+  // (aeltere/eingeschraenkte Browser bzw. unsicherer Kontext). Rein clientseitig,
+  // kein Netz-Aufruf.
+  function legacyCopy(value) {
+    const scratch = document.createElement("textarea");
+    scratch.className = "agent-chip__scratch";
+    scratch.value = value;
+    scratch.setAttribute("readonly", "");
+    document.body.appendChild(scratch);
+    scratch.select();
+    scratch.setSelectionRange(0, value.length);
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    document.body.removeChild(scratch);
+    return ok;
+  }
+
+  function showCopiedState() {
+    copyBtn.classList.remove(COPIED_CLASS);
+    // Reflow erzwingen, damit die Pop-Animation bei schnellem Doppelklick erneut laeuft.
+    void copyBtn.offsetWidth;
+    copyBtn.classList.add(COPIED_CLASS);
+    copyLabelEl.textContent = "Copied";
+    clearTimeout(copyResetTimer);
+    copyResetTimer = setTimeout(() => {
+      copyBtn.classList.remove(COPIED_CLASS);
+      copyLabelEl.textContent = "Copy";
+    }, COPIED_LABEL_MS);
+  }
+
+  async function copyNumber() {
+    const value = (numberEl.textContent || "").trim();
+    if (!value) return;
+    let ok = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        ok = true;
+      } catch {
+        ok = legacyCopy(value);
+      }
+    } else {
+      ok = legacyCopy(value);
+    }
+    if (ok) showCopiedState();
+  }
+
+  copyBtn.addEventListener("click", copyNumber);
 </script>

@@ -28,7 +28,15 @@ import {
   callSummary,
 } from "../src/lib/api.js";
 
-import { callRows, bindList } from "../src/lib/render.js";
+import {
+  callRows,
+  bindList,
+  callTimeLabel,
+  callDurationLabel,
+  callMetaLabel,
+  callDirectionLabel,
+  fillCallModal,
+} from "../src/lib/render.js";
 
 // ---- Fake-DOM ---------------------------------------------------------------
 // Nur die Operationen, die lib/render.js wirklich nutzt. `innerHTML` ist eine
@@ -211,8 +219,8 @@ test("callRows: leere Daten -> genau eine Empty-Zeile", () => {
   assert.equal(textOf(rows), "No calls yet — connect your first agent!");
 });
 
-// ---- DOM-Bau: Normalfall + Trigger-Attribute --------------------------------
-test("callRows rendert pro Call einen Trigger-Button (Gegenstelle, Untertitel, Status) + Panel", () => {
+// ---- DOM-Bau: Normalfall + Klick oeffnet das Detail-Fenster -----------------
+test("callRows rendert pro Call eine anklickbare Zeile (Richtung, Name, Meta, Status) und ruft onSelect(call, button) auf", () => {
   const data = {
     calls: [
       {
@@ -221,11 +229,15 @@ test("callRows rendert pro Call einen Trigger-Button (Gegenstelle, Untertitel, S
         from: "+49301",
         goal: "Termin",
         status: "completed",
+        startedAt: "2026-06-23T09:00:00.000Z",
+        answeredAt: "2026-06-23T09:00:05.000Z",
+        endedAt: "2026-06-23T09:02:45.000Z",
       },
-      { direction: "inbound", from: "+49302", status: "active" },
+      { direction: "inbound", from: "+49302", status: "active", startedAt: "2026-06-23T09:00:00.000Z" },
     ],
   };
-  const rows = callRows(fakeDocument, data);
+  const selections = [];
+  const rows = callRows(fakeDocument, data, (call, button) => selections.push({ call, button }));
   assert.equal(rows.length, 2);
   const all = textOf(rows);
   assert.ok(all.includes("+4915112345")); // outbound -> to
@@ -233,111 +245,207 @@ test("callRows rendert pro Call einen Trigger-Button (Gegenstelle, Untertitel, S
   assert.ok(all.includes("+49302")); // inbound -> from
   assert.ok(all.includes("Inbound call")); // kein goal -> Standardtext
   assert.ok(rows[1].hasClass("status-badge--active"));
+  assert.equal(rows[1].find("status-badge").textContent, "LIVE");
+  assert.equal(rows[0].find("status-badge").textContent, "ENDED"); // Spec §7-Tabelle, NICHT "Completed"
 
-  // Trigger ist ein echter <button> mit aria-expanded/aria-controls, das Panel
-  // traegt genau die referenzierte id -- Tastatur-/Screenreader-Zugaenglichkeit.
-  const trigger = rows[0].find("call-row__trigger");
-  assert.equal(trigger.tag, "button");
-  assert.equal(trigger.getAttribute("aria-expanded"), "false");
-  const panel = rows[0].find("call-panel");
-  assert.equal(trigger.getAttribute("aria-controls"), panel.id);
+  // Die ganze Zeile ist ein echter <button> -- Tastatur-/Screenreader-
+  // Zugaenglichkeit ohne zusaetzliche Keydown-Verdrahtung.
+  const button = rows[0].find("call-row__link");
+  assert.equal(button.tag, "button");
+  button.click();
+  assert.equal(selections.length, 1);
+  assert.equal(selections[0].call, data.calls[0]);
+  assert.equal(selections[0].button, button);
 });
 
-test("callRows: Anruf ohne Transkript zeigt eine ruhige Leerzustand-Zeile, kein leeres <ul>", () => {
-  const rows = callRows(fakeDocument, { calls: [{ direction: "inbound", status: "completed" }] });
-  const panel = rows[0].find("call-panel");
-  assert.ok(panel.hasClass("call-panel"));
-  const empty = panel.find("call-panel__empty");
-  assert.ok(empty, "Leerzustand-Element fehlt");
-  assert.equal(empty.textContent, "No conversation recorded.");
-  assert.ok(!panel.find("chat-log"), "chat-log sollte bei leerem Transkript nicht gebaut werden");
-});
-
-test("callRows: Turns werden als Chat-Blasen gerendert, Agent/Gegenstelle unterschieden", () => {
-  const data = {
-    calls: [
-      {
-        direction: "inbound",
-        status: "completed",
-        summary: "Rueckruf vereinbart",
-        transcript: [
-          { role: "agent", text: "Guten Tag, wie kann ich helfen?", at: "2026-06-23T09:00:00.000Z" },
-          { role: "caller", text: "Ich haette gern einen Rueckruf.", at: "2026-06-23T09:00:05.000Z" },
-        ],
-      },
-    ],
-  };
-  const rows = callRows(fakeDocument, data);
-  const panel = rows[0].find("call-panel");
-  const summaryBlock = panel.find("call-summary");
-  assert.ok(summaryBlock, "Summary-Block fehlt, obwohl summary gesetzt ist");
-  assert.ok(summaryBlock.allText().includes("Rueckruf vereinbart"));
-
-  const log = panel.find("chat-log");
-  assert.equal(log.children.length, 2);
-  assert.ok(log.children[0].hasClass("chat-bubble--agent"));
-  assert.ok(log.children[1].hasClass("chat-bubble--counterparty"));
-  assert.ok(log.children[0].allText().includes("Guten Tag, wie kann ich helfen?"));
-  assert.ok(log.children[1].allText().includes("Ich haette gern einen Rueckruf."));
-});
-
-test("callRows: Klick auf den Trigger toggelt Panel + aria-expanded; Accordion laesst nur eins offen", () => {
-  const data = {
-    calls: [
-      { direction: "inbound", status: "completed", transcript: [{ role: "agent", text: "A" }] },
-      { direction: "inbound", status: "completed", transcript: [{ role: "agent", text: "B" }] },
-    ],
-  };
-  const rows = callRows(fakeDocument, data);
-  const trigger0 = rows[0].find("call-row__trigger");
-  const panel0 = rows[0].find("call-panel");
-  const trigger1 = rows[1].find("call-row__trigger");
-  const panel1 = rows[1].find("call-panel");
-
-  assert.equal(panel0.hidden, true);
-  assert.equal(panel1.hidden, true);
-
-  trigger0.click();
-  assert.equal(panel0.hidden, false);
-  assert.equal(trigger0.getAttribute("aria-expanded"), "true");
-  assert.equal(panel1.hidden, true);
-
-  // Ein zweiter Anruf oeffnen -> der erste klappt zu (nur einer offen).
-  trigger1.click();
-  assert.equal(panel1.hidden, false);
-  assert.equal(trigger1.getAttribute("aria-expanded"), "true");
-  assert.equal(panel0.hidden, true);
-  assert.equal(trigger0.getAttribute("aria-expanded"), "false");
-
-  // Erneuter Klick auf den offenen Trigger klappt zu (Toggle).
-  trigger1.click();
-  assert.equal(panel1.hidden, true);
-  assert.equal(trigger1.getAttribute("aria-expanded"), "false");
-});
-
-// ---- XSS-Beleg: Tenant-Strings landen als Text, nie als HTML -----------------
-test('Tenant-Strings mit </>/" und <script> landen ausschliesslich als textContent', () => {
-  const attack = '<script>alert("x")</script><img src="y" onerror="z">';
-  // Der boese String in jeder Tenant-Quelle: Gegenstelle (from), goal,
-  // Transkript-Text, Summary. Wuerde irgendwo innerHTML gesetzt, wirft das
-  // Fake-Element -> der Test scheitert. Hier passiert das NICHT, und der Wort-
-  // laut taucht woertlich (un-escaped, aber als Text) im Teilbaum auf.
+// Befund 3 (Fix-Runde): dritte Zeile der Anrufzeile zeigt die Zusammenfassung,
+// faellt ohne Summary auf den bisherigen Richtungs-Untertitel zurueck.
+test("callRows: dritte Zeile zeigt die Zusammenfassung, faellt ohne Summary auf den Richtungs-Untertitel zurueck", () => {
   const rows = callRows(fakeDocument, {
     calls: [
       {
         direction: "inbound",
-        from: attack,
-        goal: attack,
+        from: "+49301",
+        goal: "Rueckruf",
         status: "completed",
-        summary: attack,
-        transcript: [{ role: "caller", text: attack }],
+        summary: "Appointment request — Thursday 14:00 proposed and booked.",
       },
+      { direction: "outbound", to: "+49302", status: "completed" },
     ],
   });
+  assert.equal(rows[0].find("call-sub").textContent, "Appointment request — Thursday 14:00 proposed and booked.");
+  assert.equal(rows[1].find("call-sub").textContent, "Outbound call");
+});
 
-  // Der rohe String steht woertlich im textContent (Beleg: er ging durch
-  // textContent, nicht durch innerHTML -> der Browser parst ihn nie als HTML).
+test("callRows: onSelect ist optional (Default no-op) -- ein Klick ohne Handler wirft nicht", () => {
+  const rows = callRows(fakeDocument, { calls: [{ direction: "inbound", status: "completed" }] });
+  assert.doesNotThrow(() => rows[0].find("call-row__link").click());
+});
+
+// ---- Zeit/Dauer-Meta (Spec §7: "Today, 09:12 · 2:40") -----------------------
+test("callTimeLabel: Today-Praefix am selben Kalendertag wie `now`, sonst Monat + Tag; ungueltig -> leer", () => {
+  const now = new Date(2026, 5, 23, 12, 0, 0);
+  const sameDay = new Date(2026, 5, 23, 9, 5, 0);
+  const expectedSame = `Today, ${String(sameDay.getHours()).padStart(2, "0")}:${String(sameDay.getMinutes()).padStart(2, "0")}`;
+  assert.equal(callTimeLabel({ startedAt: sameDay.toISOString() }, now), expectedSame);
+
+  const otherDay = new Date(2026, 4, 1, 9, 5, 0);
+  const expectedOther = `May 1, ${String(otherDay.getHours()).padStart(2, "0")}:${String(otherDay.getMinutes()).padStart(2, "0")}`;
+  assert.equal(callTimeLabel({ startedAt: otherDay.toISOString() }, now), expectedOther);
+
+  // answeredAt hat Vorrang vor startedAt (Anker "abgenommen" statt "geklingelt").
+  assert.equal(
+    callTimeLabel({ startedAt: otherDay.toISOString(), answeredAt: sameDay.toISOString() }, now),
+    expectedSame,
+  );
+
+  assert.equal(callTimeLabel({}, now), "");
+  assert.equal(callTimeLabel({ startedAt: "nope" }, now), "");
+  assert.equal(callTimeLabel(null, now), "");
+});
+
+test("callDurationLabel: m:ss von answeredAt bis endedAt bzw. bis `now` (laufender Anruf); ohne answeredAt -> leer", () => {
+  const answeredAt = new Date(2026, 5, 23, 9, 0, 0);
+  const endedAt = new Date(2026, 5, 23, 9, 2, 40);
+  assert.equal(
+    callDurationLabel({ answeredAt: answeredAt.toISOString(), endedAt: endedAt.toISOString() }),
+    "2:40",
+  );
+
+  const now = new Date(2026, 5, 23, 9, 1, 30);
+  assert.equal(callDurationLabel({ answeredAt: answeredAt.toISOString() }, now), "1:30");
+
+  // Nie abgenommen (failed/cancelled vor Abnahme) -> keine erfundene Dauer.
+  assert.equal(callDurationLabel({}), "");
+  assert.equal(callDurationLabel({ answeredAt: "nope" }), "");
+});
+
+test("callMetaLabel: Zeit + Dauer getrennt durch Mittelpunkt; nur Zeit ohne Dauer; leer ohne Zeit-Anker", () => {
+  const now = new Date(2026, 5, 23, 9, 5, 0);
+  const answeredAt = new Date(2026, 5, 23, 9, 0, 5);
+  const endedAt = new Date(2026, 5, 23, 9, 2, 45);
+  const full = { startedAt: answeredAt.toISOString(), answeredAt: answeredAt.toISOString(), endedAt: endedAt.toISOString() };
+  assert.match(callMetaLabel(full, now), /^Today, \d{2}:\d{2} · 2:40$/);
+
+  const neverAnswered = { startedAt: answeredAt.toISOString() };
+  assert.match(callMetaLabel(neverAnswered, now), /^Today, \d{2}:\d{2}$/);
+
+  assert.equal(callMetaLabel({}, now), "");
+});
+
+// ---- Richtungs-Beschriftung des Detail-Fenster-Kopfs (Spec §8) --------------
+test("callDirectionLabel: Incoming/Outgoing, fehlende Richtung faellt auf Incoming zurueck", () => {
+  assert.equal(callDirectionLabel({ direction: CALL_DIRECTION.INBOUND }), "Incoming");
+  assert.equal(callDirectionLabel({ direction: CALL_DIRECTION.OUTBOUND }), "Outgoing");
+  assert.equal(callDirectionLabel({}), "Incoming");
+  assert.equal(callDirectionLabel(null), "Incoming");
+});
+
+// ---- fillCallModal: das EINE Detail-Fenster wird je Klick neu befuellt -----
+function makeModalTargets() {
+  return {
+    directionEl: fakeDocument.createElement("span"),
+    contactEl: fakeDocument.createElement("div"),
+    summaryEl: fakeDocument.createElement("div"),
+    transcriptEl: fakeDocument.createElement("div"),
+  };
+}
+
+test("fillCallModal: Richtung, Anrufer-Zeile (CONTACT-Label + Name + Meta + Status) und Transkript", () => {
+  const targets = makeModalTargets();
+  const call = {
+    direction: "inbound",
+    from: "+49302",
+    status: "completed",
+    startedAt: "2026-06-23T09:00:00.000Z",
+    answeredAt: "2026-06-23T09:00:05.000Z",
+    endedAt: "2026-06-23T09:02:45.000Z",
+    transcript: [
+      { role: "agent", text: "Guten Tag, wie kann ich helfen?", at: "2026-06-23T09:00:05.000Z" },
+      { role: "caller", text: "Ich haette gern einen Rueckruf.", at: "2026-06-23T09:00:10.000Z" },
+    ],
+  };
+
+  fillCallModal(fakeDocument, targets, call);
+
+  assert.equal(targets.directionEl.textContent, "Incoming");
+  assert.ok(targets.contactEl.allText().includes("CONTACT"));
+  assert.ok(targets.contactEl.allText().includes("+49302"));
+  const pill = targets.contactEl.find("status-badge");
+  assert.ok(pill);
+  assert.equal(pill.textContent, "ENDED");
+
+  const log = targets.transcriptEl.find("chat-log");
+  assert.equal(log.children.length, 2);
+  assert.ok(log.children[0].hasClass("chat-bubble--agent"));
+  assert.ok(log.children[1].hasClass("chat-bubble--counterparty"));
+  assert.ok(log.children[0].allText().includes("Guten Tag, wie kann ich helfen?"));
+});
+
+test("fillCallModal: Summary-Box nur sichtbar+befuellt, wenn eine Summary existiert", () => {
+  const withSummary = makeModalTargets();
+  fillCallModal(fakeDocument, withSummary, {
+    direction: "inbound",
+    status: "completed",
+    summary: "Rueckruf vereinbart",
+  });
+  assert.equal(withSummary.summaryEl.hidden, false);
+  assert.ok(withSummary.summaryEl.allText().includes("Rueckruf vereinbart"));
+
+  const withoutSummary = makeModalTargets();
+  fillCallModal(fakeDocument, withoutSummary, { direction: "outbound", to: "+491", status: "active" });
+  assert.equal(withoutSummary.summaryEl.hidden, true);
+  assert.equal(withoutSummary.summaryEl.children.length, 0);
+  assert.equal(withoutSummary.directionEl.textContent, "Outgoing");
+});
+
+test("fillCallModal: Anruf ohne Transkript zeigt eine ruhige Leerzustand-Zeile, kein leeres <ul>", () => {
+  const targets = makeModalTargets();
+  fillCallModal(fakeDocument, targets, { direction: "inbound", status: "completed" });
+  const empty = targets.transcriptEl.find("call-modal__empty");
+  assert.ok(empty, "Leerzustand-Element fehlt");
+  assert.equal(empty.textContent, "No conversation recorded.");
+  assert.ok(!targets.transcriptEl.find("chat-log"), "chat-log sollte bei leerem Transkript nicht gebaut werden");
+});
+
+test("fillCallModal: wiederholter Aufruf ersetzt den Inhalt (ein Modal, je Klick neu befuellt)", () => {
+  const targets = makeModalTargets();
+  fillCallModal(fakeDocument, targets, { direction: "inbound", from: "+49301", status: "completed", summary: "Erster Anruf" });
+  fillCallModal(fakeDocument, targets, { direction: "outbound", to: "+49302", status: "active" });
+  assert.equal(targets.directionEl.textContent, "Outgoing");
+  assert.ok(targets.contactEl.allText().includes("+49302"));
+  assert.ok(!targets.contactEl.allText().includes("+49301"));
+  assert.equal(targets.summaryEl.hidden, true); // die alte Summary ist weg
+});
+
+// ---- XSS-Beleg: Tenant-Strings landen als Text, nie als HTML -----------------
+test('Tenant-Strings mit </>/" und <script> landen ausschliesslich als textContent (Zeile)', () => {
+  const attack = '<script>alert("x")</script><img src="y" onerror="z">';
+  // Der boese String in den Tenant-Quellen der Zeile: Gegenstelle (from), goal.
+  // Wuerde irgendwo innerHTML gesetzt, wirft das Fake-Element -> der Test
+  // scheitert. Hier passiert das NICHT, und der Wortlaut taucht woertlich
+  // (un-escaped, aber als Text) im Teilbaum auf.
+  const rows = callRows(fakeDocument, {
+    calls: [{ direction: "inbound", from: attack, goal: attack, status: "completed" }],
+  });
   assert.ok(textOf(rows).includes(attack));
+});
+
+test('Tenant-Strings mit </>/" und <script> landen ausschliesslich als textContent (Detail-Fenster)', () => {
+  const attack = '<script>alert("x")</script><img src="y" onerror="z">';
+  const targets = makeModalTargets();
+  // Der boese String in jeder Tenant-Quelle des Modals: Gegenstelle (from),
+  // Summary, Transkript-Text.
+  fillCallModal(fakeDocument, targets, {
+    direction: "inbound",
+    from: attack,
+    status: "completed",
+    summary: attack,
+    transcript: [{ role: "caller", text: attack }],
+  });
+  assert.ok(targets.contactEl.allText().includes(attack));
+  assert.ok(targets.summaryEl.allText().includes(attack));
+  assert.ok(targets.transcriptEl.allText().includes(attack));
 });
 
 test("Fake-Element: jeder innerHTML-Schreibzugriff wuerde werfen (Tripwire ist scharf)", () => {

@@ -1,0 +1,327 @@
+/* =============================================================================
+ * shell.css — Trupp A: Shell, Kopfzeile, Nummernkarte, Bereichs-Navigation
+ *
+ * Import-Reihenfolge (App.astro): app.css -> app-hermes.css -> shell.css ->
+ * calls.css -> panels.css. Gleiche Spezifitaet ueberall, darum gewinnt hier
+ * (spaeter geladen) alles, was app.css/app-hermes.css bereits fuer dieselben
+ * Selektoren setzen -- ohne dass diese beiden (verbotenen) Dateien angefasst
+ * werden muessen.
+ *
+ * Nur bereits vorhandene Custom Properties + die in der Auftragsspezifikation
+ * woertlich genannten rgba-/Hex-Werte werden hier verwendet -- keine neuen
+ * Farben erfunden (Vorarbeits-Auflage).
+ * ========================================================================== */
+
+/* --------------------------------------------------- 1. Seitenkopf-Grid --- */
+
+/* .dash-head war bisher ungestylt (reiner Container). Jetzt: Text links,
+   Nummernkarte (AgentChip) rechts. */
+.dash-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+}
+
+.dash-head__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Sektions-Ueberschriften (h2) innerhalb der App-Shell: Serif statt Space
+   Grotesk, ruhige Groesse -- reine Rollen-/Schriftfamilien-Regel, kein neuer
+   Wert. */
+.app-main h2 {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-normal);
+  font-size: clamp(20px, 2vw, 26px);
+  letter-spacing: 0;
+  color: #ffffff;
+}
+
+/* Kleinlabels/Codes/Zeitstempel: System-Mono (--app-mono), NICHT IBM Plex
+   Mono -- die Klassen tragen die Regel bereits (app-hermes.css); hier nur die
+   neu hinzugekommenen (Nav-Nummern, Kopier-Knopf). */
+
+/* Befund 1 (Fix-Runde): die Pille ist in app-hermes.css `display:inline-flex`
+   (kompakt), sitzt aber als Kind von .dash-head__intro -- einem
+   `flex-direction:column`-Container (shell.css oben). Dessen Default
+   `align-items:stretch` dehnt sie trotzdem auf die volle Spaltenbreite.
+   Eigene Regel hier (spaeterer Import gewinnt bei gleicher Spezifitaet):
+   Inhalt umschliessend UND als Flex-Kind nicht gestreckt. */
+.dash-head__eyebrow {
+  align-self: flex-start;
+  width: fit-content;
+}
+
+/* -------------------------------------------------- 2. Bereichs-Navigation */
+
+/* Zweispaltiges Layout: sticky linke Spalte (Navigation) + scrollende
+   Inhaltsspalte (die vier Abschnitte). */
+.dash-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  align-items: start;
+  gap: 28px;
+}
+
+.dash-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Anker-Sprungziele: Kopf einer Sektion soll ca. 96px unter der Oberkante
+   stehen (Nav bleibt sichtbar). Ueberschreibt die schmalere Vorgabe aus
+   app.css (var(--space-card)) fuer alle vier Abschnitte inkl. #newsletter. */
+#anrufe,
+#einstellungen,
+#abrechnung,
+#newsletter {
+  scroll-margin-top: 96px;
+}
+
+/* Nav-Trog: "eingelassenes Feld" (Spec §2) -- eigene Werte, da app-hermes.css
+   fuer denselben Selektor noch die alte 3-Eintrag-Pillenleiste liefert (dort
+   nicht anfassbar, hier durch spaeteren Import ueberschrieben). */
+.dash-nav {
+  position: sticky;
+  top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 200px;
+  padding: 6px;
+  align-self: start;
+  background: rgba(8, 22, 46, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+.dash-nav__link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.dash-nav__link:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Aktiv: JS setzt is-active am Treffer des IntersectionObserver / Klick.
+   "Erhabenes Element" (Spec §2): Fuellung + weicher Schatten. */
+.dash-nav__link.is-active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+}
+
+.dash-nav__num {
+  font-family: var(--app-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.42);
+  flex-shrink: 0;
+}
+
+.dash-nav__link.is-active .dash-nav__num {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ------------------------------------------------------ 3. Nummern-Karte -- */
+
+/* AgentChip wird zur eigenstaendigen Glaskarte (.card liefert die Optik:
+   Hintergrund, Rand, Radius, Schatten, Blur -- hier nur Layout + Interaktion).
+   Befund 2 (Fix-Runde): EINE Zeile (Spec §5) -- Radiopunkt+Label+Nummer
+   (.agent-chip__row) links, Kopier-Knopf rechts. `flex-direction:column`
+   war der Grund, warum der Knopf auf eine eigene Zeile umbrach; das ist raus. */
+.agent-chip {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0;
+  min-width: 240px;
+}
+
+.agent-chip__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Label ueber Nummer bleibt linksbuendig am Radiopunkt -- explizit statt
+   implizit, damit hier keine Fremd-Regel (app.css/app-hermes.css) je wieder
+   fuer optische Zentrierung sorgen kann. */
+.agent-chip__body {
+  align-items: flex-start;
+}
+
+/* Mono nur fuer das Label darueber (app-hermes.css); die Nummer selbst
+   Mono 22px weiss (Spec §5) -- app-hermes.css liefert nur 18px, hier
+   nachgezogen (spaeterer Import gewinnt bei gleicher Spezifitaet). */
+.agent-chip__number {
+  font-family: var(--app-mono);
+  font-size: 22px;
+}
+
+.agent-chip__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.agent-chip__copy:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+.agent-chip__copy-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* "Copied"-Rueckmeldung: gruenliche Einfaerbung + kurze Pop-Skalierung. */
+.agent-chip__copy.is-copied {
+  color: #7fe0b0;
+  border-color: rgba(127, 224, 176, 0.45);
+  background: rgba(127, 224, 176, 0.16);
+  animation: agent-copy-pop 0.18s var(--motion-ease);
+}
+
+@keyframes agent-copy-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Scratch-Element fuer den execCommand-Fallback (lib-frei, kein Inline-Style:
+   Positionierung ausschliesslich ueber diese Klasse). */
+.agent-chip__scratch {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Radiopunkt: 10px (Spec §5), pulsiert gruen-hell nur im aktiven Zustand
+   (.live-dot ohne --off). Klassen/Logik unveraendert (AgentChip.astro) --
+   hier nur Groesse + Farbe + Puls-Keyframes ergaenzt. Gruenton identisch zur
+   "Copied"-Rueckmeldung (rgba(127, 224, 176, …), s.o.) -- kein neuer Hex-Wert. */
+.agent-chip__row .live-dot {
+  width: 10px;
+  height: 10px;
+}
+
+.live-dot:not(.live-dot--off) {
+  background: #7fe0b0;
+  animation: agent-dot-pulse 2s ease-in-out infinite;
+}
+
+@keyframes agent-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(127, 224, 176, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(127, 224, 176, 0);
+  }
+}
+
+/* ------------------------------------------------------------- 4. Schmal --- */
+
+/* ≤900px (Spec §5): Seitenkopf stapelt, Nummernkarte volle Breite. Eigener
+   Breakpoint, unabhaengig vom Nav-Umbruch bei 980px (Spec §6) -- beide sind
+   im Entwurf getrennt benannt. */
+@media (max-width: 900px) {
+  .dash-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .agent-chip {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Befund 2 (Fix-Runde): unter 560px darf der Kopier-Knopf umbrechen -- dann
+   aber volle Breite unter der Nummer, nicht nur so schmal wie sein Label. */
+@media (max-width: 559px) {
+  .agent-chip {
+    flex-wrap: wrap;
+  }
+  .agent-chip__copy {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+/* 761-980px (Spec §6): Navigation wird zur waagerechten Leiste ueber dem
+   Inhalt -- vier Kacheln nebeneinander, Inhalt zentriert/zweizeilig (Nummer
+   ueber Label statt links daneben). Dieselbe Leiste gilt bis ≤760px, dort
+   schrumpft nur noch die Label-Schrift (naechster Block). */
+@media (max-width: 980px) {
+  .dash-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-nav {
+    position: static;
+    top: auto;
+    width: auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .dash-nav__link {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    gap: 4px;
+    padding: 10px 6px;
+  }
+}
+
+/* ≤760px: dieselbe waagerechte Leiste (vier Kacheln in einer Reihe, siehe
+   980px-Block oben) -- nur die Labels duerfen schrumpfen (Spec §6). */
+@media (max-width: 760px) {
+  .dash-nav__label {
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-chip__copy,
+  .live-dot {
+    animation: none;
+  }
+}

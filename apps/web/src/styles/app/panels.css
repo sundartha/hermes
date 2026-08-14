@@ -1,0 +1,409 @@
+/* =============================================================================
+ * panels.css — Trupp C: Settings, Billing, Newsletter (Dashboard-Design-Spec
+ * §9 + §10 + §11)
+ *
+ * Import-Reihenfolge (App.astro): app.css -> app-hermes.css -> shell.css ->
+ * calls.css -> panels.css. Gleiche Spezifitaet ueberall, darum gewinnt hier
+ * (zuletzt geladen) alles, was die vorherigen (teils verbotenen) Dateien fuer
+ * dieselben Selektoren setzen (z.B. .perm-row/.field-input/.plan-skip aus
+ * app.css/app-hermes.css) -- ohne dass diese Dateien angefasst werden muessen.
+ * Nur bereits vorhandene Custom Properties + die in der Spec woertlich
+ * genannten rgba-/Hex-Werte -- keine neuen Farben erfunden (Vorarbeits-Auflage,
+ * Muster shell.css/calls.css).
+ *
+ * .perm-row (Settings-Toggles, auch von BillingIsland vor dem Newsletter-Umzug
+ * genutzt) und .field-input (private Rufnummer) bekommen laut Spec §9 "nur
+ * dieselbe Optik" -- app-hermes.css liefert das bereits deckungsgleich zur
+ * Spec-§2-Definition eines eingelassenen Felds, darum steht hier NICHTS
+ * Zusaetzliches fuer diese beiden Klassen (kein doppelt gepflegter Wert).
+ * ========================================================================== */
+
+/* ------------------------------------------------ 1. Settings: Sprachkacheln */
+
+.settings-lang {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.settings-lang__hint {
+  margin-top: 6px;
+}
+
+.lang-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* Der <label> traegt die sichtbare Kachel; das Radio-Input bleibt unsichtbar
+   aber fokussierbar (echte Tastatur-/Screenreader-Semantik, kein nachgebautes
+   ARIA-Widget) -- opacity:0; position:absolute statt display:none, damit der
+   Fokusring erhalten bleibt (Spec §9). */
+.lang-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(8, 22, 46, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.lang-tile:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.lang-tile:focus-within {
+  outline: 2px solid var(--color-accent, #8fb6e3);
+  outline-offset: 2px;
+}
+
+.lang-tile__input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Fuellflaeche + Kachel-Rand bei Auswahl: eine absolut positionierte
+   Geschwister-Ueberblendung (kein :has() noetig, breiter Browser-Support,
+   Muster der fruehen lang-pill__fill-Loesung). */
+.lang-tile__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(143, 182, 227, 0.1);
+  border: 1px solid rgba(143, 182, 227, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.lang-tile__input:checked ~ .lang-tile__fill {
+  opacity: 1;
+}
+
+/* Ring 18px, gefuellter Punkt 8px bei Auswahl (Spec §9). */
+.lang-tile__ring {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  transition: border-color 0.2s ease;
+}
+
+.lang-tile__input:checked ~ .lang-tile__ring {
+  border-color: #8fb6e3;
+}
+
+.lang-tile__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #8fb6e3;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.lang-tile__input:checked ~ .lang-tile__ring .lang-tile__dot {
+  opacity: 1;
+}
+
+.lang-tile__label {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: #ffffff;
+}
+
+/* Sprachcode rechts in Mono (Spec §9). */
+.lang-tile__code {
+  position: relative;
+  z-index: 1;
+  font-family: var(--app-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lang-tile,
+  .lang-tile__fill,
+  .lang-tile__ring,
+  .lang-tile__dot {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------- 2. Billing: Status */
+
+.billing-status {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.billing-status__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.billing-status-value {
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: clamp(22px, 2.4vw, 30px);
+  line-height: 1.05;
+  color: #ffffff;
+}
+
+.billing-status-detail {
+  font-family: var(--app-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+/* --------------------------------------------------- 3. Billing: Zahlungsmittel */
+
+.payment-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: rgba(8, 22, 46, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+.payment-card__icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.payment-card__status {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+/* Ghost-Knopf: gleiche Optik wie der Kopier-Knopf der Nummern-Karte (shell.css
+   .agent-chip__copy) -- weisser Rand statt gefuellter Pille. */
+.payment-card__action {
+  flex-shrink: 0;
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.payment-card__action:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+.payment-card__action:disabled {
+  opacity: var(--app-disabled-opacity);
+  cursor: default;
+}
+
+/* ------------------------------------------------------- 4. Billing: Kontingent */
+
+.quota-bar {
+  height: 8px;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.quota-bar__fill {
+  height: 100%;
+  width: var(--quota-fill, 0%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #8fb6e3, #cfe4fa);
+}
+
+.quota-line {
+  margin-top: 8px;
+  font-family: var(--app-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* --------------------------------------------------- 4b. Billing: Kuendigung */
+
+/* Stufe 1 (Spec §10: "ruhiger Text-Link statt eines fetten Knopfs", Wortlaut
+   nach § 312k BGB bleibt unveraendert). .cancel-link hatte bisher KEINE Regel
+   in irgendeinem Stylesheet -- der Knopf fiel auf Browser-Default zurueck
+   (weisser Kasten, schwarzer Text). Reiner Text-Look, kein Knopf-Rahmen. */
+.cancel-link {
+  margin-top: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.62);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.cancel-link:hover {
+  color: #ffffff;
+}
+
+.cancel-link:focus-visible {
+  outline: 2px solid var(--color-accent, #8fb6e3);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------- 5. Billing: Fussnote */
+
+.billing-footnote {
+  margin-top: 22px;
+  font-family: var(--app-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* -------------------------------------------------------------- 6. Newsletter */
+
+/* Der <label> ist der EINZIGE Bedienbereich: ein Klick irgendwo darin schaltet
+   das echte, dahinterliegende input[type=checkbox] um (native Label-Semantik)
+   -- keine JS-Klick-Weiterleitung noetig. Nur EIN Zustand (--off/--on) ist je
+   Checkbox-Stand sichtbar, per Geschwister-Selektor (Muster .lang-tile__fill
+   oben), kein :has() noetig. */
+/* Zwischenueberschriften im Abrechnungs-Block liegen eine Ebene unter dem
+   Abschnittstitel -- dieselbe leise Mono-Label-Ebene wie AGENT LANGUAGE /
+   PERMISSIONS im Settings-Block (Spec §3), nicht fett gesetzte Sans-Zeilen. */
+.billing-section {
+  margin-top: 28px;
+}
+
+.billing-section__title {
+  margin: 0 0 12px;
+  font-family: var(--app-mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.newsletter-toggle {
+  position: relative;
+  display: inline-flex;
+  margin-top: 18px;
+  cursor: pointer;
+}
+
+.newsletter-toggle__input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.newsletter-toggle__input:focus-visible ~ .newsletter-toggle__state {
+  outline: 2px solid var(--color-accent, #8fb6e3);
+  outline-offset: 2px;
+}
+
+.newsletter-toggle__state {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 999px;
+}
+
+/* Zustand "nicht angemeldet": leises Mono-Label und die weisse Pille stehen
+   nebeneinander mit Luft dazwischen -- KEIN gemeinsamer Rahmen, sonst sieht es
+   aus wie ein zusammengeklebtes Steuerelement (Spec §11). */
+.newsletter-toggle__state--off {
+  display: flex;
+  gap: 16px;
+  padding: 0;
+}
+
+.newsletter-toggle__input:checked ~ .newsletter-toggle__state--off {
+  display: none;
+}
+
+.newsletter-toggle__field {
+  font-family: var(--app-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.newsletter-toggle__cta {
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #10305a;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* Zustand "angemeldet": gruene Pille mit Punkt (Spec §11, exakte Farbwerte). */
+.newsletter-toggle__state--on {
+  background: rgba(127, 224, 176, 0.12);
+  border: 1px solid rgba(127, 224, 176, 0.4);
+  color: #7fe0b0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.newsletter-toggle__input:checked ~ .newsletter-toggle__state--on {
+  display: flex;
+}
+
+.newsletter-toggle__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #7fe0b0;
+  flex-shrink: 0;
+}
+
+/* -------------------------------------------------------------------- 7. Schmal */
+
+@media (max-width: 640px) {
+  .payment-card {
+    flex-wrap: wrap;
+  }
+  .payment-card__action {
+    width: 100%;
+    text-align: center;
+  }
+}

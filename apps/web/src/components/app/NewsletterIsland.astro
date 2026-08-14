@@ -1,0 +1,88 @@
+---
+// NewsletterIsland (Dashboard-Design-Spec §11): eigener Abschnitt fuer die
+// Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) -- bisher Teil der
+// Billing-Karte, jetzt ein eigenstaendiger vierter Bereich (#newsletter,
+// eingebunden von Trupp A in apps/web/src/pages/app/index.astro). NUR die
+// DARSTELLUNG zog um: die Einwilligungs-Logik (Route POST /api/self-service/
+// newsletter-consent, nie vorangekreuzt, Widerruf jederzeit, Fehler setzt das
+// Haekchen zurueck) lebt unveraendert in lib/subscribe.js
+// (wireNewsletterToggle/newsletterConsentFrom) -- dieselben Funktionen, die
+// vorher BillingIsland.astro verdrahtet hat.
+//
+// Zwei Zustaende (Spec §11), EIN echter input[type=checkbox] als einzige
+// Datenquelle (Muster lang-tile in SettingsIsland.astro: ein Geschwister-
+// Selektor pro Zustand blendet um, kein zweiter Endpunkt/kein Freitext-E-Mail-
+// Feld -- die Route nimmt nur {consent:boolean}, adressiert wird die
+// registrierte Tenant-E-Mail). Checkbox optisch versteckt via opacity:0;
+// position:absolute (NICHT display:none) -- Fokusring bleibt sichtbar,
+// Klick auf die Kachel (natives <label>) schaltet um.
+//
+// KEIN eigener state-Fetch (AUTH_EVENT). Checkbox startet IMMER ungecheckt im
+// Markup -- der tatsaechliche Zustand kommt ausschliesslich aus
+// data.newsletter (newsletterConsentFrom), nie aus einem lokalen Default
+// "true" (kein Dark Pattern, kein Vorankreuzen). Optik lebt in
+// styles/app/panels.css (Trupp-C-Stylesheet, Muster shell.css/calls.css).
+import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe.js";
+---
+
+<section id="newsletter-card" class="card" hidden>
+  <h2>Product updates</h2>
+  <p class="muted">
+    Occasional email about new Hermes features. Not required for your subscription —
+    you can change your mind anytime.
+  </p>
+
+  <label class="newsletter-toggle">
+    <input
+      type="checkbox"
+      id="newsletter-toggle"
+      class="newsletter-toggle__input"
+      aria-label="Subscribe to product updates"
+    />
+    <span class="newsletter-toggle__state newsletter-toggle__state--off" aria-hidden="true">
+      <span class="newsletter-toggle__field">Not subscribed</span>
+      <span class="newsletter-toggle__cta">Subscribe</span>
+    </span>
+    <span class="newsletter-toggle__state newsletter-toggle__state--on" aria-hidden="true">
+      <span class="newsletter-toggle__dot"></span>
+      Subscribed
+    </span>
+  </label>
+  <p id="newsletter-msg" class="billing-msg" hidden></p>
+</section>
+
+<script>
+  import { AUTH_STATE, AUTH_EVENT } from "../../lib/api.js";
+  import { newsletterConsentFrom, wireNewsletterToggle } from "../../lib/subscribe.js";
+
+  const cardEl = document.getElementById("newsletter-card");
+  const toggleEl = document.getElementById("newsletter-toggle");
+  const msgEl = document.getElementById("newsletter-msg");
+
+  const MSG_OK_CLASS = "billing-msg--ok";
+  const MSG_ERR_CLASS = "billing-msg--err";
+  function showMessage(text, ok) {
+    msgEl.textContent = text;
+    msgEl.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok === true);
+    msgEl.classList.toggle(MSG_ERR_CLASS, Boolean(text) && ok === false);
+    msgEl.hidden = !text;
+  }
+
+  // Umschalten schreibt sofort gegen die Route (lib/subscribe.js
+  // wireNewsletterToggle) -- kein eigener Speichern-Knopf, eine einzelne
+  // Einwilligungs-Erklaerung (Muster BillingIsland vor dem Umzug).
+  wireNewsletterToggle(toggleEl, { onMessage: showMessage });
+
+  // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
+  // eingeloggten Zustand traegt die Antwort data.newsletter. Listener synchron
+  // beim Modul-Start registrieren, BEVOR die Auth-Insel dispatcht.
+  document.addEventListener(AUTH_EVENT, (event) => {
+    const { state, data } = event.detail;
+    if (state === AUTH_STATE.AUTHENTICATED) {
+      toggleEl.checked = newsletterConsentFrom(data);
+      cardEl.hidden = false;
+    } else {
+      cardEl.hidden = true;
+    }
+  });
+</script>

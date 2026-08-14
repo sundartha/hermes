@@ -15,6 +15,7 @@ import {
   planTiles,
   subscriptionLine,
   quotaLine,
+  quotaUsedPercent,
   wireSubscribe,
   SUBSCRIBE_MESSAGES,
   PLAN_CHOICE_COPY,
@@ -33,6 +34,8 @@ import {
   billingStatusBadge,
   billingStatusBadgeClass,
   billingStatusText,
+  billingStatusHeadline,
+  billingStatusDetail,
   newsletterConsentFrom,
   NEWSLETTER_MESSAGES,
   wireNewsletterToggle,
@@ -135,6 +138,24 @@ test("quotaLine: 'remaining of included minutes remaining' oder null", () => {
   assert.equal(quotaLine({ remainingMinutes: 0, includedMinutes: 120 }), "0 of 120 minutes remaining");
   assert.equal(quotaLine(null), null);
   assert.equal(quotaLine(undefined), null);
+});
+
+// ---- quotaUsedPercent: Fuellbreite des Minuten-Balkens (Dashboard-Design-Spec §10) --
+test("quotaUsedPercent: verbrauchter Anteil in Prozent, gerundet", () => {
+  assert.equal(quotaUsedPercent({ remainingMinutes: 93, includedMinutes: 120 }), 23);
+  assert.equal(quotaUsedPercent({ remainingMinutes: 120, includedMinutes: 120 }), 0);
+  assert.equal(quotaUsedPercent({ remainingMinutes: 0, includedMinutes: 120 }), 100);
+});
+
+test("quotaUsedPercent: kein Kontingent -> 0 (der Aufrufer rendert den Balken ohnehin nicht)", () => {
+  assert.equal(quotaUsedPercent(null), 0);
+  assert.equal(quotaUsedPercent(undefined), 0);
+  assert.equal(quotaUsedPercent({ remainingMinutes: 0, includedMinutes: 0 }), 0);
+});
+
+test("quotaUsedPercent: geklemmt auf [0,100] gegen inkonsistente Server-Werte", () => {
+  assert.equal(quotaUsedPercent({ remainingMinutes: 150, includedMinutes: 120 }), 0);
+  assert.equal(quotaUsedPercent({ remainingMinutes: -10, includedMinutes: 120 }), 100);
 });
 
 // ---- Subscribe-Zustandsmaschine ---------------------------------------------
@@ -616,6 +637,44 @@ test("billingStatusText: no_card/no_sub tragen einen statischen naechsten Schrit
   assert.match(noCardText, /payment method/i);
   assert.match(noSubText, /plan/i);
   assert.notEqual(noCardText, noSubText, "no_card und no_sub muessen unterscheidbare Saetze zeigen");
+});
+
+// ---- billingStatusHeadline/-Detail: Serif-Wert + Mono-Nebenangabe (§10) -------
+
+test("billingStatusHeadline: aktiv/gekuendigt -> Plan-Name, sonst dieselbe Beschriftung wie die Status-Pille", () => {
+  const activeSub = { planSlug: "starter", currentPeriodEnd: 0, cancelAtPeriodEnd: false };
+  assert.equal(billingStatusHeadline(BILLING_STATUS.ACTIVE, activeSub), "Starter");
+  const cancelledSub = { planSlug: "business", currentPeriodEnd: 0, cancelAtPeriodEnd: true };
+  assert.equal(billingStatusHeadline(BILLING_STATUS.CANCELLED, cancelledSub), "Business");
+  assert.equal(
+    billingStatusHeadline(BILLING_STATUS.NO_CARD, { planSlug: "" }),
+    billingStatusBadge(BILLING_STATUS.NO_CARD),
+  );
+  assert.equal(
+    billingStatusHeadline(BILLING_STATUS.NO_SUB, { planSlug: "" }),
+    billingStatusBadge(BILLING_STATUS.NO_SUB),
+  );
+});
+
+test("billingStatusDetail: aktiv -> Renews-Datum (oder leer ohne Termin)", () => {
+  const epoch = 1781000000;
+  const expectedDate = new Date(epoch * 1000).toLocaleDateString("en-US");
+  assert.equal(
+    billingStatusDetail(BILLING_STATUS.ACTIVE, { planSlug: "starter", currentPeriodEnd: epoch }),
+    `Renews ${expectedDate}`,
+  );
+  assert.equal(billingStatusDetail(BILLING_STATUS.ACTIVE, { planSlug: "starter", currentPeriodEnd: 0 }), "");
+});
+
+test("billingStatusDetail: gekuendigt -> dieselbe Zeile wie cancelStatusLine (EINE Quelle)", () => {
+  const cancelledSub = { planSlug: "business", currentPeriodEnd: 1781000000, cancelAtPeriodEnd: true };
+  assert.equal(billingStatusDetail(BILLING_STATUS.CANCELLED, cancelledSub), cancelStatusLine(cancelledSub));
+});
+
+test("billingStatusDetail: no_card/no_sub -> derselbe erklaerende Satz wie billingStatusText", () => {
+  const sub = { planSlug: "" };
+  assert.equal(billingStatusDetail(BILLING_STATUS.NO_CARD, sub), billingStatusText(BILLING_STATUS.NO_CARD, sub));
+  assert.equal(billingStatusDetail(BILLING_STATUS.NO_SUB, sub), billingStatusText(BILLING_STATUS.NO_SUB, sub));
 });
 
 // ---- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) ---------------------

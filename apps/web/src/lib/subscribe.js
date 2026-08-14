@@ -141,6 +141,20 @@ export function quotaLine(quota) {
   return `${quota.remainingMinutes} of ${quota.includedMinutes} minutes remaining`;
 }
 
+const PERCENT_MIN = 0;
+const PERCENT_MAX = 100;
+
+// Verbrauchter Anteil in Prozent fuer den Minuten-Fortschrittsbalken (Dashboard-
+// Design-Spec §10). Geklemmt auf [0,100] (Verteidigung gegen inkonsistente Server-
+// Werte, z.B. remainingMinutes > includedMinutes). Kein Kontingent -> 0 (der
+// Aufrufer rendert den Balken ohnehin nur, wenn quotaLine(...) einen Text liefert).
+export function quotaUsedPercent(quota) {
+  if (!quota || !quota.includedMinutes) return PERCENT_MIN;
+  const used = quota.includedMinutes - quota.remainingMinutes;
+  const percent = Math.round((used / quota.includedMinutes) * 100);
+  return Math.min(PERCENT_MAX, Math.max(PERCENT_MIN, percent));
+}
+
 // ---- Subscribe-Zustandsmaschine ---------------------------------------------
 
 function isConflict(err) {
@@ -434,6 +448,38 @@ export function billingStatusText(kind, sub) {
   if (kind === BILLING_STATUS.CANCELLED) return `${planName(sub.planSlug)} — ${cancelStatusLine(sub)}`;
   if (kind === BILLING_STATUS.NO_CARD) return NO_CARD_STATUS_TEXT;
   return NO_SUB_STATUS_TEXT;
+}
+
+// Dashboard-Design-Spec §10: "Serif-Statuswert mit Mono-Nebenangabe" -- die Billing-
+// Insel zeigt den Zustand jetzt zweizeilig statt als EIN Fliesstext. Beide Funktionen
+// sind reine Aufspaltungen der bereits bestehenden, getesteten Bausteine (planName/
+// renewDate/cancelStatusLine/billingStatusBadge/billingStatusText) -- KEINE neue
+// Formulierung, KEIN fuenfter Zustand (G5: dieselbe Quelle, nur anders zusammengesetzt).
+// billingStatusText/subscriptionLine/cancelStatusLine bleiben unveraendert (ihr
+// Wortlaut ist per Test gepinnt) -- die Insel nutzt fuer die zweizeilige Darstellung
+// stattdessen dieses Paar.
+
+// Serif-Hauptwert: Plan-Name bei aktivem/gekuendigtem Abo, sonst dieselbe kurze
+// Beschriftung wie die Status-Pille (billingStatusBadge, EINE Quelle statt eines
+// zweiten "No card"/"No plan"-Textes).
+export function billingStatusHeadline(kind, sub) {
+  if (kind === BILLING_STATUS.ACTIVE || kind === BILLING_STATUS.CANCELLED) return planName(sub.planSlug);
+  return billingStatusBadge(kind);
+}
+
+const RENEWS_PREFIX = "Renews ";
+
+// Mono-Nebenangabe: Verlaengerungsdatum (aktiv) bzw. cancelStatusLine (gekuendigt,
+// "Cancelled — active until ..."), sonst der bestehende erklaerende Satz aus
+// billingStatusText (no_card/no_sub) -- dort ist die Nebenangabe bereits die
+// vollstaendige Aussage, kein Headline/Detail-Split noetig.
+export function billingStatusDetail(kind, sub) {
+  if (kind === BILLING_STATUS.ACTIVE) {
+    const date = renewDate(sub.currentPeriodEnd);
+    return date ? `${RENEWS_PREFIX}${date}` : "";
+  }
+  if (kind === BILLING_STATUS.CANCELLED) return cancelStatusLine(sub);
+  return billingStatusText(kind, sub);
 }
 
 // ---- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) --------------------

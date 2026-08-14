@@ -4,7 +4,7 @@
 // (src/self-service.js, NUR-Lese-Vertrag). Settings-Redesign (Aug 2026): der
 // Bereich fokussiert sich auf die Sprachwahl -- die UI bietet nur noch:
 //   - language   ("" automatisch / de / fr / en) -- das Hauptelement der Karte,
-//                als Pillenleiste (echte Radio-Inputs), kein <select> mehr
+//                als Auswahlkacheln im Radiobutton-Stil (Dashboard-Design-Spec §9)
 //   - allowPersonalData / allowBankData (Toggle, NUR restriktiver: true->false)
 // Agent-Name (Freitext), Agent-Stil (Dropdown, agentStyle) und die Begruessungs-
 // Vorlagenauswahl (greeting) sind aus der UI entfernt. Die SERVER-WHITELIST
@@ -18,12 +18,24 @@
 // Unbekannte fehlten schon vorher bewusst -- der Self-Service-Pfad lehnt sie
 // ohnehin ab (kein UI-Schreibpfad fuer rejected-Felder).
 //
+// DASHBOARD-DESIGN-SPEC §9: die Sprachkacheln ersetzen das fruehere <select>-
+// aehnliche Pillen-Markup (lang-pill). DIE SPRACHLISTE KOMMT UNVERAENDERT AUS
+// SETTINGS_LANGUAGES (lib/api.js) -- keine Sprache hinzugefuegt/entfernt, nur
+// die Kachel-Optik ist neu. Echte input[type=radio] pro Kachel, optisch
+// versteckt via opacity:0; position:absolute (NICHT display:none) -- der
+// Fokusring bleibt sichtbar (Tastaturbedienung/Screenreader-Semantik echter
+// Radios, kein nachgebautes ARIA-Widget). Optik lebt in styles/app/panels.css
+// (Trupp-C-Stylesheet, Muster shell.css/calls.css) -- kein inline-Style-Block
+// mehr hier.
+//
 // Nach Speichern: "Gespeichert", listet changed/rejected (aus der Antwort
 // abgeleitet, settingsOutcome) und RE-FETCHt den State (fetchTenantState ->
 // AUTH_EVENT neu dispatchen, damit ALLE Inseln auf den frischen Server-Stand
-// gehen). Der restriktivere Permission-Toggle greift ueber die Server-Semantik:
-// ein false->true-Versuch auf allowPersonalData/allowBankData kommt als rejected
-// zurueck (der gespeicherte Wert bleibt), die UI zeigt es an und re-fetcht.
+// gehen). Der Bestaetigungstext blendet 2600ms nach dem Speichern aus (§9) --
+// nur bei Erfolg (ok===true), Fehlermeldungen bleiben stehen. Der restriktivere
+// Permission-Toggle greift ueber die Server-Semantik: ein false->true-Versuch
+// auf allowPersonalData/allowBankData kommt als rejected zurueck (der
+// gespeicherte Wert bleibt), die UI zeigt es an und re-fetcht.
 //
 // KEIN eigener Auth-/state-Fetch im Normalfall: die Auth-Insel ermittelt den
 // Zustand einmal und dispatcht AUTH_EVENT -- diese Insel hoert darauf und befuellt
@@ -35,16 +47,6 @@
 // komplett ueber /api/state + MCP leaken, H4). Angezeigt wird ausschliesslich die
 // Server-Maske (maskPrivateNumber); der volle Wert wird nie ins Eingabefeld
 // zurueckgeschrieben.
-//
-// Optik (Hermes-Look): die Sprachauswahl ist eine ruhige Pillenleiste, das
-// Hauptelement der Karte -- die Permission-Toggles fuegen sich optisch unter,
-// unveraendert in ihrer Logik. is:global-Style-Block wie in CallsIsland.astro
-// (gleiche Handschrift dieser App): die Pillen-/Toggle-Zustaende ([checked])
-// werden von diesem Script gesetzt, nicht neu in den DOM gebaut, aber die Klasse
-// bleibt eine ECHTE, ausgelagerte CSS-Datei (CSP 'self', kein Inline-Style-
-// Attribut, kein Inline-Script). Farben/Abstaende ausschliesslich ueber die
-// bestehenden semantischen Tokens (app.css/app-hermes.css) -- kein neuer fester
-// Wert.
 import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.js";
 ---
 
@@ -54,14 +56,21 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
 
   <form id="settings-form" class="settings-form">
     <fieldset class="settings-lang">
-      <legend class="field-label">Language</legend>
-      <div class="lang-picker">
+      <legend class="field-label">Agent language</legend>
+      <p class="muted settings-lang__hint">
+        Choose the language your agent speaks on calls, or leave it automatic.
+      </p>
+      <div class="lang-picker" role="radiogroup" aria-label="Agent language">
         {
           SETTINGS_LANGUAGES.map(({ value, label }) => (
-            <label class="lang-pill">
-              <input type="radio" name="settings-language" class="lang-pill__input" value={value} />
-              <span class="lang-pill__fill" aria-hidden="true" />
-              <span class="lang-pill__label">{label}</span>
+            <label class="lang-tile">
+              <input type="radio" name="settings-language" class="lang-tile__input" value={value} />
+              <span class="lang-tile__fill" aria-hidden="true" />
+              <span class="lang-tile__ring" aria-hidden="true">
+                <span class="lang-tile__dot" aria-hidden="true" />
+              </span>
+              <span class="lang-tile__label">{label}</span>
+              <span class="lang-tile__code" aria-hidden="true">{value ? value.toUpperCase() : "AUTO"}</span>
             </label>
           ))
         }
@@ -144,19 +153,33 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
 
   const MSG_OK_CLASS = "settings-msg--ok";
   const MSG_ERR_CLASS = "settings-msg--err";
+  // §9: der Bestaetigungstext blendet nach dieser Zeit wieder aus (nur bei
+  // Erfolg -- eine Fehlermeldung bleibt stehen, bis der naechste Versuch sie
+  // ersetzt). EIN Timer pro Meldungs-Element (WeakMap, kein Leak).
+  const CONFIRM_HIDE_MS = 2600;
+  const hideTimers = new WeakMap();
 
   // Kurze Rueckmeldung mit Erfolgs-/Fehler-Faerbung, an ein beliebiges Meldungs-
   // Element (EINE Implementierung fuer settings- UND private-number-Formular, G5).
-  // text leer -> verstecken.
+  // text leer -> verstecken. Erfolgsmeldungen blenden nach CONFIRM_HIDE_MS aus.
   function showMessage(el, text, ok) {
     el.textContent = text;
     el.classList.toggle(MSG_OK_CLASS, Boolean(text) && ok);
     el.classList.toggle(MSG_ERR_CLASS, Boolean(text) && !ok);
     el.hidden = !text;
+    clearTimeout(hideTimers.get(el));
+    if (text && ok) {
+      hideTimers.set(
+        el,
+        setTimeout(() => {
+          el.hidden = true;
+        }, CONFIRM_HIDE_MS),
+      );
+    }
   }
 
-  // Formular aus dem state befuellen: die Sprach-Pille auswaehlen (fehlend/leer
-  // -> "Automatic", die erste Pille mit value="") und die Permission-Toggles
+  // Formular aus dem state befuellen: die Sprach-Kachel auswaehlen (fehlend/leer
+  // -> "Automatic", die erste Kachel mit value="") und die Permission-Toggles
   // ueber data-perm setzen. Kein clientseitiger DOM-Bau mehr (agentStyle/greeting
   // waren die einzigen Stellen, die Optionen zur Laufzeit erzeugten).
   function fillForm(data) {
@@ -171,8 +194,8 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
   }
 
   // Roher Formular-Snapshot fuer buildSettingsPatch (die Whitelist-Grenze lebt
-  // dort, nicht hier). Sprache aus der gecheckten Pille (keine Auswahl -> "",
-  // sollte praktisch nicht vorkommen, da immer genau eine Pille checked ist);
+  // dort, nicht hier). Sprache aus der gecheckten Kachel (keine Auswahl -> "",
+  // sollte praktisch nicht vorkommen, da immer genau eine Kachel checked ist);
   // Toggles ueber data-perm einsammeln.
   function readForm() {
     const checkedLang = formEl.querySelector('input[name="settings-language"]:checked');
@@ -284,94 +307,3 @@ import { SETTINGS_PERMISSION_TOGGLES, SETTINGS_LANGUAGES } from "../../lib/api.j
     }
   });
 </script>
-
-<style is:global>
-  /* Sprachwahl als ruhige Pillenleiste (Settings-Redesign, Aug 2026). is:global
-     aus derselben Begruendung wie in CallsIsland.astro: eine Datei, eine
-     CSS-Handschrift fuer diese App-Schicht -- die Klassennamen (lang-picker,
-     lang-pill*, settings-lang) sind eigens fuer diese Insel benannt, kein
-     Kollisionsrisiko. Farben/Abstaende ausschliesslich ueber die bestehenden
-     semantischen Tokens (app.css/app-hermes.css) -- kein neuer fester Wert.
-     ECHTE, von Astro ausgelagerte CSS-Datei (CSP 'self', kein Inline-Style-
-     Attribut, kein Inline-Script). */
-
-  .settings-lang {
-    border: 0;
-    margin: 0;
-    padding: 0;
-  }
-
-  .lang-picker {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-tight);
-    margin-top: var(--space-cozy);
-  }
-
-  /* Der <label> traegt das sichtbare Pillen-Gehaeuse; das Radio-Input bleibt
-     unsichtbar aber fokussierbar (Tastatur-/Screenreader-Semantik echter Radios,
-     kein nachgebautes ARIA-Widget). */
-  .lang-pill {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    overflow: hidden;
-    padding: var(--space-cozy) var(--space-gap);
-    border: var(--border-width) solid var(--color-field-border);
-    border-radius: var(--radius-badge);
-    background: var(--color-surface);
-    cursor: pointer;
-    transition: border-color 0.2s ease;
-  }
-
-  .lang-pill:hover {
-    border-color: var(--color-field-border-focus);
-  }
-
-  .lang-pill:focus-within {
-    outline: 2px solid var(--color-accent, var(--color-status-info));
-    outline-offset: 2px;
-  }
-
-  .lang-pill__input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  /* Fuellflaeche statt Label-Hintergrund: eine einfache Geschwister-Selektor-
-     Ueberblendung (kein :has() noetig, breiter Browser-Support). */
-  .lang-pill__fill {
-    position: absolute;
-    inset: 0;
-    background: var(--color-action);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-  }
-
-  .lang-pill__input:checked ~ .lang-pill__fill {
-    opacity: 1;
-  }
-
-  .lang-pill__label {
-    position: relative;
-    z-index: 1;
-    font-size: var(--text-lead);
-    font-weight: var(--weight-label);
-    color: var(--color-text);
-    transition: color 0.2s ease;
-  }
-
-  .lang-pill__input:checked ~ .lang-pill__label {
-    color: var(--color-on-action);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .lang-pill,
-    .lang-pill__fill,
-    .lang-pill__label {
-      transition: none;
-    }
-  }
-</style>

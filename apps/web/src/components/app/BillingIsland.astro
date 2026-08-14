@@ -1,32 +1,37 @@
 ---
-// Billing-Insel (W3 + P2, Payment-Neugestaltung Aug 2026): Karte hinterlegen, Abo
-// buchen, Kuendigen/Reaktivieren, Newsletter-Einwilligung -- der heute existierende
-// Backend-Umfang, NUR neu angeordnet/dargestellt (keine Datenwege/Endpunkte/Payloads
-// geaendert). Reihenfolge laut Auftrag:
-//   1. aktueller Tarif + Status (EIN Satz, was als Naechstes passiert -- s.
-//      billingStatusKind/-Text in lib/subscribe.js: kein Abo / Karte fehlt / aktiv /
-//      gekuendigt-zum-Periodenende. "Fehler" ist keine Karten-/Abo-LAGE, sondern eine
-//      fehlgeschlagene AKTION -- s. die farblich abgesetzten Ruecklauf-/Fehlermeldungen
-//      weiter unten, showMessage)
+// Billing-Insel (W3 + P2, Dashboard-Design-Spec §10): Karte hinterlegen, Abo
+// buchen, Kuendigen/Reaktivieren -- der heute existierende Backend-Umfang, NUR
+// neu angeordnet/dargestellt (keine Datenwege/Endpunkte/Payloads geaendert).
+// Reihenfolge laut Spec §10 (unveraendert zum vorherigen Stand):
+//   1. aktueller Tarif + Status (Serif-Statuswert + Mono-Nebenangabe -- s.
+//      billingStatusHeadline/-Detail in lib/subscribe.js, EINE Quelle ueber
+//      billingStatusKind/subscriptionLine/cancelStatusLine/billingStatusText.
+//      "Fehler" ist keine Karten-/Abo-LAGE, sondern eine fehlgeschlagene AKTION
+//      -- s. die farblich abgesetzten Ruecklauf-/Fehlermeldungen weiter unten,
+//      showMessage)
 //   2. Zahlungsmittel ("Add payment method" -> POST .../setup-checkout -> Stripe-
 //      Redirect. Rueckkehr ueber ?card=ok|canceled|error)
-//   3. verbrauchtes/verbleibendes Kontingent (nur mit aktivem Abo, quotaFrom)
+//   3. verbrauchtes/verbleibendes Kontingent (nur mit aktivem Abo, quotaFrom) +
+//      Minuten-Fortschrittsbalken (quotaUsedPercent, §10)
 //   4. Tarifwechsel: die Plan-Kacheln (aus dem Build-Spiegel lib/plans.js), NUR ohne
 //      aktives Abo -- eine BESTEHENDE Buchung umzustellen bietet der Server nicht an
-//      (kein neuer Endpunkt, Auftrag: "keine Datenwege"). Subscribe-Klick ->
-//      Zustandsmaschine (lib/subscribe.js): ok -> Tenant aktiv + alle Inseln
-//      refreshen; 409 no_card -> gefuehrter Stripe-Checkout MIT Plan; 409 sonst ->
-//      "bereits abonniert"; 401 -> Session.
-//   5. Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1): NIE vorangekreuzt,
-//      Zustand kommt ausschliesslich aus data.newsletter (newsletterConsentFrom).
-//      Umschalten schreibt sofort gegen POST .../newsletter-consent.
-//   6. Kuendigung (312k-P3, § 312k BGB): ruhig ganz unten, ein Text-Link statt eines
+//      (kein neuer Endpunkt). Subscribe-Klick -> Zustandsmaschine (lib/subscribe.js):
+//      ok -> Tenant aktiv + alle Inseln refreshen; 409 no_card -> gefuehrter Stripe-
+//      Checkout MIT Plan; 409 sonst -> "bereits abonniert"; 401 -> Session.
+//   5. Kuendigung (312k-P3, § 312k BGB): ruhig ganz unten, ein Text-Link statt eines
 //      fetten Knopfs (unmittelbar sichtbar/erreichbar bleibt sie trotzdem).
+//
+// Newsletter (frueher Punkt 5 in dieser Karte) ist per Dashboard-Design-Spec §11 in
+// eine eigene Insel (NewsletterIsland.astro) ausgelagert -- NUR die Darstellung zog
+// um, die Einwilligungs-Logik (Route, nie vorangekreuzt, Widerruf, Fehler-Rueckfall)
+// lebt unveraendert in lib/subscribe.js (wireNewsletterToggle/newsletterConsentFrom).
 //
 // Kein eigener state-Fetch im Normalfall: die Auth-Insel ermittelt den Zustand einmal
 // und meldet ihn per AUTH_EVENT -- diese Insel hoert mit. Nach jeder erfolgreichen
 // Aktion re-fetcht sie den State selbst und re-dispatcht AUTH_EVENT (so gehen ALLE
 // Inseln auf den frischen Stand). Anzeige-Strings nur ueber textContent (XSS-Schutz).
+// Optik lebt in styles/app/panels.css (Trupp-C-Stylesheet, Muster shell.css/calls.css)
+// -- kein inline-Style-Block mehr hier.
 import {
   CANCEL_BUTTON_LABEL,
   CONFIRM_CANCEL_BUTTON_LABEL,
@@ -41,24 +46,40 @@ import {
   <h2>Billing</h2>
   <p class="muted">Your plan, payment method and usage for Hermes.</p>
 
-  <!-- 1. aktueller Tarif + Status -->
+  <!-- 1. aktueller Tarif + Status: Serif-Hauptwert + Mono-Nebenangabe (§10). -->
   <div class="billing-status">
     <span id="billing-status-badge" class="billing-status-badge"></span>
-    <p id="billing-status-text" class="billing-status-text"></p>
+    <span class="billing-status__body">
+      <span id="billing-status-value" class="billing-status-value"></span>
+      <span id="billing-status-detail" class="billing-status-detail"></span>
+    </span>
   </div>
   <p id="billing-msg" class="billing-msg" hidden></p>
 
-  <!-- 2. Zahlungsmittel -->
+  <!-- 2. Zahlungsmittel: Kartensymbol + Text + Ghost-Knopf (§10). -->
   <div class="billing-section">
     <h3 class="billing-section__title">Payment method</h3>
-    <p id="billing-card-status" class="muted"></p>
-    <button id="billing-add" class="btn" type="button">Add payment method</button>
+    <div class="payment-card">
+      <svg class="payment-card__icon" viewBox="0 0 24 16" aria-hidden="true" focusable="false">
+        <rect x="1" y="1" width="22" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+        <rect x="1" y="4.5" width="22" height="3" fill="currentColor"></rect>
+      </svg>
+      <p id="billing-card-status" class="payment-card__status muted"></p>
+      <button id="billing-add" class="payment-card__action" type="button">Add payment method</button>
+    </div>
   </div>
 
-  <!-- 3. Kontingent -- nur mit aktivem Abo vorhanden (quotaFrom liefert sonst null). -->
+  <!-- 3. Kontingent + Minuten-Balken -- nur mit aktivem Abo vorhanden (quotaFrom
+       liefert sonst null). Der Balken selbst bleibt zusaetzlich versteckt, solange
+       keine Kontingent-Zeile gerendert wird (§10: "nur rendern, wenn ein Kontingent
+       vorliegt"). Die Fuellbreite reist als CSS-Custom-Property (--quota-fill,
+       panels.css) statt als style-Attribut -- kein Inline-Style im Markup. -->
   <div id="billing-quota-section" class="billing-section" hidden>
     <h3 class="billing-section__title">Usage</h3>
-    <p id="sub-quota" class="muted"></p>
+    <div id="quota-bar" class="quota-bar" hidden>
+      <div id="quota-bar-fill" class="quota-bar__fill"></div>
+    </div>
+    <p id="sub-quota" class="quota-line muted"></p>
   </div>
 
   <!-- 4. Tarifwechsel: die Plan-Kacheln, NUR ohne aktives Abo (s. Kopf-Kommentar). -->
@@ -68,29 +89,7 @@ import {
     <p id="sub-msg" class="billing-msg" hidden></p>
   </div>
 
-  <!-- 5. Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1). Die Checkbox startet
-       IMMER ungecheckt im Markup -- der tatsaechliche Zustand kommt ausschliesslich
-       aus data.newsletter (renderNewsletter/newsletterConsentFrom), nie aus einem
-       lokalen Default "true" (kein Dark Pattern, kein Vorankreuzen). -->
-  <div class="billing-section">
-    <h3 class="billing-section__title">Product updates</h3>
-    <p class="muted">
-      Occasional email about new Hermes features. Not required for your subscription —
-      you can change your mind anytime.
-    </p>
-    <div class="perm-row">
-      <span class="perm-text">
-        <span class="perm-title">Send me product updates</span>
-      </span>
-      <label class="switch">
-        <input type="checkbox" id="newsletter-toggle" />
-        <span class="switch-slider" aria-hidden="true"></span>
-      </label>
-    </div>
-    <p id="newsletter-msg" class="billing-msg" hidden></p>
-  </div>
-
-  <!-- 6. 312k-P3: zweistufiger Kuendigungsweg (§ 312k BGB), ruhig ganz unten. Sichtbar
+  <!-- 5. 312k-P3: zweistufiger Kuendigungsweg (§ 312k BGB), ruhig ganz unten. Sichtbar
        NUR mit aktivem Abo (renderCancelBlock blendet den Block sonst aus). Stufe 1:
        CANCEL_BUTTON_LABEL (gesetzlich vorgegebener Wortlaut) als ruhiger Text-Link
        (.cancel-link), kein roter Schreckknopf -- bleibt trotzdem unmittelbar sichtbar
@@ -108,6 +107,8 @@ import {
     <button id="resume-btn" class="btn" type="button" hidden>{RESUME_BUTTON_LABEL}</button>
     <p id="cancel-msg" class="billing-msg" hidden></p>
   </div>
+
+  <p class="billing-footnote">Payments are processed securely via Stripe.</p>
 </section>
 
 <script>
@@ -126,6 +127,7 @@ import {
   import {
     planTiles,
     quotaLine,
+    quotaUsedPercent,
     wireSubscribe,
     cancelConfirmText,
     cancelStatusLine,
@@ -133,9 +135,8 @@ import {
     billingStatusKind,
     billingStatusBadge,
     billingStatusBadgeClass,
-    billingStatusText,
-    newsletterConsentFrom,
-    wireNewsletterToggle,
+    billingStatusHeadline,
+    billingStatusDetail,
   } from "../../lib/subscribe.js";
 
   // Rueckkehr-Parameter (kein Magic-String an den Vergleichsstellen).
@@ -148,17 +149,18 @@ import {
 
   const cardEl = document.getElementById("billing-card");
   const statusBadgeEl = document.getElementById("billing-status-badge");
-  const statusTextEl = document.getElementById("billing-status-text");
+  const statusValueEl = document.getElementById("billing-status-value");
+  const statusDetailEl = document.getElementById("billing-status-detail");
   const msgEl = document.getElementById("billing-msg");
   const cardStatusEl = document.getElementById("billing-card-status");
   const addBtn = document.getElementById("billing-add");
   const quotaSectionEl = document.getElementById("billing-quota-section");
+  const quotaBarEl = document.getElementById("quota-bar");
+  const quotaBarFillEl = document.getElementById("quota-bar-fill");
   const subQuotaEl = document.getElementById("sub-quota");
   const subTilesTitleEl = document.getElementById("sub-tiles-title");
   const subTilesEl = document.getElementById("sub-tiles");
   const subMsgEl = document.getElementById("sub-msg");
-  const newsletterToggleEl = document.getElementById("newsletter-toggle");
-  const newsletterMsgEl = document.getElementById("newsletter-msg");
 
   // 312k-P3: die vier festen Kuendigungs-Steuerelemente + Nebenbereiche.
   const cancelBlockEl = document.getElementById("cancel-block");
@@ -171,8 +173,8 @@ import {
   const resumeBtnEl = document.getElementById("resume-btn");
   const cancelMsgEl = document.getElementById("cancel-msg");
 
-  // Ruhige, farblich abgesetzte Rueckmeldung statt roher Textzeilen (Auftrag): EINE
-  // Implementierung fuer alle vier Meldungs-Absaetze dieser Insel (Muster
+  // Ruhige, farblich abgesetzte Rueckmeldung statt roher Textzeilen: EINE
+  // Implementierung fuer alle drei Meldungs-Absaetze dieser Insel (Muster
   // SettingsIsland showMessage). ok=true/false faerbt, ok=null/undefined bleibt
   // neutral (muted) -- z.B. ein selbst abgebrochener Checkout ist kein Fehler.
   const MSG_OK_CLASS = "billing-msg--ok";
@@ -186,15 +188,23 @@ import {
   const showBillingMsg = (text, ok) => showMessage(msgEl, text, ok);
   const showSubMsg = (text, ok) => showMessage(subMsgEl, text, ok);
   const showCancelMsg = (text, ok) => showMessage(cancelMsgEl, text, ok);
-  const showNewsletterMsg = (text, ok) => showMessage(newsletterMsgEl, text, ok);
 
-  // 1. Status-Zeile: Badge + EIN Satz, was der aktuelle Zustand fuer den Kunden
-  // bedeutet (billingStatusKind/-Badge/-Text, lib/subscribe.js -- EINE Quelle, G5).
+  // 1. Status-Zeile: Badge + Serif-Hauptwert + Mono-Nebenangabe (billingStatusKind/
+  // -Badge/-Headline/-Detail, lib/subscribe.js -- EINE Quelle, G5).
   function renderStatus(hasCard, sub) {
     const kind = billingStatusKind({ hasCard, sub });
-    statusBadgeEl.textContent = billingStatusBadge(kind);
+    const badge = billingStatusBadge(kind);
+    const headline = billingStatusHeadline(kind, sub);
+    statusBadgeEl.textContent = badge;
     statusBadgeEl.className = `billing-status-badge billing-status-badge--${billingStatusBadgeClass(kind)}`;
-    statusTextEl.textContent = billingStatusText(kind, sub);
+    // Ohne Tarif faellt billingStatusHeadline auf den Badge-Text zurueck (subscribe.js).
+    // Beides nebeneinander waere dieselbe Aussage zweimal -- dann traegt der Badge den
+    // Zustand allein und der Serif-Hauptwert bleibt leer (kein zweiter Wortlaut, G5).
+    const duplicate = headline === badge;
+    statusBadgeEl.hidden = !badge;
+    statusValueEl.textContent = duplicate ? "" : headline;
+    statusValueEl.hidden = duplicate;
+    statusDetailEl.textContent = billingStatusDetail(kind, sub);
   }
 
   // 2. Zahlungsmittel: Karten-Status + Button-Text (1:1 zum Bestand).
@@ -203,12 +213,15 @@ import {
     addBtn.textContent = hasCard ? "Add a different card" : "Add payment method";
   }
 
-  // 3. Kontingent: quotaLine liefert null ohne aktives Abo -> die ganze Sektion bleibt
-  // versteckt (kein leerer "Usage"-Titel ohne Inhalt).
+  // 3. Kontingent: quotaLine liefert null ohne aktives Abo -> die ganze Sektion UND
+  // der Balken bleiben versteckt (kein leerer "Usage"-Titel ohne Inhalt, §10). Die
+  // Fuellbreite reist als CSS-Custom-Property (kein style-Attribut im Markup).
   function renderQuotaSection(quota) {
     const text = quotaLine(quota);
     quotaSectionEl.hidden = !text;
     subQuotaEl.textContent = text || "";
+    quotaBarEl.hidden = !quota;
+    if (quota) quotaBarFillEl.style.setProperty("--quota-fill", `${quotaUsedPercent(quota)}%`);
   }
 
   // 4. Tarifwechsel: Kacheln aus dem Build-Spiegel, NUR ohne aktives Abo (Kopf-
@@ -220,13 +233,7 @@ import {
     subTilesEl.replaceChildren(...(showTiles ? planTiles(document, numberSetupFeeFrom(data)) : []));
   }
 
-  // 5. Newsletter: die Checkbox spiegelt IMMER den Server-Stand, nie einen lokalen
-  // Default (newsletterConsentFrom faellt fail-closed auf false zurueck).
-  function renderNewsletter(data) {
-    newsletterToggleEl.checked = newsletterConsentFrom(data);
-  }
-
-  // 6. 312k-P3: Kuendigungs-Region. NUR mit aktivem Abo sichtbar; cancelAtPeriodEnd
+  // 5. 312k-P3: Kuendigungs-Region. NUR mit aktivem Abo sichtbar; cancelAtPeriodEnd
   // -> Zustand + Ruecknahme, sonst die zweistufige Kuendigung (Stufe 1 sichtbar,
   // Stufe 2 erst nach Klick). Der Bestaetigungstext wird bei JEDEM Render neu gesetzt
   // (aktueller Plan/Termin), die Sichtbarkeit der zweiten Stufe bleibt dabei unberuehrt
@@ -248,7 +255,7 @@ import {
     }
   }
 
-  // Sichtbarkeit + alle sechs Abschnitte aus genau dem state, den die Auth-Insel
+  // Sichtbarkeit + alle fuenf Abschnitte aus genau dem state, den die Auth-Insel
   // ermittelt hat. result.present===false (hasCard kein Boolean) -> Block versteckt.
   function renderBilling(data) {
     const { present, hasCard } = cardStatus(data);
@@ -259,7 +266,6 @@ import {
     renderCardSection(hasCard);
     renderQuotaSection(quotaFrom(data));
     renderPlanTiles(data, sub);
-    renderNewsletter(data);
     renderCancelBlock(sub);
   }
 
@@ -312,11 +318,6 @@ import {
     { onDone: refreshState, onMessage: showCancelMsg },
   );
 
-  // Newsletter-Toggle: schreibt sofort gegen die Route (lib/subscribe.js
-  // wireNewsletterToggle) -- kein eigener re-fetch noetig, der Server-Antwortwert
-  // (result.newsletterConsent) ist bereits die neue Wahrheit fuer die Checkbox.
-  wireNewsletterToggle(newsletterToggleEl, { onMessage: showNewsletterMsg });
-
   // Rueckkehr von Stripe Checkout: kurze Rueckmeldung. Der echte Status kommt ohnehin
   // aus dem naechsten state-Fetch (AUTH_EVENT). ?card=ok|canceled|error = reiner
   // Karten-Flow; ?sub=ok|failed = Kachel-Flow (BK2). P14: ?card=error ist der Stripe-/
@@ -363,108 +364,3 @@ import {
 
   showReturnMessage();
 </script>
-
-<style is:global>
-  /* Payment-Neugestaltung (Aug 2026): Struktur-/Optik-Ergaenzungen, die sich ueber die
-     bestehenden Tokens/Klassen (app.css) nicht ausdruecken lassen. is:global aus
-     derselben Begruendung wie CallsIsland/SettingsIsland: eine Datei, eine CSS-
-     Handschrift fuer diese App-Schicht -- die Klassennamen (billing-status*,
-     billing-section*, cancel-link, billing-msg--ok/--err) sind eigens fuer diese Insel
-     benannt, kein Kollisionsrisiko mit anderen Komponenten. AUSSCHLIESSLICH
-     semantische Tokens (Strategie 2.5) -- kein neuer fester Wert. Diese Datei bleibt
-     trotzdem eine ECHTE, von Astro ausgelagerte CSS-Datei (CSP 'self', kein Inline-
-     Style-Attribut, kein Inline-Script). */
-
-  .billing-status {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-cozy);
-    margin-top: var(--space-stack);
-  }
-
-  .billing-status-text {
-    margin: 0;
-    color: var(--color-text);
-  }
-
-  .billing-status-badge {
-    flex-shrink: 0;
-    padding: var(--space-hairline) var(--space-cozy);
-    border-radius: var(--radius-badge);
-    font-size: var(--text-eyebrow);
-    font-weight: var(--weight-label);
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-label);
-    white-space: nowrap;
-  }
-
-  /* Ruhige neutrale Farbe fuer die beiden Vorbereitungs-Zustaende (kein Abo/keine
-     Karte) -- informativ, nicht alarmierend. */
-  .billing-status-badge--pending {
-    background: var(--color-status-neutral-surface);
-    color: var(--color-status-neutral);
-  }
-
-  .billing-status-badge--active {
-    background: var(--color-status-positive-surface);
-    color: var(--color-status-positive);
-  }
-
-  .billing-status-badge--cancelled {
-    background: var(--color-status-critical-surface);
-    color: var(--color-status-critical);
-  }
-
-  /* Ruhige Abschnitts-Unterteilung innerhalb der EINEN Billing-Karte (Reihenfolge
-     laut Auftrag: Tarif+Status, Zahlungsmittel, Kontingent, Tarifwechsel, Newsletter,
-     Kuendigung). Kein eigener Kartenrahmen je Abschnitt -- eine Trennlinie reicht. */
-  .billing-section {
-    margin-top: var(--space-stack);
-    padding-top: var(--space-stack);
-    border-top: var(--border-width) solid var(--color-divider);
-  }
-
-  .billing-section__title {
-    margin: 0 0 var(--space-tight);
-    font-size: var(--text-eyebrow);
-    font-weight: var(--weight-label);
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-label);
-    color: var(--color-muted);
-  }
-
-  /* § 312k-P3 (Auftrag): ein ruhiger Text-Link statt eines fetten .btn -- unmittelbar
-     sichtbar und erreichbar bleibt er, nur optisch zurueckhaltend (Muster .plan-skip
-     aus app.css, hier als eigene Klasse, weil .plan-skip semantisch der Aktivierungs-
-     Skip ist). */
-  .cancel-link {
-    display: inline-block;
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--color-muted);
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
-  }
-
-  .cancel-link:hover {
-    color: var(--color-text);
-  }
-
-  .cancel-link:focus-visible {
-    outline: 2px solid var(--color-accent, var(--color-status-info));
-    outline-offset: 2px;
-  }
-
-  /* Faerbung der Ruecklauf-/Fehlermeldungen (Muster .settings-msg--ok/--err, app.css) --
-     hier lokal, weil .billing-msg (app.css) bisher nur die neutrale Muted-Farbe traegt. */
-  .billing-msg--ok {
-    color: var(--color-status-positive);
-  }
-
-  .billing-msg--err {
-    color: var(--color-status-critical);
-  }
-</style>
