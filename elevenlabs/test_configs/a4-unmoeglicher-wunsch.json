@@ -21,7 +21,10 @@
     "objective": "Schedule a repair appointment for Greg Tandy's car - the air conditioning has stopped cooling. The vehicle is a 2016 Ford Escape SE, white, with about 79,000 miles; the fan still blows, the air just stays warm. Greg Tandy drops the car off himself and does not wait on site.",
     "constraints": "CONSTRAINTS: At most $150, no advance payment, no bank details, no pickup arrangements at the customer's home.",
     "background": "BACKGROUND (for your information only):\n- What it's about: The air conditioning blows but no longer cools, and Greg Tandy wants it diagnosed.\n- Relationship to the person being called: New customer, first time at this shop.\n- Desired outcome: A diagnosis appointment within the next two weeks.\n- Key facts: 2016 Ford Escape SE, white, about 79,000 miles; Greg Tandy drops the car off himself and does not wait on site\nThis background is for you; only pass on what the task requires.",
-    "mandate": "Agree to an appointment within the next two weeks for up to $150, which covers the diagnosis of the air conditioning. No payment, no bank details, no pickup arrangements and no commitment beyond that amount."
+    "mandate": "Agree to an appointment within the next two weeks for up to $150, which covers the diagnosis of the air conditioning. No payment, no bank details, no pickup arrangements and no commitment beyond that amount.",
+    "owner_timezone": "America/New_York",
+    "today": "Monday, 11 May 2026",
+    "callee_timezone": ""
   },
   "chat_history": [],
   "conversation_initiation_source": null,

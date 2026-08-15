@@ -29,6 +29,7 @@
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { DISCLOSURE_OWNER_FALLBACK_EN, LOCALES } from "../i18n/locales.js";
 import { fetchConversation, startOutboundCall } from "./convai.js";
+import { callTimeContext } from "./time-context.js";
 
 // Endzustaende des Anbieters. Alles andere gilt als LAUFEND und wird weiter abgeholt: ein
 // unbekannter Status darf kein Gespraech vorzeitig fuer beendet erklaeren. Die Obergrenze
@@ -142,6 +143,23 @@ function backgroundText(context) {
   return `\n${label.heading}\n${lines.join("\n")}\n${label.guardrail}`;
 }
 
+// Die Zone des ANGERUFENEN reist samt ihrem Satz und ihrem fuehrenden Zeilenumbruch -
+// dasselbe Muster wie constraintsText/backgroundText und aus demselben Grund: der Prompt
+// der Vorlage ist EIN statischer Text und kann keinen Block weglassen. Stuende der Satz
+// statisch dort, verspraeche er bei einem nicht ableitbaren Land (jede +1-Nummer, s.
+// time-context.js) eine Umrechnung gegen eine Zone, die niemand kennt. Was der Agent DANN
+// tun soll, steht statisch im Prompt der Vorlage - er nennt die Zone oder fragt nach; das
+// gilt immer und braucht keinen Wert.
+//
+// Der Satz ist hier getippt und stammt NICHT aus EN_PROMPT: der Bestandsweg hat kein
+// Gegenstueck (dort steht die Uhrzeit fertig gerendert im Systemprompt, es gibt keinen
+// Baustein dafuer). Ein neuer Eintrag in src/i18n/prompts/en.js waere ein Baustein ohne
+// Leser im Bestand.
+function calleeTimezoneText(zone) {
+  if (!zone) return "";
+  return `\nThe person you are calling is in the ${zone} time zone - convert every time you agree between those two zones and say which zone you mean.`;
+}
+
 // Eine Kontext-Zeile - Beschriftung NUR bei Inhalt: ein blankes Feld ergaebe sonst eine
 // Zeile, die aus nichts als ihrer Ueberschrift besteht ("- Desired outcome: ").
 function contextLine(label, wert) {
@@ -172,11 +190,12 @@ function assertConfigured(el) {
     );
 }
 
-// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die sechs, die die
+// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die neun, die die
 // Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
-// {{background}}, {{mandate}}) - fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt
-// unaufgeloest. Der Weg ueber eine Prompt-Uebersteuerung scheidet aus: eine nicht
-// freigeschaltete conversation_config_override wird vom Anbieter STILL ignoriert.
+// {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}}) -
+// fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt unaufgeloest. Der Weg ueber eine
+// Prompt-Uebersteuerung scheidet aus: eine nicht freigeschaltete
+// conversation_config_override wird vom Anbieter STILL ignoriert.
 //
 // owner_name ist der einzige mit INHALTLICHEM Default: er traegt die Offenlegung (Regel 2,
 // Artikel 50 EU AI Act), und die haengt nie an einer Variablen ohne Default. Ein fehlender
@@ -194,11 +213,16 @@ function assertConfigured(el) {
 // jedem Modell-Turn -, und was hier verfremdet wuerde, stuende genau so im Transkript und in
 // der Offenlegung, deren Wortlaut wir nachweisen muessen.
 //
-// Die drei gebauten Bloecke gehen UNGETRIMMT raus: sie sind per Bau String (jeder Baustein
+// Die vier gebauten Bloecke gehen UNGETRIMMT raus: sie sind per Bau String (jeder Baustein
 // liefert "" oder einen fertigen Block), sie haben ihre Eingaben bereits VOR der
 // Leer-Pruefung getrimmt - und ihr fuehrender Zeilenumbruch ist Inhalt, den ein Trimmen
 // hier wegfressen wuerde (dann stuende der Block ohne Leerzeile an der Auftragszeile).
-function dynamicVariables(call, ownerName) {
+//
+// ZEIT (T7): die Zone des Auftraggebers und das heutige Datum sind IMMER gesetzt (der
+// Zeitkontext liefert beide fail-safe), die Zone des Angerufenen NUR, wenn sie ableitbar
+// ist - geraten wird nichts (s. time-context.js). Vorher wirkte an ihrer Stelle ein
+// Festwert am Agenten ("Europe/Berlin"), der weder besessen noch pro Anruf richtig war.
+function dynamicVariables({ call, ownerName, time }) {
   return {
     owner_name: alsText(ownerName) || DISCLOSURE_OWNER_FALLBACK_EN,
     callee: alsText(call.to),
@@ -206,6 +230,9 @@ function dynamicVariables(call, ownerName) {
     constraints: constraintsText(call.constraints),
     background: backgroundText(call.context),
     mandate: mandateText(call.mandate),
+    owner_timezone: alsText(time.ownerZone),
+    callee_timezone: calleeTimezoneText(time.calleeZone),
+    today: alsText(time.today),
   };
 }
 
@@ -293,6 +320,12 @@ export function makeElevenLabsOutbound({
     const el = settings();
     assertConfigured(el);
     const { ownerName } = store.tenantContext(call.tenantId);
+    // Eigener Reader (store.tenantTimezone), NICHT tenantContext - genau wie im
+    // Bestandsweg (src/claude.js): die Zeitzone gehoert nicht in die LLM-/MCP-View.
+    const time = callTimeContext({
+      tenantTimezone: store.tenantTimezone(call.tenantId),
+      callee: call.to,
+    });
     const conversationId = await startOutboundCall({
       fetchImpl: fetch,
       account: el,
@@ -301,7 +334,7 @@ export function makeElevenLabsOutbound({
         agent_phone_number_id: el.agentPhoneNumberId,
         to_number: call.to,
         conversation_initiation_client_data: {
-          dynamic_variables: dynamicVariables(call, ownerName),
+          dynamic_variables: dynamicVariables({ call, ownerName, time }),
         },
       },
     });

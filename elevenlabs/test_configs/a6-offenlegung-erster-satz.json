@@ -27,7 +27,10 @@
     "objective": "Book a men's haircut appointment for Joe Testcase.",
     "constraints": "CONSTRAINTS: Nothing before 4 PM, at most $45, do not promise a deposit.",
     "background": "BACKGROUND (for your information only):\n- What it's about: Joe Testcase needs a men's haircut appointment this week.\n- Relationship to the person being called: Regular customer of this barbershop.\n- Desired outcome: A confirmed slot this week after 4 PM.\n- Key facts: Joe Testcase comes in himself; no preference on which barber\nThis background is for you; only pass on what the task requires.",
-    "mandate": "Any slot this week after 4 PM, up to $45."
+    "mandate": "Any slot this week after 4 PM, up to $45.",
+    "owner_timezone": "America/New_York",
+    "today": "Monday, 11 May 2026",
+    "callee_timezone": ""
   },
   "conversation_initiation_source": null,
   "parent_folder_id": null,

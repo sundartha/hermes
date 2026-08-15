@@ -66,8 +66,13 @@ import { readFileSync } from "node:fs";
 import http from "node:http";
 import test from "node:test";
 
+import { timezoneForCountry } from "../src/geo/resolve.js";
 import { DISCLOSURE_OWNER_FALLBACK_EN, LOCALES } from "../src/i18n/locales.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import {
+  BOOTSTRAP_TENANT_ID,
+  DEFAULT_TIMEZONE,
+  countryForE164,
+} from "../src/store/defaults.js";
 import {
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_LAST_NAME,
@@ -960,4 +965,151 @@ test("EL-START T6 (Vorrang): der Vorrang-Satz erreicht den Agenten nur zusammen 
       `die Verbote reisen ohne ihren Vorrang - aus "entscheide frei, aber hoechstens 40 Euro" wird am Anbieter wieder "entscheide frei". Material: ${material}`,
     );
   });
+});
+
+// ---- T7: die zwei Zeitzonen und die aktuelle Zeit ------------------------------------
+// ABSICHTLICH ROT. Der Bestandsweg loest beides PRO ANRUF auf: src/claude.js liest die
+// Zeitzone DES TENANTS (store.tenantTimezone -> resolveTimezone) und formatiert damit ein
+// frisches `now` in den Systemprompt (claude.js:62/:99, P8/FMT-28 - der Agent nannte
+// deutschen Anrufern zuvor eine um 1-2 h falsche Uhrzeit, weil der Serverprozess UTC
+// faehrt). Auf diesem Weg spricht der Agent DES ANBIETERS: er weiss ausschliesslich, was
+// der Anrufstart ihm mitgibt, und dynamicVariables (src/elevenlabs/outbound.js) uebergibt
+// sechs Variablen, von denen KEINE eine Zeitzone oder ein Datum traegt. Was dort
+// stattdessen wirkt, ist ein FESTWERT am Agenten (conversation_config.agent.prompt.
+// timezone = "Europe/Berlin") - ein Wert, den die Vorlage nicht einmal besitzt (er steht
+// unter _nicht_besessen), den also kein Drift-Gate haelt; im Prompt selbst steht kein
+// Datums-Slot, nur das feste Beispiel "Thursday at nine".
+//
+// Warum das ein Befund ist und kein Komfortmangel: fast jeder Auftrag verhandelt einen
+// TERMIN. Ein Agent mit fester Zone und ohne Datum sagt einem Auftraggeber in Tokio einen
+// Termin nach Berliner Zeit zu und rechnet "naechsten Donnerstag" gegen ein Datum, das er
+// gar nicht kennt - beides faellt niemandem auf, bis der Auftraggeber vor verschlossener
+// Tuer steht. Deshalb ZWEI Zonen, beide pro Anruf: die des AUFTRAGGEBERS (in seiner Zeit
+// steht der Termin in seinem Kalender) und die des ANGERUFENEN (in seiner spricht die
+// Gegenstelle) - der Agent rechnet um. Ein Fall, in dem beide gleich sind, beweist nichts;
+// die Wache unten haelt sie auseinander.
+//
+// DATENQUELLEN: die Zone des AUFTRAGGEBERS steht am Tenant (tenant.timezone, beim
+// Onboarding/Login ueber setTenantGeo gesetzt, Leser store.tenantTimezone) - sie ist da,
+// sie reist nur nicht. Fuer den ANGERUFENEN gibt es KEIN Feld; der einzige Anhalt ohne neue
+// Datenhaltung ist das Land der gewaehlten Nummer, und den kann der Bestand ableiten:
+// countryForE164 (store/defaults.js) -> timezoneForCountry (geo/resolve.js), dieselbe
+// Tabelle, aus der auch die Tenant-Zone stammt. Genau diese Kette pinnt der Fall.
+//
+// IHRE GRENZE, die der Bau kennen muss: countryForE164 liefert fuer +1 BEWUSST null (25
+// NANP-Laender teilen die Vorwahl, Owner-Entscheidung E2 "nie raten") - und +1 ist das
+// Marktgebiet, in dem dieses Produkt telefoniert. timezoneForCountry(null) faellt auf
+// DEFAULT_TIMEZONE ("Europe/Berlin") zurueck: wer die Kette blind baut, liefert fuer JEDEN
+// US-Anruf lautlos die Berliner Zone als die des Angerufenen. Fuer NANP braucht es eine
+// eigene Quelle (Vorwahl-Tabelle oder ein Feld am Auftrag) - eine Entscheidung, die dieser
+// Fall nicht vorwegnimmt. Deshalb waehlt er ein Ziel, dessen Land ableitbar IST, und die
+// Wache unten schlaegt an, sobald jemand ein nicht ableitbares einsetzt.
+//
+// GEPINNT wird der IANA-Bezeichner, unveraendert wie ihn der Store haelt - nicht ein
+// Zeitversatz ("UTC+02:00"). Ein Versatz veraltet mit der naechsten Sommerzeit-Umstellung,
+// und "rechne um" braucht die Zone, nicht ihren heutigen Stand.
+
+// Zwei Zonen, die weit auseinanderliegen, und KEINE davon ist der Festwert: faende der
+// Sucher "Europe/Berlin", waere nicht zu unterscheiden, ob der Wert mitgereist ist oder
+// nur der Default danebenstand (DEFAULT_TIMEZONE ist derselbe Bezeichner).
+const OWNER_TZ = "Asia/Tokyo";
+// Franzoesische Mobilnummer: +33 ist eindeutig FR (countryForE164), Europe/Paris ist weder
+// die Zone des Auftraggebers noch der Festwert.
+const CALLEE_NUMBER = "+33612345678";
+const CALLEE_TZ = timezoneForCountry(countryForE164(CALLEE_NUMBER));
+
+// Die Uhr wird ueber das DATUM gemessen, nicht ueber die Uhrzeit: eine Minute, die
+// zwischen Anrufstart und Auswertung umspringt, waere ein Flackern ohne Aussage - und ein
+// Agent, der nur die Uhrzeit kennt, kann "naechsten Donnerstag" ohnehin nicht ausrechnen.
+// WELCHE Schreibweise der Bau waehlt, entscheidet dieser Fall NICHT mit; er akzeptiert die
+// gaengigen und verlangt nur, dass eine davon ankommt. Beide Zonen liefern Kandidaten:
+// zwischen Tokio und Paris kann ein Datumswechsel liegen, und in welcher der beiden Zonen
+// der Bau das Datum ausdrueckt, ist seine Wahl (die Zonen selbst pinnen die Faelle darueber).
+const DATUMS_SCHREIBWEISEN = Object.freeze([
+  ["en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }], // 2026-08-15
+  ["en-US", { year: "numeric", month: "numeric", day: "numeric" }], // 8/15/2026
+  ["en-US", { year: "numeric", month: "long", day: "numeric" }], // August 15, 2026
+  ["en-GB", { year: "numeric", month: "long", day: "numeric" }], // 15 August 2026
+  ["de-DE", { year: "numeric", month: "2-digit", day: "2-digit" }], // 15.08.2026
+]);
+
+const heuteIn = (zone) =>
+  DATUMS_SCHREIBWEISEN.map(([locale, form]) =>
+    new Intl.DateTimeFormat(locale, { ...form, timeZone: zone }).format(new Date()),
+  );
+
+const tenantAusStore = (srv, tenantId) =>
+  (srv.readStore().tenants || []).find((tenant) => tenant.id === tenantId);
+
+test("EL-START T7: die Zeitzone des Auftraggebers, die des Angerufenen und das heutige Datum reisen pro Anruf mit", async (ctx) => {
+  await withElevenLabs(
+    { seed: seedOwner({ timezone: OWNER_TZ }), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
+    async ({ srv, mock }) => {
+      const res = await placeCall(srv, null, { to: CALLEE_NUMBER });
+      const antwort = await res.text();
+      assert.equal(
+        res.status,
+        HTTP_OK,
+        `Vorbedingung: der Anruf muss ueberhaupt starten: ${antwort}`,
+      );
+      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
+      const anfrage = mock.startRequests[0];
+      const material = agentMaterial(anfrage);
+
+      // Trennlinie wie in T6: was unsere Seite WEISS, steht im Store. Bleibt dieser Teil
+      // gruen, waehrend die uebrigen rot sind, liegt der Verlust nachweislich an der
+      // Uebergabe an den Anbieter - nicht an Seed, Store oder Wahl des Ziels.
+      await ctx.test("Vorbedingung: die Zeitzone des Auftraggebers steht am Tenant, gewaehlt wurde die Auslandsnummer", () => {
+        assert.equal(tenantAusStore(srv, BOOTSTRAP_TENANT_ID)?.timezone, OWNER_TZ);
+        assert.equal(anfrage.body.to_number, CALLEE_NUMBER);
+      });
+
+      // Ohne diese Haelfte waere jeder rote Befund unten unbrauchbar: ein Sucher, der
+      // NICHTS findet, meldet dasselbe wie ein Sucher, der nicht sucht (Lehre
+      // pruefkommando-ohne-positiv-kontrolle). Das Anliegen reist heute nachweislich mit.
+      await ctx.test("Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material", () => {
+        assert.ok(
+          enthaelt(material, OBJECTIVE),
+          `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+        );
+      });
+
+      await ctx.test("die Zeitzone des Auftraggebers erreicht den Agenten", () => {
+        assert.notEqual(
+          OWNER_TZ,
+          DEFAULT_TIMEZONE,
+          "Wache: waere die Zone des Auftraggebers der Festwert, bewiese ihr Fund nichts",
+        );
+        assert.ok(
+          enthaelt(material, OWNER_TZ),
+          `die Zeitzone des Auftraggebers (${OWNER_TZ}, am Tenant gesetzt) erreicht den Agenten NICHT - er terminiert nach dem Festwert der Agenten-Konfiguration (Europe/Berlin), egal wo der Auftraggeber sitzt. Material: ${material}`,
+        );
+      });
+
+      await ctx.test("die Zeitzone des Angerufenen erreicht den Agenten und ist von der des Auftraggebers unterscheidbar", () => {
+        assert.notEqual(
+          CALLEE_TZ,
+          OWNER_TZ,
+          "Wache: mit zwei gleichen Zonen misst dieser Fall nichts - er kann dann nicht zeigen, dass BEIDE mitreisen",
+        );
+        assert.notEqual(
+          CALLEE_TZ,
+          DEFAULT_TIMEZONE,
+          `Wache: die Zone der Gegenstelle ist der Festwert - fuer ${CALLEE_NUMBER} laesst sich kein Land ableiten (countryForE164 -> null, z.B. jede +1-Nummer), timezoneForCountry faellt auf den Default zurueck und der Fund bewiese nichts`,
+        );
+        assert.ok(
+          enthaelt(material, CALLEE_TZ),
+          `die Zeitzone des Angerufenen (${CALLEE_TZ}, aus dem Land der gewaehlten Nummer ${CALLEE_NUMBER}) erreicht den Agenten NICHT - er kann eine genannte Uhrzeit nicht in die Zeit des Auftraggebers umrechnen und sagt einen Termin zu, den beide Seiten verschieden verstehen. Material: ${material}`,
+        );
+      });
+
+      await ctx.test("das heutige Datum erreicht den Agenten", () => {
+        const kandidaten = [...heuteIn(OWNER_TZ), ...heuteIn(CALLEE_TZ)];
+        assert.ok(
+          kandidaten.some((datum) => enthaelt(material, datum)),
+          `kein heutiges Datum im Agenten-Material - der Agent verhandelt Termine ohne zu wissen, welcher Tag ist, und kann "naechsten Donnerstag" nicht aufloesen. Gesucht (eine Schreibweise genuegt): ${kandidaten.join(" | ")}. Material: ${material}`,
+        );
+      });
+    },
+  );
 });

@@ -18,6 +18,14 @@ const TZ_PATTERN = /timezone|timeZone/;
 const ALLOWED_FILES = [
   "claude.js",
   "db/schema.sql",
+  // ElevenLabs-Anrufweg (T7): dort spricht der Agent DES ANBIETERS und weiss nur, was der
+  // Anrufstart ihm mitgibt - die Zeitzone reist deshalb als dynamische Variable mit
+  // (outbound.js: owner_timezone/callee_timezone) und wird in time-context.js abgeleitet.
+  // Reine ANZEIGE wie claude.js, kein Gate: keins der beiden Module entscheidet etwas,
+  // sie beschreiben nur. Genau darum steht die Ableitung hier und nicht im Aufrufer -
+  // routes/api-calls.js fuehrt die Gegenprobe unten (LAW-07).
+  "elevenlabs/outbound.js",
+  "elevenlabs/time-context.js",
   "geo/resolve.js",
   "store/defaults.js",
   "store/json.js",
@@ -51,8 +59,8 @@ function walk(root) {
 test("nur die erlaubten Module in src/ erwaehnen timezone/timeZone (LAW-07: kein Anrufzeit-Gate)", () => {
   const files = walk(SRC_ROOT);
   const hits = files
-    .filter((f) => TZ_PATTERN.test(fs.readFileSync(f, "utf8")))
-    .map((f) => path.relative(SRC_ROOT, f))
+    .filter((file) => TZ_PATTERN.test(fs.readFileSync(file, "utf8")))
+    .map((file) => path.relative(SRC_ROOT, file))
     .sort();
   assert.deepEqual(
     hits,
