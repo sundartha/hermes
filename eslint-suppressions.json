@@ -869,11 +869,6 @@
       "count": 2
     }
   },
-  "src/store.js": {
-    "id-length": {
-      "count": 1
-    }
-  },
   "src/store/defaults.js": {
     "complexity": {
       "count": 1

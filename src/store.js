@@ -56,11 +56,11 @@ let backend;
 if (config.store.storeBackend === "pg") {
   try {
     backend = await createPgBackend();
-  } catch (e) {
+  } catch (err) {
     console.error(
       "[store] FATAL: pg-Backend nicht initialisierbar (STORE_BACKEND=pg). " +
         "DB unerreichbar oder Init fehlgeschlagen. Ursache: " +
-        (e && e.message ? e.message : String(e)),
+        (err && err.message ? err.message : String(err)),
     );
     process.exit(1);
   }
@@ -116,6 +116,11 @@ export const {
   // undefined -> der Schreibweg wuerfe zur Laufzeit einen TypeError (Muster
   // recordTelnyxConversationId).
   recordElevenlabsConversationId,
+  // EL-Anrufstart: Zusammenfassung + Befund eines vom Anbieter gefuehrten Gespraechs. OHNE
+  // diesen Re-Export waere store.recordProviderCallResult auf der Fassade undefined -> der
+  // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster
+  // recordElevenlabsConversationId).
+  recordProviderCallResult,
   countCallerTurn,
   // AL-P13: Consult-Kette. OHNE diese Re-Exports waeren sie auf der Fassade undefined
   // -> die Consult-Routen wuerfen zur Laufzeit einen TypeError (Muster countCallerTurn).
