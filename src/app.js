@@ -21,7 +21,7 @@ import {
   inboundSignatureVerifier,
   providerFromHeaders,
 } from "./telephony/registry.js";
-import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
+import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction } from "./telephony/call-termination.js";
 import { originateAiAssistantCall } from "./telnyx-origination.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
@@ -318,6 +318,10 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       originateElevenLabsCall: elevenLabsOutbound?.originateCall,
       terminateAndBillCall,
       hangUpAction,
+      // TEIL B (Owner-Auftrag 15.08.2026): die EL-Parallele zu hangUpAction, plus die
+      // konkrete Implementierung (dieselbe elevenLabsOutbound-Instanz wie oben).
+      elevenLabsHangUpAction,
+      endActiveCall: elevenLabsOutbound?.endActiveCall,
       billThunk,
       finishCall: callFinish.finishCall,
       arm: {

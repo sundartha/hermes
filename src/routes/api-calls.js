@@ -29,6 +29,10 @@ import { isConsultEventId } from "../store/state-ops.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
+// TEIL C (Owner-Auftrag 15.08.2026, cancel_call darf nicht luegen): der Deckelwert ist
+// KEINE Magic Number - er ist in elevenlabs/outbound.js besessen (Bewachung statt
+// Korrektur der Anbieter-Vorlage, s. dortiger Kommentar).
+import { ELEVENLABS_PROVIDER_MAX_DURATION_S } from "../elevenlabs/outbound.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { internalOnly } from "../wiring/internal-only.js";
@@ -78,6 +82,11 @@ export function makeCallRoutes({
   originateElevenLabsCall = elevenLabsCallNotWired,
   terminateAndBillCall,
   hangUpAction,
+  // TEIL B (Owner-Auftrag 15.08.2026): die EL-Parallele zu hangUpAction (dieselbe DI-Naht,
+  // s. telephony/call-termination.js). Default no-op haelt Tests ohne EL-Wiring
+  // unveraendert gruen (sie treffen ohnehin nie einen EL-Call).
+  elevenLabsHangUpAction = () => null,
+  endActiveCall,
   billThunk,
   finishCall,
   arm: { armMaxDurationTimer, armReserveReleaseTimer },
@@ -404,18 +413,31 @@ export function makeCallRoutes({
     if (call.status !== "active") return res.json({ status: call.status });
     const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar
     audit("cancel_call", req, `call=${call.id} requestedBy=${requestedBy}`);
+    // TEIL C: elHangUp NUR gesetzt, wenn hangUpAction() (Telnyx-Form) leer ausgeht -
+    // dieselbe Weiche wie im hangUp-Thunk unten (G5); bestimmt die Antwort weiter unten.
+    const elHangUp = hangUpAction(voiceControl, call, call.twilioSid) ? null : elevenLabsHangUpAction(endActiveCall, call);
     // F10 Runde 2 (G5): derselbe Terminierungspfad wie der Max-Dauer-Cap - erst auflegen
     // (awaited, provider-aware ueber call.provider - sonst endCall ueber den falschen
     // Anbieter), dann buchen (fire-and-forget).
     await terminateAndBillCall({
       persistEnd: () => store.endCallRecord(call.id, "cancelled"),
       // P6 (Check 5): dieselbe callControlId-/twilioSid-Auswahl wie terminateCappedCall (G5,
-      // EINE Quelle) - cancel_call eines C-Telnyx-Calls trifft den Call-Control-Hangup.
-      hangUp: hangUpAction(voiceControl, call, call.twilioSid),
+      // EINE Quelle) - EL-Calls fallen auf den Beende-Versuch (elHangUp, s.o.).
+      hangUp: hangUpAction(voiceControl, call, call.twilioSid) ?? elHangUp,
       bill: billThunk(finishCall, store, call.id),
       onHangUpError: (e) => console.error("[cancel]", e.message),
       callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
+    // TEIL C: der Loeschversuch beim Anbieter ist NICHT belegt, die Leitung zu kappen (s.
+    // convai.js#endConversation) - "cancelled" behauptet auf diesem Pfad nur, was wahr ist
+    // (Datensatz storniert, Buchung gestoppt), NICHT, dass die Leitung schon steht. Der
+    // Telnyx-Pfad (awaiteter, bestaetigter Hangup) bleibt bei der reinen Kurzantwort.
+    if (elHangUp)
+      return res.json({
+        status: "cancelled",
+        line_hangup_confirmed: false,
+        max_line_s: ELEVENLABS_PROVIDER_MAX_DURATION_S,
+      });
     res.json({ status: "cancelled" });
   });
 

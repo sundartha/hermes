@@ -29,7 +29,7 @@
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { DISCLOSURE_OWNER_FALLBACK_EN, LOCALES } from "../i18n/locales.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
-import { fetchConversation, startOutboundCall } from "./convai.js";
+import { endConversation, fetchConversation, startOutboundCall } from "./convai.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
 
@@ -49,6 +49,17 @@ const CALL_FAILED = "failed";
 // beim Abgleich (answeredAnchorOutcome) weder 0 noch eine positive Zahl ist (fehlt, NaN,
 // negativ, falscher Typ) - additiv am Call, s. store/state-ops.js recordAnsweredUnclearReason.
 const ANSWERED_UNCLEAR_REASON = "call_duration_secs_unusable";
+
+// Owner-Auftrag 15.08.2026 (cancel_call darf nicht luegen): der Beende-Versuch
+// (convai.js#endConversation, DELETE) ist NICHT belegt, die Leitung beim Anbieter
+// tatsaechlich zu kappen - der EINZIGE verlaessliche Deckel bleibt der ANBIETER SELBST:
+// max_duration_seconds, besessen in elevenlabs/agent_configs/outbound-agent.template.json
+// (live 600s seit 2026-08-15, s. dortiger _notbremse_hinweis). GENANNTER Wert statt
+// gelesener Datei: die Vorlage bleibt in dieser Sitzung unangetastet (Auftragsgrenze) -
+// dieser Wert BEWACHT sie, aendert sie nicht (Bewachung statt Korrektur, gleiches Muster
+// wie prompt.timezone). Exportiert fuer die ehrliche cancel_call-Antwort (routes/
+// api-calls.js), damit N dort KEINE Magic Number ist.
+export const ELEVENLABS_PROVIDER_MAX_DURATION_S = 600;
 
 // Rollen: der Anbieter kennt "agent" und "user", unser Transkript "agent" und "caller".
 // Alles, was nicht der Agent ist, ist die Gegenstelle - ein unbekannter Rollenname darf
@@ -408,25 +419,61 @@ export function makeElevenLabsOutbound({
     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
   }
 
+  // G5: der EINE fail-soft Ergebnisabruf, den sowohl der Poll-Takt (pollConversationResult)
+  // als auch der Beende-Versuch (endActiveCall, s.u.) brauchen - EIN Fehlerpfad statt zwei
+  // fast-identischer catch-Bloecke. Ein Abruffehler liefert null (weiter abholen bzw.
+  // Persistenz ueberspringen): ein Schluckauf beim Anbieter darf weder ein laufendes
+  // Gespraech fuer beendet erklaeren noch einen Beende-Versuch verhindern. Secret-frei
+  // geloggt (err.message, nie Rumpf/Schluessel), mit der server-eigenen callId als
+  // Korrelation.
+  async function fetchConversationSoft(conversationId, callId) {
+    return fetchConversation({ fetchImpl: fetch, account: settings(), conversationId }).catch(
+      (err) => {
+        console.error(`[el-outbound] Ergebnisabruf fehlgeschlagen (call=${callId}):`, err?.message);
+        return null;
+      },
+    );
+  }
+
   // Jeder Takt liest den Call FRISCH: ein zwischenzeitlich beendeter Anruf (Max-Dauer-Cap,
-  // cancel_call) stoppt die Schleife, ohne dass jemand sie kuendigen muesste. Ein
-  // Abruffehler ist fail-SOFT (weiter abholen): ein Schluckauf beim Anbieter darf ein
-  // laufendes Gespraech nicht fuer beendet erklaeren. Secret-frei geloggt (err.message,
-  // nie Rumpf/Schluessel), mit der server-eigenen callId als Korrelation.
+  // cancel_call) stoppt die Schleife, ohne dass jemand sie kuendigen muesste.
   async function pollConversationResult(callId, conversationId) {
     const call = store.getCall(callId);
     if (!call || call.status !== "active") return;
-    const conversation = await fetchConversation({
-      fetchImpl: fetch,
-      account: settings(),
-      conversationId,
-    }).catch((err) => {
-      console.error(`[el-outbound] Ergebnisabruf fehlgeschlagen (call=${callId}):`, err?.message);
-      return null;
-    });
+    const conversation = await fetchConversationSoft(conversationId, callId);
     if (!conversation || !FINISHED_PROVIDER_STATUS.includes(conversation.status))
       return scheduleResultPoll(callId, conversationId);
     await finishFromConversation(callId, conversation);
+  }
+
+  // TEIL A/Owner-Auftrag 15.08.2026 (Beende-Versuch beim Anbieter): der hangUp-Thunk des
+  // EL-Pfades, eingespeist ueber telephony/call-termination.js#elevenLabsHangUpAction
+  // (Aufrufer: der Max-Dauer-Cap UND cancel_call, DI statt Import-Kante telephony->
+  // elevenlabs). REIHENFOLGE BINDEND (Kern des Auftrags): der Ergebnisabruf wird ZUERST
+  // geholt und persistiert (Transkript + der Buchungsanker aus metadata.call_duration_secs,
+  // dieselben Store-Mutatoren wie finishFromConversation), ERST DANACH kommt der
+  // Loeschversuch (convai.js#endConversation) - ein DELETE nimmt beim Anbieter vermutlich
+  // den kompletten Datensatz mit (Commit 08fc253), und was wir vorher nicht gesichert
+  // haben, ist danach weg. endedAt liest FRISCH aus dem Store: der Aufrufer
+  // (terminateAndBillCall) hat persistEnd() bereits ausgefuehrt, BEVOR hangUp() (und damit
+  // diese Funktion) laeuft.
+  //
+  // FAIL-SOFT auf jeder Stufe (Absolute Regel 1): ein gescheiterter Ergebnisabruf
+  // ueberspringt nur die Persistenz (fetchConversationSoft, s.o.) und haelt den
+  // Loeschversuch NICHT auf - ein verpasster Datensatz ist kein Grund, den Versuch
+  // aufzugeben. endConversation selbst wirft nie (s. convai.js).
+  async function endActiveCall(callId) {
+    const call = store.getCall(callId);
+    const conversationId = call?.elevenlabsConversationId;
+    if (!conversationId) return;
+    const conversation = await fetchConversationSoft(conversationId, callId);
+    if (conversation) {
+      persistProviderResult(callId, conversation);
+      const anchor = answeredAnchorOutcome(call.endedAt, conversation);
+      store.trueUpAnsweredAt(callId, anchor.answeredAtIso);
+      if (anchor.unclearReason) store.recordAnsweredUnclearReason(callId, anchor.unclearReason);
+    }
+    await endConversation({ fetchImpl: fetch, account: settings(), conversationId });
   }
 
   /**
@@ -487,5 +534,5 @@ export function makeElevenLabsOutbound({
     scheduleResultPoll(call.id, conversationId);
   }
 
-  return { originateCall };
+  return { originateCall, endActiveCall };
 }

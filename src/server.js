@@ -145,7 +145,11 @@ const lifecycle = makeCallLifecycle({
   voiceControl,
   terminateAndBillCall,
   hangUpAction,
-  billThunk,
+  // TEIL B (Owner-Auftrag 15.08.2026): die konkrete EL-Beende-Implementierung
+  // (elevenLabsOutbound, oben konstruiert - DI statt Import-Kante telephony->elevenlabs).
+  // elevenLabsHangUpAction selbst ist PURE (keine IO) und deshalb ein direkter Import in
+  // call-lifecycle.js, kein zweiter DI-Slot hier.
+  billThunk, endActiveCall: elevenLabsOutbound.endActiveCall,
   reattachActiveCallCore,
   cappedEndedAtMs,
   classifyCallTime,

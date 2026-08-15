@@ -872,14 +872,15 @@ export function registerTools(
     },
   );
 
+  // TEIL C (Owner-Auflage 15.08.2026, registerTools darf NICHT wachsen): der REST-Body wird
+  // UNVERAENDERT durchgereicht statt eines hartkodierten {status:"cancelled"} - die Route
+  // (routes/api-calls.js) traegt seit dieser Aenderung die ehrliche Auskunft (Datensatz vs.
+  // Leitung) bereits selbst. Kein zweiter Wortlaut hier (G5).
   tool(
     "cancel_call",
     "Cancels a running call cleanly.",
     { call_id: z.string().describe("The call_id from place_call") },
-    async ({ call_id }) => {
-      await call("POST", `/api/calls/${call_id}/cancel`);
-      return text({ status: "cancelled" });
-    },
+    async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
   );
 
   // Stufe 0 (Text byte-identisch zum Bestand) + structuredContent (Whitelist) + Stufe 1

@@ -1,14 +1,15 @@
 // ---- ElevenLabs Convai: der EINE HTTP-Zugang des Anrufstart-Zweigs -------------------
-// Zwei Endpunkte, mehr braucht der Weg nicht: den Anrufstart (POST) und den ziehenden
-// Ergebnisabruf (GET). Rein IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie
-// src/tts/synth.js) - der Zweig laesst sich damit gegen eine Attrappe fahren, ohne dass
-// je ein echter Anruf entsteht.
+// Drei Endpunkte, mehr braucht der Weg nicht: den Anrufstart (POST), den ziehenden
+// Ergebnisabruf (GET) und den Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026). Rein
+// IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie src/tts/synth.js) - der Zweig
+// laesst sich damit gegen eine Attrappe fahren, ohne dass je ein echter Anruf entsteht.
 //
 // KEIN RETRY, bewusst (Absolute Regel 1): ein wiederholter Anrufstart ist ein zweiter
 // ECHTER Anruf beim selben Menschen. Der Fehlschlag gehoert deshalb dem Aufrufer, der
 // den Call sauber beendet - nicht einer Schleife hier. Der Ergebnisabruf wiederholt sich
 // sehr wohl, aber als Takt des Aufrufers (ELEVENLABS_RESULT_POLL_MS), nicht als
-// verborgener Retry in diesem Modul.
+// verborgener Retry in diesem Modul. Der Beende-Versuch (endConversation) wiederholt sich
+// NIE - er ist selbst schon fail-soft (s. dort) und braucht keinen zweiten Anlauf.
 //
 // TIMEOUT dagegen ist Pflicht: fetch kennt von sich aus keins. Ein stummer Anbieter
 // hielte sonst den /api/calls-Request unbegrenzt offen - der Aufrufer bekaeme weder eine
@@ -92,4 +93,36 @@ export function fetchConversation({ fetchImpl, account, conversationId }) {
     op: "Gespraechsabruf",
     init: { method: "GET" },
   });
+}
+
+/**
+ * Beende-Versuch beim Anbieter (DELETE /v1/convai/conversations/{id}): Kap-/cancel_call-
+ * Pfad (telephony/call-termination.js#elevenLabsHangUpAction). FAIL-SOFT ANDERS ALS DIE
+ * BEIDEN FUNKTIONEN OBEN (Owner-Auftrag 15.08.2026): sie wirft NIE - weder bei einer
+ * Anbieter-Ablehnung (4xx/5xx, kein assertConvaiOk) noch bei Netzwerk-/Zeitablauf-Fehlern.
+ * Ein fehlgeschlagener Loeschversuch darf den Abbruch unseres eigenen Datensatzes nicht
+ * verhindern - ein Werkzeug, das an einem Anbieter-Ausfall haengen bleibt, waere schlimmer
+ * als keins. Meldet NUR, ob der Anbieter den Versuch angenommen hat (HTTP-Status) - der
+ * Fehler-RUMPF wird wie bei den beiden Funktionen oben NIE gelesen (Regel 4/5).
+ *
+ * OB das die Leitung tatsaechlich kappt, ist NICHT belegt (s. Modul-Kopf des Aufrufers,
+ * elevenlabs/outbound.js) - diese Funktion beantwortet nur "hat der Anbieter den DELETE-
+ * Aufruf angenommen", nicht "ist das Gespraech vorbei".
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, conversationId: string}} args
+ * @returns {Promise<{accepted: boolean, status: number|null}>}
+ */
+export async function endConversation({ fetchImpl, account, conversationId }) {
+  try {
+    const res = await fetchImpl(
+      `${account.apiBase}${CONVERSATION_PATH}${encodeURIComponent(conversationId)}`,
+      {
+        method: "DELETE",
+        headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      },
+    );
+    return { accepted: res.ok, status: res.status };
+  } catch {
+    return { accepted: false, status: null };
+  }
 }

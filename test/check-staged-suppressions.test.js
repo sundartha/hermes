@@ -190,45 +190,39 @@ function offendingFiles(stagedFiles) {
 
 describe("Altlast-Liste im Aufraeum-Gate (Attrappe)", () => {
   it("entschuldigt eine gelistete Datei, meldet die ungelistete weiterhin", () => {
-    assert.deepEqual(
-      offendingFiles(["src/dummy/altlast.js", "src/dummy/nicht-gelistet.js"]),
-      ["src/dummy/nicht-gelistet.js"],
-    );
+    assert.deepEqual(offendingFiles(["src/dummy/altlast.js", "src/dummy/nicht-gelistet.js"]), [
+      "src/dummy/nicht-gelistet.js",
+    ]);
   });
 
   it("entschuldigt nicht, wenn dem Eintrag der Grund fehlt", () => {
-    assert.deepEqual(
-      offendingFiles(["src/dummy/altlast.js", "src/dummy/ohne-grund.js"]),
-      ["src/dummy/ohne-grund.js"],
-    );
+    assert.deepEqual(offendingFiles(["src/dummy/altlast.js", "src/dummy/ohne-grund.js"]), [
+      "src/dummy/ohne-grund.js",
+    ]);
   });
 
   it("entschuldigt nicht, wenn dem Eintrag das Datum fehlt", () => {
-    assert.deepEqual(
-      offendingFiles(["src/dummy/altlast.js", "src/dummy/ohne-datum.js"]),
-      ["src/dummy/ohne-datum.js"],
-    );
+    assert.deepEqual(offendingFiles(["src/dummy/altlast.js", "src/dummy/ohne-datum.js"]), [
+      "src/dummy/ohne-datum.js",
+    ]);
   });
 
   it("entschuldigt nicht, wenn Grund und Datum nur aus Leerzeichen bestehen", () => {
-    assert.deepEqual(
-      offendingFiles(["src/dummy/altlast.js", "src/dummy/leere-felder.js"]),
-      ["src/dummy/leere-felder.js"],
-    );
+    assert.deepEqual(offendingFiles(["src/dummy/altlast.js", "src/dummy/leere-felder.js"]), [
+      "src/dummy/leere-felder.js",
+    ]);
   });
 
   it("entschuldigt nicht, wenn das Datum kein Kalenderdatum ist", () => {
-    assert.deepEqual(
-      offendingFiles(["src/dummy/altlast.js", "src/dummy/krummes-datum.js"]),
-      ["src/dummy/krummes-datum.js"],
-    );
+    assert.deepEqual(offendingFiles(["src/dummy/altlast.js", "src/dummy/krummes-datum.js"]), [
+      "src/dummy/krummes-datum.js",
+    ]);
   });
 
   it("entschuldigt nicht, wenn dem Eintrag der Pin (findings) fehlt", () => {
-    assert.deepEqual(
-      offendingFiles(["src/dummy/altlast.js", "src/dummy/ohne-findings.js"]),
-      ["src/dummy/ohne-findings.js"],
-    );
+    assert.deepEqual(offendingFiles(["src/dummy/altlast.js", "src/dummy/ohne-findings.js"]), [
+      "src/dummy/ohne-findings.js",
+    ]);
   });
 
   it("laesst eine gelistete, inzwischen geraeumte Datei unauffaellig", () => {
@@ -272,10 +266,7 @@ describe("loadLegacyExceptions (injizierter Leser)", () => {
   });
 
   it("bricht ab, wenn die Liste syntaktisch kaputt ist", () => {
-    assert.throws(
-      () => loadLegacyExceptions(() => '{ "src/dummy/altlast.js": '),
-      SyntaxError,
-    );
+    assert.throws(() => loadLegacyExceptions(() => '{ "src/dummy/altlast.js": '), SyntaxError);
   });
 });
 
@@ -293,8 +284,7 @@ function firstGatedFile() {
   const suppressions = JSON.parse(readRepoFile(SUPPRESSIONS_REL));
   const legacyExceptions = JSON.parse(readRepoFile(LEGACY_EXCEPTIONS_REL));
   return Object.keys(suppressions).find(
-    (file) =>
-      !legacyExceptions[file] && Object.keys(suppressions[file]).length > 0,
+    (file) => !legacyExceptions[file] && Object.keys(suppressions[file]).length > 0,
   );
 }
 
@@ -368,10 +358,7 @@ const APPROVAL_TERMS = ["Freigabe des Eigentuemers", "gefaehrlich"];
 describe("Ablehnungs-Bericht des Aufraeum-Gates", () => {
   it("nennt die Altlast-Liste als Ausweg", () => {
     const { rejectedFile, report } = rejectionReport();
-    assert.ok(
-      report.includes(rejectedFile),
-      `Bericht nennt die abgelehnte Datei nicht: ${report}`,
-    );
+    assert.ok(report.includes(rejectedFile), `Bericht nennt die abgelehnte Datei nicht: ${report}`);
     assert.ok(
       report.includes(LEGACY_EXCEPTIONS_REL),
       `Bericht nennt den Ausweg (${LEGACY_EXCEPTIONS_REL}) nicht: ${report}`,
@@ -425,6 +412,18 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               gemessen mit "npx eslint --suppressions-location
 //               eslint-suppressions.empty.json -f json <datei>". src/mcp-tools.js
 //               neu aufgenommen: der registerTools-Split ist ein eigenes Paket.
+//   2026-08-15  Pin nachgezogen (Owner-Auftrag, EL-Beende-Versuch/cancel_call darf
+//               nicht luegen): src/routes/api-calls.js makeCallRoutes 213->222
+//               (ehrliche cancel_call-Antwort), src/mcp-tools.js registerTools
+//               433->430 (cancel_call-Handler vereinfacht). Stufe-3-Korrektur,
+//               keine neue Verstoss-ART, am echten Hook gemessen (Exit 0).
+//   2026-08-15  Pin nachgezogen (Buchungsanker, Commit 08fc253): src/store/pg.js
+//               makePgStore 462->472 Zeilen, rowToCall 21->22, flushCalls 22->23.
+//               Ursache ist das neue persistierte Feld answeredUnclearReason - es MUSS
+//               durch Zeilen-Mapper und Flush, beide Teil derselben Riesenfunktion.
+//               Unvermeidbar, solange deren Split ausgesetzt ist; der Grund steht am
+//               Eintrag selbst. Das Gate hat die Verschlechterung gemeldet, sie ist
+//               geprueft und bewusst uebernommen - nicht stillschweigend.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     reason:
@@ -482,12 +481,12 @@ const LEGACY_FINGERPRINT = {
   },
   "src/store/pg.js": {
     reason:
-      "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration.",
+      "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-15 (answeredUnclearReason): makePgStore 462 -> 472 Zeilen, rowToCall 21 -> 22, flushCalls 22 -> 23. Unvermeidbar, solange der Split ausgesetzt ist - ein neues persistiertes Feld MUSS durch Zeilen-Mapper und Flush, und beide sind Teil derselben Riesenfunktion. Genau deshalb waechst diese Datei mit jedem Feld weiter; erst der Split stoppt das. Angehoben, nicht stillschweigend: der Pin hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen.",
     date: "2026-08-13",
     findings: {
-      "complexity :: Async function 'flushCalls' has a complexity of 22. Maximum allowed is 10.": 1,
+      "complexity :: Async function 'flushCalls' has a complexity of 23. Maximum allowed is 10.": 1,
       "complexity :: Async function 'flushTenants' has a complexity of 24. Maximum allowed is 10.": 1,
-      "complexity :: Function 'rowToCall' has a complexity of 21. Maximum allowed is 10.": 1,
+      "complexity :: Function 'rowToCall' has a complexity of 22. Maximum allowed is 10.": 1,
       "complexity :: Function 'rowToTenant' has a complexity of 23. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 1,
       "id-length :: Identifier name 'b' is too short (< 2).": 2,
@@ -498,7 +497,7 @@ const LEGACY_FINGERPRINT = {
       "id-length :: Identifier name 's' is too short (< 2).": 1,
       "id-length :: Identifier name 't' is too short (< 2).": 2,
       "max-lines-per-function :: Async function 'hydrateTenantInto' has too many lines (117). Maximum allowed is 100.": 1,
-      "max-lines-per-function :: Function 'makePgStore' has too many lines (462). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makePgStore' has too many lines (472). Maximum allowed is 100.": 1,
       "max-params :: Async function 'deleteMissing' has too many parameters (4). Maximum allowed is 3.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'state'.": 3,
     },
@@ -512,7 +511,7 @@ const LEGACY_FINGERPRINT = {
       "id-length :: Identifier name 'b' is too short (< 2).": 2,
       "id-length :: Identifier name 'e' is too short (< 2).": 1,
       "max-lines-per-function :: Async arrow function has too many lines (118). Maximum allowed is 100.": 1,
-      "max-lines-per-function :: Function 'makeCallRoutes' has too many lines (213). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makeCallRoutes' has too many lines (222). Maximum allowed is 100.": 1,
       "no-magic-numbers :: No magic number: 400.": 4,
       "no-magic-numbers :: No magic number: 403.": 1,
       "no-magic-numbers :: No magic number: 404.": 4,
@@ -547,7 +546,7 @@ const LEGACY_FINGERPRINT = {
       "id-length :: Identifier name 's' is too short (< 2).": 9,
       "id-length :: Identifier name 't' is too short (< 2).": 1,
       "id-length :: Identifier name 'v' is too short (< 2).": 1,
-      "max-lines-per-function :: Function 'registerTools' has too many lines (433). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'registerTools' has too many lines (430). Maximum allowed is 100.": 1,
       "max-params :: Arrow function has too many parameters (4). Maximum allowed is 3.": 1,
       "no-magic-numbers :: No magic number: 1000.": 1,
       "no-magic-numbers :: No magic number: 2.": 6,
@@ -626,8 +625,7 @@ function substanceWordCount(reason) {
 function isSubstantialReason(reason) {
   if (typeof reason !== "string") return false;
   return (
-    reason.trim().length >= MIN_REASON_LENGTH &&
-    substanceWordCount(reason) >= MIN_SUBSTANCE_WORDS
+    reason.trim().length >= MIN_REASON_LENGTH && substanceWordCount(reason) >= MIN_SUBSTANCE_WORDS
   );
 }
 
@@ -808,7 +806,9 @@ const ZEILE_DRITTE = 99;
 const ZEILE_VIERTE = 100;
 const PIN_BASISZEILEN = [ZEILE_VORHER, ZEILE_NACHHER, ZEILE_DRITTE];
 function kurzeNamen(zeilen) {
-  return zeilen.map((line) => meldung("id-length", "Identifier name 'q' is too short (< 2).", line));
+  return zeilen.map((line) =>
+    meldung("id-length", "Identifier name 'q' is too short (< 2).", line),
+  );
 }
 const PIN_QUELLE = "id-length :: Identifier name 'q' is too short (< 2).";
 
