@@ -61,6 +61,24 @@ function elevenLabsCallNotWired() {
   );
 }
 
+// S1-5 Fix (Owner-Auftrag 15.08.2026): LAUTER Fallback statt eines stillen No-op fuer
+// elevenLabsHangUpAction (s. deps unten). Ein stiller Vorgabewert liesse eine
+// Kompositionswurzel, die diesen Parameter vergisst, den EL-Terminierungspfad UNBEMERKT
+// abschalten - die Antwort behauptete trotzdem "cancelled" (Absolute Regel 1). Bleibt eine
+// Funktion statt eines Pflichtparameters (Tests ohne EL-Wiring bleiben gruen, sie treffen
+// nie einen EL-Call - isElevenLabsCall in der Route unten haengt am Anruf, nicht an den
+// deps), wird aber LAUT, SOBALD sie tatsaechlich fuer einen EL-Call aufgerufen wird:
+// Fehlerebene-Log, dieselbe Meldungsform wie elevenLabsCallNotWired oben (P8). Die Antwort
+// bleibt ehrlich unabhaengig vom Grund: hangup_attempted:false (Route unten) sagt bereits
+// "kein Beende-Weg lief" - ob die Kennung fehlt oder die Verdrahtung, ist fuer den
+// Aufrufer dieselbe Auskunft ("kein Griff auf das Gespraech").
+function elevenLabsHangUpActionNotWired(_endActiveCall, call) {
+  console.error(
+    `[cancel] ELEVENLABS_OUTBOUND_ENABLED ist an, aber elevenLabsHangUpAction ist nicht verdrahtet (deps fehlt, call=${call.id})`,
+  );
+  return null;
+}
+
 // deps: siehe Modul-Doc. arm = { armMaxDurationTimer, armReserveReleaseTimer } aus der EINEN
 // lifecycle-Instanz (Cap-/Reserve-Backstop, INV-7); finishCall = callFinish.finishCall (bare,
 // EINE Referenz wie in call-lifecycle.js); tenant = { requestTenant, requireTenant,
@@ -83,9 +101,10 @@ export function makeCallRoutes({
   terminateAndBillCall,
   hangUpAction,
   // TEIL B (Owner-Auftrag 15.08.2026): die EL-Parallele zu hangUpAction (dieselbe DI-Naht,
-  // s. telephony/call-termination.js). Default no-op haelt Tests ohne EL-Wiring
-  // unveraendert gruen (sie treffen ohnehin nie einen EL-Call).
-  elevenLabsHangUpAction = () => null,
+  // s. telephony/call-termination.js). Der Default ist S1-5-Fix elevenLabsHangUpActionNotWired
+  // (s.o.) - LAUT statt still, haelt Tests ohne EL-Wiring aber unveraendert gruen (sie
+  // treffen ohnehin nie einen EL-Call).
+  elevenLabsHangUpAction = elevenLabsHangUpActionNotWired,
   endActiveCall,
   billThunk,
   finishCall,
@@ -242,9 +261,12 @@ export function makeCallRoutes({
         await originateElevenLabsCall(call);
         // Regel 1 (Minuten-Achse): derselbe harte Max-Dauer-Cap wie im C-Telnyx-Zweig.
         // providerCallSid=null ist Absicht (es gibt keinen twilioSid); ohne callControlId
-        // faellt hangUpAction auf null - der Cap beendet und bucht den Record und stoppt
-        // die Ergebnis-Abholung, legt aber kein Anbieter-Leg auf. Die provider-seitige
-        // Dauergrenze gehoert in die Agenten-Konfiguration und ist offene Folgearbeit.
+        // faellt hangUpAction auf null - der Cap beendet und bucht den Record, stoppt die
+        // Ergebnis-Abholung UND loest seit 6da29ec (elevenLabsHangUpAction, s.
+        // telephony/call-lifecycle.js) den Loeschversuch beim Anbieter aus (DELETE
+        // /v1/convai/conversations/{id}, S1-2b: Kommentar korrigiert - er behauptete
+        // vorher das Gegenteil). OB das die Leitung tatsaechlich kappt, ist weiterhin
+        // NICHT belegt (s. convai.js#endConversation).
         armMaxDurationTimer(call, null);
         // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
         // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
@@ -413,9 +435,20 @@ export function makeCallRoutes({
     if (call.status !== "active") return res.json({ status: call.status });
     const requestedBy = internalIdentity(req) || OWNER_ID; // L5: forensisch nachvollziehbar
     audit("cancel_call", req, `call=${call.id} requestedBy=${requestedBy}`);
-    // TEIL C: elHangUp NUR gesetzt, wenn hangUpAction() (Telnyx-Form) leer ausgeht -
-    // dieselbe Weiche wie im hangUp-Thunk unten (G5); bestimmt die Antwort weiter unten.
-    const elHangUp = hangUpAction(voiceControl, call, call.twilioSid) ? null : elevenLabsHangUpAction(endActiveCall, call);
+    // S1-4 Fix (Owner-Auftrag 15.08.2026): hangUpAction() EINMAL ausgewertet (vorher
+    // zweimal identisch aufgerufen, das erste Ergebnis nur als Boolean verworfen) -
+    // providerHangUp ist zugleich der Telnyx-Thunk UND die Telnyx-Form-Erkennung.
+    const providerHangUp = hangUpAction(voiceControl, call, call.twilioSid);
+    // Die EL-FORM des Anrufs entscheidet die ehrliche Antwort weiter unten - NICHT, ob der
+    // Beende-Versuch zufaellig zustandekam. elevenlabsConversationId kann waehrend der
+    // Klingelphase noch fehlen (elevenlabs/outbound.js Modul-Kopf, ~40s gemessen); ein
+    // cancel_call in diesem Fenster darf trotzdem nicht die kurze, unbedingte
+    // "cancelled"-Antwort bekommen. config.voice.elevenLabsOutbound.enabled ist derselbe
+    // Schalter, der in POST /api/calls die drei Origination-Zweige exklusiv verzweigt (kein
+    // zweiter Wortlaut, G5): steht er an, lief jeder outbound Call ohne providerHangUp durch
+    // GENAU diesen Zweig - unabhaengig davon, ob die Kennung schon zurueck ist.
+    const isElevenLabsCall = !providerHangUp && config.voice.elevenLabsOutbound.enabled;
+    const elHangUp = isElevenLabsCall ? elevenLabsHangUpAction(endActiveCall, call) : null;
     // F10 Runde 2 (G5): derselbe Terminierungspfad wie der Max-Dauer-Cap - erst auflegen
     // (awaited, provider-aware ueber call.provider - sonst endCall ueber den falschen
     // Anbieter), dann buchen (fire-and-forget).
@@ -423,20 +456,26 @@ export function makeCallRoutes({
       persistEnd: () => store.endCallRecord(call.id, "cancelled"),
       // P6 (Check 5): dieselbe callControlId-/twilioSid-Auswahl wie terminateCappedCall (G5,
       // EINE Quelle) - EL-Calls fallen auf den Beende-Versuch (elHangUp, s.o.).
-      hangUp: hangUpAction(voiceControl, call, call.twilioSid) ?? elHangUp,
+      hangUp: providerHangUp ?? elHangUp,
       bill: billThunk(finishCall, store, call.id),
       onHangUpError: (e) => console.error("[cancel]", e.message),
       callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
     });
-    // TEIL C: der Loeschversuch beim Anbieter ist NICHT belegt, die Leitung zu kappen (s.
-    // convai.js#endConversation) - "cancelled" behauptet auf diesem Pfad nur, was wahr ist
-    // (Datensatz storniert, Buchung gestoppt), NICHT, dass die Leitung schon steht. Der
+    // S1-4 Fix: die ehrliche Antwortform gilt fuer JEDEN EL-Anruf (isElevenLabsCall), nicht
+    // nur fuer die mit bereits angekommener Kennung - der Loeschversuch beim Anbieter ist
+    // ohnehin NICHT belegt, die Leitung zu kappen (s. convai.js#endConversation).
+    // "cancelled" behauptet auf diesem Pfad nur, was wahr ist (Datensatz storniert, Buchung
+    // gestoppt), NICHT, dass die Leitung schon steht. hangup_attempted meldet zusaetzlich,
+    // ob ueberhaupt ein Griff auf das Gespraech bestand (elHangUp truthy): fehlt die
+    // Kennung noch (oder ist elevenLabsHangUpAction gar nicht verdrahtet, S1-5), sagt die
+    // Antwort das ausdruecklich, statt einen Versuch zu behaupten, der nie stattfand. Der
     // Telnyx-Pfad (awaiteter, bestaetigter Hangup) bleibt bei der reinen Kurzantwort.
-    if (elHangUp)
+    if (isElevenLabsCall)
       return res.json({
         status: "cancelled",
         line_hangup_confirmed: false,
         max_line_s: ELEVENLABS_PROVIDER_MAX_DURATION_S,
+        hangup_attempted: Boolean(elHangUp),
       });
     res.json({ status: "cancelled" });
   });

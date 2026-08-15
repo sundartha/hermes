@@ -10,11 +10,27 @@
 //      (Max-Dauer-Cap) und routes/api-calls.js (cancel_call) loesen den Versuch tatsaechlich
 //      aus UND terminalisieren den eigenen Datensatz auch bei totalem Anbieter-Ausfall
 //   D) cancel_call luegt nicht: die Antwort behauptet keinen Leitungs-Abbruch und nennt N
+//
+// S1-Nachbesserung 15.08.2026 (unabhaengige Durchsicht der Phase-1-Commits): fuenf weitere
+// Ebenen unten im Anschluss an D:
+//   S1-3) der Ergebnisabruf im ABBRUCH-Pfad (endActiveCall) nutzt eine EIGENE, kurze Frist
+//         statt der 120s des Anrufstarts - ein stummer Anbieter darf Kappung/cancel_call
+//         nicht zwei Minuten haengen lassen
+//   S1-4) die ehrliche Antwortform gilt fuer JEDEN EL-Anruf (Call-FORM), auch OHNE bereits
+//         angekommene Kennung (Klingelphase) - plus: hangUpAction() nur EINMAL ausgewertet
+//   S1-5) der Vorgabewert fuer elevenLabsHangUpAction wird LAUT statt still, wenn er
+//         tatsaechlich fuer einen EL-Call gebraucht wird
+//   S2)   answeredAnchorOutcome wirft nicht mehr, wenn endedAtIso fehlt/unbrauchbar ist
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { endConversation } from "../src/elevenlabs/convai.js";
-import { makeElevenLabsOutbound, ELEVENLABS_PROVIDER_MAX_DURATION_S } from "../src/elevenlabs/outbound.js";
+import { endConversation, REQUEST_TIMEOUT_MS } from "../src/elevenlabs/convai.js";
+import {
+  makeElevenLabsOutbound,
+  answeredAnchorOutcome,
+  ELEVENLABS_PROVIDER_MAX_DURATION_S,
+  EL_ABORT_RESULT_FETCH_TIMEOUT_MS,
+} from "../src/elevenlabs/outbound.js";
 import {
   elevenLabsHangUpAction,
   hangUpAction,
@@ -151,6 +167,101 @@ test("endActiveCall: ohne elevenlabsConversationId -> No-op (kein Netzzugriff)",
   }, () => el.endActiveCall("call_3"));
 });
 
+// ---- S1-3: der Ergebnisabruf im ABBRUCH-Pfad nutzt eine EIGENE, kuerzere Frist ----------
+// AbortSignal.timeout wird ABGEFANGEN statt real abgewartet (P12 Fast, kein 10s-Sleep im
+// Test) - jeder Aufruf zeichnet seinen Millisekunden-Wert auf UND delegiert an die echte
+// Implementierung (das zurueckgegebene Signal bleibt real nutzbar).
+async function withAbortSignalTimeoutSpy(run) {
+  const original = AbortSignal.timeout;
+  const calls = [];
+  AbortSignal.timeout = (ms) => {
+    calls.push(ms);
+    return original.call(AbortSignal, ms);
+  };
+  try {
+    await run();
+  } finally {
+    AbortSignal.timeout = original;
+  }
+  return calls;
+}
+
+test("S1-3: EL_ABORT_RESULT_FETCH_TIMEOUT_MS ist deutlich kuerzer als das Bestands-Zeitlimit", () => {
+  assert.ok(
+    EL_ABORT_RESULT_FETCH_TIMEOUT_MS < REQUEST_TIMEOUT_MS,
+    "die Abbruch-Pfad-Frist muss kuerzer sein als convai.js REQUEST_TIMEOUT_MS (120000ms)",
+  );
+});
+
+test("S1-3: endActiveCall nutzt fuer den Ergebnisabruf EL_ABORT_RESULT_FETCH_TIMEOUT_MS statt der 120s-Bestandsfrist", async () => {
+  const call = { id: "call_timeout", elevenlabsConversationId: CONV_ID, endedAt: "2026-08-15T10:00:00.000Z" };
+  const store = spyStore(call);
+  const el = makeOutbound(store);
+  const timeoutCalls = await withAbortSignalTimeoutSpy(() =>
+    withFetch(
+      async (_url, init) => {
+        if (init.method === "GET")
+          return {
+            ok: true,
+            status: HTTP_OK,
+            json: async () => ({
+              status: "done",
+              transcript: [],
+              metadata: { call_duration_secs: 30 },
+              analysis: {},
+            }),
+          };
+        return { ok: true, status: HTTP_OK };
+      },
+      () => el.endActiveCall(call.id),
+    ),
+  );
+  assert.deepEqual(
+    timeoutCalls,
+    [EL_ABORT_RESULT_FETCH_TIMEOUT_MS, REQUEST_TIMEOUT_MS],
+    "GET (Ergebnisabruf) nutzt die kurze Abbruch-Frist, DELETE (Loeschversuch) bleibt beim Bestandswert",
+  );
+});
+
+// ---- S1-1: der unklare Buchungsanker wird LAUT, nicht mehr still -----------------------
+// Faellt metadata.call_duration_secs beim Anbieter weg/wird umbenannt, bucht dieser Zweig
+// bewusst NICHTS (Owner-Auflage, unveraendert) - aber das darf nicht MEHR unbemerkt bleiben.
+
+test("S1-1: fehlendes metadata.call_duration_secs loggt LAUT auf Fehlerebene (greifbarer Marker, callId, Grund, KEINE Rufnummer)", async () => {
+  const call = { id: "call_unclear", elevenlabsConversationId: CONV_ID, endedAt: "2026-08-15T10:00:00.000Z" };
+  const store = spyStore(call);
+  const el = makeOutbound(store);
+  const errorLines = [];
+  const originalError = console.error;
+  console.error = (...args) => errorLines.push(args.join(" "));
+  try {
+    await withFetch(
+      async (_url, init) => {
+        if (init.method === "GET")
+          return {
+            ok: true,
+            status: HTTP_OK,
+            // KEIN call_duration_secs - der stille Totalausfall aus S1-1.
+            json: async () => ({ status: "done", transcript: [], metadata: {}, analysis: {} }),
+          };
+        return { ok: true, status: HTTP_OK };
+      },
+      () => el.endActiveCall(call.id),
+    );
+  } finally {
+    console.error = originalError;
+  }
+  assert.ok(
+    errorLines.some(
+      (line) =>
+        line.includes("Buchungsanker unklar") &&
+        line.includes(call.id) &&
+        line.includes("call_duration_secs_unusable"),
+    ),
+    "der unklare Fall bleibt NICHT still - Fehlerebene-Log mit callId und Grund",
+  );
+});
+
 // ---- C: elevenLabsHangUpAction (pure Entscheidung) --------------------------------------
 
 test("elevenLabsHangUpAction: EL-Call (elevenlabsConversationId gesetzt) -> Thunk ruft endActiveCall(call.id)", async () => {
@@ -219,10 +330,16 @@ test("Max-Dauer-Cap: ein EL-Call loest jetzt den EL-Beende-Versuch aus (vorher: 
 
 // ---- C+D: Verdrahtung + Ehrlichkeit cancel_call (routes/api-calls.js) -------------------
 
+// elevenLabsOutbound.enabled:true, weil S1-4 die EL-Form ueber GENAU diesen Schalter
+// erkennt (config.voice.elevenLabsOutbound.enabled, s. routes/api-calls.js) - ohne ihn
+// wuerfe jeder Test unten mit einem EL-geformten Call (kein callControlId/twilioSid) eine
+// TypeError (config.voice.elevenLabsOutbound.enabled las sonst von undefined). Der
+// Telnyx-Form-Test unten bleibt unberuehrt: providerHangUp ist dort truthy, der Schalter
+// wird wegen Kurzschluss-Auswertung (&&) nie gelesen.
 function baseRouteDeps(store, extra) {
   return {
     store,
-    config: withConfigNamespaces({ multiTenant: false }),
+    config: withConfigNamespaces({ multiTenant: false, elevenLabsOutbound: { enabled: true } }),
     audit: () => {},
     outboundGates: [],
     voiceControl: () => ({ async endCall() {}, async endCallViaCallControl() {} }),
@@ -294,6 +411,76 @@ test("cancel_call: Telnyx-Call bleibt bei der reinen Kurzantwort (kein EL-Feld, 
   assert.equal(endCalls.length, 0, "kein EL-Versuch fuer einen Telnyx-Call");
 });
 
+// ---- S1-4: die ehrliche Antwortform gilt fuer JEDEN EL-Anruf, auch OHNE Kennung ---------
+
+test("S1-4: EL-Anruf OHNE Kennung (noch in der Klingelphase) bekommt trotzdem die ehrliche Antwortform", async () => {
+  const call = { ...elShapedCall("call_cancel_el_ringing"), elevenlabsConversationId: null };
+  const store = {
+    getCall: (id) => (id === call.id ? call : null),
+    endCallRecord: (id, status) => {
+      call.status = status;
+    },
+  };
+  const endCalls = [];
+  const { status, body } = await postCancel(
+    baseRouteDeps(store, { elevenLabsHangUpAction, endActiveCall: async (id) => endCalls.push(id) }),
+    call.id,
+  );
+  assert.equal(status, HTTP_OK);
+  assert.equal(endCalls.length, 0, "keine Kennung -> kein Griff auf das Gespraech, kein Versuch");
+  assert.equal(body.status, "cancelled", "Datensatz storniert");
+  assert.equal(body.line_hangup_confirmed, false);
+  assert.equal(body.max_line_s, ELEVENLABS_PROVIDER_MAX_DURATION_S);
+  assert.equal(
+    body.hangup_attempted,
+    false,
+    "sagt AUSDRUECKLICH: kein Griff auf das Gespraech - nicht nur schweigen wie die alte Kurzantwort",
+  );
+});
+
+test("S1-4: hangUpAction() wird GENAU EINMAL ausgewertet (vorher zweimal identisch aufgerufen)", async () => {
+  const call = { id: "call_cancel_tx2", status: "active", provider: "telnyx", twilioSid: "CA_2" };
+  const store = {
+    getCall: (id) => (id === call.id ? call : null),
+    endCallRecord: (id, status) => {
+      call.status = status;
+    },
+  };
+  let evaluations = 0;
+  const spyHangUpAction = (...args) => {
+    evaluations++;
+    return hangUpAction(...args);
+  };
+  await postCancel(baseRouteDeps(store, { hangUpAction: spyHangUpAction }), call.id);
+  assert.equal(evaluations, 1, "hangUpAction darf nur einmal ausgewertet werden, nicht zweimal identisch");
+});
+
+// ---- S1-5: der Vorgabewert fuer elevenLabsHangUpAction wird LAUT statt still ------------
+
+test("S1-5: fehlt elevenLabsHangUpAction in der Verdrahtung, wird der Fallback LAUT (Fehlerebene-Log) UND die Antwort bleibt ehrlich", async () => {
+  const call = elShapedCall("call_cancel_el_not_wired");
+  const store = {
+    getCall: (id) => (id === call.id ? call : null),
+    endCallRecord: (id, status) => {
+      call.status = status;
+    },
+  };
+  const errorLines = [];
+  const originalError = console.error;
+  console.error = (...args) => errorLines.push(args.join(" "));
+  try {
+    // KEIN elevenLabsHangUpAction in extra -> makeCallRoutes' eigener Default greift.
+    const { body } = await postCancel(baseRouteDeps(store), call.id);
+    assert.equal(body.hangup_attempted, false, "kein Beende-Weg verdrahtet -> kein Versuch");
+    assert.ok(
+      errorLines.some((line) => line.includes("nicht verdrahtet")),
+      "der Vorgabewert bleibt NICHT still - Fehlerebene-Log beim Gebrauch",
+    );
+  } finally {
+    console.error = originalError;
+  }
+});
+
 // ---- C: Fail-soft Ende-zu-Ende - totaler Anbieter-Ausfall storniert den Datensatz trotzdem
 
 test("totaler Anbieter-Ausfall (GET und DELETE scheitern) -> Datensatz wird TROTZDEM storniert+gebucht", async () => {
@@ -313,6 +500,33 @@ test("totaler Anbieter-Ausfall (GET und DELETE scheitern) -> Datensatz wird TROT
       }),
   );
   assert.deepEqual(order, ["persistEnd", "bill"], "Storno+Buchung laufen trotz totalem Anbieter-Ausfall");
+});
+
+// ---- S2: answeredAnchorOutcome darf nicht werfen, wenn endedAtIso fehlt/unbrauchbar ist -
+// store.endCallRecord kann null liefern (Call zwischen Pruefung und Aufruf verschwunden) -
+// finishFromConversation reicht dann ended?.endedAt === undefined durch. Date.parse(undefined)
+// ist NaN; new Date(NaN).toISOString() WIRFT (RangeError: Invalid time value), mitten im
+// Buchungspfad. Die Fail-Soft-Zusage des Moduls deckt bisher nur den Netzabruf, nicht diese
+// reine Ableitung.
+
+const CONVERSATION_WITH_POSITIVE_DURATION = { metadata: { call_duration_secs: 30 }, analysis: {} };
+
+test("S2: answeredAnchorOutcome(undefined, ...) wirft NICHT, sondern faellt auf 'unklar' zurueck", () => {
+  assert.doesNotThrow(() => answeredAnchorOutcome(undefined, CONVERSATION_WITH_POSITIVE_DURATION));
+  const anchor = answeredAnchorOutcome(undefined, CONVERSATION_WITH_POSITIVE_DURATION);
+  assert.equal(anchor.answeredAtIso, null, "ohne brauchbaren endedAtIso gibt es keinen Anker");
+  assert.equal(anchor.unclearReason, "call_duration_secs_unusable");
+});
+
+test("S2: answeredAnchorOutcome('kaputt', ...) wirft NICHT bei einem nicht-parsebaren endedAtIso", () => {
+  assert.doesNotThrow(() => answeredAnchorOutcome("kein-iso-datum", CONVERSATION_WITH_POSITIVE_DURATION));
+  assert.equal(answeredAnchorOutcome("kein-iso-datum", CONVERSATION_WITH_POSITIVE_DURATION).answeredAtIso, null);
+});
+
+test("S2: gueltiger endedAtIso + positive Dauer liefert weiterhin den echten Anker (Regression)", () => {
+  const anchor = answeredAnchorOutcome("2026-08-15T10:01:00.000Z", CONVERSATION_WITH_POSITIVE_DURATION);
+  assert.equal(anchor.answeredAtIso, "2026-08-15T10:00:30.000Z");
+  assert.equal(anchor.unclearReason, null);
 });
 
 // ---- E) die Obergrenze hat EINE Wahrheit -----------------------------------------------

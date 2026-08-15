@@ -424,6 +424,14 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               Unvermeidbar, solange deren Split ausgesetzt ist; der Grund steht am
 //               Eintrag selbst. Das Gate hat die Verschlechterung gemeldet, sie ist
 //               geprueft und bewusst uebernommen - nicht stillschweigend.
+//   2026-08-15  Pin nachgezogen (S1-Nacharbeit der unabhaengigen Durchsicht):
+//               src/routes/api-calls.js makeCallRoutes 222->225 Zeilen. Ursache sind die
+//               ehrliche cancel_call-Antwort (Feld hangup_attempted) und ihre Begruendung.
+//               ANMERKUNG: max-lines-per-function zaehlt hier Kommentarzeilen mit - in einem
+//               Repo, das ausfuehrliche Begruendungen VERLANGT, hebt gutes Kommentieren den
+//               Pin. Das ist die zweite Anhebung binnen eines Tages; die Durchsicht hat genau
+//               davor gewarnt. Wer das dauerhaft loesen will, entscheidet ueber skipComments
+//               in der Regel - das ist eine eigene Entscheidung, kein Nebeneffekt hier.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     reason:
@@ -504,14 +512,14 @@ const LEGACY_FINGERPRINT = {
   },
   "src/routes/api-calls.js": {
     reason:
-      "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber das Aufraeumen ist der G30-Split der Outbound-Route und damit ein Umbau im Gate-Kernpfad: diese Datei traegt die Safety-Gate-Kette (Permit, Denylist/Land-Gate/Stundenlimit, pro-Tenant-Kostendecke, OUTBOUND_FROZEN). Ein Entzerren verschiebt genau die Reihenfolge, in der diese Gates greifen; faellt dabei eine Pruefung durch, ruft der Dienst jemanden ungewollt an oder ueberzieht die Kostendecke. Das braucht ein eigenes Paket mit eigener Absicherung (Gate-Tests vor dem Schnitt), nicht einen Nebeneffekt dieses Commits.",
+      "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber das Aufraeumen ist der G30-Split der Outbound-Route und damit ein Umbau im Gate-Kernpfad: diese Datei traegt die Safety-Gate-Kette (Permit, Denylist/Land-Gate/Stundenlimit, pro-Tenant-Kostendecke, OUTBOUND_FROZEN). Ein Entzerren verschiebt genau die Reihenfolge, in der diese Gates greifen; faellt dabei eine Pruefung durch, ruft der Dienst jemanden ungewollt an oder ueberzieht die Kostendecke. Das braucht ein eigenes Paket mit eigener Absicherung (Gate-Tests vor dem Schnitt), nicht einen Nebeneffekt dieses Commits. PIN ANGEHOBEN 2026-08-15 (S1-Nachbesserung cancel_call/S1-4, S1-5, S1-2b): makeCallRoutes 222 -> 225 Zeilen - der cancel_call-Handler traegt seither die Begruendung, warum die EL-Form (nicht die Kennung) die ehrliche Antwort entscheidet, plus das zusaetzliche hangup_attempted-Feld. Unvermeidbar, solange der G30-Split aussteht (s. reason oben) - jede Verhaltenskorrektur in diesem Handler MUSS durch dieselbe Riesenfunktion. Das Gate hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen statt stillschweigend.",
     date: "2026-08-15",
     findings: {
       "complexity :: Async arrow function has a complexity of 22. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'b' is too short (< 2).": 2,
       "id-length :: Identifier name 'e' is too short (< 2).": 1,
       "max-lines-per-function :: Async arrow function has too many lines (118). Maximum allowed is 100.": 1,
-      "max-lines-per-function :: Function 'makeCallRoutes' has too many lines (222). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makeCallRoutes' has too many lines (225). Maximum allowed is 100.": 1,
       "no-magic-numbers :: No magic number: 400.": 4,
       "no-magic-numbers :: No magic number: 403.": 1,
       "no-magic-numbers :: No magic number: 404.": 4,

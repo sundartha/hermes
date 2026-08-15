@@ -42,7 +42,12 @@ const API_KEY_HEADER = "xi-api-key";
 // Default 60 s) - nicht die Gespraechsdauer. 120 s = diese 60 s plus Reserve, und
 // weiterhin ein Vielfaches unter der Max-Gespraechsdauer (1800 s): ein stummer Anbieter
 // kann einen Aufrufer damit nie ueber ein ganzes Gespraech haengen lassen.
-const REQUEST_TIMEOUT_MS = 120000;
+//
+// Bleibt der DEFAULT fuer jeden Aufruf, der keine eigene Frist mitbringt (Anrufstart,
+// Loeschversuch, der regulaere Poll-Takt). Exportiert, damit ein kuerzerer Override
+// (s. timeoutMs unten, gebraucht von elevenlabs/outbound.js#endActiveCall, S1-3) sich
+// gegen DIESEN Wert bezeugen laesst, statt eine zweite Zahl zu raten.
+export const REQUEST_TIMEOUT_MS = 120000;
 
 // Wirft MIT Status: routes/api-calls.js unterscheidet daran die Anbieter-Ablehnung (502)
 // vom Transportfehler (500) - genau wie beim Telnyx-Adapter (attachStatus).
@@ -54,12 +59,14 @@ function assertConvaiOk(res, op) {
 }
 
 // EINE Stelle fuer Basis-URL, Schluessel-Header, Timeout und Fehlerpruefung (G5): beide
-// Endpunkte unterscheiden sich nur in Pfad und Methode.
-async function convaiFetch({ fetchImpl, account, path, op, init }) {
+// Endpunkte unterscheiden sich nur in Pfad und Methode. timeoutMs optional (Default
+// REQUEST_TIMEOUT_MS) - ein Aufrufer mit eigener, kuerzerer Frist (S1-3) ueberschreibt sie
+// gezielt, ohne den Bestandswert fuer alle anderen Aufrufer zu senken.
+async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQUEST_TIMEOUT_MS }) {
   const res = await fetchImpl(`${account.apiBase}${path}`, {
     ...init,
     headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   assertConvaiOk(res, op);
   return res.json();
@@ -82,16 +89,20 @@ export async function startOutboundCall({ fetchImpl, account, body }) {
 }
 
 /**
- * Holt den Stand eines Gespraechs (status, transcript, analysis).
- * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, conversationId: string}} args
+ * Holt den Stand eines Gespraechs (status, transcript, analysis). timeoutMs optional
+ * (S1-3): Default REQUEST_TIMEOUT_MS (Bestandsverhalten fuer den regulaeren Poll-Takt);
+ * der ABBRUCH-Pfad (elevenlabs/outbound.js#endActiveCall) uebergibt eine eigene, kuerzere
+ * Frist, weil terminateAndBillCall synchron auf diesen Abruf wartet.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, conversationId: string, timeoutMs?: number}} args
  */
-export function fetchConversation({ fetchImpl, account, conversationId }) {
+export function fetchConversation({ fetchImpl, account, conversationId, timeoutMs = REQUEST_TIMEOUT_MS }) {
   return convaiFetch({
     fetchImpl,
     account,
     path: CONVERSATION_PATH + encodeURIComponent(conversationId),
     op: "Gespraechsabruf",
     init: { method: "GET" },
+    timeoutMs,
   });
 }
 

@@ -451,6 +451,16 @@ const PLACE_CALL_CONSULT_LOOP =
 const placeCallDescription = (consultLoop) =>
   [PLACE_CALL_DESCRIPTION, consultLoop ? PLACE_CALL_CONSULT_LOOP : null].filter(Boolean).join(" ");
 
+// S1-2c Fix (Owner-Auftrag 15.08.2026): die alte Beschreibung "Cancels a running call
+// cleanly" versprach einen bestaetigten Leitungs-Abbruch, den routes/api-calls.js seit
+// Owner-Auftrag 15.08.2026 (S1-4) selbst nicht mehr zusichert - das Modell entscheidet
+// nach der BESCHREIBUNG, nicht nach dem REST-Rumpf, und eine ueberholte Beschreibung ist
+// dieselbe Luege eine Ebene hoeher (C2). Modulebene statt inline (Muster
+// PLACE_CALL_DESCRIPTION): haelt registerTools() bei gleicher Zeilenzahl (Owner-Auflage,
+// eslint-legacy-exceptions.json pinnt sie).
+const CANCEL_CALL_DESCRIPTION =
+  "Cancels the call record and stops billing right away. Whether the phone line itself actually drops is NOT guaranteed on every call path - when it is not, the response says so explicitly instead of claiming a clean hangup.";
+
 // ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
 // an jeden REST-Aufruf gehaengt (X-Internal-Identity); scopedTenant (AM6) ebenso als
 // X-Internal-Tenant (am /mcp-Gateway aufgeloest). allowCalendar steuert, ob das
@@ -875,10 +885,11 @@ export function registerTools(
   // TEIL C (Owner-Auflage 15.08.2026, registerTools darf NICHT wachsen): der REST-Body wird
   // UNVERAENDERT durchgereicht statt eines hartkodierten {status:"cancelled"} - die Route
   // (routes/api-calls.js) traegt seit dieser Aenderung die ehrliche Auskunft (Datensatz vs.
-  // Leitung) bereits selbst. Kein zweiter Wortlaut hier (G5).
+  // Leitung, S1-4: zusaetzlich hangup_attempted) bereits selbst. Kein zweiter Wortlaut hier
+  // (G5). Die Beschreibung selbst ist S1-2c-korrigiert (CANCEL_CALL_DESCRIPTION oben).
   tool(
     "cancel_call",
-    "Cancels a running call cleanly.",
+    CANCEL_CALL_DESCRIPTION,
     { call_id: z.string().describe("The call_id from place_call") },
     async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
   );
