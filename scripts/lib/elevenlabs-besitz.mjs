@@ -78,6 +78,15 @@ const ART_TEXTE = "texte";
 // "description"). Steht als Datenfeld am Besitz-Eintrag, nicht hier: welcher
 // Text besessen ist, gehoert zur Besitz-Erklaerung, nicht zum Vergleicher.
 const JE_EINTRAG_SCHLUESSEL = "je_eintrag";
+// Optionaler ABWEICHENDER Unterpfad fuer die LIVE-Seite bei art "texte" -
+// gebraucht, wenn Vorlage und Live-Agent dieselbe Information unter
+// verschiedenen Namen/Verschachtelungen fuehren (Werkzeuge: die Vorlage haelt
+// den Push-Koerper unter einem tool_config-Wrapper, der Live-Agent liefert das
+// GET flach und teils umbenannt, z.B. body_params_schema -> request_body_schema
+// bzw. Header -> request_headers, gemessen 2026-08-15). Fehlt er, gilt
+// derselbe Pfad wie auf der Vorlagen-Seite (Bestandsfall: data_collection,
+// evaluation.criteria - beide Seiten fuehren dieselbe Form).
+const JE_EINTRAG_LIVE_SCHLUESSEL = "je_eintrag_live";
 const TEXT_ZUWEISUNG = " = ";
 // Schluessel-Praefix der reinen Entwickler-Doku in diesen JSON-Dateien (Bestand,
 // s. scripts/check-elevenlabs-tests.js): kein Teil des ElevenLabs-Schemas,
@@ -159,10 +168,20 @@ function namenAus(wert) {
 // Wertvergleich waere dort dauerhaft rot und damit blind. Ein fehlender Text
 // wird als (fehlt) gemeldet und nicht stillschweigend uebersprungen: sonst
 // saehe "Beschreibung geloescht" wie "stimmt ueberein" aus.
+// Textdarstellung EINES je-Eintrag-Werts: ein String bleibt sich selbst treu
+// (Prosa, der JSON-Anfuehrungszeichen nur verwirren wuerden), jeder andere
+// GEFUNDENE Wert (z.B. ein api_schema-Parameter-Objekt oder eine Header-Map)
+// wird als JSON serialisiert - sonst waere ein STRUKTURIERTER Wert nie
+// vergleichbar, nur reiner Text. Erweiterung 2026-08-15 (Werkzeug-Besitz:
+// body_params_schema/Header sind Objekte, keine Strings, s.
+// JE_EINTRAG_LIVE_SCHLUESSEL).
+function textDarstellung(wert) {
+  return typeof wert === "string" ? wert : JSON.stringify(wert);
+}
 function texteAus(wert, jeEintrag) {
   return eintraegeAus(wert).map(([name, inhalt]) => {
     const treffer = wertAnPfad(inhalt, jeEintrag);
-    const text = typeof treffer.wert === "string" ? treffer.wert : FEHLT_MARKE;
+    const text = treffer.gefunden ? textDarstellung(treffer.wert) : FEHLT_MARKE;
     return `${name}${TEXT_ZUWEISUNG}${text}`;
   });
 }
@@ -221,8 +240,13 @@ const VERGLEICHS_ARTEN = new Map([
     {
       einPfad: false,
       brauchtJeEintrag: true,
-      sammle: (werte, eintrag) => {
-        const jeEintrag = eintrag[JE_EINTRAG_SCHLUESSEL];
+      // seite waehlt zwischen je_eintrag (Vorlage, oder Live ohne eigenen
+      // Unterpfad) und je_eintrag_live (Live, wenn gesetzt) - s. Begruendung
+      // an JE_EINTRAG_LIVE_SCHLUESSEL.
+      sammle: (werte, eintrag, seite) => {
+        const jeEintragLive = eintrag[JE_EINTRAG_LIVE_SCHLUESSEL];
+        const jeEintrag =
+          seite === "live" && istPfad(jeEintragLive) ? jeEintragLive : eintrag[JE_EINTRAG_SCHLUESSEL];
         return sortierteMenge(werte.flatMap((wert) => texteAus(wert, jeEintrag)));
       },
       zeige: zeigeWert,
@@ -286,6 +310,22 @@ function ausnahmeAus(eintrag) {
 // Prueft die FORM eines Besitz-Eintrags. Ein kaputter Eintrag darf nicht still
 // als "kein Fund" durchgehen: dann pruefte das Gate genau das Feld nicht mehr,
 // das es zu pruefen behauptet.
+// Prueft je_eintrag (Pflicht, sobald die Art es braucht) und das optionale
+// je_eintrag_live (nur wenn gesetzt, dann aber gueltig) - ausgelagert aus
+// eintragsFormFehler, damit dessen Verzweigungstiefe nicht ueber die
+// Lint-Schwelle waechst (G30, eine Pruefung pro Funktion).
+function jeEintragFormFehler({ feld, art, brauchtJeEintrag, eintrag }) {
+  if (!brauchtJeEintrag) return null;
+  if (!istPfad(eintrag[JE_EINTRAG_SCHLUESSEL])) {
+    return `${feld}: art "${art}" braucht "${JE_EINTRAG_SCHLUESSEL}" - ohne den Unterpfad steht nicht fest, WELCHER Text je Eintrag verglichen wird`;
+  }
+  const jeEintragLive = eintrag[JE_EINTRAG_LIVE_SCHLUESSEL];
+  if (jeEintragLive !== undefined && !istPfad(jeEintragLive)) {
+    return `${feld}: "${JE_EINTRAG_LIVE_SCHLUESSEL}" ist gesetzt, aber kein gueltiger Pfad`;
+  }
+  return null;
+}
+
 function eintragsFormFehler(eintrag) {
   const { feld, art, vorlage, live } = eintrag ?? {};
   if (typeof feld !== "string" || feld === "") {
@@ -296,9 +336,13 @@ function eintragsFormFehler(eintrag) {
     const bekannt = [...VERGLEICHS_ARTEN.keys()].join(", ");
     return `${feld}: unbekannte Vergleichs-Art "${art}" (bekannt: ${bekannt})`;
   }
-  if (vergleich.brauchtJeEintrag && !istPfad(eintrag[JE_EINTRAG_SCHLUESSEL])) {
-    return `${feld}: art "${art}" braucht "${JE_EINTRAG_SCHLUESSEL}" - ohne den Unterpfad steht nicht fest, WELCHER Text je Eintrag verglichen wird`;
-  }
+  const jeEintragFehler = jeEintragFormFehler({
+    feld,
+    art,
+    brauchtJeEintrag: vergleich.brauchtJeEintrag,
+    eintrag,
+  });
+  if (jeEintragFehler) return jeEintragFehler;
   const ausnahmeFehler = ausnahmeFormFehler(eintrag);
   if (ausnahmeFehler) return ausnahmeFehler;
   const seiten = [
@@ -325,14 +369,14 @@ function fehlendePfade(wurzel, pfade) {
 
 // Der Vergleichswert EINER Seite. vorhanden=false gibt es nur bei art "wert":
 // bei den Mengen-Arten ist die leere Menge ein gueltiger Wert, kein Fehlen.
-function seiteVergleichswert({ vergleich, eintrag, wurzel, pfade }) {
+function seiteVergleichswert({ vergleich, eintrag, wurzel, pfade, seite }) {
   const werte = [];
   for (const pfad of pfade) {
     const treffer = wertAnPfad(wurzel, pfad);
     if (treffer.gefunden) werte.push(treffer.wert);
   }
   if (vergleich.einPfad && werte.length === 0) return { vorhanden: false };
-  return { vorhanden: true, wert: vergleich.sammle(werte, eintrag) };
+  return { vorhanden: true, wert: vergleich.sammle(werte, eintrag, seite) };
 }
 
 // Verglichen wird der VOLLE Wert, nie die gekuerzte Anzeige.
@@ -397,8 +441,15 @@ function vergleicheFeld({ eintrag, vorlage, live }) {
     eintrag,
     wurzel: vorlage,
     pfade: eintrag.vorlage,
+    seite: "vorlage",
   });
-  const rechts = seiteVergleichswert({ vergleich, eintrag, wurzel: live, pfade: eintrag.live });
+  const rechts = seiteVergleichswert({
+    vergleich,
+    eintrag,
+    wurzel: live,
+    pfade: eintrag.live,
+    seite: "live",
+  });
   if (istGleich(links, rechts)) return {};
   return { abweichung: abweichungsBefund({ eintrag, vergleich, links, rechts }) };
 }

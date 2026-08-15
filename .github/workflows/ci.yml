@@ -52,6 +52,37 @@ jobs:
       - name: ElevenLabs-Testdefinitionen (informativ, blockiert den Build NICHT)
         run: npm run elevenlabs:check
         continue-on-error: true
+      # Drift-Gate zwischen der Repo-Vorlage (elevenlabs/agent_configs/outbound-
+      # agent.template.json) und dem LIVE-Agenten bei ElevenLabs
+      # (scripts/check-elevenlabs-drift.mjs, npm run elevenlabs:drift). Auftrag
+      # Phase 2, TEIL 3: blockierend, KEIN continue-on-error - anders als beim
+      # ElevenLabs-Testdefinitionen-Schritt darueber. Bewusst ausgenommene
+      # Abweichungen (Feld "ausgenommen" mit Grund+Datum) blockieren seit
+      # Phase 2 TEIL 2 ohnehin nicht mehr (exit 0), bleiben in der Ausgabe aber
+      # sichtbar - ein continue-on-error waere hier also KEIN Kompromiss fuer
+      # eine bekannte Ausnahme, sondern ein Deckmantel fuer JEDE kuenftige
+      # Abweichung, auch eine ungewollte.
+      #
+      # DER LAUF BRAUCHT EINEN API-SCHLUESSEL (ELEVENLABS_API_KEY), UM DEN
+      # LIVE-AGENTEN ZU LESEN. Befund bei Einfuehrung dieses Schritts
+      # (2026-08-15): weder im Fork-Repo noch im Upstream-Repo ist ein
+      # entsprechendes Secret hinterlegt (gh secret list liefert fuer beide
+      # eine leere Liste) - ein blockierender Schritt, der IMMER am fehlenden
+      # Schluessel scheitert, waere schlimmer als der vorherige Zustand (gar
+      # kein Schritt). Deshalb: ohne Secret wird laut und sichtbar
+      # UEBERSPRUNGEN (::warning:: + exit 0, der Job bleibt gruen); ist das
+      # Secret gesetzt, blockiert der Schritt bei jeder nicht ausgenommenen
+      # Abweichung. Der Schluessel wird nur als Env-Variable durchgereicht,
+      # nie geloggt oder ausgegeben (CLAUDE.md Regel 4).
+      - name: ElevenLabs-Konfigurationsdrift gegen den Live-Agenten (blockierend)
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          if [ -z "$ELEVENLABS_API_KEY" ]; then
+            echo "::warning::[elevenlabs:drift] UEBERSPRUNGEN - kein ELEVENLABS_API_KEY-Secret in diesem Repo hinterlegt. Ohne Schluessel ist der Live-Agent nicht lesbar; dieser Schritt blockiert deshalb NICHT, wenn das Secret fehlt. Sobald das Secret gesetzt ist, blockiert er bei jeder nicht ausgenommenen Abweichung gegen elevenlabs/agent_configs/outbound-agent.template.json."
+            exit 0
+          fi
+          npm run elevenlabs:drift
       # Coverage-Gate ersetzt den reinen Test-Lauf (kein Doppellauf): node --test fuehrt
       # ohnehin alle Tests aus und bricht zusaetzlich mit exit 1 ab, sobald eine Schwelle
       # reisst. Schwellen kalibriert am schwellenlosen Lauf auf node 22 (= CI-Runtime,

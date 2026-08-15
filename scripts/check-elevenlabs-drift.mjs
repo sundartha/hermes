@@ -39,18 +39,45 @@ const ARG_INDEX_AGENT_ID = 2;
 const LISTEN_TRENNER = "; ";
 const LOG_PREFIX = "[check-elevenlabs-drift]";
 
-// Ausgenommene Abweichungen bleiben rot - sie sind eine Abweichung, und dass
-// man sie sieht, ist ihr Zweck. Die Schlusszeile sagt aber, WIE VIELE davon
-// festgehaltene Entscheidungen sind: sonst liest sich ein bewusst offener Punkt
-// wie ein Defekt, und wer den Unterschied nicht sieht, gewoehnt sich an rot.
+// Ausgenommene Abweichungen bleiben SICHTBAR - sie werden oben mitgedruckt wie
+// jede andere, und dass man sie sieht, ist ihr Zweck. Sie blockieren aber seit
+// 2026-08-15 NICHT mehr: als blockierender CI-Schritt (Auftrag Phase 2, TEIL 2)
+// waere ein Lauf, der wegen einer festgehaltenen Eigentuemer-Entscheidung
+// dauerhaft rot bleibt, binnen einer Woche ignoriert - ein Waechter, den man
+// ignoriert, ist keiner. Blockierend bleibt JEDE ANDERE Abweichung, jede
+// verletzte Regel und jeder Fehler in der Besitz-/Regel-Erklaerung; s.
+// istBlockierend. Eine UNVOLLSTAENDIGE Ausnahme (Grund oder Datum fehlt/leer)
+// entschuldigt nichts - sie erreicht abweichungen[] gar nicht erst, sondern
+// wird schon im Vergleichs-Kern zu einem Eintrag in fehler[]
+// (ausnahmeFormFehler in scripts/lib/elevenlabs-besitz.mjs), und Fehler
+// blockieren immer.
 function ausnahmeZusatz(abweichungen) {
   const anzahl = abweichungen.filter((abweichung) => abweichung.ausgenommen).length;
   if (anzahl === 0) return "";
   return ` (davon ${anzahl} in der Vorlage bewusst ausgenommen, mit Grund und Datum an der Zeile - kein Defekt, sondern eine festgehaltene Entscheidung)`;
 }
 
+// Blockierend ist NICHT dasselbe wie ergebnis.ok: ok (der Vergleichs-Kern)
+// heisst byte-identisch, und eine bewusst ausgenommene Abweichung ist das nie
+// (s. den Kern-Test "ausgenommen heisst nicht gruen",
+// test/elevenlabs-push-feldauswahl.test.js). Blockierend heisst dagegen "der
+// CI-Schritt darf durchfallen" - und dafuer zaehlt eine mit Grund UND Datum
+// festgehaltene Eigentuemer-Entscheidung nicht als Defekt, jede andere
+// Abweichung, jede Verbots-Verletzung und jeder Erklaerungs-Fehler aber schon.
+function istBlockierend({ abweichungen, verletzungen, fehler }) {
+  return (
+    fehler.length > 0 ||
+    verletzungen.length > 0 ||
+    abweichungen.some((abweichung) => !abweichung.ausgenommen)
+  );
+}
+
+function regelPruefungsZeile(geprueftRegeln) {
+  return `${geprueftRegeln} Verbots-Pruefungen (Regel x Eintrag) ohne Verletzung.`;
+}
+
 function melde({ ergebnis, agentId, ausserhalb }) {
-  const { ok, geprueft, geprueftRegeln, abweichungen, verletzungen, fehler } = ergebnis;
+  const { geprueft, geprueftRegeln, abweichungen, verletzungen, fehler } = ergebnis;
   const abweichungsZeilen = abweichungen.map((abweichung) => abweichung.zeile);
   const zeilen = [...fehler, ...verletzungen, ...abweichungsZeilen];
   for (const zeile of zeilen) {
@@ -63,9 +90,18 @@ function melde({ ergebnis, agentId, ausserhalb }) {
   }
   // Beide Zahlen stehen auch im gruenen Fall da: ein Pruefkommando, das nichts
   // findet, sieht sonst aus wie eines, das nichts sucht.
-  if (ok) {
+  if (!istBlockierend({ abweichungen, verletzungen, fehler })) {
+    if (abweichungen.length === 0) {
+      console.log(
+        `${LOG_PREFIX} OK - alle ${geprueft} besessenen Felder stimmen mit dem Live-Agenten ${agentId} ueberein, ${regelPruefungsZeile(geprueftRegeln)}`,
+      );
+      return 0;
+    }
+    // Gruen trotz Abweichung: ALLE gemeldeten Abweichungen sind bewusst
+    // ausgenommen (Zeilen oben) - blockiert nicht, vergessen wird trotzdem
+    // nichts, weil die Zeilen weiter gedruckt werden.
     console.log(
-      `${LOG_PREFIX} OK - alle ${geprueft} besessenen Felder stimmen mit dem Live-Agenten ${agentId} ueberein, ${geprueftRegeln} Verbots-Pruefungen (Regel x Eintrag) ohne Verletzung.`,
+      `${LOG_PREFIX} OK - ${abweichungen.length} von ${geprueft} besessenen Feldern weichen vom Live-Agenten ${agentId} ab, ALLE mit Grund und Datum bewusst ausgenommen (Zeilen oben) und deshalb kein Blocker, ${regelPruefungsZeile(geprueftRegeln)}`,
     );
     return 0;
   }
