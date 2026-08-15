@@ -221,6 +221,11 @@ export function createCall(
     status: "active", // active | completed | failed | cancelled
     startedAt: new Date().toISOString(),
     answeredAt: null,
+    // KS-EL1: der GRUND, wenn answeredAt NICHT ermittelbar war (elevenlabs/outbound.js,
+    // answeredAnchorOutcome) - additiv nullable, gesetzt NUR wenn der Anbieter-Beleg fehlt
+    // oder unbrauchbar ist (NICHT bei einer belegten Nicht-Rufannahme, s. dort). Initial
+    // null - byte-identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
+    answeredUnclearReason: null,
     endedAt: null,
     transcript: [],
     summary: null,
@@ -472,6 +477,28 @@ export function markAnswered(s, callId) {
   return setOnceTimestamp(getCall(s, callId), "answeredAt");
 }
 
+// KS-EL1 (Owner-Entscheidung: answeredAt traegt ZWEI Sachverhalte auf EINEM Feld - "die
+// Verbindung steht", gelesen von isInCallConsult/mapStatus, und "ab hier wird bezahlt",
+// gelesen von voiceMinutesOf): der Anker NACHZIEHEN, NICHT setzen. Der Stempel am
+// Anrufstart (markAnswered, "jetzt") bleibt fuer den ERSTEN Sachverhalt unveraendert
+// stehen; diese Operation tauscht ihn am Gespraechsende gegen die ECHTE Rufannahme des
+// Anbieters (answeredAtIso, oder null, wenn sie nicht feststeht) - der EINZIGE Aufrufer
+// ist finishFromConversation (elevenlabs/outbound.js), NACHDEM endedAt steht und BEVOR
+// gebucht wird. Anders als setOnceTimestamp/markAnswered bewusst KEIN set-once: hier wird
+// ein VORLAEUFIGER Wert korrigiert, kein leeres Feld erstmalig befuellt. changed
+// unbedingt true (Muster recordProviderCallResult) - genau ein Schreiber, genau einmal je
+// Call, ein no-op-Aufruf mit demselben Wert gibt es auf diesem Weg nicht.
+// Zustand ausgeschrieben (state statt s): eine neue einbuchstabige Kennung haette die
+// bestehende, im Bestand eingefrorene id-length-Ausnahme dieser Datei ueberschritten
+// (eslint-suppressions.json: exakter Zaehler, keine Toleranz nach oben) und damit
+// zusaetzliche, neue Verstoesse verdeckt statt sie zu vermeiden.
+export function trueUpAnsweredAt(state, callId, answeredAtIso) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  call.answeredAt = answeredAtIso;
+  return { call, changed: true };
+}
+
 // Setzt Terminal-Status + EXPLIZITEN endedAt-Anker (F9). Idempotent: nur aus 'active'
 // (Muster endCallRecord). Der explizite Anker (statt new Date()) ist die Grundlage fuer die
 // gekappte Zombie-/Timer-Terminalisierung in F10/F12 (nie Boot-Zeit). Nebeneffekt im Namen (N7).
@@ -668,6 +695,14 @@ export const recordTelnyxConversationId = recordProviderHandleOnce("telnyxConver
 export const recordElevenlabsConversationId = recordProviderHandleOnce(
   "elevenlabsConversationId",
 );
+
+// KS-EL1: der GRUND, warum trueUpAnsweredAt oben KEINEN Anker ermitteln konnte (additiv
+// nullable). Set-once + value-gated ueber DIESELBE Fabrik wie die Provider-Handles - die
+// Form ist identisch (ein String-Feld, einmal gesetzt, ein spaeterer Aufruf ueberschreibt
+// nicht), nur das Feld selbst ist keine Kennung, sondern ein Diagnosetext. Eine dritte,
+// eigens getippte Kopie derselben set-once-Logik (Muster recordFailureReason) waere
+// Duplizierung (G5) - die Fabrik ist bewusst allgemein genug fuer beide Faelle.
+export const recordAnsweredUnclearReason = recordProviderHandleOnce("answeredUnclearReason");
 
 // EL-Anrufstart: das Ergebnis eines Gespraechs, das der ANBIETER gefuehrt hat. Auf diesem
 // Weg gibt es bei uns weder Audio noch Turn-Schleife - Zusammenfassung und Befund kommen

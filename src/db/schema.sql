@@ -170,6 +170,11 @@ CREATE TABLE IF NOT EXISTS call (
   status             TEXT NOT NULL,
   started_at         TEXT NOT NULL,
   answered_at        TEXT,
+  -- KS-EL1: der GRUND, wenn answered_at am Gespraechsende NICHT ermittelbar war (fehlender
+  -- oder unbrauchbarer Anbieter-Beleg, elevenlabs/outbound.js answeredAnchorOutcome).
+  -- Additiv NULLABLE: nur der ElevenLabs-Anrufstart setzt sie, jeder andere Call bleibt
+  -- NULL -> Bestand byte-identisch.
+  answered_unclear_reason TEXT,
   ended_at           TEXT,
   summary            TEXT,
   objective_achieved TEXT,
@@ -320,6 +325,12 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS result JSONB;
 -- AL-P13: Consult-Kette auf Bestands-call-Tabellen nachziehen (Muster context/mandate/result).
 -- Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS consults JSONB;
+
+-- KS-EL1: der Grund, wenn answered_at nicht ermittelbar war, auf Bestands-call-Tabellen
+-- nachziehen (Muster elevenlabs_conversation_id). Idempotent; frische DB = No-op. KEIN
+-- Backfill noetig: es gibt keinen einzigen Bestands-Anruf mit diesem Grund, er misst ab
+-- Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS answered_unclear_reason TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

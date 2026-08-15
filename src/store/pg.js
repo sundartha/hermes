@@ -255,6 +255,20 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // KS-EL1: der Anker nachziehen - Wrapper-Paritaet zu json.js. changed ist bei
+    // ops.trueUpAnsweredAt unbedingt true (genau ein Schreiber, genau einmal je Call).
+    trueUpAnsweredAt(callId, answeredAtIso) {
+      const { call, changed } = ops.trueUpAnsweredAt(requireState(), callId, answeredAtIso);
+      if (changed) save();
+      return call;
+    },
+    // KS-EL1: der Grund, wenn der Anker nicht ermittelbar war - Wrapper-Paritaet zu
+    // json.js (Muster recordElevenlabsConversationId).
+    recordAnsweredUnclearReason(callId, reason) {
+      const { call, changed } = ops.recordAnsweredUnclearReason(requireState(), callId, reason);
+      if (changed) save();
+      return call;
+    },
     endCallRecord(callId, status = "completed") {
       const { call, changed } = ops.endCallRecord(requireState(), callId, status);
       if (changed) save();
@@ -1159,6 +1173,10 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     status: r.status,
     startedAt: r.started_at,
     answeredAt: r.answered_at,
+    // KS-EL1: der Grund, wenn answeredAt nicht ermittelbar war, mit-hydrieren. Ohne diese
+    // Zeile ginge er beim Restart verloren UND der naechste Flush schriebe NULL zurueck
+    // (Lehre i8-design-decisions). NULL -> null (json-Parity).
+    answeredUnclearReason: r.answered_unclear_reason ?? null,
     endedAt: r.ended_at,
     transcript: segmentsByCall.get(r.id) || [],
     summary: r.summary,
@@ -1515,8 +1533,8 @@ async function flushCalls(client, tenantId, calls) {
           estimated_cost_cents, actual_cost_micro_cents, cost_trued_at,
           cost_trued_source, cost_truing_attempts, telnyx_conversation_id, caller_turns, result,
           consults, estimated_cost_spend_month_key, estimated_cost_period_key,
-          elevenlabs_conversation_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41)
+          elevenlabs_conversation_id, answered_unclear_reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1533,7 +1551,8 @@ async function flushCalls(client, tenantId, calls) {
          consults=EXCLUDED.consults, context=EXCLUDED.context,
          estimated_cost_spend_month_key=EXCLUDED.estimated_cost_spend_month_key,
          estimated_cost_period_key=EXCLUDED.estimated_cost_period_key,
-         elevenlabs_conversation_id=EXCLUDED.elevenlabs_conversation_id`,
+         elevenlabs_conversation_id=EXCLUDED.elevenlabs_conversation_id,
+         answered_unclear_reason=EXCLUDED.answered_unclear_reason`,
       [
         c.id,
         tenantId,
@@ -1621,6 +1640,11 @@ async function flushCalls(client, tenantId, calls) {
         // UPDATE-SET, fiele die Bindung beim naechsten Flush auf NULL zurueck und der
         // Rueckfrage-Webhook faende den laufenden Anruf nicht mehr.
         c.elevenlabsConversationId ?? null,
+        // KS-EL1 ($42, ans Ende angehaengt -> keine Umnummerierung): IM ON CONFLICT DO
+        // UPDATE SET (Muster elevenlabs_conversation_id) - der Grund entsteht NACH dem
+        // Create, am Gespraechsende (finishFromConversation). Fehlte er im UPDATE-SET,
+        // fiele er beim naechsten Flush auf NULL zurueck.
+        c.answeredUnclearReason ?? null,
       ],
     );
     await flushTranscript(client, tenantId, c);

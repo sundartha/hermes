@@ -115,6 +115,11 @@ const NUMBER_A = "+4915005559002";
 // Gegen-Marker: sie darf NIE nach aussen (Datensparsamkeit, Absolute Regel 5).
 const PROVIDER_SUMMARY = "Termin am Donnerstag um 10 Uhr wurde zugesagt.";
 const TRANSCRIPT_LINE = "Donnerstag um zehn passt uns gut.";
+// KS-EL1: die Ist-Dauer des Anbieters (metadata.call_duration_secs) - OHNE sie zieht
+// finishFromConversation (elevenlabs/outbound.js) den Buchungsanker NICHT nach (der Wert
+// gilt dann als fehlend/unbrauchbar), answeredAt faellt auf null, und T3s Buchungs-Achse
+// unten misst 0 statt eines echten Anrufs.
+const PROVIDER_CALL_DURATION_SECS = 65;
 const FINISHED_CONVERSATION = Object.freeze({
   status: "done",
   transcript: [
@@ -122,6 +127,7 @@ const FINISHED_CONVERSATION = Object.freeze({
     { role: "user", message: TRANSCRIPT_LINE },
   ],
   analysis: { transcript_summary: PROVIDER_SUMMARY, call_successful: "success" },
+  metadata: { call_duration_secs: PROVIDER_CALL_DURATION_SECS },
 });
 
 // Marker im Fehler-Rumpf der Attrappe: taucht er in der Antwort an den Aufrufer auf, ist

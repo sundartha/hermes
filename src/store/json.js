@@ -456,6 +456,22 @@ export function markAnswered(callId) {
   return call;
 }
 
+// KS-EL1: der Anker nachziehen - mutiert -> save immer (Muster ops.trueUpAnsweredAt:
+// changed ist dort unbedingt true).
+export function trueUpAnsweredAt(callId, answeredAtIso) {
+  const { call, changed } = ops.trueUpAnsweredAt(load(), callId, answeredAtIso);
+  if (changed) save();
+  return call;
+}
+
+// KS-EL1: der Grund, wenn der Anker nicht ermittelbar war - mutiert -> save bei changed
+// (Muster recordElevenlabsConversationId).
+export function recordAnsweredUnclearReason(callId, reason) {
+  const { call, changed } = ops.recordAnsweredUnclearReason(load(), callId, reason);
+  if (changed) save();
+  return call;
+}
+
 export function endCallRecord(callId, status = "completed") {
   const { call, changed } = ops.endCallRecord(load(), callId, status);
   if (changed) save();

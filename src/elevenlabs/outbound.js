@@ -28,6 +28,7 @@
 // (GET /v1/convai/conversations/{id}, Takt ELEVENLABS_RESULT_POLL_MS) und legen Transkript
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { DISCLOSURE_OWNER_FALLBACK_EN, LOCALES } from "../i18n/locales.js";
+import { MS_PER_SECOND } from "../utils/timer.js";
 import { fetchConversation, startOutboundCall } from "./convai.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
@@ -43,6 +44,11 @@ const FINISHED_PROVIDER_STATUS = Object.freeze([PROVIDER_DONE, PROVIDER_FAILED])
 // beiden Seiten vorkommt und die beiden Vokabulare nicht dasselbe sind.
 const CALL_COMPLETED = "completed";
 const CALL_FAILED = "failed";
+
+// KS-EL1 (Owner-Entscheidung, s. Modul-Kopf): der GRUND, wenn metadata.call_duration_secs
+// beim Abgleich (answeredAnchorOutcome) weder 0 noch eine positive Zahl ist (fehlt, NaN,
+// negativ, falscher Typ) - additiv am Call, s. store/state-ops.js recordAnsweredUnclearReason.
+const ANSWERED_UNCLEAR_REASON = "call_duration_secs_unusable";
 
 // Rollen: der Anbieter kennt "agent" und "user", unser Transkript "agent" und "caller".
 // Alles, was nicht der Agent ist, ist die Gegenstelle - ein unbekannter Rollenname darf
@@ -95,6 +101,39 @@ const endStatusOf = (conversation) =>
 const objectiveAchievedOf = (conversation) =>
   OBJECTIVE_ACHIEVED_BY_PROVIDER[conversation.analysis?.call_successful] ??
   OBJECTIVE_ACHIEVED_UNKNOWN;
+
+// KS-EL1 (Owner-Entscheidung, s. Modul-Kopf): WAS aus dem Buchungsanker werden soll, reine
+// Entscheidung OHNE Store-Mutation (P5/P6) - exportiert, weil sie ohne Store/Netz testbar
+// ist. answeredAt traegt heute ZWEI Sachverhalte auf EINEM Feld: "die Verbindung steht"
+// (markAnswered am Anrufstart, gelesen von isInCallConsult/mapStatus - bleibt UNVERAENDERT
+// stehen) und "ab hier wird bezahlt" (voiceMinutesOf). Diese Funktion liefert den Wert fuer
+// den ZWEITEN Sachverhalt, gezogen aus der Anbieter-Wahrheit metadata.call_duration_secs:
+// der Wert ist 0, WAEHREND status=in-progress, und wird erst beim Uebergang auf
+// processing/done befuellt (tasks/spike1-messung.jsonl:12).
+//
+// EHRLICHKEIT: OB dieser Wert ab der Rufannahme misst oder die Klingelphase (SIP-Ringing)
+// einschliesst, ist NICHT belegt - der Anbieter dokumentiert die Zaehlgrenze nicht. Diese
+// Ableitung geht darum vom GUENSTIGEREN Fall aus (Rufannahme bis Ende) - das ist eine
+// ANNAHME, keine belegte Tatsache; ein echter Anruf mit bekannter Klingeldauer misst das
+// demnaechst nach.
+//
+//   positiv (>0)        -> answeredAtIso = endedAt minus Dauer. voiceMinutesOf (billing/
+//                           metering.js) rundet danach exakt ceil(Dauer/60) - die Minuten
+//                           des Anbieters, OHNE dass diese Funktion voiceMinutesOf kennt
+//                           oder anfasst.
+//   0                    -> NIEMAND hat abgenommen: kein Anker, KEIN Grund - das ist
+//                           bekannt, nicht unklar. Lieber eine Minute zu wenig als eine
+//                           erfundene (der Kern dieser Aenderung).
+//   fehlend/unbrauchbar  -> kein Anker, PLUS der Grund (ANSWERED_UNCLEAR_REASON): anders
+//                           als bei 0 steht hier NICHT fest, ob abgenommen wurde.
+export function answeredAnchorOutcome(endedAtIso, conversation) {
+  const durationSecs = conversation?.metadata?.call_duration_secs;
+  if (typeof durationSecs === "number" && Number.isFinite(durationSecs) && durationSecs > 0) {
+    const answeredAtMs = Date.parse(endedAtIso) - durationSecs * MS_PER_SECOND;
+    return { answeredAtIso: new Date(answeredAtMs).toISOString(), unclearReason: null };
+  }
+  return { answeredAtIso: null, unclearReason: durationSecs === 0 ? null : ANSWERED_UNCLEAR_REASON };
+}
 
 // Nur Zeilen mit gesprochenem Inhalt: der Anbieter fuehrt auch Werkzeug-Ereignisse im
 // transcript, die kein message-Feld tragen.
@@ -339,11 +378,24 @@ export function makeElevenLabsOutbound({
     });
   }
 
-  // Ergebnis persistieren, DANN terminalisieren - so sieht die Buchungskette den fertigen
-  // Stand. hangUp bleibt null: es gibt kein eigenes Provider-Leg mehr aufzulegen, das
-  // Gespraech ist beim Anbieter bereits beendet.
+  // Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
+  // buchen - so sieht die Buchungskette den fertigen Stand. hangUp bleibt null: es gibt
+  // kein eigenes Provider-Leg mehr aufzulegen, das Gespraech ist beim Anbieter bereits
+  // beendet.
+  //
+  // DER ANKER STEHT HIER, NICHT IM persistEnd-THUNK UNTEN: ohne eigenes hangUp (hangUp:
+  // null) ruft terminateAndBillCall bill() synchron direkt nach persistEnd() - es gibt kein
+  // Zeitfenster, in das sich ein Zwischenschritt haengen liesse. billThunk laedt den Call
+  // FRISCH aus dem Store, der Anker muss also VOR dem Aufruf unten stehen. Der
+  // endCallRecord-Aufruf hier liefert zugleich endedAt fuer answeredAnchorOutcome; der
+  // zweite Aufruf im persistEnd-Thunk ist idempotent (setCallEndedAt greift nur aus
+  // status==='active') und bleibt aus Symmetrie zu jedem anderen Terminierungspfad stehen.
   async function finishFromConversation(callId, conversation) {
     persistProviderResult(callId, conversation);
+    const ended = store.endCallRecord(callId, endStatusOf(conversation));
+    const anchor = answeredAnchorOutcome(ended?.endedAt, conversation);
+    store.trueUpAnsweredAt(callId, anchor.answeredAtIso);
+    if (anchor.unclearReason) store.recordAnsweredUnclearReason(callId, anchor.unclearReason);
     await terminateAndBillCall({
       persistEnd: () => store.endCallRecord(callId, endStatusOf(conversation)),
       hangUp: null,

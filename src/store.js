@@ -100,6 +100,14 @@ export const {
   dropLastAgentTranscript,
   purgeTranscript,
   markAnswered,
+  // KS-EL1: der Anker nachziehen (elevenlabs/outbound.js, answeredAnchorOutcome). OHNE
+  // diesen Re-Export waere store.trueUpAnsweredAt auf der Fassade undefined -> der
+  // Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster markAnswered).
+  trueUpAnsweredAt,
+  // KS-EL1: der Grund, wenn der Anker nicht ermittelbar war. OHNE diesen Re-Export waere
+  // store.recordAnsweredUnclearReason auf der Fassade undefined -> derselbe Fehler (Muster
+  // recordElevenlabsConversationId).
+  recordAnsweredUnclearReason,
   endCallRecord,
   setCallEndedAt, // F9 (A6): Seam fuer F10/F12 (expliziter End-Anker)
   markSummarySmsSent,
