@@ -71,6 +71,15 @@ const KEY_FACT_SEPARATOR = "; ";
 // beginnt er eine eigene Zeile, deshalb getrimmt - der Wortlaut bleibt unangetastet.
 const CONSTRAINTS_PRECEDENCE = EN_PROMPT.mandate.constraintsPrecedence.trim();
 
+// Der Bestand setzt Beschriftung und Briefing mit EINEM Leerzeichen zusammen
+// (src/claude.js assignmentBlock); die HINTERGRUND-Beschriftungen tragen ihren Abstand
+// dagegen schon im Baustein. Deshalb hier einmal angeklebt statt in contextLine.
+const BRIEFING_LABEL = `${EN_PROMPT.briefingLabel} `;
+
+// Im Bestand stehen die GRENZEN als Aufzaehlung, auf diesem Weg steht die Buchungs-Grenze
+// in Prosa - der Listenstrich faellt weg, der Satz bleibt unangetastet.
+const LIST_DASH = /^-\s+/;
+
 // Jeder Wert geht als getrimmter String raus, nie als undefined/null: fehlt dem Anbieter
 // eine Variable, die seine Agenten-Vorlage referenziert, bricht er das Gespraech stumm ab
 // (WebSocket-Close 1008), bevor ein Wort gesprochen ist. Zugleich DIE Leer-Pruefung der
@@ -92,14 +101,32 @@ const objectiveAchievedOf = (conversation) =>
 const spokenLines = (conversation) =>
   (conversation.transcript || []).filter((zeile) => zeile && zeile.message);
 
-// Der Spielraum in den Worten des Auftraggebers. Die Enum-Achse on_out_of_scope hat auf
-// diesem Weg noch keinen Platz (die Vorlage kennt genau EINEN {{mandate}}-Slot) - eine
-// bewusste Luecke des Anrufstarts, kein Datenverlust: das Mandat bleibt vollstaendig am
-// Call-Record.
+// Die Buchungs-Grenze des Agenten - die WIRKUNG des Mandats, nicht sein Wortlaut. Der
+// Bestand tauscht sie pro Anruf (src/claude.js:210: mandateScopeGiven ->
+// boundaries.noBookingWithMandate, sonst boundaries.noBooking). Ein statischer
+// Prompt-Satz kann das nicht: er sagte dem Agenten neben seinem Mandat die Regel des
+// mandatlosen Falls zu ("nimm den Terminwunsch als Nachricht auf"), und welcher der
+// beiden Saetze im Konflikt gewinnt, entschiede der Anruf. Sie reist deshalb IM WERT,
+// wie Verbote und Hintergrund auch.
+const bookingBoundary = (spielraumGegeben) =>
+  (spielraumGegeben
+    ? EN_PROMPT.boundaries.noBookingWithMandate
+    : EN_PROMPT.boundaries.noBooking
+  ).replace(LIST_DASH, "");
+
+// Der Spielraum in den Worten des Auftraggebers, gefolgt von der Buchungs-Grenze, die er
+// stellt. Die Enum-Achse on_out_of_scope hat auf diesem Weg noch keinen Platz (die Vorlage
+// kennt genau EINEN {{mandate}}-Slot) - eine bewusste Luecke des Anrufstarts, kein
+// Datenverlust: das Mandat bleibt vollstaendig am Call-Record.
+//
+// Die Weiche haengt am SPIELRAUM ALLEIN, nicht am Vorhandensein eines Mandats: eine blosse
+// Ausweich-Reihenfolge ermaechtigt zu nichts (dieselbe Bedingung wie mandateScopeGiven,
+// src/claude.js:97). Der Wert ist damit NIE leer - die Grenze gilt in beiden Lagen.
 function mandateText(mandate) {
-  if (!mandate) return "";
-  const teile = [mandate.decide_freely, mandate.fallback_order].map(alsText);
-  return teile.filter(Boolean).join(" ");
+  const spielraum = alsText(mandate?.decide_freely);
+  const rahmen = [spielraum, alsText(mandate?.fallback_order)].filter(Boolean).join(" ");
+  const grenze = bookingBoundary(Boolean(spielraum));
+  return rahmen ? `${rahmen}\n${grenze}` : grenze;
 }
 
 // Die harten Verbote - die OBERGRENZE des Mandats. Ohne sie wird aus "entscheide frei, aber
@@ -129,16 +156,23 @@ function constraintsText(constraints) {
 // Anweisung, die er weitergibt.
 //
 // Das Kanal-Gate (ASSISTANT_CONTEXT_ENABLED) wird hier NICHT ein zweites Mal formuliert: ist
-// es zu, traegt der Call-Record gar keinen Kontext (routes/api-calls.js), und !context
-// greift.
-function backgroundText(context) {
-  if (!context) return "";
+// es zu, traegt der Call-Record gar keinen Kontext (routes/api-calls.js), und die
+// Kontext-Zeilen fallen von selbst weg.
+//
+// Das BRIEFING steht als erste Zeile im selben Block - dieselbe Reihenfolge wie im Bestand
+// (src/claude.js assignmentBlock: BRIEFING vor der HINTERGRUND-Sektion). Es faehrt bewusst
+// im vorhandenen Wert mit statt als zehnte Variable: die Agenten-Vorlage muesste sonst um
+// einen Platzhalter wachsen, den erst ein Push an den Anbieter wirksam macht. Es haengt
+// NICHT am Kontext-Gate - Briefing und Kontext sind zwei Felder, und ein Block aus nur
+// einem von beiden ist ein vollstaendiger Block.
+function backgroundText({ context, briefing }) {
   const label = EN_PROMPT.background;
   const lines = [
-    contextLine(label.summary, context.summary),
-    contextLine(label.relationship, context.recipient_relationship),
-    contextLine(label.outcome, context.desired_outcome),
-    contextLine(label.facts, keyFactsText(context.key_facts)),
+    contextLine(BRIEFING_LABEL, briefing),
+    contextLine(label.summary, context?.summary),
+    contextLine(label.relationship, context?.recipient_relationship),
+    contextLine(label.outcome, context?.desired_outcome),
+    contextLine(label.facts, keyFactsText(context?.key_facts)),
   ].filter(Boolean);
   if (!lines.length) return "";
   return `\n${label.heading}\n${lines.join("\n")}\n${label.guardrail}`;
@@ -234,8 +268,10 @@ function assertConfigured(el) {
 // Artikel 50 EU AI Act), und die haengt nie an einer Variablen ohne Default. Ein fehlender
 // oder blanker Name ergaebe sonst den halben Satz "...on behalf of ." - das Identitaets-
 // Gate davor (telephony/outbound-gates.js) prueft den WAHRHEITSWERT des Namens, ein Name
-// aus lauter Leerzeichen passiert es. Die uebrigen fuenf tragen den leeren String: sie
-// muessen DA sein, aber ihr Fehlen kostet keine Pflicht, sondern nur Inhalt.
+// aus lauter Leerzeichen passiert es. Die uebrigen tragen ohne Inhalt den leeren String:
+// sie muessen DA sein, aber ihr Fehlen kostet keine Pflicht, sondern nur Inhalt. AUSSER
+// {{mandate}}: dort haengt seit der Mandats-Weiche die Buchungs-Grenze mit drin, und die
+// gilt in BEIDEN Lagen - der Wert ist deshalb nie leer (s. mandateText).
 //
 // AUSSPRACHE (Eigentuemer-Befund 15.08.2026, der Name klang falsch): der Name geht
 // UNVERAENDERT raus - keine Lautschrift, keine Ersatz-Schreibweise an dieser Stelle. Wie er
@@ -263,7 +299,7 @@ function dynamicVariables({ call, ownerName, time }) {
     callee: alsText(call.to),
     objective: alsText(call.goal),
     constraints: constraintsText(call.constraints),
-    background: backgroundText(call.context),
+    background: backgroundText({ context: call.context, briefing: call.briefing }),
     mandate: mandateText(call.mandate),
     owner_timezone: alsText(time.ownerZone),
     callee_timezone: calleeTimezoneText(time),
@@ -377,6 +413,25 @@ export function makeElevenLabsOutbound({
     // AL-P1/EL-BL1: set-once am Record. Es ist dieselbe Kennung, ueber die der
     // Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) den laufenden Anruf bindet.
     store.recordElevenlabsConversationId(call.id, conversationId);
+    // DER BUCHUNGSANKER DIESES WEGES (Absolute Regel 1). Ohne ihn bleibt answeredAt leer,
+    // voiceMinutesOf (billing/metering.js) liefert 0, reconcileVoiceBudget bricht ab - und
+    // die pro-Tenant-Kostendecke saehe von diesem Zweig NICHTS: beliebig viele Anrufe, der
+    // Zaehler steht still, und der Ausfall bleibt unsichtbar, weil jeder einzelne Anruf
+    // gelingt. markAnswered ruft sonst nur routes/voice.js, und auf der SIP-Trunk-Strecke
+    // des Anbieters kommt kein /voice-Webhook. Gebucht wird ueber DIESELBE Kette wie auf
+    // jedem anderen Weg (terminateAndBillCall -> finishCall -> reconcileVoiceBudget); es
+    // entsteht KEIN zweiter Kostenweg und kein zweites Gate.
+    //
+    // WARUM AN DIESER STELLE UND NICHT AM ERGEBNIS-ABRUF: der Anrufstart des Anbieters ist
+    // BLOCKIEREND ueber die ganze Klingelphase und antwortet erst, wenn der SIP-INVITE
+    // seine endgueltige Antwort hat (am 15.08.2026 gemessen, s. convai.js
+    // REQUEST_TIMEOUT_MS: 40,3 s blosses Klingeln vor der Antwort) - der Zeitpunkt SEINER
+    // Antwort ist die Rufannahme. Die Ist-Dauer aus dem Ergebnis-Abruf waere die genauere
+    // Quelle, verlangte aber einen Setter mit EXPLIZITEM Zeitstempel; markAnswered stempelt
+    // "jetzt" (set-once, store/state-ops.js). Die Abweichung ist der Verzug bis zu dem
+    // Abhol-Takt, in dem das Ende auffaellt (ELEVENLABS_RESULT_POLL_MS, Default 5 s) - sie
+    // bucht im Zweifel MEHR, nie weniger, und das ist an einem Gate die richtige Richtung.
+    store.markAnswered(call.id);
     scheduleResultPoll(call.id, conversationId);
   }
 

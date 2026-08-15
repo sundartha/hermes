@@ -437,6 +437,19 @@ test("EL-START T1: der ElevenLabs-Anrufstart wird gerufen und seine conversation
         assert.equal(dynamicVariables(anfrage).objective, OBJECTIVE);
       });
 
+      // Die zweite Variable, die den Auftrag ausmacht: WEN der Agent anruft. Im
+      // Vorlagen-Prompt traegt sie den Satz "You are calling {{callee}} right now." -
+      // faellt der Wert aus, sagt der Prompt dem Agenten nicht mehr, mit wem er spricht,
+      // waehrend to_number davon unberuehrt weitergewaehlt wird: die Luecke bliebe still.
+      // Gemessen wird gegen dasselbe normalisierte Ziel wie oben - benannt == gewaehlt.
+      await ctx.test("callee benennt dasselbe normalisierte Ziel, das gewaehlt wurde", () => {
+        assert.equal(
+          dynamicVariables(anfrage).callee,
+          TELNYX_TEST_PEER_NUMBER,
+          "{{callee}} bleibt sonst unaufgeloest oder nennt eine andere Nummer als die gewaehlte",
+        );
+      });
+
       await ctx.test("xi-api-key traegt den Schluessel", () => {
         assert.equal(anfrage.headers[API_KEY_HEADER], API_KEY);
       });
@@ -471,7 +484,16 @@ for (const fall of GATE_FAELLE) {
 
 test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassung so im Store, dass get_transcript sie liefert", async (ctx) => {
   await withElevenLabs(
-    { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
+    {
+      // Der Minutensatz steht hier EXPLIZIT, weil BASE_ENV (test/helpers.js) ihn fuer die
+      // ganze Suite auf 0 setzt: ohne diese Zeile buchte auch ein vollstaendig heiler
+      // Weg 0 Cent, und der Buchungs-Fall unten waere rot ohne Aussage - er maesse die
+      // Test-Umgebung statt des Zweigs (Lehre gate-triage-red-test-is-a-claim). Derselbe
+      // Satz und derselbe Grund wie in T4 (a/b).
+      env: { VOICE_TARIFF_DOMESTIC_CENTS: DOMESTIC_TARIFF_CENTS },
+      seed: seedOwner(),
+      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+    },
     async ({ srv, mock }) => {
       const res = await placeCall(srv);
       assert.equal(res.status, HTTP_OK, "Vorbedingung: der Anruf muss ueberhaupt starten");
@@ -520,6 +542,53 @@ test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassun
         assert.ok(
           !text.includes(TRANSCRIPT_LINE),
           "das Roh-Transkript darf NIE nach aussen (Datensparsamkeit)",
+        );
+      });
+
+      // ---- der ERFOLGSPFAD und die Kosten-/Verbrauchsachse ----------------------------
+      // Gepinnt war die Buchung bisher nur im FEHLER-Fall (T4 a/b: die Reserve wird wieder
+      // frei). Dass ein GELUNGENER Anruf ueberhaupt Geld auf die Achse legt, hielt kein
+      // Fall fest - und genau diese Achse ist ein Gate: die pro-Tenant-Kostendecke
+      // (Absolute Regel 1) liest usage[tenantId].costCents (budgetExceeded). Bucht dieser
+      // Weg nicht, laeuft er an der Decke vorbei: beliebig viele Anrufe, und der Zaehler
+      // steht still - der Ausfall ist unsichtbar, weil jeder einzelne Anruf gelingt.
+      //
+      // Gemessen wird die Achse, die der Bestand misst (test/kv-p2-inbound-budget.test.js:
+      // usage[BOOTSTRAP_TENANT_ID].costCents aus dem Store), nicht ein Log oder ein
+      // Zwischenwert. Gewartet wird auf den persistierten Abrechnungs-Marker und NICHT auf
+      // den Status: die Buchungskette laeuft fire-and-forget NACH dem Ende
+      // (terminateAndBillCall, bill wird nicht awaited), der Status ist also schon terminal,
+      // waehrend die Buchung noch aussteht. markBilled sitzt im selben Block direkt HINTER
+      // der Buchung (call-finish.js) - steht der Marker, ist gebucht oder es gab nichts.
+      const nachBuchung = await waitForStoreState(
+        srv,
+        (state) => state.calls.some((eintrag) => eintrag.id === callId && eintrag.billedAt),
+        RESULT_WAIT_MS,
+      );
+
+      // Ohne diese Haelfte waere ein roter Befund unten dreideutig: "nichts gebucht" saehe
+      // genauso aus wie "die Buchungskette lief nie" und wie "dieses Leg ist mit 0 bepreist"
+      // (Lehre pruefkommando-ohne-positiv-kontrolle). Beide Wachen trennen das ab - die
+      // Reserve ist derselbe Minutensatz dieses Legs (tariffCentsPerMin(to, from) x
+      // Vorlauffenster, outboundReserveCents), nur vor dem Waehlen statt danach.
+      await ctx.test("Positiv-Kontrolle: die Buchungskette ist gelaufen, und dieses Leg ist bepreist", () => {
+        const abgerechnet = nachBuchung.calls.find((eintrag) => eintrag.id === callId);
+        assert.ok(
+          abgerechnet.billedAt,
+          "der Erfolgspfad erreicht den EINEN Beender (terminateAndBillCall) gar nicht erst",
+        );
+        assert.ok(
+          abgerechnet.reserveCents > 0,
+          `Wache: der Minutensatz dieses Legs ist 0 (reserveCents=${JSON.stringify(abgerechnet.reserveCents)}) - dann bucht auch ein heiler Weg 0, und der Fall unten maesse die Test-Umgebung statt des Zweigs`,
+        );
+      });
+
+      await ctx.test("der Erfolgspfad bucht auf die Kosten-/Verbrauchsachse des Tenants", () => {
+        const abgerechnet = nachBuchung.calls.find((eintrag) => eintrag.id === callId);
+        const gebucht = nachBuchung.usage?.[BOOTSTRAP_TENANT_ID]?.costCents;
+        assert.ok(
+          gebucht > 0,
+          `ein gelungener ElevenLabs-Anruf legt NICHTS auf die Achse, die die pro-Tenant-Kostendecke liest (usage[${BOOTSTRAP_TENANT_ID}].costCents=${JSON.stringify(gebucht)}, Satz VOICE_TARIFF_DOMESTIC_CENTS=${DOMESTIC_TARIFF_CENTS}) - er kostet real (Carrier-Minuten der DID plus das Gespraech beim Anbieter), aber das Gate sieht davon nichts und deckelt diesen Weg nie. Am Record nachgemessen: answeredAt=${JSON.stringify(abgerechnet.answeredAt)}, endedAt=${JSON.stringify(abgerechnet.endedAt)}, estimatedCostCents=${JSON.stringify(abgerechnet.estimatedCostCents)} - die Minuten-Quelle beider Buchungen (voiceMinutesOf, billing/metering.js) liefert ohne answeredAt 0, und markAnswered ruft auf diesem Weg niemand: der Anruf laeuft ueber den SIP-Trunk des Anbieters, es kommt kein /voice-Webhook, der ihn setzen wuerde`,
         );
       });
     },
@@ -926,8 +995,9 @@ function vorlagenPrompt() {
 const materialMitVorlage = (anfrage) =>
   [agentMaterial(anfrage), rendern(vorlagenPrompt(), dynamicVariables(anfrage))].join("\n");
 
-// Ein Anrufstart, aus dem nur zaehlt, was beim Agenten ankommt. Beide Unterfaelle fahren
-// denselben Seed und unterscheiden sich in GENAU EINER Achse: dem Feld constraints.
+// Ein Anrufstart, aus dem nur zaehlt, was beim Agenten ankommt. Alle Unterfaelle, die ihn
+// fahren (T6 (Vorrang) ueber constraints, T10 ueber mandate.decide_freely), nutzen denselben
+// Seed und unterscheiden sich in GENAU EINER Achse: dem Auftrags-Feld, das sie setzen.
 async function vorrangLauf(auftrag) {
   return withElevenLabs(
     { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
@@ -965,6 +1035,80 @@ test("EL-START T6 (Vorrang): der Vorrang-Satz erreicht den Agenten nur zusammen 
       `die Verbote reisen ohne ihren Vorrang - aus "entscheide frei, aber hoechstens 40 Euro" wird am Anbieter wieder "entscheide frei". Material: ${material}`,
     );
   });
+});
+
+// ---- T6 (Mandat): der Spielraum des Auftrags erreicht den Agenten --------------------
+// Die dritte Groesse desselben Auftrags - und die einzige, die den Agenten ueberhaupt
+// ENTSCHEIDEN laesst, statt jede Frage als Nachricht zurueckzugeben: das Mandat
+// (decide_freely = die Ermaechtigung, fallback_order = die Reihenfolge, die er allein
+// durchgeht). Der Vorlagen-Prompt fuehrt dafuer einen eigenen Abschnitt ("Mandate for this
+// call: {{mandate}}") und sagt ausdruecklich: ist das Feld leer, hat der Agent KEIN Mandat
+// und sagt gar nichts zu.
+//
+// Warum das ein Befund waere und kein Qualitaetsmangel: kommt der Wert nicht an, ist der
+// Anruf nicht halb so gut, sondern ergebnislos. Der Agent nimmt eine Nachricht auf, wo der
+// Auftraggeber ihn ausdruecklich hat entscheiden lassen - und niemand sieht einen Fehler,
+// weil der Anruf technisch gelingt. Es ist die Gegenrichtung zum Verbote-Fall oben: dort
+// reist die OBERGRENZE nicht mit (der Agent verhandelt weiter als beauftragt), hier die
+// ERMAECHTIGUNG (er verhandelt gar nicht).
+//
+// Gemessen wird wie in T6 der WORTLAUT im Material, das den Agenten erreicht - ein leerer,
+// abgeschnittener oder generischer Wert traegt ihn nicht. NICHT gemessen wird die
+// Enum-Achse on_out_of_scope: sie hat auf diesem Weg bewusst keinen Platz (die Vorlage
+// kennt genau EINEN {{mandate}}-Slot, src/elevenlabs/outbound.js), und ein Fall darueber
+// entschiede eine Vorlagen-Aenderung mit, die dieser Fall nicht mitentscheiden soll.
+const MANDAT_SPIELRAUM = "Termin an jedem Werktag zwischen 9 und 12 Uhr, bis 60 Euro";
+const MANDAT_REIHENFOLGE = "zuerst Donnerstagvormittag, sonst Freitag, sonst naechste Woche";
+const MANDAT = Object.freeze({
+  decide_freely: MANDAT_SPIELRAUM,
+  fallback_order: MANDAT_REIHENFOLGE,
+});
+
+test("EL-START T6 (Mandat): die Ermaechtigung und die Ausweich-Reihenfolge erreichen den Agenten des Anbieters", async (ctx) => {
+  await withElevenLabs(
+    { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
+    async ({ srv, mock }) => {
+      const res = await placeCall(srv, null, { mandate: MANDAT });
+      const antwort = await res.text();
+      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf muss starten: ${antwort}`);
+      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
+      const material = agentMaterial(mock.startRequests[0]);
+
+      // Trennlinie wie in T6: was unsere Seite ANGENOMMEN hat, steht am Record. Bleibt
+      // dieser Teil gruen, waehrend die uebrigen rot sind, liegt der Verlust nachweislich
+      // an der Uebergabe an den Anbieter - nicht an Eingabe, Validierung oder Persistenz.
+      await ctx.test("Vorbedingung: das Mandat steht am Call-Datensatz", () => {
+        const call = ownCalls(srv)[0];
+        assert.ok(call, "kein Call-Datensatz angelegt");
+        assert.equal(call.mandate?.decide_freely, MANDAT_SPIELRAUM);
+        assert.equal(call.mandate?.fallback_order, MANDAT_REIHENFOLGE);
+      });
+
+      // Ohne diese Haelfte waere jeder rote Befund unten unbrauchbar: ein Sucher, der
+      // NICHTS findet, meldet dasselbe wie ein Sucher, der nicht sucht (Lehre
+      // pruefkommando-ohne-positiv-kontrolle). Das Anliegen reist heute nachweislich mit.
+      await ctx.test("Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material", () => {
+        assert.ok(
+          enthaelt(material, OBJECTIVE),
+          `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+        );
+      });
+
+      await ctx.test("die Ermaechtigung erreicht den Agenten im Wortlaut", () => {
+        assert.ok(
+          enthaelt(material, MANDAT_SPIELRAUM),
+          `der Spielraum ("${MANDAT_SPIELRAUM}") erreicht den Agenten NICHT - der Vorlagen-Prompt liest ein leeres {{mandate}} als "KEIN Mandat", der Agent sagt nichts zu und nimmt nur eine Nachricht auf. Material: ${material}`,
+        );
+      });
+
+      await ctx.test("die Ausweich-Reihenfolge erreicht den Agenten im Wortlaut", () => {
+        assert.ok(
+          enthaelt(material, MANDAT_REIHENFOLGE),
+          `die Ausweich-Reihenfolge ("${MANDAT_REIHENFOLGE}") erreicht den Agenten NICHT - er probiert von sich aus keine Alternative und bricht beim ersten Nein ab. Material: ${material}`,
+        );
+      });
+    },
+  );
 });
 
 // ---- T7: die zwei Zeitzonen und die aktuelle Zeit ------------------------------------
@@ -1357,6 +1501,159 @@ test("EL-START T8 (Fallback): steht keine Zone fest, nennt der Agent gar keine a
     assert.ok(
       enthaeltEines(material, GEGENSEITE_MARKER),
       `dem Agenten fehlt die Anweisung, unbestimmt zu sprechen ("tomorrow morning") und die Gegenseite die Uhrzeit nennen zu lassen - ein Verbot ohne Ersatz laesst ihn im Gespraech steckenbleiben, statt lieber unbestimmt als falsch zu sein. Erwartet: eines von ${GEGENSEITE_MARKER.join(" | ")}. Material: ${material}`,
+    );
+  });
+});
+
+// ---- T9: das Briefing des Auftraggebers ----------------------------------------------
+// ABSICHTLICH ROT. briefing ist das Feld, in das place_call den GANZEN Hintergrund aus dem
+// bisherigen Chat legt (src/mcp-tools.js: "Relevant context from the chat so far that the
+// agent needs for the call" - Namen, Vorlieben, Vorgeschichte, gewuenschtes Ergebnis und
+// Ton). Auf dem BESTANDSWEG traegt es den Systemprompt mit; auf diesem Weg spricht der
+// Agent DES ANBIETERS und weiss ausschliesslich, was der Anrufstart ihm mitgibt.
+//
+// Unsere Seite nimmt es an und behaelt es: place_call fuehrt es im Schema, /api/calls legt
+// es als call.briefing an. Danach liest es auf diesem Weg NIEMAND mehr - dynamicVariables
+// (src/elevenlabs/outbound.js) baut seine Variablen aus goal, constraints, context, mandate,
+// Zeit und Auftraggeber-Namen, briefing ist in der ganzen Datei nicht erwaehnt. Von allen
+// Groessen des Auftrags ist das der groesste Inhaltsverlust, und er ist still: der Anruf
+// gelingt, der Agent klingt nur ahnungslos - er kennt weder Namen noch Vorgeschichte, die
+// der Auftraggeber ihm ausdruecklich mitgegeben hat.
+//
+// Gemessen wird der ZWECK, nicht die Existenz eines Schluessels: der WORTLAUT des Briefings
+// muss in dem Material auftauchen, das den Agenten erreicht. Ein leerer, abgeschnittener
+// oder generischer Wert traegt ihn nicht und besteht diesen Fall deshalb nicht. WO er
+// landet - eigene dynamische Variable oder ein Platz in einem der bestehenden Bloecke -,
+// entscheidet dieser Fall NICHT mit; er akzeptiert jeden Traeger, den der Agent sieht.
+const BRIEFING_KERN =
+  "Petra schneidet ihm seit Jahren die Haare, bezahlt wird immer bar, und er kommt lieber vormittags.";
+const BRIEFING = `Aus dem bisherigen Chat: ${BRIEFING_KERN}`;
+
+test("EL-START T9: das Briefing des Auftraggebers erreicht den Agenten des Anbieters", async (ctx) => {
+  await withElevenLabs(
+    { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
+    async ({ srv, mock }) => {
+      const res = await placeCall(srv, null, { briefing: BRIEFING });
+      const antwort = await res.text();
+      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf muss starten: ${antwort}`);
+      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
+      const material = materialMitVorlage(mock.startRequests[0]);
+
+      // Trennlinie wie in T6: was unsere Seite ANGENOMMEN hat, steht am Record. Bleibt
+      // dieser Teil gruen, waehrend der letzte rot ist, liegt der Verlust nachweislich an
+      // der Uebergabe an den Anbieter - nicht an Eingabe, Validierung oder Persistenz.
+      await ctx.test("Vorbedingung: das Briefing steht am Call-Datensatz", () => {
+        const call = ownCalls(srv)[0];
+        assert.ok(call, "kein Call-Datensatz angelegt");
+        assert.equal(call.briefing, BRIEFING, "das Briefing kommt nicht einmal am Record an");
+      });
+
+      // Ohne diese Haelfte waere der rote Befund unten unbrauchbar: ein Sucher, der NICHTS
+      // findet, meldet dasselbe wie ein Sucher, der nicht sucht (Lehre
+      // pruefkommando-ohne-positiv-kontrolle). Das Anliegen reist heute nachweislich mit.
+      await ctx.test("Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material", () => {
+        assert.ok(
+          enthaelt(material, OBJECTIVE),
+          `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+        );
+      });
+
+      await ctx.test("der Wortlaut des Briefings erreicht den Agenten", () => {
+        assert.ok(
+          enthaelt(material, BRIEFING_KERN),
+          `das Briefing ("${BRIEFING_KERN}") erreicht den Agenten NICHT - weder als dynamische Variable noch ueber den gerenderten Vorlagen-Prompt. Es steht am Call-Datensatz und wird von diesem Weg nie gelesen: der Agent fuehrt das Gespraech ohne den Hintergrund, den der Auftraggeber ihm ausdruecklich mitgegeben hat. Material: ${material}`,
+        );
+      });
+    },
+  );
+});
+
+// ---- T10: die Mandats-Weiche in den Grenzen des Agenten ------------------------------
+// ABSICHTLICH ROT - und die andere Haelfte von T6 (Mandat): dort wird gemessen, dass der
+// WERT des Mandats ankommt, hier, dass er die WEICHE stellt, die er im Bestand stellt.
+//
+// Der Bestand kennt zwei Buchungs-Grenzen und tauscht sie pro Anruf (src/claude.js:210):
+// ohne Spielraum boundaries.noBooking ("du buchst nichts fest, du nimmst den Terminwunsch
+// als Nachricht auf"), mit Spielraum boundaries.noBookingWithMandate ("was dein SPIELRAUM
+// deckt, sagst du selbst zu und gibst es NICHT zusaetzlich als Nachricht weiter") - genau
+// dann, wenn call.mandate.decide_freely gesetzt ist (mandateScopeGiven, src/claude.js:97).
+// Die Agenten-Vorlage traegt an dieser Stelle EINEN statischen Prosa-Satz im Abschnitt
+// YOUR BOUNDARIES, der die OHNE-Mandat-Variante fuehrt; die Vorlage nennt das selbst
+// (_bestandsabgleich_begruendung: "NICHT geaendert wurde die Buchungs-Zeile ... sie traegt
+// weiter die OHNE-Mandat-Variante boundaries.noBooking").
+//
+// Warum das ein Befund ist und kein Schoenheitsfehler: das Mandat reist, seine WIRKUNG
+// nicht. Der Agent liest im selben Prompt "Mandate for this call: <Spielraum>" UND "du
+// buchst nichts fest, du nimmst es als Nachricht auf". Im Konflikt gewinnt mal das eine,
+// mal das andere - der Auftraggeber, der ausdruecklich hat entscheiden lassen, bekommt
+// stattdessen eine Nachricht zurueck, und niemand sieht einen Fehler, weil der Anruf
+// technisch gelingt. Der Bestand hat genau diesen Selbstwiderspruch aufgeloest (WW-F1).
+//
+// GEPINNT werden BEIDE Lagen gegeneinander, jede als Muss UND als Darf-nicht: ein
+// statischer Text kann nur eine von beiden fuehren und faellt deshalb in genau einem der
+// zwei Laeufe durch. Der Wortlaut wird NICHT abgetippt, sondern aus derselben Quelle
+// gezogen, aus der ihn der Bau nehmen muss (src/i18n/prompts/en.js ueber LOCALES - so
+// haelt es src/elevenlabs/outbound.js bereits fuer Beschriftungen und Vorrang-Satz; ein
+// hier neu getippter Satz waere eine zweite, schwaechere Wahrheit, G5). Der Listenstrich
+// faellt weg: im Bestand stehen die Zeilen in einer Aufzaehlung, auf diesem Weg
+// entscheidet der Bau ueber die Form, nicht ueber den Satz.
+const LISTENSTRICH = /^-\s+/;
+const buchungsgrenze = (baustein) => baustein.replace(LISTENSTRICH, "");
+const BUCHUNG_OHNE_MANDAT = buchungsgrenze(EN_PROMPT.boundaries.noBooking);
+const BUCHUNG_MIT_MANDAT = buchungsgrenze(EN_PROMPT.boundaries.noBookingWithMandate);
+// Eigener Spielraum-Wortlaut (nicht der aus T6 (Mandat)): die beiden Faelle duerfen sich
+// nicht ueber einen geteilten Wert bedingen.
+const WEICHE_SPIELRAUM = "Termin an jedem Werktag zwischen 14 und 17 Uhr, bis 80 Euro";
+
+test("EL-START T10: die Buchungs-Grenze des Agenten folgt dem Mandat DIESES Anrufs", async (ctx) => {
+  // Ohne diese Wache misst der Fall nichts: waeren die beiden Bausteine gleich oder einer
+  // im anderen enthalten, koennte EIN statischer Text beide Laeufe bestehen.
+  await ctx.test("Wache: die beiden Bausteine sind gegeneinander unterscheidbar", () => {
+    assert.notEqual(
+      BUCHUNG_MIT_MANDAT,
+      BUCHUNG_OHNE_MANDAT,
+      "Wache: der Bestand fuehrt zwei verschiedene Buchungs-Grenzen (src/claude.js:210) - sind sie gleich geworden, gibt es keine Weiche mehr zu stellen",
+    );
+    assert.ok(
+      !enthaelt(BUCHUNG_MIT_MANDAT, BUCHUNG_OHNE_MANDAT) &&
+        !enthaelt(BUCHUNG_OHNE_MANDAT, BUCHUNG_MIT_MANDAT),
+      "Wache: keiner der beiden Saetze darf den anderen enthalten, sonst bestuende ein einziger statischer Text beide Laeufe",
+    );
+  });
+
+  await ctx.test("ohne Mandat: die OHNE-Mandat-Grenze erreicht den Agenten, die MIT-Variante nicht", async () => {
+    const { material } = await vorrangLauf({});
+    assert.ok(
+      enthaelt(material, OBJECTIVE),
+      `Positiv-Kontrolle: der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+    );
+    assert.ok(
+      enthaelt(material, BUCHUNG_OHNE_MANDAT),
+      `ohne Mandat fehlt dem Agenten die Buchungs-Grenze des Bestands ("${BUCHUNG_OHNE_MANDAT}") - was er stattdessen liest, ist ein statischer Vorlagen-Satz, der pro Anruf nicht wechseln kann. Material: ${material}`,
+    );
+    assert.ok(
+      !enthaelt(material, BUCHUNG_MIT_MANDAT),
+      `der Agent bekommt ohne jedes Mandat die MIT-Mandat-Grenze zugesagt ("was dein Spielraum deckt, sagst du selbst zu") - er sagt dann etwas verbindlich zu, wozu ihn niemand ermaechtigt hat. Material: ${material}`,
+    );
+  });
+
+  await ctx.test("mit decide_freely: die MIT-Mandat-Grenze erreicht den Agenten, die OHNE-Variante nicht", async () => {
+    const { variablen, material } = await vorrangLauf({
+      mandate: { decide_freely: WEICHE_SPIELRAUM },
+    });
+    // Trennt "das Mandat kam gar nicht an" von "die Weiche wurde nicht gestellt": diese
+    // Haelfte ist heute gruen, die beiden darunter sind es nicht.
+    assert.ok(
+      enthaelt(variablen.mandate, WEICHE_SPIELRAUM),
+      `Vorbedingung: der Spielraum reist nicht einmal als Wert mit - {{mandate}}=${JSON.stringify(variablen.mandate)}`,
+    );
+    assert.ok(
+      enthaelt(material, BUCHUNG_MIT_MANDAT),
+      `der Auftraggeber hat den Agenten ausdruecklich entscheiden lassen ("${WEICHE_SPIELRAUM}"), aber die Buchungs-Grenze wechselt nicht mit ("${BUCHUNG_MIT_MANDAT}") - der Agent liest sein Mandat und daneben die Anweisung, trotzdem nur eine Nachricht aufzunehmen. Material: ${material}`,
+    );
+    assert.ok(
+      !enthaelt(material, BUCHUNG_OHNE_MANDAT),
+      `neben dem Mandat steht weiterhin die OHNE-Mandat-Grenze - zwei Saetze, die einander widersprechen, und welcher gewinnt, entscheidet der Anruf. Material: ${material}`,
     );
   });
 });
