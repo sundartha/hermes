@@ -39,6 +39,16 @@ const ARG_INDEX_AGENT_ID = 2;
 const LISTEN_TRENNER = "; ";
 const LOG_PREFIX = "[check-elevenlabs-drift]";
 
+// Ausgenommene Abweichungen bleiben rot - sie sind eine Abweichung, und dass
+// man sie sieht, ist ihr Zweck. Die Schlusszeile sagt aber, WIE VIELE davon
+// festgehaltene Entscheidungen sind: sonst liest sich ein bewusst offener Punkt
+// wie ein Defekt, und wer den Unterschied nicht sieht, gewoehnt sich an rot.
+function ausnahmeZusatz(abweichungen) {
+  const anzahl = abweichungen.filter((abweichung) => abweichung.ausgenommen).length;
+  if (anzahl === 0) return "";
+  return ` (davon ${anzahl} in der Vorlage bewusst ausgenommen, mit Grund und Datum an der Zeile - kein Defekt, sondern eine festgehaltene Entscheidung)`;
+}
+
 function melde({ ergebnis, agentId, ausserhalb }) {
   const { ok, geprueft, geprueftRegeln, abweichungen, verletzungen, fehler } = ergebnis;
   const abweichungsZeilen = abweichungen.map((abweichung) => abweichung.zeile);
@@ -60,7 +70,7 @@ function melde({ ergebnis, agentId, ausserhalb }) {
     return 0;
   }
   console.error(
-    `${LOG_PREFIX} ROT - ${abweichungen.length} von ${geprueft} besessenen Feldern weichen ab, ${verletzungen.length} von ${geprueftRegeln} Verbots-Pruefungen (Regel x Eintrag) verletzt, ${fehler.length} Fehler in der Besitz-/Regel-Erklaerung. Der Live-Agent wurde NICHT veraendert; das Reparieren ist eine eigene Entscheidung (npm run elevenlabs:push).`,
+    `${LOG_PREFIX} ROT - ${abweichungen.length} von ${geprueft} besessenen Feldern weichen ab${ausnahmeZusatz(abweichungen)}, ${verletzungen.length} von ${geprueftRegeln} Verbots-Pruefungen (Regel x Eintrag) verletzt, ${fehler.length} Fehler in der Besitz-/Regel-Erklaerung. Der Live-Agent wurde NICHT veraendert; das Reparieren ist eine eigene Entscheidung (npm run elevenlabs:push).`,
   );
   return 1;
 }

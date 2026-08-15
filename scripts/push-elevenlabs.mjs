@@ -6,7 +6,7 @@
 // Wege - Handarbeit im Dashboard oder ein Wegwerf-Spike. Beides ist nicht
 // wiederholbar und hinterlaesst keine Spur, welcher Wert warum gesetzt wurde.
 //
-// DIE VIER RIEGEL, in der Reihenfolge ihrer Wichtigkeit:
+// DIE FUENF RIEGEL, in der Reihenfolge ihrer Wichtigkeit:
 //
 // 1. TROCKENLAUF IST DER NORMALFALL. Ohne den ausdruecklichen Schalter
 //    --ausfuehren wird NICHTS geschrieben; ein versehentlicher Aufruf zeigt nur
@@ -19,12 +19,27 @@
 //    hat schon einmal ein Provisionierer die ganze Live-Konfiguration aus
 //    lokalen Werten geschrieben und Dashboard-Einstellungen zerstoert; genau
 //    dieser Weg ist hier baulich versperrt (kein "ganze Config hochladen").
-// 3. LESEN, VERGLEICHEN, DANN SCHREIBEN. Erst GET des Live-Agenten, dann der
+// 3. NUR DIE BENANNTEN FELDER. Mit --felder=<feld,feld> wird genau gesagt, was
+//    geschrieben werden darf; jedes andere besessene Feld bleibt unberuehrt,
+//    auch wenn es abweicht. Das ist die Grundfunktion und keine Erweiterung:
+//    "abweichend" heisst nicht "soll geaendert werden". Die Aufbewahrungs-Felder
+//    etwa stehen am Live-Agenten bewusst anders als in der Vorlage - ein Push,
+//    der sie als Nebenwirkung mitnimmt, dreht eine Entscheidung um, die niemand
+//    zur Abstimmung gestellt hat. Ein unbekannter Feldname bricht ab: eine
+//    Auswahl, die Tippfehler verschluckt, schuetzt nicht.
+//    DAMIT DAS NICHT AN DER AUFMERKSAMKEIT DES AUFRUFERS HAENGT, kann die
+//    Vorlage ein Feld selbst sperren: ein Besitz-Eintrag mit "ausgenommen"
+//    (Grund + Datum) ist ohne ausdrueckliche Nennung NIE Schreib-Kandidat,
+//    auch nicht im Lauf ohne --felder. Genannt wird er geschrieben - die
+//    Ausnahme ist ein Riegel gegen Unachtsamkeit, kein Verbot; das Umdrehen
+//    bleibt moeglich, es muss nur jemand tippen und sieht dabei die Meldung.
+// 4. LESEN, VERGLEICHEN, DANN SCHREIBEN. Erst GET des Live-Agenten, dann der
 //    gemeinsame Besitz-Vergleich, dann ein PATCH nur der abweichenden Pfade.
 //    Ein Feld, das schon stimmt, wird nicht angefasst.
-// 4. FAIL-CLOSED. Fehlender Schluessel, unlesbare oder unparsebare Vorlage,
-//    eine Besitz-Erklaerung, die nicht traegt, oder eine verletzte Regel der
-//    Vorlage: Abbruch mit Exit 1, ohne jeden Schreibversuch.
+// 5. FAIL-CLOSED. Fehlender Schluessel, unlesbare oder unparsebare Vorlage,
+//    eine Besitz-Erklaerung, die nicht traegt, eine verletzte Regel der Vorlage
+//    oder ein unverstandenes Argument: Abbruch mit Exit 1, ohne jeden
+//    Schreibversuch.
 //
 // WAS DAS WERKZEUG NICHT KANN: Felder, deren Vergleichs-Art mehrere Stellen zu
 // einer MENGE zusammenfasst (namen, variablen, texte). Aus "diese Namen fehlen"
@@ -40,9 +55,10 @@
 // abweichen, liest nach dem Schreiben erneut und meldet ROT, sobald die
 // Wirklichkeit schlechter ausfaellt als die Vorhersage.
 //
-// Aufruf:  npm run elevenlabs:push                     (Trockenlauf)
-//          npm run elevenlabs:push -- <agent_id>       (Trockenlauf, anderer Agent)
-//          npm run elevenlabs:push -- --ausfuehren     (schreibt wirklich)
+// Aufruf:  npm run elevenlabs:push                        (Trockenlauf, alle Felder Kandidat)
+//          npm run elevenlabs:push -- <agent_id>          (Trockenlauf, anderer Agent)
+//          npm run elevenlabs:push -- --felder=prompt     (Trockenlauf, nur dieses Feld)
+//          npm run elevenlabs:push -- --felder=prompt --ausfuehren   (schreibt wirklich)
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,7 +75,9 @@ import {
 } from "./lib/elevenlabs-agent-lesen.mjs";
 import {
   ART_WERT,
+  PFAD_TRENNER,
   PFAD_VERBINDER,
+  besesseneFeldNamen,
   setzeAnPfad,
   vergleicheBesitz,
 } from "./lib/elevenlabs-besitz.mjs";
@@ -68,7 +86,14 @@ const LOG_PREFIX = "[push-elevenlabs]";
 // Der einzige Schalter, der schreibt. Ausgeschrieben und ohne Kurzform: ein
 // einzelnes vertipptes Zeichen soll keinen Live-Agenten veraendern.
 const BESTAETIGUNGS_FLAG = "--ausfuehren";
+// Der Schalter, der die zu schreibenden Felder benennt. Wert am selben Token
+// (--felder=a,b) und nicht als naechstes Argument: ein getrenntes Argument
+// waere von der Agenten-Kennung nicht zu unterscheiden, und ein vergessener
+// Wert wuerde dann still den falschen Agenten adressieren.
+const FELDER_FLAG = "--felder";
 const FLAG_PRAEFIX = "--";
+const WERT_TRENNER = "=";
+const FELDER_TRENNER = ",";
 const ARG_START = 2;
 const LISTEN_TRENNER = ", ";
 // Grosszuegiger als der Lese-Abruf: der Patch traegt den vollen System-Prompt.
@@ -78,19 +103,86 @@ const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
 
 // --- Argumente ---
 
-// Freies Argument = Agenten-Kennung, Schalter = Verhalten. Ein UNBEKANNTER
-// Schalter bricht ab, statt still als Trockenlauf durchzugehen: wer
-// "--ausfuehren=true" tippt, meint schreiben, und ein Werkzeug, das solche
-// Absicht wortlos verschluckt, erzieht dazu, es noch einmal zu versuchen.
+// Zerlegt ein Schalter-Token an der ERSTEN Gleichheits-Stelle; ein Wert darf
+// selbst "=" enthalten. wert === null heisst "ohne Wert geschrieben" und ist
+// etwas anderes als ein leerer Wert: "--felder" ist ein vergessener Wert,
+// "--felder=" eine leere Liste - beides ein Fehler, aber nicht dasselbe.
+function zerlegeSchalter(token) {
+  const stelle = token.indexOf(WERT_TRENNER);
+  if (stelle < 0) return { name: token, wert: null };
+  return { name: token.slice(0, stelle), wert: token.slice(stelle + 1) };
+}
+
+function feldNamenAus(wert) {
+  return (wert ?? "")
+    .split(FELDER_TRENNER)
+    .map((name) => name.trim())
+    .filter((name) => name !== "");
+}
+
+function mitFehler(stand, fehler) {
+  return { ...stand, fehler: [...stand.fehler, fehler] };
+}
+
+// EIN Schalter, auf den bisherigen Stand angewandt - liefert den neuen Stand,
+// ohne den alten zu veraendern. Alles Unverstandene wird zu einem Eintrag in
+// fehler[], nie zu einem stillen Ueberspringen: wer "--ausfuehren=true" oder
+// "--Felder=prompt" tippt, meint etwas, und ein Werkzeug, das solche Absicht
+// wortlos verschluckt, schreibt am Ende etwas anderes als das Gemeinte.
+function wendeSchalterAn(stand, token) {
+  const { name, wert } = zerlegeSchalter(token);
+  if (name === BESTAETIGUNGS_FLAG) {
+    if (wert !== null)
+      return mitFehler(stand, `${token} - ${BESTAETIGUNGS_FLAG} nimmt keinen Wert`);
+    return { ...stand, ausfuehren: true };
+  }
+  if (name === FELDER_FLAG) {
+    const namen = feldNamenAus(wert);
+    if (namen.length === 0) {
+      return mitFehler(
+        stand,
+        `${token} - ${FELDER_FLAG} braucht mindestens einen Feldnamen, z.B. ${FELDER_FLAG}=prompt${FELDER_TRENNER}language`,
+      );
+    }
+    return { ...stand, auswahl: [...(stand.auswahl ?? []), ...namen] };
+  }
+  return mitFehler(
+    stand,
+    `${token} - unbekannter Schalter (bekannt: ${BESTAETIGUNGS_FLAG}, ${FELDER_FLAG}=<feld${FELDER_TRENNER}feld>)`,
+  );
+}
+
+// Freies Argument = Agenten-Kennung, Schalter = Verhalten. auswahl === null
+// heisst "keine Auswahl getroffen" (jedes abweichende schreibbare Feld ist
+// Kandidat) - eine leere Liste kann es nicht geben, die waere ein Fehler.
 function leseArgumente(argv) {
   const argumente = argv.slice(ARG_START);
-  const schalter = argumente.filter((wert) => wert.startsWith(FLAG_PRAEFIX));
   const frei = argumente.filter((wert) => !wert.startsWith(FLAG_PRAEFIX));
-  return {
-    agentId: frei[0] || LIVE_AGENT_ID,
-    ausfuehren: schalter.includes(BESTAETIGUNGS_FLAG),
-    unbekannt: schalter.filter((wert) => wert !== BESTAETIGUNGS_FLAG),
-  };
+  const schalter = argumente.filter((wert) => wert.startsWith(FLAG_PRAEFIX));
+  const start = { ausfuehren: false, auswahl: null, fehler: [] };
+  const stand = schalter.reduce(wendeSchalterAn, start);
+  return { ...stand, agentId: frei[0] || LIVE_AGENT_ID };
+}
+
+// Die Auswahl gegen die Besitz-Erklaerung der Vorlage. Ein Name, den die
+// Vorlage nicht fuehrt, ist ein Abbruchgrund: still ignoriert wuerde er zu
+// "dieses Feld weicht eben nicht ab" - und der Aufrufer glaubte, er haette
+// etwas geschrieben.
+function unbekannteFelder(auswahl, vorlage) {
+  const bekannt = new Set(besesseneFeldNamen(vorlage));
+  return auswahl.filter((feld) => !bekannt.has(feld));
+}
+
+// Gewaehlt ist ein Feld, wenn die Auswahl es ausdruecklich nennt - oder wenn es
+// gar keine Auswahl gibt UND die Vorlage es nicht ausgenommen hat. Die Ausnahme
+// wirkt damit genau gegen den unbedachten Lauf: "alles, was abweicht" nimmt sie
+// nicht mit, ein ausdruecklich getippter Feldname schon. Sie ist ein Riegel
+// gegen Unachtsamkeit, kein Verbot - wer die festgehaltene Entscheidung
+// umdrehen will, muss sie beim Namen nennen und sieht dabei die Meldung
+// "AUSNAHME UEBERSTIMMT".
+function istGewaehlt(auswahl, abweichung) {
+  if (auswahl !== null) return auswahl.includes(abweichung.feld);
+  return !abweichung.ausgenommen;
 }
 
 // --- Schreibbarkeit und Patch-Koerper ---
@@ -107,6 +199,24 @@ function istSchreibbar(abweichung) {
 
 function zielPfad(abweichung) {
   return abweichung.livePfade[0];
+}
+
+// Die abweichenden Felder in vier Toepfe, aus denen die ganze weitere Arbeit
+// folgt: was geschrieben wird, was die Vorlage vorerst ausnimmt, was die
+// Feldauswahl auslaesst und was gar nicht schreibbar ist. Sie getrennt zu
+// halten ist der Punkt der Uebung - "nicht angefasst, weil die Vorlage es
+// ausnimmt", "nicht angefasst, weil nicht gewaehlt" und "nicht angefasst, weil
+// unmoeglich" sind verschiedene Sachverhalte, und nur die ersten beiden sind
+// Entscheidungen, die jemand getroffen hat.
+export function teileAbweichungen({ abweichungen, auswahl }) {
+  const kandidaten = abweichungen.filter(istSchreibbar);
+  const uebergangen = kandidaten.filter((abweichung) => !istGewaehlt(auswahl, abweichung));
+  return {
+    schreibbar: kandidaten.filter((abweichung) => istGewaehlt(auswahl, abweichung)),
+    ausgenommen: uebergangen.filter((abweichung) => abweichung.ausgenommen),
+    ausgelassen: uebergangen.filter((abweichung) => !abweichung.ausgenommen),
+    rest: abweichungen.filter((abweichung) => !istSchreibbar(abweichung)),
+  };
 }
 
 // Der Patch-Koerper entsteht AUSSCHLIESSLICH aus den besessenen Live-Pfaden der
@@ -187,29 +297,97 @@ function meldeNichtSchreibbar(rest) {
   );
 }
 
-// Belegt Riegel 2 an der AUSGABE statt nur im Kommentar: der Koerper, der
-// gesendet wuerde, traegt genau diese Zweige - was hier fehlt, kann den Agenten
-// nicht erreichen. Steht auch im Trockenlauf da, damit die Zusage pruefbar ist,
-// bevor jemand den Schalter setzt.
+function istZweig(wert) {
+  return wert !== null && typeof wert === "object" && !Array.isArray(wert);
+}
+
+// Die BLATT-Pfade eines fertigen Koerpers, aus dem Koerper selbst gelesen und
+// nicht aus der Absicht, die ihn gebaut hat. Nur so ist der Umriss ein Beleg:
+// eine Liste, die aus den Eingabe-Pfaden abgeleitet waere, bewiese lediglich,
+// dass die Eingabe die Eingabe ist. Eine Liste ist ein Blatt, kein Zweig - sie
+// wird als GANZES gesetzt.
+function blattPfade(wert, praefix) {
+  if (!istZweig(wert)) return [praefix];
+  return Object.entries(wert).flatMap(([schluessel, kind]) => {
+    const pfad = praefix === "" ? schluessel : `${praefix}${PFAD_TRENNER}${schluessel}`;
+    return blattPfade(kind, pfad);
+  });
+}
+
+// Belegt die Riegel 2 und 3 an der AUSGABE statt nur im Kommentar: der Koerper,
+// der gesendet wuerde, traegt genau diese Blatt-Pfade - was hier fehlt, kann den
+// Agenten nicht erreichen. Steht auch im Trockenlauf da, damit die Zusage
+// pruefbar ist, bevor jemand den Schalter setzt.
 function meldeKoerper(koerper) {
-  const zweige = Object.keys(koerper);
-  if (zweige.length === 0) return;
+  const pfade = blattPfade(koerper, "");
+  if (pfade.length === 0) return;
   const groesse = JSON.stringify(koerper).length;
   console.log(
-    `${LOG_PREFIX} PATCH-KOERPER - nur diese Zweige, ${groesse} Zeichen gesamt: ${zweige.join(LISTEN_TRENNER)}`,
+    `${LOG_PREFIX} PATCH-KOERPER - ${groesse} Zeichen, genau diese Blatt-Pfade und nichts sonst: ${pfade.join(LISTEN_TRENNER)}`,
+  );
+}
+
+function meldeAusgelassen(ausgelassen) {
+  if (ausgelassen.length === 0) return;
+  meldeZeilen("AUSGELASSEN", ausgelassen);
+  console.log(
+    `${LOG_PREFIX} AUSGELASSEN heisst: dieses Feld weicht ab und waere schreibbar, steht aber nicht in ${FELDER_FLAG}. Es wird NICHT angefasst - "abweichend" ist keine Aufforderung, den Live-Wert umzudrehen.`,
+  );
+}
+
+// Die ausgenommenen Felder tragen ihren Grund und ihr Datum MIT - eine Marke
+// ohne Begruendung waere nur ein zweites "ist halt so", und genau die
+// unbelegte Sonderbehandlung soll die Ausnahme ersetzen.
+function meldeAusgenommen(ausgenommen) {
+  if (ausgenommen.length === 0) return;
+  for (const abweichung of ausgenommen) {
+    const { grund, seit } = abweichung.ausgenommen;
+    const zeile = `${feldZeile("AUSGENOMMEN", abweichung)} | ausgenommen seit ${seit}: ${grund}`;
+    console.log(`${LOG_PREFIX} ${zeile}`);
+  }
+  console.log(
+    `${LOG_PREFIX} AUSGENOMMEN heisst: die Vorlage nimmt dieses Feld ausdruecklich von Schreibvorgaengen aus (Feld "ausgenommen" am Besitz-Eintrag, mit Grund und Datum). Ohne Nennung in ${FELDER_FLAG} ist es NIE Schreib-Kandidat - ein unbedachter Lauf kann die festgehaltene Entscheidung nicht umdrehen. Wer sie umdrehen WILL, nennt das Feld ausdruecklich: ${FELDER_FLAG}=<feld>.`,
+  );
+}
+
+// Das Gegenstueck: eine Ausnahme, die ausdruecklich genannt wurde, wird
+// geschrieben - aber nicht lautlos. Ohne diese Zeile saehe der Lauf, der eine
+// bewusste Entscheidung umdreht, genauso aus wie jeder andere.
+function meldeUebersteuerteAusnahmen(schreibbar) {
+  const uebersteuert = schreibbar.filter((abweichung) => abweichung.ausgenommen);
+  if (uebersteuert.length === 0) return;
+  console.log(
+    `${LOG_PREFIX} AUSNAHME UEBERSTIMMT - ${feldNamen(uebersteuert).join(LISTEN_TRENNER)}: in der Vorlage vorerst ausgenommen, aber in ${FELDER_FLAG} ausdruecklich genannt. Wird geschrieben; die Ausnahme ist ein Riegel gegen Unachtsamkeit, kein Verbot. Damit wird die festgehaltene Entscheidung umgedreht - die Vorlage sollte im selben Zug nachgezogen werden.`,
+  );
+}
+
+function meldeAuswahl(auswahl) {
+  if (auswahl === null) {
+    console.log(
+      `${LOG_PREFIX} FELDAUSWAHL - keine (${FELDER_FLAG} nicht gesetzt): jedes abweichende schreibbare Feld ist Kandidat, AUSSER den in der Vorlage ausgenommenen (s. AUSGENOMMEN).`,
+    );
+    return;
+  }
+  console.log(
+    `${LOG_PREFIX} FELDAUSWAHL - nur ${auswahl.join(LISTEN_TRENNER)}. Jedes andere besessene Feld bleibt unberuehrt, auch wenn es abweicht.`,
   );
 }
 
 // Was der Lauf vorhat, bevor irgendetwas passiert - im Trockenlauf ist das das
 // ganze Ergebnis, mit --ausfuehren die Ankuendigung.
-function meldePlan({ agentId, befund, schreibbar, rest, danach }) {
+function meldePlan({ agentId, befund, auswahl, felder, danach }) {
+  const { schreibbar, ausgenommen, ausgelassen, rest } = felder;
   console.log(
-    `${LOG_PREFIX} Agent ${agentId}: ${befund.geprueft} besessene Felder verglichen, ${befund.abweichungen.length} weichen ab (${schreibbar.length} schreibbar, ${rest.length} nicht).`,
+    `${LOG_PREFIX} Agent ${agentId}: ${befund.geprueft} besessene Felder verglichen, ${befund.abweichungen.length} weichen ab (${schreibbar.length} zum Schreiben gewaehlt, ${ausgenommen.length} von der Vorlage vorerst ausgenommen, ${ausgelassen.length} durch die Feldauswahl ausgelassen, ${rest.length} nicht schreibbar).`,
   );
+  meldeAuswahl(auswahl);
   for (const verletzung of befund.verletzungen) {
     console.error(`${LOG_PREFIX} ${verletzung}`);
   }
   meldeZeilen("WUERDE SCHREIBEN", schreibbar);
+  meldeUebersteuerteAusnahmen(schreibbar);
+  meldeAusgenommen(ausgenommen);
+  meldeAusgelassen(ausgelassen);
   meldeNichtSchreibbar(rest);
   const uebrig = feldNamen(danach.abweichungen);
   const namen = uebrig.length > 0 ? `: ${uebrig.join(LISTEN_TRENNER)}` : "";
@@ -230,7 +408,9 @@ async function fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper
     return 1;
   }
   if (schreibbar.length === 0) {
-    console.log(`${LOG_PREFIX} Nichts zu schreiben - kein schreibbares Feld weicht ab.`);
+    console.log(
+      `${LOG_PREFIX} Nichts zu schreiben - kein gewaehltes schreibbares Feld weicht ab. NICHTS gesendet.`,
+    );
     return 0;
   }
 
@@ -257,7 +437,11 @@ async function fuehreAus({ agentId, vorlage, befund, schreibbar, danach, koerper
   return 0;
 }
 
-async function runCli() {
+// argv als Parameter und nicht aus process gelesen: derselbe Ablauf laesst sich
+// damit mit einer gestellten Kommandozeile durchspielen, ohne den Prozess zu
+// verbiegen - und die Zusagen dieses Werkzeugs (Abbruch VOR dem Netz, der
+// Trockenlauf schreibt nie) sind pruefbar statt behauptet.
+export async function runCli(argv = process.argv) {
   const schluesselGrund = schluesselFehlt();
   if (schluesselGrund) {
     console.error(
@@ -265,35 +449,46 @@ async function runCli() {
     );
     return 1;
   }
-  const { agentId, ausfuehren, unbekannt } = leseArgumente(process.argv);
-  if (unbekannt.length > 0) {
+  const { agentId, ausfuehren, auswahl, fehler } = leseArgumente(argv);
+  if (fehler.length > 0) {
+    for (const zeile of fehler) console.error(`${LOG_PREFIX} ${zeile}`);
     console.error(
-      `${LOG_PREFIX} Abbruch (fail-closed): unbekannte Schalter ${unbekannt.join(LISTEN_TRENNER)} - bekannt ist nur ${BESTAETIGUNGS_FLAG}. NICHTS gesendet.`,
+      `${LOG_PREFIX} Abbruch (fail-closed): ${fehler.length} Argumente nicht verstanden. NICHTS gesendet.`,
     );
     return 1;
   }
 
   const vorlage = ladeVorlage();
+  if (auswahl !== null) {
+    const unbekannt = unbekannteFelder(auswahl, vorlage);
+    if (unbekannt.length > 0) {
+      console.error(
+        `${LOG_PREFIX} Abbruch (fail-closed): ${FELDER_FLAG} nennt Felder, die die Vorlage nicht besitzt: ${unbekannt.join(LISTEN_TRENNER)}. Besessen sind: ${besesseneFeldNamen(vorlage).join(LISTEN_TRENNER)}. NICHTS gesendet.`,
+      );
+      return 1;
+    }
+  }
+
   const live = await holeLiveAgenten(agentId);
   const befund = vergleicheBesitz({ vorlage, live });
   if (befund.fehler.length > 0) {
-    for (const fehler of befund.fehler) console.error(`${LOG_PREFIX} ${fehler}`);
+    for (const zeile of befund.fehler) console.error(`${LOG_PREFIX} ${zeile}`);
     console.error(
       `${LOG_PREFIX} Abbruch (fail-closed): die Besitz-Erklaerung der Vorlage traegt nicht (${befund.fehler.length} Fehler). Was nicht verlaesslich verglichen werden kann, wird nicht geschrieben. NICHTS gesendet.`,
     );
     return 1;
   }
 
-  const schreibbar = befund.abweichungen.filter(istSchreibbar);
-  const rest = befund.abweichungen.filter((abweichung) => !istSchreibbar(abweichung));
+  const felder = teileAbweichungen({ abweichungen: befund.abweichungen, auswahl });
+  const { schreibbar } = felder;
   const danach = vergleicheBesitz({ vorlage, live: simuliereSchreiben({ live, schreibbar }) });
   const koerper = bauePatchKoerper(schreibbar);
-  meldePlan({ agentId, befund, schreibbar, rest, danach });
+  meldePlan({ agentId, befund, auswahl, felder, danach });
   meldeKoerper(koerper);
 
   if (!ausfuehren) {
     console.log(
-      `${LOG_PREFIX} TROCKENLAUF - nichts gesendet, der Live-Agent ist unveraendert. Zum wirklichen Schreiben: npm run elevenlabs:push -- ${BESTAETIGUNGS_FLAG}`,
+      `${LOG_PREFIX} TROCKENLAUF - nichts gesendet, der Live-Agent ist unveraendert. Zum wirklichen Schreiben: npm run elevenlabs:push -- ${FELDER_FLAG}=<feld> ${BESTAETIGUNGS_FLAG}`,
     );
     return 0;
   }
@@ -303,7 +498,7 @@ async function runCli() {
 const istHauptmodul = fileURLToPath(import.meta.url) === resolve(process.argv[1] || "");
 if (istHauptmodul) {
   try {
-    process.exit(await runCli());
+    process.exit(await runCli(process.argv));
   } catch (err) {
     console.error(`${LOG_PREFIX} Abbruch (fail-closed): ${ohneSchluessel(err.message)}`);
     process.exit(1);

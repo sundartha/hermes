@@ -29,6 +29,12 @@
 // Auch sie stehen als Daten in der Vorlage und nicht hier - fest verdrahtet
 // waere die Regel fuer den unsichtbar, der die Vorlage pflegt.
 //
+// AUSNAHMEN (Feld "ausgenommen" am Besitz-Eintrag, mit Grund und Datum) sind
+// KEINE Abschaltung des Vergleichs: die Abweichung wird weiter gemeldet, nur
+// gekennzeichnet. Sie sagt dem schreibenden Kommando "nicht von selbst
+// geradebiegen" - dort ist sie der Riegel (s. push). Hier ist sie eine Marke,
+// damit rot nicht mit kaputt verwechselt wird.
+//
 // FAIL-CLOSED, weil ein gruener Befund, der nichts geprueft hat, wie ein
 // bestandener aussieht: eine fehlende Besitz-Erklaerung, eine unbekannte
 // Vergleichs-Art oder ein besessener Pfad, den die Vorlage gar nicht hat, wird
@@ -43,6 +49,20 @@ const BESITZ_SCHLUESSEL = "_besitz";
 const FELDER_SCHLUESSEL = "felder";
 const REGELN_SCHLUESSEL = "regeln";
 const NICHT_BESESSEN_SCHLUESSEL = "_nicht_besessen";
+// Die AUSNAHME an einem Besitz-Eintrag: "dieses Feld weicht bewusst ab, und ein
+// Push soll es vorerst NICHT von sich aus geradebiegen". Sie aendert den
+// Vergleich nicht - die Abweichung wird weiter gemeldet, nur gekennzeichnet;
+// wer sie stumm schalten wollte, muesste den Besitz aufgeben. Grund und Datum
+// sind Pflicht (s. ausnahmeFormFehler): eine Ausnahme ohne Begruendung ist von
+// einem Versehen nicht zu unterscheiden, und ohne Datum ist "vorerst" nicht
+// nachpruefbar.
+const AUSNAHME_SCHLUESSEL = "ausgenommen";
+const AUSNAHME_GRUND_SCHLUESSEL = "grund";
+const AUSNAHME_SEIT_SCHLUESSEL = "seit";
+const AUSNAHME_DATUM_MUSTER = /^\d{4}-\d{2}-\d{2}$/;
+// Die Marke, die eine ausgenommene Abweichung in der Meldung traegt: rot bleibt
+// rot, aber "festgehaltene Entscheidung" darf nicht wie "kaputt" aussehen.
+export const AUSNAHME_MARKE = "BEWUSST AUSGENOMMEN seit";
 // Einzige heute bekannte Form eines Verbots: "kein Eintrag dieser Sammlung darf
 // einen dieser Pfade gesetzt haben". Eine unbekannte art ist ein Fehler und
 // kein stilles Ueberspringen - sonst pruefte das Gate genau das Verbot nicht
@@ -66,7 +86,7 @@ const DOKU_PRAEFIX = "_";
 // ElevenLabs' dynamic-variable-Syntax, identisch zu check-elevenlabs-tests.js:
 // "double curly braces {{variable_name}}".
 const VARIABLEN_MUSTER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
-const PFAD_TRENNER = ".";
+export const PFAD_TRENNER = ".";
 export const PFAD_VERBINDER = " + ";
 
 // Der System-Prompt ist mehrere Kilobyte gross. Ungekuerzt waere die Meldung
@@ -230,6 +250,39 @@ function pfadListeFehler({ feld, seite, pfade, einPfad }) {
   return null;
 }
 
+// Prueft die FORM einer Ausnahme. Sie ist freiwillig (fehlt sie, ist alles in
+// Ordnung), aber wenn sie da ist, muss sie tragen: eine halbe Ausnahme wuerde am
+// Push zum Riegel, ohne dass irgendwo staende, warum und seit wann - genau die
+// unbelegte Sonderbehandlung, gegen die die Besitz-Erklaerung gebaut ist.
+function ausnahmeFormFehler(eintrag) {
+  const ausnahme = eintrag[AUSNAHME_SCHLUESSEL];
+  if (ausnahme === undefined) return null;
+  const istObjekt = ausnahme !== null && typeof ausnahme === "object" && !Array.isArray(ausnahme);
+  if (!istObjekt) {
+    return `${eintrag.feld}: "${AUSNAHME_SCHLUESSEL}" ist kein Objekt mit "${AUSNAHME_GRUND_SCHLUESSEL}" und "${AUSNAHME_SEIT_SCHLUESSEL}"`;
+  }
+  const grund = ausnahme[AUSNAHME_GRUND_SCHLUESSEL];
+  if (typeof grund !== "string" || grund === "") {
+    return `${eintrag.feld}: "${AUSNAHME_SCHLUESSEL}" ohne "${AUSNAHME_GRUND_SCHLUESSEL}" - eine Ausnahme ohne Begruendung ist von einem Versehen nicht zu unterscheiden`;
+  }
+  const seit = ausnahme[AUSNAHME_SEIT_SCHLUESSEL];
+  if (typeof seit !== "string" || !AUSNAHME_DATUM_MUSTER.test(seit)) {
+    return `${eintrag.feld}: "${AUSNAHME_SCHLUESSEL}.${AUSNAHME_SEIT_SCHLUESSEL}" ist kein Datum JJJJ-MM-TT - ohne Datum ist "vorerst" nicht nachpruefbar`;
+  }
+  return null;
+}
+
+// Die Ausnahme EINES Eintrags als Daten oder null. Erst nach bestandener
+// Formpruefung aufzurufen - danach sind Grund und Datum garantiert da.
+function ausnahmeAus(eintrag) {
+  const ausnahme = eintrag?.[AUSNAHME_SCHLUESSEL];
+  if (!ausnahme) return null;
+  return {
+    grund: ausnahme[AUSNAHME_GRUND_SCHLUESSEL],
+    seit: ausnahme[AUSNAHME_SEIT_SCHLUESSEL],
+  };
+}
+
 // Prueft die FORM eines Besitz-Eintrags. Ein kaputter Eintrag darf nicht still
 // als "kein Fund" durchgehen: dann pruefte das Gate genau das Feld nicht mehr,
 // das es zu pruefen behauptet.
@@ -246,6 +299,8 @@ function eintragsFormFehler(eintrag) {
   if (vergleich.brauchtJeEintrag && !istPfad(eintrag[JE_EINTRAG_SCHLUESSEL])) {
     return `${feld}: art "${art}" braucht "${JE_EINTRAG_SCHLUESSEL}" - ohne den Unterpfad steht nicht fest, WELCHER Text je Eintrag verglichen wird`;
   }
+  const ausnahmeFehler = ausnahmeFormFehler(eintrag);
+  if (ausnahmeFehler) return ausnahmeFehler;
   const seiten = [
     { seite: "vorlage", pfade: vorlage },
     { seite: "live", pfade: live },
@@ -286,17 +341,29 @@ function istGleich(links, rechts) {
   return gleichVorhanden && JSON.stringify(links.wert) === JSON.stringify(rechts.wert);
 }
 
+// Die Kennzeichnung einer ausgenommenen Abweichung in der gedruckten Zeile.
+// Steht HINTER dem Feldnamen, damit die Zeile ihren Anfang behaelt (wer nach
+// "ABWEICHUNG <feld>" sucht, findet sie weiterhin) und die Marke trotzdem nicht
+// zu uebersehen ist.
+function ausnahmeAnhang(ausgenommen) {
+  if (!ausgenommen) return "";
+  return ` [${AUSNAHME_MARKE} ${ausgenommen.seit}: ${ausgenommen.grund}]`;
+}
+
 // Ein Abweichungs-Befund als DATEN, nicht als Satz: das lesende Gate druckt
 // zeile, das schreibende Kommando braucht art, livePfade und soll.wert, um
 // daraus einen gezielten Patch zu bauen. Wer nur den Satz zurueckgibt, zwingt
 // den zweiten Aufrufer, ihn wieder auseinanderzunehmen - und damit zu einem
-// zweiten, driftenden Vergleicher.
+// zweiten, driftenden Vergleicher. Aus demselben Grund traegt der Befund die
+// Ausnahme als Daten UND als Marke in der Zeile: das Gate druckt nur, das
+// schreibende Kommando entscheidet daran.
 function abweichungsBefund({ eintrag, vergleich, links, rechts }) {
   const anzeige = (seite) => (seite.vorhanden ? vergleich.zeige(seite.wert) : FEHLT_MARKE);
   const vorlagePfade = eintrag.vorlage.join(PFAD_VERBINDER);
   const livePfade = eintrag.live.join(PFAD_VERBINDER);
   const sollAnzeige = anzeige(links);
   const istAnzeige = anzeige(rechts);
+  const ausgenommen = ausnahmeAus(eintrag);
   return {
     feld: eintrag.feld,
     art: eintrag.art,
@@ -305,7 +372,8 @@ function abweichungsBefund({ eintrag, vergleich, links, rechts }) {
     ist: rechts,
     sollAnzeige,
     istAnzeige,
-    zeile: `ABWEICHUNG ${eintrag.feld} | Vorlage ${vorlagePfade} = ${sollAnzeige} | Live ${livePfade} = ${istAnzeige}`,
+    ausgenommen,
+    zeile: `ABWEICHUNG ${eintrag.feld}${ausnahmeAnhang(ausgenommen)} | Vorlage ${vorlagePfade} = ${sollAnzeige} | Live ${livePfade} = ${istAnzeige}`,
   };
 }
 
@@ -474,6 +542,17 @@ export function vergleicheBesitz({ vorlage, live }) {
     verletzungen: regeln.verletzungen,
     fehler,
   };
+}
+
+// Die Namen ALLER besessenen Felder, wie die Vorlage sie erklaert - unabhaengig
+// davon, ob sie gerade abweichen. Gebraucht dort, wo ein Aufrufer eine Auswahl
+// von Feldern entgegennimmt und einen Namen pruefen muss, den es gar nicht gibt.
+// Steht hier und nicht beim Aufrufer, weil sonst ein zweiter Ort wuesste, wie
+// die Besitz-Erklaerung aufgebaut ist - und mit ihr driften wuerde.
+export function besesseneFeldNamen(vorlage) {
+  const eintraege = vorlage?.[BESITZ_SCHLUESSEL]?.[FELDER_SCHLUESSEL];
+  if (!Array.isArray(eintraege)) return [];
+  return eintraege.map((eintrag) => eintrag?.feld).filter((feld) => typeof feld === "string");
 }
 
 // Was die Vorlage ausdruecklich NICHT besitzt - wird mitgemeldet, damit die
