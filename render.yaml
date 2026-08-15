@@ -95,6 +95,20 @@ services:
         value: "2000"
       - key: ELEVENLABS_TTS_TOKEN_TTL_MS
         value: "60000"
+      # ---- ElevenLabs-Anrufstart (Convai SIP-Trunk-Outbound) ----
+      # Dritter Outbound-Weg; Schluessel/Basis aus ELEVENLABS_API_KEY/_API_BASE oben
+      # (EIN Konto). Default AUS -> alles laeuft unveraendert ueber Telnyx. Erst nach
+      # angelegtem Agenten + registrierter Nummer im Dashboard scharfstellen; Flag an
+      # ohne AGENT_ID/AGENT_PHONE_NUMBER_ID -> der Zweig waehlt NICHT (fail-closed).
+      - key: ELEVENLABS_OUTBOUND_ENABLED
+        value: "false"
+      # Opake Kennungen (kein Secret, aber deployment-spezifisch) -> Dashboard.
+      - key: ELEVENLABS_AGENT_ID
+        sync: false
+      - key: ELEVENLABS_AGENT_PHONE_NUMBER_ID
+        sync: false
+      - key: ELEVENLABS_RESULT_POLL_MS
+        value: "5000"
       # ---- Telnyx AI Assistant / Brain-Shim (C-Telnyx, P10) ----
       # Master-Flag: 404 bis Cutover. Erst NACH verifiziertem Deploy im Dashboard auf
       # "true" (Owner-Cutover P11). Flag an -> Boot verlangt ASSISTANT_ID + API_KEY +

@@ -292,6 +292,7 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
     requireTenant,
     costTruing,
     consultDelivery,
+    elevenLabsOutbound,
   } = deps;
 
   // ---- Outbound-Call-Routen -------------------------------------------------------
@@ -310,6 +311,11 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       outboundGates,
       voiceControl,
       originateAiAssistantCall,
+      // EL-Anrufstart: die EINE Instanz aus server.js (INV-7, Naht wie callFinish) - sie
+      // haelt den ziehenden Ergebnisweg des Anbieters. Fehlt sie im deps-Buendel, bleibt
+      // der Platz LEER statt hier zu werfen: makeCallRoutes setzt dann seinen
+      // fail-closed Ersatz ein (kein Anruf ohne verdrahteten Anrufstart).
+      originateElevenLabsCall: elevenLabsOutbound?.originateCall,
       terminateAndBillCall,
       hangUpAction,
       billThunk,

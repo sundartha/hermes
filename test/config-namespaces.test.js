@@ -59,7 +59,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // ausgefuehrter Handlung) -> 13.
   // EL-CONSULT: elevenLabsToolToken ergaenzt (Bearer-Schluessel des Consult-Webhooks
   // POST /webhooks/elevenlabs/consult) -> 14.
-  voice: 14,
+  // EL-ANRUFSTART (2026-08-14): elevenLabsOutbound ergaenzt - EIN nested Objekt fuer den
+  // ElevenLabs-Anrufstart (Flag, Agent-/Nummern-Kennung, Abhol-Takt, Schluessel, Basis-URL),
+  // kein neuer primitiver Key -> 15.
+  voice: 15,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
@@ -88,9 +91,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // FIX-1: summaryTimeoutMs ergaenzt -> 144.
 // WW-F2: toolFollowUpEnabled ergaenzt -> 145.
 // EL-CONSULT: elevenLabsToolToken ergaenzt -> 146.
-const EXPECTED_TOTAL_KEYS = 146;
+// EL-ANRUFSTART (2026-08-14): elevenLabsOutbound ergaenzt -> 147.
+const EXPECTED_TOTAL_KEYS = 147;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (146 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (147 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -196,11 +200,13 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // FIX-1: summaryTimeoutMs ist primitiv (Zahl, kein Array/nested Objekt) -> 135.
   // WW-F2: toolFollowUpEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 136.
   // EL-CONSULT: elevenLabsToolToken ist primitiv (String, kein Array/nested Objekt) -> 137.
+  // EL-ANRUFSTART (2026-08-14): elevenLabsOutbound ist das SECHSTE nested Objekt (kein
+  // primitives Blatt) -> checked bleibt 137, nur die Nested-Objekt-Zahl unten steigt auf 6.
   const EXPECTED_PRIMITIVE_LEAVES = 137;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
-    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 4 Arrays - 5 nested Objekte) geprueft`,
+    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 4 Arrays - 6 nested Objekte) geprueft`,
   );
 });
 

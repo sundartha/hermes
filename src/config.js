@@ -424,6 +424,16 @@ export function resolveModelPrices(schedules, todayIso) {
   return resolved;
 }
 
+// EIN ElevenLabs-Konto, EIN Schluessel, EINE Basis. Beide Verbraucher (Play-TTS-Synthese
+// und der Convai-Anrufstart) sprechen dasselbe Konto an, deshalb entsteht der Wert genau
+// hier EINMAL und wird in beide Gruppen gereicht (G5) - zwei getrennte Env-Saetze waeren
+// zwei Wahrheiten ueber dasselbe Konto. .trim() gegen ein eingefuegtes Newline (ein
+// Schluessel, der nie passt), stripTrailingSlash gegen die doppelte Schraegstrich-URL.
+const ELEVENLABS_API_KEY = (process.env.ELEVENLABS_API_KEY || "").trim();
+const ELEVENLABS_API_BASE = stripTrailingSlash(
+  (process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").trim(),
+);
+
 const rawConfig = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   // B5: WELCHER Sprachmodell-Anbieter faehrt diesen Prozess (llm/provider.js). Ein
@@ -640,10 +650,10 @@ const rawConfig = {
     // outputFormat wird von encodeURIComponent zu %20 -> ElevenLabs lehnt mit HTTP 400 ab
     // (live belegt). apiKey getrimmt gegen pasted Newline. Solche Werte tragen NIE legitim
     // umgebenden Whitespace, das Trimmen ist reine Haertung.
-    apiKey: (process.env.ELEVENLABS_API_KEY || "").trim(), // SECRET, nie loggen/leaken
+    apiKey: ELEVENLABS_API_KEY, // SECRET, nie loggen/leaken
     voiceId: (process.env.ELEVENLABS_VOICE_ID || "").trim(),
     model: (process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5").trim(), // Latenz-optimiert
-    apiBase: stripTrailingSlash((process.env.ELEVENLABS_API_BASE || "https://api.elevenlabs.io").trim()),
+    apiBase: ELEVENLABS_API_BASE,
     outputFormat: (process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128").trim(), // Owner-Wahl mp3
     // GAP-22: 4000 sprengte zusammen mit dem LLM-Worst-Case (11250 ms) den 15-s-Hardcut.
     // Der Schnitt liegt bewusst HIER und nicht bei den LLM-Werten: ein Synthese-Timeout
@@ -670,6 +680,36 @@ const rawConfig = {
   // laufendes, kostendes Gespraech hineinwirkt. .trim() wie bei den ElevenLabs-Schluesseln
   // oben: ein eingefuegtes Newline waere sonst ein Geheimnis, das nie passt.
   elevenLabsToolToken: (process.env.ELEVENLABS_TOOL_TOKEN || "").trim(),
+
+  // ---- ElevenLabs-Anrufstart (Convai SIP-Trunk-Outbound; optional) ----
+  // Dritter Outbound-Weg neben TeXML und Telnyx-Call-Control: das Gespraech fuehrt der
+  // Agent des ANBIETERS. Der PROVIDER des Anrufs bleibt telnyx - die DID liegt dort,
+  // ElevenLabs haengt per SIP-Trunk daran; es ist ein ENGINE-Zweig, kein zweiter Anbieter.
+  // Der Weichenschalter steht DEFAULT AUS (fail-closed, Muster TELNYX_AI_ASSISTANT_ENABLED):
+  // aus -> jeder Anruf laeuft unveraendert ueber die Telnyx-Zweige.
+  elevenLabsOutbound: {
+    enabled: boolEnv("ELEVENLABS_OUTBOUND_ENABLED", process.env.ELEVENLABS_OUTBOUND_ENABLED, {
+      fallback: false,
+    }),
+    // Opake Kennungen aus dem ElevenLabs-Konto: der angelegte Agent und die dort
+    // registrierte Absendernummer. KEIN Secret, aber deployment-spezifisch. .trim() wie
+    // bei den Schluesseln oben. Bei aktivem Schalter sind beide Pflicht - fehlt eine,
+    // waehlt der Zweig NICHT (fail-closed, s. src/elevenlabs/outbound.js).
+    agentId: (process.env.ELEVENLABS_AGENT_ID || "").trim(),
+    agentPhoneNumberId: (process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID || "").trim(),
+    // Abholtakt des ZIEHENDEN Ergebniswegs (GET /v1/convai/conversations/{id}): der
+    // Anbieter meldet das Gespraechsende nicht an uns, wir holen es ab. Untergrenze 100 ms,
+    // damit ein vertippter Wert keine Abruf-Schleife im Millisekundentakt erzeugt
+    // (Anbieter-Rate-Limit); Default 5 s als Kompromiss aus Latenz und Abruf-Volumen.
+    resultPollMs: numEnv("ELEVENLABS_RESULT_POLL_MS", process.env.ELEVENLABS_RESULT_POLL_MS, {
+      fallback: 5000,
+      min: 100,
+      max: 60000,
+    }),
+    // EIN Konto, EIN Schluessel, EINE Basis (s. Kommentar an der Konstante oben).
+    apiKey: ELEVENLABS_API_KEY, // SECRET, nie loggen/leaken
+    apiBase: ELEVENLABS_API_BASE,
+  },
 
   // ---- Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1; optional) ----
   // C6a (P5): gruppiert (10 zusammengehoerige Keys, Praezedenzfall telnyxElevenLabs) -
@@ -1819,7 +1859,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
-  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled"],
+  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],

@@ -669,6 +669,25 @@ export const recordElevenlabsConversationId = recordProviderHandleOnce(
   "elevenlabsConversationId",
 );
 
+// EL-Anrufstart: das Ergebnis eines Gespraechs, das der ANBIETER gefuehrt hat. Auf diesem
+// Weg gibt es bei uns weder Audio noch Turn-Schleife - Zusammenfassung und Befund kommen
+// fertig von aussen und muessen trotzdem an denselben Feldern landen, die get_transcript
+// ohnehin liest.
+//
+// Anders als die Handles oben ist das bewusst KEIN set-once: es gibt genau einen Schreiber
+// (den ziehenden Ergebnisweg, und der schreibt nur bei beendetem Gespraech), und ein
+// wiederholter Abruf desselben Gespraechs traegt denselben Stand. Beide Felder stammen aus
+// EINER Anbieter-Antwort und werden deshalb in EINEM Schritt gesetzt - zwei getrennte
+// Schreibschritte koennten auseinanderfallen und einen Befund ohne die zugehoerige
+// Zusammenfassung hinterlassen. Wrapper saved immer: es gibt Spalten fuer beide.
+export function recordProviderCallResult(state, callId, { summary, objectiveAchieved }) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  call.summary = summary;
+  call.objectiveAchieved = objectiveAchieved;
+  return { call, changed: true };
+}
+
 // AL-P1: eine substanzlose Nullzeile gibt es hier nicht - der Aufrufer (agentTurn) ruft
 // NUR bei nicht-leerem callerText. Zaehlt den Anrufer-Turn mit und liefert den NEUEN
 // Stand (Nebeneffekt im Namen, N7 - Muster countNoSpeechTurn). Fehlendes Feld

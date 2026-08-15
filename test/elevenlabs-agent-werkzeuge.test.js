@@ -112,7 +112,24 @@ const TOOL_FINGERPRINT = ["get_consult"];
 //   in EINE Richtung: der Prompt gibt den Wechsel frei, das eingebaute language_detection
 //   erkennt ihn. Bis die Vorlage das Feld traegt, ist dieser Pin ROT - so gehoert es sich,
 //   er fordert die Aenderung ein.
-const PROMPT_FIELD_FINGERPRINT = ["built_in_tools", "prompt", "tool_ids"];
+//   2026-08-14 llm, reasoning_effort und temperature dazu: die MODELLWAHL ist ab heute ein
+//   besessenes Feld der Vorlage (Eintraege unter _besitz.felder). Grund ist kein neues
+//   Werkzeug, sondern ein Messfehler-Muster: die Drift-Pruefung meldete "OK ueber alle 15
+//   Felder", waehrend der Live-Agent auf einem anderen Modell stand als vorgesehen - das
+//   Modell war schlicht nicht unter den verglichenen Feldern. An genau diesem Feld sind in
+//   EINER Woche drei Messungen vorbeigelaufen (Spike 1b gegen gpt-4o-mini, A7 gegen
+//   qwen36-35b-a3b, G6 nie vollzogen). Ein Gate, das am wichtigsten Feld vorbeischaut, ist
+//   eine beruhigende Meldung ueber die falschen Felder; deshalb zaehlen die drei Stellschrauben
+//   ab jetzt zur gepinnten Konfigurationsflaeche. Die WERTE pinnt dieser Test bewusst nicht -
+//   sie sind vorlaeufig, solange die Modell-Leiter laeuft; gepinnt ist, DASS sie dastehen.
+const PROMPT_FIELD_FINGERPRINT = [
+  "built_in_tools",
+  "llm",
+  "prompt",
+  "reasoning_effort",
+  "temperature",
+  "tool_ids",
+];
 
 // Eingebaute Werkzeuge des Anbieters (prompt.built_in_tools): sie werden nicht deklariert
 // wie die tools-Karte, sondern nur an- oder abgeschaltet. Eigener Fingerprint, damit

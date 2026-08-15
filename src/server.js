@@ -16,6 +16,7 @@ import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
+import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
@@ -115,6 +116,20 @@ const callFinish = makeCallFinish({
   summarizeCall,
   planSummarySms,
   audit,
+});
+
+// EL-Anrufstart (dritter Outbound-Weg, hinter ELEVENLABS_OUTBOUND_ENABLED): EINMAL beim
+// Boot verdrahtet (Naht wie metering/callFinish, INV-7). EINE Instanz ist Pflicht - sie
+// haelt den ziehenden Ergebnisweg; eine zweite haette eine zweite Abhol-Schleife auf
+// demselben Gespraech. Konstruiert NACH callFinish (linearer DAG): finishCall kommt fertig
+// gebunden herein, terminateAndBillCall/billThunk sind dieselben Bausteine wie in
+// call-lifecycle (kein zweiter, buchungsfreier Terminierungspfad, INV-9).
+const elevenLabsOutbound = makeElevenLabsOutbound({
+  store,
+  config,
+  terminateAndBillCall,
+  billThunk,
+  finishCall: callFinish.finishCall,
 });
 
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper
@@ -232,6 +247,7 @@ const deps = {
   costCrossCheck,
   messaging,
   consultDelivery,
+  elevenLabsOutbound,
 };
 const { app } = await buildApp(deps);
 await bootServer({ app, ...deps });
