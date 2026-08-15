@@ -16,6 +16,8 @@
     "owner_name": "Nina Caldwell",
     "callee": "Del Sol Auto Repair, front desk (+1 305-555-0128)",
     "objective": "Schedule a repair appointment for Nina Caldwell's car - four new tires before a road trip. The vehicle is a 2019 Toyota RAV4 LE, silver, with 225/65R17 all-season tires and about 61,000 miles; all four tires are worn down to the wear bars. Nina Caldwell drops the car off herself and does not wait on site.",
+    "constraints": "CONSTRAINTS: Nothing outside Thursday through Saturday between 9 AM and 2 PM, at most $500 for the full set including mounting and balancing, do not promise a deposit.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: All four tires are worn down to the wear bars and have to be replaced before a road trip.\n- Relationship to the person being called: New customer, first time at this shop.\n- Desired outcome: A tire appointment inside the given window, agreed in this call.\n- Key facts: 2019 Toyota RAV4 LE, silver, 225/65R17 all-season tires, about 61,000 miles; Nina Caldwell drops the car off herself and does not wait on site\nThis background is for you; only pass on what the task requires.",
     "mandate": "Any appointment from Thursday through Saturday, between 9 AM and 2 PM, up to $500 for the full set of four tires, mounting and balancing included. Any all-season brand in that size the shop has in stock is acceptable within that price."
   },
   "chat_history": [],

@@ -201,13 +201,31 @@ hinzufuegt, das sie besitzen soll, traegt es **dort** ein, sonst wird es nie
 verglichen.
 
 **Besessen ist, was sprachabhaengig ist** (Eigentuemer-Entscheidung
-2026-08-14). Heute sind das 15 Felder: `language`, `first_message`,
-`voicemail_message`, `prompt`, `dynamic_variables` (die **Namen**), `tools`,
-`language_presets` — und seit dem 14.08. `suggested_audio_tags`, die drei
-Soft-Timeout-Texte (`message`, `additional_soft_timeout_messages`,
-`llm_generated_message_prompt_override`), `data_collection` (Schluessel **und**
-Beschreibungen, zwei Eintraege) sowie die Auswertungskriterien (Namen **und**
-`conversation_goal_prompt`, zwei Eintraege).
+2026-08-14) — **und seit dem 14.08. zusaetzlich die Modellwahl.** Heute sind das
+diese Felder (die Zahl steht bewusst nirgends fest getippt — sie driftet sonst,
+sobald ein Feld dazukommt; `npm run elevenlabs:drift` zaehlt sie zur Laufzeit):
+`language`, `first_message`, `voicemail_message`, `prompt`,
+`dynamic_variables` (die **Namen**), `tools`, `language_presets` — und seit dem
+14.08. `suggested_audio_tags`, die drei Soft-Timeout-Texte (`message`,
+`additional_soft_timeout_messages`, `llm_generated_message_prompt_override`),
+`data_collection` (Schluessel **und** Beschreibungen, zwei Eintraege), die
+Auswertungskriterien (Namen **und** `conversation_goal_prompt`, zwei Eintraege)
+sowie `llm`, `reasoning_effort` und `temperature`.
+
+Die drei Modellfelder sind die erste Erweiterung **ueber die Sprach-Regel
+hinaus**, und der Anlass ist derselbe wie beim ersten Mal: die Meldung war
+beruhigend, weil sie die falschen Felder zaehlte. Sie meldete OK ueber alle
+damals besessenen Felder, waehrend der Live-Agent auf `claude-sonnet-5` stand
+und die Vorgabe G6 das staerkste Claude verlangt — beides zugleich kann nur
+heissen, dass das Modell gar nicht verglichen wurde. Ausgerechnet an diesem
+Feld sind in **einer**
+Woche drei Messungen an anderen Werten gefahren als die Auslieferung fuehrt
+(Spike 1b gegen `gpt-4o-mini`, A7 gegen `qwen36-35b-a3b`, G6 nie vollzogen).
+Der SOLL-Wert `claude-sonnet-5` ist eine Eigentuemer-Entscheidung und
+**vorlaeufig**: die Modell-Leiter wird von unten gefahren — guenstigste
+plausible Stufe zuerst, aufhoeren, sobald sie besteht —, `sonnet-5` ist die
+mittlere Stufe und hat im ersten Teillauf kein Kriterium inhaltlich gerissen.
+Begruendung im Volltext an `prompt._modellwahl_begruendung` in der Vorlage.
 
 Der Anlass der Erweiterung war kein Einzelfall, sondern dreimal derselbe: ein
 deutscher Ueberbrueckungssatz bei einem englischen Agenten, deutsche

@@ -22,6 +22,8 @@
     "owner_name": "Ruth Halloran",
     "callee": "Bayview Auto Service, front desk (+1 415-555-0178)",
     "objective": "Schedule a repair appointment for Ruth Halloran's car - the check engine light has been on since Monday.",
+    "constraints": "CONSTRAINTS: At most $300 for the diagnostics, do not promise a deposit and do not commit to any repair work beyond it.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: The check engine light has been on since Monday and Ruth Halloran wants the cause diagnosed.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: A diagnostics appointment this week or next.\n- Key facts: Ruth Halloran drops the car off and does not wait on site; the assignment carries no details about the vehicle's make and model\nThis background is for you; only pass on what the task requires.",
     "mandate": "Any appointment this week or next, up to $300 for the diagnostics. The vehicle's make and model are not part of the assignment."
   },
   "chat_history": [

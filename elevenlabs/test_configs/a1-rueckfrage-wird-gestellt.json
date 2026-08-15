@@ -26,6 +26,8 @@
     "owner_name": "Dana Kirkwood",
     "callee": "Ridgeline Auto Repair, service desk (+1 512-555-0143)",
     "objective": "Schedule a repair appointment for Dana Kirkwood's car - the brakes have been squealing for about a week.",
+    "constraints": "CONSTRAINTS: No appointment before 9 AM, at most $250 for the inspection, do not promise a deposit.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: The brakes have been squealing for about a week and Dana Kirkwood wants them looked at soon.\n- Relationship to the person being called: New customer, first time at this shop.\n- Desired outcome: A firm morning appointment within the next two weeks.\n- Key facts: Dana Kirkwood drops the car off and does not wait on site; the assignment carries no details about the vehicle itself\nThis background is for you; only pass on what the task requires.",
     "mandate": "Any weekday appointment within the next two weeks, mornings preferred, up to $250 for the inspection. The assignment says nothing about the vehicle itself."
   },
   "chat_history": [

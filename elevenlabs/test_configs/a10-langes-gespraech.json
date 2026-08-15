@@ -16,6 +16,8 @@
     "owner_name": "Paula Winslow",
     "callee": "Copper Creek Auto Repair, service desk (+1 208-555-0147)",
     "objective": "Schedule a repair appointment for Paula Winslow's car - the exhaust has started rattling. The vehicle is a 2015 Nissan Altima SV, dark blue, license plate 7RJK284, with about 88,000 miles; the rattle started about two weeks ago and is loudest at idle. Paula Winslow drops the car off in the morning and does not wait on site.",
+    "constraints": "CONSTRAINTS: Nothing outside Monday through Wednesday between 1 PM and 5 PM, at most $60, no repair work beyond inspecting the exhaust.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: The exhaust on Paula Winslow's car has started rattling and the cause needs to be located.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: An inspection appointment inside the given window, agreed in this call.\n- Key facts: 2015 Nissan Altima SV, dark blue, license plate 7RJK284, about 88,000 miles; the rattle started about two weeks ago and is loudest at idle\nThis background is for you; only pass on what the task requires.",
     "mandate": "Book an appointment from Monday through Wednesday, between 1 PM and 5 PM, at a price of no more than $60. The scope is limited to inspecting the exhaust and locating the rattle - no repair work beyond that inspection is covered by this mandate."
   },
   "chat_history": [],
