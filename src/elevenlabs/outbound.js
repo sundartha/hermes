@@ -185,6 +185,15 @@ function assertConfigured(el) {
 // aus lauter Leerzeichen passiert es. Die uebrigen fuenf tragen den leeren String: sie
 // muessen DA sein, aber ihr Fehlen kostet keine Pflicht, sondern nur Inhalt.
 //
+// AUSSPRACHE (Eigentuemer-Befund 15.08.2026, der Name klang falsch): der Name geht
+// UNVERAENDERT raus - keine Lautschrift, keine Ersatz-Schreibweise an dieser Stelle. Wie er
+// KLINGT, entscheidet ein Aussprache-Woerterbuch am Agenten (Zuordnungsfeld
+// conversation_config.tts.pronunciation_dictionary_locators, besessen und begruendet in
+// elevenlabs/agent_configs/outbound-agent.template.json, _aussprache_hinweis). Das ist die
+// einzige Stelle, die traegt: den Namen spricht auch first_message - ein fertiger Text vor
+// jedem Modell-Turn -, und was hier verfremdet wuerde, stuende genau so im Transkript und in
+// der Offenlegung, deren Wortlaut wir nachweisen muessen.
+//
 // Die drei gebauten Bloecke gehen UNGETRIMMT raus: sie sind per Bau String (jeder Baustein
 // liefert "" oder einen fertigen Block), sie haben ihre Eingaben bereits VOR der
 // Leer-Pruefung getrimmt - und ihr fuehrender Zeilenumbruch ist Inhalt, den ein Trimmen
