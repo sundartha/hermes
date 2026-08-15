@@ -417,6 +417,24 @@ const CALENDAR_ENTRY = z.object({
 });
 const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 
+// AL-P13, der Eroeffnungs-Consult: das Feld war das einzige der fuenf Kontext-Felder, das
+// dieses Schema NICHT deklarierte - und zod strippt undeklarierte Schluessel STILL. Ueber
+// place_call erreichte es den Server also nie, obwohl HTTP-Validierung (routes/
+// _validation.js, CONTEXT_FIELDS) und Auswertung (routes/api-calls.js, emitOpeningConsult)
+// dafuer gebaut sind. Form und Deckel wie beim Geschwisterfeld key_facts (maxItems 10,
+// routes/_validation.js OPEN_QUESTIONS_LIMITS).
+//
+// Auf Modulebene wie CALENDAR_ENTRY/CALL_LIST_ENTRY daneben, NICHT inline wie die
+// Geschwisterfelder: die Schema-Definition von place_call ist bereits so tief
+// verschachtelt, dass jede weitere inline gekettete Feld-Definition die Demeter-Grenze
+// (G36) reisst. Ein benannter Wert an dieser Stelle haelt die Kette flach.
+const OPEN_QUESTIONS_FIELD = z
+  .array(z.string())
+  .optional()
+  .describe(
+    "A few (max. 10) short questions that are still open BEFORE the call and that only the principal can answer. They are asked while the phone is ringing, so the agent starts the conversation with the answers.",
+  );
+
 // Bestands-Beschreibung von place_call, byte-identisch aus dem Tool-Deskriptor
 // herausgeloest (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
 const PLACE_CALL_DESCRIPTION =
@@ -615,6 +633,7 @@ export function registerTools(
               .string()
               .optional()
               .describe("The desired outcome from the principal's perspective, phrased briefly."),
+            open_questions: OPEN_QUESTIONS_FIELD,
           })
           .optional()
           .describe(

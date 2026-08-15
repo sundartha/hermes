@@ -77,6 +77,13 @@ const EXPECTED_MARKERS = {
   "place_call.context.key_facts": ["NO"],
   "place_call.context.recipient_relationship": [],
   "place_call.context.desired_outcome": [],
+  // AL-P13 / 15.08.2026: das fuenfte Kontext-Feld war als einziges nie im zod-Schema
+  // deklariert - zod strippt undeklarierte Schluessel STILL, der Eroeffnungs-Consult konnte
+  // ueber place_call also nie feuern. Mit der Deklaration kommt ein NEUER Beschreibungs-Pfad
+  // hinzu; die Menge wird deshalb erweitert, nicht die Erwartung gesenkt. Die eine Emphase
+  // BEFORE ist die Verhaltensgarantie des Feldes (gefragt wird VOR dem Gespraech, waehrend
+  // es klingelt) und bleibt gepinnt. Praezedenz max_duration_s/KS-P3, diagnostic/GQ-P11.
+  "place_call.context.open_questions": ["BEFORE"],
   // KS-P3 (b): die Beschreibung nannte bis dahin zwei feste Zahlen ("default 180, max 300"),
   // die es seit dieser Phase nicht mehr gibt (die Frist faellt aus dem Restguthaben). Der neue
   // Text traegt EINE Emphase - dass ein Client-Wunsch die Frist nur VERKUERZEN kann. Bewusst
