@@ -122,12 +122,21 @@ const TOOL_FINGERPRINT = ["get_consult"];
 //   eine beruhigende Meldung ueber die falschen Felder; deshalb zaehlen die drei Stellschrauben
 //   ab jetzt zur gepinnten Konfigurationsflaeche. Die WERTE pinnt dieser Test bewusst nicht -
 //   sie sind vorlaeufig, solange die Modell-Leiter laeuft; gepinnt ist, DASS sie dastehen.
+//   2026-08-15 timezone dazu (Eigentuemer-Entscheidung "prompt.timezone in die Besitz-Liste:
+//   JA"): der Zeitzonen-FESTWERT am Agenten. Er ist heute WIRKUNGSLOS - seit 2026-08-15 reisen
+//   {{owner_timezone}}, {{callee_timezone}} und {{today}} als dynamische Variablen mit, und der
+//   Prompt-Abschnitt TIME AND TIME ZONES rechnet ausschliesslich mit ihnen. Gepinnt wird er
+//   trotzdem, und genau deswegen: "wirkungslos, aber ungedeckt" ist der Zustand, in dem ein
+//   stiller Wechsel im Anbieter-Dashboard niemandem auffiele - mit voller Wirkung in dem
+//   Moment, in dem ein kuenftiger Prompt wieder auf den Festwert zurueckfaellt. Wie bei der
+//   Modellwahl pinnt dieser Test nur, DASS das Feld dasteht, nicht seinen Wert.
 const PROMPT_FIELD_FINGERPRINT = [
   "built_in_tools",
   "llm",
   "prompt",
   "reasoning_effort",
   "temperature",
+  "timezone",
   "tool_ids",
 ];
 

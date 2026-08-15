@@ -162,7 +162,7 @@
         "art": "wert",
         "vorlage": ["agent.conversation_config.agent.prompt.reasoning_effort"],
         "live": ["conversation_config.agent.prompt.reasoning_effort"],
-        "_hinweis": "Zweite Stellschraube desselben Modells: sie entscheidet, ob es vor der Antwort nachdenkt, und schlaegt damit auf Antwortzeit UND Kosten je Anruf durch. Ein Dashboard-Klick genuegt, um sie zu verstellen; ohne Besitz saehe das nie jemand. SOLL none (Vorgabe G6). Eigener Eintrag statt eines Vergleichs des ganzen prompt-Objekts: dort liegen auch nicht besessene Felder (u.a. timezone, s. _nicht_besessen)."
+        "_hinweis": "Zweite Stellschraube desselben Modells: sie entscheidet, ob es vor der Antwort nachdenkt, und schlaegt damit auf Antwortzeit UND Kosten je Anruf durch. Ein Dashboard-Klick genuegt, um sie zu verstellen; ohne Besitz saehe das nie jemand. SOLL none (Vorgabe G6). Eigener Eintrag statt eines Vergleichs des ganzen prompt-Objekts: dort liegen auch nicht besessene Felder (u.a. thinking_budget, max_tokens, cascade_timeout_seconds, s. _nicht_besessen, letzter Punkt)."
       },
       {
         "feld": "temperature",
@@ -170,6 +170,13 @@
         "vorlage": ["agent.conversation_config.agent.prompt.temperature"],
         "live": ["conversation_config.agent.prompt.temperature"],
         "_hinweis": "Dritte Stellschraube desselben Modells - und der Grund, warum eine Messung an temperature 0 nichts ueber die Auslieferung sagt: 0 beguenstigt die woertliche Nachahmung des eigenen vorigen Zuges, und genau daran ist Spike 1b haengengeblieben (begruendet in scripts/spike1-b.mjs). SOLL 0.66, der heutige Live-Wert, ausdruecklich NICHT der Anbieter-Default 0."
+      },
+      {
+        "feld": "timezone",
+        "art": "wert",
+        "vorlage": ["agent.conversation_config.agent.prompt.timezone"],
+        "live": ["conversation_config.agent.prompt.timezone"],
+        "_hinweis": "Der Zeitzonen-Festwert am Agenten. Gegenueber den dynamischen Variablen {{owner_timezone}}/{{callee_timezone}}/{{today}} ist er WIRKUNGSLOS (seit 2026-08-15, s. agent.conversation_config.agent.prompt._zeitkontext_hinweis) - bewacht wird er trotzdem, weil genau 'wirkungslos, aber ungedeckt' der Zustand ist, in dem ein stiller Dashboard-Wechsel unbemerkt bliebe. Bis 2026-08-15 stand das Feld unter _nicht_besessen; es steht jetzt nur noch HIER, nie in beiden Listen. SOLL ist der per GET abgelesene Live-Wert, damit das Gate gruen startet und ab sofort JEDE kuenftige Aenderung meldet - Bewachung, nicht Korrektur. OFFENE FRAGE (Eigentuemer): ob Europe/Berlin zu einem Produkt mit englischem Weltdefault und ausschliesslich US-Rufnummern passt. Das ist eine EIGENE Entscheidung; wird sie getroffen, aendert sich der Wert hier und wird gepusht - nicht umgekehrt."
       },
       {
         "feld": "retention_days",
@@ -218,7 +225,6 @@
       "platform_settings.data_collection_scopes - fuehrt DIESELBEN Schluessel wie data_collection (heute deutsch), ist aber keine Sprache, sondern der Erhebungs-Bereich. WER die Schluessel uebersetzt, muss diese Karte im selben Zug mitziehen, sonst zeigt sie auf Felder, die es nicht mehr gibt",
       "platform_settings.evaluation.criteria[].id - deutsch abgeleitet und teils verstuemmelt (anliegen_geklrt, klarer_gesprchsabschluss), aber der Schluessel bereits ausgewerteter Anrufe; Umbenennen ist eine eigene Entscheidung",
       "conversation_config.agent.dynamic_variables.dynamic_variable_placeholders - deutsche Beispielwerte (Alex Mueller, einen Beratungstermin); besessen sind laut Eigentuemer die NAMEN der Variablen, nicht ihre Platzhalterwerte",
-      "conversation_config.agent.prompt.timezone (Europe/Berlin) - Zeitzone, nicht Sprache; faellt nicht unter die Besitz-Regel 'alles Sprachabhaengige'",
       "conversation_config.tts.enable_phoneme_tags (live false, am 2026-08-15 gemessen) - der Schalter fuer Phonem-Regeln (IPA/CMU). NICHT besessen, weil der gewaehlte Aussprache-Weg die modellunabhaengige ALIAS-Regel ist (Begruendung an agent.conversation_config._aussprache_hinweis, Punkt 3). Wer je auf Phonem-Regeln umstellt, braucht diesen Schalter UND ein Modell, das sie unterstuetzt - dann gehoert er in den Besitz, sonst wirkt ein IPA-Woerterbuch still gar nicht",
       "alle uebrigen Felder des Agenten, die im Dashboard gesetzt wurden - ASR-/Konversationseinstellungen, Stimmen-Feinheiten und die Turn-/Auswertungs-Stellschrauben, soweit sie keinen sprachabhaengigen Text tragen (Zeitgeber, Schwellen). Die MODELLWAHL stand bis 2026-08-14 als Beispiel in genau dieser Zeile und ist seitdem BESESSEN (llm, reasoning_effort, temperature unter 'felder'): sie ist keine Sprache, aber an ihr sind in einer Woche drei Messungen an anderen Werten gefahren als die Auslieferung fuehrt - und die Vollzugsmeldung ueber die damals besessenen Felder hat genau daran vorbeigeschaut. Der Besitz folgt damit nicht mehr nur der Sprach-Regel; wer ein weiteres Feld aufnimmt, begruendet es wie dort am Eintrag"
     ]
@@ -270,6 +276,8 @@
           "llm": "claude-sonnet-5",
           "reasoning_effort": "none",
           "temperature": 0.66,
+          "_timezone_begruendung": "Der FESTWERT der Zeitzone am Agenten. Seit 2026-08-15 reisen owner_timezone/callee_timezone/today als dynamische Variablen mit (s. _zeitkontext_hinweis), und der Abschnitt TIME AND TIME ZONES im Prompt rechnet ausschliesslich mit ihnen - dieses Feld ist gegenueber den Variablen WIRKUNGSLOS. Es steht hier trotzdem als SOLL-Wert, weil 'heute wirkungslos, aber ungedeckt' genau der Zustand ist, in dem sich etwas unbemerkt aendert: ohne SOLL kann kein Gate vergleichen, und ein Dashboard-Klick verschoebe die Zone lautlos - mit voller Wirkung in dem Moment, in dem ein kuenftiger Prompt oder ein Anbieter-Verhalten wieder auf sie zurueckfaellt. Der Wert ist der am 2026-08-15 per GET abgelesene Live-Stand, ABSICHTLICH nicht korrigiert: Ziel dieses Eintrags ist Bewachung, nicht Korrektur. OFFENE FRAGE (Eigentuemer): ob Europe/Berlin zu einem Produkt mit englischem Weltdefault und ausschliesslich US-Rufnummern passt - das ist eine eigene Entscheidung und wird hier nicht vorweggenommen.",
+          "timezone": "Europe/Berlin",
           "_built_in_tools_begruendung": "Eigentuemer-Entscheidung E-5 (2026-08-14): der frueher in HOW YOU SPEAK stehende Satz 'Speak only in this language: {{language}}' ist ENTFERNT. Ein Prompt, der den Sprachwechsel verbietet, und dieses eingebaute Werkzeug, das ihn leistet, arbeiten gegeneinander - im Konflikt gewinnt mal das eine, mal das andere, und genau dieser Nichtdeterminismus ist nicht debuggbar. Aufgeloest wird er in EINE Richtung: der Prompt gibt den Wechsel frei (Startsprache Englisch, bei einem Wechsel der Gegenseite mitgehen, dasselbe Ziel weiterverfolgen), language_detection erkennt ihn. only_at_conversation_start ist BEWUSST NICHT gesetzt - der Wechsel muss den ganzen Anruf ueber moeglich bleiben, nicht nur beim Gespraechsstart, und genau das ist die Anbieter-Vorgabe eines nicht gesetzten Schalters. Eine Rueckwechsel-Pflicht ('danach wieder auf Englisch') ist ausdruecklich NICHT formuliert: das waere derselbe Widerspruch in gruen.",
           "built_in_tools": {
             "language_detection": {
