@@ -15,15 +15,22 @@
 // NIE RATEN (Eigentuemer-Entscheidung E2): fuer die Zone des ANGERUFENEN gibt es kein
 // Feld, nur das Land seiner Nummer. Laesst es sich nicht ableiten - und das ist bei JEDER
 // +1-Nummer der Fall, weil 25 NANP-Laender die Vorwahl teilen und countryForE164 dort
-// bewusst null liefert -, reist KEIN Wert. Der Rueckfall auf DEFAULT_TIMEZONE, den
+// bewusst null liefert -, reist KEINE TATSACHE. Der Rueckfall auf DEFAULT_TIMEZONE, den
 // timezoneForCountry fuer die Anzeige faehrt, waere an dieser Stelle ein Schaden: er
 // behauptete fuer jeden US-Anruf lautlos die Berliner Zone. Eine falsche Zone ist
 // schlimmer als keine - mit ihr rechnet der Agent um und sagt einen Termin zu, den beide
-// Seiten verschieden verstehen; ohne sie sagt ihm der Prompt, die Zone zu nennen oder zu
-// erfragen.
+// Seiten verschieden verstehen.
+//
+// TATSACHE UND HYPOTHESE SIND ZWEI DINGE (Eigentuemer-Entscheidung 2026-08-15) und stehen
+// deshalb in zwei Feldern: die Zone aus dem LAND steht fest, die aus der VORWAHL einer
+// +1-Nummer ist eine Vermutung (nanp-area-codes.js). Eine Vermutung wird hier nie zur
+// Tatsache aufgewertet und eine Tatsache nie zur Vermutung herabgestuft; wie der Agent mit
+// jeder der beiden Lagen spricht - und was er ohne jede Zone tut -, entscheidet der
+// Aufrufer (calleeTimezoneText in outbound.js).
 import { TIMEZONE_FOR_COUNTRY } from "../geo/resolve.js";
 import { LOCALES } from "../i18n/locales.js";
 import { countryForE164, resolveTimezone } from "../store/defaults.js";
+import { timezoneHypothesisForNumber } from "./nanp-area-codes.js";
 
 // Kein ableitbares Land -> kein Wert (s. Kopfnotiz). Benannt, weil der leere String hier
 // eine Aussage ist ("wir wissen es nicht") und kein vergessener Default.
@@ -66,9 +73,19 @@ export function todayIn(timeZone) {
  * (fehlend/Muell -> DEFAULT_TIMEZONE) - genau wie im Bestandsweg, und dort wie hier
  * zwingend: Intl wirft bei unbekannter Zone einen RangeError, und ein Wurf an dieser
  * Stelle toetete den Anruf. Fuer die Gegenstelle gilt das Gegenteil (s. Kopfnotiz): dort
- * gibt es keinen Ersatzwert, nur den leeren.
+ * gibt es keinen Ersatzwert, nur den leeren - und zwei getrennte Felder, weil calleeZone
+ * feststeht und calleeZoneHypothesis nur vermutet ist.
  */
 export function callTimeContext({ tenantTimezone, callee }) {
   const ownerZone = resolveTimezone(tenantTimezone);
-  return { ownerZone, calleeZone: calleeTimezone(callee), today: todayIn(ownerZone) };
+  const calleeZone = calleeTimezone(callee);
+  return {
+    ownerZone,
+    calleeZone,
+    // Die Vermutung tritt NUR ein, wo keine Tatsache steht. Beide zugleich kann es heute
+    // nicht geben (die Vorwahl-Tabelle kennt nur +1, und genau dort liefert countryForE164
+    // nichts) - die Bedingung haelt das fest, statt sich darauf zu verlassen.
+    calleeZoneHypothesis: calleeZone ? KEINE_ZONE : timezoneHypothesisForNumber(callee),
+    today: todayIn(ownerZone),
+  };
 }

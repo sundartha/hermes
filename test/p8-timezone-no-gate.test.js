@@ -24,6 +24,12 @@ const ALLOWED_FILES = [
   // Reine ANZEIGE wie claude.js, kein Gate: keins der beiden Module entscheidet etwas,
   // sie beschreiben nur. Genau darum steht die Ableitung hier und nicht im Aufrufer -
   // routes/api-calls.js fuehrt die Gegenprobe unten (LAW-07).
+  //
+  // nanp-area-codes.js (T8) ist die Vorwahl-Tabelle, aus der bei +1 eine VERMUTETE Zone des
+  // Angerufenen entsteht - reine Daten plus eine Nachschlage-Funktion, ohne Store, ohne
+  // Config, ohne Entscheidung. Sie bestimmt nur, WIE sicher der Satz klingt, den der Agent
+  // mitbekommt; kein Anruf wird davon zugelassen oder abgelehnt.
+  "elevenlabs/nanp-area-codes.js",
   "elevenlabs/outbound.js",
   "elevenlabs/time-context.js",
   "geo/resolve.js",

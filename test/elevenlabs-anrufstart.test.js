@@ -968,17 +968,19 @@ test("EL-START T6 (Vorrang): der Vorrang-Satz erreicht den Agenten nur zusammen 
 });
 
 // ---- T7: die zwei Zeitzonen und die aktuelle Zeit ------------------------------------
-// ABSICHTLICH ROT. Der Bestandsweg loest beides PRO ANRUF auf: src/claude.js liest die
+// GEBAUT UND GRUEN (Ratsche). Der Bestandsweg loest beides PRO ANRUF auf: src/claude.js liest die
 // Zeitzone DES TENANTS (store.tenantTimezone -> resolveTimezone) und formatiert damit ein
 // frisches `now` in den Systemprompt (claude.js:62/:99, P8/FMT-28 - der Agent nannte
 // deutschen Anrufern zuvor eine um 1-2 h falsche Uhrzeit, weil der Serverprozess UTC
 // faehrt). Auf diesem Weg spricht der Agent DES ANBIETERS: er weiss ausschliesslich, was
-// der Anrufstart ihm mitgibt, und dynamicVariables (src/elevenlabs/outbound.js) uebergibt
-// sechs Variablen, von denen KEINE eine Zeitzone oder ein Datum traegt. Was dort
-// stattdessen wirkt, ist ein FESTWERT am Agenten (conversation_config.agent.prompt.
-// timezone = "Europe/Berlin") - ein Wert, den die Vorlage nicht einmal besitzt (er steht
-// unter _nicht_besessen), den also kein Drift-Gate haelt; im Prompt selbst steht kein
-// Datums-Slot, nur das feste Beispiel "Thursday at nine".
+// der Anrufstart ihm mitgibt, und dynamicVariables (src/elevenlabs/outbound.js) uebergab
+// sechs Variablen, von denen KEINE eine Zeitzone oder ein Datum trug. Was stattdessen
+// wirkte, war ein FESTWERT am Agenten (conversation_config.agent.prompt.timezone =
+// "Europe/Berlin") - ein Wert, den die Vorlage nicht einmal besass (er stand unter
+// _nicht_besessen), den also kein Drift-Gate hielt; im Prompt selbst stand kein
+// Datums-Slot, nur das feste Beispiel "Thursday at nine". Seit dem Bau reisen
+// owner_timezone, callee_timezone und today pro Anruf mit (src/elevenlabs/time-context.js);
+// dieser Fall haelt sie fest.
 //
 // Warum das ein Befund ist und kein Komfortmangel: fast jeder Auftrag verhandelt einen
 // TERMIN. Ein Agent mit fester Zone und ohne Datum sagt einem Auftraggeber in Tokio einen
@@ -1112,4 +1114,249 @@ test("EL-START T7: die Zeitzone des Auftraggebers, die des Angerufenen und das h
       });
     },
   );
+});
+
+// ---- T8: die Zone des Angerufenen ist eine HYPOTHESE, keine Tatsache -----------------
+// GEBAUT UND GRUEN (Ratsche). T7 haelt die Zone des Angerufenen fuer die Faelle fest, in denen
+// sie sich aus dem LAND der Nummer ergibt (+33 -> FR -> Europe/Paris). Fuer +1 gibt es diesen
+// Weg nicht: countryForE164 liefert dort BEWUSST null (25 NANP-Laender teilen die Vorwahl,
+// Owner-Entscheidung E2), calleeTimezoneText lieferte deshalb "" - und +1 ist das Marktgebiet,
+// in dem dieses Produkt telefoniert. Vor dem Bau reiste fuer JEDEN US-Anruf also KEINE Zone des
+// Angerufenen; im Vorlagen-Prompt stand dafuer ein statischer Satz, der nur das STILLE
+// Umrechnen verbot ("say which time zone you mean, or ask which one they are using") - er
+// erlaubte weiterhin, eine absolute Uhrzeit zu nennen. Eine Vorwahl-Tabelle gab es im Repo
+// nicht (grep: kein areaCode/AREA_CODE, TIMEZONE_FOR_COUNTRY kannte nur Laender). Seit dem Bau
+// liefert src/elevenlabs/nanp-area-codes.js die HYPOTHESE, der statische Satz ist entfallen,
+// und dieser Fall haelt beide Lagen fest.
+//
+// EIGENTUEMER-ENTSCHEIDUNG (15.08.2026), die dieser Fall festnagelt: eine Vorwahl-Tabelle
+// ALLEIN ist falsch. Die Zuordnung Vorwahl -> Zone stimmt meistens, aber nicht immer
+// (Bundesstaaten ueber Zonengrenzen, Arizona ohne Sommerzeit), und "meistens richtig" heisst
+// bei Terminen: still falsche Uhrzeiten. Richtig ist die KOMBINATION - und sie ist zugleich
+// das, was ein Mensch tut: die Tabelle liefert eine HYPOTHESE, kein Ergebnis; der Agent
+// BESTAETIGT sie im Gespraech in EINEM Satz ("I have you down as Eastern time - is that
+// right?"), bevor er eine absolute Uhrzeit nennt. Der Angerufene weiss seine Zone - die
+// verlaesslichste Quelle, die es gibt, und sie kostet eine Sekunde. Steht KEINE Zone fest,
+// nennt der Agent GAR KEINE absolute Uhrzeit: "tomorrow morning", und die Gegenseite nennt
+// die Uhrzeit. Lieber unbestimmt als falsch.
+//
+// NICHT GEPINNT, OFFEN als eigenes Paket: dass der BESTAETIGTE Wert gespeichert wird (zweite
+// Haelfte der Entscheidung). Das braucht eine Ergebnis-Rueckmeldung des Agenten an uns und
+// ein Feld am Store - beides gibt es auf diesem Weg noch nicht, und ein Fall darueber wuerde
+// hier eine Datenhaltung mitentscheiden, die dieser Fall nicht mitentscheiden soll.
+//
+// WARUM ZWEI LAEUFE, DIE ZUSAMMENGEHOEREN: der Hypothesen-Fall verlangt den IANA-Bezeichner
+// im Material, der Fallback-Fall verlangt seine ABWESENHEIT bei einer Nummer, fuer die keine
+// Zone feststeht. Erst das Paar beweist, dass die Zone PRO ANRUF aus der Vorwahl kommt: ein
+// statisch in die Vorlage getippter Zonenname bestuende den ersten Fall und fiele im zweiten
+// durch. Aus demselben Grund wird NUR der IANA-Bezeichner akzeptiert und nicht der
+// gesprochene Name ("Eastern time") - den darf ein statisches Beispiel im Prompt tragen (der
+// Satz, den der Agent SAGT), er beweist dann aber nichts ueber diesen Anruf. Es ist zugleich
+// die Schreibweise, die T7 fuer die Gegenstelle bereits festhaelt.
+const HYPOTHESE_NUMMER = "+12125550147"; // 212 = New York City: eine Zone, nie geteilt
+const HYPOTHESE_ZONE = "America/New_York";
+// 555 ist keine geografische NANP-Vorwahl (555-01xx ist ausdruecklich fuer fiktive Nummern
+// reserviert) - keine Vorwahl-Tabelle kann ihr je eine Zone zuordnen. Damit bleibt der
+// Fallback-Fall auch dann wahr, wenn die Tabelle spaeter waechst. Beide Nummern liegen im
+// fiktiven 555-01xx-Block: kein echter Anschluss, und die Attrappe waehlt ohnehin nichts.
+const OHNE_ZONE_NUMMER = "+15555550147";
+
+// Gemessen wird der ZWECK, nicht ein Wortlaut: WIE der Bau die Anweisung formuliert, ist
+// seine Wahl - DASS sie beim Agenten ankommt, ist der Vertrag. Deshalb je eine Liste
+// zulaessiger Marker; einer genuegt, und der Fehlertext nennt die ganze Liste. Keiner davon
+// steht heute im Vorlagen-Prompt (am gerenderten Prompt nachgemessen, sonst waere der Fall
+// gruen, ohne dass irgendetwas gebaut waere).
+const ANNAHME_MARKER = Object.freeze([
+  "assum",
+  "likely",
+  "probabl",
+  "guess",
+  "may be wrong",
+  "might be wrong",
+  "not confirmed",
+  "unconfirmed",
+  "hypothes",
+  "area code",
+  "suggest",
+]);
+const BESTAETIGUNG_MARKER = Object.freeze([
+  "confirm",
+  "is that right",
+  "is that correct",
+  "double-check",
+  "verify",
+  "check that with them",
+]);
+const VORHER_MARKER = Object.freeze([
+  "before you name",
+  "before naming",
+  "before you give",
+  "before you state",
+  "before you say",
+  "before you agree",
+  "before you mention",
+  "before you propose",
+  "before any",
+  "first confirm",
+]);
+// Der Fallback: KEINE absolute Uhrzeit (Verbot am Zeitwort) und die Gegenseite nennt sie.
+const ZEIT_WORT = Object.freeze(["absolute time", "specific time", "exact time", "clock time"]);
+const VERBOT_WORT = Object.freeze(["do not", "don't", "never", "avoid"]);
+const GEGENSEITE_MARKER = Object.freeze([
+  "let them name",
+  "let them say",
+  "let them suggest",
+  "let them propose",
+  "let them tell you",
+  "let the other party name",
+  "let the other party say",
+  "let the other person name",
+  "let the other person say",
+  "ask them to name",
+  "ask them what time",
+  "ask them which time",
+  "have them name",
+  "have them propose",
+]);
+
+// Die Anweisung muss NEBEN der Hypothese stehen, nicht irgendwo im Prompt: ein
+// Bestaetigungs-Satz ohne Bezug zu dieser Zone bestaetigt sie nicht. 500 Zeichen sind gross
+// genug fuer den tragenden Satz samt Anweisung daneben und klein genug, dass die entfernte
+// Zeile "Ask instead of guessing" (Abschnitt IF SOMETHING IS UNCLEAR) nicht als
+// Annahme-Marker durchschlaegt - am gerenderten Prompt nachgemessen.
+const FENSTER_ZEICHEN = 500;
+
+// Alle Textfenster um jedes Vorkommen des Ankers. Mehrere, weil der Zonenname sowohl im Wert
+// als auch in einer Vorlagen-Zeile stehen kann und EIN passendes Umfeld genuegt.
+function umfelder(material, anker) {
+  const heu = material.toLowerCase();
+  const nadel = anker.toLowerCase();
+  const treffer = [];
+  for (let i = heu.indexOf(nadel); i !== -1; i = heu.indexOf(nadel, i + nadel.length))
+    treffer.push(
+      material.slice(Math.max(0, i - FENSTER_ZEICHEN), i + nadel.length + FENSTER_ZEICHEN),
+    );
+  return treffer;
+}
+
+const enthaeltEines = (text, marker) => marker.some((wort) => enthaelt(text, wort));
+const hypotheseUmfelder = (material) => umfelder(material, HYPOTHESE_ZONE);
+
+// Ein Anrufstart auf eine US-Nummer; zurueck kommt NUR, was den Agenten erreicht. Gesucht
+// wird im selben Material wie in T6 (Vorrang): Anrufstart PLUS gerenderter Vorlagen-Prompt -
+// beide Traeger sind zulaessig, und der Fallback-Satz braucht gar keinen Wert (er gilt
+// gerade dann, wenn keiner da ist), kann also nur statisch in der Vorlage stehen.
+async function usLauf(nummer) {
+  return withElevenLabs(
+    { seed: seedOwner({ timezone: OWNER_TZ }), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
+    async ({ srv, mock }) => {
+      const res = await placeCall(srv, null, { to: nummer });
+      const antwort = await res.text();
+      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf muss starten: ${antwort}`);
+      assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
+      const anfrage = mock.startRequests[0];
+      assert.equal(anfrage.body.to_number, nummer, "Vorbedingung: gewaehlt wurde die US-Nummer");
+      return materialMitVorlage(anfrage);
+    },
+  );
+}
+
+test("EL-START T8: die aus der Vorwahl abgeleitete Zone des Angerufenen reist als bestaetigungspflichtige Hypothese", async (ctx) => {
+  const material = await usLauf(HYPOTHESE_NUMMER);
+
+  // Ohne diese Haelfte waere jeder rote Befund unten unbrauchbar: ein Sucher, der NICHTS
+  // findet, meldet dasselbe wie ein Sucher, der nicht sucht (Lehre
+  // pruefkommando-ohne-positiv-kontrolle). Das Anliegen reist heute nachweislich mit.
+  await ctx.test("Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material", () => {
+    assert.ok(
+      enthaelt(material, OBJECTIVE),
+      `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+    );
+  });
+
+  await ctx.test("Wache: ein Fund der Hypothese kann nur aus der Vorwahl stammen", () => {
+    assert.notEqual(
+      HYPOTHESE_ZONE,
+      DEFAULT_TIMEZONE,
+      "Wache: waere die Hypothese der Festwert, bewiese ihr Fund nichts",
+    );
+    assert.notEqual(
+      HYPOTHESE_ZONE,
+      OWNER_TZ,
+      "Wache: waere die Hypothese die Zone des Auftraggebers, koennte der Fund aus owner_timezone stammen",
+    );
+    assert.equal(
+      countryForE164(HYPOTHESE_NUMMER),
+      null,
+      `Wache: fuer ${HYPOTHESE_NUMMER} liefert die Land-Ableitung bewusst nichts (+1, Owner-Entscheidung E2) - die Zone kann nur ueber die Vorwahl entstehen, nicht ueber den Weg, den T7 pinnt`,
+    );
+  });
+
+  await ctx.test("die Hypothese erreicht den Agenten", () => {
+    assert.ok(
+      hypotheseUmfelder(material).length > 0,
+      `die aus der Vorwahl 212 abgeleitete Zone (${HYPOTHESE_ZONE}) erreicht den Agenten NICHT - er verhandelt mit einem Anrufer in New York, ohne dessen Zone auch nur zu vermuten, und der Auftraggeber erfaehrt die Verwechslung erst, wenn er vor verschlossener Tuer steht. Material: ${material}`,
+    );
+  });
+
+  await ctx.test("sie ist sprachlich als ANNAHME gefuehrt, nicht als feststehende Zone", () => {
+    assert.ok(
+      hypotheseUmfelder(material).some((umfeld) => enthaeltEines(umfeld, ANNAHME_MARKER)),
+      `${HYPOTHESE_ZONE} steht als Tatsache im Material - eine Vorwahl-Tabelle stimmt meistens, aber nicht immer (Staaten ueber Zonengrenzen, Arizona ohne Sommerzeit), und "meistens richtig" heisst bei Terminen: still falsche Uhrzeiten. Erwartet wird ein Wort, das den Wert als Annahme kennzeichnet - eines von: ${ANNAHME_MARKER.join(" | ")}. Material: ${material}`,
+    );
+  });
+
+  await ctx.test("der Agent soll sie in EINEM Satz bestaetigen, BEVOR er eine absolute Uhrzeit nennt", () => {
+    const umfelderMitZone = hypotheseUmfelder(material);
+    assert.ok(
+      umfelderMitZone.some((umfeld) => enthaeltEines(umfeld, BESTAETIGUNG_MARKER)),
+      `neben der Hypothese steht keine Aufforderung, sie im Gespraech zu bestaetigen - der Angerufene weiss seine Zone, das ist die verlaesslichste Quelle, die es gibt, und es kostet eine Sekunde. Erwartet: eines von ${BESTAETIGUNG_MARKER.join(" | ")}. Material: ${material}`,
+    );
+    assert.ok(
+      umfelderMitZone.some((umfeld) => enthaeltEines(umfeld, VORHER_MARKER)),
+      `die Bestaetigung ist nicht VOR die erste absolute Uhrzeit gestellt - bestaetigt der Agent erst hinterher, hat er den Termin bereits in der geratenen Zone zugesagt. Erwartet: eines von ${VORHER_MARKER.join(" | ")}. Material: ${material}`,
+    );
+  });
+});
+
+test("EL-START T8 (Fallback): steht keine Zone fest, nennt der Agent gar keine absolute Uhrzeit", async (ctx) => {
+  const material = await usLauf(OHNE_ZONE_NUMMER);
+
+  await ctx.test("Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material", () => {
+    assert.ok(
+      enthaelt(material, OBJECTIVE),
+      `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+    );
+  });
+
+  // Die andere Haelfte des Paares (s. Kopfnotiz): fuer diese Nummer steht keine Zone fest,
+  // also darf auch keine behauptet werden. Faende sich hier derselbe Bezeichner wie oben,
+  // stuende er statisch in der Vorlage und der Fall darueber bewiese nichts ueber den Anruf.
+  await ctx.test("Wache: fuer diese Nummer steht keine Zone fest - und es wird auch keine behauptet", () => {
+    assert.equal(
+      countryForE164(OHNE_ZONE_NUMMER),
+      null,
+      `Wache: ${OHNE_ZONE_NUMMER} muss unableitbar bleiben, sonst misst dieser Fall den Fallback nicht`,
+    );
+    assert.equal(
+      hypotheseUmfelder(material).length,
+      0,
+      `fuer eine Nummer ohne feststellbare Zone steht ${HYPOTHESE_ZONE} im Material - entweder ist der Bezeichner statisch in die Vorlage getippt (dann ist die Hypothese oben keine), oder es wurde eine Zone erfunden. Material: ${material}`,
+    );
+  });
+
+  await ctx.test("das Material verbietet die absolute Uhrzeit", () => {
+    const umfelderAmZeitwort = ZEIT_WORT.flatMap((wort) => umfelder(material, wort));
+    assert.ok(
+      umfelderAmZeitwort.some((umfeld) => enthaeltEines(umfeld, VERBOT_WORT)),
+      `ohne feststehende Zone fehlt dem Agenten das Verbot, eine absolute Uhrzeit zu nennen - der statische Satz der Vorlage verbietet nur das STILLE Umrechnen und laesst ihm die Uhrzeit. Erwartet: eines von ${ZEIT_WORT.join(" | ")} zusammen mit einem von ${VERBOT_WORT.join(" | ")}. Material: ${material}`,
+    );
+  });
+
+  await ctx.test("stattdessen nennt die Gegenseite die Uhrzeit", () => {
+    assert.ok(
+      enthaeltEines(material, GEGENSEITE_MARKER),
+      `dem Agenten fehlt die Anweisung, unbestimmt zu sprechen ("tomorrow morning") und die Gegenseite die Uhrzeit nennen zu lassen - ein Verbot ohne Ersatz laesst ihn im Gespraech steckenbleiben, statt lieber unbestimmt als falsch zu sein. Erwartet: eines von ${GEGENSEITE_MARKER.join(" | ")}. Material: ${material}`,
+    );
+  });
 });

@@ -30,7 +30,7 @@
     "mandate": "Any slot this week after 4 PM, up to $45.",
     "owner_timezone": "America/New_York",
     "today": "Monday, 11 May 2026",
-    "callee_timezone": ""
+    "callee_timezone": "\nThe person you are calling is probably in the America/New_York time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Eastern time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
   },
   "conversation_initiation_source": null,
   "parent_folder_id": null,

@@ -29,6 +29,7 @@
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { DISCLOSURE_OWNER_FALLBACK_EN, LOCALES } from "../i18n/locales.js";
 import { fetchConversation, startOutboundCall } from "./convai.js";
+import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
 
 // Endzustaende des Anbieters. Alles andere gilt als LAUFEND und wird weiter abgeholt: ein
@@ -147,17 +148,49 @@ function backgroundText(context) {
 // dasselbe Muster wie constraintsText/backgroundText und aus demselben Grund: der Prompt
 // der Vorlage ist EIN statischer Text und kann keinen Block weglassen. Stuende der Satz
 // statisch dort, verspraeche er bei einem nicht ableitbaren Land (jede +1-Nummer, s.
-// time-context.js) eine Umrechnung gegen eine Zone, die niemand kennt. Was der Agent DANN
-// tun soll, steht statisch im Prompt der Vorlage - er nennt die Zone oder fragt nach; das
-// gilt immer und braucht keinen Wert.
+// time-context.js) eine Umrechnung gegen eine Zone, die niemand kennt.
 //
-// Der Satz ist hier getippt und stammt NICHT aus EN_PROMPT: der Bestandsweg hat kein
+// DREI LAGEN, DIE NICHT DASSELBE SIND (Eigentuemer-Entscheidung 2026-08-15) - genau EINE
+// tritt je Anruf ein, der Wert ist deshalb NIE leer, und die frueher statisch im Prompt der
+// Vorlage stehende Auffangzeile ist mit ihnen weggefallen (sie erlaubte weiterhin eine
+// absolute Uhrzeit und waere neben Lage 3 eine zweite, schwaechere Wahrheit):
+//   TATSACHE   die Zone steht ueber das LAND der Nummer fest (+33 -> Europe/Paris). Der
+//              Agent rechnet um, ohne zu fragen.
+//   HYPOTHESE  bei +1 gibt es kein Land, nur die Vorwahl. Die Zuordnung stimmt meistens,
+//              aber nicht immer (Staaten ueber Zonengrenzen, Arizona ohne Sommerzeit), und
+//              "meistens richtig" heisst bei Terminen: still falsche Uhrzeiten. Der Wert
+//              reist deshalb als ANNAHME, und der Agent bestaetigt sie in EINEM Satz,
+//              BEVOR er eine absolute Uhrzeit nennt - der Angerufene weiss seine Zone, das
+//              ist die verlaesslichste Quelle, die es gibt, und sie kostet eine Sekunde.
+//   KEINE      steht gar nichts fest, nennt der Agent GAR KEINE absolute Uhrzeit, spricht
+//              unbestimmt ("tomorrow morning") und laesst die Gegenseite die Uhrzeit
+//              nennen. Lieber unbestimmt als falsch - dieselbe Regel wie bei erfundenen
+//              Zahlen.
+// OFFEN als eigenes Paket, hier bewusst NICHT gebaut: den im Gespraech BESTAETIGTEN Wert
+// speichern (zweite Haelfte der Eigentuemer-Entscheidung). Das braucht eine
+// Ergebnis-Rueckmeldung des Agenten an uns und ein Feld am Store - beides gibt es auf
+// diesem Weg noch nicht.
+//
+// Die Saetze sind hier getippt und stammen NICHT aus EN_PROMPT: der Bestandsweg hat kein
 // Gegenstueck (dort steht die Uhrzeit fertig gerendert im Systemprompt, es gibt keinen
 // Baustein dafuer). Ein neuer Eintrag in src/i18n/prompts/en.js waere ein Baustein ohne
 // Leser im Bestand.
-function calleeTimezoneText(zone) {
-  if (!zone) return "";
-  return `\nThe person you are calling is in the ${zone} time zone - convert every time you agree between those two zones and say which zone you mean.`;
+const calleeZoneFactSentence = (zone) =>
+  `\nThe person you are calling is in the ${zone} time zone - convert every time you agree between those two zones and say which zone you mean.`;
+
+// Der Bestaetigungssatz nennt die VERMUTETE Zone mit ihrem gesprochenen Namen. Ein fester
+// Beispielname stuende bei jedem Anruf ausserhalb dieser einen Zone neben einer anderen
+// Vermutung - der Agent liesse sich die falsche Zone bestaetigen und haette damit genau den
+// Fehler eingesammelt, gegen den die Bestaetigung gebaut ist.
+const calleeZoneHypothesisSentence = (zone) =>
+  `\nThe person you are calling is probably in the ${zone} time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: "I have you down as ${spokenTimezoneName(zone)} - is that right?" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean.`;
+
+const CALLEE_ZONE_UNKNOWN_SENTENCE = `\nYou do not know which time zone the person you are calling is in, and you must not guess one. Never name an absolute time while the zone is unknown - no specific time, no clock time. Stay vague instead ("tomorrow morning") and let them name the exact time; then repeat it back together with the time zone they used.`;
+
+function calleeTimezoneText({ calleeZone, calleeZoneHypothesis }) {
+  if (calleeZone) return calleeZoneFactSentence(calleeZone);
+  if (calleeZoneHypothesis) return calleeZoneHypothesisSentence(calleeZoneHypothesis);
+  return CALLEE_ZONE_UNKNOWN_SENTENCE;
 }
 
 // Eine Kontext-Zeile - Beschriftung NUR bei Inhalt: ein blankes Feld ergaebe sonst eine
@@ -218,10 +251,12 @@ function assertConfigured(el) {
 // Leer-Pruefung getrimmt - und ihr fuehrender Zeilenumbruch ist Inhalt, den ein Trimmen
 // hier wegfressen wuerde (dann stuende der Block ohne Leerzeile an der Auftragszeile).
 //
-// ZEIT (T7): die Zone des Auftraggebers und das heutige Datum sind IMMER gesetzt (der
-// Zeitkontext liefert beide fail-safe), die Zone des Angerufenen NUR, wenn sie ableitbar
-// ist - geraten wird nichts (s. time-context.js). Vorher wirkte an ihrer Stelle ein
-// Festwert am Agenten ("Europe/Berlin"), der weder besessen noch pro Anruf richtig war.
+// ZEIT (T7/T8): die Zone des Auftraggebers und das heutige Datum sind IMMER gesetzt (der
+// Zeitkontext liefert beide fail-safe). Fuer die Gegenstelle geht IMMER ein Satz raus, aber
+// nie ein blosser Bezeichner: er sagt zugleich, wie sicher der Wert ist - Tatsache,
+// bestaetigungspflichtige Annahme oder gar keine Zone (s. calleeTimezoneText). Geraten wird
+// dabei nichts (s. time-context.js). Vorher wirkte an dieser Stelle ein Festwert am Agenten
+// ("Europe/Berlin"), der weder besessen noch pro Anruf richtig war.
 function dynamicVariables({ call, ownerName, time }) {
   return {
     owner_name: alsText(ownerName) || DISCLOSURE_OWNER_FALLBACK_EN,
@@ -231,7 +266,7 @@ function dynamicVariables({ call, ownerName, time }) {
     background: backgroundText(call.context),
     mandate: mandateText(call.mandate),
     owner_timezone: alsText(time.ownerZone),
-    callee_timezone: calleeTimezoneText(time.calleeZone),
+    callee_timezone: calleeTimezoneText(time),
     today: alsText(time.today),
   };
 }

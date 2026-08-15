@@ -31,7 +31,7 @@
     "mandate": "Any weekday appointment within the next two weeks, mornings preferred, up to $250 for the inspection. The assignment says nothing about the vehicle itself.",
     "owner_timezone": "America/New_York",
     "today": "Monday, 11 May 2026",
-    "callee_timezone": ""
+    "callee_timezone": "\nThe person you are calling is probably in the America/Chicago time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Central time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
   },
   "chat_history": [
     {
