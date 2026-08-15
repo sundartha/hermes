@@ -14,21 +14,5 @@
   "src/telephony/call-finish.js": {
     "reason": "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung.",
     "date": "2026-08-15"
-  },
-  "test/i9-self-service.test.js": {
-    "reason": "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
-    "date": "2026-08-15"
-  },
-  "test/store-pg.test.js": {
-    "reason": "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
-    "date": "2026-08-15"
-  },
-  "test/store-pg-multitenant.test.js": {
-    "reason": "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
-    "date": "2026-08-15"
-  },
-  "test/tenant-settings-calendar-map.test.js": {
-    "reason": "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
-    "date": "2026-08-15"
   }
 }

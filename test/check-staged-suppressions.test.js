@@ -3,6 +3,13 @@
 // (die ist gross und aendert sich mit jedem Aufraeumen). Beide Richtungen:
 // eine vorgemerkte Datei mit Eintraegen wird gemeldet, eine ohne wird nicht.
 //
+// STUFE 2 (sechster und siebter Block): eine gemeldete Datei wird trotzdem
+// durchgelassen, wenn ihre UNGEFILTERTEN Lint-Befunde vor und nach der
+// Aenderung identisch sind - dann ist belegt, dass die Aenderung mechanisch
+// war. Der sechste Block prueft die Entscheidung an der Attrappe, der siebte
+// die Befundmenge an echten eslint-Meldungen (Zeilenverschiebung vs. neuer
+// Verstoss vs. nicht lintbar).
+//
 // ALTLAST-LISTE: der zweite describe-Block prueft den Ausweg aus dem Gate.
 // Hintergrund: das Gate hatte einen Fall ohne Ausweg (src/store/state-ops.js,
 // src/store/pg.js tragen Schuld, deren Aufraeumen ein eigenes Refactoring
@@ -40,15 +47,20 @@
 //      Anlass: von 45 Verstoessen der beiden gelisteten Dateien waren 37
 //      reine Umbenennungen.
 import { strict as assert } from "node:assert";
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  findChangedFindings,
   findSuppressedStagedFiles,
+  findingTally,
   loadLegacyExceptions,
+  makeUnfilteredLinter,
+  tallyDifferences,
 } from "../scripts/check-staged-suppressions.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -261,7 +273,7 @@ describe("loadLegacyExceptions (injizierter Leser)", () => {
 // Die abgelehnte Datei wird aus dem Bestand gewaehlt statt fest verdrahtet: ein
 // einzelner Bestandspfad verschwindet mit dem naechsten Aufraeumen, die Frage
 // "gibt es ueberhaupt eine abgelehnte Datei" ist die Positiv-Kontrolle.
-function firstRejectedFile() {
+function firstGatedFile() {
   const suppressions = JSON.parse(readRepoFile(SUPPRESSIONS_REL));
   const legacyExceptions = JSON.parse(readRepoFile(LEGACY_EXCEPTIONS_REL));
   return Object.keys(suppressions).find(
@@ -270,19 +282,64 @@ function firstRejectedFile() {
   );
 }
 
+// Seit Stufe 2 lehnt das Gate eine Datei nur noch ab, wenn sich ihre Befunde
+// zwischen HEAD und Index bewegen - ein CLI-Lauf ohne vorgemerkte Aenderung
+// laeuft durch. Fuer einen echten Ablehnungs-Lauf braucht der Test also einen
+// Index. Der entsteht NEBEN dem echten (GIT_INDEX_FILE): Arbeitsbaum und der
+// Index des Entwicklers bleiben unberuehrt, und der Test haengt nicht daran,
+// was gerade vorgemerkt ist. Vorgemerkt wird der Blob einer ANDEREN,
+// lint-sauberen Bestandsdatei - so bewegt sich die Befundmenge garantiert,
+// ohne dass der Test ein neues Objekt in die Objektdatenbank schreiben muss.
+const GIT_BLOB_MODE = "100644";
+const CLEAN_BLOB_SOURCE = "scripts/check-staged-suppressions.js";
+
+function git(args, env = process.env) {
+  return execFileSync("git", args, {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    env,
+  }).trim();
+}
+
+// Ein Index neben dem echten, gefuellt aus HEAD: Index == HEAD, also keine
+// Aenderung an irgendeiner Datei.
+function tempIndexEnv() {
+  const indexFile = join(mkdtempSync(join(tmpdir(), "aufraeum-gate-")), "index");
+  const env = { ...process.env, GIT_INDEX_FILE: indexFile };
+  git(["read-tree", "HEAD"], env);
+  return env;
+}
+
+function stageForeignContent(file) {
+  const env = tempIndexEnv();
+  const blob = git(["rev-parse", `HEAD:${CLEAN_BLOB_SOURCE}`]);
+  git(["update-index", "--add", "--cacheinfo", `${GIT_BLOB_MODE},${blob},${file}`], env);
+  return env;
+}
+
+function runGate(file, env) {
+  const run = spawnSync(process.execPath, [SCRIPT_PATH, file], {
+    encoding: "utf8",
+    env,
+  });
+  return { status: run.status, report: `${run.stdout}${run.stderr}` };
+}
+
+function gatedFile() {
+  const file = firstGatedFile();
+  assert.ok(
+    file,
+    `Positiv-Kontrolle fehlgeschlagen: keine Datei in ${SUPPRESSIONS_REL}, die das Gate pruefen wuerde`,
+  );
+  return file;
+}
+
 // Ein echter Ablehnungs-Lauf. Beide Berichts-Faelle teilen ihn sich: der Lauf
 // ist ihre Vorbedingung, nicht ihre Aussage.
 function rejectionReport() {
-  const rejectedFile = firstRejectedFile();
-  assert.ok(
-    rejectedFile,
-    `Positiv-Kontrolle fehlgeschlagen: keine Datei in ${SUPPRESSIONS_REL}, die das Gate ablehnen wuerde`,
-  );
-  const run = spawnSync(process.execPath, [SCRIPT_PATH, rejectedFile], {
-    encoding: "utf8",
-  });
-  const report = `${run.stdout}${run.stderr}`;
-  assert.equal(run.status, 1, `Gate hat nicht abgelehnt: ${report}`);
+  const rejectedFile = gatedFile();
+  const { status, report } = runGate(rejectedFile, stageForeignContent(rejectedFile));
+  assert.equal(status, 1, `Gate hat nicht abgelehnt: ${report}`);
   return { rejectedFile, report };
 }
 
@@ -341,6 +398,12 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               (Eigentuemer-Entscheidung): gemessen, nicht vermutet - der Hook
 //               blockiert sie wirklich. Vorbestehendes Fixture-Rauschen in
 //               Testdaten; eigenes Aufraeum-Paket vermerkt.
+//   2026-08-15  dieselben vier wieder ENTFERNT (Eigentuemer-Entscheidung):
+//               Stufe 2 laesst eine Aenderung mit unveraenderter Befundmenge
+//               selbst durch, die Eintraege haben keinen Zweck mehr. Am echten
+//               Hook gemessen: mechanische Aenderung an
+//               test/i9-self-service.test.js ohne Eintrag -> Ausgang 0,
+//               dieselbe Datei mit einem neuen Befund -> Ausgang 1.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     reason:
@@ -360,26 +423,6 @@ const LEGACY_FINGERPRINT = {
   "src/telephony/call-finish.js": {
     reason:
       "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung.",
-    date: "2026-08-15",
-  },
-  "test/i9-self-service.test.js": {
-    reason:
-      "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
-    date: "2026-08-15",
-  },
-  "test/store-pg.test.js": {
-    reason:
-      "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
-    date: "2026-08-15",
-  },
-  "test/store-pg-multitenant.test.js": {
-    reason:
-      "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
-    date: "2026-08-15",
-  },
-  "test/tenant-settings-calendar-map.test.js": {
-    reason:
-      "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
     date: "2026-08-15",
   },
 };
@@ -524,5 +567,169 @@ describe("Altlast-Ratsche (echte Liste)", () => {
 
   it("weist einen zu kurzen Grund ab", () => {
     assert.equal(isSubstantialReason("Altlast, kommt weg."), false);
+  });
+});
+
+// ---- Stufe 2: mechanische Aenderungen (Attrappe) ----------------------------
+// Der Vertrag: findChangedFindings({ candidates, readFindings }) laesst einen
+// Kandidaten der Stufe 1 nur dann fallen, wenn seine ungefilterte Befundmenge
+// vor und nach der Aenderung IDENTISCH ist. readFindings ist die Naht
+// (Datei -> { before, after } als eslint-Meldungen); wer sie fuellt - git und
+// eslint oder diese Attrappe - bleibt hier offen.
+//
+// Warum es die Stufe gibt (Eigentuemer-Entscheidung 2026-08-15): Stufe 1 allein
+// lehnt auch eine Umbenennung ab, die nichts verschlimmert, und macht das
+// Aufraeumen fremder Schuld zum Preis jeder Beruehrung - genau daraus
+// entstehen neue Altlast-Eintraege. Was die Stufe NICHT lockert: neue, mehr,
+// weniger oder getauschte Befunde fuehren unveraendert zur Ablehnung.
+const KANDIDATEN = [
+  { file: "src/dummy/altlast.js", ruleCounts: [{ rule: "id-length", count: 3 }] },
+];
+
+// Zwei verschiedene Zeilen: der Vergleich muss sie ignorieren, sonst waere
+// jede eingefuegte Zeile eine "Verschlechterung".
+const ZEILE_VORHER = 1;
+const ZEILE_NACHHER = 47;
+
+function meldung(ruleId, message, line) {
+  return { ruleId, message, line, column: line };
+}
+
+const KURZER_NAME = meldung("id-length", "Identifier name 'q' is too short (< 2).", ZEILE_VORHER);
+const KURZER_NAME_VERSCHOBEN = meldung(
+  "id-length",
+  "Identifier name 'q' is too short (< 2).",
+  ZEILE_NACHHER,
+);
+const ANDERER_KURZER_NAME = meldung(
+  "id-length",
+  "Identifier name 'x' is too short (< 2).",
+  ZEILE_VORHER,
+);
+const MAGISCHE_ZAHL = meldung("no-magic-numbers", "No magic number: 7.", ZEILE_NACHHER);
+
+async function abgelehnt(before, after) {
+  return findChangedFindings({
+    candidates: KANDIDATEN,
+    readFindings: () => Promise.resolve({ before, after }),
+  });
+}
+
+function begruendung(offenders) {
+  return offenders.flatMap((offender) => offender.reasons).join(" | ");
+}
+
+describe("findChangedFindings (Attrappe)", () => {
+  it("laesst eine Aenderung durch, deren Befunde nur verschoben sind", async () => {
+    const offenders = await abgelehnt([KURZER_NAME], [KURZER_NAME_VERSCHOBEN]);
+    assert.deepEqual(offenders, []);
+  });
+
+  it("laesst eine Datei ganz ohne Befunde durch", async () => {
+    assert.deepEqual(await abgelehnt([], []), []);
+  });
+
+  it("lehnt ab, sobald ein Befund dazukommt", async () => {
+    const offenders = await abgelehnt([KURZER_NAME], [KURZER_NAME, MAGISCHE_ZAHL]);
+    assert.deepEqual(
+      offenders.map((offender) => offender.file),
+      ["src/dummy/altlast.js"],
+    );
+    assert.match(begruendung(offenders), /No magic number: 7\./);
+  });
+
+  it("lehnt ab, wenn ein Befund wegfaellt", async () => {
+    const offenders = await abgelehnt([KURZER_NAME, MAGISCHE_ZAHL], [KURZER_NAME]);
+    assert.equal(offenders.length, KANDIDATEN.length);
+  });
+
+  it("lehnt ab, wenn ein Befund gegen einen anderen getauscht wird", async () => {
+    // Der Fall, den die eingefrorene ANZAHL nicht faengt: eine Fundstelle
+    // behoben, an anderer Stelle eine neue eingebaut - Zahl gleich, Menge nicht.
+    const offenders = await abgelehnt([KURZER_NAME], [ANDERER_KURZER_NAME]);
+    assert.equal(offenders.length, KANDIDATEN.length);
+    assert.match(begruendung(offenders), /'x' is too short/);
+  });
+
+  it("vergleicht als Multimenge, nicht als Menge", async () => {
+    const offenders = await abgelehnt([KURZER_NAME, KURZER_NAME_VERSCHOBEN], [KURZER_NAME]);
+    assert.equal(offenders.length, KANDIDATEN.length);
+  });
+
+  it("lehnt fail-closed ab, wenn die Befunde nicht lesbar sind", async () => {
+    const offenders = await findChangedFindings({
+      candidates: KANDIDATEN,
+      readFindings: () => Promise.reject(new Error("kein Stand in HEAD")),
+    });
+    assert.equal(offenders.length, KANDIDATEN.length);
+    assert.match(begruendung(offenders), /nicht pruefbar.*kein Stand in HEAD/);
+  });
+});
+
+// ---- Die Befundmenge an echten eslint-Meldungen -----------------------------
+// Die Attrappe oben prueft die Entscheidung, dieser Block das Material: was
+// eslint fuer denselben Inhalt vor und nach einer Aenderung wirklich meldet.
+// Ohne ihn stuende nur die Behauptung da, dass eine Zeilenverschiebung nichts
+// bewegt und ein neuer Verstoss doch.
+const PROBE_PFAD = "test/dummy-probe.test.js";
+const PROBE_CODE = "export function probe(q) {\n  return q;\n}\n";
+const PROBE_CODE_VERSCHOBEN = `// Kommentar, der nur Zeilen verschiebt.\n${PROBE_CODE}`;
+const PROBE_CODE_SCHLECHTER = `${PROBE_CODE}export function zweite(x) {\n  return x;\n}\n`;
+const IGNORIERTER_PFAD = "data/dummy-probe.js";
+const KAPUTTER_CODE = "export function probe(((;\n";
+
+describe("Ungefilterte Befunde (echtes eslint)", () => {
+  it("sieht die Befunde, die eslint-suppressions.json einfriert", async () => {
+    // Die Positiv-Kontrolle des ganzen Vergleichs: liefe der Linter mit der
+    // echten Unterdrueckungsdatei, waere die Menge einer Bestandsdatei leer -
+    // dann saehe JEDE Aenderung mechanisch aus und das Gate liesse alles durch.
+    const lintContent = await makeUnfilteredLinter();
+    const file = gatedFile();
+    const messages = await lintContent(readRepoFile(file), file);
+    assert.ok(
+      findingTally(messages).size > 0,
+      `${file} traegt Unterdrueckungen, der ungefilterte Lauf meldet aber nichts`,
+    );
+  });
+
+  it("bewertet eine reine Zeilenverschiebung als identisch", async () => {
+    const lintContent = await makeUnfilteredLinter();
+    const vorher = findingTally(await lintContent(PROBE_CODE, PROBE_PFAD));
+    const nachher = findingTally(await lintContent(PROBE_CODE_VERSCHOBEN, PROBE_PFAD));
+    assert.ok(vorher.size > 0, "Probe ohne Befund prueft nichts");
+    assert.deepEqual(tallyDifferences(vorher, nachher), []);
+  });
+
+  it("sieht einen neu eingebauten Verstoss", async () => {
+    const lintContent = await makeUnfilteredLinter();
+    const vorher = findingTally(await lintContent(PROBE_CODE, PROBE_PFAD));
+    const nachher = findingTally(await lintContent(PROBE_CODE_SCHLECHTER, PROBE_PFAD));
+    const differences = tallyDifferences(vorher, nachher);
+    assert.equal(differences.length, 1);
+    assert.match(differences[0].key, /id-length.*'x' is too short/);
+  });
+
+  it("bricht fail-closed ab, wenn der Inhalt nicht parsebar ist", async () => {
+    const lintContent = await makeUnfilteredLinter();
+    await assert.rejects(lintContent(KAPUTTER_CODE, PROBE_PFAD), /kann .* nicht lesen/);
+  });
+
+  it("bricht fail-closed ab, wenn eslint den Pfad gar nicht lintet", async () => {
+    const lintContent = await makeUnfilteredLinter();
+    await assert.rejects(lintContent(PROBE_CODE, IGNORIERTER_PFAD), /nicht gelintet/);
+  });
+});
+
+// ---- Der Freifahrtschein am echten CLI --------------------------------------
+// Die Gegenprobe zum Ablehnungs-Bericht oben, gefahren ueber dieselbe Naht
+// (Skript als Kindprozess, Index neben dem echten): dieselbe Datei, die mit
+// bewegter Befundmenge abgelehnt wird, laeuft ohne Bewegung durch. Ein Gate,
+// das alles ablehnt, besteht jeden Negativ-Test - erst dieses Paar zeigt, dass
+// es unterscheidet.
+describe("Aufraeum-Gate am echten CLI", () => {
+  it("laesst eine vorgemerkte Datei ohne Bewegung der Befunde durch", () => {
+    const file = gatedFile();
+    const { status, report } = runGate(file, tempIndexEnv());
+    assert.equal(status, 0, `Gate hat eine unveraenderte Datei abgelehnt: ${report}`);
   });
 });
