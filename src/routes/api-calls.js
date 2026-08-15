@@ -48,6 +48,15 @@ function contextReceivedMeta(context, config) {
   };
 }
 
+// Fail-closed-Ersatz fuer den EL-Anrufstart (s. deps unten): ein eingeschalteter Zweig
+// ohne verdrahtete Instanz waehlt NICHT. Die Meldung nennt die gescheiterte Operation und
+// ihre Ursache (P8), damit der Fehlerpfad-Log sie nicht raten muss.
+function elevenLabsCallNotWired() {
+  throw new Error(
+    "ELEVENLABS_OUTBOUND_ENABLED ist an, aber der Anrufstart ist nicht verdrahtet (deps.elevenLabsOutbound fehlt)",
+  );
+}
+
 // deps: siehe Modul-Doc. arm = { armMaxDurationTimer, armReserveReleaseTimer } aus der EINEN
 // lifecycle-Instanz (Cap-/Reserve-Backstop, INV-7); finishCall = callFinish.finishCall (bare,
 // EINE Referenz wie in call-lifecycle.js); tenant = { requestTenant, requireTenant,
@@ -61,6 +70,12 @@ export function makeCallRoutes({
   outboundGates,
   voiceControl,
   originateAiAssistantCall,
+  // EL-Anrufstart (dritter Outbound-Weg): die EINE Instanz aus server.js (INV-7) - sie
+  // haelt den ziehenden Ergebnisweg, eine zweite haette eine zweite Abhol-Schleife.
+  // Ohne verdrahtete Instanz greift der fail-closed Ersatz: bei eingeschaltetem Schalter
+  // WIRFT er in den EINEN Fehlerpfad (Call sauber beendet, Reserve frei), statt einen
+  // Anruf ueber einen halb verdrahteten Weg auszuloesen.
+  originateElevenLabsCall = elevenLabsCallNotWired,
   terminateAndBillCall,
   hangUpAction,
   billThunk,
@@ -208,10 +223,24 @@ export function makeCallRoutes({
     emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
 
     try {
-      // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
-      // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
-      // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
-      if (config.telnyx.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)) {
+      // EL-Anrufstart: der dritte Weg, an EXAKT derselben Stelle wie die beiden anderen -
+      // HINTER der kompletten, unveraenderten Gate-Kette (KEIN zweiter Einstieg, Regel 1).
+      // Der Weichenschalter steht Default aus; aus -> die beiden Telnyx-Zweige unten laufen
+      // byte-identisch weiter. Der PROVIDER des Anrufs bleibt telnyx (die DID liegt dort,
+      // ElevenLabs haengt per SIP-Trunk daran) - deshalb keine Provider-Abfrage, sondern
+      // ein Engine-Schalter (s. src/elevenlabs/outbound.js).
+      if (config.voice.elevenLabsOutbound.enabled) {
+        await originateElevenLabsCall(call);
+        // Regel 1 (Minuten-Achse): derselbe harte Max-Dauer-Cap wie im C-Telnyx-Zweig.
+        // providerCallSid=null ist Absicht (es gibt keinen twilioSid); ohne callControlId
+        // faellt hangUpAction auf null - der Cap beendet und bucht den Record und stoppt
+        // die Ergebnis-Abholung, legt aber kein Anbieter-Leg auf. Die provider-seitige
+        // Dauergrenze gehoert in die Agenten-Konfiguration und ist offene Folgearbeit.
+        armMaxDurationTimer(call, null);
+        // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
+        // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
+        // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
+      } else if (config.telnyx.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)) {
         await originateAiAssistantCall({
           store,
           voiceControl,

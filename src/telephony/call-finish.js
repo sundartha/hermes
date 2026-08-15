@@ -74,7 +74,15 @@ export function makeCallFinish({
     }
 
     try {
-      const result = await summarizeCall(call);
+      // EL-Anrufstart: auf dem ElevenLabs-Weg fuehrt der Agent des ANBIETERS das Gespraech
+      // und liefert die Zusammenfassung mit; sie steht bereits am Record, bevor
+      // finishCall den Call sieht (elevenlabs/outbound.js). Ein eigener LLM-Roundtrip
+      // waere dann eine zweite, schlechtere Wahrheit ueber dasselbe Gespraech - und Token
+      // fuer Arbeit, die schon bezahlt ist. Auf JEDEM anderen Weg ist call.summary hier
+      // leer (sie entsteht erst IN summarizeCall) -> Bestandsverhalten unveraendert.
+      const result = call.summary
+        ? { summary: call.summary, actionItems: [] }
+        : await summarizeCall(call);
       // Roh-Transkript-Purge (#7, DSGVO-Datenminimierung). P2b: der Purge steht jetzt VOR
       // dem Frueh-Return. Ein leeres `result` heisst hier NICHT "Fehler" - ein Fehler
       // WIRFT und landet im catch unten, und ein leeres Transkript ist oben bereits

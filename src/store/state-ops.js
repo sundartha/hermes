@@ -1253,7 +1253,10 @@ export function getCalendar(s, tenantId) {
   return calendarFor(s, tenantId).sort((a, b) => a.start.localeCompare(b.start));
 }
 
-export function addCalendarEvent(s, tenantId, title, startIso, endIso) {
+// Die vier Termin-Felder reisen ausnahmslos zusammen -> EIN Objekt statt vier Positionen
+// (kein Vertauschen von title/startIso/endIso mehr moeglich). Hier lebt die Shape; beide
+// Store-Fassaden (json.js/pg.js) reichen das Objekt nur durch.
+export function addCalendarEvent(s, { tenantId, title, startIso, endIso }) {
   const ev = { id: newId("ev"), title, start: startIso, end: endIso };
   calendarFor(s, tenantId).push(ev);
   return ev;

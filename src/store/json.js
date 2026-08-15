@@ -25,6 +25,15 @@ import { backfillGreetingNotices } from "./greeting-notice-migration.js";
 
 const FILE = path.join(config.server.dataDir, "store.json");
 
+// Zufallssuffix des Temp-Files in save(): Math.random().toString(36) liefert
+// "0.<ziffern+kleinbuchstaben>" - TMP_SUFFIX_RADIX ist diese Basis, TMP_SUFFIX_START
+// schneidet das fuehrende "0." ab. Reine Kollisionsvermeidung zwischen gleichzeitigen
+// Schreibern, KEINE Krypto-Anforderung.
+const TMP_SUFFIX_RADIX = 36;
+const TMP_SUFFIX_START = 2;
+// Einrueckung des persistierten store.json (menschenlesbar, wie im Bestand).
+const JSON_INDENT = 2;
+
 let state = null;
 
 export function load() {
@@ -32,63 +41,87 @@ export function load() {
   let raw;
   try {
     raw = fs.readFileSync(FILE, "utf8");
-  } catch (e) {
+  } catch (err) {
     // Genuine First-Boot (File ABWESEND, ENOENT): Defaults sind OK, kein Alarm. Jeder
     // ANDERE Read-Fehler (z.B. EACCES auf existierendem File) wird re-thrown -> sichtbar
     // nach oben (P0-Netz faengt), NIE als First-Boot fehlinterpretiert (OT-3 AC3).
-    if (e.code === "ENOENT") {
+    if (err.code === "ENOENT") {
       state = ops.makeDefaultState();
       save();
       return finishLoad();
     }
-    throw e;
+    throw err;
   }
   try {
     state = JSON.parse(raw);
-    // Neue Default-Felder ergaenzen (Migrationen)
-    state.settings = migrateSettingsToMap(state.settings);
-    state.calendar = migrateCalendarToMap(state.calendar);
-    state.usage = migrateUsageToMap(state.usage);
-    state.notifications ||= [];
-    state.profiles ||= {};
-    state.numbers ||= [];
-    state.provisioningJobs ||= []; // P6b2: Job-Spur in bestehenden Stores nachziehen
-    state.tenantBudgets ||= []; // P6b3: per-Tenant-Kostendecke nachziehen
-    state.usageEvents ||= []; // P6b3: append-only Usage-Ledger nachziehen
-    state.reservations ||= {}; // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
-    state.subIndex ||= {}; // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
-    state.platformTtsUsage ||= emptyPlatformTtsUsage(); // LCT P7: Bestands-store.json ohne die Zeile nachziehen
-    state.costCrossCheck ||= emptyCostCrossCheck(); // KV-M4: Bestands-store.json ohne die Zeile nachziehen
-    state.calls = migrateCallFields(state.calls || []);
+    migrateLoadedState();
   } catch {
-    // File VORHANDEN, aber unparsebar -> KORRUPTION. NIE still wischen (OT-3 AC3): erst
-    // forensisch nach .corrupt-<ts> sichern. NUR wenn die Sicherung GELINGT, darf der Store mit
-    // Defaults weiterlaufen (das korrupte Original ist dann sicher weggeschrieben). Scheitert die
-    // Sicherung (z.B. nicht-schreibbares dataDir), waere makeDefaultState()+save() ein stiller
-    // Wipe des korrupten Originals OHNE Forensik-Backup (S1-4) -> stattdessen fail-closed werfen;
-    // boot.js beendet den Boot dann sichtbar (exit 1).
-    const corruptPath = `${FILE}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-    let backedUp = false;
-    try {
-      fs.renameSync(FILE, corruptPath);
-      backedUp = true;
-    } catch (re) {
-      console.error(
-        `[store] KORRUPTES store.json erkannt - Sicherung FEHLGESCHLAGEN (${re.message}). ` +
-          `Original bleibt unveraendert unter ${FILE}. Fail-closed: kein Start mit Defaults.`,
-      );
-    }
-    if (!backedUp) {
-      throw new Error("store.json korrupt und forensische Sicherung fehlgeschlagen - fail-closed");
-    }
-    console.error(
-      `[store] KORRUPTES store.json erkannt - umbenannt nach ${corruptPath}. ` +
-        "Store startet mit Defaults. DATENVERLUST moeglich, File pruefen.",
-    );
-    state = ops.makeDefaultState();
-    save();
+    // Der catch umspannt BEWUSST Parse UND Migration: ein Store, dessen Felder sich nicht
+    // migrieren lassen, ist genauso unbrauchbar wie unparsebares JSON und nimmt denselben
+    // forensischen Weg.
+    recoverFromCorruptFile();
   }
   return finishLoad();
+}
+
+// File VORHANDEN, aber unbrauchbar -> KORRUPTION. NIE still wischen (OT-3 AC3): erst
+// forensisch nach .corrupt-<ts> sichern. NUR wenn die Sicherung GELINGT, darf der Store mit
+// Defaults weiterlaufen (das korrupte Original ist dann sicher weggeschrieben). Scheitert die
+// Sicherung (z.B. nicht-schreibbares dataDir), waere makeDefaultState()+save() ein stiller
+// Wipe des korrupten Originals OHNE Forensik-Backup (S1-4) -> stattdessen fail-closed werfen;
+// boot.js beendet den Boot dann sichtbar (exit 1). Der Wurf verlaesst load() unveraendert
+// (die Funktion laeuft im catch-Zweig von load).
+function recoverFromCorruptFile() {
+  const corruptPath = `${FILE}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  let backedUp = false;
+  try {
+    fs.renameSync(FILE, corruptPath);
+    backedUp = true;
+  } catch (re) {
+    console.error(
+      `[store] KORRUPTES store.json erkannt - Sicherung FEHLGESCHLAGEN (${re.message}). ` +
+        `Original bleibt unveraendert unter ${FILE}. Fail-closed: kein Start mit Defaults.`,
+    );
+  }
+  if (!backedUp) {
+    throw new Error("store.json korrupt und forensische Sicherung fehlgeschlagen - fail-closed");
+  }
+  console.error(
+    `[store] KORRUPTES store.json erkannt - umbenannt nach ${corruptPath}. ` +
+      "Store startet mit Defaults. DATENVERLUST moeglich, File pruefen.",
+  );
+  state = ops.makeDefaultState();
+  save();
+}
+
+// "Top-Level-Feld fehlt in einem Bestands-store.json" ist EINE Frage mit EINER Antwort -
+// dieselbe wie CALL_FIELD_DEFAULTS weiter unten, nur eine Ebene hoeher. Fabriken statt
+// Literalen: jeder Eintrag MUSS einen frischen Wert liefern (ein geteiltes [] waere ein
+// stiller Alias zwischen zwei Feldern). ||= laesst gesetzte Werte unangetastet und ruft die
+// Fabrik gar nicht erst -> idempotent, Reihenfolge wie im Bestand.
+const STATE_FIELD_DEFAULTS = Object.freeze({
+  notifications: () => [],
+  profiles: () => ({}),
+  numbers: () => [],
+  provisioningJobs: () => [], // P6b2: Job-Spur in bestehenden Stores nachziehen
+  tenantBudgets: () => [], // P6b3: per-Tenant-Kostendecke nachziehen
+  usageEvents: () => [], // P6b3: append-only Usage-Ledger nachziehen
+  reservations: () => ({}), // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
+  subIndex: () => ({}), // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
+  platformTtsUsage: emptyPlatformTtsUsage, // LCT P7: Bestands-store.json ohne die Zeile nachziehen
+  costCrossCheck: emptyCostCrossCheck, // KV-M4: Bestands-store.json ohne die Zeile nachziehen
+});
+
+// Neue Default-Felder ergaenzen (Migrationen). Arbeitet wie finishLoad/seed* auf dem
+// Modul-state, nicht auf einem Parameter - der Store ist hier bereits geparst.
+function migrateLoadedState() {
+  state.settings = migrateSettingsToMap(state.settings);
+  state.calendar = migrateCalendarToMap(state.calendar);
+  state.usage = migrateUsageToMap(state.usage);
+  for (const [field, makeDefault] of Object.entries(STATE_FIELD_DEFAULTS)) {
+    state[field] ||= makeDefault();
+  }
+  state.calls = migrateCallFields(state.calls || []);
 }
 
 // Gemeinsamer Abschluss von load(): First-Boot, Parse-Erfolg UND der Korruptions-Pfad
@@ -148,7 +181,7 @@ function migrateFlatToMap(value, { isFlat, mapBucket, defaultBucket }) {
 // diese Migration haelt sie gruen, ohne jeden seedState-Aufrufer anzufassen.
 function migrateUsageToMap(usage) {
   return migrateFlatToMap(usage, {
-    isFlat: (u) => typeof u.costEur === "number",
+    isFlat: (bucket) => typeof bucket.costEur === "number",
     mapBucket: bucketToCents,
     defaultBucket: emptyUsage,
   });
@@ -161,7 +194,7 @@ function migrateUsageToMap(usage) {
 // -> jeden Bucket gegen den Default auffuellen, Owner sicherstellen).
 function migrateSettingsToMap(settings) {
   return migrateFlatToMap(settings, {
-    isFlat: (s) => typeof s.agentName === "string",
+    isFlat: (bucket) => typeof bucket.agentName === "string",
     mapBucket: (bucket) => ({ ...defaultSettings(), ...bucket }),
     defaultBucket: defaultSettings,
   });
@@ -304,7 +337,8 @@ export function save() {
   // hoechstens ein verwaistes .tmp-File, NIE ein truncated store.json. Das tmp MUSS im
   // selben Verzeichnis liegen (gleiches Filesystem) -> renameSync ist atomar (POSIX),
   // kein EXDEV (siehe PLAN-SECURITY.md OT-3).
-  const tmp = `${FILE}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const suffix = Math.random().toString(TMP_SUFFIX_RADIX).slice(TMP_SUFFIX_START);
+  const tmp = `${FILE}.tmp-${process.pid}-${suffix}`;
   const fd = fs.openSync(tmp, "w");
   try {
     // OUT-05: s.reservations ist STRUKTURELL EPHEMER - nie auf Platte. Die Rest-
@@ -331,7 +365,7 @@ export function save() {
     // minimal anders als costCents: < 1 Cent pro Neustart, akzeptiert (s. schema.sql).
     const stripEphemeral = (key, value) =>
       key === "_finished" || key === "costMicroCentsRem" ? undefined : value;
-    fs.writeFileSync(fd, JSON.stringify(persisted, stripEphemeral, 2));
+    fs.writeFileSync(fd, JSON.stringify(persisted, stripEphemeral, JSON_INDENT));
     fs.fsyncSync(fd); // Daten muessen auf der Platte sein, BEVOR der Rename committet
   } finally {
     fs.closeSync(fd);
@@ -490,6 +524,15 @@ export function recordElevenlabsConversationId(callId, conversationId) {
   return call;
 }
 
+// EL-Anrufstart: Zusammenfassung + Befund eines vom Anbieter gefuehrten Gespraechs -
+// Wrapper-Paritaet zu pg.js. Saved wie recordElevenlabsConversationId: beide Felder liegen
+// persistent auf Platte, und get_transcript liest sie nach dem Anruf.
+export function recordProviderCallResult(callId, result) {
+  const { call, changed } = ops.recordProviderCallResult(load(), callId, result);
+  if (changed) save();
+  return call;
+}
+
 export function countCallerTurn(callId) {
   const { call, changed } = ops.countCallerTurn(load(), callId);
   if (changed) save();
@@ -619,8 +662,11 @@ export function getCalendar(tenantId) {
   return ops.getCalendar(load(), tenantId);
 }
 
-export function addCalendarEvent(tenantId, title, startIso, endIso) {
-  const ev = ops.addCalendarEvent(load(), tenantId, title, startIso, endIso);
+// event = { tenantId, title, startIso, endIso } - die vier Felder reisen zusammen und
+// sind deshalb EIN Objekt (die Shape lebt in ops.addCalendarEvent, die Fassade reicht sie
+// nur durch; Muster wie recordUsageEvent/applyCostCorrectionCents).
+export function addCalendarEvent(event) {
+  const ev = ops.addCalendarEvent(load(), event);
   save();
   return ev;
 }
@@ -737,9 +783,9 @@ export function claimPlatformSpendWarning(cfg, nowIso) {
 // state-ops.js Modul-Doc) -> save() NUR bei changed (Muster recordCallCostTruingResult).
 // cfg = config.billing (dieselbe Instanz, die alle anderen Fassaden-Methoden hier lesen).
 export function recordTtsCharacters(chars, nowIso) {
-  const r = ops.recordTtsCharacters(load(), chars, config.billing, nowIso);
-  if (r.changed) save();
-  return r.warning;
+  const result = ops.recordTtsCharacters(load(), chars, config.billing, nowIso);
+  if (result.changed) save();
+  return result.warning;
 }
 
 // Reine Leseprojektion (kein save). nowIso vom Aufrufer (Muster tenantBudgetSnapshot).
@@ -751,9 +797,9 @@ export function platformTtsUsageView(nowIso) {
 // PERSISTIERT (usage-Bucket) -> save() NUR bei changed (Muster recordTtsCharacters daneben).
 // KEIN cfg-Parameter: die Operation kennt weder Zyklus noch Schwelle.
 export function recordTenantTtsCharacters(tenantId, chars) {
-  const r = ops.recordTenantTtsCharacters(load(), tenantId, chars);
-  if (r.changed) save();
-  return r;
+  const result = ops.recordTenantTtsCharacters(load(), tenantId, chars);
+  if (result.changed) save();
+  return result;
 }
 
 // KV-P7 (Massnahme 3): Telnyx-Relay-Verbrauch - PERSISTIERT ZWEI Tabellen (usage-Bucket
@@ -761,19 +807,24 @@ export function recordTenantTtsCharacters(tenantId, chars) {
 // Muster recordTtsCharacters). Rueckgabe-Parity zu recordTtsCharacters (nur die Warnung,
 // nicht das interne {changed}).
 export function recordRelayTtsCharacters(tenantId, chars, nowIso) {
-  const r = ops.recordRelayTtsCharacters(load(), { tenantId, chars, cfg: config.billing, nowIso });
-  if (r.changed) save();
-  return r.warning;
+  const result = ops.recordRelayTtsCharacters(load(), {
+    tenantId,
+    chars,
+    cfg: config.billing,
+    nowIso,
+  });
+  if (result.changed) save();
+  return result.warning;
 }
 
 // ---- KV-M4: Riegel der monatlichen Gegenprobe ----
 // PERSISTIERT (Muster recordTtsCharacters) -> save() NUR bei tatsaechlicher Aenderung
 // (laterMonotonicKey kann bei einem bereits gestempelten/zukuenftigen Monat No-op sein).
 export function markCostCrossCheckAttempted(monthKey) {
-  const s = load();
-  const before = s.costCrossCheck.lastCheckedMonthKey;
-  ops.markCrossCheckAttempted(s, monthKey);
-  if (s.costCrossCheck.lastCheckedMonthKey !== before) save();
+  const loaded = load();
+  const before = loaded.costCrossCheck.lastCheckedMonthKey;
+  ops.markCrossCheckAttempted(loaded, monthKey);
+  if (loaded.costCrossCheck.lastCheckedMonthKey !== before) save();
 }
 
 // ---- Per-Tenant-Budget + Metering (P6b3) ----
@@ -806,9 +857,9 @@ export function pendingMeterEvents() {
 }
 
 export function markMeterEventsSent(eventIds) {
-  const n = ops.markMeterEventsSent(load(), eventIds);
-  if (n) save();
-  return n;
+  const sentCount = ops.markMeterEventsSent(load(), eventIds);
+  if (sentCount) save();
+  return sentCount;
 }
 
 // ---- KYC (P6b4) ----

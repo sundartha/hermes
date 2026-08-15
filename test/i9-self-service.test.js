@@ -101,13 +101,12 @@ async function setup({ bankData, paymentEnabled = true } = {}) {
     to: "+49",
     tenantId: TENANT_B,
   });
-  ops.addCalendarEvent(
-    s,
-    TENANT_B,
-    "B-Termin",
-    "2030-02-01T10:00:00.000Z",
-    "2030-02-01T11:00:00.000Z",
-  );
+  ops.addCalendarEvent(s, {
+    tenantId: TENANT_B,
+    title: "B-Termin",
+    startIso: "2030-02-01T10:00:00.000Z",
+    endIso: "2030-02-01T11:00:00.000Z",
+  });
   const { id: sessionId } = await sessions.create({
     sub: SUB_B,
     tenantId: TENANT_B,

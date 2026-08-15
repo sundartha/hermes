@@ -885,20 +885,6 @@
       "count": 1
     }
   },
-  "src/store/json.js": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 8
-    },
-    "max-params": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 3
-    }
-  },
   "src/store/pg.js": {
     "complexity": {
       "count": 4
@@ -910,7 +896,7 @@
       "count": 2
     },
     "max-params": {
-      "count": 2
+      "count": 1
     },
     "no-param-reassign": {
       "count": 3
@@ -929,7 +915,7 @@
       "count": 214
     },
     "max-params": {
-      "count": 24
+      "count": 23
     },
     "no-magic-numbers": {
       "count": 10

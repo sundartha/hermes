@@ -321,6 +321,14 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // EL-Anrufstart: Zusammenfassung + Befund aus einer Anbieter-Antwort -
+    // Wrapper-Paritaet zu json.js. Saved aus demselben Grund wie die Handles darueber: es
+    // gibt Spalten (summary/objective_achieved), und der Flush schreibt sie aus dem Spiegel.
+    recordProviderCallResult(callId, result) {
+      const { call, changed } = ops.recordProviderCallResult(requireState(), callId, result);
+      if (changed) save();
+      return call;
+    },
     countCallerTurn(callId) {
       const { call, changed } = ops.countCallerTurn(requireState(), callId);
       if (changed) save();
@@ -400,8 +408,10 @@ export function makePgStore(runner) {
     },
 
     getCalendar: (tenantId) => ops.getCalendar(requireState(), tenantId),
-    addCalendarEvent(tenantId, title, startIso, endIso) {
-      const ev = ops.addCalendarEvent(requireState(), tenantId, title, startIso, endIso);
+    // event = { tenantId, title, startIso, endIso } - Wrapper-Parity zu json.js: die vier
+    // Felder reisen zusammen und werden als EIN Objekt durchgereicht.
+    addCalendarEvent(event) {
+      const ev = ops.addCalendarEvent(requireState(), event);
       save();
       return ev;
     },

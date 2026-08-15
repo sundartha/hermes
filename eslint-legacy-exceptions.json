@@ -6,5 +6,29 @@
   "src/store/pg.js": {
     "reason": "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration.",
     "date": "2026-08-13"
+  },
+  "src/routes/api-calls.js": {
+    "reason": "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber das Aufraeumen ist der G30-Split der Outbound-Route und damit ein Umbau im Gate-Kernpfad: diese Datei traegt die Safety-Gate-Kette (Permit, Denylist/Land-Gate/Stundenlimit, pro-Tenant-Kostendecke, OUTBOUND_FROZEN). Ein Entzerren verschiebt genau die Reihenfolge, in der diese Gates greifen; faellt dabei eine Pruefung durch, ruft der Dienst jemanden ungewollt an oder ueberzieht die Kostendecke. Das braucht ein eigenes Paket mit eigener Absicherung (Gate-Tests vor dem Schnitt), nicht einen Nebeneffekt dieses Commits.",
+    "date": "2026-08-15"
+  },
+  "src/telephony/call-finish.js": {
+    "reason": "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung.",
+    "date": "2026-08-15"
+  },
+  "test/i9-self-service.test.js": {
+    "reason": "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
+    "date": "2026-08-15"
+  },
+  "test/store-pg.test.js": {
+    "reason": "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
+    "date": "2026-08-15"
+  },
+  "test/store-pg-multitenant.test.js": {
+    "reason": "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
+    "date": "2026-08-15"
+  },
+  "test/tenant-settings-calendar-map.test.js": {
+    "reason": "Eigentuemer-Entscheidung 2026-08-15 (gemessen: der Hook blockiert diese Datei wirklich). Die heutige Aenderung ist rein mechanisch - nur die Aufrufform von addCalendarEvent, keine Assertion beruehrt, lint-neutral (die Suppressions-Zahlen aendern sich durch die Aenderung nicht). Die vorbestehenden Verstoesse sind Fixture-Rauschen in Testdaten, kein Produktionscode; ein Aufraeumen waere reine Formatarbeit und wuerde einen Paar-Commit blockieren, der master heilt. Eigenes Aufraeum-Paket vermerkt.",
+    "date": "2026-08-15"
   }
 }
