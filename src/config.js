@@ -1618,6 +1618,20 @@ const rawConfig = {
   // pruefung fail-closed AN, Regel 1) fuehrt es zum Boot-Refusal, NIE zu stillem Nicht-Waehlen.
   // KEINE abgeschaltete Sicherung: alle Gates laufen unveraendert VOR voiceControl.
   fakeOriginate: boolEnv("FAKE_ORIGINATE", process.env.FAKE_ORIGINATE, { fallback: false }),
+  // Trockenlege-Naht des dritten Outbound-Wegs (Owner-Auftrag 15.08.2026, Aufgabe 1):
+  // FAKE_ORIGINATE (s.o.) deckt NUR src/telephony/registry.js (Telnyx) ab - der EL-
+  // Anrufstart (src/elevenlabs/outbound.js#originateCall) laeuft ueber einen eigenen
+  // Netzzugriff (convai.js#startOutboundCall) und hatte KEINE Naht. true -> der EINE
+  // POST gegen api.elevenlabs.io wird NICHT gerufen, stattdessen eine Antwort in der
+  // Anbieter-Form (SIPTrunkOutboundCallResponse) mit erfundenen Werten (fake_el_-Praefix).
+  // BOOT-GEHAERTET wie FAKE_ORIGINATE (fakeOriginateBootBlocked, boot.js): nur mit
+  // SKIP_TWILIO_SIGNATURE_CHECK=true zulaessig, sonst Boot-Refusal. KEINE abgeschaltete
+  // Sicherung: alle Outbound-Gates laufen unveraendert VOR originateCall.
+  fakeOriginateElevenlabs: boolEnv(
+    "FAKE_ORIGINATE_ELEVENLABS",
+    process.env.FAKE_ORIGINATE_ELEVENLABS,
+    { fallback: false },
+  ),
 
   // ---- Datenschutz ----
   // Beendete Calls (samt Transkript) und Notifications aelter als RETENTION_DAYS
@@ -1853,7 +1867,7 @@ function guardedConfig(target, path = "config") {
 // Fatal-Push, kein Doppel-Eval. rawConfig selbst bleibt der interne Speicher, wird aber
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
-  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate"],
+  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],

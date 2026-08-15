@@ -25,6 +25,7 @@ import { makeCallLifecycle } from "../src/telephony/call-lifecycle.js";
 import { makeCallRoutes } from "../src/routes/api-calls.js";
 import { cappedEndedAtMs, classifyCallTime } from "../src/store/state-ops.js";
 import { VOICE_ENGINE } from "../src/config.js";
+import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
@@ -336,4 +337,69 @@ test("EL-Deckel: die Konstante fuer cancel_call ist an den besessenen Vorlagenwe
     sollWert,
     "cancel_call nennt eine andere Obergrenze als die, die am Anbieter besessen und bewacht ist",
   );
+});
+
+// ---- F: pollConversationResult braucht eine Obergrenze (Owner-Auftrag 15.08.2026, Aufgabe 2)
+// Ohne Riegel behandelt fetchConversationSoft JEDEN Abruffehler (404/429/5xx/Timeout) wie
+// "noch nicht fertig" und pollt endlos weiter - nach einem Boot-Re-Arm sogar nach JEDEM
+// Neustart erneut (test/el-boot-rearm.test.js belegt den Re-Arm selbst). Dieser Fall belegt
+// die Obergrenze SELBST: ein Call, der laenger als ELEVENLABS_PROVIDER_MAX_DURATION_S laeuft,
+// UND dessen Anbieter durchgehend unerreichbar bleibt (404 auf jeden Versuch), terminiert
+// trotzdem statt weiter zu pollen.
+const WAIT_UNTIL_TIMEOUT_MS = 500;
+const WAIT_UNTIL_POLL_INTERVAL_MS = 5;
+
+async function waitUntil(predicate, timeoutMs = WAIT_UNTIL_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("Poll-Obergrenze griff nicht innerhalb der Testfrist");
+    await new Promise((resolve) => setTimeout(resolve, WAIT_UNTIL_POLL_INTERVAL_MS));
+  }
+}
+
+const POLL_ZOMBIE_MARGIN_S = 60; // beliebig, nur "deutlich ueber dem Deckel"
+
+test("Poll-Obergrenze: ein Call aelter als ELEVENLABS_PROVIDER_MAX_DURATION_S terminiert statt endlos weiter zu pollen (Anbieter bleibt unerreichbar)", async () => {
+  const laengstAbgelaufen = new Date(
+    Date.now() - (ELEVENLABS_PROVIDER_MAX_DURATION_S + POLL_ZOMBIE_MARGIN_S) * MS_PER_SECOND,
+  ).toISOString();
+  const call = {
+    id: "call_zombie_poll",
+    status: "active",
+    elevenlabsConversationId: CONV_ID,
+    answeredAt: laengstAbgelaufen,
+    startedAt: laengstAbgelaufen,
+    endedAt: null,
+  };
+  const store = {
+    ...spyStore(call),
+    load: () => ({ calls: [call] }),
+    setCallEndedAt: (_id, status, endedAtIso) => {
+      call.status = status;
+      call.endedAt = endedAtIso;
+    },
+  };
+  let billed = false;
+  const el = makeElevenLabsOutbound({
+    store,
+    config: elConfig(),
+    terminateAndBillCall,
+    billThunk: () => () => {
+      billed = true;
+    },
+    finishCall: () => {},
+  });
+  await withFetch(
+    async () => ({ ok: false, status: HTTP_UNPROCESSABLE }), // Anbieter bleibt fuer JEDEN Versuch unerreichbar
+    async () => {
+      el.rearmActiveConversationPolls();
+      // Gewartet wird auf "gebucht" (der LETZTE Schritt von terminateAndBillCall), nicht
+      // auf den Statuswechsel allein: persistEnd() laeuft synchron VOR dem hangUp-Versuch
+      // (endActiveCall, awaited) - ein Warten auf den blossen Status waere ein Race gegen
+      // die noch laufende Buchung.
+      await waitUntil(() => billed);
+    },
+  );
+  assert.equal(call.status, "failed", "terminiert statt endlos weiterzupollen");
+  assert.ok(billed, "die Buchungskette laeuft auch fuer den Zombie-Zweig der Poll-Obergrenze");
 });

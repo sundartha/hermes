@@ -28,10 +28,12 @@
 // (GET /v1/convai/conversations/{id}, Takt ELEVENLABS_RESULT_POLL_MS) und legen Transkript
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { DISCLOSURE_OWNER_FALLBACK_EN, LOCALES } from "../i18n/locales.js";
+import { cappedEndedAtMs, classifyCallTime } from "../store/state-ops.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 import { endConversation, fetchConversation, startOutboundCall } from "./convai.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
+import crypto from "node:crypto";
 
 // Endzustaende des Anbieters. Alles andere gilt als LAUFEND und wird weiter abgeholt: ein
 // unbekannter Status darf kein Gespraech vorzeitig fuer beendet erklaeren. Die Obergrenze
@@ -307,6 +309,27 @@ function assertConfigured(el) {
     );
 }
 
+// OUT-05-EL (Trockenlege-Naht, Owner-Auftrag 15.08.2026, Aufgabe 1): das Gegenstueck zu
+// FAKE_ORIGINATE (telephony/registry.js#fakeVoice) fuer DIESEN Weg - FAKE_ORIGINATE deckt
+// nur den Telnyx-Transport ab, config.safety.fakeOriginateElevenlabs (src/config.js) den
+// EINEN Netzzugriff hier (startOutboundCall, s. originateCall unten). Die Antwort ist in
+// der FORM des Anbieters (SIPTrunkOutboundCallResponse: success, message, conversation_id,
+// sip_call_id, Antwort von POST /v1/convai/sip-trunk/outbound-call) - die WERTE sind
+// erfunden (fake_el_-/fake_sip_-Praefix macht das im Store/Log sofort erkennbar), NICHT
+// die Form. originateCall liest daraus GENAU wie aus der echten Antwort (.conversation_id).
+// FAKE_ID_BYTE_LENGTH: dieselbe Laenge wie fakeVoice (telephony/registry.js), reine
+// Lesbarkeits-Konstante ohne fachliche Bedeutung (G25).
+const FAKE_ID_BYTE_LENGTH = 8;
+function fakeSipTrunkOutboundCallResponse() {
+  const suffix = crypto.randomBytes(FAKE_ID_BYTE_LENGTH).toString("hex");
+  return {
+    success: true,
+    message: "fake_originate: kein SIP-Anruf ausgeloest (Trockenlege-Naht)",
+    conversation_id: `fake_el_${suffix}`,
+    sip_call_id: `fake_sip_${suffix}`,
+  };
+}
+
 // Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die neun, die die
 // Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
 // {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}}) -
@@ -355,6 +378,64 @@ function dynamicVariables({ call, ownerName, time }) {
     callee_timezone: calleeTimezoneText(time),
     today: alsText(time.today),
   };
+}
+
+// Owner-Auftrag 15.08.2026 (Aufgabe 2): der Zombie-Zweig der Poll-Obergrenze (s.
+// pollConversationResult in makeElevenLabsOutbound). MODUL-EBENE statt Factory-Closure
+// (haelt makeElevenLabsOutbound unter der Zeilengrenze, G30) - alle Abhaengigkeiten reisen
+// als EIN Objekt (F1). Derselbe Terminierungs-Ablauf wie terminateActiveCall (telephony/
+// call-lifecycle.js) fuer EINEN EL-Call, nur mit dem ANBIETER-Deckel als gekapptem
+// Ende-Anker statt der Plattform-Max-Dauer: endActiveCall (Factory-Funktion, s.u.)
+// uebernimmt den Ergebnisabruf-dann-Loeschversuch bereits selbst (fail-soft) - erreicht er
+// den Anbieter doch noch, holt er die ECHTEN Werte (Transkript/Zusammenfassung/
+// Buchungsanker) nach, statt dass dieser Zweig sie sich ausdenkt. persistEnd laeuft VOR
+// hangUp (terminateAndBillCall) - endActiveCall liest call.endedAt also bereits GEKAPPT
+// (Muster dort dokumentiert).
+async function finishExpiredPoll({
+  store,
+  terminateAndBillCall,
+  billThunk,
+  finishCall,
+  endActiveCall,
+  callId,
+  nowMs,
+}) {
+  const call = store.getCall(callId);
+  if (!call) return;
+  const endedAtIso = new Date(
+    cappedEndedAtMs(call, nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S),
+  ).toISOString();
+  await terminateAndBillCall({
+    persistEnd: () => store.setCallEndedAt(callId, CALL_FAILED, endedAtIso),
+    hangUp: () => endActiveCall(callId),
+    bill: billThunk(finishCall, store, callId),
+    callId,
+  });
+}
+
+// Boot-Re-Arm (Owner-Auftrag 15.08.2026, Aufgabe 2): das Gegenstueck zu
+// rearmActiveCallTimers (telephony/call-lifecycle.js) fuer DIESEN Weg. MODUL-EBENE aus
+// demselben Grund wie finishExpiredPoll oben. scheduleResultPoll ist ein reiner
+// In-Prozess-setTimeout, dessen EINZIGER Ausloeser originateCall ist - ein Neustart/Deploy
+// nimmt ihn mit, ein aktiver EL-Call bleibt fuer immer "active", Transkript/Zusammenfassung
+// fallen aus und der Max-Dauer-Cap (call-lifecycle.js, laeuft unabhaengig weiter) bucht am
+// Ende nur die volle Kappungsdauer statt der echten. Persistiert ist
+// elevenlabsConversationId - das genuegt: jeder AKTIVE Call, der es traegt, ist ein EL-Call
+// ohne laufende Poll-Schleife.
+//
+// pollConversationResult SELBST traegt die Obergrenze (s. dort) - dieser Re-Arm ruft NUR
+// denselben Einstiegspunkt wie jeder normale Tick, KEINE zweite Zeit-Pruefung hier (G5): ein
+// laengst abgelaufener Call terminiert sich beim ersten Aufruf selbst statt einen weiteren
+// Poll auszuloesen; ein laufender bekommt seine Schleife sofort zurueck (ein direkter Aufruf
+// statt scheduleResultPoll - ein Neustart darf die Ergebnis-Erkennung nicht zusaetzlich um
+// einen vollen Takt verzoegern).
+function rearmActiveConversationPolls({ store, pollConversationResult }) {
+  const activeElCalls = store
+    .load()
+    .calls.filter((call) => call.status === "active" && call.elevenlabsConversationId);
+  for (const call of activeElCalls) void pollConversationResult(call.id, call.elevenlabsConversationId);
+  if (activeElCalls.length)
+    console.log(`[el-outbound] Poll-Schleife re-armiert: ${activeElCalls.length} Anrufe`);
 }
 
 /**
@@ -437,9 +518,21 @@ export function makeElevenLabsOutbound({
 
   // Jeder Takt liest den Call FRISCH: ein zwischenzeitlich beendeter Anruf (Max-Dauer-Cap,
   // cancel_call) stoppt die Schleife, ohne dass jemand sie kuendigen muesste.
+  //
+  // OBERGRENZE (Owner-Auftrag 15.08.2026, Aufgabe 2): fetchConversationSoft behandelt JEDEN
+  // Abruffehler (404/429/5xx/Timeout) wie "noch nicht fertig" - ohne Riegel wuerde ein
+  // liegen gebliebener Zombie fuer immer weitergepollt, nach einem Boot-Re-Arm
+  // (rearmActiveConversationPolls unten) sogar nach JEDEM Neustart erneut. Die Grenze ist
+  // die bereits vorhandene Zeit-Einstufung (classifyCallTime, store/state-ops.js) angewandt
+  // auf den besessenen Anbieter-Deckel (ELEVENLABS_PROVIDER_MAX_DURATION_S, s. Modul-Kopf):
+  // der Anbieter selbst beendet jedes Gespraech spaetestens dort - ein Call, der laenger
+  // laeuft, ist beim Anbieter nachweislich schon vorbei, weiterpollen bringt nichts mehr.
   async function pollConversationResult(callId, conversationId) {
     const call = store.getCall(callId);
     if (!call || call.status !== "active") return;
+    const nowMs = Date.now();
+    if (classifyCallTime(call, nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired)
+      return finishExpiredPoll({ store, terminateAndBillCall, billThunk, finishCall, endActiveCall, callId, nowMs });
     const conversation = await fetchConversationSoft(conversationId, callId);
     if (!conversation || !FINISHED_PROVIDER_STATUS.includes(conversation.status))
       return scheduleResultPoll(callId, conversationId);
@@ -496,18 +589,26 @@ export function makeElevenLabsOutbound({
       tenantTimezone: store.tenantTimezone(call.tenantId),
       callee: call.to,
     });
-    const conversationId = await startOutboundCall({
-      fetchImpl: fetch,
-      account: el,
-      body: {
-        agent_id: el.agentId,
-        agent_phone_number_id: el.agentPhoneNumberId,
-        to_number: call.to,
-        conversation_initiation_client_data: {
-          dynamic_variables: dynamicVariables({ call, ownerName, time }),
-        },
-      },
-    });
+    // OUT-05-EL (Trockenlege-Naht, Aufgabe 1): GENAU vor dem einzigen Netzzugriff dieses
+    // Wegs abgezweigt - wie fakeVoice in telephony/registry.js den kompletten Telnyx-
+    // Transport ersetzt, ersetzt dieser Zweig NUR den EINEN POST gegen api.elevenlabs.io.
+    // Alle Gates/Berechnungen oberhalb (assertConfigured, Zeitkontext, dynamicVariables)
+    // laufen unveraendert - der Fake unterscheidet sich einzig in der Herkunft der
+    // conversation_id.
+    const conversationId = config.safety.fakeOriginateElevenlabs
+      ? fakeSipTrunkOutboundCallResponse().conversation_id
+      : await startOutboundCall({
+          fetchImpl: fetch,
+          account: el,
+          body: {
+            agent_id: el.agentId,
+            agent_phone_number_id: el.agentPhoneNumberId,
+            to_number: call.to,
+            conversation_initiation_client_data: {
+              dynamic_variables: dynamicVariables({ call, ownerName, time }),
+            },
+          },
+        });
     if (!conversationId) throw new Error("ElevenLabs-Anrufstart lieferte keine conversation_id");
     // AL-P1/EL-BL1: set-once am Record. Es ist dieselbe Kennung, ueber die der
     // Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) den laufenden Anruf bindet.
@@ -534,5 +635,9 @@ export function makeElevenLabsOutbound({
     scheduleResultPoll(call.id, conversationId);
   }
 
-  return { originateCall, endActiveCall };
+  return {
+    originateCall,
+    endActiveCall,
+    rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult }),
+  };
 }

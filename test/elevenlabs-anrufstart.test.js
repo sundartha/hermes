@@ -473,6 +473,50 @@ test("EL-START T1: der ElevenLabs-Anrufstart wird gerufen und seine conversation
   );
 });
 
+// ---- ROTPROBE 1 (Owner-Auftrag 15.08.2026, Aufgabe 1): FAKE_ORIGINATE_ELEVENLABS ------
+// Gegenstueck zu FAKE_ORIGINATE (telephony/registry.js) fuer den EL-Anrufstart. T1 oben ist
+// bereits die Positiv-Kontrolle "ohne den Schalter erreicht der Anrufstart den Anbieter
+// wirklich" (mock.startRequests.length === 1) - dieser Fall misst die andere Haelfte: MIT
+// dem Schalter erreicht der Anrufstart den Anbieter NIE, es entsteht trotzdem ein
+// vollstaendiger Call-Datensatz mit einer Kennung in der Anbieter-Form
+// (SIPTrunkOutboundCallResponse), erfundene Werte am fake_el_-Praefix erkennbar.
+test("EL-START ROTPROBE-1: FAKE_ORIGINATE_ELEVENLABS=true erreicht den Anbieter NIE, legt aber einen Call-Datensatz mit fake_el_-Kennung an", async (ctx) => {
+  await withElevenLabs(
+    {
+      env: { FAKE_ORIGINATE_ELEVENLABS: "true" },
+      seed: seedOwner(),
+      ownerNumber: TELNYX_TEST_OWNER_NUMBER,
+    },
+    async ({ srv, mock }) => {
+      const res = await placeCall(srv);
+      const antwort = await res.json();
+
+      await ctx.test("200 mit callId - der Anruf-Datensatz entsteht trotzdem", () => {
+        assert.equal(res.status, HTTP_OK, JSON.stringify(antwort));
+        assert.ok(antwort.callId, "callId fehlt in der Antwort");
+      });
+
+      await ctx.test("KEIN Netzzugriff gegen den Anbieter (POST /v1/convai/sip-trunk/outbound-call)", () => {
+        assert.equal(
+          mock.startRequests.length,
+          0,
+          "der Anrufstart darf den Anbieter mit gesetztem Schalter NIE erreichen",
+        );
+      });
+
+      await ctx.test("die Kennung traegt die Anbieter-Form (SIPTrunkOutboundCallResponse), erfundene Werte klar markiert", () => {
+        const call = ownCalls(srv)[0];
+        assert.ok(call, "kein Call-Datensatz angelegt");
+        assert.match(
+          call.elevenlabsConversationId,
+          /^fake_el_[0-9a-f]{16}$/,
+          `fake_el_-Praefix fehlt: ${call.elevenlabsConversationId}`,
+        );
+      });
+    },
+  );
+});
+
 // ---- T2: dieselben Gates wie der Telnyx-Zweig ---------------------------------------
 
 for (const fall of GATE_FAELLE) {

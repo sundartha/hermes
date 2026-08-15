@@ -372,12 +372,22 @@ function assertBootGates(config, store) {
 
   // Boot-Haertung (OUT-05, F2): FAKE_ORIGINATE nur mit geskippter Signaturpruefung zulaessig ->
   // in Prod (Signatur fail-closed AN, Regel 1) Boot-Refusal statt stillem Nicht-Waehlen.
-  if (fakeOriginateBootBlocked(config.safety)) {
-    console.error(
-      "[boot] Start abgebrochen: FAKE_ORIGINATE=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true " +
-        "zulaessig (Test-Seam, in Produktion unzulaessig).",
-    );
-    process.exit(1);
+  // OUT-05-EL (Owner-Auftrag 15.08.2026, Aufgabe 1): FAKE_ORIGINATE_ELEVENLABS (der EL-
+  // Anrufstart-Gegenstueck, src/elevenlabs/outbound.js) teilt dieselbe Bedingung - ZWEI
+  // Aufrufe derselben reinen Funktion auf zwei verschiedenen Flags (G5), keine zweite
+  // Guard-Logik.
+  const fakeOriginateFlags = [
+    { envName: "FAKE_ORIGINATE", fakeOriginate: config.safety.fakeOriginate },
+    { envName: "FAKE_ORIGINATE_ELEVENLABS", fakeOriginate: config.safety.fakeOriginateElevenlabs },
+  ];
+  for (const { envName, fakeOriginate } of fakeOriginateFlags) {
+    if (fakeOriginateBootBlocked({ fakeOriginate, skipTwilioSignatureCheck: config.safety.skipTwilioSignatureCheck })) {
+      console.error(
+        `[boot] Start abgebrochen: ${envName}=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true ` +
+          "zulaessig (Test-Seam, in Produktion unzulaessig).",
+      );
+      process.exit(1);
+    }
   }
 
   // Boot-Guard (Pre-Mortem): jeder Tenant - auch der Bootstrap-Tenant - haelt seine
@@ -945,6 +955,10 @@ export async function bootServer({
   costCrossCheck,
   messaging,
   consultDelivery,
+  // Boot-Re-Arm des EL-Ergebnisabrufs (s. unten bei rearmActiveConversationPolls). Dieselbe
+  // EINE Instanz wie bei makeCallRoutes (INV-7) - server.js reicht sie im deps-Buendel
+  // bereits durch, hier wird sie nur ausgepackt.
+  elevenLabsOutbound,
 }) {
   // S1-4: json.js wirft aus load(), wenn ein korrupter Store NICHT forensisch gesichert
   // werden konnte (statt ihn still mit Defaults zu ueberschreiben). Ohne dieses explizite
@@ -1025,6 +1039,14 @@ export async function bootServer({
   // erreicht (s. expireOrphanedConsults). NACH dem Cap-Re-Arm, damit ein dort terminalisierter
   // Zombie hier gar nicht erst als laufender Anruf auftaucht.
   expireOrphanedConsults(store);
+
+  // Vierte Achse desselben Boot-Problems (Owner-Auftrag 15.08.2026, Aufgabe 2): der
+  // ziehende EL-Ergebnisabruf (elevenlabs/outbound.js#scheduleResultPoll) ist ein reiner
+  // In-Prozess-setTimeout mit originateCall als einzigem Ausloeser - ein Neustart nimmt ihn
+  // mit, ein aktiver EL-Call bleibt fuer immer "active". Setzt ausschliesslich Timer bzw.
+  // terminiert ueber denselben EINEN Terminierungspfad wie jeder andere Zombie (INV-5: kein
+  // exit(1) danach).
+  elevenLabsOutbound.rearmActiveConversationPolls();
 
   const httpServer = app.listen(config.server.port, () => {
     // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port

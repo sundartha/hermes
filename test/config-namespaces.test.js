@@ -17,7 +17,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P3.1: capFarewellLeadMs ergaenzt (Cap-Vorlauf-Ansage vor dem harten Max-Dauer-Cap).
   // KS-P3 (b): maxCallDurationS ENTFAELLT (E2/E3 - keine feste Maximaldauer mehr, die Frist
   // faellt pro Call aus dem Restguthaben) -> 10.
-  safety: 10,
+  // OUT-05-EL (Owner-Auftrag 15.08.2026): fakeOriginateElevenlabs ergaenzt (Trockenlege-Naht
+  // des EL-Anrufstarts, Gegenstueck zu fakeOriginate) -> 11.
+  safety: 11,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
@@ -92,9 +94,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // WW-F2: toolFollowUpEnabled ergaenzt -> 145.
 // EL-CONSULT: elevenLabsToolToken ergaenzt -> 146.
 // EL-ANRUFSTART (2026-08-14): elevenLabsOutbound ergaenzt -> 147.
-const EXPECTED_TOTAL_KEYS = 147;
+// OUT-05-EL (2026-08-15): fakeOriginateElevenlabs ergaenzt -> 148.
+const EXPECTED_TOTAL_KEYS = 148;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (147 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 14 gepinnten Counts und disjunkte Blaetter (148 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -202,7 +205,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // EL-CONSULT: elevenLabsToolToken ist primitiv (String, kein Array/nested Objekt) -> 137.
   // EL-ANRUFSTART (2026-08-14): elevenLabsOutbound ist das SECHSTE nested Objekt (kein
   // primitives Blatt) -> checked bleibt 137, nur die Nested-Objekt-Zahl unten steigt auf 6.
-  const EXPECTED_PRIMITIVE_LEAVES = 137;
+  // OUT-05-EL (2026-08-15): fakeOriginateElevenlabs ist primitiv (Boolean, kein Array/
+  // nested Objekt) -> 138.
+  const EXPECTED_PRIMITIVE_LEAVES = 138;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

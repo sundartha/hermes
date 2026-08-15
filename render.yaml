@@ -495,6 +495,10 @@ services:
       # da SKIP_TWILIO_SIGNATURE_CHECK dort false ist). Explizit gepinnt gegen Foot-Gun.
       - key: FAKE_ORIGINATE
         value: "false"
+      # OUT-05-EL: dasselbe Test-Seam-Gegenstueck fuer den EL-Anrufstart (s. FAKE_ORIGINATE
+      # oben) - dieselbe Boot-Haertung, derselbe Foot-Gun-Pin.
+      - key: FAKE_ORIGINATE_ELEVENLABS
+        value: "false"
       - key: RATE_LIMIT_PER_MIN
         value: "120"
       - key: RETENTION_DAYS
