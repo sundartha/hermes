@@ -56,6 +56,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   findChangedFindings,
+  findPinMismatches,
   findSuppressedStagedFiles,
   findingTally,
   loadLegacyExceptions,
@@ -147,8 +148,13 @@ const LEGACY_SUPPRESSIONS = {
   "src/dummy/ohne-datum.js": { "id-length": { count: 1 } },
   "src/dummy/leere-felder.js": { "id-length": { count: 1 } },
   "src/dummy/krummes-datum.js": { "id-length": { count: 1 } },
+  "src/dummy/ohne-findings.js": { "id-length": { count: 1 } },
   "src/dummy/nicht-gelistet.js": { "no-magic-numbers": { count: 2 } },
 };
+
+// Der Pin von altlast.js - eigene Konstante, weil er in Stufe-3-Tests weiter
+// unten als "gleicher" Pin wiederverwendet wird.
+const ALTLAST_PIN = { "id-length :: Identifier name 'q' is too short (< 2).": 3 };
 
 // Genau ein Eintrag ist gueltig (altlast.js). Er steht in jedem Fall mit im
 // Spiel, damit jeder Test die Entschuldigung UND die Positiv-Kontrolle
@@ -157,14 +163,17 @@ const LEGACY_EXCEPTIONS = {
   "src/dummy/altlast.js": {
     reason: "Aufraeumen waere ein eigenes Refactoring des Zustandsmoduls",
     date: "2026-08-13",
+    findings: ALTLAST_PIN,
   },
-  "src/dummy/ohne-grund.js": { date: "2026-08-13" },
-  "src/dummy/ohne-datum.js": { reason: "steht noch aus" },
-  "src/dummy/leere-felder.js": { reason: "   ", date: "   " },
-  "src/dummy/krummes-datum.js": { reason: "steht noch aus", date: "bald" },
+  "src/dummy/ohne-grund.js": { date: "2026-08-13", findings: ALTLAST_PIN },
+  "src/dummy/ohne-datum.js": { reason: "steht noch aus", findings: ALTLAST_PIN },
+  "src/dummy/leere-felder.js": { reason: "   ", date: "   ", findings: ALTLAST_PIN },
+  "src/dummy/krummes-datum.js": { reason: "steht noch aus", date: "bald", findings: ALTLAST_PIN },
+  "src/dummy/ohne-findings.js": { reason: "steht noch aus", date: "2026-08-13" },
   "src/dummy/geraeumt.js": {
     reason: "war Altlast, ist inzwischen geraeumt",
     date: "2026-08-13",
+    findings: ALTLAST_PIN,
   },
 };
 
@@ -212,6 +221,13 @@ describe("Altlast-Liste im Aufraeum-Gate (Attrappe)", () => {
     assert.deepEqual(
       offendingFiles(["src/dummy/altlast.js", "src/dummy/krummes-datum.js"]),
       ["src/dummy/krummes-datum.js"],
+    );
+  });
+
+  it("entschuldigt nicht, wenn dem Eintrag der Pin (findings) fehlt", () => {
+    assert.deepEqual(
+      offendingFiles(["src/dummy/altlast.js", "src/dummy/ohne-findings.js"]),
+      ["src/dummy/ohne-findings.js"],
     );
   });
 
@@ -383,7 +399,7 @@ const REAL_LEGACY_EXCEPTIONS = loadLegacyExceptions();
 const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 
 // Gepinnter Inhalt (Muster ROUTE_FINGERPRINT, test/route-auth-inventory.test.js):
-// ein Eintrag mehr, einer weniger oder ein geaenderter Grund erzwingt eine
+// ein Eintrag mehr, einer weniger oder ein geaenderter Grund/Pin erzwingt eine
 // bewusste Aktualisierung DIESER Stelle. Buchhaltung dazu:
 //   2026-08-13  src/store/state-ops.js, src/store/pg.js aufgenommen (D11).
 //   2026-08-13  src/conversation-watchdog.js, src/boot-guard.js wieder
@@ -404,26 +420,139 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               Hook gemessen: mechanische Aenderung an
 //               test/i9-self-service.test.js ohne Eintrag -> Ausgang 0,
 //               dieselbe Datei mit einem neuen Befund -> Ausgang 1.
+//   2026-08-15  jeder bestehende Eintrag bekommt einen findings-Pin (Stufe 3,
+//               Eigentuemer-Auflage "jede weitere Zeile bricht wieder"),
+//               gemessen mit "npx eslint --suppressions-location
+//               eslint-suppressions.empty.json -f json <datei>". src/mcp-tools.js
+//               neu aufgenommen: der registerTools-Split ist ein eigenes Paket.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     reason:
       "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration.",
     date: "2026-08-13",
+    findings: {
+      "complexity :: Function 'createCall' has a complexity of 12. Maximum allowed is 10.": 1,
+      "complexity :: Function 'setTenantSubscription' has a complexity of 13. Maximum allowed is 10.": 1,
+      "complexity :: Function 'tenantSubscription' has a complexity of 15. Maximum allowed is 10.": 1,
+      "id-length :: Identifier name 'a' is too short (< 2).": 8,
+      "id-length :: Identifier name 'b' is too short (< 2).": 3,
+      "id-length :: Identifier name 'c' is too short (< 2).": 15,
+      "id-length :: Identifier name 'e' is too short (< 2).": 10,
+      "id-length :: Identifier name 'n' is too short (< 2).": 11,
+      "id-length :: Identifier name 'q' is too short (< 2).": 1,
+      "id-length :: Identifier name 's' is too short (< 2).": 162,
+      "id-length :: Identifier name 't' is too short (< 2).": 4,
+      "max-params :: Function 'addActionItem' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'addNotification' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'addResearchFeeCostCents' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'addTranscript' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'addVoiceUsageCostCents' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'applyCostCorrectionCents' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'bootstrapTenant' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'budgetExceeded' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'bumpPlatformTtsQuota' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'findConflict' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'gateUsageCents' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'liveBudgetExceeded' has too many parameters (5). Maximum allowed is 3.": 1,
+      "max-params :: Function 'markProvisioningJob' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'recordTtsCharacters' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'reserveExceedsBudget' has too many parameters (5). Maximum allowed is 3.": 1,
+      "max-params :: Function 'seedBootstrapNumber' has too many parameters (6). Maximum allowed is 3.": 1,
+      "max-params :: Function 'seedBootstrapNumberFromConfig' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'setCallEndedAt' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'tenantBudgetSnapshot' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'tenantSpendOrDeny' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'tenantUsageAxes' has too many parameters (4). Maximum allowed is 3.": 1,
+      "max-params :: Function 'trackUsage' has too many parameters (5). Maximum allowed is 3.": 1,
+      "max-params :: Function 'tryReserveOutboundBudget' has too many parameters (5). Maximum allowed is 3.": 1,
+      "no-magic-numbers :: No magic number: 1000.": 1,
+      "no-magic-numbers :: No magic number: 16.": 1,
+      "no-magic-numbers :: No magic number: 2.": 2,
+      "no-magic-numbers :: No magic number: 24.": 1,
+      "no-magic-numbers :: No magic number: 36.": 2,
+      "no-magic-numbers :: No magic number: 6.": 1,
+      "no-magic-numbers :: No magic number: 60.": 2,
+      "no-negated-condition :: Unexpected negated condition.": 1,
+      "no-param-reassign :: Assignment to property of function parameter 'call'.": 3,
+      "no-param-reassign :: Assignment to property of function parameter 's'.": 17,
+      "no-param-reassign :: Assignment to property of function parameter 'tenant'.": 6,
+      "no-param-reassign :: Assignment to property of function parameter 'usage'.": 6,
+      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 12,
+    },
   },
   "src/store/pg.js": {
     reason:
       "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration.",
     date: "2026-08-13",
+    findings: {
+      "complexity :: Async function 'flushCalls' has a complexity of 22. Maximum allowed is 10.": 1,
+      "complexity :: Async function 'flushTenants' has a complexity of 24. Maximum allowed is 10.": 1,
+      "complexity :: Function 'rowToCall' has a complexity of 21. Maximum allowed is 10.": 1,
+      "complexity :: Function 'rowToTenant' has a complexity of 23. Maximum allowed is 10.": 1,
+      "id-length :: Identifier name 'a' is too short (< 2).": 1,
+      "id-length :: Identifier name 'b' is too short (< 2).": 2,
+      "id-length :: Identifier name 'c' is too short (< 2).": 3,
+      "id-length :: Identifier name 'e' is too short (< 2).": 4,
+      "id-length :: Identifier name 'n' is too short (< 2).": 5,
+      "id-length :: Identifier name 'r' is too short (< 2).": 23,
+      "id-length :: Identifier name 's' is too short (< 2).": 1,
+      "id-length :: Identifier name 't' is too short (< 2).": 2,
+      "max-lines-per-function :: Async function 'hydrateTenantInto' has too many lines (117). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makePgStore' has too many lines (462). Maximum allowed is 100.": 1,
+      "max-params :: Async function 'deleteMissing' has too many parameters (4). Maximum allowed is 3.": 1,
+      "no-param-reassign :: Assignment to property of function parameter 'state'.": 3,
+    },
   },
   "src/routes/api-calls.js": {
     reason:
       "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber das Aufraeumen ist der G30-Split der Outbound-Route und damit ein Umbau im Gate-Kernpfad: diese Datei traegt die Safety-Gate-Kette (Permit, Denylist/Land-Gate/Stundenlimit, pro-Tenant-Kostendecke, OUTBOUND_FROZEN). Ein Entzerren verschiebt genau die Reihenfolge, in der diese Gates greifen; faellt dabei eine Pruefung durch, ruft der Dienst jemanden ungewollt an oder ueberzieht die Kostendecke. Das braucht ein eigenes Paket mit eigener Absicherung (Gate-Tests vor dem Schnitt), nicht einen Nebeneffekt dieses Commits.",
     date: "2026-08-15",
+    findings: {
+      "complexity :: Async arrow function has a complexity of 22. Maximum allowed is 10.": 1,
+      "id-length :: Identifier name 'b' is too short (< 2).": 2,
+      "id-length :: Identifier name 'e' is too short (< 2).": 1,
+      "max-lines-per-function :: Async arrow function has too many lines (118). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makeCallRoutes' has too many lines (213). Maximum allowed is 100.": 1,
+      "no-magic-numbers :: No magic number: 400.": 4,
+      "no-magic-numbers :: No magic number: 403.": 1,
+      "no-magic-numbers :: No magic number: 404.": 4,
+      "no-magic-numbers :: No magic number: 409.": 1,
+      "no-magic-numbers :: No magic number: 500.": 1,
+      "no-magic-numbers :: No magic number: 502.": 1,
+    },
   },
   "src/telephony/call-finish.js": {
     reason:
       "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung.",
     date: "2026-08-15",
+    findings: {
+      "complexity :: Async function 'finishCall' has a complexity of 21. Maximum allowed is 10.": 1,
+      "id-length :: Identifier name 'a' is too short (< 2).": 1,
+      "id-length :: Identifier name 'e' is too short (< 2).": 2,
+      "id-length :: Identifier name 't' is too short (< 2).": 1,
+      "no-param-reassign :: Assignment to property of function parameter 'call'.": 1,
+    },
+  },
+  "src/mcp-tools.js": {
+    reason:
+      "Eigentuemer-Entscheidung 2026-08-15. Der registerTools-Split ist ein eigenes Paket und ausdruecklich nicht Teil dieser Sitzung.",
+    date: "2026-08-15",
+    findings: {
+      "complexity :: Function 'resultCardView' has a complexity of 11. Maximum allowed is 10.": 1,
+      "id-length :: Identifier name 'A' is too short (< 2).": 1,
+      "id-length :: Identifier name 'a' is too short (< 2).": 2,
+      "id-length :: Identifier name 'c' is too short (< 2).": 8,
+      "id-length :: Identifier name 'e' is too short (< 2).": 4,
+      "id-length :: Identifier name 'r' is too short (< 2).": 2,
+      "id-length :: Identifier name 's' is too short (< 2).": 9,
+      "id-length :: Identifier name 't' is too short (< 2).": 1,
+      "id-length :: Identifier name 'v' is too short (< 2).": 1,
+      "max-lines-per-function :: Function 'registerTools' has too many lines (433). Maximum allowed is 100.": 1,
+      "max-params :: Arrow function has too many parameters (4). Maximum allowed is 3.": 1,
+      "no-magic-numbers :: No magic number: 1000.": 1,
+      "no-magic-numbers :: No magic number: 2.": 6,
+      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 18,
+    },
   },
 };
 
@@ -663,6 +792,72 @@ describe("findChangedFindings (Attrappe)", () => {
     });
     assert.equal(offenders.length, KANDIDATEN.length);
     assert.match(begruendung(offenders), /nicht pruefbar.*kein Stand in HEAD/);
+  });
+});
+
+// ---- Stufe 3: gilt der Pin noch? (Attrappe) ---------------------------------
+// Der Vertrag: findPinMismatches({ stagedFiles, legacyExceptions, readStagedFindings })
+// laesst eine entschuldigte Datei nur durch, wenn ihre TATSAECHLICHE, ungefilterte
+// Befundmenge (readStagedFindings) genau dem Pin (findings im Altlast-Eintrag der
+// vorgemerkten Fassung) gleicht - Multimengen-Vergleich, BEIDE Richtungen brechen.
+// Geprueft wird gegen src/dummy/altlast.js aus LEGACY_EXCEPTIONS oben: ihr Pin
+// (ALTLAST_PIN) ist 3x derselbe id-length-Befund.
+// Zwei weitere Fundstellen-Zeilen; die Zahl selbst ist beliebig, sie muss nur von
+// den beiden oberen verschieden sein (die Meldung traegt die Identitaet, nicht die Zeile).
+const ZEILE_DRITTE = 99;
+const ZEILE_VIERTE = 100;
+const PIN_BASISZEILEN = [ZEILE_VORHER, ZEILE_NACHHER, ZEILE_DRITTE];
+function kurzeNamen(zeilen) {
+  return zeilen.map((line) => meldung("id-length", "Identifier name 'q' is too short (< 2).", line));
+}
+const PIN_QUELLE = "id-length :: Identifier name 'q' is too short (< 2).";
+
+describe("findPinMismatches (Attrappe)", () => {
+  it("laesst eine Datei mit deckungsgleichem Pin durch und prueft nur gueltige Eintraege", async () => {
+    let calls = 0;
+    const offenders = await findPinMismatches({
+      stagedFiles: ["src/dummy/altlast.js", "src/dummy/nicht-gelistet.js"],
+      legacyExceptions: LEGACY_EXCEPTIONS,
+      readStagedFindings: async () => {
+        calls += 1;
+        return kurzeNamen(PIN_BASISZEILEN);
+      },
+    });
+    assert.deepEqual(offenders, []);
+    assert.equal(calls, 1, "nur die Datei mit gueltigem Eintrag darf gelintet werden");
+  });
+
+  it("lehnt ab, wenn mehr Befunde da sind als der Pin sagt", async () => {
+    const offenders = await findPinMismatches({
+      stagedFiles: ["src/dummy/altlast.js"],
+      legacyExceptions: LEGACY_EXCEPTIONS,
+      readStagedFindings: async () => kurzeNamen([...PIN_BASISZEILEN, ZEILE_VIERTE]),
+    });
+    assert.equal(offenders.length, 1);
+    assert.equal(offenders[0].file, "src/dummy/altlast.js");
+    assert.deepEqual(offenders[0].correctedFindings, { [PIN_QUELLE]: 4 });
+    assert.match(begruendung(offenders), /3 -> 4/);
+  });
+
+  it("lehnt ab, wenn weniger Befunde da sind als der Pin sagt", async () => {
+    const offenders = await findPinMismatches({
+      stagedFiles: ["src/dummy/altlast.js"],
+      legacyExceptions: LEGACY_EXCEPTIONS,
+      readStagedFindings: async () => kurzeNamen(PIN_BASISZEILEN.slice(1)),
+    });
+    assert.equal(offenders.length, 1);
+    assert.deepEqual(offenders[0].correctedFindings, { [PIN_QUELLE]: 2 });
+    assert.match(begruendung(offenders), /3 -> 2/);
+  });
+
+  it("lehnt fail-closed ab, wenn die Befunde nicht lesbar sind", async () => {
+    const offenders = await findPinMismatches({
+      stagedFiles: ["src/dummy/altlast.js"],
+      legacyExceptions: LEGACY_EXCEPTIONS,
+      readStagedFindings: () => Promise.reject(new Error("kein Stand im Index")),
+    });
+    assert.equal(offenders.length, 1);
+    assert.match(begruendung(offenders), /nicht pruefbar.*kein Stand im Index/);
   });
 });
 

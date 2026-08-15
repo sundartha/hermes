@@ -6,12 +6,16 @@
 // still geschluckt (siehe CLAUDE.md). Gegenmassnahme: eine vorgemerkte Datei,
 // die noch Eintraege traegt, wird abgelehnt. Wer sie anfasst, raeumt vorher auf.
 //
-// ZWEI STUFEN (die zweite ist die Verfeinerung vom 2026-08-15, s.u.):
+// DREI STUFEN (die zweite und dritte sind Verfeinerungen vom 2026-08-15, s.u.):
 //   1. findSuppressedStagedFiles - welche vorgemerkte Datei traegt ueberhaupt
 //      Eintraege und ist nicht auf der Altlast-Liste? (reine Auswahl)
 //   2. findChangedFindings - hat sich an ihren UNGEFILTERTEN Lint-Befunden
 //      durch die Aenderung etwas bewegt? Nur dann wird sie abgelehnt.
-// Beide Stufen sind seiteneffektfrei und haengen an injizierten Nahten; der
+//   3. findPinMismatches - fuer eine Datei, die die Altlast-Liste ENTSCHULDIGT:
+//      deckt sich ihr gepinnter findings-Wert noch mit der TATSAECHLICHEN,
+//      ungefilterten Befundmenge der vorgemerkten Fassung? Weicht er ab
+//      (mehr oder weniger), entschuldigt der Eintrag nichts mehr.
+// Alle drei Stufen sind seiteneffektfrei und haengen an injizierten Nahten; der
 // CLI-Teil (argv/git/eslint/exit) sitzt dahinter. Testbarkeit auf einer
 // Attrappe statt der echten, ueber 600 Dateien grossen Unterdrueckungsdatei.
 // Aufruf: node scripts/check-staged-suppressions.js <datei1> <datei2> ...
@@ -21,12 +25,14 @@
 // der EINZIGE Ausweg, wenn eine Bestandsdatei angefasst werden muss, deren
 // Aufraeumen ein eigener Umbau waere. "git commit --no-verify" ist verboten -
 // eine stille Umgehung macht das ganze Gate wertlos. Die Liste bildet
-// Dateipfad -> { reason, date } ab: reason nennt, warum die Datei noch nicht
-// geraeumt ist, date (YYYY-MM-DD) wann die Ausnahme entstand. Fehlt eines von
-// beidem oder ist es leer/kein Kalenderdatum, entschuldigt der Eintrag nichts -
-// die Liste ist eine bewusste Ausnahme, kein Abstellgleis. Auf die Liste
-// gehoert nur ECHTE Schuld; ist die Unterdrueckung eine Fehlklassifikation der
-// Regel, wird die REGEL korrigiert (siehe .fortschritt.md, D9-D11).
+// Dateipfad -> { reason, date, findings } ab: reason nennt, warum die Datei
+// noch nicht geraeumt ist, date (YYYY-MM-DD) wann die Ausnahme entstand,
+// findings ist der PIN - die ungefilterte Befundmenge (Regel-Schluessel ->
+// Anzahl, siehe Stufe 2/3) GENAU dieser Dateifassung. Fehlt eines der drei
+// Felder oder ist es leer/kaputt, entschuldigt der Eintrag nichts - die Liste
+// ist eine bewusste Ausnahme, kein Abstellgleis. Auf die Liste gehoert nur
+// ECHTE Schuld; ist die Unterdrueckung eine Fehlklassifikation der Regel, wird
+// die REGEL korrigiert (siehe .fortschritt.md, D9-D11).
 //
 // MECHANISCHE AENDERUNGEN (Eigentuemer-Entscheidung 2026-08-15): Stufe 1 allein
 // ist zu grob - sie lehnt auch eine Umbenennung ab, die nichts verschlimmert,
@@ -37,6 +43,18 @@
 // ohne Aufraeumen durch. Bewegt sich auch nur ein Befund, greift "wer anfasst,
 // raeumt auf" wie bisher. Die Ratsche wird dadurch nicht schwaecher: neue,
 // mehr oder andere Verstoesse fuehren unveraendert zur Ablehnung.
+//
+// DER PIN HAELT DEN WERT FEST (Eigentuemer-Entscheidung 2026-08-15): eine
+// Altlast-Datei entschuldigt bisher PAUSCHAL, unabhaengig davon, wie viele
+// Verstoesse sie traegt - eine ausgenommene Datei kann unbemerkt schlechter
+// werden. Stufe 3 schliesst das: der Eintrag entschuldigt nur GENAU die
+// gepinnte Befundmenge. Mehr Befunde sind ein neuer Verstoss und muessten
+// sonst durchrutschen; weniger Befunde sind ein zu hoch stehender Pin - genau
+// der Spielraum, in dem spaeter ein neuer Verstoss unbemerkt Platz faende
+// (dieselbe Begruendung wie bei tallyDifferences oben). Beide Richtungen
+// brechen den Eintrag. Wiederverwendet wird dieselbe Maschinerie wie Stufe 2:
+// dieselbe ungefilterte Befund-Ermittlung (makeUnfilteredLinter mit leerer
+// Unterdrueckungsdatei) und dieselbe Vergleichsfunktion (tallyDifferences).
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -68,19 +86,37 @@ function isCalendarDate(value) {
   return !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
 }
 
-// Entschuldigt dieser Altlast-Eintrag die Datei? Nur mit Grund UND Datum -
-// ein halb gefuehrter Eintrag ist ein Abstellgleis und zaehlt nicht.
+function isPositiveInteger(value) {
+  return Number.isInteger(value) && value > 0;
+}
+
+// Der Pin: ein nicht-leeres Objekt, jede Anzahl eine positive ganze Zahl. Genau
+// die Form, die findingTally() unten erzeugt (Schluessel -> Anzahl).
+function isWellFormedFindings(findings) {
+  if (findings === null || typeof findings !== "object" || Array.isArray(findings)) return false;
+  const counts = Object.values(findings);
+  if (counts.length === 0) return false;
+  return counts.every(isPositiveInteger);
+}
+
+// Entschuldigt dieser Altlast-Eintrag die Datei? Nur mit Grund UND Datum UND
+// einem wohlgeformten Pin - ein halb gefuehrter Eintrag ist ein Abstellgleis
+// und zaehlt nicht. Ob der Pin noch zur TATSAECHLICHEN Befundmenge passt,
+// prueft diese Funktion nicht (das braucht eslint, ist also nicht rein) -
+// dafuer siehe Stufe 3, findPinMismatches.
 function excusesLegacy(entry) {
   if (!entry) return false;
-  return isNonEmptyText(entry.reason) && isCalendarDate(entry.date);
+  return (
+    isNonEmptyText(entry.reason) && isCalendarDate(entry.date) && isWellFormedFindings(entry.findings)
+  );
 }
 
 // Welche der vorgemerkten Dateien tragen noch Eintraege in den
 // Unterdrueckungen? suppressions: geparstes eslint-suppressions.json
 // (Datei -> Regelname -> { count }). legacyExceptions: geparste Altlast-Liste
-// (Datei -> { reason, date }), siehe Kopfkommentar. Liefert pro Treffer die
-// Datei und ihre Regeln samt Anzahl, in der Reihenfolge der Regeln aus der
-// Vorlage.
+// (Datei -> { reason, date, findings }), siehe Kopfkommentar. Liefert pro
+// Treffer die Datei und ihre Regeln samt Anzahl, in der Reihenfolge der Regeln
+// aus der Vorlage.
 export function findSuppressedStagedFiles({
   stagedFiles,
   suppressions,
@@ -183,6 +219,56 @@ export async function findChangedFindings({ candidates, readFindings }) {
   return offenders;
 }
 
+// ---- Stufe 3: gilt der Pin noch? --------------------------------------------
+
+// Der Pin aus dem Altlast-Eintrag, in derselben Multimengen-Form wie
+// findingTally() sie erzeugt - damit tallyDifferences beide Seiten vergleichen
+// kann, ohne einen zweiten Vergleich zu brauchen.
+function tallyFromFindings(findings) {
+  return new Map(Object.entries(findings));
+}
+
+// Umkehrung: aus einer gemessenen Multimenge den findings-Block fuer die
+// Altlast-Liste bauen - sortiert, damit die Ausgabe reproduzierbar ist und der
+// Entwickler sie unveraendert einsetzen kann.
+function findingsFromTally(tally) {
+  const findings = {};
+  for (const key of [...tally.keys()].sort()) findings[key] = tally.get(key);
+  return findings;
+}
+
+// Bleibt der Pin einer entschuldigten Datei zur TATSAECHLICHEN, ungefilterten
+// Befundmenge ihrer vorgemerkten (staged) Fassung deckungsgleich? Geprueft
+// werden nur Dateien mit strukturell gueltigem Altlast-Eintrag (excusesLegacy);
+// ohne gueltigen Pin gibt es nichts zu vergleichen - dieser Fall zaehlt schon
+// als Stufe-1-Kandidat. readStagedFindings ist die Naht: Datei -> ungefilterte
+// eslint-Meldungen ihrer vorgemerkten Fassung (dieselbe Quelle wie Stufe 2,
+// siehe makeUnfilteredLinter). Beide Richtungen brechen den Eintrag - siehe
+// Kopfkommentar "DER PIN HAELT DEN WERT FEST".
+export async function findPinMismatches({ stagedFiles, legacyExceptions, readStagedFindings }) {
+  const offenders = [];
+  for (const file of stagedFiles) {
+    const entry = legacyExceptions[file];
+    if (!excusesLegacy(entry)) continue;
+    const pin = tallyFromFindings(entry.findings);
+    let actual;
+    try {
+      actual = findingTally(await readStagedFindings(file));
+    } catch (err) {
+      offenders.push({ file, reasons: [`nicht pruefbar (fail-closed): ${err.message}`] });
+      continue;
+    }
+    const differences = tallyDifferences(pin, actual);
+    if (differences.length === 0) continue;
+    offenders.push({
+      file,
+      reasons: describeDifferences(differences),
+      correctedFindings: findingsFromTally(actual),
+    });
+  }
+  return offenders;
+}
+
 function formatOffender({ file, ruleCounts, reasons = [] }) {
   const rulesText = ruleCounts
     .map(({ rule, count }) => `${rule}: ${count}`)
@@ -224,6 +310,47 @@ function printReport(offenders) {
   for (const offender of offenders) console.error(formatOffender(offender));
   console.error("");
   for (const line of WAY_OUT_LINES) logLine(line);
+}
+
+// Der Pin-Bericht (Stufe 3). Der korrigierte findings-Block wird fertig als
+// JSON ausgegeben - nicht als Anleitung: der neue Wert soll bewusst uebernommen
+// werden, nicht von Hand nachgetippt oder erraten.
+const CORRECTED_FINDINGS_JSON_INDENT = 2;
+const CORRECTED_FINDINGS_LINE_PREFIX = "       ";
+
+function formatCorrectedFindings(correctedFindings) {
+  const json = JSON.stringify(correctedFindings, null, CORRECTED_FINDINGS_JSON_INDENT);
+  const lines = json.split("\n");
+  const indentedLines = lines.map((line) => `${CORRECTED_FINDINGS_LINE_PREFIX}${line}`);
+  return indentedLines.join("\n");
+}
+
+function formatPinOffender({ file, reasons = [], correctedFindings }) {
+  const reasonLines = reasons.map((reason) => `\n     ${reason}`).join("");
+  const correctedBlock = correctedFindings
+    ? `\n     Korrigierter findings-Block fuer ${LEGACY_EXCEPTIONS_REL}:\n${formatCorrectedFindings(correctedFindings)}`
+    : "";
+  return `  ${file}${reasonLines}${correctedBlock}`;
+}
+
+const PIN_WAY_OUT_LINES = [
+  "Ein Altlast-Eintrag entschuldigt nur GENAU die gepinnte Befundmenge - sie hat",
+  "sich bewegt (Zeilen oben). Weniger Befunde brechen genauso wie mehr: ein zu",
+  "hoch stehender Pin ist der Spielraum, in dem spaeter ein neuer Verstoss",
+  "unbemerkt Platz faende.",
+  `Ersetze den findings-Block dieser Datei in ${LEGACY_EXCEPTIONS_REL} durch den`,
+  "oben ausgegebenen, fertigen JSON-Block.",
+  `"${NO_VERIFY_COMMAND}" ist keine Option.`,
+];
+
+function printPinMismatchReport(offenders) {
+  console.error("");
+  logLine("Commit abgebrochen: folgende Dateien auf der Altlast-Liste tragen");
+  logLine("einen Pin, der nicht mehr zur tatsaechlichen, ungefilterten");
+  logLine("Befundmenge ihrer vorgemerkten Fassung passt:");
+  for (const offender of offenders) console.error(formatPinOffender(offender));
+  console.error("");
+  for (const line of PIN_WAY_OUT_LINES) logLine(line);
 }
 
 function readRepoFile(relativePath) {
@@ -298,22 +425,41 @@ async function makeGitFindingsReader() {
   };
 }
 
+// Wie makeGitFindingsReader, aber nur die vorgemerkte Fassung: die Pin-Pruefung
+// (Stufe 3) vergleicht gegen den Pin selbst, nicht gegen HEAD.
+async function makeStagedFindingsReader() {
+  const lintContent = await makeUnfilteredLinter();
+  return async function readStagedFindings(file) {
+    const stagedCode = readGitContent(`${STAGED_CONTENT_PREFIX}${file}`);
+    return lintContent(stagedCode, file);
+  };
+}
+
 async function runCli() {
   const stagedFiles = process.argv.slice(CLI_ARGS_OFFSET);
   if (stagedFiles.length === 0) return 0;
   const suppressions = JSON.parse(readRepoFile(SUPPRESSIONS_REL));
-  const candidates = findSuppressedStagedFiles({
-    stagedFiles,
-    suppressions,
-    legacyExceptions: loadLegacyExceptions(),
-  });
-  if (candidates.length === 0) return 0;
-  const offenders = await findChangedFindings({
-    candidates,
-    readFindings: await makeGitFindingsReader(),
-  });
-  if (offenders.length === 0) return 0;
-  printReport(offenders);
+  const legacyExceptions = loadLegacyExceptions();
+  const candidates = findSuppressedStagedFiles({ stagedFiles, suppressions, legacyExceptions });
+  const pinCandidates = stagedFiles.filter((file) => excusesLegacy(legacyExceptions[file]));
+  if (candidates.length === 0 && pinCandidates.length === 0) return 0;
+
+  const changedOffenders =
+    candidates.length === 0
+      ? []
+      : await findChangedFindings({ candidates, readFindings: await makeGitFindingsReader() });
+  const pinOffenders =
+    pinCandidates.length === 0
+      ? []
+      : await findPinMismatches({
+          stagedFiles: pinCandidates,
+          legacyExceptions,
+          readStagedFindings: await makeStagedFindingsReader(),
+        });
+
+  if (changedOffenders.length === 0 && pinOffenders.length === 0) return 0;
+  if (changedOffenders.length > 0) printReport(changedOffenders);
+  if (pinOffenders.length > 0) printPinMismatchReport(pinOffenders);
   return 1;
 }
 
