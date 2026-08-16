@@ -252,7 +252,25 @@ CREATE TABLE IF NOT EXISTS call (
   result JSONB,
   -- AL-P13: Consult-Kette am Call (A2: Zustand am Call, NICHT in einem Prozess-Broker -
   -- ueberlebt Deploy/Instanzwechsel und faellt automatisch unter Erase/Export/Retention).
-  consults JSONB
+  consults JSONB,
+  -- ABNAHME-D1 (TEIL 2, Eigentuemer-Auftrag): die vier vom Agenten waehrend des
+  -- Gespraechs STRUKTURIERT gesammelten Angaben (ElevenLabs Data Collection,
+  -- analysis.data_collection_results), additiv NEBEN summary - Praezedenz
+  -- answered_unclear_reason. Additiv NULLABLE: nur der ElevenLabs-Ergebnisweg setzt
+  -- sie, und nur wenn das Gespraech die jeweilige Angabe tatsaechlich hergab (kein
+  -- Termin/Betrag verhandelt ist der Normalfall, keine Luecke).
+  appointment_date TEXT,
+  appointment_time TEXT,
+  amount TEXT,
+  currency TEXT,
+  -- ABNAHME-D1 (TEIL 3, Eigentuemer-Auflage): die im Gespraech BESTAETIGTE Zeitzone des
+  -- Angerufenen, NIE eine aus der Vorwahl abgeleitete Hypothese. Herkunft + Zeitstempel
+  -- (UNSERE Serverzeit, der Anbieter liefert keinen Bestaetigungs-Zeitpunkt) reisen immer
+  -- mit dem Wert. Additiv NULLABLE, UEBERSCHREIBBAR (kein Set-once wie answered_unclear_
+  -- reason): ein spaeterer bestaetigter Wert ersetzt einen frueheren.
+  callee_confirmed_timezone TEXT,
+  callee_confirmed_timezone_origin TEXT,
+  callee_confirmed_timezone_at TEXT
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -331,6 +349,21 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS consults JSONB;
 -- Backfill noetig: es gibt keinen einzigen Bestands-Anruf mit diesem Grund, er misst ab
 -- Deploy vorwaerts.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS answered_unclear_reason TEXT;
+
+-- ABNAHME-D1 (TEIL 2): die vier strukturiert gesammelten Angaben auf Bestands-call-
+-- Tabellen nachziehen (Muster answered_unclear_reason). Idempotent; frische DB = No-op
+-- (CREATE TABLE oben hat die Spalten schon). KEIN Backfill noetig: es gibt keinen
+-- einzigen Bestands-Anruf mit dieser Angabe, sie misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS appointment_date TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS appointment_time TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS amount TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS currency TEXT;
+
+-- ABNAHME-D1 (TEIL 3): die bestaetigte Zeitzone des Angerufenen auf Bestands-call-
+-- Tabellen nachziehen, aus demselben Grund wie die vier Spalten darueber.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_origin TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_at TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

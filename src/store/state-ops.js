@@ -319,6 +319,27 @@ export function createCall(
     // der Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) einen laufenden Anruf
     // bindet. Initial null - byte-identisch zur pg-Hydrierung (rowToCall).
     elevenlabsConversationId: null,
+    // ABNAHME-D1 (Owner-Auftrag: eigene Felder im Ergebnisschema, additiv NEBEN summary/
+    // result). Vom Agenten waehrend des Gespraechs STRUKTURIERT gesammelt (ElevenLabs
+    // Data Collection, analysis.data_collection_results) statt nur als Freitext in
+    // summary zu stecken. FEHLT eine Angabe im Gespraech (kein Termin/kein Betrag
+    // verhandelt), ist das der Normalfall - alle vier bleiben dann null, byte-identisch
+    // zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift. Praezedenz
+    // answeredUnclearReason (additiv-nullables Anruf-Feld durch alle Ebenen).
+    appointmentDate: null,
+    appointmentTime: null,
+    amount: null,
+    currency: null,
+    // TEIL 3 derselben Eigentuemer-Auflage: die im Gespraech BESTAETIGTE Zeitzone des
+    // Angerufenen - NIE eine aus der Vorwahl abgeleitete Hypothese (die bleibt
+    // Vermutung, s. calleeTimezoneText in elevenlabs/outbound.js und wird hier
+    // ausdruecklich NICHT gespeichert). Herkunft + Zeitstempel reisen IMMER mit dem
+    // Wert (nie getrennt gesetzt, s. recordCalleeConfirmedTimezone) - ein blosser
+    // Zonenwert ohne Beleg, WOHER er kommt und WANN er bestaetigt wurde, waere nicht
+    // nachpruefbar. Initial null - byte-identisch zur pg-Hydrierung.
+    calleeConfirmedTimezone: null,
+    calleeConfirmedTimezoneOrigin: null,
+    calleeConfirmedTimezoneAt: null,
     callerTurns: 0,
     actionItemIds: [],
   };
@@ -720,6 +741,47 @@ export function recordProviderCallResult(state, callId, { summary, objectiveAchi
   if (!call) return { call: null, changed: false };
   call.summary = summary;
   call.objectiveAchieved = objectiveAchieved;
+  return { call, changed: true };
+}
+
+// ABNAHME-D1 (TEIL 2): die vier Angaben, die der Agent waehrend des Gespraechs
+// STRUKTURIERT gesammelt hat (ElevenLabs Data Collection), additiv NEBEN summary -
+// dieselbe EINE Anbieter-Antwort wie recordProviderCallResult direkt darueber, deshalb
+// aus demselben Grund (G5: koennten sonst auseinanderfallen) in EINEM Schritt gesetzt.
+// Bewusst KEIN set-once (Muster recordProviderCallResult, nicht recordProviderHandleOnce):
+// genau ein Schreiber (der ziehende Ergebnisweg, elevenlabs/outbound.js#persistProviderResult),
+// der nur einmal je Call laeuft. FEHLT eine Angabe im Ergebnis (Normalfall, s. Modul-Kopf-
+// Kommentar an den Feld-Defaults), uebergibt der Aufrufer null dafuer - kein Platzhalter,
+// kein Fehler. Alle vier Werte reisen als String (Praezedenz answeredUnclearReason: eine
+// TEXT-Spalte auf beiden Backends, kein zweiter Zahlentyp, der zwischen json.js und pg.js
+// auseinanderlaufen koennte).
+export function recordProviderCollectedFields(state, callId, { appointmentDate, appointmentTime, amount, currency }) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  call.appointmentDate = appointmentDate ?? null;
+  call.appointmentTime = appointmentTime ?? null;
+  call.amount = amount ?? null;
+  call.currency = currency ?? null;
+  return { call, changed: true };
+}
+
+// ABNAHME-D1 (TEIL 3, Eigentuemer-Auflage): die im Gespraech BESTAETIGTE Zeitzone des
+// Angerufenen, mit Herkunft und Zeitstempel - haengt an DERSELBEN Ergebnis-Rueckmeldung
+// wie recordProviderCollectedFields darueber, ist aber ein eigener Schreibschritt: eine
+// Hypothese (aus der Vorwahl abgeleitet) erreicht diese Funktion NIE - der Aufrufer ruft
+// sie nur auf, wenn tatsaechlich ein bestaetigter Wert vorliegt (s. elevenlabs/outbound.js).
+// ANDERS ALS recordProviderCollectedFields/answeredUnclearReason bewusst KEIN set-once:
+// "ueberschreibbar" ist woertliche Eigentuemer-Auflage - ein spaeterer bestaetigter Wert
+// ersetzt einen frueheren, statt dass der erste gewinnt. confirmedAt ist UNSERE eigene
+// Serverzeit (der Anbieter liefert keinen Bestaetigungs-Zeitpunkt) und reist immer
+// zusammen mit dem Wert - nie getrennt gesetzt, sonst koennte ein Zonenwert ohne
+// zugehoerigen Zeitstempel stehen bleiben.
+export function recordCalleeConfirmedTimezone(state, callId, { timezone, origin, confirmedAt }) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  call.calleeConfirmedTimezone = timezone;
+  call.calleeConfirmedTimezoneOrigin = origin;
+  call.calleeConfirmedTimezoneAt = confirmedAt;
   return { call, changed: true };
 }
 

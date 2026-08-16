@@ -137,6 +137,83 @@ export const CONVERSATION_DONE_WITH_ANALYSIS = Object.freeze({
   }),
 });
 
+// AUSGEDACHT (ABNAHME-D1, TEIL 2/3): KEIN gemessener Fund - analysis.data_collection_results
+// wurde bislang NIRGENDS aufgezeichnet (Modul-Kopf oben: "kein Code hier liest sie" galt VOR
+// diesem Paket). Diese Fixture bildet die FORM nach, die das ElevenLabs-OpenAPI-Schema dafuer
+// belegt (DataCollectionResultCommonModel: data_collection_id/value/json_schema/rationale,
+// components.schemas im lokal liegenden Schema-Snapshot), mit genau den fuenf Feld-
+// Kennungen, die die Vorlage deklariert (elevenlabs/agent_configs/outbound-agent.template.json,
+// platform_settings.data_collection: appointment_date/appointment_time/amount/currency/
+// confirmed_timezone). transcript/analysis.call_successful/metadata sind selbst erfunden
+// (keine echte Aufzeichnung mit befuellten data_collection_results existiert), aber in der
+// FORM identisch zu CONVERSATION_DONE_WITH_ANALYSIS oben (derselbe echte Fund). WAS HIER
+// NICHT BEHAUPTET WIRD: ob der Anbieter bei einer NICHT im Gespraech vorgekommenen Angabe
+// den Schluessel weglaesst, "value":"" liefert oder "value":null - das ist NICHT gemessen.
+// Diese Fixture deckt deshalb nur den VOLLSTAENDIG befuellten Fall ab; den fehlenden
+// Schluessel (der laut Owner-Auflage der NORMALFALL ist) deckt test/elevenlabs-data-
+// collection.test.js separat und ausdruecklich ab (ein Objekt ganz ohne den jeweiligen
+// Schluessel), ohne dafuer eine zweite, ebenso ungemessene Fixture-Form zu erfinden.
+export const CONVERSATION_DONE_WITH_DATA_COLLECTION = Object.freeze({
+  conversation_id: "conv_ausgedacht_data_collection",
+  status: "done",
+  transcript: Object.freeze([
+    Object.freeze({
+      role: "agent",
+      message: "So March 3rd, 2:30 PM, sixty dollars. Thank you, goodbye.",
+    }),
+  ]),
+  analysis: Object.freeze({
+    call_successful: "success",
+    transcript_summary: "Booked the brake pad replacement for March 3 at 2:30 PM for $60.00.",
+    data_collection_results: Object.freeze({
+      appointment_date: Object.freeze({
+        data_collection_id: "appointment_date",
+        value: "March 3",
+        json_schema: null,
+        rationale: "AUSGEDACHT - die Gegenstelle nannte das Datum im Gespraech.",
+      }),
+      appointment_time: Object.freeze({
+        data_collection_id: "appointment_time",
+        value: "2:30 PM",
+        json_schema: null,
+        rationale: "AUSGEDACHT - die Gegenstelle nannte die Uhrzeit im Gespraech.",
+      }),
+      // amount ist am Agenten als type:"number" deklariert (Vorlage) - der Wert kommt hier
+      // deshalb bewusst als JS-Zahl, nicht als String, s. collectedValue (elevenlabs/
+      // outbound.js), das ihn auf einen String abbildet.
+      amount: Object.freeze({
+        data_collection_id: "amount",
+        value: 60,
+        json_schema: null,
+        rationale: "AUSGEDACHT - der verhandelte Preis wurde im Gespraech genannt.",
+      }),
+      currency: Object.freeze({
+        data_collection_id: "currency",
+        value: "USD",
+        json_schema: null,
+        rationale: "AUSGEDACHT.",
+      }),
+      confirmed_timezone: Object.freeze({
+        data_collection_id: "confirmed_timezone",
+        value: "Eastern time",
+        json_schema: null,
+        rationale: "AUSGEDACHT - der Angerufene bestaetigte die genannte Zone im Gespraech.",
+      }),
+    }),
+  }),
+  metadata: Object.freeze({
+    call_duration_secs: 118,
+    termination_reason: "Client disconnected: 1000",
+    error: null,
+    phone_call: Object.freeze({
+      direction: "outbound",
+      agent_number: "***0177#1ca0c7",
+      external_number: "***9999#ausgedacht",
+      call_id: "otb_ausgedacht_data_collection",
+    }),
+  }),
+});
+
 // CLOSE-1008: der Anbieter beendet das WebSocket sofort nach Rufannahme, weil eine
 // Pflicht-dynamische-Variable fehlt (hier: owner_name) - tasks/spike2-messung.jsonl,
 // testanruf nr.1, conv_5701m00ppcvjeewbat7w0nxxsxrj. call_duration_secs und

@@ -432,6 +432,11 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               Pin. Das ist die zweite Anhebung binnen eines Tages; die Durchsicht hat genau
 //               davor gewarnt. Wer das dauerhaft loesen will, entscheidet ueber skipComments
 //               in der Regel - das ist eine eigene Entscheidung, kein Nebeneffekt hier.
+//   2026-08-16  Pin nachgezogen (ABNAHME-D1, sieben persistierte Felder): src/store/pg.js
+//               flushCalls 23->30, rowToCall 22->29, makePgStore 472->482. DRITTE Anhebung.
+//               Die Wachstumsrate ist damit GEMESSEN: je persistiertem Anruf-Feld +1
+//               Komplexitaet in zwei Funktionen, linear und ohne Obergrenze. Begruendung
+//               und die zwei Auswege stehen am Eintrag selbst.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     reason:
@@ -489,12 +494,12 @@ const LEGACY_FINGERPRINT = {
   },
   "src/store/pg.js": {
     reason:
-      "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-15 (answeredUnclearReason): makePgStore 462 -> 472 Zeilen, rowToCall 21 -> 22, flushCalls 22 -> 23. Unvermeidbar, solange der Split ausgesetzt ist - ein neues persistiertes Feld MUSS durch Zeilen-Mapper und Flush, und beide sind Teil derselben Riesenfunktion. Genau deshalb waechst diese Datei mit jedem Feld weiter; erst der Split stoppt das. Angehoben, nicht stillschweigend: der Pin hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen.",
+      "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-15 (answeredUnclearReason): makePgStore 462 -> 472 Zeilen, rowToCall 21 -> 22, flushCalls 22 -> 23. Unvermeidbar, solange der Split ausgesetzt ist - ein neues persistiertes Feld MUSS durch Zeilen-Mapper und Flush, und beide sind Teil derselben Riesenfunktion. Genau deshalb waechst diese Datei mit jedem Feld weiter; erst der Split stoppt das. Angehoben, nicht stillschweigend: der Pin hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen. DRITTE ANHEBUNG 2026-08-15/16 (sieben Felder aus ABNAHME-D1): flushCalls 23 -> 30, rowToCall 22 -> 29, makePgStore 472 -> 482. DAMIT IST DIE WACHSTUMSRATE GEMESSEN: jedes persistierte Anruf-Feld kostet +1 Komplexitaet in flushCalls UND in rowToCall sowie rund 1,4 Zeilen in makePgStore - linear, ohne Obergrenze. Die Anhebungen sind einzeln begruendet und keine Nachlaessigkeit (ein Feld MUSS durch Mapper und Flush), aber die Kurve ist jetzt belegt statt behauptet. Wer das stoppen will, hat zwei Wege: den Split von makePgStore (bisher ausgesetzt) oder die Ablage der eingesammelten Ergebnis-Angaben als EINE strukturierte Spalte statt N Einzelspalten - letzteres entspraeche auch der Form des Anbieters (data_collection_results ist eine Karte) und machte kuenftige Felder kostenlos. Beides ist eine Eigentuemer-Entscheidung, kein Nebeneffekt eines Commits.",
     date: "2026-08-13",
     findings: {
-      "complexity :: Async function 'flushCalls' has a complexity of 23. Maximum allowed is 10.": 1,
+      "complexity :: Async function 'flushCalls' has a complexity of 30. Maximum allowed is 10.": 1,
       "complexity :: Async function 'flushTenants' has a complexity of 24. Maximum allowed is 10.": 1,
-      "complexity :: Function 'rowToCall' has a complexity of 22. Maximum allowed is 10.": 1,
+      "complexity :: Function 'rowToCall' has a complexity of 29. Maximum allowed is 10.": 1,
       "complexity :: Function 'rowToTenant' has a complexity of 23. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 1,
       "id-length :: Identifier name 'b' is too short (< 2).": 2,
@@ -505,7 +510,7 @@ const LEGACY_FINGERPRINT = {
       "id-length :: Identifier name 's' is too short (< 2).": 1,
       "id-length :: Identifier name 't' is too short (< 2).": 2,
       "max-lines-per-function :: Async function 'hydrateTenantInto' has too many lines (117). Maximum allowed is 100.": 1,
-      "max-lines-per-function :: Function 'makePgStore' has too many lines (472). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makePgStore' has too many lines (482). Maximum allowed is 100.": 1,
       "max-params :: Async function 'deleteMissing' has too many parameters (4). Maximum allowed is 3.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'state'.": 3,
     },

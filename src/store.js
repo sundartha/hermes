@@ -129,6 +129,15 @@ export const {
   // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster
   // recordElevenlabsConversationId).
   recordProviderCallResult,
+  // ABNAHME-D1 (TEIL 2): die vier vom Agenten strukturiert gesammelten Angaben
+  // (appointment_date/appointment_time/amount/currency). OHNE diesen Re-Export waere
+  // store.recordProviderCollectedFields auf der Fassade undefined -> der ziehende
+  // Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster recordProviderCallResult).
+  recordProviderCollectedFields,
+  // ABNAHME-D1 (TEIL 3): die im Gespraech bestaetigte Zeitzone des Angerufenen, mit
+  // Herkunft und Zeitstempel. OHNE diesen Re-Export waere store.recordCalleeConfirmedTimezone
+  // auf der Fassade undefined -> derselbe Fehler (Muster recordProviderCollectedFields).
+  recordCalleeConfirmedTimezone,
   countCallerTurn,
   // AL-P13: Consult-Kette. OHNE diese Re-Exports waeren sie auf der Fassade undefined
   // -> die Consult-Routen wuerfen zur Laufzeit einen TypeError (Muster countCallerTurn).

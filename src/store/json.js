@@ -549,6 +549,22 @@ export function recordProviderCallResult(callId, result) {
   return call;
 }
 
+// ABNAHME-D1 (TEIL 2): die vier strukturiert gesammelten Angaben - Wrapper-Paritaet zu
+// pg.js. Saved wie recordProviderCallResult: die Felder liegen persistent auf Platte.
+export function recordProviderCollectedFields(callId, fields) {
+  const { call, changed } = ops.recordProviderCollectedFields(load(), callId, fields);
+  if (changed) save();
+  return call;
+}
+
+// ABNAHME-D1 (TEIL 3): die bestaetigte Zeitzone des Angerufenen (Wert + Herkunft +
+// Zeitstempel) - Wrapper-Paritaet zu pg.js. Saved wie recordProviderCollectedFields.
+export function recordCalleeConfirmedTimezone(callId, confirmed) {
+  const { call, changed } = ops.recordCalleeConfirmedTimezone(load(), callId, confirmed);
+  if (changed) save();
+  return call;
+}
+
 export function countCallerTurn(callId) {
   const { call, changed } = ops.countCallerTurn(load(), callId);
   if (changed) save();

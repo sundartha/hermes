@@ -104,6 +104,12 @@ function spyStore(call) {
     getCall: () => call,
     addTranscript: () => order.push("addTranscript"),
     recordProviderCallResult: () => order.push("recordProviderCallResult"),
+    // ABNAHME-D1: additiv NEBEN recordProviderCallResult (s. persistProviderResult,
+    // src/elevenlabs/outbound.js) - NICHT im order-Tracking (die Fixtures dieser Datei
+    // tragen keine data_collection_results, die Reihenfolgen-Assertions unten bleiben
+    // dadurch unveraendert gueltig).
+    recordProviderCollectedFields: () => {},
+    recordCalleeConfirmedTimezone: () => {},
     trueUpAnsweredAt: () => order.push("trueUpAnsweredAt"),
     recordAnsweredUnclearReason: () => order.push("recordAnsweredUnclearReason"),
   };

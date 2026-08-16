@@ -343,6 +343,23 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // ABNAHME-D1 (TEIL 2): die vier strukturiert gesammelten Angaben - Wrapper-Paritaet zu
+    // json.js. Saved aus demselben Grund wie recordProviderCallResult: es gibt Spalten
+    // (appointment_date/appointment_time/amount/currency), und der Flush schreibt sie aus
+    // dem Spiegel.
+    recordProviderCollectedFields(callId, fields) {
+      const { call, changed } = ops.recordProviderCollectedFields(requireState(), callId, fields);
+      if (changed) save();
+      return call;
+    },
+    // ABNAHME-D1 (TEIL 3): die bestaetigte Zeitzone des Angerufenen - Wrapper-Paritaet zu
+    // json.js. Saved aus demselben Grund: es gibt Spalten (callee_confirmed_timezone +
+    // Herkunft + Zeitstempel), und der Flush schreibt sie aus dem Spiegel.
+    recordCalleeConfirmedTimezone(callId, confirmed) {
+      const { call, changed } = ops.recordCalleeConfirmedTimezone(requireState(), callId, confirmed);
+      if (changed) save();
+      return call;
+    },
     countCallerTurn(callId) {
       const { call, changed } = ops.countCallerTurn(requireState(), callId);
       if (changed) save();
@@ -1177,6 +1194,18 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // Zeile ginge er beim Restart verloren UND der naechste Flush schriebe NULL zurueck
     // (Lehre i8-design-decisions). NULL -> null (json-Parity).
     answeredUnclearReason: r.answered_unclear_reason ?? null,
+    // ABNAHME-D1 (TEIL 2): die vier strukturiert gesammelten Angaben mit-hydrieren. Ohne
+    // diese Zeilen gingen sie beim Restart verloren UND der naechste Flush schriebe sie
+    // auf NULL zurueck (Lehre i8-design-decisions). NULL -> null (json-Parity).
+    appointmentDate: r.appointment_date ?? null,
+    appointmentTime: r.appointment_time ?? null,
+    amount: r.amount ?? null,
+    currency: r.currency ?? null,
+    // ABNAHME-D1 (TEIL 3): die bestaetigte Zeitzone des Angerufenen mit-hydrieren, aus
+    // demselben Grund wie die vier Zeilen darueber.
+    calleeConfirmedTimezone: r.callee_confirmed_timezone ?? null,
+    calleeConfirmedTimezoneOrigin: r.callee_confirmed_timezone_origin ?? null,
+    calleeConfirmedTimezoneAt: r.callee_confirmed_timezone_at ?? null,
     endedAt: r.ended_at,
     transcript: segmentsByCall.get(r.id) || [],
     summary: r.summary,
@@ -1533,8 +1562,11 @@ async function flushCalls(client, tenantId, calls) {
           estimated_cost_cents, actual_cost_micro_cents, cost_trued_at,
           cost_trued_source, cost_truing_attempts, telnyx_conversation_id, caller_turns, result,
           consults, estimated_cost_spend_month_key, estimated_cost_period_key,
-          elevenlabs_conversation_id, answered_unclear_reason)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42)
+          elevenlabs_conversation_id, answered_unclear_reason,
+          appointment_date, appointment_time, amount, currency,
+          callee_confirmed_timezone, callee_confirmed_timezone_origin,
+          callee_confirmed_timezone_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1552,7 +1584,12 @@ async function flushCalls(client, tenantId, calls) {
          estimated_cost_spend_month_key=EXCLUDED.estimated_cost_spend_month_key,
          estimated_cost_period_key=EXCLUDED.estimated_cost_period_key,
          elevenlabs_conversation_id=EXCLUDED.elevenlabs_conversation_id,
-         answered_unclear_reason=EXCLUDED.answered_unclear_reason`,
+         answered_unclear_reason=EXCLUDED.answered_unclear_reason,
+         appointment_date=EXCLUDED.appointment_date, appointment_time=EXCLUDED.appointment_time,
+         amount=EXCLUDED.amount, currency=EXCLUDED.currency,
+         callee_confirmed_timezone=EXCLUDED.callee_confirmed_timezone,
+         callee_confirmed_timezone_origin=EXCLUDED.callee_confirmed_timezone_origin,
+         callee_confirmed_timezone_at=EXCLUDED.callee_confirmed_timezone_at`,
       [
         c.id,
         tenantId,
@@ -1645,6 +1682,22 @@ async function flushCalls(client, tenantId, calls) {
         // Create, am Gespraechsende (finishFromConversation). Fehlte er im UPDATE-SET,
         // fiele er beim naechsten Flush auf NULL zurueck.
         c.answeredUnclearReason ?? null,
+        // ABNAHME-D1 ($43-$46, ans Ende angehaengt -> keine Umnummerierung): die vier
+        // strukturiert gesammelten Angaben. IM ON CONFLICT DO UPDATE SET (Muster
+        // answered_unclear_reason) - sie entstehen NACH dem Create, am Gespraechsende
+        // (persistProviderResult). Fehlten sie im UPDATE-SET, fielen sie beim naechsten
+        // Flush auf NULL zurueck.
+        c.appointmentDate ?? null,
+        c.appointmentTime ?? null,
+        c.amount ?? null,
+        c.currency ?? null,
+        // ABNAHME-D1 ($47-$49): die bestaetigte Zeitzone des Angerufenen, aus demselben
+        // Grund IM ON CONFLICT DO UPDATE SET wie die vier Werte darueber - und
+        // UEBERSCHREIBBAR (Eigentuemer-Auflage), ein spaeterer Flush darf einen frischer
+        // bestaetigten Wert deshalb bewusst ersetzen.
+        c.calleeConfirmedTimezone ?? null,
+        c.calleeConfirmedTimezoneOrigin ?? null,
+        c.calleeConfirmedTimezoneAt ?? null,
       ],
     );
     await flushTranscript(client, tenantId, c);

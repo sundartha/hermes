@@ -484,11 +484,27 @@
       "retention_days": 0,
       "record_voice": false
     },
-    "_data_collection_hinweis": "ENGLISCHE SOLL-Werte fuer die VIER Felder, die der Live-Agent heute fuehrt - Schluessel UND Beschreibung uebersetzt, kein Feld dazu und keines weg (termindatum -> appointment_date, kontaktperson -> contact_person, rueckrufnummer -> callback_number, naechste_schritte -> next_steps). Ausdruecklich NICHT ergaenzt sind die D1-Felder (appointment_date, appointment_time, amount, currency): das ist ein eigenes Paket. NAEHE ZU D1, damit dieses Paket es nicht verdeckt: appointment_date trifft den D1-Namen woertlich, deckt hier aber MEHR ab (Datum UND Uhrzeit in einem Feld, waehrend D1 auf appointment_date + appointment_time aufteilt) - beim D1-Bau ist das der Punkt, an dem entschieden werden muss, ob dieses Feld geteilt oder umgewidmet wird. Die drei uebrigen (contact_person, callback_number, next_steps) haben in D1 keine Entsprechung, D1s amount/currency hier keine. Die Eintraege fuehren nur type und description: die uebrigen Felder je Eintrag (enum, is_system_provided, dynamic_variable, allowed_values_dynamic_variable, constant_value, is_omitted, llm, llm_billed) setzt der Anbieter selbst, sie sind nicht besessen und wuerden einen Vollwertvergleich dauerhaft rot faerben.",
+    "_data_collection_hinweis": "ENGLISCHE SOLL-Werte fuer die urspruenglich VIER Felder, die der Live-Agent zuvor fuehrte - Schluessel UND Beschreibung uebersetzt (termindatum -> appointment_date, kontaktperson -> contact_person, rueckrufnummer -> callback_number, naechste_schritte -> next_steps); GEMESSEN am Live-Agenten seit dem letzten Push bereits SO (per GET bestaetigt, keine offene Uebersetzungs-Push-Absicht mehr). D1-BAU (ABNAHME-D1, dieses Paket): appointment_date, appointment_time, amount, currency SIND JETZT ERGAENZT, plus confirmed_timezone (TEIL 3 derselben Eigentuemer-Auflage, Zeitzonen-Bestaetigung). Die zuvor hier offen benannte SPLIT-Entscheidung ist getroffen: appointment_date trug DATUM UND UHRZEIT in einem Feld - das ist jetzt AUFGETEILT (appointment_date nur noch das Datum, die neue appointment_time die Uhrzeit), weil D1 woertlich zwei getrennte Felder verlangt und bislang kein Code (data_collection_results wurde bis zu diesem Paket nirgends gelesen) auf der bisherigen kombinierten Form aufsass - die Aufteilung veraendert also kein bestehendes Verhalten. contact_person/callback_number/next_steps bleiben unveraendert stehen (D1 hat dafuer keine Entsprechung, sie werden NICHT ersetzt). NOCH NICHT GEPUSHT (PUSH-ABSICHT, s. Dateikopf _wichtiger_hinweis_NICHT_HOCHLADEN): appointment_time/amount/currency/confirmed_timezone sind NEU in dieser Vorlage und die appointment_date-Beschreibung ist GEAENDERT (datumsonly statt Datum+Uhrzeit) - bis zum naechsten echten Push (npm run elevenlabs:push, in diesem Auftrag ausdruecklich NICHT ausgefuehrt) fuehrt der Live-Agent weiterhin die alte, kombinierte appointment_date-Beschreibung und kennt die vier neuen Schluessel nicht. npm run elevenlabs:drift meldet das erwartungsgemaess als ABWEICHUNG bei data_collection/data_collection_beschreibungen, bis gepusht ist - Bewachung, keine stille Korrektur. Die Eintraege fuehren nur type und description: die uebrigen Felder je Eintrag (enum, is_system_provided, dynamic_variable, allowed_values_dynamic_variable, constant_value, is_omitted, llm, llm_billed) setzt der Anbieter selbst, sie sind nicht besessen und wuerden einen Vollwertvergleich dauerhaft rot faerben.",
     "data_collection": {
       "appointment_date": {
         "type": "string",
-        "description": "The agreed appointment date and time, if an appointment was set during the call. Extract date and time from the conversation as precisely as possible."
+        "description": "The agreed appointment date, if an appointment was set during the call (for example 'March 3' or '2026-03-03', in whatever form it was discussed). Leave empty if no appointment was agreed. See appointment_time for the time of day."
+      },
+      "appointment_time": {
+        "type": "string",
+        "description": "The agreed appointment time, if an appointment was set during the call (for example '2:30 PM'). Leave empty if no appointment was agreed, or if a date was agreed without a specific time."
+      },
+      "amount": {
+        "type": "number",
+        "description": "The price or amount agreed or quoted during the call, as a plain number without a currency symbol (for example 60 for $60.00). Leave empty if no price or amount was discussed."
+      },
+      "currency": {
+        "type": "string",
+        "description": "The currency of the amount field, as its ISO 4217 code (for example USD). Leave empty if no price or amount was discussed."
+      },
+      "confirmed_timezone": {
+        "type": "string",
+        "description": "The exact time zone the person you are calling explicitly confirmed during THIS call - for example after you asked a confirmation question such as 'I have you down as Eastern time - is that right?' and they agreed, or after they stated their own time zone unprompted. Use the plain zone name as it was confirmed (for example 'Eastern time' or 'Pacific time'). Leave this completely empty if the zone was only ever assumed from an area code and never explicitly confirmed by them, or if time zones never came up in the call - never guess or fill this from your own assumption."
       },
       "contact_person": {
         "type": "string",

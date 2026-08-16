@@ -9,9 +9,26 @@
 // (test/fixtures/mock-conversation-driver.js), ohne Anbieter, ohne Konto, ohne Netz.
 //
 // GEPRUEFT WIRD: aus einem abgeschlossenen Gespraech wird bei uns ein verwertbares
-// Ergebnis - Datum, Uhrzeit, Preis, "Ziel erreicht" - und zwar in der Form, die der
-// Auftraggeber ueber MCP liest (src/mcp-tools.js: pickTranscript, get_transcript).
-// Die Abbildung dorthin ist src/conversation/outcome-to-mcp-fields.js.
+// Ergebnis - Datum, Uhrzeit, Preis, "Ziel erreicht". Die ersten drei Tests dieser Datei
+// pruefen das ueber die generische Abbildung "Gespraechsergebnis -> MCP-Felder"
+// (src/conversation/outcome-to-mcp-fields.js, gegen die Attrappe test/fixtures/mock-
+// conversation-driver.js) - in der Form, die der Auftraggeber ueber MCP liest
+// (src/mcp-tools.js: pickTranscript, get_transcript).
+//
+// DER VIERTE TEST (ABGENOMMEN D1) PRUEFT ETWAS ANDERES UND SAGT DAS AUSDRUECKLICH: die
+// generische Abbildung darueber ist bis heute an KEINEN echten Gespraechsfuehrungs-Adapter
+// angeschlossen (s. deren Modul-Kopf, "GENAU EIN Adapter ist vorgesehen") - der Weg, ueber
+// den ein echtes Gespraech tatsaechlich bei uns ankommt, ist src/elevenlabs/outbound.js
+// (ziehender Ergebnisabruf, GET /v1/convai/conversations/{id}). D1 prueft deshalb GENAU
+// DIESEN echten Weg: die Anbieter-Antwort fuehrt data_collection_results (vom Agenten
+// waehrend des Gespraechs STRUKTURIERT gesammelt, deklariert in elevenlabs/agent_configs/
+// outbound-agent.template.json), src/elevenlabs/outbound.js liest sie
+// (collectedFieldsOf/persistProviderResult) und src/store/state-ops.js speichert sie
+// additiv am Anruf-Datensatz (recordProviderCollectedFields). Das exponierende MCP-Schema
+// (src/mcp-tools.js: pickTranscript/get_transcript) bleibt in diesem Paket bewusst
+// unangetastet (Auftragsgrenze) - die vier Angaben sind heute als EIGENE Felder am
+// Call-Record lesbar, noch nicht ueber MCP; das ist eine eigene, spaetere Entscheidung
+// (das MCP-Schema nach aussen zu aendern).
 //
 // SPRACHE: alles, was ein US-Nutzer sehen oder hoeren wuerde, ist englisch, der Kontext
 // US (stehende Eigentuemer-Entscheidung; A8 selbst laeuft auf Englisch, Werkstattszenario,
@@ -22,13 +39,14 @@
 //
 // STAND JE ANGABE (gemessen, nicht vermutet):
 //   Ziel erreicht - eigenes Feld objective_achieved, dreiwertig (true/false/"unclear").
-//   Datum         - KEIN Feld. Ueberlebt nur als Zeichenkette im Freitext result_summary.
-//   Uhrzeit       - KEIN Feld. Ebenso.
-//   Preis         - KEIN Feld. Ebenso. Die Ergebnis-Karte (src/call-result.js,
-//                   resultCardView in src/mcp-tools.js) traegt outcome/commitments/
-//                   counterparty_commitments/open_points/next_step - kein Betrags-, kein
-//                   Datums-, kein Zeitfeld.
-// Der letzte Test dieser Datei nagelt genau diese Luecke fest und ist deshalb ROT.
+//   Datum         - eigenes Feld call.appointmentDate (ElevenLabs-Weg, additiv am
+//                   Call-Record, s. vierter Test). Ueberlebt daneben weiterhin als
+//                   Zeichenkette im Freitext result_summary (unveraendert, kein Ersatz).
+//   Uhrzeit       - eigenes Feld call.appointmentTime. Ebenso.
+//   Preis         - eigene Felder call.amount + call.currency. Ebenso. Die Ergebnis-Karte
+//                   (src/call-result.js, resultCardView in src/mcp-tools.js) traegt
+//                   weiterhin outcome/commitments/counterparty_commitments/open_points/
+//                   next_step - dieses Schema aendert TEIL 1-3 (ABNAHME-D1) NICHT.
 //
 // Testnamen tragen bewusst KEINE Katalog-ID des i18n-Launch-Testkatalogs am Namensanfang
 // ("A8-" ist keine, s. package.json config.i18nCatalogPattern) - sonst landet die Datei
@@ -44,6 +62,11 @@ import {
 import { makeMockConversationDriver } from "./fixtures/mock-conversation-driver.js";
 import { mapConversationOutcomeToMcpFields } from "../src/conversation/outcome-to-mcp-fields.js";
 import { pickTranscript } from "../src/mcp-tools.js";
+// [abgenommen D1]: der echte Weg, ueber den die vier Angaben ankommen (s. Datei-Kopf).
+import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
+import { terminateAndBillCall } from "../src/telephony/call-termination.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { CONVERSATION_DONE_WITH_DATA_COLLECTION } from "./fixtures/elevenlabs-conversations.js";
 
 // Die drei ausgehandelten Werte des Gespraechs - je EINE Konstante, damit Fixture,
 // Erwartung und Fehlermeldung nie auseinanderlaufen.
@@ -195,34 +218,117 @@ test("A8-Gegenfall: ein Gespraech ohne erreichtes Ziel gilt nie als erreicht", a
   assert.notEqual(refusedMapped.objective_achieved, true, "eine Absage gilt NIE als erreicht");
 });
 
-test("ABNAHME-D1: Datum, Uhrzeit und Betrag kommen als eigene Angaben im Ergebnis an | ROT WEIL: Datum, Uhrzeit und Betrag erreichen den Auftraggeber nur als Freitext in der Zusammenfassung, nicht als eigene Angaben | FIX: eigene Felder im Ergebnisschema plus ein Prompt, der sie anfordert - Eigentuemer-Entscheidung noetig, aendert das Schema nach aussen", async () => {
-  const mapped = await mappedResultOfSuccessfulCall("a8-structured-values");
-  const ownValues = ownValuesOf(mapped);
+// [abgenommen D1] fuehrt den ECHTEN Ergebnisweg (s. Datei-Kopf), keine Mock-Attrappe: der
+// Anbieter (ElevenLabs) fuehrt das Gespraech und meldet am Ende data_collection_results
+// (GET /v1/convai/conversations/{id}) - der Anbieter selbst wird per Attrappen-fetch
+// ersetzt (Muster test/el-fixtures-echte-antworten.test.js), aber src/elevenlabs/
+// outbound.js (Lesen+Speichern) laeuft UNVERAENDERT und echt.
+async function withFetch(fetchImpl, run) {
+  const orig = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = orig;
+  }
+}
 
-  // Gegenprobe, damit dieser Fall nicht aus einem Messfehler heraus rot ist: die vierte
-  // Angabe von A8 IST als eigener Wert lesbar - dieselbe Pruefung, gruenes Ergebnis.
-  assert.ok(
-    ownValues.includes(true),
-    "'Ziel erreicht' ist als eigene Angabe lesbar (objective_achieved) - die Pruefung selbst greift",
+// Faengt das Ergebnis ab, das persistProviderResult an den Store weiterreicht - dieselbe
+// Attrappen-Form wie el-fixtures-echte-antworten.test.js, hier zusaetzlich um TEIL-2/3-
+// Felder ergaenzt.
+function makeCapturingStore(conversationId) {
+  const call = {
+    id: `call_${conversationId}`,
+    status: "active",
+    elevenlabsConversationId: conversationId,
+    answeredAt: new Date().toISOString(),
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+  };
+  const captured = { transcript: [], summary: undefined };
+  const store = {
+    getCall: () => call,
+    load: () => ({ calls: [call] }),
+    addTranscript: (_id, role, message) => captured.transcript.push({ role, message }),
+    recordProviderCallResult: (_id, { summary, objectiveAchieved }) => {
+      captured.summary = summary;
+      call.objectiveAchieved = objectiveAchieved;
+    },
+    // Schreibt DIREKT auf den Call-Record - dieselbe Form wie state-ops.js#
+    // recordProviderCollectedFields, damit dieser Test das echte Ergebnisschema prueft
+    // (call.appointmentDate/appointmentTime/amount/currency), nicht nur eine Attrappen-
+    // Kopie davon.
+    recordProviderCollectedFields: (_id, { appointmentDate, appointmentTime, amount, currency }) => {
+      call.appointmentDate = appointmentDate;
+      call.appointmentTime = appointmentTime;
+      call.amount = amount;
+      call.currency = currency;
+    },
+    recordCalleeConfirmedTimezone: () => {},
+    trueUpAnsweredAt: () => {},
+    recordAnsweredUnclearReason: () => {},
+    endCallRecord: (_id, status) => {
+      call.status = status;
+      call.endedAt = new Date().toISOString();
+      return call;
+    },
+  };
+  return { call, store, captured };
+}
+
+test("[abgenommen D1] Datum, Uhrzeit und Betrag kommen als eigene Angaben im Ergebnis an", async () => {
+  const { call, store, captured } = makeCapturingStore(CONVERSATION_DONE_WITH_DATA_COLLECTION.conversation_id);
+  let billed = false;
+  const el = makeElevenLabsOutbound({
+    store,
+    config: withConfigNamespaces({ elevenLabsOutbound: { apiKey: "test-key", apiBase: "https://el.test" } }),
+    terminateAndBillCall,
+    billThunk: () => () => {
+      billed = true;
+    },
+    finishCall: () => {},
+  });
+
+  const HTTP_OK = 200;
+  await withFetch(
+    async (_url, init) =>
+      init.method === "GET"
+        ? { ok: true, status: HTTP_OK, json: async () => CONVERSATION_DONE_WITH_DATA_COLLECTION }
+        : { ok: true, status: HTTP_OK },
+    async () => {
+      el.rearmActiveConversationPolls();
+      await waitUntil(() => billed);
+    },
   );
 
-  // FEHLERBILD, das dahinter steht: ein echter Anbieter schreibt die Zusammenfassung
-  // selbst. Schreibt er "Booked the appointment as discussed.", trifft beim Auftraggeber
-  // ueber MCP "Ziel erreicht: ja" ein - und kein Datum, keine Uhrzeit, kein Preis. Nichts
-  // im Ergebnis kann diesen Verlust bemerken, weil es fuer die drei Werte kein Feld gibt:
-  // sie existieren nur als Zeichenkette in einem Satz, dessen Wortlaut, Sprache und Format
-  // der Anbieter bestimmt. Der Termin laesst sich daraus nicht in einen Kalender uebernehmen
-  // und der Preis nicht gegen das erteilte Mandat pruefen.
+  // Gegenprobe, damit dieser Fall nicht aus einem Messfehler heraus gruen ist: der Freitext
+  // (result_summary) traegt die Angaben WEITERHIN - additiv, kein Ersatz (Owner-Auflage).
+  assert.equal(
+    captured.summary,
+    CONVERSATION_DONE_WITH_DATA_COLLECTION.analysis.transcript_summary,
+    "die Zusammenfassung bleibt der unveraenderte Anbieter-Freitext",
+  );
+
+  // Die vier Angaben kommen jetzt ZUSAETZLICH als EIGENE, exakte Felder an - ownValuesOf
+  // (Bestands-Helfer dieser Datei) prueft bewusst OHNE Teilstring-Suche: ein Wert, der nur
+  // irgendwo in einem Satz steckt, ist keine Angabe, die eine Maschine lesen kann.
+  const ownValues = ownValuesOf({
+    appointment_date: call.appointmentDate,
+    appointment_time: call.appointmentTime,
+    amount: call.amount,
+    currency: call.currency,
+  });
   const required = [
     ["Datum", APPOINTMENT_DATE],
     ["Uhrzeit", APPOINTMENT_TIME],
-    ["Preis", APPOINTMENT_PRICE],
+    ["Betrag", "60"],
+    ["Waehrung", "USD"],
   ];
   for (const [label, value] of required) {
     assert.ok(
       ownValues.includes(value),
-      `${label} ("${value}") ist im Ergebnis als eigene Angabe lesbar - heute steckt der ` +
-        "Wert ausschliesslich im Freitext der Zusammenfassung, es gibt kein Feld dafuer",
+      `${label} ("${value}") ist im Ergebnis als eigene Angabe lesbar (call.appointmentDate/` +
+        "appointmentTime/amount/currency) - additiv neben result_summary, kein Ersatz dafuer",
     );
   }
 });

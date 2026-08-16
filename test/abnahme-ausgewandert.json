@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "id": "D1",
+    "file": "test/a8-abschluss-zusammenfassung.test.js",
+    "test": "[abgenommen D1] Datum, Uhrzeit und Betrag kommen als eigene Angaben im Ergebnis an",
+    "seit": "2026-08-16"
+  }
+]

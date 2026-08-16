@@ -68,6 +68,12 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
       captured.summary = summary;
       captured.objectiveAchieved = objectiveAchieved;
     },
+    // ABNAHME-D1: additiv NEBEN recordProviderCallResult (persistProviderResult, s.
+    // src/elevenlabs/outbound.js) - keine der drei Fixtures dieser Datei traegt
+    // data_collection_results, deshalb hier reine No-ops statt eigener Erfassung
+    // (die eigene Erfassung deckt test/elevenlabs-data-collection.test.js ab).
+    recordProviderCollectedFields: () => {},
+    recordCalleeConfirmedTimezone: () => {},
     trueUpAnsweredAt: (_id, answeredAtIso) => {
       captured.answeredAtIso = answeredAtIso;
     },

@@ -131,6 +131,87 @@ const CALLER_ROLE = "caller";
 const OBJECTIVE_ACHIEVED_BY_PROVIDER = Object.freeze({ success: true, failure: false });
 const OBJECTIVE_ACHIEVED_UNKNOWN = "unclear";
 
+// ABNAHME-D1 (Owner-Auftrag: eigene Felder im Ergebnisschema plus ein Prompt, der sie
+// anfordert): die Data-Collection-Feld-Kennungen des Agenten (elevenlabs/agent_configs/
+// outbound-agent.template.json, platform_settings.data_collection) - GENAU diese fuenf
+// Schluessel liest dieser Weg aus analysis.data_collection_results. Modul-Konstanten
+// (G25), damit Feld-Kennung (dort deklariert) und Lesestelle (hier) nie auseinanderlaufen.
+const DATA_COLLECTION_ID = Object.freeze({
+  APPOINTMENT_DATE: "appointment_date",
+  APPOINTMENT_TIME: "appointment_time",
+  AMOUNT: "amount",
+  CURRENCY: "currency",
+  // TEIL 3 derselben Auflage: NUR befuellt, wenn der Agent laut Prompt tatsaechlich eine
+  // Bestaetigung des Angerufenen bekommen hat (s. die Feld-Beschreibung in der Vorlage) -
+  // eine aus der Vorwahl abgeleitete Hypothese erreicht diese Kennung nie.
+  CONFIRMED_TIMEZONE: "confirmed_timezone",
+});
+
+// Herkunfts-Kennung fuer TEIL 3 (recordCalleeConfirmedTimezone, store/state-ops.js): der
+// EINZIGE heutige Erzeuger eines bestaetigten Zonenwerts ist dieser Weg. Ein eigener
+// Bezeichner statt eines blossen true/false, weil ein spaeterer zweiter Erzeuger (z.B.
+// eine Bestaetigung ueber SMS) denselben Wert mit ANDERER Herkunft schreiben koennte -
+// "ueberschreibbar" (Eigentuemer-Auflage) ist nur nachvollziehbar, wenn die Herkunft
+// mitreist statt zu raten, WELCHER Weg zuletzt geschrieben hat.
+export const CALLEE_TIMEZONE_ORIGIN_ELEVENLABS = "elevenlabs_data_collection";
+
+// Liest EINEN Data-Collection-Wert aus der Anbieter-Antwort (ABNAHME-D1). FEHLT die
+// Angabe (kein Termin/Betrag im Gespraech verhandelt, der Normalfall - s. der
+// Feld-Default-Kommentar in store/state-ops.js) oder ist sie eine leere Zeichenkette,
+// liefert diese Funktion null - kein Platzhalter, kein Fehler, kein Log (die
+// Owner-Auflage nennt das ausdruecklich den Normalfall, kein Fehlerfall). Der Wert
+// reist als STRING weiter, auch wenn der Anbieter eine Zahl liefert (Feld "amount" ist am
+// Agenten als type:"number" deklariert, s. Vorlage): Praezedenz answeredUnclearReason
+// (state-ops.js) ist eine TEXT-Spalte auf BEIDEN Backends - ein zweiter Zahlentyp koennte
+// zwischen json.js (haelt den rohen JS-Wert) und pg.js (NUMERIC kaeme als String vom
+// Treiber zurueck, s. hydratedMicroCents-Praezedenz) auseinanderlaufen.
+function collectedValue(dataCollectionResults, id) {
+  const value = dataCollectionResults?.[id]?.value;
+  if (value === null || value === undefined || value === "") return null;
+  return String(value);
+}
+
+// Alle fuenf Angaben in EINEM Schritt aus derselben Anbieter-Antwort (G5, Praezedenz
+// objectiveAchievedOf/endStatusOf daneben: reine Ableitung ohne Store-Zugriff, P5/P6).
+// confirmedTimezone ist bewusst NICHT Teil des appointment/amount-Bloecks: TEIL 2 und
+// TEIL 3 landen an ZWEI verschiedenen Store-Mutatoren (recordProviderCollectedFields vs.
+// recordCalleeConfirmedTimezone), weil TEIL 3 zusaetzlich Herkunft+Zeitstempel braucht
+// und ueberschreibbar sein muss, waehrend TEIL 2 dem einfacheren, nicht-set-once-
+// Praezedenzfall von recordProviderCallResult folgt.
+// Exportiert (wie answeredAnchorOutcome daneben): reine Ableitung ohne Store-Zugriff,
+// ohne Store/Netz direkt testbar.
+export function collectedFieldsOf(conversation) {
+  const results = conversation.analysis?.data_collection_results;
+  return {
+    appointmentDate: collectedValue(results, DATA_COLLECTION_ID.APPOINTMENT_DATE),
+    appointmentTime: collectedValue(results, DATA_COLLECTION_ID.APPOINTMENT_TIME),
+    amount: collectedValue(results, DATA_COLLECTION_ID.AMOUNT),
+    currency: collectedValue(results, DATA_COLLECTION_ID.CURRENCY),
+    confirmedTimezone: collectedValue(results, DATA_COLLECTION_ID.CONFIRMED_TIMEZONE),
+  };
+}
+
+// MODUL-EBENE aus demselben Grund wie finishWithoutProviderResult/fetchConversationOutcome
+// weiter unten (G30, haelt makeElevenLabsOutbound unter der Zeilengrenze). Additiv NEBEN
+// Transkript und Zusammenfassung (persistProviderResult ruft diese Funktion NACH
+// store.recordProviderCallResult auf, aendert dort nichts). TEIL 2
+// (appointmentDate/appointmentTime/amount/currency) wird IMMER geschrieben (die vier
+// bleiben null, wenn das Gespraech die jeweilige Angabe nicht hergab - der Normalfall).
+// TEIL 3 (die bestaetigte Zeitzone) wird NUR geschrieben, wenn tatsaechlich ein
+// bestaetigter Wert vorliegt - "nur bestaetigte Werte werden gespeichert" ist die
+// Owner-Auflage, hier am Aufruf selbst durchgesetzt statt dem Store-Mutator ueberlassen.
+function persistCollectedFields(store, callId, conversation) {
+  const collected = collectedFieldsOf(conversation);
+  store.recordProviderCollectedFields(callId, collected);
+  if (collected.confirmedTimezone) {
+    store.recordCalleeConfirmedTimezone(callId, {
+      timezone: collected.confirmedTimezone,
+      origin: CALLEE_TIMEZONE_ORIGIN_ELEVENLABS,
+      confirmedAt: new Date().toISOString(),
+    });
+  }
+}
+
 // Die Beschriftungen, mit denen Verbote und Hintergrund beim Agenten ankommen, kommen aus
 // dem ENGLISCHEN Prompt-Baustein des Bestandswegs - derselbe, den src/claude.js ueber
 // loc.prompt liest. Der Agent der Vorlage ist fest englisch (agent.language "en",
@@ -621,6 +702,8 @@ export function makeElevenLabsOutbound({
       summary: conversation.analysis?.transcript_summary || null,
       objectiveAchieved: objectiveAchievedOf(conversation),
     });
+    // ABNAHME-D1 (TEIL 2/3): s. persistCollectedFields oben (Modul-Ebene, G30).
+    persistCollectedFields(store, callId, conversation);
   }
 
   // S1-1 Fix (Owner-Auftrag 15.08.2026, stiller Totalausfall): das Nachziehen des
