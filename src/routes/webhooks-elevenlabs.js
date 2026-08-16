@@ -33,10 +33,13 @@ import { safeEqual } from "../util.js";
 export const ELEVENLABS_CONSULT_PATH = "/webhooks/elevenlabs/consult";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 
-// Die drei Ablehnungscodes. 402 nach dem Bestandsmuster der Geld-Denials
+// Die vier Ablehnungscodes. 402 nach dem Bestandsmuster der Geld-Denials
 // (telephony/outbound-gates.js), 404 statt 403 nach dem Bestandsmuster der Call-Routen
-// (kein Existenz-Leck), 403 fuer das Geheimnis. 500 ist keine Ablehnung, sondern das
-// letzte Netz (s. Handler): ein unerwarteter Fehler MUSS beantwortet werden.
+// (kein Existenz-Leck), 403 fuer das Geheimnis, 400 fuer eine Nutzlast, die nicht die
+// dokumentierte Umschlag-Form traegt (s. Schritt 5 im Handler; Anbieter-Beleg dort zitiert).
+// 500 ist keine Ablehnung, sondern das letzte Netz (s. Handler): ein unerwarteter Fehler
+// MUSS beantwortet werden.
+const HTTP_BAD_REQUEST = 400;
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
@@ -116,6 +119,16 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     );
   }
 
+  // Der Umschlag des Anbieters (s. Schritt 5 in handleConsult fuer den vollen Beleg), als
+  // eigenstaendiges Praedikat statt inline: haelt handleConsult unter der Komplexitaets-
+  // Grenze (G30, eine Aufgabe pro Funktion) und der Name macht die Absicht explizit (G20).
+  // null heisst "kein gueltiger Umschlag", nie ein stiller Rueckfall auf {}.
+  function parameterEnvelope(req) {
+    const parameters = req.body?.parameters;
+    if (!parameters || typeof parameters !== "object") return null;
+    return parameters;
+  }
+
   async function handleConsult(req, res) {
     // 1) Geteiltes Geheimnis - VOR jedem Store-Zugriff, jeder Zustandsaenderung und jeder
     // Protokollzeile, die Inhalt tragen koennte. Leerer config-Wert -> 403 statt "nichts
@@ -141,7 +154,21 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     });
     if (budgetAxis) return denied(res, HTTP_PAYMENT_REQUIRED, budgetAxis);
 
-    // 5) Gleichzeitigkeit - und erst DANN die Wirkung. Dieser Aufruf ist ein blockierender
+    // 5) Nutzlast-Form. Der Anbieter sendet Werkzeug-Aufrufe in einem UMSCHLAG und schema-
+    // deklarierte Parameter (hier: question) liegen NICHT auf oberster Ebene, sondern unter
+    // "parameters" (woertlich belegt: elevenlabs/skills, agents/references/client-tools.md,
+    // Abschnitt "Webhook Request Format" -
+    // {"tool_call_id":"call_abc123","tool_name":"get_weather","parameters":{...},
+    // "conversation_id":"conv_xyz789"}). Nur conversation_id liegt laut demselben Beleg auf
+    // oberster Ebene - deshalb liest Schritt 2 oben weiterhin req.body?.conversation_id
+    // direkt. Fehlt der Umschlag, ist das ein FEHLER, keine leere Frage (s. toolResultText:
+    // eine leere Frage waere eine Luege, die dem Modell etwas zum Beantworten vorgaukelt).
+    // Kein stiller Doppelweg ("question von hier ODER von da nehmen") - der wuerde genau den
+    // Fehler wieder verdecken, den dieser Umbau behebt.
+    const parameters = parameterEnvelope(req);
+    if (!parameters) return denied(res, HTTP_BAD_REQUEST, "kein_parameter_umschlag");
+
+    // 6) Gleichzeitigkeit - und erst DANN die Wirkung. Dieser Aufruf ist ein blockierender
     // Halter: er haelt die Verbindung des Anbieters bis CONSULT_OPEN_MS offen. Ohne
     // Obergrenze kann derselbe Anruf beliebig viele davon gleichzeitig aufziehen (gemessen:
     // 8 parallele Aufrufe, alle gehalten). Gezaehlt wird auf den BESTEHENDEN Slot-Zaehlern
@@ -150,7 +177,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     // ist EINE Tatsache. Kein freier Platz -> 404 wie jede andere Faehigkeits-Ablehnung,
     // OHNE dass ein Datensatz entsteht.
     const held = await consultSlots.withOpenSlot(call.id, call.tenantId, () =>
-      onConsultRaised({ callId: call.id, question: req.body?.question }),
+      onConsultRaised({ callId: call.id, question: parameters.question }),
     );
     if (!held.granted) return denied(res, HTTP_NOT_FOUND, "kein_freier_platz");
     const outcome = held.value;

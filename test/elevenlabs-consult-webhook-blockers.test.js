@@ -95,8 +95,16 @@ const post = (srv, body, headers = {}) =>
     body: JSON.stringify(body),
   });
 
+// Umschlag-Form des Anbieters (belegt: elevenlabs/skills, agents/references/client-tools.md,
+// "Webhook Request Format") - question liegt unter parameters, conversation_id auf
+// oberster Ebene. Gepinnt in test/elevenlabs-consult-webhook-envelope.test.js; hier reicht
+// fuer die BL-Faelle irgendeine ANGENOMMENE Nutzlast.
 const withToken = (srv, conversationId) =>
-  post(srv, { conversation_id: conversationId, question: QUESTION }, { [TOOL_TOKEN_HEADER]: TOOL_TOKEN });
+  post(
+    srv,
+    { conversation_id: conversationId, parameters: { question: QUESTION } },
+    { [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
+  );
 
 const callOf = (srv, id) => srv.readStore().calls.find((call) => call.id === id);
 const consultCount = (call) => (Array.isArray(call.consults) ? call.consults.length : 0);
