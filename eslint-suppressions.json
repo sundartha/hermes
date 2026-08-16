@@ -4535,11 +4535,6 @@
       "count": 2
     }
   },
-  "test/telnyx-p6-cap-callcontrol.test.js": {
-    "no-magic-numbers": {
-      "count": 3
-    }
-  },
   "test/telnyx-p6-midcall-budget-kill.test.js": {
     "no-magic-numbers": {
       "count": 1

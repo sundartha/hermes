@@ -30,6 +30,7 @@ import {
   answeredAnchorOutcome,
   ELEVENLABS_PROVIDER_MAX_DURATION_S,
   EL_ABORT_RESULT_FETCH_TIMEOUT_MS,
+  PERMANENT_ERROR_STREAK_LIMIT,
 } from "../src/elevenlabs/outbound.js";
 import {
   elevenLabsHangUpAction,
@@ -43,6 +44,7 @@ import { cappedEndedAtMs, classifyCallTime } from "../src/store/state-ops.js";
 import { VOICE_ENGINE } from "../src/config.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { CONVERSATION_DONE_WITH_ANALYSIS, ERROR_ENVELOPES } from "./fixtures/elevenlabs-conversations.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const CONV_ID = "conv_1";
@@ -554,12 +556,18 @@ test("EL-Deckel: die Konstante fuer cancel_call ist an den besessenen Vorlagenwe
 });
 
 // ---- F: pollConversationResult braucht eine Obergrenze (Owner-Auftrag 15.08.2026, Aufgabe 2)
-// Ohne Riegel behandelt fetchConversationSoft JEDEN Abruffehler (404/429/5xx/Timeout) wie
-// "noch nicht fertig" und pollt endlos weiter - nach einem Boot-Re-Arm sogar nach JEDEM
-// Neustart erneut (test/el-boot-rearm.test.js belegt den Re-Arm selbst). Dieser Fall belegt
-// die Obergrenze SELBST: ein Call, der laenger als ELEVENLABS_PROVIDER_MAX_DURATION_S laeuft,
-// UND dessen Anbieter durchgehend unerreichbar bleibt (404 auf jeden Versuch), terminiert
-// trotzdem statt weiter zu pollen.
+// ZWEI unabhaengige Riegel bremsen den Poll heute (Teil 1, Fortsetzung Aufgabe 2, s.
+// Fehlerklasse in F2 unten): eine ZEITBASIERTE Obergrenze (dieser Fall, unveraendert) UND
+// eine FEHLERKLASSEN-Unterscheidung (401/404 -> sofort aufgeben, s. F2). Dieser Fall belegt
+// die zeitbasierte Grenze ISOLIERT: der geseedete Call ist bereits VOR dem ersten Poll
+// abgelaufen (classifyCallTime(...).expired), pollConversationResult kehrt darum ueber
+// finishExpiredPoll um, BEVOR es je fetchConversationSoft (und damit die Fehlerklasse aus
+// F2) erreicht - die 422-Antwort der Attrappe wird nur noch vom Beende-Versuch
+// (endActiveCall, als hangUp-Thunk von terminateAndBillCall) gesehen, dessen Ergebnis
+// diesen Fall nicht beeinflusst (fail-soft, s. Abschnitt B oben). Ein Call, der laenger als
+// ELEVENLABS_PROVIDER_MAX_DURATION_S laeuft und dessen Anbieter durchgehend unerreichbar
+// bleibt, terminiert trotzdem statt weiter zu pollen - nach einem Boot-Re-Arm sogar nach
+// JEDEM Neustart erneut (test/el-boot-rearm.test.js belegt den Re-Arm selbst).
 const WAIT_UNTIL_TIMEOUT_MS = 500;
 const WAIT_UNTIL_POLL_INTERVAL_MS = 5;
 
@@ -616,4 +624,159 @@ test("Poll-Obergrenze: ein Call aelter als ELEVENLABS_PROVIDER_MAX_DURATION_S te
   );
   assert.equal(call.status, "failed", "terminiert statt endlos weiterzupollen");
   assert.ok(billed, "die Buchungskette laeuft auch fuer den Zombie-Zweig der Poll-Obergrenze");
+});
+
+// ---- F2: die Fehlerklasse entscheidet, nicht bloss die Zeit (Teil 1, Owner-Auftrag
+// 15.08.2026, Fortsetzung Aufgabe 2) ------------------------------------------------------
+// Zwei ECHTE, gegen api.elevenlabs.io gemessene Fehlerantworten (test/fixtures/
+// elevenlabs-conversations.js#ERROR_ENVELOPES): 401 (Schluessel taugt nicht) und 404
+// (Gespraech nicht mehr da). Beide sind DAUERHAFT - Weiterpollen kann NIE zum Erfolg
+// fuehren, genau der selbstgebaute Defekt aus dem Modul-Kopf (unser eigener Abbruch-Pfad
+// LOESCHT das Gespraech; ein danach noch armierter Poll liefe sonst gegen dieses 404 bis
+// zur zeitbasierten Obergrenze weiter). Anders als der Zombie-Fall oben ist der Call hier
+// NICHT abgelaufen (answeredAt liegt Sekunden zurueck) - der Riegel muss also aus der
+// FEHLERKLASSE selbst kommen, nicht aus der Zeit.
+//
+// TEIL 2 (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2 - "die Wiederholung fuehrt vor
+// dem Aufgeben"): "der Poll stoppt irgendwann" allein waere zu schwach - ein Fix, der
+// wieder bei JEDEM einzelnen 401/404 sofort aufgibt, bestuende diese Zusicherung ebenso
+// muehelos wie einer, der nie aufgibt. Der Attempt-Zaehler unten zeigt BEIDE Haelften: die
+// GET-Anzahl ist exakt PERMANENT_ERROR_STREAK_LIMIT (nicht 1 - der Poll versucht es vor
+// dem Aufgeben mehrfach; nicht mehr als das - er haengt nicht laenger als noetig).
+const PERMANENT_ERROR_FAELLE = [
+  { id: "404 (unbekannte Kennung)", envelope: ERROR_ENVELOPES.notFound },
+  { id: "401 (falscher Schluessel)", envelope: ERROR_ENVELOPES.unauthorizedBadKey },
+];
+
+for (const fall of PERMANENT_ERROR_FAELLE) {
+  test(`F2 (${fall.id}): DAUERHAFTER Fehler stoppt den Poll erst NACH PERMANENT_ERROR_STREAK_LIMIT Versuchen IN FOLGE, nicht beim ersten`, async () => {
+    const geradeErst = new Date().toISOString();
+    const call = {
+      id: `call_permanent_${fall.envelope.httpStatus}`,
+      status: "active",
+      elevenlabsConversationId: CONV_ID,
+      answeredAt: geradeErst,
+      startedAt: geradeErst,
+      endedAt: null,
+    };
+    const reasons = [];
+    const store = {
+      ...spyStore(call),
+      load: () => ({ calls: [call] }),
+      setCallEndedAt: (_id, status, endedAtIso) => {
+        call.status = status;
+        call.endedAt = endedAtIso;
+      },
+      recordAnsweredUnclearReason: (_id, reason) => reasons.push(reason),
+    };
+    let billed = false;
+    // Zaehlt NUR die Versuche des POLL-LOOPS selbst - sobald persistEnd() call.status auf
+    // "failed" gesetzt hat (terminateAndBillCall: persistEnd laeuft VOR hangUp), loest
+    // derselbe Beende-Pfad noch einen EIGENEN GET+DELETE ueber endActiveCall aus (Reihenfolge
+    // Ergebnisabruf-vor-Loeschversuch, s. dort) - der ist ein einmaliger Bestversuch OHNE
+    // eigene Wiederholung und gehoert NICHT zur Zaehlung, die hier gepruept wird.
+    let pollAttempts = 0;
+    const el = makeElevenLabsOutbound({
+      store,
+      config: elConfig(),
+      terminateAndBillCall,
+      billThunk: () => () => {
+        billed = true;
+      },
+      finishCall: () => {},
+    });
+    await withFetch(
+      async () => {
+        if (call.status === "active") pollAttempts += 1;
+        return { ok: false, status: fall.envelope.httpStatus, json: async () => fall.envelope.body };
+      },
+      async () => {
+        el.rearmActiveConversationPolls();
+        await waitUntil(() => billed);
+      },
+    );
+    assert.equal(call.status, "failed", "DAUERHAFT stoppt den Poll, statt endlos weiterzupollen");
+    assert.equal(
+      pollAttempts,
+      PERMANENT_ERROR_STREAK_LIMIT,
+      `${pollAttempts} statt ${PERMANENT_ERROR_STREAK_LIMIT} Poll-Versuche - VOR der Schwelle muss ` +
+        "weiterversucht werden (ein einzelner Fehler darf nicht sofort aufgeben) UND NACH der Schwelle " +
+        "ist Schluss (kein weiterer Poll-Versuch mehr)",
+    );
+    assert.deepEqual(
+      reasons,
+      ["poll_permanent_provider_error"],
+      "der Grund wird festgehalten (recordAnsweredUnclearReason), nicht nur der Status geaendert",
+    );
+  });
+}
+
+// ---- F3: Positiv-Kontrolle - ein UNGEMESSENER Status bleibt VORUEBERGEHEND -------------
+// Wuerde F2 faelschlich JEDEN Fehler als dauerhaft einstufen, koennte kein Anbieter-Ausfall
+// (5xx/429/Timeout) je heilen. Der Anbieter antwortet zunaechst zweimal mit 500
+// (ungemessen -> bleibt VORUEBERGEHEND), dann mit der ECHTEN "done"-Antwort
+// (test/fixtures/elevenlabs-conversations.js#CONVERSATION_DONE_WITH_ANALYSIS, Teil 2) -
+// der Poll muss durchhalten und das echte Ergebnis abholen statt beim ersten 500
+// aufzugeben. resultPollMs wird auf denselben kleinen Wert wie der Test-Takt gesetzt
+// (Bestandswert im Mock ist unbelegt -> config.js-Default 5000ms, zu langsam fuer P12 Fast).
+test("F3: ein ungemessener Fehlerstatus (500) bleibt VORUEBERGEHEND - der Poll haelt durch, bis das echte Ergebnis da ist", async () => {
+  const geradeErst = new Date().toISOString();
+  const call = {
+    id: "call_transient_recovery",
+    status: "active",
+    elevenlabsConversationId: CONV_ID,
+    answeredAt: geradeErst,
+    startedAt: geradeErst,
+    endedAt: null,
+  };
+  const store = {
+    ...spyStore(call),
+    load: () => ({ calls: [call] }),
+    setCallEndedAt: (_id, status, endedAtIso) => {
+      call.status = status;
+      call.endedAt = endedAtIso;
+    },
+    // Der ERFOLGSPFAD (finishFromConversation) terminiert ueber endCallRecord statt
+    // setCallEndedAt (der Zombie-/Fehlerpfad oben braucht das nicht) - eigener kleiner
+    // Fake statt eines vierten Feldes an spyStore (G5 waere hier Overengineering fuer
+    // EINEN Aufrufer).
+    endCallRecord: (_id, status) => {
+      call.status = status;
+      call.endedAt = new Date().toISOString();
+      return call;
+    },
+  };
+  let billed = false;
+  let getAttempts = 0;
+  // Absichtlich MEHR als ein einzelner Fehlversuch (G3, Grenzbedingung): ein Riegel, der
+  // faelschlich schon beim ERSTEN 500 aufgeben wuerde, faellt sonst nicht auf.
+  const TRANSIENT_FAILURES_BEFORE_SUCCESS = 2;
+  const el = makeElevenLabsOutbound({
+    store,
+    config: withConfigNamespaces({
+      elevenLabsOutbound: { ...ACCOUNT, resultPollMs: WAIT_UNTIL_POLL_INTERVAL_MS },
+    }),
+    terminateAndBillCall,
+    billThunk: () => () => {
+      billed = true;
+    },
+    finishCall: () => {},
+  });
+  await withFetch(
+    async (_url, init) => {
+      if (init.method !== "GET") return { ok: true, status: HTTP_OK };
+      getAttempts += 1;
+      if (getAttempts <= TRANSIENT_FAILURES_BEFORE_SUCCESS) return { ok: false, status: HTTP_SERVER_ERROR };
+      return { ok: true, status: HTTP_OK, json: async () => CONVERSATION_DONE_WITH_ANALYSIS };
+    },
+    async () => {
+      el.rearmActiveConversationPolls();
+      await waitUntil(() => billed);
+    },
+  );
+  assert.ok(
+    getAttempts > TRANSIENT_FAILURES_BEFORE_SUCCESS,
+    "der Poll muss ueber die 500er hinweg erneut versuchen",
+  );
+  assert.equal(call.status, "completed", "das ECHTE Ergebnis kommt an, sobald der Anbieter antwortet");
 });

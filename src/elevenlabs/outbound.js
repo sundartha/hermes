@@ -52,6 +52,48 @@ const CALL_FAILED = "failed";
 // negativ, falscher Typ) - additiv am Call, s. store/state-ops.js recordAnsweredUnclearReason.
 const ANSWERED_UNCLEAR_REASON = "call_duration_secs_unusable";
 
+// TEIL 1 (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2 - "der Poll unterscheidet
+// dauerhaft von voruebergehend"): HTTP-Status des Ergebnisabrufs, bei denen Weiterpollen
+// NIE zum Erfolg fuehren kann. GEMESSEN rein lesend gegen api.elevenlabs.io (15.08.2026,
+// s. .fortschritt.md "PHASE 2 vorgearbeitet"):
+//   401  unser Schluessel taugt nicht (egal ob falsch oder ganz fehlend)
+//   404  das Gespraech ist beim Anbieter nicht (mehr) da - auch eine unsinnige Kennung
+//        liefert 404, NICHT 422 (ein 422 auf diesem Pfad ist NICHT belegt)
+// JEDER andere Status/Fehler (429/5xx/Timeout/Netzfehler, UND jeder hier nicht gemessene
+// Status) bleibt VORUEBERGEHEND - fuer 429/5xx/Timeout belegt richtig, fuer alles NICHT
+// Gemessene die sicherere Seite (erneut versuchen bis zur bestehenden Poll-Obergrenze)
+// statt eine ungemessene Klasse zu erfinden.
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_NOT_FOUND = 404;
+const PERMANENT_FETCH_STATUS = Object.freeze([HTTP_UNAUTHORIZED, HTTP_NOT_FOUND]);
+
+// TEIL 2 (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2 - "die Wiederholung fuehrt vor
+// dem Aufgeben"): DAUERHAFT (s. PERMANENT_FETCH_STATUS) gilt erst bei WIEDERHOLUNG - ein
+// EINZELNER 401/404 wird wie voruebergehend behandelt und fuehrt zu einem weiteren
+// Versuch, erst dieselbe Fehlerklasse MEHRFACH IN FOLGE laesst den Poll aufgeben. GRUND:
+// ob es beim Anbieter ein Fenster gibt, in dem ein frisch gestartetes Gespraech per GET
+// noch nicht auffindbar ist (ein 404, OBWOHL das Gespraech laeuft), ist NICHT belegt und
+// wird hier auch nicht behauptet - diese Schwelle ist der Schutz gegen genau diesen
+// unbelegten Fall, keine gemessene Anbieter-Zusicherung. Der Wert bleibt klein: es geht um
+// den Ausschluss eines schmalen Zeitfensters (ein Rennen), nicht um Geduld mit einem
+// tatsaechlich toten Gespraech - die Risiko-Asymmetrie ist eindeutig (ein paar Abfragen zu
+// viel kosten Bruchteile eines Cents, ein zu frueh gekapptes Gespraech kostet den Kunden
+// mitten im Satz). Die bestehende Zeit-Obergrenze (classifyCallTime, s.u.) bleibt die
+// zweite, UNVERAENDERTE Bremse.
+// Exportiert, damit test/el-beende-versuch.test.js (F2) die Wiederholung GEGEN diesen
+// Wert bepruefen kann, statt eine zweite, driftfaehige Kopie der Zahl im Test zu tippen
+// (G25/G22): "erst nach N Versuchen, nicht beim ersten" ist nur dann eine echte
+// Zusicherung, wenn N aus derselben Quelle kommt wie die Produktionslogik.
+export const PERMANENT_ERROR_STREAK_LIMIT = 3;
+
+// Der GRUND, wenn der Poll wegen eines DAUERHAFTEN Anbieter-Fehlers aufgibt - derselbe
+// Mechanismus wie ANSWERED_UNCLEAR_REASON oben (recordAnsweredUnclearReason, existiert
+// bereits), ein EIGENER Wert: dort ist der Anbieter erreichbar, liefert aber ein
+// unbrauchbares call_duration_secs; hier ist der Anbieter fuer diesen Call gar nicht mehr
+// (401) oder nicht mehr auffindbar (404) erreichbar - zwei verschiedene Gruende, im
+// Store/Log unterscheidbar.
+const ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR = "poll_permanent_provider_error";
+
 // Owner-Auftrag 15.08.2026 (cancel_call darf nicht luegen): der Beende-Versuch
 // (convai.js#endConversation, DELETE) ist NICHT belegt, die Leitung beim Anbieter
 // tatsaechlich zu kappen - der EINZIGE verlaessliche Deckel bleibt der ANBIETER SELBST:
@@ -417,7 +459,11 @@ function dynamicVariables({ call, ownerName, time }) {
 // Buchungsanker) nach, statt dass dieser Zweig sie sich ausdenkt. persistEnd laeuft VOR
 // hangUp (terminateAndBillCall) - endActiveCall liest call.endedAt also bereits GEKAPPT
 // (Muster dort dokumentiert).
-async function finishExpiredPoll({
+// G5: der gemeinsame Beende-Kern fuer BEIDE Faelle, in denen der Poll OHNE ein
+// Anbieter-Ergebnis aufgibt - die Poll-Obergrenze (finishExpiredPoll) und ein DAUERHAFTER
+// Abruf-Fehler (finishOnPermanentError, Teil 1). Persistiert+haengt auf+bucht ueber
+// denselben EINEN Terminierungspfad wie jeder andere Beender.
+async function finishWithoutProviderResult({
   store,
   terminateAndBillCall,
   billThunk,
@@ -437,6 +483,87 @@ async function finishExpiredPoll({
     bill: billThunk(finishCall, store, callId),
     callId,
   });
+}
+
+async function finishExpiredPoll(deps) {
+  await finishWithoutProviderResult(deps);
+}
+
+// TEIL 1 (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2): der Poll gibt auf, wenn
+// PERMANENT_ERROR_STREAK_LIMIT DAUERHAFTE Anbieter-Fehler IN FOLGE angefallen sind (401/404,
+// s. PERMANENT_FETCH_STATUS UND TEIL 2 dort), statt endlos weiterzupollen - genau der
+// selbstgebaute Defekt aus dem Modul-Kopf (ein danach noch armierter Poll bzw. der
+// Boot-Re-Arm liefe sonst bis zur Poll-Obergrenze gegen dasselbe 404). Der Aufrufer
+// (pollConversationResult) ruft diese Funktion erst NACH Erreichen der Schwelle - hier
+// selbst gibt es keine Zaehlung mehr zu pruefen. applyAnsweredAnchor (deps,
+// Closure-Funktion wie endActiveCall) loescht den vorlaeufigen Verbindungs-Stempel
+// (answeredAt=null, S1-1-Richtung "im Zweifel GAR NICHTS") und vermerkt den Grund - wir
+// haben nie ein metadata.call_duration_secs gesehen, der provisorische Stempel darf nicht
+// als Buchungsanker stehen bleiben.
+async function finishOnPermanentError(deps) {
+  deps.applyAnsweredAnchor(deps.callId, {
+    answeredAtIso: null,
+    unclearReason: ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR,
+  });
+  await finishWithoutProviderResult(deps);
+}
+
+// MODUL-EBENE aus demselben Grund wie finishWithoutProviderResult (G30, haelt
+// makeElevenLabsOutbound unter der Zeilengrenze). G5: der EINE fail-soft Ergebnisabruf,
+// den sowohl der Poll-Takt (pollConversationResult) als auch der Beende-Versuch
+// (endActiveCall) brauchen - EIN Fehlerpfad statt zwei fast-identischer catch-Bloecke.
+// Liefert IMMER ein Objekt statt zu werfen: ein Schluckauf beim Anbieter darf weder ein
+// laufendes Gespraech fuer beendet erklaeren noch einen Beende-Versuch verhindern.
+// Secret-frei geloggt (err.message, nie Rumpf/Schluessel), mit der server-eigenen callId
+// als Korrelation.
+//
+// TEIL 1 (Owner-Auftrag 15.08.2026): `permanent` klassifiziert den Fehlschlag fuer den
+// EINEN Aufrufer, der ihn braucht (pollConversationResult) - `err.providerStatus` kommt
+// aus convai.js#assertConvaiOk (der Fehler-RUMPF wird NIE gelesen, nur der Status). Kein
+// providerStatus (Netzfehler/Timeout) -> PERMANENT_FETCH_STATUS.includes(undefined) ist
+// false -> voruebergehend, dieselbe sicherere Seite wie jeder ungemessene Status.
+// endActiveCall braucht die Klassifikation nicht - ein einmaliger Bestversuch ohne eigene
+// Wiederholung kennt "dauerhaft vs. voruebergehend" nicht.
+async function fetchConversationOutcome({ account, conversationId, callId, timeoutMs }) {
+  try {
+    const conversation = await fetchConversation({ fetchImpl: fetch, account, conversationId, timeoutMs });
+    return { conversation, permanent: false };
+  } catch (err) {
+    console.error(`[el-outbound] Ergebnisabruf fehlgeschlagen (call=${callId}):`, err?.message);
+    return { conversation: null, permanent: PERMANENT_FETCH_STATUS.includes(err?.providerStatus) };
+  }
+}
+
+// MODUL-EBENE aus demselben Grund wie finishWithoutProviderResult/fetchConversationOutcome
+// (G30, haelt makeElevenLabsOutbound unter der Zeilengrenze). Der Zaehler selbst (die Map)
+// bleibt PER-INSTANZ Closure-Zustand IN makeElevenLabsOutbound (s. dort, "der Zaehler
+// gehoert an den LAUFENDEN Poll") - diese Funktion bekommt ihn als Parameter gereicht statt
+// ihn selbst zu besitzen: eine modul-globale Map wuerde Call-IDs ueber VERSCHIEDENE
+// Fabrik-Instanzen (z.B. mehrere Tests im selben Prozess) hinweg teilen.
+//
+// Der GESAMTE Streak-Lebenszyklus EINES Takts an einer Stelle (G30: eine Aufgabe, "was
+// bedeutet dieses Abrufergebnis fuer den Zaehler"): ein NICHT-dauerhafter Takt (Erfolg oder
+// voruebergehender Fehler) loescht einen angefangenen Streak - "IN FOLGE" heisst ohne
+// Unterbrechung, ein zwischenzeitlicher 5xx/Timeout oder ein brauchbares Ergebnis ist der
+// Beleg, dass der Anbieter wieder erreichbar ist, und darf einen frueheren 401/404 nicht in
+// die naechste Serie mitnehmen. Ein dauerhafter Takt erhoeht den Zaehler und meldet, ob die
+// Schwelle ERREICHT ist (Ja/Nein-Antwort UND die Zaehlung als Nebeneffekt gehoeren zusammen -
+// der Zaehler existiert fuer genau diese eine Entscheidung, keine zweite Stelle liest ihn).
+// Bleibt die Schwelle offen, steht der Zaehler fuer den naechsten Takt bereit; ist sie
+// erreicht, wird er geloescht - ein spaeterer, fehlgeschlagener Poll desselben Calls startet
+// nach einem etwaigen Neuversuch bei null, nicht am alten Stand.
+function permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent) {
+  if (!permanent) {
+    permanentErrorStreaks.delete(callId);
+    return false;
+  }
+  const streak = (permanentErrorStreaks.get(callId) || 0) + 1;
+  if (streak < PERMANENT_ERROR_STREAK_LIMIT) {
+    permanentErrorStreaks.set(callId, streak);
+    return false;
+  }
+  permanentErrorStreaks.delete(callId);
+  return true;
 }
 
 // Boot-Re-Arm (Owner-Auftrag 15.08.2026, Aufgabe 2): das Gegenstueck zu
@@ -544,42 +671,64 @@ export function makeElevenLabsOutbound({
     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
   }
 
-  // G5: der EINE fail-soft Ergebnisabruf, den sowohl der Poll-Takt (pollConversationResult)
-  // als auch der Beende-Versuch (endActiveCall, s.u.) brauchen - EIN Fehlerpfad statt zwei
-  // fast-identischer catch-Bloecke. Ein Abruffehler liefert null (weiter abholen bzw.
-  // Persistenz ueberspringen): ein Schluckauf beim Anbieter darf weder ein laufendes
-  // Gespraech fuer beendet erklaeren noch einen Beende-Versuch verhindern. Secret-frei
-  // geloggt (err.message, nie Rumpf/Schluessel), mit der server-eigenen callId als
-  // Korrelation. timeoutMs optional (S1-3): fehlt er (regulaerer Poll-Takt), greift
+  // Duenner Delegator (G30, haelt diese Funktion unter der Zeilengrenze): die eigentliche
+  // Fail-Soft-/Fehlerklassen-Logik sitzt MODUL-EBENE in fetchConversationOutcome (s.
+  // dort) - hier wird nur `settings()` (Closure-Zugriff auf config) eingespeist.
+  // timeoutMs optional (S1-3): fehlt er (regulaerer Poll-Takt), greift
   // convai.js#fetchConversation eigener Default (REQUEST_TIMEOUT_MS); der Abbruch-Pfad
   // (endActiveCall, s.u.) uebergibt EL_ABORT_RESULT_FETCH_TIMEOUT_MS.
-  async function fetchConversationSoft(conversationId, callId, timeoutMs) {
-    return fetchConversation({ fetchImpl: fetch, account: settings(), conversationId, timeoutMs }).catch(
-      (err) => {
-        console.error(`[el-outbound] Ergebnisabruf fehlgeschlagen (call=${callId}):`, err?.message);
-        return null;
-      },
-    );
+  function fetchConversationSoft(conversationId, callId, timeoutMs) {
+    return fetchConversationOutcome({ account: settings(), conversationId, callId, timeoutMs });
   }
 
   // Jeder Takt liest den Call FRISCH: ein zwischenzeitlich beendeter Anruf (Max-Dauer-Cap,
   // cancel_call) stoppt die Schleife, ohne dass jemand sie kuendigen muesste.
   //
-  // OBERGRENZE (Owner-Auftrag 15.08.2026, Aufgabe 2): fetchConversationSoft behandelt JEDEN
-  // Abruffehler (404/429/5xx/Timeout) wie "noch nicht fertig" - ohne Riegel wuerde ein
-  // liegen gebliebener Zombie fuer immer weitergepollt, nach einem Boot-Re-Arm
-  // (rearmActiveConversationPolls unten) sogar nach JEDEM Neustart erneut. Die Grenze ist
-  // die bereits vorhandene Zeit-Einstufung (classifyCallTime, store/state-ops.js) angewandt
-  // auf den besessenen Anbieter-Deckel (ELEVENLABS_PROVIDER_MAX_DURATION_S, s. Modul-Kopf):
-  // der Anbieter selbst beendet jedes Gespraech spaetestens dort - ein Call, der laenger
-  // laeuft, ist beim Anbieter nachweislich schon vorbei, weiterpollen bringt nichts mehr.
+  // OBERGRENZE (Owner-Auftrag 15.08.2026, Aufgabe 2): unabhaengig von der Fehlerklasse
+  // (s.u.) gibt es eine ZWEITE, zeitbasierte Grenze - die bereits vorhandene
+  // Zeit-Einstufung (classifyCallTime, store/state-ops.js) angewandt auf den besessenen
+  // Anbieter-Deckel (ELEVENLABS_PROVIDER_MAX_DURATION_S, s. Modul-Kopf): der Anbieter
+  // selbst beendet jedes Gespraech spaetestens dort - ein Call, der laenger laeuft, ist
+  // beim Anbieter nachweislich schon vorbei, weiterpollen bringt nichts mehr.
+  //
+  // FEHLERKLASSE (TEIL 1, Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2):
+  // fetchConversationSoft liefert seit heute KEIN blosses "geklappt oder nicht" mehr,
+  // sondern unterscheidet DAUERHAFT (401/404, s. PERMANENT_FETCH_STATUS) von
+  // VORUEBERGEHEND. Vorher behandelte dieser Takt JEDEN Abruffehler (404/429/5xx/Timeout)
+  // gleich als "noch nicht fertig" - fuer 429/5xx/Timeout richtig, fuer 401/404 falsch:
+  // ein 401 (unser Schluessel taugt nicht) oder 404 (das Gespraech ist beim Anbieter nicht
+  // mehr da) kann durch Weiterpollen NIE zum Erfolg fuehren. Ohne diese Unterscheidung
+  // wuerde ein liegen gebliebener Zombie bis zur Zeit-Obergrenze oben weiterpollen - und
+  // nach einem Boot-Re-Arm (rearmActiveConversationPolls unten) sogar nach JEDEM Neustart
+  // erneut, der genau beschriebene Defekt aus dem Modul-Kopf (eigener DELETE-Loeschversuch
+  // hinterlaesst ein 404, gegen das ein liegen gebliebener Poll danach noch laeuft).
+  //
+  // WIEDERHOLUNG VOR DEM AUFGEBEN (TEIL 2, Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe
+  // 2): ein EINZELNER dauerhafter Fehler beendet den Poll NICHT mehr - erst
+  // PERMANENT_ERROR_STREAK_LIMIT Stueck IN FOLGE (s. dort). Ist beim Anbieter ein frisch
+  // gestartetes Gespraech per GET kurz nicht auffindbar (unbelegt, aber nicht widerlegt),
+  // wuerde ein einzelnes 404 sonst ein LAUFENDES Kundengespraech mitten im Satz kappen -
+  // das Risiko ist asymmetrisch (ein paar Abfragen mehr kosten Bruchteile eines Cents, ein
+  // gekapptes Gespraech kostet den Kunden). permanentErrorStreaks (Map, Closure-Zustand
+  // dieser Fabrik) zaehlt NUR fuer den LAUFENDEN Poll-Lauf - kein Store-Feld, weil ein
+  // Neustart die Lage ohnehin neu bewerten muss (rearmActiveConversationPolls startet
+  // jeden Poll frisch) und ein ueberlebender Zaehler einen laengst vergangenen Fehlschlag
+  // in diese neue Bewertung hineintragen wuerde.
+  const permanentErrorStreaks = new Map();
+
   async function pollConversationResult(callId, conversationId) {
     const call = store.getCall(callId);
     if (!call || call.status !== "active") return;
     const nowMs = Date.now();
+    // G5: EIN Deps-Objekt fuer BEIDE Faelle, in denen der Poll ohne Anbieter-Ergebnis
+    // aufgibt (Zeit-Obergrenze, dauerhafter Fehler) - haelt diese Funktion unter der
+    // Zeilengrenze (G30).
+    const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, callId, nowMs };
     if (classifyCallTime(call, nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired)
-      return finishExpiredPoll({ store, terminateAndBillCall, billThunk, finishCall, endActiveCall, callId, nowMs });
-    const conversation = await fetchConversationSoft(conversationId, callId);
+      return finishExpiredPoll(finishDeps);
+    const { conversation, permanent } = await fetchConversationSoft(conversationId, callId);
+    if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
+      return finishOnPermanentError({ ...finishDeps, applyAnsweredAnchor });
     if (!conversation || !FINISHED_PROVIDER_STATUS.includes(conversation.status))
       return scheduleResultPoll(callId, conversationId);
     await finishFromConversation(callId, conversation);
@@ -610,7 +759,7 @@ export function makeElevenLabsOutbound({
     const call = store.getCall(callId);
     const conversationId = call?.elevenlabsConversationId;
     if (!conversationId) return;
-    const conversation = await fetchConversationSoft(conversationId, callId, EL_ABORT_RESULT_FETCH_TIMEOUT_MS);
+    const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_RESULT_FETCH_TIMEOUT_MS);
     if (conversation) {
       persistProviderResult(callId, conversation);
       applyAnsweredAnchor(callId, answeredAnchorOutcome(call.endedAt, conversation));
