@@ -31,7 +31,13 @@ jobs:
       - run: npm ci
       - name: Syntax-Check
         run: |
-          for f in src/*.js scripts/*.js; do node --check "$f"; done
+          # Rekursiv UND inklusive .mjs. Der alte Glob "src/*.js scripts/*.js" erfasste
+          # 67 von 263 Dateien: keine einzige aus src/store, src/routes, src/telephony,
+          # src/elevenlabs (Unterverzeichnisse) und keine der 20 .mjs unter scripts.
+          # xargs statt -exec, damit ein Syntaxfehler den Schritt auch wirklich rot macht
+          # (find -exec schluckt den Rueckgabewert).
+          find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
+            | xargs -0 -n1 node --check
       - name: Lint (eslint, blockierend)
         run: npm run lint
       # Vor-dem-Hochladen-Gate fuer die ElevenLabs-Testdefinitionen
