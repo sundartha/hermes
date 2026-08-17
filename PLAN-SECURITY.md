@@ -3004,3 +3004,87 @@ wirkungslos. Der sofort wirksame Notaus ist deshalb `LOOKUP_ENABLED=false`, nich
 `src/llm/adapters/deepseek.js`) MUSS vorher live sein. Ohne P1 laeuft `look_up` in Runde 2 in
 einen HTTP 400 des Anbieters — fuer den Anrufer Stille, und der Fehler sieht aus wie ein
 Modellproblem. Beide Aenderungen liegen deshalb auf demselben Branch und gehen zusammen live.
+
+## EL-P5 — der Rueckfragekanal wird von aussen erreichbar (2026-08-17)
+
+**Was sich sicherheitsrelevant geaendert hat**, in einer Zeile: ein Endpunkt, der bisher nur theoretisch
+existierte, ist ab dem naechsten Deploy von jedem Punkt im Internet aufrufbar — und der Anbieter, der ihn
+rufen soll, kann ihn ab heute auch erreichen.
+
+### 1. Neuer Aussen-Angriffspunkt: `POST /webhooks/elevenlabs/consult`
+
+Der Endpunkt existiert im Code seit dem 15.08. und stand bis heute **ins Leere**: das Werkzeug am
+ElevenLabs-Agenten zeigte auf `https://consult-endpoint-not-yet-built.invalid/...` und trug keinen
+Auth-Header. Beides ist jetzt gesetzt (URL `https://app.sundartha.com/webhooks/elevenlabs/consult`,
+Header `x-hermes-tool-token`).
+
+**Die einzige Sicherung ist ein geteiltes Geheimnis.** Das ist keine Nachlaessigkeit, sondern eine
+Anbieter-Grenze: ElevenLabs SIGNIERT Werkzeug-Webhooks nicht (kein HMAC, keine Ed25519 wie bei Telnyx), es
+gibt ausschliesslich frei konfigurierbare Request-Header. Was daraus folgt und hier festgehalten wird:
+
+| Eigenschaft | Zustand |
+|---|---|
+| Vergleich | timing-sicher (`safeEqual`), VOR jeder anderen Verarbeitung |
+| leerer `ELEVENLABS_TOOL_TOKEN` | lehnt **jeden** Aufruf ab (fail-closed, nie offen) |
+| Ablage des Geheimnisses | `.env` bzw. Render-Env auf unserer Seite; **Workspace-Secret** im ElevenLabs-Konto auf der anderen (`secret_id PAQCzq5QVZtRX8mBscJh`) |
+| im Repo | **nur die `secret_id`**, nie der Wert (Absolute Regel 4) |
+| Replay | **NICHT geschuetzt** — wer den Header einmal sieht, kann ihn wiederverwenden. Kein Zeitstempel, keine Nonce, keine Signatur. |
+| Rotation | nicht gebaut. Wechsel heisst: neues Konto-Secret, `secret_id` im Werkzeug tauschen, Env setzen, neu starten. |
+
+**Was den Schaden begrenzt, wenn das Geheimnis doch abfliesst** — die Reihenfolge der Sicherungen im
+Handler ist bindend und jede weitere Stufe ist unabhaengig vom Token:
+1. Geheimnis (403) → 2. **Bindung an einen LAUFENDEN Anruf** ueber die opake Anbieter-Kennung (404) →
+3. Faehigkeits-Tor `consultAllowedFor` (403) → 4. Geld (402) → 5. Wirkung.
+Ohne einen gerade laufenden Anruf ist der Endpunkt mit gueltigem Token **wirkungslos**; er kann keinen Anruf
+ausloesen, keine Nummer waehlen, kein Geld bewegen. Am 17.08. gemessen: ohne Header 403, falscher Token 403,
+richtiger Token ohne laufenden Anruf 404, richtiger Token mit Muell-Nutzlast 404.
+Zusaetzlich deckelt `MAX_IN_CALL_CONSULTS_PER_CALL=1` die Zahl der kostenden Rueckfragen je Anruf.
+
+**Bewusst akzeptiertes Restrisiko:** kein Replay-Schutz, keine Rotation. Beides ist erst dann mehr als
+theoretisch, wenn der Endpunkt live ist UND ein Anruf laeuft. Vor dem ersten Fremdkunden gehoert wenigstens
+die Rotation gebaut — bis dahin steht sie hier als benannte Luecke.
+
+### 2. Die Uebersteuerungs-Erlaubnisse des Agenten sind ENGER geworden
+
+Am Live-Agenten gepusht (17.08.), `platform_settings.overrides.conversation_config_override`:
+
+| Pfad | vorher | nachher | Wirkung |
+|---|---|---|---|
+| `conversation.text_only` | **true** | **false** | eine offene Tuer ist zu: ein Sprachanruf liess sich pro Anruf in einen Text-Anruf verwandeln |
+| `tts.voice_id` | false | **true** | die Stimme ist pro Anruf setzbar — beabsichtigt, s. Eigentuemer-Entscheidung 16.08. (Weg A) |
+| alles Uebrige | false | false | unveraendert |
+
+Die geschuetzte Eigenschaft ("niemand baut den Agenten pro Anruf unbemerkt um") ist damit **staerker**
+durchgesetzt als vorher: unser Code lehnt einen Anfragekoerper mit Fremdfeldern fail-closed ab, BEVOR er das
+Netz sieht (`convai.js#assertOverrideWhitelisted`), und der Anbieter akzeptiert seit dem Push ohnehin nur
+noch zwei Pfade statt drei.
+
+### 3. Der Offenlegungssatz je Sprache — eine Pflichtaussage bekommt einen zweiten Traeger
+
+Bis heute stand der Satz an genau einer Stelle (`agent.first_message`). Ab jetzt tragen ihn zusaetzlich die
+`language_presets` fuer `de` und `fr`. **Eine Pflichtaussage an mehr Orten ist erst einmal ein Risiko**, und
+so ist es abgesichert:
+- Der Wortlaut kommt WOERTLICH aus `src/i18n/locales.js`; ein Test (T5 e) haelt beide Presets byte-identisch
+  am Code fest und wird rot, sobald eine Sprache aus `LOCALES` ohne Preset bleibt **oder** ein Preset einen
+  Text traegt, den der Code nicht kennt.
+- Der Drift-Lauf vergleicht den Wert am Live-Agenten (Besitz-Eintrag `language_presets_offenlegung`).
+- Die vom ANBIETER erzeugte Uebersetzung (`first_message_translation.text`) bleibt **verboten** — eine
+  Rechtsaussage, die niemand kuratiert hat, darf nicht gesprochen werden.
+Die frueher hier wirksame Regel "ein Preset darf den ersten Satz gar nicht setzen" ist damit ERSETZT, nicht
+gelockert: ein Anwesenheits-Verbot ist genau dann erfuellt, wenn ein deutscher Angerufener den englischen
+Satz hoert — es schuetzt gegen den falschen Satz und laesst den fehlenden durch.
+
+### 4. Der Torzustand des Rueckfragekanals reist als Daten mit
+
+`{{consult_available}}` traegt pro Anruf, ob der Kanal offen ist. Sicherheitsrelevant daran ist nur eins:
+der Wert kommt aus **derselben** Torkette (`consultAllowedFor`), die der Webhook fragt, bevor er eine
+Rueckfrage annimmt. Zwei Quellen koennten auseinanderlaufen — der Agent saegte dann eine Rueckfrage zu, die
+der Webhook ablehnt. Fail-closed an vier unbekannten Zustaenden gemessen; ohne verdrahtetes Tor faellt die
+Fabrik auf "nein".
+
+### 5. Was NICHT geaendert wurde
+
+Aufbewahrung (`retention_days = -1`) und Mitschnitt (`record_voice = true`) stehen unveraendert auf dem
+Stand der Eigentuemer-Entscheidung vom 15.08. Beide sind im Push-Kommando **gesperrt** (nicht nennbar,
+Abbruch vor jedem Netzzugriff) und bleiben im Drift-Lauf sichtbar rot. Der 90-Tage-Riegel an der Ausnahme
+erzwingt, dass die Entscheidung nicht unbefristet gruen durchgeht.
