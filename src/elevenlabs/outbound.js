@@ -24,12 +24,19 @@
 // (s. dynamicVariables): eine gesetzliche Pflicht haengt nie an einer Variablen ohne
 // Default.
 //
+// SPRACHE UND STIMME (Eigentuemer-Entscheidung 16.08.2026, Punkt 4): pro Anruf werden am
+// Agenten AUSSCHLIESSLICH diese zwei Dinge gesetzt, und beide kommen aus dem DATENSATZ,
+// nie vom Aufrufer - abgeleitet aus Mandant und Angerufenem (s. call-locale.js, EINE
+// Aufloesung fuer beide Wege). Durchgesetzt wird das eine Ebene tiefer von der weissen
+// Liste in convai.js, fail-closed vor dem einzigen Netzzugriff.
+//
 // ERGEBNIS: ziehend. Der Anbieter meldet das Gespraechsende nicht an uns, wir holen es ab
 // (GET /v1/convai/conversations/{id}, Takt ELEVENLABS_RESULT_POLL_MS) und legen Transkript
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
-import { DISCLOSURE_OWNER_FALLBACK_EN, LOCALES } from "../i18n/locales.js";
+import { LOCALES } from "../i18n/locales.js";
 import { cappedEndedAtMs, classifyCallTime } from "../store/state-ops.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
+import { callLocaleFor } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall } from "./convai.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
@@ -214,9 +221,12 @@ function persistCollectedFields(store, callId, conversation) {
 
 // Die Beschriftungen, mit denen Verbote und Hintergrund beim Agenten ankommen, kommen aus
 // dem ENGLISCHEN Prompt-Baustein des Bestandswegs - derselbe, den src/claude.js ueber
-// loc.prompt liest. Der Agent der Vorlage ist fest englisch (agent.language "en",
-// first_message aus LOCALES.en), es gibt hier also keine Sprachwahl zu treffen. Ein zweiter,
-// hier neu getippter Satz Beschriftungen waere eine zweite Wahrheit (G5).
+// loc.prompt liest. ENGLISCH BLEIBT HIER RICHTIG, auch seit der Anruf seine Sprache waehlt
+// (s. call-locale.js): diese Texte werden nicht GESPROCHEN, sie instruieren das Modell -
+// genau wie der System-Prompt des Agenten, der aus demselben Grund englisch bleibt
+// (Begruendung in der Vorlage, _prompt_grundlage_hinweis). Gesprochen und deshalb
+// sprachabhaengig ist allein die Offenlegung. Ein zweiter, hier neu getippter Satz
+// Beschriftungen waere eine zweite Wahrheit (G5).
 const EN_PROMPT = LOCALES.en.prompt;
 
 // Trennzeichen der Fakten-Liste - identisch zum Bestandsweg (src/claude.js,
@@ -490,7 +500,11 @@ function fakeSipTrunkOutboundCallResponse() {
 // Artikel 50 EU AI Act), und die haengt nie an einer Variablen ohne Default. Ein fehlender
 // oder blanker Name ergaebe sonst den halben Satz "...on behalf of ." - das Identitaets-
 // Gate davor (telephony/outbound-gates.js) prueft den WAHRHEITSWERT des Namens, ein Name
-// aus lauter Leerzeichen passiert es. Die uebrigen tragen ohne Inhalt den leeren String:
+// aus lauter Leerzeichen passiert es. DER DEFAULT SPRICHT DIE SPRACHE DES ANRUFS
+// (locale.disclosureOwnerFallback, aufgeloest in call-locale.js): frueher stand hier fest
+// der englische Ausdruck, der in einem deutschen oder franzoesischen Offenlegungssatz ein
+// Sprachbruch mitten in der Pflichtaussage waere.
+// Die uebrigen tragen ohne Inhalt den leeren String:
 // sie muessen DA sein, aber ihr Fehlen kostet keine Pflicht, sondern nur Inhalt. AUSSER
 // {{mandate}}: dort haengt seit der Mandats-Weiche die Buchungs-Grenze mit drin, und die
 // gilt in BEIDEN Lagen - der Wert ist deshalb nie leer (s. mandateText).
@@ -515,9 +529,9 @@ function fakeSipTrunkOutboundCallResponse() {
 // bestaetigungspflichtige Annahme oder gar keine Zone (s. calleeTimezoneText). Geraten wird
 // dabei nichts (s. time-context.js). Vorher wirkte an dieser Stelle ein Festwert am Agenten
 // ("Europe/Berlin"), der weder besessen noch pro Anruf richtig war.
-function dynamicVariables({ call, ownerName, time }) {
+function dynamicVariables({ call, ownerName, time, locale }) {
   return {
-    owner_name: alsText(ownerName) || DISCLOSURE_OWNER_FALLBACK_EN,
+    owner_name: alsText(ownerName) || locale.disclosureOwnerFallback,
     callee: alsText(call.to),
     objective: alsText(call.goal),
     constraints: constraintsText(call.constraints),
@@ -526,6 +540,74 @@ function dynamicVariables({ call, ownerName, time }) {
     owner_timezone: alsText(time.ownerZone),
     callee_timezone: calleeTimezoneText(time),
     today: alsText(time.today),
+  };
+}
+
+// Sprache, Stimme und Offenlegungs-Ausdruck EINES Anrufs (s. call-locale.js), an dieselbe
+// eine Aufloesung gereicht, die auch der Bestandsweg benutzt. MODUL-EBENE aus demselben
+// Grund wie finishWithoutProviderResult weiter unten (G30, haelt makeElevenLabsOutbound
+// unter der Zeilengrenze); alle Abhaengigkeiten reisen als EIN Objekt (F1).
+//
+// Der Geo-Anker ist die Nummer, ueber die dieser Anruf tatsaechlich hinausgeht (call.from)
+// - GENAU die, mit der routes/api-calls.js call.language aufgeloest hat: dieselbe
+// Funktion, dieselbe Eingabe, derselbe Zustand, also kein zweites Ergebnis.
+//
+// defaultVoiceId ist die global konfigurierte Plattform-Stimme - der Wert, auf den die
+// Stimmen-Karte faellt, wenn eine Sprache keine eigene Kennung hat (Deutsch, s.
+// telephony/adapters/telnyx/elevenlabs-voice.js, wo genau dieser Env-Name als
+// Plattform-Stimme benannt ist). Es ist eine rohe ElevenLabs-Voice-Kennung, kein
+// Telnyx-Format - der Env-Name sagt nur, WER sie bisher gereicht bekam.
+function callLocaleOf({ store, config, call, ownerName }) {
+  return callLocaleFor(store.load(), {
+    tenantId: call.tenantId,
+    numberRecord: store.numberRecordByE164(call.from),
+    ownerName,
+    defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
+  });
+}
+
+// Die EINZIGEN zwei Dinge, die pro Anruf am Agenten des Anbieters gesetzt werden duerfen
+// (Eigentuemer-Entscheidung 16.08.2026): die Sprache und die Stimme. Beide kommen aus dem
+// aufgeloesten Locale (call-locale.js), also aus dem Datensatz - kein Aufrufer kann sie
+// setzen. Die weisse Liste in convai.js#assertOverrideWhitelisted setzt genau diese zwei
+// Pfade fail-closed durch, BEVOR der Anfragekoerper das Netz sieht; ein dritter Pfad hier
+// braecht den Anrufstart ab, statt still durchzurutschen.
+//
+// DIE STIMME IST BIS ZUM PUSH WIRKUNGSLOS - und zwar STILL: die Erlaubnis-Karte des
+// LIVE-Agenten (platform_settings.overrides.conversation_config_override) stand am
+// 17.08.2026 rein lesend gemessen auf agent.language = true, tts.voice_id = FALSE. Der
+// Anbieter ignoriert einen nicht freigeschalteten Pfad kommentarlos - kein Fehler, keine
+// Warnung, der Anruf laeuft einfach in der im Dashboard gewaehlten Stimme. Die Vorlage im
+// Repo erlaubt beide (dieselbe Karte, dort true/true), der Push dieser Karte ist eine
+// Eigentuemer-Handlung und noch nicht ausgefuehrt. Ab diesem Push wirkt die Stimme OHNE
+// Codeaenderung. Der Vermerk steht hier, weil ein stillschweigend wirkungsloser Wert an
+// genau dieser Stelle bereits zweimal zugeschlagen hat.
+//
+// KEINE STIMME KONFIGURIERT -> KEIN tts-ZWEIG: eine leere Plattform-Stimme wuerde als
+// voice_id: "" hinausgehen und dem Agenten seine im Dashboard gewaehlte Stimme nehmen,
+// ohne eine zu setzen. Weglassen laesst sie stehen - fail-safe, dieselbe Haltung wie
+// hasElevenLabsVoice im Telnyx-Renderer.
+function conversationConfigOverride(locale) {
+  return {
+    agent: { language: locale.language },
+    ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
+  };
+}
+
+// Der vollstaendige Anfragekoerper des Anrufstarts (POST /v1/convai/sip-trunk/
+// outbound-call): WEN wir anrufen, WOMIT der Agent arbeitet (dynamische Variablen) und die
+// zwei erlaubten Uebersteuerungen. MODUL-EBENE aus demselben Grund wie callLocaleOf
+// darueber (G30). Der Waechter in convai.js prueft GENAU dieses Objekt, bevor es das Netz
+// sieht.
+function startCallBody({ el, call, ownerName, time, locale }) {
+  return {
+    agent_id: el.agentId,
+    agent_phone_number_id: el.agentPhoneNumberId,
+    to_number: call.to,
+    conversation_initiation_client_data: {
+      dynamic_variables: dynamicVariables({ call, ownerName, time, locale }),
+      conversation_config_override: conversationConfigOverride(locale),
+    },
   };
 }
 
@@ -870,10 +952,11 @@ export function makeElevenLabsOutbound({
       tenantTimezone: store.tenantTimezone(call.tenantId),
       callee: call.to,
     });
+    const locale = callLocaleOf({ store, config, call, ownerName });
     // OUT-05-EL (Trockenlege-Naht, Aufgabe 1): GENAU vor dem einzigen Netzzugriff dieses
     // Wegs abgezweigt - wie fakeVoice in telephony/registry.js den kompletten Telnyx-
     // Transport ersetzt, ersetzt dieser Zweig NUR den EINEN POST gegen api.elevenlabs.io.
-    // Alle Gates/Berechnungen oberhalb (assertConfigured, Zeitkontext, dynamicVariables)
+    // Alle Gates/Berechnungen oberhalb (assertConfigured, Zeitkontext, Sprach-/Stimmwahl)
     // laufen unveraendert - der Fake unterscheidet sich einzig in der Herkunft der
     // conversation_id.
     const conversationId = config.safety.fakeOriginateElevenlabs
@@ -881,17 +964,10 @@ export function makeElevenLabsOutbound({
       : await startOutboundCall({
           fetchImpl: fetch,
           account: el,
-          body: {
-            agent_id: el.agentId,
-            agent_phone_number_id: el.agentPhoneNumberId,
-            to_number: call.to,
-            conversation_initiation_client_data: {
-              dynamic_variables: dynamicVariables({ call, ownerName, time }),
-            },
-          },
-          // Nur fuer das Fehlerebene-Log der Weisse-Liste-Waeche (convai.js): dieser
-          // Aufruf setzt heute KEIN conversation_config_override, die Waeche greift
-          // trotzdem VOR jedem kuenftigen Aufrufer (s. dort).
+          body: startCallBody({ el, call, ownerName, time, locale }),
+          // Fuer das Fehlerebene-Log der Weisse-Liste-Waeche (convai.js), die diesen
+          // Anfragekoerper VOR dem Netzzugriff prueft: nichts ausser agent.language und
+          // tts.voice_id darf darin stehen.
           callId: call.id,
         });
     if (!conversationId) throw new Error("ElevenLabs-Anrufstart lieferte keine conversation_id");

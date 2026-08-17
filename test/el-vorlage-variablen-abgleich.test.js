@@ -65,10 +65,32 @@ const FAKE_RESULT_POLL_MS = 5;
 // dynamicVariables (outbound.js) liest - sonst wuerde ein leeres Feld einen Block
 // ausduennen (z.B. constraintsText/backgroundText liefern bei leerem Input "") und Seite
 // B faelschlich verkleinern, ohne dass das etwas mit dem eigentlichen Abgleich zu tun hat.
+const PIN_TENANT = "tenant-pin";
+const PIN_FROM = "+15550000001";
+
+// Die Nummer, ueber die dieser Anruf hinausgeht - zugleich der Geo-Anker, an dem der
+// Anrufstart Sprache und Stimme ableitet (src/elevenlabs/call-locale.js).
+const PIN_NUMBER = Object.freeze({
+  e164: PIN_FROM,
+  tenantId: PIN_TENANT,
+  status: "active",
+  provider: "telnyx",
+});
+
+// Der Store-Zustand, aus dem die Ableitung liest: ein Tenant mit GESETZTER Sprache. Eine
+// Attrappe mit leerem Zustand liefe still auf den Weltdefault und beruehrte die Ableitung
+// nie - die Attrappe traegt hier eine echte Antwort (Lehre b1-messwerkzeug-attrappe).
+const PIN_STATE = Object.freeze({
+  tenants: [{ id: PIN_TENANT, defaultLanguage: "de" }],
+  settings: {},
+  numbers: [PIN_NUMBER],
+});
+
 function pinCall() {
   return {
     id: "call-pin-1",
-    tenantId: "tenant-pin",
+    tenantId: PIN_TENANT,
+    from: PIN_FROM,
     to: "+491737250000",
     goal: "Termin vereinbaren",
     constraints: "hoechstens 40 Euro zusagen",
@@ -87,13 +109,16 @@ function pinCall() {
 }
 
 // Nur die Methoden, die originateCall wirklich aufruft (tenantContext, tenantTimezone,
-// recordElevenlabsConversationId, markAnswered) - plus getCall als Absicherung fuer den
-// re-armierten Poll-Takt (s.u.). Kein echter Store: dieser Test ist reine Einheit gegen
-// outbound.js, keine Server-/Store-Integration.
+// load + numberRecordByE164 fuer die Sprach-/Stimmwahl, recordElevenlabsConversationId,
+// markAnswered) - plus getCall als Absicherung fuer den re-armierten Poll-Takt (s.u.).
+// Kein echter Store: dieser Test ist reine Einheit gegen outbound.js, keine Server-/
+// Store-Integration.
 function pinStore() {
   return {
     tenantContext: () => ({ ownerName: "Pin Testowner" }),
     tenantTimezone: () => "Europe/Berlin",
+    load: () => PIN_STATE,
+    numberRecordByE164: (e164) => (e164 === PIN_FROM ? PIN_NUMBER : null),
     recordElevenlabsConversationId: () => {},
     markAnswered: () => {},
     getCall: () => null,
@@ -111,6 +136,9 @@ function pinConfig() {
         resultPollMs: FAKE_RESULT_POLL_MS,
       },
     },
+    // Die global konfigurierte Plattform-Stimme, aus der die Sprach-/Stimmwahl die
+    // Stimme dieses Anrufs ableitet (src/elevenlabs/call-locale.js).
+    telnyx: { telnyxElevenLabs: { voiceId: "pin-plattform-stimme" } },
     // Muss false sein: der Fake-Schalter ueberspringt dynamicVariables(...) komplett
     // (s. Modul-Kopf) - mit ihm gaebe es kein Objekt zum Abgreifen.
     safety: { fakeOriginateElevenlabs: false },

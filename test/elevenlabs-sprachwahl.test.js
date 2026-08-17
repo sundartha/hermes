@@ -18,25 +18,25 @@
 //   Kein Abnahmekriterium: der Zustand gilt heute schon, sein Wegfall waere eine
 //   Regression.
 //
-// ABNAHME-G2 (Abnahmekriterium, "npm run test:abnahme", heute ROT): derselbe Nutzer, ueber
-//   den ElevenLabs-Anrufstart gefuehrt, bekommt dasselbe. Heute nicht: der Agent der
-//   Vorlage (elevenlabs/agent_configs/outbound-agent.template.json) traegt
-//   conversation_config.agent.language als Fixwert "en" - laut ihrem eigenen Vermerk
-//   (_sprache_und_datenschutz.sprache) ein AGENTEN-Feld und "NICHT per Anruf umschaltbar";
-//   conversation_config.tts.voice_id steht nicht einmal in der Besitz-Liste der Vorlage
-//   (_besitz._nicht_besessen: "im Dashboard vom Eigentuemer gewaehlt"); und
-//   src/elevenlabs/outbound.js verdrahtet den englischen Offenlegungs-Ausdruck fest
-//   (DISCLOSURE_OWNER_FALLBACK_EN) samt englischer Prompt-Bausteine (LOCALES.en.prompt).
-//   Der Weltdefault Englisch ist damit NICHT umgesetzt, sondern ueberdehnt: er gilt fuer
-//   jeden, statt nur fuer den, der keine Sprache gesetzt hat.
+// [abgenommen G2] (frueher ABNAHME-G2, gruen seit 2026-08-17, s.
+//   test/abnahme-ausgewandert.json): derselbe Nutzer, ueber den ElevenLabs-Anrufstart
+//   gefuehrt, bekommt dasselbe. Die Naht dafuer ist src/elevenlabs/call-locale.js - sie
+//   loest die Sprache mit derselben resolveCallLanguage auf wie der Bestandspfad und
+//   liefert daraus Sprache, ElevenLabs-Stimme und Offenlegungssatz des Anrufstarts.
+//   VORHER war der Weg fest englisch: agent.language stand als Fixwert "en" am Agenten,
+//   die Stimme kam ungefragt aus dem Dashboard, und src/elevenlabs/outbound.js verdrahtete
+//   den englischen Offenlegungs-Ausdruck fest (DISCLOSURE_OWNER_FALLBACK_EN). Der
+//   Weltdefault Englisch war damit nicht umgesetzt, sondern ueberdehnt: er galt fuer jeden,
+//   statt nur fuer den, der keine Sprache gesetzt hat. Ab jetzt haelt "npm test" diesen
+//   Zustand fest.
 //
 // KONFIGURATIONSTEST, KEIN ANRUF: kein Netz, kein Konto, keine Attrappe, kein Server.
 // Geprueft wird ausschliesslich, was der Anrufstart aus dem gespeicherten Zustand eines
 // Tenants ABLEITET - genau die Ebene, auf der die Regel beim Umbau verloren geht.
 //
-// Testnamen: das Abnahmekriterium traegt seine Kennung am NAMENSANFANG (package.json
-// config.abnahmePattern), der Bestandsfall traegt keine - so laeuft jeder in genau EINER
-// Bank (Lehre catalog-id-prefix-misroutes-tests).
+// Testnamen: beide Faelle tragen die Abnahme-Kennung NICHT (der ausgewanderte traegt
+// stattdessen sein Siegel) - so laeuft jeder im Regressionslauf und keiner doppelt (Lehre
+// catalog-id-prefix-misroutes-tests).
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -188,7 +188,7 @@ test("Bestandspfad Sprachwahl: Herkunft und Spracheinstellung des Nutzers bestim
   );
 });
 
-// Die NAHT, die ABNAHME-G2 verlangt - hier VOR dem Bau gepinnt, wie R16 die Naht
+// Die NAHT, die G2 verlangt - hier VOR dem Bau gepinnt, wie R16 die Naht
 // outboundAgentConfigFor gepinnt hat (test/elevenlabs-agent-werkzeuge.test.js).
 //   ORT: src/elevenlabs/ - dort liegt der Anrufstart, der die Werte braucht
 //     (outbound.js). Eine zweite Aufloesung in src/telephony/ waere eine zweite Wahrheit.
@@ -225,7 +225,7 @@ async function callLocaleSeam() {
   return resolve;
 }
 
-test("ABNAHME-G2: der ElevenLabs-Anrufstart spricht die Sprache des Nutzers - Deutsch mit deutscher Stimme und deutschem Offenlegungssatz fuer einen deutschen Nutzer, Franzoesisch analog, Englisch fuer jeden ohne gesetzte Sprache | ROT WEIL: der ElevenLabs-Pfad kennt keine Sprachwahl - conversation_config.agent.language ist der Fixwert 'en' und laut Vorlage nicht per Anruf umschaltbar, conversation_config.tts.voice_id steht nicht einmal in der Besitz-Liste der Vorlage, und src/elevenlabs/outbound.js verdrahtet den englischen Offenlegungs-Ausdruck fest (DISCLOSURE_OWNER_FALLBACK_EN) - Englisch gilt damit fuer jeden statt nur fuer den ohne gesetzte Sprache | FIX: eine Naht in src/elevenlabs/, die die Sprache mit resolveCallLanguage aufloest wie der Bestandspfad und daraus Sprache, ElevenLabs-Stimme (elevenLabsVoiceIdFor) und Offenlegungssatz (LOCALES.<sprache>.disclosure) des Anrufstarts liefert, plus die Uebergabe an den Anbieter (language_presets bzw. Ueberschreibung je Gespraech)", async () => {
+test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers - Deutsch mit deutscher Stimme und deutschem Offenlegungssatz fuer einen deutschen Nutzer, Franzoesisch analog, Englisch fuer jeden ohne gesetzte Sprache", async () => {
   // 1. Positiv-Kontrolle: der Bestandspfad misst in alle drei Richtungen und ist in allen
   //    drei Merkmalen unterscheidbar. Ohne sie waere ein stur englischer Pfad von einem
   //    richtig aufloesenden nicht zu unterscheiden.

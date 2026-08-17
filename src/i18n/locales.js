@@ -114,12 +114,17 @@ function makeStyleClause(clauses, neutralClause) {
 // + Agens) und benutzt das Wort, das der zweite Satz derselben Offenlegung ohnehin fuehrt
 // (Auftraggeber / mandant) - keine neue Vokabel fuer denselben Begriff.
 //
-// NUR die EN-Fassung ist exportiert: sie ist die einzige, die ausserhalb dieses Bundles
-// gebraucht wird. Der ElevenLabs-Anrufstart laesst den Satz vom Agenten des ANBIETERS
-// sprechen (first_message, agent.language "en") und setzt den Namen in dessen Vorlagen-
-// Variable ein - er kommt an disclosure() nicht vorbei und braucht den Ausdruck als WERT
-// (src/elevenlabs/outbound.js). Die Sprache steht im Namen, damit ein zweiter Weg seinen
-// eigenen Ausdruck bewusst dazulegt statt still auf diesen zu fallen.
+// ERREICHBAR ist jeder der drei ueber sein eigenes Bundle (LOCALES.<sprache>.
+// disclosureOwnerFallback, s.u.), NICHT ueber drei Importe: der ElevenLabs-Anrufstart
+// laesst den Satz vom Agenten des ANBIETERS sprechen (first_message) und setzt nur den
+// Namen in dessen Vorlagen-Variable ein - er kommt an disclosure() nicht vorbei und
+// braucht den Ausdruck als WERT, und zwar in DER Sprache, die der Anruf aufgeloest hat
+// (src/elevenlabs/call-locale.js). Am Bundle statt als Export bleibt er unteilbar an
+// seiner Fassung: wer die Sprache waehlt, bekommt den passenden Ausdruck automatisch
+// mit, statt ihn getrennt danebenzulegen und dabei die falsche Sprache greifen zu
+// koennen. DISCLOSURE_OWNER_FALLBACK_EN bleibt zusaetzlich exportiert - der
+// Weltdefault-Ausdruck ist der einzige, den ein Test ohne aufgeloeste Sprache nennen
+// kann (test/elevenlabs-anrufstart.test.js).
 const DISCLOSURE_OWNER_FALLBACK_DE = "meinem Auftraggeber";
 const DISCLOSURE_OWNER_FALLBACK_FR = "mon mandant";
 export const DISCLOSURE_OWNER_FALLBACK_EN = "its owner";
@@ -182,6 +187,12 @@ export const LOCALES = Object.freeze({
         `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${ownerName}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
       DISCLOSURE_OWNER_FALLBACK_DE,
     ),
+    // Derselbe Ausdruck, den disclosure() oben bei fehlendem Namen selbst einsetzt -
+    // hier zusaetzlich als blosser WERT, fuer den einen Weg, der den Satz gar nicht
+    // rendert, sondern nur den Namen in die Vorlage eines fremden Agenten reicht
+    // (s. den Kommentar an DISCLOSURE_OWNER_FALLBACK_* oben). Kein zweiter Wortlaut:
+    // beide Stellen lesen dieselbe Konstante.
+    disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_DE,
     // Zusammenfassungs-Prompt-Sprach-Teil (claude.js summarizeCall). Die JSON-Keys
     // bleiben englisch (sie werden geparst); nur der menschliche Text ist sprachabhaengig.
     summarySystem: (owner) =>
@@ -295,6 +306,8 @@ export const LOCALES = Object.freeze({
         `Bonjour, ceci est un assistant IA mandaté par ${ownerName}. Cette conversation sera résumée pour mon mandant.`,
       DISCLOSURE_OWNER_FALLBACK_FR,
     ),
+    // s. DE (derselbe Ausdruck wie in disclosure(), zusaetzlich als Wert).
+    disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_FR,
     summarySystem: (owner) =>
       `Tu résumes un appel téléphonique de l'assistant IA de ${owner}. Réponds UNIQUEMENT avec du JSON valide : {"summary": "2-3 phrases en français", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 phrase", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. Mentionne dans le résumé des résultats concrets (date/heure convenue, prix, nom de la personne de contact), si le transcript les contient, plutôt que des formulations générales. objective_achieved évalue EXCLUSIVEMENT la mission initiale (pour les appels entrants : si la demande de l'appelant a été résolue). Les sujets annexes ouverts par l'assistant ou l'interlocuteur lui-même (par ex. une prise de rendez-vous proposée ou interrompue) sont SANS PERTINENCE pour cette évaluation. true = la mission a été suffisamment traitée, même si l'appel s'est terminé au milieu d'une étape de suivi ; false = la mission n'a clairement pas été atteinte ; "unclear" = réellement impossible à juger à partir de la mission. N'ajoute des action items que si ${owner} doit réellement faire quelque chose (max. 3). Les rendez-vous déjà fermement réservés ne sont PAS un action item. Fiche de résultat : outcome est UNE phrase avec le résultat concret (date/heure convenue, prix, nom) ou - si rien n'a été obtenu - la raison. commitments sont les engagements pris par l'assistant au nom de ${owner} ; counterparty_commitments sont les engagements de l'interlocuteur. open_points sont les questions restées ouvertes. next_step est LA prochaine étape pour ${owner}, sinon null. facts sont des informations durablement utiles sur l'interlocuteur (horaires, contact, prix). Chaque liste contient au maximum 3 éléments, chaque élément au maximum 200 caractères. N'invente rien : si une information manque dans le transcript, la liste reste vide ou le champ reste null.`,
     // AL-P11 (O5): s. DE - uniquement ajouté si EVIDENCE_RETENTION_DAYS > 0.
@@ -375,13 +388,16 @@ export const LOCALES = Object.freeze({
     // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).
     // Fehlt der Name, tritt DISCLOSURE_OWNER_FALLBACK_EN ein (makeDisclosure) - denselben
-    // Ausdruck setzt der ElevenLabs-Anrufstart in seine Vorlagen-Variable
-    // (src/elevenlabs/outbound.js), der den Satz nicht ueber diese Funktion rendert.
+    // Ausdruck setzt der ElevenLabs-Anrufstart in seine Vorlagen-Variable, wenn der Anruf
+    // auf Englisch aufgeloest hat; loest er auf Deutsch/Franzoesisch auf, nimmt er den
+    // Ausdruck DIESER Sprache (src/elevenlabs/call-locale.js).
     disclosure: makeDisclosure(
       (ownerName) =>
         `Hello, this is an AI assistant calling on behalf of ${ownerName}. This conversation will be summarised for the person I represent.`,
       DISCLOSURE_OWNER_FALLBACK_EN,
     ),
+    // s. DE (derselbe Ausdruck wie in disclosure(), zusaetzlich als Wert).
+    disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_EN,
     summarySystem: (owner) =>
       `You are summarising a phone call made by ${owner}'s AI assistant. Reply ONLY with valid JSON: {"summary": "2-3 sentences in English", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 sentence", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. State concrete outcomes in the summary (agreed date/time, price, contact person's name) if present in the transcript, instead of vague descriptions. objective_achieved judges ONLY the original objective (for inbound calls: whether the caller's request was resolved). Side topics opened by the assistant or the other party themselves (e.g. an offered or abandoned appointment follow-up) are IRRELEVANT to this judgement. true = the objective was answered well enough, even if the call ended in the middle of a follow-up step; false = the objective was clearly not achieved; "unclear" = genuinely impossible to judge from the objective. Only add action items if ${owner} really needs to do something (max. 3). Appointments that are already firmly booked are NOT an action item. Result card: outcome is ONE sentence with the concrete result (agreed date/time, price, name) or - if nothing was achieved - the reason why. commitments are promises the assistant made on behalf of ${owner}; counterparty_commitments are promises made by the other party. open_points are questions that stayed open. next_step is THE one next step for ${owner}, otherwise null. facts are durably useful details about the other party (opening hours, contact person, prices). Each list holds at most 3 entries, each entry at most 200 characters. Invent nothing: if a detail is missing from the transcript, the list stays empty or the field stays null.`,
     // AL-P11 (O5): s. DE - only appended when EVIDENCE_RETENTION_DAYS > 0.
