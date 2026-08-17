@@ -889,6 +889,10 @@ export function makeElevenLabsOutbound({
               dynamic_variables: dynamicVariables({ call, ownerName, time }),
             },
           },
+          // Nur fuer das Fehlerebene-Log der Weisse-Liste-Waeche (convai.js): dieser
+          // Aufruf setzt heute KEIN conversation_config_override, die Waeche greift
+          // trotzdem VOR jedem kuenftigen Aufrufer (s. dort).
+          callId: call.id,
         });
     if (!conversationId) throw new Error("ElevenLabs-Anrufstart lieferte keine conversation_id");
     // AL-P1/EL-BL1: set-once am Record. Es ist dieselbe Kennung, ueber die der

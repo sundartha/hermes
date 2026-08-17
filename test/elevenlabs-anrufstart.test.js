@@ -166,6 +166,21 @@ function endJson(res, status, payload) {
 const dynamicVariables = (anfrage) =>
   anfrage.body.conversation_initiation_client_data?.dynamic_variables ?? {};
 
+// ---- Weisse Liste conversation_config_override (Owner-Entscheidung 16.08.2026) --------
+// Dieselbe Rechnung wie der Waechter (src/elevenlabs/convai.js#overrideLeafPaths) - hier
+// unabhaengig NACHGEBAUT statt importiert: dieser Test misst, was am ANFRAGEKOERPER
+// wirklich ankommt (dieselbe Haltung wie agentMaterial/T6 unten), nicht ob die
+// Produktionslogik sich selbst zustimmt. Ein Import wuerde einen Fehler in der
+// Produktionslogik gegen sich selbst pruefen und faende ihn nie.
+const OVERRIDE_ALLOWED_LEAF_PATHS = new Set(["agent.language", "tts.voice_id"]);
+function overrideLeafPaths(wert, prefix = []) {
+  const istObjekt = wert !== null && typeof wert === "object" && !Array.isArray(wert);
+  if (!istObjekt) return prefix.length ? [prefix.join(".")] : [];
+  return Object.entries(wert).flatMap(([schluessel, kind]) =>
+    overrideLeafPaths(kind, [...prefix, schluessel]),
+  );
+}
+
 // Ein http-Server, der GENAU die zwei Endpunkte des Vertrags bedient und jeden Aufruf
 // mitschreibt. Das Verhalten des Anrufstarts ist zur Laufzeit umschaltbar (T4: erst
 // Ausfall, dann heil - so laesst sich am SELBEN Server pruefen, dass der Fehlschlag den
@@ -772,10 +787,24 @@ test("EL-START T5 (a): der Anrufstart uebergibt owner_name und uebersteuert firs
         );
       });
 
-      await ctx.test("kein first_message-/Konfigurations-Override im Rumpf", () => {
+      // UMGEDEUTET (Owner-Entscheidung 16.08.2026, ersetzt den bisherigen Wortlaut
+      // "conversation_config_override wird nicht benutzt"): die geschuetzte EIGENSCHAFT
+      // ist UNVERAENDERT - niemand darf den Agenten pro Anruf unbemerkt umbauen -, nur
+      // ihre Durchsetzung ist genauer geworden. Diese Zusicherung verbot bisher den WEG
+      // pauschal (die Zeichenkette "conversation_config_override" durfte im Rumpf gar
+      // nicht vorkommen); sie verbietet ab jetzt nicht mehr den Weg, sondern ALLES AUSSER
+      // den zwei Pfaden, die der Waechter zulaesst (src/elevenlabs/convai.js#
+      // assertOverrideWhitelisted): agent.language (die Sprache) und tts.voice_id (die
+      // Stimme). Dieser Anrufstart baut heute KEIN Override-Objekt (dynamicVariables),
+      // darum bleibt der Fall unveraendert gruen - er misst ab jetzt aber die staerkere
+      // Aussage, nicht mehr nur die schwaechere.
+      await ctx.test("first_message wird nicht uebersteuert, conversation_config_override setzt hoechstens die Weisse Liste", () => {
+        const overridePfade = overrideLeafPaths(
+          anfrage.body.conversation_initiation_client_data?.conversation_config_override,
+        );
         assert.ok(
-          !anfrage.raw.includes("conversation_config_override"),
-          "eine Uebersteuerung wird bei falscher Konfiguration STILL ignoriert - der Satz duerfte nie daran haengen",
+          overridePfade.every((pfad) => OVERRIDE_ALLOWED_LEAF_PATHS.has(pfad)),
+          `conversation_config_override darf ausschliesslich ${[...OVERRIDE_ALLOWED_LEAF_PATHS].join(", ")} setzen (agent.language/tts.voice_id) - gefunden: ${overridePfade.join(", ") || "(keine)"}. Eine Uebersteuerung wird bei falscher Konfiguration STILL ignoriert, der Satz duerfte nie daran haengen, und jeder dritte Pfad baut den Agenten pro Anruf unbemerkt um.`,
         );
         assert.ok(
           !anfrage.raw.includes("first_message"),

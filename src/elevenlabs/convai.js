@@ -58,6 +58,70 @@ function assertConvaiOk(res, op) {
   throw err;
 }
 
+// ---- Weisse Liste: conversation_config_override (Owner-Entscheidung 16.08.2026) -------
+// Ersetzt den bisherigen Wortlaut "conversation_config_override wird nicht benutzt".
+// PRO ANRUF duerfen an diesem Anbieter-Feld AUSSCHLIESSLICH zwei Dinge gesetzt werden -
+// die Sprache (agent.language) und die Stimme (tts.voice_id). Jede andere Ueberschreibung
+// ist verboten. Die geschuetzte EIGENSCHAFT ist nicht der Pfad, sondern: NIEMAND darf den
+// Agenten pro Anruf unbemerkt umbauen (Systemprompt, Werkzeuge, ASR-Keywords,
+// Text-only-Modus, ...) - dieselbe Eigenschaft wie bisher, nur genauer durchgesetzt.
+// Pfadnamen aus dem Anbieter-Schema (ConversationConfigClientOverride, s.
+// elevenlabs-openapi.json, 16.08.2026 gemessen), nicht geraten.
+//
+// NUR DER WAECHTER, NICHT DIE FUNKTION: dieses Modul WAEHLT keine Sprache/Stimme - kein
+// Aufrufer setzt heute ein Override-Objekt (elevenlabs/outbound.js#dynamicVariables baut
+// keins). Der Waechter sitzt trotzdem bereits hier, direkt vor dem einzigen Netzzugriff
+// dieses Wegs, damit jeder KUENFTIGE Aufrufer ihn automatisch durchlaeuft - ein Waechter,
+// der erst mit der Funktion zusammen entstuende, liesse genau das Zeitfenster offen, in
+// dem hier schon zwei Defekte entstanden sind.
+//
+// FAIL-CLOSED, NICHT FILTERND: ein verbotener Pfad wird NICHT still entfernt und der Rest
+// trotzdem gesendet (ein stiller Filter ist derselbe Fehler wie einst bei
+// context.open_questions) - er bricht den GESAMTEN Anrufstart ab, bevor der Anbieter den
+// Koerper sieht.
+// EXPORTIERT (TEIL 3, Owner-Auftrag 16.08.2026): die EINE Quelle, gegen die
+// test/elevenlabs-override-whitelist.test.js die Besitz-Karte des Anbieters
+// (elevenlabs/agent_configs/outbound-agent.template.json,
+// platform_settings.overrides.conversation_config_override) haelt - zwei getippte
+// Kopien derselben zwei Pfade koennten sonst auseinanderlaufen, ohne dass irgendein Test
+// es bemerkt (G5).
+export const OVERRIDE_ALLOWED_LEAF_PATHS = Object.freeze(["agent.language", "tts.voice_id"]);
+const OVERRIDE_PATH_SEPARATOR = ".";
+
+function isPlainObject(wert) {
+  return wert !== null && typeof wert === "object" && !Array.isArray(wert);
+}
+
+// Alle BLATT-Pfade eines Override-Objekts, punktgetrennt. "Blatt" = kein weiteres
+// Objekt darunter (ein Array-Wert wie asr.keywords zaehlt selbst als Blatt - kein
+// Array-Pfad steht auf der Whitelist, ein Aufloesen der Eintraege braechte nichts). Ein
+// leeres Objekt traegt keinen Blatt-Pfad: nichts gesetzt, nichts zu verbieten.
+function overrideLeafPaths(wert, prefix) {
+  if (!isPlainObject(wert)) return prefix.length ? [prefix.join(OVERRIDE_PATH_SEPARATOR)] : [];
+  return Object.entries(wert).flatMap(([schluessel, kind]) =>
+    overrideLeafPaths(kind, [...prefix, schluessel]),
+  );
+}
+
+// Wirft, wenn der Anfragekoerper ETWAS AUSSER den zwei erlaubten Pfaden setzt -
+// EINSCHLIESSLICH eines Override-Werts, der gar kein Objekt ist (eine kaputte Form ist
+// selbst ein Verstoss, kein stilles "nichts zu pruefen"). callId dient NUR dem Log
+// (Regel 4/5: keine Rufnummer, kein Schluessel, kein Anfragekoerper).
+function assertOverrideWhitelisted(body, callId) {
+  const override = body?.conversation_initiation_client_data?.conversation_config_override;
+  if (override === undefined || override === null) return;
+  const verboten = isPlainObject(override)
+    ? overrideLeafPaths(override, []).filter((pfad) => !OVERRIDE_ALLOWED_LEAF_PATHS.includes(pfad))
+    : ["(conversation_config_override ist kein Objekt)"];
+  if (verboten.length === 0) return;
+  console.error(
+    `[el-outbound] conversation_config_override abgelehnt (call=${callId}): verbotene(r) Pfad(e) ${verboten.join(", ")} - erlaubt sind ausschliesslich ${OVERRIDE_ALLOWED_LEAF_PATHS.join(", ")}`,
+  );
+  throw new Error(
+    `ElevenLabs-Anrufstart abgebrochen: conversation_config_override enthaelt nicht erlaubte(n) Pfad(e) (${verboten.join(", ")})`,
+  );
+}
+
 // EINE Stelle fuer Basis-URL, Schluessel-Header, Timeout und Fehlerpruefung (G5): beide
 // Endpunkte unterscheiden sich nur in Pfad und Methode. timeoutMs optional (Default
 // REQUEST_TIMEOUT_MS) - ein Aufrufer mit eigener, kuerzerer Frist (S1-3) ueberschreibt sie
@@ -75,9 +139,14 @@ async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQ
 /**
  * Startet den Anruf beim Anbieter. Liefert die SYNCHRON zurueckgegebene conversation_id
  * (null, wenn der Anbieter keine mitschickt - der Aufrufer behandelt das als Fehlschlag).
- * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object}} args
+ * WIRFT VOR JEDEM Netzzugriff, wenn body.conversation_initiation_client_data.
+ * conversation_config_override etwas ausserhalb der Whitelist setzt (s.
+ * assertOverrideWhitelisted oben) - callId dient nur diesem Log, kein Fachwert.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object,
+ *   callId?: string}} args
  */
-export async function startOutboundCall({ fetchImpl, account, body }) {
+export async function startOutboundCall({ fetchImpl, account, body, callId }) {
+  assertOverrideWhitelisted(body, callId);
   const antwort = await convaiFetch({
     fetchImpl,
     account,

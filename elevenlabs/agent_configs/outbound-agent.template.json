@@ -201,6 +201,13 @@
         "_hinweis": "Der Audio-Mitschnitt der Gespraeche. SOLL false, dieselbe Eigentuemer-Entscheidung G7. BEWACHT, weil der ANBIETER-DEFAULT hier true ist - Mitschnitt AN (belegt unter _quellenbeleg_felder aus der audio-saving-Doku, wiederholt an _record_voice_hinweis). Ein Wert, der bewusst vom Standard abweicht, ist genau der, den ein Dashboard-Flip lautlos auf den Standard zurueckstellt; ohne Besitz waere das nie verglichen worden. Zweite Haelfte derselben Zusage wie retention_days daneben - eine geloeschte Frist nuetzt nichts, wenn parallel weiter Stimme mitgeschnitten wird. Vorlagen-Wert bleibt false, eine Live-Abweichung ist ein Befund fuer den Eigentuemer."
       },
       {
+        "feld": "conversation_config_override_erlaubnisse",
+        "art": "wert",
+        "vorlage": ["platform_settings.overrides.conversation_config_override"],
+        "live": ["platform_settings.overrides.conversation_config_override"],
+        "_hinweis": "Die EIGENE weisse Liste des ANBIETERS (nicht die unseres Codes, die steht in src/elevenlabs/convai.js#OVERRIDE_ALLOWED_LEAF_PATHS und wird gegen DIESEN Wert gehalten von test/elevenlabs-override-whitelist.test.js, damit beide Listen nicht auseinanderlaufen koennen - G5): je Pfad EIN Wahrheitswert, ob ein Anrufstart ihn per conversation_config_override ueberhaupt setzen DARF. Setzt ein Anrufstart einen Pfad, der hier false steht, wird die Ueberschreibung nicht abgelehnt, sondern STILL ignoriert (s. agent._first_message_hinweis) - genau deshalb muss diese Karte den WAHREN Live-Zustand kennen, nicht nur unsere Absicht. SOLL (Owner-Entscheidung 16.08.2026, ersetzt den bisherigen Wortlaut 'conversation_config_override wird nicht benutzt'): ausschliesslich agent.language=true (die Sprache) und tts.voice_id=true (die Stimme) - ALLES UEBRIGE false. Gemessen am Live-Agenten 16.08.2026 (nur gelesen, GET): asr.keywords=false, turn.soft_timeout_config.message=false, tts.model_id/stability/speed/similarity_boost/pronunciation_dictionary_locators=false, tts.voice_id=FALSE, conversation.max_duration_seconds=false, conversation.text_only=TRUE, agent.first_message/max_conversation_duration_message=false, agent.prompt.*=false, agent.language=TRUE. ZWEI ABWEICHUNGEN VOM LIVE-ZUSTAND, je einen Satz: (1) tts.voice_id SOLL true, Live false - PUSH-ABSICHT, damit ein spaeteres, EIGENES Paket eine Stimmenwahl pro Anruf ueberhaupt am Anbieter setzen KANN (dieses Paket baut die Wahl selbst nicht, nur den Waechter). (2) conversation.text_only SOLL false, Live true - PUSH-ABSICHT UND Korrektur: text_only ist heute OHNE erkennbaren Grund freigeschaltet, eine offene Tuer, einen Sprachanruf pro Anruf lautlos in einen Text-Anruf zu verwandeln, und SOLL dreht das zurueck auf den sicheren Zustand. BEIDE Abweichungen sind PUSH-ABSICHT, nicht 'ausgenommen': bis zum naechsten echten npm run elevenlabs:push fuehrt das Konto weiter die alten Werte, und npm run elevenlabs:drift meldet dieses Feld bis dahin ERWARTUNGSGEMAESS als Abweichung - Bewachung, keine stille Korrektur (dasselbe Muster wie platform_settings._data_collection_hinweis, TEIL appointment_time/amount/currency/confirmed_timezone)."
+      },
+      {
         "feld": "pronunciation_dictionary_locators",
         "art": "wert",
         "vorlage": ["agent.conversation_config.tts.pronunciation_dictionary_locators"],
@@ -552,7 +559,35 @@
         }
       ]
     },
-    "_hinweis": "privacy: dieselben zwei Werte wie unter agent._sprache_und_datenschutz.datenschutz, hier zusaetzlich an der ECHTEN Schema-Position (platform_settings ist ein Geschwister von conversation_config im Request-Body von POST /v1/convai/agents/create, kein Kind von agent) - fuer ein direktes Copy-Paste beim echten Push. data_collection und evaluation kamen am 2026-08-14 dazu, s. die beiden Hinweise darueber."
+    "_overrides_hinweis": "SOLL-Werte fuer die EIGENE weisse Liste des Anbieters (platform_settings.overrides.conversation_config_override): je Pfad EIN Wahrheitswert, ob ein Anrufstart ihn per conversation_config_override ueberhaupt setzen DARF - unabhaengig von der Frage, OB unser Code das heute tut (er tut es nicht, s. src/elevenlabs/outbound.js Modulkopf). Die vollstaendige Begruendung samt der zwei PUSH-ABSICHT-Abweichungen vom gemessenen Live-Zustand (tts.voice_id, conversation.text_only) steht am Besitz-Eintrag _besitz.felder[feld=conversation_config_override_erlaubnisse]. Struktur/Reihenfolge (asr, turn, tts, conversation, agent; agent.prompt.* zuletzt) folgt exakt dem Anbieter-Schema ConversationConfigClientOverrideConfig (elevenlabs-openapi.json, 16.08.2026 gemessen), NICHT geraten.",
+    "overrides": {
+      "conversation_config_override": {
+        "asr": { "keywords": false },
+        "turn": { "soft_timeout_config": { "message": false } },
+        "tts": {
+          "model_id": false,
+          "voice_id": true,
+          "stability": false,
+          "speed": false,
+          "similarity_boost": false,
+          "pronunciation_dictionary_locators": false
+        },
+        "conversation": { "text_only": false, "max_duration_seconds": false },
+        "agent": {
+          "first_message": false,
+          "language": true,
+          "max_conversation_duration_message": false,
+          "prompt": {
+            "prompt": false,
+            "llm": false,
+            "tool_ids": false,
+            "native_mcp_server_ids": false,
+            "knowledge_base": false
+          }
+        }
+      }
+    },
+    "_hinweis": "privacy: dieselben zwei Werte wie unter agent._sprache_und_datenschutz.datenschutz, hier zusaetzlich an der ECHTEN Schema-Position (platform_settings ist ein Geschwister von conversation_config im Request-Body von POST /v1/convai/agents/create, kein Kind von agent) - fuer ein direktes Copy-Paste beim echten Push. data_collection und evaluation kamen am 2026-08-14 dazu, overrides am 2026-08-16, s. die Hinweise darueber."
   },
 
   "_spaeter_beim_place_call_umbau": {
