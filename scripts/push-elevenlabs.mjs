@@ -6,20 +6,28 @@
 // Wege - Handarbeit im Dashboard oder ein Wegwerf-Spike. Beides ist nicht
 // wiederholbar und hinterlaesst keine Spur, welcher Wert warum gesetzt wurde.
 //
-// DIE FUENF RIEGEL, in der Reihenfolge ihrer Wichtigkeit:
+// DIE SIEBEN RIEGEL, in der Reihenfolge ihrer Wichtigkeit:
 //
-// 1. TROCKENLAUF IST DER NORMALFALL. Ohne den ausdruecklichen Schalter
+// 1. GESPERRTE FELDER. retention_days und record_voice werden NIE geschrieben,
+//    in KEINE Richtung - weder als genanntes Feld (Abbruch vor jedem
+//    Netzzugriff) noch als blinder Passagier im fertigen Patch-Koerper
+//    (Abbruch vor dem PATCH). Begruendung an GESPERRTE_FELDER.
+// 2. KEIN BLINDER PASSAGIER. Jeder Blatt-Pfad des fertigen Koerpers muss unter
+//    einem Pfad liegen, den der Lauf ausdruecklich zum Schreiben gewaehlt hat.
+//    Geprueft wird der KOERPER, nicht die Absicht, die ihn gebaut hat - sonst
+//    belegte die Pruefung nur, dass die Eingabe die Eingabe ist.
+// 3. TROCKENLAUF IST DER NORMALFALL. Ohne den ausdruecklichen Schalter
 //    --ausfuehren wird NICHTS geschrieben; ein versehentlicher Aufruf zeigt nur
 //    an. Der Schalter existiert nur als Argument - es gibt keine Env-Variable
 //    und keine Datei, die ihn setzen koennte, damit er nicht aus Versehen in
 //    einer Automatisierung landet.
-// 2. NUR BESESSENE PFADE. Geschrieben wird ausschliesslich an den Live-Pfaden
+// 4. NUR BESESSENE PFADE. Geschrieben wird ausschliesslich an den Live-Pfaden
 //    aus _besitz.felder der Vorlage, und der Patch-Koerper wird AUS DIESEN
 //    PFADEN gebaut - er kann gar nichts anderes enthalten. In diesem Projekt
 //    hat schon einmal ein Provisionierer die ganze Live-Konfiguration aus
 //    lokalen Werten geschrieben und Dashboard-Einstellungen zerstoert; genau
 //    dieser Weg ist hier baulich versperrt (kein "ganze Config hochladen").
-// 3. NUR DIE BENANNTEN FELDER. Mit --felder=<feld,feld> wird genau gesagt, was
+// 5. NUR DIE BENANNTEN FELDER. Mit --felder=<feld,feld> wird genau gesagt, was
 //    geschrieben werden darf; jedes andere besessene Feld bleibt unberuehrt,
 //    auch wenn es abweicht. Das ist die Grundfunktion und keine Erweiterung:
 //    "abweichend" heisst nicht "soll geaendert werden". Die Aufbewahrungs-Felder
@@ -33,10 +41,12 @@
 //    auch nicht im Lauf ohne --felder. Genannt wird er geschrieben - die
 //    Ausnahme ist ein Riegel gegen Unachtsamkeit, kein Verbot; das Umdrehen
 //    bleibt moeglich, es muss nur jemand tippen und sieht dabei die Meldung.
-// 4. LESEN, VERGLEICHEN, DANN SCHREIBEN. Erst GET des Live-Agenten, dann der
+//    NICHT fuer die gesperrten Felder (Riegel 1): die sind nicht nennbar, ihre
+//    Ausnahme laesst sich mit diesem Werkzeug ueberhaupt nicht uebersteuern.
+// 6. LESEN, VERGLEICHEN, DANN SCHREIBEN. Erst GET des Live-Agenten, dann der
 //    gemeinsame Besitz-Vergleich, dann ein PATCH nur der abweichenden Pfade.
 //    Ein Feld, das schon stimmt, wird nicht angefasst.
-// 5. FAIL-CLOSED. Fehlender Schluessel, unlesbare oder unparsebare Vorlage,
+// 7. FAIL-CLOSED. Fehlender Schluessel, unlesbare oder unparsebare Vorlage,
 //    eine Besitz-Erklaerung, die nicht traegt, eine verletzte Regel der Vorlage
 //    oder ein unverstandenes Argument: Abbruch mit Exit 1, ohne jeden
 //    Schreibversuch.
@@ -244,6 +254,115 @@ function simuliereSchreiben({ live, schreibbar }) {
   return kopie;
 }
 
+// --- Riegel am fertigen Koerper (Riegel 1 und 2) ---
+
+// DIE SPERRLISTE. Diese zwei Felder schreibt dieses Werkzeug NIE - unabhaengig
+// davon, in welche Richtung der Wert ginge.
+//
+// WARUM GENAU DIESE ZWEI: sie tragen die Eigentuemer-Entscheidung vom
+// 2026-08-15 - Aufbewahrung (retention_days) und Mitschnitt (record_voice)
+// bleiben vorerst AN, solange an echten Anrufen gemessen wird; VOR DEM ERSTEN
+// FREMDKUNDEN wird auf G7 zurueckgedreht. Beides sind keine
+// Konfigurationsfragen, sondern Aussagen darueber, was mit den Gespraechen
+// echter Menschen geschieht. Reist so ein Feld versehentlich mit, ist der
+// Schaden nicht "falscher Wert", sondern ein Rechtsproblem - und ein
+// versehentliches ABschalten waere genauso falsch wie ein versehentliches
+// Anschalten, deshalb sperrt die Liste beide Richtungen.
+//
+// WARUM ZUSAETZLICH ZUR AUSNAHME IN DER VORLAGE: die Ausnahme ("ausgenommen",
+// Riegel 5) ist ein Riegel gegen Unachtsamkeit und laesst sich durch Nennung
+// uebersteuern - sie schuetzt gegen den unbedachten Lauf, nicht gegen den
+// falschen Tastendruck und nicht gegen einen kuenftigen Umbau, der den Koerper
+// anders baut. Diese Liste laesst sich nicht uebersteuern; das Zurueckdrehen
+// auf G7 geschieht bewusst ausserhalb dieses Werkzeugs und damit von Hand.
+const GESPERRTE_FELDER = ["retention_days", "record_voice"];
+
+function istZweig(wert) {
+  return wert !== null && typeof wert === "object" && !Array.isArray(wert);
+}
+
+// Die BLATT-Pfade eines fertigen Koerpers, aus dem Koerper selbst gelesen und
+// nicht aus der Absicht, die ihn gebaut hat. Nur so ist der Umriss ein Beleg:
+// eine Liste, die aus den Eingabe-Pfaden abgeleitet waere, bewiese lediglich,
+// dass die Eingabe die Eingabe ist. Eine Liste ist ein Blatt, kein Zweig - sie
+// wird als GANZES gesetzt.
+function blattPfade(wert, praefix) {
+  if (!istZweig(wert)) return [praefix];
+  return Object.entries(wert).flatMap(([schluessel, kind]) => {
+    const pfad = praefix === "" ? schluessel : `${praefix}${PFAD_TRENNER}${schluessel}`;
+    return blattPfade(kind, pfad);
+  });
+}
+
+// RIEGEL 1a: die AUSDRUECKLICHE Nennung. Greift am fruehesten Punkt, an dem die
+// Absicht ueberhaupt sichtbar ist - vor dem Laden der Vorlage und vor jedem
+// Netzzugriff.
+function gesperrteInAuswahl(auswahl) {
+  if (auswahl === null) return [];
+  return auswahl.filter((feld) => GESPERRTE_FELDER.includes(feld));
+}
+
+// RIEGEL 1b, der wichtigere: ein gesperrter Name als SCHLUESSEL irgendwo im
+// fertigen Koerper. Er faengt den Fall, in dem das Feld MITREIST, ohne genannt
+// worden zu sein. Sieht anders als blattPfade auch in Listen hinein: ein
+// Riegel, der eine Ablageform auslaesst, ist keiner - und welche Form der
+// Anbieter morgen erwartet, entscheidet nicht dieses Werkzeug.
+function gesperrteStellen(wert, praefix) {
+  if (wert === null || typeof wert !== "object") return [];
+  const eintraege = Array.isArray(wert)
+    ? wert.map((kind, i) => [String(i), kind])
+    : Object.entries(wert);
+  return eintraege.flatMap(([schluessel, kind]) => {
+    const pfad = praefix === "" ? schluessel : `${praefix}${PFAD_TRENNER}${schluessel}`;
+    const treffer = GESPERRTE_FELDER.includes(schluessel) ? [pfad] : [];
+    return [...treffer, ...gesperrteStellen(kind, pfad)];
+  });
+}
+
+// RIEGEL 2: die Pfade, die dieser Lauf ueberhaupt beruehren darf - abgeleitet
+// aus der AUSWAHL des Aufrufers, nicht aus dem Koerper. Beide Seiten der
+// Pruefung getrennt zu gewinnen ist der ganze Punkt: der Koerper sagt, was
+// gesendet wuerde, die Auswahl sagt, was verlangt wurde.
+function erlaubtePfade({ abweichungen, auswahl }) {
+  return abweichungen
+    .filter((abweichung) => istGewaehlt(auswahl, abweichung))
+    .flatMap((abweichung) => abweichung.livePfade);
+}
+
+// Ein Blatt-Pfad zaehlt als gedeckt, wenn er der erlaubte Pfad selbst ist ODER
+// unter ihm liegt: ein besessener Wert kann ein Objekt sein (z.B. die
+// Uebersteuerungs-Erlaubnisse), und dann traegt der Koerper unterhalb des
+// erlaubten Pfades weitere Blaetter. Sie gehoeren zum selben gesetzten Wert.
+function liegtUnter(pfad, erlaubt) {
+  return pfad === erlaubt || pfad.startsWith(`${erlaubt}${PFAD_TRENNER}`);
+}
+
+function blindePassagiere({ koerper, erlaubt }) {
+  const gedeckt = (pfad) => erlaubt.some((pfadDerAuswahl) => liegtUnter(pfad, pfadDerAuswahl));
+  return blattPfade(koerper, "").filter((pfad) => !gedeckt(pfad));
+}
+
+// Die Pruefung des FERTIGEN Koerpers an EINER Stelle: was hier durchkommt, ist
+// genau das, was den Anbieter erreichen wuerde. Liefert Befunde; eine leere
+// Liste heisst sauber. Kein Filtern, kein Ueberspringen - der Aufrufer bricht
+// ab, sobald hier etwas steht (fail-closed).
+export function koerperVerstoesse({ koerper, abweichungen, auswahl }) {
+  const befunde = [];
+  const gesperrt = gesperrteStellen(koerper, "");
+  if (gesperrt.length > 0) {
+    befunde.push(
+      `GESPERRT - der Patch-Koerper traegt gesperrte Felder an: ${gesperrt.join(LISTEN_TRENNER)}. Gesperrt sind ${GESPERRTE_FELDER.join(LISTEN_TRENNER)}; sie werden nie geschrieben, in keine Richtung.`,
+    );
+  }
+  const fremd = blindePassagiere({ koerper, erlaubt: erlaubtePfade({ abweichungen, auswahl }) });
+  if (fremd.length > 0) {
+    befunde.push(
+      `BLINDER PASSAGIER - der Patch-Koerper traegt Pfade, die kein gewaehltes Feld verlangt hat: ${fremd.join(LISTEN_TRENNER)}.`,
+    );
+  }
+  return befunde;
+}
+
 // --- Schreiben (die einzige Stelle im Repo, die den Agenten veraendert) ---
 
 async function patcheAgenten({ agentId, koerper }) {
@@ -297,23 +416,6 @@ function meldeNichtSchreibbar(rest) {
   );
 }
 
-function istZweig(wert) {
-  return wert !== null && typeof wert === "object" && !Array.isArray(wert);
-}
-
-// Die BLATT-Pfade eines fertigen Koerpers, aus dem Koerper selbst gelesen und
-// nicht aus der Absicht, die ihn gebaut hat. Nur so ist der Umriss ein Beleg:
-// eine Liste, die aus den Eingabe-Pfaden abgeleitet waere, bewiese lediglich,
-// dass die Eingabe die Eingabe ist. Eine Liste ist ein Blatt, kein Zweig - sie
-// wird als GANZES gesetzt.
-function blattPfade(wert, praefix) {
-  if (!istZweig(wert)) return [praefix];
-  return Object.entries(wert).flatMap(([schluessel, kind]) => {
-    const pfad = praefix === "" ? schluessel : `${praefix}${PFAD_TRENNER}${schluessel}`;
-    return blattPfade(kind, pfad);
-  });
-}
-
 // Belegt die Riegel 2 und 3 an der AUSGABE statt nur im Kommentar: der Koerper,
 // der gesendet wuerde, traegt genau diese Blatt-Pfade - was hier fehlt, kann den
 // Agenten nicht erreichen. Steht auch im Trockenlauf da, damit die Zusage
@@ -346,7 +448,7 @@ function meldeAusgenommen(ausgenommen) {
     console.log(`${LOG_PREFIX} ${zeile}`);
   }
   console.log(
-    `${LOG_PREFIX} AUSGENOMMEN heisst: die Vorlage nimmt dieses Feld ausdruecklich von Schreibvorgaengen aus (Feld "ausgenommen" am Besitz-Eintrag, mit Grund und Datum). Ohne Nennung in ${FELDER_FLAG} ist es NIE Schreib-Kandidat - ein unbedachter Lauf kann die festgehaltene Entscheidung nicht umdrehen. Wer sie umdrehen WILL, nennt das Feld ausdruecklich: ${FELDER_FLAG}=<feld>.`,
+    `${LOG_PREFIX} AUSGENOMMEN heisst: die Vorlage nimmt dieses Feld ausdruecklich von Schreibvorgaengen aus (Feld "ausgenommen" am Besitz-Eintrag, mit Grund und Datum). Ohne Nennung in ${FELDER_FLAG} ist es NIE Schreib-Kandidat - ein unbedachter Lauf kann die festgehaltene Entscheidung nicht umdrehen. Wer sie umdrehen WILL, nennt das Feld ausdruecklich: ${FELDER_FLAG}=<feld>. NICHT so bei den gesperrten Feldern (${GESPERRTE_FELDER.join(LISTEN_TRENNER)}): die sind nicht nennbar, ihre Nennung bricht den Lauf ab.`,
   );
 }
 
@@ -397,6 +499,15 @@ function meldePlan({ agentId, befund, auswahl, felder, danach }) {
 }
 
 // --- Ablauf ---
+
+// Ein fail-closed-Abbruch: erst die einzelnen Befunde, dann der Satz, der sagt,
+// was daraus folgt, dann Exit-Code 1. EINE Stelle, damit die Zusage "NICHTS
+// gesendet" nicht an vier Orten leicht verschieden formuliert wird.
+function brichAb(befunde, schluss) {
+  for (const zeile of befunde) console.error(`${LOG_PREFIX} ${zeile}`);
+  console.error(`${LOG_PREFIX} Abbruch (fail-closed): ${schluss}`);
+  return 1;
+}
 
 // Der Schreibteil. Getrennt vom Trockenlauf, damit an EINER Stelle steht, was
 // nur mit ausdruecklicher Bestaetigung passiert.
@@ -451,32 +562,35 @@ export async function runCli(argv = process.argv) {
   }
   const { agentId, ausfuehren, auswahl, fehler } = leseArgumente(argv);
   if (fehler.length > 0) {
-    for (const zeile of fehler) console.error(`${LOG_PREFIX} ${zeile}`);
-    console.error(
-      `${LOG_PREFIX} Abbruch (fail-closed): ${fehler.length} Argumente nicht verstanden. NICHTS gesendet.`,
+    return brichAb(fehler, `${fehler.length} Argumente nicht verstanden. NICHTS gesendet.`);
+  }
+
+  // Riegel 1a - so frueh wie moeglich: hier ist noch nichts geladen und nichts
+  // gerufen, der Abbruch kann also gar nichts angefasst haben.
+  const gesperrt = gesperrteInAuswahl(auswahl);
+  if (gesperrt.length > 0) {
+    return brichAb(
+      [],
+      `${FELDER_FLAG} nennt gesperrte Felder: ${gesperrt.join(LISTEN_TRENNER)}. Diese Felder schreibt dieses Werkzeug nie, in keine Richtung - Aufbewahrung und Mitschnitt sind eine Datenschutz-Entscheidung und keine Konfiguration (s. GESPERRTE_FELDER). NICHTS gesendet.`,
     );
-    return 1;
   }
 
   const vorlage = ladeVorlage();
-  if (auswahl !== null) {
-    const unbekannt = unbekannteFelder(auswahl, vorlage);
-    if (unbekannt.length > 0) {
-      console.error(
-        `${LOG_PREFIX} Abbruch (fail-closed): ${FELDER_FLAG} nennt Felder, die die Vorlage nicht besitzt: ${unbekannt.join(LISTEN_TRENNER)}. Besessen sind: ${besesseneFeldNamen(vorlage).join(LISTEN_TRENNER)}. NICHTS gesendet.`,
-      );
-      return 1;
-    }
+  const unbekannt = auswahl === null ? [] : unbekannteFelder(auswahl, vorlage);
+  if (unbekannt.length > 0) {
+    return brichAb(
+      [],
+      `${FELDER_FLAG} nennt Felder, die die Vorlage nicht besitzt: ${unbekannt.join(LISTEN_TRENNER)}. Besessen sind: ${besesseneFeldNamen(vorlage).join(LISTEN_TRENNER)}. NICHTS gesendet.`,
+    );
   }
 
   const live = await holeLiveAgenten(agentId);
   const befund = vergleicheBesitz({ vorlage, live });
   if (befund.fehler.length > 0) {
-    for (const zeile of befund.fehler) console.error(`${LOG_PREFIX} ${zeile}`);
-    console.error(
-      `${LOG_PREFIX} Abbruch (fail-closed): die Besitz-Erklaerung der Vorlage traegt nicht (${befund.fehler.length} Fehler). Was nicht verlaesslich verglichen werden kann, wird nicht geschrieben. NICHTS gesendet.`,
+    return brichAb(
+      befund.fehler,
+      `die Besitz-Erklaerung der Vorlage traegt nicht (${befund.fehler.length} Fehler). Was nicht verlaesslich verglichen werden kann, wird nicht geschrieben. NICHTS gesendet.`,
     );
-    return 1;
   }
 
   const felder = teileAbweichungen({ abweichungen: befund.abweichungen, auswahl });
@@ -485,6 +599,17 @@ export async function runCli(argv = process.argv) {
   const koerper = bauePatchKoerper(schreibbar);
   meldePlan({ agentId, befund, auswahl, felder, danach });
   meldeKoerper(koerper);
+
+  // Riegel 1b und 2 - am fertigen Koerper, nach der Ausgabe seiner Blatt-Pfade
+  // und vor jeder Weiche: auch der Trockenlauf endet hier rot. Ein Koerper, den
+  // dieses Werkzeug nicht senden darf, ist ein Befund und keine Fussnote.
+  const verstoesse = koerperVerstoesse({ koerper, abweichungen: befund.abweichungen, auswahl });
+  if (verstoesse.length > 0) {
+    return brichAb(
+      verstoesse,
+      `der Patch-Koerper haelt der Pruefung nicht stand (${verstoesse.length} Befunde, oben genannt). Nicht gefiltert, nicht uebersprungen, nicht gewarnt - Halt. NICHTS gesendet.`,
+    );
+  }
 
   if (!ausfuehren) {
     console.log(

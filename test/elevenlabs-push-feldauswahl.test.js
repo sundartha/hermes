@@ -12,26 +12,28 @@
 // (Aufbewahrung und Mitschnitt stehen live bewusst anders als in der Vorlage).
 //
 // KEIN NETZ, KEINE ECHTE API: der Vergleichs-Kern ist ohnehin reine Rechnung,
-// und die zwei Faelle am ganzen Ablauf laufen gegen eine gestellte fetch-
-// Attrappe, die jeden Aufruf mitschreibt. "Es wurde nicht geschrieben" ist damit
-// gemessen (kein einziger PATCH in der Aufrufliste) und nicht geglaubt.
-//
-// Die Attrappe des Live-Agenten ist bewusst winzig: sie fuehrt genau die beiden
-// Datenschutz-Felder mit ihren heutigen Live-Werten und die Sammlung, ohne die
-// das Verbot nichts pruefen koennte. Alles andere fehlt und weicht deshalb ab -
-// fuer die Aussagen hier ohne Belang, und der einzige Weg, den echten
-// Live-Stand nicht ins Repo kopieren zu muessen.
+// und die Faelle am ganzen Ablauf laufen gegen die gestellte fetch-Attrappe aus
+// helpers/elevenlabs-push-attrappe.mjs, die jeden Aufruf mitschreibt. "Es wurde
+// nicht geschrieben" ist damit gemessen (kein einziger PATCH in der
+// Aufrufliste) und nicht geglaubt.
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
 import { AUSNAHME_MARKE, vergleicheBesitz } from "../scripts/lib/elevenlabs-besitz.mjs";
 
+import {
+  EIN_AUFRUF,
+  KEIN_AUFRUF,
+  LIVE_MIT_DATENSCHUTZ,
+  TEST_SCHLUESSEL,
+  laufeMitAttrappe as laufeMitRunCli,
+  schreibendeAufrufe,
+} from "./helpers/elevenlabs-push-attrappe.mjs";
+
 // Der Schluessel wird gesetzt, BEVOR das Kommando (und mit ihm src/config.js)
 // geladen wird - deshalb dynamischer Import: statische Importe laufen vor jeder
 // Anweisung der Datei, und ohne Schluessel bricht das Kommando fail-closed ab,
-// bevor es zur Feldauswahl kaeme. Ein Platzhalter, kein echter Schluessel: die
-// fetch-Attrappe unten laesst ihn nie an ein Netz.
-const TEST_SCHLUESSEL = "test-schluessel-ohne-netz";
+// bevor es zur Feldauswahl kaeme.
 process.env.ELEVENLABS_API_KEY = TEST_SCHLUESSEL;
 const { runCli, teileAbweichungen } = await import("../scripts/push-elevenlabs.mjs");
 const { ladeVorlage } = await import("../scripts/lib/elevenlabs-agent-lesen.mjs");
@@ -60,17 +62,7 @@ const LIVE_ATTRAPPE = {
   sammlung: {},
 };
 
-// Die heutigen LIVE-Werte der beiden Datenschutz-Felder (Aufbewahrung an,
-// Mitschnitt an) - genau die bewusste Abweichung von der Vorlage (0 / false).
-const LIVE_MIT_DATENSCHUTZ = {
-  conversation_config: { language_presets: {} },
-  platform_settings: { privacy: { retention_days: -1, record_voice: true } },
-};
-
-const METHODE_GET = "GET";
 const AUFBEWAHRUNGS_FELDER = ["record_voice", "retention_days"];
-const KEIN_AUFRUF = 0;
-const EIN_AUFRUF = 1;
 
 // Beide Felder weichen ab; der einzige Unterschied zwischen ihnen ist die
 // Ausnahme. Ohne diese Gleichheit koennte ein gruener Fall auch an etwas
@@ -111,37 +103,8 @@ function zeileZu(befund, feld) {
   return treffer ? treffer.zeile : "";
 }
 
-// --- Ablauf-Attrappe: fetch und Konsole gestellt, danach zurueckgedreht ---
-
-// Antwortet auf JEDEN Aufruf mit dem gestellten Live-Agenten und schreibt die
-// Methode mit. Nur ok und text() werden vom Kommando gelesen; mehr vorzugaukeln
-// wuerde nur verdecken, was wirklich gebraucht wird.
-function fetchAttrappe(koerper) {
-  const aufrufe = [];
-  const stellvertreter = async (adresse, optionen = {}) => {
-    aufrufe.push({ adresse: String(adresse), methode: optionen.method || METHODE_GET });
-    return { ok: true, text: async () => JSON.stringify(koerper) };
-  };
-  return { aufrufe, stellvertreter };
-}
-
-async function laufeMitAttrappe(argumente) {
-  const { aufrufe, stellvertreter } = fetchAttrappe(LIVE_MIT_DATENSCHUTZ);
-  const echtesFetch = globalThis.fetch;
-  const echtesLog = console.log;
-  const echtesError = console.error;
-  const zeilen = [];
-  globalThis.fetch = stellvertreter;
-  console.log = (zeile) => zeilen.push(zeile);
-  console.error = (zeile) => zeilen.push(zeile);
-  try {
-    const code = await runCli(["node", "push-elevenlabs.mjs", ...argumente]);
-    return { code, aufrufe, ausgabe: zeilen.join("\n") };
-  } finally {
-    globalThis.fetch = echtesFetch;
-    console.log = echtesLog;
-    console.error = echtesError;
-  }
+function laufeMitAttrappe(argumente) {
+  return laufeMitRunCli({ runCli, argumente });
 }
 
 describe("Besitz-Erklaerung: die Ausnahme als geprueftes Datenfeld", () => {
@@ -243,7 +206,7 @@ describe("Push-Kommando: fail-closed vor dem Netz, Trockenlauf schreibt nie", ()
     assert.equal(lauf.code, 0);
     assert.equal(lauf.aufrufe.length, EIN_AUFRUF, "genau ein Aufruf, und der liest");
     assert.deepEqual(
-      lauf.aufrufe.filter((aufruf) => aufruf.methode !== METHODE_GET),
+      schreibendeAufrufe(lauf.aufrufe),
       [],
       "der Trockenlauf hat geschrieben",
     );
@@ -254,16 +217,21 @@ describe("Push-Kommando: fail-closed vor dem Netz, Trockenlauf schreibt nie", ()
     assert.doesNotMatch(lauf.ausgabe, /WUERDE SCHREIBEN record_voice/);
   });
 
-  it("Trockenlauf MIT ausdruecklicher Nennung schreibt trotzdem nicht, meldet die Ausnahme aber als uebersteuert", async () => {
+  // Die Uebersteuerung durch Nennung gilt weiter fuer ausgenommene Felder im
+  // Allgemeinen - fuer die beiden Aufbewahrungs-Felder aber NICHT MEHR: sie
+  // stehen seit dem 2026-08-17 auf der Sperrliste des Kommandos und sind gar
+  // nicht mehr nennbar. Der Fall steht hier, weil er frueher das Gegenteil
+  // behauptete; gemessen wird die Sperrliste in
+  // test/elevenlabs-push-sperrliste.test.js.
+  it("ein gesperrtes Feld laesst sich auch durch Nennung nicht mehr uebersteuern", async () => {
     const lauf = await laufeMitAttrappe(["--felder=retention_days"]);
-    assert.equal(lauf.code, 0);
-    assert.deepEqual(
-      lauf.aufrufe.filter((aufruf) => aufruf.methode !== METHODE_GET),
-      [],
-      "der Trockenlauf hat geschrieben",
+    assert.equal(lauf.code, 1);
+    assert.equal(
+      lauf.aufrufe.length,
+      KEIN_AUFRUF,
+      `es wurde trotzdem gerufen: ${JSON.stringify(lauf.aufrufe)}`,
     );
-    assert.match(lauf.ausgabe, /AUSNAHME UEBERSTIMMT - retention_days/);
-    assert.match(lauf.ausgabe, /WUERDE SCHREIBEN retention_days/);
-    assert.match(lauf.ausgabe, /TROCKENLAUF/);
+    assert.match(lauf.ausgabe, /nennt gesperrte Felder: retention_days/);
+    assert.doesNotMatch(lauf.ausgabe, /WUERDE SCHREIBEN retention_days/);
   });
 });
