@@ -335,6 +335,14 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // Phase-6-Voraussetzung: der Join-Schluessel zur Telefonie-Rechnung -
+    // Wrapper-Paritaet zu json.js. Saved aus demselben Grund wie die Handles darueber: es
+    // gibt eine Spalte, und der Flush schreibt sie aus dem Spiegel.
+    recordSipCallId(callId, sipCallId) {
+      const { call, changed } = ops.recordSipCallId(requireState(), callId, sipCallId);
+      if (changed) save();
+      return call;
+    },
     // EL-Anrufstart: Zusammenfassung + Befund aus einer Anbieter-Antwort -
     // Wrapper-Paritaet zu json.js. Saved aus demselben Grund wie die Handles darueber: es
     // gibt Spalten (summary/objective_achieved), und der Flush schreibt sie aus dem Spiegel.
@@ -1254,6 +1262,11 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // beim Restart verloren UND der naechste Flush schriebe NULL zurueck (Lehre
     // i8-design-decisions) - der Rueckfrage-Webhook fiele danach dauerhaft auf 404.
     elevenlabsConversationId: r.elevenlabs_conversation_id ?? null,
+    // Phase-6-Voraussetzung: den Join-Schluessel mit-hydrieren. Ohne diese Zeile ginge er
+    // beim Restart verloren UND der naechste Flush schriebe NULL zurueck (Lehre
+    // i8-design-decisions) - die Telefonie-Kosten waeren dem Anruf danach dauerhaft nicht
+    // mehr zuzuordnen, weil der Anbieter-Beleg, aus dem er stammt, geloescht ist.
+    sipCallId: r.sip_call_id ?? null,
     callerTurns: r.caller_turns ?? 0,
     // AL-P11: Ergebnis-Karte mit-hydrieren. Ohne diese Zeile ginge sie beim Restart
     // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
@@ -1545,6 +1558,127 @@ async function flushUsage(client, tenantId, usage) {
   );
 }
 
+// Die Werte EINER call-Zeile in der Reihenfolge der Platzhalter des INSERT oben
+// ($1..$50). Aus flushCalls herausgezogen (G30: "welche Zeilen muessen weg und wie
+// wird geschrieben" ist eine andere Aufgabe als "welcher Wert steht an welchem
+// Platzhalter"). Der Auszug ist zugleich der Kopfraum, den die Funktion braucht: sie
+// stand bei genau 100 Zeilen, und JEDE weitere additive Spalte haette die Laengengrenze
+// gerissen - additive Spalten sind an dieser Stelle der Normalfall, nicht die Ausnahme.
+function callRowValues(call, tenantId) {
+  return [
+    call.id,
+    tenantId,
+    call.streamToken,
+    call.twilioSid,
+    call.direction,
+    call.from,
+    call.to,
+    call.goal,
+    call.briefing,
+    call.constraints,
+    call.callerName,
+    call.language,
+    call.maxDurationS,
+    call.requestedBy,
+    call.status,
+    call.startedAt,
+    call.answeredAt,
+    call.endedAt,
+    call.summary,
+    serializeObjective(call.objectiveAchieved),
+    call.provider || DEFAULT_PROVIDER,
+    call.summarySmsSentAt ?? null,
+    // P3: Per-Call-Kontext als JSONB (Muster profile.data: Objekt -> JSON.stringify,
+    // sonst NULL). SEIT AL-P13 IM ON CONFLICT DO UPDATE SET: der Kontext ist NICHT
+    // mehr nach dem Create unveraenderlich - answerConsult merged die Antwort einer
+    // Rueckfrage in context.key_facts. Ohne den UPDATE-Eintrag faellt jede beantwortete
+    // Rueckfrage beim naechsten Flush lautlos auf den Create-Zustand zurueck.
+    call.context ? JSON.stringify(call.context) : null,
+    // CDF1: Fehlergrund-Token ($24). IM ON CONFLICT DO UPDATE SET (anders als context),
+    // weil er NACH dem Create im /voice/status-Callback gesetzt wird.
+    call.failureReason ?? null,
+    // F9 (A6): Bucht-Marker ($25). IM ON CONFLICT DO UPDATE SET (Muster failure_reason),
+    // weil er NACH dem Create in finishCall gesetzt wird.
+    call.billedAt ?? null,
+    // P5 (C-Telnyx): Call-Control-Handles ($26-$27). IM ON CONFLICT DO UPDATE SET
+    // (Muster twilio_sid) - sie werden NACH dem Create bei erfolgreicher Call-Control-
+    // Origination gesetzt, nicht beim initialen createCall.
+    call.callControlId ?? null,
+    call.assistantId ?? null,
+    // P2b: Diagnose-Markierung. Wie context NICHT im ON CONFLICT DO UPDATE SET -
+    // sie wird bei createCall gesetzt und danach nie mehr geaendert.
+    call.diagnostic === true,
+    // P6: Vorab-Mandat als JSONB ($29, ans Ende angehaengt -> keine Umnummerierung).
+    // Wie context NICHT im ON CONFLICT DO UPDATE SET: bei createCall gesetzt, danach
+    // unveraendert.
+    call.mandate ? JSON.stringify(call.mandate) : null,
+    // LCT P2 ($30-$34): ALLE FUENF im ON CONFLICT DO UPDATE SET - anders als
+    // context/mandate/diagnostic (bei createCall gesetzt, danach unveraenderlich)
+    // mutieren sie NACH dem Create: estimated_cost_cents in reconcileVoiceBudget,
+    // die vier uebrigen im Kosten-Abgleich (P3). Fehlte auch nur eine im UPDATE-SET,
+    // fiele der Wert beim naechsten Flush auf den Create-Zustand zurueck, der Call
+    // saehe dauerhaft "nie abgeglichen" aus und P3 fragte ihn endlos erneut ab.
+    call.estimatedCostCents ?? null,
+    call.actualCostMicroCents ?? null,
+    call.costTruedAt ?? null,
+    call.costTruedSource ?? null,
+    call.costTruingAttempts ?? 0,
+    // AL-P1 ($35-$36): BEIDE im ON CONFLICT DO UPDATE SET - anders als context/mandate/
+    // diagnostic mutieren sie NACH dem Create (Conversation-Webhook bzw. jeder
+    // Anrufer-Turn). Fehlten sie im UPDATE-SET, fiele der Wert beim naechsten Flush auf
+    // den Create-Zustand zurueck und die ganze Achse maesse dauerhaft 0.
+    call.telnyxConversationId ?? null,
+    call.callerTurns ?? 0,
+    // AL-P11 ($37): JSONB (Muster context/mandate: Objekt -> JSON.stringify, sonst NULL).
+    // ANDERS als context/mandate IM ON CONFLICT DO UPDATE SET: die Karte entsteht erst
+    // in summarizeCall, also NACH dem Create. Fehlte sie im UPDATE-SET, faellt sie beim
+    // naechsten Flush auf NULL zurueck und der Evidence-Purge haette nie etwas zu tun.
+    call.result ? JSON.stringify(call.result) : null,
+    // AL-P13 ($38): JSONB (Muster result). IM ON CONFLICT DO UPDATE SET - die
+    // Kette entsteht/mutiert NACH dem Create (emit beim Waehlen, answer beim
+    // Poll). Fehlte sie im UPDATE-SET, faellt sie beim naechsten Flush auf NULL
+    // zurueck und jede beantwortete Rueckfrage waere nach dem Flush weg.
+    call.consults ? JSON.stringify(call.consults) : null,
+    // KS-P5 ($39-$40): BEIDE im ON CONFLICT DO UPDATE SET - sie entstehen zusammen mit
+    // estimated_cost_cents NACH dem Create (reconcileVoiceBudget), also aus
+    // genau dem Grund, aus dem estimated_cost_cents dort schon steht. Fehlten sie im
+    // UPDATE-SET, faellt der Anker beim naechsten Flush auf NULL zurueck und jede
+    // spaetere Gutschrift wirkte nur noch auf der Lebenszeit-Achse.
+    call.estimatedCostSpendMonthKey ?? null,
+    call.estimatedCostPeriodKey ?? null,
+    // EL-BL1 ($41, ans Ende angehaengt -> keine Umnummerierung): IM ON CONFLICT DO
+    // UPDATE SET (Muster telnyx_conversation_id) - die Kennung entsteht NACH dem
+    // Create, sobald das Laufwerk das Gespraech eroeffnet hat. Fehlte sie im
+    // UPDATE-SET, fiele die Bindung beim naechsten Flush auf NULL zurueck und der
+    // Rueckfrage-Webhook faende den laufenden Anruf nicht mehr.
+    call.elevenlabsConversationId ?? null,
+    // KS-EL1 ($42, ans Ende angehaengt -> keine Umnummerierung): IM ON CONFLICT DO
+    // UPDATE SET (Muster elevenlabs_conversation_id) - der Grund entsteht NACH dem
+    // Create, am Gespraechsende (finishFromConversation). Fehlte er im UPDATE-SET,
+    // fiele er beim naechsten Flush auf NULL zurueck.
+    call.answeredUnclearReason ?? null,
+    // ABNAHME-D1 ($43-$46, ans Ende angehaengt -> keine Umnummerierung): die vier
+    // strukturiert gesammelten Angaben. IM ON CONFLICT DO UPDATE SET (Muster
+    // answered_unclear_reason) - sie entstehen NACH dem Create, am Gespraechsende
+    // (persistProviderResult). Fehlten sie im UPDATE-SET, fielen sie beim naechsten
+    // Flush auf NULL zurueck.
+    call.appointmentDate ?? null,
+    call.appointmentTime ?? null,
+    call.amount ?? null,
+    call.currency ?? null,
+    // ABNAHME-D1 ($47-$49): die bestaetigte Zeitzone des Angerufenen, aus demselben
+    // Grund IM ON CONFLICT DO UPDATE SET wie die vier Werte darueber - und
+    // UEBERSCHREIBBAR (Eigentuemer-Auflage), ein spaeterer Flush darf einen frischer
+    // bestaetigten Wert deshalb bewusst ersetzen.
+    call.calleeConfirmedTimezone ?? null,
+    call.calleeConfirmedTimezoneOrigin ?? null,
+    call.calleeConfirmedTimezoneAt ?? null,
+    // Phase-6-Join-Schluessel ($50, angehaengt -> keine Umnummerierung). IM ON CONFLICT
+    // DO UPDATE SET, Muster+Grund identisch zu elevenlabs_conversation_id oben.
+    call.sipCallId ?? null,
+  ];
+}
+
 async function flushCalls(client, tenantId, calls) {
   await deleteMissingCallsKeepActive(
     client,
@@ -1565,8 +1699,8 @@ async function flushCalls(client, tenantId, calls) {
           elevenlabs_conversation_id, answered_unclear_reason,
           appointment_date, appointment_time, amount, currency,
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
-          callee_confirmed_timezone_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49)
+          callee_confirmed_timezone_at, sip_call_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1589,116 +1723,9 @@ async function flushCalls(client, tenantId, calls) {
          amount=EXCLUDED.amount, currency=EXCLUDED.currency,
          callee_confirmed_timezone=EXCLUDED.callee_confirmed_timezone,
          callee_confirmed_timezone_origin=EXCLUDED.callee_confirmed_timezone_origin,
-         callee_confirmed_timezone_at=EXCLUDED.callee_confirmed_timezone_at`,
-      [
-        c.id,
-        tenantId,
-        c.streamToken,
-        c.twilioSid,
-        c.direction,
-        c.from,
-        c.to,
-        c.goal,
-        c.briefing,
-        c.constraints,
-        c.callerName,
-        c.language,
-        c.maxDurationS,
-        c.requestedBy,
-        c.status,
-        c.startedAt,
-        c.answeredAt,
-        c.endedAt,
-        c.summary,
-        serializeObjective(c.objectiveAchieved),
-        c.provider || DEFAULT_PROVIDER,
-        c.summarySmsSentAt ?? null,
-        // P3: Per-Call-Kontext als JSONB (Muster profile.data: Objekt -> JSON.stringify,
-        // sonst NULL). SEIT AL-P13 IM ON CONFLICT DO UPDATE SET: der Kontext ist NICHT
-        // mehr nach dem Create unveraenderlich - answerConsult merged die Antwort einer
-        // Rueckfrage in context.key_facts. Ohne den UPDATE-Eintrag faellt jede beantwortete
-        // Rueckfrage beim naechsten Flush lautlos auf den Create-Zustand zurueck.
-        c.context ? JSON.stringify(c.context) : null,
-        // CDF1: Fehlergrund-Token ($24). IM ON CONFLICT DO UPDATE SET (anders als context),
-        // weil er NACH dem Create im /voice/status-Callback gesetzt wird.
-        c.failureReason ?? null,
-        // F9 (A6): Bucht-Marker ($25). IM ON CONFLICT DO UPDATE SET (Muster failure_reason),
-        // weil er NACH dem Create in finishCall gesetzt wird.
-        c.billedAt ?? null,
-        // P5 (C-Telnyx): Call-Control-Handles ($26-$27). IM ON CONFLICT DO UPDATE SET
-        // (Muster twilio_sid) - sie werden NACH dem Create bei erfolgreicher Call-Control-
-        // Origination gesetzt, nicht beim initialen createCall.
-        c.callControlId ?? null,
-        c.assistantId ?? null,
-        // P2b: Diagnose-Markierung. Wie context NICHT im ON CONFLICT DO UPDATE SET -
-        // sie wird bei createCall gesetzt und danach nie mehr geaendert.
-        c.diagnostic === true,
-        // P6: Vorab-Mandat als JSONB ($29, ans Ende angehaengt -> keine Umnummerierung).
-        // Wie context NICHT im ON CONFLICT DO UPDATE SET: bei createCall gesetzt, danach
-        // unveraendert.
-        c.mandate ? JSON.stringify(c.mandate) : null,
-        // LCT P2 ($30-$34): ALLE FUENF im ON CONFLICT DO UPDATE SET - anders als
-        // context/mandate/diagnostic (bei createCall gesetzt, danach unveraenderlich)
-        // mutieren sie NACH dem Create: estimated_cost_cents in reconcileVoiceBudget,
-        // die vier uebrigen im Kosten-Abgleich (P3). Fehlte auch nur eine im UPDATE-SET,
-        // fiele der Wert beim naechsten Flush auf den Create-Zustand zurueck, der Call
-        // saehe dauerhaft "nie abgeglichen" aus und P3 fragte ihn endlos erneut ab.
-        c.estimatedCostCents ?? null,
-        c.actualCostMicroCents ?? null,
-        c.costTruedAt ?? null,
-        c.costTruedSource ?? null,
-        c.costTruingAttempts ?? 0,
-        // AL-P1 ($35-$36): BEIDE im ON CONFLICT DO UPDATE SET - anders als context/mandate/
-        // diagnostic mutieren sie NACH dem Create (Conversation-Webhook bzw. jeder
-        // Anrufer-Turn). Fehlten sie im UPDATE-SET, fiele der Wert beim naechsten Flush auf
-        // den Create-Zustand zurueck und die ganze Achse maesse dauerhaft 0.
-        c.telnyxConversationId ?? null,
-        c.callerTurns ?? 0,
-        // AL-P11 ($37): JSONB (Muster context/mandate: Objekt -> JSON.stringify, sonst NULL).
-        // ANDERS als context/mandate IM ON CONFLICT DO UPDATE SET: die Karte entsteht erst
-        // in summarizeCall, also NACH dem Create. Fehlte sie im UPDATE-SET, faellt sie beim
-        // naechsten Flush auf NULL zurueck und der Evidence-Purge haette nie etwas zu tun.
-        c.result ? JSON.stringify(c.result) : null,
-        // AL-P13 ($38): JSONB (Muster result). IM ON CONFLICT DO UPDATE SET - die
-        // Kette entsteht/mutiert NACH dem Create (emit beim Waehlen, answer beim
-        // Poll). Fehlte sie im UPDATE-SET, faellt sie beim naechsten Flush auf NULL
-        // zurueck und jede beantwortete Rueckfrage waere nach dem Flush weg.
-        c.consults ? JSON.stringify(c.consults) : null,
-        // KS-P5 ($39-$40): BEIDE im ON CONFLICT DO UPDATE SET - sie entstehen zusammen mit
-        // estimated_cost_cents NACH dem Create (reconcileVoiceBudget), also aus
-        // genau dem Grund, aus dem estimated_cost_cents dort schon steht. Fehlten sie im
-        // UPDATE-SET, faellt der Anker beim naechsten Flush auf NULL zurueck und jede
-        // spaetere Gutschrift wirkte nur noch auf der Lebenszeit-Achse.
-        c.estimatedCostSpendMonthKey ?? null,
-        c.estimatedCostPeriodKey ?? null,
-        // EL-BL1 ($41, ans Ende angehaengt -> keine Umnummerierung): IM ON CONFLICT DO
-        // UPDATE SET (Muster telnyx_conversation_id) - die Kennung entsteht NACH dem
-        // Create, sobald das Laufwerk das Gespraech eroeffnet hat. Fehlte sie im
-        // UPDATE-SET, fiele die Bindung beim naechsten Flush auf NULL zurueck und der
-        // Rueckfrage-Webhook faende den laufenden Anruf nicht mehr.
-        c.elevenlabsConversationId ?? null,
-        // KS-EL1 ($42, ans Ende angehaengt -> keine Umnummerierung): IM ON CONFLICT DO
-        // UPDATE SET (Muster elevenlabs_conversation_id) - der Grund entsteht NACH dem
-        // Create, am Gespraechsende (finishFromConversation). Fehlte er im UPDATE-SET,
-        // fiele er beim naechsten Flush auf NULL zurueck.
-        c.answeredUnclearReason ?? null,
-        // ABNAHME-D1 ($43-$46, ans Ende angehaengt -> keine Umnummerierung): die vier
-        // strukturiert gesammelten Angaben. IM ON CONFLICT DO UPDATE SET (Muster
-        // answered_unclear_reason) - sie entstehen NACH dem Create, am Gespraechsende
-        // (persistProviderResult). Fehlten sie im UPDATE-SET, fielen sie beim naechsten
-        // Flush auf NULL zurueck.
-        c.appointmentDate ?? null,
-        c.appointmentTime ?? null,
-        c.amount ?? null,
-        c.currency ?? null,
-        // ABNAHME-D1 ($47-$49): die bestaetigte Zeitzone des Angerufenen, aus demselben
-        // Grund IM ON CONFLICT DO UPDATE SET wie die vier Werte darueber - und
-        // UEBERSCHREIBBAR (Eigentuemer-Auflage), ein spaeterer Flush darf einen frischer
-        // bestaetigten Wert deshalb bewusst ersetzen.
-        c.calleeConfirmedTimezone ?? null,
-        c.calleeConfirmedTimezoneOrigin ?? null,
-        c.calleeConfirmedTimezoneAt ?? null,
-      ],
+         callee_confirmed_timezone_at=EXCLUDED.callee_confirmed_timezone_at,
+         sip_call_id=EXCLUDED.sip_call_id`,
+      callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);
   }

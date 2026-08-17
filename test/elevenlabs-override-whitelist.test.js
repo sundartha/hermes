@@ -107,7 +107,7 @@ test("EL-OVERRIDE: nur die zwei erlaubten Pfade -> der Anrufstart geht durch (Po
     tts: { voice_id: ALLOWED_VOICE_ID },
   });
 
-  const conversationId = await startOutboundCall({ fetchImpl, account: ACCOUNT, body, callId: CALL_ID });
+  const { conversationId } = await startOutboundCall({ fetchImpl, account: ACCOUNT, body, callId: CALL_ID });
 
   assert.equal(conversationId, CONVERSATION_ID);
   assert.equal(calls.length, 1, "genau EIN Netzaufruf bei erlaubtem Override");
@@ -117,7 +117,7 @@ test("EL-OVERRIDE: nur EINER der zwei erlaubten Pfade gesetzt -> geht ebenfalls 
   const { fetchImpl, calls } = recordingFetch();
   const body = bodyWithOverride({ tts: { voice_id: ALLOWED_VOICE_ID } });
 
-  const conversationId = await startOutboundCall({ fetchImpl, account: ACCOUNT, body, callId: CALL_ID });
+  const { conversationId } = await startOutboundCall({ fetchImpl, account: ACCOUNT, body, callId: CALL_ID });
 
   assert.equal(conversationId, CONVERSATION_ID);
   assert.equal(calls.length, 1, "die Whitelist verlangt nicht BEIDE Pfade, nur dass es keine dritten gibt");
@@ -127,7 +127,7 @@ test("EL-OVERRIDE: kein Override-Objekt -> unveraendertes Bestandsverhalten (heu
   const { fetchImpl, calls } = recordingFetch();
   const body = bodyWithOverride(undefined);
 
-  const conversationId = await startOutboundCall({ fetchImpl, account: ACCOUNT, body, callId: CALL_ID });
+  const { conversationId } = await startOutboundCall({ fetchImpl, account: ACCOUNT, body, callId: CALL_ID });
 
   assert.equal(conversationId, CONVERSATION_ID);
   assert.equal(calls.length, 1, "der heutige Anrufstart (kein Override-Objekt) bleibt unveraendert");
@@ -161,7 +161,7 @@ test("EL-OVERRIDE: ein leeres Override-Objekt setzt nichts und geht durch", asyn
   const { fetchImpl, calls } = recordingFetch();
   const body = bodyWithOverride({});
 
-  const conversationId = await startOutboundCall({ fetchImpl, account: ACCOUNT, body, callId: CALL_ID });
+  const { conversationId } = await startOutboundCall({ fetchImpl, account: ACCOUNT, body, callId: CALL_ID });
 
   assert.equal(conversationId, CONVERSATION_ID);
   assert.equal(calls.length, 1, "ein leeres Objekt setzt keinen Pfad - nichts zu verbieten");

@@ -74,6 +74,11 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
     // (die eigene Erfassung deckt test/elevenlabs-data-collection.test.js ab).
     recordProviderCollectedFields: () => {},
     recordCalleeConfirmedTimezone: () => {},
+    // Join-Schluessel zur Telefonie-Rechnung (persistProviderResult, s.
+    // src/elevenlabs/outbound.js): hier ein No-op - der Sachverhalt dieser Datei
+    // haengt nicht an ihm, aber die Attrappe muss die Methode kennen, sonst wirft
+    // der Ergebnisweg einen TypeError.
+    recordSipCallId: () => {},
     trueUpAnsweredAt: (_id, answeredAtIso) => {
       captured.answeredAtIso = answeredAtIso;
     },

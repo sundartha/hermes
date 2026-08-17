@@ -110,9 +110,9 @@ function pinCall() {
 
 // Nur die Methoden, die originateCall wirklich aufruft (tenantContext, tenantTimezone,
 // load + numberRecordByE164 fuer die Sprach-/Stimmwahl, recordElevenlabsConversationId,
-// markAnswered) - plus getCall als Absicherung fuer den re-armierten Poll-Takt (s.u.).
-// Kein echter Store: dieser Test ist reine Einheit gegen outbound.js, keine Server-/
-// Store-Integration.
+// recordSipCallId, markAnswered) - plus getCall als Absicherung fuer den re-armierten
+// Poll-Takt (s.u.). Kein echter Store: dieser Test ist reine Einheit gegen outbound.js,
+// keine Server-/Store-Integration.
 function pinStore() {
   return {
     tenantContext: () => ({ ownerName: "Pin Testowner" }),
@@ -120,6 +120,11 @@ function pinStore() {
     load: () => PIN_STATE,
     numberRecordByE164: (e164) => (e164 === PIN_FROM ? PIN_NUMBER : null),
     recordElevenlabsConversationId: () => {},
+    // Join-Schluessel zur Telefonie-Rechnung: hier ein No-op - dieser Test misst den
+    // gesendeten Anfragekoerper, nicht die Persistenz (test/el-sip-call-id-join.test.js).
+    // Die Attrappe muss die Methode aber kennen, sonst wirft der Anrufstart einen
+    // TypeError, NACHDEM der Anruf schon losgelaufen waere.
+    recordSipCallId: () => {},
     markAnswered: () => {},
     getCall: () => null,
   };

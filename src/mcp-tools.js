@@ -32,9 +32,9 @@ import { localeFor } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
-// Exportiert: src/conversation/outcome-to-mcp-fields.js baut denselben Slice-Wert fuer
-// die Anbieterwechsel-Abbildung, rein additiv, keine Verhaltensaenderung hier.
-export const LAST_TRANSCRIPT_LINES = 6;
+// NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
+// fields.js, und der ist am 17.08.2026 als toter Export geloescht worden (Phase 5).
+const LAST_TRANSCRIPT_LINES = 6;
 
 // identity (optional): wird als interner X-Internal-Identity-Header an die localhost-
 // REST-API gereicht und dient seit Phase S nur noch Audit/requestedBy (Forensik), NICHT
@@ -133,9 +133,9 @@ export function mapStatus(c) {
 // startedAt - KEIN answeredAt-Fallback: bei markAnswered wuerde der Anker sonst
 // vorspringen und die angezeigte Dauer rueckwaerts springen (z.B. 3->2). Reiner
 // Anzeigewert; abgerechnet wird separat ueber voiceMinutesOf (answeredAt..endedAt).
-// Exportiert: src/conversation/outcome-to-mcp-fields.js nutzt dieselbe Umrechnung
-// fuer dieselbe Feldform (startedAt/endedAt), rein additiv, keine Verhaltensaenderung.
-export function durationS(c) {
+// NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
+// fields.js, und der ist am 17.08.2026 als toter Export geloescht worden (Phase 5).
+function durationS(c) {
   const start = c.startedAt;
   const end = c.endedAt || new Date().toISOString();
   return Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));

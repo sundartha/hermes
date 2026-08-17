@@ -138,13 +138,45 @@ async function convaiFetch({ fetchImpl, account, path, op, init, timeoutMs = REQ
 }
 
 /**
- * Startet den Anruf beim Anbieter. Liefert die SYNCHRON zurueckgegebene conversation_id
- * (null, wenn der Anbieter keine mitschickt - der Aufrufer behandelt das als Fehlschlag).
+ * Die BEIDEN Kennungen der Anrufstart-Antwort (Anbieter-Schema
+ * SIPTrunkOutboundCallResponse: success, message, conversation_id, sip_call_id) in
+ * unserer Schreibweise. Fehlt eine, ist sie null - nie undefined, damit der Aufrufer
+ * genau eine Leerform kennt.
+ *
+ * WARUM sip_call_id ueberhaupt gelesen wird (am 17.08.2026 an einem echten Anruf
+ * belegt, s. .fortschritt.md): es ist die SIP-Call-ID des ausgehenden Legs, in der Form
+ * "otb_...". DENSELBEN Wert fuehrt der Telefonie-Beleg von Telnyx
+ * (GET /v2/detail_records, record_type sip-trunking) als sip_call_id, und der
+ * Gespraechs-Datensatz des Anbieters traegt ihn als metadata.phone_call.call_id. Er ist
+ * damit der EINZIGE Join zwischen den beiden Kostenquellen dieses Wegs: die alte
+ * Kosten-Kette jointe ueber call_control_id + telnyx_session_id, und BEIDES existiert
+ * auf der SIP-Trunk-Strecke nicht (call_control_id steht im Beleg leer,
+ * is_callcontrol: false). Aus conversation_id ist er NICHT berechenbar - beide teilen
+ * nur einen Zeitstempel-Anteil.
+ *
+ * EXPORTIERT, weil die Trockenlege-Attrappe (elevenlabs/outbound.js#
+ * fakeSipTrunkOutboundCallResponse) in der FORM DES ANBIETERS antwortet und durch GENAU
+ * DIESE Uebersetzung gelesen wird - eine zweite, dort getippte Zuordnung derselben zwei
+ * Feldnamen koennte von dieser abdriften (G5), und der Fake wuerde dann etwas anderes
+ * liefern als der echte Weg.
+ */
+export function startResultOf(antwort) {
+  return {
+    conversationId: antwort?.conversation_id || null,
+    sipCallId: antwort?.sip_call_id || null,
+  };
+}
+
+/**
+ * Startet den Anruf beim Anbieter. Liefert die SYNCHRON zurueckgegebenen Kennungen
+ * (s. startResultOf: conversationId null, wenn der Anbieter keine mitschickt - der
+ * Aufrufer behandelt das als Fehlschlag).
  * WIRFT VOR JEDEM Netzzugriff, wenn body.conversation_initiation_client_data.
  * conversation_config_override etwas ausserhalb der Whitelist setzt (s.
  * assertOverrideWhitelisted oben) - callId dient nur diesem Log, kein Fachwert.
  * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object,
  *   callId?: string}} args
+ * @returns {Promise<{conversationId: string|null, sipCallId: string|null}>}
  */
 export async function startOutboundCall({ fetchImpl, account, body, callId }) {
   assertOverrideWhitelisted(body, callId);
@@ -155,7 +187,7 @@ export async function startOutboundCall({ fetchImpl, account, body, callId }) {
     op: "Anrufstart",
     init: { method: "POST", body: JSON.stringify(body) },
   });
-  return antwort.conversation_id || null;
+  return startResultOf(antwort);
 }
 
 /**

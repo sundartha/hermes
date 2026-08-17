@@ -16,6 +16,24 @@ import { localeFor } from "../i18n/locales.js";
 // Provider-SMS-Segmentgrenze (Zusammenfassungs-SMS wird hierauf gekuerzt).
 const SMS_BODY_MAX_CHARS = 1500;
 
+// Die Action Items, die zu DIESEM Anruf bereits im Store stehen - als blosse Texte, in
+// derselben Form, die summarizeCall auf dem Bestandsweg liefert (die Zusammenfassungs-SMS
+// unten nummeriert sie).
+//
+// HIER STAND EIN HART GESETZTES [] (nur im Anbieter-Zweig, s. unten): dieser Zweig
+// ueberspringt summarizeCall, weil die Zusammenfassung schon am Record steht - und gab
+// damit auch die Action Items als "keine" aus, obwohl der Ergebnisabruf sie unmittelbar
+// davor geschrieben hat (elevenlabs/outbound.js#persistNextStep laeuft in
+// finishFromConversation VOR terminateAndBillCall, also vor dieser Stelle). Die
+// Zusammenfassungs-SMS verschwieg den vereinbarten naechsten Schritt deshalb immer.
+//
+// NUR DER ANBIETER-ZWEIG liest hier: auf dem Bestandsweg bleibt summarizeCall die Quelle
+// (dort laeuft store.addActionItem erst NACH dem Rueckgabewert, claude.js), und der Text
+// der SMS bleibt dort byte-identisch zum Bestand.
+function storedActionItemTexts(store, callId) {
+  return store.callActionItems(callId).map((item) => item.text);
+}
+
 export function makeCallFinish({
   store,
   config,
@@ -81,7 +99,7 @@ export function makeCallFinish({
       // fuer Arbeit, die schon bezahlt ist. Auf JEDEM anderen Weg ist call.summary hier
       // leer (sie entsteht erst IN summarizeCall) -> Bestandsverhalten unveraendert.
       const result = call.summary
-        ? { summary: call.summary, actionItems: [] }
+        ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
         : await summarizeCall(call);
       // Roh-Transkript-Purge (#7, DSGVO-Datenminimierung). P2b: der Purge steht jetzt VOR
       // dem Frueh-Return. Ein leeres `result` heisst hier NICHT "Fehler" - ein Fehler

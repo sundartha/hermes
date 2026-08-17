@@ -239,6 +239,14 @@ CREATE TABLE IF NOT EXISTS call (
   -- ueber sie bindet der Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) eine
   -- eingehende Werkzeug-Anfrage an einen laufenden Anruf und damit an seinen Mandanten.
   elevenlabs_conversation_id TEXT,
+  -- PHASE-6-VORAUSSETZUNG (Fertig-Punkt 7): die SIP-Call-ID des ausgehenden Legs
+  -- (Form 'otb_...'). DERSELBE Wert steht im Telefonie-Beleg von Telnyx
+  -- (detail_records.sip_call_id) und im Gespraechs-Datensatz des Anbieters
+  -- (metadata.phone_call.call_id) - er ist der EINZIGE Join zwischen den beiden
+  -- Kostenquellen dieses Wegs (call_control_id/telnyx_session_id, ueber die die alte
+  -- Kosten-Kette jointe, existieren auf der SIP-Trunk-Strecke nicht). Additiv NULLABLE -
+  -- nur der ElevenLabs-Pfad setzt sie, jeder andere Call bleibt NULL.
+  sip_call_id TEXT,
   -- AL-P1 (Abbruch-Achse): Anzahl Turns dieses Calls mit nicht-leerer Anrufer-
   -- Aeusserung. PII-FREI (nur ein Zaehler, nie Text) und PURGE-FEST: purgeTranscript
   -- leert call.transcript nach der Summary, "null Anrufer-Zeilen" traefe danach auf
@@ -335,6 +343,14 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS caller_turns INTEGER NOT NULL DEFAULT 
 -- telnyx_conversation_id). Idempotent; frische DB = No-op. KEIN Backfill noetig: es gibt
 -- keinen einzigen Bestands-Anruf mit dieser Kennung, sie misst ab Deploy vorwaerts.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS elevenlabs_conversation_id TEXT;
+
+-- PHASE-6-VORAUSSETZUNG: den Join-Schluessel zur Telefonie-Rechnung auf Bestands-call-
+-- Tabellen nachziehen (Muster elevenlabs_conversation_id). Idempotent; frische DB =
+-- No-op. KEIN Backfill - und zwar nicht bloss "nicht noetig", sondern NICHT MOEGLICH: der
+-- Wert steht ausschliesslich im Anbieter-Datensatz, und den loescht unser eigener
+-- Abbruch-Pfad (convai.js#endConversation). Rueckwirkend ist er fuer keinen einzigen
+-- Bestands-Anruf mehr erhebbar; die Kennung misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS sip_call_id TEXT;
 
 -- AL-P11: Ergebnis-Karte auf Bestands-call-Tabellen nachziehen (Muster context/mandate).
 -- Idempotent; frische DB = No-op.

@@ -238,6 +238,10 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   // null statt auf undefined; ueber genau dieses Feld bindet der Rueckfrage-Webhook
   // eine eingehende Kennung an einen laufenden Anruf.
   elevenlabsConversationId: null,
+  // Phase-6-Voraussetzung: der Join-Schluessel zwischen ElevenLabs- und Telefonie-Kosten
+  // (json<->pg-Parity - rowToCall liefert null). Ein Bestands-store.json ohne das Feld
+  // hydriert damit strukturell auf null statt auf undefined.
+  sipCallId: null,
   callerTurns: 0,
   // AL-P11: Ergebnis-Karte (json<->pg-Parity, rowToCall liefert null).
   result: null,
@@ -536,6 +540,16 @@ export function recordTelnyxConversationId(callId, conversationId) {
 // die Bindung nach einem Prozess-Neustart weg (der Webhook fiele auf 404 zurueck).
 export function recordElevenlabsConversationId(callId, conversationId) {
   const { call, changed } = ops.recordElevenlabsConversationId(load(), callId, conversationId);
+  if (changed) save();
+  return call;
+}
+
+// Phase-6-Voraussetzung: der Join-Schluessel zur Telefonie-Rechnung - Wrapper-Paritaet zu
+// pg.js. Saved wie recordElevenlabsConversationId: das Feld liegt persistent auf Platte,
+// und ohne Save waere der Schluessel nach einem Prozess-Neustart weg - der Anbieter-Beleg,
+// aus dem er sich sonst noch holen liesse, ist dann laengst geloescht.
+export function recordSipCallId(callId, sipCallId) {
+  const { call, changed } = ops.recordSipCallId(load(), callId, sipCallId);
   if (changed) save();
   return call;
 }

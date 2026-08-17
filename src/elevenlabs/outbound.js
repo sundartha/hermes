@@ -37,7 +37,7 @@ import { LOCALES } from "../i18n/locales.js";
 import { cappedEndedAtMs, classifyCallTime } from "../store/state-ops.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 import { callLocaleFor } from "./call-locale.js";
-import { endConversation, fetchConversation, startOutboundCall } from "./convai.js";
+import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
 import crypto from "node:crypto";
@@ -210,7 +210,15 @@ const DATA_COLLECTION_ID = Object.freeze({
   // Bestaetigung des Angerufenen bekommen hat (s. die Feld-Beschreibung in der Vorlage) -
   // eine aus der Vorwahl abgeleitete Hypothese erreicht diese Kennung nie.
   CONFIRMED_TIMEZONE: "confirmed_timezone",
+  // Der im Gespraech vereinbarte naechste Schritt. Die Kennung ist in der Vorlage seit
+  // jeher deklariert, hatte aber bis heute KEINEN Leser (s. persistNextStep unten).
+  NEXT_STEPS: "next_steps",
 });
+
+// Der Typ, unter dem ein Action Item am Store liegt (store/state-ops.js: actionItems[].type).
+// "appointment" liest list_action_items (mcp-tools.js, Termin-Praefix) seit jeher - einen
+// SCHREIBER bekam der Wert erst mit persistNextStep unten.
+const ACTION_ITEM_TYPE = Object.freeze({ TODO: "todo", APPOINTMENT: "appointment" });
 
 // Herkunfts-Kennung fuer TEIL 3 (recordCalleeConfirmedTimezone, store/state-ops.js): der
 // EINZIGE heutige Erzeuger eines bestaetigten Zonenwerts ist dieser Weg. Ein eigener
@@ -275,6 +283,47 @@ function persistCollectedFields(store, callId, conversation) {
       confirmedAt: new Date().toISOString(),
     });
   }
+  const nextStep = nextStepActionItemOf(conversation, collected);
+  if (nextStep) store.addActionItem(callId, nextStep.text, nextStep.type);
+}
+
+// Der im Gespraech vereinbarte NAECHSTE SCHRITT, als Action Item am Store.
+//
+// WARUM ES DAS BRAUCHT: die Feld-Kennung "next_steps" ist am Agenten seit jeher
+// deklariert (elevenlabs/agent_configs/outbound-agent.template.json, platform_settings.
+// data_collection: "A short summary of the next steps agreed at the end of the call"),
+// wurde vom Anbieter also bei jedem Gespraech mitgeliefert - und von KEINEM Leser
+// abgeholt. Dieser Weg schrieb deshalb ueberhaupt kein Action Item, waehrend der
+// Bestandsweg welche schreibt (claude.js: die Zusammenfassung ruft store.addActionItem).
+// Folge auf dem NEUEN Hauptweg: list_action_items (mcp-tools.js) blieb dauerhaft leer,
+// egal was im Gespraech vereinbart wurde.
+//
+// DERSELBE MUTATOR WIE IM BESTANDSWEG (store.addActionItem), bewusst kein zweiter
+// Schreibweg: so gilt hier dieselbe Entdopplung inhaltsgleicher Eintraege (GQ-P4) und
+// derselbe Weg an den Auftraggeber. Ein zweiter Poll-Takt oder ein Beende-Versuch nach
+// bereits geholtem Ergebnis (endActiveCall ruft persistProviderResult ebenfalls) legt
+// deshalb KEIN zweites Item an.
+//
+// NICHTS ERFUNDEN: hat das Gespraech keinen naechsten Schritt hergeben, entsteht kein
+// Eintrag - derselbe Normalfall wie bei den fuenf Angaben oben.
+//
+// DER TYP KOMMT AUS DEMSELBEN GESPRAECH: hat es einen Termin hergegeben (Datum oder
+// Uhrzeit), ist der naechste Schritt ein Termin, sonst eine Aufgabe. Damit bekommt
+// ACTION_ITEM_TYPE.APPOINTMENT seinen ersten Schreiber ueberhaupt - gelesen wird der Wert
+// seit jeher (mcp-tools.js praefixt solche Zeilen mit dem Termin-Praefix).
+//
+// REINE ABLEITUNG ohne Store-Zugriff (P5, Praezedenz collectedFieldsOf/answeredAnchorOutcome
+// daneben): sie ENTSCHEIDET nur, der EINE Aufrufer oben schreibt. `collected` reist als
+// Argument statt hier ein zweites Mal abgeleitet zu werden (G5) - es ist dieselbe
+// Anbieter-Antwort, die der Aufrufer bereits ausgewertet hat.
+function nextStepActionItemOf(conversation, collected) {
+  const text = collectedValue(
+    conversation.analysis?.data_collection_results,
+    DATA_COLLECTION_ID.NEXT_STEPS,
+  );
+  if (!text) return null;
+  const istTermin = Boolean(collected.appointmentDate || collected.appointmentTime);
+  return { text, type: istTermin ? ACTION_ITEM_TYPE.APPOINTMENT : ACTION_ITEM_TYPE.TODO };
 }
 
 // Die Beschriftungen, mit denen Verbote und Hintergrund beim Agenten ankommen, kommen aus
@@ -893,6 +942,18 @@ export function makeElevenLabsOutbound({
     });
     // ABNAHME-D1 (TEIL 2/3): s. persistCollectedFields oben (Modul-Ebene, G30).
     persistCollectedFields(store, callId, conversation);
+    // PHASE-6-VORAUSSETZUNG, ZWEITE Gelegenheit fuer denselben Join-Schluessel: derselbe
+    // "otb_"-Wert wie sip_call_id des Anrufstarts, hier aus dem Gespraechs-Datensatz
+    // (GEMESSEN, test/fixtures/elevenlabs-conversations.js). Der Anrufstart bleibt die
+    // erste und wichtigere Gelegenheit; diese hier greift nur, wenn er nichts geliefert
+    // hat (set-once, s. store/state-ops.js#recordSipCallId - ein hier gelesener Wert
+    // ueberschreibt den frueheren NIE).
+    //
+    // DIE STELLE IST BEWUSST GEWAEHLT: persistProviderResult laeuft auf BEIDEN Wegen VOR
+    // dem Loeschversuch beim Anbieter - im regulaeren Ende (finishFromConversation) gibt
+    // es gar keinen, im Abbruch (endActiveCall) ist die Reihenfolge Abruf-vor-Loeschen
+    // bindend. Was hier nicht gesichert ist, ist danach unwiederbringlich weg.
+    store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
   }
 
   // Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
@@ -1057,8 +1118,8 @@ export function makeElevenLabsOutbound({
     // Alle Gates/Berechnungen oberhalb (assertConfigured, Zeitkontext, Sprach-/Stimmwahl)
     // laufen unveraendert - der Fake unterscheidet sich einzig in der Herkunft der
     // conversation_id.
-    const conversationId = config.safety.fakeOriginateElevenlabs
-      ? fakeSipTrunkOutboundCallResponse().conversation_id
+    const { conversationId, sipCallId } = config.safety.fakeOriginateElevenlabs
+      ? startResultOf(fakeSipTrunkOutboundCallResponse())
       : await startOutboundCall({
           fetchImpl: fetch,
           account: el,
@@ -1072,6 +1133,22 @@ export function makeElevenLabsOutbound({
     // AL-P1/EL-BL1: set-once am Record. Es ist dieselbe Kennung, ueber die der
     // Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) den laufenden Anruf bindet.
     store.recordElevenlabsConversationId(call.id, conversationId);
+    // PHASE-6-VORAUSSETZUNG: der Join-Schluessel zur Telefonie-Rechnung, an der FRUEHESTEN
+    // Stelle, an der es ihn gibt - er kommt in derselben Antwort wie die conversation_id,
+    // ohne einen einzigen zusaetzlichen Abruf (s. convai.js#startResultOf).
+    //
+    // WARUM SO FRUEH: der Wert steht sonst NUR im Anbieter-Datensatz, und unser eigener
+    // Abbruch-Pfad LOESCHT den (convai.js#endConversation, gemessen 0,3 s nach dem
+    // Abbruch). Wer ihn erst danach sucht, kann die Telefonie-Kosten dem Anruf nie
+    // mehr zuordnen - rueckwirkend ist der Schluessel aus keiner Quelle mehr erhebbar.
+    //
+    // KEIN throw bei fehlendem Wert, ANDERS als bei der conversation_id eine Zeile
+    // darueber: der Anruf LAEUFT an dieser Stelle bereits (der Anrufstart ist blockierend
+    // ueber die ganze Klingelphase). Ein fehlender Buchhaltungs-Schluessel darf einen
+    // laufenden Anruf nicht in den Fehlerpfad schicken - er ist dann ein No-op
+    // (value-gated, s. store/state-ops.js#recordSipCallId), und der Ergebnisabruf holt
+    // ihn aus metadata.phone_call.call_id nach (persistProviderResult).
+    store.recordSipCallId(call.id, sipCallId);
     // DAS VERBINDUNGSSIGNAL DIESES WEGES, NICHT (mehr) der Buchungsanker (S1-2a, Kommentar
     // auf den heutigen Stand gebracht - Commit 08fc253 hat die Bedeutung getrennt).
     // answeredAt traegt zwei Sachverhalte: "die Verbindung steht" (isInCallConsult/

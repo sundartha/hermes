@@ -114,6 +114,11 @@ function storeFacade(state) {
     recordProviderCallResult: (id, ergebnis) => ops.recordProviderCallResult(state, id, ergebnis),
     recordProviderCollectedFields: (id, felder) => ops.recordProviderCollectedFields(state, id, felder),
     recordCalleeConfirmedTimezone: (id, zone) => ops.recordCalleeConfirmedTimezone(state, id, zone),
+    // Join-Schluessel zur Telefonie-Rechnung (persistProviderResult, s.
+    // src/elevenlabs/outbound.js): hier ein No-op - der Sachverhalt dieser Datei
+    // haengt nicht an ihm, aber die Attrappe muss die Methode kennen, sonst wirft
+    // der Ergebnisweg einen TypeError.
+    recordSipCallId: () => {},
     trueUpAnsweredAt: (id, iso) => ops.trueUpAnsweredAt(state, id, iso),
     recordAnsweredUnclearReason: (id, grund) => ops.recordAnsweredUnclearReason(state, id, grund),
     setCallEndedAt: (id, status, iso) => ops.setCallEndedAt(state, id, status, iso),

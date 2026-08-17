@@ -320,6 +320,13 @@ export function createCall(
     // der Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) einen laufenden Anruf
     // bindet. Initial null - byte-identisch zur pg-Hydrierung (rowToCall).
     elevenlabsConversationId: null,
+    // PHASE-6-VORAUSSETZUNG (Fertig-Punkt 7, "die Kosten sind gemessen, aufgeschluesselt
+    // nach ElevenLabs, Sprachmodell und Telefonie"): die SIP-Call-ID des ausgehenden Legs
+    // (Form "otb_..."). Der EINZIGE Join zwischen unseren zwei Kostenquellen auf der
+    // SIP-Trunk-Strecke - Herkunft und Beleg s. elevenlabs/convai.js#startResultOf.
+    // Additiv nullable: nur der ElevenLabs-Weg setzt sie, jeder andere Call bleibt null -
+    // byte-identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
+    sipCallId: null,
     // ABNAHME-D1 (Owner-Auftrag: eigene Felder im Ergebnisschema, additiv NEBEN summary/
     // result). Vom Agenten waehrend des Gespraechs STRUKTURIERT gesammelt (ElevenLabs
     // Data Collection, analysis.data_collection_results) statt nur als Freitext in
@@ -729,6 +736,16 @@ export const recordTelnyxConversationId = recordProviderHandleOnce("telnyxConver
 export const recordElevenlabsConversationId = recordProviderHandleOnce(
   "elevenlabsConversationId",
 );
+
+// Der Join-Schluessel zwischen ElevenLabs- und Telefonie-Kosten (s. Feld-Kommentar in
+// createCall). DIESELBE Fabrik wie die Handles darueber, und set-once ist hier keine
+// Formalie, sondern der Punkt: ZWEI Schreiber liefern denselben Wert - der Anrufstart
+// (frueheste Gelegenheit, elevenlabs/outbound.js#originateCall) und der Ergebnisabruf
+// (metadata.phone_call.call_id, persistProviderResult - er laeuft VOR dem Loeschversuch
+// beim Anbieter). Der zweite darf den ersten nicht ueberschreiben; ein fehlender Wert
+// ist ein No-op (changed=false -> kein Save), damit ein Anbieter, der die Kennung im
+// Anrufstart weglaesst, den Anruf nicht scheitern laesst.
+export const recordSipCallId = recordProviderHandleOnce("sipCallId");
 
 // KS-EL1: der GRUND, warum trueUpAnsweredAt oben KEINEN Anker ermitteln konnte (additiv
 // nullable). Set-once + value-gated ueber DIESELBE Fabrik wie die Provider-Handles - die

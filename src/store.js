@@ -124,6 +124,11 @@ export const {
   // undefined -> der Schreibweg wuerfe zur Laufzeit einen TypeError (Muster
   // recordTelnyxConversationId).
   recordElevenlabsConversationId,
+  // Phase-6-Voraussetzung: der Join-Schluessel zwischen ElevenLabs- und Telefonie-Kosten.
+  // OHNE diesen Re-Export waere store.recordSipCallId auf der Fassade undefined -> der
+  // Anrufstart wuerfe zur Laufzeit einen TypeError, NACHDEM der echte Anruf schon laeuft
+  // (Muster recordElevenlabsConversationId).
+  recordSipCallId,
   // EL-Anrufstart: Zusammenfassung + Befund eines vom Anbieter gefuehrten Gespraechs. OHNE
   // diesen Re-Export waere store.recordProviderCallResult auf der Fassade undefined -> der
   // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster
