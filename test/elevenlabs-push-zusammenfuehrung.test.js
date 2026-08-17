@@ -28,7 +28,11 @@ import {
 } from "./helpers/elevenlabs-push-attrappe.mjs";
 
 process.env.ELEVENLABS_API_KEY = TEST_SCHLUESSEL;
-const { mitSchreibwerten, runCli: RUN_CLI } = await import("../scripts/push-elevenlabs.mjs");
+const {
+  koerperVerstoesse,
+  mitSchreibwerten,
+  runCli: RUN_CLI,
+} = await import("../scripts/push-elevenlabs.mjs");
 
 const PFAD = "platform_settings.data_collection";
 const FELD = "data_collection";
@@ -181,5 +185,44 @@ describe("Rotprobe: ein nur live vorhandener Schluessel bricht ab, statt zu vers
     assert.equal(lauf.aufrufe.length, 1, "genau ein Aufruf, und der liest");
     assert.equal(schreibendeAufrufe(lauf.aufrufe).length, KEIN_AUFRUF);
     assert.match(lauf.ausgabe, /PATCH-KOERPER/);
+  });
+});
+
+// ---- Riegel 2b: Entwickler-Doku, die mitreisen wuerde --------------------------------
+// Diese Vorlage erklaert sich in Schluesseln mit fuehrendem Unterstrich. Der Vergleich
+// laesst sie auf der OBERSTEN Ebene einer Sammlung aus - INNERHALB eines Eintrags aber
+// nicht, und von dort ginge sie beim Schreiben mit. Der Anbieter kennt solche Schluessel
+// nicht. Der Fall ist real: das es-Preset traegt drei Begruendungen in seinem Eintrag;
+// waere es je ein NEUER Schluessel (frisch angelegter Agent), kaeme der Eintrag
+// vollstaendig aus der Vorlage - samt Doku.
+describe("Riegel 2b: ein Doku-Schluessel im Koerper wird abgelehnt, nicht herausgefiltert", () => {
+  const ABWEICHUNG_PRESETS = [
+    {
+      feld: "language_presets",
+      art: "namen",
+      livePfade: ["conversation_config.language_presets"],
+      ausgenommen: null,
+    },
+  ];
+  const befundeFuer = (koerper) =>
+    koerperVerstoesse({ koerper, abweichungen: ABWEICHUNG_PRESETS, auswahl: ["language_presets"] });
+
+  it("ein _-Schluessel unter einem gewaehlten Pfad ist ein Befund", () => {
+    const koerper = {
+      conversation_config: {
+        language_presets: { de: { overrides: {}, _begruendung: "steht hier falsch" } },
+      },
+    };
+    const befunde = befundeFuer(koerper);
+    assert.equal(befunde.length, 1, `genau ein Befund erwartet, waren: ${befunde}`);
+    assert.match(befunde[0], /^ENTWICKLER-DOKU IM KOERPER/);
+    assert.match(befunde[0], /_begruendung/);
+  });
+
+  it("Positiv-Kontrolle: derselbe Koerper ohne den Doku-Schluessel ist sauber", () => {
+    const koerper = {
+      conversation_config: { language_presets: { de: { overrides: { agent: {} } } } },
+    };
+    assert.deepEqual(befundeFuer(koerper), []);
   });
 });

@@ -67,12 +67,8 @@ import http from "node:http";
 import test from "node:test";
 
 import { timezoneForCountry } from "../src/geo/resolve.js";
-import { DISCLOSURE_OWNER_FALLBACK_EN, LOCALES } from "../src/i18n/locales.js";
-import {
-  BOOTSTRAP_TENANT_ID,
-  DEFAULT_TIMEZONE,
-  countryForE164,
-} from "../src/store/defaults.js";
+import { LOCALES } from "../src/i18n/locales.js";
+import { BOOTSTRAP_TENANT_ID, DEFAULT_TIMEZONE, countryForE164 } from "../src/store/defaults.js";
 import {
   OWNER_TEST_FIRST_NAME,
   OWNER_TEST_LAST_NAME,
@@ -537,23 +533,29 @@ test("EL-START ROTPROBE-1: FAKE_ORIGINATE_ELEVENLABS=true erreicht den Anbieter 
         assert.ok(antwort.callId, "callId fehlt in der Antwort");
       });
 
-      await ctx.test("KEIN Netzzugriff gegen den Anbieter (POST /v1/convai/sip-trunk/outbound-call)", () => {
-        assert.equal(
-          mock.startRequests.length,
-          0,
-          "der Anrufstart darf den Anbieter mit gesetztem Schalter NIE erreichen",
-        );
-      });
+      await ctx.test(
+        "KEIN Netzzugriff gegen den Anbieter (POST /v1/convai/sip-trunk/outbound-call)",
+        () => {
+          assert.equal(
+            mock.startRequests.length,
+            0,
+            "der Anrufstart darf den Anbieter mit gesetztem Schalter NIE erreichen",
+          );
+        },
+      );
 
-      await ctx.test("die Kennung traegt die Anbieter-Form (SIPTrunkOutboundCallResponse), erfundene Werte klar markiert", () => {
-        const call = ownCalls(srv)[0];
-        assert.ok(call, "kein Call-Datensatz angelegt");
-        assert.match(
-          call.elevenlabsConversationId,
-          /^fake_el_[0-9a-f]{16}$/,
-          `fake_el_-Praefix fehlt: ${call.elevenlabsConversationId}`,
-        );
-      });
+      await ctx.test(
+        "die Kennung traegt die Anbieter-Form (SIPTrunkOutboundCallResponse), erfundene Werte klar markiert",
+        () => {
+          const call = ownCalls(srv)[0];
+          assert.ok(call, "kein Call-Datensatz angelegt");
+          assert.match(
+            call.elevenlabsConversationId,
+            /^fake_el_[0-9a-f]{16}$/,
+            `fake_el_-Praefix fehlt: ${call.elevenlabsConversationId}`,
+          );
+        },
+      );
     },
   );
 });
@@ -671,17 +673,20 @@ test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassun
       // (Lehre pruefkommando-ohne-positiv-kontrolle). Beide Wachen trennen das ab - die
       // Reserve ist derselbe Minutensatz dieses Legs (tariffCentsPerMin(to, from) x
       // Vorlauffenster, outboundReserveCents), nur vor dem Waehlen statt danach.
-      await ctx.test("Positiv-Kontrolle: die Buchungskette ist gelaufen, und dieses Leg ist bepreist", () => {
-        const abgerechnet = nachBuchung.calls.find((eintrag) => eintrag.id === callId);
-        assert.ok(
-          abgerechnet.billedAt,
-          "der Erfolgspfad erreicht den EINEN Beender (terminateAndBillCall) gar nicht erst",
-        );
-        assert.ok(
-          abgerechnet.reserveCents > 0,
-          `Wache: der Minutensatz dieses Legs ist 0 (reserveCents=${JSON.stringify(abgerechnet.reserveCents)}) - dann bucht auch ein heiler Weg 0, und der Fall unten maesse die Test-Umgebung statt des Zweigs`,
-        );
-      });
+      await ctx.test(
+        "Positiv-Kontrolle: die Buchungskette ist gelaufen, und dieses Leg ist bepreist",
+        () => {
+          const abgerechnet = nachBuchung.calls.find((eintrag) => eintrag.id === callId);
+          assert.ok(
+            abgerechnet.billedAt,
+            "der Erfolgspfad erreicht den EINEN Beender (terminateAndBillCall) gar nicht erst",
+          );
+          assert.ok(
+            abgerechnet.reserveCents > 0,
+            `Wache: der Minutensatz dieses Legs ist 0 (reserveCents=${JSON.stringify(abgerechnet.reserveCents)}) - dann bucht auch ein heiler Weg 0, und der Fall unten maesse die Test-Umgebung statt des Zweigs`,
+          );
+        },
+      );
 
       await ctx.test("der Erfolgspfad bucht auf die Kosten-/Verbrauchsachse des Tenants", () => {
         const abgerechnet = nachBuchung.calls.find((eintrag) => eintrag.id === callId);
@@ -833,19 +838,22 @@ test("EL-START T5 (a): der Anrufstart uebergibt owner_name und uebersteuert firs
       // Stimme). Dieser Anrufstart baut heute KEIN Override-Objekt (dynamicVariables),
       // darum bleibt der Fall unveraendert gruen - er misst ab jetzt aber die staerkere
       // Aussage, nicht mehr nur die schwaechere.
-      await ctx.test("first_message wird nicht uebersteuert, conversation_config_override setzt hoechstens die Weisse Liste", () => {
-        const overridePfade = overrideLeafPaths(
-          anfrage.body.conversation_initiation_client_data?.conversation_config_override,
-        );
-        assert.ok(
-          overridePfade.every((pfad) => OVERRIDE_ALLOWED_LEAF_PATHS.has(pfad)),
-          `conversation_config_override darf ausschliesslich ${[...OVERRIDE_ALLOWED_LEAF_PATHS].join(", ")} setzen (agent.language/tts.voice_id) - gefunden: ${overridePfade.join(", ") || "(keine)"}. Eine Uebersteuerung wird bei falscher Konfiguration STILL ignoriert, der Satz duerfte nie daran haengen, und jeder dritte Pfad baut den Agenten pro Anruf unbemerkt um.`,
-        );
-        assert.ok(
-          !anfrage.raw.includes("first_message"),
-          "der Offenlegungssatz ist Agenten-Konfiguration, kein Anruf-Parameter (Absolute Regel 2)",
-        );
-      });
+      await ctx.test(
+        "first_message wird nicht uebersteuert, conversation_config_override setzt hoechstens die Weisse Liste",
+        () => {
+          const overridePfade = overrideLeafPaths(
+            anfrage.body.conversation_initiation_client_data?.conversation_config_override,
+          );
+          assert.ok(
+            overridePfade.every((pfad) => OVERRIDE_ALLOWED_LEAF_PATHS.has(pfad)),
+            `conversation_config_override darf ausschliesslich ${[...OVERRIDE_ALLOWED_LEAF_PATHS].join(", ")} setzen (agent.language/tts.voice_id) - gefunden: ${overridePfade.join(", ") || "(keine)"}. Eine Uebersteuerung wird bei falscher Konfiguration STILL ignoriert, der Satz duerfte nie daran haengen, und jeder dritte Pfad baut den Agenten pro Anruf unbemerkt um.`,
+          );
+          assert.ok(
+            !anfrage.raw.includes("first_message"),
+            "der Offenlegungssatz ist Agenten-Konfiguration, kein Anruf-Parameter (Absolute Regel 2)",
+          );
+        },
+      );
     },
   );
 });
@@ -882,6 +890,53 @@ test("EL-START T5 (c, Mechanismus, gruen): first_message der Agenten-Vorlage ist
   );
 });
 
+// ---- T5 (e): derselbe Satz JE SPRACHE ------------------------------------------------
+// T5 (c) darueber nagelt den ENGLISCHEN Satz fest. Der reicht nicht: Anruf 2 (17.08.2026)
+// hat am Ohr des Eigentuemers belegt, dass ein DEUTSCHER Angerufener genau diesen
+// englischen Satz hoert - Fertig-Punkt 10 ("Offenlegung in der Sprache des Angerufenen")
+// war damit fuer jeden nicht-englischen Angerufenen nicht erfuellt, ohne dass irgendetwas
+// rot geworden waere.
+//
+// ZWEI RICHTUNGEN, und die zweite ist die, an der man sich schneidet:
+//   (1) Jede Sprache, fuer die der Code einen kuratierten Offenlegungssatz FUEHRT, braucht
+//       ein Preset mit genau diesem Satz. Fehlt es, faellt die Sprache still auf Englisch
+//       zurueck - der Schaden, den Anruf 2 gemessen hat.
+//   (2) Jede Sprache, fuer die der Code KEINEN Satz fuehrt, darf auch keinen im Preset
+//       haben. Ein hier erfundener oder uebersetzter erster Satz waere eine erfundene
+//       Rechtsaussage; "keinen Satz" heisst dann bewusst: es gilt der englische.
+// Die Basissprache des Agenten ist ausgenommen - ihr Satz steht in first_message (T5 c),
+// ein Preset fuer sie waere eine zweite Kopie desselben Wortlauts.
+test("EL-START T5 (e, Mechanismus, gruen): jede Sprache mit kuratiertem Offenlegungssatz hat ein Preset mit GENAU diesem Satz - und keine andere hat einen", () => {
+  const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
+  const conversationConfig = vorlage.agent.conversation_config;
+  const presets = conversationConfig.language_presets;
+  const basisSprache = conversationConfig.agent.language;
+
+  const ersterSatzVon = (preset) => preset?.overrides?.agent?.first_message ?? null;
+
+  for (const [sprache, bundle] of Object.entries(LOCALES)) {
+    if (sprache === basisSprache) continue;
+    assert.ok(
+      presets[sprache],
+      `LOCALES fuehrt einen Offenlegungssatz fuer "${sprache}", die Vorlage aber kein language_preset - ein Angerufener dieser Sprache hoert dann den ${basisSprache}-Satz`,
+    );
+    assert.equal(
+      ersterSatzVon(presets[sprache]),
+      bundle.disclosure(OWNER_NAME_VARIABLE),
+      `das Preset "${sprache}" muss LOCALES.${sprache}.disclosure sein, nur \${ownerName} -> {{owner_name}} - kein hier entstandener Wortlaut`,
+    );
+  }
+
+  for (const [sprache, preset] of Object.entries(presets)) {
+    if (LOCALES[sprache]) continue;
+    assert.equal(
+      ersterSatzVon(preset),
+      null,
+      `das Preset "${sprache}" traegt einen ersten Satz, den der Code nicht kennt - eine hier uebersetzte Offenlegung ist eine erfundene Rechtsaussage`,
+    );
+  }
+});
+
 // ---- T5 (d): der Satz darf an keiner Variablen OHNE DEFAULT haengen ------------------
 // Die harte Regel: eine gesetzliche Pflicht haengt NIE an einer Template-Variablen.
 // Entweder der Offenlegungssatz traegt gar keine Variable, oder jede darin hat einen
@@ -911,10 +966,22 @@ const LEER = "";
 const rendern = (satz, variablen) =>
   satz.replace(PLATZHALTER, (treffer, name) => String(variablen[name] ?? LEER));
 
-function firstMessageDerVorlage() {
-  const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
-  const agent = vorlage.agent.conversation_config.agent;
-  return agent.first_message;
+// Der Satz, den der Anbieter in DIESER Sprache wirklich spricht: das language_preset,
+// wenn es eines gibt, sonst der Basis-Satz des Agenten. Genau diese Fallunterscheidung
+// macht die Zusage unten pruefbar - seit dem 2026-08-17 haengt der erste Satz nicht mehr
+// nur an agent.first_message, und ein Test, der weiter stur dort nachsaehe, wuerde bei
+// einem deutschen Angerufenen einen Satz messen, der gar nicht gesprochen wird.
+function gesprochenerSatzFuer(sprache) {
+  const conversationConfig = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8")).agent
+    .conversation_config;
+  const preset = conversationConfig.language_presets?.[sprache];
+  return preset?.overrides?.agent?.first_message ?? conversationConfig.agent.first_message;
+}
+
+// Die Sprache, die DIESER Anrufstart am Agenten gesetzt hat.
+function spracheDesAnrufs(anfrage) {
+  const clientData = anfrage.body.conversation_initiation_client_data;
+  return clientData?.conversation_config_override?.agent?.language ?? null;
 }
 
 test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Default - blanker Auftraggeber-Name, Satz bleibt vollstaendig (Artikel 50 EU AI Act)", async (ctx) => {
@@ -940,11 +1007,19 @@ test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Defa
 
       // Byte-Vergleich wie T5 (c), nicht "irgendwie gefuellt": ein inhaltsloser Fallback
       // ("x") bestuende jede schwaechere Pruefung, ohne die Offenlegung zu tragen.
+      // Gemessen wird der Satz, der in der Sprache DIESES Anrufs wirklich gesprochen
+      // wird - Preset oder Basis-Satz. Damit haelt der Fall zugleich die Paarung fest,
+      // an der sich sonst niemand stoesst: der eingesetzte Rueckfall-Ausdruck muss die
+      // Sprache des SATZES sprechen. Faellt beides auseinander, entsteht ein Mischsatz
+      // ("Hello, ... on behalf of meinem Auftraggeber"), und der ist als Pflichtaussage
+      // schlechter als jede der beiden reinen Fassungen.
       await ctx.test("der daraus gerenderte Offenlegungssatz steht fuer sich allein", () => {
-        const gerendert = rendern(firstMessageDerVorlage(), variablen);
+        const sprache = spracheDesAnrufs(mock.startRequests[0]);
+        assert.ok(LOCALES[sprache], `unbekannte Anruf-Sprache ${JSON.stringify(sprache)}`);
+        const gerendert = rendern(gesprochenerSatzFuer(sprache), variablen);
         assert.equal(
           gerendert,
-          LOCALES.en.disclosure(DISCLOSURE_OWNER_FALLBACK_EN),
+          LOCALES[sprache].disclosure(LOCALES[sprache].disclosureOwnerFallback),
           `was der Anbieter aus den uebergebenen Variablen spricht, ist nicht der vollstaendige Offenlegungssatz mit eingesetztem Default: "${gerendert}"`,
         );
       });
@@ -1015,8 +1090,7 @@ function agentMaterial(anfrage) {
 
 // Grosszuegig in der Schreibweise, streng im Inhalt: eine andere Gross-/Kleinschreibung ist
 // kein verlorenes Verbot, ein fehlender Wortlaut schon.
-const enthaelt = (material, wortlaut) =>
-  material.toLowerCase().includes(wortlaut.toLowerCase());
+const enthaelt = (material, wortlaut) => material.toLowerCase().includes(wortlaut.toLowerCase());
 
 test("EL-START T6: die harten Verbote und der Kontext des Auftrags erreichen den Agenten des Anbieters", async (ctx) => {
   await withElevenLabs(
@@ -1031,7 +1105,11 @@ test("EL-START T6: die harten Verbote und der Kontext des Auftrags erreichen den
     async ({ srv, mock }) => {
       const res = await placeCall(srv, null, { constraints: CONSTRAINTS, context: KONTEXT });
       const antwort = await res.text();
-      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf muss ueberhaupt starten: ${antwort}`);
+      assert.equal(
+        res.status,
+        HTTP_OK,
+        `Vorbedingung: der Anruf muss ueberhaupt starten: ${antwort}`,
+      );
       assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
       const anfrage = mock.startRequests[0];
       const material = agentMaterial(anfrage);
@@ -1050,12 +1128,15 @@ test("EL-START T6: die harten Verbote und der Kontext des Auftrags erreichen den
       // Ohne diese Haelfte waere jeder rote Befund unten unbrauchbar: ein Sucher, der
       // NICHTS findet, meldet dasselbe wie ein Sucher, der nicht sucht (Lehre
       // pruefkommando-ohne-positiv-kontrolle). Das Anliegen reist heute nachweislich mit.
-      await ctx.test("Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material", () => {
-        assert.ok(
-          enthaelt(material, OBJECTIVE),
-          `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
-        );
-      });
+      await ctx.test(
+        "Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material",
+        () => {
+          assert.ok(
+            enthaelt(material, OBJECTIVE),
+            `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+          );
+        },
+      );
 
       await ctx.test("jedes harte Verbot erreicht den Agenten im Wortlaut", () => {
         for (const verbot of VERBOTE)
@@ -1065,16 +1146,19 @@ test("EL-START T6: die harten Verbote und der Kontext des Auftrags erreichen den
           );
       });
 
-      await ctx.test("das Wunschergebnis und die Beziehung zur Gegenstelle erreichen den Agenten", () => {
-        assert.ok(
-          enthaelt(material, KONTEXT_ERGEBNIS),
-          `desired_outcome erreicht den Agenten NICHT - er verhandelt ohne Ziel. Material: ${material}`,
-        );
-        assert.ok(
-          enthaelt(material, KONTEXT_BEZIEHUNG),
-          `recipient_relationship erreicht den Agenten NICHT - er spricht einen Stammkunden an wie einen Fremden. Material: ${material}`,
-        );
-      });
+      await ctx.test(
+        "das Wunschergebnis und die Beziehung zur Gegenstelle erreichen den Agenten",
+        () => {
+          assert.ok(
+            enthaelt(material, KONTEXT_ERGEBNIS),
+            `desired_outcome erreicht den Agenten NICHT - er verhandelt ohne Ziel. Material: ${material}`,
+          );
+          assert.ok(
+            enthaelt(material, KONTEXT_BEZIEHUNG),
+            `recipient_relationship erreicht den Agenten NICHT - er spricht einen Stammkunden an wie einen Fremden. Material: ${material}`,
+          );
+        },
+      );
     },
   );
 });
@@ -1117,7 +1201,11 @@ async function vorrangLauf(auftrag) {
     { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
     async ({ srv, mock }) => {
       const res = await placeCall(srv, null, auftrag);
-      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf muss starten: ${await res.text()}`);
+      assert.equal(
+        res.status,
+        HTTP_OK,
+        `Vorbedingung: der Anruf muss starten: ${await res.text()}`,
+      );
       assert.equal(mock.startRequests.length, 1, "Vorbedingung: genau EIN Anrufstart am Anbieter");
       const anfrage = mock.startRequests[0];
       return { variablen: dynamicVariables(anfrage), material: materialMitVorlage(anfrage) };
@@ -1201,12 +1289,15 @@ test("EL-START T6 (Mandat): die Ermaechtigung und die Ausweich-Reihenfolge errei
       // Ohne diese Haelfte waere jeder rote Befund unten unbrauchbar: ein Sucher, der
       // NICHTS findet, meldet dasselbe wie ein Sucher, der nicht sucht (Lehre
       // pruefkommando-ohne-positiv-kontrolle). Das Anliegen reist heute nachweislich mit.
-      await ctx.test("Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material", () => {
-        assert.ok(
-          enthaelt(material, OBJECTIVE),
-          `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
-        );
-      });
+      await ctx.test(
+        "Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material",
+        () => {
+          assert.ok(
+            enthaelt(material, OBJECTIVE),
+            `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+          );
+        },
+      );
 
       await ctx.test("die Ermaechtigung erreicht den Agenten im Wortlaut", () => {
         assert.ok(
@@ -1319,20 +1410,26 @@ test("EL-START T7: die Zeitzone des Auftraggebers, die des Angerufenen und das h
       // Trennlinie wie in T6: was unsere Seite WEISS, steht im Store. Bleibt dieser Teil
       // gruen, waehrend die uebrigen rot sind, liegt der Verlust nachweislich an der
       // Uebergabe an den Anbieter - nicht an Seed, Store oder Wahl des Ziels.
-      await ctx.test("Vorbedingung: die Zeitzone des Auftraggebers steht am Tenant, gewaehlt wurde die Auslandsnummer", () => {
-        assert.equal(tenantAusStore(srv, BOOTSTRAP_TENANT_ID)?.timezone, OWNER_TZ);
-        assert.equal(anfrage.body.to_number, CALLEE_NUMBER);
-      });
+      await ctx.test(
+        "Vorbedingung: die Zeitzone des Auftraggebers steht am Tenant, gewaehlt wurde die Auslandsnummer",
+        () => {
+          assert.equal(tenantAusStore(srv, BOOTSTRAP_TENANT_ID)?.timezone, OWNER_TZ);
+          assert.equal(anfrage.body.to_number, CALLEE_NUMBER);
+        },
+      );
 
       // Ohne diese Haelfte waere jeder rote Befund unten unbrauchbar: ein Sucher, der
       // NICHTS findet, meldet dasselbe wie ein Sucher, der nicht sucht (Lehre
       // pruefkommando-ohne-positiv-kontrolle). Das Anliegen reist heute nachweislich mit.
-      await ctx.test("Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material", () => {
-        assert.ok(
-          enthaelt(material, OBJECTIVE),
-          `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
-        );
-      });
+      await ctx.test(
+        "Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material",
+        () => {
+          assert.ok(
+            enthaelt(material, OBJECTIVE),
+            `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+          );
+        },
+      );
 
       await ctx.test("die Zeitzone des Auftraggebers erreicht den Agenten", () => {
         assert.notEqual(
@@ -1346,22 +1443,25 @@ test("EL-START T7: die Zeitzone des Auftraggebers, die des Angerufenen und das h
         );
       });
 
-      await ctx.test("die Zeitzone des Angerufenen erreicht den Agenten und ist von der des Auftraggebers unterscheidbar", () => {
-        assert.notEqual(
-          CALLEE_TZ,
-          OWNER_TZ,
-          "Wache: mit zwei gleichen Zonen misst dieser Fall nichts - er kann dann nicht zeigen, dass BEIDE mitreisen",
-        );
-        assert.notEqual(
-          CALLEE_TZ,
-          DEFAULT_TIMEZONE,
-          `Wache: die Zone der Gegenstelle ist der Festwert - fuer ${CALLEE_NUMBER} laesst sich kein Land ableiten (countryForE164 -> null, z.B. jede +1-Nummer), timezoneForCountry faellt auf den Default zurueck und der Fund bewiese nichts`,
-        );
-        assert.ok(
-          enthaelt(material, CALLEE_TZ),
-          `die Zeitzone des Angerufenen (${CALLEE_TZ}, aus dem Land der gewaehlten Nummer ${CALLEE_NUMBER}) erreicht den Agenten NICHT - er kann eine genannte Uhrzeit nicht in die Zeit des Auftraggebers umrechnen und sagt einen Termin zu, den beide Seiten verschieden verstehen. Material: ${material}`,
-        );
-      });
+      await ctx.test(
+        "die Zeitzone des Angerufenen erreicht den Agenten und ist von der des Auftraggebers unterscheidbar",
+        () => {
+          assert.notEqual(
+            CALLEE_TZ,
+            OWNER_TZ,
+            "Wache: mit zwei gleichen Zonen misst dieser Fall nichts - er kann dann nicht zeigen, dass BEIDE mitreisen",
+          );
+          assert.notEqual(
+            CALLEE_TZ,
+            DEFAULT_TIMEZONE,
+            `Wache: die Zone der Gegenstelle ist der Festwert - fuer ${CALLEE_NUMBER} laesst sich kein Land ableiten (countryForE164 -> null, z.B. jede +1-Nummer), timezoneForCountry faellt auf den Default zurueck und der Fund bewiese nichts`,
+          );
+          assert.ok(
+            enthaelt(material, CALLEE_TZ),
+            `die Zeitzone des Angerufenen (${CALLEE_TZ}, aus dem Land der gewaehlten Nummer ${CALLEE_NUMBER}) erreicht den Agenten NICHT - er kann eine genannte Uhrzeit nicht in die Zeit des Auftraggebers umrechnen und sagt einen Termin zu, den beide Seiten verschieden verstehen. Material: ${material}`,
+          );
+        },
+      );
 
       await ctx.test("das heutige Datum erreicht den Agenten", () => {
         const kandidaten = [...heuteIn(OWNER_TZ), ...heuteIn(CALLEE_TZ)];
@@ -1564,17 +1664,20 @@ test("EL-START T8: die aus der Vorwahl abgeleitete Zone des Angerufenen reist al
     );
   });
 
-  await ctx.test("der Agent soll sie in EINEM Satz bestaetigen, BEVOR er eine absolute Uhrzeit nennt", () => {
-    const umfelderMitZone = hypotheseUmfelder(material);
-    assert.ok(
-      umfelderMitZone.some((umfeld) => enthaeltEines(umfeld, BESTAETIGUNG_MARKER)),
-      `neben der Hypothese steht keine Aufforderung, sie im Gespraech zu bestaetigen - der Angerufene weiss seine Zone, das ist die verlaesslichste Quelle, die es gibt, und es kostet eine Sekunde. Erwartet: eines von ${BESTAETIGUNG_MARKER.join(" | ")}. Material: ${material}`,
-    );
-    assert.ok(
-      umfelderMitZone.some((umfeld) => enthaeltEines(umfeld, VORHER_MARKER)),
-      `die Bestaetigung ist nicht VOR die erste absolute Uhrzeit gestellt - bestaetigt der Agent erst hinterher, hat er den Termin bereits in der geratenen Zone zugesagt. Erwartet: eines von ${VORHER_MARKER.join(" | ")}. Material: ${material}`,
-    );
-  });
+  await ctx.test(
+    "der Agent soll sie in EINEM Satz bestaetigen, BEVOR er eine absolute Uhrzeit nennt",
+    () => {
+      const umfelderMitZone = hypotheseUmfelder(material);
+      assert.ok(
+        umfelderMitZone.some((umfeld) => enthaeltEines(umfeld, BESTAETIGUNG_MARKER)),
+        `neben der Hypothese steht keine Aufforderung, sie im Gespraech zu bestaetigen - der Angerufene weiss seine Zone, das ist die verlaesslichste Quelle, die es gibt, und es kostet eine Sekunde. Erwartet: eines von ${BESTAETIGUNG_MARKER.join(" | ")}. Material: ${material}`,
+      );
+      assert.ok(
+        umfelderMitZone.some((umfeld) => enthaeltEines(umfeld, VORHER_MARKER)),
+        `die Bestaetigung ist nicht VOR die erste absolute Uhrzeit gestellt - bestaetigt der Agent erst hinterher, hat er den Termin bereits in der geratenen Zone zugesagt. Erwartet: eines von ${VORHER_MARKER.join(" | ")}. Material: ${material}`,
+      );
+    },
+  );
 });
 
 test("EL-START T8 (Fallback): steht keine Zone fest, nennt der Agent gar keine absolute Uhrzeit", async (ctx) => {
@@ -1590,18 +1693,21 @@ test("EL-START T8 (Fallback): steht keine Zone fest, nennt der Agent gar keine a
   // Die andere Haelfte des Paares (s. Kopfnotiz): fuer diese Nummer steht keine Zone fest,
   // also darf auch keine behauptet werden. Faende sich hier derselbe Bezeichner wie oben,
   // stuende er statisch in der Vorlage und der Fall darueber bewiese nichts ueber den Anruf.
-  await ctx.test("Wache: fuer diese Nummer steht keine Zone fest - und es wird auch keine behauptet", () => {
-    assert.equal(
-      countryForE164(OHNE_ZONE_NUMMER),
-      null,
-      `Wache: ${OHNE_ZONE_NUMMER} muss unableitbar bleiben, sonst misst dieser Fall den Fallback nicht`,
-    );
-    assert.equal(
-      hypotheseUmfelder(material).length,
-      0,
-      `fuer eine Nummer ohne feststellbare Zone steht ${HYPOTHESE_ZONE} im Material - entweder ist der Bezeichner statisch in die Vorlage getippt (dann ist die Hypothese oben keine), oder es wurde eine Zone erfunden. Material: ${material}`,
-    );
-  });
+  await ctx.test(
+    "Wache: fuer diese Nummer steht keine Zone fest - und es wird auch keine behauptet",
+    () => {
+      assert.equal(
+        countryForE164(OHNE_ZONE_NUMMER),
+        null,
+        `Wache: ${OHNE_ZONE_NUMMER} muss unableitbar bleiben, sonst misst dieser Fall den Fallback nicht`,
+      );
+      assert.equal(
+        hypotheseUmfelder(material).length,
+        0,
+        `fuer eine Nummer ohne feststellbare Zone steht ${HYPOTHESE_ZONE} im Material - entweder ist der Bezeichner statisch in die Vorlage getippt (dann ist die Hypothese oben keine), oder es wurde eine Zone erfunden. Material: ${material}`,
+      );
+    },
+  );
 
   await ctx.test("das Material verbietet die absolute Uhrzeit", () => {
     const umfelderAmZeitwort = ZEIT_WORT.flatMap((wort) => umfelder(material, wort));
@@ -1665,12 +1771,15 @@ test("EL-START T9: das Briefing des Auftraggebers erreicht den Agenten des Anbie
       // Ohne diese Haelfte waere der rote Befund unten unbrauchbar: ein Sucher, der NICHTS
       // findet, meldet dasselbe wie ein Sucher, der nicht sucht (Lehre
       // pruefkommando-ohne-positiv-kontrolle). Das Anliegen reist heute nachweislich mit.
-      await ctx.test("Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material", () => {
-        assert.ok(
-          enthaelt(material, OBJECTIVE),
-          `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
-        );
-      });
+      await ctx.test(
+        "Positiv-Kontrolle: das Anliegen findet der Sucher im Agenten-Material",
+        () => {
+          assert.ok(
+            enthaelt(material, OBJECTIVE),
+            `der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+          );
+        },
+      );
 
       await ctx.test("der Wortlaut des Briefings erreicht den Agenten", () => {
         assert.ok(
@@ -1735,39 +1844,45 @@ test("EL-START T10: die Buchungs-Grenze des Agenten folgt dem Mandat DIESES Anru
     );
   });
 
-  await ctx.test("ohne Mandat: die OHNE-Mandat-Grenze erreicht den Agenten, die MIT-Variante nicht", async () => {
-    const { material } = await vorrangLauf({});
-    assert.ok(
-      enthaelt(material, OBJECTIVE),
-      `Positiv-Kontrolle: der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
-    );
-    assert.ok(
-      enthaelt(material, BUCHUNG_OHNE_MANDAT),
-      `ohne Mandat fehlt dem Agenten die Buchungs-Grenze des Bestands ("${BUCHUNG_OHNE_MANDAT}") - was er stattdessen liest, ist ein statischer Vorlagen-Satz, der pro Anruf nicht wechseln kann. Material: ${material}`,
-    );
-    assert.ok(
-      !enthaelt(material, BUCHUNG_MIT_MANDAT),
-      `der Agent bekommt ohne jedes Mandat die MIT-Mandat-Grenze zugesagt ("was dein Spielraum deckt, sagst du selbst zu") - er sagt dann etwas verbindlich zu, wozu ihn niemand ermaechtigt hat. Material: ${material}`,
-    );
-  });
+  await ctx.test(
+    "ohne Mandat: die OHNE-Mandat-Grenze erreicht den Agenten, die MIT-Variante nicht",
+    async () => {
+      const { material } = await vorrangLauf({});
+      assert.ok(
+        enthaelt(material, OBJECTIVE),
+        `Positiv-Kontrolle: der Sucher findet nicht einmal das Anliegen - Material: ${material}`,
+      );
+      assert.ok(
+        enthaelt(material, BUCHUNG_OHNE_MANDAT),
+        `ohne Mandat fehlt dem Agenten die Buchungs-Grenze des Bestands ("${BUCHUNG_OHNE_MANDAT}") - was er stattdessen liest, ist ein statischer Vorlagen-Satz, der pro Anruf nicht wechseln kann. Material: ${material}`,
+      );
+      assert.ok(
+        !enthaelt(material, BUCHUNG_MIT_MANDAT),
+        `der Agent bekommt ohne jedes Mandat die MIT-Mandat-Grenze zugesagt ("was dein Spielraum deckt, sagst du selbst zu") - er sagt dann etwas verbindlich zu, wozu ihn niemand ermaechtigt hat. Material: ${material}`,
+      );
+    },
+  );
 
-  await ctx.test("mit decide_freely: die MIT-Mandat-Grenze erreicht den Agenten, die OHNE-Variante nicht", async () => {
-    const { variablen, material } = await vorrangLauf({
-      mandate: { decide_freely: WEICHE_SPIELRAUM },
-    });
-    // Trennt "das Mandat kam gar nicht an" von "die Weiche wurde nicht gestellt": diese
-    // Haelfte ist heute gruen, die beiden darunter sind es nicht.
-    assert.ok(
-      enthaelt(variablen.mandate, WEICHE_SPIELRAUM),
-      `Vorbedingung: der Spielraum reist nicht einmal als Wert mit - {{mandate}}=${JSON.stringify(variablen.mandate)}`,
-    );
-    assert.ok(
-      enthaelt(material, BUCHUNG_MIT_MANDAT),
-      `der Auftraggeber hat den Agenten ausdruecklich entscheiden lassen ("${WEICHE_SPIELRAUM}"), aber die Buchungs-Grenze wechselt nicht mit ("${BUCHUNG_MIT_MANDAT}") - der Agent liest sein Mandat und daneben die Anweisung, trotzdem nur eine Nachricht aufzunehmen. Material: ${material}`,
-    );
-    assert.ok(
-      !enthaelt(material, BUCHUNG_OHNE_MANDAT),
-      `neben dem Mandat steht weiterhin die OHNE-Mandat-Grenze - zwei Saetze, die einander widersprechen, und welcher gewinnt, entscheidet der Anruf. Material: ${material}`,
-    );
-  });
+  await ctx.test(
+    "mit decide_freely: die MIT-Mandat-Grenze erreicht den Agenten, die OHNE-Variante nicht",
+    async () => {
+      const { variablen, material } = await vorrangLauf({
+        mandate: { decide_freely: WEICHE_SPIELRAUM },
+      });
+      // Trennt "das Mandat kam gar nicht an" von "die Weiche wurde nicht gestellt": diese
+      // Haelfte ist heute gruen, die beiden darunter sind es nicht.
+      assert.ok(
+        enthaelt(variablen.mandate, WEICHE_SPIELRAUM),
+        `Vorbedingung: der Spielraum reist nicht einmal als Wert mit - {{mandate}}=${JSON.stringify(variablen.mandate)}`,
+      );
+      assert.ok(
+        enthaelt(material, BUCHUNG_MIT_MANDAT),
+        `der Auftraggeber hat den Agenten ausdruecklich entscheiden lassen ("${WEICHE_SPIELRAUM}"), aber die Buchungs-Grenze wechselt nicht mit ("${BUCHUNG_MIT_MANDAT}") - der Agent liest sein Mandat und daneben die Anweisung, trotzdem nur eine Nachricht aufzunehmen. Material: ${material}`,
+      );
+      assert.ok(
+        !enthaelt(material, BUCHUNG_OHNE_MANDAT),
+        `neben dem Mandat steht weiterhin die OHNE-Mandat-Grenze - zwei Saetze, die einander widersprechen, und welcher gewinnt, entscheidet der Anruf. Material: ${material}`,
+      );
+    },
+  );
 });

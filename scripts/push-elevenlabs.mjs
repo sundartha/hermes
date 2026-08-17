@@ -402,16 +402,34 @@ function gesperrteInAuswahl(auswahl) {
 // worden zu sein. Sieht anders als blattPfade auch in Listen hinein: ein
 // Riegel, der eine Ablageform auslaesst, ist keiner - und welche Form der
 // Anbieter morgen erwartet, entscheidet nicht dieses Werkzeug.
-function gesperrteStellen(wert, praefix) {
+function stellenMitSchluessel(wert, praefix, trifft) {
   if (wert === null || typeof wert !== "object") return [];
   const eintraege = Array.isArray(wert)
     ? wert.map((kind, i) => [String(i), kind])
     : Object.entries(wert);
   return eintraege.flatMap(([schluessel, kind]) => {
     const pfad = praefix === "" ? schluessel : `${praefix}${PFAD_TRENNER}${schluessel}`;
-    const treffer = GESPERRTE_FELDER.includes(schluessel) ? [pfad] : [];
-    return [...treffer, ...gesperrteStellen(kind, pfad)];
+    const treffer = trifft(schluessel) ? [pfad] : [];
+    return [...treffer, ...stellenMitSchluessel(kind, pfad, trifft)];
   });
+}
+
+function gesperrteStellen(koerper) {
+  return stellenMitSchluessel(koerper, "", (schluessel) => GESPERRTE_FELDER.includes(schluessel));
+}
+
+// RIEGEL 2b: Entwickler-Doku, die mitreist. Diese Vorlage erklaert sich selbst
+// in Schluesseln mit fuehrendem Unterstrich; der Vergleich sieht sie auf der
+// OBERSTEN Ebene einer Sammlung nicht an (eintraegeAus filtert sie), INNERHALB
+// eines Eintrags aber sehr wohl - und von dort wuerde sie beim Schreiben
+// mitgehen. Ein solcher Schluessel gehoert nicht in die Konfiguration eines
+// Anbieters, der ihn nicht kennt. NICHT herausfiltern: ablehnen. Ein stiller
+// Filter waere genau der Griff, den dieses Werkzeug nirgends tut - er machte
+// aus "die Vorlage ist falsch gebaut" ein lautloses "passt schon".
+const DOKU_PRAEFIX = "_";
+
+function dokuStellen(koerper) {
+  return stellenMitSchluessel(koerper, "", (schluessel) => schluessel.startsWith(DOKU_PRAEFIX));
 }
 
 // RIEGEL 2: die Pfade, die dieser Lauf ueberhaupt beruehren darf - abgeleitet
@@ -443,10 +461,16 @@ function blindePassagiere({ koerper, erlaubt }) {
 // ab, sobald hier etwas steht (fail-closed).
 export function koerperVerstoesse({ koerper, abweichungen, auswahl }) {
   const befunde = [];
-  const gesperrt = gesperrteStellen(koerper, "");
+  const gesperrt = gesperrteStellen(koerper);
   if (gesperrt.length > 0) {
     befunde.push(
       `GESPERRT - der Patch-Koerper traegt gesperrte Felder an: ${gesperrt.join(LISTEN_TRENNER)}. Gesperrt sind ${GESPERRTE_FELDER.join(LISTEN_TRENNER)}; sie werden nie geschrieben, in keine Richtung.`,
+    );
+  }
+  const doku = dokuStellen(koerper);
+  if (doku.length > 0) {
+    befunde.push(
+      `ENTWICKLER-DOKU IM KOERPER - diese Schluessel erklaeren die Vorlage und gehoeren nicht zum Anbieter-Schema: ${doku.join(LISTEN_TRENNER)}. Der Hinweis gehoert eine Ebene hoeher, wo der Vergleich ihn ohnehin auslaesst.`,
     );
   }
   const fremd = blindePassagiere({ koerper, erlaubt: erlaubtePfade({ abweichungen, auswahl }) });

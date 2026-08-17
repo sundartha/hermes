@@ -181,7 +181,15 @@ const DEFERRED_BUILT_IN_TOOL = "play_keypad_touch_tone";
 //   2026-08-14 angelegt mit "es" (E-5/E-6: language_detection und Spanisch werden am
 //   Agenten gesetzt). Zweibuchstabig wie agent.language ("en"); braucht der Anbieter je
 //   einen Regionalcode ("es-ES"), ist das eine Aenderung mit einer Zeile Begruendung.
-const LANGUAGE_PRESET_FINGERPRINT = ["es"];
+//   2026-08-17 "de" und "fr" dazu, und der Grund ist NICHT "eine Sprache mehr": beide
+//   tragen den Offenlegungssatz IHRER Sprache (overrides.agent.first_message, woertlich
+//   aus src/i18n/locales.js). Anruf 2 am selben Tag hat am Ohr des Eigentuemers belegt,
+//   dass ein deutscher Angerufener den ENGLISCHEN Satz hoert - Fertig-Punkt 10 verlangt
+//   die Sprache des Angerufenen. Warum nicht auch "es": fuer Spanisch fuehrt der Code
+//   keinen kuratierten Satz, und einen zu uebersetzen waere eine erfundene Rechtsaussage.
+//   Der INHALT ist bewusst nicht hier gepinnt, sondern in test/elevenlabs-anrufstart.test.js
+//   (T5 e) - dieser Pin bleibt eine Faehigkeitsliste.
+const LANGUAGE_PRESET_FINGERPRINT = ["de", "es", "fr"];
 
 const DRIFT_HINT =
   "Das ist erlaubt - aber nur bewusst: Liste in test/elevenlabs-agent-werkzeuge.test.js " +

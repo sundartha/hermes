@@ -25,9 +25,27 @@
 // werden (DIP, wie bei elevenLabsVoiceIdFor selbst) - Deutsch hat in der Stimmen-Karte
 // ABSICHTLICH keinen eigenen Eintrag, seine Stimme IST die global konfigurierte
 // Plattform-Stimme.
-import { localeFor } from "../i18n/locales.js";
+import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.js";
+import { countryForE164 } from "../store/defaults.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
 import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-voice.js";
+
+// Die Sprache des ANGERUFENEN, aus seiner Rufnummer - oder null, wenn sie sich nicht
+// BELEGEN laesst. Fertig-Punkt 10 verlangt die Offenlegung "in der Sprache des
+// Angerufenen"; die uebrige Kette (resolveCallLanguage) beantwortet eine andere Frage,
+// naemlich die Sprache des AUFTRAGGEBERS - Spracheinstellung, Geo UNSERER Nummer,
+// Tenant-Default. Beides faellt nur zusammen, solange jemand im eigenen Land anruft.
+//
+// NULL IST EINE ANTWORT, keine Panne. countryForE164 liefert fuer +1 bewusst null (25
+// NANP-Laender teilen die Vorwahl), und ein Land ohne Eintrag in der Karte ist ebenfalls
+// null. Genau deshalb wird HIER die Karte direkt gelesen und nicht languageForCountry
+// benutzt: dessen Rueckfall auf den Weltdefault wuerde "Land unbekannt" in ein
+// behauptetes "spricht Englisch" verwandeln und die Auftraggeber-Kette ueberstimmen,
+// ohne irgendetwas zu wissen.
+function calleeLanguage(to) {
+  const land = countryForE164(to);
+  return (land && LANGUAGE_FOR_COUNTRY[land]) || null;
+}
 
 /**
  * Sprache, Stimme und Offenlegungssatz EINES Anrufs, abgeleitet aus dem gespeicherten
@@ -55,14 +73,27 @@ import { elevenLabsVoiceIdFor } from "../telephony/adapters/telnyx/elevenlabs-vo
  * localeFor fail-safe auf den Weltdefault: Stimme und Offenlegungssatz sind dann englisch,
  * und der Agent bekaeme mit dem rohen Wert eine Sprache, zu der beides nicht passt.
  *
+ * VORRANG DES ANGERUFENEN (17.08.2026): laesst sich seine Sprache aus seiner Rufnummer
+ * BELEGEN, gewinnt sie - sonst gilt unveraendert die Auftraggeber-Kette. Die Offenlegung
+ * muss von der angerufenen Person VERSTANDEN werden, sonst erfuellt sie ihren Zweck nicht
+ * (Artikel 50 EU AI Act, Fertig-Punkt 10). Ohne diesen Vorrang haengt der erste Satz an
+ * der Herkunft des AUFTRAGGEBERS: gemessen am lokalen Stand haette ein Anruf an eine
+ * deutsche Mobilnummer auf FRANZOESISCH begonnen (tenant.defaultLanguage "fr", weil unsere
+ * US-Nummer keinen eigenen Sprachanker traegt) - richtig aufgeloest nach der alten Regel
+ * und trotzdem der falsche Satz.
+ * KEINE ZWEITE KETTE: der Rueckfall ist wortgleich die alte Aufloesung, nur mit einem
+ * neuen, hoeher gewichteten EINGANG davor. Bewusst NUR auf dieser Strecke - resolveCall-
+ * Language traegt auch den Inbound-Weg, wo es keinen "Angerufenen" in diesem Sinn gibt.
+ *
  * @param {object} state Store-Zustand (store.load())
  * @param {{tenantId: string, numberRecord: object|null, ownerName: string|null,
- *   defaultVoiceId: string}} args
+ *   defaultVoiceId: string, to: string|null}} args
  * @returns {{language: string, voiceId: string, firstMessage: string,
  *   disclosureOwnerFallback: string}}
  */
-export function callLocaleFor(state, { tenantId, numberRecord, ownerName, defaultVoiceId }) {
-  const locale = localeFor(resolveCallLanguage(state, { tenantId, numberRecord }));
+export function callLocaleFor(state, { tenantId, numberRecord, ownerName, defaultVoiceId, to }) {
+  const gewaehlt = calleeLanguage(to) || resolveCallLanguage(state, { tenantId, numberRecord });
+  const locale = localeFor(gewaehlt);
   return {
     language: locale.language,
     voiceId: elevenLabsVoiceIdFor(defaultVoiceId, locale.voiceProfile),

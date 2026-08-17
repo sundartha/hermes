@@ -271,3 +271,73 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
     );
   }
 });
+
+// ---- Vorrang des ANGERUFENEN (17.08.2026) --------------------------------------------
+// Die Faelle oben messen alle dieselbe Frage: welche Sprache spricht der AUFTRAGGEBER.
+// Fertig-Punkt 10 stellt eine andere: in welcher Sprache muss die Offenlegung ANKOMMEN.
+// Beide fallen nur zusammen, solange jemand im eigenen Land anruft.
+//
+// WARUM DIESER FALL EXISTIERT, gemessen und nicht ausgedacht: der lokale Stand traegt
+// tenant.defaultLanguage "fr" (Herkunft FR) und eine US-Nummer ohne eigenen Sprachanker.
+// Ein Anruf an eine deutsche Mobilnummer haette danach auf FRANZOESISCH begonnen - nach
+// der alten Regel voellig richtig aufgeloest und trotzdem der falsche erste Satz.
+//
+// DREI RICHTUNGEN, weil "gewinnt immer" genauso falsch waere wie "gewinnt nie":
+//   (1) belegbares Land des Angerufenen -> es gewinnt, auch gegen eine gesetzte
+//       Spracheinstellung des Auftraggebers;
+//   (2) NICHT belegbares Land (+1 teilen 25 NANP-Laender) -> die Auftraggeber-Kette gilt
+//       unveraendert weiter.
+//
+// EIN DRITTER FALL WIRD HIER NICHT GEMESSEN, und das ist eine Messung, keine Luecke:
+// "Land belegbar, aber ohne Sprachzuordnung" ist heute NICHT ERREICHBAR. Die Vorwahl-
+// Tabelle (CALLING_CODE_FOR_COUNTRY, src/store/defaults.js) und die Sprachkarte
+// (LANGUAGE_FOR_COUNTRY, src/i18n/locales.js) fuehren exakt dieselben sechs Laender - am
+// 2026-08-17 durchprobiert: +49/+33/+44/+41/+43/+353 loesen auf, +39/+34/+31/+48/+46
+// liefern schon kein Land. Ein Testfall dafuer waere blind gruen: er kann nicht
+// unterscheiden, ob der Rueckfall richtig gebaut ist. Der Guard in call-locale.js liest
+// die Sprachkarte trotzdem direkt statt ueber languageForCountry - er ist fuer den Tag
+// gebaut, an dem die Tabellen auseinandergehen (ein neues Land in der Vorwahl-Tabelle
+// ohne Sprachzuordnung), und genau dann wird der Fall messbar.
+const ZIEL_DE = "+491737252163";
+const ZIEL_NANP = "+18643028341";
+
+test("Sprachwahl EL: die Sprache des ANGERUFENEN gewinnt, wenn seine Nummer sie belegt - sonst gilt die Auftraggeber-Kette unveraendert", async () => {
+  const resolveLocale = await callLocaleSeam();
+  // Der Auftraggeber-Fall, gegen den gemessen wird: Spracheinstellung Franzoesisch. Er
+  // ist die staerkste Stufe der alten Kette - wer den Vorrang gegen die SCHWAECHSTE
+  // Stufe zeigt, hat nichts gezeigt.
+  const kase = CASES.find((fall) => fall.language === "fr");
+  const locale = (to) =>
+    resolveLocale(kase.stateOf(), {
+      tenantId: kase.tenantId,
+      numberRecord: null,
+      ownerName: OWNER_NAME,
+      defaultVoiceId: PLATFORM_VOICE_ID,
+      to,
+    });
+
+  assert.equal(
+    locale(ZIEL_DE).language,
+    "de",
+    "eine deutsche Rufnummer belegt die Sprache des Angerufenen - sie muss die " +
+      "franzoesische Spracheinstellung des Auftraggebers ueberstimmen",
+  );
+  assert.equal(
+    locale(ZIEL_DE).firstMessage,
+    disclosureFor("de"),
+    "der Offenlegungssatz folgt derselben Wahl - er muss vom Angerufenen VERSTANDEN " +
+      "werden (Artikel 50 EU AI Act)",
+  );
+
+  assert.equal(
+    locale(ZIEL_NANP).language,
+    kase.language,
+    "+1 teilen 25 Laender: das Land ist NICHT belegbar, also bleibt es bei der " +
+      "Auftraggeber-Kette statt bei einer geratenen Sprache",
+  );
+  assert.equal(
+    locale(undefined).language,
+    kase.language,
+    "ohne Ziel bleibt alles wie vorher - der Bestandsaufruf ohne 'to' ist unveraendert",
+  );
+});

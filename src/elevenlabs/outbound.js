@@ -697,6 +697,10 @@ function callLocaleOf({ store, config, call, ownerName }) {
     numberRecord: store.numberRecordByE164(call.from),
     ownerName,
     defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
+    // Das ANGERUFENE Ziel, bereits normalisiert (routes/api-calls.js) - der hoechst-
+    // gewichtete Eingang der Sprachwahl, s. call-locale.js. Nicht call.to roh vom
+    // Aufrufer: normalisiert wird eine Ebene hoeher, hier wird nur gelesen.
+    to: call.to,
   });
 }
 
