@@ -623,9 +623,34 @@ function fakeSipTrunkOutboundCallResponse() {
   };
 }
 
-// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die neun, die die
+// DER TORZUSTAND DES RUECKFRAGEKANALS, als Wert und nicht als Verhalten (Eigentuemer-
+// Entscheidung 17.08.2026, Punkt 1 und 3). Zwei Zeichenketten statt true/false: der
+// Anbieter setzt dynamische Variablen als TEXT in den Prompt ein, und "false" laese sich
+// dort schlechter lesen als ein Wort. Die weisse Liste bleibt bei zwei Pfaden - der
+// Prompt ist EINER, fest und gepusht, und verzweigt an diesem Wert.
+//
+// FAIL-CLOSED, und die Zusage haengt am TOR: consultAllowedFor liefert einen strikten
+// Wahrheitswert, jeder unbekannte Zustand kommt dort schon als false heraus (an vier
+// Faellen gemessen, test/elevenlabs-torzustand.test.js). Das `=== true` hier ist
+// Doppelsicherung fuer den Tag, an dem jemand das Tor lockerer macht - und ausdruecklich
+// KEIN Waechter: eine Rotprobe daran bleibt gruen, solange das Tor strikt ist. Ein
+// falsch-positiver Torzustand waere schlimmer als ein falsch-negativer - der Agent saegte
+// eine Rueckfrage zu, die nie kommt.
+const CONSULT_AVAILABLE = "available";
+const CONSULT_UNAVAILABLE = "unavailable";
+
+// Der Standard, wenn niemand ein Tor verdrahtet hat. Er ENTSCHEIDET nichts - er sagt
+// nein. Das ist kein zweites Tor (das waere Blocker BL-2 des Rueckfrage-Webhooks), sondern
+// dieselbe Antwort, die die Torkette in jedem unklaren Fall gibt: unbekannt sieht aus wie
+// nicht verfuegbar. Der Preis ist benannt: vergisst jemand die Verdrahtung, bietet der
+// Agent nie eine Rueckfrage an - konservativ, sofort am ersten Anruf sichtbar, und nie
+// eine Zusage, die niemand einloest.
+const ohneRueckfrageTor = () => false;
+
+// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die zehn, die die
 // Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
-// {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}}) -
+// {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}},
+// {{consult_available}}) -
 // fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt unaufgeloest. Der Weg ueber eine
 // Prompt-Uebersteuerung scheidet aus: eine nicht freigeschaltete
 // conversation_config_override wird vom Anbieter STILL ignoriert.
@@ -663,8 +688,9 @@ function fakeSipTrunkOutboundCallResponse() {
 // bestaetigungspflichtige Annahme oder gar keine Zone (s. calleeTimezoneText). Geraten wird
 // dabei nichts (s. time-context.js). Vorher wirkte an dieser Stelle ein Festwert am Agenten
 // ("Europe/Berlin"), der weder besessen noch pro Anruf richtig war.
-function dynamicVariables({ call, ownerName, time, locale }) {
+function dynamicVariables({ call, ownerName, time, locale, consultAllowed }) {
   return {
+    consult_available: consultAllowed === true ? CONSULT_AVAILABLE : CONSULT_UNAVAILABLE,
     owner_name: alsText(ownerName) || locale.disclosureOwnerFallback,
     callee: alsText(call.to),
     objective: alsText(call.goal),
@@ -737,13 +763,13 @@ function conversationConfigOverride(locale) {
 // zwei erlaubten Uebersteuerungen. MODUL-EBENE aus demselben Grund wie callLocaleOf
 // darueber (G30). Der Waechter in convai.js prueft GENAU dieses Objekt, bevor es das Netz
 // sieht.
-function startCallBody({ el, call, ownerName, time, locale }) {
+function startCallBody({ el, call, ownerName, time, locale, consultAllowed }) {
   return {
     agent_id: el.agentId,
     agent_phone_number_id: el.agentPhoneNumberId,
     to_number: call.to,
     conversation_initiation_client_data: {
-      dynamic_variables: dynamicVariables({ call, ownerName, time, locale }),
+      dynamic_variables: dynamicVariables({ call, ownerName, time, locale, consultAllowed }),
       conversation_config_override: conversationConfigOverride(locale),
     },
   };
@@ -925,12 +951,19 @@ function rearmActiveConversationPolls({ store, pollConversationResult }) {
  *   (INV-7) - der Ergebnisweg beendet Anrufe ueber denselben Gateway wie jeder andere
  *   Beender, nicht ueber einen zweiten, buchungsfreien Weg.
  */
+// consultAllowedFor kommt HEREIN statt importiert zu werden, und das ist keine Stilfrage:
+// src/consult/gate.js liest das MODUL src/config.js, und dieses bindet beim Laden den
+// Datenpfad. Ein statischer Import haette jede Datei, die outbound.js laedt, an diesen
+// Pfad gebunden, BEVOR ein Test sein DATA_DIR setzen kann - am 2026-08-17 gemessen: ein
+// Testfall schrieb daraufhin in das echte data/store.json statt in sein Temp-Verzeichnis.
+// Dieselbe Haltung wie bei config/store: was Zustand hat, kommt herein.
 export function makeElevenLabsOutbound({
   store,
   config,
   terminateAndBillCall,
   billThunk,
   finishCall,
+  consultAllowedFor = ohneRueckfrageTor,
 }) {
   // Immer frisch gelesen (nicht beim Bauen eingefroren): Tests uebersteuern die Gruppe
   // zur Laufzeit, und der Abholtakt darf nicht an einer Kopie von vor dem Boot haengen.
@@ -1125,6 +1158,11 @@ export function makeElevenLabsOutbound({
       callee: call.to,
     });
     const locale = callLocaleOf({ store, config, call, ownerName });
+    // Der Torzustand kommt aus DERSELBEN Torkette wie alles andere (consultAllowedFor -
+    // Master-Schalter, Kontext-Kanal, Per-Tenant-Recht), nicht aus dem MCP-Aufruf und
+    // nicht aus einem zweiten Nachbau: dieselbe Funktion, die der Webhook fragt, bevor er
+    // eine Rueckfrage annimmt (routes/webhooks-elevenlabs.js).
+    const consultAllowed = consultAllowedFor(store.resolveProfile(call.tenantId));
     // OUT-05-EL (Trockenlege-Naht, Aufgabe 1): GENAU vor dem einzigen Netzzugriff dieses
     // Wegs abgezweigt - wie fakeVoice in telephony/registry.js den kompletten Telnyx-
     // Transport ersetzt, ersetzt dieser Zweig NUR den EINEN POST gegen api.elevenlabs.io.
@@ -1136,7 +1174,7 @@ export function makeElevenLabsOutbound({
       : await startOutboundCall({
           fetchImpl: fetch,
           account: el,
-          body: startCallBody({ el, call, ownerName, time, locale }),
+          body: startCallBody({ el, call, ownerName, time, locale, consultAllowed }),
           // Fuer das Fehlerebene-Log der Weisse-Liste-Waeche (convai.js), die diesen
           // Anfragekoerper VOR dem Netzzugriff prueft: nichts ausser agent.language und
           // tts.voice_id darf darin stehen.

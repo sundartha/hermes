@@ -23,14 +23,22 @@
       {
         "feld": "language",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.agent.language"],
-        "live": ["conversation_config.agent.language"]
+        "vorlage": [
+          "agent.conversation_config.agent.language"
+        ],
+        "live": [
+          "conversation_config.agent.language"
+        ]
       },
       {
         "feld": "first_message",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.agent.first_message"],
-        "live": ["conversation_config.agent.first_message"],
+        "vorlage": [
+          "agent.conversation_config.agent.first_message"
+        ],
+        "live": [
+          "conversation_config.agent.first_message"
+        ],
         "_hinweis": "An diesem Satz haengt Artikel 50 EU AI Act (s. agent._first_message_hinweis). Genau deshalb besitzt die Vorlage ihn: eine Offenlegung, die im Dashboard still umgeschrieben wird, ist keine Offenlegung mehr."
       },
       {
@@ -47,8 +55,12 @@
       {
         "feld": "prompt",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.agent.prompt.prompt"],
-        "live": ["conversation_config.agent.prompt.prompt"]
+        "vorlage": [
+          "agent.conversation_config.agent.prompt.prompt"
+        ],
+        "live": [
+          "conversation_config.agent.prompt.prompt"
+        ]
       },
       {
         "feld": "dynamic_variables",
@@ -66,7 +78,10 @@
       {
         "feld": "tools",
         "art": "namen",
-        "vorlage": ["tools", "agent.conversation_config.agent.prompt.built_in_tools"],
+        "vorlage": [
+          "tools",
+          "agent.conversation_config.agent.prompt.built_in_tools"
+        ],
         "live": [
           "conversation_config.agent.prompt.tools",
           "conversation_config.agent.prompt.built_in_tools"
@@ -76,10 +91,16 @@
       {
         "feld": "language_presets",
         "art": "namen",
-        "vorlage": ["agent.conversation_config.language_presets"],
-        "live": ["conversation_config.language_presets"],
+        "vorlage": [
+          "agent.conversation_config.language_presets"
+        ],
+        "live": [
+          "conversation_config.language_presets"
+        ],
         "schreibweg": "je_schluessel",
-        "schreibweg_besitz": ["overrides.agent.first_message"],
+        "schreibweg_besitz": [
+          "overrides.agent.first_message"
+        ],
         "_hinweis": "Verglichen wird, WELCHE Zusatzsprachen der Agent fuehrt, nicht der Inhalt ihrer overrides: der Inhalt eines Presets kann Felder tragen, die die Vorlage nicht besitzt (z.B. eine im Dashboard gewaehlte Stimme je Sprache). Wer den Inhalt eines Presets besitzen will, traegt ihn als eigenen Eintrag ein - fuer den ersten Satz ist das seit 2026-08-17 geschehen (language_presets_offenlegung, art 'texte'). Frei ist der Inhalt damit NICHT: was ein Preset auf keinen Fall setzen darf, steht als Verbot unter 'regeln' - ein Namensvergleich kann das nicht ausdruecken, weil er nur die heutigen Namen kennt und nichts ueber den Inhalt sagt.",
         "_schreibweg_begruendung": "Wie bei data_collection: eine KARTE, an der beide Seiten Verschiedenes besitzen. Der Live-Eintrag traegt die volle Anbieter-Form (asr/turn/tts/conversation/agent, jedes Unterfeld ausgeschrieben und auf null), die Vorlage nur den einen besessenen Satz. Bestehende Sprachen behalten deshalb ihren Live-Eintrag und bekommen ausschliesslich 'overrides.agent.first_message' neu; eine Sprache, die nur live existiert, bricht ab statt zu verschwinden - im Dashboard angelegte Presets sind der wahrscheinlichste Fall und werden nicht im Vorbeigehen weggeraeumt."
       },
@@ -87,22 +108,34 @@
         "feld": "language_presets_offenlegung",
         "art": "texte",
         "je_eintrag": "overrides.agent.first_message",
-        "vorlage": ["agent.conversation_config.language_presets"],
-        "live": ["conversation_config.language_presets"],
+        "vorlage": [
+          "agent.conversation_config.language_presets"
+        ],
+        "live": [
+          "conversation_config.language_presets"
+        ],
         "_hinweis": "Der erste gesprochene Satz JE SPRACHE - die Offenlegung nach Artikel 50 EU AI Act, wenn der Angerufene nicht englisch angesprochen wird. Er ist BESESSEN und wird im WERT verglichen, nicht bloss in seiner Anwesenheit: ein Anwesenheits-Verbot (so stand es bis 2026-08-17 unter 'regeln') ist genau dann erfuellt, wenn ein deutscher Angerufener den englischen Satz hoert - es schuetzt also gegen den falschen Satz, nicht gegen den fehlenden. Die Kette ist jetzt geschlossen: src/i18n/locales.js -> Test (byte-identisch) -> diese Vorlage -> Drift-Lauf -> Live-Agent. Der andere Weg zum selben Schaden, first_message_translation.text, bleibt vollstaendig VERBOTEN (s. regeln): eine vom Anbieter erzeugte Uebersetzung ist ein Text, den niemand kuratiert hat."
       },
       {
         "feld": "suggested_audio_tags",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.tts.suggested_audio_tags"],
-        "live": ["conversation_config.tts.suggested_audio_tags"],
+        "vorlage": [
+          "agent.conversation_config.tts.suggested_audio_tags"
+        ],
+        "live": [
+          "conversation_config.tts.suggested_audio_tags"
+        ],
         "_hinweis": "Sprachabhaengig, deshalb besessen (Eigentuemer-Entscheidung 2026-08-14: besessen ist ALLES Sprachabhaengige): die Tags und ihre Beschreibungen gehen als Text in den Ausdrucks-Prompt des v3-Modells, das den ENGLISCH sprechenden Agenten steuert. Live stehen dort heute zehn DEUTSCHE Tags samt deutscher Beschreibung (Einfuehlsam, Selbstbewusst, ...), und die language_presets ueberschreiben tts nicht (overrides.tts ist null) - der englische Agent erbt sie also. art 'wert' und nicht 'namen': die Beschreibung sagt, WANN ein Tag benutzt wird, und ist damit genauso sprachabhaengig wie der Tag selbst. Der Vollwertvergleich ist hier gefahrlos, anders als bei data_collection: SuggestedAudioTag hat laut Anbieter-Schema genau zwei Felder (tag, description), der Anbieter haengt keine Defaults dran, die die Vorlage nicht fuehrt. Die Reihenfolge zaehlt damit mit - die Vorlage ist die Wahrheit, ein Push schreibt sie genau so."
       },
       {
         "feld": "soft_timeout_meldung",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.turn.soft_timeout_config.message"],
-        "live": ["conversation_config.turn.soft_timeout_config.message"],
+        "vorlage": [
+          "agent.conversation_config.turn.soft_timeout_config.message"
+        ],
+        "live": [
+          "conversation_config.turn.soft_timeout_config.message"
+        ],
         "_hinweis": "Der GESPROCHENE Ueberbrueckungssatz beim Soft-Timeout - sprachabhaengig und live heute deutsch ('[nachdenklich] Genau, dazu sag ich dir gleich mehr...'), inklusive deutschem Audio-Tag. Das ist die Familie, aus der der Eigentuemer-Befund 'Einen Moment bitte.' bei einem englischen Agenten stammt (s. soft_timeout_prompt_override)."
       },
       {
@@ -111,7 +144,9 @@
         "vorlage": [
           "agent.conversation_config.turn.soft_timeout_config.additional_soft_timeout_messages"
         ],
-        "live": ["conversation_config.turn.soft_timeout_config.additional_soft_timeout_messages"],
+        "live": [
+          "conversation_config.turn.soft_timeout_config.additional_soft_timeout_messages"
+        ],
         "_hinweis": "Dieselbe Sache wie soft_timeout_meldung, nur die Zusatzliste (live: '[geduldig] Ich bin noch dabei, gleich habe ich es...'). Eigener Eintrag statt eines Vergleichs des ganzen soft_timeout_config-Objekts, weil dort auch nicht besessene Stellschrauben liegen (timeout_seconds, randomize_fillers, max_soft_timeouts_per_generation, disable_until_first_user_message) - die gehoeren dem Dashboard."
       },
       {
@@ -128,10 +163,16 @@
       {
         "feld": "data_collection",
         "art": "namen",
-        "vorlage": ["platform_settings.data_collection"],
-        "live": ["platform_settings.data_collection"],
+        "vorlage": [
+          "platform_settings.data_collection"
+        ],
+        "live": [
+          "platform_settings.data_collection"
+        ],
         "schreibweg": "je_schluessel",
-        "schreibweg_besitz": ["description"],
+        "schreibweg_besitz": [
+          "description"
+        ],
         "_schreibweg_begruendung": "Diese Karte ist die einzige besessene Stelle, an der BEIDE Seiten Verschiedenes besitzen: die Vorlage Schluessel, Typ und Beschreibung, der Anbieter zusaetzlich acht eigene Felder je Eintrag (enum, is_system_provided, dynamic_variable, allowed_values_dynamic_variable, constant_value, is_omitted, llm, llm_billed - am Live-Agenten 2026-08-17 gemessen). Ein Vollwert-Schreiben muesste diese acht erfinden, ein Nicht-Schreiben laesst ABNAHME-D1 beim ANBIETER dauerhaft rot, waehrend sie gegen die Vorlage gruen ist - genau die Fehlerklasse 'gruener Test, unbewachte Tatsache'. Der Schreibweg fuehrt deshalb zusammen: bestehende Schluessel behalten ihren Live-Eintrag und bekommen nur die 'description' neu, neue Schluessel kommen ganz aus der Vorlage, ein nur live vorhandener Schluessel bricht ab (kein stilles Loeschen). NICHT besessen bleibt der Typ (type) - er ist keine Sprache; bei einem NEUEN Schluessel reist er trotzdem mit, weil ein Eintrag ohne Typ keiner ist und die Vorlage dort die einzige Quelle ist. data_collection_scopes braucht der Push NICHT: 'Missing keys default to conversation scope' (openapi.json, AgentPlatformSettingsRequestModel.data_collection_scopes) - und 'conversation' ist genau der Wert, den die vier bestehenden Schluessel live tragen.",
         "_hinweis": "Die SCHLUESSELMENGE der Datenerhebung. Sprachabhaengig, weil die Schluessel selbst deutsche Woerter sind (live heute termindatum, kontaktperson, rueckrufnummer, naechste_schritte) - sie erscheinen in der Auswertung und im Post-Call-Webhook, also in dem, was ein Kunde zu sehen bekommt. Eigener Eintrag NEBEN den Beschreibungen, obwohl 'texte' die Namen mitfuehrt: bei einer Umbenennung sagt dieser Eintrag in EINER Zeile, welche Menge erwartet und welche gefunden wurde, waehrend der Text-Eintrag nur zwei lange Listen gegenueberstellt."
       },
@@ -139,58 +180,90 @@
         "feld": "data_collection_beschreibungen",
         "art": "texte",
         "je_eintrag": "description",
-        "vorlage": ["platform_settings.data_collection"],
-        "live": ["platform_settings.data_collection"],
+        "vorlage": [
+          "platform_settings.data_collection"
+        ],
+        "live": [
+          "platform_settings.data_collection"
+        ],
         "_hinweis": "Die Beschreibungen derselben Sammlung - der Text, an dem das Auswertungs-Modell entscheidet, was es aus dem Gespraech zieht. Live sind sie heute deutsch. art 'texte' statt 'wert', weil der Anbieter an jeden Eintrag Felder haengt, die diese Vorlage nicht besitzt (enum, is_system_provided, dynamic_variable, allowed_values_dynamic_variable, constant_value, is_omitted, llm, llm_billed); ein Vollwertvergleich waere dauerhaft rot und damit blind. Nicht besessen bleibt der Typ (type) - der ist keine Sprache."
       },
       {
         "feld": "evaluation_kriterien",
         "art": "namen",
-        "vorlage": ["platform_settings.evaluation.criteria"],
-        "live": ["platform_settings.evaluation.criteria"],
+        "vorlage": [
+          "platform_settings.evaluation.criteria"
+        ],
+        "live": [
+          "platform_settings.evaluation.criteria"
+        ],
         "_hinweis": "GEPRUEFT und JA, sprachabhaengig: die Namen der Auswertungskriterien sind das Etikett, unter dem ein Kunde das Ergebnis eines Anrufs liest (live heute 'Termin vereinbart', 'Anliegen geklaert'). Die Vorlage haelt die Kriterien als LISTE wie der Live-Agent, art 'namen' liest je Eintrag das Feld name. Die Aufnahme in den Besitz ist die Anwendung der Eigentuemer-Regel 'alles Sprachabhaengige' auf ein Feld, das die Regel nicht namentlich nennt - wer das anders sieht, loescht diesen Eintrag und den naechsten, und das Gate hoert sofort auf, sie zu melden."
       },
       {
         "feld": "evaluation_kriterien_prompts",
         "art": "texte",
         "je_eintrag": "conversation_goal_prompt",
-        "vorlage": ["platform_settings.evaluation.criteria"],
-        "live": ["platform_settings.evaluation.criteria"],
+        "vorlage": [
+          "platform_settings.evaluation.criteria"
+        ],
+        "live": [
+          "platform_settings.evaluation.criteria"
+        ],
         "_hinweis": "Der Bewertungs-Anweisungstext je Kriterium. Sprachabhaengig aus demselben Grund wie der System-Prompt, der laengst besessen ist: es ist Prosa an ein Modell, das ein englisches Transkript beurteilt - live ist sie heute deutsch. NICHT besessen ist die Kennung (id) je Kriterium: sie ist der Schluessel, unter dem bereits ausgewertete Anrufe abgelegt sind, und ein Umbenennen ist eine eigene Entscheidung (s. _nicht_besessen)."
       },
       {
         "feld": "llm",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.agent.prompt.llm"],
-        "live": ["conversation_config.agent.prompt.llm"],
+        "vorlage": [
+          "agent.conversation_config.agent.prompt.llm"
+        ],
+        "live": [
+          "conversation_config.agent.prompt.llm"
+        ],
         "_hinweis": "Das Modell, das die Gespraeche fuehrt - die Stellschraube, an der die Drift-Pruefung bis 2026-08-14 vorbeischaute: sie meldete OK ueber alle damals besessenen Felder, waehrend live claude-sonnet-5 stand und die Vorgabe G6 das staerkste Claude verlangt. Beides zugleich kann nur heissen, dass das Modell nicht besessen war; 'drift OK' war damit eine beruhigende Meldung ueber die falschen Felder. Aufgenommen NICHT, weil es sprachabhaengig waere - das ist es nicht, und damit ist dieser Eintrag die erste bewusste Erweiterung des Besitzes ueber die Sprach-Regel hinaus (s. _nicht_besessen, letzter Punkt). Aufgenommen, weil an genau diesem Feld in EINER Woche drei Messungen an anderen Werten gefahren sind als die Auslieferung fuehrt (Spike 1b gegen gpt-4o-mini, A7 gegen qwen36-35b-a3b, G6 nie vollzogen). Der SOLL-Wert ist vorlaeufig, weil die Modell-Leiter noch laeuft - begruendet an agent.conversation_config.agent.prompt._modellwahl_begruendung. Dass dieser Eintrag nicht nur gruen meldet, sondern wirklich faengt, ist am 2026-08-15 negativ belegt: mit kuenstlich verstelltem SOLL-llm meldete npm run elevenlabs:drift 'ABWEICHUNG llm | Vorlage ... | Live ...' und endete mit Exit 1."
       },
       {
         "feld": "reasoning_effort",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.agent.prompt.reasoning_effort"],
-        "live": ["conversation_config.agent.prompt.reasoning_effort"],
+        "vorlage": [
+          "agent.conversation_config.agent.prompt.reasoning_effort"
+        ],
+        "live": [
+          "conversation_config.agent.prompt.reasoning_effort"
+        ],
         "_hinweis": "Zweite Stellschraube desselben Modells: sie entscheidet, ob es vor der Antwort nachdenkt, und schlaegt damit auf Antwortzeit UND Kosten je Anruf durch. Ein Dashboard-Klick genuegt, um sie zu verstellen; ohne Besitz saehe das nie jemand. SOLL none (Vorgabe G6). Eigener Eintrag statt eines Vergleichs des ganzen prompt-Objekts: dort liegen auch nicht besessene Felder (u.a. thinking_budget, max_tokens, cascade_timeout_seconds, s. _nicht_besessen, letzter Punkt)."
       },
       {
         "feld": "temperature",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.agent.prompt.temperature"],
-        "live": ["conversation_config.agent.prompt.temperature"],
+        "vorlage": [
+          "agent.conversation_config.agent.prompt.temperature"
+        ],
+        "live": [
+          "conversation_config.agent.prompt.temperature"
+        ],
         "_hinweis": "Dritte Stellschraube desselben Modells - und der Grund, warum eine Messung an temperature 0 nichts ueber die Auslieferung sagt: 0 beguenstigt die woertliche Nachahmung des eigenen vorigen Zuges, und genau daran ist Spike 1b haengengeblieben (begruendet in scripts/spike1-b.mjs). SOLL 0.66, der heutige Live-Wert, ausdruecklich NICHT der Anbieter-Default 0."
       },
       {
         "feld": "timezone",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.agent.prompt.timezone"],
-        "live": ["conversation_config.agent.prompt.timezone"],
+        "vorlage": [
+          "agent.conversation_config.agent.prompt.timezone"
+        ],
+        "live": [
+          "conversation_config.agent.prompt.timezone"
+        ],
         "_hinweis": "Der Zeitzonen-Festwert am Agenten. Gegenueber den dynamischen Variablen {{owner_timezone}}/{{callee_timezone}}/{{today}} ist er WIRKUNGSLOS (seit 2026-08-15, s. agent.conversation_config.agent.prompt._zeitkontext_hinweis) - bewacht wird er trotzdem, weil genau 'wirkungslos, aber ungedeckt' der Zustand ist, in dem ein stiller Dashboard-Wechsel unbemerkt bliebe. Bis 2026-08-15 stand das Feld unter _nicht_besessen; es steht jetzt nur noch HIER, nie in beiden Listen. SOLL ist der per GET abgelesene Live-Wert, damit das Gate gruen startet und ab sofort JEDE kuenftige Aenderung meldet - Bewachung, nicht Korrektur. OFFENE FRAGE (Eigentuemer): ob Europe/Berlin zu einem Produkt mit englischem Weltdefault und ausschliesslich US-Rufnummern passt. Das ist eine EIGENE Entscheidung; wird sie getroffen, aendert sich der Wert hier und wird gepusht - nicht umgekehrt."
       },
       {
         "feld": "retention_days",
         "art": "wert",
-        "vorlage": ["platform_settings.privacy.retention_days"],
-        "live": ["platform_settings.privacy.retention_days"],
+        "vorlage": [
+          "platform_settings.privacy.retention_days"
+        ],
+        "live": [
+          "platform_settings.privacy.retention_days"
+        ],
         "ausgenommen": {
           "grund": "Eigentuemer-Entscheidung 2026-08-15: die Aufbewahrung bleibt vorerst AN (live -1), solange an echten Anrufen gemessen wird - ohne aufbewahrtes Gespraech gibt es hinterher nichts nachzusehen, und genau das Nachsehen ist die laufende Arbeit. Die Vorlage bleibt bei 0, damit die Abweichung sichtbar rot bleibt und nicht als erledigt durchgeht. VOR DEM ERSTEN FREMDKUNDEN wird zwingend auf G7 zurueckgedreht (dann: --felder=retention_days --ausfuehren, und diese Ausnahme faellt im selben Zug weg).",
           "seit": "2026-08-15"
@@ -200,8 +273,12 @@
       {
         "feld": "record_voice",
         "art": "wert",
-        "vorlage": ["platform_settings.privacy.record_voice"],
-        "live": ["platform_settings.privacy.record_voice"],
+        "vorlage": [
+          "platform_settings.privacy.record_voice"
+        ],
+        "live": [
+          "platform_settings.privacy.record_voice"
+        ],
         "ausgenommen": {
           "grund": "Zweite Haelfte derselben Eigentuemer-Entscheidung vom 2026-08-15 wie bei retention_days daneben: der Mitschnitt bleibt vorerst AN (live true), solange an echten Anrufen gemessen wird - eine aufbewahrte Frist ohne Audio beantwortet die Fragen nicht, um die es beim Messen geht (was hat der Agent wirklich gesagt, wo hat er zu frueh gesprochen). Die Vorlage bleibt bei false. VOR DEM ERSTEN FREMDKUNDEN wird zwingend auf G7 zurueckgedreht, zusammen mit retention_days.",
           "seit": "2026-08-15"
@@ -211,36 +288,56 @@
       {
         "feld": "conversation_config_override_erlaubnisse",
         "art": "wert",
-        "vorlage": ["platform_settings.overrides.conversation_config_override"],
-        "live": ["platform_settings.overrides.conversation_config_override"],
+        "vorlage": [
+          "platform_settings.overrides.conversation_config_override"
+        ],
+        "live": [
+          "platform_settings.overrides.conversation_config_override"
+        ],
         "_hinweis": "Die EIGENE weisse Liste des ANBIETERS (nicht die unseres Codes, die steht in src/elevenlabs/convai.js#OVERRIDE_ALLOWED_LEAF_PATHS und wird gegen DIESEN Wert gehalten von test/elevenlabs-override-whitelist.test.js, damit beide Listen nicht auseinanderlaufen koennen - G5): je Pfad EIN Wahrheitswert, ob ein Anrufstart ihn per conversation_config_override ueberhaupt setzen DARF. Setzt ein Anrufstart einen Pfad, der hier false steht, wird die Ueberschreibung nicht abgelehnt, sondern STILL ignoriert (s. agent._first_message_hinweis) - genau deshalb muss diese Karte den WAHREN Live-Zustand kennen, nicht nur unsere Absicht. SOLL (Owner-Entscheidung 16.08.2026, ersetzt den bisherigen Wortlaut 'conversation_config_override wird nicht benutzt'): ausschliesslich agent.language=true (die Sprache) und tts.voice_id=true (die Stimme) - ALLES UEBRIGE false. Gemessen am Live-Agenten 16.08.2026 (nur gelesen, GET): asr.keywords=false, turn.soft_timeout_config.message=false, tts.model_id/stability/speed/similarity_boost/pronunciation_dictionary_locators=false, tts.voice_id=FALSE, conversation.max_duration_seconds=false, conversation.text_only=TRUE, agent.first_message/max_conversation_duration_message=false, agent.prompt.*=false, agent.language=TRUE. ZWEI ABWEICHUNGEN VOM LIVE-ZUSTAND, je einen Satz: (1) tts.voice_id SOLL true, Live false - PUSH-ABSICHT, damit ein spaeteres, EIGENES Paket eine Stimmenwahl pro Anruf ueberhaupt am Anbieter setzen KANN (dieses Paket baut die Wahl selbst nicht, nur den Waechter). (2) conversation.text_only SOLL false, Live true - PUSH-ABSICHT UND Korrektur: text_only ist heute OHNE erkennbaren Grund freigeschaltet, eine offene Tuer, einen Sprachanruf pro Anruf lautlos in einen Text-Anruf zu verwandeln, und SOLL dreht das zurueck auf den sicheren Zustand. BEIDE Abweichungen sind PUSH-ABSICHT, nicht 'ausgenommen': bis zum naechsten echten npm run elevenlabs:push fuehrt das Konto weiter die alten Werte, und npm run elevenlabs:drift meldet dieses Feld bis dahin ERWARTUNGSGEMAESS als Abweichung - Bewachung, keine stille Korrektur (dasselbe Muster wie platform_settings._data_collection_hinweis, TEIL appointment_time/amount/currency/confirmed_timezone)."
       },
       {
         "feld": "pronunciation_dictionary_locators",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.tts.pronunciation_dictionary_locators"],
-        "live": ["conversation_config.tts.pronunciation_dictionary_locators"],
+        "vorlage": [
+          "agent.conversation_config.tts.pronunciation_dictionary_locators"
+        ],
+        "live": [
+          "conversation_config.tts.pronunciation_dictionary_locators"
+        ],
         "_hinweis": "Das EINE Feld, ueber das ein Aussprache-Woerterbuch an den Agenten kommt - Mechanik, Belege und was anzulegen waere stehen an agent.conversation_config._aussprache_hinweis. Besessen seit 2026-08-15, weil an diesem Feld die Korrektur des Auftraggeber-Namens haengt (Eigentuemer-Befund Gruppe B): zwei Klicks im Dashboard haengen ein Woerterbuch an, zwei Klicks nehmen es wieder ab - ohne Besitz saehe das Abhaengen niemand, und der erste Satz jedes Anrufs waere wieder falsch ausgesprochen. Der Name reist als {{owner_name}} in first_message und in die Anrufbeantworter-Nachricht; beides sind fertige Texte fuer die Synthese, kein Modell-Ausgang - eine Prompt-Anweisung erreicht sie nicht, dieses Feld schon. SOLL ist die LEERE Liste, solange das Konto kein Woerterbuch fuehrt (gemessen 2026-08-15: GET /v1/pronunciation-dictionaries liefert eine leere Liste, der Live-Agent traegt []). Sobald eines existiert und haengt, gehoeren {pronunciation_dictionary_id, version_id} HIERHER - beide Kennungen, denn eine Zuordnung ohne version_id ist nicht aufloesbar (die Form haelt test/elevenlabs-aussprache.test.js fest). ACHTUNG, die Richtung zaehlt: meldet das Drift-Gate dieses Feld rot, WEIL live ein Woerterbuch haengt, ist die Antwort, die Kennungen in die Vorlage einzutragen - NICHT dieses Feld zu pushen. Ein Push mit dem leeren SOLL nimmt die Zuordnung wieder ab und damit die Aussprache-Korrektur zurueck - lautlos, denn gehoert wird das erst im naechsten echten Anruf."
       },
       {
         "feld": "max_duration_seconds",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.conversation.max_duration_seconds"],
-        "live": ["conversation_config.conversation.max_duration_seconds"],
+        "vorlage": [
+          "agent.conversation_config.conversation.max_duration_seconds"
+        ],
+        "live": [
+          "conversation_config.conversation.max_duration_seconds"
+        ],
         "_hinweis": "Besessen seit 2026-08-15, gleiches Vorgehen wie bei timezone (Bewachung, nicht Korrektur, s. agent.conversation_config._notbremse_hinweis): der Anrufdauer-Deckel BEIM ANBIETER (live 600s) ist der einzige, der auch dann noch greift, wenn unser eigener Prozess abstuerzt, neu startet oder vom Netz getrennt ist - und auf dieser Strecke der BINDENDE, weil er mit 600s enger ist als unsere eigene Notbremse MAX_CALL_DURATION_CAP_S von 1800s (src/store/defaults.js:294, 600 < 1800)."
       },
       {
         "feld": "silence_end_call_timeout",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.turn.silence_end_call_timeout"],
-        "live": ["conversation_config.turn.silence_end_call_timeout"],
+        "vorlage": [
+          "agent.conversation_config.turn.silence_end_call_timeout"
+        ],
+        "live": [
+          "conversation_config.turn.silence_end_call_timeout"
+        ],
         "_hinweis": "Besessen seit 2026-08-15 aus demselben Grund wie max_duration_seconds daneben (s. agent.conversation_config._notbremse_hinweis): die Stille-Grenze, nach der der ANBIETER selbst auflegt (live 30s), wirkt auch dann noch, wenn unser Prozess nicht mehr laeuft - ein In-Prozess-Timer schuetzt bei Absturz, Neustart oder Netzausfall nicht, dieser Deckel schon; wie beim Anrufdauer-Deckel gilt 600 < 1800, der Anbieter-Deckel greift auf dieser Strecke vor unserer eigenen, lockereren Notbremse."
       },
       {
         "feld": "turn_timeout",
         "art": "wert",
-        "vorlage": ["agent.conversation_config.turn.turn_timeout"],
-        "live": ["conversation_config.turn.turn_timeout"],
+        "vorlage": [
+          "agent.conversation_config.turn.turn_timeout"
+        ],
+        "live": [
+          "conversation_config.turn.turn_timeout"
+        ],
         "_hinweis": "Besessen seit 2026-08-15, dritter Teil desselben Deckels (s. agent.conversation_config._notbremse_hinweis): die Wartezeit je Gespraechsrunde (live 7s), die der ANBIETER selbst durchsetzt, greift auch bei totem eigenen Prozess noch - derselbe Grund, aus dem der Anbieter-Deckel dieser Strecke (600s bei max_duration_seconds) enger ist als unsere eigene Notbremse (1800s, 600 < 1800) und damit der bindende."
       },
       {
@@ -248,7 +345,10 @@
         "art": "texte",
         "je_eintrag": "tool_config.api_schema.url",
         "je_eintrag_live": "api_schema.url",
-        "vorlage": ["tools", "agent.conversation_config.agent.prompt.built_in_tools"],
+        "vorlage": [
+          "tools",
+          "agent.conversation_config.agent.prompt.built_in_tools"
+        ],
         "live": [
           "conversation_config.agent.prompt.tools",
           "conversation_config.agent.prompt.built_in_tools"
@@ -260,7 +360,10 @@
         "art": "texte",
         "je_eintrag": "_live_gemessene_form.request_body_schema",
         "je_eintrag_live": "api_schema.request_body_schema",
-        "vorlage": ["tools", "agent.conversation_config.agent.prompt.built_in_tools"],
+        "vorlage": [
+          "tools",
+          "agent.conversation_config.agent.prompt.built_in_tools"
+        ],
         "live": [
           "conversation_config.agent.prompt.tools",
           "conversation_config.agent.prompt.built_in_tools"
@@ -272,7 +375,10 @@
         "art": "texte",
         "je_eintrag": "_live_gemessene_form.request_headers",
         "je_eintrag_live": "api_schema.request_headers",
-        "vorlage": ["tools", "agent.conversation_config.agent.prompt.built_in_tools"],
+        "vorlage": [
+          "tools",
+          "agent.conversation_config.agent.prompt.built_in_tools"
+        ],
         "live": [
           "conversation_config.agent.prompt.tools",
           "conversation_config.agent.prompt.built_in_tools"
@@ -286,7 +392,9 @@
         "regel": "offenlegung_nie_je_sprache_ueberschreiben",
         "art": "verboten_je_eintrag",
         "live": "conversation_config.language_presets",
-        "verboten": ["first_message_translation.text"],
+        "verboten": [
+          "first_message_translation.text"
+        ],
         "meldung": "Ein language_preset darf den Offenlegungssatz nicht durch eine hier entstandene UEBERSETZUNG ersetzen. first_message ist die Offenlegung nach Artikel 50 EU AI Act (s. agent._first_message_hinweis); ein vom Anbieter uebersetzter erster Satz ist ein Text, den niemand kuratiert hat. Braucht eine Sprache einen eigenen Offenlegungssatz, kommt er WOERTLICH aus src/i18n/locales.js (LOCALES.<sprache>.disclosure) und steht als besessener Wert in dieser Vorlage (Besitz-Eintrag language_presets_offenlegung).",
         "_verboten_hinweis": "GEAENDERT 2026-08-17, und die Aenderung VERSCHAERFT: bis dahin standen hier ZWEI Pfade, 'overrides.agent.first_message' und 'first_message_translation.text'. Der erste ist herausgenommen, weil ein ANWESENHEITS-Verbot am ersten Satz die falsche Haelfte schuetzt: es ist genau dann erfuellt, wenn ein deutscher Angerufener den englischen Satz hoert - gemessen an Anruf 2 (2026-08-17, am Ohr des Eigentuemers bestaetigt). Es schuetzt gegen den FALSCHEN Satz und laesst den FEHLENDEN durch. An seine Stelle tritt ein WERT-Vergleich (Besitz-Eintrag language_presets_offenlegung, art 'texte'), der beides faengt: fehlt der Satz einer Sprache oder traegt er einen anderen Text als LOCALES.<sprache>.disclosure, schlaegt der Drift-Lauf an, und der Test T5 (e) haelt die Vorlage byte-identisch am Code fest. Der zweite Pfad BLEIBT verboten und unveraendert: 'first_message_translation.text' ist die vom Anbieter ERZEUGTE Uebersetzung - ein Text, den kein Mensch kuratiert hat, und der eine Rechtsaussage erfindet. null zaehlt als 'nicht gesetzt' - der Anbieter fuehrt die Felder eines Presets vollstaendig und setzt die ungenutzten auf null.",
         "_praezedenzfall": "Dieselbe Bewegung wie bei Abschnitt 2 am 2026-08-16 (Eigentuemer-Entscheidung, Weg A): eine zu grob formulierte Regel wird nicht aufgeweicht, sondern durch eine ersetzt, die die geschuetzte EIGENSCHAFT genauer durchsetzt. Die Eigenschaft lautet hier: der erste gesprochene Satz ist IMMER die Offenlegung, in einer Sprache, die der Angerufene versteht, byte-identisch aus dem Code - nie erfunden, nie uebersetzt, nie leer."
@@ -343,7 +451,9 @@
           "dynamic_variable": "",
           "is_omitted": false,
           "type": "object",
-          "required": ["question"],
+          "required": [
+            "question"
+          ],
           "properties": {
             "question": {
               "type": "string",
@@ -368,8 +478,8 @@
         "prompt": {
           "_auftragsblock_hinweis": "Die beiden Platzhalter {{constraints}} und {{background}} stehen ABSICHTLICH nackt und ohne eigene Ueberschrift im Abschnitt SITUATION AND TASK - sie bringen ihre Beschriftung im WERT mit (CONSTRAINTS: ... bzw. BACKGROUND (for your information only): ... samt Leitplanken-Satz, gebaut in src/elevenlabs/outbound.js aus denselben Bausteinen wie der Bestandsweg, src/i18n/prompts/en.js). Grund: dieser Prompt ist EIN statischer Text und kann keinen Block weglassen. Stuende die Ueberschrift hier, saehe der Agent bei einem Auftrag ohne Verbote einen leeren Verbots-Block - und ein leerer Block mit der Ueberschrift 'CONSTRAINTS' liest sich wie 'es gibt keine Grenzen'. Der Bestand loest es genauso (src/claude.js assignmentBlock/assistantContextSection: die Zeile bzw. der Block rendert nur, wenn das Feld gesetzt ist). Deshalb stehen beide Platzhalter seit 2026-08-15 OHNE Trennzeichen direkt hinter {{objective}}: der fuehrende Zeilenumbruch reist EBENFALLS im Wert (gebaut in src/elevenlabs/outbound.js, constraintsText/backgroundText - wieder wie der Bestand, dessen assistantContextSection den Umbruch im Wert traegt). Stuende er hier statisch, bliebe er stehen, wenn der Wert wegfaellt: vor HOW YOU SPEAK standen dann drei Leerzeilen. Ohne Werte bleibt an dieser Stelle jetzt nichts uebrig. Der VORRANG der Verbote vor dem Mandat reist seit 2026-08-15 EBENFALLS im Wert von {{constraints}} mit und steht NICHT mehr statisch im Abschnitt MANDATE: der Satz stammt woertlich aus mandate.constraintsPrecedence (src/i18n/prompts/en.js) und wird in src/elevenlabs/outbound.js (constraintsText) an die Verbots-Zeile gehaengt. Grund: statisch versprach der Prompt bei einem Auftrag OHNE Verbote den Vorrang eines Textes, den es gar nicht gibt - eine Einladung an den Agenten, sich Grenzen auszudenken oder sein Mandat abzuschwaechen. Auch hierin folgt die Vorlage dem Bestand: src/claude.js rendert constraintsPrecedence NUR, wenn call.constraints gesetzt ist. NACHTRAG 2026-08-15 (zwei weitere Groessen, die im WERT reisen statt als neuer Platzhalter): (1) das BRIEFING - der ganze Hintergrund aus dem bisherigen Chat, den place_call mitgibt - steht als ERSTE Zeile im Wert von {{background}}, mit derselben Beschriftung und in derselben Reihenfolge wie im Bestand (src/claude.js assignmentBlock: BRIEFING vor der HINTERGRUND-Sektion). Es stand zuvor am Call-Record und wurde von diesem Weg nie gelesen: der Agent fuehrte das Gespraech ohne den Hintergrund, den der Auftraggeber ihm ausdruecklich mitgegeben hatte. Ein eigener zehnter Platzhalter waere dafuer nicht noetig - und jeder neue Platzhalter wirkt erst nach einem Push an den Anbieter. (2) die BUCHUNGS-GRENZE reist im Wert von {{mandate}} (s. _bestandsabgleich_begruendung). Das Variablen-Vokabular bleibt damit bei denselben NEUN Namen.",
           "_zeitkontext_hinweis": "Der Abschnitt TIME AND TIME ZONES ist am 2026-08-15 dazugekommen und traegt die drei juengsten Platzhalter: {{today}}, {{owner_timezone}} und {{callee_timezone}}. Vorher wirkte an dieser Stelle NICHTS aus dem Anruf, sondern ein FESTWERT am Agenten (conversation_config.agent.prompt.timezone = Europe/Berlin; dieser Festwert ist seitdem gegenueber den Variablen wirkungslos, steht aber seit 2026-08-15 unter _besitz.felder als 'timezone' unter Bewachung - wirkungslos und ungedeckt zugleich ist der Zustand, in dem sich etwas unbemerkt aendert) und kein Datum - ein Agent mit fester Zone und ohne Datum sagt einem Auftraggeber in Tokio einen Termin nach Berliner Zeit zu und rechnet 'naechsten Donnerstag' gegen ein Datum, das er gar nicht kennt. Gebaut werden alle drei pro Anruf in src/elevenlabs/outbound.js (dynamicVariables) aus src/elevenlabs/time-context.js: {{owner_timezone}} ist die Zeitzone des TENANTS (store.tenantTimezone, ueber resolveTimezone fail-safe aufgeloest), {{today}} das heutige Datum in genau dieser Zone (ausgeschriebener Monat und Wochentag, damit ein Sprachmodell es sicher liest), {{callee_timezone}} die Zone des ANGERUFENEN, abgeleitet aus dem Land seiner Nummer (countryForE164 -> TIMEZONE_FOR_COUNTRY). ZWEI Dinge daran sind Absicht: (1) {{callee_timezone}} steht wie {{constraints}} und {{background}} NACKT und bringt Satz und fuehrenden Zeilenumbruch im WERT mit - dieselbe Begruendung wie unter _auftragsblock_hinweis; (2) laesst sich das Land NICHT ableiten, wird NICHTS geraten. Das ist bei JEDER +1-Nummer der Fall (25 NANP-Laender teilen die Vorwahl, Eigentuemer-Entscheidung E2 'nie raten') - also ausgerechnet im US-Marktgebiet. Der Anzeige-Rueckfall auf DEFAULT_TIMEZONE waere hier ein Schaden: eine falsche Zone ist schlimmer als keine. NACHTRAG 2026-08-15 (Eigentuemer-Entscheidung, T8): {{callee_timezone}} traegt seitdem DREI Lagen und ist deshalb NIE mehr leer - (a) TATSACHE, wenn das Land die Zone liefert (+33 -> Europe/Paris): der Agent rechnet um; (b) HYPOTHESE, wenn nur die US-Vorwahl etwas hergibt (src/elevenlabs/nanp-area-codes.js): der Wert reist ausdruecklich als Annahme, und der Agent bestaetigt sie in EINEM Satz ('I have you down as Eastern time - is that right?'), BEVOR er eine absolute Uhrzeit nennt; (c) KEINE Zone: der Agent nennt GAR KEINE absolute Uhrzeit, spricht unbestimmt ('tomorrow morning') und laesst die Gegenseite die Uhrzeit nennen. Eine Vorwahl-Tabelle ALLEIN waere falsch - die Zuordnung stimmt meistens, aber nicht immer (Staaten ueber Zonengrenzen, Arizona ohne Sommerzeit), und 'meistens richtig' heisst bei Terminen: still falsche Uhrzeiten. ZWINGENDE FOLGE, im selben Zug vollzogen: die frueher LETZTE, STATISCHE Zeile dieses Abschnitts ('If no time zone is given for the person you are calling, never convert a time silently: say which time zone you mean, or ask which one they are using.') ist ENTFERNT. Sie verbot nur das STILLE Umrechnen und liess dem Agenten weiterhin die absolute Uhrzeit - neben Lage (c) waere sie eine zweite, schwaechere Wahrheit, und ihre Bedingung ('if no time zone is given') tritt gar nicht mehr ein. NICHT gebaut und offen als eigenes Paket: den im Gespraech BESTAETIGTEN Wert speichern - das braucht eine Ergebnis-Rueckmeldung des Agenten und ein Feld am Store.",
-          "_rueckfrage_gate_hinweis": "R16 (2026-08-17): der Prompt nennt get_consult ab jetzt in GENAU EINEM Abschnitt - 'CONSULT TOOL (get_consult)'. Vorher stand das Werkzeug zusaetzlich im Abschnitt MANDATE AND BOOKING ('and instead take a message or ask via get_consult'); genau diese halbe Zeile ist ENTFERNT, sonst nichts am Prompt. GRUND: der Rueckfrage-Weg haengt an einem GATE (src/consult/gate.js, consultAllowedFor - Master-Schalter, Kontext-Kanal, Per-Tenant-Recht). Ist das Gate zu, darf der Prompt das Werkzeug NIRGENDS nennen: der Agent verspricht seinem Gegenueber sonst eine Rueckfrage, die nie kommt, oder er ruft ein Werkzeug, das der Webhook ablehnt. Die gate-abhaengige Fassung baut src/conversation/elevenlabs-agent-config.js aus GENAU DIESEM Prompt und laesst dafuer die Abschnitte weg, die das Werkzeug nennen - ein ABSCHNITT ist die Einheit, die wegfallen kann, eine halbe Zeile mitten im Mandat nicht. Dasselbe Muster fuehrt der Bestandsweg: consultRules() in src/claude.js rendert als GANZER Block oder gar nicht. KEIN INHALT GEHT VERLOREN: was die entfernte Haelfte sagte, sagt der Abschnitt CONSULT TOOL bereits woertlich ('If a question falls outside your task or mandate and you cannot answer it safely yourself, use the get_consult tool to briefly ask your principal') - es faellt eine Doppelung weg, keine Anweisung. FOLGE FUER KUENFTIGE AENDERUNGEN: wer get_consult wieder in einem anderen Abschnitt nennt, laesst diesen ganzen Abschnitt bei gesperrtem Gate mit wegfallen. Traegt er einen dynamischen Platzhalter, bricht das Laden der Naht mit einer Meldung ab - absichtlich, statt still einen halben Prompt zu senden.",
-          "prompt": "PERSONA:\nYou are an AI phone assistant calling on behalf of {{owner_name}}. You conduct this call independently. If asked directly, you make clear that you are an AI assistant, not a human.\n\nSITUATION AND TASK:\nYou are calling {{callee}} right now. You are the caller.\nYour task: {{objective}}{{constraints}}{{background}}\n\nTIME AND TIME ZONES:\nToday is {{today}}. {{owner_name}} is in the {{owner_timezone}} time zone - note every time you agree in that zone.{{callee_timezone}}\n\nHOW YOU SPEAK:\nBegin the call in English. If the other party switches to another language, continue in that language and keep pursuing the same objective. Keep your replies short (one to two sentences), at most one question per turn. Use a polite, formal form of address with unfamiliar callers unless told otherwise. Say numbers, prices and spellings the way they sound natural on the phone, not as a string of digits.\n\nIF SOMETHING IS UNCLEAR:\nAsk instead of guessing. Never invent information you do not have. If your conversation partner changes or you have to wait, stay on the line politely.\n\nYOUR BOUNDARIES:\nYou have NO access to {{owner_name}}'s calendar, bank details, or personal data unless explicitly authorized. Use tools sparingly, only when they genuinely move the task forward.\n\nCONSULT TOOL (get_consult):\nIf a question falls outside your task or mandate and you cannot answer it safely yourself, use the get_consult tool to briefly ask your principal. ALWAYS announce the call first with a short spoken sentence (for example: 'One moment, let me check that.'). Wait for the answer before continuing. Never hand a question about {{owner_name}} back to the other party - use get_consult instead.\n\nMANDATE AND BOOKING:\n{{mandate}}\nIf no leeway of your own is stated there, you have NO mandate: you make no binding commitment beyond the base task, and instead take a message. If one is stated, you act ONLY within the scope described there.\n\nCLOSING:\nAt the end, briefly summarize what was agreed or found out, and say goodbye politely.\n\nHOW YOU GET TO A RESULT:\nFirst complete the TASK fully and as concretely as possible: clarify the request, compare alternatives, reach a result. After stating your reason for calling, ALWAYS wait for the other person's reply before continuing.\nIf offered several options, state your choice first, for example \"Thursday at nine works better.\" Only describe an appointment as agreed AFTER the other person has confirmed your choice, never in the same reply. Never say you have entered or booked something - you cannot.\nOnce the task is done, you may offer a helpful next step. If you lack information for that, or the other person doesn't continue, wrap up politely. Never let the call get stuck on a side topic you yourself opened.\nAt the end, say goodbye in one sentence and then call end_call.",
+          "_rueckfrage_gate_hinweis": "R16 (2026-08-17): der Prompt nennt get_consult ab jetzt in GENAU EINEM Abschnitt - 'CONSULT TOOL (get_consult)'. Vorher stand das Werkzeug zusaetzlich im Abschnitt MANDATE AND BOOKING ('and instead take a message or ask via get_consult'); genau diese halbe Zeile ist ENTFERNT, sonst nichts am Prompt. GRUND: der Rueckfrage-Weg haengt an einem GATE (src/consult/gate.js, consultAllowedFor - Master-Schalter, Kontext-Kanal, Per-Tenant-Recht). Ist das Gate zu, darf der Prompt das Werkzeug NIRGENDS nennen: der Agent verspricht seinem Gegenueber sonst eine Rueckfrage, die nie kommt, oder er ruft ein Werkzeug, das der Webhook ablehnt. Die gate-abhaengige Fassung baut src/conversation/elevenlabs-agent-config.js aus GENAU DIESEM Prompt und laesst dafuer die Abschnitte weg, die das Werkzeug nennen - ein ABSCHNITT ist die Einheit, die wegfallen kann, eine halbe Zeile mitten im Mandat nicht. Dasselbe Muster fuehrt der Bestandsweg: consultRules() in src/claude.js rendert als GANZER Block oder gar nicht. KEIN INHALT GEHT VERLOREN: was die entfernte Haelfte sagte, sagt der Abschnitt CONSULT TOOL bereits woertlich ('If a question falls outside your task or mandate and you cannot answer it safely yourself, use the get_consult tool to briefly ask your principal') - es faellt eine Doppelung weg, keine Anweisung. FOLGE FUER KUENFTIGE AENDERUNGEN: wer get_consult wieder in einem anderen Abschnitt nennt, laesst diesen ganzen Abschnitt bei gesperrtem Gate mit wegfallen. Traegt er einen dynamischen Platzhalter, bricht das Laden der Naht mit einer Meldung ab - absichtlich, statt still einen halben Prompt zu senden. NACHTRAG 2026-08-17 (Eigentuemer-Entscheidung, fuenf Punkte): der Torzustand reist ab jetzt als DYNAMISCHE VARIABLE {{consult_available}} mit ('available'/'unavailable', Wert aus derselben Torkette consultAllowedFor, fail-closed). Der Prompt ist EINER, fest und gepusht, und verzweigt an diesem Wert - kein Prompt je Torzustand (das waere dieselbe Vermehrung wie ein Agent je Sprache, die schon abgelehnt wurde). DESHALB ZWEI ABSCHNITTE: 'REACHING YOUR PRINCIPAL DURING THIS CALL' traegt die Variable und nennt get_consult NICHT - dort steht, was bei geschlossenem Tor gilt (nichts zusagen, Nachricht aufnehmen). 'CONSULT TOOL (get_consult)' nennt das Werkzeug und faellt bei der Naht oben als GANZES weg. Die Trennung ist keine Kosmetik: haengte die Variable im get_consult-Abschnitt, verloere die Naht sie beim Wegfallen - genau dafuer bricht sie beim Laden ab, und genau das ist am 2026-08-17 einmal passiert und hat den Umbau gestoppt, bevor er still falsch werden konnte.",
+          "prompt": "PERSONA:\nYou are an AI phone assistant calling on behalf of {{owner_name}}. You conduct this call independently. If asked directly, you make clear that you are an AI assistant, not a human.\n\nSITUATION AND TASK:\nYou are calling {{callee}} right now. You are the caller.\nYour task: {{objective}}{{constraints}}{{background}}\n\nTIME AND TIME ZONES:\nToday is {{today}}. {{owner_name}} is in the {{owner_timezone}} time zone - note every time you agree in that zone.{{callee_timezone}}\n\nHOW YOU SPEAK:\nBegin the call in English. If the other party switches to another language, continue in that language and keep pursuing the same objective. Keep your replies short (one to two sentences), at most one question per turn. Use a polite, formal form of address with unfamiliar callers unless told otherwise. Say numbers, prices and spellings the way they sound natural on the phone, not as a string of digits.\n\nIF SOMETHING IS UNCLEAR:\nAsk instead of guessing. Never invent information you do not have. If your conversation partner changes or you have to wait, stay on the line politely.\n\nYOUR BOUNDARIES:\nYou have NO access to {{owner_name}}'s calendar, bank details, or personal data unless explicitly authorized. Use tools sparingly, only when they genuinely move the task forward.\n\nREACHING YOUR PRINCIPAL DURING THIS CALL: {{consult_available}}\nIf that says \"unavailable\", you cannot reach your principal while this call is running. Never say you will ask them, never promise to check back, and never announce that you are checking something with them. Take a message instead and say it will be passed on.\n\nCONSULT TOOL (get_consult):\nUse this tool ONLY while reaching your principal is \"available\" (see above). When a question falls outside your task or mandate and you cannot answer it safely yourself, use the get_consult tool to briefly ask your principal. ALWAYS announce the call first with a short spoken sentence (for example: 'One moment, let me check that.'). Wait for the answer before continuing. Never hand a question about {{owner_name}} back to the other party - use get_consult instead.\n\nMANDATE AND BOOKING:\n{{mandate}}\nIf no leeway of your own is stated there, you have NO mandate: you make no binding commitment beyond the base task, and instead take a message. If one is stated, you act ONLY within the scope described there.\n\nCLOSING:\nAt the end, briefly summarize what was agreed or found out, and say goodbye politely.\n\nHOW YOU GET TO A RESULT:\nFirst complete the TASK fully and as concretely as possible: clarify the request, compare alternatives, reach a result. After stating your reason for calling, ALWAYS wait for the other person's reply before continuing.\nIf offered several options, state your choice first, for example \"Thursday at nine works better.\" Only describe an appointment as agreed AFTER the other person has confirmed your choice, never in the same reply. Never say you have entered or booked something - you cannot.\nOnce the task is done, you may offer a helpful next step. If you lack information for that, or the other person doesn't continue, wrap up politely. Never let the call get stuck on a side topic you yourself opened.\nAt the end, say goodbye in one sentence and then call end_call.",
           "tool_ids": [
             "<AUSFUELLEN: get_consult tool_id from the response of POST /v1/convai/tools/create>"
           ],
@@ -465,7 +575,9 @@
         "silence_end_call_timeout": 30,
         "soft_timeout_config": {
           "message": "[thoughtful] Right, there is a bit more to that...",
-          "additional_soft_timeout_messages": ["[patient] I am still on it, almost there..."],
+          "additional_soft_timeout_messages": [
+            "[patient] I am still on it, almost there..."
+          ],
           "llm_generated_message_prompt_override": "Generate a short, natural bridging phrase (max. 6-8 words) that ties back to the topic just discussed - for example by briefly picking it up or hinting at what you are about to address. Sound like a person thinking for a second mid-conversation, never like a hold announcement. Avoid stock phrases such as \"one moment\" or \"I am still working on it\". Where it fits, use an audio tag such as [thoughtful] or [curious]."
         }
       },

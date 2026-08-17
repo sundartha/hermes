@@ -44,6 +44,7 @@ import {
   TENANT_REJECT,
 } from "./request-tenant.js";
 import { makeConsultDelivery } from "./consult/delivery.js";
+import { consultAllowedFor } from "./consult/gate.js";
 import { buildApp } from "./app.js";
 import { bootServer } from "./boot.js";
 
@@ -130,6 +131,9 @@ const elevenLabsOutbound = makeElevenLabsOutbound({
   terminateAndBillCall,
   billThunk,
   finishCall: callFinish.finishCall,
+  // DASSELBE Tor, das der Rueckfrage-Webhook fragt, bevor er eine Rueckfrage annimmt -
+  // hier verdrahtet statt in outbound.js importiert (Begruendung an der Signatur dort).
+  consultAllowedFor,
 });
 
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper
