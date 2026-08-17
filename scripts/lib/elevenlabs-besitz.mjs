@@ -33,12 +33,19 @@
 // KEINE Abschaltung des Vergleichs: die Abweichung wird weiter gemeldet, nur
 // gekennzeichnet. Sie sagt dem schreibenden Kommando "nicht von selbst
 // geradebiegen" - dort ist sie der Riegel (s. push). Hier ist sie eine Marke,
-// damit rot nicht mit kaputt verwechselt wird.
+// damit rot nicht mit kaputt verwechselt wird - und seit 2026-08-17 zusaetzlich
+// eine Frist: "vorerst" ohne Hoechstalter ist nur ein Wort (s.
+// AUSNAHME_HOECHSTALTER_TAGE).
 //
 // FAIL-CLOSED, weil ein gruener Befund, der nichts geprueft hat, wie ein
 // bestandener aussieht: eine fehlende Besitz-Erklaerung, eine unbekannte
 // Vergleichs-Art oder ein besessener Pfad, den die Vorlage gar nicht hat, wird
-// zu einem Eintrag in fehler[] - nie zu einem stillen "kein Fund".
+// zu einem Eintrag in fehler[] - nie zu einem stillen "kein Fund". Aus
+// demselben Grund zaehlt dieser Kern nicht, wie viele Felder und Verbote die
+// Erklaerung FUEHRT, sondern wie viele wirklich gegen den Live-Agenten gehalten
+// werden konnten (geprueft/felderSoll, regelnAngewandt/regelnSoll): eine Regel,
+// die auf einen leeren Live-Bereich trifft, ist nicht erfuellt, sondern nicht
+// pruefbar - und das ist ein Befund (nichtPruefbar[]), kein OK.
 
 // Pfad der Vorlage, relativ zur Repo-Wurzel. Steht hier und nicht beim
 // Datei-Zugriff, weil die Fehlermeldungen dieses Kerns die Datei beim Namen
@@ -63,6 +70,29 @@ const AUSNAHME_DATUM_MUSTER = /^\d{4}-\d{2}-\d{2}$/;
 // Die Marke, die eine ausgenommene Abweichung in der Meldung traegt: rot bleibt
 // rot, aber "festgehaltene Entscheidung" darf nicht wie "kaputt" aussehen.
 export const AUSNAHME_MARKE = "BEWUSST AUSGENOMMEN seit";
+// Die Marke einer Stelle, an der GAR NICHTS verglichen werden konnte. Eigene
+// Marke und eigene Liste, weil "nicht pruefbar" mit keinem der drei bekannten
+// Befunde dasselbe ist: kein Unterschied (den gaebe es nur zwischen zwei
+// vorhandenen Seiten), keine Verletzung (dafuer muesste ein Eintrag da sein) und
+// kein Fehler in der Erklaerung (die kann tadellos sein, waehrend der Agent die
+// Stelle nicht fuehrt).
+export const NICHT_PRUEFBAR_MARKE = "NICHT PRUEFBAR";
+// Die Marke einer Ausnahme, deren "vorerst" abgelaufen ist.
+export const AUSNAHME_UEBERFAELLIG_MARKE = "AUSNAHME UEBERFAELLIG";
+// Hoechstalter einer Ausnahme in Tagen. WARUM UEBERHAUPT EINE FRIST: die Vorlage
+// sagt ausdruecklich "vorerst" und "eine Ausnahme ist kein Dauerzustand" - ohne
+// gemessenes Hoechstalter ist das eine Absichtserklaerung, die nichts durchsetzt.
+// Die zwei heute ausgenommenen Felder sind Aufbewahrung und Mitschnitt fremder
+// Gespraeche; beide stehen live AN und sollen laut Eigentuemer-Entscheidung vor
+// dem ersten Fremdkunden zurueckgedreht werden.
+// WARUM 90 TAGE: ein Quartal ist lang genug, dass eine laufende Messphase nicht
+// woechentlich unterbrochen wird, und kurz genug, dass aus "vorerst" nicht
+// unbemerkt "immer" wird. Der eigentliche Termin (erster Fremdkunde) ist von
+// hier aus nicht messbar - der Kalender ist der einzige verfuegbare Ersatz.
+export const AUSNAHME_HOECHSTALTER_TAGE = 90;
+// Schreibweise wie MS_PER_DAY in src/boot-guard.js (dort dieselbe Rechnung:
+// Alter eines Datums in Tagen).
+const MS_PRO_TAG = 86_400_000;
 // Einzige heute bekannte Form eines Verbots: "kein Eintrag dieser Sammlung darf
 // einen dieser Pfade gesetzt haben". Eine unbekannte art ist ein Fehler und
 // kein stilles Ueberspringen - sonst pruefte das Gate genau das Verbot nicht
@@ -246,7 +276,9 @@ const VERGLEICHS_ARTEN = new Map([
       sammle: (werte, eintrag, seite) => {
         const jeEintragLive = eintrag[JE_EINTRAG_LIVE_SCHLUESSEL];
         const jeEintrag =
-          seite === "live" && istPfad(jeEintragLive) ? jeEintragLive : eintrag[JE_EINTRAG_SCHLUESSEL];
+          seite === "live" && istPfad(jeEintragLive)
+            ? jeEintragLive
+            : eintrag[JE_EINTRAG_SCHLUESSEL];
         return sortierteMenge(werte.flatMap((wert) => texteAus(wert, jeEintrag)));
       },
       zeige: zeigeWert,
@@ -274,6 +306,16 @@ function pfadListeFehler({ feld, seite, pfade, einPfad }) {
   return null;
 }
 
+// Das Datum einer Ausnahme als Zeitpunkt (UTC-Mitternacht) oder NaN. EINE
+// Stelle fuer beide Leser: die Formpruefung faellt auf NaN durch, die
+// Altersrechnung darf sich danach darauf verlassen, mit einer Zahl zu rechnen.
+// Geprueft wird ausdruecklich nicht nur das Muster, sondern der Kalender -
+// "2026-02-31" passt auf JJJJ-MM-TT und ergibt trotzdem kein Datum, und eine
+// Frist gegen NaN waere still immer erfuellt.
+function ausnahmeZeitpunkt(seit) {
+  return Date.parse(`${seit}T00:00:00Z`);
+}
+
 // Prueft die FORM einer Ausnahme. Sie ist freiwillig (fehlt sie, ist alles in
 // Ordnung), aber wenn sie da ist, muss sie tragen: eine halbe Ausnahme wuerde am
 // Push zum Riegel, ohne dass irgendwo staende, warum und seit wann - genau die
@@ -290,8 +332,12 @@ function ausnahmeFormFehler(eintrag) {
     return `${eintrag.feld}: "${AUSNAHME_SCHLUESSEL}" ohne "${AUSNAHME_GRUND_SCHLUESSEL}" - eine Ausnahme ohne Begruendung ist von einem Versehen nicht zu unterscheiden`;
   }
   const seit = ausnahme[AUSNAHME_SEIT_SCHLUESSEL];
-  if (typeof seit !== "string" || !AUSNAHME_DATUM_MUSTER.test(seit)) {
-    return `${eintrag.feld}: "${AUSNAHME_SCHLUESSEL}.${AUSNAHME_SEIT_SCHLUESSEL}" ist kein Datum JJJJ-MM-TT - ohne Datum ist "vorerst" nicht nachpruefbar`;
+  const istDatum =
+    typeof seit === "string" &&
+    AUSNAHME_DATUM_MUSTER.test(seit) &&
+    !Number.isNaN(ausnahmeZeitpunkt(seit));
+  if (!istDatum) {
+    return `${eintrag.feld}: "${AUSNAHME_SCHLUESSEL}.${AUSNAHME_SEIT_SCHLUESSEL}" ist kein gueltiges Datum JJJJ-MM-TT - ohne Datum ist "vorerst" weder nachpruefbar noch befristbar`;
   }
   return null;
 }
@@ -305,6 +351,20 @@ function ausnahmeAus(eintrag) {
     grund: ausnahme[AUSNAHME_GRUND_SCHLUESSEL],
     seit: ausnahme[AUSNAHME_SEIT_SCHLUESSEL],
   };
+}
+
+// Eine Ausnahme, deren "vorerst" abgelaufen ist - oder null. Gemeldet wird sie
+// UNABHAENGIG davon, ob das Feld gerade abweicht: was verfaellt, ist die
+// festgehaltene Entscheidung, nicht der Unterschied. Die Zeile wiederholt den
+// Grund nicht, der steht schon an der Abweichung; sie nennt die zwei Ausgaenge.
+function veralteteAusnahmeZeile({ eintrag, heute }) {
+  const ausgenommen = ausnahmeAus(eintrag);
+  if (!ausgenommen) return null;
+  const alterTage = Math.floor(
+    (heute.getTime() - ausnahmeZeitpunkt(ausgenommen.seit)) / MS_PRO_TAG,
+  );
+  if (alterTage <= AUSNAHME_HOECHSTALTER_TAGE) return null;
+  return `${AUSNAHME_UEBERFAELLIG_MARKE} ${eintrag.feld} | ausgenommen seit ${ausgenommen.seit}, das sind ${alterTage} Tage und damit mehr als die Hoechstfrist von ${AUSNAHME_HOECHSTALTER_TAGE} Tagen. Entweder das Feld auf den Vorlagen-Wert zurueckdrehen oder die Ausnahme mit neuem Datum und neuem Grund erneuern - "vorerst" ist abgelaufen.`;
 }
 
 // Prueft die FORM eines Besitz-Eintrags. Ein kaputter Eintrag darf nicht still
@@ -454,13 +514,31 @@ function vergleicheFeld({ eintrag, vorlage, live }) {
   return { abweichung: abweichungsBefund({ eintrag, vergleich, links, rechts }) };
 }
 
-// Alle BESESSENEN Felder und nur sie.
-function vergleicheFelder(besitz, vorlage, live) {
+// Ob EIN Feld ueberhaupt gegen etwas gehalten werden konnte - oder die Zeile,
+// die sagt, warum nicht. Verlangt wird JEDE Live-Ablage, die die
+// Besitz-Erklaerung nennt: fehlt eine von zweien, faellt das bei den Mengen-Arten
+// nicht einmal auf, weil die Vereinigung ueber die verbliebene Ablage aussieht
+// wie eine vollstaendige. Ein solches Feld wird weiterhin als Abweichung
+// gemeldet (die Vorlage fuehrt etwas, der Agent nicht) - aber es zaehlt NICHT als
+// geprueft, sonst behauptete die Zahl am Ende einen Vergleich, den es nie gab.
+function nichtPruefbarZeile(eintrag, live) {
+  const fehlend = fehlendePfade(live, eintrag.live);
+  if (fehlend.length === 0) return null;
+  return `${NICHT_PRUEFBAR_MARKE} ${eintrag.feld} | Live ${fehlend.join(PFAD_VERBINDER)} fehlt im Agenten - dieses Feld wurde gegen nichts gehalten und zaehlt nicht als geprueft`;
+}
+
+// Alle BESESSENEN Felder und nur sie. geprueft zaehlt die wirklich verglichenen,
+// soll die von der Erklaerung gefuehrten - auseinander duerfen die beiden nur
+// gehen, wenn nichtPruefbar auch sagt, wo.
+function vergleicheFelder({ besitz, vorlage, live, heute }) {
   const eintraege = besitz?.[FELDER_SCHLUESSEL];
   if (!Array.isArray(eintraege) || eintraege.length === 0) {
     return {
       geprueft: 0,
+      soll: 0,
       abweichungen: [],
+      nichtPruefbar: [],
+      veralteteAusnahmen: [],
       fehler: [
         `${VORLAGE_REL}: keine Besitz-Erklaerung (${BESITZ_SCHLUESSEL}.${FELDER_SCHLUESSEL}) mit mindestens einem Feld - ohne sie wuerde NICHTS verglichen`,
       ],
@@ -469,12 +547,30 @@ function vergleicheFelder(besitz, vorlage, live) {
 
   const abweichungen = [];
   const fehler = [];
+  const nichtPruefbar = [];
+  const veralteteAusnahmen = [];
+  let geprueft = 0;
   for (const eintrag of eintraege) {
     const ergebnis = vergleicheFeld({ eintrag, vorlage, live });
-    if (ergebnis.fehler) fehler.push(ergebnis.fehler);
+    if (ergebnis.fehler) {
+      fehler.push(ergebnis.fehler);
+      continue;
+    }
     if (ergebnis.abweichung) abweichungen.push(ergebnis.abweichung);
+    const luecke = nichtPruefbarZeile(eintrag, live);
+    if (luecke) nichtPruefbar.push(luecke);
+    else geprueft += 1;
+    const veraltet = veralteteAusnahmeZeile({ eintrag, heute });
+    if (veraltet) veralteteAusnahmen.push(veraltet);
   }
-  return { geprueft: eintraege.length, abweichungen, fehler };
+  return {
+    geprueft,
+    soll: eintraege.length,
+    abweichungen,
+    nichtPruefbar,
+    veralteteAusnahmen,
+    fehler,
+  };
 }
 
 // --- Verbote (_besitz.regeln) ---
@@ -519,44 +615,67 @@ function verletzungsZeile({ eintrag, name, gesetzt }) {
   return `VERLETZUNG ${eintrag.regel} | Live ${eintrag.live}."${name}" setzt ${pfade} | ${eintrag.meldung}`;
 }
 
+// Der Befund EINER Regel, die nichts ansehen konnte. Als Funktion und nicht als
+// geteilte Konstante, damit sich zwei Aufrufer nicht dieselben Listen teilen.
+function keinRegelFund(zusatz) {
+  return { geprueft: 0, verletzungen: [], fehler: [], nichtPruefbar: [], ...zusatz };
+}
+
 // EIN Verbot gegen EINE Sammlung des Live-Agenten. Geprueft wird jeder Eintrag,
 // den der Agent wirklich fuehrt - damit auch kuenftig hinzugefuegte und
-// unabhaengig davon, ob die Namen der Sammlung gerade abweichen.
+// unabhaengig davon, ob die Namen der Sammlung gerade abweichen. WAS als
+// Eintrag zaehlt, entscheidet eintraegeAus und nichts anderes: die
+// _-praefixierte Entwickler-Doku ist kein Eintrag, ein auf null gesetzter
+// Anbieter-Schluessel auch nicht. Zwei eigene Filter (einer beim Feldvergleich,
+// einer hier) wuerden genau darin auseinanderlaufen - dieselbe Sammlung haette
+// dann je nach Frage verschieden viele Eintraege.
 function pruefeRegel(eintrag, live) {
   const formFehler = regelFormFehler(eintrag);
-  if (formFehler) return { geprueft: 0, verletzungen: [], fehler: [formFehler] };
+  if (formFehler) return keinRegelFund({ fehler: [formFehler] });
 
   const treffer = wertAnPfad(live, eintrag.live);
   const sammlung = treffer.wert;
   const istSammlung = treffer.gefunden && sammlung !== null && typeof sammlung === "object";
   if (!istSammlung) {
-    return {
-      geprueft: 0,
-      verletzungen: [],
+    return keinRegelFund({
       fehler: [
         `${eintrag.regel}: Sammlung ${eintrag.live} fehlt im Live-Agenten oder ist kein Objekt - dieses Verbot wuerde nichts pruefen`,
       ],
-    };
+    });
+  }
+
+  const eintraege = eintraegeAus(sammlung);
+  if (eintraege.length === 0) {
+    return keinRegelFund({
+      nichtPruefbar: [
+        `${NICHT_PRUEFBAR_MARKE} ${eintrag.regel} | Live ${eintrag.live} fuehrt keinen einzigen Eintrag - dieses Verbot wurde gegen nichts gehalten. Nicht pruefbar ist nicht erfuellt`,
+      ],
+    });
   }
 
   const verletzungen = [];
-  const eintraege = Object.entries(sammlung);
   for (const [name, wert] of eintraege) {
     const gesetzt = eintrag.verboten.filter((pfad) => istGesetzt(wert, pfad));
     if (gesetzt.length > 0) verletzungen.push(verletzungsZeile({ eintrag, name, gesetzt }));
   }
-  return { geprueft: eintraege.length, verletzungen, fehler: [] };
+  return { geprueft: eintraege.length, verletzungen, fehler: [], nichtPruefbar: [] };
 }
 
 // Alle Verbote. geprueft zaehlt die wirklich angesehenen Paare (Regel x
-// Eintrag) - eine Zahl, die 0 bleibt, waere sonst von "nichts gefunden" nicht
-// zu unterscheiden.
-function pruefeRegeln(besitz, live) {
+// Eintrag), angewandt die Regeln, die ueberhaupt an einen Eintrag kamen, soll
+// die von der Erklaerung gefuehrten. Erst das Paar angewandt/soll traegt die
+// Aussage: eine Paar-Zahl allein sagt nicht, ob sie sich auf ein Verbot oder auf
+// alle verteilt - zehn Pruefungen einer Regel sehen sonst aus wie zwei erfuellte
+// Regeln.
+function pruefeRegeln({ besitz, live }) {
   const regeln = besitz?.[REGELN_SCHLUESSEL];
   if (!Array.isArray(regeln) || regeln.length === 0) {
     return {
       geprueft: 0,
+      angewandt: 0,
+      soll: 0,
       verletzungen: [],
+      nichtPruefbar: [],
       fehler: [
         `${VORLAGE_REL}: keine Regeln (${BESITZ_SCHLUESSEL}.${REGELN_SCHLUESSEL}) mit mindestens einem Verbot - ohne sie wuerde KEIN Verbot durchgesetzt`,
       ],
@@ -565,32 +684,47 @@ function pruefeRegeln(besitz, live) {
 
   const verletzungen = [];
   const fehler = [];
+  const nichtPruefbar = [];
   let geprueft = 0;
+  let angewandt = 0;
   for (const eintrag of regeln) {
     const ergebnis = pruefeRegel(eintrag, live);
     verletzungen.push(...ergebnis.verletzungen);
     fehler.push(...ergebnis.fehler);
+    nichtPruefbar.push(...ergebnis.nichtPruefbar);
     geprueft += ergebnis.geprueft;
+    if (ergebnis.geprueft > 0) angewandt += 1;
   }
-  return { geprueft, verletzungen, fehler };
+  return { geprueft, angewandt, soll: regeln.length, verletzungen, fehler, nichtPruefbar };
 }
 
 // Vergleicht Vorlage und Live-Agenten ueber die BESESSENEN Felder und setzt die
 // Verbote der Vorlage durch. Wirft nie an den Aufrufer weiter: jedes erwartbare
-// Problem wird zu einem Eintrag in fehler[], abweichungen[] oder
-// verletzungen[] (fail-closed). ok = alle drei leer.
-export function vergleicheBesitz({ vorlage, live }) {
+// Problem wird zu einem Eintrag in fehler[], abweichungen[], verletzungen[],
+// nichtPruefbar[] oder veralteteAusnahmen[] (fail-closed). ok = alle fuenf leer.
+//
+// heute ist ein Parameter mit Vorgabe und wird nicht im Kern aus der Uhr
+// gelesen: sonst haengt der einzige zeitabhaengige Befund (die Ausnahme-Frist)
+// am Kalender des Laufs und waere nur zu belegen, indem man wartet.
+export function vergleicheBesitz({ vorlage, live, heute = new Date() }) {
   const besitz = vorlage?.[BESITZ_SCHLUESSEL];
-  const felder = vergleicheFelder(besitz, vorlage, live);
-  const regeln = pruefeRegeln(besitz, live);
+  const felder = vergleicheFelder({ besitz, vorlage, live, heute });
+  const regeln = pruefeRegeln({ besitz, live });
   const fehler = [...felder.fehler, ...regeln.fehler];
+  const nichtPruefbar = [...felder.nichtPruefbar, ...regeln.nichtPruefbar];
   const sauber = felder.abweichungen.length === 0 && regeln.verletzungen.length === 0;
+  const vollstaendig = nichtPruefbar.length === 0 && felder.veralteteAusnahmen.length === 0;
   return {
-    ok: sauber && fehler.length === 0,
+    ok: sauber && fehler.length === 0 && vollstaendig,
     geprueft: felder.geprueft,
+    felderSoll: felder.soll,
     geprueftRegeln: regeln.geprueft,
+    regelnAngewandt: regeln.angewandt,
+    regelnSoll: regeln.soll,
     abweichungen: felder.abweichungen,
     verletzungen: regeln.verletzungen,
+    nichtPruefbar,
+    veralteteAusnahmen: felder.veralteteAusnahmen,
     fehler,
   };
 }

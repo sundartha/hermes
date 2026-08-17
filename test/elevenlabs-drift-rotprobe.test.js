@@ -11,8 +11,21 @@
 // Adresse und den Vertrag des Rueckfrage-Werkzeugs und die Erlaubnis-Karte, die
 // entscheidet, was ein Anrufstart am Agenten ueberhaupt umstellen darf.
 //
+// SEIT 2026-08-17 STEHT HIER AUCH DIE ZWEITE HAELFTE: nicht nur "wird eine
+// Abweichung gefangen", sondern "wurde ueberhaupt etwas angesehen". Der
+// Waechter meldete bis dahin OK, ohne dass die Zahl der wirklich verglichenen
+// Felder und der wirklich angewandten Verbote in die Entscheidung einging - ein
+// Verbot, das auf einen leeren Live-Bereich trifft, galt still als erfuellt.
+// Die Faelle bleiben in DIESER Datei und bekommen keine zweite: sie brauchen
+// genau denselben synthetischen Live-Agenten wie die Abweichungs-Faelle, und
+// eine zweite Datei koennte ihn nur ueber einen Export teilen - womit die
+// Fabrik zur oeffentlichen Schnittstelle wuerde, obwohl sie ein Testdetail ist.
+//
 // KEIN NETZ, KEIN KINDPROZESS: vergleicheBesitz ist reine Rechnung. Verglichen
-// wird die ECHTE Vorlagendatei gegen einen synthetischen Live-Agenten.
+// wird die ECHTE Vorlagendatei gegen einen synthetischen Live-Agenten. Die
+// Blockier-Entscheidung des Kommandos (istBlockierend) ist reine Rechnung ueber
+// einen fertigen Befund und wird direkt gerufen - sie ist der einzige Ort, an
+// dem "gemeldet" zu "der Lauf faellt durch" wird.
 //
 // WAS DER SYNTHETISCHE LIVE-AGENT TRAEGT: an jeder Live-Stelle, die die
 // Besitz-Erklaerung nennt, den SOLL-Wert der Vorlage - aus der Vorlagendatei
@@ -30,11 +43,20 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
+import { istBlockierend } from "../scripts/check-elevenlabs-drift.mjs";
 import { ladeVorlage } from "../scripts/lib/elevenlabs-agent-lesen.mjs";
-import { setzeAnPfad, vergleicheBesitz, wertAnPfad } from "../scripts/lib/elevenlabs-besitz.mjs";
+import {
+  AUSNAHME_HOECHSTALTER_TAGE,
+  AUSNAHME_UEBERFAELLIG_MARKE,
+  NICHT_PRUEFBAR_MARKE,
+  setzeAnPfad,
+  vergleicheBesitz,
+  wertAnPfad,
+} from "../scripts/lib/elevenlabs-besitz.mjs";
 
 const VORLAGE = ladeVorlage();
 const BESITZ_FELDER = VORLAGE._besitz.felder;
+const BESITZ_REGELN = VORLAGE._besitz.regeln;
 
 // Praefix der reinen Entwickler-Doku in dieser JSON-Datei (Konvention der
 // Vorlage selbst, s. deren _platzhalter_konvention): solche Schluessel sind kein
@@ -46,7 +68,18 @@ const LIVE_WERKZEUGE = "conversation_config.agent.prompt.tools";
 const WERKZEUG_NAME = "get_consult";
 
 // Die Live-Pfade der beiden Faelle, die kein Werkzeug betreffen.
+const FELD_MAX_DAUER = "max_duration_seconds";
 const LIVE_MAX_DAUER = "conversation_config.conversation.max_duration_seconds";
+// Die Sammlung, ueber der das einzige Verbot der Vorlage liegt - aus der
+// Erklaerung gelesen und nicht danebengeschrieben: zeigt das Verbot eines Tages
+// woandershin, soll dieser Fall mitziehen und nicht still am alten Ort messen.
+const LIVE_SPRACH_PRESETS = BESITZ_REGELN[0].live;
+// Die ausgenommenen Felder der echten Vorlage, als Daten.
+const AUSGENOMMENE_FELDER = BESITZ_FELDER.filter((eintrag) => eintrag.ausgenommen);
+// Ein Wert, der von jedem Sollwert abweicht und ausdruecklich NICHT der echte
+// Live-Wert ist: gebraucht wird nur "es weicht ab", und der echte Live-Stand
+// gehoert nicht in eine Testdatei (s. Kopf).
+const ABWEICHENDER_WERT = "Wert aus der Rotprobe, nicht der Live-Stand";
 const LIVE_ERLAUBNIS_TEXT_ONLY =
   "platform_settings.overrides.conversation_config_override.conversation.text_only";
 const VORLAGE_MAX_DAUER = "agent.conversation_config.conversation.max_duration_seconds";
@@ -110,12 +143,48 @@ function baueSauberenLiveAgenten() {
   return structuredClone(live);
 }
 
+// --- Der Bezugstag ---
+
+// Die Ausnahme-Daten der echten Vorlage. Dass es ueberhaupt welche gibt, wird
+// unten gemessen: verloere die Vorlage ihre Ausnahmen, pruefte jeder Fristen-Fall
+// hier nur noch leere Listen gegen leere Listen und saehe trotzdem gruen aus.
+const AUSNAHME_TAGE = AUSGENOMMENE_FELDER.map((eintrag) => eintrag.ausgenommen.seit).sort();
+const JUENGSTE_AUSNAHME = AUSNAHME_TAGE[AUSNAHME_TAGE.length - 1];
+
+// Ein Tag, gerechnet vom juengsten Ausnahme-Datum der Vorlage aus. Der Bezug
+// kommt aus der Vorlage und nicht aus der Uhr: ein Fall, der die echte Uhr
+// liest, wuerde genau AUSNAHME_HOECHSTALTER_TAGE nach dem naechsten
+// Ausnahme-Datum von selbst rot - ohne dass irgendetwas kaputt waere.
+function tagNachAusnahme(abstandTage) {
+  const tag = new Date(`${JUENGSTE_AUSNAHME}T00:00:00Z`);
+  tag.setUTCDate(tag.getUTCDate() + abstandTage);
+  return tag;
+}
+
+const EIN_TAG = 1;
+// Genau auf der Frist (noch nicht ueberfaellig) und genau einen Tag darueber -
+// die beiden Seiten der Grenze, nicht irgendwo daneben.
+const HEUTE_FRISCH = tagNachAusnahme(EIN_TAG);
+const HEUTE_AUF_DER_FRIST = tagNachAusnahme(AUSNAHME_HOECHSTALTER_TAGE);
+const HEUTE_UEBERFAELLIG = tagNachAusnahme(AUSNAHME_HOECHSTALTER_TAGE + EIN_TAG);
+
 // --- Ablauf eines Falls ---
 
-function befundZu(verbiege) {
+function befundZu(verbiege, heute = HEUTE_FRISCH) {
   const live = baueSauberenLiveAgenten();
   verbiege(live);
-  return vergleicheBesitz({ vorlage: VORLAGE, live });
+  return vergleicheBesitz({ vorlage: VORLAGE, live, heute });
+}
+
+// Entfernt ein Blatt aus dem Live-Agenten. Gegenstueck zu setzeAnPfad, nur hier
+// gebraucht: "das Feld steht im Dashboard gar nicht mehr" ist ein anderer
+// Sachverhalt als "es steht dort etwas anderes".
+function entferneAnPfad(live, pfad) {
+  const segmente = pfad.split(".");
+  const blatt = segmente.pop();
+  const behaelter = wertAnPfad(live, segmente.join("."));
+  assert.ok(behaelter.gefunden, `${pfad}: der Behaelter fehlt schon vor dem Entfernen`);
+  delete behaelter.wert[blatt];
 }
 
 function betroffeneFelder(befund) {
@@ -162,15 +231,25 @@ function pruefeGefangen({ befund, feld, istWertMuster }) {
 
 describe("Drift-Waechter: absichtliche Abweichungen durch den echten Vergleich", () => {
   it("Positiv-Kontrolle: ein Live-Agent mit genau den Sollwerten der Vorlage kommt sauber durch", () => {
-    const befund = vergleicheBesitz({ vorlage: VORLAGE, live: baueSauberenLiveAgenten() });
+    const befund = befundZu(() => {});
     assert.deepEqual(befund.fehler, [], `Fehler in der Besitz-/Regel-Erklaerung: ${befund.fehler}`);
     assert.deepEqual(betroffeneFelder(befund), [], "unerwartete Abweichung");
     assert.deepEqual(befund.verletzungen, [], "unerwartete Verbots-Verletzung");
+    assert.deepEqual(befund.nichtPruefbar, [], "eine Stelle konnte gar nicht angesehen werden");
+    assert.deepEqual(befund.veralteteAusnahmen, [], "unerwartet ueberfaellige Ausnahme");
     assert.equal(befund.ok, true);
-    // Ohne diese beiden Zahlen saehe ein Vergleich, der NICHTS anschaut, genau
-    // so aus wie einer, der nichts findet - und alle Faelle darunter bewiesen
-    // dann nichts.
-    assert.equal(befund.geprueft, BESITZ_FELDER.length);
+    assert.equal(istBlockierend(befund), false, "der saubere Stand wuerde den Lauf blockieren");
+    // Ohne diese Zahlen saehe ein Vergleich, der NICHTS anschaut, genau so aus
+    // wie einer, der nichts findet - und alle Faelle darunter bewiesen dann
+    // nichts. Verlangt ist nicht "> 0", sondern die Soll-Zahl der Erklaerung.
+    assert.equal(befund.felderSoll, BESITZ_FELDER.length);
+    assert.equal(befund.geprueft, befund.felderSoll, "nicht jedes besessene Feld wurde verglichen");
+    assert.equal(befund.regelnSoll, BESITZ_REGELN.length);
+    assert.equal(
+      befund.regelnAngewandt,
+      befund.regelnSoll,
+      "nicht jedes Verbot kam an einen Eintrag",
+    );
     assert.ok(befund.geprueftRegeln > 0, "kein einziges Verbot wurde gegen einen Eintrag gehalten");
   });
 
@@ -180,7 +259,7 @@ describe("Drift-Waechter: absichtliche Abweichungen durch den echten Vergleich",
     );
     pruefeGefangen({
       befund,
-      feld: "max_duration_seconds",
+      feld: FELD_MAX_DAUER,
       istWertMuster: new RegExp(`^${ENTGLEISTER_DECKEL_SEKUNDEN}$`),
     });
     const [gemeldet] = befund.abweichungen;
@@ -230,5 +309,161 @@ describe("Drift-Waechter: absichtliche Abweichungen durch den echten Vergleich",
       feld: "conversation_config_override_erlaubnisse",
       istWertMuster: /"text_only":true/,
     });
+  });
+});
+
+// --- Was gar nicht erst angesehen wurde ---
+
+// Eine winzige EIGENE Besitz-Erklaerung. Sie ist NICHT die zweite Fabrik fuer
+// einen synthetischen Live-Agenten (kein einziger Wert des echten Agenten steht
+// hier), sondern der einzige Weg, den Ausfallweg in Reinform zu zeigen: an der
+// echten Vorlage liegt das Verbot auf language_presets, und dieselbe Sammlung
+// ist zusaetzlich ein besessenes Feld - deren Abweichung verdeckt, dass das
+// Verbot selbst nichts geprueft hat. Hier passt beides zusammen, also bleibt
+// genau eine Frage uebrig: was meldet der Kern, wenn ein Verbot auf nichts
+// trifft?
+const NUR_VERBOT = {
+  regel: "nichts_heikles_je_eintrag",
+  art: "verboten_je_eintrag",
+  live: "sammlung",
+  verboten: ["heikel"],
+  meldung: "Kein Eintrag dieser Sammlung darf 'heikel' setzen.",
+};
+const NUR_VERBOT_VORLAGE = {
+  _besitz: {
+    felder: [{ feld: "wert", art: "wert", vorlage: ["soll"], live: ["ist"] }],
+    regeln: [NUR_VERBOT],
+  },
+  soll: "gleich",
+};
+const GLEICHER_WERT = "gleich";
+
+function befundZuSammlung(sammlung) {
+  return vergleicheBesitz({
+    vorlage: NUR_VERBOT_VORLAGE,
+    live: { ist: GLEICHER_WERT, sammlung },
+    heute: HEUTE_FRISCH,
+  });
+}
+
+function zeileMit(zeilen, marke, name) {
+  return zeilen.find((zeile) => zeile.startsWith(`${marke} ${name} `));
+}
+
+describe("Drift-Waechter: eine Stelle, die nie angesehen wurde, ist ein Befund", () => {
+  it("Positiv-Kontrolle: ein Verbot, das einen echten Eintrag vorfindet, ist angewandt und gruen", () => {
+    const befund = befundZuSammlung({ echter_eintrag: { harmlos: true } });
+    assert.equal(befund.ok, true, `unerwartet nicht sauber: ${JSON.stringify(befund)}`);
+    assert.equal(befund.regelnAngewandt, befund.regelnSoll);
+    assert.equal(befund.geprueftRegeln, 1);
+    assert.equal(istBlockierend(befund), false);
+  });
+
+  it("ein Verbot ueber einer leeren Live-Sammlung ist nicht erfuellt, sondern nicht pruefbar", () => {
+    const befund = befundZuSammlung({});
+    assert.equal(befund.geprueftRegeln, 0, "es wurde doch ein Eintrag angesehen");
+    assert.equal(befund.regelnAngewandt, 0, "das Verbot gilt als angewandt, ohne es zu sein");
+    assert.equal(befund.regelnSoll, 1);
+    assert.ok(
+      zeileMit(befund.nichtPruefbar, NICHT_PRUEFBAR_MARKE, NUR_VERBOT.regel),
+      `keine Zeile zu ${NUR_VERBOT.regel}: ${befund.nichtPruefbar.join(" | ")}`,
+    );
+    assert.deepEqual(befund.abweichungen, [], "der Fall darf an nichts anderem haengen");
+    assert.deepEqual(befund.fehler, [], "nicht pruefbar ist kein Fehler in der Erklaerung");
+    assert.equal(befund.ok, false, "ein ungepruefter Waechter meldet sauber");
+    assert.equal(istBlockierend(befund), true, "der Lauf laeuft trotzdem durch");
+  });
+
+  it("eine Sammlung, die nur Entwickler-Doku fuehrt, hat keinen Eintrag - der _-Schluessel zaehlt nicht", () => {
+    const befund = befundZuSammlung({ _hinweis: "kein Eintrag, sondern Prosa fuer Menschen" });
+    assert.equal(befund.geprueftRegeln, 0, "ein _-Schluessel wurde als Eintrag mitgezaehlt");
+    assert.equal(befund.regelnAngewandt, 0);
+    assert.ok(
+      zeileMit(befund.nichtPruefbar, NICHT_PRUEFBAR_MARKE, NUR_VERBOT.regel),
+      `keine Zeile zu ${NUR_VERBOT.regel}: ${befund.nichtPruefbar.join(" | ")}`,
+    );
+  });
+
+  it("das echte Verbot der Vorlage ueber leeren language_presets: 0 von 1 angewandt", () => {
+    const befund = befundZu((live) => setzeAnPfad(live, LIVE_SPRACH_PRESETS, {}));
+    assert.equal(befund.regelnSoll, BESITZ_REGELN.length);
+    assert.equal(befund.regelnAngewandt, 0, "das einzige Verbot gilt als angewandt");
+    assert.equal(befund.geprueftRegeln, 0);
+    assert.ok(
+      zeileMit(befund.nichtPruefbar, NICHT_PRUEFBAR_MARKE, BESITZ_REGELN[0].regel),
+      `keine Zeile zum echten Verbot: ${befund.nichtPruefbar.join(" | ")}`,
+    );
+    assert.equal(istBlockierend(befund), true);
+  });
+
+  it("ein besessenes Feld, das der Live-Agent gar nicht fuehrt, zaehlt nicht als geprueft", () => {
+    const befund = befundZu((live) => entferneAnPfad(live, LIVE_MAX_DAUER));
+    assert.equal(befund.felderSoll, BESITZ_FELDER.length);
+    assert.equal(
+      befund.geprueft,
+      BESITZ_FELDER.length - 1,
+      "das fehlende Feld wurde als geprueft mitgezaehlt",
+    );
+    assert.ok(
+      zeileMit(befund.nichtPruefbar, NICHT_PRUEFBAR_MARKE, FELD_MAX_DAUER),
+      `keine Zeile zu ${FELD_MAX_DAUER}: ${befund.nichtPruefbar.join(" | ")}`,
+    );
+    // Die Abweichung bleibt zusaetzlich stehen: dass die Vorlage etwas fuehrt,
+    // was der Agent nicht hat, ist ein eigener Befund - und der Push soll ihn
+    // weiterhin reparieren koennen.
+    assert.deepEqual(betroffeneFelder(befund), [FELD_MAX_DAUER]);
+    assert.equal(istBlockierend(befund), true);
+  });
+});
+
+describe("Drift-Waechter: eine Ausnahme ohne Verfallsdatum ist keine Ausnahme", () => {
+  it("die echte Vorlage fuehrt ueberhaupt Ausnahmen - sonst misst kein Fristen-Fall etwas", () => {
+    assert.ok(AUSNAHME_TAGE.length > 0, "keine ausgenommenen Felder in der Vorlage");
+    assert.match(JUENGSTE_AUSNAHME, /^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("frisch und genau auf der Frist wird nichts gemeldet", () => {
+    for (const heute of [HEUTE_FRISCH, HEUTE_AUF_DER_FRIST]) {
+      const befund = befundZu(() => {}, heute);
+      assert.deepEqual(
+        befund.veralteteAusnahmen,
+        [],
+        `am ${heute.toISOString()} wurde eine Ausnahme als ueberfaellig gemeldet`,
+      );
+      assert.equal(istBlockierend(befund), false);
+    }
+  });
+
+  it("einen Tag ueber der Frist wird jede Ausnahme laut gemeldet und blockiert", () => {
+    const befund = befundZu(() => {}, HEUTE_UEBERFAELLIG);
+    for (const eintrag of AUSGENOMMENE_FELDER) {
+      assert.ok(
+        zeileMit(befund.veralteteAusnahmen, AUSNAHME_UEBERFAELLIG_MARKE, eintrag.feld),
+        `keine Zeile zu ${eintrag.feld}: ${befund.veralteteAusnahmen.join(" | ")}`,
+      );
+    }
+    assert.equal(befund.veralteteAusnahmen.length, AUSGENOMMENE_FELDER.length);
+    // Ohne Abweichung an diesen Feldern: die Frist haengt an der festgehaltenen
+    // Entscheidung, nicht am Unterschied - der synthetische Agent traegt hier
+    // ueberall den Sollwert.
+    assert.deepEqual(betroffeneFelder(befund), []);
+    assert.equal(istBlockierend(befund), true, "eine ueberfaellige Ausnahme blockiert nicht");
+  });
+
+  it("Gegenprobe zur Unterscheidung: eine GUELTIGE Ausnahme blockiert weiterhin nicht", () => {
+    const befund = befundZu((live) => {
+      for (const eintrag of AUSGENOMMENE_FELDER) {
+        for (const pfad of eintrag.live) setzeAnPfad(live, pfad, ABWEICHENDER_WERT);
+      }
+    });
+    const ausgenommen = befund.abweichungen.filter((abweichung) => abweichung.ausgenommen);
+    assert.equal(
+      ausgenommen.length,
+      befund.abweichungen.length,
+      "es weicht mehr ab als die ausgenommenen Felder",
+    );
+    assert.ok(ausgenommen.length > 0, "es weicht gar nichts ab - der Fall misst nichts");
+    assert.equal(befund.ok, false, "ausgenommen heisst nicht gruen");
+    assert.equal(istBlockierend(befund), false, "eine gueltige Ausnahme blockiert den Lauf");
   });
 });
