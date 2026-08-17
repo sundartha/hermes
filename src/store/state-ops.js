@@ -67,6 +67,10 @@ import { hasInboundNotice } from "../i18n/inbound-notice.js";
 // P8/FMT-11: Denylist des Ziel-Gates der privaten Summary-Nummer, geteilt mit der
 // Outbound-Gate-Kette (D3, G5) - siehe number-denylist.js fuer die Begruendung.
 import { isDenied } from "../telephony/number-denylist.js";
+// Form-Waechter des Join-Schluessels zur Telefonie-Rechnung (s. recordSipCallId unten).
+// sip-call-id.js ist ein Blatt-Modul (kein Rueckimport, kein Zyklus), Muster
+// number-denylist.js: eine reine Form-Aussage ueber einen Telefonie-Fakt.
+import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 // AL-P11: EINE Mutationsquelle fuer das Entfernen der Ergebnis-Karten-Zitate (G5).
 import { stripResultEvidence } from "../call-result.js";
 // AL-P12: K (=3) lebt im Prompt-Modul, weil dort auch das Zeichenbudget haengt - die
@@ -323,7 +327,9 @@ export function createCall(
     // PHASE-6-VORAUSSETZUNG (Fertig-Punkt 7, "die Kosten sind gemessen, aufgeschluesselt
     // nach ElevenLabs, Sprachmodell und Telefonie"): die SIP-Call-ID des ausgehenden Legs
     // (Form "otb_..."). Der EINZIGE Join zwischen unseren zwei Kostenquellen auf der
-    // SIP-Trunk-Strecke - Herkunft und Beleg s. elevenlabs/convai.js#startResultOf.
+    // SIP-Trunk-Strecke - EINE Quelle (metadata.phone_call.call_id beim Ergebnisabruf),
+    // Herkunft und Beleg s. elevenlabs/outbound.js#persistProviderResult sowie der
+    // Form-Waechter in telephony/sip-call-id.js.
     // Additiv nullable: nur der ElevenLabs-Weg setzt sie, jeder andere Call bleibt null -
     // byte-identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     sipCallId: null,
@@ -738,14 +744,38 @@ export const recordElevenlabsConversationId = recordProviderHandleOnce(
 );
 
 // Der Join-Schluessel zwischen ElevenLabs- und Telefonie-Kosten (s. Feld-Kommentar in
-// createCall). DIESELBE Fabrik wie die Handles darueber, und set-once ist hier keine
-// Formalie, sondern der Punkt: ZWEI Schreiber liefern denselben Wert - der Anrufstart
-// (frueheste Gelegenheit, elevenlabs/outbound.js#originateCall) und der Ergebnisabruf
-// (metadata.phone_call.call_id, persistProviderResult - er laeuft VOR dem Loeschversuch
-// beim Anbieter). Der zweite darf den ersten nicht ueberschreiben; ein fehlender Wert
-// ist ein No-op (changed=false -> kein Save), damit ein Anbieter, der die Kennung im
-// Anrufstart weglaesst, den Anruf nicht scheitern laesst.
-export const recordSipCallId = recordProviderHandleOnce("sipCallId");
+// createCall). DIESELBE set-once-Fabrik wie die Handles darueber - ein wiederholter
+// Ergebnisabruf traegt denselben Wert, und der frueheste zaehlt; ein fehlender Wert ist
+// ein No-op (changed=false -> kein Save), damit ein Anbieter, der die Kennung weglaesst,
+// den laufenden Anruf nicht scheitern laesst.
+const setSipCallIdOnce = recordProviderHandleOnce("sipCallId");
+
+// DER WAECHTER (Owner-Auftrag 17.08.2026). Er sitzt HIER und nicht beim Leser der
+// Anbieter-Antwort, weil dies der einzige Schreibweg des Feldes ist - json- und
+// pg-Wrapper rufen beide diese Funktion, und jeder KUENFTIGE Schreiber laeuft
+// automatisch durch sie (dieselbe Ueberlegung wie bei der weissen Liste in
+// elevenlabs/convai.js, die vor dem einzigen Netzzugriff ihres Weges sitzt).
+//
+// ER VERWIRFT STATT ZU WERFEN: das Feld ist ein Buchhaltungs-Schluessel, und der Anruf
+// laeuft, wenn hier geschrieben wird. Ein Fehlschlag darf ihn nicht in den Fehlerpfad
+// schicken. Verwerfen ist aber mehr als Nichtstun - es HAELT DEN set-once-PLATZ FREI:
+// genau daran ist der Defekt vom 17.08.2026 entstanden, ein falscher Wert kam zuerst und
+// sperrte die einzige richtige Quelle fuer immer aus.
+//
+// STILL WAERE ER WERTLOS: die Meldung ist der einzige Weg, an dem eine Formaenderung des
+// Anbieters auffaellt, bevor die Kostenzuordnung eines ganzen Zeitraums fehlt. Sie ist
+// secret- und PII-frei - ein opaker Anruf-Handle, dieselbe Klasse wie die Kennungen, die
+// der ElevenLabs-Weg ohnehin loggt. Dieses Modul ist sonst IO-frei; der console-Aufruf
+// ist dieselbe eng begrenzte Ausnahme wie beim D7-Riegel weiter unten (kein Datei-/DB-IO).
+export function recordSipCallId(state, callId, sipCallId) {
+  if (sipCallId && !isTelnyxSipCallId(sipCallId)) {
+    console.error(
+      `[join-schluessel] verworfen grund=keine_telnyx_sip_call_id call=${callId} wert=${sipCallId}`,
+    );
+    return { call: getCall(state, callId), changed: false };
+  }
+  return setSipCallIdOnce(state, callId, sipCallId);
+}
 
 // KS-EL1: der GRUND, warum trueUpAnsweredAt oben KEINEN Anker ermitteln konnte (additiv
 // nullable). Set-once + value-gated ueber DIESELBE Fabrik wie die Provider-Handles - die

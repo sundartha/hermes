@@ -437,6 +437,16 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               Die Wachstumsrate ist damit GEMESSEN: je persistiertem Anruf-Feld +1
 //               Komplexitaet in zwei Funktionen, linear und ohne Obergrenze. Begruendung
 //               und die zwei Auswege stehen am Eintrag selbst.
+//   2026-08-17  Pin nachgezogen (sipCallId, Join-Schluessel zum Telnyx-Beleg): rowToCall
+//               29->30, makePgStore 482->487. VIERTE Anhebung - und die erste, die die
+//               oben GEMESSENE Kurve bestaetigt statt sie zu erweitern (+1 Komplexitaet je
+//               persistiertem Feld, wie vorhergesagt).
+//               DRITTE BEWEGUNG, neu in ihrer Art: flushCalls (30) ist WEG, callRowValues
+//               (30) ist da. Die Funktion stand exakt auf der 100-Zeilen-Grenze; die
+//               50er-Werteliste wurde herausgezogen (reiner Move, maschinell als
+//               byte-identisch verifiziert). Der Split hat die ZEILEN-Grenze gerettet, nicht
+//               die Verzweigung reduziert - die Komplexitaet ist verschoben, nicht weg.
+//               Vier Befunde vorher, vier nachher, keine neue Regel-Kategorie.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     reason:
@@ -494,12 +504,12 @@ const LEGACY_FINGERPRINT = {
   },
   "src/store/pg.js": {
     reason:
-      "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-15 (answeredUnclearReason): makePgStore 462 -> 472 Zeilen, rowToCall 21 -> 22, flushCalls 22 -> 23. Unvermeidbar, solange der Split ausgesetzt ist - ein neues persistiertes Feld MUSS durch Zeilen-Mapper und Flush, und beide sind Teil derselben Riesenfunktion. Genau deshalb waechst diese Datei mit jedem Feld weiter; erst der Split stoppt das. Angehoben, nicht stillschweigend: der Pin hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen. DRITTE ANHEBUNG 2026-08-15/16 (sieben Felder aus ABNAHME-D1): flushCalls 23 -> 30, rowToCall 22 -> 29, makePgStore 472 -> 482. DAMIT IST DIE WACHSTUMSRATE GEMESSEN: jedes persistierte Anruf-Feld kostet +1 Komplexitaet in flushCalls UND in rowToCall sowie rund 1,4 Zeilen in makePgStore - linear, ohne Obergrenze. Die Anhebungen sind einzeln begruendet und keine Nachlaessigkeit (ein Feld MUSS durch Mapper und Flush), aber die Kurve ist jetzt belegt statt behauptet. Wer das stoppen will, hat zwei Wege: den Split von makePgStore (bisher ausgesetzt) oder die Ablage der eingesammelten Ergebnis-Angaben als EINE strukturierte Spalte statt N Einzelspalten - letzteres entspraeche auch der Form des Anbieters (data_collection_results ist eine Karte) und machte kuenftige Felder kostenlos. Beides ist eine Eigentuemer-Entscheidung, kein Nebeneffekt eines Commits.",
+      "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-15 (answeredUnclearReason): makePgStore 462 -> 472 Zeilen, rowToCall 21 -> 22, flushCalls 22 -> 23. Unvermeidbar, solange der Split ausgesetzt ist - ein neues persistiertes Feld MUSS durch Zeilen-Mapper und Flush, und beide sind Teil derselben Riesenfunktion. Genau deshalb waechst diese Datei mit jedem Feld weiter; erst der Split stoppt das. Angehoben, nicht stillschweigend: der Pin hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen. DRITTE ANHEBUNG 2026-08-15/16 (sieben Felder aus ABNAHME-D1): flushCalls 23 -> 30, rowToCall 22 -> 29, makePgStore 472 -> 482. DAMIT IST DIE WACHSTUMSRATE GEMESSEN: jedes persistierte Anruf-Feld kostet +1 Komplexitaet in flushCalls UND in rowToCall sowie rund 1,4 Zeilen in makePgStore - linear, ohne Obergrenze. Die Anhebungen sind einzeln begruendet und keine Nachlaessigkeit (ein Feld MUSS durch Mapper und Flush), aber die Kurve ist jetzt belegt statt behauptet. Wer das stoppen will, hat zwei Wege: den Split von makePgStore (bisher ausgesetzt) oder die Ablage der eingesammelten Ergebnis-Angaben als EINE strukturierte Spalte statt N Einzelspalten - letzteres entspraeche auch der Form des Anbieters (data_collection_results ist eine Karte) und machte kuenftige Felder kostenlos. Beides ist eine Eigentuemer-Entscheidung, kein Nebeneffekt eines Commits. VIERTE ANHEBUNG 2026-08-17 (sipCallId, der Join-Schluessel zum Telnyx-Beleg): rowToCall 29 -> 30 und makePgStore 482 -> 487 Zeilen - beides genau die Kurve, die der Eintrag darueber VORHERGESAGT hat (+1 Komplexitaet je persistiertem Feld), also eine Bestaetigung der Messung und keine neue Ueberraschung. NEU ist die dritte Bewegung: flushCalls (Komplexitaet 30) ist WEG, dafuer ist callRowValues (30) da. Die Funktion stand exakt auf der 100-Zeilen-Grenze; jede weitere Spalte haette sie gerissen, also wurde die 50er-Werteliste als eigene Funktion herausgezogen (reiner Move, die 49 Altwerte maschinell als byte-identisch und gleich geordnet verifiziert). EHRLICH BENANNT: der Split hat die ZEILEN-Grenze gerettet, nicht die Verzweigung reduziert - die Komplexitaet ist verschoben, nicht verschwunden. Vier Befunde vorher, vier nachher, keine neue Regel-Kategorie. Die zwei Auswege oben gelten unveraendert und werden mit jeder Anhebung dringender.",
     date: "2026-08-13",
     findings: {
-      "complexity :: Async function 'flushCalls' has a complexity of 30. Maximum allowed is 10.": 1,
+      "complexity :: Function 'callRowValues' has a complexity of 30. Maximum allowed is 10.": 1,
       "complexity :: Async function 'flushTenants' has a complexity of 24. Maximum allowed is 10.": 1,
-      "complexity :: Function 'rowToCall' has a complexity of 29. Maximum allowed is 10.": 1,
+      "complexity :: Function 'rowToCall' has a complexity of 30. Maximum allowed is 10.": 1,
       "complexity :: Function 'rowToTenant' has a complexity of 23. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 1,
       "id-length :: Identifier name 'b' is too short (< 2).": 2,
@@ -510,7 +520,7 @@ const LEGACY_FINGERPRINT = {
       "id-length :: Identifier name 's' is too short (< 2).": 1,
       "id-length :: Identifier name 't' is too short (< 2).": 2,
       "max-lines-per-function :: Async function 'hydrateTenantInto' has too many lines (117). Maximum allowed is 100.": 1,
-      "max-lines-per-function :: Function 'makePgStore' has too many lines (482). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makePgStore' has too many lines (487). Maximum allowed is 100.": 1,
       "max-params :: Async function 'deleteMissing' has too many parameters (4). Maximum allowed is 3.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'state'.": 3,
     },

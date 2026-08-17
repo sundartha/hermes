@@ -262,3 +262,30 @@ export const CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES = Object.freeze({
     termination_reason: "Missing required dynamic variables in first message: {'owner_name'}", // gemessen, woertlich
   }),
 });
+
+// ---- Teil 3: die Namensfalle des Join-Schluessels ---------------------------------------
+// ANRUF 2 vom 17.08.2026 (17:45:41Z bis 17:46:09Z, unsere Kennung call_msxiyh84dwc6,
+// Anbieter conv_7201m08d8gnbe7mtygb7vxbphc7y) - GEMESSEN, s. .fortschritt.md "BEFUND 4".
+// KEIN Gespraechs-Datensatz, sondern die vier Werte, an denen der Defekt sichtbar wurde:
+// ZWEI FELDER HEISSEN AN BEIDEN ENDEN sip_call_id UND TRAGEN VERSCHIEDENE WERTE.
+//
+// Nur der "otb_"-Wert findet den Telefonie-Beleg. Der "SCL_"-Wert ist ElevenLabs' call_sid -
+// derselbe Anruf fuehrt ihn im Gespraechs-Datensatz woertlich unter metadata.phone_call.
+// call_sid, und die Antwort des Anrufstarts gibt AUSGERECHNET IHN unter dem Namen
+// sip_call_id heraus. In Anruf 1 fiel das nicht auf, weil call_sid dort leer war ("").
+//
+// HERKUNFT JE WERT (kein Wert ist erfunden):
+//   startAntwort.sip_call_id  - nicht als Rumpf mitgeschrieben, aber am ERGEBNIS belegt:
+//                               genau dieser Wert stand nach dem Anruf in unserem
+//                               sipCallId-Feld, und der Anrufstart war sein einziger
+//                               Schreiber (set-once, er lief zuerst).
+//   phoneCall.*               - ElevenLabs-Gespraechs-Datensatz, woertlich abgelesen.
+//   telnyxDetailRecord.*      - Telnyx GET /v2/detail_records, record_type sip-trunking.
+export const JOIN_SCHLUESSEL_ANRUF_2 = Object.freeze({
+  startAntwort: Object.freeze({ sip_call_id: "SCL_Qu4voPd3TXvD" }),
+  phoneCall: Object.freeze({
+    call_id: "otb_4801m08d8gnce3xs4xpka1h3773a",
+    call_sid: "SCL_Qu4voPd3TXvD",
+  }),
+  telnyxDetailRecord: Object.freeze({ sip_call_id: "otb_4801m08d8gnce3xs4xpka1h3773a" }),
+});

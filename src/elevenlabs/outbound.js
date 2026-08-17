@@ -607,6 +607,9 @@ function assertConfigured(el) {
 // sip_call_id, Antwort von POST /v1/convai/sip-trunk/outbound-call) - die WERTE sind
 // erfunden (fake_el_-/fake_sip_-Praefix macht das im Store/Log sofort erkennbar), NICHT
 // die Form. originateCall liest daraus GENAU wie aus der echten Antwort (.conversation_id).
+// sip_call_id steht hier NUR der Form halber und wird bewusst von niemandem gelesen: das
+// Feld traegt auch beim echten Anbieter nicht den Join-Schluessel, sondern dessen call_sid
+// (s. convai.js#startResultOf, an Anruf 2 vom 17.08.2026 gemessen).
 // FAKE_ID_BYTE_LENGTH: dieselbe Laenge wie fakeVoice (telephony/registry.js), reine
 // Lesbarkeits-Konstante ohne fachliche Bedeutung (G25).
 const FAKE_ID_BYTE_LENGTH = 8;
@@ -942,17 +945,23 @@ export function makeElevenLabsOutbound({
     });
     // ABNAHME-D1 (TEIL 2/3): s. persistCollectedFields oben (Modul-Ebene, G30).
     persistCollectedFields(store, callId, conversation);
-    // PHASE-6-VORAUSSETZUNG, ZWEITE Gelegenheit fuer denselben Join-Schluessel: derselbe
-    // "otb_"-Wert wie sip_call_id des Anrufstarts, hier aus dem Gespraechs-Datensatz
-    // (GEMESSEN, test/fixtures/elevenlabs-conversations.js). Der Anrufstart bleibt die
-    // erste und wichtigere Gelegenheit; diese hier greift nur, wenn er nichts geliefert
-    // hat (set-once, s. store/state-ops.js#recordSipCallId - ein hier gelesener Wert
-    // ueberschreibt den frueheren NIE).
+    // PHASE-6-VORAUSSETZUNG, die EINZIGE Quelle des Join-Schluessels zur Telefonie-
+    // Rechnung: der "otb_"-Wert, den auch der Telnyx-Beleg unter sip_call_id fuehrt
+    // (GEMESSEN an beiden Enden, test/fixtures/elevenlabs-conversations.js). Die Antwort
+    // des Anrufstarts scheidet als Quelle aus - sie liefert unter demselben Feldnamen
+    // ElevenLabs' call_sid (s. convai.js#startResultOf, an Anruf 2 vom 17.08.2026
+    // gemessen).
     //
     // DIE STELLE IST BEWUSST GEWAEHLT: persistProviderResult laeuft auf BEIDEN Wegen VOR
     // dem Loeschversuch beim Anbieter - im regulaeren Ende (finishFromConversation) gibt
     // es gar keinen, im Abbruch (endActiveCall) ist die Reihenfolge Abruf-vor-Loeschen
     // bindend. Was hier nicht gesichert ist, ist danach unwiederbringlich weg.
+    //
+    // PREIS DER EINEN QUELLE, bewusst getragen: kommt nie ein Ergebnis (Anbieter stumm,
+    // Prozess vorher weg), bleibt der Schluessel leer und die Telefonie-Kosten dieses
+    // Anrufs sind ihm nicht mehr zuzuordnen. Ein FALSCHER Schluessel waere schlechter:
+    // er joint ebenfalls nicht, sperrt aber zusaetzlich (set-once) die richtige Quelle
+    // aus und behauptet dabei eine Zuordnung, die es nicht gibt.
     store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
   }
 
@@ -1118,7 +1127,7 @@ export function makeElevenLabsOutbound({
     // Alle Gates/Berechnungen oberhalb (assertConfigured, Zeitkontext, Sprach-/Stimmwahl)
     // laufen unveraendert - der Fake unterscheidet sich einzig in der Herkunft der
     // conversation_id.
-    const { conversationId, sipCallId } = config.safety.fakeOriginateElevenlabs
+    const { conversationId } = config.safety.fakeOriginateElevenlabs
       ? startResultOf(fakeSipTrunkOutboundCallResponse())
       : await startOutboundCall({
           fetchImpl: fetch,
@@ -1133,22 +1142,14 @@ export function makeElevenLabsOutbound({
     // AL-P1/EL-BL1: set-once am Record. Es ist dieselbe Kennung, ueber die der
     // Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) den laufenden Anruf bindet.
     store.recordElevenlabsConversationId(call.id, conversationId);
-    // PHASE-6-VORAUSSETZUNG: der Join-Schluessel zur Telefonie-Rechnung, an der FRUEHESTEN
-    // Stelle, an der es ihn gibt - er kommt in derselben Antwort wie die conversation_id,
-    // ohne einen einzigen zusaetzlichen Abruf (s. convai.js#startResultOf).
+    // HIER WIRD KEIN JOIN-SCHLUESSEL MEHR GESCHRIEBEN (Korrektur vom 17.08.2026, an Anruf
+    // 2 gemessen): die Antwort des Anrufstarts fuehrt unter dem Namen sip_call_id
+    // ElevenLabs' call_sid ("SCL_...") und NICHT den Wert, der auf dem Telnyx-Beleg steht
+    // ("otb_...") - Herleitung s. convai.js#startResultOf. Der Schluessel kommt
+    // ausschliesslich aus dem Ergebnisabruf (persistProviderResult), und das ist keine
+    // Nachlaessigkeit, sondern die einzige gemessene Quelle. Was das kostet, wenn nie ein
+    // Ergebnis eintrifft, steht dort.
     //
-    // WARUM SO FRUEH: der Wert steht sonst NUR im Anbieter-Datensatz, und unser eigener
-    // Abbruch-Pfad LOESCHT den (convai.js#endConversation, gemessen 0,3 s nach dem
-    // Abbruch). Wer ihn erst danach sucht, kann die Telefonie-Kosten dem Anruf nie
-    // mehr zuordnen - rueckwirkend ist der Schluessel aus keiner Quelle mehr erhebbar.
-    //
-    // KEIN throw bei fehlendem Wert, ANDERS als bei der conversation_id eine Zeile
-    // darueber: der Anruf LAEUFT an dieser Stelle bereits (der Anrufstart ist blockierend
-    // ueber die ganze Klingelphase). Ein fehlender Buchhaltungs-Schluessel darf einen
-    // laufenden Anruf nicht in den Fehlerpfad schicken - er ist dann ein No-op
-    // (value-gated, s. store/state-ops.js#recordSipCallId), und der Ergebnisabruf holt
-    // ihn aus metadata.phone_call.call_id nach (persistProviderResult).
-    store.recordSipCallId(call.id, sipCallId);
     // DAS VERBINDUNGSSIGNAL DIESES WEGES, NICHT (mehr) der Buchungsanker (S1-2a, Kommentar
     // auf den heutigen Stand gebracht - Commit 08fc253 hat die Bedeutung getrennt).
     // answeredAt traegt zwei Sachverhalte: "die Verbindung steht" (isInCallConsult/
