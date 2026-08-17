@@ -85,12 +85,19 @@ import {
   toolCall,
   waitForStoreState,
 } from "./helpers.js";
+import {
+  CONVERSATION_DONE_WITH_ANALYSIS,
+  ERROR_ENVELOPES,
+} from "./fixtures/elevenlabs-conversations.js";
 
 // ---- Statuscodes benannt statt nackt (Repo-Regel: keine Magic Numbers) --------------
+// Die Ablehnungs-Codes des ANBIETERS stehen hier bewusst NICHT: sie kommen aus den
+// aufgezeichneten Umschlaegen (ERROR_ENVELOPES, s.u.), damit Status und Rumpf nicht
+// auseinanderlaufen koennen. HTTP_SERVER_ERROR ist unsere EIGENE Antwort im Transportfall
+// (T4 b), kein Anbieter-Code.
 const HTTP_OK = 200;
 const HTTP_PAYMENT_REQUIRED = 402;
 const HTTP_FORBIDDEN = 403;
-const HTTP_NOT_FOUND = 404;
 const HTTP_SERVER_ERROR = 500;
 const HTTP_BAD_GATEWAY = 502;
 
@@ -103,36 +110,46 @@ const API_KEY_HEADER = "xi-api-key";
 const AGENT_ID = "agent_el_test_1";
 const AGENT_PHONE_NUMBER_ID = "phnum_el_test_1";
 const API_KEY = "el-api-key-testgeheim";
-const CONVERSATION_ID = "conv_el_start_1";
 const OBJECTIVE = "Termin am Donnerstag vereinbaren (EL-START)";
 const OWNER_NAME = `${OWNER_TEST_FIRST_NAME} ${OWNER_TEST_LAST_NAME}`;
 const TENANT_A = "tenant-a";
 const SUBJECT_A = "sub-a";
 const NUMBER_A = "+4915005559002";
 
-// Ergebnis-Rohstoff der Attrappe. Die Zusammenfassung kommt VOM ANBIETER - sie muss
-// unveraendert bis in get_transcript durchkommen (T3). Die Transkript-Zeile ist der
-// Gegen-Marker: sie darf NIE nach aussen (Datensparsamkeit, Absolute Regel 5).
-const PROVIDER_SUMMARY = "Termin am Donnerstag um 10 Uhr wurde zugesagt.";
-const TRANSCRIPT_LINE = "Donnerstag um zehn passt uns gut.";
-// KS-EL1: die Ist-Dauer des Anbieters (metadata.call_duration_secs) - OHNE sie zieht
-// finishFromConversation (elevenlabs/outbound.js) den Buchungsanker NICHT nach (der Wert
+// ---- Was die Attrappe antwortet: AUFGEZEICHNETE Anbieter-Antworten -------------------
+// Owner-Regel: keine erfundene Anbieter-Antwort, wo eine echte aufgezeichnet ist. Der
+// Ergebnis-Rohstoff unten ist deshalb keine lokale Konstante mehr, sondern der gegen
+// api.elevenlabs.io GEMESSENE Gespraechs-Datensatz aus test/fixtures/elevenlabs-
+// conversations.js (15.08.2026, Herkunft und Maskierung dort je Fund dokumentiert).
+//
+// Kennung und Ergebnis stammen aus DEMSELBEN Fund: die Attrappe antwortet dem Poll damit
+// auf genau das Gespraech, dessen Kennung ihr Anrufstart vorher zurueckgegeben hat.
+const CONVERSATION_ID = CONVERSATION_DONE_WITH_ANALYSIS.conversation_id;
+// Die Zusammenfassung kommt VOM ANBIETER - sie muss unveraendert bis in get_transcript
+// durchkommen (T3). Die Zeile der Gegenstelle (Anbieter-Rolle "user") ist der Gegen-Marker:
+// sie darf NIE nach aussen (Datensparsamkeit, Absolute Regel 5).
+//
+// KS-EL1: der Fund traegt metadata.call_duration_secs (149 s, gemessen) - OHNE diesen Wert
+// zieht finishFromConversation (elevenlabs/outbound.js) den Buchungsanker NICHT nach (er
 // gilt dann als fehlend/unbrauchbar), answeredAt faellt auf null, und T3s Buchungs-Achse
 // unten misst 0 statt eines echten Anrufs.
-const PROVIDER_CALL_DURATION_SECS = 65;
-const FINISHED_CONVERSATION = Object.freeze({
-  status: "done",
-  transcript: [
-    { role: "agent", message: "Guten Tag, ich rufe wegen eines Termins an." },
-    { role: "user", message: TRANSCRIPT_LINE },
-  ],
-  analysis: { transcript_summary: PROVIDER_SUMMARY, call_successful: "success" },
-  metadata: { call_duration_secs: PROVIDER_CALL_DURATION_SECS },
-});
+const PROVIDER_SUMMARY = CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary;
+const TRANSCRIPT_LINE = CONVERSATION_DONE_WITH_ANALYSIS.transcript.find(
+  (zeile) => zeile.role === "user",
+).message;
 
-// Marker im Fehler-Rumpf der Attrappe: taucht er in der Antwort an den Aufrufer auf, ist
-// eine rohe Anbieter-Meldung durchgereicht worden (Absolute Regel 4/5).
-const PROVIDER_ERROR_MARKER = "detail-aus-dem-anbieter-rumpf";
+// Die Ablehnung der Attrappe ist ebenfalls eine GEMESSENE Antwort: der 401-Umschlag bei
+// falschem Schluessel. Sein Wortlaut ist zugleich der Leck-Marker - taucht er in der
+// Antwort an den Aufrufer auf, ist eine rohe Anbieter-Meldung durchgereicht worden
+// (Absolute Regel 4/5). Ein echter Anbieter-Satz ist als Marker strikt besser als ein
+// erfundener: genau SO eine Meldung wuerde im Ernstfall lecken.
+//
+// WARUM NICHT 429/5xx: fuer die existiert KEINE Aufzeichnung (nicht ausloesbar ohne
+// absichtliche Kontoueberlastung). Fuer den Weg dahinter ist das derselbe Fall -
+// assertConvaiOk (src/elevenlabs/convai.js) haengt JEDEN Ablehnungs-Status als
+// providerStatus an und liest den Rumpf nie.
+const PROVIDER_ERROR_ENVELOPE = ERROR_ENVELOPES.unauthorizedBadKey;
+const PROVIDER_ERROR_MARKER = PROVIDER_ERROR_ENVELOPE.body.detail.message;
 
 // Abholtakt klein, damit T3 in Sekunden aufloest statt in einem Produktions-Takt.
 const RESULT_POLL_MS = "150";
@@ -196,9 +213,13 @@ async function startElevenLabsMock() {
     // Verbindungsabbruch OHNE jede HTTP-Antwort (Muster endPremature in
     // test/_outbound-harness.js): der Ausfall-Fall, den ein Aufruf trotzdem ERREICHT -
     // und genau deshalb beobachtbar macht.
+    // AUSGEDACHT und bewusst so: fuer einen Anbieter-Abbruch ohne HTTP-Antwort existiert
+    // KEINE Aufzeichnung - er liesse sich nur durch einen echten Anbieter-Ausfall
+    // ausloesen. Erfunden ist hier aber nur der AUSLOESER, keine Anbieter-ANTWORT: es
+    // kommt gar keine.
     if (mode.abbruch) return res.socket.destroy();
     if (mode.startStatus !== HTTP_OK)
-      return endJson(res, mode.startStatus, { detail: PROVIDER_ERROR_MARKER });
+      return endJson(res, mode.startStatus, PROVIDER_ERROR_ENVELOPE.body);
     return endJson(res, HTTP_OK, {
       success: true,
       conversation_id: CONVERSATION_ID,
@@ -208,7 +229,7 @@ async function startElevenLabsMock() {
 
   const handleResult = (req, res) => {
     resultRequests.push({ url: req.url });
-    return endJson(res, HTTP_OK, { conversation_id: CONVERSATION_ID, ...FINISHED_CONVERSATION });
+    return endJson(res, HTTP_OK, CONVERSATION_DONE_WITH_ANALYSIS);
   };
 
   const server = http.createServer((req, res) => {
@@ -217,7 +238,12 @@ async function startElevenLabsMock() {
     req.on("end", () => {
       if (req.url.startsWith(START_PATH)) return handleStart(req, res, raw);
       if (req.url.startsWith(CONVERSATION_PATH)) return handleResult(req, res);
-      return endJson(res, HTTP_NOT_FOUND, { detail: "unbekannter Pfad" });
+      // Der GEMESSENE 404-Umschlag des Anbieters. EHRLICHKEIT: gemessen ist er fuer eine
+      // unbekannte Gespraechs-Kennung, NICHT fuer einen unbekannten Pfad - dafuer gibt es
+      // keine Aufzeichnung. Er steht hier trotzdem, weil unser Code den Fehler-Rumpf nie
+      // liest (convai.js: nur der Status zaehlt) und die echte Umschlag-Form naeher an der
+      // Anbieter-Wahrheit liegt als ein erfundener deutscher Satz.
+      return endJson(res, ERROR_ENVELOPES.notFound.httpStatus, ERROR_ENVELOPES.notFound.body);
     });
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -600,8 +626,17 @@ test("EL-START T3: beendetes Anbieter-Gespraech -> Transkript und Zusammenfassun
         );
         const ergebnis = await readToolResult(antwort);
         const text = ergebnis.content[0].text;
-        assert.ok(
-          text.includes(PROVIDER_SUMMARY),
+        // BEFUND aus der Umstellung auf echte Anbieter-Daten: die bisherige
+        // Teilstring-Pruefung auf dem JSON-TEXT war blind. Die echte Zusammenfassung
+        // enthaelt Anfuehrungszeichen ("American"), die im JSON-Text als \" stehen - der
+        // Wert kommt vollstaendig an, die Suche nach dem Rohtext findet ihn aber nie.
+        // Erfundene, anfuehrungszeichenfreie Testdaten konnten das nicht zeigen. Deshalb
+        // steht hier jetzt der GENAUE Feldvergleich (strenger als der Teilstring), waehrend
+        // die Leck-Pruefung unten weiter den ganzen Text absucht - dort ist die breite
+        // Suche das Richtige.
+        assert.equal(
+          JSON.parse(text).result_summary,
+          PROVIDER_SUMMARY,
           `Zusammenfassung fehlt in get_transcript: ${text}`,
         );
         assert.ok(
@@ -670,7 +705,7 @@ test("EL-START T4 (a): Anbieter antwortet mit Fehler -> sauberes Ende, Reserve f
       ownerNumber: TELNYX_TEST_OWNER_NUMBER,
     },
     async ({ srv, mock }) => {
-      mock.breakStart(HTTP_SERVER_ERROR);
+      mock.breakStart(PROVIDER_ERROR_ENVELOPE.httpStatus);
       const res = await placeCall(srv);
       const antwort = await res.json();
 

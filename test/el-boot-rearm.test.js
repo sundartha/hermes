@@ -9,34 +9,41 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { seedCall, seedState, startServer, waitForStoreState } from "./helpers.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
+import {
+  CONVERSATION_DONE_WITH_ANALYSIS,
+  ERROR_ENVELOPES,
+} from "./fixtures/elevenlabs-conversations.js";
 
-const CONV_ID = "conv_boot_rearm_1";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const HTTP_OK = 200;
-const HTTP_NOT_FOUND = 404;
 const CALL_ID = "call_boot_rearm";
-const PROVIDER_SUMMARY = "Termin bestaetigt (Boot-Re-Arm-Attrappe).";
 
-// Die Ergebnis-Attrappe des Anbieters: EIN Endpunkt (GET), immer "done" - der Anrufstart
-// selbst wird hier nie durchlaufen (der Call ist bereits als aktiv geseedet), also braucht
-// die Attrappe keinen POST-Zweig.
-const FINISHED_CONVERSATION = Object.freeze({
-  status: "done",
-  transcript: [{ role: "agent", message: "Hallo, hier ist der Boot-Re-Arm-Test." }],
-  analysis: { transcript_summary: PROVIDER_SUMMARY, call_successful: "success" },
-  metadata: { call_duration_secs: 42 },
-});
+// Die Attrappe antwortet mit einer ECHTEN, gegen api.elevenlabs.io gemessenen Antwort
+// (15.08.2026, s. test/fixtures/elevenlabs-conversations.js) statt mit lokal erfundenen
+// Werten - Owner-Regel: keine erfundene Anbieter-Antwort, wo eine echte aufgezeichnet ist.
+// Kennung und Zusammenfassung stammen aus DEMSELBEN Fund, damit die Attrappe genau das
+// antwortet, wonach der Poll fragt.
+const CONV_ID = CONVERSATION_DONE_WITH_ANALYSIS.conversation_id;
+const PROVIDER_SUMMARY = CONVERSATION_DONE_WITH_ANALYSIS.analysis.transcript_summary;
 
+// Die Ergebnis-Attrappe des Anbieters: EIN Endpunkt (GET) - der Anrufstart selbst wird hier
+// nie durchlaufen (der Call ist bereits als aktiv geseedet), also braucht die Attrappe
+// keinen POST-Zweig. Der Fehlbedien-Zweig antwortet mit dem GEMESSENEN 404-Umschlag des
+// Anbieters. EHRLICHKEIT: gemessen ist dieser Umschlag fuer eine unbekannte
+// Gespraechs-Kennung, NICHT fuer einen unbekannten Pfad - dafuer existiert keine
+// Aufzeichnung. Er steht hier trotzdem, weil unser Code den Fehler-Rumpf nie liest
+// (src/elevenlabs/convai.js: nur der Status zaehlt) und die echte Umschlag-Form allemal
+// naeher an der Anbieter-Wahrheit liegt als ein erfundener deutscher Satz.
 async function startResultMock() {
   const requests = [];
   const server = http.createServer((req, res) => {
     requests.push({ url: req.url });
     if (!req.url.startsWith(CONVERSATION_PATH)) {
-      res.writeHead(HTTP_NOT_FOUND, { "content-type": "application/json" });
-      return res.end(JSON.stringify({ detail: "unbekannter Pfad" }));
+      res.writeHead(ERROR_ENVELOPES.notFound.httpStatus, { "content-type": "application/json" });
+      return res.end(JSON.stringify(ERROR_ENVELOPES.notFound.body));
     }
     res.writeHead(HTTP_OK, { "content-type": "application/json" });
-    res.end(JSON.stringify(FINISHED_CONVERSATION));
+    res.end(JSON.stringify(CONVERSATION_DONE_WITH_ANALYSIS));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   return {
