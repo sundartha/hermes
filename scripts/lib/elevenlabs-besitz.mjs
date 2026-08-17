@@ -117,6 +117,17 @@ const JE_EINTRAG_SCHLUESSEL = "je_eintrag";
 // derselbe Pfad wie auf der Vorlagen-Seite (Bestandsfall: data_collection,
 // evaluation.criteria - beide Seiten fuehren dieselbe Form).
 const JE_EINTRAG_LIVE_SCHLUESSEL = "je_eintrag_live";
+// SCHREIBWEG: wie aus einem Befund dieses Feldes ein Schreibwert entsteht. Fehlt
+// er, gilt die Grundregel (nur art "wert" ist schreibbar - aus einer MENGE folgt
+// kein einzelner Zielwert). "je_schluessel" ist der eine deklarierte Ausweg fuer
+// eine KARTE, an der beide Seiten Verschiedenes besitzen: bestehende Schluessel
+// behalten ihren Live-Eintrag und bekommen nur die besessenen Blaetter neu, neue
+// Schluessel kommen vollstaendig aus der Vorlage. Diese Datei validiert nur die
+// FORM der Erklaerung; ausgefuehrt wird sie im schreibenden Kommando.
+export const SCHREIBWEG_SCHLUESSEL = "schreibweg";
+export const SCHREIBWEG_BESITZ_SCHLUESSEL = "schreibweg_besitz";
+export const SCHREIBWEG_JE_SCHLUESSEL = "je_schluessel";
+const SCHREIBWEGE = new Set([SCHREIBWEG_JE_SCHLUESSEL]);
 const TEXT_ZUWEISUNG = " = ";
 // Schluessel-Praefix der reinen Entwickler-Doku in diesen JSON-Dateien (Bestand,
 // s. scripts/check-elevenlabs-tests.js): kein Teil des ElevenLabs-Schemas,
@@ -174,7 +185,10 @@ export function setzeAnPfad(wurzel, pfad, wert) {
 // nicht als vorhanden - der Live-Agent fuehrt jedes bekannte Systemwerkzeug als
 // Schluessel und setzt die nicht konfigurierten auf null; ohne diese Regel
 // waere die Live-Menge immer die volle Anbieter-Liste.
-function eintraegeAus(wert) {
+// Exportiert, weil der zusammenfuehrende Schreibweg (s. push) DIESELBE Sicht auf
+// eine Sammlung braucht wie der Vergleich. Zwei eigene Zerleger waeren zwei
+// Wahrheiten: geschrieben wuerde dann etwas anderes, als verglichen wurde.
+export function eintraegeAus(wert) {
   if (Array.isArray(wert)) {
     return wert
       .filter((eintrag) => typeof eintrag?.name === "string")
@@ -386,6 +400,26 @@ function jeEintragFormFehler({ feld, art, brauchtJeEintrag, eintrag }) {
   return null;
 }
 
+// Ein gesetzter, aber unverstandener Schreibweg ist ein FEHLER und kein stilles
+// "dann eben nicht schreibbar": wer ihn hinschreibt, will schreiben, und ein
+// Tippfehler duerfte diese Absicht nicht wortlos verschlucken (dieselbe Haltung
+// wie beim unbekannten Schalter im Push-Kommando). Die besessenen Blaetter sind
+// Pflicht - ohne sie stuende nicht fest, WAS an einem bestehenden Schluessel
+// ueberschrieben wird, und der Schreibweg raete.
+function schreibwegFormFehler(eintrag) {
+  const weg = eintrag[SCHREIBWEG_SCHLUESSEL];
+  if (weg === undefined) return null;
+  if (!SCHREIBWEGE.has(weg)) {
+    const bekannt = [...SCHREIBWEGE].join(", ");
+    return `${eintrag.feld}: unbekannter "${SCHREIBWEG_SCHLUESSEL}" "${weg}" (bekannt: ${bekannt})`;
+  }
+  const besitz = eintrag[SCHREIBWEG_BESITZ_SCHLUESSEL];
+  if (!istPfadListe(besitz)) {
+    return `${eintrag.feld}: "${SCHREIBWEG_SCHLUESSEL}" "${weg}" braucht "${SCHREIBWEG_BESITZ_SCHLUESSEL}" - die Liste der Blaetter, die an einem BESTEHENDEN Schluessel ueberschrieben werden duerfen`;
+  }
+  return null;
+}
+
 function eintragsFormFehler(eintrag) {
   const { feld, art, vorlage, live } = eintrag ?? {};
   if (typeof feld !== "string" || feld === "") {
@@ -403,6 +437,8 @@ function eintragsFormFehler(eintrag) {
     eintrag,
   });
   if (jeEintragFehler) return jeEintragFehler;
+  const schreibwegFehler = schreibwegFormFehler(eintrag);
+  if (schreibwegFehler) return schreibwegFehler;
   const ausnahmeFehler = ausnahmeFormFehler(eintrag);
   if (ausnahmeFehler) return ausnahmeFehler;
   const seiten = [
@@ -472,6 +508,14 @@ function abweichungsBefund({ eintrag, vergleich, links, rechts }) {
     feld: eintrag.feld,
     art: eintrag.art,
     livePfade: eintrag.live,
+    // Die Vorlagen-Seite als DATEN, nicht nur im gedruckten Satz: ein
+    // zusammenfuehrender Schreibweg braucht den ROHEN Vorlagenwert (die Karte
+    // mit ihren Schluesseln), waehrend soll.wert die eingesammelte MENGE
+    // traegt. Wer den Pfad aus der Zeile zurueckparst, baut den zweiten,
+    // driftenden Leser - genau das, was der Befund als Daten verhindert.
+    vorlagePfade: eintrag.vorlage,
+    schreibweg: eintrag[SCHREIBWEG_SCHLUESSEL] ?? null,
+    schreibwegBesitz: eintrag[SCHREIBWEG_BESITZ_SCHLUESSEL] ?? null,
     soll: links,
     ist: rechts,
     sollAnzeige,

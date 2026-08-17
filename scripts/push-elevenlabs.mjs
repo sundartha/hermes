@@ -56,6 +56,11 @@
 // folgt kein einzelner Zielwert - welches Objekt mit welchen Anbieter-Feldern
 // dahinter entstehen soll, waere geraten. Solche Abweichungen werden angezeigt
 // und ausdruecklich NICHT geschrieben.
+// AUSNAHME, und nur eine erklaerte: traegt der Besitz-Eintrag einen SCHREIBWEG
+// (heute nur "je_schluessel"), sagt die Vorlage selbst, wie aus ihr und dem
+// Live-Stand ein Wert entsteht - s. zusammengefuehrterWert. Ohne diesen Eintrag
+// bleibt es beim Satz darueber; der Schreibweg ist eine Erklaerung in der
+// Vorlage, keine Kulanz des Werkzeugs.
 //
 // GEGENPROBE STATT VERTRAUEN: PATCH deep-merged verschachtelte Modelle, aber
 // Dict- und Listenfelder ERSETZT es (am Anbieter gemessen, .fortschritt.md
@@ -87,9 +92,12 @@ import {
   ART_WERT,
   PFAD_TRENNER,
   PFAD_VERBINDER,
+  SCHREIBWEG_JE_SCHLUESSEL,
   besesseneFeldNamen,
+  eintraegeAus,
   setzeAnPfad,
   vergleicheBesitz,
+  wertAnPfad,
 } from "./lib/elevenlabs-besitz.mjs";
 
 const LOG_PREFIX = "[push-elevenlabs]";
@@ -178,7 +186,11 @@ function leseArgumente(argv) {
 // Vorlage nicht fuehrt, ist ein Abbruchgrund: still ignoriert wuerde er zu
 // "dieses Feld weicht eben nicht ab" - und der Aufrufer glaubte, er haette
 // etwas geschrieben.
+// auswahl === null (keine Auswahl getroffen) kann keine unbekannten Namen
+// enthalten - der Fall wird HIER behandelt und nicht beim Aufrufer, damit die
+// Frage "was ist unbekannt?" nur eine Stelle hat.
 function unbekannteFelder(auswahl, vorlage) {
+  if (auswahl === null) return [];
   const bekannt = new Set(besesseneFeldNamen(vorlage));
   return auswahl.filter((feld) => !bekannt.has(feld));
 }
@@ -197,14 +209,19 @@ function istGewaehlt(auswahl, abweichung) {
 
 // --- Schreibbarkeit und Patch-Koerper ---
 
-// Schreibbar ist genau die Vergleichs-Art "wert": sie hat einen einzigen
-// Live-Pfad und einen einzigen Vorlagen-Wert - beides zusammen ergibt eine
-// eindeutige Zuweisung. soll.vorhanden wird trotz des Vergleichs mitgeprueft:
-// ein Wert, den die Vorlage gar nicht fuehrt, duerfte niemals geschrieben
-// werden, auch nicht als undefined.
+// Schreibbar ist die Vergleichs-Art "wert": sie hat einen einzigen Live-Pfad und
+// einen einzigen Vorlagen-Wert - beides zusammen ergibt eine eindeutige
+// Zuweisung. soll.vorhanden wird trotz des Vergleichs mitgeprueft: ein Wert, den
+// die Vorlage gar nicht fuehrt, duerfte niemals geschrieben werden, auch nicht
+// als undefined.
+// ODER: ein Feld, dessen Besitz-Eintrag einen SCHREIBWEG erklaert. Es braucht
+// dieselbe Eindeutigkeit - je EIN Pfad auf beiden Seiten -, nur entsteht der
+// Wert dann nicht durch Zuweisung, sondern durch Zusammenfuehrung.
 function istSchreibbar(abweichung) {
   const einPfad = abweichung.livePfade.length === 1;
-  return abweichung.art === ART_WERT && einPfad && abweichung.soll.vorhanden;
+  if (!einPfad || !abweichung.soll.vorhanden) return false;
+  if (abweichung.schreibweg !== null) return abweichung.vorlagePfade.length === 1;
+  return abweichung.art === ART_WERT;
 }
 
 function zielPfad(abweichung) {
@@ -229,13 +246,91 @@ export function teileAbweichungen({ abweichungen, auswahl }) {
   };
 }
 
+// --- Der zusammenfuehrende Schreibweg ---
+
+// EINE Sammlung, aus Vorlage und Live-Stand zusammengefuehrt. Drei Faelle, und
+// der dritte ist der Grund, warum es diese Funktion gibt:
+// - Schluessel auf BEIDEN Seiten: der LIVE-Eintrag bleibt und bekommt nur die
+//   besessenen Blaetter aus der Vorlage. Was der Anbieter sonst an seinen
+//   Eintrag haengt (enum, is_system_provided, dynamic_variable, ... - acht
+//   Felder, am Agenten gemessen), ueberlebt unveraendert. Es mitzuschreiben
+//   hiesse, Werte zu erfinden, die diese Vorlage nie besessen hat.
+// - Schluessel NUR in der Vorlage: er kommt vollstaendig aus der Vorlage. Fuer
+//   einen neuen Eintrag gibt es keine zweite Quelle.
+// - Schluessel NUR live: ABBRUCH, kein stilles Loeschen. Er kann von Hand im
+//   Dashboard entstanden sein; ihn im Vorbeigehen wegzuraeumen waere genau der
+//   Griff, den dieses Werkzeug nirgends tut. Wer ihn los werden will, entfernt
+//   ihn dort, wo er entstanden ist.
+function zusammengefuehrterWert({ abweichung, vorlage, live }) {
+  const soll = wertAnPfad(vorlage, abweichung.vorlagePfade[0]);
+  if (!soll.gefunden) {
+    return {
+      fehler: `${abweichung.feld}: die Vorlage fuehrt ${abweichung.vorlagePfade[0]} nicht - ohne Quelle wird nichts zusammengefuehrt`,
+    };
+  }
+  // Fehlt die Sammlung LIVE ganz, ist sie leer und nicht kaputt: dann sind alle
+  // Schluessel der Vorlage neu, und es gibt nichts zu verlieren. (Die Vorlagen-
+  // Seite darf nicht fehlen - dort liegt der einzige Zielwert.)
+  const ist = wertAnPfad(live, zielPfad(abweichung));
+  const sollEintraege = new Map(eintraegeAus(soll.wert));
+  const istEintraege = new Map(ist.gefunden ? eintraegeAus(ist.wert) : []);
+  const nurLive = [...istEintraege.keys()].filter((name) => !sollEintraege.has(name));
+  if (nurLive.length > 0) {
+    return {
+      fehler: `${abweichung.feld}: der Live-Agent fuehrt Schluessel, die die Vorlage nicht kennt: ${nurLive.join(LISTEN_TRENNER)}. Der Schreibweg "${SCHREIBWEG_JE_SCHLUESSEL}" loescht nichts - was hier verschwaende, hat jemand angelegt. Erst in die Vorlage aufnehmen oder im Dashboard entfernen.`,
+    };
+  }
+  const zusammen = {};
+  for (const [name, sollEintrag] of sollEintraege) {
+    const istEintrag = istEintraege.get(name);
+    zusammen[name] =
+      istEintrag === undefined
+        ? sollEintrag
+        : mitBesessenenBlaettern({
+            istEintrag,
+            sollEintrag,
+            blaetter: abweichung.schreibwegBesitz,
+          });
+  }
+  return { wert: zusammen };
+}
+
+// Ein bestehender Eintrag, an dem GENAU die besessenen Blaetter den Vorlagenwert
+// bekommen. Ein Blatt, das die Vorlage an diesem Eintrag nicht fuehrt, bleibt
+// live stehen - fehlend ist nicht dasselbe wie leer, und ein Vorlagen-Eintrag
+// ohne Beschreibung darf keine loeschen.
+function mitBesessenenBlaettern({ istEintrag, sollEintrag, blaetter }) {
+  const zusammen = { ...istEintrag };
+  for (const blatt of blaetter) {
+    const wert = wertAnPfad(sollEintrag, blatt);
+    if (wert.gefunden) setzeAnPfad(zusammen, blatt, wert.wert);
+  }
+  return zusammen;
+}
+
+// Der Wert, der fuer EIN abweichendes Feld gesendet wuerde - an EINER Stelle
+// entschieden, damit Patch-Koerper und Vorhersage nie auseinanderlaufen
+// koennen. Ohne erklaerten Schreibweg ist es der Vorlagenwert selbst.
+export function mitSchreibwerten({ schreibbar, vorlage, live }) {
+  const fehler = [];
+  const werte = schreibbar.map((abweichung) => {
+    if (abweichung.schreibweg === null) {
+      return { ...abweichung, schreibWert: abweichung.soll.wert };
+    }
+    const ergebnis = zusammengefuehrterWert({ abweichung, vorlage, live });
+    if (ergebnis.fehler) fehler.push(ergebnis.fehler);
+    return { ...abweichung, schreibWert: ergebnis.wert };
+  });
+  return { schreibbar: fehler.length > 0 ? [] : werte, fehler };
+}
+
 // Der Patch-Koerper entsteht AUSSCHLIESSLICH aus den besessenen Live-Pfaden der
 // abweichenden Felder. Es gibt keinen Zweig, der eine ganze Konfiguration
 // uebernimmt - was hier nicht als Pfad steht, kann nicht gesendet werden.
 function bauePatchKoerper(schreibbar) {
   const koerper = {};
   for (const abweichung of schreibbar) {
-    setzeAnPfad(koerper, zielPfad(abweichung), abweichung.soll.wert);
+    setzeAnPfad(koerper, zielPfad(abweichung), abweichung.schreibWert);
   }
   return koerper;
 }
@@ -249,7 +344,7 @@ function bauePatchKoerper(schreibbar) {
 function simuliereSchreiben({ live, schreibbar }) {
   const kopie = structuredClone(live);
   for (const abweichung of schreibbar) {
-    setzeAnPfad(kopie, zielPfad(abweichung), abweichung.soll.wert);
+    setzeAnPfad(kopie, zielPfad(abweichung), abweichung.schreibWert);
   }
   return kopie;
 }
@@ -576,7 +671,7 @@ export async function runCli(argv = process.argv) {
   }
 
   const vorlage = ladeVorlage();
-  const unbekannt = auswahl === null ? [] : unbekannteFelder(auswahl, vorlage);
+  const unbekannt = unbekannteFelder(auswahl, vorlage);
   if (unbekannt.length > 0) {
     return brichAb(
       [],
@@ -594,7 +689,20 @@ export async function runCli(argv = process.argv) {
   }
 
   const felder = teileAbweichungen({ abweichungen: befund.abweichungen, auswahl });
-  const { schreibbar } = felder;
+  // Die Schreibwerte VOR Vorhersage und Koerper: beide lesen denselben Wert,
+  // und ein Schreibweg, der nicht traegt, endet hier - vor jeder Ausgabe, die
+  // einen Plan behaupten wuerde, den es nicht gibt.
+  const { schreibbar, fehler: schreibwegFehler } = mitSchreibwerten({
+    schreibbar: felder.schreibbar,
+    vorlage,
+    live,
+  });
+  if (schreibwegFehler.length > 0) {
+    return brichAb(
+      schreibwegFehler,
+      `${schreibwegFehler.length} erklaerte Schreibwege tragen nicht (oben genannt). NICHTS gesendet.`,
+    );
+  }
   const danach = vergleicheBesitz({ vorlage, live: simuliereSchreiben({ live, schreibbar }) });
   const koerper = bauePatchKoerper(schreibbar);
   meldePlan({ agentId, befund, auswahl, felder, danach });
