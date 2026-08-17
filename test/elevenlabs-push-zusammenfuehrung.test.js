@@ -226,3 +226,58 @@ describe("Riegel 2b: ein Doku-Schluessel im Koerper wird abgelehnt, nicht heraus
     assert.deepEqual(befundeFuer(koerper), []);
   });
 });
+
+// ---- Der gelesene Live-Stand bleibt unveraendert --------------------------------------
+// Gefunden beim Selbst-Durchgang, nicht durch einen roten Test: die Zusammenfuehrung
+// kopierte den Live-Eintrag FLACH. Bei einem verschachtelten besessenen Blatt (wie
+// "overrides.agent.first_message" bei den Sprach-Presets) teilen flache Kopie und Original
+// die Zwischenebenen - der Schreibwert haette den gelesenen Stand an Ort und Stelle
+// umgeschrieben, und die trockene Vorhersage rechnete danach gegen einen Stand, den sie
+// selbst schon veraendert hat.
+describe("Die Zusammenfuehrung fasst den gelesenen Live-Stand nicht an", () => {
+  const VERSCHACHTELT = ["overrides.agent.first_message"];
+
+  function verschachtelteAbweichung() {
+    return {
+      ...abweichung(),
+      schreibwegBesitz: VERSCHACHTELT,
+      livePfade: ["conversation_config.language_presets"],
+      vorlagePfade: ["agent.conversation_config.language_presets"],
+    };
+  }
+
+  it("ein verschachteltes Blatt veraendert das Live-Objekt NICHT", () => {
+    const live = {
+      conversation_config: {
+        language_presets: { de: { overrides: { agent: { first_message: "ALT" } } } },
+      },
+    };
+    const vorlage = {
+      agent: {
+        conversation_config: {
+          language_presets: { de: { overrides: { agent: { first_message: "NEU" } } } },
+        },
+      },
+    };
+    const { schreibbar, fehler } = mitSchreibwerten({
+      schreibbar: [verschachtelteAbweichung()],
+      vorlage,
+      live,
+    });
+    assert.deepEqual(fehler, []);
+    const ersterSatz = (presets) => {
+      const preset = presets.de;
+      return preset.overrides.agent.first_message;
+    };
+    assert.equal(
+      ersterSatz(schreibbar[0].schreibWert),
+      "NEU",
+      "der Schreibwert traegt den neuen Text nicht",
+    );
+    assert.equal(
+      ersterSatz(live.conversation_config.language_presets),
+      "ALT",
+      "der GELESENE Live-Stand wurde mitveraendert - dann rechnet die Vorhersage gegen einen Stand, den sie selbst umgeschrieben hat",
+    );
+  });
+});

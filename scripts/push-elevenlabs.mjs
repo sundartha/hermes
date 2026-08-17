@@ -300,7 +300,13 @@ function zusammengefuehrterWert({ abweichung, vorlage, live }) {
 // live stehen - fehlend ist nicht dasselbe wie leer, und ein Vorlagen-Eintrag
 // ohne Beschreibung darf keine loeschen.
 function mitBesessenenBlaettern({ istEintrag, sollEintrag, blaetter }) {
-  const zusammen = { ...istEintrag };
+  // TIEFE Kopie, nicht {...istEintrag}: ein besessenes Blatt kann VERSCHACHTELT liegen
+  // (language_presets: "overrides.agent.first_message"). Eine flache Kopie teilt die
+  // Zwischenebenen mit dem gelesenen Live-Stand - setzeAnPfad wuerde ihn dann an Ort und
+  // Stelle veraendern, und die trockene Vorhersage rechnete gegen einen Stand, den sie
+  // selbst schon umgeschrieben hat. Genau die Zusage, die simuliereSchreiben mit seiner
+  // eigenen Kopie gibt, gilt damit auch hier.
+  const zusammen = structuredClone(istEintrag);
   for (const blatt of blaetter) {
     const wert = wertAnPfad(sollEintrag, blatt);
     if (wert.gefunden) setzeAnPfad(zusammen, blatt, wert.wert);
