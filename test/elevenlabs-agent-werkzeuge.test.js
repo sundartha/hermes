@@ -23,22 +23,25 @@
 //   am Agenten. Ein Abnahmekriterium ist das nicht, denn der Zustand muss ab der Aenderung
 //   dauerhaft gelten - deshalb Regressionslauf, deshalb keine ABNAHME--Kennung.
 //
-// R16 (Abnahmekriterium, "npm run test:abnahme", heute ROT): der Prompt nennt get_consult
-//   nur, wenn das Rueckfrage-Gate (src/consult/gate.js) es zulaesst. Nennt der Prompt ein
-//   Werkzeug, das das Gate sperrt, verspricht der Agent seinem Gegenueber eine Rueckfrage,
-//   die nie kommt - oder er versucht einen Aufruf, der abgelehnt wird.
+// R16 ([abgenommen R16], gruen seit 2026-08-17, s. test/abnahme-ausgewandert.json - ab da
+//   haelt der REGRESSIONSLAUF das Kriterium fest): der Prompt nennt get_consult nur, wenn
+//   das Rueckfrage-Gate (src/consult/gate.js) es zulaesst. Nennt der Prompt ein Werkzeug,
+//   das das Gate sperrt, verspricht der Agent seinem Gegenueber eine Rueckfrage, die nie
+//   kommt - oder er versucht einen Aufruf, der abgelehnt wird.
 //
-// GEMESSEN (2026-08-14), warum R16 ein Abnahmekriterium ist und kein Regressionsschutz:
+// GEMESSEN (2026-08-14), warum R16 ueberhaupt ein Abnahmekriterium war:
 //   - Bestandspfad: die Naht EXISTIERT. src/claude.js rendert consultRules(p) nur bei
 //     p.consultAvailable, und agentTools(call) haengt das Werkzeug nur bei
 //     consultAvailableFor(call) an. Beide Richtungen sind dort gepinnt
 //     (test/ww-p3-consult-prompt-routing.test.js, gruen im Regressionslauf).
-//   - ElevenLabs-Pfad: es gibt NICHTS Vergleichbares. Die Vorlage ist eine statische
-//     JSON-Datei, die kein Laufzeit-Code liest (sie wird nur von
-//     scripts/check-elevenlabs-tests.js und von Tests angefasst), ihr Prompt traegt den
-//     Block "CONSULT TOOL (get_consult)" bedingungslos, und
-//     src/conversation/conversation-ports.js kennt in StartConversationParams kein Feld,
-//     ueber das eine Gate-Antwort beim Laufwerk ueberhaupt ankaeme.
+//   - ElevenLabs-Pfad: es gab NICHTS Vergleichbares. Die Vorlage ist eine statische
+//     JSON-Datei, ihr Prompt trug den Block "CONSULT TOOL (get_consult)" bedingungslos,
+//     und src/conversation/conversation-ports.js kennt in StartConversationParams kein
+//     Feld, ueber das eine Gate-Antwort beim Laufwerk ueberhaupt ankaeme.
+//   - GEBAUT 2026-08-17: src/conversation/elevenlabs-agent-config.js
+//     (outboundAgentConfigFor) stellt Prompt und Werkzeugsatz aus der ANTWORT des Gates
+//     zusammen. Die VERDRAHTUNG in den Anrufstart (src/elevenlabs/outbound.js) ist damit
+//     noch nicht vollzogen - dieser Test pinnt die Naht, nicht den Aufrufer.
 //
 // KEIN NETZ, KEIN KONTO: gepinnt wird die VORLAGE IM REPO, nie der Agent im ElevenLabs-
 // Konto. Ob Vorlage und Konto uebereinstimmen, ist Sache des Vor-dem-Hochladen-Gates
@@ -518,7 +521,7 @@ async function agentConfigSeam() {
   return build;
 }
 
-test("ABNAHME-R16: der ElevenLabs-Prompt nennt get_consult nur, wenn das Rueckfrage-Gate es zulaesst | ROT WEIL: der ElevenLabs-Pfad hat nur einen statischen Prompt in der Vorlage, der das Werkzeug bedingungslos nennt - eine gate-abhaengige Zusammenstellung wie consultRules() und agentTools() in src/claude.js existiert dort nicht | FIX: eine Naht, die Prompt und Werkzeugsatz des Agenten aus der Antwort von consultAllowedFor zusammenbaut - bei gesperrtem Gate ohne den CONSULT-TOOL-Block und ohne die Werkzeug-Kennung", async () => {
+test("[abgenommen R16] der ElevenLabs-Prompt nennt get_consult nur, wenn das Rueckfrage-Gate es zulaesst", async () => {
   // 1. Das Gate misst wirklich in beide Richtungen (Kontrolle, gruen).
   for (const kase of GATE_CASES) {
     assert.equal(gateAnswerFor(kase), kase.allowed, `Gate-Antwort im Fall "${kase.name}"`);

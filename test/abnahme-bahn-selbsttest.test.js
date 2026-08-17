@@ -424,9 +424,19 @@ test("Selbsttest Abnahme-Bahn: kein Testname des Bestands faellt zwischen die dr
     buckets.regression.length >= MIN_HARVESTED - buckets.gates.length,
     "der Regressionslauf traegt den Rest",
   );
+  // Die Abnahme-Bahn ist LEER, sobald jedes Kriterium abgenommen und ausgewandert ist -
+  // seit R16 (2026-08-17) ist das der Fall. Das ist der ZIELZUSTAND, kein Messfehler, und
+  // "mindestens EIN offenes Kriterium" waere ab hier eine Forderung nach Rueckstand.
+  // Die Positiv-Kontrolle des Abnahme-Filters haengt deshalb NICHT an dieser Zahl: sie
+  // liegt in Test 3, der die Bahn an einem echten node:test-Lauf gegen eine Wegwerf-Datei
+  // misst und dort genau ihren einen Fall durchlaesst - unabhaengig davon, ob der Bestand
+  // gerade ein offenes Kriterium hat. Was hier bleibt, ist die Buchhaltung: offene plus
+  // ausgewanderte Kriterien ergeben zusammen mindestens eines. Faellt auch die auf 0, gibt
+  // es die Bahn ohne Gegenstand - dann sind Kennung, Liste oder Ernte kaputt.
   assert.ok(
-    buckets.abnahme.length >= 1,
-    "die Abnahme-Bahn haelt mindestens EIN Kriterium - eine leere Bahn besteht jede Filterpruefung",
+    buckets.abnahme.length + readMigratedList().length >= 1,
+    "Kriterien gibt es ueberhaupt - offen in der Bahn oder abgenommen in " +
+      `${MIGRATED_LIST}. Beides zugleich leer heisst: Kennung, Liste oder Namensernte ist kaputt`,
   );
   for (const entry of harvested.filter((candidate) => candidate.file === SELF_FILE)) {
     assert.ok(
