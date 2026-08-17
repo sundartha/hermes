@@ -18,6 +18,7 @@
   "simulated_user_model": null,
   "tool_mock_overrides": {},
   "dynamic_variables": {
+    "consult_available": "available",
     "owner_name": "Owen Barrett",
     "callee": "Hillcrest Auto Repair, service desk (+1 720-555-0136)",
     "objective": "Schedule a repair appointment for Owen Barrett's car - the rear brake pads need replacing. The vehicle is a 2017 Chevrolet Malibu LT, black, with about 71,000 miles; the front brakes were done last year, only the rear pads are due. Owen Barrett drops the car off and does not wait on site.",
@@ -33,5 +34,8 @@
   "parent_folder_id": null,
   "from_conversation_metadata": null,
   "_ausfuehrung_hinweis": "Zielwerte (UMSETZUNG-ElevenLabs.md Zeile 180) stehen in _ausfuehrung. Beide Werte gehoeren laut README (Feldtabelle, Zeile zu 'repeat_count') zum Ausfuehrungs-Aufruf POST /v1/convai/agents/{agent_id}/run-tests, NICHT zur Testdefinition selbst - hier nur im klar als Nicht-Schema markierten Objekt _ausfuehrung zur Sichtbarkeit dieser Kennzahlen in der Datei vermerkt, kein Schema-Feld von POST /v1/convai/agent-testing/create.",
-  "_ausfuehrung": { "repeat_count": 5, "bestehensschwelle": ">= 4 von 5" }
+  "_ausfuehrung": {
+    "repeat_count": 5,
+    "bestehensschwelle": ">= 4 von 5"
+  }
 }

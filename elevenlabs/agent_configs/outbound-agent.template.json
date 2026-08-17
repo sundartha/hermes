@@ -286,6 +286,61 @@
         "_hinweis": "Der Audio-Mitschnitt der Gespraeche. SOLL false, dieselbe Eigentuemer-Entscheidung G7. BEWACHT, weil der ANBIETER-DEFAULT hier true ist - Mitschnitt AN (belegt unter _quellenbeleg_felder aus der audio-saving-Doku, wiederholt an _record_voice_hinweis). Ein Wert, der bewusst vom Standard abweicht, ist genau der, den ein Dashboard-Flip lautlos auf den Standard zurueckstellt; ohne Besitz waere das nie verglichen worden. Zweite Haelfte derselben Zusage wie retention_days daneben - eine geloeschte Frist nuetzt nichts, wenn parallel weiter Stimme mitgeschnitten wird. Vorlagen-Wert bleibt false, eine Live-Abweichung ist ein Befund fuer den Eigentuemer."
       },
       {
+        "feld": "delete_transcript_and_pii",
+        "art": "wert",
+        "vorlage": [
+          "platform_settings.privacy.delete_transcript_and_pii"
+        ],
+        "live": [
+          "platform_settings.privacy.delete_transcript_and_pii"
+        ],
+        "_hinweis": "Besessen seit 2026-08-17 (Bewachung statt Korrektur, SOLL ist der gemessene Live-Wert). Loescht Transkript und personenbezogene Daten. false = es bleibt alles liegen."
+      },
+      {
+        "feld": "delete_audio",
+        "art": "wert",
+        "vorlage": [
+          "platform_settings.privacy.delete_audio"
+        ],
+        "live": [
+          "platform_settings.privacy.delete_audio"
+        ],
+        "_hinweis": "Besessen seit 2026-08-17 (Bewachung statt Korrektur, SOLL ist der gemessene Live-Wert). Loescht die Audioaufnahme. false = der Mitschnitt bleibt liegen; haengt sachlich an record_voice."
+      },
+      {
+        "feld": "apply_to_existing_conversations",
+        "art": "wert",
+        "vorlage": [
+          "platform_settings.privacy.apply_to_existing_conversations"
+        ],
+        "live": [
+          "platform_settings.privacy.apply_to_existing_conversations"
+        ],
+        "_hinweis": "Besessen seit 2026-08-17 (Bewachung statt Korrektur, SOLL ist der gemessene Live-Wert). Wendet die Datenschutz-Einstellungen auf BEREITS gespeicherte Gespraeche an. Der Schalter entscheidet, ob eine spaetere Umstellung rueckwirkt - genau die Frage aus der Datenschutz-Vorlage 'Was geschieht mit den bereits bei ElevenLabs liegenden Aufnahmen?'."
+      },
+      {
+        "feld": "zero_retention_mode",
+        "art": "wert",
+        "vorlage": [
+          "platform_settings.privacy.zero_retention_mode"
+        ],
+        "live": [
+          "platform_settings.privacy.zero_retention_mode"
+        ],
+        "_hinweis": "Besessen seit 2026-08-17 (Bewachung statt Korrektur, SOLL ist der gemessene Live-Wert). Der staerkste Schalter des Anbieters: 'no PII data is stored'. Er wuerde Fertig-Punkt 10 in einem Zug erfuellen und zugleich jede Nachschau an gespeicherten Gespraechen unmoeglich machen - deshalb eine Eigentuemer-Entscheidung, keine Konfiguration."
+      },
+      {
+        "feld": "conversation_history_redaction",
+        "art": "wert",
+        "vorlage": [
+          "platform_settings.privacy.conversation_history_redaction"
+        ],
+        "live": [
+          "platform_settings.privacy.conversation_history_redaction"
+        ],
+        "_hinweis": "Besessen seit 2026-08-17 (Bewachung statt Korrektur). Schwaerzung benannter Entitaeten im Gespraechsverlauf; heute aus und mit leerer Entitaetenliste. Als GANZES verglichen, weil 'an, aber ohne Entitaeten' dasselbe bedeutet wie 'aus' - zwei getrennte Felder koennten diesen Widerspruch nicht sehen."
+      },
+      {
         "feld": "conversation_config_override_erlaubnisse",
         "art": "wert",
         "vorlage": [
@@ -632,7 +687,16 @@
   "platform_settings": {
     "privacy": {
       "retention_days": 0,
-      "record_voice": false
+      "record_voice": false,
+      "delete_transcript_and_pii": false,
+      "delete_audio": false,
+      "apply_to_existing_conversations": false,
+      "zero_retention_mode": false,
+      "conversation_history_redaction": {
+        "enabled": false,
+        "entities": []
+      },
+      "_fuenf_weitere_felder_hinweis": "AUFGENOMMEN 2026-08-17. Die Datenschutz-Karte des Anbieters fuehrt SIEBEN Felder; besessen waren zwei (retention_days, record_voice). Die fuenf hier stehen auf ihrem am 2026-08-17 GEMESSENEN Live-Wert - Bewachung statt Korrektur, es wird nichts umgestellt. Grund: sie entscheiden mit, was mit den Gespraechen echter Menschen geschieht, und ein stiller Wechsel im Dashboard waere bisher unbemerkt geblieben. zero_retention_mode ist dabei der staerkste Schalter, den der Anbieter ueberhaupt anbietet ('no PII data is stored'). EINEN TRAININGS-WIDERSPRUCH gibt es in dieser API NICHT - am oeffentlichen Schema gesucht (train/opt_out/data_retention), kein Feld dafuer. Fertig-Punkt 10 ist in diesem Teil also nicht per API erfuellbar; er braucht eine Konto-/Vertragsantwort. VOR DEM ERSTEN FREMDKUNDEN sind alle sieben Felder gemeinsam zu entscheiden, nicht einzeln."
     },
     "_data_collection_hinweis": "ENGLISCHE SOLL-Werte fuer die urspruenglich VIER Felder, die der Live-Agent zuvor fuehrte - Schluessel UND Beschreibung uebersetzt (termindatum -> appointment_date, kontaktperson -> contact_person, rueckrufnummer -> callback_number, naechste_schritte -> next_steps); GEMESSEN am Live-Agenten seit dem letzten Push bereits SO (per GET bestaetigt, keine offene Uebersetzungs-Push-Absicht mehr). D1-BAU (ABNAHME-D1, dieses Paket): appointment_date, appointment_time, amount, currency SIND JETZT ERGAENZT, plus confirmed_timezone (TEIL 3 derselben Eigentuemer-Auflage, Zeitzonen-Bestaetigung). Die zuvor hier offen benannte SPLIT-Entscheidung ist getroffen: appointment_date trug DATUM UND UHRZEIT in einem Feld - das ist jetzt AUFGETEILT (appointment_date nur noch das Datum, die neue appointment_time die Uhrzeit), weil D1 woertlich zwei getrennte Felder verlangt und bislang kein Code (data_collection_results wurde bis zu diesem Paket nirgends gelesen) auf der bisherigen kombinierten Form aufsass - die Aufteilung veraendert also kein bestehendes Verhalten. contact_person/callback_number/next_steps bleiben unveraendert stehen (D1 hat dafuer keine Entsprechung, sie werden NICHT ersetzt). NOCH NICHT GEPUSHT (PUSH-ABSICHT, s. Dateikopf _wichtiger_hinweis_NICHT_HOCHLADEN): appointment_time/amount/currency/confirmed_timezone sind NEU in dieser Vorlage und die appointment_date-Beschreibung ist GEAENDERT (datumsonly statt Datum+Uhrzeit) - bis zum naechsten echten Push (npm run elevenlabs:push, in diesem Auftrag ausdruecklich NICHT ausgefuehrt) fuehrt der Live-Agent weiterhin die alte, kombinierte appointment_date-Beschreibung und kennt die vier neuen Schluessel nicht. npm run elevenlabs:drift meldet das erwartungsgemaess als ABWEICHUNG bei data_collection/data_collection_beschreibungen, bis gepusht ist - Bewachung, keine stille Korrektur. Die Eintraege fuehren nur type und description: die uebrigen Felder je Eintrag (enum, is_system_provided, dynamic_variable, allowed_values_dynamic_variable, constant_value, is_omitted, llm, llm_billed) setzt der Anbieter selbst, sie sind nicht besessen und wuerden einen Vollwertvergleich dauerhaft rot faerben.",
     "data_collection": {
