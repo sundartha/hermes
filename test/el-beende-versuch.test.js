@@ -29,7 +29,7 @@ import {
   makeElevenLabsOutbound,
   answeredAnchorOutcome,
   ELEVENLABS_PROVIDER_MAX_DURATION_S,
-  EL_ABORT_RESULT_FETCH_TIMEOUT_MS,
+  EL_ABORT_PROVIDER_TIMEOUT_MS,
   PERMANENT_ERROR_STREAK_LIMIT,
 } from "../src/elevenlabs/outbound.js";
 import {
@@ -194,14 +194,14 @@ async function withAbortSignalTimeoutSpy(run) {
   return calls;
 }
 
-test("S1-3: EL_ABORT_RESULT_FETCH_TIMEOUT_MS ist deutlich kuerzer als das Bestands-Zeitlimit", () => {
+test("S1-3: EL_ABORT_PROVIDER_TIMEOUT_MS ist deutlich kuerzer als das Bestands-Zeitlimit", () => {
   assert.ok(
-    EL_ABORT_RESULT_FETCH_TIMEOUT_MS < REQUEST_TIMEOUT_MS,
+    EL_ABORT_PROVIDER_TIMEOUT_MS < REQUEST_TIMEOUT_MS,
     "die Abbruch-Pfad-Frist muss kuerzer sein als convai.js REQUEST_TIMEOUT_MS (120000ms)",
   );
 });
 
-test("S1-3: endActiveCall nutzt fuer den Ergebnisabruf EL_ABORT_RESULT_FETCH_TIMEOUT_MS statt der 120s-Bestandsfrist", async () => {
+test("S1-3: endActiveCall nutzt fuer BEIDE Anbieter-Aufrufe EL_ABORT_PROVIDER_TIMEOUT_MS statt der 120s-Bestandsfrist", async () => {
   const call = { id: "call_timeout", elevenlabsConversationId: CONV_ID, endedAt: "2026-08-15T10:00:00.000Z" };
   const store = spyStore(call);
   const el = makeOutbound(store);
@@ -226,8 +226,11 @@ test("S1-3: endActiveCall nutzt fuer den Ergebnisabruf EL_ABORT_RESULT_FETCH_TIM
   );
   assert.deepEqual(
     timeoutCalls,
-    [EL_ABORT_RESULT_FETCH_TIMEOUT_MS, REQUEST_TIMEOUT_MS],
-    "GET (Ergebnisabruf) nutzt die kurze Abbruch-Frist, DELETE (Loeschversuch) bleibt beim Bestandswert",
+    [EL_ABORT_PROVIDER_TIMEOUT_MS, EL_ABORT_PROVIDER_TIMEOUT_MS],
+    // S1-C (17.08.2026): hier stand [kurz, REQUEST_TIMEOUT_MS] - genau der Defekt. Der
+    // DELETE wird AWAITED, seine 120s addierten sich also auf die 10s des GET: der Abbruch
+    // konnte 130 Sekunden haengen, waehrend der Kommentar "hoechstens 10s" versprach.
+    "BEIDE Anbieter-Aufrufe des Abbruch-Pfades (GET Ergebnisabruf, DELETE Loeschversuch) nutzen die kurze Abbruch-Frist",
   );
 });
 
@@ -262,7 +265,10 @@ test("S1-1: fehlendes metadata.call_duration_secs loggt LAUT auf Fehlerebene (gr
   assert.ok(
     errorLines.some(
       (line) =>
-        line.includes("Buchungsanker unklar") &&
+        // S1-B (17.08.2026): der Marker hiess "Buchungsanker unklar" und deckte nur den
+        // unklaren Fall ab; er gilt jetzt fuer JEDEN Ausgang ohne Anbieter-Dauer (auch die
+        // belegte Nicht-Rufannahme), und der GRUND unterscheidet die Faelle.
+        line.includes("Buchungsanker ohne Anbieter-Dauer") &&
         line.includes(call.id) &&
         line.includes("call_duration_secs_unusable"),
     ),

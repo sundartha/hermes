@@ -54,10 +54,40 @@ const FINISHED_PROVIDER_STATUS = Object.freeze([PROVIDER_DONE, PROVIDER_FAILED])
 const CALL_COMPLETED = "completed";
 const CALL_FAILED = "failed";
 
+// Der EINE Anbieter-Status, bei dem das Gespraech nachweislich noch LAEUFT. GEMESSEN
+// (tasks/spike1-messung.jsonl, "in-progress-felder", conv_8801kzzs612ffneskmr32gmsb33t: 60
+// Abfragen im 5-Sekunden-Takt): waehrend status="in-progress" bleibt metadata.
+// call_duration_secs ueber 59 Vergleiche hinweg 0 und das Transkript leer - die REST-Sicht
+// ist waehrend des Gespraechs tot und wird erst beim Uebergang auf "processing" auf einen
+// Schlag befuellt. Eine 0 unter DIESEM Status heisst deshalb "noch nicht bekannt", NICHT
+// "niemand hat abgenommen" (s. answeredAnchorOutcome).
+//
+// BEWUSST EINZELN statt "alles ausser done/failed gilt als laufend": nur fuer diesen einen
+// Status ist die nichtssagende 0 gemessen. Jeder andere Status behaelt sein Bestandsverhalten
+// - und die sichere Seite dieser Frage ist "nicht abgenommen", nicht "laeuft noch": eine
+// faelschlich als laufend gewertete Nicht-Rufannahme wuerde dem Kunden eine Klingelphase in
+// Rechnung stellen, und das verbietet die Eigentuemer-Auflage ("lieber eine Minute zu wenig
+// als eine erfundene"). Die Poll-Schleife (FINISHED_PROVIDER_STATUS oben) beantwortet eine
+// ANDERE Frage ("weiter abholen?") und faellt deshalb auf die andere sichere Seite.
+const PROVIDER_IN_PROGRESS = "in-progress";
+
 // KS-EL1 (Owner-Entscheidung, s. Modul-Kopf): der GRUND, wenn metadata.call_duration_secs
 // beim Abgleich (answeredAnchorOutcome) weder 0 noch eine positive Zahl ist (fehlt, NaN,
 // negativ, falscher Typ) - additiv am Call, s. store/state-ops.js recordAnsweredUnclearReason.
 const ANSWERED_UNCLEAR_REASON = "call_duration_secs_unusable";
+
+// S1-B (unabhaengige Durchsicht 17.08.2026): "Dauer 0" ist NICHT EIN Sachverhalt, sondern
+// ZWEI - und sie auf dasselbe Ergebnis fallen zu lassen war der Defekt (Repo-Lehre "nie zwei
+// Sachverhalte auf ein Label"):
+//   BEENDETES Gespraech, Dauer 0  -> niemand hat abgenommen. Bekannt, kein Anker.
+//   LAUFENDES Gespraech, Dauer 0  -> die Dauer ist zum Lesezeitpunkt schlicht unbekannt
+//                                    (gemessen, s. PROVIDER_IN_PROGRESS). Der Anker bleibt
+//                                    stehen, wie er ist.
+// Beide Gruende landen im selben additiven Feld (answeredUnclearReason) wie die Bestandswerte
+// - unterscheidbar an ihrem Wert, sichtbar ueber GET /api/calls/{id} (store/views.js#
+// publicCall streicht das Feld NICHT).
+const ANSWERED_REASON_NOT_ANSWERED = "call_duration_secs_zero_not_answered";
+const ANSWERED_REASON_CONVERSATION_RUNNING = "call_duration_secs_unknown_conversation_in_progress";
 
 // TEIL 1 (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2 - "der Poll unterscheidet
 // dauerhaft von voruebergehend"): HTTP-Status des Ergebnisabrufs, bei denen Weiterpollen
@@ -112,20 +142,48 @@ const ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR = "poll_permanent_provider_error";
 // api-calls.js), damit N dort KEINE Magic Number ist.
 export const ELEVENLABS_PROVIDER_MAX_DURATION_S = 600;
 
+// S1-A (unabhaengige Durchsicht 17.08.2026): auf DIESEM Weg ist der Anbieter-Deckel eine
+// HARTE OBERGRENZE, kein Default. classifyCallTime/cappedEndedAtMs rechnen eine Ebene
+// tiefer (call.maxDurationS || defaultMaxDurationS) - der hereingereichte Deckel wirkt dort
+// also NUR fuer Anrufe OHNE eigene Frist, und die gibt es hier nicht: routes/api-calls.js
+// setzt maxDurationS bei JEDEM Anruf (an einem echten Anruf vom 17.08.2026 gemessen: 1800).
+// AUSFALLWEG ohne diese Kappung: der Anbieter legt bei 600 s auf, unser Ergebnisabruf
+// liefert dauerhaft 5xx - der Poll laeuft bis 1800 s, cappedEndedAtMs stempelt
+// endedAt = answeredAt + 1800 s, und voiceMinutesOf (billing/metering.js) bucht 30 statt 10
+// Minuten; bei 30 ct/min 9,00 statt 3,00 EUR, jedes Mal. Die wirksame Grenze ist deshalb das
+// MINIMUM aus der anrufeigenen Frist und dem Anbieter-Deckel.
+//
+// WARUM EINE KOPIE DES DATENSATZES und nicht ein Eingriff in callLimitMs/classifyCallTime/
+// cappedEndedAtMs: die drei sind mit dem TELNYX-Weg geteilt (telephony/call-lifecycle.js,
+// telephony/reattach.js, routes/voice.js), und dort ist "call-eigene Frist schlaegt Default"
+// RICHTIG - dort gibt es keinen fremden Deckel, der frueher bindet. Die Kappung bleibt
+// deshalb hier, wo der Anbieter-Deckel besessen ist; die geteilten Funktionen bleiben
+// unangetastet (sie LESEN den Datensatz nur, sie mutieren ihn nicht - die Kopie ist
+// gefahrlos und verlaesst diese Datei nicht).
+function callUnderProviderCap(call) {
+  const eigeneFrist = call.maxDurationS || ELEVENLABS_PROVIDER_MAX_DURATION_S;
+  return { ...call, maxDurationS: Math.min(eigeneFrist, ELEVENLABS_PROVIDER_MAX_DURATION_S) };
+}
+
 // S1-3 (Owner-Auftrag 15.08.2026, "der Notaus haengt zwei Minuten"): eigene, KURZE Frist
-// fuer den Ergebnisabruf im ABBRUCH-Pfad (endActiveCall, s.u.) - dem Max-Dauer-Cap UND
-// cancel_call. terminateAndBillCall WARTET synchron auf diesen Abruf (die Reihenfolge
+// fuer BEIDE Anbieter-Aufrufe des ABBRUCH-Pfades (endActiveCall, s.u.) - dem Max-Dauer-Cap
+// UND cancel_call. terminateAndBillCall WARTET synchron auf sie (die Reihenfolge
 // Abruf-vor-Loeschversuch bleibt, sie rettet Transkript und Buchungsanker); ohne eigene
 // Frist blockiert ein stummer Anbieter Kappung UND cancel_call ueber das volle
 // convai.js#REQUEST_TIMEOUT_MS (120000ms - bemessen fuer die SIP-Klingelphase des
-// AnrufSTARTS, nicht fuer diesen reinen Metadaten-GET) und verzoegert die Buchung sowie
-// den einzigen Leitungs-Stopp-Versuch um dieselbe Zeit. 10000ms sind ein Zehntel des
+// AnrufSTARTS, nicht fuer einen Metadaten-GET oder einen DELETE) und verzoegert die Buchung
+// sowie den einzigen Leitungs-Stopp-Versuch um dieselbe Zeit. 10000ms sind ein Zehntel des
 // Bestandswerts: grosszuegig genug fuer eine normale Anbieter-Antwort (im Alltag
 // Millisekunden, kein SIP-Warten), kurz genug, dass ein stummer Anbieter Kappung/
-// cancel_call hoechstens 10s statt 2 Minuten haelt. Der Loeschversuch (endConversation)
-// laeuft danach IN JEDEM FALL - auch wenn diese Frist ablaeuft (fetchConversationSoft
-// faengt den Abbruch fail-soft ab, s. dort).
-export const EL_ABORT_RESULT_FETCH_TIMEOUT_MS = 10000;
+// cancel_call hoechstens 10s statt 2 Minuten haelt.
+//
+// S1-C (unabhaengige Durchsicht 17.08.2026): der Name sagt PROVIDER, nicht RESULT_FETCH,
+// weil die Frist seither BEIDE Aufrufe deckt. Vorher galt sie nur fuer den GET - der
+// awaitete DELETE dahinter lief weiter in die 120 s, und der Abbruch konnte damit 130
+// Sekunden haengen, waehrend der Kommentar hier "hoechstens 10 s" versprach. Der
+// Loeschversuch (endConversation) laeuft weiterhin IN JEDEM FALL, auch wenn die Frist des
+// Ergebnisabrufs ablaeuft (fetchConversationSoft faengt den Abbruch fail-soft ab, s. dort).
+export const EL_ABORT_PROVIDER_TIMEOUT_MS = 10000;
 
 // Rollen: der Anbieter kennt "agent" und "user", unser Transkript "agent" und "caller".
 // Alles, was nicht der Agent ist, ist die Gegenstelle - ein unbekannter Rollenname darf
@@ -282,9 +340,19 @@ const objectiveAchievedOf = (conversation) =>
 //                           metering.js) rundet danach exakt ceil(Dauer/60) - die Minuten
 //                           des Anbieters, OHNE dass diese Funktion voiceMinutesOf kennt
 //                           oder anfasst.
-//   0                    -> NIEMAND hat abgenommen: kein Anker, KEIN Grund - das ist
-//                           bekannt, nicht unklar. Lieber eine Minute zu wenig als eine
-//                           erfundene (der Kern dieser Aenderung).
+//   0, Gespraech vorbei  -> NIEMAND hat abgenommen: Anker weg. Bekannt, nicht unklar - aber
+//                           seit S1-B mit GRUND und Log, weil auch dieser Fall NICHT bucht
+//                           und ein nicht buchender Anruf nie still bleiben darf.
+//                           Lieber eine Minute zu wenig als eine erfundene.
+//   0, Gespraech laeuft  -> die Dauer ist zum Lesezeitpunkt unbekannt (gemessen, s.
+//                           PROVIDER_IN_PROGRESS) - der bestehende Anker BLEIBT UNANGETASTET
+//                           (keepExistingAnchor). S1-B: ein cancel_call nach vier Minuten
+//                           Gespraech loeschte hier bisher den Buchungsanker und buchte 0
+//                           Minuten, waehrend wir Anbieter und Carrier voll zahlen - und der
+//                           Beleg war 0,3 s spaeter beim Anbieter geloescht (DELETE). Es
+//                           wird KEINE Dauer erfunden: stehen bleibt allein der eigene
+//                           Verbindungsstempel (markAnswered), derselbe Anker, mit dem jeder
+//                           Telnyx-Anruf abgerechnet wird.
 //   fehlend/unbrauchbar  -> kein Anker, PLUS der Grund (ANSWERED_UNCLEAR_REASON): anders
 //                           als bei 0 steht hier NICHT fest, ob abgenommen wurde. S2
 //                           (Owner-Auftrag 15.08.2026): "unbrauchbar" deckt NICHT nur
@@ -295,16 +363,30 @@ const objectiveAchievedOf = (conversation) =>
 //                           Buchungspfad. Die Fail-Soft-Zusage des Moduls deckt bisher nur
 //                           den Netzabruf (s. Modul-Kopf), NICHT diese reine Ableitung -
 //                           deshalb beide Werte gemeinsam auf Brauchbarkeit geprueft.
+//
+// Die drei Ausgaenge bekommen je einen eigenen Erzeuger (statt dreimal dasselbe
+// Objektliteral): die Form steht damit an EINER Stelle, und jeder Ausgang traegt einen
+// Namen, statt am Leser als Feld-Kombination haengen zu bleiben (G5/G16).
+const anchorFromProviderDuration = (answeredAtIso) => ({
+  answeredAtIso,
+  unclearReason: null,
+  keepExistingAnchor: false,
+});
+const clearAnchor = (unclearReason) => ({ answeredAtIso: null, unclearReason, keepExistingAnchor: false });
+const keepAnchor = (unclearReason) => ({ answeredAtIso: null, unclearReason, keepExistingAnchor: true });
+
 export function answeredAnchorOutcome(endedAtIso, conversation) {
   const durationSecs = conversation?.metadata?.call_duration_secs;
   const durationUsable =
     typeof durationSecs === "number" && Number.isFinite(durationSecs) && durationSecs > 0;
   const endedAtMs = Date.parse(endedAtIso); // NaN bei fehlendem/kaputtem endedAtIso (S2)
-  if (durationUsable && Number.isFinite(endedAtMs)) {
-    const answeredAtMs = endedAtMs - durationSecs * MS_PER_SECOND;
-    return { answeredAtIso: new Date(answeredAtMs).toISOString(), unclearReason: null };
-  }
-  return { answeredAtIso: null, unclearReason: durationSecs === 0 ? null : ANSWERED_UNCLEAR_REASON };
+  if (durationUsable && Number.isFinite(endedAtMs))
+    return anchorFromProviderDuration(new Date(endedAtMs - durationSecs * MS_PER_SECOND).toISOString());
+  // Reihenfolge bindend: ERST fragen, ob das Gespraech ueberhaupt schon vorbei ist. Eine
+  // brauchbare Dauer (oben) schlaegt die Frage, alles darunter haengt an ihr.
+  if (conversation?.status === PROVIDER_IN_PROGRESS) return keepAnchor(ANSWERED_REASON_CONVERSATION_RUNNING);
+  if (durationSecs === 0) return clearAnchor(ANSWERED_REASON_NOT_ANSWERED);
+  return clearAnchor(ANSWERED_UNCLEAR_REASON);
 }
 
 // Nur Zeilen mit gesprochenem Inhalt: der Anbieter fuehrt auch Werkzeug-Ereignisse im
@@ -615,8 +697,9 @@ function startCallBody({ el, call, ownerName, time, locale }) {
 // pollConversationResult in makeElevenLabsOutbound). MODUL-EBENE statt Factory-Closure
 // (haelt makeElevenLabsOutbound unter der Zeilengrenze, G30) - alle Abhaengigkeiten reisen
 // als EIN Objekt (F1). Derselbe Terminierungs-Ablauf wie terminateActiveCall (telephony/
-// call-lifecycle.js) fuer EINEN EL-Call, nur mit dem ANBIETER-Deckel als gekapptem
-// Ende-Anker statt der Plattform-Max-Dauer: endActiveCall (Factory-Funktion, s.u.)
+// call-lifecycle.js) fuer EINEN EL-Call, nur mit dem ANBIETER-Deckel als HARTER Obergrenze
+// des gekappten Ende-Ankers (callUnderProviderCap, S1-A: das MINIMUM aus anrufeigener Frist
+// und Anbieter-Deckel, nie die volle Plattform-Max-Dauer): endActiveCall (Factory-Funktion, s.u.)
 // uebernimmt den Ergebnisabruf-dann-Loeschversuch bereits selbst (fail-soft) - erreicht er
 // den Anbieter doch noch, holt er die ECHTEN Werte (Transkript/Zusammenfassung/
 // Buchungsanker) nach, statt dass dieser Zweig sie sich ausdenkt. persistEnd laeuft VOR
@@ -638,7 +721,7 @@ async function finishWithoutProviderResult({
   const call = store.getCall(callId);
   if (!call) return;
   const endedAtIso = new Date(
-    cappedEndedAtMs(call, nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S),
+    cappedEndedAtMs(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S),
   ).toISOString();
   await terminateAndBillCall({
     persistEnd: () => store.setCallEndedAt(callId, CALL_FAILED, endedAtIso),
@@ -658,17 +741,41 @@ async function finishExpiredPoll(deps) {
 // selbstgebaute Defekt aus dem Modul-Kopf (ein danach noch armierter Poll bzw. der
 // Boot-Re-Arm liefe sonst bis zur Poll-Obergrenze gegen dasselbe 404). Der Aufrufer
 // (pollConversationResult) ruft diese Funktion erst NACH Erreichen der Schwelle - hier
-// selbst gibt es keine Zaehlung mehr zu pruefen. applyAnsweredAnchor (deps,
-// Closure-Funktion wie endActiveCall) loescht den vorlaeufigen Verbindungs-Stempel
-// (answeredAt=null, S1-1-Richtung "im Zweifel GAR NICHTS") und vermerkt den Grund - wir
-// haben nie ein metadata.call_duration_secs gesehen, der provisorische Stempel darf nicht
-// als Buchungsanker stehen bleiben.
+// selbst gibt es keine Zaehlung mehr zu pruefen. applyAnsweredAnchor loescht den
+// vorlaeufigen Verbindungs-Stempel (answeredAt=null, S1-1-Richtung "im Zweifel GAR NICHTS")
+// und vermerkt den Grund - wir haben nie ein metadata.call_duration_secs gesehen, der
+// provisorische Stempel darf nicht als Buchungsanker stehen bleiben.
 async function finishOnPermanentError(deps) {
-  deps.applyAnsweredAnchor(deps.callId, {
-    answeredAtIso: null,
-    unclearReason: ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR,
-  });
+  applyAnsweredAnchor(deps.store, deps.callId, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR));
   await finishWithoutProviderResult(deps);
+}
+
+// S1-1 Fix (Owner-Auftrag 15.08.2026, stiller Totalausfall): das Nachziehen des
+// Buchungsankers ist an ALLEN Terminierungswegen woertlich dieselben drei Schritte (G5) -
+// hier EINMAL statt dreimal dupliziert. MODUL-EBENE aus demselben Grund wie
+// finishWithoutProviderResult daneben (G30, haelt makeElevenLabsOutbound unter der
+// Zeilengrenze); der store reist als erstes Argument, wie bei jedem anderen Helfer hier.
+//
+// Der unklare Fall (anchor.unclearReason gesetzt) landete bisher NUR im Store und war damit
+// STUMM: faellt metadata.call_duration_secs beim Anbieter weg oder wird umbenannt, traefe das
+// JEDEN EL-Anruf, waehrend wir voll zahlen - und niemand saehe es, ohne gezielt in den
+// Datensaetzen zu suchen. Fehlerebene-Log mit greifbarem, grep-faehigem Marker
+// ("Buchungsanker ohne Anbieter-Dauer"), callId + Grund - KEINE Rufnummer (Regel 4/5,
+// dieselbe Zurueckhaltung wie im Fehlerlog von fetchConversationOutcome). NICHT-Buchen bei
+// Unklarheit bleibt die ausdrueckliche Auflage des Eigentuemers (unveraendert) - nur der
+// Zustand wird laut, statt still zu bleiben.
+//
+// S1-B: JEDER Ausgang ohne Anbieter-Dauer traegt jetzt einen Grund und eine Log-Zeile - auch
+// die belegte Nicht-Rufannahme (Dauer 0), die bisher als einzige stumm blieb, obwohl auch sie
+// nichts bucht. EIN Marker fuer alle (greifbar per grep), der GRUND unterscheidet die Faelle -
+// kein Sammelbegriff, der zwei Sachverhalte auf ein Label zieht. keepExistingAnchor: der
+// vorhandene Anker bleibt stehen, statt auf null gezogen zu werden (laufendes Gespraech, s.
+// answeredAnchorOutcome) - dieser eine Ausgang schreibt den Anker NICHT.
+function applyAnsweredAnchor(store, callId, anchor) {
+  if (!anchor.keepExistingAnchor) store.trueUpAnsweredAt(callId, anchor.answeredAtIso);
+  if (!anchor.unclearReason) return;
+  store.recordAnsweredUnclearReason(callId, anchor.unclearReason);
+  console.error(`[el-outbound] Buchungsanker ohne Anbieter-Dauer (call=${callId}): ${anchor.unclearReason}`);
 }
 
 // MODUL-EBENE aus demselben Grund wie finishWithoutProviderResult (G30, haelt
@@ -788,24 +895,6 @@ export function makeElevenLabsOutbound({
     persistCollectedFields(store, callId, conversation);
   }
 
-  // S1-1 Fix (Owner-Auftrag 15.08.2026, stiller Totalausfall): das Nachziehen des
-  // Buchungsankers ist an BEIDEN Terminierungswegen (Poll-Ergebnis, Abbruch-Pfad) WOERTLICH
-  // dieselben drei Schritte (G5) - hier EINMAL statt zweimal dupliziert. Der unklare Fall
-  // (anchor.unclearReason gesetzt) landete bisher NUR im Store und war damit STUMM: faellt
-  // metadata.call_duration_secs beim Anbieter weg oder wird umbenannt, traefe das JEDEN
-  // EL-Anruf, waehrend wir voll zahlen - und niemand saehe es, ohne gezielt in den
-  // Datensaetzen zu suchen. Fehlerebene-Log mit greifbarem, grep-faehigem Marker
-  // ("Buchungsanker unklar"), callId + Grund - KEINE Rufnummer (Regel 4/5, dieselbe
-  // Zurueckhaltung wie im Fehlerlog von fetchConversationSoft unten). NICHT-Buchen bei
-  // Unklarheit bleibt die ausdrueckliche Auflage des Eigentuemers (unveraendert) - nur der
-  // Zustand wird laut, statt still zu bleiben.
-  function applyAnsweredAnchor(callId, anchor) {
-    store.trueUpAnsweredAt(callId, anchor.answeredAtIso);
-    if (!anchor.unclearReason) return;
-    store.recordAnsweredUnclearReason(callId, anchor.unclearReason);
-    console.error(`[el-outbound] Buchungsanker unklar (call=${callId}): ${anchor.unclearReason}`);
-  }
-
   // Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
   // buchen - so sieht die Buchungskette den fertigen Stand. hangUp bleibt null: es gibt
   // kein eigenes Provider-Leg mehr aufzulegen, das Gespraech ist beim Anbieter bereits
@@ -823,7 +912,7 @@ export function makeElevenLabsOutbound({
   async function finishFromConversation(callId, conversation) {
     persistProviderResult(callId, conversation);
     const ended = store.endCallRecord(callId, endStatusOf(conversation));
-    applyAnsweredAnchor(callId, answeredAnchorOutcome(ended?.endedAt, conversation));
+    applyAnsweredAnchor(store, callId, answeredAnchorOutcome(ended?.endedAt, conversation));
     await terminateAndBillCall({
       persistEnd: () => store.endCallRecord(callId, endStatusOf(conversation)),
       hangUp: null,
@@ -841,7 +930,7 @@ export function makeElevenLabsOutbound({
   // dort) - hier wird nur `settings()` (Closure-Zugriff auf config) eingespeist.
   // timeoutMs optional (S1-3): fehlt er (regulaerer Poll-Takt), greift
   // convai.js#fetchConversation eigener Default (REQUEST_TIMEOUT_MS); der Abbruch-Pfad
-  // (endActiveCall, s.u.) uebergibt EL_ABORT_RESULT_FETCH_TIMEOUT_MS.
+  // (endActiveCall, s.u.) uebergibt EL_ABORT_PROVIDER_TIMEOUT_MS.
   function fetchConversationSoft(conversationId, callId, timeoutMs) {
     return fetchConversationOutcome({ account: settings(), conversationId, callId, timeoutMs });
   }
@@ -854,7 +943,9 @@ export function makeElevenLabsOutbound({
   // Zeit-Einstufung (classifyCallTime, store/state-ops.js) angewandt auf den besessenen
   // Anbieter-Deckel (ELEVENLABS_PROVIDER_MAX_DURATION_S, s. Modul-Kopf): der Anbieter
   // selbst beendet jedes Gespraech spaetestens dort - ein Call, der laenger laeuft, ist
-  // beim Anbieter nachweislich schon vorbei, weiterpollen bringt nichts mehr.
+  // beim Anbieter nachweislich schon vorbei, weiterpollen bringt nichts mehr. Der Deckel
+  // wirkt als HARTE Obergrenze (callUnderProviderCap, S1-A) - ohne diese Kappung gewinnt
+  // die anrufeigene Frist (bis 1800 s), und der Poll liefe bis dorthin weiter.
   //
   // FEHLERKLASSE (TEIL 1, Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2):
   // fetchConversationSoft liefert seit heute KEIN blosses "geklappt oder nicht" mehr,
@@ -889,11 +980,11 @@ export function makeElevenLabsOutbound({
     // aufgibt (Zeit-Obergrenze, dauerhafter Fehler) - haelt diese Funktion unter der
     // Zeilengrenze (G30).
     const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, callId, nowMs };
-    if (classifyCallTime(call, nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired)
+    if (classifyCallTime(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired)
       return finishExpiredPoll(finishDeps);
     const { conversation, permanent } = await fetchConversationSoft(conversationId, callId);
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
-      return finishOnPermanentError({ ...finishDeps, applyAnsweredAnchor });
+      return finishOnPermanentError(finishDeps);
     if (!conversation || !FINISHED_PROVIDER_STATUS.includes(conversation.status))
       return scheduleResultPoll(callId, conversationId);
     await finishFromConversation(callId, conversation);
@@ -916,20 +1007,27 @@ export function makeElevenLabsOutbound({
   // Loeschversuch NICHT auf - ein verpasster Datensatz ist kein Grund, den Versuch
   // aufzugeben. endConversation selbst wirft nie (s. convai.js).
   //
-  // S1-3: der Ergebnisabruf hier bekommt EL_ABORT_RESULT_FETCH_TIMEOUT_MS statt des
-  // convai.js-Defaults (s. Konstante oben) - der Loeschversuch (endConversation) laeuft
-  // UNCONDITIONAL weiter unten, auch wenn diese Frist ablaeuft (fetchConversationSoft faengt
-  // den Abbruch fail-soft ab und liefert null).
+  // S1-3/S1-C: BEIDE Anbieter-Aufrufe hier bekommen EL_ABORT_PROVIDER_TIMEOUT_MS statt des
+  // convai.js-Defaults (s. Konstante oben) - der Ergebnisabruf UND der Loeschversuch. Der
+  // Loeschversuch laeuft UNCONDITIONAL, auch wenn die Frist des Ergebnisabrufs ablaeuft
+  // (fetchConversationSoft faengt den Abbruch fail-soft ab und liefert null); die beiden
+  // Fristen addieren sich im schlimmsten Fall, deshalb muss die zweite genauso kurz sein wie
+  // die erste - sonst haengt der Abbruch 10 s + 2 Minuten.
   async function endActiveCall(callId) {
     const call = store.getCall(callId);
     const conversationId = call?.elevenlabsConversationId;
     if (!conversationId) return;
-    const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_RESULT_FETCH_TIMEOUT_MS);
+    const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
     if (conversation) {
       persistProviderResult(callId, conversation);
-      applyAnsweredAnchor(callId, answeredAnchorOutcome(call.endedAt, conversation));
+      applyAnsweredAnchor(store, callId, answeredAnchorOutcome(call.endedAt, conversation));
     }
-    await endConversation({ fetchImpl: fetch, account: settings(), conversationId });
+    await endConversation({
+      fetchImpl: fetch,
+      account: settings(),
+      conversationId,
+      timeoutMs: EL_ABORT_PROVIDER_TIMEOUT_MS,
+    });
   }
 
   /**

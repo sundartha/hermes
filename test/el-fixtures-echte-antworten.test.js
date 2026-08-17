@@ -131,15 +131,20 @@ test("Fixture FAILED (SIP-404 ungueltiges Ziel): analysis:null ueberlebt, KEIN B
     "unclear",
     "analysis:null -> objectiveAchievedOf faellt auf 'unclear' zurueck, statt zu werfen (Pflicht d)",
   );
-  // call_duration_secs ist GEMESSEN 0 (nicht fehlend/NaN) - das ist der bekannte Fall
-  // "kein Anker, kein Grund" (KS-EL1), NICHT der unklare Fall. Ein 0-Sekunden-Anruf, bei
-  // dem der Ziel-SIP-404 VOR jeder Rufannahme kam, darf nicht wie eine unklare Antwort des
-  // Anbieters behandelt werden - er IST bekannt: es wurde nie abgenommen.
+  // call_duration_secs ist GEMESSEN 0 (nicht fehlend/NaN) bei einem BEENDETEN Gespraech
+  // (status "failed") - das ist der bekannte Fall "kein Anker" (KS-EL1), NICHT der unklare.
+  // Ein 0-Sekunden-Anruf, bei dem der Ziel-SIP-404 VOR jeder Rufannahme kam, darf nicht wie
+  // eine unklare Antwort des Anbieters behandelt werden - er IST bekannt: es wurde nie
+  // abgenommen.
   assert.equal(captured.answeredAtIso, null, "call_duration_secs=0 -> kein Buchungsanker");
   assert.deepEqual(
     captured.unclearReasons,
-    [],
-    "0 ist der BEKANNTE Fall (niemand hat abgenommen) - kein unclearReason, anders als fehlend/NaN",
+    ["call_duration_secs_zero_not_answered"],
+    // S1-B (17.08.2026): hier stand [] - der Fall war der einzige, der weder Grund noch Log
+    // hinterliess. Er bucht nichts, also traegt er jetzt seinen EIGENEN Grund; verwechselt
+    // wird er mit nichts (fehlend/NaN heisst weiterhin call_duration_secs_unusable, ein
+    // LAUFENDES Gespraech call_duration_secs_unknown_conversation_in_progress).
+    "der bekannte Fall (niemand hat abgenommen) traegt seinen eigenen Grund, nicht den des unklaren Falls",
   );
 });
 

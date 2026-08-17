@@ -221,10 +221,11 @@ export function createCall(
     status: "active", // active | completed | failed | cancelled
     startedAt: new Date().toISOString(),
     answeredAt: null,
-    // KS-EL1: der GRUND, wenn answeredAt NICHT ermittelbar war (elevenlabs/outbound.js,
-    // answeredAnchorOutcome) - additiv nullable, gesetzt NUR wenn der Anbieter-Beleg fehlt
-    // oder unbrauchbar ist (NICHT bei einer belegten Nicht-Rufannahme, s. dort). Initial
-    // null - byte-identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
+    // KS-EL1: der GRUND, wenn der Buchungsanker NICHT aus der Anbieter-Dauer entstand
+    // (elevenlabs/outbound.js, answeredAnchorOutcome) - additiv nullable. S1-B (17.08.2026):
+    // gesetzt bei JEDEM solchen Ausgang, auch bei der belegten Nicht-Rufannahme (frueher der
+    // einzige stille Fall), weil auch sie nichts bucht - der Wert unterscheidet die Faelle.
+    // Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     answeredUnclearReason: null,
     endedAt: null,
     transcript: [],
@@ -503,12 +504,24 @@ export function markAnswered(s, callId) {
 // gelesen von voiceMinutesOf): der Anker NACHZIEHEN, NICHT setzen. Der Stempel am
 // Anrufstart (markAnswered, "jetzt") bleibt fuer den ERSTEN Sachverhalt unveraendert
 // stehen; diese Operation tauscht ihn am Gespraechsende gegen die ECHTE Rufannahme des
-// Anbieters (answeredAtIso, oder null, wenn sie nicht feststeht) - der EINZIGE Aufrufer
-// ist finishFromConversation (elevenlabs/outbound.js), NACHDEM endedAt steht und BEVOR
-// gebucht wird. Anders als setOnceTimestamp/markAnswered bewusst KEIN set-once: hier wird
-// ein VORLAEUFIGER Wert korrigiert, kein leeres Feld erstmalig befuellt. changed
-// unbedingt true (Muster recordProviderCallResult) - genau ein Schreiber, genau einmal je
-// Call, ein no-op-Aufruf mit demselben Wert gibt es auf diesem Weg nicht.
+// Anbieters (answeredAtIso, oder null, wenn sie nicht feststeht), NACHDEM endedAt steht und
+// BEVOR gebucht wird. Anders als setOnceTimestamp/markAnswered bewusst KEIN set-once: hier
+// wird ein VORLAEUFIGER Wert korrigiert, kein leeres Feld erstmalig befuellt.
+//
+// KORREKTUR 17.08.2026 (unabhaengige Durchsicht): hier stand "der EINZIGE Aufrufer ist
+// finishFromConversation ... genau ein Schreiber, genau einmal je Call". Das war schon vor
+// dieser Korrektur falsch - geschrieben wird ueber elevenlabs/outbound.js#applyAnsweredAnchor
+// aus DREI Pfaden: dem Poll-Ergebnis (finishFromConversation), dem Abbruch-/Kappungs-Pfad
+// (endActiveCall) und dem dauerhaften Abruf-Fehler (finishOnPermanentError). Ein Call kann
+// die Funktion damit MEHRFACH sehen (z.B. Poll gibt auf -> terminateAndBillCall -> hangUp ->
+// endActiveCall holt das Ergebnis doch noch).
+//
+// changed unbedingt true TRAEGT das trotzdem (Muster recordProviderCallResult), denn es
+// heisst nicht "es gibt nur einen Schreiber", sondern "es WURDE geschrieben, also
+// persistieren": die Zuweisung findet bei jedem Aufruf mit existierendem Call statt, ein
+// zweiter Aufruf ueberschreibt bewusst (LETZTE Erkenntnis gewinnt - der spaetere Pfad hat
+// den frischeren Anbieter-Stand), und ein fehlender Call liefert weiterhin changed:false.
+// Ein zusaetzliches Speichern bei gleichem Wert ist folgenlos.
 // Zustand ausgeschrieben (state statt s): eine neue einbuchstabige Kennung haette die
 // bestehende, im Bestand eingefrorene id-length-Ausnahme dieser Datei ueberschritten
 // (eslint-suppressions.json: exakter Zaehler, keine Toleranz nach oben) und damit

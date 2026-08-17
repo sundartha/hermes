@@ -76,9 +76,14 @@ test("KS-EL1: Dauer 0 -> answeredAt faellt auf null, NICHTS wird gebucht (Regres
   call.answeredAt = STALE_DIAL_TIME_STAMP;
   call.endedAt = ENDED_AT;
 
-  const outcome = answeredAnchorOutcome(ENDED_AT, { metadata: { call_duration_secs: 0 } });
+  const outcome = answeredAnchorOutcome(ENDED_AT, { status: "done", metadata: { call_duration_secs: 0 } });
   assert.equal(outcome.answeredAtIso, null);
-  assert.equal(outcome.unclearReason, null, "0 ist eine bekannte Tatsache (niemand hat abgenommen), kein unklarer Fall");
+  // S1-B (17.08.2026): frueher trug dieser Fall als EINZIGER gar keinen Grund - und blieb
+  // damit still, obwohl auch er nichts bucht. Er traegt jetzt seinen EIGENEN Grund (nicht
+  // den des unklaren Falls): "niemand hat abgenommen" bleibt eine bekannte Tatsache, sie
+  // wird nur nicht mehr verschwiegen.
+  assert.equal(outcome.unclearReason, "call_duration_secs_zero_not_answered");
+  assert.equal(outcome.keepExistingAnchor, false, "ein beendetes Gespraech ohne Rufannahme behaelt keinen Anker");
 
   trueUpAnsweredAt(state, call.id, outcome.answeredAtIso);
 

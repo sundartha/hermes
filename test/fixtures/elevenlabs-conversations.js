@@ -137,6 +137,31 @@ export const CONVERSATION_DONE_WITH_ANALYSIS = Object.freeze({
   }),
 });
 
+// IN-PROGRESS: der Stand, den GET waehrend eines LAUFENDEN Gespraechs liefert. Die drei
+// Felder, auf die es hier ankommt, sind GEMESSEN (tasks/spike1-messung.jsonl, Zeile "art":
+// "in-progress-felder", conv_8801kzzs612ffneskmr32gmsb33t: 60 Abfragen im 5-Sekunden-Takt
+// ueber 5 Minuten, 59 Vergleiche, NULL Pfad-Aenderungen): status bleibt "in-progress",
+// metadata.call_duration_secs bleibt 0, transcript bleibt leer. Der Befund dort woertlich:
+// "Die REST-Sicht ist waehrend des Gespraechs tot"; erst beim Uebergang auf "processing"
+// erscheinen 59 Pfade auf einen Schlag.
+//
+// AUSGEDACHT ist alles UEBRIGE an dieser Fixture: der volle GET-Rumpf dieses Gespraechs wurde
+// nicht aufgezeichnet, nur die Pfad-Vergleichsliste. `analysis: null` folgt der Form der
+// beiden echten Funde oben (ohne Abschluss keine Analyse) und ist fuer DIESE Kennung nicht
+// direkt gemessen; die Kennung selbst stammt aus der Messung. Kein Feld hier behauptet mehr,
+// als der Fund hergibt - gebraucht wird die Fixture fuer genau eine Frage: eine 0 unter
+// status "in-progress" heisst "noch nicht bekannt", nicht "niemand hat abgenommen"
+// (s. elevenlabs/outbound.js#answeredAnchorOutcome).
+export const CONVERSATION_IN_PROGRESS = Object.freeze({
+  conversation_id: "conv_8801kzzs612ffneskmr32gmsb33t",
+  status: "in-progress", // gemessen, woertlich
+  transcript: Object.freeze([]), // gemessen: bleibt leer, solange das Gespraech laeuft
+  analysis: null, // AUSGEDACHT, s. Kommentar oben
+  metadata: Object.freeze({
+    call_duration_secs: 0, // gemessen: bleibt 0 ueber die gesamte Laufzeit
+  }),
+});
+
 // AUSGEDACHT (ABNAHME-D1, TEIL 2/3): KEIN gemessener Fund - analysis.data_collection_results
 // wurde bislang NIRGENDS aufgezeichnet (Modul-Kopf oben: "kein Code hier liest sie" galt VOR
 // diesem Paket). Diese Fixture bildet die FORM nach, die das ElevenLabs-OpenAPI-Schema dafuer

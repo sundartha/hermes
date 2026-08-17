@@ -43,10 +43,11 @@ const API_KEY_HEADER = "xi-api-key";
 // weiterhin ein Vielfaches unter der Max-Gespraechsdauer (1800 s): ein stummer Anbieter
 // kann einen Aufrufer damit nie ueber ein ganzes Gespraech haengen lassen.
 //
-// Bleibt der DEFAULT fuer jeden Aufruf, der keine eigene Frist mitbringt (Anrufstart,
-// Loeschversuch, der regulaere Poll-Takt). Exportiert, damit ein kuerzerer Override
-// (s. timeoutMs unten, gebraucht von elevenlabs/outbound.js#endActiveCall, S1-3) sich
-// gegen DIESEN Wert bezeugen laesst, statt eine zweite Zahl zu raten.
+// Bleibt der DEFAULT fuer jeden Aufruf, der keine eigene Frist mitbringt (Anrufstart, der
+// regulaere Poll-Takt). Exportiert, damit ein kuerzerer Override (s. timeoutMs unten,
+// gebraucht von elevenlabs/outbound.js#endActiveCall fuer BEIDE Anbieter-Aufrufe des
+// Abbruch-Pfades - Ergebnisabruf UND Loeschversuch, S1-C) sich gegen DIESEN Wert bezeugen
+// laesst, statt eine zweite Zahl zu raten.
 export const REQUEST_TIMEOUT_MS = 120000;
 
 // Wirft MIT Status: routes/api-calls.js unterscheidet daran die Anbieter-Ablehnung (502)
@@ -188,17 +189,28 @@ export function fetchConversation({ fetchImpl, account, conversationId, timeoutM
  * OB das die Leitung tatsaechlich kappt, ist NICHT belegt (s. Modul-Kopf des Aufrufers,
  * elevenlabs/outbound.js) - diese Funktion beantwortet nur "hat der Anbieter den DELETE-
  * Aufruf angenommen", nicht "ist das Gespraech vorbei".
- * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, conversationId: string}} args
+ *
+ * timeoutMs optional (S1-C): Default REQUEST_TIMEOUT_MS. Der ABBRUCH-Pfad (elevenlabs/
+ * outbound.js#endActiveCall) uebergibt seine eigene, kurze Frist - der Aufrufer WARTET auf
+ * diesen DELETE (er ist der hangUp-Thunk von terminateAndBillCall), und mit dem Bestandswert
+ * haengt ein stummer Anbieter Kappung UND cancel_call zwei volle Minuten. Die 120 s sind fuer
+ * die SIP-Klingelphase des AnrufSTARTS bemessen (s.o.), nicht fuer diesen Ein-Zeilen-DELETE.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, conversationId: string, timeoutMs?: number}} args
  * @returns {Promise<{accepted: boolean, status: number|null}>}
  */
-export async function endConversation({ fetchImpl, account, conversationId }) {
+export async function endConversation({
+  fetchImpl,
+  account,
+  conversationId,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+}) {
   try {
     const res = await fetchImpl(
       `${account.apiBase}${CONVERSATION_PATH}${encodeURIComponent(conversationId)}`,
       {
         method: "DELETE",
         headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       },
     );
     return { accepted: res.ok, status: res.status };

@@ -18,9 +18,13 @@
 // 15.08.2026 ECHT gemessen, ihre Rohantworten lagen aber nur im Scratchpad der
 // Mess-Sitzung und NIE im Repo (s. Modulkopf des Fixture-Moduls) - fuer sie gibt es hier
 // nichts zu vergleichen ausser der EINEN Angabe, die auch aufgezeichnet ist: die gewaehlte
-// DID. tasks/spike1-messung.jsonl und tasks/spike1b-messung.jsonl tragen ueberhaupt keine
-// Anbieter-Antwort, die dieses Modul abschreibt (sie messen Werkzeug-Wartezeiten und
-// Agenten-Konfiguration) - sie kommen hier deshalb nicht vor.
+// DID. tasks/spike1b-messung.jsonl traegt ueberhaupt keine Anbieter-Antwort, die dieses
+// Modul abschreibt (sie misst Agenten-Konfiguration) - sie kommt hier deshalb nicht vor.
+//
+// ZWEITE Messdatei seit 17.08.2026 (S1-B): tasks/spike1-messung.jsonl, Satz "art":
+// "in-progress-felder". Sie belegt die drei Felder des LAUFENDEN Gespraechs
+// (CONVERSATION_IN_PROGRESS) - der einzige Fund, aus dem hervorgeht, dass eine 0 in
+// metadata.call_duration_secs waehrend des Gespraechs nichts ueber die Rufannahme sagt.
 //
 // Testnamen tragen bewusst KEINE Katalog-/Abnahme-Kennung am Namensanfang (package.json
 // config.i18nCatalogPattern / config.abnahmePattern), sonst landen sie in der falschen
@@ -35,8 +39,10 @@ import {
   CONVERSATION_DONE_WITH_ANALYSIS,
   CONVERSATION_DONE_WITH_DATA_COLLECTION,
   CONVERSATION_FAILED_INVALID_DESTINATION,
+  CONVERSATION_IN_PROGRESS,
 } from "./fixtures/elevenlabs-conversations.js";
 
+const MESSUNG_SPIKE1_URL = new URL("../tasks/spike1-messung.jsonl", import.meta.url);
 const MESSUNG_SPIKE2_URL = new URL("../tasks/spike2-messung.jsonl", import.meta.url);
 const FIXTURE_QUELLE_URL = new URL("./fixtures/elevenlabs-conversations.js", import.meta.url);
 
@@ -52,6 +58,7 @@ function messsaetze(url) {
     .map((zeile) => JSON.parse(zeile));
 }
 
+const SPIKE1 = messsaetze(MESSUNG_SPIKE1_URL);
 const SPIKE2 = messsaetze(MESSUNG_SPIKE2_URL);
 const FIXTURE_QUELLTEXT = readFileSync(FIXTURE_QUELLE_URL, "utf8");
 
@@ -59,6 +66,7 @@ const FIXTURE_QUELLTEXT = readFileSync(FIXTURE_QUELLE_URL, "utf8");
 // Aufzeichnung darf diesen Test nicht verschieben.
 const TESTANRUF_1 = SPIKE2.find((satz) => satz.art === "testanruf" && satz.nr === 1);
 const NUMMERNWAHL = SPIKE2.find((satz) => satz.art === "nummernwahl");
+const IN_PROGRESS_MESSUNG = SPIKE1.find((satz) => satz.art === "in-progress-felder");
 
 // Punktgetrennter Lesepfad - haelt die Tabellen unten datengetrieben und die Zugriffe
 // flach (G36).
@@ -184,6 +192,53 @@ test("Fixture-Abgleich: die agent_number der beiden 15.08.-Funde ist die maskier
       `${fund.conversation_id}: die Fixture nennt einen anderen Absender als die Aufzeichnung (${NUMMERNWAHL.gewaehlte_did}, maskiert)`,
     );
   }
+});
+
+// ---- Der IN-PROGRESS-Fund: drei Felder, EINE Messung (S1-B) ---------------------------
+// Der volle GET-Rumpf des laufenden Gespraechs wurde nicht mitgeschrieben, wohl aber der
+// Befund ueber genau die drei Felder, auf die es ankommt. Der Befundsatz IST hier die
+// Aufzeichnung - deshalb wird gegen ihn abgeglichen, statt die Werte nur zu behaupten.
+const IN_PROGRESS_BELEGE = Object.freeze([
+  Object.freeze({ pfad: "status", wert: "in-progress", muster: /status bleibt 'in-progress'/ }),
+  Object.freeze({
+    pfad: "metadata.call_duration_secs",
+    wert: 0,
+    muster: /metadata\.call_duration_secs bleibt 0/,
+  }),
+  Object.freeze({ pfad: "transcript", wert: [], muster: /transcript bleibt leer/ }),
+]);
+
+test("Fixture-Abgleich: die drei Felder des IN-PROGRESS-Fundes stehen so in tasks/spike1-messung.jsonl", () => {
+  assert.ok(IN_PROGRESS_MESSUNG, "Aufzeichnung ohne Satz 'in-progress-felder' - die Quelle dieses Fundes fehlt");
+  assert.equal(IN_PROGRESS_MESSUNG.gemessen, true, "der Satz beansprucht selbst nicht, gemessen zu sein");
+  assert.equal(
+    CONVERSATION_IN_PROGRESS.conversation_id,
+    IN_PROGRESS_MESSUNG.conversation,
+    "die Fixture traegt eine andere Kennung als die Messung, aus der sie stammt",
+  );
+  assert.deepEqual(
+    IN_PROGRESS_MESSUNG.geaendert_waehrend_in_progress,
+    [],
+    "die Messung belegt nicht mehr, dass sich waehrend in-progress KEIN Feld aendert - dann traegt die Fixture keine Herkunft mehr",
+  );
+  for (const { pfad, wert, muster } of IN_PROGRESS_BELEGE) {
+    assert.match(
+      IN_PROGRESS_MESSUNG.befund,
+      muster,
+      `die Messung belegt '${pfad}' nicht mehr - die Aufzeichnung ist das Original, also ist die FIXTURE falsch`,
+    );
+    assert.deepEqual(wertAn(CONVERSATION_IN_PROGRESS, pfad), wert, `Fixture ${pfad} weicht von der Messung ab`);
+  }
+});
+
+test("Fixture-Abgleich: was die IN-PROGRESS-Messung nicht hergibt (analysis), ist als ausgedacht gekennzeichnet", () => {
+  const quelltext = exportQuelltext("CONVERSATION_IN_PROGRESS");
+  assert.ok(quelltext.zeilen.length, "Export CONVERSATION_IN_PROGRESS im Fixture-Modul nicht gefunden");
+  assert.match(
+    feldZeile(quelltext, "analysis") ?? "",
+    AUSGEDACHT_MARKER,
+    "analysis ist fuer diese Kennung nicht gemessen, aber im Fixture-Modul nicht als ausgedacht gekennzeichnet",
+  );
 });
 
 test("Fixture-Abgleich: der vollstaendig erfundene data_collection-Fund ist als erfunden erkennbar", () => {
