@@ -3088,3 +3088,76 @@ Aufbewahrung (`retention_days = -1`) und Mitschnitt (`record_voice = true`) steh
 Stand der Eigentuemer-Entscheidung vom 15.08. Beide sind im Push-Kommando **gesperrt** (nicht nennbar,
 Abbruch vor jedem Netzzugriff) und bleiben im Drift-Lauf sichtbar rot. Der 90-Tage-Riegel an der Ausnahme
 erzwingt, dass die Entscheidung nicht unbefristet gruen durchgeht.
+
+## EL-P6 — der Rueckfragekanal am echten Anruf gemessen (2026-08-18)
+
+EL-P5 schloss mit dem Satz "WAS OFFEN BLEIBT: ob ElevenLabs den Header aus dem Konto-Secret wirklich
+mitschickt. Das misst nur der Anruf." Der Anruf ist gelaufen (`call_msyexvu3q5r9`,
+`conv_3701m0a0fxnzen79mjd8qfcp6k00`). Drei sicherheitsrelevante Ergebnisse.
+
+### 1. Das geteilte Geheimnis TRAEGT — erstmals am echten Aufruf belegt
+
+Der Agent rief `get_consult` zweimal. Beide Aufrufe kamen an und passierten **Schritt 1**; sie starben erst
+an Schritt 2 (`grund=kein_laufender_anruf`, nicht `grund=token`). Da die Reihenfolge der Sicherungen bindend
+ist, ist damit bewiesen: der Anbieter sendet den Header aus dem Workspace-Secret wirklich mit, und
+`safeEqual` gegen `ELEVENLABS_TOOL_TOKEN` gibt ihn frei. Der Anbieter-Datensatz fuehrt ihn als
+`headers: {"x-hermes-tool-token":"<REDACTED>"}` — **er protokolliert den Wert nicht**, was fuer uns die
+bessere Nachricht ist.
+
+### 2. Die Bindung war GEBROCHEN — und der Grund entwertet die Kettenprobe vom 17.08.
+
+Der Koerper, den ein ElevenLabs-**Webhook**-Werkzeug sendet, live gemessen:
+```
+{"question": "The workshop is asking for the car's make, model, and year …"}
+```
+**Kein `conversation_id`, kein `parameters`-Umschlag.** Beides hatte der Handler erwartet; die Annahme
+stammte aus `agents/references/client-tools.md`, dem Abschnitt fuer **CLIENT**-Tools.
+
+Sicherheitsrelevant ist daran weniger der Ausfall (fail-closed hat gehalten: der unbindbare Aufruf wurde
+mit 404 abgewiesen, es entstand kein Datensatz) als die **Beweislage**: die am 17.08. protokollierte Kette
+(403/403/404/404) sah aus wie eine Positiv-Kontrolle und war keine. Fall 3 ("richtiger Token -> 404
+kein_laufender_anruf") galt als Beleg "das Geheimnis wurde AKZEPTIERT und der Lauf faellt erst an der
+naechsten Sicherung" — er war in Wahrheit derselbe Fehlschlag, den der echte Anruf zeigte, nur mit einem
+selbstgeschriebenen Koerper erzeugt. **Eine selbstgebaute Nutzlast beweist die Form eines fremden Vertrags
+nicht.** Das gilt ueber diesen Fall hinaus fuer jede Webhook-Absicherung in diesem Repo.
+
+**Reparatur (18.08.):** `payloadQuestion` liest die gemessene flache Form; die Pruefung ist dabei
+STRENGER geworden als vorher — der Bestand pruefte nur die Existenz des Umschlags, nie Typ oder Leere von
+`question`. Jetzt: kein String / leer / nur Leerraum -> 400 `keine_frage`, kein Consult. Kein Doppelweg
+("von hier ODER von da"), die alte Umschlag-Form wird ab sofort ABGELEHNT. Reihenfolge der Sicherungen,
+Schritt 2 und die inhaltsfreie Log-Zeile unveraendert. Rotprobe gefahren: alte Lesart zurueckgedreht ->
+genau der Positiv-Fall und der Umschlag-Fall werden rot, die reinen Fail-closed-Faelle bleiben gruen (sie
+unterscheiden die Leserichtung nicht).
+
+Die Gegenseite — `conversation_id` als Body-Parameter aus `system__conversation_id` — ist
+Anbieter-Konfiguration und wird getrennt gesetzt. **Bis dahin ist der Kanal weiterhin wirkungslos**, aber
+fail-closed wirkungslos.
+
+### 3. Die Offenlegung ist zur Laufzeit NICHT garantiert (Art. 50 EU AI Act)
+
+Am selben Anruf gemessen:
+```
+original_message: "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Antonio Fotiadis. …"
+message:          "Guten Tag, hier spricht ein KI-Assistent im Auftrag von ..."
+interrupted:      true
+```
+Der Angerufene hat Auftraggeber-Namen und Zusammenfassungs-Hinweis **nie gehoert**. Ausloeser war ein
+Phantom-Turn des ASR bei 3 s. Ein Anruf zuvor lief bei identischer Konfiguration vollstaendig durch.
+
+**Absolute Regel 2 sichert den WORTLAUT, nicht die ZUSTELLUNG.** Alle drei bestehenden Sicherungen (Test
+gegen `locales.js`, Drift-Lauf, Wert-Vergleich am Preset) pruefen, was gespeichert ist — keine kann das
+fangen. Gegenmittel am Anbieter: `disable_first_message_interruptions` (Default false), dazu
+`transcribe_on_disabled_interruptions`, damit waehrend der Offenlegung Gesagtes nicht verloren geht.
+Maschinell pruefbares Rotsignal je Anruf: `transcript[0].interrupted === true`.
+
+### 4. Nebenbefund: die Vertrauensgrenze haelt gegen einen fremden Proxy
+
+Fuer die Messung lief ein cloudflared-Tunnel auf den lokalen Server. Gegenprobe von aussen:
+`GET /healthz` -> 200, `GET /api/state` -> **403**. `isTrustedLocalCaller` verlangt Loopback-Socket UND
+kein `X-Forwarded-For`; cloudflared setzt den Header wie jeder Reverse-Proxy. Damit ist die
+topologie-basierte Grenze erstmals gegen einen ANDEREN Proxy als Render belegt.
+
+**Offen und vorgemerkt:** die Werkzeug-URL steht derzeit auf der Wegwerf-Tunnel-Adresse. Sie MUSS nach der
+Abnahme auf `https://app.sundartha.com/webhooks/elevenlabs/consult` zurueckgedreht werden — eine
+trycloudflare-Adresse am Live-Agenten ist ein Endpunkt, den ein Fremder uebernehmen kann, sobald der Tunnel
+faellt.
