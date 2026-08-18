@@ -10,14 +10,10 @@ nicht am Telefon bewiesen.
       SOLL: der lokale Server laeuft ohne die Anhebung; ein vierter Anruf an dieselbe
       Nummer innerhalb von 24 h wird mit 429 abgelehnt.
       PRUEFUNG: Boot-Zeile + erneuter Waehlversuch -> 429 `ziel_limit`.
-- [ ] Werkzeug-URL zurueck auf `https://app.sundartha.com/webhooks/elevenlabs/consult`
-      ABWEICHUNG VON DER ANWEISUNG, offen benannt: der Verifikationsanruf entsteht LOKAL,
-      also braucht `get_consult` bis dahin die Tunnel-Adresse. Auf `app.sundartha.com`
-      steht heute ein Dienst vom 14.08., der die Route mit 404 beantwortet - der Agent
-      liefe im Verifikationsanruf in einen Werkzeugfehler und Messpunkt 4 waere verrauscht.
-      Deshalb: zurueckgedreht UNMITTELBAR NACH dem Anruf, nicht davor. Wenn der Eigentuemer
-      das anders will, sagt er es vor dem Anruf.
-      PRUEFUNG: Ruecklese des Werkzeugs zeigt die app.sundartha.com-Adresse.
+- [x] Werkzeug-URL zurueck auf `https://app.sundartha.com/webhooks/elevenlabs/consult`
+      Der Konflikt hat sich aufgeloest: der Eigentuemer ist weg, der Anruf entfaellt heute,
+      also braucht niemand mehr die Tunnel-Adresse. Zurueckgedreht, Ruecklese OK, Rest des
+      Werkzeugs byte-gleich. Tunnel beendet.
 
 ## 1 — BEFUND 1: die Stille nach der Eroeffnung
 
@@ -30,24 +26,24 @@ nicht am Telefon bewiesen.
 
 ### Bau
 
-- [ ] `openingQuestion` je Sprache in `src/i18n/locales.js` (de/fr/en)
+- [x] `openingQuestion` je Sprache in `src/i18n/locales.js` (de/fr/en)
       SOLL: EIN Satz, eine echte Frage, keine Interpolation.
-- [ ] Vorlage: `agent.first_message` (en) und `language_presets.de/fr` tragen
+- [x] Vorlage: `agent.first_message` (en) und `language_presets.de/fr` tragen
       Offenlegung + `bridgePhrase("{{objective}}")` + `openingQuestion`
       SOLL: der Offenlegungssatz bleibt WOERTLICH der Anfang (Absolute Regel 2).
       PRUEFUNG: `npm test` - T5 (c)/(e) vergleichen byte-genau gegen den aus LOCALES
       zusammengesetzten Satz UND pruefen zusaetzlich `startsWith(disclosure)`.
-- [ ] Vorlage: `turn.turn_timeout` 7 -> 5
+- [x] Vorlage: `turn.turn_timeout` 7 -> 5
       SOLL: der Wert steht in der Vorlage und ist besessen (Eintrag existiert bereits).
 
 ## 2 — BEFUND 3: Klammer-Tags raus
 
-- [ ] `tts.suggested_audio_tags` -> `[]`
-- [ ] `turn.soft_timeout_config`: `message`, `additional_soft_timeout_messages` und
+- [x] `tts.suggested_audio_tags` -> `[]`
+- [x] `turn.soft_timeout_config`: `message`, `additional_soft_timeout_messages` und
       `llm_generated_message_prompt_override` ohne Klammerausdruecke
       GRUND: sonst kommen die Tags durch die Soft-Timeout-Tuer zurueck.
-- [ ] Prompt: das Verbot bleibt und wird scharf gestellt
-- [ ] RIEGEL: eine Pruefung ueber das Transkript JEDES Anrufs, die anschlaegt
+- [x] Prompt: das Verbot bleibt und wird scharf gestellt
+- [x] RIEGEL: eine Pruefung ueber das Transkript JEDES Anrufs, die anschlaegt
       SOLL: Agenten-Zeile mit `[...]` -> laute Log-Zeile mit Anzahl und Fundstellen,
       NICHT stillschweigend entfernt (Qualitaet 3).
       PRUEFUNG + ROTPROBE: Test schleust `[Curious]` ein und weist den Treffer nach;
@@ -55,20 +51,20 @@ nicht am Telefon bewiesen.
 
 ## 3 — BEFUND 2: der Agent greift nicht von selbst zum Werkzeug
 
-- [ ] Prompt: kurze, trennscharfe Werkzeug-Zuordnung
+- [x] Prompt: kurze, trennscharfe Werkzeug-Zuordnung
       SOLL: (a) unbeantwortbare Frage -> ZUERST `get_consult`, "weiss ich nicht" ohne
       vorherigen Aufruf ist ein Fehler; (b) der Auftraggeber wird NIE als alternativer
       Kontaktweg angeboten; (c) was ausdruecklich KEIN Anlass ist.
-- [ ] Testdefinition B1: Gegenseite fragt etwas Unwissbares
+- [x] Testdefinition B1: Gegenseite fragt etwas Unwissbares
       SOLL gruen: Werkzeug wurde gerufen, BEVOR ein "weiss ich nicht" fiel.
-- [ ] Testdefinition B2: Gegenseite fragt etwas, das im Auftrag steht
+- [x] Testdefinition B2: Gegenseite fragt etwas, das im Auftrag steht
       SOLL gruen: Werkzeug wurde NICHT gerufen (`verify_absence`).
-- [ ] beide am Konto registriert und gruen, VOR dem Verifikationsanruf
+- [x] beide am Konto registriert und gruen, VOR dem Verifikationsanruf
 
-## 4 — PUSH (Eigentuemer-Hand) + PROTOKOLL
+## 4 — PUSH + PROTOKOLL
 
-- [ ] Sperrriegel-Rotprobe gruen -> Trockenlauf -> `--felder=` -> Ruecklese -> Drift
-- [ ] vier Werte je Push in `.fortschritt.md`
+- [x] Sperrriegel-Rotprobe gruen -> Trockenlauf -> `--felder=` -> Ruecklese -> Drift
+- [x] vier Werte je Push in `.fortschritt.md`
 
 ## 5 — VERIFIKATIONSANRUF (ein einziger)
 
@@ -79,9 +75,40 @@ woertlich unter "Art. 50 Nachweis" mit Anruf-ID.
 
 ## NEBENBEFUND (zeitbegrenzt, ein Durchgang)
 
-- [ ] Cache-Write 13.062 gegen 6.531 - warum Faktor zwei, abstellbar?
-      Nicht geklaert -> Zahl hinschreiben, Spaeter-Liste, weiter.
+- [x] Cache-Write 13.062 gegen 6.531 - warum Faktor zwei, abstellbar?
+      GEKLAERT: es IST kein Faktor zwei. An vier Anrufen gemessen 1,00 / 1,50 / 2,00 -
+      ganzzahlige Vielfache EINER Schreib-Einheit. Abgerechnet wird je ANGEFANGENER
+      Generierung, verworfene zaehlen mit. Kein Einstellfeld beim Anbieter; kleiner wird
+      es nur ueber weniger Abbrueche.
 
 ## REVIEW
 
-(wird am Ende gefuellt)
+ALLES ERLEDIGT AUSSER DEM ANRUF (Eigentuemer ist weg).
+
+- npm test: 4655 von 4655 gruen.
+- npm run elevenlabs:drift: **exit 0** - nur die zwei bewusst ausgenommenen
+  Datenschutz-Felder weichen ab.
+- B1 und B2 am Konto registriert und beide **passed**
+  (suite_2701m0b2e1x5fyrtq1d8d3vvc9qp).
+- Drei Commits, alle gepusht: ed670a2, f8deb33, 9b472c2.
+
+DREI DINGE, DIE ANDERS KAMEN ALS GEPLANT - Begruendung in .fortschritt.md:
+
+1. Die Hypothese zu Befund 1 stimmte nur halb. Es GAB einen Stille-Ausloeser
+   (turn_timeout=7); von den 17 s waren ~8 s die Offenlegung selbst, echte Stille
+   ~11 s. Der Prompt kann das nicht heilen - nach first_message hat der Agent keinen
+   Zug. Deshalb steht die Eroeffnung jetzt IN first_message.
+2. Das Push-Kommando kann `language_presets` strukturell NICHT schreiben (Mengen-
+   Vergleich). Der deutsche Eroeffnungssatz brauchte ein eigenes, eng gefuehrtes
+   Kommando mit denselben Riegeln plus einer Art.-50-Pruefung gegen LOCALES.
+3. B1s erstes Rot war FALSCH - der Agent war richtig, die Parameter-Bewertung des
+   Anbieters fand einen Pfad nicht, den der Aufruf traegt. Pruefung entfernt.
+
+SPAETER-LISTE
+
+- Wie loest der Anbieter `parameters[].path` auf? Betrifft auch A1 und A5-tool.
+- Das Push-Kommando kann besessene Sammlungs-Felder nicht schreiben.
+- Der Cache-Write-Aufschlag ist keine Konfiguration, sondern verworfene
+  Generierungen - Gegenprobe am Verifikationsanruf.
+- Die Eroeffnung ist jetzt ~12 s nicht unterbrechbar. Ob der Tausch gegen 11 s
+  Stille richtig ist, entscheidet der Anruf.
