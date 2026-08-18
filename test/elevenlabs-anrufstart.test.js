@@ -66,6 +66,7 @@ import { readFileSync } from "node:fs";
 import http from "node:http";
 import test from "node:test";
 
+import { providerOpeningFor } from "../src/elevenlabs/call-locale.js";
 import { timezoneForCountry } from "../src/geo/resolve.js";
 import { LOCALES } from "../src/i18n/locales.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_TIMEZONE, countryForE164 } from "../src/store/defaults.js";
@@ -875,13 +876,26 @@ test("EL-START T5 (b): ohne registrierten Auftraggeber-Namen wird gar nicht erst
 const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 const OWNER_NAME_VARIABLE = "{{owner_name}}";
 
-test("EL-START T5 (c, Mechanismus, gruen): first_message der Agenten-Vorlage ist byte-identisch der Offenlegungssatz aus dem Code", () => {
+// SEIT 18.08.2026 traegt first_message die GANZE Eroeffnung, nicht mehr nur die
+// Offenlegung (Befund 1 aus Anruf 6: die Offenlegung allein stellt keine Frage, der
+// Angerufene hatte keinen Anlass zu reden - 11 s Stille). Die Ratsche ist dadurch NICHT
+// schwaecher geworden, sie hat zwei Haelften bekommen:
+//   1. GLEICHHEIT gegen den zusammengesetzten Satz aus dem Code - unveraendert byte-genau,
+//      nur gegen eine laengere Wahrheit.
+//   2. Die Art.-50-Zusage EXPLIZIT: der Offenlegungssatz steht am ANFANG. Diese zweite
+//      Haelfte ueberlebt jede kuenftige Aenderung am Schwanz der Eroeffnung - genau die
+//      Aenderung, bei der ein reiner Gleichheitstest nur "irgendetwas ist anders" saegte.
+test("EL-START T5 (c, Mechanismus, gruen): first_message der Agenten-Vorlage ist byte-identisch die Eroeffnung aus dem Code, und sie BEGINNT mit dem Offenlegungssatz", () => {
   const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
   const agent = vorlage.agent.conversation_config.agent;
   assert.equal(
     agent.first_message,
-    LOCALES.en.disclosure(OWNER_NAME_VARIABLE),
-    "first_message muss LOCALES.en.disclosure sein, nur ${ownerName} -> {{owner_name}}",
+    providerOpeningFor("en"),
+    "first_message muss die aus LOCALES.en zusammengesetzte Eroeffnung sein (Offenlegung + Bruecke + Frage), nur ${ownerName} -> {{owner_name}}",
+  );
+  assert.ok(
+    agent.first_message.startsWith(LOCALES.en.disclosure(OWNER_NAME_VARIABLE)),
+    "Absolute Regel 2 / Artikel 50 EU AI Act: der Offenlegungssatz ist der ANFANG der Eroeffnung, nicht irgendwo darin",
   );
   assert.equal(
     agent.language,
@@ -922,8 +936,12 @@ test("EL-START T5 (e, Mechanismus, gruen): jede Sprache mit kuratiertem Offenleg
     );
     assert.equal(
       ersterSatzVon(presets[sprache]),
-      bundle.disclosure(OWNER_NAME_VARIABLE),
-      `das Preset "${sprache}" muss LOCALES.${sprache}.disclosure sein, nur \${ownerName} -> {{owner_name}} - kein hier entstandener Wortlaut`,
+      providerOpeningFor(sprache),
+      `das Preset "${sprache}" muss die aus LOCALES.${sprache} zusammengesetzte Eroeffnung sein, nur \${ownerName} -> {{owner_name}} - kein hier entstandener Wortlaut`,
+    );
+    assert.ok(
+      ersterSatzVon(presets[sprache]).startsWith(bundle.disclosure(OWNER_NAME_VARIABLE)),
+      `Absolute Regel 2 / Artikel 50 EU AI Act: im Preset "${sprache}" steht der Offenlegungssatz am ANFANG der Eroeffnung`,
     );
   }
 
@@ -1013,14 +1031,19 @@ test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Defa
       // Sprache des SATZES sprechen. Faellt beides auseinander, entsteht ein Mischsatz
       // ("Hello, ... on behalf of meinem Auftraggeber"), und der ist als Pflichtaussage
       // schlechter als jede der beiden reinen Fassungen.
-      await ctx.test("der daraus gerenderte Offenlegungssatz steht fuer sich allein", () => {
+      // ANGEPASST 18.08.2026: die Eroeffnung traegt jetzt Bruecke und Frage HINTER dem
+      // Offenlegungssatz (Befund 1). Die geschuetzte Eigenschaft ist unveraendert - der
+      // Pflichtsatz ist bei blankem Namen VOLLSTAENDIG und steht am Anfang -, nur der
+      // Vergleich prueft ab jetzt den ANFANG statt der ganzen Zeichenkette. Weiter
+      // byte-genau: ein inhaltsloser Fallback ("x") bestuende das ebenso wenig wie vorher.
+      await ctx.test("der daraus gerenderte Offenlegungssatz steht vollstaendig am Anfang", () => {
         const sprache = spracheDesAnrufs(mock.startRequests[0]);
         assert.ok(LOCALES[sprache], `unbekannte Anruf-Sprache ${JSON.stringify(sprache)}`);
         const gerendert = rendern(gesprochenerSatzFuer(sprache), variablen);
-        assert.equal(
-          gerendert,
-          LOCALES[sprache].disclosure(LOCALES[sprache].disclosureOwnerFallback),
-          `was der Anbieter aus den uebergebenen Variablen spricht, ist nicht der vollstaendige Offenlegungssatz mit eingesetztem Default: "${gerendert}"`,
+        const pflichtsatz = LOCALES[sprache].disclosure(LOCALES[sprache].disclosureOwnerFallback);
+        assert.ok(
+          gerendert.startsWith(pflichtsatz),
+          `was der Anbieter aus den uebergebenen Variablen spricht, beginnt nicht mit dem vollstaendigen Offenlegungssatz mit eingesetztem Default: "${gerendert}"`,
         );
       });
     },

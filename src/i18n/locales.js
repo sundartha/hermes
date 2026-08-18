@@ -179,6 +179,9 @@ export const LOCALES = Object.freeze({
     // Infinitiv/Nominalphrase-Auftraege; "wegen folgendem Anliegen" war Amtsdeutsch.
     bridgePhrase: (goal) =>
       /^ich\b/i.test(goal) ? `${goal}.` : `Es geht um Folgendes: ${goal}.`,
+    // Der Satz, der die Eroeffnung zur GESPRAECHSEROEFFNUNG macht (s. openingQuestion
+    // am Bundle-Kopf). Keine Interpolation: er darf an keinem Anruf-Wert haengen.
+    openingQuestion: "Haben Sie dafür kurz Zeit?",
     // Pflicht-Offenlegung (CLAUDE.md Regel 2): fest verdrahtet, byte-stabil, nur der
     // ownerName ist gebunden (nicht per Call-Parameter waehlbar/abschaltbar). Fehlt der
     // Name, tritt der DE-Ausdruck ein (makeDisclosure) - der Satz bleibt vollstaendig.
@@ -298,6 +301,8 @@ export const LOCALES = Object.freeze({
     // Ich-Satz-Passthrough wie DE (je/j'); sonst kuratierte, natuerlichere Bruecke.
     bridgePhrase: (goal) =>
       /^(je\b|j')/i.test(goal) ? `${goal}.` : `Voici l'objet de mon appel : ${goal}.`,
+    // s. DE (openingQuestion).
+    openingQuestion: "Auriez-vous un instant ?",
     // FR-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE).
     // Fehlt der Name, tritt der FR-Ausdruck ein (makeDisclosure).
@@ -385,6 +390,8 @@ export const LOCALES = Object.freeze({
     // Ich-Satz-Passthrough wie DE (I/I'm/I'd); sonst natuerlichere Bruecke.
     bridgePhrase: (goal) =>
       /^i\b/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,
+    // s. DE (openingQuestion).
+    openingQuestion: "Do you have a moment for that?",
     // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).
     // Fehlt der Name, tritt DISCLOSURE_OWNER_FALLBACK_EN ein (makeDisclosure) - denselben

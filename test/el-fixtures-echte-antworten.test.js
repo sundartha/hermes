@@ -21,6 +21,7 @@ import {
   CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES,
   CONVERSATION_DONE_WITH_ANALYSIS,
   CONVERSATION_FAILED_INVALID_DESTINATION,
+  CONVERSATION_MIT_KLAMMER_MARKEN,
 } from "./fixtures/elevenlabs-conversations.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
@@ -215,4 +216,72 @@ test("Fixture CLOSE-1008 (fehlende dynamische Variable): winziger, aber ECHTER A
     CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES.metadata.call_duration_secs * MS_PER_SECOND,
   );
   assert.deepEqual(captured.unclearReasons, []);
+});
+
+// ---- RIEGEL gegen Klammer-Marken im gesprochenen Text (Befund 3, Anruf 6) --------------
+// Gemessen wird an der ECHTEN Anbieter-Antwort von Anruf 6 (18.08.2026), nicht an einer
+// ausgedachten: der Agent sprach dort vier Marken ([warmly], [patient], [Curious],
+// [confident]), weil tts.suggested_audio_tags sie ihm vorschlug, waehrend der Prompt sie
+// verbot. Beide Quellen sind in der Vorlage inzwischen zu - dieser Riegel meldet, wenn sie
+// wieder aufgehen (Dashboard, Neuanlage des Agenten, zurueckgedrehte Konfiguration).
+//
+// GEMELDET, NICHT ENTFERNT: das Transkript ist der Nachweis nach Artikel 50 EU AI Act. Der
+// Fall unten prueft deshalb BEIDES - dass die Meldung kommt UND dass die Marken
+// unveraendert im Store landen.
+function mitAufgezeichnetemFehlerlog(run) {
+  const orig = console.error;
+  const zeilen = [];
+  console.error = (...args) => zeilen.push(args.join(" "));
+  return run(zeilen).finally(() => {
+    console.error = orig;
+  });
+}
+
+// Die Marken aus jeder Agenten-Zeile entfernen - die Gegenprobe zur Rotprobe. Bewusst am
+// FIXTURE-Objekt abgeleitet statt danebengeschrieben: so misst der Negativfall garantiert
+// denselben Datensatz.
+function ohneKlammerMarken(fixture) {
+  return {
+    ...fixture,
+    transcript: fixture.transcript.map((zeile) => ({
+      ...zeile,
+      message: zeile.message.replace(/\[[^\]\n]{1,40}\]\s*/g, ""),
+    })),
+  };
+}
+
+test("Riegel Klammer-Marken: der echte Anruf-6-Datensatz schlaegt an - vier Marken gemeldet, Transkript unveraendert gespeichert", async () => {
+  await mitAufgezeichnetemFehlerlog(async (zeilen) => {
+    const { captured } = await pollFixtureConversation(CONVERSATION_MIT_KLAMMER_MARKEN);
+
+    const meldung = zeilen.find((zeile) => zeile.startsWith("[el-tags]"));
+    assert.ok(meldung, `keine [el-tags]-Meldung - der Riegel hat nicht angeschlagen. Log: ${zeilen.join(" | ")}`);
+    assert.match(meldung, /treffer=4\b/, `erwartet vier Marken, Meldung: ${meldung}`);
+    for (const marke of ["[warmly]", "[patient]", "[Curious]", "[confident]"])
+      assert.ok(meldung.includes(marke), `die Meldung nennt ${marke} nicht: ${meldung}`);
+
+    // Die andere Haelfte: NICHTS wird stillschweigend entfernt (Artikel 50).
+    const gespeichert = captured.transcript.map((eintrag) => eintrag.message).join("\n");
+    for (const marke of ["[warmly]", "[patient]", "[Curious]", "[confident]"])
+      assert.ok(gespeichert.includes(marke), `${marke} fehlt im gespeicherten Transkript - still gestrippt statt gemeldet`);
+  });
+});
+
+// ROTPROBE-GEGENSTUECK: derselbe Datensatz OHNE Marken darf NICHT anschlagen. Ohne diesen
+// Fall bestuende der Riegel auch dann, wenn er stur bei jedem Anruf meldete - und eine
+// Meldung, die immer kommt, wird abgeschaltet statt beachtet.
+test("Riegel Klammer-Marken: derselbe Datensatz ohne Marken schlaegt NICHT an (Positiv-Kontrolle)", async () => {
+  await mitAufgezeichnetemFehlerlog(async (zeilen) => {
+    const { captured } = await pollFixtureConversation(ohneKlammerMarken(CONVERSATION_MIT_KLAMMER_MARKEN));
+
+    assert.equal(
+      zeilen.filter((zeile) => zeile.startsWith("[el-tags]")).length,
+      0,
+      `der Riegel meldet ohne Marken: ${zeilen.join(" | ")}`,
+    );
+    assert.ok(
+      captured.transcript.length > 0,
+      "Positiv-Kontrolle der Kontrolle: es wurde ueberhaupt ein Transkript verarbeitet",
+    );
+  });
 });

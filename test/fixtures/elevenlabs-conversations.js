@@ -289,3 +289,67 @@ export const JOIN_SCHLUESSEL_ANRUF_2 = Object.freeze({
   }),
   telnyxDetailRecord: Object.freeze({ sip_call_id: "otb_4801m08d8gnce3xs4xpka1h3773a" }),
 });
+
+// ANRUF 6 vom 18.08.2026 (unsere Kennung call_msyy57p7i7r7, Anbieter
+// conv_6901m0az888dek8t3x1wpzj4mh3z) - GEMESSEN, die Agenten-Zeilen sind WOERTLICH aus dem
+// Gespraechs-Datensatz des Anbieters abgeschrieben, samt der Klammer-Marken, die der Agent
+// wirklich gesprochen hat. Das ist Befund 3 dieses Anrufs: tts.suggested_audio_tags schlug
+// dem Modell zehn solcher Marken vor, waehrend der Prompt sie verbot - und die Marken
+// gewannen.
+//
+// WOFUER: der Riegel gegen Klammer-Marken (src/elevenlabs/outbound.js#reportAudioTags)
+// wird an DIESEM Datensatz gemessen, nicht an einem ausgedachten. Vier Marken in vier
+// Agenten-Zeilen: [warmly], [patient], [Curious], [confident].
+//
+// GEKUERZT, nicht veraendert: nur die vier Agenten-Zeilen mit Marken plus die
+// Offenlegung; die uebrigen Zeilen des Anrufs (Werkzeug-Ereignisse, Anrufer-Zeilen) tragen
+// zu dieser Frage nichts bei. Kein Wort der uebernommenen Zeilen ist umgeschrieben.
+export const CONVERSATION_MIT_KLAMMER_MARKEN = Object.freeze({
+  conversation_id: "conv_6901m0az888dek8t3x1wpzj4mh3z",
+  status: "done",
+  transcript: Object.freeze([
+    Object.freeze({
+      role: "agent",
+      message:
+        "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Antonio Fotiadis. Das Gespräch wird für meinen Auftraggeber zusammengefasst.",
+    }),
+    Object.freeze({
+      role: "user",
+      message: "Ja, hallo. Ja, das bist du. Ja, du rufst mich an und dann sagst du nix.",
+    }),
+    Object.freeze({
+      role: "agent",
+      message:
+        "[warmly] Entschuldigen Sie, es gab eine kurze Verzögerung. Ich rufe an, um für Herrn Fotiadis einen Termin für eine Bremsenprüfung zu vereinbaren, idealerweise vormittags in der kommenden Woche.",
+    }),
+    Object.freeze({
+      role: "agent",
+      message:
+        "[patient] Dazu liegen mir leider keine Angaben vor, das müsste Herr Fotiadis Ihnen direkt mitteilen. Reicht es für die Terminvereinbarung, wenn er die Fahrzeugdaten beim Termin selbst angibt?",
+    }),
+    Object.freeze({
+      role: "agent",
+      message: "[Curious] Interessant, werde ich das bei ihm klären. Einen Moment, ich frage kurz nach.",
+    }),
+    Object.freeze({
+      role: "agent",
+      message:
+        "[confident] Es handelt sich um einen Skoda Octavia Combi, Baujahr zweitausendneunzehn, mit zwei Liter TDI Motor. Passt das für die Terminvereinbarung?",
+    }),
+  ]),
+  analysis: Object.freeze({
+    call_successful: "failure",
+    transcript_summary: "Vehicle details were retrieved via the consult tool.",
+  }),
+  metadata: Object.freeze({
+    call_duration_secs: 84,
+    termination_reason: "Client disconnected: 1000",
+    error: null,
+    phone_call: Object.freeze({
+      direction: "outbound",
+      agent_number: "***8341#1ca0c7",
+      external_number: "***2163#1e3c18",
+      call_id: "otb_6901m0az888dek8t3x1wpzj4mh3z",
+    }),
+  }),
+});

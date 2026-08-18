@@ -47,6 +47,48 @@ function calleeLanguage(to) {
   return (land && LANGUAGE_FOR_COUNTRY[land]) || null;
 }
 
+// Der Auftrag reist als Platzhalter des ANBIETERS, nicht als Wert: was hier steht, ist der
+// STATISCHE Text am fremden Agenten (first_message bzw. language_preset), und einsetzen tut
+// ihn der Anbieter zur Laufzeit aus dynamic_variables (src/elevenlabs/outbound.js). Unsere
+// Seite rendert ihn NIE - deshalb bleibt er woertlich stehen.
+const OBJECTIVE_PLACEHOLDER = "{{objective}}";
+
+// Die vollstaendige Eroeffnung EINES Outbound-Anrufs, in dieser Reihenfolge:
+//   1. der Offenlegungssatz - WOERTLICH und als ALLERERSTES (Absolute Regel 2,
+//      Artikel 50 EU AI Act). Er bleibt unveraendert; hier kommt nur etwas dahinter.
+//   2. die Bruecke zum Anliegen - DIESELBE Funktion, die der Bestandsweg spricht
+//      (locale.bridgePhrase, src/claude.js openingText). Kein zweiter Wortlaut fuer
+//      dieselbe Sache, und ihr Ich-Satz-Zweig kann hier nicht greifen: ein Platzhalter
+//      faengt nie mit "ich" an.
+//   3. EINE Frage. SIE ist der eigentliche Fix von Befund 1 (Anruf 6, 18.08.2026): die
+//      Offenlegung allein stellt keine Frage, gibt dem Angerufenen also keinen Anlass zu
+//      reden - gemessen wurden 11 s Stille zwischen dem Ende der Offenlegung und der
+//      Nachfrage, die erst der turn_timeout ausloeste. Ein fremder Agent kann das nicht
+//      im Prompt heilen: nach first_message hat er den Zug gar nicht, er wartet.
+const providerOpening = (locale, ownerName) =>
+  [
+    locale.disclosure(ownerName),
+    locale.bridgePhrase(OBJECTIVE_PLACEHOLDER),
+    locale.openingQuestion,
+  ].join(" ");
+
+// Der Auftraggeber-Name als PLATZHALTER - fuer die andere Lesart derselben Eroeffnung.
+const OWNER_NAME_PLACEHOLDER = "{{owner_name}}";
+
+/**
+ * Dieselbe Eroeffnung, aber in der Form, die als STATISCHER TEXT am fremden Agenten steht:
+ * beide Werte bleiben Platzhalter, weil der Anbieter beide selbst einsetzt. Das ist der
+ * Wortlaut, gegen den sich `agent.first_message` und jedes `language_preset` der Vorlage
+ * messen lassen muessen (test/elevenlabs-anrufstart.test.js) - damit am Agenten keine
+ * zweite, von Hand geschriebene Fassung entsteht.
+ *
+ * @param {string} language Sprachcode; unbekannt -> Weltdefault (localeFor, fail-safe)
+ * @returns {string}
+ */
+export function providerOpeningFor(language) {
+  return providerOpening(localeFor(language), OWNER_NAME_PLACEHOLDER);
+}
+
 /**
  * Sprache, Stimme und Offenlegungssatz EINES Anrufs, abgeleitet aus dem gespeicherten
  * Zustand. Vier Rueckgabewerte, jeder mit genau einem Abnehmer im Anrufstart
@@ -55,8 +97,10 @@ function calleeLanguage(to) {
  *   voiceId                  -> conversation_config_override.tts.voice_id (leer, wenn
  *                               keine Plattform-Stimme konfiguriert ist - dann bleibt die
  *                               am Agenten gewaehlte Stimme stehen, s. dort)
- *   firstMessage             -> der Satz, den der Agent des Anbieters als ALLERERSTES
- *                               sprechen muss (Absolute Regel 2, Artikel 50 EU AI Act).
+ *   firstMessage             -> die GANZE Eroeffnung, die der Agent des Anbieters als
+ *                               ALLERERSTES spricht - beginnend mit dem Offenlegungssatz
+ *                               (Absolute Regel 2, Artikel 50 EU AI Act), s.
+ *                               providerOpening oben.
  *                               Er ist Agenten-Konfiguration, kein Anruf-Parameter:
  *                               agent.first_message steht NICHT auf der weissen Liste
  *                               (convai.js) und darf es nicht - der Traeger je Sprache ist
@@ -97,7 +141,7 @@ export function callLocaleFor(state, { tenantId, numberRecord, ownerName, defaul
   return {
     language: locale.language,
     voiceId: elevenLabsVoiceIdFor(defaultVoiceId, locale.voiceProfile),
-    firstMessage: locale.disclosure(ownerName),
+    firstMessage: providerOpening(locale, ownerName),
     disclosureOwnerFallback: locale.disclosureOwnerFallback,
   };
 }

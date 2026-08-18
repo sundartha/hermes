@@ -1,0 +1,50 @@
+{
+  "_hinweis": "BEFUND 2 aus Anruf 6 (18.08.2026), Zweig 2 von 2. Die Gegenseite fragt etwas, das im Auftrag STEHT - der Agent muss es selbst beantworten und darf das Werkzeug NICHT rufen. Ohne diesen Zweig waere Zweig 1 (b1) trivial erfuellbar, indem der Agent bei jeder Frage rueckfragt; zusammen spannen beide die Regel auf.",
+  "_kriterium_hinweis": "verify_absence:true - der Aufruf darf NICHT stattfinden. Die Tool-Kennung ist die ECHTE (tool_8801m00mvv3zfxhbcwbszpvfg9ae); mit einem Platzhalter waere dieser Fall garantiert gruen, ohne irgendetwas zu pruefen (die Falle, vor der elevenlabs/tests/README.md fuer A3 ausdruecklich warnt).",
+  "_abgrenzung_zu_a3": "A3 misst dieselbe Abwesenheit an einer ANDEREN Lage: dort liegt ein ANGEBOT der Gegenseite vollstaendig im Mandat, und der Agent soll es ohne Rueckfrage annehmen. Hier ist es eine reine WISSENSFRAGE, deren Antwort woertlich im Auftrag steht. Der Agent kann A3 bestehen und hier scheitern (und umgekehrt): die eine Lage prueft die Entscheidungs-Vollmacht, die andere das Nachschlagen im eigenen Auftrag.",
+  "_ausfuehrung": {
+    "repeat_count": 5,
+    "bestehensschwelle": ">= 5 von 5"
+  },
+  "name": "B2 - Kein Werkzeug, wenn die Antwort im Auftrag steht",
+  "type": "tool",
+  "tool_call_parameters": {
+    "referenced_tool": {
+      "id": "tool_8801m00mvv3zfxhbcwbszpvfg9ae",
+      "type": "webhook"
+    },
+    "verify_absence": true,
+    "parameters": [],
+    "workflow_node_transition": null,
+    "_parameters_hinweis": "Leer wie bei A3: fuer einen nicht stattgefundenen Aufruf gibt es keine Parameterwerte zu pruefen."
+  },
+  "check_any_tool_matches": null,
+  "dynamic_variables": {
+    "consult_available": "available",
+    "owner_name": "Miles Ashbury",
+    "callee": "Grove Street Auto Repair, service desk (+1 503-555-0119)",
+    "objective": "Schedule a brake inspection appointment for Miles Ashbury's car. The vehicle is a 2018 Subaru Outback Premium, license plate 4TRM819, with about 54,000 miles. Miles Ashbury drops the car off and does not wait on site.",
+    "constraints": "CONSTRAINTS: Weekday mornings only, at most $250 for the inspection, do not promise a deposit.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: The brakes have been squealing for about a week and need to be looked at.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: A firm morning appointment within the next two weeks.\n- Key facts: 2018 Subaru Outback Premium, license plate 4TRM819, about 54,000 miles; Miles Ashbury drops the car off and does not wait on site\nThis background is for you; only pass on what the task requires.",
+    "mandate": "Any weekday morning appointment within the next two weeks, up to $250 for the inspection.",
+    "owner_timezone": "America/New_York",
+    "today": "Monday, 11 May 2026",
+    "callee_timezone": "\nThe person you are calling is probably in the America/Los_Angeles time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Pacific time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
+  },
+  "chat_history": [
+    {
+      "role": "agent",
+      "time_in_call_secs": 12,
+      "message": "I'm calling to book a brake inspection, ideally a weekday morning in the next two weeks."
+    },
+    {
+      "role": "user",
+      "time_in_call_secs": 20,
+      "message": "Sure. What car is it, and roughly how many miles has it done?"
+    }
+  ],
+  "_chat_history_hinweis": "Die Frage der Gegenseite ist woertlich durch objective und background gedeckt (2018 Subaru Outback Premium, about 54,000 miles). Der zu pruefende naechste Agenten-Zug - selbst antworten, ohne get_consult - ist bewusst NICHT Teil der Datei; er ist das, was der Testlauf erzeugt und gegen verify_absence prueft.",
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

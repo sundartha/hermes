@@ -262,12 +262,15 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
         "Bestandspfad, elevenLabsVoiceIdFor) - sonst spricht der Agent Deutsch mit " +
         "amerikanischer Stimme.",
     );
-    assert.equal(
-      gewaehlt?.firstMessage,
-      disclosureFor(kase.language),
+    // Seit 18.08.2026 traegt firstMessage die GANZE Eroeffnung (Offenlegung + Bruecke +
+    // Frage, s. call-locale.js providerOpening). Was DIESER Fall misst, ist unveraendert:
+    // dass der Offenlegungssatz der SPRACHWAHL folgt - deshalb der Anfang, byte-genau.
+    // Dass die Eroeffnung als Ganzes zum Code passt, misst T5 (c)/(e) gegen die Vorlage.
+    assert.ok(
+      gewaehlt?.firstMessage?.startsWith(disclosureFor(kase.language)),
       `Fall "${kase.name}": der Offenlegungssatz kommt WOERTLICH aus ` +
-        "LOCALES.<sprache>.disclosure (Regel 2, Artikel 50 EU AI Act) - keine am " +
-        "Anbieter erzeugte Uebersetzung, keine zweite Fassung.",
+        "LOCALES.<sprache>.disclosure und steht am ANFANG (Regel 2, Artikel 50 EU AI " +
+        `Act) - keine am Anbieter erzeugte Uebersetzung, keine zweite Fassung. Bekommen: "${gewaehlt?.firstMessage}"`,
     );
   }
 });
@@ -322,11 +325,10 @@ test("Sprachwahl EL: die Sprache des ANGERUFENEN gewinnt, wenn seine Nummer sie 
     "eine deutsche Rufnummer belegt die Sprache des Angerufenen - sie muss die " +
       "franzoesische Spracheinstellung des Auftraggebers ueberstimmen",
   );
-  assert.equal(
-    locale(ZIEL_DE).firstMessage,
-    disclosureFor("de"),
-    "der Offenlegungssatz folgt derselben Wahl - er muss vom Angerufenen VERSTANDEN " +
-      "werden (Artikel 50 EU AI Act)",
+  assert.ok(
+    locale(ZIEL_DE).firstMessage.startsWith(disclosureFor("de")),
+    "der Offenlegungssatz folgt derselben Wahl und steht am Anfang der Eroeffnung - er " +
+      "muss vom Angerufenen VERSTANDEN werden (Artikel 50 EU AI Act)",
   );
 
   assert.equal(

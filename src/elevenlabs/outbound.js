@@ -443,6 +443,42 @@ export function answeredAnchorOutcome(endedAtIso, conversation) {
 const spokenLines = (conversation) =>
   (conversation.transcript || []).filter((zeile) => zeile && zeile.message);
 
+// Ein Klammerausdruck im GESPROCHENEN Text. Laengenbegrenzt, damit die Pruefung eine
+// Marke findet ("[Curious]") und nicht einen halben Satz, der zufaellig zwei Klammern
+// enthaelt; kein Zeilenumbruch aus demselben Grund.
+const AUDIO_TAG = /\[[^\]\n]{1,40}\]/g;
+
+// BEFUND 3 (Anruf 6, 18.08.2026): der Agent sprach woertlich "[Curious] Interessant, das
+// koennte wichtig sein." Ursache war ein Widerspruch in der Konfiguration -
+// tts.suggested_audio_tags schlug dem Modell zehn solcher Marken vor, waehrend der Prompt
+// sie verbot. Beide Quellen sind seither zu (Vorlage), und genau deshalb gibt es diese
+// Pruefung: eine Konfiguration, die im Dashboard oder beim naechsten Anlegen des Agenten
+// zurueckfaellt, wuerde sonst still wieder Marken sprechen.
+//
+// WARUM MELDEN UND NICHT ENTFERNEN: das Transkript ist der Nachweis nach Artikel 50 EU AI
+// Act. Was gesprochen wurde, gehoert hinein - auch das Falsche. Stilles Strippen machte
+// aus dem Nachweis eine Schoenschrift und verstecket zugleich den Konfigurationsfehler.
+//
+// NUR AGENTEN-ZEILEN: Klammern in einer Anrufer-Zeile kaemen aus der Spracherkennung und
+// sagen nichts ueber unsere Konfiguration.
+//
+// WAS GELOGGT WIRD: die Anzahl und die gefundenen Marken selbst. Sie sind KEIN
+// Gespraechsinhalt, sondern die Eigenproduktion des Modells - und ohne sie waere die
+// Meldung fuer die Diagnose wertlos (welche Marke leckt, entscheidet, welche Quelle offen
+// steht). Der Rest der Zeile bleibt draussen (Absolute Regel 4).
+function reportAudioTags(callId, lines) {
+  const marken = lines
+    .filter((zeile) => roleOf(zeile.role) === AGENT_ROLE)
+    .flatMap((zeile) => zeile.message.match(AUDIO_TAG) ?? []);
+  if (marken.length === 0) return marken;
+  console.error(
+    `[el-tags] call=${callId} treffer=${marken.length} marken=${[...new Set(marken)].join(",")} - ` +
+      "der Agent hat Klammerausdruecke GESPROCHEN. Quellen pruefen: tts.suggested_audio_tags " +
+      "und turn.soft_timeout_config am Agenten.",
+  );
+  return marken;
+}
+
 // Die Buchungs-Grenze des Agenten - die WIRKUNG des Mandats, nicht sein Wortlaut. Der
 // Bestand tauscht sie pro Anruf (src/claude.js:210: mandateScopeGiven ->
 // boundaries.noBookingWithMandate, sonst boundaries.noBooking). Ein statischer
@@ -974,8 +1010,11 @@ export function makeElevenLabsOutbound({
   // Store-Mutatoren an denselben Feldern, die get_transcript ohnehin liest - kein zweiter
   // Schreibweg neben dem Store.
   function persistProviderResult(callId, conversation) {
-    for (const zeile of spokenLines(conversation))
-      store.addTranscript(callId, roleOf(zeile.role), zeile.message);
+    const zeilen = spokenLines(conversation);
+    // VOR dem Schreiben: die Meldung gilt dem, was der Anbieter geliefert hat, und darf
+    // nicht an einem spaeteren Store-Fehler haengen bleiben (s. reportAudioTags).
+    reportAudioTags(callId, zeilen);
+    for (const zeile of zeilen) store.addTranscript(callId, roleOf(zeile.role), zeile.message);
     store.recordProviderCallResult(callId, {
       summary: conversation.analysis?.transcript_summary || null,
       objectiveAchieved: objectiveAchievedOf(conversation),
