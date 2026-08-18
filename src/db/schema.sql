@@ -161,6 +161,12 @@ CREATE TABLE IF NOT EXISTS call (
   from_e164          TEXT,
   to_e164            TEXT,
   goal               TEXT,
+  -- Thema A (2026-08-19): die bei Auftragsannahme festgelegte, geprueft-validierte
+  -- Eroeffnungszeile des ElevenLabs-Wegs plus ihr Annahme-Hash (state-ops.js
+  -- openingLineHash). Additiv NULLABLE: nur der EL-Anrufstart liest sie, jeder
+  -- andere Call bleibt NULL -> Bestand byte-identisch.
+  opening_line        TEXT,
+  opening_line_sha256 TEXT,
   briefing           TEXT,
   constraints        TEXT,
   caller_name        TEXT,
@@ -374,6 +380,13 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS appointment_date TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS appointment_time TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS amount TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS currency TEXT;
+
+-- Thema A (2026-08-19): Eroeffnungszeile + Annahme-Hash auf Bestands-call-Tabellen
+-- nachziehen (Muster answered_unclear_reason). Idempotent; frische DB = No-op. KEIN
+-- Backfill noetig: Bestands-Anrufe sind beendet, und der Anrufstart faellt bei NULL
+-- ohnehin auf den deterministischen Rueckfall (opening-line.js#verifiedOpeningLine).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS opening_line TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS opening_line_sha256 TEXT;
 
 -- ABNAHME-D1 (TEIL 3): die bestaetigte Zeitzone des Angerufenen auf Bestands-call-
 -- Tabellen nachziehen, aus demselben Grund wie die vier Spalten darueber.

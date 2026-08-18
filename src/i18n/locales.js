@@ -189,6 +189,11 @@ export const LOCALES = Object.freeze({
     // vortrug. Rund 20 s fuer null Inhalt. Eine offene Frage laesst die Gegenseite sofort
     // zur Sache antworten - im selben Zug, in dem sie sonst nur "ja" gesagt haette.
     openingQuestion: "Wie sieht es damit bei Ihnen aus?",
+    // Thema A (2026-08-19): letzte Stufe der Eroeffnungs-Treppe (src/elevenlabs/
+    // opening-line.js) - greift NUR, wenn weder die erzeugte Zeile noch der Auftrag
+    // selbst die Pruefung bestehen. EIN kurzer Satz, keine Interpolation, korrekte
+    // Umlaute (gesprochener DE-String).
+    openingReasonFallback: "Ich rufe an, um ein kurzes Anliegen mit Ihnen zu klären.",
     // Pflicht-Offenlegung (CLAUDE.md Regel 2): fest verdrahtet, byte-stabil, nur der
     // ownerName ist gebunden (nicht per Call-Parameter waehlbar/abschaltbar). Fehlt der
     // Name, tritt der DE-Ausdruck ein (makeDisclosure) - der Satz bleibt vollstaendig.
@@ -310,6 +315,8 @@ export const LOCALES = Object.freeze({
       /^(je\b|j')/i.test(goal) ? `${goal}.` : `Voici l'objet de mon appel : ${goal}.`,
     // s. DE (openingQuestion).
     openingQuestion: "Qu'en est-il de votre côté ?",
+    // s. DE (openingReasonFallback) - kuratiert, mit Akzenten.
+    openingReasonFallback: "J'appelle pour régler une petite demande avec vous.",
     // FR-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE).
     // Fehlt der Name, tritt der FR-Ausdruck ein (makeDisclosure).
@@ -399,6 +406,8 @@ export const LOCALES = Object.freeze({
       /^i\b/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,
     // s. DE (openingQuestion).
     openingQuestion: "How does that look on your side?",
+    // s. DE (openingReasonFallback).
+    openingReasonFallback: "I am calling to sort out a small matter with you.",
     // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).
     // Fehlt der Name, tritt DISCLOSURE_OWNER_FALLBACK_EN ein (makeDisclosure) - denselben

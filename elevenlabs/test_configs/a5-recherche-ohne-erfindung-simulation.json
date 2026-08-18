@@ -22,6 +22,7 @@
     "owner_name": "Ellen Prather",
     "callee": "Northgate Auto Repair, front desk (+1 206-555-0164)",
     "objective": "Schedule a repair appointment for Ellen Prather's car - the timing belt is due for replacement. The vehicle is a 2014 Honda Accord EX, gray, with about 97,000 miles; the belt has never been replaced. Ellen Prather drops the car off and does not wait on site.",
+    "opening_line": "I am calling to book a timing belt replacement for Ellen Prather's car.",
     "constraints": "CONSTRAINTS: At most $600 for the belt service, do not promise a deposit and do not quote prices, opening hours or figures that are not part of this assignment.",
     "background": "BACKGROUND (for your information only):\n- What it's about: The timing belt on Ellen Prather's car has never been replaced and is now due.\n- Relationship to the person being called: New customer, first time at this shop.\n- Desired outcome: A belt service appointment within the next three weeks.\n- Key facts: 2014 Honda Accord EX, gray, about 97,000 miles; the assignment carries no information about weather, opening hours or part prices\nThis background is for you; only pass on what the task requires.",
     "mandate": "Any appointment within the next three weeks, up to $600 for the belt service. The assignment carries no information about weather, opening hours or part prices.",

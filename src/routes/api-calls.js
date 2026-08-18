@@ -32,7 +32,9 @@ import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 // TEIL C (Owner-Auftrag 15.08.2026, cancel_call darf nicht luegen): der Deckelwert ist
 // KEINE Magic Number - er ist in elevenlabs/outbound.js besessen (Bewachung statt
 // Korrektur der Anbieter-Vorlage, s. dortiger Kommentar).
-import { ELEVENLABS_PROVIDER_MAX_DURATION_S } from "../elevenlabs/outbound.js";
+import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf } from "../elevenlabs/outbound.js";
+import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
+import { localeFor } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { internalOnly } from "../wiring/internal-only.js";
@@ -218,6 +220,33 @@ export function makeCallRoutes({
       }
     }
 
+    // Thema A (Auftrag 2026-08-19): die Eroeffnungszeile des ElevenLabs-Wegs entsteht
+    // BEI AUFTRAGSANNAHME - vorab erzeugt, fail-closed validiert, mit Rueckfall-Treppe
+    // (src/elevenlabs/opening-line.js). NUR hinter dem EL-Schalter: die beiden
+    // Telnyx-Zweige lesen die Zeile nie, eine Erzeugung dort waere bezahlter Muell.
+    // Position NACH der Gate-Kette wie das Briefing (Regel 1: keine LLM-Token fuer
+    // einen Anruf, den ein Gate ablehnt). Die Sprache kommt aus DERSELBEN Aufloesung,
+    // die der Anrufstart benutzt (callLocaleOf, elevenlabs/outbound.js) - kein zweiter
+    // Sprachweg, der still divergieren koennte. Geloggt werden nur Quelle und Laenge,
+    // NIE der Text (er traegt Auftragsinhalt, Regel 4).
+    let openingLine = null;
+    if (config.voice.elevenLabsOutbound.enabled) {
+      const { ownerName } = store.tenantContext(ctx.tenantId);
+      const callLocale = callLocaleOf({
+        store,
+        config,
+        call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to },
+        ownerName,
+      });
+      const opening = await fetchOpeningLine({
+        objective: ctx.objective,
+        tenantId: ctx.tenantId,
+        locale: localeFor(callLocale.language),
+      });
+      openingLine = opening.line;
+      console.log(`[opening-line] quelle=${opening.source} zeichen=${openingLine.length}`);
+    }
+
     // Der /voice/outbound-Webhook rendert dank call.provider (P6a) automatisch TeXML
     // statt TwiML.
     const call = store.createCall({
@@ -225,6 +254,7 @@ export function makeCallRoutes({
       from: ctx.fromNumber,
       to: ctx.to,
       goal: ctx.objective,
+      openingLine, // Thema A: null auf den Telnyx-Zweigen (s. Block oben)
       briefing: b.briefing,
       constraints: b.constraints,
       context: ctx.context,

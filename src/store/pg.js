@@ -1181,6 +1181,12 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     from: r.from_e164,
     to: r.to_e164,
     goal: r.goal,
+    // Thema A: Eroeffnungszeile + Annahme-Hash mit-hydrieren. Ohne diese Zeilen ginge
+    // beides beim Restart verloren UND der naechste Flush schriebe NULL zurueck (Lehre
+    // i8-design-decisions) - der Boot-Re-Arm eines aktiven EL-Calls spraeche dann den
+    // Rueckfall statt der festgelegten Zeile. NULL -> null (json-Parity).
+    openingLine: r.opening_line ?? null,
+    openingLineSha256: r.opening_line_sha256 ?? null,
     briefing: r.briefing,
     constraints: r.constraints,
     // P3: Per-Call-Kontext mit-hydrieren. Ohne diese Zeile ginge context beim Restart
@@ -1676,6 +1682,12 @@ function callRowValues(call, tenantId) {
     // Phase-6-Join-Schluessel ($50, angehaengt -> keine Umnummerierung). IM ON CONFLICT
     // DO UPDATE SET, Muster+Grund identisch zu elevenlabs_conversation_id oben.
     call.sipCallId ?? null,
+    // Thema A ($51-$52, angehaengt -> keine Umnummerierung): Eroeffnungszeile + Hash.
+    // BEWUSST NICHT im ON CONFLICT DO UPDATE SET (Muster goal/briefing): beide werden
+    // bei createCall gesetzt und danach nie mutiert - genau diese Unveraenderlichkeit
+    // prueft der Anrufstart (opening-line.js#verifiedOpeningLine).
+    call.openingLine ?? null,
+    call.openingLineSha256 ?? null,
   ];
 }
 
@@ -1699,8 +1711,8 @@ async function flushCalls(client, tenantId, calls) {
           elevenlabs_conversation_id, answered_unclear_reason,
           appointment_date, appointment_time, amount, currency,
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
-          callee_confirmed_timezone_at, sip_call_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50)
+          callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,

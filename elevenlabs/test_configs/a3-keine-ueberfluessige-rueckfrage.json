@@ -25,6 +25,7 @@
     "owner_name": "Miles Ashbury",
     "callee": "Grove Street Auto Repair, service desk (+1 503-555-0119)",
     "objective": "Schedule the annual inspection appointment for Miles Ashbury's car. The vehicle is a 2018 Subaru Outback Premium, license plate 4TRM819, with about 54,000 miles; the current inspection runs out at the end of this month. Miles Ashbury drops the car off and does not wait on site.",
+    "opening_line": "I am calling to book the annual inspection for Miles Ashbury's car.",
     "constraints": "CONSTRAINTS: Nothing outside Monday through Wednesday between 1 PM and 5 PM, at most $60, do not promise a deposit.",
     "background": "BACKGROUND (for your information only):\n- What it's about: The annual inspection runs out at the end of this month and needs an appointment.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: A booked inspection slot inside the given window, confirmed in this call.\n- Key facts: 2018 Subaru Outback Premium, license plate 4TRM819, about 54,000 miles; Miles Ashbury drops the car off and does not wait on site\nThis background is for you; only pass on what the task requires.",
     "mandate": "Book an appointment from Monday through Wednesday, between 1 PM and 5 PM, at a price of no more than $60. An offer inside that window is fully covered by this mandate: accept it and take it down as the result of the call, without checking back with the client.",

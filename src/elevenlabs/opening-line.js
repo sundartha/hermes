@@ -1,0 +1,131 @@
+// ---- Die Eroeffnungszeile EINES ElevenLabs-Outbound-Anrufs: PRUEFUNG UND RUECKFALL ----
+// (Auftrag 2026-08-19, Thema A.) Anruf 8 hat gemessen, dass der Auftragstext WOERTLICH
+// in die erste gesprochene Aeusserung reist ("Termin fuer eine Bremsenpruefung
+// vereinbaren" - ASCII-Ersatzschreibung hoerbar am Telefon) und dabei UNGEPRUEFT und
+// UNBEGRENZT ist: die first_message ist nicht unterbrechbar, ein 500-Zeichen-Auftrag
+// machte die Eroeffnung ueber eine halbe Minute lang.
+//
+// DIESE DATEI ist die REINE Haelfte: Validierung, Rueckfall-Treppe und die
+// Hash-Gegenprobe am Anrufstart. Sie importiert WEDER config NOCH die Store-FASSADE
+// (nur reine state-ops) - denn sie haengt am Import-Graphen von
+// src/elevenlabs/outbound.js, und die Fassade (src/store.js) bindet beim Import ihr
+// Backend samt DATA_DIR. Genau dieser Fruehstart hat beim ersten Zuschnitt dieser
+// Datei einen Test auf den falschen Datenpfad gezogen. Die ERZEUGENDE Haelfte
+// (Zweit-LLM, Kosten-Buchung) lebt in opening-line-llm.js und wird ausschliesslich
+// von routes/api-calls.js geladen - dort haengt die Fassade ohnehin schon am Graphen
+// (precall-briefing.js).
+//
+// FAIL-CLOSED-TREPPE (Auflage A3), nichts Ungeprueftes erreicht je die Sprache:
+//   1. erzeugte Zeile (opening-line-llm.js), wenn sie die Pruefung besteht;
+//   2. sonst locale.bridgePhrase(objective) - WORTGLEICH die Eroeffnung, die Anruf 8
+//      gesprochen hat (49 s, Ziel erreicht) - wenn SIE die Pruefung besteht;
+//   3. sonst die feste Kurzzeile der Sprache (locale.openingReasonFallback).
+// Ein LLM-Ausfall degradiert also exakt auf den gemessenen Bestand, nie darunter.
+//
+// Die HASH-GEGENPROBE (Auflage A6) haengt am Call-Datensatz: createCall
+// (store/state-ops.js) berechnet openingLineSha256 aus der angenommenen Zeile; der
+// Anrufstart (outbound.js) nimmt die Zeile nur, wenn der Hash noch stimmt - jede
+// Veraenderung zwischen Auftragsannahme und Anruf (Transliteration, Kuerzung,
+// Encoding-Unfall, fremder Schreiber) faellt LAUT auf und die Treppe greift ab
+// Stufe 2. Umlaute ueberleben, weil zwischen Annahme und Anruf nichts mehr am Text
+// dreht - und weil die Erzeugung korrekte Orthografie ausdruecklich verlangt.
+import { LOCALES, SUPPORTED_LANGUAGES } from "../i18n/locales.js";
+import { openingLineHash } from "../store/state-ops.js";
+
+// HARTE LAENGENGRENZE (Auflage A2) fuer die gesprochene Grund-Zeile, in Zeichen.
+// 120 Zeichen sind bei gemessenen 17,4 Zeichen/s (Anruf 8) rund 6,9 s Sprechzeit;
+// mit Offenlegung (DE 132 Z) und fester Frage (DE 33 Z) ist die Eroeffnung damit auf
+// ~16,5 s GEDECKELT - vorher war sie unbegrenzt (TEXT_LIMITS.objective erlaubt 500 Z
+// im Auftrag, das waeren ueber 30 s nicht unterbrechbare Eroeffnung). Die Grenze traegt
+// auch die Rueckfall-Stufe 2: DE-Bruecke (22 Z) + Auftrag bis ~95 Z + Punkt passt.
+export const OPENING_LINE_MAX_CHARS = 120;
+
+// Zeichen, die in gesprochener Sprache nichts verloren haben: eckige Klammern sind
+// die gemessenen Ton-Marken ([thoughtful], ...), geschweifte die Platzhalter-Syntax
+// des Anbieters - beides wuerde woertlich vorgelesen bzw. unaufgeloest gesprochen.
+const FORBIDDEN_CHARS = /[[\]{}\n\r\t]/;
+// Preisangaben (Auflage A4): die Zeile sagt, WORUM es geht, nie zu welchem Preis.
+// Deterministisch pruefbar ist nur die bezifferte Form (Zahl+Waehrung bzw.
+// Waehrungszeichen+Zahl); semantische Zusagen ohne Zahl haelt die Erzeugungs-
+// Anweisung fern, und die Rueckfall-Stufe spricht ohnehin nur den Owner-Auftrag.
+const PRICE_PATTERNS = [/\d[\d.,]*\s*(?:€|\$|eur\b|usd\b|euro\b|dollar)/i, /[€$]\s*\d/];
+// Satz-Schluss: die Zeile ist EIN fertiger Satz, an den die Vorlage die feste Frage
+// haengt. Ohne Schlusszeichen klebte sie an der Frage ("...vereinbaren Wie sieht...").
+const SENTENCE_END = /[.!?]$/;
+
+// Der unveraenderliche Kern des Offenlegungssatzes je Sprache, ABGELEITET aus
+// LOCALES (kein zweiter Wortlaut, G5): der Satzteil vor dem Namen, ohne die
+// Begruessung vor dem ersten Komma. Eine erzeugte Zeile, die ihn wiederholt,
+// wird verworfen (Auflage A3) - die Offenlegung steht bereits davor.
+const NAME_SENTINEL = "\u0000";
+const DISCLOSURE_CORES = SUPPORTED_LANGUAGES.map((lang) => {
+  const satz = LOCALES[lang].disclosure(NAME_SENTINEL);
+  const prefix = satz.split(NAME_SENTINEL)[0];
+  const ohneBegruessung = prefix.slice(prefix.indexOf(",") + 1);
+  return ohneBegruessung.trim().toLowerCase();
+});
+
+/**
+ * Prueft EINE Kandidaten-Zeile gegen alle Auflagen. Liefert die getrimmte Zeile
+ * oder null - nie eine gekuerzte oder umgeschriebene Fassung (Qualitaetsregel:
+ * ablehnen statt still strippen).
+ *
+ * @param {unknown} candidate
+ * @returns {string|null}
+ */
+export function validOpeningLine(candidate) {
+  if (typeof candidate !== "string") return null;
+  const line = candidate.trim();
+  if (!line || line.length > OPENING_LINE_MAX_CHARS) return null;
+  if (FORBIDDEN_CHARS.test(line)) return null;
+  if (!SENTENCE_END.test(line)) return null;
+  if (PRICE_PATTERNS.some((pattern) => pattern.test(line))) return null;
+  const lower = line.toLowerCase();
+  if (DISCLOSURE_CORES.some((core) => lower.includes(core))) return null;
+  return line;
+}
+
+/**
+ * Rueckfall-Stufe 2: der Owner-Auftrag in der Bestands-Bruecke - WORTGLEICH die
+ * Eroeffnung von Anruf 8. Whitespace wird wie auf dem Bestandsweg (claude.js
+ * trimGoalForSpeech) auf einfache Leerzeichen normalisiert; alles Weitere prueft
+ * validOpeningLine, und ein Auftrag, der durchfaellt (zu lang, Klammern, Preis),
+ * erreicht die Sprache NICHT (Auflage A5) - dann traegt die feste Kurzzeile.
+ *
+ * @param {unknown} objective
+ * @param {object} locale LOCALES-Bundle (localeFor)
+ * @returns {string|null}
+ */
+export function bridgedObjective(objective, locale) {
+  if (typeof objective !== "string") return null;
+  const normalized = objective.replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  return validOpeningLine(locale.bridgePhrase(normalized));
+}
+
+/**
+ * Die Zeile, die der Anrufstart WIRKLICH spricht - mit der Hash-Gegenprobe
+ * (Auflage A6). Drei Faelle:
+ *   - Zeile und Hash stimmen ueberein -> die gespeicherte Zeile;
+ *   - beide fehlen (Alt-Datensatz, Engine-Wechsel) -> stiller deterministischer
+ *     Rueckfall - fehlend ist kein Angriff;
+ *   - alles andere (veraenderte Zeile, halber Datensatz) -> LAUTER Rueckfall.
+ * Der Rueckfall ist die Treppe ab Stufe 2 - die veraenderte Zeile selbst wird NIE
+ * gesprochen.
+ *
+ * @param {{call: object, locale: object}} input locale = LOCALES-Bundle (localeFor)
+ * @returns {string}
+ */
+export function verifiedOpeningLine({ call, locale }) {
+  const { openingLine, openingLineSha256 } = call;
+  if (typeof openingLine === "string" && openingLineSha256 === openingLineHash(openingLine)) {
+    return openingLine;
+  }
+  if (openingLine != null || openingLineSha256 != null) {
+    console.warn(
+      `[opening-line] veraendert call=${call.id} - gespeicherte Zeile passt nicht ` +
+        `zum Annahme-Hash, deterministischer Rueckfall greift`,
+    );
+  }
+  return bridgedObjective(call.goal, locale) ?? locale.openingReasonFallback;
+}

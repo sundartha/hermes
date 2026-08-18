@@ -160,6 +160,16 @@ function requireTenantId(tenantId) {
   return tenantId;
 }
 
+// Auftrag 2026-08-19 (Thema A, Auflage A6): Fingerabdruck der bei Auftragsannahme
+// festgelegten Eroeffnungszeile. HIER berechnet und nicht vom Aufrufer geliefert
+// (G27, Struktur statt Konvention): kein Schreibweg kann Zeile und Hash getrennt
+// setzen, also faellt am Anrufstart (elevenlabs/opening-line.js#verifiedOpeningLine)
+// JEDE nachtraegliche Veraenderung der Zeile auf - genau die Klasse "Treiber
+// transliteriert still Umlaute weg", die der Auftrag schliessen will.
+export function openingLineHash(line) {
+  return crypto.createHash("sha256").update(line, "utf8").digest("hex");
+}
+
 export function createCall(
   s,
   {
@@ -167,6 +177,7 @@ export function createCall(
     from,
     to,
     goal,
+    openingLine,
     twilioSid,
     briefing,
     constraints,
@@ -198,6 +209,14 @@ export function createCall(
     from,
     to,
     goal: goal || null,
+    // Thema A (2026-08-19): die geprueft-festgelegte Eroeffnungszeile dieses Anrufs
+    // plus ihr Annahme-Hash (openingLineHash oben). Additiv nullable - nur der
+    // ElevenLabs-Weg befuellt sie, jeder andere Call bleibt null (pg-Parity via
+    // rowToCall). Der Hash entsteht ausschliesslich hier, im selben Zug wie die
+    // Zeile; wer die Zeile spaeter anfasst, ohne diese Funktion zu kennen, wird am
+    // Anrufstart ertappt statt gesprochen.
+    openingLine: openingLine || null,
+    openingLineSha256: openingLine ? openingLineHash(openingLine) : null,
     briefing: briefing || null,
     constraints: constraints || null,
     // P3 (PLAN-PERSONAL-ASSISTANT): strukturierter Per-Call-Kontext (additiv NULLABLE).

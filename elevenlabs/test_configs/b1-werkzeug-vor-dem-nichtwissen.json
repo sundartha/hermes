@@ -24,6 +24,7 @@
     "owner_name": "Miles Ashbury",
     "callee": "Grove Street Auto Repair, service desk (+1 503-555-0119)",
     "objective": "Schedule a brake inspection appointment for Miles Ashbury's car. The vehicle is a 2018 Subaru Outback Premium, license plate 4TRM819, with about 54,000 miles. Miles Ashbury drops the car off and does not wait on site.",
+    "opening_line": "I am calling to book a brake inspection appointment for Miles Ashbury's car.",
     "constraints": "CONSTRAINTS: Weekday mornings only, at most $250 for the inspection, do not promise a deposit.",
     "background": "BACKGROUND (for your information only):\n- What it's about: The brakes have been squealing for about a week and need to be looked at.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: A firm morning appointment within the next two weeks.\n- Key facts: 2018 Subaru Outback Premium, license plate 4TRM819, about 54,000 miles; Miles Ashbury drops the car off and does not wait on site\nThis background is for you; only pass on what the task requires.",
     "mandate": "Any weekday morning appointment within the next two weeks, up to $250 for the inspection. The assignment says nothing about which parts to fit.",

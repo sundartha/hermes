@@ -22,6 +22,7 @@
     "owner_name": "Owen Barrett",
     "callee": "Hillcrest Auto Repair, service desk (+1 720-555-0136)",
     "objective": "Schedule a repair appointment for Owen Barrett's car - the rear brake pads need replacing. The vehicle is a 2017 Chevrolet Malibu LT, black, with about 71,000 miles; the front brakes were done last year, only the rear pads are due. Owen Barrett drops the car off and does not wait on site.",
+    "opening_line": "I am calling to book a rear brake pad replacement for Owen Barrett's car.",
     "constraints": "CONSTRAINTS: Nothing outside Tuesday or Wednesday afternoon, at most $120 for the pad replacement, do not promise a deposit.",
     "background": "BACKGROUND (for your information only):\n- What it's about: The rear brake pads on Owen Barrett's car are due for replacement.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: A confirmed appointment with date, time and price.\n- Key facts: 2017 Chevrolet Malibu LT, black, about 71,000 miles; the front brakes were done last year, only the rear pads are due\nThis background is for you; only pass on what the task requires.",
     "mandate": "Any appointment on Tuesday or Wednesday afternoon, up to $120 for the pad replacement.",

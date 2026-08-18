@@ -33,8 +33,9 @@
 // ERGEBNIS: ziehend. Der Anbieter meldet das Gespraechsende nicht an uns, wir holen es ab
 // (GET /v1/convai/conversations/{id}, Takt ELEVENLABS_RESULT_POLL_MS) und legen Transkript
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
-import { LOCALES } from "../i18n/locales.js";
+import { LOCALES, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, classifyCallTime } from "../store/state-ops.js";
+import { verifiedOpeningLine } from "./opening-line.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 import { callLocaleFor } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
@@ -683,13 +684,21 @@ const CONSULT_UNAVAILABLE = "unavailable";
 // eine Zusage, die niemand einloest.
 const ohneRueckfrageTor = () => false;
 
-// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die zehn, die die
+// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die elf, die die
 // Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
 // {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}},
-// {{consult_available}}) -
+// {{consult_available}}, {{opening_line}}) -
 // fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt unaufgeloest. Der Weg ueber eine
 // Prompt-Uebersteuerung scheidet aus: eine nicht freigeschaltete
 // conversation_config_override wird vom Anbieter STILL ignoriert.
+//
+// opening_line (Thema A, 2026-08-19) ist der GESPROCHENE Anrufgrund in first_message
+// und voicemail_message - die bei Auftragsannahme festgelegte, geprueft-validierte
+// Zeile vom Call-Datensatz, hier nur noch gegen ihren Annahme-Hash gehalten
+// (verifiedOpeningLine): stimmt er nicht, spricht der Anruf den deterministischen
+// Rueckfall, NIE den veraenderten Text. {{objective}} bleibt daneben ROH bestehen -
+// es speist den PROMPT (die Aufgabe des Agenten), nicht mehr die gesprochene
+// Eroeffnung; die Aufgabentreue haengt am vollen Wortlaut des Auftraggebers.
 //
 // owner_name ist der einzige mit INHALTLICHEM Default: er traegt die Offenlegung (Regel 2,
 // Artikel 50 EU AI Act), und die haengt nie an einer Variablen ohne Default. Ein fehlender
@@ -727,6 +736,7 @@ const ohneRueckfrageTor = () => false;
 function dynamicVariables({ call, ownerName, time, locale, consultAllowed }) {
   return {
     consult_available: consultAllowed === true ? CONSULT_AVAILABLE : CONSULT_UNAVAILABLE,
+    opening_line: verifiedOpeningLine({ call, locale: localeFor(locale.language) }),
     owner_name: alsText(ownerName) || locale.disclosureOwnerFallback,
     callee: alsText(call.to),
     objective: alsText(call.goal),
@@ -753,7 +763,13 @@ function dynamicVariables({ call, ownerName, time, locale, consultAllowed }) {
 // telephony/adapters/telnyx/elevenlabs-voice.js, wo genau dieser Env-Name als
 // Plattform-Stimme benannt ist). Es ist eine rohe ElevenLabs-Voice-Kennung, kein
 // Telnyx-Format - der Env-Name sagt nur, WER sie bisher gereicht bekam.
-function callLocaleOf({ store, config, call, ownerName }) {
+//
+// EXPORTIERT seit Thema A (2026-08-19): routes/api-calls.js braucht dieselbe
+// Aufloesung VOR createCall (die Eroeffnungszeile entsteht in der Sprache des
+// Anrufs). call ist dort ein call-FOERMIGES Objekt {tenantId, from, to} - genau die
+// drei Felder, die diese Funktion liest; ein zweiter Zusammenbau der Argumente an
+// der Route waere der Weg, auf dem beide Sprachen still auseinanderlaufen.
+export function callLocaleOf({ store, config, call, ownerName }) {
   return callLocaleFor(store.load(), {
     tenantId: call.tenantId,
     numberRecord: store.numberRecordByE164(call.from),

@@ -22,6 +22,7 @@
     "owner_name": "Trevor Nash",
     "callee": "Larkspur Lane Photography, front desk (+1 615-555-0192)",
     "objective": "Ask for the next available family portrait session for Trevor Nash and take the answer down as a message. The session is for four people - Trevor Nash, his wife and their two children, aged 6 and 9 - outdoors in a park rather than in the studio, about 45 minutes, and Trevor Nash is looking for a weekend slot.",
+    "opening_line": "I am calling to ask about your next available family portrait session for Trevor Nash.",
     "constraints": "CONSTRAINTS: Collect information only, make no binding commitment, promise no payment and no deposit.",
     "background": "BACKGROUND (for your information only):\n- What it's about: Trevor Nash is looking for the next available weekend family portrait session.\n- Relationship to the person being called: New customer, first enquiry with this studio.\n- Desired outcome: Date, time and price of the next available weekend session, taken down as a message.\n- Key facts: Four people - Trevor Nash, his wife and their two children aged 6 and 9; outdoors in a park rather than in the studio, about 45 minutes\nThis background is for you; only pass on what the task requires.",
     "mandate": "Collect information only - note down the date, time and price of the next available weekend session within the next six weeks, make no binding commitment.",
