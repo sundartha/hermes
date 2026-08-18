@@ -48,11 +48,11 @@ import { elevenLabsVoiceIdFor } from "../src/telephony/adapters/telnyx/elevenlab
 const OWNER_NAME = "Owen Barrett";
 
 // Die global konfigurierte Plattform-Stimme (TELNYX_ELEVENLABS_VOICE_ID) als Testwert.
-// Sie muss herein statt gelesen zu werden: Deutsch hat in
-// ELEVENLABS_VOICE_ID_BY_PROFILE ABSICHTLICH keinen eigenen Eintrag - die deutsche Stimme
-// IST die Plattform-Stimme (s. Kommentar dort). Ein frei gewaehlter Wert macht die
-// Unterscheidbarkeitspruefung unten zugleich zur Kontrolle, dass Deutsch nicht still auf
-// die englische Stimme faellt.
+// SEIT 2026-08-18 hat Deutsch eine EIGENE kuratierte Stimme (s.u.), dieser Wert ist damit
+// der Rueckfall fuer ein Profil OHNE eigenen Eintrag. Er bleibt bewusst frei gewaehlt und
+// von allen drei Stimm-IDs verschieden: taucht er in einem der drei Faelle auf, ist eine
+// kuratierte Stimme verlorengegangen - genau der Defekt, den Anruf 7 hoerbar machte
+// (deutsches Gespraech in einer amerikanischen Stimme, weil DE keinen Eintrag hatte).
 const PLATFORM_VOICE_ID = "plattform-stimme-test";
 
 const TENANT_DE = "tenant-herkunft-de";
@@ -63,12 +63,16 @@ const TENANT_OHNE_SPRACHE = "tenant-ohne-sprache";
 // aus LOCALES/ELEVENLABS_VOICE_ID_BY_PROFILE. Beide Seiten aus derselben Quelle zu ziehen
 // koennte ein Auseinanderlaufen nicht sehen (dieselbe Begruendung wie beim Werkzeugnamen
 // in test/elevenlabs-agent-werkzeuge.test.js). Die IDs sind bindende Eigentuemer-Daten
-// (Owner-Entscheidung 2026-07-27), kein Konfigurationswert.
+// (Owner-Entscheidung 2026-08-18, vom Eigentuemer selbst angehoert), kein
+// Konfigurationswert. ALLE DREI Sprachen tragen jetzt eine eigene Stimme - Deutsch fiel
+// bis dahin auf die Plattform-Stimme zurueck und damit, wenn die nicht gesetzt war, auf
+// die Dashboard-Stimme des Agenten.
 const VOICE_PROFILE_DE = "de-female-neural";
 const VOICE_PROFILE_FR = "fr-female-neural";
 const VOICE_PROFILE_EN = "en-female-neural";
-const VOICE_ID_FR = "FFXYdAYPzn8Tw8KiHZqg";
-const VOICE_ID_EN = "wOPou4MhRIYEqQHVxjmp";
+const VOICE_ID_DE = "cqPdIo76zSHFDcSZpFov";
+const VOICE_ID_FR = "WeAAwKYcS06VmXw086yZ";
+const VOICE_ID_EN = "ZSNL4hPqCnqoMPaI4jGX";
 
 // Die drei Faelle der Eigentuemer-Vorgabe. Jeder greift eine ANDERE Stufe der
 // Praezedenzkette an - drei Faelle, die alle ueber dieselbe Stufe liefen, wuerden die
@@ -90,7 +94,7 @@ const CASES = Object.freeze([
     }),
     language: "de",
     voiceProfile: VOICE_PROFILE_DE,
-    voiceId: PLATFORM_VOICE_ID,
+    voiceId: VOICE_ID_DE,
     disclosureStart: "Guten Tag,",
   },
   {

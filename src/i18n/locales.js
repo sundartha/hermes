@@ -179,9 +179,16 @@ export const LOCALES = Object.freeze({
     // Infinitiv/Nominalphrase-Auftraege; "wegen folgendem Anliegen" war Amtsdeutsch.
     bridgePhrase: (goal) =>
       /^ich\b/i.test(goal) ? `${goal}.` : `Es geht um Folgendes: ${goal}.`,
-    // Der Satz, der die Eroeffnung zur GESPRAECHSEROEFFNUNG macht (s. openingQuestion
-    // am Bundle-Kopf). Keine Interpolation: er darf an keinem Anruf-Wert haengen.
-    openingQuestion: "Haben Sie dafür kurz Zeit?",
+    // Der Satz, der die Eroeffnung zur GESPRAECHSEROEFFNUNG macht. Keine Interpolation:
+    // er darf an keinem Anruf-Wert haengen.
+    //
+    // ER FRAGT NACH DER SACHE, NICHT NACH ERLAUBNIS (Eigentuemer-Befund nach Anruf 7,
+    // 18.08.2026). Vorher stand hier "Haben Sie dafuer kurz Zeit?" - eine Ja/Nein-Frage,
+    // und sie kostete am gemessenen Anruf einen VOLLEN Rundgang: der Angerufene sagte bei
+    // 19 s "Ja, hab ich", woraufhin der Agent bei 22 s das Anliegen ein zweites Mal
+    // vortrug. Rund 20 s fuer null Inhalt. Eine offene Frage laesst die Gegenseite sofort
+    // zur Sache antworten - im selben Zug, in dem sie sonst nur "ja" gesagt haette.
+    openingQuestion: "Wie sieht es damit bei Ihnen aus?",
     // Pflicht-Offenlegung (CLAUDE.md Regel 2): fest verdrahtet, byte-stabil, nur der
     // ownerName ist gebunden (nicht per Call-Parameter waehlbar/abschaltbar). Fehlt der
     // Name, tritt der DE-Ausdruck ein (makeDisclosure) - der Satz bleibt vollstaendig.
@@ -302,7 +309,7 @@ export const LOCALES = Object.freeze({
     bridgePhrase: (goal) =>
       /^(je\b|j')/i.test(goal) ? `${goal}.` : `Voici l'objet de mon appel : ${goal}.`,
     // s. DE (openingQuestion).
-    openingQuestion: "Auriez-vous un instant ?",
+    openingQuestion: "Qu'en est-il de votre côté ?",
     // FR-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE).
     // Fehlt der Name, tritt der FR-Ausdruck ein (makeDisclosure).
@@ -391,7 +398,7 @@ export const LOCALES = Object.freeze({
     bridgePhrase: (goal) =>
       /^i\b/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,
     // s. DE (openingQuestion).
-    openingQuestion: "Do you have a moment for that?",
+    openingQuestion: "How does that look on your side?",
     // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).
     // Fehlt der Name, tritt DISCLOSURE_OWNER_FALLBACK_EN ein (makeDisclosure) - denselben
