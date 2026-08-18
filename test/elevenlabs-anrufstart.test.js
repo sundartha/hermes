@@ -1027,6 +1027,106 @@ test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Defa
   );
 });
 
+// ---- T5 (f): der Satz muss auch zu ENDE gesprochen werden ----------------------------
+// T5 (c/d/e) nageln den WORTLAUT fest - in der Basissprache, mit eingesetztem Default und
+// je Sprache. Alle drei sagen NICHTS darueber, ob der Angerufene den Satz auch hoert.
+//
+// GEMESSEN am 18.08.2026, dass er das nicht muss: das Anbieter-Gespraech
+// conv_3701m0a0fxnzen79mjd8qfcp6k00 traegt transcript[0].interrupted = true und in
+// original_message den vollen Satz - GESPROCHEN wurde nur "Guten Tag, hier spricht ein
+// KI-Assistent im Auftrag von ...". Der Angerufene hat weder den Namen des Auftraggebers
+// noch den Hinweis auf die Zusammenfassung gehoert. Ausloeser war ein Phantom-Turn der
+// Spracherkennung bei 3 s ("Und ."); gesagt hatte die Gegenstelle nichts, das war
+// Leitungsgeraeusch. Der Anruf davor war bei IDENTISCHER Konfiguration vollstaendig
+// (interrupted = false, 132 Zeichen). Absolute Regel 2 (Artikel 50 EU AI Act) ist damit
+// zur LAUFZEIT nicht garantiert: fest verdrahtet ist, WAS der Agent sagt - DASS er es zu
+// Ende sagt, hing bis heute allein am Barge-in des Anbieters.
+//
+// BEIDE HAELFTEN, denn eine allein ist wertlos:
+//   (1) der SOLL-Wert steht in der Vorlage - sonst wird nie etwas Richtiges gepusht;
+//   (2) das Feld ist BESESSEN mit genau diesem Vorlagen-Pfad - sonst sieht der
+//       Drift-Waechter (npm run elevenlabs:drift) nie hin, und das Dashboard darf einen
+//       Schalter, an dem eine gesetzliche Pflicht haengt, still zurueckdrehen.
+// Die zweite Haelfte prueft zugleich die erste gegen: der besessene Vorlagen-Pfad wird
+// HIER aufgeloest, und faende er nichts, waere die Besitz-Erklaerung eine Zusage ins Leere.
+//
+// SCHEMA-BELEG der Live-Pfade (openapi.json des Anbieters, gelesen 2026-08-18) - er steht
+// hier, weil ein falsch geschriebener Live-Pfad ein Waechter waere, der am Agenten immer
+// ins Nichts sieht und trotzdem nie rot wird:
+//   conversation_config.agent.disable_first_message_interruptions
+//     Body_Create_Agent_v1_convai_agents_create_post.conversation_config ->
+//     ConversationalConfigAPIModel-Input.agent -> AgentConfigAPIModel-Input; boolean,
+//     Default FALSE, "If true, the user will not be able to interrupt the agent while the
+//     first message is being delivered."
+//   conversation_config.turn.transcribe_on_disabled_interruptions
+//     ... -> ConversationalConfigAPIModel-Input.turn -> TurnConfig; boolean, Default FALSE,
+//     "When off, user speech during a non-interruptible turn is ignored and won't trigger
+//     a turn."
+// Beide Anbieter-Defaults arbeiten GEGEN uns - genau deshalb reicht "im Dashboard richtig
+// eingestellt" nicht und der Besitz ist Pflicht.
+const OFFENLEGUNG_UNTERBRECHUNG = Object.freeze([
+  Object.freeze({
+    feld: "disable_first_message_interruptions",
+    vorlagePfad: "agent.conversation_config.agent.disable_first_message_interruptions",
+    livePfad: "conversation_config.agent.disable_first_message_interruptions",
+    zweck:
+      "sperrt die Unterbrechung fuer den ERSTEN Satz und nur fuer ihn - ohne ihn bricht ein Huster auf der Leitung die Offenlegung ab",
+  }),
+  Object.freeze({
+    feld: "transcribe_on_disabled_interruptions",
+    vorlagePfad: "agent.conversation_config.turn.transcribe_on_disabled_interruptions",
+    livePfad: "conversation_config.turn.transcribe_on_disabled_interruptions",
+    zweck:
+      "haelt fest, was die Gegenstelle waehrend des gesperrten Zuges sagt - der Anbieter-Default false wirft es weg, und der Agent weiss hinterher nicht, dass sie geredet hat",
+  }),
+]);
+
+const blattAnPfad = (wurzel, pfad) =>
+  pfad.split(".").reduce((knoten, teil) => (knoten == null ? undefined : knoten[teil]), wurzel);
+
+test("EL-START T5 (f, Mechanismus): die Offenlegung ist gegen Unterbrechung gesichert - SOLL in der Vorlage UND vom Drift-Waechter bewacht", () => {
+  const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
+  const besitzFelder = vorlage._besitz?.felder ?? [];
+  assert.ok(
+    besitzFelder.length > 0,
+    "die Besitz-Erklaerung der Vorlage ist leer - dann prueft die zweite Haelfte unten nichts",
+  );
+
+  for (const { feld, vorlagePfad, livePfad, zweck } of OFFENLEGUNG_UNTERBRECHUNG) {
+    assert.equal(
+      blattAnPfad(vorlage, vorlagePfad),
+      true,
+      `${TEMPLATE_PATH}: ${vorlagePfad} ist nicht true. Das Feld ${zweck}. Ohne SOLL-Wert kann kein Push die Offenlegung sichern - Artikel 50 EU AI Act haengt daran (s. agent.conversation_config._offenlegung_unterbrechung_hinweis).`,
+    );
+
+    const eintrag = besitzFelder.find((kandidat) => kandidat.feld === feld);
+    assert.ok(
+      eintrag,
+      `${TEMPLATE_PATH}: _besitz.felder fuehrt keinen Eintrag "${feld}". Der Wert steht dann zwar in der Vorlage, aber npm run elevenlabs:drift sieht am Live-Agenten nie hin - ein Zuruecksetzen im Dashboard bliebe unbemerkt.`,
+    );
+    assert.equal(
+      eintrag.art,
+      "wert",
+      `${feld}: nur art "wert" vergleicht genau ein Blatt je Seite - jede andere Art wuerde hier etwas anderes messen als den Schalter selbst`,
+    );
+    assert.deepEqual(
+      eintrag.vorlage,
+      [vorlagePfad],
+      `${feld}: der besessene VORLAGEN-Pfad zeigt woandershin als der Wert oben - der Waechter verteidigt dann eine Stelle, die niemand setzt`,
+    );
+    assert.deepEqual(
+      eintrag.live,
+      [livePfad],
+      `${feld}: der besessene LIVE-Pfad weicht vom Anbieter-Schema ab (s. Schema-Beleg im Kopf dieses Falls) - ein Waechter, der ins Nichts sieht, wird nie rot`,
+    );
+    assert.equal(
+      eintrag.ausgenommen,
+      undefined,
+      `${feld} traegt eine Ausnahme. Eine Ausnahme sagt dem Push "nicht von selbst geradebiegen" - bei einem Feld, an dem Artikel 50 EU AI Act haengt, ist das keine Entscheidung, die still in der Besitz-Liste stehen darf.`,
+    );
+  }
+});
+
 // ---- T6: die harten Verbote und der Kontext des Auftrags -----------------------------
 // ABSICHTLICH ROT. Auf dem BESTANDSWEG tragen beide Groessen den Systemprompt mit:
 // constraints als eigener VERBOTE-Block samt Vorrang-Satz (src/claude.js), context als

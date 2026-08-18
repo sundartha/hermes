@@ -267,6 +267,98 @@ test(`Werkzeug-Inventar der ElevenLabs-Vorlage: ${DEFERRED_BUILT_IN_TOOL} bleibt
   );
 });
 
+// --- Die Gespraechskennung am Rueckfrage-Werkzeug (2026-08-18) --------------------------
+//
+// GEMESSEN: am 18.08.2026 hat der Agent get_consult in einem echten Anruf zweimal gerufen,
+// und der Koerper aus dem Anbieter-Datensatz (tool_details.body) lautete beide Male nur
+//   {"question": "..."}
+// Mehr nicht. src/routes/webhooks-elevenlabs.js bindet die Rueckfrage aber ueber
+// req.body.conversation_id an den laufenden Anruf - fehlt das Feld, ist die Bindung
+// undefined und der Server antwortet 404 kein_laufender_anruf. Genau so geschehen, zweimal
+// im selben Anruf. Die WURZEL sitzt nicht im Handler, sondern in der Werkzeug-Definition:
+// der Anbieter sendet ausschliesslich, was das Schema deklariert.
+//
+// WARUM DIESER FALL UND NICHT DIE HANDLER-TESTS: test/elevenlabs-consult-webhook-*.test.js
+// pinnen die LESE-Seite (flache Form, question auf oberster Ebene, Bindung ueber
+// conversation_id). Keiner von ihnen kann sehen, ob der Anbieter die Kennung ueberhaupt
+// mitschickt - sie schreiben ihre Koerper selbst. Genau diese Luecke hat der echte Anruf
+// aufgedeckt (Lehre bench-must-reproduce-defect: eine selbstgebaute Nutzlast beweist die
+// Form des Vertrags nicht). Dieser Fall haelt deshalb die SENDE-Seite fest.
+//
+// SCHEMA-BELEG der Bindung (openapi.json des Anbieters, gelesen 2026-08-18):
+//   components.schemas.WebhookToolApiSchemaConfig-Input.properties.request_body_schema
+//     -> ObjectJsonSchemaProperty-Input (type/required/properties)
+//   properties.<name> -> LiteralJsonSchemaProperty mit dem Feld "dynamic_variable":
+//     "The name of the dynamic variable to use for this property's value. Mutually
+//      exclusive with description, is_system_provided, constant_value, and is_omitted."
+// Der Name "body_params_schema", den diese Vorlage bis zum 18.08.2026 als angeblichen
+// Push-Namen fuehrte, kommt in der Spezifikation NICHT VOR - deshalb prueft der Fall
+// zusaetzlich, dass er nicht zurueckkehrt: ein darunter gepushter Parameter verschwaende
+// still, ohne Fehler und ohne Spur.
+const CONSULT_BODY_SCHEMA_KEY = "request_body_schema";
+const CONSULT_UNBELEGTER_SCHEMA_KEY = "body_params_schema";
+// Der Schluessel ist BINDEND, nicht frei waehlbar: src/routes/webhooks-elevenlabs.js liest
+// genau ihn. Als Literal und nicht aus dem Handler importiert - er exportiert ihn nicht,
+// und ein Test, der beide Seiten aus derselben Quelle zoege, koennte ein Auseinanderlaufen
+// nicht sehen (dieselbe Begruendung wie bei CONSULT_TOOL oben).
+const CONSULT_CONVERSATION_KEY = "conversation_id";
+// Die Anbieter-Systemvariable, aus der der Wert kommt. NICHT aus der OpenAPI belegt (die
+// nennt als Beispiele nur system__time und system__call_duration_secs); belegt sind (a) der
+// Name aus der Anleitungs-Doku des Anbieters (.fortschritt.md, Abschnitt SYSTEM-VARIABLEN)
+// und (b) dass der Anbieter system__-Variablen selbst fuellt - in Spike 1b hat er ungefragt
+// system__message_to_speak am Werkzeug-Aufruf mitgeschickt (tasks/spike1b-messung.jsonl).
+const CONSULT_SYSTEM_VARIABLE = "system__conversation_id";
+const CONSULT_HANDLER_REL = "src/routes/webhooks-elevenlabs.js";
+
+const consultApiSchema = () => toolEntry(CONSULT_TOOL).tool_config?.api_schema ?? {};
+
+test("Werkzeug-Inventar der ElevenLabs-Vorlage: get_consult schickt die Gespraechskennung mit, die der Webhook liest", () => {
+  const apiSchema = consultApiSchema();
+
+  assert.equal(
+    apiSchema[CONSULT_UNBELEGTER_SCHEMA_KEY],
+    undefined,
+    `${TEMPLATE_REL}: api_schema traegt wieder "${CONSULT_UNBELEGTER_SCHEMA_KEY}". Dieser Name steht in der OpenAPI-Spezifikation des Anbieters nirgends - was darunter deklariert wird, erreicht das Konto nie und faellt beim Push nicht auf.`,
+  );
+
+  const schema = apiSchema[CONSULT_BODY_SCHEMA_KEY];
+  assert.equal(
+    typeof schema,
+    "object",
+    `${TEMPLATE_REL}: api_schema.${CONSULT_BODY_SCHEMA_KEY} fehlt - dann deklariert das Werkzeug keinen einzigen Parameter und der Anbieter sendet einen leeren Koerper.`,
+  );
+
+  const kennung = schema.properties?.[CONSULT_CONVERSATION_KEY];
+  assert.ok(
+    kennung,
+    `${TEMPLATE_REL}: der Parameter "${CONSULT_CONVERSATION_KEY}" fehlt in api_schema.${CONSULT_BODY_SCHEMA_KEY}.properties. ${CONSULT_HANDLER_REL} bindet die Rueckfrage ueber genau diesen Schluessel an den laufenden Anruf - ohne ihn antwortet der Server 404 kein_laufender_anruf, so am 18.08.2026 zweimal in einem echten Anruf gemessen.`,
+  );
+
+  assert.equal(
+    kennung.dynamic_variable,
+    CONSULT_SYSTEM_VARIABLE,
+    `${TEMPLATE_REL}: "${CONSULT_CONVERSATION_KEY}" wird nicht aus ${CONSULT_SYSTEM_VARIABLE} gefuellt. Ohne dynamic_variable muesste das MODELL die Kennung liefern - es kennt sie nicht und wuerde sie erfinden.`,
+  );
+
+  // dynamic_variable und description schliessen sich laut LiteralJsonSchemaProperty
+  // gegenseitig aus. Beides zugleich waere abgelehnt oder still ignoriert - und "still
+  // ignoriert" hiesse hier: der Parameter kommt nie an, genau der Bestandsdefekt.
+  assert.equal(
+    kennung.description,
+    undefined,
+    `${TEMPLATE_REL}: "${CONSULT_CONVERSATION_KEY}" traegt description NEBEN dynamic_variable - das Anbieter-Schema nennt beide ausdruecklich gegenseitig ausschliessend.`,
+  );
+
+  // Die Kopplung an die LESE-Seite. Absichtlich nur auf den NAMEN geprueft und nicht auf
+  // den Zugriffsausdruck: ein Umbau des Handlers darf diesen Fall nicht rot machen, ein
+  // UMBENENNEN des Schluessels sehr wohl - dann laufen Sende- und Leseseite auseinander.
+  const handlerQuelle = readFileSync(new URL(`../${CONSULT_HANDLER_REL}`, import.meta.url), "utf8");
+  assert.ok(
+    handlerQuelle.includes(CONSULT_CONVERSATION_KEY),
+    `${CONSULT_HANDLER_REL} nennt "${CONSULT_CONVERSATION_KEY}" nicht mehr. Sende- und Leseseite tragen dann verschiedene Namen, und die Rueckfrage landet wieder bei 404 - der Schluessel ist der einzige Draht zwischen beiden.`,
+  );
+});
+
 test("Werkzeug-Inventar der ElevenLabs-Vorlage: jedes Werkzeug heisst ueberall gleich und haengt genau einmal am Agenten", () => {
   for (const name of declaredToolNames()) {
     assert.equal(
