@@ -197,3 +197,59 @@ test("EL-CONSULT NUTZLAST 4: die alte parameters-Umschlag-Form wird abgelehnt (k
     await srv.stop();
   }
 });
+
+// ---- Fall 5: der WOERTLICH aufgezeichnete Anbieter-Aufruf ----------------------------
+// Die vier Faelle oben bauen ihre Nutzlast selbst - und genau das war der Fehler, der die
+// Umschlag-Annahme monatelang getragen hat: eine selbstgebaute Nutzlast prueft die eigene
+// Annahme gegen sich selbst. Dieser Fall sendet deshalb eine ZEICHENKETTE, die niemand hier
+// geschrieben hat: sie ist Zeichen fuer Zeichen der Koerper, den ElevenLabs am 18.08.2026 um
+// 16:07 CEST im Anruf call_msyuvayspk54 gesendet hat (Anbieter-Datensatz
+// conv_5501m0at0c3metdvggs6key1dehs, transcript[].tool_calls[].tool_details.body, erster von
+// drei Versuchen). Sie traegt beides: den Apostroph in "Fotiadis' Auto" und die Umlaute.
+//
+// WARUM DAS DER EIGENTLICHE BEWEIS IST: dieser Aufruf ist am Live-Server mit
+// 400 kein_parameter_umschlag gescheitert (alter Handler, Prozess vor der Reparatur
+// gestartet). Laeuft dieselbe Zeichenkette hier durch, ist die Reparatur an der ECHTEN
+// Nutzlast belegt und nicht an einer nachgebauten.
+const AUFGEZEICHNETER_KOERPER =
+  '{"question": "Welche Automarke, Modell und Baujahr hat Antonio Fotiadis\' Auto für die Bremsenprüfung?", "conversation_id": "conv_5501m0at0c3metdvggs6key1dehs"}';
+const AUFGEZEICHNETE_CONVERSATION = "conv_5501m0at0c3metdvggs6key1dehs";
+
+test("EL-CONSULT NUTZLAST 5: der woertlich aufgezeichnete Anbieter-Aufruf wird angenommen", async (ctx) => {
+  const srv = await startServer({
+    env: CONSULT_ON_ENV,
+    seed: seedState({
+      calls: [
+        seedCall({
+          id: CALL_ID,
+          status: "active",
+          direction: "outbound",
+          maxDurationS: 300,
+          elevenlabsConversationId: AUFGEZEICHNETE_CONVERSATION,
+        }),
+      ],
+    }),
+  });
+  try {
+    const res = await fetch(`${srv.localUrl}${CONSULT_PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
+      body: AUFGEZEICHNETER_KOERPER,
+    });
+
+    await ctx.test("angenommen (2xx) - genau dieser Koerper ergab am alten Handler 400", async () => {
+      assert.ok(res.ok, `2xx erwartet, war ${res.status}: ${await res.clone().text()}`);
+    });
+
+    await ctx.test("die Frage des Anbieters steht am Consult", () => {
+      const consults = callOf(srv).consults;
+      assert.equal(consults.length, 1);
+      // KEIN Gleichheitsvergleich: der Paraphrase-Riegel (consult/question.js) normalisiert
+      // Zitatzeichen, und der aufgezeichnete Text traegt einen Apostroph. Geprueft wird, dass
+      // der Fragetext ankommt - nicht, wie er normalisiert wird (das misst eine andere Datei).
+      assert.match(consults[0].questions[0], /Automarke/);
+    });
+  } finally {
+    await srv.stop();
+  }
+});
