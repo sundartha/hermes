@@ -202,16 +202,16 @@ const seedMitZweitemAnruf = () =>
 // wird, die Frist ablaeuft oder der Dienst herunterfaehrt - das ist der Messgegenstand.
 // Ein abgerissener Aufruf wird zu einem lesbaren Ergebnis statt zu einem rohen
 // fetch-Fehler, damit die Zusicherung den Grund nennen kann.
-// Nutzlast in der Umschlag-Form des Anbieters (belegt: elevenlabs/skills,
-// agents/references/client-tools.md, "Webhook Request Format") - question liegt unter
-// parameters, conversation_id auf oberster Ebene. Gepinnt in
+// Nutzlast in der FLACHEN Form des Anbieters (gemessen am Datensatz tool_details.body eines
+// echten Anrufs vom 18.08.2026) - question UND conversation_id liegen auf oberster Ebene,
+// es gibt keinen "parameters"-Umschlag. Gepinnt in
 // test/elevenlabs-consult-webhook-envelope.test.js.
 function raiseConsult(srv, conversationId = CONVERSATION_ID) {
   const started = Date.now();
   return fetch(`${srv.localUrl}${CONSULT_PATH}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
-    body: JSON.stringify({ conversation_id: conversationId, parameters: { question: QUESTION } }),
+    body: JSON.stringify({ conversation_id: conversationId, question: QUESTION }),
   }).then(
     async (res) => ({ status: res.status, body: await res.json(), ms: Date.now() - started }),
     (err) => ({ status: null, fehler: String(err), ms: Date.now() - started }),

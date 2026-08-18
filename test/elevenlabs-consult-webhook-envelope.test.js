@@ -1,28 +1,29 @@
-// ---- Umschlag-Form des ElevenLabs-Rueckfrage-Webhooks (Werkzeug get_consult) ----------
-// Reparatur-Beleg: der Anbieter schickt Werkzeug-Aufrufe NICHT flach, sondern in einem
-// Umschlag - schema-deklarierte Parameter (hier: question) liegen unter "parameters",
-// NUR conversation_id liegt auf oberster Ebene. Vor dieser Reparatur las der Handler
-// req.body?.question (oberste Ebene) und fand deshalb bei einem echten Anbieter-Aufruf
-// nie etwas - eine leere Frage wurde still an das Laufwerk zurueckgegeben, ohne dass
-// irgendwo ein Fehler sichtbar wurde.
+// ---- Nutzlast-Form des ElevenLabs-Rueckfrage-Webhooks (Werkzeug get_consult) ----------
+// Der Anbieter sendet FLACH: der schema-deklarierte Parameter question liegt direkt auf
+// oberster Ebene, es gibt KEINEN "parameters"-Umschlag.
 //
-// KENNZEICHNUNGS-PFLICHT (Vorgabe des Eigentuemers): die Umschlag-Form unten ist NICHT aus
-// einem echten Mitschnitt eines Anbieter-Aufrufs, sondern woertlich aus der
-// Anleitungs-Dokumentation des Anbieters uebernommen - elevenlabs/skills (GitHub-Repo),
-// Datei agents/references/client-tools.md, Abschnitt "Webhook Request Format":
-//   {"tool_call_id":"call_abc123","tool_name":"get_weather","parameters":{...},
-//    "conversation_id":"conv_xyz789"}
-// Ein echter Mitschnitt eines get_consult-Aufrufs steht noch aus. Erfunden ist an der
-// Nutzlast unten NICHTS: Feldnamen und Verschachtelung sind woertlich aus dem Zitat,
-// tool_name/tool_call_id sind fuer diese Tests beliebige, aber PLAUSIBLE Werte (der
-// Handler liest sie nicht, s. src/routes/webhooks-elevenlabs.js).
+// BELEG - und diesmal ein GEMESSENER, kein zitierter: am 18.08.2026 lief ein echter Anruf
+// (call_msyexvu3q5r9, Anbieter-Gespraech conv_3701m0a0fxnzen79mjd8qfcp6k00). Der Agent rief
+// get_consult zweimal auf; der Koerper aus dem Anbieter-Datensatz (tool_details.body) lautet
+// woertlich:
+//   {"question": "The workshop is asking for the car's make, model, and year for the brake
+//    inspection appointment - what should I tell them?"}
+// Mehr steht nicht drin. Die frueher hier gepinnte Umschlag-Form stammte aus
+// agents/references/client-tools.md - dem Abschnitt fuer CLIENT-Tools. Wir betreiben ein
+// WEBHOOK-Tool, fuer das dieses Format nicht gilt; die Umschlag-Form wird ab jetzt ABGELEHNT
+// (Fall 4). Kein Doppelweg - der wuerde genau diesen Fehler wieder verdecken.
+//
+// FAIL-CLOSED: fehlt question, ist es kein String oder nur Leerraum, antwortet der Handler
+// 400 und legt KEINEN Consult an. Eine leere Frage waere die schlechtere Luege - sie
+// gaukelte dem Modell etwas zum Beantworten vor (s. toolResultText in
+// src/routes/webhooks-elevenlabs.js).
 //
 // Spawn-basiert ueber die ECHTE HTTP-Route (Muster
 // test/elevenlabs-consult-webhook-guards.test.js): ein Gate, das nur in einer Funktion
 // sitzt, aber nicht in der Route haengt, wuerde sonst gruen messen. Token-, Bindungs-,
 // Faehigkeits- und Geld-Pruefung sind dort bereits gepinnt und werden hier NICHT
 // wiederholt - Faelle hier bleiben in ALLEN diesen Gates im Gutfall, damit ausschliesslich
-// die Umschlag-Form den Ausschlag gibt.
+// die Nutzlast-Form den Ausschlag gibt.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState, seedCall } from "./helpers.js";
@@ -31,13 +32,19 @@ const CONSULT_PATH = "/webhooks/elevenlabs/consult";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 const TOOL_TOKEN = "el-tool-token-testgeheim";
 
-const CALL_ID = "call_el_umschlag";
-const CONVERSATION_ID = "conv_el_umschlag_1";
-const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
+const CALL_ID = "call_el_nutzlast";
+const CONVERSATION_ID = "conv_el_nutzlast_1";
+// Der Wortlaut ist beliebig - gemessen wird hier ausschliesslich die LAGE des Feldes
+// (oberste Ebene). Bewusst OHNE Apostroph, anders als die Original-Frage im Kopfkommentar:
+// der Paraphrase-Riegel (consult/question.js, AL-P14) normalisiert Zitatzeichen, und die
+// Gleichheit in Fall 1 wuerde sonst an einem Sachverhalt scheitern, den diese Datei nicht
+// misst.
+const QUESTION =
+  "The workshop is asking for the make, model and year of the car - what should I tell them?";
 
-// HTTP_BAD_REQUEST ist der neue Ablehnungscode dieser Reparatur (routes/webhooks-elevenlabs.js).
+// HTTP_BAD_REQUEST ist der Ablehnungscode der Nutzlast-Pruefung (routes/webhooks-elevenlabs.js).
 const HTTP_BAD_REQUEST = 400;
-const KEIN_PARAMETER_UMSCHLAG = "kein_parameter_umschlag";
+const KEINE_FRAGE = "keine_frage";
 
 const CONSULT_ON_ENV = Object.freeze({
   CONSULT_ENABLED: "true",
@@ -58,14 +65,11 @@ const post = (srv, body) =>
 const callOf = (srv) => srv.readStore().calls.find((call) => call.id === CALL_ID);
 const consultCount = (srv) => (callOf(srv).consults ?? []).length;
 
-// Woertlich die Umschlag-Form aus client-tools.md, s. Kommentar am Dateikopf - nur die
-// beiden Felder befuellt, die dieser Handler tatsaechlich liest (question, conversation_id).
-const anbieterUmschlag = (question) => ({
-  tool_call_id: "call_abc123",
-  tool_name: "get_consult",
-  parameters: { question },
-  conversation_id: CONVERSATION_ID,
-});
+// Die gemessene Anbieter-Nutzlast. conversation_id steht daneben, weil das Werkzeug am
+// Anbieter getrennt so konfiguriert wird, dass es die Anbieter-Systemvariable als
+// Body-Parameter mitschickt - Schritt 2 des Handlers liest sie unveraendert von oberster
+// Ebene und ist NICHT Gegenstand dieser Datei.
+const anbieterNutzlast = (question) => ({ question, conversation_id: CONVERSATION_ID });
 
 const seed = () =>
   seedState({
@@ -80,22 +84,24 @@ const seed = () =>
     ],
   });
 
-test("EL-CONSULT UMSCHLAG 1: die dokumentierte Anbieter-Form wird angenommen, die Frage kommt aus parameters.question", async (ctx) => {
+// Fall 1 ist die Positiv-Kontrolle bis zur WIRKUNG: ohne ihn bestuende ein Handler, der
+// jede Nutzlast ablehnt, die drei Ablehnungsfaelle darunter muehelos.
+test("EL-CONSULT NUTZLAST 1: die gemessene flache Anbieter-Form wird angenommen, die Frage kommt von oberster Ebene", async (ctx) => {
   const srv = await startServer({ env: CONSULT_ON_ENV, seed: seed() });
   try {
-    const res = await post(srv, anbieterUmschlag(QUESTION));
+    const res = await post(srv, anbieterNutzlast(QUESTION));
 
     await ctx.test("angenommen (2xx), kein Gate hat gesperrt", async () => {
       assert.ok(res.ok, `2xx erwartet, war ${res.status}: ${await res.clone().text()}`);
     });
 
-    await ctx.test("die Frage aus parameters.question steht am Consult, nicht leer", () => {
+    await ctx.test("die Frage von oberster Ebene steht am Consult, nicht leer", () => {
       const consults = callOf(srv).consults;
       assert.equal(consults.length, 1);
       assert.equal(
         consults[0].questions[0],
         QUESTION,
-        "der Handler muss parameters.question lesen, nicht req.body.question (oberste Ebene)",
+        "der Handler muss req.body.question lesen - die gemessene Anbieter-Form ist flach",
       );
     });
   } finally {
@@ -103,13 +109,12 @@ test("EL-CONSULT UMSCHLAG 1: die dokumentierte Anbieter-Form wird angenommen, di
   }
 });
 
-test("EL-CONSULT UMSCHLAG 2: ein Rumpf ohne parameters wird als Fehler beantwortet, nicht still als leere Frage", async (ctx) => {
+test("EL-CONSULT NUTZLAST 2: ein Rumpf ohne question wird als Fehler beantwortet, nicht still als leere Frage", async (ctx) => {
   const srv = await startServer({ env: CONSULT_ON_ENV, seed: seed() });
   try {
     // conversation_id bindet einen gueltigen, laufenden Anruf - Token/Bindung/Faehigkeit/
-    // Geld sind also alle im Gutfall. NUR "parameters" fehlt (question waere hier frueher
-    // faelschlich auf oberster Ebene gesucht worden).
-    const res = await post(srv, { conversation_id: CONVERSATION_ID, question: QUESTION });
+    // Geld sind also alle im Gutfall. NUR question fehlt.
+    const res = await post(srv, { conversation_id: CONVERSATION_ID });
 
     await ctx.test("400, kein stiller Erfolg", async () => {
       assert.equal(
@@ -117,7 +122,7 @@ test("EL-CONSULT UMSCHLAG 2: ein Rumpf ohne parameters wird als Fehler beantwort
         HTTP_BAD_REQUEST,
         `400 erwartet, war ${res.status}: ${await res.clone().text()}`,
       );
-      assert.equal((await res.json()).error, KEIN_PARAMETER_UMSCHLAG);
+      assert.equal((await res.json()).error, KEINE_FRAGE);
     });
 
     await ctx.test("kein Consult mit leerer Frage entstanden", () => {
@@ -128,15 +133,66 @@ test("EL-CONSULT UMSCHLAG 2: ein Rumpf ohne parameters wird als Fehler beantwort
   }
 });
 
-test("EL-CONSULT UMSCHLAG 3: conversation_id wird weiterhin von der obersten Ebene gelesen", async () => {
+// Die Raender (T5/G3): question vorhanden, aber unbrauchbar. Ein Handler, der nur auf
+// "Feld da?" prueft, reichte hier eine leere oder gar keine Zeichenkette an das Modell
+// weiter - genau die Luege, die Fall 2 verbietet.
+test("EL-CONSULT NUTZLAST 3: question als Nicht-String oder leer/nur Leerraum -> 400, kein Consult", async (ctx) => {
   const srv = await startServer({ env: CONSULT_ON_ENV, seed: seed() });
   try {
-    // Genau die Anbieter-Form: conversation_id NEBEN dem Umschlag, nicht darin. Wuerde der
-    // Handler versehentlich in parameters.conversation_id suchen, faende er nichts und
-    // dieser (gueltige) Aufruf schluege fehl.
-    const res = await post(srv, anbieterUmschlag(QUESTION));
-    assert.ok(res.ok, `2xx erwartet (conversation_id ausserhalb von parameters), war ${res.status}`);
-    assert.equal(consultCount(srv), 1);
+    const unbrauchbar = {
+      "leerer String": "",
+      "nur Leerraum": "   \n\t ",
+      Zahl: 42,
+      "null": null,
+      Objekt: { text: QUESTION },
+      Liste: [QUESTION],
+      "boolesch true": true,
+    };
+    for (const [name, question] of Object.entries(unbrauchbar)) {
+      await ctx.test(`${name} -> 400`, async () => {
+        const res = await post(srv, { conversation_id: CONVERSATION_ID, question });
+        assert.equal(
+          res.status,
+          HTTP_BAD_REQUEST,
+          `400 erwartet, war ${res.status}: ${await res.clone().text()}`,
+        );
+        assert.equal((await res.json()).error, KEINE_FRAGE);
+      });
+    }
+
+    await ctx.test("kein einziger Consult entstanden", () => {
+      assert.equal(consultCount(srv), 0);
+    });
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("EL-CONSULT NUTZLAST 4: die alte parameters-Umschlag-Form wird abgelehnt (kein Doppelweg)", async (ctx) => {
+  const srv = await startServer({ env: CONSULT_ON_ENV, seed: seed() });
+  try {
+    // Exakt die Form aus agents/references/client-tools.md, die dieser Handler frueher las.
+    // Sie gilt fuer CLIENT-Tools, nicht fuer Webhook-Tools - und ein zweiter Lesepfad
+    // daneben wuerde eine erneut abweichende Anbieter-Form wieder unsichtbar machen.
+    const res = await post(srv, {
+      tool_call_id: "call_abc123",
+      tool_name: "get_consult",
+      parameters: { question: QUESTION },
+      conversation_id: CONVERSATION_ID,
+    });
+
+    await ctx.test("400 mit demselben Grund wie eine fehlende Frage", async () => {
+      assert.equal(
+        res.status,
+        HTTP_BAD_REQUEST,
+        `400 erwartet, war ${res.status}: ${await res.clone().text()}`,
+      );
+      assert.equal((await res.json()).error, KEINE_FRAGE);
+    });
+
+    await ctx.test("kein Consult aus dem Umschlag entstanden", () => {
+      assert.equal(consultCount(srv), 0, "kein stiller Rueckfall auf parameters.question");
+    });
   } finally {
     await srv.stop();
   }

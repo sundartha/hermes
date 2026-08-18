@@ -35,8 +35,8 @@ const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 
 // Die vier Ablehnungscodes. 402 nach dem Bestandsmuster der Geld-Denials
 // (telephony/outbound-gates.js), 404 statt 403 nach dem Bestandsmuster der Call-Routen
-// (kein Existenz-Leck), 403 fuer das Geheimnis, 400 fuer eine Nutzlast, die nicht die
-// dokumentierte Umschlag-Form traegt (s. Schritt 5 im Handler; Anbieter-Beleg dort zitiert).
+// (kein Existenz-Leck), 403 fuer das Geheimnis, 400 fuer eine Nutzlast ohne brauchbaren
+// Fragetext (s. Schritt 5 im Handler; Anbieter-Beleg dort zitiert).
 // 500 ist keine Ablehnung, sondern das letzte Netz (s. Handler): ein unerwarteter Fehler
 // MUSS beantwortet werden.
 const HTTP_BAD_REQUEST = 400;
@@ -119,14 +119,27 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     );
   }
 
-  // Der Umschlag des Anbieters (s. Schritt 5 in handleConsult fuer den vollen Beleg), als
-  // eigenstaendiges Praedikat statt inline: haelt handleConsult unter der Komplexitaets-
+  // Die Nutzlast des Anbieters ist FLACH: der schema-deklarierte Parameter question liegt
+  // direkt auf oberster Ebene von req.body. GEMESSEN am Anbieter-Datensatz (tool_details.body)
+  // eines echten Anrufs vom 18.08.2026 - Anruf call_msyexvu3q5r9, Anbieter-Gespraech
+  // conv_3701m0a0fxnzen79mjd8qfcp6k00 - woertlich:
+  //   {"question": "The workshop is asking for the car's make, model, and year for the brake
+  //    inspection appointment - what should I tell them?"}
+  // Mehr steht nicht drin: KEIN "parameters"-Umschlag. Die Umschlag-Form aus
+  // agents/references/client-tools.md gilt hier NICHT - dieser Abschnitt beschreibt
+  // CLIENT-Tools, wir betreiben ein WEBHOOK-Tool.
+  //
+  // Eigenstaendiges Praedikat statt inline: haelt handleConsult unter der Komplexitaets-
   // Grenze (G30, eine Aufgabe pro Funktion) und der Name macht die Absicht explizit (G20).
-  // null heisst "kein gueltiger Umschlag", nie ein stiller Rueckfall auf {}.
-  function parameterEnvelope(req) {
-    const parameters = req.body?.parameters;
-    if (!parameters || typeof parameters !== "object") return null;
-    return parameters;
+  // null heisst "keine brauchbare Frage" - fehlend, kein String oder nur Leerraum. Nie ein
+  // stiller Rueckfall auf leeren Text (s. toolResultText: eine leere Frage waere eine Luege,
+  // die dem Modell etwas zum Beantworten vorgaukelt). Kein Doppelweg ("question von hier ODER
+  // aus parameters") - der wuerde genau den Fehler wieder verdecken, den diese Reparatur
+  // behebt; die Umschlag-Form wird ab hier abgelehnt.
+  function payloadQuestion(req) {
+    const question = req.body?.question;
+    if (typeof question !== "string" || !question.trim()) return null;
+    return question;
   }
 
   async function handleConsult(req, res) {
@@ -154,19 +167,10 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     });
     if (budgetAxis) return denied(res, HTTP_PAYMENT_REQUIRED, budgetAxis);
 
-    // 5) Nutzlast-Form. Der Anbieter sendet Werkzeug-Aufrufe in einem UMSCHLAG und schema-
-    // deklarierte Parameter (hier: question) liegen NICHT auf oberster Ebene, sondern unter
-    // "parameters" (woertlich belegt: elevenlabs/skills, agents/references/client-tools.md,
-    // Abschnitt "Webhook Request Format" -
-    // {"tool_call_id":"call_abc123","tool_name":"get_weather","parameters":{...},
-    // "conversation_id":"conv_xyz789"}). Nur conversation_id liegt laut demselben Beleg auf
-    // oberster Ebene - deshalb liest Schritt 2 oben weiterhin req.body?.conversation_id
-    // direkt. Fehlt der Umschlag, ist das ein FEHLER, keine leere Frage (s. toolResultText:
-    // eine leere Frage waere eine Luege, die dem Modell etwas zum Beantworten vorgaukelt).
-    // Kein stiller Doppelweg ("question von hier ODER von da nehmen") - der wuerde genau den
-    // Fehler wieder verdecken, den dieser Umbau behebt.
-    const parameters = parameterEnvelope(req);
-    if (!parameters) return denied(res, HTTP_BAD_REQUEST, "kein_parameter_umschlag");
+    // 5) Nutzlast-Form: question liegt flach auf oberster Ebene (voller Anbieter-Beleg an
+    // payloadQuestion). Fehlt sie, ist das ein FEHLER, keine leere Frage.
+    const question = payloadQuestion(req);
+    if (!question) return denied(res, HTTP_BAD_REQUEST, "keine_frage");
 
     // 6) Gleichzeitigkeit - und erst DANN die Wirkung. Dieser Aufruf ist ein blockierender
     // Halter: er haelt die Verbindung des Anbieters bis CONSULT_OPEN_MS offen. Ohne
@@ -177,7 +181,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     // ist EINE Tatsache. Kein freier Platz -> 404 wie jede andere Faehigkeits-Ablehnung,
     // OHNE dass ein Datensatz entsteht.
     const held = await consultSlots.withOpenSlot(call.id, call.tenantId, () =>
-      onConsultRaised({ callId: call.id, question: parameters.question }),
+      onConsultRaised({ callId: call.id, question }),
     );
     if (!held.granted) return denied(res, HTTP_NOT_FOUND, "kein_freier_platz");
     const outcome = held.value;

@@ -16,12 +16,13 @@
 //
 // DER VERTRAG, den diese Datei festnagelt:
 //   Route     POST /webhooks/elevenlabs/consult (JSON)
-//   Nutzlast  { conversation_id: <opake ElevenLabs-Kennung>, parameters: { question: <Text> } }
-//             Umschlag-Form des Anbieters (belegt: elevenlabs/skills,
-//             agents/references/client-tools.md, "Webhook Request Format") - nur
-//             conversation_id liegt auf oberster Ebene, question steht unter parameters.
-//             Die Umschlag-Form selbst samt ihrer Ablehnung bei fehlendem parameters ist
-//             in test/elevenlabs-consult-webhook-envelope.test.js gepinnt; hier reicht fuer
+//   Nutzlast  { conversation_id: <opake ElevenLabs-Kennung>, question: <Text> }
+//             FLACHE Form des Anbieters, gemessen am Datensatz (tool_details.body) eines
+//             echten Anrufs vom 18.08.2026 (call_msyexvu3q5r9,
+//             conv_3701m0a0fxnzen79mjd8qfcp6k00) - beide Felder auf oberster Ebene, KEIN
+//             "parameters"-Umschlag. Die Nutzlast-Form selbst samt ihrer Ablehnung bei
+//             fehlender/unbrauchbarer question ist in
+//             test/elevenlabs-consult-webhook-envelope.test.js gepinnt; hier reicht fuer
 //             die Angriffs-/Geld-Faelle irgendeine ANGENOMMENE Nutzlast.
 //   Bindung   conversation_id -> Call ueber call.elevenlabsConversationId (Muster des
 //             bestehenden Provider-Handles call.telnyxConversationId). NUR ein Call mit
@@ -297,7 +298,7 @@ test("EL-CONSULT S2: fremde bzw. erfundene conversation_id -> 404, kein Zugriff 
     await ctx.test("Gegenprobe: dieselbe Route nimmt die EIGENE Kennung an", async () => {
       const res = await withToken(srv, {
         conversation_id: OWN_CONVERSATION_ID,
-        parameters: { question: QUESTION },
+        question: QUESTION,
       });
       assert.ok(res.ok, `2xx erwartet, war ${res.status} - dann misst der 404 oben nichts`);
     });
@@ -355,7 +356,7 @@ test("EL-CONSULT S4: Nutzlast mit Rufnummer + Gespraechsinhalt taucht in KEINER 
     // ist der gefaehrlichere Pfad) und mit ungueltigem (Ablehnungs-Protokoll).
     const angenommen = await withToken(srv, {
       conversation_id: OWN_CONVERSATION_ID,
-      parameters: { question: PII_FRAGE },
+      question: PII_FRAGE,
       caller_number: PII_NUMMER,
     });
     // EXISTENZ-KONTROLLE: eine nicht vorhandene Route protokolliert naturgemaess nichts -
@@ -367,7 +368,7 @@ test("EL-CONSULT S4: Nutzlast mit Rufnummer + Gespraechsinhalt taucht in KEINER 
     );
     await post(srv, {
       conversation_id: OWN_CONVERSATION_ID,
-      parameters: { question: PII_FRAGE },
+      question: PII_FRAGE,
       caller_number: PII_NUMMER,
     });
 
@@ -399,7 +400,7 @@ test("EL-CONSULT Gutfall: gueltiger Token + laufender eigener Anruf + freies Bud
   try {
     const res = await withToken(srv, {
       conversation_id: OWN_CONVERSATION_ID,
-      parameters: { question: QUESTION },
+      question: QUESTION,
     });
 
     await ctx.test("kein Gate hat gesperrt (2xx)", async () => {

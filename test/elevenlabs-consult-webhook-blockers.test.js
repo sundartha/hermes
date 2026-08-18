@@ -95,14 +95,15 @@ const post = (srv, body, headers = {}) =>
     body: JSON.stringify(body),
   });
 
-// Umschlag-Form des Anbieters (belegt: elevenlabs/skills, agents/references/client-tools.md,
-// "Webhook Request Format") - question liegt unter parameters, conversation_id auf
-// oberster Ebene. Gepinnt in test/elevenlabs-consult-webhook-envelope.test.js; hier reicht
-// fuer die BL-Faelle irgendeine ANGENOMMENE Nutzlast.
+// FLACHE Nutzlast-Form des Anbieters (gemessen am Datensatz tool_details.body eines echten
+// Anrufs vom 18.08.2026) - question UND conversation_id liegen auf oberster Ebene, es gibt
+// keinen "parameters"-Umschlag. Gepinnt in
+// test/elevenlabs-consult-webhook-envelope.test.js; hier reicht fuer die BL-Faelle
+// irgendeine ANGENOMMENE Nutzlast.
 const withToken = (srv, conversationId) =>
   post(
     srv,
-    { conversation_id: conversationId, parameters: { question: QUESTION } },
+    { conversation_id: conversationId, question: QUESTION },
     { [TOOL_TOKEN_HEADER]: TOOL_TOKEN },
   );
 
