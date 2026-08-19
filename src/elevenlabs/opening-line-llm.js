@@ -168,8 +168,13 @@ export async function fetchOpeningLine({ objective, tenantId, locale }) {
   // Die Quelle beschreibt die Herkunft der GRUND-Zeile; komponiert wird danach genau
   // einmal, hier - auf der SCHREIBSEITE, also VOR createCall und damit vor dem
   // Annahme-Hash. Hinter der Hash-Gegenprobe waere der angehaengte Satz ungeprueft
-  // und ungehasht (opening-line.js, verifiedOpeningLine).
-  const reason = generated ?? bridged ?? locale.openingReasonFallback;
-  const source = generated ? "erzeugt" : bridged ? "auftrag" : "fest";
+  // und ungehasht (opening-line.js, verifiedOpeningLine). EIN Tupel statt zweier
+  // paralleler Bedingungsketten (Review-Befund G5/S2) - reason und source werden
+  // aus derselben Fallstufe gebildet, nicht zweimal unabhaengig gewaehlt.
+  const [reason, source] = generated
+    ? [generated, "erzeugt"]
+    : bridged
+      ? [bridged, "auftrag"]
+      : [locale.openingReasonFallback, "fest"];
   return { line: composedOpeningLine(reason, locale), source };
 }
