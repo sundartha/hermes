@@ -188,12 +188,19 @@ export const LOCALES = Object.freeze({
     // 19 s "Ja, hab ich", woraufhin der Agent bei 22 s das Anliegen ein zweites Mal
     // vortrug. Rund 20 s fuer null Inhalt. Eine offene Frage laesst die Gegenseite sofort
     // zur Sache antworten - im selben Zug, in dem sie sonst nur "ja" gesagt haette.
-    openingQuestion: "Wie sieht es damit bei Ihnen aus?",
+    //
+    // SEIT GQ-E1 OHNE ANREDE-PRONOMEN (Befund call_mt0ddduxuzgl): der Satz steht hinter
+    // einer Zeile, deren Anrede aus dem AUFTRAG kommt - der duzte, die feste Frage
+    // siezte. Ein Baustein ohne Anrede kann mit keiner Anrede brechen; das ist die
+    // einzige Loesung ohne Heuristik und sie traegt auf allen Stufen der Treppe
+    // (Stufe 3 kennt den Auftragstext gar nicht). Waechter: GQ-E1-04.
+    openingQuestion: "Wie sieht es damit aus?",
     // Thema A (2026-08-19): letzte Stufe der Eroeffnungs-Treppe (src/elevenlabs/
     // opening-line.js) - greift NUR, wenn weder die erzeugte Zeile noch der Auftrag
     // selbst die Pruefung bestehen. EIN kurzer Satz, keine Interpolation, korrekte
-    // Umlaute (gesprochener DE-String).
-    openingReasonFallback: "Ich rufe an, um ein kurzes Anliegen mit Ihnen zu klären.",
+    // Umlaute (gesprochener DE-String). Ebenfalls ohne Anrede-Pronomen, s.
+    // openingQuestion (GQ-E1-04).
+    openingReasonFallback: "Ich rufe an, um ein kurzes Anliegen zu klären.",
     // Pflicht-Offenlegung (CLAUDE.md Regel 2): fest verdrahtet, byte-stabil, nur der
     // ownerName ist gebunden (nicht per Call-Parameter waehlbar/abschaltbar). Fehlt der
     // Name, tritt der DE-Ausdruck ein (makeDisclosure) - der Satz bleibt vollstaendig.
@@ -340,9 +347,9 @@ export const LOCALES = Object.freeze({
     bridgePhrase: (goal) =>
       /^(je\b|j')/i.test(goal) ? `${goal}.` : `Voici l'objet de mon appel : ${goal}.`,
     // s. DE (openingQuestion).
-    openingQuestion: "Qu'en est-il de votre côté ?",
+    openingQuestion: "Qu'en est-il ?",
     // s. DE (openingReasonFallback) - kuratiert, mit Akzenten.
-    openingReasonFallback: "J'appelle pour régler une petite demande avec vous.",
+    openingReasonFallback: "J'appelle pour régler une petite demande.",
     // FR-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE).
     // Fehlt der Name, tritt der FR-Ausdruck ein (makeDisclosure).
