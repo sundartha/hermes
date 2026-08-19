@@ -32,6 +32,8 @@ import { localeFor } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
+// NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
+// fields.js, und der ist am 17.08.2026 als toter Export geloescht worden (Phase 5).
 const LAST_TRANSCRIPT_LINES = 6;
 
 // identity (optional): wird als interner X-Internal-Identity-Header an die localhost-
@@ -121,7 +123,9 @@ function requireFields(obj, specs) {
 }
 
 // Status-Mapping laut Vertrag: dialing | in_progress | completed | failed | cancelled
-function mapStatus(c) {
+// Exportiert (rein additiv, keine Verhaltensaenderung): weitere Aufrufer bleiben
+// innerhalb dieser Datei, der Export vermeidet nur einen kuenftigen Nachbau.
+export function mapStatus(c) {
   if (c.status === "active") return c.answeredAt ? "in_progress" : "dialing";
   return c.status;
 }
@@ -129,6 +133,8 @@ function mapStatus(c) {
 // startedAt - KEIN answeredAt-Fallback: bei markAnswered wuerde der Anker sonst
 // vorspringen und die angezeigte Dauer rueckwaerts springen (z.B. 3->2). Reiner
 // Anzeigewert; abgerechnet wird separat ueber voiceMinutesOf (answeredAt..endedAt).
+// NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
+// fields.js, und der ist am 17.08.2026 als toter Export geloescht worden (Phase 5).
 function durationS(c) {
   const start = c.startedAt;
   const end = c.endedAt || new Date().toISOString();
@@ -183,7 +189,9 @@ function resultCardView(result) {
   };
 }
 
-function pickTranscript(callId, c) {
+// Exportiert (rein additiv, keine Verhaltensaenderung): weitere Aufrufer bleiben
+// innerhalb dieser Datei.
+export function pickTranscript(callId, c) {
   return {
     call_id: callId,
     result_summary:
@@ -409,6 +417,24 @@ const CALENDAR_ENTRY = z.object({
 });
 const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 
+// AL-P13, der Eroeffnungs-Consult: das Feld war das einzige der fuenf Kontext-Felder, das
+// dieses Schema NICHT deklarierte - und zod strippt undeklarierte Schluessel STILL. Ueber
+// place_call erreichte es den Server also nie, obwohl HTTP-Validierung (routes/
+// _validation.js, CONTEXT_FIELDS) und Auswertung (routes/api-calls.js, emitOpeningConsult)
+// dafuer gebaut sind. Form und Deckel wie beim Geschwisterfeld key_facts (maxItems 10,
+// routes/_validation.js OPEN_QUESTIONS_LIMITS).
+//
+// Auf Modulebene wie CALENDAR_ENTRY/CALL_LIST_ENTRY daneben, NICHT inline wie die
+// Geschwisterfelder: die Schema-Definition von place_call ist bereits so tief
+// verschachtelt, dass jede weitere inline gekettete Feld-Definition die Demeter-Grenze
+// (G36) reisst. Ein benannter Wert an dieser Stelle haelt die Kette flach.
+const OPEN_QUESTIONS_FIELD = z
+  .array(z.string())
+  .optional()
+  .describe(
+    "A few (max. 10) short questions that are still open BEFORE the call and that only the principal can answer. They are asked while the phone is ringing, so the agent starts the conversation with the answers.",
+  );
+
 // Bestands-Beschreibung von place_call, byte-identisch aus dem Tool-Deskriptor
 // herausgeloest (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
 const PLACE_CALL_DESCRIPTION =
@@ -424,6 +450,16 @@ const PLACE_CALL_CONSULT_LOOP =
 // Kanal aus -> byte-identisch zum Bestand (test-gepinnt).
 const placeCallDescription = (consultLoop) =>
   [PLACE_CALL_DESCRIPTION, consultLoop ? PLACE_CALL_CONSULT_LOOP : null].filter(Boolean).join(" ");
+
+// S1-2c Fix (Owner-Auftrag 15.08.2026): die alte Beschreibung "Cancels a running call
+// cleanly" versprach einen bestaetigten Leitungs-Abbruch, den routes/api-calls.js seit
+// Owner-Auftrag 15.08.2026 (S1-4) selbst nicht mehr zusichert - das Modell entscheidet
+// nach der BESCHREIBUNG, nicht nach dem REST-Rumpf, und eine ueberholte Beschreibung ist
+// dieselbe Luege eine Ebene hoeher (C2). Modulebene statt inline (Muster
+// PLACE_CALL_DESCRIPTION): haelt registerTools() bei gleicher Zeilenzahl (Owner-Auflage,
+// eslint-legacy-exceptions.json pinnt sie).
+const CANCEL_CALL_DESCRIPTION =
+  "Cancels the call record and stops billing right away. Whether the phone line itself actually drops is NOT guaranteed on every call path - when it is not, the response says so explicitly instead of claiming a clean hangup.";
 
 // ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
 // an jeden REST-Aufruf gehaengt (X-Internal-Identity); scopedTenant (AM6) ebenso als
@@ -607,6 +643,7 @@ export function registerTools(
               .string()
               .optional()
               .describe("The desired outcome from the principal's perspective, phrased briefly."),
+            open_questions: OPEN_QUESTIONS_FIELD,
           })
           .optional()
           .describe(
@@ -845,14 +882,16 @@ export function registerTools(
     },
   );
 
+  // TEIL C (Owner-Auflage 15.08.2026, registerTools darf NICHT wachsen): der REST-Body wird
+  // UNVERAENDERT durchgereicht statt eines hartkodierten {status:"cancelled"} - die Route
+  // (routes/api-calls.js) traegt seit dieser Aenderung die ehrliche Auskunft (Datensatz vs.
+  // Leitung, S1-4: zusaetzlich hangup_attempted) bereits selbst. Kein zweiter Wortlaut hier
+  // (G5). Die Beschreibung selbst ist S1-2c-korrigiert (CANCEL_CALL_DESCRIPTION oben).
   tool(
     "cancel_call",
-    "Cancels a running call cleanly.",
+    CANCEL_CALL_DESCRIPTION,
     { call_id: z.string().describe("The call_id from place_call") },
-    async ({ call_id }) => {
-      await call("POST", `/api/calls/${call_id}/cancel`);
-      return text({ status: "cancelled" });
-    },
+    async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
   );
 
   // Stufe 0 (Text byte-identisch zum Bestand) + structuredContent (Whitelist) + Stufe 1

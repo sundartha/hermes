@@ -20,6 +20,14 @@ const SECONDS_60 = 60;
 const SECONDS_400 = 400;
 const MS_PER_S = 1000;
 
+// Slice-Fenster der Quelltext-Wiring-Guards (G25: keine nackten Zahlen) - grosszuegig genug,
+// das jeweils gepruefte Code-Stueck ab seinem Marker vollstaendig einzufangen.
+const SOURCE_WINDOW_TERMINATE_ACTIVE_CALL_CHARS = 1200; // T6 (lifecycleSrc)
+// S1-4 Fix (Owner-Auftrag 15.08.2026): von 1500 auf 4000 gewachsen - der cancel_call-Handler
+// traegt seither die S1-4/S1-5-Begruendungskommentare VOR dem hangUp-Feld.
+const SOURCE_WINDOW_CANCEL_CALL_CHARS = 4000; // T7 (apiCallsSrc)
+const SOURCE_WINDOW_ARM_TIMER_CHARS = 1500; // T8 (apiCallsSrc)
+
 // Spy-voiceControl: protokolliert jeden endCall/endCallViaCallControl-Aufruf mit
 // Provider+Argument, damit T1-T3 belegen koennen, welcher Endpunkt getroffen wurde
 // (und welcher NICHT).
@@ -153,7 +161,10 @@ test("T6: terminateCappedCall verwendet hangUpAction (nicht mehr das alte provid
   // EIN Terminalisierungspfad, INV-9 unveraendert. Der Anker wandert mit, der
   // Pruefgegenstand (hangUpAction statt Inline-Ternary) bleibt.
   const marker = "async function terminateActiveCall({ callId, providerCallSid, status, failureReason }) {";
-  const block = lifecycleSrc.slice(lifecycleSrc.indexOf(marker), lifecycleSrc.indexOf(marker) + 1200);
+  const block = lifecycleSrc.slice(
+    lifecycleSrc.indexOf(marker),
+    lifecycleSrc.indexOf(marker) + SOURCE_WINDOW_TERMINATE_ACTIVE_CALL_CHARS,
+  );
 
   assert.match(block, /hangUp:\s*hangUpAction\(voiceControl,\s*call,\s*providerCallSid\)/);
   assert.doesNotMatch(
@@ -165,9 +176,22 @@ test("T6: terminateCappedCall verwendet hangUpAction (nicht mehr das alte provid
 
 test("T7: cancel_call verwendet hangUpAction (dieselbe Quelle wie terminateCappedCall)", () => {
   const marker = 'router.post("/api/calls/:id/cancel"';
-  const block = apiCallsSrc.slice(apiCallsSrc.indexOf(marker), apiCallsSrc.indexOf(marker) + 1500);
+  const block = apiCallsSrc.slice(
+    apiCallsSrc.indexOf(marker),
+    apiCallsSrc.indexOf(marker) + SOURCE_WINDOW_CANCEL_CALL_CHARS,
+  );
 
-  assert.match(block, /hangUp:\s*hangUpAction\(voiceControl,\s*call,\s*call\.twilioSid\)/);
+  // S1-4 Fix (Owner-Auftrag 15.08.2026): hangUpAction() wird seither NUR NOCH EINMAL
+  // ausgewertet (vorher zweimal identisch aufgerufen, das erste Ergebnis nur als Boolean
+  // verworfen) - der Pruefgegenstand bleibt dieselbe Quelle (hangUpAction), jetzt ueber
+  // EINE benannte Variable statt einer zweiten, identischen Auswertung im hangUp-Feld.
+  assert.match(block, /const providerHangUp = hangUpAction\(voiceControl,\s*call,\s*call\.twilioSid\);/);
+  assert.match(block, /hangUp:\s*providerHangUp\s*\?\?\s*elHangUp/);
+  assert.equal(
+    (block.match(/hangUpAction\(voiceControl,\s*call,\s*call\.twilioSid\)/g) || []).length,
+    1,
+    "hangUpAction() darf nur EINMAL ausgewertet werden - Regressionsguard fuer den alten Doppelaufruf",
+  );
 });
 
 test("T8: C-Telnyx-Origination armiert den Max-Dauer-Timer (P6-Luecke geschlossen)", () => {
@@ -177,7 +201,10 @@ test("T8: C-Telnyx-Origination armiert den Max-Dauer-Timer (P6-Luecke geschlosse
   // (providerSupports/CAPABILITY) ersetzt - derselbe Marker-Anker, neue Quelltext-Form.
   const marker =
     "config.telnyx.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)";
-  const block = apiCallsSrc.slice(apiCallsSrc.indexOf(marker), apiCallsSrc.indexOf(marker) + 1500);
+  const block = apiCallsSrc.slice(
+    apiCallsSrc.indexOf(marker),
+    apiCallsSrc.indexOf(marker) + SOURCE_WINDOW_ARM_TIMER_CHARS,
+  );
 
   assert.match(block, /armMaxDurationTimer\(call,\s*null\)/);
   assert.doesNotMatch(block, /P6-Luecke/, "die alte, bewusste Luecke darf nicht mehr dokumentiert sein");

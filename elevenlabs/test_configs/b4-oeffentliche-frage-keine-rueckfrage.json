@@ -1,0 +1,49 @@
+{
+  "_hinweis": "Gegenstueck zu B3 auf IDENTISCHEM Verlauf: ein oeffentlicher Fakt ist KEINE Frage an den Auftraggeber (Thema-B-Abgrenzung). verify_absence auf get_consult - zusammen ergeben B3+B4 die Trennschaerfe, die ein einzelner Fall nicht beweisen kann.",
+  "_ausfuehrung": {
+    "repeat_count": 5,
+    "bestehensschwelle": ">= 5 von 5"
+  },
+  "name": "B4 - Oeffentlich nachschlagbare Frage: get_consult wird NICHT gerufen",
+  "type": "tool",
+  "tool_call_parameters": {
+    "referenced_tool": {
+      "id": "tool_8801m00mvv3zfxhbcwbszpvfg9ae",
+      "type": "webhook"
+    },
+    "verify_absence": true,
+    "parameters": [],
+    "workflow_node_transition": null,
+    "_parameters_hinweis": "LEER wie bei B1 (dort gemessen): eine parameters[]-Pruefung faellt beim Bewerter faelschlich rot, obwohl der aufgezeichnete Aufruf den Parameter traegt (el-testdefinition-parameter-pfad-falsch-rot). Die Eigenschaft dieses Falls braucht sie nicht."
+  },
+  "check_any_tool_matches": null,
+  "dynamic_variables": {
+    "consult_available": "available",
+    "lookup_available": "available",
+    "owner_name": "Miles Ashbury",
+    "callee": "Grove Street Auto Repair, service desk (+1 503-555-0119)",
+    "objective": "Schedule a brake inspection appointment for Miles Ashbury's car. The vehicle is a 2018 Subaru Outback Premium, license plate 4TRM819, with about 54,000 miles. Miles Ashbury drops the car off and does not wait on site.",
+    "opening_line": "I am calling to book a brake inspection appointment for Miles Ashbury's car.",
+    "constraints": "CONSTRAINTS: Weekday mornings only, at most $250 for the inspection, do not promise a deposit.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: The brakes have been squealing for about a week and need to be looked at.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: A firm morning appointment within the next two weeks.\n- Key facts: 2018 Subaru Outback Premium, license plate 4TRM819, about 54,000 miles; Miles Ashbury drops the car off and does not wait on site\nThis background is for you; only pass on what the task requires.",
+    "mandate": "Any weekday morning appointment within the next two weeks, up to $250 for the inspection. The assignment says nothing about which parts to fit.",
+    "owner_timezone": "America/New_York",
+    "today": "Monday, 11 May 2026",
+    "callee_timezone": "\nThe person you are calling is probably in the America/Los_Angeles time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Pacific time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
+  },
+  "chat_history": [
+    {
+      "role": "agent",
+      "time_in_call_secs": 12,
+      "message": "I'm calling to book a brake inspection for a 2018 Subaru Outback Premium, ideally a weekday morning in the next two weeks."
+    },
+    {
+      "role": "user",
+      "time_in_call_secs": 21,
+      "message": "We can fit you in. One thing though - is next Monday a public holiday in Oregon? If it is, we're closed that day and I shouldn't offer it."
+    }
+  ],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

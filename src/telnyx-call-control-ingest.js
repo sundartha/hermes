@@ -8,12 +8,14 @@
 import {
   parseCallControlEvent,
   conversationIdFrom,
+  hangupDiagnosticsFrom,
   CALL_CONTROL_EVENT,
 } from "./telephony/adapters/telnyx/call-control-events.js";
 import { eventEnvelope } from "./telephony/adapters/telnyx/speak-events.js";
 import { assistantVoiceConfigured } from "./telephony/adapters/telnyx/voice.js";
 import { defaultSetTimer, MS_PER_SECOND } from "./utils/timer.js";
 import { terminateAndBillCall, billThunk } from "./telephony/call-termination.js";
+import { callFailureReason, hangupCauseStatus, COMPLETED_STATUS } from "./telephony/failure-reason.js";
 
 // Modul-Log-Tag: EINE Quelle fuer das Praefix aller Call-Control-Logs (G5/Magic-String;
 // Muster metrics.js LOG_PREFIX / telnyx-conversation-watchdog.js WATCHDOG_LOG_PREFIX).
@@ -67,6 +69,42 @@ function logEventReceived(callId, body) {
     `${CALL_CONTROL_LOG_PREFIX} event empfangen (call=${callId}) event_type=${rawToken(env?.event_type)} status=${rawToken(env?.payload?.status)}` +
       hangupCauseSuffix(env?.payload),
   );
+}
+
+// Befund 5: Klassifikation VOR onHangup, NICHT darin - der Quelltext-Guard
+// (test/call-termination-order.test.js) haengt am literalen Marker "async function onHangup(call) {"
+// und schneidet ab dort den Funktionskoerper heraus; die Signatur bleibt darum bei genau
+// EINEM Parameter. hangupCauseStatus/hangupDiagnosticsFrom laufen deshalb am Dispatcher, das
+// Ergebnis reist als flache Kopie von call mit (der persistierte Store-Datensatz bleibt
+// unberuehrt - store.endCallRecord/recordFailureReason greifen ausschliesslich ueber call.id).
+// Invariante (Nachfassrunde): "kein answered_at -> niemals completed", AUSSER die Belege
+// widersprechen sich (Blocker B: fehlender Zeitstempel, aber eine Ursache, die ein
+// gefuehrtes Gespraech bedeutet - dann gewinnt "nicht zulasten des Mandanten"). call.
+// answeredAt reist unveraendert an hangupCauseStatus durch, das die Truthiness prueft -
+// null UND ein fehlendes Feld nehmen dort denselben Zweig (Blocker A, Begruendung dort).
+// Sonst klassifiziert hangupCauseStatus den von Telnyx durchgereichten hangup_cause
+// (Wurzel statt Symptom, CLAUDE.md).
+//
+// Der Failure-Grund wird HIER set-once persistiert (VOR terminateAndBillCall im
+// nachfolgenden onHangup, derselbe Reihenfolge-Bestand wie /voice/status) - ein spaeterer
+// Retry ueberschreibt einen bereits gesetzten Grund nicht. Optionaler Aufruf (?.): store
+// ist eine injizierte Dependency (DI, kein Interface erzwungen) - ein Aufrufer, der
+// recordFailureReason nicht implementiert, bekommt keinen gespeicherten Grund, aber
+// Settlement/Abrechnung laufen unveraendert weiter (kein Crash am optionalen Zweig).
+function recordHangupOutcome(store, call, body) {
+  const diagnostics = hangupDiagnosticsFrom(body);
+  const hangupStatus = hangupCauseStatus({
+    answeredAt: call.answeredAt,
+    hangupCause: diagnostics.hangupCause,
+  });
+  store.recordFailureReason?.(call.id, callFailureReason({ status: hangupStatus, diagnostics }));
+  return { ...call, hangupDiagnostics: diagnostics, hangupStatus };
+}
+
+// Befund 5: die Status-Wahl fuers Persistieren (completed nur bei belegtem Auflegegrund,
+// sonst failed) - benannter Helper statt Inline-Ternary, EINE Quelle fuer onHangup.
+function endStatusFor(call) {
+  return call.hangupStatus === COMPLETED_STATUS ? COMPLETED_STATUS : "failed";
 }
 
 export function makeCallControlIngest({
@@ -253,16 +291,24 @@ export function makeCallControlIngest({
   // ueber billedAt/reserveReleased. Spiegelt den /voice/status-completed-Pfad; finishCall
   // ruft releaseReserve intern. Kein Timer-Handle-Clear noetig (billedAt/status!=active
   // machen ausstehende Max-Dauer-/Reserve-Timer zum No-op, Bestandsmuster).
+  //
+  // Befund 5: der gespeicherte Status haengt jetzt am Auflegegrund (call.hangupStatus, am
+  // Dispatcher von recordHangupOutcome() gesetzt und dort auch set-once persistiert - VOR
+  // terminateAndBillCall, derselbe Reihenfolge-Bestand wie /voice/status), nicht mehr blind
+  // an COMPLETED_STATUS (Muster /voice/status Zeile 528-556 in routes/voice.js, G5 -
+  // dieselbe Entscheidung, zweimal gebaut).
   async function onHangup(call) {
     openingRetryUsed.delete(call.id); // afix-p1: Retry-Token freigeben (Call terminal)
     clearOpeningSpeakTimer(call.id); // afix-timeout: Opening-Speak-Watchdog stoppen (Call terminal)
     watchdog.clear(call.id); // stab-p9: Wache stoppen (Call terminal, egal welcher Grund)
     // C5 (Struct-4): Settlement-Gateway statt manuellem endCallRecord+finishCall-Paar (G5, eine
     // Quelle mit /voice/status + place_call-catch). hangUp:null: Telnyx hat den Call bereits
-    // beendet (dieses Event IST der Hangup).
+    // beendet (dieses Event IST der Hangup). Die Abrechnung selbst bleibt unberuehrt: bill
+    // (billThunk) laedt den Call frisch aus dem Store und haengt weder an call.hangupStatus
+    // noch am gespeicherten Status (call-finish.js gated nur auf billedAt).
     await terminateAndBillCall({
       persistEnd: () => {
-        if (call.status === "active") store.endCallRecord(call.id, "completed");
+        if (call.status === "active") store.endCallRecord(call.id, endStatusFor(call));
       },
       hangUp: null,
       bill: billThunk(finishCall, store, call.id),
@@ -327,7 +373,7 @@ export function makeCallControlIngest({
       if (eventType === CALL_CONTROL_EVENT.ANSWERED) return void (await onAnswered(call, callControlId));
       if (eventType === CALL_CONTROL_EVENT.SPEAK_ENDED) return void (await onSpeakEnded(call, callControlId));
       if (eventType === CALL_CONTROL_EVENT.SPEAK_FAILED) return void (await onSpeakFailed(call, callControlId));
-      if (eventType === CALL_CONTROL_EVENT.HANGUP) return void (await onHangup(call));
+      if (eventType === CALL_CONTROL_EVENT.HANGUP) return void (await onHangup(recordHangupOutcome(store, call, req.body)));
       // AL-P1: rein diagnostischer Zweig (Store-Write, kein Call-Effekt, kein Gate).
       if (eventType === CALL_CONTROL_EVENT.CONVERSATION_CREATED) return void onConversationCreated(call, req.body);
       // unbekannt/sonstiges -> keine Wirkung (200 bereits gesendet)

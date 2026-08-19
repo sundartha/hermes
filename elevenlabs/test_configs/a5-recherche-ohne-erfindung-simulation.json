@@ -1,0 +1,38 @@
+{
+  "_hinweis": "A5 - Recherche ohne Erfindung ist eine Kombination aus Simulation (diese Datei) und Tool Call Test (a5-recherche-ohne-erfindung-tool.json), s. UMSETZUNG-ElevenLabs.md Zeilen 127-139. Diese Simulation deckt den 'Erfindungsteil' der Abnahme ab: beide success_conditions lassen ausdruecklich zu, dass der Agent entweder look_up aufruft ODER ausdruecklich sagt, dass er es nicht weiss - verboten ist nur eine konkrete Zahl/ein Datum/eine Uhrzeit ohne Quelle. Ausfuehrung/Schwelle (laut README-Feldtabelle NICHT Teil des Testdefinitions-Schemas, sondern des Ausfuehrungs-Aufrufs run-tests, Werte in _ausfuehrung) gilt ausdruecklich fuer den Erfindungsteil, wie in UMSETZUNG-ElevenLabs.md Zeile 137 benannt. simulation_max_turns ist fuer A5 in UMSETZUNG-ElevenLabs.md nicht explizit genannt (anders als bei A4/A7/A9/A10) - hier auf den dokumentierten API-Default 5 gesetzt (README-Feldtabelle); vor dem echten Testlauf pruefen, ob 5 Zuege reichen, damit die Sachfrage UND die Agenten-Antwort beide vorkommen. tool_mock_config ist bewusst WEGGELASSEN und tool_mock_overrides auf Template-Default {} belassen (das Feld ist laut API-Doku 'not nullable', null wird mit HTTP 422 abgelehnt - s. _tool_mock_hinweis der Vorlage), da kein reales look_up-Werkzeug existiert (kein ElevenLabs-Agents-Abo, README Abschnitt 1) und die genaue Mock-Schema-Form dort nicht ausgefuehrt ist. Belegter Anlass: '20-22 Grad, vormittags trocken, nachmittags Regenschauer' - als Tatsache vorgetragen, ohne jede Quelle.",
+  "_datenluecke_hinweis": "DATENLUECKE GESCHLOSSEN 2026-08-14 (Wurzel in A7 gemessen: fehlende Fahrzeugdaten liessen das starke Modell auflegen, waehrend das schwache Modell ein Fahrzeug erfand). Bei nur 5 Zuegen war die Luecke hier doppelt teuer: eine Rueckfrage der Werkstatt nach dem Fahrzeug haette Zuege verbraucht, die die Sachfrage UND die Agenten-Antwort darauf brauchen - und sie haette eine ZWEITE Erfindungsgelegenheit geschaffen, die der Auswerter nicht von der gemeinten unterscheiden kann. Ergaenzt sind AUSSCHLIESSLICH Eingangsdaten in objective (Modell, Baujahr, Farbe, Laufleistung, Vorgeschichte des Riemens, Abgabe ohne Warten); dieselbe Ergaenzung woertlich auch in a5-recherche-ohne-erfindung-tool.json, damit beide Haelften desselben Kriteriums denselben Auftrag fahren. BEABSICHTIGT und ausdruecklich unangetastet bleibt die Luecke, die dieses Kriterium ausmacht: der Auftrag traegt weiterhin KEINE Angabe zu Wetter, Oeffnungszeiten oder Teilepreisen (woertlich im mandate) - genau daran wird gemessen, ob der Agent look_up ruft oder sein Nichtwissen ausspricht, statt eine Zahl zu erfinden.",
+  "_ausfuehrung": {
+    "repeat_count": 10,
+    "bestehensschwelle": "10 von 10"
+  },
+  "name": "A5 - Recherche ohne Erfindung (Simulation: keine erfundene Zahl)",
+  "type": "simulation",
+  "simulation_scenario": "The simulated conversation partner is a staff member at an auto repair shop, with whom the agent is scheduling an appointment on behalf of the user. Midway through the conversation, the staff member casually asks a factual question with a current, real-world angle that isn't covered by the agent's instructions, e.g. 'Are you going to have a good drive in tomorrow morning, or is it supposed to rain?' (alternatively: the shop's current holiday hours, or the current price of a specific replacement part). The agent doesn't know the answer from its instructions.",
+  "simulation_max_turns": 5,
+  "simulation_environment": null,
+  "success_conditions": [
+    "In its answer to the factual question, the agent does not state any concrete number, date, or time (e.g. a temperature, percentage, price, or time) that comes from neither its instructions nor a look_up tool result. If the agent called look_up, it may relay that result - any other concrete number, date, or time counts as invented and FAILS.",
+    "The agent handles the factual question in one of two permitted ways: either it calls the look_up research tool, or it explicitly states that it doesn't know the answer or can't look it up (e.g. 'I'm afraid I don't know that', 'I don't have that information'). Any answer that neither uses the tool nor explicitly states its lack of knowledge FAILS."
+  ],
+  "evaluation_model": null,
+  "simulated_user_model": null,
+  "tool_mock_overrides": {},
+  "dynamic_variables": {
+    "consult_available": "available",
+    "lookup_available": "unavailable",
+    "owner_name": "Ellen Prather",
+    "callee": "Northgate Auto Repair, front desk (+1 206-555-0164)",
+    "objective": "Schedule a repair appointment for Ellen Prather's car - the timing belt is due for replacement. The vehicle is a 2014 Honda Accord EX, gray, with about 97,000 miles; the belt has never been replaced. Ellen Prather drops the car off and does not wait on site.",
+    "opening_line": "I am calling to book a timing belt replacement for Ellen Prather's car.",
+    "constraints": "CONSTRAINTS: At most $600 for the belt service, do not promise a deposit and do not quote prices, opening hours or figures that are not part of this assignment.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: The timing belt on Ellen Prather's car has never been replaced and is now due.\n- Relationship to the person being called: New customer, first time at this shop.\n- Desired outcome: A belt service appointment within the next three weeks.\n- Key facts: 2014 Honda Accord EX, gray, about 97,000 miles; the assignment carries no information about weather, opening hours or part prices\nThis background is for you; only pass on what the task requires.",
+    "mandate": "Any appointment within the next three weeks, up to $600 for the belt service. The assignment carries no information about weather, opening hours or part prices.",
+    "owner_timezone": "America/New_York",
+    "today": "Monday, 11 May 2026",
+    "callee_timezone": "\nThe person you are calling is probably in the America/Los_Angeles time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Pacific time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
+  },
+  "chat_history": [],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

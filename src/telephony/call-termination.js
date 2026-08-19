@@ -89,3 +89,21 @@ export function hangUpAction(voiceControl, call, providerCallSid) {
   if (providerCallSid) return () => voiceControl(call.provider).endCall(providerCallSid);
   return null;
 }
+
+// TEIL B (Owner-Auftrag 15.08.2026): die PARALLELE Entscheidung fuer die EL-Call-FORM.
+// hangUpAction() oben verzweigt ueber callControlId/providerCallSid (Telnyx-Form) und
+// liefert fuer einen EL-Call (haelt STATTDESSEN call.elevenlabsConversationId) fail-safe
+// null - der belegte Befund dieser Sitzung: ohne diese Funktion loest der EL-Weg an
+// BEIDEN Terminierungsstellen (Max-Dauer-Cap, cancel_call) NIE einen Beende-Versuch aus -
+// die Leitung laeuft weiter und kostet weiter.
+//
+// endActiveCall kommt INJIZIERT (DIP, wie voiceControl bei hangUpAction) - KEINE
+// Import-Kante von telephony/** nach elevenlabs/**: dieses Modul kennt weder ElevenLabs
+// noch das Netz, nur die Call-FORM. Der Aufrufer (server.js/app.js, Kompositionswurzel)
+// bindet die echte Implementierung (elevenlabs/outbound.js#endActiveCall: Ergebnisabruf+
+// Persistenz ZUERST, Loeschversuch DANACH). Fehlt endActiveCall (Kanal nicht verdrahtet
+// oder Test ohne EL-Wiring) -> null, derselbe fail-safe wie bei hangUpAction ohne Handle.
+export function elevenLabsHangUpAction(endActiveCall, call) {
+  if (!call.elevenlabsConversationId || typeof endActiveCall !== "function") return null;
+  return () => endActiveCall(call.id);
+}

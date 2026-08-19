@@ -1,0 +1,12 @@
+{
+  "_kommentar_exclude": "ERZEUGTE AUSGABEN - dieselbe Liste in eslint.config.js, .jscpd.json, knip.json und hier. Die vier Formate koennen einander nicht einbinden (JSON kennt kein include, und der Vertragstest liest .jscpd.json/knip.json ausdruecklich als JSON); die Gleichheit erzwingt test/messinstrumente-erzeugte-ausgaben.test.js. c8 findet diese Datei ueber findUp aus dem Arbeitsverzeichnis des coverage-Skripts (package.json: 'c8 npm test'). Achtung: ein gesetztes exclude ERSETZT die Standardliste von c8, es ergaenzt sie nicht - deshalb stehen die beiden Standard-Eintraege, die in diesem Repo ueberhaupt wirken (coverage/, test/), ausdruecklich mit drin. Die CI-Coverage-Schwellen haengen NICHT an dieser Datei: .github/workflows/ci.yml misst mit node --experimental-test-coverage, nicht mit c8.",
+  "exclude": [
+    "coverage/**",
+    "test/**",
+    "**/dist/**",
+    "**/dist-*/**",
+    "**/build/**",
+    "**/out/**",
+    "**/.astro/**"
+  ]
+}

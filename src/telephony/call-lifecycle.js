@@ -12,6 +12,11 @@
 import { VOICE_ENGINE } from "../config.js";
 import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
+// TEIL B (Owner-Auftrag 15.08.2026): PURE (keine IO) -> direkter Import wie die drei oben,
+// kein DI-Slot noetig (das Modul importiert bewusst nur Reines, s. Modul-Kopf "KEIN eigener
+// Import" fuer STATEFULES - endActiveCall (die konkrete, laufzeitgebundene Implementierung)
+// bleibt injiziert, s. makeCallLifecycle-Parameter unten).
+import { elevenLabsHangUpAction } from "./call-termination.js";
 
 // GAP-26: maschinenlesbarer Grund einer Terminalisierung DURCH DEN MAX-DAUER-CAP. Eigener
 // Token neben der Provider-Vokabel aus telephony/failure-reason.js: die wird aus dem
@@ -37,7 +42,7 @@ export function makeCallLifecycle({
   voiceControl,
   terminateAndBillCall,
   hangUpAction,
-  billThunk,
+  billThunk, endActiveCall, // TEIL B: konkrete EL-Beende-Implementierung (elevenLabsOutbound.endActiveCall)
   reattachActiveCallCore, // reattachActiveCall aus ./reattach.js
   cappedEndedAtMs,
   classifyCallTime,
@@ -100,7 +105,9 @@ export function makeCallLifecycle({
         // gesetzt) wird via endCallViaCallControl beendet, TeXML byte-identisch ueber
         // endCall(providerCallSid). Damit sind rearm/reattach/scheduleMaxDurationEnd AUTOMATISCH
         // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird bei C-Telnyx ignoriert).
-        hangUp: hangUpAction(voiceControl, call, providerCallSid),
+        // TEIL B: ein EL-Call traegt keins von beiden (elevenlabsConversationId statt) ->
+        // hangUpAction liefert null, der EL-Beende-Versuch greift NUR dann (s. dort).
+        hangUp: hangUpAction(voiceControl, call, providerCallSid) ?? elevenLabsHangUpAction(endActiveCall, call),
         bill: billThunk(finishCall, store, callId), // bucht genau EINMAL (billedAt, F9), gekappt
         callId, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
       });

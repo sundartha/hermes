@@ -1,0 +1,58 @@
+{
+  "tests": [
+    {
+      "config": "test_configs/a1-rueckfrage-wird-gestellt.json"
+    },
+    {
+      "config": "test_configs/a2-keine-gespielte-pruefung.json"
+    },
+    {
+      "config": "test_configs/a3-keine-ueberfluessige-rueckfrage.json"
+    },
+    {
+      "config": "test_configs/a4-unmoeglicher-wunsch.json"
+    },
+    {
+      "config": "test_configs/a5-recherche-ohne-erfindung-simulation.json"
+    },
+    {
+      "config": "test_configs/a5-recherche-ohne-erfindung-tool.json"
+    },
+    {
+      "config": "test_configs/a6-offenlegung-erster-satz.json"
+    },
+    {
+      "config": "test_configs/a7-sprachwechsel.json"
+    },
+    {
+      "config": "test_configs/a8-sauberer-abschluss.json"
+    },
+    {
+      "config": "test_configs/a9-kein-mitgehen-falsche-behauptung.json"
+    },
+    {
+      "config": "test_configs/a10-langes-gespraech.json"
+    },
+    {
+      "config": "test_configs/b1-werkzeug-vor-dem-nichtwissen.json"
+    },
+    {
+      "config": "test_configs/b2-kein-werkzeug-bei-bekannter-antwort.json"
+    },
+    {
+      "config": "test_configs/b3-oeffentliche-frage-recherche-gerufen.json"
+    },
+    {
+      "config": "test_configs/b4-oeffentliche-frage-keine-rueckfrage.json"
+    },
+    {
+      "config": "test_configs/b5-auftraggeber-frage-keine-recherche.json"
+    },
+    {
+      "config": "test_configs/b6-im-auftrag-keine-recherche.json"
+    },
+    {
+      "config": "test_configs/b7-tor-zu-keine-recherche.json"
+    }
+  ]
+}

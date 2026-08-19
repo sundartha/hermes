@@ -7,7 +7,7 @@
 // und eine TypeError-Regression fuer entfernte flache Keys (Read UND Write).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { config, CONFIG_NAMESPACES, configFatalErrors } from "../src/config.js";
+import { config, CONFIG_NAMESPACES } from "../src/config.js";
 import { makeConfigOverrides } from "./helpers.js";
 
 const { withConfigOverrides } = makeConfigOverrides(config);
@@ -17,7 +17,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // P3.1: capFarewellLeadMs ergaenzt (Cap-Vorlauf-Ansage vor dem harten Max-Dauer-Cap).
   // KS-P3 (b): maxCallDurationS ENTFAELLT (E2/E3 - keine feste Maximaldauer mehr, die Frist
   // faellt pro Call aus dem Restguthaben) -> 10.
-  safety: 10,
+  // OUT-05-EL (Owner-Auftrag 15.08.2026): fakeOriginateElevenlabs ergaenzt (Trockenlege-Naht
+  // des EL-Anrufstarts, Gegenstueck zu fakeOriginate) -> 11.
+  safety: 11,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
@@ -64,7 +66,12 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // Telefonie-Adapter) -> 12.
   // WW-F2: toolFollowUpEnabled ergaenzt (Nachfass-Zug bei angekuendigter, aber nicht
   // ausgefuehrter Handlung) -> 13.
-  voice: 13,
+  // EL-CONSULT: elevenLabsToolToken ergaenzt (Bearer-Schluessel des Consult-Webhooks
+  // POST /webhooks/elevenlabs/consult) -> 14.
+  // EL-ANRUFSTART (2026-08-14): elevenLabsOutbound ergaenzt - EIN nested Objekt fuer den
+  // ElevenLabs-Anrufstart (Flag, Agent-/Nummern-Kennung, Abhol-Takt, Schluessel, Basis-URL),
+  // kein neuer primitiver Key -> 15.
+  voice: 15,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
@@ -92,15 +99,17 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // B5: llmProvider + deepseekApiKey ergaenzt -> 143.
 // FIX-1: summaryTimeoutMs ergaenzt -> 144.
 // WW-F2: toolFollowUpEnabled ergaenzt -> 145.
-// 312k-Phase 4: workosManagementApiKey ergaenzt -> 146. (Beide Aenderungen sind
-// unabhaengig voneinander entstanden und im Merge zusammengefallen - die Summe
-// traegt daher beide, nicht eine von beiden.)
+// EL-CONSULT: elevenLabsToolToken ergaenzt -> 146.
+// EL-ANRUFSTART (2026-08-14): elevenLabsOutbound ergaenzt -> 147.
+// OUT-05-EL (2026-08-15): fakeOriginateElevenlabs ergaenzt -> 148.
+// 312k-Phase 4: workosManagementApiKey ergaenzt -> 149. (Beide Ketten sind unabhaengig
+// entstanden und im Merge 2026-08-19 zusammengefallen - die Summe traegt beide.)
 // 312k-Phase 5: neuer mail-Namespace (5 Keys: smtpHost/smtpPort/smtpUser/smtpPassword/
-// mailFrom) -> 151.
-// HTTP-Fortsetzung: brevoApiKey ergaenzt (mail-Namespace 5 -> 6 Keys) -> 152.
-const EXPECTED_TOTAL_KEYS = 152;
+// mailFrom) -> 154.
+// HTTP-Fortsetzung: brevoApiKey ergaenzt (mail-Namespace 5 -> 6 Keys) -> 155.
+const EXPECTED_TOTAL_KEYS = 155;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (152 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (155 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -129,10 +138,14 @@ test("Oberflaeche: config traegt GENAU die 15 Namespaces (enumerable UND ueber '
   }
 });
 
+// Abstand des numerischen Sentinels zum Ist-Wert: gross genug, dass er mit keinem
+// realistischen Default kollidiert (Fristen in ms, Betraege in Cent).
+const NUMERIC_SENTINEL_OFFSET = 12345;
+
 // Sentinel-Wahl typabhaengig, damit der neue Wert garantiert vom Default abweicht.
 function sentinelFor(currentValue) {
   if (typeof currentValue === "boolean") return !currentValue;
-  if (typeof currentValue === "number") return currentValue + 12345;
+  if (typeof currentValue === "number") return currentValue + NUMERIC_SENTINEL_OFFSET;
   return "__pa12_override_sentinel__";
 }
 
@@ -201,12 +214,22 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // Objekt) -> 134.
   // FIX-1: summaryTimeoutMs ist primitiv (Zahl, kein Array/nested Objekt) -> 135.
   // WW-F2: toolFollowUpEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 136.
-  // 312k-Phase 4: workosManagementApiKey ist primitiv (String, kein Array/nested Objekt) -> 137.
+  // EL-CONSULT: elevenLabsToolToken ist primitiv (String, kein Array/nested Objekt) -> 137.
+  // EL-ANRUFSTART (2026-08-14): elevenLabsOutbound ist das SECHSTE nested Objekt (kein
+  // primitives Blatt) -> checked bleibt 137, nur die Nested-Objekt-Zahl unten steigt auf 6.
+  // OUT-05-EL (2026-08-15): fakeOriginateElevenlabs ist primitiv (Boolean, kein Array/
+  // nested Objekt) -> 138.
+  // 312k-Phase 4: workosManagementApiKey ist primitiv (String, kein Array/nested Objekt) -> 139.
   // 312k-Phase 5: smtpHost/smtpPort/smtpUser/smtpPassword/mailFrom sind alle fuenf primitiv
-  // (String/Zahl/String/String/String, kein Array/nested Objekt) -> 142.
+  // (String/Zahl/String/String/String, kein Array/nested Objekt) -> 144.
   // HTTP-Fortsetzung: brevoApiKey ist ebenfalls primitiv (String, kein Array/nested
-  // Objekt) -> 143.
-  assert.equal(checked, 143, "alle primitiven Blaetter (152 - 4 Arrays - 5 nested Objekte) geprueft");
+  // Objekt) -> 145 (Merge 2026-08-19 beider Ketten, s. EXPECTED_TOTAL_KEYS).
+  const EXPECTED_PRIMITIVE_LEAVES = 145;
+  assert.equal(
+    checked,
+    EXPECTED_PRIMITIVE_LEAVES,
+    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 4 Arrays - 6 nested Objekte) geprueft`,
+  );
 });
 
 test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN Fatal-Befund, auch nach voller Namespace-Traversierung", async () => {
@@ -224,7 +247,7 @@ test("No-double-eval: ein ungueltiger numerischer Env-Wert erzeugt genau EINEN F
     const after = fresh.configFatalErrors().length;
     assert.equal(after, before, "keine zusaetzlichen Fatal-Befunde durch den Namespace-Zugriff");
     assert.ok(
-      fresh.configFatalErrors().some((e) => e.includes("MAX_CALLS_PER_HOUR")),
+      fresh.configFatalErrors().some((msg) => msg.includes("MAX_CALLS_PER_HOUR")),
       "der urspruengliche Fatal-Befund muss weiter vorhanden sein",
     );
   } finally {

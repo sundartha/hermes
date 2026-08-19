@@ -203,12 +203,12 @@ test("trackUsage Kostenformel + budgetExceeded-Schwelle", async () => {
 
 test("getCalendar sortiert + addCalendarEvent + findConflict (tenantId-Signatur, I2)", async () => {
   const { store, db } = await makePgTestStore();
-  store.addCalendarEvent(
-    BOOTSTRAP_TENANT_ID,
-    "Termin",
-    "2030-01-01T10:00:00.000Z",
-    "2030-01-01T11:00:00.000Z",
-  );
+  store.addCalendarEvent({
+    tenantId: BOOTSTRAP_TENANT_ID,
+    title: "Termin",
+    startIso: "2030-01-01T10:00:00.000Z",
+    endIso: "2030-01-01T11:00:00.000Z",
+  });
   const cal = store.getCalendar(BOOTSTRAP_TENANT_ID);
   for (let i = 1; i < cal.length; i++) assert.ok(cal[i - 1].start <= cal[i].start);
   assert.ok(

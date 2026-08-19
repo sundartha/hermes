@@ -1,0 +1,43 @@
+{
+  "_hinweis": "Der Zusammenfassungs-Teil des Kriteriums A8 ('die Zusammenfassung danach enthaelt genau diese drei Werte plus ein eindeutiges \"Ziel erreicht: ja\"', UMSETZUNG-ElevenLabs.md Zeile 179) ist mit dieser Simulationstest-Definition NICHT abgedeckt. Grund: die Pruefung soll gegen das Ergebnisfeld des Post-Call-Webhooks laufen (die Nachricht, die ElevenLabs nach dem Anruf an unseren Server schickt) - dafuer gibt es in der dokumentierten Feldtabelle in elevenlabs/tests/README.md kein Feld. success_conditions wird laut README (Feldtabelle, Zeile zu 'success_conditions') vom Bewerter-Modell ausgewertet, und die dort beschriebene Grundlage ist durchgehend der simulierte Gespraechsverlauf - nicht der Webhook-Payload unseres Servers. Diese Datei deckt deshalb NUR die gespraechsinternen Verhaltensweisen ab (Datum/Uhrzeit/Preis wiederholen, Verabschieden, Beenden). Der Zusammenfassungs-/Webhook-Teil des Kriteriums braucht einen eigenen, separaten Nachweis ausserhalb dieser Testdefinition (z. B. Abgleich des tatsaechlichen Post-Call-Webhook-Payloads gegen einen echten oder simulierten Anruf) - er ist hier bewusst NICHT als gepruefte Bedingung formuliert.",
+  "_datenluecke_hinweis": "DATENLUECKE GESCHLOSSEN 2026-08-14 (Wurzel in A7 gemessen: fehlende Fahrzeugdaten liessen das starke Modell auflegen, waehrend das schwache Modell ein Fahrzeug erfand und dadurch weiterspielte). A8 laeuft nur 6 Zuege und setzt laut simulation_scenario voraus, dass die Terminabsprache bereits laeuft; eine Rueckfrage der Werkstatt nach dem Fahrzeug haette genau die Zuege verbraucht, in denen Datum, Uhrzeit und Preis bestaetigt und die Verabschiedung gesprochen werden muessen - die fuenf success_conditions waeren am Ende des Gespraechs unbewertet geblieben. Ergaenzt sind AUSSCHLIESSLICH Eingangsdaten in objective (Modell, Baujahr, Farbe, Laufleistung, Umfang, Abgabe ohne Warten); Szenario, Mandat und die fuenf Erfolgsbedingungen sind unveraendert.",
+  "name": "A8 - Sauberer Abschluss mit Ergebnis",
+  "type": "simulation",
+  "simulation_scenario": "The simulated conversation partner is a staff member at an auto repair shop. At the start, the appointment request is already underway: the partner and the agent briefly negotiate the date, time, and price for a repair appointment until a concrete agreement is reached (e.g. Tuesday, 2:30 PM, $85). Once the agreement is set, the partner behaves cooperatively, doesn't change the appointment afterward, and doesn't open any new topics - deliberately giving the agent room to summarize the conversation itself, say goodbye, and end the call.",
+  "simulation_max_turns": 6,
+  "_simulation_max_turns_hinweis": "Fuer A8 ist in UMSETZUNG-ElevenLabs.md (Zeilen 170-181) keine Zugzahl woertlich vorgegeben - anders als bei A4/A7 ('8 Zuege') oder A9 ('5 Zuege') bzw. A10 (explizit simulation_max_turns: 20). 6 ist eine eigene Einschaetzung (kurze Restverhandlung + sauberer Abschluss passen in wenige Zuege), kein Beleg aus der Quelle.",
+  "simulation_environment": null,
+  "success_conditions": [
+    "Toward the end of the conversation, the agent repeats the agreed-upon date of the appointment to confirm it, before saying goodbye.",
+    "Toward the end of the conversation, the agent repeats the agreed-upon time of the appointment to confirm it, before saying goodbye.",
+    "Toward the end of the conversation, the agent repeats the agreed-upon price to confirm it, before saying goodbye.",
+    "The agent audibly says goodbye to the conversation partner (e.g. with a closing phrase like 'Goodbye' or 'Thank you very much, have a great day'), after the date, time, and price have been confirmed.",
+    "The agent actively ends the call following the goodbye, instead of leaving it open-ended or repeating itself."
+  ],
+  "evaluation_model": null,
+  "simulated_user_model": null,
+  "tool_mock_overrides": {},
+  "dynamic_variables": {
+    "consult_available": "available",
+    "lookup_available": "unavailable",
+    "owner_name": "Owen Barrett",
+    "callee": "Hillcrest Auto Repair, service desk (+1 720-555-0136)",
+    "objective": "Schedule a repair appointment for Owen Barrett's car - the rear brake pads need replacing. The vehicle is a 2017 Chevrolet Malibu LT, black, with about 71,000 miles; the front brakes were done last year, only the rear pads are due. Owen Barrett drops the car off and does not wait on site.",
+    "opening_line": "I am calling to book a rear brake pad replacement for Owen Barrett's car.",
+    "constraints": "CONSTRAINTS: Nothing outside Tuesday or Wednesday afternoon, at most $120 for the pad replacement, do not promise a deposit.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: The rear brake pads on Owen Barrett's car are due for replacement.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: A confirmed appointment with date, time and price.\n- Key facts: 2017 Chevrolet Malibu LT, black, about 71,000 miles; the front brakes were done last year, only the rear pads are due\nThis background is for you; only pass on what the task requires.",
+    "mandate": "Any appointment on Tuesday or Wednesday afternoon, up to $120 for the pad replacement.",
+    "owner_timezone": "America/New_York",
+    "today": "Monday, 11 May 2026",
+    "callee_timezone": "\nThe person you are calling is probably in the America/Denver time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Mountain time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
+  },
+  "chat_history": [],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null,
+  "_ausfuehrung_hinweis": "Zielwerte (UMSETZUNG-ElevenLabs.md Zeile 180) stehen in _ausfuehrung. Beide Werte gehoeren laut README (Feldtabelle, Zeile zu 'repeat_count') zum Ausfuehrungs-Aufruf POST /v1/convai/agents/{agent_id}/run-tests, NICHT zur Testdefinition selbst - hier nur im klar als Nicht-Schema markierten Objekt _ausfuehrung zur Sichtbarkeit dieser Kennzahlen in der Datei vermerkt, kein Schema-Feld von POST /v1/convai/agent-testing/create.",
+  "_ausfuehrung": {
+    "repeat_count": 5,
+    "bestehensschwelle": ">= 4 von 5"
+  }
+}

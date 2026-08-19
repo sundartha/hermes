@@ -58,3 +58,27 @@ export function conversationIdFrom(body) {
   const raw = ev && ev.payload && typeof ev.payload === "object" ? ev.payload.conversation_id : null;
   return typeof raw === "string" && raw ? raw : null;
 }
+
+/**
+ * Befund 5 (belegter Defekt: ein unbeantworteter Anruf landet als "completed" ohne
+ * lesbaren Grund): Telnyx' Auflege-Diagnosefelder aus dem call.hangup-Payload,
+ * STRUKTURIERT statt nur geloggt (Muster conversationIdFrom oben) - der Ingest darf den
+ * Status/Grund nicht selbst aus dem Rohbody erraten (Wurzel statt Symptom, CLAUDE.md).
+ * hangup_cause treibt die Status-Klassifikation (failure-reason.js: hangupCauseStatus),
+ * sip_hangup_cause verfeinert nur den generischen "failed"-Fall (callFailureReason,
+ * unveraendert). hangup_source wird bewusst NICHT mitgefuehrt (G12, Nachfassrunde): die
+ * Klassifikation (failure-reason.js) braucht nur hangup_cause + answeredAt, ein totes
+ * drittes Feld waere Ballast ohne Leser - HANGUP_CAUSE_FIELDS im Ingest loggt es weiterhin
+ * roh (eigener, unveraenderter Zweck: Diagnose im Log, keine Status-Entscheidung).
+ * Fail-safe null je Feld, kein Wurf.
+ * @returns {{hangupCause: string|null, sipHangupCause: string|null}}
+ */
+export function hangupDiagnosticsFrom(body) {
+  const ev = eventEnvelope(body);
+  const payload = ev && ev.payload && typeof ev.payload === "object" ? ev.payload : {};
+  return {
+    hangupCause: typeof payload.hangup_cause === "string" && payload.hangup_cause ? payload.hangup_cause : null,
+    sipHangupCause:
+      typeof payload.sip_hangup_cause === "string" && payload.sip_hangup_cause ? payload.sip_hangup_cause : null,
+  };
+}

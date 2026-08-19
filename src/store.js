@@ -56,11 +56,11 @@ let backend;
 if (config.store.storeBackend === "pg") {
   try {
     backend = await createPgBackend();
-  } catch (e) {
+  } catch (err) {
     console.error(
       "[store] FATAL: pg-Backend nicht initialisierbar (STORE_BACKEND=pg). " +
         "DB unerreichbar oder Init fehlgeschlagen. Ursache: " +
-        (e && e.message ? e.message : String(e)),
+        (err && err.message ? err.message : String(err)),
     );
     process.exit(1);
   }
@@ -100,6 +100,14 @@ export const {
   dropLastAgentTranscript,
   purgeTranscript,
   markAnswered,
+  // KS-EL1: der Anker nachziehen (elevenlabs/outbound.js, answeredAnchorOutcome). OHNE
+  // diesen Re-Export waere store.trueUpAnsweredAt auf der Fassade undefined -> der
+  // Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster markAnswered).
+  trueUpAnsweredAt,
+  // KS-EL1: der Grund, wenn der Anker nicht ermittelbar war. OHNE diesen Re-Export waere
+  // store.recordAnsweredUnclearReason auf der Fassade undefined -> derselbe Fehler (Muster
+  // recordElevenlabsConversationId).
+  recordAnsweredUnclearReason,
   endCallRecord,
   setCallEndedAt, // F9 (A6): Seam fuer F10/F12 (expliziter End-Anker)
   markSummarySmsSent,
@@ -115,6 +123,30 @@ export const {
   // OHNE diese Re-Exports waeren sie auf der Fassade undefined -> der Call-Control-Ingest
   // bzw. agentTurn wuerfen zur Laufzeit einen TypeError.
   recordTelnyxConversationId,
+  // EL-BL1: das ElevenLabs-Handle (Bindungs-Kennung des Rueckfrage-Webhooks). OHNE
+  // diesen Re-Export waere store.recordElevenlabsConversationId auf der Fassade
+  // undefined -> der Schreibweg wuerfe zur Laufzeit einen TypeError (Muster
+  // recordTelnyxConversationId).
+  recordElevenlabsConversationId,
+  // Phase-6-Voraussetzung: der Join-Schluessel zwischen ElevenLabs- und Telefonie-Kosten.
+  // OHNE diesen Re-Export waere store.recordSipCallId auf der Fassade undefined -> der
+  // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster
+  // recordElevenlabsConversationId).
+  recordSipCallId,
+  // EL-Anrufstart: Zusammenfassung + Befund eines vom Anbieter gefuehrten Gespraechs. OHNE
+  // diesen Re-Export waere store.recordProviderCallResult auf der Fassade undefined -> der
+  // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster
+  // recordElevenlabsConversationId).
+  recordProviderCallResult,
+  // ABNAHME-D1 (TEIL 2): die vier vom Agenten strukturiert gesammelten Angaben
+  // (appointment_date/appointment_time/amount/currency). OHNE diesen Re-Export waere
+  // store.recordProviderCollectedFields auf der Fassade undefined -> der ziehende
+  // Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster recordProviderCallResult).
+  recordProviderCollectedFields,
+  // ABNAHME-D1 (TEIL 3): die im Gespraech bestaetigte Zeitzone des Angerufenen, mit
+  // Herkunft und Zeitstempel. OHNE diesen Re-Export waere store.recordCalleeConfirmedTimezone
+  // auf der Fassade undefined -> derselbe Fehler (Muster recordProviderCollectedFields).
+  recordCalleeConfirmedTimezone,
   countCallerTurn,
   // AL-P13: Consult-Kette. OHNE diese Re-Exports waeren sie auf der Fassade undefined
   // -> die Consult-Routen wuerfen zur Laufzeit einen TypeError (Muster countCallerTurn).
@@ -135,6 +167,11 @@ export const {
   // Laufzeit einen TypeError (Muster advanceInCallConsult).
   addLookupFacts,
   countCallLookup,
+  // Thema B (2026-08-19): Recherche-Protokoll des EL-Wegs. OHNE diese Re-Exports
+  // waeren sie auf der Fassade undefined -> der Lookup-Webhook wuerfe zur Laufzeit
+  // einen TypeError (Muster addLookupFacts).
+  recordCallLookup,
+  finishCallLookup,
   // P3.2: No-Speech-Staffel-Zaehler (ephemer). OHNE diese Re-Exports waeren sie auf der
   // Fassade undefined -> /voice/turn wuerfe zur Laufzeit einen TypeError.
   countNoSpeechTurn,

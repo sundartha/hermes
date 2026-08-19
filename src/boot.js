@@ -5,7 +5,13 @@
 // Log-Zeilen, exit-Codes). INV-5: rearmActiveCallTimers NACH allen exit1-Gates,
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
 // "Hermes Gateway laeuft auf ..."-Zeile erst im listen-Callback (nach vollem Boot).
-import { assertConfig, gatewayUrlForPort, todayIsoDate, VOICE_ENGINE } from "./config.js";
+import {
+  assertConfig,
+  gatewayUrlForPort,
+  setBoundGatewayPort,
+  todayIsoDate,
+  VOICE_ENGINE,
+} from "./config.js";
 import { configFingerprint } from "./config-fingerprint.js";
 import {
   fakeOriginateBootBlocked,
@@ -38,14 +44,22 @@ import {
   normNum,
 } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
-import { hasPrunedSomething, tenantsOf } from "./store/state-ops.js";
+import {
+  expireOrphanedConsults as expireOrphanedConsultsOp,
+  hasPrunedSomething,
+  tenantsOf,
+} from "./store/state-ops.js";
+// EL-NEUSTART-6: die Haltefrist der Rueckfrage, aus der EINEN Quelle (G5) - dieselbe Zahl,
+// gegen die der Anbieter-Warter selbst laeuft. Kein Zyklus: consult/in-call.js importiert
+// boot.js nicht.
+import { CONSULT_OPEN_MS } from "./consult/in-call.js";
 import { SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibration.js";
 import { CATALOG_SLUGS } from "./plans.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
 import { deadAirOverrun, turnBudgetOverrun } from "./turn-budget.js";
-import { MS_PER_SECOND } from "./utils/timer.js";
+import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
 // GAP-19: EIN Praedikat fuer beide Haelften - der Boot meldet genau die Konstellation, die
 // in der Outbound-Kette das Herkunfts-Gate abschaltet (G5). Kein Zyklus: outbound-gates.js
 // importiert boot.js nicht.
@@ -65,7 +79,12 @@ import { diagnosticRetentionEnabled } from "./diagnostic-retention.js";
 // s.u.).
 import { probeMailBoot } from "./mail-boot-probe.js";
 
-const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+// G25: benannte Faktoren statt Literalen im Rumpf. Der Takt selbst ist unveraendert
+// (sechs Stunden); MS_PER_MINUTE ist die bestehende Quelle der Zeit-Umrechnung
+// (utils/timer.js), die Stunde bekommt hier ihren Namen.
+const MINUTES_PER_HOUR = 60;
+const RETENTION_SWEEP_INTERVAL_HOURS = 6;
+const RETENTION_SWEEP_INTERVAL_MS = RETENTION_SWEEP_INTERVAL_HOURS * MINUTES_PER_HOUR * MS_PER_MINUTE;
 
 // GAP-38: Praefix der Plattform-SMS, die eine In-Prozess-Heilung meldet (G25: benannte
 // Konstante statt Literal im Rumpf; Muster TTS_QUOTA_SMS_PREFIX in src/server.js).
@@ -118,7 +137,7 @@ function assertSpendCapCoherence(config) {
     ...planCapReserveFindings({ slugs: CATALOG_SLUGS, capForSlug, ...worstCase }),
   ];
   const all = [...findings, ...planCapFindings];
-  const fatal = all.find((f) => f.fatal);
+  const fatal = all.find((finding) => finding.fatal);
   if (fatal) {
     console.error(`[boot] Start abgebrochen: ${fatal.message}`);
     process.exit(1);
@@ -163,7 +182,7 @@ function warnStaleModelPrices(config) {
 // derselbe Befund eine WARN). UNKONDITIONAL: an kein Flag gekoppelt (Begruendung im
 // Guard). Muster assertSpendCapCoherence.
 function assertProviderRateInBand(config) {
-  const fatal = providerRateOutOfBand(config.billing.providerToBucketRateMicro).find((f) => f.fatal);
+  const fatal = providerRateOutOfBand(config.billing.providerToBucketRateMicro).find((finding) => finding.fatal);
   if (!fatal) return;
   console.error(`[boot] Start abgebrochen: ${fatal.message}`);
   process.exit(1);
@@ -173,7 +192,7 @@ function assertProviderRateInBand(config) {
 // exit(1) statt WARN, weil der Renderer mit ungueltigem Profil erst IM laufenden Anruf
 // wirft - der teuerstmoegliche Zeitpunkt fuer einen Konfigurations-Tippfehler.
 function assertSttProfile(config) {
-  const fatal = sttProfileFindings(config.voice.sttProfile).find((f) => f.fatal);
+  const fatal = sttProfileFindings(config.voice.sttProfile).find((finding) => finding.fatal);
   if (!fatal) return;
   console.error(`[boot] Start abgebrochen: ${fatal.message}`);
   process.exit(1);
@@ -205,12 +224,12 @@ function assertCostTruingBooking(config, store) {
     assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
     ...currentCoverage(config, store),
   });
-  const fatal = findings.find((f) => f.fatal);
+  const fatal = findings.find((finding) => finding.fatal);
   if (fatal) {
     console.error(`[boot] Start abgebrochen: ${fatal.message}`);
     process.exit(1);
   }
-  for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+  for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // LCT P5: Alarmkanal-Guard (alertChannelFindings). Loggt NIE den Wert (der besetzte Fall
@@ -218,8 +237,8 @@ function assertCostTruingBooking(config, store) {
 // per Konstruktion unerreichbar: assertConfig() faltet ihn in seine Fatal-Menge und hat den
 // Prozess bei diesem Zustand laengst mit exit(1) beendet - hier bleibt nur die WARN.
 function warnAlertChannelUnset(config) {
-  for (const f of alertChannelFindings(config.billing))
-    console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+  for (const finding of alertChannelFindings(config.billing))
+    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // LCT P5: Drift-Waechter, Ausloeser 1 von 2 (Boot). GENAU EINE Zeile fuer ALLE Praefixe -
@@ -231,7 +250,7 @@ function warnAlertChannelUnset(config) {
 function warnTariffDrift(config, store) {
   const report = tariffDriftReportFromConfig(store.load().calls, config.billing);
   const line = `[boot] Tarif-Drift: ${report.map(driftLine).join(" | ")}`;
-  if (report.some((e) => e.code !== null)) console.warn(line);
+  if (report.some((entry) => entry.code !== null)) console.warn(line);
   else console.log(line);
 }
 
@@ -246,7 +265,7 @@ function warnVoiceTariffBelowFullCost(config, store) {
     fullCostFloorCents: config.billing.voiceTariffFullCostFloorCents,
     ...currentCoverage(config, store),
   });
-  for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+  for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // GAP-22: Turn-Budget gegen den Provider-Hardcut. WARN, kein exit(1) - eine gesprengte
@@ -336,7 +355,7 @@ function warnLatentCostPaths(config) {
     realtimeEngineSelected: config.voice.voiceEngine === VOICE_ENGINE.REALTIME,
     realtimeMidCallBudgetCheck: REALTIME_MID_CALL_BUDGET_CHECK,
   });
-  for (const f of findings) console.warn(`[boot] Konfig-Warnung: ${f.message}`);
+  for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
@@ -360,12 +379,22 @@ function assertBootGates(config, store) {
 
   // Boot-Haertung (OUT-05, F2): FAKE_ORIGINATE nur mit geskippter Signaturpruefung zulaessig ->
   // in Prod (Signatur fail-closed AN, Regel 1) Boot-Refusal statt stillem Nicht-Waehlen.
-  if (fakeOriginateBootBlocked(config.safety)) {
-    console.error(
-      "[boot] Start abgebrochen: FAKE_ORIGINATE=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true " +
-        "zulaessig (Test-Seam, in Produktion unzulaessig).",
-    );
-    process.exit(1);
+  // OUT-05-EL (Owner-Auftrag 15.08.2026, Aufgabe 1): FAKE_ORIGINATE_ELEVENLABS (der EL-
+  // Anrufstart-Gegenstueck, src/elevenlabs/outbound.js) teilt dieselbe Bedingung - ZWEI
+  // Aufrufe derselben reinen Funktion auf zwei verschiedenen Flags (G5), keine zweite
+  // Guard-Logik.
+  const fakeOriginateFlags = [
+    { envName: "FAKE_ORIGINATE", fakeOriginate: config.safety.fakeOriginate },
+    { envName: "FAKE_ORIGINATE_ELEVENLABS", fakeOriginate: config.safety.fakeOriginateElevenlabs },
+  ];
+  for (const { envName, fakeOriginate } of fakeOriginateFlags) {
+    if (fakeOriginateBootBlocked({ fakeOriginate, skipTwilioSignatureCheck: config.safety.skipTwilioSignatureCheck })) {
+      console.error(
+        `[boot] Start abgebrochen: ${envName}=true ist nur mit SKIP_TWILIO_SIGNATURE_CHECK=true ` +
+          "zulaessig (Test-Seam, in Produktion unzulaessig).",
+      );
+      process.exit(1);
+    }
   }
 
   // Boot-Guard (Pre-Mortem): jeder Tenant - auch der Bootstrap-Tenant - haelt seine
@@ -704,6 +733,13 @@ export function ttsQuotaCoverageBannerLine(billing) {
   );
 }
 
+// G5/G28: derselbe Fallback stand dreimal im Banner-Rumpf (MCP, Voice-Webhook,
+// Status-Callback) - EIN Name dafuer, eine Stelle. Wortlaut unveraendert; die drei Zeilen
+// bleiben Zeichen fuer Zeichen dieselben.
+function publicUrlOrHint(server) {
+  return server.publicUrl || "PUBLIC_URL fehlt!";
+}
+
 function logBootBanner(config, port) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
@@ -729,10 +765,10 @@ function logBootBanner(config, port) {
   // capabilityProbeLines).
   for (const line of capabilityProbeLines(config)) console.log(`  ${line}`);
   console.log(
-    `  MCP (HTTP):     ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/mcp  <- als Custom Connector in Claude eintragen`,
+    `  MCP (HTTP):     ${publicUrlOrHint(config.server)}/mcp  <- als Custom Connector in Claude eintragen`,
   );
-  console.log(`  Voice-Webhook:  ${config.server.publicUrl || "PUBLIC_URL fehlt!"}/voice/incoming`);
-  console.log(`  Status-Callback:${config.server.publicUrl || "PUBLIC_URL fehlt!"}/voice/status`);
+  console.log(`  Voice-Webhook:  ${publicUrlOrHint(config.server)}/voice/incoming`);
+  console.log(`  Status-Callback:${publicUrlOrHint(config.server)}/voice/status`);
   // Outbound-Freigabe (outbound-p3): keine statische ALLOWED_NUMBERS-Liste mehr - Permit ist
   // die per-Tenant-Verifikation (Abo+KYC, Pfad 2). OUTBOUND_FROZEN zeigt den globalen
   // Kill-Switch-Zustand. Kein PII (Nummern) mehr im Banner.
@@ -779,12 +815,12 @@ function logBootBanner(config, port) {
 // Start" entscheidet (G5). Diese Funktion verweigert nie selbst, sie heilt oder schweigt.
 // Idempotent: nach der Heilung liefert die Entscheidung NOT_NEEDED.
 export async function healBootstrapStore({ config, store, messaging }) {
-  const s = store.load();
+  const state = store.load();
   const decision = bootstrapHealDecision({
-    activeNumberPresent: hasActiveNumber(s),
-    numberCount: s.numbers.length,
-    foreignTenantCount: tenantsOf(s).filter((t) => t.id !== BOOTSTRAP_TENANT_ID).length,
-    callCount: s.calls.length,
+    activeNumberPresent: hasActiveNumber(state),
+    numberCount: state.numbers.length,
+    foreignTenantCount: tenantsOf(state).filter((tenant) => tenant.id !== BOOTSTRAP_TENANT_ID).length,
+    callCount: state.calls.length,
     e164: config.provisioning.bootstrapE164,
     provider: config.provisioning.bootstrapProvider,
   });
@@ -837,17 +873,78 @@ export async function healBootstrapStore({ config, store, messaging }) {
 export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
   void costTruing
     .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
-    .catch((e) => console.error("[cost-truing]", e.message));
+    .catch((err) => console.error("[cost-truing]", err.message));
   void provisioning
     .settleDueNumberMonthMeters()
-    .catch((e) => console.error("[number-month]", e.message));
+    .catch((err) => console.error("[number-month]", err.message));
   // KV-M4: dritter, unabhaengiger Schritt im selben Stunden-Takt - kein zweiter Timer,
   // keine neue Ressource (TEIL 3 des Kickoffs). runMonthlyCrossCheck wirft intern nie
   // (Ergebnis-Objekt), das .catch() hier ist trotzdem die zweite Linie, wie bei den
   // beiden Zweigen darueber.
   void costCrossCheck
     .runMonthlyCrossCheck()
-    .catch((e) => console.error("[cost-cross-check]", e.message));
+    .catch((err) => console.error("[cost-cross-check]", err.message));
+}
+
+// EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter
+// IN DIESEM Prozess - dem Rueckfrage-Webhook des Laufwerks (conversation/consult-raised.js)
+// oder dem Long-Poll des Auftraggebers (consult/delivery.js). Beide loest der Drain auf und
+// schliesst dabei den Datensatz; ein harter Abbruch (Absturz, SIGKILL) laesst den Drain aber
+// gar nicht erst laufen. Der DATENSATZ ueberlebt trotzdem - und der neu gestartete Dienst
+// legte dieselbe Frage einem frischen Poll erneut vor, obwohl niemand mehr auf die Antwort
+// wartet.
+//
+// DRITTE Stelle DESSELBEN Mechanismus (Call-Ende: setCallEndedAt; Drain: der Warter selbst),
+// kein zweiter Status: expireOpenConsults heisst abgelaufen, NICHT beantwortet.
+//
+// EL-NEUSTART-6: geschlossen wird beides, GEZAEHLT nicht. Eine Rueckfrage, deren Haltefrist
+// beim Start noch lief, kann ihre Antwort nur von einem Warter erwartet haben, den der
+// Abbruch mitgenommen hat - sie hat KEINE Gespraechszeit gekostet und gibt ihren
+// Kontingent-Platz frei (Marker orphanedAt, gelesen von consultQuotaUsed). Eine Rueckfrage,
+// deren Frist bereits um war, hat der Anruf voll bezahlt: ihr Platz bleibt verbraucht -
+// sonst waere der Kosten-Riegel umgehbar, indem man Rueckfragen ablaufen laesst (Regel 1).
+// Im Zweifel gilt BEZAHLT (fail-closed, s. expireOrphanedConsults in store/state-ops.js).
+//
+// EL-NEUSTART-9: DIESELBE Naht ruft seither auch der Drain des geordneten Herunterfahrens
+// (conversation/consult-raised.js, closeOrphaned) - auf demselben mutate-then-save()-Weg
+// wie hier. Dieses Netz erreicht seinen Fall nicht: der Drain schliesst den Datensatz noch
+// selbst, und pendingConsult unten sieht nur OFFENE. Zwei Ausloeser, EINE Naht - eine
+// zweite Formulierung liesse den Kosten-Riegel auf einem Weg anders wirken als auf dem
+// anderen.
+//
+// VORBEHALT: CONSULT_OPEN_MS ist Konfiguration und kann sich zwischen zwei Starts geaendert
+// haben - dann misst diese Naht die Rueckfrage an einer Frist, unter der sie nie lief. Die
+// Richtung des Fehlers ist die sichere: eine VERKUERZTE Frist laesst eine verwaiste
+// Rueckfrage als bezahlt gelten (eine Rueckfrage zu wenig), nie umgekehrt einen bezahlten
+// Platz frei werden. Der Fristablauf im laufenden Prozess (conversation/consult-raised.js)
+// schreibt seinen Status ohnehin selbst; diese Ableitung deckt nur den Rest: der Abbruch
+// faellt NACH dem Fristablauf, aber BEVOR der Warter ihn schreiben konnte.
+//
+// Nur laufende Anrufe - bei terminalen hat setCallEndedAt bereits geschlossen. Ein Warter
+// aus dem Vorprozess kann per Definition nicht mehr leben, und ein Consult DIESES Laufs kann
+// es noch nicht geben: die Naht sitzt vor app.listen, es ist noch keine Route erreichbar
+// (Muster rearmActiveCallTimers/rearmActiveCalls, unmittelbar davor). Setzt keine Timer und
+// ruft kein process.exit - INV-5 bleibt unberuehrt. pendingConsult ist der bestehende reine
+// Leser fuer "an diesem Anruf ist noch etwas offen". Geschrieben wird nach dem bestehenden
+// mutate-then-save()-Muster (store/pg.js; Vorbild applyTenantIdentity in wiring/web-login.js)
+// - ohne Store-Lock, weil vor app.listen kein zweiter Schreiber existiert. Die Zeile traegt
+// nur Anzahlen, nie eine Frage (Regel 4) und erscheint nur, wenn wirklich etwas geschlossen
+// wurde.
+function expireOrphanedConsults(store) {
+  const state = store.load();
+  const nowMs = Date.now();
+  const orphaned = state.calls.filter(
+    (call) => call.status === "active" && store.pendingConsult(call.id),
+  );
+  if (!orphaned.length) return;
+  let freed = 0;
+  for (const call of orphaned)
+    freed += expireOrphanedConsultsOp(state, call.id, { nowMs, openMs: CONSULT_OPEN_MS }).orphaned;
+  store.save();
+  console.log(
+    `[boot] verwaiste Rueckfragen geschlossen: ${orphaned.length} Anrufe, ` +
+      `${freed} mit freigegebenem Kontingent`,
+  );
 }
 
 export async function bootServer({
@@ -855,12 +952,20 @@ export async function bootServer({
   config,
   store,
   lifecycle,
+  // Boot-Re-Arm der Dead-Air-Wache (s. unten bei rearmActiveCallTimers). Dieselbe EINE
+  // Instanz, die Shim und Call-Control-Ingest teilen (INV-7) - server.js reicht sie im
+  // deps-Buendel bereits durch, hier wird sie nur ausgepackt.
+  conversationWatchdog,
   callFinish,
   provisioning,
   costTruing,
   costCrossCheck,
   messaging,
   consultDelivery,
+  // Boot-Re-Arm des EL-Ergebnisabrufs (s. unten bei rearmActiveConversationPolls). Dieselbe
+  // EINE Instanz wie bei makeCallRoutes (INV-7) - server.js reicht sie im deps-Buendel
+  // bereits durch, hier wird sie nur ausgepackt.
+  elevenLabsOutbound,
 }) {
   // S1-4: json.js wirft aus load(), wenn ein korrupter Store NICHT forensisch gesichert
   // werden konnte (statt ihn still mit Defaults zu ueberschreiben). Ohne dieses explizite
@@ -923,11 +1028,41 @@ export async function bootServer({
   // OT-4). Kein Gate danach darf mehr process.exit(1) rufen.
   lifecycle.rearmActiveCallTimers();
 
+  // Zweite Achse desselben Boot-Problems: der Cap-Re-Arm darueber deckt ein ueberlebendes
+  // Leg mit Groessenordnung MAX_CALL_DURATION_CAP_S, die Dead-Air-Frist des Gespraechs-
+  // Waechters mit Groessenordnung 45 s - dessen Timer nimmt ein Deploy genauso mit, und
+  // sein einziger Armierer (ai_assistant_start, Call-Control-Ingest) kommt fuer ein bereits
+  // laufendes Gespraech nie wieder. UNMITTELBAR NACH dem Cap-Re-Arm und aus DESSEN
+  // Ergebnis: der Zombie-Zweig dort setzt den Endstatus synchron (persistEnd laeuft vor dem
+  // ersten await in terminateAndBillCall), der Schnappschuss traegt also nur noch Zeilen,
+  // die wirklich weiterlaufen; welche davon ein Assistant-Leg sind, entscheidet der
+  // Waechter an den Merkmalen AM CALL, nicht an einem Flag (isRunningAssistantLeg).
+  // Setzt ausschliesslich Timer - INV-5 (kein exit(1) nach dem Re-Arm) bleibt unberuehrt,
+  // der Max-Dauer-Cap und sein Re-Arm sind unveraendert.
+  conversationWatchdog.rearmActiveCalls(store.load().calls);
+
+  // Dritte Achse desselben Boot-Problems: die beiden Re-Arms darueber holen Timer zurueck,
+  // die der Neustart genommen hat - diese Naht schliesst den Zustand, den kein Timer mehr
+  // erreicht (s. expireOrphanedConsults). NACH dem Cap-Re-Arm, damit ein dort terminalisierter
+  // Zombie hier gar nicht erst als laufender Anruf auftaucht.
+  expireOrphanedConsults(store);
+
+  // Vierte Achse desselben Boot-Problems (Owner-Auftrag 15.08.2026, Aufgabe 2): der
+  // ziehende EL-Ergebnisabruf (elevenlabs/outbound.js#scheduleResultPoll) ist ein reiner
+  // In-Prozess-setTimeout mit originateCall als einzigem Ausloeser - ein Neustart nimmt ihn
+  // mit, ein aktiver EL-Call bleibt fuer immer "active". Setzt ausschliesslich Timer bzw.
+  // terminiert ueber denselben EINEN Terminierungspfad wie jeder andere Zombie (INV-5: kein
+  // exit(1) danach).
+  elevenLabsOutbound.rearmActiveConversationPolls();
+
   const httpServer = app.listen(config.server.port, () => {
     // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port
     const port = httpServer.address().port;
-    // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT)
-    process.env.GATEWAY_URL ||= gatewayUrlForPort(port);
+    // Eigene REST-API fuer die MCP-Tools erreichbar machen (auch bei abweichendem PORT).
+    // Der Wert geht in den Halter in config.js, NICHT nach process.env (G35): ein erst
+    // nach listen() bekannter Wert ist keine Umgebungs-Konfiguration. Ein gesetztes
+    // GATEWAY_URL bleibt vorrangig - genau wie beim frueheren ||=.
+    setBoundGatewayPort(port);
     logBootBanner(config, port);
     // PROV-01/F5: Crash-verwaiste Provisioning-Jobs beim Boot reconcilen. Fire-and-forget NACH
     // den Boot-Logs - blockiert weder listen noch Healthcheck; der Boot-Guard (hasActiveNumber)
@@ -942,8 +1077,8 @@ export async function bootServer({
     // selbst jeden Fehler (verschickt nie eine Mail); das .catch() hier ist die zweite
     // Linie (Muster runSweepTick oben) - NIE e.message loggen (Regel 4: eine Mail-
     // Fehlermeldung kann Zugangsdaten tragen).
-    void probeMailBoot(config).catch((e) =>
-      console.error("[mail] Sonde unerwartet gescheitert", e?.code ?? e?.name ?? "unbekannt"),
+    void probeMailBoot(config).catch((fehler) =>
+      console.error("[mail] Sonde unerwartet gescheitert", fehler?.code ?? fehler?.name ?? "unbekannt"),
     );
   });
 
