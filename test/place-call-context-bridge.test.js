@@ -73,6 +73,14 @@ test("P1-01: place_call-briefing-Beschreibung verlangt zusammengefassten Kontext
   assert.match(briefing, /summari/i, "verlangt Zusammenfassen statt Roh-Dump");
   assert.match(briefing, /secret/i, "untersagt Secrets");
   assert.match(briefing, /assistant/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
+  // GQ-B1: das Briefing darf eine Wissensluecke nicht vorweg zuschreiben - eine
+  // Vertroestung auf den Auftraggeber nimmt dem Agenten die Antwort, statt sie zu geben.
+  assert.match(
+    briefing,
+    /never write that the principal will get back/i,
+    "untersagt die Vertroestung auf den Auftraggeber",
+  );
+  assert.match(briefing, /Leave the gap open/i, "verlangt die offene Luecke");
 });
 
 test("P1-02 (nach P10/LANG-15): place_call-Schema bleibt strukturell unveraendert (gleiche Felder + Optionalitaet)", () => {
@@ -104,6 +112,9 @@ test("I9-01: place_call-objective-Beschreibung verlangt Ich-Satz + konkretes The
   assert.match(objective, /disclosure/i, "verortet es nach der Offenlegung");
   assert.match(objective, /concrete topic/i, "verlangt konkretes Thema/Anlass");
   assert.match(objective, /ask the user FIRST/i, "verlangt Rueckfrage statt vagem Auftrag");
+  // GQ-B1: die Vorab-Rueckfrage ist auf das THEMA eingeengt - ein einzelnes fehlendes
+  // Detail traegt das Briefing oder die Live-Rueckfrage, keine Chat-Runde.
+  assert.match(objective, /topic itself/i, "die Vorab-Rueckfrage gilt nur noch dem Thema selbst");
 });
 
 // P3 (PLAN-PERSONAL-ASSISTANT): das context-Feld ist OPTIONAL (advisory) und seine

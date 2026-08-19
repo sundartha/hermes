@@ -443,8 +443,17 @@ const PLACE_CALL_DESCRIPTION =
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
 // aber eine Anweisung auf ein Werkzeug, das gar nicht registriert ist, waere eine Luege.
+// GQ-B1: Die frueher hier zugesagte Gratis-Rueckfrage waehrend der Klingelzeit (Consult #0)
+// faellt weg - auf dem live laufenden ElevenLabs-Weg erreicht ihre Antwort keinen Prompt
+// mehr: emitOpeningConsult feuert unmittelbar vor dem Waehlen, und backgroundText baut den
+// Hintergrund genau einmal beim Waehlen. Eine Zusage ohne Deckung gehoert nicht in eine
+// Beschreibung. Der Ersatz ist KONDITIONAL formuliert: consultAllowedFor (das diesen Text
+// anhaengt) deckt die Rueckfrage IM Gespraech nicht vollstaendig ab, die braucht zusaetzlich
+// IN_CALL_CONSULT_ENABLED - eine unbedingte Zusage waere dort eine Luege. "at most once"
+// spiegelt MAX_IN_CALL_CONSULTS_PER_CALL; der Draht dorthin haengt in
+// test/gq-b1-briefing-openness.test.js.
 const PLACE_CALL_CONSULT_LOOP =
-  "Right after this call returns, start calling await_call_event with the returned call_id and keep calling it until it returns event=\"done\" - while the phone is still ringing the agent may ask you questions you can answer for free.";
+  "Right after this call returns, start calling await_call_event with the returned call_id and keep calling it until it returns event=\"done\" - if the agent runs into a detail the briefing left open, its question reaches you only inside this loop, and it can ask at most once, so answer it straight away. Place the call with what you have: an open detail costs nothing, a guessed one cannot be taken back.";
 
 // Zusammensetzung per filter(Boolean) (Muster briefingSystem in precall-briefing.js):
 // Kanal aus -> byte-identisch zum Bestand (test-gepinnt).
@@ -575,16 +584,28 @@ export function registerTools(
           .describe(
             "Take the destination number over EXACTLY as the user gave it - copy the digits character by character, NEVER convert them or reshape them into E.164 (reshaping introduces digit errors; the server normalises deterministically). A national notation with a leading 0 is resolved by the server via the user's home country; international destinations need +XX/00XX - if a number looks like a foreign national format, ask the user for the international notation instead of guessing. Checked server-side by the safety gates (permission profile/allowlist, denylist, country).",
           ),
+        // GQ-B1: Die Vorab-Rueckfrage gilt nur noch dem THEMA selbst - der Satz wird
+        // woertlich vorgesprochen, ohne Thema gibt es keinen sprechbaren ersten Satz. Eine
+        // fehlende Praeferenz traegt dagegen das Mandat oder die Live-Rueckfrage. Der neue
+        // Nebensatz benennt den dritten Ausgang ("stays open") und ist BEWUSST durchgehend
+        // klein geschrieben: jedes Grossbuchstaben-Wort mit zwei oder mehr Buchstaben
+        // verschoebe die gepinnte Marker-Inventur dieses Feldes.
         objective: z
           .string()
           .describe(
-            "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic or preference is still unknown, ask the user FIRST, instead of sending off a vague task. Background and details do NOT belong here, they belong in the briefing.",
+            "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic itself is still unknown, ask the user FIRST, instead of sending off a vague task - a single missing detail is not a reason to ask, it belongs in the briefing or stays open. Background and details do NOT belong here, they belong in the briefing.",
           ),
+        // GQ-B1: Das Briefing reist als erste Zeile des HINTERGRUND-Blocks in den
+        // Agenten-Prompt (backgroundText in elevenlabs/outbound.js). Der Agenten-Prompt
+        // verbietet die Rueckfrage fuer alles, was dort schon steht - eine vorweggenommene
+        // Antwort schaltet den Rueckfragekanal fuer genau diese Luecke ab. Deshalb steht
+        // das VERBOT hier: es gilt immer, auch bei ausgeschaltetem Kanal. Der Hinweis auf
+        // die Live-Rueckfrage steht dagegen am kanalabhaengigen PLACE_CALL_CONSULT_LOOP.
         briefing: z
           .string()
           .optional()
           .describe(
-            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
+            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. Write only what you KNOW: never script an answer for a detail you are missing, and never write that the principal will get back to the other party - the agent is not allowed to say that, so such a line removes an answer instead of adding one. Leave the gap open. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
           ),
         constraints: z
           .string()
@@ -598,11 +619,17 @@ export function registerTools(
         // das Feature, nicht der Typ.
         mandate: z
           .object({
+            // GQ-B1: Die zweite "Ask the user FIRST"-Anweisung ist gestrichen - die bedingte
+            // Aufforderung im ELTERN-Feld mandate bleibt woertlich stehen und ist der
+            // verbleibende Weg zu einem Rahmen. Die Erfindungs-Sperre bleibt (sie ist die
+            // sicherheitsrelevante Haelfte); der Ausgang dreht von "Chat-Runde" auf "Feld
+            // weglassen" und ist damit fail-closed: ohne Feld darf der Agent nichts zusagen,
+            // genau das sagt der naechste Satz derselben Beschreibung bereits.
             decide_freely: z
               .string()
               .optional()
               .describe(
-                "The authorisation - what the agent may commit to in the call WITHOUT asking back, e.g. 'appointment on any weekday between 9 and 12, up to 60 euros'. Phrase it concretely enough that a yes/no decision can be derived from it on the phone; vague frames ('flexible', 'sometime') do not help. Ask the user FIRST about their frame, instead of inventing one. WITHOUT this field the agent may commit to nothing and only passes every proposal on as a message. Hard prohibitions do NOT belong here, they belong in constraints.",
+                "The authorisation - what the agent may commit to in the call WITHOUT asking back, e.g. 'appointment on any weekday between 9 and 12, up to 60 euros'. Phrase it concretely enough that a yes/no decision can be derived from it on the phone; vague frames ('flexible', 'sometime') do not help. Never invent one: take the frame from what the user has already said, otherwise leave the field out. WITHOUT this field the agent may commit to nothing and only passes every proposal on as a message. Hard prohibitions do NOT belong here, they belong in constraints.",
               ),
             fallback_order: z
               .string()
