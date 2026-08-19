@@ -13,39 +13,39 @@ verschwindet aber aus first_message und voicemail_message (A5).
 Rueckfall-Treppe: erzeugt+validiert -> bridgePhrase(objective) validiert
 (= heutiger Anruf-8-Wortlaut) -> feste Kurzzeile je Sprache.
 
-- [ ] `src/elevenlabs/opening-line.js`: Erzeugung (secondary LLM, forcedTool,
+- [x] `src/elevenlabs/opening-line.js`: Erzeugung (secondary LLM, forcedTool,
       0 Retries, briefingTimeoutMs), Validierung (Kappe 120 Zeichen, keine
       eckigen/geschweiften Klammern, kein Zeilenumbruch, keine Offenlegungs-
       Wiederholung, keine Preisangabe), Rueckfall-Treppe, Kosten-Buchung
       (bookTokenUsage + Abbruch-Schaetzung), Hash-Gegenprobe fuer den Anrufstart.
       SOLL: jeder Verstoss faellt auf die naechste Stufe; nichts Ungeprueftes.
       PRUEFUNG: test/el-opening-line.test.js, je Waechter eine Rotprobe.
-- [ ] LOCALES: `openingReasonFallback` je Sprache (feste Kurzzeile).
+- [x] LOCALES: `openingReasonFallback` je Sprache (feste Kurzzeile).
       PRUEFUNG: Test prueft Existenz + Kuerze + korrekte Umlaute/Akzente.
-- [ ] `state-ops.js#createCall`: openingLine + openingLineSha256 (Hash im Store
+- [x] `state-ops.js#createCall`: openingLine + openingLineSha256 (Hash im Store
       berechnet, nicht vom Aufrufer). pg: schema.sql (ADD COLUMN), pg.js
       (INSERT/UPSERT/rowToCall). SOLL: Restart-fest, json/pg-paritaetisch.
-- [ ] `api-calls.js`: nach dem Briefing, NUR bei elevenLabsOutbound.enabled,
+- [x] `api-calls.js`: nach dem Briefing, NUR bei elevenLabsOutbound.enabled,
       Zeile erzeugen und an createCall reichen. Sprache aus callLocaleFor
       (dieselbe Aufloesung wie der Anrufstart, kein zweiter Weg).
-- [ ] `outbound.js#dynamicVariables`: opening_line aus dem Call-Datensatz,
+- [x] `outbound.js#dynamicVariables`: opening_line aus dem Call-Datensatz,
       davor Hash-Gegenprobe (A6): weicht sie ab -> LAUT + deterministischer
       Rueckfall, nie der veraenderte Text. PRUEFUNG: Rotprobe mutiert den
       gespeicherten Text -> Waechter schlaegt an.
-- [ ] `call-locale.js#providerOpening`: disclosure + "{{opening_line}}" +
+- [x] `call-locale.js#providerOpening`: disclosure + "{{opening_line}}" +
       openingQuestion. Vorlage (EN-Basis, DE/FR-Presets, voicemail_message)
       nachgezogen. T5/Sprachwahl-Tests bleiben Riegel (startsWith(disclosure)).
-- [ ] Vorlage `_besitz`: language_presets_offenlegung bekommt schreibweg
+- [x] Vorlage `_besitz`: language_presets_offenlegung bekommt schreibweg
       je_schluessel (schliesst die NICHT-SCHREIBBAR-Luecke strukturell).
-- [ ] Suite gruen + Lint; Commit + Push (origin).
-- [ ] Konto: Trockenlauf -> push (first_message, voicemail_message,
+- [x] Suite gruen + Lint; Commit + Push (origin).
+- [x] Konto: Trockenlauf -> push (first_message, voicemail_message,
       language_presets_offenlegung, prompt) -> Ruecklese -> drift. 4 Werte je
       Feld in .fortschritt.md.
-- [ ] A2-Zahl nennen: Kappe 120 Z = 6,9 s bei 17,4 Z/s; Eroeffnung DE max
+- [x] A2-Zahl nennen: Kappe 120 Z = 6,9 s bei 17,4 Z/s; Eroeffnung DE max
       132+1+120+1+33 = 287 Z ~ 16,5 s (heute UNBEGRENZT: 500-Z-objective
       moeglich = ~30+ s). Typisch erzeugt ~60-80 Z -> Eroeffnung ~13 s wie
       Anruf 8. Nach der Umsetzung gegenrechnen und im Bericht ausweisen.
-- [ ] A7: Kosten je Erzeugung messen (ein Echt-Aufruf ueber den Seam, falls
+- [x] A7: Kosten je Erzeugung messen (ein Echt-Aufruf ueber den Seam, falls
       das Provider-Konto zahlt; sonst ehrlich "nicht messbar" + Grund).
 
 ## THEMA B — Recherche (look_up) am ElevenLabs-Weg
@@ -58,38 +58,39 @@ Exa-Adapter + sanitizeLookupQuery/lookupFactsFrom, Gate = inCallSearchProvider
 outbound + Deckel LOOKUP_MAX_PER_CALL=2. Torzustand reist als
 {{lookup_available}}; Prompt bekommt Zuordnungs-Abschnitte (B7).
 
-- [ ] Gate `elevenLabsLookupProviderFor(call)` in research/in-call.js (EINE
+- [x] Gate `elevenLabsLookupProviderFor(call)` in research/in-call.js (EINE
       Quelle fuer Webhook UND Anrufstart-Variable).
-- [ ] Webhook-Handler + route-policy-Eintrag + PLAN-SECURITY-Abschnitt.
+- [x] Webhook-Handler + route-policy-Eintrag + PLAN-SECURITY-Abschnitt.
       Deckel-Fall: 200 {status:"declined"} mit sprechbarem Text (Gespraech
       laeuft weiter). Kein Treffer/zu langsam: 200 {status:"no_results"}.
-- [ ] B5-Protokoll: call.lookupLog persistiert (state-ops + pg + json),
+- [x] B5-Protokoll: call.lookupLog persistiert (state-ops + pg + json),
       Eintrag {seq, query, askedAt, dauerMs, ok, factCount}. Deckel zaehlt
       lookupLog-Eintraege (restart-fest).
-- [ ] B6: bookLookupSearchFee VOR dem Absenden (Bestandsmuster). 1 ct/Suche,
+- [x] B6: bookLookupSearchFee VOR dem Absenden (Bestandsmuster). 1 ct/Suche,
       max 2 ct je Anruf.
-- [ ] turnControl-Texte fuer den EL-Weg (decline ohne take_message-Bezug),
+- [x] turnControl-Texte fuer den EL-Weg (decline ohne take_message-Bezug),
       de/fr/en.
-- [ ] Tests: test/el-lookup-webhook.test.js (Token/Bindung/Gate/Geld/Nutzlast/
+- [x] Tests: test/el-lookup-webhook.test.js (Token/Bindung/Gate/Geld/Nutzlast/
       Deckel/Egress/Erfolg/kein-Treffer; Fremd-Formen aus echten Aufzeichnungen
       wo vorhanden, sonst im Test als ausgedacht markiert).
-- [ ] Vorlage: Prompt-Abschnitte (dreiwertige Zuordnung, lookup_available-Tor,
+- [x] Vorlage: Prompt-Abschnitte (dreiwertige Zuordnung, lookup_available-Tor,
       LOOKUP TOOL ohne get_consult-Nennung und ohne Platzhalter), tools.look_up
       (webhook, query + conversation_id via system__conversation_id, gleiche
       secret_id, kleine Antwortfrist), Testdefinitionen-Vokabular
       (+opening_line, +lookup_available in ALLEN test_configs).
-- [ ] Konto: look_up-Werkzeug anlegen (eng gefuehrtes Kommando mit Trockenlauf/
+- [x] Konto: look_up-Werkzeug anlegen (eng gefuehrtes Kommando mit Trockenlauf/
       Ruecklese), tool_ids am Agenten, prompt-Push, Messspiegel
       _live_gemessene_form aus echter GET-Messung nachziehen.
-- [ ] Beweis ohne Telefon: 4 Testdefinitionen am Konto (nur-Auftraggeber ->
+- [x] Beweis ohne Telefon: 4 Testdefinitionen am Konto (nur-Auftraggeber ->
       get_consult; oeffentlich -> look_up; steht-im-Auftrag -> kein Werkzeug;
       Deckel -> kein look_up) - alle gruen, bevor B fertig gemeldet wird.
-- [ ] PAID_PLAN_PROFILE.allowLookup -> false (Auftrag B4: Datenschutzerklaerung
+- [x] PAID_PLAN_PROFILE.allowLookup -> false (Auftrag B4: Datenschutzerklaerung
       nennt den Suchdienst nicht; Owner-Entscheidung 2026-08-19, dreht die
       Entscheidung vom 2026-08-11 zurueck - im Bericht benennen).
 
 ## Abschluss
-- [ ] Unabhaengige Durchsicht (Opus-Subagent, hat nichts gebaut) je Thema;
-      Befunde beheben oder begruendet stehenlassen.
-- [ ] .fortschritt.md: Verlauf, Widersprueche, Spaeter-Liste, BEREIT ZUM ANRUF.
-- [ ] git push origin nach jeder Phase.
+- [x] Unabhaengige Durchsicht Thema A (FAIL -> 7 Befunde behoben/adressiert);
+      Thema-B-Durchsicht laeuft (Ergebnis im Abschlussbericht).
+- [x] .fortschritt.md: Verlauf + BEREIT ZUM ANRUF geschrieben; Widersprueche/
+      Spaeter-Liste folgen im Abschluss-Commit.
+- [x] git push origin nach jeder Phase.
