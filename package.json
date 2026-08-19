@@ -21,6 +21,7 @@
     "elevenlabs:check": "node scripts/check-elevenlabs-tests.js",
     "elevenlabs:drift": "node scripts/check-elevenlabs-drift.mjs",
     "elevenlabs:push": "node scripts/push-elevenlabs.mjs",
+    "exa:key": "node scripts/exa-key-setzen.mjs",
     "spike1:consult-echo": "node scripts/spike1-consult-echo.mjs",
     "spike1:setup": "node scripts/spike1-setup.mjs",
     "spike1:ws-probe": "node scripts/spike1-ws-probe.mjs",
