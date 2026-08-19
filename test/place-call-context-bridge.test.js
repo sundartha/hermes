@@ -73,13 +73,11 @@ test("P1-01: place_call-briefing-Beschreibung verlangt zusammengefassten Kontext
   assert.match(briefing, /summari/i, "verlangt Zusammenfassen statt Roh-Dump");
   assert.match(briefing, /secret/i, "untersagt Secrets");
   assert.match(briefing, /assistant/i, "haelt die Assistenten-Rolle (kein Claude/Gemini)");
-  // GQ-B1: das Briefing darf eine Wissensluecke nicht vorweg zuschreiben - eine
-  // Vertroestung auf den Auftraggeber nimmt dem Agenten die Antwort, statt sie zu geben.
-  assert.match(
-    briefing,
-    /never write that the principal will get back/i,
-    "untersagt die Vertroestung auf den Auftraggeber",
-  );
+  // GQ-B2 (Owner-Revision der GQ-B1-Pauschale): der Owner ist waehrend des Anrufs
+  // abwesend. Die ehrliche Prozess-Auskunft fuer Nur-Owner-Wissen ist deshalb erlaubt -
+  // untersagt bleibt die ERFUNDENE Antwort. Die volle Drei-Klassen-Inventur pinnt
+  // test/gq-b1-briefing-openness.test.js (GQ-B2-01/02).
+  assert.match(briefing, /never script an answer/i, "untersagt die erfundene Antwort");
   assert.match(briefing, /Leave the gap open/i, "verlangt die offene Luecke");
   // GQ-B1 Review-Blocker (Runde 1): das Verbot betrifft nur das VORWEGSCHREIBEN hier -
   // es behauptet nicht, der Agent duerfe eine Rueckmeldung generell nicht zusagen.

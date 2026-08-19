@@ -595,17 +595,21 @@ export function registerTools(
           .describe(
             "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic itself is still unknown, ask the user FIRST, instead of sending off a vague task - a single missing detail is not a reason to ask, it belongs in the briefing or stays open. Background and details do NOT belong here, they belong in the briefing.",
           ),
-        // GQ-B1: Das Briefing reist als erste Zeile des HINTERGRUND-Blocks in den
-        // Agenten-Prompt (backgroundText in elevenlabs/outbound.js). Der Agenten-Prompt
-        // verbietet die Rueckfrage fuer alles, was dort schon steht - eine vorweggenommene
-        // Antwort schaltet den Rueckfragekanal fuer genau diese Luecke ab. Deshalb steht
-        // das VERBOT hier: es gilt immer, auch bei ausgeschaltetem Kanal. Der Hinweis auf
-        // die Live-Rueckfrage steht dagegen am kanalabhaengigen PLACE_CALL_CONSULT_LOOP.
+        // GQ-B2 (Owner-Entscheidung 2026-08-19): der Auftraggeber ist waehrend des Anrufs
+        // ABWESEND - das ist der Normalfall. Die GQ-B1-Pauschale ("nie vertroesten")
+        // ueberschoss deshalb: sie verbrennt die eine gedeckelte Rueckfrage auf Fragen, die
+        // auch der auftraggebende Assistent nicht beantworten kann. An ihre Stelle tritt die
+        // Selbsteinschaetzung in drei Klassen - eigene Quellen (offen lassen + deklarieren),
+        // Nur-Owner-Wissen (die ehrliche Prozess-Auskunft, KEINE erfundene Antwort),
+        // oeffentlich pruefbar (nichts schreiben). Die Erfindungs-Sperre ("never script an
+        // answer") bleibt woertlich stehen, sie ist weiterhin wahr. Der Text nennt bewusst
+        // KEIN Werkzeug: das Feld ist immer registriert, waehrend die Rueckfrage am Kanal
+        // haengt - die Anweisung dazu steht am kanalabhaengigen PLACE_CALL_CONSULT_LOOP.
         briefing: z
           .string()
           .optional()
           .describe(
-            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. Write only what you KNOW: never script an answer for a detail you are missing, and never write that the principal will get back to the other party - do not pre-empt that answer here, so such a line removes an answer instead of adding one. Leave the gap open. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
+            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. Write only what you KNOW: never script an answer for a detail you are missing. For each gap, decide: could you answer it yourself during the call (calendar, mail, files, chat)? Then leave the gap open and declare that in one line. Can only the principal know it? Then write the honest line that they will get back on it. Can anyone look it up? Then write nothing. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
           ),
         constraints: z
           .string()
