@@ -89,8 +89,7 @@ outbound + Deckel LOOKUP_MAX_PER_CALL=2. Torzustand reist als
       Entscheidung vom 2026-08-11 zurueck - im Bericht benennen).
 
 ## Abschluss
-- [x] Unabhaengige Durchsicht Thema A (FAIL -> 7 Befunde behoben/adressiert);
-      Thema-B-Durchsicht laeuft (Ergebnis im Abschlussbericht).
-- [x] .fortschritt.md: Verlauf + BEREIT ZUM ANRUF geschrieben; Widersprueche/
-      Spaeter-Liste folgen im Abschluss-Commit.
+- [x] Unabhaengige Durchsichten A+B (beide FAIL im Erst-Urteil; A: 7 behoben/2
+      getragen, B: 3 behoben/2 getragen - alles in .fortschritt.md + EL-P7).
+- [x] .fortschritt.md: Verlauf, Widersprueche, Spaeter-Liste, BEREIT ZUM ANRUF.
 - [x] git push origin nach jeder Phase.
