@@ -266,8 +266,9 @@ test("[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers 
         "Bestandspfad, elevenLabsVoiceIdFor) - sonst spricht der Agent Deutsch mit " +
         "amerikanischer Stimme.",
     );
-    // Seit 18.08.2026 traegt firstMessage die GANZE Eroeffnung (Offenlegung + Bruecke +
-    // Frage, s. call-locale.js providerOpening). Was DIESER Fall misst, ist unveraendert:
+    // Seit 18.08.2026 traegt firstMessage die GANZE Eroeffnung (Offenlegung + Grund-Zeile
+    // (die Frage reist seit GQ-E1 im Wert), s. call-locale.js providerOpening). Was
+    // DIESER Fall misst, ist unveraendert:
     // dass der Offenlegungssatz der SPRACHWAHL folgt - deshalb der Anfang, byte-genau.
     // Dass die Eroeffnung als Ganzes zum Code passt, misst T5 (c)/(e) gegen die Vorlage.
     assert.ok(

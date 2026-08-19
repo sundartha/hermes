@@ -34,6 +34,7 @@ const { makeElevenLabsOutbound } = await import("../src/elevenlabs/outbound.js")
 const { consultAllowedFor } = await import("../src/consult/gate.js");
 const { elevenLabsLookupAvailableFor } = await import("../src/research/registry.js");
 const { openingLineHash } = await import("../src/store/state-ops.js");
+const { LOCALES } = await import("../src/i18n/locales.js");
 
 const VARIABLE = "consult_available";
 const OFFEN = "available";
@@ -206,10 +207,13 @@ describe("Wert von opening_line am Anrufstart", () => {
     call.openingLineSha256 = openingLineHash(LINE); // Hash der UNveraenderten Zeile
     const gesendet = await openingLineBei(call);
     assert.notEqual(gesendet, call.openingLine);
-    assert.equal(gesendet, "Es geht um Folgendes: Termin vereinbaren.");
+    assert.equal(gesendet, `Es geht um Folgendes: Termin vereinbaren. ${LOCALES.de.openingQuestion}`);
   });
 
   it("Alt-Datensatz ohne Zeile -> deterministischer Rueckfall aus dem Auftrag, NIE roh unbegrenzt", async () => {
-    assert.equal(await openingLineBei(pinCall()), "Es geht um Folgendes: Termin vereinbaren.");
+    assert.equal(
+      await openingLineBei(pinCall()),
+      `Es geht um Folgendes: Termin vereinbaren. ${LOCALES.de.openingQuestion}`,
+    );
   });
 });

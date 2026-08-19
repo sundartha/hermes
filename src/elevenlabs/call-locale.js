@@ -67,13 +67,14 @@ const OPENING_LINE_PLACEHOLDER = "{{opening_line}}";
 //      Artikel 50 EU AI Act). Er bleibt unveraendert; hier kommt nur etwas dahinter.
 //   2. die Grund-Zeile ({{opening_line}}, s. oben) - EIN fertiger Satz, der sagt,
 //      worum es geht.
-//   3. EINE Frage. SIE ist der eigentliche Fix von Befund 1 (Anruf 6, 18.08.2026): die
-//      Offenlegung allein stellt keine Frage, gibt dem Angerufenen also keinen Anlass zu
-//      reden - gemessen wurden 11 s Stille zwischen dem Ende der Offenlegung und der
-//      Nachfrage, die erst der turn_timeout ausloeste. Ein fremder Agent kann das nicht
-//      im Prompt heilen: nach first_message hat er den Zug gar nicht, er wartet.
+//      Sie endet weiterhin auf GENAU EINE Frage - der Befund aus Anruf 6 (11 s Stille,
+//      weil die Offenlegung allein keinen Anlass zum Reden gibt und ein fremder Agent
+//      nach first_message den Zug gar nicht hat) bleibt gedeckt. Die Frage reist seit
+//      GQ-E1 aber IM WERT statt im Rahmen: nur dort ist entscheidbar, ob sie noch
+//      gebraucht wird oder die Zeile schon selbst fragt (opening-line.js,
+//      composedOpeningLine). Hinter der Variablen steht deshalb nichts mehr.
 const providerOpening = (locale, ownerName) =>
-  [locale.disclosure(ownerName), OPENING_LINE_PLACEHOLDER, locale.openingQuestion].join(" ");
+  [locale.disclosure(ownerName), OPENING_LINE_PLACEHOLDER].join(" ");
 
 // Der Auftraggeber-Name als PLATZHALTER - fuer die andere Lesart derselben Eroeffnung.
 const OWNER_NAME_PLACEHOLDER = "{{owner_name}}";

@@ -875,6 +875,7 @@ test("EL-START T5 (b): ohne registrierten Auftraggeber-Namen wird gar nicht erst
 // gegen den Code, nie das Konto (dafuer gibt es npm run elevenlabs:drift).
 const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 const OWNER_NAME_VARIABLE = "{{owner_name}}";
+const OPENING_LINE_VARIABLE = "{{opening_line}}";
 
 // SEIT 18.08.2026 traegt first_message die GANZE Eroeffnung, nicht mehr nur die
 // Offenlegung (Befund 1 aus Anruf 6: die Offenlegung allein stellt keine Frage, der
@@ -891,7 +892,7 @@ test("EL-START T5 (c, Mechanismus, gruen): first_message der Agenten-Vorlage ist
   assert.equal(
     agent.first_message,
     providerOpeningFor("en"),
-    "first_message muss die aus LOCALES.en zusammengesetzte Eroeffnung sein (Offenlegung + Bruecke + Frage), nur ${ownerName} -> {{owner_name}}",
+    "first_message muss die aus LOCALES.en zusammengesetzte Eroeffnung sein (Offenlegung + Grund-Zeile), nur ${ownerName} -> {{owner_name}}",
   );
   assert.ok(
     agent.first_message.startsWith(LOCALES.en.disclosure(OWNER_NAME_VARIABLE)),
@@ -951,6 +952,35 @@ test("EL-START T5 (e, Mechanismus, gruen): jede Sprache mit kuratiertem Offenleg
       ersterSatzVon(preset),
       null,
       `das Preset "${sprache}" traegt einen ersten Satz, den der Code nicht kennt - eine hier uebersetzte Offenlegung ist eine erfundene Rechtsaussage`,
+    );
+  }
+});
+
+// ---- GQ-E1-05: hinter der Variablen steht kein statischer Text mehr ------------------
+// Zusammen mit den startsWith(disclosure)-Zusagen aus T5 (c)/(e) passt danach zwischen
+// Offenlegung und Variable kein Text mehr - weder davor noch dahinter (E-P3). Das ist
+// die Zusage, an der die Komposition im WERT haengt: steht am Anbieter wieder eine feste
+// Frage hinter der Variablen, ergibt eine selbst fragende Grund-Zeile zwei Fragen.
+test("GQ-E1-05: der statische Rahmen endet mit der Variablen", () => {
+  const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
+  const conversationConfig = vorlage.agent.conversation_config;
+
+  assert.ok(
+    conversationConfig.agent.first_message.endsWith(OPENING_LINE_VARIABLE),
+    "first_message der Vorlage darf hinter {{opening_line}} keinen statischen Text mehr fuehren",
+  );
+  for (const [sprache, preset] of Object.entries(conversationConfig.language_presets)) {
+    const satz = preset?.overrides?.agent?.first_message ?? null;
+    if (satz === null) continue;
+    assert.ok(
+      satz.endsWith(OPENING_LINE_VARIABLE),
+      `das Preset "${sprache}" fuehrt hinter {{opening_line}} statischen Text - dort kann die Komposition ihn nicht mehr weglassen`,
+    );
+  }
+  for (const sprache of Object.keys(LOCALES)) {
+    assert.ok(
+      providerOpeningFor(sprache).endsWith(OPENING_LINE_VARIABLE),
+      `providerOpeningFor("${sprache}") muss mit der Variablen enden - sie ist der Referenz-Wortlaut der Vorlage`,
     );
   }
 });
@@ -2033,7 +2063,7 @@ test("EL-START T11 (Thema A): opening_line reist geprueft an den Anbieter UND li
 
       // +49-Ziel -> DE-Bruecke. Byte-Vergleich, nicht "irgendwie gefuellt": rohes
       // call.goal (der Anruf-8-Defekt) unterscheidet sich genau um den Bruecken-Rahmen.
-      const erwartet = `Es geht um Folgendes: ${OBJECTIVE}.`;
+      const erwartet = `Es geht um Folgendes: ${OBJECTIVE}. ${LOCALES.de.openingQuestion}`;
       const variablen = dynamicVariables(mock.startRequests[0]);
       assert.equal(variablen.opening_line, erwartet);
 
@@ -2042,6 +2072,10 @@ test("EL-START T11 (Thema A): opening_line reist geprueft an den Anbieter UND li
       const call = ownCalls(srv)[0];
       assert.ok(call, "der Call-Datensatz existiert");
       assert.equal(call.openingLine, erwartet);
+      assert.ok(
+        call.openingLine.endsWith("?"),
+        "komponiert wird VOR dem Hashen (R6): der gespeicherte Wert traegt die Frage bereits",
+      );
       assert.equal(typeof call.openingLineSha256, "string");
       assert.equal(call.openingLineSha256.length, SHA256_HEX_LAENGE);
     },

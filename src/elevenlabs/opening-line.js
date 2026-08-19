@@ -20,6 +20,8 @@
 //   2. sonst locale.bridgePhrase(objective) - WORTGLEICH die Eroeffnung, die Anruf 8
 //      gesprochen hat (49 s, Ziel erreicht) - wenn SIE die Pruefung besteht;
 //   3. sonst die feste Kurzzeile der Sprache (locale.openingReasonFallback).
+// Auf jeder Stufe wird die Grund-Zeile abschliessend komponiert (composedOpeningLine):
+// die feste Frage der Sprache kommt dazu, wenn und nur wenn die Zeile nicht selbst fragt.
 // Ein LLM-Ausfall degradiert damit auf den Anruf-8-Wortlaut, SOLANGE der Auftrag die
 // Kappe einhaelt (DE: bis ~96 Zeichen). EHRLICH BENANNT (Review-Befund R4): ein
 // LAENGERER Auftrag faellt bei totem LLM auf die feste Kurzzeile und verliert damit
@@ -40,11 +42,18 @@ import { openingLineHash } from "../store/state-ops.js";
 
 // HARTE LAENGENGRENZE (Auflage A2) fuer die gesprochene Grund-Zeile, in Zeichen.
 // 120 Zeichen sind bei gemessenen 17,4 Zeichen/s (Anruf 8) rund 6,9 s Sprechzeit;
-// mit Offenlegung (DE 132 Z) und fester Frage (DE 33 Z) ist die Eroeffnung damit auf
-// ~16,5 s GEDECKELT - vorher war sie unbegrenzt (TEXT_LIMITS.objective erlaubt 500 Z
+// mit Offenlegung (DE 132 Z) und fester Frage (DE 23 Z, seit GQ-E1 ohne Anrede) ist
+// die Eroeffnung damit auf ~15,9 s GEDECKELT, und sie faellt weiter, wenn die Zeile
+// selbst fragt (dann entfaellt die feste Frage, s. composedOpeningLine) - vorher war
+// sie unbegrenzt (TEXT_LIMITS.objective erlaubt 500 Z
 // im Auftrag, das waeren ueber 30 s nicht unterbrechbare Eroeffnung). Die Grenze traegt
 // auch die Rueckfall-Stufe 2: DE-Bruecke (22 Z) + Auftrag bis ~95 Z + Punkt passt.
 export const OPENING_LINE_MAX_CHARS = 120;
+
+// Obergrenze der festen Frage je Sprache. Kein Stilmass, sondern der Deckel der
+// Eroeffnung: die gesprochene Zeile ist hoechstens OPENING_LINE_MAX_CHARS + 1 + dieser
+// Wert (test/el-opening-line.test.js rechnet das nach). Heutiges Maximum ist EN mit 32.
+export const OPENING_QUESTION_MAX_CHARS = 40;
 
 // Zeichen, die in gesprochener Sprache nichts verloren haben: eckige Klammern sind
 // die gemessenen Ton-Marken ([thoughtful], ...), geschweifte die Platzhalter-Syntax
@@ -55,11 +64,21 @@ const FORBIDDEN_CHARS = /[[\]{}\n\r\t]/;
 // Waehrungszeichen+Zahl); semantische Zusagen ohne Zahl haelt die Erzeugungs-
 // Anweisung fern, und die Rueckfall-Stufe spricht ohnehin nur den Owner-Auftrag.
 const PRICE_PATTERNS = [/\d[\d.,]*\s*(?:€|\$|eur\b|usd\b|euro\b|dollar)/i, /[€$]\s*\d/];
-// Satz-Schluss: die Zeile ist EIN fertiger Satz, an den die Vorlage die feste Frage
-// haengt. Ohne Schlusszeichen klebte sie an der Frage ("...vereinbaren Wie sieht...").
-// BEWUSST OHNE "?" (Review-Befund): eine Frage vor der festen Frage ergaebe zwei
-// Fragen hintereinander - der Angerufene wuesste nicht, welche er beantworten soll.
-const SENTENCE_END = /[.!]$/;
+// Satz-Schluss: die Zeile ist EIN fertiger Satz. Ohne Schlusszeichen klebte sie an dem,
+// was folgt ("...vereinbaren Wie sieht..."). MIT "?" seit GQ-E1: hinter der Zeile steht
+// am Anbieter kein Textteil mehr (der Rahmen endet mit der Variablen, call-locale.js),
+// und ob die feste Frage noch dazukommt, entscheidet composedOpeningLine - eine Zeile,
+// die selbst fragt, ist damit ein gueltiger Abschluss der Eroeffnung.
+const SENTENCE_END = /[.!?]$/;
+
+// Ein Fragezeichen NUR als letztes Zeichen: zwei Fragen in einer Aeusserung lassen den
+// Angerufenen raten, welche er beantworten soll. Dieselbe Zusage wie vorher, nur an der
+// Stelle, an der sie jetzt etwas entscheidet (composedOpeningLine).
+const QUESTION_MARK = "?";
+const fragtHoechstensAmEnde = (line) => {
+  const i = line.indexOf(QUESTION_MARK);
+  return i === -1 || i === line.length - 1;
+};
 
 // Der unveraenderliche Kern des Offenlegungssatzes je Sprache, ABGELEITET aus
 // LOCALES (kein zweiter Wortlaut, G5): der Satzteil vor dem Namen, ohne die
@@ -98,6 +117,7 @@ export function validOpeningLine(candidate) {
   if (!line || line.length > OPENING_LINE_MAX_CHARS) return null;
   if (FORBIDDEN_CHARS.test(line)) return null;
   if (!SENTENCE_END.test(line)) return null;
+  if (!fragtHoechstensAmEnde(line)) return null;
   if (PRICE_PATTERNS.some((pattern) => pattern.test(line))) return null;
   const lower = line.toLowerCase();
   if (DISCLOSURE_CORES.some((core) => lower.includes(core))) return null;
@@ -111,6 +131,10 @@ export function validOpeningLine(candidate) {
  * validOpeningLine, und ein Auftrag, der durchfaellt (zu lang, Klammern, Preis),
  * erreicht die Sprache NICHT (Auflage A5) - dann traegt die feste Kurzzeile.
  *
+ * Seit GQ-E1 zwei Formen: ein Auftrag, der auf "?" endet, laeuft OHNE Bruecken-Rahmen
+ * durch (er ist bereits die Frage); sonst faellt ein mitgebrachtes [.!] weg, damit
+ * bridgePhrase genau ein Satz-Endzeichen setzt.
+ *
  * @param {unknown} objective
  * @param {object} locale LOCALES-Bundle (localeFor)
  * @returns {string|null}
@@ -119,7 +143,30 @@ export function bridgedObjective(objective, locale) {
   if (typeof objective !== "string") return null;
   const normalized = objective.replace(/\s+/g, " ").trim();
   if (!normalized) return null;
-  return validOpeningLine(locale.bridgePhrase(normalized));
+  // Der Auftrag IST schon die sprechbare Frage - kein Rahmen, kein zweites Satzzeichen.
+  if (normalized.endsWith(QUESTION_MARK)) return validOpeningLine(normalized);
+  // Genau EIN Satz-Endzeichen: bridgePhrase setzt ihres, also faellt ein mitgebrachtes
+  // vorher weg. BEWUSST NUR [.!] - trimGoalForSpeech (claude.js, Telnyx-Weg) streicht
+  // zusaetzlich das Fragezeichen; hier bleibt es stehen, weil eine Frage-Zeile seit
+  // dieser Phase gueltig ist. Der Telnyx-Weg bleibt unveraendert.
+  const ohneSatzende = normalized.replace(/[.!]+$/, "").trim();
+  if (!ohneSatzende) return null;
+  return validOpeningLine(locale.bridgePhrase(ohneSatzende));
+}
+
+/**
+ * Die vollstaendige gesprochene Eroeffnung NACH der Offenlegung: die Grund-Zeile und -
+ * nur wenn sie nicht schon selbst fragt - die feste Frage der Sprache. Der statische
+ * Rahmen am Anbieter endet mit der Variablen (call-locale.js), also ist DIES der
+ * einzige Ort, an dem ueber die Frage entschieden wird. Rein, deterministisch, ohne
+ * Sprachkenntnis - in jeder Sprache dieselbe Regel.
+ *
+ * @param {string} reason gepruefte Grund-Zeile (validOpeningLine)
+ * @param {object} locale LOCALES-Bundle (localeFor)
+ * @returns {string}
+ */
+export function composedOpeningLine(reason, locale) {
+  return reason.endsWith(QUESTION_MARK) ? reason : `${reason} ${locale.openingQuestion}`;
 }
 
 /**
@@ -146,5 +193,10 @@ export function verifiedOpeningLine({ call, locale }) {
         `zum Annahme-Hash, deterministischer Rueckfall greift`,
     );
   }
-  return bridgedObjective(call.goal, locale) ?? locale.openingReasonFallback;
+  // OBEN VERBUERGT, UNTEN KOMPONIERT: der gespeicherte Wert ist bereits die bei
+  // Auftragsannahme komponierte Zeile (fetchOpeningLine, VOR createCall) - der Hash
+  // deckt genau ihn ab, deshalb geht er oben byte-genau zurueck. Der Rueckfall
+  // entsteht erst hier und muss denselben Kompositionsschritt noch gehen.
+  const reason = bridgedObjective(call.goal, locale) ?? locale.openingReasonFallback;
+  return composedOpeningLine(reason, locale);
 }
