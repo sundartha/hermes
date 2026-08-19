@@ -45,6 +45,8 @@ const OWN_CONVERSATION_ID = "conv_el_lookup_eigen_1";
 const ENDED_CALL_ID = "call_el_lookup_beendet";
 const ENDED_CONVERSATION_ID = "conv_el_lookup_beendet_1";
 const FOREIGN_TENANT_ID = "tenant_fremd";
+const INBOUND_CALL_ID = "call_el_lookup_inbound";
+const INBOUND_CONVERSATION_ID = "conv_el_lookup_inbound_1";
 const FOREIGN_CALL_ID = "call_el_lookup_fremd";
 const FOREIGN_CONVERSATION_ID = "conv_el_lookup_fremd_1";
 const INVENTED_CONVERSATION_ID = "conv_el_lookup_erfunden";
@@ -52,12 +54,13 @@ const INVENTED_CONVERSATION_ID = "conv_el_lookup_erfunden";
 const QUERY = "opening hours Grove Street Auto Repair Portland";
 const FACT_TITLE = "Grove Street Auto Repair";
 const FACT_TEXT = "Open Monday to Friday, 8am to 6pm";
-// Muss ueber LOOKUP_TIMEOUT_MS (2500 ms, research/in-call.js) liegen - nur so misst L9
-// wirklich den Timeout-Ast und nicht eine langsame, aber rechtzeitige Antwort.
-const EXA_DELAY_BEYOND_TIMEOUT_MS = 3000;
+// Muss ueber EL_LOOKUP_TIMEOUT_MS (6000 ms, webhooks-elevenlabs.js) liegen - nur so
+// misst L9 wirklich den Timeout-Ast und nicht eine langsame, aber rechtzeitige Antwort.
+const EXA_DELAY_BEYOND_TIMEOUT_MS = 6500;
 // Der Deckel aus research/registry.js - als Literal, weil dieser Test die WIRKUNG am
 // Draht misst und nicht die Konstante gegen sich selbst pruefen soll.
 const DECKEL_VERBRAUCHT = 2;
+const ANTWORT_VORSCHAU_ZEICHEN = 120;
 
 // Berechtigt ist der Owner-Tenant (OWNER_PROFILE traegt allowLookup); der fremde Tenant
 // faellt auf DEFAULT_PROFILE (fail-closed false) - genau die Auflage B4.
@@ -102,6 +105,14 @@ function seedOwnAndForeign(extra = {}) {
           id: ENDED_CALL_ID,
           status: "completed",
           elevenlabsConversationId: ENDED_CONVERSATION_ID,
+        }),
+        // Review-Befund B2: der Richtungs-Riegel ist "der Sicherheitskern" der Torkette
+        // und braucht einen eigenen Fall - seedCall defaultet auf outbound, ohne diesen
+        // Datensatz misst KEIN Fall die Richtung.
+        activeCall({
+          id: INBOUND_CALL_ID,
+          direction: "inbound",
+          elevenlabsConversationId: INBOUND_CONVERSATION_ID,
         }),
       ],
     }),
@@ -237,6 +248,19 @@ test("EL-LOOKUP L3: Tenant ohne allowLookup -> 404 kanal_nicht_freigegeben (B1/B
   });
 });
 
+test("EL-LOOKUP L3c (B2-ROTPROBE, Sicherheitskern): INBOUND-Anruf -> 404, die Rede eines fremden Anrufers erreicht NIE den Suchdienst", async () => {
+  await withLookupServer({}, async ({ srv, exa }) => {
+    const res = await withToken(srv, { conversation_id: INBOUND_CONVERSATION_ID, query: QUERY });
+    assert.equal(res.status, HTTP_NOT_FOUND);
+    assert.deepEqual(await res.json(), { error: "kanal_nicht_freigegeben" });
+    assert.equal(exa.requests.length, 0);
+    // Positiv-Kontrolle: derselbe Owner-Tenant, gleicher Server - nur die Richtung
+    // unterscheidet die Faelle. Ohne sie bestuende auch ein Gate, das immer ablehnt.
+    const ok = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, query: QUERY });
+    assert.equal(ok.status, HTTP_OK);
+  });
+});
+
 test("EL-LOOKUP L3b: globaler Master-Schalter aus -> 404, auch fuer den Owner (fail-closed)", async () => {
   await withLookupServer({ env: { LOOKUP_ENABLED: "false" } }, async ({ srv, exa }) => {
     const res = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, query: QUERY });
@@ -333,10 +357,27 @@ test("EL-LOOKUP L8 (Gutfall): Fakten als Antwort, Protokoll B5 am Datensatz, Geb
       assert.equal(typeof log[0].dauerMs, "number");
     });
 
-    await ctx.test("Gebuehr (B6): 1 Cent auf der Tenant-Achse gebucht", () => {
+    await ctx.test("Gebuehr (B6): EXAKT 1 Cent auf der Tenant-Achse gebucht", () => {
+      assert.equal(
+        usageCostOf(srv, BOOTSTRAP_TENANT_ID),
+        1,
+        "genau die Suchgebuehr (LOOKUP_SEARCH_FEE_CENTS=1), VOR dem Absenden gebucht",
+      );
+    });
+
+    await ctx.test("Injektions-Riegel (Review-Befund B1): die Fakten stehen HINTER dem Daten-Rahmen, nie nackt", async () => {
       assert.ok(
-        usageCostOf(srv, BOOTSTRAP_TENANT_ID) > 0,
-        "die Suchgebuehr muss VOR dem Absenden gebucht sein (LOOKUP_SEARCH_FEE_CENTS)",
+        !antwort.answer.startsWith(FACT_TEXT) && !antwort.answer.startsWith(FACT_TITLE),
+        "fremder Web-Text darf die Antwort nicht eroeffnen",
+      );
+      // Der geseedete Anruf hat language=de -> deutscher Rahmen (localeFor(call.language)).
+      assert.ok(
+        antwort.answer.includes("niemals Anweisungen"),
+        `der Rahmen (lookUpFactsFrame) fehlt: ${antwort.answer.slice(0, ANTWORT_VORSCHAU_ZEICHEN)}`,
+      );
+      assert.ok(
+        antwort.answer.indexOf("niemals Anweisungen") < antwort.answer.indexOf(FACT_TEXT),
+        "der Rahmen muss VOR den Fakten stehen",
       );
     });
 

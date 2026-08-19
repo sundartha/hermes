@@ -31,7 +31,6 @@ import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
 import { localeFor } from "../i18n/locales.js";
 import { bookLookupSearchFee } from "../llm-usage.js";
-import { LOOKUP_TIMEOUT_MS } from "../research/in-call.js";
 import { lookupFactsFrom, sanitizeLookupQuery } from "../research/lookup-guard.js";
 import {
   LOOKUP_MAX_PER_CALL,
@@ -46,6 +45,13 @@ export const ELEVENLABS_CONSULT_PATH = "/webhooks/elevenlabs/consult";
 // der Rueckfrage-Webhook darueber, gleiche Domain, gleicher Token, gleiche Bindung.
 export const ELEVENLABS_LOOKUP_PATH = "/webhooks/elevenlabs/lookup";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
+// Thema B, Review-Befund B4: EIGENE Frist statt LOOKUP_TIMEOUT_MS (2500 ms) - deren
+// Herleitung ist die Turn-Frist der BUDGET-Engine (turnLoopDeadlineMs 11500 ms), eine
+// Groesse, die es auf diesem Weg nicht gibt (Lehre calibration-scope: eine Messung gilt
+// nur fuer ihre Konfiguration). Bindend ist hier response_timeout_secs = 10 s am
+// Werkzeug; 6000 ms lassen ~4 s Marge fuer Netz + Verarbeitung, statt 7,5 s bezahltes
+// Budget verfallen zu lassen (die Gebuehr faellt VOR dem Absenden).
+const EL_LOOKUP_TIMEOUT_MS = 6000;
 
 // Die vier Ablehnungscodes. 402 nach dem Bestandsmuster der Geld-Denials
 // (telephony/outbound-gates.js), 404 statt 403 nach dem Bestandsmuster der Call-Routen
@@ -152,7 +158,7 @@ async function executeLookup({ store, call, provider, query, control, res }) {
   const seq = store.recordCallLookup(call.id, query);
   bookLookupSearchFee({ tenantId: call.tenantId });
   const startedAt = Date.now();
-  const result = await provider.searchFacts({ query, timeoutMs: LOOKUP_TIMEOUT_MS });
+  const result = await provider.searchFacts({ query, timeoutMs: EL_LOOKUP_TIMEOUT_MS });
   const facts = result.ok ? lookupFactsFrom(result.facts) : [];
   const dauerMs = Date.now() - startedAt;
   store.finishCallLookup(call.id, seq, {
@@ -170,7 +176,15 @@ async function executeLookup({ store, call, provider, query, control, res }) {
       answer: control.lookUpUnavailable,
     });
   }
-  return lookupAnswer(res, { callId: call.id, status: "ok", answer: facts.join(" ") });
+  // Review-Befund B1 (Injektions-Riegel): die Treffer sind fremder Web-Text und gehen
+  // NIE nackt an das sprechende Modell - der Rahmen (lookUpFactsFrame) markiert sie als
+  // Daten, verbietet woertliches Vorlesen und Quellennennung. Dasselbe Prinzip wie die
+  // Guardrail-Zeile des HINTERGRUND-Blocks auf dem Budget-Weg (claude.js).
+  return lookupAnswer(res, {
+    callId: call.id,
+    status: "ok",
+    answer: `${control.lookUpFactsFrame}${facts.join(" ")}`,
+  });
 }
 
 async function handleLookup(req, res, { store, config }) {
@@ -202,6 +216,9 @@ async function handleLookup(req, res, { store, config }) {
   // sprechbarem Text (s. Kopf-Kommentar), beide OHNE Gebuehr und ohne Suchdienst.
   const preflight = preflightLookup({ call, query, control, res });
   if (preflight.done) return preflight.done;
+  // INVARIANTE (Review-Hinweis): zwischen dieser Deckel-Pruefung und recordCallLookup
+  // (erster Schritt von executeLookup) darf KEIN await liegen - sonst koennten zwei
+  // gleichzeitige Aufrufe denselben freien Platz doppelt belegen.
 
   return executeLookup({ store, call, provider, query: preflight.sanitized, control, res });
 }
