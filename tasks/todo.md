@@ -1,95 +1,42 @@
-# Durchgang 2026-08-19: natuerlicher Anrufgrund (A) + Recherche am EL-Weg (B)
+# Durchgang 2026-08-19 (2): EL-Weg LIVE bringen (Cutover auf Auftrag des Eigentuemers)
 
-Auftrag des Eigentuemers vom 19.08.2026, autonom. Messlatte: Anruf 8 (49 s, 0,118 USD,
-17,4 Z/s, ~1,6 s Stille). Kein Deploy, kein Engine-Flip, keine echten Anrufe, kein
-Wortlaut-Eingriff an der Offenlegung.
+Auftrag woertlich: "mache alles, was du jetzt gesagt hast" - Push, Deploy, Keys,
+Tenant-Freischaltung, Prod-Smoke-Anruf. Erster Live-Eingriff dieser Kette,
+ausdrueckliches Go liegt vor.
 
-## THEMA A — Eroeffnungszeile statt rohem {{objective}}
+- [ ] 1. Merge upstream/master (33 Commits, u.a. Stripe-Reconcile + Web-Login) in
+      master. 19 beidseitig geaenderte Dateien, darunter config.js/schema.sql/
+      state-ops.js/pg.js. ERWARTET: Merge ohne verlorene Seite; `node --check`
+      auf allen Konfliktdateien OK. PRUEFUNG: `git diff --stat`, Konfliktliste 0.
+- [ ] 2. Volle Suite gruen NACH dem Merge. ERWARTET: `npm test` 0 rot.
+      PRUEFUNG: Exit-Code + Schlusszeile.
+- [ ] 3. Push origin + upstream (KEIN force). ERWARTET: beide Remotes auf dem
+      Merge-Commit. PRUEFUNG: `git rev-parse` remote == lokal.
+- [ ] 4. Render-Inventur VOR jedem Eingriff: Service-IDs, autoDeploy-Zustand,
+      vorhandene Env-Keys (nur Namen). ERWARTET: Hermes-Hauptservice gefunden;
+      ELEVENLABS_API_KEY + Webhook-Token + DeepSeek-Key vorhanden.
+      PRUEFUNG: get_service/Env-Liste.
+- [ ] 5. Env setzen: ELEVENLABS_OUTBOUND_ENABLED=true, LOOKUP_ENABLED=true,
+      EXA_API_KEY (aus lokaler .env). Fehlende Consult-Flags ergaenzen.
+      ERWARTET: nur ADDITIV (kein bestehender Key geloescht). PRUEFUNG:
+      Env-Liste vorher/nachher vergleichen.
+- [ ] 6. Deploy ausloesen, Ende abwarten. ERWARTET: Status live, /healthz 200.
+      PRUEFUNG: get_deploy + curl https://app.sundartha.com/healthz.
+- [ ] 7. Prod-DB: Owner-Tenant-Profil allowLookup=true (DB-Schnappschuss!).
+      Danach Neustart (Deploy aus Schritt 6 zaehlt nur, wenn DB-Update VOR dem
+      Neustart lag - sonst zweiter Restart). ERWARTET: SELECT zeigt
+      allowLookup=true. PRUEFUNG: psql-Readback.
+- [ ] 8. Routen-Smoke ohne Anruf: POST /webhooks/elevenlabs/lookup ohne Token
+      -> fail-closed (401/403, NICHT 404). PRUEFUNG: curl-Statuscode.
+- [ ] 9. Prod-Smoke-Anruf ueber den MCP-Connector (place_call an die eigene
+      Nummer, await_call_event-Schleife; falls consult kommt: answer_consult).
+      ERWARTET: opening-line-Logzeile + look_up ueber app.sundartha.com.
+      PRUEFUNG: Render-Logs + Call-Datensatz.
+- [ ] 10. Doku (.fortschritt.md Cutover-Eintrag), Commit, Push beide Remotes,
+      Caffeinate aus.
 
-Entwurf: Vorab-Erzeugung EINER natuerlichen Grund-Zeile durch das Zweit-LLM
-(Muster precall-briefing.js), Validierung fail-closed, Reise als NEUE dynamic
-variable {{opening_line}}; {{objective}} bleibt roh im PROMPT (Aufgabentreue),
-verschwindet aber aus first_message und voicemail_message (A5).
-Rueckfall-Treppe: erzeugt+validiert -> bridgePhrase(objective) validiert
-(= heutiger Anruf-8-Wortlaut) -> feste Kurzzeile je Sprache.
-
-- [x] `src/elevenlabs/opening-line.js`: Erzeugung (secondary LLM, forcedTool,
-      0 Retries, briefingTimeoutMs), Validierung (Kappe 120 Zeichen, keine
-      eckigen/geschweiften Klammern, kein Zeilenumbruch, keine Offenlegungs-
-      Wiederholung, keine Preisangabe), Rueckfall-Treppe, Kosten-Buchung
-      (bookTokenUsage + Abbruch-Schaetzung), Hash-Gegenprobe fuer den Anrufstart.
-      SOLL: jeder Verstoss faellt auf die naechste Stufe; nichts Ungeprueftes.
-      PRUEFUNG: test/el-opening-line.test.js, je Waechter eine Rotprobe.
-- [x] LOCALES: `openingReasonFallback` je Sprache (feste Kurzzeile).
-      PRUEFUNG: Test prueft Existenz + Kuerze + korrekte Umlaute/Akzente.
-- [x] `state-ops.js#createCall`: openingLine + openingLineSha256 (Hash im Store
-      berechnet, nicht vom Aufrufer). pg: schema.sql (ADD COLUMN), pg.js
-      (INSERT/UPSERT/rowToCall). SOLL: Restart-fest, json/pg-paritaetisch.
-- [x] `api-calls.js`: nach dem Briefing, NUR bei elevenLabsOutbound.enabled,
-      Zeile erzeugen und an createCall reichen. Sprache aus callLocaleFor
-      (dieselbe Aufloesung wie der Anrufstart, kein zweiter Weg).
-- [x] `outbound.js#dynamicVariables`: opening_line aus dem Call-Datensatz,
-      davor Hash-Gegenprobe (A6): weicht sie ab -> LAUT + deterministischer
-      Rueckfall, nie der veraenderte Text. PRUEFUNG: Rotprobe mutiert den
-      gespeicherten Text -> Waechter schlaegt an.
-- [x] `call-locale.js#providerOpening`: disclosure + "{{opening_line}}" +
-      openingQuestion. Vorlage (EN-Basis, DE/FR-Presets, voicemail_message)
-      nachgezogen. T5/Sprachwahl-Tests bleiben Riegel (startsWith(disclosure)).
-- [x] Vorlage `_besitz`: language_presets_offenlegung bekommt schreibweg
-      je_schluessel (schliesst die NICHT-SCHREIBBAR-Luecke strukturell).
-- [x] Suite gruen + Lint; Commit + Push (origin).
-- [x] Konto: Trockenlauf -> push (first_message, voicemail_message,
-      language_presets_offenlegung, prompt) -> Ruecklese -> drift. 4 Werte je
-      Feld in .fortschritt.md.
-- [x] A2-Zahl nennen: Kappe 120 Z = 6,9 s bei 17,4 Z/s; Eroeffnung DE max
-      132+1+120+1+33 = 287 Z ~ 16,5 s (heute UNBEGRENZT: 500-Z-objective
-      moeglich = ~30+ s). Typisch erzeugt ~60-80 Z -> Eroeffnung ~13 s wie
-      Anruf 8. Nach der Umsetzung gegenrechnen und im Bericht ausweisen.
-- [x] A7: Kosten je Erzeugung messen (ein Echt-Aufruf ueber den Seam, falls
-      das Provider-Konto zahlt; sonst ehrlich "nicht messbar" + Grund).
-
-## THEMA B — Recherche (look_up) am ElevenLabs-Weg
-
-Entwurf: Webhook /webhooks/elevenlabs/lookup in webhooks-elevenlabs.js (Bauart
-= Consult-Kanal: Token fail-closed, Bindung ueber conversation_id, 404 fuer
-"nicht berechtigt", 402 Geld, 400 Nutzlast), Ausfuehrung ueber BESTEHENDEN
-Exa-Adapter + sanitizeLookupQuery/lookupFactsFrom, Gate = inCallSearchProvider
-(Master LOOKUP_ENABLED + EXA_API_KEY + per-Tenant allowLookup) + Richtung
-outbound + Deckel LOOKUP_MAX_PER_CALL=2. Torzustand reist als
-{{lookup_available}}; Prompt bekommt Zuordnungs-Abschnitte (B7).
-
-- [x] Gate `elevenLabsLookupProviderFor(call)` in research/in-call.js (EINE
-      Quelle fuer Webhook UND Anrufstart-Variable).
-- [x] Webhook-Handler + route-policy-Eintrag + PLAN-SECURITY-Abschnitt.
-      Deckel-Fall: 200 {status:"declined"} mit sprechbarem Text (Gespraech
-      laeuft weiter). Kein Treffer/zu langsam: 200 {status:"no_results"}.
-- [x] B5-Protokoll: call.lookupLog persistiert (state-ops + pg + json),
-      Eintrag {seq, query, askedAt, dauerMs, ok, factCount}. Deckel zaehlt
-      lookupLog-Eintraege (restart-fest).
-- [x] B6: bookLookupSearchFee VOR dem Absenden (Bestandsmuster). 1 ct/Suche,
-      max 2 ct je Anruf.
-- [x] turnControl-Texte fuer den EL-Weg (decline ohne take_message-Bezug),
-      de/fr/en.
-- [x] Tests: test/el-lookup-webhook.test.js (Token/Bindung/Gate/Geld/Nutzlast/
-      Deckel/Egress/Erfolg/kein-Treffer; Fremd-Formen aus echten Aufzeichnungen
-      wo vorhanden, sonst im Test als ausgedacht markiert).
-- [x] Vorlage: Prompt-Abschnitte (dreiwertige Zuordnung, lookup_available-Tor,
-      LOOKUP TOOL ohne get_consult-Nennung und ohne Platzhalter), tools.look_up
-      (webhook, query + conversation_id via system__conversation_id, gleiche
-      secret_id, kleine Antwortfrist), Testdefinitionen-Vokabular
-      (+opening_line, +lookup_available in ALLEN test_configs).
-- [x] Konto: look_up-Werkzeug anlegen (eng gefuehrtes Kommando mit Trockenlauf/
-      Ruecklese), tool_ids am Agenten, prompt-Push, Messspiegel
-      _live_gemessene_form aus echter GET-Messung nachziehen.
-- [x] Beweis ohne Telefon: 4 Testdefinitionen am Konto (nur-Auftraggeber ->
-      get_consult; oeffentlich -> look_up; steht-im-Auftrag -> kein Werkzeug;
-      Deckel -> kein look_up) - alle gruen, bevor B fertig gemeldet wird.
-- [x] PAID_PLAN_PROFILE.allowLookup -> false (Auftrag B4: Datenschutzerklaerung
-      nennt den Suchdienst nicht; Owner-Entscheidung 2026-08-19, dreht die
-      Entscheidung vom 2026-08-11 zurueck - im Bericht benennen).
-
-## Abschluss
-- [x] Unabhaengige Durchsichten A+B (beide FAIL im Erst-Urteil; A: 7 behoben/2
-      getragen, B: 3 behoben/2 getragen - alles in .fortschritt.md + EL-P7).
-- [x] .fortschritt.md: Verlauf, Widersprueche, Spaeter-Liste, BEREIT ZUM ANRUF.
-- [x] git push origin nach jeder Phase.
+Risiken (Pre-Mortem): (a) Env-Update-Werkzeug koennte ERSETZEN statt mergen ->
+erst Schema/Semantik pruefen, sonst Render-API direkt; (b) Merge verliert eine
+Seite -> Suite + gezielte Diffs; (c) autoDeploy koennte beim Upstream-Push sofort
+deployen - unkritisch, weil Flag noch aus = Verhalten unveraendert (byte-identisch
+belegt); (d) RLS blockt naive Prod-DB-Queries -> Forensik-Muster aus Memory.
