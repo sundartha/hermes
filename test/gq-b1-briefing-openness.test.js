@@ -124,9 +124,12 @@ test("GQ-B1-03: die Vorab-Rueckfrage steht an GENAU EINER Stelle des place_call-
   const treffer = placeCallPaths(captureDescriptions(CONSULT_CTX)).flatMap(([pfad, text]) =>
     (text.match(ASK_FIRST) || []).map(() => pfad),
   );
-  // answer_consult traegt denselben Wortlaut bewusst weiter - anderer Pfad, anderer
-  // Zeitpunkt (IM Gespraech, dort ist die Rueckfrage richtig). Die Praefix-Einschraenkung
-  // auf place_call* ist Absicht.
+  // GQ-B2 Fix-Runde 1 (Owner-Revision): die GQ-B1-Begruendung "anderer Pfad, anderer
+  // Zeitpunkt, dort ist die Rueckfrage richtig" ist ueberholt - der Owner ist waehrend
+  // des Anrufs ABWESEND, deshalb traegt answer_consult den Wortlaut NICHT mehr weiter
+  // (siehe GQ-B2-05 unten, pfad-uebergreifend gepinnt). Die Praefix-Einschraenkung auf
+  // place_call* bleibt trotzdem bestehen: sie ist der einzige Ort, an dem die
+  // Vorab-Rueckfrage VOR dem Anruf ueberhaupt zulaessig ist.
   assert.deepEqual(treffer, ["place_call.objective"], "Anzahl UND Ort sind gepinnt");
 });
 
@@ -214,5 +217,23 @@ test("GQ-B2-04: die Server-Instructions kennen keine unbedingte Vorab-Rueckfrage
     consultInstructions,
     /only ask the user when they are actually present/i,
     "die Nutzer-Rueckfrage ist an Anwesenheit gebunden",
+  );
+});
+
+test("GQ-B2-05: answer_consult traegt keine unbedingte Vorab-Rueckfrage mehr (pfad-uebergreifend)", () => {
+  // Naeherer Entscheidungspunkt als die Server-Instructions (call-quality-chain-Lehre:
+  // enge Anweisungen an der Tool-Beschreibung wirken dort, wo breite Regeln kippen).
+  // Ein widerspruechlicher Satz hier wuerde GQ-B2-03/04 unterlaufen, obwohl beide gruen
+  // sind - deshalb pinnt dieser Fall answer_consult direkt statt nur consultInstructions.
+  const answerConsult = captureDescriptions(CONSULT_CTX).get("answer_consult");
+  assert.doesNotMatch(
+    answerConsult,
+    /ask the user first/i,
+    "der Owner ist waehrend des Anrufs abwesend, wie in MCP_CONSULT_INSTRUCTIONS",
+  );
+  assert.match(
+    answerConsult,
+    /do not know, say so honestly/i,
+    "der Unbekannt-Ausgang ist ausdruecklich, wie in MCP_CONSULT_INSTRUCTIONS",
   );
 });

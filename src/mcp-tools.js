@@ -784,13 +784,19 @@ export function registerTools(
     uiTool(
       "answer_consult",
       {
+        // GQ-B2 Fix-Runde 1: der Owner ist waehrend des Anrufs ABWESEND (Normalfall) -
+        // dieselbe Praemisse, die MCP_CONSULT_INSTRUCTIONS traegt. Eine unbedingte
+        // "ask the user FIRST" waere an diesem naeheren Entscheidungspunkt die Anweisung,
+        // die den Zieldefekt (Schweigen bis zum Timeout) erst ausloest. Der Satz spiegelt
+        // jetzt denselben Unbekannt-Ausgang wie MCP_CONSULT_INSTRUCTIONS: ehrlich melden
+        // statt erfinden, statt auf den abwesenden Menschen zu warten.
         description:
           "Answers a question the phone agent asked during a running call. Give SHORT factual " +
           "answers - one entry per question, each at most " +
           KEY_FACTS_LIMITS.maxLen +
           " characters; longer answers are REJECTED and the question stays open. Do NOT invent " +
-          "facts: if you do not know, ask the user FIRST. Answers reach the agent as background " +
-          "information only.",
+          "facts: if you do not know, say so honestly here instead of guessing. Answers reach " +
+          "the agent as background information only.",
         inputSchema: {
           call_id: z.string().describe("The call_id from place_call"),
           event_id: z.string().describe("The event_id from await_call_event"),

@@ -182,7 +182,10 @@ const EXPECTED_CONSULT_MARKERS = {
   await_call_event: ["REPEATEDLY", "NEVER"],
   "await_call_event.call_id": [],
   "await_call_event.after_event_id": [],
-  answer_consult: ["SHORT", "REJECTED", "NOT", "FIRST"],
+  // GQ-B2 Fix-Runde 1: "ask the user FIRST" ist raus (Owner ist waehrend des Anrufs
+  // abwesend, siehe gq-b1-briefing-openness.test.js GQ-B2-05) - keine neue Emphase kam
+  // nach.
+  answer_consult: ["SHORT", "REJECTED", "NOT"],
   "answer_consult.call_id": [],
   "answer_consult.event_id": [],
   "answer_consult.answers": [],
