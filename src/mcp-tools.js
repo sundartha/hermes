@@ -605,7 +605,7 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. Write only what you KNOW: never script an answer for a detail you are missing, and never write that the principal will get back to the other party - the agent is not allowed to say that, so such a line removes an answer instead of adding one. Leave the gap open. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
+            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. Write only what you KNOW: never script an answer for a detail you are missing, and never write that the principal will get back to the other party - do not pre-empt that answer here, so such a line removes an answer instead of adding one. Leave the gap open. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
           ),
         constraints: z
           .string()
