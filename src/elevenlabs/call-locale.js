@@ -53,11 +53,13 @@ function calleeLanguage(to) {
 // Unsere Seite rendert ihn NIE - deshalb bleibt er woertlich stehen.
 //
 // Thema A (2026-08-19): hier stand bis dahin bridgePhrase("{{objective}}") - der ROHE
-// Auftragstext im festen Rahmen. Jetzt reist {{opening_line}}: die bei Auftragsannahme
-// erzeugte, fail-closed validierte und laengenbegrenzte Grund-Zeile (src/elevenlabs/
-// opening-line.js). Ihr Rueckfall ist wortgleich die alte Bruecke, der GUTE Fall eine
-// natuerliche Formulierung - roher, ungepruefter Auftragstext erreicht die gesprochene
-// Eroeffnung auf diesem Weg nicht mehr (Auflage A5).
+// Auftragstext im festen Rahmen, UNGEPRUEFT und UNBEGRENZT. Jetzt reist
+// {{opening_line}}: die bei Auftragsannahme erzeugte, fail-closed validierte und
+// laengenbegrenzte Grund-Zeile (src/elevenlabs/opening-line.js). PRAEZISE (Auflage
+// A5): Auftragstext erreicht die Eroeffnung nur noch GEPRUEFT - laengenbegrenzt,
+// klammer-/preis-/umbruchfrei (Rueckfall-Stufe 2, wortgleich Anruf 8) - oder als
+// natuerliche erzeugte Formulierung; unbegrenzt-roh nie mehr. Eine SEMANTISCHE
+// Pruefung des Auftragsinhalts ist das nicht.
 const OPENING_LINE_PLACEHOLDER = "{{opening_line}}";
 
 // Die vollstaendige Eroeffnung EINES Outbound-Anrufs, in dieser Reihenfolge:

@@ -19,6 +19,7 @@
   "tool_mock_overrides": {},
   "dynamic_variables": {
     "consult_available": "available",
+    "lookup_available": "unavailable",
     "owner_name": "Owen Barrett",
     "callee": "Hillcrest Auto Repair, service desk (+1 720-555-0136)",
     "objective": "Schedule a repair appointment for Owen Barrett's car - the rear brake pads need replacing. The vehicle is a 2017 Chevrolet Malibu LT, black, with about 71,000 miles; the front brakes were done last year, only the rear pads are due. Owen Barrett drops the car off and does not wait on site.",

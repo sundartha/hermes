@@ -25,12 +25,16 @@ const HTTP_ERROR = 500;
 // Deutlich ueber OPENING_LINE_MAX_CHARS, damit auch Stufe 2 der Treppe faellt.
 const WORT_WIEDERHOLUNGEN = 40;
 const UEBERLANGE_ZEICHEN = 200;
+// Der Mock meldet 25 Output-Tokens; der Abbruch-Pfad schaetzt OPENING_MAX_TOKENS=100.
+const MOCK_OUTPUT_TOKENS = 25;
+const ABBRUCH_SCHAETZUNG_TOKENS = 100;
 
 // Gute DE-Zeile MIT Umlauten - der Kernfall von Auflage A6 (Umlaute ueberleben).
 const GENERATED_DE = "Ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren.";
 
 let mode = "toolUse";
 let nextReason = GENERATED_DE;
+let requestCount = 0;
 let lastRequest = null;
 
 function anthropicToolMessage(reason) {
@@ -48,7 +52,10 @@ function anthropicToolMessage(reason) {
 
 let server;
 let store;
+let config;
 let localeFor;
+let SUPPORTED_LANGUAGES;
+let usageFor;
 let fetchOpeningLine, validOpeningLine, verifiedOpeningLine, OPENING_LINE_MAX_CHARS;
 let openingLineHash;
 
@@ -57,6 +64,7 @@ before(async () => {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
+      requestCount += 1;
       lastRequest = JSON.parse(body);
       if (mode === "error500") {
         res.writeHead(HTTP_ERROR, { "content-type": "application/json" });
@@ -77,7 +85,9 @@ before(async () => {
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: OWNER }] }),
   );
   store = await import("../src/store.js");
-  ({ localeFor } = await import("../src/i18n/locales.js"));
+  ({ config } = await import("../src/config.js"));
+  ({ localeFor, SUPPORTED_LANGUAGES } = await import("../src/i18n/locales.js"));
+  ({ usageFor } = await import("../src/store/state-ops.js"));
   ({ validOpeningLine, verifiedOpeningLine, OPENING_LINE_MAX_CHARS } = await import(
     "../src/elevenlabs/opening-line.js"
   ));
@@ -245,3 +255,46 @@ test("verifiedOpeningLine: unbrauchbares goal am Alt-Datensatz -> feste Kurzzeil
   const spoken = verifiedOpeningLine({ call, locale: localeFor("de") });
   assert.equal(spoken, localeFor("de").openingReasonFallback);
 });
+
+// ---- Nachbesserungen aus der unabhaengigen Durchsicht (2026-08-19) -------------------
+
+test("validOpeningLine: Rotprobe Fragezeichen-Ende - vor der festen Frage darf keine zweite stehen", () => {
+  assert.equal(validOpeningLine("Haben Sie kurz Zeit für die Bremsenprüfung?"), null);
+});
+
+test("openingReasonFallback: JEDE Sprache fuehrt eine feste Kurzzeile, die ihre eigene Pruefung besteht", () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const zeile = localeFor(lang).openingReasonFallback;
+    assert.equal(typeof zeile, "string", `Sprache ${lang}: Kurzzeile fehlt`);
+    assert.equal(validOpeningLine(zeile), zeile, `Sprache ${lang}: Kurzzeile faellt durch`);
+  }
+});
+
+test("Notaus (R5): openingLineLlm=false -> KEIN LLM-Aufruf, Treppe ab Stufe 2", async () => {
+  const vorher = requestCount;
+  config.voice.elevenLabsOutbound.openingLineLlm = false;
+  try {
+    const { line, source } = await fetchOpeningLine(args());
+    assert.equal(source, "auftrag");
+    assert.equal(line, "Es geht um Folgendes: Termin zur Bremsenprüfung vereinbaren.");
+    assert.equal(requestCount, vorher, "abgeschaltet darf kein einziger Request rausgehen");
+  } finally {
+    config.voice.elevenLabsOutbound.openingLineLlm = true;
+  }
+});
+
+test("Kostenbuchung (R2/A7): der Gut-Fall bucht die gemeldeten Tokens auf den Tenant-Bucket", async () => {
+  const vorher = usageFor(store.load(), BOOTSTRAP_TENANT_ID).outputTokens;
+  await fetchOpeningLine(args());
+  const nachher = usageFor(store.load(), BOOTSTRAP_TENANT_ID).outputTokens;
+  assert.equal(nachher - vorher, MOCK_OUTPUT_TOKENS, "genau die gemeldeten Output-Tokens muessen gebucht sein");
+});
+
+test("Kostenbuchung (R2/AL-P9): der 5xx-Abbruch bucht die pessimistische Schaetzung, nie 0", async () => {
+  mode = "error500";
+  const vorher = usageFor(store.load(), BOOTSTRAP_TENANT_ID).outputTokens;
+  await fetchOpeningLine(args());
+  const nachher = usageFor(store.load(), BOOTSTRAP_TENANT_ID).outputTokens;
+  assert.equal(nachher - vorher, ABBRUCH_SCHAETZUNG_TOKENS, "OPENING_MAX_TOKENS als Output-Schaetzung (estimatedAbortUsage)");
+});
+

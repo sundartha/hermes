@@ -20,6 +20,7 @@
   "tool_mock_overrides": {},
   "dynamic_variables": {
     "consult_available": "available",
+    "lookup_available": "unavailable",
     "owner_name": "Greg Tandy",
     "callee": "Cardinal Motors Repair Shop, service advisor (+1 602-555-0182)",
     "objective": "Schedule a repair appointment for Greg Tandy's car - the air conditioning has stopped cooling. The vehicle is a 2016 Ford Escape SE, white, with about 79,000 miles; the fan still blows, the air just stays warm. Greg Tandy drops the car off himself and does not wait on site.",

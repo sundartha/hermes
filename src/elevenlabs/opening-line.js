@@ -20,7 +20,13 @@
 //   2. sonst locale.bridgePhrase(objective) - WORTGLEICH die Eroeffnung, die Anruf 8
 //      gesprochen hat (49 s, Ziel erreicht) - wenn SIE die Pruefung besteht;
 //   3. sonst die feste Kurzzeile der Sprache (locale.openingReasonFallback).
-// Ein LLM-Ausfall degradiert also exakt auf den gemessenen Bestand, nie darunter.
+// Ein LLM-Ausfall degradiert damit auf den Anruf-8-Wortlaut, SOLANGE der Auftrag die
+// Kappe einhaelt (DE: bis ~96 Zeichen). EHRLICH BENANNT (Review-Befund R4): ein
+// LAENGERER Auftrag faellt bei totem LLM auf die feste Kurzzeile und verliert damit
+// den gesprochenen Anrufgrund - der Preis der harten Kappe (Auflage A2) in Verbindung
+// mit "ablehnen statt kuerzen" (Auftrags-Qualitaetsregel 3). Der Hebel dagegen ist
+// die Erzeugung (Stufe 1), die lange Auftraege natuerlich verdichtet - sie braucht
+// ein gedecktes LLM-Konto.
 //
 // Die HASH-GEGENPROBE (Auflage A6) haengt am Call-Datensatz: createCall
 // (store/state-ops.js) berechnet openingLineSha256 aus der angenommenen Zeile; der
@@ -51,7 +57,9 @@ const FORBIDDEN_CHARS = /[[\]{}\n\r\t]/;
 const PRICE_PATTERNS = [/\d[\d.,]*\s*(?:€|\$|eur\b|usd\b|euro\b|dollar)/i, /[€$]\s*\d/];
 // Satz-Schluss: die Zeile ist EIN fertiger Satz, an den die Vorlage die feste Frage
 // haengt. Ohne Schlusszeichen klebte sie an der Frage ("...vereinbaren Wie sieht...").
-const SENTENCE_END = /[.!?]$/;
+// BEWUSST OHNE "?" (Review-Befund): eine Frage vor der festen Frage ergaebe zwei
+// Fragen hintereinander - der Angerufene wuesste nicht, welche er beantworten soll.
+const SENTENCE_END = /[.!]$/;
 
 // Der unveraenderliche Kern des Offenlegungssatzes je Sprache, ABGELEITET aus
 // LOCALES (kein zweiter Wortlaut, G5): der Satzteil vor dem Namen, ohne die
@@ -64,6 +72,17 @@ const DISCLOSURE_CORES = SUPPORTED_LANGUAGES.map((lang) => {
   const ohneBegruessung = prefix.slice(prefix.indexOf(",") + 1);
   return ohneBegruessung.trim().toLowerCase();
 });
+// Fail-closed BEIM LADEN (Review-Befund R7): ein leerer Kern - etwa weil eine kuenftige
+// Offenlegung mit dem Namen beginnt - machte includes("") wahr und verwuerfe JEDE Zeile
+// in JEDER Sprache, still und dauerhaft. Deterministisch beim Laden werfen faellt im
+// Test auf, nicht mitten im Anruf (Muster elevenlabs-agent-config.js).
+if (DISCLOSURE_CORES.some((core) => core.length === 0)) {
+  throw new Error(
+    "opening-line.js: ein Offenlegungs-Kern ist leer - die Ableitung aus LOCALES traegt " +
+      "fuer mindestens eine Sprache nicht (Name vor dem ersten Komma?). Ableitung " +
+      "anpassen, nicht den Waechter entfernen.",
+  );
+}
 
 /**
  * Prueft EINE Kandidaten-Zeile gegen alle Auflagen. Liefert die getrimmte Zeile

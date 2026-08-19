@@ -98,7 +98,10 @@ const toolEntry = (name) => TEMPLATE.tools?.[name] ?? {};
 //   2026-08-14 BEWUSST UNVERAENDERT, obwohl ein Werkzeug dazukommt: language_detection
 //   (E-5, Sprachwechsel) ist ein EINGEBAUTES Werkzeug des Anbieters und steht nicht in der
 //   tools-Karte, die diese Liste pinnt - es zaehlt im BUILT_IN_TOOL_FINGERPRINT unten.
-const TOOL_FINGERPRINT = ["get_consult"];
+//   2026-08-19 look_up dazu (Owner-Auftrag Thema B): die Recherche waehrend des Gespraechs,
+//   als Webhook auf /webhooks/elevenlabs/lookup (gleiche Bauart wie get_consult), hinter
+//   dem Recherche-Gate (research/registry.js) und dem Deckel LOOKUP_MAX_PER_CALL.
+const TOOL_FINGERPRINT = ["get_consult", "look_up"];
 
 // Zweiter Fingerprint, weil ein Werkzeug nicht nur ueber die tools-Karte an den Agenten
 // kommt: ElevenLabs haengt Faehigkeiten auch an weitere Felder des prompt-Objekts

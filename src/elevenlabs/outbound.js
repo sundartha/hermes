@@ -673,8 +673,11 @@ function fakeSipTrunkOutboundCallResponse() {
 // KEIN Waechter: eine Rotprobe daran bleibt gruen, solange das Tor strikt ist. Ein
 // falsch-positiver Torzustand waere schlimmer als ein falsch-negativer - der Agent saegte
 // eine Rueckfrage zu, die nie kommt.
-const CONSULT_AVAILABLE = "available";
-const CONSULT_UNAVAILABLE = "unavailable";
+// Seit Thema B (2026-08-19) das GETEILTE Vokabular beider Tore: consult_available
+// UND lookup_available sprechen dieselben zwei Woerter - der Prompt verzweigt an
+// beiden Stellen mit demselben Muster ('If that says "unavailable" ...').
+const GATE_AVAILABLE = "available";
+const GATE_UNAVAILABLE = "unavailable";
 
 // Der Standard, wenn niemand ein Tor verdrahtet hat. Er ENTSCHEIDET nichts - er sagt
 // nein. Das ist kein zweites Tor (das waere Blocker BL-2 des Rueckfrage-Webhooks), sondern
@@ -683,11 +686,14 @@ const CONSULT_UNAVAILABLE = "unavailable";
 // Agent nie eine Rueckfrage an - konservativ, sofort am ersten Anruf sichtbar, und nie
 // eine Zusage, die niemand einloest.
 const ohneRueckfrageTor = () => false;
+// Dasselbe fuer die Recherche (Thema B): unverdrahtet heisst "nicht verfuegbar" -
+// der Agent bietet dann nie eine Recherche an, die der Webhook ablehnen wuerde.
+const ohneRechercheTor = () => false;
 
-// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die elf, die die
+// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die zwoelf, die die
 // Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
 // {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}},
-// {{consult_available}}, {{opening_line}}) -
+// {{consult_available}}, {{opening_line}}, {{lookup_available}}) -
 // fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt unaufgeloest. Der Weg ueber eine
 // Prompt-Uebersteuerung scheidet aus: eine nicht freigeschaltete
 // conversation_config_override wird vom Anbieter STILL ignoriert.
@@ -733,9 +739,13 @@ const ohneRueckfrageTor = () => false;
 // bestaetigungspflichtige Annahme oder gar keine Zone (s. calleeTimezoneText). Geraten wird
 // dabei nichts (s. time-context.js). Vorher wirkte an dieser Stelle ein Festwert am Agenten
 // ("Europe/Berlin"), der weder besessen noch pro Anruf richtig war.
-function dynamicVariables({ call, ownerName, time, locale, consultAllowed }) {
+function dynamicVariables({ call, ownerName, time, locale, consultAllowed, lookupAllowed }) {
   return {
-    consult_available: consultAllowed === true ? CONSULT_AVAILABLE : CONSULT_UNAVAILABLE,
+    consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
+    // Thema B: der Torzustand der Recherche, aus DERSELBEN Torkette wie der Webhook
+    // (research/registry.js#elevenLabsLookupAvailableFor) - fail-closed, dieselbe
+    // Doppelsicherung wie consult_available darueber.
+    lookup_available: lookupAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     opening_line: verifiedOpeningLine({ call, locale: localeFor(locale.language) }),
     owner_name: alsText(ownerName) || locale.disclosureOwnerFallback,
     callee: alsText(call.to),
@@ -815,13 +825,20 @@ function conversationConfigOverride(locale) {
 // zwei erlaubten Uebersteuerungen. MODUL-EBENE aus demselben Grund wie callLocaleOf
 // darueber (G30). Der Waechter in convai.js prueft GENAU dieses Objekt, bevor es das Netz
 // sieht.
-function startCallBody({ el, call, ownerName, time, locale, consultAllowed }) {
+function startCallBody({ el, call, ownerName, time, locale, consultAllowed, lookupAllowed }) {
   return {
     agent_id: el.agentId,
     agent_phone_number_id: el.agentPhoneNumberId,
     to_number: call.to,
     conversation_initiation_client_data: {
-      dynamic_variables: dynamicVariables({ call, ownerName, time, locale, consultAllowed }),
+      dynamic_variables: dynamicVariables({
+        call,
+        ownerName,
+        time,
+        locale,
+        consultAllowed,
+        lookupAllowed,
+      }),
       conversation_config_override: conversationConfigOverride(locale),
     },
   };
@@ -1016,6 +1033,10 @@ export function makeElevenLabsOutbound({
   billThunk,
   finishCall,
   consultAllowedFor = ohneRueckfrageTor,
+  // Thema B: das Recherche-Tor, aus demselben Grund HEREINGEREICHT wie
+  // consultAllowedFor (research/registry.js liest das MODUL src/config.js).
+  // Signatur (call, resolveProfile) -> boolean, s. elevenLabsLookupAvailableFor.
+  lookupAvailableFor = ohneRechercheTor,
 }) {
   // Immer frisch gelesen (nicht beim Bauen eingefroren): Tests uebersteuern die Gruppe
   // zur Laufzeit, und der Abholtakt darf nicht an einer Kopie von vor dem Boot haengen.
@@ -1218,6 +1239,10 @@ export function makeElevenLabsOutbound({
     // nicht aus einem zweiten Nachbau: dieselbe Funktion, die der Webhook fragt, bevor er
     // eine Rueckfrage annimmt (routes/webhooks-elevenlabs.js).
     const consultAllowed = consultAllowedFor(store.resolveProfile(call.tenantId));
+    // Thema B: der Torzustand der Recherche - DIESELBE Funktion, die der Webhook fragt
+    // (research/registry.js#elevenLabsLookupAvailableFor, per DI verdrahtet), mit der
+    // Fassaden-Profilaufloesung als Parameter.
+    const lookupAllowed = lookupAvailableFor(call, store.resolveProfile);
     // OUT-05-EL (Trockenlege-Naht, Aufgabe 1): GENAU vor dem einzigen Netzzugriff dieses
     // Wegs abgezweigt - wie fakeVoice in telephony/registry.js den kompletten Telnyx-
     // Transport ersetzt, ersetzt dieser Zweig NUR den EINEN POST gegen api.elevenlabs.io.
@@ -1229,7 +1254,7 @@ export function makeElevenLabsOutbound({
       : await startOutboundCall({
           fetchImpl: fetch,
           account: el,
-          body: startCallBody({ el, call, ownerName, time, locale, consultAllowed }),
+          body: startCallBody({ el, call, ownerName, time, locale, consultAllowed, lookupAllowed }),
           // Fuer das Fehlerebene-Log der Weisse-Liste-Waeche (convai.js), die diesen
           // Anfragekoerper VOR dem Netzzugriff prueft: nichts ausser agent.language und
           // tts.voice_id darf darin stehen.

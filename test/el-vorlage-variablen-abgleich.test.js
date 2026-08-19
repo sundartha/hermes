@@ -42,10 +42,11 @@ import { consultAllowedFor } from "../src/consult/gate.js";
 import { sendeAnrufstart } from "./helpers/elevenlabs-anrufstart-attrappe.mjs";
 
 const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
-// Elf seit Thema A (2026-08-19): {{opening_line}} kam als elfter Name dazu - die bei
+// Zwoelf seit Thema A+B (2026-08-19): {{opening_line}} kam als elfter Name dazu - die bei
 // Auftragsannahme validierte Grund-Zeile, die {{objective}} im GESPROCHENEN Teil
-// (first_message/voicemail_message) ersetzt, waehrend {{objective}} im Prompt bleibt.
-const EXPECTED_VARIABLE_COUNT = 11;
+// (first_message/voicemail_message) ersetzt, waehrend {{objective}} im Prompt bleibt -
+// und {{lookup_available}} als zwoelfter (Torzustand der Recherche, Thema B).
+const EXPECTED_VARIABLE_COUNT = 12;
 
 // ---- Seite A: {{name}} aus dem WIRKLICHEN Vorlagentext --------------------------------
 const PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
@@ -77,7 +78,7 @@ function fehlendeUndUeberzaehlige(seiteA, seiteB) {
   return { fehlend, ueberzaehlig };
 }
 
-test("EL-VORLAGE-VARIABLEN: Platzhalter der Vorlage und gesendete dynamic_variables sind deckungsgleich (elf Namen)", async () => {
+test("EL-VORLAGE-VARIABLEN: Platzhalter der Vorlage und gesendete dynamic_variables sind deckungsgleich (zwoelf Namen)", async () => {
   const seiteA = templatePlaceholderNames();
   const gesendet = await sentDynamicVariables();
   const seiteB = new Set(Object.keys(gesendet));

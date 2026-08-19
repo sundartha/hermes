@@ -150,7 +150,12 @@ async function generatedOpeningLine({ objective, tenantId, locale }) {
  * @returns {Promise<{line: string, source: "erzeugt"|"auftrag"|"fest"}>}
  */
 export async function fetchOpeningLine({ objective, tenantId, locale }) {
-  const generated = await generatedOpeningLine({ objective, tenantId, locale });
+  // Notaus (Review-Befund R5): abgeschaltet faellt JEDE Eroeffnung ohne LLM-Aufruf
+  // und ohne Kosten direkt auf die Treppe ab Stufe 2 - der Anruf laeuft unveraendert.
+  const llmEnabled = config.voice.elevenLabsOutbound.openingLineLlm === true;
+  const generated = llmEnabled
+    ? await generatedOpeningLine({ objective, tenantId, locale })
+    : null;
   if (generated) return { line: generated, source: "erzeugt" };
   const bridged = bridgedObjective(objective, locale);
   if (bridged) return { line: bridged, source: "auftrag" };

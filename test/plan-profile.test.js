@@ -43,10 +43,13 @@ test("Owner-Entscheidung 2026-08-11: allowConsult ist fuer JEDEN Katalog-Slug tr
   }
 });
 
-test("Owner-Entscheidung 2026-08-11 (P6 Werkzeugwahl): allowLookup ist fuer JEDEN Katalog-Slug true - der Vorbehalt aus AL-P10b ist aufgehoben", () => {
+test("Owner-Entscheidung 2026-08-19 (Thema B, Auflage B4 - ersetzt die Entscheidung vom 2026-08-11): allowLookup ist fuer JEDEN Katalog-Slug FALSE, solange die Datenschutzerklaerung den Suchdienst nicht nennt", () => {
+  // Nur der Owner-Tenant traegt das Recht (OWNER_PROFILE, store/defaults.js). Wer den
+  // Kanal fuer zahlende Kunden oeffnet, dreht src/plans.js zurueck UND zieht die
+  // Datenschutzerklaerung im selben Zug nach - dann diesen Pin mitziehen.
   for (const slug of CATALOG_SLUGS) {
     const profile = planProfileFor(slug);
-    assert.equal(profile.allowLookup, true, `${slug}: allowLookup != true`);
+    assert.equal(profile.allowLookup, false, `${slug}: allowLookup != false`);
   }
 });
 

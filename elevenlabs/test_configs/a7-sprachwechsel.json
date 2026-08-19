@@ -14,6 +14,7 @@
   "tool_mock_overrides": {},
   "dynamic_variables": {
     "consult_available": "available",
+    "lookup_available": "unavailable",
     "owner_name": "Nina Caldwell",
     "callee": "Del Sol Auto Repair, front desk (+1 305-555-0128)",
     "objective": "Schedule a repair appointment for Nina Caldwell's car - four new tires before a road trip. The vehicle is a 2019 Toyota RAV4 LE, silver, with 225/65R17 all-season tires and about 61,000 miles; all four tires are worn down to the wear bars. Nina Caldwell drops the car off herself and does not wait on site.",

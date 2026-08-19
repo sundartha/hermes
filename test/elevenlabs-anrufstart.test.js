@@ -2009,3 +2009,42 @@ test("EL-START T10: die Buchungs-Grenze des Agenten folgt dem Mandat DIESES Anru
     },
   );
 });
+
+
+// ---- T11 (Thema A, 2026-08-19; Review-Befund R1): opening_line ist VERDRAHTET --------
+// Der Namens-Abgleich (el-vorlage-variablen-abgleich) sieht nur, DASS opening_line
+// reist; die Wert-Tests (elevenlabs-torzustand) messen outbound.js in Isolation. Dieser
+// Fall misst die GANZE Kette ueber die echte Route: place_call -> Gate-Kette ->
+// fetchOpeningLine (LLM nicht erreichbar -> Stufe 2) -> createCall (Zeile + Hash) ->
+// Anrufstart -> dynamic_variables am Draht der Anbieter-Attrappe. Wuerde der Block in
+// api-calls.js entfernt ODER outbound.js rohes call.goal senden, fiele er rot aus.
+const SHA256_HEX_LAENGE = 64;
+
+test("EL-START T11 (Thema A): opening_line reist geprueft an den Anbieter UND liegt mit Annahme-Hash am Datensatz", async () => {
+  await withElevenLabs(
+    // ANTHROPIC_BASE_URL auf die EL-Attrappe: jeder LLM-Versuch endet dort als schneller
+    // 404 (nicht-transient, kein Retry) - kein echtes Netz, kein Warten; die Treppe
+    // faellt deterministisch auf Stufe 2 (Auftrag in der Bestands-Bruecke).
+    { env: MULTI, seed: seedTenantA() },
+    async ({ srv, mock }) => {
+      const res = await placeCall(srv, SUBJECT_A);
+      assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf startet: ${await res.text()}`);
+      assert.equal(mock.startRequests.length, 1, "genau ein Anrufstart");
+
+      // +49-Ziel -> DE-Bruecke. Byte-Vergleich, nicht "irgendwie gefuellt": rohes
+      // call.goal (der Anruf-8-Defekt) unterscheidet sich genau um den Bruecken-Rahmen.
+      const erwartet = `Es geht um Folgendes: ${OBJECTIVE}.`;
+      const variablen = dynamicVariables(mock.startRequests[0]);
+      assert.equal(variablen.opening_line, erwartet);
+
+      // Persistenz: Zeile + sha256 am Call-Datensatz (A6) - der Anrufstart hat also
+      // gegen den Annahme-Hash verifiziert gesprochen, nicht aus einer zweiten Quelle.
+      const call = ownCalls(srv)[0];
+      assert.ok(call, "der Call-Datensatz existiert");
+      assert.equal(call.openingLine, erwartet);
+      assert.equal(typeof call.openingLineSha256, "string");
+      assert.equal(call.openingLineSha256.length, SHA256_HEX_LAENGE);
+    },
+  );
+});
+

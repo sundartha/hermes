@@ -47,6 +47,7 @@
   "chat_history": [],
   "dynamic_variables": {
     "consult_available": "available",
+    "lookup_available": "unavailable",
     "owner_name": "Joe Testcase",
     "callee": "Fifth Avenue Barbershop, front desk (+1 212-555-0157)",
     "objective": "Book a men's haircut appointment for Joe Testcase.",

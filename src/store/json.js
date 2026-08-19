@@ -643,6 +643,21 @@ export function countCallLookup(callId) {
   return ops.countCallLookup(load(), callId);
 }
 
+// Thema B (2026-08-19): Recherche-Protokoll des EL-Wegs - BEIDE saven (das Feld liegt
+// persistent, Spalte lookup_log; der Deckel zaehlt die Eintraege und muss einen
+// Instanzwechsel ueberleben, anders als der ephemere countCallLookup darueber).
+export function recordCallLookup(callId, query) {
+  const { changed, seq } = ops.recordCallLookup(load(), callId, query);
+  if (changed) save();
+  return seq;
+}
+
+export function finishCallLookup(callId, seq, outcome) {
+  const { changed } = ops.finishCallLookup(load(), callId, { seq, ...outcome });
+  if (changed) save();
+  return changed;
+}
+
 // P3.2: ephemerer No-Speech-Streak - KEIN save() (das Feld ist wie reserveCents nicht
 // persistenz-tragend; ein Flush aus anderem Anlass nimmt es folgenlos mit).
 export function countNoSpeechTurn(callId) {

@@ -417,6 +417,18 @@ export function makePgStore(runner) {
       return added;
     },
     countCallLookup: (callId) => ops.countCallLookup(requireState(), callId),
+    // Thema B (2026-08-19): Recherche-Protokoll des EL-Wegs - beide saven (Spalte
+    // lookup_log, im UPDATE-SET; der Deckel zaehlt die Eintraege restart-fest).
+    recordCallLookup(callId, query) {
+      const { changed, seq } = ops.recordCallLookup(requireState(), callId, query);
+      if (changed) save();
+      return seq;
+    },
+    finishCallLookup(callId, seq, outcome) {
+      const { changed } = ops.finishCallLookup(requireState(), callId, { seq, ...outcome });
+      if (changed) save();
+      return changed;
+    },
     // P3.2: ephemerer No-Speech-Streak - Wrapper-Paritaet zu json.js. KEIN save(): es gibt
     // keine Spalte (Muster releaseOutboundReserve), der Flush-Spaltenblock bleibt unberuehrt.
     countNoSpeechTurn: (callId) => ops.countNoSpeechTurn(requireState(), callId),
@@ -1282,6 +1294,10 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
     // JSONB kommt vom Treiber bereits geparst (Muster context/mandate/result). NULL -> null.
     consults: r.consults ?? null,
+    // Thema B: Recherche-Protokoll mit-hydrieren (JSONB auto-geparst). Ohne diese
+    // Zeile ginge es beim Restart verloren UND der naechste Flush schriebe NULL
+    // zurueck (Lehre i8-design-decisions) - und der Deckel zaehlte von vorn.
+    lookupLog: r.lookup_log ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
   };
 }
@@ -1688,6 +1704,11 @@ function callRowValues(call, tenantId) {
     // prueft der Anrufstart (opening-line.js#verifiedOpeningLine).
     call.openingLine ?? null,
     call.openingLineSha256 ?? null,
+    // Thema B ($53): Recherche-Protokoll (JSONB, Muster consults). IM ON CONFLICT DO
+    // UPDATE SET - die Eintraege entstehen NACH dem Create (je Webhook-Aufruf). Fehlte
+    // die Spalte im UPDATE-SET, fiele das Protokoll beim naechsten Flush auf NULL
+    // zurueck und der Deckel zaehlte wieder von vorn.
+    call.lookupLog ? JSON.stringify(call.lookupLog) : null,
   ];
 }
 
@@ -1711,8 +1732,9 @@ async function flushCalls(client, tenantId, calls) {
           elevenlabs_conversation_id, answered_unclear_reason,
           appointment_date, appointment_time, amount, currency,
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
-          callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52)
+          callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
+          lookup_log)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1736,7 +1758,7 @@ async function flushCalls(client, tenantId, calls) {
          callee_confirmed_timezone=EXCLUDED.callee_confirmed_timezone,
          callee_confirmed_timezone_origin=EXCLUDED.callee_confirmed_timezone_origin,
          callee_confirmed_timezone_at=EXCLUDED.callee_confirmed_timezone_at,
-         sip_call_id=EXCLUDED.sip_call_id`,
+         sip_call_id=EXCLUDED.sip_call_id, lookup_log=EXCLUDED.lookup_log`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);

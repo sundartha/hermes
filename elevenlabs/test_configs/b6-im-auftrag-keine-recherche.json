@@ -1,22 +1,20 @@
 {
-  "_hinweis": "BEFUND 2 aus Anruf 6 (18.08.2026), Zweig 2 von 2. Die Gegenseite fragt etwas, das im Auftrag STEHT - der Agent muss es selbst beantworten und darf das Werkzeug NICHT rufen. Ohne diesen Zweig waere Zweig 1 (b1) trivial erfuellbar, indem der Agent bei jeder Frage rueckfragt; zusammen spannen beide die Regel auf.",
-  "_kriterium_hinweis": "verify_absence:true - der Aufruf darf NICHT stattfinden. Die Tool-Kennung ist die ECHTE (tool_8801m00mvv3zfxhbcwbszpvfg9ae); mit einem Platzhalter waere dieser Fall garantiert gruen, ohne irgendetwas zu pruefen (die Falle, vor der elevenlabs/tests/README.md fuer A3 ausdruecklich warnt).",
-  "_abgrenzung_zu_a3": "A3 misst dieselbe Abwesenheit an einer ANDEREN Lage: dort liegt ein ANGEBOT der Gegenseite vollstaendig im Mandat, und der Agent soll es ohne Rueckfrage annehmen. Hier ist es eine reine WISSENSFRAGE, deren Antwort woertlich im Auftrag steht. Der Agent kann A3 bestehen und hier scheitern (und umgekehrt): die eine Lage prueft die Entscheidungs-Vollmacht, die andere das Nachschlagen im eigenen Auftrag.",
+  "_hinweis": "Gegenstueck zu B2 auf IDENTISCHEM Verlauf (Fahrzeugdaten stehen woertlich im Auftrag): gar kein Werkzeug ist richtig. B2 prueft die get_consult-Abwesenheit, dieser Fall die look_up-Abwesenheit - zusammen der Beweis-Zweig 'steht im Auftrag -> kein Werkzeug'.",
   "_ausfuehrung": {
     "repeat_count": 5,
     "bestehensschwelle": ">= 5 von 5"
   },
-  "name": "B2 - Kein Werkzeug, wenn die Antwort im Auftrag steht",
+  "name": "B6 - Antwort steht im Auftrag: look_up wird NICHT gerufen",
   "type": "tool",
   "tool_call_parameters": {
     "referenced_tool": {
-      "id": "tool_8801m00mvv3zfxhbcwbszpvfg9ae",
+      "id": "<AUSFUELLEN: look_up tool_id from the response of POST /v1/convai/tools/create>",
       "type": "webhook"
     },
     "verify_absence": true,
     "parameters": [],
     "workflow_node_transition": null,
-    "_parameters_hinweis": "Leer wie bei A3: fuer einen nicht stattgefundenen Aufruf gibt es keine Parameterwerte zu pruefen."
+    "_parameters_hinweis": "LEER wie bei B1 (dort gemessen): eine parameters[]-Pruefung faellt beim Bewerter faelschlich rot, obwohl der aufgezeichnete Aufruf den Parameter traegt (el-testdefinition-parameter-pfad-falsch-rot). Die Eigenschaft dieses Falls braucht sie nicht."
   },
   "check_any_tool_matches": null,
   "dynamic_variables": {
@@ -45,7 +43,6 @@
       "message": "Sure. What car is it, and roughly how many miles has it done?"
     }
   ],
-  "_chat_history_hinweis": "Die Frage der Gegenseite ist woertlich durch objective und background gedeckt (2018 Subaru Outback Premium, about 54,000 miles). Der zu pruefende naechste Agenten-Zug - selbst antworten, ohne get_consult - ist bewusst NICHT Teil der Datei; er ist das, was der Testlauf erzeugt und gegen verify_absence prueft.",
   "conversation_initiation_source": null,
   "parent_folder_id": null,
   "from_conversation_metadata": null

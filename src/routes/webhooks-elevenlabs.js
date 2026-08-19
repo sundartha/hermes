@@ -1,4 +1,8 @@
-// ---- Rueckfrage-Webhook des ElevenLabs-Laufwerks (Werkzeug get_consult) --------------
+// ---- Werkzeug-Webhooks des ElevenLabs-Laufwerks (get_consult + look_up) --------------
+// Seit Thema B (2026-08-19) traegt dieser Router ZWEI Werkzeug-Endpunkte derselben
+// Bauart: den Rueckfrage-Webhook (get_consult, unten ausfuehrlich) und den
+// Recherche-Webhook (look_up, s. handleLookup). Beide teilen Token, Bindung und
+// Fehler-Netz; die Kopf-Begruendung unten gilt fuer beide.
 // Der Agent des Anbieters fuehrt das Gespraech und ruft dieses Werkzeug MITTEN im
 // laufenden, kostenden Anruf auf: er haelt seinen Request offen und legt unsere Antwort
 // seinem Modell als Werkzeug-Ergebnis vor (Frage-Antwort-Zyklus, kein
@@ -26,11 +30,21 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
 import { localeFor } from "../i18n/locales.js";
-import { consultQuotaUsed } from "../store/state-ops.js";
+import { bookLookupSearchFee } from "../llm-usage.js";
+import { LOOKUP_TIMEOUT_MS } from "../research/in-call.js";
+import { lookupFactsFrom, sanitizeLookupQuery } from "../research/lookup-guard.js";
+import {
+  LOOKUP_MAX_PER_CALL,
+  elevenLabsLookupProviderFor,
+} from "../research/registry.js";
+import { consultQuotaUsed, elevenLabsLookupCount } from "../store/state-ops.js";
 import { safeEqual } from "../util.js";
 
 // Pfad + Header als benannte Konstanten (G25): beide stehen so in der Agenten-Vorlage.
 export const ELEVENLABS_CONSULT_PATH = "/webhooks/elevenlabs/consult";
+// Thema B (2026-08-19): der Recherche-Webhook (Werkzeug look_up) - GLEICHE Bauart wie
+// der Rueckfrage-Webhook darueber, gleiche Domain, gleicher Token, gleiche Bindung.
+export const ELEVENLABS_LOOKUP_PATH = "/webhooks/elevenlabs/lookup";
 const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 
 // Die vier Ablehnungscodes. 402 nach dem Bestandsmuster der Geld-Denials
@@ -56,6 +70,142 @@ function toolResultText(outcome, locale) {
   return outcome.facts.length ? outcome.facts.join(" ") : control.consultTimeout;
 }
 
+// Bindung ueber die opake Anbieter-Kennung am Call-Datensatz - dasselbe Muster wie das
+// bestehende Provider-Handle telnyxConversationId. NUR ein laufender Anruf ist bindbar:
+// eine Wirkung nachtraeglich in ein beendetes Gespraech zu reichen ist derselbe Angriff
+// wie eine erfundene Kennung. Kein Rueckfall auf "irgendeinen laufenden Anruf".
+// MODUL-EBENE (G30, Muster elevenlabs/outbound.js): BEIDE Werkzeug-Webhooks binden ueber
+// genau diese eine Funktion.
+function activeCallBoundTo(store, conversationId) {
+  if (typeof conversationId !== "string" || !conversationId) return null;
+  const calls = store.load().calls;
+  return (
+    calls.find(
+      (call) => call.elevenlabsConversationId === conversationId && call.status === "active",
+    ) || null
+  );
+}
+
+// ---- Thema B (2026-08-19): der Recherche-Webhook (Werkzeug look_up) ------------------
+// GLEICHE Sicherungs-REIHENFOLGE wie handleConsult: Geheimnis -> Bindung -> Faehigkeit ->
+// Geld -> Nutzlast -> Wirkung. Abweichungen, jede begruendet:
+//   - Das KONTINGENT (Auflage B3, LOOKUP_MAX_PER_CALL) antwortet 200 mit einem
+//     SPRECHBAREN Ablehnungstext statt 404: der Agent steht mitten im bezahlten
+//     Gespraech, und ein Werkzeug-Fehler liesse ihn stocken - der Text laesst ihn
+//     weiterreden (dasselbe Muster wie der Budget-Weg, research/in-call.js
+//     performLookupRequest: declined ist ein Tool-ERGEBNIS, kein HTTP-Fehler).
+//     "Nicht berechtigt" (Tor zu) bleibt dagegen 404 wie beim Consult (Auflage B1).
+//   - Der EGRESS-Filter (sanitizeLookupQuery, dieselbe eine Quelle wie der Budget-Weg)
+//     verwirft OHNE Gebuehr und OHNE Kontingent-Verbrauch.
+//   - Gebuehr + Protokoll-Eintrag (Auflagen B5/B6) VOR dem Absenden: eine ausgeloeste
+//     Suche ist bezahlt und protokolliert, auch wenn die Antwort nie ankommt. Das
+//     PROTOKOLL traegt die Query (Owner-Auflage B5, fuer die Datenschutzerklaerung);
+//     die KONSOLE bleibt PII-frei (Regel 4).
+//   - "Nichts gefunden" und "zu langsam" (Timeout LOOKUP_TIMEOUT_MS) antworten beide
+//     200 mit einem Weiterred-Text (Auflage B2): kein verwertbarer Fakt ist fuer den
+//     Agenten in beiden Faellen dasselbe.
+// MODUL-EBENE statt Factory-Closure (G30, haelt makeElevenLabsWebhookRoutes unter der
+// Zeilengrenze - Muster elevenlabs/outbound.js); die Laufzeit-Instanzen reisen als EIN
+// deps-Objekt (F1).
+function lookupDenied(res, status, grund) {
+  console.log(`[el-lookup] abgelehnt grund=${grund}`);
+  return res.status(status).json({ error: grund });
+}
+
+function lookupAnswer(res, { callId, status, answer }) {
+  console.log(`[el-lookup] call=${callId} ergebnis=${status}`);
+  return res.json({ status, answer });
+}
+
+// Nutzlast-Form wie beim Consult (payloadQuestion, dort mit Anbieter-Beleg): der
+// schema-deklarierte Parameter liegt FLACH auf oberster Ebene.
+function lookupPayloadQuery(req) {
+  const query = req.body?.query;
+  if (typeof query !== "string" || !query.trim()) return null;
+  return query;
+}
+
+// 6) Kontingent (Auflage B3): die naechste Anfrage nach dem Deckel wird abgelehnt, das
+// Gespraech laeuft weiter - sprechbarer Text statt Werkzeug-Fehler (Kopf-Kommentar).
+// 7) Egress-Filter: was den Server nicht verlassen darf, verlaesst ihn nicht - ohne
+// Gebuehr, ohne Kontingent-Verbrauch (dieselbe eine Quelle wie der Budget-Weg).
+// EIN Vorpruef-Schritt, weil beide dieselbe Antwortform teilen (G5) - liefert entweder
+// die fertige declined-Antwort (done) oder die versandfertige Query (sanitized).
+function preflightLookup({ call, query, control, res }) {
+  const declined = () =>
+    lookupAnswer(res, { callId: call.id, status: "declined", answer: control.lookUpDeclinedSpoken });
+  if (elevenLabsLookupCount(call) >= LOOKUP_MAX_PER_CALL) {
+    console.log(`[el-lookup] abgelehnt grund=kontingent call=${call.id}`);
+    return { done: declined() };
+  }
+  const sanitized = sanitizeLookupQuery(query, call);
+  if (!sanitized) {
+    console.warn(`[el-lookup] verworfen grund=egress call=${call.id}`);
+    return { done: declined() };
+  }
+  return { sanitized };
+}
+
+// Protokoll (B5) + Gebuehr (B6) VOR dem Absenden, dann die Suche, dann die Antwort ans
+// Modell des Anbieters: Fakten als Text - oder der Weiterred-Text (B2). Beides 200.
+async function executeLookup({ store, call, provider, query, control, res }) {
+  const seq = store.recordCallLookup(call.id, query);
+  bookLookupSearchFee({ tenantId: call.tenantId });
+  const startedAt = Date.now();
+  const result = await provider.searchFacts({ query, timeoutMs: LOOKUP_TIMEOUT_MS });
+  const facts = result.ok ? lookupFactsFrom(result.facts) : [];
+  const dauerMs = Date.now() - startedAt;
+  store.finishCallLookup(call.id, seq, {
+    ok: result.ok === true,
+    factCount: facts.length,
+    dauerMs,
+  });
+  console.log(
+    `[el-lookup] fertig call=${call.id} ok=${result.ok === true} dauer_ms=${dauerMs} fakten=${facts.length}`,
+  );
+  if (!facts.length) {
+    return lookupAnswer(res, {
+      callId: call.id,
+      status: "no_results",
+      answer: control.lookUpUnavailable,
+    });
+  }
+  return lookupAnswer(res, { callId: call.id, status: "ok", answer: facts.join(" ") });
+}
+
+async function handleLookup(req, res, { store, config }) {
+  // 1) Geteiltes Geheimnis - identisch zu handleConsult (fail-closed, safeEqual).
+  const secret = config.voice.elevenLabsToolToken;
+  if (!secret || !safeEqual(req.get(TOOL_TOKEN_HEADER) || "", secret))
+    return lookupDenied(res, HTTP_FORBIDDEN, "token");
+
+  // 2) Bindung an einen LAUFENDEN Anruf und damit an den Mandanten.
+  const call = activeCallBoundTo(store, req.body?.conversation_id);
+  if (!call) return lookupDenied(res, HTTP_NOT_FOUND, "kein_laufender_anruf");
+
+  // 3) Faehigkeit (Auflagen B1/B4): Richtung, Master-Schalter, Secret und das
+  // Per-Tenant-Recht allowLookup - DIESELBE Torkette, die der Anrufstart fuer
+  // {{lookup_available}} fragt (research/registry.js). 404 wie beim Consult.
+  const provider = elevenLabsLookupProviderFor(call, store.resolveProfile);
+  if (!provider) return lookupDenied(res, HTTP_NOT_FOUND, "kanal_nicht_freigegeben");
+
+  // 4) Geld (Absolute Regel 1): die gerissene pro-Tenant-Decke sperrt auch diesen Weg.
+  const budgetAxis = blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId });
+  if (budgetAxis) return lookupDenied(res, HTTP_PAYMENT_REQUIRED, budgetAxis);
+
+  // 5) Nutzlast.
+  const query = lookupPayloadQuery(req);
+  if (!query) return lookupDenied(res, HTTP_BAD_REQUEST, "keine_anfrage");
+
+  const control = localeFor(call.language).prompt.turnControl;
+  // 6+7) Kontingent und Egress (preflightLookup): beide antworten declined mit
+  // sprechbarem Text (s. Kopf-Kommentar), beide OHNE Gebuehr und ohne Suchdienst.
+  const preflight = preflightLookup({ call, query, control, res });
+  if (preflight.done) return preflight.done;
+
+  return executeLookup({ store, call, provider, query: preflight.sanitized, control, res });
+}
+
 /**
  * @param {{store: object, config: object, onConsultRaised: Function,
  *   consultSlots: {withOpenSlot: Function}}} deps
@@ -76,19 +226,8 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     return res.status(status).json({ error: grund });
   }
 
-  // Bindung ueber die opake Anbieter-Kennung am Call-Datensatz - dasselbe Muster wie das
-  // bestehende Provider-Handle telnyxConversationId. NUR ein laufender Anruf ist bindbar:
-  // eine Rueckfrage nachtraeglich in ein beendetes Gespraech zu reichen ist derselbe
-  // Angriff wie eine erfundene Kennung. Kein Rueckfall auf "irgendeinen laufenden Anruf".
-  function activeCallByConversationId(conversationId) {
-    if (typeof conversationId !== "string" || !conversationId) return null;
-    const calls = store.load().calls;
-    return (
-      calls.find(
-        (call) => call.elevenlabsConversationId === conversationId && call.status === "active",
-      ) || null
-    );
-  }
+  // Bindung: s. activeCallBoundTo (Modul-Ebene) - EINE Funktion fuer beide Webhooks.
+  const activeCallByConversationId = (conversationId) => activeCallBoundTo(store, conversationId);
 
   // Faehigkeits-Schnittmenge des Kanals (consult/gate.js) PLUS das eigene Flag der
   // Rueckfrage IM Gespraech: diese Frage entsteht aus FREMDER Rede - der Angerufene hat
@@ -203,6 +342,17 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
       return await handleConsult(req, res);
     } catch (err) {
       console.error(`[el-consult] fehler: ${err?.stack || err?.message || "unbekannt"}`);
+      if (res.headersSent) return res.end();
+      return res.status(HTTP_SERVER_ERROR).json({ error: "intern" });
+    }
+  });
+
+  // Dasselbe Fehler-Netz fuer den Recherche-Webhook (Begruendung oben).
+  router.post(ELEVENLABS_LOOKUP_PATH, async (req, res) => {
+    try {
+      return await handleLookup(req, res, { store, config });
+    } catch (err) {
+      console.error(`[el-lookup] fehler: ${err?.stack || err?.message || "unbekannt"}`);
       if (res.headersSent) return res.end();
       return res.status(HTTP_SERVER_ERROR).json({ error: "intern" });
     }

@@ -709,6 +709,16 @@ const rawConfig = {
     // EIN Konto, EIN Schluessel, EINE Basis (s. Kommentar an der Konstante oben).
     apiKey: ELEVENLABS_API_KEY, // SECRET, nie loggen/leaken
     apiBase: ELEVENLABS_API_BASE,
+    // Thema A (2026-08-19): Notaus fuer die LLM-VORAB-ERZEUGUNG der Eroeffnungszeile
+    // (src/elevenlabs/opening-line-llm.js). Default AN - die Erzeugung ist der Kern des
+    // Features und ihr Ausfall degradiert ohnehin fail-closed auf den Anruf-8-Wortlaut.
+    // Der Schalter existiert, damit ein schaedlich gemessener Zweit-LLM-Aufruf auf dem
+    // Anrufpfad abschaltbar ist, OHNE den ganzen EL-Weg zu opfern (Review-Befund R5).
+    openingLineLlm: boolEnv(
+      "ELEVENLABS_OPENING_LINE_LLM_ENABLED",
+      process.env.ELEVENLABS_OPENING_LINE_LLM_ENABLED,
+      { fallback: true },
+    ),
   },
 
   // ---- Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1; optional) ----

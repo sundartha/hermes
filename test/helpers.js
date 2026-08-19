@@ -338,6 +338,12 @@ export const BASE_ENV = {
   LOOKUP_ENABLED: "false",
   LOOKUP_SEARCH_FEE_CENTS: "1",
   EXA_API_KEY: "",
+  // Thema A (2026-08-19): die LLM-Vorab-Erzeugung der Eroeffnungszeile auf den
+  // Code-Default gepinnt (Lehre test-base-env-drift). In Spawn-Tests laeuft der Versuch
+  // gegen den (nicht erreichbaren bzw. per ANTHROPIC_BASE_URL umgelenkten) Anbieter,
+  // scheitert nicht-transient und faellt fail-closed auf die Auftrags-Bruecke - genau
+  // dieser Rueckfall wird in elevenlabs-anrufstart.test.js (T11) am Draht gemessen.
+  ELEVENLABS_OPENING_LINE_LLM_ENABLED: "true",
   EXA_API_BASE: "",
   // AL-P13: Consult-Kanal in Spawn-Tests neutral AUS (Default). Ohne diese Zeile leakt
   // eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);

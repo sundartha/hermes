@@ -264,6 +264,11 @@ At the end, say goodbye in one sentence and then call end_call.`,
     lookUpDeclined:
       "Looking something up is not possible right now. Answer from your task and your " +
       "background, or record the request via take_message.",
+    // Thema B (2026-08-19): dieselbe Ablehnung fuer den ElevenLabs-Weg, der KEIN
+    // take_message-Werkzeug hat - der Agent nimmt Nachrichten im Gespraech auf.
+    lookUpDeclinedSpoken:
+      "Looking something up is no longer possible in this call. Answer from your task " +
+      "and your background, or offer to pass the request on as a message.",
     lookUpUnavailable:
       "Nothing could be looked up on that. Do not mention it as a search - answer from " +
       "your task or record the request as a message.",

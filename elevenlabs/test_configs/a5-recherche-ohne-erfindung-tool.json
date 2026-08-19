@@ -20,6 +20,7 @@
   "check_any_tool_matches": null,
   "dynamic_variables": {
     "consult_available": "available",
+    "lookup_available": "available",
     "owner_name": "Ellen Prather",
     "callee": "Northgate Auto Repair, front desk (+1 206-555-0164)",
     "objective": "Schedule a repair appointment for Ellen Prather's car - the timing belt is due for replacement. The vehicle is a 2014 Honda Accord EX, gray, with about 97,000 miles; the belt has never been replaced. Ellen Prather drops the car off and does not wait on site.",

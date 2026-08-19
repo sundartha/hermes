@@ -509,7 +509,9 @@ export async function buildApp(deps) {
     }),
   );
 
-  // ---- Rueckfrage-Webhook des ElevenLabs-Laufwerks --------------------------------
+  // ---- Werkzeug-Webhooks des ElevenLabs-Laufwerks (get_consult + look_up) ---------
+  // Seit Thema B (2026-08-19) traegt derselbe Router auch den Recherche-Webhook
+  // /webhooks/elevenlabs/lookup - gleiche Bauart, eigene Gates (PLAN-SECURITY EL-P7).
   // AUTH-AUSNAHME (Regel 3, begruendet): der Agent des Anbieters ruft serverseitig und
   // kann keinen Session-Cookie senden; ElevenLabs signiert Werkzeug-Webhooks nicht.
   // Absicherung im Handler: timing-sicherer Vergleich (safeEqual) des Headers

@@ -262,6 +262,10 @@ export function createCall(
     // AL-P13: Consult-Kette (A2: Zustand am Call). Initial null - byte-identisch zur
     // pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     consults: null,
+    // Thema B (2026-08-19): das Recherche-Protokoll des EL-Wegs (recordCallLookup
+    // unten - Auflage B5, traegt zugleich den Deckel). Initial null - byte-identisch
+    // zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
+    lookupLog: null,
     // F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit nach erfolgreichem
     // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
     // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
@@ -1045,6 +1049,56 @@ export function countCallLookup(s, callId) {
 // Reiner Leser (Geschwister zu inCallConsults): fehlendes Feld -> 0, kein NaN.
 export function callLookups(call) {
   return call?.lookups || 0;
+}
+
+// ---- Thema B (2026-08-19): das RECHERCHE-PROTOKOLL des ElevenLabs-Wegs ----
+// Anders als der ephemere Zaehler des Budget-Wegs (call.lookups, oben) PERSISTENT
+// (Spalte lookup_log, JSONB): der Eigentuemer muss fuer die Datenschutzerklaerung
+// belegen koennen, WELCHE Inhalte aus einem Gespraech an den Suchdienst gingen
+// (Auflage B5) - und der Deckel LOOKUP_MAX_PER_CALL zaehlt genau diese Eintraege,
+// ueberlebt also auch einen Prozess-Restart mitten im Anruf (der Boot-Re-Arm wuerde
+// einen ephemeren Zaehler nullen und das Kontingent verdoppeln).
+//
+// ZWEI SCHRITTE, bewusst getrennt: recordCallLookup VOR dem Absenden (die Absicht
+// zaehlt fuers Kontingent, auch wenn die Antwort nie ankommt - dasselbe Prinzip wie
+// die Gebuehr, research/in-call.js), finishCallLookup NACH der Antwort (Ausgang und
+// Dauer). Die QUERY steht im Protokoll - das ist hier ausdruecklich gewollt (B5,
+// Eigentuemer-Entscheidung; die Konsolen-Logs bleiben PII-frei, s. Webhook).
+// eslint-Ratsche: "state" statt des datei-ueblichen "s" - die Bulk-Suppressions pinnen
+// die id-length-ANZAHL, und neue Schuld soll nicht dazukommen (Lehre der Altlast-Ratsche).
+export function recordCallLookup(state, callId, query) {
+  const call = getCall(state, callId);
+  if (!call || typeof query !== "string" || !query) {
+    return { call: call || null, changed: false, seq: null };
+  }
+  const log = (call.lookupLog ||= []);
+  const eintrag = {
+    seq: log.length,
+    query,
+    askedAt: new Date().toISOString(),
+    dauerMs: null,
+    ok: null,
+    factCount: null,
+  };
+  log.push(eintrag);
+  return { call, changed: true, seq: eintrag.seq };
+}
+
+export function finishCallLookup(state, callId, { seq, ok, factCount, dauerMs }) {
+  const call = getCall(state, callId);
+  const log = Array.isArray(call?.lookupLog) ? call.lookupLog : [];
+  const eintrag = log.find((zeile) => zeile.seq === seq);
+  if (!eintrag) return { call: call || null, changed: false };
+  eintrag.ok = ok === true;
+  eintrag.factCount = Number.isFinite(factCount) ? factCount : 0;
+  eintrag.dauerMs = Number.isFinite(dauerMs) ? dauerMs : null;
+  return { call, changed: true };
+}
+
+// Reiner Leser fuer Deckel und Torzustand des EL-Wegs (research/registry.js):
+// fehlendes Feld -> 0. Zaehlt EINTRAEGE (= ausgeloeste Absichten), nicht Erfolge.
+export function elevenLabsLookupCount(call) {
+  return Array.isArray(call?.lookupLog) ? call.lookupLog.length : 0;
 }
 
 // Offene Consults schliessen (Call terminal / Drain). Idempotent: ein zweiter Aufruf

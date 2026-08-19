@@ -3161,3 +3161,58 @@ topologie-basierte Grenze erstmals gegen einen ANDEREN Proxy als Render belegt.
 Abnahme auf `https://app.sundartha.com/webhooks/elevenlabs/consult` zurueckgedreht werden — eine
 trycloudflare-Adresse am Live-Agenten ist ein Endpunkt, den ein Fremder uebernehmen kann, sobald der Tunnel
 faellt.
+
+## EL-P7 — der Recherche-Webhook (look_up) am ElevenLabs-Weg (2026-08-19)
+
+Thema B des Owner-Auftrags vom 19.08.: der Agent kann waehrend des Gespraechs
+oeffentlich nachschlagbare Fakten beim Suchdienst (Exa) holen. Neuer Endpunkt
+`POST /webhooks/elevenlabs/lookup` (src/routes/webhooks-elevenlabs.js), WORTGLEICHE
+Bauart wie der Rueckfrage-Webhook EL-P5: gleiches Geheimnis (`x-hermes-tool-token`,
+timing-sicher, fail-closed bei leerem Wert), gleiche Bindung (conversation_id ->
+laufender Anruf -> Mandant), gleiche Reihenfolge (Geheimnis -> Bindung -> Faehigkeit ->
+Geld -> Nutzlast -> Wirkung), Eintrag in src/route-policy.js.
+
+### Die Gates, in dieser Reihenfolge
+
+1. Token 403 (fail-closed, Empty-Secret-Trap gedeckt).
+2. Bindung 404 `kein_laufender_anruf` (kein Existenz-Leck).
+3. Faehigkeit 404 `kanal_nicht_freigegeben`: Richtung outbound + Master-Schalter
+   `LOOKUP_ENABLED` + `EXA_API_KEY` + per-Tenant `allowLookup`
+   (research/registry.js#elevenLabsLookupProviderFor — DIESELBE Torkette speist die
+   dynamische Variable `{{lookup_available}}` am Anrufstart; kein zweiter Nachbau,
+   Lehre BL-2).
+4. Geld 402: die pro-Tenant-Kostendecke sperrt auch diesen Weg (Absolute Regel 1).
+5. Nutzlast 400 `keine_anfrage` (query flach, wie question beim Consult).
+6. Deckel `LOOKUP_MAX_PER_CALL=2` (registry.js, kein Env-Knopf): die naechste Anfrage
+   nach dem Deckel antwortet 200/declined mit sprechbarem Text — der Anruf laeuft
+   weiter, der Suchdienst wird nicht gerufen.
+7. Egress-Filter `sanitizeLookupQuery` (dieselbe eine Quelle wie der Budget-Weg):
+   Ziffernfolgen, E-Mail, Rufnummer des Angerufenen, woertliche Transkript-Zitate
+   verlassen den Server NIE — ohne Gebuehr, ohne Kontingent-Verbrauch.
+
+Alle Gates spawn-getestet uebers echte HTTP (test/el-lookup-webhook.test.js, L1-L9,
+inkl. Attrappen-Suchdienst und Timeout-Ast).
+
+### Datenschutz-Entscheidungen dieses Pakets
+
+- **Recherche-Protokoll (Owner-Auflage B5):** `call.lookupLog` persistiert je Suche
+  {seq, query, askedAt, dauerMs, ok, factCount} — ausdruecklich MIT der Query, damit
+  der Owner fuer die Datenschutzerklaerung belegen kann, welche Inhalte aus einem
+  Gespraech an den Suchdienst gingen. Faellt wie consults unter Erase/Export/
+  Retention. Die KONSOLE bleibt PII-frei (nie die Query, Regel 4).
+- **Per-Tenant Default AUS (Owner-Auflage B4):** `PAID_PLAN_PROFILE.allowLookup` ist
+  von true (Entscheidung 2026-08-11) auf **false zurueckgedreht**, solange die
+  Datenschutzerklaerung den Suchdienst nicht nennt. Nur der Owner-Tenant traegt das
+  Recht (OWNER_PROFILE). Kein Backfill noetig (kein Kunde existiert).
+- Der zweite Auftragsverarbeiter (Exa) bleibt der dokumentiert akzeptierte Preis aus
+  AL-P10c; offene Datenschutzerklaerungs-Pflicht unveraendert offen.
+
+### Bewusste Abweichungen vom Consult-Muster, je ein Satz
+
+- Deckel und Egress antworten 200/declined statt 4xx: ein Werkzeug-FEHLER liesse den
+  Anbieter-Agenten mitten im bezahlten Gespraech stocken; der sprechbare Text ist das
+  Muster des Budget-Wegs (performLookupRequest) und laesst ihn weiterreden (B2/B3).
+- `response_timeout_secs=10` statt 60: serverseitig deckelt `LOOKUP_TIMEOUT_MS=2500 ms`
+  die Suche; am anderen Ende wartet kein Mensch.
+- Kein Slot-Halter (consultSlots): der Aufruf haelt keine 47-s-Rueckfrage offen,
+  sondern antwortet binnen ~3 s; die Gleichzeitigkeit deckelt der Deckel je Anruf.

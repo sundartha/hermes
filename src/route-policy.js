@@ -138,6 +138,17 @@ export const PUBLIC_ROUTES = Object.freeze([
       "laufenden Anruf (404 sonst), Consult-Faehigkeits-Gate und die pro-Tenant-Kostendecke.",
   },
   {
+    method: "POST",
+    path: "/webhooks/elevenlabs/lookup",
+    reason:
+      "HANDLER-INTERNE AUTH, wortgleiche Bauart wie /webhooks/elevenlabs/consult darueber " +
+      "(Thema B, 2026-08-19): derselbe timing-sichere x-hermes-tool-token-Vergleich " +
+      "(fail-closed bei leerem Wert), dieselbe Bindung an einen laufenden Anruf (404), " +
+      "danach das Recherche-Gate (LOOKUP_ENABLED + EXA_API_KEY + per-Tenant allowLookup + " +
+      "Richtung outbound, research/registry.js), die pro-Tenant-Kostendecke und der " +
+      "Deckel LOOKUP_MAX_PER_CALL. Egress-Filter sanitizeLookupQuery vor jedem Versand.",
+  },
+  {
     method: "GET",
     path: LEGACY_PORTAL_PATH,
     reason:

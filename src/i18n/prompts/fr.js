@@ -264,6 +264,11 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
     lookUpDeclined:
       "Consulter quelque chose n'est pas possible maintenant. Réponds à partir de ta " +
       "mission et de ton contexte, ou consigne la demande via take_message.",
+    // Thema B (2026-08-19): meme refus pour le chemin ElevenLabs, sans outil take_message.
+    lookUpDeclinedSpoken:
+      "Consulter quelque chose n'est plus possible dans cet appel. Réponds à partir de " +
+      "ta mission et de ton contexte, ou propose de transmettre la demande comme un " +
+      "message.",
     lookUpUnavailable:
       "Rien n'a pu être consulté à ce sujet. N'en parle pas comme d'une recherche - " +
       "réponds à partir de ta mission ou consigne la demande comme un message.",

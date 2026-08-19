@@ -45,6 +45,7 @@ import {
 } from "./request-tenant.js";
 import { makeConsultDelivery } from "./consult/delivery.js";
 import { consultAllowedFor } from "./consult/gate.js";
+import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";
 import { bootServer } from "./boot.js";
 
@@ -134,6 +135,9 @@ const elevenLabsOutbound = makeElevenLabsOutbound({
   // DASSELBE Tor, das der Rueckfrage-Webhook fragt, bevor er eine Rueckfrage annimmt -
   // hier verdrahtet statt in outbound.js importiert (Begruendung an der Signatur dort).
   consultAllowedFor,
+  // Thema B: dasselbe Muster fuer das Recherche-Tor - die EINE Torkette aus
+  // research/registry.js, die auch der Lookup-Webhook fragt.
+  lookupAvailableFor: elevenLabsLookupAvailableFor,
 });
 
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper

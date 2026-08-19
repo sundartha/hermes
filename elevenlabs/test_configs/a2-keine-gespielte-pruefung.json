@@ -23,6 +23,7 @@
   "check_any_tool_matches": null,
   "dynamic_variables": {
     "consult_available": "available",
+    "lookup_available": "unavailable",
     "owner_name": "Ruth Halloran",
     "callee": "Bayview Auto Service, front desk (+1 415-555-0178)",
     "objective": "Schedule a repair appointment for Ruth Halloran's car - the check engine light has been on since Monday.",

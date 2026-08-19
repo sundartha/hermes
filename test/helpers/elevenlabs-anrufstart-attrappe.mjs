@@ -43,6 +43,11 @@ export function pinCall() {
   return {
     id: "call-pin-1",
     tenantId: PIN_TENANT,
+    // Richtung + Status wie am echten createCall-Datensatz (state-ops.js): das
+    // Recherche-Tor (Thema B) liest beide als Sicherheitsfaktoren - eine Attrappe
+    // ohne sie misst nur den fail-closed-Ast.
+    direction: "outbound",
+    status: "active",
     from: PIN_FROM,
     to: "+491737250000",
     goal: "Termin vereinbaren",
@@ -121,6 +126,11 @@ export async function sendeAnrufstart({
   makeElevenLabsOutbound,
   consultAllowedFor,
   store = pinStore(),
+  // Thema B: das Recherche-Tor, analog consultAllowedFor - ohne Wert greift der
+  // fail-closed Fabrik-Default (lookup_available = "unavailable").
+  lookupAvailableFor,
+  // Thema A: der Anruf-Datensatz, damit Wert-Tests openingLine/Hash setzen koennen.
+  call = pinCall(),
 }) {
   const originalFetch = globalThis.fetch;
   let capturedBody = null;
@@ -140,8 +150,9 @@ export async function sendeAnrufstart({
       // eingebauter Rueckfall waere ein zweites Tor, und der Torzustand wuerde dann
       // gegen eine Attrappe gemessen statt gegen die Entscheidung, die er abbildet.
       consultAllowedFor,
+      lookupAvailableFor,
     });
-    await originateCall(pinCall());
+    await originateCall(call);
   } finally {
     globalThis.fetch = originalFetch;
   }

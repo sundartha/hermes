@@ -22,6 +22,7 @@
   "check_any_tool_matches": null,
   "dynamic_variables": {
     "consult_available": "available",
+    "lookup_available": "unavailable",
     "owner_name": "Miles Ashbury",
     "callee": "Grove Street Auto Repair, service desk (+1 503-555-0119)",
     "objective": "Schedule the annual inspection appointment for Miles Ashbury's car. The vehicle is a 2018 Subaru Outback Premium, license plate 4TRM819, with about 54,000 miles; the current inspection runs out at the end of this month. Miles Ashbury drops the car off and does not wait on site.",

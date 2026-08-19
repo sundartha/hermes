@@ -163,6 +163,11 @@ export const {
   // Laufzeit einen TypeError (Muster advanceInCallConsult).
   addLookupFacts,
   countCallLookup,
+  // Thema B (2026-08-19): Recherche-Protokoll des EL-Wegs. OHNE diese Re-Exports
+  // waeren sie auf der Fassade undefined -> der Lookup-Webhook wuerfe zur Laufzeit
+  // einen TypeError (Muster addLookupFacts).
+  recordCallLookup,
+  finishCallLookup,
   // P3.2: No-Speech-Staffel-Zaehler (ephemer). OHNE diese Re-Exports waeren sie auf der
   // Fassade undefined -> /voice/turn wuerfe zur Laufzeit einen TypeError.
   countNoSpeechTurn,

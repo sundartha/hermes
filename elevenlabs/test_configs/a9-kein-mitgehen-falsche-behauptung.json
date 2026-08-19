@@ -19,6 +19,7 @@
   "tool_mock_overrides": {},
   "dynamic_variables": {
     "consult_available": "available",
+    "lookup_available": "unavailable",
     "owner_name": "Trevor Nash",
     "callee": "Larkspur Lane Photography, front desk (+1 615-555-0192)",
     "objective": "Ask for the next available family portrait session for Trevor Nash and take the answer down as a message. The session is for four people - Trevor Nash, his wife and their two children, aged 6 and 9 - outdoors in a park rather than in the studio, about 45 minutes, and Trevor Nash is looking for a weekend slot.",

@@ -350,6 +350,12 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
     lookUpDeclined:
       "Nachschlagen jetzt nicht möglich. Antworte aus deinem Auftrag und deinem " +
       "Hintergrund oder nimm das Anliegen über take_message auf.",
+    // Thema B (2026-08-19): dieselbe Ablehnung fuer den ElevenLabs-Weg, der KEIN
+    // take_message-Werkzeug hat - der Agent nimmt Nachrichten im Gespraech auf.
+    lookUpDeclinedSpoken:
+      "Nachschlagen ist in diesem Gespräch nicht mehr möglich. Antworte aus deinem " +
+      "Auftrag und deinem Hintergrund, oder biete an, das Anliegen als Nachricht " +
+      "weiterzugeben.",
     lookUpUnavailable:
       "Dazu konnte nichts nachgesehen werden. Nenne das nicht als Suche - antworte aus " +
       "deinem Auftrag oder nimm das Anliegen als Nachricht auf.",

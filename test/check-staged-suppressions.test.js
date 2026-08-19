@@ -449,11 +449,10 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               Vier Befunde vorher, vier nachher, keine neue Regel-Kategorie.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
-    reason:
-      "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration.",
-    date: "2026-08-13",
-    findings: {
-      "complexity :: Function 'createCall' has a complexity of 12. Maximum allowed is 10.": 1,
+    "reason": "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-19 (Thema A): createCall 12 -> 14 Komplexitaet (openingLine-Feld + Hash-Bedingung). Geprueft und bewusst uebernommen; das Aufraeumen bleibt das eigene Refactoring des Zustandsmoduls (s.o.).",
+    "date": "2026-08-13",
+    "findings": {
+      "complexity :: Function 'createCall' has a complexity of 14. Maximum allowed is 10.": 1,
       "complexity :: Function 'setTenantSubscription' has a complexity of 13. Maximum allowed is 10.": 1,
       "complexity :: Function 'tenantSubscription' has a complexity of 15. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 8,
@@ -499,17 +498,16 @@ const LEGACY_FINGERPRINT = {
       "no-param-reassign :: Assignment to property of function parameter 's'.": 17,
       "no-param-reassign :: Assignment to property of function parameter 'tenant'.": 6,
       "no-param-reassign :: Assignment to property of function parameter 'usage'.": 6,
-      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 12,
-    },
+      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 12
+    }
   },
   "src/store/pg.js": {
-    reason:
-      "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-15 (answeredUnclearReason): makePgStore 462 -> 472 Zeilen, rowToCall 21 -> 22, flushCalls 22 -> 23. Unvermeidbar, solange der Split ausgesetzt ist - ein neues persistiertes Feld MUSS durch Zeilen-Mapper und Flush, und beide sind Teil derselben Riesenfunktion. Genau deshalb waechst diese Datei mit jedem Feld weiter; erst der Split stoppt das. Angehoben, nicht stillschweigend: der Pin hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen. DRITTE ANHEBUNG 2026-08-15/16 (sieben Felder aus ABNAHME-D1): flushCalls 23 -> 30, rowToCall 22 -> 29, makePgStore 472 -> 482. DAMIT IST DIE WACHSTUMSRATE GEMESSEN: jedes persistierte Anruf-Feld kostet +1 Komplexitaet in flushCalls UND in rowToCall sowie rund 1,4 Zeilen in makePgStore - linear, ohne Obergrenze. Die Anhebungen sind einzeln begruendet und keine Nachlaessigkeit (ein Feld MUSS durch Mapper und Flush), aber die Kurve ist jetzt belegt statt behauptet. Wer das stoppen will, hat zwei Wege: den Split von makePgStore (bisher ausgesetzt) oder die Ablage der eingesammelten Ergebnis-Angaben als EINE strukturierte Spalte statt N Einzelspalten - letzteres entspraeche auch der Form des Anbieters (data_collection_results ist eine Karte) und machte kuenftige Felder kostenlos. Beides ist eine Eigentuemer-Entscheidung, kein Nebeneffekt eines Commits. VIERTE ANHEBUNG 2026-08-17 (sipCallId, der Join-Schluessel zum Telnyx-Beleg): rowToCall 29 -> 30 und makePgStore 482 -> 487 Zeilen - beides genau die Kurve, die der Eintrag darueber VORHERGESAGT hat (+1 Komplexitaet je persistiertem Feld), also eine Bestaetigung der Messung und keine neue Ueberraschung. NEU ist die dritte Bewegung: flushCalls (Komplexitaet 30) ist WEG, dafuer ist callRowValues (30) da. Die Funktion stand exakt auf der 100-Zeilen-Grenze; jede weitere Spalte haette sie gerissen, also wurde die 50er-Werteliste als eigene Funktion herausgezogen (reiner Move, die 49 Altwerte maschinell als byte-identisch und gleich geordnet verifiziert). EHRLICH BENANNT: der Split hat die ZEILEN-Grenze gerettet, nicht die Verzweigung reduziert - die Komplexitaet ist verschoben, nicht verschwunden. Vier Befunde vorher, vier nachher, keine neue Regel-Kategorie. Die zwei Auswege oben gelten unveraendert und werden mit jeder Anhebung dringender.",
-    date: "2026-08-13",
-    findings: {
-      "complexity :: Function 'callRowValues' has a complexity of 30. Maximum allowed is 10.": 1,
+    "reason": "Echte Schuld, kein Fehlschnitt der Regel. makePgStore mit 448 Zeilen ist ein eigener Umbau und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-15 (answeredUnclearReason): makePgStore 462 -> 472 Zeilen, rowToCall 21 -> 22, flushCalls 22 -> 23. Unvermeidbar, solange der Split ausgesetzt ist - ein neues persistiertes Feld MUSS durch Zeilen-Mapper und Flush, und beide sind Teil derselben Riesenfunktion. Genau deshalb waechst diese Datei mit jedem Feld weiter; erst der Split stoppt das. Angehoben, nicht stillschweigend: der Pin hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen. DRITTE ANHEBUNG 2026-08-15/16 (sieben Felder aus ABNAHME-D1): flushCalls 23 -> 30, rowToCall 22 -> 29, makePgStore 472 -> 482. DAMIT IST DIE WACHSTUMSRATE GEMESSEN: jedes persistierte Anruf-Feld kostet +1 Komplexitaet in flushCalls UND in rowToCall sowie rund 1,4 Zeilen in makePgStore - linear, ohne Obergrenze. Die Anhebungen sind einzeln begruendet und keine Nachlaessigkeit (ein Feld MUSS durch Mapper und Flush), aber die Kurve ist jetzt belegt statt behauptet. Wer das stoppen will, hat zwei Wege: den Split von makePgStore (bisher ausgesetzt) oder die Ablage der eingesammelten Ergebnis-Angaben als EINE strukturierte Spalte statt N Einzelspalten - letzteres entspraeche auch der Form des Anbieters (data_collection_results ist eine Karte) und machte kuenftige Felder kostenlos. Beides ist eine Eigentuemer-Entscheidung, kein Nebeneffekt eines Commits. VIERTE ANHEBUNG 2026-08-17 (sipCallId, der Join-Schluessel zum Telnyx-Beleg): rowToCall 29 -> 30 und makePgStore 482 -> 487 Zeilen - beides genau die Kurve, die der Eintrag darueber VORHERGESAGT hat (+1 Komplexitaet je persistiertem Feld), also eine Bestaetigung der Messung und keine neue Ueberraschung. NEU ist die dritte Bewegung: flushCalls (Komplexitaet 30) ist WEG, dafuer ist callRowValues (30) da. Die Funktion stand exakt auf der 100-Zeilen-Grenze; jede weitere Spalte haette sie gerissen, also wurde die 50er-Werteliste als eigene Funktion herausgezogen (reiner Move, die 49 Altwerte maschinell als byte-identisch und gleich geordnet verifiziert). EHRLICH BENANNT: der Split hat die ZEILEN-Grenze gerettet, nicht die Verzweigung reduziert - die Komplexitaet ist verschoben, nicht verschwunden. Vier Befunde vorher, vier nachher, keine neue Regel-Kategorie. Die zwei Auswege oben gelten unveraendert und werden mit jeder Anhebung dringender. FUENFTE ANHEBUNG 2026-08-19 (Thema A+B: opening_line, opening_line_sha256, lookup_log): callRowValues 30 -> 32, rowToCall 30 -> 32 - exakt die gemessene Kurve (+1 je persistiertem Feld, s.o.). Geprueft und bewusst uebernommen; die zwei Auswege oben gelten unveraendert. SECHSTE ANHEBUNG 2026-08-19 (Thema B, lookup_log): callRowValues 32 -> 33, rowToCall 32 -> 33, makePgStore 487 -> 497 - dieselbe gemessene Kurve (+1 je persistiertem Feld). Geprueft und bewusst uebernommen; die zwei Auswege oben gelten unveraendert.",
+    "date": "2026-08-13",
+    "findings": {
       "complexity :: Async function 'flushTenants' has a complexity of 24. Maximum allowed is 10.": 1,
-      "complexity :: Function 'rowToCall' has a complexity of 30. Maximum allowed is 10.": 1,
+      "complexity :: Function 'callRowValues' has a complexity of 33. Maximum allowed is 10.": 1,
+      "complexity :: Function 'rowToCall' has a complexity of 33. Maximum allowed is 10.": 1,
       "complexity :: Function 'rowToTenant' has a complexity of 23. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 1,
       "id-length :: Identifier name 'b' is too short (< 2).": 2,
@@ -520,46 +518,43 @@ const LEGACY_FINGERPRINT = {
       "id-length :: Identifier name 's' is too short (< 2).": 1,
       "id-length :: Identifier name 't' is too short (< 2).": 2,
       "max-lines-per-function :: Async function 'hydrateTenantInto' has too many lines (117). Maximum allowed is 100.": 1,
-      "max-lines-per-function :: Function 'makePgStore' has too many lines (487). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makePgStore' has too many lines (497). Maximum allowed is 100.": 1,
       "max-params :: Async function 'deleteMissing' has too many parameters (4). Maximum allowed is 3.": 1,
-      "no-param-reassign :: Assignment to property of function parameter 'state'.": 3,
-    },
+      "no-param-reassign :: Assignment to property of function parameter 'state'.": 3
+    }
   },
   "src/routes/api-calls.js": {
-    reason:
-      "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber das Aufraeumen ist der G30-Split der Outbound-Route und damit ein Umbau im Gate-Kernpfad: diese Datei traegt die Safety-Gate-Kette (Permit, Denylist/Land-Gate/Stundenlimit, pro-Tenant-Kostendecke, OUTBOUND_FROZEN). Ein Entzerren verschiebt genau die Reihenfolge, in der diese Gates greifen; faellt dabei eine Pruefung durch, ruft der Dienst jemanden ungewollt an oder ueberzieht die Kostendecke. Das braucht ein eigenes Paket mit eigener Absicherung (Gate-Tests vor dem Schnitt), nicht einen Nebeneffekt dieses Commits. PIN ANGEHOBEN 2026-08-15 (S1-Nachbesserung cancel_call/S1-4, S1-5, S1-2b): makeCallRoutes 222 -> 225 Zeilen - der cancel_call-Handler traegt seither die Begruendung, warum die EL-Form (nicht die Kennung) die ehrliche Antwort entscheidet, plus das zusaetzliche hangup_attempted-Feld. Unvermeidbar, solange der G30-Split aussteht (s. reason oben) - jede Verhaltenskorrektur in diesem Handler MUSS durch dieselbe Riesenfunktion. Das Gate hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen statt stillschweigend.",
-    date: "2026-08-15",
-    findings: {
-      "complexity :: Async arrow function has a complexity of 22. Maximum allowed is 10.": 1,
+    "reason": "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber das Aufraeumen ist der G30-Split der Outbound-Route und damit ein Umbau im Gate-Kernpfad: diese Datei traegt die Safety-Gate-Kette (Permit, Denylist/Land-Gate/Stundenlimit, pro-Tenant-Kostendecke, OUTBOUND_FROZEN). Ein Entzerren verschiebt genau die Reihenfolge, in der diese Gates greifen; faellt dabei eine Pruefung durch, ruft der Dienst jemanden ungewollt an oder ueberzieht die Kostendecke. Das braucht ein eigenes Paket mit eigener Absicherung (Gate-Tests vor dem Schnitt), nicht einen Nebeneffekt dieses Commits. PIN ANGEHOBEN 2026-08-15 (S1-Nachbesserung cancel_call/S1-4, S1-5, S1-2b): makeCallRoutes 222 -> 225 Zeilen - der cancel_call-Handler traegt seither die Begruendung, warum die EL-Form (nicht die Kennung) die ehrliche Antwort entscheidet, plus das zusaetzliche hangup_attempted-Feld. Unvermeidbar, solange der G30-Split aussteht (s. reason oben) - jede Verhaltenskorrektur in diesem Handler MUSS durch dieselbe Riesenfunktion. Das Gate hat die Verschlechterung gemeldet, sie ist geprueft und bewusst uebernommen statt stillschweigend. PIN ANGEHOBEN 2026-08-19 (Thema A, Eroeffnungszeile): der Route-Arrow 22 -> 23 Komplexitaet und 118 -> 136 Zeilen, makeCallRoutes 225 -> 243 - der Erzeugungs-Block (fetchOpeningLine hinter dem EL-Schalter, vor createCall) MUSS wie Briefing/Diagnose durch dieselbe Riesenfunktion, solange der G30-Split aussteht (s.o.). Geprueft und bewusst uebernommen statt stillschweigend; der Split-Bedarf waechst damit weiter.",
+    "date": "2026-08-15",
+    "findings": {
+      "complexity :: Async arrow function has a complexity of 23. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'b' is too short (< 2).": 2,
       "id-length :: Identifier name 'e' is too short (< 2).": 1,
-      "max-lines-per-function :: Async arrow function has too many lines (118). Maximum allowed is 100.": 1,
-      "max-lines-per-function :: Function 'makeCallRoutes' has too many lines (225). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Async arrow function has too many lines (136). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makeCallRoutes' has too many lines (243). Maximum allowed is 100.": 1,
       "no-magic-numbers :: No magic number: 400.": 4,
       "no-magic-numbers :: No magic number: 403.": 1,
       "no-magic-numbers :: No magic number: 404.": 4,
       "no-magic-numbers :: No magic number: 409.": 1,
       "no-magic-numbers :: No magic number: 500.": 1,
-      "no-magic-numbers :: No magic number: 502.": 1,
-    },
+      "no-magic-numbers :: No magic number: 502.": 1
+    }
   },
   "src/telephony/call-finish.js": {
-    reason:
-      "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung.",
-    date: "2026-08-15",
-    findings: {
+    "reason": "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung.",
+    "date": "2026-08-15",
+    "findings": {
       "complexity :: Async function 'finishCall' has a complexity of 21. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 1,
       "id-length :: Identifier name 'e' is too short (< 2).": 2,
       "id-length :: Identifier name 't' is too short (< 2).": 1,
-      "no-param-reassign :: Assignment to property of function parameter 'call'.": 1,
-    },
+      "no-param-reassign :: Assignment to property of function parameter 'call'.": 1
+    }
   },
   "src/mcp-tools.js": {
-    reason:
-      "Eigentuemer-Entscheidung 2026-08-15. Der registerTools-Split ist ein eigenes Paket und ausdruecklich nicht Teil dieser Sitzung.",
-    date: "2026-08-15",
-    findings: {
+    "reason": "Eigentuemer-Entscheidung 2026-08-15. Der registerTools-Split ist ein eigenes Paket und ausdruecklich nicht Teil dieser Sitzung.",
+    "date": "2026-08-15",
+    "findings": {
       "complexity :: Function 'resultCardView' has a complexity of 11. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'A' is too short (< 2).": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 2,
@@ -573,9 +568,9 @@ const LEGACY_FINGERPRINT = {
       "max-params :: Arrow function has too many parameters (4). Maximum allowed is 3.": 1,
       "no-magic-numbers :: No magic number: 1000.": 1,
       "no-magic-numbers :: No magic number: 2.": 6,
-      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 18,
-    },
-  },
+      "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 18
+    }
+  }
 };
 
 // Erfundene Unterdrueckung, mit der jede gelistete Datei gegen die Auswahl

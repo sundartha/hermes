@@ -267,6 +267,10 @@ CREATE TABLE IF NOT EXISTS call (
   -- AL-P13: Consult-Kette am Call (A2: Zustand am Call, NICHT in einem Prozess-Broker -
   -- ueberlebt Deploy/Instanzwechsel und faellt automatisch unter Erase/Export/Retention).
   consults JSONB,
+  -- Thema B (2026-08-19): Recherche-Protokoll des ElevenLabs-Wegs (welche Query wann
+  -- an den Suchdienst ging, Auflage B5) - traegt zugleich den Deckel je Anruf.
+  -- Faellt wie consults automatisch unter Erase/Export/Retention.
+  lookup_log JSONB,
   -- ABNAHME-D1 (TEIL 2, Eigentuemer-Auftrag): die vier vom Agenten waehrend des
   -- Gespraechs STRUKTURIERT gesammelten Angaben (ElevenLabs Data Collection,
   -- analysis.data_collection_results), additiv NEBEN summary - Praezedenz
@@ -365,6 +369,12 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS result JSONB;
 -- AL-P13: Consult-Kette auf Bestands-call-Tabellen nachziehen (Muster context/mandate/result).
 -- Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS consults JSONB;
+
+-- Thema B (2026-08-19): Recherche-Protokoll des ElevenLabs-Wegs (Auflage B5) auf
+-- Bestands-call-Tabellen nachziehen (Muster consults). Idempotent; frische DB = No-op.
+-- KEIN Backfill noetig: es gibt keinen Bestands-Anruf mit Recherche, das Protokoll
+-- misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS lookup_log JSONB;
 
 -- KS-EL1: der Grund, wenn answered_at nicht ermittelbar war, auf Bestands-call-Tabellen
 -- nachziehen (Muster elevenlabs_conversation_id). Idempotent; frische DB = No-op. KEIN

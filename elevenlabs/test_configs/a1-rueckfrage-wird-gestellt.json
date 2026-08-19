@@ -27,6 +27,7 @@
   "check_any_tool_matches": null,
   "dynamic_variables": {
     "consult_available": "available",
+    "lookup_available": "unavailable",
     "owner_name": "Dana Kirkwood",
     "callee": "Ridgeline Auto Repair, service desk (+1 512-555-0143)",
     "objective": "Schedule a repair appointment for Dana Kirkwood's car - the brakes have been squealing for about a week.",
