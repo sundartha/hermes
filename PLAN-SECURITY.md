@@ -3241,3 +3241,15 @@ inkl. Attrappen-Suchdienst und Timeout-Ast).
   die Suche; am anderen Ende wartet kein Mensch.
 - Kein Slot-Halter (consultSlots): der Aufruf haelt keine 47-s-Rueckfrage offen,
   sondern antwortet binnen ~3 s; die Gleichzeitigkeit deckelt der Deckel je Anruf.
+
+## Owner-Entscheidung 2026-08-19: Prod-DB-IP-Allowlist auf 0.0.0.0/0
+
+Die Render-Postgres-Allowlist (hermes-db) stand auf einzelnen Heim-IPs; die
+Heim-IP wechselt dynamisch, jede Session brauchte einen Dashboard-Handgriff.
+Der Owner hat die Liste am 2026-08-19 SELBST (per eigenem API-Aufruf) auf
+`0.0.0.0/0` gestellt. Bewusst akzeptiertes Risiko: die DB ist aus dem ganzen
+Internet erreichbar; verbleibender Schutz ist TLS-Pflicht + das lange
+Zufallspasswort (Render-generiert) - bei geleaktem Passwort gibt es keine
+zweite Huerde mehr. Gegenmassnahme bei Verdacht: Passwort-Rotation im
+Render-Dashboard. Der Render-API-Key fuer solche Infra-Handgriffe liegt lokal
+in `~/.config/hermes/render-api-key` (nie committen, nie loggen).
