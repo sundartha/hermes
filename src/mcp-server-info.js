@@ -79,7 +79,12 @@ export const MCP_CONSULT_INSTRUCTIONS =
   "answer_consult - if you do not know an answer, ask the user first rather than " +
   "inventing one. " +
   "Staying in that loop pays off: the final \"done\" answer carries the summary of the " +
-  "call and whether the objective was achieved.";
+  "call and whether the objective was achieved. " +
+  // GQ-B1: Die Rueckfrage hat eine Wanduhr-Frist (CONSULT_OPEN_MS) - eine Antwort nach einer
+  // gemuetlichen Chat-Runde kommt zu spaet. BEWUSST OHNE Sekundenzahl: der Wert liegt in der
+  // Konfiguration und wuerde im Text veralten.
+  "The agent is on the phone while it waits, so answer within seconds - if you have to " +
+  "ask the user, do it in the same turn.";
 
 // serverOptions traegt inzwischen ZWEI Dinge (UI-Capabilities + instructions). Byte-
 // identisch zum Bestand, solange beide Schalter aus sind: undefined. Nur so bleibt das

@@ -66,10 +66,15 @@ const EXPECTED_MARKERS = {
   place_call: ["NOT"],
   "place_call.to": ["EXACTLY", "NEVER"],
   "place_call.objective": ["ONE", "VERBATIM", "BEFORE", "NO", "ALWAYS", "FIRST", "NOT"],
-  "place_call.briefing": ["SUMMARISE", "NO"],
+  // GQ-B1: die Vertroestungs-Sperre. KNOW ist die Verhaltensgarantie des Feldes (nur
+  // Gewusstes ins Briefing) - bewusst nachgezogen statt weggeschrieben, Praezedenz
+  // max_duration_s/KS-P3.
+  "place_call.briefing": ["SUMMARISE", "NO", "KNOW"],
   "place_call.constraints": [],
   "place_call.mandate": ["MANDATE", "ITSELF", "NOTHING", "NO", "ALWAYS"],
-  "place_call.mandate.decide_freely": ["WITHOUT", "FIRST", "WITHOUT", "NOT"],
+  // GQ-B1: die Vorab-Rueckfrage ist hier gestrichen (sie steht bedingt im Eltern-Feld);
+  // die Erfindungs-Sperre bleibt, sie traegt keinen Marker.
+  "place_call.mandate.decide_freely": ["WITHOUT", "WITHOUT", "NOT"],
   "place_call.mandate.fallback_order": [],
   "place_call.mandate.on_out_of_scope": ["OUTSIDE", "ONLY"],
   "place_call.context": ["BACKGROUND", "ADDITIONAL", "NEVER", "NO"],
