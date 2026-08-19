@@ -1585,3 +1585,24 @@ Defekt):**
 3. DANN `npm run elevenlabs:drift` als Gegenprobe (prueft auch, ob der Push die
    language_presets wirklich schreibt).
 Wer Code deployt, ohne die Vorlage zu pushen, produziert zwei fast gleiche Fragen hintereinander.
+
+### GQ-B2 2026-08-20 — Owner-Revision von GQ-B1: Drei-Klassen-Briefing (Merge `e87600d`)
+
+**Bindende Praemisse (Owner, 2026-08-19): Der Owner ist waehrend des Anrufs ABWESEND —
+das ist der Normalfall.** get_consult ist wertvoll, weil der auftraggebende Assistent
+EIGENE Quellen hat (Kalender, Mail, Chat-Kontext), nicht weil er den Menschen live
+durchreichen kann. Diese Praemisse steuert alle kuenftigen Consult-/Briefing-Entscheidungen.
+
+Das GQ-B1-Pauschalverbot der Vertroestung ueberschoss deshalb: Wissensluecken zerfallen in
+drei Klassen — (1) Assistent-beantwortbar: offen lassen + in einer Zeile deklarieren;
+(2) Nur-Owner-Wissen: ehrliche Ansage VORAB ist richtig (der eine gedeckelte Consult darf
+nicht darauf verbrannt werden); (3) oeffentlich pruefbar: nichts schreiben, look_up.
+Umgesetzt als reine Textphase (briefing-Beschreibung, MCP_CONSULT_INSTRUCTIONS mit
+eigene-Quellen-zuerst + explizitem Unbekannt-Ausgang; Review fing zusaetzlich das
+unbedingte "ask the user FIRST" in der answer_consult-Beschreibung). Token-Deckel
+unveraendert in Kraft. Suite 4909/4909 gruen. PASS nach 1 Fix-Runde.
+
+Offen (spaetere Phase, braucht Testanrufe): strukturelles consult_scope-Feld + eigener
+Prompt-Abschnitt beim Agenten. Wirkungsbeleg weiterhin offen (naechster Testanruf mit
+bewusst offener Kalender-Luecke UND einer Nur-Owner-Luecke: feuert genau EIN Consult,
+und vertroestet der Agent die andere Luecke sauber?).
