@@ -1463,3 +1463,125 @@ fuehrte sie seither als vorhandenes Werkzeug. Sie ist jetzt in `scripts/stt-wer.
 (`--live-stt`), mit Tests fuer den Ergebnis-Hash in beiden Richtungen. **Lehre: ein
 Messwerkzeug, das nur in einem Bericht steht, existiert nicht** — das Aufraeum-Gebot fuer
 Prozessmuell darf keine Werkzeuge mitreissen.
+
+---
+
+## 2026-08-19 — Anruf `call_mt0ddduxuzgl`: zwei Wurzeln, zwei geplante Tracks (GQ-E1, GQ-B1)
+
+Ein Testanruf (53 s, ElevenLabs-Outbound, Profil `allowLookup=true`/`allowConsult=true`) hat zwei
+voneinander unabhaengige Wurzeln freigelegt. Beide Werkzeuge waren freigegeben, `consults` und
+`lookup_log` blieben trotzdem LEER. Rohbefunde: `tasks/gq-transkript-befunde-2026-08-19.md`.
+Entscheidung: `tasks/gq-strategie-2026-08-19.md`. Bauanweisungen: `tasks/gq-e1-spec.md`,
+`tasks/gq-b1-spec.md`. **Gebaut ist noch nichts — dieser Abschnitt haelt Befund und Plan fest.**
+
+### Befund E — die Eroeffnung, drei Defekte in einem Satz
+
+Gesprochen wurde (woertlich aus der Prod-DB):
+
+> "... Das Gespräch wird für meinen Auftraggeber zusammengefasst. Ich wollte fragen, ob du morgen
+> um 15 Uhr Zeit für eine Runde Tennis hast.. Wie sieht es damit bei Ihnen aus?"
+
+Doppelter Punkt, Du/Sie-Bruch, doppelte Frage. **Eine Wurzel:** die Eroeffnung entsteht an zwei
+Orten. Unsere Seite liefert die Grund-Zeile als Variable `{{opening_line}}`, der fremde Agent
+haelt Offenlegung UND Abschlussfrage als statischen Text (`first_message` bzw.
+`language_presets[*]`, gespiegelt in `src/elevenlabs/call-locale.js#providerOpening`). Der Teil,
+der sich pro Anruf entscheiden muss, liegt an der einzigen Stelle, die sich pro Anruf nicht
+aendern kann. Der doppelte Punkt kommt eine Etage tiefer: `bridgedObjective` reicht den
+Auftragstext ungestrippt an `bridgePhrase`, die bedingungslos ein "." anhaengt — der Telnyx-Weg
+macht denselben Schritt richtig (`trimGoalForSpeech`).
+
+### Befund B — die Auftragsseite toetet den Rueckfragekanal
+
+Der auftraggebende Claude schrieb ins Briefing: *"falls danach gefragt wird, sagen, dass Antonio
+sich dazu noch direkt meldet."* Das Briefing reist als erste Zeile des `{{background}}`-Blocks in
+den Agenten-Prompt (`src/elevenlabs/outbound.js#backgroundText`), und derselbe Prompt verbietet
+`get_consult` fuer *"anything already written in your task, background, constraints or mandate"*.
+**Jede vorweggenommene Antwort ist damit die Abschaltung der Live-Rueckfrage fuer genau diese
+Luecke** — und sie verstoesst zugleich gegen *"NEVER offer {{owner_name}} as another way to get
+that answer"*: das Briefing ueberstimmt den Prompt, weil es konkreter ist. Dazu kennen die
+Feldbeschreibungen fuer Unbekanntes nur EINEN Ausgang, die Vorab-Rueckfrage im Chat ("ask the user
+FIRST", zweimal).
+
+### Geplant: GQ-E1 (zuerst) und GQ-B1
+
+- **GQ-E1** — der statische Rahmen am Anbieter endet mit `{{opening_line}}`; die feste Frage wird
+  pro Anruf angehaengt, und zwar nur, wenn die Grund-Zeile nicht schon selbst fragt
+  (`composedOpeningLine`). `SENTENCE_END` erlaubt "?" (mit neuem Waechter: hoechstens am Ende),
+  `bridgedObjective` streicht ein mitgebrachtes Satz-Endzeichen, und die festen Bausteine der
+  Sprachen mit Du/Sie-Unterscheidung verlieren ihr Anrede-Pronomen ("Wie sieht es damit aus?",
+  "Qu'en est-il ?"). Komponiert wird auf der SCHREIBSEITE, vor dem Hash.
+- **GQ-B1** — reine Textphase an `src/mcp-tools.js` und `src/mcp-server-info.js`: das VERBOT der
+  Vertroestung ins immer registrierte `briefing`, der konditionale Hinweis auf die Live-Rueckfrage
+  in den kanalabhaengigen `PLACE_CALL_CONSULT_LOOP`, `objective` verengt die Vorab-Rueckfrage auf
+  das Thema selbst und benennt "stays open", `mandate.decide_freely` verliert die zweite
+  "Ask the user FIRST"-Anweisung, die Server-Instructions nennen die Frist.
+
+### Was die Pruefung am Code gegen die Entwuerfe korrigiert hat
+
+- **Der Zwischenzustand von GQ-E1 ist SCHLECHTER als heute, nicht gleich.** Code deployt, Vorlage
+  nicht gepusht ergibt am gemessenen Auftrag zwei fast gleiche Fragen hintereinander. Deshalb ist
+  die Reihenfolge festgelegt: **erst `elevenlabs:push`, dann deployen, dann `elevenlabs:drift`** —
+  und ohne durchfuehrbaren Push wird nicht deployt.
+- **Der geplante Loop-Text von GQ-B1 waere eine ungedeckte Zusage gewesen.**
+  `PLACE_CALL_CONSULT_LOOP` haengt an `consultAllowedFor` (drei Faktoren), die Rueckfrage IM
+  Gespraech braucht aber zusaetzlich `IN_CALL_CONSULT_ENABLED`
+  (`src/routes/webhooks-elevenlabs.js:271`). Der Satz ist jetzt konditional formuliert.
+- Zahlen richtiggestellt: **zwoelf** dynamische Variablen (nicht elf), **18** Testdefinitionen
+  unter `elevenlabs/test_configs/` (nicht elf) — von denen **keine** die Abschlussfrage fuehrt.
+- Zeichen-Deckel neu gerechnet: `place_call*`-Beschreibungen heute **5283** Zeichen (ohne Kanal) /
+  **5513** (mit Kanal); die geplanten Texte addieren **384** bzw. **556**. Der Entwurfsdeckel 5700
+  haette 33 Zeichen Luft gelassen — korrigiert auf 5800 / 6200.
+- `R5` ist NICHT "wortgleich `trimGoalForSpeech`": das Bestandswerkzeug streicht `[.!?]+$`, also
+  auch das Fragezeichen. Die neue Regel streicht bewusst nur `[.!]+$`.
+
+### Messbasis dieses Tages (vor jeder Aenderung erhoben)
+
+`LLM_PROVIDER=anthropic npm test` -> **4888 Tests, 4887 gruen**, ein bekannter Spawn-Flake rot
+(`Gate 11 Budget ...`, `test/telnyx-p5-gate-proof.test.js`), 119 s.
+
+**Bestandsdefekt gefunden:** `.env` traegt `LLM_PROVIDER=deepseek`; **42 Testdateien** binden
+`ANTHROPIC_BASE_URL`, ohne `LLM_PROVIDER` mitzupinnen (`BASE_ENV` in `test/helpers.js` pinnt es nur
+fuer gespawnte Server, nicht fuer In-Process-Tests). Ohne den Env-Vorsatz ist der Regressionslauf
+auf dieser Maschine breit rot, ohne dass etwas kaputt waere — in `test/el-opening-line.test.js`
+allein 4 Faelle. Der Sammelfix ist eine eigene kleine Aufraeum-Phase (S-O1 der Strategie); beide
+Specs schreiben bis dahin `LLM_PROVIDER=anthropic npm test` vor.
+
+### Offen, braucht echte Anrufe
+
+Treue der erzeugten Direkt-Frage (Stufe 1) · ob eine Sachfrage am Ende der Eroeffnung schneller
+zum Reden bringt als die generische Frage · Klang von "Qu'en est-il ?" · ob der Push die Presets
+wirklich schreibt (`elevenlabs:drift` danach) · Wirkungsbeleg fuer GQ-B1 (ist `consults` danach
+NICHT mehr leer?) · reicht EINE Rueckfrage je Anruf · Tempo-Messung der Chat-Runden vor
+`place_call`.
+
+### Offen, statisch belegbar, eigene Entscheidung
+
+`context.open_questions` verspricht in seiner Beschreibung, die Antworten stuenden dem Agenten beim
+Gespraechsstart zur Verfuegung — auf der live laufenden EL-Engine baut `dynamicVariables` den
+Hintergrund genau einmal beim Waehlen, unmittelbar nachdem `emitOpeningConsult` gefeuert hat.
+Zweitens: `{{consult_available}}` kommt aus drei Faktoren, der Webhook verlangt vier — bei
+`IN_CALL_CONSULT_ENABLED=false` bekaeme der Agent "available" angesagt und liefe in die Ablehnung.
+Beides ist Anrufverhalten und liegt ausserhalb von GQ-E1/GQ-B1.
+
+### Umsetzung 2026-08-19 — beide Tracks GEMERGT (master), Live-Schaltung STEHT AUS
+
+- **GQ-E1** (Eroeffnungs-Komposition): Merge `a687f5e` (Phase debafa7 + Fix ec54441). 9 Dateien:
+  composedOpeningLine als DIE Kompositionsstelle, Rahmen (providerOpening + Vorlagen-first_message)
+  endet mit {{opening_line}}, feste Bausteine de/fr ohne Anrede-Pronomen, bridgedObjective strippt
+  Satz-Endzeichen. PASS im dualen Review nach 1 Fix-Runde.
+- **GQ-B1** (place_call-Briefing/Tempo): Merge `cdddf09` (Phase 96ef69f + Fix 6be7d03). Nur
+  Stringliterale in src/mcp-tools.js + src/mcp-server-info.js plus Tests (GQ-B1-01..06 in
+  test/gq-b1-briefing-openness.test.js, Token-Deckel 5800/6200). PASS nach 1 Fix-Runde.
+- Suite auf master nach beiden Merges: `LLM_PROVIDER=anthropic npm test` = 4904/4904 gruen
+  (ein Lauf zeigte 1 rot = bekannter Spawn-Flake, Wiederholung sauber gruen).
+- Prozessdateien (Entwuerfe/Specs/Reports) sind committet und danach geloescht (CLAUDE.md-Pflicht);
+  Historie im Merge-Umfeld dieser Commits.
+
+**LIVE-SCHALTUNG (bindende Reihenfolge, Owner-Aktion — Zwischenzustand sonst SCHLECHTER als der
+Defekt):**
+1. `npm run elevenlabs:push` aus dem master-Stand (Vorlage: first_message endet mit
+   {{opening_line}}) — ERST die Vorlage,
+2. DANN Code-Deploy (Upstream-Push jonas986 + Render-Deploy),
+3. DANN `npm run elevenlabs:drift` als Gegenprobe (prueft auch, ob der Push die
+   language_presets wirklich schreibt).
+Wer Code deployt, ohne die Vorlage zu pushen, produziert zwei fast gleiche Fragen hintereinander.
