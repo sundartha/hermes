@@ -1,6 +1,8 @@
-// GQ-B1 - Waechter ueber die drei Aussagen, die diese Phase in die
-// place_call-Beschreibungen gelegt hat: (1) das Briefing darf keine Wissensluecke
-// vorweg beantworten und keine Vertroestung auf den Auftraggeber schreiben,
+// GQ-B1/GQ-B2 - Waechter ueber die Aussagen, die diese beiden Phasen in die
+// place_call-Beschreibungen gelegt haben: (1) das Briefing darf keine Wissensluecke
+// erfunden zuschreiben und sortiert jede Luecke nach der GQ-B2-Drei-Klassen-Regel
+// (eigene Quellen offen lassen + deklarieren / Nur-Owner-Wissen ehrlich ansagen /
+// oeffentlich pruefbar gar nicht erwaehnen - die GQ-B1-Pauschale ist owner-revidiert),
 // (2) der Hinweis auf die Live-Rueckfrage haengt am AKTIVEN Kanal und ist
 // konditional formuliert, (3) die Vorab-Rueckfrage im Chat steht nur noch an
 // EINER Stelle. Dazu zwei Zeichen-Deckel und der Draht zwischen der Zahl im
@@ -94,11 +96,11 @@ const placeCallChars = (descriptions) =>
 // keinen neuen Export von PLACE_CALL_CONSULT_LOOP.
 const loopSuffixOf = (plain, withConsult) => withConsult.slice(plain.length);
 
-test("GQ-B1-01: die briefing-Beschreibung verbietet die Vertroestung und verlangt die offene Luecke", () => {
+test("GQ-B1-01: die briefing-Beschreibung untersagt die erfundene Antwort und nennt kein kanalabhaengiges Werkzeug", () => {
   const briefing = captureDescriptions().get("place_call.briefing");
-  assert.match(briefing, /never script an answer/i, "untersagt die vorweggenommene Antwort");
-  assert.match(briefing, /get back to the other party/i, "untersagt die Vertroestung");
-  assert.match(briefing, /Leave the gap open/i, "verlangt die offene Luecke");
+  assert.match(briefing, /never script an answer/i, "untersagt die erfundene Antwort");
+  // Die offene Luecke und die drei Klassen pinnt GQ-B2-01 - hier steht nur, was diese
+  // Phase unabhaengig davon garantiert.
   // Das Feld ist IMMER registriert - es darf kein Werkzeug versprechen, das bei
   // ausgeschaltetem Kanal gar nicht existiert.
   assert.doesNotMatch(briefing, /await_call_event/, "nennt kein kanalabhaengiges Werkzeug");
@@ -122,9 +124,12 @@ test("GQ-B1-03: die Vorab-Rueckfrage steht an GENAU EINER Stelle des place_call-
   const treffer = placeCallPaths(captureDescriptions(CONSULT_CTX)).flatMap(([pfad, text]) =>
     (text.match(ASK_FIRST) || []).map(() => pfad),
   );
-  // answer_consult traegt denselben Wortlaut bewusst weiter - anderer Pfad, anderer
-  // Zeitpunkt (IM Gespraech, dort ist die Rueckfrage richtig). Die Praefix-Einschraenkung
-  // auf place_call* ist Absicht.
+  // GQ-B2 Fix-Runde 1 (Owner-Revision): die GQ-B1-Begruendung "anderer Pfad, anderer
+  // Zeitpunkt, dort ist die Rueckfrage richtig" ist ueberholt - der Owner ist waehrend
+  // des Anrufs ABWESEND, deshalb traegt answer_consult den Wortlaut NICHT mehr weiter
+  // (siehe GQ-B2-05 unten, pfad-uebergreifend gepinnt). Die Praefix-Einschraenkung auf
+  // place_call* bleibt trotzdem bestehen: sie ist der einzige Ort, an dem die
+  // Vorab-Rueckfrage VOR dem Anruf ueberhaupt zulaessig ist.
   assert.deepEqual(treffer, ["place_call.objective"], "Anzahl UND Ort sind gepinnt");
 });
 
@@ -161,4 +166,74 @@ test("GQ-B1-06: die Zahl im Loop-Text stammt aus der Zahl im Code", () => {
     captureDescriptions(CONSULT_CTX).get(PLACE_CALL_PREFIX),
   );
   assert.match(suffix, /at most once/i, "der Loop-Text spiegelt genau dieses Kontingent");
+});
+
+// GQ-B2 - Owner-Revision (2026-08-19): der Auftraggeber ist waehrend des Anrufs ABWESEND.
+// Die GQ-B1-Pauschale verbrannte die eine gedeckelte Rueckfrage auf Fragen, die auch der
+// auftraggebende Assistent nicht beantworten kann. Diese vier Faelle halten die Revision
+// fest - zwei am Briefing, zwei an den Server-Instructions.
+
+test("GQ-B2-01: die briefing-Beschreibung traegt alle drei Klassen der Wissensluecke", () => {
+  const briefing = captureDescriptions().get("place_call.briefing");
+  assert.match(briefing, /leave the gap open/i, "Klasse 1: die Luecke bleibt offen");
+  assert.match(briefing, /declare that in one line/i, "Klasse 1: sie wird deklariert");
+  assert.match(briefing, /only the principal know it/i, "Klasse 2: nur der Owner weiss es");
+  assert.match(briefing, /get back on it/i, "Klasse 2: die ehrliche Prozess-Auskunft");
+  assert.match(briefing, /look it up/i, "Klasse 3: oeffentlich pruefbar");
+  assert.match(briefing, /write nothing/i, "Klasse 3: kein Wort dazu ins Briefing");
+});
+
+test("GQ-B2-02: die briefing-Beschreibung traegt das GQ-B1-Pauschal-Verbot NICHT mehr", () => {
+  const briefing = captureDescriptions().get("place_call.briefing");
+  assert.doesNotMatch(
+    briefing,
+    /never write that the principal will get back/i,
+    "die Pauschale ist owner-revidiert",
+  );
+  assert.doesNotMatch(briefing, /pre-empt/i, "auch ihre Begruendung ist weg");
+});
+
+test("GQ-B2-03: die Server-Instructions nennen die eigenen Quellen zuerst und den Unbekannt-Ausgang", () => {
+  assert.match(
+    consultInstructions,
+    /answer from your own tools and context first/i,
+    "der eigene Weg steht vor jeder Nutzer-Rueckfrage",
+  );
+  assert.match(
+    consultInstructions,
+    /say with answer_consult that you do not know/i,
+    "der Unbekannt-Ausgang ist ausdruecklich",
+  );
+  assert.match(consultInstructions, /instead of waiting/i, "Schweigen ist keine Antwort");
+});
+
+test("GQ-B2-04: die Server-Instructions kennen keine unbedingte Vorab-Rueckfrage mehr", () => {
+  assert.doesNotMatch(
+    consultInstructions,
+    /ask the user first/i,
+    "der Owner ist im Normalfall abwesend",
+  );
+  assert.match(
+    consultInstructions,
+    /only ask the user when they are actually present/i,
+    "die Nutzer-Rueckfrage ist an Anwesenheit gebunden",
+  );
+});
+
+test("GQ-B2-05: answer_consult traegt keine unbedingte Vorab-Rueckfrage mehr (pfad-uebergreifend)", () => {
+  // Naeherer Entscheidungspunkt als die Server-Instructions (call-quality-chain-Lehre:
+  // enge Anweisungen an der Tool-Beschreibung wirken dort, wo breite Regeln kippen).
+  // Ein widerspruechlicher Satz hier wuerde GQ-B2-03/04 unterlaufen, obwohl beide gruen
+  // sind - deshalb pinnt dieser Fall answer_consult direkt statt nur consultInstructions.
+  const answerConsult = captureDescriptions(CONSULT_CTX).get("answer_consult");
+  assert.doesNotMatch(
+    answerConsult,
+    /ask the user first/i,
+    "der Owner ist waehrend des Anrufs abwesend, wie in MCP_CONSULT_INSTRUCTIONS",
+  );
+  assert.match(
+    answerConsult,
+    /do not know, say so honestly/i,
+    "der Unbekannt-Ausgang ist ausdruecklich, wie in MCP_CONSULT_INSTRUCTIONS",
+  );
 });
