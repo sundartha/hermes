@@ -8,7 +8,7 @@
   "type": "tool",
   "tool_call_parameters": {
     "referenced_tool": {
-      "id": "<AUSFUELLEN: look_up tool_id from the response of POST /v1/convai/tools/create>",
+      "id": "tool_6601m0bpfeqme9ssbpw9z8qhreyy",
       "type": "webhook"
     },
     "verify_absence": false,

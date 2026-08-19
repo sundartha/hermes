@@ -10,8 +10,8 @@
   "type": "tool",
   "tool_call_parameters": {
     "referenced_tool": {
-      "id": "<AUSFUELLEN: ElevenLabs-Tool-ID von look_up - existiert erst, wenn das Recherche-Werkzeug im Agenten angelegt ist>",
-      "type": "<AUSFUELLEN: system | webhook | client | workflow | api_integration_webhook | mcp | code - haengt von der Implementierung von look_up ab, noch nicht festgelegt>"
+      "id": "tool_6601m0bpfeqme9ssbpw9z8qhreyy",
+      "type": "webhook"
     },
     "verify_absence": false,
     "parameters": [],
