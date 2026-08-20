@@ -397,6 +397,16 @@ services:
       # zusaetzliches SSE-Fragment. Braucht TELNYX_SHIM_TOKEN_STREAMING=true, um zu wirken.
       - key: THINKING_SIGNAL_ENABLED
         value: "false"
+      # ---- Anruf an die eigene Nummer (OC-P1) ---- Default AUS / Liste LEER
+      # (fail-closed): Offenlegung ueberall, Bestandsverhalten. BEIDE mit sync: false
+      # (Muster ELEVENLABS_AGENT_ID), NICHT mit value: - ein im Blueprint gepinnter Wert
+      # wird von einem Blueprint-Sync ueber das im Dashboard gedrehte true zurueck-
+      # geschrieben, und Scharfstellen wie Rueckzug laufen beide ueber das Dashboard.
+      # Leere Liste heisst NIEMAND, nie "alle".
+      - key: OWNER_SELF_CALL_ENABLED
+        sync: false
+      - key: OWNER_SELF_CALL_TENANT_IDS
+        sync: false
       # Plattform-BEOBACHTUNG, kein Gate: seit KS-P9/E10 sperrt die Plattform-Achse nichts
       # mehr - dieser Wert ist die Bezugsgroesse von PLATFORM_SPEND_WARN_PERCENT (und der
       # Pro-Tenant-Fallback bei DEFAULT_TENANT_BUDGET_CENTS=0). Die sperrende Kosten-Achse

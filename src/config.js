@@ -1608,6 +1608,29 @@ const rawConfig = {
   toolFollowUpEnabled: boolEnv("TOOL_FOLLOW_UP_ENABLED", process.env.TOOL_FOLLOW_UP_ENABLED, {
     fallback: false,
   }),
+  // OC-P1 (PLAN-OWNER-CALL): Scharfschalter der Offenlegungs-Ausnahme fuer Anrufe an die
+  // EIGENE hinterlegte Nummer des anrufenden Tenants. DEFAULT AUS (fail-closed): aus ->
+  // calleeIsOwner ist fuer JEDEN Anruf false -> Offenlegung ueberall, exaktes
+  // Bestandsverhalten. Er ist zugleich der Notaus: ein Dashboard-Feld, kein Deploy.
+  // Er schaltet NIE die Offenlegung fuer Dritte ab - er ist nur EINE von vier
+  // Konjunktionen (s. src/callee-is-owner.js). Wirkt erst ab OC-P2; in OC-P1 liest das
+  // Ergebnis niemand. Kein Footgun-Eintrag: ein fataler Boot-Refusal machte genau die
+  // Scharfstellung unmoeglich, fuer die der Schalter existiert.
+  ownerSelfCallEnabled: boolEnv(
+    "OWNER_SELF_CALL_ENABLED",
+    process.env.OWNER_SELF_CALL_ENABLED,
+    { fallback: false },
+  ),
+  // OC-P1: WELCHE Tenants die Ausnahme ueberhaupt ausloesen duerfen. LEER = NIEMAND, nie
+  // JEDER (Lehre streaming-armierung-allowlist). Hier wird EINMAL gesplittet/getrimmt/von
+  // leeren Eintraegen befreit (csvEnv), damit das Praedikat strikt vergleichen kann und
+  // nirgends ein zweites Trim-Zauberstueck entsteht. Immer ein Array of Strings, nie
+  // undefined. Warum die Liste kein Beiwerk ist: POST /api/self-service/private-number
+  // haengt allein hinter webAuthMw - jeder eingeloggte Tenant darf jede format-/land-
+  // gueltige Nummer eintragen. Ohne die Liste waere die einzige Absicherung ein Mensch,
+  // der sich an einen Env-Flip erinnert. Vor dem Launch gehoert hier ausschliesslich ein
+  // Account hinein, der uns gehoert.
+  ownerSelfCallTenantIds: csvEnv(process.env.OWNER_SELF_CALL_TENANT_IDS),
   // Rate-Limit pro IP und Minute fuer alle Routen ausser /voice (Provider-Webhooks;
   // localhost-Socket ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min)
   // plus Interaktionen.
@@ -1914,7 +1937,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
-  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled"],
+  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],

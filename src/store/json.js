@@ -247,6 +247,13 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   result: null,
   // AL-P13: Consult-Kette (json<->pg-Parity, rowToCall liefert null).
   consults: null,
+  // OC-P1: Owner-Ziel-Markierung (json<->pg-Parity - die pg-Spalte ist NOT NULL DEFAULT
+  // FALSE, rowToCall liefert damit fuer jede Bestandszeile strikt false). Ein Bestands-
+  // store.json ohne das Feld hydriert deshalb ebenfalls auf false, nie auf undefined -
+  // sonst haetten die beiden Backends fuer denselben Altbestand verschiedene Antworten auf
+  // eine Frage, an der ab OC-P2 ein Pflichtsatz haengt. false ist fuer JEDEN Bestandsanruf
+  // die richtige Antwort (NICHT-Owner -> Offenlegung), deshalb kein Backfill.
+  calleeIsOwner: false,
 });
 
 function migrateCallFields(calls) {

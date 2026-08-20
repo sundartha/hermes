@@ -153,6 +153,13 @@ export const BASE_ENV = {
   // AL-P11: Zitat-Erhebung in Spawn-Tests neutral AUS (= Bestandsverhalten). Ohne diese
   // Zeile leakt eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift).
   EVIDENCE_RETENTION_DAYS: "0",
+  // OC-P1: Offenlegungs-Ausnahme in Spawn-Tests neutral AUS und Allowlist LEER
+  // (= Bestandsverhalten, Offenlegung ueberall). Ohne diese zwei Zeilen leckt eine lokale
+  // .env via dotenv in JEDEN Spawn-Test (Lehre test-base-env-drift) - und zwar auf die
+  // eine Achse, an der ab OC-P2 ein gesetzlicher Pflichtsatz haengt.
+  // test/oc-p1-owner-call-http.test.js setzt beide explizit.
+  OWNER_SELF_CALL_ENABLED: "false",
+  OWNER_SELF_CALL_TENANT_IDS: "",
   VOICE_ENGINE: "budget",
   OPENAI_API_KEY: "",
   REALTIME_MODEL: "gpt-realtime",

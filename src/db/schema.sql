@@ -268,6 +268,13 @@ CREATE TABLE IF NOT EXISTS call (
   -- (Ziel == eigene verifizierte Nummer des Tenants). NOT NULL DEFAULT FALSE: es gibt
   -- keinen dritten Zustand, und Bestandszeilen sind per Definition nicht diagnostisch.
   diagnostic BOOLEAN NOT NULL DEFAULT FALSE,
+  -- OC-P1 (PLAN-OWNER-CALL): war das Ziel dieses Outbound die eigene hinterlegte Nummer
+  -- des ANRUFENDEN Tenants (bei eingeschaltetem OWNER_SELF_CALL_ENABLED und gepinntem
+  -- Tenant)? Ab OC-P2 haengt daran, ob der Offenlegungssatz gesprochen wird. NOT NULL
+  -- DEFAULT FALSE ist die fail-closed Form: es gibt keinen dritten Zustand, und jede
+  -- Bestandszeile ist per Definition NICHT-Owner - also Offenlegung. Auf der Zeile steht
+  -- NUR dieses Boolean, NIE die Nummer.
+  callee_is_owner BOOLEAN NOT NULL DEFAULT FALSE,
   -- LCT P2 (Ist-Kosten-Achse): estimated_cost_cents ist der TATSAECHLICH gebuchte
   -- Schaetzbetrag (GANZZAHL Cents, reconcileVoiceBudget), NIE spaeter aus dem
   -- Tarif rekonstruiert. actual_cost_micro_cents ist BIGINT (nicht NUMERIC/Float, G26) in
@@ -375,6 +382,10 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS assistant_id TEXT;
 -- P2b: Diagnose-Markierung auf einer schon existierenden call-Tabelle nachziehen.
 -- Idempotent; frische DB = No-op. DEFAULT FALSE fuellt Bestandszeilen ohne Backfill.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS diagnostic BOOLEAN NOT NULL DEFAULT FALSE;
+-- OC-P1: Owner-Ziel-Markierung auf einer schon existierenden call-Tabelle nachziehen.
+-- Idempotent; frische DB = No-op. DEFAULT FALSE fuellt Bestandszeilen ohne Backfill -
+-- der Default IST die richtige Antwort fuer alles Alte (NICHT-Owner -> Offenlegung).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_is_owner BOOLEAN NOT NULL DEFAULT FALSE;
 -- P6: Mandats-Spalte auf Bestands-call-Tabellen nachziehen (Muster context).
 -- Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS mandate JSONB;
