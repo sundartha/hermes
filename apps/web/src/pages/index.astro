@@ -465,20 +465,6 @@ const legalDocs = [
       <p class="sheet__note" data-i18n="devFootnote">Streamable HTTP, OAuth beim ersten Verbinden. Läuft mit Claude, Codex und jedem MCP-Client.</p>
     </div>
 
-    <!-- Seitenfuss der gestapelten Handy-Ansicht (Owner-Feedback 2026-08-14: Handy scrollt jetzt normal, s. hermes.css). -->
-    <!-- Desktop: display:none -- dort uebernimmt das aufsteigende Fussband (.site-footer). -->
-    <div class="stack-foot">
-      <div class="menu-foot__links">
-        {legalDocs.map((entry) => (
-          <a class="menu-foot__link" href={entry.href} data-legal-open={entry.slug} data-i18n={entry.i18n}>{entry.label}</a>
-        ))}
-        <!-- § 312k BGB: gesetzlich vorgegebener Wortlaut, KEIN data-i18n (s. Fussband oben). -->
-        <a class="menu-foot__link" href="/kuendigen">Verträge kündigen</a>
-        <a class="menu-foot__link" href={`mailto:${CONTACT}`} data-i18n="contact">Kontakt</a>
-      </div>
-      <span class="menu-foot__copy" data-i18n="footerCopy">© Sundartha — Hermes, dein Telefonassistent</span>
-    </div>
-
     <!-- Rechts-Blatt. Die Texte stammen aus src/data/legal/ — derselben Quelle
          wie /datenschutz, /impressum und /agb. Die Seiten bleiben unter ihrer
          URL erreichbar (Pflicht), das Blatt ist der schnelle Weg von hier. -->
