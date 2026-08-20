@@ -29,6 +29,7 @@ import { isConsultEventId } from "../store/state-ops.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
+import { ownerSelfCallGranted } from "../callee-is-owner.js";
 // TEIL C (Owner-Auftrag 15.08.2026, cancel_call darf nicht luegen): der Deckelwert ist
 // KEINE Magic Number - er ist in elevenlabs/outbound.js besessen (Bewachung statt
 // Korrektur der Anbieter-Vorlage, s. dortiger Kommentar).
@@ -79,6 +80,49 @@ function elevenLabsHangUpActionNotWired(_endActiveCall, call) {
     `[cancel] ELEVENLABS_OUTBOUND_ENABLED ist an, aber elevenLabsHangUpAction ist nicht verdrahtet (deps fehlt, call=${call.id})`,
   );
   return null;
+}
+
+// P2b + OC-P1 (PLAN-OWNER-CALL): EINE Lesung der eigenen Nummer fuer BEIDE serverseitigen
+// Praedikate dieses Outbound-Calls - zwei store-Aufrufe waeren zwei Momentaufnahmen
+// desselben, aenderbaren Feldes (POST /api/self-service/private-number) und liessen
+// diagnostic und calleeIsOwner desselben Anrufs theoretisch auseinanderlaufen.
+//
+// AUF MODUL-EBENE statt inline in der Route: die Route (`makeCallRoutes`, der POST-
+// Handler darin) traegt bereits einen erhoehten Altlast-Pin (eslint-legacy-exceptions.json)
+// fuer Zeilenzahl/Komplexitaet - ihn fuer OC-P1 WEITER anzuheben braucht die Freigabe des
+// Eigentuemers (test/check-staged-suppressions.test.js, "Altlast-Ratsche"). Diese
+// Extraktion haelt den Aufrufer bei seiner heutigen Groesse; sie ist ausserdem der
+// sauberere Schnitt (G30: eine Aufgabe, ein Name).
+//
+//   diagnostic           - P2b: darf das Roh-Transkript die Summary ueberleben? (Ziel ==
+//                           eigene Nummer, Opt-out im Body moeglich, s.
+//                           diagnosticRetentionGranted).
+//   calleeIsOwnerOfThisCall - OC-P1: ruft dieser Tenant seine EIGENE hinterlegte Nummer an
+//                           (Schalter + Tenant-Allowlist + Ziel, s. ownerSelfCallGranted)?
+//                           Serverseitig gesetzt; das Ergebnis geht set-once an den
+//                           Anruf-Datensatz und wirkt in dieser Phase noch nirgends.
+//
+// ctx.to (NICHT die rohe `to`) und ctx.tenantId (der ANRUFENDE Tenant aus resolve_identity)
+// sind Pflicht - s. Kommentar an der Aufrufstelle. Bewusst KEIN neues Gate in der
+// outboundGates-Kette: beide Praedikate lehnen nie ab, wuerden von keinem Gate gelesen und
+// haetten die reihenfolge-gepinnte Safety-Kette nur verbreitert
+// (test/outbound-gates-order.test.js bleibt unangetastet).
+function resolveCallPrivacyFlags({ store, config, ctx }) {
+  const ownNumber = store.tenantPrivateNumber(ctx.tenantId);
+  const diagnostic = diagnosticRetentionGranted({
+    requested: ctx.b.diagnostic,
+    to: ctx.to,
+    ownNumber,
+    privacy: config.privacy,
+  });
+  const calleeIsOwnerOfThisCall = ownerSelfCallGranted({
+    to: ctx.to,
+    ownNumber,
+    tenantId: ctx.tenantId,
+    enabled: config.voice.ownerSelfCallEnabled,
+    allowedTenantIds: config.voice.ownerSelfCallTenantIds,
+  });
+  return { diagnostic, calleeIsOwnerOfThisCall };
 }
 
 // deps: siehe Modul-Doc. arm = { armMaxDurationTimer, armReserveReleaseTimer } aus der EINEN
@@ -182,19 +226,13 @@ export function makeCallRoutes({
     // normalize_target aufgeloeste Nummer - die lokale `to` bleibt roh und wird ab hier NICHT
     // mehr gelesen.
     const language = store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
-    // P2b (Diagnose-Retention): der Body-Wert ist keine Wahrheit - seit GQ-P11 ist er ein
-    // OPT-OUT (nur ein ausdrueckliches false/"false" verhindert die Aufbewahrung). Die
-    // Scope-Pruefung liegt hier, serverseitig, gegen ctx.to (das NORMALISIERTE Ziel nach
-    // dem normalize_target-Gate) und die eigene verifizierte Nummer des Tenants. Kein
-    // Treffer -> still false, kein Fehler (der Anruf laeuft normal, nur ohne Retention).
-    // Bewusst KEIN neues Gate in der outboundGates-Kette: das hier lehnt nie ab, wird
-    // von keinem Gate gelesen und haette die reihenfolge-gepinnte Safety-Kette nur
-    // verbreitert (test/outbound-gates-order.test.js bleibt unangetastet).
-    const diagnostic = diagnosticRetentionGranted({
-      requested: b.diagnostic,
-      to: ctx.to,
-      ownNumber: store.tenantPrivateNumber(ctx.tenantId),
-      privacy: config.privacy,
+    // P2b + OC-P1: beide serverseitigen Praedikate (diagnostic, calleeIsOwner) aus EINER
+    // Lesung der eigenen Nummer - volle Begruendung an resolveCallPrivacyFlags (Modul-Ebene,
+    // haelt diese ohnehin ueberlange Route nicht weiter wachsen, s. dortiger Kommentar).
+    const { diagnostic, calleeIsOwnerOfThisCall } = resolveCallPrivacyFlags({
+      store,
+      config,
+      ctx,
     });
 
     // P8 (PLAN-CONVERSATION-QUALITY-V2): Pre-Call-Briefing VOR dem Waehlen. Laeuft NUR,
@@ -266,6 +304,9 @@ export function makeCallRoutes({
       provider: ctx.outboundProvider,
       reserveCents: ctx.reserveCents, // OUT-05 (F2)
       diagnostic, // P2b: serverseitig aufgeloest, nie roh aus dem Body
+      // OC-P1: ebenfalls rein serverseitig - der Aufrufer nennt nur `to`, alles andere
+      // (eigene Nummer, Schalter, Allowlist) entscheidet der Server. Kein Client-Flag.
+      calleeIsOwner: calleeIsOwnerOfThisCall,
     });
     audit(
       "place_call",

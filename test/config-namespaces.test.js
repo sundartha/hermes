@@ -71,7 +71,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // EL-ANRUFSTART (2026-08-14): elevenLabsOutbound ergaenzt - EIN nested Objekt fuer den
   // ElevenLabs-Anrufstart (Flag, Agent-/Nummern-Kennung, Abhol-Takt, Schluessel, Basis-URL),
   // kein neuer primitiver Key -> 15.
-  voice: 15,
+  // OC-P1: ownerSelfCallEnabled + ownerSelfCallTenantIds ergaenzt (Schalter + Tenant-
+  // Allowlist der Offenlegungs-Ausnahme, PLAN-OWNER-CALL) -> 17.
+  voice: 17,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
@@ -107,9 +109,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // 312k-Phase 5: neuer mail-Namespace (5 Keys: smtpHost/smtpPort/smtpUser/smtpPassword/
 // mailFrom) -> 154.
 // HTTP-Fortsetzung: brevoApiKey ergaenzt (mail-Namespace 5 -> 6 Keys) -> 155.
-const EXPECTED_TOTAL_KEYS = 155;
+// OC-P1: ownerSelfCallEnabled + ownerSelfCallTenantIds ergaenzt -> 157.
+const EXPECTED_TOTAL_KEYS = 157;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (155 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (157 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -224,11 +227,13 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // (String/Zahl/String/String/String, kein Array/nested Objekt) -> 144.
   // HTTP-Fortsetzung: brevoApiKey ist ebenfalls primitiv (String, kein Array/nested
   // Objekt) -> 145 (Merge 2026-08-19 beider Ketten, s. EXPECTED_TOTAL_KEYS).
-  const EXPECTED_PRIMITIVE_LEAVES = 145;
+  // OC-P1: ownerSelfCallEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 146.
+  // ownerSelfCallTenantIds ist das FUENFTE Array (kein primitives Blatt, s.u.).
+  const EXPECTED_PRIMITIVE_LEAVES = 146;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
-    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 4 Arrays - 6 nested Objekte) geprueft`,
+    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 5 Arrays - 6 nested Objekte) geprueft`,
   );
 });
 

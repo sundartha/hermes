@@ -193,6 +193,7 @@ export function createCall(
     provider,
     reserveCents,
     diagnostic,
+    calleeIsOwner,
   },
 ) {
   const call = {
@@ -328,6 +329,15 @@ export function createCall(
     // Request-Body. Default false = Bestandsverhalten (Purge nach Summary); undefined/
     // fehlend -> false, byte-identisch zur pg-Hydrierung (rowToCall).
     diagnostic: diagnostic === true,
+    // OC-P1 (PLAN-OWNER-CALL): war das Ziel dieses Outbound die eigene hinterlegte
+    // Nummer des ANRUFENDEN Tenants - bei eingeschaltetem Schalter und gepinntem Tenant?
+    // Wird AUSSCHLIESSLICH serverseitig gesetzt (src/callee-is-owner.js, ausgewertet in
+    // routes/api-calls.js) - nie roh aus dem Request-Body. SET-ONCE: danach schreibt es
+    // niemand mehr, damit eine Nummern-Aenderung zwischen Auftragsannahme und Klingeln
+    // die Entscheidung nicht mehr kippen kann. `=== true` statt Rohwert: Default false ist
+    // NICHT-Owner ist Offenlegung (fail-closed), byte-identisch zur pg-Hydrierung
+    // (rowToCall). Auf dem Record steht NUR dieses Boolean, NIE die Nummer.
+    calleeIsOwner: calleeIsOwner === true,
     // OUT-05 (F2): Worst-Case-Reserve dieses Calls (GANZZAHL Cents) + Idempotenz-Schloss der
     // Freigabe. reserveCents/reserveReleased sind reine Referenz-/Idempotenz-Daten fuer
     // releaseOutboundReserve + den Backstop-Timer; der Reserve-LEDGER (s.reservations) ist
