@@ -1621,3 +1621,21 @@ kann Presets nicht schreiben" (2026-08-18) ist damit ueberholt: der Schreibweg
 funktioniert seit der Vorlagen-Erklaerung vom 2026-08-19.
 GQ-E1, GQ-B1 und GQ-B2 sind damit LIVE. Naechster Schritt: Wirkungsbeleg-Testanruf
 (Kalender-Luecke + Nur-Owner-Luecke in einem Auftrag).
+
+### Wirkungsbeleg 2026-08-20 — Anruf `call_mt18soytibps` (erster Live-Test nach Cutover)
+
+- **GQ-E1 BESTANDEN:** Eroeffnung "…ob du Samstag um zehn Uhr Zeit für Tennis hast. Wie
+  sieht es damit aus?" — kein Doppelpunkt, kein Sie/Du-Bruch (pronomenfreie Frage), EIN
+  kohaerenter Fluss.
+- **Consult-Kanal BESTANDEN (erstmals `consults` NICHT leer):** Briefing deklarierte die
+  Kalender-Faehigkeit, Anrufer schlug So 11 statt Sa 10 vor, Agent kuendigte an ("Einen
+  Moment, ich pruefe kurz den Kalender"), c0 gestellt 08:12:50.9, beantwortet 08:12:58.7
+  (~7,8 s), Zusage im Mandatsrahmen. Genau EIN Consult.
+- **Drei-Klassen-Vertagung (Ort) NICHT GETESTET:** der Agent schloss direkt nach der
+  Zusage, die Ort-Frage kam nicht mehr. Bleibt offen fuer den naechsten Anruf.
+- **NEUER BEFUND (offen, nicht diagnostiziert):** Transkriptsegment 3 beginnt mit einer
+  WIEDERHOLUNG des halben Offenlegungssatzes ("Das Gespräch wird für meinen Auftraggeber
+  zusammengefasst.") mitten im Anruf, vor der Consult-Ankuendigung. Wurzel unklar —
+  erst Runtime-Belege sammeln (weitere Anrufe/EL-Konversationslog), nicht raten.
+- Randnotiz: `objective_achieved=false` obwohl der Termin (verschoben per Mandat)
+  zustande kam — das Label misst das URSPRUNGS-Ziel; Bestandsverhalten.
