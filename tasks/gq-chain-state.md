@@ -1606,3 +1606,18 @@ Offen (spaetere Phase, braucht Testanrufe): strukturelles consult_scope-Feld + e
 Prompt-Abschnitt beim Agenten. Wirkungsbeleg weiterhin offen (naechster Testanruf mit
 bewusst offener Kalender-Luecke UND einer Nur-Owner-Luecke: feuert genau EIN Consult,
 und vertroestet der Agent die andere Luecke sauber?).
+
+### LIVE-SCHALTUNG 2026-08-20 — VOLLZOGEN (Owner-Freigabe im Chat)
+
+In der bindenden Reihenfolge: (1) `elevenlabs:push --felder=first_message,language_presets_offenlegung
+--ausfuehren` — 2 Felder geschrieben und zurueckgelesen (Achtung fuers naechste Mal: die
+DE/FR-Preset-Texte haengen am Besitz-Feld `language_presets_offenlegung`, nicht an
+`language_presets`); (2) Upstream-Push b036b00..aecaefa + Render-Deploy
+`dep-da3appabkg8c7384s250` (Service srv-d8m0fhflk1mc73bno570, autoDeploy=off, manuell
+getriggert) — Status live auf `aecaefa`, `/healthz` 200; (3) `elevenlabs:drift` — OK,
+38/38 Felder verglichen, einzige Abweichungen die zwei bewusst ausgenommenen
+(retention_days/record_voice, Owner-Entscheidung 2026-08-15). Der Memory-Befund "Push
+kann Presets nicht schreiben" (2026-08-18) ist damit ueberholt: der Schreibweg
+funktioniert seit der Vorlagen-Erklaerung vom 2026-08-19.
+GQ-E1, GQ-B1 und GQ-B2 sind damit LIVE. Naechster Schritt: Wirkungsbeleg-Testanruf
+(Kalender-Luecke + Nur-Owner-Luecke in einem Auftrag).
