@@ -26,7 +26,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { OVERRIDE_ALLOWED_LEAF_PATHS, startOutboundCall } from "../src/elevenlabs/convai.js";
+import {
+  OVERRIDE_ALLOWED_LEAF_PATHS,
+  OVERRIDE_OWNER_ONLY_LEAF_PATHS,
+  startOutboundCall,
+} from "../src/elevenlabs/convai.js";
 import { wertAnPfad } from "../scripts/lib/elevenlabs-besitz.mjs";
 
 const ACCOUNT = Object.freeze({ apiKey: "el-test-geheim-xyz", apiBase: "http://127.0.0.1:1" });
@@ -196,11 +200,24 @@ test("EL-OVERRIDE TEIL 3: die Code-Whitelist und die Besitz-Karte der Vorlage ne
   assert.ok(karte.gefunden, `${OVERRIDE_KARTE_PFAD} fehlt in der Vorlage - die Besitz-Karte ist nicht gebaut`);
 
   const kartePfade = truePfade(karte.wert).sort();
-  const codePfade = [...OVERRIDE_ALLOWED_LEAF_PATHS].sort();
+  // OC-P2: die Karte des Anbieters kennt nur EINE Menge erlaubter Pfade - sie kann nicht
+  // nach Anruf unterscheiden. Der Code fuehrt seit OC-P2 ZWEI Mengen und ist damit
+  // strenger: die Owner-Menge greift nur bei call.calleeIsOwner === true. Verglichen wird
+  // deshalb gegen die VEREINIGUNG, und die Aufteilung selbst wird darunter gepinnt.
+  const codePfade = [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_OWNER_ONLY_LEAF_PATHS].sort();
 
   assert.deepEqual(
     kartePfade,
     codePfade,
-    `die Vorlage erlaubt ${JSON.stringify(kartePfade)}, der Code (src/elevenlabs/convai.js#OVERRIDE_ALLOWED_LEAF_PATHS) erlaubt ${JSON.stringify(codePfade)} - beide muessen identisch sein, sonst driften Waechter und Besitz-Karte auseinander`,
+    `die Vorlage erlaubt ${JSON.stringify(kartePfade)}, der Code (src/elevenlabs/convai.js#OVERRIDE_ALLOWED_LEAF_PATHS + OVERRIDE_OWNER_ONLY_LEAF_PATHS) erlaubt ${JSON.stringify(codePfade)} - beide muessen identisch sein, sonst driften Waechter und Besitz-Karte auseinander`,
+  );
+
+  assert.ok(
+    OVERRIDE_OWNER_ONLY_LEAF_PATHS.includes("agent.first_message"),
+    "agent.first_message gehoert in die OWNER-Menge - sonst waere die Owner-Eroeffnung gar nicht sendbar",
+  );
+  assert.ok(
+    !OVERRIDE_ALLOWED_LEAF_PATHS.includes("agent.first_message"),
+    "agent.first_message darf NIE in der Basis-Menge stehen - sonst koennte ein Fremd-Anruf die Offenlegung uebersteuern",
   );
 });

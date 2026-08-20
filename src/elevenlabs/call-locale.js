@@ -105,10 +105,15 @@ export function providerOpeningFor(language) {
  *                               ALLERERSTES spricht - beginnend mit dem Offenlegungssatz
  *                               (Absolute Regel 2, Artikel 50 EU AI Act), s.
  *                               providerOpening oben.
- *                               Er ist Agenten-Konfiguration, kein Anruf-Parameter:
- *                               agent.first_message steht NICHT auf der weissen Liste
- *                               (convai.js) und darf es nicht - der Traeger je Sprache ist
- *                               das language_preset am Agenten. Diese Naht ist die EINE
+ *                               Er ist Agenten-Konfiguration, kein Anruf-Parameter: der
+ *                               Traeger je Sprache ist das language_preset am Agenten.
+ *                               SEIT OC-P2 mit GENAU EINER Ausnahme:
+ *                               agent.first_message steht auf der OWNER-Menge
+ *                               (convai.js#OVERRIDE_OWNER_ONLY_LEAF_PATHS) und wird
+ *                               ausschliesslich bei call.calleeIsOwner === true gesendet
+ *                               (elevenlabs/outbound.js#ownerFirstMessage). Fuer jeden
+ *                               anderen Anruf bleibt es verboten und der Wortlaut bleibt
+ *                               statischer Anbieter-Text. Diese Naht ist die EINE
  *                               Quelle des Wortlauts, gegen die sich das Preset messen
  *                               laesst (test/elevenlabs-sprachwahl.test.js), damit an ihm
  *                               keine zweite, selbst uebersetzte Fassung entsteht.

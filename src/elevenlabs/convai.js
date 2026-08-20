@@ -87,6 +87,18 @@ function assertConvaiOk(res, op) {
 // Kopien derselben zwei Pfade koennten sonst auseinanderlaufen, ohne dass irgendein Test
 // es bemerkt (G5).
 export const OVERRIDE_ALLOWED_LEAF_PATHS = Object.freeze(["agent.language", "tts.voice_id"]);
+// OC-P2 (PLAN-OWNER-CALL): die ZWEITE, ausdruecklich benannte Menge - erlaubt NUR, wenn
+// das Ziel dieses Anrufs die eigene hinterlegte Nummer des anrufenden Tenants ist
+// (call.calleeIsOwner, src/callee-is-owner.js). Fuer jeden anderen Anruf bleibt
+// agent.first_message verboten, und der Offenlegungssatz bleibt statischer Anbieter-Text:
+// selbst ein Totalausfall unseres Codes kann ihn Dritten gegenueber nicht entfernen.
+//
+// WIR SIND HIER STRENGER ALS DER ANBIETER: der ignoriert eine nicht freigeschaltete
+// Uebersteuerung STILL (kein Fehler, keine Warnung, s. Vorlage
+// _besitz.felder[conversation_config_override_erlaubnisse]). Wir brechen den GESAMTEN
+// Anrufstart ab. Ein stiller Filter waere derselbe Fehler wie einst bei
+// context.open_questions.
+export const OVERRIDE_OWNER_ONLY_LEAF_PATHS = Object.freeze(["agent.first_message"]);
 const OVERRIDE_PATH_SEPARATOR = ".";
 
 function isPlainObject(wert) {
@@ -108,15 +120,27 @@ function overrideLeafPaths(wert, prefix) {
 // EINSCHLIESSLICH eines Override-Werts, der gar kein Objekt ist (eine kaputte Form ist
 // selbst ein Verstoss, kein stilles "nichts zu pruefen"). callId dient NUR dem Log
 // (Regel 4/5: keine Rufnummer, kein Schluessel, kein Anfragekoerper).
-function assertOverrideWhitelisted(body, callId) {
+//
+// calleeIsOwner ist KEIN Schalter des Aufrufers, sondern eine TATSACHE ueber diesen Anruf
+// (serverseitig entschieden, am Datensatz persistiert). Deshalb ist es hier bewusst ein
+// Parameter und keine zweite Funktion: zwei Einstiege in denselben Netzzugriff waeren zwei
+// Wege, auf denen der Waechter umgangen werden kann (die uebliche Warnung vor
+// Flag-Argumenten, F3/G15, zielt auf Verhaltens-Selektoren des Aufrufers - hier waere die
+// Aufspaltung der gefaehrlichere Weg). FAIL-CLOSED per Default: ein kuenftiger Aufrufer,
+// der den Wert vergisst, bekommt die strenge Menge.
+function assertOverrideWhitelisted(body, callId, calleeIsOwner = false) {
   const override = body?.conversation_initiation_client_data?.conversation_config_override;
   if (override === undefined || override === null) return;
+  const erlaubt =
+    calleeIsOwner === true
+      ? [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_OWNER_ONLY_LEAF_PATHS]
+      : OVERRIDE_ALLOWED_LEAF_PATHS;
   const verboten = isPlainObject(override)
-    ? overrideLeafPaths(override, []).filter((pfad) => !OVERRIDE_ALLOWED_LEAF_PATHS.includes(pfad))
+    ? overrideLeafPaths(override, []).filter((pfad) => !erlaubt.includes(pfad))
     : ["(conversation_config_override ist kein Objekt)"];
   if (verboten.length === 0) return;
   console.error(
-    `[el-outbound] conversation_config_override abgelehnt (call=${callId}): verbotene(r) Pfad(e) ${verboten.join(", ")} - erlaubt sind ausschliesslich ${OVERRIDE_ALLOWED_LEAF_PATHS.join(", ")}`,
+    `[el-outbound] conversation_config_override abgelehnt (call=${callId}): verbotene(r) Pfad(e) ${verboten.join(", ")} - erlaubt sind ausschliesslich ${erlaubt.join(", ")}`,
   );
   throw new Error(
     `ElevenLabs-Anrufstart abgebrochen: conversation_config_override enthaelt nicht erlaubte(n) Pfad(e) (${verboten.join(", ")})`,
@@ -178,11 +202,12 @@ export function startResultOf(antwort) {
  * conversation_config_override etwas ausserhalb der Whitelist setzt (s.
  * assertOverrideWhitelisted oben) - callId dient nur diesem Log, kein Fachwert.
  * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object,
- *   callId?: string}} args
+ *   callId?: string, calleeIsOwner?: boolean}} args calleeIsOwner: OC-P2 - nur bei true
+ *   ist zusaetzlich OVERRIDE_OWNER_ONLY_LEAF_PATHS erlaubt; Default false (fail-closed).
  * @returns {Promise<{conversationId: string|null}>}
  */
-export async function startOutboundCall({ fetchImpl, account, body, callId }) {
-  assertOverrideWhitelisted(body, callId);
+export async function startOutboundCall({ fetchImpl, account, body, callId, calleeIsOwner = false }) {
+  assertOverrideWhitelisted(body, callId, calleeIsOwner);
   const antwort = await convaiFetch({
     fetchImpl,
     account,

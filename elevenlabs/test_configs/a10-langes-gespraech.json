@@ -24,6 +24,7 @@
     "mandate": "Book an appointment from Monday through Wednesday, between 1 PM and 5 PM, at a price of no more than $60. The scope is limited to inspecting the exhaust and locating the rattle - no repair work beyond that inspection is covered by this mandate.",
     "owner_timezone": "America/New_York",
     "today": "Monday, 11 May 2026",
+    "callee_relation": "",
     "callee_timezone": "\nYou do not know which time zone the person you are calling is in, and you must not guess one. Never name an absolute time while the zone is unknown - no specific time, no clock time. Stay vague instead (\"tomorrow morning\") and let them name the exact time; then repeat it back together with the time zone they used."
   },
   "chat_history": [],

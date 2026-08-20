@@ -46,7 +46,10 @@ const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 // Auftragsannahme validierte Grund-Zeile, die {{objective}} im GESPROCHENEN Teil
 // (first_message/voicemail_message) ersetzt, waehrend {{objective}} im Prompt bleibt -
 // und {{lookup_available}} als zwoelfter (Torzustand der Recherche, Thema B).
-const EXPECTED_VARIABLE_COUNT = 12;
+// Dreizehn seit OC-P2: {{callee_relation}} kam als dreizehnter Name dazu - die
+// Prompt-Sektion fuer den Fall, dass das Ziel die eigene hinterlegte Nummer des anrufenden
+// Tenants ist; sie geht fuer JEDES andere Ziel als leerer String hinaus.
+const EXPECTED_VARIABLE_COUNT = 13;
 
 // ---- Seite A: {{name}} aus dem WIRKLICHEN Vorlagentext --------------------------------
 const PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;

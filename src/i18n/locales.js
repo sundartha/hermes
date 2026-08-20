@@ -215,6 +215,34 @@ export const LOCALES = Object.freeze({
     // (s. den Kommentar an DISCLOSURE_OWNER_FALLBACK_* oben). Kein zweiter Wortlaut:
     // beide Stellen lesen dieselbe Konstante.
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_DE,
+    // OC-P2 (PLAN-OWNER-CALL 1.4): die Eroeffnung fuer den EINEN Fall, in dem der lange
+    // Offenlegungssatz entfaellt - das Ziel ist die eigene hinterlegte Nummer des
+    // anrufenden Tenants (call.calleeIsOwner, src/callee-is-owner.js). GESPROCHENER
+    // Satz, deshalb echte Umlaute, wo welche vorkommen (hier keine - das ist kein
+    // Versehen, s. test/callee-is-owner-elevenlabs.test.js).
+    //
+    // DAS WORT "KI" IST TRAGEND UND DARF NIE WEGFALLEN. Das Praedikat beweist eine
+    // Aussage ueber die NUMMER - dass das Ziel die hinterlegte Nummer des Tenants ist.
+    // Es beweist NICHT, dass die PERSON am Apparat der Auftraggeber ist:
+    // normalizePrivateNumber kennt keine Mobilfunk-Beschraenkung und keinen
+    // Geraetebezug (store/state-ops.js:2127-2136), ein Festnetz- oder
+    // Gemeinschaftsanschluss ist also zulaessig. Hebt dort jemand anderes ab, muss
+    // schon der erste Satz sagen, dass eine Maschine spricht - "Assistent" allein
+    // leistet das nicht (Artikel 50 EU AI Act). Wer die Begruessung kuerzt, kuerzt
+    // diese Zusage.
+    //
+    // DIREKTE ANREDE, Du-Form, Vorname: der Auftraggeber spricht mit seinem eigenen
+    // Assistenten. KEINE Selbst-Vorstellung als "Assistent von <Name>" - das waere die
+    // dritte Person ueber den Zuhoerer. KEIN Hinweis auf eine Zusammenfassung "fuer
+    // meinen Auftraggeber" - der Auftraggeber IST der Zuhoerer. KURZ: die Eroeffnung
+    // ist am Agenten gegen Unterbrechung gesperrt
+    // (disable_first_message_interruptions), jedes ueberfluessige Wort ist eine
+    // Sekunde, in der der Owner nicht dazwischenreden kann.
+    //
+    // KEIN NAMENS-RUECKFALL, mit Absicht: fehlt der Vorname, wird gar keine
+    // Uebersteuerung gebaut (elevenlabs/outbound.js#ownerFirstMessage) und der
+    // statische Offenlegungs-Rahmen spricht - fail-closed.
+    ownerOpening: (firstName) => `Hallo ${firstName}, hier ist dein KI-Assistent.`,
     // Zusammenfassungs-Prompt-Sprach-Teil (claude.js summarizeCall). Die JSON-Keys
     // bleiben englisch (sie werden geparst); nur der menschliche Text ist sprachabhaengig.
     summarySystem: (owner) =>
@@ -360,6 +388,8 @@ export const LOCALES = Object.freeze({
     ),
     // s. DE (derselbe Ausdruck wie in disclosure(), zusaetzlich als Wert).
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_FR,
+    // s. DE (ownerOpening) - "IA" traegt hier dieselbe Last wie "KI" dort.
+    ownerOpening: (firstName) => `Bonjour ${firstName}, c'est ton assistant IA.`,
     summarySystem: (owner) =>
       `Tu résumes un appel téléphonique de l'assistant IA de ${owner}. Réponds UNIQUEMENT avec du JSON valide : {"summary": "2-3 phrases en français", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 phrase", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. Mentionne dans le résumé des résultats concrets (date/heure convenue, prix, nom de la personne de contact), si le transcript les contient, plutôt que des formulations générales. objective_achieved évalue EXCLUSIVEMENT la mission initiale (pour les appels entrants : si la demande de l'appelant a été résolue). Les sujets annexes ouverts par l'assistant ou l'interlocuteur lui-même (par ex. une prise de rendez-vous proposée ou interrompue) sont SANS PERTINENCE pour cette évaluation. true = la mission a été suffisamment traitée, même si l'appel s'est terminé au milieu d'une étape de suivi ; false = la mission n'a clairement pas été atteinte ; "unclear" = réellement impossible à juger à partir de la mission. N'ajoute des action items que si ${owner} doit réellement faire quelque chose (max. 3). Les rendez-vous déjà fermement réservés ne sont PAS un action item. Fiche de résultat : outcome est UNE phrase avec le résultat concret (date/heure convenue, prix, nom) ou - si rien n'a été obtenu - la raison. commitments sont les engagements pris par l'assistant au nom de ${owner} ; counterparty_commitments sont les engagements de l'interlocuteur. open_points sont les questions restées ouvertes. next_step est LA prochaine étape pour ${owner}, sinon null. facts sont des informations durablement utiles sur l'interlocuteur (horaires, contact, prix). Chaque liste contient au maximum 3 éléments, chaque élément au maximum 200 caractères. N'invente rien : si une information manque dans le transcript, la liste reste vide ou le champ reste null.`,
     // AL-P11 (O5): s. DE - uniquement ajouté si EVIDENCE_RETENTION_DAYS > 0.
@@ -474,6 +504,8 @@ export const LOCALES = Object.freeze({
     ),
     // s. DE (derselbe Ausdruck wie in disclosure(), zusaetzlich als Wert).
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_EN,
+    // s. DE (ownerOpening) - "AI" traegt hier dieselbe Last wie "KI" dort.
+    ownerOpening: (firstName) => `Hi ${firstName}, it's your AI assistant.`,
     summarySystem: (owner) =>
       `You are summarising a phone call made by ${owner}'s AI assistant. Reply ONLY with valid JSON: {"summary": "2-3 sentences in English", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 sentence", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. State concrete outcomes in the summary (agreed date/time, price, contact person's name) if present in the transcript, instead of vague descriptions. objective_achieved judges ONLY the original objective (for inbound calls: whether the caller's request was resolved). Side topics opened by the assistant or the other party themselves (e.g. an offered or abandoned appointment follow-up) are IRRELEVANT to this judgement. true = the objective was answered well enough, even if the call ended in the middle of a follow-up step; false = the objective was clearly not achieved; "unclear" = genuinely impossible to judge from the objective. Only add action items if ${owner} really needs to do something (max. 3). Appointments that are already firmly booked are NOT an action item. Result card: outcome is ONE sentence with the concrete result (agreed date/time, price, name) or - if nothing was achieved - the reason why. commitments are promises the assistant made on behalf of ${owner}; counterparty_commitments are promises made by the other party. open_points are questions that stayed open. next_step is THE one next step for ${owner}, otherwise null. facts are durably useful details about the other party (opening hours, contact person, prices). Each list holds at most 3 entries, each entry at most 200 characters. Invent nothing: if a detail is missing from the transcript, the list stays empty or the field stays null.`,
     // AL-P11 (O5): s. DE - only appended when EVIDENCE_RETENTION_DAYS > 0.
