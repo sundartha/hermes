@@ -14,6 +14,15 @@
 // passen). Inline-Styles wären unter der Produktions-CSP (default-src 'self')
 // blockiert — darum trägt jedes Element seine Klasse aus hermes-demo.css.
 //
+// Sprache: SSR liefert Deutsch (die indexierte Fassung, Muster der ganzen
+// Startseite); der DE/EN-Umschalter der Seite (hermes-scroll.js applyLang)
+// tauscht zur Laufzeit das innerHTML aller [data-i18n]-Elemente — die
+// EN-Texte der Demo leben darum ZUSÄTZLICH im EN-Wörterbuch von
+// hermes-scroll.js (Präfix "hd..."). Sprachneutrale Werte (Rufnummer,
+// Werkzeugliste, "Live", "Hermes") tragen bewusst KEINEN Key. Das
+// DEMO-Objekt hier bleibt die Quelle für Seiten, die die Komponente mit
+// lang="en" serverseitig rendern.
+//
 // Füllt seinen Elternrahmen (.demo-frame auf der Startseite, .sheet__demo im
 // Blatt). Die Maße hängen am Container, nicht am Fenster.
 import "../styles/hermes-demo.css";
@@ -86,12 +95,14 @@ const DEMO = {
 const d = DEMO[lang === "en" ? "en" : "de"];
 
 // Wer spricht im Transkript: Hermes rechts (hell), die Gegenseite links.
+// i18n: Sprecher "Hermes" ist in beiden Sprachen identisch (kein Key);
+// "Praxis"/"Practice" und jede Zeile tragen einen data-i18n-Key (s.u.).
 const transcript = [
-  { text: d.l1, who: "hermes", label: d.speakerHermes, cls: "hd-l1" },
-  { text: d.l2, who: "them", label: d.speakerThem, cls: "hd-l2" },
-  { text: d.l3, who: "hermes", label: d.speakerHermes, cls: "hd-l3" },
-  { text: d.l4, who: "them", label: d.speakerThem, cls: "hd-l4" },
-  { text: d.l5, who: "hermes", label: d.speakerHermes, cls: "hd-l5" },
+  { text: d.l1, who: "hermes", label: d.speakerHermes, cls: "hd-l1", key: "hdL1", labelKey: undefined },
+  { text: d.l2, who: "them", label: d.speakerThem, cls: "hd-l2", key: "hdL2", labelKey: "hdSpeakerThem" },
+  { text: d.l3, who: "hermes", label: d.speakerHermes, cls: "hd-l3", key: "hdL3", labelKey: undefined },
+  { text: d.l4, who: "them", label: d.speakerThem, cls: "hd-l4", key: "hdL4", labelKey: "hdSpeakerThem" },
+  { text: d.l5, who: "hermes", label: d.speakerHermes, cls: "hd-l5", key: "hdL5", labelKey: undefined },
 ];
 
 // Die Marken sitzen auf den Szenenwechseln der 76s-Schleife (s. hdScene*-
@@ -111,12 +122,12 @@ const ticks = ["27.2%", "75.3%"];
         <span class="hd-windot" aria-hidden="true"></span>
         <span class="hd-windot" aria-hidden="true"></span>
         <span class="hd-windot" aria-hidden="true"></span>
-        <span class="hd-wintitle">{d.winTitle}</span>
+        <span class="hd-wintitle" data-i18n="hdWinTitle">{d.winTitle}</span>
         <!-- Szenen-Titel überblenden an derselben Stelle (rechts im Kopf). -->
         <span class="hd-scenetag">
-          <span class="hd-scenetag__item hd-sc1">{d.scene1}</span>
-          <span class="hd-scenetag__item hd-sc2">{d.scene2}</span>
-          <span class="hd-scenetag__item hd-sc3">{d.scene3}</span>
+          <span class="hd-scenetag__item hd-sc1" data-i18n="hdScene1">{d.scene1}</span>
+          <span class="hd-scenetag__item hd-sc2" data-i18n="hdScene2">{d.scene2}</span>
+          <span class="hd-scenetag__item hd-sc3" data-i18n="hdScene3">{d.scene3}</span>
         </span>
       </div>
 
@@ -126,7 +137,7 @@ const ticks = ["27.2%", "75.3%"];
           <span class="hd-event hd-anim hd-e1">
             <span class="hd-event__check" aria-hidden="true">✓</span>
             <span class="hd-event__text">
-              <span class="hd-event__key">{d.ev1k}</span>
+              <span class="hd-event__key" data-i18n="hdEv1k">{d.ev1k}</span>
               <span class="hd-event__value">{d.ev1v}</span>
             </span>
             <span class="hd-event__dot" aria-hidden="true"></span>
@@ -134,21 +145,21 @@ const ticks = ["27.2%", "75.3%"];
           <span class="hd-event hd-anim hd-e2">
             <span class="hd-event__check" aria-hidden="true">✓</span>
             <span class="hd-event__text">
-              <span class="hd-event__key">{d.ev2k}</span>
+              <span class="hd-event__key" data-i18n="hdEv2k">{d.ev2k}</span>
               <span class="hd-event__value hd-event__value--mono">{d.ev2v}</span>
             </span>
           </span>
           <span class="hd-msg hd-msg--you hd-anim hd-u1">
-            <span class="hd-msg__label">{d.youLabel}</span>
-            <span class="hd-msg__bubble">{d.userMsg}</span>
+            <span class="hd-msg__label" data-i18n="hdYouLabel">{d.youLabel}</span>
+            <span class="hd-msg__bubble" data-i18n="hdUserMsg">{d.userMsg}</span>
           </span>
           <span class="hd-msg hd-msg--ai hd-anim hd-a1">
-            <span class="hd-msg__label">{d.aiLabel}</span>
-            <span class="hd-msg__bubble">{d.aiMsg1}</span>
+            <span class="hd-msg__label" data-i18n="hdAiLabel">{d.aiLabel}</span>
+            <span class="hd-msg__bubble" data-i18n="hdAiMsg1">{d.aiMsg1}</span>
           </span>
           <span class="hd-toolcall hd-anim hd-tc1">
             <span class="hd-toolcall__spark" aria-hidden="true"></span>
-            <span class="hd-mono"><span class="hd-toolcall__fn">{d.toolName}</span>(&quot;{d.toolArg}&quot;)</span>
+            <span class="hd-mono" data-i18n="hdToolcall"><span class="hd-toolcall__fn">{d.toolName}</span>(&quot;{d.toolArg}&quot;)</span>
           </span>
         </div>
 
@@ -157,8 +168,8 @@ const ticks = ["27.2%", "75.3%"];
           <span class="hd-callcard hd-anim hd-cc">
             <span class="hd-avatar hd-avatar--ringing" aria-hidden="true"><span class="hd-avatar__glyph"></span></span>
             <span class="hd-callcard__text">
-              <span class="hd-callcard__label">{d.callLabel}</span>
-              <span class="hd-callcard__callee">{d.callee}</span>
+              <span class="hd-callcard__label" data-i18n="hdCallLabel">{d.callLabel}</span>
+              <span class="hd-callcard__callee" data-i18n="hdCallee">{d.callee}</span>
             </span>
             <span class="hd-callcard__live">
               <span class="hd-livedot" aria-hidden="true"></span>{d.live}
@@ -173,30 +184,30 @@ const ticks = ["27.2%", "75.3%"];
           <div class="hd-transcript">
             {transcript.map((line) => (
               <span class:list={["hd-line", `hd-line--${line.who}`, "hd-anim", line.cls]}>
-                <span class="hd-line__speaker">{line.label}</span>
-                <span class="hd-line__text">{line.text}</span>
+                <span class="hd-line__speaker" data-i18n={line.labelKey}>{line.label}</span>
+                <span class="hd-line__text" data-i18n={line.key}>{line.text}</span>
               </span>
             ))}
           </div>
-          <span class="hd-hangup hd-anim hd-hu">{d.hangup}</span>
+          <span class="hd-hangup hd-anim hd-hu" data-i18n="hdHangup">{d.hangup}</span>
         </div>
 
         <!-- ------------------------------- Szene 3: das Ergebnis --------- -->
         <div class="hd-scene hd-scene--3">
           <span class="hd-msg hd-msg--ai hd-anim hd-a2">
-            <span class="hd-msg__label">{d.aiLabel}</span>
-            <span class="hd-msg__bubble">{d.aiMsg2}</span>
+            <span class="hd-msg__label" data-i18n="hdAiLabel">{d.aiLabel}</span>
+            <span class="hd-msg__bubble" data-i18n="hdAiMsg2">{d.aiMsg2}</span>
           </span>
           <span class="hd-result hd-anim hd-r1">
             <span class="hd-result__dot" aria-hidden="true"></span>
             <span class="hd-result__text">
-              <span class="hd-result__key">{d.r1k}</span>
-              <span class="hd-result__value">{d.r1v}</span>
+              <span class="hd-result__key" data-i18n="hdR1k">{d.r1k}</span>
+              <span class="hd-result__value" data-i18n="hdR1v">{d.r1v}</span>
             </span>
           </span>
           <span class="hd-result hd-result--done hd-anim hd-r2">
             <span class="hd-result__check" aria-hidden="true">✓</span>
-            <span class="hd-result__done-text">{d.r2v}</span>
+            <span class="hd-result__done-text" data-i18n="hdR2v">{d.r2v}</span>
           </span>
         </div>
       </div>
@@ -208,9 +219,9 @@ const ticks = ["27.2%", "75.3%"];
       <div class="hd-controls">
         <button class="hd-pause" type="button" data-hd-pause title={d.pauseLabel} aria-label={d.pauseLabel}>❙❙</button>
         <span class="hd-steps">
-          <span class="hd-step">{d.step1}</span>
-          <span class="hd-step">{d.step2}</span>
-          <span class="hd-step">{d.step3}</span>
+          <span class="hd-step" data-i18n="hdStep1">{d.step1}</span>
+          <span class="hd-step" data-i18n="hdStep2">{d.step2}</span>
+          <span class="hd-step" data-i18n="hdStep3">{d.step3}</span>
         </span>
       </div>
       <span class="hd-track" data-hd-track title={d.scrub} role="slider" aria-label={d.scrub} tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">

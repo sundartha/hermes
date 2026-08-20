@@ -83,6 +83,38 @@ const EN = {
   footerCopy: "© Sundartha — Hermes, your phone assistant",
   copyLabel: "Copy",
   copiedLabel: "Copied",
+  /* HermesDemo (Session-Stream, components/HermesDemo.astro): die EN-Fassung
+   * aller uebersetzbaren Demo-Texte. Sprachneutrale Werte (Rufnummer,
+   * Werkzeugliste, "Live", Sprecher "Hermes") tragen im Markup bewusst
+   * keinen data-i18n-Key. hdToolcall traegt Inline-HTML (innerHTML-Swap,
+   * Muster heroTitle). */
+  hdWinTitle: "your-ai — Hermes session",
+  hdScene1: "01 · Connect & instruct",
+  hdScene2: "02 · Hermes makes the call",
+  hdScene3: "03 · The result",
+  hdEv1k: "Hermes number active",
+  hdEv2k: "Connected as an MCP connector",
+  hdYouLabel: "You, to your AI",
+  hdAiLabel: "Your AI",
+  hdUserMsg: "Can you get me a check-up appointment with Dr. Behrens this week?",
+  hdAiMsg1: "Sure — I'll give the practice a quick call.",
+  hdToolcall: '<span class="hd-toolcall__fn">place_call</span>("Dr. Behrens\' practice")',
+  hdCallLabel: "Outgoing call",
+  hdCallee: "Dr. Behrens' practice",
+  hdSpeakerThem: "Practice",
+  hdL1: "Hi, I'm the AI assistant for Jonas. I'd like to book an appointment for him.",
+  hdL2: "Sure, what is it about?",
+  hdL3: "A check-up. Would Thursday, August 14th work?",
+  hdL4: "Thursday would be free.",
+  hdL5: "That works well, let's take it. Under the name Kroh.",
+  hdHangup: "Call ended · 0:47",
+  hdAiMsg2: "Done! Thursday, Aug 14 at 11:30 am with Dr. Behrens — I've added it to your calendar.",
+  hdR1k: "Appointment",
+  hdR1v: "Thursday, Aug 14 · 11:30 am · Dr. Behrens' practice",
+  hdR2v: "Summary & transcript are waiting in your dashboard",
+  hdStep1: "Give the task",
+  hdStep2: "Hermes calls",
+  hdStep3: "The result",
 };
 
 const LANG_KEY = "hermes.lang";
