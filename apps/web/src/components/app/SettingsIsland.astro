@@ -49,6 +49,18 @@
 // -Feld bleiben unangetastet, lib/api.js behaelt savePrivateNumber/
 // privateNumberStatusText/ERROR_INVALID_PRIVATE_NUMBER (kein Schreibpfad
 // dorthin mehr, aber kein toter Server-Vertrag).
+//
+// OC-P2/OC-P3 (PLAN-OWNER-CALL): das Feld hat seit 2026-08-20 eine ZWEITE Wirkung --
+// tenant.privateNumber entscheidet mit darueber, ob der gesetzliche Offenlegungssatz
+// gesprochen wird (Anruf an genau diese Nummer = Anruf an dich selbst). Wer den Block
+// zurueckholt, MUSS ihn dabei beschriften; der Text steht fest und ist englisch
+// (/app bleibt englisch, i18n-W3):
+//   "Calls to this number are treated as calls to you: the assistant greets you by
+//    your first name instead of reading out the long disclosure. It still says it is
+//    an AI, and anyone else who picks up hears the full disclosure -- so this number
+//    must be your own."
+// NICHT schreiben, "die KI-Offenlegung wird weggelassen" -- das waere falsch und eine
+// Einladung, eine fremde Nummer einzutragen.
 import { SETTINGS_LANGUAGES } from "../../lib/api.js";
 ---
 
