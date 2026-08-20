@@ -1,77 +1,76 @@
 /* =============================================================================
- * hermes-demo.css — Erklär-Animation (40s-Schleife, sechs Akte)
+ * hermes-demo.css — Erklär-Animation, Neubau 2026-08-14 ("Session-Stream").
  *
- * Herkunft: "Hermes Demo.dc.html". Das Quell-CSS war dort bereits
- * klassenbasiert und konnte fast unveraendert uebernommen werden — nur die
- * wenigen inline style="..."-Attribute des Entwurfs sind hier Klassen
- * geworden (.hd-glow--a / .hd-glow--b), weil die Produktions-CSP
- * (default-src 'self') Style-Attribute im Markup blockiert.
+ * EIN Agent-Session-Fenster erzählt die Geschichte chronologisch (Setup →
+ * Auftrag → Anruf mit Live-Transkript → Ergebnis) in drei Szenen, die im
+ * selben Fenster durchziehen — der Fensterkopf bleibt stehen. Markup:
+ * HermesDemo.astro.
  *
- * Die Animation laeuft rein ueber CSS-Keyframes. Der Zeitversatz haengt an
- * der Variablen --hd-t, die das Modul per CSSOM (element.style.setProperty)
- * setzt — CSSOM ist von der CSP nicht betroffen, nur Style-Attribute im
- * HTML-Quelltext sind es.
+ * Technik wie im Vorgänger (bewährt): die Zeit läuft REIN über CSS-Keyframes
+ * einer 76s-Schleife (muss zu LOOP=76 in hermes-demo.js passen). Der
+ * Zeitversatz hängt an --hd-t, das Modul setzt ihn per CSSOM — Style-
+ * Attribute im Markup wären unter der Produktions-CSP blockiert, CSSOM nicht.
  *
- * Groessen haengen am Container (cqw/cqh), nicht am Fenster: dieselbe Datei
- * fuellt die breite Buehne am Desktop und die hohe Kachel am Handy.
+ * Größen hängen am Container (cqw/cqh), nicht am Fenster: dieselbe Datei
+ * füllt die breite Bühne am Desktop und die hohe Kachel am Handy.
  * ========================================================================== */
 
-/* visibility wandert mit: alle sechs Akte liegen uebereinander im selben
- * Rahmen. Nur mit opacity:0 bleibt ein abgeblendeter Akt trotzdem
- * klickbar und faengt die Klicks des sichtbaren Akts ab (die Kopieren-
- * Knoepfe in Akt 2 lagen so unter den Ergebniszeilen von Akt 6).
- * visibility ist in Animationen absichtlich "unscharf": sobald ein Ende
- * des Intervalls visible ist, gilt visible fuer das ganze Intervall — die
- * Ein-/Ausblende bleibt also sichtbar, nur die Ruhephasen sind wirklich weg. */
-/* Akt-Wechsel mit leichtem Zoom (scale 0.985) zusaetzlich zum Versatz — die
- * Buehne "atmet" beim Uebergang, statt hart zu schneiden (Redesign 2026-08-14;
- * Zeitmarken byte-identisch, nur die transform-Werte sind reicher). */
-@keyframes hdA1 { 0% { opacity: 0; visibility: visible; transform: translateY(16px) scale(0.985); } 1.7%, 10.5% { opacity: 1; visibility: visible; transform: none; } 12.5%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
-@keyframes hdA2 { 0%, 13.9% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 15.7%, 26.3% { opacity: 1; visibility: visible; transform: none; } 28.3%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
-@keyframes hdA3 { 0%, 29.7% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 31.4%, 39.5% { opacity: 1; visibility: visible; transform: none; } 41.4%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
-@keyframes hdA4 { 0%, 42.9% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 44.6%, 51.3% { opacity: 1; visibility: visible; transform: none; } 53.3%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
-@keyframes hdA5 { 0%, 54.7% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 56.4%, 82.9% { opacity: 1; visibility: visible; transform: none; } 84.9%, 100% { opacity: 0; visibility: hidden; transform: translateY(-16px) scale(0.985); } }
-@keyframes hdA6 { 0%, 86.3% { opacity: 0; visibility: hidden; transform: translateY(16px) scale(0.985); } 88%, 97.4% { opacity: 1; visibility: visible; transform: none; } 100% { opacity: 0; visibility: hidden; } }
+/* ------------------------------------------------------------- Szenenfenster
+ * visibility wandert mit (Muster Vorgänger): nur mit opacity:0 bliebe eine
+ * abgeblendete Szene klickbar und läge über der sichtbaren. visibility ist in
+ * Animationen "unscharf" (sichtbar, solange ein Intervallende sichtbar ist) —
+ * die Ein-/Ausblende bleibt dadurch sichtbar, die Ruhephasen sind weg. */
+@keyframes hdScene1 { 0% { opacity: 0; visibility: visible; transform: translateY(18px) scale(0.985); } 2.4%, 25.4% { opacity: 1; visibility: visible; transform: none; } 27.2%, 100% { opacity: 0; visibility: hidden; transform: translateY(-18px) scale(0.985); } }
+@keyframes hdScene2 { 0%, 27.2% { opacity: 0; visibility: hidden; transform: translateY(18px) scale(0.985); } 29%, 73.5% { opacity: 1; visibility: visible; transform: none; } 75.3%, 100% { opacity: 0; visibility: hidden; transform: translateY(-18px) scale(0.985); } }
+@keyframes hdScene3 { 0%, 75.3% { opacity: 0; visibility: hidden; transform: translateY(18px) scale(0.985); } 77.1%, 97.6% { opacity: 1; visibility: visible; transform: none; } 100% { opacity: 0; visibility: hidden; transform: translateY(-14px); } }
 
-@keyframes hdS1 { 0%, 15.8% { opacity: 0; transform: translateY(9px); } 17.1%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; } }
-@keyframes hdS2 { 0%, 18.4% { opacity: 0; transform: translateY(9px); } 19.7%, 26.3% { opacity: 1; transform: none; } 28.3%, 100% { opacity: 0; } }
+/* Szenen-Titel im Fensterkopf (Überblendung an derselben Stelle). */
+@keyframes hdSc1 { 0%, 25.4% { opacity: 1; } 27.2%, 100% { opacity: 0; } }
+@keyframes hdSc2 { 0%, 25.4% { opacity: 0; } 27.2%, 73.5% { opacity: 1; } 75.3%, 100% { opacity: 0; } }
+@keyframes hdSc3 { 0%, 73.5% { opacity: 0; } 75.3%, 100% { opacity: 1; } }
 
-@keyframes hdW1 { 0%, 31.6% { opacity: 0; transform: translateY(9px); } 32.8%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; } }
-@keyframes hdW2 { 0%, 33.6% { opacity: 0; transform: translateY(9px); } 34.7%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; } }
-@keyframes hdW3 { 0%, 35.5% { opacity: 0; transform: translateY(9px); } 36.7%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; } }
-@keyframes hdW4 { 0%, 37.5% { opacity: 0; transform: translateY(9px); } 38.7%, 39.5% { opacity: 1; transform: none; } 41.4%, 100% { opacity: 0; } }
+/* ------------------------------------------------- Elemente, Szene 1 (Setup) */
+@keyframes hdE1  { 0%, 2.6%  { opacity: 0; transform: translateY(10px); } 3.8%, 25.4%  { opacity: 1; transform: none; } 27.2%, 100% { opacity: 0; } }
+@keyframes hdE2  { 0%, 5.8%  { opacity: 0; transform: translateY(10px); } 7%, 25.4%    { opacity: 1; transform: none; } 27.2%, 100% { opacity: 0; } }
+@keyframes hdU1  { 0%, 10.5% { opacity: 0; transform: translateY(12px); } 11.7%, 25.4% { opacity: 1; transform: none; } 27.2%, 100% { opacity: 0; } }
+@keyframes hdAi1 { 0%, 16%   { opacity: 0; transform: translateY(12px); } 17.2%, 25.4% { opacity: 1; transform: none; } 27.2%, 100% { opacity: 0; } }
+@keyframes hdTc1 { 0%, 20.5% { opacity: 0; transform: translateY(10px); } 21.7%, 25.4% { opacity: 1; transform: none; } 27.2%, 100% { opacity: 0; } }
 
-@keyframes hdT1 { 0%, 57.9% { opacity: 0; transform: translateY(10px); } 59.2%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
-@keyframes hdT2 { 0%, 63.2% { opacity: 0; transform: translateY(10px); } 64.5%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
-@keyframes hdT3 { 0%, 68.4% { opacity: 0; transform: translateY(10px); } 69.7%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
-@keyframes hdT4 { 0%, 73.7% { opacity: 0; transform: translateY(10px); } 75%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
-@keyframes hdT5 { 0%, 78.9% { opacity: 0; transform: translateY(10px); } 80.3%, 82.9% { opacity: 1; transform: none; } 84.9%, 100% { opacity: 0; } }
-@keyframes hdT1s { 0%, 57.9% { opacity: 0; transform: translateY(10px); } 59.2%, 67% { opacity: 1; transform: none; } 68.4%, 100% { opacity: 0; } }
-@keyframes hdT2s { 0%, 63.2% { opacity: 0; transform: translateY(10px); } 64.5%, 72.3% { opacity: 1; transform: none; } 73.7%, 100% { opacity: 0; } }
-@keyframes hdT3s { 0%, 68.4% { opacity: 0; transform: translateY(10px); } 69.7%, 77.5% { opacity: 1; transform: none; } 78.9%, 100% { opacity: 0; } }
+/* ------------------------------------------------- Elemente, Szene 2 (Anruf) */
+@keyframes hdCc { 0%, 29.3% { opacity: 0; transform: translateY(10px); } 30.5%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
+@keyframes hdL1 { 0%, 33.5% { opacity: 0; transform: translateY(10px); } 34.7%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
+@keyframes hdL2 { 0%, 40%   { opacity: 0; transform: translateY(10px); } 41.2%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
+@keyframes hdL3 { 0%, 46.5% { opacity: 0; transform: translateY(10px); } 47.7%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
+@keyframes hdL4 { 0%, 53%   { opacity: 0; transform: translateY(10px); } 54.2%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
+@keyframes hdL5 { 0%, 59.5% { opacity: 0; transform: translateY(10px); } 60.7%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
+@keyframes hdHu { 0%, 67%   { opacity: 0; transform: translateY(8px);  } 68.2%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
 
-@keyframes hdR1 { 0%, 88.2% { opacity: 0; transform: translateY(10px); } 89.3%, 97.4% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-@keyframes hdR2 { 0%, 90.8% { opacity: 0; transform: translateY(10px); } 92%, 97.4% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-@keyframes hdR3 { 0%, 93.4% { opacity: 0; transform: translateY(10px); } 94.6%, 97.4% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+/* ---------------------------------------------- Elemente, Szene 3 (Ergebnis) */
+@keyframes hdAi2 { 0%, 77.5% { opacity: 0; transform: translateY(12px); } 78.7%, 97.6% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes hdR1  { 0%, 84%   { opacity: 0; transform: translateY(10px); } 85.2%, 97.6% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes hdR2  { 0%, 89.5% { opacity: 0; transform: translateY(10px); } 90.7%, 97.6% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 
-@keyframes hdStep1 { 0% { opacity: 0.36; } 1.7%, 10.5% { opacity: 1; } 12.5%, 100% { opacity: 0.36; } }
-@keyframes hdStep2 { 0%, 13.9% { opacity: 0.36; } 15.7%, 39.5% { opacity: 1; } 41.4%, 100% { opacity: 0.36; } }
-@keyframes hdStep3 { 0%, 42.9% { opacity: 0.36; } 44.6%, 97.4% { opacity: 1; } 100% { opacity: 1; } }
-@keyframes hdStep1m { 0% { opacity: 0; } 1.7%, 10.5% { opacity: 1; } 12.5%, 100% { opacity: 0; } }
-@keyframes hdStep2m { 0%, 13.9% { opacity: 0; } 15.7%, 39.5% { opacity: 1; } 41.4%, 100% { opacity: 0; } }
-@keyframes hdStep3m { 0%, 42.9% { opacity: 0; } 44.6%, 97.4% { opacity: 1; } 100% { opacity: 1; } }
+/* ------------------------------------------ Schritte der Fussleiste (aktiv) */
+@keyframes hdStep1 { 0%, 25.4% { opacity: 1; } 27.2%, 100% { opacity: 0.36; } }
+@keyframes hdStep2 { 0%, 25.4% { opacity: 0.36; } 27.2%, 73.5% { opacity: 1; } 75.3%, 100% { opacity: 0.36; } }
+@keyframes hdStep3 { 0%, 73.5% { opacity: 0.36; } 75.3%, 100% { opacity: 1; } }
+/* Schmale Kachel: die Schritte liegen übereinander und blenden nacheinander. */
+@keyframes hdStep1m { 0%, 25.4% { opacity: 1; } 27.2%, 100% { opacity: 0; } }
+@keyframes hdStep2m { 0%, 25.4% { opacity: 0; } 27.2%, 73.5% { opacity: 1; } 75.3%, 100% { opacity: 0; } }
+@keyframes hdStep3m { 0%, 73.5% { opacity: 0; } 75.3%, 100% { opacity: 1; } }
 
+/* ------------------------------------------------------- Mikro-Animationen */
 @keyframes hdProgress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
-@keyframes hdRing { 0% { box-shadow: 0 0 0 0 rgba(143, 182, 227, 0.5); } 70% { box-shadow: 0 0 0 30px rgba(143, 182, 227, 0); } 100% { box-shadow: 0 0 0 0 rgba(143, 182, 227, 0); } }
-@keyframes hdBar { 0%, 100% { transform: scaleY(0.2); } 50% { transform: scaleY(1); } }
-@keyframes hdCaret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
-@keyframes hdGlow { 0%, 100% { opacity: 0.32; } 50% { opacity: 0.6; } }
-/* Redesign 2026-08-14: zusaetzliche Mikro-Animationen. */
-@keyframes hdDrift { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(3cqw, 2cqh, 0); } }
-@keyframes hdPulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes hdRing { 0% { box-shadow: 0 0 0 0 rgba(143, 182, 227, 0.5); } 70% { box-shadow: 0 0 0 26px rgba(143, 182, 227, 0); } 100% { box-shadow: 0 0 0 0 rgba(143, 182, 227, 0); } }
 @keyframes hdRingWave { 0% { transform: scale(1); opacity: 0.9; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes hdVbar { 0%, 100% { transform: scaleY(0.2); } 50% { transform: scaleY(1); } }
+@keyframes hdPulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@keyframes hdGlow { 0%, 100% { opacity: 0.32; } 50% { opacity: 0.6; } }
+@keyframes hdDrift { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(3cqw, 2cqh, 0); } }
 
-/* Fuellt die Kachel der Elternseite (.demo-frame bzw. .sheet__demo). */
+/* ------------------------------------------------------------------- Bühne */
+
+/* Füllt die Kachel der Elternseite (.demo-frame bzw. .sheet__demo). */
 .hd-mount {
   display: block;
   position: absolute;
@@ -87,9 +86,7 @@
   min-height: 0;
   overflow: hidden;
   font-family: "Space Grotesk", sans-serif;
-  /* Redesign 2026-08-14: mehrschichtiger Nachthimmel statt eines einzelnen
-     Verlaufs — zwei farbige Lichtquellen oben rechts / unten links plus die
-     tiefe Grundflaeche. Die .hd-glow-Kreise treiben zusaetzlich darueber. */
+  /* Mehrschichtiger Nachthimmel: zwei Lichtquellen + tiefe Grundfläche. */
   background:
     radial-gradient(90% 130% at 84% -12%, rgba(102, 156, 219, 0.4) 0%, rgba(102, 156, 219, 0) 55%),
     radial-gradient(72% 100% at 4% 110%, rgba(58, 100, 160, 0.36) 0%, rgba(58, 100, 160, 0) 62%),
@@ -97,8 +94,7 @@
   --hd-t: 0s;
 }
 
-/* Lichtkante oben + leise Vignette an den Raendern — gibt der Buehne Tiefe,
-   ohne den Inhalt anzufassen. Liegt ueber allem, faengt aber keine Klicks. */
+/* Lichtkante oben + leise Rand-Vignette; fängt keine Klicks. */
 .hd-stage::after {
   content: "";
   position: absolute;
@@ -117,12 +113,7 @@
   background: radial-gradient(circle, rgba(143, 182, 227, 0.5) 0%, rgba(143, 182, 227, 0) 68%);
   filter: blur(10px);
   pointer-events: none;
-  animation: hdGlow 7s ease-in-out infinite;
 }
-/* Im Entwurf waren diese beiden Positionen inline gesetzt. Das Treiben
-   (hdDrift) laeuft auf einem eigenen Element-Paar zu haben waere Markup —
-   stattdessen treibt der Kreis selbst; hdGlow (opacity) wandert in die
-   animation-Liste daneben. */
 .hd-glow--a {
   top: -24%;
   right: -10%;
@@ -135,25 +126,107 @@
   background: radial-gradient(circle, rgba(96, 140, 205, 0.44) 0%, rgba(96, 140, 205, 0) 68%);
 }
 
-.hd-act {
-  animation-delay: var(--hd-t);
+/* ------------------------------------------------------ das Session-Fenster */
+
+.hd-window {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: calc(var(--hd-foot, 86px) + clamp(6px, 1.4cqh, 16px));
+  top: clamp(12px, 2.8cqh, 26px);
+  left: clamp(14px, 3.2cqw, 42px);
+  right: clamp(14px, 3.2cqw, 42px);
+  bottom: calc(var(--hd-foot, 86px) + clamp(8px, 2cqh, 20px));
+  max-width: 820px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: clamp(14px, 1.8cqw, 20px);
+  background: linear-gradient(168deg, rgba(16, 37, 70, 0.58) 0%, rgba(6, 17, 38, 0.66) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 30px 70px -34px rgba(2, 8, 22, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(16px) saturate(135%);
+  -webkit-backdrop-filter: blur(16px) saturate(135%);
+  overflow: hidden;
+}
+
+.hd-winhead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: clamp(8px, 1.6cqh, 13px) clamp(12px, 1.8cqw, 20px);
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.hd-windot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.hd-windot:nth-of-type(1) { background: rgba(255, 95, 87, 0.85); }
+.hd-windot:nth-of-type(2) { background: rgba(254, 188, 46, 0.85); }
+.hd-windot:nth-of-type(3) { background: rgba(40, 200, 64, 0.85); }
+.hd-wintitle {
+  margin-left: 6px;
+  font: 500 clamp(10px, 1.25cqw, 14px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+/* Szenen-Titel: drei Einträge in derselben Zelle, überblendet per Keyframes. */
+.hd-scenetag {
+  margin-left: auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-content: center;
-  justify-items: start;
-  gap: clamp(10px, 2.4cqh, 18px);
-  padding: clamp(14px, 3.4cqh, 30px) clamp(16px, 4cqw, 44px) clamp(10px, 2.2cqh, 18px);
+  flex: none;
+}
+.hd-scenetag__item {
+  grid-area: 1 / 1;
+  justify-self: end;
+  white-space: nowrap;
+  font: 500 clamp(10px, 1.25cqw, 14px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(143, 182, 227, 0.92);
+  opacity: 0;
+  animation-duration: 76s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+  animation-delay: var(--hd-t);
+}
+.hd-sc1 { animation-name: hdSc1; }
+.hd-sc2 { animation-name: hdSc2; }
+.hd-sc3 { animation-name: hdSc3; }
+
+.hd-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Die drei Szenen liegen übereinander im Fensterkörper. */
+.hd-scene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(8px, 2.2cqh, 18px);
+  padding: clamp(12px, 2.6cqh, 24px) clamp(14px, 2.4cqw, 30px);
   opacity: 0;
   animation-duration: 76s;
   animation-iteration-count: infinite;
   animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  animation-delay: var(--hd-t);
 }
+.hd-scene--1 { animation-name: hdScene1; }
+.hd-scene--2 { animation-name: hdScene2; justify-content: flex-start; }
+.hd-scene--3 { animation-name: hdScene3; }
 
+/* Einzelelemente holen ihre Kurve über diese Klassen. */
 .hd-anim {
   opacity: 0;
   animation-delay: var(--hd-t);
@@ -161,162 +234,364 @@
   animation-iteration-count: infinite;
   animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
-
-/* Akte und Einzelelemente holen ihre Kurve ueber diese Klassen. */
-.hd-act--1 { animation-name: hdA1; }
-.hd-act--2 { animation-name: hdA2; }
-.hd-act--3 { animation-name: hdA3; }
-.hd-act--4 { animation-name: hdA4; }
-.hd-act--5 { animation-name: hdA5; }
-.hd-act--6 { animation-name: hdA6; }
-.hd-s1 { animation-name: hdS1; }
-.hd-s2 { animation-name: hdS2; }
-.hd-w1 { animation-name: hdW1; }
-.hd-w2 { animation-name: hdW2; }
-.hd-w3 { animation-name: hdW3; }
-.hd-w4 { animation-name: hdW4; }
-.hd-t1 { animation-name: hdT1; }
-.hd-t2 { animation-name: hdT2; }
-.hd-t3 { animation-name: hdT3; }
-.hd-t4 { animation-name: hdT4; }
-.hd-t5 { animation-name: hdT5; }
+.hd-e1 { animation-name: hdE1; }
+.hd-e2 { animation-name: hdE2; }
+.hd-u1 { animation-name: hdU1; }
+.hd-a1 { animation-name: hdAi1; }
+.hd-tc1 { animation-name: hdTc1; }
+.hd-cc { animation-name: hdCc; }
+.hd-l1 { animation-name: hdL1; }
+.hd-l2 { animation-name: hdL2; }
+.hd-l3 { animation-name: hdL3; }
+.hd-l4 { animation-name: hdL4; }
+.hd-l5 { animation-name: hdL5; }
+.hd-hu { animation-name: hdHu; }
+.hd-a2 { animation-name: hdAi2; }
 .hd-r1 { animation-name: hdR1; }
 .hd-r2 { animation-name: hdR2; }
-.hd-r3 { animation-name: hdR3; }
-
-.hd-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font: 500 clamp(11px, 1.55cqw, 16px) / 1 var(--mono, ui-monospace, Menlo, monospace);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: rgba(143, 182, 227, 0.92);
-}
-.hd-eyebrow::before {
-  content: "";
-  width: clamp(16px, 2.4cqw, 30px);
-  height: 1px;
-  background: rgba(143, 182, 227, 0.5);
-}
-
-.hd-head {
-  margin: 0;
-  font-family: "Instrument Serif", Georgia, serif;
-  font-weight: 400;
-  font-size: clamp(24px, 4.5cqw, 62px);
-  line-height: 1.02;
-  letter-spacing: -0.015em;
-  color: #fff;
-  text-wrap: pretty;
-  text-shadow: 0 2px 26px rgba(4, 12, 28, 0.5);
-}
-
-/* Ghost-Ziffer des Akts (Redesign 2026-08-14): grosse Serifenzahl hinter der
-   linken Spalte fuellt den vorher toten Raum und gibt jedem Akt eine eigene
-   Buehnenmarke. Verlaufstext, nicht anklickbar, liegt UNTER dem Inhalt
-   (say/show/chat tragen z-index:1). Nur auf der breiten Buehne — in der
-   schmalen/flachen Kachel wuerde sie den gestapelten Inhalt stoeren. */
-.hd-actnum {
-  display: none;
-  position: absolute;
-  left: clamp(2px, 1cqw, 14px);
-  bottom: clamp(-14px, -1cqh, -4px);
-  font-family: "Instrument Serif", Georgia, serif;
-  font-size: clamp(130px, 40cqh, 280px);
-  line-height: 0.8;
-  letter-spacing: -0.04em;
-  color: transparent;
-  background: linear-gradient(178deg, rgba(143, 182, 227, 0.26) 0%, rgba(143, 182, 227, 0.04) 78%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  pointer-events: none;
-  user-select: none;
-  z-index: 0;
-}
-.hd-say,
-.hd-show,
-.hd-chat {
-  position: relative;
-  z-index: 1;
-}
-
-.hd-sub {
-  margin: 0;
-  max-width: 32ch;
-  font: 400 clamp(14px, 1.8cqw, 24px) / 1.45 "Space Grotesk", sans-serif;
-  color: rgba(255, 255, 255, 0.76);
-  text-wrap: pretty;
-}
-
-.hd-panel {
-  width: 100%;
-  border-radius: clamp(12px, 1.5cqw, 18px);
-  /* Glas statt Flaeche (Redesign 2026-08-14): Verlauf + backdrop-blur laesst
-     die treibenden Glow-Kreise hinter den Karten durchschimmern. */
-  background: linear-gradient(165deg, rgba(22, 47, 87, 0.6) 0%, rgba(7, 20, 44, 0.66) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow:
-    0 26px 56px -30px rgba(2, 8, 22, 0.95),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 0 44px rgba(143, 182, 227, 0.05);
-  backdrop-filter: blur(14px) saturate(135%);
-  -webkit-backdrop-filter: blur(14px) saturate(135%);
-  overflow: hidden;
-}
 
 .hd-mono {
-  font: 400 clamp(11.5px, 1.4cqw, 19px) / 1.5 var(--mono, ui-monospace, Menlo, monospace);
+  font: 400 clamp(11.5px, 1.4cqw, 17px) / 1.5 var(--mono, ui-monospace, Menlo, monospace);
   color: #cfe4fa;
   word-break: normal;
   overflow-wrap: break-word;
 }
 
-.hd-tool {
+/* --------------------------------------------- Szene 1: Events, Chat, Tool */
+
+/* System-Event-Zeile ("Nummer aktiv", "MCP verbunden"). */
+.hd-event {
   display: flex;
   align-items: center;
-  gap: clamp(8px, 1.2cqw, 14px);
-  padding: clamp(10px, 2.4cqh, 20px) clamp(12px, 1.6cqw, 22px);
+  gap: clamp(10px, 1.4cqw, 16px);
+  padding: clamp(9px, 1.9cqh, 15px) clamp(12px, 1.7cqw, 20px);
   border-radius: clamp(10px, 1.2cqw, 14px);
   background: linear-gradient(160deg, rgba(21, 45, 84, 0.55) 0%, rgba(8, 22, 46, 0.6) 100%);
   border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow:
-    0 16px 34px -24px rgba(2, 8, 22, 0.9),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px) saturate(130%);
-  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  box-shadow: 0 14px 30px -22px rgba(2, 8, 22, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
-.hd-tool .hd-mono {
-  padding: 3px 9px;
-  border-radius: 7px;
-  background: rgba(143, 182, 227, 0.15);
-  border: 1px solid rgba(143, 182, 227, 0.32);
+.hd-event__check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(18px, 2cqw, 24px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(127, 224, 176, 0.16);
+  border: 1px solid rgba(127, 224, 176, 0.45);
+  font: 600 clamp(9px, 1cqw, 12px) / 1 "Space Grotesk", sans-serif;
+  color: #7fe0b0;
+}
+.hd-event__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.hd-event__key {
+  font: 500 clamp(9.5px, 1.15cqw, 13px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.hd-event__value {
+  font: 500 clamp(14px, 1.9cqw, 22px) / 1.2 "Space Grotesk", sans-serif;
+  color: #fff;
+}
+.hd-event__value--mono {
+  font: 400 clamp(11px, 1.35cqw, 15px) / 1.4 var(--mono, ui-monospace, Menlo, monospace);
+  color: #9fc1e8;
+}
+.hd-event__dot {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7fe0b0;
+  box-shadow: 0 0 10px rgba(127, 224, 176, 0.8);
+  animation: hdPulseDot 2.2s ease-in-out infinite;
 }
 
-.hd-chat {
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px, #000 100%);
-  mask-image: linear-gradient(to bottom, transparent 0, #000 26px, #000 100%);
-}
-
-.hd-bubble {
-  box-shadow: 0 16px 36px -24px rgba(3, 10, 26, 0.95);
+/* Chat-Nachricht (du ↔ deine KI). */
+.hd-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   max-width: min(100%, 46ch);
-  padding: clamp(11px, 2.4cqh, 20px) clamp(14px, 1.9cqw, 24px);
-  /* Messenger-Ecken (Redesign 2026-08-14): die zur Sprecherseite zeigende
-     untere Ecke ist eng — liest sich sofort als Chat, ohne Dreiecks-Schwanz. */
-  border-radius: clamp(12px, 1.5cqw, 18px);
-  font: 400 clamp(14px, 1.75cqw, 23px) / 1.4 "Space Grotesk", sans-serif;
+}
+.hd-msg__label {
+  font: 500 clamp(9.5px, 1.1cqw, 12.5px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+.hd-msg__bubble {
+  padding: clamp(10px, 2cqh, 16px) clamp(13px, 1.8cqw, 22px);
+  border-radius: clamp(12px, 1.5cqw, 16px);
+  font: 400 clamp(13.5px, 1.7cqw, 19px) / 1.42 "Space Grotesk", sans-serif;
+  text-wrap: pretty;
+  box-shadow: 0 16px 36px -24px rgba(3, 10, 26, 0.95);
+}
+.hd-msg--you {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.hd-msg--you .hd-msg__bubble {
+  background: linear-gradient(180deg, #ffffff 0%, #e9f2fc 100%);
+  color: #10305a;
+  border-bottom-right-radius: 5px;
+}
+.hd-msg--ai {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.hd-msg--ai .hd-msg__bubble {
+  background: linear-gradient(165deg, rgba(24, 50, 92, 0.72) 0%, rgba(10, 26, 54, 0.78) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.94);
+  border-bottom-left-radius: 5px;
+}
+
+/* Der Tool-Call: die Brücke zwischen Chat und Anruf. */
+.hd-toolcall {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(9px, 1.2cqw, 13px);
+  padding: clamp(8px, 1.7cqh, 13px) clamp(12px, 1.7cqw, 20px);
+  border-radius: 999px;
+  background: rgba(4, 12, 30, 0.78);
+  border: 1px solid rgba(143, 182, 227, 0.38);
+  box-shadow: 0 12px 28px -20px rgba(2, 8, 22, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.hd-toolcall__spark {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8fb6e3;
+  box-shadow: 0 0 10px rgba(143, 182, 227, 0.9);
+  animation: hdPulseDot 1.4s ease-in-out infinite;
+}
+.hd-toolcall__fn {
+  color: #8fb6e3;
+}
+
+/* -------------------------------------- Szene 2: Anrufkarte und Transkript */
+
+.hd-callcard {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.6cqw, 18px);
+  padding: clamp(10px, 2.2cqh, 17px) clamp(12px, 1.8cqw, 22px);
+  border-radius: clamp(12px, 1.5cqw, 16px);
+  background: linear-gradient(165deg, rgba(22, 47, 87, 0.6) 0%, rgba(7, 20, 44, 0.66) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 20px 44px -28px rgba(2, 8, 22, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.hd-avatar {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(34px, 4.2cqw, 50px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(120% 120% at 30% 24%, #e8f2fc 0%, #8fb6e3 42%, #2c5f9e 100%);
+  box-shadow: 0 10px 26px -10px rgba(64, 125, 198, 0.75), inset 0 1px 2px rgba(255, 255, 255, 0.6);
+}
+.hd-avatar--ringing {
+  animation: hdRing 1.6s ease-out infinite;
+}
+.hd-avatar--ringing::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid rgba(143, 182, 227, 0.6);
+  animation: hdRingWave 1.6s ease-out infinite;
+}
+/* Hermes-Schwinge (echtes Site-Asset, img-src 'self'), weiss gefiltert. */
+.hd-avatar__glyph {
+  display: block;
+  width: 60%;
+  aspect-ratio: 1;
+  background: url("/assets/hermes-wing.png") center / contain no-repeat;
+  filter: brightness(0) invert(1) drop-shadow(0 1px 3px rgba(10, 34, 66, 0.55));
+}
+.hd-callcard__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.hd-callcard__label {
+  font: 500 clamp(9.5px, 1.15cqw, 13px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.hd-callcard__callee {
+  font: 500 clamp(15px, 2cqw, 24px) / 1.1 "Space Grotesk", sans-serif;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hd-callcard__live {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 500 clamp(9.5px, 1.1cqw, 13px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(127, 224, 176, 0.95);
+}
+.hd-livedot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7fe0b0;
+  box-shadow: 0 0 10px rgba(127, 224, 176, 0.8);
+  animation: hdPulseDot 2.2s ease-in-out infinite;
+}
+.hd-levels {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(3px, 0.5cqw, 6px);
+  height: clamp(18px, 3.6cqh, 30px);
+}
+.hd-vbar {
+  width: clamp(3px, 0.45cqw, 5px);
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(to top, rgba(143, 182, 227, 0.95), #ffffff);
+  transform-origin: 50% 50%;
+  animation: hdVbar 1.05s ease-in-out infinite;
+}
+.hd-levels .hd-vbar:nth-child(2) { animation-delay: 0.14s; }
+.hd-levels .hd-vbar:nth-child(3) { animation-delay: 0.38s; }
+.hd-levels .hd-vbar:nth-child(4) { animation-delay: 0.5s; }
+
+/* Das Live-Transkript: Sprecherzeilen mit Akzentkante — bewusst KEINE
+ * Chat-Blasen (der Chat ist das Medium zur KI, das Transkript ist das
+ * Telefongespräch — zwei verschiedene Medien, zwei Formen). */
+.hd-transcript {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: clamp(8px, 1.9cqh, 15px);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 100%);
+}
+.hd-line {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-left: clamp(10px, 1.3cqw, 15px);
+  border-left: 2px solid rgba(255, 255, 255, 0.28);
+  max-width: 62ch;
+}
+.hd-line--hermes {
+  border-left-color: rgba(143, 182, 227, 0.8);
+}
+.hd-line__speaker {
+  font: 500 clamp(9px, 1.05cqw, 12px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+}
+.hd-line--hermes .hd-line__speaker {
+  color: rgba(143, 182, 227, 0.9);
+}
+.hd-line__text {
+  font: 400 clamp(13px, 1.65cqw, 18px) / 1.42 "Space Grotesk", sans-serif;
+  color: rgba(255, 255, 255, 0.92);
   text-wrap: pretty;
 }
 
-.hd-bar {
-  width: clamp(4px, 0.55cqw, 7px);
+.hd-hangup {
+  flex: none;
+  align-self: center;
+  padding: clamp(5px, 1.1cqh, 9px) clamp(12px, 1.6cqw, 18px);
   border-radius: 999px;
-  background: linear-gradient(to top, rgba(143, 182, 227, 0.95), #ffffff);
-  box-shadow: 0 0 10px rgba(143, 182, 227, 0.4);
-  transform-origin: 50% 50%;
-  animation: hdBar 1.05s ease-in-out infinite;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font: 500 clamp(9.5px, 1.15cqw, 13px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
 }
+
+/* --------------------------------------------------- Szene 3: das Ergebnis */
+
+.hd-result {
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(10px, 1.4cqw, 16px);
+  padding: clamp(10px, 2.1cqh, 16px) clamp(12px, 1.7cqw, 20px);
+  border-radius: clamp(10px, 1.2cqw, 14px);
+  background: linear-gradient(160deg, rgba(26, 54, 98, 0.6) 0%, rgba(10, 26, 54, 0.64) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 30px -22px rgba(2, 8, 22, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.hd-result__dot {
+  flex: none;
+  margin-top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7fe0b0;
+  box-shadow: 0 0 10px rgba(127, 224, 176, 0.7);
+}
+.hd-result__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.hd-result__key {
+  font: 500 clamp(10px, 1.2cqw, 14px) / 1 var(--mono, ui-monospace, Menlo, monospace);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(143, 182, 227, 0.85);
+}
+.hd-result__value {
+  font: 400 clamp(13.5px, 1.7cqw, 20px) / 1.35 "Space Grotesk", sans-serif;
+  color: #fff;
+}
+.hd-result--done {
+  align-items: center;
+  background: linear-gradient(180deg, #ffffff 0%, #e9f2fc 100%);
+  border-color: rgba(255, 255, 255, 0.94);
+}
+.hd-result__check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(17px, 1.8cqw, 22px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #157f4f;
+  font: 600 clamp(9px, 1cqw, 12px) / 1 "Space Grotesk", sans-serif;
+  color: #fff;
+}
+.hd-result__done-text {
+  font: 500 clamp(13px, 1.6cqw, 19px) / 1.35 "Space Grotesk", sans-serif;
+  color: #10305a;
+}
+
+/* ------------------------------------------- Steuerung (Fussleiste, Verträge
+ * mit hermes-demo.js: .hd-foot wird gemessen, data-hd-pause/track/tick). */
 
 .hd-foot {
   position: absolute;
@@ -326,17 +601,35 @@
   display: flex;
   flex-direction: column;
   gap: clamp(9px, 2cqh, 15px);
-  padding: 0 clamp(16px, 4cqw, 44px) clamp(18px, 3.6cqh, 28px);
-  /* Eine Groesse fuer beides: die Pause-Taste steht links neben der Zeitachse,
-     Schrittzeile und Leiste beginnen darum an derselben Kante. Nur so kann
-     eine Ueberschrift ueber ihrem Abschnitt der Leiste stehen. */
+  padding: 0 clamp(16px, 4cqw, 44px) clamp(16px, 3.2cqh, 26px);
   --hd-pause-size: clamp(30px, 3.4cqw, 42px);
   --hd-ctrl-gap: clamp(10px, 2.6cqw, 34px);
   --hd-rail-inset: calc(var(--hd-pause-size) + var(--hd-ctrl-gap));
 }
 
+.hd-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-ctrl-gap, clamp(10px, 2.6cqw, 34px));
+}
+/* Die drei Überschriften stehen über IHREM Abschnitt der Zeitachse: die
+ * Spaltenbreiten sind exakt die Abstände der Szenenwechsel-Marken
+ * (27,2 % und 75,3 % — dieselben Werte wie data-hd-tick im Markup). */
+.hd-steps {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 27.2% 48.1% 24.7%;
+  align-items: center;
+  gap: 0;
+}
 .hd-step {
+  justify-self: center;
+  white-space: nowrap;
   animation-delay: var(--hd-t);
+  animation-duration: 76s;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
   font: 500 clamp(10px, 1.3cqw, 15px) / 1 var(--mono, ui-monospace, Menlo, monospace);
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -345,60 +638,6 @@
 .hd-step:nth-of-type(1) { animation-name: hdStep1; }
 .hd-step:nth-of-type(2) { animation-name: hdStep2; }
 .hd-step:nth-of-type(3) { animation-name: hdStep3; }
-
-.hd-split {
-  display: none;
-}
-
-.hd-stage[data-paused="1"] *,
-.hd-stage[data-paused="1"] *::before,
-.hd-stage[data-paused="1"] *::after {
-  /* Auch Pseudo-Elemente (Klingelwelle ::before) pausieren — der *-Selektor
-     allein erreicht sie nicht. */
-  animation-play-state: paused !important;
-}
-
-.hd-track {
-  position: relative;
-  display: flex;
-  align-items: center;
-  height: 22px;
-  cursor: pointer;
-  touch-action: none;
-  /* Beginnt buendig mit der Schrittzeile, nicht unter der Pause-Taste. */
-  margin-left: var(--hd-rail-inset, 0px);
-}
-.hd-track > span:first-child {
-  flex: 1 1 auto;
-  height: 4px;
-  transition: height 0.18s ease;
-}
-.hd-track:hover > span:first-child {
-  height: 6px;
-}
-.hd-tick {
-  position: absolute;
-  top: 50%;
-  width: 2px;
-  height: 9px;
-  margin-top: -4.5px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.42);
-  pointer-events: none;
-}
-
-.hd-copy {
-  flex: none;
-  padding: clamp(6px, 1.1cqh, 10px) clamp(11px, 1.4cqw, 17px);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.94);
-  font: 600 clamp(11.5px, 1.35cqw, 17px) / 1 "Space Grotesk", sans-serif;
-  color: #10305a;
-  cursor: pointer;
-  white-space: nowrap;
-  user-select: none;
-  border: 0;
-}
 
 .hd-pause {
   flex: none;
@@ -416,7 +655,7 @@
   color: #fff;
   font: 400 clamp(11px, 1.3cqw, 15px) / 1 "Space Grotesk", sans-serif;
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: border-color 0.2s ease;
   animation: none !important;
   opacity: 1 !important;
 }
@@ -424,504 +663,27 @@
   border-color: rgba(255, 255, 255, 0.6);
 }
 
-/* ---------------------------------------------------- Container-Groessen */
-
-@container hd (min-width: 620px) {
-  /* Breite Buehne: links die Aussage, rechts das Bild. */
-  .hd-act {
-    grid-template-columns: minmax(0, 1.02fr) minmax(0, 1.18fr);
-    align-items: center;
-    column-gap: clamp(24px, 4.4cqw, 72px);
-    row-gap: clamp(6px, 1.4cqh, 14px);
-  }
-  .hd-say {
-    grid-column: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: clamp(10px, 2.6cqh, 22px);
-  }
-  .hd-show {
-    grid-column: 2;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: clamp(16px, 3.4cqh, 30px);
-    width: 100%;
-  }
-  .hd-wide {
-    grid-column: 1 / -1;
-  }
-  .hd-split {
-    display: block;
-  }
-  /* Ghost-Ziffer nur auf der breiten Buehne (s. .hd-actnum oben). */
-  .hd-actnum {
-    display: block;
-  }
-}
-
-@container hd (max-height: 480px) {
-  .hd-act {
-    gap: clamp(7px, 1.6cqh, 11px);
-    padding-top: clamp(10px, 2.2cqh, 18px);
-    padding-bottom: 6px;
-  }
-  .hd-head { font-size: clamp(20px, 3.4cqw, 34px); }
-  .hd-sub { font-size: clamp(12.5px, 1.6cqw, 17px); line-height: 1.4; }
-  .hd-say { gap: clamp(6px, 1.5cqh, 10px); }
-  .hd-show { gap: clamp(8px, 1.8cqh, 12px); }
-  .hd-tool { padding: 8px clamp(11px, 1.4cqw, 15px); }
-  .hd-tool > span:last-child { font-size: 14px; }
-  .hd-bubble { padding: 8px 14px; font-size: 14px; line-height: 1.38; }
-  .hd-chat { gap: 7px; }
-  .hd-connected { display: none; }
-}
-
-@container hd (max-height: 330px) {
-  /* Flacher Rahmen: alles enger, damit die vier Werkzeugzeilen und die
-     Fussleiste ohne Ueberlappung passen. */
-  .hd-act { padding: 8px clamp(16px, 4cqw, 44px) 4px; gap: 7px; }
-  .hd-head { font-size: clamp(20px, 3.2cqw, 32px); }
-  .hd-sub { font-size: clamp(12.5px, 1.5cqw, 16px); line-height: 1.4; }
-  .hd-say { gap: 7px !important; }
-  .hd-show { gap: 10px !important; }
-  .hd-tool { padding: 5px 12px !important; font-size: 13px; }
-  .hd-tool > span:last-child { font-size: 13px !important; }
-  .hd-connected { display: none !important; }
-  .hd-bubble { padding: 6px 13px !important; font-size: 13px !important; line-height: 1.35 !important; }
-  .hd-chat { gap: 6px !important; margin-top: 0 !important; }
-  .hd-chat > :nth-child(1) { animation-name: hdT1s; }
-  .hd-chat > :nth-child(2) { animation-name: hdT2s; }
-  .hd-chat > :nth-child(3) { animation-name: hdT3s; }
-  .hd-panel { border-radius: 12px; }
-  .hd-foot { gap: 7px; padding-bottom: 11px; }
-  .hd-track { height: 18px; }
-}
-
-@container hd (max-width: 430px) {
-  /* Schmale Kachel: die drei Schritte duerfen zweizeilig werden, ohne
-     aneinanderzustossen. */
-  .hd-steps {
-    display: grid !important;
-    /* Schmale Kachel: kein Platz fuer drei Spalten — die Schritte liegen
-       uebereinander und blenden nacheinander ein (hdStep*m). */
-    grid-template-columns: 1fr !important;
-  }
-  .hd-step {
-    grid-area: 1 / 1;
-    justify-self: center;
-    font-size: clamp(12px, 3.6cqw, 15px);
-    letter-spacing: 0.1em;
-    white-space: nowrap;
-  }
-  .hd-step:nth-of-type(1) { animation-name: hdStep1m !important; }
-  .hd-step:nth-of-type(2) { animation-name: hdStep2m !important; }
-  .hd-step:nth-of-type(3) { animation-name: hdStep3m !important; }
-  .hd-foot { gap: 9px; padding-bottom: 12px; }
-  .hd-pause { width: 30px; }
-}
-
-@container hd (max-width: 619px) {
-  /* Hochkant: Inhalt ueber die ganze Hoehe verteilen statt mittig mit
-     Leerraum oben und unten. */
-  .hd-act {
-    align-content: space-evenly;
-    padding-block: clamp(14px, 3.4cqh, 26px) clamp(8px, 1.8cqh, 16px);
-  }
-  .hd-connected { display: none !important; }
-  .hd-say { display: flex; flex-direction: column; gap: clamp(8px, 2cqh, 14px); }
-  .hd-show { display: flex; flex-direction: column; gap: clamp(14px, 3cqh, 24px); width: 100%; }
-  .hd-head { font-size: clamp(26px, 7.8cqw, 44px); }
-  .hd-sub { max-width: none; font-size: clamp(15px, 4.5cqw, 20px); line-height: 1.45; }
-  .hd-eyebrow { font-size: clamp(11px, 3.3cqw, 15px); }
-  .hd-bubble {
-    font-size: clamp(15px, 4.7cqw, 20px);
-    line-height: 1.4;
-    padding: clamp(9px, 1.9cqh, 14px) clamp(14px, 4cqw, 18px);
-  }
-  .hd-chat { gap: clamp(8px, 1.7cqh, 15px); }
-  .hd-mono { font-size: clamp(12.5px, 3.7cqw, 16px); }
-  .hd-tool { padding: clamp(10px, 2.2cqh, 15px) clamp(12px, 3.4cqw, 16px); }
-  .hd-tool > span:last-child { font-size: clamp(15px, 4.4cqw, 19px); }
-  .hd-copy {
-    font-size: clamp(12.5px, 3.6cqw, 15px);
-    padding: clamp(7px, 1.6cqh, 10px) clamp(12px, 3.4cqw, 16px);
-  }
-  .hd-step { font-size: clamp(10px, 2.9cqw, 13px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hd-act,
-  .hd-anim,
-  .hd-bar,
-  .hd-glow,
-  .hd-active__dot,
-  .hd-callhead__dot,
-  .hd-avatar--ringing,
-  .hd-avatar--ringing::before {
-    animation: none !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-    transform: none !important;
-  }
-
-  /* Ohne Animation kann die Buehne die sechs Akte nicht nacheinander zeigen.
-     Gestapelt (position:absolute) laegen sie dann alle sichtbar uebereinander.
-     Darum wird die Kachel hier zum ruhigen, scrollbaren Dokument: die Akte
-     stehen untereinander, jeder fuer sich lesbar. Steuerleiste und Zeitachse
-     entfallen — sie steuern eine Animation, die es nicht gibt. */
-  .hd-stage {
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    /* size-Containment misst die Buehne OHNE ihren Inhalt — mit height:auto
-       (ruhende Seite, mobiles Blatt) fiele sie damit auf 0 zusammen. Nur die
-       Breite eingrenzen: die Hoehe darf aus den Akten kommen. Die wenigen
-       hoehenbasierten Container-Abfragen greifen dann nicht mehr; ohne
-       Animation braucht die Buehne diese Feinabstufung ohnehin nicht. */
-    container-type: inline-size;
-  }
-  .hd-act {
-    position: static;
-    inset: auto;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  .hd-act:first-of-type {
-    border-top: 0;
-  }
-  .hd-foot {
-    display: none;
-  }
-}
-
-
-/* ---------------------------------------------------------------------------
- * Die Bausteine der sechs Akte. Im Entwurf waren all diese Werte inline
- * gesetzt; unter der Produktions-CSP muessen sie Klassen sein.
- * ------------------------------------------------------------------------ */
-
-/* Nummern-/Anruf-Karte (Akt 1 und 4) */
-.hd-callcard {
-  display: flex;
-  align-items: center;
-  gap: clamp(12px, 1.8cqw, 22px);
-  padding: clamp(14px, 3cqh, 26px) clamp(14px, 2cqw, 26px);
-}
-.hd-callcard--in {
-  padding: clamp(13px, 2.6cqh, 24px) clamp(14px, 2cqw, 26px);
-}
-.hd-avatar {
-  flex: none;
+.hd-track {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: clamp(38px, 4.6cqw, 58px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  /* Licht-Orb statt flacher Scheibe (Redesign 2026-08-14). */
-  background: radial-gradient(120% 120% at 30% 24%, #e8f2fc 0%, #8fb6e3 42%, #2c5f9e 100%);
-  border: 0;
-  box-shadow:
-    0 10px 26px -10px rgba(64, 125, 198, 0.75),
-    inset 0 1px 2px rgba(255, 255, 255, 0.6);
+  height: 22px;
+  cursor: pointer;
+  touch-action: none;
+  margin-left: var(--hd-rail-inset, 0px);
 }
-.hd-avatar--ringing {
-  animation: hdRing 1.6s ease-out infinite;
-}
-/* Zweite, konzentrische Klingelwelle — das box-shadow-hdRing bleibt, der
-   Ring darueber macht den Puls sichtbar praeziser. */
-.hd-avatar--ringing::before {
-  content: "";
-  position: absolute;
-  inset: -5px;
-  border-radius: 50%;
-  border: 1px solid rgba(143, 182, 227, 0.6);
-  animation: hdRingWave 1.6s ease-out infinite;
-}
-/* Hermes-Schwinge als Avatar-Zeichen (echtes Site-Asset, CSP-konform unter
-   img-src 'self') — statt des abstrakten Quadrats. drop-shadow setzt sie vom
-   hellen Orb ab; brightness(0) invert(1) macht das Graustufen-PNG rein weiss. */
-.hd-avatar__glyph {
-  display: block;
-  width: 60%;
-  aspect-ratio: 1;
-  border-radius: 0;
-  background: url("/assets/hermes-wing.png") center / contain no-repeat;
-  filter: brightness(0) invert(1) drop-shadow(0 1px 3px rgba(10, 34, 66, 0.55));
-}
-.hd-callcard__text {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(4px, 0.9cqh, 8px);
-  min-width: 0;
-}
-.hd-label {
-  font: 500 clamp(10.5px, 1.35cqw, 16px) / 1 var(--mono, ui-monospace, Menlo, monospace);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.6);
-}
-.hd-number {
-  font: 500 clamp(19px, 2.9cqw, 42px) / 1 "Space Grotesk", sans-serif;
-  letter-spacing: 0.01em;
-  color: #fff;
-}
-.hd-callee {
-  font: 500 clamp(16px, 2.2cqw, 30px) / 1.1 "Space Grotesk", sans-serif;
-  color: #fff;
-}
-
-/* Aktiv-Punkt unter der Nummer */
-.hd-active {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font: 500 clamp(10px, 1.15cqw, 14px) / 1 var(--mono, ui-monospace, Menlo, monospace);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  /* Gruen = live (dieselbe Farbfamilie wie die Status-Pillen im Dashboard). */
-  color: rgba(127, 224, 176, 0.95);
-}
-.hd-active__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #7fe0b0;
-  box-shadow: 0 0 10px rgba(127, 224, 176, 0.8);
-  animation: hdPulseDot 2.2s ease-in-out infinite;
-}
-
-/* Fensterkopf der beiden Anschluss-Wege (Akt 2) */
-.hd-winbar {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: clamp(7px, 1.4cqh, 12px) clamp(11px, 1.4cqw, 17px);
-  background: rgba(255, 255, 255, 0.07);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-}
-.hd-windot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.32);
-}
-/* Ampel-Trio (Redesign 2026-08-14): macht den Fensterkopf sofort als
-   macOS-Fenster lesbar — gedaempft, damit es die Buehne nicht anschreit. */
-.hd-windot:nth-of-type(1) { background: rgba(255, 95, 87, 0.85); }
-.hd-windot:nth-of-type(2) { background: rgba(254, 188, 46, 0.85); }
-.hd-windot:nth-of-type(3) { background: rgba(40, 200, 64, 0.85); }
-.hd-wintitle {
-  margin-left: 6px;
-  font: 500 clamp(10.5px, 1.35cqw, 16px) / 1 var(--mono, ui-monospace, Menlo, monospace);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.62);
-}
-.hd-winrow {
-  display: flex;
-  align-items: center;
-  gap: clamp(8px, 1.2cqw, 14px);
-  padding: clamp(10px, 1.9cqh, 17px) clamp(11px, 1.4cqw, 17px);
-}
-.hd-winrow .hd-mono {
+.hd-track > span:first-child {
   flex: 1 1 auto;
-  min-width: 0;
+  height: 4px;
+  transition: height 0.18s ease;
 }
-.hd-panel--term {
-  background: rgba(4, 12, 30, 0.78);
+.hd-track:hover > span:first-child {
+  height: 6px;
 }
-.hd-termbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: clamp(6px, 1.2cqh, 11px) clamp(9px, 1.2cqw, 14px) clamp(6px, 1.2cqh, 11px)
-    clamp(11px, 1.4cqw, 17px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-}
-.hd-termbar .hd-copy {
-  margin-left: auto;
-}
-.hd-termbody {
-  display: block;
-  padding: clamp(10px, 1.9cqh, 17px) clamp(11px, 1.4cqw, 17px);
-}
-.hd-prompt {
-  color: rgba(143, 182, 227, 0.75);
-}
-.hd-caret {
-  display: inline-block;
-  width: 0.55em;
-  margin-left: 2px;
-  color: #8fb6e3;
-  animation: hdCaret 1s step-end infinite;
-}
-.hd-caret--dark {
-  width: 0.5em;
-  color: #10305a;
-}
-
-/* Verbunden-Pille + Werkzeugzeilen (Akt 3) */
-.hd-connected {
-  display: inline-flex;
-  align-self: flex-start;
-  align-items: center;
-  gap: 9px;
-  padding: clamp(7px, 1.3cqh, 11px) clamp(12px, 1.5cqw, 18px);
+.hd-track:focus-visible {
+  outline: 2px solid rgba(143, 182, 227, 0.9);
+  outline-offset: 3px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.94);
-}
-.hd-connected__check {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: clamp(16px, 1.7cqw, 21px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: #10305a;
-  font: 600 clamp(9px, 1cqw, 12px) / 1 "Space Grotesk", sans-serif;
-  color: #fff;
-}
-.hd-connected__text {
-  font: 600 clamp(11px, 1.25cqw, 15px) / 1 "Space Grotesk", sans-serif;
-  color: #10305a;
-}
-.hd-tool .hd-mono {
-  flex: none;
-  color: #8fb6e3;
-}
-.hd-tool__desc {
-  font: 400 clamp(13px, 1.6cqw, 21px) / 1.35 "Space Grotesk", sans-serif;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-/* Pegel-Balken (Akt 4) */
-.hd-levels {
-  margin-left: auto;
-  padding-left: clamp(10px, 1.6cqw, 22px);
-  display: flex;
-  align-items: flex-end;
-  gap: clamp(4px, 0.6cqw, 8px);
-  height: clamp(28px, 6.4cqh, 52px);
-}
-.hd-levels .hd-bar {
-  height: 100%;
-}
-.hd-levels .hd-bar:nth-child(1) { animation-delay: 0s; }
-.hd-levels .hd-bar:nth-child(2) { animation-delay: 0.12s; }
-.hd-levels .hd-bar:nth-child(3) { animation-delay: 0.4s; }
-.hd-levels .hd-bar:nth-child(4) { animation-delay: 0.36s; }
-.hd-levels .hd-bar:nth-child(5) { animation-delay: 0.48s; }
-
-/* Gespraechsverlauf (Akt 5) */
-.hd-act--chat {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-}
-.hd-act--chat .hd-say {
-  align-items: flex-start;
-  flex: none;
-  padding-top: clamp(6px, 2cqh, 20px);
-}
-.hd-chat {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: clamp(9px, 2.4cqh, 20px);
-  width: 100%;
-  margin-top: clamp(4px, 1.4cqh, 12px);
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-}
-.hd-bubble--me {
-  align-self: flex-end;
-  background: linear-gradient(180deg, #ffffff 0%, #e9f2fc 100%);
-  color: #10305a;
-  border-bottom-right-radius: 5px;
-}
-.hd-bubble--them {
-  align-self: flex-start;
-  background: linear-gradient(165deg, rgba(24, 50, 92, 0.72) 0%, rgba(10, 26, 54, 0.78) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.94);
-  border-bottom-left-radius: 5px;
-  backdrop-filter: blur(10px) saturate(130%);
-  -webkit-backdrop-filter: blur(10px) saturate(130%);
-}
-
-/* Anruf-Kopf des Gespraechs-Akts (Redesign 2026-08-14): wer spricht mit wem,
-   live, mit Mini-Pegel — gibt den frei schwebenden Blasen einen Rahmen. */
-.hd-callhead {
-  display: inline-flex;
-  align-self: flex-start;
-  align-items: center;
-  gap: 10px;
-  padding: clamp(7px, 1.3cqh, 11px) clamp(13px, 1.6cqw, 19px);
-  border-radius: 999px;
-  background: linear-gradient(165deg, rgba(22, 47, 87, 0.62) 0%, rgba(7, 20, 44, 0.68) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 14px 30px -22px rgba(2, 8, 22, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(10px) saturate(130%);
-  -webkit-backdrop-filter: blur(10px) saturate(130%);
-}
-.hd-callhead__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #7fe0b0;
-  box-shadow: 0 0 10px rgba(127, 224, 176, 0.8);
-  animation: hdPulseDot 2.2s ease-in-out infinite;
-}
-.hd-callhead__name {
-  font: 500 clamp(12px, 1.4cqw, 17px) / 1 "Space Grotesk", sans-serif;
-  color: #fff;
-  white-space: nowrap;
-}
-.hd-callhead__live {
-  font: 500 clamp(9.5px, 1.1cqw, 13px) / 1 var(--mono, ui-monospace, Menlo, monospace);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(127, 224, 176, 0.95);
-}
-.hd-callhead__bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: clamp(12px, 1.8cqh, 16px);
-}
-.hd-callhead__bars .hd-bar {
-  width: 3px;
-  height: 100%;
-  box-shadow: none;
-}
-.hd-callhead__bars .hd-bar:nth-child(2) { animation-delay: 0.18s; }
-.hd-callhead__bars .hd-bar:nth-child(3) { animation-delay: 0.42s; }
-
-
-/* Steuerung (Fussleiste der Buehne) */
-.hd-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--hd-ctrl-gap, clamp(10px, 2.6cqw, 34px));
-}
-/* Die drei Ueberschriften stehen ueber IHREM Abschnitt der Zeitachse, nicht
- * gleichmaessig verteilt: die Spaltenbreiten sind exakt die Abstaende der
- * Aktwechsel-Marken (12,5 % und 41,4 % — dieselben Werte wie data-hd-tick).
- * Schritt 1 = Akt 1, Schritt 2 = Akt 2+3, Schritt 3 = Akt 4-6. */
-.hd-steps {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 12.5% 28.9% 58.6%;
-  align-items: center;
-  gap: 0;
-}
-.hd-step {
-  justify-self: center;
-  white-space: nowrap;
 }
 .hd-rail {
   display: block;
@@ -941,68 +703,144 @@
   animation: hdProgress 76s linear infinite;
   animation-delay: var(--hd-t);
 }
-.hd-track:focus-visible {
-  outline: 2px solid rgba(143, 182, 227, 0.9);
-  outline-offset: 3px;
-  border-radius: 999px;
+.hd-tick {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.42);
+  pointer-events: none;
 }
 
-/* Ergebniszeilen (Akt 6) */
-.hd-tool--result {
-  align-items: flex-start;
-  background: linear-gradient(160deg, rgba(26, 54, 98, 0.6) 0%, rgba(10, 26, 54, 0.64) 100%);
-}
-.hd-result__dot {
-  flex: none;
-  margin-top: 6px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  /* Gruen = erledigt (Redesign 2026-08-14, Farbfamilie der Status-Pillen). */
-  background: #7fe0b0;
-  box-shadow: 0 0 10px rgba(127, 224, 176, 0.7);
-}
-.hd-result__text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-.hd-result__key {
-  font: 500 clamp(10.5px, 1.3cqw, 15px) / 1 var(--mono, ui-monospace, Menlo, monospace);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(143, 182, 227, 0.85);
-}
-.hd-result__value {
-  font: 400 clamp(13.5px, 1.7cqw, 22px) / 1.35 "Space Grotesk", sans-serif;
-  color: #fff;
-}
-.hd-tool--done {
-  background: linear-gradient(180deg, #ffffff 0%, #e9f2fc 100%);
-  border-color: rgba(255, 255, 255, 0.94);
-}
-/* Der Erledigt-Haken in der weissen Zeile wird gruen — Erfolgssignal statt
-   Marken-Navy (dasselbe Gruen wie hd-active/hd-result__dot). */
-.hd-tool--done .hd-connected__check {
-  background: #157f4f;
-}
-.hd-done__text {
-  font: 500 clamp(13.5px, 1.7cqw, 22px) / 1.35 "Space Grotesk", sans-serif;
-  color: #10305a;
+/* Pause erreicht auch Pseudo-Element-Animationen (Klingelwelle ::before). */
+.hd-stage[data-paused="1"] *,
+.hd-stage[data-paused="1"] *::before,
+.hd-stage[data-paused="1"] *::after {
+  animation-play-state: paused !important;
 }
 
-/* Die Kachel der Startseite ist flacher als die Buehne im Blatt — dort duerfen
-   die Ergebniszeilen enger sitzen. */
+/* ---------------------------------------------------- Container-Groessen */
+
+@container hd (max-height: 480px) {
+  .hd-scene { gap: clamp(6px, 1.6cqh, 11px); padding: clamp(9px, 2cqh, 15px) clamp(12px, 2cqw, 22px); }
+  .hd-event { padding: 7px clamp(11px, 1.5cqw, 15px); }
+  .hd-event__value { font-size: clamp(13px, 1.7cqw, 17px); }
+  .hd-msg__bubble { padding: 8px 14px; font-size: clamp(12.5px, 1.55cqw, 15px); }
+  .hd-line__text { font-size: clamp(12px, 1.5cqw, 15px); }
+  .hd-transcript { gap: 7px; }
+  .hd-callcard { padding: 8px clamp(11px, 1.5cqw, 15px); }
+}
+
 @container hd (max-height: 330px) {
-  .hd-result__value,
-  .hd-done__text {
-    font-size: 13px !important;
+  /* Flache Kachel (Startseite): alles enger, die Nebeninfos weichen. */
+  .hd-window {
+    top: clamp(8px, 1.8cqh, 14px);
+    bottom: calc(var(--hd-foot, 86px) + 8px);
   }
-  .hd-result__key {
-    font-size: 10px !important;
+  .hd-winhead { padding: 6px clamp(10px, 1.4cqw, 15px); }
+  .hd-scene { gap: 6px !important; padding: 8px clamp(11px, 1.8cqw, 18px) !important; }
+  .hd-event { padding: 5px 11px !important; gap: 9px; }
+  .hd-event__key { font-size: 9px !important; }
+  .hd-event__value { font-size: 13px !important; }
+  .hd-event__value--mono { font-size: 10.5px !important; }
+  .hd-msg__label { display: none; }
+  .hd-msg__bubble { padding: 6px 12px !important; font-size: 12.5px !important; }
+  .hd-toolcall { padding: 5px 12px !important; }
+  .hd-mono { font-size: 11px !important; }
+  .hd-callcard { padding: 6px 11px !important; }
+  .hd-callcard__callee { font-size: 14px !important; }
+  .hd-transcript { gap: 5px !important; }
+  .hd-line { gap: 2px; }
+  .hd-line__speaker { font-size: 8.5px !important; }
+  .hd-line__text { font-size: 12px !important; line-height: 1.35 !important; }
+  .hd-hangup { display: none; }
+  .hd-result { padding: 6px 12px !important; gap: 10px; }
+  .hd-result__key { font-size: 9.5px !important; }
+  .hd-result__value { font-size: 12.5px !important; }
+  .hd-result__done-text { font-size: 12.5px !important; }
+  .hd-foot { gap: 7px; padding-bottom: 11px; }
+  .hd-track { height: 18px; }
+}
+
+@container hd (max-width: 430px) {
+  /* Schmale Kachel: Szenen-Titel entfällt, die drei Schritte liegen
+     übereinander und blenden nacheinander ein. */
+  .hd-scenetag { display: none; }
+  .hd-msg { max-width: 94%; }
+  .hd-line { max-width: none; }
+  .hd-callcard__live { display: none; }
+  .hd-steps {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
   }
-  .hd-result__dot {
-    margin-top: 4px;
+  .hd-step {
+    grid-area: 1 / 1;
+    justify-self: center;
+    font-size: clamp(12px, 3.6cqw, 15px);
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+  .hd-step:nth-of-type(1) { animation-name: hdStep1m !important; }
+  .hd-step:nth-of-type(2) { animation-name: hdStep2m !important; }
+  .hd-step:nth-of-type(3) { animation-name: hdStep3m !important; }
+  .hd-foot { gap: 9px; padding-bottom: 12px; }
+  .hd-pause { width: 30px; }
+  .hd-msg__bubble { font-size: clamp(14px, 4.2cqw, 17px); }
+  .hd-line__text { font-size: clamp(13px, 4cqw, 16px); }
+  .hd-event__value { font-size: clamp(14px, 4.4cqw, 18px); }
+  .hd-event__value--mono { font-size: clamp(10.5px, 3.2cqw, 13px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hd-scene,
+  .hd-anim,
+  .hd-scenetag__item,
+  .hd-vbar,
+  .hd-glow,
+  .hd-event__dot,
+  .hd-livedot,
+  .hd-toolcall__spark,
+  .hd-avatar--ringing,
+  .hd-avatar--ringing::before {
+    animation: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+  }
+
+  /* Ohne Animation kann das Fenster die Szenen nicht nacheinander zeigen —
+     die Kachel wird zum ruhigen, scrollbaren Dokument: die Szenen stehen
+     untereinander, jede für sich lesbar. Steuerleiste entfällt (sie steuert
+     eine Animation, die es nicht gibt). size-Containment würde die Bühne
+     ohne Inhalt messen — nur die Breite eingrenzen, die Höhe kommt aus den
+     Szenen. */
+  .hd-stage {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    container-type: inline-size;
+  }
+  .hd-window {
+    position: static;
+    max-width: none;
+    height: auto;
+  }
+  .hd-body {
+    position: static;
+  }
+  .hd-scene {
+    position: static;
+    inset: auto;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .hd-scene--1 {
+    border-top: 0;
+  }
+  .hd-scenetag {
+    display: none;
+  }
+  .hd-foot {
+    display: none;
   }
 }
