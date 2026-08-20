@@ -148,3 +148,69 @@ test("dropLastAgentTranscript: json meldet false/false/true", () => {
 test("dropLastAgentTranscript: pg-Befunde == json-Befunde (Paritaet)", async () => {
   assert.deepEqual(await pgDropBefunde(), jsonDropBefunde());
 });
+
+// ---- Thema A+B (2026-08-19): die drei neuen Call-Spalten ueberleben BEIDE Backends ----
+// Review-Befund R3: jedes bisherige additiv-nullable Call-Feld hat einen Persistenz-
+// Test; opening_line/opening_line_sha256/lookup_log bekamen keinen. Der Rundlauf hier
+// prueft je Backend: create (openingLine via createCall, Hash im Store berechnet) ->
+// lookupLog via recordCallLookup/finishCallLookup -> echter Reopen bzw. Disk-Read ->
+// Werte identisch. Ohne die pg-Zeilen (Spalte/INSERT/UPDATE-SET/rowToCall) spraeche der
+// Boot-Re-Arm eines aktiven EL-Calls den Rueckfall statt der festgelegten Zeile, und
+// der Recherche-Deckel zaehlte nach jedem Restart von vorn.
+const SHA256_HEX_LAENGE = 64;
+const FIXTURE_FAKTEN = 2;
+const OPENING_LINE_FIXTURE = "Ich rufe an, um einen Termin zur Bremsenprüfung zu vereinbaren.";
+const LOOKUP_QUERY_FIXTURE = "opening hours Grove Street Auto Repair Portland";
+
+async function pgOpeningLookupRoundtrip() {
+  const { store, runner } = await makePgTestStore();
+  const created = store.createCall(newCall({ openingLine: OPENING_LINE_FIXTURE }));
+  const seq = store.recordCallLookup(created.id, LOOKUP_QUERY_FIXTURE);
+  store.finishCallLookup(created.id, seq, { ok: true, factCount: FIXTURE_FAKTEN, dauerMs: 812 });
+  await store.save();
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  const call = reopened.getCall(created.id);
+  return {
+    openingLine: call.openingLine,
+    openingLineSha256: call.openingLineSha256,
+    lookupLog: call.lookupLog,
+  };
+}
+
+function jsonOpeningLookupRoundtrip() {
+  const created = jsonStore.createCall(newCall({ openingLine: OPENING_LINE_FIXTURE }));
+  const seq = jsonStore.recordCallLookup(created.id, LOOKUP_QUERY_FIXTURE);
+  jsonStore.finishCallLookup(created.id, seq, { ok: true, factCount: FIXTURE_FAKTEN, dauerMs: 812 });
+  jsonStore.save();
+  const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));
+  const call = onDisk.calls.find((eintrag) => eintrag.id === created.id);
+  return {
+    openingLine: call.openingLine,
+    openingLineSha256: call.openingLineSha256,
+    lookupLog: call.lookupLog,
+  };
+}
+
+test("openingLine/Hash/lookupLog: pg-Roundtrip erhaelt alle drei (inkl. Umlaute)", async () => {
+  const got = await pgOpeningLookupRoundtrip();
+  assert.equal(got.openingLine, OPENING_LINE_FIXTURE);
+  assert.equal(typeof got.openingLineSha256, "string");
+  assert.equal(got.openingLineSha256.length, SHA256_HEX_LAENGE);
+  assert.equal(got.lookupLog.length, 1);
+  assert.deepEqual(got.lookupLog[0].query, LOOKUP_QUERY_FIXTURE);
+  assert.equal(got.lookupLog[0].ok, true);
+  assert.equal(got.lookupLog[0].factCount, FIXTURE_FAKTEN);
+});
+
+test("openingLine/Hash/lookupLog: pg-Ergebnis == json-Ergebnis (Paritaet)", async () => {
+  const pgResult = await pgOpeningLookupRoundtrip();
+  const jsonResult = jsonOpeningLookupRoundtrip();
+  // askedAt entsteht je Lauf neu - fuer die Paritaet zaehlt die FORM, nicht die Uhrzeit.
+  for (const seite of [pgResult, jsonResult]) {
+    assert.ok(typeof seite.lookupLog[0].askedAt === "string" && seite.lookupLog[0].askedAt);
+    delete seite.lookupLog[0].askedAt;
+  }
+  assert.deepStrictEqual(pgResult, jsonResult);
+});
+

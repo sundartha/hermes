@@ -213,6 +213,12 @@ CREATE TABLE IF NOT EXISTS call (
   from_e164          TEXT,
   to_e164            TEXT,
   goal               TEXT,
+  -- Thema A (2026-08-19): die bei Auftragsannahme festgelegte, geprueft-validierte
+  -- Eroeffnungszeile des ElevenLabs-Wegs plus ihr Annahme-Hash (state-ops.js
+  -- openingLineHash). Additiv NULLABLE: nur der EL-Anrufstart liest sie, jeder
+  -- andere Call bleibt NULL -> Bestand byte-identisch.
+  opening_line        TEXT,
+  opening_line_sha256 TEXT,
   briefing           TEXT,
   constraints        TEXT,
   caller_name        TEXT,
@@ -222,6 +228,11 @@ CREATE TABLE IF NOT EXISTS call (
   status             TEXT NOT NULL,
   started_at         TEXT NOT NULL,
   answered_at        TEXT,
+  -- KS-EL1: der GRUND, wenn answered_at am Gespraechsende NICHT ermittelbar war (fehlender
+  -- oder unbrauchbarer Anbieter-Beleg, elevenlabs/outbound.js answeredAnchorOutcome).
+  -- Additiv NULLABLE: nur der ElevenLabs-Anrufstart setzt sie, jeder andere Call bleibt
+  -- NULL -> Bestand byte-identisch.
+  answered_unclear_reason TEXT,
   ended_at           TEXT,
   summary            TEXT,
   objective_achieved TEXT,
@@ -257,6 +268,13 @@ CREATE TABLE IF NOT EXISTS call (
   -- (Ziel == eigene verifizierte Nummer des Tenants). NOT NULL DEFAULT FALSE: es gibt
   -- keinen dritten Zustand, und Bestandszeilen sind per Definition nicht diagnostisch.
   diagnostic BOOLEAN NOT NULL DEFAULT FALSE,
+  -- OC-P1 (PLAN-OWNER-CALL): war das Ziel dieses Outbound die eigene hinterlegte Nummer
+  -- des ANRUFENDEN Tenants (bei eingeschaltetem OWNER_SELF_CALL_ENABLED und gepinntem
+  -- Tenant)? Ab OC-P2 haengt daran, ob der Offenlegungssatz gesprochen wird. NOT NULL
+  -- DEFAULT FALSE ist die fail-closed Form: es gibt keinen dritten Zustand, und jede
+  -- Bestandszeile ist per Definition NICHT-Owner - also Offenlegung. Auf der Zeile steht
+  -- NUR dieses Boolean, NIE die Nummer.
+  callee_is_owner BOOLEAN NOT NULL DEFAULT FALSE,
   -- LCT P2 (Ist-Kosten-Achse): estimated_cost_cents ist der TATSAECHLICH gebuchte
   -- Schaetzbetrag (GANZZAHL Cents, reconcileVoiceBudget), NIE spaeter aus dem
   -- Tarif rekonstruiert. actual_cost_micro_cents ist BIGINT (nicht NUMERIC/Float, G26) in
@@ -281,6 +299,19 @@ CREATE TABLE IF NOT EXISTS call (
   -- setzt sie, jeder andere Call bleibt NULL. Speist scripts/telnyx-call-latency.mjs
   -- --call, damit die Latenz-Tabelle ohne Handarbeit erzeugbar ist.
   telnyx_conversation_id TEXT,
+  -- EL-BL1: die opake Conversation-Kennung des ElevenLabs-Laufwerks. Additiv NULLABLE -
+  -- nur der ElevenLabs-Pfad setzt sie, jeder andere Call bleibt NULL. Ueber sie und NUR
+  -- ueber sie bindet der Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) eine
+  -- eingehende Werkzeug-Anfrage an einen laufenden Anruf und damit an seinen Mandanten.
+  elevenlabs_conversation_id TEXT,
+  -- PHASE-6-VORAUSSETZUNG (Fertig-Punkt 7): die SIP-Call-ID des ausgehenden Legs
+  -- (Form 'otb_...'). DERSELBE Wert steht im Telefonie-Beleg von Telnyx
+  -- (detail_records.sip_call_id) und im Gespraechs-Datensatz des Anbieters
+  -- (metadata.phone_call.call_id) - er ist der EINZIGE Join zwischen den beiden
+  -- Kostenquellen dieses Wegs (call_control_id/telnyx_session_id, ueber die die alte
+  -- Kosten-Kette jointe, existieren auf der SIP-Trunk-Strecke nicht). Additiv NULLABLE -
+  -- nur der ElevenLabs-Pfad setzt sie, jeder andere Call bleibt NULL.
+  sip_call_id TEXT,
   -- AL-P1 (Abbruch-Achse): Anzahl Turns dieses Calls mit nicht-leerer Anrufer-
   -- Aeusserung. PII-FREI (nur ein Zaehler, nie Text) und PURGE-FEST: purgeTranscript
   -- leert call.transcript nach der Summary, "null Anrufer-Zeilen" traefe danach auf
@@ -295,6 +326,28 @@ CREATE TABLE IF NOT EXISTS call (
   -- AL-P13: Consult-Kette am Call (A2: Zustand am Call, NICHT in einem Prozess-Broker -
   -- ueberlebt Deploy/Instanzwechsel und faellt automatisch unter Erase/Export/Retention).
   consults JSONB,
+  -- Thema B (2026-08-19): Recherche-Protokoll des ElevenLabs-Wegs (welche Query wann
+  -- an den Suchdienst ging, Auflage B5) - traegt zugleich den Deckel je Anruf.
+  -- Faellt wie consults automatisch unter Erase/Export/Retention.
+  lookup_log JSONB,
+  -- ABNAHME-D1 (TEIL 2, Eigentuemer-Auftrag): die vier vom Agenten waehrend des
+  -- Gespraechs STRUKTURIERT gesammelten Angaben (ElevenLabs Data Collection,
+  -- analysis.data_collection_results), additiv NEBEN summary - Praezedenz
+  -- answered_unclear_reason. Additiv NULLABLE: nur der ElevenLabs-Ergebnisweg setzt
+  -- sie, und nur wenn das Gespraech die jeweilige Angabe tatsaechlich hergab (kein
+  -- Termin/Betrag verhandelt ist der Normalfall, keine Luecke).
+  appointment_date TEXT,
+  appointment_time TEXT,
+  amount TEXT,
+  currency TEXT,
+  -- ABNAHME-D1 (TEIL 3, Eigentuemer-Auflage): die im Gespraech BESTAETIGTE Zeitzone des
+  -- Angerufenen, NIE eine aus der Vorwahl abgeleitete Hypothese. Herkunft + Zeitstempel
+  -- (UNSERE Serverzeit, der Anbieter liefert keinen Bestaetigungs-Zeitpunkt) reisen immer
+  -- mit dem Wert. Additiv NULLABLE, UEBERSCHREIBBAR (kein Set-once wie answered_unclear_
+  -- reason): ein spaeterer bestaetigter Wert ersetzt einen frueheren.
+  callee_confirmed_timezone TEXT,
+  callee_confirmed_timezone_origin TEXT,
+  callee_confirmed_timezone_at TEXT,
   -- F2-Mail (Call-Summary per E-Mail bei Newsletter-Einwilligung): persistierter Dedup-
   -- Marker (ISO-Zeit), Muster summary_sms_sent_at. Additiv NULLABLE: gesetzt NACH
   -- erfolgreichem Mail-Send, sonst NULL -> Bestand byte-identisch.
@@ -329,6 +382,10 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS assistant_id TEXT;
 -- P2b: Diagnose-Markierung auf einer schon existierenden call-Tabelle nachziehen.
 -- Idempotent; frische DB = No-op. DEFAULT FALSE fuellt Bestandszeilen ohne Backfill.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS diagnostic BOOLEAN NOT NULL DEFAULT FALSE;
+-- OC-P1: Owner-Ziel-Markierung auf einer schon existierenden call-Tabelle nachziehen.
+-- Idempotent; frische DB = No-op. DEFAULT FALSE fuellt Bestandszeilen ohne Backfill -
+-- der Default IST die richtige Antwort fuer alles Alte (NICHT-Owner -> Offenlegung).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_is_owner BOOLEAN NOT NULL DEFAULT FALSE;
 -- P6: Mandats-Spalte auf Bestands-call-Tabellen nachziehen (Muster context).
 -- Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS mandate JSONB;
@@ -362,6 +419,19 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_truing_attempts INTEGER NOT NULL 
 ALTER TABLE call ADD COLUMN IF NOT EXISTS telnyx_conversation_id TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS caller_turns INTEGER NOT NULL DEFAULT 0;
 
+-- EL-BL1: ElevenLabs-Handle auf Bestands-call-Tabellen nachziehen (Muster
+-- telnyx_conversation_id). Idempotent; frische DB = No-op. KEIN Backfill noetig: es gibt
+-- keinen einzigen Bestands-Anruf mit dieser Kennung, sie misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS elevenlabs_conversation_id TEXT;
+
+-- PHASE-6-VORAUSSETZUNG: den Join-Schluessel zur Telefonie-Rechnung auf Bestands-call-
+-- Tabellen nachziehen (Muster elevenlabs_conversation_id). Idempotent; frische DB =
+-- No-op. KEIN Backfill - und zwar nicht bloss "nicht noetig", sondern NICHT MOEGLICH: der
+-- Wert steht ausschliesslich im Anbieter-Datensatz, und den loescht unser eigener
+-- Abbruch-Pfad (convai.js#endConversation). Rueckwirkend ist er fuer keinen einzigen
+-- Bestands-Anruf mehr erhebbar; die Kennung misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS sip_call_id TEXT;
+
 -- AL-P11: Ergebnis-Karte auf Bestands-call-Tabellen nachziehen (Muster context/mandate).
 -- Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS result JSONB;
@@ -369,6 +439,40 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS result JSONB;
 -- AL-P13: Consult-Kette auf Bestands-call-Tabellen nachziehen (Muster context/mandate/result).
 -- Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS consults JSONB;
+
+-- Thema B (2026-08-19): Recherche-Protokoll des ElevenLabs-Wegs (Auflage B5) auf
+-- Bestands-call-Tabellen nachziehen (Muster consults). Idempotent; frische DB = No-op.
+-- KEIN Backfill noetig: es gibt keinen Bestands-Anruf mit Recherche, das Protokoll
+-- misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS lookup_log JSONB;
+
+-- KS-EL1: der Grund, wenn answered_at nicht ermittelbar war, auf Bestands-call-Tabellen
+-- nachziehen (Muster elevenlabs_conversation_id). Idempotent; frische DB = No-op. KEIN
+-- Backfill noetig: es gibt keinen einzigen Bestands-Anruf mit diesem Grund, er misst ab
+-- Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS answered_unclear_reason TEXT;
+
+-- ABNAHME-D1 (TEIL 2): die vier strukturiert gesammelten Angaben auf Bestands-call-
+-- Tabellen nachziehen (Muster answered_unclear_reason). Idempotent; frische DB = No-op
+-- (CREATE TABLE oben hat die Spalten schon). KEIN Backfill noetig: es gibt keinen
+-- einzigen Bestands-Anruf mit dieser Angabe, sie misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS appointment_date TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS appointment_time TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS amount TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS currency TEXT;
+
+-- Thema A (2026-08-19): Eroeffnungszeile + Annahme-Hash auf Bestands-call-Tabellen
+-- nachziehen (Muster answered_unclear_reason). Idempotent; frische DB = No-op. KEIN
+-- Backfill noetig: Bestands-Anrufe sind beendet, und der Anrufstart faellt bei NULL
+-- ohnehin auf den deterministischen Rueckfall (opening-line.js#verifiedOpeningLine).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS opening_line TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS opening_line_sha256 TEXT;
+
+-- ABNAHME-D1 (TEIL 3): die bestaetigte Zeitzone des Angerufenen auf Bestands-call-
+-- Tabellen nachziehen, aus demselben Grund wie die vier Spalten darueber.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_origin TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_at TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

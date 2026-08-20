@@ -32,6 +32,8 @@ import { localeFor } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
+// NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
+// fields.js, und der ist am 17.08.2026 als toter Export geloescht worden (Phase 5).
 const LAST_TRANSCRIPT_LINES = 6;
 
 // identity (optional): wird als interner X-Internal-Identity-Header an die localhost-
@@ -121,7 +123,9 @@ function requireFields(obj, specs) {
 }
 
 // Status-Mapping laut Vertrag: dialing | in_progress | completed | failed | cancelled
-function mapStatus(c) {
+// Exportiert (rein additiv, keine Verhaltensaenderung): weitere Aufrufer bleiben
+// innerhalb dieser Datei, der Export vermeidet nur einen kuenftigen Nachbau.
+export function mapStatus(c) {
   if (c.status === "active") return c.answeredAt ? "in_progress" : "dialing";
   return c.status;
 }
@@ -129,6 +133,8 @@ function mapStatus(c) {
 // startedAt - KEIN answeredAt-Fallback: bei markAnswered wuerde der Anker sonst
 // vorspringen und die angezeigte Dauer rueckwaerts springen (z.B. 3->2). Reiner
 // Anzeigewert; abgerechnet wird separat ueber voiceMinutesOf (answeredAt..endedAt).
+// NICHT MEHR EXPORTIERT: der einzige Fremdnutzer war src/conversation/outcome-to-mcp-
+// fields.js, und der ist am 17.08.2026 als toter Export geloescht worden (Phase 5).
 function durationS(c) {
   const start = c.startedAt;
   const end = c.endedAt || new Date().toISOString();
@@ -183,7 +189,9 @@ function resultCardView(result) {
   };
 }
 
-function pickTranscript(callId, c) {
+// Exportiert (rein additiv, keine Verhaltensaenderung): weitere Aufrufer bleiben
+// innerhalb dieser Datei.
+export function pickTranscript(callId, c) {
   return {
     call_id: callId,
     result_summary:
@@ -409,6 +417,24 @@ const CALENDAR_ENTRY = z.object({
 });
 const CALENDAR_OUTPUT = { calendar: z.array(CALENDAR_ENTRY) };
 
+// AL-P13, der Eroeffnungs-Consult: das Feld war das einzige der fuenf Kontext-Felder, das
+// dieses Schema NICHT deklarierte - und zod strippt undeklarierte Schluessel STILL. Ueber
+// place_call erreichte es den Server also nie, obwohl HTTP-Validierung (routes/
+// _validation.js, CONTEXT_FIELDS) und Auswertung (routes/api-calls.js, emitOpeningConsult)
+// dafuer gebaut sind. Form und Deckel wie beim Geschwisterfeld key_facts (maxItems 10,
+// routes/_validation.js OPEN_QUESTIONS_LIMITS).
+//
+// Auf Modulebene wie CALENDAR_ENTRY/CALL_LIST_ENTRY daneben, NICHT inline wie die
+// Geschwisterfelder: die Schema-Definition von place_call ist bereits so tief
+// verschachtelt, dass jede weitere inline gekettete Feld-Definition die Demeter-Grenze
+// (G36) reisst. Ein benannter Wert an dieser Stelle haelt die Kette flach.
+const OPEN_QUESTIONS_FIELD = z
+  .array(z.string())
+  .optional()
+  .describe(
+    "A few (max. 10) short questions that are still open BEFORE the call and that only the principal can answer. They are asked while the phone is ringing, so the agent starts the conversation with the answers.",
+  );
+
 // Bestands-Beschreibung von place_call, byte-identisch aus dem Tool-Deskriptor
 // herausgeloest (AL-P13 haengt bei aktivem Consult-Kanal genau EINEN Satz an).
 const PLACE_CALL_DESCRIPTION =
@@ -417,13 +443,32 @@ const PLACE_CALL_DESCRIPTION =
 // AL-P13: der Schleifen-Hinweis haengt am AKTIVEN Kanal. Repo-Lehre (call-quality-chain):
 // enge Anweisungen an der Tool-Description wirken dort, wo breite Prompt-Regeln kippen -
 // aber eine Anweisung auf ein Werkzeug, das gar nicht registriert ist, waere eine Luege.
+// GQ-B1: Die frueher hier zugesagte Gratis-Rueckfrage waehrend der Klingelzeit (Consult #0)
+// faellt weg - auf dem live laufenden ElevenLabs-Weg erreicht ihre Antwort keinen Prompt
+// mehr: emitOpeningConsult feuert unmittelbar vor dem Waehlen, und backgroundText baut den
+// Hintergrund genau einmal beim Waehlen. Eine Zusage ohne Deckung gehoert nicht in eine
+// Beschreibung. Der Ersatz ist KONDITIONAL formuliert: consultAllowedFor (das diesen Text
+// anhaengt) deckt die Rueckfrage IM Gespraech nicht vollstaendig ab, die braucht zusaetzlich
+// IN_CALL_CONSULT_ENABLED - eine unbedingte Zusage waere dort eine Luege. "at most once"
+// spiegelt MAX_IN_CALL_CONSULTS_PER_CALL; der Draht dorthin haengt in
+// test/gq-b1-briefing-openness.test.js.
 const PLACE_CALL_CONSULT_LOOP =
-  "Right after this call returns, start calling await_call_event with the returned call_id and keep calling it until it returns event=\"done\" - while the phone is still ringing the agent may ask you questions you can answer for free.";
+  "Right after this call returns, start calling await_call_event with the returned call_id and keep calling it until it returns event=\"done\" - if the agent runs into a detail the briefing left open, its question reaches you only inside this loop, and it can ask at most once, so answer it straight away. Place the call with what you have: an open detail costs nothing, a guessed one cannot be taken back.";
 
 // Zusammensetzung per filter(Boolean) (Muster briefingSystem in precall-briefing.js):
 // Kanal aus -> byte-identisch zum Bestand (test-gepinnt).
 const placeCallDescription = (consultLoop) =>
   [PLACE_CALL_DESCRIPTION, consultLoop ? PLACE_CALL_CONSULT_LOOP : null].filter(Boolean).join(" ");
+
+// S1-2c Fix (Owner-Auftrag 15.08.2026): die alte Beschreibung "Cancels a running call
+// cleanly" versprach einen bestaetigten Leitungs-Abbruch, den routes/api-calls.js seit
+// Owner-Auftrag 15.08.2026 (S1-4) selbst nicht mehr zusichert - das Modell entscheidet
+// nach der BESCHREIBUNG, nicht nach dem REST-Rumpf, und eine ueberholte Beschreibung ist
+// dieselbe Luege eine Ebene hoeher (C2). Modulebene statt inline (Muster
+// PLACE_CALL_DESCRIPTION): haelt registerTools() bei gleicher Zeilenzahl (Owner-Auflage,
+// eslint-legacy-exceptions.json pinnt sie).
+const CANCEL_CALL_DESCRIPTION =
+  "Cancels the call record and stops billing right away. Whether the phone line itself actually drops is NOT guaranteed on every call path - when it is not, the response says so explicitly instead of claiming a clean hangup.";
 
 // ctx (Phase 2): { identity, scopedTenant, allowCalendar }. identity wird per Closure
 // an jeden REST-Aufruf gehaengt (X-Internal-Identity); scopedTenant (AM6) ebenso als
@@ -539,16 +584,32 @@ export function registerTools(
           .describe(
             "Take the destination number over EXACTLY as the user gave it - copy the digits character by character, NEVER convert them or reshape them into E.164 (reshaping introduces digit errors; the server normalises deterministically). A national notation with a leading 0 is resolved by the server via the user's home country; international destinations need +XX/00XX - if a number looks like a foreign national format, ask the user for the international notation instead of guessing. Checked server-side by the safety gates (permission profile/allowlist, denylist, country).",
           ),
+        // GQ-B1: Die Vorab-Rueckfrage gilt nur noch dem THEMA selbst - der Satz wird
+        // woertlich vorgesprochen, ohne Thema gibt es keinen sprechbaren ersten Satz. Eine
+        // fehlende Praeferenz traegt dagegen das Mandat oder die Live-Rueckfrage. Der neue
+        // Nebensatz benennt den dritten Ausgang ("stays open") und ist BEWUSST durchgehend
+        // klein geschrieben: jedes Grossbuchstaben-Wort mit zwei oder mehr Buchstaben
+        // verschoebe die gepinnte Marker-Inventur dieses Feldes.
         objective: z
           .string()
           .describe(
-            "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic or preference is still unknown, ask the user FIRST, instead of sending off a vague task. Background and details do NOT belong here, they belong in the briefing.",
+            "The goal of the call as ONE speakable first-person sentence from the perspective of the calling assistant - it is read out VERBATIM to the called party right after the disclosure, BEFORE they answer. Phrase it the way a human states their concern on the phone, e.g. 'I would like to book a men's haircut for Max on Saturday morning.' NO bare-infinitive stub like 'Book an appointment'. ALWAYS name a concrete topic/occasion when it is known; if the topic itself is still unknown, ask the user FIRST, instead of sending off a vague task - a single missing detail is not a reason to ask, it belongs in the briefing or stays open. Background and details do NOT belong here, they belong in the briefing.",
           ),
+        // GQ-B2 (Owner-Entscheidung 2026-08-19): der Auftraggeber ist waehrend des Anrufs
+        // ABWESEND - das ist der Normalfall. Die GQ-B1-Pauschale ("nie vertroesten")
+        // ueberschoss deshalb: sie verbrennt die eine gedeckelte Rueckfrage auf Fragen, die
+        // auch der auftraggebende Assistent nicht beantworten kann. An ihre Stelle tritt die
+        // Selbsteinschaetzung in drei Klassen - eigene Quellen (offen lassen + deklarieren),
+        // Nur-Owner-Wissen (die ehrliche Prozess-Auskunft, KEINE erfundene Antwort),
+        // oeffentlich pruefbar (nichts schreiben). Die Erfindungs-Sperre ("never script an
+        // answer") bleibt woertlich stehen, sie ist weiterhin wahr. Der Text nennt bewusst
+        // KEIN Werkzeug: das Feld ist immer registriert, waehrend die Rueckfrage am Kanal
+        // haengt - die Anweisung dazu steht am kanalabhaengigen PLACE_CALL_CONSULT_LOOP.
         briefing: z
           .string()
           .optional()
           .describe(
-            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
+            "Relevant context from the chat so far that the agent needs for the call: what it is about, the names involved, likes/preferences, history as well as the desired outcome and tone. SUMMARISE instead of copying in raw - only what counts for the conversation. NO secrets, passwords or payment data. Write only what you KNOW: never script an answer for a detail you are missing. For each gap, decide: could you answer it yourself during the call (calendar, mail, files, chat)? Then leave the gap open and declare that in one line. Can only the principal know it? Then write the honest line that they will get back on it. Can anyone look it up? Then write nothing. The agent speaks as the personal AI assistant of the principal (not as Claude/Gemini); phrase the context from their perspective.",
           ),
         constraints: z
           .string()
@@ -562,11 +623,17 @@ export function registerTools(
         // das Feature, nicht der Typ.
         mandate: z
           .object({
+            // GQ-B1: Die zweite "Ask the user FIRST"-Anweisung ist gestrichen - die bedingte
+            // Aufforderung im ELTERN-Feld mandate bleibt woertlich stehen und ist der
+            // verbleibende Weg zu einem Rahmen. Die Erfindungs-Sperre bleibt (sie ist die
+            // sicherheitsrelevante Haelfte); der Ausgang dreht von "Chat-Runde" auf "Feld
+            // weglassen" und ist damit fail-closed: ohne Feld darf der Agent nichts zusagen,
+            // genau das sagt der naechste Satz derselben Beschreibung bereits.
             decide_freely: z
               .string()
               .optional()
               .describe(
-                "The authorisation - what the agent may commit to in the call WITHOUT asking back, e.g. 'appointment on any weekday between 9 and 12, up to 60 euros'. Phrase it concretely enough that a yes/no decision can be derived from it on the phone; vague frames ('flexible', 'sometime') do not help. Ask the user FIRST about their frame, instead of inventing one. WITHOUT this field the agent may commit to nothing and only passes every proposal on as a message. Hard prohibitions do NOT belong here, they belong in constraints.",
+                "The authorisation - what the agent may commit to in the call WITHOUT asking back, e.g. 'appointment on any weekday between 9 and 12, up to 60 euros'. Phrase it concretely enough that a yes/no decision can be derived from it on the phone; vague frames ('flexible', 'sometime') do not help. Never invent one: take the frame from what the user has already said, otherwise leave the field out. WITHOUT this field the agent may commit to nothing and only passes every proposal on as a message. Hard prohibitions do NOT belong here, they belong in constraints.",
               ),
             fallback_order: z
               .string()
@@ -607,6 +674,7 @@ export function registerTools(
               .string()
               .optional()
               .describe("The desired outcome from the principal's perspective, phrased briefly."),
+            open_questions: OPEN_QUESTIONS_FIELD,
           })
           .optional()
           .describe(
@@ -716,13 +784,19 @@ export function registerTools(
     uiTool(
       "answer_consult",
       {
+        // GQ-B2 Fix-Runde 1: der Owner ist waehrend des Anrufs ABWESEND (Normalfall) -
+        // dieselbe Praemisse, die MCP_CONSULT_INSTRUCTIONS traegt. Eine unbedingte
+        // "ask the user FIRST" waere an diesem naeheren Entscheidungspunkt die Anweisung,
+        // die den Zieldefekt (Schweigen bis zum Timeout) erst ausloest. Der Satz spiegelt
+        // jetzt denselben Unbekannt-Ausgang wie MCP_CONSULT_INSTRUCTIONS: ehrlich melden
+        // statt erfinden, statt auf den abwesenden Menschen zu warten.
         description:
           "Answers a question the phone agent asked during a running call. Give SHORT factual " +
           "answers - one entry per question, each at most " +
           KEY_FACTS_LIMITS.maxLen +
           " characters; longer answers are REJECTED and the question stays open. Do NOT invent " +
-          "facts: if you do not know, ask the user FIRST. Answers reach the agent as background " +
-          "information only.",
+          "facts: if you do not know, say so honestly here instead of guessing. Answers reach " +
+          "the agent as background information only.",
         inputSchema: {
           call_id: z.string().describe("The call_id from place_call"),
           event_id: z.string().describe("The event_id from await_call_event"),
@@ -845,14 +919,16 @@ export function registerTools(
     },
   );
 
+  // TEIL C (Owner-Auflage 15.08.2026, registerTools darf NICHT wachsen): der REST-Body wird
+  // UNVERAENDERT durchgereicht statt eines hartkodierten {status:"cancelled"} - die Route
+  // (routes/api-calls.js) traegt seit dieser Aenderung die ehrliche Auskunft (Datensatz vs.
+  // Leitung, S1-4: zusaetzlich hangup_attempted) bereits selbst. Kein zweiter Wortlaut hier
+  // (G5). Die Beschreibung selbst ist S1-2c-korrigiert (CANCEL_CALL_DESCRIPTION oben).
   tool(
     "cancel_call",
-    "Cancels a running call cleanly.",
+    CANCEL_CALL_DESCRIPTION,
     { call_id: z.string().describe("The call_id from place_call") },
-    async ({ call_id }) => {
-      await call("POST", `/api/calls/${call_id}/cancel`);
-      return text({ status: "cancelled" });
-    },
+    async ({ call_id }) => text(await call("POST", `/api/calls/${call_id}/cancel`)),
   );
 
   // Stufe 0 (Text byte-identisch zum Bestand) + structuredContent (Whitelist) + Stufe 1

@@ -129,7 +129,13 @@ const PAID_PLAN_PROFILE = Object.freeze({
   // resolveProfileFrom (store/defaults.js) liest PLAN_PROFILE NIE - bestehende Tenants
   // behalten ihr gespeichertes Profil, bis es neu geschrieben wird (billing/activation.js
   // oder scripts/backfill-plan-profiles.js). Ein Flip hier allein aendert fuer sie nichts.
-  allowLookup: true,
+  // GEDREHT 2026-08-19 (Owner-Auftrag Thema B, Auflage B4 - ersetzt die Entscheidung
+  // vom 2026-08-11, s. Kommentar oben): die Datenschutzerklaerung nennt den
+  // Suchdienst (Exa) noch NICHT. Bis sie es tut, bekommt KEIN Tarif-Profil das
+  // Recherche-Recht - nur der Owner-Tenant traegt es (OWNER_PROFILE,
+  // store/defaults.js). Wer den Kanal fuer zahlende Kunden oeffnet, dreht diesen
+  // Wert zurueck UND zieht die Datenschutzerklaerung im selben Zug nach.
+  allowLookup: false,
   allowBooking: false,
   maxCallsPerHour: null,
 });

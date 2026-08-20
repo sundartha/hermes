@@ -765,3 +765,20 @@ Das ist exakt die Lehre, die weiter oben in diesem Dokument steht ("Hintergrund-
 mit `| tail`") — im selben Arbeitstag verletzt, weil `grep` harmloser aussieht als `tail`.
 **Jede** Filterung in der Pipe eines Hintergrundlaufs ist derselbe Fehler. Volle Ausgabe in die
 Datei, filtern erst beim Lesen.
+
+## 2026-08-19 (EL-Cutover-Merge)
+
+- **Nach jedem Merge mit package.json-Aenderung: `npm install`, nicht nur
+  `--package-lock-only`.** Fehlt eine neue Dependency (hier nodemailer), crasht
+  der Server beim Boot - und die Spawn-Tests haengen dann ENDLOS statt rot zu
+  werden (15 Worker, 0 Fortschritt). Erst Boot-Probe, dann Suite.
+- **Haengende Suite zuerst auf Zombies pruefen:** ein Suitelauf einer frueheren
+  Session hielt seit Stunden 15 Worker; `ps -eo pid,lstart` entlarvt das Alter.
+  Killen, dann frisch messen - sonst diagnostiziert man den falschen Haenger.
+- **Suppressions-Gate vs. Merge: die Richtung entscheidet.** Das Gate vergleicht
+  HEAD-Fassung gegen vorgemerkte Fassung - bei einem Merge zaehlt die GESAMTE
+  Gegenseite als Bewegung. Merge auf dem Ast bauen, dessen Seite die meisten
+  Eintrags-Dateien bewegt hat (hier: HEAD=upstream), dann bleibt nur die eigene
+  echte Schuld uebrig - und die wird bereinigt, nicht gelistet. Neue
+  Altlast-Eintraege setzt kein Bau-Agent (Hook-Regel; der Classifier blockt es
+  zusaetzlich).

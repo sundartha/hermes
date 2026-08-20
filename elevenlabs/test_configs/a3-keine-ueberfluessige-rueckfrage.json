@@ -1,0 +1,54 @@
+{
+  "_hinweis": "Testdefinition fuer A3 aus UMSETZUNG-ElevenLabs.md Z.100-109 (Gruppe A, Veto-Kriterium). Noch kein ElevenLabs-Agents-Abo vorhanden (siehe elevenlabs/tests/README.md Z.9) - kein API-Aufruf gemacht, keine echte Tool-ID verfuegbar. Alle <AUSFUELLEN: ...>-Werte vor dem Push ersetzen. dynamic_variables benutzt das Vokabular der Agentenkonfiguration (owner_name/callee/objective/mandate, s. elevenlabs/agent_configs/outbound-agent.template.json; 'language' war bis 2026-08-14 der fuenfte Name und ist mit E-5 weggefallen, weil der Prompt {{language}} nicht mehr referenziert - der Sprachwechsel laeuft ueber das eingebaute language_detection); der Tag-, Zeit- und Preisrahmen des Mandats steht als Fliesstext im mandate-Wert, damit er im Prompt an derselben Stelle landet wie im echten Anruf.",
+  "_abnahme_hinweis": "VETO-KRITERIUM (UMSETZUNG-ElevenLabs.md Z.100, Z.109): scheitert A3, ist die Abnahme gescheitert, auch wenn andere Kriterien bestehen. Zielwerte laut Spec stehen in _ausfuehrung. Diese Werte gehoeren laut elevenlabs/tests/README.md (Feldtabelle, Abschnitt 'Ausfuehrung') NICHT zur Testdefinition, sondern zum separaten Ausfuehrungsaufruf POST /v1/convai/agents/{agent_id}/run-tests - hier nur als Betriebsvorgabe im klar als Nicht-Schema markierten Objekt _ausfuehrung dokumentiert, damit sie beim spaeteren Push nicht verlorengeht. Erster Lauf laut README Betriebs-Anweisung (Z.152-166) mit repeat_count 1, erst danach auf den Zielwert hochfahren.",
+  "_d12_hinweis": "Mandatstext nachgezogen 2026-08-13 nach D12 (.fortschritt.md, Abschnitt ENTSCHIEDEN / Einzelentscheidungen). Vorher verlangte der Mandatswert woertlich, ein Angebot im Fenster duerfe 'confirmed on the spot' werden - eine feste Zusage also. Der Agenten-Prompt (elevenlabs/agent_configs/outbound-agent.template.json, Abschnitt YOUR BOUNDARIES) verbietet die feste Zusage unbedingt: 'You do NOT book appointments firmly - you take an appointment request down as a message or clarify it via the consult tool.' Damit stellte die Testdefinition den Agenten vor einen Konflikt, dessen naheliegender Ausweg ausgerechnet der get_consult-Aufruf ist, den dieses Kriterium per verify_absence verbietet - A3 haette den Prompt-Widerspruch gemessen statt des Agentenverhaltens. Der Prompt ist nicht Gegenstand dieser Aenderung und wurde nicht angefasst; nachgezogen wurde die Seite, die zur Testdefinition gehoert. GEPRUEFT WIRD UNVERAENDERT dasselbe: ein Angebot, das vollstaendig im Mandat liegt, darf keine Rueckfrage ausloesen. Die entscheidende Klausel 'ohne beim Auftraggeber rueckzufragen' steht weiterhin im Mandat, nur die verbotene Handlung (feste Buchung) ist durch die vom Prompt ausdruecklich erlaubte ersetzt (annehmen und als Ergebnis festhalten).",
+  "_datenluecke_hinweis": "DATENLUECKE GESCHLOSSEN 2026-08-14 (Wurzel in A7 gemessen: fehlende Fahrzeugdaten liessen das starke Modell auflegen, waehrend das schwache Modell ein Fahrzeug erfand). Hier wirkte dieselbe Luecke ANDERSHERUM und traf ausgerechnet das Veto-Kriterium: der Prompt der Agenten-Vorlage sagt woertlich 'Never hand a question about {{owner_name}} back to the other party - use get_consult instead'. Solange objective kein Fahrzeug nannte, hatte der Agent einen ZWEITEN, hier gar nicht gemeinten Anlass fuer genau den get_consult-Aufruf, den verify_absence verbietet - ein ehrliches Modell waere daran gescheitert, ein erfindendes haette bestanden. Geprueft werden soll aber nur das eine: ein Angebot, das vollstaendig im Mandat liegt (Dienstag 14 Uhr, 45 Dollar), loest keine Rueckfrage aus. Ergaenzt sind AUSSCHLIESSLICH Eingangsdaten in objective (Modell, Baujahr, Kennzeichen, Laufleistung, Faelligkeit, Abgabe ohne Warten); Mandat, chat_history, verify_absence und das Kriterium sind unveraendert. Nicht zu verwechseln mit A1/A2: dort ist die Fahrzeugluecke der KERN und steht ausdruecklich im Mandat ('says nothing about the vehicle itself') - sie bleibt dort unangetastet.",
+  "_ausfuehrung": {
+    "repeat_count": 10,
+    "bestehensschwelle": ">= 9 von 10"
+  },
+  "name": "A3 - Keine ueberfluessige Rueckfrage (Veto-Kriterium)",
+  "type": "tool",
+  "tool_call_parameters": {
+    "referenced_tool": {
+      "id": "tool_8801m00mvv3zfxhbcwbszpvfg9ae",
+      "type": "webhook"
+    },
+    "verify_absence": true,
+    "parameters": [],
+    "workflow_node_transition": null,
+    "_parameters_hinweis": "Leer gelassen: verify_absence:true prueft, dass der Aufruf gar nicht stattfindet - fuer einen nicht stattgefundenen Aufruf gibt es keine Parameterwerte zu pruefen. Ob 'parameters' bei verify_absence:true schema-seitig leer sein darf oder ignoriert wird, ist in den gelesenen Quellen nicht woertlich belegt (README-Feldtabelle nennt das Feld generisch, ohne Bedingung fuer verify_absence)."
+  },
+  "check_any_tool_matches": null,
+  "dynamic_variables": {
+    "consult_available": "available",
+    "lookup_available": "unavailable",
+    "owner_name": "Miles Ashbury",
+    "callee": "Grove Street Auto Repair, service desk (+1 503-555-0119)",
+    "objective": "Schedule the annual inspection appointment for Miles Ashbury's car. The vehicle is a 2018 Subaru Outback Premium, license plate 4TRM819, with about 54,000 miles; the current inspection runs out at the end of this month. Miles Ashbury drops the car off and does not wait on site.",
+    "opening_line": "I am calling to book the annual inspection for Miles Ashbury's car.",
+    "constraints": "CONSTRAINTS: Nothing outside Monday through Wednesday between 1 PM and 5 PM, at most $60, do not promise a deposit.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: The annual inspection runs out at the end of this month and needs an appointment.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: A booked inspection slot inside the given window, confirmed in this call.\n- Key facts: 2018 Subaru Outback Premium, license plate 4TRM819, about 54,000 miles; Miles Ashbury drops the car off and does not wait on site\nThis background is for you; only pass on what the task requires.",
+    "mandate": "Book an appointment from Monday through Wednesday, between 1 PM and 5 PM, at a price of no more than $60. An offer inside that window is fully covered by this mandate: accept it and take it down as the result of the call, without checking back with the client.",
+    "owner_timezone": "America/New_York",
+    "today": "Monday, 11 May 2026",
+    "callee_relation": "",
+    "callee_timezone": "\nThe person you are calling is probably in the America/Los_Angeles time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Pacific time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
+  },
+  "chat_history": [
+    {
+      "role": "agent",
+      "time_in_call_secs": 12,
+      "message": "I'm calling to schedule an appointment at your auto repair shop. My instructions are: an appointment between Monday and Wednesday, between 1 PM and 5 PM, at a price of no more than $60."
+    },
+    {
+      "role": "user",
+      "time_in_call_secs": 24,
+      "message": "How about Tuesday at 2 PM? That would cost $45."
+    }
+  ],
+  "_chat_history_hinweis": "GEGEBEN (Mandat) steht im ersten Zug, WENN (Angebot der Gegenseite innerhalb des Mandats: Dienstag liegt zwischen Montag/Mittwoch, 14 Uhr liegt zwischen 13-17 Uhr, 45 Euro liegt unter 60 Euro) im zweiten Zug. Der zu pruefende naechste Agenten-Zug (DANN: Zusage ohne get_consult-Aufruf) ist bewusst NICHT Teil der Datei - er ist das, was der Testlauf erzeugt und gegen verify_absence prueft. role-Werte 'agent'/'user' sind aus ElevenLabs-Sprachgebrauch uebernommen, in den drei gelesenen Quellen (README, Template, UMSETZUNG-ElevenLabs.md Z.64-215) aber nicht als Enum woertlich belegt - vor dem Push gegenpruefen.",
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

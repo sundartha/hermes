@@ -101,6 +101,48 @@ function makeStyleClause(clauses, neutralClause) {
   return (styleId) => clauses[styleId] || neutralClause;
 }
 
+// Der Ausdruck, der IM Offenlegungssatz an die Stelle des Auftraggeber-Namens tritt, wenn
+// keiner vorliegt ("Hello, this is an AI assistant calling on behalf of its owner."). Der
+// Satz bleibt damit vollstaendig, und die Offenlegung ("hier spricht ein KI-Assistent")
+// traegt fuer sich allein (Absolute Regel 2, Artikel 50 EU AI Act: pflichtig ist, dass die
+// Gegenstelle von der KI erfaehrt - nicht der Name des Auftraggebers). Eine gesetzliche
+// Pflicht haengt nie an einer Variablen ohne Default.
+//
+// JE SPRACHE ein eigener Ausdruck, IN dieser Sprache: der englische Einschub in einem
+// deutschen oder franzoesischen Satz waere ein Sprachbruch mitten in der Pflichtaussage.
+// Jeder ist auf den Satzbau seiner Fassung gebaut ("im Auftrag von" + Dativ, "mandaté par"
+// + Agens) und benutzt das Wort, das der zweite Satz derselben Offenlegung ohnehin fuehrt
+// (Auftraggeber / mandant) - keine neue Vokabel fuer denselben Begriff.
+//
+// ERREICHBAR ist jeder der drei ueber sein eigenes Bundle (LOCALES.<sprache>.
+// disclosureOwnerFallback, s.u.), NICHT ueber drei Importe: der ElevenLabs-Anrufstart
+// laesst den Satz vom Agenten des ANBIETERS sprechen (first_message) und setzt nur den
+// Namen in dessen Vorlagen-Variable ein - er kommt an disclosure() nicht vorbei und
+// braucht den Ausdruck als WERT, und zwar in DER Sprache, die der Anruf aufgeloest hat
+// (src/elevenlabs/call-locale.js). Am Bundle statt als Export bleibt er unteilbar an
+// seiner Fassung: wer die Sprache waehlt, bekommt den passenden Ausdruck automatisch
+// mit, statt ihn getrennt danebenzulegen und dabei die falsche Sprache greifen zu
+// koennen. DISCLOSURE_OWNER_FALLBACK_EN bleibt zusaetzlich exportiert - der
+// Weltdefault-Ausdruck ist der einzige, den ein Test ohne aufgeloeste Sprache nennen
+// kann (test/elevenlabs-anrufstart.test.js).
+const DISCLOSURE_OWNER_FALLBACK_DE = "meinem Auftraggeber";
+const DISCLOSURE_OWNER_FALLBACK_FR = "mon mandant";
+export const DISCLOSURE_OWNER_FALLBACK_EN = "its owner";
+
+// EINE Quelle (G5) fuer alle drei Offenlegungs-Lambdas - und der Ort, an dem der Default
+// STRUKTURELL bindet (G27, Struktur statt Konvention): kein Aufrufweg kann ihn vergessen,
+// weil keiner den Namen anders als durch diese Funktion in den Satz bekommt. Das
+// Identitaets-Gate davor (telephony/outbound-gates.js) prueft nur den WAHRHEITSWERT des
+// Namens; ein Name aus lauter Leerzeichen passiert es und ergaebe sonst die leere
+// Einsetzstelle "...im Auftrag von .". Der WORTLAUT des Satzes bleibt unangetastet, ein
+// gesetzter Name faellt unveraendert (nur um Rand-Leerzeichen gekuerzt) an seine Stelle.
+function makeDisclosure(satz, ownerFallback) {
+  return (ownerName) => {
+    const name = typeof ownerName === "string" ? ownerName.trim() : "";
+    return satz(name || ownerFallback);
+  };
+}
+
 // Pro Sprache: alle sprachabhaengigen Bausteine. Funktionen dort, wo ein Name/Anliegen
 // interpoliert wird (disclosure/bridgePhrase/summarySystem) - der Aufrufer reicht die
 // gebundene Identitaet bzw. das Anliegen herein (keine Identitaets-Logik im Bundle).
@@ -137,10 +179,70 @@ export const LOCALES = Object.freeze({
     // Infinitiv/Nominalphrase-Auftraege; "wegen folgendem Anliegen" war Amtsdeutsch.
     bridgePhrase: (goal) =>
       /^ich\b/i.test(goal) ? `${goal}.` : `Es geht um Folgendes: ${goal}.`,
+    // Der Satz, der die Eroeffnung zur GESPRAECHSEROEFFNUNG macht. Keine Interpolation:
+    // er darf an keinem Anruf-Wert haengen.
+    //
+    // ER FRAGT NACH DER SACHE, NICHT NACH ERLAUBNIS (Eigentuemer-Befund nach Anruf 7,
+    // 18.08.2026). Vorher stand hier "Haben Sie dafuer kurz Zeit?" - eine Ja/Nein-Frage,
+    // und sie kostete am gemessenen Anruf einen VOLLEN Rundgang: der Angerufene sagte bei
+    // 19 s "Ja, hab ich", woraufhin der Agent bei 22 s das Anliegen ein zweites Mal
+    // vortrug. Rund 20 s fuer null Inhalt. Eine offene Frage laesst die Gegenseite sofort
+    // zur Sache antworten - im selben Zug, in dem sie sonst nur "ja" gesagt haette.
+    //
+    // SEIT GQ-E1 OHNE ANREDE-PRONOMEN (Befund call_mt0ddduxuzgl): der Satz steht hinter
+    // einer Zeile, deren Anrede aus dem AUFTRAG kommt - der duzte, die feste Frage
+    // siezte. Ein Baustein ohne Anrede kann mit keiner Anrede brechen; das ist die
+    // einzige Loesung ohne Heuristik und sie traegt auf allen Stufen der Treppe
+    // (Stufe 3 kennt den Auftragstext gar nicht). Waechter: GQ-E1-04.
+    openingQuestion: "Wie sieht es damit aus?",
+    // Thema A (2026-08-19): letzte Stufe der Eroeffnungs-Treppe (src/elevenlabs/
+    // opening-line.js) - greift NUR, wenn weder die erzeugte Zeile noch der Auftrag
+    // selbst die Pruefung bestehen. EIN kurzer Satz, keine Interpolation, korrekte
+    // Umlaute (gesprochener DE-String). Ebenfalls ohne Anrede-Pronomen, s.
+    // openingQuestion (GQ-E1-04).
+    openingReasonFallback: "Ich rufe an, um ein kurzes Anliegen zu klären.",
     // Pflicht-Offenlegung (CLAUDE.md Regel 2): fest verdrahtet, byte-stabil, nur der
-    // ownerName ist gebunden (nicht per Call-Parameter waehlbar/abschaltbar).
-    disclosure: (ownerName) =>
-      `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${ownerName}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
+    // ownerName ist gebunden (nicht per Call-Parameter waehlbar/abschaltbar). Fehlt der
+    // Name, tritt der DE-Ausdruck ein (makeDisclosure) - der Satz bleibt vollstaendig.
+    disclosure: makeDisclosure(
+      (ownerName) =>
+        `Guten Tag, hier spricht ein KI-Assistent im Auftrag von ${ownerName}. Das Gespräch wird für meinen Auftraggeber zusammengefasst.`,
+      DISCLOSURE_OWNER_FALLBACK_DE,
+    ),
+    // Derselbe Ausdruck, den disclosure() oben bei fehlendem Namen selbst einsetzt -
+    // hier zusaetzlich als blosser WERT, fuer den einen Weg, der den Satz gar nicht
+    // rendert, sondern nur den Namen in die Vorlage eines fremden Agenten reicht
+    // (s. den Kommentar an DISCLOSURE_OWNER_FALLBACK_* oben). Kein zweiter Wortlaut:
+    // beide Stellen lesen dieselbe Konstante.
+    disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_DE,
+    // OC-P2 (PLAN-OWNER-CALL 1.4): die Eroeffnung fuer den EINEN Fall, in dem der lange
+    // Offenlegungssatz entfaellt - das Ziel ist die eigene hinterlegte Nummer des
+    // anrufenden Tenants (call.calleeIsOwner, src/callee-is-owner.js). GESPROCHENER
+    // Satz, deshalb echte Umlaute, wo welche vorkommen (hier keine - das ist kein
+    // Versehen, s. test/callee-is-owner-elevenlabs.test.js).
+    //
+    // DAS WORT "KI" IST TRAGEND UND DARF NIE WEGFALLEN. Das Praedikat beweist eine
+    // Aussage ueber die NUMMER - dass das Ziel die hinterlegte Nummer des Tenants ist.
+    // Es beweist NICHT, dass die PERSON am Apparat der Auftraggeber ist:
+    // normalizePrivateNumber kennt keine Mobilfunk-Beschraenkung und keinen
+    // Geraetebezug (store/state-ops.js:2127-2136), ein Festnetz- oder
+    // Gemeinschaftsanschluss ist also zulaessig. Hebt dort jemand anderes ab, muss
+    // schon der erste Satz sagen, dass eine Maschine spricht - "Assistent" allein
+    // leistet das nicht (Artikel 50 EU AI Act). Wer die Begruessung kuerzt, kuerzt
+    // diese Zusage.
+    //
+    // DIREKTE ANREDE, Du-Form, Vorname: der Auftraggeber spricht mit seinem eigenen
+    // Assistenten. KEINE Selbst-Vorstellung als "Assistent von <Name>" - das waere die
+    // dritte Person ueber den Zuhoerer. KEIN Hinweis auf eine Zusammenfassung "fuer
+    // meinen Auftraggeber" - der Auftraggeber IST der Zuhoerer. KURZ: die Eroeffnung
+    // ist am Agenten gegen Unterbrechung gesperrt
+    // (disable_first_message_interruptions), jedes ueberfluessige Wort ist eine
+    // Sekunde, in der der Owner nicht dazwischenreden kann.
+    //
+    // KEIN NAMENS-RUECKFALL, mit Absicht: fehlt der Vorname, wird gar keine
+    // Uebersteuerung gebaut (elevenlabs/outbound.js#ownerFirstMessage) und der
+    // statische Offenlegungs-Rahmen spricht - fail-closed.
+    ownerOpening: (firstName) => `Hallo ${firstName}, hier ist dein KI-Assistent.`,
     // Zusammenfassungs-Prompt-Sprach-Teil (claude.js summarizeCall). Die JSON-Keys
     // bleiben englisch (sie werden geparst); nur der menschliche Text ist sprachabhaengig.
     summarySystem: (owner) =>
@@ -272,10 +374,22 @@ export const LOCALES = Object.freeze({
     // Ich-Satz-Passthrough wie DE (je/j'); sonst kuratierte, natuerlichere Bruecke.
     bridgePhrase: (goal) =>
       /^(je\b|j')/i.test(goal) ? `${goal}.` : `Voici l'objet de mon appel : ${goal}.`,
+    // s. DE (openingQuestion).
+    openingQuestion: "Qu'en est-il ?",
+    // s. DE (openingReasonFallback) - kuratiert, mit Akzenten.
+    openingReasonFallback: "J'appelle pour régler une petite demande.",
     // FR-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE).
-    disclosure: (ownerName) =>
-      `Bonjour, ceci est un assistant IA mandaté par ${ownerName}. Cette conversation sera résumée pour mon mandant.`,
+    // Fehlt der Name, tritt der FR-Ausdruck ein (makeDisclosure).
+    disclosure: makeDisclosure(
+      (ownerName) =>
+        `Bonjour, ceci est un assistant IA mandaté par ${ownerName}. Cette conversation sera résumée pour mon mandant.`,
+      DISCLOSURE_OWNER_FALLBACK_FR,
+    ),
+    // s. DE (derselbe Ausdruck wie in disclosure(), zusaetzlich als Wert).
+    disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_FR,
+    // s. DE (ownerOpening) - "IA" traegt hier dieselbe Last wie "KI" dort.
+    ownerOpening: (firstName) => `Bonjour ${firstName}, c'est ton assistant IA.`,
     summarySystem: (owner) =>
       `Tu résumes un appel téléphonique de l'assistant IA de ${owner}. Réponds UNIQUEMENT avec du JSON valide : {"summary": "2-3 phrases en français", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 phrase", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. Mentionne dans le résumé des résultats concrets (date/heure convenue, prix, nom de la personne de contact), si le transcript les contient, plutôt que des formulations générales. objective_achieved évalue EXCLUSIVEMENT la mission initiale (pour les appels entrants : si la demande de l'appelant a été résolue). Les sujets annexes ouverts par l'assistant ou l'interlocuteur lui-même (par ex. une prise de rendez-vous proposée ou interrompue) sont SANS PERTINENCE pour cette évaluation. true = la mission a été suffisamment traitée, même si l'appel s'est terminé au milieu d'une étape de suivi ; false = la mission n'a clairement pas été atteinte ; "unclear" = réellement impossible à juger à partir de la mission. N'ajoute des action items que si ${owner} doit réellement faire quelque chose (max. 3). Les rendez-vous déjà fermement réservés ne sont PAS un action item. Fiche de résultat : outcome est UNE phrase avec le résultat concret (date/heure convenue, prix, nom) ou - si rien n'a été obtenu - la raison. commitments sont les engagements pris par l'assistant au nom de ${owner} ; counterparty_commitments sont les engagements de l'interlocuteur. open_points sont les questions restées ouvertes. next_step est LA prochaine étape pour ${owner}, sinon null. facts sont des informations durablement utiles sur l'interlocuteur (horaires, contact, prix). Chaque liste contient au maximum 3 éléments, chaque élément au maximum 200 caractères. N'invente rien : si une information manque dans le transcript, la liste reste vide ou le champ reste null.`,
     // AL-P11 (O5): s. DE - uniquement ajouté si EVIDENCE_RETENTION_DAYS > 0.
@@ -373,10 +487,25 @@ export const LOCALES = Object.freeze({
     // Ich-Satz-Passthrough wie DE (I/I'm/I'd); sonst natuerlichere Bruecke.
     bridgePhrase: (goal) =>
       /^i\b/i.test(goal) ? `${goal}.` : `Here's what I'm calling about: ${goal}.`,
+    // s. DE (openingQuestion).
+    openingQuestion: "How does that look on your side?",
+    // s. DE (openingReasonFallback).
+    openingReasonFallback: "I am calling to sort out a small matter with you.",
     // EN-Offenlegung (R8): feste, kuratierte Variante - byte-stabil und NICHT per
     // Call-Parameter waehlbar/abschaltbar; nur der ownerName ist gebunden (wie DE/FR).
-    disclosure: (ownerName) =>
-      `Hello, this is an AI assistant calling on behalf of ${ownerName}. This conversation will be summarised for the person I represent.`,
+    // Fehlt der Name, tritt DISCLOSURE_OWNER_FALLBACK_EN ein (makeDisclosure) - denselben
+    // Ausdruck setzt der ElevenLabs-Anrufstart in seine Vorlagen-Variable, wenn der Anruf
+    // auf Englisch aufgeloest hat; loest er auf Deutsch/Franzoesisch auf, nimmt er den
+    // Ausdruck DIESER Sprache (src/elevenlabs/call-locale.js).
+    disclosure: makeDisclosure(
+      (ownerName) =>
+        `Hello, this is an AI assistant calling on behalf of ${ownerName}. This conversation will be summarised for the person I represent.`,
+      DISCLOSURE_OWNER_FALLBACK_EN,
+    ),
+    // s. DE (derselbe Ausdruck wie in disclosure(), zusaetzlich als Wert).
+    disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_EN,
+    // s. DE (ownerOpening) - "AI" traegt hier dieselbe Last wie "KI" dort.
+    ownerOpening: (firstName) => `Hi ${firstName}, it's your AI assistant.`,
     summarySystem: (owner) =>
       `You are summarising a phone call made by ${owner}'s AI assistant. Reply ONLY with valid JSON: {"summary": "2-3 sentences in English", "actionItems": ["..."], "objective_achieved": true|false|"unclear", "outcome": "1 sentence", "commitments": ["..."], "counterparty_commitments": ["..."], "open_points": ["..."], "next_step": "..."|null, "facts": ["..."]}. State concrete outcomes in the summary (agreed date/time, price, contact person's name) if present in the transcript, instead of vague descriptions. objective_achieved judges ONLY the original objective (for inbound calls: whether the caller's request was resolved). Side topics opened by the assistant or the other party themselves (e.g. an offered or abandoned appointment follow-up) are IRRELEVANT to this judgement. true = the objective was answered well enough, even if the call ended in the middle of a follow-up step; false = the objective was clearly not achieved; "unclear" = genuinely impossible to judge from the objective. Only add action items if ${owner} really needs to do something (max. 3). Appointments that are already firmly booked are NOT an action item. Result card: outcome is ONE sentence with the concrete result (agreed date/time, price, name) or - if nothing was achieved - the reason why. commitments are promises the assistant made on behalf of ${owner}; counterparty_commitments are promises made by the other party. open_points are questions that stayed open. next_step is THE one next step for ${owner}, otherwise null. facts are durably useful details about the other party (opening hours, contact person, prices). Each list holds at most 3 entries, each entry at most 200 characters. Invent nothing: if a detail is missing from the transcript, the list stays empty or the field stays null.`,
     // AL-P11 (O5): s. DE - only appended when EVIDENCE_RETENTION_DAYS > 0.

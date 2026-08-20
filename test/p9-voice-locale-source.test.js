@@ -4,8 +4,10 @@
 //     (src/i18n/locales.js) statt aus einer eigenen Voice-Tabelle - gemessen gegen den
 //     BUENDELWERT, nicht gegen ein Literal: aendert jemand LOCALES.fr.sttLocale, folgt
 //     der Renderer oder dieser Test ist rot (das ist der Drift-Faenger);
-// (2) die ElevenLabs-Voice-ID folgt der Sprache (Owner-Entscheidung 2026-07-27), DE bleibt
-//     die global konfigurierte Plattform-Stimme.
+// (2) die ElevenLabs-Voice-ID folgt der Sprache (Owner-Entscheidung 2026-08-18) - seit
+//     diesem Tag fuer ALLE DREI Sprachen, auch fuer DE. Vorher fiel Deutsch auf die global
+//     konfigurierte Plattform-Stimme zurueck; war die nicht gesetzt, sprach ein deutsches
+//     Gespraech in der Dashboard-Stimme des Agenten (an Anruf 7 gemessen: en/american).
 // Pur, offline, kein Env, kein Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,10 +19,12 @@ import { LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 
 const EL = { apiKeyRef: "elevenlabs_prod", voiceId: "platform-de", model: "Default" };
 const OPTS = { elevenLabs: EL };
-// Bindende Owner-IDs (2026-07-27). Byte-genau gepinnt, damit die Entscheidung nicht
-// lautlos driftet. DE steht bewusst NICHT hier: Deutsch bleibt el.voiceId.
-const FR_VOICE_ID = "FFXYdAYPzn8Tw8KiHZqg";
-const EN_VOICE_ID = "wOPou4MhRIYEqQHVxjmp";
+// Bindende Owner-IDs (2026-08-18). Byte-genau gepinnt, damit die Entscheidung nicht
+// lautlos driftet. DE steht jetzt MIT hier - der Rueckfall auf el.voiceId war die Ursache
+// der amerikanischen Stimme in Anruf 7.
+const DE_VOICE_ID = "cqPdIo76zSHFDcSZpFov";
+const FR_VOICE_ID = "WeAAwKYcS06VmXw086yZ";
+const EN_VOICE_ID = "ZSNL4hPqCnqoMPaI4jGX";
 
 test("Voice-Tabellen fuehren die STT-Locale nicht mehr selbst - der Renderer folgt dem Locale-Buendel", () => {
   for (const language of SUPPORTED_LANGUAGES) {
@@ -40,14 +44,20 @@ test("sttLocaleForVoiceProfile wirft fail-closed beim Fremdprofil - kein stiller
   assert.throws(() => sttLocaleForVoiceProfile(undefined), /unbekanntes voiceProfile/);
 });
 
-test("ElevenLabs-Stimme je Sprache: DE = Plattform-Stimme, FR/EN = kuratierte IDs", () => {
+test("ElevenLabs-Stimme je Sprache: DE/FR/EN je eine kuratierte ID, keine faellt auf die Plattform-Stimme", () => {
   const voiceIdOf = (voiceProfile) => {
     const out = renderTelnyx([say("Text", voiceProfile)], OPTS);
     const m = out.match(/<Say voice="ElevenLabs\.[^.]+\.([^"]+)"/);
     assert.ok(m, `kein ElevenLabs-Say gerendert fuer ${voiceProfile}`);
     return m[1];
   };
-  assert.equal(voiceIdOf(VOICE_PROFILE.DE_FEMALE_NEURAL), EL.voiceId);
+  assert.equal(voiceIdOf(VOICE_PROFILE.DE_FEMALE_NEURAL), DE_VOICE_ID);
+  assert.notEqual(
+    voiceIdOf(VOICE_PROFILE.DE_FEMALE_NEURAL),
+    EL.voiceId,
+    "DE darf NICHT mehr auf die Plattform-Stimme fallen - genau dieser Rueckfall liess " +
+      "Anruf 7 in einer amerikanischen Stimme deutsch sprechen",
+  );
   assert.equal(voiceIdOf(VOICE_PROFILE.FR_FEMALE_NEURAL), FR_VOICE_ID);
   assert.equal(voiceIdOf(VOICE_PROFILE.EN_FEMALE_NEURAL), EN_VOICE_ID);
 });
@@ -56,23 +66,21 @@ test("Assistant-speak (Call-Control) bleibt bewusst bei der GLOBALEN Stimme - de
   // speakVoiceFields (src/telephony/adapters/telnyx/voice.js) nutzt elevenLabsVoiceName(el)
   // OHNE voiceProfile - das ist die einzige Stelle, an der der Assistant-Pfad danach spricht
   // (EIN global provisioniertes Voice-Setting, scripts/telnyx-assistant-provision.mjs). Fuer
-  // DE stimmt das mit dem Renderer ueberein (beide = el.voiceId); fuer FR/EN weicht der
-  // Assistant-Pfad ABSICHTLICH vom sprachaufgeloesten Renderer ab, sonst spraeche der
-  // speak-Node FR/EN, der folgende Assistant aber weiter DE (Review-Runde 2, R5-Regression).
+  // Der Assistant-Pfad weicht ABSICHTLICH vom sprachaufgeloesten Renderer ab, sonst
+  // spraeche der speak-Node in der Sprache des Anrufs, der folgende Assistant aber weiter
+  // in der global provisionierten (Review-Runde 2, R5-Regression). SEIT 2026-08-18 gilt das
+  // fuer ALLE DREI Profile: vorher fiel DE mit der globalen Stimme zusammen, weil es keine
+  // eigene hatte - die Uebereinstimmung war ein Nebeneffekt des Lochs, keine Zusage.
   const globalVoice = elevenLabsVoiceName(EL);
   for (const voiceProfile of Object.values(VOICE_PROFILE)) {
     const rendered = renderTelnyx([say("Text", voiceProfile)], OPTS).match(
       /<Say voice="([^"]+)"/,
     )[1];
-    if (voiceProfile === VOICE_PROFILE.DE_FEMALE_NEURAL) {
-      assert.equal(globalVoice, rendered, "DE: Assistant-Stimme und Renderer-Stimme sind dieselbe");
-    } else {
-      assert.notEqual(
-        globalVoice,
-        rendered,
-        `${voiceProfile}: Renderer loest sprachaufgeloest auf, Assistant-Pfad bleibt bewusst global`,
-      );
-    }
+    assert.notEqual(
+      globalVoice,
+      rendered,
+      `${voiceProfile}: Renderer loest sprachaufgeloest auf, Assistant-Pfad bleibt bewusst global`,
+    );
   }
 });
 

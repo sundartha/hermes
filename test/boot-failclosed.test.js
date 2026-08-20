@@ -82,6 +82,17 @@ test("OUT-05 F2: FAKE_ORIGINATE=true ohne SKIP_TWILIO_SIGNATURE_CHECK -> Boot ve
   assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
 });
 
+// OUT-05-EL (Owner-Auftrag 15.08.2026, Aufgabe 1): dasselbe Boot-Refusal-Muster fuer den
+// EL-Anrufstart-Gegenstueck von FAKE_ORIGINATE.
+test("OUT-05-EL: FAKE_ORIGINATE_ELEVENLABS=true ohne SKIP_TWILIO_SIGNATURE_CHECK -> Boot verweigert (exit 1)", async () => {
+  const { code, output } = await startServerExpectExit({
+    env: { FAKE_ORIGINATE_ELEVENLABS: "true", SKIP_TWILIO_SIGNATURE_CHECK: "false" },
+  });
+  assert.equal(code, 1, `erwartet exit 1, Output:\n${output}`);
+  assert.match(output, /FAKE_ORIGINATE_ELEVENLABS/);
+  assert.doesNotMatch(output, /Gateway laeuft/, "darf NICHT gestartet sein");
+});
+
 // ---- P3 (Boot-Guards Konfig-Kohaerenz/Modellpreise) -------------------------------
 
 // KS-P9/E10 (frueher T-P3-10, GEDREHT): eine Tenant-Default-Decke UEBER der Plattform-Zahl

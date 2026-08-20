@@ -66,10 +66,15 @@ const EXPECTED_MARKERS = {
   place_call: ["NOT"],
   "place_call.to": ["EXACTLY", "NEVER"],
   "place_call.objective": ["ONE", "VERBATIM", "BEFORE", "NO", "ALWAYS", "FIRST", "NOT"],
-  "place_call.briefing": ["SUMMARISE", "NO"],
+  // GQ-B1: die Vertroestungs-Sperre. KNOW ist die Verhaltensgarantie des Feldes (nur
+  // Gewusstes ins Briefing) - bewusst nachgezogen statt weggeschrieben, Praezedenz
+  // max_duration_s/KS-P3.
+  "place_call.briefing": ["SUMMARISE", "NO", "KNOW"],
   "place_call.constraints": [],
   "place_call.mandate": ["MANDATE", "ITSELF", "NOTHING", "NO", "ALWAYS"],
-  "place_call.mandate.decide_freely": ["WITHOUT", "FIRST", "WITHOUT", "NOT"],
+  // GQ-B1: die Vorab-Rueckfrage ist hier gestrichen (sie steht bedingt im Eltern-Feld);
+  // die Erfindungs-Sperre bleibt, sie traegt keinen Marker.
+  "place_call.mandate.decide_freely": ["WITHOUT", "WITHOUT", "NOT"],
   "place_call.mandate.fallback_order": [],
   "place_call.mandate.on_out_of_scope": ["OUTSIDE", "ONLY"],
   "place_call.context": ["BACKGROUND", "ADDITIONAL", "NEVER", "NO"],
@@ -77,6 +82,13 @@ const EXPECTED_MARKERS = {
   "place_call.context.key_facts": ["NO"],
   "place_call.context.recipient_relationship": [],
   "place_call.context.desired_outcome": [],
+  // AL-P13 / 15.08.2026: das fuenfte Kontext-Feld war als einziges nie im zod-Schema
+  // deklariert - zod strippt undeklarierte Schluessel STILL, der Eroeffnungs-Consult konnte
+  // ueber place_call also nie feuern. Mit der Deklaration kommt ein NEUER Beschreibungs-Pfad
+  // hinzu; die Menge wird deshalb erweitert, nicht die Erwartung gesenkt. Die eine Emphase
+  // BEFORE ist die Verhaltensgarantie des Feldes (gefragt wird VOR dem Gespraech, waehrend
+  // es klingelt) und bleibt gepinnt. Praezedenz max_duration_s/KS-P3, diagnostic/GQ-P11.
+  "place_call.context.open_questions": ["BEFORE"],
   // KS-P3 (b): die Beschreibung nannte bis dahin zwei feste Zahlen ("default 180, max 300"),
   // die es seit dieser Phase nicht mehr gibt (die Frist faellt aus dem Restguthaben). Der neue
   // Text traegt EINE Emphase - dass ein Client-Wunsch die Frist nur VERKUERZEN kann. Bewusst
@@ -92,7 +104,11 @@ const EXPECTED_MARKERS = {
   "get_call_status.call_id": [],
   get_transcript: ["NOT"],
   "get_transcript.call_id": [],
-  cancel_call: [],
+  // S1-2c (Owner-Auftrag 15.08.2026): die Beschreibung war eine Luege ("Cancels a running
+  // call cleanly") - der REST-Pfad zusichert seit S1-4 keinen bestaetigten Leitungs-Abbruch
+  // mehr. Die neue, wahrheitsgemaesse Fassung traegt EINE Emphase (NOT guaranteed) -
+  // bewusst nachgezogen statt die Emphase wegzuschreiben, Praezedenz max_duration_s/KS-P3.
+  cancel_call: ["NOT"],
   "cancel_call.call_id": [],
   get_my_number: [],
   list_calls: [],
@@ -166,7 +182,10 @@ const EXPECTED_CONSULT_MARKERS = {
   await_call_event: ["REPEATEDLY", "NEVER"],
   "await_call_event.call_id": [],
   "await_call_event.after_event_id": [],
-  answer_consult: ["SHORT", "REJECTED", "NOT", "FIRST"],
+  // GQ-B2 Fix-Runde 1: "ask the user FIRST" ist raus (Owner ist waehrend des Anrufs
+  // abwesend, siehe gq-b1-briefing-openness.test.js GQ-B2-05) - keine neue Emphase kam
+  // nach.
+  answer_consult: ["SHORT", "REJECTED", "NOT"],
   "answer_consult.call_id": [],
   "answer_consult.event_id": [],
   "answer_consult.answers": [],

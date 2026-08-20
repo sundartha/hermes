@@ -1,4 +1,4 @@
-// ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme): Snapshot-Tests fuer den
+// ElevenLabs-TTS ueber Telnyx (sprachaufgeloeste Stimme): Snapshot-Tests fuer den
 // opts.elevenLabs-Zweig des Telnyx-Renderers. Pur (kein Env, kein Spawn) - in
 // Produktion injiziert die Registry config.telnyxElevenLabs, hier kommen die opts
 // direkt. Pinnt: (1) Say-Attribute voice+api_key_ref OHNE language-Attribut,
@@ -12,6 +12,9 @@ import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";
 import { say, gather, hangup, VOICE_PROFILE } from "../src/telephony/directives.js";
 
 const XML = '<?xml version="1.0" encoding="UTF-8"?>';
+// voiceId ist der RUECKFALL fuer ein Profil ohne eigene Stimme. Seit 2026-08-18 hat jede
+// der drei Sprachen eine eigene kuratierte ID, deshalb taucht "abc123" in keinem
+// Schnappschuss mehr auf - der Renderer loest immer sprachaufgeloest auf.
 const EL = { apiKeyRef: "elevenlabs_prod", voiceId: "abc123", model: "Default" };
 const OPTS = { elevenLabs: EL };
 
@@ -21,7 +24,7 @@ test("ElevenLabs-Say: voice=ElevenLabs.Default.<id> + api_key_ref, KEIN language
     out,
     XML +
       "<Response>" +
-      '<Say voice="ElevenLabs.Default.abc123" api_key_ref="elevenlabs_prod">Hallo &amp; &lt;Test&gt;</Say>' +
+      '<Say voice="ElevenLabs.Default.cqPdIo76zSHFDcSZpFov" api_key_ref="elevenlabs_prod">Hallo &amp; &lt;Test&gt;</Say>' +
       "<Hangup/></Response>",
   );
 });
@@ -33,7 +36,7 @@ test("ElevenLabs-Gather: STT-Attribute byte-identisch zum Azure-Bestand, innerer
     XML +
       "<Response>" +
       '<Gather input="speech" language="de-DE" transcriptionEngine="Deepgram" model="deepgram/nova-3" speechTimeout="auto" action="/voice/turn?callId=c1" method="POST">' +
-      '<Say voice="ElevenLabs.Default.abc123" api_key_ref="elevenlabs_prod">Hallo?</Say>' +
+      '<Say voice="ElevenLabs.Default.cqPdIo76zSHFDcSZpFov" api_key_ref="elevenlabs_prod">Hallo?</Say>' +
       "</Gather>" +
       "</Response>",
   );
@@ -48,10 +51,11 @@ test("ElevenLabs-Gather: STT-Attribute byte-identisch zum Azure-Bestand, innerer
 // alle Sprachen" und schrieb damit genau den Defekt fest, den das Launch-Gate VOICE-12
 // unten misst - ein Ist-Pin, der als Sollzustand gelesen wurde. Er pinnt jetzt den
 // Sollzustand. Wer ihn wieder auf eine einzige ID zurueckdreht, bricht VOICE-12.
-test("ElevenLabs + FR/EN-Profil: STT-Locale UND Voice-ID folgen der Sprache", () => {
+test("ElevenLabs + jedes Sprachprofil: STT-Locale UND Voice-ID folgen der Sprache", () => {
   for (const [profile, locale, voiceId] of [
-    [VOICE_PROFILE.FR_FEMALE_NEURAL, "fr-FR", "FFXYdAYPzn8Tw8KiHZqg"],
-    [VOICE_PROFILE.EN_FEMALE_NEURAL, "en-GB", "wOPou4MhRIYEqQHVxjmp"],
+    [VOICE_PROFILE.DE_FEMALE_NEURAL, "de-DE", "cqPdIo76zSHFDcSZpFov"],
+    [VOICE_PROFILE.FR_FEMALE_NEURAL, "fr-FR", "WeAAwKYcS06VmXw086yZ"],
+    [VOICE_PROFILE.EN_FEMALE_NEURAL, "en-GB", "ZSNL4hPqCnqoMPaI4jGX"],
   ]) {
     const out = renderDirectives(
       [gather({ promptText: "Oui?", action: "/x", voiceProfile: profile })],
@@ -111,7 +115,7 @@ test("Gate halb/aus -> Azure-Bestand byte-identisch (fail-safe, kein Wurf mitten
 
 test("Model-Slot-Override: model=v3 -> ElevenLabs.v3.<id>; leer -> Default", () => {
   const v3 = renderDirectives([say("Hi")], { elevenLabs: { ...EL, model: "v3" } });
-  assert.match(v3, /voice="ElevenLabs\.v3\.abc123"/);
+  assert.match(v3, /voice="ElevenLabs\.v3\.cqPdIo76zSHFDcSZpFov"/);
   const empty = renderDirectives([say("Hi")], { elevenLabs: { ...EL, model: "" } });
-  assert.match(empty, /voice="ElevenLabs\.Default\.abc123"/);
+  assert.match(empty, /voice="ElevenLabs\.Default\.cqPdIo76zSHFDcSZpFov"/);
 });

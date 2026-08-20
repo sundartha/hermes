@@ -1,0 +1,20 @@
+{
+  "_vorlage_hinweis": "VORLAGE - nicht pushen. Alle <AUSFUELLEN: ...>-Werte ersetzen, dieses Feld '_vorlage_hinweis' vor dem Push entfernen (kein dokumentiertes Schema-Feld).",
+  "_wichtiger_befund": "Es gibt KEIN eigenes Schema-Feld fuer exakten String-Vergleich der Agenten-Antwort. Exakte Wortlaut-Pruefung (z.B. A6 Offenlegungssatz) muss als Anweisung an das Bewerter-Modell in success_condition formuliert werden - das Ergebnis bleibt eine Modell-Bewertung, kein Byte-Vergleich. Siehe README, Abschnitt UNGEKLAERT.",
+  "name": "<AUSFUELLEN: Kriterium-ID + Kurzname, z.B. \"A6 - Offenlegung als KI ist der erste Satz\">",
+  "type": "llm",
+  "success_condition": "<AUSFUELLEN: Freitext-Prompt, der bestimmt, wann die NAECHSTE Antwort des Agenten als erfolgreich gilt>",
+  "success_examples": [
+    { "response": "<AUSFUELLEN: Beispiel einer erfolgreichen Antwort>", "type": "success" }
+  ],
+  "failure_examples": [
+    { "response": "<AUSFUELLEN: Beispiel einer NICHT bestandenen Antwort>", "type": "failure" }
+  ],
+  "chat_history": [
+    { "role": "user", "time_in_call_secs": 0, "message": "<AUSFUELLEN: vorheriger Gespraechs-Turn, gegen den die naechste Agenten-Antwort getestet wird>" }
+  ],
+  "dynamic_variables": {},
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

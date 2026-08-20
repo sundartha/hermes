@@ -16,6 +16,7 @@ import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
+import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
@@ -44,6 +45,8 @@ import {
   TENANT_REJECT,
 } from "./request-tenant.js";
 import { makeConsultDelivery } from "./consult/delivery.js";
+import { consultAllowedFor } from "./consult/gate.js";
+import { elevenLabsLookupAvailableFor } from "./research/registry.js";
 import { buildApp } from "./app.js";
 import { bootServer } from "./boot.js";
 
@@ -143,6 +146,26 @@ const callFinish = makeCallFinish({
   accountsRef,
 });
 
+// EL-Anrufstart (dritter Outbound-Weg, hinter ELEVENLABS_OUTBOUND_ENABLED): EINMAL beim
+// Boot verdrahtet (Naht wie metering/callFinish, INV-7). EINE Instanz ist Pflicht - sie
+// haelt den ziehenden Ergebnisweg; eine zweite haette eine zweite Abhol-Schleife auf
+// demselben Gespraech. Konstruiert NACH callFinish (linearer DAG): finishCall kommt fertig
+// gebunden herein, terminateAndBillCall/billThunk sind dieselben Bausteine wie in
+// call-lifecycle (kein zweiter, buchungsfreier Terminierungspfad, INV-9).
+const elevenLabsOutbound = makeElevenLabsOutbound({
+  store,
+  config,
+  terminateAndBillCall,
+  billThunk,
+  finishCall: callFinish.finishCall,
+  // DASSELBE Tor, das der Rueckfrage-Webhook fragt, bevor er eine Rueckfrage annimmt -
+  // hier verdrahtet statt in outbound.js importiert (Begruendung an der Signatur dort).
+  consultAllowedFor,
+  // Thema B: dasselbe Muster fuer das Recherche-Tor - die EINE Torkette aus
+  // research/registry.js, die auch der Lookup-Webhook fragt.
+  lookupAvailableFor: elevenLabsLookupAvailableFor,
+});
+
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper
 // und Boot-Re-Arm. EINMAL beim Boot verdrahtet (Naht wie metering/callFinish, INV-7),
 // konstruiert NACH callFinish (linearer DAG): finishCall/releaseReserve kommen fertig
@@ -156,7 +179,11 @@ const lifecycle = makeCallLifecycle({
   voiceControl,
   terminateAndBillCall,
   hangUpAction,
-  billThunk,
+  // TEIL B (Owner-Auftrag 15.08.2026): die konkrete EL-Beende-Implementierung
+  // (elevenLabsOutbound, oben konstruiert - DI statt Import-Kante telephony->elevenlabs).
+  // elevenLabsHangUpAction selbst ist PURE (keine IO) und deshalb ein direkter Import in
+  // call-lifecycle.js, kein zweiter DI-Slot hier.
+  billThunk, endActiveCall: elevenLabsOutbound.endActiveCall,
   reattachActiveCallCore,
   cappedEndedAtMs,
   classifyCallTime,
@@ -258,6 +285,7 @@ const deps = {
   costCrossCheck,
   messaging,
   consultDelivery,
+  elevenLabsOutbound,
   // F2-Mail: die spaet gebundene Accounts-Zelle (s. Kommentar oben) - buildApp reicht sie
   // bis wireWebLogin durch, das accountsRef.current NACH dem Bau von accounts setzt.
   accountsRef,

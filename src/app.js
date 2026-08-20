@@ -21,10 +21,12 @@ import {
   inboundSignatureVerifier,
   providerFromHeaders,
 } from "./telephony/registry.js";
-import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
+import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction } from "./telephony/call-termination.js";
 import { originateAiAssistantCall } from "./telnyx-origination.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
+import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";
+import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
@@ -58,12 +60,38 @@ const STRIPE_WEBHOOK_PATH = "/webhooks/stripe";
 // /voice-Praefix als EINE Quelle (G5): rawBody-Capture und der Rate-Limit-Bypass
 // teilen denselben Praefix.
 const VOICE_PATH_PREFIX = "/voice";
+// Statuscodes als benannte Konstanten (G25): die Umleitung und die Grenzen, innerhalb
+// derer ein Body-Parser-Fehler als Eingabefehler des Aufrufers gilt (400 einschliesslich
+// bis 500 ausschliesslich).
+const HTTP_FOUND = 302;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_SERVER_ERROR = 500;
 // rawBody fuer /voice (Telnyx) UND den Stripe-Webhook erfassen: beide pruefen
 // gegen den unveraenderten Body. Die Erfassung aendert das Parsen NICHT (verify
 // laeuft VOR dem Parsen, additiv).
+// Object.assign statt direkter Zuweisung: req GEHOERT Express, nicht uns - die Mutation
+// ist der vom verify-Vertrag vorgesehene Weg, ein Rohwert an den Request zu haengen, und
+// sie wird hier als solche benannt statt als Parameter-Mutation geschrieben (P6/F2).
 const captureRawBody = (req, _res, buf) => {
-  if (req.path.startsWith(VOICE_PATH_PREFIX) || req.path === STRIPE_WEBHOOK_PATH) req.rawBody = buf;
+  if (req.path.startsWith(VOICE_PATH_PREFIX) || req.path === STRIPE_WEBHOOK_PATH)
+    Object.assign(req, { rawBody: buf });
 };
+
+// Body-Parser-Fehler (413 zu gross, 400 kaputtes JSON) als JSON statt HTML beantworten.
+// Alles ausserhalb der 4xx-Spanne wandert unveraendert weiter an das Error-Netz.
+function respondToParserError(err, res, next) {
+  if (!err) return next();
+  if (!err.status || err.status < HTTP_BAD_REQUEST || err.status >= HTTP_SERVER_ERROR)
+    return next(err);
+  res.status(err.status).json({ error: err.type || "bad request" });
+}
+
+// Der Parser meldet seinen Fehler an den Callback, den er selbst aufruft - die Antwort
+// entsteht damit DORT, wo der Fehler entsteht. Vorher stand dafuer eine app-weite
+// Fehler-Middleware direkt hinter den beiden Parsern; gleiches Verhalten, aber ohne den
+// Vier-Parameter-Handler, den Express nur an fn.length erkennt (F1: Obergrenze 3).
+const withParserErrors = (parser) => (req, res, next) =>
+  parser(req, res, (err) => respondToParserError(err, res, next));
 
 export function installGlobalMiddleware({ app, config }) {
   app.use(securityHeaders);
@@ -80,14 +108,10 @@ export function installGlobalMiddleware({ app, config }) {
     rateLimiter(req, res, next);
   });
 
-  app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })); // Provider-Webhooks (form-encoded)
-  app.use(express.json({ limit: BODY_LIMIT, verify: captureRawBody })); // eigene API + MCP
-
-  // Body-Parser-Fehler (413 zu gross, 400 kaputtes JSON) als JSON statt HTML beantworten
-  app.use((err, _req, res, next) => {
-    if (!err.status || err.status < 400 || err.status >= 500) return next(err);
-    res.status(err.status).json({ error: err.type || "bad request" });
-  });
+  app.use(
+    withParserErrors(express.urlencoded({ extended: false, limit: BODY_LIMIT, verify: captureRawBody })),
+  ); // Provider-Webhooks (form-encoded)
+  app.use(withParserErrors(express.json({ limit: BODY_LIMIT, verify: captureRawBody }))); // eigene API + MCP
 }
 
 export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }) {
@@ -144,7 +168,7 @@ export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }
   // Marketing-index.html (dist/index.html, weiter unten gemountet) -> der Landing-Redirect
   // gilt nur OHNE den unified Build (byte-identisch zum Bestand).
   if (!config.server.webDistDir) {
-    app.get("/", (_req, res) => res.redirect(302, LOGIN_PATH));
+    app.get("/", (_req, res) => res.redirect(HTTP_FOUND, LOGIN_PATH));
   }
 }
 
@@ -160,7 +184,7 @@ export function registerPathRedirects({ app }) {
   // braucht): niemand kommt hier mit sinnvollem Query an, und ein ungeprueft in die
   // Location gereichter Query waere unnoetige Flaeche. Beide Ziele sind Konstanten aus
   // dem Modul - nie aus dem Request abgeleitet (kein Open Redirect).
-  const umleitungAuf = (ziel) => (_req, res) => res.redirect(302, ziel);
+  const umleitungAuf = (ziel) => (_req, res) => res.redirect(HTTP_FOUND, ziel);
   for (const pfad of LOGIN_ALIAS_PATHS) app.get(pfad, umleitungAuf(LOGIN_PATH));
   for (const pfad of APP_ALIAS_PATHS) app.get(pfad, umleitungAuf(APP_PATH));
 }
@@ -223,7 +247,7 @@ export function registerStaticServing({ app, config }) {
     app.get(LEGACY_PORTAL_PATH, (req, res) => {
       const queryAt = req.originalUrl.indexOf("?");
       const search = queryAt === -1 ? "" : req.originalUrl.slice(queryAt);
-      res.redirect(302, APP_PATH + search);
+      res.redirect(HTTP_FOUND, APP_PATH + search);
     });
     // Statische Marketing-Site + App-Shell. extensions:["html"] loest /preise -> preise.html
     // auf; "/" liefert dist/index.html, /app -> app/index.html (express.static-Index-Default).
@@ -248,7 +272,14 @@ export function registerStaticServing({ app, config }) {
   }
 }
 
-export async function buildApp(deps) {
+// ---- REST-API + MCP: die Mount-Sequenz hinter den Voice-Webhooks -------------------
+// Eigener benannter Registrar wie installGlobalMiddleware/registerPublicRoutes/
+// registerStaticServing - REINE Verschiebung aus buildApp, Reihenfolge und Argumente
+// unveraendert (INV-2: die Sequenz bleibt an EINER Stelle sichtbar, sie ist nur eine
+// Ebene tiefer benannt). deps kommt als GANZES herein, damit diese Liste nicht zum
+// zweiten, mitzupflegenden Abbild der buildApp-Signatur wird; operatorAuth entsteht erst
+// im Web-Login-Block darueber und wird deshalb getrennt gereicht.
+export function registerApiRoutes({ app, deps, operatorAuth }) {
   const {
     config,
     store,
@@ -259,12 +290,134 @@ export async function buildApp(deps) {
     outboundGates,
     requestTenant,
     requireTenant,
+    costTruing,
+    consultDelivery,
+    elevenLabsOutbound,
+  } = deps;
+
+  // ---- Outbound-Call-Routen -------------------------------------------------------
+  // Die Outbound-Call-Route-Gruppe (POST /api/calls, POST /api/calls/:id/cancel) lebt
+  // in src/routes/api-calls.js (makeCallRoutes, DI-Muster wie makeReadRoutes) - reine
+  // Verschiebung, Verhalten unveraendert. An unveraenderter Mount-Position (nach
+  // der REST-API-Section, vor makeReadRoutes), hinter `internalOnly` (AUTH-P5).
+  // INV-9: die Outbound-Gate-Kette (outboundGates = EIN gepinntes Array) + der Max-Dauer-
+  // Cap (arm.*) + der Fehlerpfad (terminateAndBillCall) wandern unveraendert mit; finishCall
+  // = die EINE callFinish-Instanz (INV-7), arm.* = die EINE lifecycle-Instanz.
+  app.use(
+    makeCallRoutes({
+      store,
+      config,
+      audit,
+      outboundGates,
+      voiceControl,
+      originateAiAssistantCall,
+      // EL-Anrufstart: die EINE Instanz aus server.js (INV-7, Naht wie callFinish) - sie
+      // haelt den ziehenden Ergebnisweg des Anbieters. Fehlt sie im deps-Buendel, bleibt
+      // der Platz LEER statt hier zu werfen: makeCallRoutes setzt dann seinen
+      // fail-closed Ersatz ein (kein Anruf ohne verdrahteten Anrufstart).
+      originateElevenLabsCall: elevenLabsOutbound?.originateCall,
+      terminateAndBillCall,
+      hangUpAction,
+      // TEIL B (Owner-Auftrag 15.08.2026): die EL-Parallele zu hangUpAction, plus die
+      // konkrete Implementierung (dieselbe elevenLabsOutbound-Instanz wie oben).
+      elevenLabsHangUpAction,
+      endActiveCall: elevenLabsOutbound?.endActiveCall,
+      billThunk,
+      finishCall: callFinish.finishCall,
+      arm: {
+        armMaxDurationTimer: lifecycle.armMaxDurationTimer,
+        armReserveReleaseTimer: lifecycle.armReserveReleaseTimer,
+      },
+      tenant: { requestTenant, requireTenant, tenantOwnsCall },
+      // AL-P13: die EINE Consult-Zustell-Instanz (INV-7, in server.js konstruiert) -
+      // Poll-Zaehler und Drain-Flag leben in ihrem Closure-Scope; eine zweite Instanz
+      // haette zweite Zaehler und damit keine Obergrenze.
+      consultDelivery,
+      internalIdentity,
+      OWNER_ID,
+    }),
+  );
+
+  // ---- Read-/Export-Routen (Phase 3) ----
+  // T4-Decomposition: die GET-Route-Gruppe (/api/state, /api/calls/:id,
+  // /api/tenant-data/export) lebt in src/routes/api-read.js (makeReadRoutes,
+  // DI-Muster wie makeCallRoutes) - reine Verschiebung, Verhalten unveraendert.
+  // STATE_*-Konstanten und die View-Helfer (publicCall/upcomingCalendar/activeNumberFor)
+  // sind mitgewandert; tenantOwnsCall (eine Quelle wie POST /api/calls/:id/cancel) und
+  // die request-tenant-Resolver werden injiziert. Hinter `internalOnly` (AUTH-P5); die
+  // lesenden MCP-Tools erben das Scoping AUTOMATISCH ueber /api/state.
+  app.use(
+    makeReadRoutes({
+      store,
+      config,
+      audit,
+      tenant: { requestTenant, requireTenant, tenantOwnsCall },
+    }),
+  );
+
+  // ---- Billing-Routen ---------------------------------------------------------------
+  // Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return,
+  // cost-truing/sweep) lebt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster
+  // wie makeReadRoutes). An unveraenderter Mount-Position (nach makeReadRoutes, vor
+  // /api/onboard). Die vier Betreiber-Routen (flush-meters, cost-truing/sweep,
+  // cost-drift, platform-costs) haengen hinter webAuthMw+adminMw und werden NUR DANN
+  // gemountet, wenn operatorAuth existiert (AUTH-P6, s.o.). Das Legacy-Checkout-Paar
+  // (setup-checkout, checkout-return, geloescht erst in P9) traegt seit AUTH-P7
+  // `internalOnly` (dieselbe Middleware wie die sieben P5-Routen). billing =
+  // stripeBilling (EINE Instanz, INV-7); requireTenant = die EINE Wurzel-Instanz (403
+  // bei TENANT_REJECT). costTruing = die EINE LCT-P3-Instanz (INV-7, in server.js
+  // konstruiert).
+  app.use(
+    makeBillingRoutes({
+      config,
+      store,
+      audit,
+      billing: stripeBilling,
+      tenant: { requireTenant },
+      costTruing,
+      operatorAuth,
+    }),
+  );
+
+  // ---- Onboarding-Routen ------------------------------------------------------------
+  // /api/onboard + /api/onboard/retry lebt in src/routes/api-onboard.js
+  // (makeOnboardRoutes, DI-Muster wie makeBillingRoutes/makeCallRoutes). Unveraenderte
+  // Mount-Position (nach makeBillingRoutes, vor /mcp), hinter webAuthMw+adminMw, NUR
+  // DANN gemountet, wenn operatorAuth existiert (AUTH-P6, s.o.).
+  // provisioning = die EINE P6-Instanz (INV-7). Der withStoreLock-kritische Abschnitt +
+  // Nummern-Caps + persist_error->503 sind unveraendert.
+  app.use(makeOnboardRoutes({ store, config, audit, provisioning, operatorAuth }));
+
+  // ================= MCP ueber Streamable HTTP (Custom Connector) =================
+  // Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt in src/routes/mcp.js
+  // (makeMcpRoutes, DI-Muster wie makeBillingRoutes/makeVoiceRoutes) - reine Verschiebung,
+  // Verhalten unveraendert. Mount an UNVERAENDERTER Position: nach makeOnboardRoutes, vor
+  // errorHandler (INV-2). mcpAuth (src/auth.js) bleibt die EINZIGE Absicherung auf POST,
+  // fail-closed. Stateless pro Request
+  // (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
+  // Wurzel-Instanz (INV-7).
+  app.use(makeMcpRoutes({ config, store, requestTenant }));
+}
+
+export async function buildApp(deps) {
+  // Nur, was DIESE Ebene selbst braucht - die Kollaborateure der REST-API-Sequenz nimmt
+  // registerApiRoutes direkt aus deps (kein zweites, mitzupflegendes Abbild).
+  const {
+    config,
+    store,
+    audit,
+    callFinish,
+    lifecycle,
+    provisioning,
     conversationWatchdog,
     ttsStore,
     directiveSynth,
     voiceRender,
-    costTruing,
     messaging,
+    // EL-BL4: die EINE ConsultDelivery-Instanz (INV-7). registerApiRoutes nimmt sie fuer
+    // die Poll-Route direkt aus deps; DIESE Ebene braucht sie selbst, weil der
+    // ElevenLabs-Rueckfrage-Webhook hier gemountet wird und auf ihren Slot-Zaehlern und
+    // ihrem Drain-Flag sitzt.
     consultDelivery,
     // F2-Mail: spaet gebundene Accounts-Zelle (server.js) - an wireWebLogin durchgereicht,
     // das accountsRef.current NACH dem Bau von accounts setzt (Muster operatorAuth unten).
@@ -361,101 +514,40 @@ export async function buildApp(deps) {
     }),
   );
 
-  // ================= REST-API (Dashboard + MCP-Tools) =================
-
-  // ---- Outbound-Call-Routen -------------------------------------------------------
-  // Die Outbound-Call-Route-Gruppe (POST /api/calls, POST /api/calls/:id/cancel) lebt
-  // in src/routes/api-calls.js (makeCallRoutes, DI-Muster wie makeReadRoutes) - reine
-  // Verschiebung, Verhalten unveraendert. An unveraenderter Mount-Position (nach
-  // der REST-API-Section, vor makeReadRoutes), hinter `internalOnly` (AUTH-P5).
-  // INV-9: die Outbound-Gate-Kette (outboundGates = EIN gepinntes Array) + der Max-Dauer-
-  // Cap (arm.*) + der Fehlerpfad (terminateAndBillCall) wandern unveraendert mit; finishCall
-  // = die EINE callFinish-Instanz (INV-7), arm.* = die EINE lifecycle-Instanz.
+  // ---- Werkzeug-Webhooks des ElevenLabs-Laufwerks (get_consult + look_up) ---------
+  // Seit Thema B (2026-08-19) traegt derselbe Router auch den Recherche-Webhook
+  // /webhooks/elevenlabs/lookup - gleiche Bauart, eigene Gates (PLAN-SECURITY EL-P7).
+  // AUTH-AUSNAHME (Regel 3, begruendet): der Agent des Anbieters ruft serverseitig und
+  // kann keinen Session-Cookie senden; ElevenLabs signiert Werkzeug-Webhooks nicht.
+  // Absicherung im Handler: timing-sicherer Vergleich (safeEqual) des Headers
+  // x-hermes-tool-token gegen ELEVENLABS_TOOL_TOKEN, fail-closed bei leerem Wert - dann
+  // Bindung an einen laufenden Anruf, Faehigkeits-Gate und die pro-Tenant-Kostendecke
+  // (volle Begruendung im Routenmodul + src/route-policy.js). NICHT unter /voice: die
+  // Ed25519-Signaturpruefung dort bleibt unberuehrt. Die Wirkung laeuft ueber den
+  // BESTEHENDEN Consult-Kanal (call.consults, AL-P13); makeConsultRaised haelt selbst
+  // keinen Zustand und wird deshalb hier in der Kompositionswurzel gebaut, wie
+  // makeTelnyxLlmShim.
+  //
+  // BEIDE Nahtstellen zeigen auf DIESELBE consultDelivery-Instanz (INV-7), und zwar
+  // aus zwei Gruenden: ihre Slot-Zaehler begrenzen, wie viele Verbindungen gleichzeitig
+  // an einem Anruf/Mandanten haengen duerfen - dieser Webhook ist ein solcher Halter
+  // (EL-BL4) -, und ihr Drain-Flag loest beim Deploy auch den hier wartenden Aufruf auf,
+  // bevor httpServer.close() darauf wartet (EL-BEFUND-4). Eine zweite Instanz haette
+  // zweite Zaehler und damit gar keine Obergrenze.
   app.use(
-    makeCallRoutes({
+    makeElevenLabsWebhookRoutes({
       store,
       config,
-      audit,
-      outboundGates,
-      voiceControl,
-      originateAiAssistantCall,
-      terminateAndBillCall,
-      hangUpAction,
-      billThunk,
-      finishCall: callFinish.finishCall,
-      arm: {
-        armMaxDurationTimer: lifecycle.armMaxDurationTimer,
-        armReserveReleaseTimer: lifecycle.armReserveReleaseTimer,
-      },
-      tenant: { requestTenant, requireTenant, tenantOwnsCall },
-      // AL-P13: die EINE Consult-Zustell-Instanz (INV-7, in server.js konstruiert) -
-      // Poll-Zaehler und Drain-Flag leben in ihrem Closure-Scope; eine zweite Instanz
-      // haette zweite Zaehler und damit keine Obergrenze.
-      consultDelivery,
-      internalIdentity,
-      OWNER_ID,
+      consultSlots: consultDelivery,
+      onConsultRaised: makeConsultRaised({ store, isDraining: consultDelivery.isDraining }),
     }),
   );
 
-  // ---- Read-/Export-Routen (Phase 3) ----
-  // T4-Decomposition: die GET-Route-Gruppe (/api/state, /api/calls/:id,
-  // /api/tenant-data/export) lebt in src/routes/api-read.js (makeReadRoutes,
-  // DI-Muster wie makeCallRoutes) - reine Verschiebung, Verhalten unveraendert.
-  // STATE_*-Konstanten und die View-Helfer (publicCall/upcomingCalendar/activeNumberFor)
-  // sind mitgewandert; tenantOwnsCall (eine Quelle wie POST /api/calls/:id/cancel) und
-  // die request-tenant-Resolver werden injiziert. Hinter `internalOnly` (AUTH-P5); die
-  // lesenden MCP-Tools erben das Scoping AUTOMATISCH ueber /api/state.
-  app.use(
-    makeReadRoutes({
-      store,
-      config,
-      audit,
-      tenant: { requestTenant, requireTenant, tenantOwnsCall },
-    }),
-  );
-
-  // ---- Billing-Routen ---------------------------------------------------------------
-  // Die /api/billing/*-Route-Gruppe (flush-meters, setup-checkout, checkout-return,
-  // cost-truing/sweep) lebt in src/routes/api-billing.js (makeBillingRoutes, DI-Muster
-  // wie makeReadRoutes). An unveraenderter Mount-Position (nach makeReadRoutes, vor
-  // /api/onboard). Die vier Betreiber-Routen (flush-meters, cost-truing/sweep,
-  // cost-drift, platform-costs) haengen hinter webAuthMw+adminMw und werden NUR DANN
-  // gemountet, wenn operatorAuth existiert (AUTH-P6, s.o.). Das Legacy-Checkout-Paar
-  // (setup-checkout, checkout-return, geloescht erst in P9) traegt seit AUTH-P7
-  // `internalOnly` (dieselbe Middleware wie die sieben P5-Routen). billing =
-  // stripeBilling (EINE Instanz, INV-7); requireTenant = die EINE Wurzel-Instanz (403
-  // bei TENANT_REJECT). costTruing = die EINE LCT-P3-Instanz (INV-7, in server.js
-  // konstruiert).
-  app.use(
-    makeBillingRoutes({
-      config,
-      store,
-      audit,
-      billing: stripeBilling,
-      tenant: { requireTenant },
-      costTruing,
-      operatorAuth,
-    }),
-  );
-
-  // ---- Onboarding-Routen ------------------------------------------------------------
-  // /api/onboard + /api/onboard/retry lebt in src/routes/api-onboard.js
-  // (makeOnboardRoutes, DI-Muster wie makeBillingRoutes/makeCallRoutes). Unveraenderte
-  // Mount-Position (nach makeBillingRoutes, vor /mcp), hinter webAuthMw+adminMw, NUR
-  // DANN gemountet, wenn operatorAuth existiert (AUTH-P6, s.o.).
-  // provisioning = die EINE P6-Instanz (INV-7). Der withStoreLock-kritische Abschnitt +
-  // Nummern-Caps + persist_error->503 sind unveraendert.
-  app.use(makeOnboardRoutes({ store, config, audit, provisioning, operatorAuth }));
-
-  // ================= MCP ueber Streamable HTTP (Custom Connector) =================
-  // Das /mcp-Trio (POST mit mcpAuth, GET/DELETE -> 405) lebt in src/routes/mcp.js
-  // (makeMcpRoutes, DI-Muster wie makeBillingRoutes/makeVoiceRoutes) - reine Verschiebung,
-  // Verhalten unveraendert. Mount an UNVERAENDERTER Position: nach makeOnboardRoutes, vor
-  // errorHandler (INV-2). mcpAuth (src/auth.js) bleibt die EINZIGE Absicherung auf POST,
-  // fail-closed. Stateless pro Request
-  // (INV-8) + res.on("close")-Cleanup sind ins Modul mitgewandert. requestTenant = die EINE
-  // Wurzel-Instanz (INV-7).
-  app.use(makeMcpRoutes({ config, store, requestTenant }));
+  // ================= REST-API (Dashboard + MCP-Tools) + MCP-Transport ==============
+  // Die Mount-Sequenz selbst steht in registerApiRoutes (oben) - Position, Reihenfolge
+  // und Argumente unveraendert (INV-2). operatorAuth entsteht im Web-Login-Block und
+  // entscheidet dort ueber die sechs Betreiber-Routen (AUTH-P6).
+  registerApiRoutes({ app, deps, operatorAuth });
 
   // ---- Catch-all Error-Net -----------------------------------------------------------
   // MUSS NACH allen Route-Mounts und VOR app.listen stehen: Express-Error-MW sieht nur

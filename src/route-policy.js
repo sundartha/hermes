@@ -127,6 +127,28 @@ export const PUBLIC_ROUTES = Object.freeze([
       "HMAC-Signaturpruefung gegen STRIPE_WEBHOOK_SECRET (fail-closed); ohne PAYMENT_ENABLED 404.",
   },
   {
+    method: "POST",
+    path: "/webhooks/elevenlabs/consult",
+    reason:
+      "HANDLER-INTERNE AUTH (Runbook-Fall 2): der ElevenLabs-Agent ruft das Werkzeug " +
+      "get_consult serverseitig, kann keinen Session-Cookie senden - und ElevenLabs " +
+      "SIGNIERT Werkzeug-Webhooks nicht (nur frei konfigurierbare Header). Absicherung im " +
+      "Handler: timing-sicherer Vergleich (safeEqual) des Headers x-hermes-tool-token gegen " +
+      "ELEVENLABS_TOOL_TOKEN, leerer Wert lehnt JEDEN Aufruf ab; danach Bindung an einen " +
+      "laufenden Anruf (404 sonst), Consult-Faehigkeits-Gate und die pro-Tenant-Kostendecke.",
+  },
+  {
+    method: "POST",
+    path: "/webhooks/elevenlabs/lookup",
+    reason:
+      "HANDLER-INTERNE AUTH, wortgleiche Bauart wie /webhooks/elevenlabs/consult darueber " +
+      "(Thema B, 2026-08-19): derselbe timing-sichere x-hermes-tool-token-Vergleich " +
+      "(fail-closed bei leerem Wert), dieselbe Bindung an einen laufenden Anruf (404), " +
+      "danach das Recherche-Gate (LOOKUP_ENABLED + EXA_API_KEY + per-Tenant allowLookup + " +
+      "Richtung outbound, research/registry.js), die pro-Tenant-Kostendecke und der " +
+      "Deckel LOOKUP_MAX_PER_CALL. Egress-Filter sanitizeLookupQuery vor jedem Versand.",
+  },
+  {
     method: "GET",
     path: LEGACY_PORTAL_PATH,
     reason:
@@ -226,8 +248,8 @@ export const GATE_ONLY_ROUTES = Object.freeze([]);
 // Schluessel einer Route. EINE Quelle fuer beide Listen und den Test (G5).
 export const routeKey = (method, path) => `${String(method).toUpperCase()} ${path}`;
 
-const PUBLIC_KEYS = new Set(PUBLIC_ROUTES.map((r) => routeKey(r.method, r.path)));
-const GATE_ONLY_KEYS = new Set(GATE_ONLY_ROUTES.map((r) => routeKey(r.method, r.path)));
+const PUBLIC_KEYS = new Set(PUBLIC_ROUTES.map((route) => routeKey(route.method, route.path)));
+const GATE_ONLY_KEYS = new Set(GATE_ONLY_ROUTES.map((route) => routeKey(route.method, route.path)));
 
 // Einordnung einer einzelnen Route. Reine Funktion (kein Express, kein Zustand) -
 // damit sie mit synthetischen Eingaben pruefbar ist, ohne die App zu bauen.

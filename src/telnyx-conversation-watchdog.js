@@ -33,12 +33,80 @@ import { formatLogLine } from "./utils/log-line.js";
 
 export const WATCHDOG_LOG_PREFIX = "[telnyx-watchdog]";
 
+// Boot-Re-Arm (rearmActiveCalls, s.u.): Status eines Legs, das noch laeuft. Benannte
+// Konstante statt Literal im Rumpf; dieselbe Vokabel wie telephony/call-lifecycle.js.
+const ACTIVE_CALL_STATUS = "active";
+
+// Die Merkmale AM CALL, an denen ein laufendes Assistant-Leg auch nach einem Neustart
+// erkennbar bleibt: assistantId (bei der Origination persistiert) und callControlId (der
+// Griff, ueber den dieser Waechter ueberhaupt terminiert - ohne sie legt das Hangup-
+// Primitiv nichts auf, telnyx-call-terminate.js).
+// BEWUSST NICHT das Flag TELNYX_AI_ASSISTANT_ENABLED: legt ein Deploy es um, waehrend ein
+// Gespraech laeuft, verloere genau dieses Leg seine Deckung - der Zustand am Call, nicht
+// der Zustand der Konfiguration, entscheidet (G28: die Bedingung hat einen Namen).
+//
+// answeredAt ist das VIERTE Merkmal und tragend: die drei anderen stehen alle schon am Call,
+// BEVOR abgehoben wurde (status ab createCall, assistantId/callControlId ab dem Waehlen,
+// store/state-ops.js) - ein noch klingelndes Leg sah ohne diese Bedingung exakt aus wie ein
+// laufendes Gespraech. Telnyx laesst bis TELNYX_DIAL_TIMEOUT_SECS (60 s) klingeln, laenger als
+// die Dead-Air-Frist (Default 45 s): ein Neustart waehrend des Klingelns kappte damit einen
+// Anruf, den noch niemand angenommen hatte (beobachtet: dead_air {"callId":"...","turnSeq":0}).
+// answeredAt statt telnyxConversationId: markAnswered laeuft im call.answered-Ingest und ist
+// die letzte persistierte Zustandsaenderung VOR arm() (onSpeakEnded, telnyx-call-control-
+// ingest.js). Die Conversation-UUID wird erst bei conversation_created geschrieben, also NACH
+// arm() - an ihr haengend verloere ein bereits armiertes Leg seine Deckung, sobald das Event
+// ausbleibt oder der Neustart genau dazwischen faellt.
+function isRunningAssistantLeg(call) {
+  return (
+    call.status === ACTIVE_CALL_STATUS &&
+    Boolean(call.answeredAt) &&
+    Boolean(call.assistantId) &&
+    Boolean(call.callControlId)
+  );
+}
+
 // Zeilenformat dieser Achse ueber die gemeinsame Quelle formatLogLine (G5, Muster
 // telnyx-llm-shim.js formatShimLine - beide riefen bis dahin dieselbe Form unabhaengig
 // auf). PII-frei - nur die interne callId, Zahlen und Grund-Token, nie Wortlaut, nie
 // Rufnummern.
 function formatWatchdogLine(kind, payload) {
   return formatLogLine(WATCHDOG_LOG_PREFIX, kind, payload);
+}
+
+// Die drei Zeilen dieser Achse - Wortlaut, Feld-Reihenfolge und Kanal (warn fuer den
+// Notaus, log fuer die Betriebs-Ereignisse) unveraendert. Modul-Ebene wie
+// formatWatchdogLine: die Ausgabe haengt an keiner Injektion, nur am Zustand, und die
+// Fabrik unten bleibt damit auf ihrer Abstraktionsebene (G30/G34).
+//
+// MINOR-2 (Review-Fund): turnSeq dokumentiert, wie viele Shim-Turns dieser Call bereits
+// erreicht hat, bevor der Notaus terminiert - ohne sie war der einzige Anhaltspunkt der
+// reine Umstand "dead_air trat auf", nicht "nach wie vielen Turns".
+// dead-air-speech (Auflage 6): war eine Sprech-Verlaengerung aktiv, und wie lang?
+// 0 = keine - dann ist es der unveraenderte Bestandsfall.
+function warnDeadAir(callId, state) {
+  console.warn(
+    formatWatchdogLine("dead_air", {
+      callId,
+      turnSeq: state.turnSeq,
+      speechExtendedMs: state.speechExtendedMs,
+    }),
+  ); // PII-frei
+}
+
+// Die Vertagung ist KEIN Notaus, sondern sein Aufschub: eigener Kanal, console.log statt
+// warn (Betriebs-Ereignis, Muster logShimReattach). Der kind-Name traegt bewusst NICHT
+// "dead_air" - die Abnahme dieser Phase liest genau diese Zeichenkette im Live-Log als
+// "gekappt", und ein Substring-Treffer waere ein falscher Alarm.
+function logSpeechExtension(callId, state, extendedMs) {
+  console.log(
+    formatWatchdogLine("speech_extend", { callId, turnSeq: state.turnSeq, speechExtendedMs: extendedMs }),
+  );
+}
+
+// Boot-Re-Arm: nur wenn wirklich etwas gedeckt wurde - ein Boot ohne laufendes Gespraech
+// bleibt in der Ausgabe unveraendert (Muster rearmActiveCallTimers). PII-frei: nur Zahlen.
+function logBootRearm(legCount, deadAirMs) {
+  console.log(formatWatchdogLine("boot_rearm", { legs: legCount, deadAirMs }));
 }
 
 // afix-p3 (R4): Sprechdauer-Schaetzung fuer den Abschiedssatz. Synthese-/Playback-Latenz vor
@@ -143,6 +211,28 @@ function farewellDelayMs(speechChars, language) {
   return Math.min(Math.max(estimatedSpeechMs(speechChars, language), farewellMinMs), FAREWELL_MAX_MS);
 }
 
+// Der per-Call-Zustand, an EINER Stelle angelegt. Modul-Ebene statt Fabrik-Rumpf: die FORM
+// des Zustands haengt an keiner Injektion (Timer/terminate/now), nur die Verwaltung tut es.
+function newCallState() {
+  return {
+    deadAirTimer: null,
+    farewellTimer: null,
+    emptyStreak: 0,
+    turnSeq: 0,
+    // dead-air-speech: geschaetztes Ende der laufenden Agentensprache, ABSOLUT (0 = keine).
+    // Absolut statt Restdauer, weil sich zwei Turns damit strukturell nicht aufaddieren
+    // koennen (Auflage 4): ein neuer Turn ERSETZT den Zeitstempel, ein abgelaufener wirkt
+    // von selbst nicht mehr. Faellt mit dem State beim clear/terminateOnce weg (kein Leck) -
+    // vorausgesetzt noteAgentSpeech legt den State nicht selbst neu an (Review-Fund Runde 2,
+    // s. dortiger Kommentar).
+    speechEndsAtMs: 0,
+    // dead-air-speech: die einmal gewaehrte Vertagung, NUR fuer das dead_air-Log
+    // (Auflage 6) - beim Feuern muss sichtbar sein, ob eine Sprech-Verlaengerung aktiv war
+    // und wie lang. 0 = es gab keine. Muster turnSeq (existiert ebenfalls fuers Log).
+    speechExtendedMs: 0,
+  };
+}
+
 export function makeConversationWatchdog({
   config,
   terminate,
@@ -161,38 +251,27 @@ export function makeConversationWatchdog({
   const states = new Map();
 
   function ensureState(callId) {
-    let s = states.get(callId);
-    if (!s) {
-      s = {
-        deadAirTimer: null,
-        farewellTimer: null,
-        emptyStreak: 0,
-        turnSeq: 0,
-        // dead-air-speech: geschaetztes Ende der laufenden Agentensprache, ABSOLUT (0 = keine).
-        // Absolut statt Restdauer, weil sich zwei Turns damit strukturell nicht aufaddieren
-        // koennen (Auflage 4): ein neuer Turn ERSETZT den Zeitstempel, ein abgelaufener wirkt
-        // von selbst nicht mehr. Faellt mit dem State beim clear/terminateOnce weg (kein Leck) -
-        // vorausgesetzt noteAgentSpeech legt den State nicht selbst neu an (Review-Fund Runde 2,
-        // s. dortiger Kommentar).
-        speechEndsAtMs: 0,
-        // dead-air-speech: die einmal gewaehrte Vertagung, NUR fuer das dead_air-Log
-        // (Auflage 6) - beim Feuern muss sichtbar sein, ob eine Sprech-Verlaengerung aktiv war
-        // und wie lang. 0 = es gab keine. Muster turnSeq (existiert ebenfalls fuers Log).
-        speechExtendedMs: 0,
-      };
-      states.set(callId, s);
+    let state = states.get(callId);
+    if (!state) {
+      state = newCallState();
+      states.set(callId, state);
     }
-    return s;
+    return state;
   }
   // Generischer Timer-Clear ueber den Feldnamen ("deadAirTimer"/"farewellTimer") - beide
   // Timer-Arten raeumen sich identisch ab (nur das Feld unterscheidet sich, G5/S2).
-  function clearNamedTimer(s, timerField) {
-    if (!s[timerField]) return;
-    clearTimer(s[timerField]);
-    s[timerField] = null;
+  // Holt den Zustand selbst, statt ihn als Parameter durchgereicht zu mutieren (P6/F2):
+  // die callId ist der Griff, den alle Aufrufer ohnehin halten. Kein Zustand da = nichts zu
+  // raeumen - genau der Pfad, den clear() bei einem bereits terminalen Call faehrt.
+  function clearNamedTimer(callId, timerField) {
+    const state = states.get(callId);
+    if (!state?.[timerField]) return;
+    clearTimer(state[timerField]);
+    state[timerField] = null;
   }
-  function restartDeadAirTimer(callId, s) {
-    clearNamedTimer(s, "deadAirTimer"); // Fuettern = Lebenszeichen gesehen
+  function restartDeadAirTimer(callId) {
+    const state = ensureState(callId);
+    clearNamedTimer(callId, "deadAirTimer"); // Fuettern = Lebenszeichen gesehen
     // dead-air-speech (Review-Fund DAS-1): ein echtes Lebenszeichen schliesst die
     // Buchfuehrung der letzten Vertagung ab. Ohne diesen Reset traegt eine SPAETERE,
     // wirklich ungedeckte Terminierung im dead_air-Log noch die Vertagung eines frueheren
@@ -200,8 +279,8 @@ export function makeConversationWatchdog({
     // luegen (derselbe Anlass wie der hangup_cause-Nachtrag vom 10.08.). Die laufende
     // Vertagung selbst ist nicht betroffen: extendForSpeech stellt seinen Timer direkt und
     // laeuft nie ueber diesen Pfad.
-    s.speechExtendedMs = 0;
-    s.deadAirTimer = setTimer(() => onDeadAir(callId), deadAirMs);
+    state.speechExtendedMs = 0;
+    state.deadAirTimer = setTimer(() => onDeadAir(callId), deadAirMs);
   }
   // Gemeinsamer Kern von onDeadAir/onFarewellDue (G5/S2): genau EIN terminate, State vorher
   // weg (one-shot, kein Leak; Re-Arm nur ueber arm/observeTurn bzw. scheduleFarewellHangup).
@@ -209,14 +288,15 @@ export function makeConversationWatchdog({
   // desselben Timers findet keinen State mehr. onBeforeTerminate haengt optionale
   // Achsen-spezifische Effekte (z.B. das Dead-Air-Log) vor dem terminate ein.
   function terminateOnce(callId, timerField, { onBeforeTerminate } = {}) {
-    const s = states.get(callId);
-    if (!s) return; // bereits terminal geraeumt (clear bei hangup)
-    s[timerField] = null;
+    const state = states.get(callId);
+    if (!state) return; // bereits terminal geraeumt (clear bei hangup)
+    state[timerField] = null;
     states.delete(callId);
-    // MINOR-2-Fix (2. Review-Runde): der State (s) wird an onBeforeTerminate durchgereicht,
-    // BEVOR terminate() laeuft - states.delete(callId) oben entfernt nur den Map-Eintrag, s
-    // selbst bleibt fuer den Aufrufer gueltig. Braucht z.B. onDeadAir fuer s.turnSeq im Log.
-    if (onBeforeTerminate) onBeforeTerminate(s);
+    // MINOR-2-Fix (2. Review-Runde): der State wird an onBeforeTerminate durchgereicht,
+    // BEVOR terminate() laeuft - states.delete(callId) oben entfernt nur den Map-Eintrag,
+    // das Objekt selbst bleibt fuer den Aufrufer gueltig. Braucht z.B. onDeadAir fuer
+    // turnSeq im Log.
+    if (onBeforeTerminate) onBeforeTerminate(state);
     Promise.resolve(terminate(callId)).catch(() => {}); // Timer-Callback -> keine unhandled rejection
   }
   // dead-air-speech: die Achse soll "Leitung tot" erkennen, nicht "Anrufer schweigt". Spricht
@@ -227,30 +307,14 @@ export function makeConversationWatchdog({
   // (Auflage 4). Eine kurze Antwort ist beim Feuern laengst fertig -> der Bestandspfad,
   // unveraendert, ohne zusaetzlichen Timer und ohne zusaetzliche Logzeile.
   function onDeadAir(callId) {
-    const s = states.get(callId);
-    if (!s) return; // bereits terminal geraeumt (clear bei hangup)
-    const remainingSpeechMs = s.speechEndsAtMs - now();
-    if (remainingSpeechMs > 0) return extendForSpeech(callId, s, remainingSpeechMs);
+    const state = states.get(callId);
+    if (!state) return; // bereits terminal geraeumt (clear bei hangup)
+    const remainingSpeechMs = state.speechEndsAtMs - now();
+    if (remainingSpeechMs > 0) return extendForSpeech(callId, remainingSpeechMs);
     terminateOnce(callId, "deadAirTimer", {
-      // MINOR-2 (Review-Fund): turnSeq dokumentiert, wie viele Shim-Turns dieser Call bereits
-      // erreicht hat, bevor der Notaus terminiert - ohne sie war der einzige Anhaltspunkt der
-      // reine Umstand "dead_air trat auf", nicht "nach wie vielen Turns".
-      onBeforeTerminate: (state) =>
-        console.warn(
-          formatWatchdogLine("dead_air", {
-            callId,
-            turnSeq: state.turnSeq,
-            // dead-air-speech (Auflage 6): war eine Sprech-Verlaengerung aktiv, und wie lang?
-            // 0 = keine - dann ist es der unveraenderte Bestandsfall.
-            speechExtendedMs: state.speechExtendedMs,
-          }),
-        ), // PII-frei
+      onBeforeTerminate: (terminalState) => warnDeadAir(callId, terminalState),
     });
   }
-  // Die Vertagung ist KEIN Notaus, sondern sein Aufschub: eigener Kanal, console.log statt
-  // warn (Betriebs-Ereignis, Muster logShimReattach). Der kind-Name traegt bewusst NICHT
-  // "dead_air" - die Abnahme dieser Phase liest genau diese Zeichenkette im Live-Log als
-  // "gekappt", und ein Substring-Treffer waere ein falscher Alarm.
   // Der gefeuerte Timer ist erledigt; das Feld wird ersetzt, nicht geloescht.
   //
   // Review-Fund (dead-air-speech, 1. Runde): remainingSpeechMs + deadAirMs OHNE Klammerung
@@ -261,34 +325,72 @@ export function makeConversationWatchdog({
   // tatsaechliche Vertagung um genau diese Latenz ueber SPEECH_EXTENSION_MAX_MS hinaus - der
   // Kommentar/PLAN-SECURITY.md behauptete "HART gedeckelt", der Code hat es nicht durchgesetzt.
   // Math.min erzwingt den Deckel jetzt unabhaengig von der Turn-Latenz.
-  function extendForSpeech(callId, s, remainingSpeechMs) {
+  // ensureState statt states.get: der einzige Aufrufer (onDeadAir) haelt den Zustand in
+  // diesem Moment bereits - der Eintrag existiert per Konstruktion, und ein defensiver
+  // Nicht-da-Zweig waere hier toter Code (G9). ensureState legt deshalb nie wirklich an.
+  function extendForSpeech(callId, remainingSpeechMs) {
+    const state = ensureState(callId);
     const extendedMs = Math.min(remainingSpeechMs + deadAirMs, SPEECH_EXTENSION_MAX_MS);
-    s.speechExtendedMs = extendedMs;
-    s.deadAirTimer = setTimer(() => onDeadAir(callId), extendedMs);
-    console.log(
-      formatWatchdogLine("speech_extend", { callId, turnSeq: s.turnSeq, speechExtendedMs: extendedMs }),
-    );
+    state.speechExtendedMs = extendedMs;
+    state.deadAirTimer = setTimer(() => onDeadAir(callId), extendedMs);
+    logSpeechExtension(callId, state, extendedMs);
   }
   function arm(callId) {
     // ai_assistant_start ist raus (Ingest). Idempotent.
-    restartDeadAirTimer(callId, ensureState(callId));
+    restartDeadAirTimer(callId);
+  }
+  // Boot-Re-Arm der Dead-Air-Wache - dieselbe Frage, die rearmActiveCallTimers
+  // (telephony/call-lifecycle.js) fuer die Zeit-Achse beantwortet, fuer diese Achse
+  // gestellt. Die Timer oben leben als setTimeout im Prozess; ein Deploy/Restart nimmt sie
+  // mit, und der EINZIGE arm()-Aufrufer (Call-Control-Ingest beim ai_assistant_start) ist
+  // ein per-Call-Webhook, das fuer ein bereits laufendes Gespraech nie wieder kommt. Ohne
+  // diesen Re-Arm bleibt einem ueberlebenden Leg allein der Max-Dauer-Cap (Groessenordnung
+  // 1800 s) statt der Dead-Air-Frist (Default 45 s) - bei minutengenauer Abrechnung der
+  // Unterschied zwischen Cent und Euro.
+  //
+  // KONSERVATIV PER KONSTRUKTION - das haengt an ZWEI Teilen, nicht an einem: WELCHE Legs
+  // gedeckt werden (isRunningAssistantLeg, s.o.) und mit WELCHER Frist. Zur Auswahl: fuer ein
+  // noch klingelndes Leg hatte der ungestoerte Prozess ueberhaupt KEINE Frist gestellt (arm()
+  // faellt erst nach startAssistant, also nach dem Abheben) - jede Frist ist kuerzer als gar
+  // keine, und der Re-Arm kappte solche Anrufe mitten im Klingeln. Die Zusicherung "startet die
+  // Uhr nie frueher, als der Prozess es getan haette" traegt deshalb erst mit answeredAt im
+  // Praedikat; der Satz unten galt vorher nur fuer bereits abgenommene Legs.
+  // Zur Frist: armiert wird die VOLLE Frist ab dem Neustart, nie eine
+  // aus einem alten Zeitstempel zurueckgerechnete Restfrist. Der fluechtige Zustand
+  // (speechEndsAtMs/emptyStreak/turnSeq) ist mit dem Prozess weg und wird NICHT geraten -
+  // arm() ist exakt derselbe Aufruf, den ai_assistant_start macht. Der Neustart liegt nie
+  // VOR dem letzten Lebenszeichen, die neue Frist laeuft also nie kuerzer als die, die der
+  // Prozess ohne Neustart gestellt hatte; ein Leg, das im Moment des Neustarts gerade
+  // sprach, wird deshalb nicht sofort gekappt, sondern bekommt die ganze Frist neu.
+  // Nicht rekonstruierbar bleibt allein die EINMALIGE Sprech-Vertagung (extendForSpeech):
+  // sie haengt an der Schaetzung eines laufenden Turns, den der Neustart selbst beendet
+  // hat, und lebt beim ersten Shim-Turn nach dem Boot ueber observeTurn/noteAgentSpeech
+  // wieder auf.
+  //
+  // calls ist der Store-Schnappschuss des Aufrufers: dieser Waechter kennt keinen Store
+  // (reine Zustands-/Timer-Logik, s. Kopfkommentar), WELCHE Zeilen ein laufendes
+  // Assistant-Leg sind, entscheidet er selbst (isRunningAssistantLeg). Idempotent wie arm().
+  function rearmActiveCalls(calls) {
+    const legs = calls.filter(isRunningAssistantLeg);
+    for (const leg of legs) arm(leg.id);
+    if (legs.length) logBootRearm(legs.length, deadAirMs);
   }
   function observeTurn(callId, callerText) {
-    const s = ensureState(callId);
+    const state = ensureState(callId);
     // K0: jeder Aufruf ist EIN Shim-Request fuer diesen Call - unabhaengig davon, ob der
     // Turn anschliessend substanziell ist oder den Loop-Guard reisst.
-    s.turnSeq += 1;
+    state.turnSeq += 1;
     // afix-p3: ein neuer Turn waehrend des Farewell-Delays heisst, das Gespraech laeuft doch
     // weiter (der Abschied war verfrueht) -> Terminierung abblasen; beendet wird am naechsten
     // end_call-Turn. Damit endet zugleich die Dead-Air-Suspendierung (restart unten).
-    clearNamedTimer(s, "farewellTimer");
-    restartDeadAirTimer(callId, s); // Turn = Lebenszeichen -> Dead-Air zuruecksetzen
+    clearNamedTimer(callId, "farewellTimer");
+    restartDeadAirTimer(callId); // Turn = Lebenszeichen -> Dead-Air zuruecksetzen
     if (isSubstantialCallerText(callerText)) {
-      s.emptyStreak = 0;
-      return { loopExceeded: false, turnSeq: s.turnSeq };
+      state.emptyStreak = 0;
+      return { loopExceeded: false, turnSeq: state.turnSeq };
     }
-    s.emptyStreak += 1;
-    return { loopExceeded: s.emptyStreak >= maxEmptyTurns, turnSeq: s.turnSeq };
+    state.emptyStreak += 1;
+    return { loopExceeded: state.emptyStreak >= maxEmptyTurns, turnSeq: state.turnSeq };
   }
   // dead-air-speech: dieser Turn gibt Sprechtext auf die Leitung - bis zum geschaetzten
   // Sprechende ist die Leitung nachweislich NICHT tot. Nebeneffekt im Namen (N7): merkt sich
@@ -315,10 +417,10 @@ export function makeConversationWatchdog({
   // Normalfall also bereits. Ein bereits terminal geraeumter Call braucht keine
   // Sprech-Schaetzung mehr, deshalb hier fruehes Verlassen statt Neuanlage.
   function noteAgentSpeech(callId, { speechChars, language } = {}) {
-    const s = states.get(callId);
-    if (!s) return; // bereits terminal geraeumt (clear bei hangup) - kein Leck anlegen
+    const state = states.get(callId);
+    if (!state) return; // bereits terminal geraeumt (clear bei hangup) - kein Leck anlegen
     const spokenMs = Math.min(estimatedSpeechMs(speechChars, language), SPEECH_EXTENSION_MAX_MS);
-    s.speechEndsAtMs = spokenMs > 0 ? now() + spokenMs : 0;
+    state.speechEndsAtMs = spokenMs > 0 ? now() + spokenMs : 0;
   }
   // afix-p3 (R4): end_call ist gefallen - der Abschiedssatz ist als Completion raus, die
   // TTS-Synthese laeuft aber erst an. Statt sofort aufzulegen (Live-Messung: Hangup 81 ms nach
@@ -337,11 +439,11 @@ export function makeConversationWatchdog({
   // Funktion bei 2 Argumenten bleibt. Fehlt language (undefined/unbekannt) -> Fallback-
   // Kalibrierung, kein neues Risiko fuer bestehende Aufrufer.
   function scheduleFarewellHangup(callId, { speechChars, language } = {}) {
-    const s = ensureState(callId);
-    clearNamedTimer(s, "deadAirTimer");
-    clearNamedTimer(s, "farewellTimer");
+    const state = ensureState(callId);
+    clearNamedTimer(callId, "deadAirTimer");
+    clearNamedTimer(callId, "farewellTimer");
     const delayMs = farewellDelayMs(speechChars, language);
-    s.farewellTimer = setTimer(() => onFarewellDue(callId), delayMs);
+    state.farewellTimer = setTimer(() => onFarewellDue(callId), delayMs);
     return { delayMs };
   }
   function onFarewellDue(callId) {
@@ -351,12 +453,9 @@ export function makeConversationWatchdog({
     // Call terminal (jeder Grund) -> Wache stoppen. Externer Hangup gewinnt IMMER: auch ein
     // laufender Farewell-Timer wird geloescht (kein zweiter Hangup-Versuch auf einen bereits
     // beendeten Call).
-    const s = states.get(callId);
-    if (s) {
-      clearNamedTimer(s, "deadAirTimer");
-      clearNamedTimer(s, "farewellTimer");
-    }
+    clearNamedTimer(callId, "deadAirTimer");
+    clearNamedTimer(callId, "farewellTimer");
     states.delete(callId);
   }
-  return { arm, observeTurn, noteAgentSpeech, scheduleFarewellHangup, clear };
+  return { arm, rearmActiveCalls, observeTurn, noteAgentSpeech, scheduleFarewellHangup, clear };
 }

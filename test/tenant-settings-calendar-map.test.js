@@ -53,7 +53,12 @@ test("settingsFor liefert verschiedene Buckets pro Tenant; updateSettings(B) lae
 
 test("addCalendarEvent(B) erscheint nur in calendarFor(B), nicht in calendarFor(A)", () => {
   const s = makeDefaultState();
-  addCalendarEvent(s, TENANT_B, "Termin B", "2030-01-01T10:00:00.000Z", "2030-01-01T11:00:00.000Z");
+  addCalendarEvent(s, {
+    tenantId: TENANT_B,
+    title: "Termin B",
+    startIso: "2030-01-01T10:00:00.000Z",
+    endIso: "2030-01-01T11:00:00.000Z",
+  });
   assert.equal(calendarFor(s, TENANT_B).length, 1);
   assert.equal(calendarFor(s, TENANT_B)[0].title, "Termin B");
   assert.equal(calendarFor(s, TENANT_A).length, 0, "A-Bucket bleibt leer");
@@ -167,12 +172,12 @@ test("tenantContext(owner) bei frischem State: settings == defaults, calendar ==
 // Wrapper-Parity): findConflict findet den ueber addCalendarEvent gebuchten Termin
 // im selben Owner-Bucket (json-Backend, gegen das migrierte Temp-store.json).
 test("Fassade json.js: addCalendarEvent/findConflict round-trippen ueber tenantId", () => {
-  jsonBackend.addCalendarEvent(
-    BOOTSTRAP_TENANT_ID,
-    "Fassaden-Termin",
-    "2031-01-01T10:00:00.000Z",
-    "2031-01-01T11:00:00.000Z",
-  );
+  jsonBackend.addCalendarEvent({
+    tenantId: BOOTSTRAP_TENANT_ID,
+    title: "Fassaden-Termin",
+    startIso: "2031-01-01T10:00:00.000Z",
+    endIso: "2031-01-01T11:00:00.000Z",
+  });
   const conflict = jsonBackend.findConflict(
     BOOTSTRAP_TENANT_ID,
     "2031-01-01T10:30:00.000Z",

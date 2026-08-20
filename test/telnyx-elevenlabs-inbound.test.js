@@ -51,10 +51,14 @@ test("ElevenLabs-Env gesetzt: Telnyx-Inbound spricht ElevenLabs (STT bleibt Deep
   const srv = await startServer({ seed: seedWithTelnyxNumber(), env: EL_ENV });
   try {
     const telnyxXml = await inbound(srv, { callSid: "CAel1" });
+    // Seit 2026-08-18 traegt JEDE Sprache eine eigene kuratierte Stimme; der Inbound-
+    // Gruss laeuft auf Deutsch, also die DE-ID - nicht mehr die Plattform-Stimme aus der
+    // Env. Vorher fiel Deutsch auf sie zurueck, und wo sie fehlte, sprach der Agent in
+    // seiner Dashboard-Stimme (an Anruf 7 gemessen: en/american).
     assert.match(
       telnyxXml,
-      /<Say voice="ElevenLabs\.Default\.abc123" api_key_ref="elevenlabs_prod">/,
-      "Greeting-Say (im Gather) traegt die ElevenLabs-Plattform-Stimme",
+      /<Say voice="ElevenLabs\.Default\.cqPdIo76zSHFDcSZpFov" api_key_ref="elevenlabs_prod">/,
+      "Greeting-Say (im Gather) traegt die kuratierte DEUTSCHE ElevenLabs-Stimme",
     );
     assert.match(telnyxXml, /transcriptionEngine="Deepgram"/, "STT unveraendert Deepgram");
     assert.doesNotMatch(telnyxXml, /Azure\./, "keine gemischten Stimmen");

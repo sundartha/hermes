@@ -29,6 +29,24 @@ import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
 // Provider-SMS-Segmentgrenze (Zusammenfassungs-SMS wird hierauf gekuerzt).
 const SMS_BODY_MAX_CHARS = 1500;
 
+// Die Action Items, die zu DIESEM Anruf bereits im Store stehen - als blosse Texte, in
+// derselben Form, die summarizeCall auf dem Bestandsweg liefert (die Zusammenfassungs-SMS
+// unten nummeriert sie).
+//
+// HIER STAND EIN HART GESETZTES [] (nur im Anbieter-Zweig, s. unten): dieser Zweig
+// ueberspringt summarizeCall, weil die Zusammenfassung schon am Record steht - und gab
+// damit auch die Action Items als "keine" aus, obwohl der Ergebnisabruf sie unmittelbar
+// davor geschrieben hat (elevenlabs/outbound.js#persistNextStep laeuft in
+// finishFromConversation VOR terminateAndBillCall, also vor dieser Stelle). Die
+// Zusammenfassungs-SMS verschwieg den vereinbarten naechsten Schritt deshalb immer.
+//
+// NUR DER ANBIETER-ZWEIG liest hier: auf dem Bestandsweg bleibt summarizeCall die Quelle
+// (dort laeuft store.addActionItem erst NACH dem Rueckgabewert, claude.js), und der Text
+// der SMS bleibt dort byte-identisch zum Bestand.
+function storedActionItemTexts(store, callId) {
+  return store.callActionItems(callId).map((item) => item.text);
+}
+
 // F2-Mail: mm:ss-Dauerformat (Sekunden -> Minuten-Bruecke, G25: benannte Konstanten
 // statt nackter Zahlen).
 const MS_PER_SECOND = 1000;
@@ -109,7 +127,15 @@ export function makeCallFinish({
     }
 
     try {
-      const result = await summarizeCall(call);
+      // EL-Anrufstart: auf dem ElevenLabs-Weg fuehrt der Agent des ANBIETERS das Gespraech
+      // und liefert die Zusammenfassung mit; sie steht bereits am Record, bevor
+      // finishCall den Call sieht (elevenlabs/outbound.js). Ein eigener LLM-Roundtrip
+      // waere dann eine zweite, schlechtere Wahrheit ueber dasselbe Gespraech - und Token
+      // fuer Arbeit, die schon bezahlt ist. Auf JEDEM anderen Weg ist call.summary hier
+      // leer (sie entsteht erst IN summarizeCall) -> Bestandsverhalten unveraendert.
+      const result = call.summary
+        ? { summary: call.summary, actionItems: storedActionItemTexts(store, call.id) }
+        : await summarizeCall(call);
       // Roh-Transkript-Purge (#7, DSGVO-Datenminimierung). P2b: der Purge steht jetzt VOR
       // dem Frueh-Return. Ein leeres `result` heisst hier NICHT "Fehler" - ein Fehler
       // WIRFT und landet im catch unten, und ein leeres Transkript ist oben bereits

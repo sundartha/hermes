@@ -31,7 +31,64 @@ jobs:
       - run: npm ci
       - name: Syntax-Check
         run: |
-          for f in src/*.js scripts/*.js; do node --check "$f"; done
+          # Rekursiv UND inklusive .mjs. Der alte Glob "src/*.js scripts/*.js" erfasste
+          # 67 von 263 Dateien: keine einzige aus src/store, src/routes, src/telephony,
+          # src/elevenlabs (Unterverzeichnisse) und keine der 20 .mjs unter scripts.
+          # xargs statt -exec, damit ein Syntaxfehler den Schritt auch wirklich rot macht
+          # (find -exec schluckt den Rueckgabewert).
+          find src scripts -type f \( -name '*.js' -o -name '*.mjs' \) -print0 \
+            | xargs -0 -n1 node --check
+      - name: Lint (eslint, blockierend)
+        run: npm run lint
+      # Vor-dem-Hochladen-Gate fuer die ElevenLabs-Testdefinitionen
+      # (scripts/check-elevenlabs-tests.js): Registry-Kopplung, Platzhalter,
+      # Variablen-Vokabular. Ein Gate, das nur wirkt, wenn ein Mensch das
+      # Kommando tippt, schuetzt nichts - deshalb laeuft es hier bei jedem Push.
+      #
+      # continue-on-error, weil der Lauf heute mit exit 1 endet: vier
+      # <AUSFUELLEN: ...>-Platzhalter in a3-keine-ueberfluessige-rueckfrage.json
+      # und a5-recherche-ohne-erfindung-tool.json warten auf Werte, die erst mit
+      # dem ElevenLabs-Agents-Abo entstehen (Tool-IDs, elevenlabs/tests/README.md,
+      # Abschnitt "WARNUNG vor dem ersten Lauf"). Blockierend waere der Schritt
+      # heute rot auf jedem Push und damit binnen einer Woche abgeschaltet.
+      #
+      # SOBALD DIESE VIER PLATZHALTER AUFGELOEST SIND: continue-on-error hier
+      # entfernen. Ab dann ist jeder Fund ein Push-Blocker - genau dafuer
+      # existiert das Gate, denn hochgeladen wird nur, was fehlerfrei ist.
+      - name: ElevenLabs-Testdefinitionen (informativ, blockiert den Build NICHT)
+        run: npm run elevenlabs:check
+        continue-on-error: true
+      # Drift-Gate zwischen der Repo-Vorlage (elevenlabs/agent_configs/outbound-
+      # agent.template.json) und dem LIVE-Agenten bei ElevenLabs
+      # (scripts/check-elevenlabs-drift.mjs, npm run elevenlabs:drift). Auftrag
+      # Phase 2, TEIL 3: blockierend, KEIN continue-on-error - anders als beim
+      # ElevenLabs-Testdefinitionen-Schritt darueber. Bewusst ausgenommene
+      # Abweichungen (Feld "ausgenommen" mit Grund+Datum) blockieren seit
+      # Phase 2 TEIL 2 ohnehin nicht mehr (exit 0), bleiben in der Ausgabe aber
+      # sichtbar - ein continue-on-error waere hier also KEIN Kompromiss fuer
+      # eine bekannte Ausnahme, sondern ein Deckmantel fuer JEDE kuenftige
+      # Abweichung, auch eine ungewollte.
+      #
+      # DER LAUF BRAUCHT EINEN API-SCHLUESSEL (ELEVENLABS_API_KEY), UM DEN
+      # LIVE-AGENTEN ZU LESEN. Befund bei Einfuehrung dieses Schritts
+      # (2026-08-15): weder im Fork-Repo noch im Upstream-Repo ist ein
+      # entsprechendes Secret hinterlegt (gh secret list liefert fuer beide
+      # eine leere Liste) - ein blockierender Schritt, der IMMER am fehlenden
+      # Schluessel scheitert, waere schlimmer als der vorherige Zustand (gar
+      # kein Schritt). Deshalb: ohne Secret wird laut und sichtbar
+      # UEBERSPRUNGEN (::warning:: + exit 0, der Job bleibt gruen); ist das
+      # Secret gesetzt, blockiert der Schritt bei jeder nicht ausgenommenen
+      # Abweichung. Der Schluessel wird nur als Env-Variable durchgereicht,
+      # nie geloggt oder ausgegeben (CLAUDE.md Regel 4).
+      - name: ElevenLabs-Konfigurationsdrift gegen den Live-Agenten (blockierend)
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+        run: |
+          if [ -z "$ELEVENLABS_API_KEY" ]; then
+            echo "::warning::[elevenlabs:drift] UEBERSPRUNGEN - kein ELEVENLABS_API_KEY-Secret in diesem Repo hinterlegt. Ohne Schluessel ist der Live-Agent nicht lesbar; dieser Schritt blockiert deshalb NICHT, wenn das Secret fehlt. Sobald das Secret gesetzt ist, blockiert er bei jeder nicht ausgenommenen Abweichung gegen elevenlabs/agent_configs/outbound-agent.template.json."
+            exit 0
+          fi
+          npm run elevenlabs:drift
       # Coverage-Gate ersetzt den reinen Test-Lauf (kein Doppellauf): node --test fuehrt
       # ohnehin alle Tests aus und bricht zusaetzlich mit exit 1 ab, sobald eine Schwelle
       # reisst. Schwellen kalibriert am schwellenlosen Lauf auf node 22 (= CI-Runtime,
@@ -41,19 +98,20 @@ jobs:
       # (node 24 misst hier ~15 Punkte niedriger) -> Schwellen bewusst gegen die CI-Major
       # (22) geankert, nicht gegen die lokale node-Version.
       #
-      # Laeuft ueber denselben Wrapper wie "npm test" (test/i18n-catalog-run.mjs regression),
+      # Laeuft ueber denselben Wrapper wie "npm test" (test/testbaenke-run.mjs regression),
       # zusaetzliche node --test-Flags nach dem "--"-Trenner durchgereicht (G5: die
       # Invocation - Flag-Name, Glob, Modus - steht damit an EINER Stelle, nicht hier UND im
-      # Wrapper dupliziert). Das klammert den i18n-Launch-Testkatalog aus (Muster aus
-      # package.json config.i18nCatalogPattern, EINE Quelle fuer npm test/test:gates/CI):
-      # der Katalog enthaelt gewollt rote Launch-Gate-Befunde, kein Regressionsfang
-      # (PLAN-I18N-TESTS.md 4.1), und riss diese Schwelle sonst bei jedem Push. Die
-      # Coverage-Differenz Regressionslauf vs. Volllauf ist dabei vernachlaessigbar (lokal
+      # Wrapper dupliziert). Das klammert den i18n-Launch-Testkatalog UND die Abnahmekriterien
+      # aus (Muster aus package.json config.i18nCatalogPattern bzw. config.abnahmePattern, EINE
+      # Quelle fuer npm test/test:gates/test:abnahme/CI): beide Baenke enthalten gewollt rote
+      # Befunde - offene Launch-Gates (PLAN-I18N-TESTS.md 4.1) bzw. offene Rueckstandsposten
+      # des Umstiegs -, kein Regressionsfang, und rissen diese Schwelle sonst bei jedem Push.
+      # Die Coverage-Differenz Regressionslauf vs. Volllauf ist dabei vernachlaessigbar (lokal
       # node 26 gemessen, 2026-07-25: lines -0.07 / branches -0.08 / funcs -0.03 Punkte -
       # weit innerhalb der 5-Punkte-Marge der Schwellen oben).
       - name: Coverage-Gate (unterschrittene Schwelle bricht den Build)
         run: |
-          NODE_ENV=test node test/i18n-catalog-run.mjs regression -- \
+          NODE_ENV=test node test/testbaenke-run.mjs regression -- \
             --experimental-test-coverage \
             --test-coverage-lines=81 --test-coverage-functions=77 --test-coverage-branches=86
       # Eigener, ausdruecklich NICHT blockierender Schritt fuer den i18n-Launch-Testkatalog:

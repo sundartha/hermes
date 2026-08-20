@@ -16,7 +16,7 @@ import { CONSULT_WAIT } from "../store/defaults.js";
 import {
   callStartAnchorMs,
   consultAnswerAwaitingDelivery as consultAnswerAwaitingDeliveryOp,
-  inCallConsults,
+  consultQuotaUsed,
 } from "../store/state-ops.js";
 import { sanitizeConsultQuestion } from "./question.js";
 
@@ -43,7 +43,8 @@ export const CONSULT_OPEN_MS = config.tenancy.consultOpenMs;
 export const CONSULT_POLL_FRESH_MS = CONSULT_POLL_ABORT_MS;
 
 // Kosten-Riegel: hoechstens EINE Rueckfrage je Gespraech. Zaehlt NUR angenommene
-// Rueckfragen - eine Ablehnung verbraucht das Kontingent nicht.
+// Rueckfragen - eine Ablehnung verbraucht das Kontingent nicht. Wie viel verbraucht ist,
+// sagt consultQuotaUsed (store/state-ops.js): dieselbe Zahl fuer beide Riegel-Leser.
 export const MAX_IN_CALL_CONSULTS_PER_CALL = 1;
 
 // Ohne Abnehmen gab es kein Gespraech - und ohne answeredAt liesse sich ein Consult auch
@@ -100,7 +101,7 @@ export function consultAvailableFor(call, nowMs = Date.now()) {
     call.status === "active" &&
     callAnswered(call) &&
     consultClientIsPolling(call, nowMs) &&
-    inCallConsults(call).length < MAX_IN_CALL_CONSULTS_PER_CALL
+    consultQuotaUsed(call) < MAX_IN_CALL_CONSULTS_PER_CALL
   );
 }
 

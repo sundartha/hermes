@@ -25,6 +25,8 @@ const EN = {
   pricing: "Pricing",
   forDevs: "For developers",
   getNumber: "Get a number",
+  logIn: "Log in",
+  signUp: "Sign up",
   heroTitle: '<span class="l1">Give your AI</span> <span>a <em>phone number</em>.</span>',
   heroLead:
     "Hermes answers calls and handles them for you. One connection over <strong>MCP</strong> — and your AI gets a voice.",
@@ -151,6 +153,10 @@ function applyLang(next) {
 const mq = window.matchMedia("(max-width:700px), (pointer:coarse) and (max-width:1024px)");
 const isMobile = () => mq.matches;
 
+function sheetEl(name) {
+  return document.querySelector('.sheet[data-sheet="' + name + '"]');
+}
+
 let openedFromMenu = null;
 
 function setSheet(which, cameFromMenu) {
@@ -159,7 +165,7 @@ function setSheet(which, cameFromMenu) {
     sheet.setAttribute("data-open", sheet.dataset.sheet === which ? "1" : "0");
   }
   // Die Mockup-Animationen im Entwickler-Blatt starten bei jedem Oeffnen neu.
-  const devSheet = document.querySelector('.sheet[data-sheet="dev"]');
+  const devSheet = sheetEl("dev");
   if (devSheet) {
     devSheet.classList.remove("play");
     if (which === "dev") {
@@ -370,8 +376,10 @@ function goToSection(index) {
 
 /* ------------------------------------------------------------------ Verdrahtung */
 
-/* Am Handy tritt an die Stelle des Scrollens jeweils ein Vollbild-Blatt, auf
- * dem Desktop scrollt derselbe Knopf zur Sektion. */
+/* Am Handy tritt an die Stelle des Scrollens jeweils ein Vollbild-Blatt
+ * (Owner-Entscheidung 2026-08-20: nur die Startseite ist sichtbar, alles
+ * andere oeffnet sich als eigene Seite); auf dem Desktop scrollt derselbe
+ * Knopf zur Sektion. */
 function wireSectionTriggers() {
   for (const el of document.querySelectorAll("[data-goto]")) {
     const [sheet, index] = el.dataset.goto.split(":");
@@ -432,7 +440,10 @@ function wireLegal() {
     trigger.addEventListener("click", (event) => {
       event.preventDefault();
       show(trigger.dataset.legalOpen);
-      setSheet("legal", isMobile());
+      // "Zurueck ins Menue" nur, wenn der Ausloeser wirklich im Menue-Blatt
+      // sitzt — vom .stack-foot oder Desktop-Fussband aus schliesst das
+      // Rechts-Blatt einfach (kein erfundener Menue-Rueckweg).
+      setSheet("legal", Boolean(trigger.closest('.sheet[data-sheet="menu"]')));
     });
   }
   show("privacy");

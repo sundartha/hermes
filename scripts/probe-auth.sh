@@ -94,6 +94,8 @@ oeffentlich|GET|/auth/login|302|keine|Einstieg in den OIDC-Login
 oeffentlich|GET|/auth/callback|302|keine|ohne state-Cookie -> Neustart des Flows
 oeffentlich|POST|/auth/logout|204|keine|ohne Sitzung wirkungslos
 oeffentlich|POST|/webhooks/stripe|400|keine|HMAC-Pruefung schlaegt fehl (PAYMENT_ENABLED aus waere 404)
+oeffentlich|POST|/webhooks/elevenlabs/consult|403|keine|Werkzeug-Token fehlt -> 403, auch bei leerem ELEVENLABS_TOOL_TOKEN
+oeffentlich|POST|/webhooks/elevenlabs/lookup|403|keine|Werkzeug-Token fehlt -> 403, gleiche Bauart wie consult (Thema B)
 oeffentlich|GET|/tenant.html|302|keine|Altpfad-Umleitung auf /app
 oeffentlich|GET|/login|302|keine|AUTH-P7-Umleitung auf /auth/login
 oeffentlich|GET|/signin|302|keine|AUTH-P7-Umleitung auf /auth/login

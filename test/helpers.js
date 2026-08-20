@@ -153,6 +153,13 @@ export const BASE_ENV = {
   // AL-P11: Zitat-Erhebung in Spawn-Tests neutral AUS (= Bestandsverhalten). Ohne diese
   // Zeile leakt eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift).
   EVIDENCE_RETENTION_DAYS: "0",
+  // OC-P1: Offenlegungs-Ausnahme in Spawn-Tests neutral AUS und Allowlist LEER
+  // (= Bestandsverhalten, Offenlegung ueberall). Ohne diese zwei Zeilen leckt eine lokale
+  // .env via dotenv in JEDEN Spawn-Test (Lehre test-base-env-drift) - und zwar auf die
+  // eine Achse, an der ab OC-P2 ein gesetzlicher Pflichtsatz haengt.
+  // test/oc-p1-owner-call-http.test.js setzt beide explizit.
+  OWNER_SELF_CALL_ENABLED: "false",
+  OWNER_SELF_CALL_TENANT_IDS: "",
   VOICE_ENGINE: "budget",
   OPENAI_API_KEY: "",
   REALTIME_MODEL: "gpt-realtime",
@@ -234,10 +241,31 @@ export const BASE_ENV = {
   ELEVENLABS_API_KEY: "",
   ELEVENLABS_VOICE_ID: "",
   ELEVENLABS_MODEL: "",
-  ELEVENLABS_API_BASE: "",
+  // NICHT "" - leer heisst "nicht gesetzt", und config.js faellt dann auf die ECHTE
+  // Anbieter-Adresse zurueck. Gemessen: Spawn-Tests schickten damit bei jedem Lauf echte
+  // GETs an api.elevenlabs.io (mit leerem Schluessel -> echtes 401), also eine Suite, die
+  // vom Internet abhaengt und einen fremden Dienst belastet. Der Verwurf-Port 9 ist sofort
+  // und offline nicht erreichbar; Tests mit eigenem Mock setzen die Basis ohnehin selbst.
+  ELEVENLABS_API_BASE: "http://127.0.0.1:9",
   ELEVENLABS_OUTPUT_FORMAT: "",
   ELEVENLABS_SYNTH_TIMEOUT_MS: "2000",
   ELEVENLABS_TTS_TOKEN_TTL_MS: "60000",
+  // ---- ElevenLabs-Outbound (der Zweig, der ECHTE Anrufe ausloest) ----
+  // Diese fuenf fehlten und leakten damit aus der lokalen .env in jeden Spawn-Test
+  // (Lehre test-base-env-drift, hier mit Geld- statt Konfigurationsfolge). Solange
+  // ELEVENLABS_API_KEY oben "" ist, scheitert ein Anrufstart am 401 - aber diese
+  // Sicherung ist die ZWEITE, nicht die erste: sobald jemand lokal
+  // ELEVENLABS_OUTBOUND_ENABLED=true setzt (fuer einen echten Testanruf noetig),
+  // liefe sonst die GANZE Suite mit aktivem Anruf-Zweig. Das Gate gehoert hierher.
+  ELEVENLABS_OUTBOUND_ENABLED: "false",
+  ELEVENLABS_AGENT_ID: "",
+  ELEVENLABS_AGENT_PHONE_NUMBER_ID: "",
+  // Test-Seam AUS wie beim Vorbild FAKE_ORIGINATE - einzelne Tests setzen ihn explizit.
+  FAKE_ORIGINATE_ELEVENLABS: "false",
+  // Produktionstakt (5000) laesst die Poll-Maschinerie in UNBETEILIGTE Spawn-Tests
+  // hineinlaufen: deren Boot-Re-Arm pollt dann waehrend fremder Zusicherungen los.
+  // Bewusst weit ueber jeder Testfrist - Tests, die den Poll messen, setzen ihn selbst.
+  ELEVENLABS_RESULT_POLL_MS: "60000",
   // ---- Store-Backend + Onboarding/Provisioning ----
   // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.
@@ -317,6 +345,12 @@ export const BASE_ENV = {
   LOOKUP_ENABLED: "false",
   LOOKUP_SEARCH_FEE_CENTS: "1",
   EXA_API_KEY: "",
+  // Thema A (2026-08-19): die LLM-Vorab-Erzeugung der Eroeffnungszeile auf den
+  // Code-Default gepinnt (Lehre test-base-env-drift). In Spawn-Tests laeuft der Versuch
+  // gegen den (nicht erreichbaren bzw. per ANTHROPIC_BASE_URL umgelenkten) Anbieter,
+  // scheitert nicht-transient und faellt fail-closed auf die Auftrags-Bruecke - genau
+  // dieser Rueckfall wird in elevenlabs-anrufstart.test.js (T11) am Draht gemessen.
+  ELEVENLABS_OPENING_LINE_LLM_ENABLED: "true",
   EXA_API_BASE: "",
   // AL-P13: Consult-Kanal in Spawn-Tests neutral AUS (Default). Ohne diese Zeile leakt
   // eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);

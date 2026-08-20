@@ -10,18 +10,19 @@ import * as store from "../store.js";
 import { localeFor } from "../i18n/locales.js";
 import { bookLookupSearchFee } from "../llm-usage.js";
 import { callLookups } from "../store/state-ops.js";
-import { inCallSearchProvider } from "./registry.js";
+import { LOOKUP_MAX_PER_CALL, inCallSearchProvider } from "./registry.js";
 import { lookupFactsFrom, sanitizeLookupQuery } from "./lookup-guard.js";
 
 // Sprachinvarianter Tool-Name (G25): EINE Quelle fuer Schema, Registrierung und den
 // Riegel im Tool-Loop.
 export const LOOK_UP_TOOL_NAME = "look_up";
 
-// Kosten-Riegel: hoechstens so viele Suchen je Gespraech. Zaehlt NUR ausgeloeste Suchen -
-// eine am Egress-Filter verworfene verbraucht das Kontingent nicht. KEIN Env-Knopf
-// (Praezedenz CONSULT_TIMEOUT_MS/MAX_IN_CALL_CONSULTS_PER_CALL): ein zu gross gesetzter
-// Wert waere genau die Klasse "neue abgeschaltete Sicherung", die CLAUDE.md verbietet.
-export const LOOKUP_MAX_PER_CALL = 2;
+// Kosten-Riegel des Nachschlags: seit Thema B (2026-08-19) in registry.js beheimatet
+// (der EL-Weg braucht ihn in einem fassaden-freien Graphen, Begruendung dort) - hier
+// re-exportiert, damit die Bestands-Konsumenten (Tool-Loop, Tests) ihre Quelle
+// behalten. Zaehlt NUR ausgeloeste Suchen - eine am Egress-Filter verworfene
+// verbraucht das Kontingent nicht.
+export { LOOKUP_MAX_PER_CALL } from "./registry.js";
 
 // Wie lange auf den Such-Anbieter gewartet wird, bevor der Zug ohne Treffer weiterlaeuft.
 // HERLEITUNG (nichts behaupten, was nicht gemessen ist): AL-P2 hat den Telnyx-Turn-Timeout

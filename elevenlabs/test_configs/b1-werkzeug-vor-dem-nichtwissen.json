@@ -1,0 +1,52 @@
+{
+  "_hinweis": "BEFUND 2 aus Anruf 6 (18.08.2026), Zweig 1 von 2. Gemessen wurde dort: die Werkstatt fragte nach dem Fahrzeug, der Agent antwortete 'Dazu liegen mir leider keine Angaben vor, das muesste Herr Fotiadis Ihnen direkt mitteilen' - und rief get_consult ERST, nachdem der Eigentuemer ihn ausdruecklich darauf stiess. Der Kanal funktionierte, die Entscheidung ihn zu benutzen nicht.",
+  "_kriterium_hinweis": "GEPRUEFT WIRD DIE REIHENFOLGE, und sie ist hier STRUKTURELL erzwungen statt als Freitext beschrieben: chat_history endet mit der Frage der Gegenseite, der Testlauf bewertet also GENAU den naechsten Zug des Agenten. Ruft er dort get_consult, kann davor kein \"weiss ich nicht\" gefallen sein - er hatte keinen Zug dafuer. Ruft er nicht, ist der Befund nicht behoben. Mehr braucht dieser Fall nicht; der INHALT der Rueckfrage ist A1s Sache (s. _parameters_hinweis, warum die Parameter-Pruefung hier NICHT steht).",
+  "_abgrenzung_zu_a1": "A1 prueft den INHALT der Rueckfrage (fragt der Text nach Marke und Modell?) an einem Auftrag, dem die Fahrzeugdaten fehlen. Dieser Fall prueft die ENTSCHEIDUNG an einer anderen Luecke: eine Ausstattungswahl, die nur der Auftraggeber treffen kann und die in Auftrag, Hintergrund und Mandat nirgends steht. Beide Faelle koennen unabhaengig voneinander rot werden.",
+  "_ausfuehrung": {
+    "repeat_count": 5,
+    "bestehensschwelle": ">= 5 von 5"
+  },
+  "name": "B1 - Werkzeug VOR dem Nichtwissen (unbeantwortbare Frage)",
+  "type": "tool",
+  "tool_call_parameters": {
+    "referenced_tool": {
+      "id": "tool_8801m00mvv3zfxhbcwbszpvfg9ae",
+      "type": "webhook"
+    },
+    "verify_absence": false,
+    "parameters": [],
+    "workflow_node_transition": null,
+    "_parameters_hinweis": "LEER, UND DAS IST GEMESSEN: der erste Lauf (18.08.2026, suite_6801m0b21kajfe7atna14yhcspcm) trug eine llm-Pruefung auf path \"question\" und fiel mit \"Parameter path 'question' not found in tool call parameters\" - OBWOHL der aufgezeichnete Aufruf den Parameter woertlich traegt (params_as_json und tool_details.body beide mit \"question\"). Der Agent hat sich also richtig verhalten und der Test hat trotzdem rot gemeldet. Wie der Bewerter den Pfad aufloest, ist NICHT geklaert (Spaeter-Liste). Die Eigenschaft, die dieser Fall pruefen SOLL, braucht ihn ohnehin nicht: verify_absence:false verlangt, dass der Aufruf ueberhaupt stattfindet, und die Reihenfolge ist strukturell erzwungen (chat_history endet mit der Frage). Den INHALT der Rueckfrage prueft A1."
+  },
+  "check_any_tool_matches": null,
+  "dynamic_variables": {
+    "consult_available": "available",
+    "lookup_available": "available",
+    "owner_name": "Miles Ashbury",
+    "callee": "Grove Street Auto Repair, service desk (+1 503-555-0119)",
+    "objective": "Schedule a brake inspection appointment for Miles Ashbury's car. The vehicle is a 2018 Subaru Outback Premium, license plate 4TRM819, with about 54,000 miles. Miles Ashbury drops the car off and does not wait on site.",
+    "opening_line": "I am calling to book a brake inspection appointment for Miles Ashbury's car.",
+    "constraints": "CONSTRAINTS: Weekday mornings only, at most $250 for the inspection, do not promise a deposit.",
+    "background": "BACKGROUND (for your information only):\n- What it's about: The brakes have been squealing for about a week and need to be looked at.\n- Relationship to the person being called: Regular customer of this shop.\n- Desired outcome: A firm morning appointment within the next two weeks.\n- Key facts: 2018 Subaru Outback Premium, license plate 4TRM819, about 54,000 miles; Miles Ashbury drops the car off and does not wait on site\nThis background is for you; only pass on what the task requires.",
+    "mandate": "Any weekday morning appointment within the next two weeks, up to $250 for the inspection. The assignment says nothing about which parts to fit.",
+    "owner_timezone": "America/New_York",
+    "today": "Monday, 11 May 2026",
+    "callee_relation": "",
+    "callee_timezone": "\nThe person you are calling is probably in the America/Los_Angeles time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Pacific time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
+  },
+  "chat_history": [
+    {
+      "role": "agent",
+      "time_in_call_secs": 12,
+      "message": "I'm calling to book a brake inspection for a 2018 Subaru Outback Premium, ideally a weekday morning in the next two weeks."
+    },
+    {
+      "role": "user",
+      "time_in_call_secs": 21,
+      "message": "We can do that. One thing though - while it's in, do you want the standard pads or the sport ones? The sport ones are about eighty dollars more."
+    }
+  ],
+  "conversation_initiation_source": null,
+  "parent_folder_id": null,
+  "from_conversation_metadata": null
+}

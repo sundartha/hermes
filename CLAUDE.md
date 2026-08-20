@@ -124,6 +124,66 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
    Verkehr die Tenant-Decke unbegrenzt ueberziehen. Nicht ohne ausdrueckliche Owner-Entscheidung
    anfassen.
 2. **OFFENLEGUNG**: Der Offenlegungssatz bei Outbound-Calls (`disclosureSentence`) bleibt fest verdrahtet als allererster Satz — kein KI-Ermessen, kein Setting, das ihn abschaltet.
+
+   **Owner-Entscheidung 2026-08-20 (OC): der Offenlegungssatz entfaellt bei einem Anruf an
+   die eigene hinterlegte Nummer des anrufenden Tenants — und NUR dort; die
+   KI-Kennzeichnung entfaellt dabei NICHT.** Eine Offenlegung
+   gegenueber sich selbst leistet nichts: Artikel 50 EU AI Act schuetzt den Menschen, der
+   nicht weiss, dass er mit einer KI spricht. Der Auftraggeber, dessen eigener Assistent
+   ihn auf seiner eigenen hinterlegten Nummer anruft, ist dieser Mensch nicht. Der zweite
+   Halbsatz ("Das Gespraech wird fuer meinen Auftraggeber zusammengefasst") ist ihm
+   gegenueber sogar irrefuehrend — der Auftraggeber ist der Zuhoerer.
+
+   Die Ausnahme ist ENG und fail-closed. Sie greift ausschliesslich, wenn ALLE folgenden
+   Bedingungen gleichzeitig erfuellt sind, serverseitig geprueft, VOR dem Waehlen, einmal
+   je Anruf und danach unveraenderlich am Anruf-Datensatz (`call.calleeIsOwner`):
+
+   | Bedingung | Quelle |
+   |---|---|
+   | Der Tenant hat eine eigene Nummer hinterlegt | `store.tenantPrivateNumber(tenantId)` |
+   | Das Ziel ist normalisiert | `ctx.to` nach dem `normalize_target`-Gate |
+   | Ziel und eigene Nummer sind als E.164-String **exakt** gleich | `src/callee-is-owner.js` |
+   | Der ANRUFENDE Tenant ist ausdruecklich gepinnt | `OWNER_SELF_CALL_TENANT_IDS` (Default leer = niemand) |
+   | Der Schalter ist an | `OWNER_SELF_CALL_ENABLED` (Default `false`) |
+
+   Alles andere ergibt Offenlegung: kein Treffer, fehlende Nummer, fehlender Tenant,
+   nicht gepinnter Tenant, Praedikat-Fehler, Schalter aus, alter Anruf-Datensatz ohne das
+   Feld. Der Vergleich ist strikte String-Gleichheit — kein Praefix-Match, kein Fuzzy,
+   keine Normalisierung im Praedikat selbst (die ist vorgelagert und geteilt).
+
+   **Was die Ausnahme NICHT tut: sie schaltet die KI-Kennzeichnung nicht ab.** Was
+   entfaellt, ist der lange Dritt-Satz ("im Auftrag von ... wird zusammengefasst"). Die
+   Owner-Eroeffnung nennt die Maschine weiterhin beim Namen ("hier ist dein
+   KI-Assistent"). Grund: das Praedikat beweist, dass die gewaehlte NUMMER die hinterlegte
+   Nummer des Tenants ist — nicht, dass die PERSON am Apparat der Auftraggeber ist. Ein
+   Festnetz- oder Gemeinschaftsanschluss ist als eigene Nummer zulaessig
+   (`normalizePrivateNumber` prueft E.164-Form, Denylist und Laendercode, sonst nichts,
+   `src/store/state-ops.js:2127-2136`). Nimmt dort jemand anderes ab, muss der erste Satz
+   trotzdem sagen, dass eine KI spricht.
+
+   **Pflicht-Rueckfall im Anrufmoment:** stellt sich im Gespraech heraus, dass am Apparat
+   nicht der Auftraggeber ist, spricht der Agent SOFORT den vollstaendigen
+   Offenlegungssatz (Wortlaut aus `LOCALES.<lang>.disclosure`) und fuehrt das Gespraech im
+   Dritt-Modus weiter. Diese Anweisung steht in JEDEM Owner-Prompt-Baustein (EL-Weg wie
+   Budget-/Telnyx-Weg) und ist nicht optional.
+
+   **Was NICHT erlaubt ist und nie erlaubt wird:** kein Client-Flag und kein
+   MCP-Parameter entscheidet darueber (der Aufrufer nennt nur `to`, den Rest entscheidet
+   der Server); kein KI-Ermessen ueber das Praedikat (das Praedikat ist rein, das Modell
+   sieht nur das Ergebnis); kein Setting, das die Offenlegung fuer Dritte abschaltet;
+   keine zweite Stelle, die dieselbe Frage noch einmal beantwortet.
+
+   **Preis, bewusst akzeptiert:** die hinterlegte eigene Nummer ist heute Format- und
+   land-validiert, aber NICHT eigentums-verifiziert (`normalizePrivateNumber`,
+   `src/store/state-ops.js:2127-2136`), und sie ist ueber
+   `POST /api/self-service/private-number` von JEDEM eingeloggten Tenant setzbar
+   (`src/self-service-routes.js:401`, nur `webAuthMw`). Wer eine fremde Nummer hinterlegt,
+   erreichte damit einen KI-Anruf ohne den vollen Offenlegungssatz an einen Dritten.
+   Deshalb ist die Ausnahme zusaetzlich an eine ausdrueckliche Tenant-Allowlist gebunden:
+   ein nicht gepinnter Account kann sie nicht ausloesen, egal was er eintraegt. Die
+   Besitz-Verifikation ist als Launch-Blocker in `PLAN-SECURITY.md` eingetragen. Wird der
+   Eintrag dort geschlossen, ohne dass die Verifikation gebaut ist, ist DIESE Ausnahme
+   zurueckzunehmen — nicht der Eintrag.
 3. **AUTH FAIL-CLOSED**: Neue Endpunkte sind **standardmaessig** hinter einer authentifizierten Identitaet — Browser-Session (`webAuthMw`, fuer Betreiber-Routen zusaetzlich `adminMw`) oder, fuer den In-Process-MCP-Pfad, `internalOnly` (`isTrustedLocalCaller`). Jede Ausnahme (wie `/voice`, `/mcp`, `/healthz`, `/api/plans`) braucht eine eigene Absicherung, eine Begruendung im Code-Kommentar **und** einen Eintrag in der Oeffentlich-Liste (`src/route-policy.js`); ohne beides schlaegt `test/route-auth-inventory.test.js` fehl. Credential-Vergleiche timing-sicher (`safeEqual`).
 4. **SECRETS**: Nur ueber `.env` (lokal) bzw. Render-Dashboard. Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.
 5. **AUDIO**: Audio laeuft NIEMALS durch MCP — nur Transkripte/Status.
@@ -178,7 +238,7 @@ Lokal testen: PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start  + curl
 
 Test-Suite: `node:test` ohne zusaetzliche Dependencies, Tests in `test/*.test.js`. Integrationstests starten den Server als Kindprozess mit `PORT=0` und `DATA_DIR`-Override (Temp-Verzeichnis) — `data/store.json` wird nie angefasst. Neues Verhalten braucht einen Test; der manuelle Smoke-Test bleibt fuer alles, was Tests nicht abdecken (echte Telefonie, Dashboard-Optik).
 
-`npm test` und `npm run test:gates` partitionieren dieselbe Suite ueber `test/i18n-catalog-run.mjs`
+`npm test` und `npm run test:gates` partitionieren dieselbe Suite ueber `test/testbaenke-run.mjs`
 (node:test `--test-skip-pattern`/`--test-name-pattern` gegen `package.json` `config.i18nCatalogPattern`).
 Jeder i18n-Launch-Testkatalog-Test traegt seine Katalog-ID (z.B. `GAP-18`, `PROMPT-01`) am
 Namensanfang — das ist die einzige Zuordnungsregel, keine gepflegte Liste. `npm test` schliesst
@@ -190,6 +250,14 @@ ergeben denselben Testbestand wie ein ungefilterter `node --test "test/*.test.js
 verliert und dupliziert nichts. Bei der Einfuehrung nachgerechnet: 2930 + 114 = 3044 (dazu die 10
 Selbsttests in `test/i18n-catalog-run.test.js`, die die Wrapper-Logik abdecken und
 regressionsseitig mitzaehlen).
+
+Dritte Bahn, derselbe Mechanismus: `npm run test:abnahme` faehrt NUR die Abnahmekriterien
+(Kennung `ABNAHME-<ID>` am Namensanfang, Muster `package.json` `config.abnahmePattern`) und endet
+mit "x von y Abnahmekriterien erfuellt". Sie DARF rot sein — ein noch nicht gebautes Kriterium ist
+keine Regression; jeder Fall nennt seinen Grund im Namen (`| ROT WEIL: ... | FIX: ...`). Wird ein
+Kriterium gruen, legt es die Kennung ab, bekommt das Siegel `[abgenommen <ID>]` und einen Eintrag in
+`test/abnahme-ausgewandert.json`; ab da haelt `npm test` es fest — die Zahl der Ausgewanderten darf
+nie sinken (`.fortschritt.md` D13). Die Invariante oben gilt ueber alle drei Baenke.
 
 ## Referenzen
 

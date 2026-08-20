@@ -627,6 +627,10 @@
   justify-self: center;
   white-space: nowrap;
   animation-delay: var(--hd-t);
+  /* Zeitbasis wie .hd-anim: ohne duration/iteration liefe die hdStep*-Kurve
+     nie (duration 0s) — in der schmalen Kachel (<=430px, grid-area 1/1)
+     laegen die drei Labels sonst deckend uebereinander (Befund master
+     3299d87b; der Neubau bringt die Zeitbasis von Haus aus mit). */
   animation-duration: 76s;
   animation-iteration-count: infinite;
   animation-timing-function: linear;

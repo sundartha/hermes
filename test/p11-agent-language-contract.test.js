@@ -53,6 +53,10 @@ const STRING_FIELDS = [
 const FUNCTION_FIELDS = [
   "persona",
   "situationOutbound",
+  // OC-P3: die Owner-Variante von situationOutbound. Fehlt sie einer vierten Sprache,
+  // wirft outboundSituation (claude.js) fuer JEDEN Owner-Call dieser Sprache - nicht
+  // nur einen Randfall.
+  "situationOutboundOwner",
   "situationInbound",
   "speechRules",
   "clarificationRules",
@@ -134,6 +138,24 @@ test("P11-1 jede unterstuetzte Sprache traegt den vollstaendigen Prompt-Vertrag"
     assert.equal(typeof p.turnControl.endCallWait, "string");
     assert.equal(typeof p.turnControl.takeMessageResult, "string");
     assert.equal(typeof p.turnControl.unknownTool, "string");
+  }
+});
+
+// OC-P3 (D6/5.7): identityLines ist ab dieser Phase fuer JEDEN Anruf tragend
+// (claude.js identityLineFor liest sie unbedingt) - eine vierte Sprache ohne diesen
+// Baustein wuerfe nicht nur den Owner-Fall, sondern jeden Prompt. Eigener Test statt
+// eines weiteren Blocks in P11-1 (G30): jede weitere Schleife dort erhoeht dessen
+// Komplexitaet, die bereits an der Obergrenze liegt.
+test("P11-1b jede unterstuetzte Sprache traegt identityLines vollstaendig (OC-P3)", () => {
+  for (const lang of SUPPORTED_LANGUAGES) {
+    const localePrompt = LOCALES[lang].prompt;
+    for (const field of ["inbound", "outbound", "outboundOwner"]) {
+      assert.equal(
+        typeof localePrompt.identityLines[field],
+        "function",
+        `${lang}: prompt.identityLines.${field} ist keine Funktion`,
+      );
+    }
   }
 });
 

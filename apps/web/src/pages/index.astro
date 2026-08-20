@@ -86,7 +86,11 @@ const legalDocs = [
                 <span class="lang__sep" aria-hidden="true">/</span>
                 <button class="lang__opt" type="button" data-lang="en" aria-pressed="false">EN</button>
               </span>
-              <a class="btn-solid" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
+              <!-- Owner-Feedback 2026-08-14: oben rechts NICHT noch einmal "Nummer holen" (hat der Hero schon). -->
+              <!-- Login als ruhiger Textlink, Registrieren als Pillen-CTA (klassisches Muster). -->
+              <!-- BEIDE Ziele bewusst LOGIN_URL: Login = Registrierung (Account entsteht beim ersten OIDC-Login, s. lib/routes.js) — reine Nutzerfuehrung, kein zweiter Funnel. -->
+              <a class="nav-link" href={LOGIN_URL} data-i18n="logIn">Login</a>
+              <a class="btn-solid" href={LOGIN_URL} data-i18n="signUp">Registrieren</a>
             </span>
           </nav>
 
@@ -534,7 +538,11 @@ const legalDocs = [
           <button class="menu-lang" type="button" data-lang="en" aria-pressed="false">English</button>
         </div>
       </div>
-      <a class="sheet__cta" href={LOGIN_URL} data-i18n="getNumber">Nummer holen</a>
+      <!-- Owner-Feedback 2026-08-14: Login + Registrieren statt "Nummer holen" — wie im Desktop-Header (s. nav-actions oben, beide Ziele LOGIN_URL). -->
+      <div class="menu-cta-row">
+        <a class="sheet__cta sheet__cta--ghost" href={LOGIN_URL} data-i18n="logIn">Login</a>
+        <a class="sheet__cta" href={LOGIN_URL} data-i18n="signUp">Registrieren</a>
+      </div>
       <div class="menu-foot">
         <div class="menu-foot__links">
           {legalDocs.map((entry) => (

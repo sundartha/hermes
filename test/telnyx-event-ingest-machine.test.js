@@ -517,7 +517,20 @@ test("speak.ended MIT status='failed' UND gesetzter assistantId -> startAssistan
 });
 
 test("hangup: finishCall gerufen, endCallRecord nur bei status active; zweites hangup NICHT erneut endCallRecord (Idempotenz-Beitrag der Maschine)", async () => {
-  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  // Befund 5 (Nachfassrunde, Befund A): answeredAt MUSS im Fixture stehen - echte
+  // Call-Records tragen die Spalte immer (null oder ISO-String, nie ein fehlender
+  // Schluessel, s. failure-reason.js hangupCauseStatus-Kommentar). Dieser Test prueft
+  // Idempotenz/Settlement-Verdrahtung, NICHT die Antwort-Klassifikation (die deckt
+  // test/befund5-unanswered-call.test.js ab). Ohne das Feld wuerde ein Fix, der "kein
+  // answered_at" auch bei fehlendem Schluessel korrekt erkennt, hier ungewollt einen
+  // unbeantworteten Call simulieren und die completed-Erwartung unten brechen.
+  const call = {
+    id: "call_1",
+    status: "active",
+    provider: "telnyx",
+    language: "de",
+    answeredAt: new Date().toISOString(),
+  };
   const store = fakeStore(call);
   const vc = fakeVoiceControl();
   const finishCallCalls = [];
@@ -760,7 +773,16 @@ test("Review-Blocker: event_type/status ueber 64 Zeichen -> Roh-Log-Token bei 64
 // den Call nicht (getCall-Miss), reattachActiveCall laedt ihn nach - Settlement (finishCall)
 // laeuft trotzdem, statt das Live-Gespraech zu verwerfen (Reserve-Leak/gesperrtes Budget).
 test("stab-p10: hangup nach Instanzwechsel - getCall-Miss -> reattachActiveCall laedt -> Settlement laeuft", async () => {
-  const call = { id: "call_1", status: "active", provider: "telnyx", language: "de" };
+  // Befund 5 (Nachfassrunde, Befund A): answeredAt MUSS im Fixture stehen, aus demselben
+  // Grund wie beim Hangup-Idempotenz-Test oben - dieser Test prueft den Rehydrate-Pfad
+  // (Instanzwechsel), NICHT die Antwort-Klassifikation.
+  const call = {
+    id: "call_1",
+    status: "active",
+    provider: "telnyx",
+    language: "de",
+    answeredAt: new Date().toISOString(),
+  };
   const { store, reattachActiveCall } = fakeStoreRehydrate(call);
   const vc = fakeVoiceControl();
   const finishCallCalls = [];

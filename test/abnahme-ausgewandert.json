@@ -1,0 +1,20 @@
+[
+  {
+    "id": "D1",
+    "file": "test/a8-abschluss-zusammenfassung.test.js",
+    "test": "[abgenommen D1] Datum, Uhrzeit und Betrag kommen als eigene Angaben im Ergebnis an",
+    "seit": "2026-08-16"
+  },
+  {
+    "id": "G2",
+    "file": "test/elevenlabs-sprachwahl.test.js",
+    "test": "[abgenommen G2] der ElevenLabs-Anrufstart spricht die Sprache des Nutzers - Deutsch mit deutscher Stimme und deutschem Offenlegungssatz fuer einen deutschen Nutzer, Franzoesisch analog, Englisch fuer jeden ohne gesetzte Sprache",
+    "seit": "2026-08-17"
+  },
+  {
+    "id": "R16",
+    "file": "test/elevenlabs-agent-werkzeuge.test.js",
+    "test": "[abgenommen R16] der ElevenLabs-Prompt nennt get_consult nur, wenn das Rueckfrage-Gate es zulaesst",
+    "seit": "2026-08-17"
+  }
+]

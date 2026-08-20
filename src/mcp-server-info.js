@@ -76,10 +76,24 @@ export const MCP_CONSULT_INSTRUCTIONS =
   "While a call placed with place_call is running, keep calling await_call_event with " +
   "that call_id, again and again, until it returns event=\"done\". " +
   "When it returns event=\"consult\", answer the questions briefly and factually with " +
-  "answer_consult - if you do not know an answer, ask the user first rather than " +
-  "inventing one. " +
+  // GQ-B2: Der Owner ist waehrend des Anrufs ABWESEND (Normalfall). Der Wert dieses Kanals
+  // liegt in den EIGENEN Quellen des auftraggebenden Assistenten (Kalender, Mail, Dateien,
+  // Chat-Kontext), nicht im Durchreichen an den Menschen - deshalb steht der eigene Weg
+  // zuerst und die Nutzer-Rueckfrage nur noch unter der Bedingung echter Anwesenheit.
+  "answer_consult - answer from your own tools and context first (calendar, mail, files, " +
+  "this chat); only ask the user when they are actually present right now, and never " +
+  "invent an answer. " +
   "Staying in that loop pays off: the final \"done\" answer carries the summary of the " +
-  "call and whether the objective was achieved.";
+  "call and whether the objective was achieved. " +
+  // GQ-B1: Die Rueckfrage hat eine Wanduhr-Frist (CONSULT_OPEN_MS) - eine Antwort nach einer
+  // gemuetlichen Chat-Runde kommt zu spaet. BEWUSST OHNE Sekundenzahl: der Wert liegt in der
+  // Konfiguration und wuerde im Text veralten.
+  // GQ-B2: Die Frist bleibt, ihr Ausgang wird explizit - Schweigen laesst den Agenten in den
+  // Zeitablauf laufen, ein ausdrueckliches "weiss ich nicht" laesst ihn im Gespraech sauber
+  // ausrichten, dass der Auftraggeber sich meldet.
+  "The agent is on the phone while it waits, so answer within seconds - if you cannot " +
+  "find the answer that fast, say with answer_consult that you do not know instead of " +
+  "waiting, so the agent can tell the other party that the principal will get back on it.";
 
 // serverOptions traegt inzwischen ZWEI Dinge (UI-Capabilities + instructions). Byte-
 // identisch zum Bestand, solange beide Schalter aus sind: undefined. Nur so bleibt das

@@ -33,22 +33,28 @@ import {
   routeKey,
 } from "../src/route-policy.js";
 
-// src/store.js initialisiert sein Backend zur IMPORTZEIT. Ohne DATA_DIR-Override
-// fasste der Import das echte data/store.json an - deshalb Temp-Verzeichnis UND
-// dynamischer Import (statische Importe wuerden vor diesen Zeilen ausgewertet).
+// src/store.js initialisiert sein Backend zur IMPORTZEIT (src/store/json.js friert
+// config.server.dataDir in einer Modul-Konstante ein). Ohne Override fasste der Import
+// das echte data/store.json an - deshalb Temp-Verzeichnis UND dynamischer Import
+// (statische Importe wuerden vor diesen Zeilen ausgewertet).
 const TEMP_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "route-auth-inventory-"));
-process.env.DATA_DIR = TEMP_DATA_DIR;
-// Die drei Schalter, die den Produktions-Routengraph aufspannen. storeBackend wird
-// bewusst NICHT hier gesetzt (der pg-Store wuerde beim Import eine DB suchen),
-// sondern erst nach dem Import auf dem config-Singleton - buildApp liest ihn zur
-// Aufrufzeit.
-process.env.SESSION_SECRET = "route-inventory-test-secret";
-process.env.MULTI_TENANT = "true";
-process.env.SELF_SERVICE_ENABLED = "true";
-process.env.WEB_DIST_DIR = path.join(TEMP_DATA_DIR, "web-dist");
-process.env.PUBLIC_URL = "https://route-inventory.test";
 
+// Die Schalter, die den Produktions-Routengraph aufspannen, werden auf dem
+// config-Singleton gesetzt (Muster test/platform-spend-warning.test.js, das dieselbe
+// Wahl fuer dataDir trifft; storeBackend unten in graphFor() setzt ihn fort). Die
+// Reihenfolge bleibt die tragende Eigenschaft und ist nur eine Zeile weiter gerueckt:
+// erst config.js importieren, DANN setzen, DANN app.js - die einfrierenden Module
+// (store/json.js) haengen am app-Import, nicht am config-Import. storeBackend bleibt
+// auch hier aussen vor (der pg-Store wuerde beim Import eine DB suchen) und wird erst
+// pro Graph umgeschaltet - buildApp liest ihn zur Aufrufzeit.
 const { config } = await import("../src/config.js");
+config.server.dataDir = TEMP_DATA_DIR;
+config.auth.sessionSecret = "route-inventory-test-secret";
+config.tenancy.multiTenant = true;
+config.tenancy.selfServiceEnabled = true;
+config.server.webDistDir = path.join(TEMP_DATA_DIR, "web-dist");
+config.server.publicUrl = "https://route-inventory.test";
+
 const { buildApp } = await import("../src/app.js");
 
 after(() => fs.rmSync(TEMP_DATA_DIR, { recursive: true, force: true }));
@@ -152,7 +158,7 @@ async function graphFor(storeBackend) {
 const PROD_GRAPH = await graphFor("pg");
 const LEAN_GRAPH = await graphFor("json");
 
-const keysOf = (graph) => new Set(graph.map((r) => routeKey(r.method, r.path)));
+const keysOf = (graph) => new Set(graph.map((route) => routeKey(route.method, route.path)));
 const PROD_KEYS = keysOf(PROD_GRAPH);
 
 // Diese vier Routen entstehen AUSSCHLIESSLICH im Web-Login-Block. Sie sind der Beweis,
@@ -226,6 +232,10 @@ const ROUTE_FINGERPRINT = [
   "POST /voice/outbound",
   "POST /voice/status",
   "POST /voice/turn",
+  "POST /webhooks/elevenlabs/consult",
+  // Thema B (2026-08-19): der Recherche-Webhook (look_up) - Bauart und Absicherung
+  // wortgleich zum Consult-Webhook, Eintrag in src/route-policy.js.
+  "POST /webhooks/elevenlabs/lookup",
   "POST /webhooks/stripe",
 ];
 
@@ -330,7 +340,7 @@ const OPERATOR_ROUTE_KEYS = [
 ];
 
 test("AUTH-P6-7: die sechs Betreiber-Routen tragen webAuthGateMiddleware UND adminOnlyMiddleware", () => {
-  const byKey = new Map(PROD_GRAPH.map((r) => [routeKey(r.method, r.path), r]));
+  const byKey = new Map(PROD_GRAPH.map((route) => [routeKey(route.method, route.path), route]));
   for (const key of OPERATOR_ROUTE_KEYS) {
     const route = byKey.get(key);
     assert.ok(route, `${key} fehlt im Produktions-Graph`);

@@ -69,7 +69,7 @@ test("Zwei-Tenant-Round-Trip: settings/calendar/usage/numbers/owner_name/idp_sub
   const iso1 = "2030-02-01T10:00:00.000Z";
   const iso2 = "2030-02-01T11:00:00.000Z";
   ops.settingsFor(s, TENANT_B).agentName = "B-Agent";
-  ops.addCalendarEvent(s, TENANT_B, "B-Termin", iso1, iso2);
+  ops.addCalendarEvent(s, { tenantId: TENANT_B, title: "B-Termin", startIso: iso1, endIso: iso2 });
   ops.trackUsage(s, TENANT_B, tokensOf(1_000_000, 0), PRICES);
   s.numbers.push({
     id: "num_b",

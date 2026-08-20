@@ -67,6 +67,10 @@ import { hasInboundNotice } from "../i18n/inbound-notice.js";
 // P8/FMT-11: Denylist des Ziel-Gates der privaten Summary-Nummer, geteilt mit der
 // Outbound-Gate-Kette (D3, G5) - siehe number-denylist.js fuer die Begruendung.
 import { isDenied } from "../telephony/number-denylist.js";
+// Form-Waechter des Join-Schluessels zur Telefonie-Rechnung (s. recordSipCallId unten).
+// sip-call-id.js ist ein Blatt-Modul (kein Rueckimport, kein Zyklus), Muster
+// number-denylist.js: eine reine Form-Aussage ueber einen Telefonie-Fakt.
+import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 // AL-P11: EINE Mutationsquelle fuer das Entfernen der Ergebnis-Karten-Zitate (G5).
 import { stripResultEvidence } from "../call-result.js";
 // F2-Newsletter-Recipients: timing-sicherer Token-Vergleich fuer die beiden oeffentlichen
@@ -159,6 +163,16 @@ function requireTenantId(tenantId) {
   return tenantId;
 }
 
+// Auftrag 2026-08-19 (Thema A, Auflage A6): Fingerabdruck der bei Auftragsannahme
+// festgelegten Eroeffnungszeile. HIER berechnet und nicht vom Aufrufer geliefert
+// (G27, Struktur statt Konvention): kein Schreibweg kann Zeile und Hash getrennt
+// setzen, also faellt am Anrufstart (elevenlabs/opening-line.js#verifiedOpeningLine)
+// JEDE nachtraegliche Veraenderung der Zeile auf - genau die Klasse "Treiber
+// transliteriert still Umlaute weg", die der Auftrag schliessen will.
+export function openingLineHash(line) {
+  return crypto.createHash("sha256").update(line, "utf8").digest("hex");
+}
+
 export function createCall(
   s,
   {
@@ -166,6 +180,7 @@ export function createCall(
     from,
     to,
     goal,
+    openingLine,
     twilioSid,
     briefing,
     constraints,
@@ -178,6 +193,7 @@ export function createCall(
     provider,
     reserveCents,
     diagnostic,
+    calleeIsOwner,
   },
 ) {
   const call = {
@@ -197,6 +213,14 @@ export function createCall(
     from,
     to,
     goal: goal || null,
+    // Thema A (2026-08-19): die geprueft-festgelegte Eroeffnungszeile dieses Anrufs
+    // plus ihr Annahme-Hash (openingLineHash oben). Additiv nullable - nur der
+    // ElevenLabs-Weg befuellt sie, jeder andere Call bleibt null (pg-Parity via
+    // rowToCall). Der Hash entsteht ausschliesslich hier, im selben Zug wie die
+    // Zeile; wer die Zeile spaeter anfasst, ohne diese Funktion zu kennen, wird am
+    // Anrufstart ertappt statt gesprochen.
+    openingLine: openingLine || null,
+    openingLineSha256: openingLine ? openingLineHash(openingLine) : null,
     briefing: briefing || null,
     constraints: constraints || null,
     // P3 (PLAN-PERSONAL-ASSISTANT): strukturierter Per-Call-Kontext (additiv NULLABLE).
@@ -224,6 +248,12 @@ export function createCall(
     status: "active", // active | completed | failed | cancelled
     startedAt: new Date().toISOString(),
     answeredAt: null,
+    // KS-EL1: der GRUND, wenn der Buchungsanker NICHT aus der Anbieter-Dauer entstand
+    // (elevenlabs/outbound.js, answeredAnchorOutcome) - additiv nullable. S1-B (17.08.2026):
+    // gesetzt bei JEDEM solchen Ausgang, auch bei der belegten Nicht-Rufannahme (frueher der
+    // einzige stille Fall), weil auch sie nichts bucht - der Wert unterscheidet die Faelle.
+    // Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
+    answeredUnclearReason: null,
     endedAt: null,
     transcript: [],
     summary: null,
@@ -236,6 +266,10 @@ export function createCall(
     // AL-P13: Consult-Kette (A2: Zustand am Call). Initial null - byte-identisch zur
     // pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     consults: null,
+    // Thema B (2026-08-19): das Recherche-Protokoll des EL-Wegs (recordCallLookup
+    // unten - Auflage B5, traegt zugleich den Deckel). Initial null - byte-identisch
+    // zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
+    lookupLog: null,
     // F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit nach erfolgreichem
     // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
     // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
@@ -295,6 +329,15 @@ export function createCall(
     // Request-Body. Default false = Bestandsverhalten (Purge nach Summary); undefined/
     // fehlend -> false, byte-identisch zur pg-Hydrierung (rowToCall).
     diagnostic: diagnostic === true,
+    // OC-P1 (PLAN-OWNER-CALL): war das Ziel dieses Outbound die eigene hinterlegte
+    // Nummer des ANRUFENDEN Tenants - bei eingeschaltetem Schalter und gepinntem Tenant?
+    // Wird AUSSCHLIESSLICH serverseitig gesetzt (src/callee-is-owner.js, ausgewertet in
+    // routes/api-calls.js) - nie roh aus dem Request-Body. SET-ONCE: danach schreibt es
+    // niemand mehr, damit eine Nummern-Aenderung zwischen Auftragsannahme und Klingeln
+    // die Entscheidung nicht mehr kippen kann. `=== true` statt Rohwert: Default false ist
+    // NICHT-Owner ist Offenlegung (fail-closed), byte-identisch zur pg-Hydrierung
+    // (rowToCall). Auf dem Record steht NUR dieses Boolean, NIE die Nummer.
+    calleeIsOwner: calleeIsOwner === true,
     // OUT-05 (F2): Worst-Case-Reserve dieses Calls (GANZZAHL Cents) + Idempotenz-Schloss der
     // Freigabe. reserveCents/reserveReleased sind reine Referenz-/Idempotenz-Daten fuer
     // releaseOutboundReserve + den Backstop-Timer; der Reserve-LEDGER (s.reservations) ist
@@ -316,6 +359,41 @@ export function createCall(
     // (Abbruch-Achse). Initial null/0 - byte-identisch zur pg-Hydrierung (rowToCall),
     // kein json<->pg-Shape-Drift.
     telnyxConversationId: null,
+    // EL-BL1: die opake Conversation-Kennung des ElevenLabs-Laufwerks. Dasselbe
+    // Provider-Handle-Muster wie telnyxConversationId, und der EINZIGE Weg, ueber den
+    // der Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) einen laufenden Anruf
+    // bindet. Initial null - byte-identisch zur pg-Hydrierung (rowToCall).
+    elevenlabsConversationId: null,
+    // PHASE-6-VORAUSSETZUNG (Fertig-Punkt 7, "die Kosten sind gemessen, aufgeschluesselt
+    // nach ElevenLabs, Sprachmodell und Telefonie"): die SIP-Call-ID des ausgehenden Legs
+    // (Form "otb_..."). Der EINZIGE Join zwischen unseren zwei Kostenquellen auf der
+    // SIP-Trunk-Strecke - EINE Quelle (metadata.phone_call.call_id beim Ergebnisabruf),
+    // Herkunft und Beleg s. elevenlabs/outbound.js#persistProviderResult sowie der
+    // Form-Waechter in telephony/sip-call-id.js.
+    // Additiv nullable: nur der ElevenLabs-Weg setzt sie, jeder andere Call bleibt null -
+    // byte-identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
+    sipCallId: null,
+    // ABNAHME-D1 (Owner-Auftrag: eigene Felder im Ergebnisschema, additiv NEBEN summary/
+    // result). Vom Agenten waehrend des Gespraechs STRUKTURIERT gesammelt (ElevenLabs
+    // Data Collection, analysis.data_collection_results) statt nur als Freitext in
+    // summary zu stecken. FEHLT eine Angabe im Gespraech (kein Termin/kein Betrag
+    // verhandelt), ist das der Normalfall - alle vier bleiben dann null, byte-identisch
+    // zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift. Praezedenz
+    // answeredUnclearReason (additiv-nullables Anruf-Feld durch alle Ebenen).
+    appointmentDate: null,
+    appointmentTime: null,
+    amount: null,
+    currency: null,
+    // TEIL 3 derselben Eigentuemer-Auflage: die im Gespraech BESTAETIGTE Zeitzone des
+    // Angerufenen - NIE eine aus der Vorwahl abgeleitete Hypothese (die bleibt
+    // Vermutung, s. calleeTimezoneText in elevenlabs/outbound.js und wird hier
+    // ausdruecklich NICHT gespeichert). Herkunft + Zeitstempel reisen IMMER mit dem
+    // Wert (nie getrennt gesetzt, s. recordCalleeConfirmedTimezone) - ein blosser
+    // Zonenwert ohne Beleg, WOHER er kommt und WANN er bestaetigt wurde, waere nicht
+    // nachpruefbar. Initial null - byte-identisch zur pg-Hydrierung.
+    calleeConfirmedTimezone: null,
+    calleeConfirmedTimezoneOrigin: null,
+    calleeConfirmedTimezoneAt: null,
     callerTurns: 0,
     actionItemIds: [],
   };
@@ -472,6 +550,40 @@ function setOnceTimestamp(call, fieldName) {
 
 export function markAnswered(s, callId) {
   return setOnceTimestamp(getCall(s, callId), "answeredAt");
+}
+
+// KS-EL1 (Owner-Entscheidung: answeredAt traegt ZWEI Sachverhalte auf EINEM Feld - "die
+// Verbindung steht", gelesen von isInCallConsult/mapStatus, und "ab hier wird bezahlt",
+// gelesen von voiceMinutesOf): der Anker NACHZIEHEN, NICHT setzen. Der Stempel am
+// Anrufstart (markAnswered, "jetzt") bleibt fuer den ERSTEN Sachverhalt unveraendert
+// stehen; diese Operation tauscht ihn am Gespraechsende gegen die ECHTE Rufannahme des
+// Anbieters (answeredAtIso, oder null, wenn sie nicht feststeht), NACHDEM endedAt steht und
+// BEVOR gebucht wird. Anders als setOnceTimestamp/markAnswered bewusst KEIN set-once: hier
+// wird ein VORLAEUFIGER Wert korrigiert, kein leeres Feld erstmalig befuellt.
+//
+// KORREKTUR 17.08.2026 (unabhaengige Durchsicht): hier stand "der EINZIGE Aufrufer ist
+// finishFromConversation ... genau ein Schreiber, genau einmal je Call". Das war schon vor
+// dieser Korrektur falsch - geschrieben wird ueber elevenlabs/outbound.js#applyAnsweredAnchor
+// aus DREI Pfaden: dem Poll-Ergebnis (finishFromConversation), dem Abbruch-/Kappungs-Pfad
+// (endActiveCall) und dem dauerhaften Abruf-Fehler (finishOnPermanentError). Ein Call kann
+// die Funktion damit MEHRFACH sehen (z.B. Poll gibt auf -> terminateAndBillCall -> hangUp ->
+// endActiveCall holt das Ergebnis doch noch).
+//
+// changed unbedingt true TRAEGT das trotzdem (Muster recordProviderCallResult), denn es
+// heisst nicht "es gibt nur einen Schreiber", sondern "es WURDE geschrieben, also
+// persistieren": die Zuweisung findet bei jedem Aufruf mit existierendem Call statt, ein
+// zweiter Aufruf ueberschreibt bewusst (LETZTE Erkenntnis gewinnt - der spaetere Pfad hat
+// den frischeren Anbieter-Stand), und ein fehlender Call liefert weiterhin changed:false.
+// Ein zusaetzliches Speichern bei gleichem Wert ist folgenlos.
+// Zustand ausgeschrieben (state statt s): eine neue einbuchstabige Kennung haette die
+// bestehende, im Bestand eingefrorene id-length-Ausnahme dieser Datei ueberschritten
+// (eslint-suppressions.json: exakter Zaehler, keine Toleranz nach oben) und damit
+// zusaetzliche, neue Verstoesse verdeckt statt sie zu vermeiden.
+export function trueUpAnsweredAt(state, callId, answeredAtIso) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  call.answeredAt = answeredAtIso;
+  return { call, changed: true };
 }
 
 // Setzt Terminal-Status + EXPLIZITEN endedAt-Anker (F9). Idempotent: nur aus 'active'
@@ -655,17 +767,129 @@ export function recordFailureReason(s, callId, reason) {
   return { call, changed };
 }
 
-// AL-P1: Telnyx-Conversation-UUID am Call. Set-once + nur bei truthy Wert (Muster
-// recordFailureReason): ein Webhook-Retry ueberschreibt die erste UUID nicht, ein
-// fehlendes Feld ist ein No-op (changed=false -> kein Save). Wrapper saved bei changed.
-export function recordTelnyxConversationId(s, callId, conversationId) {
-  const call = getCall(s, callId);
+// AL-P1: Provider-Handle am Call. Set-once + nur bei truthy Wert (Muster
+// recordFailureReason): ein Webhook-Retry ueberschreibt die erste Kennung nicht, ein
+// fehlender Wert ist ein No-op (changed=false -> kein Save). Wrapper saved bei changed.
+//
+// EL-BL1: seit dem ElevenLabs-Laufwerk gibt es ZWEI solcher Handles. Eine Fabrik statt
+// zweier strukturgleicher Zwillinge (G5): das Set-once-Verhalten ist die Regel, das Feld
+// nur ihr Parameter - zwei Kopien koennten auseinanderlaufen, und genau daran haengt,
+// dass eine zweite Kennung desselben Anrufs die erste nicht ueberschreibt.
+const recordProviderHandleOnce = (field) => (state, callId, handle) => {
+  const call = getCall(state, callId);
   let changed = false;
-  if (call && conversationId && !call.telnyxConversationId) {
-    call.telnyxConversationId = conversationId;
+  if (call && handle && !call[field]) {
+    call[field] = handle;
     changed = true;
   }
   return { call, changed };
+};
+
+export const recordTelnyxConversationId = recordProviderHandleOnce("telnyxConversationId");
+export const recordElevenlabsConversationId = recordProviderHandleOnce(
+  "elevenlabsConversationId",
+);
+
+// Der Join-Schluessel zwischen ElevenLabs- und Telefonie-Kosten (s. Feld-Kommentar in
+// createCall). DIESELBE set-once-Fabrik wie die Handles darueber - ein wiederholter
+// Ergebnisabruf traegt denselben Wert, und der frueheste zaehlt; ein fehlender Wert ist
+// ein No-op (changed=false -> kein Save), damit ein Anbieter, der die Kennung weglaesst,
+// den laufenden Anruf nicht scheitern laesst.
+const setSipCallIdOnce = recordProviderHandleOnce("sipCallId");
+
+// DER WAECHTER (Owner-Auftrag 17.08.2026). Er sitzt HIER und nicht beim Leser der
+// Anbieter-Antwort, weil dies der einzige Schreibweg des Feldes ist - json- und
+// pg-Wrapper rufen beide diese Funktion, und jeder KUENFTIGE Schreiber laeuft
+// automatisch durch sie (dieselbe Ueberlegung wie bei der weissen Liste in
+// elevenlabs/convai.js, die vor dem einzigen Netzzugriff ihres Weges sitzt).
+//
+// ER VERWIRFT STATT ZU WERFEN: das Feld ist ein Buchhaltungs-Schluessel, und der Anruf
+// laeuft, wenn hier geschrieben wird. Ein Fehlschlag darf ihn nicht in den Fehlerpfad
+// schicken. Verwerfen ist aber mehr als Nichtstun - es HAELT DEN set-once-PLATZ FREI:
+// genau daran ist der Defekt vom 17.08.2026 entstanden, ein falscher Wert kam zuerst und
+// sperrte die einzige richtige Quelle fuer immer aus.
+//
+// STILL WAERE ER WERTLOS: die Meldung ist der einzige Weg, an dem eine Formaenderung des
+// Anbieters auffaellt, bevor die Kostenzuordnung eines ganzen Zeitraums fehlt. Sie ist
+// secret- und PII-frei - ein opaker Anruf-Handle, dieselbe Klasse wie die Kennungen, die
+// der ElevenLabs-Weg ohnehin loggt. Dieses Modul ist sonst IO-frei; der console-Aufruf
+// ist dieselbe eng begrenzte Ausnahme wie beim D7-Riegel weiter unten (kein Datei-/DB-IO).
+export function recordSipCallId(state, callId, sipCallId) {
+  if (sipCallId && !isTelnyxSipCallId(sipCallId)) {
+    console.error(
+      `[join-schluessel] verworfen grund=keine_telnyx_sip_call_id call=${callId} wert=${sipCallId}`,
+    );
+    return { call: getCall(state, callId), changed: false };
+  }
+  return setSipCallIdOnce(state, callId, sipCallId);
+}
+
+// KS-EL1: der GRUND, warum trueUpAnsweredAt oben KEINEN Anker ermitteln konnte (additiv
+// nullable). Set-once + value-gated ueber DIESELBE Fabrik wie die Provider-Handles - die
+// Form ist identisch (ein String-Feld, einmal gesetzt, ein spaeterer Aufruf ueberschreibt
+// nicht), nur das Feld selbst ist keine Kennung, sondern ein Diagnosetext. Eine dritte,
+// eigens getippte Kopie derselben set-once-Logik (Muster recordFailureReason) waere
+// Duplizierung (G5) - die Fabrik ist bewusst allgemein genug fuer beide Faelle.
+export const recordAnsweredUnclearReason = recordProviderHandleOnce("answeredUnclearReason");
+
+// EL-Anrufstart: das Ergebnis eines Gespraechs, das der ANBIETER gefuehrt hat. Auf diesem
+// Weg gibt es bei uns weder Audio noch Turn-Schleife - Zusammenfassung und Befund kommen
+// fertig von aussen und muessen trotzdem an denselben Feldern landen, die get_transcript
+// ohnehin liest.
+//
+// Anders als die Handles oben ist das bewusst KEIN set-once: es gibt genau einen Schreiber
+// (den ziehenden Ergebnisweg, und der schreibt nur bei beendetem Gespraech), und ein
+// wiederholter Abruf desselben Gespraechs traegt denselben Stand. Beide Felder stammen aus
+// EINER Anbieter-Antwort und werden deshalb in EINEM Schritt gesetzt - zwei getrennte
+// Schreibschritte koennten auseinanderfallen und einen Befund ohne die zugehoerige
+// Zusammenfassung hinterlassen. Wrapper saved immer: es gibt Spalten fuer beide.
+export function recordProviderCallResult(state, callId, { summary, objectiveAchieved }) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  call.summary = summary;
+  call.objectiveAchieved = objectiveAchieved;
+  return { call, changed: true };
+}
+
+// ABNAHME-D1 (TEIL 2): die vier Angaben, die der Agent waehrend des Gespraechs
+// STRUKTURIERT gesammelt hat (ElevenLabs Data Collection), additiv NEBEN summary -
+// dieselbe EINE Anbieter-Antwort wie recordProviderCallResult direkt darueber, deshalb
+// aus demselben Grund (G5: koennten sonst auseinanderfallen) in EINEM Schritt gesetzt.
+// Bewusst KEIN set-once (Muster recordProviderCallResult, nicht recordProviderHandleOnce):
+// genau ein Schreiber (der ziehende Ergebnisweg, elevenlabs/outbound.js#persistProviderResult),
+// der nur einmal je Call laeuft. FEHLT eine Angabe im Ergebnis (Normalfall, s. Modul-Kopf-
+// Kommentar an den Feld-Defaults), uebergibt der Aufrufer null dafuer - kein Platzhalter,
+// kein Fehler. Alle vier Werte reisen als String (Praezedenz answeredUnclearReason: eine
+// TEXT-Spalte auf beiden Backends, kein zweiter Zahlentyp, der zwischen json.js und pg.js
+// auseinanderlaufen koennte).
+export function recordProviderCollectedFields(state, callId, { appointmentDate, appointmentTime, amount, currency }) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  call.appointmentDate = appointmentDate ?? null;
+  call.appointmentTime = appointmentTime ?? null;
+  call.amount = amount ?? null;
+  call.currency = currency ?? null;
+  return { call, changed: true };
+}
+
+// ABNAHME-D1 (TEIL 3, Eigentuemer-Auflage): die im Gespraech BESTAETIGTE Zeitzone des
+// Angerufenen, mit Herkunft und Zeitstempel - haengt an DERSELBEN Ergebnis-Rueckmeldung
+// wie recordProviderCollectedFields darueber, ist aber ein eigener Schreibschritt: eine
+// Hypothese (aus der Vorwahl abgeleitet) erreicht diese Funktion NIE - der Aufrufer ruft
+// sie nur auf, wenn tatsaechlich ein bestaetigter Wert vorliegt (s. elevenlabs/outbound.js).
+// ANDERS ALS recordProviderCollectedFields/answeredUnclearReason bewusst KEIN set-once:
+// "ueberschreibbar" ist woertliche Eigentuemer-Auflage - ein spaeterer bestaetigter Wert
+// ersetzt einen frueheren, statt dass der erste gewinnt. confirmedAt ist UNSERE eigene
+// Serverzeit (der Anbieter liefert keinen Bestaetigungs-Zeitpunkt) und reist immer
+// zusammen mit dem Wert - nie getrennt gesetzt, sonst koennte ein Zonenwert ohne
+// zugehoerigen Zeitstempel stehen bleiben.
+export function recordCalleeConfirmedTimezone(state, callId, { timezone, origin, confirmedAt }) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  call.calleeConfirmedTimezone = timezone;
+  call.calleeConfirmedTimezoneOrigin = origin;
+  call.calleeConfirmedTimezoneAt = confirmedAt;
+  return { call, changed: true };
 }
 
 // AL-P1: eine substanzlose Nullzeile gibt es hier nicht - der Aufrufer (agentTurn) ruft
@@ -756,6 +980,16 @@ export function pendingConsult(s, callId, afterEventId) {
 // Briefing-Fakten stehen vorn), der Ueberhang faellt am GETEILTEN Deckel
 // KEY_FACTS_LIMITS.maxItems; zurueck kommt die tatsaechlich uebernommene Zahl, damit der
 // Aufrufer sie melden kann und nichts still verschwindet.
+// EL-BEFUND-6: WIE VIELE Fakten stehen JETZT in call.context.key_facts? Vor dem Merge
+// gelesen ist das der Index, ab dem die Fakten DIESES Merges liegen - die einzige
+// Angabe, mit der ein Warter seine eigene Antwort spaeter zweifelsfrei wiederfindet.
+// Am Rand nachgerechnet (Stand vor dem Emit + Anzahl) waere sie falsch, sobald ein
+// zweiter Schreiber (addLookupFacts) dazwischen anhaengt.
+function keyFactsCount(call) {
+  const facts = call?.context?.key_facts;
+  return Array.isArray(facts) ? facts.length : 0;
+}
+
 function mergeContextFacts(call, facts) {
   const incoming = Array.isArray(facts) ? facts : [];
   if (!incoming.length) return 0;
@@ -801,10 +1035,16 @@ export function answerConsult(s, callId, { eventId, facts, nowMs, openMs }) {
   // In-Call-Fall ist es fail-closed: fehlt die Frist, wird NICHT eingespeist.
   if (isInCallConsult(call, consult) && !consultAlive(consultAgeMs(consult, nowMs), openMs))
     return reject(CONSULT_ANSWER.DEADLINE_PASSED);
+  // EL-BEFUND-6: Startindex VOR dem Merge festhalten. Zusammen mit answeredFacts sagt er
+  // exakt, welcher Ausschnitt von key_facts zu DIESER Antwort gehoert - unabhaengig
+  // davon, was vorher oder nachher sonst noch angehaengt wurde. Eine Zahl, kein zweiter
+  // Freitext-Speicher (dieselbe Begruendung wie bei answeredFacts).
+  const answeredFactsFrom = keyFactsCount(call);
   const mergedFacts = mergeContextFacts(call, facts);
   consult.status = CONSULT_STATUS.ANSWERED;
   consult.answeredAt = new Date().toISOString();
   consult.answeredFacts = mergedFacts;
+  consult.answeredFactsFrom = answeredFactsFrom;
   return { call, changed: true, outcome: CONSULT_ANSWER.ACCEPTED, mergedFacts };
 }
 
@@ -835,6 +1075,56 @@ export function callLookups(call) {
   return call?.lookups || 0;
 }
 
+// ---- Thema B (2026-08-19): das RECHERCHE-PROTOKOLL des ElevenLabs-Wegs ----
+// Anders als der ephemere Zaehler des Budget-Wegs (call.lookups, oben) PERSISTENT
+// (Spalte lookup_log, JSONB): der Eigentuemer muss fuer die Datenschutzerklaerung
+// belegen koennen, WELCHE Inhalte aus einem Gespraech an den Suchdienst gingen
+// (Auflage B5) - und der Deckel LOOKUP_MAX_PER_CALL zaehlt genau diese Eintraege,
+// ueberlebt also auch einen Prozess-Restart mitten im Anruf (der Boot-Re-Arm wuerde
+// einen ephemeren Zaehler nullen und das Kontingent verdoppeln).
+//
+// ZWEI SCHRITTE, bewusst getrennt: recordCallLookup VOR dem Absenden (die Absicht
+// zaehlt fuers Kontingent, auch wenn die Antwort nie ankommt - dasselbe Prinzip wie
+// die Gebuehr, research/in-call.js), finishCallLookup NACH der Antwort (Ausgang und
+// Dauer). Die QUERY steht im Protokoll - das ist hier ausdruecklich gewollt (B5,
+// Eigentuemer-Entscheidung; die Konsolen-Logs bleiben PII-frei, s. Webhook).
+// eslint-Ratsche: "state" statt des datei-ueblichen "s" - die Bulk-Suppressions pinnen
+// die id-length-ANZAHL, und neue Schuld soll nicht dazukommen (Lehre der Altlast-Ratsche).
+export function recordCallLookup(state, callId, query) {
+  const call = getCall(state, callId);
+  if (!call || typeof query !== "string" || !query) {
+    return { call: call || null, changed: false, seq: null };
+  }
+  const log = (call.lookupLog ||= []);
+  const eintrag = {
+    seq: log.length,
+    query,
+    askedAt: new Date().toISOString(),
+    dauerMs: null,
+    ok: null,
+    factCount: null,
+  };
+  log.push(eintrag);
+  return { call, changed: true, seq: eintrag.seq };
+}
+
+export function finishCallLookup(state, callId, { seq, ok, factCount, dauerMs }) {
+  const call = getCall(state, callId);
+  const log = Array.isArray(call?.lookupLog) ? call.lookupLog : [];
+  const eintrag = log.find((zeile) => zeile.seq === seq);
+  if (!eintrag) return { call: call || null, changed: false };
+  eintrag.ok = ok === true;
+  eintrag.factCount = Number.isFinite(factCount) ? factCount : 0;
+  eintrag.dauerMs = Number.isFinite(dauerMs) ? dauerMs : null;
+  return { call, changed: true };
+}
+
+// Reiner Leser fuer Deckel und Torzustand des EL-Wegs (research/registry.js):
+// fehlendes Feld -> 0. Zaehlt EINTRAEGE (= ausgeloeste Absichten), nicht Erfolge.
+export function elevenLabsLookupCount(call) {
+  return Array.isArray(call?.lookupLog) ? call.lookupLog.length : 0;
+}
+
 // Offene Consults schliessen (Call terminal / Drain). Idempotent: ein zweiter Aufruf
 // findet nichts Offenes mehr und meldet changed=false.
 export function expireOpenConsults(s, callId) {
@@ -849,6 +1139,48 @@ export function expireOpenConsults(s, callId) {
   return { call, changed };
 }
 
+// EL-NEUSTART-6: dieselbe Schliessung wie oben, PLUS der Verwaisungs-Marker. Ein harter
+// Abbruch (Absturz, SIGKILL) toetet jeden Warter, ohne dass ein Pfad den Datensatz noch
+// anfassen koennte - die Rueckfrage steht beim naechsten Start offen da und hat KEINE
+// Gespraechszeit gekostet. Ihr Kontingent-Platz muss frei werden (consultQuotaUsed), sonst
+// kann ein Anruf, der beim Anbieter weiterlaeuft, nie wieder rueckfragen.
+//
+// EL-NEUSTART-9: ZWEI Aufrufer, EINE Naht. Der zweite ist der DRAIN des geordneten
+// Herunterfahrens (conversation/consult-raised.js) - der haeufigere Weg, denn ein Deploy
+// ist die Regel und der Absturz die Ausnahme. Dort stirbt der Wartende genauso, nur
+// schliesst der Prozess den Datensatz noch selbst; das Boot-Netz sieht ihn danach nie
+// wieder (es sucht ueber pendingConsult, also ueber OFFENE Datensaetze). Beide Aufrufer
+// messen mit demselben Praedikat und derselben Frist - eine zweite Formulierung koennte
+// den Kosten-Riegel auf einem Weg anders wirken lassen als auf dem anderen.
+//
+// DIE UNTERSCHEIDUNG haengt an der Wanduhr, weil sie sonst nirgends steht: nur eine
+// Rueckfrage, deren Haltefrist beim Schliessen noch LIEF, kann einen lebenden Warter
+// gehabt haben. War die Frist bereits um, hat der Anruf sie voll bezahlt (oder der Prozess
+// starb erst danach) - dann bleibt der Platz verbraucht. IM ZWEIFEL BEZAHLT: unlesbarer
+// Zeitstempel oder fehlende Frist -> consultAlive false -> kein Marker (fail-closed, Regel
+// 1: lieber eine Rueckfrage zu wenig als ein umgehbarer Kosten-Riegel).
+//
+// NUR In-Call-Rueckfragen: Consult #0 (Klingelzeit, AL-P13) traegt gar kein Kontingent und
+// hat keine Wanduhr-Frist - ihn an CONSULT_OPEN_MS zu messen waere eine Kategorienfehler.
+// Der Status kommt unveraendert aus expireOpenConsults (EINE Quelle, kein zweiter
+// Schliess-Weg); dieser Aufruf haengt nur den Marker davor. Der Zustands-Parameter heisst
+// state und nicht s wie im Bestand: die kurzen Namen sind eingefrorene Altlast, neue Namen
+// unterschreiten die Mindestlaenge nicht.
+export function expireOrphanedConsults(state, callId, { nowMs, openMs }) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false, orphaned: 0 };
+  const orphanedAt = new Date().toISOString();
+  let orphaned = 0;
+  for (const consult of inCallConsults(call)) {
+    if (consult.status !== CONSULT_STATUS.OPEN) continue;
+    if (!consultAlive(consultAgeMs(consult, nowMs), openMs)) continue;
+    consult.orphanedAt = orphanedAt;
+    orphaned += 1;
+  }
+  const { changed } = expireOpenConsults(state, callId);
+  return { call, changed, orphaned };
+}
+
 // AL-P14: EIN Consult ist ein IN-CALL-Consult, wenn er NACH dem Abnehmen entstand.
 // Abgeleitet statt gespeichert: Consult #0 (AL-P13) entsteht beim Waehlen, also vor
 // markAnswered - ein zusaetzliches Quellenfeld waere ein zweiter, pflegebeduerftiger
@@ -861,10 +1193,24 @@ export function isInCallConsult(call, consult) {
   return askedAtMs >= answeredAtMs;
 }
 
-// Alle In-Call-Consults dieses Calls (Kontingent-Zaehlung). Reiner Leser.
+// Alle In-Call-Consults dieses Calls. Reiner Leser.
 export function inCallConsults(call) {
   if (!Array.isArray(call?.consults)) return [];
   return call.consults.filter((consult) => isInCallConsult(call, consult));
+}
+
+// EL-NEUSTART-6: WIE VIEL Kontingent hat dieser Anruf verbraucht? Die EINE Zahl fuer beide
+// Riegel-Leser (consult/in-call.js, routes/webhooks-elevenlabs.js) - zwei Formulierungen
+// koennten auseinanderlaufen und der Riegel wirkte dann auf einem Weg anders als auf dem
+// anderen. Gezaehlt wird STATUSUNABHAENGIG: eine abgelaufene oder beantwortete Rueckfrage
+// hat das kostende Gespraech offen gehalten und ist verbraucht.
+//
+// AUSGENOMMEN ist genau eine Lage, die keine Gespraechszeit gekostet hat: die Rueckfrage,
+// deren Wartender starb, waehrend ihre Haltefrist noch lief - beim harten Abbruch (Marker
+// beim Start) wie beim geordneten Herunterfahren (Marker im Drain). Gesetzt wird er
+// ausschliesslich in expireOrphanedConsults und nur innerhalb der Haltefrist. Reiner Leser.
+export function consultQuotaUsed(call) {
+  return inCallConsults(call).filter((consult) => !consult.orphanedAt).length;
 }
 
 // GQ-P13: wartet GENAU DIESE Antwort noch auf ihren ersten Modell-Turn? EINE Quelle (G5)
@@ -1161,7 +1507,10 @@ export function getCalendar(s, tenantId) {
   return calendarFor(s, tenantId).sort((a, b) => a.start.localeCompare(b.start));
 }
 
-export function addCalendarEvent(s, tenantId, title, startIso, endIso) {
+// Die vier Termin-Felder reisen ausnahmslos zusammen -> EIN Objekt statt vier Positionen
+// (kein Vertauschen von title/startIso/endIso mehr moeglich). Hier lebt die Shape; beide
+// Store-Fassaden (json.js/pg.js) reichen das Objekt nur durch.
+export function addCalendarEvent(s, { tenantId, title, startIso, endIso }) {
   const ev = { id: newId("ev"), title, start: startIso, end: endIso };
   calendarFor(s, tenantId).push(ev);
   return ev;

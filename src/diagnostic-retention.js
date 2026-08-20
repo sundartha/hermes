@@ -18,6 +18,8 @@
 // Datenschutz-Grenze ist und bleibt die ZIEL-Pruefung (to === ownNumber), die serverseitig
 // hier liegt - nicht der Body-Wert.
 
+import { calleeIsOwner } from "./callee-is-owner.js";
+
 // Ist die Diagnose-Retention ueberhaupt scharf? DIAGNOSTIC_RETENTION_DAYS=0 = Feature aus
 // (Plan P2b Punkt 2): dann wird weder ein Flag gewaehrt noch ein Purge unterdrueckt.
 export function diagnosticRetentionEnabled(privacy) {
@@ -41,15 +43,27 @@ function callerDeclined(requested) {
 //                Widerspruch (false / "false") verhindert die Aufbewahrung; fehlt er,
 //                entscheidet allein der Server ueber Ziel und Frist.
 //   to         - das BEREITS normalisierte Ziel (ctx.to nach dem normalize_target-Gate).
-//   ownNumber  - die eigene verifizierte Nummer des Tenants (store.tenantPrivateNumber;
-//                beim Setzen ueber setPrivateNumber E.164- UND land-validiert).
-// Ein Anruf an die eigene verifizierte Nummer IST ein Testanruf - beide Seiten der Leitung
+//   ownNumber  - die eigene hinterlegte Nummer des Tenants (store.tenantPrivateNumber;
+//                beim Setzen ueber setPrivateNumber E.164-, Denylist- UND land-validiert).
+//                "Validiert" heisst FORMAT und LAND - ausdruecklich NICHT, dass dem Tenant
+//                die Nummer gehoert (Besitz-Verifikation ist bewusst zurueckgestellt,
+//                PLAN-OWNER-CALL 5). Der Bestandskommentar sagte "verifiziert" und
+//                behauptete damit mehr, als das Feld traegt.
+// Ein Anruf an die eigene hinterlegte Nummer IST ein Testanruf - beide Seiten der Leitung
 // gehoeren demselben Tenant. Kein Treffer -> false, ohne Fehler: der Anruf laeuft normal,
 // nur ohne Diagnose-Retention.
 export function diagnosticRetentionGranted({ requested, to, ownNumber, privacy }) {
   if (callerDeclined(requested)) return false;
   if (!diagnosticRetentionEnabled(privacy)) return false;
-  return Boolean(ownNumber) && to === ownNumber;
+  // OC-P1 (G5, EINE Quelle): derselbe Vergleich, den ab OC-P2 die Offenlegungs-Ausnahme
+  // liest (src/callee-is-owner.js). Zwei Kopien koennten auseinanderlaufen - jemand macht
+  // eine davon "robuster" (Praefix, letzte 8 Ziffern, Gross-/Kleinschreibung) - und an
+  // genau diesem Vergleich haengt dann eine Rechtspflicht. Verhalten hier BYTE-IDENTISCH:
+  // ownNumber kommt aus tenantPrivateNumber (E.164-String oder null), to aus ctx.to
+  // (normalisierter E.164-String). BEWUSST NICHT ownerSelfCallGranted: die Diagnose-
+  // Retention darf nicht am Offenlegungs-Schalter und nicht an der Tenant-Allowlist
+  // haengen, sonst faellt sie bei einem Flag-Flip still aus.
+  return calleeIsOwner({ to, ownNumber });
 }
 
 // Ueberlebt das Roh-Transkript dieses Calls den Summary-Abschluss? Zweite Linie zum

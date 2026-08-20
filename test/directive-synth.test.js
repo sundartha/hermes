@@ -151,7 +151,7 @@ test("Telnyx + Flag AN + Synth-OK -> GATHER bekommt promptAudioUrl, SAY bekommt 
 // der einen globalen Plattform-Stimme - sonst umgeht die Vorabsynthese VOICE-12
 // vollstaendig, sobald ELEVENLABS_PLAY_TTS_ENABLED=true laeuft (der <Say>-Zweig allein
 // wird davon nie beruehrt).
-test("Telnyx + Flag AN -> Voice-ID der Vorabsynthese folgt dem voiceProfile (FR/EN), nicht der globalen Plattform-Stimme", async () => {
+test("Telnyx + Flag AN -> Voice-ID der Vorabsynthese folgt dem voiceProfile (DE/FR/EN), nicht der globalen Plattform-Stimme", async () => {
   const ttsStore = fakeTtsStore();
   const { synthesizeDirectiveAudio } = makeDirectiveSynth({
     config: fakeConfig({ enabled: true }),
@@ -168,9 +168,13 @@ test("Telnyx + Flag AN -> Voice-ID der Vorabsynthese folgt dem voiceProfile (FR/
   const { urls, fetchImpl } = recordingFetch();
   await withFakeFetch(fetchImpl, () => synthesizeDirectiveAudio(call, directives));
   assert.equal(urls.length, 3);
-  assert.match(urls[0], /text-to-speech\/FFXYdAYPzn8Tw8KiHZqg\b/, "FR folgt der bindenden FR-ID");
-  assert.match(urls[1], /text-to-speech\/wOPou4MhRIYEqQHVxjmp\b/, "EN folgt der bindenden EN-ID");
-  assert.match(urls[2], /text-to-speech\/voice123\b/, "DE bleibt die konfigurierte Plattform-Stimme");
+  assert.match(urls[0], /text-to-speech\/WeAAwKYcS06VmXw086yZ\b/, "FR folgt der bindenden FR-ID");
+  assert.match(urls[1], /text-to-speech\/ZSNL4hPqCnqoMPaI4jGX\b/, "EN folgt der bindenden EN-ID");
+  assert.match(urls[2], /text-to-speech\/cqPdIo76zSHFDcSZpFov\b/, "DE folgt der bindenden DE-ID");
+  assert.ok(
+    !urls.some((url) => /text-to-speech\/voice123\b/.test(url)),
+    "keine Sprache faellt mehr auf die globale Plattform-Stimme zurueck (Anruf-7-Defekt)",
+  );
 });
 
 test("Telnyx + Flag AN + Synth-FAIL -> Liste unveraendert (Fail-safe -> Azure-Say), kein put", async () => {
