@@ -105,6 +105,13 @@ function promptInputs(call) {
       minute: "2-digit",
     }),
     isInbound: call.direction === "inbound",
+    // OC-P3: die Owner-Tatsache dieses Anrufs als aufgeloeste Eingabe wie alles andere
+    // hier (F1/G34) - kein Baustein fragt selbst am Call nach. STRIKT === true: ein
+    // Bestands-Datensatz ohne das Feld heisst NICHT-Owner, und NICHT-Owner heisst
+    // Offenlegung (fail-closed, dieselbe Lesart wie elevenlabs/outbound.js:890). Der
+    // Schalter wird hier NICHT erneut gelesen - er steckt im Praedikat
+    // (src/callee-is-owner.js, ausgewertet in routes/api-calls.js:118).
+    calleeIsOwner: call.calleeIsOwner === true,
   };
 }
 
@@ -145,8 +152,16 @@ function assignmentBlock(p) {
 // (openingText) - dieser Satz verhindert die Doppel-Nennung (Regel 2 Geschwister). Der
 // SITUATION-Satz selbst kommt aus dem Sprach-Baustein; die Zusammensetzung mit dem
 // Auftragsblock bleibt hier (P11 D1: der Sprach-Baustein kennt assignmentBlock nicht).
+// OC-P3: zwei SITUATIONEN, nie beide. Die Owner-Variante ERSETZT die Bestandszeile,
+// sie ergaenzt sie nicht - nebeneinander waeren es zwei gegenteilige Aussagen ueber
+// dieselbe Frage ("ein Dritter" vs. "dein Auftraggeber"), und genau an solchen
+// Widerspruechen kippt das Modell. Der Auftragsblock bleibt unveraendert - es wechselt
+// nur der Situationssatz.
 function outboundSituation(p) {
-  return `${p.loc.prompt.situationOutbound(p)}\n\n${assignmentBlock(p)}`;
+  const situation = p.calleeIsOwner
+    ? p.loc.prompt.situationOutboundOwner(p)
+    : p.loc.prompt.situationOutbound(p);
+  return `${situation}\n\n${assignmentBlock(p)}`;
 }
 
 // Inbound-SITUATION: KEIN DEIN-AUFTRAG-Block (P5-O5) - der Anrufer bringt sein
@@ -168,7 +183,28 @@ function speechRules(p) {
 // Regel. Deckt drei der vier neu geschlossenen Telefonie-Luecken (P5-O6). Text kommt
 // aus dem Sprach-Baustein (P11).
 function clarificationRules(p) {
-  return p.loc.prompt.clarificationRules(p);
+  return p.loc.prompt.clarificationRules({ identityLine: identityLineFor(p) });
+}
+
+// OC-P3: WELCHE Identitaets-Zeile in den Block "WENN ETWAS UNKLAR IST" geht. DREI Lagen,
+// genau eine trifft zu. Die Reihenfolge ist bedeutungstragend: INBOUND ZUERST - ein
+// eingehender Anruf traegt calleeIsOwner strukturell nie als true (das Praedikat wird nur
+// beim Outbound-Auftrag ausgewertet, routes/api-calls.js:118); diese Zeile macht daraus
+// eine Struktur statt einer Annahme.
+// Die Auswahl sitzt HIER und nicht in den drei Sprachmodulen (G5/S2, Modulkopf
+// i18n/prompts/de.js:7-9): dieselbe if-Abfrage dreimal ist genau der Fehler, den der
+// Modulkopf verhindert. Der Bestand trug sie dreimal - mit dieser Phase null Mal.
+// DER OFFENLEGUNGSSATZ WIRD FERTIG HEREINGEREICHT, nicht umschreiben gelassen: ueber den
+// Wortlaut einer Rechtspflicht entscheidet kein Modell (Regel 2, CLAUDE.md Owner-
+// Entscheidung OC). Er kommt aus derselben einen Quelle wie der gesprochene Satz
+// (disclosureSentence) - die Prompt-Module koennten ihn gar nicht selbst bauen, sie
+// duerfen i18n/locales.js nicht importieren (locales.js importiert SIE, das waere ein
+// Zyklus).
+function identityLineFor(inputs) {
+  const lines = inputs.loc.prompt.identityLines;
+  if (inputs.isInbound) return lines.inbound(inputs.owner);
+  if (!inputs.calleeIsOwner) return lines.outbound(inputs.owner);
+  return lines.outboundOwner({ owner: inputs.owner, disclosure: disclosureSentence(inputs.call) });
 }
 
 // WW-P3: die Nachschlag-Zeile kennt jetzt DREI Lagen statt zwei. Wird nachgeschlagen,
@@ -422,12 +458,37 @@ const END_CALL_TOOL_NAME = "end_call";
 // kein Anthropic-Pfad. Das Anliegen wird hier deterministisch genannt; der erste
 // LLM-Turn (systemPrompt) wiederholt es daher NICHT.
 export function openingText(call) {
-  const disclosure = disclosureSentence(call);
+  const opening = firstSpokenSentence(call);
   const goal = trimGoalForSpeech(call.goal);
-  if (!goal) return disclosure;
+  if (!goal) return opening;
   // Sprachabhaengige, objective-neutrale Bruecke aus dem Bundle (de: "Ich rufe an wegen
   // folgendem Anliegen: ..."), grammatisch fuer Imperativ/Infinitiv/Nominalphrase-Auftraege.
-  return `${disclosure} ${localeFor(call.language).bridgePhrase(goal)}`;
+  return `${opening} ${localeFor(call.language).bridgePhrase(goal)}`;
+}
+
+// OC-P3: der ERSTE gesprochene Satz. Genau EINE Ausnahme vom Offenlegungssatz, und sie
+// haengt allein am OC-P1-Praedikat: das Ziel IST die eigene hinterlegte Nummer des
+// anrufenden Tenants (CLAUDE.md Owner-Entscheidung OC vom 2026-08-20). disclosureSentence
+// selbst bleibt unbedingt - die Verzweigung sitzt beim Zusammensetzer, wie auf dem
+// EL-Weg (elevenlabs/outbound.js#ownerFirstMessage).
+function firstSpokenSentence(call) {
+  return ownerOpeningFor(call) || disclosureSentence(call);
+}
+
+// "" heisst: KEINE Ausnahme -> der Bestandspfad (Offenlegung). Zwei fail-closed-Huerden,
+// beide strikt:
+//   1. calleeIsOwner === true - undefined/false/"true"/1 sind allesamt NICHT-Owner;
+//   2. ein nicht-leerer Vorname nach trim(). Es gibt KEINEN Namens-Rueckfall
+//      (i18n/locales.js an ownerOpening): ohne Vornamen gibt es keine Owner-Anrede,
+//      also spricht der volle Offenlegungssatz.
+// Der Vorname kommt aus DERSELBEN Quelle, aus der disclosureSentence den ownerName zieht
+// (store.tenantContext, state-ops.js:1695) - keine zweite Identitaets-Quelle.
+function ownerOpeningFor(call) {
+  if (call.calleeIsOwner !== true) return "";
+  const firstName = store.tenantContext(call.tenantId).firstName;
+  const name = typeof firstName === "string" ? firstName.trim() : "";
+  if (!name) return "";
+  return localeFor(call.language).ownerOpening(name);
 }
 
 // Glaettet das Anliegen fuer die Sprachausgabe: Whitespace normalisieren, an der
