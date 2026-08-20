@@ -32,6 +32,7 @@
     "mandate": "Book an appointment from Monday through Wednesday, between 1 PM and 5 PM, at a price of no more than $60. An offer inside that window is fully covered by this mandate: accept it and take it down as the result of the call, without checking back with the client.",
     "owner_timezone": "America/New_York",
     "today": "Monday, 11 May 2026",
+    "callee_relation": "",
     "callee_timezone": "\nThe person you are calling is probably in the America/Los_Angeles time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Pacific time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
   },
   "chat_history": [

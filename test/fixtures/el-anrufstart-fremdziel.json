@@ -1,0 +1,29 @@
+{
+  "agent_id": "pin-agent",
+  "agent_phone_number_id": "pin-phnum",
+  "to_number": "+491737250000",
+  "conversation_initiation_client_data": {
+    "dynamic_variables": {
+      "consult_available": "<LAUFABHAENGIG>",
+      "lookup_available": "unavailable",
+      "opening_line": "Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus?",
+      "owner_name": "Pin Testowner",
+      "callee": "+491737250000",
+      "objective": "Termin vereinbaren",
+      "constraints": "\nCONSTRAINTS: hoechstens 40 Euro zusagen\nThe CONSTRAINTS always take precedence over your leeway.",
+      "background": "\nBACKGROUND (for your information only):\nBRIEFING: Kunde hat bereits zweimal angerufen.\n- What it's about: Rueckruf wegen Reklamation\n- Relationship to the person being called: Kundendienst\n- Desired outcome: Ersatztermin\n- Key facts: Vertragsnummer 123; bereits einmal verschoben\nThis background is for you; only pass on what the task requires.",
+      "mandate": "Ersatztermin frei waehlen sonst Nachricht hinterlassen\nYou do NOT book appointments firmly. An appointment request your LEEWAY covers, you commit to yourself and do NOT additionally hand off as a message. For every other appointment request, what is stated under OUTSIDE YOUR LEEWAY applies.",
+      "owner_timezone": "Europe/Berlin",
+      "callee_timezone": "\nThe person you are calling is in the Europe/Berlin time zone - convert every time you agree between those two zones and say which zone you mean.",
+      "today": "<LAUFABHAENGIG>"
+    },
+    "conversation_config_override": {
+      "agent": {
+        "language": "de"
+      },
+      "tts": {
+        "voice_id": "cqPdIo76zSHFDcSZpFov"
+      }
+    }
+  }
+}

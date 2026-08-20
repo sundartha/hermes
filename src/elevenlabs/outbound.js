@@ -557,6 +557,32 @@ function backgroundText({ context, briefing }) {
   return `\n${label.heading}\n${lines.join("\n")}\n${label.guardrail}`;
 }
 
+// Der Platzhalter-Anfang des Anbieters. Ein unversorgtes {{...}} in einem Wert, den der
+// Anbieter aufloest, ist im besten Fall Muell und im schlechtesten der 1008-Abbruch (der
+// Angerufene hoert Stille, belegt im Kopfkommentar von
+// test/el-vorlage-variablen-abgleich.test.js). Benannt statt nackt im Code (G25).
+const PLACEHOLDER_OPENER = "{{";
+
+// OC-P2: die Prompt-Sektion fuer den Owner-Fall - gebaut wie constraintsText/
+// backgroundText: "" oder ein fertiger Block mit fuehrendem Zeilenumbruch, NIE null, NIE
+// undefined. "" ist der Normalfall und laesst den Prompt am Anbieter EXAKT den heutigen
+// Text rendern (leere Variablenwerte sind erprobt - constraints und background gehen
+// heute regelmaessig leer hinaus).
+//
+// STRIKT === true: ein Bestands-Datensatz ohne das Feld (undefined) heisst NICHT-Owner,
+// und NICHT-Owner heisst Offenlegung. Der Schalter wird hier NICHT noch einmal gelesen -
+// er steckt bereits im Praedikat (src/callee-is-owner.js, ausgewertet in
+// routes/api-calls.js); zwei Auswertungen desselben Schalters waeren zwei Wahrheiten.
+//
+// Der eingesetzte Offenlegungssatz kommt aus DERSELBEN einen Quelle wie der statische
+// Rahmen und die Presets (LOCALES.<lang>.disclosure), in der GESPROCHENEN Sprache dieses
+// Anrufs - obwohl der Prompt englisch ist. Keine zweite Fassung, keine Uebersetzung hier.
+function calleeRelationText({ call, owner, bundle }) {
+  if (call.calleeIsOwner !== true) return "";
+  const block = `\n${EN_PROMPT.calleeRelation({ owner, disclosure: bundle.disclosure(owner) })}`;
+  return block.includes(PLACEHOLDER_OPENER) ? "" : block;
+}
+
 // Die Zone des ANGERUFENEN reist samt ihrem Satz und ihrem fuehrenden Zeilenumbruch -
 // dasselbe Muster wie constraintsText/backgroundText und aus demselben Grund: der Prompt
 // der Vorlage ist EIN statischer Text und kann keinen Block weglassen. Stuende der Satz
@@ -690,10 +716,10 @@ const ohneRueckfrageTor = () => false;
 // der Agent bietet dann nie eine Recherche an, die der Webhook ablehnen wuerde.
 const ohneRechercheTor = () => false;
 
-// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die zwoelf, die die
+// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die dreizehn, die die
 // Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
 // {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}},
-// {{consult_available}}, {{opening_line}}, {{lookup_available}}) -
+// {{consult_available}}, {{opening_line}}, {{lookup_available}}, {{callee_relation}}) -
 // fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt unaufgeloest. Der Weg ueber eine
 // Prompt-Uebersteuerung scheidet aus: eine nicht freigeschaltete
 // conversation_config_override wird vom Anbieter STILL ignoriert.
@@ -739,15 +765,35 @@ const ohneRechercheTor = () => false;
 // bestaetigungspflichtige Annahme oder gar keine Zone (s. calleeTimezoneText). Geraten wird
 // dabei nichts (s. time-context.js). Vorher wirkte an dieser Stelle ein Festwert am Agenten
 // ("Europe/Berlin"), der weder besessen noch pro Anruf richtig war.
-function dynamicVariables({ call, ownerName, time, locale, consultAllowed, lookupAllowed }) {
+//
+// bundle + openingLine kommen HEREIN statt hier aufgeloest zu werden (s. startCallBody):
+// die Owner-Eroeffnung braucht dieselbe Grund-Zeile, und verifiedOpeningLine WARNT bei
+// einem Hash-Bruch - ein zweiter Aufruf ergaebe dieselbe Zeile, aber eine zweite Warnung
+// zum selben Anruf, also zwei Kandidaten in der Diagnose statt einem (G5/P6).
+// `locale` ist als Parameter entfallen: seine beiden Leser hier waren localeFor(
+// locale.language) und locale.disclosureOwnerFallback - beides IST das Bundle
+// (callLocaleFor leitet den Wert aus genau diesem Bundle ab, call-locale.js:144-149).
+function dynamicVariables({
+  call,
+  ownerName,
+  bundle,
+  openingLine,
+  time,
+  consultAllowed,
+  lookupAllowed,
+}) {
+  // EIN Auftraggeber-Ausdruck fuer beide Leser: die Variable owner_name (die der Anbieter
+  // in den statischen Offenlegungssatz einsetzt) UND der Owner-Prompt-Block. Zwei
+  // Rechnungen desselben Defaults waeren zwei Wahrheiten (G5).
+  const owner = alsText(ownerName) || bundle.disclosureOwnerFallback;
   return {
     consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     // Thema B: der Torzustand der Recherche, aus DERSELBEN Torkette wie der Webhook
     // (research/registry.js#elevenLabsLookupAvailableFor) - fail-closed, dieselbe
     // Doppelsicherung wie consult_available darueber.
     lookup_available: lookupAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
-    opening_line: verifiedOpeningLine({ call, locale: localeFor(locale.language) }),
-    owner_name: alsText(ownerName) || locale.disclosureOwnerFallback,
+    opening_line: openingLine,
+    owner_name: owner,
     callee: alsText(call.to),
     objective: alsText(call.goal),
     constraints: constraintsText(call.constraints),
@@ -756,6 +802,9 @@ function dynamicVariables({ call, ownerName, time, locale, consultAllowed, looku
     owner_timezone: alsText(time.ownerZone),
     callee_timezone: calleeTimezoneText(time),
     today: alsText(time.today),
+    // OC-P2: "" fuer jedes Nicht-Owner-Ziel - der Prompt am Anbieter rendert dann exakt
+    // den heutigen Text.
+    callee_relation: calleeRelationText({ call, owner, bundle }),
   };
 }
 
@@ -813,9 +862,48 @@ export function callLocaleOf({ store, config, call, ownerName }) {
 // voice_id: "" hinausgehen und dem Agenten seine im Dashboard gewaehlte Stimme nehmen,
 // ohne eine zu setzen. Weglassen laesst sie stehen - fail-safe, dieselbe Haltung wie
 // hasElevenLabsVoice im Telnyx-Renderer.
-function conversationConfigOverride(locale) {
+//
+// OC-P2: DIE EINE KOMPOSITIONSSTELLE DER OWNER-EROEFFNUNG (G5/S2). Sie besteht aus der
+// Owner-Begruessung und derselben Grund-Zeile, die der Bestandsfall hinter der Offenlegung
+// spricht - nur mit der Begruessung davor statt der Offenlegung. Es gibt keinen zweiten
+// Ort, an dem eine Eroeffnung zusammengesetzt wird (composedOpeningLine bleibt die
+// Kompositionsstelle der Grund-Zeile selbst, opening-line.js).
+//
+// "" HEISST: KEINE UEBERSTEUERUNG - nicht "leere first_message". Der Aufrufer laesst den
+// Schluessel dann GANZ weg. Ein leerer Wert naehme dem Agenten seine Eroeffnung, ohne eine
+// zu setzen - derselbe Fehler, den der tts-Zweig darueber bereits benennt.
+//
+// VIER BEDINGUNGEN, alle fail-closed:
+//   1. call.calleeIsOwner === true - strikt, undefined heisst NICHT-Owner;
+//   2. ein nicht-leerer Vorname (es gibt KEINEN Namens-Rueckfall, s. LOCALES.ownerOpening);
+//   3. der zusammengesetzte Text ist nicht blank. Doppelsicherung nach dem Muster von
+//      consult_available: sie kann heute nicht greifen (ownerOpening liefert bei
+//      gesetztem Vornamen nie ""), und sie ist ausdruecklich KEIN Waechter - eine
+//      Rotprobe daran bleibt gruen. Sie steht fuer den Tag, an dem ein Bundle den
+//      Baustein aendert;
+//   4. kein {{ im Text. Das ist der EINZIGE erreichbare Angriffsweg dieser Kette: der
+//      Vorname stammt vom Tenant (store.tenantContext), die Grund-Zeile kann keine
+//      Klammern tragen (validOpeningLine verbietet {} , opening-line.js). Ein
+//      "{{irgendwas}}" im Vornamen wuerde in einer uebersteuerten first_message zum
+//      1008-Abbruch - der Angerufene hoert Stille.
+function ownerFirstMessage({ call, bundle, firstName, openingLine }) {
+  if (call.calleeIsOwner !== true) return "";
+  const vorname = alsText(firstName);
+  if (!vorname) return "";
+  const teile = [bundle.ownerOpening(vorname), openingLine].filter(Boolean);
+  const text = teile.join(" ").trim();
+  if (!text || text.includes(PLACEHOLDER_OPENER)) return "";
+  return text;
+}
+
+function conversationConfigOverride({ call, locale, bundle, firstName, openingLine }) {
+  const eroeffnung = ownerFirstMessage({ call, bundle, firstName, openingLine });
   return {
-    agent: { language: locale.language },
+    agent: {
+      language: locale.language,
+      // WEGLASSEN STATT LEER SETZEN - dasselbe Muster wie der tts-Zweig darunter.
+      ...(eroeffnung ? { first_message: eroeffnung } : {}),
+    },
     ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
   };
 }
@@ -825,7 +913,19 @@ function conversationConfigOverride(locale) {
 // zwei erlaubten Uebersteuerungen. MODUL-EBENE aus demselben Grund wie callLocaleOf
 // darueber (G30). Der Waechter in convai.js prueft GENAU dieses Objekt, bevor es das Netz
 // sieht.
-function startCallBody({ el, call, ownerName, time, locale, consultAllowed, lookupAllowed }) {
+function startCallBody({
+  el,
+  call,
+  ownerName,
+  firstName,
+  time,
+  locale,
+  consultAllowed,
+  lookupAllowed,
+}) {
+  // EIN Bundle und EINE Grund-Zeile fuer beide Leser (s. dynamicVariables).
+  const bundle = localeFor(locale.language);
+  const openingLine = verifiedOpeningLine({ call, locale: bundle });
   return {
     agent_id: el.agentId,
     agent_phone_number_id: el.agentPhoneNumberId,
@@ -834,13 +934,39 @@ function startCallBody({ el, call, ownerName, time, locale, consultAllowed, look
       dynamic_variables: dynamicVariables({
         call,
         ownerName,
+        bundle,
+        openingLine,
         time,
-        locale,
         consultAllowed,
         lookupAllowed,
       }),
-      conversation_config_override: conversationConfigOverride(locale),
+      conversation_config_override: conversationConfigOverride({
+        call,
+        locale,
+        bundle,
+        firstName,
+        openingLine,
+      }),
     },
+  };
+}
+
+// Der vollstaendige Aufruf-Bausatz des Anrufstarts: Transport, Konto, Koerper - und die
+// zwei Werte, die der Waechter in convai.js braucht. MODUL-EBENE aus demselben Grund wie
+// startCallBody darueber (G30, haelt makeElevenLabsOutbound unter der Zeilengrenze); die
+// Abhaengigkeiten reisen als EIN Objekt (F1) und sind exakt die von startCallBody.
+//
+// callId dient NUR dem Fehlerebene-Log der Weisse-Liste-Waeche, die diesen Koerper VOR dem
+// Netzzugriff prueft. calleeIsOwner ist DASSELBE Feld DESSELBEN Datensatzes, aus dem auch
+// die Uebersteuerung gebaut wird (conversationConfigOverride) - es gibt keine zweite
+// Quelle, die abweichen koennte.
+function startCallRequest(anfrage) {
+  return {
+    fetchImpl: fetch,
+    account: anfrage.el,
+    body: startCallBody(anfrage),
+    callId: anfrage.call.id,
+    calleeIsOwner: anfrage.call.calleeIsOwner === true,
   };
 }
 
@@ -1226,7 +1352,8 @@ export function makeElevenLabsOutbound({
   async function originateCall(call) {
     const el = settings();
     assertConfigured(el);
-    const { ownerName } = store.tenantContext(call.tenantId);
+    // OC-P2: firstName liegt bereits im Tenant-Kontext - kein zweiter Reader.
+    const { ownerName, firstName } = store.tenantContext(call.tenantId);
     // Eigener Reader (store.tenantTimezone), NICHT tenantContext - genau wie im
     // Bestandsweg (src/claude.js): die Zeitzone gehoert nicht in die LLM-/MCP-View.
     const time = callTimeContext({
@@ -1237,8 +1364,12 @@ export function makeElevenLabsOutbound({
     // Der Torzustand kommt aus DERSELBEN Torkette wie alles andere (consultAllowedFor -
     // Master-Schalter, Kontext-Kanal, Per-Tenant-Recht), nicht aus dem MCP-Aufruf und
     // nicht aus einem zweiten Nachbau: dieselbe Funktion, die der Webhook fragt, bevor er
-    // eine Rueckfrage annimmt (routes/webhooks-elevenlabs.js).
-    const consultAllowed = consultAllowedFor(store.resolveProfile(call.tenantId));
+    // eine Rueckfrage annimmt (routes/webhooks-elevenlabs.js). OC-P2: den eigenen
+    // Auftraggeber zu fragen, waehrend man mit ihm telefoniert, ist sinnlos - der Prompt
+    // deckt den unavailable-Zustand vollstaendig ab ("REACHING YOUR PRINCIPAL DURING THIS
+    // CALL"), es braucht keinen neuen Prompt-Text. Das Recherche-Tor bleibt unberuehrt.
+    const consultAllowed =
+      consultAllowedFor(store.resolveProfile(call.tenantId)) && call.calleeIsOwner !== true;
     // Thema B: der Torzustand der Recherche - DIESELBE Funktion, die der Webhook fragt
     // (research/registry.js#elevenLabsLookupAvailableFor, per DI verdrahtet), mit der
     // Fassaden-Profilaufloesung als Parameter.
@@ -1249,17 +1380,11 @@ export function makeElevenLabsOutbound({
     // Alle Gates/Berechnungen oberhalb (assertConfigured, Zeitkontext, Sprach-/Stimmwahl)
     // laufen unveraendert - der Fake unterscheidet sich einzig in der Herkunft der
     // conversation_id.
+    // Alles, was in den Anfragekoerper eingeht, EINMAL benannt (G19).
+    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed };
     const { conversationId } = config.safety.fakeOriginateElevenlabs
       ? startResultOf(fakeSipTrunkOutboundCallResponse())
-      : await startOutboundCall({
-          fetchImpl: fetch,
-          account: el,
-          body: startCallBody({ el, call, ownerName, time, locale, consultAllowed, lookupAllowed }),
-          // Fuer das Fehlerebene-Log der Weisse-Liste-Waeche (convai.js), die diesen
-          // Anfragekoerper VOR dem Netzzugriff prueft: nichts ausser agent.language und
-          // tts.voice_id darf darin stehen.
-          callId: call.id,
-        });
+      : await startOutboundCall(startCallRequest(anfrage));
     if (!conversationId) throw new Error("ElevenLabs-Anrufstart lieferte keine conversation_id");
     // AL-P1/EL-BL1: set-once am Record. Es ist dieselbe Kennung, ueber die der
     // Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) den laufenden Anruf bindet.

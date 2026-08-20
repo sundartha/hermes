@@ -75,9 +75,17 @@ export function pinCall() {
 // profil ist ein PROFIL und keine fertige Ja/Nein-Antwort: der Torzustand muss durch die
 // echte Torkette (consultAllowedFor) laufen, sonst prueft ein Test die Attrappe statt das
 // Tor (Lehre b1-messwerkzeug-attrappe).
-export function pinStore({ profil = { allowConsult: true } } = {}) {
+//
+// tenantContext liefert seit OC-P2 auch firstName - der Anrufstart liest ihn fuer die
+// Owner-Eroeffnung. UEBERSCHREIBBAR, damit die Fail-closed-Treppe den Fall "leerer
+// Vorname" ueberhaupt herstellen kann; der Default bleibt eine echte Antwort und kein
+// eingebauter Rueckfall (Lehre b1-messwerkzeug-attrappe).
+export function pinStore({
+  profil = { allowConsult: true },
+  tenantContext = () => ({ ownerName: "Pin Testowner", firstName: "Pin" }),
+} = {}) {
   return {
-    tenantContext: () => ({ ownerName: "Pin Testowner" }),
+    tenantContext,
     tenantTimezone: () => "Europe/Berlin",
     load: () => PIN_STATE,
     numberRecordByE164: (e164) => (e164 === PIN_FROM ? PIN_NUMBER : null),
@@ -122,7 +130,12 @@ export function pinConfig() {
 // setzt Umgebungsvariablen, BEVOR sie das Modul (und mit ihm src/config.js) laedt. Wer
 // den Import hierher zoege, verschoebe die Ladereihenfolge in eine Datei, in der sie
 // niemand vermutet.
-export async function sendeAnrufstart({
+//
+// ZWEI AUSFAHRTEN, EIN ABGRIFF (OC-P2): sendeAnrufstartKoerper liefert den GANZEN
+// Anfragekoerper (die Uebersteuerung conversation_config_override ist von aussen sonst gar
+// nicht erreichbar), sendeAnrufstart weiterhin nur die dynamischen Variablen. Keine zweite
+// Attrappe, keine zweite fetch-Ersetzung - zwei Attrappen wuerden driften.
+export async function sendeAnrufstartKoerper({
   makeElevenLabsOutbound,
   consultAllowedFor,
   store = pinStore(),
@@ -158,7 +171,13 @@ export async function sendeAnrufstart({
   }
 
   assert.ok(capturedBody, "kein Anrufstart ausgeloest - die Attrappe hat keinen Request gesehen");
-  const rumpf = capturedBody.conversation_initiation_client_data;
+  return capturedBody;
+}
+
+// Signatur UND Rueckgabe unveraendert - die zwei Bestandsnutzer merken nichts.
+export async function sendeAnrufstart(args) {
+  const koerper = await sendeAnrufstartKoerper(args);
+  const rumpf = koerper.conversation_initiation_client_data;
   assert.ok(rumpf?.dynamic_variables, "dynamic_variables fehlt im gesendeten Rumpf");
   return rumpf.dynamic_variables;
 }

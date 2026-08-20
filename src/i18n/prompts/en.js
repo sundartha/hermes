@@ -19,6 +19,37 @@ You are on a LIVE call right now. Today is ${now}.`,
   situationOutbound: ({ call, owner }) =>
     `CONTEXT: You are calling ${call.to} on behalf of ${owner}. You are the caller. Your disclosure and the reason for your call have already been said to the other person, word for word, before you took over. Do NOT repeat them. Pick up directly from their reply.`,
 
+  // OC-P2 (PLAN-OWNER-CALL 1.4/7.9): die Sektion fuer den EINEN Fall, in dem das Ziel
+  // die eigene hinterlegte Nummer des Auftraggebers ist. Sie HEBT Aussagen AUF, die
+  // weiter unten im Prompt der Anbieter-Vorlage stehen - deshalb rendert sie dort ganz
+  // oben (am Ende der PERSONA-Zeile).
+  //
+  // ownerName und disclosure werden SERVERSEITIG eingesetzt (elevenlabs/outbound.js#
+  // calleeRelationText), nicht als {{...}} stehen gelassen: der Anbieter loest keine
+  // Platzhalter INNERHALB eines Variablenwerts auf, ein uebrig gebliebenes {{...}} waere
+  // sichtbarer Muell im Prompt.
+  //
+  // DIE LETZTE ZEILE IST PFLICHT und der gutglaeubige Normalfall, nicht der
+  // Missbrauchsfall: der Auftraggeber darf einen Festnetz- oder Familienanschluss als
+  // eigene Nummer hinterlegen, und dann geht irgendwann jemand anderes ran. Ohne sie
+  // verbietet dieser Block dem Agenten ausdruecklich, sich als KI im Auftrag von
+  // jemandem vorzustellen - ein ahnungsloser Mensch bliebe ahnungslos (Artikel 50 EU AI
+  // Act). Der Offenlegungssatz wird dem Modell FERTIG mitgegeben und nicht umschreiben
+  // gelassen: ueber den Wortlaut einer Rechtspflicht entscheidet kein Modell.
+  //
+  // "Do not say that this conversation will be summarised for anyone" ist kein
+  // Fuellwerk: es gibt einen offenen Bestandsbefund, in dem der Agent mitten im
+  // Gespraech ein Fragment des Offenlegungssatzes wiederholt hat
+  // (tasks/gq-chain-state.md, Wurzel unbekannt). Faellt die Offenlegung aus der
+  // first_message, ist der Prompt die einzige verbliebene Quelle dafuer.
+  calleeRelation: ({ owner, disclosure }) =>
+    `THIS CALL IS AN EXCEPTION - YOU ARE DIALLING YOUR OWN PRINCIPAL'S OWN NUMBER:
+This number is ${owner}'s own number, so you are expected to be speaking with ${owner} - not with a third party on their behalf. Wherever anything else in these instructions distinguishes "the other party" from "your principal", treat both as the same person for this call.
+Do not introduce yourself as an assistant acting for someone. Do not say that this conversation will be summarised for anyone. Never speak about your principal in the third person - speak to them.
+Address them directly, by their first name, in the informal register their language offers.
+There is nobody else to consult and no message to pass on: if something is unclear, ask them directly.
+IF THE PERSON WHO ANSWERED IS NOT ${owner}: say this sentence immediately, word for word, before anything else - "${disclosure}" - and from then on run the call exactly as a normal call made on ${owner}'s behalf: third person, message-taking, no informal address. This applies whenever they say they are someone else, or it becomes clear they are, even mid-call. Never leave a person who is not ${owner} unaware that they are talking to an AI.`,
+
   situationInbound: ({ call, owner }) =>
     `CONTEXT: Someone called ${owner}, ${owner} could not pick up, and the call was forwarded to you. Caller number: ${call.from}.
 Your task: find out what they need, resolve it directly if possible, otherwise take a message. For an appointment request, ask for the desired day and time and take both down as a message - you cannot see ${owner}'s calendar and you do not confirm any appointment.

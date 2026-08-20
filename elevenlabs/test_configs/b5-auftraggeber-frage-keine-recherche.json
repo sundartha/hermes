@@ -29,6 +29,7 @@
     "mandate": "Any weekday morning appointment within the next two weeks, up to $250 for the inspection. The assignment says nothing about which parts to fit.",
     "owner_timezone": "America/New_York",
     "today": "Monday, 11 May 2026",
+    "callee_relation": "",
     "callee_timezone": "\nThe person you are calling is probably in the America/Los_Angeles time zone. That is an assumption derived from their area code, it is not confirmed, and it may be wrong. Before you name any specific time, confirm it in one short sentence, for example: \"I have you down as Pacific time - is that right?\" Once they have confirmed it, convert every time you agree between those two zones and say which zone you mean."
   },
   "chat_history": [

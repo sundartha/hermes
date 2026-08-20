@@ -3253,3 +3253,36 @@ Zufallspasswort (Render-generiert) - bei geleaktem Passwort gibt es keine
 zweite Huerde mehr. Gegenmassnahme bei Verdacht: Passwort-Rotation im
 Render-Dashboard. Der Render-API-Key fuer solche Infra-Handgriffe liegt lokal
 in `~/.config/hermes/render-api-key` (nie committen, nie loggen).
+
+## Offen (Launch-Blocker): Besitz-Verifikation der eigenen Nummer
+
+Seit der Owner-Entscheidung 2026-08-20 (OC, s. CLAUDE.md Regel 2) entscheidet
+`tenant.privateNumber` darueber, ob der volle Offenlegungssatz gesprochen wird. Das Feld
+ist Format- und land-validiert (`normalizePrivateNumber`, `src/store/state-ops.js:2127`),
+aber NICHT eigentums-verifiziert, und es ist ueber
+`POST /api/self-service/private-number` von JEDEM eingeloggten Tenant setzbar
+(`src/self-service-routes.js:401`, nur `webAuthMw`). Wer eine fremde Nummer eintraegt,
+erhielte einen KI-Anruf ohne den vollen Offenlegungssatz an einen Dritten (Artikel 50 EU
+AI Act, Bussgeld bis 15 Mio. EUR).
+
+Heute verhindert das die Tenant-Allowlist `OWNER_SELF_CALL_TENANT_IDS` (Default leer):
+nur ausdruecklich gepinnte Tenants loesen die Ausnahme aus. Das ist eine
+Betriebsdisziplin-Schranke, KEINE Verifikation — sie skaliert nicht ueber unsere eigenen
+Accounts hinaus.
+
+Akzeptiert AUSSCHLIESSLICH vor dem Launch, solange in der Allowlist ausschliesslich
+Accounts stehen, die uns gehoeren.
+
+Bedingung fuer den Launch, alternativ:
+(a) Besitz-Verifikation gebaut (Bestaetigungscode an genau diese Nummer, Zeitstempel am
+    Tenant, Praedikat haengt daran, Aenderung setzt zurueck), ODER
+(b) `OWNER_SELF_CALL_ENABLED=false` — die Ausnahme ist dann wirkungslos und der
+    Offenlegungssatz gilt wieder ausnahmslos.
+
+Ein Eintrag eines fremden Accounts in `OWNER_SELF_CALL_TENANT_IDS` vor (a) ist selbst die
+Rechtsverletzung, gegen die dieser Eintrag steht. Ein Schliessen dieses Eintrags ohne (a)
+oder (b) ebenfalls — es ist kein Aufraeumen.
+
+Unberuehrt davon bleibt die KI-Kennzeichnung: auch im Ausnahmefall nennt die Eroeffnung
+die Maschine ("hier ist dein KI-Assistent"), und der Prompt verpflichtet den Agenten, den
+vollen Offenlegungssatz sofort nachzuholen, wenn am Apparat nicht der Auftraggeber ist.
