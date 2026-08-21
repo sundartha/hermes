@@ -65,6 +65,9 @@ test("INBOX-P1-S1 pg: frischer Call traegt beide Marker als null (nicht undefine
 test("INBOX-P1-S2 pg: inboxEntryAt ueberlebt den Reopen (Spalte + Flush + rowToCall)", async () => {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
+  // Zeile VOR dem Marker flushen (Produktions-Reihenfolge, s. call-finish.js): der
+  // zweite save() unten muss ein ON CONFLICT DO UPDATE sein, kein INSERT.
+  await store.save();
   store.markInboxEntry(created.id, true);
   const gesetzt = store.getCall(created.id).inboxEntryAt;
   assert.ok(gesetzt, "Marker steht sofort im Spiegel");
@@ -77,6 +80,9 @@ test("INBOX-P1-S2 pg: inboxEntryAt ueberlebt den Reopen (Spalte + Flush + rowToC
 test("INBOX-P1-S3 pg: inboxSeenAt ueberlebt den Reopen EIGENSTAENDIG (R-10)", async () => {
   const { store, runner } = await makePgTestStore();
   const created = store.createCall(newCall());
+  // Zeile VOR dem Marker flushen (Produktions-Reihenfolge, s. call-finish.js): der
+  // zweite save() unten muss ein ON CONFLICT DO UPDATE sein, kein INSERT.
+  await store.save();
   store.getCall(created.id).inboxSeenAt = SEEN_AT;
   await store.save();
   const reopened = makePgStore(runner);

@@ -11,7 +11,7 @@ import { seedCall } from "./helpers.js";
 
 const AT = "2026-01-01T00:00:00Z";
 // Die Laenge der Fall-Tabelle wird mit-asserted: ein geloeschter Fall faellt damit auf.
-const ERWARTETE_FALLZAHL = 14;
+const ERWARTETE_FALLZAHL = 18;
 const caller = (text) => ({ role: "caller", text, at: AT });
 const agent = (text) => ({ role: "agent", text, at: AT });
 const GREETING = agent("Hallo, hier ist der KI-Assistent von Jonas Beispiel.");
@@ -37,6 +37,34 @@ const CASES = [
   ["leeres Transkript", inbound({ transcript: [] }), ON, false],
   ["Transkript fehlt ganz (kaputter Datensatz)", inbound({ transcript: undefined }), ON, false],
   ["nur Agent-Zeilen, viele", inbound({ transcript: [GREETING, agent("Noch da?"), agent("Hallo?")] }), ON, false],
+  // Die vier Faelle unten pinnen die beiden Schwellen SELBST (Review-Fix): ohne sie ist
+  // "mindestens zwei substanzielle Turns ODER mindestens 12 Zeichen" frei verschiebbar,
+  // ohne dass ein Test rot wird - gemessen: INBOX_MIN_CALLER_TURNS 2->3 UND
+  // INBOX_MIN_CALLER_CHARS 12->40 liessen die urspruengliche Fall-Tabelle unveraendert gruen.
+  [
+    "zwei kurze Turns UNTER der Zeichenschwelle (pinnt INBOX_MIN_CALLER_TURNS allein)",
+    inbound({ transcript: [GREETING, caller("ok"), caller("ja")] }),
+    ON,
+    true,
+  ],
+  [
+    "ein Turn mit exakt 12 Zeichen (Zeichenschwelle von unten)",
+    inbound({ transcript: [GREETING, caller("Termine bald")] }),
+    ON,
+    true,
+  ],
+  [
+    "ein Turn mit 11 Zeichen (Zeichenschwelle von oben - knapp verfehlt)",
+    inbound({ transcript: [GREETING, caller("Termine bal")] }),
+    ON,
+    false,
+  ],
+  [
+    "11 Zeichen + ein Fuellwort unter callerSubstanceMinLen (Fuellwort zaehlt nicht mit)",
+    inbound({ transcript: [GREETING, caller("Termine bal"), caller(".")] }),
+    ON,
+    false,
+  ],
 ];
 
 test("INBOX-P1-A: die Fall-Tabelle aus E-2 haelt vollstaendig", () => {

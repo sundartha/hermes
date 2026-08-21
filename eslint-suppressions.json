@@ -1023,10 +1023,7 @@
       "count": 1
     },
     "id-length": {
-      "count": 6
-    },
-    "max-lines-per-function": {
-      "count": 2
+      "count": 12
     },
     "no-magic-numbers": {
       "count": 1
