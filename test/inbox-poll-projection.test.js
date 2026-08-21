@@ -128,3 +128,67 @@ test("INBOX-P2 D4: Eintraege kommen aufsteigend nach startedAt, unabhaengig von 
     "aufsteigend nach startedAt, nicht nach Seed- oder inboxEntryAt-Reihenfolge",
   );
 });
+
+// Review-Blocker S1-1: die Whitelist ist als FORM (exakter Schluesselsatz) bislang
+// UNGEPRUEFT - R6 arbeitet mit einer Substring-Blacklist plus blossen `in`-Praesenz-
+// pruefungen, die ein spaeter hinzugefuegtes Feld mit unverfaenglichem Namen passieren
+// liessen. Muster: test/al-p11-result-card.test.js:332 (deepEqual auf sortierten Keys).
+// Zusaetzlich pinnt dieser Fall die bislang assertionslosen Felder caller/started_at
+// gegen ihre Seed-Werte (call.from/call.startedAt) - eine Vertauschung auf call.to bzw.
+// call.endedAt blieb bislang unbemerkt gruen.
+test("INBOX-P2 S1-1: die Projektion traegt EXAKT die Whitelist-Felder, caller/started_at/summary stimmen mit den Seed-Werten", () => {
+  const call = seedCall({
+    id: "call_whitelist_pin",
+    direction: "inbound",
+    from: CALLER,
+    to: "+15005550006",
+    status: "completed",
+    startedAt: "2026-08-21T09:05:00.000Z",
+    endedAt: "2026-08-21T09:10:00.000Z",
+    summary: "Rueckruf erbeten",
+    result: {
+      outcome: "Termin vereinbart",
+      commitments: ["Unterlagen senden"],
+      counterpartyCommitments: ["Rueckruf bis Montag"],
+      openPoints: ["Adresse bestaetigen"],
+      nextStep: "Termin im Kalender eintragen",
+      facts: ["GEHEIM-FACT-PIN"],
+    },
+    inboxEntryAt: NOW,
+    inboxSeenAt: null,
+  });
+  const state = seedState({ calls: [call] });
+  ops.addActionItem(state, call.id, "Ruecktruf bis Freitag");
+
+  const { entries } = ops.takeInboxEntries(state, BOOTSTRAP_TENANT_ID, {
+    limit: 10,
+    includeSeen: false,
+  });
+
+  assert.equal(entries.length, 1);
+  assert.deepEqual(
+    Object.keys(entries[0]).sort(),
+    [
+      "action_items",
+      "action_required",
+      "call_id",
+      "caller",
+      "commitments",
+      "counterparty_commitments",
+      "next_step",
+      "open_points",
+      "outcome",
+      "started_at",
+      "summary",
+      "summary_unavailable",
+    ],
+    "exakt die Whitelist - kein Feld mehr, keins weniger",
+  );
+  assert.equal(entries[0].caller, CALLER, "caller kommt von call.from, nicht von call.to");
+  assert.equal(
+    entries[0].started_at,
+    "2026-08-21T09:05:00.000Z",
+    "started_at kommt von call.startedAt, nicht von call.endedAt",
+  );
+  assert.equal(entries[0].summary, "Rueckruf erbeten");
+});
