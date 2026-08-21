@@ -58,8 +58,8 @@
     "date": "2026-08-13",
     "findings": {
       "complexity :: Async function 'flushTenants' has a complexity of 33. Maximum allowed is 10.": 1,
-      "complexity :: Function 'callRowValues' has a complexity of 34. Maximum allowed is 10.": 1,
-      "complexity :: Function 'rowToCall' has a complexity of 34. Maximum allowed is 10.": 1,
+      "complexity :: Function 'callRowValues' has a complexity of 36. Maximum allowed is 10.": 1,
+      "complexity :: Function 'rowToCall' has a complexity of 36. Maximum allowed is 10.": 1,
       "complexity :: Function 'rowToTenant' has a complexity of 32. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 1,
       "id-length :: Identifier name 'b' is too short (< 2).": 2,
@@ -70,7 +70,7 @@
       "id-length :: Identifier name 's' is too short (< 2).": 1,
       "id-length :: Identifier name 't' is too short (< 2).": 2,
       "max-lines-per-function :: Async function 'hydrateTenantInto' has too many lines (117). Maximum allowed is 100.": 1,
-      "max-lines-per-function :: Function 'makePgStore' has too many lines (552). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makePgStore' has too many lines (557). Maximum allowed is 100.": 1,
       "max-params :: Async function 'deleteMissing' has too many parameters (4). Maximum allowed is 3.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'state'.": 3
     }
@@ -100,7 +100,8 @@
       "id-length :: Identifier name 'a' is too short (< 2).": 2,
       "id-length :: Identifier name 'e' is too short (< 2).": 3,
       "id-length :: Identifier name 't' is too short (< 2).": 1,
-      "max-lines-per-function :: Function 'makeCallFinish' has too many lines (118). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Async function 'finishCall' has too many lines (103). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makeCallFinish' has too many lines (122). Maximum allowed is 100.": 1,
       "no-magic-numbers :: No magic number: 2.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'call'.": 1
     }

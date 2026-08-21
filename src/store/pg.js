@@ -301,6 +301,12 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // INBOX-P1: Qualifikations-Marker - Wrapper-Parity zu json.js.
+    markInboxEntry(callId, qualifies) {
+      const { call, changed } = ops.markInboxEntry(requireState(), callId, qualifies);
+      if (changed) save();
+      return call;
+    },
     // LCT P2: gebuchter Schaetzbetrag - Flush schreibt estimated_cost_cents
     // (INSERT + ON CONFLICT DO UPDATE SET). KS-P5: input = { costCents, chargeAnchors },
     // die zwei Anker-Spalten stehen ebenfalls im ON CONFLICT DO UPDATE SET.
@@ -1362,6 +1368,9 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // dem Treiber, und ein NULL aus einer alt-migrierten Zeile muss auf false fallen, nie
     // auf true (fail-closed - false heisst Offenlegung).
     calleeIsOwner: r.callee_is_owner === true,
+    // INBOX-P1: beide Inbox-Marker hydrieren. NULL -> null (json-Parity).
+    inboxEntryAt: r.inbox_entry_at ?? null,
+    inboxSeenAt: r.inbox_seen_at ?? null,
     // LCT P2: Kosten-Achse hydrieren. Ohne diese Zeilen ginge sie beim Restart verloren UND
     // der naechste Flush schriebe sie auf NULL zurueck (Lehre i8-design-decisions - dieselbe
     // Klasse, die schon tenantId einmal gekostet hat). Bestandszeile ohne Wert -> null
@@ -1843,6 +1852,9 @@ function callRowValues(call, tenantId) {
     // gesetzt und danach nie mehr geaendert (set-once). Ein UPDATE-Eintrag waere hier ein
     // Defekt: er machte eine spaetere, zweite Auswertung nachtraeglich wirksam.
     call.calleeIsOwner === true,
+    // INBOX-P1 ($56-$57): beide IM ON CONFLICT DO UPDATE SET.
+    call.inboxEntryAt ?? null,
+    call.inboxSeenAt ?? null,
   ];
 }
 
@@ -1867,8 +1879,8 @@ async function flushCalls(client, tenantId, calls) {
           appointment_date, appointment_time, amount, currency,
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
           callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
-          lookup_log, summary_mail_sent_at, callee_is_owner)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55)
+          lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1893,7 +1905,8 @@ async function flushCalls(client, tenantId, calls) {
          callee_confirmed_timezone_origin=EXCLUDED.callee_confirmed_timezone_origin,
          callee_confirmed_timezone_at=EXCLUDED.callee_confirmed_timezone_at,
          sip_call_id=EXCLUDED.sip_call_id, lookup_log=EXCLUDED.lookup_log,
-         summary_mail_sent_at=EXCLUDED.summary_mail_sent_at`,
+         summary_mail_sent_at=EXCLUDED.summary_mail_sent_at,
+         inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);

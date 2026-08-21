@@ -300,6 +300,8 @@ test("KV-P1-5 sms: die Summary-SMS bucht den Ledger, das Gate bleibt unberuehrt"
       recordUsageEvent: (ev) => recordUsageEvent(s, ev),
       markSummarySmsSent: () => {},
       markBilled: () => {},
+      // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
+      markInboxEntry: () => {},
     },
     config: callFinishConfig,
     // Metering isoliert ausgeschaltet (Muster test/web-14-call-finish-sms-text-language.test.js):

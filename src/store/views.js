@@ -41,6 +41,9 @@ export function publicCall({
   costTruedAt,
   costTruedSource,
   costTruingAttempts,
+  // INBOX-P1: beide Inbox-Marker sind rein intern.
+  inboxEntryAt,
+  inboxSeenAt,
   ...rest
 }) {
   return rest;
@@ -52,12 +55,12 @@ export function publicCall({
 // Optionales provider-Argument: gesetzt -> zusaetzlich nach Provider filtern (z.B.
 // finishCall braucht die SMS-Absendernummer DESSELBEN Providers wie der Call);
 // weggelassen -> erste aktive Nummer (Default fuer outboundFrom).
-export function findActiveNumber(s, tenantId, provider) {
-  return s.numbers.find(
-    (n) =>
-      n.tenantId === tenantId &&
-      n.status === NUMBER_STATUS.ACTIVE &&
-      (provider === undefined || n.provider === provider),
+export function findActiveNumber(state, tenantId, provider) {
+  return state.numbers.find(
+    (number) =>
+      number.tenantId === tenantId &&
+      number.status === NUMBER_STATUS.ACTIVE &&
+      (provider === undefined || number.provider === provider),
   );
 }
 
@@ -65,29 +68,29 @@ export function findActiveNumber(s, tenantId, provider) {
 // dieselbe Praezedenz wie im Anruf (resolveCallLanguage), mit der aktiven Nummer als
 // Geo-Anker - EINE Quelle (G5), damit die Vorlagen-Sprache im Dashboard nicht von der
 // Sprache abweicht, in der der Anruf spaeter tatsaechlich rendert.
-export function tenantLanguage(s, tenantId) {
-  return resolveCallLanguage(s, { tenantId, numberRecord: findActiveNumber(s, tenantId) });
+export function tenantLanguage(state, tenantId) {
+  return resolveCallLanguage(state, { tenantId, numberRecord: findActiveNumber(state, tenantId) });
 }
 
 // Existiert IRGENDEINE aktive Nummer im Store? Tenant-agnostisches Boot-Gate-Praedikat
 // (P2b): der Dienst ist "telefonbar", sobald mind. ein Tenant eine aktive Nummer hat -
 // kein OWNER/BOOTSTRAP-Pin mehr. Gleiche Status-Quelle wie findActiveNumber (G5).
-export function hasActiveNumber(s) {
-  return s.numbers.some((n) => n.status === NUMBER_STATUS.ACTIVE);
+export function hasActiveNumber(state) {
+  return state.numbers.some((number) => number.status === NUMBER_STATUS.ACTIVE);
 }
 
 // LCT P7 (Fixkosten sichtbar machen): Plattform-weiter Zaehler aktiver Nummern fuer die
 // DID-Listenmiete-Anzeige (GET /api/billing/platform-costs). PII-frei: liefert nur eine
 // Ganzzahl, KEINE E.164/Tenant-Kennung. Gleiche Status-Quelle wie hasActiveNumber (G5).
-export function countActiveNumbers(s) {
-  return s.numbers.filter((n) => n.status === NUMBER_STATUS.ACTIVE).length;
+export function countActiveNumbers(state) {
+  return state.numbers.filter((number) => number.status === NUMBER_STATUS.ACTIVE).length;
 }
 
 // Aktive Nummer eines Tenants als e164-String fuer die Anzeige (fail-closed: keine
 // eigene aktive Nummer -> "", NIE die Nummer eines fremden Tenants als Fallback ->
 // kein PII-/Toll-Fraud-Leck). Gleiche Quelle wie outboundFrom (findActiveNumber).
-export function activeNumberFor(s, tenantId) {
-  const hit = findActiveNumber(s, tenantId);
+export function activeNumberFor(state, tenantId) {
+  const hit = findActiveNumber(state, tenantId);
   return hit ? hit.e164 : "";
 }
 
@@ -104,18 +107,18 @@ export const NUMBER_DISPLAY_STATUS = Object.freeze({
   NONE: "none",
 });
 
-export function numberStatusFor(s, tenantId) {
-  const own = s.numbers.filter((n) => n.tenantId === tenantId);
-  if (own.some((n) => n.status === NUMBER_STATUS.ACTIVE)) return NUMBER_DISPLAY_STATUS.ACTIVE;
-  if (own.some((n) => n.status === NUMBER_STATUS.PROVISIONING || n.status === NUMBER_STATUS.CAPTURING))
+export function numberStatusFor(state, tenantId) {
+  const own = state.numbers.filter((number) => number.tenantId === tenantId);
+  if (own.some((number) => number.status === NUMBER_STATUS.ACTIVE)) return NUMBER_DISPLAY_STATUS.ACTIVE;
+  if (own.some((number) => number.status === NUMBER_STATUS.PROVISIONING || number.status === NUMBER_STATUS.CAPTURING))
     return NUMBER_DISPLAY_STATUS.PROVISIONING;
-  if (own.some((n) => n.status === NUMBER_STATUS.REQUESTED)) return NUMBER_DISPLAY_STATUS.REQUESTED;
+  if (own.some((number) => number.status === NUMBER_STATUS.REQUESTED)) return NUMBER_DISPLAY_STATUS.REQUESTED;
   // Reale (wenn auch gescheiterte) Nummer schlaegt IMMER den globalen Skip-Marker unten
   // (gleiche Prioritaet wie ACTIVE/PROVISIONING/REQUESTED oben, Invariante 3 Fix B): ein
   // Retry legt eine FRISCHE Nummer an statt die alte 'failed' wiederzubeleben (own faellt
   // nie leer) - die frische gewinnt bereits ueber die Checks oben.
-  if (own.some((n) => n.status === NUMBER_STATUS.FAILED)) return NUMBER_DISPLAY_STATUS.FAILED;
-  if (findTenant(s, tenantId)?.numberProvisionSkipReason === GLOBAL_CAP_REASON)
+  if (own.some((number) => number.status === NUMBER_STATUS.FAILED)) return NUMBER_DISPLAY_STATUS.FAILED;
+  if (findTenant(state, tenantId)?.numberProvisionSkipReason === GLOBAL_CAP_REASON)
     return NUMBER_DISPLAY_STATUS.BLOCKED;
   return NUMBER_DISPLAY_STATUS.NONE;
 }
@@ -125,5 +128,5 @@ export function numberStatusFor(s, tenantId) {
 // Aufrufer. store wird injiziert (DIP), damit Test- und Produktions-Store dieselbe
 // Funktion nutzen.
 export function upcomingCalendar(store, tenantId) {
-  return store.getCalendar(tenantId).filter((e) => e.end >= new Date().toISOString());
+  return store.getCalendar(tenantId).filter((event) => event.end >= new Date().toISOString());
 }

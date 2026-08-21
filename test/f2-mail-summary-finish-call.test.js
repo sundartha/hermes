@@ -28,6 +28,8 @@ function makeFakeStore({ consent = true, recipients = [] } = {}) {
     recordUsageEvent: () => {},
     markSummarySmsSent: () => calls.markSummarySmsSent.push(1),
     markBilled: () => {},
+    // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
+    markInboxEntry: () => {},
     markSummaryMailSent: () => calls.markSummaryMailSent.push(1),
     tenantNewsletterConsent: () => ({ consent }),
     confirmedNewsletterRecipients: () => recipients,

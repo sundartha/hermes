@@ -123,6 +123,8 @@ test("Summary-SMS fuer den US-DID-Tenant enthaelt kein 'Anruf' (ex E2E-04)", asy
     recordUsageEvent: () => {},
     markSummarySmsSent: () => {},
     markBilled: () => {},
+    // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
+    markInboxEntry: () => {},
   };
   const callFinish = makeCallFinish({
     store,

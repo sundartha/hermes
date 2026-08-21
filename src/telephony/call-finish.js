@@ -77,6 +77,13 @@ export function makeCallFinish({
   audit,
   mailer = null,
   accountsRef = { current: null },
+  // INBOX-P1: die Inbox-Regel kommt HEREIN (DIP) - sie lebt in inbox-entry.js und haengt
+  // ueber die geteilte Substanz-Primitive an claude.js/config.js. Diese Datei bekommt
+  // summarizeCall aus genau demselben Grund injiziert (offline testbar, kein Boot beim
+  // Import). Default wie mailer/accountsRef: OHNE Verdrahtung entsteht KEIN Eintrag
+  // (fail-closed) und Bestands-Attrappen bleiben gueltig; dass server.js die echte Regel
+  // hereinreicht, pinnt test/inbox-entry-qualification.test.js.
+  qualifiesAsInboxEntry = () => false,
 }) {
   // OUT-05 (F2): Worst-Case-Reserve eines Calls freigeben (idempotent ueber call.reserveReleased,
   // state-ops). FEHLER-SCHLUCKEND: KEIN Freigabepfad (catch/finishCall/Backstop) darf je einen
@@ -126,6 +133,10 @@ export function makeCallFinish({
       return;
     }
 
+    // INBOX-P1: die Qualifikation faellt im Anrufmoment - VOR summarizeCall (der Purge
+    // unten loescht das Transkript, das der Beleg IST) und VOR jedem Fehlerpfad. Rein,
+    // kein Nebeneffekt; die Regel selbst lebt in inbox-entry.js (EINE Quelle).
+    const inboxWorthy = qualifiesAsInboxEntry(call, store.tenantContext(call.tenantId).settings);
     try {
       // EL-Anrufstart: auf dem ElevenLabs-Weg fuehrt der Agent des ANBIETERS das Gespraech
       // und liefert die Zusammenfassung mit; sie steht bereits am Record, bevor
@@ -272,6 +283,10 @@ export function makeCallFinish({
       }
     } catch (err) {
       console.error("[summary]", err.message);
+    } finally {
+      // Laeuft auch nach der Exception oben UND nach dem fruehen Return im Purge-Pfad.
+      // Ohne das luegt die Leer-Antwort der Inbox bei jedem LLM-Ausfall. No-op bei false.
+      store.markInboxEntry(call.id, inboxWorthy);
     }
   }
 

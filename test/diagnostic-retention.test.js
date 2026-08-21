@@ -210,6 +210,8 @@ function makeFakeStore(call) {
     markBilled: () => {
       call.billedAt = new Date().toISOString();
     },
+    // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
+    markInboxEntry: () => {},
   };
 }
 

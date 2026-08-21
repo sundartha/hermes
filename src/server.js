@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import * as store from "./store.js";
 import { planSummarySms } from "./sms-summary.js";
 import { summarizeCall } from "./claude.js";
+import { qualifiesAsInboxEntry } from "./inbox-entry.js";
 import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "./telnyx-conversation-watchdog.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { createTtsStore } from "./tts/store.js";
@@ -144,6 +145,7 @@ const callFinish = makeCallFinish({
   audit,
   mailer,
   accountsRef,
+  qualifiesAsInboxEntry,
 });
 
 // EL-Anrufstart (dritter Outbound-Weg, hinter ELEVENLABS_OUTBOUND_ENABLED): EINMAL beim

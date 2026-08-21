@@ -492,22 +492,6 @@
       "count": 2
     }
   },
-  "seed-card-test-payment.mjs": {
-    "id-length": {
-      "count": 3
-    },
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
-  "seed-test-payment.mjs": {
-    "id-length": {
-      "count": 4
-    },
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "src/audit-store.js": {
     "id-length": {
       "count": 1
@@ -975,11 +959,6 @@
       "count": 12
     }
   },
-  "src/store/views.js": {
-    "id-length": {
-      "count": 15
-    }
-  },
   "src/telephony/adapters/telnyx/cost-parse.js": {
     "id-length": {
       "count": 1
@@ -1047,7 +1026,7 @@
       "count": 6
     },
     "max-lines-per-function": {
-      "count": 1
+      "count": 2
     },
     "no-magic-numbers": {
       "count": 1
