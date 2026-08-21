@@ -351,7 +351,9 @@ CREATE TABLE IF NOT EXISTS call (
   -- F2-Mail (Call-Summary per E-Mail bei Newsletter-Einwilligung): persistierter Dedup-
   -- Marker (ISO-Zeit), Muster summary_sms_sent_at. Additiv NULLABLE: gesetzt NACH
   -- erfolgreichem Mail-Send, sonst NULL -> Bestand byte-identisch.
-  summary_mail_sent_at TEXT
+  summary_mail_sent_at TEXT,
+  inbox_entry_at TEXT,
+  inbox_seen_at TEXT
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -386,6 +388,8 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS diagnostic BOOLEAN NOT NULL DEFAULT FA
 -- Idempotent; frische DB = No-op. DEFAULT FALSE fuellt Bestandszeilen ohne Backfill -
 -- der Default IST die richtige Antwort fuer alles Alte (NICHT-Owner -> Offenlegung).
 ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_is_owner BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS inbox_entry_at TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS inbox_seen_at TEXT;
 -- P6: Mandats-Spalte auf Bestands-call-Tabellen nachziehen (Muster context).
 -- Idempotent; frische DB = No-op.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS mandate JSONB;

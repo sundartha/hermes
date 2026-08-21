@@ -116,6 +116,7 @@ export const {
   // Laufzeit einen TypeError.
   markSummaryMailSent,
   markBilled, // F9 (A6): Bucht-Idempotenz-Marker
+  markInboxEntry, // INBOX-P1: Qualifikations-Marker
   recordCallEstimatedCostCents, // LCT P2: gebuchter Schaetzbetrag am Call
   recordCallCostTruingResult, // LCT P3: Ergebnis des Kosten-Abgleichs am Call
   recordFailureReason,

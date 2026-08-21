@@ -67,6 +67,88 @@ function formatCallDuration(call) {
   return `${minutes}:${seconds}`;
 }
 
+// F2-Mail: Anzeige-Zeitpunkt der Mail - bewusst OHNE jeden Orts-/Zonen-Bezug an
+// Intl.DateTimeFormat: diese Datei bleibt strukturell frei von jeder Tenant-
+// Ortszeit-Lesung - ein eigener Waechtertest (LAW-07: kein Anrufzeit-Gate,
+// Owner-Auflage 7.6) haelt genau das fest. Der Zeitpunkt laeuft daher im
+// Laufzeit-Default (Prozess-seitige Voreinstellung), NICHT in der Ortszeit des
+// Tenants - eine bewusste Vereinfachung, kein Datenverlust (die Mail nennt
+// trotzdem Datum+Uhrzeit des Anrufs).
+function mailTimestampLabel(call) {
+  const anchorMs = Date.parse(call.answeredAt || call.startedAt);
+  if (Number.isNaN(anchorMs)) return "";
+  return new Intl.DateTimeFormat(localeFor(call.language).dateLocale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(anchorMs));
+}
+
+// F2-Mail: der Fliesstext, Spiegel des SMS-Bodys in finishCall (eigene Funktion, aus
+// sendSummaryMails herausgezogen, um dessen Verzweigungszahl unter der Grenze zu halten -
+// reine Verschiebung, kein Verhaltenswechsel).
+function buildMailBody({ call, t, who, result, aiCount }) {
+  const when = mailTimestampLabel(call);
+  const durationLabel = formatCallDuration(call);
+  return (
+    `${who}\n\n` +
+    (when ? `${t.mailTimeLabel} ${when}\n` : "") +
+    (durationLabel ? `${t.mailDurationLabel} ${durationLabel}\n` : "") +
+    `\n${result.summary}` +
+    (aiCount
+      ? `\n\n${t.actionItemsHeading}\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
+      : "")
+  );
+}
+
+// F2-Newsletter-Recipients: mailPlan.targets buendelt die Konto-Adresse (Boolean-Consent,
+// unsubToken=null) UND alle CONFIRMED Zusatzempfaenger (unsubToken gesetzt) - beide Achsen
+// sind orthogonal (mail-summary.js). NUR Zusatzadressen bekommen den Abmelde-Link-Footer
+// (Owner-Auftrag: "Abmelde-Link in jeder Mail an Zusatzadressen") - die Konto-Adresse
+// widerruft weiterhin ueber den Boolean-Consent-Weg, nicht ueber diesen Kanal. Liefert die
+// Zahl ERFOLGREICHER Sends zurueck (Teilfehler werden geloggt, aber NICHT gezielt
+// nachversendet - bewusste Vereinfachung, Auftrag). Eigene Funktion (aus sendSummaryMails
+// herausgezogen), um dessen Verzweigungszahl unter der Grenze zu halten.
+async function sendMailToTargets({ config, mailer, targets, mailBody, t }) {
+  let sentCount = 0;
+  for (const target of targets) {
+    const mailText = target.unsubToken
+      ? `${mailBody}\n\n${t.unsubscribeLinkLabel} ` +
+        newsletterUnsubscribeUrl(config.server.publicUrl, target.unsubToken)
+      : mailBody;
+    try {
+      await mailer.sendMail({ to: target.email, subject: t.summaryTitle, text: mailText });
+      sentCount += 1;
+    } catch (e) {
+      console.error("[mail]", e.message);
+    }
+  }
+  return sentCount;
+}
+
+// F2-Mail: Call-Summary per E-Mail bei Newsletter-Einwilligung (Auftrag), Spiegel des
+// SMS-Blocks in finishCall. Gate-Entscheidung in planSummaryMail (mail-summary.js, inkl.
+// dem EINEN async Schritt - accounts.accountByTenant); der Mail-Text baut buildMailBody,
+// der Versand sendMailToTargets (Muster SMS: sms-summary.js liest nur, den Body baut der
+// Aufrufer). Eigene Funktion (aus finishCall herausgezogen), damit finishCall unter der
+// Zeilengrenze bleibt - reine Verschiebung, kein Verhaltenswechsel.
+async function sendSummaryMails({ store, config, call, mailer, accounts, audit, t, who, result, aiCount }) {
+  const mailPlan = await planSummaryMail({ store, call, mailer, accounts });
+  if (!mailPlan.send) {
+    if (mailPlan.reason) {
+      // Kein Mailer/keine Konto-E-Mail -> Mail still uebersprungen, kein Throw (Muster SMS).
+      // Audit nur Marker + Reason, NIE die E-Mail-Adresse (Regel 4/H4).
+      audit("mail_summary_skipped", null, `call=${call.id} reason=${mailPlan.reason}`);
+    }
+    return;
+  }
+  const mailBody = buildMailBody({ call, t, who, result, aiCount });
+  const sentCount = await sendMailToTargets({ config, mailer, targets: mailPlan.targets, mailBody, t });
+  // NUR nach MINDESTENS EINEM erfolgreichen Send (Muster markSummarySmsSent) - bleiben
+  // ALLE Versuche erfolglos, KEIN Marker -> ein spaeterer Retry (naechster /voice/status)
+  // versucht die Mail(s) erneut statt sie fuer immer zu verlieren.
+  if (sentCount > 0) store.markSummaryMailSent(call.id);
+}
+
 export function makeCallFinish({
   store,
   config,
@@ -77,6 +159,13 @@ export function makeCallFinish({
   audit,
   mailer = null,
   accountsRef = { current: null },
+  // INBOX-P1: die Inbox-Regel kommt HEREIN (DIP) - sie lebt in inbox-entry.js und haengt
+  // ueber die geteilte Substanz-Primitive an claude.js/config.js. Diese Datei bekommt
+  // summarizeCall aus genau demselben Grund injiziert (offline testbar, kein Boot beim
+  // Import). Default wie mailer/accountsRef: OHNE Verdrahtung entsteht KEIN Eintrag
+  // (fail-closed) und Bestands-Attrappen bleiben gueltig; dass server.js die echte Regel
+  // hereinreicht, pinnt test/inbox-entry-qualification.test.js.
+  qualifiesAsInboxEntry = () => false,
 }) {
   // OUT-05 (F2): Worst-Case-Reserve eines Calls freigeben (idempotent ueber call.reserveReleased,
   // state-ops). FEHLER-SCHLUCKEND: KEIN Freigabepfad (catch/finishCall/Backstop) darf je einen
@@ -126,6 +215,10 @@ export function makeCallFinish({
       return;
     }
 
+    // INBOX-P1: die Qualifikation faellt im Anrufmoment - VOR summarizeCall (der Purge
+    // unten loescht das Transkript, das der Beleg IST) und VOR jedem Fehlerpfad. Rein,
+    // kein Nebeneffekt; die Regel selbst lebt in inbox-entry.js (EINE Quelle).
+    const inboxWorthy = qualifiesAsInboxEntry(call, store.tenantContext(call.tenantId).settings);
     try {
       // EL-Anrufstart: auf dem ElevenLabs-Weg fuehrt der Agent des ANBIETERS das Gespraech
       // und liefert die Zusammenfassung mit; sie steht bereits am Record, bevor
@@ -208,70 +301,27 @@ export function makeCallFinish({
         audit("sms_summary_skipped", null, `call=${call.id} reason=${plan.reason}`);
       }
 
-      // F2-Mail: Call-Summary per E-Mail bei Newsletter-Einwilligung (Auftrag), Spiegel des
-      // SMS-Blocks oben. Gate-Entscheidung in planSummaryMail (mail-summary.js, inkl. dem
-      // EINEN async Schritt - accounts.accountByTenant); der Mail-Text bleibt HIER gebaut
-      // (Muster SMS: sms-summary.js liest nur, den Body baut finishCall). aiCount/who sind
-      // bereits oben berechnet (G5: EINE Quelle fuer beide Kanaele).
-      const mailPlan = await planSummaryMail({ store, call, mailer, accounts: accountsRef.current });
-      if (mailPlan.send) {
-        const anchorMs = Date.parse(call.answeredAt || call.startedAt);
-        // Anzeige-Zeitpunkt bewusst OHNE jeden Orts-/Zonen-Bezug an Intl.DateTimeFormat:
-        // diese Datei bleibt strukturell frei von jeder Tenant-Ortszeit-Lesung - ein
-        // eigener Waechtertest (LAW-07: kein Anrufzeit-Gate, Owner-Auflage 7.6) haelt genau
-        // das fest. Der Zeitpunkt laeuft daher im Laufzeit-Default (Prozess-seitige
-        // Voreinstellung), NICHT in der Ortszeit des Tenants - eine bewusste
-        // Vereinfachung, kein Datenverlust (die Mail nennt trotzdem Datum+Uhrzeit des
-        // Anrufs).
-        const when = Number.isNaN(anchorMs)
-          ? ""
-          : new Intl.DateTimeFormat(localeFor(call.language).dateLocale, {
-              dateStyle: "medium",
-              timeStyle: "short",
-            }).format(new Date(anchorMs));
-        const durationLabel = formatCallDuration(call);
-        const mailBody =
-          `${who}\n\n` +
-          (when ? `${t.mailTimeLabel} ${when}\n` : "") +
-          (durationLabel ? `${t.mailDurationLabel} ${durationLabel}\n` : "") +
-          `\n${result.summary}` +
-          (aiCount
-            ? `\n\n${t.actionItemsHeading}\n` + result.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")
-            : "");
-        // F2-Newsletter-Recipients: mailPlan.targets buendelt die Konto-Adresse (Boolean-
-        // Consent, unsubToken=null) UND alle CONFIRMED Zusatzempfaenger (unsubToken gesetzt) -
-        // beide Achsen sind orthogonal (mail-summary.js). NUR Zusatzadressen bekommen den
-        // Abmelde-Link-Footer (Owner-Auftrag: "Abmelde-Link in jeder Mail an Zusatzadressen")
-        // - die Konto-Adresse widerruft weiterhin ueber den Boolean-Consent-Weg, nicht ueber
-        // diesen Kanal. sentCount statt Einzel-Dedup: der bestehende Marker summaryMailSentAt
-        // bleibt EIN Marker pro Call (alle Empfaenger in einem Zug); Teilfehler werden
-        // geloggt, aber NICHT gezielt nachversendet - bewusste Vereinfachung (Auftrag), die
-        // fuer den Konto-only-Fall (Bestand, genau ein Ziel) byte-identisch zum bisherigen
-        // "Marker nur bei Erfolg" bleibt.
-        let sentCount = 0;
-        for (const target of mailPlan.targets) {
-          const mailText = target.unsubToken
-            ? `${mailBody}\n\n${t.unsubscribeLinkLabel} ` +
-              newsletterUnsubscribeUrl(config.server.publicUrl, target.unsubToken)
-            : mailBody;
-          try {
-            await mailer.sendMail({ to: target.email, subject: t.summaryTitle, text: mailText });
-            sentCount += 1;
-          } catch (e) {
-            console.error("[mail]", e.message);
-          }
-        }
-        // NUR nach MINDESTENS EINEM erfolgreichen Send (Muster markSummarySmsSent) - bleiben
-        // ALLE Versuche erfolglos, KEIN Marker -> ein spaeterer Retry (naechster
-        // /voice/status) versucht die Mail(s) erneut statt sie fuer immer zu verlieren.
-        if (sentCount > 0) store.markSummaryMailSent(call.id);
-      } else if (mailPlan.reason) {
-        // Kein Mailer/keine Konto-E-Mail -> Mail still uebersprungen, kein Throw (Muster SMS).
-        // Audit nur Marker + Reason, NIE die E-Mail-Adresse (Regel 4/H4).
-        audit("mail_summary_skipped", null, `call=${call.id} reason=${mailPlan.reason}`);
-      }
+      // F2-Mail: aiCount/who sind bereits oben berechnet (G5: EINE Quelle fuer beide
+      // Kanaele - SMS und Mail). Der eigentliche Mail-Bau + Versand steht in
+      // sendSummaryMails (Modul-Top, reine Verschiebung fuer die Funktionslaenge).
+      await sendSummaryMails({
+        store,
+        config,
+        call,
+        mailer,
+        accounts: accountsRef.current,
+        audit,
+        t,
+        who,
+        result,
+        aiCount,
+      });
     } catch (err) {
       console.error("[summary]", err.message);
+    } finally {
+      // Laeuft auch nach der Exception oben UND nach dem fruehen Return im Purge-Pfad.
+      // Ohne das luegt die Leer-Antwort der Inbox bei jedem LLM-Ausfall. No-op bei false.
+      store.markInboxEntry(call.id, inboxWorthy);
     }
   }
 

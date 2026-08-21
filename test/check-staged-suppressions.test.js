@@ -514,8 +514,8 @@ const LEGACY_FINGERPRINT = {
     "date": "2026-08-13",
     "findings": {
       "complexity :: Async function 'flushTenants' has a complexity of 33. Maximum allowed is 10.": 1,
-      "complexity :: Function 'callRowValues' has a complexity of 34. Maximum allowed is 10.": 1,
-      "complexity :: Function 'rowToCall' has a complexity of 34. Maximum allowed is 10.": 1,
+      "complexity :: Function 'callRowValues' has a complexity of 36. Maximum allowed is 10.": 1,
+      "complexity :: Function 'rowToCall' has a complexity of 36. Maximum allowed is 10.": 1,
       "complexity :: Function 'rowToTenant' has a complexity of 32. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 1,
       "id-length :: Identifier name 'b' is too short (< 2).": 2,
@@ -526,7 +526,7 @@ const LEGACY_FINGERPRINT = {
       "id-length :: Identifier name 's' is too short (< 2).": 1,
       "id-length :: Identifier name 't' is too short (< 2).": 2,
       "max-lines-per-function :: Async function 'hydrateTenantInto' has too many lines (117). Maximum allowed is 100.": 1,
-      "max-lines-per-function :: Function 'makePgStore' has too many lines (552). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makePgStore' has too many lines (557). Maximum allowed is 100.": 1,
       "max-params :: Async function 'deleteMissing' has too many parameters (4). Maximum allowed is 3.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'state'.": 3
     }
@@ -549,14 +549,13 @@ const LEGACY_FINGERPRINT = {
     }
   },
   "src/telephony/call-finish.js": {
-    "reason": "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung. PIN ANGEHOBEN 2026-08-19 (EL-Cutover-Merge upstream/master <-> EL-Kette): Block wortgleich vom Hook uebernommen.",
+    "reason": "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung. PIN ANGEHOBEN 2026-08-19 (EL-Cutover-Merge upstream/master <-> EL-Kette): Block wortgleich vom Hook uebernommen. ZAHLEN KORRIGIERT 2026-08-21 (INBOX-P1 Review-Fix): finishCall riss durch die vier neuen Zeilen (INBOX-P1) ueber die max-lines-Grenze - behoben durch Auslagern des F2-Mailblocks in eigene Funktionen (sendSummaryMails/buildMailBody/sendMailToTargets/mailTimestampLabel), reine Verschiebung. Kein max-lines-Befund mehr in dieser Datei; complexity/id-length/no-magic-numbers/no-param-reassign sind dieselben BEREITS gepinnten Regeln, nur mit den durch die Verschiebung neu gemessenen Zahlen (keine neue Regel, keine neue Ausnahme).",
     "date": "2026-08-15",
     "findings": {
-      "complexity :: Async function 'finishCall' has a complexity of 32. Maximum allowed is 10.": 1,
+      "complexity :: Async function 'finishCall' has a complexity of 21. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 2,
       "id-length :: Identifier name 'e' is too short (< 2).": 3,
-      "id-length :: Identifier name 't' is too short (< 2).": 1,
-      "max-lines-per-function :: Function 'makeCallFinish' has too many lines (118). Maximum allowed is 100.": 1,
+      "id-length :: Identifier name 't' is too short (< 2).": 7,
       "no-magic-numbers :: No magic number: 2.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'call'.": 1
     }

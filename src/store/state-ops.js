@@ -395,6 +395,10 @@ export function createCall(
     calleeConfirmedTimezoneOrigin: null,
     calleeConfirmedTimezoneAt: null,
     callerTurns: 0,
+    // INBOX-P1: die zwei Inbox-Marker. Initial null - byte-identisch zur pg-Hydrierung
+    // (rowToCall), kein json<->pg-Shape-Drift. Muster summarySmsSentAt.
+    inboxEntryAt: null,
+    inboxSeenAt: null,
     actionItemIds: [],
   };
   s.calls.unshift(call);
@@ -632,6 +636,12 @@ export function markSummaryMailSent(s, callId) {
 // Voice-Minuten NICHT erneut. Wrapper saved bei changed.
 export function markBilled(s, callId) {
   return setOnceTimestamp(getCall(s, callId), "billedAt");
+}
+
+// INBOX-P1: Qualifikations-Marker. qualifies=false -> No-op.
+export function markInboxEntry(state, callId, qualifies) {
+  if (!qualifies) return { call: null, changed: false };
+  return setOnceTimestamp(getCall(state, callId), "inboxEntryAt");
 }
 
 // KS-P5: die zwei Achsen-Stempel eines Usage-Buckets als Anker-Objekt. EINE Stelle, an

@@ -254,6 +254,9 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   // eine Frage, an der ab OC-P2 ein Pflichtsatz haengt. false ist fuer JEDEN Bestandsanruf
   // die richtige Antwort (NICHT-Owner -> Offenlegung), deshalb kein Backfill.
   calleeIsOwner: false,
+  // INBOX-P1: die zwei Inbox-Marker (json<->pg-Parity, rowToCall liefert null).
+  inboxEntryAt: null,
+  inboxSeenAt: null,
 });
 
 function migrateCallFields(calls) {
@@ -514,6 +517,13 @@ export function markSummaryMailSent(callId) {
 // F9 (A6): persistierter Bucht-Marker - mutiert -> save bei changed (Muster markSummarySmsSent).
 export function markBilled(callId) {
   const { call, changed } = ops.markBilled(load(), callId);
+  if (changed) save();
+  return call;
+}
+
+// INBOX-P1: Qualifikations-Marker - save NUR bei changed (Muster markSummarySmsSent).
+export function markInboxEntry(callId, qualifies) {
+  const { call, changed } = ops.markInboxEntry(load(), callId, qualifies);
   if (changed) save();
   return call;
 }

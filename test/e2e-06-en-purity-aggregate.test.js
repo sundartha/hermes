@@ -118,6 +118,8 @@ test("Sprachreinheit: germanLeakCount ueber sieben Kanaele ist 0 fuer einen EN-T
       recordUsageEvent: () => {},
       markSummarySmsSent: () => {},
       markBilled: () => {},
+      // INBOX-P1: der Marker faellt am Gespraechsende immer (No-op bei false).
+      markInboxEntry: () => {},
     },
     config: { billing: { paymentEnabled: false, smsCostCents: 0 }, privacy: {} },
     metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
