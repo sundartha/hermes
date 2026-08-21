@@ -112,6 +112,13 @@ const EXPECTED_MARKERS = {
   "cancel_call.call_id": [],
   get_my_number: [],
   list_calls: [],
+  // INBOX-P3: das Negativ-Verbot am Tool-Entscheidungspunkt (Pre-Mortem R-11). Die drei
+  // Marker sind die Verhaltensgarantie des Werkzeugs - CONSUMING (der Abruf verbraucht),
+  // NOT appear again (kein zweites Mal), Do NOT use ... use list_calls (die Abgrenzung,
+  // ohne die das Modell beim Blaettern die Inbox leerkonsumiert). Bewusst gepinnt, nicht
+  // weggeschrieben; Praezedenz max_duration_s/KS-P3.
+  check_inbox: ["CONSUMING", "NOT", "NOT"],
+  "check_inbox.include_seen": ["NO"],
   list_action_items: [],
   get_calendar: [],
   get_agent_status: [],

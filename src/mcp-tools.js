@@ -394,6 +394,72 @@ function callTextLine(e) {
   return `[${e.id}] ${arrow} ${e.counterparty} | ${e.status} | ${e.startedAt}${e.summary ? " | " + e.summary : ""}`;
 }
 
+// ---- check_inbox (PLAN-ANRUF-INBOX, INBOX-P3, E-5) --------------------------------
+// Daten-Kontrakt check_inbox. Die Whitelist lebt an GENAU EINER Stelle: inboxEntryView
+// in src/store/state-ops.js. Dieses Schema ist ihre Schema-Seite, KEINE zweite Sicht -
+// die fuenf Karten-Felder kommen aus demselben RESULT_CARD_OUTPUT wie get_transcript
+// und await_call_event (G5/S2, ein Spread statt einer Redefinition).
+// at (statt started_at) ist der EINZIGE Unterschied zur REST-Sicht: server-seitig in
+// der Tenant-Sprache formatiert, derselbe Formatter wie list_calls/get_calendar.
+// BEWUSST NICHT .strict(): Praezedenz CALL_LIST_ENTRY. Ein spaeter im Store
+// hinzugefuegtes Feld soll als ROTER TEST auffallen (test/inbox-mcp-tool.test.js,
+// Schluesselsatz-Pin), nicht als Laufzeit-Fehler des Werkzeugs.
+const INBOX_ENTRY = z.object({
+  call_id: z.string(),
+  caller: z.string().nullable(),
+  at: z.string().nullable(),
+  summary: z.string().nullable(),
+  summary_unavailable: z.boolean(),
+  ...RESULT_CARD_OUTPUT,
+  action_items: z.array(z.string()),
+  action_required: z.boolean(),
+});
+const INBOX_OUTPUT = { entries: z.array(INBOX_ENTRY), remaining: z.number() };
+
+// Der EINE Unterschied zwischen REST- und MCP-Sicht eines Eintrags. Rest-Destrukturierung
+// statt Feldliste: das Werkzeug PROJIZIERT NICHT ERNEUT (E-5/S2-1), es tauscht ein Feld.
+// Waere hier eine Feldliste, gaebe es zwei Whitelists derselben Karte - genau die Drift,
+// gegen die der Bestandskommentar bei pickTranscript argumentiert.
+// Fehlt der Zeitstempel, bleibt at null: new Date(null) formatierte die Epoche und
+// behauptete damit eine Anrufzeit von 1970 (G26, Praezision statt Vagheit).
+function inboxEntryForModel(entry, formatDate) {
+  const { started_at: startedAt, ...rest } = entry;
+  return { ...rest, at: startedAt ? formatDate(startedAt) : null };
+}
+
+// Stufe-0-Textzeile eines Eintrags aus den GEWHITELISTETEN Feldern - Text und
+// structuredContent lesen dieselbe Struktur (eine Quelle, G5/S2).
+// Kein Richtungs-Pfeil wie in callTextLine: ein Inbox-Eintrag ist per Konstruktion
+// immer eingehend, ein konstantes Symbol waere Rauschen (G12).
+// Fehlt die Zusammenfassung, steht dort der Ersatzsatz der Tenant-Sprache statt einer
+// Luecke - ein Eintrag ohne Inhalt ist unbequem, aber wahr (E-2, Pre-Mortem R-1).
+function inboxTextLine(entry, texts) {
+  const summaryText = entry.summary ?? texts.inboxSummaryUnavailable;
+  const actions = entry.action_items.map((item) => `\n  - ${item}`).join("");
+  return `[${entry.call_id}] ${entry.caller} | ${entry.at} | ${summaryText}${actions}`;
+}
+
+// WOERTLICH festgelegt (E-5). Einsprachig englisch (Systemgrenze O14) und mit einem
+// ENGEN NEGATIV-VERBOT am Tool-Entscheidungspunkt: ohne den letzten Satz waehlt das
+// Modell check_inbox, wenn der Nutzer nur blaettern will, und verbraucht die Inbox
+// beilaeufig (Pre-Mortem R-11). Die Emphase (CONSUMING/NOT/NOT) ist Vertrag und in
+// test/p15-mcp-tool-descriptions-en.test.js nach Anzahl UND Reihenfolge gepinnt -
+// NICHT umformulieren, NICHT lokalisieren. Modulebene wie CANCEL_CALL_DESCRIPTION:
+// haelt registerTools() so klein wie moeglich (der Zeilen-Pin haengt daran).
+const CHECK_INBOX_DESCRIPTION =
+  "Check the call inbox: inbound calls that finished since the last check - who called, " +
+  "what they wanted, what was promised, and what to do now. CONSUMING: entries returned " +
+  "here are marked as seen and will NOT appear again. Do NOT use this to browse or re-read " +
+  "call history - use list_calls for that.";
+
+// Modulebene wie OPEN_QUESTIONS_FIELD. .optional().describe() in DIESER Reihenfolge:
+// .describe().optional() haengte die Beschreibung an das innere Schema, und der
+// Beschreibungs-Waechter saehe einen leeren Text.
+const INCLUDE_SEEN_FIELD = z
+  .boolean()
+  .optional()
+  .describe("Re-read entries that were already marked as seen. Changes NO marker.");
+
 // Daten-Kontrakt get_calendar: pro Eintrag GENAU title/start/end (start/end server-seitig
 // formatiert via formatDate - eine Quelle, derselbe Formatter wie der Stufe-0-Text). title
 // nullable (Robustheit, eine defekte Zeile killt nicht die Liste). Kein internes Feld.
@@ -969,6 +1035,36 @@ export function registerTools(
       return {
         content: [{ type: "text", text: txt }],
         structuredContent: { calls: entries },
+      };
+    },
+  );
+
+  // INBOX-P3 (E-5): der Konsum-Kanal der Anruf-Inbox. uiTool wegen outputSchema, aber
+  // OHNE _meta/Widget - Stufe 0 genuegt, ein weiteres Widget waere Karten-Spam.
+  // Der Handler PROJIZIERT NICHT: er reicht den fertigen REST-Eintrag durch und tauscht
+  // nur started_at gegen das formatierte at (inboxEntryForModel). Die Whitelist lebt in
+  // state-ops.inboxEntryView - hier gibt es keine zweite Feldliste (S2-1).
+  // include_seen wird unveraendert durchgereicht; ueber fail-closed entscheidet der
+  // Server (api-inbox.js: alles ausser strikt true ist false), nicht das Modell.
+  // Kein Roh-Transkript, kein facts, kein evidence, kein Audio (Regel 5) - strukturell,
+  // weil die Quelle sie gar nicht erst fuehrt.
+  uiTool(
+    "check_inbox",
+    {
+      description: CHECK_INBOX_DESCRIPTION,
+      inputSchema: { include_seen: INCLUDE_SEEN_FIELD },
+      outputSchema: INBOX_OUTPUT,
+    },
+    async ({ include_seen: includeSeen = false } = {}) => {
+      const polled = await call("POST", "/api/inbox/poll", { include_seen: includeSeen });
+      requireFields(polled, { entries: "array", remaining: "number" });
+      const entries = polled.entries.map((entry) => inboxEntryForModel(entry, formatDate));
+      const txt = entries.length
+        ? entries.map((entry) => inboxTextLine(entry, loc.mcp)).join("\n")
+        : loc.mcp.emptyInbox;
+      return {
+        content: [{ type: "text", text: txt }],
+        structuredContent: { entries, remaining: polled.remaining },
       };
     },
   );
