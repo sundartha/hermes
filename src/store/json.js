@@ -528,6 +528,16 @@ export function markInboxEntry(callId, qualifies) {
   return call;
 }
 
+// INBOX-P2 (R-3): save() NUR, wenn tatsaechlich markiert wurde. save() ist hier ein
+// SYNCHRONER Voll-Rewrite der ganzen Datei mit fsync auf demselben Event-Loop, auf dem
+// /voice/turn antworten muss - der Leer-Poll ist der Normalfall und darf nichts
+// schreiben. Muster markSummarySmsSent.
+export function takeInboxEntries(tenantId, options) {
+  const result = ops.takeInboxEntries(load(), tenantId, options);
+  if (result.marked) save();
+  return result;
+}
+
 // LCT P2: gebuchter Schaetzbetrag am Call - mutiert -> save bei changed (Muster markBilled).
 // KS-P5: input = { costCents, chargeAnchors } (Muster recordCallCostTruingResult).
 export function recordCallEstimatedCostCents(callId, input) {

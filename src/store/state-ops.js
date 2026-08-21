@@ -72,7 +72,9 @@ import { isDenied } from "../telephony/number-denylist.js";
 // number-denylist.js: eine reine Form-Aussage ueber einen Telefonie-Fakt.
 import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 // AL-P11: EINE Mutationsquelle fuer das Entfernen der Ergebnis-Karten-Zitate (G5).
-import { stripResultEvidence } from "../call-result.js";
+// INBOX-P2: dazu die EINE Aussensicht der Karte (resultCardView) - dieselbe Funktion,
+// die das MCP-Werkzeug get_transcript nutzt. Keine zweite Feldliste (G5/S2).
+import { stripResultEvidence, resultCardView } from "../call-result.js";
 // F2-Newsletter-Recipients: timing-sicherer Token-Vergleich fuer die beiden oeffentlichen
 // Token-Scans (confirm/unsubscribe) - Muster call.streamToken-Pruefung in bridge.js.
 import { safeEqual } from "../util.js";
@@ -642,6 +644,81 @@ export function markBilled(s, callId) {
 export function markInboxEntry(state, callId, qualifies) {
   if (!qualifies) return { call: null, changed: false };
   return setOnceTimestamp(getCall(state, callId), "inboxEntryAt");
+}
+
+// INBOX-P2 (E-5): die Aussensicht EINES Inbox-Eintrags. Whitelist, nicht Blacklist -
+// was hier nicht steht, verlaesst den Server nicht. Rein: kein Store-Zugriff, kein IO,
+// keine Zeit; die offenen Nachrichten kommen als fertige Textliste herein, damit die
+// Projektion testbar bleibt, ohne einen Zustand zu bauen.
+// Die fuenf Karten-Felder werden GESPREADET (nie kopiert): resultCardView ist die EINE
+// Quelle, die auch get_transcript benutzt. Kein transcript, kein facts, kein evidence.
+// summary_unavailable trennt "der Tenant will keine Nachbereitung" (dann entsteht gar
+// kein Eintrag, Praedikat-Bedingung 4) von "die Zusammenfassung ist technisch
+// gescheitert" (Eintrag mit summary null) - E-2, Pre-Mortem R-1.
+// action_required haengt ALLEIN an offenen Nachrichten dieses Anrufs: next_step und
+// open_points sind in realen Karten fast immer gefuellt, ein daraus abgeleitetes Feld
+// waere konstant true und damit wertlos (R-7).
+export function inboxEntryView(call, actionItemTexts) {
+  const summary = call.summary ?? null;
+  return {
+    call_id: call.id,
+    caller: call.from ?? null,
+    started_at: call.startedAt ?? null,
+    summary,
+    summary_unavailable: summary === null,
+    ...resultCardView(call.result),
+    action_items: actionItemTexts,
+    action_required: actionItemTexts.length > 0,
+  };
+}
+
+// Die noch OFFENEN Nachrichten eines Anrufs als reine Texte. Kennungen gehen bewusst
+// NICHT mit (F-7): der Assistent kann sie nicht abhaken, also waeren sie nur ein
+// zusaetzliches Handle auf fremde Gespraechsinhalte.
+function openActionItemTexts(state, callId) {
+  return callActionItems(state, callId)
+    .filter((item) => !item.done)
+    .map((item) => item.text);
+}
+
+// INBOX-P2, das Herzstueck (E-3b/R-4): Auswahl, Projektion UND Als-gesehen-Markierung
+// sind EINE synchrone Operation. Nicht per Kommentar verboten, sondern strukturell
+// unmoeglich: zwischen Auswahl und Markierung passt kein `await`, weil es hier keine
+// Naht gibt, an der eines stehen koennte. Damit bekommt beim Wettlauf zweier Sitzungen
+// genau EINE die Eintraege - pro Prozess (bei Deploy-Ueberlappung hat jede Instanz
+// ihren eigenen Spiegel, bewusst akzeptiert, B-1).
+//
+// TENANT-SCOPE UNKONDITIONAL: tenantCallScope, OHNE das config.tenancy.multiTenant-Gate,
+// mit dem /api/state Legacy-Calls ohne tenantId rettet. Beide Inbox-Marker entstehen
+// ausschliesslich an NEUEN Calls, die immer eine tenantId tragen - einen Legacy-Pfad
+// gibt es hier nicht, und ein Gate, das keinen Fall deckt, waere nur eine Tuer.
+//
+// Filter auf WAHRHEIT statt auf null (fail-closed): ein Datensatz ohne das Feld
+// (undefined) ist NICHT qualifiziert. `!== null` waere hier fail-OPEN.
+// Sortierung nach startedAt AUFSTEIGEND, nicht nach inboxEntryAt: ausgeliefert wird die
+// START-Zeit, inboxEntryAt ist die ENDE-Zeit - zwei ueberlappende Anrufe erschienen sonst
+// gegenlaeufig zu ihren eigenen Zeitstempeln (R-12).
+// Markiert wird NUR, was tatsaechlich ausgeliefert wurde; `remaining` nennt den Rest
+// ehrlich. `marked` ist der Wrapper-Kontrakt: save() NUR bei marked > 0 (R-3) - ein
+// Leer-Poll ist der Normalfall und darf keinen Voll-Rewrite/Voll-Flush ausloesen.
+// includeSeen: liest bereits gesehene Eintraege erneut und aendert KEINEN Marker
+// (marked bleibt 0). Optionsobjekt statt viertem Positionsargument (F1, Muster
+// recordCallEstimatedCostCents).
+export function takeInboxEntries(state, tenantId, { limit, includeSeen }) {
+  const { calls } = tenantCallScope(state, tenantId);
+  const candidates = calls
+    .filter((call) => Boolean(call.inboxEntryAt) && (includeSeen || !call.inboxSeenAt))
+    .sort((left, right) =>
+      left.startedAt < right.startedAt ? -1 : left.startedAt > right.startedAt ? 1 : 0,
+    );
+  const delivered = candidates.slice(0, limit);
+  let marked = 0;
+  const entries = delivered.map((call) => {
+    const entry = inboxEntryView(call, openActionItemTexts(state, call.id));
+    if (!includeSeen && setOnceTimestamp(call, "inboxSeenAt").changed) marked += 1;
+    return entry;
+  });
+  return { entries, remaining: candidates.length - delivered.length, marked };
 }
 
 // KS-P5: die zwei Achsen-Stempel eines Usage-Buckets als Anker-Objekt. EINE Stelle, an

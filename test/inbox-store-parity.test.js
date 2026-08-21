@@ -138,3 +138,43 @@ test("INBOX-P1-S8: publicCall strippt BEIDE Marker (kein API-Leak)", async () =>
   const sichtbar = publicCall({ id: "call_x", inboxEntryAt: SEEN_AT, inboxSeenAt: SEEN_AT, summary: "x" });
   assert.deepEqual(Object.keys(sichtbar).sort(), ["id", "summary"]);
 });
+
+// INBOX-P2 (R-3, Review-Blocker T1/P11): der pg-Wrapper takeInboxEntries war bisher
+// NUR json-seitig getestet. Muster wie oben: PGlite-Harness, createCall + markInboxEntry,
+// dann Poll ueber den pg-Store selbst (nicht ueber ops direkt) - der Wrapper inkl.
+// save()-Gate wird damit tatsaechlich ausgefuehrt.
+test("INBOX-P2-S9 pg: Poll liefert den qualifizierten Call und setzt inbox_seen_at", async () => {
+  const { store, runner } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  store.markInboxEntry(created.id, true);
+  const { entries, marked } = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  assert.equal(marked, 1, "genau ein Call wurde als gesehen markiert");
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].call_id, created.id);
+  assert.ok(store.getCall(created.id).inboxSeenAt, "inboxSeenAt steht sofort im Spiegel");
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  assert.ok(reopened.getCall(created.id).inboxSeenAt, "inbox_seen_at ueberlebt den Reopen (Flush lief)");
+});
+
+test("INBOX-P2-S10 pg: zweiter Poll ist leer und markiert nichts (marked=0, save() unterbleibt)", async () => {
+  const { store } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  store.markInboxEntry(created.id, true);
+  const erster = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  assert.equal(erster.marked, 1);
+  const zweiter = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  assert.equal(zweiter.marked, 0, "R-3: Leer-Poll markiert nichts");
+  assert.equal(zweiter.entries.length, 0, "bereits gesehener Call faellt aus dem Standard-Poll");
+});
+
+test("INBOX-P2-S11 pg: includeSeen liefert den Eintrag erneut, markiert aber nicht nochmal", async () => {
+  const { store } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  store.markInboxEntry(created.id, true);
+  store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: false });
+  const mitGesehenen = store.takeInboxEntries(BOOTSTRAP, { limit: 10, includeSeen: true });
+  assert.equal(mitGesehenen.marked, 0, "includeSeen markiert nicht");
+  assert.equal(mitGesehenen.entries.length, 1, "der Eintrag bleibt sichtbar");
+  assert.equal(mitGesehenen.entries[0].call_id, created.id);
+});

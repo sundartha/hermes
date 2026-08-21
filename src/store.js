@@ -117,6 +117,10 @@ export const {
   markSummaryMailSent,
   markBilled, // F9 (A6): Bucht-Idempotenz-Marker
   markInboxEntry, // INBOX-P1: Qualifikations-Marker
+  // INBOX-P2: die EINE Konsum-Operation (Auswahl + Projektion + Markierung, synchron).
+  // OHNE diesen Re-Export waere store.takeInboxEntries auf der Fassade undefined -> der
+  // Poll-Endpunkt wuerfe zur Laufzeit einen TypeError (Muster markInboxEntry).
+  takeInboxEntries,
   recordCallEstimatedCostCents, // LCT P2: gebuchter Schaetzbetrag am Call
   recordCallCostTruingResult, // LCT P3: Ergebnis des Kosten-Abgleichs am Call
   recordFailureReason,

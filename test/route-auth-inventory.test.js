@@ -214,6 +214,9 @@ const ROUTE_FINGERPRINT = [
   "POST /api/calls",
   "POST /api/calls/:id/cancel",
   "POST /api/calls/:id/consult/answer",
+  // INBOX-P2: der Konsum-Endpunkt der Anruf-Inbox. Klasse AUTH (internalOnly), deshalb
+  // KEIN Eintrag in src/route-policy.js - nur hier und in scripts/probe-auth.sh.
+  "POST /api/inbox/poll",
   "POST /api/onboard",
   "POST /api/onboard/retry",
   "POST /api/self-service/billing/cancel",

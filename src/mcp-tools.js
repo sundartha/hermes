@@ -28,6 +28,10 @@ import {
 } from "./store/defaults.js";
 import { CONSULT_EVENT, CONSULT_POLL_ABORT_MS } from "./consult/delivery.js";
 import { resolveGatewayUrl } from "./config.js";
+// INBOX-P2 (S2-1): die Ergebnis-Karten-Whitelist lebt seit dieser Etappe dort, wo die
+// Karte definiert wird (src/call-result.js) - EINE Quelle fuer MCP-Sicht UND die
+// Inbox-Projektion in state-ops.js. Hier NUR noch importiert, nie zweitdefiniert (G5).
+import { resultCardView } from "./call-result.js";
 import { localeFor } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
 
@@ -173,22 +177,8 @@ const CALL_STATUS_OUTPUT = {
 // duerfen nach aussen (structuredContent + Text + Widget). Das Roh-Transkript
 // (c.transcript: role/text/t) wird NIE durchgereicht - es wird serverseitig nach der
 // Summary gepurged (P8a) und faellt hier per Whitelist (nicht Blacklist) ohnehin raus.
-// EIN Filter, VOR jeder Sicht (Pre-Mortem #1).
-// AL-P11: die handlungsrelevanten Felder der Ergebnis-Karte. BEWUSST OHNE `facts`
-// (reine Eingabe des serverseitigen Gedaechtnisses, AL-P12 - kein MCP-Konsument) und
-// OHNE `evidence` (woertliche Aeusserungen eines Dritten, der nie eingewilligt hat -
-// ein zweiter Transportweg dafuer waere die Umkehrung der Minimierung aus P2b).
-// EINE Quelle fuer Sicht + Schema (G5).
-function resultCardView(result) {
-  return {
-    outcome: result?.outcome ?? null,
-    commitments: result?.commitments ?? [],
-    counterparty_commitments: result?.counterpartyCommitments ?? [],
-    open_points: result?.openPoints ?? [],
-    next_step: result?.nextStep ?? null,
-  };
-}
-
+// EIN Filter, VOR jeder Sicht (Pre-Mortem #1). Die fuenf Karten-Felder kommen aus
+// resultCardView (src/call-result.js, seit INBOX-P2 dort zuhause).
 // Exportiert (rein additiv, keine Verhaltensaenderung): weitere Aufrufer bleiben
 // innerhalb dieser Datei.
 export function pickTranscript(callId, c) {

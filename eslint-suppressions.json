@@ -732,9 +732,6 @@
     }
   },
   "src/mcp-tools.js": {
-    "complexity": {
-      "count": 1
-    },
     "id-length": {
       "count": 28
     },

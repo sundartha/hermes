@@ -80,3 +80,24 @@ export function stripResultEvidence(call) {
   delete call.result.evidence;
   return true;
 }
+
+// AL-P11 (umgezogen aus src/mcp-tools.js in INBOX-P2, S2-1): die handlungsrelevanten
+// Felder der Ergebnis-Karte als Aussensicht. Das Modul, das die Karte DEFINIERT, besitzt
+// auch ihre Aussensicht - vorher lag sie modul-privat in mcp-tools.js und war von der
+// REST-/Store-Seite nicht erreichbar, was zwangslaeufig eine ZWEITE Feldliste ergeben
+// haette (G5/S2). Blatt-Modul ohne eigene Imports -> kein Zyklus (state-ops.js importiert
+// hier bereits, mcp-tools.js ab jetzt ebenfalls).
+// BEWUSST OHNE `facts` (reine Eingabe des serverseitigen Gedaechtnisses, AL-P12 - kein
+// MCP-Konsument) und OHNE `evidence` (woertliche Aeusserungen eines Dritten, der nie
+// eingewilligt hat - ein zweiter Transportweg dafuer waere die Umkehrung der Minimierung
+// aus P2b). EINE Quelle fuer Sicht + Schema (G5).
+export function resultCardView(result) {
+  const card = result ?? {};
+  return {
+    outcome: card.outcome ?? null,
+    commitments: card.commitments ?? [],
+    counterparty_commitments: card.counterpartyCommitments ?? [],
+    open_points: card.openPoints ?? [],
+    next_step: card.nextStep ?? null,
+  };
+}
