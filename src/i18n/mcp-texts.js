@@ -43,6 +43,13 @@ export const MCP_TEXTS = Object.freeze({
     // Leer-/Zwischenzustaende der Tool-Antworten (P15/T3a): tenant-sichtbarer Text,
     // folgt der Tenant-Sprache. DE byte-identisch zum Bestand.
     emptyCalls: "Noch keine Anrufe.",
+    // INBOX-P3: die zwei tenant-sichtbaren Texte des Inbox-Werkzeugs. emptyInbox ist
+    // NEUTRAL formuliert - die Inbox ist KEINE Vollstaendigkeitsaussage darueber, ob
+    // jemand angerufen hat (abgewiesene Rufe erzeugen gar keinen Datensatz, B-2).
+    // inboxSummaryUnavailable trennt "technisch gescheitert" von "nichts passiert":
+    // ein Eintrag ohne Zusammenfassung ist unbequem, aber wahr (E-2, Pre-Mortem R-1).
+    emptyInbox: "Keine neuen Anrufe.",
+    inboxSummaryUnavailable: "Zusammenfassung nicht verfuegbar (technischer Fehler).",
     emptyCalendar: "Kalender ist leer.",
     callStillRunning:
       "Anruf laeuft noch. Bitte get_call_status pollen und spaeter erneut versuchen.",
@@ -97,6 +104,8 @@ export const MCP_TEXTS = Object.freeze({
         "The phone agent is currently unavailable. Please try again later.",
     }),
     emptyCalls: "No calls yet.",
+    emptyInbox: "No new calls.",
+    inboxSummaryUnavailable: "Summary unavailable (technical error).",
     emptyCalendar: "Calendar is empty.",
     callStillRunning: "Call is still running. Please poll get_call_status and try again later.",
     consultPermissionHint:
@@ -137,6 +146,8 @@ export const MCP_TEXTS = Object.freeze({
         "L'agent téléphonique est actuellement injoignable. Veuillez réessayer plus tard.",
     }),
     emptyCalls: "Aucun appel pour le moment.",
+    emptyInbox: "Aucun nouvel appel.",
+    inboxSummaryUnavailable: "Résumé indisponible (erreur technique).",
     emptyCalendar: "L'agenda est vide.",
     callStillRunning:
       "L'appel est encore en cours. Veuillez interroger get_call_status et réessayer plus tard.",

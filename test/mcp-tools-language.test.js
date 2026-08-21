@@ -263,7 +263,15 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
       assert.ok(texts.permissionLabels?.[key], `permissionLabels.${key} fehlt fuer ${language}`);
     // P15/T3a: Leertexte + Feldnamen des get_agent_status-Blocks. Eine Luecke wuerde
     // "undefined" in einen tenant-sichtbaren Text rendern (G27: Struktur statt Disziplin).
-    for (const key of ["emptyCalls", "emptyCalendar", "callStillRunning"])
+    // INBOX-P3: emptyInbox/inboxSummaryUnavailable ergaenzt - ein fehlender Schluessel
+    // schriebe "undefined" in genau die Antwort, die "kurz und eindeutig leer" sein soll.
+    for (const key of [
+      "emptyCalls",
+      "emptyCalendar",
+      "callStillRunning",
+      "emptyInbox",
+      "inboxSummaryUnavailable",
+    ])
       assert.ok(
         typeof texts[key] === "string" && texts[key].length > 0,
         `${key} fehlt fuer ${language}`,

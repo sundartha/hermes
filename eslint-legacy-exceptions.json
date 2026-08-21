@@ -113,7 +113,7 @@
     }
   },
   "src/mcp-tools.js": {
-    "reason": "Eigentuemer-Entscheidung 2026-08-15. Der registerTools-Split ist ein eigenes Paket und ausdruecklich nicht Teil dieser Sitzung. PIN KORRIGIERT 2026-08-21 (INBOX-P2): resultCardView ist nach src/call-result.js umgezogen (S2-1, die Ergebnis-Karten-Whitelist gehoert zu dem Modul, das die Karte definiert). Kein Befund weniger im Bestand - derselbe Befund steht jetzt unter der Zieldatei. Keine neue Regel, keine neue Ausnahme.",
+    "reason": "Eigentuemer-Entscheidung 2026-08-15. Der registerTools-Split ist ein eigenes Paket und ausdruecklich nicht Teil dieser Sitzung. PIN KORRIGIERT 2026-08-21 (INBOX-P2): resultCardView ist nach src/call-result.js umgezogen (S2-1, die Ergebnis-Karten-Whitelist gehoert zu dem Modul, das die Karte definiert). Kein Befund weniger im Bestand - derselbe Befund steht jetzt unter der Zieldatei. Keine neue Regel, keine neue Ausnahme. ZAHL KORRIGIERT 2026-08-21 (INBOX-P3): registerTools registriert mit check_inbox ein Werkzeug mehr und waechst um 20 Code-Zeilen (430 -> 450, gemessen mit 'npx eslint --suppressions-location eslint-suppressions.empty.json src/mcp-tools.js', nicht geschaetzt). Dieselbe bereits gepinnte Regel mit neu gemessener Zahl - kein neuer Eintrag, keine neue Regel, keine neue Ausnahme; alle uebrigen Befunde der Datei sind unveraendert (id-length 28, max-params 1, no-magic-numbers 7, no-restricted-syntax 18).",
     "date": "2026-08-15",
     "findings": {
       "id-length :: Identifier name 'A' is too short (< 2).": 1,
@@ -124,7 +124,7 @@
       "id-length :: Identifier name 's' is too short (< 2).": 9,
       "id-length :: Identifier name 't' is too short (< 2).": 1,
       "id-length :: Identifier name 'v' is too short (< 2).": 1,
-      "max-lines-per-function :: Function 'registerTools' has too many lines (430). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'registerTools' has too many lines (450). Maximum allowed is 100.": 1,
       "max-params :: Arrow function has too many parameters (4). Maximum allowed is 3.": 1,
       "no-magic-numbers :: No magic number: 1000.": 1,
       "no-magic-numbers :: No magic number: 2.": 6,
