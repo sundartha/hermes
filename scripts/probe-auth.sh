@@ -123,6 +123,7 @@ sitzung|POST|/api/calls/:id/cancel|403|internal|internalOnly
 sitzung|GET|/api/calls/:id/consult|403|internal|internalOnly
 sitzung|POST|/api/calls/:id/consult/answer|403|internal|internalOnly
 sitzung|GET|/api/tenant-data/export|403|internal|internalOnly - Transkripte
+sitzung|POST|/api/inbox/poll|403|internal|internalOnly - Gespraechsergebnisse
 sitzung|POST|/api/billing/setup-checkout|403|internal|internalOnly (AUTH-P7, P9 loescht) - Geld-Route
 sitzung|GET|/api/billing/checkout-return|403|internal|internalOnly (AUTH-P7, P9 loescht)
 sitzung|POST|/api/billing/flush-meters|401|webauth|webAuth vor adminOnly - 401 vor 403, Geld-Route

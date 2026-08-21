@@ -636,7 +636,7 @@
   },
   "src/call-result.js": {
     "complexity": {
-      "count": 1
+      "count": 2
     },
     "no-param-reassign": {
       "count": 1
@@ -732,9 +732,6 @@
     }
   },
   "src/mcp-tools.js": {
-    "complexity": {
-      "count": 1
-    },
     "id-length": {
       "count": 28
     },

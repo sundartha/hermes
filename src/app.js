@@ -28,6 +28,7 @@ import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";
 import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.js";
+import { makeInboxRoutes } from "./routes/api-inbox.js";
 import { makeBillingRoutes } from "./routes/api-billing.js";
 import { makeCallRoutes } from "./routes/api-calls.js";
 import { makeOnboardRoutes } from "./routes/api-onboard.js";
@@ -352,6 +353,20 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       config,
       audit,
       tenant: { requestTenant, requireTenant, tenantOwnsCall },
+    }),
+  );
+
+  // ---- Inbox-Route (INBOX-P2) -------------------------------------------------------
+  // POST /api/inbox/poll lebt in src/routes/api-inbox.js (makeInboxRoutes, DI-Muster wie
+  // makeCallRoutes/makeBillingRoutes). EIGENE Factory, weil die Route Zustand VERBRAUCHT
+  // und damit nicht in die Read-/Export-Gruppe gehoert (E-4). Mount NACH makeReadRoutes,
+  // damit die Reihenfolge der bestehenden Gruppen unveraendert bleibt. Hinter
+  // `internalOnly` (in der Factory) + requireTenant (im Handler, REJECT -> 403).
+  app.use(
+    makeInboxRoutes({
+      store,
+      audit,
+      tenant: { requireTenant },
     }),
   );
 

@@ -307,6 +307,15 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // INBOX-P2 (R-3): Wrapper-Parity zu json.js. save() flusht den KOMPLETTEN Spiegel
+    // ALLER Tenants in die serialisierte flushChain - ein unbedingtes save() haengte
+    // jeden Anruf-Schreibpfad hinter Leer-Polls, die nichts geaendert haben. Der Flush
+    // schreibt inbox_seen_at (steht seit INBOX-P1 im ON CONFLICT DO UPDATE SET).
+    takeInboxEntries(tenantId, options) {
+      const result = ops.takeInboxEntries(requireState(), tenantId, options);
+      if (result.marked) save();
+      return result;
+    },
     // LCT P2: gebuchter Schaetzbetrag - Flush schreibt estimated_cost_cents
     // (INSERT + ON CONFLICT DO UPDATE SET). KS-P5: input = { costCents, chargeAnchors },
     // die zwei Anker-Spalten stehen ebenfalls im ON CONFLICT DO UPDATE SET.
