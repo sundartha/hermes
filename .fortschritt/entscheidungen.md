@@ -206,3 +206,29 @@ weil sie sonst ein Kernversprechen des Auftrags brechen wuerden:
   mindestens ein Dutzend Zeichen. Ohne diese Huerde fuellt sich die Inbox mit Eintraegen
   "Anrufer meldete sich, Anliegen unklar" — der sichere Weg dahin, dass der Kunde das
   Werkzeug abschaltet.
+
+---
+
+## F-10: Live-Nachweis mit echtem Anruf (Deploy-Entscheidung)
+
+**Frage:** Soll der neue Stand deployt und mit einem echten eingehenden Anruf
+auf der Hermes-Nummer nachgewiesen werden?
+
+**Kontext:** Die drei Etappen sind gemergt und offline vollstaendig belegt
+(Tests + End-zu-End gegen lokal gestarteten Server: echter Gespraechsverlauf
+erzeugt Eintrag, check_inbox holt ihn ab, zweiter Abruf eindeutig leer, nie
+angekommener Anruf erzeugt keinen). Was offline nicht geht: der Beweis am
+oeffentlich erreichbaren System mit echter Telefonie.
+
+**Empfehlung:** Deployen und einen kurzen Testanruf von deinem Handy auf die
+Hermes-Nummer machen (etwas sagen, z.B. eine Rueckruf-Bitte), danach in
+Claude "check_inbox" aufrufen. Kosten: ein Anruf von wenigen Cent.
+Deploy und echter Anruf sind Owner-Handlungen - ich loese beides nicht
+selbst aus (Render deployt aus dem Upstream-Repo; echte Telefonie kostet
+Geld und beruehrt das Live-System).
+
+**Getroffene Annahme:** Kette gilt als fertig gebaut und offline bewiesen;
+der Live-Testanruf steht als letzter Schritt aus und ist in der Ergebnis-
+Seite als "offen" ausgewiesen.
+
+Datum: 2026-08-21 · Status: offen
