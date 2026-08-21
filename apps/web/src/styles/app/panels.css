@@ -596,6 +596,51 @@
   outline-offset: 2px;
 }
 
+/* -------------------------------------------------- 6c. Settings: eigene Nummer */
+
+/* OC-P2/OC-P3 (PLAN-OWNER-CALL): der Block sitzt in der Settings-Karte, teilt
+   sich aber .billing-section/.billing-section__title (Zwischenlabel-Ebene, s.o.
+   Abschnitt 6 -- "dieselbe leise Mono-Label-Ebene ... nicht fett gesetzte Sans-
+   Zeilen") statt einer dritten Kopie derselben drei Zeilen. Das Formular selbst
+   wiederverwendet .settings-form/.settings-actions/.settings-msg (SettingsIsland
+   hat bereits ein zweites <form> fuer die private Nummer, eigener Endpunkt) und
+   .field-input (app-hermes.css) fuer das Eingabefeld -- hier NUR, was es bisher
+   nicht gab: die Statuszeile und der Ghost-Knopf zum Entfernen. */
+.private-number-status {
+  margin: 10px 0 0;
+}
+
+/* Ghost-Knopf: gleiche Optik wie .payment-card__action (Abschnitt 3) -- weisser
+   Rand statt gefuellter Pille, eigene Klasse statt Wiederverwendung ueber
+   Komponentengrenzen (Muster .newsletter-toggle__unsub, das dieselben Werte
+   ebenfalls dupliziert statt .payment-card__action zu importieren). */
+.private-number-form__remove {
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.private-number-form__remove:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+.private-number-form__remove:disabled {
+  opacity: var(--app-disabled-opacity);
+  cursor: default;
+}
+
+.private-number-form__remove:focus-visible {
+  outline: 2px solid var(--color-accent, #8fb6e3);
+  outline-offset: 2px;
+}
+
 /* -------------------------------------------------------------------- 7. Schmal */
 
 @media (max-width: 640px) {
