@@ -105,11 +105,10 @@
     }
   },
   "src/call-result.js": {
-    "reason": "ZIEL DES UMZUGS 2026-08-21 (INBOX-P2, S2-1): resultCardView kommt aus src/mcp-tools.js hierher, wo die Ergebnis-Karte definiert wird - vorher war sie modul-privat und von der REST-/Store-Seite nicht erreichbar, was zwangslaeufig eine zweite Feldliste derselben Karte ergeben haette (G5). Der gepinnte complexity-Befund ist DERSELBE Bestandsbefund, nur unter der Zieldatei; die Zahl im Bestand steigt nicht. Der zweite Befund (normalizeCallResult, complexity 17) und der no-param-reassign-Befund sind vorbestehend und unberuehrt - ihr Aufraeumen ist ein eigenes Paket am Normalisierer der Modellausgabe.",
+    "reason": "ZIEL DES UMZUGS 2026-08-21 (INBOX-P2, S2-1): resultCardView kommt aus src/mcp-tools.js hierher, wo die Ergebnis-Karte definiert wird - vorher war sie modul-privat und von der REST-/Store-Seite nicht erreichbar, was zwangslaeufig eine zweite Feldliste derselben Karte ergeben haette (G5). KORRIGIERT 2026-08-21 (Runde 2, S1-A-Fix): resultCardView selbst braucht keinen Legacy-Eintrag - die Funktion liest jetzt einmal 'const card = result ?? {}' und greift danach nur noch auf card.*, damit faellt die Komplexitaet von 11 auf unter 10 (gemessen: 'npx eslint --suppressions-location eslint-suppressions.empty.json src/call-result.js' zeigt keinen resultCardView-Befund mehr). Der Umzug bringt also NUR die zwei vorbestehenden Befunde der Quelldatei mit (normalizeCallResult complexity 17, no-param-reassign) - kein neuer Eintrag fuer die Zieldatei fuer resultCardView selbst.",
     "date": "2026-08-21",
     "findings": {
       "complexity :: Function 'normalizeCallResult' has a complexity of 17. Maximum allowed is 10.": 1,
-      "complexity :: Function 'resultCardView' has a complexity of 11. Maximum allowed is 10.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'call'.": 1
     }
   },

@@ -92,11 +92,12 @@ export function stripResultEvidence(call) {
 // eingewilligt hat - ein zweiter Transportweg dafuer waere die Umkehrung der Minimierung
 // aus P2b). EINE Quelle fuer Sicht + Schema (G5).
 export function resultCardView(result) {
+  const card = result ?? {};
   return {
-    outcome: result?.outcome ?? null,
-    commitments: result?.commitments ?? [],
-    counterparty_commitments: result?.counterpartyCommitments ?? [],
-    open_points: result?.openPoints ?? [],
-    next_step: result?.nextStep ?? null,
+    outcome: card.outcome ?? null,
+    commitments: card.commitments ?? [],
+    counterparty_commitments: card.counterpartyCommitments ?? [],
+    open_points: card.openPoints ?? [],
+    next_step: card.nextStep ?? null,
   };
 }

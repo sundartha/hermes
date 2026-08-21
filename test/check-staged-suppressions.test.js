@@ -459,6 +459,12 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //   2026-08-21  Pin nachgezogen (INBOX-P2, vom Hook selbst gemeldet): src/store/pg.js
 //               makePgStore 557->562 Zeilen durch den takeInboxEntries-Wrapper (R-3,
 //               Wrapper-Parity zu json.js). Keine neue Regel-Kategorie.
+//   2026-08-21  Runde 2 (S1-A-Fix, Review-Blocker): der Eintrag "resultCardView complexity
+//               11" fuer src/call-result.js ENTFERNT statt beibehalten - die Funktion ist
+//               vermeidbar auf komplexitaetsarm umgebaut (ein "?? {}" am Anfang statt fuenf
+//               einzelnen "?."), gemessen mit dem echten eslint-Aufruf: 3 Befunde vorher,
+//               2 (vorbestehende) nachher. Kein neuer Bau-Agenten-Eintrag auf der
+//               Altlast-Liste, wie der Dateikopf es verlangt.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     "reason": "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-19 (Thema A): createCall 12 -> 14 Komplexitaet (openingLine-Feld + Hash-Bedingung). Geprueft und bewusst uebernommen; das Aufraeumen bleibt das eigene Refactoring des Zustandsmoduls (s.o.).",
@@ -566,11 +572,10 @@ const LEGACY_FINGERPRINT = {
     }
   },
   "src/call-result.js": {
-    "reason": "ZIEL DES UMZUGS 2026-08-21 (INBOX-P2, S2-1): resultCardView kommt aus src/mcp-tools.js hierher, wo die Ergebnis-Karte definiert wird - vorher war sie modul-privat und von der REST-/Store-Seite nicht erreichbar, was zwangslaeufig eine zweite Feldliste derselben Karte ergeben haette (G5). Der gepinnte complexity-Befund ist DERSELBE Bestandsbefund, nur unter der Zieldatei; die Zahl im Bestand steigt nicht. Der zweite Befund (normalizeCallResult, complexity 17) und der no-param-reassign-Befund sind vorbestehend und unberuehrt - ihr Aufraeumen ist ein eigenes Paket am Normalisierer der Modellausgabe.",
+    "reason": "ZIEL DES UMZUGS 2026-08-21 (INBOX-P2, S2-1): resultCardView kommt aus src/mcp-tools.js hierher, wo die Ergebnis-Karte definiert wird - vorher war sie modul-privat und von der REST-/Store-Seite nicht erreichbar, was zwangslaeufig eine zweite Feldliste derselben Karte ergeben haette (G5). KORRIGIERT 2026-08-21 (Runde 2, S1-A-Fix): resultCardView selbst braucht keinen Legacy-Eintrag - die Funktion liest jetzt einmal 'const card = result ?? {}' und greift danach nur noch auf card.*, damit faellt die Komplexitaet von 11 auf unter 10 (gemessen: 'npx eslint --suppressions-location eslint-suppressions.empty.json src/call-result.js' zeigt keinen resultCardView-Befund mehr). Der Umzug bringt also NUR die zwei vorbestehenden Befunde der Quelldatei mit (normalizeCallResult complexity 17, no-param-reassign) - kein neuer Eintrag fuer die Zieldatei fuer resultCardView selbst.",
     "date": "2026-08-21",
     "findings": {
       "complexity :: Function 'normalizeCallResult' has a complexity of 17. Maximum allowed is 10.": 1,
-      "complexity :: Function 'resultCardView' has a complexity of 11. Maximum allowed is 10.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'call'.": 1
     }
   },

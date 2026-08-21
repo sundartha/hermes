@@ -636,7 +636,7 @@
   },
   "src/call-result.js": {
     "complexity": {
-      "count": 2
+      "count": 1
     },
     "no-param-reassign": {
       "count": 1
