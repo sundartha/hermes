@@ -782,3 +782,15 @@ Datei, filtern erst beim Lesen.
   echte Schuld uebrig - und die wird bereinigt, nicht gelistet. Neue
   Altlast-Eintraege setzt kein Bau-Agent (Hook-Regel; der Classifier blockt es
   zusaetzlich).
+
+## 2026-08-21 INBOX-P1: Merge-Gate fing zwei Prozess-Defekte
+
+1. **Workflow-Worktrees fluten `eslint .`:** Nach JEDEM Workflow-Lauf `git worktree list`
+   pruefen und Reste unter .claude/worktrees/ entfernen, BEVOR committet wird — der
+   Pre-Commit-Lint lintet sie mit (34k Scheinfehler; zweimal passiert am selben Tag).
+2. **Suppression-Dateien sind kein Regenerier-Spielfeld:** Ein Fix-Agent hat
+   eslint-suppressions.json neu erzeugt und dabei Eintraege UNBETEILIGTER Dateien
+   geloescht (seed-*-payment.mjs) -> 9 echte Lint-Fehler, die kein Reviewer sah, weil
+   beide nur die Zieldatei linteten. Regel ab jetzt in jedem Impl-/Fix-/Review-Prompt:
+   volles `npm run lint` (eslint .) MUSS 0 Fehler melden; Suppression-Eintraege nur
+   fuer Dateien im eigenen Diff anfassen.
