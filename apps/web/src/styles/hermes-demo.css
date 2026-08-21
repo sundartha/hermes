@@ -38,6 +38,19 @@
 
 /* ------------------------------------------------- Elemente, Szene 2 (Anruf) */
 @keyframes hdCc { 0%, 29.3% { opacity: 0; transform: translateY(10px); } 30.5%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
+/* Rotations-Fassung des Transkripts (Owner-Befund 2026-08-21: halb
+   ausgeblendete Sprecher-Labels an der Maskenkante). Auf Kacheln, die keine
+   fuenf Zeilen sicher fassen, verschwindet Zeile i KOMPLETT, sobald Zeile
+   i+3 erscheint -- maximal drei Zeilen gleichzeitig, nie ein Anschnitt,
+   keine Maske noetig. Erscheinen identisch zu hdL1-hdL5. */
+/* max-height kollabiert mit: unsichtbare Zeilen belegen sonst weiter Platz
+   und schieben sichtbare in den Clip. Der 0<->96px-Uebergang laesst Zeilen
+   sanft auf- und zuklappen (die anderen rutschen fluessig nach). */
+@keyframes hdL1s { 0%, 33.5% { opacity: 0; max-height: 0; transform: translateY(10px); } 34.7%, 53% { opacity: 1; max-height: 96px; transform: none; } 54.2%, 100% { opacity: 0; max-height: 0; } }
+@keyframes hdL2s { 0%, 40% { opacity: 0; max-height: 0; transform: translateY(10px); } 41.2%, 59.5% { opacity: 1; max-height: 96px; transform: none; } 60.7%, 100% { opacity: 0; max-height: 0; } }
+@keyframes hdL3s { 0%, 46.5% { opacity: 0; max-height: 0; transform: translateY(10px); } 47.7%, 73.5% { opacity: 1; max-height: 96px; transform: none; } 75.3%, 100% { opacity: 0; max-height: 0; } }
+@keyframes hdL4s { 0%, 53% { opacity: 0; max-height: 0; transform: translateY(10px); } 54.2%, 73.5% { opacity: 1; max-height: 96px; transform: none; } 75.3%, 100% { opacity: 0; max-height: 0; } }
+@keyframes hdL5s { 0%, 59.5% { opacity: 0; max-height: 0; transform: translateY(10px); } 60.7%, 73.5% { opacity: 1; max-height: 96px; transform: none; } 75.3%, 100% { opacity: 0; max-height: 0; } }
 @keyframes hdL1 { 0%, 33.5% { opacity: 0; transform: translateY(10px); } 34.7%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
 @keyframes hdL2 { 0%, 40%   { opacity: 0; transform: translateY(10px); } 41.2%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
 @keyframes hdL3 { 0%, 46.5% { opacity: 0; transform: translateY(10px); } 47.7%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
@@ -205,6 +218,9 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  /* Owner-Befund 2026-08-21 (Desktop): laeuft eine Szene doch mal ueber,
+     darf sie NIE ueber den Fensterkopf ragen -- der Koerper clippt. */
+  overflow: hidden;
 }
 
 /* Die drei Szenen liegen übereinander im Fensterkörper. */
@@ -213,7 +229,12 @@
   inset: 0;
   display: flex;
   flex-direction: column;
+  /* safe center: passt der Inhalt nicht ganz, richtet er sich oben aus statt
+     symmetrisch ueber BEIDE Kanten zu laufen (die erste Karte lag sonst auf
+     der Kopfzeile, waehrend unten die noch unsichtbaren Elemente Platz
+     belegten). Browser ohne safe behalten schlicht center. */
   justify-content: center;
+  justify-content: safe center;
   gap: clamp(8px, 2.2cqh, 18px);
   padding: clamp(12px, 2.6cqh, 24px) clamp(14px, 2.4cqw, 30px);
   opacity: 0;
@@ -728,12 +749,30 @@
 /* ---------------------------------------------------- Container-Groessen */
 
 @container hd (max-height: 480px) {
-  .hd-scene { gap: clamp(6px, 1.6cqh, 11px); padding: clamp(9px, 2cqh, 15px) clamp(12px, 2cqw, 22px); }
-  .hd-event { padding: 7px clamp(11px, 1.5cqw, 15px); }
-  .hd-event__value { font-size: clamp(13px, 1.7cqw, 17px); }
-  .hd-msg__bubble { padding: 8px 14px; font-size: clamp(12.5px, 1.55cqw, 15px); }
-  .hd-line__text { font-size: clamp(12px, 1.5cqw, 15px); }
-  .hd-transcript { gap: 7px; }
+  /* Owner-Befund 2026-08-21: bei der Standard-Desktop-Kachel (420px hoch,
+     Body ~280px) war Szene 1 326px hoch -- die erste Karte lag auf der
+     Fensterkopfzeile. Diese Stufe bringt die dichteste Szene unter die
+     Body-Hoehe: breitere, dadurch meist einzeilige Bubbles, kompaktere
+     Labels/Paddings/Gaps. */
+  .hd-scene { gap: clamp(5px, 1.4cqh, 9px); padding: clamp(7px, 1.7cqh, 12px) clamp(12px, 2cqw, 22px); }
+  .hd-event { padding: 5px clamp(11px, 1.5cqw, 14px); }
+  .hd-event__value { font-size: clamp(13px, 1.6cqw, 15px); }
+  .hd-msg { max-width: 88%; }
+  .hd-msg__label { font-size: 9.5px; }
+  .hd-msg__bubble { padding: 7px 13px; font-size: clamp(12.5px, 1.5cqw, 14px); }
+  .hd-toolcall { padding: 5px 12px; }
+  /* Szene 2: funf Transkriptzeilen muessen in den flachen Body passen --
+     kompakter; laeuft es doch ueber, blendet die HOEHERE Maske die aelteste
+     Zeile weich aus statt ihr Sprecher-Label an der Anruf-Karte hart zu
+     zerschneiden (Owner-Befund 2026-08-21). */
+  .hd-line { gap: 2px; }
+  .hd-line__speaker { font-size: 8.5px; }
+  .hd-line__text { font-size: clamp(12px, 1.45cqw, 13px); line-height: 1.35; }
+  .hd-transcript {
+    gap: 5px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 48px, #000 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 48px, #000 100%);
+  }
   .hd-callcard { padding: 8px clamp(11px, 1.5cqw, 15px); }
 }
 
@@ -846,5 +885,37 @@
   }
   .hd-foot {
     display: none;
+  }
+}
+
+/* ---- Transkript-Rotation auf knappen Kacheln (Owner-Befund 2026-08-21) ----
+   Fuenf Zeilen passen nur auf grossen, breiten Kacheln sicher. Ueberall
+   sonst rotieren die Zeilen (hdL*s: Zeile i verschwindet komplett, wenn
+   Zeile i+3 kommt) und die Ausblend-Maske entfaellt -- damit haengt NIE
+   wieder ein halb ausgeblendetes Sprecher-Label an der Anruf-Karte.
+   Zwei gleiche Bloecke statt einer or-Query: maximale Browser-Vertraeglichkeit.
+   BEWUSST am Dateiende (Kaskade; reduced-motion oben gewinnt per !important). */
+@container hd (max-height: 480px) {
+  .hd-l1 { animation-name: hdL1s; }
+  .hd-l2 { animation-name: hdL2s; }
+  .hd-l3 { animation-name: hdL3s; }
+  .hd-l4 { animation-name: hdL4s; }
+  .hd-l5 { animation-name: hdL5s; }
+  .hd-line { overflow: hidden; }
+  .hd-transcript {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+@container hd (max-width: 430px) {
+  .hd-l1 { animation-name: hdL1s; }
+  .hd-l2 { animation-name: hdL2s; }
+  .hd-l3 { animation-name: hdL3s; }
+  .hd-l4 { animation-name: hdL4s; }
+  .hd-l5 { animation-name: hdL5s; }
+  .hd-line { overflow: hidden; }
+  .hd-transcript {
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 }
