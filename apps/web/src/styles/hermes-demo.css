@@ -38,6 +38,19 @@
 
 /* ------------------------------------------------- Elemente, Szene 2 (Anruf) */
 @keyframes hdCc { 0%, 29.3% { opacity: 0; transform: translateY(10px); } 30.5%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
+/* Rotations-Fassung des Transkripts (Owner-Befund 2026-08-21: halb
+   ausgeblendete Sprecher-Labels an der Maskenkante). Auf Kacheln, die keine
+   fuenf Zeilen sicher fassen, verschwindet Zeile i KOMPLETT, sobald Zeile
+   i+3 erscheint -- maximal drei Zeilen gleichzeitig, nie ein Anschnitt,
+   keine Maske noetig. Erscheinen identisch zu hdL1-hdL5. */
+/* max-height kollabiert mit: unsichtbare Zeilen belegen sonst weiter Platz
+   und schieben sichtbare in den Clip. Der 0<->96px-Uebergang laesst Zeilen
+   sanft auf- und zuklappen (die anderen rutschen fluessig nach). */
+@keyframes hdL1s { 0%, 33.5% { opacity: 0; max-height: 0; transform: translateY(10px); } 34.7%, 53% { opacity: 1; max-height: 96px; transform: none; } 54.2%, 100% { opacity: 0; max-height: 0; } }
+@keyframes hdL2s { 0%, 40% { opacity: 0; max-height: 0; transform: translateY(10px); } 41.2%, 59.5% { opacity: 1; max-height: 96px; transform: none; } 60.7%, 100% { opacity: 0; max-height: 0; } }
+@keyframes hdL3s { 0%, 46.5% { opacity: 0; max-height: 0; transform: translateY(10px); } 47.7%, 73.5% { opacity: 1; max-height: 96px; transform: none; } 75.3%, 100% { opacity: 0; max-height: 0; } }
+@keyframes hdL4s { 0%, 53% { opacity: 0; max-height: 0; transform: translateY(10px); } 54.2%, 73.5% { opacity: 1; max-height: 96px; transform: none; } 75.3%, 100% { opacity: 0; max-height: 0; } }
+@keyframes hdL5s { 0%, 59.5% { opacity: 0; max-height: 0; transform: translateY(10px); } 60.7%, 73.5% { opacity: 1; max-height: 96px; transform: none; } 75.3%, 100% { opacity: 0; max-height: 0; } }
 @keyframes hdL1 { 0%, 33.5% { opacity: 0; transform: translateY(10px); } 34.7%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
 @keyframes hdL2 { 0%, 40%   { opacity: 0; transform: translateY(10px); } 41.2%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
 @keyframes hdL3 { 0%, 46.5% { opacity: 0; transform: translateY(10px); } 47.7%, 73.5% { opacity: 1; transform: none; } 75.3%, 100% { opacity: 0; } }
@@ -872,5 +885,37 @@
   }
   .hd-foot {
     display: none;
+  }
+}
+
+/* ---- Transkript-Rotation auf knappen Kacheln (Owner-Befund 2026-08-21) ----
+   Fuenf Zeilen passen nur auf grossen, breiten Kacheln sicher. Ueberall
+   sonst rotieren die Zeilen (hdL*s: Zeile i verschwindet komplett, wenn
+   Zeile i+3 kommt) und die Ausblend-Maske entfaellt -- damit haengt NIE
+   wieder ein halb ausgeblendetes Sprecher-Label an der Anruf-Karte.
+   Zwei gleiche Bloecke statt einer or-Query: maximale Browser-Vertraeglichkeit.
+   BEWUSST am Dateiende (Kaskade; reduced-motion oben gewinnt per !important). */
+@container hd (max-height: 480px) {
+  .hd-l1 { animation-name: hdL1s; }
+  .hd-l2 { animation-name: hdL2s; }
+  .hd-l3 { animation-name: hdL3s; }
+  .hd-l4 { animation-name: hdL4s; }
+  .hd-l5 { animation-name: hdL5s; }
+  .hd-line { overflow: hidden; }
+  .hd-transcript {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+@container hd (max-width: 430px) {
+  .hd-l1 { animation-name: hdL1s; }
+  .hd-l2 { animation-name: hdL2s; }
+  .hd-l3 { animation-name: hdL3s; }
+  .hd-l4 { animation-name: hdL4s; }
+  .hd-l5 { animation-name: hdL5s; }
+  .hd-line { overflow: hidden; }
+  .hd-transcript {
+    -webkit-mask-image: none;
+    mask-image: none;
   }
 }
