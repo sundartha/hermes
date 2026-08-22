@@ -231,4 +231,9 @@ Geld und beruehrt das Live-System).
 der Live-Testanruf steht als letzter Schritt aus und ist in der Ergebnis-
 Seite als "offen" ausgewiesen.
 
-Datum: 2026-08-21 · Status: offen
+**Nachtrag 2026-08-22:** Deploy auf Owner-Anweisung erledigt (Commit db6dc2a
+live auf vodafone-agent, Boot sauber, /healthz 200, /api/inbox/poll ohne Auth
+403 = vorhanden und fail-closed). Offen ist NUR noch der Testanruf durch
+Antonio: Hermes-Nummer anrufen, etwas sagen, danach in Claude check_inbox.
+
+Datum: 2026-08-21 · Status: Deploy erledigt, Testanruf offen

@@ -59,7 +59,7 @@ Harte Vorgaben aus dem Auftrag:
          (caller korrekt, kein transcript/facts/evidence), 2. Aufruf "No new calls."
       C) Anruf ohne substanzielle Anrufer-Zeile -> inboxEntryAt=null, erscheint
          auch mit include_seen=true nicht.
-      OFFEN bleibt nur der Live-Testanruf nach Deploy = Owner-Entscheidung F-10
+      ERLEDIGT 2026-08-22: Deploy live (db6dc2a, Boot sauber, Route fail-closed 403). OFFEN nur noch der Testanruf durch den Owner = F-10
       in .fortschritt/entscheidungen.md.
 - [x] Aufraeumen nach gemergter Kette: Reports p1-p3 + per-run-Skripte inbox-p1/p2 +
       oc-p3 geloescht (alle committet -> Historie in git); inbox-p3.js bleibt
