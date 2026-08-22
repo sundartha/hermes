@@ -696,6 +696,29 @@ export function privateNumberStatusText(data) {
 // (src/self-service-routes.js). Hier benannt, damit die Insel keinen Magic-String haelt.
 export const ERROR_INVALID_PRIVATE_NUMBER = "invalid_private_number";
 
+// Meldungstexte des Nummern-Formulars (Speichern/Entfernen/leeres Feld/ungueltige
+// Nummer) -- dynamische Strings, EN Quelle der Wahrheit + DE-Zwilling (Muster
+// NEWSLETTER_MESSAGES, lib/subscribe.js). Session-abgelaufen/generischer Fehler
+// bleiben bewusst AUSSERHALB dieses Katalogs: das ist derselbe Text wie beim
+// Settings-Formular (STRINGS.settingsSessionExpired/settingsNotSaved, lib/i18n.js
+// t()) -- keine zweite Kopie in diesem Modul (G5).
+export const PRIVATE_NUMBER_MESSAGES = Object.freeze({
+  saved: "Number saved.",
+  removed: "Number removed.",
+  missing: "Enter a number first, or use Remove.",
+  invalid: "That number isn't valid or isn't allowed. Use the international format, for example +49 151 23456789.",
+});
+export const PRIVATE_NUMBER_MESSAGES_DE = Object.freeze({
+  saved: "Nummer gespeichert.",
+  removed: "Nummer entfernt.",
+  missing: "Gib zuerst eine Nummer ein, oder nutze Entfernen.",
+  invalid:
+    "Diese Nummer ist ungültig oder gesperrt. Nutze das internationale Format, zum Beispiel +49 151 23456789.",
+});
+export function privateNumberMessage(key) {
+  return tDyn({ en: PRIVATE_NUMBER_MESSAGES, de: PRIVATE_NUMBER_MESSAGES_DE }, key);
+}
+
 // Schreibt die private Rufnummer (POST same-origin, EIGENER Endpunkt - nicht der
 // settings-Patch). "" loescht den Eintrag (dokumentierter Opt-Out des Servers).
 // Antwort: { ok, hasPrivateNumber } - NIE die Nummer. Wirft ApiError bei non-2xx

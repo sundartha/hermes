@@ -42,25 +42,29 @@
 // das Formular. Tenant-Werte gehen NUR ueber [checked]/textContent in den DOM
 // (nie innerHTML) -- kein XSS-Pfad (Leitplanke).
 //
-// Feedback-Runde 2 (Befund 4): der "Summary SMS number"-Block (privates
-// Zweit-Formular, eigener Endpunkt /api/self-service/private-number) ist aus
-// der UI entfernt -- Zusammenfassungen laufen jetzt ueber den Newsletter
-// (NewsletterIsland). NUR die Oberflaeche ist raus: Backend-Route und
-// -Feld bleiben unangetastet, lib/api.js behaelt savePrivateNumber/
-// privateNumberStatusText/ERROR_INVALID_PRIVATE_NUMBER (kein Schreibpfad
-// dorthin mehr, aber kein toter Server-Vertrag).
+// Feedback-Runde 2 (Befund 4, Aug 2026) hatte den "Summary SMS number"-Block
+// (privates Zweit-Formular, eigener Endpunkt /api/self-service/private-number)
+// aus der UI entfernt -- Zusammenfassungen liefen seitdem ueber den Newsletter
+// (NewsletterIsland). Das Feld selbst blieb unangetastet server- und lib-seitig
+// (savePrivateNumber/privateNumberStatusText/ERROR_INVALID_PRIVATE_NUMBER).
 //
-// OC-P2/OC-P3 (PLAN-OWNER-CALL): das Feld hat seit 2026-08-20 eine ZWEITE Wirkung --
-// tenant.privateNumber entscheidet mit darueber, ob der gesetzliche Offenlegungssatz
-// gesprochen wird (Anruf an genau diese Nummer = Anruf an dich selbst). Wer den Block
-// zurueckholt, MUSS ihn dabei beschriften; der Text steht fest und ist englisch
-// (/app bleibt englisch, i18n-W3):
-//   "Calls to this number are treated as calls to you: the assistant greets you by
-//    your first name instead of reading out the long disclosure. It still says it is
-//    an AI, and anyone else who picks up hears the full disclosure -- so this number
-//    must be your own."
-// NICHT schreiben, "die KI-Offenlegung wird weggelassen" -- das waere falsch und eine
-// Einladung, eine fremde Nummer einzutragen.
+// OC-P2/OC-P3 (PLAN-OWNER-CALL, 2026-08-20): das Feld hat seitdem eine ZWEITE,
+// gewichtigere Wirkung -- tenant.privateNumber entscheidet (zusammen mit der
+// server-seitig gepinnten Tenant-Allowlist, s. CLAUDE.md Regel 2) mit darueber,
+// ob der gesetzliche Offenlegungssatz bei einem Outbound-Call entfaellt (Anruf
+// an genau diese Nummer = Anruf an dich selbst). Deshalb kommt der Block hier
+// als "Eigene Nummer"-Feld ZURUECK, NEU gerahmt um die Owner-Erkennung (nicht
+// mehr um die Summary-SMS): Erklaertext/Titel sagen NIE, dass die KI-Kennzeichnung
+// entfaellt -- die bleibt in JEDEM Fall fest verdrahtet (Backend, claude.js).
+// Was entfaellt, ist NUR die lange Drittpersonen-Vorstellung. Wortlaut zweisprachig
+// ueber lib/i18n.js STRINGS (privateNumberTitle/privateNumberHint/-Save/-Remove),
+// Statuszeile/Fehlertexte dynamisch ueber lib/api.js (privateNumberStatusText,
+// privateNumberMessage) -- gleiche Aufteilung wie der Rest dieser Insel (s.u.).
+//
+// Angezeigt wird ausschliesslich die Server-Maske (maskPrivateNumber, ueber
+// privateNumberStatusText); der volle Wert wird nie ins Eingabefeld zurueckgeschrieben
+// (kein PII-Echo). Eigener Endpunkt, eigenes <form> -- NICHT der settings-Patch
+// (buildSettingsPatch/saveSettings bleiben unangetastet, s.u.).
 import { SETTINGS_LANGUAGES } from "../../lib/api.js";
 ---
 
@@ -106,6 +110,45 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
       <span id="settings-msg" class="settings-msg" hidden></span>
     </div>
   </form>
+
+  <!-- OC-P2/OC-P3: eigene Naht (eigener Endpunkt, PII am Tenant-Record) -- deshalb
+       ein EIGENES <form> neben dem Settings-Formular (Muster vor Feedback-Runde 2).
+       Das Eingabefeld wird NIE vorbefuellt: angezeigt wird ausschliesslich die
+       Server-Maske (privateNumberStatusText), der volle Wert verlaesst den Server
+       nicht. .billing-section/__title = dieselbe Mono-Zwischenlabel-Ebene wie im
+       Abrechnungs-Block (panels.css Abschnitt 6), kein drittes Label-Aussehen. -->
+  <form id="private-number-form" class="settings-form billing-section">
+    <p class="billing-section__title" data-i18n="privateNumberTitle">YOUR OWN NUMBER</p>
+    <p class="muted" data-i18n="privateNumberHint">
+      Save your own phone number so your agent recognizes you. When it calls you on this
+      number, it skips the full third-party introduction.
+    </p>
+    <p id="private-number-status" class="muted private-number-status">—</p>
+    <input
+      id="private-number-input"
+      class="field-input"
+      type="tel"
+      inputmode="tel"
+      autocomplete="off"
+      placeholder="+49 151 23456789"
+      aria-label="Your own phone number"
+      data-i18n-attr="aria-label:privateNumberInputAriaLabel"
+    />
+    <div class="settings-actions">
+      <button id="private-number-save" class="btn" type="submit" data-i18n="privateNumberSave">
+        Save number
+      </button>
+      <button
+        id="private-number-clear"
+        class="private-number-form__remove"
+        type="button"
+        data-i18n="privateNumberRemove"
+      >
+        Remove
+      </button>
+      <span id="private-number-msg" class="settings-msg" hidden></span>
+    </div>
+  </form>
 </section>
 
 <script>
@@ -114,9 +157,13 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
     AUTH_STATE,
     AUTH_EVENT,
     HTTP_UNAUTHORIZED,
+    ERROR_INVALID_PRIVATE_NUMBER,
     buildSettingsPatch,
     fetchTenantState,
+    privateNumberMessage,
+    privateNumberStatusText,
     saveSettings,
+    savePrivateNumber,
     settingsFrom,
     settingsOutcome,
     settingsLanguageLabel,
@@ -127,6 +174,13 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
   const formEl = document.getElementById("settings-form");
   const saveBtn = document.getElementById("settings-save");
   const msgEl = document.getElementById("settings-msg");
+
+  const privateFormEl = document.getElementById("private-number-form");
+  const privateInputEl = document.getElementById("private-number-input");
+  const privateStatusEl = document.getElementById("private-number-status");
+  const privateSaveBtn = document.getElementById("private-number-save");
+  const privateClearBtn = document.getElementById("private-number-clear");
+  const privateMsgEl = document.getElementById("private-number-msg");
 
   const MSG_OK_CLASS = "settings-msg--ok";
   const MSG_ERR_CLASS = "settings-msg--err";
@@ -211,6 +265,35 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
     return t("settingsNotSaved");
   }
 
+  // Fehlertext der Nummern-Route. Der eingegebene Wert wird NIE zurueckgespiegelt
+  // (keine PII in Meldungen); nur der stabile Server-Code entscheidet den Text.
+  // ERROR_INVALID_PRIVATE_NUMBER bekommt eine verstaendliche, zweisprachige
+  // Meldung (lib/api.js privateNumberMessage); alles andere (401/Netzfehler)
+  // teilt sich denselben generischen Fehlertext wie das Settings-Formular
+  // (saveErrorText, s.o. -- keine zweite Kopie).
+  function privateNumberErrorText(err) {
+    if (err instanceof ApiError && err.code === ERROR_INVALID_PRIVATE_NUMBER) return privateNumberMessage("invalid");
+    return saveErrorText(err);
+  }
+
+  // Schreibt die Nummer und synchronisiert danach den State ueber DIESELBE eine
+  // Refetch-Naht wie das Settings-Speichern (G5). Nebeneffekt im Namen (N7).
+  async function submitPrivateNumber(value, okText) {
+    privateSaveBtn.disabled = true;
+    privateClearBtn.disabled = true;
+    try {
+      await savePrivateNumber(value);
+      privateInputEl.value = ""; // das Eingabefeld traegt nie einen gespeicherten Wert
+      showMessage(privateMsgEl, okText, true);
+      await refetchState();
+    } catch (err) {
+      showMessage(privateMsgEl, privateNumberErrorText(err), false);
+    } finally {
+      privateSaveBtn.disabled = false;
+      privateClearBtn.disabled = false;
+    }
+  }
+
   async function submit(event) {
     event.preventDefault();
     saveBtn.disabled = true;
@@ -228,6 +311,19 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
 
   formEl.addEventListener("submit", submit);
 
+  privateFormEl.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const value = privateInputEl.value.trim();
+    // Leeres Feld ist KEIN implizites Loeschen - Loeschen ist der eigene Knopf.
+    if (!value) {
+      showMessage(privateMsgEl, privateNumberMessage("missing"), false);
+      return;
+    }
+    submitPrivateNumber(value, privateNumberMessage("saved"));
+  });
+
+  privateClearBtn.addEventListener("click", () => submitPrivateNumber("", privateNumberMessage("removed")));
+
   // Die Auth-Insel ermittelt den Zustand einmal und dispatcht AUTH_EVENT; nur im
   // eingeloggten Zustand traegt die Antwort settings/greetingTemplates. Listener
   // synchron beim Modul-Start registrieren, BEVOR die Auth-Insel dispatcht. Im
@@ -237,6 +333,7 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) {
       fillForm(data);
+      privateStatusEl.textContent = privateNumberStatusText(data);
       cardEl.hidden = false;
     } else {
       cardEl.hidden = true;

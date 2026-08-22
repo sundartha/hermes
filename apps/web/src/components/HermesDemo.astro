@@ -1,10 +1,27 @@
 ---
-// Erklär-Animation — 40s-Schleife in sechs Akten.
-// Umsetzung von "Hermes Demo.dc.html". Das Quell-Design setzt Animationsnamen
-// und Maße über inline style="..."; unter der Produktions-CSP
-// (default-src 'self') ist das blockiert, darum trägt hier jedes Element seine
-// Klasse aus hermes-demo.css. Die Zeitsteuerung läuft rein über CSS-Keyframes;
-// Pause und Scrub setzt hermes-demo.js per CSSOM (das ist CSP-erlaubt).
+// Erklär-Animation, Neubau 2026-08-14 ("Session-Stream" statt Folien).
+//
+// Konzept: EIN durchgehendes Agent-Session-Fenster erzählt die Geschichte
+// chronologisch aus Nutzersicht — wie ein Screen-Recording: Setup-Events
+// (Nummer aktiv, MCP verbunden) → der Auftrag an die eigene KI im Chat →
+// der Tool-Call (place_call) → der echte Anruf mit Live-Transkript → das
+// Ergebnis zurück im Chat. Drei Szenen im SELBEN Fenster (der Fensterkopf
+// bleibt stehen, nur der Inhalt zieht weiter) statt sechs getrennter Folien.
+//
+// Technik unverändert zum Vorgänger (bewährt + CSP-konform): die Zeit läuft
+// rein über CSS-Keyframes einer 76s-Schleife; hermes-demo.js setzt nur Pause,
+// Scrub und Kopieren per CSSOM (LOOP=76 dort muss zur animation-duration hier
+// passen). Inline-Styles wären unter der Produktions-CSP (default-src 'self')
+// blockiert — darum trägt jedes Element seine Klasse aus hermes-demo.css.
+//
+// Sprache: SSR liefert Deutsch (die indexierte Fassung, Muster der ganzen
+// Startseite); der DE/EN-Umschalter der Seite (hermes-scroll.js applyLang)
+// tauscht zur Laufzeit das innerHTML aller [data-i18n]-Elemente — die
+// EN-Texte der Demo leben darum ZUSÄTZLICH im EN-Wörterbuch von
+// hermes-scroll.js (Präfix "hd..."). Sprachneutrale Werte (Rufnummer,
+// Werkzeugliste, "Live", "Hermes") tragen bewusst KEINEN Key. Das
+// DEMO-Objekt hier bleibt die Quelle für Seiten, die die Komponente mit
+// lang="en" serverseitig rendern.
 //
 // Füllt seinen Elternrahmen (.demo-frame auf der Startseite, .sheet__demo im
 // Blatt). Die Maße hängen am Container, nicht am Fenster.
@@ -14,100 +31,83 @@ const { lang = "de" } = Astro.props;
 
 const DEMO = {
   de: {
-    e1: "01 · Nummer holen", e2: "02 · Als Connector einrichten", e3: "03 · Verbunden",
-    e4: "04 · Ausgehender Anruf", e5: "05 · Das Gespräch", e6: "Ergebnis",
-    h1: "Eine echte Nummer, sofort.",
-    s1: "Direkt nach der Anmeldung vergeben — keine Hardware, keine Portierung, keine Wartezeit.",
-    yourNumber: "Deine Hermes-Nummer", caller: "+49 176 44 12 908", active: "aktiv",
-    h2: "Ein Connector — egal welche KI.",
-    s2: "Hermes ist ein MCP-Server. Einmal eintragen, und deine KI kann telefonieren.",
-    wayA: "In Claude, ChatGPT & Co.", mcpUrl: "https://app.sundartha.com/mcp",
-    copy: "Kopieren", copied: "Kopiert ✓", scrub: "Zum Springen klicken oder ziehen",
-    wayB: "Oder im Terminal", cmd: "claude mcp add --transport http hermes https://app.sundartha.com/mcp",
-    h3: "Deine KI telefoniert — raus und rein.",
-    s3: "Sie ruft selbst an und nimmt Anrufe für dich entgegen.",
-    connected: "Hermes verbunden",
-    tool1: "place_call", tool1Desc: "Selbst rauswählen",
-    tool2: "list_calls", tool2Desc: "Ein- und ausgehende Anrufe",
-    tool3: "get_transcript", tool3Desc: "Gespräch nachlesen",
-    tool4: "get_calendar", tool4Desc: "Termine abrufen",
-    pauseLabel: "Pause / Weiter",
-    h4: "Deine KI ruft an — nicht du.",
-    s4: "Termin beim Arzt, Rückruf beim Amt, Tisch reservieren: Hermes wählt und spricht.",
-    incoming: "Ausgehender Anruf", callee: "Praxis Dr. Behrens",
+    winTitle: "deine-ki — Hermes-Session",
+    scene1: "01 · Verbinden & beauftragen",
+    scene2: "02 · Hermes telefoniert",
+    scene3: "03 · Das Ergebnis",
+    ev1k: "Hermes-Nummer aktiv", ev1v: "+49 176 44 12 908",
+    ev2k: "Als MCP-Connector verbunden", ev2v: "place_call · list_calls · get_transcript · get_calendar",
+    youLabel: "Du, an deine KI",
+    aiLabel: "Deine KI",
+    userMsg: "Kannst du mir für diese Woche einen Kontrolltermin bei Dr. Behrens machen?",
+    aiMsg1: "Klar — ich rufe die Praxis kurz an.",
+    toolName: "place_call",
+    toolArg: "Praxis Dr. Behrens",
+    callLabel: "Ausgehender Anruf",
+    callee: "Praxis Dr. Behrens",
+    speakerHermes: "Hermes",
+    speakerThem: "Praxis",
     l1: "Hallo, ich bin der KI-Assistent von Jonas. Ich würde gern einen Termin für ihn vereinbaren.",
     l2: "Gerne, worum geht es denn?",
     l3: "Um eine Kontrolluntersuchung. Ginge es am Donnerstag, dem 14. August?",
     l4: "Donnerstag wäre frei.",
     l5: "Das passt gut, den nehmen wir. Auf den Namen Kroh.",
-    h6: "Du erfährst nur das Ergebnis.",
-    s6: "Zusammenfassung, Termin und Aufgabe landen in deinem Dashboard.",
-    r1k: "Zusammenfassung", r1v: "Kontrolltermin bei Dr. Behrens vereinbart",
-    r2k: "Termin", r2v: "Donnerstag, 14. Aug. · 11:30 · Praxis Dr. Behrens",
-    r3v: "Liegt in deinem Dashboard",
-    step1: "Nummer holen", step2: "Verbinden", step3: "Abnehmen lassen",
+    hangup: "Anruf beendet · 0:47",
+    aiMsg2: "Erledigt! Donnerstag, 14. Aug. um 11:30 bei Dr. Behrens — ich hab dir den Termin eingetragen.",
+    r1k: "Termin", r1v: "Donnerstag, 14. Aug. · 11:30 · Praxis Dr. Behrens",
+    r2v: "Zusammenfassung & Transkript liegen in deinem Dashboard",
+    live: "Live",
+    pauseLabel: "Pause / Weiter", scrub: "Zum Springen klicken oder ziehen",
+    step1: "Auftrag geben", step2: "Hermes telefoniert", step3: "Ergebnis",
   },
   en: {
-    e1: "01 · Get a number", e2: "02 · Add it as a connector", e3: "03 · Connected",
-    e4: "04 · Outgoing call", e5: "05 · The conversation", e6: "Result",
-    h1: "A real number, right away.",
-    s1: "Issued the moment you sign up — no hardware, no porting, no waiting.",
-    yourNumber: "Your Hermes number", caller: "+49 176 44 12 908", active: "active",
-    h2: "One connector — any AI.",
-    s2: "Hermes is an MCP server. Add it once, and your AI can make phone calls.",
-    wayA: "In Claude, ChatGPT & co.", mcpUrl: "https://app.sundartha.com/mcp",
-    copy: "Copy", copied: "Copied ✓", scrub: "Click or drag to jump",
-    wayB: "Or in the terminal", cmd: "claude mcp add --transport http hermes https://app.sundartha.com/mcp",
-    h3: "Your AI calls out — and picks up.",
-    s3: "It dials out itself and takes incoming calls for you.",
-    connected: "Hermes connected",
-    tool1: "place_call", tool1Desc: "Dial out itself",
-    tool2: "list_calls", tool2Desc: "Incoming and outgoing calls",
-    tool3: "get_transcript", tool3Desc: "Read the conversation",
-    tool4: "get_calendar", tool4Desc: "Fetch appointments",
-    pauseLabel: "Pause / play",
-    h4: "Your AI makes the call — not you.",
-    s4: "A doctor's appointment, a callback, a table for two: Hermes dials and speaks.",
-    incoming: "Outgoing call", callee: "Dr. Behrens' practice",
+    winTitle: "your-ai — Hermes session",
+    scene1: "01 · Connect & instruct",
+    scene2: "02 · Hermes makes the call",
+    scene3: "03 · The result",
+    ev1k: "Hermes number active", ev1v: "+49 176 44 12 908",
+    ev2k: "Connected as an MCP connector", ev2v: "place_call · list_calls · get_transcript · get_calendar",
+    youLabel: "You, to your AI",
+    aiLabel: "Your AI",
+    userMsg: "Can you get me a check-up appointment with Dr. Behrens this week?",
+    aiMsg1: "Sure — I'll give the practice a quick call.",
+    toolName: "place_call",
+    toolArg: "Dr. Behrens' practice",
+    callLabel: "Outgoing call",
+    callee: "Dr. Behrens' practice",
+    speakerHermes: "Hermes",
+    speakerThem: "Practice",
     l1: "Hi, I'm the AI assistant for Jonas. I'd like to book an appointment for him.",
     l2: "Sure, what is it about?",
     l3: "A check-up. Would Thursday, August 14th work?",
     l4: "Thursday would be free.",
     l5: "That works well, let's take it. Under the name Kroh.",
-    h6: "You only get the result.",
-    s6: "Summary, appointment and task land in your dashboard.",
-    r1k: "Summary", r1v: "Check-up booked with Dr. Behrens",
-    r2k: "Appointment", r2v: "Thursday, Aug 14 · 11:30 am · Dr. Behrens' practice",
-    r3v: "Waiting in your dashboard",
-    step1: "Get a number", step2: "Connect", step3: "Let it answer",
+    hangup: "Call ended · 0:47",
+    aiMsg2: "Done! Thursday, Aug 14 at 11:30 am with Dr. Behrens — I've added it to your calendar.",
+    r1k: "Appointment", r1v: "Thursday, Aug 14 · 11:30 am · Dr. Behrens' practice",
+    r2v: "Summary & transcript are waiting in your dashboard",
+    live: "Live",
+    pauseLabel: "Pause / play", scrub: "Click or drag to jump",
+    step1: "Give the task", step2: "Hermes calls", step3: "The result",
   },
 };
 
 const d = DEMO[lang === "en" ? "en" : "de"];
 
-const tools = [
-  { name: d.tool1, desc: d.tool1Desc, cls: "hd-w1" },
-  { name: d.tool2, desc: d.tool2Desc, cls: "hd-w2" },
-  { name: d.tool3, desc: d.tool3Desc, cls: "hd-w3" },
-  { name: d.tool4, desc: d.tool4Desc, cls: "hd-w4" },
+// Wer spricht im Transkript: Hermes rechts (hell), die Gegenseite links.
+// i18n: Sprecher "Hermes" ist in beiden Sprachen identisch (kein Key);
+// "Praxis"/"Practice" und jede Zeile tragen einen data-i18n-Key (s.u.).
+const transcript = [
+  { text: d.l1, who: "hermes", label: d.speakerHermes, cls: "hd-l1", key: "hdL1", labelKey: undefined },
+  { text: d.l2, who: "them", label: d.speakerThem, cls: "hd-l2", key: "hdL2", labelKey: "hdSpeakerThem" },
+  { text: d.l3, who: "hermes", label: d.speakerHermes, cls: "hd-l3", key: "hdL3", labelKey: undefined },
+  { text: d.l4, who: "them", label: d.speakerThem, cls: "hd-l4", key: "hdL4", labelKey: "hdSpeakerThem" },
+  { text: d.l5, who: "hermes", label: d.speakerHermes, cls: "hd-l5", key: "hdL5", labelKey: undefined },
 ];
 
-// Wer spricht: Hermes ist "me" (helle Blase rechts), die Gegenseite "them".
-const chat = [
-  { text: d.l1, who: "me", cls: "hd-t1" },
-  { text: d.l2, who: "them", cls: "hd-t2" },
-  { text: d.l3, who: "me", cls: "hd-t3" },
-  { text: d.l4, who: "them", cls: "hd-t4" },
-  { text: d.l5, who: "me", cls: "hd-t5" },
-];
-
-const results = [
-  { key: d.r1k, value: d.r1v, cls: "hd-r1" },
-  { key: d.r2k, value: d.r2v, cls: "hd-r2" },
-];
-
-// Die Marken sitzen auf den Aktwechseln der 76s-Schleife.
-const ticks = ["12.5%", "28.3%", "41.4%", "53.3%", "84.9%"];
+// Die Marken sitzen auf den Szenenwechseln der 76s-Schleife (s. hdScene*-
+// Keyframes in hermes-demo.css). hermes-demo.js setzt tick.style.left daraus.
+const ticks = ["27.2%", "75.3%"];
 ---
 
 <span class="hd-mount">
@@ -115,153 +115,113 @@ const ticks = ["12.5%", "28.3%", "41.4%", "53.3%", "84.9%"];
     <span class="hd-glow hd-glow--a" aria-hidden="true"></span>
     <span class="hd-glow hd-glow--b" aria-hidden="true"></span>
 
-    <!-- Akt 1 — die Nummer -->
-    <div class="hd-act hd-act--1">
-      <div class="hd-say">
-        <span class="hd-eyebrow">{d.e1}</span>
-        <h3 class="hd-head">{d.h1}</h3>
-        <p class="hd-sub">{d.s1}</p>
+    <!-- Das eine Session-Fenster: Kopf bleibt stehen, die Szenen ziehen
+         darunter durch. -->
+    <div class="hd-window">
+      <div class="hd-winhead">
+        <span class="hd-windot" aria-hidden="true"></span>
+        <span class="hd-windot" aria-hidden="true"></span>
+        <span class="hd-windot" aria-hidden="true"></span>
+        <span class="hd-wintitle" data-i18n="hdWinTitle">{d.winTitle}</span>
+        <!-- Szenen-Titel überblenden an derselben Stelle (rechts im Kopf). -->
+        <span class="hd-scenetag">
+          <span class="hd-scenetag__item hd-sc1" data-i18n="hdScene1">{d.scene1}</span>
+          <span class="hd-scenetag__item hd-sc2" data-i18n="hdScene2">{d.scene2}</span>
+          <span class="hd-scenetag__item hd-sc3" data-i18n="hdScene3">{d.scene3}</span>
+        </span>
       </div>
-      <div class="hd-show">
-        <span class="hd-panel">
-          <span class="hd-callcard">
-            <span class="hd-avatar" aria-hidden="true"><span class="hd-avatar__glyph"></span></span>
-            <span class="hd-callcard__text">
-              <span class="hd-label">{d.yourNumber}</span>
-              <span class="hd-number">{d.caller}</span>
-              <span class="hd-active">
-                <span class="hd-active__dot" aria-hidden="true"></span>{d.active}
-              </span>
+
+      <div class="hd-body">
+        <!-- ---------------------------- Szene 1: Verbinden & beauftragen -->
+        <div class="hd-scene hd-scene--1">
+          <span class="hd-event hd-anim hd-e1">
+            <span class="hd-event__check" aria-hidden="true">✓</span>
+            <span class="hd-event__text">
+              <span class="hd-event__key" data-i18n="hdEv1k">{d.ev1k}</span>
+              <span class="hd-event__value">{d.ev1v}</span>
+            </span>
+            <span class="hd-event__dot" aria-hidden="true"></span>
+          </span>
+          <span class="hd-event hd-anim hd-e2">
+            <span class="hd-event__check" aria-hidden="true">✓</span>
+            <span class="hd-event__text">
+              <span class="hd-event__key" data-i18n="hdEv2k">{d.ev2k}</span>
+              <span class="hd-event__value hd-event__value--mono">{d.ev2v}</span>
             </span>
           </span>
-        </span>
-      </div>
-    </div>
+          <span class="hd-msg hd-msg--you hd-anim hd-u1">
+            <span class="hd-msg__label" data-i18n="hdYouLabel">{d.youLabel}</span>
+            <span class="hd-msg__bubble" data-i18n="hdUserMsg">{d.userMsg}</span>
+          </span>
+          <span class="hd-msg hd-msg--ai hd-anim hd-a1">
+            <span class="hd-msg__label" data-i18n="hdAiLabel">{d.aiLabel}</span>
+            <span class="hd-msg__bubble" data-i18n="hdAiMsg1">{d.aiMsg1}</span>
+          </span>
+          <span class="hd-toolcall hd-anim hd-tc1">
+            <span class="hd-toolcall__spark" aria-hidden="true"></span>
+            <span class="hd-mono" data-i18n="hdToolcall"><span class="hd-toolcall__fn">{d.toolName}</span>(&quot;{d.toolArg}&quot;)</span>
+          </span>
+        </div>
 
-    <!-- Akt 2 — der Connector, zwei Wege -->
-    <div class="hd-act hd-act--2">
-      <div class="hd-say">
-        <span class="hd-eyebrow">{d.e2}</span>
-        <h3 class="hd-head">{d.h2}</h3>
-        <p class="hd-sub">{d.s2}</p>
-      </div>
-      <div class="hd-show">
-        <span class="hd-panel hd-anim hd-s1">
-          <span class="hd-winbar">
-            <span class="hd-windot" aria-hidden="true"></span>
-            <span class="hd-windot" aria-hidden="true"></span>
-            <span class="hd-windot" aria-hidden="true"></span>
-            <span class="hd-wintitle">{d.wayA}</span>
-          </span>
-          <span class="hd-winrow">
-            <span class="hd-mono">{d.mcpUrl}</span>
-            <button class="hd-copy" type="button" data-hd-copy={d.mcpUrl} data-hd-copied={d.copied}>{d.copy}</button>
-          </span>
-        </span>
-        <span class="hd-panel hd-panel--term hd-anim hd-s2">
-          <span class="hd-termbar">
-            <span class="hd-wintitle">{d.wayB}</span>
-            <button class="hd-copy" type="button" data-hd-copy={d.cmd} data-hd-copied={d.copied}>{d.copy}</button>
-          </span>
-          <span class="hd-termbody">
-            <span class="hd-mono"><span class="hd-prompt">$ </span>{d.cmd}<span class="hd-caret" aria-hidden="true">▊</span></span>
-          </span>
-        </span>
-      </div>
-    </div>
-
-    <!-- Akt 3 — verbunden, die Werkzeuge -->
-    <div class="hd-act hd-act--3">
-      <div class="hd-say">
-        <span class="hd-eyebrow">{d.e3}</span>
-        <h3 class="hd-head">{d.h3}</h3>
-        <p class="hd-sub">{d.s3}</p>
-      </div>
-      <div class="hd-show">
-        <span class="hd-connected">
-          <span class="hd-connected__check" aria-hidden="true">✓</span>
-          <span class="hd-connected__text">{d.connected}</span>
-        </span>
-        {tools.map((tool) => (
-          <span class:list={["hd-tool", "hd-anim", tool.cls]}>
-            <span class="hd-mono">{tool.name}</span>
-            <span class="hd-tool__desc">{tool.desc}</span>
-          </span>
-        ))}
-      </div>
-    </div>
-
-    <!-- Akt 4 — der ausgehende Anruf -->
-    <div class="hd-act hd-act--4">
-      <div class="hd-say">
-        <span class="hd-eyebrow">{d.e4}</span>
-        <h3 class="hd-head">{d.h4}</h3>
-        <p class="hd-sub">{d.s4}</p>
-      </div>
-      <div class="hd-show">
-        <span class="hd-panel">
-          <span class="hd-callcard hd-callcard--in">
+        <!-- ------------------------------- Szene 2: der Anruf, live ------ -->
+        <div class="hd-scene hd-scene--2">
+          <span class="hd-callcard hd-anim hd-cc">
             <span class="hd-avatar hd-avatar--ringing" aria-hidden="true"><span class="hd-avatar__glyph"></span></span>
             <span class="hd-callcard__text">
-              <span class="hd-label">{d.incoming}</span>
-              <span class="hd-callee">{d.callee}</span>
+              <span class="hd-callcard__label" data-i18n="hdCallLabel">{d.callLabel}</span>
+              <span class="hd-callcard__callee" data-i18n="hdCallee">{d.callee}</span>
+            </span>
+            <span class="hd-callcard__live">
+              <span class="hd-livedot" aria-hidden="true"></span>{d.live}
             </span>
             <span class="hd-levels" aria-hidden="true">
-              <span class="hd-bar"></span>
-              <span class="hd-bar"></span>
-              <span class="hd-bar"></span>
-              <span class="hd-bar"></span>
-              <span class="hd-bar"></span>
+              <span class="hd-vbar"></span>
+              <span class="hd-vbar"></span>
+              <span class="hd-vbar"></span>
+              <span class="hd-vbar"></span>
             </span>
           </span>
-        </span>
-      </div>
-    </div>
+          <div class="hd-transcript">
+            {transcript.map((line) => (
+              <span class:list={["hd-line", `hd-line--${line.who}`, "hd-anim", line.cls]}>
+                <span class="hd-line__speaker" data-i18n={line.labelKey}>{line.label}</span>
+                <span class="hd-line__text" data-i18n={line.key}>{line.text}</span>
+              </span>
+            ))}
+          </div>
+          <span class="hd-hangup hd-anim hd-hu" data-i18n="hdHangup">{d.hangup}</span>
+        </div>
 
-    <!-- Akt 5 — das Gespräch -->
-    <div class="hd-act hd-act--5 hd-act--chat">
-      <div class="hd-say">
-        <span class="hd-eyebrow">{d.e5}</span>
-      </div>
-      <div class="hd-chat">
-        {chat.map((line) => (
-          <span class:list={["hd-bubble", `hd-bubble--${line.who}`, "hd-anim", line.cls]}>{line.text}</span>
-        ))}
-      </div>
-    </div>
-
-    <!-- Akt 6 — das Ergebnis -->
-    <div class="hd-act hd-act--6">
-      <div class="hd-say">
-        <span class="hd-eyebrow">{d.e6}</span>
-        <h3 class="hd-head">{d.h6}</h3>
-        <p class="hd-sub">{d.s6}</p>
-      </div>
-      <div class="hd-show">
-        {results.map((row) => (
-          <span class:list={["hd-tool", "hd-tool--result", "hd-anim", row.cls]}>
+        <!-- ------------------------------- Szene 3: das Ergebnis --------- -->
+        <div class="hd-scene hd-scene--3">
+          <span class="hd-msg hd-msg--ai hd-anim hd-a2">
+            <span class="hd-msg__label" data-i18n="hdAiLabel">{d.aiLabel}</span>
+            <span class="hd-msg__bubble" data-i18n="hdAiMsg2">{d.aiMsg2}</span>
+          </span>
+          <span class="hd-result hd-anim hd-r1">
             <span class="hd-result__dot" aria-hidden="true"></span>
             <span class="hd-result__text">
-              <span class="hd-result__key">{row.key}</span>
-              <span class="hd-result__value">{row.value}</span>
+              <span class="hd-result__key" data-i18n="hdR1k">{d.r1k}</span>
+              <span class="hd-result__value" data-i18n="hdR1v">{d.r1v}</span>
             </span>
           </span>
-        ))}
-        <span class="hd-tool hd-tool--done hd-anim hd-r3">
-          <span class="hd-connected__check" aria-hidden="true">✓</span>
-          <span class="hd-done__text">{d.r3v}</span>
-        </span>
+          <span class="hd-result hd-result--done hd-anim hd-r2">
+            <span class="hd-result__check" aria-hidden="true">✓</span>
+            <span class="hd-result__done-text" data-i18n="hdR2v">{d.r2v}</span>
+          </span>
+        </div>
       </div>
     </div>
 
-    <!-- Steuerung -->
+    <!-- Steuerung (Verträge mit hermes-demo.js: data-hd-pause, data-hd-track,
+         data-hd-tick, .hd-foot für die Höhenmessung). -->
     <div class="hd-foot">
       <div class="hd-controls">
         <button class="hd-pause" type="button" data-hd-pause title={d.pauseLabel} aria-label={d.pauseLabel}>❙❙</button>
         <span class="hd-steps">
-          <span class="hd-step">{d.step1}</span>
-          <span class="hd-step">{d.step2}</span>
-          <span class="hd-step">{d.step3}</span>
+          <span class="hd-step" data-i18n="hdStep1">{d.step1}</span>
+          <span class="hd-step" data-i18n="hdStep2">{d.step2}</span>
+          <span class="hd-step" data-i18n="hdStep3">{d.step3}</span>
         </span>
       </div>
       <span class="hd-track" data-hd-track title={d.scrub} role="slider" aria-label={d.scrub} tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">

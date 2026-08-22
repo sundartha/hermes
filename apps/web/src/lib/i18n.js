@@ -157,6 +157,14 @@ export const STRINGS = {
     settingsSessionExpired: "Session expired - please sign in again.",
     settingsNotSaved: "Not saved.",
 
+    // SettingsIsland: own-number block (OC-P2/OC-P3, PLAN-OWNER-CALL)
+    privateNumberTitle: "YOUR OWN NUMBER",
+    privateNumberHint:
+      "Save your own phone number so your agent recognizes you. When it calls you on this number, it skips the full third-party introduction.",
+    privateNumberInputAriaLabel: "Your own phone number",
+    privateNumberSave: "Save number",
+    privateNumberRemove: "Remove",
+
     // BillingIsland
     billingTitle: "Billing",
     billingSubtitle: "Your plan, payment method and usage for Hermes.",
@@ -240,6 +248,14 @@ export const STRINGS = {
     settingsRejectedPrefix: "abgelehnt:",
     settingsSessionExpired: "Sitzung abgelaufen - bitte erneut anmelden.",
     settingsNotSaved: "Nicht gespeichert.",
+
+    // SettingsIsland: Block eigene Nummer (OC-P2/OC-P3, PLAN-OWNER-CALL)
+    privateNumberTitle: "DEINE EIGENE NUMMER",
+    privateNumberHint:
+      "Speichere deine eigene Rufnummer, damit dein Agent dich erkennt. Ruft er dich auf dieser Nummer an, entfällt die lange Vorstellung.",
+    privateNumberInputAriaLabel: "Deine eigene Rufnummer",
+    privateNumberSave: "Nummer speichern",
+    privateNumberRemove: "Entfernen",
 
     // BillingIsland
     billingTitle: "Abrechnung",
