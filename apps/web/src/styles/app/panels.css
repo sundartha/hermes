@@ -289,6 +289,15 @@
   background: linear-gradient(90deg, #8fb6e3, #cfe4fa);
 }
 
+/* Balken-Updates sichtbar machen: die Fuellbreite gleitet zum neuen Wert, statt
+   zu springen (Owner-Feedback 2026-08-26: "Leiste geht nicht mit der Minuten-
+   Anzeige einher"). Nur ohne reduzierte Bewegung. */
+@media (prefers-reduced-motion: no-preference) {
+  .quota-bar__fill {
+    transition: width 0.45s ease;
+  }
+}
+
 .quota-line {
   margin-top: 8px;
   font-family: var(--app-mono);

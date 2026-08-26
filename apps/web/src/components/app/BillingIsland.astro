@@ -127,10 +127,10 @@ import {
     fetchTenantState,
     startBillingSetupCheckout,
   } from "../../lib/api.js";
+  import { quotaFillPercent } from "../../lib/quota-fill.js";
   import {
     planTiles,
     quotaLine,
-    quotaUsedPercent,
     wireSubscribe,
     cancelConfirmText,
     cancelStatusLine,
@@ -229,7 +229,7 @@ import {
     quotaSectionEl.hidden = !text;
     subQuotaEl.textContent = text || "";
     quotaBarEl.hidden = !quota;
-    if (quota) quotaBarFillEl.style.setProperty("--quota-fill", `${quotaUsedPercent(quota)}%`);
+    if (quota) quotaBarFillEl.style.setProperty("--quota-fill", `${quotaFillPercent(quota)}%`);
   }
 
   // 4. Tarifwechsel: Kacheln aus dem Build-Spiegel, NUR ohne aktives Abo (Kopf-
