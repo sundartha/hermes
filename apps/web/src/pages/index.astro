@@ -19,6 +19,7 @@ import { LOGIN_URL } from "../lib/routes.js";
 // auch /datenschutz, /impressum und /agb gebaut werden. Kein zweiter Textstand.
 import HermesDemo from "../components/HermesDemo.astro";
 import CookieConsent from "../components/site/CookieConsent.astro";
+import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
 import privacy from "../data/legal/privacy.de.json";
 import imprint from "../data/legal/imprint.de.json";
 import terms from "../data/legal/terms.de.json";
@@ -564,6 +565,7 @@ const legalDocs = [
     </div>
 
     <CookieConsent />
+    <AnalyticsSlot />
 
     <script>
       // Hoisted script: Astro buendelt es als externes, same-origin Modul

@@ -113,6 +113,8 @@
   margin: 0;
   opacity: 0;
   cursor: pointer;
+  /* Ueber der Pille: der Tipp trifft die echte Checkbox, nicht das Deko-Span. */
+  z-index: 1;
 }
 .consent__switch input:disabled {
   cursor: default;
@@ -238,6 +240,17 @@
   }
   .consent__btn {
     min-height: 48px;
+  }
+  /* Bug 2026-08-26 (Mobile-Durchgang): "Einstellungen" war 26px hoch --
+     Tastflaeche auf 44px, Optik (Unterstrich, Groesse) bleibt. */
+  .consent__link {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+  /* Bug 2026-08-26: Notch im Querformat -- Karte nicht unter die Aussparung. */
+  .consent {
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
   }
 }
 

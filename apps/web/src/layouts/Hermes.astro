@@ -9,6 +9,7 @@ import "../styles/hermes.css";
 import "../styles/hermes-page.css";
 import { LOGIN_URL } from "../lib/routes.js";
 import CookieConsent from "../components/site/CookieConsent.astro";
+import AnalyticsSlot from "../components/site/AnalyticsSlot.astro";
 
 const { title, description, lang = "de", noindex = false } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
@@ -93,5 +94,6 @@ const legal = [
       </footer>
     </div>
     <CookieConsent />
+    <AnalyticsSlot />
   </body>
 </html>

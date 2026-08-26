@@ -1735,14 +1735,17 @@ a:hover {
   .hero-inner {
     justify-content: flex-end !important;
   }
+  /* Bug 2026-08-26: 22px Rand, im Querformat aber zusaetzlich die Notch
+     links/rechts freihalten (env ist im Hochformat 0 -> bleibt 22px). */
   .hero-pad {
-    padding-inline: 22px !important;
+    padding-inline: max(22px, env(safe-area-inset-left, 0px)) max(22px, env(safe-area-inset-right, 0px)) !important;
   }
   .nav-desktop {
     display: none !important;
   }
   .nav-mobile {
     display: flex !important;
+    padding-inline: max(22px, env(safe-area-inset-left, 0px)) max(22px, env(safe-area-inset-right, 0px));
   }
   html,
   body {
@@ -1772,9 +1775,47 @@ a:hover {
        oben, Home-Indikator unten (viewport-fit=cover). */
     padding-top: calc(26px + env(safe-area-inset-top, 0px));
     padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    /* Bug 2026-08-26: im Querformat liegt die Notch links/rechts (Inset
+       44-59px) -- 22px reichten nicht, Text rutschte darunter. */
+    padding-left: max(22px, env(safe-area-inset-left, 0px));
+    padding-right: max(22px, env(safe-area-inset-right, 0px));
   }
+  /* Bug 2026-08-26: das Menue-Blatt war overflow:hidden -- im Querformat
+     (430px hoch) und auf kleinen Androiden (<= 640px) lagen Login/
+     Registrieren und die Fusslinks ausserhalb und waren unerreichbar. Passt
+     der Inhalt, scrollt auch nichts (overscroll-behavior: contain). */
+  .menu-sheet {
+    overflow-y: auto;
+  }
+  /* Bug 2026-08-26: Touch-Ziele unter 44px -- Fusslinks im Menue (15px),
+     "Kopieren" (11px), Rechts-Pillen (38px). Fusslinks und Kopieren bekommen
+     ein unsichtbares Polster (negative Raender: Optik und Abstaende bleiben
+     exakt gleich), die Pillen werden 44px hoch. Fusslinks: 31px statt 44 --
+     die Zeilen stehen 27px auseinander, mehr Polster liesse die Tastflaechen
+     benachbarter Zeilen uebereinander liegen (Fehltipp auf den Nachbarn). */
+  .menu-foot__link {
+    padding: 8px 6px;
+    margin: -8px -6px;
+  }
+  .dev-copy {
+    padding: 16px 0 16px 16px;
+    margin: -16px 0 -16px 0;
+  }
+  .legal-pill {
+    height: 44px;
+  }
+  /* Bug 2026-08-26 (Mobile-Durchgang): die Kopfzeile des Rechts-Blatts stand
+     noch auf 53px, Nav und alle anderen Blaetter auf 26px -- das Logo sprang
+     beim Oeffnen von Datenschutz/Impressum/AGB nach unten. Ausserdem links/
+     rechts die Querformat-Aussparung (Notch) freihalten. */
   .legal-head {
-    padding-top: calc(53px + env(safe-area-inset-top, 0px));
+    padding-top: calc(26px + env(safe-area-inset-top, 0px));
+    padding-left: max(22px, env(safe-area-inset-left, 0px));
+    padding-right: max(22px, env(safe-area-inset-right, 0px));
+  }
+  .legal-body {
+    padding-left: max(22px, env(safe-area-inset-left, 0px));
+    padding-right: max(22px, env(safe-area-inset-right, 0px));
   }
   .hero-bg {
     inset: 0 0 auto 0 !important;
@@ -1818,6 +1859,39 @@ a:hover {
   }
   .scroll-hint {
     display: none !important;
+  }
+}
+
+/* Bug 2026-08-26 (Mobile-Durchgang): Handy im QUERFORMAT (Hoehe <= 500px).
+   Die Ein-Screen-Buehne (100svh, overflow hidden) hat dort keinen Platz:
+   Titel klebte 11px unter der Nav, mit Werkzeugleiste lagen die Knoepfe
+   unter der Kante, und vom Bild blieb nur ein Streifen Himmel. Fallback NUR
+   hier: die Buehne waechst mit dem Inhalt und .page scrollt. Das Hochformat
+   bleibt der eine Screen (Owner-Entscheidung 2026-08-20). */
+@media (pointer: coarse) and (max-width: 1024px) and (max-height: 500px) {
+  .page {
+    overflow-y: auto !important;
+  }
+  .pin-track {
+    height: auto !important;
+    min-height: 100svh;
+  }
+  .stage {
+    position: relative;
+    height: auto !important;
+    min-height: 100svh;
+    overflow: visible;
+  }
+  .hero-inner {
+    position: relative;
+    inset: auto;
+    min-height: 100svh;
+    padding-top: calc(104px + env(safe-area-inset-top, 0px));
+  }
+  .hero-bg {
+    height: 100% !important;
+    background-size: cover !important;
+    background-position: 50% 30% !important;
   }
 }
 

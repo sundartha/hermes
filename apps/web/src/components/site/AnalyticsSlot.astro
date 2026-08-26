@@ -1,0 +1,35 @@
+---
+// Reichweitenmessung — laeuft NUR nach Einwilligung (Kategorie "statistics",
+// s. scripts/consent.js): hier steht ein Platzhalter type="text/plain", den
+// consent.js erst nach Zustimmung in ein echtes <script> verwandelt.
+//
+// Konfiguration zur BUILD-Zeit (Astro inlinet PUBLIC_*-Vars), im Render-
+// Blueprint (render.yaml, Static-Services hermes-web / hermes-web-staging):
+//   PUBLIC_ANALYTICS_PROVIDER  plausible | umami        (leer = aus, Default)
+//   PUBLIC_ANALYTICS_HOST      z. B. https://plausible.io  (ohne Slash am Ende)
+//   PUBLIC_ANALYTICS_ID        Plausible: data-domain (sundartha.com)
+//                              Umami:     Website-ID (UUID)
+//
+// WICHTIG — die CSP des Static-Service (render.yaml, Content-Security-Policy)
+// erlaubt nur 'self'. Beim Einschalten MUSS der Host dort in script-src UND
+// connect-src ergaenzt werden, sonst blockiert der Browser das Skript still.
+// Siehe docs/RUNBOOK-ANALYTICS-CONSENT.md.
+//
+// Fail-closed: unbekannter Provider oder fehlende Werte -> es wird nichts
+// gerendert (Build laeuft durch, Seite bleibt ohne Messung).
+const PROVIDERS = {
+  plausible: { path: "/js/script.js", idAttr: "data-domain" },
+  umami: { path: "/script.js", idAttr: "data-website-id" },
+};
+
+const provider = (import.meta.env.PUBLIC_ANALYTICS_PROVIDER || "").trim().toLowerCase();
+const host = (import.meta.env.PUBLIC_ANALYTICS_HOST || "").trim().replace(/\/+$/, "");
+const id = (import.meta.env.PUBLIC_ANALYTICS_ID || "").trim();
+const spec = PROVIDERS[provider];
+const enabled = Boolean(spec && /^https:\/\/[^\s/]+$/.test(host) && id);
+const attrs = enabled ? { [spec.idAttr]: id } : {};
+---
+
+{enabled && (
+  <script type="text/plain" data-consent="statistics" data-src={host + spec.path} data-analytics={provider} defer {...attrs}></script>
+)}

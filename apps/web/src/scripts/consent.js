@@ -50,15 +50,21 @@ function writeConsent(choice) {
   return consent;
 }
 
-/* Aktiviert gesperrte Platzhalter-Skripte der freigegebenen Kategorien. */
+/* Aktiviert gesperrte Platzhalter-Skripte der freigegebenen Kategorien.
+ * Alle uebrigen Attribute des Platzhalters wandern mit (data-domain bei
+ * Plausible, data-website-id bei Umami, defer, crossorigin ...). */
+const CONTROL_ATTRS = new Set(["type", "data-consent", "data-src", "data-consent-done"]);
+
 function activateScripts(consent) {
   const blocked = document.querySelectorAll('script[type="text/plain"][data-consent]');
   for (const el of blocked) {
     const category = el.dataset.consent;
     if (!consent[category] || el.dataset.consentDone === "1" || !el.dataset.src) continue;
     const script = document.createElement("script");
+    for (const attr of el.attributes) {
+      if (!CONTROL_ATTRS.has(attr.name)) script.setAttribute(attr.name, attr.value);
+    }
     script.src = el.dataset.src;
-    script.async = true;
     el.dataset.consentDone = "1";
     el.after(script);
   }
