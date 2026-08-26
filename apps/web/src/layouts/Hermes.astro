@@ -8,6 +8,7 @@ import "../styles/fonts.css";
 import "../styles/hermes.css";
 import "../styles/hermes-page.css";
 import { LOGIN_URL } from "../lib/routes.js";
+import CookieConsent from "../components/site/CookieConsent.astro";
 
 const { title, description, lang = "de", noindex = false } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
@@ -32,7 +33,8 @@ const legal = [
 <html lang={lang}>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- viewport-fit=cover wie auf der Startseite: Bild bis unter die iPhone-Statusleiste. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
@@ -86,8 +88,10 @@ const legal = [
             <a class="site-footer__link" href={item.href}>{item.label}</a>
           ))}
           <a class="site-footer__link" href={`mailto:${CONTACT}`}>Kontakt</a>
+          <button class="site-footer__link" type="button" data-consent-open>Cookie-Einstellungen</button>
         </span>
       </footer>
     </div>
+    <CookieConsent />
   </body>
 </html>

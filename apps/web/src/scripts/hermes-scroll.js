@@ -85,6 +85,21 @@ const EN = {
   footerCopy: "© Sundartha — Hermes, your phone assistant",
   copyLabel: "Copy",
   copiedLabel: "Copied",
+  /* Einwilligungs-Karte (components/site/CookieConsent.astro, scripts/consent.js). */
+  cookieSettings: "Cookie settings",
+  ckTitle: "Cookies &amp; privacy",
+  ckText:
+    'We only store on your device what the site needs: your language choice and this decision. Analytics or marketing services run only once you agree. <a href="/datenschutz">More in the privacy policy</a>.',
+  ckNecessary: "Necessary",
+  ckNecessaryDesc: "Language choice, login in the customer area and this setting. Always on.",
+  ckStats: "Analytics",
+  ckStatsDesc: "Anonymous reach measurement so we can improve the site. Not in use yet.",
+  ckMarketing: "Marketing",
+  ckMarketingDesc: "Advertising and social media services. Not in use yet.",
+  ckAcceptAll: "Accept all",
+  ckNecessaryOnly: "Necessary only",
+  ckSave: "Save selection",
+  ckSettings: "Settings",
   /* HermesDemo (Session-Stream, components/HermesDemo.astro): die EN-Fassung
    * aller uebersetzbaren Demo-Texte. Sprachneutrale Werte (Rufnummer,
    * Werkzeugliste, "Live", Sprecher "Hermes") tragen im Markup bewusst

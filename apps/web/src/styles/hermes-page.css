@@ -210,7 +210,8 @@
   .doc-nav {
     flex-wrap: wrap;
     row-gap: 14px;
-    padding-top: 22px;
+    /* Statusleiste am iPhone freihalten (viewport-fit=cover in Hermes.astro). */
+    padding-top: calc(22px + env(safe-area-inset-top, 0px));
   }
   .doc-nav .nav-actions {
     width: 100%;

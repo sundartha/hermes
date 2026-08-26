@@ -1057,12 +1057,30 @@ a:hover {
   background-image: radial-gradient(150% 74% at 50% 4%, #1b4f86 0%, #0f2d52 46%, #0a2245 100%);
   overflow-y: auto;
 }
+/* Geschlossene Blaetter sind WEG (display none), nicht nur unsichtbar:
+   1. Safari 26 (iOS) faerbt Status- und Werkzeugleiste nach fixierten
+      Elementen am Rand — auch bei opacity 0. Fuenf unsichtbare Vollbild-
+      Blaetter mit var(--ink) machten so den dunkelblauen Balken ueber dem
+      Hero-Bild ("blauer Rand oben", Owner 2026-08-26).
+   2. Screenreader lasen die unsichtbaren Dialoge mit.
+   Das Einblenden laeuft als Animation statt Transition (aus display none
+   heraus gibt es keine Transition). */
 .sheet[data-open="0"] {
+  display: none !important;
   opacity: 0;
   pointer-events: none;
 }
 .sheet[data-open="1"] {
   opacity: 1;
+  animation: sheetIn 0.22s ease;
+}
+@keyframes sheetIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .sheet__bg,
@@ -1650,6 +1668,10 @@ a:hover {
   white-space: nowrap;
   font: 400 14.5px/1 var(--sans);
   color: rgba(207, 228, 250, 0.82);
+  /* "Cookie-Einstellungen" ist ein <button>, die anderen sind <a>. */
+  background: none;
+  border: 0;
+  padding: 0;
 }
 .menu-foot__copy {
   font: 400 12.5px/1.5 var(--sans);
@@ -1683,6 +1705,21 @@ a:hover {
   .pin-track {
     height: 100svh !important;
   }
+  /* Bug 2026-08-26 (iPhone 16 Pro Max): die Buehne blieb auf 100vh — das ist
+     in iOS Safari der GROSSE Viewport inkl. der Flaeche hinter der
+     Werkzeugleiste. Die Buttons klebten am unteren Rand dieser zu hohen Buehne,
+     also hinter der Leiste, und .page (overflow hidden) liess kein Scrollen
+     zu. 100svh = die wirklich sichtbare Hoehe; safe-area-inset-bottom haelt
+     den Home-Indikator frei (viewport-fit=cover im Viewport-Meta). */
+  .stage {
+    height: 100svh !important;
+  }
+  .hero-inner {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  .nav-mobile {
+    top: calc(26px + env(safe-area-inset-top, 0px));
+  }
   .hero-copy {
     max-width: none !important;
     transform: none !important;
@@ -1697,7 +1734,6 @@ a:hover {
   }
   .hero-inner {
     justify-content: flex-end !important;
-    padding-bottom: 20px !important;
   }
   .hero-pad {
     padding-inline: 22px !important;
@@ -1727,11 +1763,18 @@ a:hover {
   html::-webkit-scrollbar {
     display: none;
   }
-  .sheet {
+  .sheet[data-open="1"] {
     display: flex !important;
+  }
+  .sheet {
     /* Kopfzeile der Blaetter auf gleicher Hoehe wie die hochgesetzte Nav
-       (26px) -- das Logo springt beim Oeffnen nicht. */
-    padding-top: 26px;
+       (26px) -- das Logo springt beim Oeffnen nicht. Safe-Area: Statusleiste
+       oben, Home-Indikator unten (viewport-fit=cover). */
+    padding-top: calc(26px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  }
+  .legal-head {
+    padding-top: calc(53px + env(safe-area-inset-top, 0px));
   }
   .hero-bg {
     inset: 0 0 auto 0 !important;
@@ -1910,6 +1953,9 @@ a:hover {
     flex-wrap: wrap !important;
     justify-content: center !important;
     row-gap: 10px !important;
+    /* flex:none allein liess die Leiste in ihrer Inhaltsbreite stehen — sie
+       ragte bei 800px links und rechts aus dem Bild statt umzubrechen. */
+    max-width: 100%;
   }
 }
 
@@ -2007,6 +2053,7 @@ a:hover {
   }
   .sheet {
     transition: none;
+    animation: none !important;
   }
   .scroll-hint__rail::after {
     animation: none;
