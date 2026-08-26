@@ -102,10 +102,15 @@ const legalDocs = [
                 <span class="lockup__by">by Sundartha</span>
               </span>
             </a>
-            <button class="burger" type="button" data-open-sheet="menu" aria-label="Menü öffnen">
-              <span aria-hidden="true"></span>
-              <span aria-hidden="true"></span>
-            </button>
+            <!-- Owner-Feedback 2026-08-26: Login auch auf dem Handy DIREKT in der Leiste sichtbar. -->
+            <!-- Im Menü-Blatt bleiben Login + Registrieren zusätzlich stehen. -->
+            <span class="nav-mobile__actions">
+              <a class="nav-link nav-mobile__login" href={LOGIN_URL} data-i18n="logIn">Login</a>
+              <button class="burger" type="button" data-open-sheet="menu" aria-label="Menü öffnen">
+                <span aria-hidden="true"></span>
+                <span aria-hidden="true"></span>
+              </button>
+            </span>
           </div>
 
           <!-- ------------------------------------------------------ Hero -->

@@ -375,6 +375,17 @@ a:hover {
   animation: none;
   filter: none;
 }
+/* Login sichtbar neben dem Burger (Owner-Feedback 2026-08-26) — gleiche
+   Optik wie die Desktop-nav-links, leicht kompakter. */
+.nav-mobile__actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.nav-mobile__login {
+  font-size: 15px;
+  text-decoration: none;
+}
 
 .burger {
   display: flex;
