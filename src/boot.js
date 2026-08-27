@@ -29,9 +29,10 @@ import {
   latentCostPathFindings,
   sttProfileFindings,
   stalePriceFindings,
+  platformAniFindings,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
-import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
+import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
 // LCT-FIX-1: welche Belegtypen einem Call zugeordnet werden koennen, weiss der Adapter, der
 // die Belege liest - der Boot-Guard bleibt eine reine, arg-injizierte Entscheidung.
 // Provider-Konstante, kein Transport: dieselbe Richtung wie telnyx-call-control-ingest.js
@@ -42,12 +43,15 @@ import {
   USAGE_EVENT_KIND,
   BOOTSTRAP_TENANT_ID,
   normNum,
+  PLATFORM_NUMBER_PURPOSE,
+  DEFAULT_PROVIDER,
 } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import {
   expireOrphanedConsults as expireOrphanedConsultsOp,
   hasPrunedSomething,
   tenantsOf,
+  syncPlatformBindings,
 } from "./store/state-ops.js";
 // EL-NEUSTART-6: die Haltefrist der Rueckfrage, aus der EINEN Quelle (G5) - dieselbe Zahl,
 // gegen die der Anbieter-Warter selbst laeuft. Kein Zyklus: consult/in-call.js importiert
@@ -239,6 +243,15 @@ function assertCostTruingBooking(config, store) {
 function warnAlertChannelUnset(config) {
   for (const finding of alertChannelFindings(config.billing))
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+}
+
+// OUTBOUND-E1: reine Diagnose, NIE fatal (s. platformAniFindings). Loggt die Nummer nie.
+function warnPlatformAniUnset(config) {
+  for (const finding of platformAniFindings({
+    platformAniE164: config.provisioning.platformAniE164,
+    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
+  }))
+    console.warn(`[boot] ${finding.message}`);
 }
 
 // LCT P5: Drift-Waechter, Ausloeser 1 von 2 (Boot). GENAU EINE Zeile fuer ALLE Praefixe -
@@ -437,6 +450,7 @@ function assertBootGates(config, store) {
   assertCostTruingBooking(config, store);
   assertSttProfile(config);
   warnAlertChannelUnset(config);
+  warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
   warnTariffDrift(config, store);
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
   warnTurnBudgetOverrun(config); // GAP-22, WARN
@@ -860,6 +874,46 @@ export async function healBootstrapStore({ config, store, messaging }) {
   return decision;
 }
 
+// OUTBOUND-E1: die Plattform-Bindungen werden beim Boot ABGELEITET, nicht gepflegt.
+// Ein Register, das jemand von Hand pflegen muss, ist leer, sobald es darauf ankommt -
+// und ein leeres Register sieht aus wie ein gruenes.
+// ZWEI Rollen, nicht eine: der Alarm-Absender haengt an genau demselben Mechanismus,
+// der am 24.08. versagt hat (resolveBootstrapAlertSender waehlt zur Laufzeit die erste
+// aktive Bootstrap-Nummer und liefert bei Verlust STILL null). Ohne die zweite Bindung
+// schloesse dieser Umbau einen Fall und liesse die Klasse offen.
+// Beide Bindungen tragen tenantId=null: sie sind PLATTFORM-Anlagen, egal auf welcher
+// Tenant-Zeile die e164 zufaellig sitzt - genau diese Verwechslung war der Ausfall.
+// Idempotent (zweimal booten = ein Zustand), store-lokal, KEIN Provider-IO. Laeuft NACH
+// healBootstrapStore (die Alarm-Nummer soll die geheilte sein) und VOR assertBootGates.
+// Kein Facade-Wrapper noetig (Abweichung vom ersten Entwurf, s. Report): store.load()
+// und store.save() sind auf BEIDEN Backends bereits identisch - die Ableitung geht ueber
+// die reine Funktion in state-ops.js, genau das Muster, das release-reconcile.js fuer
+// dieselbe Bindung schon nutzt (dort: withStoreLock -> load -> ops.xxx -> save). Ein
+// zusaetzlicher syncPlatformBindings/platformNumberBinding-Durchreicher auf json.js UND
+// pg.js waere reine Weiterleitung ohne eigenen Wert gewesen - und auf pg.js zusaetzlich
+// unerwuenscht: makePgStore traegt eine gepinnte Zeilenzahl (eslint-legacy-exceptions.json,
+// Altlast-Ratsche in test/check-staged-suppressions.test.js), die kein Bau-Agent ohne
+// Owner-Freigabe anheben darf - dieser Weg wächst sie nicht.
+export function derivePlatformNumberBindings({ config, store }) {
+  const alertSender = resolveBootstrapAlertSender(store);
+  const open = syncPlatformBindings(store.load(), [
+    {
+      purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
+      e164: normNum(config.provisioning.platformAniE164) || "",
+      provider: DEFAULT_PROVIDER,
+      note: "abgeleitet aus PLATFORM_ANI_E164",
+    },
+    {
+      purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER,
+      e164: alertSender?.e164 || "",
+      provider: alertSender?.provider || DEFAULT_PROVIDER,
+      note: "abgeleitet aus der aktiven Bootstrap-Nummer (alert-sms.js)",
+    },
+  ]);
+  store.save();
+  return open;
+}
+
 // KV-M4: der periodische Sweep-Tick als benannte, exportierte Funktion (testbar ohne
 // echten Timer/Spawn - Muster makeGracefulShutdown weiter unten: "injizierbare Fabrik,
 // testbar mit Stub + Spy, ohne echten Prozess-Exit/Spawn"). DREI unabhaengige, SYNCHRON
@@ -983,6 +1037,8 @@ export async function bootServer({
 
   // GAP-38: VOR den Gates - die Heilung darf den Refusal nur VERMEIDEN, nie ersetzen.
   await healBootstrapStore({ config, store, messaging });
+  // OUTBOUND-E1: VOR den Gates - die Bindungen sind die Datengrundlage des Riegels.
+  derivePlatformNumberBindings({ config, store });
   assertBootGates(config, store);
 
   // LCT P3: Kosten-Abgleich im Beobachtungsmodus. Muster der beiden bestehenden

@@ -10,6 +10,8 @@ import {
   numberReleaseVerdict,
   findNumber,
   releaseNumber,
+  platformNumberBinding,
+  unbindPlatformNumber,
   tenantInactive,
   tenantNumbersForErase,
   RELEASE_VERDICT,
@@ -67,10 +69,19 @@ async function performNumberRelease({ store, provisioner, audit, logger, actor, 
     });
     return false;
   }
+  // OUTBOUND-E1: geordnete Kette. Gehoert die offene Bindung dem freigebenden Tenant
+  // selbst (Praedikat hat sie deshalb passieren lassen), wird sie IM SELBEN Lock und
+  // IM SELBEN save() geschlossen, BEVOR releaseNumber laeuft - sonst wuerfe Ebene A,
+  // und im pg-Backend wuerfe zusaetzlich der Trigger (Ebene C). Idempotent und
+  // wiederaufnehmbar ueber den bestehenden numberReleasePending-Sweep.
   await store.withStoreLock(() => {
     const s = store.load();
     const n = findNumber(s, number.id);
-    if (n && n.status === NUMBER_STATUS.ACTIVE) releaseNumber(s, number.id);
+    if (n && n.status === NUMBER_STATUS.ACTIVE) {
+      const own = platformNumberBinding(s, n.e164);
+      if (own && own.tenantId === n.tenantId) unbindPlatformNumber(s, { e164: n.e164, purpose: own.purpose });
+      releaseNumber(s, number.id);
+    }
     store.save();
   });
   logger.log(`[did-release] freigegeben number=${number.id} tenant=${number.tenantId}`);
@@ -112,7 +123,14 @@ async function releaseCandidate({ store, provisioner, audit, logger, nowMs, grac
 // NIE ein DELETE, nur die Kandidatenliste sichtbar machen. Die Fruehausfahrt ist die
 // HARTE Grenze - der Release-Pfad ist nur bei graceMs>0 erreichbar.
 export async function runReleaseReconcile({ store, provisioner, audit, logger = console, nowMs, graceMs }) {
-  const candidates = classifyNumbersForRelease(store.load(), { nowMs, graceMs }).release;
+  const buckets = classifyNumbersForRelease(store.load(), { nowMs, graceMs });
+  const candidates = buckets.release;
+  // OUTBOUND-E1: eine Sperre, die still wirkt, ist die Krankheit des Ausgangsbefunds.
+  // Der Grace-Pfad hat keinen pending-Marker (er laeuft bei jedem Login neu) - deshalb
+  // hier nur eine WARN-Zeile, kein Audit: der durable Nachweis haengt am Erase-Pfad,
+  // der die Freigabe tatsaechlich schuldet.
+  for (const { number, reason } of buckets.hold)
+    logger.warn(`[did-release] HOLD number=${number.id} grund=${reason}`);
   if (graceMs === 0) {
     if (candidates.length)
       logger.warn(
@@ -142,10 +160,24 @@ export async function runReleaseReconcile({ store, provisioner, audit, logger = 
 // (Nummern). Kein toter Code: exportierter Seam mit Testabdeckung (der Test ist der Aufrufer).
 // Alle IO injiziert (store/provisioner/audit/logger).
 export async function releaseTenantNumbersOnErase({ store, provisioner, audit, logger = console, tenantId }) {
-  const candidates = tenantNumbersForErase(store.load(), tenantId);
+  const { release, hold } = tenantNumbersForErase(store.load(), tenantId);
   let released = 0;
   let aborted = 0;
-  for (const number of candidates) {
+  // OUTBOUND-E1: jeder HOLD zaehlt als ABGEBROCHEN und bekommt EINE durable Audit-Zeile.
+  // Damit bleibt numberReleasePending=true (contract-end-cleanup.js:91), der 6-h-Sweep
+  // nimmt den Tenant wieder auf, und die haengende Freigabe ist LAUT statt still (PM-18).
+  // KEIN Provider-DELETE fuer diese Nummern - der irreversible Schritt startet gar nicht.
+  for (const { number, reason } of hold) {
+    aborted++;
+    logger.warn(`[did-release] HOLD number=${number.id} tenant=${tenantId} grund=${reason}`);
+    await recordDidAudit(audit, {
+      actor: ERASE_ACTOR,
+      tenantId,
+      action: AUDIT_ACTION.ABORTED,
+      detail: `number=${number.id} grund=${reason}`,
+    });
+  }
+  for (const number of release) {
     const ok = await performNumberRelease({
       store, provisioner, audit, logger, actor: ERASE_ACTOR, number,
     });

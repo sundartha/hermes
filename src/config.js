@@ -1270,6 +1270,20 @@ const rawConfig = {
   bootstrapE164: process.env.BOOTSTRAP_E164 || "",
   bootstrapProvider: process.env.BOOTSTRAP_PROVIDER || "",
 
+  // OUTBOUND-E1: die Absendernummer (ANI) des Produkt-Outbounds als E.164. Heute steht sie
+  // NUR in zwei Anbieter-Konfigurationen, die KEIN Produktivcode kennt (ElevenLabs-
+  // Nummernregistrierung + Telnyx ani_override) - genau deshalb konnte der Loeschweg eines
+  // Wegwerf-Kontos sie am 24.08.2026 freigeben, ohne dass irgendetwas widersprach.
+  // Aus diesem Wert leitet der Boot die Plattform-Bindung ab (kein von Hand gepflegtes
+  // Register: ein leeres Register sieht aus wie ein gruenes).
+  // Leer = KEINE Bindung -> Bestandsverhalten, und der Boot-Guard sagt das laut (nicht
+  // fatal: ein Boot-Refusal tauschte ein Outbound-Problem gegen einen Inbound-Totalausfall,
+  // dieselbe Abwaegung wie in boot-guard.js). Live dashboard-verwaltet - render.yaml
+  // allein setzt hier nichts.
+  // ABGRENZUNG zu ELEVENLABS_AGENT_PHONE_NUMBER_ID: das ist eine opake Anbieter-ID
+  // (phnum_...), KEINE E.164, und aus ihr laesst sich keine Bindung ableiten.
+  platformAniE164: (process.env.PLATFORM_ANI_E164 || "").trim(),
+
   // AM6: Owner-OAuth-Identitaet (WorkOS sub/user.id) idempotent an den Bootstrap-Tenant
   // binden (idp_subject). Wie OWNER_NUMBER_SEED ein Boot-Seed gegen Renders fluechtiges FS /
   // No-CLI-Free-Tier: resolveTenant findet so den Tenant MIT der aktiven Nummer ueber den
@@ -1928,7 +1942,7 @@ function guardedConfig(target, path = "config") {
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
-  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
+  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
   // eigener Namespace statt Anhaengsel an auth/billing (eigenstaendige Domaene, s.

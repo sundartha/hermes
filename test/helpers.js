@@ -123,6 +123,11 @@ export const BASE_ENV = {
   // setzen sie explizit per env-Override.
   BOOTSTRAP_E164: "",
   BOOTSTRAP_PROVIDER: "",
+  // OUTBOUND-E1: neutral leer - ohne diesen Eintrag leakt die echte .env per dotenv in
+  // jeden Spawn-Test (Lehre test-base-env-drift), hier mit besonders unangenehmer Folge:
+  // die echte Live-ANI wuerde in Spawn-Tests gebunden und der Freigabe-Riegel in fremden
+  // Tests scharf. Tests, die die Bindung pruefen, setzen sie explizit per env-Override.
+  PLATFORM_ANI_E164: "",
   // AM6: Owner-OAuth-Identitaets-Seed neutral leer (kein idp_subject-Seed). Ohne diese
   // Zeile leakt eine lokale .env mit OWNER_IDP_SUBJECT via dotenv in Spawn-Tests ->
   // Baseline-Drift (Lehre test-base-env-drift). am6-oauth-tenant.test.js setzt es explizit.
