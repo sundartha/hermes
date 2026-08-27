@@ -75,33 +75,41 @@ async function stillReleasableUnderLock(store, numberId) {
   });
 }
 
+// Abbruch-Pfad des Release-Kerns (G5, E1-S2-1): loggt eine Warnung, schreibt EINE
+// Audit-Zeile (Grund im Detail, kein e164/PII) und liefert das feste false, das
+// performNumberRelease bei jedem der drei Abbruchpunkte zurueckgeben muss. Vorher stand
+// dieser Dreiklang dreimal kopiert, nur der Grund unterschied sich.
+async function abortRelease({ audit, actor, number, reason, logger, message }) {
+  logger.warn(message);
+  await recordDidAudit(audit, {
+    actor,
+    tenantId: number.tenantId,
+    action: AUDIT_ACTION.ABORTED,
+    detail: `number=${number.id} grund=${reason}`,
+  });
+  return false;
+}
+
 // Gemeinsamer Release-Kern (Phase D Grace-Reconcile + Phase E Erase, EINE Quelle G5).
 // Reihenfolge: Recheck IM Lock -> Provider-DELETE VOR der Store-Mutation (Konvergenz - ein
 // Crash dazwischen konvergiert beim naechsten Lauf, divergiert nicht) -> Store
 // active->released unter Lock (idempotent: nur wenn noch active) -> durabler Audit. actor
 // unterscheidet die Ausloeser im Audit. Liefert true bei Release, false bei jedem Abbruch
 // (Store bleibt active -> retrybar, kein Orphan; jeder Abbruch schreibt EINE Audit-Zeile,
-// PM-18).
+// PM-18, ueber abortRelease).
 async function performNumberRelease({ store, provisioner, audit, logger, actor, number }) {
-  if (!(await stillReleasableUnderLock(store, number.id))) {
-    logger.warn(`[did-release] recheck-abbruch VOR provider-delete number=${number.id}`);
-    await recordDidAudit(audit, {
-      actor,
-      tenantId: number.tenantId,
-      action: AUDIT_ACTION.ABORTED,
-      detail: `number=${number.id} grund=${ABORT_REASON.RECHECK_VOR_DELETE}`,
+  if (!(await stillReleasableUnderLock(store, number.id)))
+    return abortRelease({
+      audit, actor, number, logger,
+      reason: ABORT_REASON.RECHECK_VOR_DELETE,
+      message: `[did-release] recheck-abbruch VOR provider-delete number=${number.id}`,
     });
-    return false;
-  }
-  if (!(await providerReleaseOrGone(provisioner, number, logger))) {
-    await recordDidAudit(audit, {
-      actor,
-      tenantId: number.tenantId,
-      action: AUDIT_ACTION.ABORTED,
-      detail: `number=${number.id} grund=${ABORT_REASON.PROVIDER_ERROR}`,
+  if (!(await providerReleaseOrGone(provisioner, number, logger)))
+    return abortRelease({
+      audit, actor, number, logger,
+      reason: ABORT_REASON.PROVIDER_ERROR,
+      message: `[did-release] provider-delete fehlgeschlagen number=${number.id}`,
     });
-    return false;
-  }
   // OUTBOUND-E1 (E1-02/E1-03): die Nummer ist beim Anbieter bereits weg - dieser letzte
   // Schritt DARF NICHT mehr entkommen (unhandled throw wuerde die restlichen Kandidaten der
   // Schleife stumm abbrechen). Unbind und releaseNumber muessen GEMEINSAM gelingen: schlaegt
@@ -125,14 +133,11 @@ async function performNumberRelease({ store, provisioner, audit, logger, actor, 
       store.save();
     });
   } catch (err) {
-    logger.warn(`[did-release] store-mutation fehlgeschlagen NACH provider-delete number=${number.id}: ${err.message}`);
-    await recordDidAudit(audit, {
-      actor,
-      tenantId: number.tenantId,
-      action: AUDIT_ACTION.ABORTED,
-      detail: `number=${number.id} grund=${ABORT_REASON.STORE_MUTATION_NACH_DELETE}`,
+    return abortRelease({
+      audit, actor, number, logger,
+      reason: ABORT_REASON.STORE_MUTATION_NACH_DELETE,
+      message: `[did-release] store-mutation fehlgeschlagen NACH provider-delete number=${number.id}: ${err.message}`,
     });
-    return false;
   }
   logger.log(`[did-release] freigegeben number=${number.id} tenant=${number.tenantId}`);
   await recordDidAudit(audit, {

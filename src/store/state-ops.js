@@ -2432,9 +2432,39 @@ const CALL_STATUS_ACTIVE = "active";
 // eslint id-length): eine Bestandsdatei mit bereits gepinnter Altlast darf durch neuen Code
 // NICHT weiter wachsen (Altlast-Ratsche, test/check-staged-suppressions.test.js) - der Pin
 // ist ohne Owner-Freigabe unantastbar, also bleibt der ganze OUTBOUND-E1-Block darunter.
+//
+// Review-Befund E1-S2-2: "offen" (releasedAt===null) UND "(e164,purpose) offen finden" waren
+// an vier bzw. zwei Stellen handgerollt kopiert. EINE Quelle je Frage, rein, ohne Seiteneffekt:
+function isOpenBinding(binding) {
+  return binding.releasedAt === null;
+}
+
+function findOpenBinding(state, e164, purpose) {
+  return state.platformNumberUse.find(
+    (binding) => binding.e164 === e164 && binding.purpose === purpose && isOpenBinding(binding),
+  );
+}
+
+// Bindung schliessen (Surrogatschluessel, kein Ueberschreiben - Historie bleibt stehen). EINE
+// Quelle statt der drei Kopien in unbindPlatformNumber/unbindOwnPlatformBindings/
+// syncPlatformBindings (Review-Befund E1-S2-2).
+function closeBinding(binding) {
+  binding.releasedAt = new Date().toISOString();
+  return binding;
+}
+
 export function platformNumberBindings(state, e164) {
   if (!e164) return [];
-  return state.platformNumberUse.filter((binding) => binding.e164 === e164 && binding.releasedAt === null);
+  return state.platformNumberUse.filter((binding) => binding.e164 === e164 && isOpenBinding(binding));
+}
+
+// Review-Befund E1-S2-3: "gehoert diese Bindung dem Tenant?" stand zweimal, nicht komplementaer
+// formuliert (numberBusyReason vs. unbindOwnPlatformBindings) - bei tenantId=null stuften beide
+// Stellen dieselbe Bindung gegensaetzlich ein. EINE Quelle, strikte Gleichheit, keine
+// Sonderbehandlung von null hier - eine etwaige Sonderrolle von null gehoert an den Aufrufer
+// (s. numberBusyReason unten), NICHT ins Praedikat selbst.
+function bindingBelongsTo(binding, tenantId) {
+  return binding.tenantId === tenantId;
 }
 
 // Darf DIESE Nummer stillgelegt/freigegeben werden - und wenn nein, warum nicht?
@@ -2455,8 +2485,11 @@ export function platformNumberBindings(state, e164) {
 // beim Anbieter geloescht werden). HOLD, nicht Block: der Retry-Sweep existiert bereits.
 export function numberBusyReason(state, number, { forTenantId = null } = {}) {
   const bindings = platformNumberBindings(state, number.e164);
+  // forTenantId=null heisst "kein freigebender Tenant benannt" -> JEDE offene Bindung ist
+  // dann fremd (Sonderfall des AUFRUFERS, nicht des Eigentums-Praedikats selbst - s.
+  // bindingBelongsTo oben, E1-S2-3).
   const blockedByForeignBinding = bindings.some(
-    (binding) => !(forTenantId !== null && binding.tenantId === forTenantId),
+    (binding) => forTenantId === null || !bindingBelongsTo(binding, forTenantId),
   );
   if (blockedByForeignBinding) return NUMBER_HOLD_REASON.PLATFORM_IN_USE;
   if (
@@ -2473,9 +2506,7 @@ export function numberBusyReason(state, number, { forTenantId = null } = {}) {
 // zurueckgeliefert, NICHT verdoppelt (der Teilindex in pg wuerde das ohnehin abweisen -
 // hier steht dieselbe Regel backend-frei, damit json und pg nicht auseinanderlaufen).
 export function bindPlatformNumber(state, { e164, purpose, provider, tenantId = null, providerNumberId = null, note = null }) {
-  const open = state.platformNumberUse.find(
-    (binding) => binding.e164 === e164 && binding.purpose === purpose && binding.releasedAt === null,
-  );
+  const open = findOpenBinding(state, e164, purpose);
   if (open) return open;
   const binding = {
     id: newId("pnu"), e164, purpose, provider, tenantId, providerNumberId,
@@ -2488,34 +2519,30 @@ export function bindPlatformNumber(state, { e164, purpose, provider, tenantId = 
 // Bindung schliessen (Historie bleibt stehen - Surrogatschluessel, kein Ueberschreiben).
 // Idempotent: keine offene Bindung -> null, kein Wurf.
 export function unbindPlatformNumber(state, { e164, purpose }) {
-  const open = state.platformNumberUse.find(
-    (binding) => binding.e164 === e164 && binding.purpose === purpose && binding.releasedAt === null,
-  );
+  const open = findOpenBinding(state, e164, purpose);
   if (!open) return null;
-  open.releasedAt = new Date().toISOString();
-  return open;
+  return closeBinding(open);
 }
 
 // OUTBOUND-E1 (E1-03): schliesst ALLE offenen Bindungen dieser Nummer, die dem FREIGEBENDEN
 // Tenant selbst gehoeren (number.tenantId) - Vorstufe einer Freigabe/Kuendigung. Die
-// Eigentumsfrage "gehoert die Bindung dem freigebenden Tenant?" wird NUR HIER beantwortet
-// (G5) - vorher stand dieselbe Bedingung ein zweites Mal, kopiert, im Aufrufer
-// (release-reconcile.js), und war bereits von numberBusyReason auf Plural umgestellt worden,
-// waehrend der Aufrufer noch die Einzel-Bindung loeste (Mechanismus hinter E1-01). Reine
-// Mutation, kein IO, kein Date.now-Vergleich. Liefert die GESCHLOSSENEN Bindungs-Objekte
-// (nicht nur eine Anzahl), damit ein Aufrufer sie bei einem nachfolgenden Fehler
-// zurueckrollen kann (releasedAt wieder auf null) - Unbind und Freigabe muessen GEMEINSAM
-// gelingen oder GEMEINSAM ausbleiben, sonst bliebe eine geschlossene Bindung stehen, ohne
-// dass die Nummer je freigegeben wurde (E1-02).
+// Eigentumsfrage "gehoert die Bindung dem freigebenden Tenant?" wird NUR VON bindingBelongsTo
+// (oben) beantwortet (G5, E1-S2-3) - vorher stand dieselbe Bedingung ein zweites Mal, kopiert,
+// im Aufrufer (release-reconcile.js), und war bereits von numberBusyReason auf Plural
+// umgestellt worden, waehrend der Aufrufer noch die Einzel-Bindung loeste (Mechanismus hinter
+// E1-01). Reine Mutation, kein IO, kein Date.now-Vergleich. Liefert die GESCHLOSSENEN
+// Bindungs-Objekte (nicht nur eine Anzahl), damit ein Aufrufer sie bei einem nachfolgenden
+// Fehler zurueckrollen kann (releasedAt wieder auf null) - Unbind und Freigabe muessen
+// GEMEINSAM gelingen oder GEMEINSAM ausbleiben, sonst bliebe eine geschlossene Bindung stehen,
+// ohne dass die Nummer je freigegeben wurde (E1-02).
 export function unbindOwnPlatformBindings(state, number) {
   // Gleiche Wache wie platformNumberBindings: eine Nummer ohne E.164 kann keine
   // Plattform-Rolle tragen, also auch keine eigene Bindung zu schliessen haben.
   if (!number.e164) return [];
   const closed = [];
   for (const binding of platformNumberBindings(state, number.e164)) {
-    if (binding.tenantId !== number.tenantId) continue;
-    binding.releasedAt = new Date().toISOString();
-    closed.push(binding);
+    if (!bindingBelongsTo(binding, number.tenantId)) continue;
+    closed.push(closeBinding(binding));
   }
   return closed;
 }
@@ -2530,11 +2557,11 @@ export function unbindOwnPlatformBindings(state, number) {
 export function syncPlatformBindings(state, desired) {
   for (const { purpose, e164, provider, tenantId = null, note = null } of desired) {
     for (const binding of state.platformNumberUse)
-      if (binding.purpose === purpose && binding.releasedAt === null && binding.e164 !== e164)
-        binding.releasedAt = new Date().toISOString();
+      if (binding.purpose === purpose && isOpenBinding(binding) && binding.e164 !== e164)
+        closeBinding(binding);
     if (e164) bindPlatformNumber(state, { e164, purpose, provider, tenantId, note });
   }
-  return state.platformNumberUse.filter((binding) => binding.releasedAt === null);
+  return state.platformNumberUse.filter(isOpenBinding);
 }
 
 // Zustaende, die eine Nummer aus dem Routing nehmen. Eine suspendierte Nummer routet

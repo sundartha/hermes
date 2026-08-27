@@ -46,6 +46,7 @@
       "no-magic-numbers :: No magic number: 6.": 1,
       "no-magic-numbers :: No magic number: 60.": 2,
       "no-negated-condition :: Unexpected negated condition.": 1,
+      "no-param-reassign :: Assignment to property of function parameter 'binding'.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'call'.": 3,
       "no-param-reassign :: Assignment to property of function parameter 's'.": 17,
       "no-param-reassign :: Assignment to property of function parameter 'tenant'.": 6,

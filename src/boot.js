@@ -45,6 +45,7 @@ import {
   normNum,
   PLATFORM_NUMBER_PURPOSE,
   DEFAULT_PROVIDER,
+  E164,
 } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import {
@@ -894,12 +895,22 @@ export async function healBootstrapStore({ config, store, messaging }) {
 // unerwuenscht: makePgStore traegt eine gepinnte Zeilenzahl (eslint-legacy-exceptions.json,
 // Altlast-Ratsche in test/check-staged-suppressions.test.js), die kein Bau-Agent ohne
 // Owner-Freigabe anheben darf - dieser Weg wächst sie nicht.
+// Review-Befund E1-S1-1: aus einem formal ungueltigen PLATFORM_ANI_E164 (kein '+', nationale
+// Schreibweise, Tippfehler) darf KEINE Bindung entstehen - sie saehe fuer numberBusyReason
+// (strikte String-Gleichheit) ohnehin nie wie die echte number.e164 aus und war nur ein
+// Riegel, der leise leerlief. Gleiche Pruef-Konstante wie platformAniFindings (boot-guard.js,
+// EINE Quelle) und wie bootstrapHealDecision fuer die Schwester-Env BOOTSTRAP_E164.
+function validPlatformAniE164(rawE164) {
+  const normalized = normNum(rawE164);
+  return E164.test(normalized) ? normalized : "";
+}
+
 export function derivePlatformNumberBindings({ config, store }) {
   const alertSender = resolveBootstrapAlertSender(store);
   const open = syncPlatformBindings(store.load(), [
     {
       purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
-      e164: normNum(config.provisioning.platformAniE164) || "",
+      e164: validPlatformAniE164(config.provisioning.platformAniE164),
       provider: DEFAULT_PROVIDER,
       note: "abgeleitet aus PLATFORM_ANI_E164",
     },

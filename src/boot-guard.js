@@ -452,6 +452,7 @@ export function alertChannelFindings({ platformAlertSmsTo, paymentEnabled, platf
 export const PLATFORM_ANI_FINDING = Object.freeze({
   UNSET: "platform_ani_unset", // WARN
   UNSET_WITH_OUTBOUND: "platform_ani_unset_with_outbound", // WARN, dringlicher
+  MALFORMED: "platform_ani_malformed", // WARN - gesetzt, aber unbrauchbar (Review-Befund E1-S1-1)
 });
 
 // NIE fatal - Begruendung im Plan (E-1): ein Boot-Refusal haette den Dienst nicht mehr
@@ -459,7 +460,23 @@ export const PLATFORM_ANI_FINDING = Object.freeze({
 // war. Dieselbe Abwaegung hat dieses Repo schon einmal getroffen und genauso entschieden.
 // Der besetzte Wert liefert [] und wird NIE geloggt (Regel 4/PII).
 // Arg-injiziert (config-frei) wie fakeOriginateBootBlocked/alertChannelFindings.
+//
+// Review-Befund E1-S1-1: "gesetzt" allein reichte nicht - ein Tippfehler/nationales Format
+// ohne '+' wuerde eine Bindung auf einer e164 anlegen, die numberBusyReason (strikte
+// String-Gleichheit) mit KEINER number.e164 je gleich sieht: der Riegel liefe still leer,
+// UND dieser Befund hier haette geschwiegen, weil der Wert nicht leer ist. Gleiche
+// Pruef-Konstante wie die Schwester-Env BOOTSTRAP_E164 (bootstrapHealDecision oben,
+// E164.test(normNum(...)) - EINE Quelle, defaults.js:700).
 export function platformAniFindings({ platformAniE164, elevenLabsOutboundEnabled } = {}) {
+  if (platformAniE164 && !E164.test(normNum(platformAniE164)))
+    return [{
+      code: PLATFORM_ANI_FINDING.MALFORMED,
+      fatal: false,
+      message:
+        "PLATFORM_ANI_E164 ist gesetzt, aber kein gueltiges E.164-Format - die Bindung " +
+        "greift NICHT (numberBusyReason vergleicht exakt), der Freigabe-Riegel schuetzt " +
+        "NICHTS. Wert im Render-Dashboard korrigieren (Format +<Laendercode><Nummer>).",
+    }];
   if (platformAniE164) return [];
   if (elevenLabsOutboundEnabled)
     return [{

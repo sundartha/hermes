@@ -20,6 +20,7 @@ import {
   RELEASE_VERDICT,
   findNumber,
   eraseTenantData,
+  unbindOwnPlatformBindings,
 } from "../src/store/state-ops.js";
 import {
   NUMBER_STATUS,
@@ -482,4 +483,65 @@ test("T18 (E1-02, Regression): der Recheck IM Lock unmittelbar VOR dem Provider-
   const abortedRecords = audit.records.filter((record) => record.action === "did_release_aborted");
   assert.equal(abortedRecords.length, 1);
   assert.match(abortedRecords[0].detail, /grund=recheck_vor_delete/);
+});
+
+// ---- Review-Blocker Runde 2 (E1-S1-1/E1-S2-3) ----
+
+test("T19 (E1-S1-1, Regression neben T15): ein gueltiges PLATFORM_ANI_E164 bleibt still, ein formal ungueltiges meldet platform_ani_malformed - der Text traegt keine Nummer", () => {
+  const valid = platformAniFindings({ platformAniE164: ANI, elevenLabsOutboundEnabled: true });
+  assert.deepEqual(valid, [], "gueltige e164 -> kein Befund (T15 unveraendert)");
+
+  const crooked = platformAniFindings({ platformAniE164: "015112345678", elevenLabsOutboundEnabled: true });
+  assert.equal(crooked.length, 1);
+  assert.equal(crooked[0].fatal, false);
+  assert.equal(crooked[0].code, "platform_ani_malformed");
+  assert.doesNotMatch(crooked[0].message, /\+\d{6,}/, "der Befundtext enthaelt keine Rufnummer");
+});
+
+test("T20 (E1-S1-1, Regression): derivePlatformNumberBindings leitet aus einem formal ungueltigen PLATFORM_ANI_E164 KEINE Bindung ab - der Riegel bleibt sichtbar wirkungslos statt still leerzulaufen", () => {
+  const state = makeDefaultState();
+  const config = { provisioning: { platformAniE164: "015112345678" } };
+  const store = { load: () => state, save: () => {} };
+  derivePlatformNumberBindings({ config, store });
+  assert.deepEqual(
+    state.platformNumberUse.filter(
+      (binding) => binding.purpose === PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI && binding.releasedAt === null,
+    ),
+    [],
+    "keine Bindung aus dem krummen Wert",
+  );
+});
+
+test("T21 (E1-S2-3, Regression): das Eigentums-Praedikat kommt fuer numberBusyReason UND unbindOwnPlatformBindings aus DERSELBEN Quelle - fuer eine echte tenantId stimmen beide ueberein, statt kopiert auseinanderzulaufen", () => {
+  // Fall 1 (Bestandsverhalten, seedTenantWithNumber): eine Bindung, die dem freigebenden
+  // Tenant selbst gehoert (tenantId=t1), blockiert numberBusyReason NICHT und wird von
+  // unbindOwnPlatformBindings als eigene geschlossen - beide Antworten stammen jetzt aus
+  // bindingBelongsTo(binding, tenantId).
+  const own = seedTenantWithNumber({ bound: true, bindingTenantId: "t1" });
+  const ownNumber = findNumber(own, "n1");
+  assert.equal(numberBusyReason(own, ownNumber, { forTenantId: "t1" }), null, "eigene Bindung blockiert nicht");
+  const closedOwn = unbindOwnPlatformBindings(own, ownNumber);
+  assert.equal(closedOwn.length, 1, "unbindOwnPlatformBindings schliesst dieselbe Bindung als eigene");
+
+  // Fall 2 (E1-S2-3, der gemeldete Widerspruch): eine geteilte Bindung (tenantId=null) auf
+  // einer NUMMER mit tenantId=null - "heute nicht ausloesbar" (number.tenantId ist NOT NULL),
+  // aber genau der Fall, an dem die zwei fruehen Kopien der Eigentumsfrage nicht komplementaer
+  // waren. bindingBelongsTo(binding, null) mit binding.tenantId=null ist wahr - EIN und
+  // derselbe Wert fuer beide Aufrufer, die Sonderrolle von forTenantId=null bei
+  // numberBusyReason bleibt ein EXPLIZITER, dokumentierter Zusatz am Aufrufer, kein zweites,
+  // abweichendes Praedikat.
+  const state = makeDefaultState();
+  bindPlatformNumber(state, { e164: ANI, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, provider: PROVIDER.TELNYX, tenantId: null });
+  const hypotheticalNumber = { e164: ANI, tenantId: null };
+  assert.equal(
+    numberBusyReason(state, hypotheticalNumber, { forTenantId: null }),
+    NUMBER_HOLD_REASON.PLATFORM_IN_USE,
+    "forTenantId=null: dokumentierte Sonderregel des Aufrufers, jede Bindung ist fremd",
+  );
+  const closedShared = unbindOwnPlatformBindings(state, hypotheticalNumber);
+  assert.equal(
+    closedShared.length,
+    1,
+    "bindingBelongsTo(binding{tenantId:null}, null) ist wahr - EINE Quelle statt zwei Kopien",
+  );
 });
