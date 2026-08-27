@@ -26,7 +26,7 @@ const num = (o = {}) => ({
   ...o,
 });
 // calls/platformNumberUse: [] (OUTBOUND-E1: numberReleaseVerdict ruft jetzt zusaetzlich
-// numberBusyReason -> platformNumberBinding/den Anruf-Check; ohne diese beiden Felder
+// numberBusyReason -> platformNumberBindings/den Anruf-Check; ohne diese beiden Felder
 // wuerfe der Zugriff bei gesetzter e164, weil das synthetische State-Objekt hier keinen
 // vollen makeDefaultState()-Shape traegt).
 const state = ({ numbers = [num()], tenants = [tenant()], calls = [], platformNumberUse = [] } = {}) => ({

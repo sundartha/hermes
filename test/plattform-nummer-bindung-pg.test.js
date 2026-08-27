@@ -40,7 +40,7 @@ test("P1: NEUSTART-Round-Trip - binden, save(), Spiegel verwerfen, neu hydrieren
   await store.save();
 
   const reopened = await reopen(db);
-  const binding = ops.platformNumberBinding(reopened.load(), ANI);
+  const [binding] = ops.platformNumberBindings(reopened.load(), ANI);
   assert.ok(binding, "Bindung ueberlebt Neustart");
   assert.equal(binding.purpose, PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI);
   assert.equal(binding.tenantId, null);
@@ -138,7 +138,7 @@ test("P5 (Prune-Regression, PM-12): Flush mit leerem Nummern-Slice des gebundene
 
   const remaining = (await db.query(`SELECT id FROM number WHERE id='n4'`)).rows;
   assert.equal(remaining.length, 0, "die Zeile wurde geprunt (DELETE, kein Trigger-Wurf)");
-  const binding = ops.platformNumberBinding(store.load(), CUSTOMER_DID);
+  const [binding] = ops.platformNumberBindings(store.load(), CUSTOMER_DID);
   assert.ok(binding, "die Bindung ueberlebt den Prune (eigene, globale Tabelle)");
 });
 

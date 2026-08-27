@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import {
   makeDefaultState,
   registerTenant,
-  platformNumberBinding,
+  platformNumberBindings,
   numberBusyReason,
   bindPlatformNumber,
   syncPlatformBindings,
@@ -47,6 +47,7 @@ const CUSTOMER_DID = "+4915112345678";
 const THIRTY_DAYS_MS = 2592000000; // Alter des simulierten Suspends (> Grace)
 const FOURTEEN_DAYS_MS = 1209600000; // Grace-Frist des Verdikts
 const TWO_DERIVED_BINDINGS = 2; // Boot leitet outbound_ani + alert_sms_sender ab
+const TWO_OPEN_BINDINGS_ON_ONE_NUMBER = 2; // E1-01: eigene + geteilte Bindung auf DERSELBEN e164
 
 const fakeAudit = () => ({
   records: [],
@@ -243,8 +244,8 @@ test("T9 (DSGVO): Loeschung entfernt ALLE personenbezogenen Daten, die Nummer wi
   // die Nummer selbst bleibt gehalten - eraseTenantData fasst state.numbers nicht an,
   // und die Bindung bleibt offen (Art. 17 ist erfuellt, die DID-Miete nicht Teil davon).
   assert.equal(findNumber(state, "n1").status, NUMBER_STATUS.ACTIVE);
-  assert.ok(platformNumberBinding(state, ANI) === null); // Sanity: falsche Nummer, kein Treffer
-  assert.ok(platformNumberBinding(state, findNumber(state, "n1").e164) !== null, "Bindung bleibt offen");
+  assert.equal(platformNumberBindings(state, ANI).length, 0); // Sanity: falsche Nummer, kein Treffer
+  assert.equal(platformNumberBindings(state, findNumber(state, "n1").e164).length, 1, "Bindung bleibt offen");
 });
 
 test("T10: Unbind - eine Bindung, die dem freigebenden Tenant selbst gehoert, darf mit ihm gehen; die geteilte Plattform-ANI nicht", async () => {
@@ -385,4 +386,100 @@ test("T15: leeres PLATFORM_ANI_E164 meldet sich; gesetzter Wert bleibt still; Te
 
   const set = platformAniFindings({ platformAniE164: ANI, elevenLabsOutboundEnabled: true });
   assert.deepEqual(set, []);
+});
+
+// ---- Review-Blocker Runde 1 (E1-01/E1-02/E1-03) ----
+
+test("T16 (E1-01, Regression): eine Nummer mit ZWEI gleichzeitig offenen Bindungen (eigene + geteilte Plattform-ANI) haelt - die eigene reicht NICHT, um die geteilte zu entschaerfen", () => {
+  // Zwei offene Bindungen auf DERSELBEN e164: die eigene Kunden-Bindung (tenantId=t1) UND
+  // zusaetzlich die geteilte Plattform-ANI (tenantId=null) - genau der Zwei-Rollen-Fall, den
+  // das Datenmodell (Teilindex auf (e164,purpose), kein (e164)-Unique) ausdruecklich vorsieht.
+  const state = seedTenantWithNumber({ bound: true, bindingTenantId: "t1" });
+  const e164 = findNumber(state, "n1").e164;
+  bindPlatformNumber(state, {
+    e164,
+    purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER,
+    provider: PROVIDER.TELNYX,
+    tenantId: null,
+  });
+  assert.equal(platformNumberBindings(state, e164).length, TWO_OPEN_BINDINGS_ON_ONE_NUMBER, "beide Bindungen sind offen");
+  // Vor E1-01 lieferte platformNumberBinding() nur die ERSTE Bindung (die eigene) -> die
+  // geteilte Plattform-Bindung blieb fuer numberBusyReason unsichtbar und liess den
+  // irreversiblen Provider-DELETE durchlaufen, obwohl die Plattform-ANI noch offen war.
+  assert.equal(
+    numberBusyReason(state, findNumber(state, "n1"), { forTenantId: "t1" }),
+    NUMBER_HOLD_REASON.PLATFORM_IN_USE,
+    "die geteilte Bindung haelt trotz eigener Bindung auf derselben Nummer",
+  );
+});
+
+test("T17 (E1-02/E1-03, Regression): schlaegt die Store-Mutation NACH dem Provider-DELETE fehl (neuer Anruf waehrend des Netz-Aufrufs), bricht performNumberRelease sauber ab - der bereits geschlossene eigene Unbind wird zurueckgerollt, GENAU EINE ABORTED-Audit-Zeile, kein unhandled throw", async () => {
+  // Bindung gehoert dem freigebenden Tenant selbst (own) - unbindOwnPlatformBindings schliesst
+  // sie, BEVOR releaseNumber laeuft. Der Provisioner simuliert einen waehrend seines
+  // Netz-Aufrufs neu eingehenden Anruf auf der Nummer - exakt das Fenster, das E1-02 als
+  // ungefangenen Wurf belegt hat.
+  const state = seedTenantWithNumber({ bound: true, bindingTenantId: "t1" });
+  const e164 = findNumber(state, "n1").e164;
+  const provisioner = fakeProvisioner({
+    async releaseNumber(_providerNumberId) {
+      state.calls.push({ id: "c-race", tenantId: "t1", status: "active", from: e164, to: "+491700000000" });
+      return Promise.resolve();
+    },
+  });
+  const audit = fakeAudit();
+  const result = await releaseTenantNumbersOnErase({
+    store: fakeStore(state),
+    provisioner,
+    audit,
+    logger: fakeLogger(),
+    tenantId: "t1",
+  });
+  assert.deepEqual(result, { released: 0, aborted: 1 }, "kein unhandled throw beendet den Lauf");
+  // Store bleibt active (kein Orphan, retrybar - der naechste Lauf konvergiert ueber den
+  // 404-Pfad, weil der Provider die Nummer bereits geloescht hat).
+  assert.equal(findNumber(state, "n1").status, NUMBER_STATUS.ACTIVE);
+  // Rollback (E1-03): der bereits geschlossene eigene Unbind ist zurueckgerollt, sonst
+  // persistierte ein spaeteres fremdes save() eine geschlossene Bindung, ohne dass die
+  // Nummer je freigegeben wurde.
+  assert.equal(platformNumberBindings(state, e164).length, 1, "die eigene Bindung ist wieder offen");
+  const abortedRecords = audit.records.filter((record) => record.action === "did_release_aborted");
+  assert.equal(abortedRecords.length, 1, "GENAU EINE Audit-Zeile, keine Doppelbuchung");
+  assert.match(abortedRecords[0].detail, /grund=store_mutation_nach_delete/);
+  assert.doesNotMatch(abortedRecords[0].detail, /\+\d/, "keine E.164 im Audit-Detail");
+});
+
+test("T18 (E1-02, Regression): der Recheck IM Lock unmittelbar VOR dem Provider-DELETE greift - ein Anruf, der GENAU IN DEM Fenster zwischen dem aeusseren (unlocked) Verdikt und dem ersten Lock-Erwerb beginnt, verhindert den Provider-DELETE komplett", async () => {
+  const state = seedTenantWithNumber({ bound: false });
+  const e164 = findNumber(state, "n1").e164;
+  // raceStore simuliert das TOCTOU-Fenster exakt: tenantNumbersForErase() liest den State
+  // UNGELOCKT und sieht die Nummer frei (release-Bucket). Der ALLERERSTE withStoreLock-Aufruf
+  // danach ist performNumberRelease's eigener Recheck - genau in diesem Moment (nicht davor,
+  // sonst wuerde bereits der aeussere Selektor die Nummer in den hold-Korb legen) trifft ein
+  // neuer Anruf ein.
+  let lockCalls = 0;
+  const raceStore = {
+    load: () => state,
+    save: () => {},
+    withStoreLock: (fn) => {
+      lockCalls++;
+      if (lockCalls === 1)
+        state.calls.push({ id: "c-race-vor-delete", tenantId: "t1", status: "active", from: e164, to: "+491700000000" });
+      return fn();
+    },
+  };
+  const provisioner = fakeProvisioner();
+  const audit = fakeAudit();
+  const result = await releaseTenantNumbersOnErase({
+    store: raceStore,
+    provisioner,
+    audit,
+    logger: fakeLogger(),
+    tenantId: "t1",
+  });
+  assert.deepEqual(result, { released: 0, aborted: 1 });
+  assert.deepEqual(provisioner.log, [], "der irreversible Provider-DELETE startet gar nicht erst");
+  assert.equal(findNumber(state, "n1").status, NUMBER_STATUS.ACTIVE);
+  const abortedRecords = audit.records.filter((record) => record.action === "did_release_aborted");
+  assert.equal(abortedRecords.length, 1);
+  assert.match(abortedRecords[0].detail, /grund=recheck_vor_delete/);
 });

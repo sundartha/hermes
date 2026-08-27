@@ -10,8 +10,8 @@ import {
   numberReleaseVerdict,
   findNumber,
   releaseNumber,
-  platformNumberBinding,
-  unbindPlatformNumber,
+  numberBusyReason,
+  unbindOwnPlatformBindings,
   tenantInactive,
   tenantNumbersForErase,
   RELEASE_VERDICT,
@@ -30,6 +30,12 @@ const ERASE_ACTOR = "system:erase-release";
 const AUDIT_ACTION = Object.freeze({
   RELEASED: "did_released",
   ABORTED: "did_release_aborted",
+});
+// Abbruch-Gruende im Audit-Detail (E1-02). Kein e164/PII - nur der Ablaufpunkt.
+const ABORT_REASON = Object.freeze({
+  PROVIDER_ERROR: "provider_error",
+  RECHECK_VOR_DELETE: "recheck_vor_delete",
+  STORE_MUTATION_NACH_DELETE: "store_mutation_nach_delete",
 });
 
 // Durabler Audit (EINE Quelle, G5). detail traegt NUR interne IDs (kein e164/Key/PII, Regel 4/5).
@@ -53,37 +59,81 @@ async function providerReleaseOrGone(provisioner, number, logger) {
   }
 }
 
+// OUTBOUND-E1 (E1-02): letzter, engstmoeglicher Recheck IM Lock, unmittelbar VOR dem
+// irreversiblen Provider-DELETE. Der Aufrufer hat die Eignung bereits ausserhalb des Locks
+// geprueft (Grace-Recheck bzw. Erase-Selektor, auf einem zu diesem Zeitpunkt schon wieder
+// leicht veralteten Snapshot) - dieser zweite, frisch geladene Blick schliesst das
+// TOCTOU-Fenster bis kurz vor den Netz-Aufruf. Reine Query unter Lock, kein Netz-IO im
+// kritischen Abschnitt (Store-Lock-Konvention: kurz halten, kein fremdes await drin).
+async function stillReleasableUnderLock(store, numberId) {
+  return store.withStoreLock(() => {
+    const state = store.load();
+    const num = findNumber(state, numberId);
+    return (
+      !!num && num.status === NUMBER_STATUS.ACTIVE && !numberBusyReason(state, num, { forTenantId: num.tenantId })
+    );
+  });
+}
+
 // Gemeinsamer Release-Kern (Phase D Grace-Reconcile + Phase E Erase, EINE Quelle G5).
-// Provider-DELETE VOR der Store-Mutation (Konvergenz - ein Crash dazwischen konvergiert beim
-// naechsten Lauf, divergiert nicht) -> Store active->released unter Lock (idempotent: nur wenn
-// noch active) -> durabler Audit. Der Aufrufer hat die Freigabe-Eignung bereits geprueft
-// (Grace-Recheck bzw. Erase-Selektor). actor unterscheidet die Ausloeser im Audit. Liefert
-// true bei Release, false bei Provider-Fehler (Store bleibt active -> retrybar, kein Orphan).
+// Reihenfolge: Recheck IM Lock -> Provider-DELETE VOR der Store-Mutation (Konvergenz - ein
+// Crash dazwischen konvergiert beim naechsten Lauf, divergiert nicht) -> Store
+// active->released unter Lock (idempotent: nur wenn noch active) -> durabler Audit. actor
+// unterscheidet die Ausloeser im Audit. Liefert true bei Release, false bei jedem Abbruch
+// (Store bleibt active -> retrybar, kein Orphan; jeder Abbruch schreibt EINE Audit-Zeile,
+// PM-18).
 async function performNumberRelease({ store, provisioner, audit, logger, actor, number }) {
+  if (!(await stillReleasableUnderLock(store, number.id))) {
+    logger.warn(`[did-release] recheck-abbruch VOR provider-delete number=${number.id}`);
+    await recordDidAudit(audit, {
+      actor,
+      tenantId: number.tenantId,
+      action: AUDIT_ACTION.ABORTED,
+      detail: `number=${number.id} grund=${ABORT_REASON.RECHECK_VOR_DELETE}`,
+    });
+    return false;
+  }
   if (!(await providerReleaseOrGone(provisioner, number, logger))) {
     await recordDidAudit(audit, {
       actor,
       tenantId: number.tenantId,
       action: AUDIT_ACTION.ABORTED,
-      detail: `number=${number.id} grund=provider_error`,
+      detail: `number=${number.id} grund=${ABORT_REASON.PROVIDER_ERROR}`,
     });
     return false;
   }
-  // OUTBOUND-E1: geordnete Kette. Gehoert die offene Bindung dem freigebenden Tenant
-  // selbst (Praedikat hat sie deshalb passieren lassen), wird sie IM SELBEN Lock und
-  // IM SELBEN save() geschlossen, BEVOR releaseNumber laeuft - sonst wuerfe Ebene A,
-  // und im pg-Backend wuerfe zusaetzlich der Trigger (Ebene C). Idempotent und
-  // wiederaufnehmbar ueber den bestehenden numberReleasePending-Sweep.
-  await store.withStoreLock(() => {
-    const s = store.load();
-    const n = findNumber(s, number.id);
-    if (n && n.status === NUMBER_STATUS.ACTIVE) {
-      const own = platformNumberBinding(s, n.e164);
-      if (own && own.tenantId === n.tenantId) unbindPlatformNumber(s, { e164: n.e164, purpose: own.purpose });
-      releaseNumber(s, number.id);
-    }
-    store.save();
-  });
+  // OUTBOUND-E1 (E1-02/E1-03): die Nummer ist beim Anbieter bereits weg - dieser letzte
+  // Schritt DARF NICHT mehr entkommen (unhandled throw wuerde die restlichen Kandidaten der
+  // Schleife stumm abbrechen). Unbind und releaseNumber muessen GEMEINSAM gelingen: schlaegt
+  // releaseNumber fehl (z.B. ein waehrenddessen neu eingegangener Anruf, active_call_on_number),
+  // wird der bereits erfolgte Unbind SOFORT zurueckgerollt (releasedAt wieder null), damit kein
+  // fremdes save() spaeter eine geschlossene Bindung persistiert, ohne dass die Nummer je
+  // freigegeben wurde. Die Eigentumsfrage (E1-03) beantwortet NUR unbindOwnPlatformBindings.
+  try {
+    await store.withStoreLock(() => {
+      const state = store.load();
+      const num = findNumber(state, number.id);
+      if (num && num.status === NUMBER_STATUS.ACTIVE) {
+        const closed = unbindOwnPlatformBindings(state, num);
+        try {
+          releaseNumber(state, num.id);
+        } catch (err) {
+          for (const binding of closed) binding.releasedAt = null;
+          throw err;
+        }
+      }
+      store.save();
+    });
+  } catch (err) {
+    logger.warn(`[did-release] store-mutation fehlgeschlagen NACH provider-delete number=${number.id}: ${err.message}`);
+    await recordDidAudit(audit, {
+      actor,
+      tenantId: number.tenantId,
+      action: AUDIT_ACTION.ABORTED,
+      detail: `number=${number.id} grund=${ABORT_REASON.STORE_MUTATION_NACH_DELETE}`,
+    });
+    return false;
+  }
   logger.log(`[did-release] freigegeben number=${number.id} tenant=${number.tenantId}`);
   await recordDidAudit(audit, {
     actor,
@@ -134,7 +184,7 @@ export async function runReleaseReconcile({ store, provisioner, audit, logger = 
   if (graceMs === 0) {
     if (candidates.length)
       logger.warn(
-        `[did-release] OBSERVE-ONLY (RELEASE_GRACE_DAYS=0): ${candidates.length} Kandidat(en) NICHT freigegeben: ${candidates.map((n) => n.id).join(",")}`,
+        `[did-release] OBSERVE-ONLY (RELEASE_GRACE_DAYS=0): ${candidates.length} Kandidat(en) NICHT freigegeben: ${candidates.map((num) => num.id).join(",")}`,
       );
     return { released: 0, aborted: 0, observed: candidates.length };
   }

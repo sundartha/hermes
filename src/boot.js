@@ -889,7 +889,7 @@ export async function healBootstrapStore({ config, store, messaging }) {
 // und store.save() sind auf BEIDEN Backends bereits identisch - die Ableitung geht ueber
 // die reine Funktion in state-ops.js, genau das Muster, das release-reconcile.js fuer
 // dieselbe Bindung schon nutzt (dort: withStoreLock -> load -> ops.xxx -> save). Ein
-// zusaetzlicher syncPlatformBindings/platformNumberBinding-Durchreicher auf json.js UND
+// zusaetzlicher syncPlatformBindings/platformNumberBindings-Durchreicher auf json.js UND
 // pg.js waere reine Weiterleitung ohne eigenen Wert gewesen - und auf pg.js zusaetzlich
 // unerwuenscht: makePgStore traegt eine gepinnte Zeilenzahl (eslint-legacy-exceptions.json,
 // Altlast-Ratsche in test/check-staged-suppressions.test.js), die kein Bau-Agent ohne
