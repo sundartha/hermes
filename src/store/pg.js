@@ -960,6 +960,7 @@ async function hydrate(client) {
   state.profiles = await hydrateProfiles(client);
   state.platformTtsUsage = await hydratePlatformTtsUsage(client); // LCT P7: global, wie profiles
   state.costCrossCheck = await hydrateCostCrossCheck(client); // KV-M4: global, wie platformTtsUsage
+  state.platformNumberUse = await hydratePlatformNumberUse(client); // OUTBOUND-E1: global
   await hydrateSubIndex(client, state); // tenant-prolif-b: Merge-Overlay aus account
   return state;
 }
@@ -993,6 +994,29 @@ async function hydrateCostCrossCheck(client) {
   ).rows;
   if (rows.length === 0) return emptyCostCrossCheck();
   return { lastCheckedMonthKey: rows[0].last_checked_month_key };
+}
+
+// Liest die globale platform_number_use-Tabelle (OUTBOUND-E1, Muster hydrateProfiles -
+// kein RLS-Tenant-Filter). TIMESTAMPTZ -> ISO-String, damit der Spiegel backend-identisch
+// zu json.js ist (dort schreibt new Date().toISOString()).
+async function hydratePlatformNumberUse(client) {
+  const rows = (
+    await client.query(
+      `SELECT id, e164, purpose, provider, tenant_id, provider_number_id, bound_at, released_at, note
+         FROM platform_number_use ORDER BY bound_at`,
+    )
+  ).rows;
+  // Bewusst "row" statt des im Rest der Datei ueblichen einbuchstabigen "r" (G16/N1,
+  // eslint id-length): eine Bestandsdatei mit bereits gepinnter Altlast darf durch neuen
+  // Code NICHT weiter wachsen (Altlast-Ratsche, test/check-staged-suppressions.test.js) -
+  // der Pin ist ohne Owner-Freigabe unantastbar, also bleibt neuer Code darunter.
+  return rows.map((row) => ({
+    id: row.id, e164: row.e164, purpose: row.purpose, provider: row.provider,
+    tenantId: row.tenant_id, providerNumberId: row.provider_number_id,
+    boundAt: row.bound_at instanceof Date ? row.bound_at.toISOString() : row.bound_at,
+    releasedAt: row.released_at instanceof Date ? row.released_at.toISOString() : (row.released_at ?? null),
+    note: row.note,
+  }));
 }
 
 // tenant-prolif-b: den sub->tenantId-Resolver-Index aus der account-Tabelle fuellen. account
@@ -1501,6 +1525,15 @@ async function flush(client, state, preFlush) {
   try {
     if (preFlush) await preFlush(client);
     await flushTenants(client, state.tenants);
+    // OUTBOUND-E1: platform_number_use ist global (wie profile), wird aber - ANDERS als
+    // profile/platform_tts_usage/cost_cross_check - VOR der Tenant-Schleife geflusht.
+    // Grund: der number-Trigger (Ebene C) liest platform_number_use IN DERSELBEN
+    // Transaktion. Wird eine Bindung geloest und die Nummer im selben save() freigegeben
+    // (die legitime Kuendigung, release-reconcile.js), muss das Loesen fuer den Trigger
+    // schon sichtbar sein - sonst wuerfe er, obwohl der Code alles richtig gemacht hat.
+    // Die umgekehrte Richtung (erst binden, dann im selben save() freigeben) wirft - und
+    // das ist die fail-closed-Richtung, die wir wollen.
+    await flushPlatformNumberUse(client, state.platformNumberUse);
     for (const tenant of state.tenants) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
       await flushTenantScope(client, tenant.id, state);
@@ -2061,6 +2094,38 @@ async function flushCostCrossCheck(client, row) {
      ON CONFLICT (id) DO UPDATE SET last_checked_month_key=EXCLUDED.last_checked_month_key`,
     [row.lastCheckedMonthKey],
   );
+}
+
+// platform_number_use-Flush (OUTBOUND-E1, global, an KEINEN Tenant gebunden; Muster
+// flushProfiles). id-PK-Upsert + Prune ueber die globale keep-Liste. KEIN
+// flushOwnScoped/deleteMissing: die Tabelle hat keine tenant_id-Scoping-Semantik
+// (tenant_id ist hier eine Eigenschafts-Spalte, kein Scope).
+async function flushPlatformNumberUse(client, bindings) {
+  // "binding" statt "b" (s.o., Altlast-Ratsche): der Pin dieser Datei darf nicht wachsen.
+  await deleteMissingPlatformNumberUse(client, bindings.map((binding) => binding.id));
+  for (const binding of bindings) {
+    await client.query(
+      `INSERT INTO platform_number_use
+         (id, e164, purpose, provider, tenant_id, provider_number_id, bound_at, released_at, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET
+         e164=EXCLUDED.e164, purpose=EXCLUDED.purpose, provider=EXCLUDED.provider,
+         tenant_id=EXCLUDED.tenant_id, provider_number_id=EXCLUDED.provider_number_id,
+         released_at=EXCLUDED.released_at, note=EXCLUDED.note`,
+      [binding.id, binding.e164, binding.purpose, binding.provider, binding.tenantId ?? null,
+       binding.providerNumberId ?? null, binding.boundAt, binding.releasedAt ?? null, binding.note ?? null],
+    );
+  }
+}
+
+// Prune der globalen Bindungs-Tabelle (Muster deleteMissingProfiles). Leere keep-Liste ->
+// alle Bindungen weg (Parity zu deleteMissing).
+async function deleteMissingPlatformNumberUse(client, keepIds) {
+  if (keepIds.length === 0) {
+    await client.query(`DELETE FROM platform_number_use`);
+    return;
+  }
+  await client.query(`DELETE FROM platform_number_use WHERE id <> ALL($1::text[])`, [keepIds]);
 }
 
 // Loescht Profile-Zeilen, deren tenant_id nicht mehr im Spiegel steht (global, kein

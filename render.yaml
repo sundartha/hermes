@@ -185,6 +185,12 @@ services:
       # Provider der Bootstrap-Nummer: telnyx.
       - key: BOOTSTRAP_PROVIDER
         value: "telnyx"
+      # OUTBOUND-E1: die Plattform-Absendernummer (ANI) des Produkt-Outbounds. MUSS eine
+      # kontoeigene DID des BOOTSTRAP-Tenants sein, KEINE Kunden-DID (sonst friert der
+      # Riegel die Doppelrolle ein, statt sie zu beenden). Secret-frei, aber sync:false -
+      # Wert im Dashboard, render.yaml setzt live nichts.
+      - key: PLATFORM_ANI_E164
+        sync: false
       # Globaler Outbound-Kill-Switch (outbound-p3). true = ALLE Outbounds sofort 403.
       # Default false. Notbremse + Sekunden-Rollback fuer den Allowlist-Cutover.
       - key: OUTBOUND_FROZEN

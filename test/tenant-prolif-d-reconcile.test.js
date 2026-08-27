@@ -47,6 +47,10 @@ const seed = (over = {}) => ({
     },
   ],
   numberAssignments: [{ id: "a1", numberId: "n1", tenantId: "t1", assignedAt: "x", releasedAt: null }],
+  // OUTBOUND-E1: numberReleaseVerdict ruft jetzt numberBusyReason (Anruf-Check +
+  // Plattform-Bindung) - ohne diese beiden Felder wuerfe der Zugriff bei gesetzter e164.
+  calls: [],
+  platformNumberUse: [],
   ...over,
 });
 

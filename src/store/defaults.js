@@ -98,6 +98,29 @@ export const NUMBER_TRANSITIONS = Object.freeze({
   [NUMBER_STATUS.RELEASED]: [],
 });
 
+// ---- OUTBOUND-E1: Plattform-Rollen einer Rufnummer ----
+// Die Wurzel des Ausfalls vom 24.08.2026: EINE Nummer trug zwei Rollen (Tenant-DID UND
+// Plattform-Absender), und nur die erste war im Datenmodell darstellbar. Der Loeschweg
+// eines Wegwerf-Kontos gab damit den Absender des gesamten Produkt-Outbounds frei.
+// Die Rolle ist deshalb ein eigener, deklarierter Datensatz (platform_number_use),
+// KEINE Spalte an number: number ist unter FORCE RLS tenant-isoliert (schema.sql:882),
+// eine plattformweite Frage waere dort nur unter dem GUC des zufaellig richtigen Tenants
+// beantwortbar - ein Riegel, der die Antwort nicht sehen kann, ist keiner.
+// Genau ZWEI Rollen, weil genau zwei Nummern-Abhaengigkeiten existieren, die still
+// sterben koennen: der Outbound-Absender und der Alarm-Absender (alert-sms.js:36).
+export const PLATFORM_NUMBER_PURPOSE = Object.freeze({
+  OUTBOUND_ANI: "outbound_ani",
+  ALERT_SMS_SENDER: "alert_sms_sender",
+});
+
+// HOLD-Gruende des Freigabe-Verdikts (G25: Enum statt verstreuter String-Literale).
+// Werte sind maschinenlesbare Tokens fuer Audit-Zeilen - PII-frei, nie eine Rufnummer.
+export const NUMBER_HOLD_REASON = Object.freeze({
+  PLATFORM_IN_USE: "platform_number_in_use",
+  ACTIVE_CALL: "active_call_on_number",
+  NON_TELNYX: "non_telnyx_manual", // Bestandswert, unveraendert (release-reconcile-Kompat)
+});
+
 // Skip-Grund, den requestNumber sichtbar am Tenant hinterlaesst (Fix B, PLAN-
 // PROVISIONING-CAP.md Phase A). Bewusst NUR dieser eine Grund: tenant_cap/tenant_inactive
 // sind fachlich andere Faelle (Tenant hat schon eine Nummer bzw. ist nicht aktiv) und

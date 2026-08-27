@@ -54,6 +54,7 @@ import {
   failNumber,
   releaseNumber,
   findNumber,
+  numberBusyReason,
   tenantStripe,
   tenantSubscription,
 } from "./store/state-ops.js";
@@ -147,6 +148,8 @@ export async function provisionNumber(
       await rollbackAfterOrder(s, numberId, {
         provisioner,
         providerNumberId: ordered.providerNumberId,
+        e164: ordered.e164,
+        tenantId: number.tenantId,
         billing,
         paymentIntentId,
         logger,
@@ -256,12 +259,33 @@ async function settleSetupFeeHold(s, numberId, { billing, paymentIntentId, holdA
 // (moeglicher Orphan -> Reconciliation, durch die MAX_NUMBERS-Cap gedeckelt). Eine
 // Stelle fuer beide Fehlerkanten (G5/S2). Bei billing=null ist cancelHoldIfHeld ein
 // No-op -> der payment-off Pfad erreicht diese Stelle nicht (nur Capture wirft hier).
+//
+// OUTBOUND-E1 (Review-Blocker Runde 3): dies ist der ZWEITE Aufrufer von
+// provisioner.releaseNumber (dem irreversiblen Anbieter-DELETE) im Repo, neben
+// release-reconcile.js/performNumberRelease. Anders als dort hat dieser Pfad kein
+// eigenes Verdikt (Ebene B) - deshalb hier derselbe Regel-Kern davor (numberBusyReason,
+// G5, EINE Quelle mit Ebene A/B). Strukturell kann die HIER gerade erst gekaufte,
+// nie aktivierte Nummer heute keine Plattform-Bindung tragen (number.e164 wird
+// ausschliesslich in activateNumber gesetzt, s. requestNumber/state-ops.js - vor dieser
+// Stelle ist der Store-Datensatz noch e164=null); der Recheck belegt genau das UND
+// deckt eine kuenftige Aenderung ab (z.B. eine Vor-Aktivierungs-Bindung), ohne dass ein
+// spaeterer Umbau diese Stelle neu bedenken muss. Bei Treffer: kein Provider-Kontakt,
+// HOLD statt Delete - der Retry-/Reconcile-Weg (MAX_NUMBERS-Cap) uebernimmt den Orphan,
+// wie beim regulaeren GAP-2-Pfad unten.
 async function rollbackAfterOrder(
   s,
   numberId,
-  { provisioner, providerNumberId, billing, paymentIntentId, logger },
+  { provisioner, providerNumberId, e164, tenantId, billing, paymentIntentId, logger },
 ) {
   failNumber(s, numberId); // provisioning|capturing -> failed
+  if (e164 && numberBusyReason(s, { e164 }, { forTenantId: tenantId })) {
+    logger.warn(
+      `provisionNumber: releaseNumber uebersprungen (Plattform-Bindung) -> Orphan, Reconcile noetig ` +
+        `(number=${numberId} provider=${providerNumberId})`,
+    );
+    await cancelHoldIfHeld(billing, paymentIntentId);
+    return;
+  }
   try {
     await provisioner.releaseNumber(providerNumberId);
     releaseNumber(s, numberId); // failed -> released (Provider-Nummer sauber weg)

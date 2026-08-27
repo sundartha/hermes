@@ -327,6 +327,80 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
   `performNumberRelease`). Noch KEIN Live-Aufrufer von `eraseTenantData` — latent vorverdrahtet,
   damit eine kuenftige Erase-Route keine DID leakt.
 
+## OUTBOUND-RESILIENZ-E1 — Plattform-Nummern-Bindung + dreifacher Freigabe-Riegel (2026-08-27)
+
+**Root Cause (24.08.2026):** die Absendernummer des Produkt-Outbounds war im Datenmodell
+nicht von einer gewoehnlichen Tenant-DID unterscheidbar. Der Kuendigungs-/Loesch-Weg eines
+Wegwerf-Kontos gab sie deshalb frei wie jede andere Nummer — der gesamte Outbound-Absender
+war weg, ohne dass irgendetwas widersprach.
+
+**Reichweite (wichtig, nicht ueberlesen):** der Riegel deckt **unseren Store** — jeden
+Code-Pfad, der eine Nummer ueber `state-ops.js` nach `released`/`suspended` bringt, plus
+manuelle DB-Eingriffe. Er deckt NICHT die Anbieter-Seite: wer im Telnyx-Portal die
+`connection_id` umhaengt, `ani_override` aendert oder eine EL-Registrierung loescht, umgeht
+alle drei Ebenen. Das ist Waechter-Sache (kuenftige, separate Etappe), nicht Teil dieses
+Riegels.
+
+**Drei Ebenen, alle im selben Umbau, keine ersetzt eine andere:**
+
+- **Ebene A — der Engpass.** `transitionNumber` (`src/store/state-ops.js`) ist der EINZIGE
+  Schreiber von `number.status` im Repo; er wirft, wenn eine plattform-gebundene Nummer nach
+  `released` oder `suspended` will. Deckt jeden Code-Pfad, heute und kuenftig, ohne dass ein
+  kuenftiger Aufrufer daran denken muss.
+- **Ebene B — das Verdikt.** `numberReleaseVerdict` und `tenantNumbersForErase` liefern HOLD
+  statt eines Filters, BEVOR der irreversible Provider-DELETE startet (der laeuft vor der
+  Store-Mutation, `release-reconcile.js`). Der Orchestrator zaehlt jeden HOLD als `aborted`
+  und schreibt eine durable Audit-Zeile (`did_release_aborted`, Grund `platform_number_in_use`
+  bzw. `active_call_on_number`) — nie eine E.164 im Audit-Text.
+- **Ebene C — der DB-Backstop.** Ein pg-Trigger auf `number` (`BEFORE UPDATE OF status`,
+  gegated auf den Zustandsuebergang, kein werfender DELETE-Zweig) faengt manuelle
+  DB-Eingriffe und jeden kuenftigen Schreibweg, der `state-ops.js` umgeht. Ein Fremdschluessel
+  taugt hier nicht: unsere Freigabe loescht keine Zeile, sie setzt `status='released'`.
+
+**Unbind-Protokoll:** eine offene Bindung, die dem FREIGEBENDEN Tenant selbst gehoert (nicht
+die geteilte Plattform-ANI), blockiert nicht — die Freigabe-Kette loest sie vorher
+(`unbindPlatformNumber`), dann laeuft die Freigabe normal durch. Ohne dieses Protokoll wuerde
+der Riegel im eigenen Zielzustand (je Tenant-DID eine eigene Bindung) JEDE legitime
+Kuendigung blockieren.
+
+**Preis, bewusst getragen (BA-2): eine haengende Kuendigung.** Ein Tenant, dessen DID
+zugleich GETEILTE Plattform-ANI ist, kann seine Nummer nicht per Kuendigung freigeben — die
+Freigabe haengt (HOLD + Audit), bis der Betreiber die Bindung von Hand loest. **Artikel 17
+bleibt davon unberuehrt:** `eraseTenantData` loescht weiterhin ALLE personenbezogenen Daten
+(Calls, ActionItems, Notifications, Privatnummer) und fasst `s.numbers` ohnehin nie an — offen
+bleibt ausschliesslich die Rueckgabe der Rufnummer an den Anbieter, eine Kosten-/Betriebsfrage,
+keine Betroffenenrechts-Frage.
+
+**Rueckbau, falls der Riegel eine legitime Freigabe blockiert:** `PLATFORM_ANI_E164=""` setzen
+und neu starten — der Boot leitet dann keine Bindung mehr ab, die alte Bindung wird beim
+naechsten Boot-Abgleich geschlossen, Bestandsverhalten kehrt zurueck. Der Trigger selbst laesst
+sich zusaetzlich per `DROP TRIGGER number_platform_binding_guard ON number;` einzeln
+entschaerfen, ohne Datenverlust (additive DDL).
+
+**Bewusst offen gelassen: die Prune-DELETE-Luecke.** `flushOwnScoped`/`deleteMissing`
+(`src/store/pg.js`) kann eine `number`-Zeile ganz LOESCHEN (Spiegel-Prune bei leerem
+Nummern-Slice). Ein `BEFORE DELETE`-Trigger wuerde diesen Weg schliessen, ist aber bewusst
+NICHT gebaut: er waere selbst PM-12 — jede Spiegel-Divergenz (Teil-Hydrierung, Overlap-Prozess
+beim Free-Tier-Aufwachen) machte dann aus einem lokalen Problem einen Totalausfall des
+gesamten Schreibpfads fuer ALLE Tenants. Tragbar, weil ein Prune-DELETE (a) die Bindung in
+`platform_number_use` nicht mitloescht (globale, eigene Tabelle) und (b) die Nummer NICHT beim
+Anbieter freigibt.
+
+**Praezisierung (Review-Blocker Runde 3, korrigiert 2026-08-28):** der irreversible
+Provider-DELETE laeuft NICHT ausschliesslich ueber `performNumberRelease`/Ebene B — ein
+zweiter Aufrufer von `provisioner.releaseNumber` existiert in `src/onboarding.js`
+(`rollbackAfterOrder`, Capture-Fehlerpfad nach erfolgreichem Kauf). Dieser Pfad hat kein
+eigenes Verdikt, ist aber vor demselben `numberBusyReason`-Kern (G5) abgesichert: er trifft
+strukturell nur eine gerade erst gekaufte, nie aktivierte Nummer (`number.e164` ist bis
+`activateNumber` `null`, s. `requestNumber`/`state-ops.js`), kann also die geteilte
+Plattform-ANI (immer bereits `active`, eigener `providerNumberId`) nicht treffen — der
+Recheck ist Beleg und Zukunftssicherung zugleich, kein Ersatz fuer Ebene B.
+
+Kein Safety-Gate beruehrt (Outbound-Permit, `OUTBOUND_FROZEN`, Denylist/Land-Gate/
+Stundenlimit, pro-Tenant-Kostendecke, Max-Gespraechsdauer, Telnyx-Signaturpruefung
+unveraendert); die Offenlegungs-Mechanik und `callee_is_owner` unangetastet. Neue Env
+`PLATFORM_ANI_E164` (Default leer = keine Bindung, Boot-Guard meldet das nicht-fatal).
+
 ## C5 — finishCall-Settlement strukturell erzwingen (Struct-4, nach P3)
 
 > `terminateAndBillCall` (`src/telephony/call-termination.js`) ist der EINE Terminierungspfad

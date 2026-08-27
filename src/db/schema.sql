@@ -682,6 +682,71 @@ CREATE TABLE IF NOT EXISTS number_assignment (
   released_at TEXT
 );
 
+-- platform_number_use (OUTBOUND-E1): welche Rufnummern die PLATTFORM benutzt und wofuer.
+-- GLOBAL wie profile/platform_tts_usage/cost_cross_check - KEINE Tenant-Dimension, kein
+-- app.current_tenant-Filter (Policy in der RLS-Sektion unten).
+-- WARUM eine eigene Tabelle statt einer Rolle-Spalte an number:
+--   1. number ist strikt tenant-isoliert (FORCE RLS, Policy tenant_isolation unten). Die
+--      plattformweite Frage "gehoert diese Nummer der Plattform?" waere dort nur unter dem
+--      GUC des zufaellig richtigen Tenants beantwortbar.
+--   2. Die Plattform-ANI kann eine Nummer sein, die zu KEINEM Tenant gehoert - in number
+--      ist das wegen tenant_id NOT NULL REFERENCES tenant(id) nicht darstellbar.
+-- tenant_id ist bewusst KEIN Fremdschluessel: ein FK mit ON DELETE CASCADE waere genau der
+-- Weg, auf dem eine Tenant-Loeschung die Bindung still mitnimmt - der Ausfall vom 24.08.
+-- Surrogatschluessel statt (e164) als PK: eine Nummer kann mehr als eine Rolle tragen, und
+-- ein Wiederbinden ueberschriebe sonst die Historie. released_at IS NULL = IN BENUTZUNG.
+CREATE TABLE IF NOT EXISTS platform_number_use (
+  id                 TEXT PRIMARY KEY,
+  e164               TEXT NOT NULL,
+  purpose            TEXT NOT NULL,
+  provider           TEXT NOT NULL,
+  tenant_id          TEXT,
+  provider_number_id TEXT,
+  bound_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  released_at        TIMESTAMPTZ,
+  note               TEXT
+);
+-- Je Nummer und Rolle hoechstens EINE offene Bindung; geschlossene Bindungen bleiben als
+-- Historie beliebig oft stehen (Teilindex, deshalb kein UNIQUE-Constraint).
+CREATE UNIQUE INDEX IF NOT EXISTS platform_number_use_open_idx
+  ON platform_number_use (e164, purpose) WHERE released_at IS NULL;
+
+-- OUTBOUND-E1, EBENE C: DB-seitiger Backstop unter dem Code. Deckt manuelle DB-Eingriffe
+-- und jeden kuenftigen Schreibweg, der src/store/state-ops.js umgeht. Ein Fremdschluessel
+-- taugt hier NICHT: unsere Freigabe loescht keine Zeile, sie setzt status='released'.
+--
+-- DREI Eigenschaften der Form sind NICHT optional (jede einzelne war ein Blocker):
+--  (1) Der Trigger gatet auf den ZUSTANDSUEBERGANG (WHEN), nicht auf den Zeilenzustand.
+--      flushNumbers (store/pg.js) upsertet per ON CONFLICT DO UPDATE bei JEDEM save() -
+--      also ein UPDATE auf jede Zeile, bei jedem Speichern. Ohne WHEN feuerte der Trigger
+--      auf einer bereits released-en gebundenen Zeile, flush() rollte zurueck und der
+--      Dienst persistierte gar nichts mehr, fuer ALLE Tenants (PM-11).
+--  (2) KEIN werfender BEFORE DELETE-Zweig. flushOwnScoped prunt vor jedem Insert-Loop
+--      (bei leerer keep-Liste: DELETE FROM number WHERE tenant_id=$1). Ein werfender
+--      DELETE-Trigger machte aus jeder Spiegel-Divergenz einen Totalausfall des
+--      Schreibpfads (PM-12). Die Bindung ueberlebt den Prune ohnehin (eigene Tabelle).
+--  (3) DROP TRIGGER IF EXISTS + CREATE OR REPLACE FUNCTION. migrate.applySchema fahrt die
+--      GANZE Datei bei JEDEM Prozessstart aus; ein blankes CREATE TRIGGER schluege beim
+--      zweiten Boot fehl -> Migration wirft -> beim naechsten Free-Tier-Aufwachen ist der
+--      Dienst tot (PM-13). Gedeckt von test/rls-with-check.test.js (applySchema zweimal).
+-- Gegen PGlite gemessen (Erst- und Zweitlauf, Wurf, Positiv-Kontrolle, Flush, Prune).
+DROP TRIGGER IF EXISTS number_platform_binding_guard ON number;
+CREATE OR REPLACE FUNCTION number_platform_binding_guard() RETURNS trigger AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM platform_number_use p
+              WHERE p.e164 = OLD.e164 AND p.released_at IS NULL) THEN
+    RAISE EXCEPTION 'platform_number_in_use: number % ist plattform-gebunden (-> %)', OLD.id, NEW.status;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER number_platform_binding_guard
+  BEFORE UPDATE OF status ON number
+  FOR EACH ROW
+  WHEN (OLD.status IS DISTINCT FROM NEW.status
+        AND NEW.status IN ('released','suspended'))
+  EXECUTE FUNCTION number_platform_binding_guard();
+
 -- provisioning_job: Job-Spur des async Provisioning-Workers (P6b2). idempotency_key
 -- verhindert Doppel-Records bei Retry; status = queued|done|failed. number_id/tenant_id
 -- fuer RLS + Re-Hydrierung. attempts/last_error fuer Audit/Reconciliation.
@@ -814,6 +879,8 @@ ALTER TABLE number             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE number             FORCE  ROW LEVEL SECURITY;
 ALTER TABLE number_assignment  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE number_assignment  FORCE  ROW LEVEL SECURITY;
+ALTER TABLE platform_number_use ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_number_use FORCE  ROW LEVEL SECURITY;
 ALTER TABLE provisioning_job   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE provisioning_job   FORCE  ROW LEVEL SECURITY;
 ALTER TABLE tenant_budget      ENABLE ROW LEVEL SECURITY;
@@ -875,6 +942,14 @@ CREATE POLICY platform_tts_usage_global ON platform_tts_usage USING (true) WITH 
 DROP POLICY IF EXISTS tenant_isolation ON cost_cross_check;
 DROP POLICY IF EXISTS cost_cross_check_global ON cost_cross_check;
 CREATE POLICY cost_cross_check_global ON cost_cross_check USING (true) WITH CHECK (true);
+-- platform_number_use: GLOBAL wie cost_cross_check - keine Tenant-Dimension, kein
+-- app.current_tenant-Filter. FORCE RLS bleibt aktiv (Konsistenz), die Policy ist permissiv
+-- (Muster platform_tts_usage_global). Ein Tenant-Filter waere hier der Defekt selbst:
+-- der Riegel muss die Frage "gehoert diese Nummer der Plattform?" beantworten koennen,
+-- egal unter welchem GUC der schreibende Pfad gerade laeuft.
+DROP POLICY IF EXISTS tenant_isolation ON platform_number_use;
+DROP POLICY IF EXISTS platform_number_use_global ON platform_number_use;
+CREATE POLICY platform_number_use_global ON platform_number_use USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS tenant_isolation ON notification;
 CREATE POLICY tenant_isolation ON notification
   USING (tenant_id = current_setting('app.current_tenant', true))

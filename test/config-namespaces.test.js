@@ -43,7 +43,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
   // den Weltdefault-Flip, s. src/store/defaults.js) -> 14.
-  provisioning: 14,
+  // OUTBOUND-E1: platformAniE164 ergaenzt (Plattform-Absendernummer, aus der der Boot die
+  // Plattform-Nummern-Bindung ableitet) -> 15.
+  provisioning: 15,
   // 312k-Phase 4: workosManagementApiKey ergaenzt (eigener Schluessel fuer die WorkOS-
   // Nutzerloeschung beim Vertragsende, getrennt vom Anmeldeschluessel oidcClientSecret) -> 16.
   auth: 16,
@@ -110,9 +112,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // mailFrom) -> 154.
 // HTTP-Fortsetzung: brevoApiKey ergaenzt (mail-Namespace 5 -> 6 Keys) -> 155.
 // OC-P1: ownerSelfCallEnabled + ownerSelfCallTenantIds ergaenzt -> 157.
-const EXPECTED_TOTAL_KEYS = 157;
+// OUTBOUND-E1: platformAniE164 ergaenzt -> 158.
+const EXPECTED_TOTAL_KEYS = 158;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (157 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (158 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -229,7 +232,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // Objekt) -> 145 (Merge 2026-08-19 beider Ketten, s. EXPECTED_TOTAL_KEYS).
   // OC-P1: ownerSelfCallEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 146.
   // ownerSelfCallTenantIds ist das FUENFTE Array (kein primitives Blatt, s.u.).
-  const EXPECTED_PRIMITIVE_LEAVES = 146;
+  // OUTBOUND-E1: platformAniE164 ist primitiv (String, kein Array/nested Objekt) -> 147.
+  const EXPECTED_PRIMITIVE_LEAVES = 147;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

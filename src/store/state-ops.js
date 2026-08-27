@@ -57,6 +57,7 @@ import {
   KYC_LEVEL,
   KYC_ORDER,
   COST_TRUING_SOURCE,
+  NUMBER_HOLD_REASON,
 } from "./defaults.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS, languageForCountry } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
@@ -108,6 +109,12 @@ export function makeDefaultState() {
     numbers: [], // [{ id, e164, tenantId, provider, status, providerNumberId }]
     // Historie Nummer<->Tenant (Recycling-Hygiene).
     numberAssignments: [], // [{ id, numberId, tenantId, assignedAt, releasedAt }]
+    // OUTBOUND-E1: welche Rufnummern die PLATTFORM benutzt und wofuer. GLOBAL (kein
+    // Tenant-Scope) - eine Plattform-Nummer kann zu keinem Tenant gehoeren, und ein
+    // Tenant-Scope waere genau der Weg, auf dem eine Tenant-Loeschung die Bindung
+    // still mitnimmt. released_at === null heisst IN BENUTZUNG.
+    // [{ id, e164, purpose, provider, tenantId, providerNumberId, boundAt, releasedAt, note }]
+    platformNumberUse: [],
     // Async-Provisioning-Jobs (P6b2): persistente Spur der Queue (json-Liste bzw.
     // provisioning_job-Tabelle in pg). Die Laufzeit-Queue lebt im Adapter
     // (queue/adapters/memory); diese Liste haelt den Audit-/Reconciliation-Zustand
@@ -2400,6 +2407,174 @@ export function requestNumber(
   return { ok: true, number };
 }
 
+// Status eines laufenden Gespraechs. Benannt statt Literal (G11) - dieselbe Bedeutung wie
+// in activeCallsFor(:1463) und pg.js deleteMissingCallsKeepActive.
+const CALL_STATUS_ACTIVE = "active";
+
+// ---- OUTBOUND-E1: die EINE Quelle der Wahrheit "ist diese Nummer plattform-gebunden?" ----
+// REIN, IO-frei, ohne Seiteneffekt, kein Date.now. Liefert ALLE offenen Bindungen (released_at
+// null) dieser e164 (Plural! - das Datenmodell traegt bewusst KEIN (e164)-Unique, sondern einen
+// Teilindex auf (e164, purpose): eine Nummer kann mehr als eine Rolle gleichzeitig tragen,
+// z.B. die eigene Kunden-Bindung UND die geteilte Plattform-ANI-Bindung. Ein `.find()`, das nur
+// die ERSTE offene Bindung zurueckgibt, beantwortet "was ist die erste?" statt "ist sie
+// gebunden?" - EMPIRISCH als Review-Befund E1-01 belegt: bei zwei offenen Bindungen auf
+// derselben Nummer liess das fruehere Einzel-Praedikat den Aufrufer die FALSCHE (die eigene)
+// sehen und den irreversiblen Provider-DELETE trotz fortbestehender Plattform-Bindung starten.
+// Leere/fehlende e164 -> [] : eine Nummer ohne E.164 kann keine Plattform-Rolle tragen (Muster
+// numberRecordByE164:1624).
+// Es gibt bewusst KEINEN zweiten Ort, der diese Frage beantwortet - der Ausfall vom
+// 24.08. entstand daraus, dass sie gar nicht gestellt wurde; ein zweiter Ort waere die
+// naechste Gelegenheit, dass zwei Antworten auseinanderlaufen.
+// Linearer Scan ueber den hydrierten Spiegel: bei einer Handvoll Bindungen die einfachste
+// funktionsfaehige Loesung. Zielzustand (Mehr-Nummern-Betrieb) ist ein indizierter
+// DB-Treffer ueber den bereits gelegten Teilindex - bewusste Zwischenstufe, PLAN BA-13.
+// "state"/"binding" statt der im Rest der Datei ueblichen einbuchstabigen Namen (G16/N1,
+// eslint id-length): eine Bestandsdatei mit bereits gepinnter Altlast darf durch neuen Code
+// NICHT weiter wachsen (Altlast-Ratsche, test/check-staged-suppressions.test.js) - der Pin
+// ist ohne Owner-Freigabe unantastbar, also bleibt der ganze OUTBOUND-E1-Block darunter.
+//
+// Review-Befund E1-S2-2: "offen" (releasedAt===null) UND "(e164,purpose) offen finden" waren
+// an vier bzw. zwei Stellen handgerollt kopiert. EINE Quelle je Frage, rein, ohne Seiteneffekt:
+function isOpenBinding(binding) {
+  return binding.releasedAt === null;
+}
+
+function findOpenBinding(state, e164, purpose) {
+  return state.platformNumberUse.find(
+    (binding) => binding.e164 === e164 && binding.purpose === purpose && isOpenBinding(binding),
+  );
+}
+
+// Zeitstempel fuer eine geschlossene Bindung (Surrogatschluessel, kein Ueberschreiben -
+// Historie bleibt stehen). EINE Quelle statt der drei Kopien in
+// unbindPlatformNumber/unbindOwnPlatformBindings/syncPlatformBindings (Review-Befund
+// E1-S2-2) - aber OHNE das zu schliessende Objekt als Funktionsparameter zu nehmen:
+// eine Zuweisung an eine Property eines Funktionsparameters ist genau die Altlast, die
+// die Ratsche in dieser Datei einfriert (no-param-reassign, Review-Blocker Runde 3). Die
+// eigentliche Zuweisung passiert deshalb an jedem Aufrufer selbst, auf dessen lokaler
+// Schleifen-/const-Variable (nie auf einem Parameter dieser Datei-Funktionen) - geteilt
+// bleibt nur das "wie" (ISO-Jetzt), nicht mehr die Zuweisung.
+function closingTimestamp() {
+  return new Date().toISOString();
+}
+
+export function platformNumberBindings(state, e164) {
+  if (!e164) return [];
+  return state.platformNumberUse.filter((binding) => binding.e164 === e164 && isOpenBinding(binding));
+}
+
+// Review-Befund E1-S2-3: "gehoert diese Bindung dem Tenant?" stand zweimal, nicht komplementaer
+// formuliert (numberBusyReason vs. unbindOwnPlatformBindings) - bei tenantId=null stuften beide
+// Stellen dieselbe Bindung gegensaetzlich ein. EINE Quelle, strikte Gleichheit, keine
+// Sonderbehandlung von null hier - eine etwaige Sonderrolle von null gehoert an den Aufrufer
+// (s. numberBusyReason unten), NICHT ins Praedikat selbst.
+function bindingBelongsTo(binding, tenantId) {
+  return binding.tenantId === tenantId;
+}
+
+// Darf DIESE Nummer stillgelegt/freigegeben werden - und wenn nein, warum nicht?
+// EINE Regel-Quelle (G5) fuer Ebene A (transitionNumber) UND Ebene B (numberReleaseVerdict,
+// tenantNumbersForErase). REIN + IO-frei; liefert einen HOLD-Grund oder null.
+//
+// Geschaerftes Praedikat (PLAN E-1 "Unbind-Protokoll", PM-24): eine offene Bindung, die dem
+// FREIGEBENDEN Tenant selbst gehoert, blockiert NICHT - sie darf mit ihm gehen, die
+// Freigabe-Kette loest sie vorher (unbindOwnPlatformBindings). Nur eine Bindung, die NICHT dem
+// forTenantId gehoert (geteilte Plattform-Bindung ODER ein FREMDER Tenant), haelt - und zwar
+// SOBALD IRGENDEINE der offenen Bindungen dieser Nummer fremd ist (E1-01: bei mehreren
+// gleichzeitig offenen Bindungen reicht die eigene NICHT, um alle anderen zu entschaerfen).
+// Ohne diese Schaerfung blockierte der Riegel im eigenen Zielzustand (je Tenant-DID eine
+// Bindung, E-5) JEDE legitime Kuendigung.
+//
+// Zweite Invariante: kein Release waehrend eines laufenden Anrufs auf dieser Nummer
+// (performNumberRelease prueft s.calls heute NICHT - eine DID kann mitten im Gespraech
+// beim Anbieter geloescht werden). HOLD, nicht Block: der Retry-Sweep existiert bereits.
+export function numberBusyReason(state, number, { forTenantId = null } = {}) {
+  const bindings = platformNumberBindings(state, number.e164);
+  // forTenantId=null heisst "kein freigebender Tenant benannt" -> JEDE offene Bindung ist
+  // dann fremd (Sonderfall des AUFRUFERS, nicht des Eigentums-Praedikats selbst - s.
+  // bindingBelongsTo oben, E1-S2-3).
+  const blockedByForeignBinding = bindings.some(
+    (binding) => forTenantId === null || !bindingBelongsTo(binding, forTenantId),
+  );
+  if (blockedByForeignBinding) return NUMBER_HOLD_REASON.PLATFORM_IN_USE;
+  if (
+    number.e164 &&
+    state.calls.some(
+      (call) => call.status === CALL_STATUS_ACTIVE && (call.from === number.e164 || call.to === number.e164),
+    )
+  )
+    return NUMBER_HOLD_REASON.ACTIVE_CALL;
+  return null;
+}
+
+// Bindung oeffnen. Idempotent ueber (e164, purpose): eine bereits offene Bindung wird
+// zurueckgeliefert, NICHT verdoppelt (der Teilindex in pg wuerde das ohnehin abweisen -
+// hier steht dieselbe Regel backend-frei, damit json und pg nicht auseinanderlaufen).
+export function bindPlatformNumber(state, { e164, purpose, provider, tenantId = null, providerNumberId = null, note = null }) {
+  const open = findOpenBinding(state, e164, purpose);
+  if (open) return open;
+  const binding = {
+    id: newId("pnu"), e164, purpose, provider, tenantId, providerNumberId,
+    boundAt: new Date().toISOString(), releasedAt: null, note,
+  };
+  state.platformNumberUse.push(binding);
+  return binding;
+}
+
+// Bindung schliessen (Historie bleibt stehen - Surrogatschluessel, kein Ueberschreiben).
+// Idempotent: keine offene Bindung -> null, kein Wurf.
+export function unbindPlatformNumber(state, { e164, purpose }) {
+  const open = findOpenBinding(state, e164, purpose);
+  if (!open) return null;
+  open.releasedAt = closingTimestamp();
+  return open;
+}
+
+// OUTBOUND-E1 (E1-03): schliesst ALLE offenen Bindungen dieser Nummer, die dem FREIGEBENDEN
+// Tenant selbst gehoeren (number.tenantId) - Vorstufe einer Freigabe/Kuendigung. Die
+// Eigentumsfrage "gehoert die Bindung dem freigebenden Tenant?" wird NUR VON bindingBelongsTo
+// (oben) beantwortet (G5, E1-S2-3) - vorher stand dieselbe Bedingung ein zweites Mal, kopiert,
+// im Aufrufer (release-reconcile.js), und war bereits von numberBusyReason auf Plural
+// umgestellt worden, waehrend der Aufrufer noch die Einzel-Bindung loeste (Mechanismus hinter
+// E1-01). Reine Mutation, kein IO, kein Date.now-Vergleich. Liefert die GESCHLOSSENEN
+// Bindungs-Objekte (nicht nur eine Anzahl), damit ein Aufrufer sie bei einem nachfolgenden
+// Fehler zurueckrollen kann (releasedAt wieder auf null) - Unbind und Freigabe muessen
+// GEMEINSAM gelingen oder GEMEINSAM ausbleiben, sonst bliebe eine geschlossene Bindung stehen,
+// ohne dass die Nummer je freigegeben wurde (E1-02).
+export function unbindOwnPlatformBindings(state, number) {
+  // Gleiche Wache wie platformNumberBindings: eine Nummer ohne E.164 kann keine
+  // Plattform-Rolle tragen, also auch keine eigene Bindung zu schliessen haben.
+  if (!number.e164) return [];
+  const closed = [];
+  for (const binding of platformNumberBindings(state, number.e164)) {
+    if (!bindingBelongsTo(binding, number.tenantId)) continue;
+    binding.releasedAt = closingTimestamp();
+    closed.push(binding);
+  }
+  return closed;
+}
+
+// Idempotenter Abgleich der ABGELEITETEN Bindungen (Boot). desired = die VOLLSTAENDIGE
+// Soll-Menge je Rolle; ein Eintrag ohne e164 heisst "diese Rolle hat heute keine Bindung"
+// und schliesst eine bestehende. Ohne dieses Schliessen bliebe nach einer Aenderung von
+// PLATFORM_ANI_E164 die ALTE Bindung offen - und die alte Nummer damit fuer immer
+// eingefroren; genau der Rueckbau-Hebel des Plans ("PLATFORM_ANI_E164='' -> keine
+// Bindung -> Bestandsverhalten") haette dann nicht funktioniert.
+// Zweimal booten -> identischer Zustand (Abnahme).
+export function syncPlatformBindings(state, desired) {
+  for (const { purpose, e164, provider, tenantId = null, note = null } of desired) {
+    for (const binding of state.platformNumberUse)
+      if (binding.purpose === purpose && isOpenBinding(binding) && binding.e164 !== e164)
+        binding.releasedAt = closingTimestamp();
+    if (e164) bindPlatformNumber(state, { e164, purpose, provider, tenantId, note });
+  }
+  return state.platformNumberUse.filter(isOpenBinding);
+}
+
+// Zustaende, die eine Nummer aus dem Routing nehmen. Eine suspendierte Nummer routet
+// genauso wenig wie eine freigegebene - der Riegel gilt fuer BEIDE (PLAN E-1).
+const NUMBER_OUT_OF_SERVICE = new Set([NUMBER_STATUS.RELEASED, NUMBER_STATUS.SUSPENDED]);
+
 // Validierte Zustandsaenderung (fail-closed: illegaler Uebergang wirft). Reine
 // Status-Mutation; activate/fail/release setzen Zusatzfelder.
 export function transitionNumber(s, numberId, toStatus) {
@@ -2407,6 +2582,18 @@ export function transitionNumber(s, numberId, toStatus) {
   if (!number) throw new Error(`transitionNumber: Nummer ${numberId} nicht gefunden`);
   if (!canTransitionNumber(number.status, toStatus))
     throw new Error(`transitionNumber: illegaler Uebergang ${number.status} -> ${toStatus}`);
+  // OUTBOUND-E1, EBENE A: der EINE Engpass. transitionNumber ist der einzige Schreiber
+  // von number.status im ganzen Repo (grep "\.status *=" -> nur diese Zeile) - dieser
+  // Riegel deckt damit JEDEN Code-Pfad, heute und kuenftig, ohne dass ein kuenftiger
+  // Aufrufer daran denken muesste. Er sitzt bewusst HIER und nicht in releaseNumber:
+  // sonst braeuchte ein spaeterer Suspend-Pfad eine zweite, kopierte Bedingung.
+  if (NUMBER_OUT_OF_SERVICE.has(toStatus)) {
+    const busy = numberBusyReason(s, number);
+    if (busy)
+      throw new Error(
+        `transitionNumber: Nummer ${numberId} ist gesperrt (${busy}) - Uebergang nach ${toStatus} abgelehnt`,
+      );
+  }
   number.status = toStatus;
   return number;
 }
@@ -2462,9 +2649,21 @@ export function failNumber(s, numberId) {
   return transitionNumber(s, numberId, NUMBER_STATUS.FAILED);
 }
 
-// Freigabe (terminal): status released + assignment schliessen (released_at).
+// Freigabe (terminal): status released + assignment schliessen (released_at) + e164 LEEREN.
+// e164 leeren (Owner-Entscheidung F-9): number.e164 ist global UNIQUE (schema.sql:646).
+// Blieb die e164 an der released-en Zeile stehen, liefe ein spaeterer Wiederkauf DERSELBEN
+// Nummer in eine UNIQUE-Verletzung - unter FORCE-RLS mit einer Meldung, die auf eine fuer
+// die Session unsichtbare Zeile zeigt. "Wir holen die alte Nummer zurueck" waere damit kein
+// verfuegbarer Wiederherstellungsweg. Die Historie Nummer<->Tenant geht nicht verloren:
+// sie liegt in numberAssignments (schema.sql:677-683).
+// Blast-Radius geprueft - JEDER e164-Leser filtert auf status active und sieht released-e
+// Zeilen ohnehin nie: numberRecordByE164(:1624), findActiveNumber(views.js:58),
+// activeNumberFor(views.js:93). seedBootstrapNumber(:1674) prueft e164-Kollision ohne
+// Status-Filter - genau dort ist das Leeren die gewollte Wirkung. migrate.js:100
+// (countryForE164) ist null-sicher (defaults.js:885).
 export function releaseNumber(s, numberId) {
   const number = transitionNumber(s, numberId, NUMBER_STATUS.RELEASED);
+  number.e164 = null;
   const asg = s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt);
   if (asg) asg.releasedAt = new Date().toISOString();
   return number;
@@ -2589,8 +2788,15 @@ export function numberReleaseVerdict(s, number, { nowMs, graceMs }) {
     return { action: RELEASE_VERDICT.SKIP, reason: "suspended_at_unparsebar" };
   if (nowMs - suspendedMs <= graceMs)
     return { action: RELEASE_VERDICT.SKIP, reason: "grace_not_reached" };
+  // OUTBOUND-E1, EBENE B: das Verdikt HAELT, bevor der irreversible Provider-DELETE
+  // startet (performNumberRelease loescht beim Anbieter VOR der Store-Mutation,
+  // release-reconcile.js:61 vor :70). Ein Riegel, der erst in releaseNumber greift,
+  // kaeme fuer die Nummer beim Anbieter zu spaet.
+  // VOR der Telnyx-Pruefung, damit der Betreiber den wichtigeren Grund im Audit sieht.
+  const busy = numberBusyReason(s, number, { forTenantId: number.tenantId });
+  if (busy) return { action: RELEASE_VERDICT.HOLD, reason: busy };
   if (number.provider !== PROVIDER.TELNYX)
-    return { action: RELEASE_VERDICT.HOLD, reason: "non_telnyx_manual" };
+    return { action: RELEASE_VERDICT.HOLD, reason: NUMBER_HOLD_REASON.NON_TELNYX };
   return { action: RELEASE_VERDICT.RELEASE, reason: null };
 }
 
@@ -2618,13 +2824,26 @@ export function classifyNumbersForRelease(s, { nowMs, graceMs }) {
 // Erase-Lauf findet die schon released-en Nummern NICHT mehr -> kein zweiter Provider-DELETE.
 // REIN + IO-frei (mutiert s NICHT, kein Date.now): der eigentliche Release (Provider-DELETE +
 // Store-Mutation + Audit) laeuft im Orchestrator (release-reconcile.js), NICHT hier.
+// OUTBOUND-E1: liefert KOERBE, keinen Filter (Muster classifyNumbersForRelease:2601).
+// Ein Filter waere SCHLECHTER als der Ist-Zustand, am Code belegt: releaseTenantNumbers-
+// OnErase (release-reconcile.js:144-156) zaehlt aborted nur fuer VERARBEITETE Kandidaten.
+// Eine herausgefilterte Nummer waere kein Kandidat -> released=0, aborted=0 ->
+// contract-end-cleanup.js:91 setzt numberReleasePending=false -> setContractEndCleanup-
+// Pending markiert die Kuendigung als erledigt -> der Retry-Sweep findet den Tenant NIE
+// wieder. Der Freigabeauftrag verfiele STILL (PM-18). Deshalb: disjunkte Koerbe,
+// und der Orchestrator zaehlt jeden HOLD als aborted + schreibt eine Audit-Zeile.
+// Diese Funktion bleibt REIN + IO-frei (sie kann selbst keine Audit-Zeile schreiben).
 export function tenantNumbersForErase(s, tenantId) {
-  return s.numbers.filter(
-    (n) =>
-      n.tenantId === tenantId &&
-      n.status === NUMBER_STATUS.ACTIVE &&
-      n.provider === PROVIDER.TELNYX,
-  );
+  const buckets = { release: [], hold: [] };
+  for (const n of s.numbers) {
+    if (n.tenantId !== tenantId) continue;
+    if (n.status !== NUMBER_STATUS.ACTIVE) continue;
+    if (n.provider !== PROVIDER.TELNYX) continue;
+    const busy = numberBusyReason(s, n, { forTenantId: tenantId });
+    if (busy) buckets.hold.push({ number: n, reason: busy });
+    else buckets.release.push(n);
+  }
+  return buckets;
 }
 
 // ---- 312k-Phase 4: Vertragsende-Aufraeumarbeiten nach KUENDIGUNG ----
