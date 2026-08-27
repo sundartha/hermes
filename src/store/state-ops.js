@@ -2445,12 +2445,17 @@ function findOpenBinding(state, e164, purpose) {
   );
 }
 
-// Bindung schliessen (Surrogatschluessel, kein Ueberschreiben - Historie bleibt stehen). EINE
-// Quelle statt der drei Kopien in unbindPlatformNumber/unbindOwnPlatformBindings/
-// syncPlatformBindings (Review-Befund E1-S2-2).
-function closeBinding(binding) {
-  binding.releasedAt = new Date().toISOString();
-  return binding;
+// Zeitstempel fuer eine geschlossene Bindung (Surrogatschluessel, kein Ueberschreiben -
+// Historie bleibt stehen). EINE Quelle statt der drei Kopien in
+// unbindPlatformNumber/unbindOwnPlatformBindings/syncPlatformBindings (Review-Befund
+// E1-S2-2) - aber OHNE das zu schliessende Objekt als Funktionsparameter zu nehmen:
+// eine Zuweisung an eine Property eines Funktionsparameters ist genau die Altlast, die
+// die Ratsche in dieser Datei einfriert (no-param-reassign, Review-Blocker Runde 3). Die
+// eigentliche Zuweisung passiert deshalb an jedem Aufrufer selbst, auf dessen lokaler
+// Schleifen-/const-Variable (nie auf einem Parameter dieser Datei-Funktionen) - geteilt
+// bleibt nur das "wie" (ISO-Jetzt), nicht mehr die Zuweisung.
+function closingTimestamp() {
+  return new Date().toISOString();
 }
 
 export function platformNumberBindings(state, e164) {
@@ -2521,7 +2526,8 @@ export function bindPlatformNumber(state, { e164, purpose, provider, tenantId = 
 export function unbindPlatformNumber(state, { e164, purpose }) {
   const open = findOpenBinding(state, e164, purpose);
   if (!open) return null;
-  return closeBinding(open);
+  open.releasedAt = closingTimestamp();
+  return open;
 }
 
 // OUTBOUND-E1 (E1-03): schliesst ALLE offenen Bindungen dieser Nummer, die dem FREIGEBENDEN
@@ -2542,7 +2548,8 @@ export function unbindOwnPlatformBindings(state, number) {
   const closed = [];
   for (const binding of platformNumberBindings(state, number.e164)) {
     if (!bindingBelongsTo(binding, number.tenantId)) continue;
-    closed.push(closeBinding(binding));
+    binding.releasedAt = closingTimestamp();
+    closed.push(binding);
   }
   return closed;
 }
@@ -2558,7 +2565,7 @@ export function syncPlatformBindings(state, desired) {
   for (const { purpose, e164, provider, tenantId = null, note = null } of desired) {
     for (const binding of state.platformNumberUse)
       if (binding.purpose === purpose && isOpenBinding(binding) && binding.e164 !== e164)
-        closeBinding(binding);
+        binding.releasedAt = closingTimestamp();
     if (e164) bindPlatformNumber(state, { e164, purpose, provider, tenantId, note });
   }
   return state.platformNumberUse.filter(isOpenBinding);

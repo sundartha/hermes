@@ -384,8 +384,17 @@ NICHT gebaut: er waere selbst PM-12 — jede Spiegel-Divergenz (Teil-Hydrierung,
 beim Free-Tier-Aufwachen) machte dann aus einem lokalen Problem einen Totalausfall des
 gesamten Schreibpfads fuer ALLE Tenants. Tragbar, weil ein Prune-DELETE (a) die Bindung in
 `platform_number_use` nicht mitloescht (globale, eigene Tabelle) und (b) die Nummer NICHT beim
-Anbieter freigibt — der irreversible Schritt laeuft ausschliesslich ueber `performNumberRelease`
-und ist von Ebene B gedeckt.
+Anbieter freigibt.
+
+**Praezisierung (Review-Blocker Runde 3, korrigiert 2026-08-28):** der irreversible
+Provider-DELETE laeuft NICHT ausschliesslich ueber `performNumberRelease`/Ebene B — ein
+zweiter Aufrufer von `provisioner.releaseNumber` existiert in `src/onboarding.js`
+(`rollbackAfterOrder`, Capture-Fehlerpfad nach erfolgreichem Kauf). Dieser Pfad hat kein
+eigenes Verdikt, ist aber vor demselben `numberBusyReason`-Kern (G5) abgesichert: er trifft
+strukturell nur eine gerade erst gekaufte, nie aktivierte Nummer (`number.e164` ist bis
+`activateNumber` `null`, s. `requestNumber`/`state-ops.js`), kann also die geteilte
+Plattform-ANI (immer bereits `active`, eigener `providerNumberId`) nicht treffen — der
+Recheck ist Beleg und Zukunftssicherung zugleich, kein Ersatz fuer Ebene B.
 
 Kein Safety-Gate beruehrt (Outbound-Permit, `OUTBOUND_FROZEN`, Denylist/Land-Gate/
 Stundenlimit, pro-Tenant-Kostendecke, Max-Gespraechsdauer, Telnyx-Signaturpruefung
