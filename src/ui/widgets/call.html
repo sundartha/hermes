@@ -267,14 +267,26 @@
       ? window.HermesI18n.t
       : function (key) { return key; };
 
-    // Anzeige-Labels fuer die failure_reason-Tokens aus
-    // src/telephony/failure-reason.js ("no-answer" | "busy" | "canceled" |
-    // "failed[:<sipcause>]"); unbekannte Tokens erscheinen roh (Diagnosewert).
+    // Anzeige-Labels fuer die failure_reason-Basis-Token aus
+    // src/telephony/failure-reason.js#FAILURE_REASON_BASE_TOKENS ("no-answer" | "busy" |
+    // "canceled" | "failed" | "not-placed" | "unreachable" | "result-unknown", jeweils
+    // optional mit ":<detail>"); unbekannte Tokens erscheinen roh (Diagnosewert).
+    //
+    // OUTBOUND-E2 (Review-Blocker Runde 4, S2-A/G5): diese Tabelle ist NICHT die
+    // Klassifikation (die lebt einzig in failure-reason.js) - sie ist reine
+    // Praesentation, wie schon FAILURE_REASON_TEXTS (i18n/failure-reason-texts.js) ihre
+    // eigene, andersartige Formulierung (ganzer Satz statt kurzes Label) fuehrt. Die drei
+    // neuen Basis-Token muessen HIER genauso wie DORT eine Zeile bekommen - der
+    // Vollstaendigkeits-Waechter test/mcp-ui-widget-i18n.test.js (T-i18n-failure-labels)
+    // importiert FAILURE_REASON_BASE_TOKENS und faellt rot, wenn eine fehlt.
     var FAILURE_REASON_LABELS = {
       "no-answer": "No answer",
       "busy": "Busy",
       "canceled": "Cancelled",
       "failed": "Failed",
+      "not-placed": "Not placed",
+      "unreachable": "Unreachable",
+      "result-unknown": "Result unknown",
     };
 
     // STATUS_VIEW: EIN kanonischer Eintrag pro Call-Status (dialing/in_progress/

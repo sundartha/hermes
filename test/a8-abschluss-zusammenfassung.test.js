@@ -61,6 +61,7 @@ import { waitUntil } from "./conversation-driver-contract.js";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 import { terminateAndBillCall } from "../src/telephony/call-termination.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { withFetch } from "./helpers.js";
 import { CONVERSATION_DONE_WITH_DATA_COLLECTION } from "./fixtures/elevenlabs-conversations.js";
 
 // Die drei ausgehandelten Werte des Gespraechs - je EINE Konstante, damit Fixture,
@@ -80,16 +81,6 @@ function ownValuesOf(mapped) {
 // (GET /v1/convai/conversations/{id}) - der Anbieter selbst wird per Attrappen-fetch
 // ersetzt (Muster test/el-fixtures-echte-antworten.test.js), aber src/elevenlabs/
 // outbound.js (Lesen+Speichern) laeuft UNVERAENDERT und echt.
-async function withFetch(fetchImpl, run) {
-  const orig = globalThis.fetch;
-  globalThis.fetch = fetchImpl;
-  try {
-    return await run();
-  } finally {
-    globalThis.fetch = orig;
-  }
-}
-
 // Faengt das Ergebnis ab, das persistProviderResult an den Store weiterreicht - dieselbe
 // Attrappen-Form wie el-fixtures-echte-antworten.test.js, hier zusaetzlich um TEIL-2/3-
 // Felder ergaenzt.
@@ -129,6 +120,9 @@ function makeCapturingStore(conversationId) {
     recordSipCallId: () => {},
     trueUpAnsweredAt: () => {},
     recordAnsweredUnclearReason: () => {},
+    // OUTBOUND-E2: finishFromConversation ruft recordFailureReason UNBEDINGT - eine
+    // unvollstaendige Attrappe soll auffallen (TypeError), nicht stumm bleiben.
+    recordFailureReason: () => {},
     endCallRecord: (_id, status) => {
       call.status = status;
       call.endedAt = new Date().toISOString();
