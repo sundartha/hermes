@@ -1,6 +1,13 @@
 // Datenkonstanten des Store-Blatt-Moduls (Format-/Provider-Wahrheit, kein IO, keine
 // config) - die einzige Abhaengigkeit dieser Datei. Genutzt von bootstrapHealDecision.
-import { E164, PROVIDER, RESERVE_LEAD_MINUTES, normNum, outboundReserveCents } from "./store/defaults.js";
+import {
+  E164,
+  PROVIDER,
+  RESERVE_LEAD_MINUTES,
+  normNum,
+  outboundReserveCents,
+  PLATFORM_NUMBER_PURPOSE,
+} from "./store/defaults.js";
 import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
 
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
@@ -408,6 +415,10 @@ export function planCapReserveFindings({ slugs, capForSlug, maxTariffCents }) {
 export const ALERT_CHANNEL_FINDING = Object.freeze({
   UNSET: "platform_alert_sms_unset", // WARN
   UNSET_WITH_ACTIVE_WARNING: "platform_alert_sms_unset_with_active_warning", // FATAL
+  // OUTBOUND-E3b (PM-16): "nicht konfiguriert" darf nie wie "alles gruen" aussehen -
+  // fehlen BEIDE Betreiber-Kanaele (SMS UND Mail), waehrend Outbound scharf ist UND der
+  // Ausfall-Melder selbst scharf ist (windowMs>0), haette der Melder KEINEN Empfaenger.
+  BOTH_UNSET_WITH_OUTBOUND: "platform_alert_channels_unset_with_outbound", // FATAL
 });
 
 // GAP-07: eine SCHARFE Spend-Warnung ohne Empfaenger ist keine Sicherung, sondern
@@ -420,9 +431,73 @@ export const ALERT_CHANNEL_FINDING = Object.freeze({
 // Liefert IMMER hoechstens EINEN Befund - der Boot loggt nie zwei Zeilen zur selben
 // Sache. Der besetzte Kanal liefert [] -> die Nummer wird NIE geloggt (Regel 4/PII).
 // Arg-injiziert (config-frei) wie fakeOriginateBootBlocked; die Aufrufer reichen
-// config.billing herein.
-export function alertChannelFindings({ platformAlertSmsTo, paymentEnabled, platformSpendWarnPercent } = {}) {
+// config.billing herein (plus platformAlertMailTo aus config.mail und
+// elevenLabsOutboundEnabled aus config.voice.elevenLabsOutbound - OUTBOUND-E3b).
+//
+// OUTBOUND-E3b: die BOTH_UNSET_WITH_OUTBOUND-Pruefung steht bewusst VOR der
+// bestehenden Spend-Warnung-Pruefung darunter - ein voelliges Fehlen JEDES
+// Betreiber-Kanals waehrend der Ausfall-Melder SCHARF ist (windowMs>0) und Outbound
+// laeuft, ist der dringlichere Befund. Beide bestehenden Zweige (UNSET/
+// UNSET_WITH_ACTIVE_WARNING) bleiben byte-identisch: die neuen Parameter sind bei
+// bestehenden Aufrufern (die sie nicht reichen) undefined -> falsy -> der neue Zweig
+// greift dort nie.
+// G5-Fix (Review-Blocker Runde 2): die Zusammenfuehrung der DREI Config-Namespaces
+// (billing/mail/voice) zu EINEM alertChannelFindings-Eingabeobjekt lag byte-identisch an
+// ZWEI Stellen (boot.js#warnAlertChannelUnset fuer die WARN-Zeile, config.js#
+// fatalConfigFindings fuer den Boot-Refusal) - wer eine vierte Eingabe ergaenzt und nur
+// eine Stelle nachzieht, liesse Boot-Log und Boot-Refusal auseinanderlaufen, ohne dass ein
+// Test das faengt. EINE exportierte Funktion, config-frei/arg-injiziert wie der Rest
+// dieser Datei - beide Aufrufer reichen nur noch ihre drei Namespaces durch.
+// G26/G2-Fix (Review-Blocker Runde 4): OB der Mail-Kanal als Betreiber-Kanal ZAEHLT,
+// haengt an ZWEI Dingen - einer gesetzten Zieladresse UND einem tatsaechlich
+// KONSTRUIERBAREN Mailer (selectMailer, wiring/web-login.js, liefert sonst null und
+// sendMailChannel/outage-report.js riefe mailer.sendMail() auf null auf). Die
+// Auswahlregel selbst ("Brevo-Schluessel ODER SMTP-Host") wird HIER als EINE Quelle
+// formuliert (kein zweites G5): selectMailer importiert dieses Praedikat statt die
+// Bedingung erneut zu schreiben. boot-guard.js bleibt dabei config-frei (Modulkopf) -
+// die Funktion nimmt nur den mail-Namespace als Argument.
+export function mailerKonstruierbar({ brevoApiKey, smtpHost } = {}) {
+  return Boolean(brevoApiKey || smtpHost);
+}
+
+export function alertChannelInputs({ billing, mail, voice }) {
+  return {
+    ...billing,
+    platformAlertMailTo: mail.platformAlertMailTo,
+    mailerVorhanden: mailerKonstruierbar(mail),
+    elevenLabsOutboundEnabled: voice.elevenLabsOutbound.enabled,
+  };
+}
+
+export function alertChannelFindings({
+  platformAlertSmsTo,
+  paymentEnabled,
+  platformSpendWarnPercent,
+  platformAlertMailTo,
+  mailerVorhanden,
+  elevenLabsOutboundEnabled,
+  outageAlertWindowMs,
+} = {}) {
   if (platformAlertSmsTo) return [];
+  // G26-Fix: Mail zaehlt als Kanal nur, wenn ZUSAETZLICH zur Adresse auch ein Mailer
+  // konstruierbar ist (mailerVorhanden, s. mailerKonstruierbar oben) - eine gesetzte
+  // Adresse OHNE Backend (kein BREVO_API_KEY, kein SMTP_HOST) waere sonst ein Kanal, der
+  // beim ersten Versand mit "Cannot read properties of null" scheitert, waehrend der Boot
+  // gruen bootet (PM-16-Verletzung).
+  if (!(platformAlertMailTo && mailerVorhanden) && elevenLabsOutboundEnabled && outageAlertWindowMs > 0)
+    return [
+      {
+        code: ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND,
+        fatal: true,
+        message:
+          "PLATFORM_ALERT_SMS_TO ist leer UND der Mail-Kanal ist nicht einsatzbereit " +
+          "(PLATFORM_ALERT_MAIL_TO leer ODER kein Mailer konfiguriert - weder " +
+          "BREVO_API_KEY noch SMTP_HOST), obwohl ELEVENLABS_OUTBOUND_ENABLED=true und " +
+          "OUTAGE_ALERT_WINDOW_MS>0 - der systematische-Ausfall-Melder haette KEINEN " +
+          "Betreiber-Kanal. Mindestens einen vollstaendigen Kanal setzen ODER " +
+          "ELEVENLABS_OUTBOUND_ENABLED=false ODER OUTAGE_ALERT_WINDOW_MS=0.",
+      },
+    ];
   if (paymentEnabled && platformSpendWarnPercent > 0)
     return [
       {
@@ -494,6 +569,29 @@ export function platformAniFindings({ platformAniE164, elevenLabsOutboundEnabled
     message:
       "PLATFORM_ANI_E164 ist leer - keine Plattform-Nummern-Bindung, der Freigabe-Riegel " +
       "ist wirkungslos (Bestandsverhalten).",
+  }];
+}
+
+// OUTBOUND-E3b (PM-17): die Alarm-SMS-Absenderbindung. "keine Bindung" ist ein eigener,
+// gezaehlter WARN-Befund - NIE Schweigen (dieselbe Auflage wie platformAniFindings oben:
+// "nicht konfiguriert" darf nicht wie "alles gruen" aussehen). NIE fatal: ein fehlender
+// SMS-Absender toetet nicht den Boot, der Melder hat mit Mail einen zweiten, vom SMS-Konto
+// unabhaengigen Kanal (PM-4/BA-12). openBindings ist das Rueckgabe-Array von
+// derivePlatformNumberBindings (src/boot.js) - PII-frei, nur purpose/e164-Praesenz zaehlt.
+export const PLATFORM_ALERT_SENDER_FINDING = Object.freeze({
+  UNBOUND: "alert_sms_sender_unbound", // WARN
+});
+
+export function platformAlertSenderFindings({ openBindings = [] } = {}) {
+  const bound = openBindings.some((binding) => binding.purpose === PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER);
+  if (bound) return [];
+  return [{
+    code: PLATFORM_ALERT_SENDER_FINDING.UNBOUND,
+    fatal: false,
+    message:
+      "Keine offene alert_sms_sender-Bindung - der Ausfall-Melder hat KEINEN SMS-Absender " +
+      "(Mail bleibt unberuehrt, PLATFORM_ALERT_MAIL_TO). Ursache: keine aktive " +
+      "Bootstrap-Nummer (resolveBootstrapAlertSender liefert null).",
   }];
 }
 

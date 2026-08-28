@@ -44,6 +44,7 @@ import { runContractEndCleanupSweep } from "../billing/contract-end-cleanup.js";
 import { runStripeSubscriptionReconcile } from "../billing/stripe-reconcile.js";
 import { makeSmtpMailer } from "../smtp-mail.js";
 import { makeBrevoMailer } from "../brevo-mail.js";
+import { mailerKonstruierbar } from "../boot-guard.js";
 import { runCancellationMailSweep } from "../billing/cancellation-mail.js";
 
 // tenant-prolif-d: Sweep-Kadenz des DID-Release-Reconcilers (interne Kadenz, kein
@@ -125,13 +126,19 @@ function scheduleStripeReconcile(deps) {
 // (Muster workosManagementApiKey): die Kuendigungsbestaetigung bleibt offen vermerkt.
 // Konstruktoren injizierbar (DIP-Seam) fuer den isolierten Auswahl-Test ohne echtes
 // nodemailer/fetch.
+//
+// G26-Fix (Review-Blocker Runde 4): OB ueberhaupt ein Mailer konstruierbar ist ("Brevo-
+// Schluessel ODER SMTP-Host gesetzt"), liest der Boot-Guard (alertChannelFindings) fuer
+// den BOTH_UNSET_WITH_OUTBOUND-Riegel - dieselbe Frage darf nicht zweimal formuliert
+// werden (G5). mailerKonstruierbar() aus boot-guard.js ist die EINE Quelle, hier nur
+// gelesen statt erneut geschrieben.
 export function selectMailer(
   config,
   { _makeBrevoMailer = makeBrevoMailer, _makeSmtpMailer = makeSmtpMailer } = {},
 ) {
+  if (!mailerKonstruierbar(config.mail)) return null;
   if (config.mail.brevoApiKey) return _makeBrevoMailer(config);
-  if (config.mail.smtpHost) return _makeSmtpMailer(config);
-  return null;
+  return _makeSmtpMailer(config);
 }
 
 export async function wireWebLogin({

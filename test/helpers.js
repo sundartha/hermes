@@ -441,6 +441,32 @@ export const BASE_ENV = {
   // test-base-env-drift). test/platform-spend-warning.test.js setzt den Wert explizit.
   PLATFORM_SPEND_WARN_PERCENT: "0",
   PLATFORM_ALERT_SMS_TO: "",
+  // OUTBOUND-E3b: neutral gepinnt. PLATFORM_ALERT_MAIL_TO leer - ohne diese Zeile
+  // wanderte eine echte Betreiber-Adresse aus der lokalen .env in jeden Spawn-Test
+  // (Versand-Attrappe waere umgangen). Die Schwellen auf ihren Defaults, damit ein
+  // lokaler Experimentierwert keine fremde Baseline verschiebt.
+  PLATFORM_ALERT_MAIL_TO: "",
+  // OUTAGE_ALERT_WINDOW_MS neutral AUS (0), NICHT der Produktions-Default (3600000, s.
+  // .env.example/render.yaml): empirisch belegt (Lauf mit 3600000 als Baseline), dass
+  // JEDER Spawn-Test, der ELEVENLABS_OUTBOUND_ENABLED="true" setzt (z.B.
+  // elevenlabs-anrufstart.test.js, ohne jeden Bezug zum Ausfall-Melder), sonst die neue
+  // FATALE Pruefung BOTH_UNSET_WITH_OUTBOUND ausloest (boot-guard.js#alertChannelFindings:
+  // kein Kanal + Outbound scharf + Fenster>0) und der Boot fail-closed verweigert wird -
+  // 0 haelt den Melder aus, bis ein Test ihn ausdruecklich scharf schaltet (Muster
+  // PLATFORM_SPEND_WARN_PERCENT=0 oben).
+  OUTAGE_ALERT_WINDOW_MS: "0",
+  OUTAGE_ALERT_MIN_FAILURES: "3",
+  OUTAGE_ALERT_MIN_ATTEMPTS: "20",
+  OUTAGE_ALERT_FAIL_SHARE_PERCENT: "20",
+  OUTAGE_ALERT_DEBOUNCE_MS: "21600000",
+  OUTAGE_ALERT_RETRY_MS: "900000",
+  // 0 = C8b-Selbsttest aus, bis ein Test ihn ausdruecklich scharf schaltet (Muster
+  // OUTAGE_ALERT_WINDOW_MS oben).
+  OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0",
+  // 0 = C8-HOLD-Eskalation aus (Muster OUTAGE_ALERT_WINDOW_MS oben) - sonst koennte ein
+  // Spawn-Test mit einem laengst suspendierten Fixture-Tenant unbeabsichtigt eine
+  // Betreiber-Meldung ausloesen, ohne jeden Bezug zu C8.
+  PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: "0",
   // P7 (Budget-Achsen, Der Flip): neutral AUS (Default, byte-identisch zum Bestand) - sonst
   // leakt eine lokale .env mit BUDGET_MONTH_ENABLED=true via dotenv in Spawn-Tests (Lehre
   // test-base-env-drift) und faerbt die Suite umgebungsabhaengig.

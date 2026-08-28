@@ -91,6 +91,13 @@ function logEventReceived(callId, body) {
 // ist eine injizierte Dependency (DI, kein Interface erzwungen) - ein Aufrufer, der
 // recordFailureReason nicht implementiert, bekommt keinen gespeicherten Grund, aber
 // Settlement/Abrechnung laufen unveraendert weiter (kein Crash am optionalen Zweig).
+//
+// G27/C2 (Review-Blocker Runde 3): diese Zeile ist eine vierte, von persistEndWithReason
+// (telephony/call-termination.js) UNABHAENGIGE Formulierung derselben Invariante - bewusst
+// AUSSERHALB des Reihenfolge-Riegels (test/fehlergrund-reihenfolge-riegel.test.js),
+// Begruendung dort im Kommentarkopf: eine Umstellung wuerde die Signatur von
+// onHangup(call) aendern, an der test/call-termination-order.test.js per literalem
+// Quelltext-Marker haengt (Befund 5).
 function recordHangupOutcome(store, call, body) {
   const diagnostics = hangupDiagnosticsFrom(body);
   const hangupStatus = hangupCauseStatus({

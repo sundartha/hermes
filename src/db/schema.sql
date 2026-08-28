@@ -747,6 +747,29 @@ CREATE TRIGGER number_platform_binding_guard
         AND NEW.status IN ('released','suspended'))
   EXECUTE FUNCTION number_platform_binding_guard();
 
+-- outage_alert (OUTBOUND-E3b): Zustands-/Entprell-Marker des Ausfall-Melders. GLOBAL wie
+-- platform_number_use/cost_cross_check - KEINE Tenant-Dimension. Warum eine durable Zeile
+-- und NICHT der Notification-Ringpuffer (state-ops.js schneidet auf MAX_NOTIFICATIONS) und
+-- NICHT das platformSpendWarnedMonth-Muster (pg.js: "von flush() NIE geschrieben ->
+-- strukturell ephemer"): auf plan:free ist JEDES Aufwachen ein Prozessstart - ein Marker im
+-- Speicher hiesse Alarm bei jedem Aufwachen (PM-23). Das Zaehlfenster selbst wird NICHT
+-- hier gespeichert, sondern bei jeder Beurteilung frisch aus den persistenten call-Zeilen
+-- abgeleitet (telephony/outage-detection.js#outageWindow) - nur der Entprell-/Zustands-
+-- Marker braucht Durabilitaet.
+CREATE TABLE IF NOT EXISTS outage_alert (
+  id                 TEXT PRIMARY KEY,
+  code               TEXT NOT NULL,          -- der Eimer, z.B. not-placed:invite-403
+  first_seen_at      TIMESTAMPTZ NOT NULL,   -- K0-Anker: erster Befund dieser Klasse
+  last_seen_at       TIMESTAMPTZ NOT NULL,
+  last_attempt_at    TIMESTAMPTZ,            -- S3-1: WANN ein Versand VERSUCHT wurde
+  reported_at        TIMESTAMPTZ,            -- S3-2: WANN er nachweislich zugestellt war
+  delivered_channels TEXT,                   -- "audit,mail" - PII-frei, nie ein Ziel
+  closed_at          TIMESTAMPTZ             -- Rueckkehr zu gesund
+);
+-- Je Fehlerklasse hoechstens EINE offene Zeile; geschlossene bleiben als Historie stehen.
+CREATE UNIQUE INDEX IF NOT EXISTS outage_alert_open_idx
+  ON outage_alert (code) WHERE closed_at IS NULL;
+
 -- provisioning_job: Job-Spur des async Provisioning-Workers (P6b2). idempotency_key
 -- verhindert Doppel-Records bei Retry; status = queued|done|failed. number_id/tenant_id
 -- fuer RLS + Re-Hydrierung. attempts/last_error fuer Audit/Reconciliation.
@@ -891,6 +914,8 @@ ALTER TABLE platform_tts_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE platform_tts_usage FORCE  ROW LEVEL SECURITY;
 ALTER TABLE cost_cross_check   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cost_cross_check   FORCE  ROW LEVEL SECURITY;
+ALTER TABLE outage_alert       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE outage_alert       FORCE  ROW LEVEL SECURITY;
 
 -- tenant_isolation-Policies: USING filtert lesbare/aenderbare Zeilen, WITH CHECK
 -- prueft NEU geschriebene Zeilen (INSERT + UPDATE-Ergebnis). Beide Klauseln sind
@@ -950,6 +975,11 @@ CREATE POLICY cost_cross_check_global ON cost_cross_check USING (true) WITH CHEC
 DROP POLICY IF EXISTS tenant_isolation ON platform_number_use;
 DROP POLICY IF EXISTS platform_number_use_global ON platform_number_use;
 CREATE POLICY platform_number_use_global ON platform_number_use USING (true) WITH CHECK (true);
+-- outage_alert: GLOBAL wie platform_number_use - keine Tenant-Dimension, kein
+-- app.current_tenant-Filter. FORCE RLS bleibt aktiv (Konsistenz), die Policy ist permissiv.
+DROP POLICY IF EXISTS tenant_isolation ON outage_alert;
+DROP POLICY IF EXISTS outage_alert_global ON outage_alert;
+CREATE POLICY outage_alert_global ON outage_alert USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS tenant_isolation ON notification;
 CREATE POLICY tenant_isolation ON notification
   USING (tenant_id = current_setting('app.current_tenant', true))

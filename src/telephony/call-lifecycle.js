@@ -16,7 +16,7 @@ import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 // kein DI-Slot noetig (das Modul importiert bewusst nur Reines, s. Modul-Kopf "KEIN eigener
 // Import" fuer STATEFULES - endActiveCall (die konkrete, laufzeitgebundene Implementierung)
 // bleibt injiziert, s. makeCallLifecycle-Parameter unten).
-import { elevenLabsHangUpAction } from "./call-termination.js";
+import { elevenLabsHangUpAction, persistEndWithReason } from "./call-termination.js";
 
 // GAP-26: maschinenlesbarer Grund einer Terminalisierung DURCH DEN MAX-DAUER-CAP. Eigener
 // Token neben der Provider-Vokabel aus telephony/failure-reason.js: die wird aus dem
@@ -97,10 +97,10 @@ export function makeCallLifecycle({
         cappedEndedAtMs(call, Date.now(), MAX_CALL_DURATION_CAP_S),
       ).toISOString();
       await terminateAndBillCall({
-        persistEnd: () => {
-          store.setCallEndedAt(callId, status, endedAtIso);
-          store.recordFailureReason(callId, failureReason); // GAP-26, s.o.
-        },
+        persistEnd: persistEndWithReason({ // G27/C2-Fix: EINE Formulierung statt Handarbeit
+          store, callId, reason: failureReason,
+          endCall: () => store.setCallEndedAt(callId, status, endedAtIso),
+        }),
         // P6 (Befund 1): call ist frisch (getCall oben) -> Call-Control-Call (callControlId
         // gesetzt) wird via endCallViaCallControl beendet, TeXML byte-identisch ueber
         // endCall(providerCallSid). Damit sind rearm/reattach/scheduleMaxDurationEnd AUTOMATISCH

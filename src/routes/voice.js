@@ -44,6 +44,7 @@ import {
 } from "../telnyx-inbound.js";
 import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
 import { ANSWERED_BY } from "../telephony/answered-by.js";
+import { persistEndWithReason } from "../telephony/call-termination.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -537,19 +538,23 @@ export function makeVoiceRoutes({
     if (callStatus === "in-progress" || callStatus === "answered")
       return void store.markAnswered(call.id);
     if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
-    // CDF1: maschinenlesbaren Fehlergrund aus der bereits berechneten Diagnose persistieren
-    // (PII-frei). completed -> callFailureReason null -> recordFailureReason No-op (kein Save).
-    store.recordFailureReason(call.id, callFailureReason({ status: callStatus, diagnostics }));
+    // CDF1: maschinenlesbaren Fehlergrund aus der bereits berechneten Diagnose (PII-frei).
+    // completed -> callFailureReason null -> recordFailureReason No-op (kein Save).
+    // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
+    // geschrieben (telephony/call-termination.js), NICHT mehr als freie Anweisung davor -
+    // eine freie Anweisung verletzte hier bereits einmal die Reihenfolge, GRUEN blieb die
+    // gesamte Suite trotzdem (test/fehlergrund-reihenfolge-riegel.test.js faengt das jetzt).
     // C5 (Struct-4): Settlement-Gateway statt manuellem endCallRecord+finishCall-Paar - bill
     // (Settlement) ist bei terminateAndBillCall ein strukturell erzwungenes Pflichtfeld (Fail-
     // Fast-Guard, verhindert die C5-Bugklasse: ein neuer Terminierungspfad vergisst finishCall).
     // hangUp:null: der Provider hat den Call bereits beendet (dieses Event IST der Hangup), kein
     // eigener Hangup-Versuch noetig (bereits getesteter Zweig, call-termination-order.test.js).
+    const endeSchreiben = () => {
+      if (call.status === "active")
+        store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
+    };
     await terminateAndBillCall({
-      persistEnd: () => {
-        if (call.status === "active")
-          store.endCallRecord(call.id, callStatus === "completed" ? "completed" : "failed");
-      },
+      persistEnd: persistEndWithReason({ store, callId: call.id, endCall: endeSchreiben, reason: callFailureReason({ status: callStatus, diagnostics }) }),
       hangUp: null,
       bill: billThunk(finishCall, store, call.id),
       callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
