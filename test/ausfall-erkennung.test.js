@@ -12,6 +12,7 @@ import {
   outageWindow,
   beurteileAusfall,
 } from "../src/telephony/outage-detection.js";
+import { reasonWithoutCarrier } from "../src/telephony/failure-reason.js";
 
 const SCHWELLEN_FENSTER_MS = 3600000; // 1h - identisch zum Default OUTAGE_ALERT_WINDOW_MS
 const SCHWELLEN = Object.freeze({
@@ -171,4 +172,15 @@ test("E14 Eimer-Bildung: Carrier-Suffix faellt weg, andere Quelle bleibt ein and
   assert.equal(outageBucket("not-placed:invite-403"), "not-placed:invite-403");
   assert.notEqual(outageBucket("not-placed:start-403"), outageBucket("not-placed:invite-403"));
   assert.equal(outageBucket(null), null);
+});
+
+// G22/G5-Fix (Review-Blocker Runde 4): outageBucket() DARF die Carrier-Grammatik nicht
+// selbst formulieren - sie gehoert failure-reason.js (dort wird sie beim BAUEN des
+// Tokens angehaengt). outageBucket delegiert auf reasonWithoutCarrier(); dieser Test
+// beweist die Delegation, nicht nur ein zufaellig gleiches Ergebnis - er faengt eine
+// kuenftige Aenderung der Grammatik (z.B. drei statt zwei Ziffern), die outage-
+// detection.js still NICHT mitbekommen wuerde, wenn dort erneut eine eigene Kopie der
+// Regel entstuende.
+test("G22/G5: outageBucket ist die EINE Delegation auf failure-reason.js#reasonWithoutCarrier - keine zweite Kopie der Grammatik", () => {
+  assert.equal(outageBucket, reasonWithoutCarrier);
 });

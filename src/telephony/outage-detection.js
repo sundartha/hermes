@@ -12,6 +12,7 @@
 // Anrufstart vs. SIP-INVITE sind verschiedene Defekte). Ohne das Abschneiden vervielfacht
 // sich die Eimerzahl und jeder Eimer erreicht seine Schwelle spaeter (PM-22).
 import { MS_PER_MINUTE } from "../utils/timer.js";
+import { reasonWithoutCarrier } from "./failure-reason.js";
 
 export const OUTAGE_VERDICT = Object.freeze({
   OFF: "aus", // Rollback-Hebel: windowMs=0 schaltet die Regel komplett ab
@@ -31,15 +32,13 @@ export const MIN_TENANTS_SHARED_FAULT = 2;
 // exakt, keine Rundung wie bei einem Fliesskomma-Anteil.
 const PERCENT_BASE = 100;
 
-// Carrier-Kuerzel am Ende eines Fehlergrund-Tokens (failure-reason.js:
-// CARRIER_CODE_IN_REASON, Form D<zwei Ziffern>, z.B. "-D51"). Der Eimer ist das Token
-// OHNE diesen Anhang.
-const CARRIER_SUFFIX = /-D\d{2}$/;
-
-// Der EIMER eines Fehlergrund-Tokens: ohne Carrier-Anhang. null/leer -> null.
-export function outageBucket(reason) {
-  return reason ? String(reason).replace(CARRIER_SUFFIX, "") : null;
-}
+// Der EIMER eines Fehlergrund-Tokens: ohne Carrier-Anhang. Die Grammatik des Anhangs
+// (Form D<zwei Ziffern>) kennt NUR failure-reason.js, das ihn beim Bauen des Tokens
+// anhaengt - outage-detection.js delegiert auf dessen Zerlege-Naht statt die Form ein
+// zweites Mal zu formulieren (G22/G5, Review Runde 4). Direkte Referenz statt
+// Wrapper-Funktion, damit es strukturell unmoeglich ist, hier still eine zweite Kopie
+// der Regel einzuschmuggeln. null/leer -> null.
+export const outageBucket = reasonWithoutCarrier;
 
 // Reines Zeitfenster ueber die PERSISTENTEN Anruf-Zeilen (PM-23: kein Ringpuffer, kein
 // In-Memory-Zaehler - das Fenster wird bei jedem Aufruf frisch aus store.load().calls

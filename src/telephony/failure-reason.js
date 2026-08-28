@@ -62,6 +62,15 @@ export function failureReasonBase(reason) {
   return reason ? String(reason).split(DETAIL_SEPARATOR)[0] : null;
 }
 
+// Grund OHNE Carrier-Anhang (G22/G5, Review Runde 4): der Anhang ("-D51", Form
+// CARRIER_CODE_IN_REASON) wird von genau diesem Modul beim BAUEN des Tokens angehaengt
+// (detailOf/providerErrorReason oben) - deshalb gehoert die Zerlege-Regel HIERHER statt
+// ein zweites Mal beim Aufrufer formuliert zu werden (outage-detection.js#outageBucket
+// delegiert auf diese Funktion). null/leer -> null.
+export function reasonWithoutCarrier(reason) {
+  return reason ? String(reason).replace(CARRIER_CODE_IN_REASON_SUFFIX, "") : null;
+}
+
 // ---- OUTBOUND-E2 (F1): drei Basis-Klassen, getrennt nach SCHULD --------------------
 // Der Bestand oben klassifiziert ein Gespraech, das ZUSTANDE KAM. Fuer den Fall "der
 // Anruf kam nie zustande" gab es kein Wort - und deshalb trugen der Konfigurationsdefekt
@@ -139,6 +148,10 @@ const UNREACHABLE_SIP_STATUS = new Set([
 // safeCauseToken (adapters/telnyx/webhook-events.js).
 const SIP_STATUS_IN_REASON = /sip status:\s*(\d{3})/i;
 const CARRIER_CODE_IN_REASON = /\bD\d{2}\b/;
+// Derselbe Carrier-Code, aber verankert am ENDE eines gebauten Tokens ("-D51"). Nur fuer
+// reasonWithoutCarrier() (Zerlege-Naht) - das Muster oben bleibt fuer das GREIFEN im rohen
+// Anbieter-Freitext (Bau-Seite), dieses hier fuer das ABSCHNEIDEN vom fertigen Token.
+const CARRIER_CODE_IN_REASON_SUFFIX = /-D\d{2}$/;
 
 // Ein Detail ist eine Verkettung gepruefter Bausteine - nie ein Fremdstring.
 const detailOf = (source, code, carrier) => [source, code, carrier].filter(Boolean).join("-");

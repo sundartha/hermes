@@ -448,10 +448,23 @@ export const ALERT_CHANNEL_FINDING = Object.freeze({
 // eine Stelle nachzieht, liesse Boot-Log und Boot-Refusal auseinanderlaufen, ohne dass ein
 // Test das faengt. EINE exportierte Funktion, config-frei/arg-injiziert wie der Rest
 // dieser Datei - beide Aufrufer reichen nur noch ihre drei Namespaces durch.
+// G26/G2-Fix (Review-Blocker Runde 4): OB der Mail-Kanal als Betreiber-Kanal ZAEHLT,
+// haengt an ZWEI Dingen - einer gesetzten Zieladresse UND einem tatsaechlich
+// KONSTRUIERBAREN Mailer (selectMailer, wiring/web-login.js, liefert sonst null und
+// sendMailChannel/outage-report.js riefe mailer.sendMail() auf null auf). Die
+// Auswahlregel selbst ("Brevo-Schluessel ODER SMTP-Host") wird HIER als EINE Quelle
+// formuliert (kein zweites G5): selectMailer importiert dieses Praedikat statt die
+// Bedingung erneut zu schreiben. boot-guard.js bleibt dabei config-frei (Modulkopf) -
+// die Funktion nimmt nur den mail-Namespace als Argument.
+export function mailerKonstruierbar({ brevoApiKey, smtpHost } = {}) {
+  return Boolean(brevoApiKey || smtpHost);
+}
+
 export function alertChannelInputs({ billing, mail, voice }) {
   return {
     ...billing,
     platformAlertMailTo: mail.platformAlertMailTo,
+    mailerVorhanden: mailerKonstruierbar(mail),
     elevenLabsOutboundEnabled: voice.elevenLabsOutbound.enabled,
   };
 }
@@ -461,20 +474,28 @@ export function alertChannelFindings({
   paymentEnabled,
   platformSpendWarnPercent,
   platformAlertMailTo,
+  mailerVorhanden,
   elevenLabsOutboundEnabled,
   outageAlertWindowMs,
 } = {}) {
   if (platformAlertSmsTo) return [];
-  if (!platformAlertMailTo && elevenLabsOutboundEnabled && outageAlertWindowMs > 0)
+  // G26-Fix: Mail zaehlt als Kanal nur, wenn ZUSAETZLICH zur Adresse auch ein Mailer
+  // konstruierbar ist (mailerVorhanden, s. mailerKonstruierbar oben) - eine gesetzte
+  // Adresse OHNE Backend (kein BREVO_API_KEY, kein SMTP_HOST) waere sonst ein Kanal, der
+  // beim ersten Versand mit "Cannot read properties of null" scheitert, waehrend der Boot
+  // gruen bootet (PM-16-Verletzung).
+  if (!(platformAlertMailTo && mailerVorhanden) && elevenLabsOutboundEnabled && outageAlertWindowMs > 0)
     return [
       {
         code: ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND,
         fatal: true,
         message:
-          "PLATFORM_ALERT_SMS_TO UND PLATFORM_ALERT_MAIL_TO sind beide leer, obwohl " +
-          "ELEVENLABS_OUTBOUND_ENABLED=true und OUTAGE_ALERT_WINDOW_MS>0 - der " +
-          "systematische-Ausfall-Melder haette KEINEN Betreiber-Kanal. Mindestens einen " +
-          "Kanal setzen ODER ELEVENLABS_OUTBOUND_ENABLED=false ODER OUTAGE_ALERT_WINDOW_MS=0.",
+          "PLATFORM_ALERT_SMS_TO ist leer UND der Mail-Kanal ist nicht einsatzbereit " +
+          "(PLATFORM_ALERT_MAIL_TO leer ODER kein Mailer konfiguriert - weder " +
+          "BREVO_API_KEY noch SMTP_HOST), obwohl ELEVENLABS_OUTBOUND_ENABLED=true und " +
+          "OUTAGE_ALERT_WINDOW_MS>0 - der systematische-Ausfall-Melder haette KEINEN " +
+          "Betreiber-Kanal. Mindestens einen vollstaendigen Kanal setzen ODER " +
+          "ELEVENLABS_OUTBOUND_ENABLED=false ODER OUTAGE_ALERT_WINDOW_MS=0.",
       },
     ];
   if (paymentEnabled && platformSpendWarnPercent > 0)

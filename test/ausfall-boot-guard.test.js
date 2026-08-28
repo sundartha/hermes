@@ -9,6 +9,7 @@ import {
   ALERT_CHANNEL_FINDING,
   platformAlertSenderFindings,
   PLATFORM_ALERT_SENDER_FINDING,
+  mailerKonstruierbar,
 } from "../src/boot-guard.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
 
@@ -39,10 +40,11 @@ test("nur SMS gesetzt -> []", () => {
   assert.deepEqual(findings, []);
 });
 
-test("nur Mail gesetzt -> die neue FATALE Pruefung greift NICHT mehr (mind. ein Kanal da); die bestehende SMS-spezifische WARN (Spend-Warnung/Tarif-Drift, kein Mail-Alternativkanal) bleibt unveraendert bestehen", () => {
+test("Mail-Adresse gesetzt UND Mailer konstruierbar -> die neue FATALE Pruefung greift NICHT mehr (mind. ein VOLLSTAENDIGER Kanal da); die bestehende SMS-spezifische WARN (Spend-Warnung/Tarif-Drift, kein Mail-Alternativkanal) bleibt unveraendert bestehen", () => {
   const findings = alertChannelFindings({
     platformAlertSmsTo: "",
     platformAlertMailTo: "ops@example.test",
+    mailerVorhanden: true,
     elevenLabsOutboundEnabled: true,
     outageAlertWindowMs: 3600000,
     paymentEnabled: false,
@@ -51,6 +53,25 @@ test("nur Mail gesetzt -> die neue FATALE Pruefung greift NICHT mehr (mind. ein 
   assert.equal(findings.length, 1);
   assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.UNSET);
   assert.equal(findings[0].fatal, false);
+});
+
+// G26/G2-Fix (Review-Blocker Runde 4): Mail-Adresse gesetzt, aber KEIN Mailer
+// konstruierbar (weder BREVO_API_KEY noch SMTP_HOST) - genau der Zustand, der am
+// laufenden Code "[outage] Kanal mail fehlgeschlagen: Cannot read properties of null"
+// erzeugte, waehrend der Boot gruen durchlief. Muss jetzt FATAL sein.
+test("Mail-Adresse gesetzt, aber KEIN Mailer konstruierbar -> weiterhin fatal (PM-16, kein stilles Gruen)", () => {
+  const findings = alertChannelFindings({
+    platformAlertSmsTo: "",
+    platformAlertMailTo: "ops@example.test",
+    mailerVorhanden: false,
+    elevenLabsOutboundEnabled: true,
+    outageAlertWindowMs: 3600000,
+    paymentEnabled: false,
+    platformSpendWarnPercent: WARN_PERCENT_AUS,
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND);
+  assert.equal(findings[0].fatal, true);
 });
 
 test("beide leer, aber EL-Outbound AUS -> WARN, nicht fatal", () => {
@@ -153,15 +174,16 @@ test("PM-17: openBindings undefined -> WARN (Default leer), kein Wurf", () => {
 // config.js dupliziert (die Zusammenfuehrung der drei Namespaces zu EINEM
 // alertChannelFindings-Eingabeobjekt) - jetzt EINE exportierte Quelle, beide Aufrufer
 // reichen nur noch ihre Namespaces durch.
-test("G5: alertChannelInputs fuehrt billing/mail/voice zu EINEM Eingabeobjekt zusammen", () => {
+test("G5: alertChannelInputs fuehrt billing/mail/voice zu EINEM Eingabeobjekt zusammen (inkl. mailerVorhanden, G26-Fix)", () => {
   const merged = alertChannelInputs({
     billing: { platformAlertSmsTo: "+12025550143", paymentEnabled: true },
-    mail: { platformAlertMailTo: "ops@example.test" },
+    mail: { platformAlertMailTo: "ops@example.test", brevoApiKey: "key-123" },
     voice: { elevenLabsOutbound: { enabled: true } },
   });
   assert.equal(merged.platformAlertSmsTo, "+12025550143");
   assert.equal(merged.paymentEnabled, true);
   assert.equal(merged.platformAlertMailTo, "ops@example.test");
+  assert.equal(merged.mailerVorhanden, true);
   assert.equal(merged.elevenLabsOutboundEnabled, true);
 });
 
@@ -174,4 +196,38 @@ test("G5: alertChannelInputs-Ergebnis ist direkt an alertChannelFindings ueberge
   const findings = alertChannelFindings({ ...merged, outageAlertWindowMs: 3600000 });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND);
+});
+
+// G26-Fix: Mail-Adresse gesetzt, aber WEDER BREVO_API_KEY NOCH SMTP_HOST -> mailerVorhanden
+// ist false und der BOTH_UNSET_WITH_OUTBOUND-Riegel greift trotz gesetzter Adresse.
+test("G5/G26: alertChannelInputs liest mailerVorhanden aus mail.brevoApiKey/mail.smtpHost - Adresse ALLEIN reicht nicht", () => {
+  const merged = alertChannelInputs({
+    billing: { platformAlertSmsTo: "" },
+    mail: { platformAlertMailTo: "ops@example.test" },
+    voice: { elevenLabsOutbound: { enabled: true } },
+  });
+  assert.equal(merged.mailerVorhanden, false);
+  const findings = alertChannelFindings({ ...merged, outageAlertWindowMs: 3600000 });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND);
+});
+
+// ---- G26/G2-Fix (Review-Blocker Runde 4): mailerKonstruierbar - EINE Quelle, gemeinsam
+// gelesen von selectMailer (wiring/web-login.js) und alertChannelFindings hier. ----
+
+test("mailerKonstruierbar: weder Brevo-Schluessel noch SMTP-Host -> false", () => {
+  assert.equal(mailerKonstruierbar({ brevoApiKey: "", smtpHost: "" }), false);
+});
+
+test("mailerKonstruierbar: nur Brevo-Schluessel -> true", () => {
+  assert.equal(mailerKonstruierbar({ brevoApiKey: "key-123", smtpHost: "" }), true);
+});
+
+test("mailerKonstruierbar: nur SMTP-Host -> true", () => {
+  assert.equal(mailerKonstruierbar({ brevoApiKey: "", smtpHost: "smtp.zoho.eu" }), true);
+});
+
+test("mailerKonstruierbar: kein Argument -> false, kein Wurf", () => {
+  assert.doesNotThrow(() => mailerKonstruierbar());
+  assert.equal(mailerKonstruierbar(), false);
 });
