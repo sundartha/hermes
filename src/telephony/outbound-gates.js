@@ -47,6 +47,9 @@ import {
 } from "../store/defaults.js";
 import { emergencyBrakeSeconds } from "../call-duration.js";
 import { findActiveNumber } from "../store/views.js";
+import { openOutageAlert } from "../store/state-ops.js";
+import { DRIFT_BEFUND } from "./outbound-config-drift.js";
+import { befundBucket } from "./outbound-drift-watch.js";
 import { sendFailSoftAlertSms } from "./alert-sms.js";
 import { E164, invalidText, validateAssistantContext, validateMandate } from "../routes/_validation.js";
 import { findPlan } from "../plans.js";
@@ -56,6 +59,9 @@ import { deniedPrefix, isDenied } from "./number-denylist.js";
 import { localeFor } from "../i18n/locales.js";
 
 const HOUR_MS = 60 * 60 * 1000;
+// OUTBOUND-E4: eigener Statuscode fuer den ANI-Riegel (503 = Dienst voruebergehend nicht
+// verfuegbar - passender als 403/402, die bereits andere Gate-Gruende belegen).
+const HTTP_SERVICE_UNAVAILABLE = 503;
 
 // EXPORT: drei Ausgabestellen - der Pre-Gate-Check in routes/api-calls.js, das Gate
 // trunk_zero_normalized und der Format-Zweig in numberGateError.
@@ -200,15 +206,80 @@ export function resolveMaxDurationS(raw, brakeSeconds) {
   return Number.isFinite(requested) && requested > 0 ? Math.min(requested, brakeSeconds) : brakeSeconds;
 }
 
-// Sollstaerke der Gate-Kette (17 Glieder). Erzwungen statt zugesichert (G27, OUT-14): weicht
-// die gebaute Kette hiervon ab, wirft die Fabrik beim Bau - jeder Testlauf und jeder Boot
-// faellt sofort auf, statt dass Kommentar und Wirklichkeit lautlos auseinanderlaufen (die
-// alte Zaehlung stand lange falsch im Code). Die Zahl steht bewusst NUR hier.
-const GATE_CHAIN_LENGTH = 17;
+// Sollstaerke der Gate-Kette (18 Glieder). Seit OUTBOUND-E4 mit dem neuen Glied
+// ani_ownership. Erzwungen statt zugesichert (G27, OUT-14): weicht die gebaute Kette
+// hiervon ab, wirft die Fabrik beim Bau - jeder Testlauf und jeder Boot faellt sofort auf,
+// statt dass Kommentar und Wirklichkeit lautlos auseinanderlaufen (die alte Zaehlung stand
+// lange falsch im Code). Die Zahl steht bewusst NUR hier.
+const GATE_CHAIN_LENGTH = 18;
+
+// OUTBOUND-E4: derselbe Bucket-Name wie der Drift-Waechter (outbound-drift-watch.js#
+// befundBucket(DRIFT_BEFUND.OWNERSHIP_LOST)) - EINE Quelle (G5), damit der Riegel und der
+// Waechter niemals unterschiedliche Marker-Namen lesen/schreiben.
+const ANI_OWNERSHIP_BUCKET = befundBucket(DRIFT_BEFUND.OWNERSHIP_LOST);
+
+// Reine Frische-Frage (Muster meldeErlaubt/outage-detection.js): kein/kein gueltiger
+// Zeitstempel -> NICHT frisch (fail-open bei Unwissen - der Riegel gated nie auf einer
+// Zeile, deren Alter er nicht kennt).
+function frischGenug(lastSeenAtIso, maxAgeMs) {
+  const ms = Date.parse(lastSeenAtIso || "");
+  if (Number.isNaN(ms)) return false;
+  return Date.now() - ms <= maxAgeMs;
+}
+
+// OUTBOUND-E4: der ANI-Riegel als EIGENSTAENDIGE Fabrik statt eines Inline-Objekts in
+// makeOutboundGates (Blocker-Vermeidungsliste 3, Clean-Code): makeOutboundGates ist eine
+// bereits gepinnte Altlast (eslint-suppressions.json, max-lines-per-function) - ein neues
+// Glied INLINE haette den Pin weiter angehoben. Extrahiert haelt der Pin, statt ihn
+// still zu bewegen. Eigene, hier lokale Denial-Form ({status, body, audit}) - dieselbe
+// Form wie der dortige deny()-Helfer, hier direkt als Objektliteral statt ueber dessen
+// Closure. denialAudit ist bereits modulweit definiert (s.o.), keine zweite Quelle.
+//
+// Er lehnt NUR ab, wenn ALLES zutrifft:
+//   (1) OUTBOUND_ANI_GATE_ENABLED=true,
+//   (2) es gibt eine OFFENE, durable ownership_lost-Messung,
+//   (3) sie ist FRISCH (<= OUTBOUND_ANI_GATE_MAX_AGE_MS) - auf plan:free steht der
+//       Prozess still, und eine fast stundenalte Messung darf keinen Anruf ablehnen,
+//       obwohl der Eigentuemer vor drei Minuten eine neue DID gekauft hat,
+//   (4) eine LIVE-NACHMESSUNG (derselbe GET wie Pruefung 3, eigener kurzer Timeout)
+//       bestaetigt den Verlust.
+// Jede Unsicherheit laesst DURCH (fail-open bei Unwissen): keine Messung, alte Messung,
+// unknown, Nachmessung scheitert (auch ein Wurf, im try/catch abgefangen - Fail-open ist
+// eine Eigenschaft DES GATES, nicht eine Disziplin des Aufrufers) -> der Anruf laeuft.
+// Ein falsch-positives Gate schaltet das Produkt ab (PM-2); ein verbrannter Waehlversuch
+// kostet Cent. OUTBOUND_FROZEN wird hier NIE geschrieben - der Notaus bleibt beim
+// Eigentuemer. Sitzt in der Kette HINTER resolve_outbound (braucht ctx.fromNumber), VOR
+// budget (ein Anruf, der sicher scheitert, soll keine Reserve binden).
+function makeAniOwnershipGate({ config, store, aniOwnershipRecheck }) {
+  return {
+    name: "ani_ownership",
+    async run(ctx) {
+      if (!config.safety.outboundAniGateEnabled) return null;
+      const marker = openOutageAlert(store.load(), ANI_OWNERSHIP_BUCKET);
+      if (!marker || !frischGenug(marker.lastSeenAt, config.safety.outboundAniGateMaxAgeMs)) return null;
+      let nochImmerVerloren;
+      try {
+        nochImmerVerloren = await aniOwnershipRecheck(ctx.fromNumber);
+      } catch {
+        nochImmerVerloren = null;
+      }
+      if (nochImmerVerloren !== true) return null; // null/false -> durchlassen
+      return {
+        status: HTTP_SERVICE_UNAVAILABLE,
+        body: { error: "Die Absendernummer der Plattform ist beim Anbieter nicht mehr verfuegbar. Der Anruf wurde nicht gestartet." },
+        audit: denialAudit("ani_not_owned", ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
+      };
+    },
+  };
+}
 
 // Fabrik: baut die geordnete Gate-Kette einmal beim Boot (P15, wie makeTenantResolver) -
 // gebunden an store/config und die Tenant-Identitaets-Bausteine des Aufrufers (requestTenant/
 // internalIdentity/OWNER_ID/TENANT_REJECT - EINE Quelle, kein zweiter Resolver, G5/DIP).
+// aniOwnershipRecheck (OUTBOUND-E4): Default-No-op = Bestandsverhalten BYTE-IDENTISCH,
+// wenn server.js nichts injiziert (das Gate liest den Riegel ohnehin nur bei
+// OUTBOUND_ANI_GATE_ENABLED=true UND einer frischen Messung - der No-op laesst dann
+// trotzdem durch, fail-open bei Unwissen).
 export function makeOutboundGates({
   store,
   config = defaultConfig,
@@ -217,7 +288,7 @@ export function makeOutboundGates({
   OWNER_ID,
   TENANT_REJECT,
   audit,
-  messaging,
+  messaging, aniOwnershipRecheck = async () => null,
 }) {
   // Land-Gate: Schnittmenge global ∩ profil. Ein Profil kann nur WEITER einschraenken,
   // nie ueber die globale Erlaubnis hinaus (Profil "*"/leer = keine Zusatz-Einschraenkung).
@@ -741,7 +812,11 @@ export function makeOutboundGates({
           denialAudit(originError.grund, ctx, ` tenant=${ctx.tenantId} requestedBy=${ctx.requestedBy}`),
         );
       },
-    },
+    // OUTBOUND-E4: der ANI-Riegel - das EINZIGE Gate dieser Etappe, Default AUS. Fabrik
+    // ausgelagert (makeAniOwnershipGate, oben) statt inline, damit diese bereits gepinnte
+    // Altlast-Funktion (max-lines-per-function) durch das neue Glied NICHT weiter waechst
+    // (Blocker-Vermeidungsliste 3). Volle Begruendung dort.
+    }, makeAniOwnershipGate({ config, store, aniOwnershipRecheck }),
     // EINE Geld-Achse (KS-P9/E10): die pro-Tenant-Kostendecke, fail-closed. Die
     // Plattform-Achse misst und warnt nur noch, sie sperrt nicht mehr - kein Kunde wird
     // abgewiesen, weil ein anderer Geld ausgab. Der Nutzer bekommt damit IMMER die eigenen

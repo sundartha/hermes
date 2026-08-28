@@ -13,6 +13,8 @@ import { runPlatformHoldEscalationSweep, runOutageRecoverySweep } from "../src/t
 import { NUMBER_STATUS, PROVIDER, PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON } from "../src/store/defaults.js";
 
 const SCHWELLE_MS = 86400000; // 24h - identisch zum Default PLATFORM_HOLD_ESCALATION_MAX_AGE_MS
+// ZUSATZAUFTRAG B: zwei gehaltene Nummern -> zwei Meldungen (je Nummer eine, s. holdZeile).
+const ZWEI_MELDUNGEN = 2;
 // Fenster/Tick-Abstand fuer den C8-Regressionstest unten (Ausfall-Erkennungsfenster UND
 // Abstand zwischen den zwei simulierten Sweep-Ticks) - eine benannte Stunde statt einer
 // nackten Zahlenkette (G25).
@@ -69,6 +71,34 @@ function seed({ suspendedAt, holdReason = NUMBER_HOLD_REASON.PLATFORM_IN_USE, nu
             },
           ]
         : []),
+    ],
+    outageAlerts: [],
+  };
+}
+
+// ZUSATZAUFTRAG B: mehrere gleichzeitig alte HOLDs (verschiedene Tenants/Nummern) - fuer
+// die PII-freien Anzahlen kuendigungen/nummern in der Alarm-Zeile (holdZeile,
+// outage-report.js). nummern: [{id, tenantId, e164}], alle ALT_SUSPENDED_AT (alt genug).
+function seedMehrere(nummern) {
+  const tenantIds = [...new Set(nummern.map((nummer) => nummer.tenantId))];
+  return {
+    tenants: tenantIds.map((id) => ({ id, numberReleasePending: true, workosDeletePending: false, suspendedAt: ALT_SUSPENDED_AT })),
+    numbers: nummern.map((nummer) => ({
+      id: nummer.id, tenantId: nummer.tenantId, status: NUMBER_STATUS.ACTIVE,
+      provider: PROVIDER.TELNYX, providerNumberId: `ext_${nummer.id}`, e164: nummer.e164,
+    })),
+    calls: [],
+    platformNumberUse: [
+      {
+        id: "pnu_sender", e164: SENDER_E164, purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER,
+        provider: "telnyx", tenantId: null, providerNumberId: null,
+        boundAt: NOW_ISO, releasedAt: null, note: null,
+      },
+      ...nummern.map((nummer) => ({
+        id: `pnu_hold_${nummer.id}`, e164: nummer.e164, purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
+        provider: "telnyx", tenantId: null, providerNumberId: null,
+        boundAt: ALT_SUSPENDED_AT, releasedAt: null, note: null,
+      })),
     ],
     outageAlerts: [],
   };
@@ -275,4 +305,52 @@ test("C8-Regression (Review Runde 2): alter HOLD + erfolgreicher Anruf im Fenste
   const [marker] = state.outageAlerts;
   assert.equal(marker.code, `hold:${NUMBER_HOLD_REASON.PLATFORM_IN_USE}:n1`);
   assert.equal(marker.closedAt, null, "der HOLD-Marker bleibt dauerhaft offen - kein Erholungs-Uebergang fuer HOLD-Codes");
+});
+
+// ---- ZUSATZAUFTRAG B (E3b-Nachbesserung): PII-freie Anzahlen in der Alarm-Zeile ---------
+// Vorher: "eine Kuendigung wartet..." - der Empfaenger wusste nicht, ob EINE oder FUENF
+// Kuendigungen haengen. Jetzt: kuendigungen=<distinkte Tenants> nummern=<Zeilen>, PII-frei
+// (keine Rufnummer/Tenant-ID/Nummern-ID im Body - C8-PII gilt unveraendert weiter).
+
+test("B-1: zwei Tenants mit je einem alten HOLD -> Mail-Body enthaelt kuendigungen=2 nummern=2", async () => {
+  const state = seedMehrere([
+    { id: "n1", tenantId: "t1", e164: "+493012345001" },
+    { id: "n2", tenantId: "t2", e164: "+493012345002" },
+  ]);
+  const store = makeStore(state);
+  const spies = makeSpies();
+  await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
+  assert.equal(spies.mailCalls.length, ZWEI_MELDUNGEN, "zwei Nummern -> zwei Meldungen (je Nummer eine, s. Modul-Kommentar)");
+  for (const mail of spies.mailCalls) {
+    assert.match(mail.text, /kuendigungen=2 nummern=2/, `Body traegt die GESAMTzahlen: ${mail.text}`);
+  }
+});
+
+test("B-2: ein Tenant mit zwei gehaltenen Nummern -> kuendigungen=1 nummern=2", async () => {
+  const state = seedMehrere([
+    { id: "n1", tenantId: "t1", e164: "+493012345001" },
+    { id: "n2", tenantId: "t1", e164: "+493012345002" },
+  ]);
+  const store = makeStore(state);
+  const spies = makeSpies();
+  await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
+  assert.equal(spies.mailCalls.length, ZWEI_MELDUNGEN);
+  for (const mail of spies.mailCalls) {
+    assert.match(mail.text, /kuendigungen=1 nummern=2/, `EIN Tenant, zwei Nummern: ${mail.text}`);
+  }
+});
+
+test("B-3: PII-Nachweis fuer die neue Zaehler-Zeile - keine Rufnummer, keine Tenant-/Nummern-ID", async () => {
+  const state = seedMehrere([
+    { id: "n1", tenantId: "t1", e164: "+493012345001" },
+    { id: "n2", tenantId: "t2", e164: "+493012345002" },
+  ]);
+  const store = makeStore(state);
+  const spies = makeSpies();
+  await runPlatformHoldEscalationSweep({ store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
+  for (const mail of spies.mailCalls) {
+    assert.ok(!/\+?\d{7,}/.test(mail.text), `keine Rufnummer im Body: ${mail.text}`);
+    assert.ok(!/\bt1\b/.test(mail.text) && !/\bt2\b/.test(mail.text), `keine Tenant-ID im Body: ${mail.text}`);
+    assert.ok(!/\bn1\b/.test(mail.text) && !/\bn2\b/.test(mail.text), `keine Nummern-ID im Body: ${mail.text}`);
+  }
 });

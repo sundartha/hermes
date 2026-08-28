@@ -1,0 +1,12 @@
+[
+  {
+    "befund": "unbekannt:pruefung8",
+    "grund": "Die Reichweite braucht den 24-h-Verbrauch aus der Anruf-Tabelle. Der externe Takt (GitHub Actions) hat keinen DB-Zugang (Prod-DB-IP-Allowlist). Pruefung 8 faehrt in-process beim Boot und im Stundentakt.",
+    "seit": "2026-08-28"
+  },
+  {
+    "befund": "unbekannt:pruefung9",
+    "grund": "Der Alarm-Absender kommt aus der Plattform-Bindung in der DB (PM-17). Gleiche Begruendung wie pruefung8; Pruefung 9 faehrt in-process.",
+    "seit": "2026-08-28"
+  }
+]

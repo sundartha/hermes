@@ -12,12 +12,14 @@ import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { audit } from "./util.js";
-import { voiceControl, messaging, numberProvisioning } from "./telephony/registry.js";
+import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";
+import { makeDriftWatch } from "./telephony/outbound-drift-watch.js";
+import { fetchPhoneNumber as fetchElPhoneNumber } from "./elevenlabs/convai.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
@@ -128,6 +130,18 @@ const mailer = selectMailer(config);
 // - der fuenfte Zweig (Alarmkanal-Selbsttest, s. runSweepTick) braucht dieselbe
 // Mailer-Instanz wie callFinish, kein zweiter Versandzugang (DIP).
 const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer });
+
+// OUTBOUND-E4: siebter Sweep-Zweig + Boot-Lauf (Muster outageWatch, INV-7). telnyxRead ist
+// der rein LESENDE Provider-Read-Port (registry.js#providerConfigRead, Default Telnyx);
+// elRead ist eine schmale Closure um den EL-Nummernabruf (Pruefung 1) mit der Plattform-
+// Anbieter-Config als account - dieselbe Form, die elevenlabs/outbound.js#settings()
+// bereits an fetchConversation uebergibt. Kein zweiter HTTP-Client (Plan E-6).
+const telnyxRead = providerConfigRead();
+const elRead = {
+  fetchPhoneNumber: (phoneNumberId) =>
+    fetchElPhoneNumber({ fetchImpl: fetch, account: config.voice.elevenLabsOutbound, phoneNumberId }),
+};
+const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, telnyxRead, elRead });
 
 // F2-Mail: Accounts-Zugriff (Konto-E-Mail) haengt an accounts.accountByTenant (web-auth.js),
 // das NUR existiert, wenn der pg-gated Web-Login-Block durchlaeuft (wireWebLogin, asynchron
@@ -296,6 +310,7 @@ const deps = {
   costTruing,
   costCrossCheck,
   outageWatch,
+  driftWatch,
   messaging,
   consultDelivery,
   elevenLabsOutbound,

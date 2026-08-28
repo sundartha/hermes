@@ -617,6 +617,16 @@ const rawConfig = {
   // Telnyx-Account-ID (Mission-Control-Portal): Pflicht fuer den Telnyx-Hangup
   // (POST /v2/texml/Accounts/{account_sid}/Calls/{call_sid}). Leer -> endCall wirft.
   telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
+  // OUTBOUND-E4 (Drift-Waechter, Pruefung 2/6): die FQDN-Connection, an der der
+  // ANI-Override der Plattform-Absendernummer haengt (gemessen 27.08.2026:
+  // "3026479542865757220", ElevenLabs-SIP-Trunk). NICHT verwechseln mit
+  // telnyxConnectionId (TeXML) - zwei getrennte Telnyx-Objekttypen. Leer -> der Waechter
+  // meldet Pruefung 2/6 als unbekannt (nie fatal, boot-guard.js#driftConfigFindings).
+  telnyxFqdnConnectionId: (process.env.TELNYX_FQDN_CONNECTION_ID || "").trim(),
+  // OUTBOUND-E4 (Drift-Waechter, Pruefung 7): das Outbound-Voice-Profile, dessen
+  // whitelisted_destinations mit den tatsaechlich bedienten Laendern abgeglichen wird.
+  // Leer -> der Waechter meldet Pruefung 7 als unbekannt.
+  telnyxOutboundVoiceProfileId: (process.env.TELNYX_OUTBOUND_VOICE_PROFILE_ID || "").trim(),
   // GQ-P6: wie lange Telnyx auf das Abheben wartet, bevor es mit hangup_cause=timeout
   // aufgibt (POST /v2/calls, Feld timeout_secs). Anbieter-Doku: "Minimum value is 5
   // seconds. Maximum value is 600 seconds", **Default 30**.
@@ -1253,6 +1263,31 @@ const rawConfig = {
     process.env.PLATFORM_HOLD_ESCALATION_MAX_AGE_MS,
     { fallback: PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT * MS_PER_HOUR, min: 0 },
   ),
+  // ---- Drift-Waechter (OUTBOUND-E4, F4, PLAN-OUTBOUND-RESILIENZ.md E-6) ----
+  // Mindestfrist zwischen zwei beanspruchten Laeufen (PM-26, Single-Flight/Deploy-
+  // Sturm-Schutz). 0 = der Waechter ist KOMPLETT AUS (Rollback-Hebel, Muster
+  // outageAlertWindowMs). Default 10 min.
+  outboundDriftMinIntervalMs: numEnv(
+    "OUTBOUND_DRIFT_MIN_INTERVAL_MS",
+    process.env.OUTBOUND_DRIFT_MIN_INTERVAL_MS,
+    { fallback: 600000, min: 0 },
+  ),
+  // Ab wann die letzte ERFOLGREICHE Messung als "watchdog_stale" gilt (fuenfte
+  // Befundklasse, PM-5): faengt einen abgelaufenen Schluessel, ein dauerhaftes 5xx oder
+  // einen deaktivierten Actions-Workflow, die den gesamten Fruehwarner sonst STILL
+  // abschalten wuerden. Default 6 h.
+  outboundDriftStaleMs: numEnv("OUTBOUND_DRIFT_STALE_MS", process.env.OUTBOUND_DRIFT_STALE_MS, {
+    fallback: 21600000,
+    min: 0,
+  }),
+  // Guthaben-REICHWEITE (nicht Betrag, s. Modul-Doc outbound-config-drift.js): Guthaben
+  // reicht fuer weniger als so viele Stunden bei aktuellem 24h-Verbrauch -> balance_low.
+  // Default 72 h.
+  outboundDriftBalanceMinHours: numEnv(
+    "OUTBOUND_DRIFT_BALANCE_MIN_HOURS",
+    process.env.OUTBOUND_DRIFT_BALANCE_MIN_HOURS,
+    { fallback: 72, min: 0 },
+  ),
   // ---- Spend-Monat-Flip (Budget-Achsen P7) ----
   // AN = BEIDE Gate-Achsen (Tenant UND Plattform) messen den Verbrauch im UTC-Kalendermonat
   // statt im Lebenszeit-Zaehler. AUS (Default) = byte-identisch zum Bestand. Der Flip ist ein
@@ -1757,6 +1792,21 @@ const rawConfig = {
     { fallback: false },
   ),
 
+  // ---- OUTBOUND-E4 (F4): der ANI-Riegel - das EINZIGE Gate dieser Etappe ----
+  // Default AUS: der Riegel lehnt NUR ab, wenn eine FRISCHE, LIVE-nachgemessene
+  // ownership_lost-Messung vorliegt (s. outbound-gates.js). OUTBOUND_FROZEN bleibt der
+  // bewusste Notaus - dieses Gate wird von KEINEM Codepfad automatisch gesetzt.
+  outboundAniGateEnabled: boolEnv("OUTBOUND_ANI_GATE_ENABLED", process.env.OUTBOUND_ANI_GATE_ENABLED, {
+    fallback: false,
+  }),
+  // Frische-Grenze: eine Messung aelter als dieser Wert gated NIE (auf plan:free steht
+  // der Prozess still - eine fast stundenalte Messung darf einen Anruf nicht ablehnen,
+  // obwohl der Eigentuemer laengst eine neue DID gekauft hat). Default 15 min.
+  outboundAniGateMaxAgeMs: numEnv("OUTBOUND_ANI_GATE_MAX_AGE_MS", process.env.OUTBOUND_ANI_GATE_MAX_AGE_MS, {
+    fallback: 900000,
+    min: 0,
+  }),
+
   // ---- Datenschutz ----
   // Beendete Calls (samt Transkript) und Notifications aelter als RETENTION_DAYS
   // werden geloescht (DSGVO-Datenminimierung). 0 = Retention aus.
@@ -2025,8 +2075,8 @@ function guardedConfig(target, path = "config") {
 // Fatal-Push, kein Doppel-Eval. rawConfig selbst bleibt der interne Speicher, wird aber
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
-  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
+  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
@@ -2037,7 +2087,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
-  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection"],
+  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],

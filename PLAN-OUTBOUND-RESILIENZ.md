@@ -1495,13 +1495,17 @@ unabhaengige Kanaele — und der Zustand ueberlebt einen Prozess-Neustart.
 
 | # | Kommando | Erwartete Ausgabe |
 |---|---|---|
-| C5 | `node --test test/ausfall-erkennung.test.js` | `pass 8`, `fail 0` |
-| C6 | `node --test test/ausfall-meldeweg.test.js` | `pass 3`, `fail 0` |
+| C5 | `node --test test/ausfall-erkennung.test.js` | `pass 17`, `fail 0` *(gemessen 2026-08-28)* |
+| C6 | `node --test test/ausfall-meldeweg.test.js` | `pass 15`, `fail 0` *(gemessen 2026-08-28)* |
 | C7 | `DATABASE_URL=<test-db> node --test test/ausfall-marker-durabel-pg.test.js` | `fail 0` (ohne DB: `skip`) |
-| C8 | `node --test test/platform-number-hold-eskalation.test.js` | `pass 1`, `fail 0` |
-| C8b | `node --test test/alarmkanal-selbsttest.test.js` | `pass 2`, `fail 0` |
+| C8 | `node --test test/platform-number-hold-eskalation.test.js` | `pass 12`, `fail 0` *(gemessen 2026-08-28)* |
+| C8b | `node --test test/alarmkanal-selbsttest.test.js` | `pass 7`, `fail 0` *(gemessen 2026-08-28, ebenfalls ueberholt — im Auftrag nicht genannt, mitgezogen)* |
 | C9 | `node --test test/route-auth-inventory.test.js` | `fail 0` (falls ein Operator-Endpunkt dazukommt: Eintrag in `src/route-policy.js`) |
 | C10 | `npm test` | `fail 0` |
+
+Eine feste `pass`-Zahl in einer Abnahmetabelle veraltet mit dem ersten zusaetzlichen
+Testfall. Fuer kuenftige Etappen ist `fail 0` plus eine Untergrenze (`pass >= n`) das
+Kriterium; die exakte Zahl bleibt eine Momentaufnahme mit Messdatum.
 
 **Rueckbau-Risiko: mittel.** Der Alarm kann bei Fehl-Kalibrierung zu laut sein; alle Schwellen
 sind Env-Werte, `OUTAGE_ALERT_MIN_FAILURES=0` + `OUTAGE_ALERT_FAIL_SHARE=1.1` schalten ihn aus.
@@ -1809,6 +1813,7 @@ stillschweigend als Endzustand gelesen werden.**
 | BA-11 | **Es gibt keinen Degradationspfad bei Anbieter-Ausfall.** Kein zweiter Carrier, keine Warteschlange fuer verzoegerte Auftraege. | Ein zweiter Carrier ist ein eigenes Projekt. Der Melder faengt den Fall, der Nutzer erfaehrt den Grund. | Zweiter Anbieter oder Auftrags-Warteschlange. |
 | BA-12 | **Der Guthaben-Fall reisst den SMS-Kanal mit.** Bei `credit_limit 0.00` endet mit dem Guthaben auch die Alarm-SMS. | Genau deshalb ist Mail der **primaere** Kanal und nicht optional; Pruefung 8 warnt auf Reichweite, nicht auf Restbetrag. | Guthaben-Automatik beim Anbieter (Auto-Recharge) — Owner-/Geld-Entscheidung. |
 | BA-13 | **Die Bindungs-Abfrage ist ein linearer Scan ueber den hydrierten Spiegel.** | Bei einer Handvoll Bindungen ist das die einfachste funktionsfaehige Loesung, und sie erbt keine neue Abhaengigkeit. | Im Mehr-Nummern-Betrieb ein indizierter DB-Treffer (`UNIQUE (e164, purpose) WHERE released_at IS NULL` liegt bereits), nicht ein Array-Durchlauf. |
+| BA-14 | **Die Erholungs-Meldung erscheint bei heutigem Anrufvolumen praktisch nie.** `RECOVERED` verlangt seit dem E3b-Blocker-Fix mindestens **einen erfolgreichen Anruf im selben Fenster** (`outage-detection.js:120-123`) — ein leeres Fenster ist keine Erholung. Bei ~1 Outbound/Woche und einem 60-Minuten-Fenster faellt der Erholungs-Uebergang in der Praxis nie zusammen; ein Marker bleibt offen, bis zufaellig ein Erfolg in dasselbe Fenster faellt. | Die **Richtung ist gewollt**: "zu laut ist erlaubt, stumm nie". Eine falsche Entwarnung waere der schlimmere Fehler — sie loeschte den einzigen Hinweis auf einen laufenden Ausfall. Der offene Marker schadet nicht (er entprellt nur), und der Betreiber sieht am ausbleibenden Alarm nichts Falsches. | **Ehrlich benannt: das RECOVERED-Signal ist heute dekorativ.** Erst mit nennenswertem Verkehr wird es aussagekraeftig. Alternative fuer den Zwischenzustand waere ein laengeres Erholungsfenster (Tage statt Stunden) — bewusst nicht gebaut, weil das eine zweite Fensterlaenge und damit eine zweite Wahrheit einfuehrte. |
 
 ---
 

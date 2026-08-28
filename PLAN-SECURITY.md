@@ -3336,6 +3336,42 @@ Signaturpruefung, Auth. Der Call-Status bleibt `failed` (kein neuer Status). Die
 Kostenbuchung ist unveraendert und per Test gepinnt (Anker + gebuchte Minuten an derselben
 Fixture, inkl. Anbieterfehler bei Dauer > 0).
 
+## OUTBOUND-E4 — der ANI-Riegel: neues Gate-Glied, Default AUS (2026-08-28)
+
+Neues Glied in der Outbound-Gate-Kette (`src/telephony/outbound-gates.js`, Name
+`ani_ownership`, Position: direkt hinter `resolve_outbound`, vor `budget`). Es lehnt einen
+Outbound-Call mit 503 ab, wenn der Drift-Waechter (E-6, F4) eine FRISCHE, LIVE
+nachgemessene `ownership_lost`-Messung fuer die Plattform-Absendernummer haelt — der
+27.08.2026-Fall (die ANI gehoerte dem Telnyx-Konto nicht mehr, vier Outbound-Versuche
+scheiterten unbemerkt).
+
+**Default `OUTBOUND_ANI_GATE_ENABLED=false` — bewusst.** Der Drift-Waechter selbst laeuft
+unabhaengig davon bereits scharf (Boot + Stundentakt + externer GitHub-Actions-Workflow)
+und meldet jeden Fund ueber den bestehenden Betreiber-Meldeweg (WARN→Audit→Mail→SMS). Das
+Gate ist eine ZUSAETZLICHE, optionale Verschaerfung, die echte Anrufe verhindern KANN — und
+genau deshalb ist ein falsch-positiver Auslöser hier teurer als ein spät erkannter
+Ausfall: ein Gate, das faelschlich auslöst, schaltet das Produkt fuer den Auftraggeber ab
+(PM-2), waehrend eine Meldung ohne Gate ihn nur informiert.
+
+**Drei unabhaengige Schutzschichten gegen einen Fehlalarm, alle muessen gleichzeitig
+zutreffen:**
+1. Frische-Grenze (`OUTBOUND_ANI_GATE_MAX_AGE_MS`, Default 15 min) — eine alte Messung
+   gated nie (auf `plan:free` steht der Prozess still; eine stundenalte Messung darf nicht
+   ablehnen, obwohl der Eigentuemer laengst eine neue DID gekauft hat).
+2. Eine LIVE-Nachmessung (derselbe GET wie Pruefung 3 des Waechters, eigener kurzer
+   Timeout) MUSS den Verlust im Moment des Anrufs BESTAETIGEN — eine durable, aber
+   inzwischen behobene Messung gated nicht.
+3. Fail-open bei jeder Unsicherheit: keine Messung, unbekannt, ein werfender Recheck
+   (Timeout/Netzfehler, im Gate selbst per try/catch abgefangen — nicht nur in der
+   server.js-Wiring-Disziplin) — jeder dieser Faelle laesst den Anruf durch, NIE ab.
+
+`OUTBOUND_FROZEN` wird von keinem Codepfad dieser Etappe automatisch gesetzt (per Test
+gepinnt, `test/outbound-ani-gate.test.js` G-5) — der bewusste Notaus bleibt beim
+Eigentuemer, kein Selbstabschalter.
+
+**Rueckbau: eine Env-Zeile** (`OUTBOUND_ANI_GATE_ENABLED=false`, ohnehin der Default) —
+das Gate verschwindet, der Drift-Waechter meldet unveraendert weiter.
+
 ## Owner-Entscheidung 2026-08-19: Prod-DB-IP-Allowlist auf 0.0.0.0/0
 
 Die Render-Postgres-Allowlist (hermes-db) stand auf einzelnen Heim-IPs; die

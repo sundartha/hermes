@@ -32,6 +32,7 @@ import {
   stalePriceFindings,
   platformAniFindings,
   platformAlertSenderFindings,
+  driftConfigFindings,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
@@ -268,6 +269,16 @@ function warnPlatformAniUnset(config) {
     console.warn(`[boot] ${finding.message}`);
 }
 
+// OUTBOUND-E4: reine Diagnose, NIE fatal (s. driftConfigFindings). Loggt keine ID.
+function warnOutboundDriftConfigUnset(config) {
+  for (const finding of driftConfigFindings({
+    fqdnConnectionId: config.telephony.telnyxFqdnConnectionId,
+    outboundVoiceProfileId: config.telephony.telnyxOutboundVoiceProfileId,
+    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
+  }))
+    console.warn(`[boot] ${finding.message}`);
+}
+
 // LCT P5: Drift-Waechter, Ausloeser 1 von 2 (Boot). GENAU EINE Zeile fuer ALLE Praefixe -
 // nicht eine je Praefix je Boot (Risiko-Abschnitt der Phase: WARN-Muedigkeit). WARN nur,
 // wenn ueberhaupt ein Befund vorliegt; ein durchweg im Band liegender Zustand loggt ruhig.
@@ -465,6 +476,7 @@ function assertBootGates(config, store) {
   assertSttProfile(config);
   warnAlertChannelUnset(config);
   warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
+  warnOutboundDriftConfigUnset(config); // OUTBOUND-E4, WARN
   warnTariffDrift(config, store);
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
   warnTurnBudgetOverrun(config); // GAP-22, WARN
@@ -948,7 +960,7 @@ export function derivePlatformNumberBindings({ config, store }) {
 // Zweig traegt zusaetzlich sein eigenes .catch() (zweite Linie, Muster der beiden
 // Bestandszweige). test/kv-m4-monthly-cross-check.test.js (KV-M4-8) belegt die Isolation
 // direkt gegen diese Funktion, nicht nur als Behauptung im Kommentar.
-export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch }) {
+export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch }) {
   void costTruing
     .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
     .catch((err) => console.error("[cost-truing]", err.message));
@@ -980,6 +992,12 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageW
   void outageWatch
     .runHoldEscalationSweep()
     .catch((err) => console.error("[outage-watch]", err.message));
+  // OUTBOUND-E4 (F4): SIEBTER, unabhaengiger Schritt im selben Stunden-Takt - der
+  // Drift-Waechter gegen die Anbieter-Wirklichkeit. Kein zweiter Timer, keine neue
+  // Ressource. Mindestfrist + Claim sitzen IM Waechter (PM-26), nicht hier.
+  void driftWatch
+    .runDriftSweep()
+    .catch((err) => console.error("[drift-watch]", err.message));
 }
 
 // EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter
@@ -1060,6 +1078,9 @@ export async function bootServer({
   // dieselbe EINE Instanz wie costTruing/costCrossCheck (INV-7), server.js reicht sie im
   // deps-Buendel durch.
   outageWatch,
+  // OUTBOUND-E4: siebter, unabhaengiger Zweig desselben Stunden-Sweeps (runSweepTick) +
+  // eigener Boot-Lauf. Dieselbe EINE Instanz (INV-7), server.js reicht sie durch.
+  driftWatch,
   messaging,
   consultDelivery,
   // Boot-Re-Arm des EL-Ergebnisabrufs (s. unten bei rearmActiveConversationPolls). Dieselbe
@@ -1119,7 +1140,7 @@ export async function bootServer({
   // mit (runSweepTick oben, exportiert und direkt testbar) - kein zweiter Timer, keine
   // neue Ressource.
   setInterval(
-    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch }),
+    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch }),
     config.billing.costTruingSweepIntervalMs,
   ).unref();
 
@@ -1186,6 +1207,12 @@ export async function bootServer({
     void probeMailBoot(config).catch((fehler) =>
       console.error("[mail] Sonde unerwartet gescheitert", fehler?.code ?? fehler?.name ?? "unbekannt"),
     );
+    // OUTBOUND-E4: EIN Lauf beim Start - fire-and-forget NACH den Boot-Logs (Muster
+    // PROV-01/mail-boot-probe direkt darueber): blockiert weder listen noch Healthcheck.
+    // Anbieter-IO gehoert nie an die Boot-Sequenz. Der Waechter traegt seinen eigenen
+    // Timeout je Abfrage und seine Mindestfrist (OUTBOUND_DRIFT_MIN_INTERVAL_MS) - ohne
+    // sie liefe er bei einem externen 10-Minuten-Ping bis zu 144x/Tag statt einmal.
+    void driftWatch.runBootProbe().catch((err) => console.error("[drift-watch] Boot-Sonde:", err.message));
   });
 
   // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)

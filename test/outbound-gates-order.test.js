@@ -33,6 +33,11 @@ const EXPECTED_ORDER = [
   "valid_mandate",
   "assistant_context",
   "resolve_outbound",
+  // OUTBOUND-E4: der ANI-Riegel sitzt HIER - NACH resolve_outbound (er braucht die
+  // aufgeloeste Absendernummer ctx.fromNumber), VOR budget (ein Anruf, der sicher
+  // scheitert, soll keine Geld-Reserve binden). Eine Umsortierung hinter reserve_budget
+  // (die haerteste Invariante des Moduls) MUSS diesen Test brechen.
+  "ani_ownership",
   "budget",
   "minutes",
   "compute_reserve",
