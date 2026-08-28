@@ -1,7 +1,9 @@
-// OUTBOUND-E2 (F1): die GELD-Regression. Harness-Muster test/el-geldpfad-s1.test.js - der
-// Store ist KEIN Handnachbau, sondern reicht jeden Aufruf an die ECHTEN state-ops-Mutatoren
-// durch, damit voiceMinutesOf (billing/metering.js) gegen denselben Datensatz rechnet wie in
-// Produktion.
+// OUTBOUND-E2 (F1): die GELD-Regression. Harness (storeOpsFacade/withFetch/waitUntil) geteilt
+// mit test/el-geldpfad-s1.test.js ueber test/helpers.js (G5: eine Kopie hatte den naechsten
+// Store-Methoden-Zuwachs bereits in 5 weiteren Test-Attrappen erzwungen, s. Review-Befund
+// E2-S2-1). Der Store ist KEIN Handnachbau, sondern reicht jeden Aufruf an die ECHTEN
+// state-ops-Mutatoren durch, damit voiceMinutesOf (billing/metering.js) gegen denselben
+// Datensatz rechnet wie in Produktion.
 //
 // Kern der Etappe (Owner-Auflage PM-14, Geld-Pfad unberuehrt): ein abgelehnter Anruf laeuft
 // schon heute ueber clearAnchor -> answeredAt=null -> 0 gebuchte Minuten - E2 aendert NUR das
@@ -21,51 +23,13 @@ import { terminateAndBillCall } from "../src/telephony/call-termination.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { CONVERSATION_FAILED_UNVERIFIED_ORIGINATION } from "./fixtures/elevenlabs-conversations.js";
+import { storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
-const WAIT_TIMEOUT_MS = 500;
-const WAIT_POLL_INTERVAL_MS = 5;
 const CALL_LAUFZEIT_S = 5; // seit answeredAt vergangen - deutlich unter jedem Deckel, kein Zombie
 const KONSTRUIERTE_DAUER_S = 42;
 const ERWARTETE_MINUTEN_BEI_42S = 1;
-
-async function withFetch(fetchImpl, run) {
-  const orig = globalThis.fetch;
-  globalThis.fetch = fetchImpl;
-  try {
-    return await run();
-  } finally {
-    globalThis.fetch = orig;
-  }
-}
-
-async function waitUntil(predicate) {
-  const deadline = Date.now() + WAIT_TIMEOUT_MS;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error("Bedingung nicht innerhalb der Testfrist erreicht");
-    await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_INTERVAL_MS));
-  }
-}
-
-// Die Store-Fassade, wie src/store/json.js sie baut (Muster el-geldpfad-s1.test.js): jede
-// Methode reicht an denselben state-ops-Mutator durch, den auch Produktion benutzt.
-function storeFacade(state) {
-  return {
-    load: () => state,
-    getCall: (id) => ops.getCall(state, id),
-    addTranscript: (id, rolle, text) => ops.addTranscript(state, id, rolle, text),
-    recordProviderCallResult: (id, ergebnis) => ops.recordProviderCallResult(state, id, ergebnis),
-    recordProviderCollectedFields: (id, felder) => ops.recordProviderCollectedFields(state, id, felder),
-    recordCalleeConfirmedTimezone: (id, zone) => ops.recordCalleeConfirmedTimezone(state, id, zone),
-    recordSipCallId: () => {},
-    trueUpAnsweredAt: (id, iso) => ops.trueUpAnsweredAt(state, id, iso),
-    recordAnsweredUnclearReason: (id, grund) => ops.recordAnsweredUnclearReason(state, id, grund),
-    recordFailureReason: (id, grund) => ops.recordFailureReason(state, id, grund),
-    setCallEndedAt: (id, status, iso) => ops.setCallEndedAt(state, id, status, iso),
-    endCallRecord: (id, status) => ops.endCallRecord(state, id, status).call,
-  };
-}
 
 function seedActiveCall() {
   const state = ops.makeDefaultState();
@@ -80,7 +44,7 @@ function seedActiveCall() {
   const anker = new Date(Date.now() - CALL_LAUFZEIT_S * MS_PER_SECOND).toISOString();
   call.startedAt = anker;
   call.answeredAt = anker; // der Verbindungsstempel des Anrufstarts (markAnswered)
-  return { state, call, store: storeFacade(state) };
+  return { state, call, store: storeOpsFacade(state) };
 }
 
 // EIN Poll-Takt gegen genau EINEN Gespraechs-Datensatz (Fixture) - der Anbieter antwortet

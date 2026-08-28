@@ -41,34 +41,15 @@ import { billThunk, elevenLabsHangUpAction, terminateAndBillCall } from "../src/
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { CONVERSATION_IN_PROGRESS } from "./fixtures/elevenlabs-conversations.js";
+import { storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const CONV_ID = "conv_geldpfad";
 const HTTP_OK = 200;
 const HTTP_SERVER_ERROR = 500;
 const SECONDS_PER_MINUTE = 60;
-const WAIT_UNTIL_TIMEOUT_MS = 500;
-const WAIT_UNTIL_POLL_INTERVAL_MS = 5;
 
 const elConfig = () => withConfigNamespaces({ elevenLabsOutbound: ACCOUNT });
-
-async function withFetch(fetchImpl, run) {
-  const orig = globalThis.fetch;
-  globalThis.fetch = fetchImpl;
-  try {
-    return await run();
-  } finally {
-    globalThis.fetch = orig;
-  }
-}
-
-async function waitUntil(predicate) {
-  const deadline = Date.now() + WAIT_UNTIL_TIMEOUT_MS;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error("Bedingung nicht innerhalb der Testfrist erreicht");
-    await new Promise((resolve) => setTimeout(resolve, WAIT_UNTIL_POLL_INTERVAL_MS));
-  }
-}
 
 // Fehlerebene-Log einsammeln, ohne ihn zu verschlucken - die Zeilen SIND hier die Zusicherung
 // ("der Fall wird laut statt still").
@@ -103,33 +84,6 @@ function seedActiveCall({ maxDurationS, laufzeitSekunden }) {
   return { state, call };
 }
 
-// Die Store-Fassade, wie src/store/json.js sie baut: jede Methode reicht an denselben
-// state-ops-Mutator durch, den auch Produktion benutzt (endCallRecord liefert dort den
-// Call, nicht das {call, changed}-Paar).
-function storeFacade(state) {
-  return {
-    load: () => state,
-    getCall: (id) => ops.getCall(state, id),
-    addTranscript: (id, rolle, text) => ops.addTranscript(state, id, rolle, text),
-    recordProviderCallResult: (id, ergebnis) => ops.recordProviderCallResult(state, id, ergebnis),
-    recordProviderCollectedFields: (id, felder) => ops.recordProviderCollectedFields(state, id, felder),
-    recordCalleeConfirmedTimezone: (id, zone) => ops.recordCalleeConfirmedTimezone(state, id, zone),
-    // Join-Schluessel zur Telefonie-Rechnung (persistProviderResult, s.
-    // src/elevenlabs/outbound.js): hier ein No-op - der Sachverhalt dieser Datei
-    // haengt nicht an ihm, aber die Attrappe muss die Methode kennen, sonst wirft
-    // der Ergebnisweg einen TypeError.
-    recordSipCallId: () => {},
-    trueUpAnsweredAt: (id, iso) => ops.trueUpAnsweredAt(state, id, iso),
-    recordAnsweredUnclearReason: (id, grund) => ops.recordAnsweredUnclearReason(state, id, grund),
-    // OUTBOUND-E2: finishFromConversation UND finishWithoutProviderResult rufen
-    // recordFailureReason UNBEDINGT - ueber den echten Mutator, wie jede andere
-    // Store-Methode hier (set-once + No-op bei null, s. state-ops.js).
-    recordFailureReason: (id, grund) => ops.recordFailureReason(state, id, grund),
-    setCallEndedAt: (id, status, iso) => ops.setCallEndedAt(state, id, status, iso),
-    endCallRecord: (id, status) => ops.endCallRecord(state, id, status).call,
-  };
-}
-
 function makeOutbound(store, extra) {
   return makeElevenLabsOutbound({
     store,
@@ -155,7 +109,7 @@ test("S1-A: eigene 1800-s-Frist + dauerhaft stummer Ergebnisabruf -> gebucht wer
     maxDurationS: MAX_CALL_DURATION_CAP_S,
     laufzeitSekunden: MAX_CALL_DURATION_CAP_S + ZOMBIE_UEBERZUG_S,
   });
-  const store = storeFacade(state);
+  const store = storeOpsFacade(state);
   let billed = false;
   const el = makeOutbound(store, {
     billThunk: () => () => {
@@ -195,7 +149,7 @@ test("S1-A: eine KUERZERE anrufeigene Frist bleibt wirksam - die Kappung ist das
     maxDurationS: KURZE_FRIST_S,
     laufzeitSekunden: MAX_CALL_DURATION_CAP_S,
   });
-  const store = storeFacade(state);
+  const store = storeOpsFacade(state);
   let billed = false;
   const el = makeOutbound(store, {
     billThunk: () => () => {
@@ -229,7 +183,7 @@ test("S1-B: Abbruch auf ein LAUFENDES Gespraech (in-progress, Dauer 0) loescht d
     maxDurationS: MAX_CALL_DURATION_CAP_S,
     laufzeitSekunden: GESPRAECHSDAUER_S,
   });
-  const store = storeFacade(state);
+  const store = storeOpsFacade(state);
   const el = makeOutbound(store);
   const angenommenVorAbbruch = call.answeredAt;
 
@@ -284,7 +238,7 @@ test("S1-B: ein BEENDETES Gespraech mit Dauer 0 bleibt 'niemand hat abgenommen' 
     maxDurationS: MAX_CALL_DURATION_CAP_S,
     laufzeitSekunden: GESPRAECHSDAUER_S,
   });
-  const store = storeFacade(state);
+  const store = storeOpsFacade(state);
   const el = makeOutbound(store);
 
   const fehlerzeilen = await mitFehlerLog(() =>
@@ -373,7 +327,7 @@ test("S1-C: ein stummer Anbieter laesst den Abbruch nach der KURZEN Frist zuruec
     maxDurationS: MAX_CALL_DURATION_CAP_S,
     laufzeitSekunden: GESPRAECHSDAUER_S,
   });
-  const el = makeOutbound(storeFacade(state));
+  const el = makeOutbound(storeOpsFacade(state));
   const start = Date.now();
 
   const angeforderteFristen = await withZeitrafferAbortSignal(() =>

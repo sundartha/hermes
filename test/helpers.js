@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
+import * as stateOps from "../src/store/state-ops.js";
 
 // ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
 // WEB_DIST_DIR gegen das Arbeitsverzeichnis des Spawn-Childs (= ROOT).
@@ -680,6 +681,67 @@ export async function waitForStoreState(srv, predicate, timeoutMs = 4000) {
     await new Promise((r) => setTimeout(r, 20));
   }
   return srv.readStore();
+}
+
+const WAIT_UNTIL_DEFAULT_TIMEOUT_MS = 500;
+const WAIT_UNTIL_DEFAULT_POLL_INTERVAL_MS = 5;
+
+// Wartet In-Process (kein Kindprozess, kein Store-Read von Platte) auf ein Praedikat -
+// die In-Memory-Schwester von waitForLog/waitForStoreState oben, fuer Tests, die
+// makeElevenLabsOutbound() direkt ohne Server aufrufen (G5: geteilt statt je Datei neu
+// gebaut, Bestand vor OUTBOUND-E2: el-geldpfad-s1.test.js).
+export async function waitUntil(
+  predicate,
+  { timeoutMs = WAIT_UNTIL_DEFAULT_TIMEOUT_MS, pollIntervalMs = WAIT_UNTIL_DEFAULT_POLL_INTERVAL_MS } = {},
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("Bedingung nicht innerhalb der Testfrist erreicht");
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+}
+
+// Ersetzt globalThis.fetch fuer die Dauer von run() durch eine Anbieter-Attrappe und
+// stellt das Original danach zuverlaessig wieder her (G5: geteilt statt je Datei neu
+// gebaut, Bestand vor OUTBOUND-E2: el-geldpfad-s1.test.js).
+export async function withFetch(fetchImpl, run) {
+  const orig = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = orig;
+  }
+}
+
+// Die Store-Fassade, wie src/store/json.js sie baut: jede Methode reicht an denselben
+// state-ops-Mutator durch, den auch Produktion benutzt - so rechnet voiceMinutesOf
+// (billing/metering.js) gegen denselben Datensatz wie in Produktion, statt gegen ein
+// Testobjekt mit Wunschfeldern (G5: geteilt statt je Datei neu gebaut, Bestand vor
+// OUTBOUND-E2: el-geldpfad-s1.test.js). endCallRecord liefert hier den Call, nicht das
+// {call, changed}-Paar, wie die echte Store-Fassade es tut.
+export function storeOpsFacade(state) {
+  return {
+    load: () => state,
+    getCall: (id) => stateOps.getCall(state, id),
+    addTranscript: (id, rolle, text) => stateOps.addTranscript(state, id, rolle, text),
+    recordProviderCallResult: (id, ergebnis) => stateOps.recordProviderCallResult(state, id, ergebnis),
+    recordProviderCollectedFields: (id, felder) => stateOps.recordProviderCollectedFields(state, id, felder),
+    recordCalleeConfirmedTimezone: (id, zone) => stateOps.recordCalleeConfirmedTimezone(state, id, zone),
+    // Join-Schluessel zur Telefonie-Rechnung (persistProviderResult, s.
+    // src/elevenlabs/outbound.js): hier ein No-op - nicht jeder Aufrufer haengt an ihm,
+    // aber die Attrappe muss die Methode kennen, sonst wirft der Ergebnisweg einen
+    // TypeError.
+    recordSipCallId: () => {},
+    trueUpAnsweredAt: (id, iso) => stateOps.trueUpAnsweredAt(state, id, iso),
+    recordAnsweredUnclearReason: (id, grund) => stateOps.recordAnsweredUnclearReason(state, id, grund),
+    // OUTBOUND-E2: finishFromConversation UND finishWithoutProviderResult rufen
+    // recordFailureReason UNBEDINGT - ueber den echten Mutator, wie jede andere
+    // Store-Methode hier (set-once + No-op bei null, s. state-ops.js).
+    recordFailureReason: (id, grund) => stateOps.recordFailureReason(state, id, grund),
+    setCallEndedAt: (id, status, iso) => stateOps.setCallEndedAt(state, id, status, iso),
+    endCallRecord: (id, status) => stateOps.endCallRecord(state, id, status).call,
+  };
 }
 
 // Mock der Telnyx-PROVISIONING-API: routet nach Pfad (search/order/resolve/release).
