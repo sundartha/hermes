@@ -34,16 +34,36 @@ import {
 import { SUPPORTED_LANGUAGES, localeFor } from "../src/i18n/locales.js";
 import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../src/store/state-ops.js";
 import { setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
+import { FAILURE_REASON_BASE_TOKENS } from "../src/telephony/failure-reason.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WIDGET_DIR = path.join(ROOT, "src", "ui", "widgets");
 const ALL_WIDGET_IDS = [WIDGET_AGENT_STATUS, WIDGET_MY_NUMBER, WIDGET_CALLS, WIDGET_CALENDAR, WIDGET_CALL];
 const LOCALES = Object.keys(WIDGET_DICT);
 
+// OUTBOUND-E2 (Review-Blocker Runde 4, S2-A/G5): FAILURE_REASON_LABELS lebt als
+// Objekt-Literal in call.html (self-contained Iframe-Skript, kein Import moeglich) - die
+// Menge der dort abgedeckten Basis-Token wird deshalb aus dem AUSGELIEFERTEN Quelltext
+// extrahiert statt hier ein drittes Mal hartkodiert zu werden. Ein Token, das in
+// FAILURE_REASON_BASE_TOKENS (der EINEN Klassifikations-Quelle, telephony/
+// failure-reason.js) landet, aber hier fehlt, faellt ueber T-i18n-failure-labels unten
+// rot auf - vorher fiel es nur ueber den ROH-Token in der Karte auf, den niemand testet.
+function extractFailureReasonLabels(html) {
+  const match = /var FAILURE_REASON_LABELS = (\{[\s\S]*?\n\s*\});/.exec(html);
+  assert.ok(match, "FAILURE_REASON_LABELS-Objekt-Literal nicht in call.html gefunden");
+  // new Function statt eigenem Objekt-Literal-Parser: das Literal kommt aus dem eigenen
+  // Repo-Quelltext (call.html), kein Fremd-/Nutzereingang.
+  return new Function(`return ${match[1]};`)();
+}
+
 // Ueber t(FAILURE_REASON_LABELS[...])/objectiveLabel dynamisch benutzte Keys -
 // die Literal-Regexes unten sehen sie nicht, uebersetzt werden muessen sie
-// trotzdem (call.html failureReasonLabel/objectiveLabel).
-const DYNAMIC_KEYS = ["No answer", "Busy", "Cancelled", "Failed", "Yes", "No", "Unclear"];
+// trotzdem (call.html failureReasonLabel/objectiveLabel). Die Grund-Labels kommen aus
+// dem ausgelieferten call.html selbst (s.o.), damit ein neues Label hier NIE haendisch
+// nachgetragen werden muss.
+const CALL_HTML_SOURCE = fs.readFileSync(path.join(WIDGET_DIR, "call.html"), "utf8");
+const FAILURE_REASON_LABEL_VALUES = Object.values(extractFailureReasonLabels(CALL_HTML_SOURCE));
+const DYNAMIC_KEYS = [...FAILURE_REASON_LABEL_VALUES, "Yes", "No", "Unclear"];
 
 function widgetSources() {
   return fs
@@ -102,6 +122,25 @@ test("T-i18n-keys-covered: jeder data-i18n-/t()-Key der Widget-Quellen existiert
         `Key "${key}" fehlt in Sprachtabelle "${locale}" (stiller EN-Fallback)`,
       );
     }
+  }
+});
+
+// OUTBOUND-E2 (Review-Blocker Runde 4, S2-A/G5): Vollstaendigkeits-Waechter fuer die
+// ZWEITE Fehlergrund-Verbraucherin (das Live-Widget) - Pendant zu GQ-P15-A6/A7
+// (test/gq-p15-failure-reason-notification.test.js), die dieselbe Vollstaendigkeit fuer
+// FAILURE_REASON_TEXTS bereits erzwingt. Ein Basis-Token OHNE Widget-Label faellt in
+// failureReasonLabel() (call.html) auf den ROHEN Token zurueck - genau der Befund, den
+// diese Runde behebt.
+test("T-i18n-failure-labels: jedes FAILURE_REASON_BASE_TOKEN hat ein Label im ausgelieferten call.html", () => {
+  const labels = extractFailureReasonLabels(CALL_HTML_SOURCE);
+  // Positiv-Kontrolle (Lehre pruefkommando-ohne-positiv-kontrolle): die Extraktion muss
+  // ein bekanntes Paar tatsaechlich finden, sonst prueft die Schleife unten nichts.
+  assert.equal(labels["no-answer"], "No answer", "Extraktion liefert nicht das bekannte Bestandslabel");
+  for (const token of FAILURE_REASON_BASE_TOKENS) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(labels, token),
+      `Basis-Token "${token}" hat kein Label in call.html#FAILURE_REASON_LABELS - failureReasonLabel() zeigt den rohen Token`,
+    );
   }
 });
 

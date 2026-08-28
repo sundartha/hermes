@@ -539,6 +539,41 @@ test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEI
   assert.equal(doc2.querySelector("[data-failure-display]").textContent, "sonderfall-token");
 });
 
+// OUTBOUND-E2 (Review-Blocker Runde 4): die drei neuen Schuld-Basis-Token aus
+// FAILURE_REASON_BASE_TOKENS (telephony/failure-reason.js) MUESSEN im Widget ein Label
+// bekommen, sonst zeigt failureReasonLabel() den rohen internen Token (Befund: ein per
+// place_call abgelehnter Anruf zeigte z.B. "not-placed:start-403" statt eines Labels).
+test("T-W1-call-AC7f: die drei OUTBOUND-E2-Basis-Token (not-placed/unreachable/result-unknown) zeigen ein Label, keinen rohen Token", () => {
+  const cases = [
+    { failure_reason: "not-placed:start-403", expected: "Not placed" },
+    { failure_reason: "unreachable:invite-404", expected: "Unreachable" },
+    { failure_reason: "result-unknown:poll-timeout", expected: "Result unknown" },
+  ];
+  for (const { failure_reason, expected } of cases) {
+    const doc = makeFakeDocument();
+    const env = runOwnScript(doc);
+    doc.slot("call_id").textContent = "call_x";
+    env.emit({
+      jsonrpc: "2.0",
+      method: "ui/notifications/tool-result",
+      params: {
+        structuredContent: {
+          call_id: "call_x",
+          status: "failed",
+          duration_s: 1,
+          last_transcript_lines: [],
+          failure_reason,
+        },
+      },
+    });
+    assert.equal(
+      doc.querySelector("[data-failure-display]").textContent,
+      expected,
+      `"${failure_reason}" muss als "${expected}" erscheinen, nicht roh`,
+    );
+  }
+});
+
 test("T-W1-call-AC-cancel: Cancel-Klick ruft cancel_call ueber tools/call, no-op ohne gebundene call_id UND vor dem Handshake", () => {
   const docNoCallId = makeFakeDocument();
   const envNoCallId = runOwnScript(docNoCallId);
