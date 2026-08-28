@@ -173,8 +173,14 @@ test("S1-A: eine KUERZERE anrufeigene Frist bleibt wirksam - die Kappung ist das
 });
 
 // ---- S1-B: ein laufendes Gespraech ist nicht "niemand hat abgenommen" --------------------
-const GESPRAECHSDAUER_S = 240;
-const ERWARTETE_MINUTEN_LAUFEND = GESPRAECHSDAUER_S / SECONDS_PER_MINUTE;
+// GRENZWERT-FALLE (gemessen 2026-08-28): gebucht werden ANGEFANGENE Minuten, und zwischen
+// dem Setzen des Ankers (Date.now() - laufzeitSekunden) und der Messung vergeht reale Zeit.
+// Mit exakt 240 s lag die Fixture GENAU auf der Minutengrenze: isoliert ergab sie 4 Minuten,
+// unter voller Suite-Last 5 - ein Flake ausgerechnet im Geldpfad. 210 s laesst 30 s Luft bis
+// zur naechsten Grenze; die Aussage des Falls ("der Anker bleibt stehen, die gesprochenen
+// Minuten bleiben gebucht") ist unveraendert.
+const GESPRAECHSDAUER_S = 210;
+const ERWARTETE_MINUTEN_LAUFEND = Math.ceil(GESPRAECHSDAUER_S / SECONDS_PER_MINUTE);
 const GRUND_LAUFEND = "call_duration_secs_unknown_conversation_in_progress";
 const GRUND_NICHT_ABGENOMMEN = "call_duration_secs_zero_not_answered";
 
