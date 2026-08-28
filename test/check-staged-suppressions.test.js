@@ -475,6 +475,18 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               1:1 die bisherige `const providerStatus = err?.providerStatus;`-Zeile).
 //               Gemessen mit dem echten eslint-Aufruf (--suppressions-location
 //               eslint-suppressions.empty.json). Keine neue Verstoss-Art.
+//   2026-08-28  Pin nachgezogen (OUTBOUND-E3a, E-3-Mail): src/telephony/call-finish.js
+//               id-length 12 -> 10 ('t'-Anteil 7 -> 5, 'a'/'e' unveraendert bei 2/3). Der
+//               neue vierte Aufrufer der Mail-Versandschleife (sendNotPlacedMail, die EINE
+//               Nutzer-Mail bei not-placed) haette die Shorthand-Weitergabe {..., t} an
+//               JEDER Aufrufstelle als eigenen id-length-Fund gezaehlt; stattdessen ist der
+//               Bundle-Parameter von sendMailToTargets (und von sendNotPlacedMail selbst)
+//               auf texts umbenannt - reine Umbenennung, sendSummaryMails behaelt ihren
+//               eigenen, unveraenderten Parameter t. Ergebnis: WENIGER Befunde trotz eines
+//               vierten Aufrufers. Gemessen mit dem echten eslint-Aufruf
+//               (--suppressions-location eslint-suppressions.empty.json). complexity/
+//               no-magic-numbers/no-param-reassign unveraendert (die neue Anweisung in
+//               finishCall ist unbedingt, kein neuer Zweig).
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     "reason": "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-19 (Thema A): createCall 12 -> 14 Komplexitaet (openingLine-Feld + Hash-Bedingung). Geprueft und bewusst uebernommen; das Aufraeumen bleibt das eigene Refactoring des Zustandsmoduls (s.o.).",
@@ -570,13 +582,13 @@ const LEGACY_FINGERPRINT = {
     }
   },
   "src/telephony/call-finish.js": {
-    "reason": "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung. PIN ANGEHOBEN 2026-08-19 (EL-Cutover-Merge upstream/master <-> EL-Kette): Block wortgleich vom Hook uebernommen. ZAHLEN KORRIGIERT 2026-08-21 (INBOX-P1 Review-Fix): finishCall riss durch die vier neuen Zeilen (INBOX-P1) ueber die max-lines-Grenze - behoben durch Auslagern des F2-Mailblocks in eigene Funktionen (sendSummaryMails/buildMailBody/sendMailToTargets/mailTimestampLabel), reine Verschiebung. Kein max-lines-Befund mehr in dieser Datei; complexity/id-length/no-magic-numbers/no-param-reassign sind dieselben BEREITS gepinnten Regeln, nur mit den durch die Verschiebung neu gemessenen Zahlen (keine neue Regel, keine neue Ausnahme).",
+    "reason": "Eigentuemer-Entscheidung 2026-08-15. Echte Schuld, kein Fehlschnitt der Regel - aber finishCall zu entzerren beruehrt den Abrechnungs- und Zusammenfassungs-Pfad: hier wird gebucht und die Gespraechs-Zusammenfassung erzeugt. `call._finished` ist der dokumentierte Idempotenz-Marker; ihn zu ersetzen traegt Verhaltensrisiko (Doppelbuchung oder verlorene Zusammenfassung bei doppelt zugestelltem Provider-Webhook). Eigenes Paket, eigene Absicherung. PIN ANGEHOBEN 2026-08-19 (EL-Cutover-Merge upstream/master <-> EL-Kette): Block wortgleich vom Hook uebernommen. ZAHLEN KORRIGIERT 2026-08-21 (INBOX-P1 Review-Fix): finishCall riss durch die vier neuen Zeilen (INBOX-P1) ueber die max-lines-Grenze - behoben durch Auslagern des F2-Mailblocks in eigene Funktionen (sendSummaryMails/buildMailBody/sendMailToTargets/mailTimestampLabel), reine Verschiebung. Kein max-lines-Befund mehr in dieser Datei; complexity/id-length/no-magic-numbers/no-param-reassign sind dieselben BEREITS gepinnten Regeln, nur mit den durch die Verschiebung neu gemessenen Zahlen (keine neue Regel, keine neue Ausnahme). ZAHL KORRIGIERT 2026-08-28 (OUTBOUND-E3a, E-3-Mail): sendNotPlacedMail kommt als vierter Aufrufer von sendMailToTargets hinzu (Betreiber-Auftrag: EINE Nutzer-Mail bei not-placed, dieselbe Versandschleife wie die Summary-Mail). Ohne Gegenmassnahme haette JEDE zusaetzliche Aufrufstelle der Schleife den bereits gepinnten id-length-Fund fuer den kurzen Bundle-Parameter um eins weiter angehoben (Shorthand {..., t} an der Aufrufstelle zaehlt selbst als Fund). Stattdessen ist der Parameter von sendMailToTargets (und von sendNotPlacedMail selbst) auf texts umbenannt - eine reine Umbenennung, kein Verhaltenswechsel (sendSummaryMails behaelt weiterhin den eigenen, bereits gepinnten Parameter t unveraendert). Effekt: id-length 12 -> 10 (t-Anteil 7 -> 5, a und e unveraendert bei 2 bzw. 3) - WENIGER Befunde durch die Umbenennung, TROTZ eines vierten Aufrufers. Gemessen mit 'npx eslint --suppressions-location eslint-suppressions.empty.json src/telephony/call-finish.js'. complexity/no-magic-numbers/no-param-reassign unveraendert (die neue Anweisung in finishCall ist unbedingt, kein neuer Zweig).",
     "date": "2026-08-15",
     "findings": {
       "complexity :: Async function 'finishCall' has a complexity of 21. Maximum allowed is 10.": 1,
       "id-length :: Identifier name 'a' is too short (< 2).": 2,
       "id-length :: Identifier name 'e' is too short (< 2).": 3,
-      "id-length :: Identifier name 't' is too short (< 2).": 7,
+      "id-length :: Identifier name 't' is too short (< 2).": 5,
       "no-magic-numbers :: No magic number: 2.": 1,
       "no-param-reassign :: Assignment to property of function parameter 'call'.": 1
     }

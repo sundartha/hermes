@@ -1015,7 +1015,7 @@
       "count": 1
     },
     "id-length": {
-      "count": 12
+      "count": 10
     },
     "no-magic-numbers": {
       "count": 1

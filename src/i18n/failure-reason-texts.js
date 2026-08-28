@@ -68,18 +68,49 @@ export const FAILURE_REASON_TEXTS = Object.freeze({
   }),
 });
 
-// EINE Quelle (G5) fuer die drei statusBody-Lambdas des Locale-Bundles: ohne Grund exakt der
-// Bestandstext `${target} (${statusLabel} ${status})`, mit bekanntem Grund derselbe Text plus
-// ", <reasonLabel> <Grund>". Object.hasOwn statt phrases[base] ist PFLICHT, kein Stil: das
-// Token kommt aus Provider-Daten, und ein Token wie "constructor" wuerde ueber die
-// Prototypen-Kette eine Funktion liefern und in den Nutzertext gerendert.
-export function makeStatusBody(statusLabel, { reasonLabel, phrases }) {
+// OUTBOUND-E3a (G5): die Aufloesung Token -> Satz lebt ab hier an GENAU EINER Stelle.
+// Vorher stand sie inline in makeStatusBody; mit dem MCP-Rueckweg als zweitem Leser waere
+// daraus eine zweite Herleitung geworden - genau das, was E3a verbietet.
+// Object.hasOwn statt phrases[base] ist PFLICHT, kein Stil: das Token kommt aus
+// Provider-Daten, und ein Token wie "constructor" lieferte ueber die Prototypen-Kette
+// eine Funktion in den Nutzertext.
+// Unbekanntes/neues Basis-Token -> null (der Aufrufer entscheidet seinen Rueckfall).
+export function makeFailureSentence({ phrases }) {
+  return (failureReason) => {
+    const base = failureReasonBase(failureReason);
+    return base && Object.hasOwn(phrases, base) ? phrases[base] : null;
+  };
+}
+
+// EINE Quelle (G5) fuer die drei statusBody-Lambdas des Locale-Bundles. Ausgabe
+// BYTE-IDENTISCH zum Bestand: ohne bekannten Grund `${target} (${statusLabel} ${status})`,
+// mit Grund derselbe Text plus ", <reasonLabel> <Grund>".
+export function makeStatusBody(statusLabel, bundle) {
+  const sentence = makeFailureSentence(bundle);
   return (target, status, failureReason) => {
     const statusPart = `${statusLabel} ${status}`;
-    const base = failureReasonBase(failureReason);
-    const phrase = base && Object.hasOwn(phrases, base) ? phrases[base] : null;
+    const phrase = sentence(failureReason);
     return phrase
-      ? `${target} (${statusPart}, ${reasonLabel} ${phrase})`
+      ? `${target} (${statusPart}, ${bundle.reasonLabel} ${phrase})`
       : `${target} (${statusPart})`;
+  };
+}
+
+// OUTBOUND-E3a: der Ergebnistext des MCP-Rueckwegs (await_call_event/get_transcript).
+// Anders als statusBody hat er KEIN Ziel-Feld - deshalb ein eigener Bauplan, aber
+// DIESELBE Aufloesung (makeFailureSentence). Drei Ausgaenge, bewusst getrennt:
+//   kein Grund          -> null  (der Aufrufer behaelt seinen Bestandstext; die
+//                                 Gegenrichtung ist per Test gepinnt)
+//   bekannter Grund     -> "<Lead> <reasonLabel> <Satzteil>"
+//   unbekanntes Token   -> "<Lead>" allein (Befund D-5: ein rohes Token darf den Nutzer
+//                          NIE erreichen; der Sammel-Satz ist verstaendlich und wahr, das
+//                          Token bleibt der Diagnose vorbehalten - Store, Log und das
+//                          Maschinenfeld failure_reason).
+export function makeCallFailedSummary(lead, bundle) {
+  const sentence = makeFailureSentence(bundle);
+  return (failureReason) => {
+    if (!failureReason) return null;
+    const phrase = sentence(failureReason);
+    return phrase ? `${lead} ${bundle.reasonLabel} ${phrase}` : lead;
   };
 }

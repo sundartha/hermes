@@ -8,6 +8,11 @@
 // mcp-tools.js keinen zweiten Lookup braucht (G5).
 //
 // FR traegt Akzente (wie jeder FR-String im Bundle), EN ist kuratiert.
+//
+// OUTBOUND-E3a: callFailedSummary importiert FAILURE_REASON_TEXTS/makeCallFailedSummary
+// aus failure-reason-texts.js - DIESELBE Aufloesung Token -> Satz wie die Notification
+// (G5), kein zweiter Textbau fuer denselben Grund.
+import { FAILURE_REASON_TEXTS, makeCallFailedSummary } from "./failure-reason-texts.js";
 
 // Stabile, sprachneutrale Fehler-Kennungen (P12 Pre-Mortem 2). Der Wurf traegt den CODE,
 // die Uebersetzung passiert an genau EINER Kante (wrapHandler in mcp-tools.js). Diese
@@ -86,6 +91,14 @@ export const MCP_TEXTS = Object.freeze({
       planUsage: (percent) => `Monatsnutzung: ${percent} % des Minuten-Kontingents`,
       planUsageUnknown: "Monatsnutzung: kein Kontingent hinterlegt",
     }),
+    // OUTBOUND-E3a: der Ergebnistext eines gescheiterten Anrufs im MCP-Rueckweg. TENANT-
+    // sichtbar (er erscheint im Chat), deshalb sprachabhaengig - anders als die
+    // Tool-Beschreibungen (einsprachig englisch, O14). Der GRUND-Satzteil kommt aus
+    // FAILURE_REASON_TEXTS, nicht aus einer zweiten Tabelle (G5).
+    callFailedSummary: makeCallFailedSummary(
+      "Der Anruf ist nicht zustande gekommen.",
+      FAILURE_REASON_TEXTS.de,
+    ),
   }),
   en: Object.freeze({
     roleAgent: "Agent",
@@ -128,6 +141,7 @@ export const MCP_TEXTS = Object.freeze({
       planUsage: (percent) => `Monthly usage: ${percent}% of your included minutes`,
       planUsageUnknown: "Monthly usage: no plan quota on file",
     }),
+    callFailedSummary: makeCallFailedSummary("The call did not go through.", FAILURE_REASON_TEXTS.en),
   }),
   fr: Object.freeze({
     roleAgent: "Agent",
@@ -172,5 +186,6 @@ export const MCP_TEXTS = Object.freeze({
       planUsage: (percent) => `Utilisation mensuelle : ${percent} % des minutes incluses`,
       planUsageUnknown: "Utilisation mensuelle : aucun forfait enregistré",
     }),
+    callFailedSummary: makeCallFailedSummary("L'appel n'a pas abouti.", FAILURE_REASON_TEXTS.fr),
   }),
 });

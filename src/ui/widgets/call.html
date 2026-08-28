@@ -287,6 +287,11 @@
       "not-placed": "Not placed",
       "unreachable": "Unreachable",
       "result-unknown": "Result unknown",
+      // OUTBOUND-E3a (Befund D-5): diese zwei internen Token existieren bereits als Satz
+      // in FAILURE_REASON_TEXTS (i18n/failure-reason-texts.js), hatten hier aber nie ein
+      // Kurzlabel - sie erschienen bislang ROH ("max-duration-cap") in der Karte.
+      "max-duration-cap": "Duration limit",
+      "budget-exhausted": "Budget used up",
     };
 
     // STATUS_VIEW: EIN kanonischer Eintrag pro Call-Status (dialing/in_progress/
@@ -427,12 +432,16 @@
       return Math.floor(s / 60) + ":" + (rest < 10 ? "0" + rest : rest);
     }
 
-    // "failed:487" -> Label von "failed"; unbekannter Token bleibt roh sichtbar.
+    // "failed:487" -> Label von "failed".
+    // OUTBOUND-E3a (Befund D-5): ein unbekanntes/neues Basis-Token darf den Nutzer NIE
+    // ROH erreichen. Es faellt auf das vorhandene Sammel-Label "Failed" zurueck - kurz,
+    // uebersetzt, und fuer JEDEN Grund wahr (failureReason existiert nur an nicht
+    // erfolgreichen Anrufen). Das rohe Token bleibt der Diagnose vorbehalten: es steht
+    // unveraendert am Datensatz und im Maschinenfeld failure_reason (get_call_status).
     function failureReasonLabel(raw) {
       if (raw === null || raw === undefined) return raw;
-      var token = String(raw);
-      var mapped = FAILURE_REASON_LABELS[token.split(":")[0]];
-      return mapped ? t(mapped) : token;
+      var mapped = FAILURE_REASON_LABELS[String(raw).split(":")[0]];
+      return t(mapped || "Failed");
     }
 
     // objective_achieved ist bool ODER String (get_transcript-Kontrakt,

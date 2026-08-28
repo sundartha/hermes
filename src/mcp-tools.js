@@ -145,6 +145,17 @@ function durationS(c) {
   return Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));
 }
 
+// OUTBOUND-E3a (G5): get_call_status und await_call_event beantworten dieselbe Frage -
+// "wie ist der Anruf ausgegangen und warum" - und duerfen sie nicht zweimal beantworten.
+// BEWUSST NICHT pickCallStatus als Ganzes wiederverwendet: die traegt
+// last_transcript_lines, und der await_call_event-Kontrakt reicht das Roh-Transkript
+// strukturell NICHT durch (Absolute Regel 5, s. Kommentar bei pickTranscript).
+// failure_reason ist das MASCHINENFELD (rohes Token, Diagnose); der Nutzertext entsteht
+// getrennt in pickTranscript.
+function callOutcomeView(call) {
+  return { status: mapStatus(call), failure_reason: call.failureReason ?? null };
+}
+
 // Daten-Kontrakt get_call_status (P1-Spec Abschnitt 5): GENAU diese Felder duerfen
 // nach aussen (structuredContent + Text + Widget). Whitelist, keine Blacklist. Sitzt
 // NACH der Tenant-Aufloesung (Gateway) und VOR jeder Sicht - eine einzige Stelle.
@@ -152,14 +163,11 @@ function durationS(c) {
 function pickCallStatus(callId, c, texts) {
   return {
     call_id: callId,
-    status: mapStatus(c),
+    ...callOutcomeView(c),
     duration_s: durationS(c),
     last_transcript_lines: c.transcript
       .slice(-LAST_TRANSCRIPT_LINES)
       .map((t) => `${t.role === "agent" ? texts.roleAgent : texts.roleCounterparty}: ${t.text}`),
-    // CDF1: PII-freier Fehlergrund NICHT erfolgreicher Calls. Erfolgreich/aktiv -> null
-    // (Shape stabil; bestehende Felder unveraendert). Reines Whitelist-Feld, kein Roh-Durchstich.
-    failure_reason: c.failureReason ?? null,
   };
 }
 
@@ -173,6 +181,14 @@ const CALL_STATUS_OUTPUT = {
   failure_reason: z.string().nullable(),
 };
 
+// OUTBOUND-E3a: der Warte-Platzhalter als benannte Konstante. Wortlaut BYTE-IDENTISCH zum
+// Bestand - er ist die Gegenrichtung des neuen Verhaltens und per Test gepinnt.
+// BEWUSST NICHT nach i18n/mcp-texts.js verschoben: das aenderte den Text fuer EN/FR-Tenants
+// und braeche genau die Byte-Identitaet, die E3a zusichert. Die fehlende Lokalisierung
+// dieses Bestandstexts ist ein KARTIERTER, hier NICHT behobener Befund.
+const AWAIT_SUMMARY_PLACEHOLDER =
+  "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)";
+
 // Daten-Kontrakt get_transcript (Strategie Abschnitt 5.1, DSGVO): GENAU diese Felder
 // duerfen nach aussen (structuredContent + Text + Widget). Das Roh-Transkript
 // (c.transcript: role/text/t) wird NIE durchgereicht - es wird serverseitig nach der
@@ -181,12 +197,17 @@ const CALL_STATUS_OUTPUT = {
 // resultCardView (src/call-result.js, seit INBOX-P2 dort zuhause).
 // Exportiert (rein additiv, keine Verhaltensaenderung): weitere Aufrufer bleiben
 // innerhalb dieser Datei.
-export function pickTranscript(callId, c) {
+// OUTBOUND-E3a: texts ist der 3. Parameter, Default null - Altaufrufer bleiben
+// byte-identisch. Der Warte-Platzhalter verschwindet AUSSCHLIESSLICH bei terminalem Anruf
+// MIT gespeichertem Grund. Alles andere - laufender Anruf, terminaler Anruf OHNE Grund
+// (das sind ALLE EL-Anrufe vor E2, deren failure_reason strukturell NULL ist), fehlende
+// texts (Altaufrufer/Test) - bleibt byte-identisch. Beide Richtungen sind gepinnt.
+export function pickTranscript(callId, c, texts = null) {
+  const failureSummary =
+    texts && mapStatus(c) === "failed" ? texts.callFailedSummary(c.failureReason) : null;
   return {
     call_id: callId,
-    result_summary:
-      c.summary ||
-      "(Noch keine Zusammenfassung verfuegbar - ggf. 5 Sekunden warten und erneut aufrufen.)",
+    result_summary: c.summary || failureSummary || AWAIT_SUMMARY_PLACEHOLDER,
     objective_achieved: c.objectiveAchieved ?? "unclear",
     ...resultCardView(c.result),
   };
@@ -213,10 +234,16 @@ const TRANSCRIPT_OUTPUT = {
 
 // AL-P13: outputSchema von await_call_event. Die Ergebnis-Felder sind NUR bei
 // event="done" befuellt (der Payoff, der das Dranbleiben lohnt) - sonst null bzw. leer.
+// OUTBOUND-E3a (F2a): Ausgang UND Grund auf DEM Weg, in den die Server-Instruktionen das
+// Modell schicken. Beide nullable - solange der Anruf laeuft (event "none"/"consult")
+// gibt es noch keinen Ausgang; befuellt sind sie bei event="done". Additiv: kein
+// bestehendes Feld entfaellt, kein Typ aendert sich.
 const AWAIT_EVENT_OUTPUT = {
   event: z.string(),
   event_id: z.string().nullable(),
   questions: z.array(z.string()),
+  status: z.string().nullable(),
+  failure_reason: z.string().nullable(),
   result_summary: z.string().nullable(),
   objective_achieved: z.union([z.boolean(), z.string()]).nullable(),
   ...RESULT_CARD_OUTPUT,
@@ -226,12 +253,16 @@ const AWAIT_EVENT_OUTPUT = {
 // Whitelist (pickTranscript/resultCardView) - KEINE zweite Ergebnis-Sicht (G5), das
 // Roh-Transkript ist strukturell nicht erreichbar (Regel 5). finished = der Call-Record
 // bei event="done", sonst null.
-function awaitEventView(callId, event, finished) {
-  const done = finished ? pickTranscript(callId, finished) : null;
+// OUTBOUND-E3a: EIN Objekt-Argument statt vier Positionen (max-params 3, F1) - und
+// zugleich der Grund, warum der Aufrufer unveraendert EINE Zeile bleibt.
+function awaitEventView({ callId, event, finished, texts }) {
+  const done = finished ? pickTranscript(callId, finished, texts) : null;
+  const outcome = finished ? callOutcomeView(finished) : { status: null, failure_reason: null };
   return {
     event: event.event,
     event_id: event.eventId ?? null,
     questions: Array.isArray(event.questions) ? event.questions : [],
+    ...outcome,
     result_summary: done?.result_summary ?? null,
     objective_achieved: done?.objective_achieved ?? null,
     ...resultCardView(finished?.result),
@@ -829,7 +860,7 @@ export function registerTools(
         const event = await pollConsult(`/api/calls/${call_id}/consult${query}`);
         const finished =
           event.event === CONSULT_EVENT.DONE ? await call("GET", `/api/calls/${call_id}`) : null;
-        const data = awaitEventView(call_id, event, finished);
+        const data = awaitEventView({ callId: call_id, event, finished, texts: loc.mcp });
         return {
           content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
           structuredContent: data,
@@ -951,7 +982,7 @@ export function registerTools(
       // Validiert, dass ein echtes Call-Objekt zurueckkam (transcript-Feld vorhanden);
       // das Roh-Transkript selbst wird bewusst NICHT durchgereicht (Whitelist unten).
       requireFields(c, { transcript: "array" });
-      const data = pickTranscript(call_id, c); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
+      const data = pickTranscript(call_id, c, loc.mcp); // EIN Whitelist-Filter, VOR Text + structuredContent + Widget
       // Textblock = Summary/Ziel-Sicht (kein call_id, analog get_call_status);
       // structuredContent ist die SSOT-Obermenge inkl. call_id (Whitelist). Roh-
       // Transkript taucht in KEINER Sicht auf (DSGVO).
