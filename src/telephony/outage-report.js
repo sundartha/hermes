@@ -223,12 +223,25 @@ export async function runOutageRecoverySweep({ store, config, audit, nowMs = Dat
 // (Rollback-Hebel, Muster outageAlertWindowMs).
 const SELF_TEST_BUCKET = "self-test:alert-channel";
 
-// B1-Fix (Review-Blocker Runde 3): das Praedikat "ist ein Fehlergrund-Eimer" an EINER
-// Stelle statt als verstreuter Namensvergleich (G26/P16-Auftrag: "per Konstruktion",
-// nicht ad hoc). Heute gibt es genau einen Nicht-Fehlergrund-Eimer (der Selbsttest); die
-// Funktion bleibt trotzdem die einzige Stelle, die diese Frage beantwortet.
+// B1-Fix (Review-Blocker Runde 3) + Review-Blocker Runde 2 (C8-HOLD-Marker faellt in den
+// Erholungs-Sweep): das Praedikat "ist ein Fehlergrund-Eimer" an EINER Stelle statt als
+// verstreuter Namensvergleich (G26/P16-Auftrag: "per Konstruktion", nicht ad hoc). POSITIV
+// formuliert (Whitelist), nicht als Ausschlussliste: ein echter Fehlergrund-Eimer traegt
+// IMMER das NOT_PLACED-Praefix (reportSystematicOutage/claimVerdict bauen den Marker-Code
+// ausschliesslich aus outageBucket(call.failureReason), NACHDEM failureReasonBase(...) ===
+// NOT_PLACED geprueft wurde - s. reportSystematicOutage oben). Jeder andere Marker-Code in
+// state.outageAlerts (der Selbsttest SELF_TEST_BUCKET, der HOLD-Eskalationsmarker
+// "hold:<grund>:<id>" unten) ist KEIN Fehlergrund und darf outageWindow() nie befragen -
+// fuer sie liefert outageWindow() konstruktionsbedingt IMMER fehler=0 (kein echter
+// call.failureReason bildet je auf einen dieser Codes ab), und der alte Ausschluss-Ansatz
+// (nur SELF_TEST_BUCKET benannt) uebersah GENAU DESHALB den neuen HOLD-Marker: ein
+// beantworteter Anruf im Fenster urteilte "erholt" auf einem Marker, der nie einen
+// Fehlschlag gezaehlt hat, und schloss ihn faelschlich - die Eskalation (C8) wiederholte
+// sich dann bei jedem Sweep, weil kein offener Marker mehr gefunden wurde. Eine Whitelist
+// ist die richtige Bauform, weil jeder KUENFTIGE Nicht-Fehlergrund-Marker automatisch
+// ausgeschlossen bleibt, ohne dass dieses Praedikat je wieder angefasst werden muss.
 function istFehlergrundEimer(code) {
-  return code !== SELF_TEST_BUCKET;
+  return code.startsWith(NOT_PLACED);
 }
 
 // Reine Faelligkeits-Frage (Muster meldeErlaubt/outage-detection.js): kein Marker oder nie

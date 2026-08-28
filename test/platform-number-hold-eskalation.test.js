@@ -9,10 +9,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { platformHoldEscalationCandidates } from "../src/store/state-ops.js";
-import { runPlatformHoldEscalationSweep } from "../src/telephony/outage-report.js";
+import { runPlatformHoldEscalationSweep, runOutageRecoverySweep } from "../src/telephony/outage-report.js";
 import { NUMBER_STATUS, PROVIDER, PLATFORM_NUMBER_PURPOSE, NUMBER_HOLD_REASON } from "../src/store/defaults.js";
 
 const SCHWELLE_MS = 86400000; // 24h - identisch zum Default PLATFORM_HOLD_ESCALATION_MAX_AGE_MS
+// Fenster/Tick-Abstand fuer den C8-Regressionstest unten (Ausfall-Erkennungsfenster UND
+// Abstand zwischen den zwei simulierten Sweep-Ticks) - eine benannte Stunde statt einer
+// nackten Zahlenkette (G25).
+const EINE_STUNDE_MS = 3600000;
 // Vielfaches der Schwelle fuer den "viel spaeter"-Sweep (G25: benannte Konstante statt
 // Zahlenkette) - beliebig, solange deutlich ueber jeder denkbaren Zeit-basierten Frist.
 const WEIT_UEBER_JEDE_FRIST_VIELFACHES = 30;
@@ -212,4 +216,63 @@ test("C8-Aus: platformHoldEscalationMaxAgeMs=0 haelt die Eskalation komplett aus
   await runPlatformHoldEscalationSweep({ store, config: configAus, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
   assert.equal(spies.auditCalls.length, 0);
   assert.equal(state.outageAlerts.length, 0);
+});
+
+// ---- Review-Blocker Runde 2 (neu, selbst gemessener Defekt): der HOLD-Marker faellt in
+// den Erholungs-Sweep und wird dort geschlossen -------------------------------------------
+// Reproduziert exakt die vom Reviewer gemessene Verdrahtung: ein alter HOLD eskaliert
+// (C8), UND im selben Zeitfenster liegt ein beantworteter Outbound-Anruf (irgendeiner -
+// erfolge im Fenster ist NICHT bucket-spezifisch, s. outage-detection.js#outageWindow).
+// Die urspruengliche Fassung von istFehlergrundEimer() (Ausschlussliste: "code !==
+// SELF_TEST_BUCKET") liess den HOLD-Code "hold:platform_number_in_use:<id>" ungehindert in
+// runOutageRecoverySweep - dort liefert outageWindow() fuer diesen Code konstruktionsbedingt
+// IMMER fehler=0 (kein echter call.failureReason bildet je auf ihn ab), und mit dem
+// Blocker-1-Fix ("RECOVERED nur bei erfolge>0") urteilte der Sweep faelschlich "erholt" und
+// schloss den Marker - die Eskalation feuerte danach beim naechsten Tick erneut, weil kein
+// offener Marker mehr gefunden wurde (die vom Reviewer gemessene Wiederholung stuendlich).
+// Der Fix (istFehlergrundEimer als Whitelist auf NOT_PLACED-Praefix) haelt DIESEN Test gruen.
+test("C8-Regression (Review Runde 2): alter HOLD + erfolgreicher Anruf im Fenster -> ueber zwei Sweep-Ticks GENAU EIN Befund, KEINE outage_recovered-Zeile auf dem HOLD-Code", async () => {
+  const state = seed({ suspendedAt: ALT_SUSPENDED_AT });
+  // Ein beantworteter Outbound-Anruf, deutlich vom HOLD-Vorgang getrennt (anderer Tenant,
+  // kein Bezug zur gehaltenen Nummer) - genau das Szenario "irgendein Anruf im Fenster
+  // gelingt", das der Reviewer gemessen hat.
+  state.calls = [
+    {
+      id: "call_ok", tenantId: "t_andere", direction: "outbound",
+      endedAt: "2026-08-27T16:44:00Z", answeredAt: "2026-08-27T16:43:50Z",
+      failureReason: null, to: "+12025550199",
+    },
+  ];
+  const store = makeStore(state);
+  const spies = makeSpies();
+  const configVoll = {
+    ...CONFIG,
+    billing: {
+      ...CONFIG.billing,
+      outageAlertWindowMs: EINE_STUNDE_MS,
+      outageAlertMinFailures: 3,
+      outageAlertMinAttempts: 20,
+      outageAlertFailSharePercent: 20,
+      outageAlertDebounceMs: 21600000,
+      outageAlertRetryMs: 900000,
+    },
+  };
+
+  // Tick 1 (Muster boot.js#runSweepTick: beide Zweige laufen im selben Stunden-Sweep):
+  // die HOLD-Eskalation legt den Marker an, DANACH prueft der Erholungs-Sweep denselben
+  // Sweep-Durchlauf - der erfolgreiche Anruf liegt im Fenster.
+  await runPlatformHoldEscalationSweep({ store, config: configVoll, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: NOW_MS });
+  await runOutageRecoverySweep({ store, config: configVoll, audit: spies.audit, nowMs: NOW_MS });
+  assert.equal(spies.auditCalls.length, 1, "genau ein Befund nach Tick 1 (Regression: der Erholungs-Sweep schloss den HOLD-Marker im selben Tick faelschlich)");
+  assert.equal(spies.auditCalls[0].action, "platform_hold_escalation");
+
+  // Tick 2, eine Stunde spaeter: kein zweiter Befund, egal in welcher Reihenfolge.
+  const tick2 = NOW_MS + EINE_STUNDE_MS;
+  await runOutageRecoverySweep({ store, config: configVoll, audit: spies.audit, nowMs: tick2 });
+  await runPlatformHoldEscalationSweep({ store, config: configVoll, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs: tick2 });
+  assert.equal(spies.auditCalls.length, 1, "kein zweiter Befund nach Tick 2 (Regression: outage_recovered schloss den Marker, die Eskalation wiederholte sich)");
+  assert.ok(!spies.auditCalls.some((eintrag) => eintrag.action === "outage_recovered"), "keine outage_recovered-Zeile auf einem hold:-Code");
+  const [marker] = state.outageAlerts;
+  assert.equal(marker.code, `hold:${NUMBER_HOLD_REASON.PLATFORM_IN_USE}:n1`);
+  assert.equal(marker.closedAt, null, "der HOLD-Marker bleibt dauerhaft offen - kein Erholungs-Uebergang fuer HOLD-Codes");
 });
