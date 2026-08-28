@@ -27,32 +27,13 @@ import {
   recordProviderCollectedFields,
 } from "../src/store/state-ops.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { waitUntil, withFetch } from "./helpers.js";
 import { CONVERSATION_DONE_WITH_DATA_COLLECTION } from "./fixtures/elevenlabs-conversations.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import { makePgStore } from "../src/store/pg.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
-const WAIT_TIMEOUT_MS = 500;
-const WAIT_POLL_INTERVAL_MS = 5;
-
-async function withFetch(fetchImpl, run) {
-  const orig = globalThis.fetch;
-  globalThis.fetch = fetchImpl;
-  try {
-    return await run();
-  } finally {
-    globalThis.fetch = orig;
-  }
-}
-
-async function waitUntil(predicate, timeoutMs = WAIT_TIMEOUT_MS) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error("Bedingung nicht innerhalb der Testfrist erreicht");
-    await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_INTERVAL_MS));
-  }
-}
 
 // ---- Ebene 1: collectedFieldsOf (reine Ableitung, kein Store, kein Netz) ----------------
 

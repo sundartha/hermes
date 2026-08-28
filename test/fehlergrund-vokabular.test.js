@@ -108,3 +108,38 @@ test("failureReasonBase loest die neuen Token auf ihre Basis auf, und jedes Basi
     "keine Duplikate in der Basis-Token-Menge",
   );
 });
+
+// E2-S1-1 (Review-Blocker Runde 1): der Auffangast `sip >= SIP_SERVER_ERROR_MIN` zog den
+// GESAMTEN 6xx-Bereich (RFC 3261 "global failure") nach NOT_PLACED, obwohl fuer 6xx keine
+// Belegung existiert - nur die 5xx-Regel ist im Modul-Kommentar begruendet. Grenztest an
+// 599 (letzter belegter 5xx-Code) vs. 600 (erster unbelegte 6xx-Code) vs. 604 (SIP "Does
+// Not Exist Anywhere" - der Zwilling von 404, der nach diesem Fix NICHT mehr faelschlich
+// unsere Schuld traegt).
+test("SIP-Grenze 599 vs. 600 vs. 604: nur 5xx faellt fail-closed auf NOT_PLACED, 6xx auf RESULT_UNKNOWN", () => {
+  const SIP_LAST_SERVER_ERROR = 599;
+  const SIP_FIRST_GLOBAL_FAILURE = 600;
+  const SIP_DOES_NOT_EXIST_ANYWHERE = 604;
+  assert.equal(
+    failureReasonBase(
+      providerErrorReason({ reason: `sip status: ${SIP_LAST_SERVER_ERROR}: Server Error` }),
+    ),
+    NOT_PLACED,
+    "599 ist der letzte belegte 5xx-Code - bleibt unsere Schuld",
+  );
+  assert.equal(
+    failureReasonBase(
+      providerErrorReason({ reason: `sip status: ${SIP_FIRST_GLOBAL_FAILURE}: Busy Everywhere` }),
+    ),
+    RESULT_UNKNOWN,
+    "600 ist unbelegtes 6xx - fail-closed auf result-unknown, keine erfundene Schuldzuweisung",
+  );
+  assert.equal(
+    failureReasonBase(
+      providerErrorReason({
+        reason: `sip status: ${SIP_DOES_NOT_EXIST_ANYWHERE}: Does Not Exist Anywhere`,
+      }),
+    ),
+    RESULT_UNKNOWN,
+    "604 ist der Zwilling von 404 (Ziel existiert nicht) - darf NICHT uns zugeschrieben werden",
+  );
+});

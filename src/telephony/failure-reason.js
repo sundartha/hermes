@@ -95,6 +95,12 @@ const SIP_TEMPORARILY_UNAVAILABLE = 480;
 const SIP_BUSY_HERE = 486;
 const SIP_DECLINE = 603;
 const SIP_SERVER_ERROR_MIN = 500;
+// Obergrenze der 5xx-Klasse (RFC 3261: 6xx ist eine eigene "global failure"-Klasse, nicht
+// mehr "server error"). Nur 5xx ist durch den Kommentar bei NOT_PLACED_SIP_STATUS belegt
+// ("der Trunk/Carrier hat den INVITE definitiv abgelehnt") - fuer 6xx existiert keine
+// Belegung, deshalb faellt 6xx (ausser den unten explizit belegten Codes) auf
+// RESULT_UNKNOWN zurueck (fail-closed, s. sipBase).
+const SIP_GLOBAL_FAILURE_MIN = 600;
 const SIP_STATUS_MAX = 699;
 
 // Wer den INVITE abgelehnt hat, entscheidet die Klasse - NICHT die Zahl an sich.
@@ -161,7 +167,8 @@ export function providerErrorReason(error) {
 // Komplexitaetsgrenze und macht die Regel als Regel lesbar).
 function sipBase(sip) {
   if (UNREACHABLE_SIP_STATUS.has(sip)) return UNREACHABLE;
-  if (NOT_PLACED_SIP_STATUS.has(sip) || sip >= SIP_SERVER_ERROR_MIN) return NOT_PLACED;
+  if (NOT_PLACED_SIP_STATUS.has(sip)) return NOT_PLACED;
+  if (sip >= SIP_SERVER_ERROR_MIN && sip < SIP_GLOBAL_FAILURE_MIN) return NOT_PLACED;
   return RESULT_UNKNOWN;
 }
 

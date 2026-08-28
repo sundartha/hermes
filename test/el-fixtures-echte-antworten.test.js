@@ -20,6 +20,7 @@ import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 import { terminateAndBillCall } from "../src/telephony/call-termination.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { waitUntil, withFetch } from "./helpers.js";
 import {
   CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES,
   CONVERSATION_DONE_WITH_ANALYSIS,
@@ -29,26 +30,6 @@ import {
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
-const WAIT_TIMEOUT_MS = 500;
-const WAIT_POLL_INTERVAL_MS = 5;
-
-async function withFetch(fetchImpl, run) {
-  const orig = globalThis.fetch;
-  globalThis.fetch = fetchImpl;
-  try {
-    return await run();
-  } finally {
-    globalThis.fetch = orig;
-  }
-}
-
-async function waitUntil(predicate, timeoutMs = WAIT_TIMEOUT_MS) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error("Bedingung nicht innerhalb der Testfrist erreicht");
-    await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_INTERVAL_MS));
-  }
-}
 
 // Faengt genau die Werte ab, die persistProviderResult/applyAnsweredAnchor an den Store
 // weiterreichen - dieselben Felder, die get_transcript und die Kostendecke lesen. Der Call

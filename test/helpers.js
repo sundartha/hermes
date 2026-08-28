@@ -741,6 +741,12 @@ export function storeOpsFacade(state) {
     recordFailureReason: (id, grund) => stateOps.recordFailureReason(state, id, grund),
     setCallEndedAt: (id, status, iso) => stateOps.setCallEndedAt(state, id, status, iso),
     endCallRecord: (id, status) => stateOps.endCallRecord(state, id, status).call,
+    // E2-S2-2 (Review-Blocker Runde 2): el-action-items.test.js baute vor dieser
+    // Konsolidierung eine eigene Attrappe mit denselben drei Methoden - hier ergaenzt,
+    // damit dieselbe Facade auch dort reicht statt einer zweiten Kopie.
+    addActionItem: (id, text, typ) => stateOps.addActionItem(state, id, text, typ),
+    callActionItems: (id) => stateOps.callActionItems(state, id),
+    save: () => {},
   };
 }
 

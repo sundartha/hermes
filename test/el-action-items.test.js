@@ -31,11 +31,10 @@ import { terminateAndBillCall } from "../src/telephony/call-termination.js";
 import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
-const WAIT_TIMEOUT_MS = 500;
-const WAIT_POLL_INTERVAL_MS = 5;
 
 const NEXT_STEP_TEXT = "Bring the vehicle registration to the appointment on March 3.";
 const NEXT_STEP_WITHOUT_APPOINTMENT = "Send over the damage photos by email this week.";
@@ -97,49 +96,9 @@ function makeStateStore() {
   call.status = "active";
   call.answeredAt = new Date().toISOString();
   call.elevenlabsConversationId = null;
-  return {
-    state,
-    call,
-    store: {
-      load: () => state,
-      getCall: (id) => ops.getCall(state, id),
-      addTranscript: (id, role, text) => ops.addTranscript(state, id, role, text),
-      addActionItem: (id, text, type) => ops.addActionItem(state, id, text, type),
-      callActionItems: (id) => ops.callActionItems(state, id),
-      endCallRecord: (id, status) => ops.endCallRecord(state, id, status).call,
-      trueUpAnsweredAt: (id, iso) => ops.trueUpAnsweredAt(state, id, iso),
-      recordProviderCallResult: (id, result) => ops.recordProviderCallResult(state, id, result),
-      recordProviderCollectedFields: (id, fields) => ops.recordProviderCollectedFields(state, id, fields),
-      recordCalleeConfirmedTimezone: (id, confirmed) => ops.recordCalleeConfirmedTimezone(state, id, confirmed),
-      recordAnsweredUnclearReason: () => {},
-      // OUTBOUND-E2: finishFromConversation ruft recordFailureReason UNBEDINGT - ueber den
-      // echten Mutator, wie jede andere Store-Methode hier.
-      recordFailureReason: (id, reason) => ops.recordFailureReason(state, id, reason),
-      // Gehoert einem PARALLEL laufenden Paket (Join-Schluessel sip_call_id) und hat mit
-      // Action Items nichts zu tun - hier bewusst ein No-Op, damit dieser Test nicht an
-      // dessen Zwischenstand haengt.
-      recordSipCallId: () => {},
-      save: () => {},
-    },
-  };
-}
-
-async function withFetch(fetchImpl, run) {
-  const orig = globalThis.fetch;
-  globalThis.fetch = fetchImpl;
-  try {
-    return await run();
-  } finally {
-    globalThis.fetch = orig;
-  }
-}
-
-async function waitUntil(predicate, timeoutMs = WAIT_TIMEOUT_MS) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error("Bedingung nicht innerhalb der Testfrist erreicht");
-    await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_INTERVAL_MS));
-  }
+  // E2-S2-2 (Review-Blocker Runde 2): storeOpsFacade (test/helpers.js) statt einer
+  // handkopierten Attrappe - dieselben echten state-ops-Mutatoren, EINE Quelle.
+  return { state, call, store: storeOpsFacade(state) };
 }
 
 // Faehrt den ECHTEN Poll-Weg gegen eine Anbieter-Antwort und liefert den Store-Zustand.

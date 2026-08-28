@@ -44,6 +44,7 @@ import { cappedEndedAtMs, classifyCallTime } from "../src/store/state-ops.js";
 import { VOICE_ENGINE } from "../src/config.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+import { waitUntil, withFetch } from "./helpers.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, ERROR_ENVELOPES } from "./fixtures/elevenlabs-conversations.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
@@ -53,16 +54,6 @@ const HTTP_UNPROCESSABLE = 422;
 const HTTP_SERVER_ERROR = 500;
 const ONE_HOUR_MS = 3600000;
 const elConfig = () => withConfigNamespaces({ elevenLabsOutbound: ACCOUNT });
-
-async function withFetch(fetchImpl, run) {
-  const orig = globalThis.fetch;
-  globalThis.fetch = fetchImpl;
-  try {
-    return await run();
-  } finally {
-    globalThis.fetch = orig;
-  }
-}
 
 // ---- A: convai.js#endConversation (FAIL-SOFT) ------------------------------------------
 
@@ -589,16 +580,10 @@ test("EL-Deckel: die Konstante fuer cancel_call ist an den besessenen Vorlagenwe
 // ELEVENLABS_PROVIDER_MAX_DURATION_S laeuft und dessen Anbieter durchgehend unerreichbar
 // bleibt, terminiert trotzdem statt weiter zu pollen - nach einem Boot-Re-Arm sogar nach
 // JEDEM Neustart erneut (test/el-boot-rearm.test.js belegt den Re-Arm selbst).
-const WAIT_UNTIL_TIMEOUT_MS = 500;
+// WAIT_UNTIL_POLL_INTERVAL_MS wird unten zusaetzlich als resultPollMs verwendet (nicht
+// nur als waitUntil-Default) - deshalb bleibt die Konstante hier stehen, waitUntil selbst
+// kommt jetzt aus test/helpers.js (E2-S2-2, Review-Blocker Runde 2).
 const WAIT_UNTIL_POLL_INTERVAL_MS = 5;
-
-async function waitUntil(predicate, timeoutMs = WAIT_UNTIL_TIMEOUT_MS) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error("Poll-Obergrenze griff nicht innerhalb der Testfrist");
-    await new Promise((resolve) => setTimeout(resolve, WAIT_UNTIL_POLL_INTERVAL_MS));
-  }
-}
 
 const POLL_ZOMBIE_MARGIN_S = 60; // beliebig, nur "deutlich ueber dem Deckel"
 
