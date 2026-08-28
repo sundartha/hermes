@@ -23,6 +23,9 @@
 import { config } from "./config.js";
 import { HERMES_ICON_DATA_URI, HERMES_ICON_SIZE } from "./brand-icon-data.js";
 import { uiServerExtension } from "./ui/contract.js";
+// G22: dasselbe Basis-Token wie mail-not-placed.js - EINE Quelle statt zweimal
+// getippt, sonst deaktiviert eine Umbenennung des Tokens den Wiederhol-Riegel still.
+import { NOT_PLACED } from "./telephony/failure-reason.js";
 
 // Pfad-Praefix fuer selbst gehostete Marken-Assets unter public/ (kein Magic-String,
 // G25) - server.js braucht denselben Wert fuer icons[1].src oben.
@@ -97,7 +100,7 @@ export const MCP_CONSULT_INSTRUCTIONS =
   // OUTBOUND-E3a: ohne diesen Satz sieht das Modell ab E3a ein Token wie
   // "not-placed:invite-403-D51", weiss nichts damit anzufangen und wiederholt den Anruf -
   // jedes Mal mit echten Anbieterkosten.
-  "If await_call_event returns a failure_reason starting with \"not-placed\", the call " +
+  `If await_call_event returns a failure_reason starting with "${NOT_PLACED}", the call ` +
   "could not be placed because of a problem on our side. Do NOT retry the call: tell the " +
   "user what failed, using the result_summary text as it is.";
 

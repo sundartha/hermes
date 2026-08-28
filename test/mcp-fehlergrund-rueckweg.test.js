@@ -9,6 +9,8 @@ import http from "node:http";
 import { registerTools, pickTranscript } from "../src/mcp-tools.js";
 import { FAILURE_REASON_TEXTS } from "../src/i18n/failure-reason-texts.js";
 import { MCP_TEXTS } from "../src/i18n/mcp-texts.js";
+import { MCP_CONSULT_INSTRUCTIONS } from "../src/mcp-server-info.js";
+import { NOT_PLACED } from "../src/telephony/failure-reason.js";
 
 const CALL_ID = "call_p2a";
 const AWAIT_SUMMARY_PLACEHOLDER =
@@ -178,4 +180,25 @@ test("6b: AWAIT_EVENT_OUTPUT-Kontrakt bleibt additiv - alle Bestandsfelder sind 
   // Additiv (NEU seit E3a), kein Feld entfaellt:
   assert.ok(Object.hasOwn(data, "status"));
   assert.ok(Object.hasOwn(data, "failure_reason"));
+});
+
+// P11/T1 (Review-Blocker Runde 2): MCP_CONSULT_INSTRUCTIONS trug bisher NULL
+// Testabdeckung fuer den Wiederhol-Riegel - ein stiller Verlust dieses Satzes liesse
+// das Modell einen not-placed-Anruf wiederholen, jedes Mal mit echten Anbieterkosten.
+// Positiv-Kontrolle (Lehre pruefkommando-ohne-positiv-kontrolle): ein bekannter
+// Bestandssatz muss ebenfalls gefunden werden, sonst zeigt "nichts gefunden" nur einen
+// leeren String.
+test("7: MCP_CONSULT_INSTRUCTIONS traegt den not-placed-Wiederhol-Riegel (mit Positiv-Kontrolle)", () => {
+  assert.ok(
+    MCP_CONSULT_INSTRUCTIONS.includes("await_call_event"),
+    "Positiv-Kontrolle: bekannter Bestandssatz nicht gefunden - Pruefkommando taugt nichts"
+  );
+  assert.ok(
+    MCP_CONSULT_INSTRUCTIONS.includes(NOT_PLACED),
+    "das Basis-Token NOT_PLACED fehlt in der Instruktion"
+  );
+  assert.ok(
+    MCP_CONSULT_INSTRUCTIONS.includes("Do NOT retry the call"),
+    "die Nicht-Wiederholungs-Anweisung fehlt in der Instruktion"
+  );
 });

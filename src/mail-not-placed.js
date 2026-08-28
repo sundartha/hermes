@@ -15,16 +15,19 @@
 // Bei Millionen Nutzern waere eine Mail je Fehlanruf ein Dauer-Generator (Kosten,
 // Missbrauchsflaeche, Zustellruf); not-placed ist per Definition selten UND unsere Schuld.
 import { NOT_PLACED, failureReasonBase } from "./telephony/failure-reason.js";
+// G5/G25 (Review-Blocker Runde 2): MS_PER_MINUTE kommt aus utils/timer.js, dort bereits
+// als geteilte Quelle etabliert (Muster boot.js RETENTION_SWEEP_INTERVAL_MS) - keine
+// eigene Millisekunden-Leiter hier, utils/timer.js ist blattfoermig und zyklusfrei
+// importierbar.
+import { MS_PER_MINUTE } from "./utils/timer.js";
 
 // Entprell-Fenster: mehrere Fehlversuche hintereinander sind EIN Vorfall, nicht fuenf.
 // Gemessener Anlassfall (tasks/befund-outbound-ausfall-2026-08-27.md): vier Versuche in
 // sechs Minuten. Eine Stunde deckt das mit Reserve und laesst einen wirklich neuen Vorfall
-// am naechsten Tag trotzdem durch. Benannte Konstanten statt Magic Numbers (G25); bewusst
+// am naechsten Tag trotzdem durch. Benannte Konstante statt Magic Number (G25); bewusst
 // KEIN Env-Wert - es gibt heute genau einen Betreiber und keinen Anlass, daran zu drehen.
-const MS_PER_SECOND = 1000;
-const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
-const NOT_PLACED_MAIL_DEBOUNCE_MS = MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
+const NOT_PLACED_MAIL_DEBOUNCE_MS = MINUTES_PER_HOUR * MS_PER_MINUTE;
 
 // Rein, ohne IO: hat derselbe Tenant im Fenster VOR diesem Anruf schon einen not-placed-
 // Anruf beendet? Dann ist die Mail zu diesem Vorfall bereits raus.

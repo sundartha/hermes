@@ -9,6 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCallFinish } from "../src/telephony/call-finish.js";
+import { MS_PER_MINUTE } from "../src/utils/timer.js";
 import { seedCall } from "./helpers.js";
 
 const TARGET = "+12025550143";
@@ -18,10 +19,10 @@ const TENANT_A = "tenant_a";
 const TENANT_B = "tenant_b";
 
 // Benannte Konstanten statt Magic Numbers (G25 - hart verboten ausser 0/1/-1).
-const MS_PER_SECOND = 1000;
-const SECONDS_PER_MINUTE = 60;
+// MS_PER_MINUTE kommt aus utils/timer.js (G5) - keine dritte eigene Millisekunden-Leiter
+// neben src/utils/timer.js und src/mail-not-placed.js (Review-Blocker Runde 2).
 const MINUTES_PER_HOUR = 60;
-const ONE_MINUTE_MS = SECONDS_PER_MINUTE * MS_PER_SECOND;
+const ONE_MINUTE_MS = MS_PER_MINUTE;
 const ONE_HOUR_MS = MINUTES_PER_HOUR * ONE_MINUTE_MS;
 const SIX_MINUTES = 6;
 const SIX_MINUTES_MS = SIX_MINUTES * ONE_MINUTE_MS;
