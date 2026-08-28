@@ -153,12 +153,16 @@ export async function reportSystematicOutage({ store, config, call, audit, messa
 export async function runOutageRecoverySweep({ store, config, audit }) {
   const state = store.load();
   const nowMs = Date.now();
-  const windowMs = config.billing.outageAlertWindowMs;
+  const schwellen = outageThresholds(config);
   const offeneMarker = state.outageAlerts.filter((alert) => alert.closedAt === null);
   for (const marker of offeneMarker) {
-    const fenster = outageWindow(state.calls, { nowMs, windowMs, bucket: marker.code });
-    if (fenster.fehler > 0) continue;
-    await markOnly({ urteil: OUTAGE_VERDICT.RECOVERED, bucket: marker.code, zahlen: fenster, nowMs, store, audit });
+    const fenster = outageWindow(state.calls, { nowMs, windowMs: schwellen.windowMs, bucket: marker.code });
+    // E3B-02-Fix: EINE Urteilsstelle (beurteileAusfall) statt einer zweiten,
+    // parallel formulierten RECOVERED-Klausel hier - sonst umgeht der Sweep den
+    // Rollback-Hebel OUTAGE_VERDICT.OFF (windowMs=0) vollstaendig.
+    const { urteil } = beurteileAusfall({ fenster, marker, schwellen, nowMs });
+    if (urteil !== OUTAGE_VERDICT.RECOVERED) continue;
+    await markOnly({ urteil, bucket: marker.code, zahlen: fenster, nowMs, store, audit });
   }
 }
 

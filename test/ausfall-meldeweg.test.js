@@ -242,6 +242,26 @@ test("M9: Erholung sendet nicht - genau eine Audit-Zeile, 0 Sends (Sweep-Pfad, D
   assert.ok(marker.closedAt, "der Marker ist geschlossen");
 });
 
+test("M9b (E3B-02): windowMs=0 (Rollback-Hebel OFF) - der Sweep schliesst NICHTS", async () => {
+  // Gegenprobe zum urspruenglichen Defekt: runOutageRecoverySweep formulierte die
+  // RECOVERED-Klausel selbst nach (`fenster.fehler === 0` -> schliessen) statt
+  // beurteileAusfall zu fragen - dadurch griff der Rollback-Hebel OFF (windowMs=0,
+  // "Melder komplett aus") im Sweep NIE. Mit dem Fix liefert beurteileAusfall bei
+  // windowMs=0 IMMER urteil=OFF, der Sweep handelt dann fuer KEIN Urteil (VERDICT_HANDLERS
+  // kennt OFF nicht) - der Marker bleibt offen, keine Audit-Zeile entsteht.
+  const spies = makeSpies();
+  const erfolgreicherCall = callRow({
+    id: "call_ok2", tenantId: "t_user_01ABC", endedAt: "2026-08-27T16:44:00Z",
+    answeredAt: "2026-08-27T16:43:50Z", failureReason: null,
+  });
+  const store = makeStore({ calls: [erfolgreicherCall], outageAlerts: withOpenMarker() });
+  const configOff = { ...CONFIG, billing: { ...CONFIG.billing, outageAlertWindowMs: 0 } };
+  await runOutageRecoverySweep({ store, config: configOff, audit: spies.audit });
+  assert.equal(spies.auditCalls.length, 0, "OFF darf keine Audit-Zeile erzeugen");
+  const [marker] = store.load().outageAlerts;
+  assert.equal(marker.closedAt, null, "der Marker bleibt offen - OFF schliesst nichts");
+});
+
 test("M10: Absender kommt aus der Bindung (PM-17) - ohne Bindung keine SMS, mit Bindung die gebundene Nummer", async () => {
   const spiesOhne = makeSpies();
   const storeOhne = makeStore({ calls: alarmCalls(), outageAlerts: withOpenMarker(), platformNumberUse: [] });
