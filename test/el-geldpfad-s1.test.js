@@ -121,6 +121,10 @@ function storeFacade(state) {
     recordSipCallId: () => {},
     trueUpAnsweredAt: (id, iso) => ops.trueUpAnsweredAt(state, id, iso),
     recordAnsweredUnclearReason: (id, grund) => ops.recordAnsweredUnclearReason(state, id, grund),
+    // OUTBOUND-E2: finishFromConversation UND finishWithoutProviderResult rufen
+    // recordFailureReason UNBEDINGT - ueber den echten Mutator, wie jede andere
+    // Store-Methode hier (set-once + No-op bei null, s. state-ops.js).
+    recordFailureReason: (id, grund) => ops.recordFailureReason(state, id, grund),
     setCallEndedAt: (id, status, iso) => ops.setCallEndedAt(state, id, status, iso),
     endCallRecord: (id, status) => ops.endCallRecord(state, id, status).call,
   };

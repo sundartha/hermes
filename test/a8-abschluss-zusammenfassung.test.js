@@ -129,6 +129,9 @@ function makeCapturingStore(conversationId) {
     recordSipCallId: () => {},
     trueUpAnsweredAt: () => {},
     recordAnsweredUnclearReason: () => {},
+    // OUTBOUND-E2: finishFromConversation ruft recordFailureReason UNBEDINGT - eine
+    // unvollstaendige Attrappe soll auffallen (TypeError), nicht stumm bleiben.
+    recordFailureReason: () => {},
     endCallRecord: (_id, status) => {
       call.status = status;
       call.endedAt = new Date().toISOString();

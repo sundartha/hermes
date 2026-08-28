@@ -35,6 +35,7 @@
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { LOCALES, localeFor } from "../i18n/locales.js";
 import { cappedEndedAtMs, classifyCallTime } from "../store/state-ops.js";
+import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { verifiedOpeningLine } from "./opening-line.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 import { callLocaleFor } from "./call-locale.js";
@@ -89,6 +90,15 @@ const ANSWERED_UNCLEAR_REASON = "call_duration_secs_unusable";
 // publicCall streicht das Feld NICHT).
 const ANSWERED_REASON_NOT_ANSWERED = "call_duration_secs_zero_not_answered";
 const ANSWERED_REASON_CONVERSATION_RUNNING = "call_duration_secs_unknown_conversation_in_progress";
+
+// OUTBOUND-E2 (Ausfall 27.08.2026): der DRITTE Sachverhalt hinter "Dauer 0". Der Anbieter
+// hat uns einen FEHLER genannt - der Anruf ist nie zustande gekommen, es hat nicht bloss
+// niemand abgenommen. Bis heute fielen beide auf ANSWERED_REASON_NOT_ANSWERED, und der
+// Betreiber konnte seinen eigenen Konfigurationsdefekt nicht von einer Nichtannahme
+// unterscheiden (genau die Vermischung, die dieser Block seit S1-B verbietet).
+// WELCHER Fehler es war, sagt nicht dieses Feld, sondern call.failureReason (das EINE
+// Vokabular, telephony/failure-reason.js) - hier steht nur, warum es keinen Anker gibt.
+const ANSWERED_REASON_PROVIDER_REJECTED = "provider_rejected_before_answer";
 
 // TEIL 1 (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2 - "der Poll unterscheidet
 // dauerhaft von voruebergehend"): HTTP-Status des Ergebnisabrufs, bei denen Weiterpollen
@@ -425,19 +435,45 @@ const anchorFromProviderDuration = (answeredAtIso) => ({
 const clearAnchor = (unclearReason) => ({ answeredAtIso: null, unclearReason, keepExistingAnchor: false });
 const keepAnchor = (unclearReason) => ({ answeredAtIso: null, unclearReason, keepExistingAnchor: true });
 
-export function answeredAnchorOutcome(endedAtIso, conversation) {
-  const durationSecs = conversation?.metadata?.call_duration_secs;
+// OUTBOUND-E2 (Lint-Rueckfall): ausgelagert, damit answeredAnchorOutcome unter der
+// Komplexitaetsgrenze bleibt - das zusaetzliche if fuer den Anbieterfehler (s.u.) kam dazu.
+// Rein, ohne Nebeneffekt.
+function usableProviderDuration(durationSecs, endedAtMs) {
   const durationUsable =
     typeof durationSecs === "number" && Number.isFinite(durationSecs) && durationSecs > 0;
+  return durationUsable && Number.isFinite(endedAtMs);
+}
+
+export function answeredAnchorOutcome(endedAtIso, conversation) {
+  const metadata = conversation?.metadata;
+  const durationSecs = metadata?.call_duration_secs;
   const endedAtMs = Date.parse(endedAtIso); // NaN bei fehlendem/kaputtem endedAtIso (S2)
-  if (durationUsable && Number.isFinite(endedAtMs))
+  if (usableProviderDuration(durationSecs, endedAtMs))
     return anchorFromProviderDuration(new Date(endedAtMs - durationSecs * MS_PER_SECOND).toISOString());
   // Reihenfolge bindend: ERST fragen, ob das Gespraech ueberhaupt schon vorbei ist. Eine
   // brauchbare Dauer (oben) schlaegt die Frage, alles darunter haengt an ihr.
   if (conversation?.status === PROVIDER_IN_PROGRESS) return keepAnchor(ANSWERED_REASON_CONVERSATION_RUNNING);
+  // OUTBOUND-E2, GELD-INVARIANTE: DIESE Frage steht ZWISCHEN dem Laeuft-noch-Zweig und der
+  // Dauer-0-Frage - NIE weiter oben. Zoege man sie an den Anfang, verloere JEDE Konversation
+  // mit metadata.error ihren Buchungsanker, auch die 90 Sekunden lange, die am Ende einen
+  // Anbieterfehler meldet: answeredAt=null -> voiceMinutesOf bucht 0 -> wir zahlen den
+  // Carrier und kassieren nichts (PM-14). Hier unten gilt sie nur noch fuer Anrufe OHNE
+  // brauchbare Anbieter-Dauer - und dort ist ein gemeldeter Fehler der staerkere Beleg als
+  // "Dauer 0" oder "Dauer unbrauchbar".
+  if (metadata?.error) return clearAnchor(ANSWERED_REASON_PROVIDER_REJECTED);
   if (durationSecs === 0) return clearAnchor(ANSWERED_REASON_NOT_ANSWERED);
   return clearAnchor(ANSWERED_UNCLEAR_REASON);
 }
+
+// OUTBOUND-E2: OB ein Anbieterfehler ein Fehlergrund AM CALL wird, haengt an genau
+// derselben Entscheidung wie der Buchungsanker - eine zweite Stelle koennte auseinander
+// laufen und Label und Geld widersprechen lassen. Regel: nur wenn aus der Anbieter-Dauer
+// KEIN Buchungsanker geworden ist. Ein 42-Sekunden-Gespraech, das am Ende einen Fehler
+// meldet, ist zustande gekommen und wird bezahlt - es traegt keinen "nie zustande
+// gekommen"-Grund. WAS der Fehler bedeutet, entscheidet das EINE Vokabular
+// (telephony/failure-reason.js), nicht diese Datei.
+const providerErrorReasonFor = (anchor, conversation) =>
+  anchor.answeredAtIso || anchor.keepExistingAnchor ? null : providerErrorReason(conversation?.metadata?.error);
 
 // Nur Zeilen mit gesprochenem Inhalt: der Anbieter fuehrt auch Werkzeug-Ereignisse im
 // transcript, die kein message-Feld tragen.
@@ -994,9 +1030,14 @@ async function finishWithoutProviderResult({
   endActiveCall,
   callId,
   nowMs,
+  failureReason,
 }) {
   const call = store.getCall(callId);
   if (!call) return;
+  // OUTBOUND-E2: VOR terminateAndBillCall (dieselbe Reihenfolge-Begruendung wie in
+  // finishFromConversation). BEIDE Aufgeben-Faelle sind result-unknown, NICHT "gescheitert":
+  // der Anruf kann gelaufen sein, wir haben nur kein Ergebnis abholen koennen.
+  store.recordFailureReason(callId, failureReason);
   const endedAtIso = new Date(
     cappedEndedAtMs(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S),
   ).toISOString();
@@ -1009,7 +1050,7 @@ async function finishWithoutProviderResult({
 }
 
 async function finishExpiredPoll(deps) {
-  await finishWithoutProviderResult(deps);
+  await finishWithoutProviderResult({ ...deps, failureReason: POLL_TIMEOUT_REASON });
 }
 
 // TEIL 1 (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2): der Poll gibt auf, wenn
@@ -1024,7 +1065,7 @@ async function finishExpiredPoll(deps) {
 // provisorische Stempel darf nicht als Buchungsanker stehen bleiben.
 async function finishOnPermanentError(deps) {
   applyAnsweredAnchor(deps.store, deps.callId, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR));
-  await finishWithoutProviderResult(deps);
+  await finishWithoutProviderResult({ ...deps, failureReason: pollProviderErrorReason(deps.providerStatus) });
 }
 
 // S1-1 Fix (Owner-Auftrag 15.08.2026, stiller Totalausfall): das Nachziehen des
@@ -1074,10 +1115,16 @@ function applyAnsweredAnchor(store, callId, anchor) {
 async function fetchConversationOutcome({ account, conversationId, callId, timeoutMs }) {
   try {
     const conversation = await fetchConversation({ fetchImpl: fetch, account, conversationId, timeoutMs });
-    return { conversation, permanent: false };
+    return { conversation, permanent: false, providerStatus: null };
   } catch (err) {
     console.error(`[el-outbound] Ergebnisabruf fehlgeschlagen (call=${callId}):`, err?.message);
-    return { conversation: null, permanent: PERMANENT_FETCH_STATUS.includes(err?.providerStatus) };
+    // providerStatus reist mit, damit der Aufgeben-Grund den ANBIETER-Status nennen kann
+    // (result-unknown:poll-provider-401 vs -404) statt zwei Faelle auf ein Wort zu ziehen.
+    return {
+      conversation: null,
+      permanent: PERMANENT_FETCH_STATUS.includes(err?.providerStatus),
+      providerStatus: err?.providerStatus ?? null,
+    };
   }
 }
 
@@ -1221,7 +1268,14 @@ export function makeElevenLabsOutbound({
   async function finishFromConversation(callId, conversation) {
     persistProviderResult(callId, conversation);
     const ended = store.endCallRecord(callId, endStatusOf(conversation));
-    applyAnsweredAnchor(store, callId, answeredAnchorOutcome(ended?.endedAt, conversation));
+    const anchor = answeredAnchorOutcome(ended?.endedAt, conversation);
+    applyAnsweredAnchor(store, callId, anchor);
+    // OUTBOUND-E2: VOR terminateAndBillCall. finishCall liest call.failureReason beim
+    // Notification-Bau (telephony/call-finish.js:203-217) und billThunk laedt den Call
+    // FRISCH aus dem Store - steht der Grund noch nicht am Datensatz, bleibt der Nutzertext
+    // "<Ziel> (Status: failed)", also genau der Zustand, den diese Etappe abstellt.
+    // recordFailureReason ist set-once und bei null ein No-op (store/state-ops.js:854).
+    store.recordFailureReason(callId, providerErrorReasonFor(anchor, conversation));
     await terminateAndBillCall({
       persistEnd: () => store.endCallRecord(callId, endStatusOf(conversation)),
       hangUp: null,
@@ -1291,9 +1345,9 @@ export function makeElevenLabsOutbound({
     const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, callId, nowMs };
     if (classifyCallTime(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired)
       return finishExpiredPoll(finishDeps);
-    const { conversation, permanent } = await fetchConversationSoft(conversationId, callId);
+    const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
-      return finishOnPermanentError(finishDeps);
+      return finishOnPermanentError({ ...finishDeps, providerStatus });
     if (!conversation || !FINISHED_PROVIDER_STATUS.includes(conversation.status))
       return scheduleResultPoll(callId, conversationId);
     await finishFromConversation(callId, conversation);

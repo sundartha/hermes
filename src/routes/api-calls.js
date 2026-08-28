@@ -27,6 +27,7 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { isConsultEventId } from "../store/state-ops.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
+import { startRejectionReason } from "../telephony/failure-reason.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
@@ -53,6 +54,20 @@ function contextReceivedMeta(context, config) {
     recipient_relationship: !!context?.recipient_relationship,
     desired_outcome: !!context?.desired_outcome,
   };
+}
+
+// OUTBOUND-E2: persistiert den Anbieter-Fehlergrund des Anrufstarts (falls vorhanden) UND
+// liefert providerStatus zurueck, das der Aufrufer fuer die Client-Antwort braucht - EINE
+// Zeile im Gate-Kernpfad statt zwei getrennter Anweisungen, damit die gepinnte
+// Zeilengrenze dieser Riesenfunktion nicht steigt (s. eslint-legacy-exceptions.json,
+// "src/routes/api-calls.js" - der G30-Split steht noch aus). Reine Weiterleitung an
+// startRejectionReason (telephony/failure-reason.js, EIN Klassifizierer fuer alle drei
+// Engine-Zweige) + store.recordFailureReason (set-once, No-op bei null). Kein
+// Roh-Provider-Text: startRejectionReason liefert ein Token aus geschlossener Menge.
+function recordStartRejectionReason(store, callId, err) {
+  const providerStatus = err?.providerStatus;
+  store.recordFailureReason(callId, startRejectionReason(providerStatus));
+  return providerStatus;
 }
 
 // Fail-closed-Ersatz fuer den EL-Anrufstart (s. deps unten): ein eingeschalteter Zweig
@@ -390,6 +405,18 @@ export function makeCallRoutes({
         diagnostic: call.diagnostic,
       });
     } catch (err) {
+      // OUTBOUND-E2: der Grund steht als ERSTE Anweisung am Datensatz, VOR
+      // terminateAndBillCall (recordStartRejectionReason oben, EIN Aufruf statt zwei
+      // Anweisungen - haelt die gepinnte Zeilengrenze dieser Riesenfunktion, s.
+      // eslint-legacy-exceptions.json). Dessen bill-Thunk laeuft ueber finishCall, und
+      // finishCall liest call.failureReason beim Notification-Bau
+      // (telephony/call-finish.js:203-217); stuende er spaeter, bliebe der Nutzertext
+      // "<Ziel> (Status: failed)" - genau an der Stelle stumm, fuer die diese Etappe gebaut
+      // ist (Muster: /voice/status ruft recordFailureReason ebenfalls VOR
+      // terminateAndBillCall, routes/voice.js:542). Der catch umschliesst ALLE DREI
+      // Engine-Zweige (:331/:345/:363) - damit bekommt auch eine Telnyx-Start-Ablehnung auf
+      // dem TeXML-Weg erstmals einen Grund.
+      const providerStatus = recordStartRejectionReason(store, call.id, err);
       // C5 (Struct-4): die eigentliche Luecke - bisher lief hier NIE finishCall (Settlement/
       // Notification fehlten komplett bei einem Dial-Fehlschlag), und releaseReserve wurde
       // manuell dupliziert obwohl finishCall es bereits idempotent selbst aufruft (S2,
@@ -410,12 +437,11 @@ export function makeCallRoutes({
         err?.message || String(err),
       );
       // Der Adapter haengt bei einer Provider-HTTP-Ablehnung err.providerStatus an
-      // (secret-frei). Liegt sie vor -> kategorisierte, provider-NEUTRALE Meldung mit
-      // Statusklasse (502 Upstream), damit der Aufrufer den echten Grund erkennt.
-      // C-P4: der frueher hier angehaengte Twilio-Trial-Hint ist mit dem Adapter
+      // (secret-frei, oben gelesen). Liegt sie vor -> kategorisierte, provider-NEUTRALE
+      // Meldung mit Statusklasse (502 Upstream), damit der Aufrufer den echten Grund
+      // erkennt. C-P4: der frueher hier angehaengte Twilio-Trial-Hint ist mit dem Adapter
       // entfallen - er haette nur fuer einen Anbieter gegolten, den es nicht mehr gibt.
       // Kein Roh-Body/Key an den Client (Regel 4/5).
-      const providerStatus = err?.providerStatus;
       const body = providerStatus
         ? {
             error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.`,

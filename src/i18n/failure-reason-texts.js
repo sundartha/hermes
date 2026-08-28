@@ -14,7 +14,8 @@
 // Ein UNBEKANNTES Token hat hier keinen Eintrag -> makeStatusBody faellt auf den heutigen
 // Wortlaut zurueck; ein Roh-Token erreicht den Nutzer NIE (Absolute Regel PII).
 //
-// Die vier Provider-Token stammen aus telephony/failure-reason.js, die beiden internen aus
+// Die sieben Provider-Token stammen aus telephony/failure-reason.js (FAILURE_REASON_BASE_TOKENS),
+// die beiden internen aus
 // telephony/call-lifecycle.js (CAP_FAILURE_REASON/BUDGET_FAILURE_REASON). Bewusst als
 // Literale statt als Import: das Sprachbuendel darf nicht von der Telefonie-Orchestrierung
 // (und damit transitiv von config.js) abhaengen. Gegen Drift sichert der Vollstaendigkeits-
@@ -30,6 +31,9 @@ export const FAILURE_REASON_TEXTS = Object.freeze({
       "busy": "die Leitung war besetzt",
       "canceled": "der Anruf wurde vor dem Abheben abgebrochen",
       "failed": "die Verbindung kam nicht zustande",
+      "not-placed": "der Anruf konnte auf unserer Seite nicht aufgebaut werden",
+      "unreachable": "der Anschluss war nicht erreichbar",
+      "result-unknown": "der Ausgang des Anrufs ist unbekannt",
       "max-duration-cap": "die maximale Gespraechsdauer war erreicht",
       "budget-exhausted": "das Budget war aufgebraucht",
     }),
@@ -41,6 +45,9 @@ export const FAILURE_REASON_TEXTS = Object.freeze({
       "busy": "la ligne était occupée",
       "canceled": "l'appel a été annulé avant le décrochage",
       "failed": "la connexion n'a pas pu être établie",
+      "not-placed": "l'appel n'a pas pu être établi de notre côté",
+      "unreachable": "le numéro n'était pas joignable",
+      "result-unknown": "l'issue de l'appel est inconnue",
       "max-duration-cap": "la durée maximale d'appel était atteinte",
       "budget-exhausted": "le budget était épuisé",
     }),
@@ -52,6 +59,9 @@ export const FAILURE_REASON_TEXTS = Object.freeze({
       "busy": "the line was busy",
       "canceled": "the call was cancelled before it was answered",
       "failed": "the connection could not be established",
+      "not-placed": "the call could not be placed on our side",
+      "unreachable": "the number could not be reached",
+      "result-unknown": "the outcome of the call is unknown",
       "max-duration-cap": "the maximum call duration was reached",
       "budget-exhausted": "the budget was used up",
     }),

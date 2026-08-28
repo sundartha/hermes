@@ -117,6 +117,10 @@ function spyStore(call) {
     recordSipCallId: () => {},
     trueUpAnsweredAt: () => order.push("trueUpAnsweredAt"),
     recordAnsweredUnclearReason: () => order.push("recordAnsweredUnclearReason"),
+    // OUTBOUND-E2: finishFromConversation UND finishWithoutProviderResult rufen
+    // recordFailureReason UNBEDINGT - NICHT im order-Tracking (die Reihenfolgen-
+    // Assertions dieser Datei betreffen den Beende-Versuch, nicht diesen neuen Aufruf).
+    recordFailureReason: () => {},
   };
 }
 

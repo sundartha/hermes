@@ -3316,6 +3316,26 @@ inkl. Attrappen-Suchdienst und Timeout-Ast).
 - Kein Slot-Halter (consultSlots): der Aufruf haelt keine 47-s-Rueckfrage offen,
   sondern antwortet binnen ~3 s; die Gleichzeitigkeit deckelt der Deckel je Anruf.
 
+## OUTBOUND-E2 — Anbieter-Fehlergrund am Datensatz, PII-frei by construction (2026-08-28)
+
+Der Anbieter-Fehler (`metadata.error.reason`) ist FREITEXT und kann Rufnummern tragen
+("Invalid destination number ..."). Er wird deshalb WEDER gespeichert NOCH geloggt. Was den
+Klassifizierer verlaesst, ist ausschliesslich ein Token aus geschlossener Menge:
+`<basis>:<quelle>-<code>[-<carrier>]` mit basis ∈ {not-placed, unreachable, result-unknown,
+…}, quelle ∈ {start, invite, provider, poll}, code = validierte 3-stellige Ganzzahl,
+carrier = Treffer von /\bD\d{2}\b/. Dasselbe Sicherheitsniveau wie `safeCauseToken`
+(adapters/telnyx/webhook-events.js). Gepinnt durch den PII-Fall in
+test/fehlergrund-vokabular.test.js (Grundtext mit eingebetteter fiktiver Rufnummer ->
+Token traegt keine Ziffer daraus, Form-Regex).
+
+Wer den Volltext braucht, holt ihn per Anbieter-Abfrage ueber die bereits gespeicherte
+Gespraechs-Kennung — Forensik auf Anfrage statt Dauer-Speicherung von Fremdtext.
+
+Unberuehrt: alle Safety-Gates, `disclosureSentence`, `calleeIsOwner`, Provider-
+Signaturpruefung, Auth. Der Call-Status bleibt `failed` (kein neuer Status). Die
+Kostenbuchung ist unveraendert und per Test gepinnt (Anker + gebuchte Minuten an derselben
+Fixture, inkl. Anbieterfehler bei Dauer > 0).
+
 ## Owner-Entscheidung 2026-08-19: Prod-DB-IP-Allowlist auf 0.0.0.0/0
 
 Die Render-Postgres-Allowlist (hermes-db) stand auf einzelnen Heim-IPs; die

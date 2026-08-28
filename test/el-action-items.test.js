@@ -112,6 +112,9 @@ function makeStateStore() {
       recordProviderCollectedFields: (id, fields) => ops.recordProviderCollectedFields(state, id, fields),
       recordCalleeConfirmedTimezone: (id, confirmed) => ops.recordCalleeConfirmedTimezone(state, id, confirmed),
       recordAnsweredUnclearReason: () => {},
+      // OUTBOUND-E2: finishFromConversation ruft recordFailureReason UNBEDINGT - ueber den
+      // echten Mutator, wie jede andere Store-Methode hier.
+      recordFailureReason: (id, reason) => ops.recordFailureReason(state, id, reason),
       // Gehoert einem PARALLEL laufenden Paket (Join-Schluessel sip_call_id) und hat mit
       // Action Items nichts zu tun - hier bewusst ein No-Op, damit dieser Test nicht an
       // dessen Zwischenstand haengt.

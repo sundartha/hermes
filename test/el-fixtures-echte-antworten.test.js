@@ -9,8 +9,11 @@
 //
 // EHRLICHKEIT (Pflicht b): der FAILED-Fund unten ist ein SIP-404 "ungueltiges Ziel", NICHT
 // "niemand hat abgenommen" - dieser Fall ist NICHT belegt und wird hier auch nicht
-// behauptet. Der CLOSE-1008-Fund traegt zwei Felder, die fuer GENAU DIESE Kennung nicht
-// gemessen wurden (status, analysis) - als AUSGEDACHT gekennzeichnet, s. Fixture-Kommentar.
+// behauptet. Seit OUTBOUND-E2 traegt der Fall deshalb seinen eigenen Grund
+// (provider_rejected_before_answer / failureReason unreachable:invite-404-D11), statt auf
+// call_duration_secs_zero_not_answered zu fallen (s. Test unten). Der CLOSE-1008-Fund
+// traegt zwei Felder, die fuer GENAU DIESE Kennung nicht gemessen wurden (status, analysis)
+// - als AUSGEDACHT gekennzeichnet, s. Fixture-Kommentar.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
@@ -60,7 +63,14 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
     startedAt: answeredAt,
     endedAt: null,
   };
-  const captured = { transcript: [], summary: undefined, objectiveAchieved: undefined, answeredAtIso: undefined, unclearReasons: [] };
+  const captured = {
+    transcript: [],
+    summary: undefined,
+    objectiveAchieved: undefined,
+    answeredAtIso: undefined,
+    unclearReasons: [],
+    failureReasons: [],
+  };
   const store = {
     getCall: () => call,
     load: () => ({ calls: [call] }),
@@ -84,6 +94,9 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
       captured.answeredAtIso = answeredAtIso;
     },
     recordAnsweredUnclearReason: (_id, reason) => captured.unclearReasons.push(reason),
+    // OUTBOUND-E2: der Ergebnisweg ruft recordFailureReason UNBEDINGT (finishFromConversation)
+    // - eine unvollstaendige Attrappe soll auffallen (TypeError), nicht stumm bleiben.
+    recordFailureReason: (_id, reason) => captured.failureReasons.push(reason),
     // Der ECHTE Store (endCallRecord) liefert den fertig persistierten Call zurueck -
     // answeredAnchorOutcome braucht dessen endedAt (s. outbound.js#finishFromConversation).
     endCallRecord: (_id, status) => {
@@ -126,7 +139,7 @@ async function pollFixtureConversation(fixture) {
 }
 
 // ---- FAILED: SIP 404 "Invalid destination number" -------------------------------------
-test("Fixture FAILED (SIP-404 ungueltiges Ziel): analysis:null ueberlebt, KEIN Buchungsanker, KEINE Behauptung ueber 'niemand hat abgenommen'", async () => {
+test("Fixture FAILED (SIP-404 ungueltiges Ziel): analysis:null ueberlebt, KEIN Buchungsanker, der Anbieterfehler traegt seinen eigenen Grund", async () => {
   const { call, captured } = await pollFixtureConversation(CONVERSATION_FAILED_INVALID_DESTINATION);
 
   assert.equal(call.status, "failed", "Anbieter-Status 'failed' -> unser Status 'failed'");
@@ -137,20 +150,25 @@ test("Fixture FAILED (SIP-404 ungueltiges Ziel): analysis:null ueberlebt, KEIN B
     "unclear",
     "analysis:null -> objectiveAchievedOf faellt auf 'unclear' zurueck, statt zu werfen (Pflicht d)",
   );
-  // call_duration_secs ist GEMESSEN 0 (nicht fehlend/NaN) bei einem BEENDETEN Gespraech
-  // (status "failed") - das ist der bekannte Fall "kein Anker" (KS-EL1), NICHT der unklare.
-  // Ein 0-Sekunden-Anruf, bei dem der Ziel-SIP-404 VOR jeder Rufannahme kam, darf nicht wie
-  // eine unklare Antwort des Anbieters behandelt werden - er IST bekannt: es wurde nie
-  // abgenommen.
-  assert.equal(captured.answeredAtIso, null, "call_duration_secs=0 -> kein Buchungsanker");
+  assert.equal(captured.answeredAtIso, null, "ein Anbieterfehler vor jeder Rufannahme setzt keinen Buchungsanker");
+  // OUTBOUND-E2 (Ausfall 27.08.2026): bis hier stand "es wurde nie abgenommen". Das war
+  // falsch: der Anbieter nennt in metadata.error einen SIP-404 ("Invalid destination
+  // number") - das ZIEL existiert nicht, es hat nicht bloss niemand abgenommen. Beide
+  // Faelle trugen dasselbe Label, und deshalb war am 27.08. ein Konfigurationsdefekt
+  // (SIP-403, unsere Absendernummer war freigegeben worden) drei Tage lang von einer
+  // Nichtannahme ununterscheidbar. Der Buchungsanker bleibt in beiden Faellen null - nur
+  // das Label wird ehrlich: der Grund heisst jetzt provider_rejected_before_answer, und der
+  // Fehlergrund am Call-Record (call.failureReason, EIN Vokabular fuer alle Engines) nennt
+  // die konkrete Klasse (unreachable, weil das ZIEL nicht erreichbar ist - nicht wir).
   assert.deepEqual(
     captured.unclearReasons,
-    ["call_duration_secs_zero_not_answered"],
-    // S1-B (17.08.2026): hier stand [] - der Fall war der einzige, der weder Grund noch Log
-    // hinterliess. Er bucht nichts, also traegt er jetzt seinen EIGENEN Grund; verwechselt
-    // wird er mit nichts (fehlend/NaN heisst weiterhin call_duration_secs_unusable, ein
-    // LAUFENDES Gespraech call_duration_secs_unknown_conversation_in_progress).
-    "der bekannte Fall (niemand hat abgenommen) traegt seinen eigenen Grund, nicht den des unklaren Falls",
+    ["provider_rejected_before_answer"],
+    "ein gemeldeter Anbieterfehler ist der staerkere Beleg als 'Dauer 0' allein",
+  );
+  assert.deepEqual(
+    captured.failureReasons,
+    ["unreachable:invite-404-D11"],
+    "der Tippfehler eines Nutzers (Ziel existiert nicht) ist NICHT unsere Schuld - anders als ein 403",
   );
 });
 
