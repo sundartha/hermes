@@ -239,6 +239,12 @@ const EMPTY_NOTIFICATIONS_DE = "Noch keine Meldungen.";
 // SERVERGERENDERT in der Sprache des Anrufs (telephony/call-finish.js); hier wird nichts
 // uebersetzt und nichts neu hergeleitet - genau das haelt "keine zweite Wahrheit" (G5).
 // XSS: ausschliesslich textContent (el()), nie innerHTML (Dateikopf-Leitplanke).
+//
+// Fix-Runde 1 (Befund G2): Zeitstempel (`item.at`) fehlte komplett -- turnTimeLabel
+// ist bereits die geteilte, getestete "at" -> "HH:MM"-Herleitung (Chat-Blasen im
+// Detail-Fenster nutzen dieselbe Funktion) statt einer zweiten Zeit-Formatierung
+// hier. Als DRITTES Kind angehaengt, damit children[1] (der Body) fuer bestehende
+// Tests/Aufrufer stabil bleibt.
 export function notificationRows(doc, data) {
   const items = notificationsFrom(data);
   if (!items.length) return [emptyRow(doc, tPair(EMPTY_NOTIFICATIONS, EMPTY_NOTIFICATIONS_DE))];
@@ -248,6 +254,8 @@ export function notificationRows(doc, data) {
       el(doc, "span", "notification-row__title", item.title),
       el(doc, "span", "notification-row__body", item.body),
     );
+    const time = turnTimeLabel(item);
+    if (time) li.append(el(doc, "span", "notification-row__time", time));
     return li;
   });
 }
