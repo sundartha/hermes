@@ -109,8 +109,18 @@ function skalaAlarm(fenster, schwellen) {
 // failSharePercent, debounceMs, retryMs } (alles Env-Werte, config.billing).
 export function beurteileAusfall({ fenster, marker, schwellen, nowMs }) {
   if (schwellen.windowMs === 0) return { urteil: OUTAGE_VERDICT.OFF, zahlen: fenster };
-  if (fenster.fehler === 0)
-    return { urteil: marker ? OUTAGE_VERDICT.RECOVERED : OUTAGE_VERDICT.NONE, zahlen: fenster };
+  // Review-Blocker (Falsche Entwarnung bei Null-Verkehr): "fehler===0" allein ist KEIN
+  // Beleg fuer Erholung - ein LEERES Fenster (versuche=0, z.B. eine Woche ohne einen
+  // einzigen Anruf) erfuellt dieselbe Bedingung wie ein GESUNDES Fenster und wurde bisher
+  // ununterscheidbar als "erholt" gewertet, obwohl niemand angerufen hat. Erholung heisst
+  // NACHGEWIESENER, FUNKTIONIERENDER Verkehr: mindestens ein ERFOLGREICHER Anruf im
+  // Fenster (fenster.erfolge>0) - ein Fenster voller Fehlversuche (nur einer anderen
+  // Klasse, sonst waere fehler>0) beweist ebenfalls keine Erholung. Ohne Beleg bleibt der
+  // Marker offen: urteil NONE, VERDICT_HANDLERS kennt dafuer keinen Handler.
+  if (fenster.fehler === 0) {
+    const erholtBelegt = !!marker && fenster.erfolge > 0;
+    return { urteil: erholtBelegt ? OUTAGE_VERDICT.RECOVERED : OUTAGE_VERDICT.NONE, zahlen: fenster };
+  }
   if (!marker) return { urteil: OUTAGE_VERDICT.FIRST, zahlen: fenster };
   const alarmBedingungErfuellt = kleinesVolumenAlarm(fenster, schwellen) || skalaAlarm(fenster, schwellen);
   const urteil =

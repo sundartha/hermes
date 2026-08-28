@@ -20,6 +20,7 @@ import {
 import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, OUTAGE_VERDICT } from "./outage-detection.js";
 import * as ops from "../store/state-ops.js";
 import { sendFailSoftAlertSms, platformAlertSender } from "./alert-sms.js";
+import { NUMBER_HOLD_REASON } from "../store/defaults.js";
 
 // Kanal-Kennungen fuer WARN-Zeilen bei einem Sendefehler (PM-16).
 const CHANNEL = Object.freeze({ MAIL: "mail", SMS: "sms" });
@@ -185,9 +186,11 @@ export async function reportSystematicOutage({ store, config, call, audit, messa
 // nicht mehr in state.outageAlerts als OFFEN erscheint). Fail-soft wie der Ausloeser: ein
 // Fehler hier darf den restlichen Sweep (costTruing/provisioning/costCrossCheck) nie
 // beruehren (Isolation kommt vom eigenen .catch() des Aufrufers, boot.js#runSweepTick).
-export async function runOutageRecoverySweep({ store, config, audit }) {
+// nowMs injizierbar (Default Date.now(), Muster runAlertChannelSelfTest unten) - ein Test
+// braucht eine deterministische Uhr, um ein LEERES Fenster von einem GESUNDEN zu
+// unterscheiden (Blocker "falsche Entwarnung bei Null-Verkehr").
+export async function runOutageRecoverySweep({ store, config, audit, nowMs = Date.now() }) {
   const state = store.load();
-  const nowMs = Date.now();
   const schwellen = outageThresholds(config);
   // B1-Fix (Review-Blocker Runde 3): der Selbsttest-Marker (SELF_TEST_BUCKET, s.u.) ist
   // KEIN Fehlergrund-Eimer - fuer ihn liefert outageWindow() konstruktionsbedingt IMMER
@@ -265,13 +268,66 @@ export async function runAlertChannelSelfTest({ store, config, audit, messaging,
   }
 }
 
-// Fabrik fuer den vierten (Erholungs-Sweep) und fuenften (Selbsttest, C8b) Zweig des
-// Stunden-Sweeps (boot.js#runSweepTick, Muster makeCostTruing/makeCostCrossCheck: EINMAL
-// beim Boot verdrahtet, INV-7). messaging/mailer sind dieselben Instanzen wie beim
-// echten Ausfall-Melder (DIP, kein zweiter Versandzugang).
+// ---- OUTBOUND-E3b (C8, F-8): HOLD-Eskalation ueber DENSELBEN Meldeweg -------------------
+// Owner-Frage F-8 (Plan-Abschnitt 9): "Darf eine Kuendigung wegen einer Plattform-Bindung
+// haengen bleiben? Ja, mit HOLD + Audit + 24-h-Eskalation. Artikel 17 ist unabhaengig davon
+// erfuellt." Kein zweiter Kanal, keine zweite Entprellung (G5): derselbe WARN -> Audit ->
+// Mail -> SMS-Weg wie der Ausfall-Alarm, derselbe durable Marker-Speicher
+// (state.outageAlerts) wie der C8b-Selbsttest. Anders als dort ist die Entprellung hier
+// PERMANENT statt zeitbasiert (kein retryMs/debounceMs): "der naechste Sweep wiederholt ihn
+// NICHT" gilt fuer immer, nicht nur fuer eine Frist - einmal eskaliert ist der HOLD ein an
+// den Betreiber uebergebener Vorgang, keine wiederkehrende Meldung. Der Marker-Code traegt
+// die interne Nummern-ID (kein e164, keine PII, Regel 10 - dieselbe Konvention wie jede
+// did-release-Audit-Zeile, release-reconcile.js#recordDidAudit "number=${number.id}").
+function platformHoldBucket(numberId) {
+  return `hold:${NUMBER_HOLD_REASON.PLATFORM_IN_USE}:${numberId}`;
+}
+
+// Ein Kandidat: Faelligkeits-Urteil UND Reservierung ATOMAR im SELBEN Lock (G26-Muster,
+// Vorbild runAlertChannelSelfTest) - ein bereits offener Marker fuer GENAU diese Nummer
+// heisst "schon eskaliert", kein zweiter Versand, auch nicht bei zwei parallelen Sweeps.
+async function meldeHoldEskalation({ store, config, audit, messaging, mailer, numberId, nowMs }) {
+  const bucket = platformHoldBucket(numberId);
+  const zuMelden = await store.withStoreLock(() => {
+    const state = store.load();
+    if (ops.openOutageAlert(state, bucket)) return false;
+    ops.claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
+    return true;
+  });
+  store.save();
+  if (!zuMelden) return;
+  // PII-frei (Regel 10): keine Nummer, kein Tenant, kein Call-Bezug - reine Klasse.
+  const zeile =
+    "Hermes Betriebsmeldung\n" +
+    `klasse=${NUMBER_HOLD_REASON.PLATFORM_IN_USE} eine Kuendigung wartet seit ueber der Eskalations-Schwelle auf die Freigabe einer Rufnummer`;
+  console.warn("[outage] platform_hold_escalation");
+  audit("platform_hold_escalation", null, zeile);
+  await sendeUeberBeideKanaele({ store, config, messaging, mailer, code: bucket, zeile, nowMs });
+}
+
+// Fail-soft wie die uebrigen Sweep-Zweige. nowMs injizierbar (Muster runOutageRecoverySweep/
+// runAlertChannelSelfTest). maxAgeMs<=0 haelt die Eskalation komplett aus (Rollback-Hebel,
+// Muster outageAlertWindowMs/outageAlertSelfTestIntervalMs).
+export async function runPlatformHoldEscalationSweep({ store, config, audit, messaging, mailer, nowMs = Date.now() }) {
+  try {
+    const maxAgeMs = config.billing.platformHoldEscalationMaxAgeMs;
+    if (maxAgeMs <= 0) return;
+    const candidates = ops.platformHoldEscalationCandidates(store.load(), { nowMs, maxAgeMs });
+    for (const number of candidates)
+      await meldeHoldEskalation({ store, config, audit, messaging, mailer, numberId: number.id, nowMs });
+  } catch (err) {
+    console.error("[outage] HOLD-Eskalation fehlgeschlagen:", err.message);
+  }
+}
+
+// Fabrik fuer den vierten (Erholungs-Sweep), fuenften (Selbsttest, C8b) und sechsten
+// (HOLD-Eskalation, C8) Zweig des Stunden-Sweeps (boot.js#runSweepTick, Muster
+// makeCostTruing/makeCostCrossCheck: EINMAL beim Boot verdrahtet, INV-7). messaging/mailer
+// sind dieselben Instanzen wie beim echten Ausfall-Melder (DIP, kein zweiter Versandzugang).
 export function makeOutageWatch({ store, config, audit, messaging, mailer }) {
   return {
     runRecoverySweep: () => runOutageRecoverySweep({ store, config, audit }),
     runAlertChannelSelfTest: () => runAlertChannelSelfTest({ store, config, audit, messaging, mailer }),
+    runHoldEscalationSweep: () => runPlatformHoldEscalationSweep({ store, config, audit, messaging, mailer }),
   };
 }

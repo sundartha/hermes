@@ -123,6 +123,29 @@ test("E11 Erholung: fehler=0 mit offenem Marker -> erholt", () => {
   assert.equal(urteil, OUTAGE_VERDICT.RECOVERED);
 });
 
+test("E11b (Blocker: falsche Entwarnung bei Null-Verkehr) Erholung OHNE Verkehr -> KEIN Befund, Marker bleibt offen", () => {
+  // Gegenprobe zu E11: ein LEERES Fenster (versuche=0, erfolge=0) erfuellt "fehler===0"
+  // genauso wie ein GESUNDES Fenster - vorher wurde das ununterscheidbar als "erholt"
+  // gewertet, obwohl niemand angerufen hat (offener Marker, Sweep stuendlich, Fenster
+  // 60min -> spaetestens 2h nach dem Alarm stand "erholt" im Log, waehrend die
+  // Konfiguration unveraendert kaputt war).
+  const fensterLeer = { fehler: 0, versuche: 0, erfolge: 0, tenants: 0 };
+  const marker = { reportedAt: "2026-08-27T15:45:00Z", lastAttemptAt: null };
+  const { urteil } = beurteileAusfall({ fenster: fensterLeer, marker, schwellen: SCHWELLEN, nowMs: NOW_MS });
+  assert.equal(urteil, OUTAGE_VERDICT.NONE, "kein Verkehr ist KEIN Beleg fuer Erholung");
+});
+
+test("E11c (Blocker-Gegenprobe): ein Fenster voller FEHLVERSUCHE (versuche>0, erfolge=0) ist ebenfalls KEINE Erholung", () => {
+  // versuche>0 allein reicht nicht (die Klausel verlangt erfolge>0): zaehlten in diesem
+  // Fenster z.B. nur unreachable-Anrufe (Ziel-Schuld, outageWindow zaehlt sie in versuche,
+  // nie in fehler dieses Eimers), waere "versuche>0" erfuellt, ohne dass ein einziger Anruf
+  // tatsaechlich durchkam - kein Beleg, dass der systematische Ausfall behoben ist.
+  const fensterNurVersuche = { fehler: 0, versuche: 10, erfolge: 0, tenants: 0 };
+  const marker = { reportedAt: "2026-08-27T15:45:00Z", lastAttemptAt: null };
+  const { urteil } = beurteileAusfall({ fenster: fensterNurVersuche, marker, schwellen: SCHWELLEN, nowMs: NOW_MS });
+  assert.equal(urteil, OUTAGE_VERDICT.NONE);
+});
+
 test("E12 Aus-Schalter: windowMs=0 bei sonst voller Alarm-Lage -> aus", () => {
   const fenster = { fehler: 3, versuche: 3, erfolge: 0, tenants: 1 };
   const marker = { reportedAt: null, lastAttemptAt: null };

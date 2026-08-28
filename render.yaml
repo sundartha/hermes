@@ -477,6 +477,10 @@ services:
       # C8b: monatlicher Selbsttest ueber beide Kanaele. 0 = komplett aus.
       - key: OUTAGE_ALERT_SELF_TEST_INTERVAL_MS
         value: "2592000000"
+      # C8 (Owner-Entscheidung F-8): 24-h-Eskalation eines haengenden Kuendigungs-
+      # Nummern-HOLD (platform_number_in_use) ueber denselben Meldeweg. 0 = komplett aus.
+      - key: PLATFORM_HOLD_ESCALATION_MAX_AGE_MS
+        value: "86400000"
       # Betreiber-Zieladresse, der PRIMAERE Kanal (haengt an keinem Carrier). Secret-frei,
       # aber sync:false (Dashboard-verwaltet, Muster PLATFORM_ANI_E164). WARNUNG: bleibt
       # dieser Wert UND PLATFORM_ALERT_SMS_TO gemeinsam leer, waehrend

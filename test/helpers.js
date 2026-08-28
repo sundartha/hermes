@@ -463,6 +463,10 @@ export const BASE_ENV = {
   // 0 = C8b-Selbsttest aus, bis ein Test ihn ausdruecklich scharf schaltet (Muster
   // OUTAGE_ALERT_WINDOW_MS oben).
   OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0",
+  // 0 = C8-HOLD-Eskalation aus (Muster OUTAGE_ALERT_WINDOW_MS oben) - sonst koennte ein
+  // Spawn-Test mit einem laengst suspendierten Fixture-Tenant unbeabsichtigt eine
+  // Betreiber-Meldung ausloesen, ohne jeden Bezug zu C8.
+  PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: "0",
   // P7 (Budget-Achsen, Der Flip): neutral AUS (Default, byte-identisch zum Bestand) - sonst
   // leakt eine lokale .env mit BUDGET_MONTH_ENABLED=true via dotenv in Spawn-Tests (Lehre
   // test-base-env-drift) und faerbt die Suite umgebungsabhaengig.

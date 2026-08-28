@@ -2955,6 +2955,41 @@ export function tenantsPendingContractEndCleanup(s) {
   return tenantsOf(s).filter((t) => t.numberReleasePending || t.workosDeletePending);
 }
 
+// ---- OUTBOUND-E3b (C8, F-8, PLAN-OUTBOUND-RESILIENZ.md Abschnitt 9) ----
+// Owner-Frage F-8: "Darf eine Kuendigung wegen einer Plattform-Bindung haengen bleiben?"
+// Antwort: "Ja, mit HOLD + Audit + 24-h-Eskalation. Artikel 17 ist unabhaengig davon
+// erfuellt." Diese Funktion liefert die Kandidaten fuer die 24-h-Eskalation: Nummern,
+// deren Kuendigungs-Freigabe seit LAENGER als maxAgeMs an einer fremden Plattform-Bindung
+// haengt (HOLD-Grund GENAU platform_number_in_use - EINE Regel-Quelle, tenantNumbersForErase/
+// numberBusyReason oben, G5, keine zweite Formulierung der Eigentumsfrage).
+//
+// Die Wartezeit zaehlt ab tenant.suspendedAt: derselbe durable Zeitanker, den der
+// Kuendigungs-Pfad ohnehin setzt, BEVOR attemptContractEndCleanup zum ersten Mal versucht,
+// die Nummer freizugeben (billing/webhook.js: setSuspendedAtIfAbsent VOR dem Aufruf) - kein
+// neues Feld, kein zweiter Zeitanker. clearSuspendedAt setzt ihn bei einer Reaktivierung
+// wieder auf null zurueck, ein Alterswert aus einer LAENGST erledigten Suspendierung kann
+// hier also nicht faelschlich weiterlaufen.
+//
+// REIN + IO-frei (mutiert state NICHT, kein Date.now): nowMs/maxAgeMs injiziert (Muster
+// classifyNumbersForRelease). Kein Zeitanker (suspendedAt fehlt/unparsebar) -> Alter
+// unbekannt -> fail-closed NICHT eskalieren (kein Fehlalarm auf einer Altzeile ohne Anker).
+// Langer Parametername statt der im Rest der Datei ueblichen einbuchstabigen (G16/N1,
+// eslint id-length) - dieselbe Begruendung wie beim OUTBOUND-E3b-Block oben: der bereits
+// gepinnte Altlast-Fund darf durch neuen Code NICHT weiter wachsen.
+export function platformHoldEscalationCandidates(state, { nowMs, maxAgeMs }) {
+  const candidates = [];
+  for (const tenant of tenantsPendingContractEndCleanup(state)) {
+    if (!tenant.numberReleasePending) continue;
+    const suspendedMs = Date.parse(tenant.suspendedAt ?? "");
+    if (Number.isNaN(suspendedMs)) continue;
+    if (nowMs - suspendedMs <= maxAgeMs) continue;
+    const { hold } = tenantNumbersForErase(state, tenant.id);
+    for (const { number, reason } of hold)
+      if (reason === NUMBER_HOLD_REASON.PLATFORM_IN_USE) candidates.push(number);
+  }
+  return candidates;
+}
+
 // Liest die WorkOS-Identitaet (sub, aus dem verifizierten IdP-Profil beim Login gebunden,
 // s. registerTenant/resolveOrCreateTenant idp_subject) eines Tenants. Reine Query, kein IO.
 // Genutzt vom Vertragsende-Aufraeumen (312k-Phase 4): die Nutzer-Kennung fuer die WorkOS-

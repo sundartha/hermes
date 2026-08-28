@@ -974,6 +974,12 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageW
   void outageWatch
     .runAlertChannelSelfTest()
     .catch((err) => console.error("[outage-watch]", err.message));
+  // C8 (Nachbesserung, F-8): SECHSTER, unabhaengiger Schritt - die 24-h-Eskalation eines
+  // haengenden Kuendigungs-Nummern-HOLD (platform_number_in_use). Teilt sich denselben
+  // Stunden-Takt, kein zweiter Timer/keine neue Ressource.
+  void outageWatch
+    .runHoldEscalationSweep()
+    .catch((err) => console.error("[outage-watch]", err.message));
 }
 
 // EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter

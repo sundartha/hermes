@@ -43,7 +43,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // outageAlertDebounceMs, outageAlertRetryMs) -> 43.
   // C8b (Review-Blocker Runde 2): outageAlertSelfTestIntervalMs ergaenzt (monatlicher
   // Alarmkanal-Selbsttest) -> 44.
-  billing: 44,
+  // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs ergaenzt (24-h-Eskalation
+  // eines haengenden Kuendigungs-Nummern-HOLD) -> 45.
+  billing: 45,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -123,9 +125,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // OUTBOUND-E3b: sechs Ausfall-Melder-Schwellen (billing) + platformAlertMailTo (mail)
 // ergaenzt -> 165.
 // C8b (Review-Blocker Runde 2): outageAlertSelfTestIntervalMs (billing) ergaenzt -> 166.
-const EXPECTED_TOTAL_KEYS = 166;
+// C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs (billing) ergaenzt -> 167.
+const EXPECTED_TOTAL_KEYS = 167;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (166 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (167 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -247,7 +250,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // (String) sind alle sieben primitiv (kein Array/nested Objekt) -> 154.
   // C8b (Review-Blocker Runde 2): outageAlertSelfTestIntervalMs ist primitiv (Zahl,
   // kein Array/nested Objekt) -> 155.
-  const EXPECTED_PRIMITIVE_LEAVES = 155;
+  // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs ist primitiv (Zahl, kein
+  // Array/nested Objekt) -> 156.
+  const EXPECTED_PRIMITIVE_LEAVES = 156;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

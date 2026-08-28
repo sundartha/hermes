@@ -205,6 +205,9 @@ const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;
 // Kanal, der zwoelf Monate nie ausgeloest wurde, ist kein bewiesener Kanal - der Selbsttest
 // laeuft im selben monatlichen Rhythmus, den der Plan nennt.
 const OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT = 30;
+// C8 (F-8): Eskalations-Schwelle einer haengenden Kuendigungs-Nummernfreigabe - "24-h-
+// Eskalation" ist der woertliche Owner-Beschluss (Plan-Abschnitt 9).
+const PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT = 24;
 
 // Reine EUR->Cents-Rundung (G26: Money at rest ist Ganzzahl). Eigene, exportierte
 // Funktion statt Inline-Ausdruck, DAMIT ein Unit-Test die Float-Falle direkt trifft:
@@ -1239,6 +1242,17 @@ const rawConfig = {
     process.env.OUTAGE_ALERT_SELF_TEST_INTERVAL_MS,
     { fallback: OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT * MS_PER_DAY, min: 0 },
   ),
+  // C8 (Owner-Entscheidung F-8, PLAN-OUTBOUND-RESILIENZ.md Abschnitt 9): "Darf eine
+  // Kuendigung wegen einer Plattform-Bindung haengen bleiben? Ja, mit HOLD + Audit +
+  // 24-h-Eskalation." Mindestalter (ab tenant.suspendedAt), ab dem ein HOLD
+  // platform_number_in_use GENAU EINEN Betreiber-Befund ueber denselben Meldeweg erzeugt
+  // wie der Ausfall-Alarm. 0 = Eskalation KOMPLETT AUS (Rollback-Hebel, Muster
+  // outageAlertWindowMs/outageAlertSelfTestIntervalMs).
+  platformHoldEscalationMaxAgeMs: numEnv(
+    "PLATFORM_HOLD_ESCALATION_MAX_AGE_MS",
+    process.env.PLATFORM_HOLD_ESCALATION_MAX_AGE_MS,
+    { fallback: PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT * MS_PER_HOUR, min: 0 },
+  ),
   // ---- Spend-Monat-Flip (Budget-Achsen P7) ----
   // AN = BEIDE Gate-Achsen (Tenant UND Plattform) messen den Verbrauch im UTC-Kalendermonat
   // statt im Lebenszeit-Zaehler. AUS (Default) = byte-identisch zum Bestand. Der Flip ist ein
@@ -2012,7 +2026,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -

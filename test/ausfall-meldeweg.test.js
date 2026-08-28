@@ -227,13 +227,16 @@ test("M9: Erholung sendet nicht - genau eine Audit-Zeile, 0 Sends (Sweep-Pfad, D
   // "erholt" strukturell nie selbst feststellen (der triggernde Call zaehlt immer als
   // eigener Fehler im Fenster) - die Erholung laeuft ueber den Sweep (runOutageRecoverySweep),
   // der das Fenster ohne einen aktuellen not-placed-Anruf neu bewertet.
+  // nowMs deterministisch injiziert (Muster ausfall-erkennung.test.js NOW_MS) - der
+  // erfolgreiche Anruf muss NACHWEISLICH im (fixen) Fenster liegen, unabhaengig von der
+  // Wanduhr des Testlaufs (sonst faellt der Test bei wachsendem Datum aus dem Fenster).
   const spies = makeSpies();
   const erfolgreicherCall = callRow({
     id: "call_ok", tenantId: "t_user_01ABC", endedAt: "2026-08-27T16:44:00Z",
     answeredAt: "2026-08-27T16:43:50Z", failureReason: null,
   });
   const store = makeStore({ calls: [erfolgreicherCall], outageAlerts: withOpenMarker() });
-  await runOutageRecoverySweep({ store, config: CONFIG, audit: spies.audit });
+  await runOutageRecoverySweep({ store, config: CONFIG, audit: spies.audit, nowMs: Date.parse(NOW_ISO) });
   assert.equal(spies.mailCalls.length, 0);
   assert.equal(spies.smsCalls.length, 0);
   assert.equal(spies.auditCalls.length, 1);
@@ -256,10 +259,25 @@ test("M9b (E3B-02): windowMs=0 (Rollback-Hebel OFF) - der Sweep schliesst NICHTS
   });
   const store = makeStore({ calls: [erfolgreicherCall], outageAlerts: withOpenMarker() });
   const configOff = { ...CONFIG, billing: { ...CONFIG.billing, outageAlertWindowMs: 0 } };
-  await runOutageRecoverySweep({ store, config: configOff, audit: spies.audit });
+  await runOutageRecoverySweep({ store, config: configOff, audit: spies.audit, nowMs: Date.parse(NOW_ISO) });
   assert.equal(spies.auditCalls.length, 0, "OFF darf keine Audit-Zeile erzeugen");
   const [marker] = store.load().outageAlerts;
   assert.equal(marker.closedAt, null, "der Marker bleibt offen - OFF schliesst nichts");
+});
+
+test("M9c (PFLICHT-TEST, Blocker falsche Entwarnung bei Null-Verkehr): offener Marker + LEERES Fenster -> KEINE Audit-Zeile, Marker bleibt offen", async () => {
+  // Reproduziert exakt das vom Reviewer gemessene Szenario: ein offener Marker, aber KEIN
+  // einziger Anruf im Fenster (rund ein Anruf pro Woche im echten Verkehrsregime - der
+  // Sweep laeuft stuendlich und faende sonst binnen 2h "erholt", waehrend die Konfiguration
+  // unveraendert kaputt ist).
+  const spies = makeSpies();
+  const store = makeStore({ calls: [], outageAlerts: withOpenMarker() });
+  await runOutageRecoverySweep({ store, config: CONFIG, audit: spies.audit, nowMs: Date.parse(NOW_ISO) });
+  assert.equal(spies.mailCalls.length, 0);
+  assert.equal(spies.smsCalls.length, 0);
+  assert.equal(spies.auditCalls.length, 0, "kein Verkehr -> keine Audit-Zeile (weder Alarm noch Erholung)");
+  const [marker] = store.load().outageAlerts;
+  assert.equal(marker.closedAt, null, "der Marker bleibt offen - kein Beleg fuer Erholung");
 });
 
 test("M10: Absender kommt aus der Bindung (PM-17) - ohne Bindung keine SMS, mit Bindung die gebundene Nummer", async () => {
