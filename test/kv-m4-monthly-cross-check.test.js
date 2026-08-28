@@ -286,10 +286,17 @@ test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing, pr
   // OUTBOUND-E3b: vierter, unabhaengiger Zweig - er wird trotz der drei Wuerfe der
   // uebrigen Zweige ausgefuehrt UND wirft selbst, um die Isolation in BEIDE Richtungen zu
   // belegen (er haelt die anderen nicht auf, die anderen halten ihn nicht auf).
+  // C8b (Review-Blocker Runde 2): FUENFTER Zweig (Alarmkanal-Selbsttest) - derselbe
+  // Fake muss BEIDE Methoden bedienen, die runSweepTick auf outageWatch aufruft.
+  let selfTestCalled = false;
   const throwingOutageWatch = {
     async runRecoverySweep() {
       outageWatchCalled = true;
       throw new Error("kv-m4-8-outage-boom");
+    },
+    async runAlertChannelSelfTest() {
+      selfTestCalled = true;
+      throw new Error("kv-m4-8-self-test-boom");
     },
   };
 
@@ -319,5 +326,10 @@ test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing, pr
   assert.ok(
     errorLogs.some((zeile) => zeile === "[outage-watch] kv-m4-8-outage-boom"),
     `der vierte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
+  );
+  assert.equal(selfTestCalled, true, "outageWatch.runAlertChannelSelfTest lief trotz werfendem costCrossCheck");
+  assert.ok(
+    errorLogs.some((zeile) => zeile === "[outage-watch] kv-m4-8-self-test-boom"),
+    `der fuenfte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
   );
 });

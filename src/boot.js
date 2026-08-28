@@ -20,6 +20,7 @@ import {
   unpricedModels,
   providerRateOutOfBand,
   alertChannelFindings,
+  alertChannelInputs,
   costTruingBookingFindings,
   voiceTariffFloorFindings,
   planCapUnderivableFindings,
@@ -245,14 +246,15 @@ function assertCostTruingBooking(config, store) {
 // OUTBOUND-E3b: alertChannelFindings liest jetzt zusaetzlich platformAlertMailTo (Namespace
 // mail) und elevenLabsOutboundEnabled (Namespace voice) - config.billing ALLEIN wuerfe hier
 // (guardedConfig lehnt jeden Zugriff auf eine Property AUSSERHALB des eigenen Namespace
-// fail-closed ab, Tippfehler-Riegel). Deshalb dieselbe Zusammenfuehrung wie
-// fatalConfigFindings (config.js).
+// fail-closed ab, Tippfehler-Riegel). Die Zusammenfuehrung selbst kommt aus
+// boot-guard.alertChannelInputs (G5-Fix: EINE Quelle statt zweier byte-identischer Kopien,
+// geteilt mit fatalConfigFindings in config.js).
 function warnAlertChannelUnset(config) {
-  const alertChannelConfig = {
-    ...config.billing,
-    platformAlertMailTo: config.mail.platformAlertMailTo,
-    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
-  };
+  const alertChannelConfig = alertChannelInputs({
+    billing: config.billing,
+    mail: config.mail,
+    voice: config.voice,
+  });
   for (const finding of alertChannelFindings(alertChannelConfig))
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
@@ -965,6 +967,12 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageW
   // finishCall sieht nur not-placed-Anrufe und kann "erholt" nie selbst feststellen).
   void outageWatch
     .runRecoverySweep()
+    .catch((err) => console.error("[outage-watch]", err.message));
+  // C8b (Review-Blocker Runde 2): FUENFTER, unabhaengiger Schritt - der monatliche
+  // Alarmkanal-Selbsttest. Teilt sich denselben Stunden-Takt (die Faelligkeits-Pruefung
+  // selbst ist billig und intern gegated, kein zweiter Timer/keine neue Ressource).
+  void outageWatch
+    .runAlertChannelSelfTest()
     .catch((err) => console.error("[outage-watch]", err.message));
 }
 

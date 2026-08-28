@@ -107,12 +107,6 @@ const costTruing = makeCostTruing({ store, config, voiceControl, audit, messagin
 // keine Buchung wird beruehrt.
 const costCrossCheck = makeCostCrossCheck({ store, config, voiceControl });
 
-// OUTBOUND-E3b: vierter, unabhaengiger Sweep-Zweig (Muster costTruing/costCrossCheck,
-// INV-7) - schliesst offene Ausfall-Marker, deren Fenster inzwischen gesund ist (D9: der
-// Ausloeser in finishCall sieht nur not-placed-Anrufe und kann "erholt" nie selbst
-// feststellen). audit/messaging sind dieselben Instanzen wie ueberall sonst (DIP).
-const outageWatch = makeOutageWatch({ store, config, audit });
-
 // F2-Mail (Call-Summary per E-Mail bei Newsletter-Einwilligung): EIGENE Mailer-Instanz ueber
 // dieselbe Auswahl-Rangfolge wie wireWebLogin (selectMailer, src/wiring/web-login.js -
 // Brevo/HTTP vor SMTP, G5: EINE Rangfolge, kein zweiter Auswahl-Codepfad), aber bewusst
@@ -125,6 +119,15 @@ const outageWatch = makeOutageWatch({ store, config, audit });
 // (makeBrevoMailer/makeSmtpMailer) sind laut eigenem Modul-Kopf zustandslos (jeder Aufrufer
 // bekommt seine EIGENE Instanz) - zwei Instanzen sind unbedenklich, kein Doppel-Zustand.
 const mailer = selectMailer(config);
+
+// OUTBOUND-E3b: vierter, unabhaengiger Sweep-Zweig (Muster costTruing/costCrossCheck,
+// INV-7) - schliesst offene Ausfall-Marker, deren Fenster inzwischen gesund ist (D9: der
+// Ausloeser in finishCall sieht nur not-placed-Anrufe und kann "erholt" nie selbst
+// feststellen). audit/messaging sind dieselben Instanzen wie ueberall sonst (DIP).
+// C8b (Review-Blocker Runde 2): NACH mailer verdrahtet (statt davor wie im ersten Entwurf)
+// - der fuenfte Zweig (Alarmkanal-Selbsttest, s. runSweepTick) braucht dieselbe
+// Mailer-Instanz wie callFinish, kein zweiter Versandzugang (DIP).
+const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer });
 
 // F2-Mail: Accounts-Zugriff (Konto-E-Mail) haengt an accounts.accountByTenant (web-auth.js),
 // das NUR existiert, wenn der pg-gated Web-Login-Block durchlaeuft (wireWebLogin, asynchron

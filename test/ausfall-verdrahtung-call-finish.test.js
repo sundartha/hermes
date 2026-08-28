@@ -118,6 +118,42 @@ test("E3B-01: not-placed-Anruf loest den Betreiber-Melder ueber den echten finis
   assert.equal(state.outageAlerts[0].code, "not-placed:invite-403");
 });
 
+test("E3B-01/G-Fix (Review-Blocker Runde 2): sendNotPlacedMail wirft (z.B. pg-Pool erschoepft) - der Betreiber-Melder laeuft TROTZDEM", async () => {
+  // Reproduziert den Befund: planNotPlacedMail#accountByTenant ist eine echte pg-Abfrage
+  // und kann werfen. Ohne eigenes try/catch um sendNotPlacedMail riss ein Wurf hier den
+  // gesamten reportFailedCall mit - der Betreiber-Melder liefe dann NIE, genau in dem
+  // Fall, fuer den er gebraucht wird (eine Backend-Stoerung erzeugt not-placed-Anrufe).
+  const call = seedCall({
+    status: "failed",
+    direction: "outbound",
+    to: "+12025550143",
+    endedAt: "2026-08-27T10:00:00.000Z",
+    failureReason: "not-placed:invite-403",
+  });
+  const state = makeState([call]);
+  const store = makeFakeStore(state);
+  const { calls: auditCalls, audit } = auditSpy();
+  const werfenderAccountsRef = { current: { accountByTenant: async () => { throw new Error("pg-pool-erschoepft"); } } };
+
+  const finish = makeCallFinish({
+    store,
+    config,
+    metering: { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} },
+    messaging: () => ({ sendSms: async () => {} }),
+    summarizeCall: fakeSummarizeCall,
+    planSummarySms: () => ({ send: false, reason: null }),
+    audit,
+    mailer: { sendMail: async () => {} },
+    accountsRef: werfenderAccountsRef,
+  });
+
+  await assert.doesNotReject(() => finish.finishCall(call));
+
+  const outageAudits = auditCalls.filter((entry) => entry.action === "outage_detected");
+  assert.equal(outageAudits.length, 1, "der Betreiber-Melder muss trotz werfender Nutzer-Mail laufen (K0/Erstbefund)");
+  assert.equal(state.outageAlerts.length, 1, "ein durabler Marker entsteht trotz werfender Nutzer-Mail");
+});
+
 test("E3B-01: ein completed-Anruf loest den Betreiber-Melder NICHT aus", async () => {
   const call = seedCall({
     status: "completed",

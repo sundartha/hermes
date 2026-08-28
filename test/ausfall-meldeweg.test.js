@@ -283,3 +283,20 @@ test("M11: Nicht-not-placed loest nichts aus (unreachable)", async () => {
   assert.equal(spies.mailCalls.length, 0);
   assert.equal(spies.smsCalls.length, 0);
 });
+
+test("M12 (G26, Review-Blocker Runde 2): zwei GLEICHZEITIG endende not-placed-Anrufe schicken GENAU EINEN Alarm - der Sendeplatz ist VOR dem Versand reserviert", async () => {
+  // Reproduziert den Befund: ohne Reservierung lesen zwei parallel abschliessende
+  // finishCall-Laeufe denselben, noch nicht geclaimten Marker, urteilen BEIDE "alarm" und
+  // senden BEIDE - die Entprellung (meldeErlaubt/retryMs) waere im Ernstfall wirkungslos.
+  const spies = makeSpies();
+  const calls = alarmCalls();
+  const store = makeStore({ calls, outageAlerts: withOpenMarker(), platformNumberUse: boundSender() });
+  await Promise.all([
+    reportSystematicOutage({ store, config: CONFIG, call: calls[1], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer }),
+    reportSystematicOutage({ store, config: CONFIG, call: calls[2], audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer }),
+  ]);
+  assert.equal(spies.mailCalls.length, 1, "genau EINE Mail trotz zweier gleichzeitig endender Anrufe");
+  assert.equal(spies.smsCalls.length, 1, "genau EINE SMS trotz zweier gleichzeitig endender Anrufe");
+  const [marker] = store.load().outageAlerts;
+  assert.ok(marker.lastAttemptAt, "lastAttemptAt gesetzt (Reservierung)");
+});

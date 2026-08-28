@@ -474,6 +474,9 @@ services:
         value: "21600000"
       - key: OUTAGE_ALERT_RETRY_MS
         value: "900000"
+      # C8b: monatlicher Selbsttest ueber beide Kanaele. 0 = komplett aus.
+      - key: OUTAGE_ALERT_SELF_TEST_INTERVAL_MS
+        value: "2592000000"
       # Betreiber-Zieladresse, der PRIMAERE Kanal (haengt an keinem Carrier). Secret-frei,
       # aber sync:false (Dashboard-verwaltet, Muster PLATFORM_ANI_E164). WARNUNG: bleibt
       # dieser Wert UND PLATFORM_ALERT_SMS_TO gemeinsam leer, waehrend

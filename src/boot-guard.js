@@ -441,6 +441,21 @@ export const ALERT_CHANNEL_FINDING = Object.freeze({
 // UNSET_WITH_ACTIVE_WARNING) bleiben byte-identisch: die neuen Parameter sind bei
 // bestehenden Aufrufern (die sie nicht reichen) undefined -> falsy -> der neue Zweig
 // greift dort nie.
+// G5-Fix (Review-Blocker Runde 2): die Zusammenfuehrung der DREI Config-Namespaces
+// (billing/mail/voice) zu EINEM alertChannelFindings-Eingabeobjekt lag byte-identisch an
+// ZWEI Stellen (boot.js#warnAlertChannelUnset fuer die WARN-Zeile, config.js#
+// fatalConfigFindings fuer den Boot-Refusal) - wer eine vierte Eingabe ergaenzt und nur
+// eine Stelle nachzieht, liesse Boot-Log und Boot-Refusal auseinanderlaufen, ohne dass ein
+// Test das faengt. EINE exportierte Funktion, config-frei/arg-injiziert wie der Rest
+// dieser Datei - beide Aufrufer reichen nur noch ihre drei Namespaces durch.
+export function alertChannelInputs({ billing, mail, voice }) {
+  return {
+    ...billing,
+    platformAlertMailTo: mail.platformAlertMailTo,
+    elevenLabsOutboundEnabled: voice.elevenLabsOutbound.enabled,
+  };
+}
+
 export function alertChannelFindings({
   platformAlertSmsTo,
   paymentEnabled,

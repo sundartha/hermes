@@ -201,8 +201,19 @@ async function sendNotPlacedMail({ store, config, call, mailer, accountsRef, aud
 // liegen woanders (mail-not-placed.js bzw. telephony/outage-detection.js); hier steht nur
 // die Reihenfolge. Der Betreiber-Weg ist vollstaendig fail-soft (eigenes try/catch in
 // reportSystematicOutage) - ein Fehler dort darf einen Anruf-Abschluss NIE abbrechen.
+//
+// sendNotPlacedMail dagegen ist NICHT wurf-sicher: planNotPlacedMail#accountByTenant ist
+// eine echte pg-Abfrage (kann werfen). Ohne eigenes try/catch riss ein Wurf hier den
+// Betreiber-Melder MIT - genau in dem Fall, fuer den er gebraucht wird: eine
+// Backend-Stoerung erzeugt not-placed-Anrufe UND wirft womoeglich in genau demselben
+// pg-Pool, den accountByTenant befragt (Review-Blocker Runde 2). Deshalb eigenes
+// try/catch, Reihenfolge (Nutzer zuerst) bleibt unveraendert.
 async function reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts }) {
-  await sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts });
+  try {
+    await sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts });
+  } catch (err) {
+    console.error("[mail] not-placed:", err.message);
+  }
   await reportSystematicOutage({ store, config, call, audit, messaging, mailer });
 }
 

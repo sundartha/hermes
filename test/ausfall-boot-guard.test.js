@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   alertChannelFindings,
+  alertChannelInputs,
   ALERT_CHANNEL_FINDING,
   platformAlertSenderFindings,
   PLATFORM_ALERT_SENDER_FINDING,
@@ -146,4 +147,31 @@ test("PM-17: openBindings undefined -> WARN (Default leer), kein Wurf", () => {
   assert.doesNotThrow(() => platformAlertSenderFindings({}));
   const findings = platformAlertSenderFindings({});
   assert.equal(findings.length, 1);
+});
+
+// G5-Fix (Review-Blocker Runde 2): alertChannelInputs war byte-identisch in boot.js und
+// config.js dupliziert (die Zusammenfuehrung der drei Namespaces zu EINEM
+// alertChannelFindings-Eingabeobjekt) - jetzt EINE exportierte Quelle, beide Aufrufer
+// reichen nur noch ihre Namespaces durch.
+test("G5: alertChannelInputs fuehrt billing/mail/voice zu EINEM Eingabeobjekt zusammen", () => {
+  const merged = alertChannelInputs({
+    billing: { platformAlertSmsTo: "+12025550143", paymentEnabled: true },
+    mail: { platformAlertMailTo: "ops@example.test" },
+    voice: { elevenLabsOutbound: { enabled: true } },
+  });
+  assert.equal(merged.platformAlertSmsTo, "+12025550143");
+  assert.equal(merged.paymentEnabled, true);
+  assert.equal(merged.platformAlertMailTo, "ops@example.test");
+  assert.equal(merged.elevenLabsOutboundEnabled, true);
+});
+
+test("G5: alertChannelInputs-Ergebnis ist direkt an alertChannelFindings uebergebbar", () => {
+  const merged = alertChannelInputs({
+    billing: { platformAlertSmsTo: "" },
+    mail: { platformAlertMailTo: "" },
+    voice: { elevenLabsOutbound: { enabled: true } },
+  });
+  const findings = alertChannelFindings({ ...merged, outageAlertWindowMs: 3600000 });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND);
 });

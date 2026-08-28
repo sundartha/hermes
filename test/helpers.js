@@ -460,6 +460,9 @@ export const BASE_ENV = {
   OUTAGE_ALERT_FAIL_SHARE_PERCENT: "20",
   OUTAGE_ALERT_DEBOUNCE_MS: "21600000",
   OUTAGE_ALERT_RETRY_MS: "900000",
+  // 0 = C8b-Selbsttest aus, bis ein Test ihn ausdruecklich scharf schaltet (Muster
+  // OUTAGE_ALERT_WINDOW_MS oben).
+  OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0",
   // P7 (Budget-Achsen, Der Flip): neutral AUS (Default, byte-identisch zum Bestand) - sonst
   // leakt eine lokale .env mit BUDGET_MONTH_ENABLED=true via dotenv in Spawn-Tests (Lehre
   // test-base-env-drift) und faerbt die Suite umgebungsabhaengig.

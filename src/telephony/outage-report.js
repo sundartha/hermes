@@ -93,6 +93,10 @@ async function markOnly({ urteil, bucket, zahlen, nowMs, store, audit }) {
 // Mail-Ziel gesetzt gilt als "nichts zu wiederholen" (Audit/SMS sind dann das Beste, was
 // es gibt), ein WERFENDER Mailversand dagegen NICHT: der naechste not-placed-Abschluss
 // wiederholt die Meldung nach retryMs.
+// Der Sendeplatz ist an dieser Stelle BEREITS reserviert (claimVerdict, VOR jedem
+// Versand, s.u.) - hier wird nur noch gesendet und danach reportedAt/deliveredChannels
+// nachgezogen (S3-2). Kein zweiter Reservierungsschritt hier, sonst waere die
+// Entprellung wieder an genau der Stelle geloest, die die Reservierung schliesst.
 async function sendAlert({ bucket, zahlen, nowMs, store, config, audit, messaging, mailer }) {
   const zeile = alarmZeile({ code: bucket, zahlen, regel: OUTAGE_VERDICT.ALERT, windowMs: config.billing.outageAlertWindowMs });
   console.warn(`[outage] outage_alert klasse=${bucket}`);
@@ -121,6 +125,31 @@ async function applyOutageVerdict(context) {
   if (handler) await handler(context);
 }
 
+// G26-Fix (Race): Urteil UND Reservierung laufen ATOMAR im SELBEN withStoreLock-
+// Abschnitt, VOR jedem Versand. Ohne das lesen zwei GLEICHZEITIG endende not-placed-
+// Anrufe denselben, noch nicht geclaimten Marker, urteilen beide "alarm" und senden
+// beide - der einzige Daempfer des Melders (meldeErlaubt/retryMs) waere im Ernstfall
+// wirkungslos, weil er auf einem lastAttemptAt urteilt, das erst NACH dem Versand
+// gesetzt wird. Die Reservierung setzt lastAttemptAt sofort (claimOutageAlert
+// sent:true, channels:[]) - jeder Parallellauf, der DANACH in denselben Lock kommt,
+// sieht die Sperre bereits und urteilt nicht mehr "alarm". Der Versand selbst (Mail/
+// SMS, sendAlert) bleibt ausserhalb des Locks - reines IO gehoert nicht in eine
+// Store-Sperre.
+async function claimVerdict({ store, bucket, schwellen, nowMs }) {
+  const result = await store.withStoreLock(() => {
+    const state = store.load();
+    const fenster = outageWindow(state.calls, { nowMs, windowMs: schwellen.windowMs, bucket });
+    const marker = ops.openOutageAlert(state, bucket);
+    const urteilResult = beurteileAusfall({ fenster, marker, schwellen, nowMs });
+    if (urteilResult.urteil === OUTAGE_VERDICT.ALERT) {
+      ops.claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: [] });
+    }
+    return urteilResult;
+  });
+  store.save();
+  return result;
+}
+
 // Der EINE Ausloeser: JEDER beendete Anruf fragt die Regel. Nur not-placed-Anrufe (Schuld
 // bei uns/Anbieter) zaehlen ueberhaupt - ein Erfolg oder ein unreachable/no-answer/
 // result-unknown-Abschluss kehrt sofort zurueck (K2 wird davon nur "gesuender", nie
@@ -134,9 +163,7 @@ export async function reportSystematicOutage({ store, config, call, audit, messa
     const bucket = outageBucket(call.failureReason);
     const nowMs = Date.parse(call.endedAt) || Date.now();
     const schwellen = outageThresholds(config);
-    const fenster = outageWindow(store.load().calls, { nowMs, windowMs: schwellen.windowMs, bucket });
-    const marker = ops.openOutageAlert(store.load(), bucket);
-    const { urteil, zahlen } = beurteileAusfall({ fenster, marker, schwellen, nowMs });
+    const { urteil, zahlen } = await claimVerdict({ store, bucket, schwellen, nowMs });
     await applyOutageVerdict({ urteil, bucket, zahlen, nowMs, store, config, audit, messaging, mailer });
   } catch (err) {
     console.error("[outage] Ausfall-Melder fehlgeschlagen:", err.message);
@@ -166,8 +193,68 @@ export async function runOutageRecoverySweep({ store, config, audit }) {
   }
 }
 
-// Fabrik fuer den vierten, unabhaengigen Zweig des Stunden-Sweeps (boot.js#runSweepTick,
-// Muster makeCostTruing/makeCostCrossCheck: EINMAL beim Boot verdrahtet, INV-7).
-export function makeOutageWatch({ store, config, audit }) {
-  return { runRecoverySweep: () => runOutageRecoverySweep({ store, config, audit }) };
+// C8b (Review-Blocker Runde 2, Plan-Abschnitt "Meldeweg und Alarm-Body"): "ein Kanal, der
+// zwoelf Monate lang nie ausgeloest wurde, ist kein bewiesener Kanal". Der Selbsttest laeuft
+// UEBER DENSELBEN Meldeweg (WARN -> Audit -> Mail -> SMS, sendMailChannel/sendSmsChannel von
+// oben) - kein zweiter Versand-Codepfad (G5). Der Marker liegt im SELBEN durablen
+// outageAlerts-Speicher wie ein echter Ausfall-Marker, unter einem eigenen, mit keinem
+// echten Fehlergrund-Eimer kollidierenden Code - PM-23 gilt unveraendert: die Faelligkeit
+// haengt an lastAttemptAt (durabel), nicht an einem In-Memory-Zaehler, und ueberlebt damit
+// jeden Neustart. outageAlertSelfTestIntervalMs=0 schaltet den Selbsttest komplett ab
+// (Rollback-Hebel, Muster outageAlertWindowMs).
+const SELF_TEST_BUCKET = "self-test:alert-channel";
+
+// Reine Faelligkeits-Frage (Muster meldeErlaubt/outage-detection.js): kein Marker oder nie
+// versucht -> faellig; sonst faellig, sobald seit dem letzten Versuch mindestens
+// intervalMs vergangen sind. intervalMs<=0 haelt den Selbsttest fuer immer aus.
+function selfTestFaellig(marker, nowMs, intervalMs) {
+  if (intervalMs <= 0) return false;
+  if (!marker || !marker.lastAttemptAt) return true;
+  return nowMs - Date.parse(marker.lastAttemptAt) >= intervalMs;
+}
+
+// Fail-soft wie reportSystematicOutage: ein Fehler hier darf den Stunden-Sweep (der
+// Selbsttest teilt sich dessen Takt) niemals abbrechen. Reservierung ZUERST (G26-Muster):
+// lastAttemptAt sperrt sofort jeden Parallellauf, danach erst der eigentliche Versand.
+export async function runAlertChannelSelfTest({ store, config, audit, messaging, mailer, nowMs = Date.now() }) {
+  try {
+    const intervalMs = config.billing.outageAlertSelfTestIntervalMs;
+    // G26-Muster: Faelligkeits-Urteil UND Reservierung ATOMAR im SELBEN Lock, VOR jedem
+    // Versand - sonst lesen zwei gleichzeitige Sweep-Ticks denselben, noch nicht
+    // geclaimten Marker, urteilen BEIDE "faellig" und senden beide.
+    const faellig = await store.withStoreLock(() => {
+      const state = store.load();
+      const marker = ops.openOutageAlert(state, SELF_TEST_BUCKET);
+      const istFaellig = selfTestFaellig(marker, nowMs, intervalMs);
+      if (istFaellig) ops.claimOutageAlert(state, { code: SELF_TEST_BUCKET, nowMs, sent: true, channels: [] });
+      return istFaellig;
+    });
+    store.save();
+    if (!faellig) return;
+    // PII-frei (Regel 10): keine Fehlerklasse, keine Zahlen noetig - reiner Funktionsnachweis.
+    const zeile = "Hermes Betriebsmeldung\nAlarmkanal funktioniert (Selbsttest)";
+    console.warn("[outage] alert_channel_self_test");
+    audit("alert_channel_self_test", null, zeile);
+    const mailResult = await sendMailChannel({ mailer, config, zeile });
+    sendSmsChannel({ messaging, store, config, zeile });
+    const delivered = mailResult.delivered || !mailResult.hasTarget;
+    await store.withStoreLock(() => {
+      const state = store.load();
+      ops.claimOutageAlert(state, { code: SELF_TEST_BUCKET, nowMs, sent: true, channels: delivered ? ["mail"] : [] });
+    });
+    store.save();
+  } catch (err) {
+    console.error("[outage] Alarmkanal-Selbsttest fehlgeschlagen:", err.message);
+  }
+}
+
+// Fabrik fuer den vierten (Erholungs-Sweep) und fuenften (Selbsttest, C8b) Zweig des
+// Stunden-Sweeps (boot.js#runSweepTick, Muster makeCostTruing/makeCostCrossCheck: EINMAL
+// beim Boot verdrahtet, INV-7). messaging/mailer sind dieselben Instanzen wie beim
+// echten Ausfall-Melder (DIP, kein zweiter Versandzugang).
+export function makeOutageWatch({ store, config, audit, messaging, mailer }) {
+  return {
+    runRecoverySweep: () => runOutageRecoverySweep({ store, config, audit }),
+    runAlertChannelSelfTest: () => runAlertChannelSelfTest({ store, config, audit, messaging, mailer }),
+  };
 }

@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
 // GAP-07: boot-guard.js und telephony/stt-profile.js importieren ihrerseits nur
 // import-freie bzw. Blatt-Module -> kein Zyklus, obwohl beide sonst downstream sitzen.
-import { alertChannelFindings } from "./boot-guard.js";
+import { alertChannelFindings, alertChannelInputs } from "./boot-guard.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
 // G5: die Minute lebt in utils/timer.js (import-freies Blatt, kein Zyklus) - dieselbe
@@ -201,6 +201,10 @@ const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 // (G25: benannte Konstanten statt Zahlenketten im Ausdruck).
 const OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT = 6;
 const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;
+// OUTBOUND-E3b (Review-Blocker Runde 2, C8b/Plan-Abschnitt "Meldeweg und Alarm-Body"): ein
+// Kanal, der zwoelf Monate nie ausgeloest wurde, ist kein bewiesener Kanal - der Selbsttest
+// laeuft im selben monatlichen Rhythmus, den der Plan nennt.
+const OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT = 30;
 
 // Reine EUR->Cents-Rundung (G26: Money at rest ist Ganzzahl). Eigene, exportierte
 // Funktion statt Inline-Ausdruck, DAMIT ein Unit-Test die Float-Falle direkt trifft:
@@ -1226,6 +1230,15 @@ const rawConfig = {
     fallback: OUTAGE_ALERT_RETRY_MINUTES_DEFAULT * MS_PER_MINUTE,
     min: 0,
   }),
+  // C8b (Plan-Abschnitt "Meldeweg und Alarm-Body"): Mindestabstand zwischen zwei
+  // Selbsttests desselben Kanals - "ein Kanal, der zwoelf Monate nie ausgeloest wurde, ist
+  // kein bewiesener Kanal". 0 = Selbsttest KOMPLETT AUS (Rollback-Hebel, Muster
+  // outageAlertWindowMs).
+  outageAlertSelfTestIntervalMs: numEnv(
+    "OUTAGE_ALERT_SELF_TEST_INTERVAL_MS",
+    process.env.OUTAGE_ALERT_SELF_TEST_INTERVAL_MS,
+    { fallback: OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT * MS_PER_DAY, min: 0 },
+  ),
   // ---- Spend-Monat-Flip (Budget-Achsen P7) ----
   // AN = BEIDE Gate-Achsen (Tenant UND Plattform) messen den Verbrauch im UTC-Kalendermonat
   // statt im Lebenszeit-Zaehler. AUS (Default) = byte-identisch zum Bestand. Der Flip ist ein
@@ -1999,7 +2012,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
@@ -2304,12 +2317,14 @@ const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
 function fatalConfigFindings(isProduction) {
   // OUTBOUND-E3b: aus dem Aufruf-Ausdruck herausgezogen (G36/no-restricted-syntax) - die
   // Kombination aus tief verschachtelten Feldzugriffen UND der .filter().map()-Kette
-  // darunter riss sonst ueber die erlaubte Verkettungstiefe.
-  const alertChannelConfig = {
-    ...config.billing,
-    platformAlertMailTo: config.mail.platformAlertMailTo,
-    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
-  };
+  // darunter riss sonst ueber die erlaubte Verkettungstiefe. Die Zusammenfuehrung selbst
+  // kommt aus boot-guard.alertChannelInputs (G5-Fix: EINE Quelle statt zweier
+  // byte-identischer Kopien, geteilt mit warnAlertChannelUnset in boot.js).
+  const alertChannelConfig = alertChannelInputs({
+    billing: config.billing,
+    mail: config.mail,
+    voice: config.voice,
+  });
   return configFatalErrors()
     .concat(productionFootguns(config, isProduction))
     .concat(
