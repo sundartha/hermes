@@ -120,3 +120,43 @@ griff, Anruf lief weiter). Telnyx-Guthaben `GET /v2/balance`: **3,09 USD** — k
   in Render nachziehen).
 - Ob eine US-Absendernummer nach DE dauerhaft zustellbar ist (Bestandslehre:
   US-DID -> DE war schon einmal intermittierend, Fix damals: +49-DID).
+
+---
+
+## 5. BEHOBEN am 2026-08-28 (Zwischenloesung, ohne Deploy)
+
+Owner-Entscheidung zu F-1, umgesetzt am laufenden System: der ANI-Override der
+Telnyx-Connection `3026479542865757220` ("ElevenLabs Spike2") zeigt jetzt auf die
+kontoeigene, keinem Kunden zugewiesene DID `+18643028341` (Tenant `owner`) statt auf die
+am 24.08. freigegebene `+15739090177`.
+
+| | vorher | nachher |
+|---|---|---|
+| `ani_override` | `+15739090177` (nicht mehr im Konto) | `+18643028341` (aktiv, Konto `owner`) |
+| `ani_override_type` | `always` | `always` (unveraendert) |
+
+Verifikation per echtem Anruf (`call_mtd0acq2hq4q`, 2026-08-28): **status completed,
+duration 29 s**, kein `failure_reason` — vorher vier Versuche mit `failed` nach je ~6 s.
+Der Angerufene hat den Assistenten gehoert und geantwortet.
+
+### Damit ist der offene Punkt 3 aus Abschnitt 4 beantwortet
+
+> "Ob die ANI derselben Connection zugewiesen sein muss wie der ausgehende Trunk."
+
+**NEIN, muss sie nicht.** `+18643028341` ist der Connection `2982643896460248193`
+("Hermes") zugewiesen, der ausgehende Trunk ist `3026479542865757220`
+("ElevenLabs Spike2") — der Anruf ging trotzdem durch. Telnyx prueft bei
+"Unverified origination number" (D51) offenbar die KONTO-Zugehoerigkeit, nicht die
+Connection-Zuordnung. Gemessen, nicht angenommen.
+
+### Was damit NICHT geloest ist
+
+Die Absendernummer ist weiterhin EINE geteilte Nummer fuer alle Tenants. Bis zum
+12.08.2026 lief jeder Outbound ueber Telnyx mit der DID des jeweiligen Tenants
+(`api-calls.js:395`, `from: ctx.fromNumber`); seit dem Umstieg auf den
+ElevenLabs-Weg (ab 19.08.) gibt es dieses Feld auf dem Anrufpfad nicht mehr
+(`elevenlabs/outbound.js` uebergibt nur `agent_phone_number_id`). Ein Rueckruf des
+Angerufenen landet daher beim Besitzer der geteilten Nummer, nicht beim anrufenden
+Tenant. Das ist eine Regression aus dem Umstieg und als eigene Etappe eingeplant
+(je DID eine EL-Nummernregistrierung, ID am `number`-Datensatz, `ani_override_type`
+weg von `always`).
