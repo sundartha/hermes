@@ -1,17 +1,26 @@
 // CDF1 (Report #2 5.4): maschinenlesbarer, PII-freier Fehlergrund aus dem normalisierten
 // Provider-Lifecycle ({status, diagnostics} aus extractLifecycleEvent). Provider-agnostisch:
 // die CallStatus-Vokabel ist Twilio-Konvention, die Telnyx' TeXML spiegelt; der SIP-Cause
-// verfeinert NUR den
-// generischen "failed"-Fall. PII-frei by construction (nur Status-/Cause-Token, NIE Nummern/
-// Namen - diagnostics.sipHangupCause ist bereits ueber safeCauseToken gefiltert).
+// verfeinert NUR den generischen "failed"-Fall. PII-frei by construction (nur Status-/
+// Cause-Token, NIE Nummern/Namen - diagnostics.sipHangupCause ist bereits ueber
+// safeCauseToken gefiltert).
 //
-// OUTBOUND-E2 (F1, Regressionsfang Ausfall 27.08.2026): der Bestand oben klassifiziert ein
-// Gespraech, das ZUSTANDE KAM. Fuer den Fall "der Anruf kam nie zustande" gab es kein Wort -
-// und deshalb trugen unser Konfigurationsdefekt (SIP 403, der Ausfall) und der Tippfehler
-// eines Nutzers (SIP 404, Ziel existiert nicht) bis heute dasselbe Label
-// (call_duration_secs_zero_not_answered). Das Modul traegt ab hier ZWEI Erzeuger-Familien:
-// oben der Lifecycle eines zustande gekommenen Gespraechs, unten die Ablehnung eines nie
-// zustande gekommenen Anrufs - beide PII-frei by construction, beide reine Funktionen ohne
+// OUTBOUND-E2 (F1, Regressionsfang Ausfall 27.08.2026): der Bestand oben klassifizierte
+// urspruenglich NUR "zustande gekommen (completed) vs. nicht" - ein SIP-Code verfeinerte
+// den generischen "failed"-Fall lediglich als angehaengtes DETAIL ("failed:403"), OHNE
+// SCHULD-Klasse. Fuer den Fall "der Anruf kam nie zustande" gab es zusaetzlich gar kein
+// Wort - deshalb trugen unser Konfigurationsdefekt (SIP 403, der Ausfall) und der
+// Tippfehler eines Nutzers (SIP 404, Ziel existiert nicht) bis heute dasselbe Label.
+//
+// Review-Befund S2-1 (Runde 3): zwei Zuordnungen DESSELBEN SIP-Codes auf einen Grund waeren
+// das Gegenteil des Etappenziels "EIN Fehlervokabular ueber alle Engines" gewesen - deshalb
+// nutzt callFailureReason() unten (der TeXML-/Call-Control-Lifecycle-Weg) jetzt DIESELBE
+// Schuld-Zuordnung sipBase() wie providerErrorReason() (der ElevenLabs-Weg). EINE
+// Zuordnungstabelle (SIP-Code -> Schuld-Basis-Token), zwei Aufrufer - kein Zweitweg mehr,
+// der denselben SIP-403 als blosses "failed" statt als "not-placed" ausgibt. Das Modul
+// traegt weiterhin zwei Erzeuger-FAMILIEN (Lifecycle eines zustande gekommenen Gespraechs
+// oben, Ablehnung eines nie zustande gekommenen Anrufs unten), aber nur noch EINE
+// SIP-Klassifikation - beide PII-frei by construction, beide reine Funktionen ohne
 // Netz-/Store-/Log-Zugriff.
 
 // Erfolgs-/Selbstsprechende Status (Domaenen-Vokabel, identisch zur /voice/status-Terminalliste).
@@ -28,13 +37,20 @@ const GENERIC_FAILURE_STATUS = "failed";
 const DETAIL_SEPARATOR = ":";
 
 // Liefert ein stabiles, kleines Token (string) ODER null (Erfolg/aktiv/leer -> KEIN Grund).
-// Form: "no-answer" | "busy" | "canceled" | "failed:<sipcause>" | "failed" | <roher status>.
+// Form: "no-answer" | "busy" | "canceled" | "<schuld-basis>:invite-<sipcode>" |
+// "failed:<roher-cause>" | "failed" | <roher status>. Der numerische SIP-Fall laeuft ueber
+// sipBase() (S2-1: EINE Zuordnung mit providerErrorReason geteilt, s. Modul-Kopf); ein
+// NICHT-numerischer Auflegegrund (z.B. Telnyx' "normal_clearing"-Wortfamilie, s.
+// hangupCauseStatus weiter unten) faellt auf das alte, unklassifizierte Detail-Anhaengen
+// zurueck - fail-closed, keine erfundene Schuld fuer einen Wert, der kein SIP-Statuscode ist.
 export function callFailureReason({ status, diagnostics } = {}) {
   if (!status || status === COMPLETED_STATUS) return null;
   if (SELF_DESCRIBING_FAILURES.includes(status)) return status;
   if (status === GENERIC_FAILURE_STATUS) {
-    const sip = diagnostics?.sipHangupCause;
-    return sip ? `${GENERIC_FAILURE_STATUS}${DETAIL_SEPARATOR}${sip}` : GENERIC_FAILURE_STATUS;
+    const rawCause = diagnostics?.sipHangupCause;
+    const sip = statusNumber(rawCause, SIP_STATUS_MAX);
+    if (sip !== null) return reasonOf(sipBase(sip), detailOf(SOURCE_INVITE, sip));
+    return rawCause ? `${GENERIC_FAILURE_STATUS}${DETAIL_SEPARATOR}${rawCause}` : GENERIC_FAILURE_STATUS;
   }
   return status; // unbekannter Nicht-completed-Status -> defensiver Passthrough, kein Bruch
 }

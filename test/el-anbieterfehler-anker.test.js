@@ -27,9 +27,14 @@ import { storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
+const HTTP_NOT_FOUND = 404;
 const CALL_LAUFZEIT_S = 5; // seit answeredAt vergangen - deutlich unter jedem Deckel, kein Zombie
 const KONSTRUIERTE_DAUER_S = 42;
 const ERWARTETE_MINUTEN_BEI_42S = 1;
+// Deutlich ueber dem Anbieter-Deckel (ELEVENLABS_PROVIDER_MAX_DURATION_S=600s): macht
+// classifyCallTime(...).expired wahr, OHNE dass der Fetch-Mock ueberhaupt gebraucht wird
+// (die Zeit-Obergrenze wird VOR dem Ergebnisabruf geprueft, s. pollConversationResult).
+const ZOMBIE_LAUFZEIT_S = 700;
 
 function seedActiveCall() {
   const state = ops.makeDefaultState();
@@ -132,4 +137,68 @@ test("echte Nicht-Rufannahme (Dauer 0, kein Anbieterfehler): byte-identisch zum 
     "provider_rejected_before_answer",
     "eine echte Nichtannahme und ein Anbieterfehler duerfen NIE dasselbe Label tragen",
   );
+});
+
+// Review-Befund S1-1 (Runde 3): finishExpiredPoll persistiert seit dieser Etappe erstmals
+// POLL_TIMEOUT_REASON am Call-Record - ungeprueft war das neues Verhalten ohne jede
+// Assertion (Gegenprobe: failureReason durch null ersetzt -> voller Regressionslauf bleibt
+// gruen). Die Zeit-Obergrenze wird VOR dem Ergebnisabruf geprueft (pollConversationResult),
+// der Fetch-Mock hier antwortet deshalb nie inhaltlich - er darf nur nicht fehlen.
+test("Poll-Obergrenze ueberschritten (Zombie-Anruf): failureReason = result-unknown:poll-timeout", async () => {
+  const { call, store } = seedActiveCall();
+  call.startedAt = new Date(Date.now() - ZOMBIE_LAUFZEIT_S * MS_PER_SECOND).toISOString();
+  call.answeredAt = call.startedAt;
+  let billed = false;
+  const el = makeElevenLabsOutbound({
+    store,
+    config: withConfigNamespaces({ elevenLabsOutbound: ACCOUNT }),
+    terminateAndBillCall,
+    billThunk: () => () => {
+      billed = true;
+    },
+    finishCall: () => {},
+  });
+  await withFetch(
+    async () => {
+      throw new Error("darf nicht aufgerufen werden: die Zeit-Obergrenze entscheidet vor dem Fetch");
+    },
+    async () => {
+      el.rearmActiveConversationPolls();
+      await waitUntil(() => billed);
+    },
+  );
+
+  assert.equal(call.failureReason, "result-unknown:poll-timeout");
+});
+
+// Review-Befund S1-1 (Runde 3): finishOnPermanentError persistiert
+// pollProviderErrorReason(deps.providerStatus) - ungeprueft, ob der Anbieter-Status
+// tatsaechlich am Call-Record landet. PERMANENT_FETCH_STATUS (401/404) verlangt
+// PERMANENT_ERROR_STREAK_LIMIT (3) Fehlschlaege IN FOLGE, bevor der Poll aufgibt -
+// rearmActiveConversationPolls ruft pollConversationResult direkt (kein echter Timer noetig),
+// dreimaliger Aufruf reicht darum, um die Schwelle zu erreichen.
+test("dauerhafter Abruf-Fehler (HTTP 404, 3x in Folge): failureReason traegt den Anbieter-Status", async () => {
+  const { call, store } = seedActiveCall();
+  let billed = false;
+  const el = makeElevenLabsOutbound({
+    store,
+    config: withConfigNamespaces({ elevenLabsOutbound: ACCOUNT }),
+    terminateAndBillCall,
+    billThunk: () => () => {
+      billed = true;
+    },
+    finishCall: () => {},
+  });
+  await withFetch(
+    async (_url, init) =>
+      init.method === "GET" ? { ok: false, status: HTTP_NOT_FOUND, json: async () => ({}) } : { ok: true, status: HTTP_OK },
+    async () => {
+      el.rearmActiveConversationPolls();
+      el.rearmActiveConversationPolls();
+      el.rearmActiveConversationPolls();
+      await waitUntil(() => billed);
+    },
+  );
+
+  assert.equal(call.failureReason, "result-unknown:poll-provider-404");
 });

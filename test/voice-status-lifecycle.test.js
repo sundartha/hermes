@@ -212,7 +212,14 @@ test("/voice/status Telnyx: Hangup-Ursache wird PII-frei als Diagnose geloggt", 
     assert.ok(calls.st_tnx_hangup_dirty.endedAt, "failed: endedAt muss gesetzt sein");
     // CDF1 (Spec a+b+d/json): persistierter Fehlergrund am Call-Record.
     assert.equal(calls.st_tnx_noanswer.failureReason, "no-answer", "no-answer: Status gewinnt");
-    assert.equal(calls.st_tnx_hangup_dirty.failureReason, "failed:603", "failed + SIP -> failed:603");
+    // OUTBOUND-E2 (S2-1, Runde 3): SIP 603 (Decline) klassifiziert jetzt nach Schuld
+    // (sipBase) statt als unklassifiziertes "failed:603" - EIN Fehlervokabular ueber alle
+    // Engines (genau der TeXML-/voice-status-Weg, den der 27.08.-Ausfall betraf).
+    assert.equal(
+      calls.st_tnx_hangup_dirty.failureReason,
+      "unreachable:invite-603",
+      "failed + SIP 603 -> unreachable:invite-603 (sipBase, S2-1)",
+    );
     // Spec (b): erfolgreicher Call traegt KEINEN Grund (null/absent).
     assert.ok(calls.st_tnx_hangup.failureReason == null, "completed: kein failureReason");
   } finally {
