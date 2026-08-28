@@ -42,6 +42,7 @@ import { callLocaleFor } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
+import { persistEndWithReason } from "../telephony/call-termination.js";
 import crypto from "node:crypto";
 
 // Endzustaende des Anbieters. Alles andere gilt als LAUFEND und wird weiter abgeholt: ein
@@ -1034,15 +1035,20 @@ async function finishWithoutProviderResult({
 }) {
   const call = store.getCall(callId);
   if (!call) return;
-  // OUTBOUND-E2: VOR terminateAndBillCall (dieselbe Reihenfolge-Begruendung wie in
-  // finishFromConversation). BEIDE Aufgeben-Faelle sind result-unknown, NICHT "gescheitert":
-  // der Anruf kann gelaufen sein, wir haben nur kein Ergebnis abholen koennen.
-  store.recordFailureReason(callId, failureReason);
+  // OUTBOUND-E2: BEIDE Aufgeben-Faelle sind result-unknown, NICHT "gescheitert": der Anruf
+  // kann gelaufen sein, wir haben nur kein Ergebnis abholen koennen.
+  // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
+  // geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel).
   const endedAtIso = new Date(
     cappedEndedAtMs(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S),
   ).toISOString();
   await terminateAndBillCall({
-    persistEnd: () => store.setCallEndedAt(callId, CALL_FAILED, endedAtIso),
+    persistEnd: persistEndWithReason({
+      store,
+      callId,
+      reason: failureReason,
+      endCall: () => store.setCallEndedAt(callId, CALL_FAILED, endedAtIso),
+    }),
     hangUp: () => endActiveCall(callId),
     bill: billThunk(finishCall, store, callId),
     callId,
@@ -1270,14 +1276,17 @@ export function makeElevenLabsOutbound({
     const ended = store.endCallRecord(callId, endStatusOf(conversation));
     const anchor = answeredAnchorOutcome(ended?.endedAt, conversation);
     applyAnsweredAnchor(store, callId, anchor);
-    // OUTBOUND-E2: VOR terminateAndBillCall. finishCall liest call.failureReason beim
-    // Notification-Bau (telephony/call-finish.js:203-217) und billThunk laedt den Call
-    // FRISCH aus dem Store - steht der Grund noch nicht am Datensatz, bleibt der Nutzertext
-    // "<Ziel> (Status: failed)", also genau der Zustand, den diese Etappe abstellt.
-    // recordFailureReason ist set-once und bei null ein No-op (store/state-ops.js:854).
-    store.recordFailureReason(callId, providerErrorReasonFor(anchor, conversation));
+    // OUTBOUND-E2: finishCall liest call.failureReason beim Notification-Bau (telephony/
+    // call-finish.js) und billThunk laedt den Call FRISCH aus dem Store - steht der Grund
+    // noch nicht am Datensatz, bleibt der Nutzertext "<Ziel> (Status: failed)", also genau
+    // der Zustand, den diese Etappe abstellt.
+    // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
+    // geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel). Der zweite
+    // endCallRecord-Aufruf im Thunk ist idempotent (greift nur aus status==='active'); der
+    // ERSTE oben (:1275) bleibt UNANGETASTET - er ist der Anker-Lieferant fuer
+    // answeredAnchorOutcome (PM-7/PM-14).
     await terminateAndBillCall({
-      persistEnd: () => store.endCallRecord(callId, endStatusOf(conversation)),
+      persistEnd: persistEndWithReason({ store, callId, reason: providerErrorReasonFor(anchor, conversation), endCall: () => store.endCallRecord(callId, endStatusOf(conversation)) }),
       hangUp: null,
       bill: billThunk(finishCall, store, callId),
       callId,

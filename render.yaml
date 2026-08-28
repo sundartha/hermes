@@ -459,6 +459,29 @@ services:
       # die Warnung).
       - key: PLATFORM_ALERT_SMS_TO
         value: ""
+      # ---- Systematischer-Ausfall-Melder (OUTBOUND-E3b) ----
+      # Meldet einen systematischen Outbound-Ausfall (Regressionsfang: 27.08.2026-Fall)
+      # dem Betreiber, ohne dass zufaellig jemand anrufen muss. 0 = komplett aus.
+      - key: OUTAGE_ALERT_WINDOW_MS
+        value: "3600000"
+      - key: OUTAGE_ALERT_MIN_FAILURES
+        value: "3"
+      - key: OUTAGE_ALERT_MIN_ATTEMPTS
+        value: "20"
+      - key: OUTAGE_ALERT_FAIL_SHARE_PERCENT
+        value: "20"
+      - key: OUTAGE_ALERT_DEBOUNCE_MS
+        value: "21600000"
+      - key: OUTAGE_ALERT_RETRY_MS
+        value: "900000"
+      # Betreiber-Zieladresse, der PRIMAERE Kanal (haengt an keinem Carrier). Secret-frei,
+      # aber sync:false (Dashboard-verwaltet, Muster PLATFORM_ANI_E164). WARNUNG: bleibt
+      # dieser Wert UND PLATFORM_ALERT_SMS_TO gemeinsam leer, waehrend
+      # ELEVENLABS_OUTBOUND_ENABLED=true und OUTAGE_ALERT_WINDOW_MS>0 gesetzt sind,
+      # verweigert der Dienst nach dem Deploy den Start (fatal) - VOR einem Deploy dieser
+      # Etappe im Dashboard setzen.
+      - key: PLATFORM_ALERT_MAIL_TO
+        sync: false
       # ---- Spend-Monat-Flip (Budget-Achsen P7) ----
       # AN = beide Gate-Achsen messen im UTC-Kalendermonat statt lebenslang. AUS (Default)
       # ist byte-identisch zum Bestand. Vorbedingung vor dem Flip: Live-Beleg, dass

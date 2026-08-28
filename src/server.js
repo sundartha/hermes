@@ -17,6 +17,7 @@ import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
+import { makeOutageWatch } from "./telephony/outage-report.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
@@ -105,6 +106,12 @@ const costTruing = makeCostTruing({ store, config, voiceControl, audit, messagin
 // AUSSCHLIESSLICH den eigenen Monats-Riegel (state.costCrossCheck) - kein Gate, kein Meter,
 // keine Buchung wird beruehrt.
 const costCrossCheck = makeCostCrossCheck({ store, config, voiceControl });
+
+// OUTBOUND-E3b: vierter, unabhaengiger Sweep-Zweig (Muster costTruing/costCrossCheck,
+// INV-7) - schliesst offene Ausfall-Marker, deren Fenster inzwischen gesund ist (D9: der
+// Ausloeser in finishCall sieht nur not-placed-Anrufe und kann "erholt" nie selbst
+// feststellen). audit/messaging sind dieselben Instanzen wie ueberall sonst (DIP).
+const outageWatch = makeOutageWatch({ store, config, audit });
 
 // F2-Mail (Call-Summary per E-Mail bei Newsletter-Einwilligung): EIGENE Mailer-Instanz ueber
 // dieselbe Auswahl-Rangfolge wie wireWebLogin (selectMailer, src/wiring/web-login.js -
@@ -285,6 +292,7 @@ const deps = {
   voiceRender,
   costTruing,
   costCrossCheck,
+  outageWatch,
   messaging,
   consultDelivery,
   elevenLabsOutbound,

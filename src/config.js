@@ -197,6 +197,11 @@ const HOURS_PER_DAY = 24;
 const MS_PER_HOUR = MINUTES_PER_HOUR * MS_PER_MINUTE;
 const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 
+// OUTBOUND-E3b: Default-Vielfache fuer die Entprellung/Wiederholung des Ausfall-Melders
+// (G25: benannte Konstanten statt Zahlenketten im Ausdruck).
+const OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT = 6;
+const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;
+
 // Reine EUR->Cents-Rundung (G26: Money at rest ist Ganzzahl). Eigene, exportierte
 // Funktion statt Inline-Ausdruck, DAMIT ein Unit-Test die Float-Falle direkt trifft:
 // 0.29 * 100 === 28.999999999999996 in JS (node -e verifiziert) - ohne Math.round
@@ -1176,6 +1181,51 @@ const rawConfig = {
   // account.role) - es gibt KEINE natuerliche Zielnummer fuer eine PLATTFORM-Groesse. NIE
   // die private Nummer eines Tenants: das waere eine Betreiber-Zahl an einen Kunden.
   platformAlertSmsTo: process.env.PLATFORM_ALERT_SMS_TO || "",
+  // ---- Systematischer-Ausfall-Melder (OUTBOUND-E3b, PLAN-OUTBOUND-RESILIENZ.md E-4) ----
+  // Zeitfenster, ueber das die not-placed-Fehlerquote je Klasse (Eimer) gezaehlt wird.
+  // 0 = Melder KOMPLETT AUS (Rollback-Hebel, ein einziger Wert/Guard/Test statt zwei
+  // verstreuter Env-Werte).
+  outageAlertWindowMs: numEnv("OUTAGE_ALERT_WINDOW_MS", process.env.OUTAGE_ALERT_WINDOW_MS, {
+    fallback: MS_PER_HOUR,
+    min: 0,
+  }),
+  // K1 (kleines Volumen): Mindestzahl Fehler derselben Klasse im Fenster, BEVOR ueberhaupt
+  // Alarm moeglich ist. Der gemessene Vorfall (27.08.2026) erzeugte 4 Versuche - N=3 feuert
+  // vor dem letzten, ohne dass ein einzelner Fehlversuch schon eine echte SMS+Mail kostet.
+  outageAlertMinFailures: numEnv("OUTAGE_ALERT_MIN_FAILURES", process.env.OUTAGE_ALERT_MIN_FAILURES, {
+    fallback: 3,
+    min: 1,
+  }),
+  // Mindestnenner, ab dem K2 (Skala) statt K1 (kleines Volumen) entscheidet UND ab dem der
+  // Anteilsvergleich ueberhaupt aussagekraeftig ist (bei M=20 bedeuten 20% nie weniger als
+  // 4 Fehler - K2 kann also nie schwaecher sein als K1).
+  outageAlertMinAttempts: numEnv("OUTAGE_ALERT_MIN_ATTEMPTS", process.env.OUTAGE_ALERT_MIN_ATTEMPTS, {
+    fallback: 20,
+    min: 1,
+  }),
+  // K2-Schwelle in Prozent (ganzzahlig, Deviation D-4 - kein Fliesskomma-Prozent-Env im
+  // Repo). 20-facher Abstand zum plausiblen Grundrauschen (<=1% not-placed im gesunden
+  // Betrieb) und deutlich unterhalb jedes echten Teilausfalls.
+  outageAlertFailSharePercent: numEnv(
+    "OUTAGE_ALERT_FAIL_SHARE_PERCENT",
+    process.env.OUTAGE_ALERT_FAIL_SHARE_PERCENT,
+    { fallback: 20, min: 0, max: 100 },
+  ),
+  // Mindest-Wiederholfrist NACH einer bereits ZUGESTELLTEN Meldung (entprellt am VORFALL,
+  // nicht am einzelnen Anruf) - derselbe Wert, den E3a bereits fuer die Nutzer-Mail
+  // ausliefert (NOT_PLACED_MAIL_DEBOUNCE_MS), hier als eigener Wert, weil Nutzer- und
+  // Betreiber-Kanal unabhaengig entprellt werden.
+  outageAlertDebounceMs: numEnv("OUTAGE_ALERT_DEBOUNCE_MS", process.env.OUTAGE_ALERT_DEBOUNCE_MS, {
+    fallback: OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT * MS_PER_HOUR,
+    min: 0,
+  }),
+  // Mindest-Wiederholfrist nach einem VERSUCHTEN, aber NICHT zugestellten Versand (S3-2):
+  // ohne diesen Wert gibt es nach einer fehlgeschlagenen Mail NULL Meldungen zum echten
+  // Vorfall, solange die Entprellfrist der (nie zugestellten) Meldung laeuft.
+  outageAlertRetryMs: numEnv("OUTAGE_ALERT_RETRY_MS", process.env.OUTAGE_ALERT_RETRY_MS, {
+    fallback: OUTAGE_ALERT_RETRY_MINUTES_DEFAULT * MS_PER_MINUTE,
+    min: 0,
+  }),
   // ---- Spend-Monat-Flip (Budget-Achsen P7) ----
   // AN = BEIDE Gate-Achsen (Tenant UND Plattform) messen den Verbrauch im UTC-Kalendermonat
   // statt im Lebenszeit-Zaehler. AUS (Default) = byte-identisch zum Bestand. Der Flip ist ein
@@ -1784,6 +1834,14 @@ const rawConfig = {
   smtpUser: process.env.SMTP_USER || "",
   smtpPassword: process.env.SMTP_PASSWORD || "", // SECRET - nie loggen/leaken
   mailFrom: process.env.MAIL_FROM || "",
+  // OUTBOUND-E3b (PM-4/BA-12): Betreiber-Zieladresse des systematischen-Ausfall-Melders.
+  // BEWUSST der PRIMAERE Kanal - anders als PLATFORM_ALERT_SMS_TO (billing-Namespace)
+  // haengt Mail an KEINEM Carrier: der heutige einzige Betreiber-SMS-Kanal laeuft ueber
+  // dasselbe Telnyx-Konto und dieselbe Nummern-Tabelle wie der ausgefallene Outbound - ein
+  // Alarm, den derselbe Defekt mitreisst, ist keiner. LEER = kein Mail-Versand, nur
+  // Audit-Log (der Boot-Guard meldet das - s. boot-guard.js#alertChannelFindings - fatal,
+  // wenn zusaetzlich beide anderen Bedingungen zutreffen).
+  platformAlertMailTo: process.env.PLATFORM_ALERT_MAIL_TO || "",
 
   // ---- Voice-Engine ----
   // "budget"  = Provider-eigene STT/TTS (Telnyx TeXML) + Claude Haiku (quasi gratis, Default)
@@ -1941,14 +1999,14 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
   // eigener Namespace statt Anhaengsel an auth/billing (eigenstaendige Domaene, s.
   // brevo-mail.js/smtp-mail.js/billing/cancellation-mail.js). HTTP-Fortsetzung:
   // brevoApiKey ergaenzt (Render sperrt SMTP auf kostenlosen Plaenen) -> 6.
-  mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom"],
+  mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
@@ -2244,10 +2302,18 @@ const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
 //    lebt NICHT hier, sondern in der einen Wahrheitstabelle (boot-guard.alertChannelFindings) -
 //    diese Zeile faltet nur ihren fatalen Anteil in dieselbe Ausgabe wie die uebrigen Fatals.
 function fatalConfigFindings(isProduction) {
+  // OUTBOUND-E3b: aus dem Aufruf-Ausdruck herausgezogen (G36/no-restricted-syntax) - die
+  // Kombination aus tief verschachtelten Feldzugriffen UND der .filter().map()-Kette
+  // darunter riss sonst ueber die erlaubte Verkettungstiefe.
+  const alertChannelConfig = {
+    ...config.billing,
+    platformAlertMailTo: config.mail.platformAlertMailTo,
+    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
+  };
   return configFatalErrors()
     .concat(productionFootguns(config, isProduction))
     .concat(
-      alertChannelFindings(config.billing)
+      alertChannelFindings(alertChannelConfig)
         .filter((befund) => befund.fatal)
         .map((befund) => befund.message),
     );

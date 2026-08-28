@@ -1,0 +1,149 @@
+// OUTBOUND-E3b (PM-16): "nicht konfiguriert" darf nie wie "alles gruen" aussehen. Die
+// alertChannelFindings-Erweiterung um BOTH_UNSET_WITH_OUTBOUND + platformAlertSenderFindings
+// (PM-17). Reine Units gegen boot-guard.js, kein Boot, kein Netz.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  alertChannelFindings,
+  ALERT_CHANNEL_FINDING,
+  platformAlertSenderFindings,
+  PLATFORM_ALERT_SENDER_FINDING,
+} from "../src/boot-guard.js";
+import { PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
+
+const WARN_PERCENT_AUS = 0;
+const WARN_PERCENT_AN = 80;
+
+test("beide Kanaele leer + EL-Outbound an + Fenster > 0 -> fatal, neuer Code", () => {
+  const findings = alertChannelFindings({
+    platformAlertSmsTo: "",
+    platformAlertMailTo: "",
+    elevenLabsOutboundEnabled: true,
+    outageAlertWindowMs: 3600000,
+    paymentEnabled: false,
+    platformSpendWarnPercent: WARN_PERCENT_AUS,
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.BOTH_UNSET_WITH_OUTBOUND);
+  assert.equal(findings[0].fatal, true);
+});
+
+test("nur SMS gesetzt -> []", () => {
+  const findings = alertChannelFindings({
+    platformAlertSmsTo: "+12025550143",
+    platformAlertMailTo: "",
+    elevenLabsOutboundEnabled: true,
+    outageAlertWindowMs: 3600000,
+  });
+  assert.deepEqual(findings, []);
+});
+
+test("nur Mail gesetzt -> die neue FATALE Pruefung greift NICHT mehr (mind. ein Kanal da); die bestehende SMS-spezifische WARN (Spend-Warnung/Tarif-Drift, kein Mail-Alternativkanal) bleibt unveraendert bestehen", () => {
+  const findings = alertChannelFindings({
+    platformAlertSmsTo: "",
+    platformAlertMailTo: "ops@example.test",
+    elevenLabsOutboundEnabled: true,
+    outageAlertWindowMs: 3600000,
+    paymentEnabled: false,
+    platformSpendWarnPercent: WARN_PERCENT_AUS,
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.UNSET);
+  assert.equal(findings[0].fatal, false);
+});
+
+test("beide leer, aber EL-Outbound AUS -> WARN, nicht fatal", () => {
+  const findings = alertChannelFindings({
+    platformAlertSmsTo: "",
+    platformAlertMailTo: "",
+    elevenLabsOutboundEnabled: false,
+    outageAlertWindowMs: 3600000,
+    paymentEnabled: false,
+    platformSpendWarnPercent: WARN_PERCENT_AUS,
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.UNSET);
+  assert.equal(findings[0].fatal, false);
+});
+
+test("beide leer, aber OUTAGE_ALERT_WINDOW_MS=0 -> WARN, nicht fatal", () => {
+  const findings = alertChannelFindings({
+    platformAlertSmsTo: "",
+    platformAlertMailTo: "",
+    elevenLabsOutboundEnabled: true,
+    outageAlertWindowMs: 0,
+    paymentEnabled: false,
+    platformSpendWarnPercent: WARN_PERCENT_AUS,
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, ALERT_CHANNEL_FINDING.UNSET);
+  assert.equal(findings[0].fatal, false);
+});
+
+test("die zwei Bestandsbefunde bleiben BYTE-IDENTISCH (Zeichenkettenvergleich)", () => {
+  // Bestandsverhalten (LCT P5/GAP-07), unveraendert durch die neuen Parameter: alle drei
+  // neuen Parameter fehlen hier komplett (Bestandsaufrufer wie warnAlertChannelUnset).
+  const unsetOnly = alertChannelFindings({ platformAlertSmsTo: "", paymentEnabled: false, platformSpendWarnPercent: WARN_PERCENT_AUS });
+  assert.equal(unsetOnly.length, 1);
+  assert.equal(unsetOnly[0].code, ALERT_CHANNEL_FINDING.UNSET);
+  assert.equal(unsetOnly[0].fatal, false);
+  assert.equal(
+    unsetOnly[0].message,
+    "PLATFORM_ALERT_SMS_TO ist leer - Plattform-Warnung und Tarif-Drift-Alarm laufen " +
+      "nur ins Audit-Log, es geht KEINE SMS an einen Menschen.",
+  );
+
+  const unsetWithWarning = alertChannelFindings({
+    platformAlertSmsTo: "",
+    paymentEnabled: true,
+    platformSpendWarnPercent: WARN_PERCENT_AN,
+  });
+  assert.equal(unsetWithWarning.length, 1);
+  assert.equal(unsetWithWarning[0].code, ALERT_CHANNEL_FINDING.UNSET_WITH_ACTIVE_WARNING);
+  assert.equal(unsetWithWarning[0].fatal, true);
+  assert.equal(
+    unsetWithWarning[0].message,
+    "PLATFORM_ALERT_SMS_TO ist leer, obwohl PAYMENT_ENABLED=true und " +
+      "PLATFORM_SPEND_WARN_PERCENT>0 - die Plattform-Spend-Warnung haette keinen " +
+      "Empfaenger. Empfaenger setzen ODER PLATFORM_SPEND_WARN_PERCENT=0 (Warnung bewusst aus).",
+  );
+});
+
+test("gesetzte SMS-Nummer -> [] wie bisher, unabhaengig von den neuen Parametern", () => {
+  const findings = alertChannelFindings({
+    platformAlertSmsTo: "+12025550143",
+    paymentEnabled: true,
+    platformSpendWarnPercent: WARN_PERCENT_AN,
+  });
+  assert.deepEqual(findings, []);
+});
+
+// ---- PM-17: platformAlertSenderFindings ----
+
+test("PM-17: keine offene alert_sms_sender-Bindung -> WARN, nicht fatal", () => {
+  const findings = platformAlertSenderFindings({ openBindings: [] });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, PLATFORM_ALERT_SENDER_FINDING.UNBOUND);
+  assert.equal(findings[0].fatal, false);
+});
+
+test("PM-17: eine offene alert_sms_sender-Bindung -> []", () => {
+  const findings = platformAlertSenderFindings({
+    openBindings: [{ purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER, e164: "+15005550006" }],
+  });
+  assert.deepEqual(findings, []);
+});
+
+test("PM-17: nur eine outbound_ani-Bindung (falsche Rolle) -> WARN", () => {
+  const findings = platformAlertSenderFindings({
+    openBindings: [{ purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI, e164: "+15005550006" }],
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].code, PLATFORM_ALERT_SENDER_FINDING.UNBOUND);
+});
+
+test("PM-17: openBindings undefined -> WARN (Default leer), kein Wurf", () => {
+  assert.doesNotThrow(() => platformAlertSenderFindings({}));
+  const findings = platformAlertSenderFindings({});
+  assert.equal(findings.length, 1);
+});

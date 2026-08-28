@@ -115,6 +115,11 @@ export function makeDefaultState() {
     // still mitnimmt. released_at === null heisst IN BENUTZUNG.
     // [{ id, e164, purpose, provider, tenantId, providerNumberId, boundAt, releasedAt, note }]
     platformNumberUse: [],
+    // OUTBOUND-E3b: Zustands-/Entprell-Marker des systematischen-Ausfall-Melders (PM-23).
+    // GLOBAL wie platformNumberUse, EIN Marker je Fehlerklasse (Eimer). closedAt===null
+    // heisst OFFEN (Ausfall noch nicht als "gesund" bestaetigt).
+    // [{ id, code, firstSeenAt, lastSeenAt, lastAttemptAt, reportedAt, deliveredChannels, closedAt }]
+    outageAlerts: [],
     // Async-Provisioning-Jobs (P6b2): persistente Spur der Queue (json-Liste bzw.
     // provisioning_job-Tabelle in pg). Die Laufzeit-Queue lebt im Adapter
     // (queue/adapters/memory); diese Liste haelt den Audit-/Reconciliation-Zustand
@@ -2463,6 +2468,15 @@ export function platformNumberBindings(state, e164) {
   return state.platformNumberUse.filter((binding) => binding.e164 === e164 && isOpenBinding(binding));
 }
 
+// Gegenrichtung zu platformNumberBindings: dort ist die e164 bekannt und die Rolle
+// gesucht, hier ist die ROLLE bekannt und die e164 gesucht (OUTBOUND-E3b, PM-17: der
+// Alarm-SMS-Absender wird ueber die beim Boot ABGELEITETE Bindung aufgeloest, NICHT ueber
+// eine erneute Laufzeit-Suche wie resolveBootstrapAlertSender - genau der Mechanismus, den
+// der Erase-Weg am 24.08.2026 still mitgenommen hat).
+export function openPlatformBindingByPurpose(state, purpose) {
+  return state.platformNumberUse.find((binding) => binding.purpose === purpose && isOpenBinding(binding));
+}
+
 // Review-Befund E1-S2-3: "gehoert diese Bindung dem Tenant?" stand zweimal, nicht komplementaer
 // formuliert (numberBusyReason vs. unbindOwnPlatformBindings) - bei tenantId=null stuften beide
 // Stellen dieselbe Bindung gegensaetzlich ein. EINE Quelle, strikte Gleichheit, keine
@@ -2569,6 +2583,60 @@ export function syncPlatformBindings(state, desired) {
     if (e164) bindPlatformNumber(state, { e164, purpose, provider, tenantId, note });
   }
   return state.platformNumberUse.filter(isOpenBinding);
+}
+
+// ---- OUTBOUND-E3b: Zustands-/Entprell-Marker des Ausfall-Melders (PM-23) ----------------
+// GLOBAL wie platformNumberUse - kein Tenant-Scope, EIN Marker je Fehlerklasse (Eimer, s.
+// telephony/outage-detection.js#outageBucket). Der Marker traegt NUR Zustand/Zeitpunkte,
+// NIE eine Rufnummer/Tenant-Kennung (Regel 10). Lange Namen statt der im Rest der Datei
+// ueblichen einbuchstabigen (G16/N1, eslint id-length) - dieselbe Begruendung wie beim
+// OUTBOUND-E1-Block oben: der bereits gepinnte Altlast-Fund darf durch neuen Code NICHT
+// weiter wachsen.
+
+// Die aktuell OFFENE Zeile (closedAt===null) fuer diese Fehlerklasse, oder undefined.
+export function openOutageAlert(state, code) {
+  return state.outageAlerts.find((alert) => alert.code === code && alert.closedAt === null);
+}
+
+// Marker anlegen/aktualisieren. sent=true haelt fest, dass ein Versand-VERSUCH lief
+// (S3-1, lastAttemptAt); channels (nur bei nachweislich ERFOLGREICHEN Kanaelen) setzt
+// reportedAt - entprellt wird am VORFALL, nicht an der Mail (S3-2): ein Fehlschlag laesst
+// reportedAt bewusst leer, ein spaeterer Aufruf darf den Versand wiederholen.
+export function claimOutageAlert(state, { code, nowMs, sent = false, channels = [] }) {
+  const nowIso = new Date(nowMs).toISOString();
+  let marker = openOutageAlert(state, code);
+  if (marker) {
+    marker.lastSeenAt = nowIso;
+  } else {
+    marker = {
+      id: newId("otg"),
+      code,
+      firstSeenAt: nowIso,
+      lastSeenAt: nowIso,
+      lastAttemptAt: null,
+      reportedAt: null,
+      deliveredChannels: null,
+      closedAt: null,
+    };
+    state.outageAlerts.push(marker);
+  }
+  if (sent) {
+    marker.lastAttemptAt = nowIso;
+    if (channels.length > 0) {
+      marker.reportedAt = nowIso;
+      marker.deliveredChannels = channels.join(",");
+    }
+  }
+  return marker;
+}
+
+// Rueckkehr zu gesund: schliesst die offene Zeile (Historie bleibt stehen, kein
+// Ueberschreiben - Muster unbindPlatformNumber). Keine offene Zeile -> null, kein Wurf.
+export function closeOutageAlert(state, { code, nowMs }) {
+  const marker = openOutageAlert(state, code);
+  if (!marker) return null;
+  marker.closedAt = new Date(nowMs).toISOString();
+  return marker;
 }
 
 // Zustaende, die eine Nummer aus dem Routing nehmen. Eine suspendierte Nummer routet

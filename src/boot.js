@@ -30,6 +30,7 @@ import {
   sttProfileFindings,
   stalePriceFindings,
   platformAniFindings,
+  platformAlertSenderFindings,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
@@ -241,8 +242,18 @@ function assertCostTruingBooking(config, store) {
 // liefert [] und meldet damit gar nichts). Der seit GAP-07 moegliche FATALE Befund ist hier
 // per Konstruktion unerreichbar: assertConfig() faltet ihn in seine Fatal-Menge und hat den
 // Prozess bei diesem Zustand laengst mit exit(1) beendet - hier bleibt nur die WARN.
+// OUTBOUND-E3b: alertChannelFindings liest jetzt zusaetzlich platformAlertMailTo (Namespace
+// mail) und elevenLabsOutboundEnabled (Namespace voice) - config.billing ALLEIN wuerfe hier
+// (guardedConfig lehnt jeden Zugriff auf eine Property AUSSERHALB des eigenen Namespace
+// fail-closed ab, Tippfehler-Riegel). Deshalb dieselbe Zusammenfuehrung wie
+// fatalConfigFindings (config.js).
 function warnAlertChannelUnset(config) {
-  for (const finding of alertChannelFindings(config.billing))
+  const alertChannelConfig = {
+    ...config.billing,
+    platformAlertMailTo: config.mail.platformAlertMailTo,
+    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
+  };
+  for (const finding of alertChannelFindings(alertChannelConfig))
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
@@ -935,7 +946,7 @@ export function derivePlatformNumberBindings({ config, store }) {
 // Zweig traegt zusaetzlich sein eigenes .catch() (zweite Linie, Muster der beiden
 // Bestandszweige). test/kv-m4-monthly-cross-check.test.js (KV-M4-8) belegt die Isolation
 // direkt gegen diese Funktion, nicht nur als Behauptung im Kommentar.
-export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
+export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch }) {
   void costTruing
     .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
     .catch((err) => console.error("[cost-truing]", err.message));
@@ -949,6 +960,12 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
   void costCrossCheck
     .runMonthlyCrossCheck()
     .catch((err) => console.error("[cost-cross-check]", err.message));
+  // OUTBOUND-E3b (D9): VIERTER, unabhaengiger Schritt im selben Stunden-Takt - schliesst
+  // offene Ausfall-Marker, deren Fenster inzwischen gesund ist (der Ausloeser in
+  // finishCall sieht nur not-placed-Anrufe und kann "erholt" nie selbst feststellen).
+  void outageWatch
+    .runRecoverySweep()
+    .catch((err) => console.error("[outage-watch]", err.message));
 }
 
 // EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter
@@ -1025,6 +1042,10 @@ export async function bootServer({
   provisioning,
   costTruing,
   costCrossCheck,
+  // OUTBOUND-E3b: vierter, unabhaengiger Zweig desselben Stunden-Sweeps (runSweepTick) -
+  // dieselbe EINE Instanz wie costTruing/costCrossCheck (INV-7), server.js reicht sie im
+  // deps-Buendel durch.
+  outageWatch,
   messaging,
   consultDelivery,
   // Boot-Re-Arm des EL-Ergebnisabrufs (s. unten bei rearmActiveConversationPolls). Dieselbe
@@ -1049,7 +1070,11 @@ export async function bootServer({
   // GAP-38: VOR den Gates - die Heilung darf den Refusal nur VERMEIDEN, nie ersetzen.
   await healBootstrapStore({ config, store, messaging });
   // OUTBOUND-E1: VOR den Gates - die Bindungen sind die Datengrundlage des Riegels.
-  derivePlatformNumberBindings({ config, store });
+  // OUTBOUND-E3b (PM-17): das Ergebnis wurde bisher verworfen - jetzt haelt es
+  // warnPlatformAlertSenderUnbound dagegen (NIE fatal, s. dort).
+  const openPlatformBindings = derivePlatformNumberBindings({ config, store });
+  for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
+    console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store);
 
   // LCT P3: Kosten-Abgleich im Beobachtungsmodus. Muster der beiden bestehenden
@@ -1080,7 +1105,7 @@ export async function bootServer({
   // mit (runSweepTick oben, exportiert und direkt testbar) - kein zweiter Timer, keine
   // neue Ressource.
   setInterval(
-    () => runSweepTick({ costTruing, provisioning, costCrossCheck }),
+    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch }),
     config.billing.costTruingSweepIntervalMs,
   ).unref();
 

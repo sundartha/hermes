@@ -23,6 +23,7 @@ import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
 import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
 import { planNotPlacedMail } from "../mail-not-placed.js";
+import { reportSystematicOutage } from "./outage-report.js";
 // F2-Newsletter-Recipients: EINE Quelle fuer den Abmelde-Link-URL-Bau (G5), geteilt mit
 // self-service-routes.js (Bestaetigungs-Mail-Link nutzt das Confirm-Pendant dort).
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
@@ -194,6 +195,17 @@ async function sendNotPlacedMail({ store, config, call, mailer, accountsRef, aud
   });
 }
 
+// OUTBOUND-E3b: die zwei Meldewege eines gescheiterten Anrufs an EINER Naht - an den
+// NUTZER (E3a: die eine not-placed-Mail, oben) und, wenn dieser Anruf Teil eines
+// SYSTEMATISCHEN Ausfalls ist, an den BETREIBER (E3b). Beide Entscheidungen sind rein und
+// liegen woanders (mail-not-placed.js bzw. telephony/outage-detection.js); hier steht nur
+// die Reihenfolge. Der Betreiber-Weg ist vollstaendig fail-soft (eigenes try/catch in
+// reportSystematicOutage) - ein Fehler dort darf einen Anruf-Abschluss NIE abbrechen.
+async function reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts }) {
+  await sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts });
+  await reportSystematicOutage({ store, config, call, audit, messaging, mailer });
+}
+
 export function makeCallFinish({
   store,
   config,
@@ -257,10 +269,12 @@ export function makeCallFinish({
         t.statusBody(target, call.status, call.failureReason),
         call.id,
       );
-      // OUTBOUND-E3a (E-3): die EINE Nutzer-Mail, ausschliesslich fuer not-placed (unser/
-      // Anbieter-Defekt). planNotPlacedMail entscheidet Ziel+Gate, sendMailToTargets
-      // versendet - kein zweiter Benachrichtigungsweg (G5).
-      await sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts: t });
+      // OUTBOUND-E3a (E-3)/E3b (E-4): die EINE Nutzer-Mail (ausschliesslich fuer not-placed,
+      // unser/Anbieter-Defekt) UND, an derselben Naht, der Betreiber-Melder fuer einen
+      // SYSTEMATISCHEN Ausfall - beide Entscheidungen sind rein und liegen woanders
+      // (mail-not-placed.js bzw. telephony/outage-detection.js), reportFailedCall (oben)
+      // haelt nur die Reihenfolge (kein zweiter Benachrichtigungsweg, G5).
+      await reportFailedCall({ store, config, call, mailer, accountsRef, audit, messaging, texts: t });
       return;
     }
 

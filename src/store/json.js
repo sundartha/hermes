@@ -111,6 +111,7 @@ const STATE_FIELD_DEFAULTS = Object.freeze({
   platformTtsUsage: emptyPlatformTtsUsage, // LCT P7: Bestands-store.json ohne die Zeile nachziehen
   costCrossCheck: emptyCostCrossCheck, // KV-M4: Bestands-store.json ohne die Zeile nachziehen
   platformNumberUse: () => [], // OUTBOUND-E1: Bestands-store.json ohne die Liste nachziehen
+  outageAlerts: () => [], // OUTBOUND-E3b: Bestands-store.json ohne die Liste nachziehen
 });
 
 // Neue Default-Felder ergaenzen (Migrationen). Arbeitet wie finishLoad/seed* auf dem

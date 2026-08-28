@@ -38,7 +38,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 35.
   // KV-P0: flushEpochIso ergaenzt (Flush-Stichtag, verriegelt POST /api/billing/flush-meters) -> 36.
   // KV-P2: voiceTariffInboundCents ergaenzt (Inbound-Minutensatz, kalibriert an KV-M1) -> 37.
-  billing: 37,
+  // OUTBOUND-E3b: sechs Ausfall-Melder-Schwellen ergaenzt (outageAlertWindowMs,
+  // outageAlertMinFailures, outageAlertMinAttempts, outageAlertFailSharePercent,
+  // outageAlertDebounceMs, outageAlertRetryMs) -> 43.
+  billing: 43,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -53,7 +56,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // (smtpHost/smtpPort/smtpUser/smtpPassword/mailFrom) -> 5, neuer 15. Namespace.
   // HTTP-Fortsetzung: brevoApiKey ergaenzt (Render sperrt SMTP auf kostenlosen Plaenen,
   // der Versand wechselt vorrangig auf Brevo per HTTP) -> 6.
-  mail: 6,
+  // OUTBOUND-E3b: platformAlertMailTo ergaenzt (Betreiber-Zieladresse des systematischen-
+  // Ausfall-Melders, der PRIMAERE Kanal) -> 7.
+  mail: 7,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
   // einer Preistabelle pro Modell-ID zusammengefasst (modelPricesUsd, 1 nested Key statt
   // 2 primitiver Keys) -> 10 statt 11.
@@ -113,9 +118,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // HTTP-Fortsetzung: brevoApiKey ergaenzt (mail-Namespace 5 -> 6 Keys) -> 155.
 // OC-P1: ownerSelfCallEnabled + ownerSelfCallTenantIds ergaenzt -> 157.
 // OUTBOUND-E1: platformAniE164 ergaenzt -> 158.
-const EXPECTED_TOTAL_KEYS = 158;
+// OUTBOUND-E3b: sechs Ausfall-Melder-Schwellen (billing) + platformAlertMailTo (mail)
+// ergaenzt -> 165.
+const EXPECTED_TOTAL_KEYS = 165;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (158 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (165 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -233,7 +240,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // OC-P1: ownerSelfCallEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 146.
   // ownerSelfCallTenantIds ist das FUENFTE Array (kein primitives Blatt, s.u.).
   // OUTBOUND-E1: platformAniE164 ist primitiv (String, kein Array/nested Objekt) -> 147.
-  const EXPECTED_PRIMITIVE_LEAVES = 147;
+  // OUTBOUND-E3b: sechs Ausfall-Melder-Schwellen (alle Zahl) + platformAlertMailTo
+  // (String) sind alle sieben primitiv (kein Array/nested Objekt) -> 154.
+  const EXPECTED_PRIMITIVE_LEAVES = 154;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

@@ -961,6 +961,7 @@ async function hydrate(client) {
   state.platformTtsUsage = await hydratePlatformTtsUsage(client); // LCT P7: global, wie profiles
   state.costCrossCheck = await hydrateCostCrossCheck(client); // KV-M4: global, wie platformTtsUsage
   state.platformNumberUse = await hydratePlatformNumberUse(client); // OUTBOUND-E1: global
+  state.outageAlerts = await hydrateOutageAlerts(client); // OUTBOUND-E3b: global, wie platformNumberUse
   await hydrateSubIndex(client, state); // tenant-prolif-b: Merge-Overlay aus account
   return state;
 }
@@ -1016,6 +1017,29 @@ async function hydratePlatformNumberUse(client) {
     boundAt: row.bound_at instanceof Date ? row.bound_at.toISOString() : row.bound_at,
     releasedAt: row.released_at instanceof Date ? row.released_at.toISOString() : (row.released_at ?? null),
     note: row.note,
+  }));
+}
+
+// Liest die globale outage_alert-Tabelle (OUTBOUND-E3b, Muster hydratePlatformNumberUse -
+// kein RLS-Tenant-Filter). TIMESTAMPTZ -> ISO-String, damit der Spiegel backend-identisch
+// zu json.js ist.
+async function hydrateOutageAlerts(client) {
+  const rows = (
+    await client.query(
+      `SELECT id, code, first_seen_at, last_seen_at, last_attempt_at, reported_at,
+              delivered_channels, closed_at
+         FROM outage_alert ORDER BY first_seen_at`,
+    )
+  ).rows;
+  return rows.map((row) => ({
+    id: row.id,
+    code: row.code,
+    firstSeenAt: row.first_seen_at instanceof Date ? row.first_seen_at.toISOString() : row.first_seen_at,
+    lastSeenAt: row.last_seen_at instanceof Date ? row.last_seen_at.toISOString() : row.last_seen_at,
+    lastAttemptAt: row.last_attempt_at instanceof Date ? row.last_attempt_at.toISOString() : (row.last_attempt_at ?? null),
+    reportedAt: row.reported_at instanceof Date ? row.reported_at.toISOString() : (row.reported_at ?? null),
+    deliveredChannels: row.delivered_channels,
+    closedAt: row.closed_at instanceof Date ? row.closed_at.toISOString() : (row.closed_at ?? null),
   }));
 }
 
@@ -1534,6 +1558,10 @@ async function flush(client, state, preFlush) {
     // Die umgekehrte Richtung (erst binden, dann im selben save() freigeben) wirft - und
     // das ist die fail-closed-Richtung, die wir wollen.
     await flushPlatformNumberUse(client, state.platformNumberUse);
+    // OUTBOUND-E3b: outage_alert ist global wie platform_number_use, hat aber KEINE
+    // Trigger-Abhaengigkeit zur Tenant-Schleife - sie steht trotzdem HIER (Muster-Treue,
+    // dieselbe Ebene wie die uebrige Plattform-Buchhaltung), nicht danach.
+    await flushOutageAlerts(client, state.outageAlerts);
     for (const tenant of state.tenants) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
       await flushTenantScope(client, tenant.id, state);
@@ -2126,6 +2154,36 @@ async function deleteMissingPlatformNumberUse(client, keepIds) {
     return;
   }
   await client.query(`DELETE FROM platform_number_use WHERE id <> ALL($1::text[])`, [keepIds]);
+}
+
+// outage_alert-Flush (OUTBOUND-E3b, global, an KEINEN Tenant gebunden; Muster
+// flushPlatformNumberUse). id-PK-Upsert + Prune ueber die globale keep-Liste.
+async function flushOutageAlerts(client, alerts) {
+  await deleteMissingOutageAlerts(client, alerts.map((alert) => alert.id));
+  for (const alert of alerts) {
+    await client.query(
+      `INSERT INTO outage_alert
+         (id, code, first_seen_at, last_seen_at, last_attempt_at, reported_at,
+          delivered_channels, closed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO UPDATE SET
+         last_seen_at=EXCLUDED.last_seen_at, last_attempt_at=EXCLUDED.last_attempt_at,
+         reported_at=EXCLUDED.reported_at, delivered_channels=EXCLUDED.delivered_channels,
+         closed_at=EXCLUDED.closed_at`,
+      [alert.id, alert.code, alert.firstSeenAt, alert.lastSeenAt, alert.lastAttemptAt ?? null,
+       alert.reportedAt ?? null, alert.deliveredChannels ?? null, alert.closedAt ?? null],
+    );
+  }
+}
+
+// Prune der globalen Marker-Tabelle (Muster deleteMissingPlatformNumberUse). Leere
+// keep-Liste -> alle Marker weg (Parity zu deleteMissing).
+async function deleteMissingOutageAlerts(client, keepIds) {
+  if (keepIds.length === 0) {
+    await client.query(`DELETE FROM outage_alert`);
+    return;
+  }
+  await client.query(`DELETE FROM outage_alert WHERE id <> ALL($1::text[])`, [keepIds]);
 }
 
 // Loescht Profile-Zeilen, deren tenant_id nicht mehr im Spiegel steht (global, kein

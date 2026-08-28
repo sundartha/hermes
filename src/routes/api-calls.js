@@ -31,6 +31,7 @@ import { startRejectionReason } from "../telephony/failure-reason.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
+import { persistEndWithReason } from "../telephony/call-termination.js";
 // TEIL C (Owner-Auftrag 15.08.2026, cancel_call darf nicht luegen): der Deckelwert ist
 // KEINE Magic Number - er ist in elevenlabs/outbound.js besessen (Bewachung statt
 // Korrektur der Anbieter-Vorlage, s. dortiger Kommentar).
@@ -77,10 +78,12 @@ const providerStatusOf = (err) => err?.providerStatus;
 // der beweist am Produktions-Thunk selbst, dass der Grund VOR dem Endstatus geschrieben
 // wird - kein zweiter, im Test nachgebauter Ablauf (das war E2-Befund E2-B).
 export function endFailedCallWithReason(store, callId, providerStatus) {
-  return () => {
-    store.recordFailureReason(callId, startRejectionReason(providerStatus));
-    store.endCallRecord(callId, "failed");
-  };
+  return persistEndWithReason({
+    store,
+    callId,
+    reason: startRejectionReason(providerStatus),
+    endCall: () => store.endCallRecord(callId, "failed"),
+  });
 }
 
 // Fail-closed-Ersatz fuer den EL-Anrufstart (s. deps unten): ein eingeschalteter Zweig
