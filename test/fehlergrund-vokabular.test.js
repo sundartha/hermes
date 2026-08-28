@@ -63,8 +63,10 @@ test("der SIP-404-Bestandsfund ergibt unreachable:invite-404-D11 - eine ANDERE K
 test("die HTTP-Statusklasse entscheidet die Schuld: 4xx wir, 5xx unbekannt - beim Anrufstart wie beim Ergebnisabruf", () => {
   assert.equal(startRejectionReason(HTTP_UNPROCESSABLE), "not-placed:start-422");
   assert.equal(startRejectionReason(HTTP_SERVICE_UNAVAILABLE), "result-unknown:start-503");
-  assert.equal(startRejectionReason(undefined), null, "kein providerStatus -> kein erfundener Grund");
-  assert.equal(startRejectionReason("nonsense"), null, "kein Fremdtext als Zahl missverstehen");
+  // OUTBOUND-E3a (Befund D-4): kein providerStatus (Netzfehler/Timeout/unlesbarer Wert)
+  // ist NICHT mehr grundlos - er bekommt den unbekannten Ausgang, nicht die Schuldklasse.
+  assert.equal(startRejectionReason(undefined), "result-unknown:start-no-status", "kein erfundener Grund, aber auch kein leeres Feld");
+  assert.equal(startRejectionReason("nonsense"), "result-unknown:start-no-status", "kein Fremdtext als Zahl missverstehen");
   assert.equal(POLL_TIMEOUT_REASON, "result-unknown:poll-timeout");
   assert.equal(pollProviderErrorReason(HTTP_NOT_FOUND), "result-unknown:poll-provider-404");
   // Unbekannter SIP-Code faellt fail-closed auf RESULT_UNKNOWN, statt eine ungemessene

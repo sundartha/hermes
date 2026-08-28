@@ -151,13 +151,24 @@ function statusNumber(value, max) {
   return Number.isInteger(zahl) && zahl >= HTTP_CLIENT_ERROR_MIN && zahl <= max ? zahl : null;
 }
 
+// Detail fuer den Start-Fehlschlag OHNE verwertbaren Anbieter-Status (Netzfehler,
+// Zeitablauf, abgebrochene Verbindung, unlesbarer Statuswert). Geschlossene Menge wie
+// die uebrigen Detail-Bausteine - nie aus Anbieter-Text gebildet.
+const START_NO_STATUS_DETAIL = "no-status";
+
 // HTTP-Ablehnung des ANRUFSTARTS -> Token. Rein, ohne Netz/Store/Log. Gilt fuer ALLE drei
 // Engine-Zweige: der catch in routes/api-calls.js umschliesst sie alle.
-// Kein providerStatus (Netzfehler/Timeout) -> null: wir behaupten keinen Grund, den wir
-// nicht haben (Bestandsverhalten, s. PLAN Abschnitt 8).
+//
+// OUTBOUND-E3a (Befund D-4): kein providerStatus hiess bisher KEIN Grund - der Anruf lag
+// danach ohne jede Erklaerung im Store, und der Nutzer bekam "<Ziel> (Status: failed)".
+// Jetzt bekommt er einen Grund, aber in der Klasse fuer den UNBEKANNTEN AUSGANG, nicht in
+// der Schuldklasse: ohne Antwort des Anbieters wissen wir nicht, ob gewaehlt wurde.
+// Fail-closed in beide Richtungen - kein erfundener Grund, aber auch kein leeres Feld.
+// RESULT_UNKNOWN zaehlt bewusst NICHT in den spaeteren Ausfall-Alarm (E3b) und loest
+// KEINE Nutzer-Mail aus (die haengt an NOT_PLACED, s. mail-not-placed.js).
 export function startRejectionReason(providerStatus) {
   const code = statusNumber(providerStatus, HTTP_STATUS_MAX);
-  if (code === null) return null;
+  if (code === null) return reasonOf(RESULT_UNKNOWN, detailOf(SOURCE_START, START_NO_STATUS_DETAIL));
   const base = code >= HTTP_SERVER_ERROR_MIN ? RESULT_UNKNOWN : NOT_PLACED;
   return reasonOf(base, detailOf(SOURCE_START, code));
 }

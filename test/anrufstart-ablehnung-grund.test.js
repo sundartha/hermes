@@ -10,11 +10,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { startServer, seedCall } from "./helpers.js";
+import { startServer } from "./helpers.js";
 import { FAILURE_REASON_TEXTS } from "../src/i18n/failure-reason-texts.js";
-import { getCall, recordFailureReason } from "../src/store/state-ops.js";
-import { makeCallFinish } from "../src/telephony/call-finish.js";
-import { terminateAndBillCall, billThunk } from "../src/telephony/call-termination.js";
 
 const TO = "+4915112345678"; // erlaubtes Ziel, kein Premium/Notruf
 const TELNYX_PROVIDER_STATUS = 403;
@@ -110,101 +107,18 @@ test("Start-Ablehnung des Anbieters (403): der Anruf traegt den Grund, die Antwo
   }
 });
 
-// ---------------- Ordnungssensitiver Regressionsfang (Review-Blocker Runde 4) ----------------
+// ---------------- Reihenfolge-Regressionsfang: AUSGEWANDERT (OUTBOUND-E3a) ----------------
 //
-// Befund: der Integrationstest oben prueft nur das ERGEBNIS. Selbst gefahren (Reviewer):
-// recordStartRejectionReason NACH terminateAndBillCall verschoben -> derselbe Test bleibt
-// GRUEN. Ursache: terminateAndBillCall ruft bill() fire-and-forget auf (Promise.resolve(
-// bill()).catch(...), call-termination.js) - der Kindprozess-Integrationstest wartet auf
-// KEINEN der beiden Vorgaenge synchron, sondern liest ueber HTTP einen spaeteren
-// Zustand, der von der zufaelligen Ereignisschleifen-Reihenfolge abhaengt.
+// Der ordnungssensitive Test, der frueher hier stand, baute die Produktionsreihenfolge im
+// TEST selbst nach (recordFailureReason VOR terminateAndBillCall, von Hand getippt) - ein
+// Test, der die echte Reihenfolge im Produktionscode nicht pruefte, sondern nur seine
+// EIGENE Kopie davon. Clean-Code-Befund E2-B / Safety-Befund C1: bei vertauschter
+// Reihenfolge im echten Code (src/routes/api-calls.js) blieb dieser Test GRUEN.
 //
-// Dieser Test bildet denselben Ablauf DETERMINISTISCH nach - dieselben Produktionsfunktionen
-// (state-ops.recordFailureReason, terminateAndBillCall, billThunk, makeCallFinish), aber
-// mit einem In-Memory-Store statt eines Kindprozesses: der von bill() zurueckgegebene
-// Promise wird explizit abgewartet (Muster GQ-P15-B1, test/gq-p15-failure-reason-
-// notification.test.js), statt auf eine zufaellige Task-Reihenfolge zu hoffen.
-function throwing(label) {
-  return () => {
-    throw new Error(`${label} haette im passiven Fruehe-Return-Zweig nicht laufen duerfen`);
-  };
-}
-
-function makeOrderHarness(callOverrides) {
-  const call = seedCall({ status: "active", transcript: [], ...callOverrides });
-  const state = { calls: [call] };
-  const notifyCapture = [];
-  const config = { billing: { paymentEnabled: false, smsCostCents: 0 }, privacy: {} };
-  const store = {
-    withStoreLock: (fn) => fn(),
-    releaseOutboundReserve: async () => {},
-    save: () => {},
-    addNotification: (title, body, callId) => notifyCapture.push({ title, body, callId }),
-    markBilled: () => {},
-    getCall: (id) => getCall(state, id),
-    recordFailureReason: (callId, reason) => recordFailureReason(state, callId, reason),
-  };
-  const metering = { recordVoiceMinuteMeter: () => {}, reconcileVoiceBudget: () => {} };
-  const { finishCall } = makeCallFinish({
-    store,
-    config,
-    metering,
-    messaging: throwing("messaging"),
-    summarizeCall: throwing("summarizeCall"),
-    planSummarySms: throwing("planSummarySms"),
-    audit: throwing("audit"),
-  });
-  return { call, store, finishCall, notifyCapture };
-}
-
-const REASON = "not-placed:start-403";
-
-test("Reihenfolge-Regressionsfang (ordnungssensitiv): recordFailureReason VOR terminateAndBillCall -> Notification traegt den Grund", async () => {
-  const { call, store, finishCall, notifyCapture } = makeOrderHarness();
-  let billPromise;
-  const trackedBill = () => (billPromise = billThunk(finishCall, store, call.id)());
-
-  // Exakt die Reihenfolge aus dem echten catch (routes/api-calls.js): erst der Grund,
-  // dann die Terminierung.
-  store.recordFailureReason(call.id, REASON);
-  await terminateAndBillCall({
-    persistEnd: () => {
-      call.status = "failed";
-    },
-    hangUp: null,
-    bill: trackedBill,
-    callId: call.id,
-  });
-  await billPromise; // deterministisch auf das fire-and-forget bill() warten, kein Raten
-
-  assert.equal(notifyCapture.length, 1);
-  const phrase = FAILURE_REASON_TEXTS.de.phrases["not-placed"];
-  assert.ok(
-    notifyCapture[0].body.includes(phrase),
-    `Notification traegt nicht die Grund-Phrase: ${notifyCapture[0].body}`,
-  );
-});
-
-test("Gegenprobe (beweist, dass die Reihenfolge tatsaechlich zaehlt): recordFailureReason NACH dem abgewarteten bill() kommt zu spaet", async () => {
-  const { call, store, finishCall, notifyCapture } = makeOrderHarness();
-  let billPromise;
-  const trackedBill = () => (billPromise = billThunk(finishCall, store, call.id)());
-
-  await terminateAndBillCall({
-    persistEnd: () => {
-      call.status = "failed";
-    },
-    hangUp: null,
-    bill: trackedBill,
-    callId: call.id,
-  });
-  await billPromise; // die Notification ist zu diesem Zeitpunkt schon gebaut
-  store.recordFailureReason(call.id, REASON); // zu spaet - reine Dokumentation der Race
-
-  assert.equal(notifyCapture.length, 1);
-  const phrase = FAILURE_REASON_TEXTS.de.phrases["not-placed"];
-  assert.ok(
-    !notifyCapture[0].body.includes(phrase),
-    "Positiv-Kontrolle: bei falscher Reihenfolge darf die Grund-Phrase NICHT erscheinen",
-  );
-});
+// OUTBOUND-E3a macht die Reihenfolge zur STRUKTUR statt zum Kommentar: der Grund wird
+// INNERHALB des persistEnd-Thunks geschrieben (endFailedCallWithReason,
+// src/routes/api-calls.js), und persistEnd laeuft in terminateAndBillCall garantiert VOR
+// bill() (src/telephony/call-termination.js). Der Regressionsfang dafuer steht jetzt in
+// test/fehlergrund-reihenfolge-riegel.test.js - er prueft den ECHTEN Produktions-Thunk
+// (Laufzeit) UND die Verdrahtung im ausgelieferten Quelltext (Sabotage-Fang), statt eine
+// Kopie der Reihenfolge im Test zu wiederholen.

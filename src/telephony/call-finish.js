@@ -22,6 +22,7 @@ import { USAGE_EVENT_KIND } from "../store/defaults.js";
 import { keepsTranscriptForDiagnosis } from "../diagnostic-retention.js";
 import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
+import { planNotPlacedMail } from "../mail-not-placed.js";
 // F2-Newsletter-Recipients: EINE Quelle fuer den Abmelde-Link-URL-Bau (G5), geteilt mit
 // self-service-routes.js (Bestaetigungs-Mail-Link nutzt das Confirm-Pendant dort).
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
@@ -108,15 +109,20 @@ function buildMailBody({ call, t, who, result, aiCount }) {
 // Zahl ERFOLGREICHER Sends zurueck (Teilfehler werden geloggt, aber NICHT gezielt
 // nachversendet - bewusste Vereinfachung, Auftrag). Eigene Funktion (aus sendSummaryMails
 // herausgezogen), um dessen Verzweigungszahl unter der Grenze zu halten.
-async function sendMailToTargets({ config, mailer, targets, mailBody, t }) {
+// OUTBOUND-E3a: subject ist jetzt Parameter statt hartcodiert t.summaryTitle - die
+// not-placed-Mail unten teilt sich diese Schleife, braucht aber t.failedTitle als Betreff.
+// Parameter heisst texts statt t (Umbenennung, kein Verhaltenswechsel): mit dem zweiten
+// Aufrufer (sendNotPlacedMail) waere die bisherige Shorthand-Weitergabe {..., t} an JEDER
+// Aufrufstelle ein weiterer id-length-Fund derselben, bereits gepinnten Regel gewesen.
+async function sendMailToTargets({ config, mailer, targets, mailBody, subject, texts }) {
   let sentCount = 0;
   for (const target of targets) {
     const mailText = target.unsubToken
-      ? `${mailBody}\n\n${t.unsubscribeLinkLabel} ` +
+      ? `${mailBody}\n\n${texts.unsubscribeLinkLabel} ` +
         newsletterUnsubscribeUrl(config.server.publicUrl, target.unsubToken)
       : mailBody;
     try {
-      await mailer.sendMail({ to: target.email, subject: t.summaryTitle, text: mailText });
+      await mailer.sendMail({ to: target.email, subject, text: mailText });
       sentCount += 1;
     } catch (e) {
       console.error("[mail]", e.message);
@@ -142,11 +148,50 @@ async function sendSummaryMails({ store, config, call, mailer, accounts, audit, 
     return;
   }
   const mailBody = buildMailBody({ call, t, who, result, aiCount });
-  const sentCount = await sendMailToTargets({ config, mailer, targets: mailPlan.targets, mailBody, t });
+  const sentCount = await sendMailToTargets({
+    config,
+    mailer,
+    targets: mailPlan.targets,
+    mailBody,
+    subject: t.summaryTitle,
+    texts: t,
+  });
   // NUR nach MINDESTENS EINEM erfolgreichen Send (Muster markSummarySmsSent) - bleiben
   // ALLE Versuche erfolglos, KEIN Marker -> ein spaeterer Retry (naechster /voice/status)
   // versucht die Mail(s) erneut statt sie fuer immer zu verlieren.
   if (sentCount > 0) store.markSummaryMailSent(call.id);
+}
+
+// OUTBOUND-E3a (E-3): GENAU EINE Mail, ausschliesslich fuer die Klasse not-placed - der
+// Anruf kam nie zustande, WEIL WIR oder der Anbieter ihn abgelehnt haben. Ein Nutzer, der
+// nach dem Auftrag nicht in seinen MCP-Client zurueckkehrt, erfuehre sonst UEBERHAUPT NIE,
+// dass sein Auftrag an UNSEREM Defekt gescheitert ist - und genau das ist der Anlassfall
+// vom 27.08.2026.
+//
+// KEIN eigener Textbau: der Rumpf ist t.statusBody - DIESELBE Funktion, die zwei Zeilen
+// darueber die Benachrichtigung baut (G5). Die Mail kann per Konstruktion nichts anderes
+// behaupten als der Feed. Kein Gespraechsinhalt, kein Anbieter-Rohtext, keine
+// Zusammenfassung; das Ziel steht nur dort, wo der Bestand es ohnehin zeigt.
+// accountsRef statt accountsRef.current: der Aufrufer reicht die spaet gebundene Zelle
+// (call-finish.js Modul-Kopf), dereferenziert wird an EINER Stelle - hier.
+// Fail-soft wie jeder Mailweg: sendMailToTargets faengt selbst (kein Throw in finishCall).
+async function sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts }) {
+  const plan = await planNotPlacedMail({ store, call, mailer, accounts: accountsRef.current });
+  if (!plan.send) {
+    // Audit nur Marker + Grund, NIE die E-Mail-Adresse und NIE die Rufnummer (Regel 4/H4).
+    if (plan.reason) audit("not_placed_mail_skipped", null, `call=${call.id} reason=${plan.reason}`);
+    return;
+  }
+  const mailBody =
+    `${texts.statusBody(call.to, call.status, call.failureReason)}\n\n${texts.notPlacedMailHint}`;
+  await sendMailToTargets({
+    config,
+    mailer,
+    targets: plan.targets,
+    mailBody,
+    subject: texts.failedTitle,
+    texts,
+  });
 }
 
 export function makeCallFinish({
@@ -212,6 +257,10 @@ export function makeCallFinish({
         t.statusBody(target, call.status, call.failureReason),
         call.id,
       );
+      // OUTBOUND-E3a (E-3): die EINE Nutzer-Mail, ausschliesslich fuer not-placed (unser/
+      // Anbieter-Defekt). planNotPlacedMail entscheidet Ziel+Gate, sendMailToTargets
+      // versendet - kein zweiter Benachrichtigungsweg (G5).
+      await sendNotPlacedMail({ store, config, call, mailer, accountsRef, audit, texts: t });
       return;
     }
 

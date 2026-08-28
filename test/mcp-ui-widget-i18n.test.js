@@ -35,6 +35,7 @@ import { SUPPORTED_LANGUAGES, localeFor } from "../src/i18n/locales.js";
 import { makeDefaultState, registerTenant, setTenantGeo, tenantGeo } from "../src/store/state-ops.js";
 import { setWorldDefaultLanguageEnabled } from "../src/store/defaults.js";
 import { FAILURE_REASON_BASE_TOKENS } from "../src/telephony/failure-reason.js";
+import { CAP_FAILURE_REASON, BUDGET_FAILURE_REASON } from "../src/telephony/call-lifecycle.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WIDGET_DIR = path.join(ROOT, "src", "ui", "widgets");
@@ -131,12 +132,19 @@ test("T-i18n-keys-covered: jeder data-i18n-/t()-Key der Widget-Quellen existiert
 // FAILURE_REASON_TEXTS bereits erzwingt. Ein Basis-Token OHNE Widget-Label faellt in
 // failureReasonLabel() (call.html) auf den ROHEN Token zurueck - genau der Befund, den
 // diese Runde behebt.
-test("T-i18n-failure-labels: jedes FAILURE_REASON_BASE_TOKEN hat ein Label im ausgelieferten call.html", () => {
+// OUTBOUND-E3a (Befund D-5): die Menge erweitert sich um die ZWEI internen Token
+// (Cap-/Budget-Abbruch, call-lifecycle.js) - dieselbe Vereinigung wie
+// REAL_BASE_TOKENS in test/gq-p15-failure-reason-notification.test.js. Beide waren
+// bereits in FAILURE_REASON_TEXTS vorhanden, aber bislang OHNE Widget-Label - genau die
+// Luecke, die D-5 schliesst.
+const REAL_BASE_TOKENS = () => new Set([...FAILURE_REASON_BASE_TOKENS, CAP_FAILURE_REASON, BUDGET_FAILURE_REASON]);
+
+test("T-i18n-failure-labels: jedes Basis-Token (Provider + intern) hat ein Label im ausgelieferten call.html", () => {
   const labels = extractFailureReasonLabels(CALL_HTML_SOURCE);
   // Positiv-Kontrolle (Lehre pruefkommando-ohne-positiv-kontrolle): die Extraktion muss
   // ein bekanntes Paar tatsaechlich finden, sonst prueft die Schleife unten nichts.
   assert.equal(labels["no-answer"], "No answer", "Extraktion liefert nicht das bekannte Bestandslabel");
-  for (const token of FAILURE_REASON_BASE_TOKENS) {
+  for (const token of REAL_BASE_TOKENS()) {
     assert.ok(
       Object.prototype.hasOwnProperty.call(labels, token),
       `Basis-Token "${token}" hat kein Label in call.html#FAILURE_REASON_LABELS - failureReasonLabel() zeigt den rohen Token`,
