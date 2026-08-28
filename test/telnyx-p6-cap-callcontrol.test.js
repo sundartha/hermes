@@ -22,7 +22,10 @@ const MS_PER_S = 1000;
 
 // Slice-Fenster der Quelltext-Wiring-Guards (G25: keine nackten Zahlen) - grosszuegig genug,
 // das jeweils gepruefte Code-Stueck ab seinem Marker vollstaendig einzufangen.
-const SOURCE_WINDOW_TERMINATE_ACTIVE_CALL_CHARS = 1200; // T6 (lifecycleSrc)
+// G27/C2-Fix (Review-Blocker Runde 3): von 1200 auf 1600 gewachsen - persistEnd
+// formuliert seither ueber persistEndWithReason (call-termination.js) statt einer
+// freien Arrow-Funktion, das schiebt den hangUp-Marker weiter nach hinten.
+const SOURCE_WINDOW_TERMINATE_ACTIVE_CALL_CHARS = 1600; // T6 (lifecycleSrc)
 // S1-4 Fix (Owner-Auftrag 15.08.2026): von 1500 auf 4000 gewachsen - der cancel_call-Handler
 // traegt seither die S1-4/S1-5-Begruendungskommentare VOR dem hangUp-Feld.
 const SOURCE_WINDOW_CANCEL_CALL_CHARS = 4000; // T7 (apiCallsSrc)

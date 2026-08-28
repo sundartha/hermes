@@ -4,7 +4,7 @@
 // gegen Attrappen (KEINE echten Anrufe/SMS/Mails).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runAlertChannelSelfTest } from "../src/telephony/outage-report.js";
+import { runAlertChannelSelfTest, runOutageRecoverySweep } from "../src/telephony/outage-report.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
 
 const CONFIG = Object.freeze({
@@ -123,6 +123,33 @@ test("S5 (G26-Muster): zwei gleichzeitige Sweep-Ticks senden GENAU EINMAL (Reser
   ]);
   assert.equal(spies.mailCalls.length, 1, "genau EINE Mail trotz zweier gleichzeitiger Ticks");
   assert.equal(spies.smsCalls.length, 1, "genau EINE SMS trotz zweier gleichzeitiger Ticks");
+});
+
+test("S7 (B1-Fix, Review-Blocker Runde 3): der Erholungs-Sweep und der Selbsttest laufen "
+  + "MEHRFACH hintereinander gegen denselben Store - genau EIN Selbsttest-Versand ueber "
+  + "5 simulierte Stunden-Ticks (30-Tage-Intervall), NIE eine outage_recovered-Zeile fuer "
+  + "den Selbsttest-Marker", async () => {
+  // Reproduziert den gemessenen Defekt: ohne den B1-Fix schliesst runOutageRecoverySweep
+  // den Selbsttest-Marker bei JEDEM Tick als "erholt" (er sieht fuer den Selbsttest-Eimer
+  // IMMER fehler=0), der Selbsttest findet danach keinen offenen Marker mehr und feuert
+  // erneut - 5 Ticks haetten 5 Mails/5 SMS und 4 falsche outage_recovered-Zeilen ergeben.
+  const spies = makeSpies();
+  const store = makeStore({ platformNumberUse: boundSender() });
+  const STUNDEN_TAKT_MS = 3600000; // Produktions-Sweep-Takt (boot.js#runSweepTick)
+  const SIMULIERTE_TICKS = 5;
+  for (let tick = 0; tick < SIMULIERTE_TICKS; tick += 1) {
+    const nowMs = NOW_MS + tick * STUNDEN_TAKT_MS;
+    await runOutageRecoverySweep({ store, config: CONFIG, audit: spies.audit });
+    await runAlertChannelSelfTest({
+      store, config: CONFIG, audit: spies.audit, messaging: spies.messaging, mailer: spies.mailer, nowMs,
+    });
+  }
+  assert.equal(spies.mailCalls.length, 1, "genau EIN Selbsttest-Versand ueber 5 Ticks (30-Tage-Intervall)");
+  assert.equal(spies.smsCalls.length, 1, "genau EINE Selbsttest-SMS ueber 5 Ticks");
+  const recoveredZeilen = spies.auditCalls.filter((call) => call.action === "outage_recovered");
+  assert.equal(recoveredZeilen.length, 0, "der Selbsttest-Marker darf NIE outage_recovered ausloesen");
+  const marker = store.load().outageAlerts.find((alert) => alert.code === "self-test:alert-channel");
+  assert.equal(marker.closedAt, null, "der Selbsttest-Marker bleibt offen - der Sweep darf ihn nicht schliessen");
 });
 
 test("S6: PII-Regex - der Selbsttest-Body traegt keine Rufnummer/Tenant-ID", async () => {

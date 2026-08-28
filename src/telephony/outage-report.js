@@ -73,6 +73,21 @@ function sendSmsChannel({ messaging, store, config, zeile }) {
   });
 }
 
+// G5-Fix (Review-Blocker Runde 3): der Versand-und-Buchen-Block war BYTE-IDENTISCH in
+// sendAlert und runAlertChannelSelfTest formuliert - Mail senden, SMS senden, delivered
+// aus dem Mail-Ergebnis ableiten, Marker im selben withStoreLock-Abschnitt fortschreiben.
+// EINE Formulierung (G5): beide Aufrufer unterscheiden sich nur im Marker-Code.
+async function sendeUeberBeideKanaele({ store, config, messaging, mailer, code, zeile, nowMs }) {
+  const mailResult = await sendMailChannel({ mailer, config, zeile });
+  sendSmsChannel({ messaging, store, config, zeile });
+  const delivered = mailResult.delivered || !mailResult.hasTarget;
+  await store.withStoreLock(() => {
+    const state = store.load();
+    ops.claimOutageAlert(state, { code, nowMs, sent: true, channels: delivered ? ["mail"] : [] });
+  });
+  store.save();
+}
+
 // K0/Erholung: WARN + Audit, KEIN Versand (kostenlos). Der Marker wird trotzdem
 // fortgeschrieben (firstSeenAt/lastSeenAt bzw. closedAt) - Daempfung: ein zweiter K0-Fund
 // derselben Klasse feuert nicht erneut (die Zeile ist dann schon offen).
@@ -101,14 +116,7 @@ async function sendAlert({ bucket, zahlen, nowMs, store, config, audit, messagin
   const zeile = alarmZeile({ code: bucket, zahlen, regel: OUTAGE_VERDICT.ALERT, windowMs: config.billing.outageAlertWindowMs });
   console.warn(`[outage] outage_alert klasse=${bucket}`);
   audit("outage_alert", null, zeile);
-  const mailResult = await sendMailChannel({ mailer, config, zeile });
-  sendSmsChannel({ messaging, store, config, zeile });
-  const delivered = mailResult.delivered || !mailResult.hasTarget;
-  await store.withStoreLock(() => {
-    const state = store.load();
-    ops.claimOutageAlert(state, { code: bucket, nowMs, sent: true, channels: delivered ? ["mail"] : [] });
-  });
-  store.save();
+  await sendeUeberBeideKanaele({ store, config, messaging, mailer, code: bucket, zeile, nowMs });
 }
 
 // Dispatch-Tabelle (G23): EIN Eintrag je meldepflichtigem Urteil, kein if/else ueber
@@ -181,7 +189,15 @@ export async function runOutageRecoverySweep({ store, config, audit }) {
   const state = store.load();
   const nowMs = Date.now();
   const schwellen = outageThresholds(config);
-  const offeneMarker = state.outageAlerts.filter((alert) => alert.closedAt === null);
+  // B1-Fix (Review-Blocker Runde 3): der Selbsttest-Marker (SELF_TEST_BUCKET, s.u.) ist
+  // KEIN Fehlergrund-Eimer - fuer ihn liefert outageWindow() konstruktionsbedingt IMMER
+  // fehler=0 (kein echter call.failureReason bildet je auf seinen Code ab). Ohne den
+  // Ausschluss urteilt beurteileAusfall() bei JEDEM Sweep-Tick "erholt", der Sweep
+  // schliesst den Marker sofort wieder, und der Selbsttest findet beim naechsten Tick
+  // keinen offenen Marker mehr -> feuert bei JEDEM Tick statt einmal je Periode.
+  const offeneMarker = state.outageAlerts.filter(
+    (alert) => alert.closedAt === null && istFehlergrundEimer(alert.code),
+  );
   for (const marker of offeneMarker) {
     const fenster = outageWindow(state.calls, { nowMs, windowMs: schwellen.windowMs, bucket: marker.code });
     // E3B-02-Fix: EINE Urteilsstelle (beurteileAusfall) statt einer zweiten,
@@ -203,6 +219,14 @@ export async function runOutageRecoverySweep({ store, config, audit }) {
 // jeden Neustart. outageAlertSelfTestIntervalMs=0 schaltet den Selbsttest komplett ab
 // (Rollback-Hebel, Muster outageAlertWindowMs).
 const SELF_TEST_BUCKET = "self-test:alert-channel";
+
+// B1-Fix (Review-Blocker Runde 3): das Praedikat "ist ein Fehlergrund-Eimer" an EINER
+// Stelle statt als verstreuter Namensvergleich (G26/P16-Auftrag: "per Konstruktion",
+// nicht ad hoc). Heute gibt es genau einen Nicht-Fehlergrund-Eimer (der Selbsttest); die
+// Funktion bleibt trotzdem die einzige Stelle, die diese Frage beantwortet.
+function istFehlergrundEimer(code) {
+  return code !== SELF_TEST_BUCKET;
+}
 
 // Reine Faelligkeits-Frage (Muster meldeErlaubt/outage-detection.js): kein Marker oder nie
 // versucht -> faellig; sonst faellig, sobald seit dem letzten Versuch mindestens
@@ -235,14 +259,7 @@ export async function runAlertChannelSelfTest({ store, config, audit, messaging,
     const zeile = "Hermes Betriebsmeldung\nAlarmkanal funktioniert (Selbsttest)";
     console.warn("[outage] alert_channel_self_test");
     audit("alert_channel_self_test", null, zeile);
-    const mailResult = await sendMailChannel({ mailer, config, zeile });
-    sendSmsChannel({ messaging, store, config, zeile });
-    const delivered = mailResult.delivered || !mailResult.hasTarget;
-    await store.withStoreLock(() => {
-      const state = store.load();
-      ops.claimOutageAlert(state, { code: SELF_TEST_BUCKET, nowMs, sent: true, channels: delivered ? ["mail"] : [] });
-    });
-    store.save();
+    await sendeUeberBeideKanaele({ store, config, messaging, mailer, code: SELF_TEST_BUCKET, zeile, nowMs });
   } catch (err) {
     console.error("[outage] Alarmkanal-Selbsttest fehlgeschlagen:", err.message);
   }

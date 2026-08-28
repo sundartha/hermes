@@ -1,21 +1,31 @@
-// OUTBOUND-E3a/E3b (Befund C1/C-A, REIHENFOLGE-RIEGEL): der Nutzertext (E3a) UND der
-// Betreiber-Melder (E3b) haengen an der Invariante "der Grund wird geschrieben, BEVOR der
-// Anruf beendet/abgerechnet wird". E3a hatte diese Invariante NUR in routes/api-calls.js
-// als Struktur erzwungen; in routes/voice.js und elevenlabs/outbound.js war sie eine
-// verschiebbare Anweisung - der Safety-Reviewer hat sie in voice.js verletzt, und die
-// GESAMTE Suite blieb GRUEN (Befund C-A). Dieser Test deckt jetzt ALLE DREI Naehte ueber
-// EINE Formulierung der Invariante (persistEndWithReason, src/telephony/
-// call-termination.js), nicht drei kopierte.
+// OUTBOUND-E3a/E3b (Befund C1/C-A/G27-C2, REIHENFOLGE-RIEGEL): der Nutzertext (E3a), der
+// Betreiber-Melder (E3b) UND der Max-Dauer-/Budget-Cap (call-lifecycle.js) haengen an der
+// Invariante "der Grund wird geschrieben, BEVOR der Anruf beendet/abgerechnet wird". E3a
+// hatte diese Invariante NUR in routes/api-calls.js als Struktur erzwungen; in
+// routes/voice.js, elevenlabs/outbound.js UND (Review-Blocker Runde 3) call-lifecycle.js
+// war sie eine verschiebbare Anweisung - der Safety-Reviewer hat sie in voice.js verletzt,
+// und die GESAMTE Suite blieb GRUEN (Befund C-A). Dieser Test deckt jetzt ALLE VIER Naehte
+// ueber EINE Formulierung der Invariante (persistEndWithReason, src/telephony/
+// call-termination.js), nicht vier kopierte.
+//
+// AUSDRUECKLICHE AUSNAHME (G27-C2-Fix, Fix-Vorschlag "begruendete Ausnahme statt Umbau"):
+// src/telnyx-call-control-ingest.js#recordHangupOutcome persistiert den Grund ebenfalls VOR
+// dem Settlement (funktional korrekt, siehe eigener Kommentar dort), bleibt aber bewusst
+// AUSSERHALB dieses Riegels - eine Umstellung auf persistEndWithReason wuerde die Signatur
+// von onHangup(call) aendern muessen, an der test/call-termination-order.test.js per
+// LITERALEM Quelltext-Marker haengt (Befund 5). Eine vierte kopierte Formulierung bleibt
+// hier ein bewusst akzeptiertes Risiko, kein blinder Fleck - der Reihenfolge-Beweis fuer
+// diese Naht liegt in call-termination-order.test.js.
 //
 // R1  Mechanismus-Pin (Bestand): persistEnd laeuft vor bill.
 // R2  Produktions-Thunk (Bestand): endFailedCallWithReason schreibt Grund vor Endstatus.
 // R3  Laufzeit je Naht: persistEndWithReason({store, callId, reason, endCall}) ruft
 //     recordFailureReason VOR endCall - deepEqual auf der Aufzeichnung.
-// R4  SABOTAGE-FANG, generisch ueber DREI Dateien:
+// R4  SABOTAGE-FANG, generisch ueber VIER Dateien:
 //     (a) Positiv-Kontrolle: jede Datei enthaelt "persistEndWithReason(" mindestens einmal
 //         (Lehre pruefkommando-ohne-positiv-kontrolle - ein spaeteres "0 Treffer" beweist
 //         sonst nichts).
-//     (b) In KEINER der drei Dateien kommt "store.recordFailureReason(" vor - wer die
+//     (b) In KEINER der vier Dateien kommt "store.recordFailureReason(" vor - wer die
 //         Anweisung als freie Zeile zurueckholt (genau die Sabotage von Befund C-A), macht
 //         diesen Fall ROT.
 // R5  Verdrahtungs-Pin je Naht: die persistEnd-Aufrufstellen nennen persistEndWithReason
@@ -45,6 +55,7 @@ const ORDER_CRITICAL_FILES = Object.freeze([
   "src/routes/api-calls.js",
   "src/routes/voice.js",
   "src/elevenlabs/outbound.js",
+  "src/telephony/call-lifecycle.js", // G27/C2-Fix (Review-Blocker Runde 3), s.u.
 ]);
 
 function readSrc(relPath) {
@@ -84,14 +95,14 @@ test("R3 Laufzeit je Naht: persistEndWithReason ruft recordFailureReason VOR end
   assert.deepEqual(seen, ["reason:not-placed:invite-403-D51", "end"]);
 });
 
-test("R4(a) Positiv-Kontrolle: alle drei Naht-Dateien nennen persistEndWithReason mindestens einmal", () => {
+test("R4(a) Positiv-Kontrolle: alle vier Naht-Dateien nennen persistEndWithReason mindestens einmal", () => {
   for (const relPath of ORDER_CRITICAL_FILES) {
     const src = readSrc(relPath);
     assert.match(src, /persistEndWithReason\(/, `${relPath} nennt persistEndWithReason nicht`);
   }
 });
 
-test("R4(b) SABOTAGE-FANG: in KEINER der drei Naht-Dateien steht store.recordFailureReason( als freie Anweisung", () => {
+test("R4(b) SABOTAGE-FANG: in KEINER der vier Naht-Dateien steht store.recordFailureReason( als freie Anweisung", () => {
   for (const relPath of ORDER_CRITICAL_FILES) {
     const src = readSrc(relPath);
     const freieAufrufe = src.match(/store\.recordFailureReason\(/g) || [];
@@ -116,4 +127,10 @@ test("R5 Verdrahtungs-Pin je Naht: die persistEnd-Aufrufstellen sind mit dem Rie
   const outboundTreffer = outboundSrc.match(/persistEnd: persistEndWithReason\(\{/g) || [];
   const ERWARTETE_NAEHTE_OUTBOUND = 2; // finishWithoutProviderResult + finishFromConversation
   assert.equal(outboundTreffer.length, ERWARTETE_NAEHTE_OUTBOUND, "beide EL-Naehte sind verdrahtet");
+
+  // G27/C2-Fix (Review-Blocker Runde 3): terminateActiveCall (Max-Dauer-/Budget-Cap) war
+  // die vierte, von Hand formulierte Auspraegung derselben Invariante - jetzt ueber
+  // denselben Riegel.
+  const lifecycleSrc = readSrc("src/telephony/call-lifecycle.js");
+  assert.match(lifecycleSrc, /persistEnd: persistEndWithReason\(\{/);
 });
