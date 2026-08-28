@@ -47,6 +47,7 @@ export const DRIFT_BEFUND = Object.freeze({
   EL_AGENT_MISMATCH: "config_el_agent_mismatch",
   EL_OUTBOUND_DISABLED: "config_el_outbound_disabled",
   CONNECTION_INACTIVE: "config_connection_inactive",
+  ANI_OVERRIDE_MISSING: "config_ani_override_missing",
   ANI_MISMATCH: "config_ani_mismatch",
   FQDN_UNBOUND: "config_fqdn_unbound",
   OVP_DISABLED: "config_ovp_disabled",
@@ -67,10 +68,17 @@ function unbekannt(pruefung) {
 // Fail-closed (Blocker-Vermeidungsliste 3, Muster ausnahmeFormFehler in
 // scripts/lib/elevenlabs-besitz.mjs): eine Ausnahme OHNE grund ODER OHNE seit ist keine
 // gueltige Ausnahme - sie wird zu einem eigenen, BLOCKIERENDEN Fehler und NIE stillschweigend
-// zu einer echten Ausnahme aufgewertet.
+// zu einer echten Ausnahme aufgewertet. EINE Regel-Quelle (G5, Review-Blocker): sowohl
+// ausnahmeFehler als auch gueltigeAusnahmen fragen istUngueltig() - eine Aenderung der Regel
+// (z.B. "seit" muss ein ISO-Datum sein) kann dadurch nicht mehr an einer der beiden Stellen
+// vergessen werden.
+function istUngueltig(ausnahme) {
+  return !ausnahme.grund || !ausnahme.seit;
+}
+
 export function ausnahmeFehler(ausnahmen) {
   return ausnahmen
-    .filter((ausnahme) => !ausnahme.grund || !ausnahme.seit)
+    .filter(istUngueltig)
     .map(
       (ausnahme) =>
         `Ausnahme fuer '${ausnahme.befund || "(kein Befund-Code)"}' ist UNGUELTIG: grund und seit sind Pflicht (fail-closed).`,
@@ -79,7 +87,7 @@ export function ausnahmeFehler(ausnahmen) {
 
 function gueltigeAusnahmen(ausnahmen) {
   const fehler = ausnahmeFehler(ausnahmen);
-  const ungueltig = new Set(ausnahmen.filter((ausnahme) => !ausnahme.grund || !ausnahme.seit).map((ausnahme) => ausnahme.befund));
+  const ungueltig = new Set(ausnahmen.filter(istUngueltig).map((ausnahme) => ausnahme.befund));
   const map = new Map();
   for (const ausnahme of ausnahmen) {
     if (ungueltig.has(ausnahme.befund)) continue;
@@ -146,7 +154,11 @@ function pruefeConnection({ connection }, ctx) {
 }
 
 // ---- Pruefung 3+4: Kontoeigentum der ANI ----------------------------------------------
-function kontoBesitzt(kontotreffer, e164) {
+// EXPORTIERT (Review-Blocker G9/C2, G5): der ANI-Riegel (outbound-gates.js#
+// ani_ownership) braucht fuer seine LIVE-Nachmessung exakt dasselbe Kontoeigentums-
+// Urteil wie Pruefung 3/9 - EINE Quelle statt einer zweiten, im Gate getippten
+// Vergleichslogik.
+export function kontoBesitzt(kontotreffer, e164) {
   if (!kontotreffer || kontotreffer.ok !== true) return "unbekannt";
   const treffer = (kontotreffer.wert || {}).treffer || [];
   const genau = treffer.filter((eintrag) => eintrag.e164 === e164 && eintrag.status === "active");
@@ -158,8 +170,24 @@ function verifiziertAlsAusweich(verifizierte, e164) {
   return (verifizierte.wert || {}).e164s?.includes(e164) === true;
 }
 
-function pruefeAniEigentum({ aniKontotreffer, verifizierte }, nAni, ctx) {
-  if (!nAni) return; // kein N_ani ableitbar (Pruefung 2 lieferte nichts) - hier kein zweiter unknown
+// Review-Blocker G26/PM-16: "kein Urteil moeglich" war bisher EIN Fall (return ohne
+// Befund) fuer ZWEI verschiedene Ursachen - Pruefung 2 selbst nicht lesbar (Anbieterfehler,
+// bereits unbekannt:pruefung2) UND Connection lesbar, aber ani_override GELOESCHT (eine
+// stille Konfigurationsaenderung beim Anbieter, die Outbound genauso lahmlegt wie
+// ownership_lost). Beide muessen die Sollzahl korrekt bedienen (kein Phantom-"gemessen")
+// und der zweite Fall braucht den VOLLEN Meldeweg statt eines stillen unknown.
+function pruefeAniEigentum({ aniKontotreffer, verifizierte, connection }, nAni, ctx) {
+  if (!nAni) {
+    if (connection && connection.ok === true) {
+      melde(
+        { code: DRIFT_BEFUND.ANI_OVERRIDE_MISSING, klasse: DRIFT_KLASSE.CONFIG, detail: "fqdn_connection.outbound.ani_override ist leer" },
+        ctx,
+      );
+      return;
+    }
+    meldeUnbekannt("pruefung3", "kein N_ani ableitbar (Pruefung 2 nicht lesbar)", ctx);
+    return;
+  }
   const status = kontoBesitzt(aniKontotreffer, nAni);
   if (status === "unbekannt") {
     meldeUnbekannt("pruefung3", "aniKontotreffer nicht lesbar", ctx);

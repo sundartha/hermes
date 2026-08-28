@@ -1,0 +1,281 @@
+// OUTBOUND-E4 Review-Blocker (P11/T1 + BLOCKER 2): outbound-drift-watch.js (Takt,
+// Single-Flight/Mindestfrist, VOLL/NOTIZ-Dispatch, Marker-Schliessung) hatte KEINEN
+// einzigen Verhaltenstest - der reine Kern (outbound-config-drift.js) ist in
+// test/outbound-drift-kern.test.js gedeckt, aber der Aufrufer drumherum nicht. Alle
+// Faelle hier laufen ueber makeDriftWatch(...).runDriftSweep()/runBootProbe() mit
+// injizierten telnyxRead/elRead-Attrappen (NUR-LESEND, kein Netz, Muster K-14).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { makeDriftWatch, befundBucket } from "../src/telephony/outbound-drift-watch.js";
+import { withConfigNamespaces } from "./config-namespaces-helper.js";
+
+const AGENT_ID = "agent_test";
+const PLATFORM_ANI = "+15739090177";
+const ALERT_SENDER = "+15005550006";
+const FQDN_CONNECTION_ID = "conn_1";
+const OVP_ID = "ovp_1";
+
+function fakeConfig(overrides = {}) {
+  return withConfigNamespaces({
+    elevenLabsOutbound: { agentId: AGENT_ID, agentPhoneNumberId: "phnum_test" },
+    platformAniE164: PLATFORM_ANI,
+    telnyxFqdnConnectionId: FQDN_CONNECTION_ID,
+    telnyxOutboundVoiceProfileId: OVP_ID,
+    allowedCountryCodes: ["+49"],
+    outboundDriftMinIntervalMs: 3600000,
+    outboundDriftStaleMs: 21600000,
+    outboundDriftBalanceMinHours: 72,
+    platformAlertMailTo: "",
+    platformAlertSmsTo: "",
+    ...overrides,
+  });
+}
+
+// "Gesunde" Antworten fuer alle sechs Telnyx-GETs + den EL-GET (Muster
+// outbound-drift-kern.test.js#messungGesund) - findPhoneNumber beantwortet standardmaessig
+// JEDE angefragte E.164 als kontoeigen (ANI-Pruefung UND Alarm-Absender-Pruefung teilen
+// sich diese eine Methode).
+function fakeTelnyxRead(overrides = {}) {
+  return {
+    findPhoneNumber: async (e164) => ({ treffer: [{ e164, status: "active" }] }),
+    listVerifiedNumbers: async () => ({ e164s: [] }),
+    getFqdnConnection: async () => ({ active: true, aniOverride: PLATFORM_ANI }),
+    listFqdns: async () => ({ connectionIds: [FQDN_CONNECTION_ID] }),
+    getOutboundVoiceProfile: async () => ({ enabled: true, whitelistedDestinations: ["DE"] }),
+    getBalance: async () => ({ availableCreditMicroCents: 100_000_000_000 }),
+    ...overrides,
+  };
+}
+
+function fakeElRead(overrides = {}) {
+  return {
+    fetchPhoneNumber: async () => ({
+      phone_number: PLATFORM_ANI,
+      assigned_agent: { agent_id: AGENT_ID },
+      supports_outbound: true,
+    }),
+    ...overrides,
+  };
+}
+
+function fakeStore({ alerts = [], calls = [] } = {}) {
+  const state = {
+    outageAlerts: [...alerts],
+    calls,
+    platformNumberUse: [{ e164: ALERT_SENDER, purpose: "alert_sms_sender", releasedAt: null }],
+  };
+  return {
+    load: () => state,
+    save: () => {},
+    withStoreLock: (fn) => fn(),
+  };
+}
+
+// EINE Positiv-Anrufzeile innerhalb der letzten 24h, damit Pruefung 8 ein Urteil faellen
+// kann (verbrauch24hMicroCents > 0) - ohne echten Verkehr ist Pruefung 8 strukturell
+// unbekannt (Regelfall, s. K-12), das wuerde JEDEN Testfall hier mit unknown>0 fluten.
+function gesunderVerkehr() {
+  return [{ endedAt: new Date().toISOString(), actualCostMicroCents: 1_000_000 }];
+}
+
+// Kleine Lese-/Schreibhelfer (G36, Gesetz von Demeter): kein vierfach verkettetes
+// store.load().outageAlerts.find(...).feld quer durch die Tests.
+function findAlert(store, code) {
+  return store.load().outageAlerts.find((alert) => alert.code === code);
+}
+
+function setzeLaufMarkerAlt(store) {
+  const laufMarker = findAlert(store, "drift:lauf");
+  laufMarker.lastSeenAt = new Date(0).toISOString();
+}
+
+function fakeDeps({ store, config, telnyxRead, elRead, audit } = {}) {
+  return {
+    store: store || fakeStore({ calls: gesunderVerkehr() }),
+    config: config || fakeConfig(),
+    audit: audit || (() => {}),
+    messaging: () => ({ sendSms: async () => {} }),
+    mailer: { sendMail: async () => {} },
+    telnyxRead: telnyxRead || fakeTelnyxRead(),
+    elRead: elRead || fakeElRead(),
+  };
+}
+
+// W-0: Positiv-Kontrolle - der Baustein selbst meldet bei einem WIRKLICH gesunden
+// Zustand GAR NICHTS (Blocker-Vermeidungsliste 2: ein Waechter, der alles meldet, besteht
+// jeden Negativ-Test und ist trotzdem kaputt).
+test("E4-Waechter: W-0 Positiv-Kontrolle - vollstaendig gesunder Zustand meldet KEINEN Befund", async () => {
+  const auditEvents = [];
+  const driftWatch = makeDriftWatch(fakeDeps({ audit: (event) => auditEvents.push(event) }));
+  await driftWatch.runBootProbe();
+  assert.deepEqual(
+    auditEvents.filter((event) => event.startsWith("drift_")),
+    [],
+    "ein gesunder Lauf darf keine einzige drift_*-Audit-Zeile erzeugen",
+  );
+});
+
+// W-1: Single-Flight/Mindestfrist (PM-26) --------------------------------------------
+test("E4-Waechter: W-1 zweiter Lauf INNERHALB der Mindestfrist -> kein zweiter Anbieter-Zugriff (Single-Flight)", async () => {
+  let aufrufe = 0;
+  const telnyxRead = fakeTelnyxRead({
+    findPhoneNumber: async (e164) => {
+      aufrufe += 1;
+      return { treffer: [{ e164, status: "active" }] };
+    },
+  });
+  const driftWatch = makeDriftWatch(fakeDeps({ telnyxRead }));
+  await driftWatch.runBootProbe();
+  const aufrufeNachLauf1 = aufrufe;
+  assert.ok(aufrufeNachLauf1 > 0, "der erste Lauf muss den Anbieter befragen");
+  await driftWatch.runDriftSweep();
+  assert.equal(
+    aufrufe,
+    aufrufeNachLauf1,
+    "der zweite Lauf innerhalb der Mindestfrist darf den Anbieter NICHT erneut befragen (Single-Flight)",
+  );
+});
+
+test("E4-Waechter: W-1b outboundDriftMinIntervalMs<=0 haelt den Waechter komplett aus (Rollback-Hebel)", async () => {
+  let aufrufe = 0;
+  const telnyxRead = fakeTelnyxRead({
+    findPhoneNumber: async (e164) => {
+      aufrufe += 1;
+      return { treffer: [{ e164, status: "active" }] };
+    },
+  });
+  const config = fakeConfig({ outboundDriftMinIntervalMs: 0 });
+  const driftWatch = makeDriftWatch(fakeDeps({ config, telnyxRead }));
+  await driftWatch.runBootProbe();
+  assert.equal(aufrufe, 0, "minIntervalMs<=0 darf keinen einzigen Anbieter-Zugriff ausloesen");
+});
+
+// W-2: Dispatch - ownership -> VOLLER Meldeweg (Audit + Marker) ---------------------
+test("E4-Waechter: W-2 ownership_lost -> voller Meldeweg (Audit-Event drift_ownership_lost, Marker offen)", async () => {
+  const store = fakeStore({ calls: gesunderVerkehr() });
+  const auditEvents = [];
+  const telnyxRead = fakeTelnyxRead({
+    findPhoneNumber: async (e164) => (e164 === PLATFORM_ANI ? { treffer: [] } : { treffer: [{ e164, status: "active" }] }),
+  });
+  const driftWatch = makeDriftWatch(fakeDeps({ store, telnyxRead, audit: (event) => auditEvents.push(event) }));
+  await driftWatch.runBootProbe();
+  assert.ok(auditEvents.includes("drift_ownership_lost"), "ownership ist eine VOLL_KLASSE - muss ueber meldeBetreiberAlarm gehen");
+  const marker = findAlert(store, befundBucket("ownership_lost"));
+  assert.ok(marker && marker.closedAt === null, "der Marker muss offen bleiben, solange der Befund besteht");
+});
+
+// W-2b: Dispatch - unknown -> NUR Notiz (kein voller Meldeweg), aber NIE stumm ------
+test("E4-Waechter: W-2b ein unknown-Befund meldet als NOTIZ (Audit-Event drift_unbekannt:pruefung8), kein Stille", async () => {
+  const store = fakeStore({ calls: [] }); // kein Verkehr -> Pruefung 8 unknown (Regelfall)
+  const auditEvents = [];
+  const driftWatch = makeDriftWatch(fakeDeps({ store, audit: (event) => auditEvents.push(event) }));
+  await driftWatch.runBootProbe();
+  assert.ok(
+    auditEvents.includes("drift_unbekannt:pruefung8"),
+    "ein Anbieterfehler/fehlender Verkehr MUSS einen gezaehlten, gemeldeten unknown-Befund erzeugen (PM-16), nie Stille",
+  );
+});
+
+// W-3 (BLOCKER 2, REGRESSIONSFANG): keine falsche Entwarnung, wenn ein Anbieterfehler
+// einen vorher OFFENEN Befund durch einen unknown ERSETZT statt ihn zu loesen. -------
+test("E4-Waechter: W-3 Lauf 1 meldet ownership_lost, Lauf 2 (Anbieter 429 auf ALLES) SCHLIESST den Marker NICHT (keine falsche Entwarnung)", async () => {
+  const store = fakeStore({ calls: gesunderVerkehr() });
+  const auditEvents = [];
+  const audit = (event) => auditEvents.push(event);
+
+  // Lauf 1: echter ownership_lost-Befund (ANI ohne Kontotreffer, Alarm-Absender bleibt gesund).
+  const telnyxReadDefekt = fakeTelnyxRead({
+    findPhoneNumber: async (e164) => (e164 === PLATFORM_ANI ? { treffer: [] } : { treffer: [{ e164, status: "active" }] }),
+  });
+  const driftWatch1 = makeDriftWatch(fakeDeps({ store, telnyxRead: telnyxReadDefekt, audit }));
+  await driftWatch1.runBootProbe();
+  const markerNachLauf1 = findAlert(store, befundBucket("ownership_lost"));
+  assert.ok(markerNachLauf1 && markerNachLauf1.closedAt === null, "Lauf 1 muss den Marker oeffnen");
+
+  // Lauf 2, NACH Ablauf der Mindestfrist (hier direkt am Marker simuliert statt echt zu
+  // warten): Anbieter antwortet auf ALLES mit 429 (Rate-Limit) - die Pruefung, die
+  // ownership_lost gefunden hatte, kann diesmal KEIN Urteil faellen.
+  const providerFehler = () => Promise.reject(Object.assign(new Error("429"), { providerStatus: 429 }));
+  const telnyxReadAusgefallen = {
+    findPhoneNumber: providerFehler,
+    listVerifiedNumbers: providerFehler,
+    getFqdnConnection: providerFehler,
+    listFqdns: providerFehler,
+    getOutboundVoiceProfile: providerFehler,
+    getBalance: providerFehler,
+  };
+  setzeLaufMarkerAlt(store);
+  const configOhneWartezeit = fakeConfig({ outboundDriftMinIntervalMs: 1 });
+  const driftWatch2 = makeDriftWatch(fakeDeps({ store, config: configOhneWartezeit, telnyxRead: telnyxReadAusgefallen, audit }));
+  await driftWatch2.runDriftSweep();
+
+  const markerNachLauf2 = findAlert(store, befundBucket("ownership_lost"));
+  assert.ok(markerNachLauf2, "der Marker darf nicht verschwinden");
+  assert.equal(markerNachLauf2.closedAt, null, "BLOCKER 2: ein Anbieterfehler darf den offenen ownership_lost-Marker NIE schliessen");
+  assert.ok(
+    !auditEvents.some((event) => event === "drift_recovered"),
+    "kein drift_recovered waehrend eines Laufs, der nicht urteilen konnte (zaehler.unknown > 0)",
+  );
+});
+
+// W-3b Positiv-Kontrolle: ein WIRKLICH gesunder Folgelauf SCHLIESST den Marker -------
+test("E4-Waechter: W-3b Positiv-Kontrolle - ein Folgelauf OHNE unknown und OHNE den Befund schliesst den Marker (drift_recovered)", async () => {
+  const store = fakeStore({ calls: gesunderVerkehr() });
+  const auditEvents = [];
+  const audit = (event) => auditEvents.push(event);
+
+  const telnyxReadDefekt = fakeTelnyxRead({
+    findPhoneNumber: async (e164) => (e164 === PLATFORM_ANI ? { treffer: [] } : { treffer: [{ e164, status: "active" }] }),
+  });
+  const driftWatch1 = makeDriftWatch(fakeDeps({ store, telnyxRead: telnyxReadDefekt, audit }));
+  await driftWatch1.runBootProbe();
+  assert.ok(findAlert(store, befundBucket("ownership_lost")));
+
+  setzeLaufMarkerAlt(store);
+  const configOhneWartezeit = fakeConfig({ outboundDriftMinIntervalMs: 1 });
+  const driftWatch2 = makeDriftWatch(fakeDeps({ store, config: configOhneWartezeit, telnyxRead: fakeTelnyxRead(), audit }));
+  await driftWatch2.runDriftSweep();
+
+  const marker = findAlert(store, befundBucket("ownership_lost"));
+  assert.ok(marker.closedAt !== null, "ein WIRKLICH gesunder Lauf muss den Marker schliessen");
+  assert.ok(auditEvents.includes("drift_recovered"), "die Erholung muss eine Audit-Zeile hinterlassen");
+});
+
+// W-4: Pruefung 8 (24h-Verbrauch) - Fensterfilter ------------------------------------
+test("E4-Waechter: W-4 verbrauch24hMicroCents zaehlt NUR Anrufe innerhalb der letzten 24h, negative/nicht-ganzzahlige Kosten NIE", async () => {
+  const EINE_STUNDE_MS = 3600000;
+  const STUNDEN_PRO_TAG = 24;
+  const ZWEI_TAGE = 2;
+  const nowIso = new Date().toISOString();
+  const vorZweiTagenIso = new Date(Date.now() - ZWEI_TAGE * STUNDEN_PRO_TAG * EINE_STUNDE_MS).toISOString();
+  const store = fakeStore({
+    calls: [
+      { endedAt: nowIso, actualCostMicroCents: 1_000_000 }, // innerhalb 24h -> zaehlt
+      { endedAt: vorZweiTagenIso, actualCostMicroCents: 9_999_999_999 }, // ausserhalb -> NICHT zaehlen
+      { endedAt: nowIso, actualCostMicroCents: -500 }, // negativ -> NICHT zaehlen
+      { endedAt: nowIso, actualCostMicroCents: 1.5 }, // nicht ganzzahlig -> NICHT zaehlen
+    ],
+  });
+  const auditEvents = [];
+  const driftWatch = makeDriftWatch(fakeDeps({ store, audit: (event) => auditEvents.push(event) }));
+  await driftWatch.runBootProbe();
+  // Mit NUR dem 24h-Anruf gezaehlt (1.000.000 Mikro-Cent) und riesigem Guthaben ist die
+  // Reichweite extrem hoch -> kein balance_low. Wuerden die ausgeschlossenen Zeilen
+  // mitgezaehlt, waere der Verbrauch riesig und die Reichweite kollabierte.
+  assert.ok(!auditEvents.some((event) => event.startsWith("drift_balance_low")), "nur der 24h-Anruf darf in den Verbrauch einfliessen");
+  assert.ok(!auditEvents.some((event) => event.startsWith("drift_unbekannt:pruefung8")), "1.000.000 Mikro-Cent gilt als echter Verbrauch");
+});
+
+// Gegenprobe zu W-3 (Blocker-Vermeidungsliste 2): die ALTE Bedingung ("Befund fehlt in
+// diesem Lauf -> schliessen", ohne das zaehler.unknown-Gate) haette den Marker in W-3
+// SEHR WOHL geschlossen - das belegt, dass W-3 tatsaechlich das Blocker-2-Verhalten prueft
+// und nicht zufaellig gruen ist.
+test("E4-Waechter: W-3c Gegenprobe - OHNE das zaehler-Gate haette Lauf 2 aus W-3 den Marker geschlossen", () => {
+  const alteBedingung = (befundeDiesesLaufs, code) => !befundeDiesesLaufs.some((befundCode) => befundCode === code);
+  const befundeAusfall = ["unbekannt:pruefung3", "unbekannt:pruefung8"]; // ownership_lost fehlt, weil unknown statt Urteil
+  assert.equal(
+    alteBedingung(befundeAusfall, "ownership_lost"),
+    true,
+    "die ALTE Bedingung haette faelschlich 'verschwunden -> schliessen' gemeldet",
+  );
+});

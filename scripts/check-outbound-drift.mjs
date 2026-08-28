@@ -24,7 +24,7 @@ import { telnyxConfigRead } from "../src/telephony/adapters/telnyx/config-read.j
 import { fetchPhoneNumber } from "../src/elevenlabs/convai.js";
 import { messeAnbieterWirklichkeit } from "../src/telephony/outbound-config-probe.js";
 import { beurteileDrift, istBlockierend, DRIFT_BEFUND } from "../src/telephony/outbound-config-drift.js";
-import { bedienteLaenderAus } from "../src/telephony/outbound-drift-watch.js";
+import { sollAusConfig as sollAusConfigGeteilt, schwellenAusConfig } from "../src/telephony/outbound-config-soll.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,20 +61,11 @@ function ladeAusnahmen() {
 // Waechter-Job.
 function sollAusConfig() {
   return {
-    elAgentId: config.voice.elevenLabsOutbound.agentId,
-    elPhoneNumberId: config.voice.elevenLabsOutbound.agentPhoneNumberId,
-    platformAniE164: config.provisioning.platformAniE164,
-    fqdnConnectionId: config.telephony.telnyxFqdnConnectionId,
-    ovpId: config.telephony.telnyxOutboundVoiceProfileId,
-    bedienteLaender: bedienteLaenderAus(config.safety.allowedCountryCodes),
+    ...sollAusConfigGeteilt(config),
     alertSenderE164: "",
     verbrauch24hMicroCents: undefined,
     letzteErfolgreicheMessungMs: undefined,
   };
-}
-
-function schwellenAusConfig() {
-  return { staleMs: config.billing.outboundDriftStaleMs, balanceMinHours: config.billing.outboundDriftBalanceMinHours };
 }
 
 // Betriebs-Positiv-Kontrolle (Lehre pruefkommando-ohne-positiv-kontrolle): ein gruener
@@ -134,7 +125,7 @@ async function runCli() {
     messung,
     soll,
     ausnahmen: ladeAusnahmen(),
-    schwellen: schwellenAusConfig(),
+    schwellen: schwellenAusConfig(config),
     nowMs: Date.now(),
   });
   return melde(ergebnis);

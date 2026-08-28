@@ -60,6 +60,34 @@ test("OUTBOUND-E4: server.js baut makeDriftWatch und reicht driftWatch ins deps-
   assert.match(depsBlock, /\bdriftWatch,/, "driftWatch fehlt im deps-Buendel");
 });
 
+// Review-Blocker (BLOCKER 1 / G9/C2): der ANI-Riegel (outbound-gates.js#ani_ownership)
+// kann OHNE diese Verdrahtung NIE ablehnen - makeOutboundGates() faellt sonst auf ihren
+// Default-No-op (`async () => null`) zurueck, egal wie scharf OUTBOUND_ANI_GATE_ENABLED
+// steht. test/outbound-ani-gate.test.js deckt NUR die Gate-Logik selbst (injizierte
+// Attrappe) - dieser Test schliesst die Luecke, dass server.js den ECHTEN Recheck
+// UEBERHAUPT baut und an makeOutboundGates uebergibt.
+test("OUTBOUND-E4: server.js baut den echten aniOwnershipRecheck ueber providerConfigRead() und uebergibt ihn an makeOutboundGates", () => {
+  assert.match(
+    serverSrc,
+    /import\s*{\s*makeAniOwnershipRecheck\s*}\s*from\s*"\.\/telephony\/ani-ownership-recheck\.js"/,
+    "makeAniOwnershipRecheck muss importiert sein",
+  );
+  const gatesStart = serverSrc.indexOf("const { gates: outboundGates } = makeOutboundGates({");
+  assert.notEqual(gatesStart, -1, "makeOutboundGates(...)-Aufruf nicht gefunden");
+  const gatesEnd = serverSrc.indexOf("});", gatesStart);
+  const gatesBlock = serverSrc.slice(gatesStart, gatesEnd);
+  assert.match(
+    gatesBlock,
+    /aniOwnershipRecheck:\s*makeAniOwnershipRecheck\(\s*{\s*telnyxRead\s*}\s*\)/,
+    "aniOwnershipRecheck muss ueber makeAniOwnershipRecheck({ telnyxRead }) an makeOutboundGates uebergeben werden",
+  );
+  // telnyxRead muss VOR diesem Aufruf existieren, sonst wirft server.js beim Boot auf
+  // ein undefiniertes Symbol (TDZ) statt den Recheck zu bauen.
+  const telnyxReadDefIndex = serverSrc.indexOf("const telnyxRead = providerConfigRead();");
+  assert.notEqual(telnyxReadDefIndex, -1, "telnyxRead muss ueber providerConfigRead() gebaut werden");
+  assert.ok(telnyxReadDefIndex < gatesStart, "telnyxRead muss VOR makeOutboundGates(...) definiert sein");
+});
+
 test("OUTBOUND-E4: boot.js reicht driftWatch aus dem deps-Buendel an runSweepTick weiter UND ruft runBootProbe() im app.listen-Callback", () => {
   assert.match(bootSrc, /function runSweepTick\({[^}]*\bdriftWatch\b[^}]*}\)/,
     "runSweepTick muss driftWatch destrukturieren");

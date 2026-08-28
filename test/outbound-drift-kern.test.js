@@ -249,6 +249,47 @@ test("E4-Kern: K-14 Nur-Lese-Pin - keine schreibende HTTP-Methode in Kern/Probe/
   }
 });
 
+// K-16/K-17: Review-Blocker G26/PM-16 - "kein N_ani ableitbar" war EIN Fall fuer ZWEI
+// verschiedene Ursachen (Anbieterfehler vs. geloeschter ani_override). Beide muessen die
+// Sollzahl korrekt bedienen; der zweite braucht den VOLLEN Meldeweg statt eines stillen
+// unknown.
+test("E4-Kern: K-16 Connection nicht lesbar -> unbekannt:pruefung2 UND ein zusaetzliches unbekannt:pruefung3 (kein Phantom-'gemessen')", () => {
+  const messung = { ...messungMitAniBesitz(), connection: { ok: false, grund: "timeout" } };
+  const { befunde, zaehler } = beurteileDrift({ messung, soll: SOLL, schwellen: SCHWELLEN, nowMs: 1 });
+  assert.ok(befunde.some((befund) => befund.code === `${UNBEKANNT_PRAEFIX}pruefung2`));
+  assert.ok(befunde.some((befund) => befund.code === `${UNBEKANNT_PRAEFIX}pruefung3`));
+  // Pruefung 5 (rein rechnerisch) braucht ebenfalls N_ani und kann ohne Connection auch
+  // kein Urteil faellen -> drei gezaehlte unknown-Befunde, KEINER davon still uebersprungen.
+  const BETROFFENE_PRUEFUNGEN = 3; // pruefung2, pruefung3, pruefung5
+  assert.equal(zaehler.unknown, BETROFFENE_PRUEFUNGEN, "alle drei betroffenen Pruefungen zaehlen als 'kein Urteil'");
+  assert.ok(!befunde.some((befund) => befund.code === DRIFT_BEFUND.OWNERSHIP_LOST));
+});
+
+test("E4-Kern: K-17 Connection lesbar, ani_override GELOESCHT -> config_ani_override_missing (Klasse config, voller Meldeweg), KEIN stilles unknown", () => {
+  const messung = { ...messungMitAniBesitz(), connection: { ok: true, wert: { active: true, aniOverride: null } } };
+  const { befunde } = beurteileDrift({ messung, soll: SOLL, schwellen: SCHWELLEN, nowMs: 1 });
+  const treffer = befunde.find((befund) => befund.code === DRIFT_BEFUND.ANI_OVERRIDE_MISSING);
+  assert.ok(treffer, "ein geloeschter ani_override muss einen eigenen Befund erzeugen, kein stilles 'kein Urteil'");
+  assert.equal(treffer.klasse, DRIFT_KLASSE.CONFIG);
+  assert.ok(!befunde.some((befund) => befund.code === `${UNBEKANNT_PRAEFIX}pruefung3`), "das ist ein Urteil, kein unknown");
+  assert.ok(!befunde.some((befund) => befund.code === DRIFT_BEFUND.OWNERSHIP_LOST));
+});
+
+// K-18 (Review-Blocker G2/PM-5): outbound-drift-ausnahmen.json muss fuer den STRUKTURELL
+// unvermeidbaren unbekannt:pruefung1_supports_outbound-Befund einen GUELTIGEN Eintrag
+// tragen - sonst blockiert der stuendliche GitHub-Actions-Workflow bei JEDEM Lauf, ohne
+// dass je etwas passiert ist (genau die stille Untaetigkeit, gegen die diese Etappe
+// gebaut wurde). Jeder Eintrag der Datei muss ausserdem selbst gueltig sein (grund+seit).
+test("E4-Kern: K-18 outbound-drift-ausnahmen.json enthaelt eine GUELTIGE Ausnahme fuer unbekannt:pruefung1_supports_outbound", () => {
+  const roh = fs.readFileSync(path.join(REPO_ROOT, "outbound-drift-ausnahmen.json"), "utf8");
+  const ausnahmen = JSON.parse(roh);
+  assert.deepEqual(ausnahmeFehler(ausnahmen), [], "keine der eingetragenen Ausnahmen darf selbst ungueltig sein (fail-closed)");
+  const treffer = ausnahmen.find((ausnahme) => ausnahme.befund === `${UNBEKANNT_PRAEFIX}pruefung1_supports_outbound`);
+  assert.ok(treffer, "unbekannt:pruefung1_supports_outbound muss in der Ausnahme-Datei stehen");
+  assert.ok(treffer.grund, "grund ist Pflicht");
+  assert.ok(treffer.seit, "seit ist Pflicht");
+});
+
 // K-15: supports_outbound fehlt in der Antwort ---------------------------------------
 test("E4-Kern: K-15 supports_outbound fehlt in der EL-Antwort -> unbekannt:pruefung1_supports_outbound, KEIN config-Befund", () => {
   const messung = { ...messungMitAniBesitz(), elNummer: { ok: true, wert: { e164: PLATTFORM_ANI, agentId: AGENT_ID } } };

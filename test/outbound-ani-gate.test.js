@@ -238,19 +238,36 @@ test("E4-ANI-Riegel: G-4b enabled=true + Messung negativ, Nachmessung liefert nu
 
 // G-5: OUTBOUND_FROZEN bleibt in ALLEN Faellen unveraendert (Regressionsschutz) ------
 test("E4-ANI-Riegel: G-5 in allen Faellen bleibt config.safety.outboundFrozen unveraendert (kein Selbstabschalter)", async () => {
-  const config = defaultConfig({ outboundAniGateEnabled: true, outboundFrozen: false });
-  const { gates } = makeOutboundGates(
-    makeDeps({
-      config: { outboundAniGateEnabled: true },
-      store: {
-        load: () => ({
-          numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: "+491700000000" }],
-          outageAlerts: [{ code: "drift:ownership_lost", closedAt: null, lastSeenAt: FRISCH_ISO }],
-        }),
-      },
-      aniOwnershipRecheck: async () => true,
-    }),
-  );
+  // BUGFIX (Review-Blocker T1/P12): vorher erzeugte defaultConfig(...) HIER ein zweites,
+  // von makeDeps unabhaengiges Config-Objekt - die Assertion pruefte ein Objekt, das der
+  // Produktionscode nie sieht, und blieb IMMER gruen. Jetzt wird GENAU das deps-Objekt
+  // festgehalten, das an makeOutboundGates geht, und DESSEN config gelesen.
+  const deps = makeDeps({
+    config: { outboundAniGateEnabled: true },
+    store: {
+      load: () => ({
+        numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: "+491700000000" }],
+        outageAlerts: [{ code: "drift:ownership_lost", closedAt: null, lastSeenAt: FRISCH_ISO }],
+      }),
+    },
+    aniOwnershipRecheck: async () => true,
+  });
+  const { gates } = makeOutboundGates(deps);
   await mitUhr(FRISCH_MS + EINE_MINUTE_MS, () => fahreKette(gates));
-  assert.equal(config.safety.outboundFrozen, false, "der ANI-Riegel schreibt OUTBOUND_FROZEN NIE");
+  assert.equal(deps.config.safety.outboundFrozen, false, "der ANI-Riegel schreibt OUTBOUND_FROZEN NIE");
+});
+
+// Gegenprobe zu G-5 (Blocker-Vermeidungsliste 1/2): belegt, dass die obige Assertion
+// wirklich das von makeOutboundGates gesehene Objekt prueft, indem sie es absichtlich
+// VOR der Pruefung sabotiert - ohne den Fix waere diese Sabotage wirkungslos gewesen
+// (die alte Assertion pruefte ein anderes Objekt).
+test("E4-ANI-Riegel: G-5b Gegenprobe - ein absichtliches Schreiben auf deps.config.safety.outboundFrozen macht die G-5-Assertion rot", async () => {
+  const deps = makeDeps({ config: { outboundAniGateEnabled: true } });
+  const { gates } = makeOutboundGates(deps);
+  await mitUhr(FRISCH_MS, () => fahreKette(gates));
+  deps.config.safety.outboundFrozen = true; // simulierter Fremdschreiber
+  assert.throws(
+    () => assert.equal(deps.config.safety.outboundFrozen, false),
+    "eine Sabotage auf DEMSELBEN Objekt, das G-5 prueft, muss die Assertion zum Scheitern bringen",
+  );
 });

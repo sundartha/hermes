@@ -23,6 +23,7 @@ import { fetchPhoneNumber as fetchElPhoneNumber } from "./elevenlabs/convai.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
+import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
 import { blockingBudgetAxis } from "./budget-gate.js";
@@ -76,6 +77,14 @@ const { requestTenant, requireTenant } = makeRequestTenant(store);
 // kein zweiter Tenant-Resolver, G5/DIP). audit/messaging (Budget-Achsen P6) speisen die
 // fail-soft Plattform-Fruehwarnung im reserve_budget-Gate - dieselben Instanzen wie
 // callFinish (kein zweiter Audit-/Messaging-Zugang, DIP).
+//
+// OUTBOUND-E4 Review-Blocker (BLOCKER 1 / G9/C2): telnyxRead ist derselbe rein LESENDE
+// Provider-Read-Port, den driftWatch weiter unten bekommt (registry.js#
+// providerConfigRead, Default Telnyx, kein zweiter HTTP-Client) - HIER schon gebaut
+// (statt erst bei driftWatch), damit der ANI-Riegel seine LIVE-Nachmessung ("Schutzschicht
+// 2", PLAN-SECURITY.md) ueberhaupt bekommt. Ohne diese Verdrahtung faellt aniOwnershipRecheck
+// auf makeOutboundGates' Default-No-op zurueck und das Gate kann NIE ablehnen.
+const telnyxRead = providerConfigRead();
 const { gates: outboundGates } = makeOutboundGates({
   store,
   config,
@@ -85,6 +94,7 @@ const { gates: outboundGates } = makeOutboundGates({
   TENANT_REJECT,
   audit,
   messaging,
+  aniOwnershipRecheck: makeAniOwnershipRecheck({ telnyxRead }),
 });
 
 // Metering-Instanz (P6b3-Meter + outbound-p1c-Reconcile) EINMAL beim Boot verdrahtet
@@ -131,12 +141,12 @@ const mailer = selectMailer(config);
 // Mailer-Instanz wie callFinish, kein zweiter Versandzugang (DIP).
 const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer });
 
-// OUTBOUND-E4: siebter Sweep-Zweig + Boot-Lauf (Muster outageWatch, INV-7). telnyxRead ist
-// der rein LESENDE Provider-Read-Port (registry.js#providerConfigRead, Default Telnyx);
-// elRead ist eine schmale Closure um den EL-Nummernabruf (Pruefung 1) mit der Plattform-
-// Anbieter-Config als account - dieselbe Form, die elevenlabs/outbound.js#settings()
-// bereits an fetchConversation uebergibt. Kein zweiter HTTP-Client (Plan E-6).
-const telnyxRead = providerConfigRead();
+// OUTBOUND-E4: siebter Sweep-Zweig + Boot-Lauf (Muster outageWatch, INV-7). telnyxRead
+// (dieselbe Instanz wie beim ANI-Riegel oben, EIN Read-Port, kein zweiter HTTP-Client)
+// ist der rein LESENDE Provider-Read-Port (registry.js#providerConfigRead, Default
+// Telnyx); elRead ist eine schmale Closure um den EL-Nummernabruf (Pruefung 1) mit der
+// Plattform-Anbieter-Config als account - dieselbe Form, die elevenlabs/outbound.js#
+// settings() bereits an fetchConversation uebergibt.
 const elRead = {
   fetchPhoneNumber: (phoneNumberId) =>
     fetchElPhoneNumber({ fetchImpl: fetch, account: config.voice.elevenLabsOutbound, phoneNumberId }),

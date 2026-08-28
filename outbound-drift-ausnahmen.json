@@ -1,5 +1,10 @@
 [
   {
+    "befund": "unbekannt:pruefung1_supports_outbound",
+    "grund": "GET /v1/convai/phone-numbers/{id} liefert laut Quelltextpruefung (K-15, src/telephony/outbound-config-drift.js) kein supports_outbound-Feld - jede Messung erzeugt diesen unbekannt-Befund strukturell, unabhaengig vom Anbieterzustand. Ergaenzt/dokumentiert ElevenLabs das Feld, ist dieser Eintrag zu entfernen.",
+    "seit": "2026-08-28"
+  },
+  {
     "befund": "unbekannt:pruefung8",
     "grund": "Die Reichweite braucht den 24-h-Verbrauch aus der Anruf-Tabelle. Der externe Takt (GitHub Actions) hat keinen DB-Zugang (Prod-DB-IP-Allowlist). Pruefung 8 faehrt in-process beim Boot und im Stundentakt.",
     "seit": "2026-08-28"

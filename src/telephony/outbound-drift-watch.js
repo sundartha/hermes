@@ -8,6 +8,7 @@
 import { messeAnbieterWirklichkeit } from "./outbound-config-probe.js";
 import { beurteileDrift, DRIFT_KLASSE } from "./outbound-config-drift.js";
 import { meldeBetreiberAlarm, meldeBetreiberNotiz } from "./outage-report.js";
+import { sollAusConfig as sollAusConfigGeteilt, schwellenAusConfig as schwellenAusConfigGeteilt } from "./outbound-config-soll.js";
 import * as ops from "../store/state-ops.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../store/defaults.js";
 import { MS_PER_MINUTE } from "../utils/timer.js";
@@ -30,25 +31,6 @@ const istBefundMarkerCode = (code) => code.startsWith(DRIFT_BUCKET_PREFIX) && co
 // NOTIZ (WARN->Audit, kein Versand) - "nie stumm" ist trotzdem erfuellt, weil beide Stufen
 // eine durable Audit-Zeile hinterlassen.
 const VOLL_KLASSEN = new Set([DRIFT_KLASSE.OWNERSHIP, DRIFT_KLASSE.CONFIG, DRIFT_KLASSE.STALE]);
-
-// Bekannte Praefix->ISO-Zuordnung (Deviation: nur die drei heute betriebenen Laender,
-// Plan E-6 Pruefung 7). "*" oder eine nicht gelistete Vorwahl (z.B. +1/NANP, 25 Laender
-// teilen sich die Vorwahl) macht die Menge UNBESTIMMBAR - leere Liste, der Kern meldet das
-// dann als unbekannt:pruefung7 statt eines Fehlalarms auf einer geratenen Menge.
-const PREFIX_ISO = Object.freeze({ "+49": "DE", "+33": "FR", "+44": "GB" });
-
-// EXPORTIERT: scripts/check-outbound-drift.mjs (der CLI-Weg) braucht dieselbe Ableitung -
-// EINE Quelle (G5), kein zweiter, dort getippter Praefix-Vergleich.
-export function bedienteLaenderAus(allowedCountryCodes) {
-  const codes = Array.isArray(allowedCountryCodes) ? allowedCountryCodes : [];
-  const iso = [];
-  for (const praefix of codes) {
-    const land = PREFIX_ISO[praefix];
-    if (!land) return [];
-    iso.push(land);
-  }
-  return iso;
-}
 
 // Pruefung 8: der 24-h-Verbrauch ist KEINE Anbieter-Abfrage, sondern eine Store-Query
 // (echte Carrier-Kosten, schema.sql#actualCostMicroCents) - deshalb hier, nicht im Probe.
@@ -92,7 +74,18 @@ async function beanspruchen({ store, nowMs, minIntervalMs }) {
 // Offene drift:-Marker, die im AKTUELLEN Lauf keinen Befund mehr haben -> schliessen (eine
 // Audit-Zeile drift_recovered je Uebergang). Damit alarmiert eine Wiederholung spaeter
 // erneut (kein dauerhaft "erledigt" auf einem Befund, der wiederkommt).
-function schliesseVerschwundeneBefunde({ store, audit, befunde, nowMs }) {
+//
+// REVIEW-BLOCKER (falsche Entwarnung waehrend eines laufenden Ausfalls): "im aktuellen
+// Lauf keinen Befund mehr" ist NUR dann eine echte Entwarnung, wenn dieser Lauf ueberhaupt
+// ein Urteil faellen konnte. Ein reiner Anbieterfehler (429/Timeout) macht aus
+// "ownership_lost" ein "unbekannt:pruefung3" - der Marker waere sonst geschlossen worden,
+// obwohl der Ausfall unveraendert fortbesteht (PM-16, eine Ebene hoeher als der Kern).
+// Dieselbe Bedingung wie beim MESSUNG_OK_MARKER (zaehler.unknown === 0): kann der Lauf
+// auch nur EINE Pruefung nicht beurteilen, wird in diesem Lauf GAR NICHTS geschlossen -
+// lieber ein Marker, der laenger offen bleibt, als eine geloeschte Warnung waehrend eines
+// laufenden Ausfalls.
+function schliesseVerschwundeneBefunde({ store, audit, befunde, zaehler, nowMs }) {
+  if (zaehler.unknown > 0) return;
   const aktuelle = new Set(befunde.map((befund) => befundBucket(befund.code)));
   const state = store.load();
   const offene = state.outageAlerts.filter(
@@ -110,12 +103,7 @@ function sollAusConfig({ config, store, verbrauch24hMs }) {
   const alertBinding = ops.openPlatformBindingByPurpose(store.load(), PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER);
   const messungOk = ops.openOutageAlert(store.load(), MESSUNG_OK_MARKER);
   return {
-    elAgentId: config.voice.elevenLabsOutbound.agentId,
-    elPhoneNumberId: config.voice.elevenLabsOutbound.agentPhoneNumberId,
-    platformAniE164: config.provisioning.platformAniE164,
-    fqdnConnectionId: config.telephony.telnyxFqdnConnectionId,
-    ovpId: config.telephony.telnyxOutboundVoiceProfileId,
-    bedienteLaender: bedienteLaenderAus(config.safety.allowedCountryCodes),
+    ...sollAusConfigGeteilt(config),
     alertSenderE164: alertBinding?.e164 || "",
     verbrauch24hMicroCents: verbrauch24hMs,
     letzteErfolgreicheMessungMs: messungOk ? Date.parse(messungOk.lastSeenAt) : null,
@@ -134,10 +122,7 @@ async function laufeDrift({ store, config, audit, messaging, mailer, telnyxRead,
 
     const state = store.load();
     const soll = sollAusConfig({ config, store, verbrauch24hMs: verbrauch24hMicroCents(state.calls, nowMs) });
-    const schwellen = {
-      staleMs: config.billing.outboundDriftStaleMs,
-      balanceMinHours: config.billing.outboundDriftBalanceMinHours,
-    };
+    const schwellen = schwellenAusConfigGeteilt(config);
 
     const messung = await messeAnbieterWirklichkeit({ telnyxRead, elRead, soll });
     const { befunde, zaehler, gemessen, soll: sollAnzahl } = beurteileDrift({ messung, soll, schwellen, nowMs });
@@ -157,7 +142,7 @@ async function laufeDrift({ store, config, audit, messaging, mailer, telnyxRead,
         await meldeBetreiberNotiz({ store, audit, bucket, aktion: `drift_${befund.code}`, zeile, nowMs });
       }
     }
-    schliesseVerschwundeneBefunde({ store, audit, befunde, nowMs });
+    schliesseVerschwundeneBefunde({ store, audit, befunde, zaehler, nowMs });
 
     if (zaehler.unknown === 0) {
       await store.withStoreLock(() => {
