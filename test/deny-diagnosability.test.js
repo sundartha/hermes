@@ -207,8 +207,9 @@ test("ani_ownership-Gate: frische Messung + Nachmessung bestaetigt -> 503, grund
   assert.equal(denial.status, HTTP_SERVICE_UNAVAILABLE);
   assert.equal(denial.audit.grund, "ani_not_owned");
   // to= im Detail ist Bestandsvertrag (jedes Gate traegt das Ziel, s. denialAudit) - PII-
-  // frei heisst hier: die Plattform-ANI selbst (ctx.fromNumber, die eigentliche
-  // Bestandsgroesse dieses Befunds) taucht NICHT auf.
+  // frei heisst hier: die Plattform-ANI selbst (config.provisioning.platformAniE164, die
+  // eigentliche Bestandsgroesse dieses Befunds) taucht NICHT auf. NICHT ctx.fromNumber -
+  // das ist die Tenant-DID und eine ANDERE Nummer (Blocker 2 der E4-Nachbesserung).
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=ani_not_owned tenant=T requestedBy=owner`);
   assert.ok(!denial.body.error.includes("+15739090177"), `keine ANI im Ablehnungstext: ${denial.body.error}`);
   assert.ok(!denial.audit.detail.includes("+15739090177"), `keine ANI im Audit-Detail: ${denial.audit.detail}`);

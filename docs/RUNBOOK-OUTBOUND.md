@@ -150,7 +150,8 @@ Alarmzeile). S. `PLAN-OUTBOUND-RESILIENZ.md` Abschnitt 9.
 ## Betrieb: der externe Takt
 
 `.github/workflows/outbound-drift.yml` faehrt stuendlich (`cron: "17 * * * *"`) und bei
-manuellem `workflow_dispatch`. **Fehlt eines der drei Secrets (`TELNYX_API_KEY`,
-`ELEVENLABS_API_KEY`, `PLATFORM_ANI_E164`), wird der Workflow ROT** (bewusst, anders als
+manuellem `workflow_dispatch`. **Fehlt eines der vier Secrets (`TELNYX_API_KEY`,
+`ELEVENLABS_API_KEY`, `PLATFORM_ANI_E164`, `ELEVENLABS_AGENT_ID`), wird der Workflow ROT**
+(bewusst, anders als
 `elevenlabs:drift` in `ci.yml` — ein uebersprungener Waechter darf nie wie ein bestandener
 aussehen). Secrets hinterlegen: GitHub-Repo → Settings → Secrets and variables → Actions.

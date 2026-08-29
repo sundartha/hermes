@@ -13,5 +13,10 @@
     "befund": "unbekannt:pruefung9",
     "grund": "Der Alarm-Absender kommt aus der Plattform-Bindung in der DB (PM-17). Gleiche Begruendung wie pruefung8; Pruefung 9 faehrt in-process.",
     "seit": "2026-08-28"
+  },
+  {
+    "befund": "config_ani_mismatch",
+    "grund": "Bewusster Zwischenzustand seit der Wiederherstellung am 2026-08-28 (Weg 1): der ANI-Override der Trunk-Connection zeigt auf die kontoeigene Plattform-DID, die ElevenLabs-Nummernregistrierung traegt weiterhin die alte, freigegebene Nummer. Beide Werte weichen daher planmaessig voneinander ab, der Outbound funktioniert trotzdem (per Anruf belegt, call_mtd0acq2hq4q, 29 s). Ohne diesen Eintrag ist der stuendliche Waechter ab dem ersten Lauf dauerhaft rot und wird binnen einer Woche ignoriert (PLAN-OUTBOUND-RESILIENZ.md E-6). ZU ENTFERNEN, sobald die Absender-Etappe je Tenant-DID eine eigene EL-Registrierung anlegt - dann muss dieser Befund wieder scharf sein.",
+    "seit": "2026-08-29"
   }
 ]
