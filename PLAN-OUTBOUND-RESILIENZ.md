@@ -1661,7 +1661,8 @@ EL-Registrierung, `number.provider_agent_phone_number_id`) mit umgesetzt. Der ma
 Stand steht im Abschnitt "E-5 (F3) — Absender-Wahrheit: gemessen oder ehrlich unbekannt" weiter
 oben (Zeile ~837, "UMGESETZT (OUTBOUND-E5, 2026-08-29)") und in `PLAN-SECURITY.md` Abschnitt
 "OUTBOUND-E5". Diese Skizze bleibt als Historie stehen, ihre Abnahmepunkte (E-1/E-2/E-3 unten)
-sind durch die tatsaechlich gebauten Tests (`test/absender-*.test.js`, sieben Dateien) ersetzt.
+sind durch die tatsaechlich gebauten Tests (`test/absender-*.test.js`, sechs Dateien, plus
+`test/e5-01-sipregistrar-produktionspfad.test.js` fuer die Freigabe-Verdrahtung) ersetzt.
 
 **Ziel (urspruenglich).** Die gespeicherte Absendernummer ist die tatsaechlich gesendete — oder
 das System sagt ehrlich, dass es sie nicht kennt.

@@ -2729,8 +2729,8 @@ export function attachNumberPaymentIntent(s, numberId, paymentIntentId) {
 // Provisionierungs-Anlauf ueberschreibt eine bestehende Kennung NICHT - sonst entstuende beim
 // Anbieter eine Waise, auf die niemand mehr zeigt). Fehlende Nummer -> throw (Muster
 // attachNumberPaymentIntent).
-export function attachNumberRegistration(s, numberId, providerAgentPhoneNumberId) {
-  const number = findNumber(s, numberId);
+export function attachNumberRegistration(state, numberId, providerAgentPhoneNumberId) {
+  const number = findNumber(state, numberId);
   if (!number) throw new Error(`attachNumberRegistration: Nummer ${numberId} nicht gefunden`);
   if (number.providerAgentPhoneNumberId) return number;
   number.providerAgentPhoneNumberId = providerAgentPhoneNumberId;

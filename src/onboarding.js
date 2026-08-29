@@ -77,26 +77,26 @@ const PROVISION_SEARCH_LIMIT = 10;
 // (kein Kauf) + Hold-Freigabe; capture-Fehler (Payment-Pfad) nach dem Kauf ->
 // Provider-Release + failed + Hold-Freigabe. Liefert die aktivierte Nummer.
 export async function provisionNumber(
-  s,
+  state,
   deps,
   { numberId, countryCode, connectionId, type, holdAmountCents, currency },
 ) {
   const { provisioner, billing, sipRegistrar, logger = console } = deps;
-  const number = findNumber(s, numberId);
+  const number = findNumber(state, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
 
   // Zahlungsfaehigkeit als ERSTES (fail-closed, unveraendert scharf): ohne hinterlegte
   // Karte gibt es weder Preis-Suche noch Kauf. Reiner Zustands-Check, kein Provider-Call.
-  const card = billing ? requireTenantCard(s, numberId, number.tenantId) : null;
+  const card = billing ? requireTenantCard(state, numberId, number.tenantId) : null;
 
   // Zustands-Schloss #2 frueh setzen (requested -> provisioning), damit die zusaetzliche
   // Preis-Suche das Doppelkauf-Fenster NICHT verbreitert.
-  beginProvisioning(s, numberId);
+  beginProvisioning(state, numberId);
 
   // Preis-Suche VOR dem Hold (GAP-11): der Einmalpreis steht in der Provider-Antwort,
   // ein Hold in seiner Hoehe ist ohne sie unmoeglich. Read-only: reserviert nichts,
   // kauft nichts. Die geld-tragende Invariante bleibt "kein orderNumber ohne Hold".
-  const candidate = await findPurchasableNumber(s, numberId, {
+  const candidate = await findPurchasableNumber(state, numberId, {
     provisioner,
     countryCode,
     type,
@@ -112,7 +112,7 @@ export async function provisionNumber(
   let paymentIntentId = null;
   let setupFeeExempt = false;
   if (billing) {
-    ({ paymentIntentId, exempt: setupFeeExempt } = await placeSetupFeeHold(s, numberId, {
+    ({ paymentIntentId, exempt: setupFeeExempt } = await placeSetupFeeHold(state, numberId, {
       tenantId: number.tenantId,
       billing,
       card,
@@ -129,7 +129,7 @@ export async function provisionNumber(
   try {
     ordered = await provisioner.orderNumber({ e164: candidate.e164, connectionId, idempotencyKey });
   } catch (err) {
-    failNumber(s, numberId); // provisioning -> failed (kein Kauf zustande gekommen)
+    failNumber(state, numberId); // provisioning -> failed (kein Kauf zustande gekommen)
     await cancelHoldIfHeld(billing, paymentIntentId); // Geld freigeben (nichts gekauft)
     throw err;
   }
@@ -139,14 +139,14 @@ export async function provisionNumber(
   // schliessen.
   if (billing) {
     try {
-      await settleSetupFeeHold(s, numberId, {
+      await settleSetupFeeHold(state, numberId, {
         billing,
         paymentIntentId,
         holdAmountCents: effectiveHoldCents, // Hold == Capture (R3) bleibt EINE Zahl
         exempt: setupFeeExempt,
       });
     } catch (capErr) {
-      await rollbackAfterOrder(s, numberId, {
+      await rollbackAfterOrder(state, numberId, {
         provisioner,
         providerNumberId: ordered.providerNumberId,
         e164: ordered.e164,
@@ -159,7 +159,7 @@ export async function provisionNumber(
     }
   }
 
-  const activatedNumber = activateNumber(s, numberId, {
+  const activatedNumber = activateNumber(state, numberId, {
     e164: ordered.e164,
     providerNumberId: ordered.providerNumberId,
     // Monatsmiete aus derselben Provider-Antwort -> P5 bucht genau diesen Wert.
@@ -172,7 +172,7 @@ export async function provisionNumber(
   // auf die globale Registrierung zurueck und der Reparaturlauf holt es nach. Ein Wurf hier
   // wuerde eine bezahlte, funktionierende Nummer auf 'failed' zurueckrollen - genau die
   // Kaskade, die es nicht geben darf.
-  await registriereNummerFailSoft(s, activatedNumber, { sipRegistrar, logger });
+  await registriereNummerFailSoft(state, activatedNumber, { sipRegistrar, logger });
   return activatedNumber;
 }
 
@@ -180,14 +180,14 @@ export async function provisionNumber(
 // traegt, loest KEINEN Anbieter-Aufruf aus - zweimal aufgerufen entsteht keine zweite
 // Registrierung. Kein Wurf nach aussen; jeder Fehlschlag ist EINE benannte, gezaehlte
 // Log-Zeile (nie stilles Gruen), PII-/Secret-frei (nur interne IDs, nie e164, nie Passwort).
-async function registriereNummerFailSoft(s, number, { sipRegistrar, logger = console }) {
+async function registriereNummerFailSoft(state, number, { sipRegistrar, logger = console }) {
   if (!sipRegistrar || number.providerAgentPhoneNumberId) return;
   try {
     const { phoneNumberId, angelegt } = await sipRegistrar.ensureRegistration({
       e164: number.e164,
       numberId: number.id,
     });
-    attachNumberRegistration(s, number.id, phoneNumberId);
+    attachNumberRegistration(state, number.id, phoneNumberId);
     logger.log(`[el-registrierung] number=${number.id} angelegt=${angelegt}`);
   } catch (err) {
     logger.warn(
@@ -200,7 +200,7 @@ async function registriereNummerFailSoft(s, number, { sipRegistrar, logger = con
 // Provider-Preis, falls die Antwort ihn traegt). R5: 0 Treffer -> kontrollierter Fehler
 // (NICHT Crash). Jeder Fehlschlag setzt die Nummer auf 'failed'; ein Hold ist an dieser
 // Stelle noch nicht gestellt, also gibt es auch nichts freizugeben.
-async function findPurchasableNumber(s, numberId, { provisioner, countryCode, type }) {
+async function findPurchasableNumber(state, numberId, { provisioner, countryCode, type }) {
   try {
     const candidates = await provisioner.searchNumbers({
       countryCode,
@@ -212,7 +212,7 @@ async function findPurchasableNumber(s, numberId, { provisioner, countryCode, ty
       throw new Error(`provisionNumber: keine kaufbare Nummer fuer ${countryCode} verfuegbar`);
     return candidate;
   } catch (err) {
-    failNumber(s, numberId); // nichts gehalten -> nichts freizugeben
+    failNumber(state, numberId); // nichts gehalten -> nichts freizugeben
     throw err;
   }
 }
@@ -220,10 +220,10 @@ async function findPurchasableNumber(s, numberId, { provisioner, countryCode, ty
 // Fail-closed-Gate VOR jedem Provider-Call: ohne hinterlegte Karte kein Kauf und keine
 // Preis-Suche. EINE Stelle, die tenantStripe liest (G5); der Hold bekommt das Ergebnis
 // gereicht. Fehlermeldung woertlich wie bisher (Bestandstest pinnt sie).
-function requireTenantCard(s, numberId, tenantId) {
-  const card = tenantStripe(s, tenantId);
+function requireTenantCard(state, numberId, tenantId) {
+  const card = tenantStripe(state, tenantId);
   if (!card.customerId || !card.paymentMethodId) {
-    failNumber(s, numberId);
+    failNumber(state, numberId);
     throw new Error(`provisionNumber: Tenant ${tenantId} hat kein hinterlegtes Zahlungsmittel`);
   }
   return card;
@@ -251,8 +251,12 @@ async function cancelHoldIfHeld(billing, paymentIntentId) {
 // (requireTenantCard), der die Karte hier hereinreicht. Zusaetzlich strukturell
 // abgesichert ueber payment_method_collection='always' im Checkout (stripe.js).
 // Liefert { paymentIntentId, exempt } (EIN Rueckgabewert statt Output-Argument, F2).
-async function placeSetupFeeHold(s, numberId, { tenantId, billing, card, holdAmountCents, currency }) {
-  const exempt = tenantSubscription(s, tenantId).numberSetupFeeExempt;
+async function placeSetupFeeHold(
+  state,
+  numberId,
+  { tenantId, billing, card, holdAmountCents, currency },
+) {
+  const exempt = tenantSubscription(state, tenantId).numberSetupFeeExempt;
   const { customerId, paymentMethodId } = card;
   let paymentIntentId;
   try {
@@ -266,10 +270,10 @@ async function placeSetupFeeHold(s, numberId, { tenantId, billing, card, holdAmo
     });
     paymentIntentId = hold.paymentIntentId;
   } catch (holdErr) {
-    failNumber(s, numberId);
+    failNumber(state, numberId);
     throw holdErr;
   }
-  attachNumberPaymentIntent(s, numberId, paymentIntentId);
+  attachNumberPaymentIntent(state, numberId, paymentIntentId);
   return { paymentIntentId, exempt };
 }
 
@@ -277,8 +281,12 @@ async function placeSetupFeeHold(s, numberId, { tenantId, billing, card, holdAmo
 // laeuft ueber DIESELBE Fehlerkante (rollbackAfterOrder beim Aufrufer) - ein gescheiterter
 // Abschluss darf nie eine bezahlte/gehaltene Waise hinterlassen (G5, kein zweiter
 // Rollback-Pfad).
-async function settleSetupFeeHold(s, numberId, { billing, paymentIntentId, holdAmountCents, exempt }) {
-  beginCapturing(s, numberId); // provisioning -> capturing (Geld-Abschluss laeuft)
+async function settleSetupFeeHold(
+  state,
+  numberId,
+  { billing, paymentIntentId, holdAmountCents, exempt },
+) {
+  beginCapturing(state, numberId); // provisioning -> capturing (Geld-Abschluss laeuft)
   if (exempt) return billing.cancelHold(paymentIntentId);
   return billing.captureHold(paymentIntentId, holdAmountCents);
 }
@@ -303,12 +311,12 @@ async function settleSetupFeeHold(s, numberId, { billing, paymentIntentId, holdA
 // HOLD statt Delete - der Retry-/Reconcile-Weg (MAX_NUMBERS-Cap) uebernimmt den Orphan,
 // wie beim regulaeren GAP-2-Pfad unten.
 async function rollbackAfterOrder(
-  s,
+  state,
   numberId,
   { provisioner, providerNumberId, e164, tenantId, billing, paymentIntentId, logger },
 ) {
-  failNumber(s, numberId); // provisioning|capturing -> failed
-  if (e164 && numberBusyReason(s, { e164 }, { forTenantId: tenantId })) {
+  failNumber(state, numberId); // provisioning|capturing -> failed
+  if (e164 && numberBusyReason(state, { e164 }, { forTenantId: tenantId })) {
     logger.warn(
       `provisionNumber: releaseNumber uebersprungen (Plattform-Bindung) -> Orphan, Reconcile noetig ` +
         `(number=${numberId} provider=${providerNumberId})`,
@@ -318,7 +326,7 @@ async function rollbackAfterOrder(
   }
   try {
     await provisioner.releaseNumber(providerNumberId);
-    releaseNumber(s, numberId); // failed -> released (Provider-Nummer sauber weg)
+    releaseNumber(state, numberId); // failed -> released (Provider-Nummer sauber weg)
   } catch (relErr) {
     // GAP-2: Release-Fehler NICHT mehr still schlucken. Ein gekaufter, nicht freigegebener
     // Provider-Datensatz = bezahlter Orphan -> sichtbar fuers Owner-Reconcile-Runbook.

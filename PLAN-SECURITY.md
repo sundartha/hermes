@@ -3438,20 +3438,30 @@ Anbieter (GET-Liste), wird ihre Kennung uebernommen statt neu angelegt. Ein Fehl
 nutzbar (faellt LAUT auf die globale Rueckfall-Registrierung zurueck), die Registrierung
 wird ueber den Reparaturlauf nachholbar (`npm run elevenlabs:nummern`).
 
-**Waisen-Risiko, NOCH NICHT verdrahtet (Review-Blocker Runde 1, G9 — Korrektur einer
-frueheren Fassung dieses Abschnitts):** `release-reconcile.js#performNumberRelease` nimmt
-einen `sipRegistrar`-Parameter entgegen und loest bei gesetzter Kennung fail-soft einen
-EL-Loeschversuch (`DELETE /v1/convai/phone-numbers/{id}`) aus — aber KEIN Produktions-
-Aufrufer uebergibt ihn (`wiring/web-login.js#scheduleReleaseReconcile` und
-`billing/contract-end-cleanup.js#attemptContractEndCleanup` reichen ihn nicht durch). Eine
-fruehere Fassung dieses Abschnitts behauptete, der Loeschversuch werde "auch ausgeloest" —
-das war falsch und wurde hier korrigiert (Doku-an-Code-Pflicht, E4-Lehre 2). Bis die
-Verdrahtung nachgezogen ist, hinterlaesst JEDE Freigabe einer DID mit
-ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true eine Waise beim Anbieter — auffindbar NUR ueber
-den manuellen Pruefmodus (`npm run elevenlabs:nummern -- --pruefen`), nie automatisch
-aufgeraeumt. Nachzugstask: den Registrar hinter demselben Dreifach-Gate wie der Orchestrator
-an beiden Aufrufern injizieren, mit einem Test, der den Loeschversuch UEBER den
-Produktionsaufrufer belegt.
+**Waisen-Risiko, VERDRAHTET (Review-Blocker Runde 3 / E5-01 — zweite Korrektur dieses
+Abschnitts):** `release-reconcile.js#performNumberRelease` nimmt einen `sipRegistrar`-
+Parameter entgegen und loest bei gesetzter Kennung fail-soft einen EL-Loeschversuch
+(`DELETE /v1/convai/phone-numbers/{id}`) aus. Eine fruehere Fassung dieses Abschnitts
+behauptete, KEIN Produktions-Aufrufer reiche ihn durch — das stimmte fuer Runde 1, ist aber
+seit Runde 3 (E5-01) UEBERHOLT und war am HEAD dieser Etappe bereits falsch (Doku-an-Code-
+Pflicht, E4-Lehre 2, hier ein zweites Mal verletzt). Die gemeinsame Konstruktions-Naht
+`sipRegistrarWennAktiv(config)` (`src/elevenlabs/nummern-registrierung.js:100`) wird jetzt
+tatsaechlich injiziert: `wiring/web-login.js` (Zeilen 191/218/357/375, sowohl der
+Grace-Reconcile- als auch der sofortige Erase-Pfad) UND `billing/webhook.js` (:276/:424) ->
+`billing/contract-end-cleanup.js#attemptContractEndCleanup` (:82/:93/:125/:136) reichen den
+Registrar durch. Belegt durch `test/e5-01-sipregistrar-produktionspfad.test.js` (6 Tests,
+darunter eine Positiv-Kontrolle "ohne Registrar -> 0 EL-Aufrufe, byte-identisch zum
+Bestand"), selbst nachgefahren: `node --test test/e5-01-sipregistrar-produktionspfad.test.js`
+-> `pass 6 fail 0`.
+
+**Ehrlicher Restpunkt:** `removeRegistration` (`makeElSipRegistrar`) ist wie der gesamte
+EL-Loeschpfad bewusst FAIL-SOFT (`src/elevenlabs/convai.js#fireAndForgetDelete` wirft nie,
+Owner-Auftrag 15.08.2026) — ein Anbieter-5xx, ein Timeout oder eine 4xx-Ablehnung beim
+DELETE hinterlaesst weiterhin eine Waise beim Anbieter, jetzt aber nur noch als Fehlschlag-
+Fall (nicht mehr strukturell, da der Aufruf nie ausgeloest wurde). Das ist Absicht (eine
+haengende ElevenLabs-API darf eine Kuendigung/Art.-17-Loeschung nicht blockieren) und bleibt
+auffindbar ueber denselben manuellen Pruefmodus (`npm run elevenlabs:nummern -- --pruefen`),
+nie automatisch aufgeraeumt.
 
 **Was NICHT in diesem Merge ausgefuehrt wurde:** kein einziger echter Anbieter-Schreibzugriff
 (Tests laufen ausschliesslich gegen lokale Attrappen). Der Telnyx-ANI-Override
