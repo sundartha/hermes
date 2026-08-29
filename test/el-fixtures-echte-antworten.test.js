@@ -17,6 +17,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
+import { FROM_SOURCE } from "../src/store/state-ops.js";
 import { terminateAndBillCall } from "../src/telephony/call-termination.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -51,6 +52,7 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
     answeredAtIso: undefined,
     unclearReasons: [],
     failureReasons: [],
+    actualSender: undefined,
   };
   const store = {
     getCall: () => call,
@@ -71,6 +73,16 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
     // haengt nicht an ihm, aber die Attrappe muss die Methode kennen, sonst wirft
     // der Ergebnisweg einen TypeError.
     recordSipCallId: () => {},
+    // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber.
+    recordFromRegistrationSource: () => {},
+    // E5-02 (Review Runde 2): NICHT laenger ein No-op - der Produktions-Lesepfad
+    // (recordAbsenderMessung, src/elevenlabs/outbound.js) war bisher voellig unverifiziert,
+    // JEDE EL-Attrappe stubbte diese Methode weg. Der Wert wird hier aufgezeichnet, damit
+    // die Tests unten den GENAUEN Feldpfad (metadata.phone_call.agent_number) byte-genau
+    // gegen das Fixture-Token pinnen koennen.
+    recordActualSender: (_id, sender) => {
+      captured.actualSender = sender;
+    },
     trueUpAnsweredAt: (_id, answeredAtIso) => {
       captured.answeredAtIso = answeredAtIso;
     },
@@ -150,6 +162,16 @@ test("Fixture FAILED (SIP-404 ungueltiges Ziel): analysis:null ueberlebt, KEIN B
     captured.failureReasons,
     ["unreachable:invite-404-D11"],
     "der Tippfehler eines Nutzers (Ziel existiert nicht) ist NICHT unsere Schuld - anders als ein 403",
+  );
+  // E5-02 (Review Runde 2): der Produktions-Lesepfad recordAbsenderMessung liest
+  // conversation.metadata.phone_call.agent_number - byte-genau gegen das Fixture-Token
+  // gepinnt (Vermeidungsliste 3: eine Attrappe, die den Wert ignoriert, beweist nichts).
+  // AUCH im abgelehnten Fall befuellt (der Kommentar an recordAbsenderMessung sagt das
+  // ausdruecklich - dieser Test ist die eine Fixture, die das belegt).
+  assert.deepEqual(
+    captured.actualSender,
+    { e164: "***0177#1ca0c7", source: FROM_SOURCE.PROVIDER_MEASURED },
+    "recordActualSender muss mit dem GENAUEN Fixture-Token und source=provider_measured gerufen werden",
   );
 });
 

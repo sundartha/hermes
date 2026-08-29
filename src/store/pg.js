@@ -366,6 +366,8 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // OUTBOUND-E5: Absender-Wahrheits-Mutatoren als Spread (haelt den Zeilen-Pin, s.o.).
+    ...absenderWahrheitMutatoren({ requireState, save }),
     // EL-Anrufstart: Zusammenfassung + Befund aus einer Anbieter-Antwort -
     // Wrapper-Paritaet zu json.js. Saved aus demselben Grund wie die Handles darueber: es
     // gibt Spalten (summary/objective_achieved), und der Flush schreibt sie aus dem Spiegel.
@@ -1178,7 +1180,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   ).rows;
   const numberRows = (
     await client.query(
-      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents FROM number WHERE tenant_id = $1`,
+      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id FROM number WHERE tenant_id = $1`,
       [tenantId],
     )
   ).rows;
@@ -1212,26 +1214,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   state.calls.push(...callRows.map((r) => rowToCall(r, segmentsByCall, itemIdsByCall)));
   state.actionItems.push(...itemRows.map(rowToActionItem));
   state.notifications.push(...notifRows.map(rowToNotification));
-  state.numbers.push(
-    ...numberRows.map((r) => ({
-      id: r.id,
-      e164: r.e164,
-      tenantId: r.tenant_id,
-      provider: r.provider,
-      status: r.status,
-      providerNumberId: r.provider_number_id,
-      paymentIntentId: r.payment_intent_id ?? null,
-      // Geo (F1): Bestands-Nummer ohne Wert -> null (kein undefined-Drift, Muster wie
-      // payment_intent_id); der Code-Fallback || DE/de der Konsumenten greift.
-      country: r.country ?? null,
-      language: r.language ?? null,
-      // P4: Feld nur bei vorhandenem Wert (NULL -> abwesend). Haelt den Round-Trip
-      // jeder Bestands-Nummer form-identisch und trennt "nicht gelernt" von 0.
-      ...(r.monthly_cost_cents === null || r.monthly_cost_cents === undefined
-        ? {}
-        : { monthlyCostCents: r.monthly_cost_cents }),
-    })),
-  );
+  state.numbers.push(...numberRows.map(rowToNumber));
   state.provisioningJobs.push(
     ...jobRows.map((r) => ({
       id: r.id,
@@ -1334,6 +1317,39 @@ function rowToSettings(r) {
 // Ergebnis-Typ erzwingt und die diese Kante nicht wieder einebnen darf.
 function hydratedMicroCents(raw) {
   return raw === null || raw === undefined ? null : Number(raw);
+}
+
+// OUTBOUND-E5: die drei Absender-Wahrheits-Felder als EIN benanntes Konzept. Modul-Ebene und
+// als Spread eingesetzt, damit die gepinnte Komplexitaet von rowToCall/callRowValues (je 36,
+// eslint-legacy-exceptions.json) NICHT steigt - jedes ?? direkt in jenen Funktionen waere +1.
+function absenderWahrheitFelder(r) {
+  return {
+    fromActualE164: r.from_actual_e164 ?? null,
+    fromSource: r.from_source ?? null,
+    fromRegistrationSource: r.from_registration_source ?? null,
+  };
+}
+function absenderWahrheitWerte(call) {
+  return [call.fromActualE164 ?? null, call.fromSource ?? null, call.fromRegistrationSource ?? null];
+}
+
+// OUTBOUND-E5: die zwei Schreibweg-Mutatoren als Spread-Fabrik statt zweier ausgeschriebener
+// Methoden IN makePgStore - haelt dessen gepinnte Zeilengrenze (eslint-legacy-exceptions.json),
+// aus demselben Grund wie absenderWahrheitFelder/-Werte oben. requireState/save reisen herein
+// (Closure-Zustand des jeweiligen makePgStore-Aufrufs, kein Modul-Singleton).
+function absenderWahrheitMutatoren({ requireState, save }) {
+  return {
+    recordFromRegistrationSource(callId, quelle) {
+      const { call, changed } = ops.recordFromRegistrationSource(requireState(), callId, quelle);
+      if (changed) save();
+      return call;
+    },
+    recordActualSender(callId, herkunft) {
+      const { call, changed } = ops.recordActualSender(requireState(), callId, herkunft);
+      if (changed) save();
+      return call;
+    },
+  };
 }
 
 function rowToCall(r, segmentsByCall, itemIdsByCall) {
@@ -1469,6 +1485,7 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // zurueck (Lehre i8-design-decisions) - und der Deckel zaehlte von vorn.
     lookupLog: r.lookup_log ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
+    ...absenderWahrheitFelder(r),
   };
 }
 
@@ -1925,6 +1942,10 @@ function callRowValues(call, tenantId) {
     // INBOX-P1 ($56-$57): beide IM ON CONFLICT DO UPDATE SET.
     call.inboxEntryAt ?? null,
     call.inboxSeenAt ?? null,
+    // OUTBOUND-E5 ($58-$60, angehaengt -> keine Umnummerierung): die drei Absender-
+    // Wahrheits-Felder, alle IM ON CONFLICT DO UPDATE SET - sie entstehen NACH dem
+    // Create (Anrufstart bzw. Ergebnisabruf).
+    ...absenderWahrheitWerte(call),
   ];
 }
 
@@ -1949,8 +1970,9 @@ async function flushCalls(client, tenantId, calls) {
           appointment_date, appointment_time, amount, currency,
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
           callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
-          lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57)
+          lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
+          from_actual_e164, from_source, from_registration_source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1976,7 +1998,9 @@ async function flushCalls(client, tenantId, calls) {
          callee_confirmed_timezone_at=EXCLUDED.callee_confirmed_timezone_at,
          sip_call_id=EXCLUDED.sip_call_id, lookup_log=EXCLUDED.lookup_log,
          summary_mail_sent_at=EXCLUDED.summary_mail_sent_at,
-         inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at`,
+         inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at,
+         from_actual_e164=EXCLUDED.from_actual_e164, from_source=EXCLUDED.from_source,
+         from_registration_source=EXCLUDED.from_registration_source`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);
@@ -2223,6 +2247,24 @@ async function flushOwnScoped({ client, tenantId, table, rows, insertRow }) {
 // flush ruft flushNumbers pro Tenant unter dessen RLS-GUC; flushOwnScoped kapselt
 // own-Filter + deleteMissing (siehe dort). So round-trippen die Nummern aller Tenants
 // (nicht mehr owner-only).
+// number-Zeile -> Spiegel-Objekt. Gegenstueck zu flushNumbers, Konvention wie rowToTenant/
+// rowToCall. Aus hydrateTenantInto herausgeloest, weil dessen gepinnte Zeilengrenze
+// (eslint-legacy-exceptions.json) sonst durch die E5-Spalte STEIGEN wuerde - dieser Schnitt
+// SENKT sie stattdessen.
+function rowToNumber(r) {
+  return {
+    id: r.id, e164: r.e164, tenantId: r.tenant_id, provider: r.provider, status: r.status,
+    providerNumberId: r.provider_number_id,
+    paymentIntentId: r.payment_intent_id ?? null,
+    country: r.country ?? null,
+    language: r.language ?? null,
+    // OUTBOUND-E5: Bestands-Nummer ohne Registrierung -> null (kein undefined-Drift).
+    providerAgentPhoneNumberId: r.provider_agent_phone_number_id ?? null,
+    ...(r.monthly_cost_cents === null || r.monthly_cost_cents === undefined
+      ? {} : { monthlyCostCents: r.monthly_cost_cents }),
+  };
+}
+
 async function flushNumbers(client, tenantId, numbers) {
   await flushOwnScoped({
     client,
@@ -2231,14 +2273,15 @@ async function flushNumbers(client, tenantId, numbers) {
     rows: numbers,
     insertRow: (n) =>
       client.query(
-        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (id) DO UPDATE SET
            e164=EXCLUDED.e164, provider=EXCLUDED.provider,
            status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
            payment_intent_id=EXCLUDED.payment_intent_id,
            country=EXCLUDED.country, language=EXCLUDED.language,
-           monthly_cost_cents=EXCLUDED.monthly_cost_cents`,
+           monthly_cost_cents=EXCLUDED.monthly_cost_cents,
+           provider_agent_phone_number_id=EXCLUDED.provider_agent_phone_number_id`,
         [
           n.id,
           tenantId,
@@ -2250,6 +2293,7 @@ async function flushNumbers(client, tenantId, numbers) {
           n.country ?? null,
           n.language ?? null,
           n.monthlyCostCents ?? null,
+          n.providerAgentPhoneNumberId ?? null,
         ],
       ),
   });

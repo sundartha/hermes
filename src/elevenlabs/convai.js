@@ -1,9 +1,10 @@
 // ---- ElevenLabs Convai: der EINE HTTP-Zugang des Anrufstart-Zweigs -------------------
-// Vier Endpunkte, mehr braucht der Zweig nicht: den Anrufstart (POST), den ziehenden
-// Ergebnisabruf (GET), den Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026) und den
-// Nummernabruf (GET, OUTBOUND-E4/Pruefung 1 des Drift-Waechters). Rein
-// IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie src/tts/synth.js) - der Zweig
-// laesst sich damit gegen eine Attrappe fahren, ohne dass je ein echter Anruf entsteht.
+// Sieben Endpunkte: den Anrufstart (POST), den ziehenden Ergebnisabruf (GET), den
+// Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026), den Nummernabruf (GET, OUTBOUND-E4/
+// Pruefung 1 des Drift-Waechters) - dazu die drei der Nummernregistrierung (Liste/Anlegen/
+// Loeschen, OUTBOUND-E5). Rein IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie
+// src/tts/synth.js) - der Zweig laesst sich damit gegen eine Attrappe fahren, ohne dass je
+// ein echter Anruf oder eine echte Registrierung entsteht.
 //
 // KEIN RETRY, bewusst (Absolute Regel 1): ein wiederholter Anrufstart ist ein zweiter
 // ECHTER Anruf beim selben Menschen. Der Fehlschlag gehoert deshalb dem Aufrufer, der
@@ -23,6 +24,10 @@
 const OUTBOUND_CALL_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";
+// OUTBOUND-E5: Liste/Anlegen adressieren die SAMMLUNG (kein trailing slash, kein
+// Einzelpfad-Suffix) - anders als PHONE_NUMBER_PATH oben, das einen EINZELNEN
+// Nummer-Datensatz adressiert (Loeschen bleibt auf PHONE_NUMBER_PATH + id).
+const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
 const API_KEY_HEADER = "xi-api-key";
 
 // Interner Transport-Bound, kein Operator-Knopf (Praezedenz ERROR_DETAIL_MAX_LEN in
@@ -238,15 +243,32 @@ export function fetchConversation({ fetchImpl, account, conversationId, timeoutM
   });
 }
 
+// Review-Blocker Runde 1 (G5): endConversation und deletePhoneNumber waren zwei
+// wortgleiche fail-soft-DELETEs (identischer try/fetchImpl/Header/Timeout/Ergebnis-Ausdruck/
+// catch) - jede kuenftige Aenderung (Header, Timeout-Semantik, Fehlerbehandlung) haette an
+// BEIDEN Stellen erfolgen muessen. EIN gemeinsamer Kern, der Aufrufer liefert nur den Pfad.
+// Wirft NIE (Owner-Auftrag 15.08.2026): weder bei einer Anbieter-Ablehnung (4xx/5xx, kein
+// assertConvaiOk) noch bei Netzwerk-/Zeitablauf-Fehlern. Ein fehlgeschlagener Loeschversuch
+// darf den Abbruch unseres eigenen Datensatzes nicht verhindern - ein Werkzeug, das an einem
+// Anbieter-Ausfall haengen bleibt, waere schlimmer als keins. Meldet NUR, ob der Anbieter den
+// Versuch angenommen hat (HTTP-Status) - der Fehler-RUMPF wird NIE gelesen (Regel 4/5).
+async function fireAndForgetDelete({ fetchImpl, account, path, timeoutMs }) {
+  try {
+    const res = await fetchImpl(`${account.apiBase}${path}`, {
+      method: "DELETE",
+      headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return { accepted: res.ok, status: res.status };
+  } catch {
+    return { accepted: false, status: null };
+  }
+}
+
 /**
  * Beende-Versuch beim Anbieter (DELETE /v1/convai/conversations/{id}): Kap-/cancel_call-
- * Pfad (telephony/call-termination.js#elevenLabsHangUpAction). FAIL-SOFT ANDERS ALS DIE
- * BEIDEN FUNKTIONEN OBEN (Owner-Auftrag 15.08.2026): sie wirft NIE - weder bei einer
- * Anbieter-Ablehnung (4xx/5xx, kein assertConvaiOk) noch bei Netzwerk-/Zeitablauf-Fehlern.
- * Ein fehlgeschlagener Loeschversuch darf den Abbruch unseres eigenen Datensatzes nicht
- * verhindern - ein Werkzeug, das an einem Anbieter-Ausfall haengen bleibt, waere schlimmer
- * als keins. Meldet NUR, ob der Anbieter den Versuch angenommen hat (HTTP-Status) - der
- * Fehler-RUMPF wird wie bei den beiden Funktionen oben NIE gelesen (Regel 4/5).
+ * Pfad (telephony/call-termination.js#elevenLabsHangUpAction). FAIL-SOFT (s.
+ * fireAndForgetDelete oben).
  *
  * OB das die Leitung tatsaechlich kappt, ist NICHT belegt (s. Modul-Kopf des Aufrufers,
  * elevenlabs/outbound.js) - diese Funktion beantwortet nur "hat der Anbieter den DELETE-
@@ -260,25 +282,13 @@ export function fetchConversation({ fetchImpl, account, conversationId, timeoutM
  * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, conversationId: string, timeoutMs?: number}} args
  * @returns {Promise<{accepted: boolean, status: number|null}>}
  */
-export async function endConversation({
-  fetchImpl,
-  account,
-  conversationId,
-  timeoutMs = REQUEST_TIMEOUT_MS,
-}) {
-  try {
-    const res = await fetchImpl(
-      `${account.apiBase}${CONVERSATION_PATH}${encodeURIComponent(conversationId)}`,
-      {
-        method: "DELETE",
-        headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
-        signal: AbortSignal.timeout(timeoutMs),
-      },
-    );
-    return { accepted: res.ok, status: res.status };
-  } catch {
-    return { accepted: false, status: null };
-  }
+export function endConversation({ fetchImpl, account, conversationId, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  return fireAndForgetDelete({
+    fetchImpl,
+    account,
+    path: CONVERSATION_PATH + encodeURIComponent(conversationId),
+    timeoutMs,
+  });
 }
 
 /**
@@ -296,6 +306,63 @@ export function fetchPhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs 
     path: PHONE_NUMBER_PATH + encodeURIComponent(phoneNumberId),
     op: "Nummernabruf",
     init: { method: "GET" },
+    timeoutMs,
+  });
+}
+
+/**
+ * OUTBOUND-E5: alle registrierten Nummern des Kontos. NUR LESEND. Zweck: Idempotenz-Schloss
+ * #2 des Anlegens (existiert die e164 schon, wird ihre Kennung UEBERNOMMEN statt eine zweite
+ * Registrierung erzeugt) und der Waisen-Abgleich des Reparaturlaufs. Wirft mit
+ * err.providerStatus (assertConvaiOk), KEIN Retry (Muster fetchPhoneNumber).
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, timeoutMs?: number}} args
+ * @returns {Promise<Array<{phone_number: string, phone_number_id: string}>>}
+ */
+export function listPhoneNumbers({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: PHONE_NUMBERS_PATH,
+    op: "Nummernliste",
+    init: { method: "GET" },
+    timeoutMs,
+  });
+}
+
+/**
+ * OUTBOUND-E5: SCHREIBZUGRIFF - legt EINE SIP-Trunk-Nummernregistrierung an.
+ * Der EINZIGE schreibende Anbieter-Aufruf dieser Etappe. Er ist NICHT idempotent (der
+ * Anbieter garantiert das nicht - UNBELEGT); die Idempotenz stellt der Aufrufer her
+ * (elevenlabs/nummern-registrierung.js). KEIN Retry, aus demselben Grund wie beim
+ * Anrufstart: ein wiederholter Schreibzugriff kann eine zweite Registrierung erzeugen.
+ * Der Fehler-RUMPF wird NIE gelesen (Regel 4/5) - er kann Nummern-/Auth-Fragmente tragen.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object}} args
+ * @returns {Promise<{phoneNumberId: string|null}>}
+ */
+export async function createPhoneNumber({ fetchImpl, account, body }) {
+  const antwort = await convaiFetch({
+    fetchImpl,
+    account,
+    path: PHONE_NUMBERS_PATH,
+    op: "Nummernregistrierung",
+    init: { method: "POST", body: JSON.stringify(body) },
+  });
+  return { phoneNumberId: antwort?.phone_number_id || null };
+}
+
+/**
+ * OUTBOUND-E5: SCHREIBZUGRIFF - Loeschversuch einer Registrierung (Freigabe-Protokoll).
+ * FAIL-SOFT wie endConversation (s. fireAndForgetDelete oben): wirft NIE. Eine haengende
+ * Anbieter-API darf eine Kuendigung/Art.-17-Loeschung nicht blockieren. Meldet nur
+ * {accepted, status}.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, phoneNumberId: string, timeoutMs?: number}} args
+ * @returns {Promise<{accepted: boolean, status: number|null}>}
+ */
+export function deletePhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  return fireAndForgetDelete({
+    fetchImpl,
+    account,
+    path: PHONE_NUMBER_PATH + encodeURIComponent(phoneNumberId),
     timeoutMs,
   });
 }

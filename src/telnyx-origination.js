@@ -4,6 +4,7 @@
 // ohne server.js zu importieren. KEIN Max-Dauer-Timer hier (P6 verdrahtet ihn callControlId-
 // korrekt); der provider-seitige time_limit_secs-Cap (voice.js) UND der Reserve-Backstop
 // (armReserveReleaseTimer, Aufrufer) greifen daneben.
+import { FROM_SOURCE } from "./store/state-ops.js";
 
 // Regel 3 / G5: EINE Quelle fuer die assistantId-Bindung, geteilt von Outbound-Origination
 // (hier) UND Inbound-Answer (telnyx-inbound.js). Mutiert den LEBENDEN Call; der Aufrufer
@@ -26,5 +27,10 @@ export async function originateAiAssistantCall({ store, voiceControl, config, ca
   // callControlId als EIGENES Feld (P6-Boot-Recovery adressiert den Hangup ueber diese
   // ID-Form, NICHT twilioSid).
   call.callControlId = callControlId;
+  // OUTBOUND-E5 (F3): auf diesem Weg reist die Absendernummer als Port-Parameter
+  // (telephony/ports.js:127) unveraendert in das Provider-Feld, und die benutzte
+  // Call-Control-Connection traegt keinen ani_override - der gesendete Absender IST
+  // fromNumber. Deshalb ist "tenant_did" hier ein Struktur-Beleg, keine Behauptung.
+  store.recordActualSender(call.id, { e164: fromNumber, source: FROM_SOURCE.TENANT_DID });
   store.save();
 }

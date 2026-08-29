@@ -21,6 +21,7 @@ import { makeOutageWatch } from "./telephony/outage-report.js";
 import { makeDriftWatch } from "./telephony/outbound-drift-watch.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
+import { metrics } from "./metrics.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
 import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
@@ -196,6 +197,9 @@ const elevenLabsOutbound = makeElevenLabsOutbound({
   // Thema B: dasselbe Muster fuer das Recherche-Tor - die EINE Torkette aus
   // research/registry.js, die auch der Lookup-Webhook fragt.
   lookupAvailableFor: elevenLabsLookupAvailableFor,
+  // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler - hier verdrahtet statt in
+  // outbound.js importiert (Begruendung an der Signatur dort, Lehre test-base-env-drift).
+  metrics,
 });
 
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper

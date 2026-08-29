@@ -39,6 +39,7 @@ export function makeStripeWebhookRoute({
   numberProvisioner,
   workos,
   auditStore,
+  sipRegistrar,
 }) {
   return async (req, res) => {
     if (!requirePaymentEnabled(res, config, "payment disabled")) return;
@@ -61,7 +62,7 @@ export function makeStripeWebhookRoute({
     }
     const outcome = await applyStripeWebhookSerialized(event, {
       store, accounts, sessions, audit, req, provision, billing,
-      numberProvisioner, workos, auditStore,
+      numberProvisioner, workos, auditStore, sipRegistrar,
     });
     // Plattform-Alarm (GAP-03/GAP-04): sendBootstrapAlertSms ist fail-soft - ohne
     // konfigurierten Empfaenger passiert nichts, ein Fehler bricht die Webhook-Antwort NIE ab.

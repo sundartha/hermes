@@ -97,7 +97,7 @@ async function abortRelease({ audit, actor, number, reason, logger, message }) {
 // unterscheidet die Ausloeser im Audit. Liefert true bei Release, false bei jedem Abbruch
 // (Store bleibt active -> retrybar, kein Orphan; jeder Abbruch schreibt EINE Audit-Zeile,
 // PM-18, ueber abortRelease).
-async function performNumberRelease({ store, provisioner, audit, logger, actor, number }) {
+async function performNumberRelease({ store, provisioner, audit, logger, actor, number, sipRegistrar }) {
   if (!(await stillReleasableUnderLock(store, number.id)))
     return abortRelease({
       audit, actor, number, logger,
@@ -110,6 +110,14 @@ async function performNumberRelease({ store, provisioner, audit, logger, actor, 
       reason: ABORT_REASON.PROVIDER_ERROR,
       message: `[did-release] provider-delete fehlgeschlagen number=${number.id}`,
     });
+  // OUTBOUND-E5 (F3): die EL-Registrierung dieser DID zurueckgeben. STRIKT FAIL-SOFT und
+  // ohne Abbruch-Pfad: die DID ist beim Anbieter schon weg, und eine haengende ElevenLabs-API
+  // darf eine Kuendigung/Art.-17-Loeschung NICHT blockieren (E1 hat bereits genug HOLD-Gruende,
+  // und ein vierter Abbruchgrund hier machte die Freigabe von einem ZWEITEN Anbieter abhaengig).
+  // Preis, bewusst getragen: ein Fehlschlag hinterlaesst eine Waise beim Anbieter. Sie ist
+  // NICHT unsichtbar - der Reparaturlauf listet sie (`npm run elevenlabs:nummern -- --pruefen`).
+  if (sipRegistrar && number.providerAgentPhoneNumberId)
+    await sipRegistrar.removeRegistration(number.providerAgentPhoneNumberId);
   // OUTBOUND-E1 (E1-02/E1-03): die Nummer ist beim Anbieter bereits weg - dieser letzte
   // Schritt DARF NICHT mehr entkommen (unhandled throw wuerde die restlichen Kandidaten der
   // Schleife stumm abbrechen). Unbind und releaseNumber muessen GEMEINSAM gelingen: schlaegt
@@ -150,7 +158,7 @@ async function performNumberRelease({ store, provisioner, audit, logger, actor, 
 }
 
 // Ein Grace-Kandidat: Live-Recheck (Invariante 3) gegen den FRISCHEN Store -> Release-Kern.
-async function releaseCandidate({ store, provisioner, audit, logger, nowMs, graceMs, numberId }) {
+async function releaseCandidate({ store, provisioner, audit, logger, nowMs, graceMs, numberId, sipRegistrar }) {
   // Live-Recheck (Invariante 3) gegen den FRISCHEN Store, unmittelbar vor dem DELETE:
   // reaktivierte der Kunde zwischenzeitlich (suspended_at geloescht + status active),
   // kippt der Verdict + tenantInactive -> Abbruch. Ein Fehl-Release ist Rufnummern-
@@ -171,13 +179,13 @@ async function releaseCandidate({ store, provisioner, audit, logger, nowMs, grac
     });
     return false;
   }
-  return performNumberRelease({ store, provisioner, audit, logger, actor: RECONCILE_ACTOR, number });
+  return performNumberRelease({ store, provisioner, audit, logger, actor: RECONCILE_ACTOR, number, sipRegistrar });
 }
 
 // Ein Reconcile-Lauf. graceMs===0 (Observe-Only-Sentinel, Invariante 2) = Feature aus:
 // NIE ein DELETE, nur die Kandidatenliste sichtbar machen. Die Fruehausfahrt ist die
 // HARTE Grenze - der Release-Pfad ist nur bei graceMs>0 erreichbar.
-export async function runReleaseReconcile({ store, provisioner, audit, logger = console, nowMs, graceMs }) {
+export async function runReleaseReconcile({ store, provisioner, audit, logger = console, nowMs, graceMs, sipRegistrar }) {
   const buckets = classifyNumbersForRelease(store.load(), { nowMs, graceMs });
   const candidates = buckets.release;
   // OUTBOUND-E1: eine Sperre, die still wirkt, ist die Krankheit des Ausgangsbefunds.
@@ -196,7 +204,7 @@ export async function runReleaseReconcile({ store, provisioner, audit, logger = 
   let released = 0;
   let aborted = 0;
   for (const candidate of candidates) {
-    const ok = await releaseCandidate({ store, provisioner, audit, logger, nowMs, graceMs, numberId: candidate.id });
+    const ok = await releaseCandidate({ store, provisioner, audit, logger, nowMs, graceMs, numberId: candidate.id, sipRegistrar });
     if (ok) released++;
     else aborted++;
   }
@@ -214,7 +222,7 @@ export async function runReleaseReconcile({ store, provisioner, audit, logger = 
 // verdrahtet; die kuenftige Erase-Route komponiert store.eraseTenantData (Daten) + diese Fn
 // (Nummern). Kein toter Code: exportierter Seam mit Testabdeckung (der Test ist der Aufrufer).
 // Alle IO injiziert (store/provisioner/audit/logger).
-export async function releaseTenantNumbersOnErase({ store, provisioner, audit, logger = console, tenantId }) {
+export async function releaseTenantNumbersOnErase({ store, provisioner, audit, logger = console, tenantId, sipRegistrar }) {
   const { release, hold } = tenantNumbersForErase(store.load(), tenantId);
   let released = 0;
   let aborted = 0;
@@ -234,7 +242,7 @@ export async function releaseTenantNumbersOnErase({ store, provisioner, audit, l
   }
   for (const number of release) {
     const ok = await performNumberRelease({
-      store, provisioner, audit, logger, actor: ERASE_ACTOR, number,
+      store, provisioner, audit, logger, actor: ERASE_ACTOR, number, sipRegistrar,
     });
     if (ok) released++;
     else aborted++;

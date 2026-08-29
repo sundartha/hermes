@@ -413,6 +413,13 @@ export function createCall(
     // (rowToCall), kein json<->pg-Shape-Drift. Muster summarySmsSentAt.
     inboxEntryAt: null,
     inboxSeenAt: null,
+    // OUTBOUND-E5: die drei Absender-Wahrheits-Felder existieren ab Anlage, damit json- und
+    // pg-Backend form-identisch round-trippen (store-pg-json-parity). Bewusst reine
+    // Zuweisungen ohne || / ?? - jeder Operator hier hoebe die gepinnte Komplexitaet dieser
+    // Altlast-Funktion um 1 (eslint-legacy-exceptions.json).
+    fromActualE164: null,
+    fromSource: null,
+    fromRegistrationSource: null,
     actionItemIds: [],
   };
   s.calls.unshift(call);
@@ -930,6 +937,39 @@ export function recordSipCallId(state, callId, sipCallId) {
 // eigens getippte Kopie derselben set-once-Logik (Muster recordFailureReason) waere
 // Duplizierung (G5) - die Fabrik ist bewusst allgemein genug fuer beide Faelle.
 export const recordAnsweredUnclearReason = recordProviderHandleOnce("answeredUnclearReason");
+
+// OUTBOUND-E5: die Herkunft der beim Anrufstart gewaehlten EL-Registrierung. DIESELBE
+// set-once-Fabrik wie die Provider-Handles darueber (G5) - ein zweiter Anlauf desselben
+// Anrufs traegt denselben Wert, und der frueheste zaehlt.
+export const recordFromRegistrationSource = recordProviderHandleOnce("fromRegistrationSource");
+
+// OUTBOUND-E5: das geteilte Vokabular fuer call.fromSource - WOHER die Messung von
+// fromActualE164 kommt. Beide bekannten Schreiber (telnyx-origination.js, elevenlabs/
+// outbound.js) importieren dieselben zwei Werte, kein Modul tippt seinen eigenen String.
+// "unbekannt" ist bewusst KEIN dritter Wert hier: der Feld-Default aus createCall ist
+// NULL, und ein Schreiber, der nichts Belegbares hat, laesst das Feld schlicht unberuehrt
+// (Lead-Vorgabe 8) - NULL ist der ehrliche "unbekannt"-Zustand, kein geratener String.
+export const FROM_SOURCE = Object.freeze({
+  TENANT_DID: "tenant_did",
+  PROVIDER_MEASURED: "provider_measured",
+});
+
+// OUTBOUND-E5: die TATSAECHLICH gesendete Absendernummer. Set-once (Muster
+// recordProviderHandleOnce, hier zweifeldrig und deshalb ausgeschrieben) und
+// FORM-VALIDIERT mit dem BESTEHENDEN E.164-Praedikat (E164, store/defaults.js:700) - keine
+// zweite Normalisierung (G5). DER WAECHTER SITZT HIER, weil dies der einzige Schreibweg des
+// Feldes ist: die vorhandene Anbieter-Fixture traegt an dieser Stelle ein MASKIERTES Token
+// ("***0177#1ca0c7", test/fixtures/elevenlabs-conversations.js:97), und ein ungepruefter
+// Anbieter-String landete sonst in genau der Spalte, die jede Oberflaeche mit "wo kann man
+// zurueckrufen" beantwortet. Nur OUTBOUND; alles andere -> No-op (changed=false, kein Save).
+export function recordActualSender(state, callId, { e164, source }) {
+  const call = getCall(state, callId);
+  if (!call || call.direction !== "outbound" || call.fromActualE164) return { call, changed: false };
+  if (!e164 || !E164.test(e164)) return { call, changed: false };
+  call.fromActualE164 = e164;
+  call.fromSource = source;
+  return { call, changed: true };
+}
 
 // EL-Anrufstart: das Ergebnis eines Gespraechs, das der ANBIETER gefuehrt hat. Auf diesem
 // Weg gibt es bei uns weder Audio noch Turn-Schleife - Zusammenfassung und Befund kommen
@@ -2685,6 +2725,18 @@ export function attachNumberPaymentIntent(s, numberId, paymentIntentId) {
   return number;
 }
 
+// OUTBOUND-E5: die EL-Nummernregistrierung an DIESE Nummer haengen. Set-once (ein zweiter
+// Provisionierungs-Anlauf ueberschreibt eine bestehende Kennung NICHT - sonst entstuende beim
+// Anbieter eine Waise, auf die niemand mehr zeigt). Fehlende Nummer -> throw (Muster
+// attachNumberPaymentIntent).
+export function attachNumberRegistration(state, numberId, providerAgentPhoneNumberId) {
+  const number = findNumber(state, numberId);
+  if (!number) throw new Error(`attachNumberRegistration: Nummer ${numberId} nicht gefunden`);
+  if (number.providerAgentPhoneNumberId) return number;
+  number.providerAgentPhoneNumberId = providerAgentPhoneNumberId;
+  return number;
+}
+
 // provisioning -> capturing: Geld-Einzug laeuft (Stripe capture). NUR im Payment-
 // Pfad (provisionNumber mit deps.billing). activateNumber deckt capturing -> active ab.
 export function beginCapturing(s, numberId) {
@@ -2732,6 +2784,10 @@ export function failNumber(s, numberId) {
 export function releaseNumber(s, numberId) {
   const number = transitionNumber(s, numberId, NUMBER_STATUS.RELEASED);
   number.e164 = null;
+  // OUTBOUND-E5: die Registrierung gehoert zur Nummer und geht mit ihr. Der Anbieter-DELETE
+  // laeuft im Freigabe-Kern (release-reconcile.js) VOR dieser Mutation; hier faellt nur die
+  // Kennung, damit keine Zeile auf eine geloeschte Registrierung zeigt.
+  number.providerAgentPhoneNumberId = null;
   const asg = s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt);
   if (asg) asg.releasedAt = new Date().toISOString();
   return number;

@@ -36,6 +36,10 @@ import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
 import { numberProvisioning } from "../telephony/registry.js";
 import { PROVIDER } from "../store/defaults.js";
+// E5-01 (Review-Blocker Runde 3): dieselbe Konstruktions-Naht wie der Provisioning-
+// Orchestrator - vorher injizierte dieser Aufrufer NIE einen sipRegistrar, jede Freigabe
+// hinterliess live eine EL-Waise (s. sipRegistrarWennAktiv, nummern-registrierung.js).
+import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
 import { stripeBilling } from "../billing/stripe.js";
 import { makeStripeWebhookRoute } from "../routes/stripe-webhook.js";
 import { isSelfServiceLive } from "../config.js";
@@ -175,12 +179,16 @@ export async function wireWebLogin({
   const telnyxProvisioner = numberProvisioning(PROVIDER.TELNYX);
   // tenant-prolif-d: DID-Release-Reconcile scharfschalten (Boot-Lauf + Sweep). Der
   // Provider laeuft ueber den bestehenden NumberProvisioning-Port (nur Telnyx). graceMs=0
-  // (Default) = Observe-Only -> loggt nur Kandidaten, gibt nichts frei.
+  // (Default) = Observe-Only -> loggt nur Kandidaten, gibt nichts frei. E5-01: sipRegistrar
+  // ueber sipRegistrarWennAktiv(config) - dasselbe Dreifach-Gate wie der Provisioning-
+  // Orchestrator; die Fabrik ist zustandslos, ein erneuter Aufruf je Sweep aendert am
+  // Ergebnis nichts (undefined bei Schalter aus/Default -> performNumberRelease
+  // ueberspringt den EL-Schritt unveraendert, byte-identisch zum Bestand).
   scheduleReleaseReconcile({
     store,
     provisioner: telnyxProvisioner,
     audit: auditStore,
-    graceMs: config.provisioning.releaseGraceMs,
+    graceMs: config.provisioning.releaseGraceMs, sipRegistrar: sipRegistrarWennAktiv(config),
   });
   // 312k-Phase 4: WorkOS-Management-Adapter NUR konstruieren, wenn ein eigens dafuer
   // vergebener Schluessel gesetzt ist (config.auth.workosManagementApiKey) - NICHT
@@ -207,7 +215,7 @@ export async function wireWebLogin({
     store,
     numberProvisioner: telnyxProvisioner,
     workos: workosManagement,
-    auditStore,
+    auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
   });
   // Boot-Lauf + Sweep der Kuendigungsbestaetigung per E-Mail (312k-Phase 5, NUR fuer
   // Tenants mit noch offenem Vermerk - s. tenantsPendingCancellationMail, state-ops.js).
@@ -346,7 +354,7 @@ export async function wireWebLogin({
       // periodische Sweep oben (scheduleContractEndCleanup) - EINE Quelle, kein Drift.
       numberProvisioner: telnyxProvisioner,
       workos: workosManagement,
-      auditStore,
+      auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
     }),
   );
 
@@ -364,7 +372,7 @@ export async function wireWebLogin({
         store, accounts, sessions, audit, req: null, provision, billing: stripeBilling,
         numberProvisioner: telnyxProvisioner,
         workos: workosManagement,
-        auditStore,
+        auditStore, sipRegistrar: sipRegistrarWennAktiv(config),
       },
     });
   }

@@ -73,6 +73,13 @@ services:
         sync: false
       - key: TELNYX_OUTBOUND_VOICE_PROFILE_ID
         sync: false
+      # OUTBOUND-E5 (F3): Digest-Zugangsdaten der SIP-Trunk-FQDN-Connection oben, nur
+      # gebraucht fuer ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true (s.u.). Leer -> das
+      # Anlegen einer Registrierung schlaegt fail-closed fehl (KEIN No-op).
+      - key: TELNYX_SIP_TRUNK_USERNAME
+        sync: false
+      - key: TELNYX_SIP_TRUNK_PASSWORD
+        sync: false
       # ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme). Nur aktiv, wenn
       # REF + VOICE_ID gesetzt sind; leer = Azure-Bestand. Erst NACH gruenem
       # Live-Smoke setzen (Plan/tasks/todo.md).
@@ -113,6 +120,11 @@ services:
         sync: false
       - key: ELEVENLABS_AGENT_PHONE_NUMBER_ID
         sync: false
+      # OUTBOUND-E5 (F3): Schalter fuer den EINZIGEN neuen Anbieter-SCHREIBZUGRIFF dieser
+      # Etappe (Anlegen einer EL-Nummernregistrierung je Tenant-DID). Default AUS - erst
+      # NACH Owner-Pilot (V1-V4, docs/RUNBOOK-OUTBOUND.md) auf "true" setzen.
+      - key: ELEVENLABS_NUMBER_REGISTRATION_ENABLED
+        value: "false"
       - key: ELEVENLABS_RESULT_POLL_MS
         value: "5000"
       # ---- Telnyx AI Assistant / Brain-Shim (C-Telnyx, P10) ----

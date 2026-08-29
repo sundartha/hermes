@@ -200,6 +200,11 @@ export const BASE_ENV = {
   // Waechter ohnehin komplett aushaelt - Pin trotzdem, Muster TELNYX_CONNECTION_ID.
   TELNYX_FQDN_CONNECTION_ID: "",
   TELNYX_OUTBOUND_VOICE_PROFILE_ID: "",
+  // OUTBOUND-E5: neutral leer/aus, sonst leakt eine lokale .env in Spawn-Tests (Lehre
+  // test-base-env-drift). Wirkungslos ohne ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true,
+  // Pin trotzdem, Muster TELNYX_FQDN_CONNECTION_ID.
+  TELNYX_SIP_TRUNK_USERNAME: "",
+  TELNYX_SIP_TRUNK_PASSWORD: "",
   TELNYX_ACCOUNT_SID: "",
   // Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT P1) neutral AUS
   // (fail-closed): der Shim antwortet 404, der Live-Pfad ist byte-identisch. Ohne diese
@@ -281,6 +286,11 @@ export const BASE_ENV = {
   ELEVENLABS_OUTBOUND_ENABLED: "false",
   ELEVENLABS_AGENT_ID: "",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "",
+  // OUTBOUND-E5: neutral AUS, sonst leakt eine lokale .env mit
+  // ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true in Spawn-Tests (Lehre
+  // test-base-env-drift) -> die Suite versuchte, echte EL-Nummernregistrierungen
+  // anzulegen. Einzelne Tests setzen sie explizit auf "true".
+  ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "false",
   // Test-Seam AUS wie beim Vorbild FAKE_ORIGINATE - einzelne Tests setzen ihn explizit.
   FAKE_ORIGINATE_ELEVENLABS: "false",
   // Produktionstakt (5000) laesst die Poll-Maschinerie in UNBETEILIGTE Spawn-Tests
@@ -774,6 +784,12 @@ export function storeOpsFacade(state) {
     // aber die Attrappe muss die Methode kennen, sonst wirft der Ergebnisweg einen
     // TypeError.
     recordSipCallId: () => {},
+    // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber - originateCall
+    // (absenderFuerAnruf) und persistProviderResult (recordAbsenderMessung) rufen beide
+    // ueber die ECHTEN Mutatoren, sonst wirft der Anrufstart/Ergebnisweg einen TypeError.
+    recordFromRegistrationSource: (id, quelle) =>
+      stateOps.recordFromRegistrationSource(state, id, quelle),
+    recordActualSender: (id, herkunft) => stateOps.recordActualSender(state, id, herkunft),
     trueUpAnsweredAt: (id, iso) => stateOps.trueUpAnsweredAt(state, id, iso),
     recordAnsweredUnclearReason: (id, grund) => stateOps.recordAnsweredUnclearReason(state, id, grund),
     // OUTBOUND-E2: finishFromConversation UND finishWithoutProviderResult rufen
@@ -897,6 +913,25 @@ export function fakeProvisioner(overrides = {}) {
     },
   };
   return { log, orderCalls, ...base, ...overrides };
+}
+
+// OUTBOUND-E5 (F3, Review-Blocker "Nachbesserung" 6): geteilte Attrappe des EL-SIP-
+// Registrars fuer die Freigabe-Seite (release-reconcile.js#performNumberRelease). War
+// wortgleich in test/absender-registrierung-freigabe.test.js UND
+// test/e5-01-sipregistrar-produktionspfad.test.js dupliziert - beide Tests pinnen dieselbe
+// Zusicherung ("genau EIN Loeschversuch mit der richtigen Kennung"), eine auseinander-
+// laufende Kopie haette das unbemerkt aufgeweicht. removeCalls zeichnet jeden Aufruf auf
+// (Attrappen-Pflicht: pruefen statt stur gruen antworten).
+export function fakeSipRegistrar(overrides = {}) {
+  const removeCalls = [];
+  return {
+    removeCalls,
+    async removeRegistration(phoneNumberId) {
+      removeCalls.push(phoneNumberId);
+      if (overrides.removeRegistration) return overrides.removeRegistration(phoneNumberId);
+      return { accepted: true, status: 200 };
+    },
+  };
 }
 
 // PA-18: fakeTelnyxShimConfig lebt jetzt in config-namespaces-helper.js (das config.js
