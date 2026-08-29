@@ -630,8 +630,9 @@ const rawConfig = {
   // OUTBOUND-E5 (F3): Digest-Zugangsdaten der SIP-Trunk-FQDN-Connection
   // (fqdn_authentication_method: "credential-authentication", gemessen 2026-08-29). Nur
   // gebraucht fuer das ANLEGEN einer ElevenLabs-Nummernregistrierung (outbound_trunk_config.
-  // credentials) - der Anrufstart selbst braucht sie nicht. Leer -> der Registrar wird in
-  // provisioning-orchestrator.js gar nicht erst injiziert (No-op, Bestandsschutz).
+  // credentials) - der Anrufstart selbst braucht sie nicht. Leer -> makeElSipRegistrar
+  // (elevenlabs/nummern-registrierung.js) wirft VOR jedem Netzzugriff, jeder Aufrufer faengt
+  // das als benannten Fehlschlag ab (fail-closed, KEIN No-op - Review-Blocker Runde 1).
   telnyxSipTrunkUsername: (process.env.TELNYX_SIP_TRUNK_USERNAME || "").trim(),
   // SECRET - nie loggen, nie in eine API-/MCP-Antwort, nie in einen Fehlertext.
   telnyxSipTrunkPassword: process.env.TELNYX_SIP_TRUNK_PASSWORD || "",

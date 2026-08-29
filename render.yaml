@@ -74,8 +74,8 @@ services:
       - key: TELNYX_OUTBOUND_VOICE_PROFILE_ID
         sync: false
       # OUTBOUND-E5 (F3): Digest-Zugangsdaten der SIP-Trunk-FQDN-Connection oben, nur
-      # gebraucht fuer ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true (s.u.). Leer -> der
-      # Registrar wird nicht injiziert (No-op).
+      # gebraucht fuer ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true (s.u.). Leer -> das
+      # Anlegen einer Registrierung schlaegt fail-closed fehl (KEIN No-op).
       - key: TELNYX_SIP_TRUNK_USERNAME
         sync: false
       - key: TELNYX_SIP_TRUNK_PASSWORD

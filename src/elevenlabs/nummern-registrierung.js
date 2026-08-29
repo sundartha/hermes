@@ -31,6 +31,22 @@ export function registrierungsKoerper({ e164, numberId, agentId, sipUser, sipPas
   };
 }
 
+// Review-Blocker Runde 1 (Blocker 1/2/G4): die FAIL-CLOSED-Zusage unten war bis hierher nur
+// Kommentar - weder hier noch am Injektions-Gate (provisioning-orchestrator.js) wurden
+// apiKey/agentId/SIP-Zugangsdaten je geprueft. Fehlten sie, registrierte ensureRegistration
+// beim Anbieter mit LEEREN credentials/agent_id - ein echter Schreibzugriff, dessen Ergebnis
+// (falls vom Anbieter angenommen) als funktionierende Registrierung persistiert wurde
+// (attachNumberRegistration ist set-once, der Schaden war danach NICHT mehr reparierbar).
+// Die Pruefung steht bewusst HIER (nicht im Injektions-Gate des Orchestrators): sie deckt
+// JEDEN Aufrufer ab (Orchestrator UND den CLI-Reparaturlauf), nicht nur den einen.
+function fehlendeZugangsdaten({ el, sipUser, sipPasswort }) {
+  if (!el?.apiKey) return "ELEVENLABS_API_KEY fehlt";
+  if (!el?.agentId) return "ELEVENLABS_AGENT_ID fehlt";
+  if (!sipUser) return "TELNYX_SIP_TRUNK_USERNAME fehlt";
+  if (!sipPasswort) return "TELNYX_SIP_TRUNK_PASSWORD fehlt";
+  return null;
+}
+
 // FAIL-CLOSED, NIE STILLES GRUEN: fehlt Schluessel/Agent/SIP-Zugang, wird NICHT "nichts zu
 // tun" gemeldet, sondern geworfen - der Aufrufer zaehlt das als eigenen, benannten
 // Fehlschlag.
@@ -39,6 +55,10 @@ export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = fetch
   // UEBERNOMMEN. Deckt den Fall "angelegt, aber vor dem Persistieren abgestuerzt" ab, ohne
   // sich auf eine Anbieter-Garantie zu stuetzen, die UNBELEGT ist.
   async function ensureRegistration({ e164, numberId }) {
+    // VOR jedem Netzzugriff (auch vor dem GET) - ein Aufruf mit leeren Zugangsdaten liefe
+    // sonst als echter, folgenreicher Anbieter-Schreibzugriff durch.
+    const grund = fehlendeZugangsdaten({ el, sipUser, sipPasswort });
+    if (grund) throw new Error(`ElevenLabs-Nummernregistrierung: ${grund}`);
     const bestand = (await listPhoneNumbers({ fetchImpl, account: el })).find(
       (eintrag) => eintrag.phone_number === e164,
     );

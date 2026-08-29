@@ -387,16 +387,21 @@ function warnMissingProvisioningConnection(config) {
 // ein Boot-Refusal wegen einer fehlenden EL-Nummernregistrierungs-Angabe taeuschte einen
 // Inbound-Totalausfall vor, obwohl NUR das Anlegen neuer Registrierungen betroffen ist
 // (Praezedenz PLATFORM_ANI_E164, E1: ein Outbound-Problem wird nicht gegen einen
-// Inbound-Totalausfall getauscht). Fehlen die SIP-Zugangsdaten, wird der Registrar in
-// provisioning-orchestrator.js ohnehin nicht injiziert (No-op) - diese Zeile macht die
-// Fehlkonfiguration nur SICHTBAR, statt sie stumm folgenlos zu lassen.
+// Inbound-Totalausfall getauscht). Der Registrar WIRD injiziert (der Orchestrator prueft
+// nur PROVISIONING_ENABLED/ELEVENLABS_OUTBOUND_ENABLED/numberRegistrationEnabled, nicht die
+// SIP-Zugangsdaten) - die eigentliche Sicherung sitzt in makeElSipRegistrar#ensureRegistration
+// (Review-Blocker Runde 1: wirft VOR jedem Netzzugriff, faengt jeder Aufrufer als benannten
+// Fehlschlag ab, keine Registrierung mit leeren credentials). Diese Zeile macht die
+// Fehlkonfiguration zusaetzlich schon beim Boot SICHTBAR, statt sie erst beim ersten
+// Nummernkauf als Log-Zeile auffallen zu lassen.
 function warnElRegistrationSipCredsMissing(config) {
   if (!config.voice.elevenLabsOutbound.numberRegistrationEnabled) return;
   if (config.telephony.telnyxSipTrunkUsername && config.telephony.telnyxSipTrunkPassword) return;
   console.warn(
     "[boot] Konfig-Warnung: ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne " +
       "TELNYX_SIP_TRUNK_USERNAME/TELNYX_SIP_TRUNK_PASSWORD - das Anlegen neuer " +
-      "ElevenLabs-Nummernregistrierungen bleibt aus, bestehende DIDs bleiben nutzbar.",
+      "ElevenLabs-Nummernregistrierungen schlaegt fail-closed fehl (benannte Log-Zeile je " +
+      "DID), bestehende DIDs bleiben nutzbar.",
   );
 }
 

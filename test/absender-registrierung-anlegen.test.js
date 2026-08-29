@@ -151,3 +151,45 @@ test("C6: das SIP-Passwort erscheint in keiner Log-/Warn-Zeile", async () => {
   await provisionNumber(state, { provisioner: prov, sipRegistrar, logger }, { numberId, ...ARGS });
   for (const zeile of [...logs, ...warns]) assert.ok(!zeile.includes(SIP_PASSWORT), `Passwort-Leak: ${zeile}`);
 });
+
+// Review-Blocker Runde 1 (Blocker 1/2/G4): FEHLENDE SIP-Zugangsdaten duerfen NIE zu einem
+// echten Anbieter-Aufruf mit leeren credentials fuehren. C7/C8 pruefen makeElSipRegistrar
+// direkt (0 Netzzugriffe VOR dem Wurf, Blocker-Vermeidungsliste 3: die Attrappe zaehlt ihre
+// eigenen Aufrufe, statt stur "ok" zu behaupten). C9 ist die Positiv-Kontrolle (Vermeidungs-
+// liste 2): derselbe Aufbau mit vollstaendigen Zugangsdaten bleibt unveraendert C1-gruen.
+test("C7: leere SIP-Zugangsdaten -> ensureRegistration wirft VOR jedem Netzzugriff, 0 Anbieter-Aufrufe", async () => {
+  const { fetchImpl, calls } = fetchAttrappe({ listResponse: [] });
+  const registrar = makeElSipRegistrar({ el: EL_ACCOUNT, sipUser: "", sipPasswort: "", fetchImpl });
+  await assert.rejects(
+    () => registrar.ensureRegistration({ e164: TEST_DID, numberId: "num_test7" }),
+    /TELNYX_SIP_TRUNK_USERNAME fehlt/,
+  );
+  assert.equal(calls.length, 0, "kein einziger Anbieter-Aufruf, auch kein GET");
+});
+
+// C8: derselbe Fall, aber ueber den Produktionspfad (provisionNumber) - fail-soft
+// abgefangen, benannte Warn-Zeile, DID bleibt active, Feld bleibt leer (kein SET-ONCE mit
+// einer kaputten Kennung, kein stiller Rueckfall auf quelle=tenant_did).
+test("C8: leere SIP-Zugangsdaten ueber provisionNumber -> DID bleibt active, Feld bleibt leer, benannte Warn-Zeile, 0 Anbieter-Aufrufe", async () => {
+  const { state, numberId } = seedRequested();
+  const { fetchImpl, calls } = fetchAttrappe({ listResponse: [] });
+  const sipRegistrar = makeElSipRegistrar({ el: EL_ACCOUNT, sipUser: "", sipPasswort: "", fetchImpl });
+  const { logger, warns } = captureLogger();
+  const prov = fakeProvisioner();
+  const result = await provisionNumber(state, { provisioner: prov, sipRegistrar, logger }, { numberId, ...ARGS });
+  assert.equal(result.status, NUMBER_STATUS.ACTIVE);
+  assert.equal(calls.length, 0, "kein einziger Anbieter-Aufruf");
+  assert.equal(findNumber(state, numberId).providerAgentPhoneNumberId, undefined);
+  assert.equal(warns.length, 1, "genau eine benannte Warn-Zeile");
+  assert.match(warns[0], /FEHLGESCHLAGEN/);
+});
+
+// C9 (Positiv-Kontrolle, Vermeidungsliste 2): vollstaendige Zugangsdaten -> unveraendert
+// C1-Verhalten, kein Kollateralschaden durch die neue Pruefung.
+test("C9 (Positiv-Kontrolle): vollstaendige Zugangsdaten -> genau 1 POST wie zuvor", async () => {
+  const { fetchImpl, calls } = fetchAttrappe({ listResponse: [] });
+  const registrar = makeElSipRegistrar({ el: EL_ACCOUNT, sipUser: SIP_USER, sipPasswort: SIP_PASSWORT, fetchImpl });
+  const ergebnis = await registrar.ensureRegistration({ e164: TEST_DID, numberId: "num_test9" });
+  assert.deepEqual(ergebnis, { phoneNumberId: "phnum_new", angelegt: true });
+  assert.equal(calls.filter((eintrag) => eintrag.method === "POST").length, 1);
+});

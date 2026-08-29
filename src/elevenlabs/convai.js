@@ -243,15 +243,32 @@ export function fetchConversation({ fetchImpl, account, conversationId, timeoutM
   });
 }
 
+// Review-Blocker Runde 1 (G5): endConversation und deletePhoneNumber waren zwei
+// wortgleiche fail-soft-DELETEs (identischer try/fetchImpl/Header/Timeout/Ergebnis-Ausdruck/
+// catch) - jede kuenftige Aenderung (Header, Timeout-Semantik, Fehlerbehandlung) haette an
+// BEIDEN Stellen erfolgen muessen. EIN gemeinsamer Kern, der Aufrufer liefert nur den Pfad.
+// Wirft NIE (Owner-Auftrag 15.08.2026): weder bei einer Anbieter-Ablehnung (4xx/5xx, kein
+// assertConvaiOk) noch bei Netzwerk-/Zeitablauf-Fehlern. Ein fehlgeschlagener Loeschversuch
+// darf den Abbruch unseres eigenen Datensatzes nicht verhindern - ein Werkzeug, das an einem
+// Anbieter-Ausfall haengen bleibt, waere schlimmer als keins. Meldet NUR, ob der Anbieter den
+// Versuch angenommen hat (HTTP-Status) - der Fehler-RUMPF wird NIE gelesen (Regel 4/5).
+async function fireAndForgetDelete({ fetchImpl, account, path, timeoutMs }) {
+  try {
+    const res = await fetchImpl(`${account.apiBase}${path}`, {
+      method: "DELETE",
+      headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return { accepted: res.ok, status: res.status };
+  } catch {
+    return { accepted: false, status: null };
+  }
+}
+
 /**
  * Beende-Versuch beim Anbieter (DELETE /v1/convai/conversations/{id}): Kap-/cancel_call-
- * Pfad (telephony/call-termination.js#elevenLabsHangUpAction). FAIL-SOFT ANDERS ALS DIE
- * BEIDEN FUNKTIONEN OBEN (Owner-Auftrag 15.08.2026): sie wirft NIE - weder bei einer
- * Anbieter-Ablehnung (4xx/5xx, kein assertConvaiOk) noch bei Netzwerk-/Zeitablauf-Fehlern.
- * Ein fehlgeschlagener Loeschversuch darf den Abbruch unseres eigenen Datensatzes nicht
- * verhindern - ein Werkzeug, das an einem Anbieter-Ausfall haengen bleibt, waere schlimmer
- * als keins. Meldet NUR, ob der Anbieter den Versuch angenommen hat (HTTP-Status) - der
- * Fehler-RUMPF wird wie bei den beiden Funktionen oben NIE gelesen (Regel 4/5).
+ * Pfad (telephony/call-termination.js#elevenLabsHangUpAction). FAIL-SOFT (s.
+ * fireAndForgetDelete oben).
  *
  * OB das die Leitung tatsaechlich kappt, ist NICHT belegt (s. Modul-Kopf des Aufrufers,
  * elevenlabs/outbound.js) - diese Funktion beantwortet nur "hat der Anbieter den DELETE-
@@ -265,25 +282,13 @@ export function fetchConversation({ fetchImpl, account, conversationId, timeoutM
  * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, conversationId: string, timeoutMs?: number}} args
  * @returns {Promise<{accepted: boolean, status: number|null}>}
  */
-export async function endConversation({
-  fetchImpl,
-  account,
-  conversationId,
-  timeoutMs = REQUEST_TIMEOUT_MS,
-}) {
-  try {
-    const res = await fetchImpl(
-      `${account.apiBase}${CONVERSATION_PATH}${encodeURIComponent(conversationId)}`,
-      {
-        method: "DELETE",
-        headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
-        signal: AbortSignal.timeout(timeoutMs),
-      },
-    );
-    return { accepted: res.ok, status: res.status };
-  } catch {
-    return { accepted: false, status: null };
-  }
+export function endConversation({ fetchImpl, account, conversationId, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  return fireAndForgetDelete({
+    fetchImpl,
+    account,
+    path: CONVERSATION_PATH + encodeURIComponent(conversationId),
+    timeoutMs,
+  });
 }
 
 /**
@@ -347,28 +352,17 @@ export async function createPhoneNumber({ fetchImpl, account, body }) {
 
 /**
  * OUTBOUND-E5: SCHREIBZUGRIFF - Loeschversuch einer Registrierung (Freigabe-Protokoll).
- * FAIL-SOFT wie endConversation: wirft NIE. Eine haengende Anbieter-API darf eine
- * Kuendigung/Art.-17-Loeschung nicht blockieren. Meldet nur {accepted, status}.
+ * FAIL-SOFT wie endConversation (s. fireAndForgetDelete oben): wirft NIE. Eine haengende
+ * Anbieter-API darf eine Kuendigung/Art.-17-Loeschung nicht blockieren. Meldet nur
+ * {accepted, status}.
  * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, phoneNumberId: string, timeoutMs?: number}} args
  * @returns {Promise<{accepted: boolean, status: number|null}>}
  */
-export async function deletePhoneNumber({
-  fetchImpl,
-  account,
-  phoneNumberId,
-  timeoutMs = REQUEST_TIMEOUT_MS,
-}) {
-  try {
-    const res = await fetchImpl(
-      `${account.apiBase}${PHONE_NUMBER_PATH}${encodeURIComponent(phoneNumberId)}`,
-      {
-        method: "DELETE",
-        headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
-        signal: AbortSignal.timeout(timeoutMs),
-      },
-    );
-    return { accepted: res.ok, status: res.status };
-  } catch {
-    return { accepted: false, status: null };
-  }
+export function deletePhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  return fireAndForgetDelete({
+    fetchImpl,
+    account,
+    path: PHONE_NUMBER_PATH + encodeURIComponent(phoneNumberId),
+    timeoutMs,
+  });
 }

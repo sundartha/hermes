@@ -22,6 +22,7 @@ import { config } from "../src/config.js";
 import { PROVIDER, NUMBER_STATUS } from "../src/store/defaults.js";
 import { makeElSipRegistrar } from "../src/elevenlabs/nummern-registrierung.js";
 import { listPhoneNumbers } from "../src/elevenlabs/convai.js";
+import { attachNumberRegistration } from "../src/store/state-ops.js";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -99,9 +100,18 @@ async function pruefen({ state, el, nurNumberId }) {
 // --anlegen: der EINZIGE Schreibzugriff. NUR fuer DIDs ohne Kennung (Schloss #1 sitzt
 // bereits in registrierungFehlt/ensureRegistration selbst); seriell, je Nummer eine
 // Log-Zeile, kein Abbruch der Schleife bei einem einzelnen Fehlschlag (Muster
-// registriereNummerFailSoft in onboarding.js).
-async function anlegen({ state, saveState, el, sipUser, sipPasswort, nurNumberId }) {
-  const registrar = makeElSipRegistrar({ el, sipUser, sipPasswort });
+// registriereNummerFailSoft in onboarding.js). saveState wird AWAITED (Review-Blocker
+// Runde 1, G26): auf STORE_BACKEND=pg (die dokumentierte Betriebsvoraussetzung dieses
+// Skripts) ist save() asynchron - ein nicht awaiteter Aufruf liesse die kostenpflichtig
+// angelegte Registrierung nie in der DB landen, waehrend das Skript trotzdem "angelegt"
+// meldet (stilles Gruen genau im Datenverlust-Fall). attachNumberRegistration statt
+// Direktzuweisung (G5): derselbe set-once-Mutator wie im Produktionspfad
+// (onboarding.js#registriereNummerFailSoft), EINE Stelle schreibt das Feld.
+// fetchImpl optional (Default global fetch, wie makeElSipRegistrar selbst) - IO-injiziert,
+// damit anlegen() sich direkt gegen eine lokale Attrappe testen laesst (Muster
+// nummern-registrierung.js), ohne den CLI-Entry (runCli/dynamic store-import) mitzuziehen.
+export async function anlegen({ state, saveState, el, sipUser, sipPasswort, nurNumberId, fetchImpl }) {
+  const registrar = makeElSipRegistrar({ el, sipUser, sipPasswort, ...(fetchImpl ? { fetchImpl } : {}) });
   const kandidaten = aktiveTelnyxNummern(state, nurNumberId).filter(
     (number) => !number.providerAgentPhoneNumberId,
   );
@@ -112,8 +122,8 @@ async function anlegen({ state, saveState, el, sipUser, sipPasswort, nurNumberId
         e164: number.e164,
         numberId: number.id,
       });
-      number.providerAgentPhoneNumberId = phoneNumberId;
-      saveState();
+      attachNumberRegistration(state, number.id, phoneNumberId);
+      await saveState();
       console.log(`${LOG_PREFIX} number=${number.id} angelegt=${angelegt}`);
     } catch (err) {
       fehlgeschlagen++;
@@ -158,7 +168,9 @@ async function runCli(argv) {
   if (modus.anlegen)
     return anlegen({
       state,
-      saveState: () => store.save(),
+      saveState: async () => {
+        await store.save();
+      },
       el,
       sipUser: config.telephony.telnyxSipTrunkUsername,
       sipPasswort: config.telephony.telnyxSipTrunkPassword,

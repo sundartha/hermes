@@ -3421,6 +3421,15 @@ provisioning-orchestrator.js#runProvisioningDrain`):
 API-/MCP-Antwort, nie in einem Fehlertext (Regel 4) — per Test gepinnt
 (`test/absender-registrierung-anlegen.test.js` C6).
 
+**Fail-closed bei fehlenden Zugangsdaten (Review-Blocker Runde 1, Blocker 1/2/G4):** das
+Dreifach-Gate im Orchestrator prueft NUR PROVISIONING_ENABLED/ELEVENLABS_OUTBOUND_ENABLED/
+ELEVENLABS_NUMBER_REGISTRATION_ENABLED — nicht ob apiKey/agentId/SIP-Zugangsdaten gesetzt
+sind. Die Pruefung sitzt deshalb in `makeElSipRegistrar#ensureRegistration`
+(`elevenlabs/nummern-registrierung.js`) selbst und wirft VOR jedem Netzzugriff, wenn
+ELEVENLABS_API_KEY, der Agent oder TELNYX_SIP_TRUNK_USERNAME/-PASSWORD fehlen. Damit greift
+sie fuer JEDEN Aufrufer (Orchestrator wie den CLI-Reparaturlauf), nicht nur einen — und es
+entsteht KEINE Registrierung mit leeren `credentials`/`agent_id`.
+
 **Idempotent, fehlertolerant:** zwei eigene Schloesser statt einer unbelegten
 Anbieter-Garantie — Schloss 1 (Zustand): eine Nummer mit bereits gesetzter Kennung loest
 keinen Anbieter-Aufruf aus. Schloss 2 (Wiederanlauf): existiert die e164 bereits beim
@@ -3429,12 +3438,20 @@ Anbieter (GET-Liste), wird ihre Kennung uebernommen statt neu angelegt. Ein Fehl
 nutzbar (faellt LAUT auf die globale Rueckfall-Registrierung zurueck), die Registrierung
 wird ueber den Reparaturlauf nachholbar (`npm run elevenlabs:nummern`).
 
-**Bewusst getragenes Waisen-Risiko:** beim Zurueckgeben einer DID (Freigabe/Kuendigung/
-Art.-17-Loeschung) wird auch der EL-Loeschversuch (`DELETE /v1/convai/phone-numbers/{id}`)
-ausgeloest — STRIKT FAIL-SOFT, ohne Abbruchpfad: eine haengende ElevenLabs-API darf eine
-Kuendigung/Art.-17-Loeschung nicht blockieren. Schlaegt der Loeschversuch fehl, bleibt die
-Registrierung als Waise beim Anbieter stehen — sie ist NICHT unsichtbar, der Reparaturlauf
-listet sie im Pruefmodus (`npm run elevenlabs:nummern -- --pruefen`).
+**Waisen-Risiko, NOCH NICHT verdrahtet (Review-Blocker Runde 1, G9 — Korrektur einer
+frueheren Fassung dieses Abschnitts):** `release-reconcile.js#performNumberRelease` nimmt
+einen `sipRegistrar`-Parameter entgegen und loest bei gesetzter Kennung fail-soft einen
+EL-Loeschversuch (`DELETE /v1/convai/phone-numbers/{id}`) aus — aber KEIN Produktions-
+Aufrufer uebergibt ihn (`wiring/web-login.js#scheduleReleaseReconcile` und
+`billing/contract-end-cleanup.js#attemptContractEndCleanup` reichen ihn nicht durch). Eine
+fruehere Fassung dieses Abschnitts behauptete, der Loeschversuch werde "auch ausgeloest" —
+das war falsch und wurde hier korrigiert (Doku-an-Code-Pflicht, E4-Lehre 2). Bis die
+Verdrahtung nachgezogen ist, hinterlaesst JEDE Freigabe einer DID mit
+ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true eine Waise beim Anbieter — auffindbar NUR ueber
+den manuellen Pruefmodus (`npm run elevenlabs:nummern -- --pruefen`), nie automatisch
+aufgeraeumt. Nachzugstask: den Registrar hinter demselben Dreifach-Gate wie der Orchestrator
+an beiden Aufrufern injizieren, mit einem Test, der den Loeschversuch UEBER den
+Produktionsaufrufer belegt.
 
 **Was NICHT in diesem Merge ausgefuehrt wurde:** kein einziger echter Anbieter-Schreibzugriff
 (Tests laufen ausschliesslich gegen lokale Attrappen). Der Telnyx-ANI-Override
