@@ -794,3 +794,43 @@ Datei, filtern erst beim Lesen.
    beide nur die Zieldatei linteten. Regel ab jetzt in jedem Impl-/Fix-/Review-Prompt:
    volles `npm run lint` (eslint .) MUSS 0 Fehler melden; Suppression-Eintraege nur
    fuer Dateien im eigenen Diff anfassen.
+
+## 2026-08-29 Der teuerste Fehler der Kette: Beweispflichten ohne Kostensignal
+
+Der Owner hat den Verbrauch beanstandet. Nachgemessen (`scripts/workflow-kosten.mjs`,
+an diesem Tag gebaut): **12.757 Mio Token ueber 118 Laeufe** in diesem Projekt; ein
+einzelner Implementierungs-Agent 447 Mio in 955 Turns.
+
+**5x Warum:**
+
+1. Warum kostete ein Agent 447 Mio? Kosten = Kontext x Turns. 955 Turns bei ~467k
+   Kontext; 99,7 % war Wiederlesen, sein Produkt waren 48k Output.
+2. Warum wurde der Kontext so gross? Das Skript forderte zwoelfmal "Kommando + Ausgabe
+   **woertlich**", und jeder Agent sollte die volle Suite (5.400 Tests, >11.000 Zeilen)
+   selbst fahren, plus Sabotage-Gegenproben mit je einem weiteren Lauf.
+3. Warum forderte es das? Weil jede Etappe im Review echte Defekte fand, die Tests nicht
+   fingen. Die Antwort war jedes Mal eine weitere Beweispflicht: 6 -> 9 -> 6 -> 7 -> 10
+   -> 12 ueber E1..E5. Jede Ergaenzung war fuer sich richtig. Keine wurde je zurueckgenommen.
+4. Warum fiel das Wachstum niemandem auf? Weil `subagent_tokens` die Cache-Reads nicht
+   zaehlt und dadurch 3 Mio meldete fuer einen Lauf, der 861 Mio kostete.
+5. Warum gab es kein anderes Signal? Weil die echte Zahl zwar in den Transkripten steht,
+   aber **nichts sie je gelesen hat**. Die Uebergabe schrieb "rund 15,5 Mio" fuer eine
+   Kette, die 3.060 Mio kostete - Faktor 197 - und die naechste Sitzung glaubte es.
+
+**Wurzel:** ein selbstverstaerkender Kreis ohne Gegenkraft. Beweispflichten wachsen
+monoton (jede durch einen echten Defekt gerechtfertigt), das einzige sichtbare
+Kostensignal zeigt um Faktor ~200 zu niedrig. Nichts drueckt dagegen.
+
+**Behoben:**
+
+1. `scripts/workflow-kosten.mjs` misst die Wahrheit aus den Transkripten (mit
+   Positiv-Kontrolle: findet es nichts, bricht es LAUT ab statt eine leere, beruhigende
+   Bilanz zu melden - dieser Riegel hat beim ersten Lauf sofort einen echten Fehler
+   gefangen, die Pfadkodierung von Leerzeichen).
+2. `.claude/refs/workflow.md` Abschnitt 2a: keine woertlichen Ausgaben, volle Suite genau
+   einmal vom Lead, Agenten unter ~150 Turns halten, nach jedem Lauf messen.
+
+**Die verallgemeinerbare Lehre:** eine Qualitaetsmassnahme, die nur hinzugefuegt und nie
+zurueckgenommen wird, ist eine Ratsche - und eine Ratsche ohne Kostenmessung laeuft
+zwangslaeufig aus dem Ruder. Wer eine Beweispflicht ergaenzt, nennt ihren Preis, oder
+nimmt eine andere weg.

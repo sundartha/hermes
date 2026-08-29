@@ -11,8 +11,49 @@
 
 - Use subagents (Task tool) liberally to keep main context window clean
 - Offload research, exploration, and parallel analysis to subagents
-- For complex problems, throw more compute at it via subagents
+- For complex problems, throw more compute at it via subagents — **aber siehe 2a: "mehr Rechenzeit" ist nicht gratis, und die Rechnung ist quadratisch**
 - One tack per subagent for focused execution
+
+### 2a. Was Subagenten kosten (Pflicht, nicht optional)
+
+**Die Kostenformel ist `Kontextgroesse x Turns`.** Nicht die Menge produzierten Codes. Jede
+Ausgabe, die einmal im Kontext eines Agenten liegt, wird bei JEDEM weiteren Turn erneut gelesen
+und erneut bezahlt. Ein Agent, der doppelt so lange arbeitet mit doppelt so viel Kontext, kostet
+das Vierfache.
+
+Am 29.08.2026 gemessen, nachdem die Outbound-Kette entgleist war:
+
+| | |
+|---|---|
+| ein einzelner Implementierungs-Agent | **447 Mio Token**, 955 Turns, ~467k Durchschnittskontext |
+| davon Cache-Reads (reines Wiederlesen) | **99,7 %** — sein Produkt waren 48k Output |
+| die Etappe E5 gesamt (19 Agenten) | 861 Mio |
+| alle 118 Laeufe dieses Projekts | **12.757 Mio** |
+
+**Die drei Regeln, die daraus folgen:**
+
+1. **NIE woertliche Kommando-Ausgaben verlangen.** Kein "Kommando + Ausgabe woertlich". Ein
+   Testlauf produziert >11.000 Zeilen; die liegen danach fuer immer im Kontext. Als Beleg
+   genuegen Exit-Code und die Zeilen `# pass` / `# fail`. Das war der groesste Einzeltreiber:
+   die per-run-Skripte steigerten sich ueber E1..E5 von 6 auf 12 solcher Forderungen.
+2. **Die volle Suite laeuft EINMAL, am Ende, vom Lead** — nicht in jedem Agenten und nicht
+   nochmal "SELBST" von jedem Reviewer. Waehrend der Arbeit laufen gezielte Testdateien.
+3. **Agenten kurz halten.** Ab ~150 Turns ist ein Agent im teuren Bereich. Viele kleine mit
+   frischem Kontext schlagen einen langen — die Kosten wachsen quadratisch mit der Lebensdauer.
+
+**Nach JEDEM Workflow-Lauf die echten Kosten messen:**
+
+```
+node scripts/workflow-kosten.mjs            # juengste Laeufe
+node scripts/workflow-kosten.mjs <lauf-id>  # je Agent, mit Turn-Warnung
+```
+
+**Die vom Workflow-Werkzeug gemeldete Zahl `subagent_tokens` ist als Kostenanzeige UNBRAUCHBAR** —
+sie laesst die Cache-Reads weg und zeigt dadurch um Faktor ~200 zu wenig (gemeldet 3 Mio fuer
+einen Lauf, der 861 Mio kostete). Genau daran ist es ein Monat lang niemandem aufgefallen: jede
+Sitzung las die beruhigende Zahl und schrieb sie in die Uebergabe fuer die naechste. Eine
+Kostenangabe, die nicht aus `workflow-kosten.mjs` stammt, ist nicht zu glauben und nicht
+weiterzureichen.
 
 ### 3. Self-Improvement Loop
 
