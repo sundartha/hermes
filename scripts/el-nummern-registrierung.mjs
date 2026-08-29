@@ -20,7 +20,7 @@
 // erst nach einem (moeglicherweise scheiternden) DB-Verbindungsaufbau auffallen.
 import { config } from "../src/config.js";
 import { PROVIDER, NUMBER_STATUS } from "../src/store/defaults.js";
-import { makeElSipRegistrar } from "../src/elevenlabs/nummern-registrierung.js";
+import { makeElSipRegistrar, fehlendeZugangsdaten } from "../src/elevenlabs/nummern-registrierung.js";
 import { listPhoneNumbers } from "../src/elevenlabs/convai.js";
 import { attachNumberRegistration } from "../src/store/state-ops.js";
 import { resolve } from "node:path";
@@ -33,12 +33,6 @@ const CLI_ARGS_OFFSET = 2;
 
 function schluesselFehlt() {
   if (!config.voice.elevenLabsOutbound.apiKey) return "ELEVENLABS_API_KEY fehlt.";
-  return null;
-}
-
-function sipZugangFehlt() {
-  if (!config.telephony.telnyxSipTrunkUsername || !config.telephony.telnyxSipTrunkPassword)
-    return "TELNYX_SIP_TRUNK_USERNAME/TELNYX_SIP_TRUNK_PASSWORD fehlen.";
   return null;
 }
 
@@ -61,18 +55,31 @@ function aktiveTelnyxNummern(state, nurNumberId) {
   );
 }
 
-// Waisen: Registrierungen beim Anbieter, deren phone_number KEINER aktiven DID gehoert.
-// Reine Menge-Differenz - kein zweiter Netzzugriff (dieselbe Liste beantwortet beides).
-function waisen(providerListe, aktiveNummern) {
-  const aktiveE164 = new Set(aktiveNummern.map((number) => number.e164));
-  return providerListe.filter((eintrag) => !aktiveE164.has(eintrag.phone_number));
+// Waisen: Registrierungen beim Anbieter, deren phone_number KEINER aktiven DID gehoert
+// UND die nicht die globale Rueckfall-Registrierung (el.agentPhoneNumberId) sind - die
+// ist Betriebszustand (Bestandsschutz fuer Tenants ohne eigene Registrierung, s. Runbook
+// V4), kein Muell. Reine Menge-Differenz - kein zweiter Netzzugriff (dieselbe Liste
+// beantwortet beides).
+//
+// REVIEW-BLOCKER RUNDE 2 (RUNBOOK V3): waisen() bekommt IMMER ALLE aktiven DIDs, nicht die
+// --nur-gefilterte Auswahl - sonst meldet der Pilot-Pruefmodus (--nur=<numberId>) die
+// Registrierungen aller UEBRIGEN Tenants faelschlich als Waisen (die Menge-Differenz sah
+// nur die eine gewaehlte DID als "aktiv").
+function waisen(providerListe, alleAktivenNummern, rueckfallId) {
+  const aktiveE164 = new Set(alleAktivenNummern.map((number) => number.e164));
+  return providerListe.filter(
+    (eintrag) => !aktiveE164.has(eintrag.phone_number) && eintrag.phone_number_id !== rueckfallId,
+  );
 }
 
-// --pruefen: NUR-LESEND. Meldet je aktiver DID, ob Store-Kennung UND Anbieter-Datensatz
-// uebereinstimmen, plus die Waisen-Liste. PII-arm: nur interne IDs und die letzten vier
-// Ziffern haetten ohnehin keinen Mehrwert - hier wird gar keine Rufnummer geloggt.
-async function pruefen({ state, el, nurNumberId }) {
+// --pruefen: NUR-LESEND. Meldet je aktiver (ggf. --nur-gefilterter) DID, ob Store-Kennung
+// UND Anbieter-Datensatz uebereinstimmen, plus die Waisen-Liste (IMMER ueber ALLE aktiven
+// DIDs gebildet, s. waisen() oben - --nur filtert nur die Fortschritts-Zeilen je DID, nicht
+// die Waisen-Pruefung). PII-arm: nur interne IDs und die letzten vier Ziffern haetten
+// ohnehin keinen Mehrwert - hier wird gar keine Rufnummer geloggt.
+export async function pruefen({ state, el, nurNumberId }) {
   const aktiveNummern = aktiveTelnyxNummern(state, nurNumberId);
+  const alleAktivenNummern = nurNumberId ? aktiveTelnyxNummern(state, null) : aktiveNummern;
   const providerListe = await listPhoneNumbers({ fetchImpl: fetch, account: el });
   const providerByE164 = new Map(providerListe.map((eintrag) => [eintrag.phone_number, eintrag]));
   let ohneRegistrierung = 0;
@@ -87,7 +94,7 @@ async function pruefen({ state, el, nurNumberId }) {
       console.error(`${LOG_PREFIX} number=${number.id} Registrierung WEICHT AB oder fehlt beim Anbieter`);
     }
   }
-  const waisenListe = waisen(providerListe, aktiveNummern);
+  const waisenListe = waisen(providerListe, alleAktivenNummern, el.agentPhoneNumberId);
   for (const eintrag of waisenListe)
     console.error(`${LOG_PREFIX} WAISE beim Anbieter: phone_number_id=${eintrag.phone_number_id}`);
   console.log(
@@ -149,21 +156,35 @@ async function runCli(argv) {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): ELEVENLABS_NUMBER_REGISTRATION_ENABLED ist nicht "true".`);
     return 1;
   }
-  const grundSip = modus.anlegen ? sipZugangFehlt() : null;
-  if (grundSip) {
-    console.error(`${LOG_PREFIX} Fehler (fail-closed): ${grundSip}`);
+  // E5-03 (G5-Fix, Review Runde 2): EINE Quelle fuer "welche Zugangsdaten sind fuer eine
+  // Registrierung Pflicht?" - fehlendeZugangsdaten aus nummern-registrierung.js, dieselbe
+  // Pruefung, die ensureRegistration ohnehin je Nummer durchsetzt. Vorher pruefte das
+  // Skript hier eine eigene, kuerzere Liste (nur SIP-Zugang, OHNE agentId) - bei fehlender
+  // ELEVENLABS_AGENT_ID meldete runCli faelschlich "alles gut" und baute die DB-Verbindung
+  // erst auf, um dann je Nummer in den Wurf zu laufen.
+  const el = config.voice.elevenLabsOutbound;
+  const sipUser = config.telephony.telnyxSipTrunkUsername;
+  const sipPasswort = config.telephony.telnyxSipTrunkPassword;
+  const grundZugang = modus.anlegen ? fehlendeZugangsdaten({ el, sipUser, sipPasswort }) : null;
+  if (grundZugang) {
+    console.error(`${LOG_PREFIX} Fehler (fail-closed): ${grundZugang}`);
     return 1;
   }
   // Store-Import HINTER allen Konfig-Checks (s. Modul-Kopf) - dynamic import, kein
   // DB-Verbindungsaufbau, bevor die billigeren Pruefungen oben durchgelaufen sind.
+  // store.js exportiert die Fassade als BENANNTE Einzelfunktionen (kein "store"-Objekt,
+  // Muster server.js/claude.js/scripts/check-setup.js: "import * as store"). Der bisherige
+  // Destrukturierungs-Import `({ store } = ...)` griff auf ein nicht existierendes Feld -
+  // store blieb undefined, jeder Aufruf (--pruefen UND --anlegen) crashte fail-closed
+  // erst spaeter mit "Cannot read properties of undefined (reading 'load')". Gefunden durch
+  // den CLI-Spawn-Test dieser Runde (E5-01) - der komplette Einstieg war zuvor ungetestet.
   let store;
   try {
-    ({ store } = await import("../src/store.js"));
+    store = await import("../src/store.js");
   } catch (err) {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): Store nicht erreichbar: ${err.message}`);
     return 1;
   }
-  const el = config.voice.elevenLabsOutbound;
   const state = store.load();
   if (modus.anlegen)
     return anlegen({
@@ -172,8 +193,8 @@ async function runCli(argv) {
         await store.save();
       },
       el,
-      sipUser: config.telephony.telnyxSipTrunkUsername,
-      sipPasswort: config.telephony.telnyxSipTrunkPassword,
+      sipUser,
+      sipPasswort,
       nurNumberId: modus.nur,
     });
   return pruefen({ state, el, nurNumberId: modus.nur });

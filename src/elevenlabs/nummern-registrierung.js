@@ -39,7 +39,7 @@ export function registrierungsKoerper({ e164, numberId, agentId, sipUser, sipPas
 // (attachNumberRegistration ist set-once, der Schaden war danach NICHT mehr reparierbar).
 // Die Pruefung steht bewusst HIER (nicht im Injektions-Gate des Orchestrators): sie deckt
 // JEDEN Aufrufer ab (Orchestrator UND den CLI-Reparaturlauf), nicht nur den einen.
-function fehlendeZugangsdaten({ el, sipUser, sipPasswort }) {
+export function fehlendeZugangsdaten({ el, sipUser, sipPasswort }) {
   if (!el?.apiKey) return "ELEVENLABS_API_KEY fehlt";
   if (!el?.agentId) return "ELEVENLABS_AGENT_ID fehlt";
   if (!sipUser) return "TELNYX_SIP_TRUNK_USERNAME fehlt";
