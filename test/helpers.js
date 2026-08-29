@@ -1298,7 +1298,15 @@ export async function startServer({
   // kein Seed-Overwrite; die auf Platte persistierte Owner-Nummer traegt den Boot-Guard.
   const dataDir =
     reuseDataDir || tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
-  const child = spawn(process.execPath, ["src/server.js"], {
+  // NICHT "src/server.js" direkt: der Wrapper installiert einen Eltern-Waechter und startet dann
+  // den unveraenderten Server. stop() unten raeumt zuverlaessig auf, aber nur auf dem GUTEN Pfad -
+  // stirbt der Testrunner abnormal (Sitzungslimit, gestoppter Workflow, pkill), ueberlebt sein
+  // Serverkind und wird an launchd durchgereicht. Am 29.08.2026 liefen so 19 verwaiste Server
+  // gleichzeitig, drei ueber einen Tag; die Last daraus laesst fremde Tests am
+  // STARTUP_TIMEOUT_MS scheitern. Begruendung und Messung: test/helpers/server-mit-
+  // elternwaechter.mjs. startServerExpectExit behaelt bewusst den direkten Einstieg: die dortigen
+  // Server sind auf 8 s befristet und ihre Ausgabe wird byte-genau geprueft.
+  const child = spawn(process.execPath, ["test/helpers/server-mit-elternwaechter.mjs"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
     stdio: ["ignore", "pipe", "pipe"],
