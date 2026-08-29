@@ -33,6 +33,10 @@ function defaultStore(overrides = {}) {
     tryReserveOutboundBudget: () => true,
     reserveExceedsBudget: () => false,
     withStoreLock: (fn) => fn(),
+    // OUTBOUND-E4: das ani_ownership-Gate liest store.load().outageAlerts - leer heisst
+    // "keine Messung", das Gate bleibt dann ohnehin aus (outboundAniGateEnabled default
+    // false in defaultConfig unten).
+    load: () => ({ outageAlerts: [] }),
     // Budget-Achsen P6 (Fruehwarnung): der Fake soll die reale Kontraktflaeche spiegeln
     // statt sich auf das Schlucken eines TypeError zu verlassen. null = keine Warnung
     // faellig (diese Datei prueft Ablehnungstexte, nicht die Warnung).
@@ -53,6 +57,7 @@ function makeDeps(o = {}) {
     internalIdentity: () => null,
     OWNER_ID: "owner",
     TENANT_REJECT: "reject",
+    ...(o.aniOwnershipRecheck ? { aniOwnershipRecheck: o.aniOwnershipRecheck } : {}),
   };
 }
 
@@ -169,6 +174,44 @@ test("reserve_budget-Gate, D7 unbuchbarer Bucket: ziffernfreier Sperrtext, grund
   assert.ok(!/\d/.test(denial.body.error), "kein 'NaN EUR' auf einer Geld-Kante");
   assert.ok(!DURATION_LEAK.test(denial.body.error));
   assert.equal(denial.audit.detail, `to=${VALID_TO} grund=reserve_erschoepft tenant=T requestedBy=owner`);
+});
+
+// ==== ani_ownership-Gate (OUTBOUND-E4) ============================================
+// Muster der beiden Gates oben: der neue Grund ani_not_owned muss diagnostizierbar
+// (eigenes Token, kein generischer Fehler) UND PII-frei sein (keine Rufnummer im Text).
+
+const EINE_MINUTE_MS = 60000;
+const HTTP_SERVICE_UNAVAILABLE = 503;
+const FRISCHE_MS = "2026-08-27T16:45:00.000Z";
+const NOW_MS = Date.parse(FRISCHE_MS) + EINE_MINUTE_MS; // 1 min spaeter, klar innerhalb jeder Frist
+
+test("ani_ownership-Gate: frische Messung + Nachmessung bestaetigt -> 503, grund=ani_not_owned, PII-frei", async () => {
+  const { gates } = makeOutboundGates(
+    makeDeps({
+      config: { outboundAniGateEnabled: true, outboundAniGateMaxAgeMs: 900000 },
+      store: {
+        load: () => ({ outageAlerts: [{ code: "drift:ownership_lost", closedAt: null, lastSeenAt: FRISCHE_MS }] }),
+      },
+      aniOwnershipRecheck: async () => true,
+    }),
+  );
+  const nowStub = () => NOW_MS;
+  const echterDateNow = Date.now;
+  Date.now = nowStub;
+  let denial;
+  try {
+    denial = await gateBy(gates, "ani_ownership").run(baseCtx({ fromNumber: "+15739090177" }));
+  } finally {
+    Date.now = echterDateNow;
+  }
+  assert.equal(denial.status, HTTP_SERVICE_UNAVAILABLE);
+  assert.equal(denial.audit.grund, "ani_not_owned");
+  // to= im Detail ist Bestandsvertrag (jedes Gate traegt das Ziel, s. denialAudit) - PII-
+  // frei heisst hier: die Plattform-ANI selbst (ctx.fromNumber, die eigentliche
+  // Bestandsgroesse dieses Befunds) taucht NICHT auf.
+  assert.equal(denial.audit.detail, `to=${VALID_TO} grund=ani_not_owned tenant=T requestedBy=owner`);
+  assert.ok(!denial.body.error.includes("+15739090177"), `keine ANI im Ablehnungstext: ${denial.body.error}`);
+  assert.ok(!denial.audit.detail.includes("+15739090177"), `keine ANI im Audit-Detail: ${denial.audit.detail}`);
 });
 
 // ==== spendMonthEndDate: Grenzfaelle gegen hartkodierte Erwartungen ================

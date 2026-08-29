@@ -1,6 +1,7 @@
 // ---- ElevenLabs Convai: der EINE HTTP-Zugang des Anrufstart-Zweigs -------------------
-// Drei Endpunkte, mehr braucht der Weg nicht: den Anrufstart (POST), den ziehenden
-// Ergebnisabruf (GET) und den Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026). Rein
+// Vier Endpunkte, mehr braucht der Zweig nicht: den Anrufstart (POST), den ziehenden
+// Ergebnisabruf (GET), den Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026) und den
+// Nummernabruf (GET, OUTBOUND-E4/Pruefung 1 des Drift-Waechters). Rein
 // IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie src/tts/synth.js) - der Zweig
 // laesst sich damit gegen eine Attrappe fahren, ohne dass je ein echter Anruf entsteht.
 //
@@ -21,6 +22,7 @@
 
 const OUTBOUND_CALL_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
+const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";
 const API_KEY_HEADER = "xi-api-key";
 
 // Interner Transport-Bound, kein Operator-Knopf (Praezedenz ERROR_DETAIL_MAX_LEN in
@@ -277,4 +279,23 @@ export async function endConversation({
   } catch {
     return { accepted: false, status: null };
   }
+}
+
+/**
+ * OUTBOUND-E4 (Pruefung 1 des Drift-Waechters): rein LESEND. Der Waechter fragt, ob die
+ * registrierte SIP-Nummer beim Anbieter noch existiert, welche Rufnummer sie traegt und
+ * welchem Agenten sie zugewiesen ist. KEIN RETRY (Muster der beiden Funktionen oben) - ein
+ * Fehlschlag ist ein Datum fuer den Aufrufer (outbound-config-probe.js), keine Schleife
+ * hier. Wirft MIT err.providerStatus wie fetchConversation (assertConvaiOk).
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, phoneNumberId: string, timeoutMs?: number}} args
+ */
+export function fetchPhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: PHONE_NUMBER_PATH + encodeURIComponent(phoneNumberId),
+    op: "Nummernabruf",
+    init: { method: "GET" },
+    timeoutMs,
+  });
 }

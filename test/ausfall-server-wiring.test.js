@@ -40,6 +40,61 @@ test("E3B-01: boot.js reicht outageWatch aus dem deps-Buendel an runSweepTick we
     "runSweepTick muss outageWatch.runRecoverySweep() tatsaechlich aufrufen");
   // Der Aufrufer von runSweepTick (der Stunden-Timer) muss outageWatch aus SEINEM
   // eigenen deps-Buendel weiterreichen, nicht selbst neu bauen (EINE Instanz, INV-7).
-  assert.match(bootSrc, /runSweepTick\({\s*costTruing,\s*provisioning,\s*costCrossCheck,\s*outageWatch\s*}\)/,
-    "der Sweep-Timer muss outageWatch an runSweepTick durchreichen");
+  assert.match(bootSrc, /runSweepTick\({\s*costTruing,\s*provisioning,\s*costCrossCheck,\s*outageWatch,\s*driftWatch\s*}\)/,
+    "der Sweep-Timer muss outageWatch UND driftWatch an runSweepTick durchreichen");
+});
+
+// OUTBOUND-E4: zweiter Verdrahtungspunkt, identisches Muster - der Drift-Waechter ist der
+// SIEBTE Sweep-Zweig UND ein eigener Boot-Lauf. Dieselbe Luecke wie bei E3B-01: faellt
+// eine der Zeilen weg, wirft runSweepTick beim naechsten Boot auf undefined bzw. der
+// Boot-Lauf entfaellt lautlos, ohne dass ein Bestandstest es merkt.
+test("OUTBOUND-E4: server.js baut makeDriftWatch und reicht driftWatch ins deps-Buendel durch", () => {
+  assert.match(serverSrc, /import\s*{\s*makeDriftWatch\s*}\s*from\s*"\.\/telephony\/outbound-drift-watch\.js"/,
+    "makeDriftWatch muss importiert sein");
+  assert.match(serverSrc, /const driftWatch = makeDriftWatch\(/,
+    "driftWatch muss EINMAL beim Boot konstruiert werden (Muster outageWatch)");
+  const depsStart = serverSrc.indexOf("const deps = {");
+  assert.notEqual(depsStart, -1, "deps-Buendel nicht gefunden");
+  const depsEnd = serverSrc.indexOf("};", depsStart);
+  const depsBlock = serverSrc.slice(depsStart, depsEnd);
+  assert.match(depsBlock, /\bdriftWatch,/, "driftWatch fehlt im deps-Buendel");
+});
+
+// Review-Blocker (BLOCKER 1 / G9/C2): der ANI-Riegel (outbound-gates.js#ani_ownership)
+// kann OHNE diese Verdrahtung NIE ablehnen - makeOutboundGates() faellt sonst auf ihren
+// Default-No-op (`async () => null`) zurueck, egal wie scharf OUTBOUND_ANI_GATE_ENABLED
+// steht. test/outbound-ani-gate.test.js deckt NUR die Gate-Logik selbst (injizierte
+// Attrappe) - dieser Test schliesst die Luecke, dass server.js den ECHTEN Recheck
+// UEBERHAUPT baut und an makeOutboundGates uebergibt.
+test("OUTBOUND-E4: server.js baut den echten aniOwnershipRecheck ueber providerConfigRead() und uebergibt ihn an makeOutboundGates", () => {
+  assert.match(
+    serverSrc,
+    /import\s*{\s*makeAniOwnershipRecheck\s*}\s*from\s*"\.\/telephony\/ani-ownership-recheck\.js"/,
+    "makeAniOwnershipRecheck muss importiert sein",
+  );
+  const gatesStart = serverSrc.indexOf("const { gates: outboundGates } = makeOutboundGates({");
+  assert.notEqual(gatesStart, -1, "makeOutboundGates(...)-Aufruf nicht gefunden");
+  const gatesEnd = serverSrc.indexOf("});", gatesStart);
+  const gatesBlock = serverSrc.slice(gatesStart, gatesEnd);
+  assert.match(
+    gatesBlock,
+    /aniOwnershipRecheck:\s*makeAniOwnershipRecheck\(\s*{\s*telnyxRead\s*}\s*\)/,
+    "aniOwnershipRecheck muss ueber makeAniOwnershipRecheck({ telnyxRead }) an makeOutboundGates uebergeben werden",
+  );
+  // telnyxRead muss VOR diesem Aufruf existieren, sonst wirft server.js beim Boot auf
+  // ein undefiniertes Symbol (TDZ) statt den Recheck zu bauen.
+  const telnyxReadDefIndex = serverSrc.indexOf("const telnyxRead = providerConfigRead();");
+  assert.notEqual(telnyxReadDefIndex, -1, "telnyxRead muss ueber providerConfigRead() gebaut werden");
+  assert.ok(telnyxReadDefIndex < gatesStart, "telnyxRead muss VOR makeOutboundGates(...) definiert sein");
+});
+
+test("OUTBOUND-E4: boot.js reicht driftWatch aus dem deps-Buendel an runSweepTick weiter UND ruft runBootProbe() im app.listen-Callback", () => {
+  assert.match(bootSrc, /function runSweepTick\({[^}]*\bdriftWatch\b[^}]*}\)/,
+    "runSweepTick muss driftWatch destrukturieren");
+  assert.match(bootSrc, /driftWatch\s*\n\s*\.runDriftSweep\(\)/,
+    "runSweepTick muss driftWatch.runDriftSweep() tatsaechlich aufrufen (siebter Zweig)");
+  assert.match(bootSrc, /export async function bootServer\({[^]*?\bdriftWatch,[^]*?}\)/,
+    "bootServer muss driftWatch aus dem deps-Buendel destrukturieren");
+  assert.match(bootSrc, /driftWatch\.runBootProbe\(\)/,
+    "bootServer muss driftWatch.runBootProbe() im app.listen-Callback aufrufen (Boot-Lauf)");
 });

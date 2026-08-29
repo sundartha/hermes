@@ -307,20 +307,33 @@ test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing, pr
       throw new Error("kv-m4-8-hold-escalation-boom");
     },
   };
+  // OUTBOUND-E4: SIEBTER, unabhaengiger Zweig (Drift-Waechter) - er wird trotz der
+  // Wuerfe der uebrigen sechs Zweige ausgefuehrt UND wirft selbst (Isolation in BEIDE
+  // Richtungen). Zusatzauftrag A: OHNE diesen siebten Fake in der Attrappe waere GENAU
+  // dieser Concern (Fabrik-Rueckgabe vs. tatsaechlich gerufene Methoden) hier sofort
+  // sichtbar geworden - test/sweep-fabrik-vertrag.test.js deckt ihn jetzt strukturell.
+  let driftWatchCalled = false;
+  const throwingDriftWatch = {
+    async runDriftSweep() {
+      driftWatchCalled = true;
+      throw new Error("kv-m4-8-drift-boom");
+    },
+  };
 
   const errorLogs = await captureConsoleError(async () => {
-    // runSweepTick selbst ist SYNCHRON (kein await zwischen den sechs Zweigen) - der Aufruf
-    // darf nicht werfen, obwohl mehrere Zweige rejecten.
+    // runSweepTick selbst ist SYNCHRON (kein await zwischen den sieben Zweigen) - der
+    // Aufruf darf nicht werfen, obwohl mehrere Zweige rejecten.
     assert.doesNotThrow(() => {
       runSweepTick({
         costTruing: costTruingFake,
         provisioning: provisioningFake,
         costCrossCheck: throwingCostCrossCheck,
         outageWatch: throwingOutageWatch,
+        driftWatch: throwingDriftWatch,
       });
     });
-    // Alle sechs Zweige sind fire-and-forget - eine Microtask-Runde reicht, damit auch die
-    // werfenden Promises ihr .catch() durchlaufen, bevor der Test endet.
+    // Alle sieben Zweige sind fire-and-forget - eine Microtask-Runde reicht, damit auch
+    // die werfenden Promises ihr .catch() durchlaufen, bevor der Test endet.
     await new Promise((resolve) => setImmediate(resolve));
   });
 
@@ -344,5 +357,10 @@ test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing, pr
   assert.ok(
     errorLogs.some((zeile) => zeile === "[outage-watch] kv-m4-8-hold-escalation-boom"),
     `der sechste Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
+  );
+  assert.equal(driftWatchCalled, true, "driftWatch.runDriftSweep lief trotz der Wuerfe der uebrigen Zweige");
+  assert.ok(
+    errorLogs.some((zeile) => zeile === "[drift-watch] kv-m4-8-drift-boom"),
+    `der siebte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
   );
 });

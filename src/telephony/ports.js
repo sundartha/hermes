@@ -232,6 +232,29 @@
  */
 
 /**
+ * @typedef {Object} ProviderConfigRead
+ *   Port 6 (OUTBOUND-E4/F4, Drift-Waechter). AUSSCHLIESSLICH LESEND - jede Methode ist ein
+ *   GET, keine schreibt je etwas beim Provider (Nur-Lese-Pin, test/outbound-drift-
+ *   kern.test.js#K-14). Jede Methode wirft MIT err.providerStatus (Muster NumberProvisioning),
+ *   NIE mit dem API-Key (Regel 4). Ersetzt KEINEN Bestandsport - es ist eine eigene, schmale
+ *   Erweiterung des Telnyx-Adapters (Plan E-6: "kein zweiter HTTP-Client").
+ * @property {(e164: string) => Promise<{treffer: {e164: string, status: string}[]}>} findPhoneNumber
+ *   Pruefung 3 (ANI-Kontoeigentum) UND Pruefung 9 (Alarm-Absender-Kontoeigentum): gehoert
+ *   diese E.164 dem Konto, und mit welchem Status?
+ * @property {() => Promise<{e164s: string[]}>} listVerifiedNumbers
+ *   Pruefung 4 (Ausweichpfad): verifizierte Fremd-CLIs. Die LISTE, nie der Einzelabruf.
+ * @property {(connectionId: string) => Promise<{active: boolean, aniOverride: string|null}>} getFqdnConnection
+ *   Pruefung 2: ist die FQDN-Connection aktiv, und welchen ANI-Override traegt sie?
+ * @property {() => Promise<{connectionIds: string[]}>} listFqdns
+ *   Pruefung 6: welche FQDNs sind an welche Connection gebunden?
+ * @property {(profileId: string) => Promise<{enabled: boolean, whitelistedDestinations: string[]}>} getOutboundVoiceProfile
+ *   Pruefung 7: ist das Outbound-Voice-Profile aktiv, welche Ziellaender sind freigeschaltet?
+ * @property {() => Promise<{availableCreditMicroCents: number|null}>} getBalance
+ *   Pruefung 8: Kontostand (GANZZAHL Mikro-Cent der Provider-Waehrung, G26). Nicht
+ *   parsebar -> null, NIE 0 (eine still zu 0 gewordene Zahl saehe aus wie eine Messung).
+ */
+
+/**
  * @typedef {Object} MediaFrame
  *   Neutrales Media-Stream-Frame (Port 4). KEIN Provider-Feld (kein streamSid/
  *   stream_id) im Vertrag - streamRef ist die neutrale Stream-Referenz.

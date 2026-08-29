@@ -104,6 +104,31 @@ async function markOnly({ urteil, bucket, zahlen, nowMs, store, audit }) {
   store.save();
 }
 
+// OUTBOUND-E4: EIN Meldeweg (G5). Bisher stand diese Formulierung nur privat als Rumpf
+// von sendAlert; der Drift-Waechter braucht exakt sie - ein zweiter Kanal waere genau der
+// Fehler, den PM-4 beschreibt. Reservierung ATOMAR im Lock VOR jedem Versand bleibt beim
+// jeweiligen Aufrufer (G26-Muster, s. claimVerdict/meldeHoldEskalation/laufeDrift).
+export async function meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs }) {
+  console.warn(`[outage] ${aktion} klasse=${bucket}`);
+  audit(aktion, null, zeile);
+  await sendeUeberBeideKanaele({ store, config, messaging, mailer, code: bucket, zeile, nowMs });
+}
+
+// Die kostenlose Stufe (K0-Bauform, markOnly ohne Versand): WARN + Audit + Marker. Fuer
+// Befunde, die LAUT sein muessen, aber keinen Alarm rechtfertigen (Drift-Waechter-Klassen
+// unknown/warn). Anders als markOnly (K0/RECOVERED, s.u.) kennt diese Funktion kein
+// urteil - sie CLAIMT immer (nie close); der Aufrufer entscheidet selbst, wann ein Befund
+// wieder verschwunden ist (outbound-drift-watch.js#closeVerschwundeneBefunde).
+export async function meldeBetreiberNotiz({ store, audit, bucket, aktion, zeile, nowMs }) {
+  console.warn(`[outage] ${aktion} klasse=${bucket}`);
+  audit(aktion, null, zeile);
+  await store.withStoreLock(() => {
+    const state = store.load();
+    ops.claimOutageAlert(state, { code: bucket, nowMs });
+  });
+  store.save();
+}
+
 // Alarm: der volle Meldeweg (WARN -> Audit -> Mail -> SMS). Der Marker haelt fest, DASS
 // ein Versand versucht wurde (S3-1) und ob er nachweislich zugestellt war (S3-2) - kein
 // Mail-Ziel gesetzt gilt als "nichts zu wiederholen" (Audit/SMS sind dann das Beste, was
@@ -115,9 +140,7 @@ async function markOnly({ urteil, bucket, zahlen, nowMs, store, audit }) {
 // Entprellung wieder an genau der Stelle geloest, die die Reservierung schliesst.
 async function sendAlert({ bucket, zahlen, nowMs, store, config, audit, messaging, mailer }) {
   const zeile = alarmZeile({ code: bucket, zahlen, regel: OUTAGE_VERDICT.ALERT, windowMs: config.billing.outageAlertWindowMs });
-  console.warn(`[outage] outage_alert klasse=${bucket}`);
-  audit("outage_alert", null, zeile);
-  await sendeUeberBeideKanaele({ store, config, messaging, mailer, code: bucket, zeile, nowMs });
+  await meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion: "outage_alert", zeile, nowMs });
 }
 
 // Dispatch-Tabelle (G23): EIN Eintrag je meldepflichtigem Urteil, kein if/else ueber
@@ -296,10 +319,33 @@ function platformHoldBucket(numberId) {
   return `hold:${NUMBER_HOLD_REASON.PLATFORM_IN_USE}:${numberId}`;
 }
 
+// ZUSATZAUFTRAG B (E3b-Nachbesserung): reine ANZAHLEN, kein Bezug. Ohne sie weiss der
+// Empfaenger nicht, ob EINE oder FUENF Kuendigungen haengen - und damit nicht, wie
+// dringend der Vorgang ist. KEINE Rufnummer, KEINE Tenant-Identitaet, KEINE Nummern-ID
+// (Regel 10, C8-PII-Test gilt weiter) - kuendigungen zaehlt DISTINKTE Tenants (ein Tenant
+// mit mehreren gehaltenen Nummern ist EINE Kuendigung), nummern zaehlt die Zeilen selbst.
+function holdEskalationsZahlen(candidates) {
+  return { kuendigungen: new Set(candidates.map((nummer) => nummer.tenantId)).size, nummern: candidates.length };
+}
+
+// Muster der Bestands-Alarmzeile (fehler=/versuche=, outage-detection.js#alarmZeile):
+// benannte Zahlen statt Prosa ("eine Kuendigung wartet"). zahlen kommt vom AUFRUFER
+// (runPlatformHoldEscalationSweep) - EINMAL aus candidates berechnet und in JEDEN Aufruf
+// desselben Sweeps durchgereicht: alle Zeilen dieses Sweeps tragen dieselben Gesamtzahlen,
+// nicht die des jeweils EINEN Kandidaten (gewollt - der Empfaenger soll den GESAMTumfang
+// des Vorgangs sehen, nicht nur die eine Nummer, die diese Zeile ausgeloest hat).
+function holdZeile({ kuendigungen, nummern }) {
+  return (
+    "Hermes Betriebsmeldung\n" +
+    `klasse=${NUMBER_HOLD_REASON.PLATFORM_IN_USE} kuendigungen=${kuendigungen} nummern=${nummern} ` +
+    "warten seit ueber der Eskalations-Schwelle auf die Freigabe einer Rufnummer"
+  );
+}
+
 // Ein Kandidat: Faelligkeits-Urteil UND Reservierung ATOMAR im SELBEN Lock (G26-Muster,
 // Vorbild runAlertChannelSelfTest) - ein bereits offener Marker fuer GENAU diese Nummer
 // heisst "schon eskaliert", kein zweiter Versand, auch nicht bei zwei parallelen Sweeps.
-async function meldeHoldEskalation({ store, config, audit, messaging, mailer, numberId, nowMs }) {
+async function meldeHoldEskalation({ store, config, audit, messaging, mailer, numberId, zahlen, nowMs }) {
   const bucket = platformHoldBucket(numberId);
   const zuMelden = await store.withStoreLock(() => {
     const state = store.load();
@@ -309,13 +355,10 @@ async function meldeHoldEskalation({ store, config, audit, messaging, mailer, nu
   });
   store.save();
   if (!zuMelden) return;
-  // PII-frei (Regel 10): keine Nummer, kein Tenant, kein Call-Bezug - reine Klasse.
-  const zeile =
-    "Hermes Betriebsmeldung\n" +
-    `klasse=${NUMBER_HOLD_REASON.PLATFORM_IN_USE} eine Kuendigung wartet seit ueber der Eskalations-Schwelle auf die Freigabe einer Rufnummer`;
-  console.warn("[outage] platform_hold_escalation");
-  audit("platform_hold_escalation", null, zeile);
-  await sendeUeberBeideKanaele({ store, config, messaging, mailer, code: bucket, zeile, nowMs });
+  await meldeBetreiberAlarm({
+    store, config, audit, messaging, mailer,
+    bucket, aktion: "platform_hold_escalation", zeile: holdZeile(zahlen), nowMs,
+  });
 }
 
 // Fail-soft wie die uebrigen Sweep-Zweige. nowMs injizierbar (Muster runOutageRecoverySweep/
@@ -326,8 +369,9 @@ export async function runPlatformHoldEscalationSweep({ store, config, audit, mes
     const maxAgeMs = config.billing.platformHoldEscalationMaxAgeMs;
     if (maxAgeMs <= 0) return;
     const candidates = ops.platformHoldEscalationCandidates(store.load(), { nowMs, maxAgeMs });
+    const zahlen = holdEskalationsZahlen(candidates);
     for (const number of candidates)
-      await meldeHoldEskalation({ store, config, audit, messaging, mailer, numberId: number.id, nowMs });
+      await meldeHoldEskalation({ store, config, audit, messaging, mailer, numberId: number.id, zahlen, nowMs });
   } catch (err) {
     console.error("[outage] HOLD-Eskalation fehlgeschlagen:", err.message);
   }

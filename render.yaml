@@ -67,6 +67,12 @@ services:
         sync: false
       - key: TELNYX_ACCOUNT_SID
         sync: false
+      # OUTBOUND-E4 (Drift-Waechter): FQDN-Connection (ANI-Override) + Outbound-Voice-
+      # Profile (Ziellaender). Leer -> die Pruefungen 2/6/7 melden unbekannt (nie fatal).
+      - key: TELNYX_FQDN_CONNECTION_ID
+        sync: false
+      - key: TELNYX_OUTBOUND_VOICE_PROFILE_ID
+        sync: false
       # ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme). Nur aktiv, wenn
       # REF + VOICE_ID gesetzt sind; leer = Azure-Bestand. Erst NACH gruenem
       # Live-Smoke setzen (Plan/tasks/todo.md).
@@ -195,6 +201,13 @@ services:
       # Default false. Notbremse + Sekunden-Rollback fuer den Allowlist-Cutover.
       - key: OUTBOUND_FROZEN
         value: "false"
+      # OUTBOUND-E4 (F4): der ANI-Riegel - das EINZIGE Gate der Drift-Waechter-Etappe.
+      # Default AUS (nur Beobachtung). Lehnt NUR bei frischer, LIVE-nachgemessener
+      # ownership_lost-Messung ab. OUTBOUND_FROZEN bleibt der bewusste Notaus.
+      - key: OUTBOUND_ANI_GATE_ENABLED
+        value: "false"
+      - key: OUTBOUND_ANI_GATE_MAX_AGE_MS
+        value: "900000"
       # ALLOWED_NUMBERS: ab outbound-p3 wirkungslos (statische Allowlist abgeschafft);
       # Permit = per-Tenant-Verifikation. Key bleibt fuer den Owner-Env-Cleanup.
       - key: ALLOWED_NUMBERS
@@ -489,6 +502,16 @@ services:
       # Etappe im Dashboard setzen.
       - key: PLATFORM_ALERT_MAIL_TO
         sync: false
+      # ---- Drift-Waechter (OUTBOUND-E4, F4) ----
+      # Erkennt eine Abweichung zwischen unserer deklarierten Absenderkonfiguration und
+      # der Anbieter-Wirklichkeit (27.08.2026-Fall), OHNE dass ein Anruf stattfindet.
+      # 0 = der Waechter ist KOMPLETT AUS.
+      - key: OUTBOUND_DRIFT_MIN_INTERVAL_MS
+        value: "600000"
+      - key: OUTBOUND_DRIFT_STALE_MS
+        value: "21600000"
+      - key: OUTBOUND_DRIFT_BALANCE_MIN_HOURS
+        value: "72"
       # ---- Spend-Monat-Flip (Budget-Achsen P7) ----
       # AN = beide Gate-Achsen messen im UTC-Kalendermonat statt lebenslang. AUS (Default)
       # ist byte-identisch zum Bestand. Vorbedingung vor dem Flip: Live-Beleg, dass

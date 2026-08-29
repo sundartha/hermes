@@ -19,6 +19,7 @@ import { telnyxMessaging } from "./adapters/telnyx/messaging.js";
 import { renderDirectives as telnyxRenderDirectives } from "./adapters/telnyx/render.js";
 import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signature.js";
 import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
+import { telnyxConfigRead } from "./adapters/telnyx/config-read.js";
 import { telnyxMedia } from "./adapters/telnyx/media.js";
 import { telnyxWebhookEvents } from "./adapters/telnyx/webhook-events.js";
 import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
@@ -59,6 +60,10 @@ const PORT = Object.freeze({
   MEDIA_TRANSPORT: "mediaTransport",
   WEBHOOK_EVENTS: "webhookEvents",
   NUMBER_PROVISIONING: "numberProvisioning",
+  // OUTBOUND-E4: rein LESENDER Port (Drift-Waechter). Eigener Name statt eines
+  // Anhaengsels an NUMBER_PROVISIONING - der Port kauft nichts, das waere die falsche
+  // Nachbarschaft.
+  PROVIDER_CONFIG_READ: "providerConfigRead",
   VOICE_RENDERER: "voiceRenderer",
 });
 
@@ -68,6 +73,7 @@ const ADAPTERS = Object.freeze({
   [PORT.MEDIA_TRANSPORT]: { [PROVIDER.TELNYX]: telnyxMedia },
   [PORT.WEBHOOK_EVENTS]: { [PROVIDER.TELNYX]: telnyxWebhookEvents },
   [PORT.NUMBER_PROVISIONING]: { [PROVIDER.TELNYX]: telnyxNumberProvisioning },
+  [PORT.PROVIDER_CONFIG_READ]: { [PROVIDER.TELNYX]: telnyxConfigRead },
   // Sonderfall (b): Eintrag = fertiger VoiceRenderer. Der Renderer bekommt seine
   // Plattform-Config LAZY zur Render-Zeit injiziert - der Arrow liest config erst beim
   // Aufruf, NICHT zur Import-Zeit (P15: kein Lazy-Init-Singleton, config-Bindung an der
@@ -147,6 +153,12 @@ export const webhookEvents = (provider = DEFAULT_PROVIDER) => pick(PORT.WEBHOOK_
 /** @returns {import("./ports.js").NumberProvisioning} */
 export const numberProvisioning = (provider = PROVIDER.TELNYX) =>
   pick(PORT.NUMBER_PROVISIONING, provider);
+
+// OUTBOUND-E4: rein LESENDER Port (Drift-Waechter). Eigener, explizit hingeschriebener
+// Default wie numberProvisioning - fail-closed bei unbekanntem Provider.
+/** @returns {import("./ports.js").ProviderConfigRead} */
+export const providerConfigRead = (provider = PROVIDER.TELNYX) =>
+  pick(PORT.PROVIDER_CONFIG_READ, provider);
 
 // Telnyx bekommt die ElevenLabs-TTS-Konfiguration (globale Plattform-Stimme) lazy
 // zur Render-Zeit injiziert (Sonderfall b, siehe ADAPTERS oben) - der Renderer selbst

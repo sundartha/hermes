@@ -108,6 +108,16 @@ export const BASE_ENV = {
   // Ohne diese Zeile leakt eine lokale .env mit OUTBOUND_FROZEN=true via dotenv in Spawn-Tests
   // -> Baseline-Drift (Lehre test-base-env-drift). outbound-frozen.test.js setzt es explizit.
   OUTBOUND_FROZEN: "false",
+  // OUTBOUND-E4: der ANI-Riegel ist ein SICHERHEITS-Gate (kann Anrufe ablehnen) - neutral
+  // AUS, byte-identisch zum Produktions-Default. Kein Bestandstest soll ihn ungewollt
+  // scharf schalten; test/outbound-ani-gate.test.js setzt ihn explizit.
+  OUTBOUND_ANI_GATE_ENABLED: "false",
+  // OUTBOUND-E4: der Drift-Waechter ist KEIN Sicherheits-Gate, macht aber Anbieter-IO
+  // (Telnyx/ElevenLabs GETs). 0 = KOMPLETT AUS (Rollback-Hebel, Muster
+  // OUTAGE_ALERT_WINDOW_MS=0 oben) - ohne diese Zeile liefe JEDER Spawn-Test beim Boot in
+  // eine Anbieter-Abfrage (Lehre test-base-env-drift). test/outbound-drift-*.test.js
+  // fahren den Kern/die Watch-Funktion direkt, ohne den echten Boot-Takt zu brauchen.
+  OUTBOUND_DRIFT_MIN_INTERVAL_MS: "0",
   ALLOWED_COUNTRY_CODES: "*", // Land-Gate fuer Altbestand neutral; number-gate.test.js setzt es explizit
   MAX_CALLS_PER_HOUR: "100", // hoch genug, dass es Altbestand-Tests nicht bremst (wie RATE_LIMIT_PER_MIN)
   PROFILES_JSON: "", // Profile-Seed leer; einzelne Tests setzen es explizit
@@ -185,6 +195,11 @@ export const BASE_ENV = {
   TELNYX_API_BASE: "",
   TELNYX_CONNECTION_ID: "",
   TELNYX_CALL_CONTROL_APP_ID: "",
+  // OUTBOUND-E4: neutral leer, sonst leakt eine lokale .env in Spawn-Tests (Lehre
+  // test-base-env-drift). Wirkungslos hier, weil OUTBOUND_DRIFT_MIN_INTERVAL_MS=0 den
+  // Waechter ohnehin komplett aushaelt - Pin trotzdem, Muster TELNYX_CONNECTION_ID.
+  TELNYX_FQDN_CONNECTION_ID: "",
+  TELNYX_OUTBOUND_VOICE_PROFILE_ID: "",
   TELNYX_ACCOUNT_SID: "",
   // Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT P1) neutral AUS
   // (fail-closed): der Shim antwortet 404, der Live-Pfad ist byte-identisch. Ohne diese

@@ -13,9 +13,11 @@
 //                 (kein separater configure-PATCH; die Order ist async-pending).
 //   resolve:   GET  /v2/phone_numbers?filter[phone_number]=<e164>  (poll bis Ressourcen-id da)
 //   release:   DELETE /v2/phone_numbers/{id}
-import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
 import { parseDecimalToMicroCents } from "./cost-parse.js";
+// OUTBOUND-E4 (E-6/G5): authHeaders/url wandern nach http.js (EIN HTTP-Baustein statt
+// eines zweiten Telnyx-Clients) - config-read.js teilt sich dieselben zwei Funktionen.
+import { telnyxAuthHeaders as authHeaders, telnyxUrl as url } from "./http.js";
 
 const AVAILABLE_PATH = "/v2/available_phone_numbers";
 const ORDERS_PATH = "/v2/number_orders";
@@ -35,18 +37,6 @@ const INCLUDE_TELNYX_DETAIL = { includeDetail: true };
 const RESOURCE_POLL_ATTEMPTS = 8;
 const RESOURCE_POLL_INTERVAL_MS = 1000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function authHeaders(extra = {}) {
-  if (!config.telephony.telnyxApiKey)
-    throw new Error("Telnyx NumberProvisioning: TELNYX_API_KEY fehlt");
-  return {
-    Authorization: `Bearer ${config.telephony.telnyxApiKey}`,
-    "Content-Type": "application/json",
-    ...extra,
-  };
-}
-
-const url = (path) => config.telephony.telnyxApiBase + path;
 
 // Loest die phone_number-Ressourcen-id (release/voice) per gedeckeltem Poll auf, da
 // die Order async-pending ist (s.o.). Liefert die id oder wirft MIT Kontext (kein

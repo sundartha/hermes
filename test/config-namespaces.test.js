@@ -19,7 +19,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // faellt pro Call aus dem Restguthaben) -> 10.
   // OUT-05-EL (Owner-Auftrag 15.08.2026): fakeOriginateElevenlabs ergaenzt (Trockenlege-Naht
   // des EL-Anrufstarts, Gegenstueck zu fakeOriginate) -> 11.
-  safety: 11,
+  // OUTBOUND-E4: outboundAniGateEnabled + outboundAniGateMaxAgeMs ergaenzt (der ANI-Riegel,
+  // Default aus) -> 13.
+  safety: 13,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
@@ -45,7 +47,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // Alarmkanal-Selbsttest) -> 44.
   // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs ergaenzt (24-h-Eskalation
   // eines haengenden Kuendigungs-Nummern-HOLD) -> 45.
-  billing: 45,
+  // OUTBOUND-E4: outboundDriftMinIntervalMs + outboundDriftStaleMs +
+  // outboundDriftBalanceMinHours ergaenzt (Drift-Waechter-Mindestfrist, Stale-Grenze,
+  // Guthaben-Reichweiten-Schwelle) -> 48.
+  billing: 48,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -89,7 +94,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
   // C-P5: twilioSid/twilioToken/twilioEdge entfallen (kein Codepfad las sie) -> 7.
-  telephony: 7,
+  // OUTBOUND-E4: telnyxFqdnConnectionId + telnyxOutboundVoiceProfileId ergaenzt (Drift-
+  // Waechter Pruefung 2/6/7) -> 9.
+  telephony: 9,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
   // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
   // AL-P14: inCallConsultEnabled ergaenzt (Rueckfrage IM Gespraech, Default aus) -> 8.
@@ -126,9 +133,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // ergaenzt -> 165.
 // C8b (Review-Blocker Runde 2): outageAlertSelfTestIntervalMs (billing) ergaenzt -> 166.
 // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs (billing) ergaenzt -> 167.
-const EXPECTED_TOTAL_KEYS = 167;
+// OUTBOUND-E4: 2 (safety) + 3 (billing) + 2 (telephony) ergaenzt -> 174.
+const EXPECTED_TOTAL_KEYS = 174;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (167 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (174 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -252,7 +260,11 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // kein Array/nested Objekt) -> 155.
   // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs ist primitiv (Zahl, kein
   // Array/nested Objekt) -> 156.
-  const EXPECTED_PRIMITIVE_LEAVES = 156;
+  // OUTBOUND-E4: outboundAniGateEnabled (Boolean) + outboundAniGateMaxAgeMs (Zahl) +
+  // outboundDriftMinIntervalMs/outboundDriftStaleMs/outboundDriftBalanceMinHours (alle
+  // Zahl) + telnyxFqdnConnectionId/telnyxOutboundVoiceProfileId (beide String) sind alle
+  // sieben primitiv (kein Array/nested Objekt) -> 163.
+  const EXPECTED_PRIMITIVE_LEAVES = 163;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

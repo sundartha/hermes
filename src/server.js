@@ -12,15 +12,18 @@ import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { audit } from "./util.js";
-import { voiceControl, messaging, numberProvisioning } from "./telephony/registry.js";
+import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";
+import { makeDriftWatch } from "./telephony/outbound-drift-watch.js";
+import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
+import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
 import { blockingBudgetAxis } from "./budget-gate.js";
@@ -74,6 +77,14 @@ const { requestTenant, requireTenant } = makeRequestTenant(store);
 // kein zweiter Tenant-Resolver, G5/DIP). audit/messaging (Budget-Achsen P6) speisen die
 // fail-soft Plattform-Fruehwarnung im reserve_budget-Gate - dieselben Instanzen wie
 // callFinish (kein zweiter Audit-/Messaging-Zugang, DIP).
+//
+// OUTBOUND-E4 Review-Blocker (BLOCKER 1 / G9/C2): telnyxRead ist derselbe rein LESENDE
+// Provider-Read-Port, den driftWatch weiter unten bekommt (registry.js#
+// providerConfigRead, Default Telnyx, kein zweiter HTTP-Client) - HIER schon gebaut
+// (statt erst bei driftWatch), damit der ANI-Riegel seine LIVE-Nachmessung ("Schutzschicht
+// 2", PLAN-SECURITY.md) ueberhaupt bekommt. Ohne diese Verdrahtung faellt aniOwnershipRecheck
+// auf makeOutboundGates' Default-No-op zurueck und das Gate kann NIE ablehnen.
+const telnyxRead = providerConfigRead();
 const { gates: outboundGates } = makeOutboundGates({
   store,
   config,
@@ -83,6 +94,7 @@ const { gates: outboundGates } = makeOutboundGates({
   TENANT_REJECT,
   audit,
   messaging,
+  aniOwnershipRecheck: makeAniOwnershipRecheck({ telnyxRead }),
 });
 
 // Metering-Instanz (P6b3-Meter + outbound-p1c-Reconcile) EINMAL beim Boot verdrahtet
@@ -128,6 +140,14 @@ const mailer = selectMailer(config);
 // - der fuenfte Zweig (Alarmkanal-Selbsttest, s. runSweepTick) braucht dieselbe
 // Mailer-Instanz wie callFinish, kein zweiter Versandzugang (DIP).
 const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer });
+
+// OUTBOUND-E4: siebter Sweep-Zweig + Boot-Lauf (Muster outageWatch, INV-7). telnyxRead
+// (dieselbe Instanz wie beim ANI-Riegel oben, EIN Read-Port, kein zweiter HTTP-Client)
+// ist der rein LESENDE Provider-Read-Port (registry.js#providerConfigRead, Default
+// Telnyx); elRead kommt aus der EINEN Fabrik makeElConfigRead (Blocker 7, G5) - vorher
+// stand dieselbe Closure wortgleich auch in scripts/check-outbound-drift.mjs.
+const elRead = makeElConfigRead(config);
+const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, telnyxRead, elRead });
 
 // F2-Mail: Accounts-Zugriff (Konto-E-Mail) haengt an accounts.accountByTenant (web-auth.js),
 // das NUR existiert, wenn der pg-gated Web-Login-Block durchlaeuft (wireWebLogin, asynchron
@@ -296,6 +316,7 @@ const deps = {
   costTruing,
   costCrossCheck,
   outageWatch,
+  driftWatch,
   messaging,
   consultDelivery,
   elevenLabsOutbound,
