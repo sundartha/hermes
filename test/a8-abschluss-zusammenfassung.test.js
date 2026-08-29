@@ -118,6 +118,9 @@ function makeCapturingStore(conversationId) {
     // haengt nicht an ihm, aber die Attrappe muss die Methode kennen, sonst wirft
     // der Ergebnisweg einen TypeError.
     recordSipCallId: () => {},
+    // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber.
+    recordFromRegistrationSource: () => {},
+    recordActualSender: () => {},
     trueUpAnsweredAt: () => {},
     recordAnsweredUnclearReason: () => {},
     // OUTBOUND-E2: finishFromConversation ruft recordFailureReason UNBEDINGT - eine

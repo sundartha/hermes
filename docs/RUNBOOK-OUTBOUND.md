@@ -155,3 +155,88 @@ manuellem `workflow_dispatch`. **Fehlt eines der vier Secrets (`TELNYX_API_KEY`,
 (bewusst, anders als
 `elevenlabs:drift` in `ci.yml` — ein uebersprungener Waechter darf nie wie ein bestandener
 aussehen). Secrets hinterlegen: GitHub-Repo → Settings → Secrets and variables → Actions.
+
+## ANI-Cutover und Nummern-Registrierung (OUTBOUND-E5)
+
+Bezug: `PLAN-OUTBOUND-RESILIENZ.md` Etappe E5 (F3), `tasks/befund-outbound-ausfall-2026-08-27.md`
+Abschnitt 3 (F3) + Abschnitt 5. Solange `ani_override_type: "always"` auf der SIP-Trunk-
+FQDN-Connection steht, ueberschreibt Telnyx JEDE von ElevenLabs gesendete Absendernummer —
+der Code dieser Etappe ist bis zum Cutover korrekt und folgenlos, wirkt aber OHNE weitere
+Code-Aenderung, sobald der Cutover unten gefahren ist.
+
+**Harte Vorbedingungen — JEDE einzelne, sonst faellt der Outbound aus:**
+
+| # | Vorbedingung | Beleg |
+|---|---|---|
+| V1 | `ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true` + `TELNYX_SIP_TRUNK_USERNAME`/`TELNYX_SIP_TRUNK_PASSWORD` im Render-Dashboard, Deploy erfolgt | `/healthz` zeigt geaenderten `configHash` |
+| V2 | **Pilot:** eine Nummer registriert (`npm run elevenlabs:nummern -- --anlegen --ja-wirklich --nur=<numberId>`), `GET /v1/convai/phone-numbers/{id}` gelesen, Testanruf gefuehrt, Rechnung geprueft | schliesst die UNBELEGT-Punkte (Registrierungskosten, `inbound_trunk_config` optional?) aus |
+| V3 | **Jede aktive DID hat eine Registrierung** | `npm run elevenlabs:nummern` (Default `--pruefen`) ⇒ Exit `0`, „0 aktive DIDs ohne Registrierung" |
+| V4 | **Die globale Rueckfall-Registrierung (`ELEVENLABS_AGENT_PHONE_NUMBER_ID`) traegt eine KONTOEIGENE Nummer** | heute traegt sie die am 24.08. freigegebene `+15739090177`. **Ohne V4 endet jeder Rueckfall-Anruf nach dem Cutover in SIP 403 D51** — heute maskiert der ANI-Override das. Owner: neue Registrierung fuer die Plattform-DID anlegen und `ELEVENLABS_AGENT_PHONE_NUMBER_ID` nachziehen. |
+
+**Ist-Stand sichern (GET, kostenlos):**
+
+```bash
+curl -s -H "Authorization: Bearer $TELNYX_API_KEY" \
+  https://api.telnyx.com/v2/fqdn_connections/3026479542865757220 \
+| jq '.data.outbound | {ani_override, ani_override_type, outbound_voice_profile_id}'
+```
+
+Der volle Antwortkoerper traegt `password` im Klartext — nur die drei Felder ansehen, nie
+den Rohkoerper irgendwohin kopieren oder loggen.
+
+**Scharfschalten — den WERT leeren, NICHT den Typ aendern** (`ani_override_type` kennt kein
+Aus: Enum `["always","normal","emergency"]`, Default `always`, Doku woertlich „Only applies
+when ani_override is not blank" — der einzige belegte Ausschalter ist der leere Wert):
+
+```bash
+curl -s -X PATCH \
+  -H "Authorization: Bearer $TELNYX_API_KEY" -H "content-type: application/json" \
+  https://api.telnyx.com/v2/fqdn_connections/3026479542865757220 \
+  -d '{"outbound":{"ani_override":""}}'
+```
+
+Beleg (GET): `.data.outbound.ani_override == ""`.
+
+**Wirkungs-Beleg (kostet einen Anruf):** Testanruf fuehren, dann
+
+```bash
+curl -s -H "Authorization: Bearer $TELNYX_API_KEY" \
+  "https://api.telnyx.com/v2/detail_records?filter[record_type]=call&page[size]=5" | jq '.data[] | {from,to,started_at}'
+```
+
+⇒ `from` muss die DID des anrufenden Tenants sein. Zusaetzlich in der DB:
+`from_registration_source='tenant_did'`, `from_actual_e164 = from_e164`.
+
+**Rueckbau — EINE Zeile, sofort wirksam, kein Deploy:**
+
+```bash
+curl -s -X PATCH \
+  -H "Authorization: Bearer $TELNYX_API_KEY" -H "content-type: application/json" \
+  https://api.telnyx.com/v2/fqdn_connections/3026479542865757220 \
+  -d '{"outbound":{"ani_override":"+18643028341","ani_override_type":"always"}}'
+```
+
+Zweite, unabhaengige Rueckbau-Achse (Code-Seite): `ELEVENLABS_NUMBER_REGISTRATION_ENABLED=false`
++ Neustart ⇒ keine neuen Registrierungen; die Auswahl faellt fuer jede DID ohne Kennung auf
+den Bestand (globale Rueckfall-Registrierung) zurueck.
+
+**Danach:** `outbound-drift-ausnahmen.json` → Eintrag `config_ani_mismatch` entfernen
+(Grund im Eintrag selbst dokumentiert).
+
+### Reparaturlauf (Bestands-DIDs, Backfill)
+
+`npm run elevenlabs:nummern` prueft (Default), ob jede aktive Tenant-DID eine eigene
+ElevenLabs-Registrierung traegt, deren `phone_number` mit ihr uebereinstimmt, und listet
+Waisen (Registrierungen ohne passende aktive DID). NUR-LESEND im Default-Modus.
+
+```
+npm run elevenlabs:nummern                                   # --pruefen (Default), nur-lesend
+npm run elevenlabs:nummern -- --anlegen --ja-wirklich         # legt fehlende Registrierungen an
+npm run elevenlabs:nummern -- --anlegen --ja-wirklich --nur=<numberId>  # Pilot: EINE Nummer
+```
+
+Fail-closed: fehlender `ELEVENLABS_API_KEY` (bzw. bei `--anlegen` fehlende SIP-Zugangsdaten
+oder `ELEVENLABS_NUMBER_REGISTRATION_ENABLED=false`) ⇒ Exit 1 mit benannter Meldung, nie ein
+stilles OK. Betriebliche Voraussetzung: `STORE_BACKEND=pg` + `DATABASE_URL` + IP in der
+Prod-DB-Allowlist (Lehre `prod-db-ip-allowlist`: „SSL connection closed unexpectedly" heisst
+Firewall, nicht TLS).

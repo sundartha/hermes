@@ -114,11 +114,29 @@ export function createMetrics({
     log("call_denied", { grund, country, language });
   }
 
-  return { llmCall, logTurn, recordTurnRendered, logTurnGap, logShimTurn, logSpeechResult, logCallDenied };
+  // OUTBOUND-E5 (F3): wie oft der EL-Anrufstart auf die GLOBALE Registrierung zurueckfaellt
+  // statt die eigene DID des Tenants zu senden. Whitelist wie logCallDenied: geloggt wird
+  // AUSSCHLIESSLICH der Grund-Code - NIE eine Rufnummer, NIE tenantId, NIE callId.
+  function logSenderFallback({ grund }) {
+    if (!enabled) return;
+    log("sender_fallback", { grund });
+  }
+
+  return {
+    llmCall,
+    logTurn,
+    recordTurnRendered,
+    logTurnGap,
+    logShimTurn,
+    logSpeechResult,
+    logCallDenied,
+    logSenderFallback,
+  };
 }
 
 // Prozessweiter Singleton (P15). Konsumenten: claude.js (llmCall via createLlmClient,
 // logTurn) + routes/voice.js (recordTurnRendered/logTurnGap/logSpeechResult im /voice/turn)
 // + telnyx-llm-shim.js (logShimTurn im Custom-LLM-Shim, C-Telnyx P10)
-// + routes/api-calls.js (logCallDenied in der Denial-Senke von POST /api/calls).
+// + routes/api-calls.js (logCallDenied in der Denial-Senke von POST /api/calls)
+// + elevenlabs/outbound.js (logSenderFallback beim Absender-Rueckfall, OUTBOUND-E5).
 export const metrics = createMetrics();

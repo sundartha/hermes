@@ -106,6 +106,9 @@ function spyStore(call) {
     // haengt nicht an ihm, aber die Attrappe muss die Methode kennen, sonst wirft
     // der Ergebnisweg einen TypeError.
     recordSipCallId: () => {},
+    // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber.
+    recordFromRegistrationSource: () => {},
+    recordActualSender: () => {},
     trueUpAnsweredAt: () => order.push("trueUpAnsweredAt"),
     recordAnsweredUnclearReason: () => order.push("recordAnsweredUnclearReason"),
     // OUTBOUND-E2: finishFromConversation UND finishWithoutProviderResult rufen

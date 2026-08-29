@@ -627,6 +627,14 @@ const rawConfig = {
   // whitelisted_destinations mit den tatsaechlich bedienten Laendern abgeglichen wird.
   // Leer -> der Waechter meldet Pruefung 7 als unbekannt.
   telnyxOutboundVoiceProfileId: (process.env.TELNYX_OUTBOUND_VOICE_PROFILE_ID || "").trim(),
+  // OUTBOUND-E5 (F3): Digest-Zugangsdaten der SIP-Trunk-FQDN-Connection
+  // (fqdn_authentication_method: "credential-authentication", gemessen 2026-08-29). Nur
+  // gebraucht fuer das ANLEGEN einer ElevenLabs-Nummernregistrierung (outbound_trunk_config.
+  // credentials) - der Anrufstart selbst braucht sie nicht. Leer -> der Registrar wird in
+  // provisioning-orchestrator.js gar nicht erst injiziert (No-op, Bestandsschutz).
+  telnyxSipTrunkUsername: (process.env.TELNYX_SIP_TRUNK_USERNAME || "").trim(),
+  // SECRET - nie loggen, nie in eine API-/MCP-Antwort, nie in einen Fehlertext.
+  telnyxSipTrunkPassword: process.env.TELNYX_SIP_TRUNK_PASSWORD || "",
   // GQ-P6: wie lange Telnyx auf das Abheben wartet, bevor es mit hangup_cause=timeout
   // aufgibt (POST /v2/calls, Feld timeout_secs). Anbieter-Doku: "Minimum value is 5
   // seconds. Maximum value is 600 seconds", **Default 30**.
@@ -719,6 +727,16 @@ const rawConfig = {
     // waehlt der Zweig NICHT (fail-closed, s. src/elevenlabs/outbound.js).
     agentId: (process.env.ELEVENLABS_AGENT_ID || "").trim(),
     agentPhoneNumberId: (process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID || "").trim(),
+    // OUTBOUND-E5 (F3): Schalter fuer den EINZIGEN neuen Anbieter-SCHREIBZUGRIFF dieser
+    // Etappe (Anlegen einer Nummernregistrierung im Provisioning). Default AUS: der Merge
+    // ist damit inert, unabhaengig von ELEVENLABS_OUTBOUND_ENABLED - kein automatisches
+    // Anlegen ohne diese ausdrueckliche zweite Zustimmung (s. worker/provisioning-
+    // orchestrator.js, Dreifach-Gate).
+    numberRegistrationEnabled: boolEnv(
+      "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
+      process.env.ELEVENLABS_NUMBER_REGISTRATION_ENABLED,
+      { fallback: false },
+    ),
     // Abholtakt des ZIEHENDEN Ergebniswegs (GET /v1/convai/conversations/{id}): der
     // Anbieter meldet das Gespraechsende nicht an uns, wir holen es ab. Untergrenze 100 ms,
     // damit ein vertippter Wert keine Abruf-Schleife im Millisekundentakt erzeugt
@@ -2087,7 +2105,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
-  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId"],
+  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],

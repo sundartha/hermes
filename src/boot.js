@@ -383,6 +383,23 @@ function warnMissingProvisioningConnection(config) {
   );
 }
 
+// OUTBOUND-E5 (F3): WARN statt Boot-Refusal (Muster warnMissingProvisioningConnection) -
+// ein Boot-Refusal wegen einer fehlenden EL-Nummernregistrierungs-Angabe taeuschte einen
+// Inbound-Totalausfall vor, obwohl NUR das Anlegen neuer Registrierungen betroffen ist
+// (Praezedenz PLATFORM_ANI_E164, E1: ein Outbound-Problem wird nicht gegen einen
+// Inbound-Totalausfall getauscht). Fehlen die SIP-Zugangsdaten, wird der Registrar in
+// provisioning-orchestrator.js ohnehin nicht injiziert (No-op) - diese Zeile macht die
+// Fehlkonfiguration nur SICHTBAR, statt sie stumm folgenlos zu lassen.
+function warnElRegistrationSipCredsMissing(config) {
+  if (!config.voice.elevenLabsOutbound.numberRegistrationEnabled) return;
+  if (config.telephony.telnyxSipTrunkUsername && config.telephony.telnyxSipTrunkPassword) return;
+  console.warn(
+    "[boot] Konfig-Warnung: ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne " +
+      "TELNYX_SIP_TRUNK_USERNAME/TELNYX_SIP_TRUNK_PASSWORD - das Anlegen neuer " +
+      "ElevenLabs-Nummernregistrierungen bleibt aus, bestehende DIDs bleiben nutzbar.",
+  );
+}
+
 // KV-P7: zwei latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
 // boot-guard.js fuer die Begruendung je Befund). WARN, kein exit(1) - Muster
 // warnAlertChannelUnset. realtimeMidCallBudgetCheck kommt aus GENAU EINER Quelle
@@ -403,7 +420,8 @@ function warnLatentCostPaths(config) {
 // (LCT P4) das siebte, assertSttProfile (STT-A1) das achte und assertPricedModels (B4a)
 // das neunte, das noch process.exit(1) rufen kann - warnStaleModelPrices/
 // warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
-// warnMissingProvisioningConnection/warnLatentCostPaths sind reine Diagnose (nie fatal).
+// warnMissingProvisioningConnection/warnLatentCostPaths/warnElRegistrationSipCredsMissing
+// sind reine Diagnose (nie fatal).
 function assertBootGates(config, store) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -484,6 +502,7 @@ function assertBootGates(config, store) {
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
   warnLatentCostPaths(config); // KV-P7, WARN
+  warnElRegistrationSipCredsMissing(config); // OUTBOUND-E5, WARN
 }
 
 // Welche Budget-Achse die Gates messen (Budget-Achsen P7). Eigene Funktion, damit die

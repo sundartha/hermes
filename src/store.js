@@ -138,6 +138,12 @@ export const {
   // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster
   // recordElevenlabsConversationId).
   recordSipCallId,
+  // OUTBOUND-E5: Absender-Wahrheit + Registrierungs-Herkunft. OHNE diese Re-Exports waeren
+  // store.recordActualSender / store.recordFromRegistrationSource auf der Fassade undefined
+  // -> der EL-Anrufstart bzw. der Ergebnisweg wuerfen zur Laufzeit einen TypeError
+  // (Muster recordSipCallId).
+  recordActualSender,
+  recordFromRegistrationSource,
   // EL-Anrufstart: Zusammenfassung + Befund eines vom Anbieter gefuehrten Gespraechs. OHNE
   // diesen Re-Export waere store.recordProviderCallResult auf der Fassade undefined -> der
   // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster

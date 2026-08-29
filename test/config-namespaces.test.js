@@ -96,7 +96,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // C-P5: twilioSid/twilioToken/twilioEdge entfallen (kein Codepfad las sie) -> 7.
   // OUTBOUND-E4: telnyxFqdnConnectionId + telnyxOutboundVoiceProfileId ergaenzt (Drift-
   // Waechter Pruefung 2/6/7) -> 9.
-  telephony: 9,
+  // OUTBOUND-E5: telnyxSipTrunkUsername + telnyxSipTrunkPassword ergaenzt (Digest-
+  // Zugangsdaten der SIP-Trunk-FQDN-Connection, nur fuer das Anlegen einer EL-
+  // Nummernregistrierung) -> 11.
+  telephony: 11,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
   // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
   // AL-P14: inCallConsultEnabled ergaenzt (Rueckfrage IM Gespraech, Default aus) -> 8.
@@ -134,9 +137,13 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // C8b (Review-Blocker Runde 2): outageAlertSelfTestIntervalMs (billing) ergaenzt -> 166.
 // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs (billing) ergaenzt -> 167.
 // OUTBOUND-E4: 2 (safety) + 3 (billing) + 2 (telephony) ergaenzt -> 174.
-const EXPECTED_TOTAL_KEYS = 174;
+// OUTBOUND-E5: 2 (telephony: telnyxSipTrunkUsername/-Password) ergaenzt -> 176.
+// numberRegistrationEnabled liegt INNERHALB des bereits gezaehlten nested Objekts
+// voice.elevenLabsOutbound (Muster elevenLabsOutbound selbst, s.o.) - kein neuer
+// primitiver Key auf der voice-Ebene, die Summe steigt dadurch NICHT zusaetzlich.
+const EXPECTED_TOTAL_KEYS = 176;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (174 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (176 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -264,7 +271,12 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // outboundDriftMinIntervalMs/outboundDriftStaleMs/outboundDriftBalanceMinHours (alle
   // Zahl) + telnyxFqdnConnectionId/telnyxOutboundVoiceProfileId (beide String) sind alle
   // sieben primitiv (kein Array/nested Objekt) -> 163.
-  const EXPECTED_PRIMITIVE_LEAVES = 163;
+  // OUTBOUND-E5: telnyxSipTrunkUsername (String) + telnyxSipTrunkPassword (String) sind
+  // beide primitiv (kein Array/nested Objekt) -> 165. numberRegistrationEnabled liegt
+  // innerhalb des bereits gezaehlten nested Objekts voice.elevenLabsOutbound (dessen
+  // primitive Blaetter durchlaeuft dieser Test nicht einzeln, s. continue oben) - checked
+  // steigt dadurch NICHT.
+  const EXPECTED_PRIMITIVE_LEAVES = 165;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

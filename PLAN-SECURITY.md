@@ -3387,6 +3387,62 @@ Eigentuemer, kein Selbstabschalter.
 **Rueckbau: eine Env-Zeile** (`OUTBOUND_ANI_GATE_ENABLED=false`, ohnehin der Default) —
 das Gate verschwindet, der Drift-Waechter meldet unveraendert weiter.
 
+## OUTBOUND-E5 — je Tenant-DID eine eigene ElevenLabs-Nummernregistrierung (2026-08-29)
+
+**Der Datenschutz-Grund der Etappe:** bis zum 12.08.2026 sendete jeder Outbound-Anruf die
+DID des anrufenden Tenants als Absender (Telnyx-Zweige, unveraendert). Seit dem Umstieg
+auf den ElevenLabs-Weg (19.08.) traegt `startCallBody` (`elevenlabs/outbound.js`) nur noch
+`agent_id`/`agent_phone_number_id`/`to_number` — die gesendete Absendernummer haengt
+ausschliesslich an EINER global registrierten ElevenLabs-SIP-Nummer, fuer ALLE Tenants
+gleich. Ein Angerufener, der zurueckruft, landete damit ueber
+`store.numberRecordByE164(to)` beim BESITZER dieser geteilten Nummer — nicht beim
+anrufenden Tenant. Bei einem echten Kunden waere das ein Datenschutz-Vorfall (fremde
+Rueckrufe landen im falschen Assistenten). Befund + Herleitung:
+`tasks/befund-outbound-ausfall-2026-08-27.md` Abschnitt 3 (F3) und Abschnitt 5.
+
+**Der erste Anbieter-SCHREIBZUGRIFF dieser Etappe ausserhalb des Nummernkaufs:** das
+Anlegen einer ElevenLabs-SIP-Trunk-Nummernregistrierung (`POST /v1/convai/phone-numbers`,
+`src/elevenlabs/convai.js#createPhoneNumber`) je aktiver Tenant-DID. Bislang schrieb dieses
+Repo beim Anbieter ausschliesslich Telnyx-Nummernkaeufe; dies ist der erste Schreibzugriff
+gegen die ElevenLabs-API (bisher nur GET/POST-Anrufstart/DELETE-Beende-Versuch, alles
+Bestandsverhalten).
+
+**Dreifach-Gate, alle drei muessen gleichzeitig zutreffen** (`worker/
+provisioning-orchestrator.js#runProvisioningDrain`):
+1. `PROVISIONING_ENABLED` — derselbe Schalter wie der Telnyx-Nummernkauf.
+2. `ELEVENLABS_OUTBOUND_ENABLED` — ohne aktiven EL-Weg waere eine Registrierung zwecklos.
+3. `ELEVENLABS_NUMBER_REGISTRATION_ENABLED` — Default **AUS**, EIGENER Schalter. Der Merge
+   ist damit inert: ohne diesen dritten Schalter entsteht KEINE einzige neue Registrierung,
+   unabhaengig davon, wie die beiden anderen Flags stehen.
+
+**Neues Secret: `TELNYX_SIP_TRUNK_PASSWORD`.** Digest-Passwort der SIP-Trunk-FQDN-Connection
+(`fqdn_authentication_method: "credential-authentication"`, gemessen 2026-08-29), reist als
+`outbound_trunk_config.credentials.password` im Anlege-Koerper. Nie geloggt, nie in einer
+API-/MCP-Antwort, nie in einem Fehlertext (Regel 4) — per Test gepinnt
+(`test/absender-registrierung-anlegen.test.js` C6).
+
+**Idempotent, fehlertolerant:** zwei eigene Schloesser statt einer unbelegten
+Anbieter-Garantie — Schloss 1 (Zustand): eine Nummer mit bereits gesetzter Kennung loest
+keinen Anbieter-Aufruf aus. Schloss 2 (Wiederanlauf): existiert die e164 bereits beim
+Anbieter (GET-Liste), wird ihre Kennung uebernommen statt neu angelegt. Ein Fehlschlag
+(z.B. Anbieter-5xx) reisst die Nummern-Provisionierung NICHT — die DID bleibt `active` und
+nutzbar (faellt LAUT auf die globale Rueckfall-Registrierung zurueck), die Registrierung
+wird ueber den Reparaturlauf nachholbar (`npm run elevenlabs:nummern`).
+
+**Bewusst getragenes Waisen-Risiko:** beim Zurueckgeben einer DID (Freigabe/Kuendigung/
+Art.-17-Loeschung) wird auch der EL-Loeschversuch (`DELETE /v1/convai/phone-numbers/{id}`)
+ausgeloest — STRIKT FAIL-SOFT, ohne Abbruchpfad: eine haengende ElevenLabs-API darf eine
+Kuendigung/Art.-17-Loeschung nicht blockieren. Schlaegt der Loeschversuch fehl, bleibt die
+Registrierung als Waise beim Anbieter stehen — sie ist NICHT unsichtbar, der Reparaturlauf
+listet sie im Pruefmodus (`npm run elevenlabs:nummern -- --pruefen`).
+
+**Was NICHT in diesem Merge ausgefuehrt wurde:** kein einziger echter Anbieter-Schreibzugriff
+(Tests laufen ausschliesslich gegen lokale Attrappen). Der Telnyx-ANI-Override
+(`ani_override_type: "always"` auf der SIP-Trunk-Connection) ueberschreibt bis zum
+Owner-Cutover weiterhin JEDE gesendete Absendernummer — der neue Code ist bis dahin korrekt
+und folgenlos, wirkt aber ohne weitere Code-Aenderung, sobald der Cutover gefahren ist
+(`docs/RUNBOOK-OUTBOUND.md`, Abschnitt "ANI-Cutover und Nummern-Registrierung").
+
 ## Owner-Entscheidung 2026-08-19: Prod-DB-IP-Allowlist auf 0.0.0.0/0
 
 Die Render-Postgres-Allowlist (hermes-db) stand auf einzelnen Heim-IPs; die

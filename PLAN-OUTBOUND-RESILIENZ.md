@@ -925,6 +925,34 @@ der vierte in dieser Revision ergaenzt:
 - **In diesen Etappen gebaut: die Ehrlichkeit (Teil 1).** Der Mehr-Nummern-Betrieb ist
   Beschaffung + Geld -> **offene Frage F-2**.
 
+**UMGESETZT (OUTBOUND-E5, 2026-08-29).** Beide Teile dieses Abschnitts sind gebaut:
+Teil 1 (Buchfuehrung: `from_actual_e164`/`from_source`, s.o.) UND Teil 2 (Zielzustand: je
+Tenant-DID eine eigene EL-Registrierung, `number.provider_agent_phone_number_id`,
+`waehleAbsenderRegistrierung` in `telephony/absender-registrierung.js`, Anlegen/Loeschen in
+`elevenlabs/nummern-registrierung.js`, Reparaturlauf `scripts/el-nummern-registrierung.mjs`).
+Details, Tests, Dreifach-Gate: `PLAN-SECURITY.md` Abschnitt "OUTBOUND-E5".
+
+Die beiden OFFEN-Punkte oben sind damit beantwortet, nicht mehr offen:
+- **`ani_override_type`:** das Enum kennt keinen Aus-Wert (`["always","normal","emergency"]`,
+  Default `always`). Der belegte Ausschalter ist NICHT ein anderer Typ-Wert, sondern der
+  **geleerte** `ani_override` (`""`) — die Telnyx-Doku sagt woertlich "Only applies when
+  ani_override is not blank". Am laufenden System per GET bestaetigt (2026-08-29).
+- **Preis einer EL-SIP-Registrierung** bleibt UNBELEGT — deshalb bewusst KEIN Auto-Backfill
+  fuer Bestands-DIDs, sondern ein manueller Reparaturlauf mit Pilot-Modus
+  (`npm run elevenlabs:nummern -- --anlegen --nur=<numberId>`), der Owner liest die Rechnung
+  vor dem breiten Anlegen.
+
+**Bewusst zurueckgestellte Folgearbeit (nicht Teil von E5):**
+- Der **TeXML-Zweig** bleibt `from_source=null` ("unbekannt") — die Marker-Zeile wuerde in der
+  gepinnten Riesenfunktion `makeCallRoutes`/der Route-Arrow (`routes/api-calls.js`,
+  `eslint-legacy-exceptions.json`) landen; ein Umbau dort ist der ohnehin anstehende G30-Split,
+  nicht diese Etappe. Der TeXML-Zweig ist ausserdem nicht der Live-Weg.
+- **Drift-Pruefung 10** ("jede aktive DID hat eine Registrierung, deren `phone_number` gleich
+  der DID ist") wird bewusst NICHT in `outbound-config-drift.js` gebaut — sie wird stattdessen
+  vom Pruefmodus des Reparaturlaufs (`--pruefen`) beantwortet. Ein Ausbau des In-Prozess-
+  Waechters um eine N-DID-Schleife (statt der heutigen Einzel-Invarianten) ist eine eigene
+  Entscheidung.
+
 ### E-6 (F4) — Drift-Waechter: welche Pruefungen, wie oft, was bei Rot
 
 **Welche.** Neun Invarianten, alle nur-lesend:
@@ -1626,8 +1654,17 @@ bleibt es bei WARN + Audit.
 
 ### E5 — F3: Absender-Wahrheit
 
-**Ziel.** Die gespeicherte Absendernummer ist die tatsaechlich gesendete — oder das System sagt
-ehrlich, dass es sie nicht kennt.
+**UEBERHOLT durch die tatsaechliche Umsetzung (2026-08-29).** Diese Skizze deckte nur Teil 1
+(Buchfuehrung: `from_actual_e164`/`from_source`) ab — der Owner hat die Etappe vor dem Bau neu
+geschnitten (Regression, keine Ungenauigkeit) und Teil 2 (je Tenant-DID eine eigene
+EL-Registrierung, `number.provider_agent_phone_number_id`) mit umgesetzt. Der massgebliche
+Stand steht im Abschnitt "E-5 (F3) — Absender-Wahrheit: gemessen oder ehrlich unbekannt" weiter
+oben (Zeile ~837, "UMGESETZT (OUTBOUND-E5, 2026-08-29)") und in `PLAN-SECURITY.md` Abschnitt
+"OUTBOUND-E5". Diese Skizze bleibt als Historie stehen, ihre Abnahmepunkte (E-1/E-2/E-3 unten)
+sind durch die tatsaechlich gebauten Tests (`test/absender-*.test.js`, sieben Dateien) ersetzt.
+
+**Ziel (urspruenglich).** Die gespeicherte Absendernummer ist die tatsaechlich gesendete — oder
+das System sagt ehrlich, dass es sie nicht kennt.
 
 **Betroffene Dateien**
 - `src/db/schema.sql` — `ALTER TABLE call ADD COLUMN IF NOT EXISTS from_actual_e164 TEXT` +

@@ -21,6 +21,8 @@ const SCRIPTS = [
   // OUTBOUND-E4: ohne diesen Eintrag erfasst dieses Gate das neue Skript GAR NICHT und
   // bliebe gruen, ohne etwas zu pruefen (Plan-Auftrag, woertlich).
   "scripts/check-outbound-drift.mjs",
+  // OUTBOUND-E5: derselbe Grund - ohne diesen Eintrag bliebe der Reparaturlauf ungeprueft.
+  "scripts/el-nummern-registrierung.mjs",
 ];
 // Vor PA-12 bereits verschachtelte Gruppen - in PA-19 bewusst flach adressiert belassen.
 const NESTED_GROUPS = new Set(["telnyxElevenLabs", "telnyxAssistant", "elevenLabsPlayTts"]);

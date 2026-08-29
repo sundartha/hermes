@@ -34,7 +34,8 @@
 // (GET /v1/convai/conversations/{id}, Takt ELEVENLABS_RESULT_POLL_MS) und legen Transkript
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { LOCALES, localeFor } from "../i18n/locales.js";
-import { cappedEndedAtMs, classifyCallTime } from "../store/state-ops.js";
+import { cappedEndedAtMs, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
+import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { verifiedOpeningLine } from "./opening-line.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
@@ -43,6 +44,8 @@ import { endConversation, fetchConversation, startOutboundCall, startResultOf } 
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
+// OUTBOUND-E5 (F3): die reine Registrierungs-Auswahl - kein Netz, kein Store (s. dort).
+import { waehleAbsenderRegistrierung, ABSENDER_QUELLE } from "../telephony/absender-registrierung.js";
 import crypto from "node:crypto";
 
 // Endzustaende des Anbieters. Alles andere gilt als LAUFEND und wird weiter abgeholt: ein
@@ -753,6 +756,17 @@ const ohneRueckfrageTor = () => false;
 // der Agent bietet dann nie eine Recherche an, die der Webhook ablehnen wuerde.
 const ohneRechercheTor = () => false;
 
+// OUTBOUND-E5 (F3): der Standard-Metrik-Empfaenger, wenn niemand welche verdrahtet hat -
+// ein No-op statt eines Wurfs, dasselbe Muster wie ohneRueckfrageTor/ohneRechercheTor.
+// HEREINGEREICHT statt importiert (Muster consultAllowedFor, s. Signatur unten): src/
+// metrics.js importiert src/config.js und bindet damit dessen DATA_DIR-Snapshot beim
+// Laden - ein statischer Import HIER haette jede Datei, die outbound.js STATISCH laedt
+// (mehrere Testdateien tun das, Muster test/el-sip-call-id-join.test.js), an diesen
+// Zeitpunkt gebunden, BEVOR der Test sein eigenes DATA_DIR setzen kann (Lehre
+// test-base-env-drift - am 2026-08-29 genau so gemessen: ein Testlauf schrieb daraufhin
+// in das echte data/store.json statt in sein Temp-Verzeichnis).
+const ohneMetrikMeldung = Object.freeze({ logSenderFallback: () => {} });
+
 // Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die dreizehn, die die
 // Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
 // {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}},
@@ -878,6 +892,38 @@ export function callLocaleOf({ store, config, call, ownerName }) {
   });
 }
 
+// OUTBOUND-E5 (F3): Absender-Registrierung waehlen und einen Rueckfall LAUT machen -
+// MODUL-EBENE aus demselben Grund wie callLocaleOf darueber (G30, haelt
+// makeElevenLabsOutbound unter der Zeilengrenze). DIESELBE Quelle wie resolve_outbound
+// (views.js#findActiveNumber, tenant-gefiltert) - kein zweiter Absenderpfad. Die
+// Auswahl selbst ist rein und netzfrei (waehleAbsenderRegistrierung); sie kann nur eine
+// Registrierung liefern, die an der Nummer haengt, die dieser Anruf als from gebucht hat.
+// LAUT, nie still (E4-Lehre 4): der Rueckfall ist im Log benannt, wird gezaehlt und steht
+// am Anruf-Datensatz. PII-frei - Herkunft und Grund, nie eine Rufnummer.
+function absenderFuerAnruf({ store, call, el, metrics }) {
+  const absender = waehleAbsenderRegistrierung({
+    numberRecord: findActiveNumber(store.load(), call.tenantId),
+    fromE164: call.from,
+    rueckfallId: el.agentPhoneNumberId,
+  });
+  if (absender.quelle === ABSENDER_QUELLE.RUECKFALL_GLOBAL) {
+    console.warn(`[el-outbound] Absender-Rueckfall (call=${call.id}): grund=${absender.grund}`);
+    metrics.logSenderFallback({ grund: absender.grund });
+  }
+  store.recordFromRegistrationSource(call.id, absender.quelle);
+  return absender;
+}
+
+// OUTBOUND-E5 (F3): die vom Anbieter gemeldete Absendernummer persistieren - MODUL-EBENE
+// aus demselben Grund wie absenderFuerAnruf darueber (G30). Die Fixture traegt hier ein
+// MASKIERTES Token, kein E.164 - die Formpruefung sitzt im Store-Mutator (recordActualSender).
+function recordAbsenderMessung(store, callId, conversation) {
+  store.recordActualSender(callId, {
+    e164: conversation.metadata?.phone_call?.agent_number,
+    source: FROM_SOURCE.PROVIDER_MEASURED,
+  });
+}
+
 // Die EINZIGEN zwei Dinge, die pro Anruf am Agenten des Anbieters gesetzt werden duerfen
 // (Eigentuemer-Entscheidung 16.08.2026): die Sprache und die Stimme. Beide kommen aus dem
 // aufgeloesten Locale (call-locale.js), also aus dem Datensatz - kein Aufrufer kann sie
@@ -959,13 +1005,19 @@ function startCallBody({
   locale,
   consultAllowed,
   lookupAllowed,
+  agentPhoneNumberId,
 }) {
   // EIN Bundle und EINE Grund-Zeile fuer beide Leser (s. dynamicVariables).
   const bundle = localeFor(locale.language);
   const openingLine = verifiedOpeningLine({ call, locale: bundle });
   return {
     agent_id: el.agentId,
-    agent_phone_number_id: el.agentPhoneNumberId,
+    // OUTBOUND-E5 (F3): die Registrierung der DID DES ANRUFENDEN TENANTS. Der Anrufkoerper
+    // hat kein Absenderfeld (am Anbieter belegt) - DIESE Kennung bestimmt allein, welche
+    // Nummer der Angerufene sieht. Vorher stand hier die EINE globale Env fuer ALLE Tenants;
+    // ein Rueckruf landete dadurch beim Besitzer jener Nummer, nicht beim Auftraggeber.
+    // Aufgeloest wird sie oben, EINMAL, rein (waehleAbsenderRegistrierung).
+    agent_phone_number_id: agentPhoneNumberId,
     to_number: call.to,
     conversation_initiation_client_data: {
       dynamic_variables: dynamicVariables({
@@ -1216,6 +1268,9 @@ export function makeElevenLabsOutbound({
   // consultAllowedFor (research/registry.js liest das MODUL src/config.js).
   // Signatur (call, resolveProfile) -> boolean, s. elevenLabsLookupAvailableFor.
   lookupAvailableFor = ohneRechercheTor,
+  // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler (s. ohneMetrikMeldung oben fuer die
+  // Begruendung, warum er hereingereicht statt importiert wird).
+  metrics = ohneMetrikMeldung,
 }) {
   // Immer frisch gelesen (nicht beim Bauen eingefroren): Tests uebersteuern die Gruppe
   // zur Laufzeit, und der Abholtakt darf nicht an einer Kopie von vor dem Boot haengen.
@@ -1255,6 +1310,9 @@ export function makeElevenLabsOutbound({
     // er joint ebenfalls nicht, sperrt aber zusaetzlich (set-once) die richtige Quelle
     // aus und behauptet dabei eine Zuordnung, die es nicht gibt.
     store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
+    // OUTBOUND-E5 (F3): die vom Anbieter gemeldete Absendernummer - AUCH im abgelehnten Fall
+    // befuellt (Befund 27.08.). Formpruefung sitzt im Store-Mutator (recordActualSender).
+    recordAbsenderMessung(store, callId, conversation);
   }
 
   // Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
@@ -1437,6 +1495,9 @@ export function makeElevenLabsOutbound({
     // (research/registry.js#elevenLabsLookupAvailableFor, per DI verdrahtet), mit der
     // Fassaden-Profilaufloesung als Parameter.
     const lookupAllowed = lookupAvailableFor(call, store.resolveProfile);
+    // OUTBOUND-E5 (F3): Absender-Registrierung waehlen + Rueckfall LAUT machen (Modul-Ebene
+    // unten, G30 - haelt diese Funktion unter der Zeilengrenze).
+    const agentPhoneNumberId = absenderFuerAnruf({ store, call, el, metrics }).agentPhoneNumberId;
     // OUT-05-EL (Trockenlege-Naht, Aufgabe 1): GENAU vor dem einzigen Netzzugriff dieses
     // Wegs abgezweigt - wie fakeVoice in telephony/registry.js den kompletten Telnyx-
     // Transport ersetzt, ersetzt dieser Zweig NUR den EINEN POST gegen api.elevenlabs.io.
@@ -1444,7 +1505,7 @@ export function makeElevenLabsOutbound({
     // laufen unveraendert - der Fake unterscheidet sich einzig in der Herkunft der
     // conversation_id.
     // Alles, was in den Anfragekoerper eingeht, EINMAL benannt (G19).
-    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed };
+    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, agentPhoneNumberId };
     const { conversationId } = config.safety.fakeOriginateElevenlabs
       ? startResultOf(fakeSipTrunkOutboundCallResponse())
       : await startOutboundCall(startCallRequest(anfrage));

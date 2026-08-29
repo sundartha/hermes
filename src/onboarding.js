@@ -51,6 +51,7 @@ import {
   beginCapturing,
   activateNumber,
   attachNumberPaymentIntent,
+  attachNumberRegistration,
   failNumber,
   releaseNumber,
   findNumber,
@@ -80,7 +81,7 @@ export async function provisionNumber(
   deps,
   { numberId, countryCode, connectionId, type, holdAmountCents, currency },
 ) {
-  const { provisioner, billing, logger = console } = deps;
+  const { provisioner, billing, sipRegistrar, logger = console } = deps;
   const number = findNumber(s, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
 
@@ -158,12 +159,41 @@ export async function provisionNumber(
     }
   }
 
-  return activateNumber(s, numberId, {
+  const activatedNumber = activateNumber(s, numberId, {
     e164: ordered.e164,
     providerNumberId: ordered.providerNumberId,
     // Monatsmiete aus derselben Provider-Antwort -> P5 bucht genau diesen Wert.
     monthlyCostCents: monthlyCostCentsForProviderPrice(candidate.price),
   });
+  // OUTBOUND-E5 (F3): die EL-Nummernregistrierung DIESER DID. Optionale Dependency (Muster
+  // billing): nicht injiziert -> No-op, Bestandsverhalten BYTE-IDENTISCH. NACH der
+  // Aktivierung und FEHLERTOLERANT: die DID ist gekauft und bezahlt, sie bleibt nutzbar.
+  // Ein Fehlschlag laesst providerAgentPhoneNumberId NULL - der Anrufstart faellt dann LAUT
+  // auf die globale Registrierung zurueck und der Reparaturlauf holt es nach. Ein Wurf hier
+  // wuerde eine bezahlte, funktionierende Nummer auf 'failed' zurueckrollen - genau die
+  // Kaskade, die es nicht geben darf.
+  await registriereNummerFailSoft(s, activatedNumber, { sipRegistrar, logger });
+  return activatedNumber;
+}
+
+// Fehlertolerantes Anlegen. Schloss #1 (Zustand): eine Nummer, die bereits eine Kennung
+// traegt, loest KEINEN Anbieter-Aufruf aus - zweimal aufgerufen entsteht keine zweite
+// Registrierung. Kein Wurf nach aussen; jeder Fehlschlag ist EINE benannte, gezaehlte
+// Log-Zeile (nie stilles Gruen), PII-/Secret-frei (nur interne IDs, nie e164, nie Passwort).
+async function registriereNummerFailSoft(s, number, { sipRegistrar, logger = console }) {
+  if (!sipRegistrar || number.providerAgentPhoneNumberId) return;
+  try {
+    const { phoneNumberId, angelegt } = await sipRegistrar.ensureRegistration({
+      e164: number.e164,
+      numberId: number.id,
+    });
+    attachNumberRegistration(s, number.id, phoneNumberId);
+    logger.log(`[el-registrierung] number=${number.id} angelegt=${angelegt}`);
+  } catch (err) {
+    logger.warn(
+      `[el-registrierung] FEHLGESCHLAGEN number=${number.id}: ${err.message} - DID bleibt nutzbar, Registrierung nachholbar`,
+    );
+  }
 }
 
 // Read-only Preis-/Verfuegbarkeitssuche: liefert den ersten Kandidaten (mit seinem

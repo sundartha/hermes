@@ -590,6 +590,18 @@ export function recordSipCallId(callId, sipCallId) {
   return call;
 }
 
+// OUTBOUND-E5: Wrapper-Paritaet zu pg.js (Muster recordSipCallId).
+export function recordFromRegistrationSource(callId, quelle) {
+  const { call, changed } = ops.recordFromRegistrationSource(load(), callId, quelle);
+  if (changed) save();
+  return call;
+}
+export function recordActualSender(callId, herkunft) {
+  const { call, changed } = ops.recordActualSender(load(), callId, herkunft);
+  if (changed) save();
+  return call;
+}
+
 // EL-Anrufstart: Zusammenfassung + Befund eines vom Anbieter gefuehrten Gespraechs -
 // Wrapper-Paritaet zu pg.js. Saved wie recordElevenlabsConversationId: beide Felder liegen
 // persistent auf Platte, und get_transcript liest sie nach dem Anruf.

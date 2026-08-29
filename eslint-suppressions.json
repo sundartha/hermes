@@ -753,7 +753,7 @@
   },
   "src/onboarding.js": {
     "id-length": {
-      "count": 6
+      "count": 7
     }
   },
   "src/plans.js": {
@@ -911,7 +911,7 @@
       "count": 4
     },
     "id-length": {
-      "count": 41
+      "count": 42
     },
     "max-lines-per-function": {
       "count": 2
@@ -933,7 +933,7 @@
       "count": 3
     },
     "id-length": {
-      "count": 241
+      "count": 242
     },
     "max-params": {
       "count": 23

@@ -353,7 +353,13 @@ CREATE TABLE IF NOT EXISTS call (
   -- erfolgreichem Mail-Send, sonst NULL -> Bestand byte-identisch.
   summary_mail_sent_at TEXT,
   inbox_entry_at TEXT,
-  inbox_seen_at TEXT
+  inbox_seen_at TEXT,
+  -- OUTBOUND-E5 (F3): die Absender-WAHRHEIT (Messung) + die Registrierungs-HERKUNFT
+  -- (Wahl beim Waehlen) - zwei verschiedene Fragen, s. ALTER-Kommentar weiter unten.
+  -- Additiv NULLABLE, KEIN Backfill.
+  from_actual_e164 TEXT,
+  from_source TEXT,
+  from_registration_source TEXT
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -477,6 +483,18 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS opening_line_sha256 TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_origin TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_at TEXT;
+
+-- OUTBOUND-E5 (F3): die Absender-WAHRHEIT, getrennt von der Absender-ABSICHT (from_e164).
+-- from_actual_e164 = was der Anbieter sagt, dass gesendet wurde; NUR aus Messung, set-once,
+-- nur E.164-foermig, nur OUTBOUND. from_source = woher dieses Wissen kommt.
+-- from_registration_source = welche ElevenLabs-Nummernregistrierung der Anrufstart benutzt
+-- hat (eigene Tenant-DID oder der globale Rueckfall) - eine ANDERE Frage als from_source,
+-- deshalb eine eigene Spalte (nie zwei Sachverhalte auf ein Label).
+-- Additiv NULLABLE. KEIN Backfill, und zwar begruendet: fuer jede Bestandszeile ist NULL der
+-- WAHRE Wert; from_e164 dorthin zu kopieren waere genau die Behauptung, die F3 abstellt.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS from_actual_e164        TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS from_source             TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS from_registration_source TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).
@@ -647,7 +665,10 @@ CREATE TABLE IF NOT EXISTS number (
   provider           TEXT,
   status             TEXT NOT NULL DEFAULT 'active',
   provider_number_id TEXT,
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- OUTBOUND-E5 (F3): die ElevenLabs-Nummernregistrierung dieser DID, s. ALTER-Kommentar
+  -- weiter unten. Additiv NULLABLE.
+  provider_agent_phone_number_id TEXT
 );
 -- Forward-compat fuer eine bestehende number-Tabelle (idempotent). Bestehende
 -- (geseedete) Nummern sind in Benutzung -> Default 'active'. e164 von NOT NULL auf
@@ -670,6 +691,15 @@ ALTER TABLE number ADD COLUMN IF NOT EXISTS language TEXT;
 -- NULLABLE: Bestands-Nummern und Kaeufe ohne cost_information -> NULL = "keine Miete
 -- gelernt" (P5 faellt dann auf seinen Fallback zurueck), ausdruecklich NICHT 0.
 ALTER TABLE number ADD COLUMN IF NOT EXISTS monthly_cost_cents INTEGER;
+-- OUTBOUND-E5 (F3): die ElevenLabs-Nummernregistrierung DIESER DID (phnum_...). Der
+-- EL-Anrufstart traegt kein Absenderfeld (am Anbieter belegt) - die gesendete Nummer haengt
+-- allein an der Registrierung. Je Tenant-DID eine eigene; die Kennung gehoert deshalb an die
+-- Nummer, nicht in eine globale Env (die kann per Definition keine Pro-Tenant-Groesse tragen).
+-- Additiv NULLABLE. Bestands-DIDs bleiben NULL -> der Anrufstart faellt LAUT auf die globale
+-- Registrierung zurueck (Bestandsschutz), bis der Reparaturlauf sie nachtraegt.
+-- RLS: number traegt bereits ENABLE/FORCE ROW LEVEL SECURITY + Policy tenant_isolation
+-- (schema.sql:901-902) - eine additive Spalte erbt sie, es entsteht KEINE neue Policy.
+ALTER TABLE number ADD COLUMN IF NOT EXISTS provider_agent_phone_number_id TEXT;
 
 -- number_assignment: Historie Nummer<->Tenant (Recycling-Hygiene). assigned_at bei
 -- Aktivierung, released_at bei Freigabe. Eine frisch freigegebene Nummer wird nicht

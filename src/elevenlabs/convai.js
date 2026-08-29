@@ -1,9 +1,10 @@
 // ---- ElevenLabs Convai: der EINE HTTP-Zugang des Anrufstart-Zweigs -------------------
-// Vier Endpunkte, mehr braucht der Zweig nicht: den Anrufstart (POST), den ziehenden
-// Ergebnisabruf (GET), den Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026) und den
-// Nummernabruf (GET, OUTBOUND-E4/Pruefung 1 des Drift-Waechters). Rein
-// IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie src/tts/synth.js) - der Zweig
-// laesst sich damit gegen eine Attrappe fahren, ohne dass je ein echter Anruf entsteht.
+// Sieben Endpunkte: den Anrufstart (POST), den ziehenden Ergebnisabruf (GET), den
+// Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026), den Nummernabruf (GET, OUTBOUND-E4/
+// Pruefung 1 des Drift-Waechters) - dazu die drei der Nummernregistrierung (Liste/Anlegen/
+// Loeschen, OUTBOUND-E5). Rein IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie
+// src/tts/synth.js) - der Zweig laesst sich damit gegen eine Attrappe fahren, ohne dass je
+// ein echter Anruf oder eine echte Registrierung entsteht.
 //
 // KEIN RETRY, bewusst (Absolute Regel 1): ein wiederholter Anrufstart ist ein zweiter
 // ECHTER Anruf beim selben Menschen. Der Fehlschlag gehoert deshalb dem Aufrufer, der
@@ -23,6 +24,10 @@
 const OUTBOUND_CALL_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";
+// OUTBOUND-E5: Liste/Anlegen adressieren die SAMMLUNG (kein trailing slash, kein
+// Einzelpfad-Suffix) - anders als PHONE_NUMBER_PATH oben, das einen EINZELNEN
+// Nummer-Datensatz adressiert (Loeschen bleibt auf PHONE_NUMBER_PATH + id).
+const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
 const API_KEY_HEADER = "xi-api-key";
 
 // Interner Transport-Bound, kein Operator-Knopf (Praezedenz ERROR_DETAIL_MAX_LEN in
@@ -298,4 +303,72 @@ export function fetchPhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs 
     init: { method: "GET" },
     timeoutMs,
   });
+}
+
+/**
+ * OUTBOUND-E5: alle registrierten Nummern des Kontos. NUR LESEND. Zweck: Idempotenz-Schloss
+ * #2 des Anlegens (existiert die e164 schon, wird ihre Kennung UEBERNOMMEN statt eine zweite
+ * Registrierung erzeugt) und der Waisen-Abgleich des Reparaturlaufs. Wirft mit
+ * err.providerStatus (assertConvaiOk), KEIN Retry (Muster fetchPhoneNumber).
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, timeoutMs?: number}} args
+ * @returns {Promise<Array<{phone_number: string, phone_number_id: string}>>}
+ */
+export function listPhoneNumbers({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: PHONE_NUMBERS_PATH,
+    op: "Nummernliste",
+    init: { method: "GET" },
+    timeoutMs,
+  });
+}
+
+/**
+ * OUTBOUND-E5: SCHREIBZUGRIFF - legt EINE SIP-Trunk-Nummernregistrierung an.
+ * Der EINZIGE schreibende Anbieter-Aufruf dieser Etappe. Er ist NICHT idempotent (der
+ * Anbieter garantiert das nicht - UNBELEGT); die Idempotenz stellt der Aufrufer her
+ * (elevenlabs/nummern-registrierung.js). KEIN Retry, aus demselben Grund wie beim
+ * Anrufstart: ein wiederholter Schreibzugriff kann eine zweite Registrierung erzeugen.
+ * Der Fehler-RUMPF wird NIE gelesen (Regel 4/5) - er kann Nummern-/Auth-Fragmente tragen.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object}} args
+ * @returns {Promise<{phoneNumberId: string|null}>}
+ */
+export async function createPhoneNumber({ fetchImpl, account, body }) {
+  const antwort = await convaiFetch({
+    fetchImpl,
+    account,
+    path: PHONE_NUMBERS_PATH,
+    op: "Nummernregistrierung",
+    init: { method: "POST", body: JSON.stringify(body) },
+  });
+  return { phoneNumberId: antwort?.phone_number_id || null };
+}
+
+/**
+ * OUTBOUND-E5: SCHREIBZUGRIFF - Loeschversuch einer Registrierung (Freigabe-Protokoll).
+ * FAIL-SOFT wie endConversation: wirft NIE. Eine haengende Anbieter-API darf eine
+ * Kuendigung/Art.-17-Loeschung nicht blockieren. Meldet nur {accepted, status}.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, phoneNumberId: string, timeoutMs?: number}} args
+ * @returns {Promise<{accepted: boolean, status: number|null}>}
+ */
+export async function deletePhoneNumber({
+  fetchImpl,
+  account,
+  phoneNumberId,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+}) {
+  try {
+    const res = await fetchImpl(
+      `${account.apiBase}${PHONE_NUMBER_PATH}${encodeURIComponent(phoneNumberId)}`,
+      {
+        method: "DELETE",
+        headers: { [API_KEY_HEADER]: account.apiKey, "content-type": "application/json" },
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+    );
+    return { accepted: res.ok, status: res.status };
+  } catch {
+    return { accepted: false, status: null };
+  }
 }

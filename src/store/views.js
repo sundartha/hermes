@@ -44,6 +44,9 @@ export function publicCall({
   // INBOX-P1: beide Inbox-Marker sind rein intern.
   inboxEntryAt,
   inboxSeenAt,
+  // OUTBOUND-E5: rein interner Betriebs-Marker (Muster summarySmsSentAt/telnyxConversationId).
+  // Er beantwortet eine Betreiber-Frage ("ging die eigene DID raus?"), keine Nutzer-Frage.
+  fromRegistrationSource,
   ...rest
 }) {
   return rest;
