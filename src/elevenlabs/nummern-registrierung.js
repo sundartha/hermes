@@ -88,15 +88,25 @@ export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = fetch
   return { ensureRegistration, removeRegistration };
 }
 
-// E5-01 (Review-Blocker Runde 3): EINE gemeinsame Konstruktions-Naht fuer ALLE
-// Produktionsaufrufer (provisioning-orchestrator.js, web-login.js, contract-end-cleanup.js
-// via billing/webhook.js) - vorher baute NUR der Provisioning-Orchestrator den Registrar,
-// die Freigabe-Aufrufer (Grace-Reconcile, Art.-17-Erase) injizierten ihn NIE. Jede Freigabe
-// hinterliess dadurch live eine EL-Waise, obwohl der Reparaturlauf/Kommentar einen
-// Fehlschlag als Ausnahme, nicht als Regelfall beschrieb. Dasselbe Dreifach-Gate wie
-// zuvor NUR im Orchestrator (PROVISIONING_ENABLED + elevenLabsOutbound.enabled +
-// numberRegistrationEnabled) - EIN Bauplatz statt zweier, kein zweiter Ort, der dieselbe
-// Gate-Frage nochmal beantwortet (G5).
+// E5-01 (Review-Blocker Runde 3): gemeinsame Konstruktions-Naht fuer die FREIGABE-
+// Aufrufer (web-login.js, contract-end-cleanup.js via billing/webhook.js), die den
+// Registrar zuvor NIE injizierten - jede Freigabe hinterliess dadurch live eine EL-Waise.
+// NICHT abgeschlossen (Review-Blocker "Nachbesserung" 4/5, EHRLICH OFFEN GELASSEN): der
+// Provisioning-Orchestrator (worker/provisioning-orchestrator.js#runProvisioningDrain)
+// baut das IDENTISCHE Dreifach-Gate weiterhin INLINE noch einmal, statt diese Funktion zu
+// rufen - zwei Orte beantworten dieselbe Gate-Frage. Der naheliegende Fix
+// (`deps.sipRegistrar = sipRegistrarWennAktiv(config)` im Orchestrator) wurde gebaut und
+// verworfen: er KUERZT die bereits ueber max-lines-per-function gepinnte Fabrik-Funktion
+// makeProvisioningOrchestrator (180 -> 172 echte Zeilen) und aendert damit den woertlichen
+// eslint-Befundtext ('has too many lines (180)' -> '(172)') - eine ECHTE Verbesserung, die
+// `scripts/check-staged-suppressions.js` trotzdem als Bewegung ablehnt (der Vergleich ist
+// Text-basiert, nicht Richtungs-bewusst), und `test/check-staged-suppressions.test.js`
+// pinnt den Inhalt von eslint-legacy-exceptions.json zusaetzlich als Snapshot - beide
+// verbieten einem Bau-Agenten ausdruecklich, sich per neuem Altlast-Eintrag selbst
+// freizuschalten. Der fertige Fix (Diff + der noetige Legacy-Pin samt Reason) liegt im
+// Nachbesserungs-Report der Etappe bereit - er braucht die Freigabe des Eigentuemers,
+// entweder fuer den Pin oder fuer einen groesseren, hier bewusst NICHT gezogenen Umbau
+// (die Fabrik unter 100 Zeilen bringen).
 export function sipRegistrarWennAktiv(config) {
   if (
     !config.provisioning.provisioningEnabled ||

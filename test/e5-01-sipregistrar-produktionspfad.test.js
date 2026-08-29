@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { attemptContractEndCleanup } from "../src/billing/contract-end-cleanup.js";
 import { sipRegistrarWennAktiv } from "../src/elevenlabs/nummern-registrierung.js";
 import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
-import { fakeProvisioner } from "./helpers.js";
+import { fakeProvisioner, fakeSipRegistrar } from "./helpers.js";
 
 const TENANT = "t_e5_01";
 
@@ -60,18 +60,6 @@ function fakeStore(state) {
     },
     tenantsPendingContractEndCleanup: () =>
       state.tenants.filter((tenant) => tenant.numberReleasePending || tenant.workosDeletePending),
-  };
-}
-
-function fakeSipRegistrar(overrides = {}) {
-  const removeCalls = [];
-  return {
-    removeCalls,
-    async removeRegistration(phoneNumberId) {
-      removeCalls.push(phoneNumberId);
-      if (overrides.removeRegistration) return overrides.removeRegistration(phoneNumberId);
-      return { accepted: true, status: 200 };
-    },
   };
 }
 

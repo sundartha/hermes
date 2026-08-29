@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { releaseTenantNumbersOnErase } from "../src/release-reconcile.js";
 import { NUMBER_STATUS, PROVIDER } from "../src/store/defaults.js";
-import { fakeProvisioner } from "./helpers.js";
+import { fakeProvisioner, fakeSipRegistrar } from "./helpers.js";
 
 const fakeAudit = () => ({
   records: [],
@@ -19,18 +19,6 @@ const fakeLogger = () => ({ log: () => {}, warn: () => {} });
 // Fake-Store ueber der Facade-Kontraktflaeche { load, save, withStoreLock } - EINE
 // mutable Referenz, so wirken Mutationen ueber alle load()-Aufrufe hinweg.
 const fakeStore = (state) => ({ load: () => state, save: () => {}, withStoreLock: (fn) => fn() });
-
-function fakeSipRegistrar(overrides = {}) {
-  const removeCalls = [];
-  return {
-    removeCalls,
-    async removeRegistration(phoneNumberId) {
-      removeCalls.push(phoneNumberId);
-      if (overrides.removeRegistration) return overrides.removeRegistration(phoneNumberId);
-      return { accepted: true, status: 200 };
-    },
-  };
-}
 
 const seed = (over = {}) => ({
   tenants: [{ id: "t1" }],

@@ -915,6 +915,25 @@ export function fakeProvisioner(overrides = {}) {
   return { log, orderCalls, ...base, ...overrides };
 }
 
+// OUTBOUND-E5 (F3, Review-Blocker "Nachbesserung" 6): geteilte Attrappe des EL-SIP-
+// Registrars fuer die Freigabe-Seite (release-reconcile.js#performNumberRelease). War
+// wortgleich in test/absender-registrierung-freigabe.test.js UND
+// test/e5-01-sipregistrar-produktionspfad.test.js dupliziert - beide Tests pinnen dieselbe
+// Zusicherung ("genau EIN Loeschversuch mit der richtigen Kennung"), eine auseinander-
+// laufende Kopie haette das unbemerkt aufgeweicht. removeCalls zeichnet jeden Aufruf auf
+// (Attrappen-Pflicht: pruefen statt stur gruen antworten).
+export function fakeSipRegistrar(overrides = {}) {
+  const removeCalls = [];
+  return {
+    removeCalls,
+    async removeRegistration(phoneNumberId) {
+      removeCalls.push(phoneNumberId);
+      if (overrides.removeRegistration) return overrides.removeRegistration(phoneNumberId);
+      return { accepted: true, status: 200 };
+    },
+  };
+}
+
 // PA-18: fakeTelnyxShimConfig lebt jetzt in config-namespaces-helper.js (das config.js
 // bereits legitim importiert) - ein config.js-Import HIER wuerde config.js schon beim
 // Import von helpers.js auswerten, VOR dem env-Setup jeder aufrufenden Datei (s.
