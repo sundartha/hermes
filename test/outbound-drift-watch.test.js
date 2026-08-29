@@ -27,6 +27,11 @@ function fakeConfig(overrides = {}) {
     outboundDriftBalanceMinHours: 72,
     platformAlertMailTo: "",
     platformAlertSmsTo: "",
+    // Blocker 3 (Entprellung VOR dem Alarm-Versand): Produktions-Defaults (6h/15min,
+    // s. src/config.js#OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT), damit "zwei Laeufe direkt
+    // hintereinander" in W-6 deterministisch entprellt wird.
+    outageAlertDebounceMs: 21600000,
+    outageAlertRetryMs: 900000,
     ...overrides,
   });
 }
@@ -89,7 +94,12 @@ function setzeLaufMarkerAlt(store) {
   laufMarker.lastSeenAt = new Date(0).toISOString();
 }
 
-function fakeDeps({ store, config, telnyxRead, elRead, audit } = {}) {
+// ladeAusnahmen (BLOCKER 3): default HIER bewusst () => [] (leer), NICHT der echte
+// Produktions-Default aus makeDriftWatch - sonst wuerden die deklarierten Ausnahmen der
+// ECHTEN outbound-drift-ausnahmen.json (u.a. unbekannt:pruefung8) JEDEN Bestandstest
+// hier stillschweigend mitpraegen. W-5 unten prueft GERADE deshalb separat und OHNE
+// diese Attrappe, dass der Produktions-Default tatsaechlich greift.
+function fakeDeps({ store, config, telnyxRead, elRead, audit, ladeAusnahmen } = {}) {
   return {
     store: store || fakeStore({ calls: gesunderVerkehr() }),
     config: config || fakeConfig(),
@@ -98,6 +108,7 @@ function fakeDeps({ store, config, telnyxRead, elRead, audit } = {}) {
     mailer: { sendMail: async () => {} },
     telnyxRead: telnyxRead || fakeTelnyxRead(),
     elRead: elRead || fakeElRead(),
+    ladeAusnahmen: ladeAusnahmen || (() => []),
   };
 }
 
@@ -264,6 +275,163 @@ test("E4-Waechter: W-4 verbrauch24hMicroCents zaehlt NUR Anrufe innerhalb der le
   // mitgezaehlt, waere der Verbrauch riesig und die Reichweite kollabierte.
   assert.ok(!auditEvents.some((event) => event.startsWith("drift_balance_low")), "nur der 24h-Anruf darf in den Verbrauch einfliessen");
   assert.ok(!auditEvents.some((event) => event.startsWith("drift_unbekannt:pruefung8")), "1.000.000 Mikro-Cent gilt als echter Verbrauch");
+});
+
+// W-5 (BLOCKER 3, zweite Haelfte): OHNE injizierte ladeAusnahmen muss der Produktions-
+// Default die ECHTE outbound-drift-ausnahmen.json laden - vorher bekam der In-Prozess-
+// Waechter NIE eine Ausnahme, egal was in der Datei stand (befund.ausgenommen blieb
+// strukturell immer false).
+test("E4-Waechter: W-5 OHNE injizierte ladeAusnahmen laedt der Waechter die ECHTE outbound-drift-ausnahmen.json", async () => {
+  const store = fakeStore({ calls: [] }); // kein Verkehr -> unbekannt:pruefung8 (Regelfall)
+  const auditEvents = [];
+  const driftWatch = makeDriftWatch({
+    store,
+    config: fakeConfig(),
+    audit: (event) => auditEvents.push(event),
+    messaging: () => ({ sendSms: async () => {} }),
+    mailer: { sendMail: async () => {} },
+    telnyxRead: fakeTelnyxRead(),
+    elRead: fakeElRead(),
+    // ladeAusnahmen ABSICHTLICH NICHT injiziert - der Produktions-Default muss greifen.
+  });
+  await driftWatch.runBootProbe();
+  assert.ok(
+    !auditEvents.includes("drift_unbekannt:pruefung8"),
+    "die reale outbound-drift-ausnahmen.json nimmt unbekannt:pruefung8 aus - ohne den Fix waere ausgenommen strukturell immer false",
+  );
+});
+
+// W-6 (BLOCKER 3, erste Haelfte): Entprellung VOR dem Alarm-Versand -----------------
+test("E4-Waechter: W-6 zwei aufeinanderfolgende Laeufe bei UNVERAENDERTEM Befund -> GENAU EIN Versand", async () => {
+  const store = fakeStore({ calls: gesunderVerkehr() });
+  let mailVersand = 0;
+  const mailer = { sendMail: async () => { mailVersand += 1; } };
+  const telnyxReadDefekt = fakeTelnyxRead({
+    findPhoneNumber: async (e164) => (e164 === PLATFORM_ANI ? { treffer: [] } : { treffer: [{ e164, status: "active" }] }),
+  });
+  const config = fakeConfig({ platformAlertMailTo: "owner@example.com" });
+
+  const deps1 = fakeDeps({ store, config, telnyxRead: telnyxReadDefekt, audit: () => {} });
+  deps1.mailer = mailer;
+  await makeDriftWatch(deps1).runBootProbe();
+  assert.equal(mailVersand, 1, "Lauf 1 muss den vollen Meldeweg (Mail) ausloesen");
+
+  // Lauf 2 DIREKT danach, derselbe Befund unveraendert - nur die Single-Flight-
+  // Mindestfrist wird umgangen (ein ANDERER Marker als die Entprellung selbst).
+  setzeLaufMarkerAlt(store);
+  const configOhneWartezeit = fakeConfig({ outboundDriftMinIntervalMs: 1, platformAlertMailTo: "owner@example.com" });
+  const deps2 = fakeDeps({ store, config: configOhneWartezeit, telnyxRead: telnyxReadDefekt, audit: () => {} });
+  deps2.mailer = mailer;
+  await makeDriftWatch(deps2).runDriftSweep();
+  assert.equal(mailVersand, 1, "Lauf 2 (derselbe Befund, direkt danach) darf NICHT erneut senden - Entprellung");
+});
+
+// W-7 (BLOCKER 4, S1-1): PRODUKTIONSNAHE Antwortform - zwei STRUKTURELLE, gueltig
+// ausgenommene unknowns (EL ohne supports_outbound-Feld, KEIN Verkehr in 24h) duerfen die
+// Selbstheilung NICHT mehr blockieren. Ausdruecklich OHNE die leere-ladeAusnahmen-Attrappe
+// (fakeDeps' Default) - dieser Test laedt die ECHTE outbound-drift-ausnahmen.json, weil
+// GENAU deren zwei Eintraege die Gegenprobe bilden (Muster des Reviewer-Befunds: "gemessen
+// 7 von 9 unbekannt=2" -> ohne Fix bleiben Schliessung UND messung-ok false).
+test("E4-Waechter: W-7 zwei ausgenommene unknowns (produktionsnah) -> messung-ok wird geschrieben, ein verschwundener Befund wird geschlossen", async () => {
+  const store = fakeStore({
+    alerts: [
+      {
+        id: "otg_alt",
+        code: befundBucket("ownership_lost"),
+        firstSeenAt: "2026-08-20T00:00:00.000Z",
+        lastSeenAt: "2026-08-20T00:00:00.000Z",
+        lastAttemptAt: null,
+        reportedAt: null,
+        deliveredChannels: null,
+        closedAt: null,
+      },
+    ],
+    calls: [], // KEIN Verkehr -> unbekannt:pruefung8 (Regelfall, in der Ausnahme-Datei ausgenommen)
+  });
+  const auditEvents = [];
+  const driftWatch = makeDriftWatch({
+    store,
+    config: fakeConfig(),
+    audit: (event) => auditEvents.push(event),
+    messaging: () => ({ sendSms: async () => {} }),
+    mailer: { sendMail: async () => {} },
+    telnyxRead: fakeTelnyxRead(),
+    elRead: fakeElRead({
+      // KEIN supports_outbound-Feld -> unbekannt:pruefung1_supports_outbound (K-15, in
+      // der Ausnahme-Datei ausgenommen)
+      fetchPhoneNumber: async () => ({ phone_number: PLATFORM_ANI, assigned_agent: { agent_id: AGENT_ID } }),
+    }),
+    // ladeAusnahmen ABSICHTLICH NICHT injiziert - der Produktions-Default muss beide
+    // strukturellen unknowns als ausgenommen erkennen.
+  });
+  await driftWatch.runBootProbe();
+
+  const messungOk = findAlert(store, "drift:messung-ok");
+  assert.ok(messungOk && messungOk.lastSeenAt, "BLOCKER 4: messung-ok muss geschrieben werden, obwohl zwei (ausgenommene) unknowns vorliegen");
+  const alterMarker = findAlert(store, befundBucket("ownership_lost"));
+  assert.ok(
+    alterMarker && alterMarker.closedAt !== null,
+    "BLOCKER 4: ein verschwundener Befund muss trotz ausgenommener unknowns geschlossen werden",
+  );
+  assert.ok(auditEvents.includes("drift_recovered"), "die Schliessung muss eine Audit-Zeile hinterlassen");
+});
+
+// W-8 (LIVE-LAGE-BEWEIS, der wichtigste Test dieser Nachbesserung): der Deploy-Stand vom
+// 28.08.2026 haelt DAUERHAFT einen echten, NIE exemptierten config-Befund
+// (config_ani_mismatch: EL-Registrierung +15739090177 != ani_override +18643028341 ==
+// PLATFORM_ANI_E164, Weg 1 der Wiederherstellung, bewusst) - dieser Befund ist bei JEDEM
+// stuendlichen Lauf (Boot, Sweep, externer Actions-Takt) IDENTISCH vorhanden, unbegrenzt.
+// OHNE Blocker 3 waere das 24 Mails/24h. Simuliert werden 24 Laeufe im STUENDLICHEN Takt
+// (die reale Kadenz aus boot.js#runSweepTick + dem GitHub-Actions-Cron) ueber eine
+// gestellte Uhr (kein echtes Warten). Erwartung: NICHT 24 Versaende, sondern hoechstens
+// alle debounceMs (Produktions-Default 6h) einer - hier exakt 4 (Stunde 0/6/12/18).
+test("E4-Waechter: W-8 LIVE-LAGE-Beweis - EL-Nummer != ani_override (bewusst, Weg 1) fuehrt NICHT zu stuendlichem Mail+SMS", async () => {
+  const EL_LIVE = "+15739090177"; // EL-Registrierung, unveraendert (gehoert dem Konto nicht mehr - separater Sachverhalt)
+  const ANI_OVERRIDE_LIVE = "+18643028341"; // kontoeigene DID == PLATFORM_ANI_E164
+  const EINE_STUNDE_MS = 3600000;
+  const STUNDEN_PRO_TAG = 24;
+  const ERWARTETE_VERSAENDE = 4; // 24h / 6h-Entprellung = Stunde 0, 6, 12, 18
+
+  const store = fakeStore({ calls: gesunderVerkehr() });
+  let mailVersand = 0;
+  const mailer = { sendMail: async () => { mailVersand += 1; } };
+  const telnyxRead = fakeTelnyxRead({
+    getFqdnConnection: async () => ({ active: true, aniOverride: ANI_OVERRIDE_LIVE }),
+  });
+  const elRead = fakeElRead({
+    fetchPhoneNumber: async () => ({
+      phone_number: EL_LIVE,
+      assigned_agent: { agent_id: AGENT_ID },
+      supports_outbound: true, // alles AUSSER der bewussten Weg-1-Abweichung bleibt gesund
+    }),
+  });
+  const config = fakeConfig({ platformAniE164: ANI_OVERRIDE_LIVE, platformAlertMailTo: "owner@example.com" });
+  const deps = fakeDeps({ store, config, telnyxRead, elRead, audit: () => {} });
+  deps.mailer = mailer;
+  const driftWatch = makeDriftWatch(deps);
+
+  const echteUhr = Date.now;
+  let uhrMs = Date.parse("2026-08-29T00:00:00.000Z");
+  Date.now = () => uhrMs;
+  try {
+    await driftWatch.runBootProbe(); // Stunde 0
+    // Bewusst sequenziell (kein Promise.all): jeder Lauf muss den durablen Marker-Stand
+    // des VORHERIGEN Laufs sehen (Entprellung/Single-Flight lesen den Store) - genau die
+    // reale Reihenfolge stuendlicher Cron-Ticks.
+    for (let stunde = 1; stunde < STUNDEN_PRO_TAG; stunde += 1) {
+      uhrMs += EINE_STUNDE_MS;
+      await driftWatch.runDriftSweep();
+    }
+  } finally {
+    Date.now = echteUhr;
+  }
+
+  assert.ok(mailVersand < STUNDEN_PRO_TAG, `${mailVersand} Mails an 24 stuendlichen Laeufen waere weiterhin stuendlich`);
+  assert.equal(
+    mailVersand,
+    ERWARTETE_VERSAENDE,
+    "die 6h-Entprellung (config.billing.outageAlertDebounceMs) muss auf 4 Versaende pro Tag reduzieren",
+  );
 });
 
 // Gegenprobe zu W-3 (Blocker-Vermeidungsliste 2): die ALTE Bedingung ("Befund fehlt in

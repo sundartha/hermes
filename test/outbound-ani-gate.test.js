@@ -23,6 +23,12 @@ const FRISCH_MS = Date.parse(FRISCH_ISO);
 const MAX_AGE_MS = 900000; // 15 min, Produktions-Default
 const EINE_MINUTE_MS = 60000; // Abstand "jetzt" zur Fixture-Zeit, klar innerhalb jeder Frist
 const HTTP_SERVICE_UNAVAILABLE = 503;
+// Blocker 2 (Review Runde 2): PLATTFORM-ANI (aus PLATFORM_ANI_E164/config.provisioning.
+// platformAniE164) MUSS die nachgemessene Nummer sein - NICHT die Absender-DID des
+// anrufenden Tenants (ctx.fromNumber, hier bewusst eine ANDERE Nummer als
+// PLATTFORM_ANI, damit G-2b eine Verwechslung tatsaechlich faengt).
+const PLATTFORM_ANI = "+18643028341";
+const TENANT_DID = "+491700000000"; // == store.load().numbers[0].e164, wird ctx.fromNumber
 
 // Vollstaendig durchgesteuerter Default-Store (Muster outbound-gates-order.test.js): die
 // GESAMTE Kette laesst sich bis reserve_budget durchfahren, ohne dass ein anderes Gate
@@ -65,6 +71,7 @@ function defaultConfig(overrides = {}) {
     perTargetWindowMs: 86400000,
     outboundAniGateEnabled: false,
     outboundAniGateMaxAgeMs: MAX_AGE_MS,
+    platformAniE164: PLATTFORM_ANI,
     ...overrides,
   });
 }
@@ -167,6 +174,33 @@ test("E4-ANI-Riegel: G-2 enabled=true + frischer ownership_lost + Nachmessung be
   assert.equal(denial.audit.event, "place_call_denied");
   assert.equal(nachmessungAufrufe, 1, "genau EINE Live-Nachmessung");
   assert.equal(reserviert, 0, "0 Waehlversuche - reserve_budget wurde NIE erreicht");
+});
+
+// G-2b: Blocker 2 - die Nachmessung MUSS die Plattform-ANI treffen, NICHT ctx.fromNumber
+test("E4-ANI-Riegel: G-2b die Live-Nachmessung erhaelt BYTE-GENAU die Plattform-ANI, NICHT die Tenant-DID (ctx.fromNumber)", async () => {
+  let gemesseneE164 = null;
+  const { gates } = makeOutboundGates(
+    makeDeps({
+      config: { outboundAniGateEnabled: true, platformAniE164: PLATTFORM_ANI },
+      store: {
+        load: () => ({
+          numbers: [{ tenantId: "T", status: "active", provider: "telnyx", e164: TENANT_DID }],
+          outageAlerts: [{ code: "drift:ownership_lost", closedAt: null, lastSeenAt: FRISCH_ISO }],
+        }),
+      },
+      aniOwnershipRecheck: async (e164) => {
+        gemesseneE164 = e164;
+        return true;
+      },
+    }),
+  );
+  await mitUhr(FRISCH_MS + EINE_MINUTE_MS, () => fahreKette(gates));
+  assert.equal(gemesseneE164, PLATTFORM_ANI, "die Nachmessung muss die PLATTFORM-ANI bekommen");
+  assert.notEqual(
+    gemesseneE164,
+    TENANT_DID,
+    "die Nachmessung darf NIEMALS die Absender-DID des anrufenden Tenants bekommen (Blocker 2)",
+  );
 });
 
 // G-3: unbekannt ODER zu alt -> durchlassen (fail-open bei Unwissen) -----------------

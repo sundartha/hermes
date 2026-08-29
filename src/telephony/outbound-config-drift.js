@@ -123,7 +123,16 @@ function pruefeElNummer({ elNummer }, soll, ctx) {
     meldeUnbekannt("pruefung1", "phone_number fehlt in der Antwort", ctx);
     return null;
   }
-  if (wert.agentId && soll.elAgentId && wert.agentId !== soll.elAgentId) {
+  // Blocker 1/5 (Review Runde 2): "kein Urteil moeglich" hatte hier ZWEI stille Faelle -
+  // soll.elAgentId leer (ELEVENLABS_AGENT_ID nicht konfiguriert) und wert.agentId fehlend
+  // (assigned_agent nicht in der Antwort, z.B. Nummer keinem Agenten zugewiesen). Beide
+  // wurden bisher als [] gemeldet UND als "gemessen" mitgezaehlt - exakt der Fehler, den
+  // K-15 fuer pruefung1_supports_outbound bereits behoben hat (unbekannt statt stumm).
+  if (!soll.elAgentId) {
+    meldeUnbekannt("pruefung1_agent", "ELEVENLABS_AGENT_ID nicht konfiguriert", ctx);
+  } else if (!wert.agentId) {
+    meldeUnbekannt("pruefung1_agent", "assigned_agent.agent_id fehlt in der Antwort", ctx);
+  } else if (wert.agentId !== soll.elAgentId) {
     melde(
       { code: DRIFT_BEFUND.EL_AGENT_MISMATCH, klasse: DRIFT_KLASSE.CONFIG, detail: "assigned_agent.agent_id != ELEVENLABS_AGENT_ID" },
       ctx,
@@ -330,9 +339,22 @@ function pruefeStale({ soll, schwellen, nowMs }, ctx) {
 // Zaehlt EINMAL ueber die fertige Befundliste (ALLE Klassen, ausgenommen oder nicht) -
 // die einzige Stelle, die zaehler befuellt (kein Parameter-Mutieren in den pruefeXxx-
 // Funktionen, G27/F1).
+//
+// unknownOffen (Blocker 4, S1-1): NICHT-AUSGENOMMENE unknowns - unterscheidet "erklaerte
+// Unwissenheit" (ein strukturell unvermeidbarer unknown mit gueltiger Ausnahme, z.B.
+// unbekannt:pruefung1_supports_outbound) von "konnte nicht messen" (ein ECHTER
+// Anbieterfehler/fehlender Schluessel ohne Ausnahme). zaehler.unknown bleibt die
+// GESAMTzahl (Sollzahl-Rechnung/Log-Zeile) - unknownOffen ist die fuer Selbstheilung
+// (schliesseVerschwundeneBefunde/MESSUNG_OK_MARKER, outbound-drift-watch.js) relevante
+// Teilmenge. Ohne die Trennung war zaehler.unknown in Produktion IMMER > 0 (strukturelle
+// unknowns sind der Regelfall), wodurch beide Selbstheilungs-Bedingungen unerreichbar
+// blieben.
 function zaehleBefunde(befunde) {
-  const zaehler = { ownership: 0, config: 0, warn: 0, unknown: 0, watchdog_stale: 0 };
-  for (const eintrag of befunde) zaehler[eintrag.klasse] += 1;
+  const zaehler = { ownership: 0, config: 0, warn: 0, unknown: 0, watchdog_stale: 0, unknownOffen: 0 };
+  for (const eintrag of befunde) {
+    zaehler[eintrag.klasse] += 1;
+    if (eintrag.klasse === DRIFT_KLASSE.UNKNOWN && !eintrag.ausgenommen) zaehler.unknownOffen += 1;
+  }
   return zaehler;
 }
 

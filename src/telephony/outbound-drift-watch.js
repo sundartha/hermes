@@ -8,7 +8,9 @@
 import { messeAnbieterWirklichkeit } from "./outbound-config-probe.js";
 import { beurteileDrift, DRIFT_KLASSE } from "./outbound-config-drift.js";
 import { meldeBetreiberAlarm, meldeBetreiberNotiz } from "./outage-report.js";
+import { meldeErlaubt } from "./outage-detection.js";
 import { sollAusConfig as sollAusConfigGeteilt, schwellenAusConfig as schwellenAusConfigGeteilt } from "./outbound-config-soll.js";
+import { ladeAusnahmen as ladeAusnahmenGeteilt } from "./outbound-drift-ausnahmen.js";
 import * as ops from "../store/state-ops.js";
 import { PLATFORM_NUMBER_PURPOSE } from "../store/defaults.js";
 import { MS_PER_MINUTE } from "../utils/timer.js";
@@ -80,12 +82,21 @@ async function beanspruchen({ store, nowMs, minIntervalMs }) {
 // ein Urteil faellen konnte. Ein reiner Anbieterfehler (429/Timeout) macht aus
 // "ownership_lost" ein "unbekannt:pruefung3" - der Marker waere sonst geschlossen worden,
 // obwohl der Ausfall unveraendert fortbesteht (PM-16, eine Ebene hoeher als der Kern).
-// Dieselbe Bedingung wie beim MESSUNG_OK_MARKER (zaehler.unknown === 0): kann der Lauf
-// auch nur EINE Pruefung nicht beurteilen, wird in diesem Lauf GAR NICHTS geschlossen -
-// lieber ein Marker, der laenger offen bleibt, als eine geloeschte Warnung waehrend eines
-// laufenden Ausfalls.
+// Dieselbe Bedingung wie beim MESSUNG_OK_MARKER (zaehler.unknownOffen === 0): kann der
+// Lauf auch nur EINE Pruefung nicht beurteilen, wird in diesem Lauf GAR NICHTS
+// geschlossen - lieber ein Marker, der laenger offen bleibt, als eine geloeschte Warnung
+// waehrend eines laufenden Ausfalls.
+//
+// BLOCKER 4 (S1-1, Review Runde 2): zaehler.unknown (ALLE unknowns) statt
+// zaehler.unknownOffen (NICHT-ausgenommene unknowns) machte diese Bedingung in
+// Produktion UNERREICHBAR - strukturell unvermeidbare unknowns (z.B.
+// unbekannt:pruefung1_supports_outbound, "kein Verbrauch in 24h" bei ~1 Anruf/Woche)
+// sind der REGELFALL, nicht die Ausnahme. zaehler.unknown blieb dadurch in Produktion
+// IMMER > 0, ein behobener Ausfall wurde NIE geschlossen. unknownOffen zaehlt nur
+// unknowns OHNE gueltige Ausnahme - "erklaerte Unwissenheit" blockt die Selbstheilung
+// nicht mehr, ein ECHTES "konnte nicht messen" weiterhin.
 function schliesseVerschwundeneBefunde({ store, audit, befunde, zaehler, nowMs }) {
-  if (zaehler.unknown > 0) return;
+  if (zaehler.unknownOffen > 0) return;
   const aktuelle = new Set(befunde.map((befund) => befundBucket(befund.code)));
   const state = store.load();
   const offene = state.outageAlerts.filter(
@@ -110,9 +121,31 @@ function sollAusConfig({ config, store, verbrauch24hMs }) {
   };
 }
 
+// BLOCKER 3 (Review Runde 2, erste Haelfte): Entprellung VOR jedem Alarm-Versand. OHNE
+// sie feuert JEDER Lauf (stuendlich, plus Boot, plus externer Actions-Takt) bei
+// unveraendertem Befund erneut den VOLLEN Meldeweg (Mail+SMS) - gemessen: 24
+// runDriftSweep-Aufrufe bei unveraendertem Ausfall -> 3 Mails + 9 Audit-Zeilen; im
+// Stundentakt waeren das 24 Mails/Tag, der reale 27.08.-Ausfall lief 3 Tage. Dieselbe
+// Regel (meldeErlaubt) und dieselben Schwellen wie der Ausfall-Melder (E-3b, Muster
+// outageAlertDebounceMs) - EINE Quelle (G5) statt einer zweiten, hier getippten
+// Fristlogik: "ein bereits gemeldeter Vorfall darf erst nach debounceMs erneut erinnern"
+// ist dieselbe Frage, ob sie am not-placed-Ausfall oder an einem Drift-Befund haengt. Ein
+// noch nicht existierender Marker (erster Fund) ist immer erlaubt.
+function alarmErlaubt({ store, bucket, config, nowMs }) {
+  const marker = ops.openOutageAlert(store.load(), bucket);
+  if (!marker) return true;
+  return meldeErlaubt(marker, nowMs, {
+    debounceMs: config.billing.outageAlertDebounceMs,
+    retryMs: config.billing.outageAlertRetryMs,
+  });
+}
+
 // Vollstaendig fail-soft: ein Fehler HIER darf niemals den Boot oder den Stunden-Sweep
 // abbrechen (Muster reportSystematicOutage/runPlatformHoldEscalationSweep).
-async function laufeDrift({ store, config, audit, messaging, mailer, telnyxRead, elRead, anlass }) {
+// ladeAusnahmen (BLOCKER 3, zweite Haelfte): dieselbe deklarierte Ausnahme-Quelle wie der
+// CLI-Weg (outbound-drift-ausnahmen.js) - injizierbar (Test), Default die ECHTE Datei
+// (Muster telnyxRead/elRead/mailer: injiziert, aber mit einem echten Produktions-Default).
+async function laufeDrift({ store, config, audit, messaging, mailer, telnyxRead, elRead, ladeAusnahmen, anlass }) {
   try {
     const minIntervalMs = config.billing.outboundDriftMinIntervalMs;
     // Rollback-Hebel (Muster outageAlertWindowMs=0): 0 haelt den Waechter komplett aus.
@@ -125,18 +158,27 @@ async function laufeDrift({ store, config, audit, messaging, mailer, telnyxRead,
     const schwellen = schwellenAusConfigGeteilt(config);
 
     const messung = await messeAnbieterWirklichkeit({ telnyxRead, elRead, soll });
-    const { befunde, zaehler, gemessen, soll: sollAnzahl } = beurteileDrift({ messung, soll, schwellen, nowMs });
+    const { befunde, zaehler, gemessen, soll: sollAnzahl } = beurteileDrift({
+      messung,
+      soll,
+      ausnahmen: ladeAusnahmen(),
+      schwellen,
+      nowMs,
+    });
 
     // Umfangs-Zeile IMMER loggen, auch im gruenen Fall (Betriebs-Positiv-Kontrolle,
     // Lehre pruefkommando-ohne-positiv-kontrolle): ein Waechter, der nichts findet, muss
     // von einem, der nichts sucht, unterscheidbar bleiben.
-    console.log(`[drift] anlass=${anlass} gemessen=${gemessen} von ${sollAnzahl} befunde=${befunde.length} unbekannt=${zaehler.unknown}`);
+    console.log(
+      `[drift] anlass=${anlass} gemessen=${gemessen} von ${sollAnzahl} befunde=${befunde.length} unbekannt=${zaehler.unknown} unbekannt_offen=${zaehler.unknownOffen}`,
+    );
 
     for (const befund of befunde) {
       if (befund.ausgenommen) continue;
       const bucket = befundBucket(befund.code);
       const zeile = driftZeile(befund);
       if (VOLL_KLASSEN.has(befund.klasse)) {
+        if (!alarmErlaubt({ store, bucket, config, nowMs })) continue; // entprellt (Blocker 3)
         await meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion: `drift_${befund.code}`, zeile, nowMs });
       } else {
         await meldeBetreiberNotiz({ store, audit, bucket, aktion: `drift_${befund.code}`, zeile, nowMs });
@@ -144,7 +186,7 @@ async function laufeDrift({ store, config, audit, messaging, mailer, telnyxRead,
     }
     schliesseVerschwundeneBefunde({ store, audit, befunde, zaehler, nowMs });
 
-    if (zaehler.unknown === 0) {
+    if (zaehler.unknownOffen === 0) {
       await store.withStoreLock(() => {
         ops.claimOutageAlert(store.load(), { code: MESSUNG_OK_MARKER, nowMs });
       });
@@ -158,9 +200,11 @@ async function laufeDrift({ store, config, audit, messaging, mailer, telnyxRead,
 // Fabrik (Muster makeOutageWatch): EINMAL beim Boot verdrahtet (INV-7). telnyxRead/elRead
 // sind der rein lesende Read-Port (registry.js#providerConfigRead, elevenlabs/convai.js#
 // fetchPhoneNumber ueber eine schmale account-Closure) - server.js injiziert sie.
-export function makeDriftWatch({ store, config, audit, messaging, mailer, telnyxRead, elRead }) {
+// ladeAusnahmen: Default die ECHTE, geteilte Ausnahme-Datei (Blocker 3) - ein Test kann
+// eine eigene Attrappe injizieren, server.js injiziert nichts und bekommt den Default.
+export function makeDriftWatch({ store, config, audit, messaging, mailer, telnyxRead, elRead, ladeAusnahmen = ladeAusnahmenGeteilt }) {
   return {
-    runDriftSweep: () => laufeDrift({ store, config, audit, messaging, mailer, telnyxRead, elRead, anlass: "sweep" }),
-    runBootProbe: () => laufeDrift({ store, config, audit, messaging, mailer, telnyxRead, elRead, anlass: "boot" }),
+    runDriftSweep: () => laufeDrift({ store, config, audit, messaging, mailer, telnyxRead, elRead, ladeAusnahmen, anlass: "sweep" }),
+    runBootProbe: () => laufeDrift({ store, config, audit, messaging, mailer, telnyxRead, elRead, ladeAusnahmen, anlass: "boot" }),
   };
 }

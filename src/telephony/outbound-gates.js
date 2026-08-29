@@ -257,9 +257,16 @@ function makeAniOwnershipGate({ config, store, aniOwnershipRecheck }) {
       if (!config.safety.outboundAniGateEnabled) return null;
       const marker = openOutageAlert(store.load(), ANI_OWNERSHIP_BUCKET);
       if (!marker || !frischGenug(marker.lastSeenAt, config.safety.outboundAniGateMaxAgeMs)) return null;
+      // Blocker 2 (Review Runde 2): die Nachmessung muss die PLATTFORM-ANI treffen -
+      // exakt die Nummer, die Pruefung 3 misst (N_ani = outbound.ani_override der
+      // FQDN-Connection) und die der Marker drift:ownership_lost meint. ctx.fromNumber
+      // ist die EIGENE aktive DID des ANRUFENDEN Tenants - eine andere Nummer, die im
+      // realen Fall weiterhin dem Konto gehoert und den Riegel dadurch wirkungslos
+      // machte (false-negativ) oder umgekehrt einen unbeteiligten Anruf haette ablehnen
+      // koennen (false-positiv auf einer fremden Nummer).
       let nochImmerVerloren;
       try {
-        nochImmerVerloren = await aniOwnershipRecheck(ctx.fromNumber);
+        nochImmerVerloren = await aniOwnershipRecheck(config.provisioning.platformAniE164);
       } catch {
         nochImmerVerloren = null;
       }

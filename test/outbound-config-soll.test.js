@@ -52,3 +52,17 @@ test("E4-Soll: S-3 beide Aufrufer importieren AUS outbound-config-soll.js, keine
   assert.doesNotMatch(watchSrc, /PREFIX_ISO/, "outbound-drift-watch.js darf keine eigene Praefix-Tabelle mehr tragen");
   assert.doesNotMatch(cliSrc, /PREFIX_ISO/, "der CLI-Weg darf keine eigene Praefix-Tabelle mehr tragen");
 });
+
+// Blocker 7 (Review Runde 2, G5): dieselbe Duplizierung am EL-GET (elRead-Closure) - vorher
+// wortgleich in server.js UND scripts/check-outbound-drift.mjs. EINE Fabrik statt zweier
+// getippter Kopien; die Gegenprobe stellt sicher, dass keiner der beiden Aufrufer noch
+// eine eigene "fetchPhoneNumber({ fetchImpl: fetch, account: ..." Formulierung traegt.
+test("E4-Soll: S-4 beide Aufrufer bauen elRead ueber makeElConfigRead, keine getippte Zweitkopie der Closure (Blocker 7)", () => {
+  const serverSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "server.js"), "utf8");
+  const cliSrc = fs.readFileSync(path.join(REPO_ROOT, "scripts", "check-outbound-drift.mjs"), "utf8");
+  assert.match(serverSrc, /makeElConfigRead/, "server.js muss makeElConfigRead verwenden");
+  assert.match(cliSrc, /makeElConfigRead/, "der CLI-Weg muss makeElConfigRead verwenden");
+  const eigeneClosure = /fetchPhoneNumber\(\{\s*fetchImpl:\s*fetch/;
+  assert.doesNotMatch(serverSrc, eigeneClosure, "server.js darf die EL-Closure nicht mehr selbst formulieren");
+  assert.doesNotMatch(cliSrc, eigeneClosure, "der CLI-Weg darf die EL-Closure nicht mehr selbst formulieren");
+});

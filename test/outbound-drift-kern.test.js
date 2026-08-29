@@ -13,6 +13,7 @@ import {
   DRIFT_KLASSE,
   DRIFT_BEFUND,
   UNBEKANNT_PRAEFIX,
+  PRUEFUNGEN_SOLL,
 } from "../src/telephony/outbound-config-drift.js";
 import { telnyxJson } from "../src/telephony/adapters/telnyx/http.js";
 import fs from "node:fs";
@@ -297,4 +298,76 @@ test("E4-Kern: K-15 supports_outbound fehlt in der EL-Antwort -> unbekannt:pruef
   assert.ok(befunde.some((befund) => befund.code === `${UNBEKANNT_PRAEFIX}pruefung1_supports_outbound`));
   assert.ok(!befunde.some((befund) => befund.code === DRIFT_BEFUND.EL_OUTBOUND_DISABLED));
   assert.equal(zaehler.unknown, 1);
+});
+
+// K-19: Blocker 1 - EL-Nummer keinem Agenten zugewiesen (assigned_agent fehlt) --------
+test("E4-Kern: K-19 assigned_agent.agent_id fehlt in der EL-Antwort -> unbekannt:pruefung1_agent, KEIN gruenes 9/9", () => {
+  const messung = {
+    ...messungMitAniBesitz(),
+    elNummer: { ok: true, wert: { e164: PLATTFORM_ANI, supportsOutbound: true } },
+  };
+  const { befunde, zaehler, gemessen } = beurteileDrift({ messung, soll: SOLL, schwellen: SCHWELLEN, nowMs: 1 });
+  assert.ok(
+    befunde.some((befund) => befund.code === `${UNBEKANNT_PRAEFIX}pruefung1_agent`),
+    "fehlendes assigned_agent.agent_id muss ein GEZAEHLTER unknown-Befund sein",
+  );
+  assert.ok(!befunde.some((befund) => befund.code === DRIFT_BEFUND.EL_AGENT_MISMATCH));
+  assert.ok(zaehler.unknown >= 1);
+  assert.ok(gemessen < PRUEFUNGEN_SOLL, "darf NICHT als vollstaendig 'gemessen' zaehlen");
+});
+
+// K-20: Blocker 5 - ELEVENLABS_AGENT_ID nicht konfiguriert (soll.elAgentId leer) ------
+test("E4-Kern: K-20 ELEVENLABS_AGENT_ID nicht konfiguriert -> unbekannt:pruefung1_agent, KEIN stiller Vergleich", () => {
+  const soll = { ...SOLL, elAgentId: "" };
+  const { befunde, zaehler, gemessen } = beurteileDrift({
+    messung: messungMitAniBesitz(),
+    soll,
+    schwellen: SCHWELLEN,
+    nowMs: 1,
+  });
+  assert.ok(
+    befunde.some((befund) => befund.code === `${UNBEKANNT_PRAEFIX}pruefung1_agent`),
+    "leeres soll.elAgentId muss ein GEZAEHLTER unknown-Befund sein",
+  );
+  assert.ok(!befunde.some((befund) => befund.code === DRIFT_BEFUND.EL_AGENT_MISMATCH));
+  assert.ok(zaehler.unknown >= 1);
+  assert.ok(gemessen < PRUEFUNGEN_SOLL, "darf NICHT als vollstaendig 'gemessen' zaehlen");
+});
+
+// K-21: Positiv-Kontrolle Agent-Zuweisung - beide Werte gesetzt und gleich -> kein Befund
+test("E4-Kern: K-21 assigned_agent.agent_id == ELEVENLABS_AGENT_ID -> kein Befund, kein unknown fuer pruefung1_agent", () => {
+  const { befunde } = beurteileDrift({ messung: messungGesund(), soll: SOLL, schwellen: SCHWELLEN, nowMs: 1 });
+  assert.ok(!befunde.some((befund) => befund.code.startsWith(`${UNBEKANNT_PRAEFIX}pruefung1_agent`)));
+  assert.ok(!befunde.some((befund) => befund.code === DRIFT_BEFUND.EL_AGENT_MISMATCH));
+});
+
+// K-22: echter Mismatch bleibt ein Mismatch (Regressionsschutz gegen die Neufassung) --
+test("E4-Kern: K-22 assigned_agent.agent_id != ELEVENLABS_AGENT_ID (beide gesetzt) -> config_el_agent_mismatch", () => {
+  const messung = {
+    ...messungMitAniBesitz(),
+    elNummer: { ok: true, wert: { e164: PLATTFORM_ANI, agentId: "agent_ANDERER", supportsOutbound: true } },
+  };
+  const { befunde } = beurteileDrift({ messung, soll: SOLL, schwellen: SCHWELLEN, nowMs: 1 });
+  const treffer = befunde.filter((befund) => befund.code === DRIFT_BEFUND.EL_AGENT_MISMATCH);
+  assert.equal(treffer.length, 1);
+  assert.equal(treffer[0].klasse, DRIFT_KLASSE.CONFIG);
+});
+
+// K-23/K-24: Blocker 4 (S1-1) - zaehler.unknownOffen unterscheidet "erklaerte
+// Unwissenheit" (gueltige Ausnahme) von "konnte nicht messen" (kein Eintrag) ----------
+test("E4-Kern: K-23 ein unknown MIT gueltiger Ausnahme zaehlt in zaehler.unknown, NICHT in zaehler.unknownOffen", () => {
+  const messung = { ...messungMitAniBesitz(), elNummer: { ok: true, wert: { e164: PLATTFORM_ANI, agentId: AGENT_ID } } };
+  const ausnahmen = [
+    { befund: `${UNBEKANNT_PRAEFIX}pruefung1_supports_outbound`, grund: "EL liefert das Feld strukturell nicht", seit: "2026-08-28" },
+  ];
+  const { zaehler } = beurteileDrift({ messung, soll: SOLL, ausnahmen, schwellen: SCHWELLEN, nowMs: 1 });
+  assert.equal(zaehler.unknown, 1, "die GESAMTzahl bleibt unveraendert (Sollzahl-Rechnung/Log-Zeile)");
+  assert.equal(zaehler.unknownOffen, 0, "ein GUELTIG ausgenommener unknown darf die Selbstheilung NICHT blockieren");
+});
+
+test("E4-Kern: K-24 ein unknown OHNE Ausnahme zaehlt in BEIDEN Zaehlern (echtes 'konnte nicht messen')", () => {
+  const messung = { ...messungMitAniBesitz(), elNummer: { ok: true, wert: { e164: PLATTFORM_ANI, agentId: AGENT_ID } } };
+  const { zaehler } = beurteileDrift({ messung, soll: SOLL, schwellen: SCHWELLEN, nowMs: 1 });
+  assert.equal(zaehler.unknown, 1);
+  assert.equal(zaehler.unknownOffen, 1, "ohne Ausnahme bleibt ein unknown ein ECHTES 'konnte nicht messen'");
 });

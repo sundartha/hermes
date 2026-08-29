@@ -8,6 +8,16 @@
 // Reine Funktionen (kein Netz, kein store, kein Date.now) - der Store-abhaengige Rest
 // (alertSenderE164, verbrauch24hMicroCents, letzteErfolgreicheMessungMs) bleibt beim
 // jeweiligen Aufrufer, weil nur outbound-drift-watch.js einen Store hat (Plan D-5).
+//
+// AUSNAHME (Blocker 7, Review Runde 2): makeElConfigRead() unten ist KEINE reine
+// Projektion mehr - sie liefert eine Closure, die BEIM AUFRUF einen echten GET macht.
+// Die Fabrik selbst bleibt aber deterministisch (kein Netz WAEHREND der Konstruktion,
+// kein Date.now) - dieselbe Trennung wie bei jeder anderen injizierten Provider-Closure
+// in diesem Repo (messaging()/voiceControl aus registry.js). Sie steht trotzdem HIER statt
+// in einer dritten Datei, weil sie EXAKT dieselbe Duplizierung beseitigt (elRead stand
+// wortgleich in server.js UND scripts/check-outbound-drift.mjs) - derselbe G5-Fall, nur am
+// EL-GET statt an der Telnyx-Soll-Projektion.
+import { fetchPhoneNumber } from "../elevenlabs/convai.js";
 
 // Bekannte Praefix->ISO-Zuordnung (Deviation: nur die drei heute betriebenen Laender,
 // Plan E-6 Pruefung 7). "*" oder eine nicht gelistete Vorwahl macht die Menge
@@ -42,4 +52,15 @@ export function sollAusConfig(config) {
 
 export function schwellenAusConfig(config) {
   return { staleMs: config.billing.outboundDriftStaleMs, balanceMinHours: config.billing.outboundDriftBalanceMinHours };
+}
+
+// Blocker 7 (G5): die EINE Fabrik fuer die EL-Nummernabruf-Closure (Pruefung 1). Vorher
+// wortgleich in server.js UND scripts/check-outbound-drift.mjs formuliert - eine
+// kuenftige Aenderung (z.B. ein zweiter Header, ein anderer fetchImpl) haette an einer der
+// beiden Stellen vergessen werden koennen, ohne dass ein Test es merkt.
+export function makeElConfigRead(config) {
+  return {
+    fetchPhoneNumber: (phoneNumberId) =>
+      fetchPhoneNumber({ fetchImpl: fetch, account: config.voice.elevenLabsOutbound, phoneNumberId }),
+  };
 }

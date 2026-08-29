@@ -21,16 +21,18 @@
 // Aufruf: npm run outbound:drift
 import { config } from "../src/config.js";
 import { telnyxConfigRead } from "../src/telephony/adapters/telnyx/config-read.js";
-import { fetchPhoneNumber } from "../src/elevenlabs/convai.js";
 import { messeAnbieterWirklichkeit } from "../src/telephony/outbound-config-probe.js";
 import { beurteileDrift, istBlockierend, DRIFT_BEFUND } from "../src/telephony/outbound-config-drift.js";
-import { sollAusConfig as sollAusConfigGeteilt, schwellenAusConfig } from "../src/telephony/outbound-config-soll.js";
-import { readFileSync } from "node:fs";
+import {
+  sollAusConfig as sollAusConfigGeteilt,
+  schwellenAusConfig,
+  makeElConfigRead,
+} from "../src/telephony/outbound-config-soll.js";
+import { ladeAusnahmen } from "../src/telephony/outbound-drift-ausnahmen.js";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const LOG_PREFIX = "[check-outbound-drift]";
-const AUSNAHMEN_PFAD = new URL("../outbound-drift-ausnahmen.json", import.meta.url);
 
 // Fail-closed VOR jedem Netzzugriff: ungelesen wird nichts als gruen gemeldet (Muster
 // check-elevenlabs-drift.mjs#schluesselFehlt). Nur der Telnyx-Schluessel ist Pflicht - ein
@@ -39,19 +41,6 @@ const AUSNAHMEN_PFAD = new URL("../outbound-drift-ausnahmen.json", import.meta.u
 function schluesselFehlt() {
   if (!config.telephony.telnyxApiKey) return "TELNYX_API_KEY fehlt.";
   return null;
-}
-
-// Deklarierte Ausnahmen (Muster eslint-legacy-exceptions.json): Grund UND Datum sind
-// Pflicht (der Kern selbst prueft das nochmal, s. ausnahmeFehler) - eine fehlende Datei
-// gilt als "keine Ausnahmen", kein Fehler (ein frischer Checkout ohne die Datei soll nicht
-// scheitern, er hat dann nur mehr blockierende Befunde).
-function ladeAusnahmen() {
-  try {
-    const roh = readFileSync(AUSNAHMEN_PFAD, "utf8");
-    return JSON.parse(roh);
-  } catch {
-    return [];
-  }
 }
 
 // Der CLI-Weg hat KEINEN Store: Pruefung 8 (24h-Verbrauch) und Pruefung 9 (Alarm-Absender-
@@ -115,10 +104,7 @@ async function runCli() {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): ${grund} Ungelesen wird nichts als gruen gemeldet.`);
     return 1;
   }
-  const elRead = {
-    fetchPhoneNumber: (phoneNumberId) =>
-      fetchPhoneNumber({ fetchImpl: fetch, account: config.voice.elevenLabsOutbound, phoneNumberId }),
-  };
+  const elRead = makeElConfigRead(config);
   const soll = sollAusConfig();
   const messung = await messeAnbieterWirklichkeit({ telnyxRead: telnyxConfigRead, elRead, soll });
   const ergebnis = beurteileDrift({

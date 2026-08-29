@@ -3360,7 +3360,13 @@ zutreffen:**
    ablehnen, obwohl der Eigentuemer laengst eine neue DID gekauft hat).
 2. Eine LIVE-Nachmessung (derselbe GET wie Pruefung 3 des Waechters, eigener kurzer
    Timeout) MUSS den Verlust im Moment des Anrufs BESTAETIGEN — eine durable, aber
-   inzwischen behobene Messung gated nicht.
+   inzwischen behobene Messung gated nicht. Die Nachmessung zielt IMMER auf die
+   **Plattform-ANI** (`config.provisioning.platformAniE164`, dieselbe Nummer, die
+   Pruefung 3 des Waechters misst) — NICHT auf `ctx.fromNumber` (die aktive DID des
+   ANRUFENDEN Tenants). Review-Blocker 2026-08-29: eine erste Fassung mass versehentlich
+   die Tenant-DID nach, wodurch der Riegel im echten 27.08.-Fall inert gewesen waere (die
+   Tenant-DID gehoerte dem Konto weiterhin) — per Test byte-genau gepinnt
+   (`test/outbound-ani-gate.test.js` G-2b).
 3. Fail-open bei jeder Unsicherheit: keine Messung, unbekannt, ein werfender Recheck
    (Timeout/Netzfehler, im Gate selbst per try/catch abgefangen — nicht nur in der
    server.js-Wiring-Disziplin) — jeder dieser Faelle laesst den Anruf durch, NIE ab.

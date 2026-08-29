@@ -41,7 +41,9 @@ Audit-Zeile).
 
 **Wann eskaliert wird:** sofort, VOLLER Meldeweg (WARN→Audit→Mail→SMS). Zusaetzlich: ist
 `OUTBOUND_ANI_GATE_ENABLED=true`, lehnt der ANI-Riegel ab dem naechsten Anruf mit 503 ab
-(nur wenn die Messung frisch ist UND eine Live-Nachmessung sie bestaetigt).
+(nur wenn die Messung frisch ist UND eine Live-Nachmessung sie bestaetigt — die
+Nachmessung prueft die **Plattform-ANI** `PLATFORM_ANI_E164`, NICHT die Absender-DID des
+anrufenden Tenants).
 
 ## `alert_sender_not_owned` (Klasse `ownership`, VOLLER Alarm)
 

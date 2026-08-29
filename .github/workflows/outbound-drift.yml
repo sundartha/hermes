@@ -32,11 +32,17 @@ jobs:
         env:
           TELNYX_API_KEY: ${{ secrets.TELNYX_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_AGENT_ID: ${{ secrets.ELEVENLABS_AGENT_ID }}
           PLATFORM_ANI_E164: ${{ secrets.PLATFORM_ANI_E164 }}
         run: |
+          # Blocker 1 (Review Runde 2): ohne ELEVENLABS_AGENT_ID wertet Pruefung 1 die
+          # Agent-Zuweisung NIE aus (unbekannt:pruefung1_agent) - der stuendliche externe
+          # Waechter meldete das bisher als "9 von 9 gefahren", obwohl die Haelfte von
+          # Pruefung 1 nie beurteilt wurde. Deshalb hier Pflicht-Secret, nicht optional.
           fehlend=""
           if [ -z "$TELNYX_API_KEY" ];     then fehlend="$fehlend TELNYX_API_KEY"; fi
           if [ -z "$ELEVENLABS_API_KEY" ]; then fehlend="$fehlend ELEVENLABS_API_KEY"; fi
+          if [ -z "$ELEVENLABS_AGENT_ID" ]; then fehlend="$fehlend ELEVENLABS_AGENT_ID"; fi
           if [ -z "$PLATFORM_ANI_E164" ];  then fehlend="$fehlend PLATFORM_ANI_E164"; fi
           if [ -n "$fehlend" ]; then
             echo "::error::[outbound:drift] KEIN Lauf moeglich - diese Secrets fehlen im Repo:$fehlend. Dieser Schritt wird ABSICHTLICH rot (anders als der ElevenLabs-Konfigurationsdrift-Schritt in ci.yml): ein uebersprungener Waechter sieht im Log aus wie ein bestandener."
