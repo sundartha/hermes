@@ -87,3 +87,26 @@ export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = fetch
 
   return { ensureRegistration, removeRegistration };
 }
+
+// E5-01 (Review-Blocker Runde 3): EINE gemeinsame Konstruktions-Naht fuer ALLE
+// Produktionsaufrufer (provisioning-orchestrator.js, web-login.js, contract-end-cleanup.js
+// via billing/webhook.js) - vorher baute NUR der Provisioning-Orchestrator den Registrar,
+// die Freigabe-Aufrufer (Grace-Reconcile, Art.-17-Erase) injizierten ihn NIE. Jede Freigabe
+// hinterliess dadurch live eine EL-Waise, obwohl der Reparaturlauf/Kommentar einen
+// Fehlschlag als Ausnahme, nicht als Regelfall beschrieb. Dasselbe Dreifach-Gate wie
+// zuvor NUR im Orchestrator (PROVISIONING_ENABLED + elevenLabsOutbound.enabled +
+// numberRegistrationEnabled) - EIN Bauplatz statt zweier, kein zweiter Ort, der dieselbe
+// Gate-Frage nochmal beantwortet (G5).
+export function sipRegistrarWennAktiv(config) {
+  if (
+    !config.provisioning.provisioningEnabled ||
+    !config.voice.elevenLabsOutbound?.enabled ||
+    !config.voice.elevenLabsOutbound?.numberRegistrationEnabled
+  )
+    return undefined;
+  return makeElSipRegistrar({
+    el: config.voice.elevenLabsOutbound,
+    sipUser: config.telephony.telnyxSipTrunkUsername,
+    sipPasswort: config.telephony.telnyxSipTrunkPassword,
+  });
+}

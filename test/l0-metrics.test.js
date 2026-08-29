@@ -231,6 +231,35 @@ test("T-L0-7b (P2a): chars=0 wird geloggt (No-Speech ist ein Signal, kein Nicht-
   assert.deepEqual(entries[0].payload, { callId: "c1", chars: 0 });
 });
 
+test("T-L0-8 (E5-02, OUTBOUND-E5): logSenderFallback ist PII-frei (NUR grund - NIE Rufnummer/tenantId/callId)", () => {
+  const { log, entries } = collector();
+  const metrics = createMetrics({ enabled: true, log });
+
+  metrics.logSenderFallback({
+    grund: "keine_eigene_registrierung",
+    to: "+491701234567",
+    tenantId: "t_leak",
+    callId: "c_leak",
+  });
+
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].kind, "sender_fallback");
+  assert.deepEqual(Object.keys(entries[0].payload), ["grund"], "NUR der Grund-Code, kein weiteres Feld erreicht das Log");
+  assert.equal(entries[0].payload.grund, "keine_eigene_registrierung");
+  assert.equal(JSON.stringify(entries[0].payload).includes("+491701234567"), false, "Rufnummer NIE im Log");
+  assert.equal(JSON.stringify(entries[0].payload).includes("t_leak"), false, "tenantId NIE im Log");
+  assert.equal(JSON.stringify(entries[0].payload).includes("c_leak"), false, "callId NIE im Log");
+});
+
+test("T-L0-8b (E5-02): logSenderFallback schweigt bei enabled=false (Master-Schalter, Muster logCallDenied)", () => {
+  const { log, entries } = collector();
+  const metrics = createMetrics({ enabled: false, log });
+
+  metrics.logSenderFallback({ grund: "keine_eigene_registrierung" });
+
+  assert.equal(entries.length, 0);
+});
+
 test("T-L0-5: beschraenkte Map verdraengt den aeltesten Eintrag (Leak-Schutz)", () => {
   const { log, entries } = collector();
   // maxTrackedCalls=2: nach A,B,C ist A verdraengt; now liefert record-Zeiten + Gap-Zeit.

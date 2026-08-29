@@ -79,6 +79,7 @@ export async function attemptContractEndCleanup({
   auditStore = { record: async () => {} },
   logger = console,
   tenantId,
+  sipRegistrar,
 }) {
   let numberReleasePending = true;
   try {
@@ -89,6 +90,7 @@ export async function attemptContractEndCleanup({
         audit: auditStore,
         logger,
         tenantId,
+        sipRegistrar,
       });
       numberReleasePending = aborted > 0;
     } else {
@@ -120,10 +122,19 @@ export async function runContractEndCleanupSweep({
   workos,
   auditStore,
   logger = console,
+  sipRegistrar,
 }) {
   const pending = store.tenantsPendingContractEndCleanup();
   for (const tenant of pending) {
-    await attemptContractEndCleanup({ store, numberProvisioner, workos, auditStore, logger, tenantId: tenant.id });
+    await attemptContractEndCleanup({
+      store,
+      numberProvisioner,
+      workos,
+      auditStore,
+      logger,
+      tenantId: tenant.id,
+      sipRegistrar,
+    });
   }
   return { attempted: pending.length };
 }
