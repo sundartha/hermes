@@ -23,8 +23,11 @@ const RUN = {
   phaseId: "OUTBOUND-E5",
   phaseTitle:
     "F3: der Outbound sendet wieder die DID des anrufenden Tenants (je DID eine EL-Registrierung) und der Store schreibt die tatsaechlich gesendete Nummer",
-  branch: "phase/outbound-e5-absender-did",
+  branch: "phase/outbound-e5-absender-did-v2",
   baseBranch: "master",
+  // Der erste Lauf (wf_04ac0dec-140) starb am Sitzungslimit, NACHDEM der Impl-Agent gearbeitet,
+  // aber BEVOR er committet hatte. Der Lead hat den Zwischenstand als WIP-Commit gesichert.
+  wipCommit: "160a705",
   planDoc: "PLAN-OUTBOUND-RESILIENZ.md",
   befundDoc: "tasks/befund-outbound-ausfall-2026-08-27.md",
   maxFixRounds: 3,
@@ -37,6 +40,7 @@ const BASE = RUN.baseBranch;
 const PLAN_DOC = RUN.planDoc;
 const BEFUND_DOC = RUN.befundDoc;
 const MAX_FIX_ROUNDS = RUN.maxFixRounds;
+const WIP_COMMIT = RUN.wipCommit;
 const REPORT_PATH = "tasks/outbound-e5-report.md";
 
 const PLAN_AGENT = { model: "opus", effort: "xhigh" };
@@ -62,6 +66,18 @@ const BLOCKER_VERMEIDUNG = `BLOCKER-VERMEIDUNGSLISTE (aus 23 Fix-Runden der Etap
 8. FIXTURES NICHT AUF GRENZWERTE legen; Erwartungen aus dem Fixture ABLEITEN.
 9. NEUE ENV-VARIABLEN vollstaendig: src/config.js + .env.example + render.yaml + test/helpers.js BASE_ENV; pruefen, ob ein neuer Boot-Guard Bestands-Spawn-Tests kippt.
 10. DOKU AN DEN CODE ANGLEICHEN, nicht umgekehrt - und wenn die Etappe eine Zusicherung in PLAN-SECURITY.md/Runbook aendert, wird sie DORT nachgezogen (E4-Blocker 2).`;
+
+const WIP_HINWEIS = `ES LIEGT EIN ZWISCHENSTAND VOR - DU FAENGST NICHT BEI NULL AN.
+Der erste Anlauf dieser Etappe starb am Sitzungslimit, nachdem der Impl-Agent gearbeitet, aber bevor er committet hatte. Der Lead hat den Zwischenstand als WIP-Commit "${WIP_COMMIT}" gesichert (46 Dateien, ~1929 Zeilen, darunter sechs neue Testdateien test/absender-*.test.js). Dein Branch geht von DIESEM Commit aus, nicht von "${BASE}".
+
+WAS DER ZWISCHENSTAND IST UND WAS NICHT:
+- Er ist NICHT abgenommen, NICHT reviewt, und der Vorgaenger hat seine Beweise nie geliefert - er ist mitten in der Arbeit gestorben. Behandle ihn als fremden, unbelegten Entwurf.
+- Der Lead hat den Zwischenstand SELBST gemessen (nicht der Vorgaenger, der ist vorher gestorben): "${TEST_CMD}" ergibt 5397 pass / 0 fail (Anker auf ${BASE}: ${TEST_FLOOR}), "npm run lint" ergibt 0 Fehler / 65 Warnungen. Der Code ist also lauffaehig und die Suite gruen - das sagt aber NUR, dass nichts abstuerzt. Ob die Tests den richtigen SOLL-Zustand pinnen (Stichwort argument-ignorierende Attrappen, E4-Lehre Nr. 3), ist damit ausdruecklich NICHT belegt. Genau das pruefst du.
+- Du uebernimmst ihn NICHT auf Zutrauen. Fuer JEDEN der zehn Beweise gilt unveraendert: selbst ausfuehren, Kommando und Ausgabe woertlich zitieren. Ein Beweis, den du nicht selbst gefahren hast, ist kein Beweis - egal wie fertig der Code aussieht.
+- Wo der Zwischenstand vom Plan abweicht oder unfertig ist, ziehst du ihn auf den Plan nach oder baust ihn zurueck. Er ist Material, nicht Vorgabe. Was du daran aenderst oder verwirfst, nennst du in deviations.
+- Der WIP-Commit bleibt als erster Commit deines Branches stehen; deine eigene Arbeit kommt als weiterer Commit darauf. Den WIP-Commit NICHT umschreiben.
+
+`;
 
 const LINT_REGEL = `LINT-PFLICHT: npm run lint (eslint ., VOLL, im Worktree) MUSS "0 errors" melden. Suppressions nur fuer Diff-eigene Dateien.`;
 
@@ -237,9 +253,10 @@ const impl = await agent(
 === PLAN ===
 ${plan || "(Plan fehlt - brich ab, melde es in deviations)"}
 === ENDE PLAN ===
-VORGEHEN:
+${WIP_HINWEIS}VORGEHEN:
 1. ln -s "${NODE_MODULES}" node_modules
-2. git checkout -b ${BRANCH} ${BASE}
+2. git checkout -b ${BRANCH} ${WIP_COMMIT}   (NICHT von ${BASE} - der Zwischenstand oben)
+2a. Verschaffe dir zuerst einen Ueberblick, WAS im Zwischenstand schon steckt: "git show --stat ${WIP_COMMIT}" und "git diff ${BASE}..${WIP_COMMIT}". Erst danach entscheidest du je Planschritt: schon erledigt / unfertig / abweichend / fehlt.
 3. Lies "${REPO}/${BEFUND_DOC}" (Abschnitt 3/F3, Abschnitt 5) SELBST. Implementiere EXAKT gemaess Plan. ${CLEAN_CODE_REQ}
 ${LEAD_DECISIONS}
 4. node --check auf JEDE geaenderte .js-Datei.
@@ -247,6 +264,7 @@ ${LEAD_DECISIONS}
 6. **ZEHN BEWEISE (alle Pflicht, alle AUSFUEHREN):** eigeneDidProof, rueckfallLautProof, tenantIsolationProof, idempotenzProof, fehlertoleranzProof, buchfuehrungProof, telnyxZweigeUnveraendertProof, keineSchreibzugriffeProof, failClosedProof, backfillProof - Kommando+Ausgabe woertlich. Dazu driftAusnahmeProof, cutoverBeschreibung, envProof, gatesProof, lintProof.
 7. JEDEN Abnahmepunkt einzeln abarbeiten (abzaehlen!); Kommando+Ausgabe nach abnahmeProofs.
 8. node_modules NICHT committen. git add (Dateien EINZELN, nie -A) && git commit (Botschaft deutsch). headCommit = git rev-parse HEAD.
+8a. ZWISCHENDURCH COMMITTEN, nicht erst am Schluss. Genau daran ist der erste Anlauf gescheitert: er hat gearbeitet, bis die Sitzung endete, und stand ohne einen einzigen Commit da - 1929 Zeilen waeren verloren gewesen, haette der Lead sie nicht von Hand gerettet. Committe deshalb nach jedem in sich abgeschlossenen Schritt (z.B. Store-Feld+Migration, Registrierungs-Client, Auswahl im Anrufpfad, Tests). Lieber fuenf kleine Commits als ein grosser, der nie entsteht. Am Ende zaehlt nur, dass der Branch alles traegt.
 ${ABS_RULES}
 EHRLICH fuellen; Offenes offen nennen, nicht schoenen.`,
   { label: `${PHASE}-implement`, phase: "Implementieren", schema: IMPL_SCHEMA, isolation: "worktree", ...IMPL_AGENT },
