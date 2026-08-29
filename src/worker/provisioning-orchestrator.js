@@ -15,8 +15,9 @@ import {
 } from "../store/defaults.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.js";
-// OUTBOUND-E5 (F3): der Registrar hinter dem Dreifach-Gate (s. runProvisioningDrain).
-import { makeElSipRegistrar } from "../elevenlabs/nummern-registrierung.js";
+// OUTBOUND-E5 (F3/Nachbesserung Blocker 4+5): EIN Bauplatz fuer das Dreifach-Gate
+// (sipRegistrarWennAktiv), nicht zwei - s. runProvisioningDrain.
+import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
 
 export function makeProvisioningOrchestrator({
   store,
@@ -151,21 +152,13 @@ export function makeProvisioningOrchestrator({
   async function runProvisioningDrain() {
     const s = store.load();
     const deps = { provisioner: numberProvisioning(PROVIDER.TELNYX) };
-    // OUTBOUND-E5 (F3): der Registrar ist der EINZIGE neue Anbieter-SCHREIBZUGRIFF dieser
-    // Etappe. Er haengt an DERSELBEN Stelle und HINTER demselben Schalter-Muster wie der
-    // Nummernkauf (PROVISIONING_ENABLED), plus zwei eigene Riegel: ohne aktiven EL-Weg waere
-    // eine Registrierung zwecklos, und der eigene Schalter (Default AUS) macht den Merge inert
-    // und laesst sich umlegen, OHNE das Onboarding abzuschalten.
-    if (
-      config.provisioning.provisioningEnabled &&
-      config.voice.elevenLabsOutbound?.enabled &&
-      config.voice.elevenLabsOutbound?.numberRegistrationEnabled
-    )
-      deps.sipRegistrar = makeElSipRegistrar({
-        el: config.voice.elevenLabsOutbound,
-        sipUser: config.telephony.telnyxSipTrunkUsername,
-        sipPasswort: config.telephony.telnyxSipTrunkPassword,
-      });
+    // OUTBOUND-E5 (F3/Nachbesserung Blocker 4+5): der Registrar ist der EINZIGE neue
+    // Anbieter-SCHREIBZUGRIFF dieser Etappe. Das Dreifach-Gate (PROVISIONING_ENABLED plus
+    // die zwei EL-Riegel) beantwortet NUR sipRegistrarWennAktiv - hier NICHT noch einmal
+    // inline nachbauen, sonst pruefen die vier Gate-Tests in
+    // test/e5-01-sipregistrar-produktionspfad.test.js eine Funktion, die der Produktionspfad
+    // gar nicht ruft.
+    deps.sipRegistrar = sipRegistrarWennAktiv(config);
     // Geld-/Zahlungs-Optionen sind land-unabhaengig (global). Die Suchparameter
     // (countryCode/connectionId) werden PRO JOB aus dem Number-Record abgeleitet
     // (P7, Geo-Provisioning) - nicht mehr global aus config.provisioning.provisioningCountry.

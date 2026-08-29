@@ -91,22 +91,14 @@ export function makeElSipRegistrar({ el, sipUser, sipPasswort, fetchImpl = fetch
 // E5-01 (Review-Blocker Runde 3): gemeinsame Konstruktions-Naht fuer die FREIGABE-
 // Aufrufer (web-login.js, contract-end-cleanup.js via billing/webhook.js), die den
 // Registrar zuvor NIE injizierten - jede Freigabe hinterliess dadurch live eine EL-Waise.
-// NICHT abgeschlossen (Review-Blocker "Nachbesserung" 4/5, EHRLICH OFFEN GELASSEN): der
-// Provisioning-Orchestrator (worker/provisioning-orchestrator.js#runProvisioningDrain)
-// baut das IDENTISCHE Dreifach-Gate weiterhin INLINE noch einmal, statt diese Funktion zu
-// rufen - zwei Orte beantworten dieselbe Gate-Frage. Der naheliegende Fix
-// (`deps.sipRegistrar = sipRegistrarWennAktiv(config)` im Orchestrator) wurde gebaut und
-// verworfen: er KUERZT die bereits ueber max-lines-per-function gepinnte Fabrik-Funktion
-// makeProvisioningOrchestrator (180 -> 172 echte Zeilen) und aendert damit den woertlichen
-// eslint-Befundtext ('has too many lines (180)' -> '(172)') - eine ECHTE Verbesserung, die
-// `scripts/check-staged-suppressions.js` trotzdem als Bewegung ablehnt (der Vergleich ist
-// Text-basiert, nicht Richtungs-bewusst), und `test/check-staged-suppressions.test.js`
-// pinnt den Inhalt von eslint-legacy-exceptions.json zusaetzlich als Snapshot - beide
-// verbieten einem Bau-Agenten ausdruecklich, sich per neuem Altlast-Eintrag selbst
-// freizuschalten. Der fertige Fix (Diff + der noetige Legacy-Pin samt Reason) liegt im
-// Nachbesserungs-Report der Etappe bereit - er braucht die Freigabe des Eigentuemers,
-// entweder fuer den Pin oder fuer einen groesseren, hier bewusst NICHT gezogenen Umbau
-// (die Fabrik unter 100 Zeilen bringen).
+// ABGESCHLOSSEN (Owner-Auftrag 2026-08-29, Blocker 4+5): der Provisioning-Orchestrator
+// (worker/provisioning-orchestrator.js#runProvisioningDrain) ruft jetzt ebenfalls diese
+// Funktion statt das Dreifach-Gate inline nachzubauen - EIN Bauplatz statt zweier, wie
+// dieser Kommentar es vorher nur behauptete. Der Fix aendert den max-lines-per-function-
+// Befundtext von makeProvisioningOrchestrator (180 -> 171 Zeilen, echte Verbesserung,
+// bleibt aber ueber der Grenze) - dafuer traegt eslint-legacy-exceptions.json seit diesem
+// Auftrag einen eigenen, gepinnten Eintrag (Begruendung dort), test/check-staged-
+// suppressions.test.js ist mitgezogen.
 export function sipRegistrarWennAktiv(config) {
   if (
     !config.provisioning.provisioningEnabled ||

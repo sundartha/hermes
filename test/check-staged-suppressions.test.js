@@ -487,6 +487,15 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               (--suppressions-location eslint-suppressions.empty.json). complexity/
 //               no-magic-numbers/no-param-reassign unveraendert (die neue Anweisung in
 //               finishCall ist unbedingt, kein neuer Zweig).
+//   2026-08-29  src/worker/provisioning-orchestrator.js NEU aufgenommen (Owner-Auftrag,
+//               OUTBOUND-E5 Rest, Blocker 4+5): der Orchestrator ruft jetzt
+//               sipRegistrarWennAktiv(config) statt das Dreifach-Gate ein zweites Mal
+//               inline zu bauen - die vier Gate-Tests in
+//               test/e5-01-sipregistrar-produktionspfad.test.js decken damit erstmals den
+//               tatsaechlichen Produktionspfad ab. makeProvisioningOrchestrator sinkt
+//               180 -> 171 Zeilen (Verbesserung), bleibt aber ueber der 100-Zeilen-Grenze -
+//               der geaenderte Meldungstext zwingt trotzdem einen Eintrag (Begruendung am
+//               Eintrag selbst). id-length/no-negated-condition unveraendert.
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     "reason": "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-19 (Thema A): createCall 12 -> 14 Komplexitaet (openingLine-Feld + Hash-Bedingung). Geprueft und bewusst uebernommen; das Aufraeumen bleibt das eigene Refactoring des Zustandsmoduls (s.o.).",
@@ -618,6 +627,17 @@ const LEGACY_FINGERPRINT = {
       "no-magic-numbers :: No magic number: 1000.": 1,
       "no-magic-numbers :: No magic number: 2.": 6,
       "no-restricted-syntax :: Aufrufkette zu tief (mehr als 4 verkettete Zugriffe) - Gesetz von Demeter (G36)": 18
+    }
+  },
+  "src/worker/provisioning-orchestrator.js": {
+    "reason": "Owner-Auftrag 2026-08-29 (OUTBOUND-E5 Rest, Blocker 4+5): der Provisioning-Orchestrator baute das Dreifach-Gate um den EINZIGEN kostenpflichtigen Anbieter-Schreibzugriff dieser Etappe (die ElevenLabs-SIP-Registrierung) inline noch einmal nach, statt die bereits vorhandene sipRegistrarWennAktiv(config) aus elevenlabs/nummern-registrierung.js zu rufen - die vier Gate-Tests in test/e5-01-sipregistrar-produktionspfad.test.js pruefen seither eine Funktion, die der Produktionspfad gar nicht aufrief. FIX: Inline-Gate und den makeElSipRegistrar-Import geloescht, runProvisioningDrain ruft jetzt sipRegistrarWennAktiv(config) - EIN Bauplatz statt zweier, wie der Kommentar der Funktion es schon behauptete. NEBENWIRKUNG AUF DEN LINT-BEFUND: makeProvisioningOrchestrator sinkt 180 -> 171 Zeilen (die geloeschten 14 Inline-Zeilen minus die eine neue Aufrufzeile plus laengerer Kommentar) - eine ECHTE Verbesserung, bleibt aber ueber der 100-Zeilen-Grenze. Diese Datei war vorher NICHT auf der Altlast-Liste (nur ueber eslint-suppressions.json grob-suppressed, das dort NUR pro Regel zaehlt, nicht pro Meldungstext) - der geaenderte Meldungstext (180 -> 171) zaehlt fuer scripts/check-staged-suppressions.js trotzdem als Bewegung und braucht deshalb jetzt diesen Eintrag, obwohl kein neuer Verstoss entstanden ist. Ein tieferer Umbau (die Fabrik unter 100 Zeilen bringen, Aufteilung in mehrere Module) ist ein eigener, hier bewusst NICHT gezogener Schnitt - dieser Fix loest nur die gemeldeten drei Punkte. id-length (s/e/r) und no-negated-condition sind unveraendert (10 Vorkommen vorher als EIN Regel-Zaehler in eslint-suppressions.json, hier jetzt nach Meldungstext aufgeschluesselt: 4x 's', 4x 'e', 2x 'r' - macht zusammen 10 - plus 1x no-negated-condition, alles unveraendert gegenueber vor dem Fix, keine neue Regel-Kategorie). Gemessen mit 'npx eslint src/worker/provisioning-orchestrator.js --suppressions-location eslint-suppressions.empty.json --format json'.",
+    "date": "2026-08-29",
+    "findings": {
+      "id-length :: Identifier name 'e' is too short (< 2).": 4,
+      "id-length :: Identifier name 'r' is too short (< 2).": 2,
+      "id-length :: Identifier name 's' is too short (< 2).": 4,
+      "max-lines-per-function :: Function 'makeProvisioningOrchestrator' has too many lines (171). Maximum allowed is 100.": 1,
+      "no-negated-condition :: Unexpected negated condition.": 1
     }
   }
 };
