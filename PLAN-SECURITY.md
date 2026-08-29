@@ -3357,7 +3357,16 @@ Ausfall: ein Gate, das faelschlich auslöst, schaltet das Produkt fuer den Auftr
 zutreffen:**
 1. Frische-Grenze (`OUTBOUND_ANI_GATE_MAX_AGE_MS`, Default 15 min) — eine alte Messung
    gated nie (auf `plan:free` steht der Prozess still; eine stundenalte Messung darf nicht
-   ablehnen, obwohl der Eigentuemer laengst eine neue DID gekauft hat).
+   ablehnen, obwohl der Eigentuemer laengst eine neue DID gekauft hat). Review-Blocker
+   2026-08-29 (Runde 2, Folge des Blocker-3-Fixes/Mail-Entprellung): eine erste Fassung
+   liess `marker.lastSeenAt` genau dann einfrieren, wenn der VOLLE Meldeweg wegen der
+   Versand-Entprellung (`OUTAGE_ALERT_DEBOUNCE_MS`, Default 6h) ausgesetzt war — die
+   Frische-Grenze haette einen 27.08.-artigen, mehrtaegigen Ausfall dadurch nur rund 15
+   von 360 Minuten je Entprellungszyklus scharf gesehen statt durchgehend. Fix: der
+   Drift-Waechter (`outbound-drift-watch.js#laufeDrift`) beansprucht den Marker
+   (`lastSeenAt`) bei JEDEM Lauf unabhaengig vom Versand — entprellt wird NUR Mail/SMS,
+   nie die Messfrische selbst (per Test gepinnt, `test/outbound-drift-watch.test.js`
+   W-6b).
 2. Eine LIVE-Nachmessung (derselbe GET wie Pruefung 3 des Waechters, eigener kurzer
    Timeout) MUSS den Verlust im Moment des Anrufs BESTAETIGEN — eine durable, aber
    inzwischen behobene Messung gated nicht. Die Nachmessung zielt IMMER auf die

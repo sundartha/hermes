@@ -326,6 +326,58 @@ test("E4-Waechter: W-6 zwei aufeinanderfolgende Laeufe bei UNVERAENDERTEM Befund
   assert.equal(mailVersand, 1, "Lauf 2 (derselbe Befund, direkt danach) darf NICHT erneut senden - Entprellung");
 });
 
+// W-6b (Review Runde 2, NEUER Blocker eingefuehrt durch den W-6/Blocker-3-Fix): die
+// Entprellung des VERSANDS darf die FRISCHE des Markers nicht einfrieren. Der ANI-Riegel
+// (outbound-gates.js#frischGenug) liest marker.lastSeenAt mit einem VIEL kuerzeren Fenster
+// (OUTBOUND_ANI_GATE_MAX_AGE_MS, Default 15 min) als die Mail/SMS-Entprellung (Default 6h)
+// laeuft - ohne diesen Test haette ein entprellter Lauf lastSeenAt gar nicht mehr
+// angefasst, und der Riegel waere waehrend eines laufenden Ausfalls fast immer inert
+// gewesen (genau die eigene Messung des Reviews: 8 stuendliche Laeufe, Marker-Alter
+// waechst bis 300 min statt bei 0 zu bleiben).
+test("E4-Waechter: W-6b entprellter Lauf haelt den Marker trotzdem FRISCH (lastSeenAt), sendet aber nicht erneut", async () => {
+  const EINE_STUNDE_MS = 3600000;
+  const store = fakeStore({ calls: gesunderVerkehr() });
+  const auditEvents = [];
+  const audit = (event) => auditEvents.push(event);
+  let mailVersand = 0;
+  const mailer = { sendMail: async () => { mailVersand += 1; } };
+  const telnyxReadDefekt = fakeTelnyxRead({
+    findPhoneNumber: async (e164) => (e164 === PLATFORM_ANI ? { treffer: [] } : { treffer: [{ e164, status: "active" }] }),
+  });
+  const config = fakeConfig({ platformAlertMailTo: "owner@example.com" });
+  const deps = fakeDeps({ store, config, telnyxRead: telnyxReadDefekt, audit });
+  deps.mailer = mailer;
+  const driftWatch = makeDriftWatch(deps);
+
+  const echteUhr = Date.now;
+  let uhrMs = Date.parse("2026-08-29T00:00:00.000Z");
+  Date.now = () => uhrMs;
+  try {
+    await driftWatch.runBootProbe(); // Stunde 0: erster Fund, voller Meldeweg
+    assert.equal(mailVersand, 1, "Lauf 1 muss senden");
+    const markerNachLauf1 = findAlert(store, befundBucket("ownership_lost"));
+    assert.equal(markerNachLauf1.lastSeenAt, new Date(uhrMs).toISOString(), "Lauf 1 muss lastSeenAt setzen");
+
+    uhrMs += EINE_STUNDE_MS; // Stunde 1: derselbe Befund, Entprellung greift (1h < 6h-debounceMs)
+    await driftWatch.runDriftSweep();
+  } finally {
+    Date.now = echteUhr;
+  }
+
+  assert.equal(mailVersand, 1, "Stunde 1 ist entprellt - KEIN zweiter Versand");
+  assert.ok(
+    auditEvents.includes("drift_ownership_lost_entprellt"),
+    "ein entprellter Lauf darf nicht stumm bleiben - er muss eine eigene, unterscheidbare Audit-Zeile hinterlassen",
+  );
+  const markerNachLauf2 = findAlert(store, befundBucket("ownership_lost"));
+  assert.equal(
+    markerNachLauf2.lastSeenAt,
+    new Date(uhrMs).toISOString(),
+    "REVIEW-BLOCKER: die Marker-Frische (lastSeenAt) darf NICHT am Alarm-Versand haengen - " +
+      "der ANI-Riegel (frischGenug) liest genau dieses Feld mit einem kuerzeren Fenster als die Entprellung",
+  );
+});
+
 // W-7 (BLOCKER 4, S1-1): PRODUKTIONSNAHE Antwortform - zwei STRUKTURELLE, gueltig
 // ausgenommene unknowns (EL ohne supports_outbound-Feld, KEIN Verkehr in 24h) duerfen die
 // Selbstheilung NICHT mehr blockieren. Ausdruecklich OHNE die leere-ladeAusnahmen-Attrappe

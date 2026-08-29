@@ -9,6 +9,14 @@ Jede Meldung traegt den Klassen-Token als Anker: `klasse=<ownership|config|warn|
 watchdog_stale> befund=<code> ...`. Suche im Alarm-Text nach `befund=` fuer den exakten
 Code.
 
+**Entprellung (Review Runde 2, Blocker 3):** ein VOLL-Befund (`ownership`/`config`/
+`watchdog_stale`) sendet Mail+SMS nur beim ERSTEN Fund und danach erst wieder nach
+`OUTAGE_ALERT_DEBOUNCE_MS` (Default 6h) — ein unveraendert bestehender Befund erzeugt bei
+jedem stuendlichen Lauf trotzdem eine Audit-Zeile (`drift_<code>_entprellt`), nur ohne
+erneuten Versand. Die **Marker-Frische** (`lastSeenAt`, das Feld, das der ANI-Riegel unten
+liest) haengt NICHT an dieser Entprellung — sie wird bei JEDEM Lauf fortgeschrieben, auch
+waehrend Mail/SMS pausieren.
+
 ## Wie man den Waechter manuell faehrt
 
 ```
