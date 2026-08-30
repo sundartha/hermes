@@ -42,9 +42,9 @@ Er wuerde den Ausfall vom 27.08. exakt wiederholen. Die Belege:
 
 | Vorbedingung | gemessen | Ergebnis |
 |---|---|---|
-| V1 SIP-Zugangsdaten | `TELNYX_SIP_TRUNK_USERNAME`/`-PASSWORD` existieren weder lokal noch sonstwo greifbar | **BLOCKIERT - nur der Owner kann sie in Telnyx anlegen** |
+| V1 SIP-Zugangsdaten | **existieren bereits.** Die FQDN-Connection 3026479542865757220 traegt selbst `user_name = hermes8c37c9d7` - denselben Username, den die funktionierende EL-Registrierung benutzt (`outbound_trunk.username`, per GET belegt) - und ein gesetztes Passwort. Sie standen nur nie in `.env`/Render. | **kein Neuanlegen noetig, nur uebertragen** |
 | V2 Pilot | nicht gefahren (Anbieter-Schreibzugriff, Kosten UNBELEGT) | offen |
-| V3 jede DID registriert | `npm run elevenlabs:nummern`: "1 von 1 aktiven DIDs ohne Registrierung" | **NICHT erfuellt** |
+| V3 jede DID registriert | **KORREKTUR:** die erste Messung lief gegen den LOKALEN JSON-Store (`STORE_BACKEND` ist lokal nicht gesetzt -> Default `json`), nicht gegen die Produktion. In der Prod-DB stehen **DREI** aktive DIDs, alle ohne Registrierung: `+18643028341` (owner), `+15804504874`, `+17067101188`. Fuer den Reparaturlauf muss `STORE_BACKEND=pg` gesetzt sein. | **NICHT erfuellt (3 offen, nicht 1)** |
 | V4 Rueckfall kontoeigen | EL-Registrierung traegt `+15739090177`; das Telnyx-Konto besitzt `+15804504874`, `+17067101188`, `+18643028341` - die Rueckfall-Nummer ist NICHT darunter | **NICHT erfuellt** |
 
 **Die Kausalkette, wenn man den Cutover trotzdem faehrt:** keine Tenant-DID hat eine eigene
@@ -55,10 +55,17 @@ SIP 403 "Unverified origination number". Das ist woertlich der Ausfall vom 27.08
 **Der ANI-Override ist derzeit das EINZIGE, was den Outbound am Leben haelt.** Er bleibt stehen,
 bis V1-V4 erfuellt sind.
 
-Reihenfolge fuer den Owner: V1 (SIP-Zugangsdaten anlegen + in Render setzen, dann
-`ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true`) -> V4 (Registrierung fuer eine KONTOEIGENE
-Plattform-DID, `ELEVENLABS_AGENT_PHONE_NUMBER_ID` nachziehen) -> V2 (Pilot, eine Nummer, Testanruf,
-Rechnung) -> V3 (`npm run elevenlabs:nummern` bis Exit 0) -> ERST DANN der PATCH unten.
+**V4 braucht KEINEN Nummernkauf.** Das Telnyx-Konto besitzt `+18643028341` (owner-Tenant,
+zugleich `PLATFORM_ANI_E164`). Bekommt diese DID ihre eigene Registrierung und zeigt
+`ELEVENLABS_AGENT_PHONE_NUMBER_ID` auf ebendiese, traegt der globale Rueckfall eine kontoeigene
+Nummer - eine Registrierung in beiden Rollen, keine Dublette, keine Kosten. F-1 (eigene
+Plattform-DID kaufen) bleibt die sauberere Dauerloesung, ist aber fuer den Cutover nicht noetig.
+
+Reihenfolge: V1 (Zugangsdaten uebertragen, dann `ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true`)
+-> V4 (Registrierung fuer `+18643028341`, `ELEVENLABS_AGENT_PHONE_NUMBER_ID` nachziehen)
+-> V2 (Pilot: diese eine Nummer, Testanruf, Rechnung) -> V3 (die beiden uebrigen aktiven DIDs
+registrieren, `npm run elevenlabs:nummern` mit `STORE_BACKEND=pg` bis Exit 0)
+-> ERST DANN der PATCH unten.
 
 Der neue Code ist korrekt und **folgenlos**, solange Telnyx jede gesendete Nummer ueberschreibt.
 Erst der Cutover schaltet ihn scharf:
