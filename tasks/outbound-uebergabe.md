@@ -1,4 +1,4 @@
-# Uebergabe: Outbound-Resilienz-Kette (Stand 2026-08-30, nach dem Deploy)
+# Uebergabe: Outbound-Resilienz-Kette (Stand 2026-08-30, E5 wirksam)
 
 Selbsttragend. Ersetzt die Fassung vom Morgen.
 
@@ -35,53 +35,56 @@ Die neuen E5-Env-Variablen haben alle sichere Defaults (`ELEVENLABS_NUMBER_REGIS
 = `false`, SIP-Zugangsdaten leer), die Migration ist rein additiv (drei nullable Spalten,
 `ADD COLUMN IF NOT EXISTS`) und laeuft beim Boot automatisch. Der Dienst ist unauffaellig.
 
-## 2. DIE OFFENE OWNER-AKTION, ohne die E5 wirkungslos bleibt
+## 2. E5 IST SCHARF GESCHALTET UND WIRKSAM (2026-08-30)
 
-**STAND 2026-08-30, am Anbieter gemessen: der Cutover DARF JETZT NICHT gefahren werden.**
-Er wuerde den Ausfall vom 27.08. exakt wiederholen. Die Belege:
+Der ANI-Cutover ist gefahren, alle vier Vorbedingungen erfuellt, die Wirkung mit einem echten
+Anruf belegt. **Die Regression aus dem ElevenLabs-Umstieg ist geschlossen.**
 
-| Vorbedingung | gemessen | Ergebnis |
+| Schritt | Stand |
+|---|---|
+| V1 SIP-Zugangsdaten | erledigt. Sie mussten nie angelegt werden: die FQDN-Connection 3026479542865757220 traegt selbst `user_name = hermes8c37c9d7` samt Passwort - denselben Username, den die bestehende Registrierung nutzt. Sie lagen nur nirgends in der Konfiguration. Passwort liegt jetzt in `~/.config/hermes/sip-pass` (chmod 600, gleiche Ablage wie `db-url`). |
+| V2 Pilot | erledigt: `+18643028341` registriert, per GET verifiziert. **Registrierungen sind KOSTENLOS** - Telnyx-Guthaben vor/nach drei Anlagen unveraendert 3,00 USD. Damit ist der UNBELEGT-Punkt geschlossen. |
+| V3 alle DIDs | erledigt: `0 von 3 aktiven DIDs ohne Registrierung, 0 abweichend, 0 Waise(n)`. |
+| V4 Rueckfall kontoeigen | erledigt: `ELEVENLABS_AGENT_PHONE_NUMBER_ID` = `phnum_4001m18yyw9jfp287kky86e3egn2` (`+18643028341`, kontoeigen). Kein Nummernkauf noetig. |
+| Cutover | gefahren: `ani_override` = `""`. Voice-Profile `2982782444253480209` hat die Teiländerung ueberlebt (unmittelbar per GET geprueft - eine PATCH auf ein verschachteltes Objekt kann Nachbarfelder mitnehmen). |
+
+**Die Registrierungen je aktiver DID:**
+
+| DID | Tenant | Registrierung |
 |---|---|---|
-| V1 SIP-Zugangsdaten | **existieren bereits.** Die FQDN-Connection 3026479542865757220 traegt selbst `user_name = hermes8c37c9d7` - denselben Username, den die funktionierende EL-Registrierung benutzt (`outbound_trunk.username`, per GET belegt) - und ein gesetztes Passwort. Sie standen nur nie in `.env`/Render. | **kein Neuanlegen noetig, nur uebertragen** |
-| V2 Pilot | nicht gefahren (Anbieter-Schreibzugriff, Kosten UNBELEGT) | offen |
-| V3 jede DID registriert | **KORREKTUR:** die erste Messung lief gegen den LOKALEN JSON-Store (`STORE_BACKEND` ist lokal nicht gesetzt -> Default `json`), nicht gegen die Produktion. In der Prod-DB stehen **DREI** aktive DIDs, alle ohne Registrierung: `+18643028341` (owner), `+15804504874`, `+17067101188`. Fuer den Reparaturlauf muss `STORE_BACKEND=pg` gesetzt sein. | **NICHT erfuellt (3 offen, nicht 1)** |
-| V4 Rueckfall kontoeigen | EL-Registrierung traegt `+15739090177`; das Telnyx-Konto besitzt `+15804504874`, `+17067101188`, `+18643028341` - die Rueckfall-Nummer ist NICHT darunter | **NICHT erfuellt** |
+| `+18643028341` | owner | `phnum_4001m18yyw9jfp287kky86e3egn2` (zugleich globaler Rueckfall) |
+| `+15804504874` | t_user_...992W6 | `phnum_1801m18z2twbeexajb3edv1xbbt2` |
+| `+17067101188` | t_user_...ZMTH | `phnum_0701m18z3h2tex79r3vscsk5jxqq` |
 
-**Die Kausalkette, wenn man den Cutover trotzdem faehrt:** keine Tenant-DID hat eine eigene
-Registrierung (V3) -> jeder Anruf faellt auf die globale Registrierung zurueck -> die traegt eine
-Nummer, die dem Konto nicht gehoert (V4) -> ohne den maskierenden ANI-Override antwortet Telnyx mit
-SIP 403 "Unverified origination number". Das ist woertlich der Ausfall vom 27.08.
-
-**Der ANI-Override ist derzeit das EINZIGE, was den Outbound am Leben haelt.** Er bleibt stehen,
-bis V1-V4 erfuellt sind.
-
-**V4 braucht KEINEN Nummernkauf.** Das Telnyx-Konto besitzt `+18643028341` (owner-Tenant,
-zugleich `PLATFORM_ANI_E164`). Bekommt diese DID ihre eigene Registrierung und zeigt
-`ELEVENLABS_AGENT_PHONE_NUMBER_ID` auf ebendiese, traegt der globale Rueckfall eine kontoeigene
-Nummer - eine Registrierung in beiden Rollen, keine Dublette, keine Kosten. F-1 (eigene
-Plattform-DID kaufen) bleibt die sauberere Dauerloesung, ist aber fuer den Cutover nicht noetig.
-
-Reihenfolge: V1 (Zugangsdaten uebertragen, dann `ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true`)
--> V4 (Registrierung fuer `+18643028341`, `ELEVENLABS_AGENT_PHONE_NUMBER_ID` nachziehen)
--> V2 (Pilot: diese eine Nummer, Testanruf, Rechnung) -> V3 (die beiden uebrigen aktiven DIDs
-registrieren, `npm run elevenlabs:nummern` mit `STORE_BACKEND=pg` bis Exit 0)
--> ERST DANN der PATCH unten.
-
-Der neue Code ist korrekt und **folgenlos**, solange Telnyx jede gesendete Nummer ueberschreibt.
-Erst der Cutover schaltet ihn scharf:
+**Wirkungsbeleg (echter Anruf `call_mtfm5ss7g3jz`, 2026-08-30):** Anruf von Tenant `...ZMTH` an
+dessen eigene hinterlegte Nummer. Der Angerufene hat die angezeigte Nummer muendlich als
+`+17067101188` bestaetigt - die eigene DID, nicht mehr die geteilte `+18643028341`. In der Prod-DB:
 
 ```
-PATCH https://api.telnyx.com/v2/fqdn_connections/3026479542865757220
-{"outbound":{"ani_override":""}}
+from_e164                = +17067101188   (Absicht)
+from_actual_e164         = +17067101188   (vom Anbieter GEMESSEN)
+from_source              = provider_measured
+from_registration_source = tenant_did
 ```
 
-`ani_override_type` NICHT anfassen - das Enum kennt keinen Aus-Wert; leeres `ani_override` genuegt
-(am Live-Konto per GET bestaetigt). **Vier Vorbedingungen und der Rueckbau stehen in
-`docs/RUNBOOK-OUTBOUND.md`, Abschnitt "ANI-Cutover und Nummern-Registrierung".** Besonders V4: die
-globale Rueckfall-Registrierung traegt heute noch die am 24.08. freigegebene `+15739090177` - ohne
-V4 endet jeder Rueckfall-Anruf nach dem Cutover in SIP 403.
+Absicht und Wirklichkeit stimmen ueberein, gemessen statt geraten, und es war die EIGENE
+Registrierung - nicht der Rueckfall.
 
-Zweite, unabhaengige Rueckbau-Achse: `ELEVENLABS_NUMBER_REGISTRATION_ENABLED=false`.
+**Rueckbau, falls noetig - EINE Zeile, kein Deploy:**
+
+```
+PATCH /v2/fqdn_connections/3026479542865757220
+{"outbound":{"ani_override":"+18643028341","ani_override_type":"always"}}
+```
+
+Zweite, unabhaengige Achse: `ELEVENLABS_NUMBER_REGISTRATION_ENABLED=false`.
+
+**Zwei kleine Restpunkte:**
+- Die alte Registrierung `phnum_1101m00pjrg7e1js7aaxwp8hdw38` (`+15739090177`, dem Konto nicht mehr
+  gehoerend) ist nicht mehr referenziert und kann geloescht werden. Bewusst stehen gelassen:
+  Loeschen ist unumkehrbar, Liegenlassen ist folgenlos.
+- Die lokale `.env` traegt noch den ALTEN `ELEVENLABS_AGENT_PHONE_NUMBER_ID`. Fuer lokale Laeufe
+  ohne Belang (sie telefonieren nicht produktiv), vor dem naechsten lokalen Anruf nachziehen.
 
 ## 3. Prozess-Wurzel behoben (der teuerste Befund des Tages)
 
@@ -121,7 +124,7 @@ Vorgaenger sind geloescht (Historie in `git`) - **bitte nicht aus der Historie z
 
 | # | Frage | Stand |
 |---|---|---|
-| **F-3** | **ANI-Cutover bei Telnyx** (Abschnitt 2) | **offen - ohne ihn wirkt E5 nicht** |
+| ~~F-3~~ | ~~ANI-Cutover bei Telnyx~~ | **ERLEDIGT 2026-08-30, mit Anruf belegt (Abschnitt 2)** |
 | F-1 | Eigene Plattform-DID kaufen (1 USD + 2 USD/Monat) statt der owner-DID? | Zwischenloesung laeuft |
 | F-4 | Waechter-Secrets im GitHub-Repo hinterlegen | offen; VIER: `TELNYX_API_KEY`, `ELEVENLABS_API_KEY`, `PLATFORM_ANI_E164`, `ELEVENLABS_AGENT_ID` |
 | F-5 | ANI-Riegel scharf schalten (Default aus)? | nach einer Woche gruener Waechter-Laeufe |
