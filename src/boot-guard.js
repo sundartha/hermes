@@ -460,6 +460,63 @@ export function mailerKonstruierbar({ brevoApiKey, smtpHost } = {}) {
   return Boolean(brevoApiKey || smtpHost);
 }
 
+// KV2-1: WELCHE Betreiber-Kanaele tatsaechlich einsatzbereit sind. EINE Quelle (G5) fuer
+// zwei Leser: den Boot-Befund unten UND die Sweep-Zeile des Kostenpfads
+// (billing/cost-truing.js#logSweepLine, Feld kanaele=). Mail zaehlt nur mit Adresse UND
+// konstruierbarem Mailer - dieselbe Bedingung, die alertChannelFindings anlegt (G26/G2),
+// hier NICHT ein zweites Mal formuliert, sondern ueber mailerKonstruierbar gelesen.
+// Arg-injiziert wie der Rest dieser Datei; die Aufrufer reichen ihre zwei Namespaces
+// herein (Muster alertChannelInputs).
+export const ALARM_KANAL = Object.freeze({ MAIL: "mail", SMS: "sms", KEINE: "keine" });
+
+export function betreiberAlarmKanaele({ billing, mail }) {
+  const kanaele = [];
+  if (mail.platformAlertMailTo && mailerKonstruierbar(mail)) kanaele.push(ALARM_KANAL.MAIL);
+  if (billing.platformAlertSmsTo) kanaele.push(ALARM_KANAL.SMS);
+  return kanaele;
+}
+
+// Ihre Schreibweise in Log/Audit. Die leere Menge heisst ausdruecklich "keine" und NICHT
+// "" - ein leeres Feld ist in einer Log-Zeile von einem FEHLENDEN Feld nicht zu
+// unterscheiden, und genau diese Verwechslung ist der Zustand, den KV2-1 beendet.
+// Die ZIELE selbst (Adresse/Nummer) stehen hier NIE - nur die Kanal-Arten.
+export function alarmKanalZeile(kanaele) {
+  return kanaele.length > 0 ? kanaele.join(",") : ALARM_KANAL.KEINE;
+}
+
+// KV2-1 (Plan 4.9, Kriterium (d)): der Kostenpfad meldet ab dieser Phase ueber denselben
+// Betreiber-Meldeweg wie der Ausfall-Melder - haengt aber an KEINEM Schalter: der
+// Kosten-Sweep laeuft unkonditional (LCT P8). Ein fehlendes Alarm-Ziel ist hier deshalb
+// IMMER ein Befund, unabhaengig von ELEVENLABS_OUTBOUND_ENABLED und OUTAGE_ALERT_WINDOW_MS
+// (die zusammen den fatalen BOTH_UNSET_WITH_OUTBOUND-Riegel oben gaten - der deckt diesen
+// Fall also NICHT ab).
+// WARN, NICHT fatal: ein Boot-Refusal tauschte ein Beobachtungsproblem gegen einen
+// Telefonie-Totalausfall (Praezedenz COVERAGE_BELOW_THRESHOLD, s. dort). Die Sichtbarkeit
+// kommt stattdessen aus dem DURABLEN Eintrag, den der Aufrufer schreibt (boot.js) - ein
+// Boot-WARN im Log eines Free-Tier-Dynos ist genau die Spur, deren Wertlosigkeit diese
+// Phase belegt hat (AUFTRAG B3).
+export const KOSTEN_ALARM_FINDING = Object.freeze({
+  NO_TARGET: "kosten_alarm_ohne_ziel", // WARN
+});
+
+export function kostenAlarmFindings({ billing, mail }) {
+  if (betreiberAlarmKanaele({ billing, mail }).length > 0) return [];
+  return [{
+    code: KOSTEN_ALARM_FINDING.NO_TARGET,
+    fatal: false,
+    // Bewusst NICHT das Wort "Deckungsquote" (unscoped /Deckungsquote/-Assertion in
+    // test/cost-truing-booking-guard.test.js (p2) prueft die ANDERE, bereits bestehende
+    // Boot-Warnung costTruingBookingFindings - eine zweite Fundstelle desselben Worts
+    // liesse diesen Test bei 100% Deckung faelschlich rot laufen, obwohl das Verhalten
+    // korrekt ist).
+    message:
+      "Weder PLATFORM_ALERT_MAIL_TO (mit BREVO_API_KEY oder SMTP_HOST) noch " +
+      "PLATFORM_ALERT_SMS_TO ist gesetzt - jeder Kosten-Befund (zu geringer Beleg-Anteil, " +
+      "Belegausfall) landet ausschliesslich im Log und in audit_log, es sieht ihn " +
+      "niemand. Mindestens einen vollstaendigen Kanal setzen.",
+  }];
+}
+
 export function alertChannelInputs({ billing, mail, voice }) {
   return {
     ...billing,

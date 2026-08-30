@@ -41,8 +41,10 @@ import {
   isBookableCents,
 } from "../store/defaults.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
-import { chargeAnchorsOfCall, nextCostTruingAttempt } from "../store/state-ops.js";
+import { chargeAnchorsOfCall, closeOutageAlert, nextCostTruingAttempt, openOutageAlert } from "../store/state-ops.js";
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
+import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
+import { alarmKanalZeile, betreiberAlarmKanaele } from "../boot-guard.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
 
 // Zwei Ausloeser (Intervall + manueller Endpunkt), EIN benannter Grund je. Exportiert:
@@ -69,6 +71,79 @@ const COST_TRUING_FINDING = Object.freeze({
   TTS_QUOTA_EXHAUSTED: "tts_quota_exhausted",
 });
 const COST_TRUING_AUDIT_EVENT = "cost_truing_befund";
+
+// KV2-1: der Marker-Namensraum des Kostenpfads in state.outageAlerts. Kollidiert mit
+// keinem Bestands-Eimer (Fehlergrund "not-placed*", "drift:", "hold:", "self-test:") -
+// wichtig, weil runOutageRecoverySweep NUR Fehlergrund-Eimer schliesst (istFehlergrundEimer)
+// und schliesseVerschwundeneBefunde nur "drift:"-Marker: ein kosten:-Marker wird also von
+// keinem fremden Sweep angefasst. Jeder Befund-Code bekommt seinen EIGENEN Eimer und damit
+// seine EIGENE Entprellung (Plan 4.9).
+const KOSTEN_BUCKET_PREFIX = "kosten:";
+const kostenBucket = (code) => `${KOSTEN_BUCKET_PREFIX}${code}`;
+
+// Die Deckungs-Achse - EINE Liste fuer drei Leser: die Meldestufe (VOLL), das Schliessen
+// bei Erholung und der Stillstands-Bezug. Drei getrennte Aufzaehlungen liefen beim ersten
+// Nachziehen auseinander (G5).
+const COVERAGE_FINDING_CODES = Object.freeze([
+  COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD,
+  COST_TRUING_FINDING.COVERAGE_STALLED,
+]);
+
+// Meldestufe je Befund-Code (Muster VOLL_KLASSEN, telephony/outbound-drift-watch.js):
+// die Deckungs-Achse meldet VOLL (WARN -> Audit -> Mail -> SMS), Volumen und
+// TTS-Kontingent bleiben auf der kostenlosen Notiz-Stufe. Das ist keine neue Entscheidung,
+// sondern die bestehende: KE-P8/PM-7 ("kein eigener Alarmweg, keine SMS-Klasse") und
+// KV-P7 (der Play-TTS-Pfad alarmiert dieselbe Schwelle bereits per SMS aus server.js -
+// eine zweite SMS waere Kanal-Verdopplung auf demselben Konto).
+const VOLL_BEFUND_CODES = new Set(COVERAGE_FINDING_CODES);
+
+// Ein eigenes Ereignis fuer den Uebergang zurueck ueber die Schwelle (Muster
+// drift_recovered). Nie zwei Sachverhalte auf einem Label: "Befund" und "Befund weg" sind
+// zwei Aussagen.
+const COST_TRUING_RECOVERED_EVENT = "cost_truing_erholt";
+
+// Modul-Ebene statt im makeCostTruing-Closure (G30/G34: eine Aufgabe, eine
+// Abstraktionsebene je Funktion) - beide sind rein und brauchen nur die zwei
+// Zahlen, keinen Zugriff auf store/audit/messaging.
+//
+// Die Zahlen der Deckungs-Achse. Das Feld sweeps= (prozesslokaler Zaehler) ist seit
+// KV2-1 durch seit= ersetzt - dieselbe Frage ("seit wann durchgehend unter der
+// Schwelle"), aber am DURABLEN Marker beantwortet (firstSeenAt) statt in einer
+// Prozesserinnerung. Der alte Zaehler wurde von JEDEM Deploy genullt und erreichte die
+// Eskalationsstufe nie (AUFTRAG B3, im Live-Log gemessen: nach dem Deploy wieder
+// sweeps=1). Der Name wechselt mit dem Sachverhalt (G11: nie zwei Bedeutungen auf einem
+// Label).
+function coverageDetail(coveragePercent, minCoveragePercent, seitIso) {
+  return `deckung=${coveragePercent}% schwelle=${minCoveragePercent}% seit=${seitIso}`;
+}
+
+// Die Terminierungsregel in ZEIT statt in Sweeps. Die SCHWELLE bleibt
+// COST_TRUING_COVERAGE_STALL_SWEEPS und wird ueber die EINE Kadenz-Quelle
+// COST_TRUING_SWEEP_INTERVAL_MS umgerechnet (min 1 Minute, also nie 0) - kein neuer
+// Env-Wert, keine zweite Zeit-Groesse. Die Schwelle wird NIE gesenkt, um die
+// Vorbedingung zu erfuellen.
+function coverageStallMs(stallSweeps, sweepIntervalMs) {
+  return stallSweeps * sweepIntervalMs;
+}
+
+// Zurueck ueber der Schwelle: die offenen Deckungs-Marker schliessen, damit firstSeenAt
+// beim naechsten Einbruch neu beginnt (das durable Gegenstueck zu sweepsBelowThreshold=0).
+// EINE Audit-Zeile je Uebergang, und NUR wenn wirklich etwas geschlossen wurde - sonst
+// schriebe jeder gesunde Sweep eine Zeile (Muster drift_recovered). store/audit als
+// Parameter statt Closure (F1: 3 Argumente) - dieselbe Instanz, die der Aufrufer haelt.
+async function closeCoverageBefunde(store, audit, nowMs) {
+  const geschlossen = await store.withStoreLock(() => {
+    const state = store.load();
+    return COVERAGE_FINDING_CODES
+      .map((code) => closeOutageAlert(state, { code: kostenBucket(code), nowMs }))
+      .filter(Boolean).length;
+  });
+  store.save();
+  if (geschlossen === 0) return;
+  const zeile = `marker=${geschlossen}`;
+  console.log(`[cost-truing] erholt ${zeile}`);
+  audit(COST_TRUING_RECOVERED_EVENT, null, zeile);
+}
 // LCT P5 (Drift-Waechter): eigenes Audit-Ereignis + eigener SMS-Praefix, getrennt von
 // COST_TRUING_AUDIT_EVENT (verschiedene Aussage: Deckungsquote vs. Tarif-Abweichung).
 const TARIFF_DRIFT_AUDIT_EVENT = "tarif_drift_befund";
@@ -258,9 +333,11 @@ export function costTruingCoveragePercent(state, nowMs = Date.now()) {
   return percentFromBreakdown(coverageBreakdown(state, nowMs));
 }
 
-// messaging ist der Alarmkanal (LCT P5, Drift-Waechter-SMS), kein Abgleich-Pfad - der
-// Provider-Kosten-Abgleich selbst laeuft ausschliesslich ueber voiceControl.
-export function makeCostTruing({ store, config, voiceControl, audit, messaging, now = Date.now }) {
+// messaging/mailer sind der Betreiber-Alarmkanal (Plan 4.9), kein Abgleich-Pfad - der
+// Provider-Kosten-Abgleich selbst laeuft ausschliesslich ueber voiceControl. audit ist
+// seit KV2-1 die DURABLE Variante (server.js#durableAudit); ein Test kann jede Funktion
+// mit der util.js#audit-Signatur injizieren.
+export function makeCostTruing({ store, config, voiceControl, audit, messaging, mailer, now = Date.now }) {
   // Modul-lokaler Laufriegel. BEIDE Ausloeser (Intervall + manueller Endpunkt) teilen
   // sich diesen einen Boolean. GESETZT VOR DEM ERSTEN await, freigegeben im finally:
   // Node ist single-threaded, aber der Sweep awaitet den Pool-Abruf je Provider (KE-P2,
@@ -272,14 +349,15 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // Wiederholung, nicht Verschraenkung - deshalb beide Riegel, nicht einer.)
   let sweepRunning = false;
 
-  // Entprellfenster je Befund-Code (COST_ALERT_DEBOUNCE_MS, Default 24 h). Ohne sie
-  // meldete der Sweep denselben Befund in jeder Kadenz erneut (bei der KE-P6B-Kadenz von
-  // 1 h 24-mal am Tag) und trainierte den Kanal taub.
-  // Ein Schluessel, zwei Nutzer: P3 entprellt je Befund-Code, P5 keyt zusaetzlich auf den
-  // Praefix ("<praefix> <code>"). BEWUSST DIESELBE Map und DIESELBE Regel - eine zweite
-  // Entprellung mit eigenem Fenster liefe beim ersten Nachziehen auseinander.
+  // Entprellfenster der NOTIZ-Stufe (COST_ALERT_DEBOUNCE_MS, Default 24 h) und der
+  // Tarif-Drift-SMS (P5 keyt zusaetzlich auf den Praefix, "<praefix> <code>"). BEWUSST
+  // DIESELBE Map und DIESELBE Regel fuer beide.
+  // KV2-1: die VOLL-Stufe entprellt NICHT mehr hier, sondern am DURABLEN Marker
+  // (outage-report.js#meldeVollBefund, OUTAGE_ALERT_DEBOUNCE_MS/-RETRY_MS). Warum die
+  // Notiz-Stufe trotzdem diese Map braucht: sie setzt nie sent:true, also bleiben
+  // lastAttemptAt/reportedAt null und meldeErlaubt liefert immer true - der Marker KANN
+  // eine nie sendende Stufe nicht entprellen.
   const lastFindingMs = new Map();
-  let sweepsBelowThreshold = 0;
 
   // Kandidaten-Praedikat (persistierter Versuchszaehler, kein In-Memory). COST_TRUING_
   // MAX_ATTEMPTS gegen den PERSISTIERTEN Zaehler (P2): ein prozess-lokaler Zaehler wird
@@ -368,36 +446,30 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return true;
   }
 
-  // DER Befundkanal: entprellen -> WARN -> Audit, fuer JEDEN Code dieselbe Zeile (G5).
-  // KE-P8/PM-7: der Bruchpunkt-Waechter bekommt bewusst keinen eigenen Weg und keine
-  // SMS-Klasse, sondern nur einen weiteren Code hier. WAS gemeldet wird, formuliert der
-  // Aufrufer im detail - der Kanal kennt weder Deckungsquote noch Anfragezahl.
-  function emitFinding(code, detail, nowMs) {
-    if (!shouldEmitFinding(code, nowMs)) return;
-    const line = `grund=${code} ${detail}`;
-    console.warn(`[cost-truing] Befund ${line}`);
-    audit(COST_TRUING_AUDIT_EVENT, null, line); // req=null -> ip=system (Plattform-Ereignis)
+  // DER Befundkanal, seit KV2-1 auf dem BESTEHENDEN Betreiber-Meldeweg (Plan 4.9): WARN ->
+  // Audit (durabel) -> je nach Stufe Mail+SMS. Er wird hier NICHT neu gebaut - alarmErlaubt/
+  // meldeVollBefund/meldeBetreiberNotiz sind dieselben Bausteine wie beim Drift-Waechter
+  // (EIN Meldeweg, G5). WAS gemeldet wird, formuliert weiterhin der Aufrufer im detail;
+  // der Kanal kennt weder Deckungsquote noch Anfragezahl.
+  // Die Inhalts-WARN bleibt die BESTEHENDE Zeile ("[cost-truing] Befund grund=..."): der
+  // Meldeweg loggt nur aktion+klasse, das Detail stuende sonst in keiner Log-Zeile mehr.
+  // zeile ist zugleich Audit-Detail UND Mail-Body und bleibt deshalb byte-identisch zum
+  // Bestandsformat (Log-/Test-Konsumenten) - PII-frei per Vertrag der Aufrufer.
+  async function emitFinding(code, detail, nowMs) {
+    const voll = VOLL_BEFUND_CODES.has(code);
+    if (!voll && !shouldEmitFinding(code, nowMs)) return;
+    const zeile = `grund=${code} ${detail}`;
+    console.warn(`[cost-truing] Befund ${zeile}`);
+    const meldung = { store, config, audit, messaging, mailer,
+      bucket: kostenBucket(code), aktion: COST_TRUING_AUDIT_EVENT, zeile, nowMs };
+    if (voll) await meldeVollBefund(meldung);
+    else await meldeBetreiberNotiz(meldung);
   }
 
-  // Die Zahlen der Deckungs-Achse. Das Format bleibt BYTE-IDENTISCH zum Bestand
-  // (Log-Konsumenten): grund= deckung= schwelle= sweeps= in genau dieser Reihenfolge.
-  function emitCoverageFinding(code, coveragePercent, nowMs) {
-    emitFinding(
-      code,
-      `deckung=${coveragePercent}% schwelle=${config.billing.costTruingMinCoveragePercent}% ` +
-        `sweeps=${sweepsBelowThreshold}`,
-      nowMs,
-    );
-  }
-
-  // Die Quote wird am Ende JEDES Sweeps ausgegeben - nur rechnen und nicht melden ist der
-  // Zustand, in dem "dann flippen wir halt trotzdem" unbemerkt bleibt (Risiko: stiller
-  // Ausfall des Jobs im schlafenden Free-Tier-Dyno, PM-4). PII-frei: keine Rufnummer,
-  // keine Tenant-Klarnamen, keine Transkript-Fragmente.
-  // KV-M3/TOD 8: die drei Nebenzaehler stehen IMMER in dieser Zeile, nicht nur beim
-  // Unterschreiten der Schwelle - genau dann, wenn die Quote GUT aussieht und die WARN
-  // unten NICHT feuert, waere ein Belegausfall sonst an dieser Stelle unsichtbar.
-  function reportCoverage(coveragePercent, coverage, nowMs) {
+  // coverageDetail/coverageStallMs/closeCoverageBefunde sind Modul-Ebene (oben, vor
+  // makeCostTruing) - reine Funktionen bzw. store/audit als explizite Parameter statt
+  // Closure (G30/G34, F1).
+  async function reportCoverage(coveragePercent, coverage, nowMs) {
     const min = config.billing.costTruingMinCoveragePercent;
     console.log(
       `[cost-truing] deckung=${coveragePercent}% schwelle=${min}% ` +
@@ -405,21 +477,18 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
         `ausserhalb_fenster=${coverage.outsideWindow}`,
     );
     if (coveragePercent >= min) {
-      sweepsBelowThreshold = 0;
+      await closeCoverageBefunde(store, audit, nowMs);
       return;
     }
-    sweepsBelowThreshold++;
-    emitCoverageFinding(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD, coveragePercent, nowMs);
-    // Terminierungsregel: bleibt die Quote ueber COST_TRUING_COVERAGE_STALL_SWEEPS
-    // aufeinanderfolgende Sweeps unter der Schwelle, ist eine Owner-Entscheidung faellig
-    // (Ursache beheben oder Abbruch nach P3/P5). Die SCHWELLE WIRD DABEI NIE GESENKT, um
-    // die Vorbedingung zu erfuellen - das waere die Sicherung an ihre eigene Verletzung
-    // angepasst. AKZEPTIERTES RESTRISIKO: dieser Zaehler ist prozess-lokal und wird von
-    // einem Restart genullt; die tragende, bei jedem Sweep neu aus Daten abgeleitete
-    // Meldung ist coverage_below_threshold, die Stillstands-Meldung ist nur die
-    // Eskalationsstufe darueber.
-    if (sweepsBelowThreshold >= config.billing.costTruingCoverageStallSweeps)
-      emitCoverageFinding(COST_TRUING_FINDING.COVERAGE_STALLED, coveragePercent, nowMs);
+    // Marker VOR dem Melden lesen: emitFinding legt ihn sonst gerade erst an, und seit=
+    // stuende im ersten Sweep eines Einbruchs auf einem anderen Wert als in den folgenden.
+    const marker = openOutageAlert(store.load(), kostenBucket(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD));
+    const seitIso = marker ? marker.firstSeenAt : new Date(nowMs).toISOString();
+    const detail = coverageDetail(coveragePercent, min, seitIso);
+    await emitFinding(COST_TRUING_FINDING.COVERAGE_BELOW_THRESHOLD, detail, nowMs);
+    const stallMs = coverageStallMs(config.billing.costTruingCoverageStallSweeps, config.billing.costTruingSweepIntervalMs);
+    if (nowMs - Date.parse(seitIso) < stallMs) return;
+    await emitFinding(COST_TRUING_FINDING.COVERAGE_STALLED, detail, nowMs);
   }
 
   // Zaehlt das Ergebnis EINES abgeglichenen Calls in die Sweep-Bilanz ein. Bezugsgroesse
@@ -504,20 +573,28 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // Wahrheit. Gegen VERSCHRAENKUNG zweier Sweeps traegt der Laufriegel sweepRunning.
   // 0 Zeichen -> gar kein Schreibzugriff (ein Anruf ohne zugeordneten ElevenLabs-Beleg darf
   // keine Tenant-Zeile anfassen).
-  function reportTtsQuotaFinding(warning, nowMs) {
-    if (!warning) return;
+  // KV2-1: sammelt statt sofort zu melden - gemeldet wird NACH der Buchungsschleife (der
+  // Meldeweg ist seit dieser Phase asynchron: Marker-Lock, Versand), und ein await IN der
+  // Schleife braeche die Zusage "zwischen Pool-Abruf und Bilanz kommt kein await mehr"
+  // (D1/PM-5), an der der Schutz gegen verschraenkte Sweeps haengt.
+  // sammler HIER statt eines Rueckgabewerts an trueOneCall (G34/C2): trueOneCall traegt
+  // bereits die Komplexitaets-Obergrenze dieser Datei (eslint-suppressions.json) - eine
+  // weitere Verzweigung dort haette sie ERHOEHT. Die Entscheidung "melden oder nicht"
+  // gehoert ohnehin zu DIESER Funktion (sie kennt measured.ttsCharacters/warnung), nicht
+  // zur Aufrufer-Schleife.
+  // 0 Zeichen -> gar kein Schreibzugriff und kein Befund.
+  function bookTtsCharactersFor(call, measured, sammler) {
+    if (measured.ttsCharacters <= 0) return;
+    const nowMs = now(); // EIN Zeitpunkt, zwei Projektionen (Muster closedAt in trueOneCall)
+    const warnung = store.recordRelayTtsCharacters(call.tenantId, measured.ttsCharacters, new Date(nowMs).toISOString());
+    if (warnung) sammler.ttsWarnungen.push(warnung);
+  }
+
+  async function reportTtsQuotaFinding(warning, nowMs) {
     const code = warning.exhausted
       ? COST_TRUING_FINDING.TTS_QUOTA_EXHAUSTED
       : COST_TRUING_FINDING.TTS_QUOTA_WARN_THRESHOLD;
-    emitFinding(code, `zeichen=${warning.characters}/${warning.quota} zyklus=${warning.cycleKey}`, nowMs);
-  }
-
-  function bookTtsCharactersFor(call, measured) {
-    if (measured.ttsCharacters <= 0) return;
-    const nowMs = now(); // EIN Zeitpunkt, zwei Projektionen (Muster closedAt in trueOneCall)
-    const warning = store.recordRelayTtsCharacters(
-      call.tenantId, measured.ttsCharacters, new Date(nowMs).toISOString());
-    reportTtsQuotaFinding(warning, nowMs);
+    await emitFinding(code, `zeichen=${warning.characters}/${warning.quota} zyklus=${warning.cycleKey}`, nowMs);
   }
 
   // Abruf-Kennzahlen EINER Provider-Antwort, gelesen VOR der Buchbarkeits-Uebersetzung
@@ -646,7 +723,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // strukturell vorhanden, ein Ueberspring-Zweig waere toter Code. Wer nicht abrufbar ist,
   // erreicht diese Funktion nie und bleibt ein vollstaendiges No-op (kein Wurf, KEIN
   // Feld-Schreiben, KEIN verbrauchter Versuch).
-  function trueOneCall(call, { control, pool }, tally) {
+  function trueOneCall(call, { control, pool }, sammler) {
     const legId = providerLegIdOf(call);
     let result;
     try {
@@ -682,8 +759,8 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // sieht den Call nicht mehr als Kandidaten; gegen VERSCHRAENKUNG traegt der
     // Laufriegel aus P3. Hier ist deshalb KEIN dritter Riegel noetig.
     if (measured) bookCorrectionFor(call, measured);
-    if (measured) bookTtsCharactersFor(call, measured);
-    countOutcome(tally, truedSource, closed);
+    if (measured) bookTtsCharactersFor(call, measured, sammler);
+    countOutcome(sammler.tally, truedSource, closed);
   }
 
   // Versand ueber den geteilten Bootstrap-Alarm-Baustein (G5, EINE Quelle mit der
@@ -727,14 +804,21 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // eindeutig. Bewusst als Zaehler formuliert und nicht als Allquantor ueber der leeren Menge:
   // "nichts Unvollstaendiges beobachtet" ist eine Beobachtung, "alles vollstaendig" waere eine
   // Behauptung (dieselbe Falle wie die leere Pflicht-Menge in classifyRecords).
-  function logSweepLine({ trigger, candidateCount, tally, fetchTally }) {
+  // KV2-1 (Kriterium (d)): kanaele= nennt, ueber welche Betreiber-Kanaele die Befunde
+  // dieses Sweeps ueberhaupt hinauskaemen. Es ist die Gegenprobe zu der bewusst
+  // beibehaltenen Meldeweg-Semantik "kein Mail-Ziel gilt als zugestellt"
+  // (outage-report.js#sendeUeberBeideKanaele, Plan 4.9): kanaele=keine heisst, dass jede
+  // Meldung dieses Sweeps ausschliesslich im Log und in audit_log steht. Nur Kanal-ARTEN,
+  // nie die Ziele.
+  function logSweepLine({ trigger, candidateCount, tally, fetchTally, kanaele }) {
     console.log(
       `[cost-truing] sweep trigger=${trigger} kandidaten=${candidateCount} ` +
         `gemessen=${tally.measured} unvollstaendig=${tally.incomplete} ` +
         `ohne_schaetzung=${tally.noEstimate} ` +
         `unbestimmt=${tally.unavailable} uebersprungen=${tally.skippedCalls} ` +
         `anfragen=${fetchTally.requests} seiten=${fetchTally.pages} ` +
-        `pool=${fetchTally.records} vollstaendig=${fetchTally.incompletePools === 0}`,
+        `pool=${fetchTally.records} vollstaendig=${fetchTally.incompletePools === 0} ` +
+        `kanaele=${kanaele}`,
     );
   }
 
@@ -744,9 +828,9 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // VOLUMEN, kein Fehler: der Sweep bleibt korrekt, er waechst nur aus seinem Intervall
   // heraus (Gegenmassnahme: Plan Kap. 3, Stufe 1 - Fenster verschmaelern).
   // Dieselbe Quelle wie das Log (fetchTally), damit Befund und Zeile nie auseinanderlaufen.
-  function reportFetchVolume(fetchTally, nowMs) {
+  async function reportFetchVolume(fetchTally, nowMs) {
     if (fetchTally.requests <= SWEEP_REQUESTS_WARN_THRESHOLD) return;
-    emitFinding(
+    await emitFinding(
       COST_TRUING_FINDING.REQUESTS_ABOVE_THRESHOLD,
       `anfragen=${fetchTally.requests} schwelle=${SWEEP_REQUESTS_WARN_THRESHOLD}`,
       nowMs,
@@ -775,15 +859,19 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // deshalb liefert pools.get() hier nie undefined.
     const { pools, fetchTally } = await fetchCostRecordPools(retrievable, controls);
     const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls, failed: 0 };
-    for (const call of retrievable) trueOneCall(call, pools.get(call.provider), tally);
+    const sammler = { tally, ttsWarnungen: [] };
+    for (const call of retrievable) trueOneCall(call, pools.get(call.provider), sammler);
     // EIN Breakdown (coverageBreakdown), aus dem SOWOHL die Quote ALS AUCH die drei
     // Nebenzaehler abgeleitet werden (KV-M3, G5) - keine zweite Iteration ueber
     // state.calls, kein zweiter Formel-Ausdruck.
     const coverage = coverageBreakdown(store.load(), nowMs);
     const coveragePercent = percentFromBreakdown(coverage);
-    logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally });
-    reportFetchVolume(fetchTally, nowMs);
-    reportCoverage(coveragePercent, coverage, nowMs);
+    const kanaele = alarmKanalZeile(betreiberAlarmKanaele({ billing: config.billing, mail: config.mail }));
+    logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele });
+    // Ab hier meldet der Sweep - NACH der Bilanz, also ausserhalb der PM-5-Zusage.
+    await reportFetchVolume(fetchTally, nowMs);
+    for (const warnung of sammler.ttsWarnungen) await reportTtsQuotaFinding(warnung, nowMs);
+    await reportCoverage(coveragePercent, coverage, nowMs);
     reportTariffDrift(store.load(), nowMs);
     return {
       skipped: false,

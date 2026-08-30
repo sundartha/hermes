@@ -437,6 +437,8 @@ export async function buildApp(deps) {
     // F2-Mail: spaet gebundene Accounts-Zelle (server.js) - an wireWebLogin durchgereicht,
     // das accountsRef.current NACH dem Bau von accounts setzt (Muster operatorAuth unten).
     accountsRef,
+    // KV2-1: dieselbe Mechanik fuer den durablen Audit-Sink des Kostenpfads.
+    auditStoreRef,
     // DIP-Seam (PLAN-AUTH-GATE P1) - dieselbe Naht, die wireWebLogin intern schon nutzt,
     // nur eine Ebene hoeher gezogen: der Routen-Inventar-Test
     // (test/route-auth-inventory.test.js) muss den PRODUKTIONS-Routengraph bauen
@@ -491,6 +493,8 @@ export async function buildApp(deps) {
         messaging,
         // F2-Mail: wireWebLogin setzt accountsRef.current NACH dem Bau von accounts.
         accountsRef,
+        // KV2-1: dieselbe Mechanik fuer den durablen Audit-Sink des Kostenpfads.
+        auditStoreRef,
       });
     });
   }

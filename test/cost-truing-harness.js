@@ -16,6 +16,13 @@ import {
 } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+// KV2-1: die drei neuen Kadenz-/Entprell-Defaults der fakeConfig lesen den ECHTEN
+// Produktions-Fallback statt einen zweiten, hier getippten Zahlenwert zu erfinden (G5,
+// G25 - kein neuer Magic-Number-Fund in dieser bereits an eslint-suppressions.json
+// gepinnten Datei). config.js wird ueber config-namespaces-helper.js an dieser Stelle
+// ohnehin schon statisch importiert (s. Kopf-Kommentar oben) - kein zweiter Importpfad,
+// kein zusaetzliches test-base-env-drift-Risiko.
+import { config as prodDefaults } from "../src/config.js";
 
 const MS_PER_MINUTE = 60 * 1000;
 
@@ -57,6 +64,12 @@ export function makeStubStore(state, { nowMs = Date.now(), billing = fakeConfig(
     markCostCrossCheckAttempted(monthKey) {
       markCrossCheckAttempted(state, monthKey);
     },
+    // KV2-1: der Befundkanal laeuft ueber den Betreiber-Meldeweg und schreibt dabei den
+    // durablen Marker (state.outageAlerts) - dieselben zwei Store-Methoden, die
+    // outage-report.js ueberall nutzt. Der Lock ist hier ein Direktaufruf: der Stub kennt
+    // keine Nebenlaeufigkeit, und ein zweites Lock-Verhalten waere eine zweite Wahrheit.
+    withStoreLock(fn) { return Promise.resolve().then(fn); },
+    save() {},
   };
 }
 
@@ -72,6 +85,11 @@ export function fakeConfig(overrides = {}) {
     costTruingRequiredRecordTypes: [],
     costTruingMinCoveragePercent: 80,
     costTruingCoverageStallSweeps: 8,
+    // KV2-1: die Kadenz-Quelle der zeitbasierten Stall-Terminierung (Default = ECHTER
+    // Prod-Fallback, s. Import oben). Ohne einen Default hier waere
+    // costTruingCoverageStallSweeps * undefined = NaN, und JEDER Vergleich mit NaN ist
+    // false - coverage_stalled feuerte dann bei JEDEM Sweep 1, unabhaengig vom Fenster.
+    costTruingSweepIntervalMs: prodDefaults.billing.costTruingSweepIntervalMs,
     costDriftWarnPercent: 50,
     costAlertDebounceMs: 24 * 60 * 60 * 1000,
     voiceTariffDomesticCents: 20,
@@ -80,6 +98,12 @@ export function fakeConfig(overrides = {}) {
     providerToBucketRateMicro: 1_000_000,
     costCalibrationMinSamples: 20,
     platformAlertSmsTo: "",
+    // KV2-1: Entprellung der VOLL-Stufe (Plan 4.9). ECHTER Prod-Fallback (grosszuegig);
+    // Tests, die die Entprellung selbst pruefen, setzen sie explizit herunter.
+    outageAlertDebounceMs: prodDefaults.billing.outageAlertDebounceMs,
+    outageAlertRetryMs: prodDefaults.billing.outageAlertRetryMs,
+    // Alarm-Ziel default leer (BASE_ENV-Zustand) -> kanaele=keine, kein Versand.
+    platformAlertMailTo: "",
     // KV-P7: Fallback-Werte aus src/config.js (ttsCharacterQuota/-WarnPercent/
     // ttsQuotaCycleAnchorDay) - ohne sie liest recordRelayTtsCharacters (bumpPlatformTtsQuota)
     // cfg.ttsCharacterQuota als undefined (withConfigNamespaces delegiert auf den flachen

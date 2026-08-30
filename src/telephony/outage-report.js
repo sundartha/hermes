@@ -17,7 +17,7 @@ import {
   NOT_PLACED,
   failureReasonBase,
 } from "./failure-reason.js";
-import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, OUTAGE_VERDICT } from "./outage-detection.js";
+import { outageBucket, outageWindow, beurteileAusfall, alarmZeile, meldeErlaubt, OUTAGE_VERDICT } from "./outage-detection.js";
 import * as ops from "../store/state-ops.js";
 import { sendFailSoftAlertSms, platformAlertSender } from "./alert-sms.js";
 import { NUMBER_HOLD_REASON } from "../store/defaults.js";
@@ -127,6 +127,39 @@ export async function meldeBetreiberNotiz({ store, audit, bucket, aktion, zeile,
     ops.claimOutageAlert(state, { code: bucket, nowMs });
   });
   store.save();
+}
+
+// UMGEZOGEN aus outbound-drift-watch.js (KV2-1): der aufrufer-seitige Entprell-Riegel VOR
+// jedem Alarm-Versand gehoert in das Meldeweg-Modul, nicht in einen seiner Verbraucher -
+// seit KV2-1 hat er zwei (Drift-Waechter und Kostenpfad, Plan 4.9). Verhalten unveraendert.
+//
+// BLOCKER 3 (Review Runde 2, Drift-Waechter): OHNE diese Entprellung feuert JEDER Lauf bei
+// unveraendertem Befund erneut den VOLLEN Meldeweg (Mail+SMS) - gemessen: 24 Sweeps bei
+// unveraendertem Ausfall -> 3 Mails + 9 Audit-Zeilen; im Stundentakt 24 Mails/Tag.
+// Dieselbe Regel (meldeErlaubt) und dieselben Schwellen wie der Ausfall-Melder.
+// ENTSCHEIDET NUR UEBER DEN VERSAND: false heisst NICHT "dieser Lauf tut nichts" - der
+// Aufrufer faellt auf meldeBetreiberNotiz zurueck, die den Marker trotzdem beansprucht.
+function alarmErlaubt({ store, bucket, config, nowMs }) {
+  const marker = ops.openOutageAlert(store.load(), bucket);
+  if (!marker) return true;
+  return meldeErlaubt(marker, nowMs, {
+    debounceMs: config.billing.outageAlertDebounceMs,
+    retryMs: config.billing.outageAlertRetryMs,
+  });
+}
+
+// Ein entprellter VOLL-Befund darf den Marker NICHT unangetastet lassen - genau das liess
+// marker.lastSeenAt einfrieren, obwohl der Befund bei jedem Lauf neu gemessen wird.
+// Entprellt wird NUR der Versand (Mail/SMS): meldeBetreiberNotiz claimt den Marker OHNE
+// sent:true (lastAttemptAt/reportedAt bleiben unveraendert, die naechste
+// Faelligkeitspruefung damit auch) und schreibt selbst WARN+Audit fort - "nie stumm" gilt
+// fuer JEDEN Lauf, nicht nur fuer den, der tatsaechlich sendet.
+export async function meldeVollBefund({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs }) {
+  if (alarmErlaubt({ store, bucket, config, nowMs })) {
+    await meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs });
+  } else {
+    await meldeBetreiberNotiz({ store, audit, bucket, aktion: `${aktion}_entprellt`, zeile, nowMs });
+  }
 }
 
 // Alarm: der volle Meldeweg (WARN -> Audit -> Mail -> SMS). Der Marker haelt fest, DASS

@@ -97,6 +97,8 @@ test("(P9-3) leere abrufbare Menge bei nicht-leerer Kandidatenmenge -> Bilanz tr
     line,
     "[cost-truing] sweep trigger=manual kandidaten=3 gemessen=0 unvollstaendig=0 " +
       "ohne_schaetzung=0 unbestimmt=0 uebersprungen=3 " +
-      "anfragen=0 seiten=0 pool=0 vollstaendig=true",
+      // KV2-1 (Kriterium (d)): kanaele= HINTER den Bestandsfeldern - kein Ziel gesetzt
+      // (BASE_ENV/fakeConfig-Default) -> kanaele=keine.
+      "anfragen=0 seiten=0 pool=0 vollstaendig=true kanaele=keine",
   );
 });
