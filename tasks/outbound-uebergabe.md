@@ -1,10 +1,10 @@
-# Uebergabe: Outbound-Resilienz-Kette (Stand 2026-08-29, abends)
+# Uebergabe: Outbound-Resilienz-Kette (Stand 2026-08-30, nach dem Deploy)
 
 Selbsttragend. Ersetzt die Fassung vom Morgen.
 
 ## 1. Die Kette ist KOMPLETT gemergt
 
-`master` steht auf dem Merge von E5. Alle sieben Etappen sind lokal gemergt, nichts gepusht.
+`master` steht auf dem Merge von E5. Alle Etappen sind gemergt, gepusht UND live (s. 1b).
 Test-Anker: **5420 pass / 0 fail** (`LLM_PROVIDER=anthropic npm test`, vom Lead selbst gefahren).
 
 | Etappe | Inhalt |
@@ -119,7 +119,7 @@ Vorgaenger sind geloescht (Historie in `git`) - **bitte nicht aus der Historie z
 | F-4 | Waechter-Secrets im GitHub-Repo hinterlegen | offen; VIER: `TELNYX_API_KEY`, `ELEVENLABS_API_KEY`, `PLATFORM_ANI_E164`, `ELEVENLABS_AGENT_ID` |
 | F-5 | ANI-Riegel scharf schalten (Default aus)? | nach einer Woche gruener Waechter-Laeufe |
 | F-7 | Telnyx-Guthaben (3,09 USD) und DeepSeek (HTTP 402) auffuellen | offen |
-| — | Wann wird gepusht/deployt? | offen, inzwischen 40 Commits lokal |
+| — | ~~Wann wird gepusht/deployt?~~ | **ERLEDIGT 2026-08-30**: beide Remotes + Render auf `1f4f4a5` |
 | — | `seed-test-payment.mjs` + `seed-card-test-payment.mjs` | vom Lead nach `scratchpad/beiseite-gelegt/` verschoben (nicht geloescht), weil sie den Linter blockierten. Entscheidung steht aus. |
 
 **Vor dem naechsten Deploy zwingend:** `PLATFORM_ANI_E164` und `PLATFORM_ALERT_MAIL_TO` sind im
