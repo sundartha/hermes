@@ -142,4 +142,22 @@ export async function startInboundHarness({ voiceEngine, seed = {}, configureSta
   });
 }
 
+// ownerNumberSeed(number) -> { numbers: [...] }-Ausschnitt fuer startInboundHarness'
+// seed-Parameter: eine aktive Owner-Nummer des Bootstrap-Tenants. Gemeinsamer Helfer
+// statt drei identischer Inline-Objekte (G5/S2) - ein kuenftiges Pflichtfeld am
+// number-Datensatz wird so an EINER Stelle ergaenzt, nicht an dreien vergessen.
+export function ownerNumberSeed(number) {
+  return {
+    numbers: [
+      {
+        id: "num_owner_seed",
+        e164: number.e164,
+        tenantId: BOOTSTRAP_TENANT_ID,
+        provider: number.provider,
+        status: "active",
+      },
+    ],
+  };
+}
+
 export { BOOTSTRAP_TENANT_ID };

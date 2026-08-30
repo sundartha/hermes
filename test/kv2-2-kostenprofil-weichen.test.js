@@ -12,7 +12,7 @@ import {
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
 import { KOSTENPROFIL, KOSTENPROFILE } from "../src/billing/kostenarten.js";
-import { startInboundHarness } from "./helpers/inbound-router-harness.js";
+import { startInboundHarness, ownerNumberSeed } from "./helpers/inbound-router-harness.js";
 
 const HTTP_OK = 200;
 
@@ -91,17 +91,7 @@ test("KV2-2-c3: TeXML-Zweig (beide Flags aus) setzt costProfile=telnyx_budget", 
 
 // Inbound-Seed (Muster geoSeed aus inbound-routing.test.js): eine aktive Owner-Nummer.
 function inboundSeed() {
-  return {
-    numbers: [
-      {
-        id: "num_owner_seed",
-        e164: TELNYX_TEST_OWNER_NUMBER.e164,
-        tenantId: BOOTSTRAP_TENANT_ID,
-        provider: TELNYX_TEST_OWNER_NUMBER.provider,
-        status: "active",
-      },
-    ],
-  };
+  return ownerNumberSeed(TELNYX_TEST_OWNER_NUMBER);
 }
 
 async function postIncoming(harness, callSid) {

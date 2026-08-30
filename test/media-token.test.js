@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 import WebSocket from "ws";
 import { startServer, seedState, seedCall, OWNER_TEST_NUMBER } from "./helpers.js";
 import { MEDIA_PATH } from "../src/bridge.js";
-import { PROVIDER, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-import { startInboundHarness } from "./helpers/inbound-router-harness.js";
+import { PROVIDER } from "../src/store/defaults.js";
+import { startInboundHarness, ownerNumberSeed } from "./helpers/inbound-router-harness.js";
 
 const TOKEN = "a".repeat(32);
 const CALL_ID = "call_test1";
@@ -88,17 +88,7 @@ test("/media-WebSocket: stream_token-Pruefung", async (t) => {
 test("TwiML der Realtime-Engine traegt das stream_token des Calls", async () => {
   const harness = await startInboundHarness({
     voiceEngine: "realtime",
-    seed: {
-      numbers: [
-        {
-          id: "num_owner_seed",
-          e164: OWNER_TEST_NUMBER.e164,
-          tenantId: BOOTSTRAP_TENANT_ID,
-          provider: OWNER_TEST_NUMBER.provider,
-          status: "active",
-        },
-      ],
-    },
+    seed: ownerNumberSeed(OWNER_TEST_NUMBER),
   });
   try {
     const res = await fetch(`${harness.url}/voice/incoming`, {
