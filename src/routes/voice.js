@@ -45,6 +45,7 @@ import {
 import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
 import { ANSWERED_BY } from "../telephony/answered-by.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -322,6 +323,10 @@ export function makeVoiceRoutes({
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
 
       if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) {
+        // KV2-2: Realtime-Inbound traegt einen ZWEITEN Traeger (openai_realtime,
+        // Katalogzeile #14) - deshalb ein eigenes Profil und nicht ein gemeinsames
+        // "telnyx_inbound": ein Flag-Flip bliebe sonst still (4.3, 6.4).
+        store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_INBOUND_REALTIME);
         // GAP-14: auch die Realtime-Engine darf den Pflichtsatz nicht dem Modell
         // ueberlassen (der Opener ist eine Prompt-Anweisung). Deterministisch gerendert
         // VOR dem Stream-Handoff; bridge.js bleibt unberuehrt (HEIKLE STELLE).
@@ -330,6 +335,7 @@ export function makeVoiceRoutes({
           .send(render([sayD(locale.inboundNotice, locale.voiceProfile), ...streamDirectives(call)], provider));
       }
 
+      store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_INBOUND_BUDGET);
       const ctx = store.tenantContext(call.tenantId);
       // GAP-14: der Pflichtsatz wird GERENDERT, nie gepromptet (Regel-2-Analogie fuer
       // Inbound) - und nur vorangestellt, wenn er im Greeting fehlt (kein Doppelsatz).

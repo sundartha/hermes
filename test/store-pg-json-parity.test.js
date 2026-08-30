@@ -214,3 +214,44 @@ test("openingLine/Hash/lookupLog: pg-Ergebnis == json-Ergebnis (Paritaet)", asyn
   assert.deepStrictEqual(pgResult, jsonResult);
 });
 
+// ---- KV2-2: cost_profile (das an der Engine-Weiche gesetzte Kostenprofil) -------------
+// Neuer Spaltentyp (additiv nullable, Muster sipCallId): create -> recordCostProfile ->
+// save -> echter Reopen/Disk-Read -> Wert unveraendert. Eine Altzeile ohne das Feld
+// hydriert auf null, nie auf undefined (4.6: das ist das Legacy-Signal fuer "vor der
+// Kette entstanden").
+const COST_PROFILE_FIXTURE = "el_convai_sip";
+
+async function pgCostProfileRoundtrip() {
+  const { store, runner } = await makePgTestStore();
+  const created = store.createCall(newCall());
+  store.recordCostProfile(created.id, COST_PROFILE_FIXTURE);
+  await store.save();
+  const reopened = makePgStore(runner);
+  await reopened.init();
+  return reopened.getCall(created.id).costProfile;
+}
+
+function jsonCostProfileRoundtrip() {
+  const created = jsonStore.createCall(newCall());
+  jsonStore.recordCostProfile(created.id, COST_PROFILE_FIXTURE);
+  const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, "store.json"), "utf8"));
+  return onDisk.calls.find((eintrag) => eintrag.id === created.id).costProfile;
+}
+
+test("costProfile: pg-Roundtrip erhaelt den Wert", async () => {
+  assert.equal(await pgCostProfileRoundtrip(), COST_PROFILE_FIXTURE);
+});
+
+test("costProfile: json-Roundtrip erhaelt den Wert (Disk)", () => {
+  assert.equal(jsonCostProfileRoundtrip(), COST_PROFILE_FIXTURE);
+});
+
+test("costProfile: eine Altzeile ohne das Feld hydriert auf null (BEIDE Backends)", async () => {
+  const { store } = await makePgTestStore();
+  const pgCreated = store.createCall(newCall());
+  assert.equal(store.getCall(pgCreated.id).costProfile, null, "pg: nie gesetzt -> null");
+
+  const jsonCreated = jsonStore.createCall(newCall());
+  assert.equal(jsonStore.getCall(jsonCreated.id).costProfile, null, "json: nie gesetzt -> null");
+});
+

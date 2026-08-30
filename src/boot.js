@@ -44,6 +44,7 @@ import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/
 // (assistantVoiceConfigured).
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
 import { attachMediaBridge, REALTIME_MID_CALL_BUDGET_CHECK } from "./bridge.js";
+import { hatEinsammler, KOSTENART } from "./billing/kostenarten.js";
 import {
   USAGE_EVENT_KIND,
   BOOTSTRAP_TENANT_ID,
@@ -228,18 +229,28 @@ function currentCoverage(config, store) {
 // (telephony/adapters/telnyx/voice.js). Quote unter der Schwelle = WARN, kein exit(1) -
 // ein Boot-Refusal tauschte ein Kostenproblem gegen einen Telefonie-Totalausfall (Praezedenz
 // warnTariffDrift); die laute Linie ist der Befund coverage_below_threshold aus dem Sweep.
-function assertCostTruingBooking(config, store) {
-  const findings = costTruingBookingFindings({
-    requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
-    assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
-    ...currentCoverage(config, store),
-  });
+// LCT P4 / KV2-2 (G5): EIN Umgang mit einer Befundmenge, in der fatale und warnende
+// Befunde gemeinsam auftreten koennen (fatal zuerst, dann alle als WARN). Vorher stand
+// dieser Block wortgleich zweimal (assertCostTruingBooking, und die neue fatale Variante
+// von latentCostPathFindings haette einen dritten, byte-identischen Zwilling erzeugt) -
+// genau die Doppelstruktur, die dieser Plan beendet.
+function applyBootFindings(findings) {
   const fatal = findings.find((finding) => finding.fatal);
   if (fatal) {
     console.error(`[boot] Start abgebrochen: ${fatal.message}`);
     process.exit(1);
   }
   for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+}
+
+function assertCostTruingBooking(config, store) {
+  applyBootFindings(
+    costTruingBookingFindings({
+      requiredRecordTypes: config.billing.costTruingRequiredRecordTypes,
+      assignableRecordTypes: ASSIGNABLE_COST_RECORD_TYPES,
+      ...currentCoverage(config, store),
+    }),
+  );
 }
 
 // LCT P5: Alarmkanal-Guard (alertChannelFindings). Loggt NIE den Wert (der besetzte Fall
@@ -419,28 +430,34 @@ function warnElRegistrationSipCredsMissing(config) {
 }
 
 // KV-P7: zwei latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
-// boot-guard.js fuer die Begruendung je Befund). WARN, kein exit(1) - Muster
-// warnAlertChannelUnset. realtimeMidCallBudgetCheck kommt aus GENAU EINER Quelle
-// (REALTIME_MID_CALL_BUDGET_CHECK, src/bridge.js) - kein zweites Flag hier.
-function warnLatentCostPaths(config) {
-  const findings = latentCostPathFindings({
-    playTtsEnabled: config.voice.elevenLabsPlayTts.enabled,
-    realtimeEngineSelected: config.voice.voiceEngine === VOICE_ENGINE.REALTIME,
-    realtimeMidCallBudgetCheck: REALTIME_MID_CALL_BUDGET_CHECK,
-  });
-  for (const finding of findings) console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+// boot-guard.js fuer die Begruendung je Befund). realtimeMidCallBudgetCheck kommt aus
+// GENAU EINER Quelle (REALTIME_MID_CALL_BUDGET_CHECK, src/bridge.js) - kein zweites Flag
+// hier. KV2-2 (h): der dritte Befund (REALTIME_CARRIER_UNCOLLECTED) kann jetzt FATAL sein
+// - Name deshalb "assert" statt "warn" (N7, kann den Prozess beenden), Umgang ueber
+// applyBootFindings (G5) statt eines eigenen console.warn-Loops.
+// realtimeCarrierHasCollector: EINE Quelle - die Profil-Registry (kostenarten.js), nicht
+// ein zweites Flag hier.
+function assertLatentCostPaths(config) {
+  applyBootFindings(
+    latentCostPathFindings({
+      playTtsEnabled: config.voice.elevenLabsPlayTts.enabled,
+      realtimeEngineSelected: config.voice.voiceEngine === VOICE_ENGINE.REALTIME,
+      realtimeMidCallBudgetCheck: REALTIME_MID_CALL_BUDGET_CHECK,
+      realtimeCarrierHasCollector: hatEinsammler(KOSTENART.OPENAI_REALTIME),
+    }),
+  );
 }
 
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertCostTruingBooking
-// (LCT P4) das siebte, assertSttProfile (STT-A1) das achte und assertPricedModels (B4a)
-// das neunte, das noch process.exit(1) rufen kann - warnStaleModelPrices/
-// warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
-// warnMissingProvisioningConnection/warnLatentCostPaths/warnElRegistrationSipCredsMissing
-// sind reine Diagnose (nie fatal). warnKostenAlarmZielUnset (KV2-1) ist ebenfalls reine
-// Diagnose, nie fatal - PLUS ein durabler Eintrag (s. dort).
+// (LCT P4) das siebte, assertSttProfile (STT-A1) das achte, assertPricedModels (B4a)
+// das neunte und assertLatentCostPaths (KV2-2 (h)) das zehnte, das noch process.exit(1)
+// rufen kann - warnStaleModelPrices/warnAlertChannelUnset/warnTariffDrift/
+// warnNumberOriginDecoupled/warnMissingProvisioningConnection/
+// warnElRegistrationSipCredsMissing sind reine Diagnose (nie fatal). warnKostenAlarmZielUnset
+// (KV2-1) ist ebenfalls reine Diagnose, nie fatal - PLUS ein durabler Eintrag (s. dort).
 function assertBootGates(config, store, durableAudit) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -521,7 +538,7 @@ function assertBootGates(config, store, durableAudit) {
   warnTurnOutlivesDeadAir(config); // AL-P6, WARN
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
-  warnLatentCostPaths(config); // KV-P7, WARN
+  assertLatentCostPaths(config); // KV-P7/KV2-2 (h): kann exit(1)
   warnElRegistrationSipCredsMissing(config); // OUTBOUND-E5, WARN
 }
 

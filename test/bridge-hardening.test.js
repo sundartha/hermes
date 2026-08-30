@@ -40,7 +40,13 @@ function wsOpen(url) {
 // Gehaertet: callId=undefined -> store.getCall -> null -> "unbekannte call_id, trenne" + sauberer
 // Socket-Close; der aeussere try/catch faengt jeden Rest. Diskriminator = das [guard]-Log fehlt.
 test("Provider-message-Handler: malformter start-Frame erreicht den P0-Backstop nicht (AC2/AC4)", async () => {
-  const srv = await startServer({ env: { VOICE_ENGINE: "realtime" } });
+  // KV2-2: das VOICE_ENGINE=realtime-Override ist HIER beweisbar wirkungslos gestrichen -
+  // attachMediaBridge (src/boot.js) ist UNKONDITIONAL, der WS-Endpunkt existiert auch
+  // unter der Default-Engine budget (Kommentar am Aufruf: "nur relevant bei
+  // VOICE_ENGINE=realtime" beschreibt die NUTZUNG, nicht die Registrierung). Ohne den
+  // Strich bootete dieser Spawn seit KV2-2(h) unter realtime gar nicht mehr (fataler
+  // Riegel REALTIME_CARRIER_UNCOLLECTED) - Deckung dieses Tests unveraendert.
+  const srv = await startServer();
   try {
     const ws = await wsOpen(`ws://127.0.0.1:${srv.port}${MEDIA_PATH[PROVIDER.TELNYX]}`);
     ws.send(JSON.stringify({ event: "start" })); // KEIN .start-Objekt

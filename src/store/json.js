@@ -244,6 +244,9 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   // (json<->pg-Parity - rowToCall liefert null). Ein Bestands-store.json ohne das Feld
   // hydriert damit strukturell auf null statt auf undefined.
   sipCallId: null,
+  // KV2-2: Kostenprofil (json<->pg-Parity - rowToCall liefert null). Ein Bestands-
+  // store.json ohne das Feld hydriert strukturell auf null, nie auf undefined.
+  costProfile: null,
   callerTurns: 0,
   // AL-P11: Ergebnis-Karte (json<->pg-Parity, rowToCall liefert null).
   result: null,
@@ -586,6 +589,15 @@ export function recordElevenlabsConversationId(callId, conversationId) {
 // aus dem er sich sonst noch holen liesse, ist dann laengst geloescht.
 export function recordSipCallId(callId, sipCallId) {
   const { call, changed } = ops.recordSipCallId(load(), callId, sipCallId);
+  if (changed) save();
+  return call;
+}
+
+// KV2-2: das an der Engine-Weiche gesetzte Kostenprofil - Wrapper-Paritaet zu pg.js.
+// Saved bei changed - das Profil liegt persistent, und ohne Save waere es nach einem
+// Neustart weg.
+export function recordCostProfile(callId, profil) {
+  const { call, changed } = ops.recordCostProfile(load(), callId, profil);
   if (changed) save();
   return call;
 }

@@ -58,7 +58,12 @@ function geoSeed(extraSettings = {}) {
 }
 
 test("unbekannte To -> fail-closed Hangup + Audit, kein Stream, kein Call-Record", async () => {
-  const srv = await startServer({ env: { VOICE_ENGINE: "realtime" } });
+  // KV2-2: das VOICE_ENGINE=realtime-Override ist HIER beweisbar wirkungslos gestrichen -
+  // der Unrouted-Zweig (!numberRecord, src/routes/voice.js) kehrt VOR der Engine-Weiche
+  // zurueck, die Assertion "kein stream_token" bleibt gueltig. Ohne den Strich bootete
+  // dieser Spawn seit KV2-2(h) unter realtime gar nicht mehr (fataler Riegel
+  // REALTIME_CARRIER_UNCOLLECTED) - Deckung dieses Tests unveraendert.
+  const srv = await startServer();
   try {
     const res = await fetch(`${srv.localUrl}/voice/incoming`, {
       method: "POST",

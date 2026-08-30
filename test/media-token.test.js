@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import WebSocket from "ws";
 import { startServer, seedState, seedCall, OWNER_TEST_NUMBER } from "./helpers.js";
 import { MEDIA_PATH } from "../src/bridge.js";
-import { PROVIDER } from "../src/store/defaults.js";
+import { PROVIDER, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
+import { startInboundHarness } from "./helpers/inbound-router-harness.js";
 
 const TOKEN = "a".repeat(32);
 const CALL_ID = "call_test1";
@@ -79,10 +80,28 @@ test("/media-WebSocket: stream_token-Pruefung", async (t) => {
   }
 });
 
+// KV2-2 (h): dieser Fall lief zuvor ueber den echten Spawn-Server (startServer) mit
+// VOICE_ENGINE=realtime. Seit dem fatalen Boot-Riegel REALTIME_CARRIER_UNCOLLECTED
+// bootet der Dienst unter dieser Engine nicht mehr - der In-Process-Harness (s.
+// test/helpers/inbound-router-harness.js) faehrt denselben Router OHNE src/boot.js.
+// Assertions WORTGLEICH zum Bestand (stream_token im TwiML, Wert == call.streamToken).
 test("TwiML der Realtime-Engine traegt das stream_token des Calls", async () => {
-  const srv = await startServer({ env: { VOICE_ENGINE: "realtime" } });
+  const harness = await startInboundHarness({
+    voiceEngine: "realtime",
+    seed: {
+      numbers: [
+        {
+          id: "num_owner_seed",
+          e164: OWNER_TEST_NUMBER.e164,
+          tenantId: BOOTSTRAP_TENANT_ID,
+          provider: OWNER_TEST_NUMBER.provider,
+          status: "active",
+        },
+      ],
+    },
+  });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await fetch(`${harness.url}/voice/incoming`, {
       method: "POST",
       // To = geseedete Owner-Nummer (P3c): unbekannte To wuerde fail-closed greifen.
       body: new URLSearchParams({
@@ -93,11 +112,12 @@ test("TwiML der Realtime-Engine traegt das stream_token des Calls", async () => 
     });
     assert.equal(res.status, 200);
     const twiml = await res.text();
-    const created = srv.readStore().calls[0];
+    const calls = harness.store.load().calls;
+    const created = calls.find((call) => call.twilioSid === "CAtest");
     assert.ok(created.streamToken, "Call hat ein streamToken im Store");
     assert.match(twiml, /name="stream_token"/);
     assert.ok(twiml.includes(`value="${created.streamToken}"`), "TwiML traegt den Token-Wert");
   } finally {
-    await srv.stop();
+    await harness.stop();
   }
 });

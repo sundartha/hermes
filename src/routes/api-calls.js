@@ -28,6 +28,7 @@ import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { isConsultEventId } from "../store/state-ops.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
+import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
@@ -360,6 +361,9 @@ export function makeCallRoutes({
       // ElevenLabs haengt per SIP-Trunk daran) - deshalb keine Provider-Abfrage, sondern
       // ein Engine-Schalter (s. src/elevenlabs/outbound.js).
       if (config.voice.elevenLabsOutbound.enabled) {
+        // KV2-2: Kostenprofil an der Weiche, VOR dem Waehlen. Set-once (state-ops);
+        // liest niemand produktiv, lehnt niemanden ab.
+        store.recordCostProfile(call.id, KOSTENPROFIL.EL_CONVAI_SIP);
         await originateElevenLabsCall(call);
         // Regel 1 (Minuten-Achse): derselbe harte Max-Dauer-Cap wie im C-Telnyx-Zweig.
         // providerCallSid=null ist Absicht (es gibt keinen twilioSid); ohne callControlId
@@ -374,6 +378,7 @@ export function makeCallRoutes({
         // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
         // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
       } else if (config.telnyx.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)) {
+        store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_ASSISTANT);
         await originateAiAssistantCall({
           store,
           voiceControl,
@@ -392,6 +397,11 @@ export function makeCallRoutes({
         // EINZIGE in-Prozess-Cap (fail-closed, Regel 1).
         armMaxDurationTimer(call, null);
       } else {
+        // Owner-Entscheidung 10 laeuft auf ihrem DEFAULT: dieser Zweig verzweigt NICHT
+        // auf die Engine (die Weiche faellt erst im Webhook /voice/outbound), also deckt
+        // telnyx_budget hier beide Engines ab. Benannte Restluecke, unerreichbar
+        // solange der Boot-Riegel (h) VOICE_ENGINE=realtime verhindert.
+        store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_BUDGET);
         const tw = await voiceControl(ctx.outboundProvider).originateCall({
           from: ctx.fromNumber,
           to: ctx.to,
