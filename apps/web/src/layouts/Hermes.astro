@@ -66,7 +66,10 @@ const legal = [
             {nav.map((item) => (
               <a class="nav-link" href={item.href}>{item.label}</a>
             ))}
-            <a class="btn-solid" href={LOGIN_URL}>Nummer holen</a>
+            <!-- Owner-Feedback 2026-08-26: wie auf der Startseite Login + Registrieren statt eines zweiten "Nummer holen". -->
+            <!-- Beide Ziele LOGIN_URL — Login = Registrierung, Account entsteht beim ersten OIDC-Login (lib/routes.js). -->
+            <a class="nav-link" href={LOGIN_URL}>Login</a>
+            <a class="btn-solid" href={LOGIN_URL}>Registrieren</a>
           </span>
         </nav>
       </header>
