@@ -18,7 +18,47 @@ Test-Anker: **5420 pass / 0 fail** (`LLM_PROVIDER=anthropic npm test`, vom Lead 
 Der Ausfall vom 27.08. selbst ist seit dem 28.08. behoben (ANI-Override zeigt auf `+18643028341`),
 der MCP-Weg ist demofaehig. Hergang: `tasks/befund-outbound-ausfall-2026-08-27.md`.
 
+## 1b. DEPLOY-STAND (2026-08-30, gemessen)
+
+**Der Code ist LIVE.** `1f4f4a5` auf lokal = origin = upstream = Render.
+Beleg: `/healthz` am Live-Dienst meldet `commit: 1f4f4a5...` (nicht dem Push- oder Deploy-Status
+glauben - dieses Feld ist der Beleg). Deploy `dep-da9uqvss728c73et5ngg`, Status `live`.
+
+Dabei zwei Notiz-Korrekturen, beide frisch gemessen:
+- `mcp__render__trigger_deploy` wird NICHT mehr vom Classifier blockiert (Notiz von 2026-07-21
+  ueberholt) - der Deploy liess sich direkt ausloesen.
+- `autoDeploy` steht weiterhin auf `no`: ein Push allein deployt nichts, das gilt unveraendert.
+- upstream trug zwei eigene Commits von Jonas (apps/web) - bidirektionale Divergenz wie
+  dokumentiert. Gemergt, Test-Gate 5420/0, beide Remotes gepusht.
+
+Die neuen E5-Env-Variablen haben alle sichere Defaults (`ELEVENLABS_NUMBER_REGISTRATION_ENABLED`
+= `false`, SIP-Zugangsdaten leer), die Migration ist rein additiv (drei nullable Spalten,
+`ADD COLUMN IF NOT EXISTS`) und laeuft beim Boot automatisch. Der Dienst ist unauffaellig.
+
 ## 2. DIE OFFENE OWNER-AKTION, ohne die E5 wirkungslos bleibt
+
+**STAND 2026-08-30, am Anbieter gemessen: der Cutover DARF JETZT NICHT gefahren werden.**
+Er wuerde den Ausfall vom 27.08. exakt wiederholen. Die Belege:
+
+| Vorbedingung | gemessen | Ergebnis |
+|---|---|---|
+| V1 SIP-Zugangsdaten | `TELNYX_SIP_TRUNK_USERNAME`/`-PASSWORD` existieren weder lokal noch sonstwo greifbar | **BLOCKIERT - nur der Owner kann sie in Telnyx anlegen** |
+| V2 Pilot | nicht gefahren (Anbieter-Schreibzugriff, Kosten UNBELEGT) | offen |
+| V3 jede DID registriert | `npm run elevenlabs:nummern`: "1 von 1 aktiven DIDs ohne Registrierung" | **NICHT erfuellt** |
+| V4 Rueckfall kontoeigen | EL-Registrierung traegt `+15739090177`; das Telnyx-Konto besitzt `+15804504874`, `+17067101188`, `+18643028341` - die Rueckfall-Nummer ist NICHT darunter | **NICHT erfuellt** |
+
+**Die Kausalkette, wenn man den Cutover trotzdem faehrt:** keine Tenant-DID hat eine eigene
+Registrierung (V3) -> jeder Anruf faellt auf die globale Registrierung zurueck -> die traegt eine
+Nummer, die dem Konto nicht gehoert (V4) -> ohne den maskierenden ANI-Override antwortet Telnyx mit
+SIP 403 "Unverified origination number". Das ist woertlich der Ausfall vom 27.08.
+
+**Der ANI-Override ist derzeit das EINZIGE, was den Outbound am Leben haelt.** Er bleibt stehen,
+bis V1-V4 erfuellt sind.
+
+Reihenfolge fuer den Owner: V1 (SIP-Zugangsdaten anlegen + in Render setzen, dann
+`ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true`) -> V4 (Registrierung fuer eine KONTOEIGENE
+Plattform-DID, `ELEVENLABS_AGENT_PHONE_NUMBER_ID` nachziehen) -> V2 (Pilot, eine Nummer, Testanruf,
+Rechnung) -> V3 (`npm run elevenlabs:nummern` bis Exit 0) -> ERST DANN der PATCH unten.
 
 Der neue Code ist korrekt und **folgenlos**, solange Telnyx jede gesendete Nummer ueberschreibt.
 Erst der Cutover schaltet ihn scharf:
