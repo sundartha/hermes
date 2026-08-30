@@ -21,6 +21,8 @@ import {
   providerRateOutOfBand,
   alertChannelFindings,
   alertChannelInputs,
+  kostenAlarmFindings,
+  ALARM_KANAL,
   costTruingBookingFindings,
   voiceTariffFloorFindings,
   planCapUnderivableFindings,
@@ -260,6 +262,17 @@ function warnAlertChannelUnset(config) {
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
 }
 
+// KV2-1 (Kriterium (d)): der Alarm-Empfaenger des KOSTENpfads als harte Vorbedingung.
+// WARN wie warnAlertChannelUnset - PLUS ein DURABLER Eintrag: die ganze Phase existiert,
+// weil eine Log-Zeile auf einem Free-Tier-Dyno keine Spur ist (AUFTRAG B3). Der Wert wird
+// NIE geloggt; das Detail nennt nur die Kanal-Art.
+function warnKostenAlarmZielUnset(config, durableAudit) {
+  const [finding] = kostenAlarmFindings({ billing: config.billing, mail: config.mail });
+  if (!finding) return;
+  console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+  durableAudit(finding.code, null, `kanaele=${ALARM_KANAL.KEINE}`);
+}
+
 // OUTBOUND-E1: reine Diagnose, NIE fatal (s. platformAniFindings). Loggt die Nummer nie.
 function warnPlatformAniUnset(config) {
   for (const finding of platformAniFindings({
@@ -426,8 +439,9 @@ function warnLatentCostPaths(config) {
 // das neunte, das noch process.exit(1) rufen kann - warnStaleModelPrices/
 // warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
 // warnMissingProvisioningConnection/warnLatentCostPaths/warnElRegistrationSipCredsMissing
-// sind reine Diagnose (nie fatal).
-function assertBootGates(config, store) {
+// sind reine Diagnose (nie fatal). warnKostenAlarmZielUnset (KV2-1) ist ebenfalls reine
+// Diagnose, nie fatal - PLUS ein durabler Eintrag (s. dort).
+function assertBootGates(config, store, durableAudit) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
   // GAR NICHT gestartet - kein app.listen, kein /voice, kein /mcp, keine Audio-Bridge.
@@ -498,6 +512,7 @@ function assertBootGates(config, store) {
   assertCostTruingBooking(config, store);
   assertSttProfile(config);
   warnAlertChannelUnset(config);
+  warnKostenAlarmZielUnset(config, durableAudit); // KV2-1, WARN + durabel
   warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
   warnOutboundDriftConfigUnset(config); // OUTBOUND-E4, WARN
   warnTariffDrift(config, store);
@@ -1098,6 +1113,9 @@ export async function bootServer({
   provisioning,
   costTruing,
   costCrossCheck,
+  // KV2-1: die EINE Audit-Funktion des Kostenpfads (Konsole + durabel) - der Boot-Befund
+  // warnKostenAlarmZielUnset schreibt ueber sie denselben durablen Marker wie der Sweep.
+  durableAudit,
   // OUTBOUND-E3b: vierter, unabhaengiger Zweig desselben Stunden-Sweeps (runSweepTick) -
   // dieselbe EINE Instanz wie costTruing/costCrossCheck (INV-7), server.js reicht sie im
   // deps-Buendel durch.
@@ -1134,7 +1152,7 @@ export async function bootServer({
   const openPlatformBindings = derivePlatformNumberBindings({ config, store });
   for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
     console.warn(`[boot] ${finding.message}`);
-  assertBootGates(config, store);
+  assertBootGates(config, store, durableAudit);
 
   // LCT P3: Kosten-Abgleich im Beobachtungsmodus. Muster der beiden bestehenden
   // periodischen Jobs (Retention hier, DID-Release-Reconciler in wiring/web-login.js):

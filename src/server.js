@@ -12,6 +12,7 @@ import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { audit } from "./util.js";
+import { makeDurableAudit } from "./durable-audit.js";
 import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
@@ -104,15 +105,6 @@ const { gates: outboundGates } = makeOutboundGates({
 // Aufrufer (finishCall / Provisioning-Drain), nicht im Modul.
 const metering = makeMetering({ store });
 
-// Kosten-Abgleich (LCT P3) EINMAL beim Boot verdrahtet (Naht wie metering, INV-7). Der
-// Laufriegel lebt im Factory-Scope = EIN Riegel pro Prozess, den Intervall (boot.js) und
-// manueller Endpunkt (api-billing.js) sich teilen - zwei Instanzen haetten zwei Riegel und
-// damit keinen. voiceControl kommt aus der Registry (Adapter ohne fetchCostRecordPool/
-// assignCostRecords -> sauberer No-op). Schreibt ausschliesslich P2-Felder; kein Gate,
-// kein Meter, keine Buchung wird beruehrt. messaging (LCT P5, Drift-Waechter-Alarm) ist
-// dieselbe Instanz wie bei outboundGates/callFinish (kein zweiter Messaging-Zugang, DIP).
-const costTruing = makeCostTruing({ store, config, voiceControl, audit, messaging });
-
 // KV-M4: monatliche Gegenprobe (reine Beobachtung) EINMAL beim Boot verdrahtet (Naht wie
 // costTruing, INV-7). Dieselbe voiceControl-Registry (Telnyx-only, kein Abgleich moeglich
 // -> sauberer No-op, Muster costTruing). Liest NUR die Gate-Achse und den Ledger, schreibt
@@ -132,6 +124,32 @@ const costCrossCheck = makeCostCrossCheck({ store, config, voiceControl });
 // (makeBrevoMailer/makeSmtpMailer) sind laut eigenem Modul-Kopf zustandslos (jeder Aufrufer
 // bekommt seine EIGENE Instanz) - zwei Instanzen sind unbedenklich, kein Doppel-Zustand.
 const mailer = selectMailer(config);
+
+// KV2-1: spaet gebundene Audit-Sink-Zelle (Muster accountsRef unten). Initialwert null;
+// gesetzt NUR im pg-gated guardedBoot-Block (wireWebLogin, das makeAuditStore ohnehin
+// baut). STORE_BACKEND=json / pg-Ausfall -> bleibt null -> der durable Zweig ist ein
+// fail-soft No-op (bewusste Festlegung, Plan 4.10).
+const auditStoreRef = { current: null };
+
+// KV2-1: die EINE Audit-Funktion des Kostenpfads - Konsolenzeile wie bisher, PLUS durabel
+// in audit_log. util.js#audit ist ausschliesslich ein console.log; genau deshalb lieferte
+// `select ... from audit_log where action='cost_truing_befund'` 11 Tage lang 0 Zeilen,
+// waehrend der Befund korrekt feuerte (AUFTRAG B3).
+const durableAudit = makeDurableAudit({ audit, auditStoreRef });
+
+// Kosten-Abgleich (LCT P3) EINMAL beim Boot verdrahtet (Naht wie metering, INV-7). Der
+// Laufriegel lebt im Factory-Scope = EIN Riegel pro Prozess, den Intervall (boot.js) und
+// manueller Endpunkt (api-billing.js) sich teilen - zwei Instanzen haetten zwei Riegel und
+// damit keinen. voiceControl kommt aus der Registry (Adapter ohne fetchCostRecordPool/
+// assignCostRecords -> sauberer No-op). Schreibt ausschliesslich P2-Felder; kein Gate,
+// kein Meter, keine Buchung wird beruehrt. messaging (LCT P5, Drift-Waechter-Alarm) ist
+// dieselbe Instanz wie bei outboundGates/callFinish (kein zweiter Messaging-Zugang, DIP).
+// KV2-1: NACH selectMailer verdrahtet (vorher davor) - der Befundkanal geht seit dieser
+// Phase ueber denselben Meldeweg wie der Ausfall-Melder (Plan 4.9/4.10) und braucht
+// deshalb den Mailer. Dieselbe Umstellung, die outageWatch schon hinter sich hat.
+const costTruing = makeCostTruing({
+  store, config, voiceControl, audit: durableAudit, messaging, mailer,
+});
 
 // OUTBOUND-E3b: vierter, unabhaengiger Sweep-Zweig (Muster costTruing/costCrossCheck,
 // INV-7) - schliesst offene Ausfall-Marker, deren Fenster inzwischen gesund ist (D9: der
@@ -319,6 +337,11 @@ const deps = {
   voiceRender,
   costTruing,
   costCrossCheck,
+  // KV2-1: durabler Audit-Sink des Kostenpfads - auditStoreRef geht an buildApp/
+  // wireWebLogin (das die Zelle befuellt), durableAudit an bootServer/assertBootGates
+  // (das den Boot-Befund darueber schreibt).
+  auditStoreRef,
+  durableAudit,
   outageWatch,
   driftWatch,
   messaging,

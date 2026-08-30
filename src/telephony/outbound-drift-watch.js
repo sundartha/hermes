@@ -7,8 +7,7 @@
 // bezahlten Kundenanruf.
 import { messeAnbieterWirklichkeit } from "./outbound-config-probe.js";
 import { beurteileDrift, DRIFT_KLASSE } from "./outbound-config-drift.js";
-import { meldeBetreiberAlarm, meldeBetreiberNotiz } from "./outage-report.js";
-import { meldeErlaubt } from "./outage-detection.js";
+import { meldeBetreiberNotiz, meldeVollBefund } from "./outage-report.js";
 import { sollAusConfig as sollAusConfigGeteilt, schwellenAusConfig as schwellenAusConfigGeteilt } from "./outbound-config-soll.js";
 import { ladeAusnahmen as ladeAusnahmenGeteilt } from "./outbound-drift-ausnahmen.js";
 import * as ops from "../store/state-ops.js";
@@ -122,48 +121,6 @@ function sollAusConfig({ config, store, verbrauch24hMs }) {
     verbrauch24hMicroCents: verbrauch24hMs,
     letzteErfolgreicheMessungMs: messungOk ? Date.parse(messungOk.lastSeenAt) : null,
   };
-}
-
-// BLOCKER 3 (Review Runde 2, erste Haelfte): Entprellung VOR jedem Alarm-Versand. OHNE
-// sie feuert JEDER Lauf (stuendlich, plus Boot, plus externer Actions-Takt) bei
-// unveraendertem Befund erneut den VOLLEN Meldeweg (Mail+SMS) - gemessen: 24
-// runDriftSweep-Aufrufe bei unveraendertem Ausfall -> 3 Mails + 9 Audit-Zeilen; im
-// Stundentakt waeren das 24 Mails/Tag, der reale 27.08.-Ausfall lief 3 Tage. Dieselbe
-// Regel (meldeErlaubt) und dieselben Schwellen wie der Ausfall-Melder (E-3b, Muster
-// outageAlertDebounceMs) - EINE Quelle (G5) statt einer zweiten, hier getippten
-// Fristlogik: "ein bereits gemeldeter Vorfall darf erst nach debounceMs erneut erinnern"
-// ist dieselbe Frage, ob sie am not-placed-Ausfall oder an einem Drift-Befund haengt. Ein
-// noch nicht existierender Marker (erster Fund) ist immer erlaubt.
-// ENTSCHEIDET NUR UEBER DEN VERSAND (Review Runde 2 verschaerft das): false heisst NICHT
-// "dieser Lauf tut nichts" - der Aufrufer (laufeDrift) faellt dann auf meldeBetreiberNotiz
-// zurueck, die den Marker trotzdem beansprucht (lastSeenAt), nur eben ohne sent:true. Die
-// Marker-FRISCHE haengt damit nicht mehr am Alarm-Versand.
-function alarmErlaubt({ store, bucket, config, nowMs }) {
-  const marker = ops.openOutageAlert(store.load(), bucket);
-  if (!marker) return true;
-  return meldeErlaubt(marker, nowMs, {
-    debounceMs: config.billing.outageAlertDebounceMs,
-    retryMs: config.billing.outageAlertRetryMs,
-  });
-}
-
-// BLOCKER (Review Runde 2, Folge des Blocker-3-Fixes): ein entprellter VOLL-Befund darf
-// den Marker NICHT unangetastet lassen - genau das liess marker.lastSeenAt einfrieren,
-// obwohl der Ausfall stuendlich neu gemessen wird. Der ANI-Riegel (outbound-gates.js#
-// frischGenug) liest exakt dieses Feld mit einem VIEL kuerzeren Fenster
-// (OUTBOUND_ANI_GATE_MAX_AGE_MS, Default 15 min) als die Versand-Entprellung
-// (outageAlertDebounceMs, Default 6 h) laeuft - ohne diesen Zweig war das Gate dadurch nur
-// rund 15 von 360 Minuten scharf statt durchgehend. Entprellt wird NUR der Versand (Mail/
-// SMS): meldeBetreiberNotiz claimt den Marker OHNE sent:true (lastAttemptAt/reportedAt
-// bleiben unveraendert, also bleibt auch die naechste alarmErlaubt-Faelligkeitspruefung
-// unveraendert) und schreibt selbst WARN+Audit fort - "nie stumm" gilt damit fuer JEDEN
-// Lauf, nicht nur fuer den, der tatsaechlich sendet.
-async function meldeVollBefund({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs }) {
-  if (alarmErlaubt({ store, bucket, config, nowMs })) {
-    await meldeBetreiberAlarm({ store, config, audit, messaging, mailer, bucket, aktion, zeile, nowMs });
-  } else {
-    await meldeBetreiberNotiz({ store, audit, bucket, aktion: `${aktion}_entprellt`, zeile, nowMs });
-  }
 }
 
 // Vollstaendig fail-soft: ein Fehler HIER darf niemals den Boot oder den Stunden-Sweep

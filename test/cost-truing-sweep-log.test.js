@@ -52,7 +52,9 @@ test("(P6-8) Sweep-Log traegt anfragen/seiten/pool/vollstaendig HINTER den Besta
     "[cost-truing] sweep trigger=manual kandidaten=2 gemessen=0 unvollstaendig=2 " +
       "ohne_schaetzung=0 unbestimmt=0 uebersprungen=0 " +
       `anfragen=${ASSIGNABLE_COST_RECORD_TYPES.length} seiten=${ASSIGNABLE_COST_RECORD_TYPES.length} ` +
-      "pool=1 vollstaendig=true",
+      // KV2-1 (Kriterium (d)): kanaele= HINTER den Bestandsfeldern - kein Ziel gesetzt
+      // (BASE_ENV/fakeConfig-Default) -> kanaele=keine.
+      "pool=1 vollstaendig=true kanaele=keine",
   );
   assert.equal(
     fetchCalls.length, Number(line.match(/anfragen=(\d+)/)[1]),
