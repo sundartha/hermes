@@ -888,6 +888,13 @@ ALTER TABLE usage_event ADD COLUMN IF NOT EXISTS cost_micro_cents BIGINT;
 -- beleg_ref traegt AUSSCHLIESSLICH die opake Anbieter-Belegkennung (conv_.../otb_...).
 -- KEIN CHECK-Constraint auf reife/traeger: die Gueltigkeit lebt fail-closed im Mutator
 -- (eine Quelle, Muster kyc_level).
+-- nachreifbar (KV2-4): kann diese Zeile spaeter noch auf 'belegt' gehoben werden? FALSE
+-- setzt ausschliesslich der EL-Abbruchweg (elevenlabs/outbound.js#endActiveCall ->
+-- convai.js#endConversation, ein DELETE beim Anbieter). NICHT dasselbe wie reife=
+-- beleg_strukturell_unbeschaffbar: der Betrag dieser Zeile zaehlt WEITER in die
+-- Belegsumme (Matrix 4.6: "nachbuchen mit dem, was da ist"), sie kann nur nicht mehr
+-- reifen. Der gleichnamige Zustand AM ANRUF (KV2-7) ist eine andere Ebene.
+-- EINBAHNSTRASSE: FALSE kommt nie wieder auf TRUE (state-ops#recordCallCostEvidence).
 CREATE TABLE IF NOT EXISTS call_cost_evidence (
   id                            TEXT PRIMARY KEY,
   tenant_id                     TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
@@ -901,8 +908,12 @@ CREATE TABLE IF NOT EXISTS call_cost_evidence (
   versuche                      INT NOT NULL DEFAULT 0,
   gemessen_at                   TEXT,
   abstand_zum_gespraechsende_s  INT,
-  detail                        JSONB
+  detail                        JSONB,
+  nachreifbar                   BOOLEAN NOT NULL DEFAULT TRUE
 );
+-- Forward-compat (Muster tenant.status): Bestandszeilen bekommen TRUE - vor KV2-4 gab es
+-- keinen Schreiber, der eine Zeile als nicht nachreifbar haette markieren koennen.
+ALTER TABLE call_cost_evidence ADD COLUMN IF NOT EXISTS nachreifbar BOOLEAN NOT NULL DEFAULT TRUE;
 -- EINE Zeile je (call_id, traeger) - der Idempotenz-Riegel auch in der DB, nicht nur
 -- im Spiegel (Kriterium (a)).
 CREATE UNIQUE INDEX IF NOT EXISTS call_cost_evidence_call_traeger_idx

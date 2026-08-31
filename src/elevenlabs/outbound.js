@@ -44,6 +44,9 @@ import { endConversation, fetchConversation, startOutboundCall, startResultOf } 
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
+// KV2-4: die Belegzeilen dieses Gespraechs (Regelwerk und Geldpruefung liegen daneben,
+// nicht hier - s. kosten-beleg.js).
+import { recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 // OUTBOUND-E5 (F3): die reine Registrierungs-Auswahl - kein Netz, kein Store (s. dort).
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE } from "../telephony/absender-registrierung.js";
 import crypto from "node:crypto";
@@ -924,6 +927,57 @@ function recordAbsenderMessung(store, callId, conversation) {
   });
 }
 
+// Das Gespraech ist beim Anbieter zu Ende. Transkript, Zusammenfassung und Befund KOMMEN
+// VON IHM (wir haben auf diesem Weg weder Audio noch Turn-Schleife) und landen ueber die
+// Store-Mutatoren an denselben Feldern, die get_transcript ohnehin liest - kein zweiter
+// Schreibweg neben dem Store. MODUL-EBENE (G30/G34): die Funktion braucht ausser store
+// keinen Zustand der Fabrik - dieselbe Begruendung wie bei recordAbsenderMessung darueber.
+//
+// belegNachreifbar (KV2-4): DATENFELD der EL-Belegzeile, keine Verhaltensweiche - es
+// steuert hier keine Verzweigung, es wird persistiert (deshalb kein G15/F3-Selektor). Die
+// beiden Aufrufer liefern es ausdruecklich, ohne Default: der regulaere Weg laesst den
+// Anbieter-Datensatz stehen, der Abbruchweg loescht ihn unmittelbar danach.
+function persistProviderResult({ store, callId, conversation, belegNachreifbar }) {
+  const zeilen = spokenLines(conversation);
+  // VOR dem Schreiben: die Meldung gilt dem, was der Anbieter geliefert hat, und darf
+  // nicht an einem spaeteren Store-Fehler haengen bleiben (s. reportAudioTags).
+  reportAudioTags(callId, zeilen);
+  for (const zeile of zeilen) store.addTranscript(callId, roleOf(zeile.role), zeile.message);
+  store.recordProviderCallResult(callId, {
+    summary: conversation.analysis?.transcript_summary || null,
+    objectiveAchieved: objectiveAchievedOf(conversation),
+  });
+  // ABNAHME-D1 (TEIL 2/3): s. persistCollectedFields oben (Modul-Ebene, G30).
+  persistCollectedFields(store, callId, conversation);
+  // PHASE-6-VORAUSSETZUNG, die EINZIGE Quelle des Join-Schluessels zur Telefonie-
+  // Rechnung: der "otb_"-Wert, den auch der Telnyx-Beleg unter sip_call_id fuehrt
+  // (GEMESSEN an beiden Enden, test/fixtures/elevenlabs-conversations.js). Die Antwort
+  // des Anrufstarts scheidet als Quelle aus - sie liefert unter demselben Feldnamen
+  // ElevenLabs' call_sid (s. convai.js#startResultOf, an Anruf 2 vom 17.08.2026 gemessen).
+  //
+  // DIE STELLE IST BEWUSST GEWAEHLT: persistProviderResult laeuft auf BEIDEN Wegen VOR
+  // dem Loeschversuch beim Anbieter - im regulaeren Ende (finishFromConversation) gibt es
+  // gar keinen, im Abbruch (endActiveCall) ist die Reihenfolge Abruf-vor-Loeschen bindend.
+  // Was hier nicht gesichert ist, ist danach unwiederbringlich weg.
+  //
+  // PREIS DER EINEN QUELLE, bewusst getragen: kommt nie ein Ergebnis (Anbieter stumm,
+  // Prozess vorher weg), bleibt der Schluessel leer und die Telefonie-Kosten dieses
+  // Anrufs sind ihm nicht mehr zuzuordnen. Ein FALSCHER Schluessel waere schlechter: er
+  // jointet ebenfalls nicht, sperrt aber zusaetzlich (set-once) die richtige Quelle aus
+  // und behauptet dabei eine Zuordnung, die es nicht gibt.
+  store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
+  // OUTBOUND-E5 (F3): die vom Anbieter gemeldete Absendernummer - AUCH im abgelehnten Fall
+  // befuellt (Befund 27.08.). Formpruefung sitzt im Store-Mutator (recordActualSender).
+  recordAbsenderMessung(store, callId, conversation);
+  // KV2-4: der EL-Beleg (vorlaeufig) plus die erwartete telnyx_sip-Zeile. HIER, weil beide
+  // Aufrufer von persistProviderResult damit bedient sind - das regulaere Ende und der
+  // Abbruch -, und ALS LETZTER SCHRITT, weil dieser Schreibweg rein additiv ist und keinen
+  // der Anbieter-Wahrheits-Schreiber oben beeinflussen darf. Kein Netz-IO: die Antwort
+  // liegt bereits vollstaendig im Speicher. Fail-soft (s. dort) - dieses Buch hat noch
+  // keinen Leser und darf den Geld-/Terminierungspfad nie anhalten.
+  recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar });
+}
+
 // Die EINZIGEN zwei Dinge, die pro Anruf am Agenten des Anbieters gesetzt werden duerfen
 // (Eigentuemer-Entscheidung 16.08.2026): die Sprache und die Stimme. Beide kommen aus dem
 // aufgeloesten Locale (call-locale.js), also aus dem Datensatz - kein Aufrufer kann sie
@@ -1276,45 +1330,6 @@ export function makeElevenLabsOutbound({
   // zur Laufzeit, und der Abholtakt darf nicht an einer Kopie von vor dem Boot haengen.
   const settings = () => config.voice.elevenLabsOutbound;
 
-  // Das Gespraech ist beim Anbieter zu Ende. Transkript, Zusammenfassung und Befund KOMMEN
-  // VON IHM (wir haben auf diesem Weg weder Audio noch Turn-Schleife) und landen ueber die
-  // Store-Mutatoren an denselben Feldern, die get_transcript ohnehin liest - kein zweiter
-  // Schreibweg neben dem Store.
-  function persistProviderResult(callId, conversation) {
-    const zeilen = spokenLines(conversation);
-    // VOR dem Schreiben: die Meldung gilt dem, was der Anbieter geliefert hat, und darf
-    // nicht an einem spaeteren Store-Fehler haengen bleiben (s. reportAudioTags).
-    reportAudioTags(callId, zeilen);
-    for (const zeile of zeilen) store.addTranscript(callId, roleOf(zeile.role), zeile.message);
-    store.recordProviderCallResult(callId, {
-      summary: conversation.analysis?.transcript_summary || null,
-      objectiveAchieved: objectiveAchievedOf(conversation),
-    });
-    // ABNAHME-D1 (TEIL 2/3): s. persistCollectedFields oben (Modul-Ebene, G30).
-    persistCollectedFields(store, callId, conversation);
-    // PHASE-6-VORAUSSETZUNG, die EINZIGE Quelle des Join-Schluessels zur Telefonie-
-    // Rechnung: der "otb_"-Wert, den auch der Telnyx-Beleg unter sip_call_id fuehrt
-    // (GEMESSEN an beiden Enden, test/fixtures/elevenlabs-conversations.js). Die Antwort
-    // des Anrufstarts scheidet als Quelle aus - sie liefert unter demselben Feldnamen
-    // ElevenLabs' call_sid (s. convai.js#startResultOf, an Anruf 2 vom 17.08.2026
-    // gemessen).
-    //
-    // DIE STELLE IST BEWUSST GEWAEHLT: persistProviderResult laeuft auf BEIDEN Wegen VOR
-    // dem Loeschversuch beim Anbieter - im regulaeren Ende (finishFromConversation) gibt
-    // es gar keinen, im Abbruch (endActiveCall) ist die Reihenfolge Abruf-vor-Loeschen
-    // bindend. Was hier nicht gesichert ist, ist danach unwiederbringlich weg.
-    //
-    // PREIS DER EINEN QUELLE, bewusst getragen: kommt nie ein Ergebnis (Anbieter stumm,
-    // Prozess vorher weg), bleibt der Schluessel leer und die Telefonie-Kosten dieses
-    // Anrufs sind ihm nicht mehr zuzuordnen. Ein FALSCHER Schluessel waere schlechter:
-    // er joint ebenfalls nicht, sperrt aber zusaetzlich (set-once) die richtige Quelle
-    // aus und behauptet dabei eine Zuordnung, die es nicht gibt.
-    store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
-    // OUTBOUND-E5 (F3): die vom Anbieter gemeldete Absendernummer - AUCH im abgelehnten Fall
-    // befuellt (Befund 27.08.). Formpruefung sitzt im Store-Mutator (recordActualSender).
-    recordAbsenderMessung(store, callId, conversation);
-  }
-
   // Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
   // buchen - so sieht die Buchungskette den fertigen Stand. hangUp bleibt null: es gibt
   // kein eigenes Provider-Leg mehr aufzulegen, das Gespraech ist beim Anbieter bereits
@@ -1330,7 +1345,9 @@ export function makeElevenLabsOutbound({
   // S2: ended kann null sein (store.endCallRecord findet den Call nicht mehr) -
   // answeredAnchorOutcome faengt das selbst ab (s. dort), hier wird nur noch weitergereicht.
   async function finishFromConversation(callId, conversation) {
-    persistProviderResult(callId, conversation);
+    // Regulaeres Ende: es gibt hier keinen Loeschversuch, der Anbieter-Datensatz bleibt
+    // abrufbar -> der Beleg kann in KV2-9 auf 'belegt' nachreifen.
+    persistProviderResult({ store, callId, conversation, belegNachreifbar: true });
     const ended = store.endCallRecord(callId, endStatusOf(conversation));
     const anchor = answeredAnchorOutcome(ended?.endedAt, conversation);
     applyAnsweredAnchor(store, callId, anchor);
@@ -1449,7 +1466,14 @@ export function makeElevenLabsOutbound({
     if (!conversationId) return;
     const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
     if (conversation) {
-      persistProviderResult(callId, conversation);
+      // Kriterium (c): unmittelbar nach diesem Block laeuft endConversation, ein DELETE
+      // beim Anbieter, das den Datensatz vermutlich mitnimmt (s. Kommentar oben). Der
+      // Beleg entsteht also in derselben Form wie am regulaeren Ende - aber er ist
+      // strukturell nicht nachreifbar. UNBEDINGT, nicht abhaengig vom Ausgang des DELETE:
+      // die sichere Richtung ist "reift nicht" (nachbuchen ja, erstatten nein, 4.4);
+      // schlaegt das DELETE fehl, kostet uns das hoechstens eine ungenutzte Reifung, nie
+      // eine unbelegte Erstattung.
+      persistProviderResult({ store, callId, conversation, belegNachreifbar: false });
       applyAnsweredAnchor(store, callId, answeredAnchorOutcome(call.endedAt, conversation));
     }
     await endConversation({

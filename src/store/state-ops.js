@@ -67,7 +67,7 @@ import {
   assertCostEvidenceInput,
   buildCostEvidenceRow,
   canSetEvidenceMaturity,
-  costEvidenceValuePatch,
+  costEvidenceFortschreibung,
   isTerminalMaturity,
 } from "./cost-evidence.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS, languageForCountry } from "../i18n/locales.js";
@@ -4353,7 +4353,7 @@ export function recordCallCostEvidence(s, eingabe) {
   if (vorhanden.reife === reife && isTerminalMaturity(reife))
     return { evidence: vorhanden, changed: false };
   vorhanden.reife = reife;
-  Object.assign(vorhanden, costEvidenceValuePatch(eingabe));
+  Object.assign(vorhanden, costEvidenceFortschreibung(vorhanden, eingabe));
   return { evidence: vorhanden, changed: true };
 }
 
