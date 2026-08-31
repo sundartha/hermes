@@ -28,8 +28,8 @@ import { KOSTENART } from "../src/billing/kostenarten.js";
 import { COST_TRUING_SOURCE, PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
 import { EL_STICHPROBE, eigenCentQuelleJeAnruf, elVollkostenState } from "./fixtures/kostenv2-vollkosten-stichprobe.js";
 import { makeCostTruing, SWEEP_TRIGGER } from "../src/billing/cost-truing.js";
-import { makeStubStore, fakeConfig } from "./cost-truing-harness.js";
-import { startServer, seedState } from "./helpers.js";
+import { makeStubStore, fakeConfig, fakeSpies } from "./cost-truing-harness.js";
+import { startServer, seedState, BASE_ENV } from "./helpers.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const KURS_MICRO = 920_000; // 0,92 EUR je USD - der Live-Kurs (config.js-Fallback)
@@ -187,17 +187,6 @@ function boundAlertSender() {
   }];
 }
 
-function fakeSpies() {
-  const mailCalls = [];
-  const smsCalls = [];
-  return {
-    mailCalls,
-    smsCalls,
-    mailer: { async sendMail(args) { mailCalls.push(args); } },
-    messaging: () => ({ async sendSms(args) { smsCalls.push(args); } }),
-  };
-}
-
 function kanalConfig(domesticCents) {
   return fakeConfig({
     costTruingMinCoveragePercent: 80,
@@ -314,4 +303,17 @@ test("KV2-10 (cfg3): unbekanntes Profil oder Muell-Cent in der Env-Karte reisst 
     if (saved === undefined) delete process.env.VOICE_TARIFF_GRUNDBETRAG_CENTS;
     else process.env.VOICE_TARIFF_GRUNDBETRAG_CENTS = saved;
   }
+});
+
+// KV2-10 Review (Randbedingung 3 der Spec): die neue Env-Variable muss wie jede
+// Schwester-Variable in BASE_ENV gepinnt sein. Ohne die Klemme fuellt dotenv die
+// UNgesetzte Variable aus einer lokalen .env - steht dort Muell (z.B.
+// "el_convai_sip:kein_zahl"), reisst routeCentsEnv den Config-Build
+// (fatalConfigErrors -> Boot-Refusal) in JEDEM Spawn-Test der Suite.
+test("KV2-10 (cfg4): BASE_ENV pinnt VOICE_TARIFF_GRUNDBETRAG_CENTS neutral leer (kein dotenv-Leak aus lokaler .env)", () => {
+  assert.ok(
+    "VOICE_TARIFF_GRUNDBETRAG_CENTS" in BASE_ENV,
+    "der Schluessel existiert in BASE_ENV - nur dann klemmt dotenv die lokale .env aus",
+  );
+  assert.equal(BASE_ENV.VOICE_TARIFF_GRUNDBETRAG_CENTS, "", "leer = fail-closed Default {} (alle Routen 0)");
 });

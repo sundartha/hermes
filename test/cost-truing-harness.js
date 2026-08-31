@@ -180,6 +180,18 @@ export function fakeVoiceControl(byProvider) {
   };
 }
 
+// KV2-10 Review (G5): Mail-/SMS-Spione der Kanal-Tests - vorher byte-identisch in
+// kv2-1-kosten-alarm-naht.test.js und kv2-10-tarifpaar.test.js gepflegt, obwohl beide
+// ohnehin makeStubStore/fakeConfig aus DIESEM Harness ziehen. EINE Quelle: wer den
+// Stub-Store teilt, teilt auch die Kanal-Spione.
+export function fakeSpies() {
+  const mailCalls = [];
+  const smsCalls = [];
+  const mailer = { async sendMail(args) { mailCalls.push(args); } };
+  const messaging = () => ({ async sendSms(args) { smsCalls.push(args); } });
+  return { mailCalls, smsCalls, mailer, messaging };
+}
+
 // Der KOEDER aller Beleg-Fixturen (Spec A2): ein Feld, das der Code NICHT als
 // Zuordnungsquelle verwenden darf. Es traegt immer dieselbe FREMDE UUID - liest der Code
 // telnyx_leg_id, kommt kein einziger erwarteter Beleg herein und jede Erwartung faellt.

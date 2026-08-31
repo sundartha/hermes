@@ -38,6 +38,10 @@ import { internalOnly } from "../wiring/internal-only.js";
 // Status-Marker der gebundenen Karte (kein Magic-String, G25). Nur checkout-return.
 const CARD_ON_FILE_STATUS = "card_on_file";
 
+// HTTP-Status der Nicht-berechenbar-Antwort von platform-costs (G25, Naming wie
+// src/app.js/webhooks-elevenlabs.js).
+const HTTP_SERVER_ERROR = 500;
+
 // deps: { config, store, audit, billing, tenant, costTruing, operatorAuth }. config ist
 // das globale Config-Objekt (paymentEnabled/publicUrl/stripeCustomerRetryDelayMs).
 // store traegt load/save. audit ist util.audit (loggt nur Keys, keine Werte/Secrets).
@@ -160,6 +164,19 @@ export function makeBillingRoutes({
     const elevenLabsUsdCents = config.billing.platformFixedCostUsdCentsPerMonth;
     const elevenLabsCents =
       providerMicroCentsToBucketCents(elevenLabsUsdCents * MICRO_CENTS_PER_CENT, config.billing.providerToBucketRateMicro);
+    // KV2-10 Review (G26/PM-4): die geteilte Umrechnung liefert dokumentiert null, sobald
+    // das Produkt den sicheren Ganzzahlbereich verlaesst (US-Listenpreis ab rund 98 USD
+    // je Monat bei Kurs 0,92 - realistisch, die Env hat kein max). null + didRentCents
+    // koerzierte null zuvor still zu 0 und liess den ElevenLabs-Anteil aus der Summe
+    // verschwinden. "Nicht berechenbar ist nicht kostet nichts": der Anzeige-Endpunkt
+    // lehnt mit diagnosefaehiger Meldung ab, statt eine zu niedrige Betreiber-Zahl
+    // still auszugeben. Reine Anzeige - kein Gate liest diese Route.
+    if (elevenLabsCents === null) {
+      return res.status(HTTP_SERVER_ERROR).json({
+        error:
+          "ElevenLabs-Fixkosten nicht berechenbar: Produkt aus PLATFORM_FIXED_COST_CENTS_PER_MONTH und PROVIDER_TO_BUCKET_RATE_MICRO ueberschreitet den sicheren Ganzzahlbereich",
+      });
+    }
     const didRentCents = config.billing.numberMonthlyCostCents * activeNumbers;
     const fixedCostCentsPerMonth = elevenLabsCents + didRentCents;
     res.json({
