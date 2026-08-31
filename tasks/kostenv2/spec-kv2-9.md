@@ -1,32 +1,43 @@
-<!-- Auftragsblatt KV2-9. Geschnitten aus tasks/PLAN-KOSTEN-V2.md (Zeilen 1685-1793). -->
+<!-- Auftragsblatt KV2-9. Der Phasenabschnitt aus tasks/PLAN-KOSTEN-V2.md. -->
 
-# Pflichtlektuere vor der Umsetzung
+# Pflichtlektuere
 
-Dieses Blatt ist der Auftrag, aber NICHT der ganze Kontext. Vor dem ersten Edit zu lesen:
+Nur das hier - NICHT den ganzen Plan, NICHT die uebrigen Befund-Dateien. Jede Zeile,
+die du liest, traegst du danach durch jeden weiteren Schritt mit.
 
-- `tasks/PLAN-KOSTEN-V2.md` Abschnitt 2 (Zielbild), Abschnitt 3 (Kostenarten-Tabelle, inkl. 3.5 Einheiten und
-  3.6 die ID-Falle), Abschnitt 4 (Architektur-Entscheidung, insbesondere 4.3
-  Durchsetzungsstelle, 4.5 Settlement, 4.6 Matrix, 4.7 Schliessregel) und
-  **Abschnitt 7 (Eigentuemer-Entscheidungen) vollstaendig**.
-- `tasks/kostenv2/befund-code.md`, `befund-elevenlabs.md`, `befund-gate.md`,
-  `befund-telnyx.md` - der gemessene Ist-Zustand. Keine Annahme ueber Bestandscode ohne
-  Beleg aus diesen Befunden ODER aus dem Code selbst.
+- `tasks/PLAN-KOSTEN-V2.md`: Abschnitt 2 (Zielbild), 3.5 (Einheiten), 3.6 (die ID-Falle), 4.3 (Durchsetzungsstelle) und **Abschnitt 7 vollstaendig**, dazu 4.4 (Reife) und 4.8 (Herkunftsangabe)
+- `tasks/kostenv2/befund-elevenlabs.md` - der gemessene EL-Ist-Zustand.
 - `CLAUDE.md` (Absolute Regeln) und `.claude/refs/clean-code.md`.
 
-# Harte Randbedingungen dieser Kette
+Brauchst du darueber hinaus etwas, lies gezielt nach - aber lies nicht vorsorglich.
 
-1. **Safety-Gates, Offenlegungssatz und `callee_is_owner` werden NICHT angefasst.** Beruehrt
-   die Umsetzung eines davon, ist das ein Abbruchgrund mit Meldung an den Lead - keine
-   eigenmaechtige Aenderung, auch keine "harmlose" Umformulierung.
-2. **Abschnitt 7, Punkte 1-9 und 13 sind entschieden** - umsetzen wie dort festgelegt.
-   **Die Punkte 10, 11, 12, 14, 15 und 16 laufen auf Default und sind so gekennzeichnet.**
-   Verlangt die Phase, einen davon scharf zu stellen, wird er auf dem dokumentierten
-   Default gebaut und der Punkt im Report als Rueckfrage an den Owner gemeldet -
-   NICHT eigenmaechtig festgelegt.
-3. Neue Env-Variable: sofort in `src/config.js`, `.env.example` UND in `BASE_ENV` der
-   Test-Helfer (sonst leakt die echte `.env` in Spawn-Tests).
-4. Neues Verhalten braucht einen Test. Geldrechnung braucht einen Test, der die Rechnung
-   pinnt, nicht nur ihre Existenz.
+# Harte Randbedingungen
+
+1. **Safety-Gates, Offenlegungssatz und `callee_is_owner` werden NICHT angefasst.**
+   Braucht die Umsetzung eines davon, ist das ein Abbruchgrund mit Meldung - keine
+   eigenmaechtige Aenderung. Dasselbe gilt fuer ein gepinntes Lint-Budget: melden,
+   nicht selbst anheben.
+2. **Abschnitt 7, Punkte 1-9 und 13 sind entschieden** - so umsetzen. **Die Punkte 10,
+   11, 12, 14, 15 und 16 laufen auf Default und sind so gekennzeichnet.** Verlangt die
+   Phase, einen davon scharf zu stellen: auf dem dokumentierten Default bauen und im
+   Report als Rueckfrage melden - NICHT selbst festlegen.
+3. Neue Env-Variable: `src/config.js`, `.env.example` UND `BASE_ENV` in
+   `test/helpers.js` (sonst leakt die echte `.env` in Spawn-Tests).
+4. Neues Verhalten braucht einen Test. Geldrechnung braucht einen Test, der die
+   Rechnung pinnt, nicht nur ihre Existenz.
+
+# Zusaetzlicher Auftrag dieser Phase (Lead-Befund F-2, gemessen 2026-08-31)
+
+`test/el-fixtures-echte-antworten.test.js` faehrt einen Fake-Store OHNE
+`recordCallCostEvidence`. Im Vollauf nach dem KV2-4-Merge stand 19-mal
+`[el-kosten-beleg] Belegschreibung fehlgeschlagen ...: store.recordCallCostEvidence is
+not a function` im Log. Der Produktionspfad ist versorgt (`src/store.js:148`,
+Parameter-Injektion in `src/elevenlabs/outbound.js:978`) - aber der fail-soft-Zweig aus
+KV2-4 verschluckt den Fehlschlag lautlos, ausgerechnet in dem Test, der gegen echte
+EL-Fixtures prueft. Dort laeuft der Belegweg also NICHT mit.
+
+Zieh das Test-Double nach, sodass der Belegweg in diesem Test wirklich ausgefuehrt wird.
+Details in `tasks/kostenv2/befunde-kette.md` (F-2).
 
 ---
 
