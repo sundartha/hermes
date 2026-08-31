@@ -54,6 +54,11 @@ const VORHER_COST_CENTS = 100;
 const PFLICHT_RECORD_TYPES = ["sip-trunking", "call-control"];
 const BILLED_SEC = 60;
 const KEINE_SEKUNDEN = 0;
+// Matrix 4.6, "Profil unbekannt (Anruf NACH der Kette entstanden)": ein GESETZTER, aber
+// nicht registrierter Wert - z.B. ein spaeter entferntes/umbenanntes Profil. KEINE
+// Altzeile (die hat gar kein costProfile, s. Zeile 6/7) und deshalb NICHT ueber die
+// Legacy-Zuordnung aufloesbar (kostenprofilFuerAnruf, KV2-8-Verschaerfung).
+const UNBEKANNTES_PROFIL = "kv2_profil_entfernt_oder_zukuenftig";
 
 // ---- Fixture-Bausteine -------------------------------------------------------------------
 
@@ -256,13 +261,18 @@ const MATRIX = [
   },
   {
     nr: 8,
-    name: "profillose INBOUND-Altzeile (Legacy telnyx_inbound_budget)",
+    name: "Profil unbekannt (Anruf NACH der Kette entstanden)",
     aufbau: ({ state, nowMs, mikroCents }) => ({
-      call: beendeterCall(state, { nowMs, direction: "inbound", legRef: { callControlId: "cc_in" } }),
+      call: beendeterCall(state, { nowMs, profil: UNBEKANNTES_PROFIL, legRef: { callControlId: "cc_1" } }),
       control: poolMit(vollerPool({ mikroCents })),
     }),
-    hoch: { gebucht: true, deltaCents: ERWARTETES_DELTA_HOCH, costCentsNachher: VORHER_COST_CENTS + ERWARTETES_DELTA_HOCH, herkunft: COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG, endzustand: ENDZUSTAND.PROFIL_FEHLT },
-    niedrig: { gebucht: true, deltaCents: ERWARTETES_DELTA_NIEDRIG, costCentsNachher: VORHER_COST_CENTS + ERWARTETES_DELTA_NIEDRIG, herkunft: COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG, endzustand: ENDZUSTAND.PROFIL_FEHLT },
+    // Kein Riegel wie bei sipCallId GESETZT (Zeile 7) - hier gibt es keine Legacy-
+    // Zuordnung, die greifen koennte: die Pflichtmenge ist strukturell leer
+    // (pflichtTraegerFuerProfil eines unbekannten Profils), sweepTraegerFuerProfil
+    // liefert null, also schreibt der Sweep gar keine Belegzeile - "gar nichts" in
+    // BEIDE Richtungen (4.6), trotz eines vollstaendigen Telnyx-Pools.
+    hoch: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.PROFIL_FEHLT },
+    niedrig: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: ENDZUSTAND.PROFIL_FEHLT },
   },
   {
     nr: 9,

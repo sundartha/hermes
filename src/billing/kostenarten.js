@@ -100,21 +100,6 @@ export const PFLICHTTYPEN_AUS_ENV = "aus_env_pflichtmenge";
 // kein Uebernehmen des Env-Werts "weil er naheliegt" (Spec (d), Fehlschlag-Zweig).
 export const PFLICHTTYPEN_UNGEMESSEN = Object.freeze([]);
 
-// KV2-5(d)-NACHTRAG, GEMESSEN 2026-08-31 gegen /v2/detail_records (Konto dieser Kette,
-// Messlogik scripts/kv2-5-telnyx-belegtypen.mjs): der EL-Weg fuehrt BEWEISBAR GENAU
-// EINEN Belegtyp. Der abgerufene Pool trug sip-trunking 250, call-control 224,
-// speech-to-text 98, text-to-speech 111, recording 91, ai-voice-assistant 69 und
-// inference 79 Belege - keiner ausser sip-trunking laesst sich ueber die bekannten
-// sip_call_id-/Session-Anker dem EL-Weg zuordnen.
-// ANKER-STABIL: dieselbe Menge, ob nur gegen die in tasks/kostenv2/befund-telnyx.md aus
-// der Produktions-DB belegte sip_call_id verankert oder gegen alle 26 otb_-Kennungen des
-// Pools - das Ergebnis ist also kein Artefakt einer duennen Ankermenge.
-// Die Menge ist BEWUSST NICHT der Env-Wert (sip-trunking,call-control): call-control ist
-// auf dem EL-Weg strukturell leer (befund-telnyx.md, Zusatzbefund: ALLE 13 EL-Belege
-// tragen sip_call_id, KEINER call_control_id) - ihn mitzufordern hiesse, dieses Profil koenne
-// nie vollstaendig werden.
-const PFLICHTTYPEN_EL_CONVAI_SIP = Object.freeze(["sip-trunking"]);
-
 // Je EIN Pflichtfeld-Check (G30/G34: eine Aufgabe pro Funktion, haelt
 // pruefeKostenart unterhalb der Komplexitaets-Obergrenze). Nicht exportiert - reine
 // Bausteine von pruefeKostenart, kein eigener Aufrufer.
@@ -406,10 +391,15 @@ export const KOSTENARTEN = Object.freeze({
 // Pflicht-Einsammler (Kriterium (i)).
 export const KOSTENPROFILE = Object.freeze({
   [KOSTENPROFIL.EL_CONVAI_SIP]: {
-    // KV2-5(d) ist NACHGEHOLT (2026-08-31, KV2-8): die Menge steht gemessen fest, s. die
-    // Herleitung an PFLICHTTYPEN_EL_CONVAI_SIP oben. Sie loest PFLICHTTYPEN_UNGEMESSEN ab,
-    // das bis dahin die fail-closed Antwort "nichts bewiesen" war.
-    pflichttypen: PFLICHTTYPEN_EL_CONVAI_SIP,
+    // KV2-5(d): die Pflicht-Typmenge fuer den Telnyx-SIP-Anteil dieses Profils ist NOCH
+    // NICHT am Anbieter gemessen (die vorgeschriebene Positiv-Kontrolle,
+    // KV2_5_KNOWN_CALL_CONTROL_ID, konnte in dieser Kette nicht gefahren werden - kein
+    // Prod-DB-Zugriff, die bekannten call_control_id-Praefixe sind aus dem Anbieter-
+    // Fenster gealtert, tasks/kostenv2/befund-telnyx.md). PFLICHTTYPEN_UNGEMESSEN bleibt
+    // die fail-closed Antwort "nichts bewiesen", bis die Messung mit gueltiger
+    // Positiv-Kontrolle nachgeholt und vom Owner freigegeben ist (Review-Befund KV2-8
+    // Runde 1, Blocker 2: der Wert war ohne diese Freigabe gesetzt worden).
+    pflichttypen: PFLICHTTYPEN_UNGEMESSEN,
     traeger: {
       [KOSTENART.ELEVENLABS_CONVAI]: { einsammler: EINSAMMLER.KV2_4 },
       [KOSTENART.TELNYX_SIP]: { einsammler: EINSAMMLER.KV2_5 },
@@ -475,9 +465,19 @@ export function legacyKostenprofil({ sipCallId, direction }) {
 }
 
 // DAS Profil eines Anrufs, fuer jeden Leser dieselbe Antwort (G5). Gesetztes und bekanntes
-// costProfile gewinnt; sonst die Legacy-Zuordnung oben.
+// costProfile gewinnt; sonst die Legacy-Zuordnung oben - ABER NUR fuer ein FEHLENDES
+// (null/undefined) costProfile, also eine Altzeile von VOR der Kette (4.6). Ein GESETZTER,
+// aber unbekannter Wert (Matrix 4.6, "Profil unbekannt (Anruf NACH der Kette entstanden)")
+// ist KEINE Altzeile - er kann nur entstanden sein, NACHDEM der Schreibweg
+// (recordCostProfile, state-ops.js) schon existierte, also nachdem die Legacy-Zuordnung
+// bereits ueberholt war (z.B. ein spaeter entferntes/umbenanntes Profil). Ihn trotzdem auf
+// die Legacy-Zuordnung umzulenken waere eine erfundene Vollstaendigkeit (KV2-8 Abnahme
+// (a)/(b)) - er bleibt deshalb UNAUFGELOEST. Jeder Leser (pflichtTraegerFuerProfil,
+// pflichttypenFuerProfil, sweepTraegerFuerProfil) behandelt einen unbekannten Wert
+// bereits fail-closed als leer/null, kein weiterer Riegel noetig.
 export function kostenprofilFuerAnruf(call) {
-  return istBekanntesKostenprofil(call?.costProfile) ? call.costProfile : legacyKostenprofil(call ?? {});
+  if (istBekanntesKostenprofil(call?.costProfile)) return call.costProfile;
+  return call?.costProfile == null ? legacyKostenprofil(call ?? {}) : call.costProfile;
 }
 
 // Kriterium (h)/hatEinsammler: true, wenn IRGENDEIN Profil diesen Traeger mit einem

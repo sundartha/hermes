@@ -48,7 +48,7 @@ import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
 import { alarmKanalZeile, betreiberAlarmKanaele } from "../boot-guard.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
-import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
+import { KOSTENPROFIL, istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
 import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
 import { legRefOfCall } from "./call-leg-ref.js";
 // KV2-6: die Deckung JE TRAEGER und der faelligkeits-unabhaengige Herzschlag. Das
@@ -330,9 +330,17 @@ const versucheUebrig = (call, billing) => nextCostTruingAttempt(call) <= billing
 //      Bestandszusage von applyCostCorrectionCents ("der Aufrufer garantiert
 //      actualCostMicroCents >= 0"): die Summe ist entweder ein gueltiger
 //      Anbieter-Mikro-Cent-Betrag oder null - nie negativ, nie NaN, nie ein String.
+//   4. Profil unbekannt (Matrix 4.6, "Anruf NACH der Kette entstanden") -> STRUKTURELL
+//      kein Sweep-Traeger (sweepTraegerFuerProfil liefert null, schreibeSweepKostenbeleg
+//      schreibt deshalb nie eine Zeile fuer diesen Anruf) und damit heute bereits ueber
+//      Grund 3 abgedeckt - der Riegel steht trotzdem EXPLIZIT hier, weil "gar nichts,
+//      in BEIDE Richtungen" (4.6) eine Aussage ueber das PROFIL ist, nicht nur ueber die
+//      zufaellig leere Belegsumme: ein kuenftiger Einsammler, der unabhaengig vom Profil
+//      schreibt, darf diese Zeile nie buchbar machen.
 const sweepDarfKorrigieren = (call, projektion) =>
   isBookableCents(call.estimatedCostCents) &&
   isProviderMicroCents(projektion.summeMikroCents) &&
+  istBekanntesKostenprofil(kostenprofilFuerAnruf(call)) &&
   kostenprofilFuerAnruf(call) !== KOSTENPROFIL.EL_CONVAI_SIP;
 
 // KV2-8, DIE Geld-Kante dieser Phase: genau EIN Settlement je Anruf, gespeist aus der
