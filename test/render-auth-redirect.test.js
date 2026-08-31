@@ -28,9 +28,14 @@ const web = serviceBlock("hermes-web");
 
 test("hermes-web leitet /auth/* per redirect auf den Gateway-Auth-Origin um", () => {
   assert.match(web, /routes:/, "hermes-web hat keinen routes-Block");
+  // Geprueft wird, DASS die Regel existiert und auf einen https-Auth-Origin zeigt --
+  // NICHT auf welchen. Der konkrete Origin ist Gegenstand des Track-B-Cutovers und
+  // steht in PUBLIC_GATEWAY_URL; dass beide denselben nennen, sichert der dritte Test
+  // dieser Datei (Atomaritaets-Guard). Ein hier eingefrorener Hostname wuerde jeden
+  // legitimen Cutover rot faerben, ohne zusaetzliche Sicherheit zu geben.
   assert.match(
     web,
-    /-\s*type:\s*redirect[\s\S]*?source:\s*\/auth\/\*[\s\S]*?destination:\s*https:\/\/vodafone-agent\.onrender\.com\/auth\/:splat/,
+    /-\s*type:\s*redirect[\s\S]*?source:\s*\/auth\/\*[\s\S]*?destination:\s*https:\/\/[^/\s]+\/auth\/:splat/,
     "hermes-web hat keine redirect-Regel /auth/* -> Gateway -> Deep-Links auf sundartha.com/auth/* wuerden 404en",
   );
 });
