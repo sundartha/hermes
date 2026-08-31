@@ -39,6 +39,8 @@ import {
   MAX_CALL_DURATION_CAP_S,
   MICRO_CENTS_PER_CENT,
   isBookableCents,
+  isProviderMicroCents,
+  istBeweisendeHerkunft,
 } from "../store/defaults.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 import { chargeAnchorsOfCall, closeOutageAlert, nextCostTruingAttempt, openOutageAlert } from "../store/state-ops.js";
@@ -47,7 +49,7 @@ import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report
 import { alarmKanalZeile, betreiberAlarmKanaele } from "../boot-guard.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
 import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
-import { belegVollstaendig, schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
+import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
 import { legRefOfCall } from "./call-leg-ref.js";
 // KV2-6: die Deckung JE TRAEGER und der faelligkeits-unabhaengige Herzschlag. Das
 // Regelwerk liegt bewusst in einem eigenen Modul und NICHT hier: diese Datei traegt ein
@@ -58,7 +60,11 @@ import { kostenBuchBericht, istBuchBefundCode } from "./kosten-deckung.js";
 // KV2-7: die Schliessregel und die Endzustaende liegen als REINES Regelwerk daneben -
 // dieselbe Begruendung wie bei kosten-deckung.js (Lint-Budget dieser Datei, EINE
 // Formulierung je Frage). Import-Richtung strikt einseitig.
-import { abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE, zaehlListe } from "./kosten-abschluss.js";
+import { ABSCHLUSS_GRUND, abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE, zaehlListe } from "./kosten-abschluss.js";
+// KV2-8: die Projektion des Kosten-Buchs auf das Settlement. Eigenes Modul, dieselbe
+// Begruendung wie bei kosten-deckung.js/kosten-abschluss.js (Lint-Budget dieser Datei,
+// EINE Formulierung je Frage). Import-Richtung strikt einseitig.
+import { settlementProjektion } from "./kosten-projektion.js";
 
 // Zwei Ausloeser (Intervall + manueller Endpunkt), EIN benannter Grund je. Exportiert:
 // boot.js und api-billing.js teilen sich diese eine Quelle statt zweier Magic-Strings.
@@ -188,21 +194,33 @@ function meldeAbschluss(call, abschluss, sammler) {
 // KV2-7: Kandidaten, die in DIESEM Lauf gar nicht gemessen wurden (nicht abrufbar oder
 // Versuche erschoepft) UND die noch offen sind: nach Fristablauf schliessen. Ohne diesen
 // Lauf bliebe genau diese Menge fuer immer offen (Abnahme (c): "er bleibt nicht ewig
-// offen"). Er misst nichts, verbraucht keinen Versuch, schreibt keinen Herkunftswert und
-// bucht keinen Cent. Rein synchron - die PM-5-Zusage bleibt unberuehrt. Modul-Ebene,
-// store/billing als Parameter (Muster closeCoverageBefunde).
-function schliesseFaelligeOffene(candidates, sammler, { store, billing }) {
+// offen"). Rein synchron - die PM-5-Zusage bleibt unberuehrt. Modul-Ebene, store/config
+// als Parameter (Muster closeCoverageBefunde).
+// KV2-8: dieser Lauf schliesst nicht mehr nur, er SETTELT. Bis KV2-7 bewegte er bewusst
+// keinen Cent - die Matrix 4.6 verlangt aber genau hier "Frist abgelaufen, Ist >
+// Schaetzung -> nachbuchen" und "Traeger nur vorlaeufig -> nachbuchen". Er misst
+// weiterhin NICHT, verbraucht KEINEN Versuch und ruft KEINEN Adapter.
+function schliesseFaelligeOffene(candidates, sammler, { store, config }) {
   for (const call of candidates) {
     if (call.costTruedAt !== null) continue;
+    const belege = store.callCostEvidence(call.id);
     const abschluss = abschlussFuerAnruf({
       call,
-      belege: store.callCostEvidence(call.id),
+      belege,
       nowMs: sammler.nowMs,
-      deadlineMs: faelligkeitsfensterMs(billing),
+      deadlineMs: faelligkeitsfensterMs(config.billing),
       sweepTraegerErledigt: false,
     });
     if (!abschluss.geschlossen) continue;
-    store.schliesseKostenAbgleich(call.id, new Date(sammler.nowMs).toISOString());
+    const projektion = settlementProjektion({ call, belege });
+    setteleAnruf({ call, projektion, store, config });
+    // KV2-8: Herkunft UND Betrag am selben set-once-Schritt - beides Aussagen ueber das
+    // BUCH, keine ueber eine Messung. Ohne summierbare Zeile bleibt beides unberuehrt.
+    store.schliesseKostenAbgleich(call.id, {
+      closedAt: new Date(sammler.nowMs).toISOString(),
+      source: herkunftOhneMessung(projektion),
+      actualCostMicroCents: projektion.summeMikroCents,
+    });
     meldeAbschluss(call, abschluss, sammler);
   }
 }
@@ -304,11 +322,51 @@ const versucheUebrig = (call, billing) => nextCostTruingAttempt(call) <= billing
 //   2. EL-Route -> der Telnyx-Pool traegt NUR den SIP-Anteil (4,01 US-ct gemessen), NIE
 //      die ElevenLabs-Kosten (56 US-ct ueber 8 Anrufe). Gegen eine 30-ct-Schaetzung
 //      gebucht, loeschte er rund 90 % der echten Kosten von der Gate-Achse - die B6-Falle.
-//      Diese Kette SAMMELT hier, sie bucht nicht; gebucht wird erst in KV2-8 aus der
-//      Belegsumme beider Traeger. Der Riegel haengt am PROFIL, nicht an einem Flag, und
-//      erfasst ueber die Legacy-Zuordnung auch die 12 profillosen EL-Altzeilen (KV2-5(h)).
-const sweepDarfKorrigieren = (call) =>
-  isBookableCents(call.estimatedCostCents) && kostenprofilFuerAnruf(call) !== KOSTENPROFIL.EL_CONVAI_SIP;
+//      Der Riegel haengt am PROFIL, nicht an einem Flag, und erfasst ueber die
+//      Legacy-Zuordnung auch die 12 profillosen EL-Altzeilen (KV2-5(h)). Er bleibt in
+//      KV2-8 UNANGETASTET: die EL-Zeile reift erst in KV2-9 nach, bis dahin bewegt ein
+//      EL-Anruf keinen Cent (Owner-Entscheidung 7, KV2-5(h) pinnt es am Spion).
+//   3. Keine brauchbare Belegsumme -> es gibt nichts zu buchen. Der Riegel ERFUELLT die
+//      Bestandszusage von applyCostCorrectionCents ("der Aufrufer garantiert
+//      actualCostMicroCents >= 0"): die Summe ist entweder ein gueltiger
+//      Anbieter-Mikro-Cent-Betrag oder null - nie negativ, nie NaN, nie ein String.
+const sweepDarfKorrigieren = (call, projektion) =>
+  isBookableCents(call.estimatedCostCents) &&
+  isProviderMicroCents(projektion.summeMikroCents) &&
+  kostenprofilFuerAnruf(call) !== KOSTENPROFIL.EL_CONVAI_SIP;
+
+// KV2-8, DIE Geld-Kante dieser Phase: genau EIN Settlement je Anruf, gespeist aus der
+// Belegsumme des Kosten-Buchs statt aus EINER Telnyx-Messung. Zwei Aufrufer, ein Rumpf
+// (G5): der schliessende Mess-Lauf (trueOneCall) und der Faelligkeitslauf
+// (schliesseFaelligeOffene). Der Riegel gegen ein ZWEITES Settlement ist unveraendert
+// costTruedAt (set-once, state-ops.js) - ein geschlossener Anruf ist nie wieder Kandidat.
+// Die Asymmetrie wird NICHT hier gebaut: applyCostCorrectionCents verwirft einen
+// negativen Delta ohne dataComplete VOR jeder Mutation. Was diese Funktion liefert, ist
+// ausschliesslich, WORAUS dataComplete entsteht. Modul-Ebene, store/config als Parameter
+// (Muster closeCoverageBefunde). Nebeneffekt im Namen (N7).
+function setteleAnruf({ call, projektion, store, config }) {
+  if (!sweepDarfKorrigieren(call, projektion)) return;
+  const { booked, deltaCents } = store.applyCostCorrectionCents(call.tenantId, {
+    actualCostMicroCents: projektion.summeMikroCents,
+    estimatedCostCents: call.estimatedCostCents,
+    providerToBucketRateMicro: config.billing.providerToBucketRateMicro,
+    dataComplete: projektion.vollBelegt,
+    // KS-P5: die Anker der Belastung reisen mit. Ohne sie faellt die Gutschrift auf
+    // NO_CHARGE_ANCHORS zurueck und wirkt nur auf der Lebenszeit-Achse.
+    chargeAnchors: chargeAnchorsOfCall(call),
+  });
+  console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
+}
+
+// KV2-8: Herkunft eines Abschlusses OHNE Messung in diesem Lauf. Ohne summierbare
+// Belegzeile gibt es nichts zu behaupten -> null, das Feld bleibt stehen (bei einem nie
+// gemessenen Anruf also null, wie im Bestand).
+function herkunftOhneMessung(projektion) {
+  if (projektion.summeMikroCents === null) return null;
+  return projektion.vollBelegt
+    ? COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG
+    : COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG;
+}
 
 // Beendet-Zeitstempel EINES Calls in Millisekunden, oder null (fehlend/unbrauchbar).
 // EINE Parse-Stelle fuer die zwei Verbraucher - die Faelligkeit eines Kandidaten und die
@@ -346,9 +404,12 @@ function coverageBucketOf(call, nowMs) {
 // die drei Nebenzaehler in einem Pass - keine zweite Iteration, kein zweiter
 // Formel-Ausdruck. costTruingCoveragePercent und die Sweep-Log-Zeile leiten sich BEIDE
 // aus GENAU diesem Objekt ab (percentFromBreakdown), damit sie nie auseinanderlaufen
-// koennen. Zaehler (proven) bleibt costTruedSource === 'telnyx_detail_records' (dieser
-// Wert wird nur bei kompletter Pflicht-Typ-Menge gesetzt - EINE Quelle der
-// Vollstaendigkeits-Aussage, kein zweites Praedikat).
+// koennen.
+// KV2-8: Zaehler (proven) ist die BEWEISENDE Herkunft (istBeweisendeHerkunft,
+// defaults.js) - seit dieser Phase zwei Werte statt eines. Das ist der VIERTE Leser des
+// alten Direktvergleichs, den Plan 4.8 nicht nennt: ohne diesen Mitzug faellt die Quote
+// nach dem Deploy dauerhaft auf 0 %, coverage_below_threshold waere ein Dauer-Alarm und
+// coverage_stalled eskalierte - genau der "Alarm, der immer an ist" (4.4).
 function coverageBreakdown(state, nowMs) {
   const ended = Array.isArray(state?.calls) ? state.calls.filter(isEndedCall) : [];
   const breakdown = { eligible: 0, proven: 0, noEstimate: 0, neverAnswered: 0, outsideWindow: 0 };
@@ -367,7 +428,7 @@ function coverageBreakdown(state, nowMs) {
       continue;
     }
     breakdown.eligible++;
-    if (call.costTruedSource === COST_TRUING_SOURCE.DETAIL_RECORDS) breakdown.proven++;
+    if (istBeweisendeHerkunft(call.costTruedSource)) breakdown.proven++;
   }
   return breakdown;
 }
@@ -609,58 +670,41 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       else tally.unavailable++;
       return;
     }
-    if (truedSource === COST_TRUING_SOURCE.DETAIL_RECORDS) tally.measured++;
+    if (istBeweisendeHerkunft(truedSource)) tally.measured++;
     else if (truedSource === COST_TRUING_SOURCE.NO_ESTIMATE) tally.noEstimate++;
     else tally.incomplete++;
   }
 
-  // LCT P4, das Herz der Phase: das VOLLSTAENDIGKEITS-Praedikat. Nur wenn ALLE drei
-  // Belege vorliegen, darf Geld ZURUECKGEGEBEN werden. Nachgebucht wird immer.
-  //   1. source === 'telnyx_detail_records' - gesetzt NUR bei kompletter Pflicht-Menge
-  //      (classifyRecords, EINE Quelle; ueber der LEEREN Menge ist das nie wahr).
-  //   2. billedSecTotal > 0 - Records ohne abgerechnete Sekunden beweisen nichts.
-  //   3. estimatedCostCents ist ein persistierter, buchbarer Betrag (P2) - gegen den
-  //      und NUR gegen den wird gerechnet, nie gegen einen neu abgeleiteten Tarif.
-  // Die Waehrung steht bewusst NICHT in dieser Liste: P1 verwirft fremdwaehrende
-  // Records schon am Adapter, ein zweiter Riegel hier waere eine zweite Wahrheit (G5).
-  // Bedingung 1+2 teilt sich diese Funktion seit KV2-5 mit der Reife der
-  // telnyx_call_records-Belegzeile (belegVollstaendig, sweep-kostenbeleg.js) - EINE
-  // Quelle (G5). Bedingung 3 bleibt hier: sie ist eine Eigenschaft des ANRUFS, nicht des
-  // Belegs (Spec (g)).
-  function refundProven(call, measured) {
-    return (
-      belegVollstaendig(measured) &&
-      isBookableCents(call.estimatedCostCents)
-    );
+  // KV2-8: das VOLLSTAENDIGKEITS-Praedikat lebt seit dieser Phase im Kosten-Buch
+  // (kosten-projektion.js#istVollBelegt: Beleg-IST gegen PROFIL-SOLL), nicht mehr in
+  // EINER Telnyx-Messung. Die Herkunft folgt derselben Quelle:
+  //   - Buch vollstaendig + Schaetzbetrag -> 'kostenbuch_vollbeleg' (beweisend)
+  //   - Buch vollstaendig, kein Schaetzbetrag -> 'no_estimate' (die Belege sind gut, es
+  //     fehlt nur der Betrag, gegen den gerechnet wuerde)
+  //   - Buch unvollstaendig, Frist abgelaufen -> 'kostenbuch_teilbeleg' (final, aber
+  //     NICHT beweisend: systematisch zu niedrig)
+  //   - sonst -> die Messaussage dieses Laufs (measured.source, i.d.R. 'incomplete')
+  // Ohne Schaetzbetrag gibt es keinen Teilbeleg-Fall: es faellt nichts zu buchen an, und
+  // 'no_estimate'/'incomplete' bleiben die zwei Sachverhalte des Bestands.
+  function truedSourceOf({ call, measured, projektion, abschluss }) {
+    if (!isBookableCents(call.estimatedCostCents)) return projektion.vollBelegt ? COST_TRUING_SOURCE.NO_ESTIMATE : measured.source;
+    if (projektion.vollBelegt) return COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG;
+    if (abschluss.grund === ABSCHLUSS_GRUND.FRIST) return COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG;
+    // Ohne vollstaendiges Buch darf NIE eine BEWEISENDE Herkunft entstehen (Abnahme (e)).
+    // measured.source misst nur den Telnyx-Pool gegen die Pflicht-TYPMENGE des Profils -
+    // nicht die Pflicht-TRAEGER: ein el_convai_sip-Anruf hat einen vollstaendigen
+    // sip-trunking-Pool, seine elevenlabs_convai-Zeile aber noch gar nicht. Ohne diesen
+    // Riegel zaehlte die Deckungsquote ihn als bewiesen und der Drift-Waechter naehme ihn
+    // als Stichprobe - mit einem Betrag, der nur den halben Anruf traegt.
+    return istBeweisendeHerkunft(measured.source) ? COST_TRUING_SOURCE.INCOMPLETE : measured.source;
   }
 
-  // Kein buchbarer Schaetzbetrag -> strukturell nicht korrigierbar. Zwei getrennte
-  // Sachverhalte, zwei getrennte Zustaende (kein gemeinsames Label):
-  //   - Records VOLLSTAENDIG (measured.source === 'telnyx_detail_records') -> 'no_estimate'
-  //     (die Messung ist gut, es fehlt nur der Schaetzbetrag).
-  //   - Records unvollstaendig -> es bleibt beim Messproblem 'incomplete' (== measured.source).
-  // Beide sind nicht 'telnyx_detail_records', drueckt die Deckungsquote also identisch.
-  function truedSourceOf(call, measured) {
-    if (isBookableCents(call.estimatedCostCents)) return measured.source;
-    return measured.source === COST_TRUING_SOURCE.DETAIL_RECORDS
-      ? COST_TRUING_SOURCE.NO_ESTIMATE
-      : measured.source;
-  }
-
-  // KV2-7: Gebucht wird NUR im SCHLIESSENDEN Lauf - sonst boeckte ein ueber mehrere
-  // Sweeps offen bleibender Anruf (el_convai_sip) eine Korrektur je Messung: Doppelbuchung
-  // (applyCostCorrectionCents bucht den Delta gegen die Schaetzung, nicht gegen die
-  // letzte Buchung).
-  function bucheKorrektur(call, measured) {
-    if (!sweepDarfKorrigieren(call)) return;
-    const { booked, deltaCents } = store.applyCostCorrectionCents(call.tenantId, {
-      actualCostMicroCents: measured.actualCostMicroCents, estimatedCostCents: call.estimatedCostCents,
-      providerToBucketRateMicro: config.billing.providerToBucketRateMicro, dataComplete: refundProven(call, measured),
-      // KS-P5: die Anker der Belastung reisen mit. Ohne sie faellt die Gutschrift auf
-      // NO_CHARGE_ANCHORS zurueck und wirkt nur auf der Lebenszeit-Achse.
-      chargeAnchors: chargeAnchorsOfCall(call),
-    });
-    console.log(`[cost-truing] korrektur call=${call.id} delta_eur_cent=${deltaCents} gebucht=${booked}`);
+  // KV2-8: die Belegzeilen kommen aus dem Store, die Regel aus kosten-projektion.js.
+  // Diese Funktion ist die EINZIGE Store-Beruehrung des Settlements im Closure; das
+  // Settlement selbst liegt auf Modul-Ebene (setteleAnruf), weil der Faelligkeitslauf
+  // denselben Rumpf braucht (G5).
+  function projektionVon(call) {
+    return settlementProjektion({ call, belege: store.callCostEvidence(call.id) });
   }
 
   // ElevenLabs-Zeichen des Calls, PRO TENANT (KE-P6, Plan F6) UND auf dem globalen
@@ -853,26 +897,50 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // KV2-7: der Sweep-Traeger ist fertig (GENAU der Bestandsausdruck) - ob das den
     // ANRUF schliesst, entscheidet die Pflichtmenge des Profils (kosten-abschluss.js).
     const sweepTraegerErledigt = measured !== null || attempt >= config.billing.costTruingMaxAttempts;
-    const abschluss = abschlussNachMessung({ call, measured, records: result.records, sweepTraegerErledigt, sammler, store, config });
+    const abschluss = abschlussNachMessung({
+      call,
+      measured,
+      records: result.records,
+      sweepTraegerErledigt,
+      sammler,
+      store,
+      config,
+    });
     const closed = abschluss.geschlossen;
+    // KV2-8: NACH abschlussNachMessung - dort ist die Belegzeile dieses Laufs bereits
+    // geschrieben; eine Projektion davor saehe das Buch von gestern.
+    const projektion = projektionVon(call);
     // EINE Herkunfts-Bestimmung fuer Persistenz UND Bilanz (G5): countOutcome zaehlt exakt
     // den Wert, der am Call landet - kein zweites, aus measured.source neu abgeleitetes Urteil.
-    const truedSource = measured ? truedSourceOf(call, measured) : COST_TRUING_SOURCE.UNAVAILABLE;
+    const truedSource = measured
+      ? truedSourceOf({ call, measured, projektion, abschluss })
+      : COST_TRUING_SOURCE.UNAVAILABLE;
 
+    // KV2-8: der persistierte Ist-Betrag ist die BELEGSUMME des Kosten-Buchs (alle
+    // Traeger), nicht mehr die eine Telnyx-Messung. recordCallCostTruingResult uebernimmt
+    // ihn nur bei isProviderMicroCents; null laesst das Feld unveraendert - "nicht
+    // gemessen" bleibt von "0" unterscheidbar.
     store.recordCallCostTruingResult(call.id, {
-      source: truedSource, actualCostMicroCents: measured ? measured.actualCostMicroCents : null,
+      source: truedSource,
+      actualCostMicroCents: projektion.summeMikroCents,
       closedAt: closed ? new Date(now()).toISOString() : null,
     });
 
     // LCT P4: der Flip. Idempotenz traegt costTruedAt (oben gesetzt) - ein zweiter Lauf
     // sieht den Call nicht mehr als Kandidaten; gegen VERSCHRAENKUNG traegt der
-    // Laufriegel aus P3. KV2-7: nur im SCHLIESSENDEN Lauf (s. bucheKorrektur) - sonst
+    // Laufriegel aus P3. KV2-7: nur im SCHLIESSENDEN Lauf (s. setteleAnruf) - sonst
     // Doppelbuchung bei einem ueber mehrere Sweeps offenen Anruf (el_convai_sip).
+    // Drift-Warnung und TTS-Zeichen brauchen die MESSUNG dieses Laufs.
     if (measured && closed) {
       warnOnCostDrift(call, measured.actualCostMicroCents);
-      bucheKorrektur(call, measured);
       bookTtsCharactersFor(call, measured, sammler);
     }
+    // KV2-8: das Settlement haengt am ABSCHLUSS, nicht an der Messung dieses Laufs - es
+    // speist sich aus dem Kosten-Buch. Ein hier per FRIST geschlossener Anruf ohne
+    // Messung (Pool nicht abrufbar) wuerde sonst NIE settlen: schliesseFaelligeOffene
+    // ueberspringt ihn, weil costTruedAt schon steht. Ohne Belegsumme bewegt sich
+    // trotzdem kein Cent (sweepDarfKorrigieren).
+    if (closed) setteleAnruf({ call, projektion, store, config });
     countOutcome(sammler.tally, truedSource, closed);
     if (closed) meldeAbschluss(call, abschluss, sammler);
   }
@@ -977,7 +1045,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     for (const call of messbar) trueOneCall(call, pools.get(call.provider), sammler);
     // KV2-7: der Faelligkeitslauf ueber ALLE Kandidaten - schliesst auch einen nie
     // gemessenen Anruf (Abnahme (c): "er bleibt nicht ewig offen").
-    schliesseFaelligeOffene(candidates, sammler, { store, billing: config.billing });
+    schliesseFaelligeOffene(candidates, sammler, { store, config });
     // EIN Breakdown (coverageBreakdown), aus dem SOWOHL die Quote ALS AUCH die drei
     // Nebenzaehler abgeleitet werden (KV-M3, G5) - keine zweite Iteration ueber
     // state.calls, kein zweiter Formel-Ausdruck.

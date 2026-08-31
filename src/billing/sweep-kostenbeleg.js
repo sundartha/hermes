@@ -53,6 +53,11 @@ export function sweepTraegerFuerProfil(profil) {
   return TELNYX_CALL_RECORDS_PROFILE.has(profil) ? KOSTENART.TELNYX_CALL_RECORDS : null;
 }
 
+// KV2-8: die Traeger, deren Beleg aus Telnyx' detail_records stammt - die einzigen, die
+// gegen eine Telnyx-RECHNUNG verglichen werden duerfen (cost-cross-check.js). Gepinnt
+// gegen sweepTraegerFuerProfil: jeder Wert, den die Funktion liefern kann, steht hier.
+export const TELNYX_SWEEP_TRAEGER = Object.freeze([KOSTENART.TELNYX_SIP, KOSTENART.TELNYX_CALL_RECORDS]);
+
 // Matrix 4.6, Geldregel eines bereits summierten Mikro-Cent-Betrags:
 //   kein Betrag (null)                  -> keine Zeile (NIE 0: "nicht gemessen" != "0 Kosten")
 //   kein gueltiger Mikro-Cent-Wert       -> keine Zeile, Datenfehler

@@ -76,9 +76,9 @@ export function makeStubStore(state, { nowMs = Date.now(), billing = fakeConfig(
     },
     // KV2-7: Schliessregel-Mutatoren - dieselbe Delegation an die ECHTEN state-ops-
     // Funktionen (kein zweites, vereinfachtes Verhalten).
-    schliesseKostenAbgleich(callId, closedAt) {
-      const { call, changed } = schliesseKostenAbgleich(state, callId, closedAt);
-      if (changed) writes.push({ callId, closedAt });
+    schliesseKostenAbgleich(callId, eingabe) {
+      const { call, changed } = schliesseKostenAbgleich(state, callId, eingabe);
+      if (changed) writes.push({ callId, ...eingabe });
       return call;
     },
     oeffneKostenAbgleichErneut(callId) {

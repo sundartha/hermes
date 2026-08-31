@@ -38,7 +38,8 @@ function seedCall(state, { costProfile, costTruedAtIso }) {
   call.status = "completed";
   call.endedAt = new Date().toISOString();
   if (costProfile !== undefined) call.costProfile = costProfile;
-  if (costTruedAtIso !== undefined) schliesseKostenAbgleich(state, call.id, costTruedAtIso);
+  // KV2-8: Optionsobjekt statt drittem Positionsargument (Signaturwechsel, F1).
+  if (costTruedAtIso !== undefined) schliesseKostenAbgleich(state, call.id, { closedAt: costTruedAtIso });
   return call;
 }
 

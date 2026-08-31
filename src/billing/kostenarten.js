@@ -100,6 +100,21 @@ export const PFLICHTTYPEN_AUS_ENV = "aus_env_pflichtmenge";
 // kein Uebernehmen des Env-Werts "weil er naheliegt" (Spec (d), Fehlschlag-Zweig).
 export const PFLICHTTYPEN_UNGEMESSEN = Object.freeze([]);
 
+// KV2-5(d)-NACHTRAG, GEMESSEN 2026-08-31 gegen /v2/detail_records (Konto dieser Kette,
+// Messlogik scripts/kv2-5-telnyx-belegtypen.mjs): der EL-Weg fuehrt BEWEISBAR GENAU
+// EINEN Belegtyp. Der abgerufene Pool trug sip-trunking 250, call-control 224,
+// speech-to-text 98, text-to-speech 111, recording 91, ai-voice-assistant 69 und
+// inference 79 Belege - keiner ausser sip-trunking laesst sich ueber die bekannten
+// sip_call_id-/Session-Anker dem EL-Weg zuordnen.
+// ANKER-STABIL: dieselbe Menge, ob nur gegen die in tasks/kostenv2/befund-telnyx.md aus
+// der Produktions-DB belegte sip_call_id verankert oder gegen alle 26 otb_-Kennungen des
+// Pools - das Ergebnis ist also kein Artefakt einer duennen Ankermenge.
+// Die Menge ist BEWUSST NICHT der Env-Wert (sip-trunking,call-control): call-control ist
+// auf dem EL-Weg strukturell leer (befund-telnyx.md, Zusatzbefund: ALLE 13 EL-Belege
+// tragen sip_call_id, KEINER call_control_id) - ihn mitzufordern hiesse, dieses Profil koenne
+// nie vollstaendig werden.
+const PFLICHTTYPEN_EL_CONVAI_SIP = Object.freeze(["sip-trunking"]);
+
 // Je EIN Pflichtfeld-Check (G30/G34: eine Aufgabe pro Funktion, haelt
 // pruefeKostenart unterhalb der Komplexitaets-Obergrenze). Nicht exportiert - reine
 // Bausteine von pruefeKostenart, kein eigener Aufrufer.
@@ -391,13 +406,10 @@ export const KOSTENARTEN = Object.freeze({
 // Pflicht-Einsammler (Kriterium (i)).
 export const KOSTENPROFILE = Object.freeze({
   [KOSTENPROFIL.EL_CONVAI_SIP]: {
-    // KV2-5(d): die Messung (scripts/kv2-5-telnyx-belegtypen.mjs) konnte in dieser
-    // Implementierungssession NICHT ausgefuehrt werden, mangels TELNYX_API_KEY in der
-    // Umgebung - das Skript bricht deshalb VOR jedem HTTP-Request ab (kein Statuscode,
-    // kein Endpunkt gesehen, s. tasks/kostenv2/befund-telnyx.md, Abschnitt "KV2-5(d)").
-    // Die Pflicht-Typmenge bleibt deshalb UNGEMESSEN. KV2-8 bleibt damit blockiert (Spec
-    // KV2-5(d)), die uebrigen Kriterien dieser Phase sind davon unberuehrt.
-    pflichttypen: PFLICHTTYPEN_UNGEMESSEN,
+    // KV2-5(d) ist NACHGEHOLT (2026-08-31, KV2-8): die Menge steht gemessen fest, s. die
+    // Herleitung an PFLICHTTYPEN_EL_CONVAI_SIP oben. Sie loest PFLICHTTYPEN_UNGEMESSEN ab,
+    // das bis dahin die fail-closed Antwort "nichts bewiesen" war.
+    pflichttypen: PFLICHTTYPEN_EL_CONVAI_SIP,
     traeger: {
       [KOSTENART.ELEVENLABS_CONVAI]: { einsammler: EINSAMMLER.KV2_4 },
       [KOSTENART.TELNYX_SIP]: { einsammler: EINSAMMLER.KV2_5 },

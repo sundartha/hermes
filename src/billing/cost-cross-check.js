@@ -36,6 +36,9 @@ import {
   carrierGateCostCentsForMonth,
 } from "../store/state-ops.js";
 import { providerMicroCentsToBucketCents } from "./cost-calibration.js";
+import { belegSummeJeTraegerFuerMonat, summeUeberTraeger } from "./kosten-projektion.js";
+import { TELNYX_SWEEP_TRAEGER } from "./sweep-kostenbeleg.js";
+import { LEERE_LISTE } from "./kosten-abschluss.js";
 
 const UNAVAILABLE_REASON = Object.freeze({
   NO_TELNYX_ADAPTER: "no_telnyx_adapter",
@@ -43,29 +46,63 @@ const UNAVAILABLE_REASON = Object.freeze({
   FETCH_REJECTED: "provider_error",
 });
 
-// Die Log-Zeile im ok:true-Fall: zwei Differenzen, jede zwischen tatsaechlich
-// vergleichbaren Groessen (Befund C) - USD gegen USD nativ, EUR gegen EUR nach expliziter
-// Konvertierung MIT der Rate im Feldnamen. convertedEurCents kann null sein
-// (providerMicroCentsToBucketCents verlaesst den sicheren Integer-Bereich) - dann zeigt
-// die Zeile "null" statt einer erfundenen Zahl (G26/PM-4).
-function crossCheckLineOk({ monthKey, invoice, actualUsdMicroCents, gateCarrierEurCents, rateMicro }) {
-  const convertedEurCents = providerMicroCentsToBucketCents(actualUsdMicroCents, rateMicro);
-  const diffRechnungMinusIst = invoice.totalMicroCents - actualUsdMicroCents;
+// KV2-8: die Rechnungs-Differenz braucht eine Telnyx-Traeger-Summe aus dem Kosten-Buch.
+// Steht dort keine, gibt es nichts zu vergleichen - eine Differenz gegen einen fehlenden
+// Wert waere eine erfundene Zahl (G26), genau wie bei einer fehlenden Rechnung.
+const NO_KOSTENBUCH_REASON = "kein_kostenbuch";
+
+// KV2-8, Traeger-Trennung: "wie viel Ist steht je Traeger im Buch" als Log-Feld -
+// "traeger(betrag),traeger(betrag)", alphabetisch (belegSummeJeTraegerFuerMonat sortiert
+// bereits), oder LEERE_LISTE. Dieselbe Konstante wie kosten-abschluss.js/KV2-1 (G5), kein
+// zweiter, hier getippter Leer-String.
+function traegerZeile(traegerSummen) {
+  if (traegerSummen.length === 0) return LEERE_LISTE;
+  return traegerSummen.map((eintrag) => `${eintrag.traeger}(${eintrag.mikroCents})`).join(",");
+}
+
+// KV2-8: die Rechnungs-Differenz DARF ausschliesslich gegen Telnyx-Traeger gebildet
+// werden. call.actualCostMicroCents ist seit dieser Phase die Summe UEBER ALLE Traeger;
+// ein EL-Anruf traegt provider=telnyx, der alte Provider-Filter haette also
+// ElevenLabs-Kosten gegen eine Telnyx-Rechnung gestellt (Mischdifferenz). Ohne
+// Telnyx-Traeger im Buch gibt es keine Differenz, nur den Grund.
+function rechnungsDifferenzFeld(invoice, istTelnyxMicroCents) {
+  if (istTelnyxMicroCents === null)
+    return `diff_rechnung_minus_ist=nicht_verfuegbar(reason=${NO_KOSTENBUCH_REASON})`;
+  return `diff_rechnung_minus_ist_usd_micro_cent=${invoice.totalMicroCents - istTelnyxMicroCents}`;
+}
+
+// Die Log-Zeile im ok:true-Fall. DREI Groessen, ZWEI Differenzen, jede zwischen
+// vergleichbaren Zahlen (Befund C, seit KV2-8 traeger-getrennt):
+//   ist_telnyx  (Kosten-Buch, nur Telnyx-Traeger) <-> Telnyx-Rechnung   [USD nativ]
+//   ist_gesamt  (alle Traeger, call-Ebene)        <-> Gate-Buchung      [EUR nach Kurs]
+// Warum ist_gesamt weiterhin von der call-Ebene kommt: das Kosten-Buch existiert erst seit
+// KV2-3 - eine Gegenprobe, die einen Bestandsmonat ohne Buchzeilen als 0 meldete, waere
+// still falsch statt unvollstaendig. Weicht ist_gesamt von der Summe der Buchzeilen ab,
+// ist genau das die Information (Nachlauf des Buchs), kein Fehler.
+// convertedEurCents kann null sein (providerMicroCentsToBucketCents verlaesst den sicheren
+// Integer-Bereich) - dann zeigt die Zeile "null" statt einer erfundenen Zahl (G26/PM-4).
+function crossCheckLineOk(params) {
+  const { monthKey, invoice, istTelnyxMicroCents, istGesamtMicroCents } = params;
+  const { traegerSummen, gateCarrierEurCents, rateMicro } = params;
+  const convertedEurCents = providerMicroCentsToBucketCents(istGesamtMicroCents, rateMicro);
   const diffIstMinusGate = convertedEurCents === null ? null : convertedEurCents - gateCarrierEurCents;
   return (
     `[cost-cross-check] monat=${monthKey} telnyx_rechnung_usd_micro_cent=${invoice.totalMicroCents} ` +
-    `ist_calls_usd_micro_cent=${actualUsdMicroCents} diff_rechnung_minus_ist_usd_micro_cent=${diffRechnungMinusIst} ` +
-    `gate_carrier_eur_cent=${gateCarrierEurCents} ist_konvertiert_eur_cent(rate=${rateMicro})=${convertedEurCents} ` +
+    `ist_telnyx_usd_micro_cent=${istTelnyxMicroCents} ${rechnungsDifferenzFeld(invoice, istTelnyxMicroCents)} ` +
+    `ist_je_traeger=${traegerZeile(traegerSummen)} ` +
+    `ist_gesamt_usd_micro_cent=${istGesamtMicroCents} gate_carrier_eur_cent=${gateCarrierEurCents} ` +
+    `ist_konvertiert_eur_cent(rate=${rateMicro})=${convertedEurCents} ` +
     `diff_ist_minus_gate_eur_cent=${diffIstMinusGate}`
   );
 }
 
 // Bei Provider-Fehlschlag/keine Rechnung fuer den Monat: KEINE Diffs gegen "nicht
 // verfuegbar" - eine Differenz gegen einen fehlenden Wert waere eine erfundene Zahl (G26).
-function crossCheckLineUnavailable({ monthKey, invoice, actualUsdMicroCents, gateCarrierEurCents }) {
+function crossCheckLineUnavailable({ monthKey, invoice, istGesamtMicroCents, traegerSummen, gateCarrierEurCents }) {
   return (
     `[cost-cross-check] monat=${monthKey} telnyx_rechnung=nicht_verfuegbar(reason=${invoice.reason}) ` +
-    `ist_calls_usd_micro_cent=${actualUsdMicroCents} gate_carrier_eur_cent=${gateCarrierEurCents}`
+    `ist_je_traeger=${traegerZeile(traegerSummen)} ` +
+    `ist_gesamt_usd_micro_cent=${istGesamtMicroCents} gate_carrier_eur_cent=${gateCarrierEurCents}`
   );
 }
 
@@ -112,12 +149,19 @@ export function makeCostCrossCheck({ store, config, voiceControl }) {
     // Monat mit Provider-Ausfall bleibt fuer immer ungeloggt (kein automatisches Nachholen).
     store.markCostCrossCheckAttempted(monthKey);
 
-    const actualUsdMicroCents = actualCostMicroCentsForMonth(s, monthKey);
+    // KV2-8: drei Groessen statt zwei - die Traeger-Bilanz aus dem Kosten-Buch, daraus
+    // der reine Telnyx-Anteil (Bezugsgroesse der RECHNUNGS-Differenz) und weiterhin das
+    // Gesamt-Ist von der call-Ebene (Bezugsgroesse der GATE-Differenz).
+    const traegerSummen = belegSummeJeTraegerFuerMonat({ state: s, monthKey });
+    const istTelnyxMicroCents = summeUeberTraeger(traegerSummen, TELNYX_SWEEP_TRAEGER);
+    const istGesamtMicroCents = actualCostMicroCentsForMonth(s, monthKey);
     const gateCarrierEurCents = carrierGateCostCentsForMonth(s, monthKey);
     logCrossCheckLine({
       monthKey,
       invoice,
-      actualUsdMicroCents,
+      traegerSummen,
+      istTelnyxMicroCents,
+      istGesamtMicroCents,
       gateCarrierEurCents,
       rateMicro: config.billing.providerToBucketRateMicro,
     });

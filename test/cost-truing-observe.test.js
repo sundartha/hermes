@@ -377,7 +377,9 @@ test("(h2) Gegenprobe: dieselben Records mit ERFUELLTER Pflicht-Menge -> 'telnyx
     store, config, voiceControl: fakeVoiceControl({ telnyx: control }), audit: () => {}, now: () => nowMs,
   });
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
-  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.DETAIL_RECORDS);
+  // KV2-8: erfuellte Pflicht-Menge + vollstaendiges Kosten-Buch -> 'kostenbuch_vollbeleg'
+  // (beweisende Herkunft, wie 'telnyx_detail_records' es vor dieser Phase war).
+  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG);
 });
 
 test("(h3) Gegenprobe: dieselben Records mit NICHT erfuellter Pflicht-Menge -> 'incomplete'", async () => {

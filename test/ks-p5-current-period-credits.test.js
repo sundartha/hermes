@@ -117,10 +117,18 @@ function meteringStoreOn(s, nowIso) {
 
 // Belege ueber die volle Pflicht-Menge mit Ist-Kosten 0 bei abgerechneten Sekunden > 0:
 // vollstaendige Datenlage (refundProven) UND maximale Rueckerstattung in einem Stub.
+// KV2-8: der Betrag ist MINIMAL statt exakt 0. Grund: seit KV2-5 gilt "Betrag 0 bei
+// Mengenangabe > 0" als Datenfehler und erzeugt GAR KEINE Belegzeile (Matrix 4.6) - seit
+// KV2-8 speist sich die Korrektur aus der Belegsumme, und ohne Zeile gibt es nichts zu
+// buchen. Ein Mikro-Cent je Record laesst die Zeile entstehen und konvertiert bei der
+// Test-Rate weiterhin zu 0 Bucket-Cent: die Zusage dieses Tests (volle Rueckerstattung,
+// Anker durchgereicht) bleibt woertlich dieselbe.
+const MINIMALER_BELEG_MIKRO_CENT = 1;
+
 function nullCostControl() {
   const records = PFLICHT_RECORD_TYPES.map((recordType) => ({
     recordType,
-    costMicroCents: 0,
+    costMicroCents: MINIMALER_BELEG_MIKRO_CENT,
     currency: "USD",
     billedSec: 60,
   }));
@@ -282,8 +290,9 @@ test("P7 Anker-Kette: die Buchung stempelt die Anker, der Abgleichlauf gibt gena
   assert.equal(call.estimatedCostPeriodKey, bucket.budgetPeriodKey, "Anker = der Perioden-Stempel NACH der Buchung");
   assert.equal(bucket.spendMonthCostCents, gebucht);
 
-  // Leseseite: der ECHTE Sweep (cost-truing.bookCorrectionFor) reicht chargeAnchorsOfCall
-  // durch. Ist-Kosten 0 bei nachgewiesener Vollstaendigkeit -> volle Rueckerstattung.
+  // Leseseite: der ECHTE Sweep (cost-truing.setteleAnruf) reicht chargeAnchorsOfCall
+  // durch. Ist-Kosten praktisch 0 bei nachgewiesener Vollstaendigkeit -> volle
+  // Rueckerstattung (s. MINIMALER_BELEG_MIKRO_CENT).
   const { runCostTruingSweep } = makeCostTruing({
     store: makeStubStore(s, { nowMs }),
     config: fakeConfig({ costTruingRequiredRecordTypes: PFLICHT_RECORD_TYPES }),

@@ -561,8 +561,8 @@ export function recordCallCostTruingResult(callId, outcome) {
 
 // KV2-7: Abschluss ohne Messung (Faelligkeitslauf) - mutiert -> save bei changed (Muster
 // recordCallCostTruingResult).
-export function schliesseKostenAbgleich(callId, closedAt) {
-  const { call, changed } = ops.schliesseKostenAbgleich(load(), callId, closedAt);
+export function schliesseKostenAbgleich(callId, eingabe) {
+  const { call, changed } = ops.schliesseKostenAbgleich(load(), callId, eingabe);
   if (changed) save();
   return call;
 }

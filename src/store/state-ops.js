@@ -838,21 +838,27 @@ export function recordCallCostTruingResult(s, callId, { source, actualCostMicroC
   return { call, changed: true };
 }
 
-// KV2-7: Abschluss OHNE Messung. Der Faelligkeitslauf schliesst einen Anruf, fuer den in
-// diesem Sweep gar nicht gemessen wurde (nicht abrufbar oder Versuche erschoepft) und
-// dessen Frist abgelaufen ist. Bewusst NICHT ueber recordCallCostTruingResult: das dort
-// verbrauchte nextCostTruingAttempt waere ein Versuch, den niemand unternommen hat, und
-// ein Herkunftswert waere eine Messaussage, die es nicht gibt. costTruedSource bleibt
-// deshalb UNVERAENDERT (null bei nie gemessenen Anrufen) - die beiden neuen
-// Herkunftswerte fuer "Frist abgelaufen, Teilbeleg" kommen in KV2-8 (Plan 4.8), zusammen
-// mit ihren drei Lesern. SET-ONCE wie der Bestand: ein bereits geschlossener Anruf ist
-// ein No-Op. Liefert { call, changed }.
+// KV2-7/KV2-8: Abschluss OHNE Messung. Der Faelligkeitslauf schliesst einen Anruf, fuer
+// den in diesem Sweep gar nicht gemessen wurde (nicht abrufbar oder Versuche erschoepft)
+// und dessen Frist abgelaufen ist. Bewusst NICHT ueber recordCallCostTruingResult: das
+// dort verbrauchte nextCostTruingAttempt waere ein Versuch, den niemand unternommen hat -
+// der Versuchszaehler bleibt hier unberuehrt.
+// KV2-8 ergaenzt Herkunft und Betrag. Der frueher hier notierte Einwand ("ein
+// Herkunftswert waere eine Messaussage, die es nicht gibt") faellt mit den zwei neuen
+// Werten weg: kostenbuch_vollbeleg/kostenbuch_teilbeleg sind Aussagen ueber das
+// KOSTEN-BUCH, keine ueber eine Messung. source=null laesst das Feld stehen, wie bisher;
+// ein unbekannter Wert wird verworfen (derselbe Wertebereichs-Riegel wie in
+// recordCallCostTruingResult). Optionsobjekt statt drittem/viertem Positionsargument (F1).
+// SET-ONCE wie der Bestand: ein bereits geschlossener Anruf ist ein No-Op.
+// Liefert { call, changed }.
 // Zustandsparameter ausgeschrieben statt der ueblichen 's'-Konvention dieser Datei
 // (Lint-Budget: id-length 's' ist in eslint-legacy-exceptions.json exakt gepinnt, ein
 // Anheben braucht Eigentuemer-Freigabe - kein Bau-Agent setzt das selbst fest).
-export function schliesseKostenAbgleich(state, callId, closedAt) {
+export function schliesseKostenAbgleich(state, callId, { closedAt, source = null, actualCostMicroCents = null }) {
   const call = getCall(state, callId);
   if (!call || call.costTruedAt !== null || !closedAt) return { call: call || null, changed: false };
+  if (source !== null && Object.values(COST_TRUING_SOURCE).includes(source)) call.costTruedSource = source;
+  if (isProviderMicroCents(actualCostMicroCents)) call.actualCostMicroCents = actualCostMicroCents;
   call.costTruedAt = closedAt;
   return { call, changed: true };
 }
@@ -4664,10 +4670,16 @@ export function markCrossCheckAttempted(s, monthKey) {
 }
 
 // Summe der abgerufenen Ist-Kosten (actualCostMicroCents, PROVIDER-Waehrung/USD-Mikro-Cent,
-// UNVERAENDERT) aller TELNYX-Calls, deren Buchungsmonat monthKey ist. NUR Telnyx: die
-// Provider-Rechnung (Zahl 1 der Gegenprobe) ist ausschliesslich Telnyx-Verkehr - eine
-// Beimischung von Altzeilen fremder Anbieter waere kein Vergleich zwischen gleichen
-// Groessen.
+// UNVERAENDERT) aller TELNYX-Calls, deren Buchungsmonat monthKey ist. Der Provider-Filter
+// haelt Altzeilen fremder Anbieter heraus.
+//
+// AB KV2-8 IST DAS DIE GESAMT-IST-SUMME UEBER ALLE TRAEGER JE ANRUF - und damit NICHT
+// mehr die Bezugsgroesse der RECHNUNGS-Differenz: call.actualCostMicroCents traegt seit
+// dem Settlement die Belegsumme des Kosten-Buchs (bei einem EL-Anruf also auch den
+// ElevenLabs-Anteil, obwohl der Anruf provider=telnyx fuehrt). Gegen eine Telnyx-Rechnung
+// verglichen waere das eine Mischdifferenz; dafuer bildet cost-cross-check.js die
+// traeger-getrennte Summe (belegSummeJeTraegerFuerMonat + TELNYX_SWEEP_TRAEGER). Diese
+// Funktion bleibt die Bezugsgroesse der GATE-Differenz (Ist gegen gebuchte Carrier-Cent).
 // Monatsanker ist estimatedCostSpendMonthKey - DERSELBE Anker, unter dem
 // reconcileVoiceBudget/bookCents auf die Gate-Achse gebucht haben (KS-P5 Bucket-Brigade) -
 // NICHT endedAt: Zahl 2 und Zahl 3 der Gegenprobe muessen ueber denselben Zeit-Anker-Typ

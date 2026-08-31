@@ -127,7 +127,8 @@ test("(b) Telnyx-Engine-Anruf: dieselbe Korrektur wie im Bestand, PLUS eine teln
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, NACHHER_COST_CENTS_TELNYX, "identische Korrektur wie vor KV2-5");
-  assert.equal(call.costTruedSource, "telnyx_detail_records");
+  // KV2-8: neu gesettelte Anrufe tragen "kostenbuch_vollbeleg".
+  assert.equal(call.costTruedSource, "kostenbuch_vollbeleg");
 
   const zeilen = store.callCostEvidence(call.id);
   assert.equal(zeilen.length, 1, "genau EINE Belegzeile - keine telnyx_sip-Zeile fuer die Telnyx-Route");

@@ -6,7 +6,7 @@
 // tariffCentsPerMin (src/telephony/outbound-gates.js) wird von dieser Phase NICHT
 // importiert und NICHT beruehrt. Seit P5 wird nur das reine Praefix-Praedikat
 // hasCountryPrefix aus demselben Modul geteilt (EINE Praefix-Frage, kein Tarif-Lookup).
-import { COST_TRUING_SOURCE, MICRO_CENTS_PER_CENT, PROVIDER_RATE_SCALE } from "../store/defaults.js";
+import { MICRO_CENTS_PER_CENT, PROVIDER_RATE_SCALE, istBeweisendeHerkunft } from "../store/defaults.js";
 import { hasCountryPrefix } from "../telephony/outbound-gates.js";
 import { voiceMinutesOf } from "./metering.js";
 
@@ -46,8 +46,13 @@ const ALERTABLE_DRIFT_CODES = Object.freeze([
   TARIFF_DRIFT_FINDING.CONVERSION_ERROR,
 ]);
 
-// Nur BEWIESEN vollstaendig abgeglichene Calls (costTruedSource === DETAIL_RECORDS)
-// sind Stichproben. 'incomplete' ist systematisch ZU NIEDRIG - liesse man es zu,
+// Nur BEWIESEN vollstaendig abgeglichene Calls sind Stichproben - seit KV2-8 zwei
+// Herkunftswerte (Bestandszeilen 'telnyx_detail_records', neue Settlements
+// 'kostenbuch_vollbeleg'), abgefragt ueber die EINE Quelle in defaults.js statt ueber eine
+// hier gepflegte zweite Liste (G5). 'kostenbuch_teilbeleg' ist wie 'incomplete'
+// systematisch ZU NIEDRIG und bleibt draussen - sonst alarmierte der Waechter gegen seine
+// eigene Datenluecke.
+// 'incomplete' ist systematisch ZU NIEDRIG - liesse man es zu,
 // erzeugte die lueckenhafte Messung selbst den Befund 'overestimate' und der Waechter
 // alarmierte gegen seine eigene Datenluecke (P4-Risiko/PM-8).
 // Praefix an BEIDEN Enden (P5, Herkunfts-Achse): Stichprobe ist nur, was auch zum
@@ -56,7 +61,7 @@ const ALERTABLE_DRIFT_CODES = Object.freeze([
 // verschiedene Groessen.
 function isDriftSample(call, prefix) {
   return (
-    call.costTruedSource === COST_TRUING_SOURCE.DETAIL_RECORDS &&
+    istBeweisendeHerkunft(call.costTruedSource) &&
     hasCountryPrefix(call.to, prefix) &&
     hasCountryPrefix(call.from, prefix)
   );
