@@ -65,7 +65,7 @@ import {
 // boot.js nicht.
 import { CONSULT_OPEN_MS } from "./consult/in-call.js";
 import { SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
-import { tariffDriftReportFromConfig, driftLine } from "./billing/cost-calibration.js";
+import { tariffDriftReportFromConfig, driftLine, tarifpaarReport, tarifpaarZeile } from "./billing/cost-calibration.js";
 import { CATALOG_SLUGS } from "./plans.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
@@ -316,9 +316,25 @@ function warnTariffDrift(config, store) {
   else console.log(line);
 }
 
+// KV2-10: Tarifpaar-Waechter, Ausloeser Boot (Kriterium (e)). GENAU EINE Zeile fuer ALLE
+// Routen (Muster warnTariffDrift: keine Zeile je Route je Boot - WARN-Muedigkeit). KEIN
+// SMS/KEIN Mail hier - der laufende Alarm haengt am Sweep (cost-truing.js, derselbe Grund
+// wie beim Drift-Waechter: der Boot feuert einmal je Prozessstart). KEIN Audit: der Befund
+// aendert nichts daran, WAS der Dienst ablehnt. eigenCentJeAnruf bleibt null, solange keine
+// je-Anruf-Quelle fuer die Eigen-Achsen existiert (benannter offener Punkt, s. Kopfkommentar
+// der Tarifpaar-Sektion in cost-calibration.js) - der Waechter ist dann sichtbar-wartend
+// (tarifpaar_zu_wenig_proben), nie scheinbar-messend.
+function warnTarifpaar(config, store) {
+  const report = tarifpaarReport({ state: store.load(), eigenCentJeAnruf: null, billing: config.billing });
+  const line = `[boot] Tarifpaar: ${report.map(tarifpaarZeile).join(" | ")}`;
+  if (report.some((entry) => entry.code !== null)) console.warn(line);
+  else console.log(line);
+}
+
 // LCT P4b: Vollkosten-Boot-Guard (WARN). Haelt den konfigurierten Inlandstarif gegen die
-// Vollkostenschwelle UND die live aus dem Spiegel gerechnete Deckungsquote. Feuert nur in
-// der Konjunktion (voiceTariffFloorFindings). Deckungsquote + Schwelle liefert currentCoverage
+// Vollkostenschwelle; die live aus dem Spiegel gerechnete Deckungsquote reist als Kontext
+// mit (voiceTariffFloorFindings feuert seit KV2-10 auf belowFloor ALLEIN, nicht mehr in
+// der Konjunktion mit duenner Deckung). Deckungsquote + Schwelle liefert currentCoverage
 // (dieselbe EINE Quelle wie der P4-Guard). WARN, kein exit(1). An KEIN Flag gekoppelt: der
 // Tarif ist auch ohne aktive Korrekturbuchung der Buchungswert jedes nicht abgeglichenen Calls.
 function warnVoiceTariffBelowFullCost(config, store) {
@@ -533,6 +549,7 @@ function assertBootGates(config, store, durableAudit) {
   warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
   warnOutboundDriftConfigUnset(config); // OUTBOUND-E4, WARN
   warnTariffDrift(config, store);
+  warnTarifpaar(config, store); // KV2-10, WARN: Tarifpaar-Waechter feuert beim Start
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
   warnTurnBudgetOverrun(config); // GAP-22, WARN
   warnTurnOutlivesDeadAir(config); // AL-P6, WARN

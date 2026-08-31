@@ -158,13 +158,16 @@ test("KV-P2-3 (T5-Grenzfall): unbrauchbares answeredAt normalisiert auf 0 Minute
 
 // ---- KV-P2-5: Ein-Quellen-Riegel (strukturell, Muster KV-P1-10) --------------------------
 //
-// Fangt eine zweite Inbound-Tarif-Quelle ab, bevor sie entsteht (G5/G27): die Landkarte
-// deklariert EINE Preisquelle je Kosten-Art - ein zweites Vorkommen macht die Deklaration
-// zur Luege, ohne dass ein Verhaltenstest rot wird.
+// Fangt eine dritte Inbound-Tarif-Quelle ab, bevor sie entsteht (G5/G27): die Landkarte
+// deklariert EINE Preisquelle je Kosten-Art. Seit KV2-10 gibt es ZWEI legitimierte
+// LESESTELLEN mit verschiedenen Rollen: metering.js BUCHT den Satz (unveraendert),
+// cost-calibration.js vergleicht ihn im Tarifpaar-Waechter gegen die gemessenen Vollkosten
+// (misst - justiert/bucht NICHTS, Plan KV2-10 3.1b). Jede weitere Stelle bliebe ein
+// G5-Bruch.
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXCLUDED_DIR_NAMES = new Set(["node_modules", ".git"]);
 
-test("KV-P2-5: billing.voiceTariffInboundCents wird an genau EINER Stelle in src/ gelesen, in src/billing/metering.js", () => {
+test("KV-P2-5: billing.voiceTariffInboundCents wird an genau ZWEI Stellen gelesen - metering.js (Buchung) und cost-calibration.js (Waechter, KV2-10)", () => {
   function alleSrcDateien(relDir) {
     const treffer = [];
     const stack = [path.join(REPO_ROOT, relDir)];
@@ -185,10 +188,10 @@ test("KV-P2-5: billing.voiceTariffInboundCents wird an genau EINER Stelle in src
   // metering.js bewusst als "defaultConfig" importiert ist (Idiom aus outbound-gates.js,
   // s. dortiges tariffCentsPerMin). Die Deklarationszeile in config.js ("voiceTariffInbound
   // Cents: numEnv(...)" bzw. der Namensraum-String in CONFIG_NAMESPACES.billing) traegt
-  // kein ".billing." davor und faellt damit NICHT unter dieses Muster - nur eine zweite
+  // kein ".billing." davor und faellt damit NICHT unter dieses Muster - nur eine weitere
   // LESESTELLE waere ein Treffer.
   const CALL_SITE_PATTERN = /\bbilling\.voiceTariffInboundCents\b/g;
-  const EXPECTED_CALL_SITE = "src/billing/metering.js";
+  const EXPECTED_CALL_SITES = ["src/billing/cost-calibration.js", "src/billing/metering.js"];
 
   const vorkommenJeDatei = alleSrcDateien("src")
     .map((datei) => ({
@@ -202,13 +205,13 @@ test("KV-P2-5: billing.voiceTariffInboundCents wird an genau EINER Stelle in src
 
   assert.equal(
     gesamtVorkommen,
-    1,
-    `eine zweite Inbound-Tarif-Quelle waere G5-Bruch - gefunden: ${gesamtVorkommen} Vorkommen [${fundstellen}]`,
+    EXPECTED_CALL_SITES.length,
+    `eine dritte Inbound-Tarif-Quelle waere G5-Bruch (legitimiert: Buchung in metering.js, Mess-Vergleich im KV2-10-Waechter) - gefunden: ${gesamtVorkommen} Vorkommen [${fundstellen}]`,
   );
   assert.deepEqual(
     vorkommenJeDatei.map((eintrag) => eintrag.datei),
-    [EXPECTED_CALL_SITE],
-    `das einzige Vorkommen muss in ${EXPECTED_CALL_SITE} liegen - gefunden: [${fundstellen}]`,
+    EXPECTED_CALL_SITES,
+    `die Vorkommen muessen genau in ${EXPECTED_CALL_SITES.join(" und ")} liegen - gefunden: [${fundstellen}]`,
   );
 });
 

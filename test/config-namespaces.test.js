@@ -56,7 +56,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // Anrufs ohne vollstaendige Belegmenge) -> 50.
   // KV2-9: elEvidenceMinAgeMinutes ergaenzt (Mindestalter vor dem zweiten, reifenden
   // ElevenLabs-Abruf) -> 51.
-  billing: 51,
+  // KV2-10: voiceTariffGrundbetragCentsJeRoute ergaenzt (Grundbetrag des zweiteiligen
+  // Tarifs je Route, csv-Karte); platformFixedCostCentsPerMonth UMBENANNT in
+  // platformFixedCostUsdCentsPerMonth (USD-Listenpreis statt faelschlich gelabelter
+  // EUR-Cent - menge neutral) -> 52.
+  billing: 52,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -150,9 +154,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // primitiver Key auf der voice-Ebene, die Summe steigt dadurch NICHT zusaetzlich.
 // KV2-7: costSettleDeadlineHours (billing) ergaenzt -> 178.
 // KV2-9: elEvidenceMinAgeMinutes (billing) ergaenzt -> 179.
-const EXPECTED_TOTAL_KEYS = 179;
+// KV2-10: voiceTariffGrundbetragCentsJeRoute (billing) ergaenzt; platformFixedCost… ->
+// platformFixedCostUsdCentsPerMonth umbenannt (menge neutral) -> 180.
+const EXPECTED_TOTAL_KEYS = 180;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (179 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (180 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -288,11 +294,15 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // KV2-6: kostenHeartbeatFensterH ist primitiv (Zahl, kein Array/nested Objekt) -> 166.
   // KV2-7: costSettleDeadlineHours ist primitiv (Zahl, kein Array/nested Objekt) -> 167.
   // KV2-9: elEvidenceMinAgeMinutes ist primitiv (Zahl, kein Array/nested Objekt) -> 168.
+  // KV2-10: voiceTariffGrundbetragCentsJeRoute ist das SIEBTE nested Objekt (csv-Karte
+  // profil:cents, kein primitives Blatt, s. continue oben) -> checked bleibt 168; der
+  // Rename platformFixedCostCentsPerMonth -> platformFixedCostUsdCentsPerMonth bleibt
+  // primitiv (Zahl) und verschiebt nichts.
   const EXPECTED_PRIMITIVE_LEAVES = 168;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
-    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 5 Arrays - 6 nested Objekte) geprueft`,
+    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 5 Arrays - 7 nested Objekte) geprueft`,
   );
 });
 

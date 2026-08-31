@@ -6,6 +6,10 @@ import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled 
 // GAP-07: boot-guard.js und telephony/stt-profile.js importieren ihrerseits nur
 // import-freie bzw. Blatt-Module -> kein Zyklus, obwohl beide sonst downstream sitzen.
 import { alertChannelFindings, alertChannelInputs } from "./boot-guard.js";
+// KV2-10: die gueltigen Werte von VOICE_TARIFF_GRUNDBETRAG_CENTS sind die Kostenprofile
+// der Engine-Weiche. billing/kostenarten.js ist importfrei (Blatt, Praezedenz boot-guard
+// oben) - kein Zyklus, keine zweite Routen-Liste hier.
+import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
 // G5: die Minute lebt in utils/timer.js (import-freies Blatt, kein Zyklus) - dieselbe
@@ -239,6 +243,31 @@ function csvEnv(raw) {
     .split(",")
     .map((eintrag) => eintrag.trim())
     .filter(Boolean);
+}
+
+// KV2-10: csv-KARTE "profil:cents" -> Objekt (z.B. "el_convai_sip:23,telnyx_budget:5").
+// Fail-closed wie numEnv: ein unbekanntes Profil, ein Muell-Cent oder ein Eintrag ohne
+// Trenner landet in fatalConfigErrors (Boot-Refusal), nie still als 0 - ein vertippter
+// Grundbetrag muesste sonst erst am Alarm-Bildschirm auffallen. abwesend/leer -> {}
+// (alle Routen 0 = "noch nicht gesetzt", die heutige Reserve-Wahrheit). gueltigeRouten
+// kommt vom Aufrufer (Object.values(KOSTENPROFIL), EINE Quelle) - diese Datei fuehrt
+// keine zweite Routen-Liste.
+function routeCentsEnv(name, raw, gueltigeRouten) {
+  const karte = {};
+  for (const eintrag of csvEnv(raw)) {
+    const trennIndex = eintrag.lastIndexOf(":");
+    const profil = trennIndex === -1 ? "" : eintrag.slice(0, trennIndex);
+    const cents = trennIndex === -1 ? null : parseNumEnv(eintrag.slice(trennIndex + 1), true);
+    if (!gueltigeRouten.includes(profil) || cents === null || cents < 0) {
+      fatalConfigErrors.push(
+        `${name}="${eintrag}" ist keine gueltige Karte profil:ganze-cent ` +
+          `(gueltige Profile: ${gueltigeRouten.join("|")}).`,
+      );
+      continue;
+    }
+    karte[profil] = cents;
+  }
+  return karte;
 }
 
 // Getrimmter Grossbuchstaben-Wert (Laendercode). Gleiche Begruendung wie csvEnv:
@@ -1190,24 +1219,37 @@ const rawConfig = {
     min: 0,
   }),
   // LCT P4b (Vollkosten-Boot-Guard): Untergrenze, unter die VOICE_TARIFF_DOMESTIC_CENTS
-  // nicht sinken darf, ohne dass ein Boot-Guard (WARN) anschlaegt, solange die
-  // Abgleich-Deckung duenn ist. GANZZAHL EUR-Cent (wie der Tarif). Herleitung ueber die
-  // teuerste AKTIVIERBARE Konfiguration, Kurs 0,92 (USD-ct -> EUR-ct, Kap.-2.1-Regel):
-  //
-  //   Zustand Assistant-Pfad                   | Schwelle | Herleitung
-  //   im Code UND per Env (TELNYX_AI_ASSISTANT_ENABLED) aktivierbar | 10 | 10,4 USD-ct x 0,92 = 9,568 -> aufgerundet
-  //   nach VOLLZOGENEM Rueckbau aus voice.js + config.js           |  5 |  5,4 USD-ct x 0,92 = 4,968 -> aufgerundet
-  //
-  // AUSLOESER fuer den Wechsel auf 5 ist der GEMERGTE Rueckbau (ein grep, der
-  // startAssistant / ai_assistant_start nicht mehr findet), NICHT die Absicht. Solange der
-  // Pfad im Code steht, gilt 10 - eine Absichtserklaerung entfernt keinen Code-Pfad. Default 10.
-  // min:0 ist die test-neutrale Abschaltung (wie VOICE_TARIFF_DOMESTIC_CENTS=0 in der Suite):
-  // unset faellt auf 10 (armiert) zurueck; 0 deaktiviert den WARN bewusst und sichtbar (er ist
-  // eine Diagnose, kein Geld-Gate - kein per-Default abgeschaltetes Safety-Gate).
+  // nicht sinken darf, ohne dass ein Boot-Guard (WARN) anschlaegt. Seit KV2-10
+  // DECKUNGS-UNABHAENGIG (belowFloor allein ist Ausloeser, s. boot-guard.js). GANZZAHL
+  // EUR-Cent (wie der Tarif). Neuherleitung KV2-10 aus der gemessenen Vollkosten-
+  // Stichprobe statt aus der (noch) aktivierbaren Assistant-Konfiguration: p95 der
+  // Vollkosten je Minute der Route el_convai_sip (B2+O2: 0,1576 USD x 0,92 = 14,5 ->
+  // aufgerundet 15; ohne Eigen-Achsen, Kurs 0,92). Mit gesetztem Grundbetrag
+  // (VOICE_TARIFF_GRUNDBETRAG_CENTS) kann die Schwelle sinken - Neuherleitung dann ueber
+  // den Tarifpaar-Report (cost-calibration.js). min:0 ist die test-neutrale Abschaltung
+  // (wie VOICE_TARIFF_DOMESTIC_CENTS=0 in der Suite): unset faellt auf 15 (armiert)
+  // zurueck; 0 deaktiviert den WARN bewusst und sichtbar (er ist eine Diagnose, kein
+  // Geld-Gate - kein per-Default abgeschaltetes Safety-Gate).
   voiceTariffFullCostFloorCents: numEnv(
     "VOICE_TARIFF_FULL_COST_FLOOR_CENTS",
     process.env.VOICE_TARIFF_FULL_COST_FLOOR_CENTS,
-    { fallback: 10, min: 0 },
+    { fallback: 15, min: 0 },
+  ),
+  // KV2-10 (Owner-Entscheidung 5): Grundbetrag des ZWEITEILIGEN Tarifs, je Route
+  // (Kostenprofil) in GANZZAHL EUR-Cent je ANRUF - csv-Karte profil:cents. Der Minutensatz
+  // bleibt voiceTariffDomesticCents (Outbound-Routen) bzw. voiceTariffInboundCents
+  // (Inbound-Routen); der Tarifpaar-Waechter (cost-calibration.js) prueft beide gegeneinander.
+  // Herkunft des Vorschlags: KV2-10-Stichprobe, 20 ct + 18 ct/min fuer el_convai_sip.
+  // GESETZT wird der Wert vom Menschen (Owner-Entscheidung 6: keine automatische
+  // Justierung). Default {} = alle Routen 0 ("noch nicht gesetzt") - genau die heutige
+  // Reserve-Wahrheit: dieser Grundbetrag geht in KEINE Reserve-Rechnung (KV2-10
+  // Scope-Riegel), die waere eine eigene Phase. OFFENER PUNKT: der Waechter misst erst,
+  // wenn eine je-Anruf-Quelle fuer die Eigen-Achsen existiert (eigenCentJeAnruf, s.
+  // cost-calibration.js) - bis dahin meldet jede Zeile tarifpaar_zu_wenig_proben.
+  voiceTariffGrundbetragCentsJeRoute: routeCentsEnv(
+    "VOICE_TARIFF_GRUNDBETRAG_CENTS",
+    process.env.VOICE_TARIFF_GRUNDBETRAG_CENTS,
+    Object.values(KOSTENPROFIL),
   ),
   voiceTariffDomesticPrefixes: VOICE_TARIFF_DOMESTIC_PREFIXES,
   // Per-Tenant Default-Kostendecke (GANZZAHL Cents, G26). ZWEI Wirkungen (P2a/D3):
@@ -1382,8 +1424,14 @@ const rawConfig = {
     min: 1,
     max: 28,
   }),
-  // ElevenLabs-Fixkosten in GANZZAHL EUR-Cent (belegt: 6,00 USD/Monat -> 600 EUR-Cent).
-  platformFixedCostCentsPerMonth: numEnv(
+  // KV2-10 (Katalogzeile #8, Waehrungs-Klarstellung): ElevenLabs-Grundgebuehr in GANZZAHL
+  // US-Cent (LISTENPREIS; belegt: next_invoice.subtotal_cents = 600 = 6,00 USD,
+  // befund-elevenlabs.md 3). Vor KV2-10 hiess der Key platformFixedCostCentsPerMonth und
+  // wurde in api-billing.js als EUR-Cent angezeigt, obwohl die Rechnung auf US-Cent lautet;
+  // jetzt rechnet die Route ueber DEN EINEN Kurs nach EUR-Cent um und gibt den
+  // USD-Listenpreis separat mit. Der ENV-NAME bleibt unveraendert (Rename einer Env ist
+  // eine eigene Entscheidung, Praezedenz SKIP_TWILIO_SIGNATURE_CHECK).
+  platformFixedCostUsdCentsPerMonth: numEnv(
     "PLATFORM_FIXED_COST_CENTS_PER_MONTH",
     process.env.PLATFORM_FIXED_COST_CENTS_PER_MONTH,
     { fallback: 600, min: 0 },
@@ -2135,7 +2183,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -

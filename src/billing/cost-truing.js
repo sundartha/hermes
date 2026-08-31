@@ -47,7 +47,14 @@ import { chargeAnchorsOfCall, closeOutageAlert, nextCostTruingAttempt, openOutag
 import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
 import { alarmKanalZeile, betreiberAlarmKanaele } from "../boot-guard.js";
-import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
+import {
+  tariffDriftReportFromConfig,
+  alertableDriftFindings,
+  driftLine,
+  tarifpaarReport,
+  tarifpaarZeile,
+  alertbareTarifpaarBefunde,
+} from "./cost-calibration.js";
 import { KOSTENPROFIL, istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
 import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
 import { legRefOfCall } from "./call-leg-ref.js";
@@ -92,6 +99,11 @@ const COST_TRUING_FINDING = Object.freeze({
   // dieselbe Schwelle stattdessen per SMS (server.js), NICHT hierueber.
   TTS_QUOTA_WARN_THRESHOLD: "tts_quota_warn_threshold",
   TTS_QUOTA_EXHAUSTED: "tts_quota_exhausted",
+  // KV2-10: sechster Code auf DEMSELBEN Kanal - dieselbe Kanal-Praezedenz wie
+  // REQUESTS_ABOVE_THRESHOLD: der Tarifpaar-Waechter (cost-calibration.js) meldet die
+  // Unterschaetzung des konfigurierten Paars, und der laufende Alarm gehoert an den
+  // Sweep (der Boot loggt nur, s. boot.js#warnTarifpaar).
+  TARIFPAAR_UNTERSCHAETZT: "tarifpaar_unterschaetzt",
 });
 const COST_TRUING_AUDIT_EVENT = "cost_truing_befund";
 
@@ -118,7 +130,10 @@ const COVERAGE_FINDING_CODES = Object.freeze([
 // sondern die bestehende: KE-P8/PM-7 ("kein eigener Alarmweg, keine SMS-Klasse") und
 // KV-P7 (der Play-TTS-Pfad alarmiert dieselbe Schwelle bereits per SMS aus server.js -
 // eine zweite SMS waere Kanal-Verdopplung auf demselben Konto).
-const VOLL_BEFUND_CODES = new Set(COVERAGE_FINDING_CODES);
+// KV2-10 (d): TARIFPAAR_UNTERSCHAETZT meldet VOLL wie die Deckungs-Klassen (Plan 4.9) -
+// die Unterschaetzung ist die geldrelevante Richtung (der Tarif deckt die gemessenen
+// Vollkosten nicht), tarifpaar_zu_wenig_proben bleibt dagegen reine Log-Zeile.
+const VOLL_BEFUND_CODES = new Set([...COVERAGE_FINDING_CODES, COST_TRUING_FINDING.TARIFPAAR_UNTERSCHAETZT]);
 
 // Ein eigenes Ereignis fuer den Uebergang zurueck ueber die Schwelle (Muster
 // drift_recovered). Nie zwei Sachverhalte auf einem Label: "Befund" und "Befund weg" sind
@@ -399,6 +414,26 @@ function herkunftOhneMessung(projektion) {
     : COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG;
 }
 
+// KV2-10 (d): GENAU EIN Befund fuer ALLE unterschaetzten Routen (Muster warnTariffDrift im
+// Boot: eine Zeile, keine je Route - WARN-Muedigkeit). Das Detail nennt das konkrete Paar
+// (Vorschlag gegen konfiguriert), PII-frei per tarifpaarZeile. Die Log-Zeile steht in
+// JEDEM Sweep (sichtbar-wartend), der Kanal nur bei Unterschaetzung.
+// Modul-Ebene statt im makeCostTruing-Closure (Lint-Budget dieser Datei,
+// eslint-suppressions.json - Muster closeCoverageBefunde/abschlussNachMessung oben):
+// emitFinding kommt als Parameter herein (P4), eigenCentJeAnruf ebenfalls - die Quelle ist
+// eine Fabrik-Argument, kein Zustand des Closure.
+async function meldeTarifpaar({ state, eigenCentJeAnruf, billing, emitFinding, nowMs }) {
+  const report = tarifpaarReport({ state, eigenCentJeAnruf, billing });
+  console.log(`[cost-truing] tarifpaar ${report.map(tarifpaarZeile).join(" | ")}`);
+  const unterschaetzt = alertbareTarifpaarBefunde(report);
+  if (unterschaetzt.length === 0) return;
+  await emitFinding(
+    COST_TRUING_FINDING.TARIFPAAR_UNTERSCHAETZT,
+    unterschaetzt.map(tarifpaarZeile).join(" | "),
+    nowMs,
+  );
+}
+
 // Beendet-Zeitstempel EINES Calls in Millisekunden, oder null (fehlend/unbrauchbar).
 // EINE Parse-Stelle fuer die zwei Verbraucher - die Faelligkeit eines Kandidaten und die
 // Zeitschranke des Belegabrufs (G5). Zwei eigene Date.parse-Ausdruecke liefen beim ersten
@@ -537,7 +572,13 @@ export function ohneBeweiskraft(source) {
   return istBeweisendeHerkunft(source) ? COST_TRUING_SOURCE.INCOMPLETE : source;
 }
 
-export function makeCostTruing({ store, config, voiceControl, audit, messaging, mailer, elKostenRead = null, now = Date.now }) {
+// KV2-10: eigenCentJeAnruf = die Eigen-Cent je Anruf (ai_token + research_fee) als
+// INJIZIERTE Quelle - im Bestand existiert keine (Briefing/Eroeffnungssatz buchen
+// callId:null, research_fee schreibt kein usage_event). Injektion statt Lazy-Init (P15);
+// die Produktion (server.js) uebergibt nichts -> null -> jede Stichprobe wird benannt als
+// eigen_achsen verweigert. Die Signatur bleibt einzeilig: makeCostTruing traegt eine
+// gepinnte max-lines-Befundmenge (eslint-suppressions.json), Zeilen verschieben sie.
+export function makeCostTruing({ store, config, voiceControl, audit, messaging, mailer, elKostenRead = null, eigenCentJeAnruf = null, now = Date.now }) {
   // Modul-lokaler Laufriegel. BEIDE Ausloeser (Intervall + manueller Endpunkt) teilen
   // sich diesen einen Boolean. GESETZT VOR DEM ERSTEN await, freigegeben im finally:
   // Node ist single-threaded, aber der Sweep awaitet den Pool-Abruf je Provider (KE-P2,
@@ -667,8 +708,9 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     if (!voll && !shouldEmitFinding(code, nowMs)) return;
     const zeile = `grund=${code} ${detail}`;
     console.warn(`[cost-truing] Befund ${zeile}`);
-    const meldung = { store, config, audit, messaging, mailer,
-      bucket: kostenBucket(code), aktion: COST_TRUING_AUDIT_EVENT, zeile, nowMs };
+    // meldung einzeilig (KV2-10): die Zeilenzahl dieses Closures ist gepinnt
+    // (eslint-suppressions.json, max-lines-per-function) - reines Formatting.
+    const meldung = { store, config, audit, messaging, mailer, bucket: kostenBucket(code), aktion: COST_TRUING_AUDIT_EVENT, zeile, nowMs };
     if (voll) await meldeVollBefund(meldung);
     else await meldeBetreiberNotiz(meldung);
   }
@@ -997,10 +1039,15 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // Prozessstart, und ein Dienst, der nach dem Deploy wochenlang ohne Restart laeuft,
   // wertet genau in dem Zeitraum nicht aus, in dem sich P4 auf P5 als Gegenmassnahme
   // stuetzt. insufficient_samples wird GELOGGT, aber NIE alarmiert (alertableDriftFindings).
-  function reportTariffDrift(state, nowMs) {
+  // LCT P5 + KV2-10: die ZWEI Tarif-Waechter des Sweeps an EINER Aufrufstelle - der
+  // Praefix-Drift (P5, eigener SMS-Versand) und das Tarifpaar (KV2-10, Modul-Ebene
+  // meldeTarifpaar unten, emitFinding als Parameter). Zwei getrennte Aufrufzeilen wuerden
+  // die gepinnte max-lines-Befundmenge dieses Closures verschieben.
+  async function reportTariffDrift(state, nowMs) {
     const report = tariffDriftReportFromConfig(state.calls, config.billing);
     console.log(`[cost-truing] tarif-drift ${report.map(driftLine).join(" | ")}`);
     for (const entry of alertableDriftFindings(report)) alertDrift(entry, nowMs);
+    await meldeTarifpaar({ state, eigenCentJeAnruf, billing: config.billing, emitFinding, nowMs });
   }
 
   // Die Sweep-Bilanz als EINE Zeile. Das Format ist TESTGEPINNT: es ist die Datenquelle des
@@ -1097,7 +1144,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     for (const warnung of sammler.ttsWarnungen) await reportTtsQuotaFinding(warnung, nowMs);
     await reportCoverage(coveragePercent, coverage, nowMs);
     for (const befund of buch.befunde) await emitFinding(befund.code, befund.detail, nowMs);
-    reportTariffDrift(store.load(), nowMs);
+    await reportTariffDrift(store.load(), nowMs); // KV2-10: async, meldet danach das Tarifpaar
     return {
       skipped: false,
       candidates: candidates.length,

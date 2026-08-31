@@ -23,8 +23,12 @@ import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../bill
 import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate.js";
 import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.js";
 import { kostenBuchBericht } from "../billing/kosten-deckung.js";
-import { tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
+import { providerMicroCentsToBucketCents, tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 import { countActiveNumbers } from "../store/views.js";
+// KV2-10: die einzige Stelle, die US-Cent (Listenpreis) ueber DEN EINEN Kurs nach EUR-Cent
+// hebt - MICRO_CENTS_PER_CENT ist die Skala der geteilten Umrechnungsfunktion (G5: EINE
+// Quelle je Idiom, kein hier getippter zweiter 1e6-Faktor).
+import { MICRO_CENTS_PER_CENT } from "../store/defaults.js";
 // P14: dieselbe EINE Quelle der Stripe-Rueckkehr-Ziele wie self-service-routes.js
 // (frueher stand die cancelUrl hier als zweites Inline-Literal, driftfaehig, G5).
 import { CHECKOUT_RETURN } from "../portal-paths.js";
@@ -149,12 +153,20 @@ export function makeBillingRoutes({
   operator.get("/api/billing/platform-costs", (req, res) => {
     const nowIso = new Date().toISOString();
     const activeNumbers = countActiveNumbers(store.load());
+    // KV2-10: der ElevenLabs-Wert ist ein USD-LISTENPREIS (600 US-ct = 6,00 USD) und wird
+    // hier ueber DEN EINEN Kurs in EUR-Cent umgerechnet (600 x 0,92 = 552, aufgerundet in
+    // der geteilten Funktion) - vorher wurde er unumgerechnet als "EUR-Cent" ausgegeben.
+    // elevenLabsUsdCents reist separat mit, damit kein Konsument die Waehrungen verwechselt.
+    const elevenLabsUsdCents = config.billing.platformFixedCostUsdCentsPerMonth;
+    const elevenLabsCents =
+      providerMicroCentsToBucketCents(elevenLabsUsdCents * MICRO_CENTS_PER_CENT, config.billing.providerToBucketRateMicro);
     const didRentCents = config.billing.numberMonthlyCostCents * activeNumbers;
-    const fixedCostCentsPerMonth = config.billing.platformFixedCostCentsPerMonth + didRentCents;
+    const fixedCostCentsPerMonth = elevenLabsCents + didRentCents;
     res.json({
       currency: "EUR",
       listPriceNotBilled: true,
-      elevenLabsCents: config.billing.platformFixedCostCentsPerMonth,
+      elevenLabsUsdCents,
+      elevenLabsCents,
       didRentCents,
       activeNumbers,
       fixedCostCentsPerMonth,
