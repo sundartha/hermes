@@ -9,6 +9,7 @@ import { startServer, seedState, OWNER_TEST_NUMBER } from "./helpers.js";
 import { makeDefaultState, settingsFor, updateSettings } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { INBOUND_NOTICES } from "../src/i18n/inbound-notice.js";
+import { startInboundHarness, ownerNumberSeed } from "./helpers/inbound-router-harness.js";
 
 // Pflicht-Marker je Sprache statt einer deutschen Regex gegen den damaligen Default
 // (Pre-Mortem 5): nach dem P10-Flip loest ein Testfall OHNE gesetzte Sprache auf en auf -
@@ -91,16 +92,23 @@ test("Inbound-Pflichtsatz: ein Greeting MIT Marker wird angenommen (Gegenprobe)"
   assert.ok(changed.includes("greeting"));
 });
 
+// KV2-2 (h): dieser Fall lief zuvor ueber den echten Spawn-Server (startServer) mit
+// VOICE_ENGINE=realtime. Seit dem fatalen Boot-Riegel REALTIME_CARRIER_UNCOLLECTED
+// bootet der Dienst unter dieser Engine nicht mehr - der In-Process-Harness (s.
+// test/helpers/inbound-router-harness.js) faehrt denselben Router OHNE src/boot.js.
+// Assertions WORTGLEICH zum Bestand (INBOUND_NOTICES.de im Body, stream_token-Handoff).
+// Absolute Regel 2 bleibt damit auf dem Realtime-Pfad gepinnt, nicht ersatzlos geloescht.
 test("Inbound-Pflichtsatz: auch die Realtime-Engine rendert ihn vor dem Stream-Handoff", async () => {
   // P10: language explizit "de" - Subjekt dieses Tests ist der Realtime-Rendering-Pfad,
   // nicht die Sprachaufloesung. Ohne den Pin faellt der ungeseedete Tenant auf den
   // Weltdefault (en) durch und der Pflichtsatz-Assert (INBOUND_NOTICES.de) schlaegt fehl.
-  const srv = await startServer({
-    env: { VOICE_ENGINE: "realtime" },
-    seed: seedState({ settings: { language: "de" } }),
+  const harness = await startInboundHarness({
+    voiceEngine: "realtime",
+    seed: ownerNumberSeed(OWNER_TEST_NUMBER),
+    configureState: (state) => updateSettings(state, BOOTSTRAP_TENANT_ID, { language: "de" }),
   });
   try {
-    const res = await fetch(`${srv.localUrl}/voice/incoming`, {
+    const res = await fetch(`${harness.url}/voice/incoming`, {
       method: "POST",
       body: new URLSearchParams({
         CallSid: "CAgap14realtime",
@@ -112,6 +120,6 @@ test("Inbound-Pflichtsatz: auch die Realtime-Engine rendert ihn vor dem Stream-H
     assert.ok(body.includes(INBOUND_NOTICES.de), `Pflichtsatz fehlt im Realtime-Pfad: ${body}`);
     assert.ok(body.includes('name="stream_token"'), `Stream-Handoff fehlt: ${body}`);
   } finally {
-    await srv.stop();
+    await harness.stop();
   }
 });

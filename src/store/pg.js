@@ -366,6 +366,12 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // KV2-2: Wrapper-Paritaet zu json.js. Saved aus demselben Grund wie recordSipCallId.
+    recordCostProfile(callId, profil) {
+      const { call, changed } = ops.recordCostProfile(requireState(), callId, profil);
+      if (changed) save();
+      return call;
+    },
     // OUTBOUND-E5: Absender-Wahrheits-Mutatoren als Spread (haelt den Zeilen-Pin, s.o.).
     ...absenderWahrheitMutatoren({ requireState, save }),
     // EL-Anrufstart: Zusammenfassung + Befund aus einer Anbieter-Antwort -
@@ -1471,6 +1477,9 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // i8-design-decisions) - die Telefonie-Kosten waeren dem Anruf danach dauerhaft nicht
     // mehr zuzuordnen, weil der Anbieter-Beleg, aus dem er stammt, geloescht ist.
     sipCallId: r.sip_call_id ?? null,
+    // KV2-2: Kostenprofil mit-hydrieren. Ohne diese Zeile ginge es beim Restart verloren
+    // UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
+    costProfile: r.cost_profile ?? null,
     callerTurns: r.caller_turns ?? 0,
     // AL-P11: Ergebnis-Karte mit-hydrieren. Ohne diese Zeile ginge sie beim Restart
     // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
@@ -1946,6 +1955,10 @@ function callRowValues(call, tenantId) {
     // Wahrheits-Felder, alle IM ON CONFLICT DO UPDATE SET - sie entstehen NACH dem
     // Create (Anrufstart bzw. Ergebnisabruf).
     ...absenderWahrheitWerte(call),
+    // KV2-2 ($61, angehaengt): Kostenprofil. IM ON CONFLICT DO UPDATE SET - es entsteht
+    // NACH dem Create (an der Engine-Weiche), der set-once-Riegel liegt in state-ops,
+    // nicht in SQL (Muster sip_call_id, NICHT callee_is_owner).
+    call.costProfile ?? null,
   ];
 }
 
@@ -1971,8 +1984,8 @@ async function flushCalls(client, tenantId, calls) {
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
           callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
           lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
-          from_actual_e164, from_source, from_registration_source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60)
+          from_actual_e164, from_source, from_registration_source, cost_profile)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -2000,7 +2013,8 @@ async function flushCalls(client, tenantId, calls) {
          summary_mail_sent_at=EXCLUDED.summary_mail_sent_at,
          inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at,
          from_actual_e164=EXCLUDED.from_actual_e164, from_source=EXCLUDED.from_source,
-         from_registration_source=EXCLUDED.from_registration_source`,
+         from_registration_source=EXCLUDED.from_registration_source,
+         cost_profile=EXCLUDED.cost_profile`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);

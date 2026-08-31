@@ -61,6 +61,9 @@ import {
 } from "./defaults.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS, languageForCountry } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
+// KV2-2: die Kostenprofil-Registry der Engine-Weiche. Import-frei von src/telephony/*
+// (s. Kopfkommentar kostenarten.js) - kein Zyklus in den Store-Graph.
+import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
 import { isKnownPlanSlug } from "../plans.js";
 // GAP-14: Wert-Guard fuer updateSettings (greeting muss den Inbound-Pflichtsatz tragen).
 // inbound-notice.js ist ein Blatt-Modul (kein Rueckimport, kein Zyklus).
@@ -387,6 +390,11 @@ export function createCall(
     // Additiv nullable: nur der ElevenLabs-Weg setzt sie, jeder andere Call bleibt null -
     // byte-identisch zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     sipCallId: null,
+    // KV2-2: das Kostenprofil dieses Anrufs. Bewusst NICHT hier befuellt, auch wenn der
+    // Aufrufer es wuesste - es wird an der ENGINE-WEICHE gesetzt (4.3), weil die
+    // Erzeugungsstelle den Traeger nicht kennt (der ConvAI-Umstieg hat keine der beiden
+    // createCall-Stellen angefasst). Initial null - byte-identisch zur pg-Hydrierung.
+    costProfile: null,
     // ABNAHME-D1 (Owner-Auftrag: eigene Felder im Ergebnisschema, additiv NEBEN summary/
     // result). Vom Agenten waehrend des Gespraechs STRUKTURIERT gesammelt (ElevenLabs
     // Data Collection, analysis.data_collection_results) statt nur als Freitext in
@@ -928,6 +936,31 @@ export function recordSipCallId(state, callId, sipCallId) {
     return { call: getCall(state, callId), changed: false };
   }
   return setSipCallIdOnce(state, callId, sipCallId);
+}
+
+const setCostProfileOnce = recordProviderHandleOnce("costProfile");
+
+// KV2-2: das Kostenprofil, gesetzt an der Engine-Weiche. Zwei Fehlrichtungen, bewusst
+// UNGLEICH behandelt (Abnahmekriterium (b)):
+//   unbekannter Wert -> WIRFT. Der Wert kann nur aus KOSTENPROFIL kommen (die Weichen
+//     lesen den Enum, nie ein Literal); ein Treffer hier ist ein Programmierfehler, den
+//     der Inventar-Test (c) in CI faengt, bevor er je einen Anruf sieht.
+//   fehlender Wert   -> WIRFT NICHT. Ein Wahlpfad, der das Setzen vergisst, darf keinen
+//     Anruf verhindern (4.3: die schlechteste Folge eines NEUEN Fehlers ist "kein
+//     Refund", niemals "kein Anruf"). Fail-closed wird stattdessen das Settlement.
+// Die console-Zeile ist dieselbe eng begrenzte Ausnahme wie beim Join-Schluessel-
+// Waechter oben (dieses Modul ist sonst IO-frei); sie ist PII- und secret-frei. Die
+// Eskalation zum Betreiber-Alarm (kosten:profil-fehlt, 4.9) gehoert KV2-6 - sie hier
+// zu verdrahten waere ein zweiter Meldeweg (G5) und braeuchte IO in state-ops.
+export function recordCostProfile(state, callId, profil) {
+  if (!profil) {
+    console.warn(`[kostenprofil] fehlt call=${callId} - Anruf entsteht trotzdem, kein Settlement`);
+    return { call: getCall(state, callId), changed: false };
+  }
+  if (!istBekanntesKostenprofil(profil)) {
+    throw new Error(`recordCostProfile: unbekanntes Kostenprofil '${profil}'`);
+  }
+  return setCostProfileOnce(state, callId, profil);
 }
 
 // KS-EL1: der GRUND, warum trueUpAnsweredAt oben KEINEN Anker ermitteln konnte (additiv

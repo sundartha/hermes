@@ -138,6 +138,10 @@ export const {
   // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster
   // recordElevenlabsConversationId).
   recordSipCallId,
+  // KV2-2: das an der Engine-Weiche gesetzte Kostenprofil. OHNE diesen Re-Export waere
+  // store.recordCostProfile auf der Fassade undefined -> beide Weichen wuerfen zur
+  // Laufzeit einen TypeError (Muster recordSipCallId).
+  recordCostProfile,
   // OUTBOUND-E5: Absender-Wahrheit + Registrierungs-Herkunft. OHNE diese Re-Exports waeren
   // store.recordActualSender / store.recordFromRegistrationSource auf der Fassade undefined
   // -> der EL-Anrufstart bzw. der Ergebnisweg wuerfen zur Laufzeit einen TypeError

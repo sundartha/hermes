@@ -312,6 +312,11 @@ CREATE TABLE IF NOT EXISTS call (
   -- Kosten-Kette jointe, existieren auf der SIP-Trunk-Strecke nicht). Additiv NULLABLE -
   -- nur der ElevenLabs-Pfad setzt sie, jeder andere Call bleibt NULL.
   sip_call_id TEXT,
+  -- KV2-2: das an der ENGINE-WEICHE gesetzte Kostenprofil dieses Anrufs (set-once,
+  -- Registry src/billing/kostenarten.js). Additiv NULLABLE: eine Altzeile von VOR der
+  -- Kette traegt NULL und faellt in KV2-7 auf ein Legacy-Profil (4.6) - KEIN Backfill,
+  -- rueckwirkend ist die Engine eines Altanrufs nicht mehr feststellbar.
+  cost_profile TEXT,
   -- AL-P1 (Abbruch-Achse): Anzahl Turns dieses Calls mit nicht-leerer Anrufer-
   -- Aeusserung. PII-FREI (nur ein Zaehler, nie Text) und PURGE-FEST: purgeTranscript
   -- leert call.transcript nach der Summary, "null Anrufer-Zeilen" traefe danach auf
@@ -441,6 +446,12 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS elevenlabs_conversation_id TEXT;
 -- Abbruch-Pfad (convai.js#endConversation). Rueckwirkend ist er fuer keinen einzigen
 -- Bestands-Anruf mehr erhebbar; die Kennung misst ab Deploy vorwaerts.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS sip_call_id TEXT;
+
+-- KV2-2: Kostenprofil auf Bestands-call-Tabellen nachziehen (Muster sip_call_id).
+-- Idempotent; frische DB = No-op. KEIN Backfill (migrate() laeuft auf EINER Connection
+-- mit app.current_tenant auf BOOTSTRAP_TENANT_ID und saehe unter FORCE-RLS ohnehin nur
+-- die Bootstrap-Zeilen). NULL = "vor der Kette entstanden", 4.6.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS cost_profile TEXT;
 
 -- AL-P11: Ergebnis-Karte auf Bestands-call-Tabellen nachziehen (Muster context/mandate).
 -- Idempotent; frische DB = No-op.

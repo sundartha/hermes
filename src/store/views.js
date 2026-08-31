@@ -51,6 +51,10 @@ export function publicCall({
   // OUTBOUND-E5: rein interner Betriebs-Marker (Muster summarySmsSentAt/telnyxConversationId).
   // Er beantwortet eine Betreiber-Frage ("ging die eigene DID raus?"), keine Nutzer-Frage.
   fromRegistrationSource,
+  // KV2-2: das Kostenprofil ist ein Betreiber-Datum wie die uebrigen Kosten-Felder
+  // darueber (estimatedCostCents … costTruingAttempts) - es beantwortet keine
+  // Nutzerfrage und hat in /api/state nichts verloren.
+  costProfile,
   ...rest
 }) {
   return rest;

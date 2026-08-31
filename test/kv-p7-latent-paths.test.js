@@ -36,6 +36,7 @@ test("KV-P7-1: ELEVENLABS_PLAY_TTS_ENABLED=true -> genau ein Befund PLAY_TTS_UNP
     playTtsEnabled: true,
     realtimeEngineSelected: false,
     realtimeMidCallBudgetCheck: false,
+    realtimeCarrierHasCollector: true,
   });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].code, LATENT_COST_PATH_FINDING.PLAY_TTS_UNPRICED);
@@ -49,6 +50,7 @@ test("KV-P7-2 (Gegenbeispiel): ELEVENLABS_PLAY_TTS_ENABLED=false, Budget-Engine 
     playTtsEnabled: false,
     realtimeEngineSelected: false,
     realtimeMidCallBudgetCheck: false,
+    realtimeCarrierHasCollector: true,
   });
   assert.deepEqual(findings, []);
 });
@@ -63,6 +65,7 @@ test("KV-P7-3: VOICE_ENGINE=realtime ohne Mid-Call-Budget-Pruefung -> genau ein 
     playTtsEnabled: false,
     realtimeEngineSelected: true,
     realtimeMidCallBudgetCheck: REALTIME_MID_CALL_BUDGET_CHECK,
+    realtimeCarrierHasCollector: true,
   });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].code, LATENT_COST_PATH_FINDING.REALTIME_NO_MIDCALL_BUDGET);
@@ -76,6 +79,7 @@ test("KV-P7-4 (Gegenbeispiel, die Sache): realtimeMidCallBudgetCheck=true -> kei
     playTtsEnabled: false,
     realtimeEngineSelected: true,
     realtimeMidCallBudgetCheck: true,
+    realtimeCarrierHasCollector: true,
   });
   assert.deepEqual(findings, [], "der Guard prueft die SACHE, nicht nur das Flag VOICE_ENGINE=realtime allein");
 });
@@ -85,6 +89,7 @@ test("KV-P7-5 (Gegenbeispiel, das Flag): Budget-Engine mit realtimeMidCallBudget
     playTtsEnabled: false,
     realtimeEngineSelected: false,
     realtimeMidCallBudgetCheck: false,
+    realtimeCarrierHasCollector: true,
   });
   assert.deepEqual(findings, []);
 });
