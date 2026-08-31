@@ -106,6 +106,7 @@ const STATE_FIELD_DEFAULTS = Object.freeze({
   provisioningJobs: () => [], // P6b2: Job-Spur in bestehenden Stores nachziehen
   tenantBudgets: () => [], // P6b3: per-Tenant-Kostendecke nachziehen
   usageEvents: () => [], // P6b3: append-only Usage-Ledger nachziehen
+  callCostEvidence: () => [], // KV2-3: Kosten-Buch in bestehenden Stores nachziehen
   reservations: () => ({}), // OUT-05: nur DEFENSIV (Platte traegt es nie) -> Ergebnis immer leer
   subIndex: () => ({}), // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
   platformTtsUsage: emptyPlatformTtsUsage, // LCT P7: Bestands-store.json ohne die Zeile nachziehen
@@ -959,6 +960,18 @@ export function recordUsageEvent(input) {
   const event = ops.recordUsageEvent(load(), input);
   save();
   return event;
+}
+
+// KV2-3: Kosten-Buch. Wrapper-Paritaet zu pg.js. Der Mutator saved immer, wenn er etwas
+// bewegt hat; die Query saved nie (Muster recordUsageEvent / dailySmsCount).
+export function recordCallCostEvidence(eingabe) {
+  const { evidence, changed } = ops.recordCallCostEvidence(load(), eingabe);
+  if (changed) save();
+  return evidence;
+}
+
+export function callCostEvidence(callId) {
+  return ops.callCostEvidence(load(), callId);
 }
 
 // Tages-Cap-Zaehler der gesendeten Summary-SMS eines Tenants (F2 P8): reine Query

@@ -385,3 +385,67 @@ export const CONVERSATION_MIT_KLAMMER_MARKEN = Object.freeze({
     }),
   }),
 });
+
+// KV2-3 (f): der VOLLSTAENDIGE Rumpf-Aufbau aus befund-elevenlabs.md Abschnitt 1 -
+// gemessen 2026-08-30 gegen conv_6301m0dha17kes9ax95jzx19cvt4 (19.08., 53s, der erste der
+// 8 B2-Anrufe). Zahlenwerte (cost/cost_fiat/charging.*) sind der dort dokumentierte
+// GEMESSENE Fund, wortgleich uebernommen. Rufnummer maskiert (Modulkopf-Pflicht), der
+// Transkript-Wortlaut ist ein generischer Platzhaltersatz (kein echter Gespraechsinhalt
+// wurde fuer dieses Feld aufgezeichnet) - die Kosten-/Struktur-Felder sind der eigentliche
+// Pruefgegenstand dieser Fixture, nicht der Gespraechsinhalt.
+//
+// ZWECK: Kriterium (f) faehrt den VOLLEN Rumpf gegen belegDetailAusRohdaten und prueft,
+// dass NUR die Allowlist-Pfade durchkommen - transcript[].message, metadata.phone_call.
+// external_number und analysis.transcript_summary muessen alle drei herausfallen,
+// charging.llm_usage.<modell>.input.price (ein gleichnamiger 'price'-Leaf unter einem
+// ANDEREN Elternsegment als 'analysis') ebenfalls (Gegenprobe zu analysis.price).
+export const CONVERSATION_DONE_MIT_KOSTEN = Object.freeze({
+  conversation_id: "conv_6301m0dha17kes9ax95jzx19cvt4",
+  status: "done",
+  transcript: Object.freeze([
+    Object.freeze({
+      role: "agent",
+      message:
+        "Hello, this is an AI assistant calling on behalf of Jonas Beispiel. This conversation will be summarised for the person I represent.",
+    }),
+    Object.freeze({ role: "user", message: "Sure, go ahead." }),
+  ]),
+  analysis: Object.freeze({
+    call_successful: "success",
+    transcript_summary: "The AI assistant completed the test call for Jonas Beispiel.",
+  }),
+  metadata: Object.freeze({
+    cost: 526,
+    cost_fiat: 0.10420301650668388,
+    call_duration_secs: 53,
+    termination_reason: "Client disconnected: 1000",
+    error: null,
+    phone_call: Object.freeze({
+      direction: "outbound",
+      agent_number: "***0177#1ca0c7",
+      external_number: "***2163#1e3c18", // maskNumber() des echten Ziels
+      call_id: "otb_6301m0dha17kes9ax95jzx19cvt4",
+    }),
+    charging: Object.freeze({
+      llm_price: 0.034607,
+      llm_charge: 174,
+      platform_price: 0.069596,
+      platform_charge: 353,
+      call_charge: 353,
+      tier: "starter",
+      analysis: Object.freeze({ price: 0, charge: 0 }),
+      llm_usage: Object.freeze({
+        "claude-sonnet-5": Object.freeze({
+          input: Object.freeze({ tokens: 1200, price: 0.0036 }),
+          input_cache_read: Object.freeze({ tokens: 400, price: 0.00012 }),
+          input_cache_write: Object.freeze({ tokens: 0, price: 0 }),
+          output_total: Object.freeze({ tokens: 900, price: 0.030727 }),
+        }),
+      }),
+      tts_usage: Object.freeze({ model: "eleven_turbo_v2", characters: 612, seconds: 41.2 }),
+      asr_usage: Object.freeze({ model: "nova-3", calls: 6, seconds: 53 }),
+      free_minutes_consumed: 0.0,
+      free_llm_dollars_consumed: 0.0,
+    }),
+  }),
+});

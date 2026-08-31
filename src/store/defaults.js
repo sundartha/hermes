@@ -189,6 +189,32 @@ export const COST_TRUING_SOURCE = Object.freeze({
   UNAVAILABLE: "unavailable",
 });
 
+// KV2-3: Reife einer Belegzeile im Kosten-Buch (call_cost_evidence.reife). VIER
+// Auspraegungen. Der frueher hier vorgesehene fuenfte Wert 'beleg_ausgeblieben' ENTFAELLT
+// (Owner-Entscheidung 16, DEFAULT uebernommen am 2026-08-30, nicht ausdruecklich
+// entschieden): kein Schreiber, keine Zeile der Matrix 4.6, kein Endzustand aus KV2-7 -
+// ein Enum-Wert ohne Schreiber ist toter Code im Schema.
+export const REIFE = Object.freeze({
+  ERWARTET: "erwartet",
+  VORLAEUFIG: "vorlaeufig",
+  BELEGT: "belegt",
+  STRUKTURELL_UNBESCHAFFBAR: "beleg_strukturell_unbeschaffbar",
+});
+
+// Die FORTSCHRITTS-Ordnung: Position = Rang. Ein Uebergang ist erlaubt, wenn der Rang
+// nicht SINKT (Ueberspringen von 'vorlaeufig' eingeschlossen, Gleichstand erlaubt ->
+// Idempotenz). Ein Rueckschritt wirft (Mutator in state-ops.js).
+export const REIFE_FORTSCHRITT = Object.freeze([REIFE.ERWARTET, REIFE.VORLAEUFIG, REIFE.BELEGT]);
+
+// TERMINALE Zustaende - sie stehen NEBEN der Ordnung, nicht darin: aus jedem
+// Fortschritts-Zustand erreichbar (kein Rueckschritt, wirft nicht), aus ihnen fuehrt
+// KEIN Uebergang mehr heraus (auch nicht nach 'belegt').
+export const REIFE_TERMINAL = Object.freeze([REIFE.STRUKTURELL_UNBESCHAFFBAR]);
+
+// Welche Reifegrade in die Belegsumme zaehlen (4.5). 'erwartet' traegt NICHTS bei - es hat
+// keinen Betrag, nicht den Betrag 0. EINE Quelle, damit KV2-8 die Regel nicht neu erfindet.
+export const REIFE_SUMMIERBAR = Object.freeze([REIFE.VORLAEUFIG, REIFE.BELEGT]);
+
 // Cent<->EUR-Bruecke (G25): EUR-Ableitung an Anzeige-/Persistenz-Kanten (z.B.
 // api-read.js usageView, pg.js flushUsage). Das Budget-Gate selbst vergleicht rein
 // Integer costCents (P1) - keine Division im Gate-Pfad.
@@ -273,6 +299,14 @@ export const PROVIDER_RATE_SCALE = 1_000_000;
 // Bestandspfad (D12) und wird NICHT aufgeweicht, sondern bekommt einen Nachbarn.
 export function isCorrectionCents(x) {
   return Number.isFinite(x) && Number.isInteger(x);
+}
+
+// Ist x ein gueltiger ANBIETER-Betrag in Mikro-Cent? Schwester von isBookableCents auf der
+// feineren Achse: isSafeInteger statt isFinite+isInteger, weil Mikro-Cent-Summen gross
+// werden. Bisher stand genau dieser Ausdruck inline in recordCallCostTruingResult; das
+// Kosten-Buch (KV2-3) waere die zweite Kopie gewesen (G5).
+export function isProviderMicroCents(wert) {
+  return Number.isSafeInteger(wert) && wert >= 0;
 }
 
 // Preis-Bezugsgroesse der Anthropic-Preisstaffel (USD pro 1 Mio. Tokens). Benannt

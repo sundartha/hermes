@@ -51,6 +51,7 @@ import {
   MODEL_PRICE_RATE_FIELDS,
   isBookableCents,
   isCorrectionCents,
+  isProviderMicroCents,
   PROVIDER_RATE_SCALE,
   USAGE_CORRUPT_REASON,
   globalCapCents,
@@ -59,6 +60,16 @@ import {
   COST_TRUING_SOURCE,
   NUMBER_HOLD_REASON,
 } from "./defaults.js";
+// KV2-3: das Regelwerk des Kosten-Buchs (Wertebereiche, Waechter, detail-Allowlist,
+// Summenregel). Blatt-Modul, importiert nur defaults.js -> kein Zyklus (Muster
+// call-result.js / number-denylist.js).
+import {
+  assertCostEvidenceInput,
+  buildCostEvidenceRow,
+  canSetEvidenceMaturity,
+  costEvidenceValuePatch,
+  isTerminalMaturity,
+} from "./cost-evidence.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS, languageForCountry } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
 // KV2-2: die Kostenprofil-Registry der Engine-Weiche. Import-frei von src/telephony/*
@@ -137,6 +148,12 @@ export function makeDefaultState() {
     // quantity, costCents, occurredAt, stripeMeterSent }]. Eintraege werden NIE
     // mutiert, nur stripeMeterSent flippt beim Flush.
     usageEvents: [],
+    // KV2-3: das KOSTEN-Buch (call_cost_evidence) - eine Zeile je (callId, traeger),
+    // append-only nach vorne. Getrennt vom Erloes-Buch usageEvents (Owner-Entscheidung 1):
+    // dort stehen Kundenerloese, hier Lieferantenkosten. [{ id, tenantId, callId, traeger,
+    // reife, betragMikroCents, waehrung, quelle, belegRef, versuche, gemessenAt,
+    // abstandZumGespraechsendeS, detail }]
+    callCostEvidence: [],
     // In-Flight-Reserven (OUT-05): tenantId -> GANZZAHL Cents noch nicht abgerechneter
     // Worst-Case-Kosten laufender Outbound-Calls. STRUKTURELL EPHEMER: nie auf Platte
     // (json.save schliesst es aus), nie in pg (kein Flush) -> ein Neustart startet bei 0
@@ -814,7 +831,7 @@ export function recordCallCostTruingResult(s, callId, { source, actualCostMicroC
   if (!call || call.costTruedAt !== null || !Object.values(COST_TRUING_SOURCE).includes(source))
     return { call: call || null, changed: false };
   call.costTruingAttempts = nextCostTruingAttempt(call);
-  if (Number.isSafeInteger(actualCostMicroCents) && actualCostMicroCents >= 0)
+  if (isProviderMicroCents(actualCostMicroCents))
     call.actualCostMicroCents = actualCostMicroCents;
   call.costTruedSource = source;
   if (closedAt) call.costTruedAt = closedAt;
@@ -4293,6 +4310,59 @@ export function markMeterEventsSent(s, eventIds) {
     }
   }
   return n;
+}
+
+// ---- KV2-3: das Kosten-Buch (call_cost_evidence) --------------------------------------
+// Zwei Operationen, sonst nichts: NICHTS liest dieses Buch in dieser Phase, nichts bucht
+// daraus. Das REGELWERK (Wertebereiche, Waechter, detail-Allowlist, Summenregel) liegt in
+// store/cost-evidence.js; hier steht ausschliesslich, was den Zustand beruehrt.
+
+// Die eine Zeile eines Paares (callId, traeger), oder undefined. EINE Fundstelle-Regel
+// (G5) fuer Mutator und Query.
+function findCostEvidence(s, callId, traeger) {
+  return s.callCostEvidence.find((zeile) => zeile.callId === callId && zeile.traeger === traeger);
+}
+
+// Belegzeile anlegen ODER nach vorne fortschreiben. FAIL-CLOSED, es WIRFT (nicht
+// verwirft) - anders als recordSipCallId, und aus demselben Grund wie recordCostProfile
+// (KV2-2): der Aufrufer ist Code, kein Anbieter. Anbieter-Daten sind VOR dem Aufruf zu
+// pruefen (KV2-4 Kriterium (b) verlangt genau das), damit ein leerer cost_fiat nicht als
+// Ausnahme im Ergebnispfad landet. tenantId kommt aus dem ANRUF, nie vom Aufrufer.
+// Liefert { evidence, changed } (Wrapper saven bei changed).
+export function recordCallCostEvidence(s, eingabe) {
+  const { callId, traeger, reife } = eingabe;
+  const call = getCall(s, callId);
+  if (!call) throw new Error(`recordCallCostEvidence: Anruf '${callId}' nicht gefunden`);
+  assertCostEvidenceInput(eingabe);
+  const vorhanden = findCostEvidence(s, callId, traeger);
+  if (!vorhanden) {
+    const zeile = buildCostEvidenceRow({
+      id: newId("cce"), tenantId: call.tenantId, callId, eingabe,
+    });
+    s.callCostEvidence.push(zeile);
+    return { evidence: zeile, changed: true };
+  }
+  if (!canSetEvidenceMaturity(vorhanden.reife, reife))
+    throw new Error(
+      `recordCallCostEvidence: Reife-Rueckschritt '${vorhanden.reife}' -> '${reife}' ` +
+        `(call=${callId}, traeger=${traeger})`,
+    );
+  // (b)(iii): derselbe TERMINALE Zustand erneut ist ein echtes No-Op - auch die
+  // Wertfelder bleiben unberuehrt, damit ein wiederholter Sweep nichts nachtraeglich
+  // verschiebt (und nicht scheitert).
+  if (vorhanden.reife === reife && isTerminalMaturity(reife))
+    return { evidence: vorhanden, changed: false };
+  vorhanden.reife = reife;
+  Object.assign(vorhanden, costEvidenceValuePatch(eingabe));
+  return { evidence: vorhanden, changed: true };
+}
+
+// Alle Belegzeilen EINES Anrufs, stabil nach traeger sortiert (deterministische Form fuer
+// die Backend-Paritaet). Reine Query, kein IO, kein save.
+export function callCostEvidence(s, callId) {
+  return s.callCostEvidence
+    .filter((zeile) => zeile.callId === callId)
+    .sort((links, rechts) => links.traeger.localeCompare(rechts.traeger));
 }
 
 // ---- Reserve-Ledger (OUT-05): atomare In-Flight-Reservierung ----
