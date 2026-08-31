@@ -137,7 +137,16 @@ function logInvoiceFetchFailure(err) {
 // Stufe 1 (Anker): DAS Feld, das die Belege mit der uebergebenen Leg-Referenz verbindet.
 // providerLegIdOf(call) liefert in BEIDEN Pfaden eine `v3:`-Token (twilioSid im TeXML-/
 // Budget-Pfad, callControlId im Assistant-Pfad) - genau die Form traegt call_control_id.
-const ANCHOR_ID_FIELD = "call_control_id";
+// KV2-5: zwei Felder statt eines. Zwei Anrufwege fuehren zwei Primaerschluessel:
+//   call_control_id - TeXML-/Budget- und Assistant-Pfad (`v3:`-Token, providerLegIdOf)
+//   sip_call_id     - der SIP-Trunk-Weg der ElevenLabs-Anrufe (`otb_`-Kennung)
+// GEMESSEN 2026-08-30 (befund-telnyx.md O1): von 13 sip-trunking-Belegen im EL-Zeitraum
+// tragen ALLE 13 sip_call_id und KEINER call_control_id; fuer alle 12 bekannten
+// sip_call_id-Werte liefert der Pool genau EINEN Treffer. Der Bestandsmechanismus haette
+// jeden dieser Belege als session_unresolved verworfen.
+// Die beiden Namensraeume koennen einander nicht treffen (`v3:` gegen `otb_`), der
+// Vergleich bleibt strikte String-Gleichheit - kein Fuzzy, keine Session-Heuristik.
+const ANCHOR_ID_FIELDS = Object.freeze(["call_control_id", "sip_call_id"]);
 // Stufe 2 (Aufspannen): die zwei Feldnamen, unter denen Belege eine Provider-Session
 // fuehren - sip-trunking/call-control/recording/ai-voice-assistant schreiben
 // telnyx_session_id, speech-to-text/text-to-speech call_session_id; kein Beleg traegt
@@ -374,8 +383,11 @@ function recordSessionRefs(raw) {
 
 // Stufe 1: zeigt der Beleg DIREKT auf die uebergebene Leg-Referenz? Exakte Gleichheit auf
 // einer global eindeutigen Provider-ID - der staerkste Zugehoerigkeitsbeweis hier.
+// Log-Weg-Zaehler bleibt EIN `via_anchor` (kein vierter Schluessel): das Log-Format ist
+// testgepinnt (formatAssignmentRoutes, tasks/lct-DEPLOY-CHECKLIST.md), und beide Felder
+// sind derselbe Sachverhalt - ein Primaerschluessel-Treffer der Stufe 1.
 function matchesAnchor(raw, legId) {
-  return Boolean(raw[ANCHOR_ID_FIELD]) && String(raw[ANCHOR_ID_FIELD]) === legId;
+  return ANCHOR_ID_FIELDS.some((feld) => Boolean(raw[feld]) && String(raw[feld]) === legId);
 }
 
 // Stufe 1, aufgesammelt: die Provider-Sessions, die beweisbar zu diesem Call gehoeren.

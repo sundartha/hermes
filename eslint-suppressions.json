@@ -443,6 +443,11 @@
       "count": 3
     }
   },
+  "scripts/kv2-5-telnyx-belegtypen.mjs": {
+    "no-restricted-properties": {
+      "count": 4
+    }
+  },
   "scripts/prod-read.mjs": {
     "id-length": {
       "count": 1

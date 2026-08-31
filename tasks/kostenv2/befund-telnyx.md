@@ -161,3 +161,30 @@ im Auftrag offen gelassenen Moeglichkeit "kein Beleg" — sie trifft NICHT zu.
   abgefragt, da O1/O2 sich auf `sip-trunking` beziehen; `COST_TRUING_REQUIRED_RECORD_TYPES`
   verlangt beide Typen als Pflicht-Typen, ein vollstaendiger Pool-Fetch braeuchte also auch
   diesen Typ gemessen — offen fuer eine Folgemessung.
+
+## KV2-5(d): Owner-Meldung - Messung in dieser Session nicht ausgefuehrt
+
+Die fuer KV2-5(d) verlangte Messung (`scripts/kv2-5-telnyx-belegtypen.mjs`: Pflicht-Typmenge
+von `el_convai_sip`, Latenz-Obergrenze der `sip-trunking`-Belege, `inference`-Bilanz) konnte
+in der Implementierungssession dieser Phase NICHT durchgefuehrt werden.
+
+**Fehlerbild:** `TELNYX_API_KEY` war in der Umgebung dieser Session nicht gesetzt. Das
+Skript meldet das VOR jedem HTTP-Request (`meldeAbbruch("TELNYX_API_KEY fehlt. Statuscode=n/a
+Endpunkt=n/a")`, `scripts/kv2-5-telnyx-belegtypen.mjs:191-193`) - es gibt fuer diesen Lauf
+also weder einen beobachteten Statuscode noch einen angefragten Endpunkt. Zeitpunkt:
+2026-08-31 (Implementierung KV2-5).
+
+**Das ist NICHT derselbe Vorfall wie der HTTP-401-Ausfall in `AUFTRAG.md:138`** - jener
+betraf den Telnyx-MCP-Server einer FRUEHEREN Session (deren Ergebnis in diesem Dokument oben
+steht, 12/12 `sip-trunking`-Belege gemessen); diese Session hatte ueberhaupt keinen
+Telnyx-API-Schluessel zur Verfuegung und kam nicht bis zu einem Request.
+
+**Konsequenz nach Spec KV2-5(d):** die Pflicht-Typmenge von `el_convai_sip` bleibt
+UNGESETZT (`PFLICHTTYPEN_UNGEMESSEN`, `src/billing/kostenarten.js`), die Latenz- und die
+`inference`-Frage bleiben offen, **KV2-8 bleibt blockiert.** Die uebrigen Kriterien dieser
+Phase ((a),(b),(c),(e),(f),(g),(h)) sind davon unberuehrt. Die Phase ist damit teil-erfuellt
+und ausdruecklich NICHT gruen - wie in KV2-5(d) selbst vorgesehen.
+
+**Fuer eine Folgesession:** `TELNYX_API_KEY` (aus `.env` oder Render) sowie
+`KV2_5_KNOWN_SIP_CALL_IDS` und `KV2_5_KNOWN_CALL_CONTROL_ID` setzen und
+`scripts/kv2-5-telnyx-belegtypen.mjs` erneut ausfuehren.

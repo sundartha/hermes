@@ -14,7 +14,14 @@ import {
 import { KOSTENARTEN } from "../billing/kostenarten.js";
 
 // ---- Benannte Konstanten (G25) ---------------------------------------------------------
-const BELEG_REF_MUSTER = /^[A-Za-z0-9_-]{1,128}$/;
+// KV2-5: ':' und '=' kommen dazu. Grund: der Anker der vier Telnyx-Profile ist die
+// call_control_id in ihrer `v3:<base64url>`-Form - ohne diese zwei Zeichen faellt genau der
+// haeufigste Anker durch die Formregel und die Belegzeile traegt dauerhaft belegRef=null,
+// also ein Feld ohne Inhalt. NICHT aufgenommen sind '+', '.', '@' und jedes Leerzeichen:
+// sie sind das, was eine Rufnummer, eine E-Mail und einen Freitext ausmacht - der
+// PII-Riegel dieser Regel bleibt damit unveraendert wirksam (Gegenprobe in
+// test/kv2-5-telnyx-sip-beleg.test.js, "eine Rufnummer als beleg_ref wirft", bleibt gruen).
+const BELEG_REF_MUSTER = /^[A-Za-z0-9_:=-]{1,128}$/;
 const QUELLE_MUSTER = /^[a-z][a-z0-9_]{0,63}$/;
 
 // Hat wert die Form einer opaken Anbieter-Belegkennung (conv_.../otb_...)? Reines
