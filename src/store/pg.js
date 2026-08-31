@@ -304,8 +304,7 @@ export function makePgStore(runner) {
     // INBOX-P1: Qualifikations-Marker - Wrapper-Parity zu json.js.
     markInboxEntry(callId, qualifies) {
       const { call, changed } = ops.markInboxEntry(requireState(), callId, qualifies);
-      if (changed) save();
-      return call;
+      if (changed) save(); return call;
     },
     // INBOX-P2 (R-3): Wrapper-Parity zu json.js. save() flusht den KOMPLETTEN Spiegel
     // ALLER Tenants in die serialisierte flushChain - ein unbedingtes save() haengte
@@ -332,6 +331,10 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // KV2-7: die zwei Schliessregel-Mutatoren als Spread-Fabrik statt zweier ausgeschriebener
+    // Methoden IN makePgStore - haelt dessen gepinnte Zeilengrenze (eslint-legacy-exceptions.json),
+    // Muster absenderWahrheitMutatoren (OUTBOUND-E5, unten in dieser Datei).
+    ...kostenAbschlussMutatoren({ requireState, save }),
     // CDF1 (Report #2 5.4): persistierter Fehlergrund - Wrapper-Parity zu json.js. Der
     // Flush schreibt failure_reason am call-Record (INSERT + ON CONFLICT DO UPDATE).
     recordFailureReason(callId, reason) {
@@ -1399,6 +1402,23 @@ function absenderWahrheitMutatoren({ requireState, save }) {
     },
     recordActualSender(callId, herkunft) {
       const { call, changed } = ops.recordActualSender(requireState(), callId, herkunft);
+      if (changed) save();
+      return call;
+    },
+  };
+}
+
+// KV2-7: dieselbe Spread-Fabrik-Technik (s. absenderWahrheitMutatoren oben) fuer die zwei
+// Schliessregel-Mutatoren - haelt makePgStores gepinnte Zeilengrenze.
+function kostenAbschlussMutatoren({ requireState, save }) {
+  return {
+    schliesseKostenAbgleich(callId, closedAt) {
+      const { call, changed } = ops.schliesseKostenAbgleich(requireState(), callId, closedAt);
+      if (changed) save();
+      return call;
+    },
+    oeffneKostenAbgleichErneut(callId) {
+      const { call, changed } = ops.oeffneKostenAbgleichErneut(requireState(), callId);
       if (changed) save();
       return call;
     },

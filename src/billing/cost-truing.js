@@ -55,6 +55,10 @@ import { legRefOfCall } from "./call-leg-ref.js";
 // Kostenpfad soll seine Kennzahl nicht ein zweites Mal formulieren. Import-Richtung ist
 // strikt einseitig - kosten-deckung.js kennt cost-truing.js nicht (kein Zyklus).
 import { kostenBuchBericht, istBuchBefundCode } from "./kosten-deckung.js";
+// KV2-7: die Schliessregel und die Endzustaende liegen als REINES Regelwerk daneben -
+// dieselbe Begruendung wie bei kosten-deckung.js (Lint-Budget dieser Datei, EINE
+// Formulierung je Frage). Import-Richtung strikt einseitig.
+import { abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE, zaehlListe } from "./kosten-abschluss.js";
 
 // Zwei Ausloeser (Intervall + manueller Endpunkt), EIN benannter Grund je. Exportiert:
 // boot.js und api-billing.js teilen sich diese eine Quelle statt zweier Magic-Strings.
@@ -153,6 +157,56 @@ async function closeCoverageBefunde(store, audit, nowMs) {
   console.log(`[cost-truing] erholt ${zeile}`);
   audit(COST_TRUING_RECOVERED_EVENT, null, zeile);
 }
+
+// KV2-7: schreibt den Beleg (falls gemessen) und wertet die Schliessregel aus - AUSGELAGERT
+// aus trueOneCall (Lint-Budget dieser Datei, eslint-suppressions.json). Modul-Ebene,
+// store/config als Parameter (Muster closeCoverageBefunde oben). sweepTraegerErledigt
+// bleibt Sache des Aufrufers (dort lesbarer im Kontext von attempt/measured).
+function abschlussNachMessung({ call, measured, records, sweepTraegerErledigt, sammler, store, config }) {
+  if (measured) schreibeSweepKostenbeleg({ store, call, measured, records });
+  return abschlussFuerAnruf({
+    call, belege: store.callCostEvidence(call.id), nowMs: sammler.nowMs,
+    deadlineMs: faelligkeitsfensterMs(config.billing), sweepTraegerErledigt,
+  });
+}
+
+// KV2-7: EINE Stelle, an der ein Abschluss sichtbar wird: die namentliche Traegerliste
+// (Abnahme (c)) im Log, die Zaehlzeile ((e)/(h)) in der Sweep-Bilanz. PII-frei: Call-ID
+// und Traegernamen, dieselbe Klasse wie die bestehende korrektur-Zeile. Modul-Ebene statt
+// im makeCostTruing-Closure (Lint-Budget dieser Datei) - reiner console.log/Push, kein
+// store/config-Zugriff noetig (Muster closeCoverageBefunde oben). Aufrufer entscheidet,
+// OB geschlossen wurde (s. trueOneCall/schliesseFaelligeOffene) - diese Funktion nimmt es
+// als gegeben.
+function meldeAbschluss(call, abschluss, sammler) {
+  console.log(
+    `[cost-truing] abschluss call=${call.id} zustand=${abschluss.endzustand} ` +
+      `grund=${abschluss.grund} fehlend=${abschluss.fehlend.join(",") || LEERE_LISTE}`,
+  );
+  sammler.abschluesse.push(abschluss.endzustand); // push, keine Parameter-Zuweisung (Lint-Pin)
+}
+
+// KV2-7: Kandidaten, die in DIESEM Lauf gar nicht gemessen wurden (nicht abrufbar oder
+// Versuche erschoepft) UND die noch offen sind: nach Fristablauf schliessen. Ohne diesen
+// Lauf bliebe genau diese Menge fuer immer offen (Abnahme (c): "er bleibt nicht ewig
+// offen"). Er misst nichts, verbraucht keinen Versuch, schreibt keinen Herkunftswert und
+// bucht keinen Cent. Rein synchron - die PM-5-Zusage bleibt unberuehrt. Modul-Ebene,
+// store/billing als Parameter (Muster closeCoverageBefunde).
+function schliesseFaelligeOffene(candidates, sammler, { store, billing }) {
+  for (const call of candidates) {
+    if (call.costTruedAt !== null) continue;
+    const abschluss = abschlussFuerAnruf({
+      call,
+      belege: store.callCostEvidence(call.id),
+      nowMs: sammler.nowMs,
+      deadlineMs: faelligkeitsfensterMs(billing),
+      sweepTraegerErledigt: false,
+    });
+    if (!abschluss.geschlossen) continue;
+    store.schliesseKostenAbgleich(call.id, new Date(sammler.nowMs).toISOString());
+    meldeAbschluss(call, abschluss, sammler);
+  }
+}
+
 // LCT P5 (Drift-Waechter): eigenes Audit-Ereignis + eigener SMS-Praefix, getrennt von
 // COST_TRUING_AUDIT_EVENT (verschiedene Aussage: Deckungsquote vs. Tarif-Abweichung).
 const TARIFF_DRIFT_AUDIT_EVENT = "tarif_drift_befund";
@@ -235,6 +289,14 @@ const providerLegIdOf = legRefOfCall;
 // Stelle zusammengefuehrt, damit die Aufrufzeile in trueOneCall lesbar bleibt.
 const pflichttypenVon = (call, billing) =>
   pflichttypenFuerProfil(kostenprofilFuerAnruf(call), billing.costTruingRequiredRecordTypes);
+
+// KV2-7: darf der Sweep fuer diesen Anruf in DIESEM Lauf noch messen? Bis KV2-7 war das
+// derselbe Vergleich wie in isTruingCandidate (Kandidaten-Riegel) - er wandert hierher, an
+// die Stelle, an die er gehoert: an den ABRUF, nicht an die Offenheit des Anrufs (ein
+// Anruf mit erschoepftem Zaehler bleibt Kandidat, s. isTruingCandidate). Modul-Ebene statt
+// im makeCostTruing-Closure (Lint-Budget dieser Datei, eslint-suppressions.json) - reine
+// Funktion, billing kommt vom Aufrufer statt aus dem Closure.
+const versucheUebrig = (call, billing) => nextCostTruingAttempt(call) <= billing.costTruingMaxAttempts;
 
 // Darf der Sweep fuer diesen Anruf eine Korrektur BUCHEN? Zwei Ausschlussgruende, eine
 // Frage:
@@ -399,9 +461,11 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // MAX_ATTEMPTS gegen den PERSISTIERTEN Zaehler (P2): ein prozess-lokaler Zaehler wird
   // auf dem Render-Free-Tier bei jedem Restart genullt, erreicht die Obergrenze nie und
   // liesse den Job unbegrenzt gegen tote Calls laufen.
+  // KV2-7: der Versuchszaehler ist KEIN Kandidaten-Riegel mehr, sondern ein MESS-Riegel
+  // (Modul-Ebene versucheUebrig). Ein Anruf mit erschoepftem Zaehler bleibt offen, bis
+  // seine Pflichtmenge steht oder die Frist ablaeuft (Abnahme (d)).
   function isTruingCandidate(call, nowMs) {
     if (!isEndedCall(call) || call.costTruedAt !== null) return false;
-    if (nextCostTruingAttempt(call) > config.billing.costTruingMaxAttempts) return false;
     const endedMs = endedAtMs(call);
     if (endedMs === null) return false; // unbrauchbarer Zeitstempel != "faellig"
     return nowMs - endedMs >= config.billing.costTruingDelayMinutes * MS_PER_MINUTE;
@@ -583,19 +647,15 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       : measured.source;
   }
 
-  // Legt zuerst die Sweep-Belegzeile an (KV2-5(g), immer - unabhaengig vom Ausschluss
-  // unten) und bucht danach, sofern erlaubt, die Korrektur EINES abgeglichenen Calls.
-  // Reihenfolge ist Absicht: ein fehlender Schaetzbetrag ist eine Eigenschaft des Anrufs
-  // und darf nie die Bedeutung "Beleg fehlt" bekommen (Spec (g)); die EL-Route bekommt
-  // gerade dann ihre telnyx_sip-Zeile, wenn sie nichts bucht (sweepDarfKorrigieren).
-  function belegenUndBuchen(call, measured, records) {
-    schreibeSweepKostenbeleg({ store, call, measured, records });
+  // KV2-7: Gebucht wird NUR im SCHLIESSENDEN Lauf - sonst boeckte ein ueber mehrere
+  // Sweeps offen bleibender Anruf (el_convai_sip) eine Korrektur je Messung: Doppelbuchung
+  // (applyCostCorrectionCents bucht den Delta gegen die Schaetzung, nicht gegen die
+  // letzte Buchung).
+  function bucheKorrektur(call, measured) {
     if (!sweepDarfKorrigieren(call)) return;
     const { booked, deltaCents } = store.applyCostCorrectionCents(call.tenantId, {
-      actualCostMicroCents: measured.actualCostMicroCents,
-      estimatedCostCents: call.estimatedCostCents,
-      providerToBucketRateMicro: config.billing.providerToBucketRateMicro,
-      dataComplete: refundProven(call, measured),
+      actualCostMicroCents: measured.actualCostMicroCents, estimatedCostCents: call.estimatedCostCents,
+      providerToBucketRateMicro: config.billing.providerToBucketRateMicro, dataComplete: refundProven(call, measured),
       // KS-P5: die Anker der Belastung reisen mit. Ohne sie faellt die Gutschrift auf
       // NO_CHARGE_ANCHORS zurueck und wirkt nur auf der Lebenszeit-Achse.
       chargeAnchors: chargeAnchorsOfCall(call),
@@ -655,8 +715,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
 
   function poolFetchStats(pool) {
     return {
-      requests: nonNegativeCount(pool?.requests),
-      pages: nonNegativeCount(pool?.pages),
+      requests: nonNegativeCount(pool?.requests), pages: nonNegativeCount(pool?.pages),
       records: Array.isArray(pool?.raw) ? pool.raw.length : 0,
       incomplete: !(pool?.ok === true && pool.complete !== false),
     };
@@ -766,10 +825,11 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // SYNCHRON (KE-P2/PM-5): zwischen Pool-Abruf und Buchungsschleife liegt strukturell kein
   // Netz-await mehr. Provideraufloesung und Faehigkeitspruefung sind in costRecordControlFor
   // gewandert (EINE Entscheidung, EINE Stelle). Ab KE-P9 laeuft die Schleife ausschliesslich
-  // ueber ABRUFBARE Kandidaten (isRetrievable) - control und legId sind hier deshalb
-  // strukturell vorhanden, ein Ueberspring-Zweig waere toter Code. Wer nicht abrufbar ist,
-  // erreicht diese Funktion nie und bleibt ein vollstaendiges No-op (kein Wurf, KEIN
-  // Feld-Schreiben, KEIN verbrauchter Versuch).
+  // ueber ABRUFBARE, seit KV2-7 zusaetzlich noch MESSBARE Kandidaten (isRetrievable +
+  // versucheUebrig) - control und legId sind hier deshalb strukturell vorhanden, ein
+  // Ueberspring-Zweig waere toter Code. Wer nicht abrufbar oder erschoepft ist, erreicht
+  // diese Funktion nie und bleibt ein vollstaendiges No-op (kein Wurf, KEIN Feld-
+  // Schreiben, KEIN verbrauchter Versuch).
   function trueOneCall(call, { control, pool }, sammler) {
     const legId = providerLegIdOf(call);
     let result;
@@ -790,24 +850,31 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       ? classifyRecords(result.records, pflichttypenVon(call, config.billing))
       : null;
     const attempt = nextCostTruingAttempt(call);
-    const closed = measured !== null || attempt >= config.billing.costTruingMaxAttempts;
+    // KV2-7: der Sweep-Traeger ist fertig (GENAU der Bestandsausdruck) - ob das den
+    // ANRUF schliesst, entscheidet die Pflichtmenge des Profils (kosten-abschluss.js).
+    const sweepTraegerErledigt = measured !== null || attempt >= config.billing.costTruingMaxAttempts;
+    const abschluss = abschlussNachMessung({ call, measured, records: result.records, sweepTraegerErledigt, sammler, store, config });
+    const closed = abschluss.geschlossen;
     // EINE Herkunfts-Bestimmung fuer Persistenz UND Bilanz (G5): countOutcome zaehlt exakt
     // den Wert, der am Call landet - kein zweites, aus measured.source neu abgeleitetes Urteil.
     const truedSource = measured ? truedSourceOf(call, measured) : COST_TRUING_SOURCE.UNAVAILABLE;
 
     store.recordCallCostTruingResult(call.id, {
-      source: truedSource,
-      actualCostMicroCents: measured ? measured.actualCostMicroCents : null,
+      source: truedSource, actualCostMicroCents: measured ? measured.actualCostMicroCents : null,
       closedAt: closed ? new Date(now()).toISOString() : null,
     });
 
-    if (measured) warnOnCostDrift(call, measured.actualCostMicroCents);
     // LCT P4: der Flip. Idempotenz traegt costTruedAt (oben gesetzt) - ein zweiter Lauf
     // sieht den Call nicht mehr als Kandidaten; gegen VERSCHRAENKUNG traegt der
-    // Laufriegel aus P3. Hier ist deshalb KEIN dritter Riegel noetig.
-    if (measured) belegenUndBuchen(call, measured, result.records);
-    if (measured) bookTtsCharactersFor(call, measured, sammler);
+    // Laufriegel aus P3. KV2-7: nur im SCHLIESSENDEN Lauf (s. bucheKorrektur) - sonst
+    // Doppelbuchung bei einem ueber mehrere Sweeps offenen Anruf (el_convai_sip).
+    if (measured && closed) {
+      warnOnCostDrift(call, measured.actualCostMicroCents);
+      bucheKorrektur(call, measured);
+      bookTtsCharactersFor(call, measured, sammler);
+    }
     countOutcome(sammler.tally, truedSource, closed);
+    if (closed) meldeAbschluss(call, abschluss, sammler);
   }
 
   // Der SMS-Versand ist ECHT und KOSTENPFLICHTIG. Die Kostenklemme ist die Entprellung:
@@ -854,7 +921,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // (outage-report.js#sendeUeberBeideKanaele, Plan 4.9): kanaele=keine heisst, dass jede
   // Meldung dieses Sweeps ausschliesslich im Log und in audit_log steht. Nur Kanal-ARTEN,
   // nie die Ziele.
-  function logSweepLine({ trigger, candidateCount, tally, fetchTally, kanaele, buch }) {
+  function logSweepLine({ trigger, candidateCount, tally, fetchTally, kanaele, buch, erschoepft, abschluesse }) {
     console.log(
       `[cost-truing] sweep trigger=${trigger} kandidaten=${candidateCount} ` +
         `gemessen=${tally.measured} unvollstaendig=${tally.incomplete} ` +
@@ -862,7 +929,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
         `unbestimmt=${tally.unavailable} uebersprungen=${tally.skippedCalls} ` +
         `anfragen=${fetchTally.requests} seiten=${fetchTally.pages} ` +
         `pool=${fetchTally.records} vollstaendig=${fetchTally.incompletePools === 0} ` +
-        `kanaele=${kanaele} ${buch.zeile}`,
+        `kanaele=${kanaele} ${buch.zeile} erschoepft=${erschoepft} abschluesse=${zaehlListe(abschluesse)}`,
     );
   }
 
@@ -896,15 +963,21 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // Abruf, kein Schreibzugriff, kein verbrauchter Versuch. Sie bleiben Kandidaten und
     // erscheinen unveraendert als uebersprungen= (Owner-Entscheidung: nur Abruf-Filter).
     const skippedCalls = candidates.length - retrievable.length;
+    // KV2-7: gemessen wird nur, wer noch Versuche hat - ein erschoepfter Anruf bleibt
+    // offen (s. isTruingCandidate), zieht aber KEINE Anfrage mehr.
+    const messbar = retrievable.filter((call) => versucheUebrig(call, config.billing));
     // D1: der Abruf ist schleifeninvariant und laeuft EINMAL je Provider - VOR der Schleife.
     // Ab hier bis zur Bilanz kommt kein Netz-await mehr (PM-5): zwei verschraenkte Sweeps
     // koennen sich hier nicht mehr dazwischenschieben.
-    // pools ist aus GENAU DIESER retrievable-Liste gebaut, ueber die die Schleife laeuft -
+    // pools ist aus GENAU DIESER messbar-Liste gebaut, ueber die die Schleife laeuft -
     // deshalb liefert pools.get() hier nie undefined.
-    const { pools, fetchTally } = await fetchCostRecordPools(retrievable, controls);
+    const { pools, fetchTally } = await fetchCostRecordPools(messbar, controls);
     const tally = { measured: 0, incomplete: 0, noEstimate: 0, unavailable: 0, skippedCalls, failed: 0 };
-    const sammler = { tally, ttsWarnungen: [] };
-    for (const call of retrievable) trueOneCall(call, pools.get(call.provider), sammler);
+    const sammler = { tally, ttsWarnungen: [], abschluesse: [], nowMs };
+    for (const call of messbar) trueOneCall(call, pools.get(call.provider), sammler);
+    // KV2-7: der Faelligkeitslauf ueber ALLE Kandidaten - schliesst auch einen nie
+    // gemessenen Anruf (Abnahme (c): "er bleibt nicht ewig offen").
+    schliesseFaelligeOffene(candidates, sammler, { store, billing: config.billing });
     // EIN Breakdown (coverageBreakdown), aus dem SOWOHL die Quote ALS AUCH die drei
     // Nebenzaehler abgeleitet werden (KV-M3, G5) - keine zweite Iteration ueber
     // state.calls, kein zweiter Formel-Ausdruck.
@@ -913,10 +986,9 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // KV2-6: die zweite, unabhaengige Kennzahl - Deckung JE TRAEGER aus dem Kosten-Buch
     // plus der faelligkeits-unabhaengige Herzschlag. Rein synchron, ohne Netz: sie liest
     // denselben In-Memory-Spiegel und faellt damit nicht unter die PM-5-Zusage.
-    const buch =
-      kostenBuchBericht({ state: store.load(), billing: config.billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
+    const buch = kostenBuchBericht({ state: store.load(), billing: config.billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
     const kanaele = alarmKanalZeile(betreiberAlarmKanaele({ billing: config.billing, mail: config.mail }));
-    logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele, buch });
+    logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele, buch, erschoepft: retrievable.length - messbar.length, abschluesse: sammler.abschluesse });
     // Ab hier meldet der Sweep - NACH der Bilanz, also ausserhalb der PM-5-Zusage.
     await reportFetchVolume(fetchTally, nowMs);
     for (const warnung of sammler.ttsWarnungen) await reportTtsQuotaFinding(warnung, nowMs);

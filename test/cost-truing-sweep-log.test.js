@@ -58,7 +58,13 @@ test("(P6-8) Sweep-Log traegt anfragen/seiten/pool/vollstaendig HINTER den Besta
       // (makeDueOutboundCall-Default) - das liegt INNERHALB der Karenz dieser Config
       // (costTruingDelayMinutes=180min + costTruingSweepIntervalMs=1h = 4h), also
       // ausserhalb JEDES Fensters: buch=keine herzschlag=keine.
-      "pool=1 vollstaendig=true kanaele=keine buch=keine herzschlag=keine nie_beendet=0 profillos=0",
+      // KV2-7: erschoepft=/abschluesse= HINTER profillos=. Beide Kandidaten sind
+      // messbar (0 Versuche), erschoepft=0. Beide Fixturen tragen KEIN costProfile
+      // (makeDueOutboundCall setzt es nicht) -> Endzustand profil_fehlt, sobald der
+      // Sweep-Traeger (telnyx_call_records) fertig ist (measured!==null, auch bei
+      // unvollstaendiger Pflicht-Menge) -> abschluesse=profil_fehlt(2).
+      "pool=1 vollstaendig=true kanaele=keine buch=keine herzschlag=keine nie_beendet=0 " +
+      "profillos=0 erschoepft=0 abschluesse=profil_fehlt(2)",
   );
   assert.equal(
     fetchCalls.length, Number(line.match(/anfragen=(\d+)/)[1]),

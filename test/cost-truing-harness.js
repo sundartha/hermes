@@ -13,6 +13,7 @@
 import {
   createCall, recordCallCostTruingResult, applyCostCorrectionCents, recordRelayTtsCharacters,
   markCrossCheckAttempted, recordCallCostEvidence, callCostEvidence,
+  schliesseKostenAbgleich, oeffneKostenAbgleichErneut,
 } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -72,6 +73,17 @@ export function makeStubStore(state, { nowMs = Date.now(), billing = fakeConfig(
     },
     callCostEvidence(callId) {
       return callCostEvidence(state, callId);
+    },
+    // KV2-7: Schliessregel-Mutatoren - dieselbe Delegation an die ECHTEN state-ops-
+    // Funktionen (kein zweites, vereinfachtes Verhalten).
+    schliesseKostenAbgleich(callId, closedAt) {
+      const { call, changed } = schliesseKostenAbgleich(state, callId, closedAt);
+      if (changed) writes.push({ callId, closedAt });
+      return call;
+    },
+    oeffneKostenAbgleichErneut(callId) {
+      const { call } = oeffneKostenAbgleichErneut(state, callId);
+      return call;
     },
     // KV2-1: der Befundkanal laeuft ueber den Betreiber-Meldeweg und schreibt dabei den
     // durablen Marker (state.outageAlerts) - dieselben zwei Store-Methoden, die

@@ -123,6 +123,14 @@ export const {
   takeInboxEntries,
   recordCallEstimatedCostCents, // LCT P2: gebuchter Schaetzbetrag am Call
   recordCallCostTruingResult, // LCT P3: Ergebnis des Kosten-Abgleichs am Call
+  // KV2-7: Abschluss ohne Messung (Faelligkeitslauf). OHNE diesen Re-Export waere
+  // store.schliesseKostenAbgleich undefined -> der Faelligkeitslauf wuerfe zur Laufzeit
+  // einen TypeError (Muster recordCallCostTruingResult).
+  schliesseKostenAbgleich,
+  // KV2-7, Phasenschnitt-Nachlauf: setzt costTruedAt zurueck auf null. OHNE diesen
+  // Re-Export waere store.oeffneKostenAbgleichErneut undefined -> der Nachlauf-Skript-
+  // Pfad wuerfe zur Laufzeit einen TypeError.
+  oeffneKostenAbgleichErneut,
   recordFailureReason,
   // AL-P1: Conversation-UUID (Latenz-Achse) + Anrufer-Turn-Zaehler (Abbruch-Achse).
   // OHNE diese Re-Exports waeren sie auf der Fassade undefined -> der Call-Control-Ingest

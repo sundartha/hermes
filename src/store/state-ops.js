@@ -838,6 +838,38 @@ export function recordCallCostTruingResult(s, callId, { source, actualCostMicroC
   return { call, changed: true };
 }
 
+// KV2-7: Abschluss OHNE Messung. Der Faelligkeitslauf schliesst einen Anruf, fuer den in
+// diesem Sweep gar nicht gemessen wurde (nicht abrufbar oder Versuche erschoepft) und
+// dessen Frist abgelaufen ist. Bewusst NICHT ueber recordCallCostTruingResult: das dort
+// verbrauchte nextCostTruingAttempt waere ein Versuch, den niemand unternommen hat, und
+// ein Herkunftswert waere eine Messaussage, die es nicht gibt. costTruedSource bleibt
+// deshalb UNVERAENDERT (null bei nie gemessenen Anrufen) - die beiden neuen
+// Herkunftswerte fuer "Frist abgelaufen, Teilbeleg" kommen in KV2-8 (Plan 4.8), zusammen
+// mit ihren drei Lesern. SET-ONCE wie der Bestand: ein bereits geschlossener Anruf ist
+// ein No-Op. Liefert { call, changed }.
+// Zustandsparameter ausgeschrieben statt der ueblichen 's'-Konvention dieser Datei
+// (Lint-Budget: id-length 's' ist in eslint-legacy-exceptions.json exakt gepinnt, ein
+// Anheben braucht Eigentuemer-Freigabe - kein Bau-Agent setzt das selbst fest).
+export function schliesseKostenAbgleich(state, callId, closedAt) {
+  const call = getCall(state, callId);
+  if (!call || call.costTruedAt !== null || !closedAt) return { call: call || null, changed: false };
+  call.costTruedAt = closedAt;
+  return { call, changed: true };
+}
+
+// KV2-7, Phasenschnitt-Nachlauf (4.7): oeffnet einen im Fenster KV2-5..KV2-7 faelschlich
+// gelatchten Anruf wieder. DIE EINZIGE Stelle im System, die costTruedAt zuruecksetzt -
+// zulaessig, weil der set-once-Riegel gegen doppelte BUCHUNG schuetzt und bis
+// einschliesslich KV2-7 kein Cent bewegt wurde (applyCostCorrectionCents ist fuer diese
+// Anrufe nie gelaufen, KV2-5 ruft bookCorrectionFor fuer die EL-Route nicht). Bereits
+// offen -> No-Op (Idempotenz des einmaligen Laufs). Liefert { call, changed }.
+export function oeffneKostenAbgleichErneut(state, callId) {
+  const call = getCall(state, callId);
+  if (!call || call.costTruedAt === null) return { call: call || null, changed: false };
+  call.costTruedAt = null;
+  return { call, changed: true };
+}
+
 // Anker der Max-Dauer-Rechnung UND des Live-Verbrauchs (KS-P2): der ECHTE Call-Start
 // (answeredAt bevorzugt, sonst startedAt), NIE der Boot-Zeitpunkt. Fehlt beides -> NaN.
 // Die zwei Aufrufer clampen bewusst UNTERSCHIEDLICH und beide fail-closed:
