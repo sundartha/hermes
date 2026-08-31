@@ -220,11 +220,18 @@ export function buildCostEvidenceRow({ id, tenantId, callId, eingabe }) {
 // "letzter Schreiber gewinnt" fuer das, was der Aufrufer tatsaechlich mitbringt. REIN
 // (P6/F2): liefert ein neues Objekt statt eine bestehende Zeile zu mutieren; der Aufrufer
 // (state-ops.js, Eigentuemer des Zustands) wendet das Patch per Object.assign an.
+//
+// PII-Riegel (schema.sql: "detail traegt AUSSCHLIESSLICH Preis-/Mengenfelder"): detail
+// wird HIER, am einzigen Schreibweg beider Store-Operationen (buildCostEvidenceRow und
+// der Object.assign-Fortschreibungspfad in state-ops.js), zwingend durch
+// belegDetailAusRohdaten() projiziert - der Aufrufer kann die Allowlist nicht umgehen,
+// indem er einen rohen Anbieter-Body statt eines bereits gefilterten Objekts uebergibt.
 export function costEvidenceValuePatch(eingabe) {
   const patch = {};
   for (const feld of COST_EVIDENCE_WERTFELDER) {
     if (eingabe[feld] !== undefined) patch[feld] = eingabe[feld];
   }
+  if ("detail" in patch) patch.detail = belegDetailAusRohdaten(patch.detail);
   return patch;
 }
 

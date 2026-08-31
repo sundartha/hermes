@@ -263,6 +263,33 @@ test("KV2-3 (f): ein gleichnamiger price-Leaf unter fremdem Elternsegment faellt
   assert.ok(!serialisiert.includes("0.0036"), "der llm_usage-Preis ist nicht durchgerutscht");
 });
 
+test("KV2-3 (f): der Schreibweg selbst filtert - ein roher Anbieter-Body als detail landet NICHT ungefiltert in der Zeile", () => {
+  const { state, callId } = seedCall();
+  const rohDetail = {
+    transcript: "Hallo Herr Mueller, hier ist der KI-Assistent",
+    external_number: "+4915799990001",
+    secret: "sk-live-abc",
+    llm_price: VORLAEUFIG_BETRAG_MIKRO_CENTS,
+  };
+  const { evidence } = recordCallCostEvidence(state, {
+    callId,
+    traeger: TRAEGER_AI_TOKEN,
+    reife: REIFE.VORLAEUFIG,
+    betragMikroCents: VORLAEUFIG_BETRAG_MIKRO_CENTS,
+    waehrung: "USD",
+    detail: rohDetail,
+  });
+  assert.deepEqual(
+    evidence.detail,
+    { llm_price: VORLAEUFIG_BETRAG_MIKRO_CENTS },
+    "nur der Allowlist-Treffer bleibt uebrig",
+  );
+  const serialisiert = JSON.stringify(evidence.detail);
+  assert.ok(!serialisiert.includes("Mueller"), "kein Transkript im gespeicherten detail");
+  assert.ok(!serialisiert.includes("+4915799990001"), "keine Rufnummer im gespeicherten detail");
+  assert.ok(!serialisiert.includes("sk-live-abc"), "kein Secret im gespeicherten detail");
+});
+
 // ---- Abhaengigkeit KV2-2, Waechter -------------------------------------------------------
 
 test("KV2-3: unbekannter traeger / unbekannte reife werfen", () => {
