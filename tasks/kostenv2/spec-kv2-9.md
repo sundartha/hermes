@@ -148,5 +148,48 @@ Ablauf der ersten `COST_SETTLE_DEADLINE_HOURS` nach dem KV2-8-Deploy live sein. 
 verfehlt, ist der Nachlauf (g) die Absicherung; das ist Absicht und nicht Ersatz fuer die
 Reihenfolge.
 
+# Zweiter Zusatzauftrag: die gemessene Pflicht-Typmenge eintragen (KV2-5(d))
+
+KV2-5(d) verlangt woertlich: "Ergebnis wird als Pflicht-Typmenge des Profils
+`el_convai_sip` im Katalog eingetragen." Die Messung fehlte bis zuletzt, deshalb steht
+der Wert in `src/billing/kostenarten.js` bis heute auf `PFLICHTTYPEN_UNGEMESSEN` (die
+LEERE Menge, fail-closed).
+
+**Die Messung liegt jetzt vor** - der Lead hat sie am 2026-08-31 gegen die Prod-DB und
+die echte Telnyx-API gefahren, vollstaendig protokolliert in
+`tasks/kostenv2/befunde-kette.md`, Abschnitt M-1:
+
+| record_type | HTTP | Belege (last_7_days) |
+|---|---|---|
+| `sip-trunking` | 200 | **7** |
+| `call-control` | 200 | 0 |
+| `inference` | 200 | 0 |
+| `amd` / `conference` / `media_storage` | 200 | 0 |
+
+Die 7 sip-trunking-Belege tragen ein Feld `sip_call_id`, dessen Werte exakt den sieben
+juengsten Prod-DB-Anrufen entsprechen. Dass dieselbe Abfrage fuer sip-trunking Treffer
+und fuer alle anderen Typen Null liefert, ist die Positiv-Kontrolle: die Nullen sind
+echte Nullen, keine leere Suche.
+
+**Auftrag: trage `["sip-trunking"]` als Pflicht-Typmenge von `el_convai_sip` ein.**
+
+Dabei zwingend beachten:
+
+1. **Die leere Menge ist allquantifiziert wahr** - das ist Blocker-Befund 3/6 aus
+   Abschnitt 10 des Plans. Mit `PFLICHTTYPEN_UNGEMESSEN` gilt JEDER Pool als vollstaendig.
+   Der Wechsel auf eine echte einelementige Menge ist deshalb eine
+   VERHALTENSAENDERUNG an der Vollstaendigkeitsfrage, kein kosmetischer Eintrag. Sie
+   braucht einen Test, der genau diesen Unterschied pinnt: mit `["sip-trunking"]` ist ein
+   Pool OHNE sip-trunking-Zeile unvollstaendig, mit der leeren Menge waere er vollstaendig
+   gewesen.
+2. **Pruefe und berichte, was das fuer den Geldweg bedeutet.** In KV2-8 ist
+   `el_convai_sip` ueber `sweepDarfKorrigieren` (`cost-truing.js`) vom Geldweg
+   ausgeschlossen. Stelle am Code fest, ob dieser Ausschluss durch den gesetzten Wert
+   entfaellt oder bestehen bleibt, und schreibe das Ergebnis in den Report. Wenn der
+   Ausschluss dadurch faellt, ist das eine OWNER-RUECKFRAGE - dann den Wert eintragen,
+   den Ausschluss aber NICHT eigenmaechtig aufheben.
+3. Der Katalog ist bauzeit-validiert (`pruefePflichttypen`): die Menge muss
+   `Object.freeze`d, nicht leer und aus nicht-leeren Strings sein.
+
 ---
 
