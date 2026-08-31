@@ -101,6 +101,38 @@ export const CONVERSATION_FAILED_INVALID_DESTINATION = Object.freeze({
   }),
 });
 
+// FAILED: SIP 403 "Unverified origination number D51" - der Anbieter/Carrier hat den INVITE
+// abgelehnt, WEIL UNSERE Absendernummer dem Telnyx-Konto nicht mehr gehoerte. Das ist der
+// Totalausfall vom 27.08.2026 (vier Anrufe, woertlich derselbe Fehler), Beleg
+// tasks/befund-outbound-ausfall-2026-08-27.md Abschnitt 2.
+//
+// GEMESSEN, woertlich: metadata.error (code, reason, error_type).
+// ABGELEITET aus dem gemessenen DB-Datensatz desselben Anrufs (status=failed,
+//   answered_unclear_reason=call_duration_secs_zero_not_answered): status "failed" und
+//   call_duration_secs 0 - beide sind die EINZIGEN Werte, die zu diesem gespeicherten
+//   Ergebnis fuehren koennen (s. answeredAnchorOutcome/endStatusOf).
+// NICHT GEMESSEN und deshalb bewusst weggelassen: metadata.phone_call (unser Code liest es
+//   fail-soft, s. recordSipCallId). transcript/analysis stehen wie beim 404-Fund (leer bzw.
+//   null) - dort GEMESSEN, hier nach demselben Muster gesetzt und AUSDRUECKLICH als
+//   uebertragen markiert.
+// conversation_id ist KONSTRUIERT (die EL-Kennungen der vier Anrufe wurden nicht
+//   protokolliert) - erkennbar als Testwert.
+export const CONVERSATION_FAILED_UNVERIFIED_ORIGINATION = Object.freeze({
+  conversation_id: "conv_konstruiert_403_unverified_origination",
+  status: "failed",
+  transcript: Object.freeze([]),
+  analysis: null,
+  metadata: Object.freeze({
+    call_duration_secs: 0,
+    termination_reason: "",
+    error: Object.freeze({
+      code: 403,
+      reason: "unexpected status from INVITE response: sip status: 403: Unverified origination number D51 (SIP 403)",
+      error_type: "call_initialization_error",
+    }),
+  }),
+});
+
 // DONE: ein vollstaendiges, TECHNISCH erfolgreiches Gespraech (149 s). call_successful ist
 // woertlich "failure" (GEMESSEN) - der Anbieter bewertet das AUFTRAGSZIEL des Anrufs, nicht
 // ob das Telefonat zustande kam (es kam zustande: 149 s, volles Transkript).

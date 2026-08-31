@@ -23,7 +23,8 @@
 // PII: das Ziel (to) wird NIE geloggt - weder hier noch von den Aufrufern.
 
 import { findActiveNumber } from "../store/views.js";
-import { BOOTSTRAP_TENANT_ID } from "../store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, PLATFORM_NUMBER_PURPOSE } from "../store/defaults.js";
+import { openPlatformBindingByPurpose } from "../store/state-ops.js";
 
 // Absender-Aufloesung fuer eine store-basierte Plattform-Alarm-SMS (EINE Quelle, G5):
 // die aktive Nummer des BOOTSTRAP-Tenants - die eigene Betreiber-Nummer, NIE die DID
@@ -37,6 +38,22 @@ export function resolveBootstrapAlertSender(store) {
   const sender = findActiveNumber(store.load(), BOOTSTRAP_TENANT_ID);
   if (sender) return sender;
   console.warn("[alert-sms] Plattform-Alarm: keine aktive Bootstrap-Nummer, KEINE SMS");
+  return null;
+}
+
+// OUTBOUND-E3b (PM-17): der Alarm-Absender des systematischen-Ausfall-Melders (telephony/
+// outage-report.js) kommt aus der beim Boot ABGELEITETEN Plattform-Bindung
+// (alert_sms_sender, src/boot.js#derivePlatformNumberBindings), NICHT aus einer erneuten
+// Laufzeit-Suche. Grund: resolveBootstrapAlertSender oben nimmt die erste AKTIVE
+// Bootstrap-Nummer - genau der Mechanismus, den der Erase-Weg am 24.08.2026 still
+// mitgenommen hat (tasks/befund-outbound-ausfall-2026-08-27.md). Die Bindung ueberlebt
+// dieselbe Freigabe (eigene Tabelle, dreifacher Freigabe-Riegel, PLAN-OUTBOUND-
+// RESILIENZ.md E-1). Keine offene Bindung -> null (fail-closed, KEINE SMS) plus EINE
+// WARN-Zeile - LAUT, nie ein stilles null (PM-17).
+export function platformAlertSender(store) {
+  const binding = openPlatformBindingByPurpose(store.load(), PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER);
+  if (binding?.e164) return { provider: binding.provider, e164: binding.e164 };
+  console.warn("[alert-sms] Ausfall-Melder: keine gebundene Alarm-Absendernummer, KEINE SMS");
   return null;
 }
 

@@ -25,6 +25,10 @@ import { findTenant, resolveCallLanguage } from "./state-ops.js";
 // AL-P11: `result` wird BEWUSST NICHT gestrippt - die Ergebnis-Karte ist genau das,
 // was Dashboard und Art.-15-Export zeigen sollen. Der PII-empfindliche Teil (evidence)
 // haengt an der kurzen Frist, nicht an dieser Sicht.
+// OUTBOUND-E5: `fromActualE164`/`fromSource` werden BEWUSST NICHT gestrippt (anders als
+// `fromRegistrationSource` oben, ein rein interner Betriebs-Marker) - sie beantworten
+// genau die Nutzer-Frage "welche Nummer wurde tatsaechlich gesendet", ist die Nummer, die
+// der Angerufene ohnehin sieht, und traegt kein Fremdtenant-Feld.
 export function publicCall({
   streamToken,
   _finished,
@@ -44,6 +48,9 @@ export function publicCall({
   // INBOX-P1: beide Inbox-Marker sind rein intern.
   inboxEntryAt,
   inboxSeenAt,
+  // OUTBOUND-E5: rein interner Betriebs-Marker (Muster summarySmsSentAt/telnyxConversationId).
+  // Er beantwortet eine Betreiber-Frage ("ging die eigene DID raus?"), keine Nutzer-Frage.
+  fromRegistrationSource,
   ...rest
 }) {
   return rest;

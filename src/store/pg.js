@@ -366,6 +366,8 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // OUTBOUND-E5: Absender-Wahrheits-Mutatoren als Spread (haelt den Zeilen-Pin, s.o.).
+    ...absenderWahrheitMutatoren({ requireState, save }),
     // EL-Anrufstart: Zusammenfassung + Befund aus einer Anbieter-Antwort -
     // Wrapper-Paritaet zu json.js. Saved aus demselben Grund wie die Handles darueber: es
     // gibt Spalten (summary/objective_achieved), und der Flush schreibt sie aus dem Spiegel.
@@ -960,6 +962,8 @@ async function hydrate(client) {
   state.profiles = await hydrateProfiles(client);
   state.platformTtsUsage = await hydratePlatformTtsUsage(client); // LCT P7: global, wie profiles
   state.costCrossCheck = await hydrateCostCrossCheck(client); // KV-M4: global, wie platformTtsUsage
+  state.platformNumberUse = await hydratePlatformNumberUse(client); // OUTBOUND-E1: global
+  state.outageAlerts = await hydrateOutageAlerts(client); // OUTBOUND-E3b: global, wie platformNumberUse
   await hydrateSubIndex(client, state); // tenant-prolif-b: Merge-Overlay aus account
   return state;
 }
@@ -993,6 +997,52 @@ async function hydrateCostCrossCheck(client) {
   ).rows;
   if (rows.length === 0) return emptyCostCrossCheck();
   return { lastCheckedMonthKey: rows[0].last_checked_month_key };
+}
+
+// Liest die globale platform_number_use-Tabelle (OUTBOUND-E1, Muster hydrateProfiles -
+// kein RLS-Tenant-Filter). TIMESTAMPTZ -> ISO-String, damit der Spiegel backend-identisch
+// zu json.js ist (dort schreibt new Date().toISOString()).
+async function hydratePlatformNumberUse(client) {
+  const rows = (
+    await client.query(
+      `SELECT id, e164, purpose, provider, tenant_id, provider_number_id, bound_at, released_at, note
+         FROM platform_number_use ORDER BY bound_at`,
+    )
+  ).rows;
+  // Bewusst "row" statt des im Rest der Datei ueblichen einbuchstabigen "r" (G16/N1,
+  // eslint id-length): eine Bestandsdatei mit bereits gepinnter Altlast darf durch neuen
+  // Code NICHT weiter wachsen (Altlast-Ratsche, test/check-staged-suppressions.test.js) -
+  // der Pin ist ohne Owner-Freigabe unantastbar, also bleibt neuer Code darunter.
+  return rows.map((row) => ({
+    id: row.id, e164: row.e164, purpose: row.purpose, provider: row.provider,
+    tenantId: row.tenant_id, providerNumberId: row.provider_number_id,
+    boundAt: row.bound_at instanceof Date ? row.bound_at.toISOString() : row.bound_at,
+    releasedAt: row.released_at instanceof Date ? row.released_at.toISOString() : (row.released_at ?? null),
+    note: row.note,
+  }));
+}
+
+// Liest die globale outage_alert-Tabelle (OUTBOUND-E3b, Muster hydratePlatformNumberUse -
+// kein RLS-Tenant-Filter). TIMESTAMPTZ -> ISO-String, damit der Spiegel backend-identisch
+// zu json.js ist.
+async function hydrateOutageAlerts(client) {
+  const rows = (
+    await client.query(
+      `SELECT id, code, first_seen_at, last_seen_at, last_attempt_at, reported_at,
+              delivered_channels, closed_at
+         FROM outage_alert ORDER BY first_seen_at`,
+    )
+  ).rows;
+  return rows.map((row) => ({
+    id: row.id,
+    code: row.code,
+    firstSeenAt: row.first_seen_at instanceof Date ? row.first_seen_at.toISOString() : row.first_seen_at,
+    lastSeenAt: row.last_seen_at instanceof Date ? row.last_seen_at.toISOString() : row.last_seen_at,
+    lastAttemptAt: row.last_attempt_at instanceof Date ? row.last_attempt_at.toISOString() : (row.last_attempt_at ?? null),
+    reportedAt: row.reported_at instanceof Date ? row.reported_at.toISOString() : (row.reported_at ?? null),
+    deliveredChannels: row.delivered_channels,
+    closedAt: row.closed_at instanceof Date ? row.closed_at.toISOString() : (row.closed_at ?? null),
+  }));
 }
 
 // tenant-prolif-b: den sub->tenantId-Resolver-Index aus der account-Tabelle fuellen. account
@@ -1130,7 +1180,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   ).rows;
   const numberRows = (
     await client.query(
-      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents FROM number WHERE tenant_id = $1`,
+      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id FROM number WHERE tenant_id = $1`,
       [tenantId],
     )
   ).rows;
@@ -1164,26 +1214,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   state.calls.push(...callRows.map((r) => rowToCall(r, segmentsByCall, itemIdsByCall)));
   state.actionItems.push(...itemRows.map(rowToActionItem));
   state.notifications.push(...notifRows.map(rowToNotification));
-  state.numbers.push(
-    ...numberRows.map((r) => ({
-      id: r.id,
-      e164: r.e164,
-      tenantId: r.tenant_id,
-      provider: r.provider,
-      status: r.status,
-      providerNumberId: r.provider_number_id,
-      paymentIntentId: r.payment_intent_id ?? null,
-      // Geo (F1): Bestands-Nummer ohne Wert -> null (kein undefined-Drift, Muster wie
-      // payment_intent_id); der Code-Fallback || DE/de der Konsumenten greift.
-      country: r.country ?? null,
-      language: r.language ?? null,
-      // P4: Feld nur bei vorhandenem Wert (NULL -> abwesend). Haelt den Round-Trip
-      // jeder Bestands-Nummer form-identisch und trennt "nicht gelernt" von 0.
-      ...(r.monthly_cost_cents === null || r.monthly_cost_cents === undefined
-        ? {}
-        : { monthlyCostCents: r.monthly_cost_cents }),
-    })),
-  );
+  state.numbers.push(...numberRows.map(rowToNumber));
   state.provisioningJobs.push(
     ...jobRows.map((r) => ({
       id: r.id,
@@ -1286,6 +1317,39 @@ function rowToSettings(r) {
 // Ergebnis-Typ erzwingt und die diese Kante nicht wieder einebnen darf.
 function hydratedMicroCents(raw) {
   return raw === null || raw === undefined ? null : Number(raw);
+}
+
+// OUTBOUND-E5: die drei Absender-Wahrheits-Felder als EIN benanntes Konzept. Modul-Ebene und
+// als Spread eingesetzt, damit die gepinnte Komplexitaet von rowToCall/callRowValues (je 36,
+// eslint-legacy-exceptions.json) NICHT steigt - jedes ?? direkt in jenen Funktionen waere +1.
+function absenderWahrheitFelder(r) {
+  return {
+    fromActualE164: r.from_actual_e164 ?? null,
+    fromSource: r.from_source ?? null,
+    fromRegistrationSource: r.from_registration_source ?? null,
+  };
+}
+function absenderWahrheitWerte(call) {
+  return [call.fromActualE164 ?? null, call.fromSource ?? null, call.fromRegistrationSource ?? null];
+}
+
+// OUTBOUND-E5: die zwei Schreibweg-Mutatoren als Spread-Fabrik statt zweier ausgeschriebener
+// Methoden IN makePgStore - haelt dessen gepinnte Zeilengrenze (eslint-legacy-exceptions.json),
+// aus demselben Grund wie absenderWahrheitFelder/-Werte oben. requireState/save reisen herein
+// (Closure-Zustand des jeweiligen makePgStore-Aufrufs, kein Modul-Singleton).
+function absenderWahrheitMutatoren({ requireState, save }) {
+  return {
+    recordFromRegistrationSource(callId, quelle) {
+      const { call, changed } = ops.recordFromRegistrationSource(requireState(), callId, quelle);
+      if (changed) save();
+      return call;
+    },
+    recordActualSender(callId, herkunft) {
+      const { call, changed } = ops.recordActualSender(requireState(), callId, herkunft);
+      if (changed) save();
+      return call;
+    },
+  };
 }
 
 function rowToCall(r, segmentsByCall, itemIdsByCall) {
@@ -1421,6 +1485,7 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // zurueck (Lehre i8-design-decisions) - und der Deckel zaehlte von vorn.
     lookupLog: r.lookup_log ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
+    ...absenderWahrheitFelder(r),
   };
 }
 
@@ -1501,6 +1566,19 @@ async function flush(client, state, preFlush) {
   try {
     if (preFlush) await preFlush(client);
     await flushTenants(client, state.tenants);
+    // OUTBOUND-E1: platform_number_use ist global (wie profile), wird aber - ANDERS als
+    // profile/platform_tts_usage/cost_cross_check - VOR der Tenant-Schleife geflusht.
+    // Grund: der number-Trigger (Ebene C) liest platform_number_use IN DERSELBEN
+    // Transaktion. Wird eine Bindung geloest und die Nummer im selben save() freigegeben
+    // (die legitime Kuendigung, release-reconcile.js), muss das Loesen fuer den Trigger
+    // schon sichtbar sein - sonst wuerfe er, obwohl der Code alles richtig gemacht hat.
+    // Die umgekehrte Richtung (erst binden, dann im selben save() freigeben) wirft - und
+    // das ist die fail-closed-Richtung, die wir wollen.
+    await flushPlatformNumberUse(client, state.platformNumberUse);
+    // OUTBOUND-E3b: outage_alert ist global wie platform_number_use, hat aber KEINE
+    // Trigger-Abhaengigkeit zur Tenant-Schleife - sie steht trotzdem HIER (Muster-Treue,
+    // dieselbe Ebene wie die uebrige Plattform-Buchhaltung), nicht danach.
+    await flushOutageAlerts(client, state.outageAlerts);
     for (const tenant of state.tenants) {
       await client.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenant.id]);
       await flushTenantScope(client, tenant.id, state);
@@ -1864,6 +1942,10 @@ function callRowValues(call, tenantId) {
     // INBOX-P1 ($56-$57): beide IM ON CONFLICT DO UPDATE SET.
     call.inboxEntryAt ?? null,
     call.inboxSeenAt ?? null,
+    // OUTBOUND-E5 ($58-$60, angehaengt -> keine Umnummerierung): die drei Absender-
+    // Wahrheits-Felder, alle IM ON CONFLICT DO UPDATE SET - sie entstehen NACH dem
+    // Create (Anrufstart bzw. Ergebnisabruf).
+    ...absenderWahrheitWerte(call),
   ];
 }
 
@@ -1888,8 +1970,9 @@ async function flushCalls(client, tenantId, calls) {
           appointment_date, appointment_time, amount, currency,
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
           callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
-          lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57)
+          lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
+          from_actual_e164, from_source, from_registration_source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -1915,7 +1998,9 @@ async function flushCalls(client, tenantId, calls) {
          callee_confirmed_timezone_at=EXCLUDED.callee_confirmed_timezone_at,
          sip_call_id=EXCLUDED.sip_call_id, lookup_log=EXCLUDED.lookup_log,
          summary_mail_sent_at=EXCLUDED.summary_mail_sent_at,
-         inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at`,
+         inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at,
+         from_actual_e164=EXCLUDED.from_actual_e164, from_source=EXCLUDED.from_source,
+         from_registration_source=EXCLUDED.from_registration_source`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);
@@ -2063,6 +2148,68 @@ async function flushCostCrossCheck(client, row) {
   );
 }
 
+// platform_number_use-Flush (OUTBOUND-E1, global, an KEINEN Tenant gebunden; Muster
+// flushProfiles). id-PK-Upsert + Prune ueber die globale keep-Liste. KEIN
+// flushOwnScoped/deleteMissing: die Tabelle hat keine tenant_id-Scoping-Semantik
+// (tenant_id ist hier eine Eigenschafts-Spalte, kein Scope).
+async function flushPlatformNumberUse(client, bindings) {
+  // "binding" statt "b" (s.o., Altlast-Ratsche): der Pin dieser Datei darf nicht wachsen.
+  await deleteMissingPlatformNumberUse(client, bindings.map((binding) => binding.id));
+  for (const binding of bindings) {
+    await client.query(
+      `INSERT INTO platform_number_use
+         (id, e164, purpose, provider, tenant_id, provider_number_id, bound_at, released_at, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET
+         e164=EXCLUDED.e164, purpose=EXCLUDED.purpose, provider=EXCLUDED.provider,
+         tenant_id=EXCLUDED.tenant_id, provider_number_id=EXCLUDED.provider_number_id,
+         released_at=EXCLUDED.released_at, note=EXCLUDED.note`,
+      [binding.id, binding.e164, binding.purpose, binding.provider, binding.tenantId ?? null,
+       binding.providerNumberId ?? null, binding.boundAt, binding.releasedAt ?? null, binding.note ?? null],
+    );
+  }
+}
+
+// Prune der globalen Bindungs-Tabelle (Muster deleteMissingProfiles). Leere keep-Liste ->
+// alle Bindungen weg (Parity zu deleteMissing).
+async function deleteMissingPlatformNumberUse(client, keepIds) {
+  if (keepIds.length === 0) {
+    await client.query(`DELETE FROM platform_number_use`);
+    return;
+  }
+  await client.query(`DELETE FROM platform_number_use WHERE id <> ALL($1::text[])`, [keepIds]);
+}
+
+// outage_alert-Flush (OUTBOUND-E3b, global, an KEINEN Tenant gebunden; Muster
+// flushPlatformNumberUse). id-PK-Upsert + Prune ueber die globale keep-Liste.
+async function flushOutageAlerts(client, alerts) {
+  await deleteMissingOutageAlerts(client, alerts.map((alert) => alert.id));
+  for (const alert of alerts) {
+    await client.query(
+      `INSERT INTO outage_alert
+         (id, code, first_seen_at, last_seen_at, last_attempt_at, reported_at,
+          delivered_channels, closed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO UPDATE SET
+         last_seen_at=EXCLUDED.last_seen_at, last_attempt_at=EXCLUDED.last_attempt_at,
+         reported_at=EXCLUDED.reported_at, delivered_channels=EXCLUDED.delivered_channels,
+         closed_at=EXCLUDED.closed_at`,
+      [alert.id, alert.code, alert.firstSeenAt, alert.lastSeenAt, alert.lastAttemptAt ?? null,
+       alert.reportedAt ?? null, alert.deliveredChannels ?? null, alert.closedAt ?? null],
+    );
+  }
+}
+
+// Prune der globalen Marker-Tabelle (Muster deleteMissingPlatformNumberUse). Leere
+// keep-Liste -> alle Marker weg (Parity zu deleteMissing).
+async function deleteMissingOutageAlerts(client, keepIds) {
+  if (keepIds.length === 0) {
+    await client.query(`DELETE FROM outage_alert`);
+    return;
+  }
+  await client.query(`DELETE FROM outage_alert WHERE id <> ALL($1::text[])`, [keepIds]);
+}
+
 // Loescht Profile-Zeilen, deren tenant_id nicht mehr im Spiegel steht (global, kein
 // RLS-Tenant-Filter). Leere keep-Liste -> alle Profile weg (Parity zu deleteMissing).
 async function deleteMissingProfiles(client, keepTenantIds) {
@@ -2100,6 +2247,24 @@ async function flushOwnScoped({ client, tenantId, table, rows, insertRow }) {
 // flush ruft flushNumbers pro Tenant unter dessen RLS-GUC; flushOwnScoped kapselt
 // own-Filter + deleteMissing (siehe dort). So round-trippen die Nummern aller Tenants
 // (nicht mehr owner-only).
+// number-Zeile -> Spiegel-Objekt. Gegenstueck zu flushNumbers, Konvention wie rowToTenant/
+// rowToCall. Aus hydrateTenantInto herausgeloest, weil dessen gepinnte Zeilengrenze
+// (eslint-legacy-exceptions.json) sonst durch die E5-Spalte STEIGEN wuerde - dieser Schnitt
+// SENKT sie stattdessen.
+function rowToNumber(r) {
+  return {
+    id: r.id, e164: r.e164, tenantId: r.tenant_id, provider: r.provider, status: r.status,
+    providerNumberId: r.provider_number_id,
+    paymentIntentId: r.payment_intent_id ?? null,
+    country: r.country ?? null,
+    language: r.language ?? null,
+    // OUTBOUND-E5: Bestands-Nummer ohne Registrierung -> null (kein undefined-Drift).
+    providerAgentPhoneNumberId: r.provider_agent_phone_number_id ?? null,
+    ...(r.monthly_cost_cents === null || r.monthly_cost_cents === undefined
+      ? {} : { monthlyCostCents: r.monthly_cost_cents }),
+  };
+}
+
 async function flushNumbers(client, tenantId, numbers) {
   await flushOwnScoped({
     client,
@@ -2108,14 +2273,15 @@ async function flushNumbers(client, tenantId, numbers) {
     rows: numbers,
     insertRow: (n) =>
       client.query(
-        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (id) DO UPDATE SET
            e164=EXCLUDED.e164, provider=EXCLUDED.provider,
            status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
            payment_intent_id=EXCLUDED.payment_intent_id,
            country=EXCLUDED.country, language=EXCLUDED.language,
-           monthly_cost_cents=EXCLUDED.monthly_cost_cents`,
+           monthly_cost_cents=EXCLUDED.monthly_cost_cents,
+           provider_agent_phone_number_id=EXCLUDED.provider_agent_phone_number_id`,
         [
           n.id,
           tenantId,
@@ -2127,6 +2293,7 @@ async function flushNumbers(client, tenantId, numbers) {
           n.country ?? null,
           n.language ?? null,
           n.monthlyCostCents ?? null,
+          n.providerAgentPhoneNumberId ?? null,
         ],
       ),
   });

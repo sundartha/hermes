@@ -284,6 +284,13 @@ test("MCP_TEXTS ist fuer jede unterstuetzte Sprache vollstaendig", () => {
         "function",
         `agentStatus.${key} fehlt fuer ${language}`,
       );
+    // OUTBOUND-E3a: ein fehlender callFailedSummary schriebe "undefined" in genau den
+    // Text, der dem Nutzer erklaeren soll, warum sein Anruf nicht zustande kam.
+    assert.equal(
+      typeof texts.callFailedSummary,
+      "function",
+      `callFailedSummary fehlt fuer ${language}`,
+    );
   }
 });
 

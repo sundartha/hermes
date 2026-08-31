@@ -19,7 +19,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // faellt pro Call aus dem Restguthaben) -> 10.
   // OUT-05-EL (Owner-Auftrag 15.08.2026): fakeOriginateElevenlabs ergaenzt (Trockenlege-Naht
   // des EL-Anrufstarts, Gegenstueck zu fakeOriginate) -> 11.
-  safety: 11,
+  // OUTBOUND-E4: outboundAniGateEnabled + outboundAniGateMaxAgeMs ergaenzt (der ANI-Riegel,
+  // Default aus) -> 13.
+  safety: 13,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
@@ -38,12 +40,24 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // KS-P5a: voiceCapRateCentsPerMin entfaellt (E5a, ein Satz) -> 35.
   // KV-P0: flushEpochIso ergaenzt (Flush-Stichtag, verriegelt POST /api/billing/flush-meters) -> 36.
   // KV-P2: voiceTariffInboundCents ergaenzt (Inbound-Minutensatz, kalibriert an KV-M1) -> 37.
-  billing: 37,
+  // OUTBOUND-E3b: sechs Ausfall-Melder-Schwellen ergaenzt (outageAlertWindowMs,
+  // outageAlertMinFailures, outageAlertMinAttempts, outageAlertFailSharePercent,
+  // outageAlertDebounceMs, outageAlertRetryMs) -> 43.
+  // C8b (Review-Blocker Runde 2): outageAlertSelfTestIntervalMs ergaenzt (monatlicher
+  // Alarmkanal-Selbsttest) -> 44.
+  // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs ergaenzt (24-h-Eskalation
+  // eines haengenden Kuendigungs-Nummern-HOLD) -> 45.
+  // OUTBOUND-E4: outboundDriftMinIntervalMs + outboundDriftStaleMs +
+  // outboundDriftBalanceMinHours ergaenzt (Drift-Waechter-Mindestfrist, Stale-Grenze,
+  // Guthaben-Reichweiten-Schwelle) -> 48.
+  billing: 48,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
   // den Weltdefault-Flip, s. src/store/defaults.js) -> 14.
-  provisioning: 14,
+  // OUTBOUND-E1: platformAniE164 ergaenzt (Plattform-Absendernummer, aus der der Boot die
+  // Plattform-Nummern-Bindung ableitet) -> 15.
+  provisioning: 15,
   // 312k-Phase 4: workosManagementApiKey ergaenzt (eigener Schluessel fuer die WorkOS-
   // Nutzerloeschung beim Vertragsende, getrennt vom Anmeldeschluessel oidcClientSecret) -> 16.
   auth: 16,
@@ -51,7 +65,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // (smtpHost/smtpPort/smtpUser/smtpPassword/mailFrom) -> 5, neuer 15. Namespace.
   // HTTP-Fortsetzung: brevoApiKey ergaenzt (Render sperrt SMTP auf kostenlosen Plaenen,
   // der Versand wechselt vorrangig auf Brevo per HTTP) -> 6.
-  mail: 6,
+  // OUTBOUND-E3b: platformAlertMailTo ergaenzt (Betreiber-Zieladresse des systematischen-
+  // Ausfall-Melders, der PRIMAERE Kanal) -> 7.
+  mail: 7,
   // P7a: die vormals zwei globalen Preis-Skalare (Input/Output pro 1M Tokens) sind zu
   // einer Preistabelle pro Modell-ID zusammengefasst (modelPricesUsd, 1 nested Key statt
   // 2 primitiver Keys) -> 10 statt 11.
@@ -78,7 +94,12 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
   // C-P5: twilioSid/twilioToken/twilioEdge entfallen (kein Codepfad las sie) -> 7.
-  telephony: 7,
+  // OUTBOUND-E4: telnyxFqdnConnectionId + telnyxOutboundVoiceProfileId ergaenzt (Drift-
+  // Waechter Pruefung 2/6/7) -> 9.
+  // OUTBOUND-E5: telnyxSipTrunkUsername + telnyxSipTrunkPassword ergaenzt (Digest-
+  // Zugangsdaten der SIP-Trunk-FQDN-Connection, nur fuer das Anlegen einer EL-
+  // Nummernregistrierung) -> 11.
+  telephony: 11,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
   // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
   // AL-P14: inCallConsultEnabled ergaenzt (Rueckfrage IM Gespraech, Default aus) -> 8.
@@ -110,9 +131,19 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // mailFrom) -> 154.
 // HTTP-Fortsetzung: brevoApiKey ergaenzt (mail-Namespace 5 -> 6 Keys) -> 155.
 // OC-P1: ownerSelfCallEnabled + ownerSelfCallTenantIds ergaenzt -> 157.
-const EXPECTED_TOTAL_KEYS = 157;
+// OUTBOUND-E1: platformAniE164 ergaenzt -> 158.
+// OUTBOUND-E3b: sechs Ausfall-Melder-Schwellen (billing) + platformAlertMailTo (mail)
+// ergaenzt -> 165.
+// C8b (Review-Blocker Runde 2): outageAlertSelfTestIntervalMs (billing) ergaenzt -> 166.
+// C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs (billing) ergaenzt -> 167.
+// OUTBOUND-E4: 2 (safety) + 3 (billing) + 2 (telephony) ergaenzt -> 174.
+// OUTBOUND-E5: 2 (telephony: telnyxSipTrunkUsername/-Password) ergaenzt -> 176.
+// numberRegistrationEnabled liegt INNERHALB des bereits gezaehlten nested Objekts
+// voice.elevenLabsOutbound (Muster elevenLabsOutbound selbst, s.o.) - kein neuer
+// primitiver Key auf der voice-Ebene, die Summe steigt dadurch NICHT zusaetzlich.
+const EXPECTED_TOTAL_KEYS = 176;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (157 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (176 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -229,7 +260,23 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // Objekt) -> 145 (Merge 2026-08-19 beider Ketten, s. EXPECTED_TOTAL_KEYS).
   // OC-P1: ownerSelfCallEnabled ist primitiv (Boolean, kein Array/nested Objekt) -> 146.
   // ownerSelfCallTenantIds ist das FUENFTE Array (kein primitives Blatt, s.u.).
-  const EXPECTED_PRIMITIVE_LEAVES = 146;
+  // OUTBOUND-E1: platformAniE164 ist primitiv (String, kein Array/nested Objekt) -> 147.
+  // OUTBOUND-E3b: sechs Ausfall-Melder-Schwellen (alle Zahl) + platformAlertMailTo
+  // (String) sind alle sieben primitiv (kein Array/nested Objekt) -> 154.
+  // C8b (Review-Blocker Runde 2): outageAlertSelfTestIntervalMs ist primitiv (Zahl,
+  // kein Array/nested Objekt) -> 155.
+  // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs ist primitiv (Zahl, kein
+  // Array/nested Objekt) -> 156.
+  // OUTBOUND-E4: outboundAniGateEnabled (Boolean) + outboundAniGateMaxAgeMs (Zahl) +
+  // outboundDriftMinIntervalMs/outboundDriftStaleMs/outboundDriftBalanceMinHours (alle
+  // Zahl) + telnyxFqdnConnectionId/telnyxOutboundVoiceProfileId (beide String) sind alle
+  // sieben primitiv (kein Array/nested Objekt) -> 163.
+  // OUTBOUND-E5: telnyxSipTrunkUsername (String) + telnyxSipTrunkPassword (String) sind
+  // beide primitiv (kein Array/nested Objekt) -> 165. numberRegistrationEnabled liegt
+  // innerhalb des bereits gezaehlten nested Objekts voice.elevenLabsOutbound (dessen
+  // primitive Blaetter durchlaeuft dieser Test nicht einzeln, s. continue oben) - checked
+  // steigt dadurch NICHT.
+  const EXPECTED_PRIMITIVE_LEAVES = 165;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

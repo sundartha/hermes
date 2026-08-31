@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
+import * as stateOps from "../src/store/state-ops.js";
 
 // ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
 // WEB_DIST_DIR gegen das Arbeitsverzeichnis des Spawn-Childs (= ROOT).
@@ -107,6 +108,16 @@ export const BASE_ENV = {
   // Ohne diese Zeile leakt eine lokale .env mit OUTBOUND_FROZEN=true via dotenv in Spawn-Tests
   // -> Baseline-Drift (Lehre test-base-env-drift). outbound-frozen.test.js setzt es explizit.
   OUTBOUND_FROZEN: "false",
+  // OUTBOUND-E4: der ANI-Riegel ist ein SICHERHEITS-Gate (kann Anrufe ablehnen) - neutral
+  // AUS, byte-identisch zum Produktions-Default. Kein Bestandstest soll ihn ungewollt
+  // scharf schalten; test/outbound-ani-gate.test.js setzt ihn explizit.
+  OUTBOUND_ANI_GATE_ENABLED: "false",
+  // OUTBOUND-E4: der Drift-Waechter ist KEIN Sicherheits-Gate, macht aber Anbieter-IO
+  // (Telnyx/ElevenLabs GETs). 0 = KOMPLETT AUS (Rollback-Hebel, Muster
+  // OUTAGE_ALERT_WINDOW_MS=0 oben) - ohne diese Zeile liefe JEDER Spawn-Test beim Boot in
+  // eine Anbieter-Abfrage (Lehre test-base-env-drift). test/outbound-drift-*.test.js
+  // fahren den Kern/die Watch-Funktion direkt, ohne den echten Boot-Takt zu brauchen.
+  OUTBOUND_DRIFT_MIN_INTERVAL_MS: "0",
   ALLOWED_COUNTRY_CODES: "*", // Land-Gate fuer Altbestand neutral; number-gate.test.js setzt es explizit
   MAX_CALLS_PER_HOUR: "100", // hoch genug, dass es Altbestand-Tests nicht bremst (wie RATE_LIMIT_PER_MIN)
   PROFILES_JSON: "", // Profile-Seed leer; einzelne Tests setzen es explizit
@@ -123,6 +134,11 @@ export const BASE_ENV = {
   // setzen sie explizit per env-Override.
   BOOTSTRAP_E164: "",
   BOOTSTRAP_PROVIDER: "",
+  // OUTBOUND-E1: neutral leer - ohne diesen Eintrag leakt die echte .env per dotenv in
+  // jeden Spawn-Test (Lehre test-base-env-drift), hier mit besonders unangenehmer Folge:
+  // die echte Live-ANI wuerde in Spawn-Tests gebunden und der Freigabe-Riegel in fremden
+  // Tests scharf. Tests, die die Bindung pruefen, setzen sie explizit per env-Override.
+  PLATFORM_ANI_E164: "",
   // AM6: Owner-OAuth-Identitaets-Seed neutral leer (kein idp_subject-Seed). Ohne diese
   // Zeile leakt eine lokale .env mit OWNER_IDP_SUBJECT via dotenv in Spawn-Tests ->
   // Baseline-Drift (Lehre test-base-env-drift). am6-oauth-tenant.test.js setzt es explizit.
@@ -179,6 +195,16 @@ export const BASE_ENV = {
   TELNYX_API_BASE: "",
   TELNYX_CONNECTION_ID: "",
   TELNYX_CALL_CONTROL_APP_ID: "",
+  // OUTBOUND-E4: neutral leer, sonst leakt eine lokale .env in Spawn-Tests (Lehre
+  // test-base-env-drift). Wirkungslos hier, weil OUTBOUND_DRIFT_MIN_INTERVAL_MS=0 den
+  // Waechter ohnehin komplett aushaelt - Pin trotzdem, Muster TELNYX_CONNECTION_ID.
+  TELNYX_FQDN_CONNECTION_ID: "",
+  TELNYX_OUTBOUND_VOICE_PROFILE_ID: "",
+  // OUTBOUND-E5: neutral leer/aus, sonst leakt eine lokale .env in Spawn-Tests (Lehre
+  // test-base-env-drift). Wirkungslos ohne ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true,
+  // Pin trotzdem, Muster TELNYX_FQDN_CONNECTION_ID.
+  TELNYX_SIP_TRUNK_USERNAME: "",
+  TELNYX_SIP_TRUNK_PASSWORD: "",
   TELNYX_ACCOUNT_SID: "",
   // Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT P1) neutral AUS
   // (fail-closed): der Shim antwortet 404, der Live-Pfad ist byte-identisch. Ohne diese
@@ -260,6 +286,11 @@ export const BASE_ENV = {
   ELEVENLABS_OUTBOUND_ENABLED: "false",
   ELEVENLABS_AGENT_ID: "",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "",
+  // OUTBOUND-E5: neutral AUS, sonst leakt eine lokale .env mit
+  // ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true in Spawn-Tests (Lehre
+  // test-base-env-drift) -> die Suite versuchte, echte EL-Nummernregistrierungen
+  // anzulegen. Einzelne Tests setzen sie explizit auf "true".
+  ELEVENLABS_NUMBER_REGISTRATION_ENABLED: "false",
   // Test-Seam AUS wie beim Vorbild FAKE_ORIGINATE - einzelne Tests setzen ihn explizit.
   FAKE_ORIGINATE_ELEVENLABS: "false",
   // Produktionstakt (5000) laesst die Poll-Maschinerie in UNBETEILIGTE Spawn-Tests
@@ -435,6 +466,32 @@ export const BASE_ENV = {
   // test-base-env-drift). test/platform-spend-warning.test.js setzt den Wert explizit.
   PLATFORM_SPEND_WARN_PERCENT: "0",
   PLATFORM_ALERT_SMS_TO: "",
+  // OUTBOUND-E3b: neutral gepinnt. PLATFORM_ALERT_MAIL_TO leer - ohne diese Zeile
+  // wanderte eine echte Betreiber-Adresse aus der lokalen .env in jeden Spawn-Test
+  // (Versand-Attrappe waere umgangen). Die Schwellen auf ihren Defaults, damit ein
+  // lokaler Experimentierwert keine fremde Baseline verschiebt.
+  PLATFORM_ALERT_MAIL_TO: "",
+  // OUTAGE_ALERT_WINDOW_MS neutral AUS (0), NICHT der Produktions-Default (3600000, s.
+  // .env.example/render.yaml): empirisch belegt (Lauf mit 3600000 als Baseline), dass
+  // JEDER Spawn-Test, der ELEVENLABS_OUTBOUND_ENABLED="true" setzt (z.B.
+  // elevenlabs-anrufstart.test.js, ohne jeden Bezug zum Ausfall-Melder), sonst die neue
+  // FATALE Pruefung BOTH_UNSET_WITH_OUTBOUND ausloest (boot-guard.js#alertChannelFindings:
+  // kein Kanal + Outbound scharf + Fenster>0) und der Boot fail-closed verweigert wird -
+  // 0 haelt den Melder aus, bis ein Test ihn ausdruecklich scharf schaltet (Muster
+  // PLATFORM_SPEND_WARN_PERCENT=0 oben).
+  OUTAGE_ALERT_WINDOW_MS: "0",
+  OUTAGE_ALERT_MIN_FAILURES: "3",
+  OUTAGE_ALERT_MIN_ATTEMPTS: "20",
+  OUTAGE_ALERT_FAIL_SHARE_PERCENT: "20",
+  OUTAGE_ALERT_DEBOUNCE_MS: "21600000",
+  OUTAGE_ALERT_RETRY_MS: "900000",
+  // 0 = C8b-Selbsttest aus, bis ein Test ihn ausdruecklich scharf schaltet (Muster
+  // OUTAGE_ALERT_WINDOW_MS oben).
+  OUTAGE_ALERT_SELF_TEST_INTERVAL_MS: "0",
+  // 0 = C8-HOLD-Eskalation aus (Muster OUTAGE_ALERT_WINDOW_MS oben) - sonst koennte ein
+  // Spawn-Test mit einem laengst suspendierten Fixture-Tenant unbeabsichtigt eine
+  // Betreiber-Meldung ausloesen, ohne jeden Bezug zu C8.
+  PLATFORM_HOLD_ESCALATION_MAX_AGE_MS: "0",
   // P7 (Budget-Achsen, Der Flip): neutral AUS (Default, byte-identisch zum Bestand) - sonst
   // leakt eine lokale .env mit BUDGET_MONTH_ENABLED=true via dotenv in Spawn-Tests (Lehre
   // test-base-env-drift) und faerbt die Suite umgebungsabhaengig.
@@ -677,6 +734,79 @@ export async function waitForStoreState(srv, predicate, timeoutMs = 4000) {
   return srv.readStore();
 }
 
+const WAIT_UNTIL_DEFAULT_TIMEOUT_MS = 500;
+const WAIT_UNTIL_DEFAULT_POLL_INTERVAL_MS = 5;
+
+// Wartet In-Process (kein Kindprozess, kein Store-Read von Platte) auf ein Praedikat -
+// die In-Memory-Schwester von waitForLog/waitForStoreState oben, fuer Tests, die
+// makeElevenLabsOutbound() direkt ohne Server aufrufen (G5: geteilt statt je Datei neu
+// gebaut, Bestand vor OUTBOUND-E2: el-geldpfad-s1.test.js).
+export async function waitUntil(
+  predicate,
+  { timeoutMs = WAIT_UNTIL_DEFAULT_TIMEOUT_MS, pollIntervalMs = WAIT_UNTIL_DEFAULT_POLL_INTERVAL_MS } = {},
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("Bedingung nicht innerhalb der Testfrist erreicht");
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+}
+
+// Ersetzt globalThis.fetch fuer die Dauer von run() durch eine Anbieter-Attrappe und
+// stellt das Original danach zuverlaessig wieder her (G5: geteilt statt je Datei neu
+// gebaut, Bestand vor OUTBOUND-E2: el-geldpfad-s1.test.js).
+export async function withFetch(fetchImpl, run) {
+  const orig = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  try {
+    return await run();
+  } finally {
+    globalThis.fetch = orig;
+  }
+}
+
+// Die Store-Fassade, wie src/store/json.js sie baut: jede Methode reicht an denselben
+// state-ops-Mutator durch, den auch Produktion benutzt - so rechnet voiceMinutesOf
+// (billing/metering.js) gegen denselben Datensatz wie in Produktion, statt gegen ein
+// Testobjekt mit Wunschfeldern (G5: geteilt statt je Datei neu gebaut, Bestand vor
+// OUTBOUND-E2: el-geldpfad-s1.test.js). endCallRecord liefert hier den Call, nicht das
+// {call, changed}-Paar, wie die echte Store-Fassade es tut.
+export function storeOpsFacade(state) {
+  return {
+    load: () => state,
+    getCall: (id) => stateOps.getCall(state, id),
+    addTranscript: (id, rolle, text) => stateOps.addTranscript(state, id, rolle, text),
+    recordProviderCallResult: (id, ergebnis) => stateOps.recordProviderCallResult(state, id, ergebnis),
+    recordProviderCollectedFields: (id, felder) => stateOps.recordProviderCollectedFields(state, id, felder),
+    recordCalleeConfirmedTimezone: (id, zone) => stateOps.recordCalleeConfirmedTimezone(state, id, zone),
+    // Join-Schluessel zur Telefonie-Rechnung (persistProviderResult, s.
+    // src/elevenlabs/outbound.js): hier ein No-op - nicht jeder Aufrufer haengt an ihm,
+    // aber die Attrappe muss die Methode kennen, sonst wirft der Ergebnisweg einen
+    // TypeError.
+    recordSipCallId: () => {},
+    // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber - originateCall
+    // (absenderFuerAnruf) und persistProviderResult (recordAbsenderMessung) rufen beide
+    // ueber die ECHTEN Mutatoren, sonst wirft der Anrufstart/Ergebnisweg einen TypeError.
+    recordFromRegistrationSource: (id, quelle) =>
+      stateOps.recordFromRegistrationSource(state, id, quelle),
+    recordActualSender: (id, herkunft) => stateOps.recordActualSender(state, id, herkunft),
+    trueUpAnsweredAt: (id, iso) => stateOps.trueUpAnsweredAt(state, id, iso),
+    recordAnsweredUnclearReason: (id, grund) => stateOps.recordAnsweredUnclearReason(state, id, grund),
+    // OUTBOUND-E2: finishFromConversation UND finishWithoutProviderResult rufen
+    // recordFailureReason UNBEDINGT - ueber den echten Mutator, wie jede andere
+    // Store-Methode hier (set-once + No-op bei null, s. state-ops.js).
+    recordFailureReason: (id, grund) => stateOps.recordFailureReason(state, id, grund),
+    setCallEndedAt: (id, status, iso) => stateOps.setCallEndedAt(state, id, status, iso),
+    endCallRecord: (id, status) => stateOps.endCallRecord(state, id, status).call,
+    // E2-S2-2 (Review-Blocker Runde 2): el-action-items.test.js baute vor dieser
+    // Konsolidierung eine eigene Attrappe mit denselben drei Methoden - hier ergaenzt,
+    // damit dieselbe Facade auch dort reicht statt einer zweiten Kopie.
+    addActionItem: (id, text, typ) => stateOps.addActionItem(state, id, text, typ),
+    callActionItems: (id) => stateOps.callActionItems(state, id),
+    save: () => {},
+  };
+}
+
 // Mock der Telnyx-PROVISIONING-API: routet nach Pfad (search/order/resolve/release).
 // Liefert e164 +4915799990001. Geteilt von onboarding-route + onboarding-identity
 // (G5: eine Definition statt zweier Kopien). Name explizit "...ProvisioningMock",
@@ -783,6 +913,25 @@ export function fakeProvisioner(overrides = {}) {
     },
   };
   return { log, orderCalls, ...base, ...overrides };
+}
+
+// OUTBOUND-E5 (F3, Review-Blocker "Nachbesserung" 6): geteilte Attrappe des EL-SIP-
+// Registrars fuer die Freigabe-Seite (release-reconcile.js#performNumberRelease). War
+// wortgleich in test/absender-registrierung-freigabe.test.js UND
+// test/e5-01-sipregistrar-produktionspfad.test.js dupliziert - beide Tests pinnen dieselbe
+// Zusicherung ("genau EIN Loeschversuch mit der richtigen Kennung"), eine auseinander-
+// laufende Kopie haette das unbemerkt aufgeweicht. removeCalls zeichnet jeden Aufruf auf
+// (Attrappen-Pflicht: pruefen statt stur gruen antworten).
+export function fakeSipRegistrar(overrides = {}) {
+  const removeCalls = [];
+  return {
+    removeCalls,
+    async removeRegistration(phoneNumberId) {
+      removeCalls.push(phoneNumberId);
+      if (overrides.removeRegistration) return overrides.removeRegistration(phoneNumberId);
+      return { accepted: true, status: 200 };
+    },
+  };
 }
 
 // PA-18: fakeTelnyxShimConfig lebt jetzt in config-namespaces-helper.js (das config.js
@@ -1149,7 +1298,15 @@ export async function startServer({
   // kein Seed-Overwrite; die auf Platte persistierte Owner-Nummer traegt den Boot-Guard.
   const dataDir =
     reuseDataDir || tempDataDir(rawStore ? seed : ensureOwnerNumber(seed, ownerNumber), rawStore);
-  const child = spawn(process.execPath, ["src/server.js"], {
+  // NICHT "src/server.js" direkt: der Wrapper installiert einen Eltern-Waechter und startet dann
+  // den unveraenderten Server. stop() unten raeumt zuverlaessig auf, aber nur auf dem GUTEN Pfad -
+  // stirbt der Testrunner abnormal (Sitzungslimit, gestoppter Workflow, pkill), ueberlebt sein
+  // Serverkind und wird an launchd durchgereicht. Am 29.08.2026 liefen so 19 verwaiste Server
+  // gleichzeitig, drei ueber einen Tag; die Last daraus laesst fremde Tests am
+  // STARTUP_TIMEOUT_MS scheitern. Begruendung und Messung: test/helpers/server-mit-
+  // elternwaechter.mjs. startServerExpectExit behaelt bewusst den direkten Einstieg: die dortigen
+  // Server sind auf 8 s befristet und ihre Ausgabe wird byte-genau geprueft.
+  const child = spawn(process.execPath, ["test/helpers/server-mit-elternwaechter.mjs"], {
     cwd: ROOT,
     env: { PATH: process.env.PATH, ...BASE_ENV, ...env, DATA_DIR: dataDir },
     stdio: ["ignore", "pipe", "pipe"],

@@ -110,6 +110,8 @@ const STATE_FIELD_DEFAULTS = Object.freeze({
   subIndex: () => ({}), // tenant-prolif-b: nur DEFENSIV (ephemer, Platte traegt es nie)
   platformTtsUsage: emptyPlatformTtsUsage, // LCT P7: Bestands-store.json ohne die Zeile nachziehen
   costCrossCheck: emptyCostCrossCheck, // KV-M4: Bestands-store.json ohne die Zeile nachziehen
+  platformNumberUse: () => [], // OUTBOUND-E1: Bestands-store.json ohne die Liste nachziehen
+  outageAlerts: () => [], // OUTBOUND-E3b: Bestands-store.json ohne die Liste nachziehen
 });
 
 // Neue Default-Felder ergaenzen (Migrationen). Arbeitet wie finishLoad/seed* auf dem
@@ -584,6 +586,18 @@ export function recordElevenlabsConversationId(callId, conversationId) {
 // aus dem er sich sonst noch holen liesse, ist dann laengst geloescht.
 export function recordSipCallId(callId, sipCallId) {
   const { call, changed } = ops.recordSipCallId(load(), callId, sipCallId);
+  if (changed) save();
+  return call;
+}
+
+// OUTBOUND-E5: Wrapper-Paritaet zu pg.js (Muster recordSipCallId).
+export function recordFromRegistrationSource(callId, quelle) {
+  const { call, changed } = ops.recordFromRegistrationSource(load(), callId, quelle);
+  if (changed) save();
+  return call;
+}
+export function recordActualSender(callId, herkunft) {
+  const { call, changed } = ops.recordActualSender(load(), callId, herkunft);
   if (changed) save();
   return call;
 }

@@ -271,6 +271,9 @@ export async function applyStripeWebhook(
     numberProvisioner,
     workos,
     auditStore = { record: async () => {} },
+    // E5-01: derselbe EL-Registrar wie wireWebLogin (sipRegistrarWennAktiv) - NUR im
+    // SUSPEND-Zweig gelesen, an attemptContractEndCleanup weitergereicht.
+    sipRegistrar,
   },
 ) {
   const interpreted = interpretStripeEvent(event);
@@ -418,7 +421,7 @@ export async function applyStripeWebhook(
   // Nachweis in attemptContractEndCleanup) und wird vom periodischen Sweep erneut versucht.
   if (endedViaCancellation) {
     try {
-      await attemptContractEndCleanup({ store, numberProvisioner, workos, auditStore, tenantId: tenant });
+      await attemptContractEndCleanup({ store, numberProvisioner, workos, auditStore, tenantId: tenant, sipRegistrar });
     } catch (e) {
       console.error(`[contract-end] Aufraeumen fehlgeschlagen tenant=${tenant}: ${e.message}`);
     }

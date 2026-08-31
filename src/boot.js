@@ -20,6 +20,7 @@ import {
   unpricedModels,
   providerRateOutOfBand,
   alertChannelFindings,
+  alertChannelInputs,
   costTruingBookingFindings,
   voiceTariffFloorFindings,
   planCapUnderivableFindings,
@@ -29,9 +30,12 @@ import {
   latentCostPathFindings,
   sttProfileFindings,
   stalePriceFindings,
+  platformAniFindings,
+  platformAlertSenderFindings,
+  driftConfigFindings,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
-import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
+import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
 // LCT-FIX-1: welche Belegtypen einem Call zugeordnet werden koennen, weiss der Adapter, der
 // die Belege liest - der Boot-Guard bleibt eine reine, arg-injizierte Entscheidung.
 // Provider-Konstante, kein Transport: dieselbe Richtung wie telnyx-call-control-ingest.js
@@ -42,12 +46,16 @@ import {
   USAGE_EVENT_KIND,
   BOOTSTRAP_TENANT_ID,
   normNum,
+  PLATFORM_NUMBER_PURPOSE,
+  DEFAULT_PROVIDER,
+  E164,
 } from "./store/defaults.js";
 import { STRIPE_METER_EVENT_NAME } from "./billing/stripe.js";
 import {
   expireOrphanedConsults as expireOrphanedConsultsOp,
   hasPrunedSomething,
   tenantsOf,
+  syncPlatformBindings,
 } from "./store/state-ops.js";
 // EL-NEUSTART-6: die Haltefrist der Rueckfrage, aus der EINEN Quelle (G5) - dieselbe Zahl,
 // gegen die der Anbieter-Warter selbst laeuft. Kein Zyklus: consult/in-call.js importiert
@@ -236,9 +244,39 @@ function assertCostTruingBooking(config, store) {
 // liefert [] und meldet damit gar nichts). Der seit GAP-07 moegliche FATALE Befund ist hier
 // per Konstruktion unerreichbar: assertConfig() faltet ihn in seine Fatal-Menge und hat den
 // Prozess bei diesem Zustand laengst mit exit(1) beendet - hier bleibt nur die WARN.
+// OUTBOUND-E3b: alertChannelFindings liest jetzt zusaetzlich platformAlertMailTo (Namespace
+// mail) und elevenLabsOutboundEnabled (Namespace voice) - config.billing ALLEIN wuerfe hier
+// (guardedConfig lehnt jeden Zugriff auf eine Property AUSSERHALB des eigenen Namespace
+// fail-closed ab, Tippfehler-Riegel). Die Zusammenfuehrung selbst kommt aus
+// boot-guard.alertChannelInputs (G5-Fix: EINE Quelle statt zweier byte-identischer Kopien,
+// geteilt mit fatalConfigFindings in config.js).
 function warnAlertChannelUnset(config) {
-  for (const finding of alertChannelFindings(config.billing))
+  const alertChannelConfig = alertChannelInputs({
+    billing: config.billing,
+    mail: config.mail,
+    voice: config.voice,
+  });
+  for (const finding of alertChannelFindings(alertChannelConfig))
     console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+}
+
+// OUTBOUND-E1: reine Diagnose, NIE fatal (s. platformAniFindings). Loggt die Nummer nie.
+function warnPlatformAniUnset(config) {
+  for (const finding of platformAniFindings({
+    platformAniE164: config.provisioning.platformAniE164,
+    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
+  }))
+    console.warn(`[boot] ${finding.message}`);
+}
+
+// OUTBOUND-E4: reine Diagnose, NIE fatal (s. driftConfigFindings). Loggt keine ID.
+function warnOutboundDriftConfigUnset(config) {
+  for (const finding of driftConfigFindings({
+    fqdnConnectionId: config.telephony.telnyxFqdnConnectionId,
+    outboundVoiceProfileId: config.telephony.telnyxOutboundVoiceProfileId,
+    elevenLabsOutboundEnabled: config.voice.elevenLabsOutbound.enabled,
+  }))
+    console.warn(`[boot] ${finding.message}`);
 }
 
 // LCT P5: Drift-Waechter, Ausloeser 1 von 2 (Boot). GENAU EINE Zeile fuer ALLE Praefixe -
@@ -345,6 +383,28 @@ function warnMissingProvisioningConnection(config) {
   );
 }
 
+// OUTBOUND-E5 (F3): WARN statt Boot-Refusal (Muster warnMissingProvisioningConnection) -
+// ein Boot-Refusal wegen einer fehlenden EL-Nummernregistrierungs-Angabe taeuschte einen
+// Inbound-Totalausfall vor, obwohl NUR das Anlegen neuer Registrierungen betroffen ist
+// (Praezedenz PLATFORM_ANI_E164, E1: ein Outbound-Problem wird nicht gegen einen
+// Inbound-Totalausfall getauscht). Der Registrar WIRD injiziert (der Orchestrator prueft
+// nur PROVISIONING_ENABLED/ELEVENLABS_OUTBOUND_ENABLED/numberRegistrationEnabled, nicht die
+// SIP-Zugangsdaten) - die eigentliche Sicherung sitzt in makeElSipRegistrar#ensureRegistration
+// (Review-Blocker Runde 1: wirft VOR jedem Netzzugriff, faengt jeder Aufrufer als benannten
+// Fehlschlag ab, keine Registrierung mit leeren credentials). Diese Zeile macht die
+// Fehlkonfiguration zusaetzlich schon beim Boot SICHTBAR, statt sie erst beim ersten
+// Nummernkauf als Log-Zeile auffallen zu lassen.
+function warnElRegistrationSipCredsMissing(config) {
+  if (!config.voice.elevenLabsOutbound.numberRegistrationEnabled) return;
+  if (config.telephony.telnyxSipTrunkUsername && config.telephony.telnyxSipTrunkPassword) return;
+  console.warn(
+    "[boot] Konfig-Warnung: ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true ohne " +
+      "TELNYX_SIP_TRUNK_USERNAME/TELNYX_SIP_TRUNK_PASSWORD - das Anlegen neuer " +
+      "ElevenLabs-Nummernregistrierungen schlaegt fail-closed fehl (benannte Log-Zeile je " +
+      "DID), bestehende DIDs bleiben nutzbar.",
+  );
+}
+
 // KV-P7: zwei latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
 // boot-guard.js fuer die Begruendung je Befund). WARN, kein exit(1) - Muster
 // warnAlertChannelUnset. realtimeMidCallBudgetCheck kommt aus GENAU EINER Quelle
@@ -365,7 +425,8 @@ function warnLatentCostPaths(config) {
 // (LCT P4) das siebte, assertSttProfile (STT-A1) das achte und assertPricedModels (B4a)
 // das neunte, das noch process.exit(1) rufen kann - warnStaleModelPrices/
 // warnAlertChannelUnset/warnTariffDrift/warnNumberOriginDecoupled/
-// warnMissingProvisioningConnection/warnLatentCostPaths sind reine Diagnose (nie fatal).
+// warnMissingProvisioningConnection/warnLatentCostPaths/warnElRegistrationSipCredsMissing
+// sind reine Diagnose (nie fatal).
 function assertBootGates(config, store) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
@@ -437,6 +498,8 @@ function assertBootGates(config, store) {
   assertCostTruingBooking(config, store);
   assertSttProfile(config);
   warnAlertChannelUnset(config);
+  warnPlatformAniUnset(config); // OUTBOUND-E1, WARN
+  warnOutboundDriftConfigUnset(config); // OUTBOUND-E4, WARN
   warnTariffDrift(config, store);
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
   warnTurnBudgetOverrun(config); // GAP-22, WARN
@@ -444,6 +507,7 @@ function assertBootGates(config, store) {
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
   warnLatentCostPaths(config); // KV-P7, WARN
+  warnElRegistrationSipCredsMissing(config); // OUTBOUND-E5, WARN
 }
 
 // Welche Budget-Achse die Gates messen (Budget-Achsen P7). Eigene Funktion, damit die
@@ -860,6 +924,56 @@ export async function healBootstrapStore({ config, store, messaging }) {
   return decision;
 }
 
+// OUTBOUND-E1: die Plattform-Bindungen werden beim Boot ABGELEITET, nicht gepflegt.
+// Ein Register, das jemand von Hand pflegen muss, ist leer, sobald es darauf ankommt -
+// und ein leeres Register sieht aus wie ein gruenes.
+// ZWEI Rollen, nicht eine: der Alarm-Absender haengt an genau demselben Mechanismus,
+// der am 24.08. versagt hat (resolveBootstrapAlertSender waehlt zur Laufzeit die erste
+// aktive Bootstrap-Nummer und liefert bei Verlust STILL null). Ohne die zweite Bindung
+// schloesse dieser Umbau einen Fall und liesse die Klasse offen.
+// Beide Bindungen tragen tenantId=null: sie sind PLATTFORM-Anlagen, egal auf welcher
+// Tenant-Zeile die e164 zufaellig sitzt - genau diese Verwechslung war der Ausfall.
+// Idempotent (zweimal booten = ein Zustand), store-lokal, KEIN Provider-IO. Laeuft NACH
+// healBootstrapStore (die Alarm-Nummer soll die geheilte sein) und VOR assertBootGates.
+// Kein Facade-Wrapper noetig (Abweichung vom ersten Entwurf, s. Report): store.load()
+// und store.save() sind auf BEIDEN Backends bereits identisch - die Ableitung geht ueber
+// die reine Funktion in state-ops.js, genau das Muster, das release-reconcile.js fuer
+// dieselbe Bindung schon nutzt (dort: withStoreLock -> load -> ops.xxx -> save). Ein
+// zusaetzlicher syncPlatformBindings/platformNumberBindings-Durchreicher auf json.js UND
+// pg.js waere reine Weiterleitung ohne eigenen Wert gewesen - und auf pg.js zusaetzlich
+// unerwuenscht: makePgStore traegt eine gepinnte Zeilenzahl (eslint-legacy-exceptions.json,
+// Altlast-Ratsche in test/check-staged-suppressions.test.js), die kein Bau-Agent ohne
+// Owner-Freigabe anheben darf - dieser Weg wächst sie nicht.
+// Review-Befund E1-S1-1: aus einem formal ungueltigen PLATFORM_ANI_E164 (kein '+', nationale
+// Schreibweise, Tippfehler) darf KEINE Bindung entstehen - sie saehe fuer numberBusyReason
+// (strikte String-Gleichheit) ohnehin nie wie die echte number.e164 aus und war nur ein
+// Riegel, der leise leerlief. Gleiche Pruef-Konstante wie platformAniFindings (boot-guard.js,
+// EINE Quelle) und wie bootstrapHealDecision fuer die Schwester-Env BOOTSTRAP_E164.
+function validPlatformAniE164(rawE164) {
+  const normalized = normNum(rawE164);
+  return E164.test(normalized) ? normalized : "";
+}
+
+export function derivePlatformNumberBindings({ config, store }) {
+  const alertSender = resolveBootstrapAlertSender(store);
+  const open = syncPlatformBindings(store.load(), [
+    {
+      purpose: PLATFORM_NUMBER_PURPOSE.OUTBOUND_ANI,
+      e164: validPlatformAniE164(config.provisioning.platformAniE164),
+      provider: DEFAULT_PROVIDER,
+      note: "abgeleitet aus PLATFORM_ANI_E164",
+    },
+    {
+      purpose: PLATFORM_NUMBER_PURPOSE.ALERT_SMS_SENDER,
+      e164: alertSender?.e164 || "",
+      provider: alertSender?.provider || DEFAULT_PROVIDER,
+      note: "abgeleitet aus der aktiven Bootstrap-Nummer (alert-sms.js)",
+    },
+  ]);
+  store.save();
+  return open;
+}
+
 // KV-M4: der periodische Sweep-Tick als benannte, exportierte Funktion (testbar ohne
 // echten Timer/Spawn - Muster makeGracefulShutdown weiter unten: "injizierbare Fabrik,
 // testbar mit Stub + Spy, ohne echten Prozess-Exit/Spawn"). DREI unabhaengige, SYNCHRON
@@ -870,7 +984,7 @@ export async function healBootstrapStore({ config, store, messaging }) {
 // Zweig traegt zusaetzlich sein eigenes .catch() (zweite Linie, Muster der beiden
 // Bestandszweige). test/kv-m4-monthly-cross-check.test.js (KV-M4-8) belegt die Isolation
 // direkt gegen diese Funktion, nicht nur als Behauptung im Kommentar.
-export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
+export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch }) {
   void costTruing
     .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
     .catch((err) => console.error("[cost-truing]", err.message));
@@ -884,6 +998,30 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck }) {
   void costCrossCheck
     .runMonthlyCrossCheck()
     .catch((err) => console.error("[cost-cross-check]", err.message));
+  // OUTBOUND-E3b (D9): VIERTER, unabhaengiger Schritt im selben Stunden-Takt - schliesst
+  // offene Ausfall-Marker, deren Fenster inzwischen gesund ist (der Ausloeser in
+  // finishCall sieht nur not-placed-Anrufe und kann "erholt" nie selbst feststellen).
+  void outageWatch
+    .runRecoverySweep()
+    .catch((err) => console.error("[outage-watch]", err.message));
+  // C8b (Review-Blocker Runde 2): FUENFTER, unabhaengiger Schritt - der monatliche
+  // Alarmkanal-Selbsttest. Teilt sich denselben Stunden-Takt (die Faelligkeits-Pruefung
+  // selbst ist billig und intern gegated, kein zweiter Timer/keine neue Ressource).
+  void outageWatch
+    .runAlertChannelSelfTest()
+    .catch((err) => console.error("[outage-watch]", err.message));
+  // C8 (Nachbesserung, F-8): SECHSTER, unabhaengiger Schritt - die 24-h-Eskalation eines
+  // haengenden Kuendigungs-Nummern-HOLD (platform_number_in_use). Teilt sich denselben
+  // Stunden-Takt, kein zweiter Timer/keine neue Ressource.
+  void outageWatch
+    .runHoldEscalationSweep()
+    .catch((err) => console.error("[outage-watch]", err.message));
+  // OUTBOUND-E4 (F4): SIEBTER, unabhaengiger Schritt im selben Stunden-Takt - der
+  // Drift-Waechter gegen die Anbieter-Wirklichkeit. Kein zweiter Timer, keine neue
+  // Ressource. Mindestfrist + Claim sitzen IM Waechter (PM-26), nicht hier.
+  void driftWatch
+    .runDriftSweep()
+    .catch((err) => console.error("[drift-watch]", err.message));
 }
 
 // EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter
@@ -960,6 +1098,13 @@ export async function bootServer({
   provisioning,
   costTruing,
   costCrossCheck,
+  // OUTBOUND-E3b: vierter, unabhaengiger Zweig desselben Stunden-Sweeps (runSweepTick) -
+  // dieselbe EINE Instanz wie costTruing/costCrossCheck (INV-7), server.js reicht sie im
+  // deps-Buendel durch.
+  outageWatch,
+  // OUTBOUND-E4: siebter, unabhaengiger Zweig desselben Stunden-Sweeps (runSweepTick) +
+  // eigener Boot-Lauf. Dieselbe EINE Instanz (INV-7), server.js reicht sie durch.
+  driftWatch,
   messaging,
   consultDelivery,
   // Boot-Re-Arm des EL-Ergebnisabrufs (s. unten bei rearmActiveConversationPolls). Dieselbe
@@ -983,6 +1128,12 @@ export async function bootServer({
 
   // GAP-38: VOR den Gates - die Heilung darf den Refusal nur VERMEIDEN, nie ersetzen.
   await healBootstrapStore({ config, store, messaging });
+  // OUTBOUND-E1: VOR den Gates - die Bindungen sind die Datengrundlage des Riegels.
+  // OUTBOUND-E3b (PM-17): das Ergebnis wurde bisher verworfen - jetzt haelt es
+  // warnPlatformAlertSenderUnbound dagegen (NIE fatal, s. dort).
+  const openPlatformBindings = derivePlatformNumberBindings({ config, store });
+  for (const finding of platformAlertSenderFindings({ openBindings: openPlatformBindings }))
+    console.warn(`[boot] ${finding.message}`);
   assertBootGates(config, store);
 
   // LCT P3: Kosten-Abgleich im Beobachtungsmodus. Muster der beiden bestehenden
@@ -1013,7 +1164,7 @@ export async function bootServer({
   // mit (runSweepTick oben, exportiert und direkt testbar) - kein zweiter Timer, keine
   // neue Ressource.
   setInterval(
-    () => runSweepTick({ costTruing, provisioning, costCrossCheck }),
+    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch }),
     config.billing.costTruingSweepIntervalMs,
   ).unref();
 
@@ -1080,6 +1231,12 @@ export async function bootServer({
     void probeMailBoot(config).catch((fehler) =>
       console.error("[mail] Sonde unerwartet gescheitert", fehler?.code ?? fehler?.name ?? "unbekannt"),
     );
+    // OUTBOUND-E4: EIN Lauf beim Start - fire-and-forget NACH den Boot-Logs (Muster
+    // PROV-01/mail-boot-probe direkt darueber): blockiert weder listen noch Healthcheck.
+    // Anbieter-IO gehoert nie an die Boot-Sequenz. Der Waechter traegt seinen eigenen
+    // Timeout je Abfrage und seine Mindestfrist (OUTBOUND_DRIFT_MIN_INTERVAL_MS) - ohne
+    // sie liefe er bei einem externen 10-Minuten-Ping bis zu 144x/Tag statt einmal.
+    void driftWatch.runBootProbe().catch((err) => console.error("[drift-watch] Boot-Sonde:", err.message));
   });
 
   // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)

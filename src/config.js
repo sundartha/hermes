@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import { CENTS_PER_EUR, MODEL_PRICE_RATE_FIELDS, setWorldDefaultLanguageEnabled } from "./store/defaults.js";
 // GAP-07: boot-guard.js und telephony/stt-profile.js importieren ihrerseits nur
 // import-freie bzw. Blatt-Module -> kein Zyklus, obwohl beide sonst downstream sitzen.
-import { alertChannelFindings } from "./boot-guard.js";
+import { alertChannelFindings, alertChannelInputs } from "./boot-guard.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
 // G5: die Minute lebt in utils/timer.js (import-freies Blatt, kein Zyklus) - dieselbe
@@ -196,6 +196,18 @@ const MINUTES_PER_HOUR = 60;
 const HOURS_PER_DAY = 24;
 const MS_PER_HOUR = MINUTES_PER_HOUR * MS_PER_MINUTE;
 const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
+
+// OUTBOUND-E3b: Default-Vielfache fuer die Entprellung/Wiederholung des Ausfall-Melders
+// (G25: benannte Konstanten statt Zahlenketten im Ausdruck).
+const OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT = 6;
+const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;
+// OUTBOUND-E3b (Review-Blocker Runde 2, C8b/Plan-Abschnitt "Meldeweg und Alarm-Body"): ein
+// Kanal, der zwoelf Monate nie ausgeloest wurde, ist kein bewiesener Kanal - der Selbsttest
+// laeuft im selben monatlichen Rhythmus, den der Plan nennt.
+const OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT = 30;
+// C8 (F-8): Eskalations-Schwelle einer haengenden Kuendigungs-Nummernfreigabe - "24-h-
+// Eskalation" ist der woertliche Owner-Beschluss (Plan-Abschnitt 9).
+const PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT = 24;
 
 // Reine EUR->Cents-Rundung (G26: Money at rest ist Ganzzahl). Eigene, exportierte
 // Funktion statt Inline-Ausdruck, DAMIT ein Unit-Test die Float-Falle direkt trifft:
@@ -605,6 +617,25 @@ const rawConfig = {
   // Telnyx-Account-ID (Mission-Control-Portal): Pflicht fuer den Telnyx-Hangup
   // (POST /v2/texml/Accounts/{account_sid}/Calls/{call_sid}). Leer -> endCall wirft.
   telnyxAccountSid: process.env.TELNYX_ACCOUNT_SID || "",
+  // OUTBOUND-E4 (Drift-Waechter, Pruefung 2/6): die FQDN-Connection, an der der
+  // ANI-Override der Plattform-Absendernummer haengt (gemessen 27.08.2026:
+  // "3026479542865757220", ElevenLabs-SIP-Trunk). NICHT verwechseln mit
+  // telnyxConnectionId (TeXML) - zwei getrennte Telnyx-Objekttypen. Leer -> der Waechter
+  // meldet Pruefung 2/6 als unbekannt (nie fatal, boot-guard.js#driftConfigFindings).
+  telnyxFqdnConnectionId: (process.env.TELNYX_FQDN_CONNECTION_ID || "").trim(),
+  // OUTBOUND-E4 (Drift-Waechter, Pruefung 7): das Outbound-Voice-Profile, dessen
+  // whitelisted_destinations mit den tatsaechlich bedienten Laendern abgeglichen wird.
+  // Leer -> der Waechter meldet Pruefung 7 als unbekannt.
+  telnyxOutboundVoiceProfileId: (process.env.TELNYX_OUTBOUND_VOICE_PROFILE_ID || "").trim(),
+  // OUTBOUND-E5 (F3): Digest-Zugangsdaten der SIP-Trunk-FQDN-Connection
+  // (fqdn_authentication_method: "credential-authentication", gemessen 2026-08-29). Nur
+  // gebraucht fuer das ANLEGEN einer ElevenLabs-Nummernregistrierung (outbound_trunk_config.
+  // credentials) - der Anrufstart selbst braucht sie nicht. Leer -> makeElSipRegistrar
+  // (elevenlabs/nummern-registrierung.js) wirft VOR jedem Netzzugriff, jeder Aufrufer faengt
+  // das als benannten Fehlschlag ab (fail-closed, KEIN No-op - Review-Blocker Runde 1).
+  telnyxSipTrunkUsername: (process.env.TELNYX_SIP_TRUNK_USERNAME || "").trim(),
+  // SECRET - nie loggen, nie in eine API-/MCP-Antwort, nie in einen Fehlertext.
+  telnyxSipTrunkPassword: process.env.TELNYX_SIP_TRUNK_PASSWORD || "",
   // GQ-P6: wie lange Telnyx auf das Abheben wartet, bevor es mit hangup_cause=timeout
   // aufgibt (POST /v2/calls, Feld timeout_secs). Anbieter-Doku: "Minimum value is 5
   // seconds. Maximum value is 600 seconds", **Default 30**.
@@ -697,6 +728,16 @@ const rawConfig = {
     // waehlt der Zweig NICHT (fail-closed, s. src/elevenlabs/outbound.js).
     agentId: (process.env.ELEVENLABS_AGENT_ID || "").trim(),
     agentPhoneNumberId: (process.env.ELEVENLABS_AGENT_PHONE_NUMBER_ID || "").trim(),
+    // OUTBOUND-E5 (F3): Schalter fuer den EINZIGEN neuen Anbieter-SCHREIBZUGRIFF dieser
+    // Etappe (Anlegen einer Nummernregistrierung im Provisioning). Default AUS: der Merge
+    // ist damit inert, unabhaengig von ELEVENLABS_OUTBOUND_ENABLED - kein automatisches
+    // Anlegen ohne diese ausdrueckliche zweite Zustimmung (s. worker/provisioning-
+    // orchestrator.js, Dreifach-Gate).
+    numberRegistrationEnabled: boolEnv(
+      "ELEVENLABS_NUMBER_REGISTRATION_ENABLED",
+      process.env.ELEVENLABS_NUMBER_REGISTRATION_ENABLED,
+      { fallback: false },
+    ),
     // Abholtakt des ZIEHENDEN Ergebniswegs (GET /v1/convai/conversations/{id}): der
     // Anbieter meldet das Gespraechsende nicht an uns, wir holen es ab. Untergrenze 100 ms,
     // damit ein vertippter Wert keine Abruf-Schleife im Millisekundentakt erzeugt
@@ -1176,6 +1217,96 @@ const rawConfig = {
   // account.role) - es gibt KEINE natuerliche Zielnummer fuer eine PLATTFORM-Groesse. NIE
   // die private Nummer eines Tenants: das waere eine Betreiber-Zahl an einen Kunden.
   platformAlertSmsTo: process.env.PLATFORM_ALERT_SMS_TO || "",
+  // ---- Systematischer-Ausfall-Melder (OUTBOUND-E3b, PLAN-OUTBOUND-RESILIENZ.md E-4) ----
+  // Zeitfenster, ueber das die not-placed-Fehlerquote je Klasse (Eimer) gezaehlt wird.
+  // 0 = Melder KOMPLETT AUS (Rollback-Hebel, ein einziger Wert/Guard/Test statt zwei
+  // verstreuter Env-Werte).
+  outageAlertWindowMs: numEnv("OUTAGE_ALERT_WINDOW_MS", process.env.OUTAGE_ALERT_WINDOW_MS, {
+    fallback: MS_PER_HOUR,
+    min: 0,
+  }),
+  // K1 (kleines Volumen): Mindestzahl Fehler derselben Klasse im Fenster, BEVOR ueberhaupt
+  // Alarm moeglich ist. Der gemessene Vorfall (27.08.2026) erzeugte 4 Versuche - N=3 feuert
+  // vor dem letzten, ohne dass ein einzelner Fehlversuch schon eine echte SMS+Mail kostet.
+  outageAlertMinFailures: numEnv("OUTAGE_ALERT_MIN_FAILURES", process.env.OUTAGE_ALERT_MIN_FAILURES, {
+    fallback: 3,
+    min: 1,
+  }),
+  // Mindestnenner, ab dem K2 (Skala) statt K1 (kleines Volumen) entscheidet UND ab dem der
+  // Anteilsvergleich ueberhaupt aussagekraeftig ist (bei M=20 bedeuten 20% nie weniger als
+  // 4 Fehler - K2 kann also nie schwaecher sein als K1).
+  outageAlertMinAttempts: numEnv("OUTAGE_ALERT_MIN_ATTEMPTS", process.env.OUTAGE_ALERT_MIN_ATTEMPTS, {
+    fallback: 20,
+    min: 1,
+  }),
+  // K2-Schwelle in Prozent (ganzzahlig, Deviation D-4 - kein Fliesskomma-Prozent-Env im
+  // Repo). 20-facher Abstand zum plausiblen Grundrauschen (<=1% not-placed im gesunden
+  // Betrieb) und deutlich unterhalb jedes echten Teilausfalls.
+  outageAlertFailSharePercent: numEnv(
+    "OUTAGE_ALERT_FAIL_SHARE_PERCENT",
+    process.env.OUTAGE_ALERT_FAIL_SHARE_PERCENT,
+    { fallback: 20, min: 0, max: 100 },
+  ),
+  // Mindest-Wiederholfrist NACH einer bereits ZUGESTELLTEN Meldung (entprellt am VORFALL,
+  // nicht am einzelnen Anruf) - derselbe Wert, den E3a bereits fuer die Nutzer-Mail
+  // ausliefert (NOT_PLACED_MAIL_DEBOUNCE_MS), hier als eigener Wert, weil Nutzer- und
+  // Betreiber-Kanal unabhaengig entprellt werden.
+  outageAlertDebounceMs: numEnv("OUTAGE_ALERT_DEBOUNCE_MS", process.env.OUTAGE_ALERT_DEBOUNCE_MS, {
+    fallback: OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT * MS_PER_HOUR,
+    min: 0,
+  }),
+  // Mindest-Wiederholfrist nach einem VERSUCHTEN, aber NICHT zugestellten Versand (S3-2):
+  // ohne diesen Wert gibt es nach einer fehlgeschlagenen Mail NULL Meldungen zum echten
+  // Vorfall, solange die Entprellfrist der (nie zugestellten) Meldung laeuft.
+  outageAlertRetryMs: numEnv("OUTAGE_ALERT_RETRY_MS", process.env.OUTAGE_ALERT_RETRY_MS, {
+    fallback: OUTAGE_ALERT_RETRY_MINUTES_DEFAULT * MS_PER_MINUTE,
+    min: 0,
+  }),
+  // C8b (Plan-Abschnitt "Meldeweg und Alarm-Body"): Mindestabstand zwischen zwei
+  // Selbsttests desselben Kanals - "ein Kanal, der zwoelf Monate nie ausgeloest wurde, ist
+  // kein bewiesener Kanal". 0 = Selbsttest KOMPLETT AUS (Rollback-Hebel, Muster
+  // outageAlertWindowMs).
+  outageAlertSelfTestIntervalMs: numEnv(
+    "OUTAGE_ALERT_SELF_TEST_INTERVAL_MS",
+    process.env.OUTAGE_ALERT_SELF_TEST_INTERVAL_MS,
+    { fallback: OUTAGE_ALERT_SELF_TEST_DAYS_DEFAULT * MS_PER_DAY, min: 0 },
+  ),
+  // C8 (Owner-Entscheidung F-8, PLAN-OUTBOUND-RESILIENZ.md Abschnitt 9): "Darf eine
+  // Kuendigung wegen einer Plattform-Bindung haengen bleiben? Ja, mit HOLD + Audit +
+  // 24-h-Eskalation." Mindestalter (ab tenant.suspendedAt), ab dem ein HOLD
+  // platform_number_in_use GENAU EINEN Betreiber-Befund ueber denselben Meldeweg erzeugt
+  // wie der Ausfall-Alarm. 0 = Eskalation KOMPLETT AUS (Rollback-Hebel, Muster
+  // outageAlertWindowMs/outageAlertSelfTestIntervalMs).
+  platformHoldEscalationMaxAgeMs: numEnv(
+    "PLATFORM_HOLD_ESCALATION_MAX_AGE_MS",
+    process.env.PLATFORM_HOLD_ESCALATION_MAX_AGE_MS,
+    { fallback: PLATFORM_HOLD_ESCALATION_HOURS_DEFAULT * MS_PER_HOUR, min: 0 },
+  ),
+  // ---- Drift-Waechter (OUTBOUND-E4, F4, PLAN-OUTBOUND-RESILIENZ.md E-6) ----
+  // Mindestfrist zwischen zwei beanspruchten Laeufen (PM-26, Single-Flight/Deploy-
+  // Sturm-Schutz). 0 = der Waechter ist KOMPLETT AUS (Rollback-Hebel, Muster
+  // outageAlertWindowMs). Default 10 min.
+  outboundDriftMinIntervalMs: numEnv(
+    "OUTBOUND_DRIFT_MIN_INTERVAL_MS",
+    process.env.OUTBOUND_DRIFT_MIN_INTERVAL_MS,
+    { fallback: 600000, min: 0 },
+  ),
+  // Ab wann die letzte ERFOLGREICHE Messung als "watchdog_stale" gilt (fuenfte
+  // Befundklasse, PM-5): faengt einen abgelaufenen Schluessel, ein dauerhaftes 5xx oder
+  // einen deaktivierten Actions-Workflow, die den gesamten Fruehwarner sonst STILL
+  // abschalten wuerden. Default 6 h.
+  outboundDriftStaleMs: numEnv("OUTBOUND_DRIFT_STALE_MS", process.env.OUTBOUND_DRIFT_STALE_MS, {
+    fallback: 21600000,
+    min: 0,
+  }),
+  // Guthaben-REICHWEITE (nicht Betrag, s. Modul-Doc outbound-config-drift.js): Guthaben
+  // reicht fuer weniger als so viele Stunden bei aktuellem 24h-Verbrauch -> balance_low.
+  // Default 72 h.
+  outboundDriftBalanceMinHours: numEnv(
+    "OUTBOUND_DRIFT_BALANCE_MIN_HOURS",
+    process.env.OUTBOUND_DRIFT_BALANCE_MIN_HOURS,
+    { fallback: 72, min: 0 },
+  ),
   // ---- Spend-Monat-Flip (Budget-Achsen P7) ----
   // AN = BEIDE Gate-Achsen (Tenant UND Plattform) messen den Verbrauch im UTC-Kalendermonat
   // statt im Lebenszeit-Zaehler. AUS (Default) = byte-identisch zum Bestand. Der Flip ist ein
@@ -1269,6 +1400,20 @@ const rawConfig = {
   // Backend-agnostisch, anders als OWNER_NUMBER_SEED (json-only, nur Nummer ohne Tenant).
   bootstrapE164: process.env.BOOTSTRAP_E164 || "",
   bootstrapProvider: process.env.BOOTSTRAP_PROVIDER || "",
+
+  // OUTBOUND-E1: die Absendernummer (ANI) des Produkt-Outbounds als E.164. Heute steht sie
+  // NUR in zwei Anbieter-Konfigurationen, die KEIN Produktivcode kennt (ElevenLabs-
+  // Nummernregistrierung + Telnyx ani_override) - genau deshalb konnte der Loeschweg eines
+  // Wegwerf-Kontos sie am 24.08.2026 freigeben, ohne dass irgendetwas widersprach.
+  // Aus diesem Wert leitet der Boot die Plattform-Bindung ab (kein von Hand gepflegtes
+  // Register: ein leeres Register sieht aus wie ein gruenes).
+  // Leer = KEINE Bindung -> Bestandsverhalten, und der Boot-Guard sagt das laut (nicht
+  // fatal: ein Boot-Refusal tauschte ein Outbound-Problem gegen einen Inbound-Totalausfall,
+  // dieselbe Abwaegung wie in boot-guard.js). Live dashboard-verwaltet - render.yaml
+  // allein setzt hier nichts.
+  // ABGRENZUNG zu ELEVENLABS_AGENT_PHONE_NUMBER_ID: das ist eine opake Anbieter-ID
+  // (phnum_...), KEINE E.164, und aus ihr laesst sich keine Bindung ableiten.
+  platformAniE164: (process.env.PLATFORM_ANI_E164 || "").trim(),
 
   // AM6: Owner-OAuth-Identitaet (WorkOS sub/user.id) idempotent an den Bootstrap-Tenant
   // binden (idp_subject). Wie OWNER_NUMBER_SEED ein Boot-Seed gegen Renders fluechtiges FS /
@@ -1666,6 +1811,21 @@ const rawConfig = {
     { fallback: false },
   ),
 
+  // ---- OUTBOUND-E4 (F4): der ANI-Riegel - das EINZIGE Gate dieser Etappe ----
+  // Default AUS: der Riegel lehnt NUR ab, wenn eine FRISCHE, LIVE-nachgemessene
+  // ownership_lost-Messung vorliegt (s. outbound-gates.js). OUTBOUND_FROZEN bleibt der
+  // bewusste Notaus - dieses Gate wird von KEINEM Codepfad automatisch gesetzt.
+  outboundAniGateEnabled: boolEnv("OUTBOUND_ANI_GATE_ENABLED", process.env.OUTBOUND_ANI_GATE_ENABLED, {
+    fallback: false,
+  }),
+  // Frische-Grenze: eine Messung aelter als dieser Wert gated NIE (auf plan:free steht
+  // der Prozess still - eine fast stundenalte Messung darf einen Anruf nicht ablehnen,
+  // obwohl der Eigentuemer laengst eine neue DID gekauft hat). Default 15 min.
+  outboundAniGateMaxAgeMs: numEnv("OUTBOUND_ANI_GATE_MAX_AGE_MS", process.env.OUTBOUND_ANI_GATE_MAX_AGE_MS, {
+    fallback: 900000,
+    min: 0,
+  }),
+
   // ---- Datenschutz ----
   // Beendete Calls (samt Transkript) und Notifications aelter als RETENTION_DAYS
   // werden geloescht (DSGVO-Datenminimierung). 0 = Retention aus.
@@ -1770,6 +1930,14 @@ const rawConfig = {
   smtpUser: process.env.SMTP_USER || "",
   smtpPassword: process.env.SMTP_PASSWORD || "", // SECRET - nie loggen/leaken
   mailFrom: process.env.MAIL_FROM || "",
+  // OUTBOUND-E3b (PM-4/BA-12): Betreiber-Zieladresse des systematischen-Ausfall-Melders.
+  // BEWUSST der PRIMAERE Kanal - anders als PLATFORM_ALERT_SMS_TO (billing-Namespace)
+  // haengt Mail an KEINEM Carrier: der heutige einzige Betreiber-SMS-Kanal laeuft ueber
+  // dasselbe Telnyx-Konto und dieselbe Nummern-Tabelle wie der ausgefallene Outbound - ein
+  // Alarm, den derselbe Defekt mitreisst, ist keiner. LEER = kein Mail-Versand, nur
+  // Audit-Log (der Boot-Guard meldet das - s. boot-guard.js#alertChannelFindings - fatal,
+  // wenn zusaetzlich beide anderen Bedingungen zutreffen).
+  platformAlertMailTo: process.env.PLATFORM_ALERT_MAIL_TO || "",
 
   // ---- Voice-Engine ----
   // "budget"  = Provider-eigene STT/TTS (Telnyx TeXML) + Claude Haiku (quasi gratis, Default)
@@ -1926,19 +2094,19 @@ function guardedConfig(target, path = "config") {
 // Fatal-Push, kein Doppel-Eval. rawConfig selbst bleibt der interne Speicher, wird aber
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
-  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
-  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider"],
+  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
+  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
   // eigener Namespace statt Anhaengsel an auth/billing (eigenstaendige Domaene, s.
   // brevo-mail.js/smtp-mail.js/billing/cancellation-mail.js). HTTP-Fortsetzung:
   // brevoApiKey ergaenzt (Render sperrt SMTP auf kostenlosen Plaenen) -> 6.
-  mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom"],
+  mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
-  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection"],
+  telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
@@ -2230,10 +2398,20 @@ const isPositiveIntegerFee = (cents) => Number.isInteger(cents) && cents > 0;
 //    lebt NICHT hier, sondern in der einen Wahrheitstabelle (boot-guard.alertChannelFindings) -
 //    diese Zeile faltet nur ihren fatalen Anteil in dieselbe Ausgabe wie die uebrigen Fatals.
 function fatalConfigFindings(isProduction) {
+  // OUTBOUND-E3b: aus dem Aufruf-Ausdruck herausgezogen (G36/no-restricted-syntax) - die
+  // Kombination aus tief verschachtelten Feldzugriffen UND der .filter().map()-Kette
+  // darunter riss sonst ueber die erlaubte Verkettungstiefe. Die Zusammenfuehrung selbst
+  // kommt aus boot-guard.alertChannelInputs (G5-Fix: EINE Quelle statt zweier
+  // byte-identischer Kopien, geteilt mit warnAlertChannelUnset in boot.js).
+  const alertChannelConfig = alertChannelInputs({
+    billing: config.billing,
+    mail: config.mail,
+    voice: config.voice,
+  });
   return configFatalErrors()
     .concat(productionFootguns(config, isProduction))
     .concat(
-      alertChannelFindings(config.billing)
+      alertChannelFindings(alertChannelConfig)
         .filter((befund) => befund.fatal)
         .map((befund) => befund.message),
     );

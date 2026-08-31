@@ -526,8 +526,10 @@ test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEI
   assert.equal(env.posted.filter((m) => m.params && m.params.name === "get_transcript").length, 0);
   assert.equal(doc.cancelButton().disabled, true);
 
-  // Unbekannter Token bleibt roh sichtbar (Diagnosewert), "failed:<sipcause>"
-  // faellt auf das failed-Label.
+  // OUTBOUND-E3a (Befund D-5): ein unbekanntes/neues Token faellt auf das Sammel-Label
+  // "Failed" zurueck statt roh sichtbar zu bleiben - "failed:<sipcause>" tat das schon
+  // vorher, ein voellig fremder Token ("sonderfall-token") jetzt ebenso. Der rohe Token
+  // bleibt der Diagnose vorbehalten (Store/Log/get_call_status), nicht der Nutzeranzeige.
   const doc2 = makeFakeDocument();
   const env2 = runOwnScript(doc2);
   doc2.slot("call_id").textContent = "call_2";
@@ -536,7 +538,42 @@ test("T-W1-call-AC7e: failed-Status zeigt lokalisierten failure_reason, holt KEI
   assert.equal(doc2.querySelector("[data-failure-display]").textContent, "Failed");
   env2.emit({ jsonrpc: "2.0", method: "ui/notifications/tool-result",
     params: { structuredContent: { call_id: "call_2", status: "failed", duration_s: 1, last_transcript_lines: [], failure_reason: "sonderfall-token" } } });
-  assert.equal(doc2.querySelector("[data-failure-display]").textContent, "sonderfall-token");
+  assert.equal(doc2.querySelector("[data-failure-display]").textContent, "Failed");
+});
+
+// OUTBOUND-E2 (Review-Blocker Runde 4): die drei neuen Schuld-Basis-Token aus
+// FAILURE_REASON_BASE_TOKENS (telephony/failure-reason.js) MUESSEN im Widget ein Label
+// bekommen, sonst zeigt failureReasonLabel() den rohen internen Token (Befund: ein per
+// place_call abgelehnter Anruf zeigte z.B. "not-placed:start-403" statt eines Labels).
+test("T-W1-call-AC7f: die drei OUTBOUND-E2-Basis-Token (not-placed/unreachable/result-unknown) zeigen ein Label, keinen rohen Token", () => {
+  const cases = [
+    { failure_reason: "not-placed:start-403", expected: "Not placed" },
+    { failure_reason: "unreachable:invite-404", expected: "Unreachable" },
+    { failure_reason: "result-unknown:poll-timeout", expected: "Result unknown" },
+  ];
+  for (const { failure_reason, expected } of cases) {
+    const doc = makeFakeDocument();
+    const env = runOwnScript(doc);
+    doc.slot("call_id").textContent = "call_x";
+    env.emit({
+      jsonrpc: "2.0",
+      method: "ui/notifications/tool-result",
+      params: {
+        structuredContent: {
+          call_id: "call_x",
+          status: "failed",
+          duration_s: 1,
+          last_transcript_lines: [],
+          failure_reason,
+        },
+      },
+    });
+    assert.equal(
+      doc.querySelector("[data-failure-display]").textContent,
+      expected,
+      `"${failure_reason}" muss als "${expected}" erscheinen, nicht roh`,
+    );
+  }
 });
 
 test("T-W1-call-AC-cancel: Cancel-Klick ruft cancel_call ueber tools/call, no-op ohne gebundene call_id UND vor dem Handshake", () => {

@@ -225,6 +225,9 @@ function makeNumberRow(overrides) {
     paymentIntentId: null,
     country: null,
     language: null,
+    // OUTBOUND-E5 (F3): die EL-Nummernregistrierung dieser DID. Additiv, Bestands-
+    // Default null (kein Backfill).
+    providerAgentPhoneNumberId: null,
     ...overrides,
   };
 }

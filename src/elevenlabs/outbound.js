@@ -34,13 +34,18 @@
 // (GET /v1/convai/conversations/{id}, Takt ELEVENLABS_RESULT_POLL_MS) und legen Transkript
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { LOCALES, localeFor } from "../i18n/locales.js";
-import { cappedEndedAtMs, classifyCallTime } from "../store/state-ops.js";
+import { cappedEndedAtMs, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
+import { findActiveNumber } from "../store/views.js";
+import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { verifiedOpeningLine } from "./opening-line.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 import { callLocaleFor } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
+import { persistEndWithReason } from "../telephony/call-termination.js";
+// OUTBOUND-E5 (F3): die reine Registrierungs-Auswahl - kein Netz, kein Store (s. dort).
+import { waehleAbsenderRegistrierung, ABSENDER_QUELLE } from "../telephony/absender-registrierung.js";
 import crypto from "node:crypto";
 
 // Endzustaende des Anbieters. Alles andere gilt als LAUFEND und wird weiter abgeholt: ein
@@ -89,6 +94,15 @@ const ANSWERED_UNCLEAR_REASON = "call_duration_secs_unusable";
 // publicCall streicht das Feld NICHT).
 const ANSWERED_REASON_NOT_ANSWERED = "call_duration_secs_zero_not_answered";
 const ANSWERED_REASON_CONVERSATION_RUNNING = "call_duration_secs_unknown_conversation_in_progress";
+
+// OUTBOUND-E2 (Ausfall 27.08.2026): der DRITTE Sachverhalt hinter "Dauer 0". Der Anbieter
+// hat uns einen FEHLER genannt - der Anruf ist nie zustande gekommen, es hat nicht bloss
+// niemand abgenommen. Bis heute fielen beide auf ANSWERED_REASON_NOT_ANSWERED, und der
+// Betreiber konnte seinen eigenen Konfigurationsdefekt nicht von einer Nichtannahme
+// unterscheiden (genau die Vermischung, die dieser Block seit S1-B verbietet).
+// WELCHER Fehler es war, sagt nicht dieses Feld, sondern call.failureReason (das EINE
+// Vokabular, telephony/failure-reason.js) - hier steht nur, warum es keinen Anker gibt.
+const ANSWERED_REASON_PROVIDER_REJECTED = "provider_rejected_before_answer";
 
 // TEIL 1 (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2 - "der Poll unterscheidet
 // dauerhaft von voruebergehend"): HTTP-Status des Ergebnisabrufs, bei denen Weiterpollen
@@ -425,19 +439,45 @@ const anchorFromProviderDuration = (answeredAtIso) => ({
 const clearAnchor = (unclearReason) => ({ answeredAtIso: null, unclearReason, keepExistingAnchor: false });
 const keepAnchor = (unclearReason) => ({ answeredAtIso: null, unclearReason, keepExistingAnchor: true });
 
-export function answeredAnchorOutcome(endedAtIso, conversation) {
-  const durationSecs = conversation?.metadata?.call_duration_secs;
+// OUTBOUND-E2 (Lint-Rueckfall): ausgelagert, damit answeredAnchorOutcome unter der
+// Komplexitaetsgrenze bleibt - das zusaetzliche if fuer den Anbieterfehler (s.u.) kam dazu.
+// Rein, ohne Nebeneffekt.
+function usableProviderDuration(durationSecs, endedAtMs) {
   const durationUsable =
     typeof durationSecs === "number" && Number.isFinite(durationSecs) && durationSecs > 0;
+  return durationUsable && Number.isFinite(endedAtMs);
+}
+
+export function answeredAnchorOutcome(endedAtIso, conversation) {
+  const metadata = conversation?.metadata;
+  const durationSecs = metadata?.call_duration_secs;
   const endedAtMs = Date.parse(endedAtIso); // NaN bei fehlendem/kaputtem endedAtIso (S2)
-  if (durationUsable && Number.isFinite(endedAtMs))
+  if (usableProviderDuration(durationSecs, endedAtMs))
     return anchorFromProviderDuration(new Date(endedAtMs - durationSecs * MS_PER_SECOND).toISOString());
   // Reihenfolge bindend: ERST fragen, ob das Gespraech ueberhaupt schon vorbei ist. Eine
   // brauchbare Dauer (oben) schlaegt die Frage, alles darunter haengt an ihr.
   if (conversation?.status === PROVIDER_IN_PROGRESS) return keepAnchor(ANSWERED_REASON_CONVERSATION_RUNNING);
+  // OUTBOUND-E2, GELD-INVARIANTE: DIESE Frage steht ZWISCHEN dem Laeuft-noch-Zweig und der
+  // Dauer-0-Frage - NIE weiter oben. Zoege man sie an den Anfang, verloere JEDE Konversation
+  // mit metadata.error ihren Buchungsanker, auch die 90 Sekunden lange, die am Ende einen
+  // Anbieterfehler meldet: answeredAt=null -> voiceMinutesOf bucht 0 -> wir zahlen den
+  // Carrier und kassieren nichts (PM-14). Hier unten gilt sie nur noch fuer Anrufe OHNE
+  // brauchbare Anbieter-Dauer - und dort ist ein gemeldeter Fehler der staerkere Beleg als
+  // "Dauer 0" oder "Dauer unbrauchbar".
+  if (metadata?.error) return clearAnchor(ANSWERED_REASON_PROVIDER_REJECTED);
   if (durationSecs === 0) return clearAnchor(ANSWERED_REASON_NOT_ANSWERED);
   return clearAnchor(ANSWERED_UNCLEAR_REASON);
 }
+
+// OUTBOUND-E2: OB ein Anbieterfehler ein Fehlergrund AM CALL wird, haengt an genau
+// derselben Entscheidung wie der Buchungsanker - eine zweite Stelle koennte auseinander
+// laufen und Label und Geld widersprechen lassen. Regel: nur wenn aus der Anbieter-Dauer
+// KEIN Buchungsanker geworden ist. Ein 42-Sekunden-Gespraech, das am Ende einen Fehler
+// meldet, ist zustande gekommen und wird bezahlt - es traegt keinen "nie zustande
+// gekommen"-Grund. WAS der Fehler bedeutet, entscheidet das EINE Vokabular
+// (telephony/failure-reason.js), nicht diese Datei.
+const providerErrorReasonFor = (anchor, conversation) =>
+  anchor.answeredAtIso || anchor.keepExistingAnchor ? null : providerErrorReason(conversation?.metadata?.error);
 
 // Nur Zeilen mit gesprochenem Inhalt: der Anbieter fuehrt auch Werkzeug-Ereignisse im
 // transcript, die kein message-Feld tragen.
@@ -716,6 +756,17 @@ const ohneRueckfrageTor = () => false;
 // der Agent bietet dann nie eine Recherche an, die der Webhook ablehnen wuerde.
 const ohneRechercheTor = () => false;
 
+// OUTBOUND-E5 (F3): der Standard-Metrik-Empfaenger, wenn niemand welche verdrahtet hat -
+// ein No-op statt eines Wurfs, dasselbe Muster wie ohneRueckfrageTor/ohneRechercheTor.
+// HEREINGEREICHT statt importiert (Muster consultAllowedFor, s. Signatur unten): src/
+// metrics.js importiert src/config.js und bindet damit dessen DATA_DIR-Snapshot beim
+// Laden - ein statischer Import HIER haette jede Datei, die outbound.js STATISCH laedt
+// (mehrere Testdateien tun das, Muster test/el-sip-call-id-join.test.js), an diesen
+// Zeitpunkt gebunden, BEVOR der Test sein eigenes DATA_DIR setzen kann (Lehre
+// test-base-env-drift - am 2026-08-29 genau so gemessen: ein Testlauf schrieb daraufhin
+// in das echte data/store.json statt in sein Temp-Verzeichnis).
+const ohneMetrikMeldung = Object.freeze({ logSenderFallback: () => {} });
+
 // Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die dreizehn, die die
 // Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
 // {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}},
@@ -841,6 +892,38 @@ export function callLocaleOf({ store, config, call, ownerName }) {
   });
 }
 
+// OUTBOUND-E5 (F3): Absender-Registrierung waehlen und einen Rueckfall LAUT machen -
+// MODUL-EBENE aus demselben Grund wie callLocaleOf darueber (G30, haelt
+// makeElevenLabsOutbound unter der Zeilengrenze). DIESELBE Quelle wie resolve_outbound
+// (views.js#findActiveNumber, tenant-gefiltert) - kein zweiter Absenderpfad. Die
+// Auswahl selbst ist rein und netzfrei (waehleAbsenderRegistrierung); sie kann nur eine
+// Registrierung liefern, die an der Nummer haengt, die dieser Anruf als from gebucht hat.
+// LAUT, nie still (E4-Lehre 4): der Rueckfall ist im Log benannt, wird gezaehlt und steht
+// am Anruf-Datensatz. PII-frei - Herkunft und Grund, nie eine Rufnummer.
+function absenderFuerAnruf({ store, call, el, metrics }) {
+  const absender = waehleAbsenderRegistrierung({
+    numberRecord: findActiveNumber(store.load(), call.tenantId),
+    fromE164: call.from,
+    rueckfallId: el.agentPhoneNumberId,
+  });
+  if (absender.quelle === ABSENDER_QUELLE.RUECKFALL_GLOBAL) {
+    console.warn(`[el-outbound] Absender-Rueckfall (call=${call.id}): grund=${absender.grund}`);
+    metrics.logSenderFallback({ grund: absender.grund });
+  }
+  store.recordFromRegistrationSource(call.id, absender.quelle);
+  return absender;
+}
+
+// OUTBOUND-E5 (F3): die vom Anbieter gemeldete Absendernummer persistieren - MODUL-EBENE
+// aus demselben Grund wie absenderFuerAnruf darueber (G30). Die Fixture traegt hier ein
+// MASKIERTES Token, kein E.164 - die Formpruefung sitzt im Store-Mutator (recordActualSender).
+function recordAbsenderMessung(store, callId, conversation) {
+  store.recordActualSender(callId, {
+    e164: conversation.metadata?.phone_call?.agent_number,
+    source: FROM_SOURCE.PROVIDER_MEASURED,
+  });
+}
+
 // Die EINZIGEN zwei Dinge, die pro Anruf am Agenten des Anbieters gesetzt werden duerfen
 // (Eigentuemer-Entscheidung 16.08.2026): die Sprache und die Stimme. Beide kommen aus dem
 // aufgeloesten Locale (call-locale.js), also aus dem Datensatz - kein Aufrufer kann sie
@@ -922,13 +1005,19 @@ function startCallBody({
   locale,
   consultAllowed,
   lookupAllowed,
+  agentPhoneNumberId,
 }) {
   // EIN Bundle und EINE Grund-Zeile fuer beide Leser (s. dynamicVariables).
   const bundle = localeFor(locale.language);
   const openingLine = verifiedOpeningLine({ call, locale: bundle });
   return {
     agent_id: el.agentId,
-    agent_phone_number_id: el.agentPhoneNumberId,
+    // OUTBOUND-E5 (F3): die Registrierung der DID DES ANRUFENDEN TENANTS. Der Anrufkoerper
+    // hat kein Absenderfeld (am Anbieter belegt) - DIESE Kennung bestimmt allein, welche
+    // Nummer der Angerufene sieht. Vorher stand hier die EINE globale Env fuer ALLE Tenants;
+    // ein Rueckruf landete dadurch beim Besitzer jener Nummer, nicht beim Auftraggeber.
+    // Aufgeloest wird sie oben, EINMAL, rein (waehleAbsenderRegistrierung).
+    agent_phone_number_id: agentPhoneNumberId,
     to_number: call.to,
     conversation_initiation_client_data: {
       dynamic_variables: dynamicVariables({
@@ -994,14 +1083,24 @@ async function finishWithoutProviderResult({
   endActiveCall,
   callId,
   nowMs,
+  failureReason,
 }) {
   const call = store.getCall(callId);
   if (!call) return;
+  // OUTBOUND-E2: BEIDE Aufgeben-Faelle sind result-unknown, NICHT "gescheitert": der Anruf
+  // kann gelaufen sein, wir haben nur kein Ergebnis abholen koennen.
+  // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
+  // geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel).
   const endedAtIso = new Date(
     cappedEndedAtMs(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S),
   ).toISOString();
   await terminateAndBillCall({
-    persistEnd: () => store.setCallEndedAt(callId, CALL_FAILED, endedAtIso),
+    persistEnd: persistEndWithReason({
+      store,
+      callId,
+      reason: failureReason,
+      endCall: () => store.setCallEndedAt(callId, CALL_FAILED, endedAtIso),
+    }),
     hangUp: () => endActiveCall(callId),
     bill: billThunk(finishCall, store, callId),
     callId,
@@ -1009,7 +1108,7 @@ async function finishWithoutProviderResult({
 }
 
 async function finishExpiredPoll(deps) {
-  await finishWithoutProviderResult(deps);
+  await finishWithoutProviderResult({ ...deps, failureReason: POLL_TIMEOUT_REASON });
 }
 
 // TEIL 1 (Owner-Auftrag 15.08.2026, Fortsetzung Aufgabe 2): der Poll gibt auf, wenn
@@ -1024,7 +1123,7 @@ async function finishExpiredPoll(deps) {
 // provisorische Stempel darf nicht als Buchungsanker stehen bleiben.
 async function finishOnPermanentError(deps) {
   applyAnsweredAnchor(deps.store, deps.callId, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR));
-  await finishWithoutProviderResult(deps);
+  await finishWithoutProviderResult({ ...deps, failureReason: pollProviderErrorReason(deps.providerStatus) });
 }
 
 // S1-1 Fix (Owner-Auftrag 15.08.2026, stiller Totalausfall): das Nachziehen des
@@ -1074,10 +1173,16 @@ function applyAnsweredAnchor(store, callId, anchor) {
 async function fetchConversationOutcome({ account, conversationId, callId, timeoutMs }) {
   try {
     const conversation = await fetchConversation({ fetchImpl: fetch, account, conversationId, timeoutMs });
-    return { conversation, permanent: false };
+    return { conversation, permanent: false, providerStatus: null };
   } catch (err) {
     console.error(`[el-outbound] Ergebnisabruf fehlgeschlagen (call=${callId}):`, err?.message);
-    return { conversation: null, permanent: PERMANENT_FETCH_STATUS.includes(err?.providerStatus) };
+    // providerStatus reist mit, damit der Aufgeben-Grund den ANBIETER-Status nennen kann
+    // (result-unknown:poll-provider-401 vs -404) statt zwei Faelle auf ein Wort zu ziehen.
+    return {
+      conversation: null,
+      permanent: PERMANENT_FETCH_STATUS.includes(err?.providerStatus),
+      providerStatus: err?.providerStatus ?? null,
+    };
   }
 }
 
@@ -1163,6 +1268,9 @@ export function makeElevenLabsOutbound({
   // consultAllowedFor (research/registry.js liest das MODUL src/config.js).
   // Signatur (call, resolveProfile) -> boolean, s. elevenLabsLookupAvailableFor.
   lookupAvailableFor = ohneRechercheTor,
+  // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler (s. ohneMetrikMeldung oben fuer die
+  // Begruendung, warum er hereingereicht statt importiert wird).
+  metrics = ohneMetrikMeldung,
 }) {
   // Immer frisch gelesen (nicht beim Bauen eingefroren): Tests uebersteuern die Gruppe
   // zur Laufzeit, und der Abholtakt darf nicht an einer Kopie von vor dem Boot haengen.
@@ -1202,6 +1310,9 @@ export function makeElevenLabsOutbound({
     // er joint ebenfalls nicht, sperrt aber zusaetzlich (set-once) die richtige Quelle
     // aus und behauptet dabei eine Zuordnung, die es nicht gibt.
     store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
+    // OUTBOUND-E5 (F3): die vom Anbieter gemeldete Absendernummer - AUCH im abgelehnten Fall
+    // befuellt (Befund 27.08.). Formpruefung sitzt im Store-Mutator (recordActualSender).
+    recordAbsenderMessung(store, callId, conversation);
   }
 
   // Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
@@ -1221,9 +1332,19 @@ export function makeElevenLabsOutbound({
   async function finishFromConversation(callId, conversation) {
     persistProviderResult(callId, conversation);
     const ended = store.endCallRecord(callId, endStatusOf(conversation));
-    applyAnsweredAnchor(store, callId, answeredAnchorOutcome(ended?.endedAt, conversation));
+    const anchor = answeredAnchorOutcome(ended?.endedAt, conversation);
+    applyAnsweredAnchor(store, callId, anchor);
+    // OUTBOUND-E2: finishCall liest call.failureReason beim Notification-Bau (telephony/
+    // call-finish.js) und billThunk laedt den Call FRISCH aus dem Store - steht der Grund
+    // noch nicht am Datensatz, bleibt der Nutzertext "<Ziel> (Status: failed)", also genau
+    // der Zustand, den diese Etappe abstellt.
+    // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
+    // geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel). Der zweite
+    // endCallRecord-Aufruf im Thunk ist idempotent (greift nur aus status==='active'); der
+    // ERSTE oben (:1275) bleibt UNANGETASTET - er ist der Anker-Lieferant fuer
+    // answeredAnchorOutcome (PM-7/PM-14).
     await terminateAndBillCall({
-      persistEnd: () => store.endCallRecord(callId, endStatusOf(conversation)),
+      persistEnd: persistEndWithReason({ store, callId, reason: providerErrorReasonFor(anchor, conversation), endCall: () => store.endCallRecord(callId, endStatusOf(conversation)) }),
       hangUp: null,
       bill: billThunk(finishCall, store, callId),
       callId,
@@ -1291,9 +1412,9 @@ export function makeElevenLabsOutbound({
     const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, callId, nowMs };
     if (classifyCallTime(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired)
       return finishExpiredPoll(finishDeps);
-    const { conversation, permanent } = await fetchConversationSoft(conversationId, callId);
+    const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
-      return finishOnPermanentError(finishDeps);
+      return finishOnPermanentError({ ...finishDeps, providerStatus });
     if (!conversation || !FINISHED_PROVIDER_STATUS.includes(conversation.status))
       return scheduleResultPoll(callId, conversationId);
     await finishFromConversation(callId, conversation);
@@ -1374,6 +1495,9 @@ export function makeElevenLabsOutbound({
     // (research/registry.js#elevenLabsLookupAvailableFor, per DI verdrahtet), mit der
     // Fassaden-Profilaufloesung als Parameter.
     const lookupAllowed = lookupAvailableFor(call, store.resolveProfile);
+    // OUTBOUND-E5 (F3): Absender-Registrierung waehlen + Rueckfall LAUT machen (Modul-Ebene
+    // unten, G30 - haelt diese Funktion unter der Zeilengrenze).
+    const agentPhoneNumberId = absenderFuerAnruf({ store, call, el, metrics }).agentPhoneNumberId;
     // OUT-05-EL (Trockenlege-Naht, Aufgabe 1): GENAU vor dem einzigen Netzzugriff dieses
     // Wegs abgezweigt - wie fakeVoice in telephony/registry.js den kompletten Telnyx-
     // Transport ersetzt, ersetzt dieser Zweig NUR den EINEN POST gegen api.elevenlabs.io.
@@ -1381,7 +1505,7 @@ export function makeElevenLabsOutbound({
     // laufen unveraendert - der Fake unterscheidet sich einzig in der Herkunft der
     // conversation_id.
     // Alles, was in den Anfragekoerper eingeht, EINMAL benannt (G19).
-    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed };
+    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, agentPhoneNumberId };
     const { conversationId } = config.safety.fakeOriginateElevenlabs
       ? startResultOf(fakeSipTrunkOutboundCallResponse())
       : await startOutboundCall(startCallRequest(anfrage));

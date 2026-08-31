@@ -67,6 +67,19 @@ services:
         sync: false
       - key: TELNYX_ACCOUNT_SID
         sync: false
+      # OUTBOUND-E4 (Drift-Waechter): FQDN-Connection (ANI-Override) + Outbound-Voice-
+      # Profile (Ziellaender). Leer -> die Pruefungen 2/6/7 melden unbekannt (nie fatal).
+      - key: TELNYX_FQDN_CONNECTION_ID
+        sync: false
+      - key: TELNYX_OUTBOUND_VOICE_PROFILE_ID
+        sync: false
+      # OUTBOUND-E5 (F3): Digest-Zugangsdaten der SIP-Trunk-FQDN-Connection oben, nur
+      # gebraucht fuer ELEVENLABS_NUMBER_REGISTRATION_ENABLED=true (s.u.). Leer -> das
+      # Anlegen einer Registrierung schlaegt fail-closed fehl (KEIN No-op).
+      - key: TELNYX_SIP_TRUNK_USERNAME
+        sync: false
+      - key: TELNYX_SIP_TRUNK_PASSWORD
+        sync: false
       # ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme). Nur aktiv, wenn
       # REF + VOICE_ID gesetzt sind; leer = Azure-Bestand. Erst NACH gruenem
       # Live-Smoke setzen (Plan/tasks/todo.md).
@@ -107,6 +120,11 @@ services:
         sync: false
       - key: ELEVENLABS_AGENT_PHONE_NUMBER_ID
         sync: false
+      # OUTBOUND-E5 (F3): Schalter fuer den EINZIGEN neuen Anbieter-SCHREIBZUGRIFF dieser
+      # Etappe (Anlegen einer EL-Nummernregistrierung je Tenant-DID). Default AUS - erst
+      # NACH Owner-Pilot (V1-V4, docs/RUNBOOK-OUTBOUND.md) auf "true" setzen.
+      - key: ELEVENLABS_NUMBER_REGISTRATION_ENABLED
+        value: "false"
       - key: ELEVENLABS_RESULT_POLL_MS
         value: "5000"
       # ---- Telnyx AI Assistant / Brain-Shim (C-Telnyx, P10) ----
@@ -185,10 +203,23 @@ services:
       # Provider der Bootstrap-Nummer: telnyx.
       - key: BOOTSTRAP_PROVIDER
         value: "telnyx"
+      # OUTBOUND-E1: die Plattform-Absendernummer (ANI) des Produkt-Outbounds. MUSS eine
+      # kontoeigene DID des BOOTSTRAP-Tenants sein, KEINE Kunden-DID (sonst friert der
+      # Riegel die Doppelrolle ein, statt sie zu beenden). Secret-frei, aber sync:false -
+      # Wert im Dashboard, render.yaml setzt live nichts.
+      - key: PLATFORM_ANI_E164
+        sync: false
       # Globaler Outbound-Kill-Switch (outbound-p3). true = ALLE Outbounds sofort 403.
       # Default false. Notbremse + Sekunden-Rollback fuer den Allowlist-Cutover.
       - key: OUTBOUND_FROZEN
         value: "false"
+      # OUTBOUND-E4 (F4): der ANI-Riegel - das EINZIGE Gate der Drift-Waechter-Etappe.
+      # Default AUS (nur Beobachtung). Lehnt NUR bei frischer, LIVE-nachgemessener
+      # ownership_lost-Messung ab. OUTBOUND_FROZEN bleibt der bewusste Notaus.
+      - key: OUTBOUND_ANI_GATE_ENABLED
+        value: "false"
+      - key: OUTBOUND_ANI_GATE_MAX_AGE_MS
+        value: "900000"
       # ALLOWED_NUMBERS: ab outbound-p3 wirkungslos (statische Allowlist abgeschafft);
       # Permit = per-Tenant-Verifikation. Key bleibt fuer den Owner-Env-Cleanup.
       - key: ALLOWED_NUMBERS
@@ -453,6 +484,46 @@ services:
       # die Warnung).
       - key: PLATFORM_ALERT_SMS_TO
         value: ""
+      # ---- Systematischer-Ausfall-Melder (OUTBOUND-E3b) ----
+      # Meldet einen systematischen Outbound-Ausfall (Regressionsfang: 27.08.2026-Fall)
+      # dem Betreiber, ohne dass zufaellig jemand anrufen muss. 0 = komplett aus.
+      - key: OUTAGE_ALERT_WINDOW_MS
+        value: "3600000"
+      - key: OUTAGE_ALERT_MIN_FAILURES
+        value: "3"
+      - key: OUTAGE_ALERT_MIN_ATTEMPTS
+        value: "20"
+      - key: OUTAGE_ALERT_FAIL_SHARE_PERCENT
+        value: "20"
+      - key: OUTAGE_ALERT_DEBOUNCE_MS
+        value: "21600000"
+      - key: OUTAGE_ALERT_RETRY_MS
+        value: "900000"
+      # C8b: monatlicher Selbsttest ueber beide Kanaele. 0 = komplett aus.
+      - key: OUTAGE_ALERT_SELF_TEST_INTERVAL_MS
+        value: "2592000000"
+      # C8 (Owner-Entscheidung F-8): 24-h-Eskalation eines haengenden Kuendigungs-
+      # Nummern-HOLD (platform_number_in_use) ueber denselben Meldeweg. 0 = komplett aus.
+      - key: PLATFORM_HOLD_ESCALATION_MAX_AGE_MS
+        value: "86400000"
+      # Betreiber-Zieladresse, der PRIMAERE Kanal (haengt an keinem Carrier). Secret-frei,
+      # aber sync:false (Dashboard-verwaltet, Muster PLATFORM_ANI_E164). WARNUNG: bleibt
+      # dieser Wert UND PLATFORM_ALERT_SMS_TO gemeinsam leer, waehrend
+      # ELEVENLABS_OUTBOUND_ENABLED=true und OUTAGE_ALERT_WINDOW_MS>0 gesetzt sind,
+      # verweigert der Dienst nach dem Deploy den Start (fatal) - VOR einem Deploy dieser
+      # Etappe im Dashboard setzen.
+      - key: PLATFORM_ALERT_MAIL_TO
+        sync: false
+      # ---- Drift-Waechter (OUTBOUND-E4, F4) ----
+      # Erkennt eine Abweichung zwischen unserer deklarierten Absenderkonfiguration und
+      # der Anbieter-Wirklichkeit (27.08.2026-Fall), OHNE dass ein Anruf stattfindet.
+      # 0 = der Waechter ist KOMPLETT AUS.
+      - key: OUTBOUND_DRIFT_MIN_INTERVAL_MS
+        value: "600000"
+      - key: OUTBOUND_DRIFT_STALE_MS
+        value: "21600000"
+      - key: OUTBOUND_DRIFT_BALANCE_MIN_HOURS
+        value: "72"
       # ---- Spend-Monat-Flip (Budget-Achsen P7) ----
       # AN = beide Gate-Achsen messen im UTC-Kalendermonat statt lebenslang. AUS (Default)
       # ist byte-identisch zum Bestand. Vorbedingung vor dem Flip: Live-Beleg, dass

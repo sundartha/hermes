@@ -22,6 +22,17 @@ export default [
       // Wegwerf-Skripte je Workflow-Lauf (CLAUDE.md: nach Merge geloescht) -
       // die dauerhaften Werkzeuge unter .claude/workflows/*.js bleiben gelintet.
       ".claude/workflows/runs/**",
+      // Agenten-Worktrees: fluechtige Zweitcheckouts DESSELBEN Repos. Sie mitzulinten
+      // bedeutet, dieselben Dateien ein zweites Mal zu pruefen - und zwar in einem
+      // fremden Branchstand, fuer den die eingefrorenen Zaehler in
+      // eslint-suppressions.json gar nicht gelten. Das Ergebnis war bisher immer
+      // dasselbe: der pre-commit-Hook meldete Zehntausende Scheinfehler und blockierte
+      // JEDEN Commit, solange ein Workflow lief (gemessen 29.08.2026: 648 Dateien,
+      // 8.622 Fehler; laut tasks/lessons.md zuvor schon zweimal an einem Tag). Bisher
+      // wurde das jedes Mal von Hand weggeraeumt - hier ist es abgestellt. Jeder Agent
+      // lintet seinen eigenen Worktree ohnehin selbst, dort gibt es dieses
+      // Verzeichnis nicht.
+      ".claude/worktrees/**",
       // ERZEUGTE AUSGABEN - dieselbe Liste in eslint.config.js, .jscpd.json,
       // knip.json und .c8rc.json. Ein Messinstrument, das Minifier-Ausgabe
       // misst, misst den Zufall des letzten Builds statt der Sauberkeit des

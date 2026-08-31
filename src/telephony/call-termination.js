@@ -107,3 +107,23 @@ export function elevenLabsHangUpAction(endActiveCall, call) {
   if (!call.elevenlabsConversationId || typeof endActiveCall !== "function") return null;
   return () => endActiveCall(call.id);
 }
+
+// OUTBOUND-E3b (Befund C-A aus dem E3a-Safety-Review) + G27/C2-Fix (Runde 3): die
+// Invariante "der Grund steht am Datensatz, BEVOR gebucht wird" war bisher nur in
+// routes/api-calls.js Struktur; in routes/voice.js, elevenlabs/outbound.js UND
+// call-lifecycle.js war sie eine verschiebbare (bzw. von Hand umgekehrt formulierte)
+// Anweisung - der Safety-Reviewer hat sie in voice.js verletzt, und die GESAMTE Suite
+// blieb GRUEN. Diese Funktion ist die EINE Formulierung fuer diese VIER Naehte (Geltungs-
+// bereich: test/fehlergrund-reihenfolge-riegel.test.js#ORDER_CRITICAL_FILES) - sie liefert
+// den persistEnd-Thunk, in dem der Grund per Konstruktion ZUERST steht - es gibt an diesen
+// Naehten danach keine Anweisung mehr, die man hinter das await schieben KOENNTE. EINE
+// fuenfte Naht (telnyx-call-control-ingest.js#recordHangupOutcome) bleibt bewusst
+// aussenvor - Begruendung im Kommentarkopf des Riegel-Tests.
+// store.recordFailureReason ist set-once und bei null ein No-op (store/state-ops.js:854).
+// EIN Options-Argument (F1: max-params 3).
+export function persistEndWithReason({ store, callId, reason, endCall }) {
+  return () => {
+    store.recordFailureReason(callId, reason);
+    endCall();
+  };
+}

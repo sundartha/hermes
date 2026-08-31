@@ -27,9 +27,11 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { isConsultEventId } from "../store/state-ops.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
+import { startRejectionReason } from "../telephony/failure-reason.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
+import { persistEndWithReason } from "../telephony/call-termination.js";
 // TEIL C (Owner-Auftrag 15.08.2026, cancel_call darf nicht luegen): der Deckelwert ist
 // KEINE Magic Number - er ist in elevenlabs/outbound.js besessen (Bewachung statt
 // Korrektur der Anbieter-Vorlage, s. dortiger Kommentar).
@@ -53,6 +55,35 @@ function contextReceivedMeta(context, config) {
     recipient_relationship: !!context?.recipient_relationship,
     desired_outcome: !!context?.desired_outcome,
   };
+}
+
+// OUTBOUND-E3a (Befund C1): der Anbieter-Status als REINE ABFRAGE. Der Vorgaenger
+// (recordStartRejectionReason) schrieb UND lieferte zurueck - Command-Query-Vermischung
+// (Clean-Code-Befund E2-A), und genau diese Doppelrolle machte die Reihenfolge zu einer
+// verschiebbaren Anweisung im catch. Getrennt: hier die Frage, unten der Schreibweg.
+const providerStatusOf = (err) => err?.providerStatus;
+
+// OUTBOUND-E3a (Befund C1, REIHENFOLGE-RIEGEL): der Grund wird INNERHALB von persistEnd
+// geschrieben - und persistEnd laeuft in terminateAndBillCall (telephony/
+// call-termination.js:49-51) garantiert VOR bill(). Damit ist die Invariante "Grund vor
+// Buchung" Struktur, nicht Kommentar: an dieser Naht existiert keine Anweisung mehr, die
+// man hinter das await schieben KOENNTE. finishCall liest call.failureReason beim Bau der
+// Benachrichtigung UND (seit E3a) beim Mailentscheid (telephony/call-finish.js:210-218);
+// stuende der Grund spaeter, bekaeme der Nutzer "<Ziel> (Status: failed)" und keine Mail -
+// genau die Stummheit, gegen die diese Etappe gebaut ist.
+// Reihenfolge im Thunk selbst ist bewusst egal (beides vor bill()); der Grund steht
+// dennoch zuerst, weil er die Aussage ist und der Endstatus nur ihr Rahmen.
+// recordFailureReason ist set-once und bei null ein No-op (store/state-ops.js:854).
+// Exportiert NUR fuer den Riegel-Test (test/fehlergrund-reihenfolge-riegel.test.js):
+// der beweist am Produktions-Thunk selbst, dass der Grund VOR dem Endstatus geschrieben
+// wird - kein zweiter, im Test nachgebauter Ablauf (das war E2-Befund E2-B).
+export function endFailedCallWithReason(store, callId, providerStatus) {
+  return persistEndWithReason({
+    store,
+    callId,
+    reason: startRejectionReason(providerStatus),
+    endCall: () => store.endCallRecord(callId, "failed"),
+  });
 }
 
 // Fail-closed-Ersatz fuer den EL-Anrufstart (s. deps unten): ein eingeschalteter Zweig
@@ -390,13 +421,26 @@ export function makeCallRoutes({
         diagnostic: call.diagnostic,
       });
     } catch (err) {
+      // OUTBOUND-E3a (Befund C1, REIHENFOLGE-RIEGEL): der Grund wird INNERHALB von
+      // persistEnd geschrieben (endFailedCallWithReason oben) - und persistEnd laeuft in
+      // terminateAndBillCall garantiert VOR bill() (telephony/call-termination.js:49-51).
+      // Damit ist "Grund vor Buchung" Struktur, nicht Kommentar: an dieser Naht existiert
+      // keine Anweisung mehr, die sich hinter das await schieben liesse (Regressionsfang:
+      // test/fehlergrund-reihenfolge-riegel.test.js). bill laeuft ueber finishCall, und
+      // finishCall liest call.failureReason beim Notification-Bau UND (seit E3a) beim
+      // Mailentscheid (telephony/call-finish.js:210-218); stuende der Grund spaeter, bliebe
+      // der Nutzertext "<Ziel> (Status: failed)" und die not-placed-Mail bliebe aus - genau
+      // die Stummheit, fuer die diese Etappe gebaut ist. Der catch umschliesst ALLE DREI
+      // Engine-Zweige (:331/:345/:363) - damit bekommt auch eine Telnyx-Start-Ablehnung auf
+      // dem TeXML-Weg erstmals einen Grund.
+      const providerStatus = providerStatusOf(err);
       // C5 (Struct-4): die eigentliche Luecke - bisher lief hier NIE finishCall (Settlement/
       // Notification fehlten komplett bei einem Dial-Fehlschlag), und releaseReserve wurde
       // manuell dupliziert obwohl finishCall es bereits idempotent selbst aufruft (S2,
       // reserveReleased-Guard in state-ops.js). Jetzt derselbe Gateway wie die anderen 4
       // Terminierungspfade; hangUp:null (kein Dial = kein Provider-Leg zum Auflegen).
       await terminateAndBillCall({
-        persistEnd: () => store.endCallRecord(call.id, "failed"),
+        persistEnd: endFailedCallWithReason(store, call.id, providerStatus),
         hangUp: null,
         bill: billThunk(finishCall, store, call.id),
         callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
@@ -410,12 +454,11 @@ export function makeCallRoutes({
         err?.message || String(err),
       );
       // Der Adapter haengt bei einer Provider-HTTP-Ablehnung err.providerStatus an
-      // (secret-frei). Liegt sie vor -> kategorisierte, provider-NEUTRALE Meldung mit
-      // Statusklasse (502 Upstream), damit der Aufrufer den echten Grund erkennt.
-      // C-P4: der frueher hier angehaengte Twilio-Trial-Hint ist mit dem Adapter
+      // (secret-frei, oben gelesen). Liegt sie vor -> kategorisierte, provider-NEUTRALE
+      // Meldung mit Statusklasse (502 Upstream), damit der Aufrufer den echten Grund
+      // erkennt. C-P4: der frueher hier angehaengte Twilio-Trial-Hint ist mit dem Adapter
       // entfallen - er haette nur fuer einen Anbieter gegolten, den es nicht mehr gibt.
       // Kein Roh-Body/Key an den Client (Regel 4/5).
-      const providerStatus = err?.providerStatus;
       const body = providerStatus
         ? {
             error: `Provider hat den Anruf abgelehnt (HTTP ${providerStatus}). Account-/Nummern-Konfiguration pruefen.`,

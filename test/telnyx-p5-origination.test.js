@@ -21,7 +21,15 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 function spyStore() {
   const saveCalls = [];
-  return { saveCalls, save: () => saveCalls.push(true) };
+  const recordActualSenderCalls = [];
+  return {
+    saveCalls,
+    save: () => saveCalls.push(true),
+    // OUTBOUND-E5 (F3): originateAiAssistantCall ruft dies VOR store.save() - ohne den
+    // Stub wirft die Attrappe (Muster save/saveCalls).
+    recordActualSenderCalls,
+    recordActualSender: (callId, herkunft) => recordActualSenderCalls.push({ callId, herkunft }),
+  };
 }
 
 function spyVoiceControl(callControlId = "cc_spy_1") {
@@ -69,6 +77,11 @@ test("originateAiAssistantCall: exakte webhookUrl + Persistenz, EIN Aufruf", asy
   assert.equal(call.assistantId, "asst_9", "aus config.telnyxAssistant.assistantId");
   assert.equal(call.callControlId, "cc_1", "aus der originateViaCallControl-Rueckgabe");
   assert.equal(store.saveCalls.length, 1, "store.save() genau einmal");
+  // OUTBOUND-E5 (F3): auf diesem Weg IST der gesendete Absender fromNumber (kein
+  // ani_override auf der Call-Control-Connection) - Struktur-Beleg, byte-genau.
+  assert.deepEqual(store.recordActualSenderCalls, [
+    { callId: "call_abc", herkunft: { e164: "+4930000000", source: "tenant_did" } },
+  ]);
 });
 
 // OUT-27: der Assistant-Originationspfad hat KEINE eigene Laenderlogik - alles

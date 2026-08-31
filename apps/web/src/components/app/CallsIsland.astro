@@ -24,6 +24,13 @@
   <ul id="calls-list" class="data-list calls-list" aria-live="polite"></ul>
 </section>
 
+<section class="card">
+  <div class="calls-head">
+    <h2 data-i18n="notificationsTitle">Notifications</h2>
+  </div>
+  <ul id="notifications-list" class="data-list" aria-live="polite"></ul>
+</section>
+
 <div id="call-modal" class="call-modal" aria-hidden="true">
   <div class="call-modal__backdrop" data-call-modal-close></div>
   <div
@@ -58,7 +65,7 @@
 </div>
 
 <script>
-  import { bindList, callRows, fillCallModal } from "../../lib/render.js";
+  import { bindList, callRows, notificationRows, fillCallModal } from "../../lib/render.js";
 
   const modalEl = document.getElementById("call-modal");
   const modalCardEl = document.getElementById("call-modal-card");
@@ -133,4 +140,7 @@
   // Auth-Verlust (kein stale Tenant-Datenleck) -- gemeinsame Verdrahtung (G5).
   // Ein Klick auf eine Zeile oeffnet das eine Detail-Fenster (openModal).
   bindList(document, "calls-list", (doc, data) => callRows(doc, data, openModal));
+  // OUTBOUND-E3a (F2a, L8): der Benachrichtigungs-Feed war bisher reine Frontend-Luecke
+  // (der Feed lag laengst im state, wurde nur nirgends gerendert).
+  bindList(document, "notifications-list", notificationRows);
 </script>

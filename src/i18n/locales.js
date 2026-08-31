@@ -332,6 +332,11 @@ export const LOCALES = Object.freeze({
       // (Muster der uebrigen postCall-Strings).
       mailTimeLabel: "Zeitpunkt:",
       mailDurationLabel: "Dauer:",
+      // OUTBOUND-E3a: der zweite Absatz der EINEN Nutzer-Mail bei not-placed (Schuld liegt
+      // bei uns/dem Anbieter). NIE gesprochen (Muster der uebrigen postCall-Strings) - DE
+      // deshalb in der ASCII-Transliteration des Bestands, FR mit Akzenten, EN kuratiert.
+      notPlacedMailHint:
+        "Der Fehler lag auf unserer Seite, nicht bei dir. Wir kuemmern uns darum; du kannst es spaeter erneut versuchen.",
       // F2-Newsletter-Recipients: Abmelde-Link-Zeile am Ende JEDER Summary-Mail an eine
       // Zusatzadresse (Owner-Auftrag). Die Konto-Mail traegt diese Zeile NICHT (kein
       // unsubToken fuer den Konto-Pfad, s. mail-summary.js).
@@ -447,6 +452,8 @@ export const LOCALES = Object.freeze({
       // F2-Mail: Labels der Call-Summary-Mail, s. DE.
       mailTimeLabel: "Heure :",
       mailDurationLabel: "Durée :",
+      notPlacedMailHint:
+        "L'erreur vient de chez nous, pas de vous. Nous nous en occupons ; vous pouvez réessayer plus tard.",
       // F2-Newsletter-Recipients: Abmelde-Link-Zeile, s. DE.
       unsubscribeLinkLabel: "Se désabonner :",
     }),
@@ -557,6 +564,8 @@ export const LOCALES = Object.freeze({
       // F2-Mail: Labels der Call-Summary-Mail, s. DE.
       mailTimeLabel: "Time:",
       mailDurationLabel: "Duration:",
+      notPlacedMailHint:
+        "The problem was on our side, not yours. We are looking into it; you can try again later.",
       // F2-Newsletter-Recipients: Abmelde-Link-Zeile, s. DE.
       unsubscribeLinkLabel: "Unsubscribe:",
     }),

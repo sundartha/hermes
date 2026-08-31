@@ -12,14 +12,19 @@ import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { audit } from "./util.js";
-import { voiceControl, messaging, numberProvisioning } from "./telephony/registry.js";
+import { voiceControl, messaging, numberProvisioning, providerConfigRead } from "./telephony/registry.js";
 import { sendBootstrapAlertSms } from "./telephony/alert-sms.js";
 import { makeVoiceRender } from "./telephony/voice-render.js";
 import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-termination.js";
 import { makeCallFinish } from "./telephony/call-finish.js";
+import { makeOutageWatch } from "./telephony/outage-report.js";
+import { makeDriftWatch } from "./telephony/outbound-drift-watch.js";
+import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
+import { metrics } from "./metrics.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
+import { makeAniOwnershipRecheck } from "./telephony/ani-ownership-recheck.js";
 import { reattachActiveCall as reattachActiveCallCore } from "./telephony/reattach.js";
 import { makeCallLifecycle } from "./telephony/call-lifecycle.js";
 import { blockingBudgetAxis } from "./budget-gate.js";
@@ -73,6 +78,14 @@ const { requestTenant, requireTenant } = makeRequestTenant(store);
 // kein zweiter Tenant-Resolver, G5/DIP). audit/messaging (Budget-Achsen P6) speisen die
 // fail-soft Plattform-Fruehwarnung im reserve_budget-Gate - dieselben Instanzen wie
 // callFinish (kein zweiter Audit-/Messaging-Zugang, DIP).
+//
+// OUTBOUND-E4 Review-Blocker (BLOCKER 1 / G9/C2): telnyxRead ist derselbe rein LESENDE
+// Provider-Read-Port, den driftWatch weiter unten bekommt (registry.js#
+// providerConfigRead, Default Telnyx, kein zweiter HTTP-Client) - HIER schon gebaut
+// (statt erst bei driftWatch), damit der ANI-Riegel seine LIVE-Nachmessung ("Schutzschicht
+// 2", PLAN-SECURITY.md) ueberhaupt bekommt. Ohne diese Verdrahtung faellt aniOwnershipRecheck
+// auf makeOutboundGates' Default-No-op zurueck und das Gate kann NIE ablehnen.
+const telnyxRead = providerConfigRead();
 const { gates: outboundGates } = makeOutboundGates({
   store,
   config,
@@ -82,6 +95,7 @@ const { gates: outboundGates } = makeOutboundGates({
   TENANT_REJECT,
   audit,
   messaging,
+  aniOwnershipRecheck: makeAniOwnershipRecheck({ telnyxRead }),
 });
 
 // Metering-Instanz (P6b3-Meter + outbound-p1c-Reconcile) EINMAL beim Boot verdrahtet
@@ -118,6 +132,23 @@ const costCrossCheck = makeCostCrossCheck({ store, config, voiceControl });
 // (makeBrevoMailer/makeSmtpMailer) sind laut eigenem Modul-Kopf zustandslos (jeder Aufrufer
 // bekommt seine EIGENE Instanz) - zwei Instanzen sind unbedenklich, kein Doppel-Zustand.
 const mailer = selectMailer(config);
+
+// OUTBOUND-E3b: vierter, unabhaengiger Sweep-Zweig (Muster costTruing/costCrossCheck,
+// INV-7) - schliesst offene Ausfall-Marker, deren Fenster inzwischen gesund ist (D9: der
+// Ausloeser in finishCall sieht nur not-placed-Anrufe und kann "erholt" nie selbst
+// feststellen). audit/messaging sind dieselben Instanzen wie ueberall sonst (DIP).
+// C8b (Review-Blocker Runde 2): NACH mailer verdrahtet (statt davor wie im ersten Entwurf)
+// - der fuenfte Zweig (Alarmkanal-Selbsttest, s. runSweepTick) braucht dieselbe
+// Mailer-Instanz wie callFinish, kein zweiter Versandzugang (DIP).
+const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer });
+
+// OUTBOUND-E4: siebter Sweep-Zweig + Boot-Lauf (Muster outageWatch, INV-7). telnyxRead
+// (dieselbe Instanz wie beim ANI-Riegel oben, EIN Read-Port, kein zweiter HTTP-Client)
+// ist der rein LESENDE Provider-Read-Port (registry.js#providerConfigRead, Default
+// Telnyx); elRead kommt aus der EINEN Fabrik makeElConfigRead (Blocker 7, G5) - vorher
+// stand dieselbe Closure wortgleich auch in scripts/check-outbound-drift.mjs.
+const elRead = makeElConfigRead(config);
+const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, telnyxRead, elRead });
 
 // F2-Mail: Accounts-Zugriff (Konto-E-Mail) haengt an accounts.accountByTenant (web-auth.js),
 // das NUR existiert, wenn der pg-gated Web-Login-Block durchlaeuft (wireWebLogin, asynchron
@@ -166,6 +197,9 @@ const elevenLabsOutbound = makeElevenLabsOutbound({
   // Thema B: dasselbe Muster fuer das Recherche-Tor - die EINE Torkette aus
   // research/registry.js, die auch der Lookup-Webhook fragt.
   lookupAvailableFor: elevenLabsLookupAvailableFor,
+  // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler - hier verdrahtet statt in
+  // outbound.js importiert (Begruendung an der Signatur dort, Lehre test-base-env-drift).
+  metrics,
 });
 
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper
@@ -285,6 +319,8 @@ const deps = {
   voiceRender,
   costTruing,
   costCrossCheck,
+  outageWatch,
+  driftWatch,
   messaging,
   consultDelivery,
   elevenLabsOutbound,

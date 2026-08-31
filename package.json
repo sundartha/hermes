@@ -22,6 +22,8 @@
     "elevenlabs:drift": "node scripts/check-elevenlabs-drift.mjs",
     "elevenlabs:push": "node scripts/push-elevenlabs.mjs",
     "exa:key": "node scripts/exa-key-setzen.mjs",
+    "outbound:drift": "node scripts/check-outbound-drift.mjs",
+    "elevenlabs:nummern": "node scripts/el-nummern-registrierung.mjs",
     "spike1:consult-echo": "node scripts/spike1-consult-echo.mjs",
     "spike1:setup": "node scripts/spike1-setup.mjs",
     "spike1:ws-probe": "node scripts/spike1-ws-probe.mjs",

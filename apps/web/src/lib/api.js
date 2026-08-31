@@ -317,6 +317,10 @@ function listFrom(data, key) {
   return Array.isArray(value) ? value : [];
 }
 export const callsFrom = (data) => listFrom(data, "calls");
+// OUTBOUND-E3a (F2a, L8): der Benachrichtigungs-Feed lag bereits in beiden state-
+// Antworten (routes/api-read.js, self-service-routes.js), wurde aber von KEINER Zeile im
+// Frontend gelesen - reine Frontend-Luecke. {id, title, body, at, callId} (state-ops.js).
+export const notificationsFrom = (data) => listFrom(data, "notifications");
 
 // Live-Dot: der Agent gilt als "live", sobald MINDESTENS ein Call aktiv ist.
 // Gleiche Bedingung wie im Bestand (tenant.html: calls.some status==="active").

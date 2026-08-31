@@ -77,7 +77,10 @@ test("Cap-Grund: terminateCappedCall persistiert das Cap-Token gemeinsam mit dem
   assert.equal(call.status, "failed", "Zombie-Terminalisierung bleibt failed (INV-9 unveraendert)");
   assert.deepEqual(
     order,
-    ["setCallEndedAt", "recordFailureReason", "endCall", "bill"],
+    // G27/C2-Fix (Review-Blocker Runde 3): persistEnd laeuft jetzt ueber persistEndWithReason
+    // (call-termination.js) - EINE Formulierung, recordFailureReason IMMER zuerst (per
+    // Konstruktion, nicht mehr als freie, umkehrbare Zeile).
+    ["recordFailureReason", "setCallEndedAt", "endCall", "bill"],
     "Grund liegt VOR dem Provider-Hangup und VOR dem Settlement - die Buchungs-/Summary-Kette liest ihn bereits mit",
   );
 });

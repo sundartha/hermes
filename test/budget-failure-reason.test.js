@@ -112,7 +112,9 @@ test("Geld-Achse: Re-Attach eines Calls mit erschoepfter Decke terminalisiert ue
   );
   assert.deepEqual(
     order,
-    ["setCallEndedAt", "recordFailureReason", "endCall", "bill"],
+    // G27/C2-Fix (Review-Blocker Runde 3): persistEnd laeuft jetzt ueber persistEndWithReason
+    // (call-termination.js) - EINE Formulierung, recordFailureReason IMMER zuerst.
+    ["recordFailureReason", "setCallEndedAt", "endCall", "bill"],
     "Grund liegt VOR dem Provider-Hangup und VOR dem Settlement, wie beim Cap-Pendant",
   );
 });

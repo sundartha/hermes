@@ -353,7 +353,13 @@ CREATE TABLE IF NOT EXISTS call (
   -- erfolgreichem Mail-Send, sonst NULL -> Bestand byte-identisch.
   summary_mail_sent_at TEXT,
   inbox_entry_at TEXT,
-  inbox_seen_at TEXT
+  inbox_seen_at TEXT,
+  -- OUTBOUND-E5 (F3): die Absender-WAHRHEIT (Messung) + die Registrierungs-HERKUNFT
+  -- (Wahl beim Waehlen) - zwei verschiedene Fragen, s. ALTER-Kommentar weiter unten.
+  -- Additiv NULLABLE, KEIN Backfill.
+  from_actual_e164 TEXT,
+  from_source TEXT,
+  from_registration_source TEXT
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -477,6 +483,18 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS opening_line_sha256 TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_origin TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_at TEXT;
+
+-- OUTBOUND-E5 (F3): die Absender-WAHRHEIT, getrennt von der Absender-ABSICHT (from_e164).
+-- from_actual_e164 = was der Anbieter sagt, dass gesendet wurde; NUR aus Messung, set-once,
+-- nur E.164-foermig, nur OUTBOUND. from_source = woher dieses Wissen kommt.
+-- from_registration_source = welche ElevenLabs-Nummernregistrierung der Anrufstart benutzt
+-- hat (eigene Tenant-DID oder der globale Rueckfall) - eine ANDERE Frage als from_source,
+-- deshalb eine eigene Spalte (nie zwei Sachverhalte auf ein Label).
+-- Additiv NULLABLE. KEIN Backfill, und zwar begruendet: fuer jede Bestandszeile ist NULL der
+-- WAHRE Wert; from_e164 dorthin zu kopieren waere genau die Behauptung, die F3 abstellt.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS from_actual_e164        TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS from_source             TEXT;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS from_registration_source TEXT;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).
@@ -647,7 +665,10 @@ CREATE TABLE IF NOT EXISTS number (
   provider           TEXT,
   status             TEXT NOT NULL DEFAULT 'active',
   provider_number_id TEXT,
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- OUTBOUND-E5 (F3): die ElevenLabs-Nummernregistrierung dieser DID, s. ALTER-Kommentar
+  -- weiter unten. Additiv NULLABLE.
+  provider_agent_phone_number_id TEXT
 );
 -- Forward-compat fuer eine bestehende number-Tabelle (idempotent). Bestehende
 -- (geseedete) Nummern sind in Benutzung -> Default 'active'. e164 von NOT NULL auf
@@ -670,6 +691,15 @@ ALTER TABLE number ADD COLUMN IF NOT EXISTS language TEXT;
 -- NULLABLE: Bestands-Nummern und Kaeufe ohne cost_information -> NULL = "keine Miete
 -- gelernt" (P5 faellt dann auf seinen Fallback zurueck), ausdruecklich NICHT 0.
 ALTER TABLE number ADD COLUMN IF NOT EXISTS monthly_cost_cents INTEGER;
+-- OUTBOUND-E5 (F3): die ElevenLabs-Nummernregistrierung DIESER DID (phnum_...). Der
+-- EL-Anrufstart traegt kein Absenderfeld (am Anbieter belegt) - die gesendete Nummer haengt
+-- allein an der Registrierung. Je Tenant-DID eine eigene; die Kennung gehoert deshalb an die
+-- Nummer, nicht in eine globale Env (die kann per Definition keine Pro-Tenant-Groesse tragen).
+-- Additiv NULLABLE. Bestands-DIDs bleiben NULL -> der Anrufstart faellt LAUT auf die globale
+-- Registrierung zurueck (Bestandsschutz), bis der Reparaturlauf sie nachtraegt.
+-- RLS: number traegt bereits ENABLE/FORCE ROW LEVEL SECURITY + Policy tenant_isolation
+-- (schema.sql:901-902) - eine additive Spalte erbt sie, es entsteht KEINE neue Policy.
+ALTER TABLE number ADD COLUMN IF NOT EXISTS provider_agent_phone_number_id TEXT;
 
 -- number_assignment: Historie Nummer<->Tenant (Recycling-Hygiene). assigned_at bei
 -- Aktivierung, released_at bei Freigabe. Eine frisch freigegebene Nummer wird nicht
@@ -681,6 +711,94 @@ CREATE TABLE IF NOT EXISTS number_assignment (
   assigned_at TEXT NOT NULL,
   released_at TEXT
 );
+
+-- platform_number_use (OUTBOUND-E1): welche Rufnummern die PLATTFORM benutzt und wofuer.
+-- GLOBAL wie profile/platform_tts_usage/cost_cross_check - KEINE Tenant-Dimension, kein
+-- app.current_tenant-Filter (Policy in der RLS-Sektion unten).
+-- WARUM eine eigene Tabelle statt einer Rolle-Spalte an number:
+--   1. number ist strikt tenant-isoliert (FORCE RLS, Policy tenant_isolation unten). Die
+--      plattformweite Frage "gehoert diese Nummer der Plattform?" waere dort nur unter dem
+--      GUC des zufaellig richtigen Tenants beantwortbar.
+--   2. Die Plattform-ANI kann eine Nummer sein, die zu KEINEM Tenant gehoert - in number
+--      ist das wegen tenant_id NOT NULL REFERENCES tenant(id) nicht darstellbar.
+-- tenant_id ist bewusst KEIN Fremdschluessel: ein FK mit ON DELETE CASCADE waere genau der
+-- Weg, auf dem eine Tenant-Loeschung die Bindung still mitnimmt - der Ausfall vom 24.08.
+-- Surrogatschluessel statt (e164) als PK: eine Nummer kann mehr als eine Rolle tragen, und
+-- ein Wiederbinden ueberschriebe sonst die Historie. released_at IS NULL = IN BENUTZUNG.
+CREATE TABLE IF NOT EXISTS platform_number_use (
+  id                 TEXT PRIMARY KEY,
+  e164               TEXT NOT NULL,
+  purpose            TEXT NOT NULL,
+  provider           TEXT NOT NULL,
+  tenant_id          TEXT,
+  provider_number_id TEXT,
+  bound_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  released_at        TIMESTAMPTZ,
+  note               TEXT
+);
+-- Je Nummer und Rolle hoechstens EINE offene Bindung; geschlossene Bindungen bleiben als
+-- Historie beliebig oft stehen (Teilindex, deshalb kein UNIQUE-Constraint).
+CREATE UNIQUE INDEX IF NOT EXISTS platform_number_use_open_idx
+  ON platform_number_use (e164, purpose) WHERE released_at IS NULL;
+
+-- OUTBOUND-E1, EBENE C: DB-seitiger Backstop unter dem Code. Deckt manuelle DB-Eingriffe
+-- und jeden kuenftigen Schreibweg, der src/store/state-ops.js umgeht. Ein Fremdschluessel
+-- taugt hier NICHT: unsere Freigabe loescht keine Zeile, sie setzt status='released'.
+--
+-- DREI Eigenschaften der Form sind NICHT optional (jede einzelne war ein Blocker):
+--  (1) Der Trigger gatet auf den ZUSTANDSUEBERGANG (WHEN), nicht auf den Zeilenzustand.
+--      flushNumbers (store/pg.js) upsertet per ON CONFLICT DO UPDATE bei JEDEM save() -
+--      also ein UPDATE auf jede Zeile, bei jedem Speichern. Ohne WHEN feuerte der Trigger
+--      auf einer bereits released-en gebundenen Zeile, flush() rollte zurueck und der
+--      Dienst persistierte gar nichts mehr, fuer ALLE Tenants (PM-11).
+--  (2) KEIN werfender BEFORE DELETE-Zweig. flushOwnScoped prunt vor jedem Insert-Loop
+--      (bei leerer keep-Liste: DELETE FROM number WHERE tenant_id=$1). Ein werfender
+--      DELETE-Trigger machte aus jeder Spiegel-Divergenz einen Totalausfall des
+--      Schreibpfads (PM-12). Die Bindung ueberlebt den Prune ohnehin (eigene Tabelle).
+--  (3) DROP TRIGGER IF EXISTS + CREATE OR REPLACE FUNCTION. migrate.applySchema fahrt die
+--      GANZE Datei bei JEDEM Prozessstart aus; ein blankes CREATE TRIGGER schluege beim
+--      zweiten Boot fehl -> Migration wirft -> beim naechsten Free-Tier-Aufwachen ist der
+--      Dienst tot (PM-13). Gedeckt von test/rls-with-check.test.js (applySchema zweimal).
+-- Gegen PGlite gemessen (Erst- und Zweitlauf, Wurf, Positiv-Kontrolle, Flush, Prune).
+DROP TRIGGER IF EXISTS number_platform_binding_guard ON number;
+CREATE OR REPLACE FUNCTION number_platform_binding_guard() RETURNS trigger AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM platform_number_use p
+              WHERE p.e164 = OLD.e164 AND p.released_at IS NULL) THEN
+    RAISE EXCEPTION 'platform_number_in_use: number % ist plattform-gebunden (-> %)', OLD.id, NEW.status;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER number_platform_binding_guard
+  BEFORE UPDATE OF status ON number
+  FOR EACH ROW
+  WHEN (OLD.status IS DISTINCT FROM NEW.status
+        AND NEW.status IN ('released','suspended'))
+  EXECUTE FUNCTION number_platform_binding_guard();
+
+-- outage_alert (OUTBOUND-E3b): Zustands-/Entprell-Marker des Ausfall-Melders. GLOBAL wie
+-- platform_number_use/cost_cross_check - KEINE Tenant-Dimension. Warum eine durable Zeile
+-- und NICHT der Notification-Ringpuffer (state-ops.js schneidet auf MAX_NOTIFICATIONS) und
+-- NICHT das platformSpendWarnedMonth-Muster (pg.js: "von flush() NIE geschrieben ->
+-- strukturell ephemer"): auf plan:free ist JEDES Aufwachen ein Prozessstart - ein Marker im
+-- Speicher hiesse Alarm bei jedem Aufwachen (PM-23). Das Zaehlfenster selbst wird NICHT
+-- hier gespeichert, sondern bei jeder Beurteilung frisch aus den persistenten call-Zeilen
+-- abgeleitet (telephony/outage-detection.js#outageWindow) - nur der Entprell-/Zustands-
+-- Marker braucht Durabilitaet.
+CREATE TABLE IF NOT EXISTS outage_alert (
+  id                 TEXT PRIMARY KEY,
+  code               TEXT NOT NULL,          -- der Eimer, z.B. not-placed:invite-403
+  first_seen_at      TIMESTAMPTZ NOT NULL,   -- K0-Anker: erster Befund dieser Klasse
+  last_seen_at       TIMESTAMPTZ NOT NULL,
+  last_attempt_at    TIMESTAMPTZ,            -- S3-1: WANN ein Versand VERSUCHT wurde
+  reported_at        TIMESTAMPTZ,            -- S3-2: WANN er nachweislich zugestellt war
+  delivered_channels TEXT,                   -- "audit,mail" - PII-frei, nie ein Ziel
+  closed_at          TIMESTAMPTZ             -- Rueckkehr zu gesund
+);
+-- Je Fehlerklasse hoechstens EINE offene Zeile; geschlossene bleiben als Historie stehen.
+CREATE UNIQUE INDEX IF NOT EXISTS outage_alert_open_idx
+  ON outage_alert (code) WHERE closed_at IS NULL;
 
 -- provisioning_job: Job-Spur des async Provisioning-Workers (P6b2). idempotency_key
 -- verhindert Doppel-Records bei Retry; status = queued|done|failed. number_id/tenant_id
@@ -814,6 +932,8 @@ ALTER TABLE number             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE number             FORCE  ROW LEVEL SECURITY;
 ALTER TABLE number_assignment  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE number_assignment  FORCE  ROW LEVEL SECURITY;
+ALTER TABLE platform_number_use ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_number_use FORCE  ROW LEVEL SECURITY;
 ALTER TABLE provisioning_job   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE provisioning_job   FORCE  ROW LEVEL SECURITY;
 ALTER TABLE tenant_budget      ENABLE ROW LEVEL SECURITY;
@@ -824,6 +944,8 @@ ALTER TABLE platform_tts_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE platform_tts_usage FORCE  ROW LEVEL SECURITY;
 ALTER TABLE cost_cross_check   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cost_cross_check   FORCE  ROW LEVEL SECURITY;
+ALTER TABLE outage_alert       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE outage_alert       FORCE  ROW LEVEL SECURITY;
 
 -- tenant_isolation-Policies: USING filtert lesbare/aenderbare Zeilen, WITH CHECK
 -- prueft NEU geschriebene Zeilen (INSERT + UPDATE-Ergebnis). Beide Klauseln sind
@@ -875,6 +997,19 @@ CREATE POLICY platform_tts_usage_global ON platform_tts_usage USING (true) WITH 
 DROP POLICY IF EXISTS tenant_isolation ON cost_cross_check;
 DROP POLICY IF EXISTS cost_cross_check_global ON cost_cross_check;
 CREATE POLICY cost_cross_check_global ON cost_cross_check USING (true) WITH CHECK (true);
+-- platform_number_use: GLOBAL wie cost_cross_check - keine Tenant-Dimension, kein
+-- app.current_tenant-Filter. FORCE RLS bleibt aktiv (Konsistenz), die Policy ist permissiv
+-- (Muster platform_tts_usage_global). Ein Tenant-Filter waere hier der Defekt selbst:
+-- der Riegel muss die Frage "gehoert diese Nummer der Plattform?" beantworten koennen,
+-- egal unter welchem GUC der schreibende Pfad gerade laeuft.
+DROP POLICY IF EXISTS tenant_isolation ON platform_number_use;
+DROP POLICY IF EXISTS platform_number_use_global ON platform_number_use;
+CREATE POLICY platform_number_use_global ON platform_number_use USING (true) WITH CHECK (true);
+-- outage_alert: GLOBAL wie platform_number_use - keine Tenant-Dimension, kein
+-- app.current_tenant-Filter. FORCE RLS bleibt aktiv (Konsistenz), die Policy ist permissiv.
+DROP POLICY IF EXISTS tenant_isolation ON outage_alert;
+DROP POLICY IF EXISTS outage_alert_global ON outage_alert;
+CREATE POLICY outage_alert_global ON outage_alert USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS tenant_isolation ON notification;
 CREATE POLICY tenant_isolation ON notification
   USING (tenant_id = current_setting('app.current_tenant', true))

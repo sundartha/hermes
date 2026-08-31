@@ -41,6 +41,10 @@ const seed = (over = {}) => ({
     },
   ],
   numberAssignments: [{ id: "a1", numberId: "n1", tenantId: "t1", assignedAt: "x", releasedAt: null }],
+  // OUTBOUND-E1: tenantNumbersForErase ruft jetzt numberBusyReason (Anruf-Check +
+  // Plattform-Bindung) - ohne diese beiden Felder wuerfe der Zugriff bei gesetzter e164.
+  calls: [],
+  platformNumberUse: [],
   ...over,
 });
 
@@ -55,10 +59,13 @@ test("(1) Selektor: active+telnyx des Tenants ja, alles andere nein", () => {
     ],
   });
   const result = tenantNumbersForErase(s, "t1");
+  // OUTBOUND-E1: liefert Koerbe {release, hold} statt eines flachen Arrays (§4.4 des Plans -
+  // Filter waere ein stiller Rueckschritt, s. state-ops.js).
   assert.deepEqual(
-    result.map((n) => n.id),
+    result.release.map((n) => n.id),
     ["n1"],
   );
+  assert.equal(result.hold.length, 0);
 });
 
 test("(2) Happy: 1 active telnyx -> released, Store+Assignment+Audit konsistent (actor=erase)", async () => {

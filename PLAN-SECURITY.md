@@ -327,6 +327,80 @@ keine neue Dependency, Schema additiv/idempotent (`tenant.suspended_at`). Mitiga
   `performNumberRelease`). Noch KEIN Live-Aufrufer von `eraseTenantData` — latent vorverdrahtet,
   damit eine kuenftige Erase-Route keine DID leakt.
 
+## OUTBOUND-RESILIENZ-E1 — Plattform-Nummern-Bindung + dreifacher Freigabe-Riegel (2026-08-27)
+
+**Root Cause (24.08.2026):** die Absendernummer des Produkt-Outbounds war im Datenmodell
+nicht von einer gewoehnlichen Tenant-DID unterscheidbar. Der Kuendigungs-/Loesch-Weg eines
+Wegwerf-Kontos gab sie deshalb frei wie jede andere Nummer — der gesamte Outbound-Absender
+war weg, ohne dass irgendetwas widersprach.
+
+**Reichweite (wichtig, nicht ueberlesen):** der Riegel deckt **unseren Store** — jeden
+Code-Pfad, der eine Nummer ueber `state-ops.js` nach `released`/`suspended` bringt, plus
+manuelle DB-Eingriffe. Er deckt NICHT die Anbieter-Seite: wer im Telnyx-Portal die
+`connection_id` umhaengt, `ani_override` aendert oder eine EL-Registrierung loescht, umgeht
+alle drei Ebenen. Das ist Waechter-Sache (kuenftige, separate Etappe), nicht Teil dieses
+Riegels.
+
+**Drei Ebenen, alle im selben Umbau, keine ersetzt eine andere:**
+
+- **Ebene A — der Engpass.** `transitionNumber` (`src/store/state-ops.js`) ist der EINZIGE
+  Schreiber von `number.status` im Repo; er wirft, wenn eine plattform-gebundene Nummer nach
+  `released` oder `suspended` will. Deckt jeden Code-Pfad, heute und kuenftig, ohne dass ein
+  kuenftiger Aufrufer daran denken muss.
+- **Ebene B — das Verdikt.** `numberReleaseVerdict` und `tenantNumbersForErase` liefern HOLD
+  statt eines Filters, BEVOR der irreversible Provider-DELETE startet (der laeuft vor der
+  Store-Mutation, `release-reconcile.js`). Der Orchestrator zaehlt jeden HOLD als `aborted`
+  und schreibt eine durable Audit-Zeile (`did_release_aborted`, Grund `platform_number_in_use`
+  bzw. `active_call_on_number`) — nie eine E.164 im Audit-Text.
+- **Ebene C — der DB-Backstop.** Ein pg-Trigger auf `number` (`BEFORE UPDATE OF status`,
+  gegated auf den Zustandsuebergang, kein werfender DELETE-Zweig) faengt manuelle
+  DB-Eingriffe und jeden kuenftigen Schreibweg, der `state-ops.js` umgeht. Ein Fremdschluessel
+  taugt hier nicht: unsere Freigabe loescht keine Zeile, sie setzt `status='released'`.
+
+**Unbind-Protokoll:** eine offene Bindung, die dem FREIGEBENDEN Tenant selbst gehoert (nicht
+die geteilte Plattform-ANI), blockiert nicht — die Freigabe-Kette loest sie vorher
+(`unbindPlatformNumber`), dann laeuft die Freigabe normal durch. Ohne dieses Protokoll wuerde
+der Riegel im eigenen Zielzustand (je Tenant-DID eine eigene Bindung) JEDE legitime
+Kuendigung blockieren.
+
+**Preis, bewusst getragen (BA-2): eine haengende Kuendigung.** Ein Tenant, dessen DID
+zugleich GETEILTE Plattform-ANI ist, kann seine Nummer nicht per Kuendigung freigeben — die
+Freigabe haengt (HOLD + Audit), bis der Betreiber die Bindung von Hand loest. **Artikel 17
+bleibt davon unberuehrt:** `eraseTenantData` loescht weiterhin ALLE personenbezogenen Daten
+(Calls, ActionItems, Notifications, Privatnummer) und fasst `s.numbers` ohnehin nie an — offen
+bleibt ausschliesslich die Rueckgabe der Rufnummer an den Anbieter, eine Kosten-/Betriebsfrage,
+keine Betroffenenrechts-Frage.
+
+**Rueckbau, falls der Riegel eine legitime Freigabe blockiert:** `PLATFORM_ANI_E164=""` setzen
+und neu starten — der Boot leitet dann keine Bindung mehr ab, die alte Bindung wird beim
+naechsten Boot-Abgleich geschlossen, Bestandsverhalten kehrt zurueck. Der Trigger selbst laesst
+sich zusaetzlich per `DROP TRIGGER number_platform_binding_guard ON number;` einzeln
+entschaerfen, ohne Datenverlust (additive DDL).
+
+**Bewusst offen gelassen: die Prune-DELETE-Luecke.** `flushOwnScoped`/`deleteMissing`
+(`src/store/pg.js`) kann eine `number`-Zeile ganz LOESCHEN (Spiegel-Prune bei leerem
+Nummern-Slice). Ein `BEFORE DELETE`-Trigger wuerde diesen Weg schliessen, ist aber bewusst
+NICHT gebaut: er waere selbst PM-12 — jede Spiegel-Divergenz (Teil-Hydrierung, Overlap-Prozess
+beim Free-Tier-Aufwachen) machte dann aus einem lokalen Problem einen Totalausfall des
+gesamten Schreibpfads fuer ALLE Tenants. Tragbar, weil ein Prune-DELETE (a) die Bindung in
+`platform_number_use` nicht mitloescht (globale, eigene Tabelle) und (b) die Nummer NICHT beim
+Anbieter freigibt.
+
+**Praezisierung (Review-Blocker Runde 3, korrigiert 2026-08-28):** der irreversible
+Provider-DELETE laeuft NICHT ausschliesslich ueber `performNumberRelease`/Ebene B — ein
+zweiter Aufrufer von `provisioner.releaseNumber` existiert in `src/onboarding.js`
+(`rollbackAfterOrder`, Capture-Fehlerpfad nach erfolgreichem Kauf). Dieser Pfad hat kein
+eigenes Verdikt, ist aber vor demselben `numberBusyReason`-Kern (G5) abgesichert: er trifft
+strukturell nur eine gerade erst gekaufte, nie aktivierte Nummer (`number.e164` ist bis
+`activateNumber` `null`, s. `requestNumber`/`state-ops.js`), kann also die geteilte
+Plattform-ANI (immer bereits `active`, eigener `providerNumberId`) nicht treffen — der
+Recheck ist Beleg und Zukunftssicherung zugleich, kein Ersatz fuer Ebene B.
+
+Kein Safety-Gate beruehrt (Outbound-Permit, `OUTBOUND_FROZEN`, Denylist/Land-Gate/
+Stundenlimit, pro-Tenant-Kostendecke, Max-Gespraechsdauer, Telnyx-Signaturpruefung
+unveraendert); die Offenlegungs-Mechanik und `callee_is_owner` unangetastet. Neue Env
+`PLATFORM_ANI_E164` (Default leer = keine Bindung, Boot-Guard meldet das nicht-fatal).
+
 ## C5 — finishCall-Settlement strukturell erzwingen (Struct-4, nach P3)
 
 > `terminateAndBillCall` (`src/telephony/call-termination.js`) ist der EINE Terminierungspfad
@@ -3241,6 +3315,160 @@ inkl. Attrappen-Suchdienst und Timeout-Ast).
   die Suche; am anderen Ende wartet kein Mensch.
 - Kein Slot-Halter (consultSlots): der Aufruf haelt keine 47-s-Rueckfrage offen,
   sondern antwortet binnen ~3 s; die Gleichzeitigkeit deckelt der Deckel je Anruf.
+
+## OUTBOUND-E2 — Anbieter-Fehlergrund am Datensatz, PII-frei by construction (2026-08-28)
+
+Der Anbieter-Fehler (`metadata.error.reason`) ist FREITEXT und kann Rufnummern tragen
+("Invalid destination number ..."). Er wird deshalb WEDER gespeichert NOCH geloggt. Was den
+Klassifizierer verlaesst, ist ausschliesslich ein Token aus geschlossener Menge:
+`<basis>:<quelle>-<code>[-<carrier>]` mit basis ∈ {not-placed, unreachable, result-unknown,
+…}, quelle ∈ {start, invite, provider, poll}, code = validierte 3-stellige Ganzzahl,
+carrier = Treffer von /\bD\d{2}\b/. Dasselbe Sicherheitsniveau wie `safeCauseToken`
+(adapters/telnyx/webhook-events.js). Gepinnt durch den PII-Fall in
+test/fehlergrund-vokabular.test.js (Grundtext mit eingebetteter fiktiver Rufnummer ->
+Token traegt keine Ziffer daraus, Form-Regex).
+
+Wer den Volltext braucht, holt ihn per Anbieter-Abfrage ueber die bereits gespeicherte
+Gespraechs-Kennung — Forensik auf Anfrage statt Dauer-Speicherung von Fremdtext.
+
+Unberuehrt: alle Safety-Gates, `disclosureSentence`, `calleeIsOwner`, Provider-
+Signaturpruefung, Auth. Der Call-Status bleibt `failed` (kein neuer Status). Die
+Kostenbuchung ist unveraendert und per Test gepinnt (Anker + gebuchte Minuten an derselben
+Fixture, inkl. Anbieterfehler bei Dauer > 0).
+
+## OUTBOUND-E4 — der ANI-Riegel: neues Gate-Glied, Default AUS (2026-08-28)
+
+Neues Glied in der Outbound-Gate-Kette (`src/telephony/outbound-gates.js`, Name
+`ani_ownership`, Position: direkt hinter `resolve_outbound`, vor `budget`). Es lehnt einen
+Outbound-Call mit 503 ab, wenn der Drift-Waechter (E-6, F4) eine FRISCHE, LIVE
+nachgemessene `ownership_lost`-Messung fuer die Plattform-Absendernummer haelt — der
+27.08.2026-Fall (die ANI gehoerte dem Telnyx-Konto nicht mehr, vier Outbound-Versuche
+scheiterten unbemerkt).
+
+**Default `OUTBOUND_ANI_GATE_ENABLED=false` — bewusst.** Der Drift-Waechter selbst laeuft
+unabhaengig davon bereits scharf (Boot + Stundentakt + externer GitHub-Actions-Workflow)
+und meldet jeden Fund ueber den bestehenden Betreiber-Meldeweg (WARN→Audit→Mail→SMS). Das
+Gate ist eine ZUSAETZLICHE, optionale Verschaerfung, die echte Anrufe verhindern KANN — und
+genau deshalb ist ein falsch-positiver Auslöser hier teurer als ein spät erkannter
+Ausfall: ein Gate, das faelschlich auslöst, schaltet das Produkt fuer den Auftraggeber ab
+(PM-2), waehrend eine Meldung ohne Gate ihn nur informiert.
+
+**Drei unabhaengige Schutzschichten gegen einen Fehlalarm, alle muessen gleichzeitig
+zutreffen:**
+1. Frische-Grenze (`OUTBOUND_ANI_GATE_MAX_AGE_MS`, Default 15 min) — eine alte Messung
+   gated nie (auf `plan:free` steht der Prozess still; eine stundenalte Messung darf nicht
+   ablehnen, obwohl der Eigentuemer laengst eine neue DID gekauft hat). Review-Blocker
+   2026-08-29 (Runde 2, Folge des Blocker-3-Fixes/Mail-Entprellung): eine erste Fassung
+   liess `marker.lastSeenAt` genau dann einfrieren, wenn der VOLLE Meldeweg wegen der
+   Versand-Entprellung (`OUTAGE_ALERT_DEBOUNCE_MS`, Default 6h) ausgesetzt war — die
+   Frische-Grenze haette einen 27.08.-artigen, mehrtaegigen Ausfall dadurch nur rund 15
+   von 360 Minuten je Entprellungszyklus scharf gesehen statt durchgehend. Fix: der
+   Drift-Waechter (`outbound-drift-watch.js#laufeDrift`) beansprucht den Marker
+   (`lastSeenAt`) bei JEDEM Lauf unabhaengig vom Versand — entprellt wird NUR Mail/SMS,
+   nie die Messfrische selbst (per Test gepinnt, `test/outbound-drift-watch.test.js`
+   W-6b).
+2. Eine LIVE-Nachmessung (derselbe GET wie Pruefung 3 des Waechters, eigener kurzer
+   Timeout) MUSS den Verlust im Moment des Anrufs BESTAETIGEN — eine durable, aber
+   inzwischen behobene Messung gated nicht. Die Nachmessung zielt IMMER auf die
+   **Plattform-ANI** (`config.provisioning.platformAniE164`, dieselbe Nummer, die
+   Pruefung 3 des Waechters misst) — NICHT auf `ctx.fromNumber` (die aktive DID des
+   ANRUFENDEN Tenants). Review-Blocker 2026-08-29: eine erste Fassung mass versehentlich
+   die Tenant-DID nach, wodurch der Riegel im echten 27.08.-Fall inert gewesen waere (die
+   Tenant-DID gehoerte dem Konto weiterhin) — per Test byte-genau gepinnt
+   (`test/outbound-ani-gate.test.js` G-2b).
+3. Fail-open bei jeder Unsicherheit: keine Messung, unbekannt, ein werfender Recheck
+   (Timeout/Netzfehler, im Gate selbst per try/catch abgefangen — nicht nur in der
+   server.js-Wiring-Disziplin) — jeder dieser Faelle laesst den Anruf durch, NIE ab.
+
+`OUTBOUND_FROZEN` wird von keinem Codepfad dieser Etappe automatisch gesetzt (per Test
+gepinnt, `test/outbound-ani-gate.test.js` G-5) — der bewusste Notaus bleibt beim
+Eigentuemer, kein Selbstabschalter.
+
+**Rueckbau: eine Env-Zeile** (`OUTBOUND_ANI_GATE_ENABLED=false`, ohnehin der Default) —
+das Gate verschwindet, der Drift-Waechter meldet unveraendert weiter.
+
+## OUTBOUND-E5 — je Tenant-DID eine eigene ElevenLabs-Nummernregistrierung (2026-08-29)
+
+**Der Datenschutz-Grund der Etappe:** bis zum 12.08.2026 sendete jeder Outbound-Anruf die
+DID des anrufenden Tenants als Absender (Telnyx-Zweige, unveraendert). Seit dem Umstieg
+auf den ElevenLabs-Weg (19.08.) traegt `startCallBody` (`elevenlabs/outbound.js`) nur noch
+`agent_id`/`agent_phone_number_id`/`to_number` — die gesendete Absendernummer haengt
+ausschliesslich an EINER global registrierten ElevenLabs-SIP-Nummer, fuer ALLE Tenants
+gleich. Ein Angerufener, der zurueckruft, landete damit ueber
+`store.numberRecordByE164(to)` beim BESITZER dieser geteilten Nummer — nicht beim
+anrufenden Tenant. Bei einem echten Kunden waere das ein Datenschutz-Vorfall (fremde
+Rueckrufe landen im falschen Assistenten). Befund + Herleitung:
+`tasks/befund-outbound-ausfall-2026-08-27.md` Abschnitt 3 (F3) und Abschnitt 5.
+
+**Der erste Anbieter-SCHREIBZUGRIFF dieser Etappe ausserhalb des Nummernkaufs:** das
+Anlegen einer ElevenLabs-SIP-Trunk-Nummernregistrierung (`POST /v1/convai/phone-numbers`,
+`src/elevenlabs/convai.js#createPhoneNumber`) je aktiver Tenant-DID. Bislang schrieb dieses
+Repo beim Anbieter ausschliesslich Telnyx-Nummernkaeufe; dies ist der erste Schreibzugriff
+gegen die ElevenLabs-API (bisher nur GET/POST-Anrufstart/DELETE-Beende-Versuch, alles
+Bestandsverhalten).
+
+**Dreifach-Gate, alle drei muessen gleichzeitig zutreffen** (`worker/
+provisioning-orchestrator.js#runProvisioningDrain`):
+1. `PROVISIONING_ENABLED` — derselbe Schalter wie der Telnyx-Nummernkauf.
+2. `ELEVENLABS_OUTBOUND_ENABLED` — ohne aktiven EL-Weg waere eine Registrierung zwecklos.
+3. `ELEVENLABS_NUMBER_REGISTRATION_ENABLED` — Default **AUS**, EIGENER Schalter. Der Merge
+   ist damit inert: ohne diesen dritten Schalter entsteht KEINE einzige neue Registrierung,
+   unabhaengig davon, wie die beiden anderen Flags stehen.
+
+**Neues Secret: `TELNYX_SIP_TRUNK_PASSWORD`.** Digest-Passwort der SIP-Trunk-FQDN-Connection
+(`fqdn_authentication_method: "credential-authentication"`, gemessen 2026-08-29), reist als
+`outbound_trunk_config.credentials.password` im Anlege-Koerper. Nie geloggt, nie in einer
+API-/MCP-Antwort, nie in einem Fehlertext (Regel 4) — per Test gepinnt
+(`test/absender-registrierung-anlegen.test.js` C6).
+
+**Fail-closed bei fehlenden Zugangsdaten (Review-Blocker Runde 1, Blocker 1/2/G4):** das
+Dreifach-Gate im Orchestrator prueft NUR PROVISIONING_ENABLED/ELEVENLABS_OUTBOUND_ENABLED/
+ELEVENLABS_NUMBER_REGISTRATION_ENABLED — nicht ob apiKey/agentId/SIP-Zugangsdaten gesetzt
+sind. Die Pruefung sitzt deshalb in `makeElSipRegistrar#ensureRegistration`
+(`elevenlabs/nummern-registrierung.js`) selbst und wirft VOR jedem Netzzugriff, wenn
+ELEVENLABS_API_KEY, der Agent oder TELNYX_SIP_TRUNK_USERNAME/-PASSWORD fehlen. Damit greift
+sie fuer JEDEN Aufrufer (Orchestrator wie den CLI-Reparaturlauf), nicht nur einen — und es
+entsteht KEINE Registrierung mit leeren `credentials`/`agent_id`.
+
+**Idempotent, fehlertolerant:** zwei eigene Schloesser statt einer unbelegten
+Anbieter-Garantie — Schloss 1 (Zustand): eine Nummer mit bereits gesetzter Kennung loest
+keinen Anbieter-Aufruf aus. Schloss 2 (Wiederanlauf): existiert die e164 bereits beim
+Anbieter (GET-Liste), wird ihre Kennung uebernommen statt neu angelegt. Ein Fehlschlag
+(z.B. Anbieter-5xx) reisst die Nummern-Provisionierung NICHT — die DID bleibt `active` und
+nutzbar (faellt LAUT auf die globale Rueckfall-Registrierung zurueck), die Registrierung
+wird ueber den Reparaturlauf nachholbar (`npm run elevenlabs:nummern`).
+
+**Waisen-Risiko, VERDRAHTET (Review-Blocker Runde 3 / E5-01 — zweite Korrektur dieses
+Abschnitts):** `release-reconcile.js#performNumberRelease` nimmt einen `sipRegistrar`-
+Parameter entgegen und loest bei gesetzter Kennung fail-soft einen EL-Loeschversuch
+(`DELETE /v1/convai/phone-numbers/{id}`) aus. Eine fruehere Fassung dieses Abschnitts
+behauptete, KEIN Produktions-Aufrufer reiche ihn durch — das stimmte fuer Runde 1, ist aber
+seit Runde 3 (E5-01) UEBERHOLT und war am HEAD dieser Etappe bereits falsch (Doku-an-Code-
+Pflicht, E4-Lehre 2, hier ein zweites Mal verletzt). Die gemeinsame Konstruktions-Naht
+`sipRegistrarWennAktiv(config)` (`src/elevenlabs/nummern-registrierung.js:100`) wird jetzt
+tatsaechlich injiziert: `wiring/web-login.js` (Zeilen 191/218/357/375, sowohl der
+Grace-Reconcile- als auch der sofortige Erase-Pfad) UND `billing/webhook.js` (:276/:424) ->
+`billing/contract-end-cleanup.js#attemptContractEndCleanup` (:82/:93/:125/:136) reichen den
+Registrar durch. Belegt durch `test/e5-01-sipregistrar-produktionspfad.test.js` (6 Tests,
+darunter eine Positiv-Kontrolle "ohne Registrar -> 0 EL-Aufrufe, byte-identisch zum
+Bestand"), selbst nachgefahren: `node --test test/e5-01-sipregistrar-produktionspfad.test.js`
+-> `pass 6 fail 0`.
+
+**Ehrlicher Restpunkt:** `removeRegistration` (`makeElSipRegistrar`) ist wie der gesamte
+EL-Loeschpfad bewusst FAIL-SOFT (`src/elevenlabs/convai.js#fireAndForgetDelete` wirft nie,
+Owner-Auftrag 15.08.2026) — ein Anbieter-5xx, ein Timeout oder eine 4xx-Ablehnung beim
+DELETE hinterlaesst weiterhin eine Waise beim Anbieter, jetzt aber nur noch als Fehlschlag-
+Fall (nicht mehr strukturell, da der Aufruf nie ausgeloest wurde). Das ist Absicht (eine
+haengende ElevenLabs-API darf eine Kuendigung/Art.-17-Loeschung nicht blockieren) und bleibt
+auffindbar ueber denselben manuellen Pruefmodus (`npm run elevenlabs:nummern -- --pruefen`),
+nie automatisch aufgeraeumt.
+
+**Was NICHT in diesem Merge ausgefuehrt wurde:** kein einziger echter Anbieter-Schreibzugriff
+(Tests laufen ausschliesslich gegen lokale Attrappen). Der Telnyx-ANI-Override
+(`ani_override_type: "always"` auf der SIP-Trunk-Connection) ueberschreibt bis zum
+Owner-Cutover weiterhin JEDE gesendete Absendernummer — der neue Code ist bis dahin korrekt
+und folgenlos, wirkt aber ohne weitere Code-Aenderung, sobald der Cutover gefahren ist
+(`docs/RUNBOOK-OUTBOUND.md`, Abschnitt "ANI-Cutover und Nummern-Registrierung").
 
 ## Owner-Entscheidung 2026-08-19: Prod-DB-IP-Allowlist auf 0.0.0.0/0
 
