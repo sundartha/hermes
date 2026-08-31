@@ -209,7 +209,8 @@ belegen soll: die Abfrageform ist nicht kaputt, ein "0 Treffer" waere ein Messer
 Der Nachweis laeuft auf der `sip_call_id`-Achse - genau der Achse, die (d) misst.
 
 **Owner-Entscheidung noetig:** ob diese Ersatz-Positiv-Kontrolle als Erfuellung von (d)
-gilt. Die Menge `["sip-trunking"]` ist in `src/billing/kostenarten.js` gesetzt (KV2-8).
+gilt. Bis dahin bleibt die Menge `PFLICHTTYPEN_UNGEMESSEN`, bis der Owner die
+Ersatz-Positiv-Kontrolle freigibt (`src/billing/kostenarten.js`, KV2-8).
 
 ---
 
