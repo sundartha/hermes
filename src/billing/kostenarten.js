@@ -73,6 +73,33 @@ export const EINSAMMLER = Object.freeze({
   NICHT_BELEGPFLICHTIG: "nicht_belegpflichtig",
 });
 
+// Richtung eines Anrufs, wie call.direction sie fuehrt (metering.js nutzt denselben Wert).
+const RICHTUNG_INBOUND = "inbound";
+
+// Die Pflicht-Typmenge (das Vollstaendigkeits-Praedikat in classifyRecords) wird ab KV2-5
+// JE PROFIL beantwortet statt global. ZWEI Auspraegungen, mehr gibt es nicht:
+//
+// AUS_ENV: die Menge kommt weiterhin aus COST_TRUING_REQUIRED_RECORD_TYPES. Fuer die vier
+//   Telnyx-Profile ist das der HEUTIGE Live-Wert (sip-trunking,call-control) - die
+//   Umstellung macht die Menge nur ADRESSIERBAR, sie verschiebt sie nicht (Spec (f)).
+//   Deshalb steht hier ein Marker und KEIN Literal: ein Literal waere eine zweite,
+//   still veraltende Wahrheit neben der Produktionsumgebung, und der Boot-Waechter gegen
+//   die leere Menge (boot-guard.js) haengt an genau dieser Env-Variable.
+//
+// AUSDRUECKLICH VERBOTEN ist die Ableitung dieser Menge aus KOSTENARTEN[...].belegtypen
+// (Katalogzeile #3). Jene Menge benennt die BETRAGSTRAGENDEN Records (alle sechs
+// zuordenbaren Typen), nicht das Vollstaendigkeits-Praedikat. Eine Ableitung machte
+// `complete` fuer JEDEN Bestandsanruf unwahr - refundProven erstattete nie mehr, die heute
+// funktionierende Erstattung (56/56) waere still tot. Die Gegenrichtung (Verengung auf
+// call-control) lockerte die Erstattungsbedingung. Beide widersprechen (b)/(f).
+export const PFLICHTTYPEN_AUS_ENV = "aus_env_pflichtmenge";
+
+// UNGEMESSEN: die Menge ist fuer dieses Profil noch nicht am Anbieter gemessen. Die LEERE
+// Menge ist die fail-closed Antwort - classifyRecords liefert darueber niemals
+// 'telnyx_detail_records' ("nichts bewiesen", nicht "alles erlaubt"). Kein geratener Wert,
+// kein Uebernehmen des Env-Werts "weil er naheliegt" (Spec (d), Fehlschlag-Zweig).
+export const PFLICHTTYPEN_UNGEMESSEN = Object.freeze([]);
+
 // Je EIN Pflichtfeld-Check (G30/G34: eine Aufgabe pro Funktion, haelt
 // pruefeKostenart unterhalb der Komplexitaets-Obergrenze). Nicht exportiert - reine
 // Bausteine von pruefeKostenart, kein eigener Aufrufer.
@@ -119,6 +146,25 @@ function pruefeTraegerEinsammler(profilName, traeger, eintrag) {
     );
 }
 
+// KV2-5: die Pflicht-Typmenge EINES Profils darf nur drei Formen annehmen - der Env-
+// Marker, der UNGEMESSEN-Marker oder ein eingefrorenes, nicht-leeres String-Array. Eine
+// LEERE Menge ist damit nur ueber die benannte Konstante erreichbar, niemand kann sie
+// versehentlich hinschreiben.
+function pruefePflichttypen(name, pflichttypen) {
+  if (pflichttypen === PFLICHTTYPEN_AUS_ENV) return;
+  if (pflichttypen === PFLICHTTYPEN_UNGEMESSEN) return;
+  const gueltig =
+    Array.isArray(pflichttypen) &&
+    Object.isFrozen(pflichttypen) &&
+    pflichttypen.length > 0 &&
+    pflichttypen.every((typ) => typeof typ === "string" && typ.trim());
+  if (!gueltig)
+    throw new Error(
+      `kostenarten: Profil '${name}'.pflichttypen ist weder der Env-Marker noch die ` +
+        "ausdrueckliche UNGEMESSEN-Menge noch ein eingefrorenes, nicht-leeres String-Array",
+    );
+}
+
 // Kriterium (i): jedes Profil-Traeger-Paar traegt einen benannten Einsammler oder
 // ausdruecklich "nicht_belegpflichtig" - ein fehlender, leerer oder freier dritter Wert
 // reisst den Import ab, wie (a) es fuer die Katalogzeilen tut.
@@ -128,6 +174,7 @@ export function pruefeProfil(name, profil) {
   const traegerNamen = Object.keys(profil.traeger);
   if (traegerNamen.length === 0) throw new Error(`kostenarten: Profil '${name}'.traeger ist leer`);
   for (const traeger of traegerNamen) pruefeTraegerEinsammler(name, traeger, profil.traeger[traeger]);
+  pruefePflichttypen(name, profil.pflichttypen);
 }
 
 // Die record_type-Menge des Telnyx-Adapters (Katalogzeile #3), EXPLIZIT gefuehrt statt
@@ -344,24 +391,36 @@ export const KOSTENARTEN = Object.freeze({
 // Pflicht-Einsammler (Kriterium (i)).
 export const KOSTENPROFILE = Object.freeze({
   [KOSTENPROFIL.EL_CONVAI_SIP]: {
+    // KV2-5(d): die Messung (scripts/kv2-5-telnyx-belegtypen.mjs) ist am Telnyx-Zugang
+    // gescheitert (401, s. Phasenbericht) - die Pflicht-Typmenge bleibt deshalb
+    // UNGEMESSEN. KV2-8 bleibt damit blockiert (Spec KV2-5(d)), die uebrigen Kriterien
+    // dieser Phase sind davon unberuehrt.
+    pflichttypen: PFLICHTTYPEN_UNGEMESSEN,
     traeger: {
       [KOSTENART.ELEVENLABS_CONVAI]: { einsammler: EINSAMMLER.KV2_4 },
       [KOSTENART.TELNYX_SIP]: { einsammler: EINSAMMLER.KV2_5 },
     },
   },
   [KOSTENPROFIL.TELNYX_ASSISTANT]: {
+    pflichttypen: PFLICHTTYPEN_AUS_ENV,
     traeger: { [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G } },
   },
   // Owner-Entscheidung 10 (Default, nicht ausdruecklich entschieden): api-calls.js
   // verzweigt im TeXML-Zweig NICHT auf die Engine (die Weiche faellt erst im Webhook,
   // voice.js:476) - dieses Profil deckt deshalb heute BEIDE Outbound-Engines ab.
   [KOSTENPROFIL.TELNYX_BUDGET]: {
+    pflichttypen: PFLICHTTYPEN_AUS_ENV,
     traeger: { [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G } },
   },
   [KOSTENPROFIL.TELNYX_INBOUND_BUDGET]: {
+    pflichttypen: PFLICHTTYPEN_AUS_ENV,
     traeger: { [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G } },
   },
+  // telnyx_inbound_realtime bekommt KEIN Literal: sein zusaetzlicher Traeger
+  // openai_realtime ist nicht_belegpflichtig (Owner-Entscheidung 9) und geht gar nicht in
+  // eine Pflichtmenge ein; fuer den Telnyx-Anteil gilt derselbe Env-Wert (Spec (f)).
   [KOSTENPROFIL.TELNYX_INBOUND_REALTIME]: {
+    pflichttypen: PFLICHTTYPEN_AUS_ENV,
     traeger: {
       [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G },
       // Owner-Entscheidung 9 (2026-08-30): katalogisiert, kein Einsammler - der einzige
@@ -376,6 +435,35 @@ export const KOSTENPROFILE = Object.freeze({
 // der Mutator recordCostProfile (state-ops.js) prueft einen gesetzten Wert dagegen.
 export function istBekanntesKostenprofil(wert) {
   return Object.hasOwn(KOSTENPROFILE, wert);
+}
+
+// Die Pflicht-Typmenge EINES Profils. envPflichttypen ist config.billing.
+// costTruingRequiredRecordTypes - der Aufrufer reicht sie herein, weil diese Datei
+// KEINE Config importiert (Zyklus-Freiheit, s. Kopfkommentar). Unbekanntes Profil ->
+// LEERE Menge (fail-closed: "nichts bewiesen"), nie der Env-Wert als Trostpreis.
+export function pflichttypenFuerProfil(profil, envPflichttypen) {
+  const eintrag = KOSTENPROFILE[profil]?.pflichttypen;
+  if (eintrag === PFLICHTTYPEN_AUS_ENV) return envPflichttypen;
+  return Array.isArray(eintrag) ? eintrag : PFLICHTTYPEN_UNGEMESSEN;
+}
+
+// Das Kostenprofil eines Anrufs OHNE gesetztes costProfile (Altzeile von VOR dieser
+// Kette). sipCallId entscheidet, und diese Fallunterscheidung ist NICHT kosmetisch: sie
+// ist der Riegel gegen eine ungewollte Erstattung an den 12 EL-Altanrufen. Der
+// sipCallId-Join aus KV2-5 macht sie erstmals abrufbar (12/12 ohne call_control_id, ohne
+// cost_trued_at, 0 Versuche, Summe estimated_cost_cents 270 - lesend an der Produktions-DB
+// gemessen 2026-08-30). Fielen sie auf telnyx_budget, griffe der EL-Schutz nicht und ihre
+// 30-ct-Schaetzung wuerde auf den reinen SIP-Anteil heruntergesetzt: die B6-Falle.
+// Owner-Entscheidung 14, DEFAULT (a) uebernommen - nicht ausdruecklich entschieden.
+export function legacyKostenprofil({ sipCallId, direction }) {
+  if (sipCallId) return KOSTENPROFIL.EL_CONVAI_SIP;
+  return direction === RICHTUNG_INBOUND ? KOSTENPROFIL.TELNYX_INBOUND_BUDGET : KOSTENPROFIL.TELNYX_BUDGET;
+}
+
+// DAS Profil eines Anrufs, fuer jeden Leser dieselbe Antwort (G5). Gesetztes und bekanntes
+// costProfile gewinnt; sonst die Legacy-Zuordnung oben.
+export function kostenprofilFuerAnruf(call) {
+  return istBekanntesKostenprofil(call?.costProfile) ? call.costProfile : legacyKostenprofil(call ?? {});
 }
 
 // Kriterium (h)/hatEinsammler: true, wenn IRGENDEIN Profil diesen Traeger mit einem

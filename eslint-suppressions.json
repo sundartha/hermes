@@ -307,9 +307,6 @@
     },
     "no-magic-numbers": {
       "count": 2
-    },
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "scripts/convo-bench/checks.mjs": {
@@ -436,9 +433,6 @@
     "no-param-reassign": {
       "count": 15
     },
-    "no-restricted-properties": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 3
     }
@@ -465,9 +459,6 @@
   "scripts/telnyx-assistant-provision.mjs": {
     "id-length": {
       "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 1
     }
   },
   "scripts/telnyx-call-latency.mjs": {

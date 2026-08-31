@@ -1076,6 +1076,14 @@ const rawConfig = {
   // gesetzt, wenn sie am Live-Beleg gemessen ist (Kandidaten aus der Messung vom
   // 2026-07-20: sip-trunking, call-control, speech-to-text, text-to-speech, recording,
   // inference, ai-voice-assistant - "call" existiert NICHT).
+  // KV2-5: dieser Wert ist seit der Umstellung auf profil-adressierte Pflichtmengen die
+  // Pflicht-Typmenge der VIER Telnyx-Profile (telnyx_budget, telnyx_assistant,
+  // telnyx_inbound_budget, telnyx_inbound_realtime) - unveraendert wie zuvor global.
+  // Das Profil el_convai_sip liest ihn NICHT: es fuehrt seine eigene, am Anbieter gemessene
+  // Menge als Literal in src/billing/kostenarten.js (KOSTENPROFILE[...].pflichttypen).
+  // Eine Aenderung hier bewegt weiterhin alle vier Telnyx-Profile gleichzeitig - bewusst
+  // akzeptiertes Restrisiko (Spec KV2-5(f)); eine Aufteilung waere eine
+  // Verhaltensaenderung an der Erstattungsbedingung.
   costTruingRequiredRecordTypes: csvEnv(process.env.COST_TRUING_REQUIRED_RECORD_TYPES),
   // Vorbedingung des Flips (P4/P4b lesen DIESELBE Schwelle, bewusst keine zweite):
   // Mindest-Deckungsquote in Prozent. Wird sie unterschritten, meldet jeder Sweep den

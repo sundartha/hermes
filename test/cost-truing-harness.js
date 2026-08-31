@@ -12,7 +12,7 @@
 // telnyx-cost-records.test.js) - genau wie sie telnyxVoice/cost-truing.js dynamisch holen.
 import {
   createCall, recordCallCostTruingResult, applyCostCorrectionCents, recordRelayTtsCharacters,
-  markCrossCheckAttempted,
+  markCrossCheckAttempted, recordCallCostEvidence, callCostEvidence,
 } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -63,6 +63,15 @@ export function makeStubStore(state, { nowMs = Date.now(), billing = fakeConfig(
     // Funktion, kein zweites, vereinfachtes Verhalten).
     markCostCrossCheckAttempted(monthKey) {
       markCrossCheckAttempted(state, monthKey);
+    },
+    // KV2-5: das Kosten-Buch - dieselbe Delegation an die ECHTEN state-ops-Funktionen
+    // (kein zweites, vereinfachtes Verhalten), damit die Sweep-Tests ueber den echten
+    // Schreibweg laufen statt in schreibeSweepKostenbeleg's fail-soft-catch zu landen.
+    recordCallCostEvidence(eingabe) {
+      return recordCallCostEvidence(state, eingabe);
+    },
+    callCostEvidence(callId) {
+      return callCostEvidence(state, callId);
     },
     // KV2-1: der Befundkanal laeuft ueber den Betreiber-Meldeweg und schreibt dabei den
     // durablen Marker (state.outageAlerts) - dieselben zwei Store-Methoden, die
@@ -179,7 +188,7 @@ export function stubCountingFetch({ status = 200, ok = true, bodyFor = () => ({ 
 // telnyx_session_id, Zeitfelder started_at/finished_at, cost als STRING, billed_sec als
 // Zahl - dazu der Koeder. Der Anker fehlt bewusst, wenn callControlId null ist: das ZWEITE
 // Bein desselben Anrufs traegt ihn laut Messung nicht und kommt nur ueber die Session herein.
-export function measuredSipTrunkingRecord({ at, sessionId, callControlId = null, cost = "0.0401", billedSec = 60 }) {
+export function measuredSipTrunkingRecord({ at, sessionId, callControlId = null, sipCallId = undefined, cost = "0.0401", billedSec = 60 }) {
   const record = {
     record_type: "sip-trunking",
     cost,
@@ -191,6 +200,7 @@ export function measuredSipTrunkingRecord({ at, sessionId, callControlId = null,
     billed_sec: billedSec,
   };
   if (callControlId) record.call_control_id = callControlId;
+  if (sipCallId) record.sip_call_id = sipCallId;
   return record;
 }
 

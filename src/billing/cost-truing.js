@@ -46,6 +46,8 @@ import { sendBootstrapAlertSms } from "../telephony/alert-sms.js";
 import { meldeBetreiberNotiz, meldeVollBefund } from "../telephony/outage-report.js";
 import { alarmKanalZeile, betreiberAlarmKanaele } from "../boot-guard.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
+import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
+import { belegVollstaendig, schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
 
 // Zwei Ausloeser (Intervall + manueller Endpunkt), EIN benannter Grund je. Exportiert:
 // boot.js und api-billing.js teilen sich diese eine Quelle statt zweier Magic-Strings.
@@ -210,7 +212,30 @@ const PROVIDER_COST_RECORD_WINDOW_MS =
 // mehr der Nenner selbst (s. coverageBucketOf): ein beendeter Call zaehlt nur dann, wenn
 // er zusaetzlich belegbar ist.
 const isEndedCall = (call) => !!call.endedAt;
-const providerLegIdOf = (call) => call.twilioSid || call.callControlId || null;
+// KV2-5: dritte Alternative sipCallId. Ein EL-Anruf traegt weder twilioSid noch
+// callControlId (12/12 gemessen, befund-telnyx.md O1) - providerLegIdOf lieferte fuer ihn
+// null, isRetrievable war falsch, und er wurde vom Sweep uebersprungen. Die drei Werte
+// koennen einander nicht treffen: 'CA...' (Twilio), 'v3:...' (Call-Control), 'otb_...' (SIP).
+// FOLGE, benannt: ab diesem Deploy sind die 12 EL-Altanrufe erstmals Kandidaten. Dass
+// dabei kein Cent bewegt wird, traegt der EL-Riegel unten (sweepDarfKorrigieren).
+const providerLegIdOf = (call) => call.twilioSid || call.callControlId || call.sipCallId || null;
+
+// Die Pflicht-Typmenge DIESES Anrufs (KV2-5(f)) - Profil-Aufloesung und Env-Wert an EINER
+// Stelle zusammengefuehrt, damit die Aufrufzeile in trueOneCall lesbar bleibt.
+const pflichttypenVon = (call, billing) =>
+  pflichttypenFuerProfil(kostenprofilFuerAnruf(call), billing.costTruingRequiredRecordTypes);
+
+// Darf der Sweep fuer diesen Anruf eine Korrektur BUCHEN? Zwei Ausschlussgruende, eine
+// Frage:
+//   1. Kein buchbarer Schaetzbetrag -> strukturell nicht korrigierbar (Bestandsregel).
+//   2. EL-Route -> der Telnyx-Pool traegt NUR den SIP-Anteil (4,01 US-ct gemessen), NIE
+//      die ElevenLabs-Kosten (56 US-ct ueber 8 Anrufe). Gegen eine 30-ct-Schaetzung
+//      gebucht, loeschte er rund 90 % der echten Kosten von der Gate-Achse - die B6-Falle.
+//      Diese Kette SAMMELT hier, sie bucht nicht; gebucht wird erst in KV2-8 aus der
+//      Belegsumme beider Traeger. Der Riegel haengt am PROFIL, nicht an einem Flag, und
+//      erfasst ueber die Legacy-Zuordnung auch die 12 profillosen EL-Altzeilen (KV2-5(h)).
+const sweepDarfKorrigieren = (call) =>
+  isBookableCents(call.estimatedCostCents) && kostenprofilFuerAnruf(call) !== KOSTENPROFIL.EL_CONVAI_SIP;
 
 // Beendet-Zeitstempel EINES Calls in Millisekunden, oder null (fehlend/unbrauchbar).
 // EINE Parse-Stelle fuer die zwei Verbraucher - die Faelligkeit eines Kandidaten und die
@@ -518,10 +543,13 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   //      und NUR gegen den wird gerechnet, nie gegen einen neu abgeleiteten Tarif.
   // Die Waehrung steht bewusst NICHT in dieser Liste: P1 verwirft fremdwaehrende
   // Records schon am Adapter, ein zweiter Riegel hier waere eine zweite Wahrheit (G5).
+  // Bedingung 1+2 teilt sich diese Funktion seit KV2-5 mit der Reife der
+  // telnyx_call_records-Belegzeile (belegVollstaendig, sweep-kostenbeleg.js) - EINE
+  // Quelle (G5). Bedingung 3 bleibt hier: sie ist eine Eigenschaft des ANRUFS, nicht des
+  // Belegs (Spec (g)).
   function refundProven(call, measured) {
     return (
-      measured.source === COST_TRUING_SOURCE.DETAIL_RECORDS &&
-      measured.billedSecTotal > 0 &&
+      belegVollstaendig(measured) &&
       isBookableCents(call.estimatedCostCents)
     );
   }
@@ -539,11 +567,14 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
       : measured.source;
   }
 
-  // Bucht die Korrektur EINES abgeglichenen Calls. Kein Estimate -> gar keine Korrektur
-  // (Bestandszeile von vor P2, beide Richtungen). Die Asymmetrie selbst liegt eine
-  // Schicht tiefer in applyCostCorrectionCents - hier steht nur der BEWEIS.
-  function bookCorrectionFor(call, measured) {
-    if (!isBookableCents(call.estimatedCostCents)) return;
+  // Legt zuerst die Sweep-Belegzeile an (KV2-5(g), immer - unabhaengig vom Ausschluss
+  // unten) und bucht danach, sofern erlaubt, die Korrektur EINES abgeglichenen Calls.
+  // Reihenfolge ist Absicht: ein fehlender Schaetzbetrag ist eine Eigenschaft des Anrufs
+  // und darf nie die Bedeutung "Beleg fehlt" bekommen (Spec (g)); die EL-Route bekommt
+  // gerade dann ihre telnyx_sip-Zeile, wenn sie nichts bucht (sweepDarfKorrigieren).
+  function belegenUndBuchen(call, measured, records) {
+    schreibeSweepKostenbeleg({ store, call, measured, records });
+    if (!sweepDarfKorrigieren(call)) return;
     const { booked, deltaCents } = store.applyCostCorrectionCents(call.tenantId, {
       actualCostMicroCents: measured.actualCostMicroCents,
       estimatedCostCents: call.estimatedCostCents,
@@ -740,7 +771,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // ok:false, leere Antwort und unparsbare Summe sind IM TYP von einer gemessenen Null
     // unterscheidbar (P1) und heissen NIEMALS "keine Kosten" (PM-4).
     const measured = result?.ok
-      ? classifyRecords(result.records, config.billing.costTruingRequiredRecordTypes)
+      ? classifyRecords(result.records, pflichttypenVon(call, config.billing))
       : null;
     const attempt = nextCostTruingAttempt(call);
     const closed = measured !== null || attempt >= config.billing.costTruingMaxAttempts;
@@ -758,7 +789,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // LCT P4: der Flip. Idempotenz traegt costTruedAt (oben gesetzt) - ein zweiter Lauf
     // sieht den Call nicht mehr als Kandidaten; gegen VERSCHRAENKUNG traegt der
     // Laufriegel aus P3. Hier ist deshalb KEIN dritter Riegel noetig.
-    if (measured) bookCorrectionFor(call, measured);
+    if (measured) belegenUndBuchen(call, measured, result.records);
     if (measured) bookTtsCharactersFor(call, measured, sammler);
     countOutcome(sammler.tally, truedSource, closed);
   }

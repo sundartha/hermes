@@ -215,6 +215,24 @@ export default [
     },
   },
   {
+    // KV2-5: dieselbe Fehlklassifikation wie beim test/**-Override oben, hier fuer
+    // scripts/**. G35 zielt auf den PRODUKTIONSSERVER (src/**): konfigurierbare Werte
+    // muessen ueber src/config.js laufen, damit sie an EINER Stelle dokumentiert und
+    // validiert sind. Ein eigenstaendiges CLI-Werkzeug unter scripts/ importiert
+    // config.js bewusst NICHT (kein Boot-/Netz-Seiteneffekt in einem reinen Lesewerkzeug,
+    // s. Kopfkommentare der einzelnen Skripte) und liest Secrets/Betriebsparameter direkt
+    // aus process.env - das ist hier der vorgesehene Weg, nicht die Umgehung des
+    // vorgesehenen Wegs (Regel 4, CLAUDE.md: Secrets nur ueber .env). Vor diesem Override
+    // trugen sieben bestehende scripts/*.mjs denselben Befund ausschliesslich als
+    // Eintrag in eslint-suppressions.json - echte Schuld einer Regel, die den falschen
+    // Geltungsbereich hatte, keine bewusst akzeptierte Ausnahme. Fuer src/** (ausser
+    // src/config.js) bleibt die Regel unveraendert hart.
+    files: ["scripts/**"],
+    rules: {
+      "no-restricted-properties": "off",
+    },
+  },
+  {
     // T4, G4 - uebersprungene Tests duerfen nicht dauerhaft im Bestand bleiben.
     files: ["test/**"],
     rules: {
