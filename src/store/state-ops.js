@@ -2144,22 +2144,44 @@ export function normalizePrivateNumber(raw, tenantCountryIso) {
   return e164;
 }
 
+// Loescht den kompletten Besitz-Verifikationszustand (OC, Reset-Regel: "Aenderung setzt
+// zurueck"). NICHT geloescht wird privateNumberConfirmMailLog - das Tageslimit-Log ist ein
+// Missbrauchsschutz FUER DEN TENANT (nicht fuer eine bestimmte Nummer); wuerde es bei jedem
+// Nummernwechsel geleert, koennte ein Account das Tageslimit durch staendiges Wechseln
+// umgehen (setzen -> Mail -> loeschen -> neu setzen -> Mail, ...). Reine Mutation, kein IO.
+function resetPrivateNumberVerification(tenant) {
+  delete tenant.privateNumberEmailConfirmedAt;
+  delete tenant.privateNumberVerifiedAt;
+  delete tenant.privateNumberConfirmTokenHash;
+  delete tenant.privateNumberConfirmTokenExpiresAt;
+}
+
 // Setzt die private Mobilnummer (E.164), an die nach einem Inbound-Call die Gespraechs-
-// Zusammenfassung als SMS geht. Identitaets-/Kontaktdatum -> lebt am Tenant-Record
+// Zusammenfassung als SMS geht UND die per OC-Besitz-Verifikation die Offenlegungs-Ausnahme
+// (calleeIsOwner) tragen kann. Identitaets-/Kontaktdatum -> lebt am Tenant-Record
 // (NICHT in settings: settings leakt komplett ueber /api/state + MCP, H4). Reine
 // Mutation, kein IO (Wrapper saved). Leer/null/"" -> Feld entfernen (Skip-Pfad in
 // finishCall bleibt verlaesslich). Ungueltig/gesperrtes Land -> throw (fail-closed, kein
-// Muell at rest). Fehlender Tenant -> throw (Muster setKycLevel/setTenantStripe).
-// Liefert den Tenant.
+// Muell at rest, alter Wert UND alter Verifikationszustand bleiben unangetastet). Fehlender
+// Tenant -> throw (Muster setKycLevel/setTenantStripe). Liefert den Tenant.
+//
+// OC Reset-Regel: JEDE tatsaechliche Aenderung des Werts (neue Nummer ODER Loeschen) setzt
+// den kompletten Besitz-Verifikationszustand zurueck (resetPrivateNumberVerification) - ein
+// Bestaetigungs-/Verifikations-Nachweis fuer NUMMER A darf niemals fuer NUMMER B gelten.
+// Dieselbe Nummer erneut speichern ist IDEMPOTENT: before === e164 -> kein Reset, ein
+// bereits bestaetigter/verifizierter Zustand bleibt erhalten (kein taegliches Neu-
+// Bestaetigen bei unveraendertem Formular-Save).
 export function setPrivateNumber(s, tenantId, raw) {
   const tenant = findTenant(s, tenantId);
   if (!tenant) throw new Error(`setPrivateNumber: Tenant ${tenantId} nicht gefunden`);
   // P8/FMT-11: dasselbe Land-Gate wie beim Onboarding, hergeleitet aus dem Tenant-Land
   // (kein Drift zwischen den zwei Schreibwegen, G5). Tenant ohne country -> strenger
   // Bestands-Default ["+49"], byte-identisch zum Zustand vor P8.
+  const before = tenant.privateNumber ?? null;
   const e164 = normalizePrivateNumber(raw, tenant.country);
   if (e164 === null) delete tenant.privateNumber;
   else tenant.privateNumber = e164;
+  if (before !== e164) resetPrivateNumberVerification(tenant);
   return tenant;
 }
 
@@ -2171,6 +2193,108 @@ export function setPrivateNumber(s, tenantId, raw) {
 export function tenantPrivateNumber(s, tenantId) {
   const tenant = findTenant(s, tenantId);
   return tenant?.privateNumber ?? null;
+}
+
+// ---- Besitz-Verifikation der eigenen Nummer (OC, zweistufig, Owner-Entscheidung 2026-08-21) ----
+// Loest den Launch-Blocker aus PLAN-SECURITY.md: ownerSelfCallGranted (callee-is-owner.js)
+// braucht ein "verified"-Boolean statt der frueheren Tenant-Allowlist. Stufe 1 (E-Mail) UND
+// Stufe 2 (Anruf von der Nummer) leben HIER als reine Datenschicht (kein Fachwissen ueber
+// Tageslimit/TTL - das lebt in own-number-verify.js, Muster newsletterRecipients/G17).
+
+// Lese-Query: hat DIESER Tenant seine hinterlegte Nummer besitz-verifiziert (Stufe 2
+// abgeschlossen)? Reine Query, kein IO. EINZIGE Quelle fuer ownerSelfCallGranted's
+// verified-Flag (routes/api-calls.js resolveCallPrivacyFlags) - kein zweiter Bool anderswo,
+// der auseinanderlaufen koennte (G5).
+export function tenantPrivateNumberVerified(s, tenantId) {
+  return findTenant(s, tenantId)?.privateNumberVerifiedAt != null;
+}
+
+// Additive Lese-View fuer /api/self-service/state (Dashboard-Etappe 2). Reine Query, kein
+// IO. Fail-closed leere Struktur bei fehlendem Tenant (Muster tenantNewsletterConsent).
+export function privateNumberVerification(s, tenantId) {
+  const tenant = findTenant(s, tenantId);
+  return {
+    emailConfirmed: tenant?.privateNumberEmailConfirmedAt != null,
+    verified: tenant?.privateNumberVerifiedAt != null,
+    verifiedAt: tenant?.privateNumberVerifiedAt ?? null,
+  };
+}
+
+// Anzahl der ausgeloesten Bestaetigungs-Mails seit sinceIso (Missbrauchsschutz-Tageslimit,
+// s. own-number-verify.js OWN_NUMBER_CONFIRM_MAIL_DAILY_CAP). Reine Query, kein IO. Muster
+// dailyNewsletterConfirmMailCount.
+export function dailyPrivateNumberConfirmMailCount(s, tenantId, sinceIso) {
+  const tenant = findTenant(s, tenantId);
+  return (tenant?.privateNumberConfirmMailLog ?? []).filter((t) => t >= sinceIso).length;
+}
+
+// Stufe 1 (Absicht): stellt einen neuen Bestaetigungs-Token aus UND vermerkt den Versuch
+// im Tageslimit-Log - EIN Store-Write pro Aufruf (Muster addNewsletterRecipient). Fehlender
+// Tenant -> throw (kein stilles No-Op). Der AUFRUFER (self-service-routes.js) MUSS vorher
+// planStartOwnNumberConfirmation() pruefen - diese Funktion validiert NICHT erneut
+// (Trennung Entscheidung/Mutation). Ueberschreibt einen evtl. noch offenen aelteren Token
+// (Einmalverwendung ist ohnehin nur EIN Token je Tenant, kein Verlauf noetig).
+export function startPrivateNumberEmailConfirmation(s, tenantId, { tokenHash, tokenExpiresAt, now }) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant) throw new Error(`startPrivateNumberEmailConfirmation: Tenant ${tenantId} nicht gefunden`);
+  const nowIso = now ?? new Date().toISOString();
+  tenant.privateNumberConfirmTokenHash = tokenHash;
+  tenant.privateNumberConfirmTokenExpiresAt = tokenExpiresAt;
+  const cutoff = new Date(Date.parse(nowIso) - MS_PER_DAY).toISOString();
+  tenant.privateNumberConfirmMailLog = (tenant.privateNumberConfirmMailLog ?? [])
+    .filter((t) => t >= cutoff)
+    .concat(nowIso);
+  return tenant;
+}
+
+// Oeffentlicher Bestaetigungs-Pfad (GET /own-number/confirm): der Request traegt NUR ein
+// Token, keine Tenant-Identitaet - deshalb linearer Scan ueber ALLE Tenants (Muster
+// confirmNewsletterRecipientByToken), safeEqual gegen jeden Kandidaten (kein Short-Circuit-
+// String-Vergleich auf einem Secret). Treffer NUR bei gesetztem Token UND nicht abgelaufen
+// (tokenExpiresAt > nowIso) - ein bereits bestaetigter Tenant hat tokenHash=null und matcht
+// nie wieder (Einmalverwendung). Erfolg mutiert (privateNumberEmailConfirmedAt gesetzt,
+// Token geleert) und liefert {tenantId}; kein Treffer -> null (neutrale Fehlseite, OHNE
+// Aufschluss ueber den Grund).
+export function confirmPrivateNumberByToken(s, tokenHash, nowIso) {
+  for (const tenant of tenantsOf(s)) {
+    if (
+      tenant.privateNumberConfirmTokenHash &&
+      safeEqual(tenant.privateNumberConfirmTokenHash, tokenHash) &&
+      tenant.privateNumberConfirmTokenExpiresAt > nowIso
+    ) {
+      tenant.privateNumberEmailConfirmedAt = nowIso;
+      tenant.privateNumberConfirmTokenHash = null;
+      tenant.privateNumberConfirmTokenExpiresAt = null;
+      return { tenantId: tenant.id };
+    }
+  }
+  return null;
+}
+
+// Stufe 2 (Nachweis): wird von POST /voice/incoming NACH der Tenant-Aufloesung aufgerufen,
+// From bereits E.164-normalisiert (Anti-Spoof: die Provider-Signatur ist zu diesem
+// Zeitpunkt bereits fail-closed geprueft, s. routes/voice.js). Setzt privateNumberVerifiedAt
+// NUR, wenn ALLE Bedingungen gleichzeitig gelten: eine hinterlegte Nummer existiert, sie
+// entspricht EXAKT (strikter String-Vergleich, kein Praefix/Fuzzy - Muster callee-is-owner.js)
+// dem anrufenden From, Stufe 1 (E-Mail) ist bereits abgeschlossen, UND es ist noch NICHT
+// verifiziert (Einmalverwendung - ein spaeterer Anruf von dieser Nummer aendert nichts mehr).
+// Reihenfolge Stufe 1 vor Stufe 2 ist Pflicht (Plan-Vorgabe): ein Anruf-Treffer VOR
+// abgeschlossener E-Mail-Bestaetigung mutiert NICHTS, liefert aber reason=
+// "call_match_before_email_confirm" - ein reiner Support-Sichtbarkeits-Hinweis (der
+// Aufrufer entscheidet, ob/wie er das auditiert), KEINE zweite Bedingung im Praedikat.
+// Reine Mutation, kein IO. Gespraechsfluss-neutral: der Aufrufer (routes/voice.js) liest nur
+// {verified, reason} und faehrt mit dem UNVERAENDERTEN normalen Anrufaufbau fort.
+// Options-Objekt statt Einzelparameter (max-params, Muster setTenantGeo): s + tenantId
+// bleiben positional (etabliertes Muster im ganzen File), fromE164/nowIso wandern zusammen.
+export function verifyPrivateNumberByInboundCall(s, tenantId, { fromE164, nowIso }) {
+  const tenant = findTenant(s, tenantId);
+  if (!tenant || !tenant.privateNumber || tenant.privateNumber !== fromE164)
+    return { verified: false };
+  if (tenant.privateNumberVerifiedAt != null) return { verified: false };
+  if (tenant.privateNumberEmailConfirmedAt == null)
+    return { verified: false, reason: "call_match_before_email_confirm" };
+  tenant.privateNumberVerifiedAt = nowIso;
+  return { verified: true };
 }
 
 // ---- Geo-Location pro Tenant (F1, Phase 1) ----

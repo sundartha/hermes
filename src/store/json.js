@@ -1095,6 +1095,37 @@ export function tenantPrivateNumber(tenantId) {
   return ops.tenantPrivateNumber(load(), tenantId);
 }
 
+// ---- Besitz-Verifikation der eigenen Nummer (OC): Wrapper-Parity, Muster oben ----
+export function tenantPrivateNumberVerified(tenantId) {
+  return ops.tenantPrivateNumberVerified(load(), tenantId);
+}
+
+export function privateNumberVerification(tenantId) {
+  return ops.privateNumberVerification(load(), tenantId);
+}
+
+export function dailyPrivateNumberConfirmMailCount(tenantId, sinceIso) {
+  return ops.dailyPrivateNumberConfirmMailCount(load(), tenantId, sinceIso);
+}
+
+export function startPrivateNumberEmailConfirmation(tenantId, tokenInput) {
+  const tenant = ops.startPrivateNumberEmailConfirmation(load(), tenantId, tokenInput);
+  save();
+  return tenant;
+}
+
+export function confirmPrivateNumberByToken(tokenHash, nowIso) {
+  const result = ops.confirmPrivateNumberByToken(load(), tokenHash, nowIso);
+  if (result) save();
+  return result;
+}
+
+export function verifyPrivateNumberByInboundCall(tenantId, fromE164, nowIso) {
+  const result = ops.verifyPrivateNumberByInboundCall(load(), tenantId, { fromE164, nowIso });
+  if (result.verified) save();
+  return result;
+}
+
 // ---- Geo-Location pro Tenant (F1) ----
 // setTenantGeo mutiert -> save (Muster wie setTenantStripe). Die settings.language-
 // Migration braucht keinen eigenen Code (migrateSettingsToMap backfillt via

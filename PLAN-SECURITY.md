@@ -3254,35 +3254,55 @@ zweite Huerde mehr. Gegenmassnahme bei Verdacht: Passwort-Rotation im
 Render-Dashboard. Der Render-API-Key fuer solche Infra-Handgriffe liegt lokal
 in `~/.config/hermes/render-api-key` (nie committen, nie loggen).
 
-## Offen (Launch-Blocker): Besitz-Verifikation der eigenen Nummer
+## Geloest (2026-08-21): Besitz-Verifikation der eigenen Nummer
 
-Seit der Owner-Entscheidung 2026-08-20 (OC, s. CLAUDE.md Regel 2) entscheidet
-`tenant.privateNumber` darueber, ob der volle Offenlegungssatz gesprochen wird. Das Feld
-ist Format- und land-validiert (`normalizePrivateNumber`, `src/store/state-ops.js:2127`),
-aber NICHT eigentums-verifiziert, und es ist ueber
-`POST /api/self-service/private-number` von JEDEM eingeloggten Tenant setzbar
-(`src/self-service-routes.js:401`, nur `webAuthMw`). Wer eine fremde Nummer eintraegt,
-erhielte einen KI-Anruf ohne den vollen Offenlegungssatz an einen Dritten (Artikel 50 EU
-AI Act, Bussgeld bis 15 Mio. EUR).
+**Status: GELOEST.** Der fruehere Launch-Blocker (Tenant-Allowlist `OWNER_SELF_CALL_TENANT_IDS`
+als reine Betriebsdisziplin-Schranke, keine Verifikation) ist durch eine echte,
+zweistufige Besitz-Verifikation ersetzt (Owner-Entscheidung 2026-08-21, s. CLAUDE.md Regel
+2, `src/own-number-verify.js`, `src/store/state-ops.js`).
 
-Heute verhindert das die Tenant-Allowlist `OWNER_SELF_CALL_TENANT_IDS` (Default leer):
-nur ausdruecklich gepinnte Tenants loesen die Ausnahme aus. Das ist eine
-Betriebsdisziplin-Schranke, KEINE Verifikation — sie skaliert nicht ueber unsere eigenen
-Accounts hinaus.
+**Mechanik:**
+- **Stufe 1 (Absicht, E-Mail):** `POST /api/self-service/private-number` stoesst bei jeder
+  ECHTEN Aenderung des Werts (Erstanlage oder Wechsel, `before !== after`) eine
+  Bestaetigungs-Mail an die KONTO-Adresse an (`accounts.accountByTenant`, NICHT ein
+  Freitext-Ziel). Der Link (`GET /own-number/confirm?token=...`, oeffentlich, Muster
+  `/newsletter/confirm`: 32-Byte-Token, nur SHA256-Hash gespeichert, 48h TTL,
+  Einmalverwendung, `safeEqual`) setzt `privateNumberEmailConfirmedAt`. Tageslimit
+  10 Bestaetigungs-Mails/Tag (`own-number-verify.js`). Kein Mailer konfiguriert -> die
+  Nummer speichert trotzdem, die Verifikation bleibt offen (fail-soft, kein Wurf).
+- **Stufe 2 (Nachweis, Anruf):** ruft der Kunde seine Hermes-Nummer VON der hinterlegten
+  Nummer an, prueft `POST /voice/incoming` (NACH der Tenant-Aufloesung, VOR
+  `store.createCall`, Provider-Signatur bereits fail-closed geprueft) exakten
+  String-Gleichheit gegen `tenant.privateNumber` und setzt bei Treffer
+  `privateNumberVerifiedAt` (`state-ops.js verifyPrivateNumberByInboundCall`). Reihenfolge
+  Stufe 1 vor Stufe 2 ist erzwungen: ein Anruf-Treffer vor abgeschlossener
+  E-Mail-Bestaetigung mutiert nichts, hinterlaesst aber den Audit-Hinweis
+  `call_match_before_email_confirm`. Der Gespraechsfluss aendert sich dabei NICHT (kein
+  anderes Greeting, keine andere TeXML-Antwort).
+- **Reset-Regel:** JEDE tatsaechliche Aenderung der Nummer (neuer Wert oder Loeschen)
+  setzt `privateNumberEmailConfirmedAt` + `privateNumberVerifiedAt` + offene Tokens
+  zurueck (`state-ops.js resetPrivateNumberVerification`). Dieselbe Nummer erneut
+  speichern ist idempotent - die Verifikation bleibt erhalten, es wird keine neue Mail
+  ausgeloest.
+- **Praedikat:** `ownerSelfCallGranted` (`src/callee-is-owner.js`) prueft seither
+  `enabled === true && verified === true && calleeIsOwner(...)` - `verified` kommt aus
+  `store.tenantPrivateNumberVerified(tenantId)`, EINER Lesung desselben Tenant-Records wie
+  `ownNumber` (kein zweiter Store-Zugriff mit eigenem Race).
+- `OWNER_SELF_CALL_TENANT_IDS` ist seit diesem Cutover wirkungslos (Code liest den Key
+  nicht mehr) - Muster `ALLOWED_NUMBERS`, s. `.env.example`/`config.js`. `test/oc-p1-
+  owner-call-http.test.js` (OC-P1-64) belegt das ausdruecklich: der Key gesetzt, aber
+  NICHT verifiziert -> `calleeIsOwner` bleibt false.
 
-Akzeptiert AUSSCHLIESSLICH vor dem Launch, solange in der Allowlist ausschliesslich
-Accounts stehen, die uns gehoeren.
-
-Bedingung fuer den Launch, alternativ:
-(a) Besitz-Verifikation gebaut (Bestaetigungscode an genau diese Nummer, Zeitstempel am
-    Tenant, Praedikat haengt daran, Aenderung setzt zurueck), ODER
-(b) `OWNER_SELF_CALL_ENABLED=false` — die Ausnahme ist dann wirkungslos und der
-    Offenlegungssatz gilt wieder ausnahmslos.
-
-Ein Eintrag eines fremden Accounts in `OWNER_SELF_CALL_TENANT_IDS` vor (a) ist selbst die
-Rechtsverletzung, gegen die dieser Eintrag steht. Ein Schliessen dieses Eintrags ohne (a)
-oder (b) ebenfalls — es ist kein Aufraeumen.
-
-Unberuehrt davon bleibt die KI-Kennzeichnung: auch im Ausnahmefall nennt die Eroeffnung
-die Maschine ("hier ist dein KI-Assistent"), und der Prompt verpflichtet den Agenten, den
-vollen Offenlegungssatz sofort nachzuholen, wenn am Apparat nicht der Auftraggeber ist.
+**Restrisiko, bewusst akzeptiert (Owner-Entscheidung Jonas, 2026-08-21):**
+Caller-ID-Spoofing der Stufe 2 - ein Angreifer, der die Netz-Rufnummernanzeige (CLI) des
+Providers faelscht, koennte theoretisch als "From" die hinterlegte Nummer vortaeuschen und
+damit einen Anruf ohne die dazugehoerige echte SIM/Leitung ausloesen. Dagegen sprechen: (1)
+CLI-Spoofing gegen einen konkreten Telnyx-Endpunkt ist fuer einen Normalangreifer
+hochschwellig (kein Consumer-Tool-Weg wie bei E-Mail-Spoofing); (2) Stufe 1 bindet die
+Ausnahme zusaetzlich an die KONTO-Adresse - ein Angreifer braucht sowohl Zugriff auf das
+E-Mail-Postfach ALS AUCH die Faehigkeit, die Anrufer-Kennung zu faelschen, nicht nur eines
+von beidem; (3) selbst im Erfolgsfall entfaellt NUR der dritte Halbsatz des
+Offenlegungssatzes - die KI-Kennzeichnung ("hier ist dein KI-Assistent") bleibt in JEDEM
+Fall bestehen (Absolute Regel 2), und der Prompt verpflichtet den Agenten, bei jedem
+Hinweis darauf, dass am Apparat nicht der Auftraggeber ist, sofort den vollen
+Offenlegungssatz nachzuholen.

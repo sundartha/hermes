@@ -143,12 +143,12 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
    | Der Tenant hat eine eigene Nummer hinterlegt | `store.tenantPrivateNumber(tenantId)` |
    | Das Ziel ist normalisiert | `ctx.to` nach dem `normalize_target`-Gate |
    | Ziel und eigene Nummer sind als E.164-String **exakt** gleich | `src/callee-is-owner.js` |
-   | Der ANRUFENDE Tenant ist ausdruecklich gepinnt | `OWNER_SELF_CALL_TENANT_IDS` (Default leer = niemand) |
+   | Die Nummer ist besitz-verifiziert (`privateNumberVerifiedAt` gesetzt) | `store.tenantPrivateNumberVerified(tenantId)` |
    | Der Schalter ist an | `OWNER_SELF_CALL_ENABLED` (Default `false`) |
 
    Alles andere ergibt Offenlegung: kein Treffer, fehlende Nummer, fehlender Tenant,
-   nicht gepinnter Tenant, Praedikat-Fehler, Schalter aus, alter Anruf-Datensatz ohne das
-   Feld. Der Vergleich ist strikte String-Gleichheit — kein Praefix-Match, kein Fuzzy,
+   nicht verifizierte Nummer, Praedikat-Fehler, Schalter aus, alter Anruf-Datensatz ohne
+   das Feld. Der Vergleich ist strikte String-Gleichheit — kein Praefix-Match, kein Fuzzy,
    keine Normalisierung im Praedikat selbst (die ist vorgelagert und geteilt).
 
    **Was die Ausnahme NICHT tut: sie schaltet die KI-Kennzeichnung nicht ab.** Was
@@ -173,17 +173,27 @@ Gateway + Schichten (Node/ESM, kein Build-Step). Zwei Voice-Engines: `budget` (t
    sieht nur das Ergebnis); kein Setting, das die Offenlegung fuer Dritte abschaltet;
    keine zweite Stelle, die dieselbe Frage noch einmal beantwortet.
 
-   **Preis, bewusst akzeptiert:** die hinterlegte eigene Nummer ist heute Format- und
-   land-validiert, aber NICHT eigentums-verifiziert (`normalizePrivateNumber`,
-   `src/store/state-ops.js:2127-2136`), und sie ist ueber
-   `POST /api/self-service/private-number` von JEDEM eingeloggten Tenant setzbar
-   (`src/self-service-routes.js:401`, nur `webAuthMw`). Wer eine fremde Nummer hinterlegt,
-   erreichte damit einen KI-Anruf ohne den vollen Offenlegungssatz an einen Dritten.
-   Deshalb ist die Ausnahme zusaetzlich an eine ausdrueckliche Tenant-Allowlist gebunden:
-   ein nicht gepinnter Account kann sie nicht ausloesen, egal was er eintraegt. Die
-   Besitz-Verifikation ist als Launch-Blocker in `PLAN-SECURITY.md` eingetragen. Wird der
-   Eintrag dort geschlossen, ohne dass die Verifikation gebaut ist, ist DIESE Ausnahme
-   zurueckzunehmen — nicht der Eintrag.
+   **Besitz-Verifikation (Owner-Entscheidung 2026-08-21, PLAN-SECURITY.md Launch-Blocker
+   geloest):** die hinterlegte eigene Nummer ist zweistufig verifiziert, bevor sie die
+   Ausnahme ausloesen kann. Stufe 1 (Absicht): `POST /api/self-service/private-number`
+   sendet bei jeder echten Aenderung eine Bestaetigungs-Mail an die KONTO-Adresse
+   (`accounts.accountByTenant`, NICHT ein Freitext-Ziel); der Link (`GET
+   /own-number/confirm`, 32-Byte-Token, SHA256-Hash, 48h TTL, Einmalverwendung) setzt
+   `privateNumberEmailConfirmedAt`. Stufe 2 (Nachweis): ruft der Tenant seine
+   Hermes-Nummer VON der hinterlegten Nummer an, setzt `POST /voice/incoming` (nach der
+   Signaturpruefung, vor `store.createCall`) bei exaktem Treffer
+   `privateNumberVerifiedAt` — Stufe 1 ist dafuer Pflicht-Vorbedingung
+   (`src/own-number-verify.js`, `state-ops.js verifyPrivateNumberByInboundCall`). JEDE
+   Aenderung der Nummer setzt beide Zeitstempel zurueck; dieselbe Nummer erneut speichern
+   ist idempotent. `OWNER_SELF_CALL_TENANT_IDS` ist seither wirkungslos (Muster
+   `ALLOWED_NUMBERS`).
+
+   **Restrisiko, bewusst akzeptiert:** Caller-ID-Spoofing der Stufe 2 (eine gefaelschte
+   Netz-Rufnummernanzeige koennte theoretisch als "From" durchgehen). Fuer einen
+   Normalangreifer hochschwellig (kein Consumer-Tool-Weg), zusaetzlich an den Zugriff auf
+   die Konto-Adresse (Stufe 1) gebunden, und selbst im Erfolgsfall entfaellt NUR der
+   dritte Halbsatz — die KI-Kennzeichnung bleibt in JEDEM Fall bestehen. Details:
+   `PLAN-SECURITY.md`.
 3. **AUTH FAIL-CLOSED**: Neue Endpunkte sind **standardmaessig** hinter einer authentifizierten Identitaet — Browser-Session (`webAuthMw`, fuer Betreiber-Routen zusaetzlich `adminMw`) oder, fuer den In-Process-MCP-Pfad, `internalOnly` (`isTrustedLocalCaller`). Jede Ausnahme (wie `/voice`, `/mcp`, `/healthz`, `/api/plans`) braucht eine eigene Absicherung, eine Begruendung im Code-Kommentar **und** einen Eintrag in der Oeffentlich-Liste (`src/route-policy.js`); ohne beides schlaegt `test/route-auth-inventory.test.js` fehl. Credential-Vergleiche timing-sicher (`safeEqual`).
 4. **SECRETS**: Nur ueber `.env` (lokal) bzw. Render-Dashboard. Niemals committen, niemals loggen, niemals in API-Responses oder MCP-Tool-Ausgaben leaken.
 5. **AUDIO**: Audio laeuft NIEMALS durch MCP — nur Transkripte/Status.

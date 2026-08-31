@@ -360,6 +360,18 @@ export const {
   removeNewsletterRecipient,
   confirmNewsletterRecipientByToken,
   unsubscribeNewsletterRecipientByToken,
+  // Besitz-Verifikation der eigenen Nummer (OC, Owner-Entscheidung 2026-08-21) - Reader
+  // (Praedikat + Dashboard-View) + Stufe-1-Mutationen (Token ausstellen/bestaetigen) + die
+  // Stufe-2-Mutation (Anruf-Nachweis). Muster setPrivateNumber/tenantPrivateNumber. OHNE
+  // diese Re-Exports sind sie auf der Fassade undefined -> routes/api-calls.js,
+  // routes/voice.js UND self-service-routes.js wuerfen zur Laufzeit einen TypeError (die
+  // Backends json.js/pg.js exportieren alle sechs; die Fassade ist die EINE Quelle).
+  tenantPrivateNumberVerified,
+  privateNumberVerification,
+  dailyPrivateNumberConfirmMailCount,
+  startPrivateNumberEmailConfirmation,
+  confirmPrivateNumberByToken,
+  verifyPrivateNumberByInboundCall,
 } = backend;
 
 // withStoreLock(fn) - prozess-lokaler Single-Writer-Guard (OT-3 AC2). Serialisiert

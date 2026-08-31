@@ -36,24 +36,24 @@ export function calleeIsOwner({ to, ownNumber }) {
   return istNichtLeererString(to) && istNichtLeererString(ownNumber) && to === ownNumber;
 }
 
-// Die Tenant-Allowlist ist Teil der BEDINGUNG, nicht ein Detail des Aufrufers: sie
-// beantwortet "darf DIESER Account die Ausnahme ueberhaupt ausloesen". Fehlend, kein Array
-// oder LEER heisst NIEMAND - nie JEDER (haeufigste Art, eine Allowlist in eine fail-open-
-// Attrappe zu verwandeln). Das Trimmen/Splitten der Env-Liste passiert EINMAL in
-// config.js, hier wird nur strikt verglichen.
-function tenantDarfAusloesen(tenantId, allowedTenantIds) {
-  if (!istNichtLeererString(tenantId)) return false;
-  if (!Array.isArray(allowedTenantIds)) return false;
-  return allowedTenantIds.includes(tenantId);
+// Besitz-Verifikation (Owner-Entscheidung 2026-08-21, OC) ERSETZT die frueherer
+// Tenant-Allowlist als zweite Bedingung: sie beantwortet nicht mehr "steht dieser Account
+// auf einer von Hand gepflegten Liste", sondern "hat DIESER Tenant den Besitz DIESER
+// Nummer nachgewiesen" (E-Mail-Bestaetigung + Anruf von der Nummer selbst, s.
+// src/own-number-verify.js und state-ops.js verifyPrivateNumberByInboundCall). verified
+// wird strikt gegen true geprueft - undefined/false/"true"/1 sind allesamt NICHT
+// verifiziert, aus demselben Grund wie beim enabled-Flag direkt darunter.
+function nummerIstBesitzVerifiziert(verified) {
+  return verified === true;
 }
 
 // Die vollstaendige Bedingung dieses Plans, an EINER Stelle:
-//   Schalter an  UND  Tenant in der Allowlist  UND  Ziel == eigene Nummer.
+//   Schalter an  UND  Besitz verifiziert  UND  Ziel == eigene Nummer.
 // enabled wird strikt gegen true geprueft: ein "true" aus einer Env, das irgendwo als
 // String durchgereicht wurde, ist NICHT wahr (boolEnv in config.js liefert einen echten
 // Boolean; diese Zeile ist die zweite Linie).
-export function ownerSelfCallGranted({ to, ownNumber, tenantId, enabled, allowedTenantIds }) {
+export function ownerSelfCallGranted({ to, ownNumber, enabled, verified }) {
   if (enabled !== true) return false;
-  if (!tenantDarfAusloesen(tenantId, allowedTenantIds)) return false;
+  if (!nummerIstBesitzVerifiziert(verified)) return false;
   return calleeIsOwner({ to, ownNumber });
 }

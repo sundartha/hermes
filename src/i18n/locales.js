@@ -355,6 +355,25 @@ export const LOCALES = Object.freeze({
       unsubscribedPageTitle: "Abgemeldet",
       unsubscribedPageBody: "Du erhältst keine weiteren Anruf-Zusammenfassungen mehr.",
     }),
+    // OC-Besitz-Verifikation (Owner-Entscheidung 2026-08-21, PLAN-SECURITY.md Launch-
+    // Blocker geloest): Stufe-1-Bestaetigungsmail + die zwei oeffentlichen Seiten-Texte
+    // (GET /own-number/confirm). NIE gesprochen (Muster newsletter). ownerName/confirmUrl
+    // werden vom Aufrufer gebunden (keine Identitaets-Logik im Bundle).
+    ownNumberVerify: Object.freeze({
+      confirmMailSubject: "Bestätigung: eigene Rufnummer für Hermes",
+      confirmMailText: (ownerName, confirmUrl) =>
+        `Hallo ${ownerName},\n\nfür deinen Hermes-Account wurde diese Rufnummer als deine ` +
+        `eigene Nummer hinterlegt. Bitte bestätige das über diesen Link:\n\n${confirmUrl}\n\n` +
+        "Der Link ist 48 Stunden gültig. Nach der Bestätigung reicht danach ein kurzer Anruf " +
+        "von genau dieser Nummer bei deinem Hermes-Assistenten, um den Besitz endgültig " +
+        "nachzuweisen. Wenn du das nicht warst, musst du nichts tun - ohne Bestätigung bleibt " +
+        "die Nummer ohne besondere Wirkung.",
+      confirmedPageTitle: "E-Mail bestätigt",
+      confirmedPageBody:
+        "Rufe jetzt einmal von dieser Nummer deinen Hermes-Assistenten an, um die Verifikation abzuschließen.",
+      invalidPageTitle: "Link ungültig",
+      invalidPageBody: "Dieser Bestätigungslink ist ungültig oder abgelaufen.",
+    }),
   }),
   fr: Object.freeze({
     language: "fr",
@@ -465,6 +484,21 @@ export const LOCALES = Object.freeze({
       unsubscribedPageTitle: "Désabonné",
       unsubscribedPageBody: "Vous ne recevrez plus de résumés d'appel.",
     }),
+    // OC-Besitz-Verifikation: s. DE.
+    ownNumberVerify: Object.freeze({
+      confirmMailSubject: "Confirmation : votre numéro personnel pour Hermes",
+      confirmMailText: (ownerName, confirmUrl) =>
+        `Bonjour ${ownerName},\n\ncet appareil a enregistré ce numéro comme votre numéro ` +
+        `personnel pour Hermes. Merci de confirmer via ce lien :\n\n${confirmUrl}\n\n` +
+        "Ce lien est valable 48 heures. Après confirmation, un bref appel depuis ce numéro " +
+        "vers votre assistant Hermes suffira à prouver la possession. Si ce n'était pas vous, " +
+        "vous n'avez rien à faire - sans confirmation, ce numéro n'a aucun effet particulier.",
+      confirmedPageTitle: "E-mail confirmé",
+      confirmedPageBody:
+        "Appelez maintenant votre assistant Hermes depuis ce numéro pour finaliser la vérification.",
+      invalidPageTitle: "Lien invalide",
+      invalidPageBody: "Ce lien de confirmation est invalide ou expiré.",
+    }),
   }),
   // EN-Bundle (F1 Phase 4, Owner-Entscheidung #1: DE+FR+EN). GB/IE -> en. Voice/STT
   // fail-closed (R9/R10): unbekanntes Profil wirft, kein stiller DE/FR-Fallback. Live-
@@ -574,6 +608,20 @@ export const LOCALES = Object.freeze({
       invalidPageBody: "This confirmation link is invalid or has expired.",
       unsubscribedPageTitle: "Unsubscribed",
       unsubscribedPageBody: "You will no longer receive call summaries.",
+    }),
+    // OC own-number verification: s. DE.
+    ownNumberVerify: Object.freeze({
+      confirmMailSubject: "Confirm: your own number for Hermes",
+      confirmMailText: (ownerName, confirmUrl) =>
+        `Hello ${ownerName},\n\nthis phone number was added as your own number for Hermes. ` +
+        `Please confirm via this link:\n\n${confirmUrl}\n\n` +
+        "This link is valid for 48 hours. After confirming, a short call from this exact " +
+        "number to your Hermes assistant will complete the verification. If this wasn't you, " +
+        "you don't need to do anything - without confirmation, this number has no special effect.",
+      confirmedPageTitle: "Email confirmed",
+      confirmedPageBody: "Now call your Hermes assistant once from this number to complete verification.",
+      invalidPageTitle: "Link invalid",
+      invalidPageBody: "This confirmation link is invalid or has expired.",
     }),
   }),
 });

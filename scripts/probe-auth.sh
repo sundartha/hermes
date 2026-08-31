@@ -108,6 +108,7 @@ oeffentlich|GET|/app/*|200|keine|SPA-Fallback auf die App-Shell
 oeffentlich|GET|/voice/tts/:token|404|keine|Einmal-Token ungueltig; Route existiert
 oeffentlich|GET|/newsletter/confirm|400|keine|Kein/ungueltiger Bestaetigungs-Token; neutrale Fehlseite
 oeffentlich|GET|/newsletter/unsubscribe|400|keine|Kein/ungueltiger Abmelde-Token; neutrale Fehlseite
+oeffentlich|GET|/own-number/confirm|400|keine|Kein/ungueltiger Bestaetigungs-Token (OC Stufe 1); neutrale Fehlseite
 oeffentlich|POST|/voice/incoming|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/turn|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/outbound|403|keine|Provider-Signatur fail-closed
@@ -135,6 +136,7 @@ sitzung|GET|/api/portal/state|401|webauth|Sitzungs-Cookie fehlt
 sitzung|GET|/api/self-service/state|401|webauth|Sitzungs-Cookie fehlt
 sitzung|POST|/api/self-service/settings|401|webauth|Sitzungs-Cookie fehlt
 sitzung|POST|/api/self-service/private-number|401|webauth|Sitzungs-Cookie fehlt
+sitzung|POST|/api/self-service/private-number/confirm-resend|401|webauth|Sitzungs-Cookie fehlt
 sitzung|GET|/api/self-service/billing/status|401|webauth|Sitzungs-Cookie fehlt
 sitzung|POST|/api/self-service/billing/setup-checkout|401|webauth|Geld-Route, Sitzungs-Cookie fehlt
 sitzung|POST|/api/self-service/billing/subscribe|401|webauth|Geld-Route, Sitzungs-Cookie fehlt

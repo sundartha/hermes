@@ -153,6 +153,24 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS newsletter_consent_at TEXT;
 -- newsletter_consent).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS newsletter_recipients JSONB;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS newsletter_confirm_mail_log JSONB;
+-- Besitz-Verifikation der eigenen Nummer (OC, Owner-Entscheidung 2026-08-21, PLAN-SECURITY.md
+-- Launch-Blocker geloest): loest die vorherige Tenant-Allowlist OWNER_SELF_CALL_TENANT_IDS ab.
+-- Zweistufig: private_number_email_confirmed_at (Stufe 1, E-Mail-Bestaetigung der Absicht an
+-- die Konto-Adresse) MUSS gesetzt sein, BEVOR private_number_verified_at (Stufe 2, Besitz-
+-- Nachweis per Anruf von der hinterlegten Nummer selbst) gesetzt werden kann - Reihenfolge
+-- ist Pflicht (src/own-number-verify.js, state-ops.js verifyPrivateNumberByInboundCall). Die
+-- beiden Token-Spalten tragen NUR den Stufe-1-Bestaetigungslink (Muster newsletter_recipients:
+-- SHA256-Hash + Ablaufzeit, Einmalverwendung, explizites NULL nach Erfolg). Alle FUENF Felder
+-- werden bei JEDER tatsaechlichen Aenderung der Nummer zurueckgesetzt (state-ops.js
+-- resetPrivateNumberVerification) AUSSER private_number_confirm_mail_log - das Tageslimit-Log
+-- ist ein Missbrauchsschutz FUER DEN TENANT, kein Nummern-Attribut (Muster
+-- newsletter_confirm_mail_log, selbstpruned bei jedem Add-Write). Additiv NULLABLE, kein
+-- CHECK (Validierung fail-closed im Code, Muster newsletter_consent/private_number).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS private_number_email_confirmed_at TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS private_number_verified_at TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS private_number_confirm_token_hash TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS private_number_confirm_token_expires_at TEXT;
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS private_number_confirm_mail_log JSONB;
 
 -- settings: pro Tenant eine Owner-Zeile. Boolesche Flags + Strings.
 CREATE TABLE IF NOT EXISTS settings (

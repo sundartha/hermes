@@ -711,6 +711,27 @@ export function makePgStore(runner) {
     },
     tenantPrivateNumber: (tenantId) => ops.tenantPrivateNumber(requireState(), tenantId),
 
+    // ---- Besitz-Verifikation der eigenen Nummer (OC): Wrapper-Parity zu json.js ----
+    tenantPrivateNumberVerified: (tenantId) => ops.tenantPrivateNumberVerified(requireState(), tenantId),
+    privateNumberVerification: (tenantId) => ops.privateNumberVerification(requireState(), tenantId),
+    dailyPrivateNumberConfirmMailCount: (tenantId, sinceIso) =>
+      ops.dailyPrivateNumberConfirmMailCount(requireState(), tenantId, sinceIso),
+    startPrivateNumberEmailConfirmation(tenantId, tokenInput) {
+      const tenant = ops.startPrivateNumberEmailConfirmation(requireState(), tenantId, tokenInput);
+      save();
+      return tenant;
+    },
+    confirmPrivateNumberByToken(tokenHash, nowIso) {
+      const result = ops.confirmPrivateNumberByToken(requireState(), tokenHash, nowIso);
+      if (result) save();
+      return result;
+    },
+    verifyPrivateNumberByInboundCall(tenantId, fromE164, nowIso) {
+      const result = ops.verifyPrivateNumberByInboundCall(requireState(), tenantId, { fromE164, nowIso });
+      if (result.verified) save();
+      return result;
+    },
+
     // ---- Geo-Location pro Tenant (F1): Wrapper-Parity zu json.js ----
     setTenantGeo(tenantId, patch) {
       const tenant = ops.setTenantGeo(requireState(), tenantId, patch);
@@ -1003,7 +1024,10 @@ const TENANT_COLUMNS =
   "number_release_pending, workos_delete_pending, " +
   "cancellation_mail_pending, cancellation_mail_received_at, " +
   "newsletter_consent, newsletter_consent_at, " +
-  "newsletter_recipients, newsletter_confirm_mail_log";
+  "newsletter_recipients, newsletter_confirm_mail_log, " +
+  "private_number_email_confirmed_at, private_number_verified_at, " +
+  "private_number_confirm_token_hash, private_number_confirm_token_expires_at, " +
+  "private_number_confirm_mail_log";
 
 // Eine tenant-Zeile -> Tenant-Record. Alle optionalen Felder NUR-nicht-null hydrieren:
 // owner_name/idp_subject/first_name sonst -> leeres Feld, das den leeren tenantContext-
@@ -1067,6 +1091,18 @@ function rowToTenant(r) {
   // (Muster consults auf call). NULL -> Feld bleibt weg, die state-ops-Leser fallen ueber
   // ?? [] fail-closed auf eine leere Liste zurueck (kein Backfill noetig).
   if (r.newsletter_recipients != null) tenant.newsletterRecipients = r.newsletter_recipients;
+  // Besitz-Verifikation der eigenen Nummer (OC): Muster newsletter_recipients direkt
+  // darueber (ALTER-only, nullable, kein Backfill) - Bestand ohne Wert -> die state-ops-
+  // Leser fallen fail-closed auf "nicht bestaetigt/nicht verifiziert" zurueck.
+  if (r.private_number_email_confirmed_at != null)
+    tenant.privateNumberEmailConfirmedAt = r.private_number_email_confirmed_at;
+  if (r.private_number_verified_at != null) tenant.privateNumberVerifiedAt = r.private_number_verified_at;
+  if (r.private_number_confirm_token_hash != null)
+    tenant.privateNumberConfirmTokenHash = r.private_number_confirm_token_hash;
+  if (r.private_number_confirm_token_expires_at != null)
+    tenant.privateNumberConfirmTokenExpiresAt = r.private_number_confirm_token_expires_at;
+  if (r.private_number_confirm_mail_log != null)
+    tenant.privateNumberConfirmMailLog = r.private_number_confirm_mail_log;
   if (r.newsletter_confirm_mail_log != null)
     tenant.newsletterConfirmMailLog = r.newsletter_confirm_mail_log;
   return tenant;
@@ -1543,8 +1579,8 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending, cancellation_mail_pending, cancellation_mail_received_at, newsletter_consent, newsletter_consent_at, newsletter_recipients, newsletter_confirm_mail_log)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending, cancellation_mail_pending, cancellation_mail_received_at, newsletter_consent, newsletter_consent_at, newsletter_recipients, newsletter_confirm_mail_log, private_number_email_confirmed_at, private_number_verified_at, private_number_confirm_token_hash, private_number_confirm_token_expires_at, private_number_confirm_mail_log)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
@@ -1574,7 +1610,12 @@ async function flushTenants(client, tenants) {
          newsletter_consent=EXCLUDED.newsletter_consent,
          newsletter_consent_at=EXCLUDED.newsletter_consent_at,
          newsletter_recipients=EXCLUDED.newsletter_recipients,
-         newsletter_confirm_mail_log=EXCLUDED.newsletter_confirm_mail_log`,
+         newsletter_confirm_mail_log=EXCLUDED.newsletter_confirm_mail_log,
+         private_number_email_confirmed_at=EXCLUDED.private_number_email_confirmed_at,
+         private_number_verified_at=EXCLUDED.private_number_verified_at,
+         private_number_confirm_token_hash=EXCLUDED.private_number_confirm_token_hash,
+         private_number_confirm_token_expires_at=EXCLUDED.private_number_confirm_token_expires_at,
+         private_number_confirm_mail_log=EXCLUDED.private_number_confirm_mail_log`,
       [
         t.id,
         t.status,
@@ -1613,6 +1654,15 @@ async function flushTenants(client, tenants) {
         // Eintrag, kein leeres "[]" am Bestandstenant).
         t.newsletterRecipients ? JSON.stringify(t.newsletterRecipients) : null,
         t.newsletterConfirmMailLog ? JSON.stringify(t.newsletterConfirmMailLog) : null,
+        // Besitz-Verifikation der eigenen Nummer ($34-$38): Muster newsletter_recipients
+        // direkt darueber. tokenHash kann explizit null sein (Einmalverwendung nach
+        // Bestaetigung, s. state-ops.confirmPrivateNumberByToken) - t.x ?? null bildet das
+        // korrekt ab (explizites null bleibt null, undefined wird ebenfalls null).
+        t.privateNumberEmailConfirmedAt ?? null,
+        t.privateNumberVerifiedAt ?? null,
+        t.privateNumberConfirmTokenHash ?? null,
+        t.privateNumberConfirmTokenExpiresAt ?? null,
+        t.privateNumberConfirmMailLog ? JSON.stringify(t.privateNumberConfirmMailLog) : null,
       ],
     );
   }

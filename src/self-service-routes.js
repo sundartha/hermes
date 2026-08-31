@@ -62,6 +62,16 @@ import {
 // der Token-Vergleich liegt in state-ops.js (confirmNewsletterRecipientByToken/
 // unsubscribeNewsletterRecipientByToken).
 import { hashEmail } from "./util.js";
+// Besitz-Verifikation der eigenen Nummer (OC, PLAN-SECURITY.md Launch-Blocker geloest):
+// Token-Bausteine + Gate-Entscheidung + Dashboard-Projektion - EINE Quelle (G5), geteilt
+// mit routes/voice.js (Stufe 2 lebt dort ueber store.verifyPrivateNumberByInboundCall).
+import {
+  planStartOwnNumberConfirmation,
+  newOwnNumberConfirmToken,
+  ownNumberConfirmUrl,
+  hashOwnNumberToken,
+  publicPrivateNumberVerification,
+} from "./own-number-verify.js";
 
 // AM4: maschinenlesbarer Funnel-Hinweis im no_card-Response. Der Client (lib/subscribe.js)
 // springt bei next==="setup-checkout" deterministisch in die Karten-Erfassung, statt ein
@@ -80,6 +90,52 @@ const NEXT_SETUP_CHECKOUT = "setup-checkout";
 function maskPrivateNumber(e164) {
   if (!e164) return null;
   return `${e164.slice(0, 3)}…${e164.slice(-4)}`;
+}
+
+// OC-Besitz-Verifikation, Stufe 1: stellt bei Bedarf einen neuen Bestaetigungs-Token aus
+// und versendet die Mail - EINE Stelle (G5), genutzt von POST /api/self-service/private-
+// number (nach dem Setzen) UND POST .../confirm-resend (expliziter Nutzerwunsch). Reihen-
+// folge: bereits bestaetigt -> No-Op (idempotentes Resave darf nicht neu mailen) -> Tages-
+// limit-Gate -> Token ausstellen (IMMER, unabhaengig vom Mailer - Muster addNewsletterRecipient:
+// der Zaehler deckt den Missbrauchsvektor "wiederholtes Eintragen", nicht nur erfolgreiche
+// Sends) -> Mail nur mit konfiguriertem Mailer UND aufloesbarer Konto-Adresse (fail-soft,
+// Muster attemptCancellationMailConfirm: ein Mailer-/Lookup-Fehler blockt NIE den Aufrufer).
+async function startOwnNumberConfirmationIfNeeded({ store, mailer, accounts, config, tenant }) {
+  const verification = store.privateNumberVerification(tenant);
+  if (verification.emailConfirmed) return { ok: false, reason: "already_confirmed" };
+  const plan = planStartOwnNumberConfirmation({ store, tenantId: tenant });
+  if (!plan.ok) return plan;
+  const tokens = newOwnNumberConfirmToken();
+  store.startPrivateNumberEmailConfirmation(tenant, {
+    tokenHash: tokens.tokenHash,
+    tokenExpiresAt: tokens.tokenExpiresAt,
+  });
+  if (!mailer) return { ok: true, mailed: false };
+  try {
+    const language = tenantLanguage(store.load(), tenant);
+    // Konto-Adresse ist die EINZIGE zulaessige Empfaengeradresse dieser Stufe (Owner-Auftrag:
+    // "an die Konto-Adresse") - anders als bei den Newsletter-Zusatzempfaengern gibt es hier
+    // KEIN Freitext-Ziel. Fail-closed: kein accounts-Adapter/kein Account/IO-Fehler -> keine
+    // Mail (Muster accountEmail-Lookup weiter oben in dieser Datei).
+    let accountEmail = null;
+    if (accounts) {
+      try {
+        const account = await accounts.accountByTenant(tenant);
+        accountEmail = account?.email ?? null;
+      } catch (e) {
+        console.error("[own-number-confirm-mail] accountEmail lookup:", e.message);
+      }
+    }
+    if (!accountEmail) return { ok: true, mailed: false };
+    const ownerName = store.tenantContext(tenant).ownerName;
+    const t = localeFor(language).ownNumberVerify;
+    const confirmUrl = ownNumberConfirmUrl(config.server.publicUrl, tokens.confirmToken);
+    await mailer.sendMail({ to: accountEmail, subject: t.confirmMailSubject, text: t.confirmMailText(ownerName, confirmUrl) });
+    return { ok: true, mailed: true };
+  } catch (e) {
+    console.error("[own-number-confirm-mail]", e.message);
+    return { ok: true, mailed: false };
+  }
 }
 
 // Pay3/W4: der payment-bezogene Anteil der Self-Service-Lese-View. Bei PAYMENT_ENABLED
@@ -322,6 +378,11 @@ export function makeSelfServiceRoutes({
       // Dedizierter Record-Reader, Schluessel req.tenant.tenantId (nie fremd, H3) - NIE
       // ueber settings/tenantContext, die ueber /api/state + MCP komplett leaken (H4).
       privateNumber: maskPrivateNumber(store.tenantPrivateNumber(tenant)),
+      // OC-Besitz-Verifikation (PLAN-SECURITY.md Launch-Blocker geloest): additive View fuer
+      // die Dashboard-Etappe 2 (KEINE Tokens, Owner-Auftrag - publicPrivateNumberVerification
+      // strippt ohnehin nur, die rohe Query traegt bereits keine). Dedizierter Record-Reader
+      // (Muster privateNumber oben), NIE ueber settings/tenantContext (H4).
+      privateNumberVerification: publicPrivateNumberVerification(store.privateNumberVerification(tenant)),
       // Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1): dedizierter Record-Reader
       // (Muster privateNumber oben), NIE ueber settings/tenantContext (H4). consent ist
       // NIE vorangekreuzt (Default false, s. schema.sql); consentAt ist der Zeitstempel
@@ -398,9 +459,21 @@ export function makeSelfServiceRoutes({
   // Muell at rest; der Setter wirft VOR jeder Mutation -> alter Wert bleibt). Identitaet
   // = Web-Session (req.tenant.tenantId), NIE ein fremder Tenant. Audit UND Response
   // tragen NIE die Nummer - nur den Outcome-Schluessel (set|cleared|rejected, H4).
-  router.post("/api/self-service/private-number", webAuthMw, (req, res) => {
+  //
+  // OC-Besitz-Verifikation (PLAN-SECURITY.md Launch-Blocker geloest): store.setPrivateNumber
+  // setzt bei JEDER tatsaechlichen Aenderung selbst den Verifikationszustand zurueck
+  // (state-ops.js resetPrivateNumberVerification) - hier wird NUR noch entschieden, ob
+  // Stufe 1 (E-Mail-Bestaetigung) angestossen wird. Die Entscheidung haengt AUSSCHLIESSLICH
+  // an before !== after (echte Aenderung ODER Erstanlage), NICHT am emailConfirmed-Zustand:
+  // ein idempotentes erneutes Speichern DERSELBEN Nummer (before === after) loest KEINE neue
+  // Mail aus, selbst wenn die vorherige Bestaetigung noch aussteht - der bereits ausgestellte
+  // Token bleibt 48h gueltig, ein Klick auf "Speichern" ist keine Bitte um eine neue Mail
+  // (dafuer existiert confirm-resend). Fail-soft: async, aber der Mail-/Token-Pfad blockt
+  // NIEMALS die 200-Antwort (die Nummer ist bereits persistiert).
+  router.post("/api/self-service/private-number", webAuthMw, async (req, res) => {
     const tenant = req.tenant.tenantId;
     const { privateNumber } = req.body || {};
+    const before = store.tenantPrivateNumber(tenant);
     try {
       store.setPrivateNumber(tenant, privateNumber);
     } catch {
@@ -409,9 +482,31 @@ export function makeSelfServiceRoutes({
       // Vokabelform wie no_card/already_subscribed/plan_unconfigured in dieser Datei.
       return res.status(400).json({ error: "invalid_private_number" });
     }
-    const stored = store.tenantPrivateNumber(tenant) != null;
+    const after = store.tenantPrivateNumber(tenant);
+    const stored = after != null;
+    if (stored && before !== after) await startOwnNumberConfirmationIfNeeded({ store, mailer, accounts, config, tenant });
     audit("self_service_private_number", req, `outcome=${stored ? "set" : "cleared"}`);
     res.json({ ok: true, hasPrivateNumber: stored });
+  });
+
+  // ---- OC: erneutes Anstossen der Stufe-1-Bestaetigungsmail (falls verloren) -------
+  // Dashboard-Etappe 2 braucht einen Resend-Button, ohne die Nummer neu einzutragen.
+  // Dieselbe Gate-/Versand-Logik wie oben (EINE Quelle, G5) - Unterschied ist nur die
+  // Fehler-Antwort: hier gibt es tatsaechlich einen HTTP-Fehlerfall (kein stilles No-Op),
+  // weil der Nutzer aktiv um eine Mail bittet.
+  router.post("/api/self-service/private-number/confirm-resend", webAuthMw, async (req, res) => {
+    const tenant = req.tenant.tenantId;
+    if (store.tenantPrivateNumber(tenant) == null) {
+      audit("self_service_private_number_confirm_resend", req, "outcome=no_number");
+      return res.status(409).json({ error: "no_private_number" });
+    }
+    const result = await startOwnNumberConfirmationIfNeeded({ store, mailer, accounts, config, tenant });
+    if (!result.ok) {
+      audit("self_service_private_number_confirm_resend", req, `outcome=rejected reason=${result.reason}`);
+      return res.status(409).json({ error: result.reason });
+    }
+    audit("self_service_private_number_confirm_resend", req, `outcome=sent mailed=${result.mailed}`);
+    res.json({ ok: true });
   });
 
   // ---- Newsletter-Einwilligung (Opt-in, DSGVO Art. 7 Abs. 1) ----------------------
@@ -603,6 +698,34 @@ export function makeSelfServiceRoutes({
       .send(
         renderNewsletterPage({ title: t.unsubscribedPageTitle, body: t.unsubscribedPageBody, lang: language }),
       );
+  });
+
+  // ---- OC: oeffentliche Bestaetigung der Besitz-Verifikation (Stufe 1) -------------
+  // AUTH-AUSNAHME (Regel 3, begruendet, Muster /newsletter/confirm oben): der Empfaenger
+  // hat KEIN Dashboard/keine Session - Sicherung ist der kryptografisch unratbare Token
+  // (32 Byte, s. own-number-verify.js), timing-sicher verglichen (safeEqual in state-ops.js
+  // confirmPrivateNumberByToken). route-policy.js traegt den PUBLIC_ROUTES-Eintrag.
+  router.get("/own-number/confirm", (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    const result = token
+      ? store.confirmPrivateNumberByToken(hashOwnNumberToken(token), new Date().toISOString())
+      : null;
+    const language = result ? tenantLanguage(store.load(), result.tenantId) : null;
+    const t = localeFor(language).ownNumberVerify;
+    if (!result) {
+      audit("own_number_confirm_failed", req, "reason=invalid_or_expired");
+      return res
+        .status(400)
+        .type("html")
+        .send(renderNewsletterPage({ title: t.invalidPageTitle, body: t.invalidPageBody, lang: language || "de" }));
+    }
+    auditStore
+      .record({ tenantId: result.tenantId, action: "own_number_email_confirmed" })
+      .catch((err) => console.error(`own-number confirm audit write failed: ${err.message}`));
+    audit("own_number_email_confirmed", req, `tenant=${result.tenantId}`);
+    res
+      .type("html")
+      .send(renderNewsletterPage({ title: t.confirmedPageTitle, body: t.confirmedPageBody, lang: language }));
   });
 
   // ---- P5: schlanker Billing-Status fuer die gefuehrte Aktivierung -----------------
