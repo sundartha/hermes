@@ -182,6 +182,7 @@ const ROUTE_FINGERPRINT = [
   "GET /api/admin/tenants",
   "GET /api/billing/checkout-return",
   "GET /api/billing/cost-drift",
+  "GET /api/billing/kosten-deckung",
   "GET /api/billing/platform-costs",
   "GET /api/calls/:id",
   "GET /api/calls/:id/consult",
@@ -328,21 +329,22 @@ test("Routen-Inventar: ohne pg-Backend fehlt der Web-Login-Block (der Graph-Scha
   }
 });
 
-// ---- AUTH-P6: die sechs Betreiber-Routen tragen BEIDE Middlewares ----------------
+// ---- AUTH-P6: die sieben Betreiber-Routen tragen BEIDE Middlewares ----------------
 // classifyRoute() wertet AUTH schon dann, wenn IRGENDEINE Auth-Middleware in der Kette
 // steht (Plan Abschnitt 5, "Ehrliche Luecke") - webAuthGateMiddleware ALLEIN waere fuer
-// diese sechs Routen zu wenig (jeder eingeloggte, aber nicht-admin Kunde saehe sie).
-// Die Paar-Assertion unten schliesst genau diese Luecke fuer diese sechs Routen.
+// diese sieben Routen zu wenig (jeder eingeloggte, aber nicht-admin Kunde saehe sie).
+// Die Paar-Assertion unten schliesst genau diese Luecke fuer diese sieben Routen.
 const OPERATOR_ROUTE_KEYS = [
   "POST /api/billing/flush-meters",
   "POST /api/billing/cost-truing/sweep",
   "GET /api/billing/cost-drift",
+  "GET /api/billing/kosten-deckung",
   "GET /api/billing/platform-costs",
   "POST /api/onboard",
   "POST /api/onboard/retry",
 ];
 
-test("AUTH-P6-7: die sechs Betreiber-Routen tragen webAuthGateMiddleware UND adminOnlyMiddleware", () => {
+test("AUTH-P6-7: die sieben Betreiber-Routen tragen webAuthGateMiddleware UND adminOnlyMiddleware", () => {
   const byKey = new Map(PROD_GRAPH.map((route) => [routeKey(route.method, route.path), route]));
   for (const key of OPERATOR_ROUTE_KEYS) {
     const route = byKey.get(key);
@@ -358,12 +360,12 @@ test("AUTH-P6-7: die sechs Betreiber-Routen tragen webAuthGateMiddleware UND adm
   }
 });
 
-test("AUTH-P6-8: ohne pg-Backend sind die sechs Betreiber-Routen gar nicht gemountet (Kehrseite von AUTH-P6-5, In-Process)", () => {
+test("AUTH-P6-8: ohne pg-Backend sind die sieben Betreiber-Routen gar nicht gemountet (Kehrseite von AUTH-P6-5, In-Process)", () => {
   const leanKeys = keysOf(LEAN_GRAPH);
   for (const key of OPERATOR_ROUTE_KEYS) {
     assert.ok(
       !leanKeys.has(key),
-      `${key} existiert auch ohne pg-Backend - die sechs Betreiber-Routen duerfen ohne ` +
+      `${key} existiert auch ohne pg-Backend - die sieben Betreiber-Routen duerfen ohne ` +
         "operatorAuth (webAuthMw+adminMw) gar nicht gemountet sein (fail-closed by construction).",
     );
   }

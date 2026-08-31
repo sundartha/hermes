@@ -50,7 +50,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // OUTBOUND-E4: outboundDriftMinIntervalMs + outboundDriftStaleMs +
   // outboundDriftBalanceMinHours ergaenzt (Drift-Waechter-Mindestfrist, Stale-Grenze,
   // Guthaben-Reichweiten-Schwelle) -> 48.
-  billing: 48,
+  // KV2-6: kostenHeartbeatFensterH ergaenzt (Fensterlaenge des faelligkeits-
+  // unabhaengigen Herzschlags je Traeger) -> 49.
+  billing: 49,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -138,12 +140,13 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // C8 (Nachbesserung, F-8): platformHoldEscalationMaxAgeMs (billing) ergaenzt -> 167.
 // OUTBOUND-E4: 2 (safety) + 3 (billing) + 2 (telephony) ergaenzt -> 174.
 // OUTBOUND-E5: 2 (telephony: telnyxSipTrunkUsername/-Password) ergaenzt -> 176.
+// KV2-6: kostenHeartbeatFensterH (billing) ergaenzt -> 177.
 // numberRegistrationEnabled liegt INNERHALB des bereits gezaehlten nested Objekts
 // voice.elevenLabsOutbound (Muster elevenLabsOutbound selbst, s.o.) - kein neuer
 // primitiver Key auf der voice-Ebene, die Summe steigt dadurch NICHT zusaetzlich.
-const EXPECTED_TOTAL_KEYS = 176;
+const EXPECTED_TOTAL_KEYS = 177;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (176 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (177 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -276,7 +279,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // innerhalb des bereits gezaehlten nested Objekts voice.elevenLabsOutbound (dessen
   // primitive Blaetter durchlaeuft dieser Test nicht einzeln, s. continue oben) - checked
   // steigt dadurch NICHT.
-  const EXPECTED_PRIMITIVE_LEAVES = 165;
+  // KV2-6: kostenHeartbeatFensterH ist primitiv (Zahl, kein Array/nested Objekt) -> 166.
+  const EXPECTED_PRIMITIVE_LEAVES = 166;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

@@ -478,6 +478,21 @@ export function hatEinsammler(traeger) {
   });
 }
 
+// KV2-6: die Traeger EINES Profils, fuer die es einen Einsammler gibt. Gegenstueck zu
+// hatEinsammler (dort: "fuehrt IRGENDEIN Profil diesen Traeger ein"), hier profil-lokal.
+// Die nicht_belegpflichtig-Paare fallen heraus - openai_realtime (Owner-Entscheidung 9)
+// hat keinen Einsammler und darf deshalb weder in eine Deckungsquote noch in einen
+// Herzschlag eingehen: sonst waere der Alarm fuer telnyx_inbound_realtime per
+// Konstruktion dauerhaft an, und ein Alarm, der immer an ist, ist keiner (4.4).
+// Unbekanntes Profil -> LEERE Liste (fail-closed, nie ein Trostpreis-Traeger).
+export function pflichtTraegerFuerProfil(profil) {
+  // Drei eigene Anweisungen statt einer verketteten Pipeline (G36, Gesetz von Demeter) -
+  // dieselbe Rechnung, aber ohne vier verschachtelte Zugriffe in EINEM Ausdruck.
+  const traegerEintraege = Object.entries(KOSTENPROFILE[profil]?.traeger ?? {});
+  const pflichtEintraege = traegerEintraege.filter(([, eintrag]) => eintrag.einsammler !== EINSAMMLER.NICHT_BELEGPFLICHTIG);
+  return pflichtEintraege.map(([traeger]) => traeger);
+}
+
 // ---- Top-Level-Validierung: laeuft bei JEDEM Import dieses Moduls (Muster
 // cost-ledger-map.js), nicht erst in einem Testlauf. Eine verstuemmelte Zeile reisst den
 // Import ab, bevor irgendein Aufrufer die Tabellen je zu Gesicht bekommt. ----

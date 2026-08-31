@@ -436,6 +436,9 @@ export const BASE_ENV = {
   COST_TRUING_REQUIRED_RECORD_TYPES: "sip-trunking,call-control",
   COST_TRUING_MIN_COVERAGE_PERCENT: "80",
   COST_TRUING_COVERAGE_STALL_SWEEPS: "8",
+  // KV2-6: Herzschlag-Fenster auf dem Code-Default gepinnt (Lehre test-base-env-drift) -
+  // ohne diese Zeile faerbte eine lokale .env die Spawn-Suite.
+  KOSTEN_HEARTBEAT_FENSTER_H: "6",
   COST_DRIFT_WARN_PERCENT: "50",
   COST_ALERT_DEBOUNCE_MS: "86400000",
   // LCT P5 (Drift-Waechter): auf den Code-Default gepinnt (Lehre test-base-env-drift).

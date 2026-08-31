@@ -98,7 +98,10 @@ test("(P9-3) leere abrufbare Menge bei nicht-leerer Kandidatenmenge -> Bilanz tr
     "[cost-truing] sweep trigger=manual kandidaten=3 gemessen=0 unvollstaendig=0 " +
       "ohne_schaetzung=0 unbestimmt=0 uebersprungen=3 " +
       // KV2-1 (Kriterium (d)): kanaele= HINTER den Bestandsfeldern - kein Ziel gesetzt
-      // (BASE_ENV/fakeConfig-Default) -> kanaele=keine.
-      "anfragen=0 seiten=0 pool=0 vollstaendig=true kanaele=keine",
+      // (BASE_ENV/fakeConfig-Default) -> kanaele=keine. KV2-6: buch=/herzschlag=/
+      // nie_beendet=/profillos= wachsen HINTER kanaele= - die 3 Kandidaten liegen
+      // ausserhalb JEDES Fensters (makeDueOutboundCall-Default endedMinutesAgo=200min,
+      // < der Karenz dieser Config) -> buch=keine herzschlag=keine.
+      "anfragen=0 seiten=0 pool=0 vollstaendig=true kanaele=keine buch=keine herzschlag=keine nie_beendet=0 profillos=0",
   );
 });

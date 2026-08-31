@@ -301,7 +301,10 @@ test("KV2-1 (d2): die Sweep-Zeile traegt kanaele= - NUR Kanal-Arten, NIE die Zie
     logs.restore();
   }
   const sweepLine = lines.find((line) => line.startsWith("[cost-truing] sweep "));
-  assert.ok(sweepLine.endsWith("kanaele=keine"), "kanaele=keine steht am Zeilenende");
+  // KV2-6: buch=/herzschlag=/nie_beendet=/profillos= wachsen HINTER kanaele= (dieselbe
+  // Bewegung wie kanaele= selbst hinter den P6-8-Feldern) - "kanaele=keine" steht deshalb
+  // nicht mehr am Zeilenende, sondern unmittelbar VOR dem naechsten Feld.
+  assert.match(sweepLine, /kanaele=keine buch=/, "kanaele=keine steht unmittelbar vor dem Kosten-Buch");
   assert.doesNotMatch(sweepLine, /ops@|\+\d{6,}/, "kein Ziel in der Sweep-Zeile");
 });
 
