@@ -33,6 +33,14 @@
 // deepseek-b1-messung.mjs): dieses Skript laeuft AUSSERHALB des Servers und importiert
 // deshalb bewusst nicht src/config.js (kein Config-/Boot-Seiteneffekt in einem reinen
 // CLI-Werkzeug) - process.env ist hier die einzig sinnvolle Quelle.
+//
+// Die reinen Funktionen sind exportiert und main() laeuft nur, wenn das Skript direkt
+// ausgefuehrt wird (istHauptmodul-Wache, Muster scripts/check-outbound-drift.mjs) - so
+// kann ein Test die Messlogik pinnen, ohne TELNYX_API_KEY zu brauchen oder main() beim
+// Import ungewollt mit Netz-IO auszuloesen.
+
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 const TELNYX_API_BASE = process.env.TELNYX_API_BASE || "https://api.telnyx.com";
 const TELNYX_API_KEY = process.env.TELNYX_API_KEY || "";
@@ -48,8 +56,14 @@ const JSON_INDENT = 2;
 // Bekannte Belegtypen (ASSIGNABLE_COST_RECORD_TYPES, s. src/telephony/adapters/telnyx/voice.js) -
 // EXPLIZIT dupliziert statt importiert: dieses Skript laeuft ausserhalb des Servers und
 // darf keinen Netz-/Config-Seiteneffekt eines src/-Imports mitziehen (reines CLI-Werkzeug).
-const RECORD_TYPES_TO_PROBE = Object.freeze([
+// "inference" gehoert NICHT zu ASSIGNABLE_COST_RECORD_TYPES (kein Traeger bucht ihn heute),
+// steht aber trotzdem in der Probe-Liste - Q3 verspricht im Kopfkommentar ausdruecklich,
+// zu messen, ob der Typ auf diesem Konto ueberhaupt Betraege traegt. Ohne den Typ in dieser
+// Liste bleibt inferenceBilanz() immer auf der leeren Liste stehen (Map.get liefert
+// undefined) und Q3 wird nie gemessen, sondern nur mit "0" vorgetaeuscht.
+export const RECORD_TYPES_TO_PROBE = Object.freeze([
   "sip-trunking", "call-control", "speech-to-text", "text-to-speech", "recording", "ai-voice-assistant",
+  "inference",
 ]);
 
 function parsedIds(csv) {
@@ -144,7 +158,7 @@ function latenzObergrenzeMinuten(sipRecords, nowMs) {
 
 // Q3: traegt record_type=inference ueberhaupt Betraege? Aendert am Code NICHTS - wird nur
 // beziffert (Katalogzeile #15, preisquelle).
-function inferenceBilanz(inferenceRecords) {
+export function inferenceBilanz(inferenceRecords) {
   let summeUsd = 0;
   for (const eintrag of inferenceRecords) {
     const wert = Number(eintrag.cost);
@@ -160,7 +174,7 @@ function meldeAbbruch(nachricht) {
 
 // Baut die Endbilanz aus den drei Teilmessungen - ausgelagert (G30), damit main() nur noch
 // die Ablauf-Reihenfolge und die Abbruchpfade zeigt.
-function baueErgebnis({ recordsByType, knownSipCallIds }) {
+export function baueErgebnis({ recordsByType, knownSipCallIds }) {
   const typen = knownSipCallIds.length > 0 ? elWegTypen(recordsByType, knownSipCallIds) : [];
   const latenzObergrenze = latenzObergrenzeMinuten(recordsByType.get("sip-trunking") || [], Date.now());
   const inferenz = inferenceBilanz(recordsByType.get("inference") || []);
@@ -214,4 +228,9 @@ async function main() {
   druckeErgebnis(baueErgebnis({ recordsByType: abruf.recordsByType, knownSipCallIds }));
 }
 
-main().catch((fehler) => meldeAbbruch(`unerwarteter Fehler. ${fehler.message}`));
+// istHauptmodul-Wache (Muster scripts/check-outbound-drift.mjs): main() laeuft NUR bei
+// direkter Ausfuehrung, nicht wenn ein Test die reinen Funktionen oben importiert.
+const istHauptmodul = fileURLToPath(import.meta.url) === resolve(process.argv[1] || "");
+if (istHauptmodul) {
+  main().catch((fehler) => meldeAbbruch(`unerwarteter Fehler. ${fehler.message}`));
+}

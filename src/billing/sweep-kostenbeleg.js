@@ -3,15 +3,14 @@
 // Regelwerk + EIN fail-softer Schreibaufruf, kein Netz-IO, kein Zustand.
 //
 // IMPORT-RICHTUNG ist strikt EINSEITIG: cost-truing.js importiert aus dieser Datei, NIE
-// umgekehrt - sonst ein Zyklus. Der Anker (belegRef) wird deshalb HIER aus den Call-Feldern
-// abgeleitet statt aus cost-truing.js#providerLegIdOf importiert zu werden (legRefOfCall
-// unten). Das ist dieselbe dreiwertige ODER-Kette wie dort, aber eine reine Feldablesung
-// ohne Fachlogik - keine zweite Wahrheit ueber "was ist ein Beleg", nur ueber "wie liest
-// man die Leg-Referenz eines Calls".
+// umgekehrt - sonst ein Zyklus. Der Anker (belegRef) kommt aus call-leg-ref.js, einem
+// dritten, neutralen Modul ohne Abhaengigkeit auf cost-truing.js - EINE Quelle fuer die
+// Leg-Referenz, ohne den Zyklus, den ein Rueckimport aus cost-truing.js erzeugen wuerde.
 
 import { REIFE, COST_TRUING_SOURCE, isProviderMicroCents } from "../store/defaults.js";
 import { isBelegRef } from "../store/cost-evidence.js";
 import { KOSTENART, KOSTENARTEN, KOSTENPROFIL, kostenprofilFuerAnruf } from "./kostenarten.js";
+import { legRefOfCall } from "./call-leg-ref.js";
 
 // Belegtyp, der den Traeger telnyx_sip traegt (Katalogzeile #2). EINE Quelle - der
 // Traeger fuehrt AUSSCHLIESSLICH sip-trunking, nie die Telnyx-Gesamtkost
@@ -90,13 +89,6 @@ function summeDesTyps(records, recordType) {
   const billedSec = passend.reduce(
     (sum, record) => sum + (Number.isSafeInteger(record.billedSec) && record.billedSec > 0 ? record.billedSec : 0), 0);
   return { mikroCents, billedSec };
-}
-
-// Die Leg-Referenz EINES Calls - dieselbe dreiwertige ODER-Kette wie
-// cost-truing.js#providerLegIdOf, hier dupliziert statt importiert (Kopfkommentar:
-// Import-Freiheit von cost-truing.js). Reine Feldablesung, keine Fachlogik.
-function legRefOfCall(call) {
-  return call.twilioSid || call.callControlId || call.sipCallId || null;
 }
 
 // Die zwei Traeger, zwei Quellen desselben Pools:

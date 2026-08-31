@@ -48,6 +48,7 @@ import { alarmKanalZeile, betreiberAlarmKanaele } from "../boot-guard.js";
 import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "./cost-calibration.js";
 import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
 import { belegVollstaendig, schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
+import { legRefOfCall } from "./call-leg-ref.js";
 
 // Zwei Ausloeser (Intervall + manueller Endpunkt), EIN benannter Grund je. Exportiert:
 // boot.js und api-billing.js teilen sich diese eine Quelle statt zweier Magic-Strings.
@@ -214,11 +215,11 @@ const PROVIDER_COST_RECORD_WINDOW_MS =
 const isEndedCall = (call) => !!call.endedAt;
 // KV2-5: dritte Alternative sipCallId. Ein EL-Anruf traegt weder twilioSid noch
 // callControlId (12/12 gemessen, befund-telnyx.md O1) - providerLegIdOf lieferte fuer ihn
-// null, isRetrievable war falsch, und er wurde vom Sweep uebersprungen. Die drei Werte
-// koennen einander nicht treffen: 'CA...' (Twilio), 'v3:...' (Call-Control), 'otb_...' (SIP).
+// null, isRetrievable war falsch, und er wurde vom Sweep uebersprungen.
 // FOLGE, benannt: ab diesem Deploy sind die 12 EL-Altanrufe erstmals Kandidaten. Dass
 // dabei kein Cent bewegt wird, traegt der EL-Riegel unten (sweepDarfKorrigieren).
-const providerLegIdOf = (call) => call.twilioSid || call.callControlId || call.sipCallId || null;
+// Ableitung liegt in call-leg-ref.js (EINE Quelle mit sweep-kostenbeleg.js#legRefOfCall).
+const providerLegIdOf = legRefOfCall;
 
 // Die Pflicht-Typmenge DIESES Anrufs (KV2-5(f)) - Profil-Aufloesung und Env-Wert an EINER
 // Stelle zusammengefuehrt, damit die Aufrufzeile in trueOneCall lesbar bleibt.

@@ -391,10 +391,12 @@ export const KOSTENARTEN = Object.freeze({
 // Pflicht-Einsammler (Kriterium (i)).
 export const KOSTENPROFILE = Object.freeze({
   [KOSTENPROFIL.EL_CONVAI_SIP]: {
-    // KV2-5(d): die Messung (scripts/kv2-5-telnyx-belegtypen.mjs) ist am Telnyx-Zugang
-    // gescheitert (401, s. Phasenbericht) - die Pflicht-Typmenge bleibt deshalb
-    // UNGEMESSEN. KV2-8 bleibt damit blockiert (Spec KV2-5(d)), die uebrigen Kriterien
-    // dieser Phase sind davon unberuehrt.
+    // KV2-5(d): die Messung (scripts/kv2-5-telnyx-belegtypen.mjs) konnte in dieser
+    // Implementierungssession NICHT ausgefuehrt werden, mangels TELNYX_API_KEY in der
+    // Umgebung - das Skript bricht deshalb VOR jedem HTTP-Request ab (kein Statuscode,
+    // kein Endpunkt gesehen, s. tasks/kostenv2/befund-telnyx.md, Abschnitt "KV2-5(d)").
+    // Die Pflicht-Typmenge bleibt deshalb UNGEMESSEN. KV2-8 bleibt damit blockiert (Spec
+    // KV2-5(d)), die uebrigen Kriterien dieser Phase sind davon unberuehrt.
     pflichttypen: PFLICHTTYPEN_UNGEMESSEN,
     traeger: {
       [KOSTENART.ELEVENLABS_CONVAI]: { einsammler: EINSAMMLER.KV2_4 },

@@ -307,6 +307,9 @@
     },
     "no-magic-numbers": {
       "count": 2
+    },
+    "no-restricted-properties": {
+      "count": 2
     }
   },
   "scripts/convo-bench/checks.mjs": {
@@ -433,8 +436,16 @@
     "no-param-reassign": {
       "count": 15
     },
+    "no-restricted-properties": {
+      "count": 1
+    },
     "no-restricted-syntax": {
       "count": 3
+    }
+  },
+  "scripts/kv2-5-telnyx-belegtypen.mjs": {
+    "no-restricted-properties": {
+      "count": 4
     }
   },
   "scripts/prod-read.mjs": {
@@ -459,6 +470,9 @@
   "scripts/telnyx-assistant-provision.mjs": {
     "id-length": {
       "count": 3
+    },
+    "no-restricted-properties": {
+      "count": 1
     }
   },
   "scripts/telnyx-call-latency.mjs": {
