@@ -65,6 +65,10 @@ import { ABSCHLUSS_GRUND, abschlussFuerAnruf, faelligkeitsfensterMs, LEERE_LISTE
 // Begruendung wie bei kosten-deckung.js/kosten-abschluss.js (Lint-Budget dieser Datei,
 // EINE Formulierung je Frage). Import-Richtung strikt einseitig.
 import { settlementProjektion } from "./kosten-projektion.js";
+// KV2-9: der Reifungs-Zweig liegt als eigenes Modul daneben - dieselbe Begruendung wie bei
+// kosten-deckung.js/kosten-abschluss.js/kosten-projektion.js (Lint-Budget dieser Datei,
+// EINE Formulierung je Frage). Import-Richtung strikt einseitig.
+import { reifeElBelege } from "./el-reifung.js";
 
 // Zwei Ausloeser (Intervall + manueller Endpunkt), EIN benannter Grund je. Exportiert:
 // boot.js und api-billing.js teilen sich diese eine Quelle statt zweier Magic-Strings.
@@ -316,6 +320,25 @@ const pflichttypenVon = (call, billing) =>
 // Funktion, billing kommt vom Aufrufer statt aus dem Closure.
 const versucheUebrig = (call, billing) => nextCostTruingAttempt(call) <= billing.costTruingMaxAttempts;
 
+// KV2-9: Modul-Ebene statt im makeCostTruing-Closure (Lint-Budget dieser Datei,
+// eslint-suppressions.json) - reine Funktion, GEGENBUCHUNG zu den zwei neuen gezaehlten
+// Zeilen des Reifungs-Zweigs (Zeilen-Neutralitaet, s. Kopfkommentar B-C).
+//
+// DIE Bedingung "abrufbar" (KE-P9), an GENAU EINER Stelle formuliert: ohne belegfaehigen
+// Adapter oder ohne aufloesbare Leg-Referenz ist ein Call strukturell nie abgleichbar. Er
+// darf deshalb weder den UMFANG des Belegabrufs (welche Provider) noch dessen ZEITSCHRANKE
+// bestimmen - ein einziger solcher Call fror `since` sonst dauerhaft ein, und der Pool
+// wuchs mit dem gesamten Kontoverkehr, bis die Seitenobergrenze reisst und ALLE Kandidaten
+// unavailable werden (keine Rueckerstattung mehr, fuer niemanden).
+// Fehlende Faehigkeit bleibt der konservative Fall: der Call bleibt im NENNER der
+// Deckungsquote und drueckt sie, statt sie zu beschoenigen.
+const isRetrievable = (call, control) => control !== null && providerLegIdOf(call) !== null;
+
+// KV2-9: Modul-Ebene, zweite Gegenbuchung (s.o.). Abruf-Kennzahlen EINER Provider-Antwort:
+// `incomplete` heisst "dieser Abruf hat KEIN vollstaendiges Bild geliefert" - ok:false und
+// complete:false sind darin dasselbe.
+const nonNegativeCount = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
+
 // Darf der Sweep fuer diesen Anruf eine Korrektur BUCHEN? Zwei Ausschlussgruende, eine
 // Frage:
 //   1. Kein buchbarer Schaetzbetrag -> strukturell nicht korrigierbar (Bestandsregel).
@@ -514,7 +537,7 @@ export function ohneBeweiskraft(source) {
   return istBeweisendeHerkunft(source) ? COST_TRUING_SOURCE.INCOMPLETE : source;
 }
 
-export function makeCostTruing({ store, config, voiceControl, audit, messaging, mailer, now = Date.now }) {
+export function makeCostTruing({ store, config, voiceControl, audit, messaging, mailer, elKostenRead = null, now = Date.now }) {
   // Modul-lokaler Laufriegel. BEIDE Ausloeser (Intervall + manueller Endpunkt) teilen
   // sich diesen einen Boolean. GESETZT VOR DEM ERSTEN await, freigegeben im finally:
   // Node ist single-threaded, aber der Sweep awaitet den Pool-Abruf je Provider (KE-P2,
@@ -773,8 +796,6 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // Bruchpunkt-Waechter ausgerechnet im Stoerfall blind).
   // `incomplete` heisst "dieser Abruf hat KEIN vollstaendiges Bild geliefert" - ok:false und
   // complete:false sind darin dasselbe.
-  const nonNegativeCount = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
-
   function poolFetchStats(pool) {
     return {
       requests: nonNegativeCount(pool?.requests), pages: nonNegativeCount(pool?.pages),
@@ -812,18 +833,8 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     return hasCostRecordMethods ? control : null;
   }
 
-  // DIE Bedingung "abrufbar" (KE-P9), an GENAU EINER Stelle formuliert: ohne belegfaehigen
-  // Adapter oder ohne aufloesbare Leg-Referenz ist ein Call strukturell nie abgleichbar. Er
-  // darf deshalb weder den UMFANG des Belegabrufs (welche Provider) noch dessen ZEITSCHRANKE
-  // bestimmen - ein einziger solcher Call fror `since` sonst dauerhaft ein, und der Pool
-  // wuchs mit dem gesamten Kontoverkehr, bis die Seitenobergrenze reisst und ALLE Kandidaten
-  // unavailable werden (keine Rueckerstattung mehr, fuer niemanden).
-  // Zwei getrennt gepflegte Fassungen dieser Bedingung waeren der Fehlertyp, der in dieser
-  // Kette schon dreimal gefangen wurde: ein Call fiele still aus dem Abruffenster und wuerde
-  // trotzdem abgeglichen - oder umgekehrt.
-  // Fehlende Faehigkeit bleibt der konservative Fall: der Call bleibt im NENNER der
-  // Deckungsquote und drueckt sie, statt sie zu beschoenigen.
-  const isRetrievable = (call, control) => control !== null && providerLegIdOf(call) !== null;
+  // isRetrievable liegt seit KV2-9 auf Modul-Ebene (oben, neben versucheUebrig) -
+  // Lint-Budget-Gegenbuchung fuer den Reifungs-Zweig, s. Kopfkommentar der Datei.
 
   // Jeder in diesem Sweep vorkommende Provider genau EINMAL aufgeloest. Rein synchron; die
   // Map ist die EINE Wahrheit, aus der sowohl der Abruf-Filter als auch der Abruf selbst
@@ -1007,7 +1018,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // (outage-report.js#sendeUeberBeideKanaele, Plan 4.9): kanaele=keine heisst, dass jede
   // Meldung dieses Sweeps ausschliesslich im Log und in audit_log steht. Nur Kanal-ARTEN,
   // nie die Ziele.
-  function logSweepLine({ trigger, candidateCount, tally, fetchTally, kanaele, buch, erschoepft, abschluesse }) {
+  function logSweepLine({ trigger, candidateCount, tally, fetchTally, kanaele, buch, erschoepft, abschluesse, elReifung }) {
     console.log(
       `[cost-truing] sweep trigger=${trigger} kandidaten=${candidateCount} ` +
         `gemessen=${tally.measured} unvollstaendig=${tally.incomplete} ` +
@@ -1015,7 +1026,8 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
         `unbestimmt=${tally.unavailable} uebersprungen=${tally.skippedCalls} ` +
         `anfragen=${fetchTally.requests} seiten=${fetchTally.pages} ` +
         `pool=${fetchTally.records} vollstaendig=${fetchTally.incompletePools === 0} ` +
-        `kanaele=${kanaele} ${buch.zeile} erschoepft=${erschoepft} abschluesse=${zaehlListe(abschluesse)}`,
+        `kanaele=${kanaele} ${buch.zeile} erschoepft=${erschoepft} abschluesse=${zaehlListe(abschluesse)} ` +
+        `el_reifung=${zaehlListe(elReifung.ergebnisse)} el_abweichung=${elReifung.abweichungen} el_uebrig=${elReifung.uebrig}`,
     );
   }
 
@@ -1052,6 +1064,11 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // KV2-7: gemessen wird nur, wer noch Versuche hat - ein erschoepfter Anruf bleibt
     // offen (s. isTruingCandidate), zieht aber KEINE Anfrage mehr.
     const messbar = retrievable.filter((call) => versucheUebrig(call, config.billing));
+    // KV2-9: der Reifungs-Zweig laeuft ueber DIESELBE Kandidatenmenge (Abnahme (e)) und
+    // VOR dem Pool-Abruf - so bleibt die PM-5-Zusage woertlich erhalten ("ab dem
+    // Pool-Abruf kommt kein await mehr"). Die frisch gereifte Belegzeile steht damit im
+    // Buch, BEVOR trueOneCall/schliesseFaelligeOffene sie projizieren.
+    const elReifung = await reifeElBelege({ candidates, store, elKostenRead, billing: config.billing, nowMs });
     // D1: der Abruf ist schleifeninvariant und laeuft EINMAL je Provider - VOR der Schleife.
     // Ab hier bis zur Bilanz kommt kein Netz-await mehr (PM-5): zwei verschraenkte Sweeps
     // koennen sich hier nicht mehr dazwischenschieben.
@@ -1074,7 +1091,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // denselben In-Memory-Spiegel und faellt damit nicht unter die PM-5-Zusage.
     const buch = kostenBuchBericht({ state: store.load(), billing: config.billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
     const kanaele = alarmKanalZeile(betreiberAlarmKanaele({ billing: config.billing, mail: config.mail }));
-    logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele, buch, erschoepft: retrievable.length - messbar.length, abschluesse: sammler.abschluesse });
+    logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele, buch, erschoepft: retrievable.length - messbar.length, abschluesse: sammler.abschluesse, elReifung });
     // Ab hier meldet der Sweep - NACH der Bilanz, also ausserhalb der PM-5-Zusage.
     await reportFetchVolume(fetchTally, nowMs);
     for (const warnung of sammler.ttsWarnungen) await reportTtsQuotaFinding(warnung, nowMs);

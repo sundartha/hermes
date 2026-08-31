@@ -54,7 +54,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // unabhaengigen Herzschlags je Traeger) -> 49.
   // KV2-7: costSettleDeadlineHours ergaenzt (Frist bis zum Zwangs-Abschluss eines
   // Anrufs ohne vollstaendige Belegmenge) -> 50.
-  billing: 50,
+  // KV2-9: elEvidenceMinAgeMinutes ergaenzt (Mindestalter vor dem zweiten, reifenden
+  // ElevenLabs-Abruf) -> 51.
+  billing: 51,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -147,9 +149,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // voice.elevenLabsOutbound (Muster elevenLabsOutbound selbst, s.o.) - kein neuer
 // primitiver Key auf der voice-Ebene, die Summe steigt dadurch NICHT zusaetzlich.
 // KV2-7: costSettleDeadlineHours (billing) ergaenzt -> 178.
-const EXPECTED_TOTAL_KEYS = 178;
+// KV2-9: elEvidenceMinAgeMinutes (billing) ergaenzt -> 179.
+const EXPECTED_TOTAL_KEYS = 179;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (178 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (179 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -284,7 +287,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // steigt dadurch NICHT.
   // KV2-6: kostenHeartbeatFensterH ist primitiv (Zahl, kein Array/nested Objekt) -> 166.
   // KV2-7: costSettleDeadlineHours ist primitiv (Zahl, kein Array/nested Objekt) -> 167.
-  const EXPECTED_PRIMITIVE_LEAVES = 167;
+  // KV2-9: elEvidenceMinAgeMinutes ist primitiv (Zahl, kein Array/nested Objekt) -> 168.
+  const EXPECTED_PRIMITIVE_LEAVES = 168;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

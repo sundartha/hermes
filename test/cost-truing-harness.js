@@ -106,6 +106,10 @@ export function fakeConfig(overrides = {}) {
     costTruingRequiredRecordTypes: [],
     costTruingMinCoveragePercent: 80,
     costTruingCoverageStallSweeps: 8,
+    // KV2-9: ECHTER Prod-Fallback (s. prodDefaults-Import oben) statt eines zweiten,
+    // hier getippten Werts - ohne ihn waere minAgeMs NaN und der Reifungs-Zweig in JEDEM
+    // Bestands-Sweep-Test strukturell stumm (statt nur mangels Port).
+    elEvidenceMinAgeMinutes: prodDefaults.billing.elEvidenceMinAgeMinutes,
     // KV2-6: ECHTER Prod-Fallback (s. prodDefaults-Import oben) statt eines zweiten,
     // hier getippten Zahlenwerts - sonst waere das Herzschlag-Fenster in den
     // Bestands-Sweep-Tests undefined und der Herzschlag dort strukturell stumm.

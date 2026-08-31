@@ -895,6 +895,9 @@ ALTER TABLE usage_event ADD COLUMN IF NOT EXISTS cost_micro_cents BIGINT;
 -- Belegsumme (Matrix 4.6: "nachbuchen mit dem, was da ist"), sie kann nur nicht mehr
 -- reifen. Der gleichnamige Zustand AM ANRUF (KV2-7) ist eine andere Ebene.
 -- EINBAHNSTRASSE: FALSE kommt nie wieder auf TRUE (state-ops#recordCallCostEvidence).
+-- KV2-9: zweiter Schreiber ist der Reifungs-Abruf, wenn der Anbieter mit HTTP 404
+-- antwortet - das ist derselbe Sachverhalt von der anderen Seite gesehen (das DELETE des
+-- Abbruchwegs hat den Datensatz mitgenommen). EINBAHNSTRASSE unveraendert.
 CREATE TABLE IF NOT EXISTS call_cost_evidence (
   id                            TEXT PRIMARY KEY,
   tenant_id                     TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,

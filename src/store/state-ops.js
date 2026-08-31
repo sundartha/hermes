@@ -869,6 +869,12 @@ export function schliesseKostenAbgleich(state, callId, { closedAt, source = null
 // einschliesslich KV2-7 kein Cent bewegt wurde (applyCostCorrectionCents ist fuer diese
 // Anrufe nie gelaufen, KV2-5 ruft bookCorrectionFor fuer die EL-Route nicht). Bereits
 // offen -> No-Op (Idempotenz des einmaligen Laufs). Liefert { call, changed }.
+// KV2-9: der zweite einmalige Nachlauf oeffnet auch Anrufe, die KV2-8 bereits zwangs-
+// gesettelt hat. Der Schutz gegen die doppelte Buchung wandert dorthin, wo er hingehoert -
+// in das Praedikat des Nachlaufs (billing/nachlauf-phasenschnitt.js, Bedingung 5: nur
+// Anrufe, deren Belegsumme UNTER der Schaetzung liegt, bei denen also nichts gebucht
+// wurde). Diese Funktion bleibt unveraendert dumm: sie setzt costTruedAt auf null und
+// entscheidet nichts.
 export function oeffneKostenAbgleichErneut(state, callId) {
   const call = getCall(state, callId);
   if (!call || call.costTruedAt === null) return { call: call || null, changed: false };
