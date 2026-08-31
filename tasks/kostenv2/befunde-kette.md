@@ -31,6 +31,11 @@ annimmt, dieser Test decke den Belegweg ab, irrt.
 
 Natuerlicher Ort zum Schliessen: KV2-9 (Reifung des EL-Belegs).
 
+**Teilerledigt in KV2-9 (2026-08-31), Rest siehe F-6.** Der Belegweg laeuft in
+`el-fixtures-echte-antworten.test.js` jetzt wirklich mit; die Meldungen gingen von 19 auf
+16 zurueck. Mein Befund war zu eng formuliert - er nannte nur die eine Datei, die im
+damaligen Log auftauchte.
+
 ## F-3 (Umgebung, nicht Code): `npm test` bricht haengende Worker nie ab
 
 `test/testbaenke-run.mjs` faehrt `node --test` ohne `--test-timeout`, der Default ist 0
@@ -127,3 +132,34 @@ Der Nullbetrag-Fall ist also nicht hypothetisch, er liegt in den Live-Daten.
 Zur Latenz (Q2): der Anruf vom 30.08. 09:35 UTC ist am 31.08. im Beleg vorhanden -
 also unter ~30 h. Eine schaerfere Schranke braeuchte wiederholtes Messen; die
 Obergrenze 1587 min aus dem Branch widerspricht dem nicht.
+
+## F-6 (offen): der EL-Belegpfad laeuft in SECHS Testdateien fail-soft ins Leere
+
+Nachmessung nach dem KV2-9-Merge: `store.recordCallCostEvidence is not a function` steht
+weiterhin **16-mal** im Vollauf-Log (vor KV2-9: 19-mal). F-2 nannte nur
+`el-fixtures-echte-antworten.test.js`, weil nur die damals im Log sichtbar war - der
+Belegpfad wird aber von mehreren Dateien gefahren:
+
+```
+test/el-action-items.test.js
+test/el-fixtures-echte-antworten.test.js   <- in KV2-9 nachgezogen
+test/a8-abschluss-zusammenfassung.test.js
+test/kv2-4-el-kosten-beleg.test.js
+test/el-beende-versuch.test.js
+test/elevenlabs-data-collection.test.js
+```
+
+Einordnung, damit die Schwere stimmt: **kein Produktionsdefekt** - `src/store.js`
+re-exportiert die Operation, `json.js`/`pg.js` haben sie, und `kosten-beleg.js` bekommt
+den Store per Parameter. Und **kein Deckungsverlust fuer die Belegregel selbst**: die hat
+eigene Tests (`kv2-4-el-kosten-beleg`, `kv2-9-el-reifung`). Die betroffenen Dateien
+pruefen andere Dinge (Action-Items, Data-Collection, Abschluss-Zusammenfassung) und sind
+gruen.
+
+Warum es trotzdem offen bleibt: der fail-soft-Zweig aus KV2-4 macht ein fehlendes
+Store-Verfahren unsichtbar. Solange 16 solcher Meldungen als Normalzustand im Log stehen,
+faellt eine echte, neue Fehlmeldung derselben Form niemandem mehr auf - das Log ist an
+dieser Stelle abgestumpft.
+
+Sauberster Fix: das Verfahren EINMAL im gemeinsamen Store-Fake ergaenzen, statt es in
+sechs Dateien einzeln nachzuziehen.
