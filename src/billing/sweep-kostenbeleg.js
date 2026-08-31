@@ -71,21 +71,35 @@ export function sweepBelegBetrag({ mikroCents, mengeAngabe }) {
   return { mikroCents };
 }
 
+// Summe von costMicroCents ueber eine Record-Liste, fail-closed: null sobald EIN Betrag
+// kein gueltiger Mikro-Cent-Wert ist oder die laufende Summe den sicheren Ganzzahlbereich
+// verlaesst. null heisst NIE "keine Kosten" (Matrix 4.6). EINE Quelle (G5) fuer diese
+// Akkumulations-Regel innerhalb dieses Moduls (summeDesTyps ruft sie auf). Exportiert,
+// damit ein weiterer Aufrufer sie importieren kann statt sie zu duplizieren - cost-truing.js
+// traegt heute noch eine eigene, wortgleiche Kopie (sumRecordMicroCents); sie NICHT hierher
+// umzuziehen ist eine bewusste Grenze dieser Aenderung: die Datei steht unter
+// eslint-suppressions.json-Altlast, und jede Zeilenverschiebung in ihrer 292-Zeilen-Funktion
+// loest das Aufraeum-Gate (check-staged-suppressions.js) aus, das eine Eigentuemer-Freigabe
+// verlangt, die dieser Fix nicht hat.
+export function sumMicroCents(records) {
+  let total = 0;
+  for (const record of records) {
+    if (!isProviderMicroCents(record?.costMicroCents)) return null;
+    total += record.costMicroCents;
+    if (!Number.isSafeInteger(total)) return null;
+  }
+  return total;
+}
+
 // Summe der Belege EINES Typs, oder null wenn kein Beleg dieses Typs vorliegt bzw. ein
-// Betrag kein gueltiger Mikro-Cent-Wert ist. null heisst NIE "keine Kosten" - dieselbe
-// Regel und dieselbe fail-closed-Richtung wie sumRecordMicroCents (cost-truing.js).
-// `records` ist hier bereits die auf DIESEN Call zugeordnete Port-Record-Liste (der
-// Telnyx-Adapter hat die Zuordnung schon entschieden) - diese Funktion filtert nur noch
-// nach recordType.
+// Betrag kein gueltiger Mikro-Cent-Wert ist. `records` ist hier bereits die auf DIESEN
+// Call zugeordnete Port-Record-Liste (der Telnyx-Adapter hat die Zuordnung schon
+// entschieden) - diese Funktion filtert nur noch nach recordType.
 function summeDesTyps(records, recordType) {
   const passend = records.filter((record) => record.recordType === recordType);
   if (passend.length === 0) return { mikroCents: null, billedSec: 0 };
-  let mikroCents = 0;
-  for (const record of passend) {
-    if (!isProviderMicroCents(record.costMicroCents)) return { mikroCents: null, billedSec: 0 };
-    mikroCents += record.costMicroCents;
-    if (!Number.isSafeInteger(mikroCents)) return { mikroCents: null, billedSec: 0 };
-  }
+  const mikroCents = sumMicroCents(passend);
+  if (mikroCents === null) return { mikroCents: null, billedSec: 0 };
   const billedSec = passend.reduce(
     (sum, record) => sum + (Number.isSafeInteger(record.billedSec) && record.billedSec > 0 ? record.billedSec : 0), 0);
   return { mikroCents, billedSec };
