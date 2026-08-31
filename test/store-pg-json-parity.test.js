@@ -269,6 +269,9 @@ const EVIDENCE_FIXTURE = Object.freeze({
   gemessenAt: "2026-08-31T10:00:00.000Z",
   abstandZumGespraechsendeS: 4,
   detail: { llm_price: 0.05, tier: "starter" },
+  // KV2-4: das Nicht-Default-Feld mitfuehren - ein Roundtrip, der nur den Default TRUE
+  // prueft, wuerde eine fehlende Spalte im Flush nicht bemerken.
+  nachreifbar: false,
 });
 
 async function pgCostEvidenceRoundtrip() {
@@ -347,6 +350,7 @@ test("callCostEvidence: NULL-Felder hydrieren auf null, nie auf undefined (BEIDE
   ]) {
     assert.equal(pgZeile[feld], null, `pg: ${feld} ist null`);
   }
+  assert.equal(pgZeile.nachreifbar, true, "pg: Default TRUE, nie null");
 
   const jsonCreated = jsonStore.createCall(newCall());
   jsonStore.recordCallCostEvidence({
@@ -366,5 +370,6 @@ test("callCostEvidence: NULL-Felder hydrieren auf null, nie auf undefined (BEIDE
   ]) {
     assert.equal(jsonZeile[feld], null, `json: ${feld} ist null`);
   }
+  assert.equal(jsonZeile.nachreifbar, true, "json: Default TRUE, nie null");
 });
 

@@ -16,6 +16,13 @@ import { KOSTENARTEN } from "../billing/kostenarten.js";
 // ---- Benannte Konstanten (G25) ---------------------------------------------------------
 const BELEG_REF_MUSTER = /^[A-Za-z0-9_-]{1,128}$/;
 const QUELLE_MUSTER = /^[a-z][a-z0-9_]{0,63}$/;
+
+// Hat wert die Form einer opaken Anbieter-Belegkennung (conv_.../otb_...)? Reines
+// Praedikat - EINE Regex fuer den Waechter hier UND fuer die Aufrufer, die einen
+// Anbieter-Wert vorab sanieren, statt ihn werfen zu lassen (KV2-4).
+export function isBelegRef(wert) {
+  return typeof wert === "string" && BELEG_REF_MUSTER.test(wert);
+}
 // Maximale Textlaenge eines detail-Werts (G25). Zu lang -> kein Preis-/Mengenfeld mehr,
 // sondern potenziell ein Freitext-Feld (Transkript, Beschreibung) - faellt raus.
 const DETAIL_TEXT_MAX = 64;
@@ -154,7 +161,7 @@ function pruefeGeld(eingabe) {
 // Etiketten-Form: beleg_ref und quelle sind opake Kennungen, keine Freitextfelder (PII-Riegel).
 function pruefeEtiketten(eingabe) {
   const { belegRef, quelle } = eingabe;
-  if (belegRef !== undefined && belegRef !== null && !BELEG_REF_MUSTER.test(belegRef))
+  if (belegRef !== undefined && belegRef !== null && !isBelegRef(belegRef))
     throw new Error(`cost-evidence: belegRef '${belegRef}' hat kein gueltiges Format`);
   if (quelle !== undefined && quelle !== null && !QUELLE_MUSTER.test(quelle))
     throw new Error(`cost-evidence: quelle '${quelle}' hat kein gueltiges Format`);
@@ -171,12 +178,21 @@ function pruefeZaehler(eingabe) {
   }
 }
 
-// Ruft die vier Einzelwaechter (G30: eine Aufgabe pro Funktion, hier die Buendelung).
+// KV2-4: nachreifbar ist, wenn gesetzt, ein Boolean. NICHT null erlaubt: die Spalte ist
+// NOT NULL, "unbekannt" gibt es fuer dieses Feld nicht.
+function pruefeNachreifbar(eingabe) {
+  const { nachreifbar } = eingabe;
+  if (nachreifbar === undefined || typeof nachreifbar === "boolean") return;
+  throw new Error(`cost-evidence: 'nachreifbar' muss ein Boolean sein, nicht '${nachreifbar}'`);
+}
+
+// Ruft die fuenf Einzelwaechter (G30: eine Aufgabe pro Funktion, hier die Buendelung).
 export function assertCostEvidenceInput(eingabe) {
   pruefeTraegerUndReife(eingabe);
   pruefeGeld(eingabe);
   pruefeEtiketten(eingabe);
   pruefeZaehler(eingabe);
+  pruefeNachreifbar(eingabe);
 }
 
 // ---- Zeilen-Bau / Fortschreibung ---------------------------------------------------------
@@ -192,6 +208,7 @@ const COST_EVIDENCE_WERTFELDER = Object.freeze([
   "gemessenAt",
   "abstandZumGespraechsendeS",
   "detail",
+  "nachreifbar",
 ]);
 
 // Baut eine neue Belegzeile. tenantId kommt vom Aufrufer (aus dem Anruf abgeleitet,
@@ -212,6 +229,9 @@ export function buildCostEvidenceRow({ id, tenantId, callId, eingabe }) {
     gemessenAt: null,
     abstandZumGespraechsendeS: null,
     detail: null,
+    // KV2-4: Default TRUE - eine frische Zeile ist nachreifbar, bis der Abbruchweg
+    // das Gegenteil feststellt. Spiegelt die DB-Spalte (NOT NULL DEFAULT TRUE).
+    nachreifbar: true,
   };
   return { ...basis, ...costEvidenceValuePatch(eingabe) };
 }
@@ -232,6 +252,19 @@ export function costEvidenceValuePatch(eingabe) {
     if (eingabe[feld] !== undefined) patch[feld] = eingabe[feld];
   }
   if ("detail" in patch) patch.detail = belegDetailAusRohdaten(patch.detail);
+  return patch;
+}
+
+// Fortschreibungs-Patch fuer eine BESTEHENDE Zeile. Wie costEvidenceValuePatch, plus:
+// 'nachreifbar' ist eine EINBAHNSTRASSE wie reife - einmal false, bleibt false. Ohne
+// diese Regel koennte ein Poll-Lauf, der den Anbieter-Datensatz VOR dem Abbruch-DELETE
+// gelesen hat und erst danach schreibt, die Markierung des Abbruchwegs stillschweigend
+// aufheben; KV2-9 wuerde die Zeile dann vergeblich nachreifen. Getrennt von
+// costEvidenceValuePatch, weil es beim ANLEGEN keine Vorzeile gibt, gegen die die Regel
+// greifen koennte. REIN (P6/F2).
+export function costEvidenceFortschreibung(vorhanden, eingabe) {
+  const patch = costEvidenceValuePatch(eingabe);
+  if (vorhanden.nachreifbar === false) patch.nachreifbar = false;
   return patch;
 }
 

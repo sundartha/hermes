@@ -1168,7 +1168,8 @@ async function hydrateCallCostEvidence(client, tenantId) {
   const rows = (
     await client.query(
       `SELECT id, tenant_id, call_id, traeger, reife, betrag_mikro_cents, waehrung, quelle,
-              beleg_ref, versuche, gemessen_at, abstand_zum_gespraechsende_s, detail
+              beleg_ref, versuche, gemessen_at, abstand_zum_gespraechsende_s, detail,
+              nachreifbar
          FROM call_cost_evidence WHERE tenant_id = $1 ORDER BY id ASC`,
       [tenantId],
     )
@@ -1190,6 +1191,8 @@ async function hydrateCallCostEvidence(client, tenantId) {
     gemessenAt: row.gemessen_at ?? null,
     abstandZumGespraechsendeS: row.abstand_zum_gespraechsende_s ?? null,
     detail: row.detail ?? null,
+    // NOT NULL in der DB -> immer ein Boolean, nie null (kein ?? -Fallback noetig).
+    nachreifbar: row.nachreifbar,
   }));
 }
 
@@ -2451,15 +2454,16 @@ async function flushCallCostEvidence(client, tenantId, zeilen) {
       client.query(
         `INSERT INTO call_cost_evidence
            (id, tenant_id, call_id, traeger, reife, betrag_mikro_cents, waehrung, quelle,
-            beleg_ref, versuche, gemessen_at, abstand_zum_gespraechsende_s, detail)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            beleg_ref, versuche, gemessen_at, abstand_zum_gespraechsende_s, detail,
+            nachreifbar)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          ON CONFLICT (id) DO UPDATE SET
            reife=EXCLUDED.reife, betrag_mikro_cents=EXCLUDED.betrag_mikro_cents,
            waehrung=EXCLUDED.waehrung, quelle=EXCLUDED.quelle,
            beleg_ref=EXCLUDED.beleg_ref, versuche=EXCLUDED.versuche,
            gemessen_at=EXCLUDED.gemessen_at,
            abstand_zum_gespraechsende_s=EXCLUDED.abstand_zum_gespraechsende_s,
-           detail=EXCLUDED.detail`,
+           detail=EXCLUDED.detail, nachreifbar=EXCLUDED.nachreifbar`,
         [
           zeile.id,
           tenantId,
@@ -2474,6 +2478,7 @@ async function flushCallCostEvidence(client, tenantId, zeilen) {
           zeile.gemessenAt ?? null,
           zeile.abstandZumGespraechsendeS ?? null,
           zeile.detail ? JSON.stringify(zeile.detail) : null,
+          zeile.nachreifbar,
         ],
       ),
   });
