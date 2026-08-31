@@ -142,6 +142,11 @@ export const {
   // store.recordCostProfile auf der Fassade undefined -> beide Weichen wuerfen zur
   // Laufzeit einen TypeError (Muster recordSipCallId).
   recordCostProfile,
+  // KV2-3: das Kosten-Buch. OHNE diese Re-Exports waeren store.recordCallCostEvidence /
+  // store.callCostEvidence auf der Fassade undefined -> jeder kuenftige Einsammler
+  // (KV2-4/KV2-5) wuerfe zur Laufzeit einen TypeError (Muster recordCostProfile).
+  recordCallCostEvidence,
+  callCostEvidence,
   // OUTBOUND-E5: Absender-Wahrheit + Registrierungs-Herkunft. OHNE diese Re-Exports waeren
   // store.recordActualSender / store.recordFromRegistrationSource auf der Fassade undefined
   // -> der EL-Anrufstart bzw. der Ergebnisweg wuerfen zur Laufzeit einen TypeError

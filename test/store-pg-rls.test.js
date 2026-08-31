@@ -62,11 +62,24 @@ async function setup() {
     `INSERT INTO number (id, tenant_id, e164, provider) VALUES ('+49other', $1, '+49other', 'telnyx')`,
     [OTHER_TENANT_ID],
   );
+  // KV2-3: je eine call_cost_evidence-Zeile pro Tenant, um die RLS-Isolation des
+  // Kosten-Buchs zu pruefen (Kriterium (c)).
+  await db.query(
+    `INSERT INTO call_cost_evidence (id, tenant_id, call_id, traeger, reife)
+     VALUES ('cce_owner', $1, 'call_owner', 'ai_token', 'erwartet')`,
+    [BOOTSTRAP_TENANT_ID],
+  );
+  await db.query(
+    `INSERT INTO call_cost_evidence (id, tenant_id, call_id, traeger, reife)
+     VALUES ('cce_other', $1, 'call_other', 'ai_token', 'erwartet')`,
+    [OTHER_TENANT_ID],
+  );
 
   await db.exec(
     `CREATE ROLE ${APP_ROLE} NOLOGIN;
      GRANT SELECT, INSERT, UPDATE, DELETE ON call, transcript_segment, profile,
-       settings, action_item, calendar_event, usage, notification, number TO ${APP_ROLE};
+       settings, action_item, calendar_event, usage, notification, number,
+       call_cost_evidence TO ${APP_ROLE};
      GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE};`,
   );
   return db;
@@ -130,6 +143,20 @@ test("RLS: number-Routing ist tenant-isoliert (Cross-Tenant-Read = leer)", async
   );
   assert.deepEqual(e164s, ["+49owner"], "nur die Owner-Nummer sichtbar");
   assert.ok(!e164s.includes("+49other"), "fremde Nummer ist unsichtbar");
+});
+
+test("RLS: Kosten-Buch-Zeilen eines fremden Tenants sind unter der Owner-GUC unsichtbar", async () => {
+  const db = await setup();
+  const alle = await asAppRole(db, async () =>
+    (await db.query(`SELECT id FROM call_cost_evidence`)).rows,
+  );
+  assert.equal(alle.length, 1, "nur die eigene Zeile sichtbar (Positivkontrolle)");
+  assert.equal(alle[0].id, "cce_owner");
+  const fremde = await asAppRole(db, async () =>
+    (await db.query(`SELECT id FROM call_cost_evidence WHERE tenant_id = $1`, [OTHER_TENANT_ID]))
+      .rows,
+  );
+  assert.equal(fremde.length, 0, "die fremde tenant_id liefert unter der Owner-GUC nichts");
 });
 
 test("RLS: Schreibzugriff auf fremde tenant_id wird blockiert (WITH CHECK = USING)", async () => {
@@ -226,7 +253,7 @@ async function setupSignup() {
     `CREATE ROLE ${ENSURE_ROLE} NOLOGIN NOBYPASSRLS;
      GRANT SELECT ON tenant, settings, call, transcript_segment, action_item,
        calendar_event, usage, notification, number, provisioning_job, tenant_budget,
-       usage_event TO ${ENSURE_ROLE};`,
+       usage_event, call_cost_evidence TO ${ENSURE_ROLE};`,
   );
   return { db, store };
 }

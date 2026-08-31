@@ -873,6 +873,41 @@ ALTER TABLE usage_event ADD COLUMN IF NOT EXISTS number_id TEXT;
 -- (~2,1 Mrd.) schon bei wenigen zehn Euro KI-Kosten in Mikro-Cent-Aufloesung.
 ALTER TABLE usage_event ADD COLUMN IF NOT EXISTS cost_micro_cents BIGINT;
 
+-- call_cost_evidence (KV2-3): das KOSTEN-Buch - eine Zeile je (call_id, traeger),
+-- append-only nach vorne (reife steigt, faellt nie). NICHT zu verwechseln mit
+-- usage_event: das ist das ERLOES-Buch (Stripe-Meter-Quelle, Owner-Entscheidung 1 vom
+-- 2026-08-30 - Lieferantenkosten gehoeren dort NICHT hinein).
+-- call_id BEWUSST OHNE FK (identische Begruendung wie usage_event.call_id): ein
+-- Call-Erase/Prune darf den Kostennachweis NIE mitnehmen. tenant_id mit FK + RLS bleibt
+-- die Isolationslinie.
+-- betrag_mikro_cents NULLABLE und im Zustand 'erwartet' IMMER NULL, nie 0 - dieselbe
+-- Regel wie usage_event.cost_micro_cents ("eine 0 waere eine erfundene Messung").
+-- BIGINT (G26), weil Mikro-Cent den INT4-Bereich sofort sprengt.
+-- detail traegt AUSSCHLIESSLICH Preis-/Mengenfelder (Allowlist in store/cost-evidence.js,
+-- am einzigen Schreibweg erzwungen): KEIN Transkript, KEINE Rufnummer, kein Rohbody.
+-- beleg_ref traegt AUSSCHLIESSLICH die opake Anbieter-Belegkennung (conv_.../otb_...).
+-- KEIN CHECK-Constraint auf reife/traeger: die Gueltigkeit lebt fail-closed im Mutator
+-- (eine Quelle, Muster kyc_level).
+CREATE TABLE IF NOT EXISTS call_cost_evidence (
+  id                            TEXT PRIMARY KEY,
+  tenant_id                     TEXT NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  call_id                       TEXT NOT NULL,
+  traeger                       TEXT NOT NULL,
+  reife                         TEXT NOT NULL,
+  betrag_mikro_cents            BIGINT,
+  waehrung                      TEXT,
+  quelle                        TEXT,
+  beleg_ref                     TEXT,
+  versuche                      INT NOT NULL DEFAULT 0,
+  gemessen_at                   TEXT,
+  abstand_zum_gespraechsende_s  INT,
+  detail                        JSONB
+);
+-- EINE Zeile je (call_id, traeger) - der Idempotenz-Riegel auch in der DB, nicht nur
+-- im Spiegel (Kriterium (a)).
+CREATE UNIQUE INDEX IF NOT EXISTS call_cost_evidence_call_traeger_idx
+  ON call_cost_evidence (call_id, traeger);
+
 -- account: identity(sub)->tenant Resolver. RLS-EXEMPT (laeuft VOR app.current_tenant).
 -- tenant_id NICHT unique -> Schema traegt spaeter mehrere Accounts pro Tenant (B2B),
 -- jetzt aber Single-User pro Tenant (B2C). role: member|admin.
@@ -957,6 +992,8 @@ ALTER TABLE cost_cross_check   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cost_cross_check   FORCE  ROW LEVEL SECURITY;
 ALTER TABLE outage_alert       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE outage_alert       FORCE  ROW LEVEL SECURITY;
+ALTER TABLE call_cost_evidence ENABLE ROW LEVEL SECURITY;
+ALTER TABLE call_cost_evidence FORCE  ROW LEVEL SECURITY;
 
 -- tenant_isolation-Policies: USING filtert lesbare/aenderbare Zeilen, WITH CHECK
 -- prueft NEU geschriebene Zeilen (INSERT + UPDATE-Ergebnis). Beide Klauseln sind
@@ -1043,5 +1080,9 @@ CREATE POLICY tenant_isolation ON tenant_budget
   WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
 DROP POLICY IF EXISTS tenant_isolation ON usage_event;
 CREATE POLICY tenant_isolation ON usage_event
+  USING (tenant_id = current_setting('app.current_tenant', true))
+  WITH CHECK (tenant_id = current_setting('app.current_tenant', true));
+DROP POLICY IF EXISTS tenant_isolation ON call_cost_evidence;
+CREATE POLICY tenant_isolation ON call_cost_evidence
   USING (tenant_id = current_setting('app.current_tenant', true))
   WITH CHECK (tenant_id = current_setting('app.current_tenant', true));

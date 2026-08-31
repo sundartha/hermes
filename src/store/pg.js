@@ -372,6 +372,16 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // KV2-3: Kosten-Buch. Wrapper-Paritaet zu json.js - saved nur bei changed (der
+    // terminale No-Op schreibt nichts).
+    recordCallCostEvidence(eingabe) {
+      const { evidence, changed } = ops.recordCallCostEvidence(requireState(), eingabe);
+      if (changed) save();
+      return evidence;
+    },
+    callCostEvidence(callId) {
+      return ops.callCostEvidence(requireState(), callId);
+    },
     // OUTBOUND-E5: Absender-Wahrheits-Mutatoren als Spread (haelt den Zeilen-Pin, s.o.).
     ...absenderWahrheitMutatoren({ requireState, save }),
     // EL-Anrufstart: Zusammenfassung + Befund aus einer Anbieter-Antwort -
@@ -1150,6 +1160,39 @@ async function hydrateTenants(client) {
   return rows.map(rowToTenant);
 }
 
+// call_cost_evidence-Hydrierung (KV2-3): tenant-scoped, laeuft unter der RLS-GUC des
+// Tenants. BIGINT kommt als String vom Treiber -> Number, NULL bleibt null ("0 statt
+// unbekannt" waere eine erfundene Messung, Muster cost_micro_cents). detail ist JSONB und
+// kommt bereits geparst (Muster call.context/result).
+async function hydrateCallCostEvidence(client, tenantId) {
+  const rows = (
+    await client.query(
+      `SELECT id, tenant_id, call_id, traeger, reife, betrag_mikro_cents, waehrung, quelle,
+              beleg_ref, versuche, gemessen_at, abstand_zum_gespraechsende_s, detail
+         FROM call_cost_evidence WHERE tenant_id = $1 ORDER BY id ASC`,
+      [tenantId],
+    )
+  ).rows;
+  return rows.map((row) => ({
+    id: row.id,
+    tenantId: row.tenant_id,
+    callId: row.call_id,
+    traeger: row.traeger,
+    reife: row.reife,
+    betragMikroCents:
+      row.betrag_mikro_cents === null || row.betrag_mikro_cents === undefined
+        ? null
+        : Number(row.betrag_mikro_cents),
+    waehrung: row.waehrung ?? null,
+    quelle: row.quelle ?? null,
+    belegRef: row.beleg_ref ?? null,
+    versuche: Number(row.versuche),
+    gemessenAt: row.gemessen_at ?? null,
+    abstandZumGespraechsendeS: row.abstand_zum_gespraechsende_s ?? null,
+    detail: row.detail ?? null,
+  }));
+}
+
 // Liest die tenant-scoped Zeilen EINES Tenants (RLS-GUC ist gesetzt) und fuellt sie
 // in den Spiegel: settings/calendar/usage in den Map-Bucket dieses Tenants, calls/
 // actionItems/notifications/numbers an die globalen Listen ANGEHAENGT (nicht
@@ -1262,6 +1305,7 @@ async function hydrateTenantInto(client, state, tenantId) {
       stripeMeterSent: r.stripe_meter_sent,
     })),
   );
+  state.callCostEvidence.push(...(await hydrateCallCostEvidence(client, tenantId)));
 }
 
 function groupTranscripts(segRows) {
@@ -1633,6 +1677,7 @@ async function flushTenantScope(client, tenantId, state) {
   await flushProvisioningJobs(client, tenantId, state.provisioningJobs);
   await flushTenantBudgets(client, tenantId, state.tenantBudgets);
   await flushUsageEvents(client, tenantId, state.usageEvents);
+  await flushCallCostEvidence(client, tenantId, state.callCostEvidence);
 }
 
 // tenant-Tabelle round-trippen (I8): id/status/owner_name/idp_subject upsert. KEINE
@@ -2387,6 +2432,48 @@ async function flushUsageEvents(client, tenantId, events) {
           e.costMicroCents ?? null,
           e.occurredAt,
           e.stripeMeterSent,
+        ],
+      ),
+  });
+}
+
+// call_cost_evidence-Flush (KV2-3): id-PK-Upsert ueber flushOwnScoped (own-Filter +
+// deleteMissing, siehe dort). Aenderbar sind nur die Felder, die die Reifung fortschreibt;
+// call_id/traeger stehen nach dem Insert fest (der Unique-Index auf (call_id, traeger)
+// haelt das auch in der DB).
+async function flushCallCostEvidence(client, tenantId, zeilen) {
+  await flushOwnScoped({
+    client,
+    tenantId,
+    table: "call_cost_evidence",
+    rows: zeilen,
+    insertRow: (zeile) =>
+      client.query(
+        `INSERT INTO call_cost_evidence
+           (id, tenant_id, call_id, traeger, reife, betrag_mikro_cents, waehrung, quelle,
+            beleg_ref, versuche, gemessen_at, abstand_zum_gespraechsende_s, detail)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         ON CONFLICT (id) DO UPDATE SET
+           reife=EXCLUDED.reife, betrag_mikro_cents=EXCLUDED.betrag_mikro_cents,
+           waehrung=EXCLUDED.waehrung, quelle=EXCLUDED.quelle,
+           beleg_ref=EXCLUDED.beleg_ref, versuche=EXCLUDED.versuche,
+           gemessen_at=EXCLUDED.gemessen_at,
+           abstand_zum_gespraechsende_s=EXCLUDED.abstand_zum_gespraechsende_s,
+           detail=EXCLUDED.detail`,
+        [
+          zeile.id,
+          tenantId,
+          zeile.callId,
+          zeile.traeger,
+          zeile.reife,
+          zeile.betragMikroCents ?? null,
+          zeile.waehrung ?? null,
+          zeile.quelle ?? null,
+          zeile.belegRef ?? null,
+          zeile.versuche,
+          zeile.gemessenAt ?? null,
+          zeile.abstandZumGespraechsendeS ?? null,
+          zeile.detail ? JSON.stringify(zeile.detail) : null,
         ],
       ),
   });
