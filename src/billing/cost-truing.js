@@ -504,6 +504,16 @@ export function costTruingCoveragePercent(state, nowMs = Date.now()) {
 // Provider-Kosten-Abgleich selbst laeuft ausschliesslich ueber voiceControl. audit ist
 // seit KV2-1 die DURABLE Variante (server.js#durableAudit); ein Test kann jede Funktion
 // mit der util.js#audit-Signatur injizieren.
+// KV2-8B: der Riegel aus Abnahme (e) an EINER Stelle. Ohne vollstaendiges Kosten-Buch darf
+// NIE eine BEWEISENDE Herkunft entstehen: measured.source misst nur den Telnyx-Pool gegen
+// die Pflicht-TYPMENGE des Profils, nicht die Pflicht-TRAEGER - ein el_convai_sip-Anruf hat
+// seinen sip-trunking-Pool vollstaendig, seine elevenlabs_convai-Zeile aber noch gar nicht.
+// Liegt bewusst auf Modul-Ebene statt im Closure: so bleibt das gepinnte Zeilenbudget von
+// makeCostTruing (292) unberuehrt und der Riegel ist trotzdem nur einmal geschrieben.
+export function ohneBeweiskraft(source) {
+  return istBeweisendeHerkunft(source) ? COST_TRUING_SOURCE.INCOMPLETE : source;
+}
+
 export function makeCostTruing({ store, config, voiceControl, audit, messaging, mailer, now = Date.now }) {
   // Modul-lokaler Laufriegel. BEIDE Ausloeser (Intervall + manueller Endpunkt) teilen
   // sich diesen einen Boolean. GESETZT VOR DEM ERSTEN await, freigegeben im finally:
@@ -695,16 +705,16 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // Ohne Schaetzbetrag gibt es keinen Teilbeleg-Fall: es faellt nichts zu buchen an, und
   // 'no_estimate'/'incomplete' bleiben die zwei Sachverhalte des Bestands.
   function truedSourceOf({ call, measured, projektion, abschluss }) {
-    if (!isBookableCents(call.estimatedCostCents)) return projektion.vollBelegt ? COST_TRUING_SOURCE.NO_ESTIMATE : measured.source;
+    if (!isBookableCents(call.estimatedCostCents)) return projektion.vollBelegt ? COST_TRUING_SOURCE.NO_ESTIMATE : ohneBeweiskraft(measured.source);
     if (projektion.vollBelegt) return COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG;
     if (abschluss.grund === ABSCHLUSS_GRUND.FRIST) return COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG;
-    // Ohne vollstaendiges Buch darf NIE eine BEWEISENDE Herkunft entstehen (Abnahme (e)).
-    // measured.source misst nur den Telnyx-Pool gegen die Pflicht-TYPMENGE des Profils -
-    // nicht die Pflicht-TRAEGER: ein el_convai_sip-Anruf hat einen vollstaendigen
-    // sip-trunking-Pool, seine elevenlabs_convai-Zeile aber noch gar nicht. Ohne diesen
-    // Riegel zaehlte die Deckungsquote ihn als bewiesen und der Drift-Waechter naehme ihn
-    // als Stichprobe - mit einem Betrag, der nur den halben Anruf traegt.
-    return istBeweisendeHerkunft(measured.source) ? COST_TRUING_SOURCE.INCOMPLETE : measured.source;
+    // KV2-8B: der Riegel aus Abnahme (e) steht als ohneBeweiskraft() auf Modul-Ebene und
+    // gilt in BEIDEN Rueckgabewegen ohne vollstaendiges Buch - auch im no-estimate-Zweig
+    // oben. Stand er nur hier, fiel 'telnyx_detail_records' bei fehlendem Schaetzbetrag
+    // durch: die Deckungsquote zaehlte den Anruf als bewiesen und der Drift-Waechter nahm
+    // ihn als Stichprobe, mit einem Betrag, der nur einen Teil des Anrufs traegt. Auf
+    // master war das unmoeglich, es kam erst mit KV2-8 herein (Regression B1).
+    return ohneBeweiskraft(measured.source);
   }
 
   // KV2-8: die Belegzeilen kommen aus dem Store, die Regel aus kosten-projektion.js.

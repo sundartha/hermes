@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { makeCostTruing, SWEEP_TRIGGER } from "../src/billing/cost-truing.js";
+import { makeCostTruing, SWEEP_TRIGGER, ohneBeweiskraft } from "../src/billing/cost-truing.js";
 import { istVollBelegt, settlementProjektion } from "../src/billing/kosten-projektion.js";
 import { KOSTENART, KOSTENPROFIL } from "../src/billing/kostenarten.js";
 import { KOSTEN_BEFUND } from "../src/billing/kosten-deckung.js";
@@ -614,4 +614,63 @@ test("(i) Gegenprobe 3: kein buchbarer Schaetzbetrag -> null Cent und Herkunft n
   assert.equal(korrekturAufrufe.length, 0, "ohne Schaetzbetrag gibt es nichts zu korrigieren");
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, VORHER_COST_CENTS);
   assert.equal(call.costTruedSource, COST_TRUING_SOURCE.NO_ESTIMATE);
+});
+
+// ---------------------------------------------------------------------------------
+// KV2-8B: die Luecke, durch die Regression B1 gerutscht ist.
+//
+// Abnahme (e) verlangt woertlich, JEDEN Wert von COST_TRUING_SOURCE einmal durch die
+// Herkunftsregel zu schicken. Geprueft wurde bisher nur istBeweisendeHerkunft ueber den
+// Enum plus zwei Einzelfaelle - die Regel SELBST lief nie ueber ihren Eingaberaum. Genau
+// deshalb blieb unbemerkt, dass der Riegel im no-estimate-Zweig fehlte.
+//
+// Zwei Tests, weil es zwei Aussagen sind: der Riegel als Funktion (Tabelle ueber den
+// vollen Enum) und seine Verdrahtung im Sweep (der konkrete Regressionspfad).
+// ---------------------------------------------------------------------------------
+
+test("(e) ohneBeweiskraft: JEDER Enum-Wert - beweisende Herkunft wird zu incomplete, jede andere bleibt", () => {
+  const werte = Object.values(COST_TRUING_SOURCE);
+  assert.ok(werte.length > 0, "Enum ist nicht leer (sonst waere die Tabelle vakuos wahr)");
+
+  let beweisendeGesehen = 0;
+  for (const source of werte) {
+    const ergebnis = ohneBeweiskraft(source);
+    assert.equal(
+      istBeweisendeHerkunft(ergebnis), false,
+      `ohneBeweiskraft('${source}') ergab '${ergebnis}' - das ist weiterhin beweisend`,
+    );
+    if (istBeweisendeHerkunft(source)) {
+      beweisendeGesehen++;
+      assert.equal(ergebnis, COST_TRUING_SOURCE.INCOMPLETE, `'${source}' muss auf incomplete fallen`);
+    } else {
+      assert.equal(ergebnis, source, `'${source}' ist nicht beweisend und muss unveraendert bleiben`);
+    }
+  }
+  // Positiv-Kontrolle: haette der Enum keinen einzigen beweisenden Wert, waere die
+  // Schleife oben allquantifiziert wahr, ohne je den Riegel auszuloesen.
+  assert.ok(beweisendeGesehen > 0, "mindestens eine beweisende Herkunft muss im Enum stehen");
+});
+
+test("(e) B1-Regression: kein Schaetzbetrag UND unvollstaendiges Buch ergibt NIE eine beweisende Herkunft", async () => {
+  const nowMs = Date.now();
+  const state = makeDefaultState();
+  seedUsageCents(state, VORHER_COST_CENTS);
+  // Vollstaendiger Telnyx-Pool (measured.source waere 'telnyx_detail_records'), aber
+  // billedSec 0 haelt die Belegzeile vorlaeufig -> das Kosten-Buch ist NICHT vollbelegt.
+  // Dazu kein Schaetzbetrag: exakt die Kombination, die vor dem Fix am Riegel vorbeilief.
+  const call = beendeterCall(state, {
+    nowMs, profil: KOSTENPROFIL.TELNYX_BUDGET, legRef: { callControlId: "cc_1" }, schaetzung: null,
+  });
+  const { korrekturAufrufe } = await sweepMitSpion({
+    state, nowMs, config: testConfig(),
+    control: poolMit(vollerPool({ mikroCents: IST_NIEDRIG_MIKRO, billedSec: KEINE_SEKUNDEN })),
+  });
+
+  assert.equal(
+    istBeweisendeHerkunft(call.costTruedSource), false,
+    `Herkunft '${call.costTruedSource}' ist beweisend, obwohl das Buch unvollstaendig ist - ` +
+    "der Drift-Waechter naehme den Anruf als Stichprobe mit einem Teilbetrag (Regression B1)",
+  );
+  assert.equal(korrekturAufrufe.length, 0, "ohne Schaetzbetrag wird nichts korrigiert");
+  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, VORHER_COST_CENTS);
 });
