@@ -76,3 +76,54 @@ Owner-Entscheidung 2026-08-31: nur notieren, nicht handeln. Begruendung: eine Re
 im Arbeitsbaum entfernt die Nummern NICHT aus der Historie - dafuer braeuchte es ein
 History-Rewrite, das den Upstream-Split (Render deployt jonas986) beruehrt und weit
 ausserhalb dieser Kette liegt. Eine Redaktion in nur dieser einen Datei waere Kosmetik.
+
+## M-1 (erledigt): die Positiv-Kontrolle zu KV2-5(d), vom Lead selbst gefahren
+
+KV2-8 meldete als Blocker B2, die in KV2-5(d) vorgeschriebene Positiv-Kontrolle
+(`KV2_5_KNOWN_CALL_CONTROL_ID`) sei nicht fahrbar gewesen - "die zwei dokumentierten
+call_control_id-Praefixe sind aus dem Anbieter-Fenster gealtert, 0 von 224 Treffern" -
+und ersetzte sie durch eine sip_call_id-Variante. Am 2026-08-31 gegen die echte Prod-DB
+und die echte Telnyx-API nachgemessen.
+
+**Die Begruendung des Agenten war falsch, sein Ausweichen richtig.** Die Kontrolle
+scheiterte nicht an gealterten IDs, sondern daran, dass die betroffenen Anrufe
+ueberhaupt keine `call_control_id` tragen:
+
+| Prod-DB, Tenant t_user_01KX600834GCJFV9GTZQKWZMTH | Wert |
+|---|---|
+| Anrufe gesamt | 63 |
+| davon mit `call_control_id` | 46, ALLE mit `started_at <= 2026-08-12` |
+| davon mit `sip_call_id` | 12 (genau die EL-Anrufe der Spec) |
+
+Die call_control_id-Anrufe endeten am 12.08. und liegen damit ausserhalb des
+Telnyx-Fensters; die aktuellen EL-Anrufe erzeugen gar keine. Eine Positiv-Kontrolle
+ueber dieses Feld ist strukturell unmoeglich, nicht bloss zeitlich verpasst.
+
+**Ersatz-Positivkontrolle, bestanden.** `GET /v2/detail_records`, `last_7_days`:
+
+| record_type | HTTP | Belege |
+|---|---|---|
+| `sip-trunking` | 200 | **7** |
+| `call-control` | 200 | 0 |
+| `inference` | 200 | 0 |
+| `amd` / `conference` / `media_storage` | 200 | 0 |
+
+Die 7 sip-trunking-Belege tragen ein Feld `sip_call_id`, dessen Werte **exakt** den
+sieben juengsten Prod-DB-Anrufen entsprechen (otb_4101m190... = Anruf 2026-08-30
+09:35:13, usw.). Der Join ueber `sip_call_id` ist damit am Anbieter belegt, nicht
+angenommen. Dass dieselbe Abfrage fuer sip-trunking Treffer und fuer die uebrigen Typen
+Null liefert, ist die Positiv-Kontrolle: die Nullen sind echte Nullen, keine leere
+Suche.
+
+**Q1 ist damit unabhaengig bestaetigt: die Pflicht-Typmenge von `el_convai_sip` ist
+`["sip-trunking"]`.** Ein EL-Anruf erzeugt keinen call-control-Beleg - erwartbar, weil
+ElevenLabs die Medien fuehrt und nicht Telnyx Call Control.
+
+Nebenbefund fuer die Matrix 4.6 und Pre-Mortem 6.2 ("eine 0 wurde zum Vollbeleg"):
+4 der 7 Belege tragen `cost=0.0` und `billed_sec=0` (die drei Versuche vom 27.08.),
+3 tragen echte Betraege (0.0401 / 0.0462 / 0.0401 USD bei 60/120/60 billed_sec).
+Der Nullbetrag-Fall ist also nicht hypothetisch, er liegt in den Live-Daten.
+
+Zur Latenz (Q2): der Anruf vom 30.08. 09:35 UTC ist am 31.08. im Beleg vorhanden -
+also unter ~30 h. Eine schaerfere Schranke braeuchte wiederholtes Messen; die
+Obergrenze 1587 min aus dem Branch widerspricht dem nicht.
