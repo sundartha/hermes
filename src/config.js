@@ -1621,15 +1621,14 @@ const rawConfig = {
     process.env.OWNER_SELF_CALL_ENABLED,
     { fallback: false },
   ),
-  // OC-P1: WELCHE Tenants die Ausnahme ueberhaupt ausloesen duerfen. LEER = NIEMAND, nie
-  // JEDER (Lehre streaming-armierung-allowlist). Hier wird EINMAL gesplittet/getrimmt/von
-  // leeren Eintraegen befreit (csvEnv), damit das Praedikat strikt vergleichen kann und
-  // nirgends ein zweites Trim-Zauberstueck entsteht. Immer ein Array of Strings, nie
-  // undefined. Warum die Liste kein Beiwerk ist: POST /api/self-service/private-number
-  // haengt allein hinter webAuthMw - jeder eingeloggte Tenant darf jede format-/land-
-  // gueltige Nummer eintragen. Ohne die Liste waere die einzige Absicherung ein Mensch,
-  // der sich an einen Env-Flip erinnert. Vor dem Launch gehoert hier ausschliesslich ein
-  // Account hinein, der uns gehoert.
+  // DEPRECATED seit 2026-08-21 (OC, PLAN-SECURITY.md Launch-Blocker geloest): wirkungslos.
+  // ownerSelfCallGranted (src/callee-is-owner.js) liest diesen Key NICHT mehr - die
+  // Tenant-Allowlist ist durch eine echte Besitz-Verifikation ersetzt (E-Mail-Bestaetigung
+  // + Anrufnachweis von der Nummer selbst, s. src/own-number-verify.js,
+  // state-ops.js verifyPrivateNumberByInboundCall). Muster ALLOWED_NUMBERS (CLAUDE.md
+  // Absolute Regel 1): der Key bleibt nur fuer den Env-Cleanup, sein Wert ist wirkungslos.
+  // NICHT geloescht (Config-Key-Loeschen ist eine eigene Entscheidung, kein Nebeneffekt
+  // dieser Migration) - s. .env.example fuer den Betriebs-Hinweis.
   ownerSelfCallTenantIds: csvEnv(process.env.OWNER_SELF_CALL_TENANT_IDS),
   // Rate-Limit pro IP und Minute fuer alle Routen ausser /voice (Provider-Webhooks;
   // localhost-Socket ausgenommen). Default 120: Dashboard pollt alle 2,5s (~24/min)

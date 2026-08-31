@@ -1,7 +1,13 @@
-// OC-P1 (PLAN-OWNER-CALL): Route-Ebene ueber POST /api/calls, Muster woertlich
-// test/diagnostic-retention-http.test.js. Blocks D (Schalter+Allowlist am Datensatz),
-// E (Nicht-Leak) und F (diagnostic bleibt bei JEDEM Schalterstand unveraendert - die
-// Zusage aus 2.2 "zwei Exporte, ein Vergleich" in Testform).
+// OC (PLAN-OWNER-CALL, PLAN-SECURITY.md Launch-Blocker geloest): Route-Ebene ueber
+// POST /api/calls, Muster woertlich test/diagnostic-retention-http.test.js. Blocks D
+// (Schalter+Besitz-Verifikation am Datensatz), E (Nicht-Leak) und F (diagnostic bleibt
+// bei JEDEM Schalterstand unveraendert - die Zusage aus 2.2 "zwei Exporte, ein
+// Vergleich" in Testform).
+//
+// Seit der Owner-Entscheidung 2026-08-21 ersetzt die Besitz-Verifikation
+// (tenant.privateNumberVerifiedAt) die frueher hier per Env (OWNER_SELF_CALL_TENANT_IDS)
+// gesteuerte Tenant-Allowlist - Block D seedet den Verifikationszustand deshalb direkt am
+// Tenant-Record statt ihn ueber die Env zu pinnen (Muster voice-own-number-verify.test.js).
 //
 // FAKE_ORIGINATE=true legt NUR den TeXML-Zweig trocken (src/telephony/registry.js). Steht
 // in der lokalen .env ELEVENLABS_OUTBOUND_ENABLED=true oder TELNYX_AI_ASSISTANT_ENABLED=
@@ -16,21 +22,25 @@ import { startServer, seedState } from "./helpers.js";
 
 const OWN = "+491737252163";
 const FOREIGN = "+491729999001";
-const OTHER_TENANT = "t_fremd";
 // G25: kein Magic-Value - der einzige hier erwartete HTTP-Erfolgsstatus.
 const HTTP_OK = 200;
 
-const seed = seedState({
-  tenants: [
-    {
-      id: BOOTSTRAP_TENANT_ID,
-      status: "active",
-      firstName: "Jonas",
-      ownerName: "Jonas Beispiel",
-      privateNumber: OWN,
-    },
-  ],
-});
+function seedFor({ verified }) {
+  return seedState({
+    tenants: [
+      {
+        id: BOOTSTRAP_TENANT_ID,
+        status: "active",
+        firstName: "Jonas",
+        ownerName: "Jonas Beispiel",
+        privateNumber: OWN,
+        ...(verified
+          ? { privateNumberEmailConfirmedAt: "2026-08-01T00:00:00.000Z", privateNumberVerifiedAt: "2026-08-05T00:00:00.000Z" }
+          : {}),
+      },
+    ],
+  });
+}
 
 const BASE_CALL_ENV = {
   ALLOWED_COUNTRY_CODES: "+49",
@@ -46,8 +56,8 @@ const postCall = (url, body) =>
     body: JSON.stringify({ objective: "Test", ...body }),
   });
 
-async function callAndReadFlag({ env, to }) {
-  const srv = await startServer({ env: { ...BASE_CALL_ENV, ...env }, seed });
+async function callAndReadFlag({ env, verified, to }) {
+  const srv = await startServer({ env: { ...BASE_CALL_ENV, ...env }, seed: seedFor({ verified }) });
   try {
     const res = await postCall(srv.localUrl, { to });
     assert.equal(res.status, HTTP_OK);
@@ -59,11 +69,12 @@ async function callAndReadFlag({ env, to }) {
   }
 }
 
-// ---- Block D: Schalter + Allowlist am Anruf-Datensatz ----
+// ---- Block D: Schalter + Besitz-Verifikation am Anruf-Datensatz ----
 
-test("OC-P1-60: Schalter an, Tenant gepinnt, Ziel = eigene Nummer -> calleeIsOwner true", async () => {
+test("OC-P1-60: Schalter an, Nummer besitz-verifiziert, Ziel = eigene Nummer -> calleeIsOwner true", async () => {
   const { call } = await callAndReadFlag({
-    env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
+    env: { OWNER_SELF_CALL_ENABLED: "true" },
+    verified: true,
     to: OWN,
   });
   assert.strictEqual(call.calleeIsOwner, true);
@@ -76,42 +87,47 @@ test("OC-P1-60: Schalter an, Tenant gepinnt, Ziel = eigene Nummer -> calleeIsOwn
 // normalizeDialTarget("01737252163", "+49") -> "+491737252163".
 test("OC-P1-60b: nationale Schreibweise der eigenen Nummer -> calleeIsOwner true (Beleg: Praedikat liest ctx.to)", async () => {
   const { call } = await callAndReadFlag({
-    env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
+    env: { OWNER_SELF_CALL_ENABLED: "true" },
+    verified: true,
     to: "01737252163",
   });
   assert.strictEqual(call.calleeIsOwner, true);
 });
 
-test("OC-P1-61: Schalter an, Tenant gepinnt, Ziel FREMD -> calleeIsOwner false", async () => {
+test("OC-P1-61: Schalter an, verifiziert, Ziel FREMD -> calleeIsOwner false", async () => {
   const { call } = await callAndReadFlag({
-    env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
+    env: { OWNER_SELF_CALL_ENABLED: "true" },
+    verified: true,
     to: FOREIGN,
   });
   assert.strictEqual(call.calleeIsOwner, false);
 });
 
-test("OC-P1-62: Schalter AUS, Tenant gepinnt, Ziel = eigene Nummer -> calleeIsOwner false", async () => {
+test("OC-P1-62: Schalter AUS, verifiziert, Ziel = eigene Nummer -> calleeIsOwner false", async () => {
   const { call } = await callAndReadFlag({
-    env: { OWNER_SELF_CALL_ENABLED: "false", OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
+    env: { OWNER_SELF_CALL_ENABLED: "false" },
+    verified: true,
     to: OWN,
   });
   assert.strictEqual(call.calleeIsOwner, false);
 });
 
-test("OC-P1-63: Schalter an, Allowlist LEER, Ziel = eigene Nummer -> calleeIsOwner false", async () => {
+test("OC-P1-63: Schalter an, NICHT besitz-verifiziert, Ziel = eigene Nummer -> calleeIsOwner false (Nachfolger des Allowlist-leer-Falls)", async () => {
   const { call } = await callAndReadFlag({
-    env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: "" },
+    env: { OWNER_SELF_CALL_ENABLED: "true" },
+    verified: false,
     to: OWN,
   });
   assert.strictEqual(call.calleeIsOwner, false);
 });
 
-test("OC-P1-64: Schalter an, Allowlist ohne diesen Tenant, Ziel = eigene Nummer -> calleeIsOwner false", async () => {
+test("OC-P1-64: OWNER_SELF_CALL_TENANT_IDS ist wirkungslos - gesetzt, aber NICHT verifiziert -> calleeIsOwner bleibt false", async () => {
   const { call } = await callAndReadFlag({
-    env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: OTHER_TENANT },
+    env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
+    verified: false,
     to: OWN,
   });
-  assert.strictEqual(call.calleeIsOwner, false);
+  assert.strictEqual(call.calleeIsOwner, false, "die alte Allowlist ersetzt die Besitz-Verifikation NICHT");
 });
 
 // ---- Block E: Nicht-Leak ----
@@ -125,12 +141,8 @@ test("OC-P1-64: Schalter an, Allowlist ohne diesen Tenant, Ziel = eigene Nummer 
 // (calleeIsOwner) ist neu am Datensatz.
 test("OC-P1-65: GET /api/state traegt calleeIsOwner:true, die private Nummer NIRGENDS NEU (nur legitim als call.to)", async () => {
   const srv = await startServer({
-    env: {
-      ...BASE_CALL_ENV,
-      OWNER_SELF_CALL_ENABLED: "true",
-      OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID,
-    },
-    seed,
+    env: { ...BASE_CALL_ENV, OWNER_SELF_CALL_ENABLED: "true" },
+    seed: seedFor({ verified: true }),
   });
   try {
     const placed = await postCall(srv.localUrl, { to: OWN });
@@ -161,10 +173,10 @@ test("OC-P1-65: GET /api/state traegt calleeIsOwner:true, die private Nummer NIR
 
 // ---- Block F: diagnostic unveraendert bei JEDEM Schalterstand (2.2, zwei Exporte, ein Vergleich) ----
 
-async function diagnosticFor({ env, to }) {
+async function diagnosticFor({ env, verified, to }) {
   const srv = await startServer({
     env: { ...BASE_CALL_ENV, DIAGNOSTIC_RETENTION_DAYS: "7", ...env },
-    seed,
+    seed: seedFor({ verified }),
   });
   try {
     const res = await postCall(srv.localUrl, { to });
@@ -178,26 +190,17 @@ async function diagnosticFor({ env, to }) {
 }
 
 test("OC-P1-67: OWNER_SELF_CALL_ENABLED=false, Ziel eigene Nummer -> diagnostic weiterhin true", async () => {
-  const call = await diagnosticFor({
-    env: { OWNER_SELF_CALL_ENABLED: "false", OWNER_SELF_CALL_TENANT_IDS: "" },
-    to: OWN,
-  });
+  const call = await diagnosticFor({ env: { OWNER_SELF_CALL_ENABLED: "false" }, verified: false, to: OWN });
   assert.strictEqual(call.diagnostic, true);
 });
 
-test("OC-P1-68: OWNER_SELF_CALL_ENABLED=true + Tenant gepinnt, Ziel eigene Nummer -> diagnostic identisch true", async () => {
-  const call = await diagnosticFor({
-    env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: BOOTSTRAP_TENANT_ID },
-    to: OWN,
-  });
+test("OC-P1-68: OWNER_SELF_CALL_ENABLED=true + verifiziert, Ziel eigene Nummer -> diagnostic identisch true", async () => {
+  const call = await diagnosticFor({ env: { OWNER_SELF_CALL_ENABLED: "true" }, verified: true, to: OWN });
   assert.strictEqual(call.diagnostic, true);
 });
 
-test("OC-P1-69: OWNER_SELF_CALL_ENABLED=true + Allowlist LEER, Ziel eigene Nummer -> diagnostic true, calleeIsOwner false (zwei Exporte, ein Vergleich)", async () => {
-  const call = await diagnosticFor({
-    env: { OWNER_SELF_CALL_ENABLED: "true", OWNER_SELF_CALL_TENANT_IDS: "" },
-    to: OWN,
-  });
-  assert.strictEqual(call.diagnostic, true, "Diagnose-Retention haengt NICHT an der Allowlist");
-  assert.strictEqual(call.calleeIsOwner, false, "die Offenlegungs-Ausnahme haengt SEHR WOHL an der Allowlist");
+test("OC-P1-69: OWNER_SELF_CALL_ENABLED=true + NICHT verifiziert, Ziel eigene Nummer -> diagnostic true, calleeIsOwner false (zwei Exporte, ein Vergleich)", async () => {
+  const call = await diagnosticFor({ env: { OWNER_SELF_CALL_ENABLED: "true" }, verified: false, to: OWN });
+  assert.strictEqual(call.diagnostic, true, "Diagnose-Retention haengt NICHT an der Besitz-Verifikation");
+  assert.strictEqual(call.calleeIsOwner, false, "die Offenlegungs-Ausnahme haengt SEHR WOHL an der Besitz-Verifikation");
 });

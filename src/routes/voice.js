@@ -44,6 +44,7 @@ import {
 } from "../telnyx-inbound.js";
 import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
 import { ANSWERED_BY } from "../telephony/answered-by.js";
+import { verifyOwnNumberOnInboundCall } from "../own-number-verify.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -289,6 +290,8 @@ export function makeVoiceRoutes({
           );
       }
       const tenantId = numberRecord.tenantId;
+      // OC-Besitz-Verifikation, Stufe 2: siehe own-number-verify.js verifyOwnNumberOnInboundCall.
+      verifyOwnNumberOnInboundCall({ store, audit, req, tenantId, nowIso: new Date().toISOString() });
       // Aufloesungs-Praezedenz (#8): settings.language -> number.language ->
       // tenant.defaultLanguage -> Weltdefault (P10). Hier liegt der Geo-Anker der
       // angerufenen Nummer vor.

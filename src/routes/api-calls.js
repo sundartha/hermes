@@ -97,10 +97,10 @@ function elevenLabsHangUpActionNotWired(_endActiveCall, call) {
 //   diagnostic           - P2b: darf das Roh-Transkript die Summary ueberleben? (Ziel ==
 //                           eigene Nummer, Opt-out im Body moeglich, s.
 //                           diagnosticRetentionGranted).
-//   calleeIsOwnerOfThisCall - OC-P1: ruft dieser Tenant seine EIGENE hinterlegte Nummer an
-//                           (Schalter + Tenant-Allowlist + Ziel, s. ownerSelfCallGranted)?
-//                           Serverseitig gesetzt; das Ergebnis geht set-once an den
-//                           Anruf-Datensatz und wirkt in dieser Phase noch nirgends.
+//   calleeIsOwnerOfThisCall - OC: ruft dieser Tenant seine EIGENE, BESITZ-VERIFIZIERTE
+//                           hinterlegte Nummer an (Schalter + Besitz-Verifikation + Ziel,
+//                           s. ownerSelfCallGranted)? Serverseitig gesetzt; das Ergebnis
+//                           geht set-once an den Anruf-Datensatz.
 //
 // ctx.to (NICHT die rohe `to`) und ctx.tenantId (der ANRUFENDE Tenant aus resolve_identity)
 // sind Pflicht - s. Kommentar an der Aufrufstelle. Bewusst KEIN neues Gate in der
@@ -118,9 +118,11 @@ function resolveCallPrivacyFlags({ store, config, ctx }) {
   const calleeIsOwnerOfThisCall = ownerSelfCallGranted({
     to: ctx.to,
     ownNumber,
-    tenantId: ctx.tenantId,
     enabled: config.voice.ownerSelfCallEnabled,
-    allowedTenantIds: config.voice.ownerSelfCallTenantIds,
+    // Besitz-Verifikation (Owner-Entscheidung 2026-08-21, OC) ERSETZT die fruehere
+    // Tenant-Allowlist: verified kommt aus DEMSELBEN Tenant-Record wie ownNumber oben
+    // (eine Lesung, kein zweiter Store-Zugriff mit eigenem Race).
+    verified: store.tenantPrivateNumberVerified(ctx.tenantId),
   });
   return { diagnostic, calleeIsOwnerOfThisCall };
 }

@@ -523,6 +523,16 @@ export function thinkingSignalBannerLine(voice) {
   return voice.thinkingSignalEnabled ? "Denk-Signal: AKTIV (THINKING_SIGNAL_ENABLED=true)" : "";
 }
 
+// OC (Owner-Entscheidung 2026-08-21, PLAN-SECURITY.md Launch-Blocker geloest): dieser
+// Schalter aendert, OB der gesetzlich vorgeschriebene Offenlegungssatz (Absolute Regel 2)
+// bei einem Outbound-Call entfaellt - genau die Kategorie Schalter, die laut Boot-Sonden-
+// Regel oben nicht unbemerkt scharf sein darf. Aus -> keine Zeile, Banner byte-identisch.
+export function ownerSelfCallBannerLine(voice) {
+  return voice.ownerSelfCallEnabled
+    ? "Owner-Self-Call-Ausnahme: AKTIV (OWNER_SELF_CALL_ENABLED=true, Besitz-Verifikation entscheidet)"
+    : "";
+}
+
 // ---- AL-P16: Boot-Sonden fuer die blinden Schalter -------------------------------
 // Am 2026-08-01 waren Faehigkeiten scharf geschaltet, bei denen "gesetzt" nicht dasselbe
 // ist wie "wirkt" - und der Unterschied war am laufenden Dienst nicht ablesbar. Zweimal
@@ -761,6 +771,8 @@ function logBootBanner(config, port) {
   if (tokenStreaming) console.log(`  ${tokenStreaming}`);
   const thinkingSignal = thinkingSignalBannerLine(config.voice);
   if (thinkingSignal) console.log(`  ${thinkingSignal}`);
+  const ownerSelfCall = ownerSelfCallBannerLine(config.voice);
+  if (ownerSelfCall) console.log(`  ${ownerSelfCall}`);
   // AL-P16: die Sonden stehen unkonditional, auch im Aus-Zustand (s. Kommentar bei
   // capabilityProbeLines).
   for (const line of capabilityProbeLines(config)) console.log(`  ${line}`);

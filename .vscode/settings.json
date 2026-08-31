@@ -1,0 +1,62 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  "eslint.validate": [
+    "javascript"
+  ],
+  "eslint.useFlatConfig": true,
+  "prettier.requireConfig": true,
+  "files.exclude": {
+    "**/.npm-cache": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.npm-cache": true,
+    "**/package-lock.json": true,
+    "**/coverage": true,
+    "**/data": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/.npm-cache/**": true,
+    "**/.git/**": true
+  },
+  "javascript.preferences.importModuleSpecifierEnding": "js",
+  "npm.packageManager": "npm",
+  "files.associations": {
+    "*.command": "shellscript",
+    ".env.example": "dotenv"
+  },
+  "nodejs-testing.include": [
+    "test"
+  ],
+  "nodejs-testing.env": {
+    "NODE_ENV": "test"
+  },
+  "nodejs-testing.concurrency": 1,
+  "testing.automaticallyOpenTestResults": "neverOpen"
+}

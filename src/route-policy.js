@@ -189,6 +189,17 @@ export const PUBLIC_ROUTES = Object.freeze([
       "timing-sicher verglichen (safeEqual, state-ops.js unsubscribeNewsletterRecipientByToken).",
   },
   {
+    method: "GET",
+    path: "/own-number/confirm",
+    reason:
+      "HANDLER-INTERNE AUTH (OC-Besitz-Verifikation, PLAN-SECURITY.md Launch-Blocker geloest): " +
+      "der Empfaenger hat kein Dashboard/keine Session - Sicherung ist der kryptografisch " +
+      "unratbare Bestaetigungs-Token (32 Byte, nur als SHA256-Hash gespeichert, 48h Ablauf, " +
+      "Einmalverwendung), timing-sicher verglichen (safeEqual, state-ops.js " +
+      "confirmPrivateNumberByToken). Idempotenter GET ohne Zustandsaenderung am Aufrufer, " +
+      "kein CSRF-Risiko.",
+  },
+  {
     method: "POST",
     path: "/voice/incoming",
     reason: VOICE_SIGNATURE_REASON,
