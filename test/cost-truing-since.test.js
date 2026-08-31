@@ -203,7 +203,9 @@ test("(P5-5) die Marge deckt die Gespraechsdauer: eigene Belege auf Seite 2 werd
   const res = await run({ trigger: SWEEP_TRIGGER.MANUAL });
 
   assert.equal(res.measured, 1, "Seite 2 wurde geholt - eine zu knappe Marge haette hier abgebrochen");
-  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.DETAIL_RECORDS);
+  // KV2-8: die Herkunft eines frisch gesettelten Anrufs ist 'kostenbuch_vollbeleg' -
+  // 'telnyx_detail_records' bleibt der Wert an Bestandszeilen von VOR dieser Phase.
+  assert.equal(call.costTruedSource, COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG);
   assert.equal(call.actualCostMicroCents, 4_010_000, "Null-Zwilling (0) + abgerechneter Beleg (0.0401 USD) - ALLE zugeordneten Belege");
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, 84, "Korrektur gebucht: 100 - (20 - 4)");
   assert.equal(fetchCalls.filter((c) => new URL(c.url).searchParams.get("filter[record_type]") === "sip-trunking").length, 2);

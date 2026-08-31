@@ -127,7 +127,8 @@ test("(b) Telnyx-Engine-Anruf: dieselbe Korrektur wie im Bestand, PLUS eine teln
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, NACHHER_COST_CENTS_TELNYX, "identische Korrektur wie vor KV2-5");
-  assert.equal(call.costTruedSource, "telnyx_detail_records");
+  // KV2-8: neu gesettelte Anrufe tragen "kostenbuch_vollbeleg".
+  assert.equal(call.costTruedSource, "kostenbuch_vollbeleg");
 
   const zeilen = store.callCostEvidence(call.id);
   assert.equal(zeilen.length, 1, "genau EINE Belegzeile - keine telnyx_sip-Zeile fuer die Telnyx-Route");
@@ -288,7 +289,18 @@ test("kostenprofilFuerAnruf: gesetztes, bekanntes costProfile gewinnt gegen die 
     kostenprofilFuerAnruf({ costProfile: KOSTENPROFIL.TELNYX_ASSISTANT, sipCallId: "otb_x" }),
     KOSTENPROFIL.TELNYX_ASSISTANT,
   );
-  assert.equal(kostenprofilFuerAnruf({ costProfile: "unbekannt", sipCallId: "otb_x" }), KOSTENPROFIL.EL_CONVAI_SIP);
+});
+
+// KV2-8-VERSCHAERFUNG (Matrix 4.6, "Profil unbekannt (Anruf NACH der Kette entstanden)"):
+// bis KV2-8 lenkte diese Funktion auch ein GESETZTES, aber unbekanntes costProfile auf die
+// Legacy-Zuordnung um - ununterscheidbar von einer echten Altzeile (fehlendes costProfile)
+// und damit eine erfundene Vollstaendigkeit im Settlement (KV2-8 Abnahme (a)/(b)). Nur ein
+// FEHLENDES (null/undefined) costProfile ist eine Altzeile; ein gesetzter unbekannter Wert
+// bleibt jetzt UNAUFGELOEST.
+test("kostenprofilFuerAnruf: fehlendes costProfile faellt auf die Legacy-Zuordnung zurueck, ein gesetztes unbekanntes NICHT", () => {
+  assert.equal(kostenprofilFuerAnruf({ costProfile: null, sipCallId: "otb_x" }), KOSTENPROFIL.EL_CONVAI_SIP);
+  assert.equal(kostenprofilFuerAnruf({ costProfile: undefined, sipCallId: "otb_x" }), KOSTENPROFIL.EL_CONVAI_SIP);
+  assert.equal(kostenprofilFuerAnruf({ costProfile: "unbekannt", sipCallId: "otb_x" }), "unbekannt");
 });
 
 // ---- sweepTraegerFuerProfil / sweepBelegBetrag: reine Regelwerk-Unit-Tests ----

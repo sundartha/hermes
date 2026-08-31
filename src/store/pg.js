@@ -1412,8 +1412,8 @@ function absenderWahrheitMutatoren({ requireState, save }) {
 // Schliessregel-Mutatoren - haelt makePgStores gepinnte Zeilengrenze.
 function kostenAbschlussMutatoren({ requireState, save }) {
   return {
-    schliesseKostenAbgleich(callId, closedAt) {
-      const { call, changed } = ops.schliesseKostenAbgleich(requireState(), callId, closedAt);
+    schliesseKostenAbgleich(callId, eingabe) {
+      const { call, changed } = ops.schliesseKostenAbgleich(requireState(), callId, eingabe);
       if (changed) save();
       return call;
     },

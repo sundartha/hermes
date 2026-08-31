@@ -103,7 +103,8 @@ test("(a) telnyx_budget, vollstaendiger Pool: ein Sweep schliesst, ein zweiter s
   assert.equal(result.candidates, 1);
   assert.equal(call.costTruingAttempts, 1, "genau EIN Versuch");
   assert.equal(call.costTruedAt, new Date(nowMs).toISOString());
-  assert.equal(call.costTruedSource, "telnyx_detail_records");
+  // KV2-8: neu gesettelte Anrufe tragen "kostenbuch_vollbeleg".
+  assert.equal(call.costTruedSource, "kostenbuch_vollbeleg");
 
   const result2 = await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
   assert.equal(result2.candidates, 0, "geschlossener Anruf ist kein Kandidat mehr");

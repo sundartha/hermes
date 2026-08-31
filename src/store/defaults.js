@@ -182,12 +182,36 @@ export const USAGE_EVENT_KIND = Object.freeze({
 // aber ein anderer Sachverhalt und deshalb ein eigener Zustand (zwei Ursachen teilen sich
 // NICHT ein Label). 'unavailable' = nicht gemessen (ok:false, leere Antwort, unparsbare
 // Summe) und NIEMALS "Kosten = 0".
+// KV2-8 (Plan 4.8): zwei neue Werte. 'telnyx_detail_records' bleibt - er steht an
+// Bestandszeilen von VOR dieser Phase und behauptet dort weiterhin die Wahrheit; neu
+// geschrieben wird er nur noch im Rueckfall (unvollstaendiges Buch ohne abgelaufene
+// Frist). Die Regel dieser Enum ("zwei Ursachen teilen sich NICHT ein Label") ist der
+// Grund fuer ZWEI Werte statt eines: "alle Pflicht-Traeger belegt" und "Frist abgelaufen,
+// Teilbeleg" sind verschiedene Sachverhalte, und ein Settlement aus dem Kosten-Buch darf
+// nicht 'telnyx_detail_records' behaupten (Abnahme (e)).
 export const COST_TRUING_SOURCE = Object.freeze({
   DETAIL_RECORDS: "telnyx_detail_records",
+  KOSTENBUCH_VOLLBELEG: "kostenbuch_vollbeleg",
+  KOSTENBUCH_TEILBELEG: "kostenbuch_teilbeleg",
   INCOMPLETE: "incomplete",
   NO_ESTIMATE: "no_estimate",
   UNAVAILABLE: "unavailable",
 });
+
+// KV2-8: WELCHE Herkunft "vollstaendig bewiesen" bedeutet - EINE Quelle fuer die drei
+// Leser (coverageBreakdown und countOutcome in cost-truing.js, isDriftSample in
+// cost-calibration.js). Vor dieser Phase stand der Vergleich `=== DETAIL_RECORDS`
+// dreimal getrennt da; mit einem ZWEITEN beweisenden Wert waeren daraus drei einzeln
+// nachzuziehende Stellen geworden (G5) - genau der Fehlertyp, an dem die Deckungsquote
+// still auf 0 % gefallen waere.
+const BEWEISENDE_HERKUNFT = Object.freeze([
+  COST_TRUING_SOURCE.DETAIL_RECORDS,
+  COST_TRUING_SOURCE.KOSTENBUCH_VOLLBELEG,
+]);
+
+export function istBeweisendeHerkunft(source) {
+  return BEWEISENDE_HERKUNFT.includes(source);
+}
 
 // KV2-3: Reife einer Belegzeile im Kosten-Buch (call_cost_evidence.reife). VIER
 // Auspraegungen. Der frueher hier vorgesehene fuenfte Wert 'beleg_ausgeblieben' ENTFAELLT

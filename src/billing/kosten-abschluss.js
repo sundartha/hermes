@@ -90,14 +90,20 @@ export function nichtNachreifbar(zeile) {
 }
 
 // Reihenfolge ist eine Aussage (fail-closed zuerst):
-//  1. kein costProfile          -> PROFIL_FEHLT  (Zielbild 4: eine unbekannte Pflicht-
-//                                  menge ist NIEMALS Vollstaendigkeit; Matrix 4.6)
+//  1. kein costProfile ODER eine leere Pflichtmenge -> PROFIL_FEHLT (Zielbild 4: eine
+//     unbekannte Pflichtmenge ist NIEMALS Vollstaendigkeit; Matrix 4.6). Zwei Lagen
+//     fuehren hierher: die Altzeile (costProfile fehlt, faellt in der Money-Rechnung
+//     trotzdem auf die Legacy-Zuordnung zurueck - dieser Endzustand ist NUR das Label,
+//     s. KV2-8) UND ein gesetztes, aber unbekanntes Profil ("Anruf NACH der Kette
+//     entstanden", KV2-8) - dort ist die Pflichtmenge leer, weil kostenprofilFuerAnruf
+//     einen solchen Wert bewusst NICHT auf die Legacy-Zuordnung umlenkt.
 //  2. (h) UND Frist abgelaufen  -> UNBESCHAFFBAR (nie waehrend laufender Frist)
 //  3. fehlend leer              -> VOLLSTAENDIG
 //  4. alle fehlenden Traeger nicht nachreifbar -> UNBESCHAFFBAR (Abbruchweg, (e))
 //  5. sonst                     -> UNVOLLSTAENDIG_FINAL mit fehlend
 function endzustandVon({ call, belege, fehlend, frist }) {
-  if (!call?.costProfile) return ENDZUSTAND.PROFIL_FEHLT;
+  if (!call?.costProfile || pflichtTraegerFuerProfil(kostenprofilFuerAnruf(call)).length === 0)
+    return ENDZUSTAND.PROFIL_FEHLT;
   if (frist && belegUnbeschaffbarAmAnruf({ call, belege })) return ENDZUSTAND.UNBESCHAFFBAR;
   if (fehlend.length === 0) return ENDZUSTAND.VOLLSTAENDIG;
   if (fehlend.every((traeger) => nichtNachreifbar(zeileFuerTraeger(belege, traeger)))) return ENDZUSTAND.UNBESCHAFFBAR;

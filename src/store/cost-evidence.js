@@ -281,8 +281,16 @@ export function costEvidenceFortschreibung(vorhanden, eingabe) {
 // Zeilen mit echtem Ganzzahl-Betrag. Ein 'erwartet'-Posten (oder ein terminal markierter)
 // traegt NICHTS bei - nicht den Betrag 0, gar nichts. Kein `?? 0`: ein NULL-Betrag darf
 // nie stillschweigend zur 0 werden.
+// KV2-8: der Filter bekommt einen Namen und einen zweiten Aufrufer. Die Projektion
+// (billing/kosten-projektion.js) muss "gibt es UEBERHAUPT eine summierbare Zeile"
+// beantworten koennen, ohne die Bedingung ein zweites Mal zu formulieren (G5) - sonst
+// waere "Summe 0 mangels Zeilen" von "gemessene 0" nicht unterscheidbar.
+export function summierbareBelegzeilen(zeilen) {
+  return zeilen.filter(
+    (zeile) => REIFE_SUMMIERBAR.includes(zeile.reife) && isProviderMicroCents(zeile.betragMikroCents),
+  );
+}
+
 export function costEvidenceSumMicroCents(zeilen) {
-  return zeilen
-    .filter((zeile) => REIFE_SUMMIERBAR.includes(zeile.reife) && isProviderMicroCents(zeile.betragMikroCents))
-    .reduce((summe, zeile) => summe + zeile.betragMikroCents, 0);
+  return summierbareBelegzeilen(zeilen).reduce((summe, zeile) => summe + zeile.betragMikroCents, 0);
 }

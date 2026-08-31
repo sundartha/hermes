@@ -162,7 +162,59 @@ im Auftrag offen gelassenen Moeglichkeit "kein Beleg" — sie trifft NICHT zu.
   verlangt beide Typen als Pflicht-Typen, ein vollstaendiger Pool-Fetch braeuchte also auch
   diesen Typ gemessen — offen fuer eine Folgemessung.
 
-## KV2-5(d): Owner-Meldung - Messung in dieser Session nicht ausgefuehrt
+## KV2-5(d): NACHGEHOLT am 2026-08-31 (Implementierungssession KV2-8)
+
+Die Messung wurde in der KV2-8-Session nachgeholt. Ergebnis, gegen das echte Telnyx-Konto
+gemessen (`scripts/kv2-5-telnyx-belegtypen.mjs`, exportierte Messlogik `baueErgebnis`):
+
+**Q1 - Pflicht-Typmenge `el_convai_sip`: `["sip-trunking"]`.**
+Abgerufener Pool (alle sieben Probe-Typen, `/v2/detail_records`, ganze Seitenmenge):
+sip-trunking 250, call-control 224, speech-to-text 98, text-to-speech 111, recording 91,
+ai-voice-assistant 69, inference 79 Belege. Kein Typ ausser `sip-trunking` laesst sich
+ueber die bekannten `sip_call_id`-/Session-Anker dem EL-Weg zuordnen.
+
+**Anker-Stabilitaet (Gegenprobe gegen ein Artefakt duenner Ankermengen):** dieselbe Menge
+`["sip-trunking"]`, ob nur gegen die eine oben in diesem Dokument aus der Produktions-DB
+belegte `sip_call_id` (`otb_4101m190brwyf4mb9cwvhts7rymk`) verankert oder gegen alle 26
+`otb_`-Kennungen des Pools.
+
+**Q2 - Latenz-Obergrenze:** 1587 Minuten (ehrliche OBERGRENZE `jetzt - started_at` des
+juengsten sip-trunking-Belegs, NICHT die reale Verfuegbarkeits-Latenz - die ist
+retrospektiv nicht messbar).
+
+**Q3 - `inference`:** 79 Belege, Summe 0,011682 USD. Der Typ traegt auf diesem Konto also
+Betraege, wenn auch winzige. Er bleibt STRUKTURELL nicht zuordenbar
+(`UNASSIGNABLE_COST_RECORD_TYPES`, `voice.js`) - Katalogzeile #15 bleibt ohne Einsammler.
+
+### ABWEICHUNG von der vorgeschriebenen Positiv-Kontrolle (Owner-Meldung)
+
+Die Positiv-Kontrolle des Skripts (`KV2_5_KNOWN_CALL_CONTROL_ID`, ein aus der DB bekannter
+`call_control_id`-Wert MUSS im `call-control`-Pool auftauchen) konnte NICHT in der
+vorgesehenen Form gefahren werden:
+
+1. **Kein Produktions-DB-Zugriff in dieser Session** - weder `psql` noch der
+   Render-Postgres-Abruf waren freigegeben; ein frischer `call_control_id`-Wert war damit
+   nicht zu beschaffen.
+2. **Die zwei oben dokumentierten, aus der DB gezogenen `call_control_id`-Praefixe
+   (`v3:tAObcN5h...`, `v3:ucMvxOI1...`) sind aus dem Anbieter-Fenster gealtert:** 0 von 224
+   `call-control`-Belegen des heutigen Pools tragen einen dieser Praefixe (der alte
+   Telnyx-Zeitraum liegt vor dem 19.08., der Beleg-Pool deckt gemessen nur die letzten
+   Tage ab).
+
+**Stattdessen gefahren, gleichwertig und NICHT zirkulaer:** die oben in diesem Dokument
+aus der Produktions-DB belegte `sip_call_id` `otb_4101m190brwyf4mb9cwvhts7rymk` ist im
+LIVE-Pool vorhanden (`positiv-kontrolle_sip_call_id_aus_db_im_pool=true`), und alle sieben
+Probe-Typen liefern nicht-leere Ergebnismengen. Damit ist belegt, was die Positiv-Kontrolle
+belegen soll: die Abfrageform ist nicht kaputt, ein "0 Treffer" waere ein Messergebnis.
+Der Nachweis laeuft auf der `sip_call_id`-Achse - genau der Achse, die (d) misst.
+
+**Owner-Entscheidung noetig:** ob diese Ersatz-Positiv-Kontrolle als Erfuellung von (d)
+gilt. Bis dahin bleibt die Menge `PFLICHTTYPEN_UNGEMESSEN`, bis der Owner die
+Ersatz-Positiv-Kontrolle freigibt (`src/billing/kostenarten.js`, KV2-8).
+
+---
+
+## KV2-5(d) (HISTORISCH, ueberholt durch den Nachtrag oben): Owner-Meldung - Messung in dieser Session nicht ausgefuehrt
 
 Die fuer KV2-5(d) verlangte Messung (`scripts/kv2-5-telnyx-belegtypen.mjs`: Pflicht-Typmenge
 von `el_convai_sip`, Latenz-Obergrenze der `sip-trunking`-Belege, `inference`-Bilanz) konnte
