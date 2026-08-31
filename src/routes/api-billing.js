@@ -21,7 +21,8 @@ import { Router } from "express";
 import { flushMeters } from "../billing/meter.js";
 import { bindCardFromSession, startCheckoutWithStaleCustomerHeal } from "../billing/card-setup.js";
 import { requirePaymentEnabled, requirePublicUrl } from "../billing/payment-gate.js";
-import { SWEEP_TRIGGER } from "../billing/cost-truing.js";
+import { SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../billing/cost-truing.js";
+import { kostenBuchBericht } from "../billing/kosten-deckung.js";
 import { tariffDriftReportFromConfig } from "../billing/cost-calibration.js";
 import { countActiveNumbers } from "../store/views.js";
 // P14: dieselbe EINE Quelle der Stripe-Rueckkehr-Ziele wie self-service-routes.js
@@ -159,6 +160,22 @@ export function makeBillingRoutes({
       fixedCostCentsPerMonth,
       ttsQuota: store.platformTtsUsageView(nowIso),
     });
+  });
+
+  // ---- Deckung je Traeger + Herzschlag (KV2-6) ----
+  // Hinter einer Admin-Sitzung (webAuthMw+adminMw, AUTH-P6); ohne diese Sicherung gar
+  // nicht gemountet. NICHT tenant-gescopt - dieselbe Naht und Begruendung wie cost-drift
+  // und platform-costs daneben (Plattform-Aggregat ueber alle Tenants). REINE ANZEIGE:
+  // kein Gate, keine Reserve, keine Buchung liest diese Route; sie rechnet dieselbe
+  // Kennzahl wie der Sweep aus DERSELBEN Funktion (G5), nicht aus einer zweiten Formel.
+  // Antwort ist PII- und secret-frei: Traegernamen (Katalog-IDs), Zaehler, Prozente, die
+  // gerenderte Zeile und die Befund-Codes. Keine Call-ID, keine Tenant-Kennung, keine
+  // Rufnummer, kein Alarm-Empfaenger.
+  operator.get("/api/billing/kosten-deckung", (req, res) => {
+    res.json(kostenBuchBericht({
+      state: store.load(), billing: config.billing, nowMs: Date.now(),
+      deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS,
+    }));
   });
 
   // ---- Stripe-Rueckkehr nach der Karten-Erfassung, Gegenstueck zu setup-checkout ----

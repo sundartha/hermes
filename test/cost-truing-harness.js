@@ -94,6 +94,10 @@ export function fakeConfig(overrides = {}) {
     costTruingRequiredRecordTypes: [],
     costTruingMinCoveragePercent: 80,
     costTruingCoverageStallSweeps: 8,
+    // KV2-6: ECHTER Prod-Fallback (s. prodDefaults-Import oben) statt eines zweiten,
+    // hier getippten Zahlenwerts - sonst waere das Herzschlag-Fenster in den
+    // Bestands-Sweep-Tests undefined und der Herzschlag dort strukturell stumm.
+    kostenHeartbeatFensterH: prodDefaults.billing.kostenHeartbeatFensterH,
     // KV2-1: die Kadenz-Quelle der zeitbasierten Stall-Terminierung (Default = ECHTER
     // Prod-Fallback, s. Import oben). Ohne einen Default hier waere
     // costTruingCoverageStallSweeps * undefined = NaN, und JEDER Vergleich mit NaN ist

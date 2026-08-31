@@ -49,6 +49,12 @@ import { tariffDriftReportFromConfig, alertableDriftFindings, driftLine } from "
 import { KOSTENPROFIL, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
 import { belegVollstaendig, schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
 import { legRefOfCall } from "./call-leg-ref.js";
+// KV2-6: die Deckung JE TRAEGER und der faelligkeits-unabhaengige Herzschlag. Das
+// Regelwerk liegt bewusst in einem eigenen Modul und NICHT hier: diese Datei traegt ein
+// gepinntes Lint-Budget (eslint-suppressions.json, makeCostTruing 292 Zeilen), und der
+// Kostenpfad soll seine Kennzahl nicht ein zweites Mal formulieren. Import-Richtung ist
+// strikt einseitig - kosten-deckung.js kennt cost-truing.js nicht (kein Zyklus).
+import { kostenBuchBericht, istBuchBefundCode } from "./kosten-deckung.js";
 
 // Zwei Ausloeser (Intervall + manueller Endpunkt), EIN benannter Grund je. Exportiert:
 // boot.js und api-billing.js teilen sich diese eine Quelle statt zweier Magic-Strings.
@@ -198,7 +204,11 @@ export const PROVIDER_COST_RECORD_WINDOW_DAYS = 7;
 const HOURS_PER_DAY = 24;
 const MINUTES_PER_HOUR = 60;
 const SECONDS_PER_MINUTE = 60;
-const PROVIDER_COST_RECORD_WINDOW_MS =
+// KV2-6: exportiert, weil die Deckung je Traeger GENAU dieses Fenster misst - ein Anruf
+// ausserhalb kann strukturell keinen Beleg mehr bekommen. Die Zahl wandert NICHT in das
+// neue Modul (das erzeugte einen Import-Zyklus); sie wird von dort als Parameter
+// entgegengenommen. EINE Quelle bleibt diese Zeile.
+export const PROVIDER_COST_RECORD_WINDOW_MS =
   PROVIDER_COST_RECORD_WINDOW_DAYS * HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
 // DAS Praedikat "beendeter Call" - RICHTUNGSOFFEN seit KV-P3. Bis dahin stand hier
@@ -482,7 +492,12 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // zeile ist zugleich Audit-Detail UND Mail-Body und bleibt deshalb byte-identisch zum
   // Bestandsformat (Log-/Test-Konsumenten) - PII-frei per Vertrag der Aufrufer.
   async function emitFinding(code, detail, nowMs) {
-    const voll = VOLL_BEFUND_CODES.has(code);
+    // Die Bestandscodes sind feste Strings, verglichen ueber die Menge; die drei
+    // KV2-6-Klassen tragen den Traeger hinter einem ':' und werden deshalb ueber ihre
+    // KLASSE erkannt (istBuchBefundCode). Alle drei melden VOLL (Mail+SMS) - 4.9 fuehrt
+    // sie unter demselben Meldeweg, und die Entprellung bleibt der durable Marker je
+    // Eimer (meldeVollBefund), inklusive Rueckfall auf die Notiz-Stufe im Entprellfenster.
+    const voll = VOLL_BEFUND_CODES.has(code) || istBuchBefundCode(code);
     if (!voll && !shouldEmitFinding(code, nowMs)) return;
     const zeile = `grund=${code} ${detail}`;
     console.warn(`[cost-truing] Befund ${zeile}`);
@@ -795,26 +810,23 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     countOutcome(sammler.tally, truedSource, closed);
   }
 
-  // Versand ueber den geteilten Bootstrap-Alarm-Baustein (G5, EINE Quelle mit der
-  // ElevenLabs-Kontingent-Warnung LCT P7): Empfaenger-Riegel, Bootstrap-Absender (die
-  // eigene Betreiber-Nummer, NIE die DID eines Kunden), try/catch und fire-and-forget
-  // liegen alle dort. Ein Alarm darf einen Sweep nie abbrechen. Das Ziel (platformAlertSmsTo)
-  // wird NIE geloggt.
-  function sendDriftAlertSms(detail) {
-    sendBootstrapAlertSms({ messaging, config, store, prefix: DRIFT_ALERT_SMS_PREFIX, detail, logTag: "cost-truing" });
-  }
-
   // Der SMS-Versand ist ECHT und KOSTENPFLICHTIG. Die Kostenklemme ist die Entprellung:
   // hoechstens EINE Meldung je Praefix und Befund-Code je COST_ALERT_DEBOUNCE_MS (24 h) ->
   // bei 3 Praefixen x 3 alarmierenden Codes (ALERTABLE_DRIFT_CODES) maximal 9 SMS am Tag,
   // statt einer Meldung je Befund und Sweep. Der Schluessel traegt den Code,
   // conversion_error entprellt also getrennt von under-/overestimate.
+  //
+  // Versand ueber den geteilten Bootstrap-Alarm-Baustein (G5, EINE Quelle mit der
+  // ElevenLabs-Kontingent-Warnung LCT P7): Empfaenger-Riegel, Bootstrap-Absender (die
+  // eigene Betreiber-Nummer, NIE die DID eines Kunden), try/catch und fire-and-forget
+  // liegen alle dort. Ein Alarm darf einen Sweep nie abbrechen. Das Ziel
+  // (platformAlertSmsTo) wird NIE geloggt.
   function alertDrift(entry, nowMs) {
     if (!shouldEmitFinding(`${entry.prefix} ${entry.code}`, nowMs)) return;
     const detail = driftLine(entry);
     console.warn(`[cost-truing] Tarif-Drift ${detail}`);
     audit(TARIFF_DRIFT_AUDIT_EVENT, null, detail); // req=null -> ip=system
-    sendDriftAlertSms(detail);
+    sendBootstrapAlertSms({ messaging, config, store, prefix: DRIFT_ALERT_SMS_PREFIX, detail, logTag: "cost-truing" });
   }
 
   // Ausloeser 2 von 2 (Laufzeit). Der Boot-Guard allein genuegt NICHT: er feuert einmal je
@@ -842,7 +854,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
   // (outage-report.js#sendeUeberBeideKanaele, Plan 4.9): kanaele=keine heisst, dass jede
   // Meldung dieses Sweeps ausschliesslich im Log und in audit_log steht. Nur Kanal-ARTEN,
   // nie die Ziele.
-  function logSweepLine({ trigger, candidateCount, tally, fetchTally, kanaele }) {
+  function logSweepLine({ trigger, candidateCount, tally, fetchTally, kanaele, buch }) {
     console.log(
       `[cost-truing] sweep trigger=${trigger} kandidaten=${candidateCount} ` +
         `gemessen=${tally.measured} unvollstaendig=${tally.incomplete} ` +
@@ -850,7 +862,7 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
         `unbestimmt=${tally.unavailable} uebersprungen=${tally.skippedCalls} ` +
         `anfragen=${fetchTally.requests} seiten=${fetchTally.pages} ` +
         `pool=${fetchTally.records} vollstaendig=${fetchTally.incompletePools === 0} ` +
-        `kanaele=${kanaele}`,
+        `kanaele=${kanaele} ${buch.zeile}`,
     );
   }
 
@@ -898,12 +910,18 @@ export function makeCostTruing({ store, config, voiceControl, audit, messaging, 
     // state.calls, kein zweiter Formel-Ausdruck.
     const coverage = coverageBreakdown(store.load(), nowMs);
     const coveragePercent = percentFromBreakdown(coverage);
+    // KV2-6: die zweite, unabhaengige Kennzahl - Deckung JE TRAEGER aus dem Kosten-Buch
+    // plus der faelligkeits-unabhaengige Herzschlag. Rein synchron, ohne Netz: sie liest
+    // denselben In-Memory-Spiegel und faellt damit nicht unter die PM-5-Zusage.
+    const buch =
+      kostenBuchBericht({ state: store.load(), billing: config.billing, nowMs, deckungFensterMs: PROVIDER_COST_RECORD_WINDOW_MS });
     const kanaele = alarmKanalZeile(betreiberAlarmKanaele({ billing: config.billing, mail: config.mail }));
-    logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele });
+    logSweepLine({ trigger, candidateCount: candidates.length, tally, fetchTally, kanaele, buch });
     // Ab hier meldet der Sweep - NACH der Bilanz, also ausserhalb der PM-5-Zusage.
     await reportFetchVolume(fetchTally, nowMs);
     for (const warnung of sammler.ttsWarnungen) await reportTtsQuotaFinding(warnung, nowMs);
     await reportCoverage(coveragePercent, coverage, nowMs);
+    for (const befund of buch.befunde) await emitFinding(befund.code, befund.detail, nowMs);
     reportTariffDrift(store.load(), nowMs);
     return {
       skipped: false,

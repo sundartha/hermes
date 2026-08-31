@@ -54,7 +54,11 @@ test("(P6-8) Sweep-Log traegt anfragen/seiten/pool/vollstaendig HINTER den Besta
       `anfragen=${ASSIGNABLE_COST_RECORD_TYPES.length} seiten=${ASSIGNABLE_COST_RECORD_TYPES.length} ` +
       // KV2-1 (Kriterium (d)): kanaele= HINTER den Bestandsfeldern - kein Ziel gesetzt
       // (BASE_ENV/fakeConfig-Default) -> kanaele=keine.
-      "pool=1 vollstaendig=true kanaele=keine",
+      // KV2-6: buch=/herzschlag= HINTER kanaele=. Beide Kandidaten enden 200 min her
+      // (makeDueOutboundCall-Default) - das liegt INNERHALB der Karenz dieser Config
+      // (costTruingDelayMinutes=180min + costTruingSweepIntervalMs=1h = 4h), also
+      // ausserhalb JEDES Fensters: buch=keine herzschlag=keine.
+      "pool=1 vollstaendig=true kanaele=keine buch=keine herzschlag=keine nie_beendet=0 profillos=0",
   );
   assert.equal(
     fetchCalls.length, Number(line.match(/anfragen=(\d+)/)[1]),
