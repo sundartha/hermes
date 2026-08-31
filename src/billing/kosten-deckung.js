@@ -15,15 +15,19 @@
 // Auslegung A2 (Plan Abschnitt 0.4): feuert der Herzschlag fuer einen Traeger, schweigt
 // die Deckungsmeldung DESSELBEN Traegers - sonst zwei Alarme fuer einen Sachverhalt.
 import { MAX_CALL_DURATION_CAP_S, REIFE } from "../store/defaults.js";
-import { MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from "../utils/timer.js";
 import { kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "./kostenarten.js";
+import {
+  belegUnbeschaffbarAmAnruf,
+  faelligkeitsfensterMs,
+  fristAbgelaufen,
+  LEERE_LISTE,
+  nichtNachreifbar,
+} from "./kosten-abschluss.js";
 
 // ---- Konstanten (G25; kein Literal in einem Operator-Ausdruck) -------------------------
-const MINUTEN_JE_STUNDE = 60;
-const MS_PER_HOUR = MINUTEN_JE_STUNDE * MS_PER_MINUTE;
 const PROZENT_BASIS = 100;
 const BEFUND_TRENNER = ":";
-const LEERE_LISTE = "keine"; // Muster kanaele=keine (KV2-1)
 const HERZSCHLAG_AUS = "aus"; // sichtbar statt still (Rollback-Hebel)
 
 // Die drei Alarmklassen (Plan 4.9). Der Eimer-Praefix "kosten:" kommt vom Aufrufer
@@ -79,11 +83,14 @@ const imFenster = (iso, fen) => {
 };
 
 // ---- Index: EINE Ablesung des Kosten-Buchs fuer beide Fragen (G5) -----------------------
-function reifeIndex(zeilen) {
+// KV2-7: Map<callId, Zeile[]> statt Map<callId, Map<traeger, reife>> - deckungJeTraeger
+// braucht die GANZE Zeile (nachreifbar), nicht nur ihre Reife. Nachschlag je Traeger ueber
+// zeilen.find(...) (<=3 Zeilen je Anruf, kein Performance-Anliegen).
+function belegIndex(zeilen) {
   const index = new Map();
   for (const zeile of zeilen) {
-    if (!index.has(zeile.callId)) index.set(zeile.callId, new Map());
-    index.get(zeile.callId).set(zeile.traeger, zeile.reife);
+    if (!index.has(zeile.callId)) index.set(zeile.callId, []);
+    index.get(zeile.callId).push(zeile);
   }
   return index;
 }
@@ -95,27 +102,46 @@ const traegerVon = (call) => pflichtTraegerFuerProfil(kostenprofilFuerAnruf(call
 
 // ---- Messungen (je EINE Aufgabe) ---------------------------------------------------------
 
+// KV2-7: der 6.10-Fall (h), EINE Quelle fuer beide Messungen (G5) - Deckung UND
+// Herzschlag lesen dieselbe Bedingung, damit sie nie auseinanderlaufen koennen. Haelt
+// zugleich BEIDE Funktionen unterhalb der Komplexitaets-Obergrenze (G30).
+function istUnbeschaffbarerAnruf({ call, zeilen, nowMs, deadlineMs }) {
+  return belegUnbeschaffbarAmAnruf({ call, belege: zeilen }) && fristAbgelaufen({ call, nowMs, deadlineMs });
+}
+
+// Die Zaehlzeile EINES Traeger-Eintrags im Kosten-Buch (KV2-7) - AUSGELAGERT aus
+// deckungJeTraeger (Lint-Budget: eine Aufgabe pro Funktion, G30/G34). DREI Wege in
+// dieselbe Zaehlzeile, ein Sachverhalt - "dieser Beleg kommt nie":
+//   (1) terminale Reife (Bestand, KV2-6),
+//   (2) Abbruchweg: die Zeile traegt nachreifbar=false und ist nicht belegt - sie
+//       KANN nicht mehr auf 'belegt' steigen ((e): kein Deckungs-Alarm),
+//   (3) der 6.10-Fall am ANRUF (h) - keine Zeile, erst NACH Fristablauf beurteilt.
+function deckungTraegerEintrag({ zeilen, traeger, unbeschaffbarerAnruf, bisher }) {
+  const eintrag = bisher ?? { kandidaten: 0, belegt: 0, offen: 0, unbeschaffbar: 0 };
+  const zeile = zeilen.find((kandidat) => kandidat.traeger === traeger);
+  if (istUnbeschaffbar(zeile?.reife) || nichtNachreifbar(zeile) || unbeschaffbarerAnruf) {
+    eintrag.unbeschaffbar++;
+  } else {
+    eintrag.kandidaten++;
+    if (istBelegt(zeile?.reife)) eintrag.belegt++;
+    else eintrag.offen++;
+  }
+  return eintrag;
+}
+
 // Deckung je Traeger: kandidaten/belegt/offen/unbeschaffbar ueber alle Anrufe, deren
 // endedAt im Fenster liegt und die diesen Traeger als Pflicht fuehren. unbeschaffbar
 // faellt aus Zaehler UND Nenner (eigener Zaehler, Kriterium c) - nur 'belegt' zaehlt als
 // erfuellt, 'vorlaeufig' und eine fehlende Zeile bleiben 'offen'.
-function deckungJeTraeger({ calls, index, fen }) {
+function deckungJeTraeger({ calls, index, fen, nowMs, deadlineMs }) {
   const ergebnis = new Map();
   if (!fen) return ergebnis;
   for (const call of calls) {
     if (!imFenster(call.endedAt, fen)) continue;
-    const reifen = index.get(call.id);
+    const zeilen = index.get(call.id) ?? [];
+    const unbeschaffbarerAnruf = istUnbeschaffbarerAnruf({ call, zeilen, nowMs, deadlineMs });
     for (const traeger of traegerVon(call)) {
-      const eintrag = ergebnis.get(traeger) ?? { kandidaten: 0, belegt: 0, offen: 0, unbeschaffbar: 0 };
-      const reife = reifen?.get(traeger);
-      if (istUnbeschaffbar(reife)) {
-        eintrag.unbeschaffbar++;
-      } else {
-        eintrag.kandidaten++;
-        if (istBelegt(reife)) eintrag.belegt++;
-        else eintrag.offen++;
-      }
-      ergebnis.set(traeger, eintrag);
+      ergebnis.set(traeger, deckungTraegerEintrag({ zeilen, traeger, unbeschaffbarerAnruf, bisher: ergebnis.get(traeger) }));
     }
   }
   return ergebnis;
@@ -124,16 +150,19 @@ function deckungJeTraeger({ calls, index, fen }) {
 // Herzschlag je Traeger: beendet/angelegt ueber alle Anrufe, deren endedAt im Fenster
 // liegt und die diesen Traeger als Pflicht fuehren - UNABHAENGIG von Faelligkeit/
 // costTruedAt (der Sachverhalt "sammelt ueberhaupt noch jemand" kennt keine Faelligkeit).
-function herzschlagJeTraeger({ calls, index, fen }) {
+// KV2-7: derselbe Anruf wird UEBERSPRUNGEN, wenn er der 6.10-Fall (h) ist UND seine Frist
+// abgelaufen ist - er haelt sich damit aus Deckungsquote UND Herzschlag heraus (Spec (h)).
+function herzschlagJeTraeger({ calls, index, fen, nowMs, deadlineMs }) {
   const ergebnis = new Map();
   if (!fen) return ergebnis;
   for (const call of calls) {
     if (!imFenster(call.endedAt, fen)) continue;
-    const reifen = index.get(call.id);
+    const zeilen = index.get(call.id) ?? [];
+    if (istUnbeschaffbarerAnruf({ call, zeilen, nowMs, deadlineMs })) continue;
     for (const traeger of traegerVon(call)) {
       const eintrag = ergebnis.get(traeger) ?? { beendet: 0, angelegt: 0 };
       eintrag.beendet++;
-      if (istAngelegt(reifen?.get(traeger))) eintrag.angelegt++;
+      if (istAngelegt(zeilen.find((kandidat) => kandidat.traeger === traeger)?.reife)) eintrag.angelegt++;
       ergebnis.set(traeger, eintrag);
     }
   }
@@ -253,19 +282,22 @@ function sortierteEintraege(map, projizieren = (werte) => werte) {
 // cost-truing.js (Zyklus-Freiheit, s. Kopfkommentar).
 export function kostenBuchBericht({ state, billing, nowMs, deckungFensterMs }) {
   const calls = Array.isArray(state?.calls) ? state.calls : [];
-  const index = reifeIndex(Array.isArray(state?.callCostEvidence) ? state.callCostEvidence : []);
+  const index = belegIndex(Array.isArray(state?.callCostEvidence) ? state.callCostEvidence : []);
   const karenz = karenzMs(billing);
   const deckungFen = fenster({ nowMs, laengeMs: deckungFensterMs, karenz });
   const fensterH = billing.kostenHeartbeatFensterH;
   const herzschlagFen = fenster({ nowMs, laengeMs: fensterH * MS_PER_HOUR, karenz });
   const herzschlagAktiv = herzschlagFen !== null;
+  // KV2-7: die Faelligkeitsfrist der Schliessregel (kein zweiter Parameter - `billing`
+  // liegt bereits vor, die Route und der Sweep erben die Aenderung ohne eigenen Edit).
+  const deadlineMs = faelligkeitsfensterMs(billing);
 
   const bericht = {
     deckung: sortierteEintraege(
-      deckungJeTraeger({ calls, index, fen: deckungFen }),
+      deckungJeTraeger({ calls, index, fen: deckungFen, nowMs, deadlineMs }),
       (werte) => ({ ...werte, prozent: quoteVon(werte) }),
     ),
-    herzschlag: sortierteEintraege(herzschlagJeTraeger({ calls, index, fen: herzschlagFen })),
+    herzschlag: sortierteEintraege(herzschlagJeTraeger({ calls, index, fen: herzschlagFen, nowMs, deadlineMs })),
     nieBeendet: nieBeendetZahl({ calls, nowMs, deckungFensterMs }),
     profillos: profillosZahl({ calls, fen: herzschlagFen }),
     fensterH,

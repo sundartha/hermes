@@ -559,6 +559,22 @@ export function recordCallCostTruingResult(callId, outcome) {
   return call;
 }
 
+// KV2-7: Abschluss ohne Messung (Faelligkeitslauf) - mutiert -> save bei changed (Muster
+// recordCallCostTruingResult).
+export function schliesseKostenAbgleich(callId, closedAt) {
+  const { call, changed } = ops.schliesseKostenAbgleich(load(), callId, closedAt);
+  if (changed) save();
+  return call;
+}
+
+// KV2-7, Phasenschnitt-Nachlauf: setzt costTruedAt zurueck auf null - mutiert -> save bei
+// changed (Muster recordCallCostTruingResult).
+export function oeffneKostenAbgleichErneut(callId) {
+  const { call, changed } = ops.oeffneKostenAbgleichErneut(load(), callId);
+  if (changed) save();
+  return call;
+}
+
 // CDF1 (Report #2 5.4): persistierter Fehlergrund (mapped Token): mutiert -> save bei
 // changed (Muster wie markSummarySmsSent). Der Grund ueberlebt den Prozess-Restart.
 export function recordFailureReason(callId, reason) {

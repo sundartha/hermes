@@ -439,6 +439,9 @@ export const BASE_ENV = {
   // KV2-6: Herzschlag-Fenster auf dem Code-Default gepinnt (Lehre test-base-env-drift) -
   // ohne diese Zeile faerbte eine lokale .env die Spawn-Suite.
   KOSTEN_HEARTBEAT_FENSTER_H: "6",
+  // KV2-7: Settlement-Frist auf dem Code-Default gepinnt (Lehre test-base-env-drift) -
+  // ohne diese Zeile faerbte eine lokale .env die Spawn-Suite.
+  COST_SETTLE_DEADLINE_HOURS: "48",
   COST_DRIFT_WARN_PERCENT: "50",
   COST_ALERT_DEBOUNCE_MS: "86400000",
   // LCT P5 (Drift-Waechter): auf den Code-Default gepinnt (Lehre test-base-env-drift).

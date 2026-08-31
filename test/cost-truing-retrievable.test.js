@@ -102,6 +102,11 @@ test("(P9-3) leere abrufbare Menge bei nicht-leerer Kandidatenmenge -> Bilanz tr
       // nie_beendet=/profillos= wachsen HINTER kanaele= - die 3 Kandidaten liegen
       // ausserhalb JEDES Fensters (makeDueOutboundCall-Default endedMinutesAgo=200min,
       // < der Karenz dieser Config) -> buch=keine herzschlag=keine.
-      "anfragen=0 seiten=0 pool=0 vollstaendig=true kanaele=keine buch=keine herzschlag=keine nie_beendet=0 profillos=0",
+      // KV2-7: erschoepft=/abschluesse= HINTER profillos=. Keine Antwort => keine der
+      // drei Fixturen ist messbar (uebersprungen, keine Leg-Referenz) -> erschoepft=0
+      // (der Zaehler zaehlt nur nicht mehr versuchbare, nicht uebersprungene Calls); sie
+      // tragen kein costProfile UND schliessen in diesem Sweep nicht -> abschluesse=keine.
+      "anfragen=0 seiten=0 pool=0 vollstaendig=true kanaele=keine buch=keine herzschlag=keine " +
+      "nie_beendet=0 profillos=0 erschoepft=0 abschluesse=keine",
   );
 });
