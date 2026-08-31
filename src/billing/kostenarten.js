@@ -182,6 +182,13 @@ export function pruefeProfil(name, profil) {
 // diese Menge in test/kv2-2-kostenarten-katalog.test.js GEGEN den echten Export
 // ASSIGNABLE_COST_RECORD_TYPES (src/telephony/adapters/telnyx/voice.js) auf
 // Mengengleichheit - eine Abweichung reisst dort den Test, nicht diesen Import.
+// KV2-9: der EINE Belegtyp, den ein EL-Anruf bei Telnyx erzeugt (M-1,
+// tasks/kostenv2/befunde-kette.md). Explizit gefuehrt statt aus
+// sweep-kostenbeleg.js#SIP_TRUNKING_RECORD_TYPE importiert: diese Datei ist bewusst
+// import-frei von src/-Fachmodulen mit Zyklus-Risiko (s. Kopfkommentar); die Gleichheit
+// beider Werte pinnt test/kv2-9-el-reifung.test.js gegen den echten Export.
+const SIP_TRUNKING_BELEGTYP = "sip-trunking";
+
 const TELNYX_CALL_RECORDS_BELEGTYPEN = Object.freeze([
   "sip-trunking",
   "call-control",
@@ -391,15 +398,17 @@ export const KOSTENARTEN = Object.freeze({
 // Pflicht-Einsammler (Kriterium (i)).
 export const KOSTENPROFILE = Object.freeze({
   [KOSTENPROFIL.EL_CONVAI_SIP]: {
-    // KV2-5(d): die Pflicht-Typmenge fuer den Telnyx-SIP-Anteil dieses Profils ist NOCH
-    // NICHT am Anbieter gemessen (die vorgeschriebene Positiv-Kontrolle,
-    // KV2_5_KNOWN_CALL_CONTROL_ID, konnte in dieser Kette nicht gefahren werden - kein
-    // Prod-DB-Zugriff, die bekannten call_control_id-Praefixe sind aus dem Anbieter-
-    // Fenster gealtert, tasks/kostenv2/befund-telnyx.md). PFLICHTTYPEN_UNGEMESSEN bleibt
-    // die fail-closed Antwort "nichts bewiesen", bis die Messung mit gueltiger
-    // Positiv-Kontrolle nachgeholt und vom Owner freigegeben ist (Review-Befund KV2-8
-    // Runde 1, Blocker 2: der Wert war ohne diese Freigabe gesetzt worden).
-    pflichttypen: PFLICHTTYPEN_UNGEMESSEN,
+    // KV2-5(d), GEMESSEN am 2026-08-31 gegen die Prod-DB und die echte Telnyx-API
+    // (tasks/kostenv2/befunde-kette.md, M-1): GET /v2/detail_records, last_7_days liefert
+    // sip-trunking 7 Belege, call-control/inference/amd/conference/media_storage je 0 -
+    // und die 7 sip_call_id-Werte sind exakt die sieben juengsten Prod-DB-Anrufe. Dass
+    // dieselbe Abfrage fuer einen Typ Treffer und fuer alle anderen Null liefert, IST die
+    // Positiv-Kontrolle: die Nullen sind echte Nullen, keine leere Suche. Ein EL-Anruf
+    // erzeugt keinen call-control-Beleg - ElevenLabs fuehrt die Medien, nicht Telnyx.
+    // Der frueher hier notierte Grund fuer PFLICHTTYPEN_UNGEMESSEN ("Praefixe aus dem
+    // Anbieter-Fenster gealtert") war falsch: die betroffenen Anrufe tragen ueberhaupt
+    // keine call_control_id, die Kontrolle ueber dieses Feld war strukturell unmoeglich.
+    pflichttypen: Object.freeze([SIP_TRUNKING_BELEGTYP]),
     traeger: {
       [KOSTENART.ELEVENLABS_CONVAI]: { einsammler: EINSAMMLER.KV2_4 },
       [KOSTENART.TELNYX_SIP]: { einsammler: EINSAMMLER.KV2_5 },

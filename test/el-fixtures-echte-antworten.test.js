@@ -17,13 +17,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
-import { FROM_SOURCE } from "../src/store/state-ops.js";
+import { FROM_SOURCE, makeDefaultState, recordCallCostEvidence, callCostEvidence } from "../src/store/state-ops.js";
+import { BOOTSTRAP_TENANT_ID, REIFE } from "../src/store/defaults.js";
+import { KOSTENART } from "../src/billing/kostenarten.js";
 import { terminateAndBillCall } from "../src/telephony/call-termination.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { waitUntil, withFetch } from "./helpers.js";
 import {
   CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES,
+  CONVERSATION_DONE_MIT_KOSTEN,
   CONVERSATION_DONE_WITH_ANALYSIS,
   CONVERSATION_FAILED_INVALID_DESTINATION,
   CONVERSATION_MIT_KLAMMER_MARKEN,
@@ -31,20 +34,30 @@ import {
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 const HTTP_OK = 200;
+// KV2-4-gepinnter Mikro-Cent-Wert von CONVERSATION_DONE_MIT_KOSTEN.metadata.cost_fiat
+// (0,10420301650668388 USD) - EINE Quelle statt eines zweiten, hier getippten Werts.
+const CONVERSATION_DONE_MIT_KOSTEN_MIKRO_CENTS = 10_420_301;
 
 // Faengt genau die Werte ab, die persistProviderResult/applyAnsweredAnchor an den Store
 // weiterreichen - dieselben Felder, die get_transcript und die Kostendecke lesen. Der Call
 // entsteht HIER (statt als Parameter uebergeben zu werden) - sonst waere das Mutieren
 // seiner Felder im endCallRecord-Fake unten ein no-param-reassign-Verstoss (P6/F2).
 function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
+  // F-2 (tasks/kostenv2/befunde-kette.md): NICHT laenger ein Ad-hoc-Objekt. Ein ECHTER
+  // state-ops-Zustand (makeDefaultState), damit recordCallCostEvidence/callCostEvidence
+  // unten an die ECHTEN state-ops-Funktionen delegieren koennen statt in einem
+  // Ad-hoc-'load()' zu landen, das die beiden Methoden nie kannte.
+  const state = makeDefaultState();
   const call = {
     id,
+    tenantId: BOOTSTRAP_TENANT_ID,
     status: "active",
     elevenlabsConversationId,
     answeredAt,
     startedAt: answeredAt,
     endedAt: null,
   };
+  state.calls.push(call);
   const captured = {
     transcript: [],
     summary: undefined,
@@ -56,7 +69,7 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
   };
   const store = {
     getCall: () => call,
-    load: () => ({ calls: [call] }),
+    load: () => state,
     addTranscript: (_id, role, message) => captured.transcript.push({ role, message }),
     recordProviderCallResult: (_id, { summary, objectiveAchieved }) => {
       captured.summary = summary;
@@ -97,15 +110,21 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
       call.endedAt = new Date().toISOString();
       return call;
     },
+    // F-2 (tasks/kostenv2/befunde-kette.md): NICHT laenger weggelassen. Ohne diese zwei
+    // Methoden verschluckte der fail-soft-Zweig aus KV2-4 den Belegweg lautlos -
+    // ausgerechnet in dem Test, der gegen ECHTE Anbieter-Antworten prueft. Delegiert an
+    // die ECHTEN state-ops-Funktionen (kein zweites, vereinfachtes Store-Verhalten).
+    recordCallCostEvidence: (eingabe) => recordCallCostEvidence(state, eingabe),
+    callCostEvidence: (callId) => callCostEvidence(state, callId),
   };
-  return { call, store, captured };
+  return { call, store, captured, state };
 }
 
 // EIN Poll-Takt gegen EINEN Gespraechs-Datensatz (Fixture) - der Anbieter antwortet sofort
 // mit dem uebergebenen Datensatz, egal welche Kennung angefragt wird (jeder Test hier
 // fragt genau eine Kennung ab).
 async function pollFixtureConversation(fixture) {
-  const { call, store, captured } = makeCapturingStore({
+  const { call, store, captured, state } = makeCapturingStore({
     id: `call_${fixture.conversation_id}`,
     elevenlabsConversationId: fixture.conversation_id,
     answeredAt: new Date().toISOString(),
@@ -128,7 +147,7 @@ async function pollFixtureConversation(fixture) {
       await waitUntil(() => billed);
     },
   );
-  return { call, captured };
+  return { call, captured, state };
 }
 
 // ---- FAILED: SIP 404 "Invalid destination number" -------------------------------------
@@ -305,4 +324,36 @@ test("Riegel Klammer-Marken: derselbe Datensatz ohne Marken schlaegt NICHT an (P
       "Positiv-Kontrolle der Kontrolle: es wurde ueberhaupt ein Transkript verarbeitet",
     );
   });
+});
+
+// ---- F-2 (tasks/kostenv2/befunde-kette.md): der Belegweg laeuft jetzt wirklich mit -----
+// Vorher verschluckte makeCapturingStore#load ("ein Ad-hoc-Objekt ohne
+// recordCallCostEvidence/callCostEvidence") den Belegweg lautlos: recordElevenLabsKosten-
+// Belege faengt JEDEN Fehler fail-soft ab (KV2-4-Vertrag) - ein TypeError landete darin
+// unbemerkt. F-2a/F-2b pruefen den ECHTEN Belegweg auf dem ECHTEN Poll-Pfad.
+
+test("F-2a: der Belegweg laeuft mit - die telnyx_sip-Zeile (reife=erwartet) steht nach dem Poll, unabhaengig vom EL-Betrag", async () => {
+  const { state } = await pollFixtureConversation(CONVERSATION_DONE_WITH_ANALYSIS);
+
+  const belege = callCostEvidence(state, `call_${CONVERSATION_DONE_WITH_ANALYSIS.conversation_id}`);
+  const telnyxSip = belege.find((zeile) => zeile.traeger === KOSTENART.TELNYX_SIP);
+  assert.ok(telnyxSip, "die erwartete telnyx_sip-Zeile fehlt - der Belegweg lief NICHT mit");
+  assert.equal(telnyxSip.reife, REIFE.ERWARTET, "'wir erwarten einen SIP-Beleg' ist unabhaengig vom EL-Betrag");
+});
+
+test("F-2b: CONVERSATION_DONE_MIT_KOSTEN auf dem echten Poll-Pfad - EL-Zeile vorlaeufig mit dem GEMESSENEN Betrag, telnyx_sip erwartet", async () => {
+  const { state } = await pollFixtureConversation(CONVERSATION_DONE_MIT_KOSTEN);
+
+  const belege = callCostEvidence(state, `call_${CONVERSATION_DONE_MIT_KOSTEN.conversation_id}`);
+  const elZeile = belege.find((zeile) => zeile.traeger === KOSTENART.ELEVENLABS_CONVAI);
+  assert.ok(elZeile, "die elevenlabs_convai-Zeile fehlt - der Belegweg lief NICHT mit");
+  assert.equal(elZeile.reife, REIFE.VORLAEUFIG);
+  // 0,10420301650668388 USD -> 10_420_301 Mikro-Cent (bereits in KV2-4 gegen dieselbe
+  // Fixture gepinnt) - HIER erstmals auf dem echten Poll-Pfad, nicht nur per Direktaufruf.
+  assert.equal(elZeile.betragMikroCents, CONVERSATION_DONE_MIT_KOSTEN_MIKRO_CENTS);
+  assert.equal(elZeile.belegRef, CONVERSATION_DONE_MIT_KOSTEN.conversation_id);
+
+  const telnyxSip = belege.find((zeile) => zeile.traeger === KOSTENART.TELNYX_SIP);
+  assert.ok(telnyxSip, "die erwartete telnyx_sip-Zeile fehlt");
+  assert.equal(telnyxSip.reife, REIFE.ERWARTET);
 });

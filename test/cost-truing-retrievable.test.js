@@ -106,7 +106,9 @@ test("(P9-3) leere abrufbare Menge bei nicht-leerer Kandidatenmenge -> Bilanz tr
       // drei Fixturen ist messbar (uebersprungen, keine Leg-Referenz) -> erschoepft=0
       // (der Zaehler zaehlt nur nicht mehr versuchbare, nicht uebersprungene Calls); sie
       // tragen kein costProfile UND schliessen in diesem Sweep nicht -> abschluesse=keine.
+      // KV2-9: el_reifung=/el_abweichung=/el_uebrig= HINTER abschluesse= - kein
+      // elKostenRead injiziert -> vollstaendiges No-op.
       "anfragen=0 seiten=0 pool=0 vollstaendig=true kanaele=keine buch=keine herzschlag=keine " +
-      "nie_beendet=0 profillos=0 erschoepft=0 abschluesse=keine",
+      "nie_beendet=0 profillos=0 erschoepft=0 abschluesse=keine el_reifung=keine el_abweichung=0 el_uebrig=0",
   );
 });

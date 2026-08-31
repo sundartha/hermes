@@ -44,6 +44,7 @@ import { createQueue } from "./queue/registry.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeMetering } from "./billing/metering.js";
 import { makeCostTruing } from "./billing/cost-truing.js";
+import { fetchConversation } from "./elevenlabs/convai.js";
 import { makeCostCrossCheck } from "./billing/cost-cross-check.js";
 import {
   makeRequestTenant,
@@ -147,8 +148,18 @@ const durableAudit = makeDurableAudit({ audit, auditStoreRef });
 // KV2-1: NACH selectMailer verdrahtet (vorher davor) - der Befundkanal geht seit dieser
 // Phase ueber denselben Meldeweg wie der Ausfall-Melder (Plan 4.9/4.10) und braucht
 // deshalb den Mailer. Dieselbe Umstellung, die outageWatch schon hinter sich hat.
+// KV2-9: der ZWEITE, reifende EL-Abruf (GET /v1/convai/conversations/{id}) als schmaler,
+// rein LESENDER Port - der Billing-Pfad kennt damit keinen Anbieter (DIP, Muster telnyxRead/
+// elRead). BEWUSST als Closure hier und NICHT als Fabrik: makeElConfigRead existiert nur,
+// weil DIESELBE Closure zusaetzlich im CLI-Weg (scripts/check-outbound-drift.mjs) stand -
+// fuer diesen Abruf gibt es genau einen Aufrufer.
+const elKostenRead = {
+  fetchConversation: (conversationId) =>
+    fetchConversation({ fetchImpl: fetch, account: config.voice.elevenLabsOutbound, conversationId }),
+};
+
 const costTruing = makeCostTruing({
-  store, config, voiceControl, audit: durableAudit, messaging, mailer,
+  store, config, voiceControl, audit: durableAudit, messaging, mailer, elKostenRead,
 });
 
 // OUTBOUND-E3b: vierter, unabhaengiger Sweep-Zweig (Muster costTruing/costCrossCheck,

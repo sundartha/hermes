@@ -64,7 +64,9 @@ test("(P6-8) Sweep-Log traegt anfragen/seiten/pool/vollstaendig HINTER den Besta
       // Sweep-Traeger (telnyx_call_records) fertig ist (measured!==null, auch bei
       // unvollstaendiger Pflicht-Menge) -> abschluesse=profil_fehlt(2).
       "pool=1 vollstaendig=true kanaele=keine buch=keine herzschlag=keine nie_beendet=0 " +
-      "profillos=0 erschoepft=0 abschluesse=profil_fehlt(2)",
+      // KV2-9: el_reifung=/el_abweichung=/el_uebrig= HINTER abschluesse= - kein
+      // elKostenRead injiziert (Bestandstest ohne EL-Anrufe) -> vollstaendiges No-op.
+      "profillos=0 erschoepft=0 abschluesse=profil_fehlt(2) el_reifung=keine el_abweichung=0 el_uebrig=0",
   );
   assert.equal(
     fetchCalls.length, Number(line.match(/anfragen=(\d+)/)[1]),
