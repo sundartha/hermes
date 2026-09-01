@@ -32,10 +32,15 @@ const MONEY_CONFIG_KEYS = Object.freeze([
   "modelPricesUsd",
   // LCT P7 (Fixkosten sichtbar machen): DID-Listenmiete je Nummer (EUR-Cent).
   "numberMonthlyCostCents",
-  // platformFixedCostCentsPerMonth traegt kein Cents-/Eur-/Usd-Suffix am WORTENDE (endet
+  // platformFixedCostUsdCentsPerMonth traegt kein Cents-/Eur-/Usd-Suffix am WORTENDE (endet
   // auf "PerMonth") und wird deshalb bewusst zusaetzlich manuell eingetragen: reine Anzeige-
-  // Fixkosten in GANZZAHL EUR-Cent, dasselbe Geld-Feld-Muster wie die Cents-Suffix-Felder.
-  "platformFixedCostCentsPerMonth",
+  // Fixkosten in GANZZAHL US-Cent (KV2-10: USD-Listenpreis, vor KV2-10 faelschlich als
+  // EUR-Cent gelabelt und ungepraegt durchgereicht), dasselbe Geld-Feld-Muster wie die
+  // Cents-Suffix-Felder.
+  "platformFixedCostUsdCentsPerMonth",
+  // KV2-10: Grundbetrag des zweiteiligen Tarifs je Route (csv-Karte profil:ganze-cent).
+  // Endet auf "Route" - manueller Eintrag, dasselbe Geld-Feld-Muster wie die Zeile daruber.
+  "voiceTariffGrundbetragCentsJeRoute",
   // AL-P10: Preis EINER serverseitigen Vorab-Suche (Ganzzahl EUR-Cent, Muster
   // smsCostCents) - Geld-Feld der Vorab-Recherche im Pre-Call-Briefing.
   "researchSearchFeeCents",

@@ -50,7 +50,7 @@ const OPERATOR_CONFIG = withConfigNamespaces({
   geoEnabled: false,
   defaultTenantBudgetCents: 0,
   numberMonthlyCostCents: 92,
-  platformFixedCostCentsPerMonth: 600,
+  platformFixedCostUsdCentsPerMonth: 600,
   ttsCharacterQuota: 39981,
   ttsCharacterQuotaWarnPercent: 0,
   ttsQuotaCycleAnchorDay: 1,

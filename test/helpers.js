@@ -469,6 +469,12 @@ export const BASE_ENV = {
   // LCT P4b: Vollkosten-Boot-Guard test-neutral aus (Schwelle 0 => 0<0 false => still),
   // analog VOICE_TARIFF_DOMESTIC_CENTS=0. Die P4b-Tests setzen die Schwelle explizit.
   VOICE_TARIFF_FULL_COST_FLOOR_CENTS: "0",
+  // KV2-10: die Grundbetrag-Karte neutral leer gepinnt (fail-closed Default {} = alle
+  // Routen 0, "noch nicht gesetzt") - ohne diese Zeile laedt dotenv eine lokale .env mit
+  // z.B. "el_convai_sip:muell" in JEDES Spawn-Kind (routeCentsEnv -> fatalConfigErrors ->
+  // Boot-Refusal in der ganzen Spawn-Suite, Lehre test-base-env-drift). .env.example
+  // laedt den Owner aktiv zum Setzen ein - genau deshalb braucht die Suite die Klemme.
+  VOICE_TARIFF_GRUNDBETRAG_CENTS: "",
   DEFAULT_TENANT_BUDGET_CENTS: "0",
   // P6 (Budget-Achsen, Fruehwarnung): neutral AUS (0 = kein Ereignis, byte-identisch
   // zum Bestand) - sonst leakt eine lokale .env via dotenv in Spawn-Tests (Lehre

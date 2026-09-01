@@ -15,7 +15,7 @@ import { makeCostTruing, SWEEP_TRIGGER } from "../src/billing/cost-truing.js";
 import { kostenAlarmFindings, betreiberAlarmKanaele, alarmKanalZeile } from "../src/boot-guard.js";
 import { makeDefaultState, openOutageAlert } from "../src/store/state-ops.js";
 import { COST_TRUING_SOURCE, PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
-import { makeStubStore, fakeConfig, makeDueOutboundCall } from "./cost-truing-harness.js";
+import { makeStubStore, fakeConfig, fakeSpies, makeDueOutboundCall } from "./cost-truing-harness.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SENDER_E164 = "+15005550006";
@@ -36,14 +36,6 @@ function makeUnprovenCoverageCall(state, nowMs) {
   call.costTruedSource = COST_TRUING_SOURCE.UNAVAILABLE;
   call.costTruedAt = new Date(nowMs).toISOString();
   return call;
-}
-
-function fakeSpies() {
-  const mailCalls = [];
-  const smsCalls = [];
-  const mailer = { async sendMail(args) { mailCalls.push(args); } };
-  const messaging = () => ({ async sendSms(args) { smsCalls.push(args); } });
-  return { mailCalls, smsCalls, mailer, messaging };
 }
 
 function collectWarns() {

@@ -460,11 +460,19 @@ services:
       # gemessen), NICHT der Outbound-Worst-Case. Unset -> Code-Default 6.
       - key: VOICE_TARIFF_INBOUND_CENTS
         value: "6"
-      # LCT P4b - Vollkosten-Untergrenze (EUR-Cent). Sinkt VOICE_TARIFF_DOMESTIC_CENTS
-      # darunter bei duenner Abgleich-Deckung, warnt der Boot (WARN, kein exit).
-      # 10 = teuerste aktivierbare Konfiguration (inkl. ai-voice-assistant), Kurs 0,92.
+      # LCT P4b/KV2-10 - Vollkosten-Untergrenze (EUR-Cent). Sinkt VOICE_TARIFF_DOMESTIC_CENTS
+      # darunter, warnt der Boot (WARN, kein exit) - seit KV2-10 DECKUNGS-UNABHAENGIG.
+      # 15 = p95 Vollkosten/Minute der Route el_convai_sip aus der KV2-10-Stichprobe
+      # (B2+O2: 0,1576 USD x 0,92 = 14,5 -> 15; ohne Eigen-Achsen, Kurs 0,92).
       - key: VOICE_TARIFF_FULL_COST_FLOOR_CENTS
-        value: "10"
+        value: "15"
+      # KV2-10 - Grundbetrag des zweiteiligen Tarifs je Route (csv-Karte profil:cents,
+      # EUR-Cent je ANRUF). Leer = alle Routen 0 ("noch nicht gesetzt"). Der
+      # Tarifpaar-Waechter misst - JUSTIERT NICHTS (Owner-Entscheidung 6). Vorschlag aus
+      # der KV2-10-Stichprobe: el_convai_sip:20 (dazu Minutensatz 18). Unbekanntes Profil
+      # oder Muell-Cent -> Boot-Refusal.
+      - key: VOICE_TARIFF_GRUNDBETRAG_CENTS
+        value: ""
       # Untergrenze aus spendCapCoherence Klausel B (FATAL, exit 1):
       # VOICE_TARIFF_DEFAULT_CENTS * RESERVE_LEAD_MINUTES(2), seit KS-P3
       # 30 * 2 = 60. Darunter faellt jedes Ziel ohne gemessenen Inlandssatz vor dem Dial
@@ -537,6 +545,8 @@ services:
         value: "75"
       - key: TTS_QUOTA_CYCLE_ANCHOR_DAY
         value: "3"
+      # KV2-10: GANZZAHL US-Cent LISTENPREIS (6,00 USD/Monat) - die Route rechnet ueber
+      # den EINEN Kurs nach EUR-Cent um. ENV-Name unveraendert (Rename ist eigene Entscheidung).
       - key: PLATFORM_FIXED_COST_CENTS_PER_MONTH
         value: "600"
       - key: NUMBER_MONTHLY_COST_CENTS
