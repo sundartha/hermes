@@ -1,3 +1,22 @@
+# KV2-11: EL-Settlement freigeben + Deploy KV2-10/11 (2026-09-02)
+
+- [x] 1. KV2-11 gebaut und gemergt (merge d0bf81b, Phase phase/task-impl 4c0ed9d):
+      EL-Riegel aus sweepDarfKorrigieren entfernt, B6-Schutz lebt in
+      istVollBelegt/dataComplete. Gate PASS (Safety FREIGABE, Clean-Code PASS),
+      Suite auf master 5683/5683 gruen. Spec tasks/kostenv2/spec-kv2-11.md,
+      Tests test/kv2-11-el-settlement.test.js (6 Faelle).
+      VERIFIKATION: npm test -> "# pass 5683 / # fail 0".
+- [ ] 2. Deploy KV2-10+11: BLOCKIERT auf gh-Auth (Token Antonio20045 invalid,
+      osxkeychain leer, SSH-Key nicht autorisiert, Askpass-Haenger). Wartet auf
+      Owner-Login; danach: git push upstream master:master (jonas986 ist das
+      Deploy-Repo, autoDeploy=no) + Render-Deploy trigger
+      (srv-d8m0fhflk1mc73bno570) + /healthz-Commit-Check.
+      ERWARTET: Deploy live auf d0bf81b, /healthz zeigt d0bf81b.
+- [ ] 3. Nach dem Deploy: erster Sweep schreibt Kosten-Buch fuer neue EL-Anrufe
+      (el_reifung= in der Sweep-Zeile); Erstattungen erst ab Anrufen NACH dem
+      Deploy (heutiger Testanruf call_mtjsvfkpuzm8 bleibt bewusst ohne Erstattung
+      - sein EL-Beleg wurde nie geschrieben).
+
 # Durchgang 2026-08-19 (2): EL-Weg LIVE bringen — ERLEDIGT bis auf 2 Restpunkte
 
 Auftrag: "mache alles, was du jetzt gesagt hast"; Nachtrag: KEIN Testanruf.
@@ -31,3 +50,21 @@ Auftrag: "mache alles, was du jetzt gesagt hast"; Nachtrag: KEIN Testanruf.
       get_consult-Probe sein (Frage stellen, die NICHT im Briefing steht).
 - [x] 10. Doku (.fortschritt.md Cutover-Eintrag), Commit, Push beide Remotes,
       Caffeinate aus.
+
+## Geo-Nummern-Strategie (Start 2026-09-01, Workflow geo-nummern-strategie)
+
+- [x] 1. Strategie-Doc PLAN-GEO-NUMMERN.md erstellt: Telnyx-Regulatorik (KYC/Requirement
+      Groups), Laender-Matrix, Interims-US-Nummer-Konzept, Zustandsmaschine Swap,
+      Phasenplan mit Gates, Pre-Mortem, offene Owner-Entscheidungen.
+      ERWARTET: Datei existiert, alle Pflichtabschnitte vorhanden, Abnahme-Agent
+      pass=true und blockers=[].
+      VERIFIKATION: Workflow-Abnahme-Verdict; grep '^## ' PLAN-GEO-NUMMERN.md zeigt
+      die Pflichtabschnitte; grep -c '[äöüÄÖÜß]' = 0.
+      BELEG: Abnahme pass=true, geprueft=8/8, blockers=[] (Run wf_31f308d2-6b8);
+      11 H2-Pflichtabschnitte vorhanden; Umlaut-Grep = 0; 768 Zeilen.
+- [x] 2. Fakten gesichert: jede Telnyx-Kernaussage im Doc traegt eine Quelle,
+      Unsicherheiten als UNBESTAETIGT markiert, file:line-Referenzen stimmen.
+      ERWARTET: Fakten-Check-Linse und Abnahme melden 0 Abweichungen nach Fix-Runde.
+      VERIFIKATION: Abnahme-Verdict blockers=[]; Stichprobe per grep im Repo.
+      BELEG: Fakten-Check-Linse 6 Befunde, alle in Fix-Runde 1 eingearbeitet
+      (23/23 angewandt, 0 widerlegt); Abnahme-Stichprobe 5 file:line ok.
