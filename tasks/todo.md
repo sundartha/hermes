@@ -6,12 +6,13 @@
       Suite auf master 5683/5683 gruen. Spec tasks/kostenv2/spec-kv2-11.md,
       Tests test/kv2-11-el-settlement.test.js (6 Faelle).
       VERIFIKATION: npm test -> "# pass 5683 / # fail 0".
-- [ ] 2. Deploy KV2-10+11: BLOCKIERT auf gh-Auth (Token Antonio20045 invalid,
-      osxkeychain leer, SSH-Key nicht autorisiert, Askpass-Haenger). Wartet auf
-      Owner-Login; danach: git push upstream master:master (jonas986 ist das
-      Deploy-Repo, autoDeploy=no) + Render-Deploy trigger
-      (srv-d8m0fhflk1mc73bno570) + /healthz-Commit-Check.
-      ERWARTET: Deploy live auf d0bf81b, /healthz zeigt d0bf81b.
+- [x] 2. Deploy KV2-10+11: ERLEDIGT 2026-09-02 12:26 MESZ. gh-Login (Antonio20045)
+      erneuert; upstream-Divergenz (2 Website-Commits, Analytics-Consent +
+      Login-Redirect-Guard) sauber gemergt (9b6b197), beide Suiten gruen
+      (Backend 5664/5664, Web 195/195), push zu BEIDEN Remotes, Render-Deploy
+      dep-dabvj9btqb8s73dn7fn0 live auf 9b6b197.
+      BELEG: /healthz -> {"ok":true,"commit":"9b6b197..."}; DB-Migration gelaufen
+      (call_cost_evidence-Tabelle + cost_profile-Spalte in Prod-DB je count=1).
 - [ ] 3. Nach dem Deploy: erster Sweep schreibt Kosten-Buch fuer neue EL-Anrufe
       (el_reifung= in der Sweep-Zeile); Erstattungen erst ab Anrufen NACH dem
       Deploy (heutiger Testanruf call_mtjsvfkpuzm8 bleibt bewusst ohne Erstattung
