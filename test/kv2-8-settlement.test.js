@@ -252,10 +252,10 @@ const MATRIX = [
       call: beendeterCall(state, { nowMs, legRef: { sipCallId: "otb_4101m190brwyf4mb9cwvhts7rymk" } }),
       control: poolMit([{ recordType: "sip-trunking", costMicroCents: mikroCents, currency: "USD", billedSec: BILLED_SEC, legId: "otb_4101m190brwyf4mb9cwvhts7rymk" }]),
     }),
-    // DER EL-Riegel: null Cent, applyCostCorrectionCents bleibt UNGERUFEN (Owner-
-    // Entscheidung 7, KV2-5(h)). Geschlossen wird der Anruf nicht - die elevenlabs_convai-
-    // Zeile fehlt und die Frist laeuft noch. Die Herkunft ist 'incomplete' und NIEMALS
-    // 'telnyx_detail_records': der Telnyx-Pool ist zwar vollstaendig, der ANRUF aber nicht.
+    // Kein Settlement: der Anruf schliesst NICHT (die elevenlabs_convai-Zeile fehlt, die
+    // Frist laeuft noch) - das Settlement haengt am Abschluss (KV2-8), nicht an der
+    // Messung. Die Herkunft bleibt 'incomplete' und NIEMALS 'telnyx_detail_records': der
+    // Telnyx-Pool ist zwar vollstaendig, der ANRUF aber nicht.
     hoch: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: null },
     niedrig: { gebucht: false, deltaCents: null, costCentsNachher: VORHER_COST_CENTS, herkunft: COST_TRUING_SOURCE.INCOMPLETE, endzustand: null },
   },
@@ -485,8 +485,12 @@ test("(e) ein el_convai_sip-Settlement schreibt NIE 'telnyx_detail_records'", as
 
   assert.notEqual(call.costTruedSource, COST_TRUING_SOURCE.DETAIL_RECORDS);
   assert.equal(call.costTruedSource, COST_TRUING_SOURCE.KOSTENBUCH_TEILBELEG);
-  assert.equal(korrekturAufrufe.length, 0, "der EL-Riegel: kein Cent, auch nach Fristablauf");
-  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, VORHER_COST_CENTS);
+  // KV2-11 (OR-1): Ist > Schaetzung -> bedingungslos nachbuchen, auch ohne beweisende
+  // Herkunft. Die Erstattungs-Richtung bleibt am dataComplete-Riegel: die EL-Zeile ist
+  // nur vorlaeufig, das telnyx_sip-SOLL fehlt ganz -> keine Rueckerstattung.
+  assert.equal(korrekturAufrufe.length, 1, "nach Fristablauf settelt die EL-Route (OR-1)");
+  assert.equal(korrekturAufrufe[0].dataComplete, false, "das Buch ist unvollstaendig");
+  assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, VORHER_COST_CENTS + ERWARTETES_DELTA_HOCH);
 });
 
 // ---- (g) Vorzeichen und Typ: was die Geld-Kante zu sehen bekommt --------------------------

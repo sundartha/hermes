@@ -462,12 +462,16 @@ export function pflichttypenFuerProfil(profil, envPflichttypen) {
 
 // Das Kostenprofil eines Anrufs OHNE gesetztes costProfile (Altzeile von VOR dieser
 // Kette). sipCallId entscheidet, und diese Fallunterscheidung ist NICHT kosmetisch: sie
-// ist der Riegel gegen eine ungewollte Erstattung an den 12 EL-Altanrufen. Der
-// sipCallId-Join aus KV2-5 macht sie erstmals abrufbar (12/12 ohne call_control_id, ohne
-// cost_trued_at, 0 Versuche, Summe estimated_cost_cents 270 - lesend an der Produktions-DB
-// gemessen 2026-08-30). Fielen sie auf telnyx_budget, griffe der EL-Schutz nicht und ihre
-// 30-ct-Schaetzung wuerde auf den reinen SIP-Anteil heruntergesetzt: die B6-Falle.
-// Owner-Entscheidung 14, DEFAULT (a) uebernommen - nicht ausdruecklich entschieden.
+// liefert dem Settlement das richtige PROFIL-SOLL. Seit KV2-11 (Owner-Entscheidung OR-1)
+// sperrt kein profil-abhaengiger Riegel mehr die EL-Route - der B6-Schutz lebt
+// strukturell in istVollBelegt (kosten-projektion.js): Erstattung nur, wenn BEIDE
+// Pflicht-Traeger (elevenlabs_convai UND telnyx_sip) belegt sind. Fielen die 12
+// EL-Altanrufe (12/12 ohne call_control_id, ohne cost_trued_at, 0 Versuche, Summe
+// estimated_cost_cents 270 - lesend an der Produktions-DB gemessen 2026-08-30) auf
+// telnyx_budget, waere ihr Pflicht-SOLL nur telnyx_call_records: das Buch erschiene
+// vollstaendig, obwohl die EL-Zeile fehlt, und die 30-ct-Schaetzung wuerde auf den reinen
+// SIP-Anteil heruntergesetzt - die B6-Falle. Owner-Entscheidung 14, DEFAULT (a)
+// uebernommen - nicht ausdruecklich entschieden.
 export function legacyKostenprofil({ sipCallId, direction }) {
   if (sipCallId) return KOSTENPROFIL.EL_CONVAI_SIP;
   return direction === RICHTUNG_INBOUND ? KOSTENPROFIL.TELNYX_INBOUND_BUDGET : KOSTENPROFIL.TELNYX_BUDGET;
