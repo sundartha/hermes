@@ -302,7 +302,9 @@ test("(f) usage.costCents bleibt unveraendert; bei drei Sweeps eines offenen el_
   }
 
   assert.deepStrictEqual(state.usage, usageVorher, "usage.costCents unveraendert");
-  assert.equal(bookings, 0, "die EL-Route bucht in dieser Kette NIE (sweepDarfKorrigieren)");
+  // KV2-11: der Wert 0 traegt nicht mehr der EL-Riegel, sondern der Abschluss - der
+  // zweite Pflicht-Traeger fehlt, die Frist laeuft, ohne Schluss kein Settlement.
+  assert.equal(bookings, 0, "kein Buchungsaufruf: der Anruf schliesst nicht (zweiter Pflicht-Traeger fehlt), das Settlement haengt am Abschluss");
   assert.equal(call.costTruedAt, null, "der Anruf bleibt offen (kein zweiter Traeger belegt)");
 });
 

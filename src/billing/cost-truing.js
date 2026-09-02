@@ -55,7 +55,7 @@ import {
   tarifpaarZeile,
   alertbareTarifpaarBefunde,
 } from "./cost-calibration.js";
-import { KOSTENPROFIL, istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
+import { istBekanntesKostenprofil, kostenprofilFuerAnruf, pflichttypenFuerProfil } from "./kostenarten.js";
 import { schreibeSweepKostenbeleg } from "./sweep-kostenbeleg.js";
 import { legRefOfCall } from "./call-leg-ref.js";
 // KV2-6: die Deckung JE TRAEGER und der faelligkeits-unabhaengige Herzschlag. Das
@@ -317,8 +317,10 @@ const isEndedCall = (call) => !!call.endedAt;
 // KV2-5: dritte Alternative sipCallId. Ein EL-Anruf traegt weder twilioSid noch
 // callControlId (12/12 gemessen, befund-telnyx.md O1) - providerLegIdOf lieferte fuer ihn
 // null, isRetrievable war falsch, und er wurde vom Sweep uebersprungen.
-// FOLGE, benannt: ab diesem Deploy sind die 12 EL-Altanrufe erstmals Kandidaten. Dass
-// dabei kein Cent bewegt wird, traegt der EL-Riegel unten (sweepDarfKorrigieren).
+// FOLGE, benannt: ab diesem Deploy sind die 12 EL-Altanrufe erstmals Kandidaten. Ihre
+// Erstattung haengt seit KV2-11 nicht mehr an einer Profilsperre, sondern am
+// vollstaendigen Kosten-Buch (istVollBelegt): fehlt die EL-Zeile, gibt es dataComplete
+// falsch und damit keine Rueckerstattung.
 // Ableitung liegt in call-leg-ref.js (EINE Quelle mit sweep-kostenbeleg.js#legRefOfCall).
 const providerLegIdOf = legRefOfCall;
 
@@ -354,32 +356,33 @@ const isRetrievable = (call, control) => control !== null && providerLegIdOf(cal
 // complete:false sind darin dasselbe.
 const nonNegativeCount = (n) => (Number.isSafeInteger(n) && n >= 0 ? n : 0);
 
-// Darf der Sweep fuer diesen Anruf eine Korrektur BUCHEN? Zwei Ausschlussgruende, eine
+// Darf der Sweep fuer diesen Anruf eine Korrektur BUCHEN? Drei Ausschlussgruende, eine
 // Frage:
 //   1. Kein buchbarer Schaetzbetrag -> strukturell nicht korrigierbar (Bestandsregel).
-//   2. EL-Route -> der Telnyx-Pool traegt NUR den SIP-Anteil (4,01 US-ct gemessen), NIE
-//      die ElevenLabs-Kosten (56 US-ct ueber 8 Anrufe). Gegen eine 30-ct-Schaetzung
-//      gebucht, loeschte er rund 90 % der echten Kosten von der Gate-Achse - die B6-Falle.
-//      Der Riegel haengt am PROFIL, nicht an einem Flag, und erfasst ueber die
-//      Legacy-Zuordnung auch die 12 profillosen EL-Altzeilen (KV2-5(h)). Er bleibt in
-//      KV2-8 UNANGETASTET: die EL-Zeile reift erst in KV2-9 nach, bis dahin bewegt ein
-//      EL-Anruf keinen Cent (Owner-Entscheidung 7, KV2-5(h) pinnt es am Spion).
-//   3. Keine brauchbare Belegsumme -> es gibt nichts zu buchen. Der Riegel ERFUELLT die
+//   2. Keine brauchbare Belegsumme -> es gibt nichts zu buchen. Der Riegel ERFUELLT die
 //      Bestandszusage von applyCostCorrectionCents ("der Aufrufer garantiert
 //      actualCostMicroCents >= 0"): die Summe ist entweder ein gueltiger
 //      Anbieter-Mikro-Cent-Betrag oder null - nie negativ, nie NaN, nie ein String.
-//   4. Profil unbekannt (Matrix 4.6, "Anruf NACH der Kette entstanden") -> STRUKTURELL
+//   3. Profil unbekannt (Matrix 4.6, "Anruf NACH der Kette entstanden") -> STRUKTURELL
 //      kein Sweep-Traeger (sweepTraegerFuerProfil liefert null, schreibeSweepKostenbeleg
 //      schreibt deshalb nie eine Zeile fuer diesen Anruf) und damit heute bereits ueber
-//      Grund 3 abgedeckt - der Riegel steht trotzdem EXPLIZIT hier, weil "gar nichts,
+//      Grund 2 abgedeckt - der Riegel steht trotzdem EXPLIZIT hier, weil "gar nichts,
 //      in BEIDE Richtungen" (4.6) eine Aussage ueber das PROFIL ist, nicht nur ueber die
 //      zufaellig leere Belegsumme: ein kuenftiger Einsammler, der unabhaengig vom Profil
 //      schreibt, darf diese Zeile nie buchbar machen.
+//
+// KV2-11 (Owner-Entscheidung OR-1, 2026-09-02): der bisherige vierte Grund - die EL-Route
+// pauschal gesperrt - ist ENTFALLEN. Der B6-Schutz (der Telnyx-Pool traegt NUR den
+// SIP-Anteil, NIE die ElevenLabs-Kosten; eine Erstattung gegen die 30-ct-Schaetzung
+// loeschte rund 90 % der echten Kosten von der Gate-Achse) lebt seit KV2-8 STRUKTURELL,
+// nicht als Profilsperre: istVollBelegt (kosten-projektion.js) vergleicht Beleg-IST gegen
+// PROFIL-SOLL, und applyCostCorrectionCents (state-ops.js) verwirft jeden NEGATIVEN Delta
+// ohne vollstaendiges Buch VOR jeder Mutation. Nachbuchen (Ist > Schaetzung) bleibt
+// bedingungslos. Beide EL-Pflicht-Traeger sind USD - der EINE Kurs passt.
 const sweepDarfKorrigieren = (call, projektion) =>
   isBookableCents(call.estimatedCostCents) &&
   isProviderMicroCents(projektion.summeMikroCents) &&
-  istBekanntesKostenprofil(kostenprofilFuerAnruf(call)) &&
-  kostenprofilFuerAnruf(call) !== KOSTENPROFIL.EL_CONVAI_SIP;
+  istBekanntesKostenprofil(kostenprofilFuerAnruf(call));
 
 // KV2-8, DIE Geld-Kante dieser Phase: genau EIN Settlement je Anruf, gespeist aus der
 // Belegsumme des Kosten-Buchs statt aus EINER Telnyx-Messung. Zwei Aufrufer, ein Rumpf

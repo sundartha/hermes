@@ -96,7 +96,7 @@ test("(a) el_convai_sip mit ausschliesslich Telnyx-SIP-Beleg bewegt NULL Cent au
   });
   await runCostTruingSweep({ trigger: SWEEP_TRIGGER.MANUAL });
 
-  assert.equal(korrekturAufrufe, 0, "applyCostCorrectionCents darf fuer die EL-Route NIE aufgerufen werden");
+  assert.equal(korrekturAufrufe, 0, "kein Buchungsaufruf: ohne Abschluss kein Settlement - der zweite Pflicht-Traeger fehlt (seit KV2-11 ohne EL-Riegel)");
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCents, VORHER_COST_CENTS, "costCents bit-gleich");
   assert.equal(usageFor(state, BOOTSTRAP_TENANT_ID).costCorrectionMicroCentsRem, remBefore, "Rest bit-gleich");
 
