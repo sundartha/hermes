@@ -543,7 +543,14 @@ select.field-input option {
   .app-header {
     flex-wrap: wrap;
     row-gap: 14px;
-    padding: 22px 20px;
+    /* Safe-Area: viewport-fit=cover (App.astro) zieht die Seite bis unter die
+       iPhone-Statusleiste bzw. an die Notch im Querformat. */
+    padding: calc(22px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) 22px max(20px, env(safe-area-inset-left, 0px));
+  }
+  .app-main {
+    padding-left: max(20px, env(safe-area-inset-left, 0px));
+    padding-right: max(20px, env(safe-area-inset-right, 0px));
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
   }
   .app-brand__mark,
   .app-brand__wing {

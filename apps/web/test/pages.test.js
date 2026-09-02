@@ -166,3 +166,31 @@ test("EN-Rechtsseiten tragen noindex + Vorrangklausel, DE-Rechtsseiten kein noin
     assert.ok(!html.includes('content="noindex"'), `${page} darf kein noindex tragen`);
   }
 });
+
+// Cookie-Einwilligung (§ 25 TDDDG): jede oeffentliche Seite traegt den Banner,
+// den Wiederoeffnen-Link und das Handy-Viewport-Meta; ohne PUBLIC_ANALYTICS_*
+// darf KEIN Mess-Platzhalter im Output stehen (fail-closed, s. AnalyticsSlot).
+const PUBLIC_PAGES = ["index.html", ...MARKETING_PAGES, ...LEGAL_PAGES];
+
+test("Cookie-Einwilligung: Banner + Wiederoeffnen-Link + viewport-fit auf jeder oeffentlichen Seite", () => {
+  for (const page of PUBLIC_PAGES) {
+    const html = readDist(page);
+    assert.ok(html.includes("data-consent-root"), `${page} fehlt der Einwilligungs-Banner`);
+    assert.ok(html.includes('data-consent-action="necessary"'), `${page}: "Nur notwendige" fehlt`);
+    assert.ok(html.includes('data-consent-action="all"'), `${page}: "Alle akzeptieren" fehlt`);
+    assert.ok(html.includes("data-consent-open"), `${page} fehlt "Cookie-Einstellungen"`);
+    assert.match(html, /name="viewport" content="[^"]*viewport-fit=cover/, `${page} fehlt viewport-fit=cover`);
+  }
+});
+
+test("ohne PUBLIC_ANALYTICS_* steht kein Mess-Platzhalter im Output", () => {
+  for (const page of PUBLIC_PAGES) {
+    assert.ok(!readDist(page).includes('type="text/plain"'), `${page} enthaelt einen Analytics-Platzhalter`);
+  }
+});
+
+test("Datenschutz nennt die lokale Speicherung (hermes.lang, hermes.consent)", () => {
+  const html = readDist("datenschutz/index.html");
+  assert.ok(html.includes("hermes.lang"), "hermes.lang fehlt im Datenschutztext");
+  assert.ok(html.includes("hermes.consent"), "hermes.consent fehlt im Datenschutztext");
+});

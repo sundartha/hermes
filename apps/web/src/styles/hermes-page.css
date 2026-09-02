@@ -154,6 +154,17 @@
 .doc-steps .step__text {
   font-size: clamp(14px, 1.15vw, 17px);
 }
+/* Bug 2026-08-26 (Mobile-Durchgang): Entwickler-Karte auf "So funktioniert's".
+   .doc-steps .sheet__card hat gap 0 (die Schritte bringen ihr Padding selbst
+   mit) -- der Fliesstext klebte darum direkt an der Kopfzeile. Und im Markup
+   fehlt das Leerzeichen hinter der URL ("…/mcpals Konnektor"); bis das Markup
+   nachzieht, schafft ein Randabstand die Luft. */
+.doc-steps .dev-card__head + .step__text {
+  margin-top: 14px;
+}
+.doc-steps .step__text .dev-field__url {
+  margin-right: 0.3em;
+}
 
 /* Rechtstexte: eine Spalte, gut lesbare Maße. */
 .doc-legal {
@@ -210,7 +221,8 @@
   .doc-nav {
     flex-wrap: wrap;
     row-gap: 14px;
-    padding-top: 22px;
+    /* Statusleiste am iPhone freihalten (viewport-fit=cover in Hermes.astro). */
+    padding-top: calc(22px + env(safe-area-inset-top, 0px));
   }
   .doc-nav .nav-actions {
     width: 100%;
@@ -226,6 +238,60 @@
   .doc-footer {
     justify-content: center;
     text-align: center;
+  }
+
+  /* Bug 2026-08-26 (Mobile-Durchgang, KRITISCH): hermes.css sperrt am Handy
+     html/body (overflow hidden, 100svh) fuer die Ein-Screen-Startseite.
+     Hermes.astro laedt hermes.css aber ebenfalls -- seit 3299d87b (20.08.)
+     waren Preise, So funktioniert's, Rechtstexte und Kuendigen am Handy NICHT
+     scrollbar: nur der erste Bildschirm, kein Fussband, kein Kuendigen-Weg.
+     Diese Datei haengt nur an Hermes.astro und laedt nach hermes.css, also
+     hier wieder freigeben; die Startseite bleibt unberuehrt. */
+  html,
+  body {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Bug 2026-08-26: Notch im Querformat -- Rand links/rechts mindestens so
+     breit wie die Aussparung (im Hochformat 0 -> unveraendert). */
+  .doc-nav,
+  .doc-main,
+  .doc-footer {
+    padding-left: max(clamp(20px, 3.4vw, 44px), env(safe-area-inset-left, 0px));
+    padding-right: max(clamp(20px, 3.4vw, 44px), env(safe-area-inset-right, 0px));
+  }
+
+  /* Bug 2026-08-26: neun Fusslinks standen nowrap in EINER Zeile
+     (.site-footer__nav aus hermes.css ist fuer das breite Fussband gebaut,
+     flex:none + nowrap) und ragten bei 375px links und rechts 224px aus dem
+     Bild ("holen", "Verträge kündige"). Umbrechen, zentriert; die Links
+     bekommen dabei 45px Tastflaeche (Text war 15px hoch). */
+  .doc-footer .site-footer__copy {
+    flex: 0 0 auto;
+    max-width: 100%;
+    white-space: normal;
+    overflow: visible;
+  }
+  .doc-footer .site-footer__nav {
+    flex: 0 1 auto;
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 0;
+    column-gap: 18px;
+  }
+  .doc-footer .site-footer__link {
+    padding-block: 15px;
+  }
+
+  /* Bug 2026-08-26: Touch-Ziele der Leiste -- Textlinks 16px hoch, CTA 40px.
+     Polster statt groesserer Schrift: die Zeile wird 4px hoeher, sonst nichts. */
+  .doc-nav .nav-link {
+    padding-block: 14px;
+  }
+  .doc-nav .btn-solid {
+    min-height: 44px;
   }
 }
 

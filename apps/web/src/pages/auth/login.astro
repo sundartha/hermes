@@ -1,0 +1,27 @@
+---
+// Fallback fuer getippte/gebookmarkte sundartha.com/auth/login-Links.
+//
+// Befund 2026-08-26: die Blueprint-Route "redirect /auth/* -> Gateway" in
+// render.yaml greift auf dem Static-Service NICHT (sundartha.com/auth/login
+// und das Labor lieferten 404 - beide Static-Services sind offenbar nicht
+// blueprint-verwaltet, nur die Header stimmen). Diese statische Seite faengt
+// den haeufigsten Deep-Link ab: Meta-Refresh auf LOGIN_URL (CSP-konform, kein
+// Inline-Script) plus sichtbarer Link, falls der Browser Refresh unterdrueckt.
+// noindex: reine Weiche, kein Inhalt.
+import { LOGIN_URL } from "../../lib/routes.js";
+---
+
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta http-equiv="refresh" content={`0; url=${LOGIN_URL}`} />
+    <title>Weiter zur Anmeldung — Sundartha Hermes</title>
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+  </head>
+  <body>
+    <p>Du wirst zur Anmeldung weitergeleitet. Falls nicht: <a href={LOGIN_URL}>Anmelden bei Hermes</a>.</p>
+  </body>
+</html>

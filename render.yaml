@@ -686,8 +686,15 @@ services:
       # Die Static Site hat selbst kein /auth/login (404); der OIDC-Flow lebt auf dem
       # Gateway-Service. routes.js ist fail-closed -> fehlt die Var, bricht der Build ab
       # (statt still 404 zu liefern). Spaeterer Track-B-Cutover = nur dieser Wert.
+      # Befund 2026-08-26: der OIDC-Callback ist bei WorkOS auf app.sundartha.com
+      # registriert. Startet der Login auf vodafone-agent.onrender.com, landen die
+      # pkce/state/nonce-Cookies auf dem falschen Host, der Callback findet sie
+      # nicht und muss ueber recoverLogin() den Flow ein zweites Mal starten
+      # (funktioniert, aber doppelter Roundtrip). Deshalb zeigt der Login-Link
+      # direkt auf den Auth-Origin app.sundartha.com (identisch zum Gateway-Build
+      # oben). Im Labor (hermes-web-staging) seit 2026-08-26 per Dashboard-Env so gesetzt.
       - key: PUBLIC_GATEWAY_URL
-        value: "https://vodafone-agent.onrender.com"
+        value: "https://app.sundartha.com"
     buildFilter:
       paths:
         - "apps/web/**"
@@ -701,9 +708,15 @@ services:
       # sundartha.com/auth/*-URLs wuerden sonst 404en. Redirect leitet sie an den
       # Gateway-Auth-Origin. CSP-konform (Top-Level-Navigation, nicht connect-src);
       # :splat erhaelt den Restpfad. Disjunkt zu /app/* -> keine Reihenfolge-Kollision.
+      # ACHTUNG (Befund 2026-08-26): diese routes greifen auf dem Static-Service
+      # NICHT (sundartha.com/app/* und /auth/* liefern 404; nur die headers unten
+      # sind wirksam). Die Static-Services sind offenbar per Dashboard angelegt,
+      # nicht ueber dieses Blueprint. Uebergangsloesung im Code:
+      # apps/web/src/pages/auth/login.astro (Meta-Refresh auf LOGIN_URL).
+      # Dauerhaft: Routes im Render-Dashboard des Static-Service eintragen.
       - type: redirect
         source: /auth/*
-        destination: https://vodafone-agent.onrender.com/auth/:splat
+        destination: https://app.sundartha.com/auth/:splat
     headers: # Static-Service hat KEINE Express-securityHeaders -> selbst setzen
       - path: /*
         name: X-Frame-Options

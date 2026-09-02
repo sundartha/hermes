@@ -3,7 +3,7 @@
   "metaDescription": "Allgemeine Geschäftsbedingungen für die Nutzung von Sundartha Hermes: Leistungen, Tarife, Laufzeit, Pflichten und Haftung.",
   "eyebrow": "Rechtliches",
   "title": "Allgemeine Geschäftsbedingungen",
-  "note": "Dieser Entwurf gibt den tatsächlichen Leistungsumfang und die technischen Grenzen des Dienstes wieder. Die mit [OFFEN] markierten Punkte hängen an der noch nicht gegründeten Gesellschaft oder an einer Entscheidung des Betreibers.",
+  "note": "Dieser Entwurf gibt den tatsächlichen Leistungsumfang und die technischen Grenzen des Dienstes wieder. Die mit [OFFEN] markierten Punkte — Firmenname und Anschrift, Gerichtsstand und die Entscheidung über den Leistungsbeginn während der Widerrufsfrist — hängen an der noch nicht gegründeten Gesellschaft oder an einer Entscheidung des Betreibers.",
   "sections": [
     {
       "heading": "Geltungsbereich und Vertragspartner",
@@ -11,7 +11,7 @@
     },
     {
       "heading": "Gegenstand der Leistung",
-      "text": "Wir stellen dem Nutzer eine Rufnummer bereit und betreiben dazu einen Assistenten, der eingehende Anrufe entgegennimmt und im Auftrag des Nutzers ausgehende Anrufe führt. Der Assistent versteht gesprochene Sprache, antwortet gesprochen, fasst Gespräche zusammen und stellt Zusammenfassungen, Aufgaben und Termine im Kundenbereich bereit. Der Assistent lässt sich über eine Schnittstelle an eine KI-Anwendung des Nutzers anbinden."
+      "text": "Wir stellen dem Nutzer eine Rufnummer bereit und betreiben dazu einen Assistenten, der eingehende Anrufe entgegennimmt und im Auftrag des Nutzers ausgehende Anrufe führt. Der Assistent versteht gesprochene Sprache, antwortet gesprochen, fasst Gespräche zusammen und stellt Zusammenfassungen, Aufgaben und Termine im Kundenbereich bereit; auf Wunsch des Nutzers gehen Zusammenfassungen zusätzlich per SMS an eine hinterlegte Mobilnummer oder per E-Mail. Der Assistent lässt sich über eine Schnittstelle an eine KI-Anwendung des Nutzers anbinden."
     },
     {
       "heading": "Zustandekommen des Vertrages",
@@ -19,7 +19,7 @@
     },
     {
       "heading": "Tarife und Vergütung",
-      "text": "Es gelten die auf der Preisseite genannten Tarife: Starter zu 4,99 € je Monat mit 30 Gesprächsminuten, Business zu 9,99 € je Monat mit 120 Gesprächsminuten. Beide Tarife umfassen eine Rufnummer. Die Beträge sind monatlich im Voraus zur Zahlung fällig. [OFFEN: Angabe, ob die Preise Umsatzsteuer enthalten — das hängt von Rechtsform und Steuerstatus ab und muss vor dem Verkauf an Verbraucher zweifelsfrei ausgewiesen sein.]"
+      "text": "Es gelten die auf der Preisseite genannten Tarife: Starter zu 4,99 € je Monat mit 30 Gesprächsminuten, Business zu 9,99 € je Monat mit 120 Gesprächsminuten. Beide Tarife umfassen eine Rufnummer. Die Beträge sind Endpreise und enthalten die gesetzliche Umsatzsteuer, soweit sie anfällt; sie sind monatlich im Voraus zur Zahlung fällig. Der Preis für den jeweiligen Tarif wird im Buchungsvorgang vor der Bestellung noch einmal angezeigt."
     },
     {
       "heading": "Abrechnung",
@@ -35,7 +35,7 @@
     },
     {
       "heading": "Widerrufsrecht für Verbraucher",
-      "text": "[OFFEN: Verbindliche Widerrufsbelehrung nebst Muster-Widerrufsformular. Verbrauchern steht ein Widerrufsrecht von 14 Tagen zu. Soll der Dienst schon vor Ablauf dieser Frist nutzbar sein, ist dafür eine ausdrückliche Zustimmung des Verbrauchers und ein Hinweis auf das Erlöschen des Widerrufsrechts erforderlich. Text und Ablauf sollten anwaltlich erstellt werden.]"
+      "text": "Widerrufsbelehrung — Widerrufsrecht: Als Verbraucher hast du das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen. Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsabschlusses. Um dein Widerrufsrecht auszuüben, musst du uns (Sundartha, [OFFEN: Firmenname und ladungsfähige Anschrift — siehe Impressum], E-Mail: kontakt@sundartha.com) mittels einer eindeutigen Erklärung (z. B. ein mit der Post versandter Brief oder eine E-Mail) über deinen Entschluss, diesen Vertrag zu widerrufen, informieren. Du kannst dafür das unten stehende Muster-Widerrufsformular verwenden, das jedoch nicht vorgeschrieben ist. Zur Wahrung der Widerrufsfrist reicht es aus, dass du die Mitteilung über die Ausübung des Widerrufsrechts vor Ablauf der Widerrufsfrist absendest. Folgen des Widerrufs: Wenn du diesen Vertrag widerrufst, haben wir dir alle Zahlungen, die wir von dir erhalten haben, unverzüglich und spätestens binnen vierzehn Tagen ab dem Tag zurückzuzahlen, an dem die Mitteilung über deinen Widerruf dieses Vertrags bei uns eingegangen ist. Für diese Rückzahlung verwenden wir dasselbe Zahlungsmittel, das du bei der ursprünglichen Transaktion eingesetzt hast, es sei denn, mit dir wurde ausdrücklich etwas anderes vereinbart; in keinem Fall werden dir wegen dieser Rückzahlung Entgelte berechnet. Hast du verlangt, dass die Dienstleistung während der Widerrufsfrist beginnen soll, so hast du uns einen angemessenen Betrag zu zahlen, der dem Anteil der bis zu dem Zeitpunkt, zu dem du uns von der Ausübung des Widerrufsrechts hinsichtlich dieses Vertrags unterrichtest, bereits erbrachten Dienstleistungen im Vergleich zum Gesamtumfang der im Vertrag vorgesehenen Dienstleistungen entspricht. Muster-Widerrufsformular (wenn du den Vertrag widerrufen willst, fülle bitte dieses Formular aus und sende es zurück): An Sundartha, [OFFEN: Anschrift], kontakt@sundartha.com — Hiermit widerrufe ich den von mir abgeschlossenen Vertrag über die Erbringung der folgenden Dienstleistung: Hermes, Tarif … — bestellt am … — Name des Verbrauchers — Anschrift des Verbrauchers — Unterschrift des Verbrauchers (nur bei Mitteilung auf Papier) — Datum. Ende der Widerrufsbelehrung. [OFFEN: Entscheidung des Betreibers, ob der Dienst schon während der Widerrufsfrist nutzbar sein soll. Wenn ja, muss der Buchungsvorgang eine eigene, nicht vorangekreuzte Zustimmung des Verbrauchers zum vorzeitigen Beginn und die Kenntnisnahme des anteiligen Wertersatzes abfragen (§ 356 Abs. 4, § 357a BGB); diese Abfrage ist im Kundenbereich derzeit nicht vorhanden.]"
     },
     {
       "heading": "Pflichten des Nutzers",
@@ -51,7 +51,7 @@
     },
     {
       "heading": "Verfügbarkeit",
-      "text": "Wir bemühen uns um einen durchgehenden Betrieb, schulden aber keine bestimmte Verfügbarkeit. Wartungsarbeiten, Störungen bei vorgelagerten Telefonie- oder Sprachdiensten sowie Ereignisse außerhalb unseres Einflussbereichs können den Dienst vorübergehend einschränken. [OFFEN: Entscheidung, ob eine zugesicherte Verfügbarkeit angeboten werden soll.]"
+      "text": "Wir bemühen uns um einen durchgehenden Betrieb, schulden aber keine bestimmte Verfügbarkeit. Wartungsarbeiten, Störungen bei vorgelagerten Telefonie- oder Sprachdiensten sowie Ereignisse außerhalb unseres Einflussbereichs können den Dienst vorübergehend einschränken. Über geplante Wartungsarbeiten, die den Dienst länger unterbrechen, informieren wir nach Möglichkeit vorab."
     },
     {
       "heading": "Grenzen des Assistenten",
@@ -59,7 +59,7 @@
     },
     {
       "heading": "Haftung",
-      "text": "Wir haften unbeschränkt bei Vorsatz und grober Fahrlässigkeit sowie bei Verletzung von Leben, Körper und Gesundheit und nach dem Produkthaftungsgesetz. Bei einfacher Fahrlässigkeit haften wir nur für die Verletzung wesentlicher Vertragspflichten und der Höhe nach begrenzt auf den vertragstypischen, vorhersehbaren Schaden. Im Übrigen ist die Haftung ausgeschlossen. [OFFEN: anwaltliche Prüfung der Klausel — Haftungsbeschränkungen in Allgemeinen Geschäftsbedingungen sind fehleranfällig und im Zweifel unwirksam.]"
+      "text": "Wir haften unbeschränkt bei Vorsatz und grober Fahrlässigkeit sowie bei Verletzung von Leben, Körper und Gesundheit und nach dem Produkthaftungsgesetz. Bei einfacher Fahrlässigkeit haften wir nur für die Verletzung wesentlicher Vertragspflichten und der Höhe nach begrenzt auf den vertragstypischen, vorhersehbaren Schaden. Im Übrigen ist die Haftung ausgeschlossen. Wesentliche Vertragspflichten sind solche, deren Erfüllung die ordnungsgemäße Durchführung des Vertrages überhaupt erst ermöglicht und auf deren Einhaltung der Nutzer regelmäßig vertrauen darf. Für Inhalte, die der Assistent aus Gesprächen ableitet, und für Handlungen, die der Nutzer auf dieser Grundlage vornimmt, haften wir nur nach Maßgabe dieser Regelung."
     },
     {
       "heading": "Datenschutz",
@@ -71,7 +71,7 @@
     },
     {
       "heading": "Schlussbestimmungen",
-      "text": "[OFFEN: anwendbares Recht und Gerichtsstand — beides hängt vom Sitz der Gesellschaft ab und ist bei Verträgen mit Verbrauchern nur eingeschränkt frei wählbar.] Sollte eine Bestimmung unwirksam sein, bleibt der Vertrag im Übrigen wirksam."
+      "text": "Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts. Gegenüber Verbrauchern gilt diese Rechtswahl nur, soweit ihnen dadurch nicht der Schutz zwingender Vorschriften des Rechts des Staates entzogen wird, in dem sie ihren gewöhnlichen Aufenthalt haben. Ist der Nutzer Kaufmann, juristische Person des öffentlichen Rechts oder öffentlich-rechtliches Sondervermögen, ist ausschließlicher Gerichtsstand für alle Streitigkeiten aus diesem Vertrag [OFFEN: Sitz der Gesellschaft — Ort]. Sollte eine Bestimmung unwirksam sein, bleibt der Vertrag im Übrigen wirksam. Vertragssprache ist Deutsch; der Vertragstext wird von uns nicht gesondert gespeichert, die jeweils geltenden Bedingungen sind auf der Website abrufbar."
     },
     {
       "heading": "Hinweis zu diesem Text",
