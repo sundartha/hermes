@@ -13,10 +13,16 @@
       dep-dabvj9btqb8s73dn7fn0 live auf 9b6b197.
       BELEG: /healthz -> {"ok":true,"commit":"9b6b197..."}; DB-Migration gelaufen
       (call_cost_evidence-Tabelle + cost_profile-Spalte in Prod-DB je count=1).
-- [ ] 3. Nach dem Deploy: erster Sweep schreibt Kosten-Buch fuer neue EL-Anrufe
-      (el_reifung= in der Sweep-Zeile); Erstattungen erst ab Anrufen NACH dem
-      Deploy (heutiger Testanruf call_mtjsvfkpuzm8 bleibt bewusst ohne Erstattung
-      - sein EL-Beleg wurde nie geschrieben).
+- [x] 3. ERLEDIGT 2026-09-02 19:33 MESZ: EL-Testanruf call_mtka4kunn0qy (42 s,
+      17:57 MESZ) komplett durch die KV2-Kette. BELEGE (Prod-DB):
+      elevenlabs_convai vorlaeufig 8.086.110 µct bei Anrufende -> im 17:26-UTC-
+      Sweep gereift zu belegt (el_reifung=bestaetigt(1), el_abweichung=0);
+      telnyx_sip belegt 4.010.000 µct; cost_trued_at=17:26:39Z,
+      cost_trued_source=kostenbuch_vollbeleg, actual_cost_micro_cents=12.096.110
+      (= exakte Belegsumme). ERSTATTUNG: spend_month 2026-09 60 -> 41 ct,
+      cost_eur 15.92 -> 15.73 (delta -19 ct = Prognose: 12,096 US-ct x 0,92
+      = 11 ct gegen 30 ct Schaetzung). Sweep-Zeile: "abschluesse=vollstaendig(1)".
+      Altanrufe: 13x telnyx_sip-only Teilbeleg, 0 ct bewegt (B6-Schutz live).
 
 # Durchgang 2026-08-19 (2): EL-Weg LIVE bringen — ERLEDIGT bis auf 2 Restpunkte
 
