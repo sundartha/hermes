@@ -1,5 +1,14 @@
 // Abnahmekriterien AS1-AS4 der Stimme-Kette (ST1 aus tasks/PLAN-AGENTEN-STIMME.md, O1).
-// ST2-ST4 erweitern dieselbe Datei um AS5-AS10.
+// ST2-ST4 erweitern dieselbe Datei um AS5-AS10 - die kommen MIT Abnahme-Kennung und
+// Grund-Zeile in die ABNAHME-Bahn (npm run test:abnahme).
+//
+// MIGRATIONSSTAND: AS1-AS4 sind abgenommen (2026-09-03) und in den Regressionslauf
+// gewandert - Kennung abgelegt, Siegel "[abgenommen <ID>]" getragen, Eintrag in
+// test/abnahme-ausgewandert.json. Ab da haelt "npm test" sie fest (R2-Ratsche im
+// Selbsttest der Abnahme-Bahn, test/abnahme-bahn-selbsttest.test.js). Die Grund-Zeile
+// "| ROT WEIL: ... | FIX: ..." ist mit der Kennung weggefallen: R3 verlangt sie nur an
+// Namen MIT Abnahme-Kennung, und ihr Inhalt dokumentierte den Zustand VOR ST1 - der ist
+// jetzt eingepinnt, nicht mehr offen.
 //
 // WAHRHEITS-KETTE (O1, Wartungsregel): kanonisch fuer den Regel-Inhalt B1+B2 ist die
 // EL-VORLAGE (elevenlabs/agent_configs/outbound-agent.template.json - Master-Prompt EN
@@ -9,12 +18,9 @@
 // (AS2/AS3-Assertions) - wer nur eine Stelle aendert, macht AS2 oder AS3 rot.
 //
 // Testnamen tragen bewusst KEINE Katalog-ID des i18n-Launch-Testkatalogs am Namensanfang
-// (package.json config.i18nCatalogPattern), sondern NUR die Abnahme-Kennung - sonst
-// landet die Datei im falschen Testlauf (Lehre catalog-id-prefix-misroutes-tests).
-// Die Kriterien sind gruen abgeliefert, tragen aber TROTZDEM die Grund-Zeile
-// "| ROT WEIL: ... | FIX: ...": der Selbsttest der Abnahme-Bahn (R3,
-// test/abnahme-bahn-selbsttest.test.js) verlangt sie an JEDEM Namen mit Abnahme-Kennung,
-// auch an gruenen - sie dokumentiert hier den Zustand VOR ST1, nicht einen offenen Fall.
+// (package.json config.i18nCatalogPattern) und keine Abnahme-Kennung mehr, sondern das
+// Abnahme-Siegel - sonst landet die Datei im falschen Testlauf (Lehre
+// catalog-id-prefix-misroutes-tests).
 //
 // Kein Netz, kein Konto, kein DATA_DIR: geprueft werden die Vorlage im Repo, die
 // LOCALES-Bausteine (config-frei, Bestandsmuster f1-i18n-locale / call-locale) und das
@@ -28,7 +34,9 @@ import { providerOpeningFor } from "../src/elevenlabs/call-locale.js";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 const BEFUNDE_REL = "tasks/EL-STIMME-BEFUNDE.md";
-const LANGS = ["de", "en", "fr"];
+// EINE Aufzaehlung der Sprachmenge, aus LOCALES abgeleitet (keine zweite Liste, die
+// driften kann) - auch die Preset-Schleife unten iteriert LANGS, nicht LOCALES selbst.
+const LANGS = Object.keys(LOCALES);
 
 // Kanon-Texte der Vorlage (Abschnitt 0 des ST1-Plans; Typografie im Bestandsstil der
 // Vorlage: " - " statt Gedankenstrich, "Do not" statt "Do NOT").
@@ -113,7 +121,7 @@ const assertArt50FelderUnberuehrt = (vorlage) => {
     "first_message muss byte-identisch die aus LOCALES.en zusammengesetzte Eroeffnung bleiben",
   );
   const presets = conversationConfig.language_presets;
-  for (const [sprache] of Object.entries(LOCALES)) {
+  for (const sprache of LANGS) {
     if (sprache === BASE_LANGUAGE) continue;
     assert.equal(
       presetFirstMessageOf(presets[sprache]),
@@ -141,7 +149,7 @@ const allNewRuleTexts = () => [
   ...LANGS.flatMap((lang) => [SPEECH_B1[lang], SPEECH_B2[lang]]),
 ];
 
-test("ABNAHME-AS1: ST0-Forensik im Befund-Doc - Drift-Exit-Code, Abweichungsfelder und [el-tags]-Trefferzahl stehen als Zahlen | ROT WEIL: die ST0-Forensik-Ergebnisse standen noch nicht als Zahlen in einem Befund-Doc | FIX: tasks/EL-STIMME-BEFUNDE.md ST0 (Exit-Code, Abweichungsfelder, Trefferzahl)", () => {
+test("[abgenommen AS1] ST0-Forensik im Befund-Doc - Drift-Exit-Code, Abweichungsfelder und [el-tags]-Trefferzahl stehen als Zahlen", () => {
   const befunde = readFileSync(new URL(`../${BEFUNDE_REL}`, import.meta.url), "utf8");
 
   // Der gemessene Drift-Exit-Code steht als Zahl im Doc - nicht als "irgendwie rot".
@@ -171,7 +179,7 @@ test("ABNAHME-AS1: ST0-Forensik im Befund-Doc - Drift-Exit-Code, Abweichungsfeld
   );
 });
 
-test("ABNAHME-AS2: Vorlage traegt B1-Regel, B2-Ergaenzung und neuen soft_timeout-Override - und die Art-50-Felder bleiben unberuehrt | ROT WEIL: Vorlage und Override trugen die ST1-Regeln noch nicht | FIX: B1/B2 im Master-Prompt, Override umgeformt, Unberuehrtheits-Pin", () => {
+test("[abgenommen AS2] Vorlage traegt B1-Regel, B2-Ergaenzung und neuen soft_timeout-Override - und die Art-50-Felder bleiben unberuehrt", () => {
   const vorlage = template();
 
   // (a)+(b) die Regeln stehen im Master-Prompt (Substring, nicht Ganz-Feld: der Prompt
@@ -196,7 +204,7 @@ test("ABNAHME-AS2: Vorlage traegt B1-Regel, B2-Ergaenzung und neuen soft_timeout
   assertArt50FelderUnberuehrt(vorlage);
 });
 
-test("ABNAHME-AS3: alle drei i18n-speechRules (de/en/fr) tragen die B1-Zeile UND die B2-Zeile | ROT WEIL: die speechRules trugen die Uebersetzungen der B1/B2-Regeln noch nicht | FIX: je zwei neue Zeilen am Blockende in de.js, en.js, fr.js", () => {
+test("[abgenommen AS3] alle drei i18n-speechRules (de/en/fr) tragen die B1-Zeile UND die B2-Zeile", () => {
   for (const lang of LANGS) {
     const regeln = speechRulesOf(lang);
     assert.ok(
@@ -210,7 +218,7 @@ test("ABNAHME-AS3: alle drei i18n-speechRules (de/en/fr) tragen die B1-Zeile UND
   }
 });
 
-test("ABNAHME-AS4: keiner der neuen Regeltexte enthaelt ein eckiges Klammer-Zeichen | ROT WEIL: kein Pin hielt die Lehre vom 18.08. fuer die neuen ST1-Regeltexte fest | FIX: AS4 pinnt Klammerfreiheit an Kanon- und Render-Seite", () => {
+test("[abgenommen AS4] keiner der neuen Regeltexte enthaelt ein eckiges Klammer-Zeichen", () => {
   // Lehre 18.08.: ein Prompt-Verbot mit Klammer-BEISPIEL verlor gegen das Beispiel -
   // deshalb darf KEIN neuer Regeltext auch nur ein "[" oder "]" enthalten.
   const texte = allNewRuleTexts();
