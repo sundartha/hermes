@@ -58,6 +58,19 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       ERWARTET: Push-Protokoll (geaenderte Felder + Ruecklese) im Befund-Doc; AS5/AS6
       gruen.
       VERIFIKATION: Drift-Exit-Code 0 nach Push dokumentiert; test:abnahme-Beleg.
+      TEILBELEG (Repo-Vorbereitung 2026-09-03, KEIN Push): Entscheidung 9 umgesetzt -
+      Karte um tts.supported_voices=false und additional_soft_timeout_messages=false
+      erweitert (Einfuegeposition per read-only LIVE-GET; Karte SOLL == LIVE), Pins
+      soft_timeout_llm_filler/soft_timeout_filler_limit mit SOLL=LIVE-Messwert und
+      Aenderungsweg gesetzt; AS5 GRUEN, AS6 ROT wie erwartet ("8 von 9"), npm test
+      5687/5687; Push-Semantik im Befund-Doc dokumentiert (Karten-PATCH ersetzt das
+      Gesamtobjekt, Skriptkopf GEGENPROBE STATT VERTRAUEN); read-only Drift-Lauf:
+      Karte aus der Abweichungsliste gefallen, 40/40 verglichen, rot nur noch
+      retention/record_voice (BEWUSST AUSGENOMMEN) + agent.prompt.prompt +
+      llm_generated_message_prompt_override. OFFEN: OWNER-GATE Push (frischer
+      Drift-Lauf DAVOR, R7); danach Protokoll-Abschnitt "## ST2 Push-Protokoll" mit
+      "Ruecklese" und "Drift nach dem Push: Exit-Code 0" nach den AS6-Markern ins
+      Befund-Doc (tasks/EL-STIMME-BEFUNDE.md).
 - [ ] 4. ST3 Detektoren (O3, NUR Diagnose): [el-b1]-Heuristik (eng: nur unmittelbar
       aufeinanderfolgende Saetze, loggt NUR Trefferzahl/Cues/Zeilenindizes — R8),
       Zaehlfeld [el-tags]/[el-b1] am Call-Datensatz (Entscheidung 6), Kommentar-
