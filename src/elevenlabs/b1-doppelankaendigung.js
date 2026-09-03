@@ -107,7 +107,7 @@ const saetzeVon = (text) =>
 // "Gedicht." und "[Marke] Klar" zu "Gedicht.Klar" zusammen und die Satzgrenze fiele weg).
 const klammerfrei = (text) => String(text ?? "").replace(AUDIO_TAG, " ");
 
-// NFD-Diakritika-Strip + Kleinschreibung + Satz-/Apostroph-Zeichen raus ("fröhlich" wird
+// NFD-Diakritika-Strip + Kleinschreibung + Satz-/Apostroph-Zeichen raus ("froehlich"-Marke wird
 // zu seiner ASCII-Form, "d'accord" zu "daccord") - Cue- und Lexem-Vergleich ueber reine
 // Buchstaben-/Ziffernfolgen.
 // In zwei benannte Schritte getrennt (G19): erst die Diakritika-freie Kleinschreibung,
