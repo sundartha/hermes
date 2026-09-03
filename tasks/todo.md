@@ -1,3 +1,154 @@
+# EL-Agenten-Stimme: Umsetzung ST0-ST5 (2026-09-03, Lead-Session)
+
+Auftrag: Phasenplan aus tasks/PLAN-AGENTEN-STIMME.md umsetzen. Freigegeben vom Owner:
+ST0 inkl. Mitschnitt-Testanruf (Entscheidung 1), ST1/ST3 (Code+Tests). Vor JEDEM dieser
+Schritte EINZELN Owner-Gate: EL-Push in ST2, (A/B-)Testanrufe in ST4. Befund-Doc:
+tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheidungen
+2026-09-02 gelten; nicht erneut stellen.
+
+- [x] 1. ST0 Forensik schliessen (read-only + Testanruf): elevenlabs:drift (Exit-Code +
+      Feldliste der Abweichungen, LIVE-Erlaubnis-Karte inkl. first_message-Status,
+      Entscheidung 7), 30-Tage-[el-tags]-Rueckblick in Render-Logs
+      (srv-d8m0fhflk1mc73bno570), Mitschnitt-Testanruf eigene Nummer — VORHER belegen,
+      dass Recording aktiv ist — + Audio-Auswertung (Filler-Frage: Sprechpause/
+      Stimmwechsel zwischen den Saetzen?).
+      ERWARTET: Befund-Doc mit Drift-Exit-Code + Abweichungsliste, [el-tags]-Trefferzahl
+      als Zahl, first_message-Status, Mitschnitt-Urteil Filler ja/nein/unentscheidbar;
+      Erkenntnis-Kopplung: erschuettern die Befunde ST1/ST2?
+      VERIFIKATION: Exit-Codes + Audio-Messwerte im Doc; Lead-grep auf Secret-Muster und
+      vollstaendige E.164 im Doc = 0 Treffer.
+      BELEG: tasks/EL-STIMME-BEFUNDE.md — drift Exit 1 (38/38 verglichen, 2 bewusste
+      Ausnahmen retention/record_voice, 1 blockierend: 2 LIVE-only Erlaubnis-Schluessel);
+      [el-tags]-Trefferzahl=3 im beobachtbaren Fenster (Render-Retention NUR 7 Tage,
+      30-Tage-Fenster logseitlich unerreichbar; 3/3 der seit 30.08. log-sichtbaren
+      Outbounds betroffen); first_message=TRUE (Entscheidung 7 beantwortet); Recording
+      aktiv-belegt (record_voice=true, Audio-Abruf HTTP 200 am Vorfall). FILLER-FRAGE AM
+      ORIGINAL-VORFALLS-AUDIO GEKLAERT: urteil=eine-generation (Grenzpause 0,33 s unter
+      Baseline-Median 0,58 s; kein Stimm-Sprung; Frueheinsatz-Fenster still; Luecke durch
+      Endpointing+LLM-Latenz erklaert, Initiierung nach 0,512 s VOR der 2,0-s-Schwelle).
+      Owner 2026-09-03: Testanruf UEBERSPRUNGEN (Entscheidung 8); Erlaubnis-Karte:
+      2 LIVE-only Schluessel in Vorlage aufnehmen (Entscheidung 9, Erledigung ST2).
+      Lead-grep auf Doc: Umlaute 0, volle E.164 0. Kein Code geaendert -> keine Suite.
+- [x] 2. ST1 Regeln (O1): B1-Regel + B2-Ergaenzung im Vorlagen-Master-Prompt,
+      soft_timeout_prompt_override-Umformulierung, speechRules de/en/fr (ENDE-Insert,
+      Quell-Kommentar auf Vorlage); Tests AS2 (inkl. Unberuehrtheits-Assertion der
+      Art.-50-Felder), AS3, AS4 in der Bahn test:abnahme.
+      ERWARTET: AS2/AS3/AS4 gruen in npm run test:abnahme; npm test gruen; phase-impl
+      mit dualem Review (S1/S2 = Blocker).
+      VERIFIKATION: "# pass"/"# fail"-Zeilen als Beleg hier; Merge nur mit Suite-Beleg.
+      BELEG: phase-impl Run wf_e4493e04-490, Branch phase/task-impl (93bfbaf + Fix
+      c9b7aed), Merge 1c10a6b. Safety-Review FREIGABE (Art.-50-Felder byte-identisch
+      gepeinnt, Scope exakt, Branch-Suite 5684/5684 im Reviewer-Lauf); Clean-Code
+      Runde 1: 1x S1 (Regel-Pins liefen nur in der Abnahme-Bahn) -> Fix-Runde:
+      AS1-AS4 in die Regressionsbahn gewandert (Siegel [abgenommen ASn] am Namensanfang,
+      abnahme-ausgewandert.json 3->7, R2-Ratsche gruen) + S4-Fix LANGS=Object.keys-
+      (LOCALES); Re-Audit pass=true, 0x S1/S2. LEAD-SUITE AUF MERGE (1c10a6b):
+      test:abnahme "7 von 7 Abnahmekriterien erfuellt", Exit 0. npm test Volllaufen:
+      5668/5666/2 bzw. 5668/5667/1 — Fail-Namen WANDELN zwischen Laeufen, EL-CONSULT S1
+      isoliert 3x gruen (Spawn-Flake, Reviewer sah dasselbe Muster an HM4/originateVia-
+      CallControl). test:gates 3 rot (GAP-05 SOLL, GAP-15 SOLL rot, E2E-03) — alle 3
+      PER BASELINE-LAUF AUF cd8a88c VOR dem Merge identisch rot belegt (vorbestehende
+      Produktbefunde, nicht ST1). KEIN Push ans Live-System: nur Repo-SOLL geaendert;
+      drift wird bis ST2 erwartungsgemaess um agent.prompt.prompt + llm_override
+      zusaetzlich rot (Befund-Doc ST1-Abschnitt).
+- [ ] 3. ST2 Pin & Push (O2) — OWNER-GATE vor dem Push (patcht Live-Agenten): frischer
+      Drift-Lauf unmittelbar DAVOR (LIVE-Erlaubnis-Karte, R7; kein stiller Push),
+      Pin-Erweiterung use_llm_generated_message + max_soft_timeouts_per_generation mit
+      _hinweis + Aenderungsweg (AS5), Push mit Ruecklese, Drift exit 0 danach (AS6).
+      ERWARTET: Push-Protokoll (geaenderte Felder + Ruecklese) im Befund-Doc; AS5/AS6
+      gruen.
+      VERIFIKATION: Drift-Exit-Code 0 nach Push dokumentiert; test:abnahme-Beleg.
+- [ ] 4. ST3 Detektoren (O3, NUR Diagnose): [el-b1]-Heuristik (eng: nur unmittelbar
+      aufeinanderfolgende Saetze, loggt NUR Trefferzahl/Cues/Zeilenindizes — R8),
+      Zaehlfeld [el-tags]/[el-b1] am Call-Datensatz (Entscheidung 6), Kommentar-
+      Erweiterung outbound.js (Vorfall 2026-09-02), anonymisierte Vorfalls-Fixture
+      conv_0501... (AS7), Gegenprobe an sauberen Fixtures (AS8), String-Check (AS9).
+      ERWARTET: AS7/AS8/AS9 gruen; gespeicherte Transkripte unveraendert (Art. 50);
+      npm test gruen.
+      VERIFIKATION: test:abnahme + npm test Beleg hier; Merge nur mit Suite-Beleg.
+- [ ] 5. ST4 Verifikations-Testanruf — OWNER-GATE vor den Anrufen (Kosten): echter
+      Anruf mit Detektoren live, Transkript als anonymisierte Fixture, Owner-Hoer-Urteil
+      (natuerlicher Uebergang, Stille-Wahrnehmung) ins Befund-Doc (AS10); A/B-Testanrufe
+      ignore_default_personality (Entscheidung 3, Schaltung nur auf Messung).
+      ERWARTET: AS10 gruen (Klammer-Marken in Agent-Zeilen = 0, B1 ungemeldet,
+      Hoer-Urteil-Abschnitt im Doc, Fixture anonymisiert).
+      VERIFIKATION: call-/conv-ID + grep-Exit-Code im Befund-Doc; test:abnahme-Beleg.
+- [ ] 6. ST5 Lehren sichern + Abschluss: tasks/lessons.md EL-Regel mit VIER Kernsaetzen
+      (AS11, deterministischer Grep); Aufraeum-Pflicht (Prozessmuell der Kette im
+      Merge-Commit: untrackte Doku erst committen, dann loeschen, nie git add -A);
+      volle Suite EINMAL vom Lead (npm test, test:gates, test:abnahme — nur wenn Code
+      geaendert); Kostenmessung per temp-HOME-Symlink (Memory
+      workflow-kosten-claude-zai-pfad) + node scripts/workflow-kosten.mjs <run-id>.
+      ERWARTET: AS11 gruen; Kostenzahl aus workflow-kosten.mjs (nie subagent_tokens).
+      VERIFIKATION: test:abnahme-Beleg + Kostenzahl hier.
+
+# EL-Agenten-Qualitaet: Forensik + Strategie-Doc "Agenten-Stimme verbessern" (2026-09-02)
+
+Auftrag: B1 (doppelte Ankuendigung) + B2 (gesprochene Klammermarke "[froehlich]") aus Testanruf
+call_mtka4kunn0qy / EL conv_0501m1hddb92f5d8hktsr4cb813m. Lead + Workflow-Orchestrierung
+(Eigentuemer-Anordnung); KEINE Code-Aenderungen ohne erneute Freigabe. Doc-only Lauf ->
+volle Suite entfaellt (workflow.md 2a, Regel 2).
+
+- [x] 1. FORENSIK (3 Agenten parallel, read-only): EL-Live-Agent (System-Prompt, tts.*,
+      Modell), Repo-Landkarte ([el-tags]-Detektor, Registrierung, Prompt-Tests PROMPT-*/GAP-*),
+      Historie (Befund 3 vom 18.08.).
+      ERWARTET: 3 Berichte mit Quellen (EL-Feldnamen/file:line), Secrets maskiert,
+      Telefonnummern maskiert, Luecken als offene Fragen.
+      VERIFIKATION: Workflow-Rueckgabe: je summary vorhanden; kein Secret-Muster und keine
+      vollstaendige E.164-Nummer im Rueckgabetext (Lead-Stichprobe per grep).
+      BELEG (Run wf_af77fc54-7f2): 3 Berichte mit Quellen; version_id des Live-Agenten
+      identisch mit Testanruf-conv -> Konfig = Vorfalls-Konfig. Kern: B2 suggested_audio_tags
+      LEER, Prompt verbietet Klammern explizit -> [froehlich] = Improvisation,
+      tts.expressive_mode=true als Gegen-Sog-Vermutung; B1 beide Ankuendigungen in EINER
+      Generation, erster Satz passt aufs soft_timeout-Filler-Profil (2.0 s vs. 2.067 s TTFB).
+      Kein Pinning-File "registrierung.js" fuer Agenten - Pin ist
+      elevenlabs/agent_configs/outbound-agent.template.json (38 Felder) + drift/push-Skripte.
+      Lead-Grep auf Doc: kein Secret/E.164-Treffer.
+- [x] 2. STRATEGIE-DOC tasks/PLAN-AGENTEN-STIMME.md: Optionen O1 EL-Prompt-Regeln (de/en/fr
+      konsistent), O2 Pin in Registrierungs-Vorlage (Befund-3-Mechanik), O3 Detektor B1 nur
+      Diagnose (Art. 50 AI Act, nie Transkripte strippen); Phasenplan mit ABNAHME-<ID>-Kriterien;
+      offene Owner-Entscheidungen.
+      ERWARTET: Datei existiert mit Pflichtabschnitten, ohne Umlaute, ohne Secrets/PII.
+      VERIFIKATION: grep '^## ' tasks/PLAN-AGENTEN-STIMME.md zeigt Pflichtabschnitte;
+      grep -c '[äöüÄÖÜß]' tasks/PLAN-AGENTEN-STIMME.md = 0.
+      BELEG: grep '^## ' -> 8 Pflichtabschnitte (Zeilen 9/27/116/138/258/277/362/391);
+      Umlaut-Grep = 0; Secret/PII-Grep kein Treffer. Phasen ST0-ST5 mit ABNAHME-Kriterien,
+      7 offene Owner-Entscheidungen.
+- [x] 3. PRE-MORTEM-Abschnitt im Doc: je Risiko Entscheidung vermeiden/entschaerft/akzeptiert.
+      ERWARTET: Abschnitt "## Pre-Mortem" mit Tabelle; Massnahmen zurueck in den Phasenplan.
+      VERIFIKATION: grep 'Pre-Mortem'; Abnahme-Agent prueft mit.
+      BELEG: Abschnitt Zeile 362; 10 Risiken R1-R10, je Entscheidung (8x entschaerft,
+      1x vermeiden, 1x bewusst akzeptiert), Massnahmen in Phasenplan zurueckgeflossen.
+- [x] 4. CLEAN-CODE-GATE (.claude/refs/clean-code.md): S1/S2-Blocker im Entwurf; G5 keine zweite
+      Wahrheit neben src/i18n/prompts/*.js; keine Magic Strings; Kommentar-Konvention.
+      ERWARTET: pass=true nach hoechstens einer Fix-Runde.
+      VERIFIKATION: Review-Verdict pass=true, blockers=[].
+      BELEG: Runde 1 pass=false (3 Blocker: Umlaute "Gruens-Bedingung"/"verdaechtigen",
+      G5 Wahrheits-Kette Vorlage vs. i18n, +1) -> Fix-Runde -> Runde 2 pass=true,
+      blockers=[]; 3 kleinere findings (u.a. G11: 'pacing' fehlt in den i18n-Ableitungen -
+      fuer ST1 notiert).
+- [x] 5. ABNAHME: Doc gegen eigene Abnahmekriterien; Stichprobe file:line-Referenzen (5+).
+      ERWARTET: pass=true, blockers=[].
+      VERIFIKATION: Abnahme-Verdict; danach Kostenmessung per temp-HOME-Symlink
+      (Memory workflow-kosten-claude-zai-pfad) + node scripts/workflow-kosten.mjs <run-id>.
+      BELEG: Abnahme pass=true, geprueft=44, blockers=[], Stichprobe 17 Referenzen
+      (outbound.js:493/513-524/944/1036-1046, convai.js:96/108/138-155/217,
+      de.js:36-43, Tests, Vorlage, gq-doc) alle ok; 1 Einschraenkung dokumentiert
+      (gq-Zitat ist Paraphrase). KOSTEN (workflow-kosten.mjs, temp-HOME): 8,0 Mio Token
+      gesamt, davon 7,4 Mio Cache-Reads, Output 146k, 384 Turns, 9 Agenten, ~29 min;
+      workflow-Anzeige subagent_tokens 0,64 Mio erneut ~12x zu niedrig.
+      Doc-only Lauf: kein Code geaendert, Suite nicht noetig; nichts committet.
+- [x] 6. Owner-Entscheidungen eingeholt und dokumentiert (2026-09-02, alle 7 im Sinne der
+      Doc-Empfehlung): 1 Mitschnitt-Testanruf in ST0, 2 expressive_mode anlassen mit
+      Escalations-Schwelle, 3 ignore_default_personality per A/B in ST4 messen, 4 Pin minimal
+      erweitern (use_llm_generated_message + max_soft_timeouts_per_generation), 5 B1-Heuristik
+      nur Diagnose mit Gegenprobe-Pflicht, 6 Zaehlfeld [el-tags]/[el-b1] am Call-Datensatz,
+      7 first_message-Erlaubnis in ST0 mitlesen (Weiterverfolgung OC-Kette).
+      ST0-Start: "noch nicht" - Kette startet auf Kommando.
+      ERWARTET: je Entscheidung eine "Entscheidung 2026-09-02 (Owner)"-Zeile im Doc.
+      VERIFIKATION: grep -c 'Entscheidung 2026-09-02 (Owner)' tasks/PLAN-AGENTEN-STIMME.md
+      -> 7; Umlaut-Grep bleibt 0.
+
 # KV2-11: EL-Settlement freigeben + Deploy KV2-10/11 (2026-09-02)
 
 - [x] 1. KV2-11 gebaut und gemergt (merge d0bf81b, Phase phase/task-impl 4c0ed9d):
