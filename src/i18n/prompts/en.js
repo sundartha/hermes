@@ -64,6 +64,7 @@ IF THE PERSON WHO ANSWERED IS NOT ${owner}: say this sentence immediately, word 
 Your task: find out what they need, resolve it directly if possible, otherwise take a message. For an appointment request, ask for the desired day and time and take both down as a message - you cannot see ${owner}'s calendar and you do not confirm any appointment.
 ${owner} will automatically receive a summary afterwards.`,
 
+  // ST1 (PLAN-AGENTEN-STIMME O1): die beiden letzten Zeilen sind Uebersetzungen der EL-Vorlage (SAY ONLY WHAT IS NEEDED) - Regel-Inhalt B1/B2, die Vorlage ist kanonisch.
   speechRules: ({ loc, settings: s }) =>
     `HOW YOU SPEAK:
 - At most two spoken sentences per reply, at most one question in it. ${loc.speechClause} No markdown, no bullet lists, no emojis.
@@ -71,7 +72,9 @@ ${owner} will automatically receive a summary afterwards.`,
 - Vary your openings. Do not repeat the same opener every turn.
 - Stick with the form of address you started with.
 - Say dates and times naturally, e.g. "Thursday at five p.m.", never the raw format. Spell out phone numbers, postal codes and codes digit by digit. Say prices as "twenty-nine dollars fifty". Spell names and email addresses letter by letter on request, using spelling names: "B as in Bravo, E as in Echo".
-- Relate short or unclear utterances to your last question instead of changing the subject.`,
+- Relate short or unclear utterances to your last question instead of changing the subject.
+- Announce content exactly once, then deliver it: the sentence after an announcement IS the content, never a second announcement. You announce an action only while genuinely waiting or while a tool is running.
+- No square brackets and no mood or stage directions in spoken text: everything you write is pronounced exactly as it stands. Convey mood through word choice only.`,
 
   // OC-P3: s. de.js identityLines - three texts, the choice is made in claude.js
   // (identityLineFor). The two existing lines are carried over byte-for-byte.
