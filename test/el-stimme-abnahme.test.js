@@ -1,6 +1,9 @@
 // Abnahmekriterien AS1-AS4 der Stimme-Kette (ST1 aus tasks/PLAN-AGENTEN-STIMME.md, O1).
 // ST2-ST4 erweitern dieselbe Datei um AS5-AS10 - die kommen MIT Abnahme-Kennung und
 // Grund-Zeile in die ABNAHME-Bahn (npm run test:abnahme).
+// ST2-Anteil (2026-09-03): AS5 pinnt die Vorlagen-Besitzerweiterung (Owner-Entscheidungen
+// 4 + 9) und ist gruen, sobald die Vorlage stimmt; AS6 ist Doc-Kriterium und bleibt
+// bewusst ROT bis zum dokumentierten Push - noch NICHT auswandern (ST1-Prezedenz).
 //
 // MIGRATIONSSTAND: AS1-AS4 sind abgenommen (2026-09-03) und in den Regressionslauf
 // gewandert - Kennung abgelegt, Siegel "[abgenommen <ID>]" getragen, Eintrag in
@@ -78,6 +81,11 @@ const VOICEMAIL_PIN =
 // sie waere eine zweite Kopie desselben Wortlauts (Bestandsmuster EL-START T5 e).
 const BASE_LANGUAGE = "en";
 
+// Pin-Marker des Aenderungswegs an den ST2-Besitz-Eintraegen: der Satz ist bewusst
+// identisch in beiden Eintraegen - er ist der R9-Riegel gegen Dashboard-Aenderungen am
+// gepinnten SOLL (siehe _besitz.felder, Eintraege soft_timeout_llm_filler/_filler_limit).
+const AENDERUNGSWEG_MARKER = "SOLL aendern NUR in dieser Vorlage";
+
 const template = () =>
   JSON.parse(readFileSync(new URL(`../${TEMPLATE_REL}`, import.meta.url), "utf8"));
 
@@ -86,10 +94,17 @@ const masterPromptOf = (vorlage) => {
   const agentSection = vorlage.agent?.conversation_config?.agent ?? {};
   return agentSection.prompt?.prompt ?? "";
 };
-const softTimeoutOverrideOf = (vorlage) => {
+// In Stufen gelesen statt in einer Kette (G36/Demeter, im Lint dieses Repos ein Fehler).
+const softTimeoutConfig = (vorlage) => {
   const turn = vorlage.agent?.conversation_config?.turn ?? {};
-  return turn.soft_timeout_config?.llm_generated_message_prompt_override ?? null;
+  return turn.soft_timeout_config ?? {};
 };
+const softTimeoutOverrideOf = (vorlage) =>
+  softTimeoutConfig(vorlage).llm_generated_message_prompt_override ?? null;
+const besitzEintrag = (vorlage, feld) =>
+  vorlage._besitz.felder.find((eintrag) => eintrag.feld === feld) ?? null;
+const overrideKarte = (vorlage) =>
+  vorlage.platform_settings?.overrides?.conversation_config_override ?? {};
 
 // Neutraler Render der speechRules: settings ohne agentStyle -> styleClause faellt auf
 // die Neutral-Klausel, byte-stabil und ohne Store/Konfiguration.
@@ -148,6 +163,35 @@ const allNewRuleTexts = () => [
   OVERRIDE_NEU,
   ...LANGS.flatMap((lang) => [SPEECH_B1[lang], SPEECH_B2[lang]]),
 ];
+
+// EIN art-wert-Pin am soft_timeout_config (ST2, Owner-Entscheidung 4): Feldname, beide
+// Pfade exakt, keine Ausnahme (eine Ausnahme wuerde die Bewachung stumm schalten) und der
+// Aenderungsweg im Hinweis. Gemeinsamer Helfer fuer beide Eintraege - dieselbe Pruefung
+// doppelt zu schreiben hiesse, sie getrennt pflegen zu koennen (G5).
+const assertBesitzWertPin = (vorlage, feld, blatt) => {
+  const eintrag = besitzEintrag(vorlage, feld);
+  assert.ok(eintrag, `der Besitz-Eintrag "${feld}" fehlt in _besitz.felder`);
+  assert.equal(eintrag.art, "wert", `"${feld}" muss art "wert" tragen (exakter Wertvergleich)`);
+  assert.deepEqual(
+    eintrag.vorlage,
+    [`agent.conversation_config.turn.soft_timeout_config.${blatt}`],
+    `"${feld}" muss genau den Vorlagen-Pfad auf ${blatt} vergleichen`,
+  );
+  assert.deepEqual(
+    eintrag.live,
+    [`conversation_config.turn.soft_timeout_config.${blatt}`],
+    `"${feld}" muss genau den Live-Pfad auf ${blatt} vergleichen`,
+  );
+  assert.equal(
+    eintrag.ausgenommen,
+    undefined,
+    `"${feld}" darf keine Ausnahme tragen - sonst waere die Bewachung stumm`,
+  );
+  assert.ok(
+    eintrag._hinweis?.includes(AENDERUNGSWEG_MARKER),
+    `"${feld}" muss den Aenderungsweg nennen (${AENDERUNGSWEG_MARKER})`,
+  );
+};
 
 test("[abgenommen AS1] ST0-Forensik im Befund-Doc - Drift-Exit-Code, Abweichungsfelder und [el-tags]-Trefferzahl stehen als Zahlen", () => {
   const befunde = readFileSync(new URL(`../${BEFUNDE_REL}`, import.meta.url), "utf8");
@@ -247,5 +291,62 @@ test("[abgenommen AS4] keiner der neuen Regeltexte enthaelt ein eckiges Klammer-
   assert.ok(
     bracketFree(softTimeoutOverrideOf(template())),
     "der soft_timeout-Override enthaelt ein eckiges Klammer-Zeichen",
+  );
+});
+
+test("ABNAHME-AS5: Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (Feldname, beide Pfade, SOLL-Wert, Aenderungsweg) und fuehrt die zwei LIVE-only Erlaubnis-Schluessel mit false | ROT WEIL: use_llm_generated_message und max_soft_timeouts_per_generation gehoerten dem Dashboard (kein Besitz-Eintrag) und die Erlaubnis-Karte kannte die zwei LIVE-only Schluessel nicht - drift an der Karte dauerhaft rot, der Filler-Mechanismus unbewacht | FIX: zwei art-wert-Eintraege in _besitz.felder mit SOLL = LIVE-Messwert und Aenderungsweg, Karte um tts.supported_voices=false und turn.soft_timeout_config.additional_soft_timeout_messages=false erweitern (Owner-Entscheidungen 4 + 9)", () => {
+  const vorlage = template();
+
+  // (a) beide Stellschrauben sind als Besitz gepinnt: Feldname, art, beide Pfade exakt,
+  // keine Ausnahme, Aenderungsweg im Hinweis (der Pin-Marker fuer dieses Kriterium).
+  assertBesitzWertPin(vorlage, "soft_timeout_llm_filler", "use_llm_generated_message");
+  assertBesitzWertPin(vorlage, "soft_timeout_filler_limit", "max_soft_timeouts_per_generation");
+
+  // (b) die SOLL-Werte sind der am Live-Agenten gemessene Stand (Bewachung, nicht
+  // Korrektur) - SOLL == LIVE heisst: keine Schreib-Kandidaten, der spaetere ST2-Push
+  // schreibt nur die ST1-Regelfelder.
+  assert.equal(
+    softTimeoutConfig(vorlage).use_llm_generated_message,
+    true,
+    "use_llm_generated_message muss SOLL true tragen (LIVE-Messwert ST0/ST2)",
+  );
+  assert.equal(
+    softTimeoutConfig(vorlage).max_soft_timeouts_per_generation,
+    1,
+    "max_soft_timeouts_per_generation muss SOLL 1 tragen (LIVE-Messwert ST2)",
+  );
+
+  // (c) Entscheidung 9: die zwei LIVE-only Schluessel stehen mit false in der Karte -
+  // Wert false heisst "nicht erlaubt", keine Erlaubnis wird erweitert (und die Karte
+  // ist damit kein Push-Kandidat mehr, SOLL == LIVE).
+  assert.equal(
+    overrideKarte(vorlage).tts.supported_voices,
+    false,
+    "tts.supported_voices muss false in der Erlaubnis-Karte stehen (keine Erweiterung)",
+  );
+  assert.equal(
+    overrideKarte(vorlage).turn.soft_timeout_config.additional_soft_timeout_messages,
+    false,
+    "turn.soft_timeout_config.additional_soft_timeout_messages muss false in der Erlaubnis-Karte stehen (keine Erweiterung)",
+  );
+});
+
+test("ABNAHME-AS6: Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protokoll' im Befund-Doc dokumentiert | ROT WEIL: der Push ist nicht ausgefuehrt - ST2-Reposeite liefert bewusst nur das SOLL, der Push ist Owner-Gate | FIX: frischen Drift-Lauf, Push der ST1-Regelfelder mit Ruecklese, danach Drift-Exit-Code 0 als Abschnitt '## ST2 Push-Protokoll' (mit 'Ruecklese' und 'Drift nach dem Push: Exit-Code 0') in tasks/EL-STIMME-BEFUNDE.md dokumentieren", () => {
+  const befunde = readFileSync(new URL(`../${BEFUNDE_REL}`, import.meta.url), "utf8");
+
+  // Der Abschnitt entsteht erst mit dem echten Push - die Marker-Literale sind die
+  // Vorgabe an den, der den Push protokolliert (Bestandsmuster AS1: String-Checks).
+  assert.match(
+    befunde,
+    /## ST2 Push-Protokoll/,
+    "das Befund-Doc braucht einen Abschnitt '## ST2 Push-Protokoll' (entsteht mit dem Push)",
+  );
+  assert.ok(
+    befunde.includes("Ruecklese"),
+    "das Push-Protokoll muss die Ruecklese des Patches dokumentieren",
+  );
+  assert.ok(
+    befunde.includes("Drift nach dem Push: Exit-Code 0"),
+    "das Push-Protokoll muss 'Drift nach dem Push: Exit-Code 0' als Zeile tragen",
   );
 });

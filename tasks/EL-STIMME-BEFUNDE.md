@@ -171,18 +171,67 @@ audio-unsichtbar — haette den Verlauf aber auch nicht gepraegt.
   (retention_days/record_voice) und die Erlaubnis-Karte bleiben unveraendert Teil des
   ST0-Befunds. AS1 prueft nur den ST0-Abschnitt dieses Docs und bleibt gruen.
 
+## ST2 Repo-Vorbereitung (2026-09-03, KEIN Push)
+
+1. **Entscheidung 9 umgesetzt**: die 2 LIVE-only Erlaubnis-Schluessel stehen in der
+   SOLL-Karte - `tts.supported_voices`=false, `turn.soft_timeout_config.additional_soft_timeout_messages`
+   =false. Einfuegeposition je LIVE-GET (Vergleichskern `istGleich` in
+   scripts/lib/elevenlabs-besitz.mjs vergleicht per JSON.stringify, Schluesselreihenfolge
+   ist serialisierungsrelevant): `supported_voices` zwischen `voice_id` und `stability`,
+   `additional_soft_timeout_messages` hinter `message`. Beide Werte false = keine
+   Erlaubnis erweitert (Semantik der Karte: nur `true` erlaubt), kein Push dafuer
+   noetig (SOLL == LIVE an der Karte). BELEGT durch read-only Drift-Lauf 2026-09-03
+   (KEIN Schreibzugriff): `conversation_config_override` steht NICHT mehr in der
+   Abweichungsliste.
+2. **Pin-Erweiterung (Entscheidung 4)**: zwei neue art-wert-Eintraege in
+   `_besitz.felder`, direkt hinter `soft_timeout_prompt_override`:
+   `soft_timeout_llm_filler` (agent.conversation_config.turn.soft_timeout_config.
+   use_llm_generated_message, SOLL true) und `soft_timeout_filler_limit`
+   (agent.conversation_config.turn.soft_timeout_config.max_soft_timeouts_per_generation,
+   SOLL 1). Beide SOLL-Werte sind der am 2026-09-03 per GET gemessene LIVE-Stand
+   (Bewachung statt Korrektur, dasselbe Muster wie timezone/max_duration_seconds);
+   Aenderungsweg im `_hinweis` je Eintrag ("SOLL aendern NUR in dieser Vorlage", dann
+   npm run elevenlabs:push - nie am Dashboard, R9). Keine Push-Kandidaten (SOLL ==
+   LIVE); der Drift-Lauf vergleicht jetzt 40/40 besessene Felder, beide Pins gruen.
+3. **Push-Semantik am eigenen Skriptcode verifiziert** (scripts/push-elevenlabs.mjs,
+   Symbol-Anker statt Zeilennummern): Schreib-Kandidaten sind nur ABWEICHENDE besessene
+   Felder mit art "wert" und genau EINEM Live-Pfad (`vergleicheBesitz` ->
+   `teileAbweichungen` -> `istSchreibbar`, `zielPfad` = livePfade[0]).
+   `mitSchreibwerten` setzt `schreibWert = abweichung.soll.wert` - fuer die Karte der
+   KOMPLETTE Karten-Wert -, `bauePatchKoerper` -> `setzeAnPfad(koerper, zielPfad,
+   schreibWert)`: ein Karten-Patch setzt das GANZE Objekt, kein Blatt-Merge. Der
+   Skriptkopf ("GEGENPROBE STATT VERTRAUEN") haelt die Anbieter-Messung fest: PATCH
+   deep-merged verschachtelte Modelle, aber Dict-Felder ERSETZT es. Konsequenz: VOR
+   Entscheidung 9 haette ein Karten-Push die 2 LIVE-only Schluessel GELAESCHT (SOLL
+   kannte sie nicht); ab jetzt schreibt ein etwaiger Karten-Push sie mit, nichts geht
+   verloren. Da SOLL == LIVE ist die Karte ueberhaupt kein Push-Kandidat mehr. Die
+   Sperrliste `GESPERRTE_FELDER` (retention_days, record_voice) bleibt unberuehrt - der
+   spaetere ST2-Push schreibt nur die ST1-Regelfelder `agent.prompt.prompt` und
+   `llm_generated_message_prompt_override`.
+4. **Betriebserwartung bis zum Push** (ersetzt/erweitert den ST1-Absatz): `npm run
+   elevenlabs:drift` bleibt ROT mit GENAU den erwarteten Abweichungen -
+   `retention_days` + `record_voice` (BEWUSST AUSGENOMMEN), `agent.prompt.prompt`,
+   `llm_generated_message_prompt_override`. Die Erlaubnis-Karte ist aus der
+   Abweichungsliste GEFALLEN (read-only Drift-Lauf 2026-09-03: 40/40 verglichen, 4
+   Abweichungen, Exit-Code 1). Der frische Drift-Lauf unmittelbar vor dem Push (R7)
+   darf nur noch an genau diesen vier Feldern rot sein - an jeder fuenften Abweichung
+   ist anzuhalten.
+
 ## Offene Punkte
 
-1. **[ST2-vorgelaegig, Owner-Entscheidung noetig]** Umgang mit den 2 LIVE-only
-   Erlaubnis-Schluesseln (`tts.supported_voices`,
+1. **[erledigt ST2 2026-09-03]** Umgang mit den 2 LIVE-only Erlaubnis-Schluesseln
+   (`tts.supported_voices`,
    `turn.soft_timeout_config.additional_soft_timeout_messages`, beide false):
-   in die Vorlage aufnehmen / als Ausnahme dokumentieren / per Push entfernen.
-   Ohne Entscheidung bleibt das Drift-Gate an `conversation_config_override`
-   dauerhaft rot.
-2. **[ST2-vorgelaegig]** Push-Semantik der Karte (Besitz-Eintrag art 'wert'): ersetzt
-   der PATCH das Gesamtobjekt (dann verschwinden die 2 LIVE-only Schluessel,
-   Provider-Default dafuer unbekannt) oder wird je Blattpfad gemergt? Vor ST2 am
-   Push-Kommando/Provider klaeren.
+   Owner-Entscheidung 9 - in die SOLL-Karte aufgenommen, Wert false, keine Erlaubnis
+   erweitert. Drift meldet `conversation_config_override` nicht mehr (read-only
+   Drift-Lauf 2026-09-03, s. Abschnitt "ST2 Repo-Vorbereitung", Block 1).
+2. **[erledigt ST2 2026-09-03]** Push-Semantik der Karte (Besitz-Eintrag art 'wert'):
+   am eigenen Skriptcode geklaert - der Karten-Patch setzt das GESAMTE Objekt
+   (`mitSchreibwerten`/`bauePatchKoerper`/`setzeAnPfad` am kompletten Karten-Wert),
+   und der Anbieter ERSETZT Dict-Felder beim PATCH statt zu mergen (Skriptkopf
+   "GEGENPROBE STATT VERTRAUEN"). Ein Karten-Push nimmt die 2 Schluessel damit mit,
+   statt sie still zu loeschen; SOLL == LIVE macht die Karte ohnehin zum
+   Nicht-Kandidaten (s. Abschnitt "ST2 Repo-Vorbereitung", Block 3).
 3. 19.08.-[freundlich] logseitlich nicht verifizierbar (7-Tage-Retention); optional
    Store-/Transkript-Pruefung.
 4. Trefferquote [el-tags] pro Anruf: erst mit ST3-Zaehlfeld messbar (Logs allein
