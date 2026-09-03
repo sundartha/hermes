@@ -263,20 +263,17 @@ export function makePgStore(runner) {
       return call;
     },
     // KS-EL1: der Grund, wenn der Anker nicht ermittelbar war - Wrapper-Paritaet zu
-    // json.js (Muster recordElevenlabsConversationId).
+    // json.js (Muster recordElevenlabsConversationId). Rumpf-Ende einzeilig (Muster
+    // markInboxEntry): der ST3-Spread darunter braucht die Zeile, der gepinnte
+    // Zeilenzaehler von makePgStore bleibt dadurch unveraendert (Praezedenz KV2-7).
     recordAnsweredUnclearReason(callId, reason) {
       const { call, changed } = ops.recordAnsweredUnclearReason(requireState(), callId, reason);
-      if (changed) save();
-      return call;
+      if (changed) save(); return call;
     },
-    // ST3 (O3): Zaehlfeld der Stimmen-Detektoren - Wrapper-Paritaet zu json.js. Saved aus
-    // demselben Grund wie die Handles darueber: es gibt eine Spalte (el_detector_counts),
-    // und der Flush schreibt sie aus dem Spiegel.
-    recordElDetectorCounts(callId, zaehlung) {
-      const { call, changed } = ops.recordElDetectorCounts(requireState(), callId, zaehlung);
-      if (changed) save();
-      return call;
-    },
+    // ST3 (O3): Zaehlfeld der Stimmen-Detektoren als Spread-Fabrik statt ausgeschriebener
+    // Methode IN makePgStore (Muster kostenAbschlussMutatoren, unten) - haelt dessen
+    // gepinnte Zeilenzahl in eslint-legacy-exceptions.json unveraendert.
+    ...elDetektorMutatoren({ requireState, save }),
     endCallRecord(callId, status = "completed") {
       const { call, changed } = ops.endCallRecord(requireState(), callId, status);
       if (changed) save();
@@ -1438,6 +1435,20 @@ function kostenAbschlussMutatoren({ requireState, save }) {
     },
     oeffneKostenAbgleichErneut(callId) {
       const { call, changed } = ops.oeffneKostenAbgleichErneut(requireState(), callId);
+      if (changed) save();
+      return call;
+    },
+  };
+}
+
+// ST3 (O3): der Zaehlfeld-Mutator der Stimmen-Detektoren - dieselbe Spread-Fabrik wie
+// absenderWahrheitMutatoren/kostenAbschlussMutatoren darueber, Wrapper-Paritaet zu
+// json.js. Saved aus demselben Grund wie die Handles: es gibt eine Spalte
+// (el_detector_counts), und der Flush schreibt sie aus dem Spiegel.
+function elDetektorMutatoren({ requireState, save }) {
+  return {
+    recordElDetectorCounts(callId, zaehlung) {
+      const { call, changed } = ops.recordElDetectorCounts(requireState(), callId, zaehlung);
       if (changed) save();
       return call;
     },

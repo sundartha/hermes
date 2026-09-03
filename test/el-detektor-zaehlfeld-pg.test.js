@@ -17,7 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-let makePgStore, PGlite, BOOTSTRAP;
+let makePgStore, PGlite, BOOTSTRAP, publicCall;
 
 before(async () => {
   process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-el-detektor-pg-"));
@@ -25,6 +25,7 @@ before(async () => {
   ({ makePgStore } = await import("../src/store/pg.js"));
   ({ PGlite } = await import("@electric-sql/pglite"));
   ({ BOOTSTRAP_TENANT_ID: BOOTSTRAP } = await import("../src/store/defaults.js"));
+  ({ publicCall } = await import("../src/store/views.js"));
 });
 
 // pglite-Store hinter dem Runner-Vertrag (Muster al-p13: dieselbe PGlite-Instanz fuer
@@ -82,4 +83,22 @@ test("ST3-pg: elDetectorCounts ueberlebt flush + Reopen, ist set-once und faellt
     "ein Flush nach einer Fremd-Mutation hat das Zaehlfeld verworfen",
   );
   assert.equal(dritter.getCall(call.id).failureReason, "unreachable:probe", "Positivkontrolle: die Fremd-Mutation selbst ist da");
+});
+
+// ---- Sichtbarkeit (Pin-Test, S1-2 des dualen Reviews) ---------------------------------
+// publicCall ist eine SPERRliste: wer dort genannt wird, wird gestrichen. Das Zaehlfeld
+// ist Betreiber-Diagnose (PII-frei, aber es beantwortet keine Nutzerfrage) und darf
+// /api/state nicht verlassen (Muster costProfile). Der Strip ist Verhalten, also gepinnt
+// (Muster AL-P1-5 in al-p1-store-fields.test.js und der Sichtbarkeits-Fall in
+// el-sip-call-id-join.test.js); ein Kontrollwert reist mit, damit der Test nicht auch
+// dann gruen bliebe, wenn publicCall jemals ALLES streichen wuerde.
+test("ST3: publicCall streicht elDetectorCounts - Kontrollwerte reisen mit", () => {
+  const sicht = publicCall({
+    id: "call_strip_beweis",
+    status: "completed",
+    elDetectorCounts: { elTags: 4, elB1: 0 },
+  });
+  assert.equal(sicht.elDetectorCounts, undefined, "das Zaehlfeld darf die API nicht verlassen");
+  assert.equal(sicht.id, "call_strip_beweis", "unbeteiligte Felder bleiben erhalten");
+  assert.equal(sicht.status, "completed", "unbeteiligte Felder bleiben erhalten");
 });
