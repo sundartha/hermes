@@ -41,6 +41,10 @@ import { verifiedOpeningLine } from "./opening-line.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 import { callLocaleFor } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
+// ST3 (O3): AUDIO_TAG wohnt seit dem Move im Heuristik-Modul (EINE Quelle fuer [el-tags]
+// UND die B1-Lexemisierung, Import-Richtung nur hierher - kein Zykel); findeB1Treffer ist
+// die reine B1-Heuristik (kein Store, kein Netz, s. dort).
+import { AUDIO_TAG, findeB1Treffer } from "./b1-doppelankaendigung.js";
 import { spokenTimezoneName } from "./nanp-area-codes.js";
 import { callTimeContext } from "./time-context.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
@@ -487,11 +491,6 @@ const providerErrorReasonFor = (anchor, conversation) =>
 const spokenLines = (conversation) =>
   (conversation.transcript || []).filter((zeile) => zeile && zeile.message);
 
-// Ein Klammerausdruck im GESPROCHENEN Text. Laengenbegrenzt, damit die Pruefung eine
-// Marke findet ("[Curious]") und nicht einen halben Satz, der zufaellig zwei Klammern
-// enthaelt; kein Zeilenumbruch aus demselben Grund.
-const AUDIO_TAG = /\[[^\]\n]{1,40}\]/g;
-
 // BEFUND 3 (Anruf 6, 18.08.2026): der Agent sprach woertlich "[Curious] Interessant, das
 // koennte wichtig sein." Ursache war ein Widerspruch in der Konfiguration -
 // tts.suggested_audio_tags schlug dem Modell zehn solcher Marken vor, waehrend der Prompt
@@ -510,6 +509,18 @@ const AUDIO_TAG = /\[[^\]\n]{1,40}\]/g;
 // Gespraechsinhalt, sondern die Eigenproduktion des Modells - und ohne sie waere die
 // Meldung fuer die Diagnose wertlos (welche Marke leckt, entscheidet, welche Quelle offen
 // steht). Der Rest der Zeile bleibt draussen (Absolute Regel 4).
+//
+// VORFALL 2026-09-02 (tasks/PLAN-AGENTEN-STIMME.md, ST3/O3): der Agent sprach
+// "[froehlich]" woertlich - die zweite DE-Marke nach dem 18.08.-Fix ([Curious]-Serie,
+// Konfig-Ursache) und nach "[freundlich]" (19.08., damals bewusst zurueckgestellt).
+// Diesmal KEINE offene Quelle: suggested_audio_tags ist leer, die Soft-Timeout-Texte
+// sind klammerfrei - B2 ist Adhaeren-Luecke des Modells, keine Konfig. Im selben
+// Vorfall zeigte sich B1: der Agent kuendigte den Inhalt an und kuendigte ihn ein
+// zweites Mal an, bevor er ihn lieferte - dafuer gibt es seit ST3 den zweiten
+// Detektor daneben (reportDoubleAnnouncements, Heuristik in b1-doppelankaendigung.js)
+// und das diagnostische Zaehlfeld am Call-Datensatz (recordElDetectorCounts,
+// Owner-Entscheidung 6): MELDEN, NICHT ENTFERNEN gilt fuer beide - das Transkript
+// bleibt unveraendert (Art. 50).
 function reportAudioTags(callId, lines) {
   const marken = lines
     .filter((zeile) => roleOf(zeile.role) === AGENT_ROLE)
@@ -521,6 +532,28 @@ function reportAudioTags(callId, lines) {
       "und turn.soft_timeout_config am Agenten.",
   );
   return marken;
+}
+
+// ST3 (O3, NUR Diagnose): B1 - der Agent kuendigt denselben Inhalt an und kuendigt ihn
+// erneut an, bevor er ihn liefert (Vorfall 2026-09-02, s. Kommentarblock oben). Dieselbe
+// Disziplin wie [el-tags]: NUR Agent-Zeilen, NUR MELDEN - keine Transkript-Aenderung.
+//
+// WAS GELOGGT WIRD (Pre-Mortem R8): Trefferzahl, Leit-Cues und Zeilenindizes - KEINE
+// Vollsaetze. Die Cues sind Einzelwoerter aus den geschlossenen Listen der Heuristik,
+// die Zeilenindizes beziehen sich auf die Liste gesprochener Zeilen, die
+// persistProviderResult sieht. Heuristik MIT dokumentierter False-Positive-Toleranz
+// (Owner-Entscheidung 5): Feuert [el-b1] dauernd, ist das Rauschen sicht- und zaehlbar
+// (Zaehlfeld), und die Detailligung wird duenner gezogen - NIE abgestellt.
+function reportDoubleAnnouncements(callId, lines) {
+  const treffer = findeB1Treffer(lines);
+  if (treffer.length === 0) return treffer;
+  const cues = treffer.map((einTreffer) => einTreffer.cues.join("+")).join(",");
+  const zeilen = [...new Set(treffer.map((einTreffer) => einTreffer.zeile))].join(",");
+  console.error(
+    `[el-b1] call=${callId} treffer=${treffer.length} cues=${cues} zeilen=${zeilen} - ` +
+      "der Agent hat denselben Inhalt doppelt angekuendigt (B1). Heuristik, NUR Diagnose.",
+  );
+  return treffer;
 }
 
 // Die Buchungs-Grenze des Agenten - die WIRKUNG des Mandats, nicht sein Wortlaut. Der
@@ -941,7 +974,11 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar }
   const zeilen = spokenLines(conversation);
   // VOR dem Schreiben: die Meldung gilt dem, was der Anbieter geliefert hat, und darf
   // nicht an einem spaeteren Store-Fehler haengen bleiben (s. reportAudioTags).
-  reportAudioTags(callId, zeilen);
+  // ST3: beide Detektoren melden und zaehlen - das Zaehlfeld (Owner-Entscheidung 6)
+  // macht die Rueckfall-Rate messbar (Treffer/Anrufe) und aendert am Transkript nichts.
+  const audioTagMarken = reportAudioTags(callId, zeilen);
+  const b1Treffer = reportDoubleAnnouncements(callId, zeilen);
+  store.recordElDetectorCounts(callId, { elTags: audioTagMarken.length, elB1: b1Treffer.length });
   for (const zeile of zeilen) store.addTranscript(callId, roleOf(zeile.role), zeile.message);
   store.recordProviderCallResult(callId, {
     summary: conversation.analysis?.transcript_summary || null,

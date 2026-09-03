@@ -304,6 +304,11 @@ export function createCall(
     // unten - Auflage B5, traegt zugleich den Deckel). Initial null - byte-identisch
     // zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift.
     lookupLog: null,
+    // ST3 (O3): diagnostisches Zaehlfeld der Stimmen-Detektoren ([el-tags]/[el-b1]),
+    // gesetzt am Gespraechsende (recordElDetectorCounts). Initial null - byte-identisch
+    // zur pg-Hydrierung (rowToCall), kein json<->pg-Shape-Drift. NIE nach aussen
+    // (publicCall strippt es wie costProfile).
+    elDetectorCounts: null,
     // F2 P9 (M2): persistierter Summary-SMS-Dedup-Marker (ISO-Zeit nach erfolgreichem
     // Send, sonst null). Initial null - byte-identisch zur pg-Hydrierung (rowToCall), kein
     // json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt ihn wie streamToken/_finished).
@@ -1036,6 +1041,13 @@ export const recordAnsweredUnclearReason = recordProviderHandleOnce("answeredUnc
 // set-once-Fabrik wie die Provider-Handles darueber (G5) - ein zweiter Anlauf desselben
 // Anrufs traegt denselben Wert, und der frueheste zaehlt.
 export const recordFromRegistrationSource = recordProviderHandleOnce("fromRegistrationSource");
+
+// ST3 (Owner-Entscheidung 6, tasks/PLAN-AGENTEN-STIMME.md O3): diagnostisches Zaehlfeld
+// der Stimmen-Detektoren ([el-tags]/[el-b1]) am Call - PII-FREI (nur Zaehler, nie Text),
+// KEINE Transkript-Aenderung (Art. 50). Dieselbe set-once-Fabrik wie die Handles daneben:
+// das Zaehlobjekt ist immer truthy, auch der Normalfall {elTags:0, elB1:0} wird gesetzt,
+// und ein wiederholter Ergebnisabruf desselben Gespraechs ueberschreibt ihn nicht.
+export const recordElDetectorCounts = recordProviderHandleOnce("elDetectorCounts");
 
 // OUTBOUND-E5: das geteilte Vokabular fuer call.fromSource - WOHER die Messung von
 // fromActualE164 kommt. Beide bekannten Schreiber (telnyx-origination.js, elevenlabs/

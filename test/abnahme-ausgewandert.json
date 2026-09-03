@@ -52,5 +52,23 @@
     "file": "test/el-stimme-abnahme.test.js",
     "test": "[abgenommen AS6] Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protokoll' im Befund-Doc dokumentiert",
     "seit": "2026-09-03"
+  },
+  {
+    "id": "AS7",
+    "file": "test/el-fixtures-echte-antworten.test.js",
+    "test": "[abgenommen AS7] Vorfalls-Fixture 2026-09-02: [el-b1] feuert genau 1x, [el-tags] meldet [fröhlich], Transkript unveraendert gespeichert, Meldung ohne Vollsaetze, Fixture anonymisiert",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS8",
+    "file": "test/el-fixtures-echte-antworten.test.js",
+    "test": "[abgenommen AS8] Gegenprobe an sauberen Echtfall-Fixtures (Anruf-7/8-Charakter): beide Detektoren still, Zaehlfeld 0",
+    "seit": "2026-09-03"
+  },
+  {
+    "id": "AS9",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS9] Kommentarblock an reportAudioTags nennt den Vorfall 2026-09-02 mit Doc-Verweis",
+    "seit": "2026-09-03"
   }
 ]

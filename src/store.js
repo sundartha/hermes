@@ -161,6 +161,10 @@ export const {
   // (Muster recordSipCallId).
   recordActualSender,
   recordFromRegistrationSource,
+  // ST3 (O3): Zaehlfeld der Stimmen-Detektoren am Call. OHNE diesen Re-Export waere
+  // store.recordElDetectorCounts auf der Fassade undefined -> der EL-Ergebnisweg wuerfe
+  // zur Laufzeit einen TypeError (Muster recordSipCallId).
+  recordElDetectorCounts,
   // EL-Anrufstart: Zusammenfassung + Befund eines vom Anbieter gefuehrten Gespraechs. OHNE
   // diesen Re-Export waere store.recordProviderCallResult auf der Fassade undefined -> der
   // ziehende Ergebnisweg wuerfe zur Laufzeit einen TypeError (Muster

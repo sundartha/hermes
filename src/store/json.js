@@ -492,6 +492,13 @@ export function recordAnsweredUnclearReason(callId, reason) {
   return call;
 }
 
+// ST3: Zaehlfeld der Stimmen-Detektoren - mutiert -> save bei changed (Muster oben).
+export function recordElDetectorCounts(callId, zaehlung) {
+  const { call, changed } = ops.recordElDetectorCounts(load(), callId, zaehlung);
+  if (changed) save();
+  return call;
+}
+
 export function endCallRecord(callId, status = "completed") {
   const { call, changed } = ops.endCallRecord(load(), callId, status);
   if (changed) save();

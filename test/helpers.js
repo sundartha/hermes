@@ -799,6 +799,9 @@ export function storeOpsFacade(state) {
     // aber die Attrappe muss die Methode kennen, sonst wirft der Ergebnisweg einen
     // TypeError.
     recordSipCallId: () => {},
+    // ST3: Zaehlfeld der Stimmen-Detektoren - dieselbe Begruendung wie recordSipCallId
+    // direkt darueber (kein Aufrufer dieser Facade liest es).
+    recordElDetectorCounts: () => {},
     // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber - originateCall
     // (absenderFuerAnruf) und persistProviderResult (recordAbsenderMessung) rufen beide
     // ueber die ECHTEN Mutatoren, sonst wirft der Anrufstart/Ergebnisweg einen TypeError.

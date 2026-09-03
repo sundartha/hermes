@@ -17,7 +17,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
-import { FROM_SOURCE, makeDefaultState, recordCallCostEvidence, callCostEvidence } from "../src/store/state-ops.js";
+import { FROM_SOURCE, makeDefaultState, recordCallCostEvidence, callCostEvidence, recordElDetectorCounts } from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID, REIFE } from "../src/store/defaults.js";
 import { KOSTENART } from "../src/billing/kostenarten.js";
 import { terminateAndBillCall } from "../src/telephony/call-termination.js";
@@ -28,8 +28,10 @@ import {
   CONVERSATION_CLOSED_MISSING_DYNAMIC_VARIABLES,
   CONVERSATION_DONE_MIT_KOSTEN,
   CONVERSATION_DONE_WITH_ANALYSIS,
+  CONVERSATION_DONE_WITH_DATA_COLLECTION,
   CONVERSATION_FAILED_INVALID_DESTINATION,
   CONVERSATION_MIT_KLAMMER_MARKEN,
+  CONVERSATION_VORFALL_2026_09_02,
 } from "./fixtures/elevenlabs-conversations.js";
 
 const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
@@ -116,6 +118,9 @@ function makeCapturingStore({ id, elevenlabsConversationId, answeredAt }) {
     // die ECHTEN state-ops-Funktionen (kein zweites, vereinfachtes Store-Verhalten).
     recordCallCostEvidence: (eingabe) => recordCallCostEvidence(state, eingabe),
     callCostEvidence: (callId) => callCostEvidence(state, callId),
+    // ST3: bewusst DELEGIEREND statt No-op (Muster recordCallCostEvidence direkt darueber)
+    // - AS7/AS8 lesen call.elDetectorCounts am ECHTEN state-ops-Zustand.
+    recordElDetectorCounts: (id, zaehlung) => recordElDetectorCounts(state, id, zaehlung),
   };
   return { call, store, captured, state };
 }
@@ -323,6 +328,121 @@ test("Riegel Klammer-Marken: derselbe Datensatz ohne Marken schlaegt NICHT an (P
       captured.transcript.length > 0,
       "Positiv-Kontrolle der Kontrolle: es wurde ueberhaupt ein Transkript verarbeitet",
     );
+  });
+});
+
+// ---- ST3 (O3): die zwei Detektoren am VORFALL 2026-09-02 (AS7/AS8) -----------------------
+// AS7/AS8 leben hier und nicht in test/el-stimme-abnahme.test.js, weil hier der Poll-
+// Treiber (pollFixtureConversation, mitAufgezeichnetemFehlerlog, makeCapturingStore)
+// steht - Verlagerung statt Duplikation (G5). AS7 misst am ECHTEN Vorfalls-Datensatz:
+// BEIDE Defekte derselben Aeusserung ([fröhlich] als B2-Marke, die doppelte Ankuendigung
+// als B1) muessen JE GENAU EINMAL melden, das Zaehlfeld beide tragen - und das
+// Transkript bleibt unveraendert (Art. 50: das Transkript ist der Nachweis, stilles
+// Strippen machte aus dem Nachweis eine Schoenschrift).
+
+// Vollsaetze aus dem gespeicherten Transkript (Satzgrenzen wie die Heuristik) - fuer den
+// R8-Leak-Check: keine dieser Zeilen darf in einer [el-b1]-Meldung stehen. Ab dieser
+// Laenge gilt ein Satz als Vollsatz (kuerzere Fragment tragen keinen Gespraechsinhalt).
+const MINIMALE_VOLLSATZ_LAENGE = 20;
+const vollsaetzeVon = (transcript) =>
+  transcript
+    .flatMap((eintrag) => eintrag.message.split(/\n+|(?<=[.!?])\s+/))
+    .filter((satz) => satz.length > MINIMALE_VOLLSATZ_LAENGE);
+
+test("[abgenommen AS7] Vorfalls-Fixture 2026-09-02: [el-b1] feuert genau 1x, [el-tags] meldet [fröhlich], Transkript unveraendert gespeichert, Meldung ohne Vollsaetze, Fixture anonymisiert", async () => {
+  await mitAufgezeichnetemFehlerlog(async (zeilen) => {
+    const { call, captured } = await pollFixtureConversation(CONVERSATION_VORFALL_2026_09_02);
+
+    // (a) [el-b1]: GENAU EINE Meldung, Trefferzahl 1, die gemessenen Cues, der Zeilenindex
+    // der dritten Sprechzeile (0-basiert, inklusive der Anrufer-Zeile - so wie
+    // persistProviderResult die Liste sieht).
+    const b1Zeilen = zeilen.filter((zeile) => zeile.startsWith("[el-b1]"));
+    assert.equal(b1Zeilen.length, 1, `erwartet genau eine [el-b1]-Meldung, Log: ${zeilen.join(" | ")}`);
+    const b1Meldung = b1Zeilen[0];
+    assert.match(b1Meldung, /treffer=1\b/, `erwartet treffer=1, Meldung: ${b1Meldung}`);
+    assert.ok(b1Meldung.includes("cues=gut+klar"), `die Meldung nennt die Cues nicht: ${b1Meldung}`);
+    assert.ok(b1Meldung.includes("zeilen=2"), `die Meldung nennt den Zeilenindex nicht: ${b1Meldung}`);
+
+    // (b) [el-tags]: dieselbe Aeusserung, derselbe Treffer - die Marke [fröhlich] (B2).
+    const tagsMeldung = zeilen.find((zeile) => zeile.startsWith("[el-tags]"));
+    assert.ok(tagsMeldung, `keine [el-tags]-Meldung. Log: ${zeilen.join(" | ")}`);
+    assert.match(tagsMeldung, /treffer=1\b/, `erwartet treffer=1, Meldung: ${tagsMeldung}`);
+    assert.ok(tagsMeldung.includes("[fröhlich]"), `die Meldung nennt [fröhlich] nicht: ${tagsMeldung}`);
+
+    // (c) Art.-50-Pin: das Transkript kommt WOERTLICH in den Store - Marke, Gedicht-Wortlaut
+    // und die doppelte Ankuendigung unveraendert (Rollen wie der Bestandstest uebersetzt).
+    assert.deepEqual(
+      captured.transcript,
+      [
+        { role: "agent", message: CONVERSATION_VORFALL_2026_09_02.transcript[0].message },
+        { role: "caller", message: CONVERSATION_VORFALL_2026_09_02.transcript[1].message },
+        { role: "agent", message: CONVERSATION_VORFALL_2026_09_02.transcript[2].message },
+      ],
+      "das Vorfall-Transkript muss unveraendert gespeichert werden (MELDEN, NICHT ENTFERNEN)",
+    );
+
+    // (d) Zaehlfeld (Owner-Entscheidung 6): beide Detektoren am Call - PII-frei, nur Zaehler.
+    assert.deepEqual(call.elDetectorCounts, { elTags: 1, elB1: 1 });
+
+    // (e) R8: KEIN Vollsatz des Transkripts steht in der [el-b1]-Meldung - nur Cues und
+    // Indizes duerfen gemeldet werden (PII-/Gespraechsschutz, Absolute Regel 4).
+    for (const satz of vollsaetzeVon(captured.transcript)) {
+      assert.ok(!b1Meldung.includes(satz), `Vollsatz geleakt: "${satz}" in "${b1Meldung}"`);
+    }
+
+    // (f) Anonymisierung der Fixture (Modulkopf-Pflicht): kein Eigentuemernamen, keine
+    // Klartext-Rufnummer (Bestandsmuster: Nummern nur als maskNumber-Token).
+    const fixtureSerialisiert = JSON.stringify(CONVERSATION_VORFALL_2026_09_02);
+    assert.ok(!fixtureSerialisiert.includes("Antonio"), "der Eigentuemernamen (Vorname) steht in der Fixture");
+    assert.ok(!fixtureSerialisiert.includes("Fotiadis"), "der Eigentuemernamen (Nachname) steht in der Fixture");
+    assert.ok(
+      !/(\+|")\d{7,}/.test(fixtureSerialisiert),
+      "eine Klartext-Rufnummer steht in der Fixture (erlaubt sind nur maskNumber-Token)",
+    );
+  });
+});
+
+// AS8: Gegenprobe - dieselben Detektoren an den SAUBEREN Echtfall-Fixtures. Ohne diesen
+// Fall bestuende auch eine Heuristik, die bei JEDEM Gespraech meldet. Positivkontrolle
+// je Runde: es wurde wirklich ein Transkript verarbeitet (Stille ohne Inhalt bewiese
+// nichts), und die Klammer-Marken-Runde trennt die Achsen: elTags zaehlt, elB1 bleibt 0.
+test("[abgenommen AS8] Gegenprobe an sauberen Echtfall-Fixtures (Anruf-7/8-Charakter): beide Detektoren still, Zaehlfeld 0", async () => {
+  const saubereFixtures = [
+    CONVERSATION_DONE_WITH_ANALYSIS,
+    CONVERSATION_DONE_MIT_KOSTEN,
+    CONVERSATION_DONE_WITH_DATA_COLLECTION,
+  ];
+  for (const fixture of saubereFixtures) {
+    await mitAufgezeichnetemFehlerlog(async (zeilen) => {
+      const { call, captured } = await pollFixtureConversation(fixture);
+      assert.ok(
+        captured.transcript.length > 0,
+        "Positivkontrolle: es wurde ueberhaupt ein Transkript verarbeitet",
+      );
+      assert.deepEqual(
+        zeilen.filter((zeile) => zeile.startsWith("[el-tags]") || zeile.startsWith("[el-b1]")),
+        [],
+        `an einer sauberen Fixture meldet ein Detektor: ${zeilen.join(" | ")}`,
+      );
+      assert.deepEqual(
+        call.elDetectorCounts,
+        { elTags: 0, elB1: 0 },
+        "der Normalfall {elTags:0, elB1:0} muss gesetzt werden (kein Verschlucken)",
+      );
+    });
+  }
+
+  // Trennschaerfe: der Anruf-6-Datensatz (Klammer-Defekt OHNE Doppelankuendigung) zaehlt
+  // NUR auf elTags - feuerte [el-b1] hier auch, messe die Heuristik Marken, nicht B1.
+  await mitAufgezeichnetemFehlerlog(async (zeilen) => {
+    const { call, captured } = await pollFixtureConversation(CONVERSATION_MIT_KLAMMER_MARKEN);
+    assert.ok(captured.transcript.length > 0, "Positivkontrolle: es wurde ueberhaupt ein Transkript verarbeitet");
+    assert.equal(
+      zeilen.filter((zeile) => zeile.startsWith("[el-b1]")).length,
+      0,
+      `[el-b1] meldet am Anruf-6-Datensatz (keine Doppelankuendigung): ${zeilen.join(" | ")}`,
+    );
+    assert.deepEqual(call.elDetectorCounts, { elTags: 4, elB1: 0 });
   });
 });
 
