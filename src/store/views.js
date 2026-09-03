@@ -55,6 +55,9 @@ export function publicCall({
   // darueber (estimatedCostCents … costTruingAttempts) - es beantwortet keine
   // Nutzerfrage und hat in /api/state nichts verloren.
   costProfile,
+  // ST3: Betreiber-Diagnose-Zaehler der Stimmen-Detektoren (PII-frei) - beantwortet
+  // keine Nutzerfrage, Muster costProfile (kein /api/state-Leak).
+  elDetectorCounts,
   ...rest
 }) {
   return rest;

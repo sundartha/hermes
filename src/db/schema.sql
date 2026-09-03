@@ -364,7 +364,12 @@ CREATE TABLE IF NOT EXISTS call (
   -- Additiv NULLABLE, KEIN Backfill.
   from_actual_e164 TEXT,
   from_source TEXT,
-  from_registration_source TEXT
+  from_registration_source TEXT,
+  -- ST3 (O3, NUR Diagnose): Zaehlfeld der Stimmen-Detektoren [el-tags]/[el-b1]
+  -- ({elTags,elB1}), PII-FREI (nur Zaehler, nie Text), KEINE Transkript-Aenderung
+  -- (Art. 50). Additiv NULLABLE: nur der ElevenLabs-Ergebnisweg setzt sie.
+  -- Muster lookup_log.
+  el_detector_counts JSONB
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -506,6 +511,11 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS callee_confirmed_timezone_at TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS from_actual_e164        TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS from_source             TEXT;
 ALTER TABLE call ADD COLUMN IF NOT EXISTS from_registration_source TEXT;
+
+-- ST3: Detektor-Zaehlfeld auf Bestands-call-Tabellen nachziehen (Muster
+-- answered_unclear_reason). Idempotent; frische DB = No-op. KEIN Backfill: die Zahl
+-- misst ab Deploy vorwaerts.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS el_detector_counts JSONB;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

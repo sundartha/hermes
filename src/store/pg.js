@@ -269,6 +269,14 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // ST3 (O3): Zaehlfeld der Stimmen-Detektoren - Wrapper-Paritaet zu json.js. Saved aus
+    // demselben Grund wie die Handles darueber: es gibt eine Spalte (el_detector_counts),
+    // und der Flush schreibt sie aus dem Spiegel.
+    recordElDetectorCounts(callId, zaehlung) {
+      const { call, changed } = ops.recordElDetectorCounts(requireState(), callId, zaehlung);
+      if (changed) save();
+      return call;
+    },
     endCallRecord(callId, status = "completed") {
       const { call, changed } = ops.endCallRecord(requireState(), callId, status);
       if (changed) save();
@@ -1389,6 +1397,17 @@ function absenderWahrheitWerte(call) {
   return [call.fromActualE164 ?? null, call.fromSource ?? null, call.fromRegistrationSource ?? null];
 }
 
+// ST3 (O3): Zaehlfeld der Stimmen-Detektoren als EIN JSONB (Muster lookup_log). Spread-
+// Helfer statt direktem ?? in rowToCall/callRowValues haelt deren gepinnte Komplexitaet
+// flach (Muster absenderWahrheitFelder darueber). JSONB kommt vom Treiber bereits
+// geparst; NULL -> null (json-Parity zu createCall, das das Feld nicht setzt).
+function elDetektorFelder(zeile) {
+  return { elDetectorCounts: zeile.el_detector_counts ?? null };
+}
+function elDetektorWerte(call) {
+  return [call.elDetectorCounts ? JSON.stringify(call.elDetectorCounts) : null];
+}
+
 // OUTBOUND-E5: die zwei Schreibweg-Mutatoren als Spread-Fabrik statt zweier ausgeschriebener
 // Methoden IN makePgStore - haelt dessen gepinnte Zeilengrenze (eslint-legacy-exceptions.json),
 // aus demselben Grund wie absenderWahrheitFelder/-Werte oben. requireState/save reisen herein
@@ -1562,6 +1581,9 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     lookupLog: r.lookup_log ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
     ...absenderWahrheitFelder(r),
+    // ST3: Detektor-Zaehlfeld mit-hydrieren - ohne diese Zeile ginge es beim Restart
+    // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
+    ...elDetektorFelder(r),
   };
 }
 
@@ -2027,6 +2049,11 @@ function callRowValues(call, tenantId) {
     // NACH dem Create (an der Engine-Weiche), der set-once-Riegel liegt in state-ops,
     // nicht in SQL (Muster sip_call_id, NICHT callee_is_owner).
     call.costProfile ?? null,
+    // ST3 ($62, angehaengt): Detektor-Zaehlfeld als JSONB (Muster lookup_log). IM ON
+    // CONFLICT DO UPDATE SET - es entsteht NACH dem Create am Gespraechsende
+    // (persistProviderResult); ohne UPDATE-SET faelle es beim naechsten Flush auf NULL
+    // zurueck (Muster answered_unclear_reason).
+    ...elDetektorWerte(call),
   ];
 }
 
@@ -2052,8 +2079,9 @@ async function flushCalls(client, tenantId, calls) {
           callee_confirmed_timezone, callee_confirmed_timezone_origin,
           callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
           lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
-          from_actual_e164, from_source, from_registration_source, cost_profile)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61)
+          from_actual_e164, from_source, from_registration_source, cost_profile,
+          el_detector_counts)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -2082,7 +2110,8 @@ async function flushCalls(client, tenantId, calls) {
          inbox_entry_at=EXCLUDED.inbox_entry_at, inbox_seen_at=EXCLUDED.inbox_seen_at,
          from_actual_e164=EXCLUDED.from_actual_e164, from_source=EXCLUDED.from_source,
          from_registration_source=EXCLUDED.from_registration_source,
-         cost_profile=EXCLUDED.cost_profile`,
+         cost_profile=EXCLUDED.cost_profile,
+         el_detector_counts=EXCLUDED.el_detector_counts`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);

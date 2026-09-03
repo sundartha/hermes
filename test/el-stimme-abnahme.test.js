@@ -6,10 +6,16 @@
 // Doc-Kriterium (bewusst ROT bis zum Push) und ist nach dem dokumentierten Push
 // (Befund-Doc '## ST2 Push-Protokoll', 2026-09-03) ebenfalls gewandert.
 //
-// MIGRATIONSSTAND: AS1-AS6 sind abgenommen (2026-09-03) und in den Regressionslauf
+// ST3-Anteil (2026-09-03): AS9 (Kommentarblock am reportAudioTags nennt den Vorfall
+// 2026-09-02) ist GRUEN abgeliefert und direkt gewandert. AS7/AS8 (Detektoren am
+// Vorfalls-Datensatz + Gegenprobe) leben in test/el-fixtures-echte-antworten.test.js -
+// dort steht der Poll-Treiber (pollFixtureConversation), Verlagerung statt Duplikation.
+//
+// MIGRATIONSSTAND: AS1-AS9 sind abgenommen (2026-09-03) und in den Regressionslauf
 // gewandert - Kennung abgelegt, Siegel "[abgenommen <ID>]" getragen, Eintrag in
-// test/abnahme-ausgewandert.json. Ab da haelt "npm test" sie fest (R2-Ratsche im
-// Selbsttest der Abnahme-Bahn, test/abnahme-bahn-selbsttest.test.js). Die Grund-Zeile
+// test/abnahme-ausgewandert.json (AS7/AS8 unter ihrer eigenen Datei). Ab da haelt
+// "npm test" sie fest (R2-Ratsche im Selbsttest der Abnahme-Bahn,
+// test/abnahme-bahn-selbsttest.test.js). Die Grund-Zeile
 // "| ROT WEIL: ... | FIX: ..." ist mit der Kennung weggefallen: R3 verlangt sie nur an
 // Namen MIT Abnahme-Kennung, und ihr Inhalt dokumentierte den Zustand VOR ST1 - der ist
 // jetzt eingepinnt, nicht mehr offen.
@@ -349,5 +355,27 @@ test("[abgenommen AS6] Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protok
   assert.ok(
     befunde.includes("Drift nach dem Push: Exit-Code 0"),
     "das Push-Protokoll muss 'Drift nach dem Push: Exit-Code 0' als Zeile tragen",
+  );
+});
+
+// ST3 (O3): der Kommentarblock am [el-tags]-Detektor muss den Vorfall BENENNEN, der ihn
+// erweitert hat - Datum, Doc-Verweis und die Nachbar-Instrumente (reportDoubleAnnouncements,
+// Zaehlfeld). Nur die Kombination aller drei Strings ist der Beleg: "2026-09-02" allein
+// koennte irgendwo im Modulkopf mitschwingen, "function reportAudioTags" pinnt den Check
+// an den Detektor-Block.
+test("[abgenommen AS9] Kommentarblock an reportAudioTags nennt den Vorfall 2026-09-02 mit Doc-Verweis", () => {
+  const outbound = readFileSync(new URL("../src/elevenlabs/outbound.js", import.meta.url), "utf8");
+
+  assert.ok(
+    outbound.includes("function reportAudioTags"),
+    "Positivkontrolle: reportAudioTags muss in der Datei stehen (der Check haengt an ihrem Block)",
+  );
+  assert.ok(
+    outbound.includes("2026-09-02"),
+    "der Kommentarblock muss das Vorfalls-Datum 2026-09-02 nennen",
+  );
+  assert.ok(
+    outbound.includes("PLAN-AGENTEN-STIMME"),
+    "der Kommentarblock muss auf tasks/PLAN-AGENTEN-STIMME.md verweisen",
   );
 });

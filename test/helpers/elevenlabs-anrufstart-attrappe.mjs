@@ -96,6 +96,9 @@ export function pinStore({
     // Die Methode muss aber existieren, sonst wirft der Anrufstart einen TypeError,
     // NACHDEM der Anruf schon losgelaufen waere.
     recordSipCallId: () => {},
+    // ST3: Zaehlfeld der Stimmen-Detektoren - dieselbe Begruendung wie recordSipCallId
+    // direkt darueber (der Ergebnisweg zaehlt, diese Attrappe misst den Anfragekoerper).
+    recordElDetectorCounts: () => {},
     // OUTBOUND-E5: dieselbe Begruendung wie recordSipCallId direkt darueber - die
     // Absender-Auswahl (absenderFuerAnruf) ruft beide VOR dem Netzzugriff; ohne die
     // Methoden wirft der Anrufstart einen TypeError, bevor die Attrappe je den
