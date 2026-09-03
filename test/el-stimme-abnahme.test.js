@@ -2,10 +2,11 @@
 // ST2-ST4 erweitern dieselbe Datei um AS5-AS10 - die kommen MIT Abnahme-Kennung und
 // Grund-Zeile in die ABNAHME-Bahn (npm run test:abnahme).
 // ST2-Anteil (2026-09-03): AS5 pinnt die Vorlagen-Besitzerweiterung (Owner-Entscheidungen
-// 4 + 9), ist GRUEN abgeliefert und direkt mitgewandert (ST1-Prezedenz); AS6 ist
-// Doc-Kriterium und bleibt bewusst ROT bis zum dokumentierten Push - noch NICHT auswandern.
+// 4 + 9), ist GRUEN abgeliefert und direkt mitgewandert (ST1-Prezedenz); AS6 war
+// Doc-Kriterium (bewusst ROT bis zum Push) und ist nach dem dokumentierten Push
+// (Befund-Doc '## ST2 Push-Protokoll', 2026-09-03) ebenfalls gewandert.
 //
-// MIGRATIONSSTAND: AS1-AS5 sind abgenommen (2026-09-03) und in den Regressionslauf
+// MIGRATIONSSTAND: AS1-AS6 sind abgenommen (2026-09-03) und in den Regressionslauf
 // gewandert - Kennung abgelegt, Siegel "[abgenommen <ID>]" getragen, Eintrag in
 // test/abnahme-ausgewandert.json. Ab da haelt "npm test" sie fest (R2-Ratsche im
 // Selbsttest der Abnahme-Bahn, test/abnahme-bahn-selbsttest.test.js). Die Grund-Zeile
@@ -331,7 +332,7 @@ test("[abgenommen AS5] Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (
   );
 });
 
-test("ABNAHME-AS6: Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protokoll' im Befund-Doc dokumentiert | ROT WEIL: der Push ist nicht ausgefuehrt - ST2-Reposeite liefert bewusst nur das SOLL, der Push ist Owner-Gate | FIX: frischen Drift-Lauf, Push der ST1-Regelfelder mit Ruecklese, danach Drift-Exit-Code 0 als Abschnitt '## ST2 Push-Protokoll' (mit 'Ruecklese' und 'Drift nach dem Push: Exit-Code 0') in tasks/EL-STIMME-BEFUNDE.md dokumentieren", () => {
+test("[abgenommen AS6] Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protokoll' im Befund-Doc dokumentiert", () => {
   const befunde = readFileSync(new URL(`../${BEFUNDE_REL}`, import.meta.url), "utf8");
 
   // Der Abschnitt entsteht erst mit dem echten Push - die Marker-Literale sind die

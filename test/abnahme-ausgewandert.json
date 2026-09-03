@@ -46,5 +46,11 @@
     "file": "test/el-stimme-abnahme.test.js",
     "test": "[abgenommen AS5] Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (Feldname, beide Pfade, SOLL-Wert, Aenderungsweg) und fuehrt die zwei LIVE-only Erlaubnis-Schluessel mit false",
     "seit": "2026-09-03"
+  },
+  {
+    "id": "AS6",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS6] Drift-Lauf Exit-Code 0 nach dem Push als 'ST2 Push-Protokoll' im Befund-Doc dokumentiert",
+    "seit": "2026-09-03"
   }
 ]

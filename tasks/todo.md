@@ -51,7 +51,7 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       Produktbefunde, nicht ST1). KEIN Push ans Live-System: nur Repo-SOLL geaendert;
       drift wird bis ST2 erwartungsgemaess um agent.prompt.prompt + llm_override
       zusaetzlich rot (Befund-Doc ST1-Abschnitt).
-- [ ] 3. ST2 Pin & Push (O2) — OWNER-GATE vor dem Push (patcht Live-Agenten): frischer
+- [x] 3. ST2 Pin & Push (O2) — OWNER-GATE vor dem Push (patcht Live-Agenten): frischer
       Drift-Lauf unmittelbar DAVOR (LIVE-Erlaubnis-Karte, R7; kein stiller Push),
       Pin-Erweiterung use_llm_generated_message + max_soft_timeouts_per_generation mit
       _hinweis + Aenderungsweg (AS5), Push mit Ruecklese, Drift exit 0 danach (AS6).
@@ -71,6 +71,18 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       Drift-Lauf DAVOR, R7); danach Protokoll-Abschnitt "## ST2 Push-Protokoll" mit
       "Ruecklese" und "Drift nach dem Push: Exit-Code 0" nach den AS6-Markern ins
       Befund-Doc (tasks/EL-STIMME-BEFUNDE.md).
+      BELEG (PUSH + AS6, 2026-09-03): Owner-Freigabe nach Patch-Prognose. R7-GUARD
+      ZUGESCHLAGEN: Vor-Push-Drift meldete 5 statt 4 Abweichungen — EL hatte 4
+      allowed_values:null-Keys an get_consult/look_up migriert (version_id unveraendert,
+      Deep-Diff ST0-GET vs Frisch-GET); R7-Nachzug Commit 9b52004 (Vorlage-SOLL + Doc-
+      Abschnitt), danach 4 Abweichungen wie erwartet. Push (erst Trockenlauf, dann echt
+      mit --felder=prompt,soft_timeout_prompt_override --ausfuehren): GENAU 2 Pfade
+      geschrieben (agent.prompt.prompt + llm_generated_message_prompt_override),
+      Ruecklese "OK - 2 Felder geschrieben und zurueckgelesen"; Drift nach dem Push:
+      Exit-Code 0 ("2 abweichend, ALLE bewusst ausgenommen, 40/40, keine
+      Verbots-Verletzung"). Push-Protokoll im Befund-Doc ("## ST2 Push-Protokoll").
+      AS6 gruen -> gewandert (Siegel, ausgewandert.json 8->9); npm run test:abnahme
+      "9 von 9 Abnahmekriterien erfuellt"; Selbsttest + Datei 15/15 gruen.
       BELEG (Merge + Suite, 2026-09-03): phase-impl Run wf_c59e926d-0b5, Commit 73a92f2,
       Safety FREIGABE + Clean-Code PASS (je 0 Blocker, kein src/-Kontakt). Merge 8a45f40;
       AS5 gruen abgeliefert und direkt in die Regressionsbahn gewandert (Siegel

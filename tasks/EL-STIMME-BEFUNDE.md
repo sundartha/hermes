@@ -271,3 +271,24 @@ hierher, kein Schreibzugriff - nur Vorlagen-Edit und read-only GETs.
    datieren 11/14 Anruf-IDs nicht).
 5. (Nicht ST0-ST5, nur gemeldet — Go-live-Bedingung): Rueckdreh
    retention_days/record_voice auf G7-SOLL vor dem ersten Fremdkunden.
+
+## ST2 Push-Protokoll (2026-09-03, Owner-Freigabe nach Patch-Prognose)
+
+- **Freigabe:** Owner 2026-09-03, nach Prognose "GENAU 2 Felder" (AskUserQuestion).
+- **R7 davor:** frischer Drift-Lauf meldete 5 statt 4 Abweichungen -> ANGEHALTEN (kein
+  Push). Ursache: EL-seitige Schema-Migration (allowed_values:null an get_consult/
+  look_up), version_id unveraendert; R7-Nachzug in die Vorlage (Commit 9b52004);
+  danach 4 Abweichungen exakt wie erwartet. Siehe Abschnitt R7-Zwischenfall.
+- **Trockenlauf:** PATCH-Koerper 7913 Zeichen, genau 2 Blattpfade, nichts sonst.
+- **Push (echt):** `npm run elevenlabs:push -- --felder=prompt,soft_timeout_prompt_override
+  --ausfuehren` — geschrieben wurden NUR
+  `conversation_config.agent.prompt.prompt` (B1/B2-Regeln aus ST1) und
+  `conversation_config.turn.soft_timeout_config.llm_generated_message_prompt_override`
+  (neuer Wortlaut). Unberuehrt: Stimme/voice_id, Modell, Timeouts, Erlaubnis-Karte,
+  neue Pins, alle Offenlegungsfelder, retention_days/record_voice (bewusste Ausnahmen).
+- **Ruecklese:** Skript-Meldung "OK - 2 Felder geschrieben und zurueckgelesen,
+  2 besessene Felder weichen noch ab (wie vorhergesagt)" — die 2 Verbleibenden sind
+  die bewussten Ausnahmen retention_days/record_voice.
+- Drift nach dem Push: Exit-Code 0 — "OK - 2 besessene Felder weichen ab, ALLE mit
+  Grund und Datum bewusst ausgenommen ... 40 von 40 besessenen Feldern wirklich
+  verglichen ... keine Verbots-Verletzung."
