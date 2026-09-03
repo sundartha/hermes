@@ -2,10 +2,10 @@
 // ST2-ST4 erweitern dieselbe Datei um AS5-AS10 - die kommen MIT Abnahme-Kennung und
 // Grund-Zeile in die ABNAHME-Bahn (npm run test:abnahme).
 // ST2-Anteil (2026-09-03): AS5 pinnt die Vorlagen-Besitzerweiterung (Owner-Entscheidungen
-// 4 + 9) und ist gruen, sobald die Vorlage stimmt; AS6 ist Doc-Kriterium und bleibt
-// bewusst ROT bis zum dokumentierten Push - noch NICHT auswandern (ST1-Prezedenz).
+// 4 + 9), ist GRUEN abgeliefert und direkt mitgewandert (ST1-Prezedenz); AS6 ist
+// Doc-Kriterium und bleibt bewusst ROT bis zum dokumentierten Push - noch NICHT auswandern.
 //
-// MIGRATIONSSTAND: AS1-AS4 sind abgenommen (2026-09-03) und in den Regressionslauf
+// MIGRATIONSSTAND: AS1-AS5 sind abgenommen (2026-09-03) und in den Regressionslauf
 // gewandert - Kennung abgelegt, Siegel "[abgenommen <ID>]" getragen, Eintrag in
 // test/abnahme-ausgewandert.json. Ab da haelt "npm test" sie fest (R2-Ratsche im
 // Selbsttest der Abnahme-Bahn, test/abnahme-bahn-selbsttest.test.js). Die Grund-Zeile
@@ -294,7 +294,7 @@ test("[abgenommen AS4] keiner der neuen Regeltexte enthaelt ein eckiges Klammer-
   );
 });
 
-test("ABNAHME-AS5: Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (Feldname, beide Pfade, SOLL-Wert, Aenderungsweg) und fuehrt die zwei LIVE-only Erlaubnis-Schluessel mit false | ROT WEIL: use_llm_generated_message und max_soft_timeouts_per_generation gehoerten dem Dashboard (kein Besitz-Eintrag) und die Erlaubnis-Karte kannte die zwei LIVE-only Schluessel nicht - drift an der Karte dauerhaft rot, der Filler-Mechanismus unbewacht | FIX: zwei art-wert-Eintraege in _besitz.felder mit SOLL = LIVE-Messwert und Aenderungsweg, Karte um tts.supported_voices=false und turn.soft_timeout_config.additional_soft_timeout_messages=false erweitern (Owner-Entscheidungen 4 + 9)", () => {
+test("[abgenommen AS5] Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (Feldname, beide Pfade, SOLL-Wert, Aenderungsweg) und fuehrt die zwei LIVE-only Erlaubnis-Schluessel mit false", () => {
   const vorlage = template();
 
   // (a) beide Stellschrauben sind als Besitz gepinnt: Feldname, art, beide Pfade exakt,

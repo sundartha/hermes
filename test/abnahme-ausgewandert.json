@@ -40,5 +40,11 @@
     "file": "test/el-stimme-abnahme.test.js",
     "test": "[abgenommen AS4] keiner der neuen Regeltexte enthaelt ein eckiges Klammer-Zeichen",
     "seit": "2026-09-03"
+  },
+  {
+    "id": "AS5",
+    "file": "test/el-stimme-abnahme.test.js",
+    "test": "[abgenommen AS5] Vorlage pinnt die zwei Filler-Stellschrauben als Besitz (Feldname, beide Pfade, SOLL-Wert, Aenderungsweg) und fuehrt die zwei LIVE-only Erlaubnis-Schluessel mit false",
+    "seit": "2026-09-03"
   }
 ]
