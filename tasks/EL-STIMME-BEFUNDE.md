@@ -217,6 +217,39 @@ audio-unsichtbar — haette den Verlauf aber auch nicht gepraegt.
    darf nur noch an genau diesen vier Feldern rot sein - an jeder fuenften Abweichung
    ist anzuhalten.
 
+### R7-Zwischenfall beim Vor-Push-Drift (2026-09-03)
+
+Der Vor-Push-Drift (R7) meldete FUENF Abweichungen statt der erwarteten vier -
+Block 4 hiess: an jeder fuenften Abweichung anhalten. Angehalten, per Deep-Diff
+zweier Live-GETs (ST0 frueher Morgen vs. jetzt) aufgeklaert. KEIN Push bis
+hierher, kein Schreibzugriff - nur Vorlagen-Edit und read-only GETs.
+
+- **Ursache (Anbieter-seitig, kein Eingriff unserer Seite):** EL hat am
+  Live-Agenten vier NEUE Keys ins Tool-API-Schema migriert, alle Wert null -
+  `allowed_values` an `properties.question` und `properties.conversation_id`
+  von get_consult sowie `properties.query` und `properties.conversation_id` von
+  look_up (je Pfad `api_schema.request_body_schema.properties.*`). Die
+  `version_id` ist UNVERAENDERT (agtvrsn_6601m0g...), niemand hat den Agenten
+  bearbeitet, und die Vorlagen-Werkzeuge sind seit cd8a88c unbewegt (bewiesen)
+  - eine EL-seitige Schema-Migration (Key-Default null = keine Einschraenkung),
+  kein echter Drift.
+- **Wirkung aufs Gate:** der Besitz-Eintrag `werkzeug_body_params_schema`
+  vergleicht die Spiegel `tools.*._live_gemessene_form.request_body_schema` per
+  JSON.stringify gegen die Live-Form; die vier fehlenden Keys machten die
+  Werkzeuge scheinbar abweichend.
+- **Nachzug:** alle vier Keys (null) in BEIDE Spiegel aufgenommen, Position je
+  frischem Live-GET zwischen `dynamic_variable` und
+  `allowed_values_dynamic_variable` (Schluesselreihenfolge
+  serialisierungsrelevant); Nachtrag am Spiegel-Hinweis von get_consult
+  (NACHTRAG ST2 2026-09-03). Die Push-Form `tool_config.api_schema` bleibt
+  unberuehrt - kein Besitz-Eintrag zieht sie fuer diesen Vergleich heran.
+- **Beleg:** Drift vorher ROT mit 5 Abweichungen, nachher ROT mit 4
+  Abweichungen (beide Exit-Code 1; `werkzeug_body_params_schema` aus der Liste
+  gefallen, die vier erwarteten bleiben: prompt,
+  llm_generated_message_prompt_override, retention_days [BEWUSST AUSGENOMMEN],
+  record_voice [BEWUSST AUSGENOMMEN]). Der Push-Blocker aus Block 4 ist damit
+  wieder frei.
+
 ## Offene Punkte
 
 1. **[erledigt ST2 2026-09-03]** Umgang mit den 2 LIVE-only Erlaubnis-Schluesseln
