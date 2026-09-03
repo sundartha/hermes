@@ -71,6 +71,17 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       Drift-Lauf DAVOR, R7); danach Protokoll-Abschnitt "## ST2 Push-Protokoll" mit
       "Ruecklese" und "Drift nach dem Push: Exit-Code 0" nach den AS6-Markern ins
       Befund-Doc (tasks/EL-STIMME-BEFUNDE.md).
+      BELEG (Merge + Suite, 2026-09-03): phase-impl Run wf_c59e926d-0b5, Commit 73a92f2,
+      Safety FREIGABE + Clean-Code PASS (je 0 Blocker, kein src/-Kontakt). Merge 8a45f40;
+      AS5 gruen abgeliefert und direkt in die Regressionsbahn gewandert (Siegel
+      [abgenommen AS5], ausgewandert.json 7->8, Commit bce9d6f; npm run test:abnahme
+      "8 von 9 Abnahmekriterien erfuellt"). LEAD-SUITE AUF MERGE+MIGRATION (bce9d6f):
+      npm test # pass 5688 / # fail 0 (komplett gruen, kein Flake); test:gates 3 rot
+      (GAP-05/GAP-15/E2E-03, per Baseline-Lauf auf cd8a88c als vorbestehend belegt,
+      s. ST1-Beleg); test:abnahme Exit 0. Push-Prognose fuer das Owner-Gate: der
+      Live-Push schreibt voraussichtlich NUR agent.prompt.prompt (B1/B2-Regeln) und
+      llm_generated_message_prompt_override (neuer Text); Karte und neue Pins stehen
+      SOLL==LIVE und sind keine Schreibkandidaten.
 - [ ] 4. ST3 Detektoren (O3, NUR Diagnose): [el-b1]-Heuristik (eng: nur unmittelbar
       aufeinanderfolgende Saetze, loggt NUR Trefferzahl/Cues/Zeilenindizes — R8),
       Zaehlfeld [el-tags]/[el-b1] am Call-Datensatz (Entscheidung 6), Kommentar-
