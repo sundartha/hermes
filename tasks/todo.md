@@ -94,7 +94,7 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       Live-Push schreibt voraussichtlich NUR agent.prompt.prompt (B1/B2-Regeln) und
       llm_generated_message_prompt_override (neuer Text); Karte und neue Pins stehen
       SOLL==LIVE und sind keine Schreibkandidaten.
-- [ ] 4. ST3 Detektoren (O3, NUR Diagnose): [el-b1]-Heuristik (eng: nur unmittelbar
+- [x] 4. ST3 Detektoren (O3, NUR Diagnose): [el-b1]-Heuristik (eng: nur unmittelbar
       aufeinanderfolgende Saetze, loggt NUR Trefferzahl/Cues/Zeilenindizes — R8),
       Zaehlfeld [el-tags]/[el-b1] am Call-Datensatz (Entscheidung 6), Kommentar-
       Erweiterung outbound.js (Vorfall 2026-09-02), anonymisierte Vorfalls-Fixture
@@ -102,6 +102,21 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       ERWARTET: AS7/AS8/AS9 gruen; gespeicherte Transkripte unveraendert (Art. 50);
       npm test gruen.
       VERIFIKATION: test:abnahme + npm test Beleg hier; Merge nur mit Suite-Beleg.
+      BELEG: phase-impl Run wf_c4e3da6a-efa, Commits 31394c3 + Fix 598d322 + 7e7eb88,
+      Merge 42dfdf0. Runde 1 BLOCKED (2x S1: ungegruendete pg.js-Lint-Pin-Anhebung
+      makePgStore 576->581 ohne FINGERPRINT-Nachzug — Ratsche ist Owner-Gate; fehlender
+      publicCall-Strip-Pin-Test fuer elDetectorCounts). Fix: Pin-Anhebung zurueckgebaut
+      via Modul-Fabrik elDetektorMutatoren + dokumentierter KV2-7-Kompaktionspraezedenz
+      (makePgStore exakt 576, Legacy-JSON byte-identisch zu master, Ratsche 41/41) +
+      Strip-Pin-Test AL-P1-5-Muster. Re-Audit pass=true, 0x S1/S2. Umsetzung: reines
+      Heuristik-Modul src/elevenlabs/b1-doppelankaendigung.js, Reporter [el-b1] (nur
+      Trefferzahl/Cues/Zeilenindizes — R8), Zaehlfeld elDetectorCounts durch komplette
+      Store-Kette inkl. idempotentem pg-Schema-Migrationspfad, Vorfalls-Kommentar am
+      reportAudioTags-Block, anonymisierte Vorfalls-Fixture (AS7, kein Nummern-/Eigen-
+      namen-Grep-Fund). AS7-AS9 von der Impl direkt gewandert (ausgewandert.json 9->12).
+      LEAD-SUITE AUF MERGE (42dfdf0): npm test 5683/5683 fail 0; test:gates 3 rot
+      (bekannt vorbestehend, s. ST1-Beleg); test:abnahme "12 von 12 Abnahmekriterien
+      erfuellt". AS10/AS11 folgen in ST4/ST5.
 - [ ] 5. ST4 Verifikations-Testanruf — OWNER-GATE vor den Anrufen (Kosten): echter
       Anruf mit Detektoren live, Transkript als anonymisierte Fixture, Owner-Hoer-Urteil
       (natuerlicher Uebergang, Stille-Wahrnehmung) ins Befund-Doc (AS10); A/B-Testanrufe
