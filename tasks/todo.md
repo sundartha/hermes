@@ -36,4 +36,5 @@ Regel: kein Push, kein Deploy, kein Testanruf ohne ausdrueckliche Freigabe des E
       Erwartet: `npm test` gruen, lint 0, JSON parsebar. Verifikation: Suite-Lauf im Lead nach Merge -> 0b6702e, 102/102 Zieltests, Suite 5716/5716.
 - [x] **SP2** Push-Werkzeug: `voicemail_message` ueber `je_schluessel` auf `built_in_tools`.
       Erwartet: Zusammenfuehrungs-Tests (1)-(6) gruen. Verifikation: Suite-Lauf im Lead nach Merge.
-- [ ] Eigentuemer: Push in Reihenfolge, zwei Testanrufe (Gespraech + Mailbox) - Anleitung in UEBERGABE, Kettenstand.
+- [x] Eigentuemer: Push in Reihenfolge (v40 prompt+turn, v41 voicemail_message), Drift gruen.
+- [ ] Zwei Testanrufe (Gespraech + Mailbox): Erwartung in UEBERGABE, Kettenstand. Verifikation: Gespraechs-JSON + Audio.

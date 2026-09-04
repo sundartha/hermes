@@ -419,3 +419,15 @@ Telco-Route. Welcher Text daraus wird, ist Zufall der Erkennung. Was uns gehoert
 - Optional: Ticket an ElevenLabs mit `conv_9301m1m3z963ewbvz4s7zzrevfa0` (Phantome "Wie?"/"Wie sind?")
   und `conv_2901m1p6s4heejhtwj1wydfhjsjy` (t=2 "No. ¿Sí está ahí?" in Stille), Frage nach dem
   Rohkanal der Erkennung.
+
+### Push AUSGEFUEHRT 2026-09-04 abends (Eigentuemer per `!`, Lead hat jede Stufe lesend gegengeprueft)
+
+- Schritt 1/2: `prompt` + `transcribe_on_disabled_interruptions` -> Version `agtvrsn_3601m1q64x9tfkgt66gvzvmp67mv`.
+  Live gemessen: neue Regel drin, "Begin the call in English" weg, Schalter `false`,
+  `disable_first_message_interruptions` weiter `true`.
+- Schritt 3/4: `voicemail_message` ueber den neuen Sammlungs-Schreibweg -> Version
+  `agtvrsn_5901m1q67m31f22ar8vptava9skp`, kein HTTP 400. Live gemessen:
+  `voicemail_detection.params.voicemail_message == "{{voicemail_line}}"`, konfigurierte Werkzeuge
+  unveraendert end_call/language_detection/voicemail_detection, elf uebrige weiter `null`.
+- `npm run elevenlabs:drift`: OK, nur `retention_days`/`record_voice` (bewusst ausgenommen seit 15.08.).
+- OFFEN: die zwei Testanrufe (Gespraechspfad, Mailboxpfad). Erst danach ist die Kette abgenommen.
