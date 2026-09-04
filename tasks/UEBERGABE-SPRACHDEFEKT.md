@@ -431,3 +431,31 @@ Telco-Route. Welcher Text daraus wird, ist Zufall der Erkennung. Was uns gehoert
   unveraendert end_call/language_detection/voicemail_detection, elf uebrige weiter `null`.
 - `npm run elevenlabs:drift`: OK, nur `retention_days`/`record_voice` (bewusst ausgenommen seit 15.08.).
 - OFFEN: die zwei Testanrufe (Gespraechspfad, Mailboxpfad). Erst danach ist die Kette abgenommen.
+
+### Abnahme am echten Anruf, 2026-09-04 21:49/21:51 UTC (neue Agent-Version agtvrsn_5901m1q6…)
+
+**Anruf 1, Gespraechspfad (`call_mtnhl3g52yr5`, `conv_6401m1q6bghefr5t5a2q7b0xq27t`): BESTANDEN.**
+41 s, `end_call`, `language_detection.used=false`, durchgehend deutsch. Ein Phantom-Turn `"..."`
+kam bei t=13 in der Schweigephase des Eigentuemers (Audio: Stille 7,8–16,2 s); der Agent fragte
+nur kurz nach ("Antonio, kannst du mich gut hören?"), kein Sprachwechsel, keine Entschuldigung
+fuer die Verbindung. Nebenbefund: Agent-Text trug `[freundlich]` (Audio-Tag, nicht gesprochen,
+per Scribe geprueft) — Thema der Stimme-Kette (B2-Regel), nicht dieser Defekt.
+
+**Anruf 2, Mailboxpfad (`call_mtnho2zw76yb`, `conv_6701m1q6frmzf4pvfyj9j68b05hs`): NICHT AUSSAGEKRAEFTIG.**
+Die Mailbox hat nicht abgenommen (Eigentuemer: "hat geklingelt und dann aufgelegt, ich habe nichts
+gemacht"). Telnyx: 42 s Klingeln, dann 8 s verbunden, `NORMAL_CLEARING`/`send_bye` (Gegenseite
+legte auf). EL: 8 s, nur die Eroeffnung, kein User-Turn, `voicemail_detection.used=false`,
+"Client disconnected: 1000". Gleiches Muster wie 08-20 17:17 (Netzansage "Mailbox ausgeschaltet",
+8 s). Ansagetext NICHT belegbar: `transcribe_on_disabled_interruptions=false` verwirft alles
+waehrend der Eroeffnung, die Aufnahme enthaelt den Gegenkanal nicht.
+
+**NEUES OFFENES RISIKO (im Pre-Mortem gefehlt):** Beginnt eine Mailbox-Ansage WAEHREND der
+Eroeffnung (so am 04.09. 08:50, User-Turn t=0), sieht das Modell mit dem neuen Schalter nur noch
+ihren Rest nach der Eroeffnung. Ob `voicemail_detection` dann noch verlaesslich feuert, ist
+UNGEPRUEFT. Test: Handy in Flugmodus, dann Anruf — die Mailbox nimmt sofort ab. Faellt er durch:
+NICHT den Schalter zuruecknehmen (er ist die Gegenkraft am Phantom-Pfad), sondern die
+Mailbox-Erkennung getrennt absichern (eigener kleiner Schritt).
+
+Nebenbei im Log: `[sms] Telnyx sendSms fehlgeschlagen: HTTP 400 (40305 Invalid 'from' address)`
+nach jedem Anruf — die Zusammenfassungs-SMS scheitert am Absender (US-DID). Bestandsdefekt,
+nicht Teil dieser Kette.

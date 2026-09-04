@@ -37,4 +37,5 @@ Regel: kein Push, kein Deploy, kein Testanruf ohne ausdrueckliche Freigabe des E
 - [x] **SP2** Push-Werkzeug: `voicemail_message` ueber `je_schluessel` auf `built_in_tools`.
       Erwartet: Zusammenfuehrungs-Tests (1)-(6) gruen. Verifikation: Suite-Lauf im Lead nach Merge.
 - [x] Eigentuemer: Push in Reihenfolge (v40 prompt+turn, v41 voicemail_message), Drift gruen.
-- [ ] Zwei Testanrufe (Gespraech + Mailbox): Erwartung in UEBERGABE, Kettenstand. Verifikation: Gespraechs-JSON + Audio.
+- [x] Testanruf Gespraechspfad: BESTANDEN (conv_6401…, LD_used=false, Phantom bei t=13 korrekt behandelt).
+- [ ] Testanruf Mailboxpfad: Mailbox nahm nicht ab (Netz nach 42 s, 8 s, send_bye). Wiederholen mit Handy im Flugmodus. Erwartet: VD_used=true, Text deutsch ab LOCALES.de.disclosure.
