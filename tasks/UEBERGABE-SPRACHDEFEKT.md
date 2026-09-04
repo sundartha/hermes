@@ -377,3 +377,45 @@ aus einem leisen, nicht von uns erzeugten Signal der Gegenseite. Er ist seit Mit
 intermittierend nachweisbar und korreliert mit KEINER Aenderung an Code, Agent, Payload oder
 Telco-Route. Welcher Text daraus wird, ist Zufall der Erkennung. Was uns gehoert und was am
 04.09. den Schaden gemacht hat, ist die Verstaerkerkette (BELEGT 18).
+
+## Kettenstand 2026-09-04 abends: SP1 + SP2 GEMERGT, Push und Testanruf OFFEN (Eigentuemer)
+
+- `0b6702e` merge(sp1): Prompt-Regel E-5b (Wechsel nur nach Bestaetigung in der anderen Sprache;
+  ein Wort/Fragment/Unklares ist nie Wechselgrund und kein Anlass fuer Verbindungs-Kommentare),
+  `turn.transcribe_on_disabled_interruptions=false`; Tests umgepinnt, `PLAN-SECURITY.md` nachgezogen.
+- `5e44f17` merge(sp2): Besitz-Eintrag `voicemail_message` ist Sammlungs-Eintrag ueber
+  `built_in_tools` (`schreibweg je_schluessel`); PATCH traegt alle Werkzeuge vollstaendig, nur das
+  besessene Blatt bekommt den Vorlagenwert. Kein Skript geaendert. Tests (1)-(6) + Drift-Rotprobe.
+- Suite im Lead nach beiden Merges: 5716/5716 (erster Lauf 1 Flake, zweiter Lauf gruen).
+- Spec und Phasenberichte sind nach dem Merge entfernt (Historie: `207ee57`, Reports-Commit davor).
+- Der LIVE-AGENT IST NOCH ALT (v39). Nichts davon wirkt, bis der Eigentuemer pusht.
+
+### Push-Anleitung (Eigentuemer, `!`-Praefix; fuer Agenten gesperrt)
+
+1. `npm run elevenlabs:push -- --felder=prompt,transcribe_on_disabled_interruptions`
+   Erwartet (Trockenlauf): PATCH-Koerper mit GENAU zwei Blatt-Pfaden
+   `conversation_config.agent.prompt.prompt` und `conversation_config.turn.transcribe_on_disabled_interruptions`;
+   Vorhersage "danach noch abweichend": nur `voicemail_message`.
+2. Gleicher Befehl mit `--ausfuehren`. Danach `npm run elevenlabs:drift`: nur `voicemail_message` rot.
+3. `npm run elevenlabs:push -- --felder=voicemail_message`
+   Erwartet (Trockenlauf): alle Koerper-Pfade liegen unter `conversation_config.agent.prompt.built_in_tools`,
+   JEDES eingebaute Werkzeug ist enthalten (end_call, language_detection, voicemail_detection, ...),
+   nur `voicemail_detection.params.voicemail_message` traegt `{{voicemail_line}}`.
+4. Gleicher Befehl mit `--ausfuehren`: kein HTTP 400. Danach `npm run elevenlabs:drift` gruen.
+   Reihenfolge ist sicher: der Server (DE1, `bc4fe1e`) liefert `voicemail_line` bereits.
+5. Testanruf GESPRAECHSPFAD (kostet ~0,10 USD): abnehmen, waehrend der Eroeffnung und ~10 s danach
+   schweigen, dann ein ganzer deutscher Satz. Erwartet im Gespraechs-JSON: kein
+   `language_detection`-Aufruf, `features_usage.language_detection.used=false`, Agent durchgehend
+   deutsch, keine Entschuldigung fuer die Verbindung; ein Phantom-Turn darf hoechstens eine kurze
+   Wiederholung der Frage ausloesen.
+6. Testanruf MAILBOXPFAD: nicht abnehmen. Erwartet: Text deutsch, beginnt byte-identisch mit
+   `LOCALES.de.disclosure`, enthaelt die Grund-Zeile, `voicemail_detection.used=true`.
+7. Erst wenn 5 und 6 am Anruf bestanden sind, gilt die Kette als abgenommen.
+
+### Nebenbei, ohne Bezug zum Fix
+
+- DeepSeek-Konto ist leer (402 seit 02.09. 15:57): Briefing und LLM-Eroeffnung fallen bei jedem
+  Anruf aus. Aufladen oder `LLM_PROVIDER` wechseln.
+- Optional: Ticket an ElevenLabs mit `conv_9301m1m3z963ewbvz4s7zzrevfa0` (Phantome "Wie?"/"Wie sind?")
+  und `conv_2901m1p6s4heejhtwj1wydfhjsjy` (t=2 "No. ¿Sí está ahí?" in Stille), Frage nach dem
+  Rohkanal der Erkennung.
