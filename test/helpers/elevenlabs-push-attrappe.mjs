@@ -21,14 +21,47 @@ export const EIN_AUFRUF = 1;
 // fail-closed ab, bevor es zu dem Riegel kaeme, den der Fall messen will.
 export const TEST_SCHLUESSEL = "test-schluessel-ohne-netz";
 
+// Der Text, den der Live-Agent am 2026-09-04 im Anrufbeantworter-Werkzeug fuehrte
+// (englisch, statisch - genau der Defekt, den SP2 pushbar macht).
+export const VOICEMAIL_LIVE_TEXT = "Hi, this is an AI assistant calling. Please call back.";
+// Ein Systemwerkzeug, das der Anbieter FUEHRT, aber nicht konfiguriert hat: solche
+// Schluessel stehen bei ihm auf null und sind fuer eintraegeAus kein Eintrag.
+export const UNKONFIGURIERTES_WERKZEUG = "transfer_to_number";
+
+// Die eingebauten Werkzeuge in der FORM, die am 2026-09-04 am Live-Agenten gemessen
+// wurde - nachgebaut, nicht abgeschrieben. Sie stehen HIER und nicht in einer einzelnen
+// Testdatei, weil der gestellte Live-Agent sie seit SP2 braucht: der Besitz-Eintrag
+// voicemail_message zeigt auf die SAMMLUNG built_in_tools, und fehlt sie live ganz,
+// kaeme sie vollstaendig aus der Vorlage - samt deren Entwickler-Doku, womit jeder Lauf
+// am Riegel 2b endet. Ein echter Agent hat diesen Zustand nicht.
+export function liveWerkzeuge(voicemailText = VOICEMAIL_LIVE_TEXT) {
+  return {
+    end_call: { name: "end_call", type: "system", params: { system_tool_type: "end_call" } },
+    language_detection: {
+      name: "language_detection",
+      type: "system",
+      params: { system_tool_type: "language_detection", only_at_conversation_start: false },
+    },
+    voicemail_detection: {
+      name: "voicemail_detection",
+      type: "system",
+      params: { system_tool_type: "voicemail_detection", voicemail_message: voicemailText },
+    },
+    [UNKONFIGURIERTES_WERKZEUG]: null,
+  };
+}
+
 // Der gestellte Live-Agent: bewusst winzig. Er fuehrt genau die beiden
 // Datenschutz-Felder mit ihren heutigen Live-Werten (Aufbewahrung an,
-// Mitschnitt an - die bewusste Abweichung von der Vorlage) und die Sammlung,
-// ohne die das Verbot der Vorlage nichts pruefen koennte. Alles andere fehlt
-// und weicht deshalb ab; das ist fuer die gemessenen Aussagen ohne Belang und
-// der einzige Weg, den echten Live-Stand nicht ins Repo zu kopieren.
+// Mitschnitt an - die bewusste Abweichung von der Vorlage) und die Sammlungen,
+// ohne die die Vorlage nichts pruefen bzw. nichts zusammenfuehren koennte. Alles
+// andere fehlt und weicht deshalb ab; das ist fuer die gemessenen Aussagen ohne
+// Belang und der einzige Weg, den echten Live-Stand nicht ins Repo zu kopieren.
 export const LIVE_MIT_DATENSCHUTZ = {
-  conversation_config: { language_presets: {} },
+  conversation_config: {
+    language_presets: {},
+    agent: { prompt: { built_in_tools: liveWerkzeuge() } },
+  },
   platform_settings: { privacy: { retention_days: -1, record_voice: true } },
 };
 

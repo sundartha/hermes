@@ -43,14 +43,20 @@
       },
       {
         "feld": "voicemail_message",
-        "art": "wert",
+        "art": "texte",
+        "je_eintrag": "params.voicemail_message",
         "vorlage": [
-          "agent.conversation_config.agent.prompt.built_in_tools.voicemail_detection.params.voicemail_message"
+          "agent.conversation_config.agent.prompt.built_in_tools"
         ],
         "live": [
-          "conversation_config.agent.prompt.built_in_tools.voicemail_detection.params.voicemail_message"
+          "conversation_config.agent.prompt.built_in_tools"
         ],
-        "_hinweis": "Die ZWEITE Stelle, an der der Offenlegungssatz haengt - dieselbe Artikel-50-Logik wie eine Zeile darueber. Seit DE1 (2026-09-04) traegt das Blatt selbst nur noch den Platzhalter {{voicemail_line}}; die Offenlegung entsteht pro Anruf in src/elevenlabs/outbound.js (s. _voicemail_message_hinweis am Werkzeug). Besessen bleibt das Feld trotzdem: ein im Dashboard zurueckgeschriebener statischer Text wuerde die Sprachwahl lautlos aushebeln. Der Pfad ist der am Live-Agenten gemessene (params innerhalb des Werkzeugs, 2026-08-14), nicht die frueher geratene Form direkt im Werkzeug-Objekt."
+        "_hinweis": "Die ZWEITE Stelle, an der der Offenlegungssatz haengt - dieselbe Artikel-50-Logik wie eine Zeile darueber. Seit DE1 (2026-09-04) traegt das Blatt selbst nur noch den Platzhalter {{voicemail_line}}; die Offenlegung entsteht pro Anruf in src/elevenlabs/outbound.js (s. _voicemail_message_hinweis am Werkzeug). Besessen bleibt das Feld trotzdem: ein im Dashboard zurueckgeschriebener statischer Text wuerde die Sprachwahl lautlos aushebeln. Der Pfad ist der am Live-Agenten gemessene (params innerhalb des Werkzeugs, 2026-08-14), nicht die frueher geratene Form direkt im Werkzeug-Objekt. NACHTRAG SP2 (2026-09-04): dieser Eintrag zeigt nicht mehr auf das BLATT, sondern auf die Sammlung built_in_tools; verglichen wird ueber je_eintrag weiterhin genau dieses eine Blatt, jetzt aber an JEDEM eingebauten Werkzeug. GRUND ist die Schreibseite: der Anbieter ERSETZT das Werkzeug-Objekt beim PATCH, statt zu mergen - ein Koerper mit nur dem Blattpfad endete am 2026-09-04 mit HTTP 400 'Field required, param: agent.prompt.built_in_tools.voicemail_detection.name', womit KEIN Werkzeug-Feld pushbar war (s. tasks/UEBERGABE-SPRACHDEFEKT.md). Nebengewinn auf der Leseseite: ein zweites Werkzeug, das diesen Text kuenftig ebenfalls fuehrt, faellt von selbst auf, statt eine neue Luecke zu sein.",
+        "schreibweg": "je_schluessel",
+        "schreibweg_besitz": [
+          "params.voicemail_message"
+        ],
+        "_schreibweg_begruendung": "DAZUGEKOMMEN 2026-09-04 (SP2), wortgleich die Semantik von language_presets_offenlegung - nur ueber built_in_tools statt ueber die Sprach-Presets: der Patch-Koerper traegt das VOLLSTAENDIGE Live-Dict aller eingebauten Werkzeuge (name, type und alle nicht besessenen params unveraendert), und NUR voicemail_detection.params.voicemail_message bekommt den Vorlagenwert. Ein Werkzeug, das die Vorlage ohne dieses Blatt fuehrt (end_call, language_detection), behaelt seinen Live-Stand, weil ein in der Vorlage FEHLENDES Blatt nicht geschrieben wird; ein Werkzeug, das nur live existiert, bricht den Lauf ab, statt zu verschwinden. Es musste dafuer KEIN Skript geaendert werden - der Schreibweg und die Art 'texte' tragen den Fall bereits; das wurde am Vergleichs-Kern gemessen, bevor diese Zeile geschrieben wurde. PREIS, bewusst akzeptiert: ein Anbieter-Schluessel, der live auf null steht (ein nicht konfiguriertes Systemwerkzeug), ist fuer eintraegeAus kein Eintrag und reist im Koerper nicht mit - er traegt keine Konfiguration, also geht auch keine verloren."
       },
       {
         "feld": "prompt",
