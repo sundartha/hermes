@@ -202,8 +202,9 @@ describe("OC-P2-B: das Owner-Ziel bekommt die KI-Eroeffnung und die Prompt-Sekti
   it("OC-P2-B7: opening_line reist im Owner-Fall weiterhin mit", async () => {
     const variablen = variablenVon(await koerperFuer({ call: ownerZiel("de") }));
 
-    // Die voicemail_message der Vorlage referenziert {{opening_line}} - ein Weglassen waere
-    // der 1008-Abbruch, obwohl die Zeile in der Eroeffnung bereits steckt.
+    // first_message referenziert {{opening_line}}, und seit DE1 geht dieselbe Zeile als
+    // WERT in {{voicemail_line}} ein - ein Weglassen waere der 1008-Abbruch, obwohl die
+    // Zeile in der Eroeffnung bereits steckt.
     assert.ok(variablen.opening_line.length > 0);
   });
 });

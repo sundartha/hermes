@@ -50,7 +50,7 @@
         "live": [
           "conversation_config.agent.prompt.built_in_tools.voicemail_detection.params.voicemail_message"
         ],
-        "_hinweis": "Die ZWEITE Stelle, an der der Offenlegungssatz haengt - dieselbe Artikel-50-Logik wie eine Zeile darueber: der Anrufbeantworter-Text beginnt woertlich und byte-identisch mit LOCALES.en.disclosure aus src/i18n/locales.js (s. das Werkzeug voicemail_detection, dort _voicemail_message_hinweis). Artikel 50 EU AI Act gilt auch fuer eine Nachricht auf dem Anrufbeantworter; ein Text, der im Dashboard still umgeschrieben wird, laesst die Pflicht genauso lautlos verschwinden wie bei first_message. Solange nur first_message besessen war, war von zwei Offenlegungen genau eine geschuetzt. Der Pfad ist der am Live-Agenten gemessene (params innerhalb des Werkzeugs, 2026-08-14), nicht die frueher geratene Form direkt im Werkzeug-Objekt."
+        "_hinweis": "Die ZWEITE Stelle, an der der Offenlegungssatz haengt - dieselbe Artikel-50-Logik wie eine Zeile darueber. Seit DE1 (2026-09-04) traegt das Blatt selbst nur noch den Platzhalter {{voicemail_line}}; die Offenlegung entsteht pro Anruf in src/elevenlabs/outbound.js (s. _voicemail_message_hinweis am Werkzeug). Besessen bleibt das Feld trotzdem: ein im Dashboard zurueckgeschriebener statischer Text wuerde die Sprachwahl lautlos aushebeln. Der Pfad ist der am Live-Agenten gemessene (params innerhalb des Werkzeugs, 2026-08-14), nicht die frueher geratene Form direkt im Werkzeug-Objekt."
       },
       {
         "feld": "prompt",
@@ -67,13 +67,15 @@
         "art": "variablen",
         "vorlage": [
           "agent.conversation_config.agent.prompt.prompt",
-          "agent.conversation_config.agent.first_message"
+          "agent.conversation_config.agent.first_message",
+          "agent.conversation_config.agent.prompt.built_in_tools.voicemail_detection.params.voicemail_message"
         ],
         "live": [
           "conversation_config.agent.prompt.prompt",
-          "conversation_config.agent.first_message"
+          "conversation_config.agent.first_message",
+          "conversation_config.agent.prompt.built_in_tools.voicemail_detection.params.voicemail_message"
         ],
-        "_hinweis": "Verglichen werden die Namen, die der Text WIRKLICH liest - auf beiden Seiten aus denselben zwei Feldern gesammelt, nicht aus einer zweiten Liste. Eine gepflegte Namensliste waere ein drittes Ding, das gegen die beiden Texte driften kann; das Beispiel unter _spaeter_beim_place_call_umbau bleibt deshalb Beispiel und ist NICHT die Quelle dieses Vergleichs."
+        "_hinweis": "Verglichen werden die Namen, die der Text WIRKLICH liest - auf beiden Seiten aus denselben drei Feldern gesammelt, nicht aus einer zweiten Liste. Eine gepflegte Namensliste waere ein drittes Ding, das gegen die Texte driften kann; das Beispiel unter _spaeter_beim_place_call_umbau bleibt deshalb Beispiel und ist NICHT die Quelle dieses Vergleichs. Seit DE1 (2026-09-04) zaehlt auch der Anrufbeantworter-Text mit: eine Variable, die NUR dort steht, war vorher fuer diesen Vergleich unsichtbar - genau die 1008-Klasse, gegen die dieser Eintrag antritt."
       },
       {
         "feld": "tools",
@@ -734,10 +736,10 @@
               "type": "system",
               "name": "voicemail_detection",
               "params": {
-                "voicemail_message": "Hello, this is an AI assistant calling on behalf of {{owner_name}}. This conversation will be summarised for the person I represent. I am leaving this message because nobody picked up. {{opening_line}} I will try again later. Goodbye."
+                "voicemail_message": "{{voicemail_line}}"
               },
               "_begruendung": "Steht wegen KRITERIUM B5, FALL (c) (UMSETZUNG-ElevenLabs.md, 'Ein Anruf ohne Gespraech gilt nicht als Erfolg' - Anrufbeantworter) hier: ohne dieses Werkzeug ist der Fall nicht abnehmbar. Die Faelle (a) niemand hebt ab und (b) besetzt meldet ElevenLabs ueber den Fehler-Webhook call_initiation_failure; beim Anrufbeantworter sendet der Anbieter ihn ausdruecklich NICHT (dort woertlich zitiert: der Anruf gilt als erfolgreich aufgebaut). Erkannt wird der Fall deshalb nur ueber dieses modellbasierte Werkzeug plus Auswertung des Post-Call-Webhooks.",
-              "_voicemail_message_hinweis": "ENGLISCH und mit den HEUTIGEN Platzhalternamen ({{owner_name}}, {{objective}}), nicht der Live-Wortlaut: der Live-Agent traegt an dieser Stelle heute (Stand 2026-08-14) einen deutschen Text mit {{user_name}}/{{call_purpose}} - Platzhalter, die es seit der Sprachumstellung (2026-08-13/14, s. _sprachumstellung_hinweis) nicht mehr gibt und die deshalb LEER gerendert wuerden. Der erste Teil ist der Offenlegungssatz, WOERTLICH und byte-identisch aus src/i18n/locales.js LOCALES.en.disclosure, nur ${ownerName} zu {{owner_name}} - genau wie bei first_message (s. _first_message_hinweis): Artikel 50 EU AI Act gilt auch fuer eine Nachricht auf dem Anrufbeantworter, und selbst uebersetzen oder nachbauen ist hier verboten. {{objective}} steht als eigener Satz; die Auftragswerte sind ausformulierte Saetze samt Schlusspunkt (Beleg: dynamic_variables.objective in elevenlabs/test_configs/*.json). ABLAGE BELEGT (2026-08-14, am Live-Agenten GEMESSEN beim Patch dieses Feldes, nicht aus einem woertlichen Schema-Zitat): das Feld heisst voicemail_message und sitzt unter 'params' INNERHALB des Werkzeugs - frueher stand es in dieser Vorlage direkt im Werkzeug-Objekt, das war geraten und ist hiermit nachgezogen. Warum das eine eigene Zeile wert ist: der Werkzeug-Pin (test/elevenlabs-agent-werkzeuge.test.js) misst NAMEN, nicht Form - ein Push kann an der Form scheitern, ohne dass ein Test es sieht. Gegen genau diese Luecke steht das Feld seit 2026-08-14 zusaetzlich in _besitz.felder und wird vom Drift-Gate mit demselben Pfad gegen den Live-Agenten verglichen."
+              "_voicemail_message_hinweis": "DE1 (2026-09-04): dieses Blatt traegt seit hier NUR noch die dynamische Variable {{voicemail_line}}, keinen gesprochenen Text mehr. GRUND: eine Anbieter-Messung am selben Tag (GET auf einen Live-Agenten UND das oeffentliche Schema unter https://api.elevenlabs.io/openapi.json) zeigt, dass weder language_presets.<sprache>.overrides noch conversation_config_override im Schema einen Pfad zu built_in_tools fuehren - der Preset-Weg fuer dieses Feld ist damit TOT, ebenso der Per-Anruf-Override. Der einzige tragfaehige Weg ist eine dynamische Variable: der Anbieter loest sie in genau diesem Feld auf (Schema VoicemailDetectionToolConfig.voicemail_message, Beschreibung woertlich 'Supports dynamic variables'), und live tut er es an dieser Stelle bereits fuer {{owner_name}}/{{opening_line}}. Der Wert entsteht in src/elevenlabs/outbound.js (voicemailText) ueber src/elevenlabs/call-locale.js (providerVoicemailMessage) aus LOCALES.<sprache>.disclosure + LOCALES.<sprache>.voicemailBody - er beginnt byte-identisch mit dem Offenlegungssatz (Artikel 50 EU AI Act gilt auch fuer eine Nachricht auf dem Anrufbeantworter). ANLASS: ein deutscher Anruf (call_mtmpqje4clmh / conv_4501m1nsr1hhe2aa07pt5t38r0zy) hinterliess einen englischen Anrufbeantworter-Text, weil dieses Blatt bis dahin statischen englischen Text trug und keine Uebersteuerung existierte. PREIS, bewusst akzeptiert: fehlt die Variable in dynamic_variables, rendert der Anbieter den nackten Platzhalter statt eines Textes - dagegen steht, dass dynamicVariables() das Feld strukturell IMMER liefert (nie bedingt weggelassen) und test/el-vorlage-variablen-abgleich.test.js seit DE1 auch dieses Blatt in den Namens-Abgleich einbezieht."
             }
           }
         },

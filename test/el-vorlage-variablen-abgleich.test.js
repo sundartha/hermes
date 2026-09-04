@@ -49,7 +49,10 @@ const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 // Dreizehn seit OC-P2: {{callee_relation}} kam als dreizehnter Name dazu - die
 // Prompt-Sektion fuer den Fall, dass das Ziel die eigene hinterlegte Nummer des anrufenden
 // Tenants ist; sie geht fuer JEDES andere Ziel als leerer String hinaus.
-const EXPECTED_VARIABLE_COUNT = 13;
+// Vierzehn seit DE1: {{voicemail_line}} kam als vierzehnter Name dazu - der GANZE
+// Anrufbeantworter-Text, in der Sprache des Anrufs komponiert (der Text am Agenten
+// laesst sich weder je Sprache noch je Anruf uebersteuern, 2026-09-04 gemessen).
+const EXPECTED_VARIABLE_COUNT = 14;
 
 // ---- Seite A: {{name}} aus dem WIRKLICHEN Vorlagentext --------------------------------
 const PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
@@ -60,12 +63,24 @@ function placeholderNamesIn(text) {
   return gefunden;
 }
 
+// DRITTE QUELLE seit DE1: der Anrufbeantworter-Text. Bis dahin las diese Seite nur
+// prompt + first_message - eine Variable, die NUR dort unten steht, war damit
+// unsichtbar, und genau das ist der Close-1008-Fall, den diese Datei faengt.
+// In Stufen gelesen statt in einer Kette (G36/Demeter, Bestandsmuster el-stimme-abnahme).
+function voicemailMessageOf(agent) {
+  const builtInTools = agent.prompt.built_in_tools;
+  const detection = builtInTools.voicemail_detection;
+  return detection.params.voicemail_message;
+}
+
 function templatePlaceholderNames() {
   const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
   const agent = vorlage.agent.conversation_config.agent;
-  const promptText = agent.prompt.prompt;
-  const firstMessage = agent.first_message;
-  return new Set([...placeholderNamesIn(promptText), ...placeholderNamesIn(firstMessage)]);
+  return new Set([
+    ...placeholderNamesIn(agent.prompt.prompt),
+    ...placeholderNamesIn(agent.first_message),
+    ...placeholderNamesIn(voicemailMessageOf(agent)),
+  ]);
 }
 
 // ---- Seite B: das ECHTE dynamic_variables-Objekt, per Attrappen-fetch abgegriffen -----
@@ -81,7 +96,7 @@ function fehlendeUndUeberzaehlige(seiteA, seiteB) {
   return { fehlend, ueberzaehlig };
 }
 
-test("EL-VORLAGE-VARIABLEN: Platzhalter der Vorlage und gesendete dynamic_variables sind deckungsgleich (zwoelf Namen)", async () => {
+test("EL-VORLAGE-VARIABLEN: Platzhalter der Vorlage und gesendete dynamic_variables sind deckungsgleich (vierzehn Namen)", async () => {
   const seiteA = templatePlaceholderNames();
   const gesendet = await sentDynamicVariables();
   const seiteB = new Set(Object.keys(gesendet));
