@@ -134,7 +134,7 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       nachholbar laut Protokoll ST0-3. Befund-Doc: ST4-Abschluss + Offene Punkte
       (Endstand). npm run test:abnahme: "13 von 14 Abnahmekriterien erfuellt"
       (AS10 das einzige offene).
-- [ ] 6. ST5 Lehren sichern + Abschluss: tasks/lessons.md EL-Regel mit VIER Kernsaetzen
+- [x] 6. ST5 Lehren sichern + Abschluss: tasks/lessons.md EL-Regel mit VIER Kernsaetzen
       (AS11, deterministischer Grep); Aufraeum-Pflicht (Prozessmuell der Kette im
       Merge-Commit: untrackte Doku erst committen, dann loeschen, nie git add -A);
       volle Suite EINMAL vom Lead (npm test, test:gates, test:abnahme — nur wenn Code
@@ -148,8 +148,11 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       ungepinntes Repo / Vorlage ist kanonisch. Aufraeumung: keine Worktrees/Phase-
       Branches mehr (alle entfernt), keine per-run-Skripte dieser Kette in
       .claude/workflows/runs/, PLAN-GEO-NUMMERN.md (andere Kette) bewusst untracked
-      gelassen. Finale Suite: siehe nachfolgende Zeile. KOSTEN: siehe nachfolgende
-      Zeile (workflow-kosten.mjs, temp-HOME-Symlink).
+      gelassen. FINALE SUITE (Endstand 2026-09-04): npm test Lauf1 5684/5683/1
+      (wandernder Spawn-Flake) -> Zweitlauf 5703/5703 fail 0 KOMPLETT GRUEN
+      (Beleg-Muster wie Reviewer-/Fix-Agenten-Laeufe); test:gates 3 rot (GAP-05/
+      GAP-15/E2E-03, per Baseline cd8a88c als vorbestehend belegt); test:abnahme
+      "13 von 14" (AS10 bewusst rot, einziges offenes Kriterium der Kette).
       KOSTEN (echte Messung 2026-09-04, temp-HOME-Symlink, nie subagent_tokens):
       ST0 wf_ac26e11f-91a 4,8 Mio (220 Turns) + ST1 wf_e4493e04-490 33,0 Mio (631) +
       ST2 wf_c59e926d-0b5 18,0 Mio (360) + ST3 wf_c4e3da6a-efa 40,2 Mio (622)
