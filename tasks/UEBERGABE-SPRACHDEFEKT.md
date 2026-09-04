@@ -459,3 +459,15 @@ Mailbox-Erkennung getrennt absichern (eigener kleiner Schritt).
 Nebenbei im Log: `[sms] Telnyx sendSms fehlgeschlagen: HTTP 400 (40305 Invalid 'from' address)`
 nach jedem Anruf — die Zusammenfassungs-SMS scheitert am Absender (US-DID). Bestandsdefekt,
 nicht Teil dieser Kette.
+
+**Anruf 3, Mailboxpfad mit Handy im Flugmodus (`call_mtnhy4bag1mo`, `conv_3201m1q6y1y7esyaf19x4pkwxmcg`, 21:59 UTC): WIEDER KEINE MAILBOX.**
+Telnyx: sofort verbunden, 8 s, `NORMAL_CLEARING`/`send_bye` (Gegenseite legte auf). EL: 7 s, nur
+die Eroeffnung (Scribe: vollstaendig gesprochen bis "Wie sieht es damit aus?"), kein User-Turn,
+`voicemail_detection.used=false`. Dreimal dasselbe 8-s-Muster (20.08. 17:17, 04.09. 21:51, 21:59):
+auf der Leitung des Eigentuemers nimmt derzeit KEINE Mailbox ab, das Netz beendet nach ~8 s
+(Ansage NICHT belegbar, s. o.). Die Mailbox vom 04.09. 08:50 ("Dein Anruf wurde an Voicemail
+weitergeleitet ... Signalton") war offenbar ein anderer Beantworter (Handy-seitig?) — offen.
+**Der Mailboxpfad ist damit NICHT abnehmbar, bis auf der Zielnummer eine Mailbox abnimmt** (Carrier-
+Mailbox aktivieren, oder mit Einwilligung eine fremde Nummer mit aktiver Mailbox — dann laeuft der
+Dritt-Pfad mit vollem Offenlegungssatz, was fuer Artikel 50 sogar der bessere Test ist).
+Das OFFENE RISIKO (Ansage waehrend der Eroeffnung wird verworfen) bleibt ungeprueft.

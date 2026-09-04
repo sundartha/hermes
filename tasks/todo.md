@@ -38,4 +38,4 @@ Regel: kein Push, kein Deploy, kein Testanruf ohne ausdrueckliche Freigabe des E
       Erwartet: Zusammenfuehrungs-Tests (1)-(6) gruen. Verifikation: Suite-Lauf im Lead nach Merge.
 - [x] Eigentuemer: Push in Reihenfolge (v40 prompt+turn, v41 voicemail_message), Drift gruen.
 - [x] Testanruf Gespraechspfad: BESTANDEN (conv_6401…, LD_used=false, Phantom bei t=13 korrekt behandelt).
-- [ ] Testanruf Mailboxpfad: Mailbox nahm nicht ab (Netz nach 42 s, 8 s, send_bye). Wiederholen mit Handy im Flugmodus. Erwartet: VD_used=true, Text deutsch ab LOCALES.de.disclosure.
+- [ ] Testanruf Mailboxpfad: BLOCKIERT - auch im Flugmodus nimmt keine Mailbox ab (3x 8-s-Muster). Braucht eine Zielnummer mit aktiver Mailbox. Erwartet dann: VD_used=true, Text deutsch ab LOCALES.de.disclosure; zusaetzlich das Risiko 'Ansage waehrend Eroeffnung verworfen' pruefen.
