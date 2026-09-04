@@ -41,7 +41,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { LOCALES } from "../src/i18n/locales.js";
-import { providerOpeningFor } from "../src/elevenlabs/call-locale.js";
+import { providerOpeningFor, providerVoicemailMessage } from "../src/elevenlabs/call-locale.js";
 
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 const BEFUNDE_REL = "tasks/EL-STIMME-BEFUNDE.md";
@@ -77,13 +77,13 @@ const SPEECH_B2 = Object.freeze({
   fr: "Aucun crochet ni indication d'humeur ou de mise en scène dans le texte parlé : tout ce que tu écris est prononcé exactement tel quel. L'humeur passe uniquement par le choix des mots.",
 });
 
-// Statischer Text der Vorlage OHNE Gegenstueck in LOCALES (die Anrufbeantworter-Nachricht
-// ist EL-spezifisch) - deshalb byte-Pin des Ist-Stands statt Zusammensetzung. Die
-// Offenlegung darin ist LOCALES.en.disclosure woertlich vorangestellt (T5-Kette).
-const VOICEMAIL_PIN =
-  "Hello, this is an AI assistant calling on behalf of {{owner_name}}. This conversation " +
-  "will be summarised for the person I represent. I am leaving this message because nobody " +
-  "picked up. {{opening_line}} I will try again later. Goodbye.";
+// DE1: das Blatt am Agenten traegt NUR noch die dynamische Variable. Der frueher hier
+// stehende englische Byte-Pin schrieb den Defekt als SOLL fest: er war genau dann
+// gruen, wenn ein deutscher Anrufbeantworter den englischen Text hoert - dieselbe
+// falsche Haelfte, die 2026-08-17 schon beim Preset-Anwesenheitsverbot geschuetzt war.
+const VOICEMAIL_PLATZHALTER = "{{voicemail_line}}";
+const VOICEMAIL_OWNER = "Pin Testowner";
+const VOICEMAIL_GRUNDZEILE = "Ich rufe wegen einer Terminfrage an.";
 
 // Basis-Sprache des Agenten der Vorlage: ihr Satz steht in first_message, ein Preset fuer
 // sie waere eine zweite Kopie desselben Wortlauts (Bestandsmuster EL-START T5 e).
@@ -154,9 +154,24 @@ const assertArt50FelderUnberuehrt = (vorlage) => {
   }
   assert.equal(
     voicemailMessageOf(agentSection),
-    VOICEMAIL_PIN,
-    "voicemail_message (zweite Art.-50-Stelle) muss byte-identisch bleiben - statischer Text, deshalb Ist-Pin",
+    VOICEMAIL_PLATZHALTER,
+    "voicemail_message darf am Agenten KEINEN gesprochenen Text mehr tragen - alles, was hier " +
+      "statisch steht, kommt bei jedem nicht-englischen Anruf englisch heraus",
   );
+  // JE SPRACHE, wie first_message darueber: der komponierte Text beginnt byte-identisch
+  // mit LOCALES.<sprache>.disclosure (Artikel 50 EU AI Act, nicht uebersetzt, nicht gekuerzt).
+  for (const sprache of LANGS) {
+    const text = providerVoicemailMessage({
+      locale: LOCALES[sprache],
+      ownerName: VOICEMAIL_OWNER,
+      openingLine: VOICEMAIL_GRUNDZEILE,
+    });
+    assert.ok(
+      text.startsWith(LOCALES[sprache].disclosure(VOICEMAIL_OWNER)),
+      `der Anrufbeantworter-Text fuer "${sprache}" beginnt nicht mit LOCALES.${sprache}.disclosure`,
+    );
+    assert.ok(text.includes(VOICEMAIL_GRUNDZEILE), `"${sprache}": die Grund-Zeile fehlt`);
+  }
   assert.equal(
     agentSection.disable_first_message_interruptions,
     true,

@@ -25,6 +25,10 @@
 // werden (DIP, wie bei elevenLabsVoiceIdFor selbst) - Deutsch hat in der Stimmen-Karte
 // ABSICHTLICH keinen eigenen Eintrag, seine Stimme IST die global konfigurierte
 // Plattform-Stimme.
+//
+// DE1 (2026-09-04): seit dieser Phase entsteht auf demselben Weg auch der
+// Anrufbeantworter-Text (providerVoicemailMessage) - dieselbe Quelle, dieselbe
+// Offenlegung zuerst, nur ein anderer Ort am Agenten.
 import { LANGUAGE_FOR_COUNTRY, localeFor } from "../i18n/locales.js";
 import { countryForE164 } from "../store/defaults.js";
 import { resolveCallLanguage } from "../store/state-ops.js";
@@ -91,6 +95,30 @@ const OWNER_NAME_PLACEHOLDER = "{{owner_name}}";
  */
 export function providerOpeningFor(language) {
   return providerOpening(localeFor(language), OWNER_NAME_PLACEHOLDER);
+}
+
+/**
+ * Die vollstaendige Anrufbeantworter-Nachricht EINES Anrufs, in der Sprache des Anrufs.
+ *
+ * DIESELBE REIHENFOLGE UND DIESELBE QUELLE wie providerOpening darueber: der
+ * Offenlegungssatz WOERTLICH und als ALLERERSTES (Absolute Regel 2, Artikel 50 EU AI
+ * Act - er gilt auch fuer eine Nachricht auf dem Anrufbeantworter), dahinter der
+ * sprachliche Rest aus demselben Bundle. Es gibt keine zweite Fassung und keine
+ * Uebersetzung: was gesprochen wird, steht in src/i18n/locales.js.
+ *
+ * WARUM DAS UEBERHAUPT HIER ENTSTEHT (Messung 2026-09-04, DE1): am Agenten liegt dieser
+ * Text unter built_in_tools.voicemail_detection.params - ein Pfad, den WEDER ein
+ * language_preset NOCH eine conversation_config_override im Anbieter-Schema fuehrt.
+ * Beide Uebersteuerungswege scheiden damit aus. Der einzige tragfaehige Weg ist die
+ * dynamische Variable: der Anbieter loest sie in genau diesem Feld auf (Schema
+ * VoicemailDetectionToolConfig.voicemail_message, "Supports dynamic variables"), und
+ * live tut er es bereits fuer {{owner_name}}/{{opening_line}}.
+ *
+ * @param {{locale: object, ownerName: string, openingLine: string}} args
+ * @returns {string}
+ */
+export function providerVoicemailMessage({ locale, ownerName, openingLine }) {
+  return [locale.disclosure(ownerName), locale.voicemailBody(openingLine)].join(" ");
 }
 
 /**

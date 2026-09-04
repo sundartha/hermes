@@ -215,6 +215,14 @@ export const LOCALES = Object.freeze({
     // (s. den Kommentar an DISCLOSURE_OWNER_FALLBACK_* oben). Kein zweiter Wortlaut:
     // beide Stellen lesen dieselbe Konstante.
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_DE,
+    // DE1: die zweite gesprochene Art.-50-Stelle - der Anrufbeantworter-Text. Was hier
+    // steht, ist AUSSCHLIESSLICH das, was HINTER dem Offenlegungssatz kommt: der Grund
+    // der Nachricht, die Grund-Zeile des Auftrags und der Abschied. Der Satz selbst wird
+    // NICHT hier wiederholt (disclosure ist die eine Quelle, G5) - er wird in
+    // src/elevenlabs/call-locale.js davorgesetzt und bleibt damit strukturell der
+    // ALLERERSTE (Absolute Regel 2). Gesprochener Text, deshalb echte Umlaute.
+    voicemailBody: (openingLine) =>
+      `Ich hinterlasse diese Nachricht, weil niemand abgehoben hat. ${openingLine} Ich versuche es später noch einmal. Auf Wiederhören.`,
     // OC-P2 (PLAN-OWNER-CALL 1.4): die Eroeffnung fuer den EINEN Fall, in dem der lange
     // Offenlegungssatz entfaellt - das Ziel ist die eigene hinterlegte Nummer des
     // anrufenden Tenants (call.calleeIsOwner, src/callee-is-owner.js). GESPROCHENER
@@ -393,6 +401,9 @@ export const LOCALES = Object.freeze({
     ),
     // s. DE (derselbe Ausdruck wie in disclosure(), zusaetzlich als Wert).
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_FR,
+    // s. DE (voicemailBody).
+    voicemailBody: (openingLine) =>
+      `Je laisse ce message parce que personne n'a décroché. ${openingLine} Je réessaierai plus tard. Au revoir.`,
     // s. DE (ownerOpening) - "IA" traegt hier dieselbe Last wie "KI" dort.
     ownerOpening: (firstName) => `Bonjour ${firstName}, c'est ton assistant IA.`,
     summarySystem: (owner) =>
@@ -511,6 +522,11 @@ export const LOCALES = Object.freeze({
     ),
     // s. DE (derselbe Ausdruck wie in disclosure(), zusaetzlich als Wert).
     disclosureOwnerFallback: DISCLOSURE_OWNER_FALLBACK_EN,
+    // s. DE (voicemailBody). WOERTLICH der Rest des heutigen Live-Texts am Agenten
+    // (Stand 2026-09-04, per GET gemessen) - fuer Englisch aendert sich am gesprochenen
+    // Wort NICHTS, nur der Ort, an dem es steht.
+    voicemailBody: (openingLine) =>
+      `I am leaving this message because nobody picked up. ${openingLine} I will try again later. Goodbye.`,
     // s. DE (ownerOpening) - "AI" traegt hier dieselbe Last wie "KI" dort.
     ownerOpening: (firstName) => `Hi ${firstName}, it's your AI assistant.`,
     summarySystem: (owner) =>

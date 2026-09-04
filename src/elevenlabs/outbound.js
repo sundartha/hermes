@@ -39,7 +39,7 @@ import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { verifiedOpeningLine } from "./opening-line.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
-import { callLocaleFor } from "./call-locale.js";
+import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 // ST3 (O3): AUDIO_TAG wohnt seit dem Move im Heuristik-Modul (EINE Quelle fuer [el-tags]
 // UND die B1-Lexemisierung, Import-Richtung nur hierher - kein Zykel); findeB1Treffer ist
@@ -659,6 +659,28 @@ function calleeRelationText({ call, owner, bundle }) {
   return block.includes(PLACEHOLDER_OPENER) ? "" : block;
 }
 
+// DE1: der Anrufbeantworter-Text dieses Anrufs, in der Sprache des Anrufs. Gebaut wie
+// calleeRelationText direkt darueber und aus demselben Grund an derselben Stelle: der
+// Wortlaut kommt aus EINER Quelle (call-locale.js -> LOCALES), hier steht nur der
+// Waechter davor.
+//
+// WARUM DER TEXT UEBERHAUPT VON UNS KOMMT: das Feld am Agenten
+// (built_in_tools.voicemail_detection.params.voicemail_message) laesst sich weder je
+// Sprache noch je Anruf uebersteuern (Anbieter-Schema, 2026-09-04 gemessen). Es loest
+// aber dynamische Variablen auf - der einzige Weg, auf dem ein deutscher Anruf keinen
+// englischen Anrufbeantworter-Text mehr hinterlaesst.
+//
+// "" HEISST HIER: KEINE NACHRICHT. Der Anbieter beendet den Anruf dann sofort, statt
+// etwas zu sprechen (Schema-Beschreibung des Feldes) - fail-safe: eine Lage, in der wir
+// den Text nicht sauber bauen koennen, hinterlaesst LIEBER NICHTS als eine Nachricht
+// ohne belastbare Offenlegung. Dieselbe {{-Sperre und dieselbe Semantik wie bei
+// ownerFirstMessage/calleeRelationText: ein unversorgtes {{...}} in einem Wert, den der
+// Anbieter aufloest, ist im besten Fall Muell und im schlechtesten der 1008-Abbruch.
+function voicemailText({ owner, bundle, openingLine }) {
+  const text = providerVoicemailMessage({ locale: bundle, ownerName: owner, openingLine });
+  return text.includes(PLACEHOLDER_OPENER) ? "" : text;
+}
+
 // Die Zone des ANGERUFENEN reist samt ihrem Satz und ihrem fuehrenden Zeilenumbruch -
 // dasselbe Muster wie constraintsText/backgroundText und aus demselben Grund: der Prompt
 // der Vorlage ist EIN statischer Text und kann keinen Block weglassen. Stuende der Satz
@@ -803,21 +825,22 @@ const ohneRechercheTor = () => false;
 // in das echte data/store.json statt in sein Temp-Verzeichnis).
 const ohneMetrikMeldung = Object.freeze({ logSenderFallback: () => {} });
 
-// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die dreizehn, die die
+// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die vierzehn, die die
 // Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
 // {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}},
-// {{consult_available}}, {{opening_line}}, {{lookup_available}}, {{callee_relation}}) -
-// fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt unaufgeloest. Der Weg ueber eine
-// Prompt-Uebersteuerung scheidet aus: eine nicht freigeschaltete
-// conversation_config_override wird vom Anbieter STILL ignoriert.
+// {{consult_available}}, {{opening_line}}, {{lookup_available}}, {{callee_relation}},
+// {{voicemail_line}}) - fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt
+// unaufgeloest. Der Weg ueber eine Prompt-Uebersteuerung scheidet aus: eine nicht
+// freigeschaltete conversation_config_override wird vom Anbieter STILL ignoriert.
 //
-// opening_line (Thema A, 2026-08-19) ist der GESPROCHENE Anrufgrund in first_message
-// und voicemail_message - die bei Auftragsannahme festgelegte, geprueft-validierte
-// Zeile vom Call-Datensatz, hier nur noch gegen ihren Annahme-Hash gehalten
-// (verifiedOpeningLine): stimmt er nicht, spricht der Anruf den deterministischen
-// Rueckfall, NIE den veraenderten Text. {{objective}} bleibt daneben ROH bestehen -
-// es speist den PROMPT (die Aufgabe des Agenten), nicht mehr die gesprochene
-// Eroeffnung; die Aufgabentreue haengt am vollen Wortlaut des Auftraggebers.
+// opening_line (Thema A, 2026-08-19) ist der GESPROCHENE Anrufgrund in first_message -
+// die bei Auftragsannahme festgelegte, geprueft-validierte Zeile vom Call-Datensatz,
+// hier nur noch gegen ihren Annahme-Hash gehalten (verifiedOpeningLine): stimmt er
+// nicht, spricht der Anruf den deterministischen Rueckfall, NIE den veraenderten Text.
+// In den Anrufbeantworter-Text geht sie seit DE1 als WERT ein (voicemail_line), nicht
+// mehr als Platzhalter. {{objective}} bleibt daneben ROH bestehen - es speist den
+// PROMPT (die Aufgabe des Agenten), nicht mehr die gesprochene Eroeffnung; die
+// Aufgabentreue haengt am vollen Wortlaut des Auftraggebers.
 //
 // owner_name ist der einzige mit INHALTLICHEM Default: er traegt die Offenlegung (Regel 2,
 // Artikel 50 EU AI Act), und die haengt nie an einer Variablen ohne Default. Ein fehlender
@@ -892,6 +915,11 @@ function dynamicVariables({
     // OC-P2: "" fuer jedes Nicht-Owner-Ziel - der Prompt am Anbieter rendert dann exakt
     // den heutigen Text.
     callee_relation: calleeRelationText({ call, owner, bundle }),
+    // DE1: der GANZE Anrufbeantworter-Text, in der Sprache dieses Anrufs. Er benutzt
+    // DENSELBEN owner-Ausdruck wie owner_name eine Zeile darueber (zwei Rechnungen
+    // desselben Defaults waeren zwei Wahrheiten, G5) und DIESELBE geprueft-validierte
+    // Grund-Zeile wie die Eroeffnung.
+    voicemail_line: voicemailText({ owner, bundle, openingLine }),
   };
 }
 

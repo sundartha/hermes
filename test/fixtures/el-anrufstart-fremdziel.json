@@ -15,7 +15,8 @@
       "mandate": "Ersatztermin frei waehlen sonst Nachricht hinterlassen\nYou do NOT book appointments firmly. An appointment request your LEEWAY covers, you commit to yourself and do NOT additionally hand off as a message. For every other appointment request, what is stated under OUTSIDE YOUR LEEWAY applies.",
       "owner_timezone": "Europe/Berlin",
       "callee_timezone": "\nThe person you are calling is in the Europe/Berlin time zone - convert every time you agree between those two zones and say which zone you mean.",
-      "today": "<LAUFABHAENGIG>"
+      "today": "<LAUFABHAENGIG>",
+      "voicemail_line": "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Pin Testowner. Das Gespräch wird für meinen Auftraggeber zusammengefasst. Ich hinterlasse diese Nachricht, weil niemand abgehoben hat. Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus? Ich versuche es später noch einmal. Auf Wiederhören."
     },
     "conversation_config_override": {
       "agent": {

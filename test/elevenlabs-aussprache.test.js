@@ -37,6 +37,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { providerVoicemailMessage } from "../src/elevenlabs/call-locale.js";
+import { LOCALES } from "../src/i18n/locales.js";
+
 const TEMPLATE_REL = "elevenlabs/agent_configs/outbound-agent.template.json";
 const TEMPLATE = JSON.parse(readFileSync(new URL(`../${TEMPLATE_REL}`, import.meta.url), "utf8"));
 
@@ -56,13 +59,16 @@ const LOCATOR_PFLICHTFELDER = ["pronunciation_dictionary_id", "version_id"];
 // Die dynamische Variable, in der der Name reist.
 const OWNER_VARIABLE = "{{owner_name}}";
 
+// Proben fuer die zweite Stelle seit DE1 (s. unten): kein echter Name, nur ein
+// unverwechselbarer Testwert.
+const OWNER_NAME_PROBE = "Ausspracheprobe Owner";
+const OPENING_PROBE = "Ich rufe wegen einer Terminfrage an.";
+
 // In Stufen gelesen statt in einer Kette: das Agenten-Objekt ist mehrere Ebenen tief
 // (G36/Demeter, im Lint dieses Repos ein Fehler).
 const conversationConfig = () => TEMPLATE.agent?.conversation_config ?? {};
 const ttsBlock = () => conversationConfig().tts ?? {};
 const agentSection = () => conversationConfig().agent ?? {};
-const builtInTools = () => agentSection().prompt?.built_in_tools ?? {};
-const voicemailMessage = () => builtInTools().voicemail_detection?.params?.voicemail_message ?? "";
 const besitzFelder = () => TEMPLATE._besitz?.felder ?? [];
 const besitzEintrag = () => besitzFelder().find((eintrag) => eintrag?.feld === BESITZ_FELD);
 
@@ -147,8 +153,19 @@ test("Aussprache: der Name wird an zwei Stellen gesprochen, die kein Modell erze
     agentSection().first_message?.includes(OWNER_VARIABLE),
     `first_message traegt ${OWNER_VARIABLE} nicht mehr - dann faellt der Name woanders, und die Aussprache-Entscheidung zeigt ins Leere`,
   );
+  // DE1: die zweite Stelle traegt den Namen weiterhin als FERTIGEN Text, nur nicht mehr
+  // ueber {{owner_name}}: der ganze Anrufbeantworter-Text reist seit DE1 in
+  // {{voicemail_line}} und wird bei uns komponiert (call-locale.js). Geprueft wird
+  // deshalb die Komposition, nicht der Platzhalter - die Aussprache-Entscheidung haengt
+  // an dem, was WIRKLICH synthetisiert wird.
+  const gesprochen = providerVoicemailMessage({
+    locale: LOCALES.en,
+    ownerName: OWNER_NAME_PROBE,
+    openingLine: OPENING_PROBE,
+  });
   assert.ok(
-    voicemailMessage().includes(OWNER_VARIABLE),
-    `die Anrufbeantworter-Nachricht traegt ${OWNER_VARIABLE} nicht mehr - dieselbe Sache, zweite Stelle`,
+    gesprochen.includes(OWNER_NAME_PROBE),
+    "die Anrufbeantworter-Nachricht traegt den Auftraggeber-Namen nicht mehr unveraendert - " +
+      "dieselbe Sache wie bei first_message, zweite Stelle",
   );
 });

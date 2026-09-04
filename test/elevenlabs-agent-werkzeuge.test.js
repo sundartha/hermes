@@ -429,11 +429,14 @@ const FOLLOW_VERB = /\b(continue|keep|carry on|follow|proceed|stay)\w*/i;
 const NEGATION = /\b(do not|don't|never|must not|cannot|can't|avoid|refrain)\b/i;
 const LANGUAGE_WORD = /\blanguage/i;
 const ENGLISH = /\benglish\b/i;
+// DE1: der Kern von (a) ist nicht mehr "Startsprache Englisch", sondern "sprich die
+// Sprache deiner Eroeffnung" - deshalb ein Sprechverb statt eines Englisch-Zwangs.
+const SPEAK_VERB = /\b(speak|begin|start|open)\w*/i;
 
 const REQUIRED_LANGUAGE_RULES = Object.freeze([
   {
-    label: "(a) Englisch ist die Startsprache des Anrufs",
-    concepts: [/\b(begin|start|open)\w*/i, ENGLISH],
+    label: "(a) die Startsprache ist die des Anrufs, nicht fest Englisch",
+    concepts: [SPEAK_VERB, LANGUAGE_WORD],
   },
   {
     label: "(b) wechselt die Gegenseite die Sprache, geht der Agent mit",
@@ -461,6 +464,13 @@ const FORBIDDEN_LANGUAGE_RULES = Object.freeze([
     concepts: [/\b(back|return|revert)\w*/i, ENGLISH],
     why: "vom Eigentuemer ausdruecklich benannt: derselbe Fehler in gruen",
   },
+  {
+    label: "Englisch als feste Startsprache",
+    concepts: [SPEAK_VERB, ENGLISH],
+    why:
+      "DE1: 'Begin the call in English.' zwingt einen Anruf mit deutscher Eroeffnung " +
+      "mitten im Gespraech zurueck ins Englische - am Live-Verkehr 2026-09-04 gehoert",
+  },
 ]);
 
 // Positiv-Kontrollen des Messwerkzeugs (Lehre pruefkommando-ohne-positiv-kontrolle). Die
@@ -468,12 +478,13 @@ const FORBIDDEN_LANGUAGE_RULES = Object.freeze([
 // Zusicherungen duerfen nicht am Wortlaut kleben, sondern muessen auch anders formulierte
 // Prompts durchlassen - und auf jeder der drei verbotenen Formen anschlagen.
 const CONTROL_OK =
-  "Open the conversation in English. Should your counterpart move to a different " +
-  "language, carry on in that language and keep working toward the same goal.";
+  "Use the language of your opening line and remain in it. Should your counterpart move " +
+  "to a different language, carry on in that language and keep working toward the same goal.";
 const CONTROL_VIOLATIONS = Object.freeze([
   "Speak only in this language: {{language}}.",
   "Never switch the language during the call.",
   "If they switch, follow them, but return to English right after.",
+  "Begin the call in English.",
 ]);
 
 test("Sprachwechsel in der ElevenLabs-Vorlage: language_detection gilt den ganzen Anruf, nicht nur zum Start", () => {
