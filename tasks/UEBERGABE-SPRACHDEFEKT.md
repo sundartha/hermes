@@ -224,3 +224,156 @@ Feld) — die Vorsession hat mehrfach zu grosse Loesungen vorgeschlagen, bevor d
 - Die Vorsession hat die Kette DE1 **ohne Verifikationsanruf** abgeschlossen, weil die
   vorherige Kette (ST1-ST5) das auch getan hat — genau daraus ist der heutige Vertrauensverlust
   entstanden. Schliess nichts ab, was du nicht am echten Anruf gesehen hast.
+
+---
+
+# Nachtrag 2026-09-04 (Session 2, Messphase abgeschlossen — NICHTS geaendert, kein Push, kein Deploy)
+
+Vier rein lesende Subagenten (A Audio, B Gespraechsvergleich, C Fremdeinfluss, D Server/Telco).
+Rohdaten im Session-Scratchpad (`audio/`, `conv/`, `c/`, `d/`); die 17 Gespraechs-JSONs sind
+jederzeit erneut per `GET /v1/convai/conversations/<id>` ziehbar.
+
+## BELEGT (neu)
+
+15. **Der Eigentuemer hat beim 12:37-Anruf vor dem Spanisch NICHTS gesagt.** Audio
+    (`GET /v1/convai/conversations/<id>/audio`, MP3 16 kHz Mono-Mix): first_message endet bei
+    7,13 s, spanische Agent-Antwort beginnt 9,15 s; dazwischen digitale Stille (mean −83 dB,
+    max −69,5 dB, silencedetect). Positiv-Kontrolle: der echte Eigentuemer-Turn ab 16,35 s
+    hat max −7,6 dB und sagt woertlich: *"Was? Ich habe nix gesagt. Wie kommst du jetzt darauf,
+    auf Spanisch zu reden?"* EL-Scribe-Transkription (auto, erzwungen `deu`, erzwungen `spa`)
+    findet vor 9,15 s ausschliesslich die deutsche first_message des Agenten.
+    **BELEGT 7 ist damit zu korrigieren:** der Turn `"No. ¿Sí está ahí?"` ist ein
+    PHANTOM-Turn der Echtzeit-Spracherkennung (Scribe v2 Realtime), keine Aeusserung.
+16. **Phantom-Turns gab es schon im "guten" Anruf 09-03 17:10:** User-Turns t=8 `"Wie?"` und
+    t=12 `"Wie sind?"` liegen im Audio in Stille (7,04–10,92 s und 13,63–15,85 s). Der zweite
+    hat den Agenten mitten im Wort unterbrochen (`interrupted=true`), worauf er "Entschuldige,
+    ich glaube die Verbindung war kurz schlecht" sprach. Beide sind Fragmente des eigenen
+    Agenten-Satzes *"Wie sieht es damit aus?"* (Ende der first_message). `"¿Sí está ahí?"` ist
+    phonetisch *"sieht es da(mit aus)"* — Zuordnung plausibel, Leckpfad NICHT BELEGT (s. u.).
+17. **Vor 09-03 gab es in 9 verbundenen Gespraechen seit 20.08. KEINEN Phantom-Turn** (alle
+    User-Turns ≤4 Woerter ueber 13 Gespraeche: nur 09-03 2x, 09-04 12:37 1x, plus zwei echte
+    kurze Antworten 08-20/08-30). Zwischen dem letzten sauberen Anruf (09-02 15:57) und dem
+    ersten Phantom-Anruf (09-03 17:10) hat sich auf unserer Seite NICHTS geaendert: gleiche
+    Agent-Version v38, gleicher Server-Commit `9b6b197` (live seit 02.09. 10:26 UTC), Diff der
+    Anruf-Payload GUT vs. 09-02 = null Unterschiede, identischer Eroeffnungssatz
+    "…Wie sieht es damit aus?" in 11 von 12 verbundenen Anrufen. **Der Beginn der
+    Phantom-Turns korreliert mit keiner unserer Aenderungen.**
+18. **Die Verstaerkerkette, die aus einem Phantom ein spanisches Gespraech macht, ist unsere
+    Konfiguration:** (a) `agent.disable_first_message_interruptions=true` +
+    `turn.transcribe_on_disabled_interruptions=true` — was waehrend der Eroeffnung "gehoert"
+    wird, unterbricht nicht, landet aber als User-Turn beim Modell (t=2, `interrupted=false`,
+    `ignored_as_backchannel=false`); (b) Prompt-Regel *"If the other party switches to another
+    language, continue in that language"* — das Modell antwortet t=9 spanisch;
+    (c) `language_detection` (`only_at_conversation_start=false`) wird t=23 gerufen und
+    verriegelt ASR+TTS auf Spanisch: der echte deutsche Eigentuemer-Turn bei 16 s steht im
+    EL-Transkript als spanische Paraphrase *"Ah, ¿cómo sabes que hablo español?"*.
+19. **Mailbox 08:50 ist trivial erklaert:** erster Anruf im Fenster, der eine echte Mailbox
+    mit Ansage erreichte (08-20 17:17 war eine "Mailbox ausgeschaltet"-Netzansage ohne Band).
+    Werkzeug feuerte t=18 mit Zitat der Ansage. Englischer Text = statischer Vorlagentext
+    (BELEGT 9); der Anruf lag unter Deploy `4368c00` (live 07:24 UTC), also VOR DE1.
+20. **06:01 ist eine eigene Fehlerklasse, kein Sprachdefekt:** Telnyx `answered 06:01:13`,
+    20 s, `NORMAL_CLEARING`, aber `mos=1` (tote Leitung); EL `1011 sip request timed out`,
+    0 s. Die vier Fehlschlaege vom 27.08. waren etwas anderes (Telnyx `CALL_REJECTED` D51,
+    EL `403 Unverified origination number`, nie verbunden). n=1, Mechanismus NICHT BELEGT.
+    Server verbuchte `provider_rejected_before_answer` (Telnyx berechnet trotzdem 20 s).
+21. **Kein Fremdeinfluss:** EL genau ein Branch, 39 Versionen, keine nach v39 (auch nicht am
+    04.09.), keine zwischen v38/v39; upstream == origin (nur die Uebergabe lokal), 150 Commits
+    seit 20.08. ausschliesslich von den zwei bekannten Autoren; EL-Changelog 28.08.–04.09.:
+    kein Eintrag (NICHT BELEGT = nichts gefunden); ASR-Label in allen 13 Gespraechen
+    "Scribe v2 Realtime", LLM `claude-sonnet-5`.
+22. **Deploy-Zeitstrahl 04.09.** (in der Uebergabe fehlte einer): `9b6b197` bis 07:24:44 UTC
+    (06:01-Anruf), `4368c00` 07:24:44–12:33:37 (08:49-Anruf), `bc4fe1e` ab 12:33:37
+    (12:37-Anruf). Diff `9b6b197..4368c00` auf dem EL-Outbound-Pfad: nur Post-Call-Diagnostik
+    (B1-Detektor, Zaehlfeld); `src/i18n/prompts/*` speist nur den Telnyx-/Budget-Prompt
+    (`src/claude.js`), nicht den EL-Agenten. Kein Sprachbezug.
+23. **DeepSeek-402 ist ein LIVE-Defekt, aber nicht die Ursache:** bei ALLEN vier Anrufen
+    fielen precall-briefing und LLM-Opening-Line aus (Fallback `quelle=fest`/`auftrag`); der
+    gute 09-03-Anruf lief mit demselben 402.
+
+## WIDERLEGT (neu)
+
+- **"Der Eigentuemer hat etwas Mehrdeutiges gesagt."** Nein — Stille (BELEGT 15).
+- **"Erster Anruf nach Agent-Aenderung scheitert" (OFFEN 4).** 06:01 ist eine SIP-Zeitueber-
+  schreitung mit verbundener, toter Telnyx-Leitung; die 27.08.-Fehlschlaege waren D51-
+  Ablehnungen. Keine gemeinsame Klasse, kein Bezug zur Agent-Version (BELEGT 20).
+- **"Die Werkzeug-Erstausloesungen sind das Raetsel."** Beide sind Folge: Mailbox = erster
+  echter Mailbox-Kontakt; language_detection = Folge des Phantom-Turns (BELEGT 18/19).
+
+## OFFEN (neu)
+
+1. **Leckpfad des Phantom-Turns.** Inhaltlich Fragmente des eigenen Agenten-Satzes; im
+   Mono-Mix der Aufnahme ist an den Stellen Stille. Ein getrennter User-Kanal existiert in der
+   EL-API nicht (`/audio` ohne Kanalparameter, `has_user_audio=true`). Kandidaten: Echo am
+   Handapparat/Netz, fehlende Echo-Unterdrueckung im EL-SIP-Pfad, ASR-Halluzination mit
+   Kontext-Bias. Erst ab 09-03 beobachtet, ohne Aenderung unsererseits. Messweg: EL-Support
+   mit `conv_9301…`/`conv_2901…`, kontrollierter Testanruf (Handapparat vs. Freisprechen).
+2. **Push-Werkzeug** (OFFEN 5 alt) bleibt der Blocker fuer jeden Agent-Fix.
+3. **DeepSeek-Konto** (BELEGT 13/23): aufladen oder `LLM_PROVIDER` wechseln — Owner-Entscheidung.
+
+## Fix-Vorschlag (WARTET AUF FREIGABE — nichts davon ist umgesetzt)
+
+Ziel laut Eigentuemer: pro Anruf festgelegte Sprache wird NUR gesprochen; Englisch nur als
+Weltdefault bei unbekannter Sprache. Kleinster Eingriff, der die Kette aus BELEGT 18 an der
+Stelle unterbricht, die uns gehoert:
+
+- **F1 (Prompt + eine dynamische Variable):** Regel *"Begin the call in English. If the other
+  party switches to another language, continue in that language"* ersetzen durch eine an
+  `{{call_language}}` gebundene Regel: die ganze Zeit diese Sprache; kein Wechsel wegen einer
+  kurzen, unklaren oder einzelnen Aeusserung; Wechsel nur auf ausdrueckliche Bitte oder wenn die
+  Gegenseite klar mehrere ganze Saetze in einer anderen Sprache spricht. Server liefert
+  `call_language` aus dem Bundle (`dynamicVariables`), Platzhalter-Abgleichtest deckt es.
+  Hebt Entscheidung E-5 auf (Test `REQUIRED_LANGUAGE_RULES` in
+  `test/elevenlabs-agent-werkzeuge.test.js` pinnt heute das Gegenteil) — Owner-Entscheidung.
+  Reihenfolge ZWINGEND: Server zuerst live, Prompt-Push danach (nackter Platzhalter = 1008-Abbruch,
+  der Angerufene hoert Stille).
+- **F2 (Agent-Schalter, optional):** `turn.transcribe_on_disabled_interruptions=false` — was
+  waehrend der Eroeffnung gehoert wird, verfaellt. Schneidet genau den t=2-Pfad ab. Preis: ein
+  echtes "Hallo?" waehrend der Offenlegung erreicht das Modell nicht (es koennte ohnehin erst
+  nach der Eroeffnung antworten). Schuetzt NICHT gegen Phantome nach der Eroeffnung (09-03).
+- **F3 (Agent-Werkzeug, optional):** `language_detection` abschalten, solange die Sprache je
+  Anruf serverseitig gepinnt ist. Nimmt eine Faehigkeit (ausdruecklicher Wechsel auf Bitte).
+  Nur mit reparierten Push-Werkzeug erreichbar (built_in_tools-PATCH verlangt `name`).
+
+Empfehlung: F1 zuerst (wirkt unabhaengig vom Leckpfad und auch nach der Eroeffnung), F2 als
+billige zweite Sicherung, F3 nur wenn der Eigentuemer den Wechsel-auf-Bitte nicht will.
+Abnahme NUR am echten Anruf (Gespraechspfad UND Mailboxpfad getrennt), nicht an der Suite.
+
+## Nachtrag 2 (2026-09-04, nach Einwand des Eigentuemers "seit den Commits kaputt")
+
+24. **Voll-Diff v38 -> v39 (gesamte Agent-Config, nicht nur Prompt):** zwei Prompt-Bloecke plus
+    `turn.soft_timeout_config.llm_generated_message_prompt_override` (Fuellsatz-Prompt). Sonst
+    NICHTS: `transcribe_on_disabled_interruptions`, `disable_first_message_interruptions`,
+    `speculative_turn`, `turn_model`, ASR, VAD, Werkzeuge, Presets — alle identisch.
+25. **Phantom-Turns gab es schon im August.** Transkripte 14.–19.08.: 08-18 08:41 erster
+    User-Turn t=3 `"Und ."` (WAEHREND der Eroeffnung, `interrupted=false`); 08-17 17:45 t=17
+    `"..."`; 08-18 17:38 t=17 `"..."`; 08-19 08:06 t=82 `"..."`. Vier von 13 August-Anrufen
+    tragen leere oder fragmentarische User-Turns. 20.08.–02.09.: keine. 03./04.09.: drei.
+    Der Ausgang haengt allein davon ab, welchen TEXT die Erkennung dem Phantom gibt: `"..."`
+    ignoriert das Modell, `"Wie?"` erzeugt eine Entschuldigung fuer die "schlechte Verbindung",
+    Spanisch kippt die Sprache. Neu am 04.09. ist NUR der Text, nicht das Phaenomen.
+26. **Zwischen letztem sauberen Anruf (02.09. 15:57) und erstem Phantom-Anruf (03.09. 17:10)
+    liegt KEIN Commit, KEIN Deploy, KEIN Agent-Push:** beide auf `9b6b197` (live seit 02.09.
+    10:26) und Agent v38. Die dynamischen Variablen haben identische Schluessel (bis auf
+    `voicemail_line` am 04.09. 12:37); Wertunterschiede nur in Auftrag/Briefing/Zeit.
+27. **Echo-Test am Audio (Autokorrelation, Schweif, Positivkontrolle bis −45 dB):** keine
+    verzoegerte Kopie der Agentenstimme in den Aufnahmen. ABER: am 03.09. liegt zum Phantom
+    "Wie?" (8,05–10,9 s) ein echtes Fremdsignal von der Gegenseite im Mix (−55 dBFS, Spitze
+    −42 dBFS, Sprachband, 33 dB unter dem Agenten), nicht agentenaehnlich (r=0,05). Die
+    Aufnahme ist ein nachbearbeiteter Mix: in sauberen Anrufen ist die Pause nach der
+    Eroeffnung exakt digital still (−100 dBFS), der Rohkanal der Gegenseite ist also nicht
+    enthalten. Was die Erkennung WAEHREND der Agentensprache bekam, ist aus der Aufnahme
+    nicht ablesbar.
+28. **Telnyx-Seite fuer alle Anrufe seit 28.08. identisch:** Route "Intra", Codec PCMU,
+    Verbindung "ElevenLabs Spike2", keine internen Wiederholungen, mos 4,49 (06:01: mos 1).
+29. **Eigentuemer-Angabe:** Anrufe wurden vor und nach dem 03.09. sowohl am Ohr als auch ueber
+    Freisprechen angenommen. Die Annahmeart erklaert den Beginn der Phantome damit nicht.
+30. **Anbieter-Doku (F):** `transcribe_on_disabled_interruptions` seit 29.06.2026 im Schema,
+    Default `false`, bei uns `true` (schon in v38). Keine dokumentierte Konditionierung der
+    Erkennung auf Agenten-Text. Kein Changelog-Eintrag 25.08.–04.09.; STT-Latenz-Vorfall EU
+    04.09. 11:41–12:12 (nur Latenz).
+
+**Stand der Ursachenfrage:** Der Fehlhoerer entsteht in der Echtzeit-Erkennung von ElevenLabs
+aus einem leisen, nicht von uns erzeugten Signal der Gegenseite. Er ist seit Mitte August
+intermittierend nachweisbar und korreliert mit KEINER Aenderung an Code, Agent, Payload oder
+Telco-Route. Welcher Text daraus wird, ist Zufall der Erkennung. Was uns gehoert und was am
+04.09. den Schaden gemacht hat, ist die Verstaerkerkette (BELEGT 18).

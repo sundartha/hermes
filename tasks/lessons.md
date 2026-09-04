@@ -863,3 +863,21 @@ Kostensignal zeigt um Faktor ~200 zu niedrig. Nichts drueckt dagegen.
 zurueckgenommen wird, ist eine Ratsche - und eine Ratsche ohne Kostenmessung laeuft
 zwangslaeufig aus dem Ruder. Wer eine Beweispflicht ergaenzt, nennt ihren Preis, oder
 nimmt eine andere weg.
+
+## 2026-09-04 Das Transkript ist kein Beleg fuer das, was gesagt wurde
+
+Die Vorsession hat aus dem EL-Transkript (`"No. ¿Sí está ahí?"`, `source_medium: audio`)
+geschlossen, der Eigentuemer habe etwas gesagt, und daraus die Frage "falsch gehoert oder
+mehrdeutig?" gebaut. Das Audio zeigt: er hat nichts gesagt. Der Turn war ein Phantom der
+Spracherkennung — und derselbe Phantomtyp stand schon im "guten" Vergleichsanruf, als
+"Wie?"/"Wie sind?", also sprachlich unauffaellig und deshalb nie bemerkt.
+
+**Regel:** Wo Audio existiert (`record_voice: true`), ist das Audio der Beleg, das Transkript
+nur ein Zeiger. Vor jeder Aussage ueber eine Aeusserung: Stille-Messung (silencedetect) plus
+unabhaengige Transkription mit Positiv-Kontrolle (ein echter Turn muss laut sichtbar sein).
+Und: ein "guter" Anruf ist erst gut, wenn auch seine User-Turns am Audio geprueft sind — der
+Vergleichsanruf hatte denselben Defekt, nur mit harmlosem Ausgang.
+
+**Zweite Lehre:** "Warum feuert Werkzeug X zum ersten Mal?" war die falsche Leitfrage. Beide
+Werkzeuge feuerten als FOLGE (erster echter Mailbox-Kontakt; Sprachwechsel bereits vollzogen).
+Erst die Reihenfolge im Anruf klaeren (was kam zuerst?), dann nach Ursachen suchen.
