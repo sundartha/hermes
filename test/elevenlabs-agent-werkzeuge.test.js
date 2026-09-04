@@ -22,6 +22,13 @@
 //   Wechsel erlaubt, Ziel unveraendert, kein Rueckwechsel-Zwang, Werkzeug und Zusatzsprache
 //   am Agenten. Ein Abnahmekriterium ist das nicht, denn der Zustand muss ab der Aenderung
 //   dauerhaft gelten - deshalb Regressionslauf, deshalb keine ABNAHME--Kennung.
+//   NACHGEZOGEN E-5b (2026-09-04): der Wechsel bleibt erlaubt, aber er braucht eine
+//   SCHWELLE. Am 04.09. hat ein einziger Phantom-Zug der Anbieter-Erkennung (aus Stille,
+//   am Audio belegt) ein deutsches Gespraech nach Spanisch gekippt, weil die alte Regel
+//   bedingungsloses Mitgehen verlangte (tasks/UEBERGABE-SPRACHDEFEKT.md, BELEGT 15/18).
+//   Gepinnt ist ab jetzt: Sprache der Eroeffnung halten, einmal zweisprachig nachfragen,
+//   Wechsel erst nach Bestaetigung, ein einzelnes Wort/Fragment/Unklares ist nie ein
+//   Wechselgrund, Ziel unveraendert.
 //
 // R16 ([abgenommen R16], gruen seit 2026-08-17, s. test/abnahme-ausgewandert.json - ab da
 //   haelt der REGRESSIONSLAUF das Kriterium fest): der Prompt nennt get_consult nur, wenn
@@ -414,8 +421,9 @@ const LOCK_SENTENCE = "Speak only in this language";
 
 // Die Sprachregel im Prompt wird auf ihren KERN geprueft, nicht auf den Wortlaut: jede
 // Zusicherung ist eine Menge von Begriffen, die IN EINEM SATZ zusammen vorkommen muessen.
-// Satzweise statt prompt-weit, weil "Begin the call in English" und "never switch the
-// language" sonst gemeinsam gruen waeren - also genau der Widerspruch, den E-5 aufloest.
+// Satzweise statt prompt-weit, weil "Speak the language of your opening message" und "never
+// switch the language" sonst gemeinsam gruen waeren - also genau der Widerspruch, den E-5
+// aufloest.
 const sentencesOf = (text) =>
   text
     .split(/(?<=[.!?])\s+|\n+/)
@@ -429,51 +437,96 @@ const FOLLOW_VERB = /\b(continue|keep|carry on|follow|proceed|stay)\w*/i;
 const NEGATION = /\b(do not|don't|never|must not|cannot|can't|avoid|refrain)\b/i;
 const LANGUAGE_WORD = /\blanguage/i;
 const ENGLISH = /\benglish\b/i;
+const CONFIRM = /\bconfirm\w*/i;
+// Der Anlass, den die Regel ausdruecklich NICHT als Wechselgrund gelten laesst - der
+// Fehlhoerer. Er taucht in beiden Richtungen auf: als Zusicherung (c) und als Entkraeftung
+// des Wechsel-Verbots, denn "nicht wegen eines Fragments wechseln" ist kein Wechsel-Verbot.
+const UNKLARER_ANLASS = /\b(single word|one word|isolated word|fragment|unclear|ambiguous)\w*/i;
+// Die Eroeffnung als Sprachanker - in zwei Begriffen statt einem Literal, damit eine
+// anders formulierte Fassung ("your first greeting") durchkommt.
+const ERSTER_ZUG = /\b(opening|first|initial)\b/i;
+const AEUSSERUNG = /\b(message|line|greeting|sentence|words)\b/i;
 
 const REQUIRED_LANGUAGE_RULES = Object.freeze([
   {
-    label: "(a) Englisch ist die Startsprache des Anrufs",
-    concepts: [/\b(begin|start|open)\w*/i, ENGLISH],
+    label: "(a) die Startsprache ist die Sprache der Eroeffnung und bleibt es",
+    concepts: [ERSTER_ZUG, AEUSSERUNG, LANGUAGE_WORD],
   },
   {
-    label: "(b) wechselt die Gegenseite die Sprache, geht der Agent mit",
-    concepts: [SWITCH_VERB, FOLLOW_VERB, LANGUAGE_WORD],
+    label: "(b) gewechselt wird erst nach einer Bestaetigung",
+    concepts: [SWITCH_VERB, CONFIRM],
   },
   {
-    label: "(c) das Ziel bleibt dabei unveraendert dasselbe",
+    label: "(c) ein einzelnes Wort, ein Fragment oder Unklares ist kein Wechselgrund",
+    concepts: [UNKLARER_ANLASS, NEGATION, SWITCH_VERB],
+  },
+  {
+    label: "(d) das Ziel bleibt dabei unveraendert dasselbe",
     concepts: [/\b(same|unchanged|identical)\b/i, /\b(objective|goal|task|purpose|mission)\w*/i],
   },
 ]);
 
+// entkraeftet: Begriffe, die denselben Satz aus dem Verbot herausnehmen. Ohne sie waere die
+// NEUE Regel ihr eigener Verstoss - "ein Fragment ist nie ein Grund zu wechseln" traegt
+// Negation, Wechsel-Verb und "language" in EINEM Satz. Verboten ist nicht das Wort, sondern
+// die BEDINGUNGSLOSIGKEIT: eine Wechsel-Regel ohne Bestaetigungsweg und ohne Einschraenkung
+// auf den Fehlhoerer-Fall. Je Regel eigen, nicht global - sonst liesse "Never switch the
+// language, even if they confirm" sich durch das blosse Wort confirm freikaufen.
 const FORBIDDEN_LANGUAGE_RULES = Object.freeze([
   {
     label: "Sprach-Sperre (nur eine Sprache erlaubt)",
     concepts: [/\b(only|exclusively|solely)\b/i, LANGUAGE_WORD],
+    entkraeftet: [CONFIRM],
     why: "ein Prompt, der auf eine Sprache festnagelt, arbeitet gegen language_detection",
   },
   {
-    label: "Wechsel-Verbot",
+    label: "Wechsel-Verbot ohne Bestaetigungsweg",
     concepts: [NEGATION, SWITCH_VERB, LANGUAGE_WORD],
-    why: "derselbe Widerspruch, nur negativ formuliert",
+    entkraeftet: [UNKLARER_ANLASS],
+    why: "derselbe Widerspruch, nur negativ formuliert - erlaubt ist nur das enge Verbot fuer Wort/Fragment/Unklares",
   },
   {
     label: "Rueckwechsel-Pflicht",
     concepts: [/\b(back|return|revert)\w*/i, ENGLISH],
+    entkraeftet: [],
     why: "vom Eigentuemer ausdruecklich benannt: derselbe Fehler in gruen",
   },
+  {
+    label: "bedingungsloses Mitgehen (die alte E-5-Regel)",
+    concepts: [SWITCH_VERB, FOLLOW_VERB, LANGUAGE_WORD],
+    entkraeftet: [CONFIRM],
+    why: "genau diese Regel hat am 2026-09-04 einen Phantom-Zug in ein spanisches Gespraech verwandelt - ein einziger Fehlhoerer genuegte",
+  },
 ]);
+
+// Ein Verbots-Treffer ist ein Satz, der alle Begriffe traegt UND von keinem Entkraeftungs-
+// Begriff derselben Regel gerettet wird.
+const anySentenceIsForbidden = (text, rule) =>
+  sentencesOf(text).some(
+    (sentence) =>
+      rule.concepts.every((concept) => concept.test(sentence)) &&
+      !rule.entkraeftet.some((ausnahme) => ausnahme.test(sentence)),
+  );
 
 // Positiv-Kontrollen des Messwerkzeugs (Lehre pruefkommando-ohne-positiv-kontrolle). Die
 // erlaubte Fassung ist bewusst eine PARAPHRASE der Eigentuemer-Formulierung: die
 // Zusicherungen duerfen nicht am Wortlaut kleben, sondern muessen auch anders formulierte
-// Prompts durchlassen - und auf jeder der drei verbotenen Formen anschlagen.
+// Prompts durchlassen - und auf jeder der verbotenen Formen anschlagen.
 const CONTROL_OK =
-  "Open the conversation in English. Should your counterpart move to a different " +
-  "language, carry on in that language and keep working toward the same goal.";
+  "Use the language of your first greeting and stay in it for the entire call. " +
+  "If they seem to be using another language, ask once, short and in both languages, " +
+  "whether they would rather use it; change over only once they have confirmed in that " +
+  "language, and stay on the same objective. " +
+  "One isolated word, a fragment or anything unclear must never make you change the " +
+  "language or remark on the line quality; just repeat your last question.";
 const CONTROL_VIOLATIONS = Object.freeze([
   "Speak only in this language: {{language}}.",
   "Never switch the language during the call.",
   "If they switch, follow them, but return to English right after.",
+  "If the other party switches to another language, continue in that language.",
+  // Kontrolle der Entkraeftung selbst: das blosse Wort confirm darf ein bedingungsloses
+  // Wechsel-VERBOT nicht freikaufen.
+  "Never switch the language, even if they confirm.",
 ]);
 
 test("Sprachwechsel in der ElevenLabs-Vorlage: language_detection gilt den ganzen Anruf, nicht nur zum Start", () => {
@@ -508,9 +561,9 @@ test("Sprachwechsel in der ElevenLabs-Vorlage: language_presets traegt exakt die
   );
 });
 
-test("Sprachwechsel in der ElevenLabs-Vorlage: der Prompt setzt die Startsprache, gibt den Wechsel frei und verlangt keinen Rueckwechsel", () => {
-  // 1. Kontrolle am Messwerkzeug: die Paraphrase besteht alle drei Zusicherungen und
-  //    verletzt keines der drei Verbote - die Pruefung haengt nicht am Wortlaut.
+test("Sprachwechsel in der ElevenLabs-Vorlage: der Prompt haelt die Startsprache und gibt den Wechsel erst nach Bestaetigung frei", () => {
+  // 1. Kontrolle am Messwerkzeug: die Paraphrase besteht alle Zusicherungen und verletzt
+  //    keines der Verbote - die Pruefung haengt nicht am Wortlaut.
   for (const rule of REQUIRED_LANGUAGE_RULES) {
     assert.ok(
       anySentenceMatchesAll(CONTROL_OK, rule.concepts),
@@ -520,7 +573,7 @@ test("Sprachwechsel in der ElevenLabs-Vorlage: der Prompt setzt die Startsprache
   }
   for (const rule of FORBIDDEN_LANGUAGE_RULES) {
     assert.ok(
-      !anySentenceMatchesAll(CONTROL_OK, rule.concepts),
+      !anySentenceIsForbidden(CONTROL_OK, rule),
       `Messwerkzeug defekt: die erlaubte Paraphrase schlaegt bei "${rule.label}" an.`,
     );
   }
@@ -529,7 +582,7 @@ test("Sprachwechsel in der ElevenLabs-Vorlage: der Prompt setzt die Startsprache
   //    waere ein Verbot, das nie anschlaegt, von einem erfuellten nicht zu unterscheiden.
   for (const violation of CONTROL_VIOLATIONS) {
     assert.ok(
-      FORBIDDEN_LANGUAGE_RULES.some((rule) => anySentenceMatchesAll(violation, rule.concepts)),
+      FORBIDDEN_LANGUAGE_RULES.some((rule) => anySentenceIsForbidden(violation, rule)),
       `Messwerkzeug defekt: "${violation}" wird von keinem Verbot erfasst.`,
     );
   }
@@ -542,18 +595,20 @@ test("Sprachwechsel in der ElevenLabs-Vorlage: der Prompt setzt die Startsprache
       "gegeneinander - mal gewinnt das eine, mal das andere (E-5).",
   );
 
-  // 4. Der Kern: Startsprache, Wechsel erlaubt, Ziel unveraendert - in beliebiger Formulierung.
+  // 4. Der Kern: Eroeffnungssprache halten, Wechsel nur nach Bestaetigung, kein Wechsel
+  //    wegen eines Fehlhoerers, Ziel unveraendert - in beliebiger Formulierung.
   for (const rule of REQUIRED_LANGUAGE_RULES) {
     assert.ok(
       anySentenceMatchesAll(promptText(), rule.concepts),
       `${TEMPLATE_REL}: der Prompt sagt nicht ${rule.label}. Verlangt ist der Sinn, nicht ` +
-        "der Wortlaut: Startsprache festlegen, Wechsel bei der Gegenseite mitgehen, dasselbe " +
-        "Ziel weiterverfolgen - alles drei in je einem Satz zusammenhaengend.",
+        "der Wortlaut: Sprache der Eroeffnung halten, bei Verdacht einmal zweisprachig " +
+        "nachfragen, erst nach Bestaetigung wechseln, kein Wechsel wegen eines Wortes oder " +
+        "Fragments, dasselbe Ziel weiterverfolgen - jedes in je einem Satz zusammenhaengend.",
     );
   }
   for (const rule of FORBIDDEN_LANGUAGE_RULES) {
     assert.ok(
-      !anySentenceMatchesAll(promptText(), rule.concepts),
+      !anySentenceIsForbidden(promptText(), rule),
       `${TEMPLATE_REL}: der Prompt enthaelt "${rule.label}" - ${rule.why}.`,
     );
   }

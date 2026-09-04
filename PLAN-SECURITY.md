@@ -3220,8 +3220,12 @@ Phantom-Turn des ASR bei 3 s. Ein Anruf zuvor lief bei identischer Konfiguration
 
 **Absolute Regel 2 sichert den WORTLAUT, nicht die ZUSTELLUNG.** Alle drei bestehenden Sicherungen (Test
 gegen `locales.js`, Drift-Lauf, Wert-Vergleich am Preset) pruefen, was gespeichert ist — keine kann das
-fangen. Gegenmittel am Anbieter: `disable_first_message_interruptions` (Default false), dazu
-`transcribe_on_disabled_interruptions`, damit waehrend der Offenlegung Gesagtes nicht verloren geht.
+fangen. Gegenmittel am Anbieter: `disable_first_message_interruptions` (Default false). Dazu stand bis
+2026-09-04 `transcribe_on_disabled_interruptions=true`, damit waehrend der Offenlegung Gesagtes nicht
+verloren geht; dieser Zusatz ist mit SP1-B auf `false` GEDREHT, weil ueber ihn ein Phantom-Turn der
+Erkennung als echter Zug beim Modell ankam und den Anruf in eine fremde Sprache kippte
+(`tasks/UEBERGABE-SPRACHDEFEKT.md`). Die Offenlegung selbst ist davon unberuehrt: sie haengt an
+`disable_first_message_interruptions`, das unveraendert `true` bleibt.
 Maschinell pruefbares Rotsignal je Anruf: `transcript[0].interrupted === true`.
 
 ### 4. Nebenbefund: die Vertrauensgrenze haelt gegen einen fremden Proxy
