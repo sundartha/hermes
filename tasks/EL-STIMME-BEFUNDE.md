@@ -159,7 +159,7 @@ audio-unsichtbar — haette den Verlauf aber auch nicht gepraegt.
 
 - Gelten tun die Regeln an FUENF Stellen (Wahrheits-Kette O1, Vorlage ist kanonisch):
   Master-Prompt (B1-Regel + B2-Ergaenzung im Abschnitt SAY ONLY WHAT IS NEEDED),
-  soft_timeout_prompt_override (GANZ umgeformt - Bestaetigung statt Ankündigung,
+  soft_timeout_prompt_override (GANZ umgeformt - Bestaetigung statt Ankuendigung,
   Schlusssatz/Klammer-Verbot bleibt), speechRules de/en/fr (je zwei neue Zeilen).
   Pins: `test/el-stimme-abnahme.test.js`, AS1-AS4 alle GRUEN (`npm run test:abnahme`
   meldet 7 von 7).
@@ -292,3 +292,37 @@ hierher, kein Schreibzugriff - nur Vorlagen-Edit und read-only GETs.
 - Drift nach dem Push: Exit-Code 0 — "OK - 2 besessene Felder weichen ab, ALLE mit
   Grund und Datum bewusst ausgenommen ... 40 von 40 besessenen Feldern wirklich
   verglichen ... keine Verbots-Verletzung."
+
+## ST4-Abschluss ohne Verifikationsanruf (2026-09-04, Owner-Entscheidung)
+
+- **Deploy live:** dep-dad718gn74is73dia44g auf Commit 4368c00 (getriggert 2026-09-04
+  07:17 UTC, finished 07:24 UTC); /healthz belegt 4368c00. Damit laufen die Detektoren
+  [el-tags]/[el-b1], das Zaehlfeld elDetectorCounts (inkl. pg-Spalte, idempotente
+  Migration) und die ST1-i18n-Regeln (Budget-/Realtime-Weg) im Prod-Gateway.
+- **Owner-Self-Call-Pfad scharf** (Render-Env readonly: OWNER_SELF_CALL_ENABLED=true,
+  Tenant gepinnt); Recording aktiv (record_voice=true, Retention unbegrenzt).
+- **Verifikationsanruf: NICHT durchgefuehrt** — Owner-Entscheidung 2026-09-04 ("kein
+  Testanruf", Kette trotzdem abschliessen; keine Begruendung erfragt). Damit ist
+  ABNAHME-AS10 BEWUSST ROT und nachholbar: Protokoll steht in ST0-3, Aufrufweg ist
+  place_call (Connector) oder Loopback /api/calls (Betreiber-Kanal), Auswertung
+  automatisch (EL-Conversations + Render-Logs + Zaehlfeld) plus Owner-Hoer-Urteil.
+  Bis dahin ist die Wirkung der B1/B2-Regeln am Live-Verkehr UNVERMESSEN — der
+  naechste echte Anruf liefert die ersten Feldwerte (Zaehlfeld, Detektor-Logs).
+- **A/B ignore_default_personality (Entscheidung 3): entfallen bis auf Widerruf** —
+  A/B benoetigt Messanrufe; mit dem Verzicht auf Testanrufe entfaellt auch diese
+  Messung. Schaltung bleibt beim Ist (false), keine ungemessene Aenderung (R10).
+- Escalations-Schwelle (Entscheidung 2) bleibt unveraendert scharf: ein
+  Marken-Rueckfall NACH dem O1/O2-Push -> expressive_mode aus, MIT Hoer-Vergleich.
+
+## Offene Punkte (Endstand 2026-09-04)
+
+1. **AS10 Verifikationsanruf** (bewusst rot, nachholbar): Protokoll ST0-3, Marker im
+   Test test/el-stimme-abnahme.test.js. Nachhol jederzeit moeglich.
+2. **A/B ignore_default_personality**: entfallen bis auf Widerruf (Owner 2026-09-04).
+3. **Wirkungsmessung B1/B2 live**: erst ab naechstem echtem Anruf (Zaehlfeld +
+   Detektoren); [el-tags]-Rate war vor dem Push 3/3 der log-sichtbaren Outbounds
+   (7-Tage-Fenster).
+4. 19.08.-[freundlich] logseitlich nicht verifizierbar (Render-Retention 7 Tage).
+5. (Go-live, nicht diese Kette): Rueckdreh retention_days/record_voice auf G7-SOLL
+   vor dem ersten Fremdkunden; Besitz-Verifikation private_number (PLAN-SECURITY,
+   Launch-Blocker zur OC-Ausnahme).

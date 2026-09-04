@@ -11,8 +11,9 @@
 // Vorfalls-Datensatz + Gegenprobe) leben in test/el-fixtures-echte-antworten.test.js -
 // dort steht der Poll-Treiber (pollFixtureConversation), Verlagerung statt Duplikation.
 //
-// MIGRATIONSSTAND: AS1-AS9 sind abgenommen (2026-09-03) und in den Regressionslauf
-// gewandert - Kennung abgelegt, Siegel "[abgenommen <ID>]" getragen, Eintrag in
+// MIGRATIONSSTAND: AS1-AS9 und AS11 sind abgenommen (2026-09-03/04) und in den
+// Regressionslauf gewandert - Kennung abgelegt, Siegel "[abgenommen <ID>]" getragen,
+// Eintrag in
 // test/abnahme-ausgewandert.json (AS7/AS8 unter ihrer eigenen Datei). Ab da haelt
 // "npm test" sie fest (R2-Ratsche im Selbsttest der Abnahme-Bahn,
 // test/abnahme-bahn-selbsttest.test.js). Die Grund-Zeile
@@ -378,4 +379,51 @@ test("[abgenommen AS9] Kommentarblock an reportAudioTags nennt den Vorfall 2026-
     outbound.includes("PLAN-AGENTEN-STIMME"),
     "der Kommentarblock muss auf tasks/PLAN-AGENTEN-STIMME.md verweisen",
   );
+});
+
+// ST4/ST5-Anteil (2026-09-04): AS10 ist Doc-Kriterium des Verifikationsanrufs und
+// bleibt BEWUSST ROT in der Abnahme-Bahn - der Anruf wurde per Owner-Entscheidung
+// 2026-09-04 nicht durchgefuehrt ("kein Testanruf"), die Kette sollte trotzdem
+// abgeschlossen werden; das Kriterium ist damit offen und nachholbar. AS11 (lessons)
+// ist gruen abgeliefert und direkt gewandert (ST1/ST2/ST3-Prezedenz).
+test("ABNAHME-AS10: Verifikationsanruf im Befund-Doc belegt - Marken 0, B1 ungemeldet, Hoer-Urteil | ROT WEIL: der Verifikationsanruf wurde nicht durchgefuehrt - Owner-Entscheidung 2026-09-04: kein Testanruf, Kette trotzdem abschliessen | FIX: Testanruf gemaess Protokoll (tasks/EL-STIMME-BEFUNDE.md ST0-3, place_call auf die eigene Nummer) nachholen und Abschnitt '## ST4 Verifikationsanruf' mit call-/conv-ID, 'Klammer-Marken in Agent-Zeilen: 0', 'B1: ungemeldet', 'Hoer-Urteil' und anonymisierter Fixture dokumentieren", () => {
+  const befunde = readFileSync(new URL(`../${BEFUNDE_REL}`, import.meta.url), "utf8");
+
+  assert.match(
+    befunde,
+    /## ST4 Verifikationsanruf/,
+    "das Befund-Doc braucht einen Abschnitt '## ST4 Verifikationsanruf' (entsteht mit dem Anruf)",
+  );
+  assert.ok(
+    befunde.includes("Klammer-Marken in Agent-Zeilen: 0"),
+    "der Verifikationsabschnitt muss 'Klammer-Marken in Agent-Zeilen: 0' als Zeile tragen",
+  );
+  assert.ok(
+    befunde.includes("B1: ungemeldet"),
+    "der Verifikationsabschluss muss 'B1: ungemeldet' festhalten",
+  );
+  assert.ok(
+    befunde.includes("Hoer-Urteil"),
+    "das Hoer-Urteil des Owners (Pre-Mortem R3/R6/R10) muss dokumentiert sein",
+  );
+});
+
+// ST5: die vier Kernsaetze der EL-Regel in tasks/lessons.md - deterministischer
+// Grep auf die Signatur-Phrasen (Aufgabenstellung AS11). Wer eine Phrase abschwächt,
+// macht diesen Test rot, bevor die Lehre unbemerkt verwaessert.
+test("[abgenommen AS11] lessons.md traegt die EL-Regel mit den VIER Kernsaetzen (Signatur-Phrasen)", () => {
+  const lessons = readFileSync(new URL("../tasks/lessons.md", import.meta.url), "utf8");
+  const signaturPhrasen = [
+    "MELDEN, NICHT ENTFERNEN",
+    "Beispiel schlaegt Regel",
+    "Dashboard schlaegt ungepinntes Repo",
+    "Vorlage ist kanonisch",
+  ];
+
+  for (const phrase of signaturPhrasen) {
+    assert.ok(
+      lessons.includes(phrase),
+      `tasks/lessons.md muss die Signatur-Phrase '${phrase}' der EL-Regel enthalten`,
+    );
+  }
 });

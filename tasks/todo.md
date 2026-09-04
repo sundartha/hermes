@@ -117,13 +117,23 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       LEAD-SUITE AUF MERGE (42dfdf0): npm test 5683/5683 fail 0; test:gates 3 rot
       (bekannt vorbestehend, s. ST1-Beleg); test:abnahme "12 von 12 Abnahmekriterien
       erfuellt". AS10/AS11 folgen in ST4/ST5.
-- [ ] 5. ST4 Verifikations-Testanruf — OWNER-GATE vor den Anrufen (Kosten): echter
+- [x] 5. ST4 Verifikations-Testanruf — OWNER-GATE vor den Anrufen (Kosten): echter
       Anruf mit Detektoren live, Transkript als anonymisierte Fixture, Owner-Hoer-Urteil
       (natuerlicher Uebergang, Stille-Wahrnehmung) ins Befund-Doc (AS10); A/B-Testanrufe
       ignore_default_personality (Entscheidung 3, Schaltung nur auf Messung).
       ERWARTET: AS10 gruen (Klammer-Marken in Agent-Zeilen = 0, B1 ungemeldet,
       Hoer-Urteil-Abschnitt im Doc, Fixture anonymisiert).
       VERIFIKATION: call-/conv-ID + grep-Exit-Code im Befund-Doc; test:abnahme-Beleg.
+      BELEG (Abschluss ohne Anruf, 2026-09-04): Owner-Anordnung "den testanruf mach ich
+      nicht" — Verifikationsanruf UND A/B (Entscheidung 3) nicht durchgefuehrt,
+      Entscheidung 10 im Plan-Doc. DEPLOY DURCHGEFUEHRT (freigegeben): dep-dad718gn74is73
+      dia44g auf 4368c00 live (/healthz belegt), Detektoren + Zaehlfeld + ST1-i18n im
+      Prod-Gateway, Owner-Self-Call scharf, Recording aktiv. AS10 als BEWUSST ROTES
+      Doc-Kriterium gepinnt (Kennung + Grund-Zeile, Marker '## ST4 Verifikationsanruf'
+      / 'Klammer-Marken in Agent-Zeilen: 0' / 'B1: ungemeldet' / 'Hoer-Urteil'),
+      nachholbar laut Protokoll ST0-3. Befund-Doc: ST4-Abschluss + Offene Punkte
+      (Endstand). npm run test:abnahme: "13 von 14 Abnahmekriterien erfuellt"
+      (AS10 das einzige offene).
 - [ ] 6. ST5 Lehren sichern + Abschluss: tasks/lessons.md EL-Regel mit VIER Kernsaetzen
       (AS11, deterministischer Grep); Aufraeum-Pflicht (Prozessmuell der Kette im
       Merge-Commit: untrackte Doku erst committen, dann loeschen, nie git add -A);
@@ -132,6 +142,22 @@ tasks/EL-STIMME-BEFUNDE.md (ST0-Belege + Phasenprotokoll). Die 7 Owner-Entscheid
       workflow-kosten-claude-zai-pfad) + node scripts/workflow-kosten.mjs <run-id>.
       ERWARTET: AS11 gruen; Kostenzahl aus workflow-kosten.mjs (nie subagent_tokens).
       VERIFIKATION: test:abnahme-Beleg + Kostenzahl hier.
+      BELEG: AS11 gruen abgeliefert und direkt gewandert (Siegel, ausgewandert.json
+      12->13) — lessons.md L5 "EL-Agenten-Stimme: vier Kernsaetze" mit den Signatur-
+      Phrasen MELDEN NICHT ENTFERNEN / Beispiel schlaegt Regel / Dashboard schlaegt
+      ungepinntes Repo / Vorlage ist kanonisch. Aufraeumung: keine Worktrees/Phase-
+      Branches mehr (alle entfernt), keine per-run-Skripte dieser Kette in
+      .claude/workflows/runs/, PLAN-GEO-NUMMERN.md (andere Kette) bewusst untracked
+      gelassen. Finale Suite: siehe nachfolgende Zeile. KOSTEN: siehe nachfolgende
+      Zeile (workflow-kosten.mjs, temp-HOME-Symlink).
+      KOSTEN (echte Messung 2026-09-04, temp-HOME-Symlink, nie subagent_tokens):
+      ST0 wf_ac26e11f-91a 4,8 Mio (220 Turns) + ST1 wf_e4493e04-490 33,0 Mio (631) +
+      ST2 wf_c59e926d-0b5 18,0 Mio (360) + ST3 wf_c4e3da6a-efa 40,2 Mio (622)
+      = ~96 Mio Token Workflows gesamt (davon >95 % Cache-Reads), zuzueglich rund 10
+      Einzelagenten ausserhalb der Workflows (Audio-Forensik, Fix-/Re-Audit-, R7- und
+      Anruf-Vorbereitungs-Agenten). Beobachtung fuer kuenftige Ketten: 3 Agenten
+      liefen deutlich ueber der 150-Turn-Leitlinie (274/201/334) — Implementierungs-
+      agenten der phase-impl-Groessenordnung kosten quadratisch.
 
 # EL-Agenten-Qualitaet: Forensik + Strategie-Doc "Agenten-Stimme verbessern" (2026-09-02)
 

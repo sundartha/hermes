@@ -456,6 +456,12 @@ Alle Belege und Messwerte: tasks/EL-STIMME-BEFUNDE.md. Kompakt:
   8. **ST0-Mitschnitt-Testanruf UEBERSPRUNGEN** — die Primaerfrage ist am
      Original-Audio beantwortet (staerkere Evidenz als jede Reproduktion); der
      ST4-Verifikationsanruf misst die neuen Regeln nach dem Push live.
+  10. **Kein Testanruf / Kettenschutz ohne Verifikationsanruf (2026-09-04):** Der
+      ST4-Verifikationsanruf und die A/B-Messanrufe wurden ausdruecklich NICHT
+      durchgefuehrt (Owner-Anordnung: "den testanruf mach ich nicht"; keine
+      Begruendung erfragt). AS10 bleibt bewusst ROT und nachholbar (Protokoll
+      ST0-3), A/B entfaellt bis auf Widerruf, Schaltungen bleiben beim Ist (R10).
+      Der Deploy (4368c00) mit Detektoren + Zaehlfeld ist trotzdem live.
   9. **Erlaubnis-Karte: die 2 LIVE-only Schluessel** (tts.supported_voices,
      turn.soft_timeout_config.additional_soft_timeout_messages, beide false) **kommen
      in die Vorlage** (SOLL erweitern; kein Verhalten geaendert, kein Push dafuer

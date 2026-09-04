@@ -3,6 +3,35 @@
 Lehren aus der Ausfuehrung von `PLAN-FRAGILITY-REMEDIATION.md` (eine `phase-lean`-Session
 pro Phase). Neueste zuerst.
 
+## L5 — EL-Agenten-Stimme: vier Kernsaetze fuer Prompt-/Detektor-Arbeit, P1
+Quelle: Stimme-Kette ST0-ST5 (tasks/PLAN-AGENTEN-STIMME.md, Vorfaelle "[froehlich]" +
+Doppelankuendigung 2026-09-02). Gilt ab jetzt fuer JEDE Arbeit am EL-Agenten (Prompt,
+Konfig, Detektoren) und die Budget-/Realtime-Pendants. Die vier Kernsaetze im Wortlaut:
+
+1. **MELDEN, NICHT ENTFERNEN:** Detektoren ([el-tags], [el-b1]) melden ausschliesslich —
+   Transkripte werden NIE nachtraeglich gestript oder geschoent (Art. 50 EU AI Act: das
+   Transkript ist der Nachweis; outbound.js-Kommentar "WARUM MELDEN UND NICHT ENTFERNEN").
+   Ein Zaehlfeld am Call-Datensatz macht die Rate messbar, ohne den Nachweis anzufassen.
+2. **Beispiel schlaegt Regel:** kein Regeltext traegt eine eckige Klammer — ein
+   Klammer-BEISPIEL im Prompt erzeugt genau das Verhalten, das die Regel verbietet
+   (Lehre 18.08.: das Prompt-Verbot mit Beispiel verlor gegen das Beispiel).
+3. **Dashboard schlaegt ungepinntes Repo:** nur GEPINNTE Felder (Vorlage _besitz.felder
+   + drift/push) sind Wahrheit. Ein Feld ohne Pin kann im Dashboard still geaendert
+   werden, ohne dass ein Gate es meldet — SOLL aendern NUR in der Vorlage, dann pushen.
+4. **Vorlage ist kanonisch, speechRules sind Uebersetzungen:** inhaltliche B1/B2-
+   Aenderungen gehen im SELBEN Commit an allen fuenf Stellen (Master-Prompt,
+   soft_timeout-Override, speechRules de/en/fr) UND an ihren Pins — wer nur eine Stelle
+   aendert, erzeugt Drift zwischen Vorlage und speechRules, den kein Detektor sieht.
+
+**Warum:** Die Kette bewies alle vier als reale Fehlerfamilien: B2 war eine
+Adhaerenz-Luecke trotz existierender Regel (Beispiel-/Sog-Problematik), Befund 3 war
+Konfig-gegen-Prompt (Dashboard-/Pin-Problematik), und die Vorfaelle waren nur zaehlbar,
+weil gemeldet statt entfernt wurde.
+**How to apply:** Vor jeder EL-Prompt-/Konfig-Aenderung: Vorlage als Quelle nehmen
+(kein Dashboard-Griff), Regeltexte klammerfrei halten, Detektoren nur erweitern
+(Diagnose), Aenderungen an allen fuenf Stellen + Pins in einem Commit, danach
+`npm run elevenlabs:drift` (und bei Live-Wirkung: Push mit Ruecklese, Owner-Gate).
+
 ## L1 — Pausierter Workflow != toter Workflow (Ruhemodus-Kollision), P1
 **Symptom:** Mac ging waehrend des P1-Lean-Workflows in den Ruhemodus. Nach dem Aufwachen
 sah `TaskList` "No tasks" -> ich schloss "Workflow tot" und startete eine MANUELLE
