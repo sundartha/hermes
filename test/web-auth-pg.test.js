@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PGlite } from "@electric-sql/pglite";
 import { applySchema, backfillAccountEmailCase } from "../src/db/migrate.js";
-import { makeAccounts, makeSessions } from "../src/web-auth.js";
+import { makeAccounts, makeSessions, newestAccountIfUnanimousEmail } from "../src/web-auth.js";
 
 async function setup() {
   const db = new PGlite();
@@ -70,6 +70,50 @@ test("accountByTenant: genau 1 -> {sub,email}; 0 -> null; >1 (mehrdeutig) -> nul
   await accounts.upsertOnFirstLogin({ sub: "u2", email: "u2@x" }); // legt t_u2 an
   await db.query(`UPDATE account SET tenant_id = 't_u1' WHERE sub = 'u2'`);
   assert.equal(await accounts.accountByTenant("t_u1"), null);
+});
+
+// ---- CL1-B5: newestAccountIfUnanimousEmail (reines Praedikat, keine DB) -------------------
+
+test("newestAccountIfUnanimousEmail: [] -> null", () => {
+  assert.equal(newestAccountIfUnanimousEmail([]), null);
+});
+
+test("newestAccountIfUnanimousEmail: eine Zeile -> sie selbst", () => {
+  const rows = [{ sub: "u1", email: "u1@x" }];
+  assert.deepEqual(newestAccountIfUnanimousEmail(rows), { sub: "u1", email: "u1@x" });
+});
+
+test("newestAccountIfUnanimousEmail: zwei Zeilen gleicher Email -> die erste (juengste)", () => {
+  const rows = [
+    { sub: "u2", email: "kunde@x" },
+    { sub: "u1", email: "kunde@x" },
+  ];
+  assert.deepEqual(newestAccountIfUnanimousEmail(rows), { sub: "u2", email: "kunde@x" });
+});
+
+test("newestAccountIfUnanimousEmail: zwei Zeilen unterschiedlicher Email -> null", () => {
+  const rows = [
+    { sub: "u2", email: "u2@x" },
+    { sub: "u1", email: "u1@x" },
+  ];
+  assert.equal(newestAccountIfUnanimousEmail(rows), null);
+});
+
+// ---- CL1-B5: accountByTenant, zwei Zeilen GLEICHER Email -> juengste gewinnt (pglite) -----
+
+test("accountByTenant: zwei Zeilen gleicher Email auf demselben Tenant -> juengste (created_at) gewinnt", async () => {
+  const { db, accounts } = await setup();
+  await accounts.upsertOnFirstLogin({ sub: "u1", email: "kunde@x" });
+  // Zweiter Account auf denselben Tenant, DIESELBE Email (CL1-B5: Vertragsende-Cleanup
+  // loescht den WorkOS-User, die account-Zeile bleibt stehen; ein zurueckkehrender Kunde
+  // haengt einen zweiten sub an). account.tenant_id ist FK, nicht unique (s.o.).
+  await accounts.upsertOnFirstLogin({ sub: "u2", email: "kunde@x" }); // legt t_u2 an
+  await db.query(`UPDATE account SET tenant_id = 't_u1' WHERE sub = 'u2'`);
+  // created_at deterministisch setzen statt auf now()-Aufloesung zu vertrauen: u2 ist die
+  // JUENGERE Zeile (spaeterer Zeitstempel) und muss gewinnen.
+  await db.query(`UPDATE account SET created_at = $1 WHERE sub = $2`, ["2026-01-01T00:00:00Z", "u1"]);
+  await db.query(`UPDATE account SET created_at = $1 WHERE sub = $2`, ["2026-01-02T00:00:00Z", "u2"]);
+  assert.deepEqual(await accounts.accountByTenant("t_u1"), { sub: "u2", email: "kunde@x" });
 });
 
 test("makeAccounts.setStatus aktiviert; upsert liest aktuellen Status zurueck (nicht hartkodiert)", async () => {

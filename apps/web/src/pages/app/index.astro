@@ -56,7 +56,7 @@ const dashNav = [
        Script die Plan-Kacheln (billing/status, suspended-erreichbar) -> der Tenant
        aktiviert sich per Abo selbst. Ohne Payment bleibt der Wartetext. i18n
        (Etappe 1): data-i18n uebersetzt den Wartetext-Default; sobald renderPlanChoice/
-       dismissPlanChoice (lib/subscribe.js, Etappe 2, unangetastet) den Titel/Text
+       dismissPlanChoice (lib/subscribe.js, Etappe 2; Ausgang CL1-B4) den Titel/Text
        ueberschreiben, bleibt DIESER Teil bewusst englisch bis Etappe 2. -->
   <section id="region-pending" class="card" hidden>
     <h1 id="pending-title" data-i18n="pendingTitle">Account awaiting activation</h1>
@@ -67,6 +67,10 @@ const dashNav = [
     <!-- AM3: sekundaerer "Maybe later"-Skip, nur im Payment-Aktivierungs-Pfad sichtbar.
          Rein praesentational - aktiviert NICHTS (kein subscribe/setStatus, /state bleibt 403). -->
     <button id="pending-skip" class="plan-skip" type="button" hidden data-i18n="pendingSkip">Maybe later</button>
+    <!-- CL1-B4: Ausgang aus dem "Maybe later"-Zustand. Gegenstueck zu #pending-skip -
+         genau einer der beiden ist sichtbar, damit die Region nie ohne Bedienelement
+         dasteht. Gleiche ruhige Optik (.plan-skip), kein zweiter CTA. -->
+    <button id="pending-restore" class="plan-skip" type="button" hidden data-i18n="pendingRestore">Show plans</button>
   </section>
 
   <section id="region-error" class="card" hidden>
@@ -183,6 +187,7 @@ const dashNav = [
     subtitle: pendingTextEl,
     tiles: pendingTilesEl,
     skip: document.getElementById("pending-skip"),
+    restore: document.getElementById("pending-restore"),
   };
 
   function showPendingMessage(text) {
@@ -205,6 +210,9 @@ const dashNav = [
   // "Maybe later": rein praesentational -> Plan-Auswahl ausblenden, Pending-Banner zeigen.
   // Kein subscribe/setStatus (aktiviert nichts, /state bleibt 403).
   pendingEls.skip.addEventListener("click", () => dismissPlanChoice(pendingEls));
+  // CL1-B4: zurueck zur Plan-Auswahl. renderPending() holt den Billing-Status frisch,
+  // statt Preis/Gebuehr zwischenzuspeichern - kein zusaetzlicher Modul-Zustand.
+  pendingEls.restore.addEventListener("click", () => renderPending());
 
   // EIN delegierter Subscribe-Listener am stabilen Kachel-Container (G5, kein Binding
   // pro Button). Nach erfolgreicher Buchung wird der Tenant aktiv -> ein Reload zieht

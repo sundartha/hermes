@@ -11,6 +11,7 @@ import { makeKeyedChainMutex } from "../chain-mutex.js";
 import { isKnownPlanSlug } from "../plans.js";
 import { moneyActionFor, graceDueAtIso, MONEY_ACTION, MONEY_EVENT } from "./money-events.js";
 import { attemptContractEndCleanup } from "./contract-end-cleanup.js";
+import { clearSubscriptionReference } from "./subscribe.js";
 
 // Replay-Fenster (Stripe-Default 5 min): ein abgefangener+spaeter wiedereingespielter
 // Webhook mit gueltiger Signatur faellt nach diesem Fenster durch (G25).
@@ -53,6 +54,17 @@ const MONEY_EVENT_ALARM_SMS_PREFIX = "[Hermes] Zahlungsereignis: ";
 // aktivieren; alle anderen Status -> ignore. Suspend laeuft weiter ausschliesslich ueber
 // DELETED/PAYMENT_FAILED (Spec: nur diese beiden suspenden).
 const CONFIRMED_SUBSCRIPTION_STATUS = Object.freeze(new Set(["active", "trialing"]));
+
+// CL1-B1: WARUM suspendiert wird. Beide Ereignisse falten weiter auf action=suspend
+// (WELCHE Events suspendieren, aendert sich NICHT) - aber der SUSPEND-Zweig muss
+// unterscheiden koennen, ob das Stripe-Abo noch EXISTIERT: nach deleted ist die
+// gespeicherte sub_-Referenz tot, im Dunning lebt sie weiter (Doppelabbuchungs-
+// Schutz). Die Unterscheidung faellt HIER, in der reinen Interpretation - der
+// Effekt-Zweig wertet das Roh-Event NICHT erneut aus (G5/G23: eine Auswertungsstelle).
+export const SUSPEND_REASON = Object.freeze({
+  SUBSCRIPTION_DELETED: "subscription_deleted", // Abo bei Stripe beendet -> Referenz ist tot
+  PAYMENT_FAILED: "payment_failed",             // Dunning -> Abo lebt, Referenz bleibt
+});
 
 // Parst den Stripe-Signature-Header "t=<ts>,v1=<hex>[,v1=<hex>...]" in {timestamp, v1[]}.
 // Fail-closed: fehlt t oder ein v1, -> null (Aufrufer lehnt ab). Mehrere v1 (Secret-
@@ -159,6 +171,7 @@ export function interpretStripeEvent(event) {
     case SUBSCRIPTION_EVENT.DELETED:
       return {
         action: WEBHOOK_ACTION.SUSPEND,
+        suspendReason: SUSPEND_REASON.SUBSCRIPTION_DELETED,
         tenantRef: tenantRefOf(object),
         subscriptionId: object.id ?? null,
       };
@@ -168,6 +181,7 @@ export function interpretStripeEvent(event) {
       // garantiert auf der Invoice).
       return {
         action: WEBHOOK_ACTION.SUSPEND,
+        suspendReason: SUSPEND_REASON.PAYMENT_FAILED,
         tenantRef: tenantRefOf(object),
         subscriptionId: object.subscription ?? null,
       };
@@ -251,6 +265,28 @@ function planSlugOf(object) {
 // Effekte (der Tenant war/bleibt aktiv, er hat bezahlt). suspend setzt
 // suspended + invalidiert alle Sessions des Tenants und ruft provision NIE. ignore = No-Op.
 // Nebeneffekt (Status-/Abo-/KYC-Schreibung + Provisioning) im Namen.
+//
+// CL1-B2 (Geld-Invariante): NUR das echte Vertragsende entwertet die Abo-Referenz. Nach
+// customer.subscription.deleted existiert bei Stripe kein Abo mehr - bliebe die sub_-
+// Referenz stehen, behauptete sie dauerhaft "es gibt ein Abo" und der Kunde kaeme weder
+// ins Dashboard (status=suspended -> 403) noch zu einem neuen Abo (hasActiveSubscription
+// -> 409 already_subscribed): ein Zustand ohne Ausgang. Bei invoice.payment_failed wird an
+// den Abo-Referenzen NICHTS geaendert - dort LEBT das Stripe-Abo weiter; eine geleerte
+// Referenz liesse denselben Kunden ein ZWEITES Abo kaufen (Doppelabbuchung). Das Gate
+// hasActiveSubscription bleibt unveraendert.
+// Ausgelagert aus applyStripeWebhook (G30: eine Aufgabe pro Funktion, haelt die ohnehin
+// grosse Orchestrierungs-Funktion unter der Zeilen-/Komplexitaetsgrenze) - EIN Aufrufer,
+// direkt darunter. Nebeneffekt (Abo-Schreibung + Audit) im Namen.
+function auditSuspendSubscriptionRef({ store, tenant, suspendReason, audit, req }) {
+  const subscriptionEnded = suspendReason === SUSPEND_REASON.SUBSCRIPTION_DELETED;
+  if (subscriptionEnded) clearSubscriptionReference(store, tenant);
+  audit(
+    "stripe_webhook_suspend",
+    req,
+    `tenant=${tenant} reason=${suspendReason} subscription_ref=${subscriptionEnded ? "cleared" : "kept"}`,
+  );
+}
+
 export async function applyStripeWebhook(
   event,
   {
@@ -279,7 +315,7 @@ export async function applyStripeWebhook(
   const interpreted = interpretStripeEvent(event);
   const {
     action, tenantRef, subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart,
-    customerId, paymentMethodId, cancelAtPeriodEnd,
+    customerId, paymentMethodId, cancelAtPeriodEnd, suspendReason,
   } = interpreted;
   if (action === WEBHOOK_ACTION.IGNORE) return;
   // GAP-03: Geld-Ereignisse ausserhalb der Subscription-Lifecycle-Allowlist auditieren SICH
@@ -412,7 +448,7 @@ export async function applyStripeWebhook(
   // DB-Status via accounts.setStatus oben ist davon unabhaengig gesetzt.
   store.setSuspendedAtIfAbsent(tenant);
   await sessions.invalidateByTenant(tenant);
-  audit("stripe_webhook_suspend", req, `tenant=${tenant}`);
+  auditSuspendSubscriptionRef({ store, tenant, suspendReason, audit, req });
   // Die Sperre ist an dieser Stelle bereits VOLLZOGEN (setStatus/setSuspendedAtIfAbsent/
   // invalidateByTenant sind oben durchgelaufen) - das Aufraeumen laeuft danach, best-effort,
   // und darf die Antwort NIE blockieren (try/catch: attemptContractEndCleanup ist selbst

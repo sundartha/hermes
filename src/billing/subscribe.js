@@ -83,6 +83,20 @@ export function hasActiveSubscription(store, tenant) {
   return !!store.tenantSubscription(tenant).subscriptionId;
 }
 
+// CL1-B2: das Gegenstueck zu hasActiveSubscription - die EINE Stelle, die die
+// gespeicherte Abo-Referenz entwertet. Genau das Feld, das die Lesekante darueber
+// prueft, und NUR dieses: planSlug bleibt (Historie/Budget-Ableitung, Owner-
+// Entscheidung "geparkt"), cancelAtPeriodEnd bleibt (der Vertragsende-Retry im
+// Webhook liest ihn). Kein No-Op-Risiko und kein Wurf: ist nichts gespeichert
+// (auch bei unbekanntem Tenant liefert tenantSubscription null), passiert nichts -
+// setTenantSubscription wuerde fuer einen unbekannten Tenant werfen, und der
+// SUSPEND-Zweig hat kein try/catch ueber sich. Idempotent (zweiter Aufruf = No-Op).
+// Nebeneffekt (Store-Schreibung) im Namen (N7).
+export function clearSubscriptionReference(store, tenant) {
+  if (!hasActiveSubscription(store, tenant)) return;
+  store.setTenantSubscription(tenant, { subscriptionId: null });
+}
+
 // Erstellt das Abo fail-closed und persistiert seine Referenzen am Tenant.
 // Reihenfolge der Gates (M3, alle fail-closed): unbekannter Plan -> unkonfigurierter
 // Price -> bereits aktives Abo (Doppelabbuchungs-Schutz) -> Karte-on-file Pflicht.

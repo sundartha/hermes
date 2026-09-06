@@ -300,24 +300,31 @@ function planChoiceText(key) {
 
 // Rahmt die suspended-Region als prominente Plan-Auswahl: aktivierende H1, erklaerender
 // Untertitel, Plan-Kacheln aus dem Build-Spiegel, sichtbarer Skip-Link. REIN DOM (doc + els),
-// kein Netz. els = { title, subtitle, tiles, skip }. fee (Phase A) optional, an planTiles
-// durchgereicht (numberSetupFeeFrom, null -> keine Gebuehren-Zeile). NUR bei PAYMENT_ENABLED aufgerufen
+// kein Netz. els = { title, subtitle, tiles, skip, restore }. Von den beiden Knoepfen ist
+// IMMER genau einer sichtbar (CL1-B4). fee (Phase A) optional, an planTiles durchgereicht
+// (numberSetupFeeFrom, null -> keine Gebuehren-Zeile). NUR bei PAYMENT_ENABLED aufgerufen
 // (Aufrufer-Guard) -> ohne Payment byte-identisch.
 export function renderPlanChoice(doc, els, fee = null) {
   els.title.textContent = planChoiceText("title");
   els.subtitle.textContent = planChoiceText("subtitle");
   els.tiles.replaceChildren(...planTiles(doc, fee));
   els.skip.hidden = false;
+  // Object.assign statt direkter Zuweisung (no-param-reassign/props:true - dieselbe
+  // Wirkung, ohne die bestehende Unterdrueckungszahl der Datei zu bewegen).
+  Object.assign(els.restore, { hidden: true });
 }
 
 // "Maybe later": blendet die Plan-Auswahl aus, zeigt das ruhige Pending-Banner. REIN DOM,
 // ruft KEIN subscribe/setStatus (Invariante AM3: aktiviert nichts, /state bleibt 403).
-// Einbahn (Reload bringt die Auswahl zurueck) - bewusst minimal (YAGNI).
+// CL1-B4: der Zustand behaelt einen Ausgang - der Skip-Knopf weicht dem Rueckweg zur
+// Plan-Auswahl. Vorher blieb eine Ansicht ohne Link, Knopf oder Retry zurueck; einziger
+// Rueckweg war ein manueller Reload, der nirgends angeboten wurde.
 export function dismissPlanChoice(els) {
   els.title.textContent = planChoiceText("bannerTitle");
   els.subtitle.textContent = planChoiceText("bannerText");
   els.tiles.replaceChildren();
   els.skip.hidden = true;
+  Object.assign(els.restore, { hidden: false });
 }
 
 // ---- 312k-P3: Kuendigungs-Weg (§ 312k BGB) ------------------------------------

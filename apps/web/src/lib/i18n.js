@@ -122,6 +122,7 @@ export const STRINGS = {
     pendingText:
       "Your account has been created and is awaiting activation. Once it's active, your assistant will appear here.",
     pendingSkip: "Maybe later",
+    pendingRestore: "Show plans",
     errorTitle: "Something went wrong",
     errorText: "The app couldn't load just now. Check your connection and try again.",
     errorRetry: "Try again",
@@ -216,6 +217,7 @@ export const STRINGS = {
     pendingText:
       "Dein Konto wurde erstellt und wartet auf die Freischaltung. Sobald es aktiv ist, erscheint dein Assistent hier.",
     pendingSkip: "Vielleicht später",
+    pendingRestore: "Tarife anzeigen",
     errorTitle: "Etwas ist schiefgelaufen",
     errorText: "Die App konnte gerade nicht geladen werden. Prüf deine Verbindung und versuch es erneut.",
     errorRetry: "Erneut versuchen",
