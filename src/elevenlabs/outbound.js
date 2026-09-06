@@ -816,7 +816,7 @@ const ohneRechercheTor = () => false;
 
 // OUTBOUND-E5 (F3): der Standard-Metrik-Empfaenger, wenn niemand welche verdrahtet hat -
 // ein No-op statt eines Wurfs, dasselbe Muster wie ohneRueckfrageTor/ohneRechercheTor.
-// HEREINGEREICHT statt importiert (Muster consultAllowedFor, s. Signatur unten): src/
+// HEREINGEREICHT statt importiert (Muster consultAllowedForCall, s. Signatur unten): src/
 // metrics.js importiert src/config.js und bindet damit dessen DATA_DIR-Snapshot beim
 // Laden - ein statischer Import HIER haette jede Datei, die outbound.js STATISCH laedt
 // (mehrere Testdateien tun das, Muster test/el-sip-call-id-join.test.js), an diesen
@@ -1370,7 +1370,7 @@ function rearmActiveConversationPolls({ store, pollConversationResult }) {
  *   (INV-7) - der Ergebnisweg beendet Anrufe ueber denselben Gateway wie jeder andere
  *   Beender, nicht ueber einen zweiten, buchungsfreien Weg.
  */
-// consultAllowedFor kommt HEREIN statt importiert zu werden, und das ist keine Stilfrage:
+// consultAllowedForCall kommt HEREIN statt importiert zu werden, und das ist keine Stilfrage:
 // src/consult/gate.js liest das MODUL src/config.js, und dieses bindet beim Laden den
 // Datenpfad. Ein statischer Import haette jede Datei, die outbound.js laedt, an diesen
 // Pfad gebunden, BEVOR ein Test sein DATA_DIR setzen kann - am 2026-08-17 gemessen: ein
@@ -1382,9 +1382,11 @@ export function makeElevenLabsOutbound({
   terminateAndBillCall,
   billThunk,
   finishCall,
-  consultAllowedFor = ohneRueckfrageTor,
+  // Signatur (call, profile) -> boolean, s. consult/gate.js#consultAllowedForCall: DAS
+  // Praedikat, das auch der Rueckfrage-Webhook fragt - eine Stelle, zwei Aufrufer.
+  consultAllowedForCall = ohneRueckfrageTor,
   // Thema B: das Recherche-Tor, aus demselben Grund HEREINGEREICHT wie
-  // consultAllowedFor (research/registry.js liest das MODUL src/config.js).
+  // consultAllowedForCall (research/registry.js liest das MODUL src/config.js).
   // Signatur (call, resolveProfile) -> boolean, s. elevenLabsLookupAvailableFor.
   lookupAvailableFor = ohneRechercheTor,
   // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler (s. ohneMetrikMeldung oben fuer die
@@ -1571,15 +1573,15 @@ export function makeElevenLabsOutbound({
       callee: call.to,
     });
     const locale = callLocaleOf({ store, config, call, ownerName });
-    // Der Torzustand kommt aus DERSELBEN Torkette wie alles andere (consultAllowedFor -
+    // Der Torzustand kommt aus DERSELBEN Torkette wie alles andere (consultAllowedForCall -
     // Master-Schalter, Kontext-Kanal, Per-Tenant-Recht), nicht aus dem MCP-Aufruf und
     // nicht aus einem zweiten Nachbau: dieselbe Funktion, die der Webhook fragt, bevor er
-    // eine Rueckfrage annimmt (routes/webhooks-elevenlabs.js). OC-P2: den eigenen
-    // Auftraggeber zu fragen, waehrend man mit ihm telefoniert, ist sinnlos - der Prompt
-    // deckt den unavailable-Zustand vollstaendig ab ("REACHING YOUR PRINCIPAL DURING THIS
-    // CALL"), es braucht keinen neuen Prompt-Text. Das Recherche-Tor bleibt unberuehrt.
-    const consultAllowed =
-      consultAllowedFor(store.resolveProfile(call.tenantId)) && call.calleeIsOwner !== true;
+    // eine Rueckfrage annimmt (routes/webhooks-elevenlabs.js) - seit P1 einschliesslich der
+    // Owner-Bedingung, die dort gefehlt hat. OC-P2: den eigenen Auftraggeber zu fragen,
+    // waehrend man mit ihm telefoniert, ist sinnlos - der Prompt deckt den
+    // unavailable-Zustand vollstaendig ab ("REACHING YOUR PRINCIPAL DURING THIS CALL"), es
+    // braucht keinen neuen Prompt-Text. Das Recherche-Tor bleibt unberuehrt.
+    const consultAllowed = consultAllowedForCall(call, store.resolveProfile(call.tenantId));
     // Thema B: der Torzustand der Recherche - DIESELBE Funktion, die der Webhook fragt
     // (research/registry.js#elevenLabsLookupAvailableFor, per DI verdrahtet), mit der
     // Fassaden-Profilaufloesung als Parameter.

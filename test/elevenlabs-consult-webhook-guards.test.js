@@ -79,8 +79,15 @@ const FOREIGN_TENANT_ID = "tenant_fremd";
 const FOREIGN_CALL_ID = "call_el_fremd";
 const FOREIGN_CONVERSATION_ID = "conv_el_fremd_1";
 const INVENTED_CONVERSATION_ID = "conv_el_frei_erfunden";
+const OWNER_CALL_ID = "call_el_owner";
+const OWNER_CONVERSATION_ID = "conv_el_owner_1";
 
 const QUESTION = "Darf ich den Termin am Donnerstag zusagen?";
+// Obergrenze fuer eine Ablehnung. Sie muss deutlich UNTER CONSULT_OPEN_MS (1500 ms, s.
+// SHORT_CONSULT_ENV) liegen: eine durchgelassene Rueckfrage antwortet erst nach Ablauf der
+// Haltefrist - genau die 47 s Stille des Defekts vom 06.09.2026 im Kleinen. Ein
+// Localhost-Umlauf liegt bei ~10 ms, die Marge ist also zwei Groessenordnungen.
+const MAX_ABLEHNUNG_MS = 1000;
 
 // Feature-Schnittmenge fuer den Consult-Kanal (src/consult/gate.js: consultEnabled UND
 // assistantContextEnabled UND das Per-Tenant-Recht allowConsult - Owner-Profil traegt es).
@@ -413,6 +420,69 @@ test("EL-CONSULT Gutfall: gueltiger Token + laufender eigener Anruf + freies Bud
     await ctx.test("die Rueckfrage haengt am eigenen Anruf - und nur dort", () => {
       assert.equal(consultCount(callOf(srv, OWN_CALL_ID)), 1, "Consult am gebundenen Anruf");
       assert.equal(consultCount(callOf(srv, FOREIGN_CALL_ID)), 0, "fremder Anruf unberuehrt");
+    });
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("EL-CONSULT S5: Rueckfrage auf einem OWNER-Anruf -> 404 kanal_nicht_freigegeben, ohne Halt und ohne Datensatz", async (ctx) => {
+  const srv = await startServer({
+    env: { ...CONSULT_ON_ENV, ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN, ...SHORT_CONSULT_ENV },
+    seed: seedState({
+      calls: [
+        // Derselbe Tenant, dasselbe Profil, dieselbe Kette - EINZIGER Unterschied ist das
+        // Ziel-Praedikat. Ohne diese Paarung belegt der 404 unten nur, dass irgendetwas
+        // abgelehnt hat.
+        activeCall({ id: OWN_CALL_ID, elevenlabsConversationId: OWN_CONVERSATION_ID }),
+        activeCall({
+          id: OWNER_CALL_ID,
+          elevenlabsConversationId: OWNER_CONVERSATION_ID,
+          calleeIsOwner: true,
+        }),
+      ],
+    }),
+  });
+  try {
+    const start = Date.now();
+    const res = await withToken(srv, {
+      conversation_id: OWNER_CONVERSATION_ID,
+      question: QUESTION,
+    });
+    const dauer = Date.now() - start;
+
+    await ctx.test("404 mit dem Bestands-Ablehnungsgrund", async () => {
+      assert.equal(res.status, HTTP_NOT_FOUND);
+      assert.deepEqual(await res.json(), { error: "kanal_nicht_freigegeben" });
+    });
+
+    await ctx.test("kein Halt: die Antwort kommt lange vor CONSULT_OPEN_MS", () => {
+      assert.ok(
+        dauer < MAX_ABLEHNUNG_MS,
+        `Ablehnung dauerte ${dauer} ms - die Leitung wurde gehalten`,
+      );
+    });
+
+    await ctx.test("kein Consult-Datensatz am Owner-Anruf", () => {
+      assert.equal(consultCount(callOf(srv, OWNER_CALL_ID)), 0);
+    });
+
+    // GEGENPROBE UND ZUGLEICH LOG-SCHRANKE: derselbe Server, derselbe Token, dasselbe
+    // Profil, nur ein NICHT-Owner-Anruf. Sie beweist (a) dass P1 nichts anderes gebrochen
+    // hat und (b) - weil stdout eine geordnete Pipe ist - dass alles, was der
+    // Owner-Request geschrieben haette, bereits geschrieben waere.
+    await ctx.test("Gegenprobe: derselbe Aufruf auf einem NICHT-Owner-Anruf bleibt unveraendert", async () => {
+      const ok = await withToken(srv, { conversation_id: OWN_CONVERSATION_ID, question: QUESTION });
+      assert.ok(ok.ok, `2xx erwartet, war ${ok.status} - dann misst der 404 oben nichts`);
+      assert.equal(consultCount(callOf(srv, OWN_CALL_ID)), 1);
+      await waitForLog(srv, new RegExp(`\\[consult-raised\\] gestellt call=${OWN_CALL_ID}`));
+    });
+
+    await ctx.test("keine [consult-raised]-Zeile fuer den Owner-Anruf", () => {
+      assert.ok(
+        !srv.stdout.includes(`gestellt call=${OWNER_CALL_ID}`),
+        `der Owner-Anruf hat eine Rueckfrage gestellt:\n${srv.stdout}`,
+      );
     });
   } finally {
     await srv.stop();

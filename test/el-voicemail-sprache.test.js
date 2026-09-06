@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { providerVoicemailMessage } from "../src/elevenlabs/call-locale.js";
-import { consultAllowedFor } from "../src/consult/gate.js";
+import { consultAllowedForCall } from "../src/consult/gate.js";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 
@@ -45,7 +45,7 @@ function englishBausteine() {
 }
 
 test("Voicemail-Sprache: bei Anrufsprache de traegt voicemail_line den DEUTSCHEN Text und keinen englischen Baustein", async () => {
-  const variablen = await sendeAnrufstart({ makeElevenLabsOutbound, consultAllowedFor });
+  const variablen = await sendeAnrufstart({ makeElevenLabsOutbound, consultAllowedForCall });
 
   assert.ok(
     variablen.voicemail_line.startsWith(LOCALES.de.disclosure(OWNER_NAME)),
