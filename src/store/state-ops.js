@@ -1555,23 +1555,33 @@ export function ackConsult(s, callId, { eventId }) {
   return { call, changed: true, outcome: CONSULT_ANSWER.ACCEPTED };
 }
 
-// P2: der Abbruch EINER Stufe - Status UND Grund in EINEM Schritt, EIN Schreibweg.
-// Der Status kommt unveraendert aus advanceInCallConsult (dieselbe Naht wie Budget-Weg und
-// Call-Ende, kein zweiter Schliess-Mechanismus, G5); dieser Aufruf haengt nur den Grund
-// daran. stageMs ist die Frist, die gerade gerissen ist, und wird als openMs/waitMs
-// weitergereicht: nur dann ist consultAlive false und der Datensatz schliesst wirklich -
-// mit CONSULT_OPEN_MS als openMs waere eine Stufe-0-Rueckfrage nach 5 s noch "lebendig"
-// und bliebe OPEN stehen (Phantom-Datensatz, E-2).
+// P2 (S1-1-Fix, Review Runde 1): der Abbruch EINER Stufe - Status UND Grund in EINEM
+// Schritt, EIN Schreibweg. GEZIELTE Mutation ueber consultId, NICHT mehr ueber
+// advanceInCallConsult: dessen Suche nach "der ersten offenen Rueckfrage"
+// (inCallConsults(call).find(...), Array-Position) trifft bei ZWEI GLEICHZEITIG offenen
+// In-Call-Consults (MAX_OPEN_POLLS_PER_CALL=2, consult/delivery.js) nicht zuverlaessig
+// GENAU den Consult, dessen eigene Stufe gerade abgelaufen ist - der Aufrufer
+// (conversation/consult-raised.js:awaitAnswer) hat sein Stufen-Ergebnis (expiredStage)
+// bereits fuer GENAU diese consultId gerechnet. Verwechselte Reihenfolge hiess: der
+// falsche (noch legitime) Consult wurde auf timed_out gesetzt, waehrend der eigentliche
+// Ziel-Consult unveraendert offen blieb, OHNE timeoutReason - und awaitAnswer gab dem
+// Anbieter trotzdem bedingungslos "timed out" zurueck (Phantom-Datensatz, E-2).
+//
+// stageMs ist die Frist, die laut expiredStage gerade gerissen ist; consultAlive prueft
+// dieselbe Wanduhr-Formel wie advanceInCallConsult (EINE Quelle, G5). Unbekannte Kennung
+// oder ein Consult, der nicht mehr OPEN ist (schon beantwortet/abgelaufen/verwaist),
+// ist ein No-op - der Aufrufer hat dann bereits einen anderen Zweig genommen
+// (consult.status !== OPEN direkt in awaitAnswer) und diese Funktion darf ihn nicht
+// nachtraeglich ueberschreiben.
 export function timeOutStagedConsult(s, callId, { consultId, reason, nowMs, stageMs }) {
-  const { changed, wait } = advanceInCallConsult(s, callId, {
-    nowMs,
-    waitMs: stageMs,
-    openMs: stageMs,
-  });
   const call = getCall(s, callId);
   const consult = call?.consults?.find((c) => c.id === consultId) ?? null;
-  if (consult?.status === CONSULT_STATUS.TIMED_OUT) consult.timeoutReason = reason;
-  return { call: call || null, changed: changed || consult?.timeoutReason === reason, wait };
+  const idle = { call: call || null, changed: false, wait: CONSULT_WAIT.NONE };
+  if (!consult || consult.status !== CONSULT_STATUS.OPEN) return idle;
+  if (consultAlive(consultAgeMs(consult, nowMs), stageMs)) return idle;
+  consult.status = CONSULT_STATUS.TIMED_OUT;
+  consult.timeoutReason = reason;
+  return { call, changed: true, wait: CONSULT_WAIT.TIMED_OUT };
 }
 
 // AL-P14: der Client hat auf diesen Call gepollt. EPHEMER (kein save, keine Spalte -

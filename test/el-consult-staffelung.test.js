@@ -253,3 +253,117 @@ test("P2-11: markConsultAskDelivered haelt den ERSTEN Zeitpunkt", () => {
   // und bedeutet das GEGENTEIL - markConsultAskDelivered darf es NIE beruehren.
   assert.equal(consult.deliveredAt, undefined);
 });
+
+// P2-12/P2-13 (S1-1-Fix): benannte Alter statt Magic Numbers (G25). Die Zustellfrist ist
+// dieselbe wie STAGES.deliveryDeadlineMs oben (200ms) - EINE Quelle statt einer zweiten,
+// zufaellig gleichen Zahl. ALIVE liegt darunter (fuer SICH selbst noch nicht abgelaufen),
+// EXPIRED darueber.
+const P2_STAGE_MS = STAGES.deliveryDeadlineMs;
+const ALT_ALIVE_AGE_MS = 150;
+const JUNG_ALIVE_AGE_MS = 50;
+const EXPIRED_AGE_MS = 250;
+
+// P2-12 (S1-1-Fix, Review Runde 1): ZWEI GLEICHZEITIG OFFENE In-Call-Consults
+// (MAX_OPEN_POLLS_PER_CALL=2, consult/delivery.js) mit je EIGENER, unabhaengiger Stufe.
+// Vorher waehlte timeOutStagedConsult den zu schliessenden Datensatz ueber
+// advanceInCallConsult, das den ERSTEN offenen Consult in ARRAY-REIHENFOLGE nimmt - nicht
+// ueber die uebergebene consultId. Bei zwei offenen Consults traf das nicht zuverlaessig
+// den Consult, dessen EIGENE Stufe gerade abgelaufen ist: der aeltere, noch lebendige
+// Consult (c0) wurde angefasst (held:true), waehrend der juengere Ziel-Consult (c1),
+// dessen Zustellfrist tatsaechlich gerissen ist, unveraendert OPEN blieb, OHNE
+// timeoutReason - waehrend awaitAnswer dem Anbieter trotzdem bedingungslos "timed out"
+// zurueckgab (Phantom-Datensatz, E-2, s. state-ops.js:timeOutStagedConsult).
+test("P2-12: bei zwei offenen In-Call-Consults schliesst timeOutStagedConsult GENAU den per consultId benannten, nicht den ersten im Array", () => {
+  const state = { calls: [] };
+  seedActiveCall(state);
+  const call = ops.getCall(state, CALL_ID);
+  const now = Date.now();
+  // c0 (aelter): 150ms alt - unter der Zustellfrist (200ms) von c1, also fuer SICH selbst
+  // noch nicht abgelaufen. Reihenfolge im Array bewusst zuerst (der bisherige Bug waehlte
+  // genau dieses Element).
+  call.consults.push({
+    id: "c0",
+    seq: 0,
+    questions: ["Frage A"],
+    status: CONSULT_STATUS.OPEN,
+    askedAt: new Date(now - ALT_ALIVE_AGE_MS).toISOString(),
+    answeredAt: null,
+    answeredFacts: 0,
+  });
+  // c1 (juenger, das eigentliche Ziel dieses Aufrufs): ueber der Zustellfrist alt, also
+  // fuer sich selbst abgelaufen.
+  call.consults.push({
+    id: "c1",
+    seq: 1,
+    questions: ["Frage B"],
+    status: CONSULT_STATUS.OPEN,
+    askedAt: new Date(now - EXPIRED_AGE_MS).toISOString(),
+    answeredAt: null,
+    answeredFacts: 0,
+  });
+
+  const ergebnis = ops.timeOutStagedConsult(state, CALL_ID, {
+    consultId: "c1",
+    reason: CONSULT_TIMEOUT_REASON.NOT_DELIVERED,
+    nowMs: now,
+    stageMs: P2_STAGE_MS,
+  });
+
+  const c0 = ops.getCall(state, CALL_ID).consults.find((entry) => entry.id === "c0");
+  const c1 = ops.getCall(state, CALL_ID).consults.find((entry) => entry.id === "c1");
+
+  assert.equal(ergebnis.changed, true);
+  assert.equal(c1.status, CONSULT_STATUS.TIMED_OUT, "der benannte Consult c1 schliesst");
+  assert.equal(c1.timeoutReason, CONSULT_TIMEOUT_REASON.NOT_DELIVERED);
+  assert.equal(c0.status, CONSULT_STATUS.OPEN, "der NICHT benannte Consult c0 bleibt offen");
+  assert.equal(c0.held, undefined, "c0 bleibt UNVERAENDERT - kein Seiteneffekt auf dem falschen Datensatz");
+});
+
+// Gegenprobe: derselbe Aufbau, aber consultId zeigt auf den AELTEREN (c0) - der jetzt
+// selbst seine eigene (kuerzere) Frist gerissen hat, waehrend der juengere (c1) noch
+// lebt. Ohne den Fix waere das Ergebnis in beide Richtungen falsch moeglich, je nach
+// Array-Position - dieser Fall deckt die andere Reihenfolge ab.
+test("P2-13: dieselbe Lage umgekehrt im Array - der juengere steht an Array-Position 0, das Ziel (aelterer) trotzdem korrekt getroffen", () => {
+  const state = { calls: [] };
+  seedActiveCall(state);
+  const call = ops.getCall(state, CALL_ID);
+  const now = Date.now();
+  // Array-Position 0: der JUENGERE (50ms, fuer sich selbst noch nicht abgelaufen) -
+  // genau die Position, die der bisherige Bug (Array-Reihenfolge statt consultId)
+  // gegriffen haette.
+  call.consults.push({
+    id: "c1",
+    seq: 1,
+    questions: ["Frage B"],
+    status: CONSULT_STATUS.OPEN,
+    askedAt: new Date(now - JUNG_ALIVE_AGE_MS).toISOString(),
+    answeredAt: null,
+    answeredFacts: 0,
+  });
+  // Array-Position 1: der AELTERE (ueber der Zustellfrist) - das eigentliche Ziel.
+  call.consults.push({
+    id: "c0",
+    seq: 0,
+    questions: ["Frage A"],
+    status: CONSULT_STATUS.OPEN,
+    askedAt: new Date(now - EXPIRED_AGE_MS).toISOString(),
+    answeredAt: null,
+    answeredFacts: 0,
+  });
+
+  const ergebnis = ops.timeOutStagedConsult(state, CALL_ID, {
+    consultId: "c0",
+    reason: CONSULT_TIMEOUT_REASON.NOT_DELIVERED,
+    nowMs: now,
+    stageMs: P2_STAGE_MS,
+  });
+
+  const c0 = ops.getCall(state, CALL_ID).consults.find((entry) => entry.id === "c0");
+  const c1 = ops.getCall(state, CALL_ID).consults.find((entry) => entry.id === "c1");
+
+  assert.equal(ergebnis.changed, true);
+  assert.equal(c0.status, CONSULT_STATUS.TIMED_OUT, "das benannte Ziel c0 schliesst, trotz Array-Position 1");
+  assert.equal(c0.timeoutReason, CONSULT_TIMEOUT_REASON.NOT_DELIVERED);
+  assert.equal(c1.status, CONSULT_STATUS.OPEN, "c1 bleibt offen, obwohl es an Array-Position 0 steht");
+  assert.equal(c1.held, undefined);
+});
