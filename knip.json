@@ -10,6 +10,7 @@
     "scripts/check-token-sync.js",
     "scripts/convo-bench.mjs",
     "scripts/backfill-plan-profiles.js",
+    "scripts/anruf-unterbrechungen.mjs",
     "scripts/call-abandon-rate.mjs",
     "scripts/deepseek-b1-messung.mjs",
     "scripts/erase-tenant.js",
