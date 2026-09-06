@@ -277,7 +277,7 @@ function planSlugOf(object) {
 // Ausgelagert aus applyStripeWebhook (G30: eine Aufgabe pro Funktion, haelt die ohnehin
 // grosse Orchestrierungs-Funktion unter der Zeilen-/Komplexitaetsgrenze) - EIN Aufrufer,
 // direkt darunter. Nebeneffekt (Abo-Schreibung + Audit) im Namen.
-function auditSuspendSubscriptionRef({ store, tenant, suspendReason, audit, req }) {
+function clearEndedSubscriptionRefAndAudit({ store, tenant, suspendReason, audit, req }) {
   const subscriptionEnded = suspendReason === SUSPEND_REASON.SUBSCRIPTION_DELETED;
   if (subscriptionEnded) clearSubscriptionReference(store, tenant);
   audit(
@@ -448,7 +448,7 @@ export async function applyStripeWebhook(
   // DB-Status via accounts.setStatus oben ist davon unabhaengig gesetzt.
   store.setSuspendedAtIfAbsent(tenant);
   await sessions.invalidateByTenant(tenant);
-  auditSuspendSubscriptionRef({ store, tenant, suspendReason, audit, req });
+  clearEndedSubscriptionRefAndAudit({ store, tenant, suspendReason, audit, req });
   // Die Sperre ist an dieser Stelle bereits VOLLZOGEN (setStatus/setSuspendedAtIfAbsent/
   // invalidateByTenant sind oben durchgelaufen) - das Aufraeumen laeuft danach, best-effort,
   // und darf die Antwort NIE blockieren (try/catch: attemptContractEndCleanup ist selbst

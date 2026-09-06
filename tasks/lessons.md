@@ -863,3 +863,27 @@ Kostensignal zeigt um Faktor ~200 zu niedrig. Nichts drueckt dagegen.
 zurueckgenommen wird, ist eine Ratsche - und eine Ratsche ohne Kostenmessung laeuft
 zwangslaeufig aus dem Ruder. Wer eine Beweispflicht ergaenzt, nennt ihren Preis, oder
 nimmt eine andere weg.
+
+## 2026-09-07: Ein Worktree sieht keine untrackten Dateien - zwei Fehlstarts derselben Phase
+
+**Symptom:** Der `phase-impl-lean`-Lauf zu CL1 brach zweimal ab. Beim ersten Mal meldete der
+Safety-Reviewer, er finde weder den Branch noch die Spec; `grep -rl "CL1"` lieferte im
+Arbeitsverzeichnis null Treffer, obwohl Plan und Spec offen vor dem Lead lagen.
+
+**Ursache:** Die Workflow-Agenten arbeiten in einem frischen Worktree aus `master`. Plan-Doku
+und Spec waren im Haupt-Repo **untracked**. Untrackte Dateien existieren in keinem anderen
+Worktree - der Auftrag verwies also auf Dateien, die dort schlicht nicht da waren.
+
+**Regel:** Jede Datei, auf die ein Worktree-Agent per Pfad verwiesen wird (Spec, Plan,
+Kickoff), muss VOR dem Start committet sein. Ein `git status --porcelain` mit `??` auf einer
+dieser Dateien heisst: der Lauf wird ins Leere laufen.
+
+**Zweiter Fehlstart, andere Ursache, gleiche Familie:** `node_modules` fehlte im Haupt-Repo
+komplett (der Worktree-Symlink zeigt dorthin), wodurch der Pre-Commit-Hook ueber ein
+fehlendes `eslint` fiel. Vor einem Phasenlauf gehoert beides geprueft: sind die Auftrags-
+Dateien committet, und stehen die Dependencies im Haupt-Repo.
+
+**Was den Lauf gerettet hat:** Der Abbruch (Session-Limit) liess den Worktree stehen. Die
+Arbeit des Impl-Agenten lag uncommittet darin und war vollstaendig verwertbar - vor dem
+Aufraeumen eines gescheiterten Laufs IMMER `git -C <worktree> status` lesen, nie blind
+entfernen.
