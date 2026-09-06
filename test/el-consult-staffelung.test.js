@@ -9,9 +9,23 @@ import { makeConsultRaised, CONSULT_RESULT } from "../src/conversation/consult-r
 import { CONSULT_STATUS, CONSULT_TIMEOUT_REASON, CONSULT_ANSWER } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
 
-const STAGES = Object.freeze({ deliveryDeadlineMs: 200, ackDeadlineMs: 400, answerDeadlineMs: 900 });
-const TICK_MS = 20;
-const TOLERANZ_MS = 250; // ein Tick + Scheduler-Rauschen, grosszuegig gegen Last
+// S1-Fix (Review Runde 2): Fristen weiter heruntergezogen (200/400/900 -> 60/120/240).
+// Grund: node:test faehrt Testdateien parallel: die echten Timer dieser Datei (bis zu
+// 900ms) drueckten unter Last woanders in ein knappes 50ms-Zeitbudget hinein
+// (PRECALL_BRIEFING_TIMEOUT_MS in al-p10-precall-research.test.js) und liessen dessen
+// Retry dort in "retries-exhausted" laufen. Der Fristnachweis selbst (Reihenfolge/
+// Grenzen der Stufen) bleibt bei jeder Groessenordnung gueltig - nur die absolute
+// Wanduhr-Last dieser Datei sinkt.
+const STAGES = Object.freeze({ deliveryDeadlineMs: 60, ackDeadlineMs: 120, answerDeadlineMs: 240 });
+const TICK_MS = 10;
+const TOLERANZ_MS = 150; // ein Tick + Scheduler-Rauschen, grosszuegig gegen Last
+
+// Marker-Zeitpunkte fuer die Store-Double-Faelle unten - proportional zu den STAGES oben
+// heruntergezogen (vorher 50/300/600 gegen 200/400/900), G25: benannte Konstanten statt
+// wiederholter Magic Numbers.
+const FRUEH_MARKIERT_MS = 20; // deutlich vor der jeweils naechsten Stufe (Zustellung/Quittung)
+const ANTWORT_VOR_QUITTUNGSFRIST_MS = 90; // P2-5: Antwort ohne Quittung, noch vor ackDeadlineMs
+const ANTWORT_NACH_QUITTUNGSFRIST_MS = 170; // P2-4: Antwort zwischen ackDeadlineMs und answerDeadlineMs
 
 const CALL_ID = "call_staffelung";
 const CONSULT_ID = "c0"; // erste Rueckfrage der Kette (state-ops.consultIdOf)
@@ -99,7 +113,7 @@ test("P2-1: ohne pollenden Client endet der Halt nach der Zustellfrist", async (
 });
 
 test("P2-2: zugestellt, nicht quittiert - Abbruch nach der Quittungsfrist", async () => {
-  const { store, cleanup } = storeDouble({ zustellenNachMs: 50 });
+  const { store, cleanup } = storeDouble({ zustellenNachMs: FRUEH_MARKIERT_MS });
   const onConsultRaised = makeConsultRaised({ store, stages: STAGES, tickMs: TICK_MS });
   const started = Date.now();
   const result = await onConsultRaised({ callId: CALL_ID, question: QUESTION });
@@ -110,7 +124,7 @@ test("P2-2: zugestellt, nicht quittiert - Abbruch nach der Quittungsfrist", asyn
 });
 
 test("P2-3: quittiert, keine Antwort - Abbruch erst nach der Gesamtfrist", async () => {
-  const { store, cleanup } = storeDouble({ quittierenNachMs: 50 });
+  const { store, cleanup } = storeDouble({ quittierenNachMs: FRUEH_MARKIERT_MS });
   const onConsultRaised = makeConsultRaised({ store, stages: STAGES, tickMs: TICK_MS });
   const started = Date.now();
   const result = await onConsultRaised({ callId: CALL_ID, question: QUESTION });
@@ -124,7 +138,7 @@ test("P2-3: quittiert, keine Antwort - Abbruch erst nach der Gesamtfrist", async
 });
 
 test("P2-4: quittiert und beantwortet - unveraendert ausgeliefert", async () => {
-  const { store, aufrufe, cleanup } = storeDouble({ quittierenNachMs: 50, antwortNachMs: 600 });
+  const { store, aufrufe, cleanup } = storeDouble({ quittierenNachMs: FRUEH_MARKIERT_MS, antwortNachMs: ANTWORT_NACH_QUITTUNGSFRIST_MS });
   const onConsultRaised = makeConsultRaised({ store, stages: STAGES, tickMs: TICK_MS });
   const result = await onConsultRaised({ callId: CALL_ID, question: QUESTION });
   cleanup();
@@ -134,7 +148,7 @@ test("P2-4: quittiert und beantwortet - unveraendert ausgeliefert", async () => 
 });
 
 test("P2-5: Antwort OHNE Quittung innerhalb der Frist wird ausgeliefert (E-3)", async () => {
-  const { store, cleanup } = storeDouble({ zustellenNachMs: 50, antwortNachMs: 300 });
+  const { store, cleanup } = storeDouble({ zustellenNachMs: FRUEH_MARKIERT_MS, antwortNachMs: ANTWORT_VOR_QUITTUNGSFRIST_MS });
   const onConsultRaised = makeConsultRaised({ store, stages: STAGES, tickMs: TICK_MS });
   const result = await onConsultRaised({ callId: CALL_ID, question: QUESTION });
   cleanup();
@@ -142,7 +156,7 @@ test("P2-5: Antwort OHNE Quittung innerhalb der Frist wird ausgeliefert (E-3)", 
 });
 
 test("P2-6: keine Stufe haelt laenger als die Gesamtfrist (I-7)", async () => {
-  const { store, cleanup } = storeDouble({ quittierenNachMs: 50 });
+  const { store, cleanup } = storeDouble({ quittierenNachMs: FRUEH_MARKIERT_MS });
   const onConsultRaised = makeConsultRaised({ store, stages: STAGES, tickMs: TICK_MS });
   const started = Date.now();
   const result = await onConsultRaised({ callId: CALL_ID, question: QUESTION });
