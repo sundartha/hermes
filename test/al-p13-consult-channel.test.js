@@ -229,6 +229,10 @@ function makeRouteStore({ allowConsult = true, tenantId = TENANT, status = "acti
     // AL-P14: der Lesepfad bucht seit dieser Phase den Poll am Call mit (ephemer). Das
     // Test-Double muss die Methode kennen, sonst wirft die Route einen TypeError.
     noteConsultPoll: (id) => ops.noteConsultPoll(state, id),
+    // P2 (Stufe 0): derselbe Lesepfad haelt seit dieser Phase zusaetzlich die Zustellung
+    // am Consult-Datensatz fest. Muster noteConsultPoll - ohne den Eintrag hier wirft die
+    // Route denselben TypeError.
+    markConsultAskDelivered: (id, eventId) => ops.markConsultAskDelivered(state, id, eventId),
     tenantGeo: () => ({ country: null, defaultLanguage: null }),
   };
 }

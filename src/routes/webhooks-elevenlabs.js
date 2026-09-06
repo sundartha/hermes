@@ -76,6 +76,19 @@ function toolResultText(outcome, locale) {
   return outcome.facts.length ? outcome.facts.join(" ") : control.consultTimeout;
 }
 
+// P2: die Antwort-Huelle an den Anbieter, ausgelagert statt inline in handleConsult (G30/
+// eine Abstraktionsebene) - reiner Aufruf ohne eigenen Verzweigungspunkt haelt
+// handleConsult unter der Komplexitaetsgrenze. reason ist MASCHINENLESBAR und PII-frei
+// (ein Zustands-Token, kein Gespraechsinhalt) - gesprochen wird er nie, alle drei
+// Abbruchgruende tragen denselben bestehenden Timeout-Text (E-4, s. toolResultText).
+function consultResponseBody(outcome, locale) {
+  return {
+    status: outcome.kind,
+    reason: outcome.reason ?? null,
+    answer: toolResultText(outcome, locale),
+  };
+}
+
 // Bindung ueber die opake Anbieter-Kennung am Call-Datensatz - dasselbe Muster wie das
 // bestehende Provider-Handle telnyxConversationId. NUR ein laufender Anruf ist bindbar:
 // eine Wirkung nachtraeglich in ein beendetes Gespraech zu reichen ist derselbe Angriff
@@ -265,7 +278,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
   // RICHTUNG ist der Sicherheitskern (consult/in-call.js): die Rede eines fremden
   // Inbound-Anrufers darf NIE als "Rueckfrage" in den Kontext des Tenants exportiert
   // werden. KONTINGENT ist der Kosten-Riegel: jede angenommene Rueckfrage haelt das
-  // kostende Gespraech bis CONSULT_OPEN_MS offen.
+  // kostende Gespraech bis hoechstens EL_CONSULT_ANSWER_MS offen (P2, gestaffelt).
   //
   // calleeIsOwner ist AUS DEMSELBEN GRUND uebernommen und faellt nicht unter die
   // ausgelassenen Turn-Fakten: es ist eine Tatsache ueber das ZIEL dieses Anrufs, vor dem
@@ -274,7 +287,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
   // rechnet mit DEMSELBEN Praedikat (consultAllowedForCall, consult/gate.js), und dass es
   // hier gefehlt hat, war der Defekt vom 06.09.2026: den eigenen Auftraggeber zu fragen,
   // waehrend man mit ihm telefoniert, kann niemand beantworten - die Leitung stand still,
-  // bis CONSULT_OPEN_MS ablief.
+  // bis zur Haltefrist ablief.
   function consultAllowed(call) {
     return (
       config.tenancy.inCallConsultEnabled === true &&
@@ -338,8 +351,9 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     if (!question) return denied(res, HTTP_BAD_REQUEST, "keine_frage");
 
     // 6) Gleichzeitigkeit - und erst DANN die Wirkung. Dieser Aufruf ist ein blockierender
-    // Halter: er haelt die Verbindung des Anbieters bis CONSULT_OPEN_MS offen. Ohne
-    // Obergrenze kann derselbe Anruf beliebig viele davon gleichzeitig aufziehen (gemessen:
+    // Halter: er haelt die Verbindung des Anbieters gestaffelt offen (P2, hoechstens
+    // EL_CONSULT_ANSWER_MS + ein Poll-Tick). Ohne Obergrenze kann derselbe Anruf beliebig
+    // viele davon gleichzeitig aufziehen (gemessen:
     // 8 parallele Aufrufe, alle gehalten). Gezaehlt wird auf den BESTEHENDEN Slot-Zaehlern
     // des Kanals (MAX_OPEN_POLLS_PER_CALL / MAX_OPEN_POLLS_PER_TENANT, consult/delivery.js),
     // nicht auf einem zweiten daneben - "wie viele Verbindungen haengen an diesem Anruf"
@@ -351,10 +365,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     if (!held.granted) return denied(res, HTTP_NOT_FOUND, "kein_freier_platz");
     const outcome = held.value;
     console.log(`[el-consult] call=${call.id} ergebnis=${outcome.kind}`);
-    return res.json({
-      status: outcome.kind,
-      answer: toolResultText(outcome, localeFor(call.language)),
-    });
+    return res.json(consultResponseBody(outcome, localeFor(call.language)));
   }
 
   // Eigenes Fehler-Netz statt des zentralen (app.js): Express 4 reicht die Rejection eines

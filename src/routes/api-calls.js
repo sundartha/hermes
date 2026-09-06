@@ -21,10 +21,11 @@
 // injiziert (EINE Quelle, INV-7).
 import { Router } from "express";
 import { VOICE_ENGINE } from "../config.js";
-import { normNum, CONSULT_ANSWER } from "../store/defaults.js";
+import { normNum, CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../store/defaults.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
+import { CONSULT_EVENT } from "../consult/delivery.js";
 import { isConsultEventId } from "../store/state-ops.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
@@ -504,6 +505,13 @@ export function makeCallRoutes({
       afterEventId: typeof req.query.after === "string" ? req.query.after : null,
       signal: null,
     });
+    // P2 (Stufe 0, N-10): DIES ist die Zustellung - der Client bekommt die Frage mit dieser
+    // Antwort in die Hand. Bis heute war nirgends festgehalten, ob eine Rueckfrage jemals
+    // einen Client ERREICHT hat; die Aufklaerung am 06.09. brauchte deshalb eine
+    // Zeugenaussage statt einer Messung. Der Marker gehoert an den Datensatz und nicht in
+    // waitForEvent: consult/delivery.js liest, es schreibt nicht.
+    if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
+      store.markConsultAskDelivered(call.id, event.eventId);
     res.json(event);
   });
 
@@ -522,12 +530,31 @@ export function makeCallRoutes({
       return res
         .status(403)
         .json({ error: "Consult-Kanal ist fuer diesen Tenant nicht freigegeben." });
-    const { event_id: eventId, answers } = req.body || {};
+    const { event_id: eventId, answers, status } = req.body || {};
     // event_id ist Client-Freitext ueber einen authentifizierten Endpunkt. Format-
     // Pruefung VOR jeder Weiterverarbeitung (auch vor dem Audit-Log unten) - sonst
     // landet beliebiger Text im Forensik-Trail (Regel 4: keine Freitext-Audit-Zeile).
     if (!isConsultEventId(eventId))
       return res.status(400).json({ error: "event_id ist ungueltig" });
+    // P2 (SCOPE 2): der leichte Modus. AUSDRUECKLICH ueber status und NICHT ueber ein
+    // fehlendes answers-Feld: ein Client, der answers vergisst, wuerde sonst still
+    // quittieren statt zu antworten - der Fehler saehe wie Erfolg aus. Fehlender status =
+    // FINAL, damit jeder Bestands-Aufrufer byte-identisch bleibt.
+    if (
+      status !== undefined &&
+      status !== CONSULT_ANSWER_MODE.WORKING &&
+      status !== CONSULT_ANSWER_MODE.FINAL
+    )
+      return res.status(400).json({ error: "status ist ungueltig" });
+    if (status === CONSULT_ANSWER_MODE.WORKING) {
+      const { outcome } = store.ackConsult(call.id, { eventId });
+      // Eigene Aktion statt "consult_answered": eine Quittung ist keine Antwort, und der
+      // Forensik-Trail von P3 muss beides unterscheiden koennen. PII-frei - Kennungen und
+      // Ergebnis-Token, nie der Fragetext (Regel 4).
+      audit("consult_acked", req, `call=${call.id} event=${eventId} ergebnis=${outcome}`);
+      if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
+      return res.json({ accepted: true, merged_facts: 0 });
+    }
     const validated = validateAssistantContext({ key_facts: answers });
     if (validated.error || !validated.value)
       return res.status(400).json({ error: validated.error || "answers ist Pflicht" });

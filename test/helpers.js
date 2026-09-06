@@ -395,6 +395,12 @@ export const BASE_ENV = {
   // dotenv in die Spawn-Tests (Lehre test-base-env-drift).
   CONSULT_WAIT_MS: "4000",
   CONSULT_OPEN_MS: "47000",
+  // P2: die drei EL-Rueckfrage-Fristen neutral auf den Produktions-Default gepinnt, sonst
+  // leakt eine lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift).
+  // Die EL-Webhook-Tests setzen sie explizit kurz (s. dort).
+  EL_CONSULT_DELIVERY_MS: "5000",
+  EL_CONSULT_ACK_MS: "5000",
+  EL_CONSULT_ANSWER_MS: "30000",
   // AL-P7b: Denk-Signal in Spawn-Tests neutral AUS (Default). Ohne diese Zeile leakt eine
   // lokale .env via dotenv in die Spawn-Tests (Lehre test-base-env-drift);
   // al-p7b-*.test.js setzen es explizit auf "true".

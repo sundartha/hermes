@@ -114,7 +114,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
   // AL-P14: inCallConsultEnabled ergaenzt (Rueckfrage IM Gespraech, Default aus) -> 8.
   // GQ-P2: consultWaitMs + consultOpenMs ergaenzt (die zwei Consult-Fristen) -> 10.
-  tenancy: 10,
+  // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs ergaenzt (die drei
+  // Fristen des gestaffelten EL-Rueckfrage-Halts) -> 13.
+  tenancy: 13,
   // P1 (i18n-Fix): deployedCommit ergaenzt (Deploy-Commit fuer /healthz + Boot-Banner) -> 8.
   server: 8,
   store: 3,
@@ -156,9 +158,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // KV2-9: elEvidenceMinAgeMinutes (billing) ergaenzt -> 179.
 // KV2-10: voiceTariffGrundbetragCentsJeRoute (billing) ergaenzt; platformFixedCost… ->
 // platformFixedCostUsdCentsPerMonth umbenannt (menge neutral) -> 180.
-const EXPECTED_TOTAL_KEYS = 180;
+// P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs (tenancy) ergaenzt ->
+// 183.
+const EXPECTED_TOTAL_KEYS = 183;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (180 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -298,7 +302,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // profil:cents, kein primitives Blatt, s. continue oben) -> checked bleibt 168; der
   // Rename platformFixedCostCentsPerMonth -> platformFixedCostUsdCentsPerMonth bleibt
   // primitiv (Zahl) und verschiebt nichts.
-  const EXPECTED_PRIMITIVE_LEAVES = 168;
+  // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs sind alle drei
+  // primitiv (Zahl, kein Array/nested Objekt) -> 171.
+  const EXPECTED_PRIMITIVE_LEAVES = 171;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

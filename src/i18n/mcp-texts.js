@@ -64,6 +64,10 @@ export const MCP_TEXTS = Object.freeze({
       "Hinweis: Falls waehrend des Anrufs keine Live-Rueckfragen ankommen, muss die " +
       "Werkzeug-Berechtigung des Connectors auf 'Zulassen' stehen.",
     consultAnswerAccepted: (n) => `${n} Angabe(n) an den Anruf uebergeben.`,
+    // P2 (SCOPE 2): NIE gesprochen, tenant-sichtbarer Chat-Text derselben Klasse wie
+    // consultAnswerAccepted - die Quittung ("working") ist keine Antwort und braucht
+    // deshalb einen eigenen Text statt consultAnswerAccepted(0).
+    consultAckAccepted: "Rueckfrage quittiert - die Antwort wird erwartet.",
     consultAnswerRejected:
       "Antwort verworfen (Format oder Laenge). Die Rueckfrage bleibt offen - bitte kuerzer antworten.",
     consultNoLongerOpen: "Diese Rueckfrage ist nicht mehr offen (beantwortet oder Anruf vorbei).",
@@ -125,6 +129,7 @@ export const MCP_TEXTS = Object.freeze({
       "Note: if no live questions arrive during the call, the connector's tool permission " +
       "needs to be set to 'Allow'.",
     consultAnswerAccepted: (n) => `${n} detail(s) passed on to the call.`,
+    consultAckAccepted: "Consult acknowledged - the answer is expected next.",
     consultAnswerRejected:
       "Answer rejected (format or length). The question stays open - please answer more briefly.",
     consultNoLongerOpen: "This question is no longer open (already answered or the call ended).",
@@ -169,6 +174,7 @@ export const MCP_TEXTS = Object.freeze({
       "Remarque : si aucune question en direct n'arrive pendant l'appel, l'autorisation " +
       "d'outil du connecteur doit être réglée sur « Autoriser ».",
     consultAnswerAccepted: (n) => `${n} information(s) transmise(s) à l'appel.`,
+    consultAckAccepted: "Question accusée de réception - la réponse est attendue.",
     consultAnswerRejected:
       "Réponse rejetée (format ou longueur). La question reste ouverte - veuillez répondre plus brièvement.",
     consultNoLongerOpen:
