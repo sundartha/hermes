@@ -37,7 +37,7 @@ import test from "node:test";
 
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 
-import { consultAllowedFor } from "../src/consult/gate.js";
+import { consultAllowedForCall } from "../src/consult/gate.js";
 
 import { sendeAnrufstart } from "./helpers/elevenlabs-anrufstart-attrappe.mjs";
 
@@ -88,7 +88,7 @@ function templatePlaceholderNames() {
 // - GETEILT mit test/elevenlabs-torzustand.test.js, das denselben Anrufstart faehrt und
 // den WERT einer dieser Variablen misst. Zwei eigene Attrappen wuerden gegeneinander
 // driften, und dann hoerte genau eine der beiden Suiten still auf zu messen.
-const sentDynamicVariables = () => sendeAnrufstart({ makeElevenLabsOutbound, consultAllowedFor });
+const sentDynamicVariables = () => sendeAnrufstart({ makeElevenLabsOutbound, consultAllowedForCall });
 
 function fehlendeUndUeberzaehlige(seiteA, seiteB) {
   const fehlend = [...seiteA].filter((name) => !seiteB.has(name));

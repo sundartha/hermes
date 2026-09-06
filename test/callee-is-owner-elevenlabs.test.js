@@ -30,7 +30,7 @@ import { SPOKEN_TRANSLITERATION_STEMS } from "./umlaut-stems-helper.js";
 process.env.CONSULT_ENABLED = "true";
 process.env.ASSISTANT_CONTEXT_ENABLED = "true";
 const { makeElevenLabsOutbound } = await import("../src/elevenlabs/outbound.js");
-const { consultAllowedFor } = await import("../src/consult/gate.js");
+const { consultAllowedForCall } = await import("../src/consult/gate.js");
 const { LOCALES } = await import("../src/i18n/locales.js");
 const { OVERRIDE_ALLOWED_LEAF_PATHS, startOutboundCall } =
   await import("../src/elevenlabs/convai.js");
@@ -78,7 +78,7 @@ function ownerStore(tenantContext) {
 
 // EIN Abgriff fuer alle Faelle - die geteilte Attrappe, keine zweite.
 async function koerperFuer({ call, store = pinStore({ profil: { allowConsult: true } }) }) {
-  return sendeAnrufstartKoerper({ makeElevenLabsOutbound, consultAllowedFor, store, call });
+  return sendeAnrufstartKoerper({ makeElevenLabsOutbound, consultAllowedForCall, store, call });
 }
 
 const rumpfVon = (koerper) => koerper.conversation_initiation_client_data;

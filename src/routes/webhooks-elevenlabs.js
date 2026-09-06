@@ -26,7 +26,7 @@
 // dem gebundenen Anruf kommen.
 import { Router } from "express";
 import { blockingBudgetAxis } from "../budget-gate.js";
-import { consultAllowedFor } from "../consult/gate.js";
+import { consultAllowedForCall } from "../consult/gate.js";
 import { MAX_IN_CALL_CONSULTS_PER_CALL } from "../consult/in-call.js";
 import { CONSULT_RESULT } from "../conversation/consult-raised.js";
 import { localeFor } from "../i18n/locales.js";
@@ -266,10 +266,19 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
   // Inbound-Anrufers darf NIE als "Rueckfrage" in den Kontext des Tenants exportiert
   // werden. KONTINGENT ist der Kosten-Riegel: jede angenommene Rueckfrage haelt das
   // kostende Gespraech bis CONSULT_OPEN_MS offen.
+  //
+  // calleeIsOwner ist AUS DEMSELBEN GRUND uebernommen und faellt nicht unter die
+  // ausgelassenen Turn-Fakten: es ist eine Tatsache ueber das ZIEL dieses Anrufs, vor dem
+  // Waehlen einmal entschieden und danach unveraenderlich am Datensatz (OC-P1) - keine
+  // Aussage ueber unsere Turn-Schleife, die auf diesem Weg gar nicht laeuft. Der Anrufstart
+  // rechnet mit DEMSELBEN Praedikat (consultAllowedForCall, consult/gate.js), und dass es
+  // hier gefehlt hat, war der Defekt vom 06.09.2026: den eigenen Auftraggeber zu fragen,
+  // waehrend man mit ihm telefoniert, kann niemand beantworten - die Leitung stand still,
+  // bis CONSULT_OPEN_MS ablief.
   function consultAllowed(call) {
     return (
       config.tenancy.inCallConsultEnabled === true &&
-      consultAllowedFor(store.resolveProfile(call.tenantId)) &&
+      consultAllowedForCall(call, store.resolveProfile(call.tenantId)) &&
       call.direction === "outbound" &&
       consultQuotaUsed(call) < MAX_IN_CALL_CONSULTS_PER_CALL
     );

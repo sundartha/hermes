@@ -73,7 +73,7 @@ export function pinCall() {
 // Einheit gegen outbound.js, keine Server-/Store-Integration.
 //
 // profil ist ein PROFIL und keine fertige Ja/Nein-Antwort: der Torzustand muss durch die
-// echte Torkette (consultAllowedFor) laufen, sonst prueft ein Test die Attrappe statt das
+// echte Torkette (consultAllowedForCall) laufen, sonst prueft ein Test die Attrappe statt das
 // Tor (Lehre b1-messwerkzeug-attrappe).
 //
 // tenantContext liefert seit OC-P2 auch firstName - der Anrufstart liest ihn fuer die
@@ -146,9 +146,9 @@ export function pinConfig() {
 // Attrappe, keine zweite fetch-Ersetzung - zwei Attrappen wuerden driften.
 export async function sendeAnrufstartKoerper({
   makeElevenLabsOutbound,
-  consultAllowedFor,
+  consultAllowedForCall,
   store = pinStore(),
-  // Thema B: das Recherche-Tor, analog consultAllowedFor - ohne Wert greift der
+  // Thema B: das Recherche-Tor, analog consultAllowedForCall - ohne Wert greift der
   // fail-closed Fabrik-Default (lookup_available = "unavailable").
   lookupAvailableFor,
   // Thema A: der Anruf-Datensatz, damit Wert-Tests openingLine/Hash setzen koennen.
@@ -171,7 +171,7 @@ export async function sendeAnrufstartKoerper({
       // Das ECHTE Tor, vom Aufrufer hereingereicht - bewusst OHNE Default: ein
       // eingebauter Rueckfall waere ein zweites Tor, und der Torzustand wuerde dann
       // gegen eine Attrappe gemessen statt gegen die Entscheidung, die er abbildet.
-      consultAllowedFor,
+      consultAllowedForCall,
       lookupAvailableFor,
     });
     await originateCall(call);
