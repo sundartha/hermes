@@ -552,6 +552,25 @@ async function selectAccountAuth(c, sub) {
   return rows[0] || null;
 }
 
+// CL1-B5: Auswahlregel fuer accountByTenant. Der Vertragsende-Cleanup loescht den
+// WorkOS-User, laesst dessen account-Zeile aber stehen; kehrt der Kunde zurueck,
+// haengt der Email-Dedup einen zweiten sub auf denselben Tenant. Zwei Zeilen hiessen
+// bisher pauschal "mehrdeutig -> null", und email-abhaengige Funktionen (Dashboard-
+// Prefill, Newsletter-Empfaenger, Kuendigungsbestaetigung) degradierten still.
+// Regel: JUENGSTE Zeile gewinnt, solange ALLE Zeilen dieselbe Email tragen - dann ist
+// die Empfaengerfrage gar nicht mehrdeutig, egal wie viele subs es gibt. Tragen sie
+// UNTERSCHIEDLICHE Emails, bleibt es fail-closed bei null (nicht raten, B2C-1:1).
+// rows kommt vom Aufrufer bereits absteigend nach created_at sortiert (juengste zuerst).
+// Verglichen wird ueber normalizeEmail - dieselbe Identitaets-Definition wie im
+// Login-Dedup (G5), kein zweiter Email-Vergleichsbegriff.
+export function newestAccountIfUnanimousEmail(rows) {
+  if (rows.length === 0) return null;
+  const [newest] = rows;
+  const email = normalizeEmail(newest.email);
+  if (!rows.every((row) => normalizeEmail(row.email) === email)) return null;
+  return { sub: newest.sub, email: newest.email };
+}
+
 // ---- makeAccounts ----------------------------------------------------
 // Tenant + Account upsert beim ersten Login; Lesepfade fuer Middleware.
 //
@@ -624,18 +643,26 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
     },
 
     // A2-Bruecke (Achsen-Bruch A9): die Aktivierung kennt nur tenantId, das Profil keyt
-    // email. Reverse-Query zu upsertOnFirstLogin. Liefert {sub,email} fuer GENAU EINEN
-    // Account des Tenants, sonst null: 0 (Webhook vor Account-Anlage) ODER >1 (mehrdeutig,
-    // §5.6 B2C-1:1 - NICHT raten, fail-closed). account ist RLS-exempt (laeuft vor
-    // app.current_tenant, Muster resolve/setStatus). LIMIT 2 trennt eindeutig/mehrdeutig,
-    // ohne die ganze Liste zu laden.
+    // email. Reverse-Query zu upsertOnFirstLogin. Liefert {sub,email} fuer den Tenant,
+    // sonst null: 0 Zeilen (Webhook vor Account-Anlage) ODER mehrere Zeilen mit
+    // UNTERSCHIEDLICHEN Emails (echt mehrdeutig, §5.6 B2C-1:1 - NICHT raten, fail-closed).
+    // Tragen mehrere Zeilen dieselbe Email (CL1-B5: Vertragsende-Cleanup loescht den
+    // WorkOS-User, nicht die account-Zeile - ein zurueckkehrender Kunde haengt einen
+    // zweiten sub an denselben Tenant), gewinnt die JUENGSTE - s.
+    // newestAccountIfUnanimousEmail. account ist RLS-exempt (laeuft vor
+    // app.current_tenant, Muster resolve/setStatus).
     async accountByTenant(tenantId) {
       return runner.withClient(async (c) => {
+        // ORDER BY created_at DESC = juengste Zeile zuerst (sub ASC nur als stabiler
+        // Tie-Break bei identischem Zeitstempel - deterministisch statt Zufalls-
+        // reihenfolge). KEIN LIMIT mehr: die Einstimmigkeitsregel muss JEDE Zeile des
+        // Tenants sehen; ein LIMIT koennte Einstimmigkeit behaupten, die nicht gilt
+        // (fail-open). Ein Tenant hat eine Handvoll Accounts, keine Liste.
         const { rows } = await c.query(
-          `SELECT sub, email FROM account WHERE tenant_id = $1 LIMIT 2`,
+          `SELECT sub, email FROM account WHERE tenant_id = $1 ORDER BY created_at DESC, sub ASC`,
           [tenantId],
         );
-        return rows.length === 1 ? rows[0] : null;
+        return newestAccountIfUnanimousEmail(rows);
       });
     },
 

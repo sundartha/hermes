@@ -1,7 +1,16 @@
 # PLAN-CANCEL-LOCKOUT — Gekündigter Tenant ist dauerhaft ausgesperrt
 
-Status: Analyse abgeschlossen, Umsetzung nicht begonnen. Analyse 2026-09-06 (4 parallele
-Read-only-Agenten + eigene Nachprüfung am Code; alle Zeilenangaben gegen `master` verifiziert).
+Status: **Analyse abgeschlossen, B1–B5 umgesetzt und auf `master` gemergt** (2026-09-07, Phase CL1,
+Suite 5707 pass / 2 fail — beide Fehler vorbestehend in `test/kv2-10-tarifpaar.test.js`, auf
+`master` identisch reproduziert). Analyse 2026-09-06 (4 parallele Read-only-Agenten + eigene
+Nachprüfung am Code; alle Zeilenangaben gegen den damaligen `master` verifiziert).
+
+**Noch offen — der Code-Fix allein entsperrt niemanden:**
+1. Push + Deploy stehen aus (Owner-Freigabe).
+2. Der Bestandsheiler muss einmal gegen Produktion laufen:
+   `node scripts/reconcile-stale-subscriptions.js` (Trockenlauf), dann `--apply`.
+   Erst danach ist der betroffene Datensatz frei.
+3. Owner-Entscheidungen 2 und 4 in Abschnitt 7 sind unbeantwortet.
 
 ## 1. Symptom (Owner-Report)
 
