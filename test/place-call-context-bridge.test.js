@@ -48,10 +48,11 @@ function captureSchemas() {
   return schemas;
 }
 
-// Soll-Form von place_call NACH P10/LANG-15 (= P1 + das optionale advisory-Feld context +
-// das optionale Diagnose-Retention-Flag diagnostic, MINUS das wirkungslose language-Feld,
-// das P10 entfernt hat - die Sprache loest der Server ausschliesslich ueber
-// store.resolveCallLanguage auf, s. Nachtrag 2026-07-28 in tasks/gates-fix-chain.md).
+// Soll-Form von place_call NACH P4a (= P1 + das optionale advisory-Feld context + das
+// optionale Diagnose-Retention-Flag diagnostic PLUS das seit F-2 wirksame language-Feld
+// (LANG-15 aufgehoben, PLAN-ANRUFDEFEKTE.md Abschnitt 6, tasks/p4a-spec.md): ohne Angabe
+// loest der Server die Sprache weiterhin ausschliesslich ueber store.resolveCallLanguage
+// auf, mit Angabe gewinnt der Sprachwunsch die GESPRAECHSSPRACHE (nie die Offenlegung).
 // Aus diesen Eintraegen leiten sich Feldanzahl + Optionalitaet ab - kein nacktes
 // Zahl-Literal (G25).
 const PLACE_CALL_SHAPE = {
@@ -61,6 +62,7 @@ const PLACE_CALL_SHAPE = {
   constraints: { optional: true },
   mandate: { optional: true },
   context: { optional: true },
+  language: { optional: true },
   max_duration_s: { optional: true },
   diagnostic: { optional: true },
 };

@@ -39,7 +39,7 @@ import { persistEndWithReason } from "../telephony/call-termination.js";
 // Korrektur der Anbieter-Vorlage, s. dortiger Kommentar).
 import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf } from "../elevenlabs/outbound.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
-import { localeFor } from "../i18n/locales.js";
+import { localeFor, supportedLanguageOf, SUPPORTED_LANGUAGES } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
 import { metrics } from "../metrics.js";
 import { internalOnly } from "../wiring/internal-only.js";
@@ -208,6 +208,35 @@ function resolveCallPrivacyFlags({ store, config, ctx }) {
   return { diagnostic, calleeIsOwnerOfThisCall };
 }
 
+// P4a (F-2): die zwei Ablehnungen des Sprachwunsches. Beide sind reine EINGABEfehler und
+// laufen deshalb wie die Bestands-400er VOR jedem Gate - ohne Audit, ohne Metrik
+// (dieselbe Regel wie bei to/objective und E164_FORMAT_ERROR). Die unterstuetzten Codes
+// stehen IM error-String: der MCP-Weg reicht nur json.error an das aufrufende Modell
+// weiter (mcp-tools.js#api), ein Zusatzfeld saehe es nie. code/supported reisen zusaetzlich
+// fuer maschinelle Leser. Englisch, weil hier das Client-MODELL liest, nicht der Tenant
+// (Systemgrenze O14) - Gate-Ablehnungen an den Tenant bleiben davon unberuehrt.
+const UNSUPPORTED_LANGUAGE = "unsupported_language";
+const LANGUAGE_UNAVAILABLE = "language_unavailable";
+
+const unsupportedLanguageBody = () => ({
+  error: `${UNSUPPORTED_LANGUAGE}: language must be one of ${SUPPORTED_LANGUAGES.join(", ")}`,
+  code: UNSUPPORTED_LANGUAGE,
+  supported: SUPPORTED_LANGUAGES,
+});
+
+// P4a/E-1 (hartes Gate): der Wunsch gilt NUR auf dem Sprechweg, der Gespraechs- und
+// Offenlegungssprache getrennt beantwortet (ElevenLabs, elevenlabs/call-locale.js). Die
+// Telnyx-Zweige rendern den Offenlegungssatz aus call.language (claude.js
+// disclosureSentence) - dort machte ein Wunsch die Sprache der PFLICHTAUSSAGE
+// client-bestimmt, und genau das verbietet F-2 Punkt 4 (PM-2). LAUT abgelehnt statt still
+// ignoriert: ein wirkungsloses Feld IST der Defekt, gegen den diese Phase gebaut ist.
+const languageUnavailableBody = () => ({
+  error:
+    `${LANGUAGE_UNAVAILABLE}: this deployment cannot separate the spoken language from the ` +
+    "mandatory AI disclosure - omit language",
+  code: LANGUAGE_UNAVAILABLE,
+});
+
 // deps: siehe Modul-Doc. arm = { armMaxDurationTimer, armReserveReleaseTimer } aus der EINEN
 // lifecycle-Instanz (Cap-/Reserve-Backstop, INV-7); finishCall = callFinish.finishCall (bare,
 // EINE Referenz wie in call-lifecycle.js); tenant = { requestTenant, requireTenant,
@@ -287,6 +316,14 @@ export function makeCallRoutes({
     // (wie die to/objective-Pruefung oben).
     if (isTrunkZeroFormatError(to)) return res.status(400).json({ error: E164_FORMAT_ERROR });
 
+    // P4a: der Sprachwunsch - VOR jedem Gate, vor jedem Datensatz, vor jeder Buchung
+    // (E-3: kein Anruf, kein Datensatz, keine Kosten). Fehlend/"" heisst "kein Wunsch"
+    // (Bestandsverhalten); alles andere MUSS im Katalog stehen.
+    const requestedLanguage = b.language ? supportedLanguageOf(b.language) : null;
+    if (b.language && !requestedLanguage) return res.status(400).json(unsupportedLanguageBody());
+    if (requestedLanguage && !config.voice.elevenLabsOutbound.enabled)
+      return res.status(400).json(languageUnavailableBody());
+
     // Geordnete Safety-/Geld-Gate-Kette (EINE Schleife, EIN Array, Struct-1 P6). ctx
     // transportiert Derivationen (normalisiertes to, tenantId, Absendernummer, Reserve)
     // zwischen den Gates; volle Reihenfolge + Rationale in telephony/outbound-gates.js.
@@ -308,7 +345,13 @@ export function makeCallRoutes({
     // Ab hier ist ctx vollstaendig durch die Gate-Kette befuellt. KRITISCH: ctx.to ist die von
     // normalize_target aufgeloeste Nummer - die lokale `to` bleibt roh und wird ab hier NICHT
     // mehr gelesen.
-    const language = store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
+    // P4a (F-2 Punkt 2): der Wunsch des Auftraggebers gewinnt, sonst UNVERAENDERT die
+    // Auftraggeber-Kette. Das ist die GESPRAECHSsprache; die Sprache des
+    // Offenlegungssatzes entsteht getrennt und aus dem Angerufenen
+    // (elevenlabs/call-locale.js#disclosureLanguageOf) und wird hier nicht beruehrt.
+    const language =
+      requestedLanguage ||
+      store.resolveCallLanguage({ tenantId: ctx.tenantId, numberRecord: ctx.numberRecord });
     // P2b + OC-P1: beide serverseitigen Praedikate (diagnostic, calleeIsOwner) aus EINER
     // Lesung der eigenen Nummer - volle Begruendung an resolveCallPrivacyFlags (Modul-Ebene,
     // haelt diese ohnehin ueberlange Route nicht weiter wachsen, s. dortiger Kommentar).
@@ -356,7 +399,10 @@ export function makeCallRoutes({
       const callLocale = callLocaleOf({
         store,
         config,
-        call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to },
+        // P4a: die Gespraechssprache steht bereits fest (s. oben) und reist mit - sie
+        // wird hier NICHT zum zweiten Mal aufgeloest (G5). Die Grund-Zeile entsteht in
+        // der Sprache des Gespraechs, der Pflichtsatz davor in der des Angerufenen.
+        call: { tenantId: ctx.tenantId, from: ctx.fromNumber, to: ctx.to, language },
         ownerName,
       });
       const opening = await fetchOpeningLine({

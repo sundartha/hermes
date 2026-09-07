@@ -1,8 +1,10 @@
 // F1 Phase 8: Outbound-Gespraechssprache aus der EIGENEN aktiven Nummer (Geo-Anker)
 // bzw. settings.language-Override. POST /api/calls leitet call.language ueber DIESELBE
 // Praezedenz wie Inbound ab (resolveCallLanguage, Owner #8): settings.language ->
-// number.language -> tenant.defaultLanguage -> "de". Der historische Call-Body-Param
-// b.language wird BEWUSST nicht mehr beruecksichtigt (eine kuratierte Quelle, R8-Geist).
+// number.language -> tenant.defaultLanguage -> "de". Der Call-Body-Param `language` wird
+// seit P4a (F-2, LANG-15 aufgehoben) WIEDER beruecksichtigt - er ueberstimmt diese Kette
+// fuer die GESPRAECHSSPRACHE, wenn der ElevenLabs-Weg an ist (s. LANG-15 unten); ohne den
+// EL-Weg wird er laut mit 400 language_unavailable abgelehnt statt still ignoriert.
 //
 // Reiner Spawn (startServer + seedState), KEIN pglite in derselben Datei (Lehre p6a-Stall).
 // Getestet wird der Owner-Pfad (localhost ohne Identitaets-Header -> Tenant Null): die
@@ -14,6 +16,9 @@ import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_LANGUAGE } from "../src/store/defaults.js";
 
+const HTTP_OK = 200;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_SERVER_ERROR = 500;
 const TO = "+4915112345678"; // erlaubtes DE-Ziel (in Allowlist, kein Premium/Notruf)
 // Owner-Absendernummer mit FR-Geo-Anker: ersetzt die DE-Default-Owner-Nummer aus dem
 // Boot-Guard (ensureOwnerNumber seedet nur, wenn KEINE aktive Owner-Nummer existiert).
@@ -51,7 +56,7 @@ function placeCall(srv) {
 
 const ENV = { ALLOWED_NUMBERS: TO };
 const outboundCall = (srv) =>
-  srv.readStore().calls.find((c) => c.direction === "outbound" && c.to === TO);
+  srv.readStore().calls.find((call) => call.direction === "outbound" && call.to === TO);
 
 // Wie placeCall, aber MIT explizitem, abweichendem Sprachwunsch im Body - der einzige
 // Unterschied, den LANG-15 misst. Eigene Funktion statt Flag-Parameter (F3/G15).
@@ -63,16 +68,23 @@ function placeCallWithLanguageWish(srv, language) {
   });
 }
 
-// LANG-15 (tasks/i18n-tests/01-sprachaufloesung.md): der Sprachwunsch aus dem Call-Body -
-// und damit auch der aus dem MCP-Tool place_call, das nur diese REST-Route ruft - wird
-// serverseitig ignoriert. Die Sprache kommt ausschliesslich aus resolveCallLanguage
-// (Geo-Anker/Override). Die SOLL-Haelfte (das Feld gehoert nach Entscheidung E3 ganz
-// entfernt) traegt test/p15-mcp-tool-descriptions-en.test.js.
-test("LANG-15 (Mechanismus, gruen) - body.language wird serverseitig ignoriert, der Geo-Anker gewinnt", async () => {
+// LANG-15 (tasks/i18n-tests/01-sprachaufloesung.md): AUFGEHOBEN durch Owner-Entscheidung
+// F-2 (2026-09-06, PLAN-ANRUFDEFEKTE.md Abschnitt 6). Bis P4a wurde der Sprachwunsch
+// serverseitig STILL ignoriert - genau der Defekt W5 (call_mtq08ett4l3o). Ab hier wird er
+// NIE mehr still ignoriert: mit ELEVENLABS_OUTBOUND_ENABLED=false (BASE_ENV, dieser Server)
+// kann der Wunsch die Offenlegungssprache nicht sicher von der Gespraechssprache trennen
+// (D-3, routes/api-calls.js#languageUnavailableBody) - er wird deshalb LAUT mit 400
+// language_unavailable abgelehnt statt weiter zu wirken oder zu verschwinden. Kein Anruf,
+// kein Datensatz. Der WIRK-Fall (EL-Weg an) hat seinen eigenen Nachbau in
+// test/place-call-sprachwahl.test.js (G5, kein zweiter hier).
+test("LANG-15 (Mechanismus, gruen) - ein Sprachwunsch wird NIE still ignoriert: ohne EL-Weg 400 statt Wirkungslosigkeit", async () => {
   const srv = await startServer({ env: ENV, seed: ownerSeed({ numberLanguage: "fr" }) });
   try {
-    assert.equal((await placeCallWithLanguageWish(srv, "en")).status, 500);
-    assert.equal(outboundCall(srv).language, "fr", "der Geo-Anker der Nummer gewinnt, nicht der Body-Wunsch");
+    const vorAnzahl = srv.readStore().calls.length;
+    const res = await placeCallWithLanguageWish(srv, "en");
+    assert.equal(res.status, HTTP_BAD_REQUEST);
+    assert.equal((await res.json()).code, "language_unavailable");
+    assert.equal(srv.readStore().calls.length, vorAnzahl, "kein Anruf, kein Datensatz (E-3)");
   } finally {
     await srv.stop();
   }
@@ -93,9 +105,9 @@ test("LANG-26 (Mechanismus, gruen) - Inbound und Outbound leiten dieselbe Sprach
         To: OWNER_FR_NUMBER,
       }),
     });
-    assert.equal(inboundRes.status, 200);
-    assert.equal((await placeCall(srv)).status, 500);
-    const inboundCall = srv.readStore().calls.find((c) => c.direction === "inbound");
+    assert.equal(inboundRes.status, HTTP_OK);
+    assert.equal((await placeCall(srv)).status, HTTP_SERVER_ERROR);
+    const inboundCall = srv.readStore().calls.find((call) => call.direction === "inbound");
     assert.equal(inboundCall.language, "fr");
     assert.equal(outboundCall(srv).language, "fr");
     assert.equal(inboundCall.language, outboundCall(srv).language, "beide Richtungen stimmen ueberein");
@@ -108,7 +120,7 @@ test("LANG-26 (Mechanismus, gruen) - Inbound und Outbound leiten dieselbe Sprach
 test("Outbound-Sprache = language der eigenen aktiven Nummer (FR-Nummer -> call.language=fr)", async () => {
   const srv = await startServer({ env: ENV, seed: ownerSeed({ numberLanguage: "fr" }) });
   try {
-    assert.equal((await placeCall(srv)).status, 500, "Gates passiert -> Offline-Originate (500)");
+    assert.equal((await placeCall(srv)).status, HTTP_SERVER_ERROR, "Gates passiert -> Offline-Originate (500)");
     assert.equal(outboundCall(srv).language, "fr", "Outbound-Sprache aus number.language (FR)");
   } finally {
     await srv.stop();
@@ -129,7 +141,7 @@ test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Num
     seed: ownerSeed({ numberLanguage: "fr", settingsLanguage: "en" }),
   });
   try {
-    assert.equal((await placeCall(srv)).status, 500);
+    assert.equal((await placeCall(srv)).status, HTTP_SERVER_ERROR);
     assert.equal(
       outboundCall(srv).language,
       "en",
@@ -146,7 +158,7 @@ test("Praezedenz #8: settings.language-Override schlaegt number.language (FR-Num
 test("Letzte Praezedenz-Stufe: Nummer ohne language -> call.language = Weltdefault", async () => {
   const srv = await startServer({ env: ENV, seed: ownerSeed() }); // weder number.language noch settings.language
   try {
-    assert.equal((await placeCall(srv)).status, 500);
+    assert.equal((await placeCall(srv)).status, HTTP_SERVER_ERROR);
     assert.equal(
       outboundCall(srv).language,
       DEFAULT_LANGUAGE,

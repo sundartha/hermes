@@ -23,6 +23,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { registerTools } from "../src/mcp-tools.js";
+import { SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 import { GERMAN_STOPWORDS, ROOT } from "./helpers.js";
 
 // Grossschreib-Marker = Emphase. Ausgenommen sind dokumentierte ABKUERZUNGEN, die nur
@@ -95,6 +96,11 @@ const EXPECTED_MARKERS = {
   // nachgezogen statt die Emphase wegzuschreiben: die Aussage ist die eigentliche
   // Verhaltensgarantie dieses Feldes.
   "place_call.max_duration_s": ["SHORTER"],
+  // P4a (F-2): das Feld ist zurueck und WIRKSAM (LANG-15 aufgehoben). SPEAKS ist die
+  // Verhaltensgarantie (nur die Gespraechssprache, nie die Offenlegung), REJECTED die
+  // Ablehnungssemantik (nie stilles Ignorieren, E-3), NOT die harte Gate-Grenze zur
+  // Pflicht-Offenlegung. AI steht in NON_EMPHASIS_TOKENS.
+  "place_call.language": ["SPEAKS", "REJECTED", "NOT"],
   // GQ-P11: aus dem Opt-in wurde ein Opt-out. Die Emphase wandert entsprechend mit -
   // OWN (die Grenze, die der Server prueft), NOT (das Modell muss nichts mehr setzen),
   // ONLY (der Widerspruch ist der eng begrenzte Fall). Bewusst nachgezogen statt die
@@ -170,15 +176,18 @@ test("O14: die Systemgrenze Modellsprache != Nutzersprache ist im Code dokumenti
   assert.match(src, /MODELLSPRACHE != NUTZERSPRACHE/);
 });
 
-// LANG-15 (SOLL) - Entscheidung E3 (tasks/i18n-tests/00-kanonische-liste.md, Cluster D11):
-// place_call.language gehoert ENTFERNT. Die Sprache haengt an Tenant/Nummer und wird
-// serverseitig ueber resolveCallLanguage aufgeloest; ein wirkungsloser Parameter fuehrt das
-// Modell in die Irre. HEUTE ROT: das Feld steht weiter im Zod-Schema, und seine Beschreibung
-// nennt sogar einen falschen Default ("default 'de'", waehrend der Code-Default seit P10
-// "en" ist) - eine nutzersichtbare Falschaussage. Wird E3 umgesetzt, faellt der Pfad
-// place_call.language zugleich aus EXPECTED_MARKERS oben (mitziehen).
-test("LANG-15 (SOLL, rot) - das MCP-Schema bietet keinen wirkungslosen place_call.language-Parameter mehr", () => {
-  assert.ok(!captureDescriptions().has("place_call.language"));
+// LANG-15 (SOLL, gruen nach F-2) - place_call bietet einen WIRKSAMEN Sprachparameter, und
+// seine Beschreibung nennt Katalog, Default und die Grenze zur Offenlegung. Entscheidung
+// E3 (tasks/i18n-tests/00-kanonische-liste.md, Cluster D11: "entfernen") ist durch die
+// Owner-Entscheidung F-2 (2026-09-06, PLAN-ANRUFDEFEKTE.md Abschnitt 6) AUFGEHOBEN: ein
+// wirkungsloser Parameter fuehrte das Modell in die Irre (W5) - die Antwort darauf ist ein
+// wirksamer Parameter, kein entfernter.
+test("LANG-15 (SOLL, gruen nach F-2) - place_call.language nennt den Katalog, lehnt unbekannte Codes ab und bleibt von der Offenlegung getrennt", () => {
+  const text = captureDescriptions().get("place_call.language");
+  assert.ok(text, "der Pfad existiert");
+  for (const code of SUPPORTED_LANGUAGES) assert.ok(text.includes(code), `Katalog nennt ${code}`);
+  assert.match(text, /REJECTED/);
+  assert.match(text, /disclosure/i);
 });
 
 // AL-P13: der Consult-Kanal registriert zwei WEITERE Werkzeuge - aber NUR bei

@@ -278,7 +278,20 @@ function seedOwner(tenantOverrides = {}) {
 // Tenant A mit eigener aktiver Telnyx-Nummer. Per Default passiert er JEDES Gate (am
 // laufenden Server nachgemessen); jeder Fall senkt genau eine Achse ab. Fehlende Werte
 // werden WEGGELASSEN statt auf null gesetzt - die fail-closed-Praedikate lesen "fehlend".
-function seedTenantA({ kycLevel = "card", ownerName = "Alice A", status = "active" } = {}) {
+// P4a (F-2 Punkt 2): defaultLanguage ist NEU und bleibt fuer jeden Bestandsaufruf
+// undefined (keine Verhaltensaenderung) - nur die drei Faelle, die seit P4a die
+// GESPRAECHSSPRACHE des Tenants selbst pruefen, setzen ihn ausdruecklich. VORHER liess
+// sich das nicht messen: die Gespraechssprache folgte dem Angerufenen (calleeLanguage),
+// die Sprache des Tenants selbst war irrelevant. Seit der Umkehrung ist sie es nicht mehr
+// - TENANT_A braucht deshalb hier dieselbe Sprache wie sein DE-Ziel (TELNYX_TEST_PEER_
+// NUMBER), sonst misst ein Bestandsfall ploetzlich die neue Abweichungs-Lage, die er gar
+// nicht pruefen will.
+function seedTenantA({
+  kycLevel = "card",
+  ownerName = "Alice A",
+  status = "active",
+  defaultLanguage,
+} = {}) {
   return seedState({
     tenants: [
       { id: BOOTSTRAP_TENANT_ID, status: "active" },
@@ -288,6 +301,7 @@ function seedTenantA({ kycLevel = "card", ownerName = "Alice A", status = "activ
         idpSubject: SUBJECT_A,
         ...(ownerName ? { ownerName } : {}),
         ...(kycLevel ? { kycLevel } : {}),
+        ...(defaultLanguage ? { defaultLanguage } : {}),
       },
     ],
     numbers: [
@@ -814,7 +828,11 @@ test("EL-START T4 (b): Anbieter bricht die Verbindung ab -> 500, Call failed, ke
 
 test("EL-START T5 (a): der Anrufstart uebergibt owner_name und uebersteuert first_message NICHT", async (ctx) => {
   await withElevenLabs(
-    { seed: seedOwner(), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
+    // P4a: defaultLanguage "de" haelt die GESPRAECHSSPRACHE deckungsgleich mit der
+    // OFFENLEGUNGSSPRACHE des DE-Ziels (TELNYX_TEST_PEER_NUMBER) - dieser Fall misst den
+    // Bestandsfall OHNE Abweichung (kein first_message), nicht die seit P4a neue
+    // Abweichungs-Lage (die hat ihren eigenen Nachbau in test/place-call-sprachwahl.test.js, G5).
+    { seed: seedOwner({ defaultLanguage: "de" }), ownerNumber: TELNYX_TEST_OWNER_NUMBER },
     async ({ srv, mock }) => {
       const res = await placeCall(srv);
       assert.equal(res.status, HTTP_OK, "Vorbedingung: der Anruf muss ueberhaupt starten");
@@ -1034,7 +1052,11 @@ function spracheDesAnrufs(anfrage) {
 
 test("EL-START T5 (d): der Offenlegungssatz haengt an keiner Variablen ohne Default - blanker Auftraggeber-Name, Satz bleibt vollstaendig (Artikel 50 EU AI Act)", async (ctx) => {
   await withElevenLabs(
-    { env: MULTI, seed: seedTenantA({ ownerName: OWNER_NAME_BLANK }) },
+    // P4a: defaultLanguage "de" haelt die GESPRAECHSSPRACHE deckungsgleich mit der
+    // OFFENLEGUNGSSPRACHE des DE-Ziels (TELNYX_TEST_PEER_NUMBER) - dieser Fall misst den
+    // Bestandsfall OHNE Abweichung, nicht die seit P4a neue Abweichungs-Lage (die hat
+    // ihren eigenen Nachbau in test/place-call-sprachwahl.test.js, G5).
+    { env: MULTI, seed: seedTenantA({ ownerName: OWNER_NAME_BLANK, defaultLanguage: "de" }) },
     async ({ srv, mock }) => {
       const res = await placeCall(srv, SUBJECT_A);
       assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf startet: ${await res.text()}`);
@@ -2074,7 +2096,9 @@ test("EL-START T11 (Thema A): opening_line reist geprueft an den Anbieter UND li
     // ANTHROPIC_BASE_URL auf die EL-Attrappe: jeder LLM-Versuch endet dort als schneller
     // 404 (nicht-transient, kein Retry) - kein echtes Netz, kein Warten; die Treppe
     // faellt deterministisch auf Stufe 2 (Auftrag in der Bestands-Bruecke).
-    { env: MULTI, seed: seedTenantA() },
+    // P4a: defaultLanguage "de" haelt die GESPRAECHSSPRACHE deckungsgleich mit der
+    // OFFENLEGUNGSSPRACHE des DE-Ziels - dieselbe Begruendung wie bei T5 (d) oben.
+    { env: MULTI, seed: seedTenantA({ defaultLanguage: "de" }) },
     async ({ srv, mock }) => {
       const res = await placeCall(srv, SUBJECT_A);
       assert.equal(res.status, HTTP_OK, `Vorbedingung: der Anruf startet: ${await res.text()}`);

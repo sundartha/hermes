@@ -21,6 +21,8 @@
 // 4/5): er kann Nummern-/Auth-Fragmente tragen, und fuer die Kategorisierung reicht der
 // Status. Weitergegeben wird ausschliesslich err.providerStatus.
 
+import { disclosurePrefixFor } from "../i18n/locales.js";
+
 const OUTBOUND_CALL_PATH = "/v1/convai/sip-trunk/outbound-call";
 const CONVERSATION_PATH = "/v1/convai/conversations/";
 const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";
@@ -105,8 +107,17 @@ export const OVERRIDE_ALLOWED_LEAF_PATHS = Object.freeze(["agent.language", "tts
 // _besitz.felder[conversation_config_override_erlaubnisse]). Wir brechen den GESAMTEN
 // Anrufstart ab. Ein stiller Filter waere derselbe Fehler wie einst bei
 // context.open_questions.
-export const OVERRIDE_OWNER_ONLY_LEAF_PATHS = Object.freeze(["agent.first_message"]);
+// UMBENANNT (P4a): die Menge ist nicht mehr owner-only - seit F-2 darf agent.first_message
+// auch dann reisen, wenn Gespraechs- und Offenlegungssprache auseinanderlaufen (s.
+// assertDisclosureCarried). Der Name nennt jetzt das Feld statt einer von zwei Lagen.
+export const OVERRIDE_FIRST_MESSAGE_LEAF_PATHS = Object.freeze(["agent.first_message"]);
 const OVERRIDE_PATH_SEPARATOR = ".";
+
+// EIN Zugriffspfad fuer beide Waechter (G5) - conversation_config_override liegt drei
+// Ebenen tief, und ein zweiter, an derselben Stelle getippter Zugriff koennte abdriften.
+function overrideOf(body) {
+  return body?.conversation_initiation_client_data?.conversation_config_override;
+}
 
 function isPlainObject(wert) {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
@@ -135,16 +146,32 @@ function overrideLeafPaths(wert, prefix) {
 // Flag-Argumenten, F3/G15, zielt auf Verhaltens-Selektoren des Aufrufers - hier waere die
 // Aufspaltung der gefaehrlichere Weg). FAIL-CLOSED per Default: ein kuenftiger Aufrufer,
 // der den Wert vergisst, bekommt die strenge Menge.
-function assertOverrideWhitelisted(body, callId, calleeIsOwner = false) {
-  const override = body?.conversation_initiation_client_data?.conversation_config_override;
+//
+// P4a: dieselbe Haltung gilt fuer die zweite Lage, in der agent.first_message erlaubt ist
+// - Gespraechs-/Offenlegungssprache weichen ab (spracheWeichtAb weiter unten). Beide Lagen
+// oeffnen dieselbe Menge OVERRIDE_FIRST_MESSAGE_LEAF_PATHS, weil der Anbieter nur EINEN
+// first_message-Pfad kennt; welche Lage zutrifft, entscheidet danach assertDisclosureCarried.
+// Die erlaubte Menge FUER DIESEN Anruf - EINE Entscheidung, aus der Waechter UND Log/
+// Fehlertext lesen (G30: das Zusammensetzen ist keine eigene Aufgabe der Pruef-Funktion).
+function erlaubtePfadeFuer(override, { calleeIsOwner, disclosureLanguage }) {
+  const firstMessageErlaubt = calleeIsOwner === true || spracheWeichtAb(override, disclosureLanguage);
+  return firstMessageErlaubt
+    ? [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_FIRST_MESSAGE_LEAF_PATHS]
+    : OVERRIDE_ALLOWED_LEAF_PATHS;
+}
+
+// Die verbotenen Pfade dieses Koerpers - ein Wert, der gar kein Objekt ist, zaehlt selbst
+// als EIN Verstoss (kaputte Form ist keine Nicht-Pruefung).
+function verboteneOverridePfade(override, erlaubt) {
+  if (!isPlainObject(override)) return ["(conversation_config_override ist kein Objekt)"];
+  return overrideLeafPaths(override, []).filter((pfad) => !erlaubt.includes(pfad));
+}
+
+function assertOverrideWhitelisted(body, callId, { calleeIsOwner = false, disclosureLanguage = null } = {}) {
+  const override = overrideOf(body);
   if (override === undefined || override === null) return;
-  const erlaubt =
-    calleeIsOwner === true
-      ? [...OVERRIDE_ALLOWED_LEAF_PATHS, ...OVERRIDE_OWNER_ONLY_LEAF_PATHS]
-      : OVERRIDE_ALLOWED_LEAF_PATHS;
-  const verboten = isPlainObject(override)
-    ? overrideLeafPaths(override, []).filter((pfad) => !erlaubt.includes(pfad))
-    : ["(conversation_config_override ist kein Objekt)"];
+  const erlaubt = erlaubtePfadeFuer(override, { calleeIsOwner, disclosureLanguage });
+  const verboten = verboteneOverridePfade(override, erlaubt);
   if (verboten.length === 0) return;
   console.error(
     `[el-outbound] conversation_config_override abgelehnt (call=${callId}): verbotene(r) Pfad(e) ${verboten.join(", ")} - erlaubt sind ausschliesslich ${erlaubt.join(", ")}`,
@@ -152,6 +179,57 @@ function assertOverrideWhitelisted(body, callId, calleeIsOwner = false) {
   throw new Error(
     `ElevenLabs-Anrufstart abgebrochen: conversation_config_override enthaelt nicht erlaubte(n) Pfad(e) (${verboten.join(", ")})`,
   );
+}
+
+// P4a: laeuft die Gespraechssprache von der Offenlegungssprache weg? Der Vergleich liest
+// die gesendete Sprache aus dem KOERPER und die Offenlegungssprache aus der AUFLOESUNG -
+// zwei Quellen, sonst waere er tautologisch. disclosureLanguage === null heisst
+// "unbekannt" (Bestandsaufrufer) und damit "keine Abweichung nachweisbar".
+const spracheWeichtAb = (override, disclosureLanguage) =>
+  disclosureLanguage !== null && override?.agent?.language !== disclosureLanguage;
+
+// P4a (Artikel 50 EU AI Act, Absolute Regel 2, I-1): weicht die Gespraechssprache von der
+// Offenlegungssprache ab, MUSS dieser Anruf seine Eroeffnung selbst mitbringen UND sie MUSS
+// mit dem Pflichtsatz der OFFENLEGUNGSSPRACHE beginnen. Sonst spraeche der Anbieter den Satz
+// seines language_presets - in der Sprache, die der Auftraggeber gewaehlt hat, nicht der
+// Angerufene. Gemessen wird der namensunabhaengige Anfang (disclosurePrefixFor): den
+// Auftraggeber-Namen kennt dieser Waechter nicht, den Pflichtsatz schon.
+// EINZIGE AUSNAHME: das eigene Ziel (OC-P2) - dort ersetzt die Owner-Begruessung den Satz
+// per Eigentuemer-Entscheidung; eine Eroeffnung braucht es auch dort.
+// WIRFT VOR JEDEM NETZZUGRIFF - eine still ignorierte Uebersteuerung ist auf diesem Weg
+// erprobt (der Anbieter meldet keinen Fehler), und eine still fehlende Offenlegung waere
+// keine Offenlegung.
+const fehlendeEroeffnung = (eroeffnung) => typeof eroeffnung !== "string" || !eroeffnung;
+
+function fehlendeEroeffnungFehler(callId, override, disclosureLanguage) {
+  return new Error(
+    `Anrufstart abgebrochen (call=${callId}): agent.language=${override?.agent?.language} weicht von ` +
+      `der Offenlegungssprache ${disclosureLanguage} ab, aber der Anruf bringt keine eigene ` +
+      "agent.first_message mit - der Anbieter spraeche den Pflichtsatz seines Presets.",
+  );
+}
+
+function falscherPflichtsatzFehler(callId, disclosureLanguage) {
+  return new Error(
+    `Anrufstart abgebrochen (call=${callId}): agent.first_message beginnt nicht mit dem ` +
+      `Offenlegungssatz der Sprache ${disclosureLanguage} (Artikel 50 EU AI Act).`,
+  );
+}
+
+// Der einzige Fall, in dem eine getragene Eroeffnung TROTZDEM nicht den Pflichtsatz
+// beweisen muss: das eigene Ziel (OC-P2), wo die Owner-Begruessung an seine Stelle tritt.
+function pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner) {
+  if (calleeIsOwner === true) return false;
+  return !eroeffnung.startsWith(disclosurePrefixFor(disclosureLanguage));
+}
+
+function assertDisclosureCarried(body, callId, { calleeIsOwner = false, disclosureLanguage = null } = {}) {
+  const override = overrideOf(body);
+  if (!spracheWeichtAb(override, disclosureLanguage)) return;
+  const eroeffnung = override?.agent?.first_message;
+  if (fehlendeEroeffnung(eroeffnung)) throw fehlendeEroeffnungFehler(callId, override, disclosureLanguage);
+  if (pflichtsatzFehlt(eroeffnung, disclosureLanguage, calleeIsOwner))
+    throw falscherPflichtsatzFehler(callId, disclosureLanguage);
 }
 
 // EINE Stelle fuer Basis-URL, Schluessel-Header, Timeout und Fehlerpruefung (G5): beide
@@ -209,12 +287,24 @@ export function startResultOf(antwort) {
  * conversation_config_override etwas ausserhalb der Whitelist setzt (s.
  * assertOverrideWhitelisted oben) - callId dient nur diesem Log, kein Fachwert.
  * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object,
- *   callId?: string, calleeIsOwner?: boolean}} args calleeIsOwner: OC-P2 - nur bei true
- *   ist zusaetzlich OVERRIDE_OWNER_ONLY_LEAF_PATHS erlaubt; Default false (fail-closed).
+ *   callId?: string, calleeIsOwner?: boolean, disclosureLanguage?: string|null}} args
+ *   calleeIsOwner: OC-P2 - nur bei true (oder bei P4a-Sprachabweichung) ist zusaetzlich
+ *   OVERRIDE_FIRST_MESSAGE_LEAF_PATHS erlaubt; Default false (fail-closed).
+ *   disclosureLanguage: P4a - die aufgeloeste Sprache des Pflichtsatzes; Default null
+ *   (unbekannt = Bestandsaufrufer, keine Abweichung nachweisbar, fail-closed).
  * @returns {Promise<{conversationId: string|null}>}
  */
-export async function startOutboundCall({ fetchImpl, account, body, callId, calleeIsOwner = false }) {
-  assertOverrideWhitelisted(body, callId, calleeIsOwner);
+export async function startOutboundCall({
+  fetchImpl,
+  account,
+  body,
+  callId,
+  calleeIsOwner = false,
+  disclosureLanguage = null,
+}) {
+  const eroeffnungsKontext = { calleeIsOwner, disclosureLanguage };
+  assertOverrideWhitelisted(body, callId, eroeffnungsKontext);
+  assertDisclosureCarried(body, callId, eroeffnungsKontext);
   const antwort = await convaiFetch({
     fetchImpl,
     account,
