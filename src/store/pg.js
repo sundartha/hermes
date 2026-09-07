@@ -442,6 +442,26 @@ export function makePgStore(runner) {
       if (result.changed) save();
       return result;
     },
+    // P2 (Stufe 0): saved wie markConsultAnswerDelivered - askDeliveredAt liegt in
+    // derselben consults-Spalte und muss einen Instanzwechsel ueberleben.
+    markConsultAskDelivered(callId, eventId) {
+      const result = ops.markConsultAskDelivered(requireState(), callId, eventId);
+      if (result.changed) save();
+      return result;
+    },
+    // P2 (Stufe 1): saved wie oben - die Quittung ist genauso persistent wie die Zustellung.
+    ackConsult(callId, input) {
+      const result = ops.ackConsult(requireState(), callId, input);
+      if (result.changed) save();
+      return result;
+    },
+    // P2: der gestaffelte Abbruch - Status und Grund in einem Schreibweg, saved wie
+    // advanceInCallConsult (derselbe Zustand, dieselbe Spalte).
+    timeOutStagedConsult(callId, input) {
+      const result = ops.timeOutStagedConsult(requireState(), callId, input);
+      if (result.changed) save();
+      return result;
+    },
     expireOpenConsults(callId) {
       const { call, changed } = ops.expireOpenConsults(requireState(), callId);
       if (changed) save();

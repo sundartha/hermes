@@ -424,6 +424,15 @@ services:
         value: "4000"
       - key: CONSULT_OPEN_MS
         value: "47000"
+      # ---- Gestaffelter Halt des ElevenLabs-Rueckfrage-Webhooks (P2, W2) ---- Drei
+      # Stufen statt einer Pauschalfrist (Zustellung/Quittung/Antwort). VORLAEUFIG (E-6):
+      # keine Messung fuer Stufe 0/1, aus P3-Telemetrie nachzukalibrieren.
+      - key: EL_CONSULT_DELIVERY_MS
+        value: "5000"
+      - key: EL_CONSULT_ACK_MS
+        value: "5000"
+      - key: EL_CONSULT_ANSWER_MS
+        value: "30000"
       # ---- Denk-Signal (AL-P7b) ---- Default AUS (fail-closed): kein Prompt-Block, kein
       # zusaetzliches SSE-Fragment. Braucht TELNYX_SHIM_TOKEN_STREAMING=true, um zu wirken.
       - key: THINKING_SIGNAL_ENABLED

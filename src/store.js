@@ -188,6 +188,12 @@ export const {
   // waere store.markConsultAnswerDelivered auf der Fassade undefined -> der Shim wuerfe
   // zur Laufzeit einen TypeError (Muster answerConsult).
   markConsultAnswerDelivered,
+  // P2: Zustell-, Quittungs- und Abbruch-Marker der gestaffelten Rueckfrage. OHNE diese
+  // Re-Exports waeren sie auf der Fassade undefined -> die Poll-Route, die Antwort-Route
+  // und der EL-Warter wuerfen zur Laufzeit einen TypeError (Muster answerConsult).
+  markConsultAskDelivered,
+  ackConsult,
+  timeOutStagedConsult,
   expireOpenConsults,
   pendingConsult,
   // AL-P14: In-Call-Rueckfrage. OHNE diese Re-Exports waeren sie auf der Fassade

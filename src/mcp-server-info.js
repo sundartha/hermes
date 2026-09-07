@@ -78,7 +78,15 @@ export const HERMES_SERVER_INFO = {
 export const MCP_CONSULT_INSTRUCTIONS =
   "While a call placed with place_call is running, keep calling await_call_event with " +
   "that call_id, again and again, until it returns event=\"done\". " +
-  "When it returns event=\"consult\", answer the questions briefly and factually with " +
+  "When it returns event=\"consult\", " +
+  // P2 (SCOPE 2): das Ausbleiben der Quittung IST der Berechtigungstest - deshalb steht
+  // die Pflicht an BEIDEN Orten, Werkzeugbeschreibung UND Instruktionsblock. Bewusst
+  // OHNE Sekundenzahl (Muster GQ-B1): die Fristen liegen in der Konfiguration und
+  // wuerden im Text veralten.
+  "the instant a consult arrives, call answer_consult once with status=\"working\" and no " +
+  "answers - if that acknowledgement does not arrive within seconds, the server assumes " +
+  "nobody can answer and lets the agent move on. Then answer the questions briefly and " +
+  "factually with " +
   // GQ-B2: Der Owner ist waehrend des Anrufs ABWESEND (Normalfall). Der Wert dieses Kanals
   // liegt in den EIGENEN Quellen des auftraggebenden Assistenten (Kalender, Mail, Dateien,
   // Chat-Kontext), nicht im Durchreichen an den Menschen - deshalb steht der eigene Weg

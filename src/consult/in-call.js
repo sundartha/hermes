@@ -33,8 +33,16 @@ export const CONSULT_WAIT_MS = config.tenancy.consultWaitMs;
 // GQ-P2 (W2): die lange Frist - wie lange die Rueckfrage OFFEN bleibt und eine
 // eintreffende Antwort noch annimmt. Getrennt von CONSULT_WAIT_MS, weil "warten" und
 // "sterben" zwei verschiedene Dinge sind: der Agent spricht laengst weiter, waehrend der
-// Kanal noch offen ist. Ein laenger offener Consult verlaengert KEIN Gespraech - es wird
-// nirgends gewartet, und expireOpenConsults schliesst ihn spaetestens am Call-Ende.
+// Kanal noch offen ist. Ein laenger offener Consult verlaengert KEIN Gespraech -
+// AUF DIESEM WEG (Budget-/Telnyx-Engine) wird nirgends gewartet, und expireOpenConsults
+// schliesst ihn spaetestens am Call-Ende.
+//
+// AUF DEM ELEVENLABS-WEG GILT DAS NICHT, und die Ungenauigkeit war ein Befund vom
+// 06.09.2026 (PLAN-ANRUFDEFEKTE W2): dort haelt der Rueckfrage-Webhook seinen Request
+// offen und friert die Leitung ein, solange er wartet
+// (conversation/consult-raised.js, "ES WIRD GEWARTET"). Seit P2 ist dieser Halt
+// gestaffelt und laeuft gegen EL_CONSULT_DELIVERY/ACK/ANSWER_MS, nicht gegen
+// CONSULT_OPEN_MS. Diese Konstante hier bleibt der Wert des MCP-Long-Poll-Wegs (E-5).
 export const CONSULT_OPEN_MS = config.tenancy.consultOpenMs;
 
 // Wie frisch ein Client-Poll sein muss, damit das Werkzeug ueberhaupt angeboten wird.

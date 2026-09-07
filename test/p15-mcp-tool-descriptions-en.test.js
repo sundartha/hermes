@@ -192,9 +192,12 @@ const EXPECTED_CONSULT_MARKERS = {
   // GQ-B2 Fix-Runde 1: "ask the user FIRST" ist raus (Owner ist waehrend des Anrufs
   // abwesend, siehe gq-b1-briefing-openness.test.js GQ-B2-05) - keine neue Emphase kam
   // nach.
-  answer_consult: ["SHORT", "REJECTED", "NOT"],
+  // P2 (SCOPE 2): FIRST/THEN sind neu - die Pflicht zur sofortigen Quittung
+  // (status="working") VOR der eigentlichen Antwort.
+  answer_consult: ["FIRST", "THEN", "SHORT", "REJECTED", "NOT"],
   "answer_consult.call_id": [],
   "answer_consult.event_id": [],
+  "answer_consult.status": [],
   "answer_consult.answers": [],
 };
 

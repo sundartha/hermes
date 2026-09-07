@@ -57,6 +57,12 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 // kommt, gehoert in einen anderen Gespraechsabschnitt (Kein Fail-open).
 const CONSULT_WAIT_MAX_MS = 60_000;
 const CONSULT_OPEN_MAX_MS = 300_000;
+// P2 (W2): Obergrenze JEDER der drei EL-Rueckfrage-Fristen. Bindend ist
+// response_timeout_secs = 60 am Werkzeug get_consult (live gemessen, Vorlage
+// tools.get_consult.tool_config); 55 s lassen 5 s fuer Netz und Verarbeitung. EINE Zahl
+// fuer alle drei Stufen (G5) - eine Stufe, die ueber das Werkzeug-Zeitlimit hinaus haelt,
+// laesst den Anbieter den Aufruf abbrechen, statt zu antworten.
+const EL_CONSULT_STAGE_MAX_MS = 55_000;
 
 // Sentinel fuer einen Boot ohne Deploy-Metadatum (lokal / fremder Host). Exportiert,
 // damit Boot-Banner-, /healthz- und Testcode denselben Wert nutzen (G25/G5).
@@ -1687,6 +1693,39 @@ const rawConfig = {
     min: 0,
     max: CONSULT_OPEN_MAX_MS,
   }),
+  // P2 (W2/E-1): der Halt des ElevenLabs-Rueckfrage-Webhooks ist GESTAFFELT - erst wird
+  // geprueft, ob der Kanal traegt, dann wird auf die Antwort gewartet. Eine pauschale
+  // Frist kann "kann hier ueberhaupt jemand antworten?" (Millisekunden) und "wie lautet
+  // die Antwort?" (Sekunden) nicht gleichzeitig beantworten.
+  // ENV-AENDERBAR und NICHT Modul-Konstante (E-1): genau die Zahl, die den Kanal toeten
+  // kann, muss ohne Code-Aenderung korrigierbar sein.
+  // ALLE DREI SIND VORLAEUFIG (E-6): fuer Stufe 0 und 1 existiert KEINE Messung, weil
+  // genau diese Zeitpunkte bis heute nicht protokolliert werden (N-10). Sie sind in EINE
+  // Richtung sicher gewaehlt - zu kurz heisst "der Agent redet weiter", zu lang heisst
+  // "Stille am Telefon". P3 liefert die Telemetrie, aus der beide nachkalibriert werden.
+  // Stufe 0: wurde die Frage an einen pollenden Client AUSGELIEFERT?
+  elConsultDeliveryMs: numEnv("EL_CONSULT_DELIVERY_MS", process.env.EL_CONSULT_DELIVERY_MS, {
+    fallback: 5000,
+    min: 0,
+    max: EL_CONSULT_STAGE_MAX_MS,
+  }),
+  // Stufe 1: hat der Client quittiert? ZUSAETZLICH zu Stufe 0 (Summe = 10 000 ms ab
+  // Entstehung). Das Ausbleiben der Quittung IST der Berechtigungstest: fehlt die
+  // Connector-Berechtigung fuer answer_consult, laeuft die Quittung in denselben Dialog
+  // und bleibt aus - Abbruch nach 10 s statt nach 47 s (N-10, Aussage des Eigentuemers).
+  elConsultAckMs: numEnv("EL_CONSULT_ACK_MS", process.env.EL_CONSULT_ACK_MS, {
+    fallback: 5000,
+    min: 0,
+    max: EL_CONSULT_STAGE_MAX_MS,
+  }),
+  // Stufe 2: die eigentliche Antwort, GESAMT ab Entstehung. GEMESSEN hergeleitet: alle je
+  // beantworteten Rueckfragen dieses Tenants kamen in 7,8-19,6 s (5 Faelle, gesamte
+  // Historie) - 30 s tragen diesen Normalfall mit Marge.
+  elConsultAnswerMs: numEnv("EL_CONSULT_ANSWER_MS", process.env.EL_CONSULT_ANSWER_MS, {
+    fallback: 30000,
+    min: 0,
+    max: EL_CONSULT_STAGE_MAX_MS,
+  }),
   // Self-Service-Schicht (I9): getrenntes Tenant-Dashboard + Self-Service-Settings-
   // Route hinter eigenem Reife-Flag. DEFAULT AUS (fail-closed): die Self-Service-
   // Routen existieren ohne das Flag schlicht nicht (404) -> heutiges Admin-Dashboard
@@ -2195,7 +2234,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
-  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs"],
+  tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],
   store: ["storeBackend", "databaseUrl", "queueBackend"],
   metrics: ["metricsEnabled"],

@@ -21,10 +21,11 @@
 // injiziert (EINE Quelle, INV-7).
 import { Router } from "express";
 import { VOICE_ENGINE } from "../config.js";
-import { normNum, CONSULT_ANSWER } from "../store/defaults.js";
+import { normNum, CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../store/defaults.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
+import { CONSULT_EVENT } from "../consult/delivery.js";
 import { isConsultEventId } from "../store/state-ops.js";
 import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
@@ -139,6 +140,56 @@ function elevenLabsHangUpActionNotWired(_endActiveCall, call) {
 // outboundGates-Kette: beide Praedikate lehnen nie ab, wuerden von keinem Gate gelesen und
 // haetten die reihenfolge-gepinnte Safety-Kette nur verbreitert
 // (test/outbound-gates-order.test.js bleibt unangetastet).
+// P2 (Review-Fix Runde 1, S1/CLAUDE.md "keine neuen abgeschaltete Sicherungen"): reine
+// Formpruefung ausgelagert - EIN Verzweigungspunkt statt der zusammengesetzten
+// Bedingung (status !== undefined && status !== WORKING && status !== FINAL) direkt in
+// der Route. Modul-Ebene wie resolveCallPrivacyFlags oben (G30/G34, eine
+// Abstraktionsebene je Funktion) - macht den am 2026-09-06 gepinnten
+// Komplexitaets-Befund ueberfluessig statt ihn hinzunehmen.
+function invalidConsultAnswerStatus(status) {
+  if (status === undefined) return null;
+  if (status === CONSULT_ANSWER_MODE.WORKING || status === CONSULT_ANSWER_MODE.FINAL) return null;
+  return "status ist ungueltig";
+}
+
+// P2 (Review-Fix Runde 1): der leichte Quittungs-Zweig (status=WORKING) ausgelagert -
+// gleiches Muster wie consultResponseBody in webhooks-elevenlabs.js (G30/eine
+// Abstraktionsebene je Funktion). Reiner Aufruf ohne eigenen Verzweigungspunkt in der
+// Route selbst; Ablehnungscode 409 UNVERAENDERT, nur verschoben.
+function ackWorkingConsult({ store, audit, req, res, call, eventId }) {
+  const { outcome } = store.ackConsult(call.id, { eventId });
+  // Eigene Aktion statt "consult_answered": eine Quittung ist keine Antwort, und der
+  // Forensik-Trail von P3 muss beides unterscheiden koennen. PII-frei - Kennungen und
+  // Ergebnis-Token, nie der Fragetext (Regel 4).
+  audit("consult_acked", req, `call=${call.id} event=${eventId} ergebnis=${outcome}`);
+  if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
+  return res.json({ accepted: true, merged_facts: 0 });
+}
+
+// P2 (Review-Fix Runde 1): der volle Antwort-Zweig (status=FINAL/Bestand) ausgelagert -
+// gleiche Begruendung wie ackWorkingConsult oben. Verhalten byte-identisch zum Vorzustand,
+// nur aus der Route in eine eigene Funktion verschoben.
+function answerConsultFinal({ store, audit, req, res, call, eventId, answers }) {
+  const validated = validateAssistantContext({ key_facts: answers });
+  if (validated.error || !validated.value)
+    return res.status(400).json({ error: validated.error || "answers ist Pflicht" });
+  // GQ-P2: die Offen-Frist-KONSTANTE kommt aus dem Consult-Modul (G22/EINE Quelle),
+  // der DB-Zugriff bleibt am injizierten store (DIP).
+  const { outcome, mergedFacts } = store.answerConsult(call.id, {
+    eventId,
+    facts: validated.value.key_facts,
+    nowMs: Date.now(),
+    openMs: CONSULT_OPEN_MS,
+  });
+  audit(
+    "consult_answered",
+    req,
+    `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${mergedFacts}`,
+  );
+  if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
+  return res.json({ accepted: true, merged_facts: mergedFacts });
+}
+
 function resolveCallPrivacyFlags({ store, config, ctx }) {
   const ownNumber = store.tenantPrivateNumber(ctx.tenantId);
   const diagnostic = diagnosticRetentionGranted({
@@ -504,6 +555,13 @@ export function makeCallRoutes({
       afterEventId: typeof req.query.after === "string" ? req.query.after : null,
       signal: null,
     });
+    // P2 (Stufe 0, N-10): DIES ist die Zustellung - der Client bekommt die Frage mit dieser
+    // Antwort in die Hand. Bis heute war nirgends festgehalten, ob eine Rueckfrage jemals
+    // einen Client ERREICHT hat; die Aufklaerung am 06.09. brauchte deshalb eine
+    // Zeugenaussage statt einer Messung. Der Marker gehoert an den Datensatz und nicht in
+    // waitForEvent: consult/delivery.js liest, es schreibt nicht.
+    if (event.event === CONSULT_EVENT.CONSULT && event.eventId)
+      store.markConsultAskDelivered(call.id, event.eventId);
     res.json(event);
   });
 
@@ -522,33 +580,21 @@ export function makeCallRoutes({
       return res
         .status(403)
         .json({ error: "Consult-Kanal ist fuer diesen Tenant nicht freigegeben." });
-    const { event_id: eventId, answers } = req.body || {};
+    const { event_id: eventId, answers, status } = req.body || {};
     // event_id ist Client-Freitext ueber einen authentifizierten Endpunkt. Format-
     // Pruefung VOR jeder Weiterverarbeitung (auch vor dem Audit-Log unten) - sonst
     // landet beliebiger Text im Forensik-Trail (Regel 4: keine Freitext-Audit-Zeile).
     if (!isConsultEventId(eventId))
       return res.status(400).json({ error: "event_id ist ungueltig" });
-    const validated = validateAssistantContext({ key_facts: answers });
-    if (validated.error || !validated.value)
-      return res.status(400).json({ error: validated.error || "answers ist Pflicht" });
-    // GQ-P2: die Offen-Frist-KONSTANTE kommt aus dem Consult-Modul (G22/EINE Quelle),
-    // der DB-Zugriff bleibt am injizierten store (DIP) - anders als claude.js/der Shim ist
-    // diese Route Factory-basiert und wird mit einem Store-Double getestet (P4); ein
-    // direkter Aufruf von in-call.js's acceptConsultAnswer wuerde am Test-Double vorbei
-    // immer den echten Singleton-Store treffen.
-    const { outcome, mergedFacts } = store.answerConsult(call.id, {
-      eventId,
-      facts: validated.value.key_facts,
-      nowMs: Date.now(),
-      openMs: CONSULT_OPEN_MS,
-    });
-    audit(
-      "consult_answered",
-      req,
-      `call=${call.id} event=${eventId} ergebnis=${outcome} fakten=${mergedFacts}`,
-    );
-    if (outcome !== CONSULT_ANSWER.ACCEPTED) return res.status(409).json({ error: outcome });
-    res.json({ accepted: true, merged_facts: mergedFacts });
+    // P2 (SCOPE 2): der leichte Modus. AUSDRUECKLICH ueber status und NICHT ueber ein
+    // fehlendes answers-Feld: ein Client, der answers vergisst, wuerde sonst still
+    // quittieren statt zu antworten - der Fehler saehe wie Erfolg aus. Fehlender status =
+    // FINAL, damit jeder Bestands-Aufrufer byte-identisch bleibt.
+    const statusError = invalidConsultAnswerStatus(status);
+    if (statusError) return res.status(400).json({ error: statusError });
+    if (status === CONSULT_ANSWER_MODE.WORKING)
+      return ackWorkingConsult({ store, audit, req, res, call, eventId });
+    return answerConsultFinal({ store, audit, req, res, call, eventId, answers });
   });
 
   // Laufenden Anruf sauber abbrechen

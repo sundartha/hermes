@@ -691,6 +691,29 @@ export function markConsultAnswerDelivered(callId) {
   return result;
 }
 
+// P2 (Stufe 0): saved wie markConsultAnswerDelivered - askDeliveredAt liegt in derselben
+// consults-Spalte und muss einen Instanzwechsel ueberleben.
+export function markConsultAskDelivered(callId, eventId) {
+  const result = ops.markConsultAskDelivered(load(), callId, eventId);
+  if (result.changed) save();
+  return result;
+}
+
+// P2 (Stufe 1): saved wie oben - die Quittung ist genauso persistent wie die Zustellung.
+export function ackConsult(callId, input) {
+  const result = ops.ackConsult(load(), callId, input);
+  if (result.changed) save();
+  return result;
+}
+
+// P2: der gestaffelte Abbruch - Status und Grund in einem Schreibweg, saved wie
+// advanceInCallConsult (derselbe Zustand, dieselbe Spalte).
+export function timeOutStagedConsult(callId, input) {
+  const result = ops.timeOutStagedConsult(load(), callId, input);
+  if (result.changed) save();
+  return result;
+}
+
 export function expireOpenConsults(callId) {
   const { call, changed } = ops.expireOpenConsults(load(), callId);
   if (changed) save();

@@ -1261,19 +1261,31 @@ function consultAlive(ageMs, openMs) {
   return Number.isFinite(ageMs) && Number.isFinite(openMs) && ageMs < openMs;
 }
 
+// P2: die gemeinsame Vorpruefung BEIDER Schreibkanten einer Rueckfrage (Quittung und
+// Antwort). EINE Reihenfolge der Ablehnungen (G5): Call vorbei -> unbekanntes Ereignis ->
+// nicht mehr offen. Zwei Formulierungen koennten auseinanderlaufen, und dann naehme die
+// eine Kante an, was die andere Millisekunden spaeter verwirft. Reiner Leser.
+function openConsultFor(s, callId, eventId) {
+  const call = getCall(s, callId);
+  if (!call || call.status !== "active")
+    return { call: call || null, consult: null, outcome: CONSULT_ANSWER.CALL_ENDED };
+  const consult = Array.isArray(call.consults)
+    ? call.consults.find((c) => c.id === eventId)
+    : null;
+  if (!consult) return { call, consult: null, outcome: CONSULT_ANSWER.UNKNOWN_EVENT };
+  if (consult.status !== CONSULT_STATUS.OPEN)
+    return { call, consult, outcome: CONSULT_ANSWER.ALREADY_ANSWERED };
+  return { call, consult, outcome: null };
+}
+
 // Antwort einspeisen. facts sind BEREITS validiert (validateAssistantContext an der
 // Route) - diese Ebene kennt keine Validierung, sie fuehrt Buch (G30/G34: eine
 // Abstraktionsebene). Reihenfolge der Ablehnungen ist bindend: Call vorbei ->
 // unbekanntes Ereignis -> schon beantwortet -> Frist abgelaufen.
 export function answerConsult(s, callId, { eventId, facts, nowMs, openMs }) {
-  const call = getCall(s, callId);
-  const reject = (outcome) => ({ call: call || null, changed: false, outcome, mergedFacts: 0 });
-  if (!call || call.status !== "active") return reject(CONSULT_ANSWER.CALL_ENDED);
-  const consult = Array.isArray(call.consults)
-    ? call.consults.find((c) => c.id === eventId)
-    : null;
-  if (!consult) return reject(CONSULT_ANSWER.UNKNOWN_EVENT);
-  if (consult.status !== CONSULT_STATUS.OPEN) return reject(CONSULT_ANSWER.ALREADY_ANSWERED);
+  const { call, consult, outcome } = openConsultFor(s, callId, eventId);
+  const reject = (o) => ({ call: call || null, changed: false, outcome: o, mergedFacts: 0 });
+  if (outcome) return reject(outcome);
   // GQ-P2: NUR der In-Call-Consult hat eine Wanduhr-Frist. Consult #0 (Klingelzeit,
   // AL-P13) wartet ausschliesslich auf den Client und darf nie an der Uhr sterben - er
   // ueberspringt dieses Gate vollstaendig (Bestandsverhalten byte-identisch). Fuer den
@@ -1510,6 +1522,66 @@ export function markConsultAnswerDelivered(s, callId) {
       marked += 1;
     }
   return { call, changed: marked > 0, marked };
+}
+
+// P2 (Stufe 0, N-10): die FRAGE ist bei einem pollenden Client angekommen. Nebeneffekt im
+// Namen (N7). askDeliveredAt und NICHT deliveredAt: deliveredAt ist seit GQ-P7 vergeben
+// und bedeutet das GEGENTEIL - dass die ANTWORT einen Modell-Turn gesehen hat
+// (answerAwaitsDelivery). Dasselbe Feld doppelt zu belegen wuerde das Zustellfenster der
+// Budget-Engine dauerhaft schliessen.
+// EINMALIG: der ERSTE Zeitpunkt bleibt stehen. Ein Client, der dieselbe Frage nach einem
+// verlorenen Poll erneut zieht, verschoebe sonst die Frist, gegen die er gemessen wird.
+export function markConsultAskDelivered(s, callId, eventId) {
+  const call = getCall(s, callId);
+  const consult = Array.isArray(call?.consults)
+    ? call.consults.find((c) => c.id === eventId)
+    : null;
+  if (!consult || consult.status !== CONSULT_STATUS.OPEN || consult.askDeliveredAt)
+    return { call: call || null, changed: false };
+  consult.askDeliveredAt = new Date().toISOString();
+  return { call, changed: true };
+}
+
+// P2 (Stufe 1): die QUITTUNG - "ich habe die Frage, ich arbeite daran". Nebeneffekt im
+// Namen (N7). Sie haengt an DERSELBEN Berechtigung wie die Antwort (SCOPE 2), deshalb
+// dieselbe Route, dieselbe Vorpruefung (openConsultFor), dieselben Ablehnungscodes.
+// IDEMPOTENT: eine zweite Quittung ist accepted mit changed:false - ein wiederholender
+// Client soll nicht in einen Fehler laufen.
+export function ackConsult(s, callId, { eventId }) {
+  const { call, consult, outcome } = openConsultFor(s, callId, eventId);
+  if (outcome) return { call: call || null, changed: false, outcome };
+  if (consult.ackedAt) return { call, changed: false, outcome: CONSULT_ANSWER.ACCEPTED };
+  consult.ackedAt = new Date().toISOString();
+  return { call, changed: true, outcome: CONSULT_ANSWER.ACCEPTED };
+}
+
+// P2 (S1-1-Fix, Review Runde 1): der Abbruch EINER Stufe - Status UND Grund in EINEM
+// Schritt, EIN Schreibweg. GEZIELTE Mutation ueber consultId, NICHT mehr ueber
+// advanceInCallConsult: dessen Suche nach "der ersten offenen Rueckfrage"
+// (inCallConsults(call).find(...), Array-Position) trifft bei ZWEI GLEICHZEITIG offenen
+// In-Call-Consults (MAX_OPEN_POLLS_PER_CALL=2, consult/delivery.js) nicht zuverlaessig
+// GENAU den Consult, dessen eigene Stufe gerade abgelaufen ist - der Aufrufer
+// (conversation/consult-raised.js:awaitAnswer) hat sein Stufen-Ergebnis (expiredStage)
+// bereits fuer GENAU diese consultId gerechnet. Verwechselte Reihenfolge hiess: der
+// falsche (noch legitime) Consult wurde auf timed_out gesetzt, waehrend der eigentliche
+// Ziel-Consult unveraendert offen blieb, OHNE timeoutReason - und awaitAnswer gab dem
+// Anbieter trotzdem bedingungslos "timed out" zurueck (Phantom-Datensatz, E-2).
+//
+// stageMs ist die Frist, die laut expiredStage gerade gerissen ist; consultAlive prueft
+// dieselbe Wanduhr-Formel wie advanceInCallConsult (EINE Quelle, G5). Unbekannte Kennung
+// oder ein Consult, der nicht mehr OPEN ist (schon beantwortet/abgelaufen/verwaist),
+// ist ein No-op - der Aufrufer hat dann bereits einen anderen Zweig genommen
+// (consult.status !== OPEN direkt in awaitAnswer) und diese Funktion darf ihn nicht
+// nachtraeglich ueberschreiben.
+export function timeOutStagedConsult(s, callId, { consultId, reason, nowMs, stageMs }) {
+  const call = getCall(s, callId);
+  const consult = call?.consults?.find((c) => c.id === consultId) ?? null;
+  const idle = { call: call || null, changed: false, wait: CONSULT_WAIT.NONE };
+  if (!consult || consult.status !== CONSULT_STATUS.OPEN) return idle;
+  if (consultAlive(consultAgeMs(consult, nowMs), stageMs)) return idle;
+  consult.status = CONSULT_STATUS.TIMED_OUT;
+  consult.timeoutReason = reason;
+  return { call, changed: true, wait: CONSULT_WAIT.TIMED_OUT };
 }
 
 // AL-P14: der Client hat auf diesen Call gepollt. EPHEMER (kein save, keine Spalte -

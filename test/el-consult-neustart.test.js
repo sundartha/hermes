@@ -151,6 +151,21 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // zeigt weiterhin, dass ein einzelner 401 den Anruf NICHT sofort beendet.
 const EL_RESULT_POLL_MS_OHNE_INTERFERENZ = "60000";
 
+// P2 (W2): der EL-Halt laeuft seit P2 nicht mehr pauschal gegen CONSULT_OPEN_MS, sondern
+// gestaffelt gegen drei Fristen (Zustellung/Quittung/Antwort). Diese Datei misst einen
+// FLACHEN Ablauf (der Auftraggeber quittiert nie mit status="working") und braucht deshalb
+// weiterhin GENAU EINEN Zeitpunkt: alle drei Stufen werden auf denselben Wert gesetzt
+// (ACK additiv 0, s. EL_CONSULT_ACK_MS unten), damit Zustellung, Quittung und Antwort exakt
+// bei derselben Wanduhr-Marke ablaufen - unabhaengig davon, ob ein Fall zwischendurch pollt
+// (das setzt askDeliveredAt und ueberspringt nur Stufe 0, nicht die Ablaufzeit selbst).
+function elStagesFlach(ms) {
+  return {
+    EL_CONSULT_DELIVERY_MS: String(ms),
+    EL_CONSULT_ACK_MS: "0",
+    EL_CONSULT_ANSWER_MS: String(ms),
+  };
+}
+
 const CONSULT_ON_ENV = Object.freeze({
   CONSULT_ENABLED: "true",
   ASSISTANT_CONTEXT_ENABLED: "true",
@@ -160,6 +175,7 @@ const CONSULT_ON_ENV = Object.freeze({
   CONSULT_OPEN_MS: String(OPEN_MS),
   SHUTDOWN_DRAIN_TIMEOUT_MS: String(DRAIN_TIMEOUT_MS),
   ELEVENLABS_RESULT_POLL_MS: EL_RESULT_POLL_MS_OHNE_INTERFERENZ,
+  ...elStagesFlach(OPEN_MS),
 });
 
 // Dieselbe Konfiguration mit der KURZEN Haltefrist - die Umgebung der beiden Ablauf-Faelle
@@ -171,6 +187,7 @@ const CONSULT_ON_ENV = Object.freeze({
 const KURZE_FRIST_ENV = Object.freeze({
   ...CONSULT_ON_ENV,
   CONSULT_OPEN_MS: String(KURZ_OFFEN_MS),
+  ...elStagesFlach(KURZ_OFFEN_MS),
 });
 
 // Ein laufender Outbound-Anruf mit Anbieter-Kennung. maxDurationS grosszuegig, damit der

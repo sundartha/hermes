@@ -225,10 +225,18 @@ function makeRouteStore({ allowConsult = true, tenantId = TENANT, status = "acti
     resolveProfile: () => ({ allowConsult }),
     emitConsult: (id, q) => ops.emitConsult(state, id, q).call,
     answerConsult: (id, input) => ops.answerConsult(state, id, input),
+    // P2 (Review-Fix Runde 2, T-NEU-1): die Quittung (status=WORKING) braucht diese
+    // Methode - ohne sie wirft ackWorkingConsult (api-calls.js) einen TypeError, sobald
+    // ein Test den Zweig tatsaechlich anspricht (bisher war er ungetestet).
+    ackConsult: (id, input) => ops.ackConsult(state, id, input),
     pendingConsult: (id, after) => ops.pendingConsult(state, id, after),
     // AL-P14: der Lesepfad bucht seit dieser Phase den Poll am Call mit (ephemer). Das
     // Test-Double muss die Methode kennen, sonst wirft die Route einen TypeError.
     noteConsultPoll: (id) => ops.noteConsultPoll(state, id),
+    // P2 (Stufe 0): derselbe Lesepfad haelt seit dieser Phase zusaetzlich die Zustellung
+    // am Consult-Datensatz fest. Muster noteConsultPoll - ohne den Eintrag hier wirft die
+    // Route denselben TypeError.
+    markConsultAskDelivered: (id, eventId) => ops.markConsultAskDelivered(state, id, eventId),
     tenantGeo: () => ({ country: null, defaultLanguage: null }),
   };
 }
@@ -411,6 +419,96 @@ test("AL-P13-18: der Lesepfad liefert Ereignis/Kennung/Fragen - und NIE ein Tran
     assert.equal(res.status, 200);
     assert.deepEqual(body, { event: "consult", eventId: "c0", questions: QUESTIONS });
     assert.ok(!JSON.stringify(body).includes("GEHEIMES TRANSKRIPT"));
+  } finally {
+    await srv.stop();
+  }
+});
+
+// P2 (Review-Fix Runde 2): kurze Helfer-Funktion statt einer sechsgliedrigen Kette (G36,
+// Gesetz von Demeter) - EINE Stelle, die weiss, wie der eine gesetzte Test-Consult zu
+// finden ist, statt die Kette in jedem der drei neuen Tests unten zu wiederholen.
+function firstConsultOf(store) {
+  const call = store.state.calls[0];
+  return call.consults[0];
+}
+
+const HTTP_OK = 200;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_CONFLICT = 409;
+
+// P2 (Review-Fix Runde 2, T-NEU-1): der GET-Poll ist die Zustellung (Kommentar an der
+// Route, "P2 (Stufe 0, N-10)") - bisher unbewiesen, dass sie tatsaechlich greift. Ueber
+// den ECHTEN Route-Aufruf (kein direkter ops-Call) geprueft, danach am Store-Zustand.
+test("AL-P13-47: der echte GET-Poll setzt askDeliveredAt am Consult-Datensatz", async () => {
+  const store = makeRouteStore();
+  ops.emitConsult(store.state, CALL_ID, ["A"]);
+  const srv = await mountCallRoutes(store);
+  try {
+    assert.equal(firstConsultOf(store).askDeliveredAt, undefined, "vor dem Poll unberuehrt");
+    const pollResponse = await fetch(`${srv.base}/api/calls/${CALL_ID}/consult`);
+    assert.equal(pollResponse.status, HTTP_OK);
+    assert.ok(firstConsultOf(store).askDeliveredAt, "der echte Poll hat die Zustellung markiert");
+  } finally {
+    await srv.stop();
+  }
+});
+
+// P2 (Review-Fix Runde 2, T-NEU-1): status=WORKING real ueber die Route, nicht nur ueber
+// die reine ops-Funktion (el-consult-staffelung.test.js) - erst hier zeigt sich, ob die
+// Verdrahtung (ackWorkingConsult, store.ackConsult) greift.
+test("AL-P13-48: status=working quittiert ohne die Rueckfrage zu schliessen", async () => {
+  const store = makeRouteStore();
+  ops.emitConsult(store.state, CALL_ID, ["A"]);
+  const srv = await mountCallRoutes(store);
+  try {
+    const ackResponse = await postAnswer(srv, { event_id: "c0", status: "working" });
+    assert.equal(ackResponse.status, HTTP_OK);
+    assert.deepEqual(await ackResponse.json(), { accepted: true, merged_facts: 0 });
+    assert.equal(firstConsultOf(store).status, defaults.CONSULT_STATUS.OPEN, "bleibt OFFEN");
+    assert.ok(firstConsultOf(store).ackedAt, "die Quittung selbst ist am Datensatz sichtbar");
+    // Zweiter Aufruf: idempotent, kein 409 (ackConsult akzeptiert eine zweite Quittung).
+    const zweiteAckResponse = await postAnswer(srv, { event_id: "c0", status: "working" });
+    assert.equal(zweiteAckResponse.status, HTTP_OK);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// P2-TEST-GAP (Review-Fix Runde 3): die 409-Ablehnung des WORKING-Zweigs war real ueber
+// die Route ungetestet - AL-P13-48 deckt nur den Erfolgs-/Idempotenz-Pfad ab. Consult
+// ZUERST final beantworten (status=FINAL, Bestandsverhalten), dann dieselbe event_id
+// quittieren: ackConsult trifft openConsultFor mit einem nicht mehr OFFENEN Consult und
+// muss ueber ackWorkingConsult denselben 409-Ablehnungscode liefern wie der FINAL-Zweig
+// (AL-P13-14).
+test("AL-P13-51: status=working auf einen bereits beantworteten Consult -> 409", async () => {
+  const store = makeRouteStore();
+  ops.emitConsult(store.state, CALL_ID, ["A"]);
+  const srv = await mountCallRoutes(store);
+  try {
+    const finalResponse = await postAnswer(srv, { event_id: "c0", answers: ["x"] });
+    assert.equal(finalResponse.status, HTTP_OK);
+    const ackResponse = await postAnswer(srv, { event_id: "c0", status: "working" });
+    assert.equal(ackResponse.status, HTTP_CONFLICT);
+    assert.equal((await ackResponse.json()).error, defaults.CONSULT_ANSWER.ALREADY_ANSWERED);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("AL-P13-49: ein ungueltiger status-Wert -> 400, Consult unveraendert offen", async () => {
+  const store = makeRouteStore();
+  ops.emitConsult(store.state, CALL_ID, ["A"]);
+  const srv = await mountCallRoutes(store);
+  try {
+    const invalidStatusResponse = await postAnswer(srv, {
+      event_id: "c0",
+      status: "pending",
+      answers: ["x"],
+    });
+    assert.equal(invalidStatusResponse.status, HTTP_BAD_REQUEST);
+    assert.equal((await invalidStatusResponse.json()).error, "status ist ungueltig");
+    assert.equal(firstConsultOf(store).status, defaults.CONSULT_STATUS.OPEN);
+    assert.equal(firstConsultOf(store).ackedAt, undefined, "kein Seiteneffekt bei 400");
   } finally {
     await srv.stop();
   }
@@ -851,6 +949,29 @@ test("AL-P13-42: answer_consult mappt 200/400/409 auf die drei Locale-Texte", as
       assert.ok(!r.isError, "kein Werkzeugfehler - das Modell soll weiterpollen");
     });
   }
+});
+
+// P2 (Review-Fix Runde 2, T-NEU-1): der status=WORKING-Fruehzweig des Handlers selbst
+// (mcp-tools.js) war bisher ungetestet - AL-P13-42 deckt nur den FINAL-Antwortpfad ab.
+// Der Fruehzweig liest NICHT merged_facts aus der Gateway-Antwort, sondern gibt immer
+// den festen Quittungstext + {accepted:true, merged_facts:0} zurueck - genau das prueft
+// dieser Fall, mit einer Gateway-Antwort, die absichtlich einen ANDEREN Wert traegt
+// (merged_facts:7), um einen Blindgaenger auszuschliessen.
+test("AL-P13-50: answer_consult mit status=working gibt die feste Quittung zurueck, unabhaengig vom Gateway-Body", async () => {
+  const { localeFor } = await import("../src/i18n/locales.js");
+  const mcp = localeFor("en").mcp;
+  await withGateway(
+    [{ path: "/api/calls/", status: HTTP_OK, body: { accepted: true, merged_facts: 7 } }],
+    async () => {
+      const handler = captureRegistrations({ consultAllowed: true, language: "en" }).get(
+        "answer_consult",
+      ).handler;
+      const result = await handler({ call_id: CALL_ID, event_id: "c0", status: "working" });
+      assert.equal(result.content[0].text, mcp.consultAckAccepted);
+      assert.deepEqual(result.structuredContent, { accepted: true, merged_facts: 0 });
+      assert.ok(!result.isError);
+    },
+  );
 });
 
 test("AL-P13-43: der Berechtigungs-Hinweis haengt EINMAL am place_call-Ergebnis", async () => {

@@ -450,6 +450,22 @@ export const CONSULT_ANSWER = Object.freeze({
   // unterscheidbar bleiben - genau daran haengt die Diagnose des Rueckkanals.
   DEADLINE_PASSED: "deadline_passed",
 });
+
+// P2 (W2): warum der gestaffelte Halt endete. Maschinenlesbar - er steht am Datensatz
+// (P3 auditiert ihn dort ohne Rateschritt) und in der HTTP-Antwort an den Anbieter, NIE
+// im Gespraech: alle drei sprechen den bestehenden Timeout-Text (E-4).
+export const CONSULT_TIMEOUT_REASON = Object.freeze({
+  NOT_DELIVERED: "not_delivered", // Stufe 0: kein pollender Client hat die Frage bekommen
+  NOT_ACKED: "not_acked", // Stufe 1: zugestellt, aber niemand quittiert -> nicht bedienbar
+  TIMEOUT: "timeout", // Stufe 2: quittiert, aber keine Antwort in der Gesamtfrist
+});
+
+// P2: die zwei Modi von answer_consult. KEIN neues Werkzeug (SCOPE 2): ein eigenes
+// ack_consult haette eine eigene Connector-Berechtigung, die per Default wieder auf
+// "nachfragen" stuende - die Falle waere identisch nachgebaut. Fehlender Modus = FINAL,
+// damit jeder Bestands-Aufrufer byte-identisch bleibt.
+export const CONSULT_ANSWER_MODE = Object.freeze({ WORKING: "working", FINAL: "final" });
+
 // Konservativster der drei Wege: ohne ausdrueckliche Angabe gibt der Agent ein Angebot
 // ausserhalb seines Spielraums als Nachricht weiter, statt ab- oder zuzusagen.
 export const MANDATE_OUT_OF_SCOPE_DEFAULT = MANDATE_OUT_OF_SCOPE.TAKE_MESSAGE;

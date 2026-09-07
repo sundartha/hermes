@@ -25,6 +25,7 @@ import {
   MAX_CALL_DURATION_CAP_S,
   MANDATE_OUT_OF_SCOPE_VALUES,
   KEY_FACTS_LIMITS,
+  CONSULT_ANSWER_MODE,
 } from "./store/defaults.js";
 import { CONSULT_EVENT, CONSULT_POLL_ABORT_MS } from "./consult/delivery.js";
 import { resolveGatewayUrl } from "./config.js";
@@ -878,8 +879,14 @@ export function registerTools(
         // jetzt denselben Unbekannt-Ausgang wie MCP_CONSULT_INSTRUCTIONS: ehrlich melden
         // statt erfinden, statt auf den abwesenden Menschen zu warten.
         description:
-          "Answers a question the phone agent asked during a running call. Give SHORT factual " +
-          "answers - one entry per question, each at most " +
+          "Answers a question the phone agent asked during a running call. " +
+          // P2 (SCOPE 2): die Quittung ist die ERSTE Pflicht nach Erhalt der Frage - sie
+          // ist zugleich der Berechtigungstest. Bleibt sie aus, bricht der Server den
+          // Halt nach wenigen Sekunden ab, statt den Anrufer 47 s stumm warten zu lassen.
+          "FIRST, the moment you receive the question, call this tool once with " +
+          'status="working" and no answers - that tells the agent someone is on it. ' +
+          'THEN send the real answer with status="final" (the default). ' +
+          "Give SHORT factual answers - one entry per question, each at most " +
           KEY_FACTS_LIMITS.maxLen +
           " characters; longer answers are REJECTED and the question stays open. Do NOT invent " +
           "facts: if you do not know, say so honestly here instead of guessing. Answers reach " +
@@ -887,18 +894,35 @@ export function registerTools(
         inputSchema: {
           call_id: z.string().describe("The call_id from place_call"),
           event_id: z.string().describe("The event_id from await_call_event"),
+          status: z
+            .enum([CONSULT_ANSWER_MODE.WORKING, CONSULT_ANSWER_MODE.FINAL])
+            .optional()
+            .describe(
+              '"working" = acknowledge immediately, no answers needed. "final" (default) = the answer.',
+            ),
           answers: z
             .array(z.string())
-            .describe("One short answer per open question, in the order the questions were given."),
+            .optional()
+            .describe(
+              "One short answer per open question, in the order the questions were given. " +
+                'Required unless status is "working".',
+            ),
         },
         outputSchema: ANSWER_CONSULT_OUTPUT,
       },
-      async ({ call_id, event_id, answers }) => {
+      async ({ call_id, event_id, status, answers }) => {
         try {
           const r = await call("POST", `/api/calls/${call_id}/consult/answer`, {
             event_id,
+            status,
             answers,
           });
+          if (status === CONSULT_ANSWER_MODE.WORKING) {
+            return {
+              content: [{ type: "text", text: loc.mcp.consultAckAccepted }],
+              structuredContent: { accepted: true, merged_facts: 0 },
+            };
+          }
           const mergedFacts = typeof r?.merged_facts === "number" ? r.merged_facts : 0;
           return {
             content: [{ type: "text", text: loc.mcp.consultAnswerAccepted(mergedFacts) }],
