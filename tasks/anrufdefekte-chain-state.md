@@ -83,7 +83,17 @@ Einordnung: **der Kern von P2 ist ohne diese zwei Felder bereits wirksam** - der
 Halt sitzt im Server-Code und ist live. Die zwei Felder ergaenzen ihn um die
 Unterbrechbarkeit und den gesprochenen statt getippten Warteton.
 
-**OFFEN: der Agent-Push.** Der Server-Code ist live, die Vorlage noch nicht - das ist die
+**ERLEDIGT 07.09.: der Agent-Push.** `--felder=turn_eagerness --ausfuehren` gelaufen,
+PATCH an genau einem Pfad, geschrieben und zurueckgelesen. Unabhaengig gegengeprueft mit
+`npm run elevenlabs:drift`: `turn_eagerness` weicht nicht mehr ab, es bleiben 4 (die 2
+bewussten Datenschutz-Ausnahmen vom 15.08. + die 2 nicht schreibbaren Werkzeug-Felder).
+**turn_eagerness = "patient" ist damit LIVE** - ab hier gilt die Vorher-Messung als
+Vergleichsgrundlage, und die naechsten Anrufe laufen bereits unter der neuen Einstellung.
+
+**OFFEN: die zwei Werkzeug-Felder im Dashboard** (`get_consult.interruption_mode = allow`,
+`get_consult.tool_call_sound = null`) - siehe oben, ueber den Push nicht erreichbar.
+
+**Alte Notiz (ueberholt): der Agent-Push.** Der Server-Code ist live, die Vorlage noch nicht - das ist die
 richtige Reihenfolge und ein sicherer Zwischenzustand: die drei Vorlagen-Felder wirken
 schlicht noch nicht, nichts ist kaputt.
 
