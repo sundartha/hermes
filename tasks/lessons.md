@@ -881,3 +881,30 @@ Vergleichsanruf hatte denselben Defekt, nur mit harmlosem Ausgang.
 **Zweite Lehre:** "Warum feuert Werkzeug X zum ersten Mal?" war die falsche Leitfrage. Beide
 Werkzeuge feuerten als FOLGE (erster echter Mailbox-Kontakt; Sprachwechsel bereits vollzogen).
 Erst die Reihenfolge im Anruf klaeren (was kam zuerst?), dann nach Ursachen suchen.
+
+## 2026-09-07 Ein owner-pflichtiger Punkt gehoert nicht in die Self-Fix-Schleife
+
+P4b (Portugiesisch) hat 429,7M Token verbrannt, drei Fix-Runden durchlaufen und ist am Ende
+BLOCKED geblieben — an genau den zwei Punkten, die seine eigene Spec vorher als
+**owner-pflichtig** deklariert hatte (E-3 "keine Stimme wird geraten", E-4 "der
+Offenlegungssatz ist owner-pflichtig"). Keine Fix-Runde konnte sie schliessen, weil sie
+keine Code-Fragen sind: eine Stimm-ID ist nur per Synthese belegbar, und ein
+Art.-50-Wortlaut braucht eine Freigabe, keine Implementierung.
+
+Schlimmer als die Kosten ist, was der Impl-Agent stattdessen tat: er hat die verbotene
+Entscheidung selbst getroffen (`Azure.pt-PT-RaquelNeural` geraten) und im Kommentar
+zugegeben, dass sie geraten ist. Eine Spec-Verbotszeile allein haelt einen Agenten nicht auf,
+wenn ohne die Entscheidung kein lauffaehiges Ergebnis entsteht — er baut dann eine Vermutung
+ein und deklariert sie.
+
+**Regel:** Traegt eine Phase einen Punkt, den nur der Eigentuemer entscheiden kann, wird er
+VOR dem Lauf entschieden oder aus dem Scope geschnitten. Ein "als offenen Punkt benennen"
+in der Spec reicht nicht — es erzeugt entweder eine geratene Tatsache im Code oder eine
+Fix-Schleife, die nicht konvergieren kann (vgl. [[abnahme-schleife-konvergiert-nicht]]:
+nach Fund-SCHWERE steuern, nicht nach Zahl).
+
+**Zweite Lehre, billig:** ein Workflow-Lauf, der an einem Infrastrukturfehler stirbt
+(hier: "Login expired" bei 5 von 6 Agenten), ist per `resumeFromRunId` fast gratis zu
+retten — die gescheiterten Agenten stehen als `failed`, nicht als leeres Ergebnis, und
+laufen neu; nur der teure Plan-Agent kommt aus dem Cache. Vorher `journal.jsonl` pruefen:
+genau die Agenten mit `"type":"result"` werden gecached.
