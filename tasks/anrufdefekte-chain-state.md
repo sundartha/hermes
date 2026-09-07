@@ -71,6 +71,18 @@ Die drei Consult-Fristen stehen als Env-Variablen am Service `srv-d8m0fhflk1mc73
 (5000/5000/30000) - identisch zu den Code-Defaults, aber jetzt im Dashboard nachjustierbar
 ohne Deploy. Genau dafuer sind sie env-faehig (PM-1).
 
+**Am Trockenlauf GEMESSEN (07.09.): die zwei P2-Felder sind NICHT ueber den Push
+schreibbar.** Ihre Vergleichsart ist "texte" - sie fasst alle fuenf Werkzeuge zu EINER Menge
+zusammen, und aus einer Menge folgt kein einzelner Zielwert; fuer die eingebauten Werkzeuge
+fuehrt die Vorlage "(fehlt)". Das Skript raet hier bewusst nicht.
+**`get_consult.interruption_mode = allow` und `get_consult.tool_call_sound = null` gehoeren
+damit ins ElevenLabs-Dashboard**, nicht in den Push. Schreibbar ist nur `turn_eagerness`
+(PATCH-Koerper: 61 Zeichen, genau ein Blatt-Pfad).
+
+Einordnung: **der Kern von P2 ist ohne diese zwei Felder bereits wirksam** - der gestaffelte
+Halt sitzt im Server-Code und ist live. Die zwei Felder ergaenzen ihn um die
+Unterbrechbarkeit und den gesprochenen statt getippten Warteton.
+
 **OFFEN: der Agent-Push.** Der Server-Code ist live, die Vorlage noch nicht - das ist die
 richtige Reihenfolge und ein sicherer Zwischenzustand: die drei Vorlagen-Felder wirken
 schlicht noch nicht, nichts ist kaputt.
