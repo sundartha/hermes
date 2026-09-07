@@ -33,7 +33,7 @@ import { resolveGatewayUrl } from "./config.js";
 // Karte definiert wird (src/call-result.js) - EINE Quelle fuer MCP-Sicht UND die
 // Inbox-Projektion in state-ops.js. Hier NUR noch importiert, nie zweitdefiniert (G5).
 import { resultCardView } from "./call-result.js";
-import { localeFor } from "./i18n/locales.js";
+import { localeFor, SUPPORTED_LANGUAGES } from "./i18n/locales.js";
 import { MCP_ERROR_CODE } from "./i18n/mcp-texts.js";
 
 // Letzte N Transkriptzeilen fuer get_call_status (G25, kein Magic-Wert im Slice).
@@ -768,10 +768,29 @@ export function registerTools(
           .describe(
             "Optional structured BACKGROUND for the conversation (only for the agent's information, ADDITIONAL to the briefing). The agent speaks as the personal AI assistant of the principal, NEVER as Claude/Gemini; only pass on what the task requires. NO secrets.",
           ),
-        // LANG-15: KEIN language-Feld hier. Die Sprache wird serverseitig ausschliesslich
-        // ueber store.resolveCallLanguage (Geo/Settings, Weltdefault siehe DEFAULT_LANGUAGE)
-        // aufgeloest - ein Client-Feld waere wirkungslos und dessen Beschreibung wuerde
-        // veralten (Bestand nannte faelschlich 'de' statt des Weltdefaults 'en').
+        // LANG-15 AUFGEHOBEN (Owner-Entscheidung F-2, 2026-09-06, PLAN-ANRUFDEFEKTE.md
+        // Abschnitt 6): das Feld gibt es wieder - und es WIRKT. Bis dahin entschied allein
+        // die Zielnummer; ein portugiesischer Auftrag an eine deutsche Nummer war nicht
+        // ausdrueckbar und der Widerspruch wurde STILL ignoriert (W5, gemessen an
+        // call_mtq08ett4l3o). Ohne Angabe gilt ab hier die Sprache des AUFTRAGGEBERS, nicht
+        // mehr die des Ziellandes; ein nicht unterstuetzter Code wird mit 400
+        // unsupported_language abgelehnt statt auf den Weltdefault gedreht.
+        // WAS DIESES FELD NICHT KANN (hartes Gate, F-2 Punkt 4 / PM-2): die Sprache des
+        // OFFENLEGUNGSSATZES bestimmen. Die folgt weiterhin dem ANGERUFENEN
+        // (elevenlabs/call-locale.js) - eine client-gewaehlte Sprache darf nicht darueber
+        // entscheiden, ob ein Mensch die Artikel-50-Aufklaerung versteht.
+        // Der Katalog reist aus SUPPORTED_LANGUAGES in den Text, nicht getippt: sonst
+        // veraltet die Beschreibung mit der naechsten Sprache (P4b).
+        language: z
+          .string()
+          .optional()
+          .describe(
+            `The language the agent SPEAKS in this call - one of: ${SUPPORTED_LANGUAGES.join(", ")}. ` +
+              "Leave it out unless the user asked for a particular language: without it the call " +
+              "is held in the principal's own language. An unsupported code is REJECTED with an " +
+              "error instead of being ignored. This does NOT change the language of the mandatory " +
+              "AI disclosure - that always follows the person being called.",
+          ),
         // S1-6 DiD: schema-seitig bereits positiv/ganzzahlig/gecappt (der eigentliche
         // Wurzelfix sitzt in outbound-gates.js resolveMaxDurationS, das JEDEN Body-Wert
         // - auch einen durch diese Zod-Grenze rutschenden - nochmal klemmt).

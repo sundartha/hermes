@@ -606,6 +606,28 @@ export const LOCALES = Object.freeze({
 // Unterstuetzte Sprach-Codes (Bundle-Schluessel) - fuer Tests/Iteration.
 export const SUPPORTED_LANGUAGES = Object.freeze(Object.keys(LOCALES));
 
+// P4a: der Sprachwunsch EINES Auftrags, kanonisiert - oder null. NULL IST EINE ANTWORT:
+// ob "kein Wunsch" (Feld weggelassen) oder "unbekannter Code" (400) gemeint ist,
+// entscheidet der Aufrufer, nicht diese Funktion. Gross-/Kleinschreibung ist KEIN
+// Nutzerfehler, sondern eine Schreibweise (dieselbe Haltung wie
+// resolveOptionalEnumOverride fuer die Spracheinstellung, LANG-19); ein Regionszusatz
+// ("de-DE", "pt-BR") ist dagegen eine eigene Behauptung und wird NICHT still gekuerzt.
+export function supportedLanguageOf(wert) {
+  if (typeof wert !== "string") return null;
+  const code = wert.trim().toLowerCase();
+  return SUPPORTED_LANGUAGES.find((unterstuetzt) => unterstuetzt === code) ?? null;
+}
+
+// Der namensunabhaengige ANFANG des Offenlegungssatzes einer Sprache - alles vor dem
+// Auftraggeber-Namen. Er ist der Massstab, an dem der Anrufstart-Waechter
+// (elevenlabs/convai.js) eine pro Anruf gebaute Eroeffnung misst, OHNE den Namen zu
+// kennen: der Name sind Tenant-Daten, der Pflichtsatz ist es nicht. EINE Ableitung fuer
+// beide Leser (G5) - opening-line.js#DISCLOSURE_CORES setzt darauf auf.
+const DISCLOSURE_NAME_SENTINEL = "\u0000";
+export function disclosurePrefixFor(language) {
+  return localeFor(language).disclosure(DISCLOSURE_NAME_SENTINEL).split(DISCLOSURE_NAME_SENTINEL)[0];
+}
+
 // F1 Geo-Location (Phase 6) - Land -> Default-Sprache. DIE eine Quelle, die ein bei der
 // Registrierung aufgeloestes/gewaehltes ISO-3166-1-alpha-2-Land auf eine Gespraechs-
 // sprache (Bundle-Schluessel) abbildet. Lebt an der i18n-Quelle (nicht in state-ops, das

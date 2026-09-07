@@ -815,7 +815,7 @@
       "count": 2
     },
     "no-magic-numbers": {
-      "count": 14
+      "count": 16
     }
   },
   "src/routes/api-onboard.js": {
@@ -2580,14 +2580,6 @@
   "test/f1-i18n-locale.test.js": {
     "id-length": {
       "count": 4
-    }
-  },
-  "test/f1-p8-outbound-lang.test.js": {
-    "id-length": {
-      "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 6
     }
   },
   "test/f1-provisioning-geo.test.js": {

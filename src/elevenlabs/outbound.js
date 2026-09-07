@@ -651,11 +651,13 @@ const PLACEHOLDER_OPENER = "{{";
 // routes/api-calls.js); zwei Auswertungen desselben Schalters waeren zwei Wahrheiten.
 //
 // Der eingesetzte Offenlegungssatz kommt aus DERSELBEN einen Quelle wie der statische
-// Rahmen und die Presets (LOCALES.<lang>.disclosure), in der GESPROCHENEN Sprache dieses
+// Rahmen und die Presets (LOCALES.<lang>.disclosure), in der OFFENLEGUNGSsprache dieses
 // Anrufs - obwohl der Prompt englisch ist. Keine zweite Fassung, keine Uebersetzung hier.
-function calleeRelationText({ call, owner, bundle }) {
+// P4a: die Nachricht ist an den ANGERUFENEN gerichtet und beginnt mit dem Pflichtsatz -
+// sie folgt deshalb der Offenlegungssprache, nicht der Gespraechssprache (E-1).
+function calleeRelationText({ call, owner, offenlegung }) {
   if (call.calleeIsOwner !== true) return "";
-  const block = `\n${EN_PROMPT.calleeRelation({ owner, disclosure: bundle.disclosure(owner) })}`;
+  const block = `\n${EN_PROMPT.calleeRelation({ owner, disclosure: offenlegung.disclosure(owner) })}`;
   return block.includes(PLACEHOLDER_OPENER) ? "" : block;
 }
 
@@ -676,8 +678,10 @@ function calleeRelationText({ call, owner, bundle }) {
 // ohne belastbare Offenlegung. Dieselbe {{-Sperre und dieselbe Semantik wie bei
 // ownerFirstMessage/calleeRelationText: ein unversorgtes {{...}} in einem Wert, den der
 // Anbieter aufloest, ist im besten Fall Muell und im schlechtesten der 1008-Abbruch.
-function voicemailText({ owner, bundle, openingLine }) {
-  const text = providerVoicemailMessage({ locale: bundle, ownerName: owner, openingLine });
+// P4a: die Nachricht ist an den ANGERUFENEN gerichtet und beginnt mit dem Pflichtsatz -
+// sie folgt deshalb der Offenlegungssprache, nicht der Gespraechssprache (E-1).
+function voicemailText({ owner, offenlegung, openingLine }) {
+  const text = providerVoicemailMessage({ locale: offenlegung, ownerName: owner, openingLine });
   return text.includes(PLACEHOLDER_OPENER) ? "" : text;
 }
 
@@ -876,26 +880,23 @@ const ohneMetrikMeldung = Object.freeze({ logSenderFallback: () => {} });
 // dabei nichts (s. time-context.js). Vorher wirkte an dieser Stelle ein Festwert am Agenten
 // ("Europe/Berlin"), der weder besessen noch pro Anruf richtig war.
 //
-// bundle + openingLine kommen HEREIN statt hier aufgeloest zu werden (s. startCallBody):
-// die Owner-Eroeffnung braucht dieselbe Grund-Zeile, und verifiedOpeningLine WARNT bei
-// einem Hash-Bruch - ein zweiter Aufruf ergaebe dieselbe Zeile, aber eine zweite Warnung
-// zum selben Anruf, also zwei Kandidaten in der Diagnose statt einem (G5/P6).
-// `locale` ist als Parameter entfallen: seine beiden Leser hier waren localeFor(
-// locale.language) und locale.disclosureOwnerFallback - beides IST das Bundle
-// (callLocaleFor leitet den Wert aus genau diesem Bundle ab, call-locale.js:144-149).
+// offenlegung + openingLine kommen HEREIN statt hier aufgeloest zu werden (s.
+// startCallBody): die Owner-Eroeffnung braucht dieselbe Grund-Zeile, und
+// verifiedOpeningLine WARNT bei einem Hash-Bruch - ein zweiter Aufruf ergaebe dieselbe
+// Zeile, aber eine zweite Warnung zum selben Anruf, also zwei Kandidaten in der Diagnose
+// statt einem (G5/P6).
+// P4a: `owner` kommt HEREIN statt hier berechnet zu werden - EIN Auftraggeber-Ausdruck
+// fuer alle drei Leser (owner_name, callee_relation, die uebersteuerte Eroeffnung) lebt
+// jetzt in startCallBody (G5); drei Rechnungen desselben Defaults waeren drei Wahrheiten.
 function dynamicVariables({
   call,
-  ownerName,
-  bundle,
+  owner,
+  offenlegung,
   openingLine,
   time,
   consultAllowed,
   lookupAllowed,
 }) {
-  // EIN Auftraggeber-Ausdruck fuer beide Leser: die Variable owner_name (die der Anbieter
-  // in den statischen Offenlegungssatz einsetzt) UND der Owner-Prompt-Block. Zwei
-  // Rechnungen desselben Defaults waeren zwei Wahrheiten (G5).
-  const owner = alsText(ownerName) || bundle.disclosureOwnerFallback;
   return {
     consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
     // Thema B: der Torzustand der Recherche, aus DERSELBEN Torkette wie der Webhook
@@ -914,12 +915,12 @@ function dynamicVariables({
     today: alsText(time.today),
     // OC-P2: "" fuer jedes Nicht-Owner-Ziel - der Prompt am Anbieter rendert dann exakt
     // den heutigen Text.
-    callee_relation: calleeRelationText({ call, owner, bundle }),
+    callee_relation: calleeRelationText({ call, owner, offenlegung }),
     // DE1: der GANZE Anrufbeantworter-Text, in der Sprache dieses Anrufs. Er benutzt
     // DENSELBEN owner-Ausdruck wie owner_name eine Zeile darueber (zwei Rechnungen
     // desselben Defaults waeren zwei Wahrheiten, G5) und DIESELBE geprueft-validierte
     // Grund-Zeile wie die Eroeffnung.
-    voicemail_line: voicemailText({ owner, bundle, openingLine }),
+    voicemail_line: voicemailText({ owner, offenlegung, openingLine }),
   };
 }
 
@@ -950,9 +951,13 @@ export function callLocaleOf({ store, config, call, ownerName }) {
     ownerName,
     defaultVoiceId: config.telnyx.telnyxElevenLabs.voiceId,
     // Das ANGERUFENE Ziel, bereits normalisiert (routes/api-calls.js) - der hoechst-
-    // gewichtete Eingang der Sprachwahl, s. call-locale.js. Nicht call.to roh vom
-    // Aufrufer: normalisiert wird eine Ebene hoeher, hier wird nur gelesen.
+    // gewichtete Eingang der OFFENLEGUNGS-Sprachwahl, s. call-locale.js. Nicht call.to
+    // roh vom Aufrufer: normalisiert wird eine Ebene hoeher, hier wird nur gelesen.
     to: call.to,
+    // P4a: die GESPRAECHSSPRACHE steht am Datensatz (routes/api-calls.js hat Sprachwunsch
+    // und Auftraggeber-Kette dort zu EINEM Wert gemacht). Sie wird hier nicht zum zweiten
+    // Mal aufgeloest; die Offenlegungssprache leitet die Naht selbst aus `to` ab.
+    callLanguage: call.language,
   });
 }
 
@@ -1088,18 +1093,49 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar }
 //      Klammern tragen (validOpeningLine verbietet {} , opening-line.js). Ein
 //      "{{irgendwas}}" im Vornamen wuerde in einer uebersteuerten first_message zum
 //      1008-Abbruch - der Angerufene hoert Stille.
-function ownerFirstMessage({ call, bundle, firstName, openingLine }) {
+function ownerFirstMessage({ call, offenlegung, firstName, openingLine }) {
   if (call.calleeIsOwner !== true) return "";
   const vorname = alsText(firstName);
   if (!vorname) return "";
-  const teile = [bundle.ownerOpening(vorname), openingLine].filter(Boolean);
-  const text = teile.join(" ").trim();
-  if (!text || text.includes(PLACEHOLDER_OPENER)) return "";
-  return text;
+  // P4a: die KI-Kennzeichnung der Owner-Eroeffnung ersetzt den Pflichtsatz (OC) und
+  // traegt dieselbe Pflicht - also dieselbe Sprache. Der Beweis des Praedikats lautet
+  // "die NUMMER gehoert dem Tenant", nicht "die PERSON ist der Tenant".
+  return sichereEroeffnung([offenlegung.ownerOpening(vorname), openingLine]);
 }
 
-function conversationConfigOverride({ call, locale, bundle, firstName, openingLine }) {
-  const eroeffnung = ownerFirstMessage({ call, bundle, firstName, openingLine });
+// "" HEISST: KEINE UEBERSTEUERUNG - nicht "leere first_message" (s. conversationConfig-
+// Override). EIN Waechter fuer beide Lagen (G5/S2): blank oder ein unversorgtes {{...}}
+// ergeben "", weil ein unaufgeloester Platzhalter im besten Fall Muell und im
+// schlechtesten der 1008-Abbruch ist (der Angerufene hoert Stille).
+function sichereEroeffnung(teile) {
+  const text = teile.filter(Boolean).join(" ").trim();
+  return !text || text.includes(PLACEHOLDER_OPENER) ? "" : text;
+}
+
+// P4a: DIE EINE Kompositionsstelle der pro Anruf uebersteuerten Eroeffnung - zwei
+// einander ausschliessende Lagen, sonst leer:
+//   1. das eigene Ziel (OC-P2): die Owner-Begruessung tritt an die Stelle des
+//      Pflichtsatzes - unveraendert, weder weiter noch enger (I-2);
+//   2. Gespraechs- und Offenlegungssprache laufen auseinander (F-2): dann waehlt der
+//      Anbieter ueber agent.language das language_preset - und damit den Pflichtsatz -
+//      in der GESPRAECHSSPRACHE aus. Ein franzoesisch gefuehrter Anruf an eine deutsche
+//      Nummer bekaeme so den franzoesischen Satz, den der Angerufene nicht versteht.
+//      Deshalb reist der Satz hier als WERT, aus DERSELBEN Quelle wie der statische
+//      Rahmen (LOCALES.<sprache>.disclosure) - keine zweite Fassung, keine Uebersetzung.
+// Fallen beide Sprachen zusammen (jeder Anruf ohne Sprachwunsch im eigenen Sprachraum),
+// bleibt es beim statischen Anbietertext und der Koerper ist byte-identisch zum Bestand.
+// Laesst sich in Lage 2 keine sichere Eroeffnung bauen, entsteht "" - dann WIRFT der
+// Waechter in convai.js vor dem Netzzugriff. Es gibt bewusst KEINEN dritten, stillen
+// Ausgang: ein Anruf mit unpassendem Pflichtsatz ist schlechter als kein Anruf.
+function perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine }) {
+  const ownerEroeffnung = ownerFirstMessage({ call, offenlegung, firstName, openingLine });
+  if (ownerEroeffnung) return ownerEroeffnung;
+  if (locale.language === locale.disclosureLanguage) return "";
+  return sichereEroeffnung([offenlegung.disclosure(owner), openingLine]);
+}
+
+function conversationConfigOverride({ call, locale, offenlegung, firstName, owner, openingLine }) {
+  const eroeffnung = perCallFirstMessage({ call, locale, offenlegung, firstName, owner, openingLine });
   return {
     agent: {
       language: locale.language,
@@ -1128,7 +1164,15 @@ function startCallBody({
 }) {
   // EIN Bundle und EINE Grund-Zeile fuer beide Leser (s. dynamicVariables).
   const bundle = localeFor(locale.language);
+  // P4a: das Buendel der OFFENLEGUNGSSPRACHE. Fallen beide zusammen - jeder Anruf ohne
+  // Sprachwunsch im eigenen Sprachraum -, ist es DASSELBE Objekt und der Koerper bleibt
+  // byte-identisch zum Bestand (test/fixtures/el-anrufstart-fremdziel.json).
+  const offenlegung = localeFor(locale.disclosureLanguage);
   const openingLine = verifiedOpeningLine({ call, locale: bundle });
+  // EIN Auftraggeber-Ausdruck fuer alle drei Leser (owner_name, callee_relation und die
+  // uebersteuerte Eroeffnung) - drei Rechnungen desselben Defaults waeren drei Wahrheiten
+  // (G5). Der Default spricht die Sprache des PFLICHTSATZES, in den er eingesetzt wird.
+  const owner = alsText(ownerName) || offenlegung.disclosureOwnerFallback;
   return {
     agent_id: el.agentId,
     // OUTBOUND-E5 (F3): die Registrierung der DID DES ANRUFENDEN TENANTS. Der Anrufkoerper
@@ -1141,8 +1185,8 @@ function startCallBody({
     conversation_initiation_client_data: {
       dynamic_variables: dynamicVariables({
         call,
-        ownerName,
-        bundle,
+        owner,
+        offenlegung,
         openingLine,
         time,
         consultAllowed,
@@ -1151,8 +1195,9 @@ function startCallBody({
       conversation_config_override: conversationConfigOverride({
         call,
         locale,
-        bundle,
+        offenlegung,
         firstName,
+        owner,
         openingLine,
       }),
     },
@@ -1175,6 +1220,10 @@ function startCallRequest(anfrage) {
     body: startCallBody(anfrage),
     callId: anfrage.call.id,
     calleeIsOwner: anfrage.call.calleeIsOwner === true,
+    // P4a: die Offenlegungssprache aus der AUFLOESUNG (locale), nicht aus dem Koerper, den
+    // der Waechter prueft - erst dadurch kann er eine falsch gebaute Eroeffnung ueberhaupt
+    // sehen. Dieselbe Haltung wie calleeIsOwner eine Zeile darunter.
+    disclosureLanguage: anfrage.locale.disclosureLanguage,
   };
 }
 

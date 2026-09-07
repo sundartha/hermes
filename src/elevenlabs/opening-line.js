@@ -37,7 +37,7 @@
 // Encoding-Unfall, fremder Schreiber) faellt LAUT auf und die Treppe greift ab
 // Stufe 2. Umlaute ueberleben, weil zwischen Annahme und Anruf nichts mehr am Text
 // dreht - und weil die Erzeugung korrekte Orthografie ausdruecklich verlangt.
-import { LOCALES, SUPPORTED_LANGUAGES } from "../i18n/locales.js";
+import { SUPPORTED_LANGUAGES, disclosurePrefixFor } from "../i18n/locales.js";
 import { openingLineHash } from "../store/state-ops.js";
 
 // HARTE LAENGENGRENZE (Auflage A2) fuer die gesprochene Grund-Zeile, in Zeichen.
@@ -84,12 +84,11 @@ const fragtHoechstensAmEnde = (line) => {
 // LOCALES (kein zweiter Wortlaut, G5): der Satzteil vor dem Namen, ohne die
 // Begruessung vor dem ersten Komma. Eine erzeugte Zeile, die ihn wiederholt,
 // wird verworfen (Auflage A3) - die Offenlegung steht bereits davor.
-const NAME_SENTINEL = "\u0000";
 const DISCLOSURE_CORES = SUPPORTED_LANGUAGES.map((lang) => {
-  const satz = LOCALES[lang].disclosure(NAME_SENTINEL);
-  const prefix = satz.split(NAME_SENTINEL)[0];
-  const ohneBegruessung = prefix.slice(prefix.indexOf(",") + 1);
-  return ohneBegruessung.trim().toLowerCase();
+  // P4a: die Trennung Satz/Name lebt seit hier EINMAL in i18n/locales.js
+  // (disclosurePrefixFor) - der Anrufstart-Waechter braucht dieselbe Ableitung.
+  const prefix = disclosurePrefixFor(lang);
+  return prefix.slice(prefix.indexOf(",") + 1).trim().toLowerCase();
 });
 // Fail-closed BEIM LADEN (Review-Befund R7): ein leerer Kern - etwa weil eine kuenftige
 // Offenlegung mit dem Namen beginnt - machte includes("") wahr und verwuerfe JEDE Zeile

@@ -42,10 +42,13 @@ before(async () => {
 // Jede Beschreibung kostet bei JEDEM Turn des Client-Modells Token. Der Deckel ist
 // kein Stil-Test: er zwingt die naechste Phase, Zuwachs zu begruenden statt
 // anzuhaengen. Anheben nur mit benanntem Grund. Die Luft ist bewusst knapp bemessen,
-// aber nicht so knapp, dass eine Wortwahl-Korrektur ihn reisst (gemessen: 5667 von
-// 5800 ohne Kanal, 6069 von 6200 mit Kanal).
-const PLACE_CALL_BUDGET_CHARS = 5800;
-const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 6200;
+// aber nicht so knapp, dass eine Wortwahl-Korrektur ihn reisst.
+// P4a (benannter Grund): place_call.language ist neu (LANG-15 aufgehoben, F-2) und
+// traegt Katalog + Ablehnungssemantik + die Grenze zur Offenlegung - das treibt den
+// Deckel messbar nach oben (gemessen: 6139 von 6300 ohne Kanal, 6541 von 6700 mit
+// Kanal). Etwas Luft bleibt, damit eine reine Wortwahl-Korrektur ihn nicht reisst.
+const PLACE_CALL_BUDGET_CHARS = 6300;
+const PLACE_CALL_WITH_CONSULT_BUDGET_CHARS = 6700;
 const CONSULT_CTX = Object.freeze({ consultAllowed: true });
 const PLACE_CALL_PREFIX = "place_call";
 // GROSS-/KLEINSCHREIBUNG BEWUSST EGAL: der Bestand trug den Satz einmal als "ask the
