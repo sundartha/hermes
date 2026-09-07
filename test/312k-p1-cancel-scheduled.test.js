@@ -193,7 +193,7 @@ test("312k-P1 Test 2b (Store-Ebene): setTenantSubscription/tenantSubscription Ro
 
 // ---- Pflichttest 3: deleted bleibt SUSPEND, unveraendert durch die 312k-Aenderung ----
 
-test("312k-P1 Test 3: customer.subscription.deleted bleibt SUSPEND, unveraendert (kein Abo-Patch)", async () => {
+test("312k-P1 Test 3: customer.subscription.deleted bleibt SUSPEND (kein gespeichertes Abo -> nichts zu entwerten, s. CL1-B2)", async () => {
   const deps = fakeDeps();
   await applyStripeWebhook(deletedEvent({ id: "evt_3", created: 1 }), deps);
   assert.deepEqual(deps.calls.setStatus, [[TENANT, "suspended"]]);

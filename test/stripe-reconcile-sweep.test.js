@@ -78,6 +78,14 @@ function fakeStore(s) {
       subscriptionId: findTenant(tenantId)?.stripeSubscriptionId ?? null,
       cancelAtPeriodEnd: findTenant(tenantId)?.stripeCancelAtPeriodEnd ?? false,
     }),
+    // CL1-B2: der DELETED-Zweig entwertet die gespeicherte Abo-Referenz - dieser Sweep
+    // treibt genau diesen Zweig ueber den echten Webhook-Pfad, die Schreibkante muss
+    // hier also existieren (sonst TypeError statt No-Op).
+    setTenantSubscription: (tenantId, patch) => {
+      const tenant = findTenant(tenantId);
+      if (tenant && patch.subscriptionId !== undefined) tenant.stripeSubscriptionId = patch.subscriptionId;
+      return tenant ?? null;
+    },
     setSuspendedAtIfAbsent: (tenantId) => {
       const t = findTenant(tenantId);
       if (t && !t.suspendedAt) t.suspendedAt = new Date(NOW_MS).toISOString();

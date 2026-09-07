@@ -3281,6 +3281,27 @@ export function tenantsForStripeReconcile(s) {
   return tenantsOf(s).filter((t) => t.stripeSubscriptionId && !t.suspendedAt);
 }
 
+// ---- CL1-B3: Bestandsheiler fuer TOTE Abo-Referenzen ----
+// Selektor fuer reconcileStaleSubscriptions (billing/stale-subscription-reconcile.js):
+// Tenants, die eine Abo-Referenz TRAGEN, aber NICHT aktiv sind. Das ist die
+// Kandidatenmenge des Aussperrungs-Befunds (status=suspended + stehengebliebene
+// stripeSubscriptionId -> 403 im Dashboard UND 409 beim Neu-Abo).
+// Bewusst NICHT dieselbe Menge wie tenantsForStripeReconcile darueber: der beantwortet
+// "darf ich noch sperren?" (Abo da, NICHT suspendiert -> verlorener Webhook), dieser
+// hier "ist die Referenz tot?" (Abo-Referenz da, NICHT aktiv). Gegenlaeufige Fragen,
+// gegenlaeufige Wirkung - deshalb zwei Selektoren statt eines Flag-Arguments (F3/G15).
+// REIN + IO-frei (mutiert state NICHT). Wer die Referenz wirklich verliert, entscheidet
+// ausschliesslich Stripe (kein Blind-Update, s. Executor). Parameter ausgeschrieben
+// (state/tenant statt s/t wie in der Nachbarfunktion oben): id-length ist fuer diese
+// Datei bereits am gepinnten Altlast-Limit (eslint-legacy-exceptions.json), dessen
+// Anhebung Eigentuemer-Freigabe braucht (test/check-staged-suppressions.test.js,
+// "Altlast-Ratsche") - neue Zeilen wachsen den Pin also bewusst nicht mit.
+export function tenantsForStaleSubscriptionReconcile(state) {
+  return tenantsOf(state).filter(
+    (tenant) => tenant.stripeSubscriptionId && tenant.status !== TENANT_STATUS.ACTIVE,
+  );
+}
+
 // ---- Newsletter-Einwilligung pro Tenant (Opt-in, DSGVO Art. 7 Abs. 1) ----
 // Setzt die Newsletter-Einwilligung eines Tenants. Lebt am Tenant-RECORD (NICHT in
 // settings): sie ist eine Einwilligung der Person/des Accounts, keine Agent-Verhaltens-
