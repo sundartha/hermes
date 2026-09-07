@@ -20,6 +20,11 @@
 // Antwort?"), nicht dieselbe Frage zweimal. CONSULT_OPEN_MS bleibt unveraendert der Wert
 // des MCP-Long-Poll-Wegs (E-5) und wird von dieser Datei nicht mehr gelesen.
 //
+// P3 (N-10): der gestaffelte Abbruch liefert zusaetzlich eine INHALTSFREIE Spur
+// (abortTrace) mit - sie ist die Messung, die am 06.09. fehlte und deren Fehlen die
+// Aufklaerung auf eine Zeugenaussage angewiesen liess. Sie verlaesst den Server NICHT
+// Richtung Anbieter (consultResponseBody baut seine drei Felder ausdruecklich selbst).
+//
 // STOP-PRAEDIKAT ist die EIGENE Rueckfrage, nicht "irgendeine offene": store.pendingConsult
 // wuerde sofort auf die gerade selbst gestellte Frage ansprechen (Port-Befund 1) und der
 // Aufruf kaeme mit leeren Haenden zurueck. Gewartet wird deshalb auf GENAU DEN Datensatz,
@@ -55,7 +60,16 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // facts ist NIE undefined - der Aufrufer darf es unabhaengig vom Ausgang iterieren.
 const rejected = (reason) => ({ kind: CONSULT_RESULT.REJECTED, facts: [], reason });
-const timedOut = (reason) => ({ kind: CONSULT_RESULT.TIMEOUT, facts: [], reason });
+// P3 (N-10): abortTrace ist NUR beim gestaffelten Abbruch gesetzt (E-2) - Drain, Call-Ende
+// und "Consult verschwunden" sind KEINE gescheiterten Rueckfragen dieses Halts und tragen
+// weiterhin null. Der Diskriminator ist damit strukturell, nicht ein Zeichenketten-Vergleich
+// auf reason beim Aufrufer.
+const timedOut = (reason, abortTrace = null) => ({
+  kind: CONSULT_RESULT.TIMEOUT,
+  facts: [],
+  reason,
+  abortTrace,
+});
 
 // P2: WELCHE Stufe hat ihr Ziel verfehlt? REIN - kein Store-Zugriff, kein Schreiben, keine
 // Uhr. Genau deshalb ist der Fristnachweis ohne Server pruefbar (test/el-consult-
@@ -67,6 +81,32 @@ const timedOut = (reason) => ({ kind: CONSULT_RESULT.TIMEOUT, facts: [], reason 
 // E-3: geprueft wird nur das FEHLEN des Markers. Ein Client, der ohne Vorab-Quittung
 // direkt antwortet, wird von diesem Praedikat nie erreicht - der ANSWERED-Zweig im
 // Wartelauf liegt davor.
+// P3: Zeitspanne zwischen zwei ISO-Stempeln in ms. null, wo die Stufe nie erreicht wurde
+// (fehlender Stempel) oder ein Stempel unlesbar ist - fail-closed nach dem Muster von
+// consultAgeMs/consultAlive (state-ops): lieber KEIN Wert als ein erfundener. Genau dieser
+// null-Fall ist die Aussage "Stufe nicht erreicht", die die Kalibrierung braucht.
+function spanMs(vonIso, bisIso) {
+  const von = Date.parse(vonIso ?? "");
+  const bis = Date.parse(bisIso ?? "");
+  return Number.isFinite(von) && Number.isFinite(bis) ? bis - von : null;
+}
+
+// P3 (N-10): die INHALTSFREIE Spur eines gescheiterten Halts - genau die Kennung und die
+// drei Zahlen, aus denen die vorlaeufigen Fristen von Stufe 0/1 nachkalibriert werden
+// (PLAN-ANRUFDEFEKTE P2, "Herleitung der Zahlen"). Der GRUND steht nicht hier: er steht am
+// Ergebnis selbst (reason) und wird nicht verdoppelt (G5).
+// Was hier NIE hineingehoert: Fragetext, Antworttext, Rufnummer, Transkriptfragment
+// (Absolute Regel 4/5). holdMs kommt von der Wanduhr DES WARTERS (startedAtMs), nicht aus
+// askedAt - dieselbe Quelle, gegen die auch die Fristen gemessen werden.
+function makeAbortTrace(consult, holdMs) {
+  return {
+    consultId: consult.id,
+    holdMs,
+    deliveredAfterMs: spanMs(consult.askedAt, consult.askDeliveredAt),
+    ackedAfterMs: spanMs(consult.askDeliveredAt, consult.ackedAt),
+  };
+}
+
 function expiredStage(consult, ageMs, stages) {
   if (!consult.askDeliveredAt && ageMs >= stages.deliveryDeadlineMs)
     return { reason: CONSULT_TIMEOUT_REASON.NOT_DELIVERED, stageMs: stages.deliveryDeadlineMs };
@@ -182,11 +222,12 @@ export function makeConsultRaised({
       // Wartezeit-Schritt). Der Grund-Token ist der Status selbst, PII-frei.
       if (consult.status !== CONSULT_STATUS.OPEN) return timedOut(consult.status);
       const nowMs = Date.now();
+      const ageMs = nowMs - startedAtMs;
       // P2: EIN Praedikat entscheidet ueber alle drei Stufen (expiredStage, rein). Der
       // Datensatz wird beim Abbruch geschlossen UND traegt den Grund - ein offener
       // Datensatz ohne Zustellweg ist ein Phantom (E-2): eine spaetere Antwort auf ihn
       // wird von answerConsult danach zuverlaessig abgelehnt, statt still zu gelingen.
-      const stage = expiredStage(consult, nowMs - startedAtMs, stages);
+      const stage = expiredStage(consult, ageMs, stages);
       if (stage) {
         store.timeOutStagedConsult(callId, {
           consultId,
@@ -194,7 +235,9 @@ export function makeConsultRaised({
           nowMs,
           stageMs: stage.stageMs,
         });
-        return timedOut(stage.reason);
+        // P3: dieselbe Zahl, gegen die die Stufe entschieden wurde, ist die tatsaechlich
+        // gehaltene Dauer - keine zweite Messung daneben (G5).
+        return timedOut(stage.reason, makeAbortTrace(consult, ageMs));
       }
       // EL-BEFUND-4: Drain-Freigabe, gleiche Stelle und gleicher Grund wie in
       // ConsultDelivery.waitForEvent. Ohne sie haelt dieser Warter beim Deploy

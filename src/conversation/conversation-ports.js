@@ -160,6 +160,12 @@
  *   undefined - der Aufrufer darf facts unabhaengig vom Ausgang immer iterieren.
  * @property {string} [reason] - nur bei kind!=="answered"; PII-frei, fuer Logs; ergaenzt den
  *   Diskriminator um ein Detail (z.B. der konkrete Gate-Grund), ersetzt ihn nicht.
+ * @property {{consultId: string, holdMs: number, deliveredAfterMs: number|null,
+ *   ackedAfterMs: number|null}|null} [abortTrace] - nur beim GESTAFFELTEN Abbruch (P2-Stufe
+ *   0/1/2) gesetzt, sonst null: die inhaltsfreie Spur des gescheiterten Halts (P3). Reine
+ *   Kennungen und Millisekunden - NIE Gespraechsinhalt. Sie ist Telemetrie FUER HERMES und
+ *   geht NICHT an das Laufwerk zurueck; null in den Spannen heisst "diese Stufe wurde nie
+ *   erreicht", nicht "0 ms".
  */
 
 /**
