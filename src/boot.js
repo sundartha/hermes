@@ -35,6 +35,7 @@ import {
   platformAniFindings,
   platformAlertSenderFindings,
   driftConfigFindings,
+  llmFallbackFindings,
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
@@ -390,6 +391,15 @@ function warnTurnOutlivesDeadAir(config) {
   );
 }
 
+// FW2: der Ausweich-Anbieter ist gesetzt, kann aber nicht ausweichen. WARN (s. Guard).
+function warnLlmFallbackUnusable(config) {
+  for (const finding of llmFallbackFindings({
+    provider: config.llm.llmProvider,
+    fallback: config.llm.llmProviderFallback,
+  }))
+    console.warn(`[boot] Konfig-Warnung: ${finding.message}`);
+}
+
 // GAP-19 (erste Haelfte): FORCE_NUMBER_COUNTRY entkoppelt das Kauf-Land vom Herkunftsland -
 // jeder neue Tenant telefoniert dann unter auslaendischer Absenderkennung. WARN, kein exit(1):
 // das IST der gewollte Live-Zustand (render.yaml), ein Boot-Refusal waere ein selbst
@@ -472,7 +482,8 @@ function assertLatentCostPaths(config) {
 // das neunte und assertLatentCostPaths (KV2-2 (h)) das zehnte, das noch process.exit(1)
 // rufen kann - warnStaleModelPrices/warnAlertChannelUnset/warnTariffDrift/
 // warnNumberOriginDecoupled/warnMissingProvisioningConnection/
-// warnElRegistrationSipCredsMissing sind reine Diagnose (nie fatal). warnKostenAlarmZielUnset
+// warnElRegistrationSipCredsMissing/warnLlmFallbackUnusable (FW2) sind reine Diagnose
+// (nie fatal). warnKostenAlarmZielUnset
 // (KV2-1) ist ebenfalls reine Diagnose, nie fatal - PLUS ein durabler Eintrag (s. dort).
 function assertBootGates(config, store, durableAudit) {
   const ok = assertConfig();
@@ -553,6 +564,7 @@ function assertBootGates(config, store, durableAudit) {
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
   warnTurnBudgetOverrun(config); // GAP-22, WARN
   warnTurnOutlivesDeadAir(config); // AL-P6, WARN
+  warnLlmFallbackUnusable(config); // FW2, WARN
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
   assertLatentCostPaths(config); // KV-P7/KV2-2 (h): kann exit(1)

@@ -11,7 +11,8 @@
 // toolDefs (agentTurn ruft sie in-house auf -> S2-Anti-Duplizierung).
 import { randomUUID } from "node:crypto";
 import { safeEqual, hashText } from "./util.js";
-import { degradedSpeechFor, isProviderBillingError } from "./llm.js";
+import { degradedSpeechFor } from "./llm.js";
+import { noteLlmBillingOutage } from "./llm-billing-outage.js";
 import { makeFixedWindowCounter } from "./middleware.js";
 import { metrics as defaultMetrics } from "./metrics.js";
 import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
@@ -456,20 +457,6 @@ function forwardMetadataShape(body) {
     ccidInMetadata: typeof metaCcid === "string" && Boolean(metaCcid),
     ccidTopLevel: typeof topCcid === "string" && Boolean(topCcid),
   };
-}
-
-// GQ-P4/A4 (Owner-Entscheidung 2026-08-04): der Bezahl-/Guthaben-Fall ist KEIN
-// gewoehnlicher Turn-Fehler - er legt den Agenten fuer JEDEN Anruf gleichzeitig still.
-// Eigener, eindeutig greppbarer Kanal (console.error, Token ALARM_LLM_BILLING) und die
-// HANDLUNG im Payload: eine Zeile, die nur "Fehler" sagt, hat den Vorfall am 04.08. genau
-// nicht sichtbar gemacht (P8). BEWUSST KEINE Alarm-SMS - sie kostet Geld und kann in eine
-// Schleife geraten; die Alarmregel haengt der Betreiber ausserhalb des Repos an dieses Token.
-// PII-frei: nur callId/turnSeq/Zaehler + ein fester deutscher Handlungstext.
-const BILLING_ALARM_ACTION =
-  "KI-Guthaben beim Anbieter aufgebraucht - sofort aufladen, sonst antwortet KEIN Anruf mehr";
-
-function logShimBillingAlarm(payload) {
-  console.error(formatShimLine("ALARM_LLM_BILLING", { ...payload, handlung: BILLING_ALARM_ACTION }));
 }
 
 // GQ-P4/A3 - MESSPUNKT, kein Fix. Der Degradations-Satz ist im Catch verdrahtet, trotzdem
@@ -1002,10 +989,10 @@ export function makeTelnyxLlmShim({
       // KEIN Retry hier (der llm.js-Seam hat bereits begrenzt+selektiv retried).
       console.error(`${SHIM_LOG_PREFIX} agentTurn fehlgeschlagen (turnSeq=${turnSeq}):`, err && err.name); // secret-frei
       // GQ-P4/A1: der Bezahl-/Guthaben-Fall ist ein EIGENER Zustand - unabhaengig davon,
-      // ob der Anbieter ihn als 402 oder (Anthropic) als 400 verpackt. Klassifikation in
-      // llm.js (EINE Quelle, G5); hier nur der Alarm (A4).
-      const billingBlocked = isProviderBillingError(err);
-      if (billingBlocked) logShimBillingAlarm({ callId: call.id, turnSeq });
+      // ob der Anbieter ihn als 402 oder (Anthropic) als 400 verpackt. Klassifikation +
+      // Alarm + Latch in EINER Funktion (FW2, G5): src/llm-billing-outage.js.
+      const billingBlocked = noteLlmBillingOutage(err, {
+        logPrefix: SHIM_LOG_PREFIX, payload: { callId: call.id, turnSeq } });
       // GQ-P4/A2: N Fehlschlaege IN FOLGE -> wuerdevoll beenden statt stumm weiterlaufen.
       const failedTurns = modelAnswered ? 0 : countFailedTurn(call.id);
       const giveUp = failedTurns >= config.telnyx.telnyxAssistant.maxConsecutiveFailedTurns;
