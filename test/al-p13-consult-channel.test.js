@@ -434,6 +434,7 @@ function firstConsultOf(store) {
 
 const HTTP_OK = 200;
 const HTTP_BAD_REQUEST = 400;
+const HTTP_CONFLICT = 409;
 
 // P2 (Review-Fix Runde 2, T-NEU-1): der GET-Poll ist die Zustellung (Kommentar an der
 // Route, "P2 (Stufe 0, N-10)") - bisher unbewiesen, dass sie tatsaechlich greift. Ueber
@@ -468,6 +469,27 @@ test("AL-P13-48: status=working quittiert ohne die Rueckfrage zu schliessen", as
     // Zweiter Aufruf: idempotent, kein 409 (ackConsult akzeptiert eine zweite Quittung).
     const zweiteAckResponse = await postAnswer(srv, { event_id: "c0", status: "working" });
     assert.equal(zweiteAckResponse.status, HTTP_OK);
+  } finally {
+    await srv.stop();
+  }
+});
+
+// P2-TEST-GAP (Review-Fix Runde 3): die 409-Ablehnung des WORKING-Zweigs war real ueber
+// die Route ungetestet - AL-P13-48 deckt nur den Erfolgs-/Idempotenz-Pfad ab. Consult
+// ZUERST final beantworten (status=FINAL, Bestandsverhalten), dann dieselbe event_id
+// quittieren: ackConsult trifft openConsultFor mit einem nicht mehr OFFENEN Consult und
+// muss ueber ackWorkingConsult denselben 409-Ablehnungscode liefern wie der FINAL-Zweig
+// (AL-P13-14).
+test("AL-P13-51: status=working auf einen bereits beantworteten Consult -> 409", async () => {
+  const store = makeRouteStore();
+  ops.emitConsult(store.state, CALL_ID, ["A"]);
+  const srv = await mountCallRoutes(store);
+  try {
+    const finalResponse = await postAnswer(srv, { event_id: "c0", answers: ["x"] });
+    assert.equal(finalResponse.status, HTTP_OK);
+    const ackResponse = await postAnswer(srv, { event_id: "c0", status: "working" });
+    assert.equal(ackResponse.status, HTTP_CONFLICT);
+    assert.equal((await ackResponse.json()).error, defaults.CONSULT_ANSWER.ALREADY_ANSWERED);
   } finally {
     await srv.stop();
   }
