@@ -46,9 +46,34 @@ korrekt und nicht gefaehrlich, nur unvollstaendig.
 diesem Stand nachgemessen, nicht aus dem Diff geschlossen. Ursache nicht untersucht (war
 nicht Teil des Auftrags). **Solange sie rot sind, verdeckt `npm test` jede echte Regression.**
 
-### 3. Was am Live-System noch fehlt
+### 3. `al-p10-precall-research.test.js` pinnt `LLM_PROVIDER` nicht
+
+Die Datei setzt `ANTHROPIC_BASE_URL` auf einen lokalen Attrappen-Server, aber nicht den
+Anbieter. Steht in der `.env` `LLM_PROVIDER=deepseek` (so ist es seit 08-11), laeuft der Test
+gegen den DeepSeek-Adapter und 9 von 12 Faellen scheitern - im Arbeits-Repo rot, in jedem
+Worktree ohne `.env` gruen. `npm test` selbst ist davon nicht betroffen (BASE_ENV greift),
+der direkte `node --test`-Aufruf sehr wohl. Kein Defekt der Kette; dieselbe Env-Drift-Falle
+wie in `test-base-env-drift`. Fix waere eine Zeile: `LLM_PROVIDER` im Setup mitpinnen.
+
+### 4. Was am Live-System noch fehlt
 
 Alles unten ist Owner-Arbeit; die Kette hat den Anbieter nicht angefasst.
+
+## Live-Stand (07.09.2026, gemessen - nicht aus einer Notiz gelesen)
+
+**Server-Code IST LIVE.** `GET /healthz` meldet `commit 40ff4c6` (der Merge-Commit dieser
+Kette samt der fremden CL1-Arbeit). Weg dorthin: `git push upstream master` (das Deploy-Repo
+ist `jonas986`, nicht `origin` - ein Push nach origin macht nichts live), danach ein Deploy,
+den das Setzen der Env-Variablen selbst ausgeloest hat. **`autoDeploy` steht auf `no`**: ein
+Push allein deployt hier NICHT.
+
+Die drei Consult-Fristen stehen als Env-Variablen am Service `srv-d8m0fhflk1mc73bno570`
+(5000/5000/30000) - identisch zu den Code-Defaults, aber jetzt im Dashboard nachjustierbar
+ohne Deploy. Genau dafuer sind sie env-faehig (PM-1).
+
+**OFFEN: der Agent-Push.** Der Server-Code ist live, die Vorlage noch nicht - das ist die
+richtige Reihenfolge und ein sicherer Zwischenzustand: die drei Vorlagen-Felder wirken
+schlicht noch nicht, nichts ist kaputt.
 
 ## Reihenfolge fuer das Livebringen (bindend)
 
