@@ -59,7 +59,9 @@ test("KV2-1 (a1): durableAudit ruft die Konsolen-Audit-Funktion UND den durablen
   durableAudit("x", null, "y");
   assert.deepEqual(auditCalls, [{ action: "x", req: null, detail: "y" }]);
   await Promise.resolve().then(() => {}); // dem .then()/.catch() der Sink-Promise Zeit geben
-  assert.deepEqual(recordCalls, [{ action: "x", detail: "y" }]);
+  // P3: der Eintrag traegt seither das tenant_id-Feld. Der PLATTFORM-Auditor bindet keinen
+  // Mandanten und schreibt hier weiterhin null - genau das pinnt diese Zeile jetzt mit.
+  assert.deepEqual(recordCalls, [{ action: "x", tenantId: null, detail: "y" }]);
 });
 
 test("KV2-1 (a2): fail-soft - null-Sink, synchroner Wurf, rejectete Promise brechen NIE", async () => {

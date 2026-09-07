@@ -439,6 +439,9 @@ export async function buildApp(deps) {
     accountsRef,
     // KV2-1: dieselbe Mechanik fuer den durablen Audit-Sink des Kostenpfads.
     auditStoreRef,
+    // P3: der mandanten-gebundene durable Auditor (server.js) - der EL-Rueckfrage-Webhook
+    // schreibt damit die Spur eines gescheiterten Halts. Kein neuer Weg, dieselbe Fabrik.
+    durableAuditFor,
     // DIP-Seam (PLAN-AUTH-GATE P1) - dieselbe Naht, die wireWebLogin intern schon nutzt,
     // nur eine Ebene hoeher gezogen: der Routen-Inventar-Test
     // (test/route-auth-inventory.test.js) muss den PRODUKTIONS-Routengraph bauen
@@ -559,6 +562,10 @@ export async function buildApp(deps) {
       config,
       consultSlots: consultDelivery,
       onConsultRaised: makeConsultRaised({ store, isDraining: consultDelivery.isDraining }),
+      // P3 (N-10): der durable, mandanten-gebundene Audit-Weg. OHNE Default und bewusst:
+      // ein stiller No-op verstecke genau die Blindheit, die diese Phase behebt. Dass die
+      // Verdrahtung steht, pinnt test/el-consult-timeout-spur.test.js (P3-7).
+      auditFor: durableAuditFor,
     }),
   );
 

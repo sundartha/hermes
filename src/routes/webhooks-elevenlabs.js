@@ -53,6 +53,12 @@ const TOOL_TOKEN_HEADER = "x-hermes-tool-token";
 // Budget verfallen zu lassen (die Gebuehr faellt VOR dem Absenden).
 const EL_LOOKUP_TIMEOUT_MS = 6000;
 
+// P3 (N-10): die Aktion des durablen Audit-Eintrags fuer einen gescheiterten Halt.
+// Modul-lokale gefrorene Kennung nach dem Bestandsmuster AUDIT_ACTION
+// (billing/contract-end-cleanup.js, telephony/outage-report.js) - hier EINE Zeichenkette,
+// deshalb eine Konstante statt eines Objekts (S4: keine Indirektion ohne Mehrwert).
+const CONSULT_TIMEOUT_AUDIT_ACTION = "consult_timeout";
+
 // Die vier Ablehnungscodes. 402 nach dem Bestandsmuster der Geld-Denials
 // (telephony/outbound-gates.js), 404 statt 403 nach dem Bestandsmuster der Call-Routen
 // (kein Existenz-Leck), 403 fuer das Geheimnis, 400 fuer eine Nutzlast ohne brauchbaren
@@ -87,6 +93,46 @@ function consultResponseBody(outcome, locale) {
     reason: outcome.reason ?? null,
     answer: toolResultText(outcome, locale),
   };
+}
+
+// P3: die Detailzeile des Eintrags - und ihr PII-Riegel ist der Kern dieser Phase
+// (I-2, Absolute Regel 4/5): ausschliesslich server-eigene Kennungen, ein maschinenlesbarer
+// Grund-Token und Millisekunden. NIE Fragetext, Antwort, Rufnummer, Transkriptfragment.
+// Der Mandant steht NICHT in dieser Zeile: er steht in der Spalte tenant_id des Eintrags
+// (kein zweiter Ort fuer dieselbe Tatsache, G5).
+// EIGENE Schluessel fuer die GEMESSENEN Spannen: zustellung_ms/quittung_ms sind in der
+// [consult-raised]-Zeile bereits mit den FRISTEN belegt, und zwei Sachverhalte auf einem
+// Label sind im Log ein echter Defekt (Lehre live-cost-tracing). Eine nie erreichte Stufe
+// laesst ihren Schluessel WEG - kein Platzhalter, der sich als "0 ms" lesen liesse.
+function consultTimeoutDetail(callId, reason, trace) {
+  const felder = [
+    `call=${callId}`,
+    `consult=${trace.consultId}`,
+    `grund=${reason}`,
+    `halt_ms=${trace.holdMs}`,
+  ];
+  if (trace.deliveredAfterMs !== null) felder.push(`zugestellt_nach_ms=${trace.deliveredAfterMs}`);
+  if (trace.ackedAfterMs !== null) felder.push(`quittiert_nach_ms=${trace.ackedAfterMs}`);
+  return felder.join(" ");
+}
+
+// P3 (N-10): die dauerhafte Spur eines gescheiterten Halts. Nebeneffekt im Namen (N7).
+// UNBEDINGT gerufen und selbst verzweigend, NICHT als if am Aufrufort: handleConsult steht
+// exakt auf der Komplexitaetsgrenze (gemessen 10 von 10, eslint complexity max 10) - ein
+// weiterer Zweig dort waere ein Blocker. Dasselbe Motiv wie bei consultResponseBody (P2).
+// GENAU EIN Eintrag je gescheitertem Consult (E-2): abortTrace ist ausschliesslich beim
+// gestaffelten Abbruch gesetzt - nicht bei Erfolg, nicht bei Ablehnung, nicht bei
+// Drain/Call-Ende, und eine spaete, verworfene Antwort erreicht diesen Pfad nie.
+// Der Weg ist fail-soft und NICHT blockierend (durable-audit.js faengt jeden Schreibfehler
+// laut und inhaltsfrei ab, ohne await): der Halt ist hier ohnehin vorbei und wird nicht
+// verlaengert, ein Schreibfehler kann den laufenden Anruf nicht beruehren (I-3).
+function traceConsultAbort({ call, outcome, auditFor }) {
+  if (!outcome.abortTrace) return;
+  auditFor(call.tenantId)(
+    CONSULT_TIMEOUT_AUDIT_ACTION,
+    null,
+    consultTimeoutDetail(call.id, outcome.reason, outcome.abortTrace),
+  );
 }
 
 // Bindung ueber die opake Anbieter-Kennung am Call-Datensatz - dasselbe Muster wie das
@@ -244,8 +290,17 @@ async function handleLookup(req, res, { store, config }) {
  *   consultSlots = die EINE ConsultDelivery-Instanz des Prozesses (consult/delivery.js).
  *   Ihre Slot-Zaehler begrenzen, wie viele Verbindungen gleichzeitig an EINEM Anruf bzw.
  *   EINEM Mandanten haengen duerfen - dieser Webhook ist ein solcher Halter.
+ *   auditFor = (tenantId) => durable schreibender Auditor (durable-audit.js, in server.js
+ *   gebunden). P3: der gescheiterte Rueckfrage-Halt bekommt damit einen Eintrag in
+ *   audit_log - fail-soft, inhaltsfrei, ohne neue Route und ohne neue Auth-Ausnahme.
  */
-export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, consultSlots }) {
+export function makeElevenLabsWebhookRoutes({
+  store,
+  config,
+  onConsultRaised,
+  consultSlots,
+  auditFor,
+}) {
   const router = Router();
 
   // Jede greifende Sicherung wird LAUT statt stumm (Diagnose-Muster des Brain-Shims):
@@ -365,6 +420,7 @@ export function makeElevenLabsWebhookRoutes({ store, config, onConsultRaised, co
     if (!held.granted) return denied(res, HTTP_NOT_FOUND, "kein_freier_platz");
     const outcome = held.value;
     console.log(`[el-consult] call=${call.id} ergebnis=${outcome.kind}`);
+    traceConsultAbort({ call, outcome, auditFor });
     return res.json(consultResponseBody(outcome, localeFor(call.language)));
   }
 

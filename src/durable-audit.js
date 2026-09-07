@@ -15,8 +15,9 @@
 // No-op (bewusste Festlegung, Plan 4.10).
 //
 // PII/Secrets: detail kommt ausschliesslich von Aufrufern mit PII-freiem Zeilen-Vertrag
-// (grund=/deckung=/schwelle=/seit=/anfragen=/kanaele=). Hier wird nichts angereichert.
-export function makeDurableAudit({ audit, auditStoreRef }) {
+// (grund=/deckung=/schwelle=/seit=/anfragen=/kanaele=/call=/consult=/halt_ms=/
+// zugestellt_nach_ms=/quittiert_nach_ms=). Hier wird nichts angereichert.
+export function makeDurableAudit({ audit, auditStoreRef, tenantId = null }) {
   const meldeSchreibfehler = (err) =>
     console.error("[audit] durabler Eintrag fehlgeschlagen:", err.message);
   return (action, req, detail = "") => {
@@ -24,9 +25,16 @@ export function makeDurableAudit({ audit, auditStoreRef }) {
     const sink = auditStoreRef.current;
     if (!sink) return;
     try {
-      // tenantId/actorSub bleiben null: ein Plattform-Ereignis ist keinem Tenant und
-      // keiner Identitaet zuzurechnen (Muster audit(action, null, ...) -> ip=system).
-      Promise.resolve(sink.record({ action, detail: detail || null })).catch(meldeSchreibfehler);
+      // actorSub bleibt null: keines dieser Ereignisse entsteht aus einer Identitaet.
+      // tenantId ist BINDUNG DER INSTANZ, nicht Angabe des Aufrufers (P3): der
+      // Plattform-Auditor (server.js#durableAudit) bindet nichts und schreibt wie bisher
+      // null - ein Plattform-Ereignis ist keinem Mandanten zuzurechnen. Ein gebundener
+      // Auditor (durableAuditFor) bekommt den Mandanten in der Kompositionswurzel. Zwei
+      // Gruende fuer die Fabrik statt eines vierten Arguments: die Aufrufstelle im Fachcode
+      // bleibt dreistellig (F1, eslint max-params 3), und eine Aufrufstelle kann keinen
+      // FALSCHEN Mandanten mitgeben - sie kennt ihn gar nicht.
+      Promise.resolve(sink.record({ action, tenantId, detail: detail || null }))
+        .catch(meldeSchreibfehler);
     } catch (err) {
       meldeSchreibfehler(err); // synchroner Wurf des Sinks
     }

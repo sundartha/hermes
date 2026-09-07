@@ -138,6 +138,13 @@ const auditStoreRef = { current: null };
 // waehrend der Befund korrekt feuerte (AUFTRAG B3).
 const durableAudit = makeDurableAudit({ audit, auditStoreRef });
 
+// P3 (N-10): derselbe durable Weg, an EINEN Mandanten gebunden - fuer Ereignisse, die
+// einem Mandanten gehoeren statt der Plattform (heute: der abgebrochene Rueckfrage-Halt
+// des ElevenLabs-Webhooks). Kein zweiter Schreibpfad (E-1): dieselbe Fabrik, dieselbe
+// spaet gebundene Zelle, dasselbe fail-soft. Die Instanz ist eine Closure ohne Zustand -
+// sie je Ereignis zu bauen kostet nichts und haelt die Verdrahtung hier oben (P15).
+const durableAuditFor = (tenantId) => makeDurableAudit({ audit, auditStoreRef, tenantId });
+
 // Kosten-Abgleich (LCT P3) EINMAL beim Boot verdrahtet (Naht wie metering, INV-7). Der
 // Laufriegel lebt im Factory-Scope = EIN Riegel pro Prozess, den Intervall (boot.js) und
 // manueller Endpunkt (api-billing.js) sich teilen - zwei Instanzen haetten zwei Riegel und
@@ -354,6 +361,7 @@ const deps = {
   // (das den Boot-Befund darueber schreibt).
   auditStoreRef,
   durableAudit,
+  durableAuditFor,
   outageWatch,
   driftWatch,
   messaging,
