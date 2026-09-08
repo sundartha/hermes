@@ -3518,3 +3518,72 @@ oder (b) ebenfalls — es ist kein Aufraeumen.
 Unberuehrt davon bleibt die KI-Kennzeichnung: auch im Ausnahmefall nennt die Eroeffnung
 die Maschine ("hier ist dein KI-Assistent"), und der Prompt verpflichtet den Agenten, den
 vollen Offenlegungssatz sofort nachzuholen, wenn am Apparat nicht der Auftraggeber ist.
+
+## SEC-TEST — Sicherheits-Testplan + drei bewusst getragene Risiken (2026-09-07)
+
+`PLAN-SICHERHEITSTEST.md` (Repo-Wurzel) ist der vollstaendige Sicherheits-Testplan:
+15 Angriffspfade, 54 pruefbare Faelle, Wellen W0-W5. Er ersetzt diesen Eintrag nicht,
+sondern speist ihn: was dort als Risiko akzeptiert wird, steht hier.
+
+Drei Owner-Entscheidungen vom 07.09.2026 (Herleitung: `PLAN-SICHERHEITSTEST.md` 8.4/8.5)
+sind bewusst getragene Risiken und KEINE offenen Aufgaben:
+
+**(1) Der SMS-Weg der unverifizierten eigenen Nummer bleibt vorerst ohne Allowlist.**
+Neuer Befund, vom Eintrag "Offen (Launch-Blocker): Besitz-Verifikation der eigenen Nummer"
+NICHT gedeckt: jener Eintrag sichert den ANRUF-Weg (`OWNER_SELF_CALL_ENABLED` Default false
+plus Tenant-Allowlist, `src/callee-is-owner.js`). Der SMS-Weg hat keine solche Bindung -
+`setPrivateNumber` (`src/store/state-ops.js:2471`) prueft nur E.164-Form, Denylist und
+Laendercode, und die Summary-SMS nach jedem Inbound-Call geht an genau diesen Wert
+(`src/sms-summary.js:26`). Jeder eingeloggte Tenant kann dort eine fremde Nummer eintragen
+(`src/self-service-routes.js:401`, nur `webAuthMw`) und erhaelt damit Zusammenfassungen von
+Gespraechen Dritter an eine Nummer, die ihm nicht gehoert.
+Warum trotzdem akzeptiert: alle aktiven Accounts sind wir selbst (siehe unten).
+**Ausloeser, der das Risiko zum Befund macht: der erste Fremdkunde.** Bis dahin ist die
+Gegenmassnahme klein (dieselbe Allowlist wie am Anruf-Weg), danach ist sie Pflicht -
+zusammen mit der Besitz-Verifikation aus dem Eintrag darueber.
+
+**(2) Der Repo-Split bleibt: Render deployt aus `jonas986/vodafone-agent` (Upstream), nicht
+aus `origin`.** Es gibt kein belegtes Merge-Gate und keine geprueften Zugriffsrechte auf
+diesem Konto; die in `.github/workflows/ci.yml:8` genannte `docs/RUNBOOK-BRANCH-PROTECTION.md`
+existiert im Repo nicht. Wer dort schreiben kann, deployt an jeder Pruefung vorbei.
+Warum trotzdem akzeptiert: Owner-Entscheidung, Aufwand einer Konsolidierung ueberwiegt
+heute den Nutzen. Konsequenz, die mitgetragen wird: jede Aussage ueber den
+PRODUKTIONS-Stand ist nur so belastbar wie der Zugriffsschutz dieses Kontos. Die Messung
+(MFA-Status, Schreibrechte, Branch-Protection) laeuft trotzdem und ist read-only.
+
+**(3) Kein externer Pentest, kein Bug-Bounty.** Die Ausfuehrung des Testplans uebernimmt der
+Assistent. Bewusst mitgetragen: der Pruefende teilt die blinden Flecken des Geprueften -
+der Plan ist aus derselben Code-Lektuere entstanden, gegen die er prueft. `security.txt`/VDP
+wird unabhaengig davon angelegt (0 EUR, legaler Meldeweg).
+
+**Die gemeinsame Sicherungsannahme aller drei Punkte** ist die Praemisse aus
+`PLAN-SICHERHEITSTEST.md` 1.1: **alle aktiven Accounts sind wir selbst.** Sie ist ab hier
+kein Kontext mehr, sondern eine tragende Annahme - faellt sie, fallen (1) und (2) sofort
+mit, ohne dass eine Code-Aenderung noetig waere.
+
+### Messstand des Testplans (Laeufe 1+2, 2026-09-08)
+
+Belege: `tasks/sicherheitstest-befunde.md`. Die Funde unten sind **noch keine akzeptierten
+Risiken** - ob und was gefixt wird, entscheidet der Owner separat. Sie stehen hier, damit
+Sicherheitsarbeit sie nicht uebersieht.
+
+- **REPLAY-02 (Geld, schwerster neuer Fund):** ein byte-identisch wiederholter
+  `/voice/turn`-Webhook (EIN Body, EIN Zeitstempel, EINE Signatur) loest eine ZWEITE
+  Modellrunde aus und bucht ein zweites Mal - gemessen 828 -> 1656 Cent auf genau der Achse,
+  die `budgetExceeded` als Tenant-Decke liest; das Transkript verdoppelt sich (2 -> 4 Zeilen).
+  Kein Angreifer noetig: ein Anbieter-Retry nach Timeout genuegt. Das Gegenstueck
+  `/voice/status` ist ueber den persistierten `billedAt`-Marker sauber idempotent
+  (`src/telephony/call-finish.js:258-266`) - die Luecke liegt allein auf der KI-Token-Achse.
+- **Gate-Kette im Fehlerfall (GATE-02):** stirbt die Datenquelle eines Outbound-Gates, wird
+  in **17 von 17** gemessenen Faellen NICHT gewaehlt und kein Anruf-Datensatz angelegt - das
+  Sicherheitsversprechen haelt. Aber 14 der 17 Faelle enden ohne jede Antwort (der Request
+  haengt bis zum Client-Timeout, `[guard] unhandledRejection` im Log), weil Express 4
+  async-Rejections nicht faengt und die Gate-Schleife (`src/routes/api-calls.js:331-341`)
+  keinen try/catch hat. `/voice/incoming` hat genau diesen Schutz (`src/routes/voice.js:279`).
+- **`scripts/spike2-anruf.mjs`** loest einen echten Anruf direkt beim Anbieter aus und laeuft
+  dabei an der GESAMTEN Gate-Kette vorbei (keine Denylist, kein Land-Gate, keine Kostendecke,
+  kein `OUTBOUND_FROZEN`). Committet, Ziel aus `argv`, Schluessel aus `.env`. Verstaerkt (2).
+- **Gehalten und belegt:** Inbound-Kostendecke sperrt bei korrupter UND werfender Datenquelle
+  fail-closed (GATE-03); je Wahlweg genau ein Aufrufer, alle hinter der Kette (GATE-01);
+  Routen-Fuzzing und Pfad-Traversal finden nichts (L-03); Render-Logs werden ~7 Tage
+  aufbewahrt, was das Zeitfenster einer versehentlich geloggten PII-Zeile begrenzt (OPS-03).
