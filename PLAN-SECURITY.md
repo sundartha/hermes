@@ -3587,3 +3587,78 @@ Sicherheitsarbeit sie nicht uebersieht.
   fail-closed (GATE-03); je Wahlweg genau ein Aufrufer, alle hinter der Kette (GATE-01);
   Routen-Fuzzing und Pfad-Traversal finden nichts (L-03); Render-Logs werden ~7 Tage
   aufbewahrt, was das Zeitfenster einer versehentlich geloggten PII-Zeile begrenzt (OPS-03).
+
+## SEC-P1 — Webhook-Idempotenz: Anker, Vorhaltezeit, Restrisiken (2026-09-08)
+
+Ausgang (gemessen, `PLAN-SEC-FIX.md` § SEC-P1): ein byte-identischer, gueltig signierter
+Request, zweimal zugestellt, erzeugte auf `/voice/incoming` ZWEI Anruf-Datensaetze
+(REPLAY-01) und auf `/voice/turn` eine ZWEITE Modellrunde (REPLAY-02: Token 4M/1M ->
+8M/2M, 828 -> 1656 Cent, Transkript 2 -> 4 Zeilen). `/voice/status` war bereits gedeckt
+(persistierter `billedAt`-Marker).
+
+Vor beiden Routen haengt jetzt ein Wiederholungs-Riegel
+(`src/telephony/webhook-idempotenz.js`), registriert PRO ROUTE und damit strukturell
+HINTER der Ed25519-Signatur-MW: ein unsignierter Request kann keinen Anker beanspruchen.
+**Kein Safety-Gate wird beruehrt** — der Riegel fuegt hinzu, er nimmt nichts weg, und er
+VERWIRFT NIE (ein Anbieter-Retry ist legitim und bekommt 200, kein 4xx).
+
+### Woraus der Anker gebildet wird
+
+| Route | Anker | Warum |
+|---|---|---|
+| `/voice/incoming` | `in:<CallSid>` — der Anruf-Datensatz SELBST ist der persistierte Anker (`createCall` legt `twilioSid` an, `getCall` matcht darauf) | Telnyx liefert genau EIN "a call comes in"-Ereignis je Leg. Kein neues Feld noetig; das ist die `billedAt`-Bauart, nur dass der Marker schon existiert |
+| `/voice/turn` | ZWEI Anker: **A** `t:<turnToken>` (frische Marke, die WIR je gerendertem Gather in die Action-/Redirect-URL setzen und die der Anbieter zurueckreicht) und **B** `e:sha256(telnyx-timestamp \| rawBody)` (Fingerabdruck des SIGNIERTEN Umschlags) | Der TeXML-Gather-Callback traegt KEIN anbieterseitiges Ereignis-Merkmal. `CallSid` allein waere der teuerste Fehler: die zweite Runde desselben Anrufs saehe wie ein Duplikat aus, der Agent verstummte |
+
+Duplikat = **einer** der beiden Anker ist bereits beansprucht. Vollstaendigkeit:
+
+| Fall | A | B | Ergebnis |
+|---|---|---|---|
+| Anbieter-Retry, gleiche URL, gleiche Signatur | Treffer | Treffer | Wiederholung |
+| Anbieter-Retry, gleiche URL, NEU signiert | Treffer | frei | Wiederholung |
+| Angreifer, byte-identisch, Marke gestrichen/geraten | frei | Treffer | Wiederholung |
+| Echte 2. Runde, Anrufer sagt WORTGLEICH dasselbe | frei (neuer Gather = neue Marke) | frei (neue Sekunde -> neuer Fingerabdruck) | normal verarbeitet |
+
+Die Marke wird beim EINTREFFEN beansprucht, nicht beim Rendern — eine wiederholt
+ausgelieferte Antwort traegt deshalb eine Marke, die noch niemand eingeloest hat, und die
+naechste echte Runde kommt durch (kein Livelock).
+
+### Was eine Wiederholung als Antwort bekommt
+
+- Prozess-Cache getroffen -> die erste Antwort **byte-identisch** (Status/Content-Type/Body).
+- Erste Zustellung laeuft noch -> die Wiederholung WARTET auf sie (Deckel
+  `PROVIDER_WEBHOOK_HARDCUT_MS`) und liefert sie aus.
+- Nur der persistierte Anker getroffen (Prozess-Neustart) -> Folge-Gather OHNE Prompt:
+  Mikrofon offen, frische Marke, **keine Modellrunde, keine Synthese, kein Cent**.
+- Gar keine Antwort erzeugt (Absturz) -> die Wiederholung laeuft normal durch; es wurde
+  nichts doppelt gebucht, und der Anrufer braucht eine Antwort.
+
+### Vorhaltezeit
+
+| Schicht | Inhalt | Wie es verschwindet |
+|---|---|---|
+| Prozess-Cache (`Map` im Abschluss der Fabrik) | Anker -> Antwort | LRU-Deckel `ANSWER_CACHE_MAX` (200); aelteste Eintraege fallen raus; stirbt mit dem Prozess |
+| Persistiert am Call (`call.webhookAnchors`, nur `/voice/turn`) | NUR die Anker-Strings (Zufallsmarke bzw. Hash, PII-FREI) | Ringpuffer `WEBHOOK_ANCHOR_HISTORY` (6); der Rest stirbt mit dem Call-Datensatz ueber die bestehende `RETENTION_DAYS`-Loeschung |
+| `/voice/incoming` | nichts Neues — der Call-Datensatz selbst | wie oben |
+
+Kein neuer Aufraeum-Job, keine neue Env-Variable, keine neue npm-Abhaengigkeit. Der
+Antwort-WORTLAUT (PII) verlaesst den Prozess nie; persistiert werden ausschliesslich
+Hashes/Zufallsmarken — also keine neue PII-Senke neben `transcript` und keine Kollision
+mit der kuerzeren `DIAGNOSTIC_RETENTION_DAYS`-Transkript-Loeschung. `webhookAnchors` ist in
+`views.publicCall` gestrippt und verlaesst die API nicht.
+
+### Bewusst getragene Restrisiken
+
+| # | Restrisiko | Warum getragen |
+|---|---|---|
+| R1 | Ein Angreifer mit gueltiger Signatur, der `callId` auf einen anderen, ihm bekannten aktiven Anruf umbiegt, umgeht den call-gebundenen Anker | Ein globales Ledger waere eine neue, quer-mandantige PII-/Datensenke. Der Angreifer braucht bereits eine abgefangene gueltige Signatur UND eine fremde `callId`; die Signatur gilt nur 300 s |
+| R2 | Zweite Zustellung NACH Prozess-Neustart bekommt den Wortlaut nicht zurueck, nur ein offenes Mikrofon | Der Wortlaut ist PII und wuerde die kuerzere Transkript-Loeschung ueberleben. Der Anruf ueberlebt, es kostet nichts |
+| R3 | Request ganz OHNE ableitbaren Anker (kein `CallSid`, keine Marke, kein signierter Umschlag — lokaler Skip-Modus, in-flight-Leg ueber einen Deploy) laeuft wie bisher | Fail-open genau dort, wo heute schon nichts geschuetzt ist; kein Gate wird geschwaecht. In Produktion liegt immer mindestens der Umschlag-Anker vor |
+| R4 | pg flusht asynchron: stirbt der Prozess zwischen Antwort und Flush, ist der Anker weg | Geerbt von `billedAt`, kein neuer Defekt |
+| R5 | `/voice/outbound` bleibt ohne Riegel (doppelte Zustellung -> zweite Opening-Zeile im Transkript) | Nicht gemessen, nicht Teil dieser Phase. Als Befund benannt, nicht gebaut |
+| R6 | Prozessuebergreifende Beanspruchung (`deliveries` lebt im Prozess) | = GATE-04 in `PLAN-SEC-FIX.md` § 4, ausdruecklich draussen, solange `numInstances=1`. Der pg-Store ist ein Spiegel mit asynchronem Flush, kein synchroner DB-Schreiber — ein `ON CONFLICT` waere hier wirkungslos |
+| R7 | Zwei GLEICHZEITIGE Anrufe, deren Turn-Webhook-Body UND Zeitstempel byte-identisch waeren, teilten sich Anker B | In Produktion unerreichbar: der TeXML-Body traegt je Leg die eigene `CallSid`. Der Ausgang waere ausserdem harmlos (eine wiederholte Antwort, Mikrofon bleibt offen, naechste Runde laeuft) |
+
+Belegt durch `test/sec-p1-webhook-idempotenz.test.js` (echte Ed25519-Signatur, EIN Body,
+EIN Zeitstempel, zweimal zugestellt; LLM-Aufrufe gezaehlt) und
+`test/sec-p1-webhook-anker-persistenz.test.js` (Round-Trip in BEIDEN Store-Backends,
+Ringpuffer-Deckel, kein API-Leck).

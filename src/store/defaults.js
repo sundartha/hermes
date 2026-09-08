@@ -25,6 +25,14 @@ const DEMO_EVENTS = [
 // Hoechstens so viele Notifications behalten (Ring-Puffer, neueste zuerst).
 export const MAX_NOTIFICATIONS = 50;
 
+// SEC-P1: Hoechstens so viele Ereignis-Anker je Anruf behalten (Ring-Puffer der bereits
+// verarbeiteten /voice/turn-Webhooks, neueste zuletzt). Zwei Anker je Runde plus Reserve -
+// ein Anbieter-Retry trifft immer die juengste Runde, aeltere braucht niemand mehr. Hier
+// statt in telephony/webhook-idempotenz.js, weil state-ops den Deckel anwendet und ein
+// Store-Modul keine Telefonie-Kette (und ueber sie config) importieren soll - Muster
+// MAX_NOTIFICATIONS darueber.
+export const WEBHOOK_ANCHOR_HISTORY = 6;
+
 // Telefonie-Provider fuer den config-derived Nummern-Seed (number-Tabelle). Benannte
 // Konstante (G25), eine Quelle (G5/G13) fuer state-ops.seedBootstrapNumber,
 // pg.flushNumbers, migrate.seedDefaults; die telephony-registry importiert dieselben

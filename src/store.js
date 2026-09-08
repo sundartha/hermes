@@ -116,6 +116,10 @@ export const {
   // Laufzeit einen TypeError.
   markSummaryMailSent,
   markBilled, // F9 (A6): Bucht-Idempotenz-Marker
+  // SEC-P1: Ereignis-Anker der Turn-Webhooks. OHNE diesen Re-Export waere
+  // store.recordWebhookAnchors auf der Fassade undefined -> der Wiederholungs-Riegel
+  // wuerfe zur Laufzeit einen TypeError (Muster markBilled).
+  recordWebhookAnchors,
   markInboxEntry, // INBOX-P1: Qualifikations-Marker
   // INBOX-P2: die EINE Konsum-Operation (Auswahl + Projektion + Markierung, synchron).
   // OHNE diesen Re-Export waere store.takeInboxEntries auf der Fassade undefined -> der
