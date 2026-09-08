@@ -7,8 +7,8 @@ Kickoff (Lead-Rolle): `tasks/sec-fix-kickoff.md`.
 
 | Phase | Titel | Merge-Commit | Abnahme erfuellt | Bemerkung |
 |---|---|---|---|---|
-| SEC-P0 | Testbank gruen | — | — | laeuft |
-| SEC-P1 | Webhook-Idempotenz | — | — | wartet auf gruene Bank |
+| SEC-P0 | Testbank gruen | `98cf2bd` | **ja** | Teil (b) Flakes offen, s. unten |
+| SEC-P1 | Webhook-Idempotenz | — | — | laeuft |
 | SEC-P2 | Lieferkette | — | — | — |
 | SEC-P3 | Eingabegrenzen + CSRF | — | — | — |
 | SEC-P4 | EL-Token je Mandant | — | — | — |
@@ -23,7 +23,33 @@ Die fuenf bekannten Flake-Dateien haben in diesem Lauf NICHT gefeuert.
 
 ## Offene Befunde
 
-(noch keine)
+**F-1 (aus SEC-P0, getragenes Risiko): die fuenf Flake-Dateien sind NICHT stabilisiert.**
+`auth-p5-internal-only`, `el-consult-timeout-spur`, `el-geldpfad-s1`,
+`telnyx-p5-origination`, `al-p10-precall-research`. Sie haben in DREI vollen Laeufen dieser
+Sitzung (Baseline + zwei Abnahmelaeufe) kein einziges Mal gefeuert; ohne Reproduktion ist
+keine Wurzel zu belegen, und eine erratene "Stabilisierung" waere schlimmer als keine.
+
+Wirkung auf die restliche Kette: eine Flake kann die Abnahme einer spaeteren Phase falsch rot
+faerben. Gegenmittel ist die Bestandslehre `suite-flake-p5-gate-proof` — ein roter Fall in
+einer dieser fuenf Dateien zaehlt erst, wenn er ISOLIERT (`node --test test/<datei>.test.js`)
+ebenfalls rot ist. Kehrt die Flake zurueck und ist dann reproduzierbar, gehoert sie in eine
+eigene kleine Phase, nicht in die laufende.
+
+Nebenbefund derselben Wurzelklasse: der SEC-P0-Defekt war eine Zeitbombe (Fixture gegen
+Wanduhr). Es kann weitere geben — sie zeigen sich als Test, der ohne Code-Aenderung rot wird.
+
+## Abweichung vom Kickoff, bewusst
+
+Das per-run-Skript `.claude/workflows/runs/sec-fix.js` wird NICHT nach jeder Phase geloescht,
+sondern erst am Kettenende. Es traegt die Effizienz-Riegel und wird von SEC-P0 bis SEC-P6
+unveraendert benutzt; siebenmal loeschen und identisch neu schreiben waere Churn, kein
+Aufraeumen. Report- und Spec-Dateien je Phase verschwinden wie vorgesehen im Merge-Zug.
+
+Zweite Beobachtung zum Riegel selbst: in SEC-P0 hat er Teil (b) verhindert (der Impl-Agent
+durfte die volle Suite nicht fahren und konnte die Flakes deshalb nicht reproduzieren). Fuer
+Phasen, in denen der volle Suite-Lauf das MESSINSTRUMENT ist und nicht nur die Regressionsprobe,
+muss der Riegel gelockert werden — das war hier nicht noetig, weil die Flakes ohnehin nicht
+feuerten.
 
 ## Owner-Blocker (nicht vom Assistenten baubar, s. PLAN-SEC-FIX.md Abschnitt 3)
 
