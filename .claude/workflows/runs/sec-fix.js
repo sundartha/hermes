@@ -111,6 +111,16 @@ const REPORT_AGENT = { model: MODEL_SONNET, effort: "low" };
 
 const NO_WAIT = `EFFIZIENZ (PFLICHT, nicht verhandelbar): Warte NIE aktiv auf einen Hintergrundlauf. Kein "sleep", kein "echo idle", kein "ps aux | grep <pid>", keine Polling-Schleife. Fahre lange Kommandos im VORDERGRUND mit grosszuegigem Timeout - ein blockierender Aufruf kostet EINEN Turn, eine Warteschleife kostet zwanzig. Erzeuge nie woertliche Volldumps langer Kommando-Ausgaben; als Beleg genuegen Exit-Code und die Zeilen "# pass" / "# fail".`;
 
+// Gelernt in SEC-P3, teuer: der Impl-Agent hatte fertige, gruene Arbeit - und liess sie
+// UNCOMMITTET liegen, weil der pre-commit-Hook den Commit ablehnte und er den Ausweg fuer
+// ausserhalb seines Mandats hielt. Der Review sah einen leeren Branch, eine ganze Fix-Runde
+// (45 Mio Token) ging fuer das blosse Sichern der schon fertigen Arbeit drauf.
+const COMMIT_PFLICHT = `COMMIT IST PFLICHT, NICHT OPTIONAL: fertige Arbeit uncommittet im Worktree liegen zu lassen ist dasselbe wie keine Arbeit - der Review sieht einen leeren Branch. Lehnt der pre-commit-Hook (scripts/check-staged-suppressions.js) ab, weil ein Legacy-Pin sich bewegt hat, dann ist das DEIN Problem und du loest es in dieser Reihenfolge:
+1. URSACHE beseitigen: waechst eine bereits gepinnte Riesenfunktion nur, weil neuer Code IN ihr steht, leg den neuen Code auf MODUL-EBENE. Die Funktion waechst dann nicht, der Pin bewegt sich nicht, es entsteht keine neue Ausnahme. Das ist die Hausloesung und fast immer moeglich.
+2. Geht das nachweislich nicht: Pin in eslint-legacy-exceptions.json anheben - mit datiertem, ehrlichem Grund im vorhandenen reason-Text (bestehende Praxis, s. die PIN-ANGEHOBEN-Eintraege dort). Das ist KEINE neue abgeschaltete Sicherung, sondern das dokumentierte Verfahren des Hauses.
+3. NIEMALS \"git commit --no-verify\" und niemals eine Pruefung ueberspringen.
+Kommst du auf keinem der Wege zu einem Commit, ist das ein BLOCKER, den du meldest - aber erst NACHDEM du 1. und 2. wirklich versucht hast.`;
+
 const TURN_BUDGET = `TURN-BUDGET (PFLICHT): Hast du nach 60 Werkzeug-Aufrufen keinen gruenen Zielzustand, brich ab und melde praezise, was fehlt und woran es haengt. Ein sauberes BLOCKED nach 60 Turns ist billiger und ehrlicher als ein Lauf, der sich festbeisst.`;
 
 const CLEAN_CODE_REQ = `CLEAN-CODE (PFLICHT): Lies "${REPO}/.claude/refs/clean-code.md" (verbindlicher Prueftkatalog) und befolge ihn bei JEDER Code-Entscheidung. Insbesondere: keine Duplizierung (G5/S2, gemeinsame Logik extrahieren); keine Magic Numbers ausser 0/1/-1 (G25, benannte Konstante, in config.js wenn konfigurierbar G35); kein toter/auskommentierter Code (C5/G9), keine ungenutzten Imports (G12); intentions-ausdrueckende Namen, Nebeneffekte im Namen sichtbar (N7); eine Aufgabe + eine Abstraktionsebene pro Funktion (G30/G34), <=3 Argumente (F1, sonst Objekt); Lazy-Init-Antipattern vermeiden (P15); keine brittle Datei:Zeile-Kommentare (C2); ESM, kein Build-Step, kein TypeScript, Kommentare deutsch OHNE Umlaute (ue/oe/ae); neues Verhalten braucht einen automatisierten Test (P11/T-Serie), reiner Refactor laesst die Bestandssuite OHNE Test-Aenderung gruen.`;
@@ -200,6 +210,7 @@ VORGEHEN:
 7. node_modules-Symlink NICHT committen. git add (nur die betroffenen src/test/config/doc-Dateien) && git commit. headCommit = git rev-parse HEAD.
 ${ABS_RULES}
 ${NO_WAIT}
+${COMMIT_PFLICHT}
 ${TURN_BUDGET}
 EHRLICH fuellen. Tests nicht gruen / blockiert -> testsPass=false + deviations, nicht schoenen.`,
   {
@@ -342,6 +353,7 @@ ${CLEAN_CODE_REQ}
 ${ABS_RULES}
 4. node --check + die BETROFFENEN Testdateien gruen (node --test test/<datei>.test.js im Vordergrund; NICHT die volle Suite, die faehrt der Lead). node_modules NICHT committen. git add (betroffene Dateien) && git commit -m "fix(${String(PHASE).toLowerCase()}): Review-Blocker beheben (Runde ${round})". headCommit = git rev-parse HEAD.
 ${NO_WAIT}
+${COMMIT_PFLICHT}
 ${TURN_BUDGET}
 EHRLICH: was du NICHT loesen konntest, in summary nennen.`,
     {

@@ -932,3 +932,31 @@ nach Fund-SCHWERE steuern, nicht nach Zahl).
 retten — die gescheiterten Agenten stehen als `failed`, nicht als leeres Ergebnis, und
 laufen neu; nur der teure Plan-Agent kommt aus dem Cache. Vorher `journal.jsonl` pruefen:
 genau die Agenten mit `"type":"result"` werden gecached.
+
+## Fertige Arbeit uncommittet ist keine Arbeit (SEC-P3, 2026-09-08)
+
+**Was passierte.** Der Implementierungs-Agent setzte SEC-P3 vollstaendig um, 149 Tests gruen —
+und committete NICHT. Der pre-commit-Hook (`scripts/check-staged-suppressions.js`) lehnte ab,
+weil `makeSelfServiceRoutes` durch sechs neue Zeilen von 418 auf 424 wuchs und die Zeilenzahl
+Teil des Befund-Schluessels ist. Der Agent hielt beide Auswege fuer "ausserhalb meines
+Mandats" und meldete den Stand als "vorgemerkt im Worktree".
+
+**Kosten.** Der Review sah einen leeren Branch (`git diff master sec/p3` = 0 Bytes) und
+blockierte zu Recht. Die anschliessende Fix-Runde brauchte 270 Turns und 45 Mio Token — fast
+alles davon, um schon fertige Arbeit zu FINDEN und zu SICHERN, nicht um sie zu machen.
+
+**Wurzel.** Nicht der Hook. Der Auftrag sagte "git commit", aber nicht, was gilt, wenn der
+Commit abgelehnt wird. Ein Agent ohne Regel fuer den Fehlerfall waehlt die vorsichtigste
+Deutung — und die war hier die teuerste.
+
+**Regel fuer kuenftige Phasen-Prompts** (steht jetzt als `COMMIT_PFLICHT` im per-run-Skript):
+Commit ist Pflicht. Lehnt der Hook wegen eines bewegten Legacy-Pins ab, gilt diese
+Reihenfolge: (1) Ursache beseitigen — neuen Code auf MODUL-EBENE legen, dann waechst die
+gepinnte Funktion nicht; (2) nur wenn das nachweislich nicht geht: Pin anheben mit datiertem,
+ehrlichem Grund (bestehende Hauspraxis); (3) NIEMALS `--no-verify`. Ein Blocker wird erst
+gemeldet, nachdem (1) und (2) wirklich versucht wurden.
+
+**Nebenbefund, der die Regel stuetzt:** Weg (1) hat in derselben Phase funktioniert. Der
+Fix-Agent legte den neuen Code auf Modul-Ebene, die Riesenfunktion wuchs nicht, der Hook nahm
+den Commit von sich aus an (gegengeprueft: Exit 0). Es gab also nie einen Grund, an der
+Sicherung vorbeizugehen.
