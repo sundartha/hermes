@@ -56,6 +56,10 @@ const baseConfig = {
   server: { publicUrl: "http://localhost", webDistDir: "" },
   provisioning: { releaseGraceMs: 0 },
   billing: { paymentEnabled: false },
+  // SEC-P3: die gemounteten Self-Service-Routen lesen jetzt zusaetzlich
+  // config.safety.csrfEnforce (Herkunftspruefung, s. mountSelfServiceRoutes). Produktions-
+  // Default true - dieselbe Attrappen-Namespace-Form wie billing/tenancy oben.
+  safety: { csrfEnforce: true },
   // 312k-Phase 5: wireWebLogin liest jetzt zusaetzlich config.mail.smtpHost (Gate fuer den
   // SMTP-Mailer-Bau, s. wiring/web-login.js) - leer = kein Mailer (Auslieferungszustand,
   // Muster workosManagementApiKey oben).

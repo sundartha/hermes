@@ -80,6 +80,9 @@ export const AUTH_FAILED_GRUND = Object.freeze({
   NOT_ACTIVE: "not_active", // Sitzung gueltig, Tenant-Status nicht erlaubt (403)
   NOT_ADMIN: "not_admin", // Sitzung gueltig, aber kein Admin (403)
   NOT_LOCAL: "not_local", // kein vertrauenswuerdiger In-Process-Aufrufer (403)
+  // SEC-P3: schreibender Request mit FREMDEM Origin auf einer Self-Service-Route (403).
+  // Fehlender Origin ist KEIN Treffer und erzeugt keine Zeile (Normalfall S2S/Webhook).
+  CROSS_ORIGIN: "cross_origin",
 });
 
 export function auditAuthFailed(req, grund) {

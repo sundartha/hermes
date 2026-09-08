@@ -21,7 +21,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // des EL-Anrufstarts, Gegenstueck zu fakeOriginate) -> 11.
   // OUTBOUND-E4: outboundAniGateEnabled + outboundAniGateMaxAgeMs ergaenzt (der ANI-Riegel,
   // Default aus) -> 13.
-  safety: 13,
+  // SEC-P3: csrfEnforce ergaenzt (Herkunftspruefung der Self-Service-Schreibrouten) -> 14.
+  safety: 14,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
@@ -160,7 +161,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // platformFixedCostUsdCentsPerMonth umbenannt (menge neutral) -> 180.
 // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs (tenancy) ergaenzt ->
 // 183.
-const EXPECTED_TOTAL_KEYS = 183;
+// SEC-P3: csrfEnforce (safety) ergaenzt -> 184.
+const EXPECTED_TOTAL_KEYS = 184;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -304,7 +306,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // primitiv (Zahl) und verschiebt nichts.
   // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs sind alle drei
   // primitiv (Zahl, kein Array/nested Objekt) -> 171.
-  const EXPECTED_PRIMITIVE_LEAVES = 171;
+  // SEC-P3: csrfEnforce ist primitiv (Boolean, kein Array/nested Objekt) -> 172.
+  const EXPECTED_PRIMITIVE_LEAVES = 172;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

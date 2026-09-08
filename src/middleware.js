@@ -1,4 +1,5 @@
 // HTTP-Schutzschichten fuer das Gateway - bewusst in-house, ohne neue Dependency.
+import { auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 
 // CSP erlaubt Inline-Skripte/-Styles und Google Fonts. Der urspruengliche Grund - das
 // alte Dashboard public/tenant.html mit Inline-<script>/<style> und onclick-Handlern -
@@ -25,6 +26,64 @@ export function securityHeaders(req, res, next) {
   // API-Antworten (Transkripte!) duerfen nirgends zwischengespeichert werden
   if (req.path.startsWith("/api/")) res.set("Cache-Control", "no-store");
   next();
+}
+
+// ---- Herkunftspruefung (SEC-P3) --------------------------------------------------
+// Methoden ohne Zustandsaenderung (RFC 9110 "safe"): unberuehrt. Ein CSRF-Angriff
+// braucht eine schreibende Methode; GET /api/self-service/billing/return ist der
+// Stripe-Browser-Redirect und darf NIE an dieser Stelle scheitern.
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+// Sprachneutraler Antwort-Token in der Vokabelform der Self-Service-Oberflaeche
+// (invalid_private_number / no_card). Die Antwort nennt den Grund und sonst NICHTS:
+// kein Echo des Origins, keine Liste erlaubter Herkuenfte.
+const CROSS_ORIGIN_ERROR = "cross_origin_blocked";
+// Antwortcode der Herkunftspruefung. Benannt wie im Bestand (telnyx-llm-shim.js,
+// routes/webhooks-elevenlabs.js): der nackte Zahlenwert im Handler waere ein Magic
+// Number.
+const HTTP_FORBIDDEN = 403;
+
+// Reines Praedikat ohne HTTP-Wissen (Muster makeFixedWindowCounter): "kommt dieser
+// Request NACHWEISLICH von einem fremden Ursprung?" Drei Faelle, absichtlich in dieser
+// Reihenfolge:
+//   1. kein Origin -> false. PFLICHT, keine Nachlaessigkeit: Anbieter-Webhooks, /mcp
+//      und Server-zu-Server-Aufrufer senden keinen Origin; fail-closed wuerde genau
+//      diese Aufrufer brechen.
+//   2. Origin unparsbar ("null" aus einem sandboxed iframe, Muell) -> true.
+//   3. sonst Host-Vergleich. Verglichen wird der HOST (inkl. Port), NICHT das Schema:
+//      der Proxy terminiert TLS, ein Schema-Vergleich braeuchte X-Forwarded-Proto und
+//      damit eine zweite, spoofbare Quelle (bewusst getragen, s. PLAN-SECURITY.md).
+//      Host ist case-insensitiv -> beide Seiten kleingeschrieben, sonst sperrt ein
+//      "Host: App.Sundartha.com" legitimen Verkehr aus.
+export function crossOriginRequest(originHeader, host) {
+  if (!originHeader) return false;
+  if (!host) return true;
+  let originHost;
+  try {
+    originHost = new URL(originHeader).host;
+  } catch {
+    return true;
+  }
+  return originHost.toLowerCase() !== host.toLowerCase();
+}
+
+// Express-Adapter. Vergleichsanker ist req.headers.host, NICHT req.hostname: bei
+// "trust proxy" liest req.hostname X-Forwarded-Host, das ein Aufrufer selbst setzen
+// koennte; den Host-Header kann ein Cross-Origin-fetch nicht setzen (forbidden header
+// name). enforce !== false statt Boolean(enforce): NUR der Literalwert false schaltet
+// ab - ein fehlender/vermuellter Wert darf eine Sicherung nie stillschweigend loesen.
+export function createSameOriginGuard({ enforce }) {
+  const aktiv = enforce !== false;
+  return function sameOriginOnlyMiddleware(req, res, next) {
+    if (!aktiv || SAFE_METHODS.has(req.method)) return next();
+    if (!crossOriginRequest(req.headers.origin, req.headers.host)) return next();
+    // EIN Forensik-Kanal (G5): dieselbe auth_failed-Zeile wie webAuthGateMiddleware /
+    // adminOnlyMiddleware / internalOnly, mit req.path (nie originalUrl) und OHNE den
+    // Origin-Wert - er ist angreifer-kontrollierter Text und gehoert nicht ungeprueft
+    // ins Log.
+    auditAuthFailed(req, AUTH_FAILED_GRUND.CROSS_ORIGIN);
+    res.status(HTTP_FORBIDDEN).json({ error: CROSS_ORIGIN_ERROR });
+  };
 }
 
 const RATE_WINDOW_MS = 60_000;

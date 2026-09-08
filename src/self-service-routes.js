@@ -13,6 +13,8 @@
 // store.updateSettings (greeting nur als Vorlage; Permission-Flags nur restriktiver;
 // alles andere abgelehnt). updateSettings bleibt UNVERAENDERT.
 import { Router } from "express";
+import { createSameOriginGuard } from "./middleware.js";
+import { promptLineRejection } from "./routes/_validation.js";
 import { selfServicePatch, hasCardOnFile, lockedSelfServiceKeys } from "./self-service.js";
 import { greetingTemplatesFor } from "./i18n/greeting-catalog.js";
 import { PERSONA_STYLE_IDS, localeFor } from "./i18n/locales.js";
@@ -890,6 +892,49 @@ export function makeSelfServiceRoutes({
   );
 
   return router;
+}
+
+// SEC-P3: Herkunftspruefung (CSRF) + Eingabegrenze fuer agentName - als eigener,
+// kleiner Router VOR makeSelfServiceRoutes montiert, statt in der Router-Fabrik
+// selbst (G30/G34: eine Aufgabe pro Funktion, makeSelfServiceRoutes bleibt
+// unveraendert). Praefix-Montage, KEIN nacktes router.use(mw) und KEINE Liste
+// einzelner Routen:
+//   * nackt waere ein Fehler - dieser Router wird in wiring/web-login.js VOR /voice,
+//     express.static und registerApiRoutes gemountet; die Schicht liefe damit an
+//     JEDEM spaeteren Request entlang, /voice/incoming eingeschlossen.
+//   * eine Routen-Liste driftet - eine kuenftige Self-Service-Route waere still
+//     ungeschuetzt. Der Praefix nimmt sie automatisch mit.
+// Sichere Methoden bleiben unberuehrt (s. createSameOriginGuard), damit der
+// Stripe-Redirect GET /api/self-service/billing/return unveraendert durchlaeuft; die
+// beiden oeffentlichen GET /newsletter/* liegen ausserhalb des Praefixes.
+export function mountSelfServiceRoutes(deps) {
+  const guarded = Router();
+  guarded.use(
+    "/api/self-service",
+    createSameOriginGuard({ enforce: deps.config.safety.csrfEnforce }),
+  );
+  guarded.use("/api/self-service/settings", rejectInvalidAgentName(deps.audit));
+  guarded.use(makeSelfServiceRoutes(deps));
+  return guarded;
+}
+
+// Antwortcode der agentName-Eingabegrenze. Benannt wie im Bestand
+// (telnyx-llm-shim.js, routes/webhooks-elevenlabs.js) statt als nackte Zahl im Handler.
+const HTTP_BAD_REQUEST = 400;
+
+// Laenge + Steuerzeichen VOR jedem Schreibzugriff - der Befund war 200 mit 20.000
+// gespeicherten Zeichen. Geprueft wird req.body.agentName DIREKT (nicht der von
+// selfServicePatch gefilterte Patch): fuer dieses eine Feld aequivalent, weil
+// selfServicePatch es ungeprueft durchreicht (agentName in SELF_SERVICE_FREE_FIELDS,
+// Typ-Check macht ausschliesslich updateSettings - s. self-service.js). Die Antwort
+// nennt den Grund und NICHT den abgelehnten Wert.
+function rejectInvalidAgentName(audit) {
+  return function agentNameLimitMiddleware(req, res, next) {
+    const rejection = promptLineRejection("agentName", req.body?.agentName);
+    if (!rejection) return next();
+    audit("self_service_settings_denied", req, `field=agentName reason=${rejection}`);
+    res.status(HTTP_BAD_REQUEST).json({ error: "invalid_agent_name", reason: rejection });
+  };
 }
 
 // W4/AM4: reason -> { HTTP-Status, JSON-Body } in EINEM Switch (kein Magic-String/Number,
