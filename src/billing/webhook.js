@@ -66,6 +66,14 @@ export const SUSPEND_REASON = Object.freeze({
   PAYMENT_FAILED: "payment_failed",             // Dunning -> Abo lebt, Referenz bleibt
 });
 
+// FW1-A: WARUM ein Ereignis ohne Wirkung bleibt. no_tenant = kein Korrelationsschluessel
+// (Bestandsverhalten, Detail unveraendert); unknown_tenant = das Ereignis NENNT einen
+// Tenant (metadata.tenant_ref), den diese Datenbank nicht kennt.
+const WEBHOOK_IGNORE_REASON = Object.freeze({
+  NO_TENANT: "no_tenant",
+  UNKNOWN_TENANT: "unknown_tenant",
+});
+
 // Parst den Stripe-Signature-Header "t=<ts>,v1=<hex>[,v1=<hex>...]" in {timestamp, v1[]}.
 // Fail-closed: fehlt t oder ein v1, -> null (Aufrufer lehnt ab). Mehrere v1 (Secret-
 // Rotation) werden alle gesammelt.
@@ -287,6 +295,37 @@ function clearEndedSubscriptionRefAndAudit({ store, tenant, suspendReason, audit
   );
 }
 
+// FW1-A: loest den Tenant auf UND belegt seine Existenz - die EINE Stelle fuer beide
+// Webhook-Zweige (G5/S2), ohne ihre unterschiedliche Aufloesungs-REIHENFOLGE zu
+// verwischen: die Reihenfolge steckt im uebergebenen findFallbackTenantId (Lifecycle:
+// subscriptionId; Geld: customerId), das AUSSCHLIESSLICH ohne tenantRef gerufen wird.
+// Damit bleibt der no_tenant-Pfad ohne jeden Store-Zugriff (der Katalogtest
+// gap-03-stripe-money-events fuehrt ihn mit store={}).
+// Geprueft wird NUR der tenantRef-Zweig: der Fallback liefert per Konstruktion eine
+// Zeile, die es im selben State gibt, oder null - eine zweite Pruefung dort waere ein
+// redundanter Store-Zugriff ohne Aussage. Reine Query (kein Write).
+// Liefert { tenant, reason }: reason=null bei Treffer, sonst WEBHOOK_IGNORE_REASON.
+function resolveExistingTenant(store, tenantRef, findFallbackTenantId) {
+  if (!tenantRef) {
+    const tenant = findFallbackTenantId();
+    return tenant
+      ? { tenant, reason: null }
+      : { tenant: null, reason: WEBHOOK_IGNORE_REASON.NO_TENANT };
+  }
+  if (!store.tenantExists(tenantRef))
+    return { tenant: null, reason: WEBHOOK_IGNORE_REASON.UNKNOWN_TENANT };
+  return { tenant: tenantRef, reason: null };
+}
+
+// Audit-Detail-Fragment fuer einen nicht aufloesbaren Tenant. EINE Quelle fuer beide
+// Zweige (G5): no_tenant bleibt das unveraenderte Bestandsdetail; unknown_tenant nennt
+// zusaetzlich die genannte, aber nicht existierende Tenant-Id - ohne sie waere der tote
+// Verweis im Log nicht auffindbar (Pre-Mortem 1 der Spec).
+function unresolvedTenantDetail(reason, tenantRef) {
+  if (reason === WEBHOOK_IGNORE_REASON.UNKNOWN_TENANT) return `tenant=${tenantRef} ${reason}`;
+  return reason;
+}
+
 export async function applyStripeWebhook(
   event,
   {
@@ -322,9 +361,17 @@ export async function applyStripeWebhook(
   // SELBST zuerst (vor jeder Tenant-Aufloesung) - eigener Zweig, eigene Tenant-Aufloesungs-
   // Reihenfolge (s. applyMoneyEvent).
   if (action === WEBHOOK_ACTION.MONEY) return applyMoneyEvent(event, interpreted, { store, audit, req });
-  const tenant = tenantRef || store.findTenantBySubscription(subscriptionId)?.id || null;
+  // FW1-A: Existenz-Gate unmittelbar nach der Aufloesung und VOR jedem Schreibzugriff.
+  // Ein toter tenant_ref lief bisher bis in setTenantSubscription und dort in einen
+  // unhandledRejection: die Antwort an Stripe blieb aus, Stripe wiederholte das Ereignis
+  // dauerhaft erfolglos. Jetzt: eine Audit-Zeile, regulaere Rueckkehr, Route antwortet 200.
+  const { tenant, reason: unresolved } = resolveExistingTenant(
+    store,
+    tenantRef,
+    () => store.findTenantBySubscription(subscriptionId)?.id || null,
+  );
   if (!tenant) {
-    audit("stripe_webhook_ignored", req, `action=${action} no_tenant`);
+    audit("stripe_webhook_ignored", req, `action=${action} ${unresolvedTenantDetail(unresolved, tenantRef)}`);
     return;
   }
   if (action === WEBHOOK_ACTION.CANCEL_SCHEDULED) {
@@ -408,14 +455,12 @@ export async function applyStripeWebhook(
       req,
       `tenant=${tenant} ${profileAuditDetail(profile)} ${provisionAuditDetail(provisioned)} budget_period=${budgetPeriodStarted ? "reset" : "kept"}`,
     );
-    // GAP-03/O2: ein bestaetigtes aktives Abo hebt jede Beanstandungs-Wirkung auf
-    // (Reversibilitaet) - ein zuvor gesetzter billing_hold/periodCreditRevoked darf einen
-    // wieder zahlenden Tenant nicht dauerhaft sperren.
-    if (activated) {
-      store.clearBillingHold(tenant);
-      store.setTenantSubscription(tenant, { periodCreditRevoked: false });
-      return { activated: true };
-    }
+    // GAP-03/O2 + FW1-B: die Ruecknahme der Beanstandungs-Wirkung (clearBillingHold +
+    // periodCreditRevoked:false) liegt seit FW1 in activatePaidTenant - der EINEN
+    // gemeinsamen Aktivierung, die auch der Self-Service-Rueckkehrpfad durchlaeuft
+    // (subscribe.js). Bedingung unveraendert: activated===true heisst bestaetigtes Abo
+    // plus geklaertes Provisioning-Ergebnis.
+    if (activated) return { activated: true };
     // GAP-04: das Provisioning-Ergebnis ist NICHT geklaert - der Wartezustands-Marker bleibt
     // gesetzt (activation.js), der Operator-Retry findet den Tenant wieder. Plattform-Alarm-
     // Wunsch geht an den Route-Layer zurueck (routes/stripe-webhook.js sendet die SMS - kein
@@ -479,11 +524,16 @@ async function applyMoneyEvent(event, interpreted, { store, audit, req }) {
   const eventType = event && event.type;
   const eventId = (event && event.id) ?? "unknown";
   audit("stripe_money_event", req, `type=${eventType} event=${eventId} action=${moneyAction}`);
-  const tenant = tenantRef
-    ? tenantRef
-    : (customerId && store.findTenantByCustomer(customerId)?.id) || null;
+  // FW1-A: dasselbe Existenz-Gate wie im Lifecycle-Zweig (gemeinsamer Helfer), mit der
+  // Aufloesungs-Reihenfolge dieses Zweigs (tenantRef -> customerId). Der customerId-Guard
+  // bleibt IM Fallback: ohne Korrelationsschluessel wird der Store nicht angefasst.
+  const { tenant, reason: unresolved } = resolveExistingTenant(
+    store,
+    tenantRef,
+    () => (customerId && store.findTenantByCustomer(customerId)?.id) || null,
+  );
   if (!tenant) {
-    audit("stripe_money_event_ignored", req, "no_tenant");
+    audit("stripe_money_event_ignored", req, unresolvedTenantDetail(unresolved, tenantRef));
     return { action: WEBHOOK_ACTION.MONEY, tenant: null, alarm: null };
   }
   applyMoneyAction(store, tenant, moneyAction);

@@ -342,6 +342,10 @@ export const {
   // OHNE diese Re-Exports sind sie auf der Fassade undefined -> billing/webhook.js UND
   // outbound-gates.js wuerfen zur Laufzeit einen TypeError. Muster wie findTenantBySubscription.
   findTenantByCustomer,
+  // FW1-A: Existenz-Praedikat der Webhook-Tenant-Aufloesung. OHNE diesen Re-Export ist
+  // store.tenantExists auf der Fassade undefined -> billing/webhook.js wirft zur Laufzeit
+  // einen TypeError (dieselbe Landmine wie bei findTenantByCustomer).
+  tenantExists,
   setBillingHold,
   clearBillingHold,
   billingHoldActive,

@@ -730,6 +730,8 @@ export function makePgStore(runner) {
 
     // ---- Billing-Hold (GAP-03, O2): Wrapper-Parity zu json.js ----
     findTenantByCustomer: (customerId) => ops.findTenantByCustomer(requireState(), customerId),
+    // FW1-A: reine Query (kein save), Wrapper-Parity zu json.js.
+    tenantExists: (tenantId) => ops.tenantExists(requireState(), tenantId),
     setBillingHold(tenantId, patch) {
       ops.setBillingHold(requireState(), tenantId, patch);
       save();
