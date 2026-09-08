@@ -601,6 +601,11 @@ services:
         value: "false"
       - key: RATE_LIMIT_PER_MIN
         value: "120"
+      # SEC-P3: Herkunftspruefung der Self-Service-Schreibrouten. Default ist ohnehin
+      # true - hier gepinnt, damit der Schalter im Blueprint sichtbar ist. Achtung: die
+      # Live-Services sind Dashboard-managed, diese Zeile allein aendert Live nichts.
+      - key: CSRF_ENFORCE
+        value: "true"
       - key: RETENTION_DAYS
         value: "30"
       # P2b: Diagnose-Retention in Produktion vorerst AUS. Erst auf "7" stellen, wenn die

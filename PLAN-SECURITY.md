@@ -3709,3 +3709,39 @@ npm audit --omit=dev                      -> 2 moderate severity vulnerabilities
 
 `apps/web` hat ein eigenes Lockfile, 0 Verwundbarkeiten, nicht angefasst.
 `.github/dependabot.yml` bereits versioniert, nicht Teil dieser Phase.
+
+---
+
+## SEC-P3 — Eingabegrenzen + CSRF-Modus (2026-09-09)
+
+### Owner-bindende Entscheidungen (gelten bis widerrufen)
+
+1. **Der CSRF-Modus ist Origin-gegen-Request-Host, kein Token und keine Allowlist.**
+   Verglichen wird der Host des `Origin`-Headers mit `req.headers.host`. Kein
+   Doppel-Submit-Cookie, kein Synchronizer-Token, keine gepflegte Liste erlaubter
+   Herkuenfte. Begruendung: die App laeuft single-origin (`render.yaml`, Phase A) — eine
+   Liste haette einen Fehlkonfigurations-Ausgang (einmal falsch = Dashboard tot), der
+   Host-Vergleich hat keinen. Ein Token-Verfahren braeuchte einen zweiten Zustand pro
+   Sitzung, ohne mehr zu leisten.
+2. **Fehlender `Origin` passiert weiterhin (200).** Anbieter-Webhooks, `/mcp` und
+   Server-zu-Server-Aufrufer senden keinen; eine fail-closed-Variante braeche sie —
+   bei `/voice` hiesse das: eingehende Anrufe sterben. Ein FREMDER Origin -> 403.
+3. **Das Schema wird NICHT verglichen, nur der Host (inkl. Port).** Der Proxy terminiert
+   TLS; ein Schema-Vergleich braeuchte `X-Forwarded-Proto` als zweite, spoofbare Quelle.
+   Der `http://`-Zwilling faellt mit HSTS (SEC-P5). Bewusst getragen.
+4. **`CSRF_ENFORCE=false` ist ein zulaessiger Betriebszustand und loest KEINEN
+   Boot-Refusal aus** (nicht in `PRODUCTION_FOOTGUNS`). Ein Not-Aus, der den Dienst nicht
+   mehr starten laesst, ist kein Not-Aus. Wird der Schalter je auf `false` gestellt, ist
+   das eine bewusste, befristete Owner-Entscheidung.
+5. **Die Laengengrenze prompt-gebundener Freitextfelder lebt in `TEXT_LIMITS`
+   (`src/routes/_validation.js`), nicht in `config.js`.** `agentName: 80`. Kein Env-Knopf:
+   dieselbe Frage hat im Haus genau eine Quelle. Gemessen in CODEPOINTS; verworfen werden
+   ausschliesslich C0-/C1-Steuerzeichen. **Eine Zeichen-Allowlist ist und bleibt
+   verboten** — das Produkt ist weltweit ausgelegt.
+
+### Reichweite
+
+Geschuetzt sind alle nicht-sicheren Methoden unter `/api/self-service/**` (Praefix-
+Montage, keine Routen-Liste — eine kuenftige Route ist automatisch mit drin). NICHT
+geschuetzt und bewusst nicht: `/voice/*` (Provider-Signatur), `/mcp` (mcpAuth),
+`/webhooks/stripe` (HMAC), `/api/calls` u.a. (`internalOnly`).

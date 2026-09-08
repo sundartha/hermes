@@ -108,6 +108,11 @@ export const BASE_ENV = {
   // Ohne diese Zeile leakt eine lokale .env mit OUTBOUND_FROZEN=true via dotenv in Spawn-Tests
   // -> Baseline-Drift (Lehre test-base-env-drift). outbound-frozen.test.js setzt es explizit.
   OUTBOUND_FROZEN: "false",
+  // SEC-P3: Herkunftspruefung neutral auf den PRODUKTIONS-Default gepinnt (an), nicht
+  // auf den bequemen Wert. Spawn-Tests senden keinen Origin-Header und sind davon
+  // unberuehrt; ohne die Zeile leakt eine lokale .env mit CSRF_ENFORCE=false via dotenv
+  // in jeden Spawn-Test und deaktivierte die Sicherung unbemerkt.
+  CSRF_ENFORCE: "true",
   // OUTBOUND-E4: der ANI-Riegel ist ein SICHERHEITS-Gate (kann Anrufe ablehnen) - neutral
   // AUS, byte-identisch zum Produktions-Default. Kein Bestandstest soll ihn ungewollt
   // scharf schalten; test/outbound-ani-gate.test.js setzt ihn explizit.

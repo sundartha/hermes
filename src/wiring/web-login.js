@@ -30,7 +30,7 @@ import {
 } from "../web-auth.js";
 import { makePortalStore } from "../store/portal.js";
 import { makeAuditStore } from "../audit-store.js";
-import { makeSelfServiceRoutes } from "../self-service-routes.js";
+import { mountSelfServiceRoutes } from "../self-service-routes.js";
 import { createRateLimiter } from "../middleware.js";
 import { setTenantIdentityIfAbsent } from "../store/state-ops.js";
 import { runReleaseReconcile } from "../release-reconcile.js";
@@ -323,7 +323,7 @@ export async function wireWebLogin({
   // gesichert, keine Admin-Sitzung. audit = util.audit (nur Keys, keine Werte/PII).
   if (isSelfServiceLive(config)) {
     app.use(
-      makeSelfServiceRoutes({
+      mountSelfServiceRoutes({
         store,
         webAuthMw,
         webAuthPendingMw,
