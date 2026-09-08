@@ -26,7 +26,7 @@ import {
 } from "../src/billing/cost-calibration.js";
 import { KOSTENART } from "../src/billing/kostenarten.js";
 import { COST_TRUING_SOURCE, PLATFORM_NUMBER_PURPOSE } from "../src/store/defaults.js";
-import { EL_STICHPROBE, eigenCentQuelleJeAnruf, elVollkostenState } from "./fixtures/kostenv2-vollkosten-stichprobe.js";
+import { EL_STICHPROBE, STICHPROBEN_ENDE_MS, eigenCentQuelleJeAnruf, elVollkostenState } from "./fixtures/kostenv2-vollkosten-stichprobe.js";
 import { makeCostTruing, SWEEP_TRIGGER } from "../src/billing/cost-truing.js";
 import { makeStubStore, fakeConfig, fakeSpies } from "./cost-truing-harness.js";
 import { startServer, seedState, BASE_ENV } from "./helpers.js";
@@ -200,8 +200,16 @@ function kanalConfig(domesticCents) {
   });
 }
 
+// KV2-10 / SEC-P0: `now` ist der FIXTURE-ANKER, nicht die Wanduhr. Begruendung (Messung
+// 2026-09-08): der Sweep bewertet jeden Anruf gegen PROVIDER_COST_RECORD_WINDOW_DAYS=7.
+// Mit Date.now() fielen die 8 Stichproben ab dem 06.09.2026 aus dem Belegfenster, die
+// Deckung sank auf 0 % und der Sweep meldete ZUSAETZLICH coverage_below_threshold - ein
+// ZWEITER, eigener Sachverhalt mit eigenem Alarm. Die Faelle unten zaehlen die Meldungen
+// des Kanals; sie muessen deshalb den Zustand festlegen, ueber den der Kanal urteilt.
+// Nicht geaendert hat sich, was sie zusichern: genau EINE Meldung bei Unterschaetzung,
+// KEINE bei gedecktem Tarif.
 async function sweepMitTarifpaar(domesticCents) {
-  const nowMs = Date.now();
+  const nowMs = STICHPROBEN_ENDE_MS;
   const state = elVollkostenState();
   state.platformNumberUse = boundAlertSender();
   const store = makeStubStore(state);
@@ -233,6 +241,9 @@ test("KV2-10 (d1): Unterschaetzung (Minutensatz 10) -> GENAU EINE Mail und EINE 
   assert.equal(mailCalls.length, 1, "genau eine Mail");
   assert.equal(smsCalls.length, 1, "genau eine SMS");
   assert.match(JSON.stringify(mailCalls[0]) + JSON.stringify(smsCalls[0]), /vorschlag=20ct\+18ct\/min/);
+  // Die EINE Meldung ist die des Tarifpaars - eine Zahl allein liesse sich auch von einem
+  // fremden Befund erfuellen (SEC-P0: genau so war der Fall rot geworden).
+  assert.match(JSON.stringify(mailCalls[0]), /grund=tarifpaar_unterschaetzt/);
   assert.ok(
     auditCalls.some((entry) => entry.detail.includes("grund=tarifpaar_unterschaetzt")),
     `audit-Detail nennt den Befund-Code: ${JSON.stringify(auditCalls)}`,
