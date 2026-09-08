@@ -31,17 +31,35 @@ die Messwerte bereits.
   `Workflow({ scriptPath, args: { phaseId, phaseTitle, branch, baseBranch, planDoc, specFile, maxFixRounds } })`
   — `args` MUSS ein echtes Objekt sein und `phaseId` tragen; fehlt es, bricht der Workflow
   fail-closed ab. Der lange Auftragstext gehoert in die `specFile`, nicht in `args`.
-- **Modell-Pins an JEDEM `agent()`-Aufruf** im per-run Skript: `opus` fuer Plan und
-  Safety-/Verhaltens-Review, `sonnet` fuer Implementierung, Clean-Code-Audit, Self-Fix und
-  Report. Vererbung ist ein Kosten-Bug, kein Feature.
+- **Modell-Pins sind im Skript bereits gesetzt** (Plan + Safety-Review auf Opus,
+  Implementierung/Clean-Code/Fix/Report auf Sonnet). Pruefe sie in deiner per-run Kopie nach,
+  aendere sie nicht ohne Grund - Vererbung waere ein Kosten-Bug.
+- **`highStakes: true` MUSST du selbst setzen.** Das Skript leitet Hochrisiko aus einer
+  hartkodierten Liste `["P5","P6","P7"]` ab (`phase-impl-lean.js:90`) - unsere IDs heissen
+  `SEC-P<N>` und treffen diese Liste NICHT. Ohne den expliziten Schalter laeuft die
+  Implementierung des Geldpfads auf dem schwaecheren Modell und der Safety-Review eine Stufe
+  weicher. Setze ihn so:
+
+  | Phase | `highStakes` | Warum |
+  |---|---|---|
+  | SEC-P0 Testbank | `false` | Testcode, kein Live-Pfad |
+  | SEC-P1 Idempotenz | **`true`** | Geldbuchung + Anrufdatensatz |
+  | SEC-P2 Lieferkette | `false` | Versionsspruenge, durch die Suite gedeckt |
+  | SEC-P3 Grenzen + CSRF | **`true`** | Auth-Oberflaeche, Zustandswechsel |
+  | SEC-P4 EL-Token | **`true`** | Mandantentrennung |
+  | SEC-P5 Web-Haertung | **`true`** | Session-Cookie, alle Sitzungen enden |
+  | SEC-P6 Gate-Antwort | **`true`** | Outbound-Gate-Kette, Absolute Regel 1 |
 - **Eine Bahn zur Zeit.** Zwei parallele Workflows haben diese Maschine schon auf Load 32 bei
   15 Kernen gefahren.
 
 ## Je Phase, in dieser Reihenfolge
 
-1. **Spec schreiben.** Kopiere den Phasenabschnitt aus `PLAN-SEC-FIX.md` nach
-   `tasks/sec-p<N>-spec.md`. Das ist eine Textoperation, kein Code-Lesen. Ergaenze nur, was
-   der Plan-Agent sonst raten muesste.
+1. **Keine Spec schreiben.** Der Workflow sucht sich den Phasenabschnitt selbst: er
+   bekommt `specFile: "PLAN-SEC-FIX.md"` und `phaseId: "SEC-P<N>"` und liest daraus den
+   Abschnitt fuer genau diese Phase (`phase-impl-lean.js:113-115`). Eine eigene
+   `tasks/sec-p<N>-spec.md` schreibst du NUR, wenn du beim Lesen des Phasenabschnitts eine
+   Luecke siehst, die der Plan-Agent sonst raten muesste - dann ergaenzt sie ihn, ersetzt ihn
+   aber nicht.
 2. **Branch von `master`.** `git checkout -b sec/p<N> master` — erst den Branch, DANN lesen
    lassen; ein Worktree auf veraltetem Commit hat diese Kette schon einmal gekostet.
 3. **Workflow starten**, Ergebnis abwarten, **Return-Felder nicht glauben.** Pruefe selbst:
@@ -51,9 +69,10 @@ die Messwerte bereits.
    dort genannten Kommando. Nicht "sieht gut aus".
 5. **Merge im Lead**, klein. `finalBranch` mergen, nicht blind `branch` (kann `-fixN` heissen).
    Uncommittete Owner-Arbeit: nur *tracked* stashen.
-6. **Aufraeumen im selben Zug** (CLAUDE.md, Pflicht): `tasks/sec-p<N>-spec.md`,
-   `-report.md`, das per-run-Skript aus `.claude/workflows/runs/`. Erst committen, dann
+6. **Aufraeumen im selben Zug** (CLAUDE.md, Pflicht): `tasks/sec-p<N>-report.md`, eine
+   etwaige `-spec.md`, das per-run-Skript aus `.claude/workflows/runs/`. Erst committen, dann
    loeschen — sonst ist es fuer genau die Dateien unumkehrbar, die nie in der Historie waren.
+   `PLAN-SEC-FIX.md` bleibt, es ist das Manifest der ganzen Kette.
 7. **Kettenstand fortschreiben** in `tasks/sec-fix-chain-state.md`: Phase, Merge-Commit,
    Abnahme erfuellt ja/nein, offene Befunde. Das ist die Datei, die eine Nachfolge-Session
    liest — halte sie kurz.
