@@ -3662,3 +3662,50 @@ Belegt durch `test/sec-p1-webhook-idempotenz.test.js` (echte Ed25519-Signatur, E
 EIN Zeitstempel, zweimal zugestellt; LLM-Aufrufe gezaehlt) und
 `test/sec-p1-webhook-anker-persistenz.test.js` (Round-Trip in BEIDEN Store-Backends,
 Ringpuffer-Deckel, kein API-Leck).
+
+## SEC-P2 — Lieferkette: gezieltes Update statt `npm audit fix` (2026-09-09)
+
+Zwei Commits, 0 Zeilen Anwendungslogik, kein `--force`, keine neue Abhaengigkeit.
+
+**Commit 1 (nicht-brechend):** `npm update ip-address fast-uri hono @hono/node-server
+body-parser brace-expansion` — alle sechs transitiv, alle innerhalb bestehender Ranges,
+`package.json` unveraendert. Bewusst NICHT `npm audit fix`: das haette `express` von
+4.22.2 auf 4.22.1 zurueckgestuft, um dem `qs`-Advisory auszuweichen, und das Advisory
+dabei nicht einmal behoben (`qs` bleibt in beiden Faellen im verwundbaren Bereich
+2.2.5-6.15.3, nur an einer anderen Stelle im Baum). Ein Downgrade eines Live-Frameworks
+als Nebenwirkung eines Sicherheitsschritts wird hier nicht getragen.
+
+**Commit 2 (brechend, `nodemailer` Major):** `nodemailer` `^7.0.13` -> `^10.0.1`. Einziger
+Breaking Change laut Anbieter-CHANGELOG: `Node.js >= 20` erforderlich — wir fahren
+`>=22 <23`, vertraeglich. Kein Quellcode-Edit in `src/smtp-mail.js` /
+`src/mail-boot-probe.js` noetig (Default-Export, `createTransport`, `sendMail`, `verify`
+unveraendert). Neuer Test `test/nodemailer-lernvertrag.test.js` (Clean-Code P10) faengt
+genau das ab, was die attrappenbasierten Bestandstests per Konstruktion nicht sehen
+koennen: er laeuft gegen die ECHTE Bibliothek (lokaler `net`-Server ohne STARTTLS) und
+sichert die Invariante "TLS ist ERZWUNGEN" — kein `DATA`-Kommando erreicht den Server,
+solange `requireTLS` respektiert wird.
+
+### Owner-bindende Entscheidungen (gelten bis widerrufen)
+
+1. **`nodemailer` faehrt ab jetzt auf `^10`.** `Node >= 20` ist damit harte Untergrenze
+   der Mail-Faehigkeit (heute `>=22 <23` — Puffer vorhanden). Ein Rueckschritt auf `^7`
+   holt sechs hohe Advisories zurueck (SMTP-Command-Injection, CRLF-Injection, fehlende
+   TLS-Pruefung beim OAuth2-Token-Abruf, `raw`/`jsonTransport` umgehen
+   `disableFileAccess`/`disableUrlAccess`).
+2. **Das `qs`-Advisory (moderat, via `express@4.22.2` -> `qs@~6.15.1`) wird bewusst
+   getragen**, solange es moderat bleibt — der einzige Ausweg ist ein `express`-Downgrade
+   oder ein `overrides`-Zwang, beides ein brechender Sprung an einem Live-Framework fuer
+   einen moderaten Befund. Wird das Advisory je auf `high` hochgestuft, faellt die Abnahme
+   dieser Phase von selbst rot; der `express`-5-Sprung (oder `overrides`) ist dann als
+   eigene Entscheidung zu treffen, nicht nebenbei.
+
+### Zustand nach beiden Commits (gemessen)
+
+```
+npm audit --omit=dev --audit-level=high   -> exit 0   (Abnahme)
+npm audit --audit-level=high              -> exit 0   (CI-Gate-Paritaet, ci.yml auditiert ohne --omit=dev)
+npm audit --omit=dev                      -> 2 moderate severity vulnerabilities (qs, s.o.)
+```
+
+`apps/web` hat ein eigenes Lockfile, 0 Verwundbarkeiten, nicht angefasst.
+`.github/dependabot.yml` bereits versioniert, nicht Teil dieser Phase.
