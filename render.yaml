@@ -382,6 +382,10 @@ services:
       # nicht die Umstellung. Mitzieh-Pflichten stehen in .env.example.
       - key: LLM_PROVIDER
         value: anthropic
+      # FW2: Ausweich-Anbieter des Guthaben-Latch. Leer = Funktion AUS (Bestand).
+      # Mitzieh-Pflichten stehen in .env.example.
+      - key: LLM_PROVIDER_FALLBACK
+        value: ""
       # ---- Pre-Call-Briefing (P8) ---- Default AUS; Anschalten ist Owner-Arbeit.
       - key: PRECALL_BRIEFING_ENABLED
         value: "false"
@@ -573,6 +577,9 @@ services:
         value: "10000"
       - key: LLM_BREAKER_COOLDOWN_MS
         value: "30000"
+      # FW2: Haltedauer des Guthaben-Latch (900000 ms = 15 min).
+      - key: LLM_BILLING_LATCH_COOLDOWN_MS
+        value: "900000"
       # L0-Instrumentierung: PII-freie Latenz-/STT-Gap-Logs UND (GAP-35) das
       # Ablehnungs-Ereignis mit Land/Sprache. Im Mehr-Laender-Betrieb
       # (ALLOWED_COUNTRY_CODES > 1 Eintrag bzw. "*") ist das die EINZIGE Log-Zeile, an

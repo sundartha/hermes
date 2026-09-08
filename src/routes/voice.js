@@ -31,6 +31,7 @@ import { withInboundNotice } from "../i18n/inbound-notice.js";
 import { greetingForLanguage } from "../i18n/greeting-catalog.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
+import { noteLlmBillingOutage } from "../llm-billing-outage.js";
 import { agentTurn, openingText, callerHasSpoken } from "../claude.js";
 import { isBudgetAxis } from "../budget-gate.js";
 import { remainingMaxDurationMs } from "../store/state-ops.js";
@@ -71,6 +72,9 @@ import { KOSTENPROFIL } from "../billing/kostenarten.js";
 // Platzhalter; die exakte Telnyx-Handoff-Direktive ist live unbestaetigt (P0/P11). Zentral
 // benannt statt inline-[] gestreut.
 const INBOUND_ASSISTANT_HANDOFF = [];
+
+// FW2: EIN Kanalname fuer die Diagnose-Zeilen dieses Webhooks (G25).
+const TURN_LOG_PREFIX = "[voice/turn]";
 
 export function makeVoiceRoutes({
   store,
@@ -397,7 +401,7 @@ export function makeVoiceRoutes({
         // (logUnknown:false) WAR aktiv, "kein aktiver Call" waere dort irrefuehrend (G2).
         if (reattached.logUnknown)
           console.warn(
-            `[voice/turn] kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
+            `${TURN_LOG_PREFIX} kein aktiver Call (callId=${req.query.callId || "-"} ${call ? `status=${call.status}` : "unbekannt"}) -> Hangup`,
           );
         return res.type("text/xml").send(render([hangupD()]));
       }
@@ -441,6 +445,10 @@ export function makeVoiceRoutes({
       // KEIN Retry hier (der Seam hat bereits begrenzt+selektiv retried); das Gespraech
       // endet kontrolliert (Say + Hangup), kein stummer Abbruch. Jeder ANDERE Fehler
       // (nicht-transient, z.B. 4xx/Auth) bleibt terminal wie im Bestand.
+      // FW2-B: der Guthaben-Ausfall ist auf diesem Weg bisher nicht von einem beliebigen
+      // Fehler unterscheidbar - dieselbe Alarm-Funktion wie im Assistant-Weg (G5, EINE
+      // Quelle), plus der Latch. Der Degradations-/Sendepfad bleibt unveraendert.
+      noteLlmBillingOutage(err, { logPrefix: TURN_LOG_PREFIX, payload: { callId: call.id } });
       const locale = localeFor(call.language);
       await sendTurnOutcome(res, call, { speech: degradedSpeechFor(err, locale), endCall: true });
     }

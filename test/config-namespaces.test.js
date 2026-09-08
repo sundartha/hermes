@@ -85,7 +85,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // B5: llmProvider + deepseekApiKey ergaenzt (Anbieter-Wahl + Schluessel des
   // Fremdadapters) -> 14.
   // FIX-1: summaryTimeoutMs ergaenzt (eigener Timeout der Zusammenfassung) -> 15.
-  llm: 15,
+  // FW2: llmProviderFallback + llmBillingLatchCooldownMs ergaenzt (Ausweich-Anbieter des
+  // Guthaben-Latch + seine Haltedauer) -> 17.
+  llm: 17,
   telnyx: 2,
   // AL-P7b: thinkingSignalEnabled ergaenzt (Denk-Signal-Flag) -> 11.
   // STT-A1: sttProfile ergaenzt (neutrale STT-Wahl, EIN Config-Schluessel fuer alle
@@ -160,7 +162,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // platformFixedCostUsdCentsPerMonth umbenannt (menge neutral) -> 180.
 // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs (tenancy) ergaenzt ->
 // 183.
-const EXPECTED_TOTAL_KEYS = 183;
+// FW2: llmProviderFallback + llmBillingLatchCooldownMs (llm) ergaenzt -> 185.
+const EXPECTED_TOTAL_KEYS = 185;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -304,7 +307,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // primitiv (Zahl) und verschiebt nichts.
   // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs sind alle drei
   // primitiv (Zahl, kein Array/nested Objekt) -> 171.
-  const EXPECTED_PRIMITIVE_LEAVES = 171;
+  // FW2: llmProviderFallback (String) + llmBillingLatchCooldownMs (Zahl) sind beide
+  // primitiv (kein Array/nested Objekt) -> 173.
+  const EXPECTED_PRIMITIVE_LEAVES = 173;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
