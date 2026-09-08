@@ -9,8 +9,8 @@ Kickoff (Lead-Rolle): `tasks/sec-fix-kickoff.md`.
 |---|---|---|---|---|
 | SEC-P0 | Testbank gruen | `98cf2bd` | **ja** | Teil (b) Flakes offen, s. unten |
 | SEC-P1 | Webhook-Idempotenz | `105c839` | **ja** | 14 neue Faelle; Entscheidung in PLAN-SECURITY.md ab Zeile 3591 |
-| SEC-P2 | Lieferkette | — | — | laeuft |
-| SEC-P3 | Eingabegrenzen + CSRF | — | — | — |
+| SEC-P2 | Lieferkette | `e9dc392` | **ja** | audit high Exit 0; 8 -> 2 Befunde, beide moderat |
+| SEC-P3 | Eingabegrenzen + CSRF | — | — | laeuft |
 | SEC-P4 | EL-Token je Mandant | — | — | — |
 | SEC-P5 | Web-Haertung | — | — | — |
 | SEC-P6 | Antwort statt Haenger + Waechter | — | — | — |
@@ -35,6 +35,9 @@ einer dieser fuenf Dateien zaehlt erst, wenn er ISOLIERT (`node --test test/<dat
 ebenfalls rot ist. Kehrt die Flake zurueck und ist dann reproduzierbar, gehoert sie in eine
 eigene kleine Phase, nicht in die laufende.
 
+**F-1 ist seit SEC-P2 belegt LEBENDIG:** im ersten vollen Lauf auf `sec/p2` war `AL-P10-1`
+rot, isoliert dreimal gruen, der zweite volle Lauf gruen. Genau das vorhergesagte Muster.
+
 Nebenbefund derselben Wurzelklasse: der SEC-P0-Defekt war eine Zeitbombe (Fixture gegen
 Wanduhr). Es kann weitere geben — sie zeigen sich als Test, der ohne Code-Aenderung rot wird.
 
@@ -44,6 +47,7 @@ Wanduhr). Es kann weitere geben — sie zeigen sich als Test, der ohne Code-Aend
 |---|---|---|---|---|
 | SEC-P0 | `wf_c5b100fd-9b3` | 17,9 Mio | 192 | 9,8 Mio / 80 Turns |
 | SEC-P1 | `wf_a691e1ef-a9a` | 106,9 Mio | 722 | 41,3 Mio / 184 Turns |
+| SEC-P2 | `wf_80044ac7-77d` | 23,9 Mio | 270 | 9,3 Mio / 85 Turns |
 
 SEC-P1 riss den Richtwert (150 Turns je Agent) bei zwei Agenten: Implementierung 184,
 Safety-Review 187. Kein Warteschleifen-Muster — die Phase beruehrte beide Store-Backends,
@@ -71,6 +75,13 @@ durfte die volle Suite nicht fahren und konnte die Flakes deshalb nicht reproduz
 Phasen, in denen der volle Suite-Lauf das MESSINSTRUMENT ist und nicht nur die Regressionsprobe,
 muss der Riegel gelockert werden — das war hier nicht noetig, weil die Flakes ohnehin nicht
 feuerten.
+
+## Verbliebene Lieferketten-Befunde nach SEC-P2 (bewusst offen)
+
+2 moderate: `qs` via `express` 4.22.2. Der Abschnitt verlangt nur `--audit-level=high` Exit 0;
+diese zwei werden nicht ueber einen weiteren brechenden Sprung gejagt. `npm audit fix` haette
+express faelschlich auf 4.22.1 ZURUECKgestuft, ohne das qs-Advisory zu beheben — deshalb wurde
+gezielt aktualisiert statt pauschal gefixt.
 
 ## Owner-Blocker (nicht vom Assistenten baubar, s. PLAN-SEC-FIX.md Abschnitt 3)
 
