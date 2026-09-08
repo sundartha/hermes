@@ -254,6 +254,42 @@ test("SEC-P1-7: Neustart-Fall - persistierter Anker antwortet mit offenem Mikrof
   }
 });
 
+test("SEC-P1-9: /voice/incoming nach Neustart - der Anruf-Datensatz IST der Anker", async () => {
+  const signer = makeTelnyxSigner();
+  // Der Prozess-Cache ist leer (frischer Server), der Anruf-Datensatz aber schon da -
+  // genau der Zustand nach einem Deploy zwischen Provider-Retry und Erst-Zustellung.
+  // Anders als SEC-P1-1 (zweimal DEMSELBEN Prozess zugestellt, der Prozess-Cache faengt
+  // dort VOR seenBefore) muss dieser Test den store-basierten Fallback-Zweig selbst
+  // erreichen: der Call existiert bereits BEVOR der Request eintrifft.
+  const srv = await startServer({
+    env: { SKIP_TWILIO_SIGNATURE_CHECK: "false", TELNYX_PUBLIC_KEY: signer.publicKeyBase64 },
+    seed: seedState({
+      calls: [
+        seedCall({
+          id: "call_incoming_restart",
+          provider: "telnyx",
+          status: "active",
+          twilioSid: "CAsecp1restart",
+        }),
+      ],
+    }),
+  });
+  try {
+    const envelope = sealedEnvelope(signer, {
+      CallSid: "CAsecp1restart",
+      From: "+4915112345678",
+      To: OWNER_TEST_NUMBER.e164,
+    });
+    const res = await deliver(srv, "/voice/incoming", envelope);
+    const xml = await res.text();
+    assert.equal(res.status, HTTP_OK);
+    assert.match(xml, /<Gather/, "keepAliveXml haelt das Mikrofon offen statt eines Fehlers");
+    assert.equal(srv.readStore().calls.length, 1, "kein zweiter Anruf-Datensatz entsteht");
+  } finally {
+    await srv.stop();
+  }
+});
+
 // Reine Anker-Ableitung, ohne Server: die Grenzfaelle sind fail-open dokumentiert
 // (kein Anker -> Bestandsverhalten) und duerfen NIE werfen.
 test("SEC-P1-8: Anker-Ableitung an den Raendern - leere Liste statt Throw", () => {
