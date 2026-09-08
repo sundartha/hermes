@@ -51,7 +51,11 @@ export function eigenCentQuelleJeAnruf(fixture = EL_STICHPROBE) {
 const FIXTURE_QUELLE = "kv2_10_fixture";
 
 // Fester Gespraechs-Ende-Anker (deterministisch, kein Date.now() in der Fixture).
-const STICHPROBEN_ENDE_MS = Date.parse("2026-08-30T12:00:00Z");
+// EXPORTIERT, weil jeder Verbraucher, der diese Fixture gegen eine UHR auswertet, dieselbe
+// Uhr braucht: der Sweep bewertet einen Anruf ueber PROVIDER_COST_RECORD_WINDOW_DAYS gegen
+// `now`. Mit Date.now() als now waeren die Stichproben ab dem achten Tag nach diesem Anker
+// "ausserhalb des Belegfensters" - ein anderer Zustand als der, den die Fixture baut.
+export const STICHPROBEN_ENDE_MS = Date.parse("2026-08-30T12:00:00Z");
 
 // Baut aus der Stichprobe einen echten State-Spiegel: createCall-Shape je Anruf plus
 // ZWEI callCostEvidence-Zeilen (elevenlabs_convai, telnyx_sip), beide reife=belegt,
