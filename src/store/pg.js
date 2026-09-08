@@ -306,6 +306,13 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // SEC-P1: Ereignis-Anker der Turn-Webhooks - Wrapper-Parity zu json.js. Der Flush
+    // schreibt webhook_anchors (INSERT + ON CONFLICT DO UPDATE SET).
+    recordWebhookAnchors(callId, anchors) {
+      const { call, changed } = ops.recordWebhookAnchors(requireState(), callId, anchors);
+      if (changed) save();
+      return call;
+    },
     // INBOX-P1: Qualifikations-Marker - Wrapper-Parity zu json.js.
     markInboxEntry(callId, qualifies) {
       const { call, changed } = ops.markInboxEntry(requireState(), callId, qualifies);
@@ -1611,6 +1618,12 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // zurueck (Lehre i8-design-decisions) - und der Deckel zaehlte von vorn.
     lookupLog: r.lookup_log ?? null,
     actionItemIds: itemIdsByCall.get(r.id) || [],
+    // SEC-P1: Ereignis-Anker mit-hydrieren. Ohne diese Zeile ginge der Anker beim
+    // Restart verloren UND der naechste Flush ueberschriebe ihn (Lehre
+    // i8-design-decisions) - eine Wiederholung loeste danach wieder eine zweite
+    // Modellrunde aus. JSONB kommt vom Treiber geparst; NULL -> [] (json-Parity zu
+    // createCall). Frisches Array je Zeile, kein geteilter Alias.
+    webhookAnchors: r.webhook_anchors ?? [],
     ...absenderWahrheitFelder(r),
     // ST3: Detektor-Zaehlfeld mit-hydrieren - ohne diese Zeile ginge es beim Restart
     // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
@@ -2085,6 +2098,12 @@ function callRowValues(call, tenantId) {
     // (persistProviderResult); ohne UPDATE-SET faelle es beim naechsten Flush auf NULL
     // zurueck (Muster answered_unclear_reason).
     ...elDetektorWerte(call),
+    // SEC-P1 ($63, ans Ende angehaengt -> keine Umnummerierung): Ereignis-Anker als
+    // JSONB (Muster lookup_log). IM ON CONFLICT DO UPDATE SET - die Anker entstehen
+    // NACH dem Create (je Turn-Webhook); fehlte die Spalte im UPDATE-SET, fiele der
+    // Ringpuffer bei jedem Flush auf den Create-Zustand zurueck und der Neustart-Fall
+    // waere ungeschuetzt. Leere Liste -> NULL (kein "[]" am Bestandsanruf).
+    call.webhookAnchors?.length ? JSON.stringify(call.webhookAnchors) : null,
   ];
 }
 
@@ -2111,8 +2130,8 @@ async function flushCalls(client, tenantId, calls) {
           callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
           lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
           from_actual_e164, from_source, from_registration_source, cost_profile,
-          el_detector_counts)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62)
+          el_detector_counts, webhook_anchors)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -2142,7 +2161,8 @@ async function flushCalls(client, tenantId, calls) {
          from_actual_e164=EXCLUDED.from_actual_e164, from_source=EXCLUDED.from_source,
          from_registration_source=EXCLUDED.from_registration_source,
          cost_profile=EXCLUDED.cost_profile,
-         el_detector_counts=EXCLUDED.el_detector_counts`,
+         el_detector_counts=EXCLUDED.el_detector_counts,
+         webhook_anchors=EXCLUDED.webhook_anchors`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);

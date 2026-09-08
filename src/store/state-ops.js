@@ -25,6 +25,7 @@ import {
   sanitizeProfile,
   resolveProfileFrom,
   MAX_NOTIFICATIONS,
+  WEBHOOK_ANCHOR_HISTORY,
   DEFAULT_PROVIDER,
   PROVIDER,
   DEFAULT_COUNTRY,
@@ -450,6 +451,12 @@ export function createCall(
     fromActualE164: null,
     fromSource: null,
     fromRegistrationSource: null,
+    // SEC-P1: Ringpuffer der bereits verarbeiteten /voice/turn-Ereignis-Anker
+    // (PII-FREI: Zufallsmarke bzw. sha256 des signierten Umschlags, NIE Wortlaut).
+    // Ueberlebt den Neustart -> eine Wiederholung loest danach keine zweite
+    // Modellrunde mehr aus. Reine Zuweisung ohne Operator (die gepinnte Komplexitaet
+    // dieser Altlast-Funktion bleibt unveraendert, s. eslint-legacy-exceptions.json).
+    webhookAnchors: [],
     actionItemIds: [],
   };
   s.calls.unshift(call);
@@ -687,6 +694,23 @@ export function markSummaryMailSent(s, callId) {
 // Voice-Minuten NICHT erneut. Wrapper saved bei changed.
 export function markBilled(s, callId) {
   return setOnceTimestamp(getCall(s, callId), "billedAt");
+}
+
+// SEC-P1: die Anker EINES verarbeiteten Turn-Webhooks anhaengen; aeltere fallen aus dem
+// Ringpuffer (WEBHOOK_ANCHOR_HISTORY). Unbekannter Call -> changed=false, KEIN Throw
+// (ein verspaeteter Retry darf den Setter nicht crashen, Muster setOnceTimestamp).
+// Bereits bekannte Anker werden nicht doppelt geschrieben -> kein Flush ohne Aenderung.
+// Zustand ausgeschrieben (state statt s, Muster trueUpAnsweredAt/markInboxEntry): eine
+// neue einbuchstabige Kennung ueberschritte die im Bestand eingefrorene
+// id-length-Ausnahme dieser Datei (eslint-suppressions.json, exakter Zaehler).
+export function recordWebhookAnchors(state, callId, anchors) {
+  const call = getCall(state, callId);
+  if (!call) return { call: null, changed: false };
+  const known = call.webhookAnchors ?? [];
+  const fresh = anchors.filter((anchor) => !known.includes(anchor));
+  if (!fresh.length) return { call, changed: false };
+  call.webhookAnchors = [...known, ...fresh].slice(-WEBHOOK_ANCHOR_HISTORY);
+  return { call, changed: true };
 }
 
 // INBOX-P1: Qualifikations-Marker. qualifies=false -> No-op.

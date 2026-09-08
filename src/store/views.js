@@ -58,6 +58,10 @@ export function publicCall({
   // ST3: Betreiber-Diagnose-Zaehler der Stimmen-Detektoren (PII-frei) - beantwortet
   // keine Nutzerfrage, Muster costProfile (kein /api/state-Leak).
   elDetectorCounts,
+  // SEC-P1: die Ereignis-Anker sind ein rein interner Wiederholungs-Riegel (Muster
+  // summarySmsSentAt/costProfile) - keine Nutzerfrage, kein Anzeige-Vertrag. Haelt
+  // /api/state, die Self-Service-Antwort und die MCP-Ausgaben BYTE-IDENTISCH.
+  webhookAnchors,
   ...rest
 }) {
   return rest;

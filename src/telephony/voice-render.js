@@ -2,7 +2,8 @@
 // schliesst config und liest config.server.publicUrl/config.voice.sttSpeechTimeoutSec ZUR LAUFZEIT
 // (nicht zur Import-Zeit einfrieren - sonst driftet der Telnyx-Absolut-URL-Pfad). Der
 // voiceRenderer-Port, die Direktiven-Helfer, localeFor, MEDIA_PATH und DEFAULT_PROVIDER
-// werden hier importiert (EINE Quelle je, G5). Rein: kein I/O, keine Nebeneffekte.
+// werden hier importiert (EINE Quelle je, G5). Rein: kein I/O, keine Nebeneffekte;
+// einzige Ausnahme ist die frische Turn-Marke je Gather (Zufall, kein IO, kein Zustand).
 //
 //   render                 - Direktiven-Liste -> Provider-Markup (TwiML/TeXML), Hot-Path.
 //   turnDirectives         - Sprach-Turn (Budget-Engine): Gather + Redirect-Fallback.
@@ -19,6 +20,7 @@ import {
 import { localeFor } from "../i18n/locales.js";
 import { MEDIA_PATH } from "../bridge.js";
 import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
+import { newTurnToken, TURN_TOKEN_PARAM } from "./webhook-idempotenz.js";
 
 export function makeVoiceRender({ config }) {
   // Kurz-Helfer fuer Direktiven-Listen -> Provider-Markup (TwiML/TeXML). provider
@@ -35,7 +37,12 @@ export function makeVoiceRender({ config }) {
   function turnDirectives(call, text, { speechTimeoutSec } = {}) {
     const isTelnyx = call.provider === PROVIDER.TELNYX;
     const base = isTelnyx ? config.server.publicUrl : "";
-    const action = `${base}/voice/turn?callId=${call.id}`;
+    // SEC-P1: EINE frische Turn-Marke je gerendertem Gather. Der Anbieter reicht sie
+    // im Action- ODER im Redirect-Aufruf zurueck (genau eines von beiden feuert) ->
+    // sie identifiziert das EREIGNIS. Zwei echte Runden tragen verschiedene Marken,
+    // ein Retry derselben Runde traegt dieselbe. Die XML-Maskierung des "&" uebernimmt
+    // escapeXml im Renderer (Gather-action UND Redirect-Body).
+    const action = `${base}/voice/turn?callId=${call.id}&${TURN_TOKEN_PARAM}=${newTurnToken()}`;
     // Voice-Profil (TTS-Voice + STT-Locale) aus call.language ableiten (F1 P4). DE-Call
     // -> DE_FEMALE_NEURAL -> Renderer byte-identisch (Snapshot). Fail-safe ueber localeFor.
     const voiceProfile = localeFor(call.language).voiceProfile;

@@ -46,6 +46,7 @@ import { makeCallControlIngest } from "../telnyx-call-control-ingest.js";
 import { ANSWERED_BY } from "../telephony/answered-by.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
+import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -199,6 +200,18 @@ export function makeVoiceRoutes({
 
   const router = Router();
 
+  // SEC-P1 (REPLAY-01/02): Wiederholungs-Riegel der zwei ungeschuetzten Webhooks.
+  // EINE Instanz je Server (INV-7). Registriert wird er PRO ROUTE, also strukturell
+  // HINTER der /voice-Signatur-MW - ein unsignierter Request darf keinen Anker
+  // beanspruchen. keepAliveXml ist die Antwort auf eine Wiederholung, deren Wortlaut
+  // dieser Prozess nicht mehr kennt (Neustart): Folge-Gather OHNE Prompt haelt das
+  // Mikrofon offen, kostet keine Modellrunde und keine Synthese. KEIN Gate wird hier
+  // beruehrt (Regel 1) - der Riegel fuegt hinzu, er nimmt nichts weg.
+  const idempotenz = makeWebhookIdempotenz({
+    store,
+    keepAliveXml: (call) => render(followupTurnDirectives(call, ""), call.provider),
+  });
+
   // ---- INV-4 (Pflicht-Kommentar, safety-tragend): TTS-Route ZUERST, DANN Sig-MW, DANN die 5
   // Webhooks (/voice/incoming, /voice/turn, /voice/outbound, /voice/status,
   // /voice/call-control). Wuerde die Sig-MW VOR die TTS-Route ruecken, wuerde PII-Audio
@@ -259,7 +272,7 @@ export function makeVoiceRoutes({
   // vor der Signatur waere Tenant-Spoofing). Unbekannte/fehlende To -> hoeflicher
   // Hangup, KEIN Default-Tenant, KEIN aktiver Call (nicht-routbare Nummer kostet
   // nichts).
-  router.post("/voice/incoming", async (req, res) => {
+  router.post("/voice/incoming", idempotenz.forIncoming, async (req, res) => {
     // Provider EINMAL aus dem (bereits fail-closed signatur-geprueften) Header
     // ableiten. Skip-Signature/lokale curl-Tests ohne Provider-Header -> DEFAULT_PROVIDER,
     // seit C-P1 also der Telnyx-Pfad - bewusst und getestet ("C-P1 B",
@@ -378,7 +391,7 @@ export function makeVoiceRoutes({
   });
 
   // ---------------- GESPRAECHS-TURN (Budget-Engine, beide Richtungen) ----------------
-  router.post("/voice/turn", async (req, res) => {
+  router.post("/voice/turn", idempotenz.forTurn, async (req, res) => {
     let call = store.getCall(req.query.callId);
     if (!call || call.status !== "active") {
       // F12 (A6): dem Prozess unbekannter, aber in der DB aktiver Call (Deploy-Instanz-

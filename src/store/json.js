@@ -263,11 +263,20 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   // INBOX-P1: die zwei Inbox-Marker (json<->pg-Parity, rowToCall liefert null).
   inboxEntryAt: null,
   inboxSeenAt: null,
+  // SEC-P1: Bestands-store.json ohne das Feld hydriert auf [] (pg-Parity: rowToCall
+  // liefert fuer eine Bestandszeile ebenfalls []). Kein Backfill noetig - ein
+  // Bestands-Anruf ist beendet und bekommt keinen Turn-Webhook mehr.
+  webhookAnchors: [],
 });
 
 function migrateCallFields(calls) {
   for (const call of calls) {
-    for (const [field, fallback] of Object.entries(CALL_FIELD_DEFAULTS)) call[field] ??= fallback;
+    // SEC-P1: Listen-Defaults werden KOPIERT. Die Karte oben ist eingefroren, ihre Werte
+    // sind es nicht - ein direkt zugewiesenes [] waere EIN geteiltes Array in allen
+    // migrierten Calls (derselbe stille Alias, den STATE_FIELD_DEFAULTS mit Fabriken
+    // vermeidet). Skalare Defaults bleiben unveraendert.
+    for (const [field, fallback] of Object.entries(CALL_FIELD_DEFAULTS))
+      call[field] ??= Array.isArray(fallback) ? [...fallback] : fallback;
   }
   return calls;
 }
@@ -530,6 +539,13 @@ export function markSummaryMailSent(callId) {
 // F9 (A6): persistierter Bucht-Marker - mutiert -> save bei changed (Muster markSummarySmsSent).
 export function markBilled(callId) {
   const { call, changed } = ops.markBilled(load(), callId);
+  if (changed) save();
+  return call;
+}
+
+// SEC-P1: Ereignis-Anker am Call - mutiert -> save bei changed (Muster markBilled).
+export function recordWebhookAnchors(callId, anchors) {
+  const { call, changed } = ops.recordWebhookAnchors(load(), callId, anchors);
   if (changed) save();
   return call;
 }

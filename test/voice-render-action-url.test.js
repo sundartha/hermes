@@ -22,8 +22,16 @@ test("S1-14b: telnyx-Call -> absolute Action-URL (config.publicUrl-Praefix)", ()
     { id: "call_2", provider: "telnyx", language: "de" },
     "Hallo",
   );
-  assert.equal(gatherD.action, "https://agent.test/voice/turn?callId=call_2");
-  assert.equal(redirectD.url, "https://agent.test/voice/turn?callId=call_2");
+  // SEC-P1: die Action-URL traegt seither eine frische Turn-Marke je gerendertem Gather
+  // (Ereignis-Anker des Wiederholungs-Riegels). Praefix byte-genau, die Marke als FORM
+  // (16 Hex-Zeichen aus 8 Zufallsbytes) - ein fester Wert waere per Definition nicht
+  // frisch. Gather und Redirect MUESSEN dieselbe Marke tragen: bei TeXML feuert genau
+  // eines von beiden, also gehoert zu einem Gather genau EIN Ereignis-Anker.
+  assert.match(
+    gatherD.action,
+    /^https:\/\/agent\.test\/voice\/turn\?callId=call_2&turnToken=[0-9a-f]{16}$/,
+  );
+  assert.equal(redirectD.url, gatherD.action);
 });
 
 // S3 (P8-Testluecke): streamDirectives() - https->wss-Ersetzung + MEDIA_PATH + Param-Form
@@ -71,6 +79,6 @@ test("C-P1: streamDirectives ohne call.provider -> Media-Pfad des Rueckfalls (Te
 test("BEFUND (Charakterisierung): Call ohne provider -> TeXML-Renderer, aber RELATIVE Action-URL", () => {
   const { turnDirectives } = makeVoiceRender({ config: fakeConfig });
   const [gatherD, redirectD] = turnDirectives({ id: "call_12", language: "de" }, "Hallo");
-  assert.equal(gatherD.action, "/voice/turn?callId=call_12");
-  assert.equal(redirectD.url, "/voice/turn?callId=call_12");
+  assert.match(gatherD.action, /^\/voice\/turn\?callId=call_12&turnToken=[0-9a-f]{16}$/);
+  assert.equal(redirectD.url, gatherD.action);
 });

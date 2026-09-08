@@ -369,7 +369,11 @@ CREATE TABLE IF NOT EXISTS call (
   -- ({elTags,elB1}), PII-FREI (nur Zaehler, nie Text), KEINE Transkript-Aenderung
   -- (Art. 50). Additiv NULLABLE: nur der ElevenLabs-Ergebnisweg setzt sie.
   -- Muster lookup_log.
-  el_detector_counts JSONB
+  el_detector_counts JSONB,
+  -- SEC-P1: Ereignis-Anker bereits verarbeiteter /voice/turn-Webhooks (JSONB-Array,
+  -- PII-frei: Zufallsmarke bzw. sha256 des signierten Umschlags, NIE Wortlaut).
+  -- Additiv NULLABLE -> Bestandszeile = NULL = "keine Wiederholung bekannt".
+  webhook_anchors JSONB
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -516,6 +520,11 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS from_registration_source TEXT;
 -- answered_unclear_reason). Idempotent; frische DB = No-op. KEIN Backfill: die Zahl
 -- misst ab Deploy vorwaerts.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS el_detector_counts JSONB;
+
+-- SEC-P1: Ereignis-Anker auf Bestands-call-Tabellen nachziehen (Muster
+-- el_detector_counts). Idempotent; frische DB = No-op. KEIN Backfill: Bestands-Anrufe
+-- sind beendet und bekommen keinen Turn-Webhook mehr.
+ALTER TABLE call ADD COLUMN IF NOT EXISTS webhook_anchors JSONB;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).
