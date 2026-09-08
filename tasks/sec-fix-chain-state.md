@@ -8,8 +8,8 @@ Kickoff (Lead-Rolle): `tasks/sec-fix-kickoff.md`.
 | Phase | Titel | Merge-Commit | Abnahme erfuellt | Bemerkung |
 |---|---|---|---|---|
 | SEC-P0 | Testbank gruen | `98cf2bd` | **ja** | Teil (b) Flakes offen, s. unten |
-| SEC-P1 | Webhook-Idempotenz | — | — | laeuft |
-| SEC-P2 | Lieferkette | — | — | — |
+| SEC-P1 | Webhook-Idempotenz | `105c839` | **ja** | 14 neue Faelle; Entscheidung in PLAN-SECURITY.md ab Zeile 3591 |
+| SEC-P2 | Lieferkette | — | — | laeuft |
 | SEC-P3 | Eingabegrenzen + CSRF | — | — | — |
 | SEC-P4 | EL-Token je Mandant | — | — | — |
 | SEC-P5 | Web-Haertung | — | — | — |
@@ -37,6 +37,27 @@ eigene kleine Phase, nicht in die laufende.
 
 Nebenbefund derselben Wurzelklasse: der SEC-P0-Defekt war eine Zeitbombe (Fixture gegen
 Wanduhr). Es kann weitere geben — sie zeigen sich als Test, der ohne Code-Aenderung rot wird.
+
+## Kosten je Lauf (real gemessen, `scripts/workflow-kosten.mjs`)
+
+| Phase | Lauf | Gesamt | Turns | groesster Agent |
+|---|---|---|---|---|
+| SEC-P0 | `wf_c5b100fd-9b3` | 17,9 Mio | 192 | 9,8 Mio / 80 Turns |
+| SEC-P1 | `wf_a691e1ef-a9a` | 106,9 Mio | 722 | 41,3 Mio / 184 Turns |
+
+SEC-P1 riss den Richtwert (150 Turns je Agent) bei zwei Agenten: Implementierung 184,
+Safety-Review 187. Kein Warteschleifen-Muster — die Phase beruehrte beide Store-Backends,
+zwei Routen und zwei neue Testdateien. Die Effizienz-Riegel haben gehalten (kein Agent fuhr
+die volle Suite), die Groesse der Phase war der Treiber.
+
+## Zusatzbefund SEC-P1: Legacy-Pins weiter angehoben
+
+`makePgStore` 591 -> 596 Zeilen, `rowToCall` 37 -> 38, `callRowValues` 37 -> 39,
+`makeVoiceRoutes` 269 -> 273. Keine NEUE abgeschaltete Sicherung, keine neue Regel-Kategorie —
+das dokumentierte Bestandsverfahren (Pin anheben, Grund benennen). Die seit 2026-08-15
+gemessene lineare Kurve laeuft aber weiter: jedes persistierte Feld kostet einen weiteren
+Punkt in Mapper und Werteliste. Der G30-Split von `makePgStore` bleibt die einzige echte
+Abhilfe und ist eine Owner-Entscheidung, kein Nebeneffekt einer Sicherheitsphase.
 
 ## Abweichung vom Kickoff, bewusst
 
