@@ -98,6 +98,8 @@ function fakeStore(s) {
     },
     findTenantBySubscription: (subId) =>
       s.tenants.find((t) => t.stripeSubscriptionId === subId) ?? null,
+    // FW1-A: Existenz-Gate der Tenant-Aufloesung - ueber den echten State geprueft.
+    tenantExists: (tenantId) => Boolean(findTenant(tenantId)),
   };
 }
 

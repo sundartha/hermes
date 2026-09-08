@@ -16,6 +16,8 @@ function fakeDeps({ tenantBySub = null } = {}) {
     calls,
     store: {
       findTenantBySubscription: (subId) => (tenantBySub && subId ? { id: tenantBySub } : null),
+      // FW1-A: Existenz-Gate der Tenant-Aufloesung - dieses Double modelliert einen existierenden Tenant.
+      tenantExists: () => true,
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
       // tenant-prolif-c: Suspend stempelt den Grace-Anker.
       setSuspendedAtIfAbsent: (tenant) => calls.suspend.push(tenant),
