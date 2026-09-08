@@ -27,15 +27,19 @@ stehen in Abschnitt 3 als Owner-Blocker, nicht als Phase.
 
 ## 1. Reihenfolge und ihre Begruendung
 
-| Phase | Titel | Warum an dieser Stelle |
-|---|---|---|
-| SEC-P0 | Testbank gruen | Ohne gruene Bank ist KEIN spaeterer Fix beweisbar. Solange 1-4 wechselnde Flakes pro Lauf auftreten, ist eine echte Regression vom Rauschen nicht unterscheidbar. Billigster Schritt, hoechster Hebel |
-| SEC-P1 | Webhook-Idempotenz | Der einzige Befund, der OHNE Angreifer Geld kostet (Anbieter-Retry genuegt). Zwei Befunde, ein Fix |
-| SEC-P2 | Lieferkette | Drei High-Advisories in Produktionsabhaengigkeiten, `nodemailer` direkt auf dem Live-Mailpfad. Fremder Code, den wir nicht pruefen — schneller Wert je Aufwand |
-| SEC-P3 | Eingabegrenzen + CSRF | Erste Phase, die den Angreifer mit Konto adressiert |
-| SEC-P4 | EL-Token je Mandant | Belegte Quer-Mandanten-Reichweite eines statischen Tokens |
-| SEC-P5 | Web-Haertung | Verteidigung in der Tiefe. Bewusst SPAET: der Cookie-Rename beendet alle laufenden Sitzungen, das will man nicht mitten in der Kette |
-| SEC-P6 | Antwort statt Haenger + Waechter | Verfuegbarkeit + die drei Struktur-Waechter, die den erreichten Stand einfrieren |
+Die Spalte **Groesse** steuert den Zuschnitt des Laufs: `S` heisst wenige Dateien, ein
+Testfile, `maxFixRounds: 1` — dort ist ein dreistuendiger Lauf ein Fehler, kein Fleiss. `L`
+heisst mehrere Nahtstellen und verdient die volle Behandlung.
+
+| Phase | Titel | Groesse | Warum an dieser Stelle |
+|---|---|---|---|
+| SEC-P0 | Testbank gruen | M | Ohne gruene Bank ist KEIN spaeterer Fix beweisbar. Solange 1-4 wechselnde Flakes pro Lauf auftreten, ist eine echte Regression vom Rauschen nicht unterscheidbar. Billigster Schritt, hoechster Hebel |
+| SEC-P1 | Webhook-Idempotenz | L | Der einzige Befund, der OHNE Angreifer Geld kostet (Anbieter-Retry genuegt). Zwei Befunde, ein Fix |
+| SEC-P2 | Lieferkette | S | Drei High-Advisories in Produktionsabhaengigkeiten, `nodemailer` direkt auf dem Live-Mailpfad. Fremder Code, den wir nicht pruefen — schneller Wert je Aufwand |
+| SEC-P3 | Eingabegrenzen + CSRF | M | Erste Phase, die den Angreifer mit Konto adressiert |
+| SEC-P4 | EL-Token je Mandant | S | Belegte Quer-Mandanten-Reichweite eines statischen Tokens |
+| SEC-P5 | Web-Haertung | M | Verteidigung in der Tiefe. Bewusst SPAET: der Cookie-Rename beendet alle laufenden Sitzungen, das will man nicht mitten in der Kette |
+| SEC-P6 | Antwort statt Haenger + Waechter | L | Verfuegbarkeit + die drei Struktur-Waechter, die den erreichten Stand einfrieren |
 
 Eine Phase gilt erst als fertig, wenn ihr Abnahmekriterium (unten, deterministisch) erfuellt
 ist UND `npm test` gruen bleibt. Rot in `npm run test:gates` oder `npm run test:abnahme` ist

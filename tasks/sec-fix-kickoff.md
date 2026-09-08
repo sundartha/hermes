@@ -52,6 +52,63 @@ die Messwerte bereits.
 - **Eine Bahn zur Zeit.** Zwei parallele Workflows haben diese Maschine schon auf Load 32 bei
   15 Kernen gefahren.
 
+## Effizienz-Riegel (gemessen, nicht vermutet)
+
+Die Vergangenheit dieses Repos zeigt: **die Agentenzahl sagt nichts ueber die Kosten, EIN
+weglaufender Agent sagt alles.** Zwei Laeufe derselben Form (je 5 Agenten):
+
+| Lauf | Gesamt | Turns | groesster Agent |
+|---|---|---|---|
+| `wf_73257d7c` (gesund) | 35,3 Mio | 308 | 19,1 Mio / 133 Turns |
+| `wf_9fbd09a0` (weggelaufen) | **260,5 Mio** | 955 | **223,6 Mio / 687 Turns** = 86 % des Laufs |
+
+Der Ausreisser wurde nachgelesen. Seine 347 Bash-Aufrufe, klassifiziert:
+
+| Anteil | Was | Gesunder Vergleichslauf |
+|---|---|---|
+| **20 %** | reines **Warten/Pollen** (`sleep 60; echo waited`, `echo idle`, `ps aux \| grep <pid>`) | 5,5 % |
+| 9 % | **31 volle Test-Laeufe** in EINEM Agenten | 10 |
+| 49 % | Lesen/Suchen (legitime Groundung) | — |
+
+Bei ~325k Durchschnittskontext kostet JEDER dieser Warte-Turns den vollen Kontext erneut:
+69 Warte-Turns sind rund **22 Mio Token fuer nichts**. Die Kette dahinter ist immer dieselbe:
+langer Test-Lauf -> Agent startet ihn im Hintergrund -> pollt -> Turns -> Kosten wachsen
+quadratisch mit der Lebensdauer.
+
+**Die Wurzel steht im Skript.** `phase-impl-lean.js` weist DREI Agenten an, die volle Suite zu
+fahren: Zeile 171 (Implementierung), Zeile 239 (Safety-Review, ausdruecklich "selbst"),
+Zeile 312 (Self-Fix). Das widerspricht `.claude/refs/workflow.md` Abschnitt 2a woertlich:
+"Die volle Suite laeuft EINMAL, am Ende, vom Lead - nicht in jedem Agenten und nicht nochmal
+SELBST von jedem Reviewer."
+
+**Was du in deiner per-run Kopie aenderst** (nicht im geteilten Original - andere Sessions
+lesen es):
+
+1. **Zeile 171 und 312** (Implementierung, Self-Fix): statt `npm test (beide Backends)` ->
+   *"Fahre NUR die betroffenen Testdateien: `node --test test/<datei>.test.js`. Die volle
+   Suite faehrt der Lead einmal am Ende - fahre sie NICHT."*
+2. **Zeile 239** (Safety-Review): statt `npm test selbst` -> *"Fahre die vom
+   Implementierungs-Agenten genannten Testdateien selbst nach. Die volle Suite ist Sache des
+   Leads."* Die Unabhaengigkeit der Pruefung bleibt, sie wird nur nicht dreifach bezahlt.
+3. **In JEDEN Agenten-Prompt**: *"Warte NIE aktiv auf einen Hintergrundlauf. Kein `sleep`,
+   kein `echo idle`, kein `ps aux | grep <pid>`. Fahre lange Kommandos im VORDERGRUND mit
+   grosszuegigem Timeout - ein blockierender Aufruf kostet EINEN Turn, eine Warteschleife
+   kostet zwanzig."*
+4. **Turn-Budget als Abbruch**, ebenfalls in den Implementierungs- und Fix-Prompt:
+   *"Hast du nach 60 Werkzeug-Aufrufen keinen gruenen Zielzustand, brich ab und melde
+   praezise, was fehlt."* Ein sauberes BLOCKED nach 60 Turns ist billiger und ehrlicher als
+   ein 220-Mio-Lauf, der sich festbeisst.
+
+**Waehrend der Lauf laeuft:** beobachte ihn ueber `/workflows`. Ueberschreitet EIN Agent rund
+250 Turns, ist er weggelaufen - `TaskStop`, Ursache am Phasenschnitt suchen (meist: die Phase
+war zu gross oder die Spec zu unscharf), neu ansetzen. Nach JEDEM Lauf die echten Kosten
+messen: `node scripts/workflow-kosten.mjs <lauf-id>`. Die vom Workflow-Werkzeug gemeldete Zahl
+`subagent_tokens` ist als Kostenanzeige unbrauchbar (laesst Cache-Reads weg, Faktor ~200 zu
+niedrig).
+
+**Richtwert je Phase dieser Kette:** unter 40 Mio Token und unter 150 Turns je Agent. Darueber
+ist etwas falsch - nicht "gruendlich".
+
 ## Je Phase, in dieser Reihenfolge
 
 1. **Keine Spec schreiben.** Der Workflow sucht sich den Phasenabschnitt selbst: er
