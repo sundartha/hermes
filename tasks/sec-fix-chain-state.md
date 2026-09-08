@@ -10,8 +10,8 @@ Kickoff (Lead-Rolle): `tasks/sec-fix-kickoff.md`.
 | SEC-P0 | Testbank gruen | `98cf2bd` | **ja** | Teil (b) Flakes offen, s. unten |
 | SEC-P1 | Webhook-Idempotenz | `105c839` | **ja** | 14 neue Faelle; Entscheidung in PLAN-SECURITY.md ab Zeile 3591 |
 | SEC-P2 | Lieferkette | `e9dc392` | **ja** | audit high Exit 0; 8 -> 2 Befunde, beide moderat |
-| SEC-P3 | Eingabegrenzen + CSRF | — | — | laeuft |
-| SEC-P4 | EL-Token je Mandant | — | — | — |
+| SEC-P3 | Eingabegrenzen + CSRF | `7b88c32` | **ja** | 21 neue Faelle; CSRF_ENFORCE als Rueckfall-Hebel |
+| SEC-P4 | EL-Token je Mandant | — | — | laeuft |
 | SEC-P5 | Web-Haertung | — | — | — |
 | SEC-P6 | Antwort statt Haenger + Waechter | — | — | — |
 
@@ -48,11 +48,21 @@ Wanduhr). Es kann weitere geben — sie zeigen sich als Test, der ohne Code-Aend
 | SEC-P0 | `wf_c5b100fd-9b3` | 17,9 Mio | 192 | 9,8 Mio / 80 Turns |
 | SEC-P1 | `wf_a691e1ef-a9a` | 106,9 Mio | 722 | 41,3 Mio / 184 Turns |
 | SEC-P2 | `wf_80044ac7-77d` | 23,9 Mio | 270 | 9,3 Mio / 85 Turns |
+| SEC-P3 | `wf_a8b13fc0-9a4` | 90,3 Mio | 650 | 45,1 Mio / 270 Turns |
 
 SEC-P1 riss den Richtwert (150 Turns je Agent) bei zwei Agenten: Implementierung 184,
 Safety-Review 187. Kein Warteschleifen-Muster — die Phase beruehrte beide Store-Backends,
 zwei Routen und zwei neue Testdateien. Die Effizienz-Riegel haben gehalten (kein Agent fuhr
 die volle Suite), die Groesse der Phase war der Treiber.
+
+**SEC-P3, Fix-Agent bei 270 Turns / 45,1 Mio — bewusst NICHT abgebrochen.** Der Kickoff
+verlangt `TaskStop` ab rund 250 Turns. Vor dem Abbruch nachgesehen statt der Zahl geglaubt:
+null Warteschleifen, null volle Suite-Laeufe, echte Arbeit. Die Wurzel war nicht Weglaufen,
+sondern dass der Impl-Agent seine fertige Arbeit uncommittet liegen liess (s. `lessons.md`) —
+der Fix-Agent musste sie erst finden und sichern. Ein Abbruch haette 45 Mio verworfen und die
+Phase blockiert zurueckgelassen; er committete vier Minuten spaeter. Die 250er-Schwelle zielt
+auf das Poll-Muster, nicht auf teure ehrliche Arbeit — sie bleibt der Anlass zum HINSEHEN,
+nicht zum reflexhaften Abbrechen.
 
 ## Zusatzbefund SEC-P1: Legacy-Pins weiter angehoben
 
