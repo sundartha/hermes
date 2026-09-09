@@ -12,8 +12,8 @@ Kickoff (Lead-Rolle): `tasks/sec-fix-kickoff.md`.
 | SEC-P2 | Lieferkette | `e9dc392` | **ja** | audit high Exit 0; 8 -> 2 Befunde, beide moderat |
 | SEC-P3 | Eingabegrenzen + CSRF | `7b88c32` | **ja** | 21 neue Faelle; CSRF_ENFORCE als Rueckfall-Hebel |
 | SEC-P4 | EL-Token je Mandant | `bd807a5` | **ja** | 18 Faelle; scharf erst nach Anbieter-Push (Owner-Blocker 6) |
-| SEC-P5 | Web-Haertung | — | — | laeuft |
-| SEC-P6 | Antwort statt Haenger + Waechter | — | — | — |
+| SEC-P5 | Web-Haertung | `320be0a` | **ja** (lokal) | Aussenmessung erst nach Deploy; Owner-Blocker 7 |
+| SEC-P6 | Antwort statt Haenger + Waechter | — | — | laeuft |
 
 ## Ausgangsmessung des Leads (voller Lauf, vor SEC-P0)
 
@@ -58,6 +58,7 @@ Wanduhr). Es kann weitere geben — sie zeigen sich als Test, der ohne Code-Aend
 | SEC-P2 | `wf_80044ac7-77d` | 23,9 Mio | 270 | 9,3 Mio / 85 Turns |
 | SEC-P3 | `wf_a8b13fc0-9a4` | 90,3 Mio | 650 | 45,1 Mio / 270 Turns |
 | SEC-P4 | `wf_19c04dce-0ce` | 58,4 Mio | 370 | 32,3 Mio / 150 Turns |
+| SEC-P5 | `wf_2b6d8a49-c2b` | 42,4 Mio | 352 | 20,4 Mio / 134 Turns |
 
 SEC-P1 riss den Richtwert (150 Turns je Agent) bei zwei Agenten: Implementierung 184,
 Safety-Review 187. Kein Warteschleifen-Muster — die Phase beruehrte beide Store-Backends,
@@ -121,6 +122,13 @@ gezielt aktualisiert statt pauschal gefixt.
    antworten 404, der Agent verstummt im Gespraech. Bis dahin ist die Quer-Mandanten-Reichweite
    nur zur HAELFTE geschlossen — der Ablehnungsgrund verraet den fremden Anruf nicht mehr, die
    Bindung selbst gelingt weiterhin.
+7. **NEU aus SEC-P5: HSTS des Static-Service muss im Render-DASHBOARD gesetzt werden.** Der
+   Eintrag in `render.yaml` ist im Repo richtig, wird live aber nicht wirksam — `hermes-web`
+   ist dashboard-managed (Bestandslehre: Live != render.yaml). Ohne diesen Handgriff bleibt
+   `sundartha.com` ohne HSTS, waehrend Gateway und App es nach dem Deploy haben.
+8. **NEU aus SEC-P5: die Aussenmessung der drei Oberflaechen steht aus.** Der Code ist gebaut
+   und lokal am laufenden Server belegt; ob die Live-Header stimmen, zeigt erst die
+   Wiederholung der urspruenglichen Aussenmessung NACH dem Deploy.
 
 ## Ausdruecklich nicht Teil der Kette
 
