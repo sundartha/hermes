@@ -13,7 +13,7 @@ Kickoff (Lead-Rolle): `tasks/sec-fix-kickoff.md`.
 | SEC-P3 | Eingabegrenzen + CSRF | `7b88c32` | **ja** | 21 neue Faelle; CSRF_ENFORCE als Rueckfall-Hebel |
 | SEC-P4 | EL-Token je Mandant | `bd807a5` | **ja** | 18 Faelle; scharf erst nach Anbieter-Push (Owner-Blocker 6) |
 | SEC-P5 | Web-Haertung | `320be0a` | **ja** (lokal) | Aussenmessung erst nach Deploy; Owner-Blocker 7 |
-| SEC-P6 | Antwort statt Haenger + Waechter | (Branch `sec/p6`) | **ja** | 18 neue Faelle; Pin NACHGEZOGEN (alle Werte sinken); Waechter-3-Erwartung korrigiert |
+| SEC-P6 | Antwort statt Haenger + Waechter | `4345c98` | **ja** | 18 neue Faelle; Pin NACHGEZOGEN (alle Werte sinken); Waechter-3-Erwartung korrigiert |
 
 ## Zusatzbefund SEC-P6: die Waechter-3-Erwartung der Vorlage war falsch gemessen
 
@@ -44,6 +44,47 @@ Abschnitt "SEC-P6".
 `npm test` -> Exit 1, `# tests 5803 / # pass 5801 / # fail 2 / # skipped 0`.
 Rot: `KV2-10 (d1)` und `KV2-10 (d2)` aus `test/kv2-10-tarifpaar.test.js`.
 Die fuenf bekannten Flake-Dateien haben in diesem Lauf NICHT gefeuert.
+
+## Die Kette ist vollstaendig. Endstand am 2026-09-09
+
+Alle sieben Phasen sind gemergt, jede mit erfuellter Abnahme, jede vom Lead selbst
+nachgemessen. `npm audit --omit=dev --audit-level=high` liefert Exit 0. Der Launch-Katalog
+(`test:gates`, 767 Faelle, 3 rot) und die Abnahmebank (`test:abnahme`, 13 von 14) duerfen rot
+sein — das sind keine Regressionsbaenke.
+
+## Offener Befund F-1, jetzt DIAGNOSTIZIERT: die Bank ist unter voller Parallelitaet nicht mehr verlaesslich gruen
+
+**Messung am Kettenende, gleicher Commit, dieselbe Bank:**
+
+| Lauf | Parallelitaet | Ergebnis | Dauer |
+|---|---|---|---|
+| 1 | Standard (15 Kerne) | 5880/5883, **3 rot** | 150 s |
+| 2 | Standard | 5881/5883, **2 rot** | 150 s |
+| 3 | Standard | 5881/5883, **2 rot** | 150 s |
+| 4 | `--test-concurrency=4` | **5883/5883, Exit 0** | 410 s |
+
+Die Fehlermenge WECHSELT zwischen den Laeufen (`AL-P10-1`, `dial-target-normalization`,
+`OC-P1-60`, `INBOX-P2 C2`); jeder betroffene Fall ist isoliert drei- bis viermal gruen, und
+keine der Dateien liegt im Diff der Phase, in der sie auffiel. **Es sind Rennen, keine
+Regressionen** — und die gedrosselte Messung beweist es, statt es zu behaupten.
+
+**Die Kette hat den Druck selbst erhoeht.** 146 Testdateien starten einen echten Server; 51
+Testdateien hat diese Kette beruehrt, mehrere Spawn-Tests sind neu hinzugekommen. Der Schwellwert,
+ab dem die vorhandene Race kippt, ist dadurch ueberschritten worden. SEC-P0 konnte das nicht
+fixen: damals feuerte keine einzige Flake, und ohne Reproduktion ist keine Wurzel zu belegen.
+Jetzt IST sie reproduzierbar.
+
+**Was das fuer die Abnahmen dieser Kette heisst: nichts.** Jede Phase hatte ihren eigenen
+gruenen Volllauf, und die neuen Faelle jeder Phase sind deterministisch gruen — sie starten
+keine Serverfarm. Betroffen ist die Verlaesslichkeit kuenftiger Laeufe, nicht die Gueltigkeit
+der bisherigen.
+
+**Empfehlung (naechste Arbeit, NICHT in dieser Kette gebaut):** die Wurzel sitzt in der
+Spawn-/Bereitschafts-Mechanik von `test/helpers.js`, nicht in einzelnen Testdateien — eine
+deterministische Bereitschaftspruefung statt eines Zeitfensters, eigener Zustand je Test,
+sauberes Abraeumen des Kindprozesses. Eine dauerhafte Drosselung der Parallelitaet ist
+ausdruecklich NICHT die Loesung (sie verdeckt die Ursache und verdreifacht die Laufzeit), aber
+sie ist ein brauchbarer Hebel, wenn ein einzelner CI-Lauf verlaesslich sein muss.
 
 ## Offene Befunde
 
@@ -83,6 +124,8 @@ Wanduhr). Es kann weitere geben — sie zeigen sich als Test, der ohne Code-Aend
 | SEC-P3 | `wf_a8b13fc0-9a4` | 90,3 Mio | 650 | 45,1 Mio / 270 Turns |
 | SEC-P4 | `wf_19c04dce-0ce` | 58,4 Mio | 370 | 32,3 Mio / 150 Turns |
 | SEC-P5 | `wf_2b6d8a49-c2b` | 42,4 Mio | 352 | 20,4 Mio / 134 Turns |
+| SEC-P6 | `wf_b57ea129-640` | 66,4 Mio | 430 | 35,0 Mio / 185 Turns |
+| **Summe** | | **406,2 Mio** | **2986** | |
 
 SEC-P1 riss den Richtwert (150 Turns je Agent) bei zwei Agenten: Implementierung 184,
 Safety-Review 187. Kein Warteschleifen-Muster — die Phase beruehrte beide Store-Backends,
