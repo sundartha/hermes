@@ -11,8 +11,8 @@ Kickoff (Lead-Rolle): `tasks/sec-fix-kickoff.md`.
 | SEC-P1 | Webhook-Idempotenz | `105c839` | **ja** | 14 neue Faelle; Entscheidung in PLAN-SECURITY.md ab Zeile 3591 |
 | SEC-P2 | Lieferkette | `e9dc392` | **ja** | audit high Exit 0; 8 -> 2 Befunde, beide moderat |
 | SEC-P3 | Eingabegrenzen + CSRF | `7b88c32` | **ja** | 21 neue Faelle; CSRF_ENFORCE als Rueckfall-Hebel |
-| SEC-P4 | EL-Token je Mandant | — | — | laeuft |
-| SEC-P5 | Web-Haertung | — | — | — |
+| SEC-P4 | EL-Token je Mandant | `bd807a5` | **ja** | 18 Faelle; scharf erst nach Anbieter-Push (Owner-Blocker 6) |
+| SEC-P5 | Web-Haertung | — | — | laeuft |
 | SEC-P6 | Antwort statt Haenger + Waechter | — | — | — |
 
 ## Ausgangsmessung des Leads (voller Lauf, vor SEC-P0)
@@ -35,6 +35,14 @@ einer dieser fuenf Dateien zaehlt erst, wenn er ISOLIERT (`node --test test/<dat
 ebenfalls rot ist. Kehrt die Flake zurueck und ist dann reproduzierbar, gehoert sie in eine
 eigene kleine Phase, nicht in die laufende.
 
+**F-1 ist GROESSER als die fuenf katalogisierten Dateien.** In SEC-P4 war `OC-P1-67`
+(`test/oc-p1-owner-call-http.test.js`) im ersten vollen Lauf rot — isoliert dreimal gruen, und
+die Datei liegt gar nicht im Diff der Phase. Diese Datei steht NICHT auf der Fuenferliste aus
+SEC-P0. Der gemeinsame Nenner beider Sichtungen dieser Sitzung (`AL-P10-1`, `OC-P1-67`) ist
+nicht ein bestimmter Test, sondern die BAUART: Spawn-Tests, die einen echten Server starten.
+Wer das angeht, sucht die Wurzel in der Spawn-/Bereitschafts-Mechanik von `test/helpers.js`,
+nicht in einzelnen Testdateien.
+
 **F-1 ist seit SEC-P2 belegt LEBENDIG:** im ersten vollen Lauf auf `sec/p2` war `AL-P10-1`
 rot, isoliert dreimal gruen, der zweite volle Lauf gruen. Genau das vorhergesagte Muster.
 
@@ -49,6 +57,7 @@ Wanduhr). Es kann weitere geben — sie zeigen sich als Test, der ohne Code-Aend
 | SEC-P1 | `wf_a691e1ef-a9a` | 106,9 Mio | 722 | 41,3 Mio / 184 Turns |
 | SEC-P2 | `wf_80044ac7-77d` | 23,9 Mio | 270 | 9,3 Mio / 85 Turns |
 | SEC-P3 | `wf_a8b13fc0-9a4` | 90,3 Mio | 650 | 45,1 Mio / 270 Turns |
+| SEC-P4 | `wf_19c04dce-0ce` | 58,4 Mio | 370 | 32,3 Mio / 150 Turns |
 
 SEC-P1 riss den Richtwert (150 Turns je Agent) bei zwei Agenten: Implementierung 184,
 Safety-Review 187. Kein Warteschleifen-Muster — die Phase beruehrte beide Store-Backends,
@@ -104,6 +113,14 @@ gezielt aktualisiert statt pauschal gefixt.
    Produktion, ohne Ablauf).
 4. Stripe-Zugang (`team@sundartha.com`) — OPS-04 offen.
 5. Zwei-Faktor am Render-Konto des Owners ist aus.
+6. **NEU aus SEC-P4: Anbieter-Push der ElevenLabs-Werkzeug-Vorlage.** Der Code ist gebaut und
+   getestet, steht aber hinter `ELEVENLABS_TENANT_TOKEN_REQUIRED=false`. Scharf wird der
+   Mandanten-Riegel erst, wenn die geaenderte Werkzeug-Vorlage beim Anbieter liegt (sie holt
+   `tenant_token` ueber `dynamic_variable` in den Anfragekoerper) UND der Schalter danach auf
+   `true` geht. Reihenfolge ist nicht optional: Schalter zuerst = `look_up` und `get_consult`
+   antworten 404, der Agent verstummt im Gespraech. Bis dahin ist die Quer-Mandanten-Reichweite
+   nur zur HAELFTE geschlossen — der Ablehnungsgrund verraet den fremden Anruf nicht mehr, die
+   Bindung selbst gelingt weiterhin.
 
 ## Ausdruecklich nicht Teil der Kette
 
