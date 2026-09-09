@@ -747,6 +747,20 @@ const rawConfig = {
   // oben: ein eingefuegtes Newline waere sonst ein Geheimnis, das nie passt.
   elevenLabsToolToken: (process.env.ELEVENLABS_TOOL_TOKEN || "").trim(),
 
+  // SEC-P4: der SCHARFE Zustand der Mandanten-Bindung dieses Tokens
+  // (elevenlabs/tenant-tool-token.js). DEFAULT AUS, und das ist keine Bequemlichkeit:
+  // die Werkzeug-Definition am Anbieter schickt den abgeleiteten Wert noch nicht mit
+  // (ihr Push ist eine Eigentuemer-Handlung). AN, bevor der Anbieter sendet, hiesse:
+  // look_up und get_consult antworten 404, die In-Call-Recherche stirbt und der Agent
+  // steht im laufenden Gespraech stumm da (Lehre in-call-research-is-mandatory). AUS
+  // wird ein FEHLENDER Wert wie bisher behandelt, ein VORGELEGTER falscher Wert aber
+  // schon jetzt abgelehnt.
+  elevenLabsTenantTokenRequired: boolEnv(
+    "ELEVENLABS_TENANT_TOKEN_REQUIRED",
+    process.env.ELEVENLABS_TENANT_TOKEN_REQUIRED,
+    { fallback: false },
+  ),
+
   // ---- ElevenLabs-Anrufstart (Convai SIP-Trunk-Outbound; optional) ----
   // Dritter Outbound-Weg neben TeXML und Telnyx-Call-Control: das Gespraech fuehrt der
   // Agent des ANBIETERS. Der PROVIDER des Anrufs bleibt telnyx - die DID liegt dort,
@@ -2239,7 +2253,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
-  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
+  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],

@@ -38,6 +38,7 @@ import { cappedEndedAtMs, classifyCallTime, FROM_SOURCE } from "../store/state-o
 import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { verifiedOpeningLine } from "./opening-line.js";
+import { tenantToolToken } from "./tenant-tool-token.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
@@ -896,6 +897,7 @@ function dynamicVariables({
   time,
   consultAllowed,
   lookupAllowed,
+  tenantToken,
 }) {
   return {
     consult_available: consultAllowed === true ? GATE_AVAILABLE : GATE_UNAVAILABLE,
@@ -921,6 +923,12 @@ function dynamicVariables({
     // desselben Defaults waeren zwei Wahrheiten, G5) und DIESELBE geprueft-validierte
     // Grund-Zeile wie die Eroeffnung.
     voicemail_line: voicemailText({ owner, offenlegung, openingLine }),
+    // SEC-P4: die Mandanten-Dimension des Werkzeug-Tokens. Die Werkzeug-Definition liest
+    // sie ueber dynamic_variable in ihren Anfragekoerper (dieselbe Mechanik wie
+    // conversation_id aus system__conversation_id); der PROMPT nennt sie NIE - kein
+    // Modell bekommt sie zu sehen und kann sie aussprechen (Absolute Regel 4). ALS
+    // LETZTER Schluessel, damit die Reihenfolge des Bestands-Koerpers unberuehrt bleibt.
+    tenant_token: tenantToken,
   };
 }
 
@@ -1161,6 +1169,7 @@ function startCallBody({
   consultAllowed,
   lookupAllowed,
   agentPhoneNumberId,
+  tenantToken,
 }) {
   // EIN Bundle und EINE Grund-Zeile fuer beide Leser (s. dynamicVariables).
   const bundle = localeFor(locale.language);
@@ -1191,6 +1200,7 @@ function startCallBody({
         time,
         consultAllowed,
         lookupAllowed,
+        tenantToken,
       }),
       conversation_config_override: conversationConfigOverride({
         call,
@@ -1645,7 +1655,13 @@ export function makeElevenLabsOutbound({
     // laufen unveraendert - der Fake unterscheidet sich einzig in der Herkunft der
     // conversation_id.
     // Alles, was in den Anfragekoerper eingeht, EINMAL benannt (G19).
-    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, agentPhoneNumberId };
+    // SEC-P4: die Mandanten-Dimension dieses Anrufs - EINMAL abgeleitet, rein, netzfrei.
+    // Aus DEMSELBEN Geheimnis, gegen das der Webhook den Header prueft (kein zweites).
+    const tenantToken = tenantToolToken({
+      secret: config.voice.elevenLabsToolToken,
+      tenantId: call.tenantId,
+    });
+    const anfrage = { el, call, ownerName, firstName, time, locale, consultAllowed, lookupAllowed, agentPhoneNumberId, tenantToken };
     const { conversationId } = config.safety.fakeOriginateElevenlabs
       ? startResultOf(fakeSipTrunkOutboundCallResponse())
       : await startOutboundCall(startCallRequest(anfrage));

@@ -289,6 +289,10 @@ export const BASE_ENV = {
   // ELEVENLABS_OUTBOUND_ENABLED=true setzt (fuer einen echten Testanruf noetig),
   // liefe sonst die GANZE Suite mit aktivem Anruf-Zweig. Das Gate gehoert hierher.
   ELEVENLABS_OUTBOUND_ENABLED: "false",
+  // SEC-P4: der Mandanten-Riegel der Werkzeug-Webhooks, neutral auf seinen Default
+  // gepinnt (Lehre test-base-env-drift) - sonst faerbte eine lokale .env, die ihn
+  // scharfstellt, jeden Spawn-Test. test/sec-p4-mandanten-token.test.js setzt ihn gezielt.
+  ELEVENLABS_TENANT_TOKEN_REQUIRED: "false",
   ELEVENLABS_AGENT_ID: "",
   ELEVENLABS_AGENT_PHONE_NUMBER_ID: "",
   // OUTBOUND-E5: neutral AUS, sonst leakt eine lokale .env mit

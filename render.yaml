@@ -115,6 +115,11 @@ services:
       # ohne AGENT_ID/AGENT_PHONE_NUMBER_ID -> der Zweig waehlt NICHT (fail-closed).
       - key: ELEVENLABS_OUTBOUND_ENABLED
         value: "false"
+      # SEC-P4: Mandanten-Bindung des Werkzeug-Tokens. Default AUS, bis die
+      # Werkzeug-Definition am Anbieter den Parameter tenant_token traegt. Achtung: die
+      # Live-Services sind Dashboard-managed, diese Zeile allein aendert Live nichts.
+      - key: ELEVENLABS_TENANT_TOKEN_REQUIRED
+        value: "false"
       # Opake Kennungen (kein Secret, aber deployment-spezifisch) -> Dashboard.
       - key: ELEVENLABS_AGENT_ID
         sync: false

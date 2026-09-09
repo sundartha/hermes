@@ -3745,3 +3745,66 @@ Geschuetzt sind alle nicht-sicheren Methoden unter `/api/self-service/**` (Praef
 Montage, keine Routen-Liste — eine kuenftige Route ist automatisch mit drin). NICHT
 geschuetzt und bewusst nicht: `/voice/*` (Provider-Signatur), `/mcp` (mcpAuth),
 `/webhooks/stripe` (HMAC), `/api/calls` u.a. (`internalOnly`).
+
+---
+
+## SEC-P4 — ElevenLabs-Werkzeug-Token je Mandant (2026-09-09)
+
+### Der Befund
+
+Die beiden Werkzeug-Webhooks (`/webhooks/elevenlabs/consult`, `.../lookup`) sind allein
+durch das geteilte Geheimnis im Header `x-hermes-tool-token` gesichert. Dieses Geheimnis
+ist EIN Wert fuer ALLE Mandanten; die Bindung (`activeCallBoundTo`) fragt nur, ob ein
+laufender Anruf zu der vorgelegten Gespraechskennung gehoert — nie, ob der Aufrufer fuer
+DESSEN Mandanten sprechen darf. Zweitens verriet der Ablehnungsgrund die Bindung: eine
+erfundene Kennung antwortete `kein_laufender_anruf`, die Kennung des Anrufs eines fremden
+Mandanten `kanal_nicht_freigegeben`.
+
+### Was gebaut ist
+
+1. **Vereinheitlichter Ablehnungsgrund, sofort wirksam.** Alle Ablehnungen, die von einem
+   gebundenen Anruf abhaengen (Bindung, Mandanten-Riegel, Faehigkeit), antworten `404`
+   mit demselben Grund. Das LOG unterscheidet sie weiter (`toolDenied` trennt `logGrund`
+   von `antwortGrund`) — ohne diese Diagnose waere der naechste echte Vorfall nicht mehr
+   aufklaerbar. `402` (Geld), `400` (Nutzlast) und `404 kein_freier_platz` bleiben
+   unveraendert: wer sie erreicht, hat einen faehigen Anruf bereits passiert.
+2. **Mandanten-Dimension aus dem Anrufstart.** Der Anrufstart gibt dem Agenten dieses
+   Anrufs `tenant_token` als dynamische Variable mit, abgeleitet als
+   `HMAC-SHA256(ELEVENLABS_TOOL_TOKEN, "v1:<tenantId>")`
+   (`src/elevenlabs/tenant-tool-token.js`); die Werkzeug-Definition holt den Wert ueber
+   `dynamic_variable` in ihren Anfragekoerper zurueck (dieselbe Mechanik wie
+   `conversation_id` aus `system__conversation_id`), und der Webhook rechnet den Sollwert
+   aus dem GEBUNDENEN Anruf neu aus und vergleicht timing-sicher (`safeEqual`).
+
+### Owner-bindende Entscheidungen (gelten bis widerrufen)
+
+1. **Abgeleitet, kein zweites Geheimnis.** Dasselbe eine Plattform-Geheimnis, ein
+   Rotationsfall, NICHTS wird persistiert — beide Seiten rechnen. Die staerkere Variante
+   (zufaelliges, je Mandant persistiertes Geheimnis) ist bewusst verworfen: neue Spalte +
+   Backfill + N Rotationsfaelle.
+2. **`ELEVENLABS_TENANT_TOKEN_REQUIRED` ist Default `false`, und das ist keine
+   Bequemlichkeit.** Die Werkzeug-Definition am Anbieter schickt den Wert noch nicht mit.
+   AN, bevor der Anbieter sendet, hiesse: `look_up` und `get_consult` antworten `404`, die
+   In-Call-Recherche stirbt und der Agent steht im laufenden Gespraech stumm da. AUS gilt
+   fuer einen FEHLENDEN Wert das heutige Verhalten; ein VORGELEGTER falscher Wert wird
+   IMMER abgelehnt.
+3. **`tenant_token` steht NICHT unter `required`.** Ein Anruf, der vor dem Push gestartet
+   wurde, traegt den Wert nicht, und ein `dynamic_variable`-Parameter wird ohnehin nie vom
+   Modell geliefert.
+
+### Grenze, ehrlich benannt
+
+Die Ableitung schuetzt NICHT gegen einen Angreifer, der Plattform-Token UND
+Mandanten-Kennung zugleich besitzt — er kann den Wert selbst ausrechnen. Sie nimmt dem
+einen geteilten Token seine QUER-MANDANTEN-REICHWEITE. Solange der Schalter aus ist,
+besteht diese Reichweite fort; die Phase liefert die vereinheitlichte Auskunft sofort und
+den Riegel scharf-schaltbar.
+
+### Offener Owner-Blocker (nicht vom Assistenten baubar)
+
+Die Werkzeug-Definition am Anbieter muss `tenant_token` tragen: `PATCH
+/v1/convai/tools/{tool_id}` fuer BEIDE Werkzeuge von Hand — `npm run elevenlabs:push`
+kann das nicht (Werkzeuge sind Besitz-Art `texte` und werden ausdruecklich nicht
+geschrieben). Erst danach: erneute GET-Messung -> `_live_gemessene_form` nachziehen ->
+Testanruf -> `ELEVENLABS_TENANT_TOKEN_REQUIRED=true`. In dieser Phase wurde nicht
+gepusht, nicht deployt und kein Live-Wert geaendert.

@@ -113,6 +113,11 @@ export function pinStore({
 export function pinConfig() {
   return {
     voice: {
+      // SEC-P4: das Plattform-Geheimnis, aus dem der Anrufstart den Mandanten-Token
+      // ableitet. Eine ECHTE Antwort und kein Leerwert (Lehre b1-messwerkzeug-attrappe):
+      // mit "" liefe die Ableitung in ihren Leerast und der Golden-Vergleich pinnte nur
+      // den leeren String statt der Ableitung.
+      elevenLabsToolToken: "pin-tool-token",
       elevenLabsOutbound: {
         apiKey: "pin-test-key",
         agentId: "pin-agent",

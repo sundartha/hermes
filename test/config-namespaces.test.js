@@ -100,7 +100,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // kein neuer primitiver Key -> 15.
   // OC-P1: ownerSelfCallEnabled + ownerSelfCallTenantIds ergaenzt (Schalter + Tenant-
   // Allowlist der Offenlegungs-Ausnahme, PLAN-OWNER-CALL) -> 17.
-  voice: 17,
+  voice: 18,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
@@ -162,7 +162,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs (tenancy) ergaenzt ->
 // 183.
 // SEC-P3: csrfEnforce (safety) ergaenzt -> 184.
-const EXPECTED_TOTAL_KEYS = 184;
+// SEC-P4: elevenLabsTenantTokenRequired (voice) ergaenzt -> 185.
+const EXPECTED_TOTAL_KEYS = 185;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -307,7 +308,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // P2 (W2): elConsultDeliveryMs + elConsultAckMs + elConsultAnswerMs sind alle drei
   // primitiv (Zahl, kein Array/nested Objekt) -> 171.
   // SEC-P3: csrfEnforce ist primitiv (Boolean, kein Array/nested Objekt) -> 172.
-  const EXPECTED_PRIMITIVE_LEAVES = 172;
+  // SEC-P4: elevenLabsTenantTokenRequired ist primitiv (Boolean, kein Array/nested
+  // Objekt) -> 173.
+  const EXPECTED_PRIMITIVE_LEAVES = 173;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
