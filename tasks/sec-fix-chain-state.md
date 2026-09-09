@@ -13,7 +13,31 @@ Kickoff (Lead-Rolle): `tasks/sec-fix-kickoff.md`.
 | SEC-P3 | Eingabegrenzen + CSRF | `7b88c32` | **ja** | 21 neue Faelle; CSRF_ENFORCE als Rueckfall-Hebel |
 | SEC-P4 | EL-Token je Mandant | `bd807a5` | **ja** | 18 Faelle; scharf erst nach Anbieter-Push (Owner-Blocker 6) |
 | SEC-P5 | Web-Haertung | `320be0a` | **ja** (lokal) | Aussenmessung erst nach Deploy; Owner-Blocker 7 |
-| SEC-P6 | Antwort statt Haenger + Waechter | — | — | laeuft |
+| SEC-P6 | Antwort statt Haenger + Waechter | (Branch `sec/p6`) | **ja** | 18 neue Faelle; Pin NACHGEZOGEN (alle Werte sinken); Waechter-3-Erwartung korrigiert |
+
+## Zusatzbefund SEC-P6: die Waechter-3-Erwartung der Vorlage war falsch gemessen
+
+`PLAN-SEC-FIX.md` verlangte, `toolDefs("de")` liefere exakt vier Namen. Am Code und an der
+Laufzeit gemessen liefert `toolDefs` NUR den festen Basissatz beider Engines
+(`end_call`, `take_message`); die beiden bedingten Werkzeuge (`get_consult`, `look_up`)
+haengt erst `agentTools(call)` an. Ein Waechter auf `toolDefs` mit der Vier-Namen-Erwartung
+waere sofort rot gewesen - also genau der Waechter, den man am naechsten Tag abschaltet.
+Der Zwei-Namen-Satz ist ausserdem bereits dreifach gepinnt (P1b-2, M8, P11-5).
+
+Umgesetzt ist deshalb die inhaltlich gemeinte Zusage an der Stelle, an der der Satz
+ENTSTEHT: `agentTools` ist dafuer aus `src/claude.js` exportiert (eine Zeile, keine
+Verhaltensaenderung, kein neuer Aufrufer in `src/`). Gepinnt sind beide Endzustaende -
+Kanaele offen = exakt vier Namen, Kanaele zu = exakt der Basissatz; die beiden Faelle sind
+einander Positiv-Kontrolle (die Messung reagiert auf 2 <-> 4).
+
+## Zusatzbefund SEC-P6: der Fehlerpfad hatte ZWEI Haelften
+
+Ein try/catch nur um die Gate-Schleife haette 14 der 17 Faelle NICHT behoben: die
+Ablehnungs-Senke der Route ruft nach dem Gate erneut `store.tenantGeo` (ueber
+`denialDimensions`) - selbst eine der sterbenden Datenquellen. Sie warf dort ein zweites
+Mal, ausserhalb jedes Gates, also wieder ohne Antwort. Beide Haelften sind gefixt und
+einzeln gepinnt (`SEC-P6-4`, `SEC-P6-5`). Volle Begruendung in PLAN-SECURITY.md,
+Abschnitt "SEC-P6".
 
 ## Ausgangsmessung des Leads (voller Lauf, vor SEC-P0)
 

@@ -280,6 +280,49 @@ function makeAniOwnershipGate({ config, store, aniOwnershipRecheck }) {
   };
 }
 
+// SEC-P6 (GATE-02): die Gate-Kette laeuft an GENAU EINER Stelle - und ein GEWORFENES Gate
+// ist eine ABLEHNUNG, nie eine Freigabe. Gemessen war: 17 von 17 sterbenden Datenquellen
+// fuehrten zu NULL Wahlversuchen (das Sicherheitsversprechen hielt), aber 14 davon zu GAR
+// KEINER Antwort - Express 4 faengt Rejections aus async-Handlern nicht, der Request hing
+// bis zum Client-Timeout. Der Fehlerpfad endet deshalb hier mit einem Denial und BRICHT AB;
+// ein Weiterlaufen (continue) waere der Totalschaden dieser Phase: "Gate kaputt" wuerde zu
+// "es wird gewaehlt" (Absolute Regel 1). Die Bauart ist die des /voice-Handlers
+// (routes/voice.js), nicht eine neue.
+//
+// Der Anzeigetext ist bewusst NICHT sprachabhaengig: die Sprachquelle der Kette
+// (store.tenantLanguage) ist selbst eine der sterbenden Datenquellen - eine Lokalisierung
+// koennte im Fehlerfall ein zweites Mal werfen. Praezedenz im Haus: der ani_ownership-503
+// und der reserve-Fehlerpfad antworten ebenso fest.
+export const GATE_ERROR_GRUND = "gate_error";
+export const GATE_ERROR_MESSAGE =
+  "Sicherheitspruefung derzeit nicht moeglich. Der Anruf wurde nicht gestartet.";
+
+/**
+ * Faehrt die geordnete Gate-Kette. Fuellt ctx (Derivations-Gates schreiben hinein).
+ *
+ * @param {{gates: Array<{name: string, run: Function}>, ctx: object}} input
+ * @returns {Promise<null|{status: number, body: object, audit: object|null}>}
+ *   null = alle Gates passiert. Sonst die Ablehnung - auch die eines geworfenen Gates.
+ */
+export async function runOutboundGates({ gates, ctx }) {
+  for (const gate of gates) {
+    let denial;
+    try {
+      denial = await gate.run(ctx);
+    } catch (fehler) {
+      // secret-frei (Regel 4): Gate-NAME und Meldung, nie ctx, nie config, nie Rohfehler
+      console.error(`[place_call] Gate ${gate.name} fehlgeschlagen:`, fehler?.message);
+      return {
+        status: HTTP_SERVICE_UNAVAILABLE,
+        body: { error: GATE_ERROR_MESSAGE },
+        audit: denialAudit(GATE_ERROR_GRUND, ctx, ` gate=${gate.name}`),
+      };
+    }
+    if (denial) return denial;
+  }
+  return null;
+}
+
 // Fabrik: baut die geordnete Gate-Kette einmal beim Boot (P15, wie makeTenantResolver) -
 // gebunden an store/config und die Tenant-Identitaets-Bausteine des Aufrufers (requestTenant/
 // internalIdentity/OWNER_ID/TENANT_REJECT - EINE Quelle, kein zweiter Resolver, G5/DIP).
