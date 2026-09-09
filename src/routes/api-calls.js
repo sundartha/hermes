@@ -27,7 +27,11 @@ import { consultAllowedFor } from "../consult/gate.js";
 import { CONSULT_OPEN_MS } from "../consult/in-call.js";
 import { CONSULT_EVENT } from "../consult/delivery.js";
 import { isConsultEventId } from "../store/state-ops.js";
-import { E164_FORMAT_ERROR, isTrunkZeroFormatError } from "../telephony/outbound-gates.js";
+import {
+  E164_FORMAT_ERROR,
+  isTrunkZeroFormatError,
+  runOutboundGates,
+} from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { providerSupports, CAPABILITY } from "../telephony/registry.js";
@@ -208,6 +212,38 @@ function resolveCallPrivacyFlags({ store, config, ctx }) {
   return { diagnostic, calleeIsOwnerOfThisCall };
 }
 
+// GAP-35: die drei PII-freien Dimensionen des Ablehnungs-Ereignisses. Land und Sprache
+// kommen aus dem TENANT (tenantGeo, reine Query), NICHT aus der Zielnummer: eine aus
+// der E.164-Vorwahl abgeleitete Landangabe waere ein Rufnummern-Fragment im Log
+// (Absolute Regel 4). Ohne aufgeloesten Tenant - outbound_frozen feuert VOR
+// resolve_identity, tenant_reject traegt eine unbekannte Identitaet - liefert tenantGeo
+// beide Achsen als null: geraten wird nichts. Bewusst NICHT resolveCallLanguage, das
+// via settingsFor lazy einen Settings-Bucket anlegen wuerde (Schreib-Nebeneffekt auf
+// einer unaufgeloesten Identitaet).
+// SEC-P6: von der Closure auf die Modul-Ebene gezogen (Praezedenz resolveCallPrivacyFlags
+// oben) - so waechst die ohnehin ueberlange makeCallRoutes durch diese Phase NICHT.
+function denialDimensions({ store, grund, tenantId }) {
+  const { country, defaultLanguage } = store.tenantGeo(tenantId);
+  return { grund, country, language: defaultLanguage };
+}
+
+// SEC-P6: Audit und Metrik einer Ablehnung sind BEOBACHTUNG, nie Bedingung der Antwort.
+// Die zweite Haelfte des GATE-02-Haengers sass genau hier: stirbt store.tenantGeo, wirft
+// denialDimensions ein zweites Mal - diesmal AUSSERHALB jedes Gates, also wieder ohne
+// Antwort. Scheitert die Protokollierung, wird sie LAUT (secret-freie Fehlerzeile), die
+// Ablehnung wird trotzdem zugestellt: der Anruf ist so oder so abgelehnt, und eine stumme
+// Antwort ist der schlechtere Ausgang. Reine 400er-Eingabefehler tragen kein audit-Objekt
+// und erzeugen weiterhin weder Audit- noch Metrik-Zeile (Bestand, unveraendert).
+function beobachteAblehnung({ store, audit, denial, req, tenantId }) {
+  if (!denial.audit) return;
+  try {
+    audit(denial.audit.event, req, denial.audit.detail);
+    metrics.logCallDenied(denialDimensions({ store, grund: denial.audit.grund, tenantId }));
+  } catch (fehler) {
+    console.error("[place_call] Ablehnung nicht protokollierbar:", fehler?.message);
+  }
+}
+
 // P4a (F-2): die zwei Ablehnungen des Sprachwunsches. Beide sind reine EINGABEfehler und
 // laufen deshalb wie die Bestands-400er VOR jedem Gate - ohne Audit, ohne Metrik
 // (dieselbe Regel wie bei to/objective und E164_FORMAT_ERROR). Die unterstuetzten Codes
@@ -274,18 +310,6 @@ export function makeCallRoutes({
 }) {
   const router = Router();
 
-  // GAP-35: die drei PII-freien Dimensionen des Ablehnungs-Ereignisses. Land und Sprache
-  // kommen aus dem TENANT (tenantGeo, reine Query), NICHT aus der Zielnummer: eine aus
-  // der E.164-Vorwahl abgeleitete Landangabe waere ein Rufnummern-Fragment im Log
-  // (Absolute Regel 4). Ohne aufgeloesten Tenant - outbound_frozen feuert VOR
-  // resolve_identity, tenant_reject traegt eine unbekannte Identitaet - liefert tenantGeo
-  // beide Achsen als null: geraten wird nichts. Bewusst NICHT resolveCallLanguage, das
-  // via settingsFor lazy einen Settings-Bucket anlegen wuerde (Schreib-Nebeneffekt auf
-  // einer unaufgeloesten Identitaet).
-  function denialDimensions(grund, tenantId) {
-    const { country, defaultLanguage } = store.tenantGeo(tenantId);
-    return { grund, country, language: defaultLanguage };
-  }
 
   // L5/I5: EINE Sichtbarkeits-Regel fuer alle Call-Routen dieser Datei (G5) - fremder
   // Tenant -> der Aufrufer antwortet 404 (kein Existenz-Leck, NICHT 403). Hinter dem
@@ -324,22 +348,18 @@ export function makeCallRoutes({
     if (requestedLanguage && !config.voice.elevenLabsOutbound.enabled)
       return res.status(400).json(languageUnavailableBody());
 
-    // Geordnete Safety-/Geld-Gate-Kette (EINE Schleife, EIN Array, Struct-1 P6). ctx
+    // Geordnete Safety-/Geld-Gate-Kette (EINE Kettenfahrt, EIN Array, Struct-1 P6). ctx
     // transportiert Derivationen (normalisiertes to, tenantId, Absendernummer, Reserve)
     // zwischen den Gates; volle Reihenfolge + Rationale in telephony/outbound-gates.js.
+    // SEC-P6: die Kette faehrt in runOutboundGates (telephony/outbound-gates.js) - dort ist
+    // "ein geworfenes Gate ist eine Ablehnung" STRUKTUR und nicht Disziplin dieser Route
+    // (G27). Die Senke unten ist unveraendert die einzige Stelle, an der eine Ablehnung den
+    // Client erreicht (GAP-35: Audit + PII-freie Metrik, gleiche Bedingung wie bisher).
     const ctx = { req, to, objective, b };
-    for (const gate of outboundGates) {
-      const denial = await gate.run(ctx);
-      if (denial) {
-        if (denial.audit) {
-          audit(denial.audit.event, req, denial.audit.detail);
-          // GAP-35: dasselbe Ereignis maschinenlesbar und PII-frei. GLEICHE Bedingung wie
-          // das Audit - reine 400er-Eingabefehler sind keine Sicherheits-Ablehnung und
-          // erzeugen weiterhin weder Audit- noch Metrik-Zeile.
-          metrics.logCallDenied(denialDimensions(denial.audit.grund, ctx.tenantId));
-        }
-        return res.status(denial.status).json(denial.body);
-      }
+    const denial = await runOutboundGates({ gates: outboundGates, ctx });
+    if (denial) {
+      beobachteAblehnung({ store, audit, denial, req, tenantId: ctx.tenantId });
+      return res.status(denial.status).json(denial.body);
     }
 
     // Ab hier ist ctx vollstaendig durch die Gate-Kette befuellt. KRITISCH: ctx.to ist die von

@@ -628,7 +628,11 @@ function getConsultToolDef(language) {
 // (LlmRequest.cachePrefix) - taucht das Werkzeug mitten im Call auf oder verschwindet
 // es, faellt dieses Praefix genau einmal. Bewusst in Kauf genommen; die Alternative
 // waere ein dauerhaft angebotenes Werkzeug ohne Empfaenger.
-function agentTools(call) {
+// SEC-P6 (Waechter 3): exportiert, weil der Werkzeugsatz des Telefon-Agenten GENAU HIER
+// entsteht - toolDefs ist nur der Basissatz. Ohne diesen Export ist der GESCHLOSSENE Satz
+// (kein fuenftes Werkzeug) nicht messbar; die Bestandstests pruefen bis heute nur
+// includes(). Reiner Lese-Zugriff, kein Aufrufer in src/ kommt hinzu.
+export function agentTools(call) {
   const tools = toolDefs(call.language);
   if (consultAvailableFor(call)) tools.push(getConsultToolDef(call.language));
   // AL-P10b: dieselbe Sperre wie get_consult - outbound-only, aktiver Call, Kontingent,

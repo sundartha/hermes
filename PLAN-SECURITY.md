@@ -3580,13 +3580,83 @@ Sicherheitsarbeit sie nicht uebersieht.
   haengt bis zum Client-Timeout, `[guard] unhandledRejection` im Log), weil Express 4
   async-Rejections nicht faengt und die Gate-Schleife (`src/routes/api-calls.js:331-341`)
   keinen try/catch hat. `/voice/incoming` hat genau diesen Schutz (`src/routes/voice.js:279`).
+  **BEHOBEN SEC-P6** - ein geworfenes Gate ergibt 503 + `grund=gate_error` und BRICHT die
+  Kette ab; die Zustellung der Ablehnung ist zusaetzlich gegen Audit-/Metrik-Wuerfe
+  abgesichert.
 - **`scripts/spike2-anruf.mjs`** loest einen echten Anruf direkt beim Anbieter aus und laeuft
   dabei an der GESAMTEN Gate-Kette vorbei (keine Denylist, kein Land-Gate, keine Kostendecke,
   kein `OUTBOUND_FROZEN`). Committet, Ziel aus `argv`, Schluessel aus `.env`. Verstaerkt (2).
+  **ENTFERNT SEC-P6** - die Datei ist geloescht (kein npm-Skript, kein knip-Eintrag, keine
+  Import-Kante verwies darauf). `scripts/spike2-sip.mjs` bleibt: es richtet die SIP-Strecke
+  ein und kennt keinen Wahl-Endpunkt.
 - **Gehalten und belegt:** Inbound-Kostendecke sperrt bei korrupter UND werfender Datenquelle
   fail-closed (GATE-03); je Wahlweg genau ein Aufrufer, alle hinter der Kette (GATE-01);
   Routen-Fuzzing und Pfad-Traversal finden nichts (L-03); Render-Logs werden ~7 Tage
   aufbewahrt, was das Zeitfenster einer versehentlich geloggten PII-Zeile begrenzt (OPS-03).
+
+## SEC-P6 — Antwortverhalten der Gate-Kette + drei Struktur-Waechter (2026-09-09)
+
+Ausgang (gemessen, `PLAN-SEC-FIX.md` § SEC-P6): 17 von 17 sterbenden Gate-Datenquellen
+fuehrten zu NULL Wahlversuchen - das Sicherheitsversprechen hielt -, aber 14 davon endeten
+ohne jedes Antwort-Byte.
+
+**Der Fix hat zwei Haelften, weil der Defekt zwei hatte.** Die Gate-Kette faehrt jetzt in
+`runOutboundGates` (`src/telephony/outbound-gates.js`): ein geworfenes Gate ist dort eine
+ABLEHNUNG und BRICHT die Kette ab - `return`, kein `continue`. Ein Weiterlaufen waere der
+Totalschaden dieser Phase gewesen ("Gate kaputt" wuerde zu "es wird gewaehlt", Absolute
+Regel 1). Der `reserve_budget`-eigene try/catch bleibt unangetastet: er ist spezifischer
+(er kennt die Geld-Achse und den Grund `reserve_error`), der neue Fang ist der generische
+Rueckhalt fuer die anderen Gates.
+
+Die zweite Haelfte sass in der Ablehnungs-Senke der Route: `denialDimensions` liest
+`store.tenantGeo` - selbst eine der sterbenden Datenquellen. Stirbt sie, warf die Senke ein
+ZWEITES Mal, diesmal ausserhalb jedes Gates, also wieder ohne Antwort. Audit und Metrik
+laufen deshalb in `beobachteAblehnung` (`src/routes/api-calls.js`, Modul-Ebene): scheitert
+die Protokollierung, wird sie LAUT (secret-freie Fehlerzeile), die Ablehnung wird trotzdem
+zugestellt.
+
+- **Statuswahl 503** (nicht 500): Praezedenz im Haus sind der `ani_ownership`-503 und der
+  `reserve`-Fehlerpfad - "Dienst voruebergehend nicht verfuegbar" beschreibt den Zustand
+  richtiger als ein Programmfehler, und 402/403 sind bereits von Gate-Gruenden belegt.
+- **Der Anzeigetext ist sprachinvariant.** Die Sprachquelle der Kette
+  (`store.tenantLanguage`) ist selbst eine sterbende Datenquelle; eine Lokalisierung
+  koennte im Fehlerfall ein zweites Mal werfen. Der Text nennt kein Innenleben (kein
+  Stack, keine Fehlermeldung, kein Config-Name); Gate-Name und Meldung stehen nur im
+  serverseitigen Log und im Audit-Detail (`grund=gate_error gate=<name>`).
+
+**Drei Waechter, die den erreichten Stand einfrieren** (alle im Regressionslauf, Praefix
+`SEC-P6-`, jeder mit eigener Positiv-Kontrolle):
+
+1. `test/sec-p6-waechter-rls.test.js` - jede Tabelle mit `tenant_id` hat FORCE + Policy
+   oder steht begruendet in `RLS_AUSNAHMEN` (heute: `account`, `session`, `audit_log` -
+   alle drei loesen VOR `app.current_tenant` auf bzw. sind append-only). Ein verwaister
+   Eintrag (Tabelle hat inzwischen FORCE+Policy) macht ebenfalls rot, sonst rottet die
+   Liste zur Blankovollmacht.
+2. `test/sec-p6-waechter-wahlaufrufer.test.js` - je Wahlweg entspricht die Menge der
+   Aufrufer in `src/` der Erwartungsliste. Gepinnt wird Datei + Symbol, NIE eine
+   Zeilennummer.
+3. `test/sec-p6-waechter-werkzeugsatz.test.js` - der Werkzeugsatz des Telefon-Agenten ist
+   bei offenen Kanaelen EXAKT `end_call/get_consult/look_up/take_message` und ohne Kanaele
+   exakt der Basissatz. Gemessen an `agentTools(call)`, wo der Satz entsteht - `toolDefs()`
+   liefert nur den Basissatz (zwei Namen) und ist bereits dreifach gepinnt. Erstes Pin des
+   GESCHLOSSENEN Satzes ueberhaupt: die Bestandstests pruefen nur `includes()`, ein
+   fuenftes Werkzeug waere bis heute unbemerkt geblieben.
+
+**Zwei benannte Restrisiken (bewusst nicht in dieser Phase gebaut):**
+
+- **RESTRISIKO A - der Streifen zwischen Kette und Origination.** `store.resolveCallLanguage`,
+  `resolveCallPrivacyFlags` (`store.tenantPrivateNumber`), `emitOpeningConsult`
+  (`store.resolveProfile`), `store.createCall`, `store.recordCostProfile` und `store.save`
+  laufen NACH der Gate-Kette und VOR dem `try` der Origination. Sie sind keine
+  Gate-Datenquellen und waren nicht Teil der 17 gemessenen Faelle; ein Wurf dort haengt
+  heute wie frueher. Der bestehende `catch` kann sie nicht mit uebernehmen - er ruft
+  `terminateAndBillCall` auf einem Anruf-Datensatz auf, den es in diesem Fenster noch gar
+  nicht gibt. Eigener Befund, eigene Phase.
+- **RESTRISIKO B - Waechter 2 kennt nur die BEKANNTEN Wahlwege.** Ein neuer Weg, der den
+  Anbieter per rohem `fetch` anspricht - die Klasse, die `spike2-anruf.mjs` verkoerperte -,
+  wird von ihm nicht gefunden. Deshalb wurde geloescht statt nachgeruestet. Ein Waechter
+  auf "roher Anbieter-Wahl-Endpunkt in `src/`/`scripts/`" ist eine eigene, groessere
+  Entscheidung.
 
 ## SEC-P1 — Webhook-Idempotenz: Anker, Vorhaltezeit, Restrisiken (2026-09-08)
 
