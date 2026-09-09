@@ -22,6 +22,7 @@ import {
   makeAccounts,
   makeSessions,
   makeWebAuthRoutes,
+  SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { requestNumberForPaidTenant } from "../src/billing/provision-trigger.js";
@@ -179,11 +180,11 @@ function request(method, url, { cookie, body } = {}) {
   });
 }
 
-// Extrahiert den `session=...`-Teil aus dem Set-Cookie der dev-login-Antwort (der Wert ist
+// Extrahiert den Sitzungs-Cookie aus dem Set-Cookie der dev-login-Antwort (der Wert ist
 // bereits URL-encoded, wird so unveraendert als Cookie-Header zurueckgereicht).
 function sessionCookieFrom(setCookie) {
   for (const c of setCookie || []) {
-    if (c.startsWith("session=")) return c.split(";")[0];
+    if (c.startsWith(`${SESSION_COOKIE_NAME}=`)) return c.split(";")[0];
   }
   return null;
 }

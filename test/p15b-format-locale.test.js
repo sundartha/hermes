@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { localeFor } from "../src/i18n/locales.js";
@@ -31,7 +31,7 @@ const TENANTS = Object.freeze([
   { sub: "sub-en", tenantId: "t_sub-en", language: "en", formatLocale: "en-GB" },
 ]);
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 async function seedActiveTenant(store, accounts, { sub, tenantId, language }) {
   const s = store.load();

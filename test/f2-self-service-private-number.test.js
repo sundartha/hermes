@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -24,7 +24,7 @@ const TENANT_B = "t_sub-b";
 const SUB_SUSPENDED = "sub-susp";
 const TENANT_SUSPENDED = "t_sub-susp";
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 // Sammelt die Audit-Aufrufe (action, details), damit der Test beweisen kann, dass die
 // Nummer NIE ins Audit gehoben wird (H4) - nur der Outcome-Key.

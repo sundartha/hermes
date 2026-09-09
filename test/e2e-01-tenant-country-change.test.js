@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -55,7 +55,7 @@ async function setup() {
   });
   return {
     base: `http://127.0.0.1:${server.address().port}`,
-    cookie: `session=${encodeURIComponent(signValue(sessionId, SECRET))}`,
+    cookie: `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}`,
     store,
     close: () => new Promise((r) => server.close(r)),
   };

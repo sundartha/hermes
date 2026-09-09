@@ -3808,3 +3808,55 @@ kann das nicht (Werkzeuge sind Besitz-Art `texte` und werden ausdruecklich nicht
 geschrieben). Erst danach: erneute GET-Messung -> `_live_gemessene_form` nachziehen ->
 Testanruf -> `ELEVENLABS_TENANT_TOKEN_REQUIRED=true`. In dieser Phase wurde nicht
 gepusht, nicht deployt und kein Live-Wert geaendert.
+
+## SEC-P5 — Web-Haertung: HSTS, striktes script-src, __Host-Cookie (2026-09-09)
+
+### Was gebaut ist
+
+1. **HSTS auf beiden Auslieferungswegen.** `Strict-Transport-Security:
+   max-age=15552000; includeSubDomains` — im Gateway aus `HSTS_HEADER_VALUE`
+   (`src/middleware.js`, EINE Quelle) und als Header-Regel des Static-Service in
+   `render.yaml`. `test/sec-p5-web-haertung.test.js` haelt beide Seiten deckungsgleich;
+   den Header am echten HTTP-Weg misst `test/headers.test.js`.
+2. **`script-src 'self'`** in der Gateway-CSP — kein `'unsafe-inline'` (`'unsafe-eval'`
+   stand dort nie). `style-src` behaelt sein `'unsafe-inline'`: das war nicht Teil des
+   Auftrags und ist eine eigene Entscheidung. Belegt ist die Vertraeglichkeit an der
+   Quelle (kein `is:inline`, `assetsInlineLimit: 0`) und am gebauten Astro-Output
+   (`apps/web/test/csp.test.js`).
+3. **Sitzungs-Cookie heisst `__Host-session`** (`SESSION_COOKIE_NAME`,
+   `src/web-auth.js`). Ein Doppel-Lesen des alten Namens gibt es NICHT — eine zweite
+   akzeptierte Herkunft waere genau die Aufweichung, die die Phase beseitigt; ein
+   eigener Testfall belegt, dass `session=` jetzt 401 ergibt.
+
+### Bindung und Begruendungen
+
+- **`includeSubDomains` fuer 180 Tage** bindet jeden Namen unter der Zone an HTTPS:
+  `sundartha.com`, `www.sundartha.com`, `app.sundartha.com`,
+  `vodafone-agent.onrender.com` — alle heute ausschliesslich ueber HTTPS erreichbar
+  (Render). Ein kuenftiger Klartext-Subdomain-Dienst waere fuer die Restlaufzeit der
+  Zusage in jedem Browser unerreichbar, der sie einmal gesehen hat.
+- **Kein `preload`.** Die Zusage ist nicht widerrufbar: ein Browser vergisst sie erst nach
+  Ablauf von `max-age`, die Preload-Liste ist praktisch endgueltig. 180 Tage ist die
+  kleinste vom Auftrag verlangte Frist, also das kleinste Zeitfenster im Fehlerfall.
+- **Preis, bewusst akzeptiert:** der Cookie-Name aendert sich, also endet beim Deploy JEDE
+  laufende Sitzung. Alle aktiven Accounts sind heute wir.
+- **Die Anmeldung ueber eine LAN-IP war schon vor dieser Phase tot:** `cookieAttrs()`
+  setzt `Secure` bedingungslos, ohne Protokoll-Verzweigung. `__Host-` ist damit eine reine
+  Umbenennung — die drei Bedingungen (Secure, `Path=/`, kein `Domain=`) waren bereits
+  erfuellt. Die Bestandslehre zum Loopback-Bypass betrifft den Auth-Rauchtest, nicht
+  diesen Cookie.
+- **Abgrenzung:** die Login-Flow-Cookies `pkce_verifier` / `oauth_state` / `oidc_nonce`
+  bleiben unpraefixiert. Gemessen und benannt im Auftrag war das Sitzungs-Cookie; ihre
+  Umbenennung ist ein eigener Auftrag mit eigenem Testradius.
+- Keine neue Env-Variable: ein Sicherheits-Header, den eine Env abschalten kann, ist eine
+  abschaltbare Sicherung.
+
+### Owner-Schritte, die diese Phase NICHT ausfuehrt
+
+1. Deploy des Gateways.
+2. Eintrag des HSTS-Headers im Render-Dashboard des Static-Service (`hermes-web` ist
+   dashboard-managed — der `render.yaml`-Eintrag wird live nicht wirksam), ueber den
+   Lab->Live-Weg aus `docs/RUNBOOK-LAB-LIVE.md`.
+3. Aussenmessung der drei Oberflaechen nach dem Deploy.
+4. Entscheidung, ob die `apps/web`-Testbank (`apps/web/test/csp.test.js`, laeuft nur auf
+   Kommando via `npm --prefix apps/web test`) in CI aufgenommen wird.

@@ -1,14 +1,18 @@
 // HTTP-Schutzschichten fuer das Gateway - bewusst in-house, ohne neue Dependency.
 import { auditAuthFailed, AUTH_FAILED_GRUND } from "./util.js";
 
-// CSP erlaubt Inline-Skripte/-Styles und Google Fonts. Der urspruengliche Grund - das
-// alte Dashboard public/tenant.html mit Inline-<script>/<style> und onclick-Handlern -
-// ist mit P14 entfallen. Die Regel bleibt hier BEWUSST unveraendert: das Verschaerfen
-// ist ein eigener Auftrag (die App-Shell aus apps/web muss vorher gegen die engere
-// Policy gemessen werden), nicht ein Nebeneffekt der Loeschung.
+// CSP. script-src ist strikt: 'self', kein 'unsafe-inline', kein 'unsafe-eval'. Der
+// urspruengliche Grund fuer die Lockerung - das alte Dashboard public/tenant.html mit
+// Inline-<script> und onclick-Handlern - ist mit P14 entfallen, und der eigene Auftrag,
+// den der Vorgaengerkommentar ankuendigte, ist SEC-P5: der apps/web-Build wurde gegen die
+// engere Policy gemessen (kein is:inline in den Quellen, assetsInlineLimit 0 -> Astro
+// buendelt jedes Skript als externes same-origin-Modul). test/sec-p5-web-haertung.test.js
+// haelt das fest.
+// style-src behaelt 'unsafe-inline' - das war nicht Teil des Auftrags und ist eine eigene
+// Entscheidung, kein Mitnehmen bei der Gelegenheit.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src https://fonts.gstatic.com",
   "img-src 'self' data:",
@@ -16,11 +20,25 @@ const CSP = [
   "frame-ancestors 'none'",
 ].join("; ");
 
+// HSTS: 180 Tage inklusive Subdomains. Bewusst NICHT ein Jahr und bewusst OHNE
+// "preload" - die Zusage ist nicht widerrufbar: ein Browser vergisst sie erst, wenn
+// max-age abgelaufen ist, und die Preload-Liste ist praktisch endgueltig. 180 Tage ist
+// die kleinste Frist, die der Auftrag verlangt, also das kleinste Zeitfenster im
+// Fehlerfall. Betroffene Namen, alle ausschliesslich ueber HTTPS erreichbar (Render):
+// sundartha.com, www.sundartha.com, app.sundartha.com, vodafone-agent.onrender.com.
+// Ueber Klartext-HTTP ignorieren Browser den Header (RFC 6797) - er darf deshalb
+// bedingungslos mitgehen, ohne eine zweite, spoofbare Protokollquelle zu brauchen.
+const HSTS_MAX_AGE_SECONDS = 15552000;
+// EINE Quelle (G5) fuer beide Auslieferungswege: dieses Gateway und der Static-Service
+// in render.yaml. test/sec-p5-web-haertung.test.js haelt beide Seiten deckungsgleich.
+export const HSTS_HEADER_VALUE = `max-age=${HSTS_MAX_AGE_SECONDS}; includeSubDomains`;
+
 export function securityHeaders(req, res, next) {
   res.set({
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": HSTS_HEADER_VALUE,
     "Content-Security-Policy": CSP,
   });
   // API-Antworten (Transkripte!) duerfen nirgends zwischengespeichert werden

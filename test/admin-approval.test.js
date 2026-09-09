@@ -17,6 +17,7 @@ import {
   makeSessions,
   makeAdminRoutes,
   signValue,
+  SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { makeAuditStore } from "../src/audit-store.js";
 
@@ -68,7 +69,7 @@ function request(method, url, sessionId) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const headers = sessionId
-      ? { Cookie: `session=${encodeURIComponent(signValue(sessionId, SECRET))}` }
+      ? { Cookie: `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}` }
       : {};
     const req = http.request(
       { hostname: u.hostname, port: u.port, path: u.pathname, method, headers },

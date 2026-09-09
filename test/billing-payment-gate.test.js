@@ -20,7 +20,7 @@ import { requirePaymentEnabled } from "../src/billing/payment-gate.js";
 import { makeBillingRoutes } from "../src/routes/api-billing.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { makeStripeWebhookRoute } from "../src/routes/stripe-webhook.js";
-import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { registerTenant } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -137,7 +137,7 @@ test("PAYMENT_ENABLED aus: alle 3 self-service/billing-Routen -> 404 mit exaktem
   await accounts.upsertOnFirstLogin({ sub: SUB, email: "paygate@kunde.de" });
   await accounts.setStatus(TENANT, "active");
   const { id: sessionId } = await sessions.create({ sub: SUB, tenantId: TENANT, ttlSeconds: 3600 });
-  const cookie = `session=${encodeURIComponent(signValue(sessionId, SECRET))}`;
+  const cookie = `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}`;
 
   const app = express();
   app.use(express.json());

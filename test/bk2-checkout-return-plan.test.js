@@ -18,6 +18,7 @@ import {
   makeAccounts,
   makeSessions,
   signValue,
+  SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
@@ -85,7 +86,7 @@ function fakeBilling(spy = {}, checkoutOutcome = {}, { staleCustomerHeal = false
   };
 }
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 // Harness wie w4-setup(): Store + Identitaets-Schicht + Self-Service-Routen auf einer
 // Wegwerf-App. Zusaetzlich Customer cus_b vorgeseedet (ohne payment_method - die Karte

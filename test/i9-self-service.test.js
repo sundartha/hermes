@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { greetingTemplatesFor } from "../src/i18n/greeting-catalog.js";
 import { PERSONA_STYLE_IDS } from "../src/i18n/locales.js";
@@ -50,7 +50,7 @@ function fakeBilling() {
   };
 }
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 // Seedet einen aktiven Tenant im Mirror (App-Daten) + in der DB (Identitaet) und
 // gibt seinen Settings-Bucket zurueck, damit der Aufrufer Vorbedingungen setzen kann.

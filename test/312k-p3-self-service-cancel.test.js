@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeAuditStore } from "../src/audit-store.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
@@ -42,7 +42,7 @@ function fakeBilling(spy = { schedule: [], unschedule: [] }) {
   };
 }
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 async function setup({ withSubscription = true, status = "active" } = {}) {
   const { store, db, runner } = await makePgTestStore();

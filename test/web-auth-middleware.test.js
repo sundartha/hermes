@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { webAuth, webAuthAllowPending, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, signValue } from "../src/web-auth.js";
 
 const SECRET = "test-secret-012345678901234567890";
 const FUTURE = new Date(Date.now() + 3600_000).toISOString();
@@ -48,7 +48,9 @@ function get(url, cookie) {
     req.on("error", reject);
   });
 }
-const sessionCookie = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const sessionCookie = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
+// SEC-P5: benannter Antwortcode fuer den neuen Fall - der nackte Wert waere ein Magic Number.
+const UNAUTHORIZED = 401;
 
 test("kein Cookie -> 401", async () => {
   const s = await mount(fakeDeps());
@@ -56,6 +58,17 @@ test("kein Cookie -> 401", async () => {
     assert.equal((await get(`${s.base}/probe`)).status, 401);
   } finally {
     await s.close();
+  }
+});
+// SEC-P5: der ALTE Name traegt keine Sitzung mehr. Ohne diesen Fall bewiese die Suite
+// nur, dass der neue Name funktioniert - nicht, dass nicht beide akzeptiert werden.
+test("altes Cookie 'session=' -> 401 (kein Doppel-Lesen)", async () => {
+  const server = await mount(fakeDeps());
+  try {
+    const alterName = `session=${encodeURIComponent(signValue("sess1", SECRET))}`;
+    assert.equal((await get(`${server.base}/probe`, alterName)).status, UNAUTHORIZED);
+  } finally {
+    await server.close();
   }
 });
 test("gueltige aktive Session -> req.tenant gesetzt", async () => {

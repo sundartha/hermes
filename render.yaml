@@ -740,6 +740,14 @@ services:
       - path: /*
         name: X-Frame-Options
         value: DENY
+      # HSTS (SEC-P5). Wert MUSS mit HSTS_HEADER_VALUE in src/middleware.js
+      # uebereinstimmen - test/sec-p5-web-haertung.test.js haelt beide Seiten fest.
+      # ACHTUNG, gilt wie fuer die routes darueber: dieser Static-Service ist
+      # dashboard-managed. Ein render.yaml-Push aendert die Live-Header NICHT; der
+      # Eintrag hier ist die Quelle der Wahrheit fuer den Owner-Schritt im Dashboard.
+      - path: /*
+        name: Strict-Transport-Security
+        value: "max-age=15552000; includeSubDomains"
       # Strikte CSP: rein statische Marketing-Site (kein Auth/Secret/User-Input,
       # keine /api). Das Fluegel-Logo ist eine reine CSS-Keyframe-Animation (kein
       # WebGL/Pixi) -> KEIN 'unsafe-eval' noetig. default-src 'self' deckt

@@ -17,6 +17,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { applySchema } from "../src/db/migrate.js";
 import { guardedBoot } from "../src/boot-guard.js";
 import { wireWebLogin } from "../src/wiring/web-login.js";
+import { SESSION_COOKIE_NAME } from "../src/web-auth.js";
 import { tenantIdForSubject } from "../src/store/defaults.js";
 
 // Frischer pglite-Runner mit angewandtem Schema (Muster web-auth-pg.test.js setup()).
@@ -172,7 +173,7 @@ test("S2-15: devLoginEnabled -> POST /auth/dev-login mintet Session, 302-Redirec
   try {
     const res = await fetch(`${srv.url}/auth/dev-login`, { method: "POST", redirect: "manual" });
     assert.equal(res.status, 302);
-    assert.match(res.headers.get("set-cookie") || "", /session=/);
+    assert.match(res.headers.get("set-cookie") || "", new RegExp(`${SESSION_COOKIE_NAME}=`));
   } finally {
     await srv.close();
   }

@@ -23,7 +23,7 @@ import {
 } from "../src/billing/webhook.js";
 import { makeDefaultState, registerTenant, setTenantSubscription, tenantSubscription } from "../src/store/state-ops.js";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
@@ -189,7 +189,7 @@ async function setupRoute({ tenantId, priorSubscriptionId = "sub_prior" }) {
   // Moment des Requests bereits geloescht (401 statt der eigentlich gepruefte 200/409).
   async function loginAs() {
     const { id: sessionId } = await sessions.create({ sub, tenantId, ttlSeconds: 3600 });
-    return `session=${encodeURIComponent(signValue(sessionId, SECRET))}`;
+    return `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(sessionId, SECRET))}`;
   }
 
   return {

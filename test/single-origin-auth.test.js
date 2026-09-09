@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
-import { makeWebAuthRoutes, verifyValue } from "../src/web-auth.js";
+import { makeWebAuthRoutes, verifyValue, SESSION_COOKIE_NAME } from "../src/web-auth.js";
 import { productionFootguns } from "../src/config.js";
 
 const SECRET = "test-session-secret-0123456789";
@@ -109,11 +109,16 @@ test("dev-login (devLoginEnabled): mintet Session-Cookie + 302 postLoginPath (/a
     assert.equal(calls.create[0].sub, "dev-user", "dev-Default-sub");
     assert.equal(calls.create[0].tenantId, "t_dev");
     // Set-Cookie traegt die SIGNIERTE Session-id (wie der echte Callback).
-    const sessionCookie = cookieValue(res.setCookie, "session");
+    const sessionCookie = cookieValue(res.setCookie, SESSION_COOKIE_NAME);
     assert.equal(verifyValue(sessionCookie, SECRET), "sess-dev-1", "signiertes Session-Cookie");
     const joined = res.setCookie.join("\n");
     assert.match(joined, /HttpOnly/i);
     assert.match(joined, /SameSite=Lax/i);
+    // SEC-P5: die drei Bedingungen, die der Browser fuer __Host- erzwingt.
+    const gesetzt = res.setCookie.find((zeile) => zeile.startsWith(`${SESSION_COOKIE_NAME}=`));
+    assert.match(gesetzt, /;\s*Secure/i);
+    assert.match(gesetzt, /;\s*Path=\/(;|$)/i);
+    assert.doesNotMatch(gesetzt, /;\s*Domain=/i, "__Host- verbietet Domain=");
   } finally {
     await srv.close();
   }
