@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeAuditStore } from "../src/audit-store.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
@@ -27,7 +27,7 @@ const SECRET = "newsletter-recipients-web-secret-0123456789";
 const SUB = "sub-nlr-a";
 const TENANT = "t_sub-nlr-a";
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 function makeAuditSpy() {
   const calls = [];

@@ -111,6 +111,14 @@ function clearCookies(res, names) {
   }
 }
 
+// EINE Quelle (G5) fuer den Namen des Sitzungs-Cookies. Das Praefix __Host- ist kein
+// Schmuck, sondern eine vom Browser erzwungene Zusage: er nimmt das Cookie NUR mit
+// Secure, mit Path=/ und OHNE Domain an - eine (auch kompromittierte) Subdomain kann es
+// damit weder setzen noch ueberschreiben. cookieAttrs() erfuellt alle drei Bedingungen
+// bereits bedingungslos; der Praefix macht die Zusage nur pruefbar.
+// Preis, bewusst: der Name aendert sich, also endet beim Deploy JEDE laufende Sitzung.
+export const SESSION_COOKIE_NAME = "__Host-session";
+
 // Login-Flow-Cookies (state/pkce/nonce) als EINE Namensliste (G5) fuer die drei Cleanup-Stellen.
 const LOGIN_FLOW_COOKIE_NAMES = ["pkce_verifier", "oauth_state", "oidc_nonce"];
 
@@ -199,7 +207,7 @@ export function makeWebAuthRoutes(deps) {
     // WorkOS-Sign-out-Redirect bei /auth/logout. Dev-Login reicht sie nie durch (undefined ->
     // sessions.create() defaultet auf null, kein Verhaltenswechsel fuer den Dev-Pfad).
     const { id } = await sessions.create({ sub, tenantId, ttlSeconds, workosSessionId });
-    res.append("Set-Cookie", cookieAttrs("session", signValue(id, secret), ttlSeconds));
+    res.append("Set-Cookie", cookieAttrs(SESSION_COOKIE_NAME, signValue(id, secret), ttlSeconds));
     return { tenantId, id };
   }
 
@@ -306,14 +314,14 @@ export function makeWebAuthRoutes(deps) {
   // Formular). Alt-Sessions/Dev-Login OHNE workos_session_id -> weiterhin 204 ohne Body
   // (rein lokal, byte-identisch zum Bestand).
   router.post("/auth/logout", async (req, res) => {
-    const sessionId = readSignedCookie(req, "session", secret);
+    const sessionId = readSignedCookie(req, SESSION_COOKIE_NAME, secret);
     let workosSessionId = null;
     if (sessionId) {
       const row = await sessions.get(sessionId);
       workosSessionId = row ? row.workosSessionId : null;
       await sessions.invalidateById(sessionId);
     }
-    clearCookies(res, ["session"]);
+    clearCookies(res, [SESSION_COOKIE_NAME]);
     if (!workosSessionId) return res.status(204).end();
     res
       .status(200)
@@ -716,7 +724,7 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
 // webAuthAllowPending nicht auseinanderdriften. Fail-closed: kein Detail-Leak, kein
 // Token-/Cookie-Logging (der Aufrufer faengt unerwartete Fehler generisch ab).
 async function resolveWebSession({ secret, sessions, accounts }, req) {
-  const sessionId = readSignedCookie(req, "session", secret);
+  const sessionId = readSignedCookie(req, SESSION_COOKIE_NAME, secret);
   if (!sessionId) return null;
   const row = await sessions.get(sessionId);
   if (!row || row.invalidated_at != null || new Date(row.expires_at) <= new Date()) return null;

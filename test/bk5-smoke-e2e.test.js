@@ -27,6 +27,7 @@ import {
   makeAccounts,
   makeSessions,
   signValue,
+  SESSION_COOKIE_NAME,
 } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
@@ -70,7 +71,7 @@ const CONFIG = Object.freeze({
   stripeBusinessPriceId: "price_business",
 });
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 // Fake-BillingPort (BK2-Superset, in-process, KEIN Netz, kein echtes Stripe): spy faengt
 // die successUrl (Plan-Carry) + die createSubscription-Parameter (priceId).

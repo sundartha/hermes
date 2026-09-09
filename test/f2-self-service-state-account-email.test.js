@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { makeSelfServiceRoutes } from "../src/self-service-routes.js";
 import * as ops from "../src/store/state-ops.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
@@ -21,7 +21,7 @@ const SUB_A = "sub-mail-a";
 const TENANT_A = "t_sub-mail-a";
 const ACCOUNT_EMAIL = "kunde-mail-a@example.test";
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 async function seedActiveTenant(store, accounts, { sub, tenantId, email }) {
   const s = store.load();

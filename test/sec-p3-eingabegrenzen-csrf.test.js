@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import express from "express";
 import { makePgTestStore } from "./pg-helpers.js";
-import { webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
+import { SESSION_COOKIE_NAME, webAuth, webAuthAllowPending, makeAccounts, makeSessions, signValue } from "../src/web-auth.js";
 import { mountSelfServiceRoutes } from "../src/self-service-routes.js";
 import { crossOriginRequest } from "../src/middleware.js";
 import { promptLineRejection, TEXT_LIMITS } from "../src/routes/_validation.js";
@@ -35,7 +35,7 @@ const HTTP_FORBIDDEN = 403;
 const TOO_LONG_AGENT_NAME_LENGTH = 20000;
 const NON_STRING_AGENT_NAME = 123;
 
-const cookieFor = (id) => `session=${encodeURIComponent(signValue(id, SECRET))}`;
+const cookieFor = (id) => `${SESSION_COOKIE_NAME}=${encodeURIComponent(signValue(id, SECRET))}`;
 
 // Spion ueber BEIDE Geld-Wege, die unter dem Praefix liegen: ein fremder Origin darf
 // weder eine Kuendigung vormerken noch ein Abo anlegen (Nachweis "kein Zustandswechsel").
