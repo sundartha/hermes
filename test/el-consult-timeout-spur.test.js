@@ -26,7 +26,8 @@ process.env.CONSULT_ENABLED = "true"; // consult/gate.js liest das config-Single
 process.env.ASSISTANT_CONTEXT_ENABLED = "true"; // Import - Muster callee-is-owner-elevenlabs
 // Abweichung vom Wortlaut des Plans (nur die beiden Zeilen oben): consultAllowed()
 // (webhooks-elevenlabs.js) prueft zusaetzlich config.tenancy.inCallConsultEnabled - ohne
-// dieses Flag lehnt JEDER Fall dieser Datei mit 404 "kanal_nicht_freigegeben" ab, bevor
+// dieses Flag lehnt JEDER Fall dieser Datei mit 404 ab (Grund im Log:
+// "kanal_nicht_freigegeben"; nach aussen seit SEC-P4 der einheitliche Grund), bevor
 // er den zu pruefenden Abbruch je erreicht. Default ist false (Datenschutz-Gate, s.
 // config.js); ohne das Flag hier waere der ganze Testkatalog ein Blindgang.
 process.env.IN_CALL_CONSULT_ENABLED = "true";

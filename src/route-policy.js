@@ -135,7 +135,11 @@ export const PUBLIC_ROUTES = Object.freeze([
       "SIGNIERT Werkzeug-Webhooks nicht (nur frei konfigurierbare Header). Absicherung im " +
       "Handler: timing-sicherer Vergleich (safeEqual) des Headers x-hermes-tool-token gegen " +
       "ELEVENLABS_TOOL_TOKEN, leerer Wert lehnt JEDEN Aufruf ab; danach Bindung an einen " +
-      "laufenden Anruf (404 sonst), Consult-Faehigkeits-Gate und die pro-Tenant-Kostendecke.",
+      "laufenden Anruf UND an dessen Mandanten (SEC-P4: der Anrufstart gibt dem Agenten " +
+      "einen aus dem Mandanten abgeleiteten Wert mit, den die Werkzeug-Definition " +
+      "zurueckschickt; ein Aufruf fuer Mandant A passt an keinem Anruf von Mandant B), " +
+      "Consult-Faehigkeits-Gate und die pro-Tenant-Kostendecke. Jede dieser drei " +
+      "Ablehnungen antwortet mit demselben Grund (404), nur das Log unterscheidet sie.",
   },
   {
     method: "POST",
@@ -143,10 +147,15 @@ export const PUBLIC_ROUTES = Object.freeze([
     reason:
       "HANDLER-INTERNE AUTH, wortgleiche Bauart wie /webhooks/elevenlabs/consult darueber " +
       "(Thema B, 2026-08-19): derselbe timing-sichere x-hermes-tool-token-Vergleich " +
-      "(fail-closed bei leerem Wert), dieselbe Bindung an einen laufenden Anruf (404), " +
+      "(fail-closed bei leerem Wert), dieselbe Bindung an einen " +
+      "laufenden Anruf UND an dessen Mandanten (SEC-P4: der Anrufstart gibt dem Agenten " +
+      "einen aus dem Mandanten abgeleiteten Wert mit, den die Werkzeug-Definition " +
+      "zurueckschickt; ein Aufruf fuer Mandant A passt an keinem Anruf von Mandant B), " +
       "danach das Recherche-Gate (LOOKUP_ENABLED + EXA_API_KEY + per-Tenant allowLookup + " +
       "Richtung outbound, research/registry.js), die pro-Tenant-Kostendecke und der " +
-      "Deckel LOOKUP_MAX_PER_CALL. Egress-Filter sanitizeLookupQuery vor jedem Versand.",
+      "Deckel LOOKUP_MAX_PER_CALL. Jede dieser drei Ablehnungen antwortet mit demselben " +
+      "Grund (404), nur das Log unterscheidet sie. Egress-Filter sanitizeLookupQuery vor " +
+      "jedem Versand.",
   },
   {
     method: "GET",

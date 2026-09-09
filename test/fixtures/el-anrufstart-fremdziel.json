@@ -16,7 +16,8 @@
       "owner_timezone": "Europe/Berlin",
       "callee_timezone": "\nThe person you are calling is in the Europe/Berlin time zone - convert every time you agree between those two zones and say which zone you mean.",
       "today": "<LAUFABHAENGIG>",
-      "voicemail_line": "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Pin Testowner. Das Gespräch wird für meinen Auftraggeber zusammengefasst. Ich hinterlasse diese Nachricht, weil niemand abgehoben hat. Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus? Ich versuche es später noch einmal. Auf Wiederhören."
+      "voicemail_line": "Guten Tag, hier spricht ein KI-Assistent im Auftrag von Pin Testowner. Das Gespräch wird für meinen Auftraggeber zusammengefasst. Ich hinterlasse diese Nachricht, weil niemand abgehoben hat. Es geht um Folgendes: Termin vereinbaren. Wie sieht es damit aus? Ich versuche es später noch einmal. Auf Wiederhören.",
+      "tenant_token": "674c6b1907cbe08dbe04e8d62605a52fe848a472d39cd5f7d996a6c8e3d989be"
     },
     "conversation_config_override": {
       "agent": {

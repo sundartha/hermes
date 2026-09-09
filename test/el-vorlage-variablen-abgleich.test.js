@@ -20,7 +20,10 @@
 //   Seite A  {{name}}-Vorkommen aus dem TEXT der echten Agenten-Vorlage
 //            (agent.conversation_config.agent.prompt.prompt + .first_message - dieselben
 //            zwei Quellen, die die Vorlage selbst unter _besitz.felder fuer den Eintrag
-//            "dynamic_variables" nennt) - per Regex aus der Datei extrahiert.
+//            "dynamic_variables" nennt) - per Regex aus der Datei extrahiert. Dazu die
+//            beiden Quellen, die KEIN {{name}} tragen und trotzdem eine dynamische
+//            Variable verbrauchen: der Anrufbeantworter-Text (DE1) und die
+//            dynamic_variable-Verweise der WERKZEUGE (SEC-P4).
 //   Seite B  die Schluessel des dynamic_variables-Objekts, das
 //            src/elevenlabs/outbound.js (makeElevenLabsOutbound().originateCall)
 //            WIRKLICH ueber den einzigen Netzzugriff dieses Wegs an den Anbieter
@@ -52,7 +55,11 @@ const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 // Vierzehn seit DE1: {{voicemail_line}} kam als vierzehnter Name dazu - der GANZE
 // Anrufbeantworter-Text, in der Sprache des Anrufs komponiert (der Text am Agenten
 // laesst sich weder je Sprache noch je Anruf uebersteuern, 2026-09-04 gemessen).
-const EXPECTED_VARIABLE_COUNT = 14;
+// Fuenfzehn seit SEC-P4: tenant_token kam als fuenfzehnter Name dazu - die
+// Mandanten-Dimension des Werkzeug-Tokens. Sie steht in KEINEM Text, sondern nur im
+// Anfragekoerper der Werkzeuge; ohne die vierte Quelle unten waere sie hier unsichtbar
+// gewesen und der Abgleich haette sie als toten Ballast gemeldet.
+const EXPECTED_VARIABLE_COUNT = 15;
 
 // ---- Seite A: {{name}} aus dem WIRKLICHEN Vorlagentext --------------------------------
 const PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
@@ -73,6 +80,34 @@ function voicemailMessageOf(agent) {
   return detection.params.voicemail_message;
 }
 
+// VIERTE QUELLE seit SEC-P4: die dynamic_variable-Verweise der WERKZEUGE. Eine Variable,
+// die NUR ein Werkzeug liest, trug bisher kein {{name}} und war damit unsichtbar - dieselbe
+// Luecke, die DE1 fuer den Anrufbeantworter-Text geschlossen hat. Ausgenommen sind die
+// Anbieter-SYSTEMVARIABLEN (system__conversation_id): die fuellt der Anbieter selbst, wir
+// schicken sie nie mit, und eine Forderung nach ihr waere der umgekehrte Fehlalarm.
+const SYSTEM_VARIABLE_PREFIX = "system__";
+
+// Der Name, den EINE Parameter-Deklaration verbraucht - oder null. Eigenstaendig, weil
+// die Schleife darunter sonst ueber der Komplexitaetsgrenze steht (eslint complexity 10)
+// und weil "was ist eine verbrauchte Variable" genau eine Frage ist (G30).
+function verbrauchteVariableVon(eigenschaft) {
+  const name = eigenschaft.dynamic_variable;
+  if (typeof name !== "string" || !name) return null;
+  return name.startsWith(SYSTEM_VARIABLE_PREFIX) ? null : name;
+}
+
+function toolVariableNamesIn(tools) {
+  const gefunden = new Set();
+  for (const werkzeug of Object.values(tools ?? {})) {
+    const schema = werkzeug.tool_config?.api_schema?.request_body_schema;
+    for (const eigenschaft of Object.values(schema?.properties ?? {})) {
+      const name = verbrauchteVariableVon(eigenschaft);
+      if (name) gefunden.add(name);
+    }
+  }
+  return gefunden;
+}
+
 function templatePlaceholderNames() {
   const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
   const agent = vorlage.agent.conversation_config.agent;
@@ -80,6 +115,7 @@ function templatePlaceholderNames() {
     ...placeholderNamesIn(agent.prompt.prompt),
     ...placeholderNamesIn(agent.first_message),
     ...placeholderNamesIn(voicemailMessageOf(agent)),
+    ...toolVariableNamesIn(vorlage.tools),
   ]);
 }
 
@@ -96,7 +132,7 @@ function fehlendeUndUeberzaehlige(seiteA, seiteB) {
   return { fehlend, ueberzaehlig };
 }
 
-test("EL-VORLAGE-VARIABLEN: Platzhalter der Vorlage und gesendete dynamic_variables sind deckungsgleich (vierzehn Namen)", async () => {
+test("EL-VORLAGE-VARIABLEN: verbrauchte Vorlagen-Variablen und gesendete dynamic_variables sind deckungsgleich (fuenfzehn Namen)", async () => {
   const seiteA = templatePlaceholderNames();
   const gesendet = await sentDynamicVariables();
   const seiteB = new Set(Object.keys(gesendet));
@@ -104,7 +140,7 @@ test("EL-VORLAGE-VARIABLEN: Platzhalter der Vorlage und gesendete dynamic_variab
   assert.equal(
     seiteA.size,
     EXPECTED_VARIABLE_COUNT,
-    `Vorlage benutzt ${seiteA.size} Platzhalter statt der erwarteten ${EXPECTED_VARIABLE_COUNT}: ${[...seiteA].sort().join(", ")}`,
+    `Vorlage verbraucht ${seiteA.size} Variablen statt der erwarteten ${EXPECTED_VARIABLE_COUNT}: ${[...seiteA].sort().join(", ")}`,
   );
   assert.equal(
     seiteB.size,
@@ -116,7 +152,7 @@ test("EL-VORLAGE-VARIABLEN: Platzhalter der Vorlage und gesendete dynamic_variab
   assert.deepEqual(
     fehlend,
     [],
-    `Vorlage benutzt {{${fehlend.join("}}, {{")}}} - outbound.js schickt das NICHT mit. ` +
+    `Vorlage verbraucht ${fehlend.join(", ")} - outbound.js schickt das NICHT mit. ` +
       "Das ist der Close-1008-Fall (tasks/spike2-messung.jsonl:12): der Platzhalter " +
       "bleibt unaufgeloest, der Anbieter bricht das Gespraech vor dem ersten Wort ab.",
   );

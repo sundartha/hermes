@@ -369,6 +369,53 @@ test("Werkzeug-Inventar der ElevenLabs-Vorlage: get_consult schickt die Gespraec
   );
 });
 
+// --- SEC-P4: die Mandanten-Dimension am Anfragekoerper BEIDER Werkzeuge ----------------
+//
+// Der Header x-hermes-tool-token traegt EINEN Wert fuer ALLE Mandanten, und am Anbieter
+// ist er nicht per Mandant konfigurierbar (eine geteilte Agenten-Konfiguration, ein
+// Workspace-Secret je Werkzeug). Die Dimension kommt deshalb vom ANRUFSTART: er schickt
+// tenant_token als dynamische Variable mit, und dieser Parameter holt sie ueber
+// dynamic_variable in den Anfragekoerper zurueck - dieselbe Mechanik wie conversation_id
+// oben. Dieser Fall haelt wieder die SENDE-Seite fest: die Lese-Seite testet
+// test/sec-p4-mandanten-token.test.js, sie schreibt ihre Koerper aber selbst und kann
+// nicht sehen, ob der Anbieter den Wert ueberhaupt mitschickt.
+//
+// BEIDE Werkzeuge, nicht nur eines: sie teilen denselben Header und denselben Server -
+// ein Werkzeug ohne den Parameter waere die offene Tuer, waehrend die andere zu ist.
+const TENANT_TOKEN_KEY = "tenant_token";
+const TENANT_TOKEN_VARIABLE = "tenant_token";
+
+test("Werkzeug-Inventar der ElevenLabs-Vorlage: beide Werkzeuge schicken die Mandanten-Dimension mit, die der Webhook prueft (SEC-P4)", () => {
+  for (const werkzeug of declaredToolNames()) {
+    const schema = toolEntry(werkzeug).tool_config?.api_schema?.[CONSULT_BODY_SCHEMA_KEY];
+    const parameter = schema?.properties?.[TENANT_TOKEN_KEY];
+    assert.ok(
+      parameter,
+      `${TEMPLATE_REL}: Werkzeug "${werkzeug}" deklariert "${TENANT_TOKEN_KEY}" nicht. Der Aufruf traegt dann keine Mandanten-Dimension, und das eine geteilte Geheimnis erreicht wieder jeden laufenden Anruf jedes Mandanten.`,
+    );
+    assert.equal(
+      parameter.dynamic_variable,
+      TENANT_TOKEN_VARIABLE,
+      `${TEMPLATE_REL}: "${TENANT_TOKEN_KEY}" an "${werkzeug}" wird nicht aus der dynamischen Variablen ${TENANT_TOKEN_VARIABLE} gefuellt - ohne dynamic_variable muesste das MODELL den Wert liefern, es kennt ihn nicht.`,
+    );
+    assert.equal(
+      parameter.description,
+      undefined,
+      `${TEMPLATE_REL}: "${TENANT_TOKEN_KEY}" an "${werkzeug}" traegt description NEBEN dynamic_variable - das Anbieter-Schema nennt beide ausdruecklich gegenseitig ausschliessend.`,
+    );
+    assert.ok(
+      !(schema.required ?? []).includes(TENANT_TOKEN_KEY),
+      `${TEMPLATE_REL}: "${TENANT_TOKEN_KEY}" steht an "${werkzeug}" unter required - ein Anruf, der VOR dem Push gestartet wurde, traegt den Wert nicht, und ein dynamic_variable-Parameter wird nie vom Modell geliefert.`,
+    );
+  }
+
+  const handlerQuelle = readFileSync(new URL(`../${CONSULT_HANDLER_REL}`, import.meta.url), "utf8");
+  assert.ok(
+    handlerQuelle.includes(TENANT_TOKEN_KEY),
+    `${CONSULT_HANDLER_REL} nennt "${TENANT_TOKEN_KEY}" nicht mehr. Sende- und Leseseite tragen dann verschiedene Namen, und der Riegel prueft einen Wert, den niemand schickt.`,
+  );
+});
+
 test("Werkzeug-Inventar der ElevenLabs-Vorlage: jedes Werkzeug heisst ueberall gleich und haengt genau einmal am Agenten", () => {
   for (const name of declaredToolNames()) {
     assert.equal(

@@ -434,7 +434,7 @@ test("EL-CONSULT Gutfall: gueltiger Token + laufender eigener Anruf + freies Bud
   }
 });
 
-test("EL-CONSULT S5: Rueckfrage auf einem OWNER-Anruf -> 404 kanal_nicht_freigegeben, ohne Halt und ohne Datensatz", async (ctx) => {
+test("EL-CONSULT S5: Rueckfrage auf einem OWNER-Anruf -> 404 mit einheitlichem Ablehnungsgrund (SEC-P4), ohne Halt und ohne Datensatz", async (ctx) => {
   const srv = await startServer({
     env: { ...CONSULT_ON_ENV, ELEVENLABS_TOOL_TOKEN: TOOL_TOKEN, ...SHORT_CONSULT_ENV },
     seed: seedState({
@@ -459,9 +459,11 @@ test("EL-CONSULT S5: Rueckfrage auf einem OWNER-Anruf -> 404 kanal_nicht_freigeg
     });
     const dauer = Date.now() - start;
 
-    await ctx.test("404 mit dem Bestands-Ablehnungsgrund", async () => {
+    await ctx.test("404 mit dem einheitlichen Ablehnungsgrund", async () => {
       assert.equal(res.status, HTTP_NOT_FOUND);
-      assert.deepEqual(await res.json(), { error: "kanal_nicht_freigegeben" });
+      // SEC-P4: alle drei bindungsabhaengigen Ablehnungen (Bindung, Mandanten-Riegel,
+      // Faehigkeit) tragen nach aussen denselben Grund; nur das Log unterscheidet sie.
+      assert.deepEqual(await res.json(), { error: "kein_laufender_anruf" });
     });
 
     await ctx.test("kein Halt: die Antwort kommt lange vor CONSULT_OPEN_MS", () => {
