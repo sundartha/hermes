@@ -199,7 +199,37 @@ gezielt aktualisiert statt pauschal gefixt.
    Produktion, ohne Ablauf).
 4. Stripe-Zugang (`team@sundartha.com`) — OPS-04 offen.
 5. Zwei-Faktor am Render-Konto des Owners ist aus.
-6. **NEU aus SEC-P4: Anbieter-Push der ElevenLabs-Werkzeug-Vorlage.** Der Code ist gebaut und
+6. **SEC-P4, Anbieter-Seite ERLEDIGT 2026-09-10, Schalter noch AUS.** Beide Live-Werkzeuge
+   (`look_up` = `tool_6601m0bpfeqme9ssbpw9z8qhreyy`, `get_consult` =
+   `tool_8801m00mvv3zfxhbcwbszpvfg9ae`) tragen jetzt `tenant_token` im
+   `request_body_schema`, gefuellt ueber `dynamic_variable: "tenant_token"` — dieselbe
+   Mechanik, die `conversation_id` ueber `system__conversation_id` schon benutzt.
+
+   **Nicht** ueber `scripts/push-elevenlabs.mjs` gepatcht (das schriebe die GANZE
+   Live-Konfiguration aus der lokalen `.env`), sondern gezielt: Schnappschuss per GET,
+   EIN Feld ergaenzt, `PATCH /v1/convai/tools/{id}` mit exakt dem Live-Stand zurueck.
+   Gegengeprueft per erneutem GET und Feld-fuer-Feld-Vergleich: **nur** die neun Felder der
+   neuen Eigenschaft sind dazugekommen, nichts entfernt, nichts geaendert. `required` bleibt
+   `["query"]` bzw. `["question"]` — ein fehlender Wert ergibt `FEHLT`, keinen Anbieter-Fehler.
+   Schnappschuesse vorher/nachher liegen im Scratchpad der Sitzung.
+
+   **Warum das ohne Risiko war:** `tenantTokenVerdict` liefert bei leerem Wert `FEHLT`, und
+   `FEHLT` haengt am Schalter. Solange `ELEVENLABS_TENANT_TOKEN_REQUIRED` fehlt (live nicht
+   gesetzt = Default `false`), laeuft alles wie vorher.
+
+   **WAS NOCH FEHLT, und warum es einen Testanruf braucht:** dass das Feld ANKOMMT, ist noch
+   nicht gemessen. Der Server loggt im Erfolgsfall nichts (`PASSEND` und `FEHLT`-bei-Schalter-aus
+   kehren beide still zurueck, `webhooks-elevenlabs.js:217/218`) — ein Logblick beweist also
+   nichts. Der Beleg ist EIN Testanruf ueber den EL-Weg und danach der Blick in den
+   ElevenLabs-Gespraechsdatensatz, ob der Werkzeug-Aufruf ein NICHT-leeres `tenant_token`
+   trug. Erst dann darf `ELEVENLABS_TENANT_TOKEN_REQUIRED=true` gesetzt werden. Umgekehrt
+   waere der Preis: `look_up` und `get_consult` antworten 404 und der Agent verstummt.
+
+   Kontext, der die Dringlichkeit bestimmt: `ELEVENLABS_OUTBOUND_ENABLED` ist live **`true`**
+   (im Dashboard nachgesehen) — der EL-Weg ist der tatsaechlich genutzte Outbound-Pfad, kein
+   ruhender Zweig.
+
+~~Alter Stand:~~ **NEU aus SEC-P4: Anbieter-Push der ElevenLabs-Werkzeug-Vorlage.** Der Code ist gebaut und
    getestet, steht aber hinter `ELEVENLABS_TENANT_TOKEN_REQUIRED=false`. Scharf wird der
    Mandanten-Riegel erst, wenn die geaenderte Werkzeug-Vorlage beim Anbieter liegt (sie holt
    `tenant_token` ueber `dynamic_variable` in den Anfragekoerper) UND der Schalter danach auf
