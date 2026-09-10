@@ -44,6 +44,8 @@ function fakeDeps({ storedSubscriptionId = null } = {}) {
     calls,
     store: {
       findTenantBySubscription: () => null,
+      // FW1-A: Existenz-Gate der Tenant-Aufloesung - dieses Double modelliert einen existierenden Tenant.
+      tenantExists: () => true,
       setTenantSubscription: (tenant, patch) => calls.subscription.push([tenant, patch]),
       tenantSubscription: () => ({ planSlug: null, subscriptionId: storedSubscriptionId }),
       setSuspendedAtIfAbsent: (tenant) => calls.suspend.push(tenant),

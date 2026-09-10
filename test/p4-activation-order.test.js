@@ -15,6 +15,7 @@ import {
   kycReached,
   clearSuspendedAt,
   billingHoldActive,
+  clearBillingHold,
   stampBudgetPeriod,
 } from "../src/store/state-ops.js";
 import { KYC_OUTBOUND_MIN } from "../src/store/defaults.js";
@@ -34,6 +35,8 @@ function storeOn(s, { ensureTenantCalls = [] } = {}) {
     ensureTenant: async (t) => {
       ensureTenantCalls.push(t);
     },
+    // FW1-B: clearBillingHold laeuft jetzt in activatePaidTenant selbst.
+    clearBillingHold: (tenant) => clearBillingHold(s, tenant),
   };
 }
 

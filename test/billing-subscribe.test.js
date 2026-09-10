@@ -49,10 +49,10 @@ function fakeStore({ card = true, sub = null, pm = "pm_x" } = {}) {
     // GAP-01: Perioden-Fenster des Budget-Gates (activatePaidTenant stempelt es).
     billingHoldActive: () => null,
     stampBudgetPeriod: () => false,
-    // GAP-04: ensureTenant (Spiegel-Nachzug NACH erfolgreicher Aktivierung). GAP-03:
-    // clearBillingHold (Reversibilitaet) - hier nicht relevant, wird aber nur vom Webhook-
-    // Pfad gerufen (applyStripeWebhook), nicht von activateSubscriptionFromCheckoutSession.
+    // GAP-04: ensureTenant (Spiegel-Nachzug NACH erfolgreicher Aktivierung).
     ensureTenant: async () => {},
+    // FW1-B: clearBillingHold laeuft jetzt in activatePaidTenant - also auch auf diesem Rueckkehrpfad.
+    clearBillingHold: () => {},
   };
 }
 

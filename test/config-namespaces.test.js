@@ -86,7 +86,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // B5: llmProvider + deepseekApiKey ergaenzt (Anbieter-Wahl + Schluessel des
   // Fremdadapters) -> 14.
   // FIX-1: summaryTimeoutMs ergaenzt (eigener Timeout der Zusammenfassung) -> 15.
-  llm: 15,
+  // FW2: llmProviderFallback + llmBillingLatchCooldownMs ergaenzt (Ausweich-Anbieter des
+  // Guthaben-Latch + seine Haltedauer) -> 17.
+  llm: 17,
   telnyx: 2,
   // AL-P7b: thinkingSignalEnabled ergaenzt (Denk-Signal-Flag) -> 11.
   // STT-A1: sttProfile ergaenzt (neutrale STT-Wahl, EIN Config-Schluessel fuer alle
@@ -163,7 +165,11 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // 183.
 // SEC-P3: csrfEnforce (safety) ergaenzt -> 184.
 // SEC-P4: elevenLabsTenantTokenRequired (voice) ergaenzt -> 185.
-const EXPECTED_TOTAL_KEYS = 185;
+// FW2: llmProviderFallback + llmBillingLatchCooldownMs (llm) ergaenzt -> 187.
+// ACHTUNG beim Merge beider Ketten (2026-09-10): SEC und FW zaehlten unabhaengig von 183
+// aus und schrieben BEIDE "-> 185". Git hat die identische Zahlzeile stillschweigend
+// zusammengefuehrt - die Summe war dadurch um 2 zu niedrig. Gemessen, nicht gerechnet.
+const EXPECTED_TOTAL_KEYS = 187;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -310,7 +316,10 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // SEC-P3: csrfEnforce ist primitiv (Boolean, kein Array/nested Objekt) -> 172.
   // SEC-P4: elevenLabsTenantTokenRequired ist primitiv (Boolean, kein Array/nested
   // Objekt) -> 173.
-  const EXPECTED_PRIMITIVE_LEAVES = 173;
+  // FW2: llmProviderFallback (String) + llmBillingLatchCooldownMs (Zahl) sind beide
+  // primitiv (kein Array/nested Objekt) -> 175. Zur doppelten Zaehlung s. den Hinweis
+  // bei EXPECTED_TOTAL_KEYS.
+  const EXPECTED_PRIMITIVE_LEAVES = 175;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

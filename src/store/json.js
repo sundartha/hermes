@@ -1153,6 +1153,11 @@ export function findTenantByCustomer(customerId) {
   return ops.findTenantByCustomer(load(), customerId);
 }
 
+// FW1-A: reine Query (kein save), analog findTenantBySubscription/findTenantByCustomer.
+export function tenantExists(tenantId) {
+  return ops.tenantExists(load(), tenantId);
+}
+
 export function setBillingHold(tenantId, patch) {
   ops.setBillingHold(load(), tenantId, patch);
   save();

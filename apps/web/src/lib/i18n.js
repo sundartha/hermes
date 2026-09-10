@@ -145,8 +145,6 @@ export const STRINGS = {
     viewDetails: "View details",
     transcript: "Transcript",
     modalClose: "Close",
-    // OUTBOUND-E3a (F2a, L8): Ueberschrift des Benachrichtigungs-Feeds.
-    notificationsTitle: "Notifications",
 
     // SettingsIsland
     settingsTitle: "My agent settings",
@@ -240,7 +238,6 @@ export const STRINGS = {
     viewDetails: "Details ansehen",
     transcript: "Gesprächsverlauf",
     modalClose: "Schließen",
-    notificationsTitle: "Meldungen",
 
     // SettingsIsland
     settingsTitle: "Mein Agent",

@@ -211,6 +211,9 @@ const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 // (G25: benannte Konstanten statt Zahlenketten im Ausdruck).
 const OUTAGE_ALERT_DEBOUNCE_HOURS_DEFAULT = 6;
 const OUTAGE_ALERT_RETRY_MINUTES_DEFAULT = 15;
+// FW2: Standard-Haltedauer des Guthaben-Latch (G25/G35, Muster
+// OUTAGE_ALERT_RETRY_MINUTES_DEFAULT).
+const LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT = 15;
 // OUTBOUND-E3b (Review-Blocker Runde 2, C8b/Plan-Abschnitt "Meldeweg und Alarm-Body"): ein
 // Kanal, der zwoelf Monate nie ausgeloest wurde, ist kein bewiesener Kanal - der Selbsttest
 // laeuft im selben monatlichen Rhythmus, den der Plan nennt.
@@ -493,6 +496,14 @@ const rawConfig = {
   // B5: Schluessel des Fremdadapters. Boot-Pflicht NUR bei LLM_PROVIDER=deepseek
   // (assertConfig) - sonst ist leer der Normalfall.
   deepseekApiKey: process.env.DEEPSEEK_API_KEY || "",
+  // FW2: Ausweich-Anbieter fuer den Guthaben-Latch. Leer/ungesetzt = Funktion AUS
+  // (Verhalten byte-identisch zum Bestand). Gleiche gueltige Menge wie LLM_PROVIDER,
+  // unbekannter Wert bricht den Boot ab (enumEnv). Identisch mit LLM_PROVIDER = kein
+  // Ausweichen moeglich -> Konfig-Warnung beim Boot (llmFallbackFindings, boot-guard.js).
+  llmProviderFallback: enumEnv("LLM_PROVIDER_FALLBACK", process.env.LLM_PROVIDER_FALLBACK, {
+    allowed: LLM_PROVIDER_VALUES,
+    fallback: "",
+  }),
   // B4a: MUSS eine Preisstaffel in MODEL_PRICE_SCHEDULES haben - sonst bricht der Boot ab
   // (assertPricedModels, src/boot.js). Eine DATIERTE Snapshot-ID ist ein ANDERER Schluessel.
   claudeModel: process.env.CLAUDE_MODEL || "claude-haiku-4-5",
@@ -540,6 +551,12 @@ const rawConfig = {
   }),
   llmBreakerCooldownMs: numEnv("LLM_BREAKER_COOLDOWN_MS", process.env.LLM_BREAKER_COOLDOWN_MS, {
     fallback: 30000,
+    min: 1,
+  }),
+  // FW2: wie lange der Guthaben-Vermerk haelt. Der Latch ist ein Notbehelf MIT
+  // Verfallsdatum - ein wieder aufgeladenes Konto uebernimmt ohne Neustart wieder.
+  llmBillingLatchCooldownMs: numEnv("LLM_BILLING_LATCH_COOLDOWN_MS", process.env.LLM_BILLING_LATCH_COOLDOWN_MS, {
+    fallback: LLM_BILLING_LATCH_COOLDOWN_MINUTES_DEFAULT * MS_PER_MINUTE,
     min: 1,
   }),
 
@@ -2251,7 +2268,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   // brevo-mail.js/smtp-mail.js/billing/cancellation-mail.js). HTTP-Fortsetzung:
   // brevoApiKey ergaenzt (Render sperrt SMTP auf kostenlosen Plaenen) -> 6.
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
-  llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
+  llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
   voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
@@ -2463,8 +2480,14 @@ const REQUIRED_CONFIG = Object.freeze([
     // nicht-transient, also Degradation in jedem Turn, und das erst im Anruf sichtbar.
     // ANTHROPIC_API_KEY bleibt bewusst UNBEDINGT Pflicht (eine Lockerung waere das
     // Aufweichen einer bestehenden Pruefung ohne Not - B5 stellt den Live-Anbieter nicht um).
-    fehlt: () => config.llm.llmProvider === LLM_PROVIDER.DEEPSEEK && !config.llm.deepseekApiKey,
-    name: "DEEPSEEK_API_KEY (weil LLM_PROVIDER=deepseek)",
+    // FW2: derselbe Schluessel, zweiter Anlass - ein gesetzter Ausweich-Anbieter ohne
+    // Schluessel wuerde JEDEN Aufruf nach dem Latch mit 401 beantworten, also genau im
+    // Notfall versagen.
+    fehlt: () =>
+      (config.llm.llmProvider === LLM_PROVIDER.DEEPSEEK ||
+        config.llm.llmProviderFallback === LLM_PROVIDER.DEEPSEEK) &&
+      !config.llm.deepseekApiKey,
+    name: "DEEPSEEK_API_KEY (weil LLM_PROVIDER/LLM_PROVIDER_FALLBACK=deepseek)",
   },
   {
     fehlt: () => !config.server.publicUrl || config.server.publicUrl.includes("CHANGE-ME"),

@@ -2428,6 +2428,16 @@ export function findTenantByCustomer(s, customerId) {
   return s.tenants.find((t) => t.stripeCustomerId === customerId) ?? null;
 }
 
+// FW1-A: existiert der Tenant? Reine Query, kein IO, kein Write. Formuliert ueber das
+// vorhandene findTenant - EINE Quelle der Existenz-Regel (G5), keine zweite Suchlogik.
+// Der Webhook braucht das Praedikat, weil metadata.tenant_ref eines Stripe-Objekts einen
+// Tenant NENNEN kann, den es hier nicht (mehr) gibt: Stripe traegt die Metadata dauerhaft
+// am Objekt, auch nach dem Loeschen des Datensatzes oder aus einer fremden Umgebung.
+// Ungeprueft weitergereicht wirft der erste Schreibzugriff (setTenantSubscription).
+export function tenantExists(state, tenantId) {
+  return findTenant(state, tenantId) !== null;
+}
+
 // ---- Billing-Hold (GAP-03, O2) ----
 // Setzt/loescht den Outbound-Sperrgrund eines Tenants + optionale Frist (dueAtIso, ISO).
 // Reine Mutation, kein IO (Wrapper saved). Fehlender Tenant -> No-Op (Muster

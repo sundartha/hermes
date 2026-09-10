@@ -9,6 +9,7 @@ import {
   PLATFORM_NUMBER_PURPOSE,
 } from "./store/defaults.js";
 import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
+import { usableFallbackProvider } from "./llm/provider.js";
 
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
 // Blast-Radius: faengt jeden Fehler, loggt ihn laut + secret-frei (nur err.message)
@@ -94,6 +95,27 @@ export function sttProfileFindings(sttProfile) {
         `STT_PROFILE='${sttProfile}' ist unbekannt. Gueltig: ` +
         `${Object.values(STT_PROFILE).join("|")}.`,
       fatal: true,
+    },
+  ];
+}
+
+export const LLM_FALLBACK_FINDING = Object.freeze({ SAME_AS_PRIMARY: "llm_fallback_same_as_primary" });
+
+// FW2: gesetzt, aber wirkungslos. WARN, kein exit(1) - der Fehlausgang ist der
+// Bestandszustand (kein Ausweichen), ein Boot-Refusal tauschte einen Tippfehler gegen
+// einen Telefonie-Totalausfall (Praezedenz warnTariffDrift/warnNumberOriginDecoupled).
+// Rein, arg-injiziert, config-frei (Muster driftConfigFindings).
+export function llmFallbackFindings({ provider, fallback } = {}) {
+  if (!fallback) return [];
+  if (usableFallbackProvider({ provider, fallback })) return [];
+  return [
+    {
+      code: LLM_FALLBACK_FINDING.SAME_AS_PRIMARY,
+      fatal: false,
+      message:
+        `LLM_PROVIDER_FALLBACK=${fallback} ist identisch mit LLM_PROVIDER - es gibt keinen Anbieter, ` +
+        "auf den ausgewichen werden koennte; der Guthaben-Latch bleibt wirkungslos. Wert im " +
+        "Render-Dashboard auf einen ANDEREN gueltigen Anbieter setzen oder leeren.",
     },
   ];
 }

@@ -231,6 +231,8 @@ function fakeWebhookStore(s) {
   return {
     ...inner,
     findTenantBySubscription: () => null,
+    // FW1-A: Existenz-Gate der Tenant-Aufloesung - ueber den echten State geprueft (Muster wie im Rest dieses Doubles).
+    tenantExists: (tenantId) => Boolean(findTenant(tenantId)),
     setSuspendedAtIfAbsent: () => {},
     tenantSubscription: (tenantId) => ({
       planSlug: null,

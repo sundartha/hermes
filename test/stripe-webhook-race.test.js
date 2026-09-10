@@ -33,6 +33,8 @@ function fakeDeps({ delays = {}, executionOrder = null, tenant = TENANT } = {}) 
     calls,
     store: {
       findTenantBySubscription: () => null,
+      // FW1-A: Existenz-Gate der Tenant-Aufloesung - dieses Double modelliert einen existierenden Tenant.
+      tenantExists: () => true,
       setTenantSubscription: () => {},
       setKycLevel: (t, level) => calls.kyc.push([t, level]),
       tenantStripe: () => ({ customerId: null, paymentMethodId: null }),
