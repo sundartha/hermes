@@ -135,44 +135,6 @@
   white-space: normal;
 }
 
-/* ------------------------------------------- 2b. Benachrichtigungs-Feed --- */
-/* OUTBOUND-E3a Fix-Runde 1 (Befund G2): der Feed rendert seit E3a, blieb aber
-   ungestylt (Titel/Rumpf klebten als Inline-Spans aneinander). Aufbau/Farben
-   spiegeln .call-row/.call-body/.call-who/.call-sub 1:1 -- selbe Karte, selbe
-   Optik, keine neuen Farbwerte erfunden. Scoping ueber die Container-id wie
-   #calls-list oben (gleiche Spezifitaet, kein !important noetig). */
-#notifications-list .notification-row {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-#notifications-list .notification-row:last-child {
-  border-bottom: 0;
-}
-
-.notification-row__title {
-  font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.notification-row__body {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 400;
-  color: rgba(255, 255, 255, 0.78);
-}
-
-.notification-row__time {
-  font-family: var(--app-mono);
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.46);
-}
-
 /* Status-Pille (Spec §7-Tabelle): Text kommt aus render.js (LIVE/ENDED/
    CANCELLED/FAILED), hier nur die vier Farbtoene. Eigene rgba-Werte statt der
    kraeftigen Ampelfarben aus app.css/app-hermes.css (spaeterer Import gewinnt). */

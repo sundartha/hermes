@@ -16,7 +16,6 @@ import {
   AUTH_EVENT,
   CALL_DIRECTION,
   callsFrom,
-  notificationsFrom,
   callCounterparty,
   callSubtitle,
   callStatusKind,
@@ -229,36 +228,13 @@ export function callRows(doc, data, onSelect = () => {}) {
   return calls.map((call) => callRow(doc, call, onSelect));
 }
 
-// ---- Benachrichtigungs-Feed (OUTBOUND-E3a, F2a, L8) -------------------------
-const EMPTY_NOTIFICATIONS = "No messages yet.";
-const EMPTY_NOTIFICATIONS_DE = "Noch keine Meldungen.";
-
-// Der Benachrichtigungs-Feed lag seit jeher in beiden state-Antworten
-// (routes/api-read.js, self-service-routes.js) und wurde von KEINER Zeile im Frontend
-// gelesen - eine reine Frontend-Luecke, kein Server-Bau. title/body kommen
-// SERVERGERENDERT in der Sprache des Anrufs (telephony/call-finish.js); hier wird nichts
-// uebersetzt und nichts neu hergeleitet - genau das haelt "keine zweite Wahrheit" (G5).
-// XSS: ausschliesslich textContent (el()), nie innerHTML (Dateikopf-Leitplanke).
-//
-// Fix-Runde 1 (Befund G2): Zeitstempel (`item.at`) fehlte komplett -- turnTimeLabel
-// ist bereits die geteilte, getestete "at" -> "HH:MM"-Herleitung (Chat-Blasen im
-// Detail-Fenster nutzen dieselbe Funktion) statt einer zweiten Zeit-Formatierung
-// hier. Als DRITTES Kind angehaengt, damit children[1] (der Body) fuer bestehende
-// Tests/Aufrufer stabil bleibt.
-export function notificationRows(doc, data) {
-  const items = notificationsFrom(data);
-  if (!items.length) return [emptyRow(doc, tPair(EMPTY_NOTIFICATIONS, EMPTY_NOTIFICATIONS_DE))];
-  return items.map((item) => {
-    const li = el(doc, "li", "notification-row");
-    li.append(
-      el(doc, "span", "notification-row__title", item.title),
-      el(doc, "span", "notification-row__body", item.body),
-    );
-    const time = turnTimeLabel(item);
-    if (time) li.append(el(doc, "span", "notification-row__time", time));
-    return li;
-  });
-}
+// Benachrichtigungs-Feed (OUTBOUND-E3a, F2a, L8): auf Owner-Wunsch 2026-09-10
+// ersatzlos aus der Oberflaeche entfernt -- die Meldungen standen als zweite
+// Karte unter den Anrufen und wiederholten nur, was die Anrufzeile ohnehin
+// zeigt. Der Feed selbst bleibt SERVERSEITIG unangetastet (store, audit,
+// state-Antwort von routes/api-read.js + self-service-routes.js); es faellt
+// nur der Renderer weg. Praezedenz: Summary-SMS-Block (0798ba0) und
+// Permissions-Block (28a5f4f) -- Oberflaeche raus, Backend bleibt.
 
 // ---- Detail-Fenster (Spec §8): Transkript-Chat ------------------------------
 // Eine Chat-Blase je Turn. role unterscheidet Agent/Gegenstelle optisch
