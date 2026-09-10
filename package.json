@@ -24,6 +24,7 @@
     "exa:key": "node scripts/exa-key-setzen.mjs",
     "outbound:drift": "node scripts/check-outbound-drift.mjs",
     "reconcile:stale-subs": "node scripts/reconcile-stale-subscriptions.js",
+    "reconcile:orphan-accounts": "node scripts/reconcile-orphan-accounts.js",
     "elevenlabs:nummern": "node scripts/el-nummern-registrierung.mjs",
     "spike1:consult-echo": "node scripts/spike1-consult-echo.mjs",
     "spike1:setup": "node scripts/spike1-setup.mjs",

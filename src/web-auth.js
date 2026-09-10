@@ -674,6 +674,62 @@ export function makeAccounts(runner, { defaultCountry } = {}) {
       });
     },
 
+    // ---- CL2: Lesepfad des Abgleichs verwaister account-Zeilen --------------------
+    // Liefert die Zeilen JEDES Tenants, bei dem eine Altlast moeglich ist: entweder haengen
+    // mehrere account-Zeilen am selben Tenant, oder tenant.idp_subject zeigt auf gar keine
+    // Zeile mehr. Beides entsteht nach einem Vertragsende: der Cleanup loescht die
+    // WorkOS-Identitaet, laesst ihre account-Zeile aber stehen, und der naechste Login haengt
+    // eine weitere Zeile an denselben (geparkten) Tenant.
+    // Bewusst NUR Kandidaten, nicht die ganze Tabelle: der Abgleich fragt pro Zeile bei
+    // WorkOS nach, und ein Lauf ueber alle Accounts waere eine Fremdlast ohne Erkenntnis.
+    // Die Entscheidung, WELCHE Zeile weg darf, trifft dieser Lesepfad NICHT - er weiss
+    // nichts ueber tot/lebendig (s. orphan-account-reconcile.js). Read-only, RLS-exempt wie
+    // die uebrigen account-Pfade.
+    async accountsForOrphanReconcile() {
+      return runner.withClient(async (client) => {
+        const { rows } = await client.query(
+          `SELECT t.id AS "tenantId", t.idp_subject AS "idpSubject",
+                  a.sub, a.email, a.created_at AS "createdAt"
+             FROM tenant t JOIN account a ON a.tenant_id = t.id
+            WHERE t.id IN (SELECT tenant_id FROM account GROUP BY tenant_id HAVING count(*) > 1)
+               OR (t.idp_subject IS NOT NULL
+                   AND t.idp_subject NOT IN (SELECT sub FROM account WHERE tenant_id = t.id))
+            ORDER BY t.id, a.created_at`,
+        );
+        return rows;
+      });
+    },
+
+    // Entfernt EINE account-Zeile. Nur fuer den Abgleich verwaister Zeilen gedacht; der
+    // Aufrufer hat vorher bei WorkOS bestaetigt, dass diese Identitaet nicht mehr existiert,
+    // UND dass mindestens eine andere Zeile des Tenants stehen bleibt. Warum diese Bedingung
+    // ausserhalb liegt: account.email ist der EINZIGE Email-Anker am Tenant (es gibt keinen
+    // tenantByEmail-Pfad) - faellt die letzte Zeile, ist der Tenant beim naechsten Login per
+    // Email unauffindbar und der Rueckkehrer bekaeme einen leeren Tenant ohne Historie und
+    // ohne stripe_customer_id. session.sub haengt per FK CASCADE daran: die Sessions dieser
+    // toten Identitaet verschwinden mit - sie waeren ohnehin nicht mehr autorisierbar.
+    async dropAccount(sub) {
+      return runner.withClient(async (client) => {
+        const { rows } = await client.query(`DELETE FROM account WHERE sub = $1 RETURNING sub`, [sub]);
+        return rows.length > 0;
+      });
+    },
+
+    // Setzt den Identitaetsanker des Tenants. tenant.idp_subject bestimmt, WELCHE
+    // WorkOS-Identitaet das naechste Vertragsende loescht (contract-end-cleanup.js). Zeigt er
+    // nach einer Rueckkehr auf den laengst geloeschten Alt-sub, laeuft die Loeschung gegen
+    // einen Geist - 404 zaehlt dort als Erfolg - und die LEBENDE Identitaet bleibt stehen:
+    // eine nicht erfuellte Loeschpflicht, die niemandem auffaellt.
+    async setIdpSubject(tenantId, sub) {
+      return runner.withClient(async (client) => {
+        const { rows } = await client.query(
+          `UPDATE tenant SET idp_subject = $1 WHERE id = $2 RETURNING id`,
+          [sub, tenantId],
+        );
+        return rows.length > 0;
+      });
+    },
+
     // Admin: Tenant-Status aendern (active/suspended). Gibt true zurueck, wenn ein
     // Tenant getroffen wurde - sonst false -> der Aufrufer antwortet 404 (kein
     // silent-noop, kein Audit-Eintrag fuer eine nicht-existente Tenant-ID).

@@ -6,6 +6,9 @@
 // ungeklaert, und ein Anmeldeschluessel gehoert nicht auf einen Loeschpfad. Teilt sich
 // workosApiBase mit makeOidc (dieselbe WorkOS-Umgebung, EIN Host fuer Login+Management).
 // Niemals den API-Key oder die Nutzer-Kennung (subject) loggen.
+// "gibt es nicht (mehr)" - der Regelfall nach einem Vertragsende, kein Fehler (G25).
+const HTTP_NOT_FOUND = 404;
+
 export function makeWorkosManagement(config, { _fetch = fetch } = {}) {
   const usersEndpoint = `${config.auth.workosApiBase}/user_management/users`;
 
@@ -25,6 +28,22 @@ export function makeWorkosManagement(config, { _fetch = fetch } = {}) {
       if (r.status === 404) return { deleted: true, alreadyGone: true };
       if (!r.ok) throw new Error(`workos_management deleteUser HTTP ${r.status}`);
       return { deleted: true, alreadyGone: false };
+    },
+
+    // Existenzpruefung EINER WorkOS-Identitaet (CL2: Abgleich verwaister account-Zeilen).
+    // Gegenstueck zu deleteUser und bewusst getrennt davon: der Abgleich darf NIE loeschen,
+    // er liest nur. 404 = die Identitaet gibt es nicht mehr (der Regelfall nach einem
+    // Vertragsende); 200 = sie lebt. Jeder ANDERE Status wirft - der Aufrufer wertet das
+    // fail-closed als "unbekannt" und laesst die Zeile stehen. Ein Netzfehler darf nie als
+    // "tot" durchgehen, sonst raeumte ein kurzer WorkOS-Ausfall lebende Identitaeten ab.
+    // Wie deleteUser: nur der HTTP-Status reist in die Meldung, nie Schluessel oder subject.
+    async userExists(subject) {
+      const response = await _fetch(`${usersEndpoint}/${encodeURIComponent(subject)}`, {
+        headers: { Authorization: `Bearer ${config.auth.workosManagementApiKey}` },
+      });
+      if (response.status === HTTP_NOT_FOUND) return false;
+      if (!response.ok) throw new Error(`workos_management userExists HTTP ${response.status}`);
+      return true;
     },
   };
 }
