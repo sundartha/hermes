@@ -9,7 +9,8 @@
 // Laufzeit ersetzt wird.
 //
 // WICHTIG: derselbe localStorage-Key wie die Website (hermes.lang) -- wer dort
-// DE waehlt, bekommt hier ebenfalls DE.
+// DE waehlt, bekommt hier ebenfalls DE. Ohne gespeicherte Wahl gilt beidseitig
+// Englisch (Default-Wechsel 2026-09-10, s. scripts/hermes-scroll.js).
 
 const LANG_KEY = "hermes.lang";
 const SUPPORTED_LANGS = new Set(["de", "en"]);
