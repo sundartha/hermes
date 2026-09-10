@@ -12,7 +12,7 @@ Kickoff (Lead-Rolle): `tasks/sec-fix-kickoff.md`.
 | SEC-P2 | Lieferkette | `e9dc392` | **ja** | audit high Exit 0; 8 -> 2 Befunde, beide moderat |
 | SEC-P3 | Eingabegrenzen + CSRF | `7b88c32` | **ja** | 21 neue Faelle; CSRF_ENFORCE als Rueckfall-Hebel |
 | SEC-P4 | EL-Token je Mandant | `bd807a5` | **ja** | 18 Faelle; scharf erst nach Anbieter-Push (Owner-Blocker 6) |
-| SEC-P5 | Web-Haertung | `320be0a` | **ja** (lokal) | Aussenmessung erst nach Deploy; Owner-Blocker 7 |
+| SEC-P5 | Web-Haertung | `320be0a` | **ja, auch live** | Aussenmessung 2026-09-10 bestanden, s. unten |
 | SEC-P6 | Antwort statt Haenger + Waechter | `4345c98` | **ja** | 18 neue Faelle; Pin NACHGEZOGEN (alle Werte sinken); Waechter-3-Erwartung korrigiert |
 
 ## Zusatzbefund SEC-P6: die Waechter-3-Erwartung der Vorlage war falsch gemessen
@@ -44,6 +44,24 @@ Abschnitt "SEC-P6".
 `npm test` -> Exit 1, `# tests 5803 / # pass 5801 / # fail 2 / # skipped 0`.
 Rot: `KV2-10 (d1)` und `KV2-10 (d2)` aus `test/kv2-10-tarifpaar.test.js`.
 Die fuenf bekannten Flake-Dateien haben in diesem Lauf NICHT gefeuert.
+
+## LIVE seit 2026-09-10
+
+Die Kette ist gemergt (`7937e9c`, inkl. Merge mit FW1/FW2 von upstream) und **deployt**:
+Gateway `vodafone-agent` manuell um 20:02, Marketing `hermes-web` automatisch um 19:58.
+Der HSTS-Header des Static-Service ist im Render-Dashboard gesetzt (Owner-Schritt erledigt).
+
+**Aussenmessung SEC-P5 am 2026-09-10, alle drei Oberflaechen bestanden:**
+
+| Oberflaeche | HSTS | `script-src` |
+|---|---|---|
+| `sundartha.com` | `max-age=15552000; includeSubDomains` | `'self'` |
+| `app.sundartha.com` | dito | `'self'` |
+| `vodafone-agent.onrender.com` | dito | `'self'` |
+
+Kein `'unsafe-inline'` und kein `'unsafe-eval'` mehr in `script-src` auf irgendeiner der drei.
+Der urspruengliche Befund (HSTS fehlte auf allen dreien, `'unsafe-inline'` auf zweien) ist
+damit geschlossen — gemessen, nicht behauptet.
 
 ## Die Kette ist vollstaendig. Endstand am 2026-09-09
 
@@ -189,13 +207,12 @@ gezielt aktualisiert statt pauschal gefixt.
    antworten 404, der Agent verstummt im Gespraech. Bis dahin ist die Quer-Mandanten-Reichweite
    nur zur HAELFTE geschlossen — der Ablehnungsgrund verraet den fremden Anruf nicht mehr, die
    Bindung selbst gelingt weiterhin.
-7. **NEU aus SEC-P5: HSTS des Static-Service muss im Render-DASHBOARD gesetzt werden.** Der
-   Eintrag in `render.yaml` ist im Repo richtig, wird live aber nicht wirksam — `hermes-web`
-   ist dashboard-managed (Bestandslehre: Live != render.yaml). Ohne diesen Handgriff bleibt
-   `sundartha.com` ohne HSTS, waehrend Gateway und App es nach dem Deploy haben.
-8. **NEU aus SEC-P5: die Aussenmessung der drei Oberflaechen steht aus.** Der Code ist gebaut
-   und lokal am laufenden Server belegt; ob die Live-Header stimmen, zeigt erst die
-   Wiederholung der urspruenglichen Aussenmessung NACH dem Deploy.
+7. ~~HSTS des Static-Service im Render-Dashboard~~ — **ERLEDIGT 2026-09-10.** Gesetzt unter
+   `hermes-web` -> Headers (eigener Navigationspunkt unter "Manage", NICHT in Settings):
+   Path `/*`, `Strict-Transport-Security`, `max-age=15552000; includeSubDomains`. Wirkte
+   sofort, ohne Redeploy. Die Dashboard-Kopie ist eine DRITTE Stelle neben `src/middleware.js`
+   und `render.yaml` — der Test kann sie nicht sehen, ein Tippfehler dort bliebe unentdeckt.
+8. ~~Aussenmessung der drei Oberflaechen~~ — **ERLEDIGT 2026-09-10**, s. Abschnitt oben.
 
 ## Ausdruecklich nicht Teil der Kette
 
