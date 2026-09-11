@@ -145,12 +145,30 @@ function billingErrorFor(errorBody, message) {
   // off-session-Belastung kann nicht helfen; der Aufrufer braucht den Zustand, um dem
   // Kunden eine on-session-Bestaetigung anzubieten.
   if (err.code === AUTHENTICATION_REQUIRED_CODE)
-    return new PaymentAuthenticationRequiredError(message);
+    return withProviderCodes(new PaymentAuthenticationRequiredError(message), err);
   // Tote/unsichtbare Customer-Referenz (P9/Fix B): NUR code+param=customer heilt
   // card-setup.js; resource_missing auf einem anderen param bleibt generisch.
   if (err.code === RESOURCE_MISSING_CODE && err.param === CUSTOMER_PARAM)
-    return new CustomerMissingError(message);
-  return new Error(message);
+    return withProviderCodes(new CustomerMissingError(message), err);
+  return withProviderCodes(new Error(message), err);
+}
+
+// PROV-402-DIAG: haengt die beiden STABILEN Stripe-Maschinentoken an den Fehler, OHNE die
+// Message zu veraendern (die ist test-gepinnt und soll sich bewusst nicht nach Fehlertyp
+// unterscheiden). Hintergrund: ein gescheiterter Setup-Gebuehr-Hold landete als blosses
+// "Stripe placeHold fehlgeschlagen: HTTP 402" im Log UND im provisioning_job.last_error -
+// aus beidem war NICHT ablesbar, ob die Bank ablehnte (card_declined/insufficient_funds),
+// 3-D Secure fehlte oder die Karte abgelaufen war. Genau diese Unterscheidung entscheidet
+// aber, ob ein Retry ueberhaupt helfen kann. code/declineCode sind Stripe-Tokens, KEINE
+// Secrets und KEINE PII (Regel 4: der Rohkoerper mit Adresse/E-Mail bleibt weiter aussen vor).
+// Object.assign statt direkter Zuweisung (no-param-reassign/props:true - dieselbe
+// Wirkung, ohne die Unterdrueckungszahl der Datei zu bewegen; Muster renderPlanChoice
+// in apps/web/src/lib/subscribe.js).
+function withProviderCodes(error, providerError) {
+  return Object.assign(error, {
+    ...(providerError.code ? { providerCode: providerError.code } : {}),
+    ...(providerError.decline_code ? { declineCode: providerError.decline_code } : {}),
+  });
 }
 
 // Stufe 2: wie assertOk, aber der Stripe-Fehlercode bestimmt den Port-Fehlertyp. Der

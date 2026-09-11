@@ -133,17 +133,14 @@ export async function startBillingSetupCheckout(plan) {
   return url;
 }
 
-// Bucht ein Abo (POST same-origin, JSON-Body { plan }). Loest beim Backend ECHTES
-// wiederkehrendes Geld aus (Recurring) -> NUR vom expliziten Subscribe-Klick. Erfolg:
-// { plan, currentPeriodEnd } + der Tenant wird aktiv. Wirft ApiError bei non-2xx; der
-// .next ("setup-checkout") steuert die gefuehrte Folge (Funnel) in lib/subscribe.js.
-export function startBillingSubscribe(plan) {
-  return apiRequest("/api/self-service/billing/subscribe", { method: "POST", body: { plan } });
-}
+// (Der Wrapper um POST /billing/subscribe ist entfallen: seit der Tarif-Klick ausnahmslos
+// ueber die gehostete Stripe-Seite laeuft, ruft das Dashboard die Sofort-Abbuchungs-Route
+// nirgends mehr auf. Die Route selbst bleibt am Gateway bestehen - ein toter Client-Wrapper
+// waere nur eine Einladung, den alten Weg versehentlich wieder zu verdrahten.)
 
 // 312k-P3: Vormerkung/Ruecknahme der Kuendigung zum Periodenende (§ 312k BGB). Beide
 // POST same-origin, KEIN Body (die Identitaet kommt aus der Session, nie aus dem Client -
-// Muster startBillingSubscribe ohne Body-Identitaet). Erfolg (auch beim idempotenten
+// Muster startNumberRetry: keine Identitaet im Body). Erfolg (auch beim idempotenten
 // Doppelklick, s. Gateway self-service-routes.js): { cancelAtPeriodEnd, currentPeriodEnd }.
 // Wirft ApiError bei non-2xx (409 no_subscription, 401 abgelaufene Session).
 export function startBillingCancel() {
@@ -151,6 +148,15 @@ export function startBillingCancel() {
 }
 export function startBillingResume() {
   return apiRequest("/api/self-service/billing/resume", { method: "POST" });
+}
+
+// NUM-RETRY: stoesst die gescheiterte Nummern-Einrichtung des EIGENEN Tenants neu an
+// (POST same-origin, KEIN Body - die Identitaet kommt aus der Session, Muster
+// startBillingCancel). Erfolg: { reason } ("queued"/"dry_run"/"redrive"). Wirft ApiError
+// bei non-2xx; err.code traegt den stabilen Server-Grund (403 no_active_subscriber,
+// 409 already_provisioned/tenant_cap, 429 global_cap, 503 persist_error).
+export function startNumberRetry() {
+  return apiRequest("/api/self-service/onboard/retry", { method: "POST" });
 }
 
 // Liest den schlanken Billing-Status (GET, webAuthPendingMw -> auch fuer suspendierte
@@ -240,6 +246,71 @@ export function numberPlaceholderText(data) {
   if (numberStatus === NUMBER_STATUS.FAILED) return tPair(NUMBER_TEXT_SETUP_FAILED, NUMBER_TEXT_SETUP_FAILED_DE);
   if (numberStatus === NUMBER_STATUS.BLOCKED) return tPair(NUMBER_TEXT_SETUP_BLOCKED, NUMBER_TEXT_SETUP_BLOCKED_DE);
   return tPair(NUMBER_TEXT_NO_NUMBER, NUMBER_TEXT_NO_NUMBER_DE);
+}
+
+// NUM-RETRY: genau der eine Zustand, aus dem der Kunde selbst wieder herauskommt.
+// 'blocked' (globale Kapazitaetsgrenze) gehoert NICHT dazu - dort haengt es an der
+// Plattform, ein Kunden-Retry wuerde nur erneut auflaufen. 'none' auch nicht: da wurde
+// nie etwas angefragt. Muster isNumberProvisioning (rein, DOM-frei, testbar).
+export function isNumberSetupFailed(data) {
+  return agentInfo(data).numberStatus === NUMBER_STATUS.FAILED;
+}
+
+// Erklaerung + Beschriftung des Retry-Wegs. Der Hinweis nennt bewusst KEINE konkrete
+// Ursache: 'failed' entsteht aus mehreren Kanten (keine kaufbare Nummer, abgelehnter
+// Gebuehren-Hold, Anbieter-Fehler), und der Server traegt den Grund nicht in die
+// Kunden-Antwort. Was fuer JEDE dieser Kanten stimmt und was der Kunde wissen muss:
+// ein Retry versucht die einmalige Einrichtungsgebuehr erneut ueber das hinterlegte
+// Zahlungsmittel. EN bleibt der Vertrag, _DE der Zwilling (Muster NUMBER_TEXT_*).
+const NUMBER_RETRY_LABEL = "Retry";
+const NUMBER_RETRY_LABEL_DE = "Erneut versuchen";
+const NUMBER_RETRY_HINT =
+  "Setting up your number didn't go through. Retrying reserves the one-time setup fee on your payment method again.";
+const NUMBER_RETRY_HINT_DE =
+  "Die Einrichtung deiner Nummer ist nicht durchgelaufen. Ein neuer Versuch reserviert die einmalige Einrichtungsgebühr erneut auf deinem Zahlungsmittel.";
+export function numberRetryLabel() {
+  return tPair(NUMBER_RETRY_LABEL, NUMBER_RETRY_LABEL_DE);
+}
+export function numberRetryHint() {
+  return tPair(NUMBER_RETRY_HINT, NUMBER_RETRY_HINT_DE);
+}
+
+// Rueckmeldungen des Retry-Knopfs. Die Fehler-Schluessel sind die STABILEN Server-Codes
+// aus der Route (self-service-routes.js) - direkt als Lookup-Schluessel, kein zweites
+// Mapping (Muster NEWSLETTER_RECIPIENT_MESSAGES in lib/subscribe.js).
+export const NUMBER_RETRY_MESSAGES = Object.freeze({
+  queued: "Setting up your number — this usually takes a moment.",
+  already_provisioned: "A number is already on its way.",
+  tenant_cap: "A number is already on its way.",
+  global_cap: "No capacity right now — please try again later.",
+  persist_error: "Something went wrong. Please try again in a moment.",
+  no_active_subscriber: "Your subscription isn't active — pick a plan first.",
+  sessionExpired: "Session expired - please sign in again.",
+  failed: "Couldn't start the setup. Please try again.",
+});
+export const NUMBER_RETRY_MESSAGES_DE = Object.freeze({
+  queued: "Deine Nummer wird eingerichtet — das dauert meist einen Moment.",
+  already_provisioned: "Eine Nummer ist bereits unterwegs.",
+  tenant_cap: "Eine Nummer ist bereits unterwegs.",
+  global_cap: "Gerade keine Kapazität — bitte versuch es später erneut.",
+  persist_error: "Etwas ist schiefgelaufen. Bitte versuch es gleich noch einmal.",
+  no_active_subscriber: "Dein Abo ist nicht aktiv — wähle zuerst einen Tarif.",
+  sessionExpired: "Sitzung abgelaufen - bitte erneut anmelden.",
+  failed: "Die Einrichtung konnte nicht gestartet werden. Bitte versuch es erneut.",
+});
+
+// Meldungstext eines Retry-Laufs: 401 -> Session abgelaufen; ein bekannter Server-Code ->
+// die passende Meldung; sonst der generische Fallback. Fail-closed: nie erfunden, nie als
+// Erfolg gedeutet (Muster newsletterRecipientErrorText).
+export function numberRetryMessage(key) {
+  const dict = { en: NUMBER_RETRY_MESSAGES, de: NUMBER_RETRY_MESSAGES_DE };
+  return Object.prototype.hasOwnProperty.call(NUMBER_RETRY_MESSAGES, key)
+    ? tDyn(dict, key)
+    : tDyn(dict, "failed");
+}
+export function numberRetryErrorKey(err) {
+  if (err instanceof ApiError && err.status === HTTP_UNAUTHORIZED) return "sessionExpired";
+  return (err instanceof ApiError && err.code) || "failed";
 }
 
 // Liest den Karten-Status aus der state-Antwort -- die EINE Stelle, an der das

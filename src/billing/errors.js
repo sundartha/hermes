@@ -28,3 +28,18 @@ export class PaymentAuthenticationRequiredError extends Error {
     this.name = "PaymentAuthenticationRequiredError";
   }
 }
+
+// PROV-402-DIAG: Diagnose-Suffix " code=... decline=..." fuer Log-/Persistenz-Zeilen eines
+// Billing-Fehlers. Der Adapter (stripe.js) haengt die beiden STABILEN Provider-Token an
+// jeden Billing-Fehler (providerCode/declineCode); diese Funktion formt daraus die eine
+// Zeile, die Ops und jede spaetere Sitzung liest. Warum getrennt vom Adapter: die
+// PROTOKOLLIERENDEN Schichten (Provisioning-Worker) duerfen nur am Port-/Fehlermodul
+// haengen, nie am konkreten Stripe-Adapter (DIP, Muster CustomerMissingError).
+// Ohne Token -> "" -> die Zeile bleibt byte-identisch zum Bestand. Enthaelt NIE den
+// Provider-Rohkoerper (Adresse/E-Mail/PII) und NIE einen Schluessel (Regel 4).
+export function providerErrorDetail(error) {
+  const code = error && error.providerCode;
+  const decline = error && error.declineCode;
+  if (!code && !decline) return "";
+  return `${code ? ` code=${code}` : ""}${decline ? ` decline=${decline}` : ""}`;
+}

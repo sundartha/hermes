@@ -319,7 +319,10 @@ import {
 
   // EIN delegierter Subscribe-Listener am stabilen Kachel-Container (G5). Die Kacheln
   // werden bei jedem Render ersetzt -> kein Binding pro Button, kein Listener-Leak.
-  wireSubscribe(subTilesEl, { onSubscribed: refreshState, onMessage: showSubMsg });
+  // Kein onSubscribed mehr: der Klick verlaesst die Seite Richtung Stripe-Checkout
+  // (auch MIT Karte-on-file) - es gibt im Klick-Pfad keine Buchung, die ein Re-Fetch
+  // zeigen koennte. Die Rueckkehr laedt die Seite ohnehin neu und meldet ?sub=ok.
+  wireSubscribe(subTilesEl, { onMessage: showSubMsg });
 
   // 312k-P3: die vier festen Kuendigungs-Steuerelemente. onDone re-fetcht denselben Weg
   // wie onSubscribed (der Webhook bestaetigt den geschriebenen Zustand ohnehin kurz

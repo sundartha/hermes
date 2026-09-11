@@ -15,9 +15,22 @@ import {
 } from "../store/defaults.js";
 import { searchParamsForCountry, holdAmountForCountry } from "../telephony/provisioning-geo.js";
 import { PROVISION_REASON } from "../billing/provision-outcome.js";
+import { providerErrorDetail } from "../billing/errors.js";
 // OUTBOUND-E5 (F3/Nachbesserung Blocker 4+5): EIN Bauplatz fuer das Dreifach-Gate
 // (sipRegistrarWennAktiv), nicht zwei - s. runProvisioningDrain.
 import { sipRegistrarWennAktiv } from "../elevenlabs/nummern-registrierung.js";
+
+// PROV-402-DIAG: die EINE Diagnose-Zeile eines gescheiterten Provisioning-Laufs - sie geht
+// wortgleich ins Log UND in den persistierten provisioning_job.last_error. Modulweit (nicht
+// in der Fabrik) definiert: sie haengt an nichts aus dem Closure und die Fabrik ist ohnehin
+// zu lang. Hintergrund: bei einem gescheiterten Hold der Nummern-Einrichtungsgebuehr stand
+// an beiden Stellen nur "Stripe placeHold fehlgeschlagen: HTTP 402" - ob die Bank ablehnte,
+// das Guthaben fehlte, 3-D Secure verlangt war oder die Karte abgelaufen: nicht
+// rekonstruierbar, obwohl genau das entscheidet, ob ein Retry helfen kann. Ohne
+// Provider-Token bleibt das Suffix leer -> Zeile byte-identisch zum Bestand.
+function failureLine(err) {
+  return `${err.message}${providerErrorDetail(err)}`;
+}
 
 export function makeProvisioningOrchestrator({
   store,
@@ -199,9 +212,11 @@ export function makeProvisioningOrchestrator({
         store.save();
         return r;
       } catch (err) {
-        if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.FAILED, err.message);
+        // PROV-402-DIAG: dieselbe Diagnose-Zeile in den persistierten last_error UND ins
+        // Log (failureLine, EINE Quelle - s. dort, warum das noetig wurde).
+        if (record) markProvisioningJob(s, record.id, PROVISIONING_JOB_STATUS.FAILED, failureLine(err));
         store.save(); // 'failed'-Number + Job persistieren
-        console.error("[provision-worker]", err.message);
+        console.error("[provision-worker]", failureLine(err));
         throw err; // drain markiert den Queue-Job failed; provisionNumber hat schon gerollbackt
       }
     });

@@ -215,13 +215,10 @@ const dashNav = [
   pendingEls.restore.addEventListener("click", () => renderPending());
 
   // EIN delegierter Subscribe-Listener am stabilen Kachel-Container (G5, kein Binding
-  // pro Button). Nach erfolgreicher Buchung wird der Tenant aktiv -> ein Reload zieht
-  // die volle Shell (die meisten suspended-Tenants laufen aber ueber 409 no_card ->
-  // gefuehrter Stripe-Checkout -> Rueckkehr aktiviert).
-  wireSubscribe(pendingTilesEl, {
-    onSubscribed: () => window.location.reload(),
-    onMessage: showPendingMessage,
-  });
+  // pro Button). Der Klick fuehrt ausnahmslos in den gehosteten Stripe-Checkout; die
+  // Rueckkehr (/billing/return?plan=...) bucht, aktiviert und laedt die volle Shell -
+  // deshalb kein onSubscribed/Reload mehr in diesem Pfad.
+  wireSubscribe(pendingTilesEl, { onMessage: showPendingMessage });
 
   // Listener synchron registrieren, BEVOR die Auth-Insel (hinter ihrem fetch)
   // dispatcht -- so geht kein Event verloren.

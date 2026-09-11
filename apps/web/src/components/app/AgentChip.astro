@@ -29,6 +29,9 @@
       <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
       <span id="agent-number" class="agent-chip__number"></span>
     </span>
+    <!-- NUM-RETRY: erklaerender Satz + Rueckmeldung des Retry-Laufs. Bleibt leer und
+         versteckt, solange alles normal laeuft (Bestandsoptik unveraendert). -->
+    <span id="agent-retry-note" class="agent-chip__note" hidden aria-live="polite"></span>
   </span>
   <button
     id="agent-copy"
@@ -48,6 +51,12 @@
     </svg>
     <span id="agent-copy-label" class="agent-chip__copy-label" data-i18n="copy" aria-live="polite">Copy</span>
   </button>
+  <!-- NUM-RETRY: der Ausweg aus 'failed'. Sitzt im selben Slot wie der Kopier-Knopf
+       (immer genau EINER von beiden sichtbar) - eine fehlgeschlagene Einrichtung hat
+       keine Nummer zum Kopieren, ein Kopier-Knopf neben einer Fehlermeldung kopierte
+       bisher den Fehlertext. Der erklaerende Satz steht darunter, damit der Kunde
+       weiss, was der Klick ausloest (erneute Reservierung der Einrichtungsgebuehr). -->
+  <button id="agent-retry" class="agent-chip__copy" type="button" hidden></button>
 </div>
 
 <script>
@@ -57,6 +66,13 @@
     agentInfo,
     isAgentLive,
     numberPlaceholderText,
+    isNumberSetupFailed,
+    numberRetryLabel,
+    numberRetryHint,
+    numberRetryMessage,
+    numberRetryErrorKey,
+    startNumberRetry,
+    fetchTenantState,
   } from "../../lib/api.js";
   import { t } from "../../lib/i18n.js";
 
@@ -69,8 +85,30 @@
   const numberEl = document.getElementById("agent-number");
   const copyBtn = document.getElementById("agent-copy");
   const copyLabelEl = document.getElementById("agent-copy-label");
+  const retryBtn = document.getElementById("agent-retry");
+  const retryNoteEl = document.getElementById("agent-retry-note");
 
   let copyResetTimer = null;
+
+  // NUM-RETRY: genau EINER der beiden Knoepfe ist sichtbar. Kopieren ergibt nur Sinn,
+  // wenn es eine echte Nummer gibt (vorher stand der Kopier-Knopf auch neben
+  // "Einrichtung der Nummer fehlgeschlagen" und kopierte den Fehlertext); der
+  // Retry-Knopf nur im einen Zustand, aus dem der Kunde selbst herauskommt.
+  function renderNumberActions(data) {
+    const { number } = agentInfo(data);
+    const failed = isNumberSetupFailed(data);
+    copyBtn.hidden = !number;
+    retryBtn.hidden = !failed;
+    retryBtn.textContent = numberRetryLabel();
+    setNote(failed ? numberRetryHint() : "");
+  }
+
+  // Ein Textslot fuer Erklaerung UND Rueckmeldung: leer -> versteckt (kein leerer
+  // Kasten im Normalfall).
+  function setNote(text) {
+    retryNoteEl.textContent = text;
+    retryNoteEl.hidden = !text;
+  }
 
   function showChip(data) {
     const { number } = agentInfo(data);
@@ -79,6 +117,7 @@
     // Werte weiter ausschliesslich via textContent (XSS).
     numberEl.textContent = number || numberPlaceholderText(data);
     dotEl.classList.toggle(DOT_OFF_CLASS, !isAgentLive(data));
+    renderNumberActions(data);
     chipEl.hidden = false;
   }
 
@@ -86,6 +125,9 @@
   function clearChip() {
     numberEl.textContent = "";
     dotEl.classList.add(DOT_OFF_CLASS);
+    copyBtn.hidden = false;
+    retryBtn.hidden = true;
+    setNote("");
     chipEl.hidden = true;
   }
 
@@ -93,6 +135,30 @@
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) showChip(data);
     else clearChip();
+  });
+
+  // NUM-RETRY: ein Lauf pro Klick (busy-Flag wie wireSubscribe/wireCancelControls).
+  // Erfolg -> frischen state holen und per AUTH_EVENT an ALLE Inseln verteilen: der
+  // Chip springt damit selbst auf "wird eingerichtet…" um, ohne Reload. Fehlschlag ->
+  // ehrliche Meldung, der Knopf bleibt stehen (kein vorgetaeuschter Erfolg).
+  let retryBusy = false;
+  retryBtn.addEventListener("click", async () => {
+    if (retryBusy) return;
+    retryBusy = true;
+    retryBtn.disabled = true;
+    try {
+      const result = await startNumberRetry();
+      setNote(numberRetryMessage((result && result.reason) || "queued"));
+      const data = await fetchTenantState();
+      document.dispatchEvent(
+        new CustomEvent(AUTH_EVENT, { detail: { state: AUTH_STATE.AUTHENTICATED, data } }),
+      );
+    } catch (err) {
+      setNote(numberRetryMessage(numberRetryErrorKey(err)));
+    } finally {
+      retryBusy = false;
+      retryBtn.disabled = false;
+    }
   });
 
   // Copy-to-clipboard: navigator.clipboard mit document.execCommand-Fallback

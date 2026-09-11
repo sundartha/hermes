@@ -248,38 +248,52 @@ function spyOpts() {
   };
 }
 
-test("wireSubscribe: ok -> 'booked' + onSubscribed; postet {plan} an die subscribe-Route", async () => {
-  const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { plan: "starter", currentPeriodEnd: 1 } }));
+// Die KERN-Invariante dieses Pfades (Owner-Entscheidung 2026-09-11): ein Tarif-Klick
+// erreicht NIE POST /billing/subscribe - also nie eine stille off-session-Abbuchung der
+// Karte-on-file. Genau EIN Request, und der geht in den gehosteten Stripe-Checkout.
+test("wireSubscribe: Tarif-Klick -> setup-checkout {plan} -> navigate zur Stripe-url (KEIN /subscribe)", async () => {
+  const f = stubFetch(() =>
+    fakeResponse({ ok: true, status: 200, json: { url: "https://checkout.stripe.com/c/pay/cs_test" } }),
+  );
   try {
     const container = fakeContainer();
     const opts = spyOpts();
     wireSubscribe(container, opts);
     await container.click("starter");
-    assert.equal(f.calls[0].path, "/api/self-service/billing/subscribe");
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0].path, "/api/self-service/billing/setup-checkout");
     assert.equal(f.calls[0].options.method, "POST");
     assert.deepEqual(JSON.parse(f.calls[0].options.body), { plan: "starter" });
-    assert.deepEqual(opts.messages, [{ text: SUBSCRIBE_MESSAGES.booked, ok: true }]);
-    assert.equal(opts.subscribedCount, 1);
+    assert.deepEqual(opts.navigated, ["https://checkout.stripe.com/c/pay/cs_test"]);
+    // Keine Erfolgsmeldung im Klick-Pfad: gebucht wird erst nach der Rueckkehr von Stripe.
+    assert.deepEqual(opts.messages, []);
+    assert.ok(
+      f.calls.every((entry) => !String(entry.path).endsWith("/billing/subscribe")),
+      "Der Tarif-Klick darf die Sofort-Abbuchungs-Route nie mehr treffen",
+    );
   } finally {
     f.restore();
   }
 });
 
-test("wireSubscribe: 409 no_card -> gefuehrter Checkout {plan} -> navigate zur Stripe-url", async () => {
+// Regression zum Ausgangsfehler: MIT hinterlegter Karte lief der Klick frueher glatt
+// durch POST /subscribe (Sofort-Abbuchung ohne Bestaetigungsseite). Der Kartenzustand
+// darf den Weg nicht mehr faerben - derselbe eine Checkout-Request wie ohne Karte.
+test("wireSubscribe: auch MIT Karte-on-file fuehrt der Klick in den Checkout, nicht in die Abbuchung", async () => {
   const f = stubFetch((path) => {
-    if (path.includes("/subscribe")) return fakeResponse({ ok: false, status: 409, json: { error: "no_card", next: "setup-checkout", plan: "business" } });
-    return fakeResponse({ ok: true, status: 200, json: { url: "https://checkout.stripe.com/c/pay/cs_test" } });
+    assert.ok(!String(path).endsWith("/billing/subscribe"), "kein Sofort-Abo-Call");
+    return fakeResponse({ ok: true, status: 200, json: { url: "https://checkout.stripe.com/c/pay/cs_live" } });
   });
   try {
     const container = fakeContainer();
     const opts = spyOpts();
     wireSubscribe(container, opts);
     await container.click("business");
-    // Zweiter Call ist der Setup-Checkout MIT getragenem Plan.
-    assert.equal(f.calls[1].path, "/api/self-service/billing/setup-checkout");
-    assert.deepEqual(JSON.parse(f.calls[1].options.body), { plan: "business" });
-    assert.deepEqual(opts.navigated, ["https://checkout.stripe.com/c/pay/cs_test"]);
-    assert.equal(opts.subscribedCount, 0); // kein onSubscribed im no_card-Pfad
+    assert.equal(f.calls.length, 1);
+    // Der Plan reist auch im Karte-vorhanden-Fall im Body mit: ohne ihn liefe die
+    // Session im setup-Mode (nur Karte erfassen) und die Rueckkehr buchte nichts.
+    assert.deepEqual(JSON.parse(f.calls[0].options.body), { plan: "business" });
+    assert.deepEqual(opts.navigated, ["https://checkout.stripe.com/c/pay/cs_live"]);
   } finally {
     f.restore();
   }
@@ -341,6 +355,10 @@ test("renderPlanChoice: aktivierende H1 + Untertitel + 2 Kacheln + Skip sichtbar
   const els = {
     title: { textContent: "" }, subtitle: { textContent: "" },
     tiles: { _k: null, replaceChildren(...n) { this._k = n; } }, skip: { hidden: true },
+    // CL1-B4: renderPlanChoice/dismissPlanChoice schalten seither auch den Rueckweg-Knopf.
+    // Die Fixtures dieser Datei kannten ihn nicht -> die drei Faelle liefen in einen
+    // Object.assign(undefined)-TypeError (Altlast-Rot, nicht in cl1-b4-plan-choice-exit).
+    restore: { hidden: false },
   };
   renderPlanChoice(fakeDocument, els);
   assert.equal(els.title.textContent, PLAN_CHOICE_COPY.title);
@@ -353,6 +371,10 @@ test("renderPlanChoice: mit fee -> Kacheln tragen die Gebuehren-Zeile", () => {
   const els = {
     title: { textContent: "" }, subtitle: { textContent: "" },
     tiles: { _k: null, replaceChildren(...n) { this._k = n; } }, skip: { hidden: true },
+    // CL1-B4: renderPlanChoice/dismissPlanChoice schalten seither auch den Rueckweg-Knopf.
+    // Die Fixtures dieser Datei kannten ihn nicht -> die drei Faelle liefen in einen
+    // Object.assign(undefined)-TypeError (Altlast-Rot, nicht in cl1-b4-plan-choice-exit).
+    restore: { hidden: false },
   };
   renderPlanChoice(fakeDocument, els, { amountCents: 999, currency: "eur" });
   assert.ok(els.tiles._k.some((t) => textOf([t]).includes("9,99 €")));
@@ -364,6 +386,7 @@ test("dismissPlanChoice: Pending-Banner, Kacheln+Skip weg, KEIN subscribe/setSta
     const els = {
       title: { textContent: "" }, subtitle: { textContent: "" },
       tiles: { _k: [1, 2], replaceChildren(...n) { this._k = n; } }, skip: { hidden: false },
+      restore: { hidden: true },
     };
     dismissPlanChoice(els);
     assert.equal(els.title.textContent, PLAN_CHOICE_COPY.bannerTitle);
@@ -855,13 +878,16 @@ test("DE-Modus: quotaLine/billingStatusBadge/billingStatusText sind deutsch", ()
 
 test("DE-Modus: SUBSCRIBE_MESSAGES/CANCEL_MESSAGES/NEWSLETTER_MESSAGES/PLAN_CHOICE_COPY laufen ueber wireSubscribe/wireCancelControls/wireNewsletterToggle deutsch", async () => {
   await withLangAsync("de", async () => {
-    const f = stubFetch(() => fakeResponse({ ok: true, status: 200, json: { plan: "starter", currentPeriodEnd: 1 } }));
+    // Der Erfolgsfall des Tarif-Klicks zeigt seit der Checkout-Umstellung keine Meldung
+    // mehr (er verlaesst die Seite) - die sprachbewusste Ausgabe wird deshalb am
+    // Fehlerfall geprueft: 401 -> deutscher "Sitzung abgelaufen"-Satz.
+    const f = stubFetch(() => fakeResponse({ ok: false, status: 401, json: {} }));
     try {
       const container = fakeContainer();
       const opts = spyOpts();
       wireSubscribe(container, opts);
       await container.click("starter");
-      assert.deepEqual(opts.messages, [{ text: "Abo gebucht.", ok: true }]);
+      assert.deepEqual(opts.messages, [{ text: "Sitzung abgelaufen - bitte erneut anmelden.", ok: false }]);
     } finally {
       f.restore();
     }

@@ -38,6 +38,9 @@ import {
   tenantLanguage,
 } from "./store/views.js";
 import { tenantGeo } from "./store/state-ops.js";
+// NUM-RETRY: dieselbe KYC-Schwelle wie der Operator-Re-Trigger (routes/api-onboard.js) -
+// EINE Quelle aus store/defaults.js, keine zweite Schwellen-Definition.
+import { KYC_OUTBOUND_MIN } from "./store/defaults.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
 // Fix A1 (Runde 1, G5): dieselbe Kauf-Land-Override-Kombination wie requestNumberForPaid-
 // Tenant (provision-trigger.js) - EIN Ort statt einer dritten, abweichenden Inline-Kopie.
@@ -70,6 +73,23 @@ import { hashEmail } from "./util.js";
 // nacktes 409 als Sackgasse zu sehen. Kein Magic-String (G25); spiegelbildlich
 // SETUP_CHECKOUT_NEXT im Frontend (Contract-String ueber die Origin-Grenze, wie die error-Codes).
 const NEXT_SETUP_CHECKOUT = "setup-checkout";
+
+// NUM-RETRY: reason (triggerTenantProvisioning) -> HTTP-Status der Kunden-Antwort.
+// Bewusst eine EIGENE, schmale Tabelle statt der Operator-Variante (RETRY_REASON_STATUS in
+// routes/api-onboard.js): die Operator-Route beantwortet einen Fremd-Tenant-Auftrag und
+// kennt Gruende (needs_manual_reconcile), die dem Kunden nichts sagen. Hier zaehlt nur, ob
+// er es spaeter nochmal versuchen kann (429/503) oder ob der Zustand schon in Ordnung ist
+// (409 already_provisioned = eine Nummer ist bereits unterwegs). Default 409 (s. Aufrufer).
+// Benannte Codes statt nackter Zahlen (no-magic-numbers; die Bestandsstellen dieser Datei
+// tragen ihre Zahlen inline, neuer Code uebernimmt diesen Stil bewusst NICHT).
+const HTTP_FORBIDDEN = 403;
+const HTTP_CONFLICT = 409;
+const HTTP_TOO_MANY_REQUESTS = 429;
+const HTTP_SERVICE_UNAVAILABLE = 503;
+const RETRY_REJECT_STATUS = Object.freeze({
+  global_cap: HTTP_TOO_MANY_REQUESTS,
+  persist_error: HTTP_SERVICE_UNAVAILABLE,
+});
 
 // F2 P6: maskiert die EIGENE private Summary-Nummer fuer die Self-Service-Read-View
 // (Decision #5, H4). Zeigt NUR den Laendercode (erste 3 Zeichen) + die letzten 4 Ziffern,
@@ -914,8 +934,59 @@ export function mountSelfServiceRoutes(deps) {
     createSameOriginGuard({ enforce: deps.config.safety.csrfEnforce }),
   );
   guarded.use("/api/self-service/settings", rejectInvalidAgentName(deps.audit));
+  // NUM-RETRY liegt bewusst NEBEN der Router-Fabrik, nicht darin (dieselbe Begruendung
+  // wie beim Herkunfts-Guard oben: eine Aufgabe pro Funktion, makeSelfServiceRoutes
+  // bleibt unveraendert). Reihenfolge egal - beide Router tragen disjunkte Pfade; der
+  // Praefix-Guard darueber deckt diese Route automatisch mit ab.
+  guarded.use(makeNumberRetryRoute(deps));
   guarded.use(makeSelfServiceRoutes(deps));
   return guarded;
+}
+
+// ---- NUM-RETRY: gescheiterte Nummern-Einrichtung selbst neu anstossen -------------
+// Der Ausgangsfall (2026-09-11, live): Abo gebucht und bezahlt, danach scheiterte der
+// Hold der einmaligen Einrichtungsgebuehr (Stripe 402) -> Nummer 'failed'. Das Dashboard
+// zeigte "Einrichtung der Nummer fehlgeschlagen" und sonst NICHTS: kein Grund, kein
+// Knopf, kein Weg zurueck. Der einzige Retry-Hebel war POST /api/onboard/retry hinter
+// einer ADMIN-Sitzung - ein zahlender Kunde konnte seine Nummer also ohne Ops-Eingriff
+// nie mehr bekommen, obwohl er weiterlief und weiterzahlte.
+//
+// Identitaet = Web-Session (req.tenant.tenantId) - der Kunde stoesst AUSSCHLIESSLICH
+// seinen EIGENEN Tenant an; anders als die Operator-Route nimmt diese hier gar keine
+// tenantId entgegen, es gibt also keinen Fremd-Tenant-Parameter, den jemand faelschen
+// koennte (H3).
+//
+// webAuthMw (NICHT webAuthPendingMw, Muster cancel): nur ein AKTIVER Tenant hat ein
+// bezahltes Abo, das einen Nummernkauf rechtfertigt.
+//
+// Geld-Safety (Regel 1): DERSELBE Gate wie die Operator-Route - tenantActiveSubscriber
+// mit KYC_OUTBOUND_MIN. Kein Nummernkauf fuer Nicht-Zahler. Und DERSELBE Kauf-Pfad
+// (provision = triggerTenantProvisioning, G5): keine zweite Kauflogik, alle Invarianten
+// (Hold-vor-Order, Caps, Idempotenz, Rollback) bleiben, wo sie sind.
+//
+// Doppelklick: triggerTenantProvisioning fragt die Nummer unter store.withStoreLock an;
+// der zweite Aufruf sieht die frische 'requested'-Zeile des ersten und faellt auf
+// already_provisioned - kein zweiter Kauf, kein zweiter Hold.
+export function makeNumberRetryRoute({ store, webAuthMw, audit, provision }) {
+  const router = Router();
+  router.post("/api/self-service/onboard/retry", webAuthMw, async (req, res) => {
+    const tenant = req.tenant.tenantId;
+    if (!store.tenantActiveSubscriber(tenant, KYC_OUTBOUND_MIN)) {
+      audit("self_service_onboard_retry_denied", req, `tenant=${tenant} reason=no_active_subscriber`);
+      return res.status(HTTP_FORBIDDEN).json({ error: "no_active_subscriber" });
+    }
+    const result = await provision(tenant);
+    audit("self_service_onboard_retry", req, `tenant=${tenant} ok=${result.ok} reason=${result.reason}`);
+    // Sprachneutrale Token wie ueberall in dieser Datei (no_card/already_subscribed/
+    // plan_unconfigured) - BEWUSST nicht die Runbook-Klartexte der Operator-Route
+    // (RETRY_REASON_MESSAGE): die richten sich an den Owner, nicht an den Kunden.
+    if (!result.ok)
+      return res
+        .status(RETRY_REJECT_STATUS[result.reason] || HTTP_CONFLICT)
+        .json({ error: result.reason });
+    res.json({ reason: result.reason });
+  });
+  return router;
 }
 
 // Antwortcode der agentName-Eingabegrenze. Benannt wie im Bestand
