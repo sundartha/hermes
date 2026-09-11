@@ -104,6 +104,24 @@ sauberes Abraeumen des Kindprozesses. Eine dauerhafte Drosselung der Parallelita
 ausdruecklich NICHT die Loesung (sie verdeckt die Ursache und verdreifacht die Laufzeit), aber
 sie ist ein brauchbarer Hebel, wenn ein einzelner CI-Lauf verlaesslich sein muss.
 
+## Zusatzbefund 2026-09-11: `allowLookup` war fuer den Owner-Tenant aus
+
+Der erste Testanruf schlug fehl (`look_up` -> 404), und zwar NICHT wegen SEC-P4: der
+Ablehnungsgrund war `kanal_nicht_freigegeben`, also die Faehigkeits-Stufe HINTER der
+Mandanten-Pruefung. Ursache war das Rechteprofil in der DB — `allowLookup` stand auf `false`.
+
+Das ist kein Konfigurationsfehler, sondern Absicht: `plans.js` gibt bezahlten Plaenen
+`allowLookup: false`, nur das Owner-Profil traegt das Recht. Der Tenant
+`t_user_01KX600834GCJFV9GTZQKWZMTH` loeste auf ein Plan-Profil auf. Gesetzt per
+`UPDATE profile SET data = jsonb_set(data,'{allowLookup}','true'::jsonb,true)` plus Neustart
+(der pg-Store haelt das Profil im Speicher). Danach: Nachschlagen funktioniert, zweimal belegt.
+
+Offen als PRODUKT-Frage, nicht als Defekt: ob zahlende Plaene die In-Call-Recherche bekommen
+sollen. Ein Flip in `plans.js` allein reicht dafuer nicht — Profilrechte sind ein
+DB-Schnappschuss je Tenant.
+
+Nebenbei bestaetigt: die Tenant-RLS greift. Von 18 Tenants sah genau EINER den Anruf.
+
 ## Offene Befunde
 
 **F-1 (aus SEC-P0, getragenes Risiko): die fuenf Flake-Dateien sind NICHT stabilisiert.**
@@ -199,44 +217,25 @@ gezielt aktualisiert statt pauschal gefixt.
    Produktion, ohne Ablauf).
 4. Stripe-Zugang (`team@sundartha.com`) — OPS-04 offen.
 5. Zwei-Faktor am Render-Konto des Owners ist aus.
-6. **SEC-P4, Anbieter-Seite ERLEDIGT 2026-09-10, Schalter noch AUS.** Beide Live-Werkzeuge
-   (`look_up` = `tool_6601m0bpfeqme9ssbpw9z8qhreyy`, `get_consult` =
-   `tool_8801m00mvv3zfxhbcwbszpvfg9ae`) tragen jetzt `tenant_token` im
-   `request_body_schema`, gefuellt ueber `dynamic_variable: "tenant_token"` — dieselbe
-   Mechanik, die `conversation_id` ueber `system__conversation_id` schon benutzt.
+6. ~~SEC-P4 Anbieter-Push + Schalter~~ — **ERLEDIGT UND BEWIESEN 2026-09-11.** Beide
+   Live-Werkzeuge (`look_up`, `get_consult`) tragen `tenant_token` im `request_body_schema`
+   ueber `dynamic_variable`; gezielt per `PATCH /v1/convai/tools/{id}` gesetzt (NICHT ueber
+   `push-elevenlabs.mjs`, das die ganze Live-Konfiguration aus der lokalen `.env` schriebe),
+   gegengeprueft per GET-Diff: nur die neun Felder der neuen Eigenschaft neu, nichts sonst
+   bewegt. `ELEVENLABS_TENANT_TOKEN_REQUIRED=true` ist live gesetzt.
 
-   **Nicht** ueber `scripts/push-elevenlabs.mjs` gepatcht (das schriebe die GANZE
-   Live-Konfiguration aus der lokalen `.env`), sondern gezielt: Schnappschuss per GET,
-   EIN Feld ergaenzt, `PATCH /v1/convai/tools/{id}` mit exakt dem Live-Stand zurueck.
-   Gegengeprueft per erneutem GET und Feld-fuer-Feld-Vergleich: **nur** die neun Felder der
-   neuen Eigenschaft sind dazugekommen, nichts entfernt, nichts geaendert. `required` bleibt
-   `["query"]` bzw. `["question"]` — ein fehlender Wert ergibt `FEHLT`, keinen Anbieter-Fehler.
-   Schnappschuesse vorher/nachher liegen im Scratchpad der Sitzung.
+   **Der Beweis, am laufenden Dienst gefuehrt:** Instanz `-jpgnv` startete 09:11:34 mit dem
+   scharfen Schalter; der Testanruf `call_mtwqs9qn0a6a` lief 09:17:03 auf DEMSELBEN Prozess
+   und lieferte `[el-lookup] ok=true`, ohne eine einzige `mandant_`-Zeile. Bei scharfem
+   Schalter waere `FEHLT` abgelehnt worden — das Urteil war also `PASSEND`. Die
+   Quer-Mandanten-Reichweite ist damit geschlossen, nicht nur verschleiert.
 
-   **Warum das ohne Risiko war:** `tenantTokenVerdict` liefert bei leerem Wert `FEHLT`, und
-   `FEHLT` haengt am Schalter. Solange `ELEVENLABS_TENANT_TOKEN_REQUIRED` fehlt (live nicht
-   gesetzt = Default `false`), laeuft alles wie vorher.
+   **Unterwegs gelernt und anderswo wertvoll:** ElevenLabs verwirft dynamische Variablen, die
+   NICHTS referenziert. `tenant_token` fehlte im Anruf um 20:36 nicht wegen eines Fehlers,
+   sondern weil der Prompt ihn bewusst nie nennt und die Werkzeug-Definition ihn noch nicht
+   kannte. Erst der Patch gab ihm einen Abnehmer. Wer kuenftig eine Variable NUR an ein
+   Werkzeug schickt, muss sie dort referenzieren, sonst kommt sie nie an.
 
-   **WAS NOCH FEHLT, und warum es einen Testanruf braucht:** dass das Feld ANKOMMT, ist noch
-   nicht gemessen. Der Server loggt im Erfolgsfall nichts (`PASSEND` und `FEHLT`-bei-Schalter-aus
-   kehren beide still zurueck, `webhooks-elevenlabs.js:217/218`) — ein Logblick beweist also
-   nichts. Der Beleg ist EIN Testanruf ueber den EL-Weg und danach der Blick in den
-   ElevenLabs-Gespraechsdatensatz, ob der Werkzeug-Aufruf ein NICHT-leeres `tenant_token`
-   trug. Erst dann darf `ELEVENLABS_TENANT_TOKEN_REQUIRED=true` gesetzt werden. Umgekehrt
-   waere der Preis: `look_up` und `get_consult` antworten 404 und der Agent verstummt.
-
-   Kontext, der die Dringlichkeit bestimmt: `ELEVENLABS_OUTBOUND_ENABLED` ist live **`true`**
-   (im Dashboard nachgesehen) — der EL-Weg ist der tatsaechlich genutzte Outbound-Pfad, kein
-   ruhender Zweig.
-
-~~Alter Stand:~~ **NEU aus SEC-P4: Anbieter-Push der ElevenLabs-Werkzeug-Vorlage.** Der Code ist gebaut und
-   getestet, steht aber hinter `ELEVENLABS_TENANT_TOKEN_REQUIRED=false`. Scharf wird der
-   Mandanten-Riegel erst, wenn die geaenderte Werkzeug-Vorlage beim Anbieter liegt (sie holt
-   `tenant_token` ueber `dynamic_variable` in den Anfragekoerper) UND der Schalter danach auf
-   `true` geht. Reihenfolge ist nicht optional: Schalter zuerst = `look_up` und `get_consult`
-   antworten 404, der Agent verstummt im Gespraech. Bis dahin ist die Quer-Mandanten-Reichweite
-   nur zur HAELFTE geschlossen — der Ablehnungsgrund verraet den fremden Anruf nicht mehr, die
-   Bindung selbst gelingt weiterhin.
 7. ~~HSTS des Static-Service im Render-Dashboard~~ — **ERLEDIGT 2026-09-10.** Gesetzt unter
    `hermes-web` -> Headers (eigener Navigationspunkt unter "Manage", NICHT in Settings):
    Path `/*`, `Strict-Transport-Security`, `max-age=15552000; includeSubDomains`. Wirkte
