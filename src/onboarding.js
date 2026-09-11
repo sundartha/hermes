@@ -33,19 +33,28 @@
 // FRUEHER als zuvor (vor jedem Provider-Kontakt).
 //
 // R4-PRAEZISIERUNG (GAP-11) - sie steht NICHT im Ermessen dieser Implementierung,
-// sondern folgt der Owner-Entscheidung vom 2026-07-28, protokolliert in der Phasen-
-// Spezifikation der Gates-Fix-Kette (Abschnitt P4, Nachtrag zur Reihenfolgen-Frage):
-// Die Einrichtungsgebuehr, die dieser Hold reserviert, ist per Konfiguration
-// abgeschaltet - der Kunde zahlt sein Abo und sonst nichts; die Nummer ist unsere
-// Kosten, gedeckt vom Abo. searchNumbers ist eine reine Preisabfrage: kostenlos,
-// reserviert nichts, kauft nichts. Die geld-tragende Zusage lautet deshalb praezise
-// "kein KAUF ohne reserviertes Geld" (statt: kein Kontakt zum Provider) - orderNumber,
-// der einzige geldbewegende Schritt, liegt weiterhin strikt HINTER dem erfolgreichen
-// Hold. AKZEPTIERTES RESTRISIKO: ein Tenant mit hinterlegter, aber am Hold abgelehnter
-// Karte loest je manuellem Provisionierungs-Versuch (kein Auto-Retry) einen
-// zusaetzlichen read-only Suchaufruf beim Provider aus, BEVOR der Hold scheitert. Es
-// wird dabei nie Geld bewegt und keine Nummer gekauft - das Restrisiko ist
-// Provider-Traffic, kein Geldverlust.
+// sondern folgt der Owner-Entscheidung vom 2026-09-11 (Geldpfad-Plan, Abschnitt 3.2).
+// Sie ueberholt die aeltere R4-Position vom 2026-07-28, die hier eine abgeschaltete
+// Einrichtungsgebuehr behauptete: die Gebuehr ist gewollt, der Kunde zahlt sie
+// zusaetzlich zum Abo. Wie hoch der Betrag ist, entscheidet holdAmountForProviderPrice
+// weiter oben - der Einmalpreis des Providers, ersatzweise die hereingereichte
+// Pauschale aus NUMBER_SETUP_FEE_CENTS. Null wird er nie: der Boot-Waechter erzwingt
+// bei PAYMENT_ENABLED=true einen ganzzahligen Wert groesser null (config.js), und die
+// Oberflaeche weist den Betrag vor dem Checkout aus (self-service-routes.js). Ob der
+// Hold am Ende eingezogen oder storniert wird, entscheidet allein numberSetupFeeExempt
+// in settleSetupFeeHold. Quelle dieses Feldes ist die Rechnungssumme des laufenden
+// Abos: eine Nullrechnung befreit (retrieveSubscription in billing/stripe.js,
+// fail-closed - unbekannt heisst nicht befreit). Die Rechnungssumme ist dabei ein
+// bewusst gewaehlter Stellvertreter fuer "zahlt ohnehin nichts", kein Zufall; ein
+// eigenes Befreiungs-Signal gibt es absichtlich nicht (Owner-Entscheidung vom selben
+// Tag). searchNumbers ist eine reine Preisabfrage: kostenlos, reserviert nichts, kauft
+// nichts. Die geld-tragende Zusage lautet deshalb praezise "kein KAUF ohne reserviertes
+// Geld" (statt: kein Kontakt zum Provider) - orderNumber, der einzige geldbewegende
+// Schritt, liegt weiterhin strikt HINTER dem erfolgreichen Hold. AKZEPTIERTES
+// RESTRISIKO: ein Tenant mit hinterlegter, aber am Hold abgelehnter Karte loest je
+// manuellem Provisionierungs-Versuch (kein Auto-Retry) einen zusaetzlichen read-only
+// Suchaufruf beim Provider aus, BEVOR der Hold scheitert. Es wird dabei nie Geld bewegt
+// und keine Nummer gekauft - das Restrisiko ist Provider-Traffic, kein Geldverlust.
 import {
   beginProvisioning,
   beginCapturing,
