@@ -61,7 +61,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // Tarifs je Route, csv-Karte); platformFixedCostCentsPerMonth UMBENANNT in
   // platformFixedCostUsdCentsPerMonth (USD-Listenpreis statt faelschlich gelabelter
   // EUR-Cent - menge neutral) -> 52.
-  billing: 52,
+  // GP-P0 (PLAN-GELDPFAD.md): paidWithoutNumberGraceMs ergaenzt (Frist, ab der ein
+  // zahlender Mandant ohne Live-Nummer gemeldet wird) -> 53.
+  billing: 53,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -169,7 +171,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // ACHTUNG beim Merge beider Ketten (2026-09-10): SEC und FW zaehlten unabhaengig von 183
 // aus und schrieben BEIDE "-> 185". Git hat die identische Zahlzeile stillschweigend
 // zusammengefuehrt - die Summe war dadurch um 2 zu niedrig. Gemessen, nicht gerechnet.
-const EXPECTED_TOTAL_KEYS = 187;
+// GP-P0: paidWithoutNumberGraceMs (billing) ergaenzt -> 188.
+const EXPECTED_TOTAL_KEYS = 188;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -319,7 +322,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // FW2: llmProviderFallback (String) + llmBillingLatchCooldownMs (Zahl) sind beide
   // primitiv (kein Array/nested Objekt) -> 175. Zur doppelten Zaehlung s. den Hinweis
   // bei EXPECTED_TOTAL_KEYS.
-  const EXPECTED_PRIMITIVE_LEAVES = 175;
+  // GP-P0: paidWithoutNumberGraceMs ist primitiv (Zahl, kein Array/nested Objekt) -> 176.
+  const EXPECTED_PRIMITIVE_LEAVES = 176;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

@@ -411,8 +411,20 @@ test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing, pr
     },
   };
 
+  // GP-P0: ACHTER, unabhaengiger Zweig - er wird trotz der Wuerfe der uebrigen sieben
+  // ausgefuehrt UND wirft selbst (Isolation in BEIDE Richtungen). OHNE diesen Fake wuerde
+  // runSweepTick SYNCHRON auf einer undefined-Methode werfen, statt die Isolation zu
+  // belegen.
+  let paidWithoutNumberCalled = false;
+  const throwingPaidWithoutNumberWatch = {
+    async runPaidWithoutNumberSweep() {
+      paidWithoutNumberCalled = true;
+      throw new Error("kv-m4-8-paid-no-number-boom");
+    },
+  };
+
   const errorLogs = await captureConsoleError(async () => {
-    // runSweepTick selbst ist SYNCHRON (kein await zwischen den sieben Zweigen) - der
+    // runSweepTick selbst ist SYNCHRON (kein await zwischen den acht Zweigen) - der
     // Aufruf darf nicht werfen, obwohl mehrere Zweige rejecten.
     assert.doesNotThrow(() => {
       runSweepTick({
@@ -421,9 +433,10 @@ test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing, pr
         costCrossCheck: throwingCostCrossCheck,
         outageWatch: throwingOutageWatch,
         driftWatch: throwingDriftWatch,
+        paidWithoutNumberWatch: throwingPaidWithoutNumberWatch,
       });
     });
-    // Alle sieben Zweige sind fire-and-forget - eine Microtask-Runde reicht, damit auch
+    // Alle acht Zweige sind fire-and-forget - eine Microtask-Runde reicht, damit auch
     // die werfenden Promises ihr .catch() durchlaufen, bevor der Test endet.
     await new Promise((resolve) => setImmediate(resolve));
   });
@@ -453,5 +466,14 @@ test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing, pr
   assert.ok(
     errorLogs.some((zeile) => zeile === "[drift-watch] kv-m4-8-drift-boom"),
     `der siebte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
+  );
+  assert.equal(
+    paidWithoutNumberCalled,
+    true,
+    "paidWithoutNumberWatch.runPaidWithoutNumberSweep lief trotz der Wuerfe der uebrigen Zweige",
+  );
+  assert.ok(
+    errorLogs.some((zeile) => zeile === "[paid-no-number] kv-m4-8-paid-no-number-boom"),
+    `der achte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
   );
 });

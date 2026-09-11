@@ -1045,7 +1045,7 @@ export function derivePlatformNumberBindings({ config, store }) {
 // Zweig traegt zusaetzlich sein eigenes .catch() (zweite Linie, Muster der beiden
 // Bestandszweige). test/kv-m4-monthly-cross-check.test.js (KV-M4-8) belegt die Isolation
 // direkt gegen diese Funktion, nicht nur als Behauptung im Kommentar.
-export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch }) {
+export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch }) {
   void costTruing
     .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
     .catch((err) => console.error("[cost-truing]", err.message));
@@ -1083,6 +1083,14 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageW
   void driftWatch
     .runDriftSweep()
     .catch((err) => console.error("[drift-watch]", err.message));
+  // GP-P0 (PLAN-GELDPFAD.md 2): ACHTER, unabhaengiger Schritt im selben Stunden-Takt -
+  // meldet einen aktiven, verifizierten Subscriber, der laenger als die Frist keine
+  // Live-Nummer hat. Kein zweiter Timer, keine neue Ressource. Reine Beobachtung: dieser
+  // Zweig kauft nichts und stoesst nichts an. Frist + Entprellung sitzen IM Waechter,
+  // nicht hier.
+  void paidWithoutNumberWatch
+    .runPaidWithoutNumberSweep()
+    .catch((err) => console.error("[paid-no-number]", err.message));
 }
 
 // EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter
@@ -1169,6 +1177,10 @@ export async function bootServer({
   // OUTBOUND-E4: siebter, unabhaengiger Zweig desselben Stunden-Sweeps (runSweepTick) +
   // eigener Boot-Lauf. Dieselbe EINE Instanz (INV-7), server.js reicht sie durch.
   driftWatch,
+  // GP-P0: achter, unabhaengiger Zweig desselben Stunden-Sweeps. Dieselbe EINE Instanz
+  // (INV-7), server.js reicht sie durch. KEIN eigener Boot-Lauf: der Befund ist
+  // zeit-basiert und verliert nichts, wenn er erst im ersten Tick faellt.
+  paidWithoutNumberWatch,
   messaging,
   consultDelivery,
   // Boot-Re-Arm des EL-Ergebnisabrufs (s. unten bei rearmActiveConversationPolls). Dieselbe
@@ -1228,7 +1240,7 @@ export async function bootServer({
   // mit (runSweepTick oben, exportiert und direkt testbar) - kein zweiter Timer, keine
   // neue Ressource.
   setInterval(
-    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch }),
+    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch }),
     config.billing.costTruingSweepIntervalMs,
   ).unref();
 
