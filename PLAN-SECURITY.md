@@ -3930,3 +3930,75 @@ gepusht, nicht deployt und kein Live-Wert geaendert.
 3. Aussenmessung der drei Oberflaechen nach dem Deploy.
 4. Entscheidung, ob die `apps/web`-Testbank (`apps/web/test/csp.test.js`, laeuft nur auf
    Kommando via `npm --prefix apps/web test`) in CI aufgenommen wird.
+
+## GELDPFAD — Behebungskette zum Vorfall vom 11.09.2026 (GP-P0..GP-P6, abgeschlossen 2026-09-11)
+
+Manifest `PLAN-GELDPFAD.md`, Kettenstand `tasks/geldpfad-chain-state.md`. Der Vorfall: ein
+zahlender Mandant wurde mit 4,99 EUR belastet und bekam keine Rufnummer, weil seine
+Zahlungsmethode vom Typ `link` war — eine Wallet, die eine getrennte Autorisierung und
+Erfassung nicht traegt. Derselbe Weg trug 4,99 EUR und lehnte sechs Sekunden spaeter den
+92-Cent-Hold ab. Es war kein Deckungsproblem.
+
+Fuenf Entscheidungen, die diese Kette gefaellt hat und die ohne ausdrueckliche
+Owner-Entscheidung nicht rueckgaengig zu machen sind:
+
+**(1) Eignung der Zahlungsmethode ist eine ALLOWLIST, niemals eine Denylist (GP-P2,
+2026-09-11).** `isHoldCapablePaymentMethodType` (`src/billing/payment-method-eligibility.js`)
+ist die einzige Stelle, die ueber Eignung entscheidet. Sie kennt heute genau `card`. Alles
+andere — auch ein kuenftiger, tatsaechlich hold-faehiger Stripe-Typ — faellt durch, bis ihn
+jemand eintraegt. Falsch-negativ ist hier bewusst billiger als falsch-positiv: die
+Denylist-Variante ("wenn `link`, ablehnen") liesse jeden neuen Wallet-Typ durch und der
+Schaden liefe unbemerkt weiter. Ein Test pinnt die Allowlist-Eigenschaft an einem frei
+erfundenen Typ; ohne ihn weicht der naechste Edit sie still auf.
+
+**(2) Unbekannter Zahlungsmethoden-Typ gilt als ungeeignet, fail-closed (GP-P2, Owner-Frage 5,
+2026-09-11).** Das Typ-Feld ist additiv-nullable ohne Backfill, jeder Bestands-Mandant traegt
+also zunaechst `null`. Der Rueckweg ist GP-P3, nicht eine Lockerung: wer eine Karte neu
+hinterlegt, stoesst die Provisionierung selbst wieder an. Zwischen den Merges von GP-P2 und
+GP-P3 bestand ein Fenster, in dem betroffene Mandanten nur ueber die Admin-Route zu bedienen
+waren; da alle aktiven Konten intern sind, wurde es getragen.
+
+**(3) Der Ablehnungsgrund hat ZWEI Transportwege, und Steuerung liest nur den getypten (GP-P1,
+Owner-Fragen 6 und 8, 2026-09-11).** Die Whitelist ist genau `error.code`,
+`error.decline_code`, `error.type` — feste Stripe-Enums, nie Freitext, nie verschachtelte
+Objekte wie `payment_method` oder `billing_details`. Der Enum-Anhang landet auch dauerhaft in
+`job.lastError` in Postgres. Ein Struktur-Waechter mit eigener Positiv-Kontrolle haelt fest,
+dass kein Modul unter `src/` `err.message` per `includes`/`match`/`indexOf` zur Steuerung
+liest; Ausnahmen stehen mit Begruendung in einer im Test hartkodierten Liste. Ohne diese
+Trennung kippt ein harmloser Wortlaut-Edit spaeter den automatischen Wiederanlauf in eine
+Endlosschleife. Im selben Zug faellt `createSubscription` von Stufe 3 auf Stufe 2 zurueck und
+protokolliert keine Kundendaten mehr — eine Verengung des Protokollierten, nie eine
+Erweiterung.
+
+**(4) Der Wiederanlauf kann enden: Versuchsdeckel plus terminaler Zustand (GP-P3/GP-P4,
+2026-09-11).** `PROVISIONING_RETRY_MAX_ATTEMPTS` (Default 3) zaehlt je Mandant und zaehlt
+`failed`-Nummern MIT; erschoepft fuehrt hart nach `needs_manual_reconcile`. Das ist kein
+Komfort, sondern der Ersatz fuer einen Deckel, der hier strukturell nicht greift:
+`occupiesCapacity` zaehlt `failed` und `released` nicht zur Kapazitaet, und die
+Idempotenz-Schluessel haengen an der `numberId` — jeder Neuanlauf erzeugt eine neue `numberId`
+mit frischen Schluesseln und stiesse nie an `MAX_NUMBERS_PER_TENANT`. Ohne den Zaehler waere
+der automatische Wiederanlauf ein Umgehungsweg um genau den Deckel, der seit E10 gegen
+DID-Vermehrung uebrig ist. Der zeitgesteuerte Zweig (GP-P4) stoesst zusaetzlich nur an, wenn
+die getypte Klassifikation aus (3) die letzte Ablehnung als voruebergehend ausweist;
+`PROVISIONING_RETRY_MIN_INTERVAL_MS` (Default 24 h) entprellt. Beide Werte sind Env, kein Code.
+Rollback: `maxAttempts=0` bzw. `minIntervalMs=0` halten den jeweiligen Zweig komplett aus.
+
+**(5) Der Preis-Waechter eskaliert auch seine eigene Unwissenheit — beziffert (GP-P6,
+Owner-Frage 12, 2026-09-11).** Zwei Waechter mit unterschiedlicher Schwere: `assertPricedPlans`
+ist netzfrei, prueft Config gegen Config und beendet den Start mit `exit(1)`, wenn bei
+`PAYMENT_ENABLED=true` ein Katalog-Slug keine Stripe-Price-Id hat. Bei `PAYMENT_ENABLED=false`
+ist er folgenlos, sonst stirbt jeder Entwickler- und Testboot. Der zweite Waechter vergleicht
+taeglich (`PRICE_DRIFT_MIN_INTERVAL_MS=86400000`) Betrag und Waehrung gegen den Katalog, ueber
+einen injizierbaren, rein lesenden Port, und meldet ueber denselben Kanal wie
+`outbound-drift-watch` (Audit -> Mail -> SMS, entprellt — eine SMS ist ein kostenpflichtiger
+Ausgangskanal). Ein Netzfehler bleibt eine Notiz; erst
+`PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER` (Default 3) aufeinanderfolgende erzeugen GENAU EINE
+Meldung, jeder weitere schweigt, ein erfolgreicher Lauf setzt zurueck. Ohne diese Zusage
+maskiert ein fehlendes Lese-Scope den Preis-Drift fuer immer.
+
+**Nicht Teil der Kette, weiter offen (`PLAN-GELDPFAD.md` Abschnitt 3):** die Deaktivierung von
+Link als Zahlungsart im Stripe-Dashboard (reiner Dashboard-Schritt, ausdruecklich NICHT per
+`payment_method_types` im Code zu ersetzen — ein falscher Wert legte beide Checkout-Aufbauten
+zugleich lahm); die Nachweisdokumente fuer `+4921194289148`; und der Dauergutschein ueber
+hundert Prozent, der zusammen mit der Befreiung an `invoiceTotal===0` einen Vollgratis-Zugang
+ergibt — zu pruefen vor dem ersten fremden Kunden.
