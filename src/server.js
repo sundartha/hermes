@@ -21,6 +21,7 @@ import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";
 import { makeDriftWatch } from "./telephony/outbound-drift-watch.js";
 import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.js";
+import { makePriceDriftWatch } from "./billing/price-drift-watch.js";
 import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
@@ -193,6 +194,19 @@ const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, tel
 // der Vorfall vom 11.09. (Muster costTruing, KV2-1). KEIN messaging/mailer: die Phase
 // meldet auf der Notiz-Stufe (WARN -> Audit -> Marker), sie alarmiert nicht.
 const paidWithoutNumberWatch = makePaidWithoutNumberWatch({ store, config, audit: durableAudit });
+
+// GP-P6: ZEHNTER Sweep-Zweig + eigener Boot-Lauf (Muster driftWatch, INV-7). lesePreis ist
+// der rein LESENDE Stripe-Abruf des bestehenden Adapters - kein zweiter HTTP-Client, kein
+// Geld-Aufruf. durableAudit wie GP-P0 (der Befund muss die Log-Rotation ueberleben);
+// messaging/mailer sind dieselben Instanzen wie ueberall sonst (DIP).
+const priceDriftWatch = makePriceDriftWatch({
+  store,
+  config,
+  audit: durableAudit,
+  messaging,
+  mailer,
+  lesePreis: (priceId) => stripeBilling.retrievePriceAmount(priceId),
+});
 
 // F2-Mail: Accounts-Zugriff (Konto-E-Mail) haengt an accounts.accountByTenant (web-auth.js),
 // das NUR existiert, wenn der pg-gated Web-Login-Block durchlaeuft (wireWebLogin, asynchron
@@ -385,6 +399,7 @@ const deps = {
   driftWatch,
   paidWithoutNumberWatch,
   provisionRetryWatch,
+  priceDriftWatch,
   messaging,
   consultDelivery,
   elevenLabsOutbound,

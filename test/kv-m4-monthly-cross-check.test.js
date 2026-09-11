@@ -385,6 +385,7 @@ const WERFENDE_ZWEIGE = [
   { zweig: "driftWatch", methode: "runDriftSweep", logPraefix: "[drift-watch]", fehler: "kv-m4-8-drift-boom" },
   { zweig: "paidWithoutNumberWatch", methode: "runPaidWithoutNumberSweep", logPraefix: "[paid-no-number]", fehler: "kv-m4-8-paid-no-number-boom" },
   { zweig: "provisionRetryWatch", methode: "runProvisionRetrySweep", logPraefix: "[provision-retry-sweep]", fehler: "kv-m4-8-provision-retry-boom" },
+  { zweig: "priceDriftWatch", methode: "runPriceDriftSweep", logPraefix: "[price-drift]", fehler: "kv-m4-8-price-drift-boom" },
 ];
 
 // Die beiden Zweige, die SAUBER zurueckkehren - an ihnen wird gemessen, dass die Wuerfe

@@ -11,7 +11,7 @@
 // geblockter Request liefert 402 (kein Originate, kein Call-Record).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState } from "./helpers.js";
+import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { findPlan } from "../src/plans.js";
 import { resolvePeriodStartIso, periodStartFromEnd } from "../src/billing/period.js";
@@ -100,6 +100,8 @@ const PAY_ENV = {
   STRIPE_WEBHOOK_SECRET: "whsec_test_x",
   STRIPE_API_BASE: "http://127.0.0.1:9",
   NUMBER_SETUP_FEE_CENTS: "500",
+  // GP-P6: Price-Id je Katalog-Slug ist bei PAYMENT_ENABLED=true Boot-Pflicht (assertPricedPlans).
+  ...PLAN_PRICE_BOOT_ENV,
 };
 const PAY_OFF_ENV = { MULTI_TENANT: "true", ALLOWED_NUMBERS: TO }; // PAYMENT_ENABLED default false
 

@@ -18,6 +18,7 @@ import {
   meterMappingGaps,
   spendCapCoherence,
   unpricedModels,
+  unpricedPlanSlugs,
   providerRateOutOfBand,
   alertChannelFindings,
   alertChannelInputs,
@@ -68,6 +69,9 @@ import { CONSULT_OPEN_MS } from "./consult/in-call.js";
 import { SWEEP_TRIGGER, costTruingCoveragePercent } from "./billing/cost-truing.js";
 import { tariffDriftReportFromConfig, driftLine, tarifpaarReport, tarifpaarZeile } from "./billing/cost-calibration.js";
 import { CATALOG_SLUGS } from "./plans.js";
+// GP-P6 (a): die EINE Slug->Price-Quelle (G5) - das Gate vergleicht Config gegen Config,
+// ohne eine zweite Zuordnung zu tippen. Kein Zyklus: subscribe.js importiert boot.js nicht.
+import { priceIdForPlan } from "./billing/subscribe.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
 import { deadAirOverrun, turnBudgetOverrun } from "./turn-budget.js";
@@ -179,6 +183,23 @@ function assertPricedModels(config) {
       "jedes konfigurierte Modell braucht eine Staffel in MODEL_PRICE_SCHEDULES (src/config.js), " +
       "BEVOR CLAUDE_MODEL/PRECALL_BRIEFING_MODEL darauf gestellt wird. Eine DATIERTE " +
       "Snapshot-ID ist ein ANDERER Schluessel als der Alias.",
+  );
+  process.exit(1);
+}
+
+// GP-P6 (a): ein buchbarer Tarif ohne Stripe-Price-Id ist bei aktivem Geldpfad keine
+// Route-500 mehr, sondern ein Boot-Refusal (PLAN-GELDPFAD.md GP-P6). Rein lokal, Config
+// gegen Config, KEIN Netz - deshalb darf er fatal sein (Muster assertPricedModels).
+// PAYMENT_ENABLED=false laesst ihn vollstaendig aus: sonst stirbt jeder Entwickler- und
+// Testboot (Muster isPositiveIntegerFee, "FATAL nur im Payment-Pfad").
+function assertPricedPlans(config) {
+  if (!config.billing.paymentEnabled) return;
+  const unpriced = unpricedPlanSlugs(CATALOG_SLUGS, (slug) => priceIdForPlan(slug, config));
+  if (!unpriced.length) return;
+  console.error(
+    `[boot] Start abgebrochen: Katalog-Tarif(e) ohne Stripe-Price-Id: ${unpriced.join(",")} - ` +
+      "bei PAYMENT_ENABLED=true braucht JEDER Slug aus PLAN_CATALOG (src/plans.js) eine " +
+      "STRIPE_<TARIF>_PRICE_ID. Ein buchbarer Tarif ohne Price ist eine Preisseite, die nichts verkauft.",
   );
   process.exit(1);
 }
@@ -479,7 +500,8 @@ function assertLatentCostPaths(config) {
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertCostTruingBooking
 // (LCT P4) das siebte, assertSttProfile (STT-A1) das achte, assertPricedModels (B4a)
-// das neunte und assertLatentCostPaths (KV2-2 (h)) das zehnte, das noch process.exit(1)
+// das neunte, assertPricedPlans (GP-P6) das zehnte und assertLatentCostPaths (KV2-2 (h))
+// das elfte, das noch process.exit(1)
 // rufen kann - warnStaleModelPrices/warnAlertChannelUnset/warnTariffDrift/
 // warnNumberOriginDecoupled/warnMissingProvisioningConnection/
 // warnElRegistrationSipCredsMissing/warnLlmFallbackUnusable (FW2) sind reine Diagnose
@@ -551,6 +573,7 @@ function assertBootGates(config, store, durableAudit) {
   // sie vor rearmActiveCallTimers() stehen (INV-5, s.u. in bootServer).
   assertSpendCapCoherence(config);
   assertPricedModels(config); // B4a: FATAL, s. dort
+  assertPricedPlans(config); // GP-P6: FATAL nur bei PAYMENT_ENABLED=true, s. dort
   warnStaleModelPrices(config); // B4a: WARN
   assertProviderRateInBand(config);
   assertCostTruingBooking(config, store);
@@ -1045,7 +1068,7 @@ export function derivePlatformNumberBindings({ config, store }) {
 // Zweig traegt zusaetzlich sein eigenes .catch() (zweite Linie, Muster der beiden
 // Bestandszweige). test/kv-m4-monthly-cross-check.test.js (KV-M4-8) belegt die Isolation
 // direkt gegen diese Funktion, nicht nur als Behauptung im Kommentar.
-export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch, provisionRetryWatch }) {
+export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }) {
   void costTruing
     .runCostTruingSweep({ trigger: SWEEP_TRIGGER.INTERVAL })
     .catch((err) => console.error("[cost-truing]", err.message));
@@ -1100,6 +1123,12 @@ export function runSweepTick({ costTruing, provisioning, costCrossCheck, outageW
   void provisionRetryWatch
     .runProvisionRetrySweep()
     .catch((err) => console.error("[provision-retry-sweep]", err.message));
+  // GP-P6 (PLAN-GELDPFAD.md 2): ZEHNTER, unabhaengiger Schritt im selben Stunden-Takt -
+  // vergleicht den ANGEZEIGTEN Katalogpreis mit dem, was Stripe wirklich abbucht. Kein
+  // zweiter Timer. Der Tages-Takt (PRICE_DRIFT_MIN_INTERVAL_MS) sitzt IM Waechter.
+  void priceDriftWatch
+    .runPriceDriftSweep()
+    .catch((err) => console.error("[price-drift]", err.message));
 }
 
 // EL-NEUSTART-4: das Netz unter dem Drain. Eine offene Rueckfrage haengt an einem Warter
@@ -1195,6 +1224,9 @@ export async function bootServer({
   // sonst je Neustart einen Kaufanstoss ausloesen - die Mindestfrist faengt das zwar ab,
   // aber der Zweig braucht den Boot-Lauf gar nicht (der naechste Tick genuegt).
   provisionRetryWatch,
+  // GP-P6: zehnter, unabhaengiger Zweig desselben Stunden-Sweeps + eigener Boot-Lauf.
+  // Dieselbe EINE Instanz (INV-7), server.js reicht sie durch.
+  priceDriftWatch,
   messaging,
   consultDelivery,
   // Boot-Re-Arm des EL-Ergebnisabrufs (s. unten bei rearmActiveConversationPolls). Dieselbe
@@ -1254,7 +1286,7 @@ export async function bootServer({
   // mit (runSweepTick oben, exportiert und direkt testbar) - kein zweiter Timer, keine
   // neue Ressource.
   setInterval(
-    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch, provisionRetryWatch }),
+    () => runSweepTick({ costTruing, provisioning, costCrossCheck, outageWatch, driftWatch, paidWithoutNumberWatch, provisionRetryWatch, priceDriftWatch }),
     config.billing.costTruingSweepIntervalMs,
   ).unref();
 
@@ -1327,6 +1359,10 @@ export async function bootServer({
     // Timeout je Abfrage und seine Mindestfrist (OUTBOUND_DRIFT_MIN_INTERVAL_MS) - ohne
     // sie liefe er bei einem externen 10-Minuten-Ping bis zu 144x/Tag statt einmal.
     void driftWatch.runBootProbe().catch((err) => console.error("[drift-watch] Boot-Sonde:", err.message));
+    // GP-P6: EIN Lauf beim Start - fire-and-forget NACH den Boot-Logs (Muster
+    // driftWatch.runBootProbe direkt darueber). Anbieter-IO gehoert nie an die
+    // Boot-Sequenz; die Mindestfrist im Waechter macht daraus hoechstens EINEN Abruf/Tag.
+    void priceDriftWatch.runBootProbe().catch((err) => console.error("[price-drift] Boot-Sonde:", err.message));
   });
 
   // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)

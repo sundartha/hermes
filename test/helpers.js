@@ -124,6 +124,12 @@ export const BASE_ENV = {
   // eine Anbieter-Abfrage (Lehre test-base-env-drift). test/outbound-drift-*.test.js
   // fahren den Kern/die Watch-Funktion direkt, ohne den echten Boot-Takt zu brauchen.
   OUTBOUND_DRIFT_MIN_INTERVAL_MS: "0",
+  // GP-P6: derselbe Grund wie eine Zeile darueber - der Preis-Waechter macht
+  // Anbieter-IO (Stripe-GET). 0 = KOMPLETT AUS, damit kein Spawn-Test beim Boot in einen
+  // Anbieter-Abruf laeuft (Lehre test-base-env-drift). Die Eskalations-Grenze wird
+  // trotzdem neutral gepinnt, damit eine lokale .env sie nicht in Spawn-Tests leakt.
+  PRICE_DRIFT_MIN_INTERVAL_MS: "0",
+  PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER: "3",
   ALLOWED_COUNTRY_CODES: "*", // Land-Gate fuer Altbestand neutral; number-gate.test.js setzt es explizit
   MAX_CALLS_PER_HOUR: "100", // hoch genug, dass es Altbestand-Tests nicht bremst (wie RATE_LIMIT_PER_MIN)
   PROFILES_JSON: "", // Profile-Seed leer; einzelne Tests setzen es explizit
@@ -1153,6 +1159,15 @@ export function makeTelnyxSigner() {
 // eigentliche Aussage. EINE Quelle (G5/S2) statt der frueher in telnyx-p5-gate-proof +
 // telnyx-p5-origination + telnyx-p8-inbound + telnyx-p9-flag-matrix + telnyx-shim-route
 // fuenffach (teils voll, teils als 2-Key-Teilsatz) kopierten Fixture.
+// GP-P6: seit assertPricedPlans (boot.js) ist eine Price-Id je Katalog-Slug Boot-Pflicht,
+// sobald PAYMENT_ENABLED=true ist. Jeder Spawn-Test mit aktivem Payment braucht sie - EINE
+// Quelle (G5/S2, Muster TELNYX_ASSISTANT_BOOT_ENV darunter). Die Werte sind Attrappen,
+// kein Test ruft Stripe.
+export const PLAN_PRICE_BOOT_ENV = Object.freeze({
+  STRIPE_STARTER_PRICE_ID: "price_test_starter",
+  STRIPE_BUSINESS_PRICE_ID: "price_test_business",
+});
+
 export const TELNYX_ASSISTANT_BOOT_ENV = Object.freeze({
   TELNYX_ASSISTANT_ID: "asst_x",
   TELNYX_API_KEY: "key_x",

@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { startServer } from "./helpers.js";
+import { startServer, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
 import {
@@ -162,6 +162,8 @@ const PAY_ENV = {
   TELNYX_API_KEY: "KEYtest",
   TELNYX_CONNECTION_ID: "conn_1",
   MAX_NUMBERS: "10",
+  // GP-P6: Price-Id je Katalog-Slug ist bei PAYMENT_ENABLED=true Boot-Pflicht (assertPricedPlans).
+  ...PLAN_PRICE_BOOT_ENV,
 };
 
 async function pollNumberStatus(srv, id, status, timeoutMs = 4000) {
