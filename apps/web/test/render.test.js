@@ -38,22 +38,8 @@ import {
   fillCallModal,
 } from "../src/lib/render.js";
 
-// Simuliert die DE-Sprachwahl fuer getLang() (lib/i18n.js), OHNE setLang() zu rufen --
-// setLang() greift auf `document` zu (document.documentElement.lang, dispatchEvent),
-// das es in node:test nicht gibt. getLang() liest NUR localStorage.getItem, darum
-// reicht ein minimaler Stub. Restauriert globalThis.localStorage danach (auch wenn es
-// vorher gar nicht existierte -- Node hat von Haus aus keinen globalThis.localStorage).
-function withLang(lang, fn) {
-  const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
-  const original = globalThis.localStorage;
-  globalThis.localStorage = { getItem: () => lang };
-  try {
-    fn();
-  } finally {
-    if (had) globalThis.localStorage = original;
-    else delete globalThis.localStorage;
-  }
-}
+// GP-P3: withLang lebt jetzt EINMAL in test/lang-helper.js (api.test.js nutzt sie ebenfalls).
+import { withLang } from "./lang-helper.js";
 
 // ---- Fake-DOM ---------------------------------------------------------------
 // Nur die Operationen, die lib/render.js wirklich nutzt. `innerHTML` ist eine

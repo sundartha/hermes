@@ -260,6 +260,10 @@ services:
       # gruenem Telnyx-Idempotenz-Smoke scharfschalten.
       - key: PROVISIONING_REDRIVE_MAX_AGE_MS
         value: "0"
+      # GP-P3: Versuchsdeckel je Mandant fuer den automatischen Wiederanlauf nach
+      # Kartenwechsel. Erschoepft -> needs_manual_reconcile. 0 = komplett aus.
+      - key: PROVISIONING_RETRY_MAX_ATTEMPTS
+        value: "3"
       # tenant-prolif-d: Grace (TAGE) bis zum Auto-DID-Release suspendierter Tenants.
       # 0 = Observe-Only (fail-closed, kein DELETE). Erst > 0 gibt echte DIDs frei.
       - key: RELEASE_GRACE_DAYS

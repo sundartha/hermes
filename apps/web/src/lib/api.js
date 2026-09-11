@@ -121,10 +121,14 @@ export async function logout() {
 // Optionaler plan (Kachel-Flow, BK2): wird als Body { plan } mitgesendet, damit die
 // Rueckkehr (billing/return) den getragenen Plan direkt bucht (gefuehrter no_card-Pfad).
 // OHNE plan geht KEIN Body raus -> byte-identisch zum reinen "Karte hinterlegen".
+// GP-P3: die EINE Adresse der Karten-Erfassung (G5/G25) - startBillingSetupCheckout ruft
+// sie, numberPlaceholderAction zeigt auf sie. Zwei getippte Literale wuerden driften.
+export const BILLING_SETUP_CHECKOUT_PATH = "/api/self-service/billing/setup-checkout";
+
 export async function startBillingSetupCheckout(plan) {
   const options = { method: "POST" };
   if (plan !== undefined) options.body = { plan };
-  const { url } = await apiRequest("/api/self-service/billing/setup-checkout", options);
+  const { url } = await apiRequest(BILLING_SETUP_CHECKOUT_PATH, options);
   // Contract-Grenze (R5): das Backend garantiert { url } -- ein 200 ohne url
   // waere ein Drift. Fail-closed pruefen, statt window.location.assign(undefined)
   // an den Aufrufer durchzureichen (G26: null/undefined nie ungeprueft nutzen).
@@ -240,6 +244,25 @@ export function numberPlaceholderText(data) {
   if (numberStatus === NUMBER_STATUS.FAILED) return tPair(NUMBER_TEXT_SETUP_FAILED, NUMBER_TEXT_SETUP_FAILED_DE);
   if (numberStatus === NUMBER_STATUS.BLOCKED) return tPair(NUMBER_TEXT_SETUP_BLOCKED, NUMBER_TEXT_SETUP_BLOCKED_DE);
   return tPair(NUMBER_TEXT_NO_NUMBER, NUMBER_TEXT_NO_NUMBER_DE);
+}
+
+const NUMBER_ACTION_FIX_PAYMENT = "Update payment method";
+const NUMBER_ACTION_FIX_PAYMENT_DE = "Zahlungsmittel aktualisieren";
+
+// GP-P3: der failed-Platzhalter bekommt eine ECHTE Aktion statt eines passiven Satzes -
+// die haeufigste Ursache eines gescheiterten Nummern-Setups ist eine Zahlungsmethode,
+// die keinen Hold traegt (Vorfall 11.09.2026), und dagegen hilft genau ein Kartenwechsel.
+// Nach dem erfolgreichen Wechsel stoesst der Server das Provisioning selbst wieder an
+// (self-service-routes.js, billing/return) - dieser Knopf braucht KEINEN neuen Endpunkt.
+// Rein (kein DOM, kein fetch) -> mit node:test unit-testbar. Alle uebrigen Status tragen
+// KEINE Aktion (null): dort hilft ein Kartenwechsel nicht.
+export function numberPlaceholderAction(data) {
+  const { numberStatus } = agentInfo(data);
+  if (numberStatus !== NUMBER_STATUS.FAILED) return null;
+  return {
+    label: tPair(NUMBER_ACTION_FIX_PAYMENT, NUMBER_ACTION_FIX_PAYMENT_DE),
+    href: BILLING_SETUP_CHECKOUT_PATH,
+  };
 }
 
 // Liest den Karten-Status aus der state-Antwort -- die EINE Stelle, an der das

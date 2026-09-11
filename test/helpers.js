@@ -321,6 +321,10 @@ export const BASE_ENV = {
   PROVISIONING_ENABLED: "false",
   PROVISIONING_COUNTRY: "DE",
   PROVISIONING_REDRIVE_MAX_AGE_MS: "0",
+  // GP-P3: 0 = automatischer Wiederanlauf aus (Muster PROVISIONING_REDRIVE_MAX_AGE_MS) -
+  // sonst leakt eine lokale .env via dotenv in Spawn-Tests und ein Fixture-Mandant mit
+  // 'failed'-Nummer koennte dort unbeabsichtigt einen Kaufanstoss ausloesen.
+  PROVISIONING_RETRY_MAX_ATTEMPTS: "0",
   RELEASE_GRACE_DAYS: "0", // tenant-prolif-d: neutraler fail-closed Default (sonst leakt lokales .env in Spawn-Tests)
   // Kauf-Land-Override aus (Default): number.country = Herkunftsland, byte-identisch.
   // Ohne diese Zeile leakt eine lokale .env mit FORCE_NUMBER_COUNTRY=US via dotenv in

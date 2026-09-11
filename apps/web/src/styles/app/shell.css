@@ -249,7 +249,10 @@
   font-size: clamp(22px, 1.83vw, 30px);
 }
 
-.agent-chip__copy {
+/* GP-P3: der Aktions-Knopf (failed-Nummer) teilt die Optik des Kopier-Knopfs -
+   angehaengter Selektor statt einer zweiten, driftenden Deklaration (S2). */
+.agent-chip__copy,
+.agent-chip__action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -267,7 +270,8 @@
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
-.agent-chip__copy:hover {
+.agent-chip__copy:hover,
+.agent-chip__action:hover {
   border-color: rgba(255, 255, 255, 0.42);
 }
 
@@ -283,6 +287,12 @@
   border-color: rgba(127, 224, 176, 0.45);
   background: rgba(127, 224, 176, 0.16);
   animation: agent-copy-pop 0.18s var(--motion-ease);
+}
+
+/* Der margin-left:auto der gemeinsamen Regel schiebt den Kopier-Knopf nach
+   rechts; der Aktions-Knopf sitzt dagegen direkt unter der Nummer. */
+.agent-chip__action {
+  margin-left: 0;
 }
 
 @keyframes agent-copy-pop {
@@ -352,7 +362,8 @@
   .agent-chip {
     flex-wrap: wrap;
   }
-  .agent-chip__copy {
+  .agent-chip__copy,
+  .agent-chip__action {
     width: 100%;
     margin-left: 0;
   }
@@ -394,6 +405,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .agent-chip__copy,
+  .agent-chip__action,
   .live-dot {
     animation: none;
   }

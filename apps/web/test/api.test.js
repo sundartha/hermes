@@ -16,6 +16,7 @@ import {
   loadAuthState,
   NUMBER_POLL_MAX_ATTEMPTS,
   NUMBER_STATUS,
+  numberPlaceholderAction,
   numberPlaceholderText,
   numberSetupFeeFrom,
   shouldPollNumberStatus,
@@ -25,7 +26,9 @@ import {
   subscriptionFrom,
   addNewsletterRecipient,
   removeNewsletterRecipient,
+  BILLING_SETUP_CHECKOUT_PATH,
 } from "../src/lib/api.js";
+import { withLang } from "./lang-helper.js";
 // Backend-Quelle der Wahrheit fuer die Anzeige-Status-Werte (Drift-Test, G22): der
 // Frontend-Spiegel NUMBER_STATUS muss exakt NUMBER_DISPLAY_STATUS entsprechen.
 import { NUMBER_DISPLAY_STATUS } from "../../../src/store/views.js";
@@ -280,6 +283,33 @@ test("numberPlaceholderText: eigener Text je numberStatus (Fix C: failed/blocked
     "No number assigned yet",
   );
   assert.equal(numberPlaceholderText(undefined), "No number assigned yet"); // fail-closed
+});
+
+// GP-P3: der failed-Platzhalter traegt eine Aktion (Kartenwechsel), jeder andere Status
+// nicht. Der href wird gegen den LITERALEN Pfad geprueft, nicht nur gegen die Konstante -
+// sonst wuerde der Test sich selbst bestaetigen (eine umbenannte Route bliebe unbemerkt).
+test("GP-P3: numberPlaceholderAction - failed traegt die Aktion auf die Karten-Route, sonst null", () => {
+  const action = numberPlaceholderAction({ agent: { numberStatus: "failed" } });
+  assert.equal(action.href, BILLING_SETUP_CHECKOUT_PATH);
+  assert.equal(action.href, "/api/self-service/billing/setup-checkout");
+
+  // Beide Sprachen tragen ein nicht-leeres Label, und sie sind verschieden (sonst waere
+  // eine fehlende Uebersetzung nicht von einer vorhandenen zu unterscheiden).
+  let labelEn = "";
+  let labelDe = "";
+  withLang("en", () => {
+    labelEn = numberPlaceholderAction({ agent: { numberStatus: "failed" } }).label;
+  });
+  withLang("de", () => {
+    labelDe = numberPlaceholderAction({ agent: { numberStatus: "failed" } }).label;
+  });
+  assert.notEqual(labelEn, "");
+  assert.notEqual(labelDe, "");
+  assert.notEqual(labelEn, labelDe);
+
+  for (const numberStatus of ["active", "provisioning", "requested", "blocked", "none"])
+    assert.equal(numberPlaceholderAction({ agent: { numberStatus } }), null, numberStatus);
+  assert.equal(numberPlaceholderAction(undefined), null); // fail-closed
 });
 
 // Drift-Guard (G22): der Frontend-Spiegel muss exakt dem Backend-Enum entsprechen --
