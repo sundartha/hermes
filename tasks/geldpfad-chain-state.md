@@ -7,6 +7,12 @@ Diese Datei ist die Uebergabe an die naechste Session. Sie bleibt kurz.
 
 `npm test`: **5887 pass / 1 fail**, gemessen 16:04-16:07 Uhr.
 
+**Fahre die Bank mit `--test-concurrency=4`.** Der Wrapper reicht Zusatzargumente durch
+(`node test/testbaenke-run.mjs regression --test-concurrency=4`). Voll parallel meldet sie ihr
+bekanntes Rennen mit **wechselnden Namen und wechselnder Zahl** - nach GP-P2 erst vier, dann
+neun rote Faelle, beim gedrosselten Lauf null. Ein roter Fall zaehlt erst, wenn er **isoliert**
+rot ist.
+
 Der eine rote Fall ist **erklaert und kein Code-Defekt**: `P14: public/tenant.html existiert
 nicht mehr`. Die Datei liegt als **untrackte Owner-Arbeit** im Arbeitsbaum (`?? public/tenant.html`,
 16 KB, 11.09. 16:01) und ist in `master` nicht getrackt. Frische Worktrees sehen sie nicht, dort
@@ -40,14 +46,29 @@ Modell-Pins unveraendert: Plan + Safety = Opus, Impl/Clean-Code/Fix/Report = Son
 | Phase | Groesse | maxFixRounds | highStakes | Lauf-ID | Gate | Merge | Abnahme |
 |---|---|---|---|---|---|---|---|
 | GP-P0 | S | 1 | false | `wf_d61a47d9-23d` | PASS (0 Fix-Runden) | `a60168c` | **erfuellt** |
-| GP-P1 | S | 1 | false | - | - | - | - |
-| GP-P2 | L | 3 | **true** | - | - | - | - |
-| GP-P3 | M | 2 | **true** | - | - | - | - |
+| GP-P1 | S | 1 | false | `wf_d94f1a66-399` | PASS (0 Fix-Runden) | `fe6d90a` | **erfuellt** |
+| GP-P2 | L | 3 | **true** | `wf_8fb281ac-282` | PASS + 1 Lead-Fix | `2acb189` | **erfuellt** |
+| GP-P3 | M | 2 | **true** | `wf_84056221-3a0` | laeuft | - | - |
 | GP-P4 | M | 2 | **true** | - | - | - | - |
 | GP-P5 | S | 1 | false | - | - | - | - |
 | GP-P6 | M | 2 | **true** | - | - | - | - |
 
 ## Offene Befunde
+
+- **Der Effizienz-Riegel hat einen Preis, und er ist eingetreten.** Weil Impl, Fix und Safety
+  nur die betroffenen Testdateien fahren, faellt ein gebrochener BESTANDStest erst beim Lead
+  auf. Bei GP-P2 waren es zwei (Altlast-Ratsche gegen die bewegten eslint-Pins, ein
+  Reconcile-Fixture ohne Kartenangabe) - beide isoliert rot, also echt, beide an der Wurzel
+  nachgezogen. Die Abwaegung bleibt richtig: der Riegel spart drei volle Suiten je Lauf, und
+  das Netz des Leads faengt genau diesen Fall. Aber der Lead-Lauf ist damit **Pflicht**, nicht
+  Kuer - ein Merge auf das PASS des Workflows hin waere hier falsch gewesen.
+- **GP-P2 hat einen Stripe-Nachschlag ergaenzt, den der Plan nicht nennt.**
+  `retrievePaymentMethodType` liest `GET /v1/payment_methods/<id>`. Noetig, weil der
+  Webhook-Schreibpfad (eine der vier vom Plan geforderten Bindestellen) kein Checkout-Objekt
+  hat, an dem sich etwas expandieren liesse. Der Test pinnt: genau ein Nachschlag je Bindung,
+  nur der Enum verlaesst die Funktion, kein Schluessel in der Fehlermeldung, und scheitert der
+  Nachschlag, entsteht die Bindung trotzdem - mit unbekanntem Typ, der dann fail-closed nicht
+  provisioniert. Ein zusaetzlicher Anbieter-Aufruf je Webhook-Bindung ist der Preis.
 
 - **GP-P0, Zeitanker ueber Stripe statt ueber Zustandsalter.** Der Plan nennt nur
   `PAID_WITHOUT_NUMBER_GRACE_MS`; gebaut ist der Anker als Beginn der laufenden
