@@ -41,6 +41,7 @@ import {
   CONSULT_ANSWER,
   CONSULT_WAIT,
   GLOBAL_CAP_REASON,
+  NEEDS_MANUAL_RECONCILE_REASON,
   REQUEST_NUMBER_REASON,
   TENANT_STATUS,
   PROVISIONING_JOB_STATUS,
@@ -2600,7 +2601,7 @@ export function tenantHasLiveNumber(s, tenantId) {
   return liveNumbers(s, tenantId).length > 0;
 }
 
-// Merkt EINEN global_cap-Skip auf dem Tenant (Fix B, reine Observability: KEIN Trigger,
+// Merkt EINEN Skip-Grund auf dem Tenant (Fix B, reine Observability: KEIN Trigger,
 // KEIN Retry, KEIN Cap-Bypass - Invariante 2 PLAN-PROVISIONING-CAP.md). requestNumber ist
 // die EINE Quelle (G5) fuer /api/onboard UND den Webhook-Pfad (requestNumberForPaidTenant)
 // - beide profitieren automatisch, ohne den Skip-Zustand selbst durchzureichen.
@@ -2615,6 +2616,35 @@ function markNumberProvisionSkipped(tenant, reason) {
 function clearNumberProvisionSkip(tenant) {
   tenant.numberProvisionSkipReason = null;
   tenant.numberProvisionSkipAt = null;
+}
+
+// GP-P3: der Versuchszaehler des automatischen Wiederanlaufs. Gezaehlt werden die
+// terminal 'failed' Nummern-Datensaetze eines Mandanten - genau der Ledger, den jeder
+// Neuanlauf verlaengert: er legt eine NEUE numberId mit frischen Idempotenz-Schluesseln
+// an, und occupiesCapacity zaehlt 'failed' nicht zur Cap, also greift
+// MAX_NUMBERS_PER_TENANT hier nie. Reine Query, kein IO. KEIN zweiter Zaehler daneben
+// (G5): eine zweite Buchfuehrung ueber dieselbe Tatsache koennte von ihr abdriften.
+// Parameter bewusst 'state'/'number' statt der Datei-Kurzform 's'/'n': die Kurznamen
+// sind in dieser Datei Altlast (eslint id-length, eslint-legacy-exceptions.json) - neuer
+// Code vergroessert sie nicht.
+export function failedNumberCount(state, tenantId) {
+  return state.numbers.filter(
+    (number) => number.tenantId === tenantId && number.status === NUMBER_STATUS.FAILED,
+  ).length;
+}
+
+// GP-P3: terminaler Uebergang bei erschoepftem Deckel - derselbe Skip-Marker, den
+// requestNumber fuer global_cap nutzt (bereits persistiert, JSON-Spiegel UND
+// number_provision_skip_reason in Postgres). Idempotent (zweiter Aufruf -> changed:false,
+// kein unnoetiges save). Der Rueckweg bleibt offen: requestNumber raeumt den Marker bei
+// jedem erfolgreichen Anlauf ueber clearNumberProvisionSkip ab. Reine Mutation, kein IO
+// (Wrapper saved bei changed). Nebeneffekt im Namen (N7).
+export function markTenantNeedsManualReconcile(state, tenantId) {
+  const tenant = findTenant(state, tenantId);
+  if (!tenant || tenant.numberProvisionSkipReason === NEEDS_MANUAL_RECONCILE_REASON)
+    return { tenant: tenant ?? null, changed: false };
+  markNumberProvisionSkipped(tenant, NEEDS_MANUAL_RECONCILE_REASON);
+  return { tenant, changed: true };
 }
 
 // Fragt eine neue Nummer fuer einen Tenant an (Onboarding, ZAHLUNGSFREI). Die

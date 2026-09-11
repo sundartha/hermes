@@ -1,7 +1,7 @@
 // GAP-04: die Gruende, mit denen triggerTenantProvisioning antwortet - EINE Quelle
 // (G25/G5) statt verstreuter String-Literale im Orchestrator und in der Aktivierung.
 // Rein, kein IO.
-import { REQUEST_NUMBER_REASON } from "../store/defaults.js";
+import { NEEDS_MANUAL_RECONCILE_REASON, REQUEST_NUMBER_REASON } from "../store/defaults.js";
 
 export const PROVISION_REASON = Object.freeze({
   QUEUED: "queued",
@@ -13,7 +13,9 @@ export const PROVISION_REASON = Object.freeze({
   TENANT_CAP: REQUEST_NUMBER_REASON.TENANT_CAP,
   GLOBAL_CAP: REQUEST_NUMBER_REASON.GLOBAL_CAP,
   PERSIST_ERROR: "persist_error",
-  NEEDS_MANUAL_RECONCILE: "needs_manual_reconcile",
+  // GP-P3: ebenfalls byte-identisch zur SSoT in store/defaults.js - denselben Grund
+  // liefern resolveProvisionRetry UND der erschoepfte Wiederanlauf (G5).
+  NEEDS_MANUAL_RECONCILE: NEEDS_MANUAL_RECONCILE_REASON,
 });
 
 // Gruende, die die Aktivierung freigeben. ALREADY_PROVISIONED kommt als {ok:false} zurueck,

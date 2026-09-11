@@ -70,7 +70,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // den Weltdefault-Flip, s. src/store/defaults.js) -> 14.
   // OUTBOUND-E1: platformAniE164 ergaenzt (Plattform-Absendernummer, aus der der Boot die
   // Plattform-Nummern-Bindung ableitet) -> 15.
-  provisioning: 15,
+  // GP-P3: provisioningRetryMaxAttempts ergaenzt (Versuchsdeckel des automatischen
+  // Wiederanlaufs nach Kartenwechsel) -> 16.
+  provisioning: 16,
   // 312k-Phase 4: workosManagementApiKey ergaenzt (eigener Schluessel fuer die WorkOS-
   // Nutzerloeschung beim Vertragsende, getrennt vom Anmeldeschluessel oidcClientSecret) -> 16.
   auth: 16,
@@ -172,7 +174,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // aus und schrieben BEIDE "-> 185". Git hat die identische Zahlzeile stillschweigend
 // zusammengefuehrt - die Summe war dadurch um 2 zu niedrig. Gemessen, nicht gerechnet.
 // GP-P0: paidWithoutNumberGraceMs (billing) ergaenzt -> 188.
-const EXPECTED_TOTAL_KEYS = 188;
+// GP-P3: provisioningRetryMaxAttempts (provisioning) ergaenzt -> 189.
+const EXPECTED_TOTAL_KEYS = 189;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -323,7 +326,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // primitiv (kein Array/nested Objekt) -> 175. Zur doppelten Zaehlung s. den Hinweis
   // bei EXPECTED_TOTAL_KEYS.
   // GP-P0: paidWithoutNumberGraceMs ist primitiv (Zahl, kein Array/nested Objekt) -> 176.
-  const EXPECTED_PRIMITIVE_LEAVES = 176;
+  // GP-P3: provisioningRetryMaxAttempts ist primitiv (Zahl, kein Array/nested Objekt) -> 177.
+  const EXPECTED_PRIMITIVE_LEAVES = 177;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

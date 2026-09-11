@@ -135,6 +135,13 @@ export const NUMBER_HOLD_REASON = Object.freeze({
 // nicht Teil dieser Phase.
 export const GLOBAL_CAP_REASON = "global_cap";
 
+// GP-P3: terminaler Skip-Grund am Tenant - der automatische Wiederanlauf hat seinen
+// Versuchsdeckel (PROVISIONING_RETRY_MAX_ATTEMPTS) erschoepft und uebergibt an den
+// Handbetrieb (POST /api/onboard/retry, admin-only). Wert identisch zum bereits
+// bestehenden Rueckgabegrund von resolveProvisionRetry - EINE Quelle statt dreier
+// getippter Literale (G25/G5).
+export const NEEDS_MANUAL_RECONCILE_REASON = "needs_manual_reconcile";
+
 // Skip-Gruende von requestNumber() als Enum (G25/G11): EINE Quelle statt verstreuter
 // String-Literale in state-ops.js. GLOBAL_CAP bleibt der bestehende GLOBAL_CAP_REASON-
 // Export (kein Duplikat, Wert identisch).

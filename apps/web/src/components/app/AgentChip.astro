@@ -29,6 +29,9 @@
       <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
       <span id="agent-number" class="agent-chip__number"></span>
     </span>
+    <!-- GP-P3: Aktion zum gescheiterten Nummern-Setup (Kartenwechsel). Label wird
+         ausschliesslich per textContent gesetzt (XSS), Sichtbarkeit per .hidden. -->
+    <button id="agent-number-action" class="agent-chip__action" type="button" hidden></button>
   </span>
   <button
     id="agent-copy"
@@ -56,7 +59,9 @@
     AUTH_EVENT,
     agentInfo,
     isAgentLive,
+    numberPlaceholderAction,
     numberPlaceholderText,
+    startBillingSetupCheckout,
   } from "../../lib/api.js";
   import { t } from "../../lib/i18n.js";
 
@@ -67,6 +72,7 @@
   const chipEl = document.getElementById("agent-chip");
   const dotEl = document.getElementById("agent-dot");
   const numberEl = document.getElementById("agent-number");
+  const actionEl = document.getElementById("agent-number-action");
   const copyBtn = document.getElementById("agent-copy");
   const copyLabelEl = document.getElementById("agent-copy-label");
 
@@ -79,12 +85,19 @@
     // Werte weiter ausschliesslich via textContent (XSS).
     numberEl.textContent = number || numberPlaceholderText(data);
     dotEl.classList.toggle(DOT_OFF_CLASS, !isAgentLive(data));
+    // GP-P3: die failed-Nummer bekommt einen Knopf auf die BESTEHENDE Karten-Erfassung
+    // (kein neuer Endpunkt). Label per textContent (XSS), Sichtbarkeit per .hidden.
+    const action = numberPlaceholderAction(data);
+    actionEl.hidden = !action;
+    if (action) actionEl.textContent = action.label;
     chipEl.hidden = false;
   }
 
   // Nicht eingeloggt -> Chip verstecken UND leeren (kein stale Tenant-Datum).
   function clearChip() {
     numberEl.textContent = "";
+    actionEl.hidden = true;
+    actionEl.textContent = "";
     dotEl.classList.add(DOT_OFF_CLASS);
     chipEl.hidden = true;
   }
@@ -147,4 +160,19 @@
   }
 
   copyBtn.addEventListener("click", copyNumber);
+
+  // GP-P3: fuehrt zur bestehenden Stripe-Checkout-Session (setup-mode) - dieselbe, die
+  // die Billing-Insel nutzt. Doppelklick-Schutz ueber disabled; scheitert der Start,
+  // wird der Knopf wieder bedienbar (KEIN neuer Fehlertext-Kanal - der ausfuehrliche
+  // Pfad mit Fehlermeldung bleibt die BillingIsland).
+  async function startCardUpdate() {
+    actionEl.disabled = true;
+    try {
+      window.location.assign(await startBillingSetupCheckout());
+    } catch {
+      actionEl.disabled = false;
+    }
+  }
+
+  actionEl.addEventListener("click", startCardUpdate);
 </script>

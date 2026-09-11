@@ -30,6 +30,7 @@ import {
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.js";
 import { provisionAuditDetail } from "./billing/provision-outcome.js";
+import { retriggerProvisioningAfterCardBind } from "./billing/provision-retry.js";
 import {
   publicCall,
   activeNumberFor,
@@ -260,6 +261,30 @@ const billingUnavailable = (res) => res.status(502).json({ error: "billing_unava
 // 312k-Phase 5: mailer ist OPTIONAL injiziert (Default null -> attemptCancellationMailConfirm
 // erkennt "kein Mailer konstruiert" fail-soft, Muster workos in contract-end-cleanup.js).
 // NUR die cancel-Route greift darauf zu (resume bekommt bewusst KEINE Mail, s. Auftrag).
+// GP-P3: Nachlauf der reinen Karten-Rueckkehr, nachdem die Karte gebunden ist. Zwei
+// Schritte auf EINER Abstraktionsebene: das gescheiterte Nummern-Provisioning wieder
+// anstossen und den Ausgang dieser Entscheidung auditieren (ohne ihn waere im Betrieb
+// nicht unterscheidbar, ob angestossen oder stillschweigend nichts getan wurde).
+//
+// Mit dem Anstoss wird aus der reinen Karten-Speicher-Route eine GELDBEWEGENDE - sie
+// traegt das Abo-/KYC-Gate deshalb selbst. Es sitzt im Entscheidungskern
+// (billing/provision-retry.js), zusammen mit dem Versuchsdeckel und der Eignung der
+// frisch gebundenen Zahlungsmethode. Steht der Mandant nicht auf 'failed', ist der
+// ganze Nachlauf ein No-op und die Antwort byte-identisch zum Bestand.
+//
+// Fail-soft: die Karte IST an dieser Stelle gebunden - ein Fehlschlag des Wiederanlaufs
+// darf daraus nie "Karte fehlgeschlagen" machen (retriggerProvisioningAfterCardBind
+// wirft nie). Deshalb steht er NACH der Bindung und nicht in ihr.
+async function finishCardOnlyReturn({ store, provision, config, audit, req, tenant }) {
+  const { outcome } = await retriggerProvisioningAfterCardBind({
+    store,
+    provision,
+    tenantId: tenant,
+    maxAttempts: config.provisioning.provisioningRetryMaxAttempts,
+  });
+  audit("self_service_card_saved", req, `tenant=${tenant} wiederanlauf=${outcome}`);
+}
+
 export function makeSelfServiceRoutes({
   store,
   webAuthMw,
@@ -714,7 +739,9 @@ export function makeSelfServiceRoutes({
             audit("self_service_card_mismatch", req, `tenant=${tenant}`);
             return res.status(403).json({ error: "Customer-Mismatch" });
           }
-          audit("self_service_card_saved", req, `tenant=${tenant}`);
+          // GP-P3: Nachlauf der reinen Karten-Rueckkehr (Wiederanlauf + Audit) - er lebt
+          // als eigene Funktion ausserhalb dieser Router-Fabrik (G30).
+          await finishCardOnlyReturn({ store, provision, config, audit, req, tenant });
           return res.redirect(CHECKOUT_RETURN.CARD_OK); // 302 -> "Karte hinterlegt"
         }
 

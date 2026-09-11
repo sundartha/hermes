@@ -17,7 +17,12 @@ import {
   redriveAgeHoldReason,
 } from "../store/state-ops.js";
 import { languageForCountry } from "../i18n/locales.js";
-import { PROVIDER, NUMBER_STATUS, PROVISIONING_JOB_STATUS } from "../store/defaults.js";
+import {
+  PROVIDER,
+  NUMBER_STATUS,
+  PROVISIONING_JOB_STATUS,
+  NEEDS_MANUAL_RECONCILE_REASON,
+} from "../store/defaults.js";
 // Fix A1 (Runde 1, G5): Kauf-Land-Override-Kombination (forceNumberCountry || homeCountry)
 // lebt EINMAL in geo/resolve.js - dieselbe Funktion nutzt numberSetupFeeCentsFor
 // (self-service-routes.js), keine zweite Inline-Kopie der "wer gewinnt"-Logik hier.
@@ -66,7 +71,7 @@ export function resolveProvisionRetry(s, opts) {
   const stuck = findStuckRequestedProvision(s, opts.tenantId);
   if (!stuck) return requestNumberForPaidTenant(s, opts);
   if (redriveAgeHoldReason(stuck.job, opts.nowMs, opts.maxAgeMs))
-    return { ok: false, reason: "needs_manual_reconcile" };
+    return { ok: false, reason: NEEDS_MANUAL_RECONCILE_REASON };
   return { ok: true, reason: "redrive", numberId: stuck.number.id, jobId: stuck.job.id, job: stuck.job };
 }
 
