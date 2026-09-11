@@ -228,6 +228,14 @@ export function unpricedModels(modelIds, modelPricesUsd) {
   return modelIds.filter((id) => !Object.hasOwn(modelPricesUsd, id));
 }
 
+// GP-P6 (a): Katalog-Slugs OHNE konfigurierte Stripe-Price-Id. Reines Praedikat wie
+// unpricedModels - es entscheidet die Schwere NICHT (das tut assertPricedPlans in
+// boot.js). priceIdOf wird INJIZIERT statt hier importiert: der Guard bleibt damit frei
+// von config/subscribe und ohne Umgebung testbar (Muster unpricedModels(ids, tabelle)).
+export function unpricedPlanSlugs(slugs, priceIdOf) {
+  return slugs.filter((slug) => !priceIdOf(slug));
+}
+
 // B4a: Veralterung der Preisliste sichtbar machen. asOf ist unser Abrufdatum; wird es alt,
 // ist die Tabelle eine ANNAHME ohne Beleg. WARN, NIE fatal - ein Kalendertag darf die
 // Telefonie nicht lahmlegen. Ein Quartal ist derselbe Takt, in dem usdToEur laut

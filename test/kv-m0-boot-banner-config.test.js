@@ -13,7 +13,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { costConfigBannerLines, UNSET_LABEL } from "../src/boot.js";
-import { startServer } from "./helpers.js";
+import { startServer, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 
 // Alles auf Fallback-Werten (= der ausgelieferte Ruhezustand aus config.js).
 function bannerConfig({ billing = {}, llm = {}, voice = {} } = {}) {
@@ -125,6 +125,8 @@ const ALL_SEVEN_SET_ENV = {
   COST_TRUING_REQUIRED_RECORD_TYPES:
     "sip-trunking,call-control,speech-to-text,text-to-speech,recording,ai-voice-assistant",
   ELEVENLABS_PLAY_TTS_ENABLED: "true",
+  // GP-P6: Price-Id je Katalog-Slug ist bei PAYMENT_ENABLED=true Boot-Pflicht (assertPricedPlans).
+  ...PLAN_PRICE_BOOT_ENV,
 };
 
 // BEWUSST kein file-scoped before()/after() fuer einen geteilten Spawn (Muster

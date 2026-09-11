@@ -18,6 +18,7 @@ import { makeOutageWatch } from "../src/telephony/outage-report.js";
 import { makeDriftWatch } from "../src/telephony/outbound-drift-watch.js";
 import { makePaidWithoutNumberWatch } from "../src/billing/paid-without-number-watch.js";
 import { makeProvisionRetryWatch } from "../src/billing/provision-retry-sweep.js";
+import { makePriceDriftWatch } from "../src/billing/price-drift-watch.js";
 import { runSweepTick } from "../src/boot.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
@@ -121,4 +122,14 @@ test("Z-A6: jede von runSweepTick auf provisionRetryWatch gerufene Methode exist
     audit: () => {},
   });
   pruefeVertrag(watch, methoden, "provisionRetryWatch");
+});
+
+test("Z-A7: jede von runSweepTick auf priceDriftWatch gerufene Methode existiert auf makePriceDriftWatch(...) und ist eine Funktion", () => {
+  const methoden = gerufeneMethoden("priceDriftWatch");
+  const watch = makePriceDriftWatch({
+    ...fakeDeps(),
+    config: withConfigNamespaces({ paymentEnabled: false, priceDriftMinIntervalMs: 0 }),
+    lesePreis: async () => ({}),
+  });
+  pruefeVertrag(watch, methoden, "priceDriftWatch");
 });

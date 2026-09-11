@@ -29,6 +29,7 @@ const CUSTOMERS_PATH = "/v1/customers";
 const CHECKOUT_SESSIONS_PATH = "/v1/checkout/sessions";
 const SUBSCRIPTIONS_PATH = "/v1/subscriptions"; // W4: monatliches Recurring
 const PAYMENT_METHODS_PATH = "/v1/payment_methods"; // GP-P2: rein lesend, kein Geld
+const PRICES_PATH = "/v1/prices"; // GP-P6: rein lesend, kein Geld
 const CHECKOUT_SETUP_MODE = "setup"; // Karte speichern OHNE Abbuchung (kein Magic-String)
 const CHECKOUT_SUBSCRIPTION_MODE = "subscription"; // Karte + Abo in EINEM gehosteten Schritt (kein Magic-String)
 // GAP-05 (Sicherungs-Achse): Stripe sammelt im subscription-Mode bei einem Rechnungsbetrag
@@ -427,6 +428,20 @@ export const stripeBilling = {
     assertOk(res, "retrievePaymentMethodType");
     const json = await res.json().catch(() => ({}));
     return paymentMethodTypeOf(json);
+  },
+
+  // GP-P6: liest NUR Betrag und Waehrung eines Stripe-Price (GET /v1/prices/{id}).
+  // Rein lesend, bewegt KEIN Geld. Aus dem Adapter kommen ausschliesslich zwei Skalare
+  // (KEIN Stripe-Objekt). Fehlendes/nicht ganzzahliges unit_amount (gestaffelter oder
+  // metered Price) -> null: der Waechter urteilt dann "unbekannt" statt zu raten (G26).
+  async retrievePriceAmount(priceId) {
+    const res = await fetch(`${url(PRICES_PATH)}/${priceId}`, { method: "GET", headers: authHeaders() });
+    assertOk(res, "retrievePriceAmount");
+    const json = await res.json().catch(() => ({}));
+    return {
+      unitAmountCents: Number.isInteger(json.unit_amount) ? json.unit_amount : null,
+      currency: typeof json.currency === "string" ? json.currency : null,
+    };
   },
 
   // Erstellt ein echtes monatliches Recurring (POST /v1/subscriptions). off_session +

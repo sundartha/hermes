@@ -348,10 +348,20 @@ services:
       - key: COST_CALIBRATION_MIN_SAMPLES
         value: "20"
       # ---- Abo-Buchung (Stripe Recurring, W4) ----
+      # WARNUNG: bleibt einer der beiden Werte leer, waehrend PAYMENT_ENABLED=true,
+      # verweigert der Dienst nach dem Deploy den Start (fatal, boot.js#assertPricedPlans,
+      # GP-P6) - VOR einem Deploy im Dashboard nachsehen.
       - key: STRIPE_STARTER_PRICE_ID
         sync: false
       - key: STRIPE_BUSINESS_PRICE_ID
         sync: false
+      # ---- Preis-Waechter (GP-P6) ----
+      # Vergleicht den angezeigten Katalogpreis mit dem, was Stripe wirklich abbucht.
+      # 0 = der Waechter ist KOMPLETT AUS.
+      - key: PRICE_DRIFT_MIN_INTERVAL_MS
+        value: "86400000"
+      - key: PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER
+        value: "3"
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
       # Self-Heal (Fix B): Wartezeit (ms) vor dem EINEN Checkout-Retry nach Stripe

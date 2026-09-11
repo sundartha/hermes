@@ -8,7 +8,7 @@
 // Reiner Spawn (startServer + seedState), KEIN pglite (Lehre p6a-Stall).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startServer, seedState, seedCall, TELNYX_ASSISTANT_BOOT_ENV } from "./helpers.js";
+import { startServer, seedState, seedCall, TELNYX_ASSISTANT_BOOT_ENV, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID, USAGE_EVENT_KIND } from "../src/store/defaults.js";
 import { findPlan } from "../src/plans.js";
 
@@ -264,6 +264,8 @@ test("Gate 12 Minuten: erschoepftes Plan-Kontingent blockt auch mit Flag an (402
       STRIPE_WEBHOOK_SECRET: "whsec_test_x",
       STRIPE_API_BASE: "http://127.0.0.1:9",
       NUMBER_SETUP_FEE_CENTS: "500",
+      // GP-P6: Price-Id je Katalog-Slug ist bei PAYMENT_ENABLED=true Boot-Pflicht (assertPricedPlans).
+      ...PLAN_PRICE_BOOT_ENV,
     },
     seed,
     identity: SUB_A,

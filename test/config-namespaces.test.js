@@ -63,7 +63,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // EUR-Cent - menge neutral) -> 52.
   // GP-P0 (PLAN-GELDPFAD.md): paidWithoutNumberGraceMs ergaenzt (Frist, ab der ein
   // zahlender Mandant ohne Live-Nummer gemeldet wird) -> 53.
-  billing: 53,
+  // GP-P6 (PLAN-GELDPFAD.md): priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter
+  // ergaenzt (Takt des Preis-Waechters und die Grenze seiner Unwissenheits-Meldung) -> 55.
+  billing: 55,
   // GAP-38 (P7): bootstrapE164 + bootstrapProvider ergaenzt (Deploy-Bootstrap-Parameter,
   // die der Boot statt des entfallenen preDeployCommand liest) -> 13.
   // Review-Fix (P10, Runde 1): worldDefaultLanguageEnabled ergaenzt (Env-Schalter fuer
@@ -176,7 +178,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // GP-P0: paidWithoutNumberGraceMs (billing) ergaenzt -> 188.
 // GP-P3: provisioningRetryMaxAttempts (provisioning) ergaenzt -> 189.
 // GP-P4: provisioningRetryMinIntervalMs (provisioning) ergaenzt -> 190.
-const EXPECTED_TOTAL_KEYS = 190;
+// GP-P6: priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter (billing) ergaenzt -> 192.
+const EXPECTED_TOTAL_KEYS = 192;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -329,7 +332,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // GP-P0: paidWithoutNumberGraceMs ist primitiv (Zahl, kein Array/nested Objekt) -> 176.
   // GP-P3: provisioningRetryMaxAttempts ist primitiv (Zahl, kein Array/nested Objekt) -> 177.
   // GP-P4: provisioningRetryMinIntervalMs ist ebenfalls primitiv (Zahl) -> 178.
-  const EXPECTED_PRIMITIVE_LEAVES = 178;
+  // GP-P6: priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter sind primitiv (Zahlen) -> 180.
+  const EXPECTED_PRIMITIVE_LEAVES = 180;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

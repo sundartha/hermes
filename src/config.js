@@ -1494,11 +1494,31 @@ const rawConfig = {
     min: 0,
   }),
   // ---- Abo-Buchung (Stripe Recurring, W4) ----
-  // Stripe-Price-Ids (recurring monatlich, EUR) je Tier. Leer = Tier nicht buchbar
-  // (priceIdForPlan -> null -> Route 500, KEIN Boot-Stop). Opake price_-Referenzen,
+  // Stripe-Price-Ids (recurring monatlich, EUR) je Tier. Leer ist seit GP-P6 bei
+  // PAYMENT_ENABLED=true ein BOOT-REFUSAL (boot.js#assertPricedPlans gegen PLAN_CATALOG);
+  // bei PAYMENT_ENABLED=false bleibt leer folgenlos. Opake price_-Referenzen,
   // KEINE Secrets.
   stripeStarterPriceId: process.env.STRIPE_STARTER_PRICE_ID || "",
   stripeBusinessPriceId: process.env.STRIPE_BUSINESS_PRICE_ID || "",
+  // ---- Preis-Waechter (GP-P6, PLAN-GELDPFAD.md) ----
+  // Mindestabstand zweier Preis-Pruefungen. Der Waechter haengt im Stunden-Sweep, prueft
+  // aber nur einmal am Tag (Owner-Entscheidung 11.09.2026, Frage 12): Stripe-Preise
+  // aendern sich seltener als Telefonie-Konfiguration, und jede Pruefung ist ein
+  // Anbieter-Aufruf. 0 = der Waechter ist KOMPLETT AUS (Rollback-Hebel, Muster
+  // outboundDriftMinIntervalMs).
+  priceDriftMinIntervalMs: numEnv("PRICE_DRIFT_MIN_INTERVAL_MS", process.env.PRICE_DRIFT_MIN_INTERVAL_MS, {
+    fallback: MS_PER_DAY,
+    min: 0,
+  }),
+  // Aufeinanderfolgende Laeufe OHNE Urteil (Netzfehler/fehlendes Lese-Scope), nach denen
+  // der Waechter seine eigene Unwissenheit meldet - GENAU EINMAL. Ein einzelner
+  // Netzfehler ist keine Betreiber-Meldung wert, ein dauerhaft fehlendes Scope sehr wohl
+  // (Owner-Frage 13). 0 = Unwissenheits-Eskalation AUS.
+  priceDriftUnknownEscalateAfter: numEnv(
+    "PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER",
+    process.env.PRICE_DRIFT_UNKNOWN_ESCALATE_AFTER,
+    { fallback: 3, min: 0 },
+  ),
   // Stripe-Webhook-Signing-Secret (whsec_...). SECRET - nie loggen/leaken. Leer +
   // PAYMENT_ENABLED -> assertConfig Boot-Refusal (Webhook fail-closed unverifizierbar).
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
@@ -2301,7 +2321,7 @@ function guardedConfig(target, path = "config") {
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "csrfEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
-  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
+  billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso", "priceDriftMinIntervalMs", "priceDriftUnknownEscalateAfter"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "provisioningRetryMaxAttempts", "provisioningRetryMinIntervalMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
@@ -2549,8 +2569,10 @@ const REQUIRED_CONFIG = Object.freeze([
   {
     // W4: das Webhook-Signing-Secret ist sicherheitskritisch (ohne ist der Stripe-Webhook
     // fail-closed unverifizierbar -> kein Abo-Lifecycle). Boot-Pflicht bei aktivem Payment
-    // (Muster STRIPE_SECRET_KEY). Die Price-Ids sind BEWUSST keine Boot-Pflicht: ein Tier
-    // darf unbuchbar bleiben (Route-500), das stoppt den Boot nicht.
+    // (Muster STRIPE_SECRET_KEY). Die Price-Ids stehen NICHT in dieser Tabelle, sind seit
+    // GP-P6 aber sehr wohl Boot-Pflicht bei aktivem Payment - geprueft in
+    // boot.js#assertPricedPlans gegen PLAN_CATALOG, nicht hier (die Slug->Price-Zuordnung
+    // lebt in billing/subscribe.js, G13).
     fehlt: () => config.billing.paymentEnabled && !config.billing.stripeWebhookSecret,
     name: "STRIPE_WEBHOOK_SECRET (weil PAYMENT_ENABLED=true)",
   },

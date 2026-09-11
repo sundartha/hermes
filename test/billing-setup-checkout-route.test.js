@@ -10,7 +10,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { startServer, seedState } from "./helpers.js";
+import { startServer, seedState, PLAN_PRICE_BOOT_ENV } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const SUB_A = "sub-a";
@@ -64,6 +64,8 @@ const PAY_ENV = (stripeUrl) => ({
   STRIPE_WEBHOOK_SECRET: "whsec_test_x",
   STRIPE_API_BASE: stripeUrl,
   NUMBER_SETUP_FEE_CENTS: "500",
+  // GP-P6: Price-Id je Katalog-Slug ist bei PAYMENT_ENABLED=true Boot-Pflicht (assertPricedPlans).
+  ...PLAN_PRICE_BOOT_ENV,
 });
 
 const postAs = (srv, idpSub, path) =>
