@@ -40,8 +40,8 @@ test("E3B-01: boot.js reicht outageWatch aus dem deps-Buendel an runSweepTick we
     "runSweepTick muss outageWatch.runRecoverySweep() tatsaechlich aufrufen");
   // Der Aufrufer von runSweepTick (der Stunden-Timer) muss outageWatch aus SEINEM
   // eigenen deps-Buendel weiterreichen, nicht selbst neu bauen (EINE Instanz, INV-7).
-  assert.match(bootSrc, /runSweepTick\({\s*costTruing,\s*provisioning,\s*costCrossCheck,\s*outageWatch,\s*driftWatch,\s*paidWithoutNumberWatch\s*}\)/,
-    "der Sweep-Timer muss outageWatch, driftWatch UND paidWithoutNumberWatch an runSweepTick durchreichen");
+  assert.match(bootSrc, /runSweepTick\({\s*costTruing,\s*provisioning,\s*costCrossCheck,\s*outageWatch,\s*driftWatch,\s*paidWithoutNumberWatch,\s*provisionRetryWatch\s*}\)/,
+    "der Sweep-Timer muss outageWatch, driftWatch, paidWithoutNumberWatch UND provisionRetryWatch an runSweepTick durchreichen");
 });
 
 // OUTBOUND-E4: zweiter Verdrahtungspunkt, identisches Muster - der Drift-Waechter ist der
@@ -121,4 +121,32 @@ test("GP-P0: boot.js destrukturiert paidWithoutNumberWatch und ruft runPaidWitho
     "runSweepTick muss paidWithoutNumberWatch.runPaidWithoutNumberSweep() tatsaechlich aufrufen (achter Zweig)");
   assert.match(bootSrc, /export async function bootServer\({[^]*?\bpaidWithoutNumberWatch,[^]*?}\)/,
     "bootServer muss paidWithoutNumberWatch aus dem deps-Buendel destrukturieren");
+});
+
+// GP-P4: dritter Verdrahtungspunkt, identisches Muster (GP-P0 oben) - der zeitgesteuerte
+// Wiederanlauf ist der NEUNTE Sweep-Zweig. Er wird NACH dem Provisioning-Orchestrator
+// konstruiert (er braucht triggerTenantProvisioning); faellt eine der Zeilen weg, wirft
+// runSweepTick beim naechsten Boot synchron auf undefined.
+test("GP-P4: server.js baut makeProvisionRetryWatch und reicht provisionRetryWatch ins deps-Buendel durch", () => {
+  assert.match(
+    serverSrc,
+    /import\s*{\s*makeProvisionRetryWatch\s*}\s*from\s*"\.\/billing\/provision-retry-sweep\.js"/,
+    "makeProvisionRetryWatch muss importiert sein",
+  );
+  assert.match(serverSrc, /const provisionRetryWatch = makeProvisionRetryWatch\(/,
+    "provisionRetryWatch muss EINMAL beim Boot konstruiert werden (Muster paidWithoutNumberWatch)");
+  const depsStart = serverSrc.indexOf("const deps = {");
+  assert.notEqual(depsStart, -1, "deps-Buendel nicht gefunden");
+  const depsEnd = serverSrc.indexOf("};", depsStart);
+  const depsBlock = serverSrc.slice(depsStart, depsEnd);
+  assert.match(depsBlock, /\bprovisionRetryWatch,/, "provisionRetryWatch fehlt im deps-Buendel");
+});
+
+test("GP-P4: boot.js destrukturiert provisionRetryWatch und ruft runProvisionRetrySweep() (neunter Zweig)", () => {
+  assert.match(bootSrc, /function runSweepTick\({[^}]*\bprovisionRetryWatch\b[^}]*}\)/,
+    "runSweepTick muss provisionRetryWatch destrukturieren");
+  assert.match(bootSrc, /provisionRetryWatch\s*\n\s*\.runProvisionRetrySweep\(\)/,
+    "runSweepTick muss provisionRetryWatch.runProvisionRetrySweep() tatsaechlich aufrufen (neunter Zweig)");
+  assert.match(bootSrc, /export async function bootServer\({[^]*?\bprovisionRetryWatch,[^]*?}\)/,
+    "bootServer muss provisionRetryWatch aus dem deps-Buendel destrukturieren");
 });

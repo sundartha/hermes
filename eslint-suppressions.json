@@ -3140,11 +3140,6 @@
       "count": 8
     }
   },
-  "test/kv-m4-monthly-cross-check.test.js": {
-    "id-length": {
-      "count": 5
-    }
-  },
   "test/kv-p0-flush-epoch.test.js": {
     "id-length": {
       "count": 16

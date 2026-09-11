@@ -21,6 +21,7 @@ import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";
 import { makeDriftWatch } from "./telephony/outbound-drift-watch.js";
 import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.js";
+import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { metrics } from "./metrics.js";
@@ -294,6 +295,17 @@ const provisioning = makeProvisioningOrchestrator({
   findNumber,
 });
 
+// GP-P4 (PLAN-GELDPFAD.md 2): neunter Zweig des Stunden-Sweeps. HIER und nicht oben bei
+// paidWithoutNumberWatch: der Zweig braucht triggerTenantProvisioning, das erst mit dem
+// Orchestrator darueber existiert. durableAudit statt audit - ein automatischer
+// Kaufanstoss muss die Log-Rotation ueberleben (Muster paidWithoutNumberWatch).
+const provisionRetryWatch = makeProvisionRetryWatch({
+  store,
+  config,
+  provision: provisioning.triggerTenantProvisioning,
+  audit: durableAudit,
+});
+
 // stab-p9 (Kosten-Notaus): EIN ConversationWatchdog, geteilt von Shim (Loop-Guard +
 // Dead-Air-Feed pro Turn) und Call-Control-Ingest (Dead-Air armieren bei ai_assistant_start,
 // stoppen bei hangup). Terminierung ueber das GETEILTE Call-Control-Hangup-Primitiv (auch
@@ -372,6 +384,7 @@ const deps = {
   outageWatch,
   driftWatch,
   paidWithoutNumberWatch,
+  provisionRetryWatch,
   messaging,
   consultDelivery,
   elevenLabsOutbound,
