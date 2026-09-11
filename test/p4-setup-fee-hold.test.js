@@ -21,7 +21,11 @@ const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 500, 
 
 function tenantWithCard(s, id, patch = {}) {
   registerTenant(s, id);
-  setTenantStripe(s, id, { customerId: `cus_${id}`, paymentMethodId: `pm_${id}` });
+  setTenantStripe(s, id, {
+    customerId: `cus_${id}`,
+    paymentMethodId: `pm_${id}`,
+    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+  });
   if (Object.keys(patch).length) setTenantSubscription(s, id, patch);
   return requestNumber(s, { tenantId: id, ...CAPS }).number;
 }

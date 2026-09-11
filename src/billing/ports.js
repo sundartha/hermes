@@ -55,6 +55,7 @@
  * @typedef {Object} SubscriptionCheckoutOutcome
  * @property {string} customerId          - opake Stripe-Customer-Referenz (cus_...)
  * @property {string} paymentMethodId     - opake payment_method-Referenz (pm_...)
+ * @property {string|null} paymentMethodType - Stripe-Enum der Zahlungsmethode ('card', 'link', ...); unexpandierte Antwort -> null
  * @property {string} subscriptionId      - opake Stripe-Subscription-Referenz (sub_...)
  * @property {number} currentPeriodStart  - Beginn der laufenden Abrechnungsperiode (Unix-Sekunden)
  * @property {number} currentPeriodEnd    - Ende der laufenden Abrechnungsperiode (Unix-Sekunden)
@@ -110,6 +111,7 @@
  * @typedef {Object} CheckoutResult
  * @property {string} customerId       - opake Stripe-Customer-Referenz (cus_...)
  * @property {string} paymentMethodId  - opake payment_method-Referenz (pm_...)
+ * @property {string|null} paymentMethodType - Stripe-Enum der Zahlungsmethode ('card', 'link', ...); unexpandierte Antwort -> null
  */
 
 /**
@@ -147,6 +149,10 @@
  *   Liest customer + payment_method + Abo-Referenzen aus einer ABGESCHLOSSENEN
  *   subscription-Session. Fehlt die Subscription oder das payment_method -> wirft
  *   (fail-closed, Muster getCheckoutSessionResult). KEIN Stripe-Objekt verlaesst den Adapter.
+ * @property {(paymentMethodId: string) => Promise<string|null>} retrievePaymentMethodType
+ *   GP-P2: liest NUR den Enum-Typ einer gespeicherten Zahlungsmethode (rein lesend, kein
+ *   Geld). Gebraucht vom Webhook-Bindepfad, dessen Ereignis den Typ nie traegt. KEIN
+ *   Stripe-Objekt verlaesst den Adapter (billing_details bleiben drinnen).
  * @property {(params: SubscribeParams) => Promise<SubscribeResult>} createSubscription
  *   Erstellt ein echtes monatliches Recurring (Stripe POST /v1/subscriptions). Loest
  *   ECHTES Geld aus (Erstzahlung off_session). Nur subscriptionId + currentPeriodEnd +

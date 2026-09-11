@@ -359,7 +359,11 @@ function numberMonthBelege(number) {
 test("GAP-11: Hold und Capture tragen denselben Betrag (eine Quelle) und ohne gelernten Preis entsteht KEIN Beleg (fail-closed)", async () => {
   const country = "DE";
   const { s, numberId } = seedRequested(country);
-  setTenantStripe(s, TENANT_ID, { customerId: "cus_gap11", paymentMethodId: "pm_gap11" });
+  setTenantStripe(s, TENANT_ID, {
+    customerId: "cus_gap11",
+    paymentMethodId: "pm_gap11",
+    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+  });
   const queue = makeMemoryQueue();
   const prov = fakeProvisioner();
   const billing = fakeSetupFeeBilling();
@@ -416,7 +420,11 @@ function providerPrice(overrides = {}) {
 // den uebergebenen Provider-Preis traegt (price=null -> Antwort ohne Preis, Bestandsform).
 async function provisionWithProviderPrice(price) {
   const { s, numberId } = seedRequested("DE");
-  setTenantStripe(s, TENANT_ID, { customerId: "cus_p4", paymentMethodId: "pm_p4" });
+  setTenantStripe(s, TENANT_ID, {
+    customerId: "cus_p4",
+    paymentMethodId: "pm_p4",
+    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+  });
   const queue = makeMemoryQueue();
   const prov = fakeProvisioner({
     async searchNumbers() {

@@ -63,6 +63,7 @@ import {
   holdAmountForProviderPrice,
   monthlyCostCentsForProviderPrice,
 } from "./telephony/provisioning-geo.js";
+import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.js";
 
 // R5 (Phase P7): statt limit:1 mehrere Kandidaten holen und den ersten verfuegbaren
 // waehlen. Eine einzelne Treffer-Anfrage scheitert haeufiger an einer zwischenzeitlich
@@ -217,14 +218,31 @@ async function findPurchasableNumber(state, numberId, { provisioner, countryCode
   }
 }
 
-// Fail-closed-Gate VOR jedem Provider-Call: ohne hinterlegte Karte kein Kauf und keine
-// Preis-Suche. EINE Stelle, die tenantStripe liest (G5); der Hold bekommt das Ergebnis
-// gereicht. Fehlermeldung woertlich wie bisher (Bestandstest pinnt sie).
+// Fail-closed-Gate VOR jedem Provider-Call: ohne GEEIGNETE Zahlungsmethode kein Kauf und
+// keine Preis-Suche. EINE Stelle, die tenantStripe liest (G5); der Hold bekommt das
+// Ergebnis gereicht. Zwei getrennte Gruende, zwei getrennte Meldungen:
+//   1. gar nichts hinterlegt - Meldung woertlich wie bisher (Bestandstest pinnt sie);
+//   2. GP-P2 (Vorfall 11.09.2026): hinterlegt, aber ohne getrennte Autorisierung. Der
+//      Mandant des Vorfalls trug eine Zahlungsmethode vom Typ 'link'; sie bezahlte das
+//      Abo (4,99 EUR) und lehnte sechs Sekunden spaeter den 92-Cent-Hold ab. Dieser Fall
+//      endete bisher NACH dem Geld-Call in einem generischen insufficient_funds - er endet
+//      jetzt VOR jedem Anbieter-Kontakt, mit dem Typ als Grund. Unbekannter Typ (null,
+//      jeder Bestands-Mandant ohne Backfill) faellt mit durch: Owner-Entscheidung
+//      2026-09-11, Frage 5 - Unbekannt gilt als ungeeignet. Der Rueckweg ist GP-P3.
+// Der Typ wird als Enum in die Meldung uebernommen, nicht als Freitext (GP-P1-Muster:
+// Etikett=Wert); sie landet ueber den Orchestrator dauerhaft in job.lastError.
 function requireTenantCard(state, numberId, tenantId) {
   const card = tenantStripe(state, tenantId);
   if (!card.customerId || !card.paymentMethodId) {
     failNumber(state, numberId);
     throw new Error(`provisionNumber: Tenant ${tenantId} hat kein hinterlegtes Zahlungsmittel`);
+  }
+  if (!isHoldCapablePaymentMethodType(card.paymentMethodType)) {
+    failNumber(state, numberId);
+    throw new Error(
+      `provisionNumber: Tenant ${tenantId} hat ein Zahlungsmittel ohne getrennte Autorisierung ` +
+        `(payment_method_type=${card.paymentMethodType ?? "unbekannt"})`,
+    );
   }
   return card;
 }

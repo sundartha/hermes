@@ -31,7 +31,11 @@ const BOUND_E164 = "+4915799990002";
 function seedRequested() {
   const state = makeDefaultState();
   registerTenant(state, "t_user1");
-  setTenantStripe(state, "t_user1", { customerId: "cus_1", paymentMethodId: "pm_1" });
+  setTenantStripe(state, "t_user1", {
+    customerId: "cus_1",
+    paymentMethodId: "pm_1",
+    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+  });
   const { number } = requestNumber(state, { tenantId: "t_user1", ...CAPS });
   return { state, numberId: number.id };
 }

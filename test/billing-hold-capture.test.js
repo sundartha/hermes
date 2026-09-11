@@ -26,7 +26,13 @@ const ARGS = { countryCode: "DE", connectionId: "conn_1", holdAmountCents: 500, 
 function seedRequested({ cardless = false } = {}) {
   const s = makeDefaultState();
   registerTenant(s, "t_user1");
-  if (!cardless) setTenantStripe(s, "t_user1", { customerId: "cus_1", paymentMethodId: "pm_1" });
+  if (!cardless)
+    // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+    setTenantStripe(s, "t_user1", {
+      customerId: "cus_1",
+      paymentMethodId: "pm_1",
+      paymentMethodType: "card",
+    });
   const { number } = requestNumber(s, { tenantId: "t_user1", ...CAPS });
   return { s, numberId: number.id };
 }

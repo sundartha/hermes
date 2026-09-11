@@ -12,6 +12,10 @@
 // und billingErrorFor in stripe.js (G11). Das Feld am Fehler heisst dagegen bewusst
 // anbieter-neutral: der Aufrufer unterscheidet Ablehnungsklassen, nicht Anbieter.
 
+// G5: die Enum-Form ist nicht decline-spezifisch - GP-P2 prueft den Zahlungsmethoden-
+// Typ mit derselben Verengung (provider-enum.js).
+import { enumOrNull } from "./provider-enum.js";
+
 // Genau drei Felder, feste Enums, NIE Freitext, NIE verschachtelte Objekte: error.
 // payment_method / billing_details / payment_intent tragen Name, E-Mail und Anschrift des
 // Kunden (belegt im Vorfall vom 11.09.2026). Schluessel = Feld der schmalen Sicht,
@@ -21,21 +25,6 @@ const DECLINE_FIELDS = Object.freeze({
   declineCode: "decline_code",
   type: "type",
 });
-
-// Was als Enum durchgeht. Stripe-Codes sind Kleinbuchstaben/Ziffern/Unterstrich
-// (card_declined, insufficient_funds, invalid_request_error). Alles andere - eine
-// E-Mail, ein Satz, ein Objekt - faellt auf null: die PII-Zusage dieser Phase haengt
-// damit an der FORM, nicht an der Annahme, der Anbieter halte sich an sein Vokabular.
-const ENUM_TOKEN = /^[a-z0-9_]+$/;
-const MAX_ENUM_LENGTH = 64;
-
-const enumOrNull = (wert) =>
-  typeof wert === "string" &&
-  wert.length > 0 &&
-  wert.length <= MAX_ENUM_LENGTH &&
-  ENUM_TOKEN.test(wert)
-    ? wert
-    : null;
 
 // Erhebt den Ablehnungsgrund GENAU EINMAL aus dem Fehlerkoerper: das Enum-Trio
 // code/decline_code/type, sonst nichts. Liefert IMMER alle drei Felder (fehlend/kein
