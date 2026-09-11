@@ -20,6 +20,7 @@
 import { config } from "../config.js";
 import { paymentMethodIdOf, periodFieldsOf } from "./webhook.js"; // G5: EINE Normalisierung (pm + Perioden)
 import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.js";
+import { declineOf, declineDetail, attachProviderDecline } from "./decline.js"; // GP-P1: EINE Quelle des Ablehnungsgrunds
 
 const PAYMENT_INTENTS_PATH = "/v1/payment_intents";
 const METER_EVENTS_PATH = "/v1/billing/meter_events";
@@ -137,8 +138,11 @@ async function readErrorBody(res) {
 // Klassifikation nach AUFRUFER-Sicht (P9): der Stripe-Fehlercode entscheidet ueber den
 // Port-Fehlertyp, nicht die technische Herkunft. Erwartet den GEPARSTEN Fehlerkoerper -
 // dieselbe Form wie isAlreadyCapturedError (G11). Kennt der Adapter den Fall nicht, bleibt
-// es der generische Error. Die Message ist in allen drei Zweigen dieselbe, damit sich der
-// Log-Output nicht nach Fehlertyp veraendert.
+// es der generische Error. Alle drei Zweige bekommen DIESELBE, bereits fertige Meldung
+// uebergeben - diese Funktion baut keinen Text. Seit GP-P1 traegt diese Meldung den
+// Ablehnungsgrund als Enum-Anhang; der Log-Output unterscheidet sich also sehr wohl nach
+// GRUND (das ist der Zweck). Er ist trotzdem KEIN Steuerkanal: wer den Grund auswerten
+// will, liest err.providerDecline (Waechter in test/gp-p1-ablehnungsgrund.test.js).
 function billingErrorFor(errorBody, message) {
   const err = (errorBody && errorBody.error) || {};
   // PAY-19: die Bank verlangt 3-D Secure. Die Karte ist gueltig - ein Retry derselben
@@ -153,22 +157,39 @@ function billingErrorFor(errorBody, message) {
   return new Error(message);
 }
 
+// GP-P1: der Bauplatz beider klassifizierenden Stufen - EINE Stelle, an der der
+// Ablehnungsgrund erhoben, angehaengt und ans Fehlerobjekt geheftet wird (G5). `detail`
+// ist der zusaetzliche Diagnose-Text der jeweiligen Stufe: Stufe 2 gibt keinen, Stufe 3
+// den Provider-Rohtext. Der Enum-Anhang steht VOR dem Rohtext, damit der Grund auch in
+// einer abgeschnittenen Log-Zeile noch lesbar ist. EIN Objekt-Argument (F1).
+function classifiedError({ body, op, status, detail = "" }) {
+  const decline = declineOf(body);
+  const nachtrag = [declineDetail(decline), detail].filter(Boolean).join(" ");
+  return attachProviderDecline(billingErrorFor(body, failureMessage(op, status, nachtrag)), decline);
+}
+
 // Stufe 2: wie assertOk, aber der Stripe-Fehlercode bestimmt den Port-Fehlertyp. Der
-// Provider-Rohkoerper bleibt AUSSEN VOR - nur Code/Typ werden uebernommen (Regel 4).
+// Provider-Rohkoerper bleibt AUSSEN VOR; uebernommen wird GENAU das Enum-Trio
+// code/decline_code/type. Regel 4 schuetzt Secrets, und die liegen ausschliesslich im
+// Request-Header (s. authHeaders) - der Grund, den Grund wegzuwerfen, war nie Regel 4,
+// sondern die Sorge um Kundendaten im Koerper. Die trifft die verschachtelten Objekte
+// (payment_method/billing_details), nicht die drei Enums (GP-P1).
 // Fuer Geld-Calls, deren Aufrufer den Erholungspfad unterscheiden koennen muss.
 async function assertOkClassified(res, op) {
   if (res.ok) return;
   const { body } = await readErrorBody(res);
-  throw billingErrorFor(body, failureMessage(op, res.status));
+  throw classifiedError({ body, op, status: res.status });
 }
 
-// Stufe 3: wie assertOkClassified, haengt zusaetzlich den Provider-Rohtext an die Diagnose
-// (Bestand der Checkout-/Subscription-Calls; der Body enthaelt keine Secrets - sk_/Bearer
-// liegen nur im Request-Header). Body nicht lesbar -> nur Status melden (wie assertOk).
+// Stufe 3: wie assertOkClassified, haengt zusaetzlich den Provider-Rohtext an die Diagnose.
+// Verbliebene Aufrufer sind die beiden Checkout-SESSION-Aufbauten: dort ist noch keine
+// Zahlungsmethode am Vorgang, der Fehlerkoerper traegt also keine Kundendaten. Der
+// Abo-Aufbau (createSubscription) hat diese Stufe mit GP-P1 verlassen - dort lagen sie
+// (Vorfall 11.09.2026). Body nicht lesbar -> nur Status melden (wie assertOk).
 async function assertOkWithDetail(res, op) {
   if (res.ok) return;
   const { text, body } = await readErrorBody(res);
-  throw billingErrorFor(body, failureMessage(op, res.status, text));
+  throw classifiedError({ body, op, status: res.status, detail: text });
 }
 
 const url = (path) => config.billing.stripeApiBase + path;
@@ -397,7 +418,11 @@ export const stripeBilling = {
     });
     body.set("metadata[tenant_ref]", tenantRef);
     const res = await fetch(url(SUBSCRIPTIONS_PATH), { method: "POST", headers, body });
-    await assertOkWithDetail(res, "createSubscription");
+    // GP-P1 (Owner-Entscheidung 2026-09-11, Frage 6): Stufe 2 statt 3. Der 402-Koerper
+    // dieses Calls trug am 11.09.2026 Name, E-Mail und Anschrift des Kunden und landete
+    // ueber err.message in console.error (self-service-routes.js, asyncBilling). Die
+    // Diagnose bleibt - als Enum-Anhang code/decline_code/type an derselben Meldung.
+    await assertOkClassified(res, "createSubscription");
     const json = await res.json().catch(() => ({}));
     return { subscriptionId: json.id, ...periodFieldsOf(json) };
   },

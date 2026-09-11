@@ -221,9 +221,19 @@ async function setSubscriptionCancellation({ store, billing, tenant, cancel }) {
 // Express 4 leitet abgelehnte Promises aus async-Handlern NICHT an die Fehler-Kette ->
 // ein geworfener Stripe-/Netzwerkfehler liesse die Anfrage HAENGEN (nie ein Response,
 // haengende Verbindung = Verfuegbarkeitsrisiko bei Skala). Dieser Wrapper faengt den
-// Fehler, loggt NUR die Fehlermeldung (op+Status, kein Secret - Regel 4) und ruft einen
-// Responder (JSON 502 bzw. Redirect), sodass IMMER geantwortet wird. Erwartete fachliche
-// Ablehnungen (no_card etc.) laufen NICHT hierueber - die behandelt der Handler selbst.
+// Fehler, loggt err.message und ruft einen Responder (JSON 502 bzw. Redirect), sodass
+// IMMER geantwortet wird. Erwartete fachliche Ablehnungen (no_card etc.) laufen NICHT
+// hierueber - die behandelt der Handler selbst.
+//
+// WAS IN DIESER ZEILE LANDET, GENAU (GP-P1 - der alte Kommentar behauptete pauschal
+// "op+Status, kein Secret" und war fuer die Stufe-3-Aufrufer falsch): Secrets nie, die
+// liegen nur im Request-Header (Regel 4). Der Abo-Aufbau (subscribe -> createSubscription)
+// liefert seit GP-P1 op + HTTP-Status + das Enum-Trio code/decline_code/type - genau die
+// Zeile, die am 11.09.2026 fehlte, ohne die Kundendaten, die damals stattdessen drin
+// standen. VERBLIEBEN: die beiden Checkout-SESSION-Aufbauten (setup-checkout) haengen
+// weiterhin den Provider-Rohtext an - dort ist noch keine Zahlungsmethode am Vorgang,
+// der Koerper traegt also keine Kundendaten. Das ist eine benannte Reichweite, keine
+// Zusage fuer jeden kuenftigen Aufrufer.
 function asyncBilling(fn, onError) {
   return async (req, res) => {
     try {
