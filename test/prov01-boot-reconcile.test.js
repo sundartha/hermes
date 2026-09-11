@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { startServer } from "./helpers.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
 import {
   NUMBER_STATUS,
   TENANT_STATUS,
@@ -120,6 +121,7 @@ function seedStuck(jobOverrides = {}) {
       ownerName: "Uwe Test",
       stripeCustomerId: "cus_1",
       stripePaymentMethodId: "pm_1",
+      stripePaymentMethodType: PAYMENT_METHOD_TYPE_CARD, // GP-P2: Eignungs-Gate braucht den Typ, nicht nur die ID
     },
   ];
   s.numbers = [
