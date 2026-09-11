@@ -3347,6 +3347,16 @@ export function paidWithoutNumberCandidates(state, { nowMs, graceMs, kycMinLevel
   return candidates;
 }
 
+// GP-P4 (PLAN-GELDPFAD.md 2): die Mandantenliste als reine Kennungsliste. Bewusst OHNE
+// Filter: welche Mandanten der zeitgesteuerte Wiederanlauf anstoesst, entscheidet der
+// GEMEINSAME Kern (billing/provision-retry.js resolveAutoProvisionRetry) - ein zweiter
+// Filter hier waere eine zweite Buchfuehrung ueber dieselbe Frage (G5) und koennte von
+// ihm abdriften. Reine Query, kein IO. Liefert Kennungen, KEINE Tenant-Objekte: kein
+// Mandanten-Record verlaesst state-ops.
+export function allTenantIds(state) {
+  return tenantsOf(state).map((tenant) => tenant.id);
+}
+
 // Liest die WorkOS-Identitaet (sub, aus dem verifizierten IdP-Profil beim Login gebunden,
 // s. registerTenant/resolveOrCreateTenant idp_subject) eines Tenants. Reine Query, kein IO.
 // Genutzt vom Vertragsende-Aufraeumen (312k-Phase 4): die Nutzer-Kennung fuer die WorkOS-

@@ -30,7 +30,7 @@ import {
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.js";
 import { provisionAuditDetail } from "./billing/provision-outcome.js";
-import { retriggerProvisioningAfterCardBind } from "./billing/provision-retry.js";
+import { retriggerFailedProvisioning } from "./billing/provision-retry.js";
 import {
   publicCall,
   activeNumberFor,
@@ -273,10 +273,10 @@ const billingUnavailable = (res) => res.status(502).json({ error: "billing_unava
 // ganze Nachlauf ein No-op und die Antwort byte-identisch zum Bestand.
 //
 // Fail-soft: die Karte IST an dieser Stelle gebunden - ein Fehlschlag des Wiederanlaufs
-// darf daraus nie "Karte fehlgeschlagen" machen (retriggerProvisioningAfterCardBind
+// darf daraus nie "Karte fehlgeschlagen" machen (retriggerFailedProvisioning
 // wirft nie). Deshalb steht er NACH der Bindung und nicht in ihr.
 async function finishCardOnlyReturn({ store, provision, config, audit, req, tenant }) {
-  const { outcome } = await retriggerProvisioningAfterCardBind({
+  const { outcome } = await retriggerFailedProvisioning({
     store,
     provision,
     tenantId: tenant,

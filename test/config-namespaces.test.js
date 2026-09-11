@@ -72,7 +72,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // Plattform-Nummern-Bindung ableitet) -> 15.
   // GP-P3: provisioningRetryMaxAttempts ergaenzt (Versuchsdeckel des automatischen
   // Wiederanlaufs nach Kartenwechsel) -> 16.
-  provisioning: 16,
+  provisioning: 17,
   // 312k-Phase 4: workosManagementApiKey ergaenzt (eigener Schluessel fuer die WorkOS-
   // Nutzerloeschung beim Vertragsende, getrennt vom Anmeldeschluessel oidcClientSecret) -> 16.
   auth: 16,
@@ -175,7 +175,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // zusammengefuehrt - die Summe war dadurch um 2 zu niedrig. Gemessen, nicht gerechnet.
 // GP-P0: paidWithoutNumberGraceMs (billing) ergaenzt -> 188.
 // GP-P3: provisioningRetryMaxAttempts (provisioning) ergaenzt -> 189.
-const EXPECTED_TOTAL_KEYS = 189;
+// GP-P4: provisioningRetryMinIntervalMs (provisioning) ergaenzt -> 190.
+const EXPECTED_TOTAL_KEYS = 190;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -327,7 +328,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // bei EXPECTED_TOTAL_KEYS.
   // GP-P0: paidWithoutNumberGraceMs ist primitiv (Zahl, kein Array/nested Objekt) -> 176.
   // GP-P3: provisioningRetryMaxAttempts ist primitiv (Zahl, kein Array/nested Objekt) -> 177.
-  const EXPECTED_PRIMITIVE_LEAVES = 177;
+  // GP-P4: provisioningRetryMinIntervalMs ist ebenfalls primitiv (Zahl) -> 178.
+  const EXPECTED_PRIMITIVE_LEAVES = 178;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

@@ -1,5 +1,13 @@
-// GP-P3 (PLAN-GELDPFAD.md 2): Wiederanlauf des Nummern-Provisionings nach einem
-// Kartenwechsel - und der Deckel, ohne den er ein Kostenvektor waere.
+// GP-P3/GP-P4 (PLAN-GELDPFAD.md 2): Wiederanlauf des Nummern-Provisionings fuer einen
+// zahlenden Mandanten ohne Live-Nummer - und der Deckel, ohne den er ein Kostenvektor
+// waere.
+//
+// GP-P4: derselbe Entscheidungskern bedient ZWEI Ausloeser - das menschliche Ereignis
+// (Kartenwechsel, self-service-routes.js) und den zeitgesteuerten Stunden-Sweep
+// (provision-retry-sweep.js). Es gibt bewusst KEINEN zweiten Kern (G5): eine zweite
+// Buchfuehrung ueber dieselbe Frage koennte von dieser abdriften. Der EINZIGE
+// Unterschied zwischen den Ausloesern ist die Mindestfrist - sie haengt AUSSCHLIESSLICH
+// am Zeit-Sweep und wird als Riegel hereingereicht (claimAttempt).
 //
 // Vorfall 11.09.2026: eine Zahlungsmethode, die keinen Hold traegt, laesst das
 // Nummern-Setup terminal auf 'failed' laufen. Der Kunde zahlt, hat aber keine Nummer.
@@ -40,6 +48,10 @@ export const PROVISION_RETRY_OUTCOME = Object.freeze({
   NO_ACTIVE_SUBSCRIPTION: "no_active_subscription",
   PAYMENT_METHOD_UNSUITABLE: "payment_method_unsuitable",
   ATTEMPTS_EXHAUSTED: "attempts_exhausted",
+  // GP-P4: entschieden JA, aber die Mindestfrist des zeitgesteuerten Zweigs laeuft noch.
+  // Eigener Ausgang statt einer Verdichtung auf NOT_FAILED: im Betrieb muss "noch nicht
+  // wieder dran" von "gar nicht erst zulaessig" unterscheidbar bleiben.
+  THROTTLED: "throttled",
   ERROR: "error",
 });
 
@@ -57,7 +69,7 @@ const NO_RETRY_ATTEMPTS = 0;
 // Pre-Mortem 2: diese Route wird mit dem Anstoss geldbewegend und traegt das Abo-/KYC-
 // Gate deshalb SELBST - provision-trigger.js sagt ausdruecklich, dass es beim Aufrufer
 // liegt und dort nicht dupliziert ist.
-export function resolveCardRebindRetry(state, { tenantId, maxAttempts, kycMinLevel = KYC_OUTBOUND_MIN }) {
+export function resolveAutoProvisionRetry(state, { tenantId, maxAttempts, kycMinLevel = KYC_OUTBOUND_MIN }) {
   if (maxAttempts <= 0)
     return { retry: false, outcome: PROVISION_RETRY_OUTCOME.DISABLED, attempts: NO_RETRY_ATTEMPTS };
   if (numberStatusFor(state, tenantId) !== NUMBER_DISPLAY_STATUS.FAILED)
@@ -88,16 +100,35 @@ async function markExhausted({ store, tenantId }) {
   });
 }
 
+// GP-P4: Riegel ZWISCHEN Entscheidung und Anstoss, injiziert (Muster ladeAusnahmen/
+// mailer: echte Naht mit echtem Default). Der Kartenwechsel ist ein MENSCHLICHES
+// Ereignis und braucht keine Frist - der Default laesst ihn unveraendert durch, die
+// Route bleibt byte-identisch. Der Zeit-Sweep reicht seine Mindestfrist herein.
+const KEIN_ZEITRIEGEL = async () => true;
+
 // Unrein: Marker schreiben + den BESTEHENDEN Anstoss rufen. Kein zweiter Kaufpfad, keine
 // Kopie des Hold-vor-Order-Kerns - provision ist triggerTenantProvisioning, injiziert.
-// WIRFT NIE (E5): die Karte ist bereits gebunden, ein Fehlschlag hier darf daraus nie
-// "Karte fehlgeschlagen" machen.
-export async function retriggerProvisioningAfterCardBind({ store, provision, tenantId, maxAttempts }) {
+// WIRFT NIE (E5): am Kartenwechsel ist die Karte bereits gebunden, ein Fehlschlag hier
+// darf daraus nie "Karte fehlgeschlagen" machen; im Stunden-Sweep darf ein einzelner
+// Mandant nie den Lauf ueber alle uebrigen abbrechen.
+export async function retriggerFailedProvisioning({
+  store,
+  provision,
+  tenantId,
+  maxAttempts,
+  claimAttempt = KEIN_ZEITRIEGEL,
+}) {
   try {
-    const decision = resolveCardRebindRetry(store.load(), { tenantId, maxAttempts });
+    const decision = resolveAutoProvisionRetry(store.load(), { tenantId, maxAttempts });
     if (decision.outcome === PROVISION_RETRY_OUTCOME.ATTEMPTS_EXHAUSTED)
       await markExhausted({ store, tenantId });
-    if (decision.retry) await provision(tenantId);
+    if (!decision.retry) return decision;
+    // Der Riegel oeffnet SEIN EIGENES Lock und laeuft VOR dem Anstoss: ein Absturz
+    // mitten im Kauf darf die Frist nicht zuruecksetzen. Keine Verschachtelung mit dem
+    // withStoreLock von triggerTenantProvisioning (Re-Entrancy).
+    if (!(await claimAttempt()))
+      return { ...decision, retry: false, outcome: PROVISION_RETRY_OUTCOME.THROTTLED };
+    await provision(tenantId);
     return decision;
   } catch (err) {
     // PII-/secret-frei: nur die Fehlermeldung, kein Tenant-Datum, keine Stripe-Referenz.

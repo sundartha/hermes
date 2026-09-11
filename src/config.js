@@ -1676,6 +1676,18 @@ const rawConfig = {
     process.env.PROVISIONING_RETRY_MAX_ATTEMPTS,
     { fallback: 3, min: 0 },
   ),
+  // GP-P4 (PLAN-GELDPFAD.md 2): Mindestfrist zwischen zwei AUTOMATISCHEN Anstoessen
+  // DESSELBEN Mandanten durch den zeitgesteuerten Wiederanlauf (Entprellung). Gemessen ab
+  // dem letzten beanspruchten Anstoss (Zeitanker in state.outageAlerts, Muster drift:lauf).
+  // Default 24 h: der Sweep haengt im Stunden-Takt - eine kuerzere Frist verbrennt den
+  // Deckel PROVISIONING_RETRY_MAX_ATTEMPTS=3 in drei Stunden. 0 = der zeitgesteuerte
+  // Zweig ist KOMPLETT AUS (Rollback-Hebel, Muster outboundDriftMinIntervalMs); der
+  // ereignisgetriebene Wiederanlauf nach Kartenwechsel (GP-P3) bleibt davon unberuehrt.
+  provisioningRetryMinIntervalMs: numEnv(
+    "PROVISIONING_RETRY_MIN_INTERVAL_MS",
+    process.env.PROVISIONING_RETRY_MIN_INTERVAL_MS,
+    { fallback: MS_PER_DAY, min: 0 },
+  ),
   // tenant-prolif-d: Grace-Periode (TAGE) bis zum automatischen DID-Release eines
   // suspendierten Tenants. 0 (Default) = Observe-Only fail-closed: der Reconcile gibt
   // NICHTS frei, loggt nur Kandidaten. Erst > 0 schaltet echte Telnyx-DELETEs scharf
@@ -2290,7 +2302,7 @@ function guardedConfig(target, path = "config") {
 export const CONFIG_NAMESPACES = Object.freeze({
   safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "csrfEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso"],
-  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "provisioningRetryMaxAttempts", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
+  provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "provisioningRetryMaxAttempts", "provisioningRetryMinIntervalMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],
   // 312k-Phase 5: Versand der Kuendigungsbestaetigung (Brevo/HTTP oder Zoho/SMTP) -
   // eigener Namespace statt Anhaengsel an auth/billing (eigenstaendige Domaene, s.

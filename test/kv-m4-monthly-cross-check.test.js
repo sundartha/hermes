@@ -287,7 +287,7 @@ test("KV-M4-4 Provider antwortet mit Fehler: kein Wurf, Log zeigt nicht_verfuegb
 
   assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY }, "runMonthlyCrossCheck wirft NICHT weiter");
   assert.ok(
-    logs.some((l) => l === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=provider_error) ist_je_traeger=keine ist_gesamt_usd_micro_cent=100 gate_carrier_eur_cent=0"),
+    logs.some((zeile) => zeile === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=provider_error) ist_je_traeger=keine ist_gesamt_usd_micro_cent=100 gate_carrier_eur_cent=0"),
     `unerwartete Log-Zeile: ${logs.join("\n")}`,
   );
 
@@ -316,7 +316,7 @@ test("KV-M4-5 Provider liefert keine Rechnung fuer den Monat: dieselbe Behandlun
 
   assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY });
   assert.ok(
-    logs.some((l) => l.includes("telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found)")),
+    logs.some((zeile) => zeile.includes("telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found)")),
     `unerwartete Log-Zeile: ${logs.join("\n")}`,
   );
 
@@ -340,7 +340,7 @@ test("KV-M4-6 Leerer Monat: keine Calls, keine Ledger-Belege -> beide Summen 0 (
 
   assert.deepEqual(result, { skipped: false, monthKey: DUE_MONTH_KEY });
   assert.ok(
-    logs.some((l) => l === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found) ist_je_traeger=keine ist_gesamt_usd_micro_cent=0 gate_carrier_eur_cent=0"),
+    logs.some((zeile) => zeile === "[cost-cross-check] monat=2026-07 telnyx_rechnung=nicht_verfuegbar(reason=invoice_not_found) ist_je_traeger=keine ist_gesamt_usd_micro_cent=0 gate_carrier_eur_cent=0"),
     `unerwartete Log-Zeile: ${logs.join("\n")}`,
   );
 });
@@ -358,7 +358,7 @@ test("KV-M4-7 erster Lauf ueberhaupt: crossCheckDueMonthKey liefert den Vormonat
 async function captureConsoleError(fn) {
   const lines = [];
   const orig = console.error;
-  console.error = (...a) => lines.push(a.map(String).join(" "));
+  console.error = (...teile) => lines.push(teile.map(String).join(" "));
   try {
     await fn();
   } finally {
@@ -367,113 +367,75 @@ async function captureConsoleError(fn) {
   return lines;
 }
 
-test("KV-M4-8 Sweep-Isolation: ein werfender costCrossCheck haelt costTruing, provisioning und outageWatch NICHT auf (Test gegen die boot.js-Verdrahtung selbst)", async () => {
-  let costTruingCalled = false;
-  let provisioningCalled = false;
-  let outageWatchCalled = false;
-  const costTruingFake = { async runCostTruingSweep() { costTruingCalled = true; return {}; } };
-  const provisioningFake = { async settleDueNumberMonthMeters() { provisioningCalled = true; return {}; } };
-  const throwingCostCrossCheck = { async runMonthlyCrossCheck() { throw new Error("kv-m4-8-boom"); } };
-  // OUTBOUND-E3b: vierter, unabhaengiger Zweig - er wird trotz der drei Wuerfe der
-  // uebrigen Zweige ausgefuehrt UND wirft selbst, um die Isolation in BEIDE Richtungen zu
-  // belegen (er haelt die anderen nicht auf, die anderen halten ihn nicht auf).
-  // C8b (Review-Blocker Runde 2): FUENFTER Zweig (Alarmkanal-Selbsttest) - derselbe
-  // Fake muss BEIDE Methoden bedienen, die runSweepTick auf outageWatch aufruft.
-  // C8 (Nachbesserung, F-8): SECHSTER Zweig (HOLD-Eskalation) - der Fake muss ALLE DREI
-  // Methoden bedienen, sonst wirft runSweepTick synchron auf einer undefined-Methode statt
-  // die Isolation der uebrigen Zweige zu belegen.
-  let selfTestCalled = false;
-  let holdEscalationCalled = false;
-  const throwingOutageWatch = {
-    async runRecoverySweep() {
-      outageWatchCalled = true;
-      throw new Error("kv-m4-8-outage-boom");
-    },
-    async runAlertChannelSelfTest() {
-      selfTestCalled = true;
-      throw new Error("kv-m4-8-self-test-boom");
-    },
-    async runHoldEscalationSweep() {
-      holdEscalationCalled = true;
-      throw new Error("kv-m4-8-hold-escalation-boom");
-    },
-  };
-  // OUTBOUND-E4: SIEBTER, unabhaengiger Zweig (Drift-Waechter) - er wird trotz der
-  // Wuerfe der uebrigen sechs Zweige ausgefuehrt UND wirft selbst (Isolation in BEIDE
-  // Richtungen). Zusatzauftrag A: OHNE diesen siebten Fake in der Attrappe waere GENAU
-  // dieser Concern (Fabrik-Rueckgabe vs. tatsaechlich gerufene Methoden) hier sofort
-  // sichtbar geworden - test/sweep-fabrik-vertrag.test.js deckt ihn jetzt strukturell.
-  let driftWatchCalled = false;
-  const throwingDriftWatch = {
-    async runDriftSweep() {
-      driftWatchCalled = true;
-      throw new Error("kv-m4-8-drift-boom");
-    },
-  };
+// Die WERFENDEN Zweige von runSweepTick - je Eintrag: das Objekt im deps-Buendel, die
+// Methode, die runSweepTick darauf ruft, das Log-Praefix ihres .catch() und der Fehlertext
+// der Attrappe. EINE Liste statt neun handgerollter Attrappen + neun Assertionspaaren
+// (G5): ein neuer Zweig kommt als EIN Eintrag dazu, nicht als drei verstreute Stellen.
+//
+// Warum ALLE werfen: die Isolation muss in BEIDE Richtungen belegt sein - ein werfender
+// Zweig haelt die uebrigen nicht auf, und die uebrigen halten ihn nicht auf. Fehlt auch
+// nur eine Methode in der Attrappe, wirft runSweepTick SYNCHRON auf undefined (der Wurf
+// liegt VOR dem Promise, das .catch() faengt ihn nicht) - genau der Produktionsschaden,
+// den test/sweep-fabrik-vertrag.test.js strukturell abdeckt.
+const WERFENDE_ZWEIGE = [
+  { zweig: "costCrossCheck", methode: "runMonthlyCrossCheck", logPraefix: "[cost-cross-check]", fehler: "kv-m4-8-boom" },
+  { zweig: "outageWatch", methode: "runRecoverySweep", logPraefix: "[outage-watch]", fehler: "kv-m4-8-outage-boom" },
+  { zweig: "outageWatch", methode: "runAlertChannelSelfTest", logPraefix: "[outage-watch]", fehler: "kv-m4-8-self-test-boom" },
+  { zweig: "outageWatch", methode: "runHoldEscalationSweep", logPraefix: "[outage-watch]", fehler: "kv-m4-8-hold-escalation-boom" },
+  { zweig: "driftWatch", methode: "runDriftSweep", logPraefix: "[drift-watch]", fehler: "kv-m4-8-drift-boom" },
+  { zweig: "paidWithoutNumberWatch", methode: "runPaidWithoutNumberSweep", logPraefix: "[paid-no-number]", fehler: "kv-m4-8-paid-no-number-boom" },
+  { zweig: "provisionRetryWatch", methode: "runProvisionRetrySweep", logPraefix: "[provision-retry-sweep]", fehler: "kv-m4-8-provision-retry-boom" },
+];
 
-  // GP-P0: ACHTER, unabhaengiger Zweig - er wird trotz der Wuerfe der uebrigen sieben
-  // ausgefuehrt UND wirft selbst (Isolation in BEIDE Richtungen). OHNE diesen Fake wuerde
-  // runSweepTick SYNCHRON auf einer undefined-Methode werfen, statt die Isolation zu
-  // belegen.
-  let paidWithoutNumberCalled = false;
-  const throwingPaidWithoutNumberWatch = {
-    async runPaidWithoutNumberSweep() {
-      paidWithoutNumberCalled = true;
-      throw new Error("kv-m4-8-paid-no-number-boom");
-    },
+// Die beiden Zweige, die SAUBER zurueckkehren - an ihnen wird gemessen, dass die Wuerfe
+// der uebrigen sie nicht aufhalten.
+const STILLE_ZWEIGE = [
+  { zweig: "costTruing", methode: "runCostTruingSweep" },
+  { zweig: "provisioning", methode: "settleDueNumberMonthMeters" },
+];
+
+const laufSchluessel = ({ zweig, methode }) => `${zweig}.${methode}`;
+
+// Build (P13): das vollstaendige deps-Buendel fuer runSweepTick + ein Protokoll, welche
+// Methode tatsaechlich lief.
+function baueSweepAttrappen() {
+  const gerufen = {};
+  const zweige = {};
+  const attrappe = (eintrag, rumpf) => {
+    zweige[eintrag.zweig] = zweige[eintrag.zweig] || {};
+    zweige[eintrag.zweig][eintrag.methode] = async () => {
+      gerufen[laufSchluessel(eintrag)] = true;
+      return rumpf();
+    };
   };
+  for (const eintrag of STILLE_ZWEIGE) attrappe(eintrag, () => ({}));
+  for (const eintrag of WERFENDE_ZWEIGE)
+    attrappe(eintrag, () => {
+      throw new Error(eintrag.fehler);
+    });
+  return { zweige, gerufen };
+}
+
+test("KV-M4-8 Sweep-Isolation: ein werfender Zweig haelt keinen der uebrigen auf (Test gegen die boot.js-Verdrahtung selbst)", async () => {
+  const { zweige, gerufen } = baueSweepAttrappen();
 
   const errorLogs = await captureConsoleError(async () => {
-    // runSweepTick selbst ist SYNCHRON (kein await zwischen den acht Zweigen) - der
+    // runSweepTick selbst ist SYNCHRON (kein await zwischen den neun Zweigen) - der
     // Aufruf darf nicht werfen, obwohl mehrere Zweige rejecten.
-    assert.doesNotThrow(() => {
-      runSweepTick({
-        costTruing: costTruingFake,
-        provisioning: provisioningFake,
-        costCrossCheck: throwingCostCrossCheck,
-        outageWatch: throwingOutageWatch,
-        driftWatch: throwingDriftWatch,
-        paidWithoutNumberWatch: throwingPaidWithoutNumberWatch,
-      });
-    });
-    // Alle acht Zweige sind fire-and-forget - eine Microtask-Runde reicht, damit auch
+    assert.doesNotThrow(() => runSweepTick(zweige));
+    // Alle neun Zweige sind fire-and-forget - eine Microtask-Runde reicht, damit auch
     // die werfenden Promises ihr .catch() durchlaufen, bevor der Test endet.
     await new Promise((resolve) => setImmediate(resolve));
   });
 
-  assert.equal(costTruingCalled, true, "costTruing.runCostTruingSweep lief trotz werfendem costCrossCheck");
-  assert.equal(provisioningCalled, true, "provisioning.settleDueNumberMonthMeters lief trotz werfendem costCrossCheck");
-  assert.equal(outageWatchCalled, true, "outageWatch.runRecoverySweep lief trotz werfendem costCrossCheck");
-  assert.ok(
-    errorLogs.some((l) => l === "[cost-cross-check] kv-m4-8-boom"),
-    `der Wurf wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
-  assert.ok(
-    errorLogs.some((zeile) => zeile === "[outage-watch] kv-m4-8-outage-boom"),
-    `der vierte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
-  assert.equal(selfTestCalled, true, "outageWatch.runAlertChannelSelfTest lief trotz werfendem costCrossCheck");
-  assert.ok(
-    errorLogs.some((zeile) => zeile === "[outage-watch] kv-m4-8-self-test-boom"),
-    `der fuenfte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
-  assert.equal(holdEscalationCalled, true, "outageWatch.runHoldEscalationSweep lief trotz werfendem costCrossCheck");
-  assert.ok(
-    errorLogs.some((zeile) => zeile === "[outage-watch] kv-m4-8-hold-escalation-boom"),
-    `der sechste Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
-  assert.equal(driftWatchCalled, true, "driftWatch.runDriftSweep lief trotz der Wuerfe der uebrigen Zweige");
-  assert.ok(
-    errorLogs.some((zeile) => zeile === "[drift-watch] kv-m4-8-drift-boom"),
-    `der siebte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
-  assert.equal(
-    paidWithoutNumberCalled,
-    true,
-    "paidWithoutNumberWatch.runPaidWithoutNumberSweep lief trotz der Wuerfe der uebrigen Zweige",
-  );
-  assert.ok(
-    errorLogs.some((zeile) => zeile === "[paid-no-number] kv-m4-8-paid-no-number-boom"),
-    `der achte Zweig wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
-  );
+  for (const eintrag of STILLE_ZWEIGE)
+    assert.equal(gerufen[laufSchluessel(eintrag)], true, `${laufSchluessel(eintrag)} lief trotz der Wuerfe der uebrigen Zweige nicht`);
+
+  for (const eintrag of WERFENDE_ZWEIGE) {
+    assert.equal(gerufen[laufSchluessel(eintrag)], true, `${laufSchluessel(eintrag)} lief trotz der Wuerfe der uebrigen Zweige nicht`);
+    assert.ok(
+      errorLogs.some((zeile) => zeile === `${eintrag.logPraefix} ${eintrag.fehler}`),
+      `${laufSchluessel(eintrag)}: der Wurf wird geloggt, nicht verschluckt: ${errorLogs.join("\n")}`,
+    );
+  }
 });

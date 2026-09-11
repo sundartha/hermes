@@ -325,6 +325,11 @@ export const BASE_ENV = {
   // sonst leakt eine lokale .env via dotenv in Spawn-Tests und ein Fixture-Mandant mit
   // 'failed'-Nummer koennte dort unbeabsichtigt einen Kaufanstoss ausloesen.
   PROVISIONING_RETRY_MAX_ATTEMPTS: "0",
+  // GP-P4: 0 = der zeitgesteuerte Wiederanlauf ist aus (Muster
+  // PROVISIONING_RETRY_MAX_ATTEMPTS oben) - sonst leakt eine lokale .env via dotenv in
+  // Spawn-Tests und ein Fixture-Mandant mit 'failed'-Nummer koennte im Stunden-Sweep
+  // unbeabsichtigt einen Kaufanstoss ausloesen.
+  PROVISIONING_RETRY_MIN_INTERVAL_MS: "0",
   RELEASE_GRACE_DAYS: "0", // tenant-prolif-d: neutraler fail-closed Default (sonst leakt lokales .env in Spawn-Tests)
   // Kauf-Land-Override aus (Default): number.country = Herkunftsland, byte-identisch.
   // Ohne diese Zeile leakt eine lokale .env mit FORCE_NUMBER_COUNTRY=US via dotenv in

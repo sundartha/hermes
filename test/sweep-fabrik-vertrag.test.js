@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { makeOutageWatch } from "../src/telephony/outage-report.js";
 import { makeDriftWatch } from "../src/telephony/outbound-drift-watch.js";
 import { makePaidWithoutNumberWatch } from "../src/billing/paid-without-number-watch.js";
+import { makeProvisionRetryWatch } from "../src/billing/provision-retry-sweep.js";
 import { runSweepTick } from "../src/boot.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
@@ -109,4 +110,15 @@ test("Z-A5: jede von runSweepTick auf paidWithoutNumberWatch gerufene Methode ex
     audit: () => {},
   });
   pruefeVertrag(watch, methoden, "paidWithoutNumberWatch");
+});
+
+test("Z-A6: jede von runSweepTick auf provisionRetryWatch gerufene Methode existiert auf makeProvisionRetryWatch(...) und ist eine Funktion", () => {
+  const methoden = gerufeneMethoden("provisionRetryWatch");
+  const watch = makeProvisionRetryWatch({
+    store: fakeDeps().store,
+    config: withConfigNamespaces({ provisioningRetryMinIntervalMs: 0, provisioningRetryMaxAttempts: 0 }),
+    provision: async () => {},
+    audit: () => {},
+  });
+  pruefeVertrag(watch, methoden, "provisionRetryWatch");
 });

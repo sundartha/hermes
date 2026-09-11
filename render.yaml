@@ -264,6 +264,10 @@ services:
       # Kartenwechsel. Erschoepft -> needs_manual_reconcile. 0 = komplett aus.
       - key: PROVISIONING_RETRY_MAX_ATTEMPTS
         value: "3"
+      # GP-P4: Mindestfrist zwischen zwei automatischen Anstoessen desselben Mandanten
+      # durch den zeitgesteuerten Wiederanlauf. 0 = zeitgesteuerter Zweig komplett aus.
+      - key: PROVISIONING_RETRY_MIN_INTERVAL_MS
+        value: "86400000"
       # tenant-prolif-d: Grace (TAGE) bis zum Auto-DID-Release suspendierter Tenants.
       # 0 = Observe-Only (fail-closed, kein DELETE). Erst > 0 gibt echte DIDs frei.
       - key: RELEASE_GRACE_DAYS
