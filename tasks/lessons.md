@@ -960,3 +960,45 @@ gemeldet, nachdem (1) und (2) wirklich versucht wurden.
 Fix-Agent legte den neuen Code auf Modul-Ebene, die Riesenfunktion wuchs nicht, der Hook nahm
 den Commit von sich aus an (gegengeprueft: Exit 0). Es gab also nie einen Grund, an der
 Sicherung vorbeizugehen.
+
+## 2026-09-11 — Lehren aus der Geldpfad-Kette (GP-P0..GP-P6, Lead-Rolle)
+
+**Ein Effizienz-Riegel verschiebt Arbeit, er loescht sie nicht.** Der Kickoff verbot Impl, Fix
+und Safety-Review die volle Suite (Wurzel des 260-Mio-Ausreissers: drei Agenten fuhren sie je
+Lauf). Das spart real - aber bei GP-P2 brach die Phase zwei BESTANDStests, die kein Agent
+gefahren hatte, und der Workflow meldete trotzdem PASS. Beide waren isoliert rot, also echt.
+**Folge: der Lead-Suitenlauf ist Pflicht, nicht Kuer.** Ein Merge auf das PASS des Workflows
+hin waere hier falsch gewesen. Der Riegel bleibt richtig; was dazugehoert, ist das Netz
+dahinter.
+
+**Ein roter Fall zaehlt erst, wenn er isoliert rot ist - und die Bank luegt in beide
+Richtungen.** Voll parallel meldete dieselbe Bank auf demselben Commit einmal vier, einmal neun
+rote Faelle, mit **wechselnden Namen**; mit `--test-concurrency=4` null. Wer die erste Zahl
+glaubt, sucht Gespenster; wer sie ignoriert, uebersieht die zwei echten dazwischen. Der
+Wrapper reicht Zusatzargumente durch: `node test/testbaenke-run.mjs regression
+--test-concurrency=4`.
+
+**`npm test` deckt das Dashboard nicht ab.** Der Wrapper sucht `test/*.test.js`;
+`apps/web/test/**` bleibt draussen. Eine Phase mit Dashboard-Anteil ist ueber `npm test`
+**nicht** abgenommen - `cd apps/web && PUBLIC_GATEWAY_URL=... node --test "test/**/*.test.js"`
+gehoert dazu.
+
+**Der Commit-Hook fahrt `eslint` und flutet die Ausgabe.** Ein `git commit` ohne
+Ausgabe-Unterdrueckung kostete rund 10k Token an Lint-Warnungen fuer nichts. Als Lead, der
+duenn bleiben soll: `git commit -q ... >/dev/null 2>&1` und den Erfolg separat pruefen.
+
+**Grosse JSON-Diffs nie ungefiltert ansehen.** `git diff -- eslint-legacy-exceptions.json` warf
+mehrere Bildschirmseiten Begruendungstext aus, weil die Datei ihre Historie im `reason`-Feld
+traegt. Die Frage war "wurde eine Sicherung abgeschaltet?" - beantwortbar mit `--stat` plus
+einem gezielten grep auf die `findings`-Zeilen.
+
+**Kettenstand VOR dem Start der Welle schreiben.** Ein Commit auf `master` waehrend eines
+laufenden Workflows liess den Plan-Agenten der naechsten Phase eine Basis-Abweichung erklaeren.
+Folgenlos, aber unnoetiger Laerm - und in der Vergangenheit schon einmal ein falscher
+Stale-Base-Blocker.
+
+**Bei einem FATAL-Boot-Guard reicht kein gruener Test.** GP-P6 fuehrt `exit(1)` ein. Die Frage
+ist nicht "besteht der Test", sondern "startet der Live-Dienst mit der ECHTEN Konfiguration
+noch". Das heisst: Katalog-Slugs zaehlen, Env-Werte gegenpruefen, und was sich lokal nicht
+belegen laesst, ausdruecklich als Vor-dem-Deploy-Schritt melden statt es als geprueft
+auszugeben.

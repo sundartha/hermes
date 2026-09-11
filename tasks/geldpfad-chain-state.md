@@ -1,4 +1,8 @@
-# Kettenstand: Geldpfad-Behebungskette (GP-P0..GP-P6)
+# Kettenstand: Geldpfad-Behebungskette (GP-P0..GP-P6) — ABGESCHLOSSEN 2026-09-11
+
+**Alle sieben Phasen gebaut, abgenommen und gemergt. Nichts offen ausser den Owner-Blockern
+unten. Nicht gepusht, nicht deployt** (Render deployt aus dem Upstream-Repo; ein Push hier
+waere ein Release, kein Test).
 
 Manifest: `PLAN-GELDPFAD.md`. Kickoff: `tasks/geldpfad-kickoff.md`.
 Diese Datei ist die Uebergabe an die naechste Session. Sie bleibt kurz.
@@ -48,10 +52,10 @@ Modell-Pins unveraendert: Plan + Safety = Opus, Impl/Clean-Code/Fix/Report = Son
 | GP-P0 | S | 1 | false | `wf_d61a47d9-23d` | PASS (0 Fix-Runden) | `a60168c` | **erfuellt** |
 | GP-P1 | S | 1 | false | `wf_d94f1a66-399` | PASS (0 Fix-Runden) | `fe6d90a` | **erfuellt** |
 | GP-P2 | L | 3 | **true** | `wf_8fb281ac-282` | PASS + 1 Lead-Fix | `2acb189` | **erfuellt** |
-| GP-P3 | M | 2 | **true** | `wf_84056221-3a0` | laeuft | - | - |
-| GP-P4 | M | 2 | **true** | - | - | - | - |
-| GP-P5 | S | 1 | false | - | - | - | - |
-| GP-P6 | M | 2 | **true** | - | - | - | - |
+| GP-P3 | M | 2 | **true** | `wf_84056221-3a0` | PASS (0 Fix-Runden) | `001d394` | **erfuellt** |
+| GP-P4 | M | 2 | **true** | `wf_87e78031-dda` | PASS (0 Fix-Runden) | `46c0e26` | **erfuellt** |
+| GP-P5 | S | 1 | false | `wf_2f4805f0-e2b` | PASS (0 Fix-Runden) | `3f409ed` | **erfuellt** |
+| GP-P6 | M | 2 | **true** | `wf_2e0ff9f5-6c6` | PASS (0 Fix-Runden) | `805966e` | **erfuellt** |
 
 ## Offene Befunde
 
@@ -82,8 +86,34 @@ Modell-Pins unveraendert: Plan + Safety = Opus, Impl/Clean-Code/Fix/Report = Son
   bei 157 Turns / 27,5 Mio - dicht dran, nicht weggelaufen (kein 86-Prozent-Ausreisser, das
   Verhaeltnis ist gesund). Bei den groesseren Phasen im Auge behalten.
 
+### Befunde aus GP-P3 bis GP-P5
+
+- **Die Dashboard-Tests laufen NICHT in `npm test`.** Der Wrapper sucht `test/*.test.js`;
+  `apps/web/test/**` bleibt draussen und braucht einen eigenen Lauf:
+  `cd apps/web && PUBLIC_GATEWAY_URL=https://vodafone-agent.onrender.com node --test "test/**/*.test.js"`.
+  Wer eine Phase mit Dashboard-Anteil nur ueber `npm test` abnimmt, hat den Dashboard-Anteil
+  NICHT geprueft. Stand nach GP-P3: 196 pass / 3 fail, gegenueber 180/18 davor - die drei
+  verbliebenen betreffen `renderPlanChoice`/`dismissPlanChoice` und lagen schon vorher auf
+  master. Bestandsbefund, nicht diese Kette.
+- **Ein Commit auf master waehrend eines laufenden Workflows ist vermeidbarer Laerm.** Der
+  Kettenstand-Commit nach GP-P2 fiel in den Start von GP-P3; der Plan-Agent bemerkte die
+  Abweichung und musste sie erklaeren. Folgenlos, aber unnoetig: Kettenstand VOR dem Start
+  schreiben.
+
 ## Wirkung fuer den Kunden (das, was am Ende zaehlt)
 
+- **GP-P2:** wer mit einer Zahlungsmethode bezahlt, die keine Vorautorisierung traegt,
+  bekommt jetzt eine klare Ablehnung mit dem Typ als Grund - statt eine Abbuchung ohne
+  Gegenleistung und eine Meldung ueber angeblich fehlende Deckung.
+- **GP-P3:** wer danach eine brauchbare Karte hinterlegt, bekommt seine Nummer ohne
+  Operator-Eingriff. Nach drei Versuchen endet der Weg in der manuellen Klaerung statt in
+  unbegrenzter Carrier-Miete.
+- **GP-P4:** derselbe Wiederanlauf laeuft auch ohne Zutun des Kunden - aber nie gegen eine
+  Zahlungsmethode, die per Konstruktion nie besteht.
+- **GP-P5:** kein Kundeneffekt. Der Kommentar im Geldpfad behauptet nicht mehr das Gegenteil
+  dessen, was der Code tut.
+- **GP-P6:** kein Kundeneffekt heute. Kuenftig faellt eine Abweichung zwischen angezeigtem und
+  abgebuchtem Preis auf, bevor sie jemand bezahlt.
 - **GP-P0:** der Zustand "zahlt, hat keine Nummer" erzeugt jetzt von selbst genau eine
   Betreiber-Notiz je Zustandsaenderung, statt nur bei manueller DB-Forensik sichtbar zu
   werden. Fuer den Kunden aendert sich noch nichts - aber der Fall vom 11.09. faellt kuenftig
@@ -103,3 +133,36 @@ kein Backfill, keine Kundenkommunikation.
 Restunsicherheit, bewusst stehengelassen: das Stripe-Lese-Scope fuer `GET /v1/prices/{id}` ist
 im Testmodus belegt, im Live-Modus nur wahrscheinlich. Scheitert der erste Live-Aufruf in GP-P6
 mit 403, ist das Scope die Ursache und kein Codefehler.
+
+## Kosten der Kette (gemessen mit `scripts/workflow-kosten.mjs`, nicht `subagent_tokens`)
+
+| Phase | Token | Turns |
+|---|---|---|
+| GP-P0 | 52,2 Mio | 348 |
+| GP-P1 | 54,2 Mio | 377 |
+| GP-P2 | 58,2 Mio | 363 |
+| GP-P3 | 60,6 Mio | 415 |
+| GP-P4 | 44,7 Mio | 312 |
+| GP-P5 | 11,5 Mio | 144 |
+| GP-P6 | 56,1 Mio | 355 |
+| **Summe** | **337,5 Mio** | **2314** |
+
+Dazu ein Lead-Fix-Agent nach GP-P2 (52 Werkzeug-Aufrufe). Der Richtwert des Kickoffs lag bei
+unter 40 Mio je Phase; gehalten hat ihn nur GP-P5 (reine Kommentarkorrektur, 11,5 Mio) und
+knapp GP-P4. **Kein Lauf ist weggelaufen** - der groesste Einzelagent lag bei 206 Turns
+(GP-P3), weit entfernt vom 687-Turn-Ausreisser der Vergangenheit, und kein Lauf brauchte auch
+nur eine Fix-Runde. Die Kosten liegen in der Groesse der Phasen, nicht in Warteschleifen.
+
+## Was eine Nachfolge-Session zuerst wissen muss
+
+1. **Nicht gepusht.** Alles liegt lokal auf `master`. Der Geldpfad ist LIVE unveraendert.
+2. **Vor dem Deploy:** der neue Boot-Guard `assertPricedPlans` beendet den Start, wenn bei
+   `PAYMENT_ENABLED=true` ein Katalog-Tarif (`starter`, `business`) keine Stripe-Price-Id hat.
+   Beide sind live sehr wahrscheinlich gesetzt - am 11.09. erreichten beide Tarife Stripe
+   (starter 200, business 402 wegen Deckung, nicht wegen fehlender Price) - aber das ist eine
+   Schlussfolgerung aus dem Vorfall, **kein Blick ins Render-Dashboard**. Vor dem Deploy dort
+   nachsehen.
+3. **Der Dienst startet lokal nicht**, und das ist Bestand seit dem 20.07.2026 (lct-p4):
+   `COST_TRUING_REQUIRED_RECORD_TYPES ist leer`. Kein Befund dieser Kette.
+4. **Die Dashboard-Suite laeuft nicht in `npm test`** (s.o.), und drei ihrer Faelle sind seit
+   vor dieser Kette rot (`renderPlanChoice`/`dismissPlanChoice`).
