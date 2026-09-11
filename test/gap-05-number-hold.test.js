@@ -28,7 +28,11 @@ test("Ein 100-%-Gutschein-Tenant bekommt die Nummer nur mit gestelltem Setup-Hol
   registerTenant(s, "t_gap05");
   setTenantSubscription(s, "t_gap05", { numberSetupFeeExempt: true });
   // Karte hinterlegt: der Hold-Riegel gilt jetzt UNABHAENGIG von der Befreiung.
-  setTenantStripe(s, "t_gap05", { customerId: "cus_gap05", paymentMethodId: "pm_gap05" });
+  setTenantStripe(s, "t_gap05", {
+    customerId: "cus_gap05",
+    paymentMethodId: "pm_gap05",
+    paymentMethodType: "card", // GP-P2: Eignungs-Gate laesst nur hold-faehige Typen durch
+  });
   const { number } = requestNumber(s, { tenantId: "t_gap05", ...CAPS });
 
   const prov = fakeProvisioner();

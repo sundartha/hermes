@@ -13,6 +13,7 @@ import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
+import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
 
 // ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
 // WEB_DIST_DIR gegen das Arbeitsverzeichnis des Spawn-Childs (= ROOT).
@@ -922,6 +923,13 @@ export function fakeBilling(overrides = {}) {
     async reportMeter(args) {
       log.push(["reportMeter", args]);
     }, // P6b3-Meter-Aufzeichner
+    // GP-P2: der Port ist um den rein lesenden Typ-Nachschlag gewachsen - das GETEILTE
+    // Double waechst mit (sonst baut jeder Test ihn neu, S2). Default 'card': die
+    // Bestandsfixturen hinterlegen eine echte Karte.
+    async retrievePaymentMethodType(id) {
+      log.push(["retrievePaymentMethodType", id]);
+      return PAYMENT_METHOD_TYPE_CARD;
+    },
   };
   return { log, ...base, ...overrides };
 }

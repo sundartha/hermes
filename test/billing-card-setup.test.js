@@ -14,8 +14,8 @@ import { CustomerMissingError } from "../src/billing/errors.js";
 
 const TENANT = "t_x";
 
-function fakeStore({ customerId = null, paymentMethodId = null } = {}) {
-  const state = { stripe: { customerId, paymentMethodId } };
+function fakeStore({ customerId = null, paymentMethodId = null, paymentMethodType = null } = {}) {
+  const state = { stripe: { customerId, paymentMethodId, paymentMethodType } };
   return {
     state,
     tenantStripe: () => state.stripe,
@@ -51,14 +51,19 @@ test("bindCardFromSession: fremder Customer -> ok:false, nichts persistiert", as
   assert.equal(store.state.stripe.paymentMethodId, null, "keine fremde Karte gebunden");
 });
 
-test("bindCardFromSession: passender Customer -> ok:true, Karte persistiert", async () => {
+test("bindCardFromSession: passender Customer -> ok:true, Karte UND Typ persistiert", async () => {
   const store = fakeStore({ customerId: "cus_x" });
   const billing = {
-    getCheckoutSessionResult: async () => ({ customerId: "cus_x", paymentMethodId: "pm_new" }),
+    getCheckoutSessionResult: async () => ({
+      customerId: "cus_x",
+      paymentMethodId: "pm_new",
+      paymentMethodType: "card",
+    }),
   };
   const result = await bindCardFromSession({ store, billing, tenant: TENANT, sessionId: "cs_1" });
   assert.deepEqual(result, { ok: true });
   assert.equal(store.state.stripe.paymentMethodId, "pm_new");
+  assert.equal(store.state.stripe.paymentMethodType, "card", "GP-P2: der Typ wandert mit");
 });
 
 // ---- ensureCustomer: bestehende Idempotenz unveraendert (Regressions-Schutz) ---------
@@ -95,7 +100,11 @@ test("startCheckoutWithStaleCustomerHeal: Happy-Path - Checkout gelingt sofort -
 });
 
 test("startCheckoutWithStaleCustomerHeal: gespeicherter Customer stale (CustomerMissingError) -> heilt, EIN Retry mit frischem Customer, PM mit geloescht, sleep mit retryDelayMs", async () => {
-  const store = fakeStore({ customerId: "cus_stale", paymentMethodId: "pm_stale" });
+  const store = fakeStore({
+    customerId: "cus_stale",
+    paymentMethodId: "pm_stale",
+    paymentMethodType: "card",
+  });
   const billing = { createCustomer: async () => ({ customerId: "cus_fresh" }) };
   const calls = [];
   const sleeps = [];
@@ -113,6 +122,11 @@ test("startCheckoutWithStaleCustomerHeal: gespeicherter Customer stale (Customer
   assert.deepEqual(calls, ["cus_stale", "cus_fresh"], "Retry mit dem frisch angelegten Customer");
   assert.equal(store.state.stripe.customerId, "cus_fresh");
   assert.equal(store.state.stripe.paymentMethodId, null, "tote paymentMethodId wird mitgeloescht (haengt am toten Customer)");
+  assert.equal(
+    store.state.stripe.paymentMethodType,
+    null,
+    "GP-P2: der Typ verschwindet mit - sonst bescheinigte er der naechsten Methode Eignung",
+  );
   assert.deepEqual(sleeps, [1500], "Wartezeit vor dem Retry");
 });
 

@@ -5,7 +5,8 @@
 import crypto from "node:crypto";
 import { activatePaidTenant, profileAuditDetail } from "./activation.js";
 import { provisionAuditDetail } from "./provision-outcome.js";
-import { customerMatches } from "./card-setup.js";
+import { bindPaymentMethodOnTenant, customerMatches } from "./card-setup.js";
+import { enumOrNull } from "./provider-enum.js"; // GP-P2: Anbieter-Enum nur in gepruefter Form
 import { hasCardOnFile } from "../self-service.js";
 import { makeKeyedChainMutex } from "../chain-mutex.js";
 import { isKnownPlanSlug } from "../plans.js";
@@ -153,6 +154,9 @@ export function interpretStripeEvent(event) {
         // auf den Browser-Return zu warten (s. applyStripeWebhook).
         customerId: object.customer ?? null,
         paymentMethodId: paymentMethodIdOf(object.default_payment_method),
+        // GP-P2: im Webhook praktisch immer null (unexpandiert) - applyStripeWebhook
+        // schlaegt ihn dann nach. Diese Funktion bleibt rein (kein IO).
+        paymentMethodType: paymentMethodTypeOf(object.default_payment_method),
       };
       // 312k-P1 (Teil A, der gefaehrliche Befund): Stripe setzt bei "kuendigt zum
       // Periodenende" status weiterhin auf active/trialing UND cancel_at_period_end=true.
@@ -230,6 +234,16 @@ function moneyEventSubscriptionId(type, object) {
 export function paymentMethodIdOf(defaultPaymentMethod) {
   if (typeof defaultPaymentMethod === "string") return defaultPaymentMethod;
   return (defaultPaymentMethod && defaultPaymentMethod.id) || null;
+}
+
+// GP-P2, Gegenstueck zu paymentMethodIdOf fuer den TYP: nur die EXPANDIERTE Objektform
+// traegt ihn. Webhook-Events sind IMMER unexpandiert (String-Id) -> null; der Aufrufer
+// schlaegt ihn dann beim Anbieter nach (applyStripeWebhook). Verengt auf die Enum-Form:
+// der Wert landet dauerhaft in der tenant-Tabelle und in Fehlermeldungen. EINE Quelle
+// (G5) wie paymentMethodIdOf: der Stripe-Adapter importiert sie von hier.
+export function paymentMethodTypeOf(defaultPaymentMethod) {
+  if (!defaultPaymentMethod || typeof defaultPaymentMethod !== "object") return null;
+  return enumOrNull(defaultPaymentMethod.type);
 }
 
 // Die aktuelle Stripe-API liefert current_period_end/-start NICHT mehr top-level an
@@ -326,6 +340,46 @@ function unresolvedTenantDetail(reason, tenantRef) {
   return reason;
 }
 
+// GP-P2: der Typ der Zahlungsmethode fuer den Race-Fix-Bindepfad. Erste Quelle ist das
+// Ereignis selbst (nur bei expandiertem default_payment_method belegt), zweite ein
+// rein lesender Anbieter-Aufruf. Fail-soft nach aussen: ein Fehlschlag liefert null und
+// bricht die Webhook-Antwort NIE ab - ein Wurf hier liesse Stripe das Ereignis dauerhaft
+// wiederholen (Muster FW1-A). Ohne billing (payment-off) wird nicht nachgeschlagen.
+async function resolvePaymentMethodType({ billing, paymentMethodType, paymentMethodId }) {
+  if (paymentMethodType) return paymentMethodType;
+  if (!billing) return null;
+  try {
+    return await billing.retrievePaymentMethodType(paymentMethodId);
+  } catch {
+    return null; // Typ unbekannt -> die Bindung entsteht trotzdem, das Gate entscheidet
+  }
+}
+
+// Race-Fix (Abo-ohne-Nummer): der Webhook gewinnt das Rennen gegen den Checkout-Return
+// regelmaessig (Stripe stellt in ms zu, der Browser-Redirect braucht Sekunden). Ohne Karte
+// am Tenant liefe das folgende Provisioning fail-closed ins Leere (provisionNumber: kein
+// Zahlungsmittel -> Nummer failed). Das Ereignis traegt customer + default_payment_method
+// signatur-verifiziert -> NUR die Luecke fuellen: NIE eine vorhandene Karte ueberschreiben
+// (eine bewusst neu erfasste bleibt) und NUR bei Customer-Match (R4: nie ein fremdes
+// payment_method an den Tenant binden).
+// GP-P2: gebunden wird Referenz UND Typ - sonst bliebe eine Karte zurueck, deren Eignung
+// das Gate nie beurteilen kann. Der Typ-Nachschlag laeuft ERST hinter den drei Bedingungen:
+// ein Mandant mit Karte loest keinen zusaetzlichen Anbieter-Aufruf aus.
+// Ausgelagert aus applyStripeWebhook (G30: eine Aufgabe pro Funktion). Nebeneffekt
+// (Karten-Schreibung) im Namen (N7).
+async function bindPaymentMethodFromEventIfMissing({
+  store,
+  billing,
+  tenant,
+  event: { customerId, paymentMethodId, paymentMethodType },
+}) {
+  if (!customerId || !paymentMethodId) return;
+  if (hasCardOnFile(store.tenantStripe(tenant))) return;
+  if (!customerMatches(store, tenant, customerId)) return;
+  const typ = await resolvePaymentMethodType({ billing, paymentMethodType, paymentMethodId });
+  bindPaymentMethodOnTenant(store, tenant, { paymentMethodId, paymentMethodType: typ });
+}
+
 export async function applyStripeWebhook(
   event,
   {
@@ -354,7 +408,7 @@ export async function applyStripeWebhook(
   const interpreted = interpretStripeEvent(event);
   const {
     action, tenantRef, subscriptionId, planSlug, currentPeriodEnd, currentPeriodStart,
-    customerId, paymentMethodId, cancelAtPeriodEnd, suspendReason,
+    customerId, paymentMethodId, paymentMethodType, cancelAtPeriodEnd, suspendReason,
   } = interpreted;
   if (action === WEBHOOK_ACTION.IGNORE) return;
   // GAP-03: Geld-Ereignisse ausserhalb der Subscription-Lifecycle-Allowlist auditieren SICH
@@ -426,20 +480,12 @@ export async function applyStripeWebhook(
     // Vermerk unberuehrt (kein falsches "nicht gekuendigt" ohne Beleg).
     if (cancelAtPeriodEnd != null) patch.cancelAtPeriodEnd = cancelAtPeriodEnd;
     store.setTenantSubscription(tenant, patch);
-    // Race-Fix (Abo-ohne-Nummer): der Webhook gewinnt das Rennen gegen den Checkout-
-    // Return regelmaessig (Stripe stellt in ms zu, der Browser-Redirect braucht
-    // Sekunden). Ohne Karte am Tenant liefe das folgende Provisioning fail-closed ins
-    // Leere (provisionNumber: kein Zahlungsmittel -> Nummer failed). Das Event traegt
-    // customer + default_payment_method signatur-verifiziert -> NUR die Luecke fuellen:
-    // NIE eine vorhandene Karte ueberschreiben (eine bewusst neu erfasste bleibt) und
-    // NUR bei Customer-Match (R4: nie ein fremdes payment_method an den Tenant binden).
-    if (
-      customerId && paymentMethodId &&
-      !hasCardOnFile(store.tenantStripe(tenant)) &&
-      customerMatches(store, tenant, customerId)
-    ) {
-      store.setTenantStripe(tenant, { paymentMethodId });
-    }
+    await bindPaymentMethodFromEventIfMissing({
+      store,
+      billing,
+      tenant,
+      event: { customerId, paymentMethodId, paymentMethodType },
+    });
     // P5: dieselbe 3-Effekt-Aktivierung wie der Subscribe-Handler (KYC=CARD + Wartezustand +
     // payment-gegatetes, idempotentes Provisioning + Status ERST nach geklaertem Ergebnis,
     // GAP-04) - EINE Quelle (activation.js). Idempotent im provision-Trigger (kein Doppelkauf

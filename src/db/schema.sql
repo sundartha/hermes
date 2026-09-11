@@ -37,6 +37,11 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS kyc_level TEXT;
 -- Referenzen (cus_/pm_), KEINE Secrets. Muster wie kyc_level (idempotent, kein CHECK).
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_customer_id       TEXT;
 ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_payment_method_id TEXT;
+-- GP-P2 (Vorfall 11.09.2026): der Stripe-Enum-Typ der gespeicherten Zahlungsmethode
+-- ('card', 'link', ...). NULL = unbekannt (Bestand vor GP-P2, kein Backfill) -> das
+-- Eignungs-Gate faellt fail-closed durch. Opaker Enum, KEIN Secret. Muster wie
+-- stripe_payment_method_id (idempotent, kein CHECK - die Allowlist lebt im Code).
+ALTER TABLE tenant ADD COLUMN IF NOT EXISTS stripe_payment_method_type TEXT;
 -- Abo-Referenzen pro Tenant (W4) additiv NULLABLE. NULL = kein aktives Abo. Opake
 -- Stripe-Referenzen (sub_/price-slug/Unix-s), KEINE Secrets. Muster wie stripe_* (kein
 -- CHECK). current_period_end als BIGINT (Unix-Sekunden, wie Stripe liefert).

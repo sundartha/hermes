@@ -231,7 +231,11 @@ function fakeProvisioner() {
 test("GP-P1 (Frage 8): der Enum-Anhang landet in job.lastError", async () => {
   const state = makeDefaultState();
   registerTenant(state, "t_gpp1_8");
-  setTenantStripe(state, "t_gpp1_8", { customerId: "cus_gpp1_8", paymentMethodId: "pm_gpp1_8" });
+  setTenantStripe(state, "t_gpp1_8", {
+    customerId: "cus_gpp1_8",
+    paymentMethodId: "pm_gpp1_8",
+    paymentMethodType: "card", // GP-P2: der Hold MUSS erreicht werden - sonst pruefte der Fall nichts
+  });
   const number = requestNumber(state, { tenantId: "t_gpp1_8", country: "DE", ...CAPS }).number;
 
   const store = makeFakeStore(state);

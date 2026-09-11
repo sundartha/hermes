@@ -18,7 +18,8 @@
 //     eigener Stripe-Endpunkt fuer "kuendigen"; nicht zu verwechseln mit cancel oben, das
 //     storniert eine PaymentIntent-Reserve, kein Abo)
 import { config } from "../config.js";
-import { paymentMethodIdOf, periodFieldsOf } from "./webhook.js"; // G5: EINE Normalisierung (pm + Perioden)
+// G5: EINE Normalisierung (pm-Id, pm-Typ, Perioden)
+import { paymentMethodIdOf, paymentMethodTypeOf, periodFieldsOf } from "./webhook.js";
 import { CustomerMissingError, PaymentAuthenticationRequiredError } from "./errors.js";
 import { declineOf, declineDetail, attachProviderDecline } from "./decline.js"; // GP-P1: EINE Quelle des Ablehnungsgrunds
 
@@ -27,6 +28,7 @@ const METER_EVENTS_PATH = "/v1/billing/meter_events";
 const CUSTOMERS_PATH = "/v1/customers";
 const CHECKOUT_SESSIONS_PATH = "/v1/checkout/sessions";
 const SUBSCRIPTIONS_PATH = "/v1/subscriptions"; // W4: monatliches Recurring
+const PAYMENT_METHODS_PATH = "/v1/payment_methods"; // GP-P2: rein lesend, kein Geld
 const CHECKOUT_SETUP_MODE = "setup"; // Karte speichern OHNE Abbuchung (kein Magic-String)
 const CHECKOUT_SUBSCRIPTION_MODE = "subscription"; // Karte + Abo in EINEM gehosteten Schritt (kein Magic-String)
 // GAP-05 (Sicherungs-Achse): Stripe sammelt im subscription-Mode bei einem Rechnungsbetrag
@@ -306,18 +308,32 @@ export const stripeBilling = {
   // (setup_intent expandiert). Fehlt das payment_method -> klarer Fehler (Karte
   // nicht gespeichert), KEIN stilles null (G26: kein null ungeprueft weiterreichen).
   async getCheckoutSessionResult(sessionId) {
-    const res = await fetch(`${url(CHECKOUT_SESSIONS_PATH)}/${sessionId}?expand[]=setup_intent`, {
+    // GP-P2: der Expand ist um eine Ebene vertieft (setup_intent.payment_method), sonst
+    // kommt die Zahlungsmethode als blosse String-Id und der Typ existiert in der Antwort
+    // gar nicht (Pre-Mortem 2: das Feld bliebe in Produktion dauerhaft null). Damit ist
+    // payment_method jetzt ein OBJEKT - die Id MUSS ueber paymentMethodIdOf laufen, das
+    // beide Formen kennt (String wie Objekt); die alte Direktlesung haette ein Stripe-
+    // Objekt als paymentMethodId in die Datenbank geschrieben.
+    const expand = "expand[]=setup_intent&expand[]=setup_intent.payment_method";
+    const res = await fetch(`${url(CHECKOUT_SESSIONS_PATH)}/${sessionId}?${expand}`, {
       method: "GET",
       headers: authHeaders(),
     });
     assertOk(res, "getCheckoutSessionResult");
     const json = await res.json().catch(() => ({}));
-    const paymentMethodId = json.setup_intent && json.setup_intent.payment_method;
+    const paymentMethod = json.setup_intent && json.setup_intent.payment_method;
+    const paymentMethodId = paymentMethodIdOf(paymentMethod);
     if (!paymentMethodId)
       throw new Error(
         "Stripe getCheckoutSessionResult: kein payment_method (Karte nicht gespeichert)",
       );
-    return { customerId: json.customer, paymentMethodId };
+    // Typ fehlt (unexpandierte Altform) -> null, KEIN Wurf: ob das reicht, entscheidet
+    // das Eignungs-Gate, nicht der Adapter.
+    return {
+      customerId: json.customer,
+      paymentMethodId,
+      paymentMethodType: paymentMethodTypeOf(paymentMethod),
+    };
   },
 
   // Checkout-Session im subscription-Mode (Rabattcode-Feature): Stripe erfasst Karte
@@ -389,10 +405,28 @@ export const stripeBilling = {
     return {
       customerId: json.customer,
       paymentMethodId,
+      paymentMethodType: paymentMethodTypeOf(sub.default_payment_method), // GP-P2: bereits expandiert
       subscriptionId: sub.id,
       ...periodFieldsOf(sub),
       planSlug: (sub.metadata && sub.metadata.plan_slug) || null,
     };
+  },
+
+  // GP-P2: liest NUR den Typ einer gespeicherten Zahlungsmethode (GET /v1/payment_methods/
+  // {id}). Rein lesend, bewegt KEIN Geld, aendert nichts. Gebraucht vom Webhook-Pfad:
+  // Stripe-Ereignisse tragen default_payment_method immer unexpandiert, der Typ steht dort
+  // nie - ohne diesen Nachschlag bekaeme jeder ueber den Race-Fix gebundene Mandant einen
+  // unbekannten Typ und damit fail-closed keine Nummer. Aus dem Adapter kommt AUSSCHLIESS-
+  // LICH der Enum-Typ: das PM-Objekt traegt billing_details mit Name, E-Mail und Anschrift
+  // (Vorfall 11.09.2026) und bleibt vollstaendig hier drinnen (Regel 4/GP-P1).
+  async retrievePaymentMethodType(paymentMethodId) {
+    const res = await fetch(`${url(PAYMENT_METHODS_PATH)}/${paymentMethodId}`, {
+      method: "GET",
+      headers: authHeaders(),
+    });
+    assertOk(res, "retrievePaymentMethodType");
+    const json = await res.json().catch(() => ({}));
+    return paymentMethodTypeOf(json);
   },
 
   // Erstellt ein echtes monatliches Recurring (POST /v1/subscriptions). off_session +

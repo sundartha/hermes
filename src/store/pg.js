@@ -1113,7 +1113,7 @@ async function hydrateSubIndex(client, state) {
 // tenant-Tabelle hat keine RLS.
 const TENANT_COLUMNS =
   "id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, " +
-  "stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, " +
+  "stripe_payment_method_id, stripe_payment_method_type, stripe_subscription_id, stripe_plan_slug, " +
   "stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, " +
   "country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, " +
   "suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, " +
@@ -1139,6 +1139,8 @@ function rowToTenant(r) {
   if (r.kyc_level != null) tenant.kycLevel = r.kyc_level;
   if (r.stripe_customer_id != null) tenant.stripeCustomerId = r.stripe_customer_id;
   if (r.stripe_payment_method_id != null) tenant.stripePaymentMethodId = r.stripe_payment_method_id;
+  if (r.stripe_payment_method_type != null)
+    tenant.stripePaymentMethodType = r.stripe_payment_method_type;
   if (r.stripe_subscription_id != null) tenant.stripeSubscriptionId = r.stripe_subscription_id;
   if (r.stripe_plan_slug != null) tenant.stripePlanSlug = r.stripe_plan_slug;
   // BIGINT kommt als String aus pg -> zurueck zur Zahl (Unix-Sekunden, kein Float-Geld).
@@ -1784,14 +1786,15 @@ async function flushTenantScope(client, tenantId, state) {
 async function flushTenants(client, tenants) {
   for (const t of tenants) {
     await client.query(
-      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending, cancellation_mail_pending, cancellation_mail_received_at, newsletter_consent, newsletter_consent_at, newsletter_recipients, newsletter_confirm_mail_log)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+      `INSERT INTO tenant (id, status, owner_name, first_name, idp_subject, kyc_level, stripe_customer_id, stripe_payment_method_id, stripe_payment_method_type, stripe_subscription_id, stripe_plan_slug, stripe_current_period_end, stripe_current_period_start, stripe_number_setup_fee_exempt, country, default_language, timezone, private_number, number_provision_skip_reason, number_provision_skip_at, suspended_at, stripe_activation_pending, stripe_billing_hold, stripe_billing_hold_due_at, stripe_period_credit_revoked, stripe_cancel_at_period_end, number_release_pending, workos_delete_pending, cancellation_mail_pending, cancellation_mail_received_at, newsletter_consent, newsletter_consent_at, newsletter_recipients, newsletter_confirm_mail_log)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34)
        ON CONFLICT (id) DO UPDATE SET
          owner_name=EXCLUDED.owner_name,
          first_name=EXCLUDED.first_name,
          idp_subject=EXCLUDED.idp_subject, kyc_level=EXCLUDED.kyc_level,
          stripe_customer_id=EXCLUDED.stripe_customer_id,
          stripe_payment_method_id=EXCLUDED.stripe_payment_method_id,
+         stripe_payment_method_type=EXCLUDED.stripe_payment_method_type,
          stripe_subscription_id=EXCLUDED.stripe_subscription_id,
          stripe_plan_slug=EXCLUDED.stripe_plan_slug,
          stripe_current_period_end=EXCLUDED.stripe_current_period_end,
@@ -1825,6 +1828,7 @@ async function flushTenants(client, tenants) {
         t.kycLevel ?? null,
         t.stripeCustomerId ?? null,
         t.stripePaymentMethodId ?? null,
+        t.stripePaymentMethodType ?? null,
         t.stripeSubscriptionId ?? null,
         t.stripePlanSlug ?? null,
         t.stripeCurrentPeriodEnd ?? null,
@@ -1848,7 +1852,7 @@ async function flushTenants(client, tenants) {
         t.cancellationMailReceivedAt ?? null,
         t.newsletterConsent ?? null,
         t.newsletterConsentAt ?? null,
-        // Newsletter-Zusatzempfaenger ($32-$33): explizites JSON.stringify fuer den
+        // Newsletter-Zusatzempfaenger ($33-$34): explizites JSON.stringify fuer den
         // outbound JSONB-Parameter (der Treiber serialisiert Schreib-Parameter NICHT
         // automatisch, Muster consults auf call). null bleibt null (leere Liste = kein
         // Eintrag, kein leeres "[]" am Bestandstenant).

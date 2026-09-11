@@ -228,14 +228,21 @@ const RACE_EVENT = (defaultPaymentMethod) => ({
 test("A(f) activate mit customer+default_payment_method, Tenant OHNE Karte + Customer-Match -> Karte gebunden (Luecke gefuellt), provision laeuft", async () => {
   const deps = fakeDeps({ stripeOnFile: { customerId: "cus_r", paymentMethodId: null } });
   await applyStripeWebhook(RACE_EVENT("pm_r"), deps);
-  assert.deepEqual(deps.calls.stripe, [["t_r", { paymentMethodId: "pm_r" }]], "Karte aus dem Event gebunden");
+  // GP-P2: paymentMethodType null, weil fakeDeps bewusst KEIN billing traegt (payment-off) -
+  // ohne Anbieter gibt es keinen Nachschlag, der Typ bleibt unbekannt und das Eignungs-Gate
+  // entscheidet spaeter fail-closed. Geschrieben wird er trotzdem, nie verschwiegen.
+  assert.deepEqual(
+    deps.calls.stripe,
+    [["t_r", { paymentMethodId: "pm_r", paymentMethodType: null }]],
+    "Karte aus dem Event gebunden",
+  );
   assert.deepEqual(deps.calls.provision, ["t_r"], "Provisioning laeuft mit hinterlegter Karte");
 });
 
 test("A(g) default_payment_method als expandiertes Objekt ({id}) -> dieselbe Bindung", async () => {
   const deps = fakeDeps({ stripeOnFile: { customerId: "cus_r", paymentMethodId: null } });
   await applyStripeWebhook(RACE_EVENT({ id: "pm_r" }), deps);
-  assert.deepEqual(deps.calls.stripe, [["t_r", { paymentMethodId: "pm_r" }]]);
+  assert.deepEqual(deps.calls.stripe, [["t_r", { paymentMethodId: "pm_r", paymentMethodType: null }]]);
 });
 
 test("A(h) Tenant MIT Karte-on-file -> KEIN Ueberschreiben (bewusst neu erfasste Karte bleibt)", async () => {
