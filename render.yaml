@@ -532,6 +532,10 @@ services:
       # Nummern-HOLD (platform_number_in_use) ueber denselben Meldeweg. 0 = komplett aus.
       - key: PLATFORM_HOLD_ESCALATION_MAX_AGE_MS
         value: "86400000"
+      # GP-P0: meldet einen zahlenden Mandanten ohne Live-Nummer (Vorfall 11.09.2026).
+      # Reine Beobachtung, kein Kauf, kein Versand. 0 = komplett aus.
+      - key: PAID_WITHOUT_NUMBER_GRACE_MS
+        value: "3600000"
       # Betreiber-Zieladresse, der PRIMAERE Kanal (haengt an keinem Carrier). Secret-frei,
       # aber sync:false (Dashboard-verwaltet, Muster PLATFORM_ANI_E164). WARNUNG: bleibt
       # dieser Wert UND PLATFORM_ALERT_SMS_TO gemeinsam leer, waehrend

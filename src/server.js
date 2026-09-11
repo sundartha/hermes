@@ -20,6 +20,7 @@ import { terminateAndBillCall, hangUpAction, billThunk } from "./telephony/call-
 import { makeCallFinish } from "./telephony/call-finish.js";
 import { makeOutageWatch } from "./telephony/outage-report.js";
 import { makeDriftWatch } from "./telephony/outbound-drift-watch.js";
+import { makePaidWithoutNumberWatch } from "./billing/paid-without-number-watch.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { metrics } from "./metrics.js";
@@ -185,6 +186,12 @@ const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer })
 // stand dieselbe Closure wortgleich auch in scripts/check-outbound-drift.mjs.
 const elRead = makeElConfigRead(config);
 const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, telnyxRead, elRead });
+
+// GP-P0: ACHTER, unabhaengiger Sweep-Zweig (Muster outageWatch/driftWatch, INV-7).
+// durableAudit statt audit: der Befund muss die Log-Rotation ueberleben - genau das war
+// der Vorfall vom 11.09. (Muster costTruing, KV2-1). KEIN messaging/mailer: die Phase
+// meldet auf der Notiz-Stufe (WARN -> Audit -> Marker), sie alarmiert nicht.
+const paidWithoutNumberWatch = makePaidWithoutNumberWatch({ store, config, audit: durableAudit });
 
 // F2-Mail: Accounts-Zugriff (Konto-E-Mail) haengt an accounts.accountByTenant (web-auth.js),
 // das NUR existiert, wenn der pg-gated Web-Login-Block durchlaeuft (wireWebLogin, asynchron
@@ -364,6 +371,7 @@ const deps = {
   durableAuditFor,
   outageWatch,
   driftWatch,
+  paidWithoutNumberWatch,
   messaging,
   consultDelivery,
   elevenLabsOutbound,

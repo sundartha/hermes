@@ -73,6 +73,11 @@ import {
 } from "./cost-evidence.js";
 import { SUPPORTED_LANGUAGES, PERSONA_STYLE_IDS, languageForCountry } from "../i18n/locales.js";
 import { planCapCents } from "../billing/plan-caps.js";
+// GP-P0: die EINE Ableitung "Beginn der laufenden Abrechnungsperiode" (G5). period.js ist
+// ein Blatt-Modul ohne eigene Imports -> kein Zyklus in den Store-Graph (Muster plan-
+// caps.js/kostenarten.js). Der Kopfkommentar dieser Datei grenzt die Spend-Monat-Achse
+// bewusst gegen diese Stripe-Periode ab; hier ist die Stripe-Periode gemeint.
+import { resolvePeriodStartIso } from "../billing/period.js";
 // KV2-2: die Kostenprofil-Registry der Engine-Weiche. Import-frei von src/telephony/*
 // (s. Kopfkommentar kostenarten.js) - kein Zyklus in den Store-Graph.
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
@@ -3254,6 +3259,49 @@ export function platformHoldEscalationCandidates(state, { nowMs, maxAgeMs }) {
     const { hold } = tenantNumbersForErase(state, tenant.id);
     for (const { number, reason } of hold)
       if (reason === NUMBER_HOLD_REASON.PLATFORM_IN_USE) candidates.push(number);
+  }
+  return candidates;
+}
+
+// ---- GP-P0 (PLAN-GELDPFAD.md 2): "zahlender Mandant ohne Nummer" ------------------
+// Der Vorfall vom 11.09.2026 war NUR durch manuelle DB-Forensik sichtbar: der
+// Boot-Klassifikator sieht ausschliesslich QUEUED-Jobs (s. classifyQueuedProvisioning-
+// Jobs oben), ein Mandant mit aktivem Abo und einer Nummer auf 'failed' hat gar keinen
+// offenen Job mehr. Dieser Selektor schliesst GENAU diese Luecke - und NUR sie: er
+// beobachtet, er handelt nicht (kein Kauf, kein Retry, kein Anbieter-Aufruf).
+//
+// REIN + IO-frei (mutiert state NICHT, kein Date.now): nowMs/graceMs/kycMinLevel
+// injiziert (Muster platformHoldEscalationCandidates/classifyNumbersForRelease).
+//
+// ZEITANKER ist der Beginn der laufenden Stripe-Abrechnungsperiode (resolvePeriodStart-
+// Iso, EINE Quelle, G5). Kein Anker (weder current_period_start noch -end) -> Alter
+// unbekannt -> fail-closed KEIN Befund. Das haelt genau zwei Klassen draussen, beide
+// gewollt: den Owner-/Bootstrap-Mandanten (seedBootstrapKyc gibt ihm id_verified, er
+// besteht tenantActiveSubscriber - aber er hat kein Stripe-Abo) und jedes frische Abo,
+// dessen Webhook noch aussteht.
+// VORBEHALT, bewusst getragen: der Anker wandert mit JEDER Periode. In der ersten
+// Stunde nach einer Verlaengerung ist er juenger als graceMs - ein in diesem Fenster
+// neu entstehender Fall wird EINEN Sweep spaeter gemeldet, nicht gar nicht.
+//
+// "Live-Nummer" ist tenantHasLiveNumber (liveNumbers/occupiesCapacity, EINE Quelle,
+// G5): released/failed zaehlen nicht. FOLGE, ausdruecklich: ein Mandant, der dauerhaft
+// auf requested/provisioning haengt, HAT eine Live-Nummer und erscheint hier NICHT -
+// diese Klasse deckt der Boot-Reconciler ab, nicht dieser Selektor.
+//
+// Langer Parametername 'state' statt des in dieser Datei ueblichen 's' (G16/N1,
+// eslint id-length): der bereits gepinnte Altlast-Fund darf durch neuen Code NICHT
+// weiter wachsen - dieselbe Begruendung wie bei platformHoldEscalationCandidates oben.
+export function paidWithoutNumberCandidates(state, { nowMs, graceMs, kycMinLevel }) {
+  const candidates = [];
+  for (const tenant of state.tenants) {
+    if (!tenantActiveSubscriber(state, tenant.id, kycMinLevel)) continue;
+    if (tenantHasLiveNumber(state, tenant.id)) continue;
+    const paidSinceIso = resolvePeriodStartIso(tenantSubscription(state, tenant.id));
+    if (!paidSinceIso) continue; // fail-closed: kein Anker -> kein Befund
+    const paidSinceMs = Date.parse(paidSinceIso);
+    if (Number.isNaN(paidSinceMs)) continue; // fail-closed, Muster suspendedAt oben
+    if (nowMs - paidSinceMs <= graceMs) continue;
+    candidates.push({ tenantId: tenant.id, paidSinceIso });
   }
   return candidates;
 }
