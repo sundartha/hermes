@@ -13,7 +13,8 @@
 // (P5, registry.js), sayD/hangupD, SPEAK_OUTCOME, localeFor, callFailureReason,
 // degradedSpeechFor, agentTurn/openingText/callerHasSpoken, remainingMaxDurationMs,
 // noSpeechEscalation, metrics, startInboundAiAssistant/inboundHandoffDecision,
-// makeCallControlIngest) werden direkt importiert (G5 "eine Quelle"). Laufzeit-Instanzen
+// makeCallControlIngest, legRunsOurTurnLoop) werden direkt importiert (G5 "eine Quelle").
+// Laufzeit-Instanzen
 // (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall/watchdog, INV-7), der
 // Provider-Dispatch-Seam (voiceControl/webhookEvents/providerFromHeaders/
 // inboundSignatureVerifier, DIP) sowie der Settlement-Seam (terminateAndBillCall/
@@ -48,6 +49,7 @@ import { ANSWERED_BY } from "../telephony/answered-by.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.js";
+import { legRunsOurTurnLoop } from "../telephony/leg-turn-loop.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -73,6 +75,29 @@ import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.js";
 // Platzhalter; die exakte Telnyx-Handoff-Direktive ist live unbestaetigt (P0/P11). Zentral
 // benannt statt inline-[] gestreut.
 const INBOUND_ASSISTANT_HANDOFF = [];
+
+// IE4: die Ersatzantwort auf eine WIEDERHOLTE Zustellung - leere Direktivenliste, damit
+// der Provider das laufende Dokument des uebergebenen Beins nicht zurueksetzt.
+// ABSICHTLICH NICHT dieselbe Konstante wie INBOUND_ASSISTANT_HANDOFF, obwohl heute
+// dieselben Bytes entstehen: dort ist die leere Liste ein PLATZHALTER fuer eine noch
+// unbestaetigte Handoff-Direktive (P0/P11). Bekommt sie je Inhalt, darf die
+// Wiederholungs-Antwort NICHT mitwandern - zwei Fragen, zwei Konstanten (G5 schuetzt
+// gemeinsame WAHRHEITEN, nicht zufaellig gleiche Werte).
+const RUNNING_DOCUMENT_UNTOUCHED = [];
+
+// IE4: die Antwort richtet sich nach dem ZUSTAND des Beins, nicht nach der Engine.
+// Budget-Bein (und jeder unbelegte Zustand) -> unveraenderter Folge-Gather OHNE Prompt:
+// Mikrofon offen, keine Modellrunde, keine Synthese. Uebergebenes Bein (heute der
+// Realtime-Stream, ab IE5 die SIP-Uebergabe) -> gueltiges, aber leeres Dokument.
+// MODUL-EBENE statt im Abschluss von makeVoiceRoutes (Praezedenz
+// recordStartRejectionReason in api-calls.js): die Entscheidung braucht keinen
+// Server-Zustand, nur die Direktiven-Fabrik - und makeVoiceRoutes traegt bereits zu viel.
+function repeatDeliveryXml(call, { render, followupTurnDirectives }) {
+  const directives = legRunsOurTurnLoop(call)
+    ? followupTurnDirectives(call, "")
+    : RUNNING_DOCUMENT_UNTOUCHED;
+  return render(directives, call.provider);
+}
 
 // FW2: EIN Kanalname fuer die Diagnose-Zeilen dieses Webhooks (G25).
 const TURN_LOG_PREFIX = "[voice/turn]";
@@ -208,12 +233,13 @@ export function makeVoiceRoutes({
   // EINE Instanz je Server (INV-7). Registriert wird er PRO ROUTE, also strukturell
   // HINTER der /voice-Signatur-MW - ein unsignierter Request darf keinen Anker
   // beanspruchen. keepAliveXml ist die Antwort auf eine Wiederholung, deren Wortlaut
-  // dieser Prozess nicht mehr kennt (Neustart): Folge-Gather OHNE Prompt haelt das
-  // Mikrofon offen, kostet keine Modellrunde und keine Synthese. KEIN Gate wird hier
-  // beruehrt (Regel 1) - der Riegel fuegt hinzu, er nimmt nichts weg.
+  // dieser Prozess nicht mehr kennt (Neustart). Seit IE4 ist sie PFADGERECHT
+  // (repeatDeliveryXml): Budget-Bein unveraendert Folge-Gather, uebergebenes Bein ein
+  // leeres Dokument. Der ANKER und die Antwortpflicht (immer text/xml, nie ein
+  // Fehlerstatus) sind unberuehrt; KEIN Gate wird hier beruehrt (Regel 1).
   const idempotenz = makeWebhookIdempotenz({
     store,
-    keepAliveXml: (call) => render(followupTurnDirectives(call, ""), call.provider),
+    keepAliveXml: (call) => repeatDeliveryXml(call, { render, followupTurnDirectives }),
   });
 
   // ---- INV-4 (Pflicht-Kommentar, safety-tragend): TTS-Route ZUERST, DANN Sig-MW, DANN die 5
