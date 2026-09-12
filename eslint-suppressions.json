@@ -980,14 +980,6 @@
       "count": 1
     }
   },
-  "src/telephony/adapters/telnyx/render.js": {
-    "id-length": {
-      "count": 11
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "src/telephony/adapters/telnyx/voice.js": {
     "complexity": {
       "count": 1
@@ -2474,14 +2466,6 @@
       "count": 1
     }
   },
-  "test/directive-synth.test.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 4
-    }
-  },
   "test/disclosure-outbound.test.js": {
     "no-magic-numbers": {
       "count": 2
@@ -3907,11 +3891,6 @@
       "count": 1
     }
   },
-  "test/p9-voice-locale-source.test.js": {
-    "id-length": {
-      "count": 1
-    }
-  },
   "test/pay-04-starter-reserve-charakterisierung.test.js": {
     "id-length": {
       "count": 1
@@ -4605,14 +4584,6 @@
     }
   },
   "test/telnyx-elevenlabs-inbound.test.js": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
-  "test/telnyx-elevenlabs-render.test.js": {
-    "id-length": {
-      "count": 1
-    },
     "no-magic-numbers": {
       "count": 1
     }

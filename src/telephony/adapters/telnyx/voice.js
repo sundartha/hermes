@@ -316,9 +316,9 @@ async function postCallControlAction(callControlId, { action, body, op }) {
 // hat (Gates-P9 B-R5-Nachtrag). KEIN `language`: im SpeakRequest optional (required =
 // payload+voice), es steuert die Azure-/Telnyx-TTS-Sprache; ElevenLabs-Modelle sind
 // multilingual und folgen dem Text (gleiche Entscheidung wie der TeXML-Say in render.js).
-// Die sprachaufgeloeste voiceProfile-Stimme (P9, VOICE-12) bleibt auf dem TeXML-Renderer
-// (render.js) und dem Play-TTS-Vorabsynthese-Pfad (directive-synth.js) beschraenkt - beide
-// haben keinen nachfolgenden Assistant, der die Stimme wechseln koennte.
+// Die sprachaufgeloeste voiceProfile-Stimme (P9, VOICE-12) bleibt seit IP3 auf den
+// Play-TTS-Vorabsynthese-Pfad (directive-synth.js) beschraenkt - er hat keinen
+// nachfolgenden Assistant, der die Stimme wechseln koennte.
 // Fail-SAFE (Fallback a): unvollstaendige ElevenLabs-Config -> Azure-Bestand byte-identisch.
 function speakVoiceFields({ voiceProfile, useAssistantVoice }) {
   const el = config.telnyx.telnyxElevenLabs;

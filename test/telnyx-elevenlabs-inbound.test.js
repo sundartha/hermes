@@ -1,9 +1,12 @@
-// ElevenLabs-TTS end-to-end am /voice/incoming-Pfad (Server-Spawn, json-Store):
-// mit gesetzten TELNYX_ELEVENLABS_*-Envs rendert der Telnyx-Inbound das Greeting
-// mit ElevenLabs-Voice + api_key_ref, die STT-Attribute (Deepgram) bleiben
-// unveraendert; ohne Env bleibt der Azure-Bestand. Provider-Wahl laeuft ueber
-// die Telnyx-Signatur-Header (Signaturpruefung im Test uebersprungen, die Header
-// dienen nur dem Provider-Dispatch wie in provider-threading.test.js).
+// IP3-RIEGEL, end-to-end (Server-Spawn, json-Store): TELNYX_ELEVENLABS_*-Envs erreichen
+// den Telnyx-Inbound-Pfad nicht mehr - der TeXML-<Say>-Relay-Zweig ist entfernt
+// (A/B-belegt defekt, Begruendung im Modulkopf von adapters/telnyx/render.js). Vor IP3
+// war GENAU dieser End-to-End-Pfad die Selbstarmierung: zwei gesetzte Envs, ohne Flag,
+// ohne Logzeile, schalteten den kompletten Inbound-Gruss auf den Relay um. Diese Datei
+// bewies das vorher am gerenderten TeXML - sie beweist jetzt das Gegenteil: dieselben
+// zwei Envs, gesetzt am echten Serverprozess, aendern das TeXML NICHT. Provider-Wahl
+// laeuft ueber die Telnyx-Signatur-Header (Signaturpruefung im Test uebersprungen, die
+// Header dienen nur dem Provider-Dispatch wie in provider-threading.test.js).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startServer, seedState } from "./helpers.js";
@@ -26,10 +29,9 @@ function seedWithTelnyxNumber() {
         tenantId: TENANT_B,
         provider: "telnyx",
         status: "active",
-        // P10: language explizit "de" - Subjekt dieses Tests ist die ElevenLabs-Stimmen-
-        // Auswahl, nicht die Sprachaufloesung. Ohne den Pin faellt die Nummer (kein
-        // eigenes language) auf den Weltdefault (en) durch und der Gather rendert
-        // en-GB/Azure statt der deutschen Assertions unten.
+        // P10: language explizit "de" - Subjekt dieses Tests ist die Inertheit der
+        // ElevenLabs-Envs, nicht die Sprachaufloesung. Ohne den Pin faellt die Nummer
+        // (kein eigenes language) auf den Weltdefault (en) durch.
         language: "de",
         providerNumberId: null,
       },
@@ -47,21 +49,14 @@ async function inbound(srv, { callSid }) {
   return res.text();
 }
 
-test("ElevenLabs-Env gesetzt: Telnyx-Inbound spricht ElevenLabs (STT bleibt Deepgram)", async () => {
+test("Selbstarmierung weg end-to-end: TELNYX_ELEVENLABS_*-Envs gesetzt, Telnyx-Inbound rendert TROTZDEM Azure", async () => {
   const srv = await startServer({ seed: seedWithTelnyxNumber(), env: EL_ENV });
   try {
     const telnyxXml = await inbound(srv, { callSid: "CAel1" });
-    // Seit 2026-08-18 traegt JEDE Sprache eine eigene kuratierte Stimme; der Inbound-
-    // Gruss laeuft auf Deutsch, also die DE-ID - nicht mehr die Plattform-Stimme aus der
-    // Env. Vorher fiel Deutsch auf sie zurueck, und wo sie fehlte, sprach der Agent in
-    // seiner Dashboard-Stimme (an Anruf 7 gemessen: en/american).
-    assert.match(
-      telnyxXml,
-      /<Say voice="ElevenLabs\.Default\.cqPdIo76zSHFDcSZpFov" api_key_ref="elevenlabs_prod">/,
-      "Greeting-Say (im Gather) traegt die kuratierte DEUTSCHE ElevenLabs-Stimme",
-    );
+    assert.match(telnyxXml, /voice="Azure\.de-DE-KatjaNeural"/, "Azure-Default unveraendert trotz gesetzter Envs");
     assert.match(telnyxXml, /transcriptionEngine="Deepgram"/, "STT unveraendert Deepgram");
-    assert.doesNotMatch(telnyxXml, /Azure\./, "keine gemischten Stimmen");
+    assert.doesNotMatch(telnyxXml, /ElevenLabs/, "kein ElevenLabs-Attribut, kein Relay");
+    assert.doesNotMatch(telnyxXml, /api_key_ref/, "kein api_key_ref am <Say>");
   } finally {
     await srv.stop();
   }

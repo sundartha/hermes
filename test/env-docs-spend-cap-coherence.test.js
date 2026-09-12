@@ -156,3 +156,34 @@ test("LAW-15 (Mechanismus, gruen) - Retention-Defaults 30/7 stimmen in src/confi
     "die Diagnose-Frist ist die STRENGERE und damit immer die bindende (src/config.js)",
   );
 });
+
+// boolEnv-Analogon zu readCodeFallback: liest den ausgelieferten CODE-Default einer
+// Boolean-Env direkt aus dem src/config.js-Quelltext (kein config-Import - der wuerde die
+// ambiente Shell auswerten, Lehre test-base-env-drift).
+function readBoolCodeFallback(text, envName) {
+  const match = text.match(new RegExp(`boolEnv\\(\\s*"${envName}",[^)]*?fallback:\\s*(true|false)`));
+  if (!match) throw new Error(`boolEnv-Fallback fuer ${envName} nicht in src/config.js gefunden`);
+  return match[1] === "true";
+}
+
+// IP3: der Prototyp einer zweiten Wahrheit ueber EINEN Wahrheitswert. render.yaml trug
+// "true" samt Kommentar "Default true", waehrend der boolEnv-Fallback seit dem
+// 422-Befund (2026-08-04) false ist und .env.example false dokumentiert. Ein erneutes
+// Anwenden des Blueprints haette den belegt defekten Inbound-Handoff scharf gestellt -
+// der Anrufer hoert dann nur die Fehleransage. Der Schalter selbst verschwindet spaeter
+// mit dem Assistant-Pfad; bis dahin sagen alle drei Quellen dasselbe.
+const INBOUND_HANDOFF_SHIPPED_DEFAULT = false;
+
+test("IP3: TELNYX_INBOUND_HANDOFF_ENABLED sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
+  const name = "TELNYX_INBOUND_HANDOFF_ENABLED";
+  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
+  const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
+  assert.equal(
+    readBoolCodeFallback(configSrc, name),
+    INBOUND_HANDOFF_SHIPPED_DEFAULT,
+    "src/config.js boolEnv-Fallback",
+  );
+  assert.equal(readEnvValue(envExample, name), String(INBOUND_HANDOFF_SHIPPED_DEFAULT), ".env.example");
+  assert.equal(readRenderValue(renderYaml, name), String(INBOUND_HANDOFF_SHIPPED_DEFAULT), "render.yaml");
+});

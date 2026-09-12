@@ -84,11 +84,7 @@ const ADAPTERS = Object.freeze({
   // nur von den Modell-Strings auf die Env-Namen verschoben.
   [PORT.VOICE_RENDERER]: {
     [PROVIDER.TELNYX]: {
-      renderDirectives: (d) =>
-        telnyxRenderDirectives(d, {
-          elevenLabs: config.telnyx.telnyxElevenLabs,
-          sttProfile: config.voice.sttProfile,
-        }),
+      renderDirectives: (d) => telnyxRenderDirectives(d, { sttProfile: config.voice.sttProfile }),
     },
   },
 });
@@ -160,10 +156,13 @@ export const numberProvisioning = (provider = PROVIDER.TELNYX) =>
 export const providerConfigRead = (provider = PROVIDER.TELNYX) =>
   pick(PORT.PROVIDER_CONFIG_READ, provider);
 
-// Telnyx bekommt die ElevenLabs-TTS-Konfiguration (globale Plattform-Stimme) lazy
-// zur Render-Zeit injiziert (Sonderfall b, siehe ADAPTERS oben) - der Renderer selbst
-// bleibt config-frei/pur (Snapshot-Tests ohne Env). Gate liegt im Renderer
-// (apiKeyRef+voiceId leer -> Azure byte-identisch).
+// Telnyx bekommt die STT-Profil-Wahl lazy zur Render-Zeit injiziert (Sonderfall b, siehe
+// ADAPTERS oben) - der Renderer selbst bleibt config-frei/pur (Snapshot-Tests ohne Env).
+// Die ElevenLabs-Plattform-Stimme wird hier seit IP3 NICHT mehr injiziert: der
+// Relay-Zweig am <Say> ist entfernt (A/B-belegt defekt, Begruendung im Modulkopf von
+// adapters/telnyx/render.js); der ElevenLabs-Weg der Budget-Engine ist die
+// <Play>-Vorabsynthese. Der Call-Control-speak-Pfad liest den Config-Block weiterhin
+// direkt (adapters/telnyx/voice.js) - diese Aenderung erreicht ihn nicht.
 /** @returns {import("./ports.js").VoiceRenderer} */
 export const voiceRenderer = (provider = DEFAULT_PROVIDER) => pick(PORT.VOICE_RENDERER, provider);
 

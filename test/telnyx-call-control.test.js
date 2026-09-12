@@ -475,7 +475,8 @@ test("afix-p1 (T-neu 1): speak useAssistantVoice=true + volle Config -> ElevenLa
 // Stimme aus P9 (VOICE-12) - sonst spricht die Offenlegung FR/EN, der nachfolgende
 // Telnyx-Assistant (EIN global provisioniertes Voice-Setting) aber weiter DE (RCA-Wurzel
 // R5, "EINE Stimme im ganzen Call"). Faengt exakt die Regression, die P9 kurzzeitig
-// einfuehrte: elevenLabsVoiceNameFor(el, voiceProfile) statt elevenLabsVoiceName(el).
+// einfuehrte: die sprachaufgeloeste Namens-Komposition statt elevenLabsVoiceName(el)
+// (die Komposition selbst ist mit dem Relay-Zweig in IP3 entfallen).
 test("R5-Regression: speak useAssistantVoice=true bleibt bei FR/EN die globale Assistant-Stimme, nicht die sprachaufgeloeste VOICE-12-ID", async () => {
   for (const voiceProfile of [VOICE_PROFILE.FR_FEMALE_NEURAL, VOICE_PROFILE.EN_FEMALE_NEURAL]) {
     const calls = stubFetch({ json: {} });
