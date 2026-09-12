@@ -709,9 +709,11 @@ const rawConfig = {
     min: 5,
     max: 600,
   }),
-  // ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme, optional). Gate im
-  // Telnyx-Renderer (via Registry injiziert): ElevenLabs-Say NUR wenn apiKeyRef
-  // UND voiceId gesetzt sind - sonst Azure-Bestand byte-identisch. apiKeyRef =
+  // ElevenLabs-Plattform-Stimme (global, optional). SEIT IP3 KEIN Renderer-Gate mehr:
+  // der TeXML-<Say>-Relay-Zweig ist entfernt (A/B-belegt defekt). Konsumenten sind nur
+  // noch der Call-Control-speak/Assistant-Pfad (adapters/telnyx/voice.js, dort das
+  // hasElevenLabsVoice-Gate), der Assistant-Provisioner und der Rueckfallwert der
+  // Outbound-Stimmauflegung (elevenlabs/outbound.js#callLocaleOf). apiKeyRef =
   // IDENTIFIER des Telnyx-Integration-Secrets, das den ElevenLabs-API-Key haelt
   // (der Key selbst liegt NUR bei Telnyx, nie hier). Bewusste Vereinfachung:
   // EIN Plattform-Key - TTS-Zeichen aller Tenants laufen ohne per-Tenant-
@@ -725,9 +727,10 @@ const rawConfig = {
   },
 
   // Play-TTS: ElevenLabs-Stimme via <Play> in der Budget-Engine (Telnyx). GETRENNT vom
-  // Relay-Block telnyxElevenLabs oben: dort baut Telnyx einen Live-Relay-Stream (der den
-  // Inbound-Track unterdrueckt -> STT leer, A/B-belegt); HIER synthetisiert unser Server
-  // die mp3 vorab und Telnyx spielt eine STATISCHE Datei -> Inbound-Track lebt. Gate
+  // Block telnyxElevenLabs oben: dort baute Telnyx bis IP3 einen Live-Relay-Stream (der
+  // den Inbound-Track unterdrueckte -> STT leer, A/B-belegt; Zweig entfernt); HIER
+  // synthetisiert unser Server die mp3 vorab und Telnyx spielt eine STATISCHE Datei ->
+  // Inbound-Track lebt. Gate
   // Default AUS (Muster PAYMENT_ENABLED) -> Azure-<Say> byte-identisch. apiKey ist SECRET.
   elevenLabsPlayTts: {
     enabled: boolEnv("ELEVENLABS_PLAY_TTS_ENABLED", process.env.ELEVENLABS_PLAY_TTS_ENABLED, {
