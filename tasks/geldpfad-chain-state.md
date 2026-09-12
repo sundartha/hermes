@@ -1,8 +1,10 @@
 # Kettenstand: Geldpfad-Behebungskette (GP-P0..GP-P6) — ABGESCHLOSSEN 2026-09-11
 
-**Alle sieben Phasen gebaut, abgenommen und gemergt. Nichts offen ausser den Owner-Blockern
-unten. Nicht gepusht, nicht deployt** (Render deployt aus dem Upstream-Repo; ein Push hier
-waere ein Release, kein Test).
+**Alle sieben Phasen gebaut, abgenommen, gemergt — und seit 11.09.2026 LIVE** (Commit
+`8447d6d`). Auf `origin` und `upstream` gepusht; Gateway `vodafone-agent` manuell deployt
+(autoDeploy dort AUS), Website `hermes-web` automatisch mitgezogen (autoDeploy dort AN —
+entgegen der Beschreibung in CLAUDE.md, frisch gemessen). `/healthz` meldet den neuen Commit:
+der neue FATAL-Boot-Guard hat den Start NICHT verhindert.
 
 Manifest: `PLAN-GELDPFAD.md`. Kickoff: `tasks/geldpfad-kickoff.md`.
 Diese Datei ist die Uebergabe an die naechste Session. Sie bleibt kurz.
@@ -153,16 +155,35 @@ knapp GP-P4. **Kein Lauf ist weggelaufen** - der groesste Einzelagent lag bei 20
 (GP-P3), weit entfernt vom 687-Turn-Ausreisser der Vergangenheit, und kein Lauf brauchte auch
 nur eine Fix-Runde. Die Kosten liegen in der Groesse der Phasen, nicht in Warteschleifen.
 
+## Live-Lage nach dem Deploy (gemessen 11.09.2026, Prod-DB + Telnyx)
+
+**Die Automatik ist scharf und fasst trotzdem niemanden an.** Keine der fuenf neuen
+Env-Variablen ist in Render gesetzt; alle laufen auf ihren Code-Defaults. Der zeitgesteuerte
+Nummernkauf kann dennoch nicht feuern: **kein einziger der sechs Mandanten traegt einen
+`stripe_payment_method_type`** (additiv-nullable ohne Backfill), und `null` gilt fail-closed
+als ungeeignet. Telnyx-Guthaben 6,79 USD bei Kreditlimit 0 - Telnyx kann nicht ueberziehen.
+
+**Genau ein Mandant zahlt und hat keine Nummer:** der des Vorfalls
+(`t_user_01KXH2B75WJ75W3JYYXDPPSK3R`, starter, Abo, Karte hinterlegt, Nummer `failed`, dazu
+eine `released`). Er bekommt sie **erst, wenn er die Karte neu hinterlegt** - dann wird der Typ
+geschrieben und GP-P3 stoesst sofort an; das Dashboard zeigt ihm dafuer jetzt einen Knopf.
+Das ist Pre-Mortem 3 des Plans, dort als akzeptiertes Restrisiko benannt. Der
+Sichtbarkeits-Selektor aus GP-P0 wird genau ihn ab der ersten Stunde melden - der erste Befund
+der Kette ist der Fall, der sie ausgeloest hat.
+
+Die beiden anderen zahlenden Mandanten haben je eine aktive Nummer und sind unauffaellig.
+
+**Forensik-Gotcha:** `number` und `provisioning_job` tragen FORCE-RLS, die Rolle
+`hermes_db_1jru_user` ist NICHT davon befreit - ein naives `count(*)` liefert dort **0** und
+sieht aus wie "es gibt keine". Pro Mandant `set app.current_tenant='<id>'` setzen. `tenant`
+selbst ist offen und darf naiv gezaehlt werden.
+
 ## Was eine Nachfolge-Session zuerst wissen muss
 
-1. **Nicht gepusht.** Alles liegt lokal auf `master`. Der Geldpfad ist LIVE unveraendert.
-2. **Vor dem Deploy:** der neue Boot-Guard `assertPricedPlans` beendet den Start, wenn bei
-   `PAYMENT_ENABLED=true` ein Katalog-Tarif (`starter`, `business`) keine Stripe-Price-Id hat.
-   Beide sind live sehr wahrscheinlich gesetzt - am 11.09. erreichten beide Tarife Stripe
-   (starter 200, business 402 wegen Deckung, nicht wegen fehlender Price) - aber das ist eine
-   Schlussfolgerung aus dem Vorfall, **kein Blick ins Render-Dashboard**. Vor dem Deploy dort
-   nachsehen.
-3. **Der Dienst startet lokal nicht**, und das ist Bestand seit dem 20.07.2026 (lct-p4):
+1. **Alles live.** `origin`, `upstream` und beide Render-Dienste stehen auf `8447d6d`.
+2. **Der Dienst startet lokal nicht**, und das ist Bestand seit dem 20.07.2026 (lct-p4):
    `COST_TRUING_REQUIRED_RECORD_TYPES ist leer`. Kein Befund dieser Kette.
-4. **Die Dashboard-Suite laeuft nicht in `npm test`** (s.o.), und drei ihrer Faelle sind seit
+3. **Die Dashboard-Suite laeuft nicht in `npm test`** (s.o.), und drei ihrer Faelle sind seit
    vor dieser Kette rot (`renderPlanChoice`/`dismissPlanChoice`).
+4. **`hermes-web` hat autoDeploy AN** (Zweig `master`), entgegen CLAUDE.md "Lab -> Live". Ein
+   Push auf `master` veroeffentlicht die Website sofort. Gemessen 11.09.2026.
