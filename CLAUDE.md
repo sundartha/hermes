@@ -257,7 +257,8 @@ mit "x von y Abnahmekriterien erfuellt". Sie DARF rot sein — ein noch nicht ge
 keine Regression; jeder Fall nennt seinen Grund im Namen (`| ROT WEIL: ... | FIX: ...`). Wird ein
 Kriterium gruen, legt es die Kennung ab, bekommt das Siegel `[abgenommen <ID>]` und einen Eintrag in
 `test/abnahme-ausgewandert.json`; ab da haelt `npm test` es fest — die Zahl der Ausgewanderten darf
-nie sinken (`.fortschritt.md` D13). Die Invariante oben gilt ueber alle drei Baenke.
+nie sinken (Regel D13, Wortlaut in `package.json` `config._comment_abnahmePattern`). Die
+Invariante oben gilt ueber alle drei Baenke.
 
 ## Referenzen
 

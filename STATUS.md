@@ -1,208 +1,71 @@
-# Sundartha - Offene Punkte (Status)
+# Status — offene Punkte
 
-> Das EINZIGE Status-/Offene-Punkte-Doc. Abgeschlossene Phasen stehen in der Git-History
-> und in der Memory, nicht hier. Lebende Referenz-Docs (bleiben separat):
-> `PLAN-SECURITY.md` (Security-Plan inkl. Secrets-Hygiene/Rotation),
-> `docs/RELEASE-GATE-killer-test.md` (Release-Gate), `tasks/lessons.md` (Lehren).
->
-> **Stand:** 2026-06-23 - HEAD lokal = `4e5d4e9` = **origin/master = upstream/master** (alle in
-> sync). Der Render-Deploy von `4e5d4e9` ist **live** (gesund hochgekommen) - der Frontend-Track
-> **w0-w5** und das **f2-Inbound-SMS-Datenmodell** sind damit **deployt/live**
-> (auto-sync-Hook + Render-autoDeploy). **Tests: 846/846 gruen.**
+Das EINZIGE Status-Doc. Abgeschlossene Ketten stehen in der Git-Historie und in der Memory,
+nicht hier. Wer einen geloeschten Plan braucht: `git log --diff-filter=D -- <datei>`.
 
-## Erledigt (Kontext, nicht offen)
+**Stand:** 2026-09-12, lokaler `master` = `4e155d1`. Geldpfad-Kette (GP-P0..P6) und
+SEC-Kette (SEC-P0..P6) sind gemergt, gepusht und live.
 
-Vollstaendig gemergt (in origin/master): Multi-Tenant-Identitaet **I0-I9**,
-Telnyx-Multi-Tenant **P0-P8** (Adapter/Ports/pg/Budget/Onboarding/Payment-Code/KYC/Realtime-Port/DSGVO),
-Auth-Foundation **+ Fixes F1-F5**, Crash-Hotspots **P0-P4**, P3b-R LLM-Resilienz **CP1-CP7**,
-Geo-Location **f1-P1..P9** (Sprache/Land-Gate +49/+33/+44, maxmind lokal), **f2-P0..P4**
-(Inbound-SMS-Datenmodell + `private_number`-Facades + Onboard-Wiring), der **Produkt-Frontend-Track
-w0-w5** (Marketing-SSG + Design-Token, OIDC-Login-Roundtrip, Billing-Insel setup-mode, Read-only
-Datensicht, Settings-/Whitelist-Editor; duenner Client gegen die bestehende API), sowie der
-**Inbound/Outbound-STT-Fix** (de-DE + `speechTimeout="auto"` + defensives `extractSpeech`).
-Der **Outbound-Dialog laeuft seit 2026-06-20 erstmals live end-to-end** (Disclosure -> Anlass -> Dialog).
-Die **Stripe-Karten-/Customer-Erfassung beim Onboarding (Pay1-Pay4)** ist gemergt: Checkout
-`setup`-Mode + `off_session`-`placeHold`; Hold->Capture laeuft end-to-end im **Test-Mode** gruen
-(PaymentIntent `succeeded`, `livemode=false`). Memory [[pay-chain-design-decisions]],
-[[f1-geo-p4-p9-decisions]]. (Die fruehere Detail-Report-Sammlung unter `tasks/*-report.md` wurde
-2026-06-23 entfernt - die Historie steht in der Git-History + Memory.)
-
-Das **Token-Sync-Gate** (MCP-UI P5) ist verankert: `npm run check:tokens` (`scripts/check-token-sync.js`) erkennt fail-closed Drift zwischen `apps/web/src/styles/tokens/` und `design-system/_shared/tokens.css` (Hash-Manifest `tokens.lock`) und prueft @import-Verbot + @dsCard-Marker. Lokal, nicht gepusht.
+**Deploy-Weg:** `git push upstream master` (Deploy-Repo ist `jonas986`, ein Push nach
+`origin` macht NICHTS live), danach manueller Deploy des Render-Service `vodafone-agent`
+(`autoDeploy` = no). Die Website `hermes-web` zieht automatisch mit.
 
 ---
 
-## 1. Live-/Betreiber-Gates (nicht autonom: Mensch / Account / Geld / echter Call)
+## 1. Blocker — nur der Owner kann sie loesen
 
-1. **STT-Live-Abschluss + Premature-close-Re-Check** - Outbound laeuft live (`7b0d877`);
-   offen ist nur die formale Akzeptanz (sauberer Re-Test mit `role:caller` + Folge-Turn) und die
-   Bestaetigung, dass unter `@anthropic-ai/sdk` 0.105 (CP7) kein "Premature close" mehr auftritt.
-2. **Telnyx-Realtime scharf schalten** - blockiert bis Live-WS-Echo-Test gruen (Payload-Format
-   mu-law vs. RTP). Code ist dormant; Live laeuft auf `VOICE_ENGINE=budget`.
-3. ~~**`TELNYX_NUMBER` produktiv setzen**~~ - **STRUKTURELL AUFGELOEST (2026-06-21):** Es gibt
-   keine `TWILIO_NUMBER`/`TELNYX_NUMBER`-Env-Var mehr. Der Owner ist Tenant Null und haelt seine
-   Absendernummer(n) wie jeder Tenant im Store; `outboundFrom` liest fuer ALLE Tenants via
-   `findActiveNumber`, ein Boot-Guard verlangt fail-closed eine aktive Owner-Nummer.
-   **Owner-Aktion:** Bestandsnummer setzen - lokal per
-   `npm run seed-owner-number -- <e164> telnyx` gegen `data/store.json`; in Prod
-   genuegt jetzt die Env (`OWNER_NUMBER` + `OWNER_NUMBER_PROVIDER`, in `render.yaml` gesetzt), die
-   beim Boot idempotent geseedet wird (s.u.). **Offen (Owner):** passt die hinterlegte Nummer
-   (Provider/Land) zum DE-Launch (`PROVISIONING_COUNTRY=DE`)?
+| # | Punkt | Was zu tun ist |
+|---|---|---|
+| O1 | **Owner-Account ausgesperrt.** Der CL1-Fix wirkt nur auf kuenftige Ereignisse; der bestehende Datensatz traegt die tote Abo-Referenz weiter (`self_service_subscribe_rejected … reason=already_subscribed`). | `scripts/reconcile-stale-subscriptions.js` einmal gegen Produktion: erst Trockenlauf, dann `--apply`. Erwartet wird `clear … (stripe=canceled)`; meldet der Lauf `keep`/`skip`, **nicht** anwenden. Braucht `STORE_BACKEND=pg`, `DATABASE_URL`, `STRIPE_SECRET_KEY` lokal. |
+| O2 | **Telnyx-Plattform-Guthaben leer** (1,99 USD, gemessen 2026-09-07). Jeder Nummernkauf scheitert mit 402, auch der des Owners nach O1. | Aufladen **bevor** der Owner neu abschliesst. |
+| O3 | **Endbeweis LLM-Antwort fehlt.** Ausbleibende 402-Zeilen sagen ohne Verkehr nichts. | Echter Testanruf, danach Log auf `[turn]` pruefen. |
+| O4 | **P7 `turn_eagerness` ist gebaut, aber nicht gepusht.** | `npm run elevenlabs:push -- --felder=turn_eagerness --ausfuehren`. Genau EIN Feld. Rueckfall: Vorlage auf `"normal"`, erneut pushen. Details `tasks/UEBERGABE-P7-LAERM.md`. |
 
-   > **DEPLOY-RISIKO AUFGELOEST (2026-06-23, `f0f7fe0`):** Der Boot seedet die Owner-Nummer jetzt
-   > wieder **config-derived idempotent** aus `OWNER_NUMBER`/`OWNER_NUMBER_PROVIDER`
-   > (`state-ops.seedOwnerNumberFromConfig`, Provider fail-closed gegen die Provider-Liste validiert).
-   > Damit ueberlebt der fluechtige Render-Free-FS-Reset bei `STORE_BACKEND=json`, ohne dass der
-   > Boot-Guard den Start verweigert. Beide Render-Env-Keys stehen in `render.yaml`. (Mit `pg` ist
-   > der Seed ohnehin persistent.)
+## 2. Offene Code-Punkte
 
-4. **Stripe live** - **Karten-Erfassung + Test-Mode-Hold/Capture ERLEDIGT** (Pay1-Pay4, gemergt +
-   live-deployt, 708/708): Checkout `setup`-Mode (Stripe-Customer + `payment_method` pro Tenant) +
-   `off_session`-`placeHold` -> die fruehere 400-Wurzel (`confirm` ohne `payment_method`) ist weg;
-   Hold->Capture gegen echtes Stripe-Test gruen (`succeeded`, `livemode=false`). Deckt auch die in
-   P6b3 ausgelassene `stripe_customer_id`-Bindung. `PAYMENT_ENABLED` bleibt `false` (Gate aus =
-   byte-identisch). Details: Memory [[pay-chain-design-decisions]]. **Offen fuer ECHTES Geld:**
-   - `PAYMENT_ENABLED=true` + `NUMBER_SETUP_FEE_CENTS>0` + `PROVISIONING_ENABLED=true` im echten
-     Onboard-Flow verifizieren (echter Nummernkauf statt Fake-Provisioner).
-   - Test->Live: `sk_live_...` nur via Render-Dashboard (nie committen).
-   - Die 3 Meter (`voice_minutes`/`ai_tokens`/`number_months`) im Stripe-Dashboard anlegen.
-   - SCA/3DS-Recovery: `off_session`-Charge kann bei echten Karten `authentication_required` werfen
-     (`pm_card_visa` nie) -> der Capture-Pfad braucht dann einen Recovery-Flow.
-5. **WorkOS invite-only scharf + Staging->Production**; **Prod-Postgres** mit non-superuser/
-   NOBYPASSRLS-Rolle + pgBouncer (transaction mode); **Killer-Test** fahren
-   (`docs/RELEASE-GATE-killer-test.md`) VOR `MULTI_TENANT=true` in Produktion.
-6. **`MCP_AUTH=oauth`** end-to-end gegen claude.ai im Dauerbetrieb; **Secrets-Hygiene**.
-   - **Secrets-Hygiene ERLEDIGT (2026-06-21, Doku):** Secrets-Inventar (Blast-Radius pro Secret),
-     Token-Rotations-Prozedur (Ueberlappung/Zero-Downtime + Besonderheiten pro Secret) und
-     Telnyx-Scoped-Key-Minimalrechte-Checkliste stehen vollstaendig in
-     `PLAN-SECURITY.md`, Abschnitt `SECRETS-HYGIENE`. Der OAuth-Code ist test-gedeckt
-     (`test/oauth.test.js`).
-   - **Live-Infra VERIFIZIERT (2026-06-21):** Render-Env steht auf `MCP_AUTH=oauth`; gegen
-     `https://vodafone-agent.onrender.com` sind Gate-5b-Steps 1-2 gruen - Protected-Resource-Metadata
-     (beide Pfade) zeigt `resource=…/mcp` + WorkOS-Issuer, unautorisierter `POST /mcp` -> `401` +
-     `WWW-Authenticate`-Wegweiser. WorkOS-Issuer erreichbar (openid-configuration + AS-Metadata +
-     JWKS 1 Key) -> Token-Verify-Kette greift live.
-   - **OFFEN (nur interaktiv/Operator):** Gate-5b-Steps 3-5 - claude.ai-Connector verbinden +
-     einloggen + Dauerbetrieb (silent Refresh ueber einen Token-Ablauf). ACHTUNG: Issuer ist noch
-     eine **Staging**-AuthKit-Domain (`…-staging.authkit.app`) -> vor echtem Prod-Dauerbetrieb
-     Staging->Production-Cutover (Runbook Gate 5, Schritt 3).
-7. **Crash-Hotspots P3 Real-Call-Smoke** (5 Szenarien, HEIKLE STELLE in `bridge.js`) als Gate
-   VOR `VOICE_ENGINE=realtime`-Aktivierung.
-8. **Frontend w0-w5 + f2-Datenmodell sind LIVE deployt** (Render-Deploy `4e5d4e9` gesund). Offen
-   ist nur noch die **manuelle Live-Abnahme der Kundensicht**: Auth-/Login-Roundtrip, Billing-Insel
-   (setup-mode), Read-only-Datensicht und Settings-/Whitelist-Editor gegen die Live-Env durchklicken
-   (das Frontend hat die bisherige `express.static`-Kundensicht abgeloest - same-origin, kein CORS;
-   `docs/strategy/hermes-frontend.md`). **f2 ist das Datenmodell (P0-P4) + der Self-Service-Write
-   P5** (`POST /api/self-service/private-number`, gemergt `f3cef86`, 854/854) - die eigentliche
-   **Inbound-SMS-Zusammenfassung an die private Tenant-Nummer** (das Versenden selbst) ist noch
-   nicht gebaut.
-9. **KALENDERZEILE 2026-09-01: den Dienst an dem Tag einmal neu deployen/neustarten** (B4a).
-   Die Sonnet-5-Staffel wechselt an diesem Datum von 2.00/10.00 auf 3.00/15.00 USD je 1 Mio.
-   Token. Die Aufloesung passiert GENAU EINMAL, beim Boot (`resolveModelPrices`,
-   `src/config.js`) - ein Prozess, der ohne Neustart darueber hinweg laeuft, bucht danach ZU
-   WENIG, und "zu wenig" ist auf der Gate-Achse die unsichere Richtung. Welche Staffel ein
-   laufender Prozess faehrt, steht in seiner Boot-Banner-Zeile `Preisstaffeln: ... ab
-   <validFrom> (naechste: <validFrom>)`.
-   **Vor jedem Deploy ausserdem (B4a, einmalig relevant):** die im Render-Dashboard gesetzten
-   Werte von `CLAUDE_MODEL`/`PRECALL_BRIEFING_MODEL` muessen in `MODEL_PRICE_SCHEDULES`
-   stehen - seit B4a startet der Dienst sonst NICHT (Boot-Abbruch, auch bei datierter
-   Snapshot-ID und auch bei `PRECALL_BRIEFING_ENABLED=false`).
+- **P4b Portugiesisch — BLOCKED**, Branch `phase/p4b-portugiesisch-fix3`, nicht gemergt.
+  Zwei Owner-Entscheidungen fehlen: die pt-Stimme (`Azure.pt-PT-RaquelNeural`) ist geraten
+  und nicht per Synthese belegt, und der pt-Offenlegungssatz ist nicht freigegeben. Der
+  Merge schaltet ihn ohne weiteren Push sofort scharf. Heutiger Zustand (`language:"pt"`
+  -> 400) ist korrekt, nur unvollstaendig. Manifest: `PLAN-ANRUFDEFEKTE.md`.
+- **Zwei rote Altlast-Tests**: `KV2-10 (d1)`/`(d2)` in `test/kv2-10-tarifpaar.test.js`,
+  rot schon vor der Anrufdefekte-Kette (auf `bf96a94` isoliert nachgemessen). Solange sie
+  rot sind, verdeckt `npm test` jede echte Regression.
+- **`test/al-p10-precall-research.test.js` pinnt `LLM_PROVIDER` nicht.** Mit
+  `LLM_PROVIDER=deepseek` in der `.env` scheitern 9 von 12 Faellen beim direkten
+  `node --test`-Aufruf. `npm test` ist ueber `BASE_ENV` nicht betroffen. Fix ist eine Zeile.
+- **Agenten-Stimme ST0-ST5** nicht gebaut, offene Owner-Entscheidungen im Plan.
+  `tasks/PLAN-AGENTEN-STIMME.md`, Befunde `tasks/EL-STIMME-BEFUNDE.md`.
+- **Cancel-Lockout**: Entscheidungen 2 und 4 in `PLAN-CANCEL-LOCKOUT.md` Abschnitt 7 sind
+  unbeantwortet.
+- **Geo-Rufnummern** sind reiner Entwurf, kein Code. Offen: G0-Klaerungen (10.8, 10.9,
+  G0-(d) zu 10.12) und die rechtliche Abnahme zu 10.1. `PLAN-GEO-NUMMERN.md`.
 
-> Hinweis: Deepgram-STT und Azure-NTTS sind im Telnyx-Account bereits aktiv/abgerechnet -
-> das ist KEIN offenes Gate mehr (per Account-Records 2026-06-20 verifiziert).
+## 3. Sicherheit
 
-## 2. Autonome Code-Follow-ups
+Launch-Blocker und getragene Risiken stehen vollstaendig in `PLAN-SECURITY.md` — das ist
+das lebende Dokument, nicht dieses hier. Der wichtigste offene Eintrag:
 
-> **Stand 2026-06-23:** A1, A3, A4 + Rebrand-Track-A sind GEMERGT. Offen bleiben hier nur noch
-> A5 (sequenziell) und A2 (in Arbeit, inkrementell).
+- **ID-01, Besitznachweis der eigenen Rufnummer.** Bewusst aus der SEC-Kette
+  herausgehalten (Owner-Entscheidung 2026-09-08). Solange er offen ist, bleibt die
+  Offenlegungs-Ausnahme fuer Owner-Selbstanrufe an die Tenant-Allowlist
+  `OWNER_SELF_CALL_TENANT_IDS` gebunden. Wird ID-01 geschlossen, ohne dass die
+  Verifikation gebaut ist, ist die **Ausnahme** zurueckzunehmen, nicht der Eintrag.
 
-1. **A5 - TEMP-DIAGNOSE-Logs entfernen** - **OFFEN (bewusst sequenziell).** `[turn-recv]`/`[turn-ok]`
-   (`src/server.js`) + `[boot]` (`src/boot-guard.js`). ERST nach Abschluss von Gate 1.1 entfernen -
-   bis dahin fuer die Live-Tests noch nuetzlich.
-2. **Azure TTS `speak_failed`** (intermittent) - **TEILS adressiert.** `/voice/status` loggt den
-   Fehlschlag jetzt PII-frei als `[voice/speak] FAILED` (durch A1) -> die Stoerung ist nun
-   diagnostizierbar. OFFEN bleibt die eigentliche Abfang-/Recovery-Strategie (nur per echtem Call
-   verifizierbar). Freie Stimmen-/Modellwahl bleibt (kein Voice-Swap als Fix).
-3. ~~**`/voice/status` Telnyx-Lifecycle parsen** (A1)~~ - **ERLEDIGT (gemergt).** Provider-bewusst:
-   `extractLifecycleEvent` + `extractSpeakOutcome`, PII-frei, `CallDuration`/Status sichtbar.
-4. ~~**Remote-Browser-OAuth fuer Self-Service** (A4)~~ - **ERLEDIGT (gemergt).** REST-Pfad liest
-   `req.tenant` aus der Web-Session VOR `req.auth`, fail-closed (`routes/_tenant.js`; `web-auth.js`
-   setzt `req.tenant`). Remote-Self-Service damit nutzbar - der Identitaets-Gap ist zu.
-5. ~~**`bridge.js handleOpenAiEvent` extrahieren** (A3)~~ - **ERLEDIGT (gemergt).** Charakterisierungs-
-   Test (A3-P1) + Extraktion (A3-P2) + Unit-Tests (A3-P3). Nur bei Realtime-Aktivierung relevant.
-6. **A2 - `server.js`-Decomposition (TD-4)** - **IN ARBEIT.** ~1130 -> 1059 LOC; extrahiert:
-   `routes/api-profiles.js`, `routes/api-read.js`, `routes/_tenant.js`, `routes/_validation.js`.
-   Weitere `/api`-Gruppen koennen inkrementell folgen (verhaltens-erhaltend).
-7. **A6 - Call-State ueberlebt Instanzwechsel nicht (S1, 2026-07-02, Runde 2 Anrufqualitaet)** -
-   **OFFEN.** Zero-Downtime-Deploy toetet laufende Calls: neue Instanz kennt den in-memory-Call
-   nicht -> `/voice/turn` legt fail-closed auf (seit Runde 2 wenigstens GELOGGT statt still),
-   und der Reconcile-Flush der neuen Instanz LOESCHT den Call-Row aus pg (deleteMissing) -
-   nachgewiesen am Owner-Testanruf `call_mr3lg2g7t9zg` (14:22:33Z, Deploy dep-d9377ui).
-   Fix = eigener Store-Schnitt: read-through-Rehydrate im Webhook-Pfad + Reconcile-Schutz fuer
-   aktive Calls + Deploy-Draining. Bei Skala PFLICHT (jeder Deploy trifft laufende Calls).
-   Details: `tasks/call-quality-2-report.md` (Diagnose S-A).
-8. **i18n-Launch-Gate P6 (GAP-01/GAP-07/GAP-10) - ERLEDIGT (2026-07-26), NICHT deployt.**
-   Rot-Liste von `npm run test:gates` **39 -> 36** (gemessen: `tests 74/pass 25/fail 49` ->
-   `tests 70/pass 25/fail 45`), `npm test` gruen (3129/0). **DEPLOY-VORBEDINGUNG:** bei
-   `PAYMENT_ENABLED=true` + `PLATFORM_SPEND_WARN_PERCENT>0` verweigert der Boot jetzt den
-   Start, wenn `PLATFORM_ALERT_SMS_TO` leer ist - Live-Env VOR dem Deploy ablesen
-   (Abhilfe: Empfaenger setzen ODER `PLATFORM_SPEND_WARN_PERCENT=0`). Details + getragene
-   Restrisiken: `PLAN-SECURITY.md` Abschnitt `P6-BUDGETFENSTER`.
+## 4. Geparkt — bewusst liegen gelassen
 
-9. **i18n-Launch-Gate P7 (GAP-32/GAP-33/GAP-38) - ERLEDIGT (2026-07-26), NICHT deployt.**
-   Kosten-Decken kohaerent (`MAX_BUDGET_EUR` 8->30, `DEFAULT_TENANT_BUDGET_CENTS` 600->1500
-   in `.env.example`/`render.yaml`/Code-Fallback), `preDeployCommand` raus + In-Prozess-
-   Heilung eines nachweislich frischen Stores, `WORST_CASE_UNAFFORDABLE` ist jetzt FATAL.
-   **DEPLOY-VORBEDINGUNGEN:** (a) `DEFAULT_TENANT_BUDGET_CENTS=1500` im Render-Dashboard
-   setzen (heute dort gar nicht gesetzt - der Code-Fallback traegt den Wert, eine reine
-   Code-Aenderung wirkt also live, aber unsichtbar); (b) **bestehende `tenant_budget`-Zeilen
-   werden NICHT nachgezogen** - Tenants mit einer Zeile aus `seedTenantDefaultBudget` (600)
-   oder plan-abgeleitet (300/900) bleiben beim 402. Vor dem Deploy am Prod-Postgres pruefen
-   und bewusst anheben/loeschen. Details + getragene Restrisiken: `PLAN-SECURITY.md`
-   Abschnitt `P7-BOOTKOHAERENZ`.
-10. **Plan-Decken tragen die verkauften Minuten - ERLEDIGT (KS-P5a, 2026-07-30), NICHT deployt.**
-    Die Decke folgt seither dem BUCHUNGSSATZ (`voiceTariffDefaultCents`): Starter `50·T`,
-    Business `150·T` - bei T=30 also 1500 / 4500 ct. Sie traegt die verkauften Minuten
-    inklusive der Worst-Case-Reserve des letzten Anrufs, satzunabhaengig und fuer jeden
-    Katalog-Slug gepinnt in `test/ks-p5a-plan-cap-carries-sold-minutes.test.js`. Der zweite
-    Deckel-Basissatz `VOICE_CAP_RATE_CENTS_PER_MIN` ist ersatzlos entfallen.
-    **Verbleibend offen:** Owner-Entscheidung **E9** - `MAX_BUDGET_EUR` (30 €) ist seit
-    KS-P9 nur noch Warnschwelle, liegt aber ab 2 Startern bzw. 1 Business-Kunden unter der
-    Summe der verkauften Decken, die Warnung wuerde ab dann Dauerzustand. Aufstellung als
-    Entscheidungsgrundlage: `tasks/ks-p5a-report.md`.
-11. **`OWNER_NUMBER_SEED` gegen `BOOTSTRAP_E164` konsolidieren (offen).** Zwei Env-Paare fuer
-    dieselbe Sache; sie komponieren heute sauber (gepinnt), sind aber eine Falle.
+- **DID-Monatsmiete wird nicht gebucht** (`ohne_preis`). Befund 2026-07-28. Beruehrt den
+  Geldpfad. Alle betroffenen Nummern gehoeren dem Owner, kein externer Schaden.
+- **DSGVO Art. 15 Auskunft** wird von Hand erledigt; es gibt bewusst keinen
+  Selbstbedienungs-Export. Ein Werkzeug fuer den manuellen Weg existiert nicht.
+- **Infra-Cutover (Track B)**: Repo-Verzeichnis, Render-Service und einige Env-/Pfadnamen
+  tragen noch `vodafone-agent`. Der Code-/Doku-Rebrand (Track A) ist erledigt.
 
-## 3. Bewusst vertagt (nur Tracking, kein akuter Task)
+---
 
-- Allowlist-Lockerung -> Phase 2 / Rechteprofile
-- pg-boss als Queue-Backend -> P8 (Stub vorhanden, Default `QUEUE_BACKEND=memory`)
-- EU-AI-Act Art. 50(2) maschinenlesbare KI-Markierung -> Compliance-Phase 08/2026
-- P8 Scale-Infra (PgBouncer / Read-Replicas / Partitionierung) -> bei echter Last
-- P3b-R CP5/CP6 (Metrik-Seam / Breaker-Tuning) -> W4 uebersprungen; **Path B** (undici als Dep
-  - expliziter Dispatcher) nur falls "Premature close" unter 0.105 erneut auftritt
-- TD-8 MCP-sub-Threading (I5; aktuell fail-closed, kein Leak)
+## Lebende Dokumente (kein Prozessmuell, bleiben)
 
-Aus der Fragilitaets-Remediation (P1-P7, gemergt `ee296c3`) bewusst zurueckgestellt:
-
-- S1-4 `usage.costEur` -> Cents (eigener Cluster; der Rest der Geldachse liegt seit P2 in Cents)
-- C6b `state-ops.js`-Split (S4, nur bei Trigger)
-- `bridge.js` als vollwertiger 6. Terminierungspfad (aus dem C5-Pre-Mortem; heute decken die
-  5 Pfade ueber `terminateAndBillCall` ab, `bridge.js` nur bei `VOICE_ENGINE=realtime`)
-- **OFFEN (Owner):** echter Realtime-Probe-Anruf als Post-Merge-Validierung von P7
-  (`VOICE_ENGINE=realtime`). Restrisiko gering und auf realtime-only begrenzt — der
-  Live-Default ist `budget`.
-
-## 4. Rebrand: "Hermes" (Produkt) / "Sundartha" (Firma)
-
-**Track A (Code/Doku-Rename) ERLEDIGT** (A6-P1..P4, gemergt, Stand 2026-06-21): kein `vodafone`
-mehr in `src/`; `agentName`-Default + `package.json` + MCP-Name + Banner + Dashboards inkl. Badge
-auf **Hermes**; die String-pinnenden Tests nachgezogen (679/679 gruen). Details:
-`tasks/rebrand-sundartha.md`. Verbleibende `vodafone`-Treffer sind BEWUSST Track B bzw. kosmetisch:
-
-- **Track B (OFFEN, owner-koordiniert/hoch-Risiko):** `render.yaml` Service-Name, Brand-URL/Domain,
-  Twilio/Telnyx/WorkOS/claude.ai-Cutover, **GitHub-Repo-Rename** (origin + upstream heissen weiter
-  `vodafone-agent` - per `gh` 2026-06-21 bestaetigt), lokaler Ordnerpfad. Schritte + Pre-Mortem:
-  `tasks/rebrand-sundartha.md` Track B.
-- **Kleine Track-A-Reste (nachzuziehen, niedrig):** README/ONBOARDING nennen noch
-  "Vodafone Verified"-Badge / "Vodafone-Design" (reine Produktnamen, KEINE URLs) + Test-Fixture
-  `admin@vodafone.de`.
+`PLAN-SECURITY.md` · `PLAN-ANRUFDEFEKTE.md` · `PLAN-CANCEL-LOCKOUT.md` ·
+`PLAN-GEO-NUMMERN.md` · `HANDOVER-FLOW-2026-09-07.md` · `tasks/lessons.md` ·
+`tasks/gq-chain-state.md` · `tasks/al-env-changes.md` (Env-Protokoll, pflichtig) ·
+`docs/RUNBOOK-*.md` · `docs/RELEASE-GATE-killer-test.md`
