@@ -1916,6 +1916,23 @@ const rawConfig = {
     fallback: 15000,
     min: 0,
   }),
+  // IE2 (PLAN-INBOUND-PARITAET.md): Takt des wiederkehrenden Geld-Waechters je aktivem
+  // Anruf (telephony/budget-watchdog.js). Er fragt die EINE Achse (blockingBudgetAxis) und
+  // beendet ueber den EINEN Terminierungspfad - B8: alle vier bestehenden Fragestellen sind
+  // ereignisgebunden (Turn-Runde, Shim-Turn, EL-Werkzeug-Webhook, /voice/*-Re-Attach); ein
+  // Anruf ohne Turn und ohne Werkzeug erreicht die Decke nie.
+  // Der Betrag IST die bewusst akzeptierte Ueberziehung zwischen zwei Runden: hoechstens
+  // dieser Takt an Gespraechszeit je laufendem Leg (bei VOICE_TARIFF_DEFAULT_CENTS=30
+  // rund 7,5 Cent), nicht kumulativ - jede Runde liest den Ist-Stand. Deutlich unter der
+  // Abrechnungsminute (Telnyx rundet auf 60 s auf), damit die Ueberziehung keine ganze
+  // Carrier-Minute erreicht.
+  // 0 = KOMPLETT AUS (Rueckfall-Hebel ohne Deploy, Muster PRICE_DRIFT_MIN_INTERVAL_MS).
+  // Max 600000 (10 min) gegen absurde Werte - laenger als der Max-Dauer-Cap waere sinnlos.
+  budgetWatchdogIntervalMs: numEnv("BUDGET_WATCHDOG_INTERVAL_MS", process.env.BUDGET_WATCHDOG_INTERVAL_MS, {
+    fallback: 15000,
+    min: 0,
+    max: 600000,
+  }),
   // A6 (F11): Watchdog-Obergrenze (ms) fuer den SIGTERM/SIGINT-Graceful-Shutdown. Der Drain
   // laesst in-flight Requests fertig und flusht dann den Store; laeuft er laenger, kappt der
   // Watchdog hart mit exit(0). Default 8000 (Render sendet nach SIGTERM erst nach ~30s SIGKILL
@@ -2323,7 +2340,7 @@ function guardedConfig(target, path = "config") {
 // Fatal-Push, kein Doppel-Eval. rawConfig selbst bleibt der interne Speicher, wird aber
 // NICHT mehr exportiert - config.<ns>.<key> ist der einzige Zugriffspfad.
 export const CONFIG_NAMESPACES = Object.freeze({
-  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "rateLimitPerMin", "csrfEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
+  safety: ["outboundFrozen", "allowedCountryCodes", "maxCallsPerHour", "perTargetCallCap", "perTargetWindowMs", "capFarewellLeadMs", "reserveReleaseGraceMs", "budgetWatchdogIntervalMs", "rateLimitPerMin", "csrfEnforce", "skipTwilioSignatureCheck", "fakeOriginate", "fakeOriginateElevenlabs", "outboundAniGateEnabled", "outboundAniGateMaxAgeMs"],
   billing: ["platformSpendCapCents", "paymentEnabled", "stripeSecretKey", "stripeApiBase", "numberSetupFeeCents", "paymentCurrency", "providerCurrency", "providerToBucketRateMicro", "costTruingDelayMinutes", "costTruingSweepIntervalMs", "costTruingMaxAttempts", "costSettleDeadlineHours", "elEvidenceMinAgeMinutes", "costTruingRequiredRecordTypes", "costTruingMinCoveragePercent", "costTruingCoverageStallSweeps", "kostenHeartbeatFensterH", "costDriftWarnPercent", "costAlertDebounceMs", "costCalibrationMinSamples", "voiceTariffDomesticCents", "voiceTariffDefaultCents", "voiceTariffInboundCents", "voiceTariffFullCostFloorCents", "voiceTariffGrundbetragCentsJeRoute", "voiceTariffDomesticPrefixes", "defaultTenantBudgetCents", "smsCostCents", "platformSpendWarnPercent", "platformAlertSmsTo", "outageAlertWindowMs", "outageAlertMinFailures", "outageAlertMinAttempts", "outageAlertFailSharePercent", "outageAlertDebounceMs", "outageAlertRetryMs", "outageAlertSelfTestIntervalMs", "platformHoldEscalationMaxAgeMs", "paidWithoutNumberGraceMs", "outboundDriftMinIntervalMs", "outboundDriftStaleMs", "outboundDriftBalanceMinHours", "budgetMonthEnabled", "ttsCharacterQuota", "ttsCharacterQuotaWarnPercent", "ttsQuotaCycleAnchorDay", "platformFixedCostUsdCentsPerMonth", "numberMonthlyCostCents", "stripeStarterPriceId", "stripeBusinessPriceId", "stripeWebhookSecret", "stripeCustomerRetryDelayMs", "flushEpochIso", "priceDriftMinIntervalMs", "priceDriftUnknownEscalateAfter"],
   provisioning: ["maxNumbers", "maxNumbersPerTenant", "provisioningEnabled", "provisioningRedriveMaxAgeMs", "provisioningRetryMaxAttempts", "provisioningRetryMinIntervalMs", "releaseGraceMs", "provisioningCountry", "forceNumberCountry", "geoEnabled", "geoDbPath", "worldDefaultLanguageEnabled", "ownerNumberSeed", "ownerNumberProvider", "bootstrapE164", "bootstrapProvider", "platformAniE164"],
   auth: ["mcpAuthToken", "mcpAuth", "oauthIssuerUrl", "oauthAudience", "sessionSecret", "oidcClientId", "oidcClientSecret", "workosApiBase", "workosManagementApiKey", "adminEmails", "loginRateLimitPerMin", "sessionTtlSeconds", "loginCookieTtlSeconds", "dashboardPassword", "ownerIdpSubject", "devLoginEnabled"],

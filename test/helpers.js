@@ -160,6 +160,11 @@ export const BASE_ENV = {
   // taeuscht kuenftigen Lesern eine wirksame Klemme vor und schuetzt vor nichts.
   CAP_FAREWELL_LEAD_MS: "20000", // P3.1: neutraler Default, sonst leakt lokales .env in Spawn-Tests
   RESERVE_RELEASE_GRACE_MS: "15000", // OUT-05 F2: neutraler Default, sonst leakt lokales .env in Spawn-Tests
+  // IE2 (Lehre test-base-env-drift): bewusst der MAX-Wert, nicht 0. Die Geld-Wache bleibt in
+  // Spawn-Tests ARMIERT (keine abgeschaltete Sicherung, G4), wird aber innerhalb eines
+  // Testlaufs nie faellig - deterministisch, ohne Bestandsverhalten zu verschieben. Ein
+  // Spawn-Test, der den Sperrfall braucht, ueberschreibt den Wert ausdruecklich.
+  BUDGET_WATCHDOG_INTERVAL_MS: "600000",
   FAKE_ORIGINATE: "false", // OUT-05 F2: Test-Seam AUS; einzelne Tests setzen ihn explizit
   SHUTDOWN_DRAIN_TIMEOUT_MS: "8000", // A6 F11: neutraler Default, sonst leakt lokales .env in Spawn-Tests
   STT_SPEECH_TIMEOUT_SEC: "2", // G3: neutraler Default, sonst leakt lokales .env in Spawn-Tests (test-base-env-drift)

@@ -627,6 +627,9 @@ services:
       # OUT-05: Reserve-Backstop-Puffer (ms) ueber der Call-Max-Dauer.
       - key: RESERVE_RELEASE_GRACE_MS
         value: "15000"
+      # IE2: Takt (ms) des wiederkehrenden Geld-Waechters je aktivem Anruf. 0 = aus.
+      - key: BUDGET_WATCHDOG_INTERVAL_MS
+        value: "15000"
       # A6 (F11): Watchdog-Obergrenze (ms) fuer den SIGTERM-Graceful-Shutdown-Drain.
       - key: SHUTDOWN_DRAIN_TIMEOUT_MS
         value: "8000"

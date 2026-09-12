@@ -17,6 +17,10 @@ import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 // Import" fuer STATEFULES - endActiveCall (die konkrete, laufzeitgebundene Implementierung)
 // bleibt injiziert, s. makeCallLifecycle-Parameter unten).
 import { elevenLabsHangUpAction, persistEndWithReason } from "./call-termination.js";
+// IE2: ebenfalls PURE (Zustand + Timer, alles IO injiziert) -> direkter Import wie die
+// Reinen oben, kein DI-Slot in server.js noetig.
+import { makeBudgetWatchdog } from "./budget-watchdog.js";
+import { defaultSetTimer } from "../utils/timer.js";
 
 // GAP-26: maschinenlesbarer Grund einer Terminalisierung DURCH DEN MAX-DAUER-CAP. Eigener
 // Token neben der Provider-Vokabel aus telephony/failure-reason.js: die wird aus dem
@@ -34,6 +38,124 @@ export const CAP_FAILURE_REASON = "max-duration-cap";
 // MCP-Clients weiter, das Call-Widget rendert unbekannte Tokens roh.
 export const BUDGET_FAILURE_REASON = "budget-exhausted";
 
+// IE2: der ANLASS einer Geld-Terminalisierung - welche Naht die Achse gefragt hat. EINE
+// Logzeile, zwei Anlaesse: nie zwei Zeilen (oder zwei Labels) fuer denselben Sachverhalt.
+// Der FAILURE-REASON am Record bleibt in beiden Faellen BUDGET_FAILURE_REASON (er reist
+// ueber get_call_status zu MCP-Clients und behaelt seinen Wert).
+export const BUDGET_TERMINATION_ORIGIN = Object.freeze({
+  REATTACH: "re-attach",
+  WATCHDOG: "wache",
+});
+
+// G25: Status eines Legs, das noch laeuft - benannt statt als Literal in den zwei NEUEN
+// Lesestellen dieser Datei (Boot-Auswahl + die Abfrage der Geld-Wache). Modul-privat wie
+// die gleichnamigen Konstanten in store/pg.js und store/state-ops.js.
+const ACTIVE_CALL_STATUS = "active";
+
+// Gemeinsame Call-Max-Dauer in ms: armMaxDurationTimer UND der Reserve-Backstop-Timer teilen
+// dieselbe Rechnung (call-eigenes Limit vor Fallback). Die Formel selbst lebt in
+// src/call-duration.js (G5: EINE Quelle innerhalb der Telephony-Schicht, auch fuer den
+// Realtime-Cap in bridge.js; state-ops.js#callLimitMs bleibt eine bewusst getrennte zweite
+// Kopie, OQ-1); hier wird nur der Fallback gebunden.
+//
+// KS-P3: die Frist steht seit dieser Phase AM CALL (call.maxDurationS, beim Anlegen aus
+// dem Restguthaben abgeleitet - Outbound im compute_reserve-Gate, Inbound in
+// /voice/incoming). Der hier gebundene Wert ist nur noch der FALLBACK fuer Zeilen ohne
+// eigene Frist (Calls, die den Deploy ueberlebt haben) und ist bewusst die absolute
+// Obergrenze: MAX_CALL_DURATION_S als Operator-Knopf ist mit E2/E3 entfallen. Der
+// Cap-Timer, der EINE Terminalisierungspfad (INV-9) und der Boot-Re-Arm sind unberuehrt.
+//
+// IE2: steht als REINE Funktion auf Modulebene statt im Fabrikrumpf - sie schliesst keine
+// injizierte Abhaengigkeit ein, nur die Modul-Konstante (P15/G30).
+function callMaxDurationMs(call) {
+  return computeMaxDurationMs(call, MAX_CALL_DURATION_CAP_S);
+}
+
+// IE2: das Leg, wenn es noch laeuft - sonst null. EINE Formulierung fuer die Frage, die
+// terminateActiveCall vor jedem Beenden stellt und die Geld-Wache in jeder Runde.
+function runningLeg(call) {
+  return call?.status === ACTIVE_CALL_STATUS ? call : null;
+}
+
+// IE2/G5: die EINE Zeile "welche Zeilen laufen noch" fuer BEIDE Boot-Re-Arms (Zeit-Achse
+// und Geld-Achse) - vorher stand der Filter im Kopf der rearm-Schleife.
+function activeCallsOf(store) {
+  return store.load().calls.filter((call) => call.status === ACTIVE_CALL_STATUS);
+}
+
+// IE2: die GELD-Achse dieser Naht als EINE Einheit - das Praedikat (welche Achse sperrt
+// gerade), der Vollzug (die eine Warnzeile + der eine Terminierungspfad), der
+// wiederkehrende Takt und dessen Boot-Re-Arm. Eigene Einheit und nicht vier Glieder im
+// Fabrikrumpf: der Rumpf verdrahtet, er formuliert nicht (G30), und die Geld-Achse ist
+// damit an EINER Stelle lesbar statt zwischen den Zeit-Achse-Gliedern verteilt.
+//
+// terminateActiveCall kommt INJIZIERT herein: es bleibt der EINE Terminalisierungspfad
+// (INV-9) im Fabrikrumpf, diese Einheit baut keinen zweiten. blockingBudgetAxis ebenfalls -
+// es gibt weiterhin GENAU EINE Geld-Achse (budget-gate.js), hier nur gebunden (G5).
+function makeBudgetAxisSeam({
+  store, billing, blockingBudgetAxis, terminateActiveCall, intervalMs, setTimer,
+}) {
+  // Die EINE gebundene Geld-Achse dieser Naht: Re-Attach (F12) und die Geld-Wache (IE2)
+  // fragen denselben Ausdruck, nicht zwei Kopien. tenantId kommt aus dem frisch geladenen
+  // Call (I8: rowToCall hydriert ihn).
+  function blockingAxisFor(call) {
+    return blockingBudgetAxis({ store, billing, tenantId: call.tenantId });
+  }
+
+  // KS-P1b, Geld-Achse: ein Leg, dessen Guthaben aufgebraucht ist, wird beendet statt mit
+  // frischer Frist weiterzulaufen. status "completed" (nicht "failed"): das Leg war
+  // technisch gesund, wir haben es beendet - wie beim Timer-Ablauf; "failed" bleibt dem
+  // Boot-Zombie vorbehalten. Die Logzeile ist Pflicht, nicht Kuer: ohne sie waere die
+  // Terminalisierung im Betrieb voellig stumm (CLAUDE.md Regel 7). Nur die
+  // server-generierte callId, kein PII.
+  // IE2: seit dieser Phase gibt es ZWEI Anlaesse (Re-Attach und der wiederkehrende
+  // Waechter) und weiterhin GENAU EINEN Weg, sie zu vollziehen - der Anlass reist als
+  // Token mit (BUDGET_TERMINATION_ORIGIN), damit EINE Logzeile beide traegt. Objekt-
+  // Argument statt eines dritten Positions-Werts (F1).
+  async function terminateOverBudgetCall({ callId, providerCallSid, origin }) {
+    console.warn(`[budget] ${origin}: Guthaben erschoepft (call=${callId}) -> terminalisiert`);
+    await terminateActiveCall({
+      callId, providerCallSid, status: "completed", failureReason: BUDGET_FAILURE_REASON,
+    });
+  }
+
+  // EIN Waechter je Prozess: makeCallLifecycle wird genau einmal verdrahtet (INV-7), und
+  // budget-watchdog.js ist PURE (Zustand + Timer, alles IO injiziert) - deshalb direkter
+  // Import statt eines DI-Slots in server.js (Praezedenz elevenLabsHangUpAction/
+  // persistEndWithReason). Eager konstruiert, kein Lazy-Init (P15).
+  const watchdog = makeBudgetWatchdog({
+    intervalMs,
+    // Der Waechter kennt keinen Store: WELCHER Datensatz noch laeuft, entscheidet diese Naht.
+    activeCallById: (callId) => runningLeg(store.getCall(callId)),
+    blockingAxisFor,
+    terminate: (call) =>
+      terminateOverBudgetCall({
+        callId: call.id,
+        providerCallSid: call.twilioSid,
+        origin: BUDGET_TERMINATION_ORIGIN.WATCHDOG,
+      }),
+    setTimer,
+  });
+
+  // Boot-Re-Arm der GELD-Achse - dieselbe Frage, die rearmActiveCallTimers fuer die
+  // ZEIT-Achse stellt. Bewusst NICHT als Anhang dort: jener kehrt bei VOICE_ENGINE=realtime
+  // sofort zurueck, und die Geld-Achse ist engine-neutral - dieser Sonderfall darf nicht
+  // geerbt werden. Die Takte leben als setTimeout im Prozess, ein Deploy nimmt sie mit, und
+  // arm() faellt nur am Anrufstart bzw. am Re-Attach: ohne diesen Re-Arm haette ein
+  // ueberlebendes Leg nur noch den Max-Dauer-Cap (Groessenordnung 1800 s) statt des Takts.
+  // Setzt AUSSCHLIESSLICH Timer (INV-5 unberuehrt). Die Zeile erscheint nur, wenn wirklich
+  // etwas gedeckt wurde (Muster rearmActiveCallTimers) und traegt nur Zahlen - kein PII.
+  function rearmWatchdogs() {
+    const { armedNow } = watchdog.rearm(activeCallsOf(store).map((call) => call.id));
+    if (armedNow)
+      console.log(
+        `[budget] Boot-Re-Arm der Geld-Wache: ${armedNow} aktive Legs (Takt ${intervalMs} ms)`,
+      );
+  }
+
+  return { blockingAxisFor, terminateOverBudgetCall, arm: watchdog.arm, rearmWatchdogs };
+}
+
 export function makeCallLifecycle({
   store,
   config,
@@ -47,23 +169,13 @@ export function makeCallLifecycle({
   cappedEndedAtMs,
   classifyCallTime,
   blockingBudgetAxis, // KS-P1b: die EINE Geld-Achse (budget-gate.js), injiziert wie classifyCallTime
+  // IE2: der Takt der Geld-Wache ist injizierbar, der Cap-Timer bewusst NICHT. Grund: der
+  // Cap feuert EINMAL und ist von den Bestandstests ueber den Zombie-Pfad (Restzeit<=0,
+  // sofortige Terminalisierung) erreichbar; ein WIEDERKEHRENDER Takt hat keinen solchen
+  // Pfad - ohne injizierten Timer waere der Negativfall "Achse frei -> nichts passiert"
+  // nur mit Wanduhr-Warten pruefbar (P12). Default = Produktionsverhalten.
+  setBudgetWatchTimer = defaultSetTimer,
 }) {
-  // Gemeinsame Call-Max-Dauer in ms: armMaxDurationTimer UND der Reserve-Backstop-Timer teilen
-  // dieselbe Rechnung (call-eigenes Limit vor Fallback). Die Formel selbst lebt in
-  // src/call-duration.js (G5: EINE Quelle innerhalb der Telephony-Schicht, auch fuer den
-  // Realtime-Cap in bridge.js; state-ops.js#callLimitMs bleibt eine bewusst getrennte zweite
-  // Kopie, OQ-1); hier wird nur der Fallback gebunden.
-  //
-  // KS-P3: die Frist steht seit dieser Phase AM CALL (call.maxDurationS, beim Anlegen aus
-  // dem Restguthaben abgeleitet - Outbound im compute_reserve-Gate, Inbound in
-  // /voice/incoming). Der hier gebundene Wert ist nur noch der FALLBACK fuer Zeilen ohne
-  // eigene Frist (Calls, die den Deploy ueberlebt haben) und ist bewusst die absolute
-  // Obergrenze: MAX_CALL_DURATION_S als Operator-Knopf ist mit E2/E3 entfallen. Der
-  // Cap-Timer, der EINE Terminalisierungspfad (INV-9) und der Boot-Re-Arm sind unberuehrt.
-  function callMaxDurationMs(call) {
-    return computeMaxDurationMs(call, MAX_CALL_DURATION_CAP_S);
-  }
-
   // F10 (A6): der EINZIGE Terminalisierungspfad des Max-Dauer-Caps - kein zweiter Bucht-freier
   // Weg (K1/K2). Provider-aware ueber call.provider (P6a): ein Telnyx-Call wird ueber Telnyx
   // beendet, nicht ueber einen fremden Anbieter. Fuer Telnyx-Outbound ist dieser Cap der EINZIGE
@@ -111,8 +223,8 @@ export function makeCallLifecycle({
         bill: billThunk(finishCall, store, callId), // bucht genau EINMAL (billedAt, F9), gekappt
         callId, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
       });
-    } catch (e) {
-      console.error("[max-duration] Terminalisierung fehlgeschlagen:", e.message);
+    } catch (err) {
+      console.error("[max-duration] Terminalisierung fehlgeschlagen:", err.message);
     }
   }
 
@@ -122,21 +234,12 @@ export function makeCallLifecycle({
     await terminateActiveCall({ callId, providerCallSid, status, failureReason: CAP_FAILURE_REASON });
   }
 
-  // KS-P1b, Geld-Achse: ein Leg, dessen Guthaben zwischen Anrufstart und Re-Attach
-  // aufgebraucht wurde, wird beendet statt mit frischer Frist reanimiert. status
-  // "completed" (nicht "failed"): das Leg war technisch gesund, wir haben es beendet - wie
-  // beim Timer-Ablauf; "failed" bleibt dem Boot-Zombie vorbehalten. Die Logzeile ist
-  // Pflicht, nicht Kuer: ohne sie waere die Terminalisierung auf den /voice/*-Pfaden im
-  // Betrieb voellig stumm (CLAUDE.md Regel 7). Nur die server-generierte callId, kein PII.
-  async function terminateOverBudgetCall(callId, providerCallSid) {
-    console.warn(`[budget] Re-Attach: Guthaben erschoepft (call=${callId}) -> terminalisiert`);
-    await terminateActiveCall({
-      callId,
-      providerCallSid,
-      status: "completed",
-      failureReason: BUDGET_FAILURE_REASON,
-    });
-  }
+  // IE2: die GELD-Achse dieser Naht, EINMAL gebunden (volle Doku an makeBudgetAxisSeam).
+  // Sie bekommt terminateActiveCall herein - es bleibt der EINE Terminalisierungspfad.
+  const budgetAxis = makeBudgetAxisSeam({
+    store, billing: config.billing, blockingBudgetAxis, terminateActiveCall,
+    intervalMs: config.safety.budgetWatchdogIntervalMs, setTimer: setBudgetWatchTimer,
+  });
 
   // F10 (A6): armiert den Max-Dauer-Cap. Nach ms feuert der EINE Terminalisierungspfad
   // (status "completed"). Liest den Call beim Feuern frisch (Guard in terminateCappedCall);
@@ -150,6 +253,16 @@ export function makeCallLifecycle({
   // place_call) bleiben byte-identisch verdrahtet.
   function armMaxDurationTimer(call, providerCallSid) {
     scheduleMaxDurationEnd(call, providerCallSid, callMaxDurationMs(call));
+    // IE2: dieselbe Naht armiert die GELD-Achse - hier und NICHT an den vier Aufrufern
+    // (routes/voice.js, drei Zweige in routes/api-calls.js). Eine Sicherung, die jeder neue
+    // Anrufweg selbst aufrufen muss, ist eine Sicherung per Konvention (G27); die erste
+    // vergessene Zeile waere ein ungedeckter Anruf. Der Funktionsname ist historisch - bis
+    // IE2 armierte er nur die Zeit-Achse; ein Rename beruehrt vier Aufrufer und einen
+    // quelltext-pruefenden Bestandstest und ist eine eigene Entscheidung.
+    // Der Realtime-Zweig von POST /api/calls armiert diesen Timer nicht (voiceEngine-Guard)
+    // und ist damit auch hier nicht gedeckt - er ist seit KV2-2 (h) beim Boot FATAL
+    // (LATENT_COST_PATH_FINDING.REALTIME_CARRIER_UNCOLLECTED) und faellt in IE6 weg.
+    budgetAxis.arm(call.id);
   }
 
   // OUT-05 (F2): Reserve-Release-Backstop. Unabhaengig vom Provider-completed-Callback gibt dieser
@@ -172,18 +285,29 @@ export function makeCallLifecycle({
   // Zeit-Leg OHNE Restzeit-Pruefung/Timer-Rearm. Vertraut NUR der DB (nie dem Request-Body);
   // sitzt strukturell HINTER app.use("/voice") (Provider-Signatur, Regel 1). Nebeneffekt
   // (Spiegel-Mutation + evtl. Terminalisierung/Cap-Rearm) im Namen (N7).
-  function reattachActiveCall(callId) {
-    return reattachActiveCallCore(callId, {
+  async function reattachActiveCall(callId) {
+    const result = await reattachActiveCallCore(callId, {
       attachActiveCall: store.attachActiveCall,
       maxCallDurationS: MAX_CALL_DURATION_CAP_S,
-      terminateCappedCall,
-      scheduleMaxDurationEnd,
-      // KS-P1b: die Geld-Achse als gebundene Query (Muster der uebrigen Deps). tenantId
-      // kommt aus dem frisch geladenen Call (I8: rowToCall hydriert ihn).
-      budgetAxisFor: (call) =>
-        blockingBudgetAxis({ store, billing: config.billing, tenantId: call.tenantId }),
-      terminateOverBudgetCall,
+      terminateCappedCall, scheduleMaxDurationEnd,
+      // KS-P1b: die Geld-Achse als gebundene Query (Muster der uebrigen Deps) - G5: derselbe
+      // gebundene Ausdruck, den die Geld-Wache in jeder Runde fragt.
+      budgetAxisFor: budgetAxis.blockingAxisFor,
+      // IE2: reattach.js bleibt BYTE-IDENTISCH - der Anlass wird hier gebunden, nicht dort
+      // durchgereicht (kein Vertragsbruch am Kern, keine Test-Aenderung an reattach).
+      terminateOverBudgetCall: (id, providerCallSid) =>
+        budgetAxis.terminateOverBudgetCall({
+          callId: id, providerCallSid, origin: BUDGET_TERMINATION_ORIGIN.REATTACH,
+        }),
     });
+    // IE2: ein Leg, das der Prozess gerade erst wiedergefunden hat, war beim Boot-Re-Arm
+    // NICHT im Spiegel (store/pg.js#attachActiveCallRow pusht die DB-Zeile erst hier hinein).
+    // Ohne diese Zeile liefe genau der Anruf ohne Geld-Wache weiter, fuer den sie am
+    // dringendsten gebraucht wird. Der Kern hat die Achse fuer DIESEN Moment schon gefragt;
+    // armiert wird der wiederkehrende Takt. arm() ist idempotent -> der In-Flight-Coalescing-
+    // Pfad (RACE-1) kann keine zwei Takte stellen.
+    if (result.call) budgetAxis.arm(result.call.id);
+    return result;
   }
 
   // KS-P1b: dieselbe Naht fuer den Assistant-Shim, der ausschliesslich ueber die Telnyx-
@@ -214,7 +338,7 @@ export function makeCallLifecycle({
     const nowMs = Date.now();
     let reArmed = 0;
     let terminalized = 0;
-    for (const call of store.load().calls.filter((c) => c.status === "active")) {
+    for (const call of activeCallsOf(store)) {
       // G5 (Review-Blocker Runde 2): dieselbe Klassifikation wie reattachActiveCall() (F12) -
       // ausgelagert nach state-ops.js, um die Restzeit-Verzweigung nicht zweimal zu pflegen.
       const { remaining, expired } = classifyCallTime(call, nowMs, MAX_CALL_DURATION_CAP_S);
@@ -227,16 +351,15 @@ export function makeCallLifecycle({
       }
     }
     if (reArmed || terminalized)
-      console.log(
-        `[rearm] aktive Calls beim Boot: ${reArmed} re-armed, ${terminalized} terminalisiert (Zombie)`,
-      );
+      console.log(`[rearm] aktive Calls beim Boot: ${reArmed} re-armed, ${terminalized} terminalisiert (Zombie)`);
   }
 
   return {
-    armMaxDurationTimer,
-    armReserveReleaseTimer,
-    reattachActiveCall,
-    reattachActiveCallByControlId,
+    armMaxDurationTimer, armReserveReleaseTimer,
+    reattachActiveCall, reattachActiveCallByControlId,
     rearmActiveCallTimers,
+    // IE2: der Boot-Re-Arm der GELD-Achse, unveraendert durchgereicht aus der Naht
+    // (dort seine Begruendung). Aufgerufen in boot.js unmittelbar nach dem Cap-Re-Arm.
+    rearmBudgetWatchdogs: budgetAxis.rearmWatchdogs,
   };
 }

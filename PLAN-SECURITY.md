@@ -4002,3 +4002,55 @@ Link als Zahlungsart im Stripe-Dashboard (reiner Dashboard-Schritt, ausdruecklic
 zugleich lahm); die Nachweisdokumente fuer `+4921194289148`; und der Dauergutschein ueber
 hundert Prozent, der zusammen mit der Befreiung an `invoiceTotal===0` einen Vollgratis-Zugang
 ergibt — zu pruefen vor dem ersten fremden Kunden.
+
+## IE2 — Die Geld-Achse bekommt einen Herzschlag (2026-09-12)
+
+**Was sich aendert.** Die pro-Tenant-Kostendecke bekommt eine **fuenfte, zeitgesteuerte**
+Fragestelle. Bisher wurde `blockingBudgetAxis` ausschliesslich aus vier
+EREIGNISGEBUNDENEN Naehten gefragt: der Turn-Runde (`claude.js#agentTurn`), dem Shim-Turn
+(`telnyx-llm-shim.js`), dem ElevenLabs-Werkzeug-Webhook (`routes/webhooks-elevenlabs.js`)
+und dem `/voice/*`-Re-Attach (`telephony/call-lifecycle.js#reattachActiveCall`). Ein Anruf
+ohne Turn und ohne Werkzeugaufruf — der Anrufer, der nur eine Nachricht hinterlaesst — hat
+die Decke mid-call NIE erreicht. Der neue Waechter
+(`src/telephony/budget-watchdog.js`, Takt `BUDGET_WATCHDOG_INTERVAL_MS`, Default 15000 ms)
+fragt je aktivem Anruf wiederkehrend DIESELBE Achse und beendet ueber DENSELBEN einen
+Terminierungspfad (`terminateOverBudgetCall` -> `terminateActiveCall` ->
+`terminateAndBillCall`). Er rechnet nichts selbst, legt nicht selbst auf und fuehrt keinen
+eigenen Zaehler.
+
+**Richtung der Wirkung: strenger, nie lockerer.** Es ist dieselbe Decke mit demselben
+Grund-Token (`budget-exhausted`) und demselben Endstatus (`completed`) — sie bindet nur
+jetzt auch dort, wo kein Ereignis sie bisher gefragt hat. Armiert wird an genau drei
+Stellen, alle strukturell und nicht per Konvention: in `armMaxDurationTimer` (die Naht, die
+jeder Anrufweg ohnehin durchlaeuft — NICHT als fuenfter Aufruf an den vier Startpfaden),
+nach erfolgreichem Re-Attach (ein Leg, das erst dort in den Prozess-Spiegel kommt) und im
+Boot-Re-Arm `rearmBudgetWatchdogs()` (unmittelbar nach dem Cap-Re-Arm; der
+Realtime-Sonderfall der Zeit-Achse wird bewusst NICHT geerbt, die Geld-Achse ist
+engine-neutral). Eine gescheiterte Runde (Achse oder Store wirft) beendet die Wache NICHT,
+sondern stellt sie neu — die einzige akzeptable Fehlrichtung fuer ein Gate.
+
+**Was unberuehrt bleibt.** Dial-Gate und Outbound-Permit, der Inbound-Reject, die
+Offenlegung, die Provider-Signaturpruefung, die Auth-Kette, `OUTBOUND_FROZEN`,
+Denylist/Land-Gate/Stundenlimit, der Max-Dauer-Cap samt seinem Re-Arm, alle Tarife und
+Decken, `src/bridge.js` (kein `blockingBudgetAxis` dort, `REALTIME_MID_CALL_BUDGET_CHECK`
+unveraendert) und `src/telephony/reattach.js` (byte-identisch — der Anlass der
+Terminalisierung wird in der Injektion gebunden). Kein neuer Endpunkt, also kein Eintrag in
+`src/route-policy.js`; keine neue Abhaengigkeit; keine zweite Geld-Achse und keine zweite
+Logquelle (die EINE Warnzeile traegt den Anlass als Token, `re-attach` oder `wache`).
+
+**Drei getragene Restrisiken.**
+
+1. **Ueberziehung von hoechstens einem Takt je Leg.** Zwischen zwei Runden kann ein Leg
+   weiterlaufen: bei 15 s Takt und `VOICE_TARIFF_DEFAULT_CENTS=30` rund 7,5 Cent je
+   laufendem Leg, bei `VOICE_TARIFF_INBOUND_CENTS=6` rund 1,5 Cent. NICHT kumulativ — jede
+   Runde liest den Ist-Stand. Der Takt liegt bewusst deutlich unter der Abrechnungsminute
+   (Telnyx rundet auf 60 s auf), damit die Ueberziehung keine ganze Carrier-Minute
+   erreicht. Zweite Linie bleibt die guthaben-abgeleitete Frist am Anruf (`maxDurationS`).
+2. **Grenze des Prozess-Spiegels.** Armiert wird, was DIESER Prozess sieht. Ein Leg einer
+   anderen Instanz ist erst ab seinem Re-Attach gedeckt. Die Abdeckung ist damit
+   unvollstaendig, aber nie falsch in die andere Richtung: es wird nie ein Leg
+   terminalisiert, das die Achse nicht als gesperrt meldet.
+3. **`BUDGET_WATCHDOG_INTERVAL_MS=0` schaltet den Takt komplett aus.** Das ist der bewusste
+   Rueckfall-Hebel ohne Deploy (wirksam beim naechsten Prozessstart). Die vier
+   ereignisgebundenen Pruefstellen bleiben dabei unveraendert scharf — der Zustand ist
+   exakt der Bestand vor dieser Phase, nicht ein Zustand ohne Decke.
