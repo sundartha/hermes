@@ -8,12 +8,23 @@ belegt (Datei + Symbolname, keine Zeilennummern — die rotten). Was nicht beleg
 steht ausschliesslich unter "Offene Messungen".
 
 **Gegengelesen gegen den Code (2026-09-12, adversarialer Durchgang, ~45 Behauptungen).**
-Drei Befunde sind übernommen und haben Abschnitte geändert, nicht nur Sätze:
-die Konsumentenliste der Stimm-Auflösung (Abschnitt 5, Punkt 1 — Folgen in IP3, IP4, IP7
-und in der Bewertungstabelle, samt neuer Fussnote (b)-Stimme, M10 und O7), die Zahl der
-`fuer`-Vorkommen im Begrüssungskatalog (W2, IP1) und die Grösse des Bestands-Szenariensatzes
-(Pre-Mortem P6, IP6). Nicht gemessen wurde in diesem Durchgang der Farbstand der Testbänke
-(kein Testlauf) — daraus ist M11 geworden.
+Drei Befunde daraus leben weiter, weil sie am Code belegt sind: die Konsumentenliste der
+Stimm-Auflösung je **Funktion** (Abschnitt 5, Punkt 1 — Folgen in IP3, IP4 und IE6), die
+Zahl der `fuer`-Vorkommen im Begrüssungskatalog (W2; behoben in IP1) und der ungemessene
+Farbstand der Testbänke (daraus ist M11 geworden). Was dieser Durchgang über den
+Telnyx-Assistant-Pfad festhielt, ist als Fussnote (b)-Stimme in 2.5 erhalten — sie ist der
+Grund, warum dieser Pfad entfernt und nicht scharfgestellt wird.
+
+---
+
+**Umgeschrieben am 2026-09-12 auf den Owner-Einwand "EIN Gesprächs-System, nicht zwei".**
+Ersetzt wurden die Abschnitte 2 (Leitentscheidung), 3 (Pre-Mortem) und 4 (Phasenkette);
+Abschnitt 6 ist nachgezogen. Abschnitt 1 bleibt inhaltlich stehen — W1–W4 und die sieben
+Sicherungen sind am Code belegt — und ist um 1.4 **ergänzt**: die Anbieter- und
+Code-Belege, die dieser Lauf neu gemessen hat. Die alte Leitentscheidung (Telnyx-AI-Assistant
+als Turn-Taking-Weg) ist **zurückgenommen**; der Assistant ist damit kein Ziel mehr, sondern
+Löschkandidat. Was aus der alten Kette entfällt oder zurückgestellt ist, steht mit Grund in
+4.1, was aus Abschnitt 6 gestrichen ist, jeweils am Ende der Tabelle.
 
 ---
 
@@ -115,349 +126,443 @@ Und: der bereits gebaute Assistant-Handoff liegt **hinter** all dem
 bekommt den fertigen Pflichtsatz als Wert übergeben. Ein Inbound-Weg, der diesen Webhook
 nicht durchläuft, hat keine dieser sieben Sicherungen.
 
+### 1.4 Was der EIN-System-Lauf am Anbieter und am Code neu belegt hat
+
+Ergänzung zu 1.1–1.3. Nichts hier streicht einen Befund von oben; W1–W4 und die sieben
+Sicherungen stehen unverändert. Provider-Aussagen tragen ihre URL und das Abrufdatum,
+Code-Belege Datei + Symbolname ohne Zeilennummern.
+
+| # | Belegt | Quelle |
+|---|---|---|
+| B1 | Ein eingehender SIP-INVITE an ElevenLabs braucht eine **Kennung vor dem `@`**: `sip:+19991234567@sip.rtc.elevenlabs.io:5060`. Die Doku verbietet ausdrücklich den Aufruf "directly to `sip@sip.rtc.elevenlabs.io:5060` without an identifier". | elevenlabs.io/docs/eleven-agents/phone-numbers/sip-trunking (2026-09-12) |
+| B2 | Der ankommende INVITE wird **entweder** per Digest-Zugangsdaten **oder** per ACL über die Signalisierungs-Quell-IP authentifiziert. | dieselbe Seite |
+| B3 | Eigene SIP-`X-`Header eines Inbound-Trunk-Anrufs werden **automatisch zu dynamic variables**, nach einer exakten Regel: `X-`-Präfix weg, klein, Bindestrich → Unterstrich, `sip_`-Präfix davor (`X-Contact-ID` → `{{sip_contact_id}}`). Das ist ein **Variablen**-Kanal — **kein** Override-Kanal für Stimme, Sprache oder `first_message`. | dieselbe Seite |
+| B4 | **Wie** ElevenLabs einen ankommenden INVITE einem Agenten zuordnet, ist **nicht ausgesprochen**. Die Doku sagt nur, eine importierte Trunk-Nummer lasse sich "assign to an ElevenLabs agent". Die naheliegende Annahme "Kennung vor dem `@` = die zugewiesene Nummer" ist damit **unbelegt** und darf keine Phasen-Prämisse sein. | dieselbe Seite; Gegenprobe: Live-`GET /v1/convai/agents/{id}` zeigt an einer von vier verknüpften Nummern `supports_inbound=true` mit vollständigem `inbound_trunk`-Objekt |
+| B5 | TeXML-`<Dial>` trägt `timeLimit` in Sekunden, Bereich **60–14400**, Default 14400; `<Sip>` wählt eine SIP-URI. **Nicht** dokumentiert: eigene SIP-Header an `<Sip>`, und was während der Brücke mit der Kontrolle über das Elternbein geschieht. | developers.telnyx.com/docs/voice/programmable-voice/texml-verbs/dial (2026-09-12) |
+| B6 | Ein laufendes EL-Gespräch von **aussen** zu beenden ist dokumentiert — Monitoring-WebSocket `wss://api.elevenlabs.io/v1/convai/conversations/{conversation_id}/monitor`, Kommando `{"command_type":"end_call"}`, `xi-api-key` mit Editor-Recht — aber ausdrücklich als **enterprise-only feature**, und man muss sich **nach** Gesprächsbeginn verbinden. Solange der Tarif unbelegt ist, ist das **keine** Notbremse. | elevenlabs.io/docs/eleven-agents/guides/realtime-monitoring (2026-09-12) |
+| B7 | Unser Code sagt über den REST-Weg dasselbe: `src/elevenlabs/convai.js#endConversation` hält fest, der `DELETE`-Versuch beantworte nur "hat der Anbieter den Aufruf angenommen", und **ob** er die Leitung kappt, sei **nicht belegt**. `src/telephony/call-termination.js#hangUpAction` liefert für einen EL-Call folgerichtig `null`, wenn kein Telnyx-Griff existiert. | Code |
+| B8 | **Die Geld-Achse hat keinen Herzschlag.** `blockingBudgetAxis` (`src/budget-gate.js`) wird aus genau vier Stellen gefragt: `claude.js#agentTurn` (vor jeder Turn-Runde), `telnyx-llm-shim.js` (Assistant-Pfad), `routes/webhooks-elevenlabs.js` (nur wenn der Agent im Gespräch ein Werkzeug ruft) und `telephony/call-lifecycle.js#reattachActiveCall` (nur an einem `/voice/*`-Request). **Kein Timer, kein Heartbeat.** Die Mid-Call-Wirkung der Kostendecke hängt heute am Turn-Loop. | Code |
+| B9 | **Das Fähigkeits-Gate ist unsere Sicherung, nicht eine Eigenschaft zweier Gehirne.** `consultAvailableFor` (`src/consult/in-call.js`) verlangt `call.direction === "outbound"`, und der EL-Werkzeug-Webhook (`routes/webhooks-elevenlabs.js`) prüft die Richtung erneut, bevor er antwortet. Ein Inbound-Anruf am **selben** Agenten bekommt `get_consult`/`look_up` also weiterhin nicht. Derselbe Prädikat-Zweig sperrt heute zusätzlich `VOICE_ENGINE.REALTIME`. | Code |
+| B10 | Die Ersatzantwort des Wiederholungs-Riegels ist ein **Gather**: `keepAliveXml: (call) => render(followupTurnDirectives(call, ""))` in `src/routes/voice.js`. Sie ist an die Budget-Engine gebunden, nicht an den Zustand des Anrufs. | Code |
+| B11 | `src/telephony/directives.js` kennt `say`/`gather`/`hangup`/`redirect`/`stream` — **keine** SIP-Dial-Direktive. Die strukturelle Präzedenz für "einen Satz sprechen, dann übergeben" existiert dagegen: `src/telephony/voice-render.js#streamDirectives` tut in **einem** TeXML-Dokument genau das. | Code |
+| B12 | `src/billing/kostenarten.js#legacyKostenprofil` klassifiziert **jeden** Anruf mit `sipCallId` als `EL_CONVAI_SIP`, **richtungsunabhängig**; `EL_CONVAI_SIP` trägt als gemessene Pflichtmenge `[sip-trunking]`. Ein neuer Inbound-Weg darf dieses Profil daher nicht wiederverwenden und seine Reihenfolge nicht überschreiben. | Code |
+| B13 | Lokal (`.env`, nur Zustand, keine Werte): `TELNYX_SIP_TRUNK_USERNAME` und `-PASSWORD` leer, `ELEVENLABS_NUMBER_REGISTRATION_ENABLED` leer, `ELEVENLABS_OUTBOUND_ENABLED=false`, `ELEVENLABS_PLAY_TTS_ENABLED` leer, `TELNYX_AI_ASSISTANT_ENABLED` und `TELNYX_INBOUND_HANDOFF_ENABLED` leer, `TELNYX_ELEVENLABS_VOICE_ID` leer; `ELEVENLABS_API_KEY` und `ELEVENLABS_AGENT_ID` gesetzt. Render ist Dashboard-managed — das sind **lokale** Aussagen, nicht die Live-Wahrheit (M1–M3). | `.env` |
+
+**Die eine Zeile, die alles trägt:** unser Webhook ist bei einem eingehenden Anruf zuerst
+dran, weil die DID auf unsere Telnyx-Voice-Application zeigt. Jeder Mechanismus, der das
+beibehält, behält die sieben Sicherungen an ihrer heutigen Naht. Jeder Mechanismus, der es
+aufgibt, muss sie beim Anbieter neu erfinden — und dort fehlen die Bauteile (B4, B6).
+
+---
+
 ---
 
 ## 2. Leitentscheidung
 
-> **(c) zuerst, (b) danach als vorbereitete Weiche, (a) verworfen.**
+> **EIN Gesprächs-System für beide Richtungen: der ElevenLabs-ConvAI-Agent. Inbound
+> erreicht ihn über K1 — unser Webhook nimmt an, rendert den Pflichtsatz und übergibt
+> das Bein danach per SIP an den Agenten. Das Carrier-Bein bleibt unser, deshalb bleiben
+> alle sieben Sicherungen an ihrer heutigen Naht und der Hangup-Griff in unserer Hand.
+> K3 (die Nummer zeigt auf den EL-Inbound-Trunk) ist **nicht zulässig**: dort fallen drei
+> Sicherungen weg, nicht "nur mit neuem Code". K2 (Media-Bridge) ist der benannte
+> Rückfall mit genannter Auslösebedingung. K4 (Telnyx-Assistant) wird **entfernt**, nicht
+> scharfgestellt.**
 >
-> Inbound wird in der turn-basierten Engine gezielt nachgebessert — Aussprache und
-> Stimme sind dort in Tagen und mit kleinstem Radius auf Outbound-Niveau zu bringen,
-> weil der Stimm-Anker schon geteilt ist (W1). Turn-Taking-Parität (Barge-in,
-> Denkpausen-Füllsätze) ist in der Budget-Engine strukturell unerreichbar (W4) und
-> bekommt genau einen Weg: den bereits gebauten Telnyx-AI-Assistant-Inbound-Handoff,
-> der hinter unserem Webhook und damit hinter allen Gates liegt. Der ElevenLabs-Agent
-> wird für Inbound **nicht** freigeschaltet, solange das nur über
-> `inbound_trunk_config` ginge: dieser Weg leitet den Anruf auf SIP-Ebene am
-> Inbound-Webhook vorbei und damit an sieben Sicherungen vorbei, den Pflichtsatz
-> eingeschlossen.
+> Am Ende der Kette lebt Gesprächslogik bei uns **nirgends** mehr: kein Turn-Loop, kein
+> eigener STT-Seam, kein Prompt je Richtung, kein zweiter Voice-Anbieter im Audiopfad.
+> EIN Agent, EINE Stimme, EIN Kostenpfad. Was bei uns bleibt, ist ausschliesslich
+> **Sicherungs- und Transportcode** — und das ist per Owner-Vorgabe ausdrücklich kein
+> Verstoss gegen den Massstab.
 
-### Bewertung aller drei Wege
+### 2.1 Die Zielarchitektur in einem Satz je Schicht
 
-| | (a) EL-ConvAI für Inbound | (b) Telnyx-AI-Assistant-Inbound | (c) Budget-Engine nachbessern |
-|---|---|---|---|
-| Qualitätsgewinn Stimme | maximal (identisch, weil derselbe Agent) | **null, und schlechter als "null" klingt** — der Assistant spricht **eine einzige statische Plattform-Stimme für jede Sprache** (s. Fussnote (b)-Stimme) | **voll** (W1: ein Flag, derselbe Resolver) |
-| Qualitätsgewinn Aussprache | keiner (der Satz wäre Anbieter-Konfiguration) | keiner (unser Greeting reist als Wert mit) | **voll** (W2 ist unser Literal) |
-| Qualitätsgewinn Turn-Taking | maximal | **hoch** (Barge-in, `onSpeechChunk`-Kanal existiert) | **keiner** (W4, Plattformgrenze) |
-| Qualitätsgewinn Fähigkeiten | hoch, aber unerwünscht: `get_consult`/`look_up` sind für Inbound **absichtlich** gesperrt | keiner (gleiches Gehirn, gleiches Gate) | keiner |
-| Aufwand | gross (Trunk, Gates neu bauen, Pflichtsatz verlagern) | gross (answered-Ereignis abwarten, belegter 422-Blocker) | **klein** (Literal, Flag, Test) |
-| Betriebsrisiko | **unannehmbar**: Gate-Umgehung by construction | mittel: belegter Provider-Race, Rückweg ist ein Flag | klein: Flag aus = byte-identisch |
-| Kosten je Anruf | anbieter-eigene Turn-Abrechnung; Lehre `elevenlabs-kosten-pro-turn`: ein *kürzerer* Anruf war teurer | **~3x**: ~5 US-Cent/angefangene Minute gegen 1,87 auf der Budget-Engine (Messung KV-M1, zitiert in `src/config.js` an `telnyxAssistant.inboundHandoffEnabled`) | +EL-Zeichen, gedeckelt durch den bestehenden Kontingent-Riegel (`src/tts/directive-synth.js#warnQuotaDegradation`) |
-| Wahrheiten danach im Code | 3 (Budget + Assistant + EL), bis Outbound *und* Inbound dort laufen | 2 (Assistant live, Budget als Rückweg) — aber **ein** Gehirn (`agentTurn` via Shim) | 1 (der Bestand), Stimm-Auflösung bereits geteilt |
+| Schicht | Zielzustand | Heute |
+|---|---|---|
+| Gehirn | **einer**: der EL-ConvAI-Agent, für Inbound und Outbound | zwei (EL outbound, `claude.js#agentTurn` inbound) |
+| Transportweg Inbound | unsere DID → unsere Voice-Application → `/voice/incoming` (sieben Sicherungen) → gerenderter Pflichtsatz → SIP-Übergabe an `sip:+<DID>@sip.rtc.elevenlabs.io:5060` | `/voice/incoming` → TeXML-`<Gather>` → `/voice/turn` (Turn-Loop bei uns) |
+| Stimme | **eine**, über `elevenLabsVoiceIdFor` aufgelöst — für den gerenderten Satz **und** für den Agenten | Azure inbound (Flag aus), EL outbound |
+| Kostenpfad | EL-Ist (`elevenlabs_convai`) + **ein** Telnyx-Träger, je Richtung dasselbe Muster | zwei Muster (`TELNYX_INBOUND_BUDGET` mit Konfigurationspreis vs. `EL_CONVAI_SIP` mit Anbieter-Ist) |
+| Notbremse | unser Telnyx-Bein: `hangUpAction` über `callControlId`, plus `<Dial timeLimit>` als provider-erzwungene Zweitlinie (B5) | unser Telnyx-Bein (Inbound), bei EL-Outbound **kein belegter Griff** (B7) |
+| Geld-Achse mid-call | ein **wiederkehrender** Wächter, pfad- und richtungsneutral (IE2) | nur über den Turn-Loop (B8) — bei EL-Outbound heute schon offen |
+| Fähigkeits-Gate | unverändert unsere Sicherung am Werkzeug-Webhook (B9) | dasselbe |
+| Engines im Code | **eine** | vier Zweige: Budget, Assistant (aus), Realtime-Bridge (aus), EL |
 
-**Fussnote (b)-Stimme (belegt, und schärfer als ein blosses "null"):** der
+### 2.2 Der Massstab, und wie die Kandidaten daran gemessen wurden
+
+Rangfolge des Owners: es gewinnt, wer am Ende am **wenigsten eigene Gesprächslogik und
+eigene Buchhaltung** zurücklässt — **bei gleichem Sicherungsniveau**. "Schnell gebaut"
+ist Tiebreaker, nie Kriterium. Sicherungs-Code zählt nicht gegen einen Kandidaten.
+
+| | K3 "EL nimmt an, wir entscheiden vorher" | **K1 "annehmen, Satz sprechen, per SIP übergeben"** | K2 "Media-Bridge" | K4 "Telnyx-Assistant" |
+|---|---|---|---|---|
+| Gesprächslogik danach bei uns | **null** | **null** | Turn-Taking-Mechanik (Barge-in, Frame-Übersetzung, Call-Ende-Puffer — die als `HEIKLE STELLE` markierten Abschnitte von `bridge.js`, nur mit EL statt OpenAI) | **ein drittes Gehirn** mit eigenem Prompt |
+| Buchhaltung danach | ein Profil, aber ohne unseren Anruf-Datensatz | ein Profil, Muster wie Outbound | ein Profil, deckungsgleich mit der bestehenden `telnyx_inbound_realtime`-Form | ein **drittes** Profil, dessen Haupttreiber laut Katalog nicht einmal pro Anruf zuordenbar ist |
+| S1 Ed25519 fail-closed | **fällt weg** | ueberlebt unverändert | ueberlebt unverändert | ueberlebt |
+| S2 Wiederholungs-Riegel | fällt weg | nur-mit-neuem-code (IE4) | nur-mit-neuem-code | ueberlebt |
+| S3 Tenant nach Signatur | **fällt weg** (unsigniertes Body-Feld) | ueberlebt unverändert | ueberlebt unverändert | ueberlebt |
+| S4 Kostendecke, Start | **fällt weg** (kein Reject-Vertrag) | ueberlebt unverändert | ueberlebt unverändert | ueberlebt |
+| S4 Kostendecke, mid-call | fällt weg | nur-mit-neuem-code (IE2) | nur-mit-neuem-code (IE2) | ueberlebt (Shim fragt die Achse) |
+| S5 Max-Dauer-Notbremse | **fällt weg** (B6/B7) | ueberlebt, Neustart eingeschlossen | nur-mit-neuem-code (Neustart-Lücke) | ueberlebt |
+| S6 Kostenprofil-Buchung | fällt weg (Anruf ohne unseren Datensatz möglich) | nur-mit-neuem-code (IE3) | nur-mit-neuem-code (IE3) | nur-mit-neuem-code |
+| S7 gerenderter Pflichtsatz | **fällt weg** (wird Dashboard-Zeile) | ueberlebt, plus Doppelansage-Riegel (IE5) | ueberlebt, plus Riegel | ueberlebt |
+| Urteil | **unzulässig** | **gewählt** | **Rückfall** | **wird entfernt** |
+
+### 2.3 Warum K3 nicht zulässig ist (und das ist keine Abwägung)
+
+K3 wäre der wörtlich schönste Weg: der Anbieter führt das Gespräch, wir entscheiden vorher
+und protokollieren danach, bei uns entsteht nicht eine Zeile Audio- oder Gesprächscode.
+Die Prüfung dieses Laufs hat ihn deshalb **zuerst** vorgenommen, nicht als Bypass
+abgetan. Er scheitert an vier Anbieter-Belegen, von denen drei Sicherungen **wegfallen** —
+und Absolute Regel 1 und 2 stehen nicht zur Abwägung.
+
+1. **S1 (Ed25519, fail-closed) hat keinen Ersatz.** Der Gesprächs-Initiations-Webhook ist
+   **nicht** signiert; HMAC-signiert sind beim Anbieter nur `post_call_transcription` und
+   die drei `voice_removal`-Ereignisse. Die einzige Authentifizierung ist ein von uns
+   gesetztes **statisches Header-Geheimnis** — dieselbe Klasse wie unser bestehender
+   `ELEVENLABS_TOOL_TOKEN`, nicht dieselbe Klasse wie ein asymmetrisches Signaturschema
+   mit Wiederholungsschutz. Für Inbound wäre die Provider-Signaturprüfung damit
+   **umgangen**. Kein zusätzlicher Sicherungs-Code bei uns kann eine Signatur herstellen,
+   die der Anbieter nicht leistet.
+2. **S3 (Tenant-Auflösung nach der Signatur) hängt danach an einem unsignierten Feld.**
+   Die angerufene Nummer käme aus dem Body dieses Webhooks. Genau diesen Spoof verhindert
+   S3 heute. Der Schaden ist nicht nur Geld: der Tenant entscheidet Begrüssung, Sprache,
+   Kontext und Postfach — eine falsche Tenant-Bindung ist ein Datenweg zwischen Mandanten.
+   Vorhandene Härtung wäre eine IP-Allowlist beim Anbieter: eine Egress-Liste, kein
+   Signaturbeweis.
+3. **S4 (Kostendecke) hat keinen Ablehnungs-Vertrag.** Die Doku sagt nur, ein
+   fehlgeschlagener oder abgelaufener Webhook **könne** den Gesprächsstart verhindern
+   ("A failed or timed-out webhook can prevent the conversation from starting"). Es gibt
+   kein Reject-Feld, keinen dokumentierten Statuscode, keine Zusage über das Verhalten im
+   Fehlerfall (harter SIP-Abbruch vs. Rückfall auf die Agenten-Default-Konfiguration).
+   Einen absichtlichen 5xx als Gate zu benutzen ist **geraten** — und genau das hat sich
+   dieses Projekt schon zweimal verletzt. Ohne Sperrwirkung gibt es unter K3 keine
+   Kostendecke, keine Denylist und keine Ablehnung unbekannter Nummern.
+4. **S5 (Max-Dauer-Notbremse) hat keinen benutzbaren Kanal.** Der einzige dokumentierte
+   Außen-Abbruch ist die Monitoring-WebSocket mit `{"command_type":"end_call"}` — und die
+   Doku nennt sie **enterprise-only** und verlangt Verbinden **nach** Gesprächsbeginn
+   (B6). Unser eigener Code sagt über den REST-Weg dasselbe: **nicht belegt**, ob der
+   `DELETE` die Leitung kappt (B7). Unter K3 hätten wir nie einen Telnyx-Griff auf das
+   Bein. Ein Anruf, den unser Prozess nicht beenden kann, ist genau der Fall, gegen den
+   die Notbremse existiert.
+
+Der Preis, den K3 dafür verlangt, ist damit nicht "etwas mehr Sicherungs-Code", sondern
+das Entfernen von Absolute Regel 1 für die eingehende Richtung. **K3 ist ausgeschieden.**
+Was ihn freischalten würde, steht als Messung M18/M21 in Abschnitt 6 — bis dahin ist er
+keine Option, auch nicht als Abkürzung.
+
+### 2.4 Warum K1 gewinnt, und woran seine Prämisse noch hängt
+
+K1 lässt bei uns **dieselbe Null an Gesprächslogik** zurück wie K3 — aber es gibt sie
+nicht auf, dass unser Webhook zuerst dran ist. Damit ist die Sicherungslage die heutige:
+S1, S3, S4-Start, S5 und S7 laufen unverändert an ihrer bestehenden Naht, S2/S4-mid-call/S6
+brauchen zusätzlichen **Sicherungs**-Code (IE2–IE4), und S5 überlebt sogar einen
+Prozess-Neustart, weil `rearmActiveCallTimers` den Call über den persistierten
+Telnyx-Griff wiederfindet. Der Umbau bei uns ist: eine SIP-Dial-Direktive neben den fünf
+bestehenden, ein Renderer-Zweig, eine Übergabe-Entscheidung — in der strukturellen Form,
+die `streamDirectives` schon vorgibt (B11).
+
+**Was K1 noch nicht belegt hat, und was deshalb gemessen wird, bevor gebaut wird (IE1):**
+
+- **B4, der Kern:** dass ein INVITE an `sip:+<unsere DID>@sip.rtc.elevenlabs.io:5060`
+  wirklich den Agenten erreicht, der an dieser Nummer hängt. Die URI-**Form** ist belegt
+  (B1), die **Zuordnungslogik** nicht.
+- **Der Variablenkanal:** `X-`Header werden zu dynamic variables, mit exakter Regel (B3) —
+  aber eigene Header an TeXML-`<Sip>` sind **nicht** dokumentiert (B5). Belegt sendbar
+  sind sie nur über das Call-Control-`dial`-Kommando (`custom_headers`). Wer K1 als reines
+  TeXML-`<Dial><Sip>` baut, hat also **keinen** Variablenkanal; wer ihn als dial+bridge
+  baut, hat einen belegten. Diese Wahl trifft IE1, nicht der Implementierer.
+- **Overrides gibt es über diesen Weg gar nicht:** Stimme, Sprache und `first_message`
+  sind keine dynamic variables. Was per Anruf steuerbar bleibt, entscheidet sich an den
+  `language_presets` des Agenten und an den Variablen — nicht an einem
+  `conversation_config_override`. Das ist die einzige Fähigkeitslücke von K1 gegenüber K2.
+- **Der Elternbein-Griff während der Brücke** (B5, nicht dokumentiert) und die
+  **Abrechnung des zweiten Beins** (ungemessen) sind die beiden Punkte, an denen K1
+  entweder S5 oder die Kostenrechnung verlieren könnte.
+
+**Auslösebedingung für den Rückfall auf K2, vorab festgelegt, damit sie später nicht
+verhandelt wird:** ergibt IE1, dass (a) der ad-hoc-INVITE den Agenten nicht erreicht,
+**oder** (b) der Elternbein-Griff während der Brücke keinen Hangup mehr trägt **und**
+`<Dial timeLimit>` die Grenze nicht durchsetzt, **oder** (c) Sprache und Stimme je Anruf
+über K1 nicht setzbar sind und der Agent dadurch in einer falschen Sprache antwortet —
+dann wird auf K2 umgestellt. K2 hat den **einzigen belegten Per-Anruf-Override-Kanal**
+(`conversation_initiation_client_data` je Verbindung: `dynamic_variables` **und**
+`conversation_config_override`), und Telnyx-Media-Streams liefern `ulaw_8000`, was die
+EL-WebSocket-Schnittstelle beidseitig listet — keine Transkodierung. Der Preis ist
+benannt und nicht kleingeredet: K2 erbt die Turn-Taking-Mechanik von `bridge.js`
+strukturell 1:1, und der Prozess-Neustart lässt dort ein unbegrenztes Bein zurück
+(`rearmActiveCallTimers` kehrt bei `VOICE_ENGINE=realtime` sofort zurück, der
+bridge-eigene Timer stirbt mit dem Prozess). Deshalb ist K2 Rückfall und nicht Ziel.
+
+### 2.5 Warum K4 nicht nur nicht gewählt, sondern entfernt wird
+
+Der Telnyx-AI-Assistant-Handoff ist gebaut, abgeschaltet, und war in der **alten**
+Leitentscheidung der Weg für Turn-Taking. Er ist für die Zielarchitektur disqualifiziert:
+eigener Prompt, eigene Kostenquelle, und eine **statische Plattform-Stimme in jeder
+Sprache** (Fussnote (b)-Stimme, RCA-Wurzel R5) — ein drittes Gehirn, das die Beschwerde
+des Owners ("andere Stimme") gar nicht löst und die Inbound-Minute laut Messung
+verdreifacht. Die Auftragsregel war: K4 kommt nur in Frage, wenn K1, K2 **und** K3 alle
+widerlegt sind. K1 und K2 sind nicht widerlegt. Damit ist K4 nicht "aufgehoben für
+später" — ein abgeschalteter Pfad mit eigenem Gehirn ist toter Code mit
+Schutzbehauptung (G9). Er wird in IE6 **gelöscht**.
+
+**Fussnote (b)-Stimme (belegt, und der Grund für die Löschung):** der
 Telnyx-AI-Assistant-Pfad löst die Stimme **nicht** nach Sprache auf. Beide Stellen, die
 seine Stimme setzen, benutzen die rohe Namensfunktion `elevenLabsVoiceName(el)` mit der
-**einen** statischen Plattform-Stimme `config.telnyx.telnyxElevenLabs.voiceId`
-(`TELNYX_ELEVENLABS_VOICE_ID`): der Pflichtsatz-Speak-Node
-(`src/telephony/adapters/telnyx/voice.js#speakVoiceFields`) und die Assistant-Ressource
-selbst (`scripts/telnyx-assistant-provision.mjs#buildAssistantConfig`, `voice_settings.voice`).
-Der `voiceProfile`-Parameter von `speakVoiceFields` wird im ElevenLabs-Zweig gar nicht
-gelesen. Das ist **Absicht und gepinnt**, nicht ein Versehen: der Modulkommentar in
-`voice.js` begründet es mit RCA-Wurzel R5 ("EINE Stimme im ganzen Call") — die
+**einen** statischen Plattform-Stimme `config.telnyx.telnyxElevenLabs.voiceId`: der
+Pflichtsatz-Speak-Node (`src/telephony/adapters/telnyx/voice.js#speakVoiceFields`) und die
+Assistant-Ressource selbst (`scripts/telnyx-assistant-provision.mjs#buildAssistantConfig`,
+`voice_settings.voice`). Der `voiceProfile`-Parameter von `speakVoiceFields` wird im
+ElevenLabs-Zweig gar nicht gelesen. Das ist **Absicht und gepinnt**, nicht ein Versehen:
+der Modulkommentar begründet es mit RCA-Wurzel R5 ("EINE Stimme im ganzen Call") — die
 Assistant-Ressource hat ein global provisioniertes Voice-Setting ohne Per-Call-Auflösung,
 ein sprachaufgelöster Speak-Node davor würde denselben Anruf in zwei Stimmen sprechen
-lassen. `test/telnyx-call-control.test.js` hält genau das als R5-Regression fest.
-**Folge für IP7:** selbst mit scharfem Assistant-Inbound spricht ein FR- oder EN-Anruf
-**nicht** die Stimme, die Outbound in dieser Sprache spricht; für `de` hängt die Gleichheit
-daran, ob die live gesetzte Plattform-Stimme zufällig der kuratierten DE-Kennung
-entspricht — unbelegt (Offene Messung M10). Eine Sprachauflösung auf diesem Pfad wäre eine
-neue Fähigkeit (Per-Call-Voice-Override oder Provisionierung je Sprache) und ist
-**nicht** Teil dieser Kette (Owner-Entscheidung O7).
+lassen. `test/telnyx-call-control.test.js` hält genau das als R5-Regression fest. Ein
+FR- oder EN-Anruf auf diesem Pfad kann die Outbound-Stimme dieser Sprache also **gar
+nicht** sprechen, und für `de` hinge die Gleichheit an einem Zufall (M10). Damit ist der
+Pfad am Owner-Massstab nicht reparierbar, sondern überzählig: er wird in IE6 Stufe 1
+entfernt.
 
-### Warum (a) verworfen ist
+### 2.6 Was am Ende wirklich verschwindet
 
-`src/elevenlabs/nummern-registrierung.js#registrierungsKoerper` lässt
-`inbound_trunk_config` **bewusst** weg, mit der Begründung im Modulkopf: "der Inbound
-läuft über die Telnyx-Voice-Application, nicht über diesen Trunk; eine Inbound-Freigabe
-wäre eine Berechtigung ohne Zweck". Diese Auslassung ist heute die einzige Sache, die
-verhindert, dass ein eingehender Anruf direkt beim Anbieter landet. Würde man sie
-setzen, fiele Abschnitt 1.3 vollständig weg: keine Signaturprüfung, keine Tenant-Bindung
-über die angerufene Nummer, **keine pro-Tenant-Kostendecke für Inbound** (Absolute Regel
-1 nennt sie ausdrücklich als beide Richtungen sperrend), keine Max-Dauer, kein
-Kostenprofil — und der Inbound-Pflichtsatz wäre eine Dashboard-Zeile statt eines
-gerenderten Strings (Absolute Regel 2, Analogie; die Lehre
-`el-eroeffnung-first-message` hält fest, dass der Prompt sie dort nicht mal ergänzen
-kann). Das ist kein "Risiko, das man mildert", sondern das Entfernen von Regel 1 und 2.
-**Nicht ohne ausdrückliche Owner-Entscheidung, und dann nur in der Variante, die die
-Naht behält:** unser Webhook nimmt an, rendert den Pflichtsatz und übergibt danach per
-Call-Control an den EL-Agenten. Das ist mechanisch (b) mit anderem Ziel — also erst (b)
-bauen, dann darüber entscheiden.
+Eine Konsolidierung, die nichts entfernt, ist keine. IE6 löscht in dieser Reihenfolge,
+jede Stufe hinter einer eigenen Freigabe:
 
-### Warum (b) nicht zuerst kommt
+1. **Der Telnyx-AI-Assistant-Inbound (drittes Gehirn):** `src/telnyx-inbound.js`,
+   `src/telnyx-llm-shim.js`, `src/telnyx-conversation-watchdog.js`,
+   `scripts/telnyx-assistant-provision.mjs`, `KOSTENPROFIL.TELNYX_ASSISTANT`, die
+   Schalter `TELNYX_AI_ASSISTANT_ENABLED` / `TELNYX_INBOUND_HANDOFF_ENABLED` — und die
+   statische Plattform-Stimme `config.telnyx.telnyxElevenLabs` **nur soweit**, wie ihre
+   vier belegten Konsumenten mit ihr sterben (der vierte,
+   `src/elevenlabs/outbound.js#callLocaleOf`, tut es **nicht** — s. IE6, Pre-Mortem Q7).
+2. **Die OpenAI-Realtime-Bridge (vierter Zweig, nie benutzt):** `src/bridge.js` samt
+   seinen `HEIKLE STELLE`-Abschnitten, `DIRECTIVE.STREAM` und `streamDirectives`,
+   `MEDIA_PATH`, die Media-Event-Naht, `VOICE_ENGINE=realtime`,
+   `KOSTENPROFIL.TELNYX_INBOUND_REALTIME`, `KOSTENART.OPENAI_REALTIME`,
+   `REALTIME_MID_CALL_BUDGET_CHECK` und die Realtime-Sonderfälle in
+   `rearmActiveCallTimers` und `consultAvailableFor`.
+3. **Die Gesprächslogik der Budget-Engine für Inbound:** `POST /voice/turn`, der
+   Folge-Gather, der Inbound-Zweig von `claude.js#agentTurn`, der Inbound-Prompt, die
+   Inbound-Werkzeuge `take_message`/`end_call` unserer Seite, der STT-Modell-Seam für
+   Inbound. Das ist die Stufe mit der grössten Tragweite und der einzigen echten
+   Owner-Frage (O9), weil danach **kein** nicht-EL-Weg mehr existiert, der ein Gespräch
+   führen kann.
+4. **Ersatz statt Lücke:** an die Stelle der entfernten Rückfall-**Engine** tritt ein
+   Rückfall **ohne Gehirn** — ein gerenderter Satz plus Auflegen, plus der bestehende
+   Anruf-Datensatz fürs Postfach. Kein LLM, kein Turn, keine zweite Wahrheit über
+   Gesprächsführung. Damit erreicht ein eingehender Anruf auch bei einem Anbieter-Ausfall
+   jemanden, ohne dass ein zweites Gesprächs-System gepflegt werden muss.
 
-(b) löst die Beschwerde des Owners **nicht**. Der Owner nennt Stimme und Aussprache; (b)
-lässt beides unverändert (siehe Tabelle) und verdreifacht dabei die Inbound-Kosten. Sein
-Blocker ist belegt und nicht kosmetisch: an `telnyxAssistant.inboundHandoffEnabled` in
-`src/config.js` steht die Live-Messung vom 2026-08-04 — auf `inbound_path path=assistant`
-folgte 370 ms später `HTTP 422 (90034 Call not answered yet)`; die Call-Control-API
-verlangt einen bereits angenommenen Anruf, während TeXML beim Inbound implizit annimmt.
-Der Anrufer hörte danach nur eine Fehleransage. Deshalb: (b) als letzte Phase, nach dem
-Messwerkzeug, das sie überhaupt beurteilen kann.
+### 2.7 Was diese Entscheidung ausdrücklich NICHT verspricht
 
-### Welche der schnellen Fixes bei der grossen Weiche wieder wegfallen
-
-Explizit, damit niemand zweimal zahlt:
-
-- **IP1 (Aussprache) fällt NICHT weg.** Das Greeting wird von uns gerendert und reist als
-  `greeting`-Wert in den Handoff (`inboundAssistantHandoffXml`, `src/routes/voice.js`).
-  Der Fix gilt auf beiden Pfaden.
-- **IP2 (Hörprobe) fällt NICHT weg** für den Say-/Play-Zweig, wird aber auf dem
-  Assistant-Pfad nur noch für den Pflichtsatz-Speak-Node aussagekräftig. Das Werkzeug ist
-  klein und der Vorher-Wert ist sonst nicht zu haben.
-- **IP3 (Relay-Zweig entfernen) fällt NICHT weg.** Der Zweig ist auf jedem Pfad eine
-  Fail-open-Selbstarmierung.
-- **IP4 (Play-TTS scharf) wird auf dem Assistant-Pfad WIRKUNGSLOS**, weil dort der
-  Assistant spricht, nicht unser `<Say>`/`<Play>`. Der Preis ist trotzdem nahe null: IP4
-  baut nichts, es stellt einen fertigen Pfad scharf und pinnt den geteilten Resolver mit
-  einem Test. Die Stimm-**Wahl** (`ELEVENLABS_VOICE_ID_BY_PROFILE`) überlebt — sie trägt
-  den Outbound-Anrufstart (`src/elevenlabs/call-locale.js#callLocaleFor`) und die
-  Play-TTS-Vorabsynthese (`src/tts/directive-synth.js`). **Nicht** den
-  Assistant-Provisioner: der schreibt die statische Plattform-Stimme (Fussnote
-  (b)-Stimme). Die Karte überlebt also wegen Outbound, nicht wegen des Assistant-Pfads.
-- **IP5 (Modell-Gleichstand) fällt NICHT weg**, sofern die Entscheidung als
-  Stimm-/Modell-Politik im Repo landet und nicht als Env-Wert eines Pfades.
-- **IP6 (Inbound-Szenarien) fällt NICHT weg** — der Bench hat schon beide Treiber
-  (`scripts/convo-bench/drivers.mjs`: `TEXML_DRIVER_ID`, `SHIM_DRIVER_ID`).
-
-Nichts an dieser Kette wird durch (b) zu Wegwerf-Code ausser dem Flag-Flip in IP4 selbst.
+- **Kein Fähigkeitsgewinn für Inbound.** `get_consult` und `look_up` bleiben gesperrt —
+  nicht weil Inbound ein anderes Gehirn hätte, sondern weil das Richtungs-Gate **unsere
+  Sicherung an unserem Werkzeug-Webhook** ist (B9). Derselbe Agent, dieselbe Sperre.
+- **Keine Barge-in-Garantie aus dem Nichts.** Barge-in kommt mit dem EL-Agenten; dass er
+  den **von uns gerenderten** ersten Satz nicht unterbrechen kann, bleibt richtig und
+  gewollt (Art.-50-Riegel, Lehre `offenlegung-ist-unterbrechbar`).
+- **Keine Kostensenkung.** Der EL-Weg kostet gemessen ~14–16 US-Cent/min gegen 1,87 auf
+  der Budget-Engine, und die Lehre "Turns statt Sekunden" macht daraus einen Mittelwert,
+  keinen Deckel. Diese Entscheidung kauft **eine Wahrheit**, nicht einen günstigeren
+  Anruf — und sie macht die Gegenrechnung erst möglich, weil danach beide Richtungen auf
+  dieselbe Ist-Quelle buchen.
+- **Keine Verfügbarkeits-Verbesserung.** Im Gegenteil: nach der Konsolidierung kappt ein
+  leeres EL-Konto **beide** Richtungen. Das ist der bewusst akzeptierte Preis (Q8, O11).
 
 ---
 
 ## 3. Pre-Mortem
 
-Ein Jahr weiter, die Kette ist gescheitert. Was ist passiert?
+Ein Jahr weiter. Die Konsolidierung ist gescheitert — es gibt wieder zwei Systeme, oder
+eines, das Schaden angerichtet hat. Was ist passiert?
 
-**P1 — Ein Anrufer bekommt keine Verbindung mehr.**
-*Weg dorthin:* IP3 entfernt einen Zweig in `sayVoiceAttrs`, und weil `config.telnyx.telnyxElevenLabs`
-"zum Relay gehört", verschwindet der Config-Block mit. Damit stirbt still auch
-`src/elevenlabs/outbound.js#callLocaleOf` (`defaultVoiceId`),
-`src/telephony/adapters/telnyx/voice.js#speakVoiceFields` und
-`scripts/telnyx-assistant-provision.mjs`.
-*Entschärfung:* IP3 nennt die vier Konsumenten des **Config-Blocks** namentlich in
-Scope/NICHT-Scope; der Config-Block bleibt unangetastet, und die Abnahme greppt auf die
-Konsumenten. Zusätzlich: `voiceAttrs` wirft bei unbekanntem Profil — der Rückfall ist
-Azure, nicht Stille.
-*Spiegelbild desselben Fehlers, und der wahrscheinlichere:* IP3 entfernt zu **wenig**.
-Mit `sayVoiceAttrs` verliert `elevenLabsVoiceNameFor` seinen **einzigen** Konsumenten
-(nachgezählt: `render.js` ist der einzige Aufrufer), und die render.js-Importe von
-`elevenLabsVoiceNameFor`/`hasElevenLabsVoice` sowie `opts.elevenLabs` samt der
-Registry-Injektion werden unbenutzt. Ein Export ohne Konsumenten mit der Begründung "ist
-ja geteilt" ist toter Code mit falscher Schutzbehauptung (G9, hart verboten). Deshalb
-zählt IP3 die Konsumenten **je Funktion**, nicht je Modul, und entfernt, was mit dem
-Zweig stirbt.
+**Q1 — Ein eingehender Anruf erreicht niemanden mehr.**
+*Weg dorthin:* IE6 Stufe 3 entfernt die Budget-Engine, und danach fällt der EL-Weg aus:
+Konto leer (402 — das ist schon einmal passiert, Lehre `live-auf-deepseek`), Agent
+umkonfiguriert, SIP-Trunk-Zugangsdaten rotiert, Anbieter-Störung. Der Anrufer hört
+Klingeln, Stille oder eine Fehleransage; niemand merkt es, weil Inbound-Anrufe niemand
+zählt.
+*Entschärfung:* (i) IE6 Stufe 3 ist die **letzte** Stufe und hat als Vorbedingung eine
+benannte Beobachtungsfrist auf dem neuen Pfad mit Owner-Freigabe — nicht "Tests grün".
+(ii) An die Stelle der Engine tritt der Rückfall **ohne Gehirn** (§2.6 Punkt 4): jeder
+Fehler beim Übergeben — Dial scheitert, Trunk antwortet nicht, Agent unbekannt — endet in
+einem gerenderten Satz und einem Anruf-Datensatz, **nie** in Stille und nie in einer
+Fehleransage. Das ist dieselbe Fail-safe-Regel, die der Assistant-Handoff schon trug.
+(iii) Der Rückfallgrund wird als benanntes Token an der **einen** bestehenden Sonde
+geführt (`logInboundPathDecision`), damit "erreicht niemanden" im Log eine Zeile hat.
+*Akzeptiertes Risiko:* der Rückfall führt kein Gespräch. Ein Anrufer, der bei einem
+EL-Ausfall etwas Komplexes loswerden will, kann es nur hinterlassen, nicht besprechen.
 
-**P2 — Die Kosten je Inbound-Minute vervielfachen sich unbemerkt.**
-*Weg dorthin:* Zwei Wege. (i) IP7 wird scharfgestellt und niemand rechnet die dokumentierte
-Verdreifachung nach; (ii) IP4 lässt die EL-Zeichen aller Mandanten auf ein
-Plattform-Konto laufen — `src/config.js#telnyxElevenLabs` nennt das ausdrücklich als
-bewusste Vereinfachung "ohne per-Tenant-Metering".
-*Entschärfung:* (i) IP7 trägt ein eigenes Kostenprofil, sonst bleibt ein Flag-Flip in der
-Buchhaltung stumm — genau die Begründung, mit der `KOSTENPROFIL.TELNYX_INBOUND_REALTIME`
-existiert (`src/routes/voice.js`, KV2-2-Kommentar). (ii) IP4 stellt den bestehenden
-Kontingent-Riegel als Abnahmekriterium unter Test
-(`src/tts/directive-synth.js`, Vor- und Nach-Buchungs-Riegel, `store.platformTtsUsageView`
-+ `ttsQuotaExhausted`); die Degradation ist fail-safe auf Azure, nie ein toter Anruf.
-Die pro-Tenant-Kostendecke bleibt in beiden Richtungen unangetastet (Absolute Regel 1).
-*Akzeptiertes Restrisiko:* fehlendes per-Tenant-TTS-Metering. Vorbestand, nicht von dieser
-Kette eingeführt; gedeckelt durch das Plattform-Kontingent.
+**Q2 — Ein Anruf, den unser Prozess nicht beenden kann.**
+*Weg dorthin:* der gefährlichste Einzelfall, und er ist **belegt vorgezeichnet**: bei
+EL-Outbound liefert `hangUpAction` heute `null`, wenn kein Telnyx-Griff existiert, und
+`endConversation` sagt selbst, dass seine Kappwirkung nicht belegt ist (B7). Wer Inbound
+so baut, dass das Bein nicht mehr unser ist, erbt genau das — mit einem Anrufer am
+anderen Ende und einer Uhr, die weiterläuft.
+*Entschärfung:* K1 ist **genau deshalb** gewählt: das Inbound-Bein bleibt unser
+Telnyx-Bein, `hangUpAction` greift über `callControlId`/`providerCallSid`, und ein Hangup
+des Elternbeins reisst die SIP-Brücke mit. Zweite Linie ist `<Dial timeLimit>`
+(belegt 60–14400 s, B5), gesetzt auf die guthaben-abgeleitete Frist
+(`brakeSecondsFor` → `emergencyBrakeSeconds`) — eine **provider-erzwungene** Grenze, die
+auch einen Neustart unseres Prozesses überlebt. Dritte Linie: `rearmActiveCallTimers`
+findet den Call nach einem Deploy über den persistierten Griff wieder.
+*Abbruchbedingung, nicht Risiko:* zeigt IE1, dass der Elternbein-Griff während der Brücke
+**nicht** trägt **und** `timeLimit` nicht greift, ist K1 an dieser Stelle widerlegt und
+die Kette wechselt auf K2 (§2.4). Ohne mindestens **einen** belegten Kappweg wird nicht
+scharfgestellt.
 
-**P3 — Der rechtlich verdrahtete Inbound-Pflichtsatz fällt weg.**
-*Weg dorthin:* IP1 "korrigiert" Greeting-Literale und trifft dabei
-`hasInboundNotice`-Erkennungsstämme, oder eine Migration schreibt ein Greeting ohne
-Pflichtsatz zurück. Oder jemand wählt später (a) und der Satz wandert in eine
-Dashboard-Zeile.
-*Entschärfung:* `withInboundNotice` ist idempotent und erkennt über Stämme
-(`AI_MARKERS`/`TRANSCRIPT_MARKERS`), nicht über Volltext — die Umlaut-Korrektur berührt
-keinen dieser Stämme (`fuer`/`für` steht in keinem). IP1 trägt als Pflicht-Test, dass
-jede Vorlage nach der Korrektur `hasInboundNotice` erfüllt, und der Bestandstest
-`test/inbound-disclosure-mandatory.test.js` bleibt grün. (a) ist verworfen (Abschnitt 2).
+**Q3 — Ein Gespräch läuft auf Kosten eines Tenants ohne Guthaben.**
+*Weg dorthin:* die Kostendecke wirkt heute mid-call **nur**, weil `agentTurn` vor jeder
+Runde `blockingBudgetAxis` fragt (B8). Fällt der Turn-Loop, wird die Achse nur noch
+gefragt, wenn der Agent zufällig ein Werkzeug ruft. Ein "Nachricht hinterlassen"-Gespräch
+ruft keines. Genau die Begründung, mit der CLAUDE.md die Lockerung E11 **zurückgenommen**
+hat ("die KI-Token werden in jeder Schleifenrunde live gebucht"), trägt auf dem neuen
+Pfad strukturell nicht mehr — und der dominante Kostentreiber (`elevenlabs_convai`) wird
+erst **nach** dem Anruf erfasst.
+*Entschärfung:* IE2 ist deshalb eine **eigene Phase vor** dem Pfad und kein Anhang: ein
+wiederkehrender Wächter fragt die **eine** Achse und beendet über den **einen**
+Terminierungspfad (`terminateActiveCall`, Geld-Token). Er ist richtungs- und pfadneutral
+gebaut und schliesst damit dieselbe Lücke, die **heute schon** bei EL-Outbound und im
+Realtime-Zweig offen ist (`REALTIME_MID_CALL_BUDGET_CHECK = false`, Boot-Guard-Warnung
+`REALTIME_NO_MIDCALL_BUDGET`). Zweite Linie: die guthaben-abgeleitete Frist als
+`timeLimit` beim Übergeben — das Guthaben wird **vor dem ersten Wort** in eine Zeitgrenze
+übersetzt.
+*Akzeptiertes Risiko:* zwischen zwei Wächter-Runden kann die Decke um das Intervall
+überzogen werden. Das Intervall gehört mit `min`/`max` nach `src/config.js`, nicht als
+nackte Zahl in den Handler, und der Betrag steht als bewusst akzeptierte Grösse im
+Phasenbericht.
 
-**P4 — Ein Deploy startet nicht mehr.**
-*Weg dorthin:* IP4/IP7 führen eine neue Env-Pflicht ein, oder `assertConfig`/`boot-guard`
-verlangt bei aktivem Flag einen Wert, den das Dashboard nicht hat.
-*Entschärfung:* Kein Schritt dieser Kette führt eine neue Boot-Pflicht ein. IP4 braucht
-`ELEVENLABS_API_KEY` (live gesetzt, sonst liefe Outbound nicht) und **keine**
-`ELEVENLABS_VOICE_ID`: `elevenLabsVoiceIdFor` liefert für `de`/`fr`/`en` eine
-Code-Kennung, der Plattform-Default wird nie gebraucht. Jede neue Env-Variable dieser
-Kette ist optional mit Fallback und wird in `src/config.js` **und** `.env.example` **und**
-`render.yaml` eingetragen (Konventionen).
-*Akzeptiertes Risiko:* `render.yaml` ist nicht die Live-Wahrheit (Render-Services sind
-Dashboard-managed) — deshalb ist jede Flag-Aussage dieser Kette als offene Messung
-markiert, nicht als Tatsache.
+**Q4 — Der Pflichtsatz fällt weg, kommt vom Anbieter, oder kommt zweimal.**
+*Weg dorthin:* drei Wege. (i) Jemand wählt später doch K3, und Artikel 50 wird eine
+Dashboard-Zeile — die Lehren `el-eroeffnung-first-message` und
+`el-agent-ist-im-kern-englisch` belegen, dass der Prompt sie dort nicht ergänzen kann und
+das de-Preset **nur** die `first_message` deckt. (ii) Wir rendern den Satz, und der Agent
+spricht danach **seine** `first_message` — der Anrufer hört zwei Begrüssungen, und der
+`startsWith`-Riegel greift nur auf unseren Teil. (iii) Der Satz wird beim Übergeben
+"eingespart", weil er ja im Agenten stehe.
+*Entschärfung:* (i) K3 ist ausgeschieden, mit Begründung im Dokument, nicht im Kopf eines
+Beteiligten. (ii) IE5 trägt den Doppelansage-Riegel als **Ziel**, nicht als Detail: der
+Agent darf auf dem Inbound-Weg keine eigene Eröffnung sprechen, und das wird am Anbieter
+**gemessen**, nicht angenommen (ein nicht freigeschaltetes Override-Feld wird laut
+Bestandslehre **still** ignoriert). (iii) Der Satz bleibt in `withInboundNotice`
+gerendert und reist nie als Prompt-Anweisung — Absolute Regel 2, GAP-14. Der Bestandstest
+`test/inbound-disclosure-mandatory.test.js` bleibt grün, und IE5 fügt den Negativfall
+hinzu: Übergabe ohne gerenderten Pflichtsatz ist ein Fehler, kein Sonderfall.
 
-**P5 — Ein Umbau macht den Outbound-Pfad kaputt, den heute niemand beklagt.**
-*Weg dorthin:* Der gefährlichste Pfad der ganzen Kette. `elevenLabsVoiceIdFor` und
-`ELEVENLABS_VOICE_ID_BY_PROFILE` sind **geteilt**: wer sie "für Inbound" anfasst, ändert
-im selben Zug die Stimme jedes Outbound-Anrufs (`conversationConfigOverride`). Dasselbe
-gilt für `config.telnyx.telnyxElevenLabs.voiceId` (P1) und für `ELEVENLABS_MODEL`, falls
-IP5 es global umstellt.
-*Entschärfung:* IP4 und IP5 tragen als Invariante "Outbound-Anfragekörper byte-identisch"
-und als Abnahme einen Test, der `startCallBody`/`conversationConfigOverride` gegen einen
-Snapshot hält. `npm run elevenlabs:drift` läuft vor und nach IP5 (es besitzt
-`conversation_config_override_erlaubnisse`, also die Freigabe von `tts.voice_id`).
-Ausserdem: die Kette fasst `src/bridge.js` nicht an (`HEIKLE STELLE`), und sie fasst
-`elevenlabs/agent_configs/*` nur in IP5 an, dort nur mit Owner-Freigabe.
+**Q5 — Der heute funktionierende Outbound-Pfad geht beim Umbau kaputt.**
+*Weg dorthin:* der wahrscheinlichste Schaden der ganzen Kette, weil alles Geteilte
+Outbound trägt. Vier konkrete Wege: die Stimm-Karte `ELEVENLABS_VOICE_ID_BY_PROFILE` wird
+"für Inbound" angefasst und ändert jeden Outbound-Anruf; `config.telnyx.telnyxElevenLabs`
+wird mit dem Assistant gelöscht und nimmt `outbound.js#callLocaleOf` den
+`defaultVoiceId`; die Nummern-Registrierung bekommt `inbound_trunk_config` und
+überschreibt dabei die gemessene `outbound_trunk`-Projektion; ein Push in die
+Agenten-Konfiguration für Inbound-Sprachwahl verstellt Outbound.
+*Entschärfung:* jede dieser vier Stellen steht in **NICHT-Scope** einer Phase, namentlich
+und mit Konsumentenliste je Funktion (nicht je Modul). IE5 trägt als Invariante
+"Outbound-Anfragekörper byte-identisch" und pinnt `startCallBody` /
+`conversationConfigOverride` gegen einen Snapshot; `npm run elevenlabs:drift` läuft vor
+**und** nach jeder Phase, die den Agenten oder die Nummern-Registrierung berührt; IE6
+entfernt `config.telnyx.telnyxElevenLabs` nur, wenn **alle** Konsumenten mit ihm sterben,
+und `callLocaleOf` tut das nicht.
+*Akzeptiertes Risiko:* die Nummern-Registrierung muss für K1 vermutlich
+`inbound_trunk_config` **zusätzlich** tragen, und ob dieselbe Nummer beides tragen kann,
+ist unbelegt (M16). Deshalb wird das an einer **Testnummer** gemessen, nie an der
+produktiven DID.
 
-**P6 — Die Kette liefert Umbauten, aber keinen Beweis.**
-*Weg dorthin:* Nach drei Phasen sagt der Owner "klingt jetzt anders, aber nicht besser",
-und nichts im Repo kann vorher/nachher unterscheiden. Der Bench-Default trifft ohnehin
-den falschen Pfad (`DEFAULT_DRIVER_ID = SHIM_DRIVER_ID`, `scripts/convo-bench/drivers.mjs`),
-und **18 von 19** registrierten Szenarien sind `direction: "outbound"` — über
-`scripts/convo-bench/scenarios/index.mjs#SCENARIOS` nachgezählt; das einzige
-Inbound-Szenario ist `inbound-nachricht.mjs`.
-*Entschärfung:* IP2 kommt **vor** jeder wahrnehmbaren Änderung ausser der
-Orthografie-Korrektur und hält den Ist-Zustand als Artefakt fest. Die Lehre
-`bench-must-reproduce-defect` ("Vorher-Messung ZUERST") ist damit befolgt.
-*Akzeptiertes Risiko:* Aussprachequalität bleibt am Ende eine Hör-Entscheidung des Owners.
-Kein Werkzeug dieser Kette behauptet, Phonetik automatisch zu bewerten; IP2 liefert die
-Audiodatei, nicht das Urteil.
+**Q6 — Die Übergabe funktioniert, aber der Anruf ist in der Buchhaltung unsichtbar.**
+*Weg dorthin:* der neue Pfad bekommt kein eigenes Kostenprofil und läuft unter
+`TELNYX_INBOUND_BUDGET` weiter — dann ist der teuerste Inbound-Anruf von einem
+Budget-Anruf nicht zu unterscheiden. Oder er bekommt `EL_CONVAI_SIP` "weil da steht
+schon EL": dessen gemessene Pflichtmenge ist `[sip-trunking]`, unser Inbound-Bein liefert
+aber `call-control` (B12) — `istVollBelegt` kippt, und die Erstattung rechnet falsch.
+*Entschärfung:* IE3 ist eine eigene Phase **vor** dem Scharfstellen, mit **gemessener**
+Pflichtmenge je Träger. `PFLICHTTYPEN_UNGEMESSEN` (leer) ist die fail-closed Antwort, nie
+der Env-Wert als Trostpreis. Der Reihenfolge-Riegel aus `legacyKostenprofil` wird als
+Test gepinnt: ein EL-Leg mit `sipCallId` bleibt `EL_CONVAI_SIP`. Das Vorbild ist der
+Boot-Riegel, der genau dafür existiert (`latentCostPathFindings`, FATAL-Muster
+`REALTIME_CARRIER_UNCOLLECTED`): ohne Katalogzeile startet der Schalter nicht.
+*Akzeptiertes Risiko:* erzeugt K1 ein zweites, ausgehendes Telnyx-Bein zu
+`sip.rtc.elevenlabs.io`, bezahlen wir Minuten, die der Notaus `OUTBOUND_FROZEN` **nicht**
+deckt — er sitzt in der Outbound-Gate-Kette, der Dial entsteht im Inbound-Webhook. Das ist
+sachlich richtig (ein Inbound-Notaus darf nicht am Outbound-Schalter hängen) und wird
+hiermit ausdrücklich so entschieden, nicht übersehen.
 
-**P7 — Die Kette verschiebt einen stillen Fehlerpfad in den Normalbetrieb.**
-*Weg dorthin:* IP4 ist scharf, das EL-Kontingent läuft mitten im Monat leer, und
-**nur** der Inbound-Pfad wechselt klanglos die Stimme zurück auf Azure. Der Owner
-berichtet erneut "andere Stimme", diesmal sporadisch — und niemand findet es, weil
-Outbound keinen solchen Rückfall hat.
-*Entschärfung:* Der Rückfall ist bereits laut (`[play-tts] Kontingent erschöpft ... ->
-Azure-Fallback`, `warnQuotaDegradation`) und alarmiert per SMS über die
-Warn-Schwelle. IP4 macht diese Zeile zum Abnahmekriterium und trägt die
-Betriebsanweisung: "sporadisch andere Stimme inbound = zuerst nach dieser Logzeile
-suchen".
-*Bewusst akzeptiert:* Der stille Rückfall bleibt. Er ist richtig — ein Anruf, der mit
-Azure-Stimme zustande kommt, ist besser als einer, der stirbt.
+**Q7 — Die Entfernung entfernt zu viel oder zu wenig.**
+*Weg dorthin:* zu viel — mit `src/bridge.js` stirbt `MEDIA_PATH`, und irgendein Leser
+ausserhalb des Realtime-Zweigs hing daran; mit `config.telnyx.telnyxElevenLabs` stirbt
+Outbounds `defaultVoiceId` (Q5). Zu wenig — der Assistant wird "nur abgeschaltet", und
+ein Jahr später steht ein Gehirn im Repo, das niemand pflegt, aber jeder Leser für eine
+lebende Naht hält; oder `elevenLabsVoiceNameFor` bleibt als Export ohne Konsumenten mit
+der Schutzbehauptung "ist ja geteilt" (G9, hart verboten).
+*Entschärfung:* IE6 zählt Konsumenten **je Funktion**, nie je Modul — auf Modulebene
+sieht jede dieser Funktionen benutzt aus. Jede Stufe hat als Abnahme einen `grep`, der
+**Dateien** nennt (keine Zeilenzahlen), und die Stufen laufen getrennt, nicht in einem
+Commit. Und: entfernt wird **ersatzlos**, nicht per Flag abgeschaltet — ein
+abgeschalteter Pfad mit eigenem Gehirn ist toter Code mit falscher Schutzbehauptung.
+*Akzeptiertes Risiko:* kommt je wieder ein Grund für einen zweiten Voice-Anbieter im
+Audiopfad, muss die Bridge neu gebaut werden. Die Historie liegt in `git`, und die
+`HEIKLE STELLE`-Kommentare sind dort nachlesbar. Das ist derselbe bewusst akzeptierte
+Preis, mit dem 2026-08-07 der Twilio-Verifizierer entfernt wurde.
+
+**Q8 — Der Anbieter ändert seine Schnittstelle, und wir haben keinen zweiten Weg mehr.**
+*Weg dorthin:* EL ändert die Agenten-Zuordnung am Inbound-Trunk, dreht ein
+Override-Feld zu, macht einen Kanal enterprise-only (das ist bei der Monitoring-WS
+**bereits** so, B6), oder das Konto ist leer. Nach IE6 Stufe 3 gibt es keinen zweiten
+Weg, der ein Gespräch führen kann — **beide** Richtungen stehen.
+*Entschärfung, soweit sie ohne zweites System geht:* (i) Der Rückfall ohne Gehirn (§2.6
+Punkt 4) hält "ein Anrufer erreicht jemanden" aufrecht, ohne eine zweite
+Gesprächswahrheit zu pflegen. (ii) Der Drift-Wächter
+(`npm run elevenlabs:drift`) ist bereits die Stelle, an der eine Anbieter-Änderung
+auffällt, und er ist fail-closed; IE5 nimmt die neuen inbound-relevanten Felder in seinen
+Besitz-Block, damit eine Änderung dort nicht still bleibt. (iii) Die
+Provider-Abstraktion (`src/telephony/ports.js`) bleibt unangetastet — der **Carrier** ist
+weiter austauschbar, auch wenn das Gehirn es nicht ist.
+*Ausdrücklich akzeptiertes Risiko, Owner-Entscheidung O11:* die Anbieter-Abhängigkeit ist
+nach dieser Konsolidierung total und einseitig. Das ist der Preis für **eine** Wahrheit,
+und er wird hier bezahlt, nicht wegdiskutiert. Wer ihn nicht zahlen will, behält zwei
+Systeme — und damit genau das Ergebnis, das der Owner ausgeschlossen hat. Es gibt keine
+dritte Möglichkeit, die beides hat; jeder Plan, der beides verspricht, lügt an dieser
+Stelle.
 
 ---
 
 ## 4. Die Phasenkette
 
-Reihenfolge = Hebel pro Aufwand. Jede Phase ist für sich deploybar. Jede Phase, die
-Live-Verhalten ändert, liegt hinter einem Schalter; Schalter aus = byte-identisch zum
-Bestand. Ausnahme mit Begründung: IP1 (eine Orthografie-Korrektur hinter einem Flag wäre
-absurd — das Verhalten *soll* sich ändern, und der Rückweg ist ein Revert).
+Reihenfolge nach der Owner-Vorgabe: (1) die schnellen Fixes, die **heute** hörbar
+entlasten und den Umstieg überleben; (2) die Sicherungs-Phasen, die der neue Pfad
+braucht, **vor** dem Pfad; (3) der Pfad selbst hinter einem Schalter, aus =
+byte-identisch zum Bestand; (4) zuletzt das Entfernen. Jede Phase ist für sich
+deploybar. Neun Phasen, davon drei unverändert aus der alten Kette.
 
----
+| Phase | Titel | Hebel | Aufwand | hochrisiko | Owner | überlebt die Weiche |
+|---|---|---|---|---|---|---|
+| ~~IP1~~ | Gesprochene Umlaute im DE-Begrüssungskatalog | — | — | — | — | **erledigt**, s. 4.1 |
+| IP2 | Hörprobe: welchen Sprechpfad Inbound nimmt | mittel | klein | nein | nein | ja |
+| IP3 | Zwei Selbst-Armierungen entfernen | hoch | klein | nein | nein | ja |
+| IP4 | Inbound spricht dieselbe Stimme wie Outbound | hoch | klein | **ja** | **ja** | ja (Vorbedingung) |
+| IE1 | Den Anbieter-Vertrag von K1 messen | hoch | mittel | nein | **ja** | ja |
+| IE2 | Die Geld-Achse bekommt einen Herzschlag | hoch | mittel | **ja** | nein | ja |
+| IE3 | Kostenprofil und gemessene Pflichtmenge für den neuen Weg | hoch | mittel | nein | nein | ja |
+| IE4 | Der Wiederholungs-Riegel bekommt eine pfadgerechte Antwort | mittel | klein | nein | nein | ja |
+| IE5 | Inbound am EL-Agenten, hinter einem Schalter | hoch | gross | **ja** | **ja** | ja |
+| IE6 | Die überzähligen Gehirne entfernen | hoch | gross | **ja** | **ja** | ja (Abschluss) |
 
-## Phase IP1 - Gesprochene Umlaute im Inbound-Begrüssungskatalog
+### 4.1 Einordnung der alten Kette
 
-**Abhängigkeiten:** keine. Kann sofort und unabhängig laufen.
-
-### Ziel (deterministisch prüfbar)
-
-Alle drei deutschen Begrüssungsvorlagen (`greetingTemplatesFor("de")`) treffen
-`SPOKEN_TRANSLITERATION_STEMS` **nicht** mehr, tragen weiterhin echte Umlaut-Zeichen und
-erfüllen weiterhin `hasInboundNotice`. Ein Mandant, dessen Datensatz noch das **alte**
-geseedete Greeting trägt, spricht nach dieser Phase trotzdem den korrigierten Satz.
-
-### Scope
-
-1. `src/store/defaults.js`: im Literal von `DEFAULT_GREETING` das **eine** Vorkommen
-   `fuer` → `für` ("Ich kann eine Nachricht fuer {owner} aufnehmen."). Wortlaut sonst
-   unverändert.
-2. `src/i18n/locales.js`: in `LOCALES.de.greetingVariants[0]` das eine Vorkommen
-   `fuer` → `für`. `greetingVariants[1]` ist bereits sauber und bleibt unangetastet.
-   Wortlaut sonst unverändert. `LOCALES.fr`/`LOCALES.en` unangetastet.
-   Zusammen sind das **zwei** geänderte Zeichenfolgen im ganzen DE-Katalog — mehr Treffer
-   bedeuten, dass etwas ausserhalb des Scopes angefasst wurde.
-3. **Die At-Rest-Falle schliessen.** `greetingForLanguage`
-   (`src/i18n/greeting-catalog.js`) behandelt ein gespeichertes Greeting, das in
-   **keiner** Vorlagenliste vorkommt, als frei gesetzten Text und gibt es unverändert
-   zurück. Nach 1./2. ist genau das für jeden bestehenden Mandanten der Fall — der Fix
-   erreicht ohne diesen Schritt **keinen einzigen Anruf**. Lösung: eine eingefrorene,
-   geschlossene Karte `GREETING_ORTHOGRAPHY_MIGRATION` (altes Literal → neues Literal,
-   genau die zwei historischen Fassungen) in `src/i18n/greeting-catalog.js`, mit **zwei**
-   Konsumenten und genau einer Wahrheit (G5):
-   - `greetingForLanguage` normalisiert die Eingabe über die Karte, **bevor** es gegen
-     die Vorlagenlisten prüft. Ein nicht-migrierter Mandant spricht damit sofort richtig.
-   - ein idempotenter Nachzieh-Lauf `scripts/greeting-orthografie-nachziehen.mjs`, der
-     `settings.greeting` genau dort umschreibt, wo er wörtlich einem Karten-Schlüssel
-     entspricht, und sonst nichts anfasst (Trockenlauf als Default, Schreiben nur mit
-     `--apply`).
-   Die Karten-Schlüssel sind **keine** wählbaren Vorlagen: sie dürfen weder in
-   `greetingTemplatesFor` noch in `ALL_GREETING_TEMPLATES` auftauchen.
-   **Form der Schlüssel (Implementierungsfalle):** `settings.greeting` hält den Wert
-   **mit** vorangestelltem Pflichtsatz — `defaults.js` seedet `DEFAULT_GREETING`, und das
-   ist bereits `withInboundNotice(...)`-umhüllt; `buildTemplates`
-   (`src/i18n/greeting-catalog.js`) umhüllt zusätzlich (idempotent). Die Karten-Schlüssel
-   sind deshalb die **umhüllten** historischen Fassungen, so wie sie at rest stehen, nicht
-   die nackten Literale. Genau zwei Einträge (greetingDefault, greetingVariants[0]).
-4. `test/de-umlaut-orthography.test.js`: `SPOKEN_DE_FIELDS` um
-   `["S15 greetingDefault", LOCALES.de.greetingDefault]` und je Variante
-   `["S16.<n> greetingVariants", ...]` erweitern. Damit fangen U1 (keine
-   Transliteration) und U2 (Gegenprobe: echte Umlaute) diese Felder mit ab.
-
-### NICHT-Scope
-
-- Kein anderes DE-Locale-Feld, kein FR/EN-Feld, kein Prompt-Text
-  (`LOCALES.de.prompt`, `summarySystem`, `realtimeOpener` bleiben **transliteriert** —
-  `test/de-umlaut-orthography.test.js` P1-U3 pinnt das ausdrücklich; wer sie "mitfixt",
-  bricht diesen Test).
-- Kein Eingriff in `INBOUND_NOTICES` (bereits korrekt).
-- Keine neuen Vorlagen, keine Wortlaut-Verbesserung, keine Stimme, kein Flag.
-- Keine automatische DB-Migration beim Boot (Lehre `no-automatic-db-migration`: DDL
-  läuft automatisch, Backfill nicht).
-
-### Betroffene Dateien / Nahtstellen
-
-`src/store/defaults.js` (`DEFAULT_GREETING`) · `src/i18n/locales.js`
-(`LOCALES.de.greetingVariants`) · `src/i18n/greeting-catalog.js`
-(`greetingForLanguage`, neue `GREETING_ORTHOGRAPHY_MIGRATION`) ·
-`scripts/greeting-orthografie-nachziehen.mjs` (neu) ·
-`test/de-umlaut-orthography.test.js`.
-Mitlesende Nahtstellen, die grün bleiben müssen: `src/routes/voice.js`
-(Greeting-Render), `src/self-service.js` (`selfServicePatch` gegen
-`ALL_GREETING_TEMPLATES`), `test/p11-greeting-language.test.js`,
-`test/p1b-no-booking.test.js`, `test/inbound-disclosure-mandatory.test.js`,
-`test/helpers.js`.
-
-### Invarianten (byte-identisch)
-
-- Der Pflichtsatz-Präfix (`INBOUND_NOTICES.de`) bleibt byte-identisch.
-- Die Anzahl wählbarer DE-Vorlagen bleibt 3, `ALL_GREETING_TEMPLATES.length` bleibt 9.
-- `greetingForLanguage` verhält sich für jeden Wert, der **nicht** Karten-Schlüssel ist,
-  byte-identisch zum Bestand (frei gesetzter Text bleibt unangetastet, `null` bleibt
-  `null`).
-- FR/EN-Kataloge byte-identisch.
-- Der Self-Service-Riegel bleibt "nur Vorlage, kein Freitext".
-
-### Abnahmekriterium
-
-```
-node --check src/store/defaults.js && node --check src/i18n/greeting-catalog.js
-npm test -- --test-concurrency=4
-node scripts/greeting-orthografie-nachziehen.mjs      # Trockenlauf
-```
-Erwartet: `npm test` grün, Zahl der Tests nicht gesunken; der Trockenlauf nennt die Zahl
-betroffener Mandanten und schreibt nichts. Zusätzlich muss gelten:
-`node -e "import('./src/i18n/greeting-catalog.js').then(m=>console.log(m.greetingTemplatesFor('de').filter(t=>/fuer/i.test(t)).length))"`
-→ `0`.
-
-### Testpflicht
-
-- **Neu:** ein Test, der für jede der drei DE-Vorlagen gleichzeitig prüft: keine
-  Transliteration, echte Umlaute vorhanden, `hasInboundNotice` erfüllt. (Die dritte
-  Zusicherung ist der Riegel gegen Pre-Mortem P3.)
-- **Neu:** `greetingForLanguage(<altes Literal>, "de")` liefert das **neue** Literal;
-  `greetingForLanguage(<freier Text>, "de")` liefert ihn unverändert (Abgrenzung).
-- **Neu:** der Nachzieh-Lauf ist idempotent (zweiter Lauf ändert nichts) und fasst einen
-  frei gesetzten Text nicht an.
-- **Erweitert:** `SPOKEN_DE_FIELDS` um S15/S16 (Bestandstests U1/U2 decken sie dann mit).
-
-### Risiko + Rückfall
-
-Risiko klein und bekannt: ein Mandant mit altem Greeting würde ohne Schritt 3 nichts
-merken (deshalb ist Schritt 3 nicht optional). Rückfall: `git revert` — die Phase ändert
-kein Schema und schreibt ohne `--apply` nichts in die DB.
-
-### Owner / Testanruf
-
-Keine Owner-Entscheidung nötig (derselbe Satz, richtig geschrieben). Kein Testanruf nötig
-für die Abnahme; ein Hörbeleg ist erwünscht, aber IP2 liefert ihn billiger.
+| Alte Phase | Status | Begründung |
+|---|---|---|
+| **IP1** Orthografie | **erledigt** (`ab497ed`, gemergt in `de870ad`) — und das Ergebnis wird auf dem neuen Weg **weiter gebraucht** | Auf dem neuen Weg rendert **unser** Webhook weiterhin `withInboundNotice(greetingForLanguage(...))` als ersten gesprochenen Satz, bevor er übergibt (Code: `src/routes/voice.js`). Der korrigierte Wortlaut ist also genau der Satz, der nach dem Umstieg **noch** von uns kommt — er überlebt die Weiche nicht zufällig, sondern als einziger gesprochener Satz unserer Seite. Zusätzlich bleibt die At-Rest-Normalisierung (`GREETING_ORTHOGRAPHY_MIGRATION`) nötig, weil die Begrüssung ein Mandanten-Setting bleibt. Offen aus IP1: der Nachzieh-Lauf mit `--apply` gegen die Produktions-DB (M5). |
+| **IP2** Hörprobe | **überlebt unverändert** | Sie ist die Vorher-Messung für IP4 **und** die Nachher-Messung für IE5 (welchen Sprechpfad rendert `/voice/incoming`). Ihr NICHT-Scope verbietet ohnehin jeden `src/`-Eingriff. IE5 erweitert ihre Klassifikation additiv um den Übergabe-Pfad — **in** IE5, nicht hier. |
+| **IP3** Selbst-Armierungen | **überlebt unverändert** | Der A/B-belegt defekte Relay-Zweig armiert sich heute automatisch und unterdrückt den Inbound-Audio-Track. Auf dem neuen Weg wäre das **schlimmer** als heute: er würde den einen gerenderten Satz kaputtsprechen und den Anrufer mit tauber Leitung an den Agenten übergeben. Der `render.yaml`-Abgleich bleibt sinnvoll, weil IE6 erst am Ende steht und ein Blueprint-Anwenden bis dahin den defekten Handoff scharfstellen könnte. |
+| **IP4** gleiche Stimme | **überlebt, mit veränderter Rolle: aus Komfort wird Vorbedingung** | Auf dem neuen Weg spricht unser Satz und danach der Agent. Rendern wir mit Azure, hört der Anrufer **zwei Stimmen in einem Anruf** — genau der Defekt, den RCA-Wurzel R5 benennt. Play-TTS ist damit keine Verschönerung mehr, sondern die Bedingung für Stimm-Kohärenz an der Übergabe. Scope, Invarianten und Abnahme bleiben unverändert. |
+| **IP5** Modell-Gleichstand | **entfällt als Phase** | Nach dem Umstieg synthetisieren wir **einen** Satz; alles andere spricht der Agent mit seinem eigenen `tts.model_id`. Die Modellfrage schrumpft damit auf "klingt unser eine Satz wie der Agent" — das ist ein Messpunkt in IE5 und die Owner-Frage O2, keine eigene Phase mit Push-Risiko in die Outbound-Konfiguration. Der Live-Wert bleibt offene Messung M4. |
+| **IP6** Inbound-Szenarien im Bench | **entfällt** | Beide Bench-Treiber (`TEXML_DRIVER_ID`, `SHIM_DRIVER_ID`) fahren **unsere** Turn-Schleife. Nach dem Umstieg gibt es keine, die sie fahren könnten — ein provider-geführtes Gespräch ist von einem lokalen Treiber nicht steuerbar. Vier bis sechs neue Szenarien würden also eine Engine messen, die IE6 löscht: Wegwerf-Arbeit. Die Vorher/Nachher-Zahl für die Weiche liefern stattdessen IE1 und IE5 an echten Anrufen plus die bestehenden Transkripte. |
+| **IP7** Assistant wartet auf `answered` | **entfällt vollständig** | Sie hätte das **dritte** Gehirn scharfgestellt. Mit der Leitentscheidung ist es nicht mehr Zielarchitektur, sondern Löschkandidat (IE6 Stufe 1). Damit entfallen auch ihre Voraussetzungen: der 422-Befund, das answered-Ereignis (M7) und die Nachprüfung des 422 (M9) sind für die Zielarchitektur gegenstandslos. |
 
 ---
 
 ## Phase IP2 - Hörprobe: welchen Sprechpfad Inbound wirklich nimmt
 
-**Abhängigkeiten:** keine. Muss **vor** IP4 und IP5 liegen (Vorher-Messung).
+**Abhängigkeiten:** keine. Muss **vor** IP4 und IE5 liegen (Vorher-Messung).
 
 ### Ziel (deterministisch prüfbar)
 
@@ -493,7 +598,7 @@ ausser der Synthese selbst.
 - **Keine** Bewertung von Aussprache oder Klangqualität. Das Werkzeug liefert die Datei,
   nicht das Urteil.
 - **Keine** Änderung an `DEFAULT_DRIVER_ID`, keinem Szenario, keinem Treiber-Verhalten.
-- Keine neuen Inbound-Szenarien (das ist IP6).
+- Keine neuen Inbound-Szenarien (in dieser Kette nicht mehr vorgesehen, s. 4.1).
 - Keine Änderung an `src/routes/voice.js`, `render.js` oder `directive-synth.js`.
 - Kein echter Provider-Anruf, kein Telnyx-Netzzugriff.
 
@@ -608,8 +713,8 @@ gegangen.
    2026-08-04 `fallback: false` hat und der Kommentar dort "DEFAULT AUS" sagt. Ein
    erneutes Anwenden des Blueprints würde den belegt defekten Handoff scharf stellen —
    der Anrufer hört dann eine Fehleransage. Der Blueprint-Wert wird `"false"`, der
-   Kommentar nennt den 422-Befund und verweist auf Phase IP7 als den Weg, ihn wieder
-   einzuschalten.
+   Kommentar nennt den 422-Befund; der Schalter selbst verschwindet in IE6 Stufe 1 mit dem
+   Assistant-Pfad.
 
 ### NICHT-Scope
 
@@ -619,7 +724,7 @@ gegangen.
   `src/telephony/adapters/telnyx/voice.js#speakVoiceFields`,
   `src/telephony/adapters/telnyx/voice.js#assistantVoiceConfigured`,
   `scripts/telnyx-assistant-provision.mjs`. Wer den Block löscht, nimmt Outbound die
-  Plattform-Stimme (Pre-Mortem P1). `src/telephony/registry.js` war der fünfte Leser und
+  Plattform-Stimme (Pre-Mortem Q7). `src/telephony/registry.js` war der fünfte Leser und
   fällt mit Scope Punkt 2 weg — **genau diese vier** bleiben danach übrig.
 - **`elevenLabsVoiceIdFor`, `elevenLabsVoiceName` und `hasElevenLabsVoice` bleiben
   exportiert und in ihrem Verhalten unverändert** — sie haben je einen Konsumenten
@@ -734,7 +839,8 @@ Kein Testanruf.
 ## Phase IP4 - Inbound spricht dieselbe Stimme wie Outbound
 
 **Abhängigkeiten:** IP2 (Vorher-Hörprobe), IP3 (kein Relay kann dazwischenkommen).
-Empfohlen nach IP1, damit der erste gesprochene Satz gleich richtig synthetisiert wird.
+IP1 (erledigt) liegt vor, damit der erste gesprochene Satz gleich richtig synthetisiert
+wird.
 
 ### Ziel (deterministisch prüfbar)
 
@@ -780,9 +886,10 @@ dieselbe Sprecherin wie im Outbound-Anruf.
 
 - **`ELEVENLABS_VOICE_ID_BY_PROFILE` wird nicht angefasst.** Die Kennungen sind eine
   Owner-Entscheidung vom 2026-08-18, vom Eigentümer per Synthese abgehört. Wer sie
-  ändert, ändert im selben Zug jeden Outbound-Anruf (Pre-Mortem P5).
+  ändert, ändert im selben Zug jeden Outbound-Anruf (Pre-Mortem Q5).
 - Kein Eingriff in `elevenlabs/agent_configs/*`, kein Push zum Anbieter.
-- **Kein** TTS-Modell-Wechsel (das ist IP5) — diese Phase ändert `ELEVENLABS_MODEL` nicht.
+- **Kein** TTS-Modell-Wechsel (das ist Owner-Entscheidung O2) — diese Phase ändert
+  `ELEVENLABS_MODEL` nicht.
 - Kein per-Tenant-TTS-Metering (bewusste Vereinfachung, in `src/config.js` dokumentiert).
 - Kein Eingriff in die Synthese-Frist `synthTimeoutMs` (2000 ms; ihre Herleitung
   `11250 + 2000 + 1500 <= 15000` steht im Config-Kommentar und darf nicht nebenbei
@@ -841,323 +948,678 @@ entscheiden kann.
 
 ---
 
-## Phase IP5 - Modell-Gleichstand: dieselbe ElevenLabs-Modellklasse in beiden Richtungen
+## Phase IE1 - Den Anbieter-Vertrag von K1 messen (kein Produktionscode)
 
-**Abhängigkeiten:** IP4 (erst wenn Inbound überhaupt ElevenLabs spricht, ist das Modell
-die verbleibende Differenz). IP2 liefert die Vorher-Datei zum Vergleich.
+**Abhängigkeiten:** keine. Kann parallel zu IP2–IP4 laufen; ihr Ergebnis ist erst **vor**
+IE5 nötig. Sie ist das Tor, das über K1 gegen K2 entscheidet.
 
 ### Ziel (deterministisch prüfbar)
 
-Die Modellwahl beider Richtungen ist im Repo **benannt und belegt**: entweder als
-gemeinsamer Wert, oder als ausdrücklich festgehaltene, begründete Differenz. Der
-Live-Wert des Outbound-Agenten (`tts.model_id`) ist gemessen und liegt als Beleg vor.
+Sechs benannte Fragen sind mit **belegt** oder **widerlegt** beantwortet, jede mit ihrer
+Quelle (echte API-Antwort, SIP-Trace, Telnyx-Portal-Debugger oder Anbieter-Doku-URL).
+Das Ergebnis steht als Messbericht im Phasenbericht und entscheidet nach der in
+Abschnitt 2.4 **vorab festgelegten** Auslösebedingung zwischen K1 und K2. Kein
+`src/`-Eingriff, kein Commit in Produktionscode.
+
+| Frage | Was "belegt" bedeutet |
+|---|---|
+| F-A **Agenten-Zuordnung** | Ein INVITE an `sip:+<Test-DID>@sip.rtc.elevenlabs.io:5060` erreicht **den** Agenten, der an dieser Nummer hängt — nachgewiesen an einem Gespräch, das der erwartete Agent führt (B4 ist heute unbelegt). |
+| F-B **Variablenkanal** | Ein selbst gesetzter `X-`Header kommt als dynamic variable beim Agenten an, nach der belegten Normalisierungsregel (B3) — und zwar auf dem Weg, den wir tatsächlich bauen würden: TeXML-`<Dial><Sip>` (Header **nicht** dokumentiert, B5) **oder** Call-Control-`dial` mit `custom_headers` (dokumentiert). Das Ergebnis bestimmt die Bauform von IE5. |
+| F-C **Elternbein-Griff** | Nach dem Bridge ist ein Hangup über `callControlId`/`providerCallSid` weiter wirksam **und/oder** `<Dial timeLimit>` (60–14400 s, B5) beendet die Brücke zuverlässig. Mindestens **einer** der beiden muss belegt sein, sonst ist S5 verloren. |
+| F-D **Zweites Bein und seine Abrechnung** | Ob der Dial ein zweites, separat abgerechnetes Telnyx-Bein erzeugt, und unter welchem `record_type` es in `detail_records` erscheint. Liefert die Trägerliste für IE3. |
+| F-E **Nummer doppelt belegbar** | Ob dieselbe Nummer `inbound_trunk_config` **und** `outbound_trunk_config` tragen kann, ohne die gemessene `outbound_trunk`-Projektion zu verlieren (M16) — gemessen an einer **Testnummer**, nie an der produktiven DID. |
+| F-F **Fehlerfall der Übergabe** | Was technisch passiert, wenn der Dial scheitert: Trunk antwortet nicht, Agent unbekannt, INVITE abgelehnt. Telnyx dokumentiert für `<Dial>` ein `action`-Attribut (URL, die beim Ende des Dial neue TeXML-Anweisungen abholt, developers.telnyx.com/docs/voice/programmable-voice/texml-verbs/dial) — **belegt** heißt: gemessen, dass diese URL im Fehlerfall wirklich gerufen wird, mit welchem Status, und dass die daraufhin gerenderte Antwort den Anrufer noch erreicht. Ohne diese Messung ist die Fail-safe-Zusicherung von IE5 Scope 6 eine unbelegte Anbieter-Fähigkeit. |
 
 ### Scope
 
-1. **Messen, nicht raten.** `npm run elevenlabs:drift` bzw. ein `GET` am Live-Agenten
-   liefert `conversation_config.tts.model_id`. Der Wert wird als Messung festgehalten
-   (nicht als Flag). Regel `provider-config-needs-doc-before-diagnosis`: erst
-   `GET` + Schnappschuss, dann entscheiden.
-2. **Owner-Entscheidung einholen und im Repo festschreiben:** dieselbe Modellklasse in
-   beiden Richtungen (Klang gleich, Inbound evtl. langsamer) **oder** bewusst
-   verschiedene Modelle (Inbound latenzoptimiert, Outbound klangoptimiert) mit
-   Begründung. Die Entscheidung gehört als Kommentar an **eine** Stelle —
-   `src/config.js#elevenLabsPlayTts` (`ELEVENLABS_MODEL`) — und, falls sie das
-   Anbieter-Feld betrifft, in den Besitz-Block der Agenten-Vorlage
-   (`_besitz.felder`), damit der Drift-Wächter sie ab dann hält.
-3. **Nur bei "gleich":** `tts.model_id` wird ein besessenes Feld der Vorlage und
-   `ELEVENLABS_MODEL` bekommt denselben Wert. Der Push zum Anbieter
-   (`npm run elevenlabs:push`) ist eine Owner-Handlung, kein Commit — und die
-   Reihenfolge ist zu beachten (Lehre `gq-e1-b1-merged-cutover-pending`:
-   Push-Reihenfolge, Preset-Feld-Gotcha).
-4. Die Synthese-Frist gegenprüfen: ein langsameres Modell kann `synthTimeoutMs` (2000 ms)
-   reissen. Reisst es, ist das Ergebnis **kein** Fehler, sondern der belegte
-   Azure-Rückfall — aber dann ist der Gleichstand nicht erreicht, und das gehört als
-   Messergebnis in die Phase, nicht in eine Timeout-Erhöhung. Eine Erhöhung würde die
-   Herleitung `11250 + 2000 + 1500 <= 15000` brechen und braucht eine eigene Entscheidung.
+1. Eine **Testnummer** und eine **Test-Trunk-Verbindung** anlegen; die produktive DID wird
+   nicht angefasst. Digest-Zugangsdaten oder ACL nach dem belegten Anbieter-Vertrag (B2).
+2. Die sechs Messungen fahren, je Messung: Vorgehen, Rohbefund-Kennung (Anruf-ID,
+   `conversation_id`, `record_type`), Ergebnis, Quelle. **Keine** Rufnummer im Klartext,
+   **kein** Gesprächstext, **kein** Schlüsselwert im Bericht (Absolute Regel 4/5).
+3. Den Bericht als **Messung** festhalten, nicht als Entscheidung: die Entscheidung K1/K2
+   trifft die vorab festgelegte Auslösebedingung aus Abschnitt 2.4.
+4. Für F-C zusätzlich den Negativfall messen: Hangup-Versuch **während** der Brücke, und
+   `timeLimit` mit einem kleinen Wert (Untergrenze 60 s) gegen einen absichtlich langen
+   Anruf.
+5. Für F-F den Fehlerfall **absichtlich herbeiführen** (Dial auf eine SIP-Adresse, die
+   niemand annimmt, und auf eine Nummer ohne Agenten), mit gesetztem `action`-Attribut auf
+   eine eigene Testroute. Gemessen wird: wird die Route gerufen, mit welchen Feldern, und
+   hört der Anrufer die daraufhin gerenderte Antwort noch. Das ist die Messung, ohne die
+   IE5 nicht gebaut werden darf.
 
 ### NICHT-Scope
 
-- Keine Änderung an Stimm-Kennungen, an `speed`, `stability` oder anderen
-  TTS-Feinheiten.
-- Kein Wechsel des Sprechpfads, kein Flag.
-- Keine Erhöhung von `synthTimeoutMs` in dieser Phase (siehe Punkt 4).
-- Keine Anpassung des Aussprache-Weges: die Alias-Regel bleibt der gewählte Weg,
-  `enable_phoneme_tags` bleibt ausdrücklich nicht besessen (Vorlage,
-  `_aussprache_hinweis`).
+- **Kein** Produktionscode, keine neue Direktive, kein Renderer-Zweig. Diese Phase baut
+  nichts — sie misst.
+- **Keine** Änderung an `src/elevenlabs/nummern-registrierung.js` und **kein**
+  `inbound_trunk_config` an der produktiven DID (Pre-Mortem Q5).
+- Kein Eingriff in den Live-Agenten, keinen Prompt, keine `language_presets`, kein
+  `elevenlabs:push`.
+- Keine Entscheidung über K3 (ausgeschieden, Abschnitt 2.3) und keine Wiederaufnahme von K4.
 
 ### Betroffene Dateien / Nahtstellen
 
-`src/config.js` (Kommentar; Wert nur bei "gleich") ·
-`elevenlabs/agent_configs/outbound-agent.template.json` (`_besitz`, nur bei "gleich") ·
-`outbound-drift-ausnahmen.json` (nur falls ein Feld bewusst ausgenommen wird) ·
-`.env.example` und `render.yaml` (falls `ELEVENLABS_MODEL` einen neuen Default bekommt).
+Keine unter `src/`. Nur **gelesen**: `src/elevenlabs/nummern-registrierung.js`
+(`registrierungsKoerper` — die gemessene Trunk-Vorlage), `src/telephony/directives.js`,
+`src/telephony/adapters/telnyx/render.js`. Anbieter-Seite: EL-Phone-Number-Ressource
+(Testnummer), Telnyx-Connection (Test), Telnyx-Portal-Debugger.
 
-### Invarianten (byte-identisch)
+### Invarianten
 
-- Bei der Entscheidung "verschiedene Modelle" ist die Phase **rein dokumentarisch**:
-  kein Verhaltensbit ändert sich.
-- Der Drift-Wächter bleibt fail-closed und behält seinen Exit-Code-Vertrag; die Zahl
-  besessener Felder darf nur **steigen**, nie sinken.
-- Der Offenlegungssatz (`first_message`, `language_presets.*.first_message`,
-  `voicemail_message`) bleibt unberührt — Absolute Regel 2.
+- Der Live-Agent, die produktive DID und die bestehende Nummern-Registrierung bleiben
+  **unverändert**; `npm run elevenlabs:drift` läuft vor und nach der Phase mit
+  unverändertem Ergebnis.
+- Outbound bleibt vollständig unberührt.
+- Keine Secrets, keine Rufnummern, kein Gesprächstext im Bericht.
 
 ### Abnahmekriterium
 
 ```
-npm run elevenlabs:drift
-npm test -- --test-concurrency=4
+npm run elevenlabs:drift          # vor und nach der Phase, unverändertes Ergebnis
 ```
-Erwartet: `elevenlabs:drift` läuft mit dem dokumentierten Exit-Code-Vertrag durch und
-nennt, bei "gleich", `tts.model_id` als besessenes und übereinstimmendes Feld. Die
-Entscheidung ist an genau einer Code-Stelle als Kommentar nachlesbar. Zusätzlich: ein
-Vorher/Nachher-Paar von Audiodateien aus IP2 liegt vor.
+Erwartet: ein Messbericht mit **sechs** Zeilen F-A…F-F, jede mit `belegt`/`widerlegt` und
+Quelle; dazu die daraus folgende Kandidaten-Entscheidung nach Abschnitt 2.4 — als
+Anwendung der vorab festgelegten Bedingung, nicht als neue Abwägung. `elevenlabs:drift`
+zeigt vorher und nachher denselben Stand.
 
 ### Testpflicht
 
-- **Nur bei "gleich":** ein Test, der `ELEVENLABS_MODEL`-Default und den Vorlagenwert
-  `tts.model_id` auf Gleichheit prüft (damit die Angleichung nicht bei der nächsten
-  Env-Änderung still zerfällt).
-- **Immer:** der Drift-Wächter bleibt grün; seine Feldzahl wird im Phasenbericht genannt
-  (Lehre `sec-fix-chain-complete`: Zähler nach dem Merge neu messen, nie aus einer Notiz
-  lesen).
+Kein neuer Test (kein Produktverhalten geändert). **Pflicht ist die Protokollform:** jede
+Messung nennt ihre Rohbefund-Kennung, damit sie nachprüfbar ist — die Lehre
+`pruefkommando-ohne-positiv-kontrolle` gilt: eine Messung ohne Positiv-Kontrolle sieht aus
+wie eine, die nichts sucht. Für F-A ist die Positiv-Kontrolle der **bekannte** Agent, für
+F-D ein Anruf, der garantiert ein zweites Bein hätte.
 
 ### Risiko + Rückfall
 
-Risiko mittel: ein Push zum Anbieter wirkt sofort auf **Outbound**, den heute niemand
-beklagt (Pre-Mortem P5). Deshalb gilt: Drift-Lauf vor **und** nach dem Push, und der
-Rückweg ist der Vorlagenwert plus erneuter Push. Rückfall bei der reinen
-Dokumentationsvariante: `git revert`.
+Risiko klein für den Bestand, real für die Kasse: echte Testanrufe kosten Geld, und ein
+falsch konfigurierter Test-Trunk kann Anrufe ins Leere schicken. Deshalb Testnummer,
+nicht produktive DID. Rückfall: Testnummer und Test-Connection löschen; es bleibt nichts
+zurück.
 
 ### Owner / Testanruf
 
-**Owner-Entscheidung zwingend** (Klang gegen Latenz, und ein Push in die Live-Konfiguration
-des Outbound-Agenten). Ein Hörvergleich ist erwünscht; ein echter Anruf ist nur nötig,
-wenn gepusht wird.
+**Beides.** Owner: Testnummer und Trunk-Zugangsdaten anlegen (heute lokal leer, B13) und
+die Tarif-Frage beim Anbieter klären, soweit sie den Monitoring-Kanal betrifft (M18).
+Echte Testanrufe sind die **einzige** Quelle für F-A bis F-D — die Doku beantwortet sie
+nicht.
 
 ---
 
-## Phase IP6 - Inbound-Szenarien im Gesprächs-Bench
+## Phase IE2 - Die Geld-Achse bekommt einen Herzschlag
 
-**Abhängigkeiten:** keine harten; sinnvoll nach IP1 (sonst messen die Szenarien einen
-Satz, der sich gleich ändert). Muss **vor** IP7 fertig sein — sonst gibt es für den
-Engine-Wechsel keine Vorher-Zahl.
+**Abhängigkeiten:** keine. Muss **vor** IE5 fertig sein. Nützlich unabhängig vom Umstieg:
+sie schliesst eine Lücke, die **heute** offen ist.
 
 ### Ziel (deterministisch prüfbar)
 
-`node scripts/convo-bench.mjs run --driver texml --repeat 5` fährt einen
-Inbound-Szenariensatz, der die belegten Inbound-Eigenheiten abdeckt, und liefert eine
-reproduzierbare Zahl für **genau den heute live laufenden Pfad**.
+Ein laufender Anruf wird beendet, wenn die pro-Tenant-Kostendecke sperrt, **ohne** dass
+ein Turn, ein Werkzeugaufruf oder ein `/voice/*`-Request stattfindet. Ein Test beweist
+genau das: Achse sperrt, kein weiterer Request, Anruf wird über den **einen**
+Terminierungspfad beendet, Grund als benanntes Token persistiert.
 
 ### Scope
 
-1. Vier bis sechs neue Szenarien mit `direction: "inbound"` neben dem bestehenden
-   `scripts/convo-bench/scenarios/inbound-nachricht.mjs`. Jedes deckt eine am Code
-   belegte Inbound-Eigenheit ab, keine erfundene:
-   - Anrufer fragt etwas, das nur der Auftraggeber weiss → der Agent darf **nicht**
-     zurückfragen (Richtungs-Gate, `src/consult/in-call.js#consultAvailableFor`) und muss
-     es als Nachricht aufnehmen.
-   - Anrufer fragt eine öffentlich prüfbare Tatsache → kein `look_up`
-     (`src/research/in-call.js#lookupProviderFor`), Nachricht statt Recherche.
-   - Anrufer nennt Wunschtag/-zeit → als Nachricht, **nicht** als Terminzusage (der
-     Inbound-Prompt sagt ausdrücklich "du siehst den Kalender nicht").
-   - Anrufer schweigt → die dreistufige No-Speech-Staffel
-     (`noSpeechReprompt` → `noSpeechRepromptAgain` → `noSpeechFarewell`).
-   - Anrufer kündigt Auflegen an → `end_call` statt Endlosschleife.
-   - Anrufer redet in einer anderen Sprache als am Tenant hinterlegt → dokumentiert das
-     heutige Verhalten (bleibt in der Tenant-Sprache), damit die offene
-     Owner-Entscheidung O5 eine Messgrundlage hat.
-2. Die bekannten Bestandsdefekte des Bench beachten: **ein** kaputtes Szenario reisst den
-   ganzen Lauf (Lehre `convo-bench-bestandsdefekte`), und `n >= 5` ist Pflicht, damit die
-   Zahl etwas bedeutet (Lehre `call-quality-chain`).
-3. Der Lauf wird mit `--driver texml` dokumentiert — im Szenario-Kopf und in
-   `README`/`docs`, nicht als Default-Änderung.
+1. **Die Wurzel, nicht das Symptom.** `blockingBudgetAxis` wird heute aus vier Stellen
+   gefragt, alle ereignisgebunden, keine davon wiederkehrend (B8). Ein Anruf, der weder
+   einen Turn noch ein Werkzeug erzeugt, erreicht die Achse nie. Neu ist **ein**
+   wiederkehrender Wächter je aktivem Anruf, der dieselbe Achse fragt.
+2. **Ein Terminierungspfad, nicht ein zweiter.** Beendet wird über
+   `src/telephony/call-lifecycle.js#terminateActiveCall` mit dem bestehenden
+   Geld-Grund-Token (dem Gegenstück zu `CAP_FAILURE_REASON`), nicht über einen neuen
+   Hangup-Weg. Vorbild für Form und Lebenszyklus ist `src/telnyx-conversation-watchdog.js`
+   — Vorbild, nicht Wiederverwendung: dieser Wächter stirbt in IE6 mit dem Assistant.
+3. **Pfad- und richtungsneutral.** Der Wächter hängt am Anruf-Datensatz, nicht an einer
+   Engine. Damit deckt er den heutigen Budget-Inbound, EL-Outbound (heute ungedeckt,
+   solange kein Werkzeug feuert) und den neuen Inbound-Weg mit **einer** Wahrheit ab.
+4. **Neustart-fest.** Der Wächter wird beim Boot für jeden aktiven Anruf re-armiert, an
+   derselben Stelle und nach demselben Muster wie `rearmActiveCallTimers` — ohne dessen
+   Realtime-Sonderfall zu erben.
+5. **Das Intervall ist ein Konfigurationswert**, nicht eine nackte Zahl: `src/config.js`
+   mit `min`/`max` (Muster `numEnv`), Eintrag in `.env.example` **und** `render.yaml`.
+   Der Betrag ist die bewusst akzeptierte Überziehung zwischen zwei Runden (Pre-Mortem Q3)
+   und wird im Phasenbericht genannt.
+6. **Doppelfeuer ausschliessen:** Wächter und Max-Dauer-Timer dürfen denselben Anruf nicht
+   zweimal terminalisieren; der Terminierungspfad ist idempotent zu halten, und der
+   Negativfall ist ein Test.
 
 ### NICHT-Scope
 
-- **Kein** neues Werkzeug, kein neuer Treiber, keine Änderung an `DEFAULT_DRIVER_ID`.
-- Kein Szenario, das eine Fähigkeit voraussetzt, die Inbound absichtlich nicht hat —
-  die Szenarien pinnen das **Nicht**-Können als gewolltes Verhalten.
-- Keine Audio-/Aussprachebewertung (das ist IP2).
-- Keine Änderung an `src/`.
+- **Keine** neue Achse, kein zweiter Geld-Begriff, kein eigener Zähler.
+  `blockingBudgetAxis` und `liveVoiceSpendCents` bleiben die **eine** Quelle.
+- **Keine** Änderung an Tarifen, Decken, Totband oder an `MAX_BUDGET_EUR` (Owner-
+  Entscheidung E10: Beobachtung, kein Gate).
+- Keine Lockerung für Inbound (Owner-Entscheidung E11 ist **zurückgezogen**; die Decke
+  sperrt beide Richtungen).
+- Kein Eingriff in `src/bridge.js` und **keine** Umstellung von
+  `REALTIME_MID_CALL_BUDGET_CHECK` — der Realtime-Zweig wird in IE6 entfernt, nicht hier
+  reanimiert.
+- Kein neuer Endpunkt (damit auch keine neue Zeile in `src/route-policy.js`).
 
 ### Betroffene Dateien / Nahtstellen
 
-`scripts/convo-bench/scenarios/*.mjs` (neu) · `scripts/convo-bench/scenarios/index.mjs`
-(Registrierung) · Doku-Zeile mit der kanonischen Aufrufform.
+`src/telephony/call-lifecycle.js` (Wächter-Armierung und Boot-Re-Arm, neben
+`armMaxDurationTimer`) · ein neues Modul für den Wächter selbst (eine Aufgabe, G30) ·
+`src/config.js` + `.env.example` + `render.yaml` (Intervall) · `src/boot.js` bzw. die
+bestehende Boot-Naht (Re-Arm-Aufruf, Position wie heute: nach den Exit-Gates, vor
+`listen`).
+Nur **gelesen**: `src/budget-gate.js`, `src/billing/metering.js`,
+`src/telnyx-conversation-watchdog.js` (als Vorbild).
 
 ### Invarianten (byte-identisch)
 
-- Die **19** Bestandsszenarien bleiben unverändert — 18 mit `direction: "outbound"` und
-  `inbound-nachricht.mjs` als einziges bestehendes Inbound-Szenario (nachgezählt über
-  `scripts/convo-bench/scenarios/index.mjs#SCENARIOS`). Die Outbound-Zahlen bleiben
-  vergleichbar. `SCENARIO_IDS` wächst nur um die neuen Kennungen; keine bestehende
-  Kennung ändert sich, keine verschwindet.
-- Kein Produktionscode unter `src/` wird angefasst.
-- Die Bench schreibt nie in `data/store.json` (Temp-`DATA_DIR`, Bestandsmuster).
+- **Solange die Achse nicht sperrt, ändert sich nichts** — kein zusätzlicher Request, kein
+  zusätzlicher Provider-Aufruf, kein geändertes TeXML.
+- Der Terminierungspfad bleibt **einer**: `terminateActiveCall`; kein zweiter Hangup-Weg,
+  keine zweite Logquelle für denselben Sachverhalt.
+- Der bestehende Geld-Grund-Token behält seinen Wert (er reist über `get_call_status` zu
+  MCP-Clients).
+- Die Prüfreihenfolge in `/voice/incoming` bleibt unverändert; diese Phase fügt dort
+  **kein** Gate hinzu, sie ergänzt die Zeit **nach** dem Start.
+- `npm test` grün, Testzahl nicht gesunken, Zahl der Einträge in
+  `test/abnahme-ausgewandert.json` nicht gesunken (Regel D13).
 
 ### Abnahmekriterium
 
 ```
-node scripts/convo-bench.mjs run --driver texml --repeat 5
+node --check src/telephony/call-lifecycle.js
 npm test -- --test-concurrency=4
+PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start   # + curl /healthz, /voice/incoming
 ```
-Erwartet: der Lauf endet ohne Abbruch, nennt in der Kopfzeile `driver=texml`, und liefert
-je Szenario eine Zahl. Diese Zahlen sind der Vorher-Wert für IP7 und werden im
-Phasenbericht festgehalten.
+Erwartet: `npm test` grün inkl. der neuen Tests; im Smoke-Test erscheint bei gesperrter
+Achse genau **eine** Warnzeile mit der server-generierten `callId` (kein PII) und der
+Anruf ist danach terminal; bei freier Achse ist die Ausgabe unverändert zum Bestand.
 
 ### Testpflicht
 
-- **Neu:** ein Test, der jedes registrierte Szenario auf Wohlgeformtheit prüft
-  (Richtung gesetzt, Erwartungen vorhanden) — das ist der Riegel gegen "ein kaputtes
-  Szenario killt den ganzen Lauf".
-- **Neu:** derselbe Test hält fest, dass jede der 19 Bestandskennungen noch registriert
-  ist. Ein Szenario, das beim Registrieren der neuen still herausfällt, wäre sonst als
-  verschwundene Vorher-Zahl nicht zu bemerken.
-- Kein neuer Produktionstest: diese Phase ändert kein Produktverhalten.
+- **Neu:** Achse sperrt, **kein** Turn und **kein** Werkzeugaufruf → Anruf wird beendet,
+  Grund-Token gesetzt. Das ist der Test, den es heute nicht gibt.
+- **Neu:** Achse frei → der Wächter beendet **nichts** (Negativfall, T5/G3).
+- **Neu:** Wächter und Max-Dauer-Timer feuern nacheinander → genau **eine**
+  Terminalisierung (Idempotenz).
+- **Neu:** Neustart mit einem aktiven Anruf → der Wächter ist danach armiert.
+- **Bestand:** die Budget-Gate-Tests und die Metering-Tests bleiben unverändert grün.
 
 ### Risiko + Rückfall
 
-Risiko klein (nur Messwerkzeug), aber Aufwand real: die Szenarien müssen den Defekt
-tatsächlich reproduzieren, sonst belegen sie nichts (Lehre
-`bench-must-reproduce-defect`). Rückfall: Szenarien deregistrieren.
+**Hochrisiko:** dieser Code **beendet Anrufe**. Ein Fehler darin kappt gesunde Gespräche —
+der teuerste denkbare Fehlalarm. Gegenmittel: er fragt ausschliesslich die bestehende
+Achse (keine eigene Rechnung), er benutzt den bestehenden Terminierungspfad, und der
+Negativfall "Achse frei → nichts passiert" ist Pflicht-Test. Rückfall: das Intervall im
+Dashboard auf den Aus-Wert (dokumentiert in `.env.example`) — sofort, ohne Deploy; danach
+`git revert`.
 
 ### Owner / Testanruf
 
-Keine Owner-Entscheidung, kein Testanruf.
+Keine Owner-Entscheidung (die Decke ist bereits beschlossen; hier wird sie nur wirksam
+gemacht). Ein echter Testanruf ist erwünscht, aber nicht abnahmenotwendig — der Sperrfall
+ist lokal reproduzierbar.
 
 ---
 
-## Phase IP7 - Der Inbound-Handoff wartet auf das answered-Ereignis
+## Phase IE3 - Kostenprofil und gemessene Pflichtmenge für den neuen Inbound-Weg
 
-**Abhängigkeiten:** IP6 (Vorher-Zahl), IP3 (Blueprint-Drift beseitigt, sonst kann der
-Handoff aus der falschen Quelle scharf werden), IP1 (der korrigierte Pflichtsatz reist in
-den Handoff).
+**Abhängigkeiten:** IE1 (F-D liefert die Trägerliste — ohne sie ist die Pflichtmenge
+geraten). Muss **vor** IE5 scharf sein.
 
 ### Ziel (deterministisch prüfbar)
 
-Bei aktivem Schalter läuft ein eingehender Anruf auf dem Call-Control-AI-Assistant, **ohne**
-den belegten `HTTP 422 (90034 Call not answered yet)`: der Handoff startet erst, nachdem
-Telnyx den Anruf als angenommen gemeldet hat. Bei Schalter aus ist das Verhalten
-byte-identisch zur Budget-Engine.
+Ein Anruf auf dem neuen Inbound-Weg trägt ein **eigenes** Kostenprofil, dessen
+Pflicht-Belegtypen **gemessen** sind (nicht aus der Umgebung geraten), und ein EL-Leg mit
+`sipCallId` bleibt weiterhin `EL_CONVAI_SIP`. Der Boot-Riegel für latente Kostenpfade
+meldet für den neuen Schalter **keinen** FATAL-Befund.
 
 ### Scope
 
-1. **Die Wurzel, nicht das Symptom.** Belegt in `src/config.js` an
-   `telnyxAssistant.inboundHandoffEnabled` (Messung 2026-08-04, Anrufe
-   `call_msf0q18o473z` / `call_msf0qch6nect`): auf `inbound_path path=assistant` folgte
-   370 ms später 422 — die Call-Control-API verlangt einen bereits **angenommenen**
-   Anruf, während TeXML beim Inbound implizit annimmt. Der Handoff braucht also einen
-   Auslöser, der nach dem answered-Ereignis liegt. Die Entscheidungsfunktion
-   `src/telnyx-inbound.js#inboundHandoffDecision` bleibt rein und unverändert in ihrer
-   Logik; was sich ändert, ist **wann** ihr Ergebnis ausgeführt wird.
-2. **Kein Raten am Ereignisnamen.** Das answered-Ereignis wird an der Quelle belegt, nicht
-   angenommen: `src/telephony/adapters/telnyx/call-control-events.js` und
-   `src/telnyx-call-control-ingest.js` führen die vorhandene Ereignisbehandlung; die
-   Feldnamen sind zu **messen** (dieselbe Disziplin, die
-   `INBOUND_CALL_CONTROL_ID_FIELD` erzwungen hat: dort war ein geratener Feldname
-   wochenlang der stille Defekt). Bis zur Messung ist der Ereignisname eine offene
-   Messung, kein Implementierungsdetail.
-3. **Fail-safe, nicht fail-open.** Kommt das answered-Ereignis nicht, bleibt der Anruf
-   auf der Budget-Engine — der Anrufer hört immer ein funktionierendes Gespräch, niemals
-   eine Fehleransage. Der Rückfallgrund wird als benanntes Token in der bestehenden
-   Sonde geführt (`INBOUND_BUDGET_REASON` bekommt einen neuen Eintrag, z.B.
-   `NOT_ANSWERED_YET`; `logInboundPathDecision` bleibt die **eine** Sonde, es entsteht
-   keine zweite Logquelle).
-4. **Eigenes Kostenprofil.** Der Assistant-Inbound-Pfad bekommt ein eigenes
-   `KOSTENPROFIL` (analog `TELNYX_INBOUND_REALTIME`, dessen Existenz genau so begründet
-   ist: "ein Flag-Flip bliebe sonst still"). Ohne das wäre die dokumentierte
-   Verdreifachung in der Buchhaltung nicht von Budget-Inbound zu unterscheiden.
-   Achtung: `src/billing/kostenarten.js#kostenprofilFuerAnruf` klassifiziert heute jeden
-   Anruf mit `sipCallId` als `EL_CONVAI_SIP`, **unabhängig von der Richtung** — die
-   Zuordnung des neuen Profils muss diese Reihenfolge respektieren und darf das
-   EL-Profil nicht überschreiben.
-5. **Der Schalter bleibt der Rückweg.** `TELNYX_INBOUND_HANDOFF_ENABLED` bleibt der
-   Weg, Inbound ohne Deploy auf die Budget-Engine zurückzustellen. Default bleibt in
-   dieser Phase **aus**; scharfgestellt wird nur nach einem erfolgreichen Testanruf.
+1. **Eine neue Zeile in der Registry**, nicht eine Wiederverwendung: `KOSTENPROFIL` und
+   `KOSTENPROFILE` in `src/billing/kostenarten.js` bekommen den neuen Inbound-Weg.
+   `EL_CONVAI_SIP` darf **nicht** wiederverwendet werden: seine gemessene Pflichtmenge ist
+   `[sip-trunking]`, unser Inbound-Bein liefert `call-control` (B12).
+2. **Träger nach dem Messergebnis aus IE1 (F-D):** `elevenlabs_convai` (Anbieter-Ist,
+   bestehender Einsammler) plus `telnyx_call_records` für unser Inbound-Bein — plus
+   `telnyx_sip`, **falls** F-D ein zweites, separat abgerechnetes Bein belegt. Kein
+   Träger ohne Messung.
+3. **Pflichtmenge gemessen, sonst fail-closed.** Die Pflicht-Belegtypen werden an echten
+   Anrufen gegen `detail_records` gemessen, mit Positiv-Kontrolle (ein Typ mit Treffern
+   neben Typen mit echten Nullen — das Muster, mit dem `EL_CONVAI_SIP` belegt wurde). Ist
+   die Messung nicht möglich, ist die Antwort `PFLICHTTYPEN_UNGEMESSEN` (leer), **nie**
+   der Env-Wert als Trostpreis.
+4. **Der Reihenfolge-Riegel wird gepinnt.** `legacyKostenprofil` klassifiziert jeden Anruf
+   mit `sipCallId` als `EL_CONVAI_SIP`, richtungsunabhängig (B12). Die Zuordnung des neuen
+   Profils respektiert diese Reihenfolge und überschreibt sie nicht — als Test, nicht als
+   Kommentar.
+5. **Der Boot-Riegel bleibt der Riegel.** `src/boot-guard.js#latentCostPathFindings` ist
+   die Stelle, die einen Schalter ohne Katalogzeile nicht starten lässt (FATAL-Muster
+   `REALTIME_CARRIER_UNCOLLECTED`). Der neue Schalter wird dort eingetragen, damit
+   "Flag an, Kosten unsichtbar" nicht möglich ist.
+
+### NICHT-Scope
+
+- **Keine** Änderung an bestehenden Profilen, Trägern, Einsammlern oder an
+  `config.billing.costTruingRequiredRecordTypes`.
+- **Keine** Tarifänderung, keine Änderung an Decken oder an der Erstattungslogik
+  (`istVollBelegt`, `kosten-projektion.js`).
+- Keine Nachbuchung für Altanrufe (Lehre `no-existing-customers-premise`: es gibt keine
+  Kundenanrufe zum Backfillen; und `did-miete-ohne-preis`: additiv-nullable braucht
+  **immer** einen Backfill — der entfällt hier nur, weil es keine Altzeilen gibt).
+- Kein Einsammler-Umbau für `elevenlabs_convai` (er existiert und ist belegt).
+
+### Betroffene Dateien / Nahtstellen
+
+`src/billing/kostenarten.js` (`KOSTENPROFIL`, `KOSTENPROFILE`, ggf.
+`kostenprofilFuerAnruf`) · `src/boot-guard.js` (`latentCostPathFindings`) ·
+`src/routes/voice.js` (die **eine** `recordCostProfile`-Zeile am neuen Zweig) ·
+Doku der Kostenarten, wo der Katalog seine Begründungen trägt.
+Nur **gelesen**: `src/billing/kosten-projektion.js`, die Einsammler.
+
+### Invarianten (byte-identisch)
+
+- Die vier bestehenden Profile bleiben unverändert, inklusive ihrer Pflichtmengen und
+  Einsammler; `pruefeSchluesselmenge` bleibt grün.
+- Ein Anruf mit `sipCallId` wird weiterhin `EL_CONVAI_SIP` zugeordnet.
+- `pflichttypenFuerProfil` bleibt fail-closed für unbekannte Profile (leere Menge, nie der
+  Env-Wert).
+- Solange der neue Inbound-Schalter aus ist, wird das neue Profil **nie** gesetzt — die
+  Buchhaltung ist byte-identisch zum Bestand.
+
+### Abnahmekriterium
+
+```
+node --check src/billing/kostenarten.js && node --check src/boot-guard.js
+npm test -- --test-concurrency=4
+PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start   # Boot-Guard-Ausgabe lesen
+```
+Erwartet: `npm test` grün, Testzahl nicht gesunken; der Boot-Guard meldet für den neuen
+Schalter **keinen** FATAL-Befund, wenn die Katalogzeile steht, und einen FATAL-Befund,
+wenn der Schalter ohne Katalogzeile an wäre (der Riegel ist als Test gegengeprobt).
+
+### Testpflicht
+
+- **Neu:** der neue Weg setzt das neue Profil; ein EL-Leg mit `sipCallId` bleibt
+  `EL_CONVAI_SIP` (Reihenfolge-Riegel, Punkt 4).
+- **Neu:** `pflichttypenFuerProfil` liefert für das neue Profil genau die **gemessene**
+  Menge — und `PFLICHTTYPEN_UNGEMESSEN`, wenn sie nicht gemessen ist (fail-closed als Test).
+- **Neu:** Schalter an **ohne** Katalogzeile → Boot-Riegel FATAL (die Gegenprobe).
+- **Bestand:** alle Kostenarten-/Projektions-Tests bleiben unverändert grün.
+
+### Risiko + Rückfall
+
+Risiko mittel und rein buchhalterisch: eine falsche Pflichtmenge kippt `istVollBelegt` und
+damit die Erstattungsrechnung — das ist die belegte B6-Falle. Deshalb ist die Messung mit
+Positiv-Kontrolle Pflicht und `PFLICHTTYPEN_UNGEMESSEN` die erlaubte Antwort. Rückfall:
+`git revert`; ohne den Inbound-Schalter ist das Profil wirkungslos.
+
+### Owner / Testanruf
+
+Keine Owner-Entscheidung. Ein echter Anruf ist nötig, um die Pflichtmenge gegen
+`detail_records` zu **messen** — derselbe Anruf kann der IE1-Testanruf sein.
+
+---
+
+## Phase IE4 - Der Wiederholungs-Riegel bekommt eine pfadgerechte Antwort
+
+**Abhängigkeiten:** keine. Muss **vor** IE5 fertig sein.
+
+### Ziel (deterministisch prüfbar)
+
+Eine wiederholte `/voice/incoming`-Zustellung für einen Anruf, der **nicht** mehr auf der
+Budget-Engine läuft, bekommt **keine** Gather-Antwort mehr. Ein Test beweist: derselbe
+Wiederholungs-Anker, aber die Ersatzantwort richtet sich nach dem Zustand des Anrufs,
+nicht nach der Engine.
+
+### Scope
+
+1. **Die Wurzel:** `keepAliveXml: (call) => render(followupTurnDirectives(call, ""))` in
+   `src/routes/voice.js` (B10). Der Anker-Mechanismus in
+   `src/telephony/webhook-idempotenz.js#makeWebhookIdempotenz` ist richtig und bleibt; die
+   **Ersatzantwort** ist an die Budget-Engine gebunden. Trifft eine Wiederholung nach einem
+   Prozess-Neustart ein Bein, das bereits übergeben ist, antworten wir mit einem Gather auf
+   eine Leitung, die der Agent führt: Brücke ab oder zwei Systeme auf einem Bein.
+2. **Die Naht ist der bestehende Parameter**, nicht ein neuer Zweig im Guard: `keepAliveXml`
+   wird pfadabhängig — für ein übergebenes Bein eine **leere** Direktivenliste (der
+   Provider setzt das laufende Dokument nicht zurück), für ein Budget-Bein unverändert der
+   Gather. Eine Funktion, eine Wahrheit; der Guard bleibt unverändert.
+3. **Gilt auch für den Bestand:** dieselbe Latenz besteht heute für den Realtime-Zweig.
+   Die Phase behebt sie dort mit, ohne `src/bridge.js` anzufassen (der Zweig wird in IE6
+   entfernt; bis dahin ist er korrekt bedient).
+
+### NICHT-Scope
+
+- **Keine** Änderung am Anker (`incomingAnchors`, `CallSid`) und **keine** Änderung an der
+  Erkennungslogik — der Wiederholungs-Riegel selbst ist nicht das Problem.
+- Kein neuer Endpunkt, keine Änderung an der Signaturprüfung, keine neue Zeile in
+  `src/route-policy.js`.
+- Keine Änderung an `followupTurnDirectives` selbst (er bleibt die Antwort für ein
+  Budget-Bein).
+- Kein Wurf bei unbekanntem Zustand: die Ersatzantwort ist fail-safe, nie ein Fehler
+  mitten im Gespräch.
+
+### Betroffene Dateien / Nahtstellen
+
+`src/routes/voice.js` (die `keepAliveXml`-Zuweisung) ·
+`src/telephony/webhook-idempotenz.js` (nur **gelesen**, falls der Vertrag reicht; sonst
+additiv erweitert) · `src/telephony/voice-render.js` (nur gelesen).
+
+### Invarianten (byte-identisch)
+
+- Für ein Bein auf der Budget-Engine ist die Ersatzantwort **byte-identisch** zum Bestand
+  — Attribut für Attribut.
+- Der Anker und die Ersatz-Antwortpflicht (immer `text/xml`, nie ein Fehlerstatus) bleiben
+  unverändert.
+- Kein Pfad antwortet auf eine Wiederholung mit einem Fehler oder mit Stille, wo heute ein
+  Dokument steht.
+
+### Abnahmekriterium
+
+```
+node --check src/routes/voice.js
+npm test -- --test-concurrency=4
+npm run inbound:hoerprobe -- --out /tmp/inbound-probe
+```
+Erwartet: `npm test` grün inkl. der neuen Tests; die Hörprobe meldet unverändert denselben
+Sprechpfad wie vor der Phase (diese Phase ändert den ersten Turn nicht).
+
+### Testpflicht
+
+- **Neu:** Wiederholung auf ein Budget-Bein → byte-identischer Gather (Bestandsschutz).
+- **Neu:** Wiederholung auf ein übergebenes Bein → **kein** Gather, fail-safe Antwort.
+- **Neu:** Wiederholung auf ein Bein in unbekanntem Zustand → fail-safe Antwort, kein Wurf.
+- **Bestand:** die Idempotenz-Tests bleiben unverändert grün.
+
+### Risiko + Rückfall
+
+Risiko klein, aber an einer heiklen Stelle: die Ersatzantwort ist das, was ein Anrufer
+hört, wenn der Provider erneut zustellt. Gegenmittel: der Budget-Fall ist byte-gepinnt,
+und der neue Fall ist fail-safe. Rückfall: `git revert`.
+
+### Owner / Testanruf
+
+Weder Owner-Entscheidung noch Testanruf.
+
+---
+
+## Phase IE5 - Inbound am ElevenLabs-Agenten, hinter einem Schalter
+
+**Abhängigkeiten:** IE1 (der Anbieter-Vertrag ist gemessen und die Bauform entschieden),
+IE2 (Geld-Achse mid-call), IE3 (Kostenprofil), IE4 (Wiederholungs-Antwort), IP3 (kein
+Relay kann dazwischenkommen), IP4 (der gerenderte Satz spricht dieselbe Stimme wie der
+Agent). **Ohne IE1 darf diese Phase nicht beginnen** — sonst ist ihre Prämisse geraten.
+
+### Ziel (deterministisch prüfbar)
+
+Bei aktivem Schalter führt ein eingehender Anruf der **EL-ConvAI-Agent** — derselbe Agent
+wie bei Outbound —, nachdem unser Webhook angenommen, die sieben Sicherungen durchlaufen
+und den Pflichtsatz **gerendert** hat. Der Anrufer hört **genau eine** Begrüssung und
+**eine** Stimme. Bei Schalter aus ist das gerenderte TeXML byte-identisch zum Bestand.
+
+### Scope
+
+1. **Eine Übergabe-Direktive neben den bestehenden fünf.** `src/telephony/directives.js`
+   bekommt die SIP-Übergabe (Bauform nach IE1/F-B: TeXML-`<Dial><Sip>` **oder**
+   Call-Control-`dial`+`bridge` mit `custom_headers`), der Telnyx-Adapter den Renderer
+   dazu. Strukturelle Vorlage ist `src/telephony/voice-render.js#streamDirectives`: **ein**
+   Dokument, erst der gerenderte Satz, dann die Übergabe (B11). Telefonie-Logik läuft über
+   die Ports, nicht im Server.
+2. **Eine reine Entscheidungsfunktion**, Muster `inboundHandoffDecision`: sie sagt, ob
+   übergeben wird, und liefert bei Nein einen **benannten** Rückfallgrund. Sie ist rein
+   (kein IO), und sie ist die **eine** Stelle, die diese Frage beantwortet.
+3. **Der Pflichtsatz bleibt unser, und er kommt genau einmal.** `withInboundNotice(...)`
+   wird weiterhin von uns gerendert und gesprochen; der Agent darf auf diesem Weg **keine**
+   eigene Eröffnung sprechen. Dass das wirklich so ist, wird am Anbieter **gemessen** und
+   als Abnahme geführt — ein nicht freigeschaltetes Override-Feld wird laut Bestandslehre
+   **still** ignoriert, und `hasInboundNotice` kennt nur unseren String. Der Riegel
+   (Absolute Regel 2, GAP-14) ist: kein Übergeben ohne vorher gerenderten Pflichtsatz.
+4. **Die Notbremse wird doppelt verdrahtet.** `armMaxDurationTimer` bleibt wie heute, und
+   zusätzlich reist die guthaben-abgeleitete Frist (`brakeSecondsFor` →
+   `emergencyBrakeSeconds`) als provider-erzwungene Zeitgrenze mit (`<Dial timeLimit>`,
+   belegt 60–14400 s, B5) — innerhalb dieser Grenzen geklemmt, mit benannter Konstante,
+   keine Magic Number. Der Wächter aus IE2 deckt die Geld-Achse.
+5. **Sprache und Stimme je Anruf**, soweit IE1/F-B es belegt: die Tenant-Sprache reist als
+   dynamic variable nach der belegten Normalisierungsregel (B3). Ist das nicht belegt,
+   wird die Sprachwahl **nicht** geraten, sondern als Grenze dokumentiert und die
+   Auslösebedingung aus Abschnitt 2.4 geprüft.
+6. **Fail-safe, nie fail-open.** Jeder Fehler — Dial scheitert, Trunk antwortet nicht,
+   Agent unbekannt, Entscheidung negativ — endet auf der Budget-Engine (solange sie noch
+   existiert) bzw. im Rückfall ohne Gehirn, **nie** in einer Fehleransage und **nie** in
+   Stille. Der Grund wird als Token an der **einen** Sonde `logInboundPathDecision`
+   geführt; es entsteht keine zweite Logquelle.
+7. **Der Schalter ist der Rückweg.** Default **aus**; Scharfstellen nur nach einem
+   erfolgreichen Testanruf. Eintrag in `src/config.js`, `.env.example` **und**
+   `render.yaml` (und der Blueprint sagt dasselbe wie der Code — der Widerspruch, den IP3
+   beseitigt hat, kommt hier nicht neu herein).
+8. **Die Hörprobe aus IP2 wird additiv erweitert** um den Übergabe-Pfad als vierten
+   benannten Token — dieselbe Klassifikationsfunktion, kein zweiter Namensvorrat.
 
 ### NICHT-Scope
 
 - **Kein** Entfernen oder Aufweichen irgendeines Gates. Signaturprüfung,
-  Tenant-Auflösung, pro-Tenant-Kostendecke, Max-Dauer-Notbremse und der gerenderte
-  Pflichtsatz bleiben **vor** der Handoff-Entscheidung, exakt wie heute in
-  `src/routes/voice.js`.
-- Kein Eingriff in `src/bridge.js` (`HEIKLE STELLE`), keine Realtime-Engine.
-- Keine ElevenLabs-Inbound-Freischaltung, kein `inbound_trunk_config` (Abschnitt 2).
-- Keine neuen Werkzeuge für den Inbound-Agenten (das Richtungs-Gate bleibt, siehe O4).
-- Keine Änderung am Assistant-Prompt oder an der Assistant-Provisionierung.
-- **Keine Stimm-Sprachauflösung auf dem Assistant-Pfad.** Diese Phase ändert die Stimme
-  nicht und macht Inbound damit **nicht** stimmgleich zu Outbound: der Speak-Node
-  (`speakVoiceFields`) und die Assistant-Ressource
-  (`scripts/telnyx-assistant-provision.mjs`) sprechen eine **statische**
-  Plattform-Stimme für jede Sprache — bewusst, mit RCA-Begründung R5 und als
-  R5-Regression in `test/telnyx-call-control.test.js` gepinnt (Fussnote (b)-Stimme).
-  Wer hier "eine Stimme pro Sprache" einbaut, bricht diesen Test und erzeugt einen Anruf
-  in zwei Stimmen. Eine Änderung daran ist Owner-Entscheidung O7 und eine eigene Kette.
-  **Folge für die Abnahme:** ein FR-/EN-Testanruf auf diesem Pfad klingt erwartbar anders
-  als der entsprechende Outbound-Anruf. Das ist kein Phasenfehler.
+  Wiederholungs-Riegel, Tenant-Auflösung, Kostendecke, Max-Dauer und der gerenderte
+  Pflichtsatz bleiben **vor** der Übergabe-Entscheidung, in unveränderter Reihenfolge.
+- **Kein** `inbound_trunk_config`-Weg, bei dem unser Webhook übersprungen wird (K3,
+  ausgeschieden — Abschnitt 2.3). Wer diesen Weg hier einbaut, entfernt Absolute Regel 1
+  für Inbound.
+- **Keine** Änderung an `ELEVENLABS_VOICE_ID_BY_PROFILE` (Owner-Entscheidung 2026-08-18)
+  und **kein** Eingriff in den Outbound-Anfragekörper.
+- **Keine** neuen Werkzeuge für Inbound: das Richtungs-Gate (`consultAvailableFor`,
+  `lookupProviderFor`, und die Richtungsprüfung im Werkzeug-Webhook) bleibt unverändert —
+  derselbe Agent, dieselbe Sperre (B9, Owner-Entscheidung O4).
+- **Kein** Entfernen der Budget-Engine (das ist IE6) und kein Eingriff in
+  `src/bridge.js`.
+- Kein `elevenlabs:push`, der Outbound-Verhalten ändert, ohne Drift-Lauf davor und danach.
 
 ### Betroffene Dateien / Nahtstellen
 
-`src/routes/voice.js` (Ausführungszeitpunkt des Handoffs) ·
-`src/telnyx-inbound.js` (`INBOUND_BUDGET_REASON` additiv, `inboundAssistantHandoffXml`) ·
-`src/telnyx-call-control-ingest.js` / `src/telephony/adapters/telnyx/call-control-events.js`
-(answered-Ereignis) · `src/billing/kostenarten.js` (`KOSTENPROFIL`, `KOSTENPROFILE`,
-`kostenprofilFuerAnruf`) · `src/config.js`, `.env.example`, `render.yaml` (Schalter-Doku).
+`src/telephony/directives.js` (neue Direktive) ·
+`src/telephony/adapters/telnyx/render.js` bzw. `.../voice.js` (Renderer bzw.
+Call-Control-Kommando, je IE1) · `src/telephony/voice-render.js` (Direktivenliste
+"Satz + Übergabe", Muster `streamDirectives`) · `src/routes/voice.js`
+(Ausführungszeitpunkt, Sonde, Kostenprofil-Zeile) · eine neue Datei für die
+Entscheidungsfunktion · `src/elevenlabs/nummern-registrierung.js` **nur**, wenn IE1/F-E
+belegt hat, dass dieselbe Nummer beides tragen kann · `src/config.js`, `.env.example`,
+`render.yaml` · `scripts/inbound-hoerprobe.mjs` (additiver Token).
 
 ### Invarianten (byte-identisch)
 
-- **Schalter aus = byte-identisch** zum heutigen Inbound-TeXML, Attribut für Attribut.
-- Die sieben Sicherungen aus Abschnitt 1.3 laufen unverändert und in unveränderter
-  Reihenfolge; die Prüfreihenfolge in `inboundHandoffDecision` bleibt erhalten (ihr
-  Kommentar begründet sie ausdrücklich als Sicherheit, nicht als Geschmack).
-- Der Pflichtsatz wird weiterhin **von uns gerendert** und als Wert übergeben, nie
-  gepromptet — Absolute Regel 2 (Inbound-Analogie, GAP-14).
-- Outbound bleibt vollständig unberührt.
-- Die Zahl der Ausgewanderten in `test/abnahme-ausgewandert.json` darf nicht sinken
-  (Regel D13).
+- **Schalter aus = byte-identisch** zum heutigen Inbound-TeXML, Attribut für Attribut,
+  inklusive Attribut-Reihenfolge und Escaping.
+- Die sieben Sicherungen laufen in unveränderter Reihenfolge; keine wandert hinter die
+  Übergabe.
+- Der Pflichtsatz wird **gerendert**, nie gepromptet, und genau einmal gesprochen.
+- **Outbound bleibt vollständig unberührt**: `startCallBody` und
+  `conversationConfigOverride` byte-identisch, gegen Snapshot gepinnt; die
+  `outbound_trunk`-Projektion der Nummern-Registrierung unverändert.
+- `test/route-auth-inventory.test.js` bleibt grün — diese Phase fügt keinen Endpunkt hinzu.
+- Die Zahl der Einträge in `test/abnahme-ausgewandert.json` sinkt nicht (Regel D13).
 
 ### Abnahmekriterium
 
 ```
-node --check src/routes/voice.js && node --check src/telnyx-inbound.js
+node --check src/routes/voice.js && node --check src/telephony/directives.js
 npm test -- --test-concurrency=4
-PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start   # + curl auf /voice/incoming
-node scripts/convo-bench.mjs run --driver shim --repeat 5
+npm run test:gates
+npm run elevenlabs:drift
+npm run inbound:hoerprobe -- --out /tmp/nachher
+PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start   # + curl /voice/incoming, Byte-Vergleich
 ```
-Erwartet: `npm test` grün; bei Schalter aus liefert `curl` auf `/voice/incoming` dasselbe
-TeXML wie vor der Phase (Byte-Vergleich); die Sonde `inbound_path` nennt bei Schalter aus
-`reason=handoff_disabled` und bei Schalter an ohne answered-Ereignis den neuen
-Rückfallgrund. **Live-Abnahme:** ein echter eingehender Anruf mit Schalter an, im
-Render-Log ohne `422`/`90034`, mit `inbound_path path=assistant`, und der Anrufer kann
-den Agenten unterbrechen.
+Erwartet: `npm test` grün, Testzahl nicht gesunken; bei Schalter aus liefert `curl`
+byte-identisches TeXML zum Stand vor der Phase; `elevenlabs:drift` vor und nach der Phase
+mit unverändertem Outbound-Ergebnis. **Live-Abnahme:** ein echter eingehender Anruf mit
+Schalter an — im Log `inbound_path` mit dem neuen Token, der Anrufer hört **genau eine**
+Begrüssung in **einer** Stimme, kann den Agenten nach dem Pflichtsatz unterbrechen, und
+der Anruf lässt sich über unseren Griff beenden (der Nachweis aus IE1/F-C am echten
+Anruf wiederholt).
 
 ### Testpflicht
 
-- **Neu:** Handoff bei Schalter an, aber **ohne** answered-Ereignis → Budget-Engine, neuer
-  Rückfallgrund, kein Call-Control-Aufruf (das ist der 422-Riegel als Test).
-- **Neu:** Handoff bei Schalter an **mit** answered-Ereignis → Assistant-Pfad, und der
-  übergebene `greeting`-Wert enthält den Pflichtsatz (Regel-2-Riegel).
-- **Neu:** das neue Kostenprofil wird für einen Assistant-Inbound-Leg gesetzt, und ein
-  EL-Leg mit `sipCallId` bleibt `EL_CONVAI_SIP` (Reihenfolge-Riegel aus Punkt 4).
 - **Neu:** Schalter aus → byte-identisches TeXML (Snapshot).
-- **Bestand:** `test/route-auth-inventory.test.js` und die Signatur-Tests bleiben grün —
-  diese Phase fügt keinen Endpunkt hinzu.
+- **Neu:** Schalter an → die Direktivenliste enthält den gerenderten Pflichtsatz **vor**
+  der Übergabe, und `hasInboundNotice` ist für den gesprochenen Text erfüllt
+  (Regel-2-Riegel).
+- **Neu:** Übergabe ohne vorher gerenderten Pflichtsatz ist **nicht** möglich (Negativfall).
+- **Neu:** jeder Fehlerfall (Dial scheitert, Entscheidung negativ, Ziel unbekannt) → kein
+  Fehlerdokument, benannter Rückfallgrund an der **einen** Sonde.
+- **Neu:** die Zeitgrenze reist innerhalb der belegten Grenzen mit und wird aus der
+  guthaben-abgeleiteten Frist gebildet (nicht aus einer nackten Zahl).
+- **Neu:** ein Inbound-Anruf am selben Agenten bekommt `get_consult`/`look_up`
+  **nicht** — der Richtungs-Riegel als Test am neuen Weg (B9).
+- **Bestand:** `test/inbound-disclosure-mandatory.test.js`, die Signatur-Tests, die
+  Idempotenz-Tests und alle Outbound-Snapshots bleiben grün.
 
 ### Risiko + Rückfall
 
-**Hochrisiko:** Geld (dokumentierte Verdreifachung der Inbound-Minute), ein Live-Pfad für
-echte Anrufer, und ein Provider-Race als Wurzel. Rückfall in zwei Stufen: (1) Schalter im
-Render-Dashboard auf `false` — sofort, ohne Deploy; (2) `git revert`. Vor dem
-Scharfstellen ist der Runtime-Output zu lesen, nicht zu raten (Absolute Regel 7):
-Render-Log und Telnyx-Portal-Debugger.
+**Hochrisiko:** ein Live-Pfad für echte Anrufer, echtes Geld (der EL-Weg kostet gemessen
+~14–16 US-Cent/min gegen 1,87), eine Anbieter-Naht, die vor IE1 unbelegt war, und Artikel
+50 im ersten Satz. Rückfall in zwei Stufen: (1) Schalter im Render-Dashboard auf `false` —
+sofort, ohne Deploy, byte-identisch zum Bestand; (2) `git revert`. Vor dem Scharfstellen
+ist der Runtime-Output zu **lesen**, nicht zu raten (Absolute Regel 7): Render-Log und
+Telnyx-Portal-Debugger.
 
 ### Owner / Testanruf
 
-**Beides zwingend.** Owner-Entscheidung: die Verdreifachung der Inbound-Kosten erneut
-bestätigen (die Zustimmung vom 2026-08-04 bezog sich auf einen Pfad, der danach
-zurückgenommen wurde). Echter Inbound-Testanruf: der 422-Befund ist nur am echten Anruf
-entstanden und nur dort zu widerlegen.
+**Beides zwingend.** Owner: den Schalter stellen und die Kosten pro Inbound-Minute
+akzeptieren (O10). Echter Inbound-Testanruf in **jeder** freigeschalteten Sprache — der
+Pflichtsatz, die Stimm-Kohärenz und die Doppelansage sind nur am Ohr entscheidbar.
+
+---
+
+## Phase IE6 - Die überzähligen Gehirne entfernen
+
+**Abhängigkeiten:** IE5 **live und über eine benannte Beobachtungsfrist bewährt**. Diese
+Phase beginnt nicht, weil Tests grün sind, sondern weil der neue Pfad Anrufe geführt hat
+und der Owner freigegeben hat.
+
+### Ziel (deterministisch prüfbar)
+
+Nach dieser Phase existiert im Repo **ein** Gesprächs-System. Deterministisch geprüft:
+`grep` findet die entfernten Module, Schalter, Direktiven, Kostenprofile und Kostenarten
+**nirgends** mehr — auch nicht in einem Kommentar, der sie als lebende Naht beschreibt —,
+und es bleibt **kein Export ohne Konsumenten** zurück. `npm test` ist grün und die Zahl
+der Einträge in `test/abnahme-ausgewandert.json` ist nicht gesunken.
+
+### Scope — in drei getrennten Stufen, drei getrennten Commits, drei getrennten Freigaben
+
+**Stufe 1 — der Telnyx-AI-Assistant (das dritte Gehirn).** Entfernt: `src/telnyx-inbound.js`,
+`src/telnyx-llm-shim.js`, `src/telnyx-conversation-watchdog.js`,
+`scripts/telnyx-assistant-provision.mjs`, `KOSTENPROFIL.TELNYX_ASSISTANT` samt Registry-Zeile,
+die Schalter `TELNYX_AI_ASSISTANT_ENABLED` und `TELNYX_INBOUND_HANDOFF_ENABLED` in
+`src/config.js` / `.env.example` / `render.yaml`, und der Handoff-Aufruf in
+`src/routes/voice.js`. **Konsumenten je Funktion zählen, nie je Modul:**
+`config.telnyx.telnyxElevenLabs` hat vier belegte Leser — `speakVoiceFields` und
+`assistantVoiceConfigured` (`.../telnyx/voice.js`) und der Provisioner sterben mit dieser
+Stufe, aber `src/elevenlabs/outbound.js#callLocaleOf` liest den `defaultVoiceId` und lebt
+weiter. Der Block wird deshalb **nicht** gelöscht, sondern auf seinen überlebenden Leser
+zurückgeschnitten, und der Modulkopf wird nachgezogen (Pre-Mortem Q5/Q7).
+
+**Stufe 2 — die OpenAI-Realtime-Bridge (der vierte Zweig, nie benutzt).** Entfernt:
+`src/bridge.js` samt seinen `HEIKLE STELLE`-Abschnitten, `DIRECTIVE.STREAM` und
+`streamDirectives`, `MEDIA_PATH`, die Media-Event-/Media-Adapter-Naht,
+`VOICE_ENGINE=realtime` samt allen Sonderfällen — darunter der Realtime-Early-Return in
+`rearmActiveCallTimers` und die Realtime-Bedingung in `consultAvailableFor` —,
+`KOSTENPROFIL.TELNYX_INBOUND_REALTIME`, `KOSTENART.OPENAI_REALTIME`,
+`REALTIME_MID_CALL_BUDGET_CHECK` und die daran hängenden Boot-Guard-Befunde
+(`REALTIME_NO_MIDCALL_BUDGET`, `REALTIME_CARRIER_UNCOLLECTED`). Mit dem Zweig
+verschwinden auch die offenen Befunde, die nur er trug.
+
+**Stufe 3 — die Gesprächslogik der Budget-Engine (die eigentliche Konsolidierung).**
+Entfernt: `POST /voice/turn`, der Folge-Gather (`followupTurnDirectives`), der
+Inbound-Zweig von `claude.js#agentTurn` samt Inbound-Prompt und den Inbound-Werkzeugen
+unserer Seite, der STT-Modell-Seam für Inbound, `KOSTENPROFIL.TELNYX_INBOUND_BUDGET` und
+die Bench-Treiber, die diese Schleife fuhren. **Was bleibt und bleiben muss:**
+`claude.js`-Fähigkeiten, die nicht Gesprächsführung sind (Zusammenfassung nach dem Anruf,
+Vorab-Briefing und Eröffnungszeile für Outbound — belegt getrennt verdrahtet über
+`routes/api-calls.js`), und der Outbound-TeXML-Weg **nur so lange**, wie er der Rückweg
+für Outbound ist (eigene Entscheidung, nicht Teil dieser Stufe).
+
+**Stufe 3b — Ersatz statt Lücke, im selben Commit wie Stufe 3.** An die Stelle der
+entfernten Rückfall-Engine tritt der Rückfall **ohne Gehirn**: ein gerenderter Satz
+(`DIRECTIVE.SAY`) plus Auflegen (`DIRECTIVE.HANGUP`), plus der bestehende Anruf-Datensatz
+fürs Postfach. Kein LLM, kein Turn, keine Gesprächsführung — damit ist er **keine** zweite
+Wahrheit über Gesprächslogik. Er greift bei jedem Fehlerfall aus IE5, Punkt 6.
+Ein Anrufbeantworter **mit Aufnahme** wäre die freundlichere Variante, ist aber am
+Provider ungemessen (M22) und ist deshalb **nicht** Teil dieser Stufe.
+
+### NICHT-Scope
+
+- **Kein** Entfernen einer Sicherung. Alle sieben bleiben; IE6 entfernt Gehirne, nicht
+  Gates. Die Prüfreihenfolge in `/voice/incoming` bleibt unverändert.
+- **Kein** Entfernen der Provider-Abstraktion (`src/telephony/ports.js`, `registry.js`,
+  Adapter): der **Carrier** bleibt austauschbar, auch wenn das Gehirn es nicht ist.
+- **Kein** Entfernen von `claude.js` als Modul: Zusammenfassung, Briefing und
+  Eröffnungszeile sind keine Gesprächsführung und haben belegt eigene Aufrufer.
+- **Kein** Löschen eines Katalog- oder Abnahmetests. Ein Test, dessen Messpunkt
+  verschwindet, **zieht um** und behält Kennung und Bank; sein Farbstand wird vor und nach
+  dem Umzug genannt (Muster IP3/M11). Ein entfernter Katalog-Test ist ein verlorenes
+  Launch-Kriterium.
+- **Kein** Entfernen von `OUTBOUND_FROZEN`, `MAX_NUMBERS`, `MAX_NUMBERS_PER_TENANT` oder
+  irgendeines Outbound-Gates.
+- Keine Stufe in einem Commit mit einer anderen.
+
+### Betroffene Dateien / Nahtstellen
+
+Je Stufe die dort genannten Dateien, plus jeweils: `src/config.js`, `.env.example`,
+`render.yaml` (Schalter-Entfernung), `src/boot-guard.js` (Befunde, die mit dem Zweig
+sterben), `src/billing/kostenarten.js` (Profile und Kostenarten), die zugehörigen Tests.
+Vor jeder Stufe zu prüfen und **nicht** anzufassen: `src/telephony/ports.js` und die
+Adapter, `src/elevenlabs/**` (der überlebende Weg), `src/route-policy.js`.
+
+### Invarianten (byte-identisch)
+
+- Die sieben Sicherungen sind nach jeder Stufe unverändert wirksam; `npm test` und die
+  Security-Tests sind nach **jeder** Stufe grün, nicht erst am Ende.
+- Outbound bleibt nach jeder Stufe unverändert: `startCallBody` und
+  `conversationConfigOverride` byte-identisch, `elevenlabs:drift` unverändert.
+- Kein Export ohne Konsumenten, kein auskommentierter Code, kein per Flag abgeschalteter
+  Pfad bleibt zurück (G9, hart verboten).
+- Kein Anrufer hört nach einer Stufe Stille oder eine Fehleransage, wo vorher ein Dokument
+  stand.
+
+### Abnahmekriterium
+
+Je Stufe, nach Dateien statt nach Zeilenzahlen:
+```
+grep -rn "telnyx-inbound\|telnyxLlmShim\|TELNYX_AI_ASSISTANT_ENABLED" src scripts test   # Stufe 1
+grep -rn "bridge.js\|REALTIME\|MEDIA_PATH\|streamDirectives" src scripts test            # Stufe 2
+grep -rn "voice/turn\|followupTurnDirectives" src scripts test                           # Stufe 3
+npm test -- --test-concurrency=4
+npm run test:gates
+npm run elevenlabs:drift
+PORT=3999 SKIP_TWILIO_SIGNATURE_CHECK=true npm start   # + curl /healthz, /voice/incoming
+```
+Erwartet: die `grep`s finden nach ihrer Stufe **nichts** mehr (auch keinen Kommentar, der
+die Naht als lebend beschreibt); `npm test` grün und die Testzahl nur um die Tests der
+entfernten Pfade gesunken, **namentlich** im Phasenbericht aufgeführt; die Zahl der
+Einträge in `test/abnahme-ausgewandert.json` unverändert; der Smoke-Test liefert für
+`/voice/incoming` ein gültiges Dokument.
+
+### Testpflicht
+
+- **Neu, je Stufe:** ein Test, der beweist, dass der entfernte Weg **nicht mehr
+  erreichbar** ist — nicht nur, dass er abgeschaltet ist.
+- **Neu (Stufe 3b):** jeder Fehlerfall aus IE5 endet im Rückfall ohne Gehirn: ein
+  gesprochener Satz, ein Anruf-Datensatz, kein Turn, kein LLM-Aufruf.
+- **Umgehängt, nicht gelöscht:** jeder Katalog-/Abnahmetest, dessen Messpunkt verschwindet,
+  behält Kennung und Bank und misst dieselbe Zusicherung am überlebenden Pfad.
+- **Bestand:** die Signatur-, Route-Auth-, Budget- und Kostenarten-Tests bleiben nach
+  jeder Stufe grün.
+
+### Risiko + Rückfall
+
+**Hochrisiko, und das grösste der Kette:** hier wird der Rückweg selbst entfernt. Nach
+Stufe 3 gibt es kein System mehr, das ohne den Anbieter ein Gespräch führen kann
+(Pre-Mortem Q1, Q8). Gegenmittel: die Stufen sind getrennt und einzeln revertierbar, jede
+hat ihre eigene Freigabe, Stufe 3 kommt zuletzt und erst nach einer Beobachtungsfrist auf
+dem neuen Pfad, und Stufe 3b liefert den Ersatz im **selben** Commit wie die Entfernung —
+nicht als Folgephase. Rückfall: `git revert` der jeweiligen Stufe; kein Schema, kein
+Datenzustand. Für Stufe 3 ist das der **einzige** Rückweg, und das ist der bewusst
+akzeptierte Preis der Konsolidierung.
+
+### Owner / Testanruf
+
+**Beides zwingend, und für Stufe 3 eine eigene Entscheidung (O9).** Owner: Stufe 1 und 2
+freigeben (zwei abgeschaltete Pfade ersatzlos entfernen), und Stufe 3 gesondert — sie
+akzeptiert die einseitige Anbieter-Abhängigkeit (O11). Testanruf nach **jeder** Stufe: ein
+echter eingehender Anruf, der ankommt und geführt wird.
 
 ---
 
@@ -1183,7 +1645,7 @@ Verbindlich ist `.claude/refs/clean-code.md`; jede Phase wird dagegen auditiert.
    sprachauflösenden Resolver, sondern an `config.telnyx.telnyxElevenLabs.voiceId`. Das
    ist eine Entscheidung mit Begründung im Code (R5: "EINE Stimme im ganzen Call"), keine
    Nachlässigkeit — und es ist gleichzeitig die Qualitätsgrenze des (b)-Pfads
-   (Fussnote (b)-Stimme, O7).
+   (Fussnote (b)-Stimme in 2.5; der Pfad wird in IE6 Stufe 1 entfernt).
    **Auflagen daraus:**
    - Kein neuer Voice-Resolver, kein neuer Env-Schalter für eine Stimme. IP4 pinnt den
      einen Resolver mit einem Test — **für seine zwei echten Konsumenten**, nicht für
@@ -1204,7 +1666,7 @@ Verbindlich ist `.claude/refs/clean-code.md`; jede Phase wird dagegen auditiert.
    ein zweites Mal literal hinschreiben — auch nicht in der Migrationskarte als
    "neuer" Wert; dort steht der neue Wert als Referenz auf die Konstante, nicht als
    Kopie.
-4. **Die Inbound-Pfad-Sonde.** `logInboundPathDecision` ist die eine Sonde je Leg. IP7
+4. **Die Inbound-Pfad-Sonde.** `logInboundPathDecision` ist die eine Sonde je Leg. IE5
    ergänzt einen Grund-Token, **keine** zweite Logzeile für denselben Sachverhalt
    (Lehre `live-cost-tracing-chain-complete`: nie zwei Sachverhalte auf ein Label — und
    nie zwei Labels für einen).
@@ -1220,20 +1682,23 @@ Verbindlich ist `.claude/refs/clean-code.md`; jede Phase wird dagegen auditiert.
   Start-Weg zu bauen. Ein zweiter Weg driftet garantiert an `BASE_ENV` vorbei (Lehre
   `test-base-env-drift`: jede neue Env-Variable gehört in `BASE_ENV`, sonst leckt `.env`
   in Spawn-Tests).
-- Das answered-Ereignis (IP7) wird an der bestehenden Ingest-Naht gelesen, nicht in
-  `routes/voice.js` nachgebaut — Telefonie-Logik läuft über die Ports, nie direkt im
-  Server (Architektur-Regel).
+- Die Übergabe-Direktive (IE5) entsteht in `telephony/directives.js` und im Adapter, nicht
+  als Sonderfall in `routes/voice.js` — Telefonie-Logik läuft über die Ports, nie direkt im
+  Server (Architektur-Regel). Dasselbe gilt für den Geld-Wächter (IE2): er hängt an der
+  Lifecycle-Naht, nicht am Handler.
 
 **Welche Magic Numbers nach `src/config.js` gehören (G25/G35):**
 
 - Nichts aus IP1–IP3: die Umlaut-Korrektur ist ein Wortlaut, die Migrationskarte ist
   kuratierter Produktinhalt (dieselbe Klasse wie `ELEVENLABS_VOICE_ID_BY_PROFILE`, das
   ausdrücklich **kein** Env-Schalter ist, mit Begründung im Modul).
-- IP5: falls eine Modellklasse gewählt wird, bleibt sie `ELEVENLABS_MODEL` in
+- O2: falls eine Modellklasse gewählt wird, bleibt sie `ELEVENLABS_MODEL` in
   `src/config.js` — mit Eintrag in `.env.example` **und** `render.yaml`.
-- IP7: jede Warte-/Fristangabe am answered-Ereignis ist ein konfigurierbarer Wert und
-  gehört nach `src/config.js` mit `min`/`max` (Muster `numEnv`), nie als nackte Zahl in
-  den Handler. Der neue `INBOUND_BUDGET_REASON`-Eintrag ist ein benannter Token, kein
+- IE2: das Wächter-Intervall gehört nach `src/config.js` mit `min`/`max` (Muster `numEnv`),
+  nie als nackte Zahl in den Wächter.
+- IE5: die Zeitgrenze an der Übergabe wird aus der guthaben-abgeleiteten Frist gebildet und
+  gegen die belegten Provider-Grenzen (60–14400 s, B5) geklemmt — mit benannter Konstante,
+  nie als Literal. Jeder neue Rückfallgrund ist ein benannter Token an der einen Sonde, kein
   String-Literal am Verwendungsort.
 
 **Weitere Katalogpunkte, die diese Kette bewusst einhält:**
@@ -1247,11 +1712,14 @@ Verbindlich ist `.claude/refs/clean-code.md`; jede Phase wird dagegen auditiert.
   Importe, der `opts.elevenLabs`-Vertrag und die Registry-Injektion — und der Modulkopf,
   der den Renderer noch als Konsumenten nennt. **Die Abnahme prüft Konsumenten je
   Funktion, nie je Modul**; auf Modulebene sieht jede dieser Funktionen benutzt aus.
-- **G30 (eine Aufgabe pro Funktion):** IP7 berührt `/voice/incoming`, einen Handler, der
-  bereits viel trägt. Neue Logik entsteht als eigene, benannte Funktion (Muster
-  `inboundAssistantHandoffXml`), nicht als weiterer Abschnitt im Handler.
+- **G30 (eine Aufgabe pro Funktion):** IE4 und IE5 berühren `/voice/incoming`, einen
+  Handler, der bereits viel trägt. Neue Logik entsteht als eigene, benannte Funktion —
+  und die Übergabe-Entscheidung als **reines** Prädikat (Muster `inboundHandoffDecision`),
+  nicht als weiterer Abschnitt im Handler. IE6 entfernt Zweige aus demselben Handler; auch
+  das ist eine Aufgabe pro Stufe, nicht drei in einem Commit.
 - **T5/G3 (Grenzen):** jede neue Entscheidung braucht ihren Negativfall als Test —
-  fehlendes Ereignis, leeres Kontingent, unbekanntes Profil, altes Greeting.
+  leeres Kontingent, unbekanntes Profil, gesperrte Geld-Achse **ohne** Turn, Übergabe ohne
+  gerenderten Pflichtsatz, Wiederholung auf ein übergebenes Bein, ungemessene Pflichtmenge.
 - **Kommentare auf Deutsch, OHNE Umlaute im Code.** Dieses Dokument trägt Umlaute; jeder
   Code-Kommentar der Kette nicht. Umgekehrt: **gesprochene** DE-Strings tragen Umlaute
   (Lehre `umlaut-transliteration-root-cause`) — genau das ist IP1.
@@ -1260,30 +1728,60 @@ Verbindlich ist `.claude/refs/clean-code.md`; jede Phase wird dagegen auditiert.
 
 ## 6. Offene Messungen und Owner-Entscheidungen
 
+Nachgezogen auf die EIN-System-Entscheidung. Gestrichene Einträge stehen mit Grund unten,
+damit niemand sie für vergessen hält.
+
 ### Offene Messungen (jede mit dem konkreten nächsten Schritt)
 
-| # | Was offen ist | Nächster Schritt |
-|---|---|---|
-| M1 | Live-Wert von `ELEVENLABS_PLAY_TTS_ENABLED` auf Render. `.env` setzt ihn nicht, `render.yaml` sagt `"false"` — aber die Services sind Dashboard-managed, der Blueprint ist **nicht** die Live-Wahrheit. Damit ist unbelegt, ob Inbound heute Azure oder ElevenLabs spricht. | Render-Dashboard lesen; danach IP2 lokal mit demselben Wert fahren. |
-| M2 | Live-Wert von `ELEVENLABS_OUTBOUND_ENABLED`. Mehrere Kettenstände legen einen live laufenden EL-Outbound nahe; `.env` sagt `false`. Ohne diesen Wert ist selbst "Outbound läuft über ElevenLabs" am Repo nicht belegt. | Render-Dashboard lesen; gegenprüfen am Kostenprofil eines jungen Outbound-Anrufs (`EL_CONVAI_SIP` in der Prod-DB). |
-| M3 | Live-Werte von `TELNYX_AI_ASSISTANT_ENABLED` und `TELNYX_INBOUND_HANDOFF_ENABLED`. Der Config-Kommentar hält fest, dass der Master-Schalter live **auf `true`** stand, während jeder Inbound über die Budget-Engine lief. | Render-Dashboard lesen; **vor** IP7 bestätigen, sonst wird IP7 gegen einen falschen Ausgangszustand gebaut. |
-| M4 | Live-Wert von `tts.model_id` und `tts.voice_id` am Outbound-Agenten, sowie ob die Whitelist `platform_settings.overrides.conversation_config_override.tts.voice_id` live `true` trägt. Ein nicht freigeschaltetes Override-Feld wird vom Anbieter **still ignoriert** (Modulkopf `src/elevenlabs/outbound.js`) — dann spräche Outbound die Dashboard-Stimme, und der Anker aus W1 hielte nur auf dem Papier. | `npm run elevenlabs:drift`; die Kennung selbst nur per Mini-Synthese prüfen, nie per `GET /v1/voices/{id}` (Lehre `el-stimme-pruefen-nur-per-synthese`). Blocker für IP4 und IP5. |
-| M5 | Ob der Owner-Test-Tenant eine **eigene** Begrüssung gesetzt hat. Dann greift `DEFAULT_GREETING` für ihn nicht, und der Umlaut-Befund wäre für seinen Anruf ohne Wirkung (für alle anderen Mandanten bleibt er). | Prod-DB-Schnappschuss von `settings.greeting` (RLS-Gotcha `app.current_tenant` beachten); danach IP1s Nachzieh-Lauf im Trockenlauf fahren. |
-| M6 | Typische (nicht Worst-Case) End-zu-End-Stille eines Inbound-Turns. Belegt ist nur die rechnerische Obergrenze (`turn-budget.js`: 4 Runden, je bis 11250 ms, plus bis 2000 ms Synthese). | IP2 liefert die Marken lokal; der Median am echten Anruf braucht die `src/metrics.js`-Zeilen aus dem Render-Log. |
-| M7 | Der Name und die Zustellform des Telnyx-answered-Ereignisses für einen **Inbound**-Leg. Ein geratener Feldname war hier schon einmal der stille Defekt (`INBOUND_CALL_CONTROL_ID_FIELD`, gemessen statt angenommen). | Vor IP7: einen echten Inbound-Anruf im Telnyx-Portal-Debugger mitlesen und die Schlüsselliste protokollieren — nie aus der Doku übernehmen. |
-| M8 | Ob ein Inbound-Anruf über die Budget-Engine überhaupt eine Telnyx-Aufnahme erzeugt, aus der ein Audio-Sample für eine manuelle Aussprachprüfung zu gewinnen wäre. | Nur relevant, falls IP2s lokale `<Play>`-Datei als Hörbeleg nicht genügt; dann Telnyx-Recordings am Testanruf prüfen. |
-| M9 | Ob der 422-Befund seit dem 2026-08-04 erneut geprüft wurde. Im Repo findet sich keine neuere Messung. | IP7, Punkt 2 — die Messung ist Teil der Phase, nicht ihre Voraussetzung. |
-| M10 | Live-Wert von `TELNYX_ELEVENLABS_VOICE_ID` (und `TELNYX_ELEVENLABS_API_KEY_REF`) — also die **statische** Stimme, die der Assistant-Pfad in jeder Sprache spricht. Lokal setzt `.env` keinen der beiden Schlüssel; damit ist unbelegt, (a) ob der Assistant-Speak-Node live überhaupt ElevenLabs spricht (ohne beide Teile fällt `hasElevenLabsVoice` auf Azure zurück) und (b) ob der Wert zufällig der kuratierten DE-Kennung entspricht. Ohne diese Messung ist "IP7 klingt in DE wie Outbound" eine Vermutung. | Render-Dashboard lesen; danach die live provisionierte Assistant-Ressource per `GET` gegen `voice_settings.voice` gegenprüfen (Regel `provider-config-needs-doc-before-diagnosis`). Blocker für die Abnahme-Erwartung von IP7, nicht für IP7 selbst. |
-| M11 | Farbstand des Katalog-Tests `VOICE-12` vor und nach IP3. Er misst die Sprachauflösung am TeXML-`<Say>`, also an dem Zweig, den IP3 entfernt; sein Umzug auf den Play-TTS-Pfad (IP3, Scope 3) darf keinen Farbwechsel verstecken. Dieses Dokument nennt den Stand **nicht** — er ist in der Befundphase nicht gemessen worden (kein Testlauf). | `npm run test:gates` vor dem ersten IP3-Commit fahren und den Stand im Phasenbericht notieren; danach erneut (Lehre `sec-fix-chain-complete`: Zähler neu messen, nie aus einer Notiz lesen). |
+| # | Was offen ist | Nächster Schritt | Blocker für |
+|---|---|---|---|
+| M1 | Live-Wert von `ELEVENLABS_PLAY_TTS_ENABLED` auf Render. Lokal leer (B13), `render.yaml` sagt `"false"` — aber die Services sind Dashboard-managed, der Blueprint ist **nicht** die Live-Wahrheit. Damit ist unbelegt, ob Inbound heute Azure oder ElevenLabs spricht. | Render-Dashboard lesen; danach IP2 lokal mit demselben Wert fahren. | IP4 |
+| M2 | Live-Wert von `ELEVENLABS_OUTBOUND_ENABLED`. Lokal `false` (B13), mehrere Kettenstände legen einen live laufenden EL-Outbound nahe. Ohne diesen Wert ist selbst "Outbound läuft über ElevenLabs" am Repo nicht belegt — und damit die Prämisse der ganzen Konsolidierung. | Render-Dashboard lesen; gegenprüfen am Kostenprofil eines jungen Outbound-Anrufs (`EL_CONVAI_SIP` in der Prod-DB, RLS-Gotcha `app.current_tenant`). | **die Leitentscheidung selbst** |
+| M4 | Live-Werte von `tts.model_id` und `tts.voice_id` am Agenten, und ob die Whitelist `platform_settings.overrides.conversation_config_override` die Felder trägt, die wir brauchen. Der Live-Audit dieses Laufs fand **an**: `tts.voice_id`, `agent.first_message`, `agent.language`; **aus**: `agent.prompt.*`, `conversation.max_duration_seconds`, `tts.model_id`. Ein nicht freigeschaltetes Feld wird **still** ignoriert. | `npm run elevenlabs:drift` plus `GET /v1/convai/agents/{id}`; die Stimm-Kennung nur per Mini-Synthese prüfen, nie per `GET /v1/voices/{id}` (Lehre `el-stimme-pruefen-nur-per-synthese`). | IP4, IE5 |
+| M5 | Ob der At-Rest-Nachzug aus IP1 (`scripts/greeting-orthografie-nachziehen.mjs --apply`) gegen die Produktions-DB gelaufen ist. Der Anrufweg ist über `greetingForLanguage` gedeckt, die gespeicherten Werte sind es nicht. | Trockenlauf gegen die Prod-DB, dann `--apply`; **Achtung** Lehre `pg-store-holds-state-in-memory`: der pg-Store hält Zustand im Speicher, ein Schreibweg braucht einen Neustart. | — (Hygiene) |
+| M6 | Typische End-zu-End-Stille eines Inbound-Turns **heute** (der Vorher-Wert für IE5). Belegt ist nur die rechnerische Obergrenze. | IP2 liefert die Marken lokal; der Median am echten Anruf braucht die `src/metrics.js`-Zeilen aus dem Render-Log. | IE5 (Vergleichswert) |
+| M10 | Live-Wert von `TELNYX_ELEVENLABS_VOICE_ID` und `TELNYX_ELEVENLABS_API_KEY_REF` (lokal beide leer, B13). Jetzt **nur noch** relevant für IE6 Stufe 1: ob die statische Plattform-Stimme irgendwo live in Gebrauch ist, bevor ihr Config-Block zurückgeschnitten wird. | Render-Dashboard lesen; die live provisionierte Assistant-Ressource per `GET` gegen `voice_settings.voice` gegenprüfen. | IE6 Stufe 1 |
+| M11 | Farbstand des Katalog-Tests `VOICE-12` vor und nach IP3 (der Messpunkt zieht auf den Play-TTS-Pfad um). In der Befundphase nicht gemessen. | `npm run test:gates` vor dem ersten IP3-Commit fahren, Stand im Phasenbericht notieren, danach erneut (Lehre `sec-fix-chain-complete`: Zähler neu messen, nie aus einer Notiz lesen). | IP3 |
+| M12 | **Die Prämisse von K1:** wie ElevenLabs einen ankommenden INVITE einem Agenten zuordnet. Die URI-Form ist belegt (B1), die Zuordnungslogik **nicht** (B4). | IE1/F-A: echter Anruf an `sip:+<Test-DID>@sip.rtc.elevenlabs.io:5060`, mit dem bekannten Agenten als Positiv-Kontrolle. | **IE5** |
+| M13 | Auf welchem Weg eigene `X-`Header wirklich mitreisen: TeXML-`<Sip>` (nicht dokumentiert, B5) oder Call-Control-`dial` mit `custom_headers` (dokumentiert). Entscheidet die Bauform von IE5. | IE1/F-B, beide Formen an einem echten Anruf. | IE5 |
+| M14 | Ob der Elternbein-Griff (`callControlId`/`providerCallSid`) während der SIP-Brücke noch einen Hangup trägt — und ob `<Dial timeLimit>` (60–14400 s, B5) die Brücke zuverlässig beendet. **Mindestens einer** muss belegt sein, sonst ist S5 verloren. | IE1/F-C, inklusive Negativfall (Hangup-Versuch während der Brücke, `timeLimit` an der Untergrenze). | **IE5, Abbruchbedingung** |
+| M15 | Ob der Dial ein zweites, separat abgerechnetes Telnyx-Bein erzeugt, und unter welchem `record_type` es in `detail_records` erscheint. Liefert die Trägerliste und die Pflichtmenge. | IE1/F-D, danach die Pflichtmengen-Messung mit Positiv-Kontrolle. | IE3 |
+| M16 | Ob dieselbe Nummer `inbound_trunk_config` **und** `outbound_trunk_config` tragen kann, ohne die gemessene `outbound_trunk`-Projektion zu verlieren. | IE1/F-E, an einer **Testnummer**, nie an der produktiven DID (Pre-Mortem Q5). | IE5 |
+| M17 | Ob Sprache und Stimme unter K1 **pro Anruf** setzbar sind. Belegt ist nur der Variablen-Kanal (B3); Overrides reisen über SIP-Header **nicht**. Ohne diese Messung ist "FR-/EN-Inbound klingt wie Outbound" eine Vermutung. | IE1/F-B plus ein Testanruf je freigeschalteter Sprache; sonst greift die Auslösebedingung aus 2.4. | IE5, Abnahme-Erwartung |
+| M18 | Ob unser Tarif den Monitoring-WebSocket (`{"command_type":"end_call"}`) überhaupt umfasst — die Doku nennt ihn **enterprise-only** (B6). Für K1 irrelevant (unser Griff ist der Telnyx-Griff), für K2 und für jede spätere K3-Wiederaufnahme entscheidend. | Beim Anbieter erfragen; ohne Zusage bleibt es kein Kappweg. | K2-Rückfall, K3-Wiederaufnahme |
+| M19 | Der Live-Audit dieses Laufs fand am Agenten eine Stimm-Kennung, die **nicht** der kuratierten DE-Kennung aus `ELEVENLABS_VOICE_ID_BY_PROFILE` entspricht. Versehen, Teststand oder Absicht? Solange das offen ist, ist "eine Stimme in beiden Richtungen" am Live-Agenten unbelegt. | `GET` am Agenten plus Mini-Synthese; Owner entscheidet, welche Kennung gilt (O12). | IP4, IE5 |
+| M20 | Am Live-Agenten steht `enable_conversation_initiation_client_data_from_webhook` auf `false`, und **eine von vier** verknüpften Nummern trägt bereits ein vollständiges `inbound_trunk`-Objekt. Überbleibsel eines frühen Versuchs oder absichtlich vorbereitet? Eine scharfe Inbound-Freigabe an einer produktiven Nummer wäre der K3-Bypass **ohne** Entscheidung. | Snapshot der vier Nummern lesen, mit Telnyx-Seite abgleichen (zeigt die DID dort auf EL?), und aufräumen, was nicht gewollt ist. | **sofort** (Sicherheitslage) |
+| M21 | Was sich am Anbieter ändern müsste, damit K3 je zulässig wäre: HMAC-Signatur (oder gleichwertig) am Initiations-Webhook, ein dokumentiertes Reject-Feld, und ein nicht-enterprise Kappweg. Solange eines fehlt, bleibt K3 ausgeschieden. | Beobachten, nicht bauen; bei einer Anbieter-Änderung neu prüfen. | — |
+| M22 | Ob TeXML eine Aufnahme-Form trägt, mit der der Rückfall ohne Gehirn (IE6 Stufe 3b) eine Nachricht **aufnehmen** könnte, statt nur zu sprechen. Ungemessen, kein Feldname geraten. | Nach IE6 Stufe 3 messen; bis dahin ist der Rückfall Satz + Auflegen. | — |
 
-### Owner-Entscheidungen (Kette steht ohne sie)
+**Gestrichen, mit Grund:** M3 (Live-Werte der Assistant-Schalter) — die Schalter werden in
+IE6 Stufe 1 **entfernt**; der einzige noch nötige Teil ist M10. M7 (Name des
+Telnyx-`answered`-Ereignisses) und M9 (Nachprüfung des 422) — sie waren Voraussetzungen
+von IP7, und IP7 entfällt vollständig (Abschnitt 4.1). M8 (Telnyx-Aufnahme als Hörbeleg) —
+IP2 liefert den Hörbeleg lokal und billiger; wird nur relevant, falls IP2s Datei nicht
+genügt.
+
+### Owner-Entscheidungen
+
+Die Kette steht ohne sie: IP2, IP3, IE1, IE2, IE3 und IE4 brauchen keine dieser
+Entscheidungen. Sie werden gebraucht für IP4, IE5 und IE6.
 
 | # | Entscheidung | Warum sie nicht delegierbar ist |
 |---|---|---|
-| O1 | **`ELEVENLABS_PLAY_TTS_ENABLED` live auf `true`** (IP4). | Es kostet ElevenLabs-Zeichen auf einem Plattform-Konto ohne per-Tenant-Metering — eine Geldentscheidung. Rückweg ist ein Dashboard-Flip. |
-| O2 | **Modellklasse: gleich oder bewusst verschieden** (IP5), und falls gleich: Push in die Live-Konfiguration des Outbound-Agenten. | Klang gegen Latenz ist eine Produktentscheidung, und der Push wirkt sofort auf Outbound, den heute niemand beklagt. |
-| O3 | **Den Assistant-Inbound-Pfad scharfstellen** (IP7) und die dokumentierte Verdreifachung der Inbound-Minute (~5 US-Cent gegen 1,87) erneut bestätigen. Die Zustimmung vom 2026-08-04 bezog sich auf einen Pfad, der danach zurückgenommen wurde. | Reine Kostenentscheidung mit Live-Wirkung auf echte Anrufer. |
-| O4 | **Bleibt das Richtungs-Gate für `get_consult`/`look_up`?** Heute bekommt ein Inbound-Anrufer nie eine echte Antwort auf eine Frage, die nur der Auftraggeber weiss — mit ausdrücklicher Sicherheitsbegründung im Code. Das ist ein Fähigkeits-Delta, kein Bug. | Eine Lockerung wäre eine neue Datenfluss-Entscheidung (Rückfrage beim Auftraggeber wegen eines fremden Anrufers; Suchanfrage nach aussen aus einem fremden Gespräch). Nicht ohne Owner, und dann als eigene Kette mit `PLAN-SECURITY.md`-Eintrag. |
-| O5 | **Braucht Inbound Spracherkennung im Gespräch?** Ruft jemand in einer anderen Sprache an als am Tenant/an der Nummer hinterlegt, bleibt der Agent den **ganzen** Anruf in der falschen Sprache (`resolveCallLanguage`, einmalig vor dem ersten Wort). Outbound hat dafür ein Anbieter-Werkzeug. | Grosser Aufwand, und die reale Häufigkeit ist unbekannt (M-Frage ohne Messgrundlage). Bewusst **keine** Phase dieser Kette — IP6 schafft mit einem Szenario erst die Messgrundlage. |
-| O6 | **Der ElevenLabs-Agent für Inbound: dauerhaft nein, oder später über unseren Webhook?** Diese Kette verwirft nur den `inbound_trunk_config`-Weg (Gate-Umgehung). Die Variante "unser Webhook nimmt an, rendert den Pflichtsatz, übergibt dann" bleibt denkbar — mechanisch ist sie IP7 mit anderem Ziel. | Sie berührt Absolute Regel 1 und 2 und ist deshalb per Definition eine Owner-Entscheidung, keine Architekturwahl eines Implementierers. |
-| O7 | **Soll der Telnyx-AI-Assistant-Pfad die Stimme pro Sprache auflösen?** Heute spricht er eine statische Plattform-Stimme in jeder Sprache — bewusst, weil die Assistant-Ressource **ein** global provisioniertes Voice-Setting hat und ein sprachaufgelöster Speak-Node davor denselben Anruf in zwei Stimmen sprechen liesse (RCA-Wurzel R5, gepinnt in `test/telnyx-call-control.test.js`). Damit gilt: auch mit scharfem IP7 klingt ein FR-/EN-Inbound-Anruf **nicht** wie der entsprechende Outbound-Anruf. | Es wäre eine neue Fähigkeit (Per-Call-Voice-Override am Assistant oder eine Assistant-Ressource je Sprache), ein Eingriff in die Live-Provisionierung und die Rücknahme einer dokumentierten RCA-Entscheidung. Bewusst **keine** Phase dieser Kette; sinnvoll erst, wenn IP7 überhaupt live ist und M10 den Ist-Wert kennt. |
+| O1 | **`ELEVENLABS_PLAY_TTS_ENABLED` live auf `true`** (IP4). Auf dem neuen Weg ist das nicht mehr Komfort, sondern die Bedingung dafür, dass der Anrufer **eine** Stimme hört statt zwei in einem Anruf. | Es kostet ElevenLabs-Zeichen auf einem Plattform-Konto ohne per-Tenant-Metering — eine Geldentscheidung. Rückweg ist ein Dashboard-Flip. |
+| O2 | **Mit welchem TTS-Modell unser eine gerenderte Satz synthetisiert wird**, gemessen gegen das Modell des Agenten (M4). Gleich = kohärent, aber evtl. langsamer; verschieden = hörbarer Bruch genau an der Übergabe. | Klang gegen Latenz an der rechtlich verdrahteten Stelle des Anrufs. Ein Push in die Agenten-Konfiguration wirkt sofort auf Outbound, den heute niemand beklagt. |
+| O4 | **Bleibt das Richtungs-Gate für `get_consult`/`look_up`?** Nach der Konsolidierung ist es derselbe Agent in beiden Richtungen — die Sperre bleibt trotzdem, weil sie **unsere** Sicherung an **unserem** Werkzeug-Webhook ist (B9). Die Frage ist damit unverändert offen, aber nicht mehr durch die Architektur beantwortet. | Eine Lockerung wäre eine neue Datenfluss-Entscheidung (Rückfrage beim Auftraggeber wegen eines fremden Anrufers; Suchanfrage nach aussen aus einem fremden Gespräch). Nicht ohne Owner, und dann als eigene Kette mit `PLAN-SECURITY.md`-Eintrag. |
+| O5 | **Braucht Inbound Spracherkennung im Gespräch?** Diese Frage **entspannt sich** durch die Konsolidierung: der EL-Agent hat `language_detection` als eigenes Werkzeug, das Outbound heute nutzt. Ob es für Inbound freigegeben wird, bleibt eine Entscheidung — aber sie ist danach ein Schalter am Agenten, kein Umbau. | Sie ändert, was der Agent während eines Anrufs mit einem fremden Anrufer tut. Bewusst **keine** Phase dieser Kette. |
+| O8 | **Den Telnyx-AI-Assistant-Pfad ersatzlos entfernen** (IE6 Stufe 1), statt ihn wie in der alten Kette scharfzustellen. Damit fällt auch die dort vorgesehene Bestätigung der dreifachen Inbound-Kosten weg — sie wird nicht mehr gebraucht. | Es ist die Rücknahme einer früheren Richtungsentscheidung und die Löschung gebauter Arbeit. Das entscheidet niemand nebenbei. |
+| O9 | **Die Gesprächslogik der Budget-Engine entfernen** (IE6 Stufe 3) — die eigentliche Konsolidierung. Danach gibt es kein System mehr, das ohne den Anbieter ein Gespräch führen kann; der Ersatz ist ein Rückfall **ohne Gehirn** (Satz + Auflegen + Postfach). | Es entfernt den Rückweg selbst. Ein Plan, der "eine Wahrheit" und "ein zweites System als Versicherung" gleichzeitig verspricht, lügt — die Wahl zwischen beidem ist die Owner-Entscheidung dieser Kette. |
+| O10 | **Den Inbound-Schalter aus IE5 scharfstellen** und die Kosten pro Inbound-Minute akzeptieren: gemessen ~14–16 US-Cent/min auf dem EL-Weg gegen 1,87 auf der Budget-Engine, und "Turns statt Sekunden" macht daraus einen Mittelwert, keinen Deckel. | Reine Kostenentscheidung mit Live-Wirkung auf echte Anrufer, an einer Achse, die um Faktor 8 springt. |
+| O11 | **Die einseitige Anbieter-Abhängigkeit akzeptieren** (Pre-Mortem Q8): nach der Konsolidierung kappt ein leeres EL-Konto oder eine Schnittstellen-Änderung **beide** Richtungen. Heute überlebt Inbound einen EL-Ausfall, weil es ein eigenes Gehirn hat. | Das ist der Preis für eine Wahrheit, und er trifft die Verfügbarkeit des Produkts. Er gehört ausdrücklich bezahlt oder ausdrücklich abgelehnt — nicht in einer Phase versteckt. |
+| O12 | **Welche Stimm-Kennung gilt** (M19): die kuratierte DE-Kennung aus `ELEVENLABS_VOICE_ID_BY_PROFILE` oder die am Live-Agenten gesetzte, abweichende. Solange das offen ist, ist "eine Stimme in beiden Richtungen" nicht belegt. | Die kuratierten Kennungen sind eine Owner-Entscheidung vom 2026-08-18, per Synthese abgehört. Eine Abweichung am Live-Agenten überstimmt sie faktisch — das muss gewollt sein oder korrigiert werden. |
+
+**Gestrichen, mit Grund:** O3 (Assistant-Inbound scharfstellen und die Verdreifachung
+bestätigen) — ersetzt durch O8: der Pfad wird entfernt, nicht scharfgestellt. O6 (EL für
+Inbound: dauerhaft nein, oder später über unseren Webhook?) — **entschieden**: ja, und
+zwar genau in der Variante, die die Naht behält (K1, Abschnitt 2.4); der
+`inbound_trunk_config`-Bypass bleibt ausgeschieden (K3, Abschnitt 2.3). O7 (soll der
+Assistant-Pfad die Stimme pro Sprache auflösen?) — gegenstandslos, der Pfad wird
+entfernt.
