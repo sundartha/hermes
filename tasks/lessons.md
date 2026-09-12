@@ -1002,3 +1002,35 @@ ist nicht "besteht der Test", sondern "startet der Live-Dienst mit der ECHTEN Ko
 noch". Das heisst: Katalog-Slugs zaehlen, Env-Werte gegenpruefen, und was sich lokal nicht
 belegen laesst, ausdruecklich als Vor-dem-Deploy-Schritt melden statt es als geprueft
 auszugeben.
+
+## 2026-09-12 — Aufraeum-Lauf: zwei Werkzeugfallen, eine Pruef-Falle
+
+Beim Entfernen von 109 Prozessdateien sind drei Fehler passiert, alle derselben Bauart:
+ein Befehl, der still das Falsche tat, statt zu scheitern.
+
+**1. zsh trennt Wortlisten anders als bash — asymmetrisch.** Eine unquotierte
+Parameter-Expansion (`for k in $KEEP`) wird in zsh NICHT in Woerter zerlegt, eine
+Kommando-Substitution (`for w in $(git worktree list ...)`) dagegen SCHON — inklusive
+Trennung an Leerzeichen IN Pfaden. Folge hier: eine Schutzliste blieb wirkungslos und
+loeschte 8 Dateien mit, die bleiben sollten; und ein Pfad mit Leerzeichen
+("Mein Unternehmen") wurde in zwei kaputte Pfade zerlegt. Beide Male meldete die Schleife
+Erfolg bzw. plausible Fehler, nie "deine Liste ist leer".
+**Regel:** Listen ueber eine Datei und `while IFS= read -r`, nie ueber `$VAR` oder `$(...)`
+in einer `for`-Schleife. Und nach jeder Schutzliste EINMAL nachzaehlen, ob die geschuetzten
+Eintraege noch da sind.
+
+**2. Ein Suchmuster ohne Positiv-Kontrolle sieht aus wie ein sauberes Ergebnis.** Die
+Vorpruefung "welche geloeschte Datei wird von Code gelesen?" suchte nach
+`readFile|existsSync|join|resolve|import|require` in derselben Zeile wie der Pfad. Der
+echte Zugriff lief ueber `new URL("../tasks/spike1-messung.jsonl", import.meta.url)` —
+nicht im Muster. Die Pruefung meldete EINEN Treffer, was wie Gruendlichkeit aussah. Erst
+die Testbank fand es (ENOENT, 8 Faelle).
+**Regel:** Ein Suchbefehl, der etwas ausschliessen soll, braucht einen bekannten Treffer
+als Gegenprobe. Findet er den nicht, ist sein "nichts gefunden" wertlos. Besser noch:
+nicht suchen, sondern die Bank fahren — sie kennt die Zugriffe, das Muster nicht.
+
+**3. Die Bank ohne `NODE_ENV=test` fahren erzeugt 194 Phantom-Rote.** Direkt
+`node test/testbaenke-run.mjs regression` aufgerufen: 200 rot. Ueber `npm test` (das
+`NODE_ENV=test` setzt): 6 rot, davon 3 bekannte Parallel-Flaker und 1 echter Fund.
+**Regel:** Die Bank IMMER ueber `npm test` fahren, nie den Runner direkt. Und: ein roter
+Fall zaehlt erst, wenn er ISOLIERT rot ist (Bestandsregel, hier dreimal bestaetigt).
