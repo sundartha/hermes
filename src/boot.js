@@ -1301,6 +1301,15 @@ export async function bootServer({
   // OT-4). Kein Gate danach darf mehr process.exit(1) rufen.
   lifecycle.rearmActiveCallTimers();
 
+  // IE2: dieselbe Boot-Naht fuer die GELD-Achse. Der Cap-Re-Arm darueber deckt ein
+  // ueberlebendes Leg gegen die ZEIT, dieser gegen das GUTHABEN - B8: ohne wiederkehrende
+  // Frage wirkt die pro-Tenant-Decke mid-call nur, wenn ein Turn oder ein Werkzeug feuert.
+  // UNMITTELBAR NACH dem Cap-Re-Arm und aus DESSEN Ergebnis: dessen Zombie-Zweig setzt den
+  // Endstatus synchron (persistEnd laeuft vor dem ersten await in terminateAndBillCall), der
+  // Schnappschuss traegt also nur noch Zeilen, die wirklich weiterlaufen. Setzt
+  // ausschliesslich Timer - INV-5 (kein exit(1) nach dem Re-Arm) bleibt unberuehrt.
+  lifecycle.rearmBudgetWatchdogs();
+
   // Zweite Achse desselben Boot-Problems: der Cap-Re-Arm darueber deckt ein ueberlebendes
   // Leg mit Groessenordnung MAX_CALL_DURATION_CAP_S, die Dead-Air-Frist des Gespraechs-
   // Waechters mit Groessenordnung 45 s - dessen Timer nimmt ein Deploy genauso mit, und

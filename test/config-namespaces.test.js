@@ -22,7 +22,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // OUTBOUND-E4: outboundAniGateEnabled + outboundAniGateMaxAgeMs ergaenzt (der ANI-Riegel,
   // Default aus) -> 13.
   // SEC-P3: csrfEnforce ergaenzt (Herkunftspruefung der Self-Service-Schreibrouten) -> 14.
-  safety: 14,
+  // IE2: budgetWatchdogIntervalMs ergaenzt (Takt des Geld-Waechters) -> 15.
+  safety: 15,
   // P6 (Budget-Achsen, Fruehwarnung): platformSpendWarnPercent + platformAlertSmsTo
   // ergaenzt (Fruehwarn-Schwelle + Betreiber-SMS-Ziel) -> 17 statt 15.
   // P7 (Budget-Achsen, Der Flip): budgetMonthEnabled ergaenzt (Spend-Monat-Flag) -> 18.
@@ -179,7 +180,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // GP-P3: provisioningRetryMaxAttempts (provisioning) ergaenzt -> 189.
 // GP-P4: provisioningRetryMinIntervalMs (provisioning) ergaenzt -> 190.
 // GP-P6: priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter (billing) ergaenzt -> 192.
-const EXPECTED_TOTAL_KEYS = 192;
+// IE2: budgetWatchdogIntervalMs (safety) ergaenzt -> 193.
+const EXPECTED_TOTAL_KEYS = 193;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -333,7 +335,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // GP-P3: provisioningRetryMaxAttempts ist primitiv (Zahl, kein Array/nested Objekt) -> 177.
   // GP-P4: provisioningRetryMinIntervalMs ist ebenfalls primitiv (Zahl) -> 178.
   // GP-P6: priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter sind primitiv (Zahlen) -> 180.
-  const EXPECTED_PRIMITIVE_LEAVES = 180;
+  // IE2: budgetWatchdogIntervalMs ist primitiv (Zahl, kein Array/nested Objekt) -> 181.
+  const EXPECTED_PRIMITIVE_LEAVES = 181;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

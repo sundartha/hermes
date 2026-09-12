@@ -187,3 +187,24 @@ test("IP3: TELNYX_INBOUND_HANDOFF_ENABLED sagt in src/config.js, .env.example un
   assert.equal(readEnvValue(envExample, name), String(INBOUND_HANDOFF_SHIPPED_DEFAULT), ".env.example");
   assert.equal(readRenderValue(renderYaml, name), String(INBOUND_HANDOFF_SHIPPED_DEFAULT), "render.yaml");
 });
+
+// IE2: derselbe Riegel eine Zeile darueber, fuer den Takt der Geld-Wache. Die Zahl IST die
+// bewusst akzeptierte Ueberziehung zwischen zwei Runden (hoechstens ein Takt Gespraechszeit
+// je laufendem Leg) - liefe render.yaml auseinander, waere im Betrieb eine andere
+// Ueberziehung scharf als die dokumentierte und begruendete. Dieselben drei Leser wie oben
+// (G5 statt einer vierten Kopie).
+const BUDGET_WATCHDOG_SHIPPED_MS = 15000;
+
+test("IE2: BUDGET_WATCHDOG_INTERVAL_MS sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
+  const name = "BUDGET_WATCHDOG_INTERVAL_MS";
+  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
+  const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
+  assert.equal(
+    readCodeFallback(configSrc, name),
+    BUDGET_WATCHDOG_SHIPPED_MS,
+    "src/config.js numEnv-Fallback",
+  );
+  assert.equal(Number(readEnvValue(envExample, name)), BUDGET_WATCHDOG_SHIPPED_MS, ".env.example");
+  assert.equal(Number(readRenderValue(renderYaml, name)), BUDGET_WATCHDOG_SHIPPED_MS, "render.yaml");
+});

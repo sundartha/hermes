@@ -1016,14 +1016,6 @@
       "count": 1
     }
   },
-  "src/telephony/call-lifecycle.js": {
-    "id-length": {
-      "count": 2
-    },
-    "max-lines-per-function": {
-      "count": 1
-    }
-  },
   "src/telephony/call-termination.js": {
     "id-length": {
       "count": 2
