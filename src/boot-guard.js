@@ -776,16 +776,19 @@ export function costTruingBookingFindings({
   return findings;
 }
 
-// KV-P7/KV2-2: DREI latente Kosten-Pfade. Die ersten zwei bleiben WARN (kein exit(1) -
+// KV-P7/KV2-2: VIER latente Kosten-Pfade. Die ersten zwei bleiben WARN (kein exit(1) -
 // ein Guard, der den Boot in einer Konfiguration verweigert, an die niemand gedacht hat,
 // waere ein selbst verursachter Telefonie-Totalausfall, Praezedenz warnUnpricedModels);
 // Klaerung s. tasks/kv-p7-tts-klaerung.md. Der dritte (KV2-2 (h), Owner-Entscheidung 9+13
 // vom 2026-08-30) ist FATAL - dasselbe Muster wie REQUIRED_TYPES_EMPTY: ein Dienst, der
 // den Kostenpfad seines aktiven Anrufwegs nicht kennt, darf nicht starten.
+// Der vierte (IE3) ist ebenfalls FATAL und derselbe Sachverhalt in neuer Richtung: ein
+// Anrufweg, dessen Kostenpfad keinen Einsammler hat, darf nicht scharf sein.
 export const LATENT_COST_PATH_FINDING = Object.freeze({
   PLAY_TTS_UNPRICED: "play_tts_unpriced", // WARN
   REALTIME_NO_MIDCALL_BUDGET: "realtime_no_midcall_budget", // WARN
   REALTIME_CARRIER_UNCOLLECTED: "realtime_carrier_uncollected", // FATAL (KV2-2 (h))
+  EL_INBOUND_CARRIER_UNCOLLECTED: "el_inbound_carrier_uncollected", // FATAL (IE3)
 });
 
 // Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster alertChannelFindings).
@@ -797,6 +800,8 @@ export function latentCostPathFindings({
   realtimeEngineSelected,
   realtimeMidCallBudgetCheck,
   realtimeCarrierHasCollector,
+  elInboundEnabled,
+  elInboundCarrierHasCollector,
 }) {
   const findings = [];
   if (playTtsEnabled) {
@@ -844,6 +849,25 @@ export function latentCostPathFindings({
         "Beleg-Einsammler (src/billing/kostenarten.js) - jede Realtime-Sitzung erzeugt " +
         "Anbieterkosten, die in keinem Buch und auf keiner Gate-Achse landen. " +
         "Handlung: VOICE_ENGINE=budget setzen, oder erst den Einsammler bauen.",
+    });
+  }
+  // IE3: derselbe Riegel wie REALTIME_CARRIER_UNCOLLECTED darueber, fuer den neuen
+  // Inbound-Weg (unser Bein, Gespraech beim EL-Agenten). Er haengt am KOSTENPFAD, nicht
+  // am Schalternamen: sobald das Profil telnyx_inbound_el_convai mindestens einen
+  // Pflicht-Traeger MIT Einsammler fuehrt, verschwindet er von selbst - und wenn jemand
+  // die Katalogzeile entfernt oder ihre Traeger auf nicht_belegpflichtig setzt, startet
+  // der Prozess mit scharfem Schalter nicht mehr.
+  if (elInboundEnabled && !elInboundCarrierHasCollector) {
+    findings.push({
+      code: LATENT_COST_PATH_FINDING.EL_INBOUND_CARRIER_UNCOLLECTED,
+      fatal: true,
+      message:
+        "ELEVENLABS_INBOUND_ENABLED=true, aber das Kostenprofil telnyx_inbound_el_convai " +
+        "fuehrt keinen Kostentraeger mit Beleg-Einsammler (src/billing/kostenarten.js) - " +
+        "jeder eingehende Anruf auf diesem Weg erzeugt Anbieterkosten (das " +
+        "ElevenLabs-Gespraech UND unser Telnyx-Bein), die in keinem Buch und auf keiner " +
+        "Gate-Achse landen. Handlung: ELEVENLABS_INBOUND_ENABLED=false setzen, oder erst " +
+        "die Katalogzeile mit Einsammler bauen.",
     });
   }
   return findings;

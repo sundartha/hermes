@@ -188,6 +188,26 @@ test("IP3: TELNYX_INBOUND_HANDOFF_ENABLED sagt in src/config.js, .env.example un
   assert.equal(readRenderValue(renderYaml, name), String(INBOUND_HANDOFF_SHIPPED_DEFAULT), "render.yaml");
 });
 
+// IE3: derselbe Riegel fuer den neuen Inbound-Weichenschalter. Er hat bis IE5 KEINEN
+// Verbraucher im Sprechpfad - genau deshalb ist ein auseinanderlaufender Blueprint hier
+// gefaehrlich: ein Reapply koennte den Weg scharf stellen, bevor jemand ihn bewusst
+// scharf stellt. Dieselben drei Leser wie oben (G5 statt einer vierten Kopie).
+const EL_INBOUND_SHIPPED_DEFAULT = false;
+
+test("IE3-7: ELEVENLABS_INBOUND_ENABLED sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
+  const name = "ELEVENLABS_INBOUND_ENABLED";
+  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
+  const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
+  const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
+  assert.equal(
+    readBoolCodeFallback(configSrc, name),
+    EL_INBOUND_SHIPPED_DEFAULT,
+    "src/config.js boolEnv-Fallback",
+  );
+  assert.equal(readEnvValue(envExample, name), String(EL_INBOUND_SHIPPED_DEFAULT), ".env.example");
+  assert.equal(readRenderValue(renderYaml, name), String(EL_INBOUND_SHIPPED_DEFAULT), "render.yaml");
+});
+
 // IE2: derselbe Riegel eine Zeile darueber, fuer den Takt der Geld-Wache. Die Zahl IST die
 // bewusst akzeptierte Ueberziehung zwischen zwei Runden (hoechstens ein Takt Gespraechszeit
 // je laufendem Leg) - liefe render.yaml auseinander, waere im Betrieb eine andere

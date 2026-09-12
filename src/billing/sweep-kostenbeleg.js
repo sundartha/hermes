@@ -46,6 +46,14 @@ const TELNYX_CALL_RECORDS_PROFILE = new Set([
   KOSTENPROFIL.TELNYX_BUDGET,
   KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
   KOSTENPROFIL.TELNYX_INBOUND_REALTIME,
+  // IE3: der neue Inbound-Weg fuehrt telnyx_call_records mit Einsammler KV2-5g
+  // (kostenarten.js). Ohne diesen Eintrag liefert sweepTraegerFuerProfil null, die Zeile
+  // wird NIE geschrieben, offeneTraeger bleibt fuer immer nicht-leer - und die Registry
+  // behauptete einen Einsammler, den es nicht gibt. Diese Liste ist bewusst explizit
+  // (keine Ableitung: die Praezedenz "telnyx_sip ODER telnyx_call_records, nie beide" ist
+  // eine Entscheidung, kein Nebeneffekt) - und sie ist gegen die Registry gepinnt
+  // (test/ie3-inbound-el-kostenprofil.test.js).
+  KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
 ]);
 
 export function sweepTraegerFuerProfil(profil) {
