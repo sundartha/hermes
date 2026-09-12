@@ -14,6 +14,7 @@
     "scripts/call-abandon-rate.mjs",
     "scripts/deepseek-b1-messung.mjs",
     "scripts/erase-tenant.js",
+    "scripts/greeting-orthografie-nachziehen.mjs",
     "scripts/prod-read.mjs",
     "scripts/set-public-url.js",
     "scripts/smoke-stripe-payment.mjs",
