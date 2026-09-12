@@ -1,6 +1,14 @@
-// Telnyx-Adapter: EINE Quelle fuer das ElevenLabs-Voice-Format und das Vollstaendigkeits-
-// Gate der Plattform-Stimme. Genutzt vom TeXML-Renderer (render.js), vom Call-Control-
-// speak (voice.js) und vom Assistant-Provisioner (scripts/) - kein Wert-Duplikat (G5/S2).
+// Telnyx-Adapter: EINE Quelle fuer das ElevenLabs-Voice-Namensformat, die Sprach-
+// Aufloesung der Stimm-ID und das Vollstaendigkeits-Gate der Plattform-Stimme - kein
+// Wert-Duplikat (G5/S2). Konsumenten JE FUNKTION (der TeXML-Renderer ist seit IP3 keiner
+// mehr: mit dem ElevenLabs-Relay-Zweig am <Say> ist auch die sprachaufgeloeste
+// Namens-Komposition entfallen, die dort davor sass):
+//   elevenLabsVoiceIdFor -> src/elevenlabs/call-locale.js (Outbound-Anrufstart) und
+//                           src/tts/directive-synth.js (Play-TTS-Vorabsynthese)
+//   elevenLabsVoiceName  -> adapters/telnyx/voice.js (Call-Control-speak) und
+//                           scripts/telnyx-assistant-provision.mjs - beide BEWUSST ohne
+//                           Sprach-Aufloesung (RCA-Wurzel R5: EINE Stimme im ganzen Call)
+//   hasElevenLabsVoice   -> adapters/telnyx/voice.js (speak + assistantVoiceConfigured)
 // Rein: kein IO, kein config-Import (der Aufrufer reicht die Registry-Werte herein).
 import { VOICE_PROFILE } from "../../directives.js";
 
@@ -45,17 +53,11 @@ export function elevenLabsVoiceName(el) {
 }
 
 // Sprach-aufgeloeste rohe Voice-ID: Profil mit eigener Stimme -> diese, sonst die
-// injizierte Plattform-Stimme (DE). EINE Aufloesungsstelle fuer beide Konsumenten
-// (Renderer-Voice-Name unten UND der Play-TTS-Vorabsynthese-Pfad in src/tts/*, der
-// dieselbe Aufloesung braucht statt einer zweiten globalen Stimme, G5/S2).
+// injizierte Plattform-Stimme. EINE Aufloesungsstelle fuer ihre beiden Konsumenten - die
+// Play-TTS-Vorabsynthese (src/tts/directive-synth.js) und den Outbound-Anrufstart
+// (src/elevenlabs/call-locale.js) - statt einer zweiten globalen Stimme daneben (G5/S2).
 export function elevenLabsVoiceIdFor(defaultVoiceId, voiceProfile) {
   return ELEVENLABS_VOICE_ID_BY_PROFILE[voiceProfile] || defaultVoiceId;
-}
-
-// Sprach-aufgeloester Voice-Name: Komposition aus der ID-Aufloesung + Namensformat
-// (kein zweiter Formatierungs- oder Aufloesungsort, G5).
-export function elevenLabsVoiceNameFor(el, voiceProfile) {
-  return elevenLabsVoiceName({ model: el.model, voiceId: elevenLabsVoiceIdFor(el.voiceId, voiceProfile) });
 }
 
 // Fail-SAFE-Gate (kein Programmierfehler, anders als das werfende voiceAttrs): eine halbe/

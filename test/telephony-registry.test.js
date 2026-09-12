@@ -54,18 +54,14 @@ test("pick liefert die exakte Adapter-Instanz je Provider", () => {
   // STT-A1: der Renderer ist hinter einem Lazy-Arrow registriert (config-Bindung an der
   // Kompositionsstelle, P15) - Referenz-Identitaet ist kein Kriterium mehr. Geprueft wird
   // die AUSGABE gegen den Adapter mit GENAU den Plattform-Werten, die die Registry
-  // injiziert. Bewusst gegen die config-Werte formuliert statt gegen den arg-losen
-  // Aufruf: sonst waere der Test nur so lange gruen, wie die Env leer ist - und beliese
-  // still, sobald jemand eine ElevenLabs-Stimme setzt.
+  // injiziert - seit IP3 ist das nur noch das STT-Profil; die ElevenLabs-Plattform-Stimme
+  // wird nicht mehr injiziert (Relay-Zweig entfernt, s. render.js-Modulkopf).
   const probe = [
     { kind: DIRECTIVE.GATHER, action: "/voice/turn?callId=c1", voiceProfile: VOICE_PROFILE.DE_FEMALE_NEURAL },
   ];
   assert.equal(
     voiceRenderer(PROVIDER.TELNYX).renderDirectives(probe),
-    telnyxRenderDirectives(probe, {
-      elevenLabs: config.telnyx.telnyxElevenLabs,
-      sttProfile: config.voice.sttProfile,
-    }),
+    telnyxRenderDirectives(probe, { sttProfile: config.voice.sttProfile }),
   );
 });
 

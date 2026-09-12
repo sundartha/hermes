@@ -8,6 +8,8 @@
 //     diesem Tag fuer ALLE DREI Sprachen, auch fuer DE. Vorher fiel Deutsch auf die global
 //     konfigurierte Plattform-Stimme zurueck; war die nicht gesetzt, sprach ein deutsches
 //     Gespraech in der Dashboard-Stimme des Agenten (an Anruf 7 gemessen: en/american).
+//     Messpunkt seit IP3 ist die Play-TTS-Vorabsynthese (test/directive-synth.test.js);
+//     hier wird nur noch gepinnt, dass opts.elevenLabs den Renderer nicht mehr erreicht.
 // Pur, offline, kein Env, kein Spawn.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -19,12 +21,6 @@ import { LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
 
 const EL = { apiKeyRef: "elevenlabs_prod", voiceId: "platform-de", model: "Default" };
 const OPTS = { elevenLabs: EL };
-// Bindende Owner-IDs (2026-08-18). Byte-genau gepinnt, damit die Entscheidung nicht
-// lautlos driftet. DE steht jetzt MIT hier - der Rueckfall auf el.voiceId war die Ursache
-// der amerikanischen Stimme in Anruf 7.
-const DE_VOICE_ID = "cqPdIo76zSHFDcSZpFov";
-const FR_VOICE_ID = "WeAAwKYcS06VmXw086yZ";
-const EN_VOICE_ID = "ZSNL4hPqCnqoMPaI4jGX";
 
 test("Voice-Tabellen fuehren die STT-Locale nicht mehr selbst - der Renderer folgt dem Locale-Buendel", () => {
   for (const language of SUPPORTED_LANGUAGES) {
@@ -44,22 +40,12 @@ test("sttLocaleForVoiceProfile wirft fail-closed beim Fremdprofil - kein stiller
   assert.throws(() => sttLocaleForVoiceProfile(undefined), /unbekanntes voiceProfile/);
 });
 
-test("ElevenLabs-Stimme je Sprache: DE/FR/EN je eine kuratierte ID, keine faellt auf die Plattform-Stimme", () => {
-  const voiceIdOf = (voiceProfile) => {
-    const out = renderTelnyx([say("Text", voiceProfile)], OPTS);
-    const m = out.match(/<Say voice="ElevenLabs\.[^.]+\.([^"]+)"/);
-    assert.ok(m, `kein ElevenLabs-Say gerendert fuer ${voiceProfile}`);
-    return m[1];
-  };
-  assert.equal(voiceIdOf(VOICE_PROFILE.DE_FEMALE_NEURAL), DE_VOICE_ID);
-  assert.notEqual(
-    voiceIdOf(VOICE_PROFILE.DE_FEMALE_NEURAL),
-    EL.voiceId,
-    "DE darf NICHT mehr auf die Plattform-Stimme fallen - genau dieser Rueckfall liess " +
-      "Anruf 7 in einer amerikanischen Stimme deutsch sprechen",
-  );
-  assert.equal(voiceIdOf(VOICE_PROFILE.FR_FEMALE_NEURAL), FR_VOICE_ID);
-  assert.equal(voiceIdOf(VOICE_PROFILE.EN_FEMALE_NEURAL), EN_VOICE_ID);
+test("opts.elevenLabs erreicht den TeXML-Renderer nicht mehr (IP3): jedes Profil rendert Azure - die kuratierten IDs sind am Play-TTS-Pfad gepinnt", () => {
+  for (const voiceProfile of Object.values(VOICE_PROFILE)) {
+    const dirs = [say("Text", voiceProfile)];
+    assert.equal(renderTelnyx(dirs, OPTS), renderTelnyx(dirs), `${voiceProfile}: opts inert`);
+    assert.ok(!renderTelnyx(dirs, OPTS).includes("ElevenLabs."), `${voiceProfile}: kein ElevenLabs-Say`);
+  }
 });
 
 test("Assistant-speak (Call-Control) bleibt bewusst bei der GLOBALEN Stimme - der Renderer (TeXML/Play-TTS) loest sprachaufgeloest auf, der Assistant danach nicht (RCA-Wurzel R5)", () => {
@@ -84,11 +70,12 @@ test("Assistant-speak (Call-Control) bleibt bewusst bei der GLOBALEN Stimme - de
   }
 });
 
-test("Halbes/leeres ElevenLabs-Gate -> Azure-Bestand, auch fuer FR/EN (fail-safe, kein Wurf im Call)", () => {
+test("Halbes/leeres/VOLLSTAENDIGES elevenLabs-opts -> Azure-Bestand, auch fuer FR/EN (inert seit IP3)", () => {
   const dirs = [say("Bonjour", VOICE_PROFILE.FR_FEMALE_NEURAL)];
   const azure = renderTelnyx(dirs);
   assert.match(azure, /voice="Azure\.fr-FR-DeniseNeural" language="fr-FR"/);
   assert.equal(renderTelnyx(dirs, {}), azure);
   assert.equal(renderTelnyx(dirs, { elevenLabs: { apiKeyRef: "r", voiceId: "" } }), azure);
   assert.equal(renderTelnyx(dirs, { elevenLabs: { apiKeyRef: "", voiceId: "v" } }), azure);
+  assert.equal(renderTelnyx(dirs, { elevenLabs: EL }), azure);
 });
