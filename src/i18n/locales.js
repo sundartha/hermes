@@ -301,7 +301,7 @@ export const LOCALES = Object.freeze({
     // Freitext). Der Pflichtsatz wird beim Katalogbau vorangestellt, nicht hier doppelt
     // gepflegt (G5). DE-Wortlaut byte-identisch zu den frueheren GREETING_TEMPLATES[1..2].
     greetingVariants: Object.freeze([
-      "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht fuer {owner} auf. Wie kann ich helfen?",
+      "Guten Tag, Sie sprechen mit dem KI-Assistenten von {owner}. Ich nehme Ihre Nachricht für {owner} auf. Wie kann ich helfen?",
       "Hallo! Der KI-Assistent von {owner} hier. Wie kann ich Ihnen weiterhelfen?",
     ]),
     // I2 (call-quality Impl-1): Turn-Fallback-Satz (claude.js agentTurn), falls das

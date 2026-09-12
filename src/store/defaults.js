@@ -540,7 +540,7 @@ function nextWeekday(daysAhead, hour) {
 // Default der einzige Wert, den updateSettings nach dem Guard (state-ops) nicht mehr
 // zurueckschreiben koennte. Zusammensetzung statt zweiter Literal-Kopie des Satzes (G5).
 export const DEFAULT_GREETING = withInboundNotice(
-  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht fuer {owner} aufnehmen. Wie kann ich helfen?",
+  "Hallo, hier ist der KI-Assistent von {owner}. {owner} kann gerade nicht ans Telefon. Ich kann eine Nachricht für {owner} aufnehmen. Wie kann ich helfen?",
   INBOUND_NOTICES.de,
 );
 

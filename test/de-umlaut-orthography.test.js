@@ -13,6 +13,7 @@ import { startServer } from "./helpers.js";
 // zweiter Konsument ist test/cq-p5-prompt-redesign.test.js. Reines Umbenennen des
 // Imports, keine Verhaltensaenderung (dieselben neun Staemme, case-insensitiv).
 import { SPOKEN_TRANSLITERATION_STEMS as TRANSLITERATION_STEMS } from "./umlaut-stems-helper.js";
+import { greetingTemplatesFor } from "../src/i18n/greeting-catalog.js";
 
 const OWNER_NAME = "Jonas Beispiel";
 const UNROUTED_TO = "+49999999999"; // nicht geseedet -> nicht routbar (S8-Pfad)
@@ -40,6 +41,16 @@ const SPOKEN_DE_FIELDS = [
   // deterministisch GESPROCHEN (LLM-frei), gehoeren also in dieselbe Klasse wie S1-S12.
   ["S13 consultFillerSpeech", LOCALES.de.consultFillerSpeech],
   ["S14 consultHoldSpeech", LOCALES.de.consultHoldSpeech],
+  // IP1 (W2): der erste gesprochene Satz jedes Inbound-Anrufs. Gemessen an der Form, die
+  // der Anrufer HOERT (Pflichtsatz + Vorlage, greetingTemplatesFor), nicht am nackten
+  // Locale-Feld - S15 ist ohnehin identisch (greetingDefault ist umhuellt), S16.0 gewinnt
+  // dadurch die Pflichtsatz-Haelfte mit.
+  // BEWUSST OHNE greetingVariants[1]: diese Vorlage traegt von sich aus keinen Umlaut
+  // ("Hallo! Der KI-Assistent ... weiterhelfen?"), die Gegenprobe U2 wuerde fuer sie falsch
+  // rot. Ihre Transliterations-Abdeckung liegt in IP1-G1, das JEDE DE-Vorlage iteriert
+  // (und damit auch jede kuenftige) - eine Iteration statt einer gepflegten Liste.
+  ["S15 greetingDefault (gesprochen)", greetingTemplatesFor("de")[0]],
+  ["S16.0 greetingVariants[0] (gesprochen)", greetingTemplatesFor("de")[1]],
 ];
 
 test("P1-U1: gesprochene DE-Strings (S1-S7) tragen keine ASCII-Transliteration mehr", () => {
