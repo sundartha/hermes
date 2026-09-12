@@ -318,6 +318,10 @@ export const BASE_ENV = {
   // hineinlaufen: deren Boot-Re-Arm pollt dann waehrend fremder Zusicherungen los.
   // Bewusst weit ueber jeder Testfrist - Tests, die den Poll messen, setzen ihn selbst.
   ELEVENLABS_RESULT_POLL_MS: "60000",
+  // IE3: neutral AUS, sonst leakt eine lokale .env mit ELEVENLABS_INBOUND_ENABLED=true
+  // via dotenv in jeden Spawn-Test (Lehre test-base-env-drift). test/ie3-...test.js setzt
+  // ihn gezielt auf "true".
+  ELEVENLABS_INBOUND_ENABLED: "false",
   // ---- Store-Backend + Onboarding/Provisioning ----
   // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.

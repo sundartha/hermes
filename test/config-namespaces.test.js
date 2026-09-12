@@ -109,7 +109,7 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // kein neuer primitiver Key -> 15.
   // OC-P1: ownerSelfCallEnabled + ownerSelfCallTenantIds ergaenzt (Schalter + Tenant-
   // Allowlist der Offenlegungs-Ausnahme, PLAN-OWNER-CALL) -> 17.
-  voice: 18,
+  voice: 19,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
@@ -181,7 +181,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // GP-P4: provisioningRetryMinIntervalMs (provisioning) ergaenzt -> 190.
 // GP-P6: priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter (billing) ergaenzt -> 192.
 // IE2: budgetWatchdogIntervalMs (safety) ergaenzt -> 193.
-const EXPECTED_TOTAL_KEYS = 193;
+// IE3: elevenLabsInbound (voice, gruppiert wie elevenLabsOutbound - ein Namespace-Blatt,
+// egal wie viele Schluessel spaeter darin liegen) ergaenzt -> 194.
+const EXPECTED_TOTAL_KEYS = 194;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(

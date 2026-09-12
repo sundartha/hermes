@@ -46,7 +46,12 @@ import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/
 // (assistantVoiceConfigured).
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
 import { attachMediaBridge, REALTIME_MID_CALL_BUDGET_CHECK } from "./bridge.js";
-import { hatEinsammler, KOSTENART } from "./billing/kostenarten.js";
+import {
+  hatEinsammler,
+  pflichtTraegerFuerProfil,
+  KOSTENART,
+  KOSTENPROFIL,
+} from "./billing/kostenarten.js";
 import {
   USAGE_EVENT_KIND,
   BOOTSTRAP_TENANT_ID,
@@ -476,7 +481,7 @@ function warnElRegistrationSipCredsMissing(config) {
   );
 }
 
-// KV-P7: zwei latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
+// KV-P7/KV2-2/IE3: vier latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
 // boot-guard.js fuer die Begruendung je Befund). realtimeMidCallBudgetCheck kommt aus
 // GENAU EINER Quelle (REALTIME_MID_CALL_BUDGET_CHECK, src/bridge.js) - kein zweites Flag
 // hier. KV2-2 (h): der dritte Befund (REALTIME_CARRIER_UNCOLLECTED) kann jetzt FATAL sein
@@ -485,12 +490,19 @@ function warnElRegistrationSipCredsMissing(config) {
 // realtimeCarrierHasCollector: EINE Quelle - die Profil-Registry (kostenarten.js), nicht
 // ein zweites Flag hier.
 function assertLatentCostPaths(config) {
+  // IE3: EINE Quelle fuer "hat der neue Inbound-Weg einen belegten Kostenpfad" - die
+  // Profil-Registry, nicht ein zweites Flag hier. Benanntes Zwischenergebnis (G19), weil
+  // die Ableitung eine Aussage ist: leere Liste heisst "unbekanntes Profil ODER kein
+  // Traeger mit Einsammler", und beides ist genau der Fall, den der Riegel faengt.
+  const elInboundPflichtTraeger = pflichtTraegerFuerProfil(KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI);
   applyBootFindings(
     latentCostPathFindings({
       playTtsEnabled: config.voice.elevenLabsPlayTts.enabled,
       realtimeEngineSelected: config.voice.voiceEngine === VOICE_ENGINE.REALTIME,
       realtimeMidCallBudgetCheck: REALTIME_MID_CALL_BUDGET_CHECK,
       realtimeCarrierHasCollector: hatEinsammler(KOSTENART.OPENAI_REALTIME),
+      elInboundEnabled: config.voice.elevenLabsInbound.enabled,
+      elInboundCarrierHasCollector: elInboundPflichtTraeger.length > 0,
     }),
   );
 }

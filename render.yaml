@@ -132,6 +132,12 @@ services:
         value: "false"
       - key: ELEVENLABS_RESULT_POLL_MS
         value: "5000"
+      # ---- ElevenLabs-Inbound (K1, IE3/IE5) ----
+      # Default AUS. Erst scharfstellen, wenn IE5 live und der Testanruf gruen ist
+      # (Owner-Entscheidung O10, Kosten pro Inbound-Minute). Achtung: die Live-Services
+      # sind Dashboard-managed, diese Zeile allein aendert Live nichts.
+      - key: ELEVENLABS_INBOUND_ENABLED
+        value: "false"
       # ---- Telnyx AI Assistant / Brain-Shim (C-Telnyx, P10) ----
       # Master-Flag: 404 bis Cutover. Erst NACH verifiziertem Deploy im Dashboard auf
       # "true" (Owner-Cutover P11). Flag an -> Boot verlangt ASSISTANT_ID + API_KEY +

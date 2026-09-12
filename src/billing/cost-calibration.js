@@ -393,6 +393,11 @@ export function tarifpaarEintrag({ route, stichproben, konfiguriert, minSamples,
 const INBOUND_KOSTENPROFILE = new Set([
   KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
   KOSTENPROFIL.TELNYX_INBOUND_REALTIME,
+  // IE3: das dritte Inbound-Profil - genau der Fall, den der Kommentar oben angekuendigt
+  // hat. Die LIVE-Buchung waehlt den Satz nach call.direction (metering.js), nicht nach
+  // Profil; ohne diesen Eintrag verglich der Tarif-Waechter die Vollkosten eines
+  // INBOUND-Anrufs gegen den OUTBOUND-Satz. Keine Tarifaenderung, eine Einordnung.
+  KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
 ]);
 
 // Das KONFIGURIERTE Paar EINER Route. Grundbetrag 0 = "noch nicht gesetzt" - genau die

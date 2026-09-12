@@ -835,6 +835,25 @@ const rawConfig = {
     ),
   },
 
+  // ---- ElevenLabs-Inbound (Kandidat K1, PLAN-INBOUND-PARITAET.md) ----
+  // Der Gegenpart zu elevenLabsOutbound in der EINGEHENDEN Richtung: unser Webhook nimmt
+  // an, laeuft durch alle sieben Sicherungen, rendert den Pflichtsatz - und uebergibt das
+  // Bein DANACH per SIP an denselben Agenten. Der PROVIDER bleibt telnyx, das Carrier-Bein
+  // bleibt unser (und damit der Hangup-Griff).
+  // DEFAULT AUS, fail-closed wie alle Engine-Weichen.
+  //
+  // STAND IE3: der Sprechpfad selbst kommt in IE5. Heute liest GENAU EIN Verbraucher
+  // diesen Wert - der Boot-Riegel (boot.js#assertLatentCostPaths ->
+  // boot-guard.js#latentCostPathFindings, Befund el_inbound_carrier_uncollected). Das ist
+  // die Reihenfolge, die der Kostenarten-Katalog verlangt: die Katalogzeile und ihr Riegel
+  // stehen, BEVOR der Weg live gehen kann - "Flag an, Kosten unsichtbar" ist damit
+  // strukturell ausgeschlossen, nicht per Disziplin.
+  elevenLabsInbound: {
+    enabled: boolEnv("ELEVENLABS_INBOUND_ENABLED", process.env.ELEVENLABS_INBOUND_ENABLED, {
+      fallback: false,
+    }),
+  },
+
   // ---- Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1; optional) ----
   // C6a (P5): gruppiert (10 zusammengehoerige Keys, Praezedenzfall telnyxElevenLabs) -
   // erste Grouping-Phase hinter dem Config-Proxy-Guard. Zugriff ausschliesslich ueber
@@ -2351,7 +2370,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs", "telnyxAssistant"],
-  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
+  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "telnyxDialTimeoutSecs", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],

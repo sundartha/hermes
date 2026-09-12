@@ -27,6 +27,9 @@
 // wirksame Schutz gegen eine still unvollstaendige Kostenlandkarte. Die Zeilenmenge (d)
 // ist ein Loeschschutz, KEIN Vollstaendigkeitsbeweis: sie friert die heute bekannte Menge
 // ein, findet aber keine kuenftig vergessene Zeile.
+// IE3 ist der Anwendungsfall dieser Regel: die Profilzeile telnyx_inbound_el_convai und
+// ihr Boot-Riegel (boot-guard.js, el_inbound_carrier_uncollected) stehen, BEVOR der
+// Inbound-Weg (IE5) einen Anruf tragen kann.
 
 // Waehrungen, die das Settlement (4.5) verarbeitet, OHNE die Zeile fail-closed zu
 // verwerfen (3.4: EIN Kurs-Pfad, Provider-Mikro-Cent USD -> Bucket-Cent EUR). Nur Zeilen
@@ -55,13 +58,19 @@ export const KOSTENART = Object.freeze({
   WORKOS_AUTH: "workos_auth", // #17
 });
 
-// Die 5 Kostenprofile der Engine-Weiche (4.3, Tabelle in spec-kv2-2.md).
+// Die 6 Kostenprofile der Engine-Weiche (4.3, Tabelle in spec-kv2-2.md).
 export const KOSTENPROFIL = Object.freeze({
   EL_CONVAI_SIP: "el_convai_sip",
   TELNYX_ASSISTANT: "telnyx_assistant",
   TELNYX_BUDGET: "telnyx_budget",
   TELNYX_INBOUND_BUDGET: "telnyx_inbound_budget",
   TELNYX_INBOUND_REALTIME: "telnyx_inbound_realtime",
+  // IE3 (PLAN-INBOUND-PARITAET.md): unser Telnyx-Inbound-Bein, dessen Gespraech der
+  // ElevenLabs-ConvAI-Agent fuehrt (Uebergabe per SIP, Kandidat K1). EIGENE Zeile und
+  // NICHT el_convai_sip: dessen gemessene Pflichtmenge ist [sip-trunking], dieses Bein
+  // liefert call-control (B12). Die Zeile steht VOR dem Weg, nicht danach - das ist die
+  // KERNREGEL des Kopfkommentars, nicht Vorratshaltung.
+  TELNYX_INBOUND_EL_CONVAI: "telnyx_inbound_el_convai",
 });
 
 // Phasenkennungen, die einen Beleg-Einsammler bauen bzw. der eine ausdrueckliche
@@ -394,7 +403,7 @@ export const KOSTENARTEN = Object.freeze({
   },
 });
 
-// Die 5 Kostenprofile der Engine-Weiche (4.3). traeger je Profil traegt den
+// Die 6 Kostenprofile der Engine-Weiche (4.3). traeger je Profil traegt den
 // Pflicht-Einsammler (Kriterium (i)).
 export const KOSTENPROFILE = Object.freeze({
   [KOSTENPROFIL.EL_CONVAI_SIP]: {
@@ -440,6 +449,28 @@ export const KOSTENPROFILE = Object.freeze({
       // heute vergebene nicht_belegpflichtig-Wert. Riegel KV2-2(h) sichert ab, dass der
       // Schalter ohne diese Zeile nicht startet.
       [KOSTENART.OPENAI_REALTIME]: { einsammler: EINSAMMLER.NICHT_BELEGPFLICHTIG },
+    },
+  },
+  // IE3: der neue Inbound-Weg (unser Bein + EL-ConvAI-Agent, K1). ZWEI Traeger, beide
+  // pflicht:true im Katalog -> beide mit echtem Einsammler (Biconditional (i3)):
+  //   elevenlabs_convai   -> der bestehende KV2-4-Weg (Anbieter-Ist am Gespraechsende)
+  //   telnyx_call_records -> der bestehende KV2-5g-Sweep ueber unser Bein
+  // telnyx_sip steht hier ABSICHTLICH NICHT: ob der Dial ein zweites, separat
+  // abgerechnetes Telnyx-Bein erzeugt, ist die Messung IE1/F-D (M15) - und sie ist
+  // offen. Kein Traeger ohne Messung.
+  //
+  // pflichttypen UNGEMESSEN, und das ist die einzige erlaubte Antwort ohne F-D: der
+  // Env-Wert (sip-trunking,call-control) waere hier geraten, und eine geratene
+  // Pflichtmenge kippt istVollBelegt in BEIDE Richtungen (B6). Folge, benannt und
+  // getragen: solange die Messung fehlt, bleibt die telnyx_call_records-Zeile dieses
+  // Profils vorlaeufig (reifeFuer, sweep-kostenbeleg.js) -> keine ERSTATTUNG auf diesem
+  // Weg. Nachbuchen (Ist > Schaetzung) bleibt unberuehrt. Wird F-D gemessen, ersetzt ein
+  // eingefrorenes Literal diesen Marker - und die Traegerliste wird dabei mitgeprueft.
+  [KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI]: {
+    pflichttypen: PFLICHTTYPEN_UNGEMESSEN,
+    traeger: {
+      [KOSTENART.ELEVENLABS_CONVAI]: { einsammler: EINSAMMLER.KV2_4 },
+      [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G },
     },
   },
 });
