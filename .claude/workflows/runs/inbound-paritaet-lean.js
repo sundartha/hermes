@@ -52,14 +52,16 @@ const NODE_MODULES = `${REPO}/node_modules`;
 // Lauf neu gesetzt und vor dem Start noch einmal gelesen - eine stale Phase hier ist
 // ein Umbau am falschen Code.
 const A = {
-  "phaseId": "IP1",
-  "phaseTitle": "Gesprochene Umlaute im Inbound-Begruessungskatalog",
-  "branch": "phase/ip1-inbound-umlaute",
+  "phaseId": "IP2",
+  "phaseTitle": "Hoerprobe: welchen Sprechpfad Inbound wirklich nimmt",
+  "branch": "phase/ip2-hoerprobe",
   "baseBranch": "master",
   "planDoc": "PLAN-INBOUND-PARITAET.md",
   "specFile": "PLAN-INBOUND-PARITAET.md",
   "maxFixRounds": 2,
-  "highStakes": false
+  "highStakes": false,
+  "planModel": "sonnet",
+  "planEffort": "high"
 };
 
 const PHASE = A.phaseId;
@@ -88,7 +90,17 @@ const HIGH_STAKES_PHASES = [];
 const HIGH_STAKES =
   typeof A.highStakes === "boolean" ? A.highStakes : HIGH_STAKES_PHASES.includes(PHASE);
 
-const PLAN_AGENT = { model: MODEL_OPUS, effort: "high" };
+// Plan-Modell pro Lauf steuerbar (Default unveraendert opus/high). Der Hebel ist eine
+// KOSTENENTSCHEIDUNG, keine Stall-Abhilfe: eine Phase ohne Architekturentscheidung (ein
+// Messwerkzeug, ein Skript) braucht kein opus im Plan. Opus bleibt Default fuer alles, wo
+// Fehler ENTSTEHEN - Architektur, Geld, Gates.
+// NICHT verwechseln: die drei IP2-Abbrueche am 2026-09-13 waren ein INTERNET-AUSFALL beim
+// Owner (Modell-Anfrage haengt -> 180 s ohne Fortschritt -> Stall auf allen 6 Versuchen),
+// kein Modell- und kein Lastproblem. Dieser Schalter haette sie nicht verhindert.
+const PLAN_AGENT = {
+  model: A.planModel || MODEL_OPUS,
+  effort: A.planEffort || "high",
+};
 const IMPL_AGENT = HIGH_STAKES
   ? { model: MODEL_OPUS, effort: "high" }
   : { model: MODEL_SONNET, effort: "medium" };

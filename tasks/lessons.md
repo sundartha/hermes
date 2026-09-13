@@ -1035,10 +1035,33 @@ nicht suchen, sondern die Bank fahren — sie kennt die Zugriffe, das Muster nic
 **Regel:** Die Bank IMMER ueber `npm test` fahren, nie den Runner direkt. Und: ein roter
 Fall zaehlt erst, wenn er ISOLIERT rot ist (Bestandsregel, hier dreimal bestaetigt).
 
-## 2026-09-13 — Ein haengender Testlauf sieht aus wie ein haengender Agent
+## 2026-09-13 — "agent stalled" sagt NICHTS ueber den Agenten
 
-Der IP2-Lauf brach ab mit "agent stalled on all 6 attempts (no progress for 180000ms
-each)". Die Meldung zeigt auf den Agenten. Die Ursache lag auf der Maschine.
+Der IP2-Lauf brach dreimal ab mit "agent stalled on all 6 attempts (no progress for
+180000ms each)". Die Meldung zeigt auf den Agenten. Keiner der drei Abbrueche lag am
+Agenten, und die ersten beiden Diagnosen dieser Sitzung waren falsch.
+
+**Die ECHTE Ursache, vom Owner genannt: sein Internet war weg.** Die Modell-Anfrage
+haengt, es kommt kein Token, nach 180 s greift der Stall-Detektor - auf JEDEM der sechs
+Versuche, weil die Leitung auf jedem Versuch tot war. Das Transkript sieht dabei
+taeuschend gesund aus: zehn bis siebzehn Minuten echte Arbeit (Dateien gelesen, gegrept),
+dann ein abgeschnittener Denkblock und "[Request interrupted by user]".
+
+**Was ich stattdessen diagnostiziert habe, beide Male daneben:**
+1. *Maschinenlast.* Beim ersten Abbruch stand die Load auf 47,58 bei 15 Kernen (Details
+   unten - der Befund war echt und musste weg, er war nur nicht die Ursache: der zweite
+   Abbruch kam bei Load 6).
+2. *Modellwahl.* Danach habe ich den Plan-Agenten von opus/high auf sonnet gestellt, mit
+   der Begruendung "stallt im langen Denkblock". Der naechste Lauf stallte genauso. Eine
+   Korrelation mit n=1, zur Ursache erklaert.
+
+**Regel:** Bei "agent stalled" ist die erste Frage, ob ueberhaupt eine Verbindung steht -
+`curl -o /dev/null -w "%{http_code} %{time_total}" --max-time 15 https://api.anthropic.com/v1/messages`
+(405 = erreichbar). Erst danach Maschinenlast, erst danach das Transkript. Und: stallen
+ALLE Versuche gleich, ist die Ursache ausserhalb des Agenten - ein echtes Agenten-Problem
+traefe nicht jeden Versuch an derselben Stelle.
+
+### Nebenbefund desselben Abends: ein verwaister Testlauf frisst die Maschine
 
 **Befund:** `uptime` meldete Load 47,58 bei 15 Kernen. `ps` zeigte einen
 `node --test`-Wurzelprozess (PID 86547), der seit **3 Stunden 17 Minuten** lief, dabei
@@ -1053,11 +1076,10 @@ fiel die Load innerhalb von Minuten auf 9,79, und derselbe Lauf startete normal.
 war der Waechter wirkungslos, weil nicht der Server verwaist war, sondern **der
 Testrunner selbst** — er war der Elternprozess, auf den der Waechter wartet.
 
-**Regel:** Meldet ein Workflow einen Stall, ist die ERSTE Messung `uptime`, nicht das
-Agenten-Transkript. Liegt die Load ueber der Kernzahl, ist die Frage nicht "warum haengt
-der Agent", sondern "was frisst die Maschine" — `ps -Ao pid,ppid,etime,args | grep
-"bin/node --test"` und auf ELAPSED achten. Ein Testlauf mit dreistelliger Minutenzahl ist
-immer ein Zombie; die Suite braucht rund zweieinhalb Minuten.
+**Regel:** `ps -Ao pid,ppid,etime,args | grep "bin/node --test"` und auf ELAPSED achten.
+Ein Testlauf mit dreistelliger Minutenzahl ist immer ein Zombie; die Suite braucht rund
+zweieinhalb Minuten. Das gehoert zur Routine nach jedem abgebrochenen Lauf - aber als
+Aufraeumen, NICHT als Stall-Erklaerung (s. oben).
 
 **Zweite Regel, aus demselben Aufraeumen:** `git worktree list --porcelain` liefert Pfade
 mit Leerzeichen ("Mein Unternehmen"). Eine `for`-Schleife ueber `awk '{print $2}'`
