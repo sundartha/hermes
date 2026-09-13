@@ -41,6 +41,34 @@ heisst, den Fehlerfall zu raten.
 
 ---
 
+## 0b. Der Owner schläft — arbeite durch, weck ihn nicht
+
+Er hat am Abend des 2026-09-13 Feierabend gemacht. **Arbeite alles ab, was ohne ihn
+geht, und lass liegen, was ohne ihn nicht geht. Frag ihn nachts nichts.**
+
+**Geht ohne ihn:** IE1 messen, IE5 bauen, IE6 bauen, je über den Lean-Workflow, nach
+jeder Phase `git diff --stat` lesen, mergen, Suite mit `--test-concurrency=4` grün
+fahren. Alles landet lokal auf `master`.
+
+**Geht NICHT ohne ihn, und das ist in Ordnung:**
+
+1. **Der Push auf `upstream`.** Der Classifier verweigert ihn dem Agenten jedes Mal
+   („Production Deploy"). Der Owner führt ihn selbst aus (`! git push upstream master`).
+   Danach löst der Agent den Deploy über die Render-Env-API aus — der Service hat
+   `autoDeploy = nein`, ein Push allein ändert live nichts.
+2. **Ein echter eingehender Testanruf.** Das Abnahmekriterium von IE5 verlangt ihn, und
+   niemand ausser dem Owner kann ihn führen.
+
+**Also der Sollzustand am Morgen:** IE1 gemessen und dokumentiert, IE5 und IE6 gebaut,
+gemergt, Suite grün — **lokal, nicht live**. Der Schalter von IE5 steht dabei auf AUS,
+Flag aus ist byte-identisch zum Bestand; selbst ein sofortiger Deploy würde also nichts
+am Verhalten ändern, bis jemand ihn bewusst umlegt.
+
+Schreib ihm morgens EINE Zusammenfassung: was gemessen wurde, was gebaut ist, was der
+Push und der Testanruf noch brauchen. Nicht drei Statusmeldungen über Nacht.
+
+---
+
 ## 1. Was der Owner will (Entscheidung, nicht Vorschlag)
 
 **Inbound und Outbound laufen über DASSELBE System: den ElevenLabs-ConvAI-Agenten.**
