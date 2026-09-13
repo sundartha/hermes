@@ -109,13 +109,15 @@ services:
       - key: ELEVENLABS_VOICE_ID
         sync: false
       - key: ELEVENLABS_MODEL
-        value: "eleven_flash_v2_5"
+        value: "eleven_v3_conversational"
       - key: ELEVENLABS_API_BASE
         value: "https://api.elevenlabs.io"
       - key: ELEVENLABS_OUTPUT_FORMAT
         value: "mp3_44100_128"
       - key: ELEVENLABS_SYNTH_TIMEOUT_MS
         value: "2000"
+      - key: ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS
+        value: "10000"
       - key: ELEVENLABS_TTS_TOKEN_TTL_MS
         value: "60000"
       # ---- ElevenLabs-Anrufstart (Convai SIP-Trunk-Outbound) ----

@@ -858,7 +858,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 3
+      "count": 2
     }
   },
   "src/self-service-routes.js": {
@@ -1109,11 +1109,6 @@
   },
   "src/tts/store.js": {
     "id-length": {
-      "count": 1
-    }
-  },
-  "src/tts/synth.js": {
-    "no-magic-numbers": {
       "count": 1
     }
   },
@@ -4852,16 +4847,6 @@
     },
     "no-magic-numbers": {
       "count": 46
-    }
-  },
-  "test/tts-store.test.js": {
-    "no-magic-numbers": {
-      "count": 5
-    }
-  },
-  "test/tts-synth.test.js": {
-    "no-magic-numbers": {
-      "count": 4
     }
   },
   "test/turn-budget.test.js": {

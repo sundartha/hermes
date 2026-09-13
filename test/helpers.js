@@ -292,6 +292,7 @@ export const BASE_ENV = {
   ELEVENLABS_API_BASE: "http://127.0.0.1:9",
   ELEVENLABS_OUTPUT_FORMAT: "",
   ELEVENLABS_SYNTH_TIMEOUT_MS: "2000",
+  ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS: "10000",
   ELEVENLABS_TTS_TOKEN_TTL_MS: "60000",
   // ---- ElevenLabs-Outbound (der Zweig, der ECHTE Anrufe ausloest) ----
   // Diese fuenf fehlten und leakten damit aus der lokalen .env in jeden Spawn-Test

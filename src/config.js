@@ -742,18 +742,38 @@ const rawConfig = {
     // umgebenden Whitespace, das Trimmen ist reine Haertung.
     apiKey: ELEVENLABS_API_KEY, // SECRET, nie loggen/leaken
     voiceId: (process.env.ELEVENLABS_VOICE_ID || "").trim(),
-    model: (process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5").trim(), // Latenz-optimiert
+    // IE7/Owner-Entscheidung 2026-09-13: EIN Modell fuer ALLE Sprachen - es gibt keine
+    // Modellwahl je Sprache und es soll auch keine geben. Der Latenz-Grund fuer
+    // eleven_flash_v2_5 ist mit dem Streaming-Umbau entfallen (erstes Paket 351-391 ms
+    // statt 2596-6370 ms Vollabruf). Rueckweg ohne Codeaenderung, falls das Modell doch
+    // die Ursache ist: ELEVENLABS_MODEL=eleven_flash_v2_5.
+    model: (process.env.ELEVENLABS_MODEL || "eleven_v3_conversational").trim(),
     apiBase: ELEVENLABS_API_BASE,
     outputFormat: (process.env.ELEVENLABS_OUTPUT_FORMAT || "mp3_44100_128").trim(), // Owner-Wahl mp3
-    // GAP-22: 4000 sprengte zusammen mit dem LLM-Worst-Case (11250 ms) den 15-s-Hardcut.
-    // Der Schnitt liegt bewusst HIER und nicht bei den LLM-Werten: ein Synthese-Timeout
-    // faellt fail-safe auf Azure-<Say> zurueck (der Call ueberlebt), ein gekuerzter
-    // LLM-Timeout kostet Antworten. 11250 + 2000 + 1500 (Reserve) = 14750 <= 15000.
+    // IE7: die Frist bis zum ERSTEN Audio-Paket, NICHT mehr bis zur fertigen Datei
+    // (src/tts/synth.js streamt). Genau dieses Warten liegt noch auf der Webhook-Wanduhr
+    // und bleibt deshalb Summand der Rechnung in src/turn-budget.js (EINE Quelle):
+    // 11250 + 2000 + 1500 (Reserve) = 14750 <= 15000. Gemessen liegt das erste Paket bei
+    // 351-391 ms; 2000 ms ist der Puffer darueber.
+    // GAP-22 (unveraendert gueltig): der Schnitt liegt bewusst HIER und nicht bei den
+    // LLM-Werten - ein Synthese-Timeout faellt fail-safe auf Azure-<Say> zurueck (der Call
+    // ueberlebt), ein gekuerzter LLM-Timeout kostet Antworten.
     synthTimeoutMs: numEnv("ELEVENLABS_SYNTH_TIMEOUT_MS", process.env.ELEVENLABS_SYNTH_TIMEOUT_MS, {
       fallback: 2000,
       min: 500,
       max: 10000,
     }),
+    // IE7: Gesamtfrist des HINTERGRUND-Stroms, ab Aufrufbeginn. Sie liegt NICHT auf der
+    // Webhook-Wanduhr (der Webhook hat nach dem ersten Paket schon geantwortet) und taucht
+    // in src/turn-budget.js deshalb bewusst NICHT auf. Sie begrenzt, wie lange
+    // GET /voice/tts/:token auf den Rest warten kann; reisst sie, liefert der Abruf das
+    // bisher Empfangene - ein abgeschnittener gesprochener Satz, nie Stille. Gemessen:
+    // vollstaendig nach 1761-2101 ms. Bleibt bewusst unter ELEVENLABS_TTS_TOKEN_TTL_MS.
+    synthTotalTimeoutMs: numEnv(
+      "ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS",
+      process.env.ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS,
+      { fallback: 10000, min: 1000, max: 30000 },
+    ),
     tokenTtlMs: numEnv("ELEVENLABS_TTS_TOKEN_TTL_MS", process.env.ELEVENLABS_TTS_TOKEN_TTL_MS, {
       fallback: 60000,
       min: 5000,
