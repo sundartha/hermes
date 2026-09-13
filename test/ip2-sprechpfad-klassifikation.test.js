@@ -4,7 +4,9 @@
 // String, keine renderDirectives()-Ausgabe (die diese Form nicht mehr erzeugen kann).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifySprechpfad, SPRECHPFAD } from "../scripts/inbound-hoerprobe.mjs";
+// IP4: der Namensvorrat ist nach src/ gezogen (der Boot-Banner liest ihn seit IP4 mit) -
+// dieselben Faelle, dieselben Zusicherungen, nur ein anderer Ort.
+import { classifySprechpfad, SPRECHPFAD } from "../src/telephony/sprechpfad.js";
 import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";
 import { say, gather, VOICE_PROFILE } from "../src/telephony/directives.js";
 import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "./helpers.js";

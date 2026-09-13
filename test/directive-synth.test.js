@@ -18,6 +18,10 @@ import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say, gather, hangup, VOICE_PROFILE } from "../src/telephony/directives.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
+// IP4: das Messwerkzeug ist nach test/helpers/play-tts-stimm-probe.mjs gezogen - der
+// Stimm-Anker (test/ip4-stimm-anker.test.js) braucht dieselbe Messung, und zwei Kopien
+// wuerden driften (S2).
+import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "./helpers/play-tts-stimm-probe.mjs";
 
 // Ein Provider-Wert ohne CAPABILITY.PLAY_AUDIO_TTS. 'twilio' als Wert, weil genau dieser
 // String seit C-P4 kein Anbieter mehr ist, aber als Altzeile in einer Bestands-DB stehen
@@ -91,17 +95,6 @@ function failFetch() {
   return async () => ({ ok: false, status: 500, text: async () => "boom" });
 }
 
-// Faengt die aufgerufene URL ein (voiceId steckt darin, s. src/tts/synth.js TTS_PATH) -
-// ohne diesen Fake bliebe die Play-TTS-Vorabsynthese fuer B2 unsichtbar getestet.
-function recordingFetch() {
-  const urls = [];
-  const fetchImpl = async (url) => {
-    urls.push(url);
-    return { ok: true, headers: { get: () => "audio/mpeg" }, arrayBuffer: async () => new Uint8Array([1]).buffer };
-  };
-  return { urls, fetchImpl };
-}
-
 test("Flag AUS -> Direktiven referenz-identisch zurueck, kein put, kein fetch", async () => {
   const ttsStore = fakeTtsStore();
   const { synthesizeDirectiveAudio } = makeDirectiveSynth({
@@ -161,31 +154,12 @@ test("Telnyx + Flag AN + Synth-OK -> GATHER bekommt promptAudioUrl, SAY bekommt 
   );
 });
 
-// EIN Messwerkzeug fuer die beiden Stimm-Tests unten (G5): schickt je Profil eine
-// sprechende Direktive durch die Vorabsynthese und liefert die Voice-ID, mit der
-// ElevenLabs gerufen wurde - sie steckt im Pfad der Synthese-URL (src/tts/synth.js,
-// TTS_PATH). Am beobachtbaren Ergebnis gemessen, nicht an einer Funktionssignatur.
-async function synthesizedVoiceIdsFor(profiles) {
-  const { synthesizeDirectiveAudio } = makeDirectiveSynth({
-    config: fakeConfig({ enabled: true }),
-    ttsStore: fakeTtsStore(),
-    store: fakeCounterStore(),
-    onQuotaWarning: noopQuotaWarning,
-  });
-  const { urls, fetchImpl } = recordingFetch();
-  await withFakeFetch(fetchImpl, () =>
-    synthesizeDirectiveAudio({ provider: "telnyx" }, profiles.map((profile) => say("Text", profile))),
-  );
-  assert.equal(urls.length, profiles.length, "je Profil genau ein Synth-Aufruf");
-  return urls.map((url) => url.match(/text-to-speech\/([^/?]+)/)[1]);
-}
-
 // B2 (Review GATES-P9): der Play-TTS-Pfad muss der P9-Sprachaufloesung folgen statt
 // der einen globalen Plattform-Stimme - sonst umgeht die Vorabsynthese VOICE-12
 // vollstaendig, sobald ELEVENLABS_PLAY_TTS_ENABLED=true laeuft (der <Say>-Zweig allein
 // wird davon nie beruehrt).
 test("Telnyx + Flag AN -> Voice-ID der Vorabsynthese folgt dem voiceProfile (DE/FR/EN), nicht der globalen Plattform-Stimme", async () => {
-  const [fr, en, de] = await synthesizedVoiceIdsFor([
+  const [fr, en, de] = await playTtsVoiceIdsFor([
     VOICE_PROFILE.FR_FEMALE_NEURAL,
     VOICE_PROFILE.EN_FEMALE_NEURAL,
     VOICE_PROFILE.DE_FEMALE_NEURAL,
@@ -194,7 +168,7 @@ test("Telnyx + Flag AN -> Voice-ID der Vorabsynthese folgt dem voiceProfile (DE/
   assert.equal(en, "ZSNL4hPqCnqoMPaI4jGX", "EN folgt der bindenden EN-ID");
   assert.equal(de, "cqPdIo76zSHFDcSZpFov", "DE folgt der bindenden DE-ID");
   assert.ok(
-    ![fr, en, de].includes("voice123"),
+    ![fr, en, de].includes(PROBE_PLATTFORM_STIMME),
     "keine Sprache faellt mehr auf die globale Plattform-Stimme zurueck (Anruf-7-Defekt)",
   );
 });
@@ -215,7 +189,7 @@ test("VOICE-12 (gruen) - TTS-Stimme loest pro Sprache auf statt einer globalen I
     VOICE_PROFILE.FR_FEMALE_NEURAL,
     VOICE_PROFILE.EN_FEMALE_NEURAL,
   ];
-  const ids = await synthesizedVoiceIdsFor(profiles);
+  const ids = await playTtsVoiceIdsFor(profiles);
   assert.equal(
     new Set(ids).size,
     profiles.length,

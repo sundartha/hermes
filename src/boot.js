@@ -40,6 +40,9 @@ import {
 } from "./boot-guard.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
+// IP4: der GETEILTE Sprechpfad-Namensvorrat (kein zweiter Ortsname fuer dasselbe) - rein,
+// ohne config-Import, der Namespace wird hereingereicht.
+import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.js";
 // LCT-FIX-1: welche Belegtypen einem Call zugeordnet werden koennen, weiss der Adapter, der
 // die Belege liest - der Boot-Guard bleibt eine reine, arg-injizierte Entscheidung.
 // Provider-Konstante, kein Transport: dieselbe Richtung wie telnyx-call-control-ingest.js
@@ -659,6 +662,28 @@ export function perCallTranscriptionProbeLine(telnyxAssistant) {
   );
 }
 
+// IP4: welchen Inbound-Sprechpfad diese Instanz faehrt. Bis hierher war das am laufenden
+// Dienst nicht ablesbar - genau die Blindheit, an der "klingt anders als Outbound" haengt
+// (der Unterschied ist EIN Flag, nicht zwei driftende Schalter).
+//
+// EIN SACHVERHALT, ZWEI FRAGEN - und nur EINE Ableitung: die KV-M0-Zeile "Modelle: ..."
+// nennt den WERT des Schalters (Konfigurations-Abzug), diese hier den daraus folgenden
+// PFAD-Token. Abgeleitet wird er an genau einer Stelle (armedInboundSprechpfad,
+// telephony/sprechpfad.js) - derselbe Namensvorrat, den die Hoerprobe am gerenderten
+// TeXML misst (scripts/inbound-hoerprobe.mjs). Kein zweiter Ortsname fuer dasselbe.
+//
+// Unkonditional wie die AL-P16-Sonden: eine im Aus-Zustand verschwindende Zeile waere im
+// Live-Log nicht von einem Deploy ohne die Sonde zu unterscheiden. Sie faellt KEIN Urteil
+// je Anruf (s. armedInboundSprechpfad) - der Rueckfall steht ausdruecklich in der Zeile.
+export function inboundSprechpfadBannerLine(voice) {
+  return probeLine(
+    "Inbound-Sprechpfad",
+    `${armedInboundSprechpfad(voice.elevenLabsPlayTts)} (ELEVENLABS_PLAY_TTS_ENABLED=${voice.elevenLabsPlayTts.enabled})`,
+    `${SPRECHPFAD.PLAY_TTS} faellt bei erschoepftem Kontingent, Synthese-Fehler oder ` +
+      `Anbieter ohne Play-Audio fail-safe auf ${SPRECHPFAD.AZURE_SAY} zurueck`,
+  );
+}
+
 // AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den
 // MCP-Host. Ein solcher Schalter darf nicht unbemerkt scharf sein (Muster
 // assistantPathLabel). Aus -> keine Zeile, Banner byte-identisch.
@@ -915,6 +940,7 @@ function logBootBanner(config, port) {
   console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
   console.log(`  ${inboundHandoffProbeLine(config.telnyx.telnyxAssistant)}`);
   console.log(`  ${perCallTranscriptionProbeLine(config.telnyx.telnyxAssistant)}`);
+  console.log(`  ${inboundSprechpfadBannerLine(config.voice)}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
   if (inCallConsult) console.log(`  ${inCallConsult}`);
   const tokenStreaming = tokenStreamingBannerLine(config.telnyx.telnyxAssistant);
