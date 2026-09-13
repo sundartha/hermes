@@ -26,7 +26,7 @@
 // nicht braucht (die Assertions lesen den Call direkt aus dem state-Objekt).
 //
 // Config: EIN Hand-Mock der Namespaces, die der Inbound-Pfad tatsaechlich liest
-// (voice.voiceEngine, telnyx.telnyxAssistant, billing.*, safety.*, server.publicUrl) -
+// (voice.voiceEngine, billing.*, safety.*, server.publicUrl) -
 // aus demselben Grund wie oben: die echte config.js waere ein weiterer Singleton mit
 // genau demselben Zu-frueh-gebunden-Risiko. makeVoiceRoutes ist eine reine DI-Factory
 // (config kommt als Parameter, s. Modulkopf src/routes/voice.js) - der Anfrage-Pfad
@@ -42,7 +42,6 @@ import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 function makeHarnessConfig(voiceEngine) {
   return {
     voice: { voiceEngine },
-    telnyx: { telnyxAssistant: { enabled: false, inboundHandoffEnabled: false } },
     billing: {
       voiceTariffInboundCents: 6,
       defaultTenantBudgetCents: 150000,
@@ -77,10 +76,9 @@ function makeHarnessStore(state) {
 }
 
 // No-op-Stubs fuer Abhaengigkeiten, die der Inbound-Pfad ENTWEDER gar nicht erreicht
-// (telnyxAssistant.enabled bleibt aus -> inboundAssistantHandoffXml liefert immer null,
-// voiceControl/webhookEvents/terminateAndBillCall/billThunk/watchdog/finishCall werden nie
-// aufgerufen) ODER deren echtes Verhalten fuer diesen Pfad irrelevant ist (ttsStore bedient
-// nur GET /voice/tts/:token, den kein Testfall dieser Kette anfragt).
+// (webhookEvents/terminateAndBillCall/billThunk/finishCall werden nie aufgerufen) ODER
+// deren echtes Verhalten fuer diesen Pfad irrelevant ist (ttsStore bedient nur
+// GET /voice/tts/:token, den kein Testfall dieser Kette anfragt).
 function noopDeps() {
   return {
     directiveSynth: { synthesizeDirectiveAudio: async (_call, directives) => directives },
@@ -90,13 +88,11 @@ function noopDeps() {
       reattachActiveCall: async () => ({ call: null, logUnknown: true }),
     },
     finishCall: async () => {},
-    voiceControl: () => ({}),
     webhookEvents: () => ({ parseSpeechResult: () => "" }),
     providerFromHeaders: () => "telnyx",
     inboundSignatureVerifier: () => ({ verifyInboundSignature: () => true }),
     terminateAndBillCall: async () => {},
     billThunk: () => async () => {},
-    watchdog: { touch() {} },
   };
 }
 

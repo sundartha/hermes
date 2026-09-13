@@ -7,8 +7,7 @@
 //      stirbt dagegen nie an der Uhr;
 //   3) zwei Turns ohne Antwort toeten die Rueckfrage NICHT mehr (W2-Gegenbeweis);
 //   4) kein Ueberbrueckungstext behauptet eine fehlende Faehigkeit;
-//   5) die Offen-Frist traegt zwei volle Poll-Zyklen (Herleitung festgenagelt);
-//   6) consultPollAgeMs trennt "nie gepollt" von "zu alt" (B-2).
+//   5) die Offen-Frist traegt zwei volle Poll-Zyklen (Herleitung festgenagelt).
 //
 // Testnamen tragen bewusst KEINE Katalog-ID (GAP-/PROMPT-/...) am Namensanfang - sonst
 // landen sie still im Gates-Lauf (package.json config.i18nCatalogPattern), wo Rot erlaubt
@@ -308,18 +307,3 @@ test("GQ-P2-5: die Offen-Frist traegt zwei volle Poll-Zyklen", () => {
   assert.ok(!(inCall.CONSULT_WAIT_MS >= config.tenancy.consultOpenMs));
 });
 
-// ---------- 6: consultPollAgeMs trennt "nie gepollt" von "zu alt" ----------
-
-test("GQ-P2-6: consultPollAgeMs trennt 'nie gepollt' von 'zu alt' (B-2)", () => {
-  const now = Date.now();
-  assert.equal(inCall.consultPollAgeMs({ consultPolledAtMs: 0 }, now), inCall.CONSULT_POLL_NEVER);
-  assert.equal(inCall.consultPollAgeMs({}, now), inCall.CONSULT_POLL_NEVER);
-  assert.equal(inCall.consultPollAgeMs({ consultPolledAtMs: now - 30_000 }, now), 30_000);
-
-  // Gegenprobe: der Boolean sieht beide Faelle als "nicht frisch" - genau die
-  // Mehrdeutigkeit, die B-2 offen liess. 30 s liegt bewusst ueber CONSULT_POLL_FRESH_MS
-  // (25 s), damit der Vergleich nicht zufaellig auf beiden Seiten true landet.
-  assert.ok(30_000 > inCall.CONSULT_POLL_FRESH_MS, "Testannahme verletzt: 30 s ist nicht 'zu alt'");
-  assert.equal(inCall.consultClientIsPolling({ consultPolledAtMs: 0 }, now), false);
-  assert.equal(inCall.consultClientIsPolling({ consultPolledAtMs: now - 30_000 }, now), false);
-});

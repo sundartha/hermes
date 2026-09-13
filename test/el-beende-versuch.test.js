@@ -363,7 +363,6 @@ function baseRouteDeps(store, extra) {
     audit: () => {},
     outboundGates: [],
     voiceControl: () => ({ async endCall() {}, async endCallViaCallControl() {} }),
-    originateAiAssistantCall: async () => {},
     terminateAndBillCall,
     hangUpAction,
     billThunk,

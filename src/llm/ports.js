@@ -149,7 +149,7 @@
  * @typedef {Object} LlmStreamSink
  *   Der Abnehmer der Text-Fragmente, vom AUFRUFER gestellt (der Port kennt weder
  *   Saetze noch SSE-Framing). Die Satzbildung liegt beim Aufrufer (claude.js), das
- *   Draht-Framing beim Shim (telnyx-llm-shim.js).
+ *   Draht-Framing heute ohne Produktionsaufrufer (R-1).
  * @property {(delta: string) => void} pushText - jedes Text-Fragment in Reihenfolge
  * @property {() => void} toolUseStarted - ein Werkzeug-Block hat begonnen; was der
  *   Abnehmer daraus macht, entscheidet er
@@ -236,7 +236,8 @@
  *   Telefonie-Port, telephony/registry.js).
  * @property {(request: LlmRequest, sink: LlmStreamSink) => Promise<LlmTurn>}
  *   completeStream - dieselbe Runde, Text-Fragmente WAEHREND der Generierung an den
- *   Sink; Pflicht, weil daran der Live-Sprechpfad haengt (telnyx-llm-shim.js). Kann
+ *   Sink; Pflicht, weil daran der Live-Sprechpfad haengt - heute ohne Produktionsaufrufer
+ *   (R-1). Kann
  *   ein Adapter es wirklich nicht, deklariert er die Luecke als Faehigkeits-Flag, das
  *   BEIM BOOT gelesen wird (Muster: providerSupports am Telefonie-Port,
  *   telephony/registry.js), und der Seam faellt fuer den GANZEN Prozess auf complete

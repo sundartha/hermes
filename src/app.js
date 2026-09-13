@@ -11,9 +11,6 @@ import express from "express";
 import { securityHeaders, createRateLimiter, errorHandler } from "./middleware.js";
 import { registerWellKnown } from "./auth.js";
 import { PLAN_CATALOG } from "./plans.js";
-import { makeTelnyxLlmShim } from "./telnyx-llm-shim.js";
-import { agentTurn } from "./claude.js";
-import { localeFor } from "./i18n/locales.js";
 import { configFingerprint } from "./config-fingerprint.js";
 import {
   voiceControl,
@@ -22,7 +19,6 @@ import {
   providerFromHeaders,
 } from "./telephony/registry.js";
 import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction } from "./telephony/call-termination.js";
-import { originateAiAssistantCall } from "./telnyx-origination.js";
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";
@@ -115,7 +111,7 @@ export function installGlobalMiddleware({ app, config }) {
   app.use(withParserErrors(express.json({ limit: BODY_LIMIT, verify: captureRawBody }))); // eigene API + MCP
 }
 
-export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }) {
+export function registerPublicRoutes({ app, config }) {
   // ---- Routen, die vor jeder Identitaet erreichbar sein muessen. Jede einzeln in
   // src/route-policy.js (PUBLIC_ROUTES) begruendet und maschinell gegen den
   // Produktions-Routengraph geprueft (test/route-auth-inventory.test.js).
@@ -139,27 +135,6 @@ export function registerPublicRoutes({ app, config, store, watchdog, lifecycle }
   app.get("/api/plans", (_req, res) => res.json(PLAN_CATALOG));
 
   registerWellKnown(app);
-
-  // ---- Telnyx AI Assistant Brain-Shim (PLAN-TELNYX-AI-ASSISTANT.md, P1) ----------------
-  // AUTH-AUSNAHME (Regel 3, begruendet): Telnyx BYO-LLM ruft diesen /v1/chat/completions-
-  // kompatiblen Endpunkt SERVERSEITIG (kann keinen Session-Cookie senden), mit EIGENER
-  // fail-closed Absicherung im Handler (analog /voice/tts/:token): 404 bei
-  // TELNYX_AI_ASSISTANT_ENABLED aus (Existenz hinter dem Flag); statisches Bearer-
-  // Integration-Secret (E2) timing-sicher via safeEqual + call_control_id-Korrelation aus
-  // forward_metadata (E1) gegen den Store-Call-Record (403 sonst); Budget-Gate pro Turn (kein
-  // Token-Burn ueber dem Cap). NICHT unter /voice -> die Ed25519-Signaturpruefung (P4.5)
-  // bleibt unberuehrt. Das Registrieren deaktiviert KEINE bestehende Middleware (Express
-  // fuehrt sie fuer andere Pfade unveraendert weiter aus, Invariante 4).
-  // Kosten-Notaus: EIN ConversationWatchdog, geteilt von Shim (Loop-Guard +
-  // Dead-Air-Feed pro Turn) und Call-Control-Ingest (Dead-Air armieren bei ai_assistant_start,
-  // stoppen bei hangup). Terminierung ueber das GETEILTE Call-Control-Hangup-Primitiv (auch
-  // der Shim nutzt makeCallControlTerminator fuer Budget-Kill/end_call, S2). watchdog kommt
-  // als die EINE Wurzel-Instanz herein (INV-7, in server.js konstruiert).
-  // KS-P1b: reattachActiveCallByControlId = dieselbe EINE lifecycle-Instanz (INV-7), die
-  // /voice/turn|outbound|status und der Call-Control-Ingest nutzen. Ohne sie verwirft der
-  // Shim ein laufendes Gespraech nach einem Instanzwechsel mit 403, waehrend der Call beim
-  // Provider ohne Cap-Timer und ohne Dead-Air-Watchdog weiterlaeuft.
-  app.post("/v1/chat/completions", makeTelnyxLlmShim({ store, config, agentTurn, localeFor, voiceControl, watchdog, reattachActiveCallByControlId: lifecycle.reattachActiveCallByControlId }));
 
   // P5: "/" hat kein Index (public/ traegt nur statische Marken-Assets) -> ginge sonst auf 404.
   // 302 auf den Login (= Registrierung, Strategie R2). VOR express.static gemountet wie
@@ -311,7 +286,6 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       audit,
       outboundGates,
       voiceControl,
-      originateAiAssistantCall,
       // EL-Anrufstart: die EINE Instanz aus server.js (INV-7, Naht wie callFinish) - sie
       // haelt den ziehenden Ergebnisweg des Anbieters. Fehlt sie im deps-Buendel, bleibt
       // der Platz LEER statt hier zu werfen: makeCallRoutes setzt dann seinen
@@ -424,7 +398,6 @@ export async function buildApp(deps) {
     callFinish,
     lifecycle,
     provisioning,
-    conversationWatchdog,
     ttsStore,
     directiveSynth,
     voiceRender,
@@ -457,7 +430,7 @@ export async function buildApp(deps) {
   app.set("trust proxy", 1);
 
   installGlobalMiddleware({ app, config });
-  registerPublicRoutes({ app, config, store, watchdog: conversationWatchdog, lifecycle });
+  registerPublicRoutes({ app, config });
   registerPathRedirects({ app });
 
   // ---- OIDC-Browser-Login (/auth/*) -----------------------------------
@@ -510,12 +483,11 @@ export async function buildApp(deps) {
 
   // ---- Voice-Webhooks -----------------------------------------------------------------
   // Alle /voice/* (GET /voice/tts/:token, app.use("/voice",sig-MW), incoming/turn/outbound/
-  // status/call-control) leben in routes/voice.js (makeVoiceRoutes, DI-Muster wie
+  // status) leben in routes/voice.js (makeVoiceRoutes, DI-Muster wie
   // makeCallRoutes). Mount an UNVERAENDERTER Position: nach express.static(publicDir), vor
   // makeCallRoutes (INV-2). Sicherung ist die Provider-Signaturpruefung, fail-closed. INV-4: TTS-Route
   // VOR der Sig-MW (im Router festgehalten). finishCall = die EINE callFinish-Instanz
-  // (INV-7); watchdog = der EINE conversationWatchdog (geteilt mit dem Shim);
-  // voiceRender/directiveSynth/ttsStore/lifecycle = die EINEN Wurzel-Instanzen.
+  // (INV-7); voiceRender/directiveSynth/ttsStore/lifecycle = die EINEN Wurzel-Instanzen.
   app.use(
     makeVoiceRoutes({
       store,
@@ -526,13 +498,11 @@ export async function buildApp(deps) {
       ttsStore,
       lifecycle,
       finishCall: callFinish.finishCall,
-      voiceControl,
       webhookEvents,
       providerFromHeaders,
       inboundSignatureVerifier,
       terminateAndBillCall,
       billThunk,
-      watchdog: conversationWatchdog,
     }),
   );
 
@@ -547,8 +517,7 @@ export async function buildApp(deps) {
   // (volle Begruendung im Routenmodul + src/route-policy.js). NICHT unter /voice: die
   // Ed25519-Signaturpruefung dort bleibt unberuehrt. Die Wirkung laeuft ueber den
   // BESTEHENDEN Consult-Kanal (call.consults, AL-P13); makeConsultRaised haelt selbst
-  // keinen Zustand und wird deshalb hier in der Kompositionswurzel gebaut, wie
-  // makeTelnyxLlmShim.
+  // keinen Zustand und wird deshalb hier in der Kompositionswurzel gebaut.
   //
   // BEIDE Nahtstellen zeigen auf DIESELBE consultDelivery-Instanz (INV-7), und zwar
   // aus zwei Gruenden: ihre Slot-Zaehler begrenzen, wie viele Verbindungen gleichzeitig

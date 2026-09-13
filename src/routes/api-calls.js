@@ -8,7 +8,7 @@
 //
 // ABSOLUTE REGEL Safety-Gates (INV-9): die geordnete Outbound-Gate-Kette laeuft
 // unveraendert als EINE Schleife ueber das EINE injizierte outboundGates-Array (INV-7,
-// wird NICHT hier neu gebaut); armMaxDurationTimer(call,null) (C-Telnyx-Zweig) bzw.
+// wird NICHT hier neu gebaut); armMaxDurationTimer(call,null) (TeXML-Zweig) bzw.
 // armMaxDurationTimer(call,tw.sid) (TeXML-Zweig) sitzen an exakt denselben Punkten
 // (kein Cap-Verlust). Der Fehlerpfad (terminateAndBillCall + providerStatus-
 // Kategorisierung, kein Roh-Provider-/Secret-Leak an den Client) wandert unveraendert.
@@ -34,7 +34,6 @@ import {
 } from "../telephony/outbound-gates.js";
 import { startRejectionReason } from "../telephony/failure-reason.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
-import { providerSupports, CAPABILITY } from "../telephony/registry.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
@@ -262,7 +261,7 @@ const unsupportedLanguageBody = () => ({
 
 // P4a/E-1 (hartes Gate): der Wunsch gilt NUR auf dem Sprechweg, der Gespraechs- und
 // Offenlegungssprache getrennt beantwortet (ElevenLabs, elevenlabs/call-locale.js). Die
-// Telnyx-Zweige rendern den Offenlegungssatz aus call.language (claude.js
+// Der TeXML-Zweig rendert den Offenlegungssatz aus call.language (claude.js
 // disclosureSentence) - dort machte ein Wunsch die Sprache der PFLICHTAUSSAGE
 // client-bestimmt, und genau das verbietet F-2 Punkt 4 (PM-2). LAUT abgelehnt statt still
 // ignoriert: ein wirkungsloses Feld IST der Defekt, gegen den diese Phase gebaut ist.
@@ -285,7 +284,6 @@ export function makeCallRoutes({
   audit,
   outboundGates,
   voiceControl,
-  originateAiAssistantCall,
   // EL-Anrufstart (dritter Outbound-Weg): die EINE Instanz aus server.js (INV-7) - sie
   // haelt den ziehenden Ergebnisweg, eine zweite haette eine zweite Abhol-Schleife.
   // Ohne verdrahtete Instanz greift der fail-closed Ersatz: bei eingeschaltetem Schalter
@@ -407,7 +405,7 @@ export function makeCallRoutes({
     // Thema A (Auftrag 2026-08-19): die Eroeffnungszeile des ElevenLabs-Wegs entsteht
     // BEI AUFTRAGSANNAHME - vorab erzeugt, fail-closed validiert, mit Rueckfall-Treppe
     // (src/elevenlabs/opening-line.js). NUR hinter dem EL-Schalter: die beiden
-    // Telnyx-Zweige lesen die Zeile nie, eine Erzeugung dort waere bezahlter Muell.
+    // Der TeXML-Zweig liest die Zeile nie, eine Erzeugung dort waere bezahlter Muell.
     // Position NACH der Gate-Kette wie das Briefing (Regel 1: keine LLM-Token fuer
     // einen Anruf, den ein Gate ablehnt). Die Sprache kommt aus DERSELBEN Aufloesung,
     // die der Anrufstart benutzt (callLocaleOf, elevenlabs/outbound.js) - kein zweiter
@@ -441,7 +439,7 @@ export function makeCallRoutes({
       from: ctx.fromNumber,
       to: ctx.to,
       goal: ctx.objective,
-      openingLine, // Thema A: null auf den Telnyx-Zweigen (s. Block oben)
+      openingLine, // Thema A: null auf dem TeXML-Zweig (s. Block oben)
       briefing: b.briefing,
       constraints: b.constraints,
       context: ctx.context,
@@ -471,9 +469,9 @@ export function makeCallRoutes({
     emitOpeningConsult({ req, call, context: ctx.context, tenantId: ctx.tenantId });
 
     try {
-      // EL-Anrufstart: der dritte Weg, an EXAKT derselben Stelle wie die beiden anderen -
+      // EL-Anrufstart: an EXAKT derselben Stelle wie der TeXML-Weg -
       // HINTER der kompletten, unveraenderten Gate-Kette (KEIN zweiter Einstieg, Regel 1).
-      // Der Weichenschalter steht Default aus; aus -> die beiden Telnyx-Zweige unten laufen
+      // Der Weichenschalter steht Default aus; aus -> der TeXML-Zweig unten laeuft
       // byte-identisch weiter. Der PROVIDER des Anrufs bleibt telnyx (die DID liegt dort,
       // ElevenLabs haengt per SIP-Trunk daran) - deshalb keine Provider-Abfrage, sondern
       // ein Engine-Schalter (s. src/elevenlabs/outbound.js).
@@ -482,7 +480,7 @@ export function makeCallRoutes({
         // liest niemand produktiv, lehnt niemanden ab.
         store.recordCostProfile(call.id, KOSTENPROFIL.EL_CONVAI_SIP);
         await originateElevenLabsCall(call);
-        // Regel 1 (Minuten-Achse): derselbe harte Max-Dauer-Cap wie im C-Telnyx-Zweig.
+        // Regel 1 (Minuten-Achse): derselbe harte Max-Dauer-Cap wie im TeXML-Zweig.
         // providerCallSid=null ist Absicht (es gibt keinen twilioSid); ohne callControlId
         // faellt hangUpAction auf null - der Cap beendet und bucht den Record, stoppt die
         // Ergebnis-Abholung UND loest seit 6da29ec (elevenLabsHangUpAction, s.
@@ -490,28 +488,6 @@ export function makeCallRoutes({
         // /v1/convai/conversations/{id}, S1-2b: Kommentar korrigiert - er behauptete
         // vorher das Gegenteil). OB das die Leitung tatsaechlich kappt, ist weiterhin
         // NICHT belegt (s. convai.js#endConversation).
-        armMaxDurationTimer(call, null);
-        // C-Telnyx (P5): Call-Control-Origination HINTER der kompletten, unveraenderten Gate-
-        // Kette (KEIN zweiter Einstieg, Regel 1). Verzweigt NUR bei aktivem Flag + Telnyx-
-        // Provider; sonst TeXML byte-identisch. Flag Default aus -> Live-Pfad unveraendert bis P11.
-      } else if (config.telnyx.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)) {
-        store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_ASSISTANT);
-        await originateAiAssistantCall({
-          store,
-          voiceControl,
-          config,
-          call,
-          fromNumber: ctx.fromNumber,
-          to: ctx.to,
-          maxDur: ctx.maxDur,
-        });
-        // P6 (Regel 1, Minuten-Achse): harter Max-Dauer-Cap AUCH fuer C-Telnyx. originateAiAssistantCall
-        // hat call.callControlId persistiert+gespeichert; terminateCappedCall liest sie beim Feuern
-        // frisch und waehlt via hangUpAction den Call-Control-Hangup (endCallViaCallControl), NICHT
-        // TeXML-endCall. providerCallSid=null ist Absicht (es gibt keinen twilioSid; die ID kommt
-        // aus callControlId). KEIN realtime-Guard: ein C-Telnyx-Call laeuft NICHT ueber die
-        // Realtime-Bridge (kein Media-Stream) -> dieser Timer ist neben time_limit_secs der
-        // EINZIGE in-Prozess-Cap (fail-closed, Regel 1).
         armMaxDurationTimer(call, null);
       } else {
         // Owner-Entscheidung 10 laeuft auf ihrem DEFAULT: dieser Zweig verzweigt NICHT

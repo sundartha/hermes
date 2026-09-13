@@ -1,7 +1,7 @@
 // F10 Runde 2 (S1/G5), C5 (Struct-4): der EINE Terminierungspfad, den JEDER Beender eines
-// aktiven Calls IN DER BUDGET-ENGINE durchlaeuft - fuenf Ausloeser: Max-Dauer-Cap-Timer
-// (terminateCappedCall), cancel_call, place_call-Dial-Fehlschlag, /voice/status und der
-// Telnyx-onHangup - Reihenfolge fest: erst persistieren, dann den Provider-
+// aktiven Calls IN DER BUDGET-ENGINE durchlaeuft - vier Ausloeser: Max-Dauer-Cap-Timer
+// (terminateCappedCall), cancel_call, place_call-Dial-Fehlschlag und /voice/status -
+// Reihenfolge fest: erst persistieren, dann den Provider-
 // Leg auflegen (awaited), ERST DANACH billing/summary/SMS anstossen (fire-and-forget). Die
 // umgekehrte Reihenfolge hielte den Anruf beim Provider technisch live, waehrend die
 // Buchungskette (echter LLM-Roundtrip in summarizeCall ueber src/llm.js mit EIGENEM
@@ -71,7 +71,9 @@ export function billThunk(finishCall, store, callId) {
 }
 
 // P6 (Regel 1 / Befund 1): waehlt Hangup-Endpunkt+ID anhand der Call-FORM, NICHT der
-// voiceEngine. Ein Call-Control-Call (callControlId gesetzt, C-Telnyx) wird ueber
+// voiceEngine. Ein Call-Control-Altbestand (callControlId gesetzt - seit IE6-S1 nur noch
+// persistierter Altbestand; rearmActiveCallTimers muss solche Legs nach einem Neustart
+// weiter beenden koennen) wird ueber
 // endCallViaCallControl(callControlId) beendet; ein TeXML-Call ueber endCall(
 // providerCallSid) - byte-identisch zum Bestand. EINE Quelle (G5) fuer terminateCappedCall
 // UND cancel_call, damit die ID-/Endpunkt-Entscheidung nicht an zwei Stellen driftet.
@@ -116,9 +118,7 @@ export function elevenLabsHangUpAction(endActiveCall, call) {
 // blieb GRUEN. Diese Funktion ist die EINE Formulierung fuer diese VIER Naehte (Geltungs-
 // bereich: test/fehlergrund-reihenfolge-riegel.test.js#ORDER_CRITICAL_FILES) - sie liefert
 // den persistEnd-Thunk, in dem der Grund per Konstruktion ZUERST steht - es gibt an diesen
-// Naehten danach keine Anweisung mehr, die man hinter das await schieben KOENNTE. EINE
-// fuenfte Naht (telnyx-call-control-ingest.js#recordHangupOutcome) bleibt bewusst
-// aussenvor - Begruendung im Kommentarkopf des Riegel-Tests.
+// Naehten danach keine Anweisung mehr, die man hinter das await schieben KOENNTE.
 // store.recordFailureReason ist set-once und bei null ein No-op (store/state-ops.js:854).
 // EIN Options-Argument (F1: max-params 3).
 export function persistEndWithReason({ store, callId, reason, endCall }) {

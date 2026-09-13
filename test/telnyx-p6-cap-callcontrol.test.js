@@ -29,7 +29,9 @@ const SOURCE_WINDOW_TERMINATE_ACTIVE_CALL_CHARS = 1600; // T6 (lifecycleSrc)
 // S1-4 Fix (Owner-Auftrag 15.08.2026): von 1500 auf 4000 gewachsen - der cancel_call-Handler
 // traegt seither die S1-4/S1-5-Begruendungskommentare VOR dem hangUp-Feld.
 const SOURCE_WINDOW_CANCEL_CALL_CHARS = 4000; // T7 (apiCallsSrc)
-const SOURCE_WINDOW_ARM_TIMER_CHARS = 1500; // T8 (apiCallsSrc)
+// Wiring-Guard (umgezogen aus test/telnyx-p9-flag-matrix.test.js, IE6-S1): Slice-Fenster
+// fuer rearmActiveCallTimers (lifecycleSrc).
+const SOURCE_WINDOW_REARM_TIMERS_CHARS = 1200;
 
 // Spy-voiceControl: protokolliert jeden endCall/endCallViaCallControl-Aufruf mit
 // Provider+Argument, damit T1-T3 belegen koennen, welcher Endpunkt getroffen wurde
@@ -197,18 +199,22 @@ test("T7: cancel_call verwendet hangUpAction (dieselbe Quelle wie terminateCappe
   );
 });
 
-test("T8: C-Telnyx-Origination armiert den Max-Dauer-Timer (P6-Luecke geschlossen)", () => {
-  // P6 (Struct-1, Outbound-Gate-Kette-Extraktion): outboundProvider lebt seither als
-  // ctx.outboundProvider (Gate-Loop-Ergebnis) - reine Variablenquelle, kein Verhaltenswechsel.
-  // P5 (Provider-Registry): der Telnyx-Literal-Vergleich wurde durch die Capability-Seam
-  // (providerSupports/CAPABILITY) ersetzt - derselbe Marker-Anker, neue Quelltext-Form.
-  const marker =
-    "config.telnyx.telnyxAssistant.enabled && providerSupports(ctx.outboundProvider, CAPABILITY.AI_ASSISTANT)";
-  const block = apiCallsSrc.slice(
-    apiCallsSrc.indexOf(marker),
-    apiCallsSrc.indexOf(marker) + SOURCE_WINDOW_ARM_TIMER_CHARS,
+// Umgezogen aus test/telnyx-p9-flag-matrix.test.js (IE6-S1, Datei geloescht): sichert nur,
+// dass rearmActiveCallTimers die Hangup-Endpunktwahl weiterhin an hangUpAction delegiert
+// (Befund 1) statt sie inline nach voiceEngine zu verzweigen. Kein "C-Telnyx" mehr im
+// Namen - der Assistant-Pfad ist entfernt, der Wiring-Anspruch bleibt.
+test("Wiring: rearmActiveCallTimers terminalisiert ausschliesslich ueber terminateCappedCall/scheduleMaxDurationEnd (kein direkter voiceEngine-getriebener endCall)", () => {
+  const marker = "function rearmActiveCallTimers()";
+  const block = lifecycleSrc.slice(
+    lifecycleSrc.indexOf(marker),
+    lifecycleSrc.indexOf(marker) + SOURCE_WINDOW_REARM_TIMERS_CHARS,
   );
-
-  assert.match(block, /armMaxDurationTimer\(call,\s*null\)/);
-  assert.doesNotMatch(block, /P6-Luecke/, "die alte, bewusste Luecke darf nicht mehr dokumentiert sein");
+  assert.match(block, /config\.voice\.voiceEngine === VOICE_ENGINE\.REALTIME\) return/);
+  assert.match(block, /terminateCappedCall\(call\.id, call\.twilioSid/);
+  assert.match(block, /scheduleMaxDurationEnd\(call, call\.twilioSid/);
+  assert.doesNotMatch(
+    block,
+    /endCallViaCallControl|\.endCall\(/,
+    "Hangup-Endpunktwahl bleibt in hangUpAction (Befund 1), NIE inline in rearm",
+  );
 });

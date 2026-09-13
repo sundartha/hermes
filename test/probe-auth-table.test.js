@@ -310,3 +310,22 @@ test("AUTH-P7-6: GATE_ONLY_ROUTES ist leer - keine Route haengt mehr allein an e
       "ein neuer Eintrag hier waere eine Route ohne eigene Sicherung.",
   );
 });
+
+// IE6-S1: der Telnyx-Assistant-Shim ist geloescht. Negativkontrolle wie AUTH-P4-8.
+const IN_IE6_S1_GELOESCHT = [{ method: "POST", path: "/v1/chat/completions" }];
+
+test("IE6-S1-10: der in IE6-S1 geloeschte Shim-Endpunkt steht nicht mehr in der Politik und ist Negativkontrolle der Probe", () => {
+  for (const { method, path } of IN_IE6_S1_GELOESCHT) {
+    const schluessel = routeKey(method, path);
+    assert.equal(
+      PUBLIC_KEYS.has(schluessel),
+      false,
+      `${schluessel}: steht noch in PUBLIC_ROUTES - in IE6-S1 geloescht, aber die Politik nicht nachgezogen`,
+    );
+    const zeile = TABELLEN_SCHLUESSEL.get(schluessel);
+    assert.ok(zeile, `${schluessel}: fehlt in der Probe-Tabelle - keine Negativkontrolle mehr`);
+    assert.equal(zeile.art, ART.FEHLT, `${schluessel}: ART muss 'fehlt' sein`);
+    assert.equal(zeile.status, "404", `${schluessel}: erwarteter Status ist 404`);
+    assert.equal(zeile.antwortet, ANTWORTET.KEINE, `${schluessel}: ANTWORTET muss 'keine' sein`);
+  }
+});

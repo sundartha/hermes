@@ -7,8 +7,6 @@ import * as store from "./store.js";
 import { planSummarySms } from "./sms-summary.js";
 import { summarizeCall } from "./claude.js";
 import { qualifiesAsInboxEntry } from "./inbox-entry.js";
-import { makeConversationWatchdog, WATCHDOG_LOG_PREFIX } from "./telnyx-conversation-watchdog.js";
-import { makeCallControlTerminator } from "./telnyx-call-terminate.js";
 import { createTtsStore } from "./tts/store.js";
 import { makeDirectiveSynth } from "./tts/directive-synth.js";
 import { audit } from "./util.js";
@@ -221,7 +219,7 @@ const accountsRef = { current: null };
 // call-finish (P4): finishCall (Settlement/Summary/SMS/Mail) + releaseReserve (Reserve-
 // Freigabe) EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler;
 // INV-7). EINE Instanz: dieselbe finishCall-Referenz geht an attachMediaBridge UND - via
-// makeVoiceRoutes - makeCallControlIngest
+// makeVoiceRoutes
 // (call._finished/billedAt-Guards verlangen Identitaet). metering ist oben konstruiert (P1);
 // die paymentEnabled-Gating-Bedingung bleibt im finishCall-Body (INV-9), Cents bleiben Ganzzahl.
 const callFinish = makeCallFinish({
@@ -320,19 +318,8 @@ const provisionRetryWatch = makeProvisionRetryWatch({
   audit: durableAudit,
 });
 
-// stab-p9 (Kosten-Notaus): EIN ConversationWatchdog, geteilt von Shim (Loop-Guard +
-// Dead-Air-Feed pro Turn) und Call-Control-Ingest (Dead-Air armieren bei ai_assistant_start,
-// stoppen bei hangup). Terminierung ueber das GETEILTE Call-Control-Hangup-Primitiv (auch
-// der Shim nutzt makeCallControlTerminator fuer Budget-Kill/end_call, S2). EINMAL beim Boot
-// verdrahtet (Naht wie metering/callFinish/lifecycle/provisioning, INV-7); geht als deps-
-// Eintrag an buildApp (Shim-Mount + Voice-Routes teilen sich die EINE Instanz).
-const conversationWatchdog = makeConversationWatchdog({
-  config,
-  terminate: makeCallControlTerminator({ store, voiceControl, logPrefix: WATCHDOG_LOG_PREFIX }),
-});
-
 // Play-TTS-Seam: haelt vorab synthetisierte Agent-Audios kurz + einmalig (PII). EINMAL
-// beim Boot verdrahtet (Naht wie conversationWatchdog, INV-7).
+// beim Boot verdrahtet (Naht wie callFinish, INV-7).
 const ttsStore = createTtsStore({ ttlMs: config.voice.elevenLabsPlayTts.tokenTtlMs });
 
 // LCT P7 (Fixkosten sichtbar machen): Alarm bei ueberschrittener ElevenLabs-Kontingent-
@@ -356,7 +343,7 @@ function onTtsQuotaWarning(warning) {
 const directiveSynth = makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning: onTtsQuotaWarning });
 
 // AL-P13: Consult-Zustellung (Stufe 0: kurzer, client-gezogener Long-Poll). EINMAL beim
-// Boot verdrahtet (Naht wie ttsStore/conversationWatchdog, INV-7): Poll-Zaehler und
+// Boot verdrahtet (Naht wie ttsStore/callFinish, INV-7): Poll-Zaehler und
 // Drain-Flag leben im Factory-Scope = EINE Obergrenze pro Prozess. Geht an buildApp
 // (Consult-Routen) UND an bootServer (Shutdown-Drain loest offene Polls auf).
 const consultDelivery = makeConsultDelivery({ store });
@@ -383,7 +370,6 @@ const deps = {
   outboundGates,
   requestTenant,
   requireTenant,
-  conversationWatchdog,
   ttsStore,
   directiveSynth,
   voiceRender,

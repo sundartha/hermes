@@ -45,8 +45,6 @@ import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/
 import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.js";
 // LCT-FIX-1: welche Belegtypen einem Call zugeordnet werden koennen, weiss der Adapter, der
 // die Belege liest - der Boot-Guard bleibt eine reine, arg-injizierte Entscheidung.
-// Provider-Konstante, kein Transport: dieselbe Richtung wie telnyx-call-control-ingest.js
-// (assistantVoiceConfigured).
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
 import { attachMediaBridge, REALTIME_MID_CALL_BUDGET_CHECK } from "./bridge.js";
 import {
@@ -82,8 +80,8 @@ import { CATALOG_SLUGS } from "./plans.js";
 import { priceIdForPlan } from "./billing/subscribe.js";
 import { planCapCents } from "./billing/plan-caps.js";
 import { audit } from "./util.js";
-import { deadAirOverrun, turnBudgetOverrun } from "./turn-budget.js";
-import { MS_PER_MINUTE, MS_PER_SECOND } from "./utils/timer.js";
+import { turnBudgetOverrun } from "./turn-budget.js";
+import { MS_PER_MINUTE } from "./utils/timer.js";
 // GAP-19: EIN Praedikat fuer beide Haelften - der Boot meldet genau die Konstellation, die
 // in der Outbound-Kette das Herkunfts-Gate abschaltet (G5). Kein Zyklus: outbound-gates.js
 // importiert boot.js nicht.
@@ -395,31 +393,6 @@ function warnTurnBudgetOverrun(config) {
   );
 }
 
-// AL-P6: der Bestands-Waechter oben misst EINE llm.complete-Kette gegen den Provider-
-// Hardcut. Dieser hier misst den TURN als Ganzes (bis zu MAX_TOOL_ROUNDS_PER_TURN Runden,
-// mit greifender Frist) gegen den Dead-Air-Watchdog des Assistant-Pfads: reisst der Turn
-// ihn, beendet der Watchdog mitten im Satz. WARN, kein exit(1) - eine gesprengte Wanduhr
-// ist kein Safety-Gate (Muster warnTurnBudgetOverrun). Nur bei aktivem Assistant-Pfad:
-// ohne Flag wird der Dead-Air-Timer nie armiert, die Warnung waere irrefuehrend
-// (Praezedenz warnMissingProvisioningConnection).
-function warnTurnOutlivesDeadAir(config) {
-  if (!config.telnyx.telnyxAssistant.enabled) return;
-  const finding = deadAirOverrun({
-    deadAirTimeoutMs: config.telnyx.telnyxAssistant.deadAirTimeoutS * MS_PER_SECOND,
-    requestTimeoutMs: config.llm.llmRequestTimeoutMs,
-    maxRetries: config.llm.llmMaxRetries,
-    backoffMs: config.llm.llmBackoffMs,
-    synthTimeoutMs: config.voice.elevenLabsPlayTts.synthTimeoutMs,
-  });
-  if (!finding) return;
-  console.warn(
-    `[boot] Konfig-Warnung: ein Turn kann ${finding.worstCaseMs} ms dauern und reisst den ` +
-      `Dead-Air-Watchdog ${finding.limitMs} ms um ${finding.overrunMs} ms ` +
-      "(TELNYX_DEAD_AIR_TIMEOUT_S/LLM_REQUEST_TIMEOUT_MS/LLM_MAX_RETRIES/LLM_BACKOFF_MS/" +
-      "ELEVENLABS_SYNTH_TIMEOUT_MS).",
-  );
-}
-
 // FW2: der Ausweich-Anbieter ist gesetzt, kann aber nicht ausweichen. WARN (s. Guard).
 function warnLlmFallbackUnusable(config) {
   for (const finding of llmFallbackFindings({
@@ -601,7 +574,6 @@ function assertBootGates(config, store, durableAudit) {
   warnTarifpaar(config, store); // KV2-10, WARN: Tarifpaar-Waechter feuert beim Start
   warnVoiceTariffBelowFullCost(config, store); // NEU: LCT P4b, WARN
   warnTurnBudgetOverrun(config); // GAP-22, WARN
-  warnTurnOutlivesDeadAir(config); // AL-P6, WARN
   warnLlmFallbackUnusable(config); // FW2, WARN
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
@@ -623,43 +595,6 @@ export function budgetAxisLabel(budgetMonthEnabled, axisLabelWhenFlagOff) {
   return budgetMonthEnabled
     ? "Spend-Monat (BUDGET_MONTH_ENABLED=true)"
     : `${axisLabelWhenFlagOff} (BUDGET_MONTH_ENABLED=false)`;
-}
-
-// AL-P1 (O1-Sonde): welcher Pfad live laeuft, waren ZWEI unabhaengige Schalter -
-// VOICE_ENGINE stand im Banner, das Assistant-Flag nirgends. Genau diese Blindheit hat den
-// Plan eine Messrunde gekostet. Eigene Funktion, damit die Banner-Zeile eine
-// Abstraktionsebene bleibt (G34) und die Bedingung einen Namen hat (G28).
-export function assistantPathLabel(assistantEnabled) {
-  return envFlagState("TELNYX_AI_ASSISTANT_ENABLED", assistantEnabled);
-}
-
-// GQ-P3: der Master-Schalter darueber meldete "AKTIV", waehrend INBOUND ueber die
-// Budget-Engine lief - diese Luege darf nicht zurueckkehren. Beide Schalter getrennt,
-// unkonditional (Muster capabilityProbeLines): eine im Aus-Zustand verschwindende Zeile
-// waere im Live-Log nicht von einem Deploy ohne Sonde zu unterscheiden.
-// Die Zeile faellt KEIN Gesamturteil - Provider und Body-Feld entscheiden je Anruf und
-// stehen in der inbound_path-Zeile je Leg (telnyx-inbound.js).
-export function inboundHandoffProbeLine(telnyxAssistant) {
-  return probeLine(
-    "Inbound-Handoff",
-    envFlagState("TELNYX_INBOUND_HANDOFF_ENABLED", telnyxAssistant.inboundHandoffEnabled),
-    `wirkt nur mit TELNYX_AI_ASSISTANT_ENABLED=${telnyxAssistant.enabled} und Telnyx als Inbound-Provider`,
-  );
-}
-
-// Messschalter (transcriptionFields, adapters/telnyx/voice.js): welcher Wert live steht,
-// war in diesem Projekt mehrfach nicht ablesbar - ein Schalter ohne Sonde ist eine neue
-// blinde Stelle (Muster inboundHandoffProbeLine, unkonditional). Fuer EINEN begleiteten
-// Testanruf gedacht, kein Dauerbetrieb.
-export function perCallTranscriptionProbeLine(telnyxAssistant) {
-  return probeLine(
-    "Pro-Call-Transkription",
-    envFlagState(
-      "TELNYX_PER_CALL_TRANSCRIPTION_ENABLED",
-      telnyxAssistant.perCallTranscriptionEnabled,
-    ),
-    "aus -> kein transcription-Feld im Call-Control-Body, Assistant-Config entscheidet allein",
-  );
 }
 
 // IP4: welchen Inbound-Sprechpfad diese Instanz faehrt. Bis hierher war das am laufenden
@@ -686,22 +621,13 @@ export function inboundSprechpfadBannerLine(voice) {
 
 // AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den
 // MCP-Host. Ein solcher Schalter darf nicht unbemerkt scharf sein (Muster
-// assistantPathLabel). Aus -> keine Zeile, Banner byte-identisch.
+// thinkingSignalBannerLine). Aus -> keine Zeile, Banner byte-identisch.
 export function inCallConsultBannerLine(tenancy) {
   return tenancy.inCallConsultEnabled ? "In-Call-Consult: AKTIV (IN_CALL_CONSULT_ENABLED=true)" : "";
 }
 
-// AL-P7: welcher Draht live laeuft, darf nicht wieder nur im Code stehen (die
-// Assistant-Flag-Blindheit hat den Plan schon eine Messrunde gekostet). Aus -> keine
-// Zeile, Banner byte-identisch (Muster inCallConsultBannerLine).
-export function tokenStreamingBannerLine(telnyxAssistant) {
-  return telnyxAssistant.shimTokenStreaming
-    ? "Token-Streaming: AKTIV (TELNYX_SHIM_TOKEN_STREAMING=true)"
-    : "";
-}
-
 // AL-P7b: das Denk-Signal aendert, WAS der Anrufer hoert. Ein solcher Schalter darf nicht
-// unbemerkt scharf sein (Muster tokenStreamingBannerLine / inCallConsultBannerLine, und die
+// unbemerkt scharf sein (Muster inCallConsultBannerLine, und die
 // Repo-Lehre "Deploy-Stand nie aus einer Notiz lesen"). Aus -> keine Zeile, Banner
 // byte-identisch.
 export function thinkingSignalBannerLine(voice) {
@@ -937,14 +863,9 @@ function logBootBanner(config, port) {
   console.log(
     `  Voice-Engine:   ${config.voice.voiceEngine}${config.voice.voiceEngine === VOICE_ENGINE.REALTIME && !config.voice.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
   );
-  console.log(`  Assistant-Pfad: ${assistantPathLabel(config.telnyx.telnyxAssistant.enabled)}`);
-  console.log(`  ${inboundHandoffProbeLine(config.telnyx.telnyxAssistant)}`);
-  console.log(`  ${perCallTranscriptionProbeLine(config.telnyx.telnyxAssistant)}`);
   console.log(`  ${inboundSprechpfadBannerLine(config.voice)}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
   if (inCallConsult) console.log(`  ${inCallConsult}`);
-  const tokenStreaming = tokenStreamingBannerLine(config.telnyx.telnyxAssistant);
-  if (tokenStreaming) console.log(`  ${tokenStreaming}`);
   const thinkingSignal = thinkingSignalBannerLine(config.voice);
   if (thinkingSignal) console.log(`  ${thinkingSignal}`);
   // AL-P16: die Sonden stehen unkonditional, auch im Aus-Zustand (s. Kommentar bei
@@ -1235,10 +1156,6 @@ export async function bootServer({
   config,
   store,
   lifecycle,
-  // Boot-Re-Arm der Dead-Air-Wache (s. unten bei rearmActiveCallTimers). Dieselbe EINE
-  // Instanz, die Shim und Call-Control-Ingest teilen (INV-7) - server.js reicht sie im
-  // deps-Buendel bereits durch, hier wird sie nur ausgepackt.
-  conversationWatchdog,
   callFinish,
   provisioning,
   costTruing,
@@ -1348,26 +1265,13 @@ export async function bootServer({
   // ausschliesslich Timer - INV-5 (kein exit(1) nach dem Re-Arm) bleibt unberuehrt.
   lifecycle.rearmBudgetWatchdogs();
 
-  // Zweite Achse desselben Boot-Problems: der Cap-Re-Arm darueber deckt ein ueberlebendes
-  // Leg mit Groessenordnung MAX_CALL_DURATION_CAP_S, die Dead-Air-Frist des Gespraechs-
-  // Waechters mit Groessenordnung 45 s - dessen Timer nimmt ein Deploy genauso mit, und
-  // sein einziger Armierer (ai_assistant_start, Call-Control-Ingest) kommt fuer ein bereits
-  // laufendes Gespraech nie wieder. UNMITTELBAR NACH dem Cap-Re-Arm und aus DESSEN
-  // Ergebnis: der Zombie-Zweig dort setzt den Endstatus synchron (persistEnd laeuft vor dem
-  // ersten await in terminateAndBillCall), der Schnappschuss traegt also nur noch Zeilen,
-  // die wirklich weiterlaufen; welche davon ein Assistant-Leg sind, entscheidet der
-  // Waechter an den Merkmalen AM CALL, nicht an einem Flag (isRunningAssistantLeg).
-  // Setzt ausschliesslich Timer - INV-5 (kein exit(1) nach dem Re-Arm) bleibt unberuehrt,
-  // der Max-Dauer-Cap und sein Re-Arm sind unveraendert.
-  conversationWatchdog.rearmActiveCalls(store.load().calls);
-
-  // Dritte Achse desselben Boot-Problems: die beiden Re-Arms darueber holen Timer zurueck,
+  // Zweite Achse desselben Boot-Problems: die beiden Re-Arms darueber holen Timer zurueck,
   // die der Neustart genommen hat - diese Naht schliesst den Zustand, den kein Timer mehr
   // erreicht (s. expireOrphanedConsults). NACH dem Cap-Re-Arm, damit ein dort terminalisierter
   // Zombie hier gar nicht erst als laufender Anruf auftaucht.
   expireOrphanedConsults(store);
 
-  // Vierte Achse desselben Boot-Problems (Owner-Auftrag 15.08.2026, Aufgabe 2): der
+  // Dritte Achse desselben Boot-Problems (Owner-Auftrag 15.08.2026, Aufgabe 2): der
   // ziehende EL-Ergebnisabruf (elevenlabs/outbound.js#scheduleResultPoll) ist ein reiner
   // In-Prozess-setTimeout mit originateCall als einzigem Ausloeser - ein Neustart nimmt ihn
   // mit, ein aktiver EL-Call bleibt fuer immer "active". Setzt ausschliesslich Timer bzw.

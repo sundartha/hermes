@@ -96,7 +96,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // FW2: llmProviderFallback + llmBillingLatchCooldownMs ergaenzt (Ausweich-Anbieter des
   // Guthaben-Latch + seine Haltedauer) -> 17.
   llm: 17,
-  telnyx: 2,
+  // IE6-S1: telnyxAssistant (18 Sub-Keys, eigenes Namespace-Blatt) entfernt -> 1.
+  telnyx: 1,
   // AL-P7b: thinkingSignalEnabled ergaenzt (Denk-Signal-Flag) -> 11.
   // STT-A1: sttProfile ergaenzt (neutrale STT-Wahl, EIN Config-Schluessel fuer alle
   // Telefonie-Adapter) -> 12.
@@ -119,7 +120,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // OUTBOUND-E5: telnyxSipTrunkUsername + telnyxSipTrunkPassword ergaenzt (Digest-
   // Zugangsdaten der SIP-Trunk-FQDN-Connection, nur fuer das Anlegen einer EL-
   // Nummernregistrierung) -> 11.
-  telephony: 11,
+  // IE6-S1: telnyxDialTimeoutSecs entfernt (nur vom Assistant-Pfad genutzt) -> 10.
+  telephony: 10,
   // P8: precallBriefingEnabled ergaenzt (Pre-Call-Briefing-Flag) -> 6.
   // AL-P13: consultEnabled ergaenzt (Consult-Kanal am Call, Default aus) -> 7.
   // AL-P14: inCallConsultEnabled ergaenzt (Rueckfrage IM Gespraech, Default aus) -> 8.
@@ -183,7 +185,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // IE2: budgetWatchdogIntervalMs (safety) ergaenzt -> 193.
 // IE3: elevenLabsInbound (voice, gruppiert wie elevenLabsOutbound - ein Namespace-Blatt,
 // egal wie viele Schluessel spaeter darin liegen) ergaenzt -> 194.
-const EXPECTED_TOTAL_KEYS = 194;
+// IE6-S1: telnyxAssistant (EIN Namespace-Blatt, nicht seine 18 internen Sub-Keys) +
+// telnyxDialTimeoutSecs entfernt -> 192.
+const EXPECTED_TOTAL_KEYS = 192;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -338,11 +342,14 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // GP-P4: provisioningRetryMinIntervalMs ist ebenfalls primitiv (Zahl) -> 178.
   // GP-P6: priceDriftMinIntervalMs + priceDriftUnknownEscalateAfter sind primitiv (Zahlen) -> 180.
   // IE2: budgetWatchdogIntervalMs ist primitiv (Zahl, kein Array/nested Objekt) -> 181.
-  const EXPECTED_PRIMITIVE_LEAVES = 181;
+  // IE6-S1: telnyxDialTimeoutSecs (primitives Blatt) entfernt -> 180. telnyxAssistant war
+  // selbst ein nested Objekt (continue oben) und trug nie zu checked bei - kein
+  // weiterer Abzug.
+  const EXPECTED_PRIMITIVE_LEAVES = 180;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,
-    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 5 Arrays - 7 nested Objekte) geprueft`,
+    `alle primitiven Blaetter (${EXPECTED_TOTAL_KEYS} - 5 Arrays - 6 nested Objekte) geprueft`,
   );
 });
 

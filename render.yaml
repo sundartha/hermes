@@ -80,15 +80,9 @@ services:
         sync: false
       - key: TELNYX_SIP_TRUNK_PASSWORD
         sync: false
-      # ElevenLabs-TTS ueber Telnyx (globale Plattform-Stimme). Nur aktiv, wenn
-      # REF + VOICE_ID gesetzt sind; leer = Azure-Bestand. Erst NACH gruenem
-      # Live-Smoke setzen (Plan/tasks/todo.md).
-      - key: TELNYX_ELEVENLABS_API_KEY_REF
-        sync: false
+      # Globale Plattform-Stimme (Rueckfall der Stimm-Karte, EL-Anrufstart).
       - key: TELNYX_ELEVENLABS_VOICE_ID
         sync: false
-      - key: TELNYX_ELEVENLABS_MODEL
-        value: "Default"
       # Play-TTS: ElevenLabs-Stimme via <Play> in der Budget-Engine (Telnyx). GETRENNT
       # vom Relay oben. Default AUS -> Azure byte-identisch.
       # UMSTELLEN (IP4, Eigentuemer-Handlung, kein Deploy noetig - Render ist
@@ -150,77 +144,6 @@ services:
       # sind Dashboard-managed, diese Zeile allein aendert Live nichts.
       - key: ELEVENLABS_INBOUND_ENABLED
         value: "false"
-      # ---- Telnyx AI Assistant / Brain-Shim (C-Telnyx, P10) ----
-      # Master-Flag: 404 bis Cutover. Erst NACH verifiziertem Deploy im Dashboard auf
-      # "true" (Owner-Cutover P11). Flag an -> Boot verlangt ASSISTANT_ID + API_KEY +
-      # CONNECTION_ID + CALL_CONTROL_APP_ID (assertConfig fail-closed).
-      - key: TELNYX_AI_ASSISTANT_ENABLED
-        value: "false"
-      # Opake Assistant-ID (KEIN Secret, aber deployment-spezifisch) -> Dashboard.
-      - key: TELNYX_ASSISTANT_ID
-        sync: false
-      # Call-Control-App-ID (Outbound ueber /v2/calls). ANDERER Objekttyp als
-      # TELNYX_CONNECTION_ID (TeXML) - Verwechslung = HTTP 422 bei jedem Outbound.
-      - key: TELNYX_CALL_CONTROL_APP_ID
-        sync: false
-      - key: TELNYX_SHIM_MAX_TURNS_PER_MIN
-        value: "30"
-      # E2: statisches Shim-Bearer-Secret (SECRET) -> Dashboard.
-      - key: TELNYX_SHIM_SHARED_SECRET
-        sync: false
-      # E3: NAME des Telnyx-Integration-Secrets fuer external_llm.llm_api_key_ref.
-      - key: TELNYX_SHIM_API_KEY_REF
-        sync: false
-      # OBS-FLAG (Diagnose): einmaliger Shape-Dump im Shim (keys-only, NIE Werte). Safe-
-      # Default false; Owner flippt im Dashboard nur fuer den EINEN Diagnose-Call auf true.
-      - key: TELNYX_SHIM_DEBUG_SHAPE
-        value: "false"
-      # AL-P7: echtes Token-Streaming des Shim-Turns (satzweise SSE statt EIN Chunk am
-      # Ende). Safe-Default false; Owner flippt im Dashboard fuer die Latenz-Abnahme.
-      - key: TELNYX_SHIM_TOKEN_STREAMING
-        value: "false"
-      # GQ-P1: Riegel gegen zwei gesprochene Antworten auf EINE Aeusserung (Befund B-1).
-      # Default true = Riegel aktiv; Owner flippt im Dashboard auf "false", um ohne Deploy
-      # auf das Bestandsverhalten zurueckzugehen.
-      - key: TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN
-        value: "true"
-      # GQ-P18: Sprechsperre (ms) am Anfang eines Shim-Turns. Fuer deepgram/nova-3
-      # existiert beim Anbieter KEIN Turn-End-Regler; solange nichts gesprochen wurde, laesst
-      # ein fortschreibender Request den laufenden Turn stumm ueberholen. Die Sperre
-      # verzoegert KEINE Antwort (am Turn-Ende geht alles raus); der Preis faellt nur beim
-      # ERSTEN Wort langer Turns an. Zum Trimmen: hold-Log-Zeile, outcome
-      # silenced/released/flushed. "0" = ohne Deploy zurueck auf das Bestandsverhalten.
-      - key: TELNYX_SHIM_EXTEND_HOLD_MS
-        value: "3000"
-      # Messschalter fuer EINE unbelegte Anbieter-Frage (transcriptionFields, adapters/
-      # telnyx/voice.js): ob der Pro-Call-transcription-Block das Assistant-eigene
-      # transcription-Objekt ersetzt oder in es hineinmerged, sagt die Telnyx-Doku nicht.
-      # Default true = Bestand byte-identisch. Owner flippt im Dashboard NUR fuer EINEN
-      # begleiteten Testanruf auf "false", danach sofort zurueckstellen - kein Dauerbetrieb.
-      - key: TELNYX_PER_CALL_TRANSCRIPTION_ENABLED
-        value: "true"
-      # GQ-P3: Inbound-Handoff auf den Call-Control-Assistant (Befund B-9). DEFAULT AUS -
-      # dieselbe Wahrheit wie der boolEnv-Fallback in src/config.js und .env.example
-      # (gepinnt in test/env-docs-spend-cap-coherence.test.js). Grund: der Handoff feuert
-      # zu FRUEH. Am Live-Anruf gemessen (2026-08-04, call_msf0q18o473z): auf
-      # "inbound_path path=assistant" folgt 370 ms spaeter HTTP 422 (90034 Call not
-      # answered yet) - der Anrufer hoert nur die Fehleransage. Ein Blueprint mit "true"
-      # stellte diesen Zustand bei jedem Apply scharf. Inbound bleibt auf der
-      # Budget-Engine. KOSTEN, falls je "true": der Assistant-Pfad ist rund dreimal teurer.
-      - key: TELNYX_INBOUND_HANDOFF_ENABLED
-        value: "false"
-      # GQ-P5: Riegel gegen den Provider-Anstoss. Telnyx stoesst nach
-      # telephony_settings.user_idle_reply_secs Sekunden Anrufer-Stille selbst einen Turn an,
-      # dessen Request KEINE neue Aeusserung traegt. Default true = der Shim antwortet leer
-      # und gueltig; Owner flippt im Dashboard auf "false" fuer das Bestandsverhalten (die
-      # ALTE Aeusserung wird erneut beantwortet und ausgesprochen).
-      - key: TELNYX_SHIM_IGNORE_PROVIDER_NUDGE
-        value: "true"
-      # GQ-P6: Klingelfrist beim Waehlen (Telnyx POST /v2/calls, timeout_secs; min 5, max
-      # 600). Default 60 statt Anbieter-Default 30 - der war zu knapp, wenn die Zustellung
-      # selbst ~30 s braucht (US-DID nach DE). Owner tunt im Dashboard ohne Deploy.
-      - key: TELNYX_DIAL_TIMEOUT_SECS
-        value: "60"
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,
@@ -483,8 +406,8 @@ services:
         value: "5000"
       - key: EL_CONSULT_ANSWER_MS
         value: "30000"
-      # ---- Denk-Signal (AL-P7b) ---- Default AUS (fail-closed): kein Prompt-Block, kein
-      # zusaetzliches SSE-Fragment. Braucht TELNYX_SHIM_TOKEN_STREAMING=true, um zu wirken.
+      # ---- Denk-Signal (AL-P7b) ---- Default AUS (fail-closed): kein Prompt-Block.
+      # Prompt-Block; kein gesprochener Abnehmer seit IE6-S1 (R-1).
       - key: THINKING_SIGNAL_ENABLED
         value: "false"
       # ---- Anruf an die eigene Nummer (OC-P1) ---- Default AUS / Liste LEER

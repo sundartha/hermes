@@ -9,7 +9,7 @@
 // tasks/afix-testcall2-report.md (Zeile 20-24) - dort per GET verifizierte Feldnamen/Shape.
 //
 // NUR GET, niemals schreibend (Regel 1 - kein Call/keine Aenderung am Live-Assistant).
-// Konventionen wie scripts/telnyx-assistant-provision.mjs: config.js als einzige
+// Konventionen wie scripts/check-outbound-drift.mjs: config.js als einzige
 // Konfig-Quelle, assertTelnyxOk als EIN Fehler-Parser, fail-closed bei fehlendem
 // TELNYX_API_KEY (kein Netzzugriff ohne Key).
 //
@@ -55,7 +55,7 @@ function headers() {
 }
 
 // GET-only Fetch-Wrapper: EINE Fehlerstelle (G5), gleiche Konvention wie
-// telnyx-assistant-provision.mjs (assertTelnyxOk, {data}-Envelope-Unwrap).
+// check-outbound-drift.mjs (assertTelnyxOk, {data}-Envelope-Unwrap).
 async function getJson(path, op) {
   const res = await fetch(`${config.telephony.telnyxApiBase}${path}`, { method: "GET", headers: headers() });
   await assertTelnyxOk(res, op, { attachStatus: true });
@@ -218,7 +218,7 @@ async function conversationIdForCall(hermesCallId) {
 }
 
 async function main() {
-  // Fail-closed VOR jedem Netzzugriff (Muster telnyx-assistant-provision.mjs REQUIRED-Gate):
+  // Fail-closed VOR jedem Netzzugriff (Muster check-outbound-drift.mjs REQUIRED-Gate):
   // kein Key -> kein Fetch-Versuch, kein irrefuehrender Netzwerkfehler.
   if (!config.telephony.telnyxApiKey) failClosed("kein TELNYX_API_KEY konfiguriert (kein Netzzugriff versucht)");
 
@@ -237,7 +237,7 @@ async function main() {
   printTable(rows);
 }
 
-// Nur als Skript ausfuehren, NICHT beim Import (Muster telnyx-assistant-provision.mjs -
+// Nur als Skript ausfuehren, NICHT beim Import (Muster check-outbound-drift.mjs -
 // Offline-Tests importieren nur die reinen Funktionen, kein echter Netz-Call/process.exit).
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
 if (isMain) main().catch((err) => failClosed(`Abruf fehlgeschlagen: ${err.message}`));

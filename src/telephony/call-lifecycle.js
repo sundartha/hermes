@@ -213,10 +213,10 @@ export function makeCallLifecycle({
           store, callId, reason: failureReason,
           endCall: () => store.setCallEndedAt(callId, status, endedAtIso),
         }),
-        // P6 (Befund 1): call ist frisch (getCall oben) -> Call-Control-Call (callControlId
+        // P6 (Befund 1): call ist frisch (getCall oben) -> Call-Control-Altbestand (callControlId
         // gesetzt) wird via endCallViaCallControl beendet, TeXML byte-identisch ueber
         // endCall(providerCallSid). Damit sind rearm/reattach/scheduleMaxDurationEnd AUTOMATISCH
-        // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird bei C-Telnyx ignoriert).
+        // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird beim Altbestand ignoriert).
         // TEIL B: ein EL-Call traegt keins von beiden (elevenlabsConversationId statt) ->
         // hangUpAction liefert null, der EL-Beende-Versuch greift NUR dann (s. dort).
         hangUp: hangUpAction(voiceControl, call, providerCallSid) ?? elevenLabsHangUpAction(endActiveCall, call),
@@ -310,22 +310,6 @@ export function makeCallLifecycle({
     return result;
   }
 
-  // KS-P1b: dieselbe Naht fuer den Assistant-Shim, der ausschliesslich ueber die Telnyx-
-  // eigene call_control_id korreliert (E1) und keine callId kennt. Bewusst ZWEISTUFIG statt
-  // die ccid durch den Kern zu schicken: der Kern coalesced parallele Re-Attaches pro
-  // callId (RACE-1). Ein zweiter Schluessel fuer denselben Call haette dieses Coalescing
-  // ausgehebelt - ein gleichzeitiger Ingest-/voice-Re-Attach und ein Shim-Turn haetten
-  // ZWEI Max-Dauer-Timer fuer dasselbe Leg armiert (Timer-Leak). Preis: auf dem seltenen
-  // Miss-Pfad zwei DB-Scans statt einem; bewusst akzeptiert. Nebeneffekt: der zweite
-  // Durchlauf liefert ueber den pg-RACE-GUARD die SPIEGEL-Instanz - genau die lebende
-  // Referenz, die der Shim braucht. Restzeit-Klassifikation, Guthaben-Pruefung und
-  // Cap-Rearm passieren damit im Kern, nicht hier (G5).
-  async function reattachActiveCallByControlId(callControlId) {
-    const found = await store.attachActiveCallByControlId(callControlId);
-    if (!found) return { call: null, logUnknown: true };
-    return await reattachActiveCall(found.id);
-  }
-
   // F10 (A6): Boot-Re-Arm der Max-Dauer-Timer. Ein Deploy/Restart toetet sonst den
   // In-Prozess-setTimeout jedes laufenden Calls -> der harte Max-Dauer-Cap (Absolute
   // Regel 1) waere nach jedem Boot weg. NUR Budget-Engine (realtime cappt in der
@@ -356,7 +340,7 @@ export function makeCallLifecycle({
 
   return {
     armMaxDurationTimer, armReserveReleaseTimer,
-    reattachActiveCall, reattachActiveCallByControlId,
+    reattachActiveCall,
     rearmActiveCallTimers,
     // IE2: der Boot-Re-Arm der GELD-Achse, unveraendert durchgereicht aus der Naht
     // (dort seine Begruendung). Aufgerufen in boot.js unmittelbar nach dem Cap-Re-Arm.

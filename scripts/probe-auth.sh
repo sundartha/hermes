@@ -89,7 +89,7 @@ oeffentlich|GET|/healthz|200|keine|Keep-Alive und Deploy-Wahrheit, vor jeder Aut
 oeffentlich|GET|/api/plans|200|keine|oeffentlicher Tarifkatalog, registerPublicRoutes
 oeffentlich|GET|/.well-known/oauth-protected-resource|200|keine|OAuth-Metadata, registerWellKnown
 oeffentlich|GET|/.well-known/oauth-protected-resource/mcp|200|keine|OAuth-Metadata (MCP-Variante)
-oeffentlich|POST|/v1/chat/completions|403|keine|Telnyx-Shim: Flag an, Bearer fehlt -> 403 (Flag aus waere 404)
+fehlt|POST|/v1/chat/completions|404|keine|in IE6-S1 geloescht (Assistant-Shim); 404 unabhaengig von Env
 oeffentlich|GET|/auth/login|302|keine|Einstieg in den OIDC-Login
 oeffentlich|GET|/auth/callback|302|keine|ohne state-Cookie -> Neustart des Flows
 oeffentlich|POST|/auth/logout|204|keine|ohne Sitzung wirkungslos
@@ -112,7 +112,6 @@ oeffentlich|POST|/voice/incoming|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/turn|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/outbound|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/status|403|keine|Provider-Signatur fail-closed
-oeffentlich|POST|/voice/call-control|403|keine|Provider-Signatur fail-closed
 oeffentlich|GET|/mcp|405|keine|Transport ist POST-only
 oeffentlich|DELETE|/mcp|405|keine|Transport ist POST-only
 sitzung|POST|/mcp|401|mcpauth|mcpAuth fail-closed (Bearer-Challenge, keine Basic-)

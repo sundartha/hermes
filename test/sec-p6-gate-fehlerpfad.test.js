@@ -173,7 +173,6 @@ async function postCall({ store, aufrufe, config, audit = () => {} }) {
       audit,
       outboundGates,
       voiceControl: () => ({ originateCall: async () => zaehleWahl() }),
-      originateAiAssistantCall: async () => zaehleWahl(),
       originateElevenLabsCall: async () => zaehleWahl(),
       terminateAndBillCall: async () => {},
       hangUpAction: () => null,

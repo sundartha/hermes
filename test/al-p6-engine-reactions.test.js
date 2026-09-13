@@ -10,62 +10,6 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { localeFor } from "../src/i18n/locales.js";
 import { startServer, seedState, seedCall } from "./helpers.js";
-import {
-  fakeRes,
-  fakeStore,
-  voiceControlSpy,
-  agentTurnSpy,
-  makeCall,
-  makeHandler,
-  validReq,
-  sseContent,
-} from "./telnyx-shim-harness.js";
-
-const HANGUP_CALL = { provider: "telnyx", callControlId: "cc_1" };
-
-// Faengt die PII-freien Gate-Zeilen des Shims ab (console.warn wie alle Gate-Logs).
-async function withShimGateLog(fn) {
-  const original = console.warn;
-  const lines = [];
-  console.warn = (...args) => lines.push(args.join(" "));
-  try {
-    await fn();
-    return lines.filter((l) => l.includes("[telnyx-shim] gate"));
-  } finally {
-    console.warn = original;
-  }
-}
-
-// Build-Schritt (P13): ein Shim-Handler samt Spies fuer einen Turn mit gegebenem
-// stopReason, Budget-Gate VOR dem Turn bewusst FREI (nur der Mid-Turn-Abbruch wirkt).
-function shimWithStopReason(stopReason) {
-  const call = makeCall();
-  const store = fakeStore({ call });
-  const voiceControl = voiceControlSpy();
-  const agentTurn = agentTurnSpy({ speech: "Ich schaue kurz nach.", endCall: false, stopReason });
-  return { call, store, voiceControl, res: fakeRes(), handler: makeHandler({ store, agentTurn, voiceControl }) };
-}
-
-test("AL-P6-7: Shim - Tenant-Cap mitten im Turn erschoepft -> Ansage UND Call-Control-Hangup", async () => {
-  const { call, store, voiceControl, res, handler } = shimWithStopReason("budget_tenant");
-
-  const gateLines = await withShimGateLog(() => handler(validReq(call), res));
-
-  assert.equal(sseContent(res), localeFor("de").budgetExhaustedHangup);
-  assert.deepEqual(voiceControl.calls, [HANGUP_CALL]);
-  assert.deepEqual(store.settlementCalls, [], "Settlement bleibt allein bei P4.5 onHangup");
-  assert.equal(gateLines.length, 1);
-  assert.match(gateLines[0], /"reason":"budget_tenant"/);
-});
-
-test("AL-P6-9: Shim - der Zeit-Abbruch legt NICHT auf, der Turn-Text geht raus", async () => {
-  const { call, voiceControl, res, handler } = shimWithStopReason("deadline");
-
-  await handler(validReq(call), res);
-
-  assert.equal(sseContent(res), "Ich schaue kurz nach.");
-  assert.deepEqual(voiceControl.calls, [], "eine gueltige Antwort beendet kein Gespraech");
-});
 
 // ---- Teil B: Budget-Engine (echte HTTP-Route, Spawn) --------------------------------
 

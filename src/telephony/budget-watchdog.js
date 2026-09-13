@@ -3,7 +3,7 @@
 //
 // B8 (der Befund, der diese Datei erzwingt): blockingBudgetAxis wird heute aus vier
 // EREIGNISGEBUNDENEN Stellen gefragt - claude.js#agentTurn (Turn-Runde),
-// telnyx-llm-shim.js (Shim-Turn), routes/webhooks-elevenlabs.js (EL-Werkzeug-Webhook) und
+// routes/webhooks-elevenlabs.js (EL-Werkzeug-Webhook) und
 // telephony/call-lifecycle.js#reattachActiveCall (/voice/*-Re-Attach). Ein Anruf ohne Turn
 // und ohne Werkzeugaufruf erreicht die pro-Tenant-Decke NIE - die Sicherung wirkt mid-call
 // nur, wenn der Anruf ohnehin Arbeit erzeugt. Dieser Waechter fragt DIESELBE Achse
@@ -13,7 +13,8 @@
 // Budget-Inbound, EL-Outbound und den kuenftigen EL-Inbound mit EINER Wahrheit.
 //
 // Vorbild fuer Form und Lebenszyklus (arm/rearm je Leg, unref-Timer):
-// telnyx-conversation-watchdog.js - Vorbild, NICHT Wiederverwendung. Jener Waechter
+// der fruehere Dead-Air-Waechter des Assistant-Pfads (entfernt IE6-S1) - Vorbild, NICHT
+// Wiederverwendung. Jener Waechter
 // terminiert entlang der Dead-Air-/Loop-Achsen eines Assistant-Gespraechs und verschwindet
 // mit dem Assistant-Pfad; diese Achse ist engine-neutral und bleibt.
 //

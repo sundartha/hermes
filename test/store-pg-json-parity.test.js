@@ -109,46 +109,6 @@ for (const [label, value] of OBJECTIVE_ACHIEVED_CASES) {
   });
 }
 
-// GQ-H1-a: dropLastAgentTranscript LIEFERT einen Befund - beide Backends, gleiche Antwort.
-// Live am Testanruf call_mshb9v7btbsp aufgefallen: die Entfernung lief, aber die
-// discarded_answer-Zeile fehlte, weil beide Wrapper dem fire-and-forget-Muster von
-// addTranscript folgten und undefined lieferten. Der Shim verzweigt auf den Rueckgabewert.
-// Die Repro-Tests haben es nicht gefangen, weil ihr fakeStore ein Boolean liefert - der
-// Fake konnte mehr als der echte Store. Deshalb die Zusicherung hier, an BEIDEN echten
-// Backends und an der Stelle, an der Paritaet ohnehin das Thema ist.
-async function pgDropBefunde() {
-  const { store } = await makePgTestStore();
-  const created = store.createCall(newCall());
-  const leer = store.dropLastAgentTranscript(created.id);
-  store.addTranscript(created.id, "caller", "Fragment");
-  const nachCaller = store.dropLastAgentTranscript(created.id);
-  store.addTranscript(created.id, "agent", "nie gesprochen");
-  const nachAgent = store.dropLastAgentTranscript(created.id);
-  return [leer, nachCaller, nachAgent];
-}
-
-function jsonDropBefunde() {
-  const created = jsonStore.createCall(newCall());
-  const leer = jsonStore.dropLastAgentTranscript(created.id);
-  jsonStore.addTranscript(created.id, "caller", "Fragment");
-  const nachCaller = jsonStore.dropLastAgentTranscript(created.id);
-  jsonStore.addTranscript(created.id, "agent", "nie gesprochen");
-  const nachAgent = jsonStore.dropLastAgentTranscript(created.id);
-  return [leer, nachCaller, nachAgent];
-}
-
-test("dropLastAgentTranscript: pg meldet false/false/true (leer, caller-Ende, agent-Ende)", async () => {
-  assert.deepEqual(await pgDropBefunde(), [false, false, true]);
-});
-
-test("dropLastAgentTranscript: json meldet false/false/true", () => {
-  assert.deepEqual(jsonDropBefunde(), [false, false, true]);
-});
-
-test("dropLastAgentTranscript: pg-Befunde == json-Befunde (Paritaet)", async () => {
-  assert.deepEqual(await pgDropBefunde(), jsonDropBefunde());
-});
-
 // ---- Thema A+B (2026-08-19): die drei neuen Call-Spalten ueberleben BEIDE Backends ----
 // Review-Befund R3: jedes bisherige additiv-nullable Call-Feld hat einen Persistenz-
 // Test; opening_line/opening_line_sha256/lookup_log bekamen keinen. Der Rundlauf hier

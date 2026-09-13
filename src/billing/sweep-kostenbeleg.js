@@ -38,11 +38,10 @@ export function belegVollstaendig(measured) {
 }
 
 // Welchen Traeger legt der Sweep fuer dieses Profil an? Profil-Trennung aus (g): EL-Route
-// bekommt AUSSCHLIESSLICH telnyx_sip, die vier Telnyx-Profile AUSSCHLIESSLICH
+// bekommt AUSSCHLIESSLICH telnyx_sip, die Telnyx-Profile AUSSCHLIESSLICH
 // telnyx_call_records. Kein Anruf bekommt beide - sonst stuende derselbe Betrag zweimal in
 // der Belegsumme, die KV2-8 bildet. Reines Praedikat.
 const TELNYX_CALL_RECORDS_PROFILE = new Set([
-  KOSTENPROFIL.TELNYX_ASSISTANT,
   KOSTENPROFIL.TELNYX_BUDGET,
   KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
   KOSTENPROFIL.TELNYX_INBOUND_REALTIME,

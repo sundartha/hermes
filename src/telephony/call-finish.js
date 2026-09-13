@@ -3,7 +3,7 @@
 // (Server-Slim P4). Die Factory schliesst store/config/metering/messaging/summarizeCall/
 // planSummarySms/audit; USAGE_EVENT_KIND importiert das Modul selbst (EINE Quelle, G5).
 // EINE Instanz je Prozess (Wurzel-Scope, INV-7): dieselbe finishCall-Referenz geht an
-// attachMediaBridge UND makeCallControlIngest - die In-Memory-Guards (call._finished) und
+// attachMediaBridge UND makeVoiceRoutes - die In-Memory-Guards (call._finished) und
 // der persistierte billedAt-Marker verlangen Identitaet. Die paymentEnabled-Gating-Bedingung
 // (Voice-Minuten-Meter) bleibt im finishCall-Body (INV-9); reconcileVoiceBudget
 // laeuft immer, releaseReserve wird intra-modul aufgerufen. P2b: die injizierte config

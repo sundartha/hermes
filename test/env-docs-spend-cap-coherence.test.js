@@ -166,27 +166,8 @@ function readBoolCodeFallback(text, envName) {
   return match[1] === "true";
 }
 
-// IP3: der Prototyp einer zweiten Wahrheit ueber EINEN Wahrheitswert. render.yaml trug
-// "true" samt Kommentar "Default true", waehrend der boolEnv-Fallback seit dem
-// 422-Befund (2026-08-04) false ist und .env.example false dokumentiert. Ein erneutes
-// Anwenden des Blueprints haette den belegt defekten Inbound-Handoff scharf gestellt -
-// der Anrufer hoert dann nur die Fehleransage. Der Schalter selbst verschwindet spaeter
-// mit dem Assistant-Pfad; bis dahin sagen alle drei Quellen dasselbe.
-const INBOUND_HANDOFF_SHIPPED_DEFAULT = false;
-
-test("IP3: TELNYX_INBOUND_HANDOFF_ENABLED sagt in src/config.js, .env.example und render.yaml dasselbe (Blueprint gegen Code)", () => {
-  const name = "TELNYX_INBOUND_HANDOFF_ENABLED";
-  const configSrc = fs.readFileSync(path.join(REPO_ROOT, "src", "config.js"), "utf8");
-  const envExample = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
-  const renderYaml = fs.readFileSync(path.join(REPO_ROOT, "render.yaml"), "utf8");
-  assert.equal(
-    readBoolCodeFallback(configSrc, name),
-    INBOUND_HANDOFF_SHIPPED_DEFAULT,
-    "src/config.js boolEnv-Fallback",
-  );
-  assert.equal(readEnvValue(envExample, name), String(INBOUND_HANDOFF_SHIPPED_DEFAULT), ".env.example");
-  assert.equal(readRenderValue(renderYaml, name), String(INBOUND_HANDOFF_SHIPPED_DEFAULT), "render.yaml");
-});
+// IP3 (TELNYX_INBOUND_HANDOFF_ENABLED) ist mit IE6-S1 gegenstandslos: der Schalter ist
+// entfernt, ohne ihn gibt es keine zweite Wahrheit mehr zu bewachen.
 
 // IE3: derselbe Riegel fuer den neuen Inbound-Weichenschalter. Er hat bis IE5 KEINEN
 // Verbraucher im Sprechpfad - genau deshalb ist ein auseinanderlaufender Blueprint hier

@@ -47,8 +47,8 @@ const API_KEY_HEADER = "xi-api-key";
 //     verhindert den Anruf also nicht, er kappt nur unsere Kennung: der Record wurde
 //     failed und abgerechnet, ohne conversation_id und ohne je einen Ergebnisabruf.
 // 15 s waren damit kuerzer als das blosse Klingeln. Der Wert muss die Klingelphase
-// tragen, und deren Obergrenze ist die Waehlfrist der Plattform (telnyxDialTimeoutSecs,
-// Default 60 s) - nicht die Gespraechsdauer. 120 s = diese 60 s plus Reserve, und
+// tragen, und deren Obergrenze ist die Klingelphase (gemessen bis 40 s, s. o.) - nicht die
+// Gespraechsdauer. 120 s = diese 60 s plus Reserve, und
 // weiterhin ein Vielfaches unter der Max-Gespraechsdauer (1800 s): ein stummer Anbieter
 // kann einen Aufrufer damit nie ueber ein ganzes Gespraech haengen lassen.
 //

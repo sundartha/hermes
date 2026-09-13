@@ -72,15 +72,6 @@ export function consultClientIsPolling(call, nowMs = Date.now()) {
   return nowMs - (call.consultPolledAtMs || 0) <= CONSULT_POLL_FRESH_MS;
 }
 
-// GQ-P2/B-2: WIE ALT ist der letzte Client-Poll? Der Boolean consultClientIsPolling kann
-// "nie gepollt" nicht von "um Millisekunden zu alt" trennen - genau diese Mehrdeutigkeit
-// liess B-2 nach dem Live-Anruf offen. Eine Zahl, kein Text (PII-Freiheit der Log-Zeile
-// unberuehrt). Reiner Leser.
-export const CONSULT_POLL_NEVER = -1;
-export function consultPollAgeMs(call, nowMs = Date.now()) {
-  return call.consultPolledAtMs ? nowMs - call.consultPolledAtMs : CONSULT_POLL_NEVER;
-}
-
 // GQ-P7: Wartet eine eingetroffene Rueckfrage-Antwort noch auf ihren ersten Modell-Turn?
 // Durchreichung der Store-Operation, damit der Shim das Consult-Modul befragt und nicht
 // direkt state-ops (dieselbe Schichtung wie consultClientIsPolling). Reiner Leser.

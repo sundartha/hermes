@@ -41,12 +41,10 @@ export { BOOTSTRAP_TENANT_ID };
 // KEINE DB-Verbindung hier konstruiert (DIP): Pool/Adapter wird injiziert. init()
 // muss vor dem ersten Zugriff erwartet werden (Migration + Hydrierung).
 
-// KS-P1b: die zwei Suchachsen des Re-Attach als vollstaendige, parametrisierte Queries -
-// EINE Scan-Implementierung (attachActiveCallRow) bedient beide (G5). Bewusst zwei fertige
-// Statements statt eines interpolierten WHERE-Fragments: so gibt es keinen Pfad, auf dem je
-// ein Aufrufer-Wert in den SQL-Text geraten koennte.
+// Vollstaendige, parametrisierte Query fuer den Re-Attach (attachActiveCallRow). Bewusst
+// ein fertiges Statement statt eines interpolierten WHERE-Fragments: so gibt es keinen
+// Pfad, auf dem je ein Aufrufer-Wert in den SQL-Text geraten koennte.
 const ACTIVE_CALL_BY_ID_SQL = `SELECT * FROM call WHERE id = $1 AND status = $2`;
-const ACTIVE_CALL_BY_CONTROL_ID_SQL = `SELECT * FROM call WHERE call_control_id = $1 AND status = $2`;
 
 export function makePgStore(runner) {
   let state = null;
@@ -210,9 +208,6 @@ export function makePgStore(runner) {
       return call;
     },
     getCall: (id) => ops.getCall(requireState(), id),
-    // Brain-Shim-Korrelation (E1): Spiegel-Scan wie getCall (D-A), kein RLS/withClient-
-    // Sonderpfad. Deploy-Grenze identisch zu getCall (Spiegel ist nach hydrate() warm).
-    getCallByControlId: (ccid) => ops.getCallByControlId(requireState(), ccid),
     // F12 (A6): einen dem Spiegel unbekannten, aber in der DB aktiven Call RLS-sauber
     // nachladen. Ein Deploy-/Instanzwechsel legt eine aktive Zeile NACH unserer init()-
     // Hydrierung an -> getCall() findet sie nicht -> der /voice-Webhook legte sonst fail-
@@ -226,26 +221,8 @@ export function makePgStore(runner) {
     // FAIL-SAFE wie ensureTenant: ein DB-Schluckauf wird secret-frei geloggt und als null
     // behandelt -> der Handler legt fail-closed auf, NIE eine Rejection.
     attachActiveCall: (callId) => attachActiveCallRow(ACTIVE_CALL_BY_ID_SQL, callId),
-    // KS-P1b: dieselbe RLS-saubere Nachladung ueber die Telnyx-eigene call_control_id -
-    // der Assistant-Shim korreliert ausschliesslich darueber (E1, Anti-Spoofing), er kennt
-    // keine callId. Leere/fehlende ccid -> null OHNE DB-Roundtrip. Das ist eine
-    // Abkuerzung, KEIN eigenes Sicherheitsnetz: `WHERE call_control_id = NULL` trifft in
-    // SQL ohnehin nie eine Zeile, und "" matcht nur eine gleichlautende. Der Riegel spart
-    // den Tenant-Loop-Scan und haelt die Form von getCallByControlId (gleiche Antwort auf
-    // dieselbe leere Eingabe) - gemessen: ohne ihn bleibt das Verhalten identisch.
-    attachActiveCallByControlId: (ccid) =>
-      ccid ? attachActiveCallRow(ACTIVE_CALL_BY_CONTROL_ID_SQL, ccid) : Promise.resolve(null),
     addTranscript(callId, role, text) {
       if (ops.addTranscript(requireState(), callId, role, text)) save();
-    },
-    // GQ-H1-a: verworfene Antwort aus dem Transkript nehmen. Muster identisch zu
-    // addTranscript (changed -> save); flushTranscript raeumt die DB-Zeile mit ab.
-    // LIEFERT den Befund zurueck (Muster json.js, NICHT addTranscript): der Shim verzweigt
-    // darauf, nur eine tatsaechliche Entfernung erzeugt die discarded_answer-Zeile.
-    dropLastAgentTranscript(callId) {
-      const entfernt = ops.dropLastAgentTranscript(requireState(), callId);
-      if (entfernt) save();
-      return entfernt;
     },
     purgeTranscript(callId) {
       if (ops.purgeTranscript(requireState(), callId)) save();
@@ -351,14 +328,6 @@ export function makePgStore(runner) {
     // Flush schreibt failure_reason am call-Record (INSERT + ON CONFLICT DO UPDATE).
     recordFailureReason(callId, reason) {
       const { call, changed } = ops.recordFailureReason(requireState(), callId, reason);
-      if (changed) save();
-      return call;
-    },
-    // AL-P1: Conversation-UUID + Anrufer-Turn-Zaehler - Wrapper-Paritaet zu json.js.
-    // BEIDE saven (anders als countNoSpeechTurn): es gibt Spalten, und der Flush schreibt
-    // sie aus dem Spiegel.
-    recordTelnyxConversationId(callId, conversationId) {
-      const { call, changed } = ops.recordTelnyxConversationId(requireState(), callId, conversationId);
       if (changed) save();
       return call;
     },
@@ -565,7 +534,7 @@ export function makePgStore(runner) {
     liveBudgetExceeded: (tenantId, liveCents, cfg) =>
       ops.liveBudgetExceeded(requireState(), tenantId, liveCents, cfg, new Date().toISOString()),
     // KS-P2/KV-P2: Basis des Live-Terms. Spiegel-Scan wie getCall, kein RLS/withClient-Sonderpfad.
-    // GRENZE (dieselbe wie getCallByControlId): ein Leg, das eine ANDERE Instanz nach unserer
+    // GRENZE (dieselbe wie getCall): ein Leg, das eine ANDERE Instanz nach unserer
     // hydrate() angelegt hat, fehlt im Spiegel und faellt aus der Summe - der Live-Term
     // unterzaehlt dann, er ueberzaehlt nie.
     activeCallsFor: (tenantId) => ops.activeCallsFor(requireState(), tenantId),
@@ -2189,13 +2158,10 @@ async function flushTranscript(client, tenantId, call) {
     ]);
     return;
   }
-  // GQ-H1-a: seit dropLastAgentTranscript kann das Transkript auch SCHRUMPFEN - vorher
-  // wuchs es nur, und ein blosser ZEILENZAEHLER genuegte, um die fehlenden anzuhaengen.
-  // Er genuegt nicht mehr: schrumpft der Spiegel und waechst danach wieder, BEVOR ein
-  // Flush laeuft, stimmt die Zahl zufaellig wieder, waehrend Zeile i und Segment i
-  // auseinanderlaufen - die verworfene Antwort bliebe stehen und die echte landete an
-  // ihrer Stelle. Deshalb wird ueber den INHALT abgeglichen: bis zur ersten Abweichung
-  // ist die DB gueltig, ab dort wird sie neu geschrieben. Das heilt auch Altbestand.
+  // Abgleich ueber den INHALT statt ueber einen Zeilenzaehler: richtig fuer jede Mutation
+  // des Spiegels und heilt Altbestand aus der Zeit, als eine verworfene Antwort entfernt
+  // werden konnte (GQ-H1-a, bis IE6-S1). Bis zur ersten Abweichung ist die DB gueltig, ab
+  // dort wird sie neu geschrieben.
   const persisted = (
     await client.query(
       `SELECT id, role, text FROM transcript_segment WHERE call_id=$1 ORDER BY id ASC`,

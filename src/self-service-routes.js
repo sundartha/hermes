@@ -956,7 +956,7 @@ export function mountSelfServiceRoutes(deps) {
 }
 
 // Antwortcode der agentName-Eingabegrenze. Benannt wie im Bestand
-// (telnyx-llm-shim.js, routes/webhooks-elevenlabs.js) statt als nackte Zahl im Handler.
+// (routes/webhooks-elevenlabs.js) statt als nackte Zahl im Handler.
 const HTTP_BAD_REQUEST = 400;
 
 // Laenge + Steuerzeichen VOR jedem Schreibzugriff - der Befund war 200 mit 20.000

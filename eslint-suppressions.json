@@ -323,17 +323,6 @@
       "count": 3
     }
   },
-  "scripts/convo-bench/driver-shim.mjs": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "scripts/convo-bench/driver-texml.mjs": {
     "no-negated-condition": {
       "count": 1
@@ -401,14 +390,6 @@
       "count": 1
     }
   },
-  "scripts/convo-bench/telnyx-fake.mjs": {
-    "id-length": {
-      "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 2
-    }
-  },
   "scripts/convo-bench/texml.mjs": {
     "id-length": {
       "count": 1
@@ -467,14 +448,6 @@
       "count": 2
     }
   },
-  "scripts/telnyx-assistant-provision.mjs": {
-    "id-length": {
-      "count": 3
-    },
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "scripts/telnyx-call-latency.mjs": {
     "id-length": {
       "count": 10
@@ -484,17 +457,6 @@
     },
     "no-negated-condition": {
       "count": 1
-    }
-  },
-  "scripts/telnyx-stt-drift.mjs": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 2
     }
   },
   "src/audit-store.js": {
@@ -852,7 +814,7 @@
   },
   "src/routes/voice.js": {
     "complexity": {
-      "count": 3
+      "count": 2
     },
     "max-lines-per-function": {
       "count": 1
@@ -933,7 +895,7 @@
       "count": 3
     },
     "id-length": {
-      "count": 251
+      "count": 248
     },
     "max-params": {
       "count": 23
@@ -948,7 +910,7 @@
       "count": 32
     },
     "no-restricted-syntax": {
-      "count": 12
+      "count": 11
     }
   },
   "src/telephony/adapters/telnyx/cost-parse.js": {
@@ -1045,61 +1007,7 @@
       "count": 2
     },
     "no-magic-numbers": {
-      "count": 2
-    }
-  },
-  "src/telnyx-call-control-ingest.js": {
-    "id-length": {
-      "count": 2
-    },
-    "max-lines-per-function": {
       "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "src/telnyx-inbound.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "src/telnyx-llm-shim.js": {
-    "complexity": {
-      "count": 1
-    },
-    "id-length": {
-      "count": 3
-    },
-    "max-lines-per-function": {
-      "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 2
-    },
-    "no-negated-condition": {
-      "count": 1
-    }
-  },
-  "src/telnyx-origination.js": {
-    "no-param-reassign": {
-      "count": 2
-    }
-  },
-  "src/telnyx-turn-failures.js": {
-    "no-magic-numbers": {
-      "count": 2
-    }
-  },
-  "src/telnyx-turn-probe.js": {
-    "no-magic-numbers": {
-      "count": 2
     }
   },
   "src/tts/directive-synth.js": {
@@ -1170,7 +1078,7 @@
   },
   "src/util.js": {
     "id-length": {
-      "count": 5
+      "count": 4
     }
   },
   "src/utils/text.js": {
@@ -1337,22 +1245,6 @@
       "count": 1
     }
   },
-  "test/al-d1-shim-diagnostics.test.js": {
-    "id-length": {
-      "count": 1
-    }
-  },
-  "test/al-d2-thinking-signal-diagnostics.test.js": {
-    "id-length": {
-      "count": 10
-    },
-    "no-magic-numbers": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "test/al-d3-consult-pump.test.js": {
     "no-magic-numbers": {
       "count": 5
@@ -1365,14 +1257,6 @@
   },
   "test/al-p1-agent-turn-callerturns.test.js": {
     "id-length": {
-      "count": 3
-    }
-  },
-  "test/al-p1-conversation-event.test.js": {
-    "id-length": {
-      "count": 4
-    },
-    "no-magic-numbers": {
       "count": 3
     }
   },
@@ -1390,11 +1274,6 @@
     },
     "no-magic-numbers": {
       "count": 3
-    }
-  },
-  "test/al-p1-turn-observability.test.js": {
-    "id-length": {
-      "count": 2
     }
   },
   "test/al-p10-precall-research.test.js": {
@@ -1506,17 +1385,6 @@
       "count": 2
     }
   },
-  "test/al-p17-first-round-audible.test.js": {
-    "id-length": {
-      "count": 8
-    },
-    "no-magic-numbers": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "test/al-p4-side-effect-tool-loop.test.js": {
     "id-length": {
       "count": 6
@@ -1532,7 +1400,7 @@
   },
   "test/al-p6-engine-reactions.test.js": {
     "id-length": {
-      "count": 3
+      "count": 2
     },
     "no-magic-numbers": {
       "count": 2
@@ -1557,17 +1425,6 @@
       "count": 5
     }
   },
-  "test/al-p7-shim-stream-wire.test.js": {
-    "id-length": {
-      "count": 6
-    },
-    "no-magic-numbers": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "test/al-p7-speech-chunker.test.js": {
     "id-length": {
       "count": 3
@@ -1589,14 +1446,6 @@
       "count": 1
     }
   },
-  "test/al-p7b-shim-bridge.test.js": {
-    "id-length": {
-      "count": 4
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "test/al-p7b-thinking-signal.test.js": {
     "id-length": {
       "count": 1
@@ -1616,25 +1465,6 @@
   "test/al-p8-bench-checks.test.js": {
     "id-length": {
       "count": 4
-    },
-    "no-magic-numbers": {
-      "count": 6
-    }
-  },
-  "test/al-p8-bench-shim-driver.test.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "test/al-p8-bench-shim-gates.test.js": {
-    "id-length": {
-      "count": 2
     },
     "no-magic-numbers": {
       "count": 6
@@ -2192,7 +2022,7 @@
       "count": 6
     },
     "no-magic-numbers": {
-      "count": 9
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 1
@@ -2766,14 +2596,6 @@
       "count": 1
     }
   },
-  "test/gq-h1-haken-repro.test.js": {
-    "id-length": {
-      "count": 3
-    },
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "test/gq-h1-transcript-shrink-pg.test.js": {
     "id-length": {
       "count": 4
@@ -2785,11 +2607,6 @@
     },
     "no-magic-numbers": {
       "count": 1
-    }
-  },
-  "test/gq-p1-turn-supersede.test.js": {
-    "id-length": {
-      "count": 10
     }
   },
   "test/gq-p10-recorded-messages.test.js": {
@@ -2819,31 +2636,18 @@
       "count": 5
     }
   },
-  "test/gq-p18-speech-gate.test.js": {
-    "id-length": {
-      "count": 8
-    },
-    "no-magic-numbers": {
-      "count": 5
-    }
-  },
   "test/gq-p2-consult-deadline.test.js": {
     "id-length": {
       "count": 3
     },
     "no-magic-numbers": {
-      "count": 10
+      "count": 6
     },
     "no-param-reassign": {
       "count": 1
     },
     "no-restricted-syntax": {
       "count": 16
-    }
-  },
-  "test/gq-p3-inbound-handoff.test.js": {
-    "no-magic-numbers": {
-      "count": 3
     }
   },
   "test/gq-p4-action-item-dedup.test.js": {
@@ -2857,25 +2661,6 @@
       "count": 1
     }
   },
-  "test/gq-p4-shim-failure-streak.test.js": {
-    "id-length": {
-      "count": 12
-    },
-    "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "test/gq-p5-provider-nudge.test.js": {
-    "id-length": {
-      "count": 9
-    },
-    "no-magic-numbers": {
-      "count": 4
-    }
-  },
   "test/gq-p8-consult-arrival-marker.test.js": {
     "id-length": {
       "count": 3
@@ -2885,16 +2670,6 @@
     },
     "no-restricted-syntax": {
       "count": 7
-    }
-  },
-  "test/gq-s1-inbound-field-probe.test.js": {
-    "no-magic-numbers": {
-      "count": 2
-    }
-  },
-  "test/gq-s1-turn-origin-probe.test.js": {
-    "id-length": {
-      "count": 8
     }
   },
   "test/graceful-shutdown.test.js": {
@@ -3008,17 +2783,9 @@
       "count": 6
     }
   },
-  "test/ks-p1b-shim-reattach.test.js": {
-    "id-length": {
-      "count": 6
-    },
-    "no-magic-numbers": {
-      "count": 3
-    }
-  },
   "test/ks-p2-live-carrier-spend.test.js": {
     "id-length": {
-      "count": 14
+      "count": 12
     },
     "no-magic-numbers": {
       "count": 4
@@ -3185,10 +2952,10 @@
   },
   "test/l0-metrics.test.js": {
     "id-length": {
-      "count": 12
+      "count": 11
     },
     "no-magic-numbers": {
-      "count": 14
+      "count": 13
     },
     "no-restricted-syntax": {
       "count": 1
@@ -3245,9 +3012,6 @@
     }
   },
   "test/machine-detection.test.js": {
-    "id-length": {
-      "count": 1
-    },
     "no-magic-numbers": {
       "count": 1
     }
@@ -4496,14 +4260,6 @@
       "count": 7
     }
   },
-  "test/stt-drift-probe.test.js": {
-    "id-length": {
-      "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "test/stt-wer-metric.test.js": {
     "no-magic-numbers": {
       "count": 26
@@ -4514,36 +4270,15 @@
       "count": 4
     }
   },
-  "test/telnyx-afix-p3-farewell.test.js": {
-    "id-length": {
-      "count": 1
-    },
-    "no-magic-numbers": {
-      "count": 16
-    }
-  },
-  "test/telnyx-assistant-config.test.js": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
-  "test/telnyx-assistant-merge-guard.test.js": {
-    "id-length": {
-      "count": 3
-    },
-    "no-magic-numbers": {
-      "count": 3
-    }
-  },
   "test/telnyx-call-control.test.js": {
     "id-length": {
-      "count": 9
-    },
-    "no-magic-numbers": {
       "count": 3
     },
+    "no-magic-numbers": {
+      "count": 1
+    },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 1
     }
   },
   "test/telnyx-call-latency.test.js": {
@@ -4580,50 +4315,6 @@
       "count": 6
     }
   },
-  "test/telnyx-event-ingest-machine.test.js": {
-    "id-length": {
-      "count": 38
-    },
-    "no-magic-numbers": {
-      "count": 27
-    },
-    "no-param-reassign": {
-      "count": 1
-    }
-  },
-  "test/telnyx-event-ingest-route.test.js": {
-    "id-length": {
-      "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 7
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "test/telnyx-k0-turn-seq.test.js": {
-    "id-length": {
-      "count": 4
-    },
-    "no-magic-numbers": {
-      "count": 2
-    }
-  },
-  "test/telnyx-llm-shim.test.js": {
-    "id-length": {
-      "count": 14
-    },
-    "no-magic-numbers": {
-      "count": 26
-    },
-    "no-negated-condition": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 9
-    }
-  },
   "test/telnyx-numbers.test.js": {
     "id-length": {
       "count": 1
@@ -4648,17 +4339,6 @@
       "count": 4
     }
   },
-  "test/telnyx-p5-origination.test.js": {
-    "id-length": {
-      "count": 3
-    },
-    "no-magic-numbers": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
   "test/telnyx-p5-token-protection.test.js": {
     "id-length": {
       "count": 5
@@ -4672,78 +4352,14 @@
       "count": 2
     }
   },
-  "test/telnyx-p6-midcall-budget-kill.test.js": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
-  "test/telnyx-p8-inbound.test.js": {
-    "id-length": {
-      "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 6
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    }
-  },
-  "test/telnyx-p8-opening-contract.test.js": {
-    "id-length": {
-      "count": 1
-    }
-  },
-  "test/telnyx-p9-flag-matrix.test.js": {
-    "id-length": {
-      "count": 3
-    },
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "test/telnyx-seed.test.js": {
     "id-length": {
       "count": 9
     }
   },
-  "test/telnyx-shim-endcall.test.js": {
-    "id-length": {
-      "count": 2
-    },
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
-  "test/telnyx-shim-harness.js": {
-    "id-length": {
-      "count": 14
-    },
-    "no-magic-numbers": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "test/telnyx-shim-route.test.js": {
-    "no-magic-numbers": {
-      "count": 4
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    }
-  },
   "test/telnyx-signature.test.js": {
     "no-magic-numbers": {
       "count": 1
-    }
-  },
-  "test/telnyx-stab-p9-watchdog.test.js": {
-    "id-length": {
-      "count": 34
-    },
-    "no-magic-numbers": {
-      "count": 8
     }
   },
   "test/telnyx-voice.test.js": {
@@ -4851,10 +4467,10 @@
   },
   "test/turn-budget.test.js": {
     "id-length": {
-      "count": 2
+      "count": 1
     },
     "no-magic-numbers": {
-      "count": 14
+      "count": 12
     }
   },
   "test/turn-fallback-locale.test.js": {

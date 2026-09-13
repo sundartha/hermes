@@ -254,7 +254,6 @@ async function mountCallRoutes(store, { holdMs = 60, tickMs = 5 } = {}) {
       audit: (...a) => audits.push(a),
       outboundGates: [],
       voiceControl: () => ({}),
-      originateAiAssistantCall: async () => {},
       terminateAndBillCall: async () => {},
       hangUpAction: () => null,
       billThunk: () => async () => {},
