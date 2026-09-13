@@ -19,6 +19,7 @@ export function writeSummary(outDir, results) {
     scenario: r.meta.scenario,
     repeat_index: r.meta.repeat_index,
     driver: r.meta.driver,
+    direction: r.meta.direction,
     ended_via: r.ended_via,
     turn_count: r.turn_count,
     checks_passed: r.checks.filter((c) => c.pass).length,
@@ -30,11 +31,13 @@ export function writeSummary(outDir, results) {
   return summary;
 }
 
+// IP2/BEW-1: driver+direction direkt an der Zeile mit der Bench-Zahl (checks=X/Y) -
+// die Tabelle wird oft isoliert kopiert/gelesen, ohne die Lauf-Kopfzeile daneben.
 function fmtRow(r) {
   const passed = r.checks.filter((c) => c.pass).length;
   const scenario = r.meta.scenario.padEnd(20);
   const endedVia = r.ended_via.padEnd(16);
-  return `${scenario} r${r.meta.repeat_index}  turns=${String(r.turn_count).padEnd(3)} ended_via=${endedVia} checks=${passed}/${r.checks.length}  judge=${r.judge?.overall_flag ?? "n/a"}`;
+  return `${scenario} r${r.meta.repeat_index}  driver=${r.meta.driver} direction=${r.meta.direction}  turns=${String(r.turn_count).padEnd(3)} ended_via=${endedVia} checks=${passed}/${r.checks.length}  judge=${r.judge?.overall_flag ?? "n/a"}`;
 }
 
 export function printSummaryTable(results) {
