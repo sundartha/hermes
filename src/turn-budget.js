@@ -5,6 +5,12 @@
 // (src/tts/directive-synth.js) noch eine Netzreserve. Beides addiert sich zur selben
 // Wanduhr. Reine Funktionen, KEIN config-Import (der Aufrufer reicht die Werte) -
 // damit ist die Rechnung ohne Env-Bastelei testbar.
+//
+// IE7: seit dem Streaming-Umbau wartet der Webhook nur noch auf das ERSTE Audio-Paket.
+// synthTimeoutMs IST genau diese Frist und bleibt deshalb unveraendert Summand dieser
+// Rechnung - die Zahlen aendern sich nicht. Die Gesamtfrist des Hintergrund-Stroms
+// (ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS) liegt NICHT auf dieser Wanduhr und ist hier bewusst
+// KEIN Summand: sie laeuft, nachdem der Webhook geantwortet hat.
 
 export const PROVIDER_WEBHOOK_HARDCUT_MS = 15000; // externer Vertragswert
 export const TURN_NETWORK_RESERVE_MS = 1500; // Express+Render-Roundtrip, TeXML-Render, Store-Schreibvorgang
@@ -23,9 +29,9 @@ export function llmTurnBudgetMs({ requestTimeoutMs, maxRetries, backoffMs }) {
   return attempts * requestTimeoutMs + backoffSum;
 }
 
-// Alles, was im selben Webhook NEBEN den llm.complete-Ketten liegt: Play-TTS-Vorab-
-// Synthese + Netzreserve. EINE Quelle (G5) - sonst rechnen turnBudgetMs,
-// turnLoopDeadlineMs und enforcedTurnWorstCaseMs dreimal dieselbe Summe.
+// Alles, was im selben Webhook NEBEN den llm.complete-Ketten liegt: das Warten auf das
+// erste Audio-Paket der Play-TTS-Synthese (IE7) + Netzreserve. EINE Quelle (G5) - sonst
+// rechnen turnBudgetMs, turnLoopDeadlineMs und enforcedTurnWorstCaseMs dreimal dieselbe Summe.
 function turnOverheadMs(synthTimeoutMs) {
   return synthTimeoutMs + TURN_NETWORK_RESERVE_MS;
 }

@@ -102,6 +102,11 @@ function repeatDeliveryXml(call, { render, followupTurnDirectives }) {
 // FW2: EIN Kanalname fuer die Diagnose-Zeilen dieses Webhooks (G25).
 const TURN_LOG_PREFIX = "[voice/turn]";
 
+// IE7: die EINE Antwort der TTS-Route auf "gibt es nicht (mehr)" - Nichtfund UND
+// Fehlerpfad geben dieselbe Auskunft, damit ein Anruf nie an einem haengenden Abruf
+// stirbt und der Endpunkt nichts ueber vergebene Token verraet.
+const HTTP_NOT_FOUND = 404;
+
 export function makeVoiceRoutes({
   store,
   config,
@@ -254,10 +259,21 @@ export function makeVoiceRoutes({
   // Kosten aus (Regel 1 unberuehrt); die einzige Absicherung der PII-Audio ist der
   // kryptografisch unratbare Token + kurze TTL + EINMALIGER Abruf (takeOnce). Kein Log
   // von Token/Bytes (kein PII/Secret-Leak, Regel 4).
-  router.get("/voice/tts/:token", (req, res) => {
-    const audio = ttsStore.takeOnce(req.params.token);
-    if (!audio) return res.status(404).end();
-    res.type(audio.contentType).send(audio.bytes);
+  // IE7: async, weil der Token vergeben wird, BEVOR die Synthese fertig ist - das Warten
+  // auf den Rest liegt hier, nicht mehr im Webhook. Begrenzt ist es durch die Gesamtfrist
+  // der Synthese (ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS), nicht durch diesen Handler. Express 4
+  // faengt Rejections aus async-Handlern NICHT ab (Muster S1-1 in /voice/incoming) ->
+  // Rumpf komplett in try/catch; der Fehlerpfad antwortet wie der Nichtfund, damit ein
+  // Anruf nie an einem haengenden Abruf stirbt. Kein Log von Token oder Bytes (Regel 4).
+  router.get("/voice/tts/:token", async (req, res) => {
+    try {
+      const audio = await ttsStore.takeOnce(req.params.token);
+      if (!audio) return res.status(HTTP_NOT_FOUND).end();
+      res.type(audio.contentType).send(audio.bytes);
+    } catch (err) {
+      console.error("[voice/tts]", err.message);
+      res.status(HTTP_NOT_FOUND).end();
+    }
   });
 
   // ---- Inbound-Signaturpruefung fuer alle /voice-Webhooks (fail-closed) ----

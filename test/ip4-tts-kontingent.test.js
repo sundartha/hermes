@@ -17,6 +17,8 @@ import { makeDirectiveSynth } from "../src/tts/directive-synth.js";
 import { say } from "../src/telephony/directives.js";
 import { captureConsole } from "./helpers.js";
 import { playTtsSynthConfig, PROBE_API_KEY } from "./helpers/play-tts-stimm-probe.mjs";
+// IE7: die gestreamte Antwort-Attrappe liegt geteilt in test/helpers/fake-tts-stream.mjs.
+import { recordingStreamFetch } from "./helpers/fake-tts-stream.mjs";
 
 const PROVIDER = "telnyx";
 const CYCLE_KEY = "2026-08";
@@ -34,25 +36,14 @@ function fakeTtsStore() {
   const putCalls = [];
   return {
     putCalls,
-    put(bytes, contentType) {
-      putCalls.push({ bytes, contentType });
+    // IE7: EIN Argument - die Audio-Zusage {contentType, bytes:Promise}.
+    put(audio) {
+      putCalls.push(audio);
       return "ip4-token";
     },
   };
 }
 
-function zaehlendesFetch() {
-  const calls = [];
-  const fetchImpl = async (...args) => {
-    calls.push(args);
-    return {
-      ok: true,
-      headers: { get: () => "audio/mpeg" },
-      arrayBuffer: async () => new Uint8Array([1]).buffer,
-    };
-  };
-  return { calls, fetchImpl };
-}
 
 function werfendesFetch() {
   throw new Error("fetch haette nie aufgerufen werden duerfen (Kosten-Gate)");
@@ -106,7 +97,7 @@ test("Vor-Riegel: erschoepftes Kontingent -> KEIN Provider-Aufruf, Direktive unv
 // Positiv-Kontrolle (Lehre pruefkommando-ohne-positiv-kontrolle): ein Gate, das alles
 // ablehnt, besteht jeden Negativ-Test.
 test("Vor-Riegel Negativfall: Kontingent frei -> genau EIN Provider-Aufruf, Audio eingewoben", async () => {
-  const { calls, fetchImpl } = zaehlendesFetch();
+  const { calls, fetchImpl } = recordingStreamFetch();
   const { out, putCalls } = await laufMit({
     store: {
       platformTtsUsageView: () => ({ characters: 0, quota: QUOTA, cycleKey: CYCLE_KEY }),
@@ -121,7 +112,7 @@ test("Vor-Riegel Negativfall: Kontingent frei -> genau EIN Provider-Aufruf, Audi
 });
 
 test("Vor-Riegel fehlt (Bestands-Attrappe ohne Projektion) -> der Nach-Riegel faengt", async () => {
-  const { calls, fetchImpl } = zaehlendesFetch();
+  const { calls, fetchImpl } = recordingStreamFetch();
   const { directives, out, putCalls, lines } = await laufMit({
     store: {
       // platformTtsUsageView bewusst NICHT gesetzt (optional chaining im Produktionscode)
@@ -148,7 +139,7 @@ test("Vor-Riegel fehlt (Bestands-Attrappe ohne Projektion) -> der Nach-Riegel fa
 // Grenzfall (T5): quota=0 heisst "Kontingent abgeschaltet", nicht "sofort erschoepft" -
 // das pinnt das quota > 0 in ttsQuotaExhausted (state-ops.js).
 test("Kontingent 0 (abgeschaltet) -> kein Riegel, die Synthese laeuft", async () => {
-  const { calls, fetchImpl } = zaehlendesFetch();
+  const { calls, fetchImpl } = recordingStreamFetch();
   const { out, putCalls } = await laufMit({
     store: {
       platformTtsUsageView: () => ({

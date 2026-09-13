@@ -159,6 +159,15 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 > Code-Kommentar "STT bleibt UNBERUEHRT" war falsch und ist korrigiert. Der neue
 > Play-TTS-Pfad (server-seitige Vorab-Synthese + natives `<Play>` einer statischen
 > Datei) umgeht dieses Problem, weil Telnyx keinen Live-Relay-Stream aufbaut.
+>
+> IE7 (Streaming): der Token wird vergeben, BEVOR die Synthese fertig ist - GET
+> /voice/tts/:token wartet seither auf den Rest des Stroms. Unveraendert: 256-bit-Token,
+> kurze TTL, EINMALIGER Abruf (takeOnce loescht VOR dem Warten, ein zweiter Abruf bekommt
+> 404), kein Log von Token oder Bytes, kein Call/keine SMS/keine Kosten ueber diesen
+> Endpunkt. Neu begrenzt: das Warten ist durch ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS
+> gedeckelt (AbortController in src/tts/synth.js), der Handler-Rumpf liegt in try/catch
+> (Express 4 faengt async-Rejections nicht), und ein abgebrochener Strom liefert das
+> bisher Empfangene statt Stille. Ohne gueltigen Token ist kein Warten ausloesbar.
 
 ## C-TELNYX — AI-Assistant-Engine (Barge-in, Custom-LLM-Shim, Call-Control)
 

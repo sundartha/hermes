@@ -22,6 +22,9 @@ import { withConfigNamespaces } from "./config-namespaces-helper.js";
 // Stimm-Anker (test/ip4-stimm-anker.test.js) braucht dieselbe Messung, und zwei Kopien
 // wuerden driften (S2).
 import { playTtsVoiceIdsFor, PROBE_PLATTFORM_STIMME } from "./helpers/play-tts-stimm-probe.mjs";
+// IE7: die Antwort-Attrappe der Synthese ist gestreamt und liegt in EINEM geteilten
+// Helfer - vier eigene Kopien wuerden driften (S2).
+import { recordingStreamFetch } from "./helpers/fake-tts-stream.mjs";
 
 // Ein Provider-Wert ohne CAPABILITY.PLAY_AUDIO_TTS. 'twilio' als Wert, weil genau dieser
 // String seit C-P4 kein Anbieter mehr ist, aber als Altzeile in einer Bestands-DB stehen
@@ -30,9 +33,6 @@ const UNSUPPORTED_PROVIDER = "twilio";
 
 const PUBLIC_URL = "https://agent.test";
 const FIXED_TOKEN = "fixed-token-abc";
-// Beliebiger Fake-Audio-Inhalt fuer okFetch() - der Bytewert selbst ist ohne Bedeutung,
-// nur seine blosse Existenz zaehlt (arrayBuffer() muss etwas liefern).
-const FAKE_AUDIO_BYTES = [1];
 // Erwartete put()-Aufrufe im gemischten Gather+Say-Fall: EINE sprechende Direktive je
 // Aufruf (Gather-Prompt + Say), s. Testname.
 const EXPECTED_PUT_CALLS_FOR_GATHER_AND_SAY = 2;
@@ -41,8 +41,9 @@ function fakeTtsStore() {
   const putCalls = [];
   return {
     putCalls,
-    put(bytes, contentType) {
-      putCalls.push({ bytes, contentType });
+    // IE7: EIN Argument - die Audio-Zusage {contentType, bytes:Promise}.
+    put(audio) {
+      putCalls.push(audio);
       return FIXED_TOKEN;
     },
   };
@@ -67,6 +68,7 @@ function fakeConfig({ enabled }) {
       apiBase: "https://api.elevenlabs.io",
       outputFormat: "mp3_44100_128",
       synthTimeoutMs: 2000,
+      synthTotalTimeoutMs: 10000,
     },
   });
 }
@@ -84,11 +86,7 @@ function throwingFetch() {
 }
 
 function okFetch() {
-  return async () => ({
-    ok: true,
-    headers: { get: () => "audio/mpeg" },
-    arrayBuffer: async () => new Uint8Array(FAKE_AUDIO_BYTES).buffer,
-  });
+  return recordingStreamFetch().fetchImpl;
 }
 
 function failFetch() {

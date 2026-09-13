@@ -28,7 +28,7 @@ import { classifySprechpfad, SPRECHPFAD } from "../src/telephony/sprechpfad.js";
 // aufgeloeste Wert (echter Endpunkt oder ein vom Aufrufer gesetzter Fake) statt des
 // toten Stubs aus test/helpers.js#BASE_ENV, den der Kindprozess sonst geerbt haette.
 function elevenLabsEnvOverrides() {
-  const { enabled, apiKey, voiceId, model, apiBase, outputFormat, synthTimeoutMs } =
+  const { enabled, apiKey, voiceId, model, apiBase, outputFormat, synthTimeoutMs, synthTotalTimeoutMs } =
     config.voice.elevenLabsPlayTts;
   return {
     ELEVENLABS_API_BASE: apiBase,
@@ -38,6 +38,7 @@ function elevenLabsEnvOverrides() {
     ELEVENLABS_MODEL: model,
     ELEVENLABS_OUTPUT_FORMAT: outputFormat,
     ELEVENLABS_SYNTH_TIMEOUT_MS: String(synthTimeoutMs),
+    ELEVENLABS_SYNTH_TOTAL_TIMEOUT_MS: String(synthTotalTimeoutMs),
   };
 }
 
@@ -63,6 +64,15 @@ function printMetricsLines(stdout) {
   }
   console.log("Latenz-Marken:");
   for (const line of lines) console.log(`  ${line}`);
+}
+
+// IE7: die Server-Zeile mit den beiden Synthese-Zeiten. Sie ist die EINZIGE Quelle fuer
+// die Gesamtdauer - das Skript misst sie nicht selbst nach (G5). Fehlt sie, ist das kein
+// Fehler des Anrufs: der Azure-Pfad synthetisiert nicht.
+const SYNTH_LINE = /^\[play-tts\] Synthese /;
+function printSyntheseLine(stdout) {
+  const line = stdout.split("\n").find((zeile) => SYNTH_LINE.test(zeile));
+  console.log(line ? `  ${line}` : "  (keine Synthese-Zeile im Server-Log)");
 }
 
 const AUDIO_EXTENSION_BY_CONTENT_TYPE = Object.freeze({ "audio/mpeg": "mp3", "audio/mp3": "mp3" });
@@ -117,8 +127,14 @@ export async function run({ out }) {
     env: { METRICS_ENABLED: "true", ...elevenLabsEnvOverrides() },
   });
   try {
+    // IE7: die Wanduhr des WEBHOOKS - genau das, was der Anrufer nach dem Abheben
+    // schweigt, bevor der Provider die TeXML hat. Getrennt von der Gesamtdauer der
+    // Synthese (die steht in der Server-Zeile unten); genau diese Trennung ist der
+    // Beweis der Phase.
+    const startedAt = Date.now();
     const res = await postTelnyxIncoming(srv, { callSid: CALL_SID });
     const texml = await res.text();
+    const webhookWartezeitMs = Date.now() - startedAt;
     if (res.status !== HTTP_OK) {
       console.error(`/voice/incoming antwortete mit HTTP ${res.status}:\n${texml}`);
       process.exitCode = 1;
@@ -132,7 +148,11 @@ export async function run({ out }) {
       return;
     }
     const voiceMatch = texml.match(/<Say voice="([^"]+)"/);
-    console.log(`sprechpfad=${pfad}${voiceMatch ? ` voice=${voiceMatch[1]}` : ""}`);
+    console.log(
+      `sprechpfad=${pfad} modell=${config.voice.elevenLabsPlayTts.model}` +
+        `${voiceMatch ? ` voice=${voiceMatch[1]}` : ""}`,
+    );
+    console.log(`webhook_wartezeit_ms=${webhookWartezeitMs}`);
 
     const call = srv.readStore().calls.find((entry) => entry.twilioSid === CALL_SID);
     const agentLine = call?.transcript.find((turn) => turn.role === "agent");
@@ -146,6 +166,8 @@ export async function run({ out }) {
     }
 
     printMetricsLines(srv.stdout);
+    console.log("Synthese-Zeiten (Server):");
+    printSyntheseLine(srv.stdout);
   } finally {
     await srv.stop();
   }

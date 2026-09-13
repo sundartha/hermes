@@ -12,6 +12,9 @@ import assert from "node:assert/strict";
 import { makeDirectiveSynth } from "../../src/tts/directive-synth.js";
 import { say } from "../../src/telephony/directives.js";
 import { withConfigNamespaces } from "../config-namespaces-helper.js";
+// IE7: die gestreamte Antwort-Attrappe ist geteilt - diese Datei hatte bis IE7 ihre eigene
+// (recordingFetch), und zwei Kopien wuerden driften (S2).
+import { recordingStreamFetch } from "./fake-tts-stream.mjs";
 
 // Die GLOBALE Plattform-Stimme dieser Attrappe: bewusst ein Wert, der in KEINER
 // kuratierten Profil-Karte steht - so faellt ein Rueckfall auf sie sofort auf.
@@ -23,9 +26,6 @@ const PROBE_PUBLIC_URL = "https://agent.test";
 // eine zweite Literalfassung dort koennte still an der Attrappe vorbeilaufen.
 export const PROBE_API_KEY = "sk_test_should_never_leak";
 const PROBE_TOKEN = "probe-token-abc";
-// Beliebiger Fake-Audio-Inhalt: der Bytewert selbst ist ohne Bedeutung, nur seine blosse
-// Existenz zaehlt (arrayBuffer() muss etwas liefern).
-const PROBE_AUDIO_BYTES = [1];
 const PROBE_PROVIDER = "telnyx";
 
 /**
@@ -45,23 +45,9 @@ export function playTtsSynthConfig() {
       apiBase: "https://api.elevenlabs.io",
       outputFormat: "mp3_44100_128",
       synthTimeoutMs: 2000,
+      synthTotalTimeoutMs: 10000,
     },
   });
-}
-
-// Faengt die aufgerufene URL ein (die Voice-ID steckt darin) - ohne diesen Fake bliebe
-// die Vorabsynthese unsichtbar getestet.
-function recordingFetch() {
-  const urls = [];
-  const fetchImpl = async (url) => {
-    urls.push(url);
-    return {
-      ok: true,
-      headers: { get: () => "audio/mpeg" },
-      arrayBuffer: async () => new Uint8Array(PROBE_AUDIO_BYTES).buffer,
-    };
-  };
-  return { urls, fetchImpl };
 }
 
 /**
@@ -79,7 +65,7 @@ export async function playTtsVoiceIdsFor(profiles) {
     store: { recordTtsCharacters: () => null },
     onQuotaWarning: () => assert.fail("onQuotaWarning gehoert nicht zu dieser Messung"),
   });
-  const { urls, fetchImpl } = recordingFetch();
+  const { urls, fetchImpl } = recordingStreamFetch();
   const originalFetch = globalThis.fetch;
   globalThis.fetch = fetchImpl;
   try {
@@ -91,5 +77,7 @@ export async function playTtsVoiceIdsFor(profiles) {
     globalThis.fetch = originalFetch;
   }
   assert.equal(urls.length, profiles.length, "je Profil genau ein Synth-Aufruf");
+  // IE7: der Streaming-Endpunkt haengt "/stream" HINTER die Voice-ID - der Ausdruck
+  // bleibt damit korrekt (er stoppt am naechsten "/").
   return urls.map((url) => url.match(/text-to-speech\/([^/?]+)/)[1]);
 }

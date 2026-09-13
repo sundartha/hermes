@@ -561,6 +561,16 @@ const LISTED_FILES = Object.keys(REAL_LEGACY_EXCEPTIONS);
 //               Beide Bewegungen sind im reason-Feld der Datei selbst begruendet.
 //               Gemessen mit dem echten eslint-Aufruf (--suppressions-location
 //               eslint-suppressions.empty.json). Keine neue Verstoss-Art.
+//   2026-09-13  IE7 (Inbound wartet nur noch auf das erste Audio-Paket) bewegt
+//               src/routes/voice.js in BEIDE Richtungen. HEBT AN: makeVoiceRoutes
+//               274 -> 279 Zeilen - der GET /voice/tts/:token-Handler ist async
+//               geworden (der Token wird vergeben, BEVOR die Synthese fertig ist)
+//               und sein Rumpf liegt deshalb in try/catch (Express 4 faengt
+//               abgelehnte Versprechen aus async-Handlern nicht ab). SENKT:
+//               no-magic-numbers 3 -> 2 - das 404 dieses Handlers heisst jetzt
+//               HTTP_NOT_FOUND. complexity unveraendert, keine neue Verstoss-Art,
+//               kein neuer Eintrag. Gemessen mit dem echten eslint-Aufruf
+//               (--suppressions-location eslint-suppressions.empty.json).
 const LEGACY_FINGERPRINT = {
   "src/store/state-ops.js": {
     "reason": "Echte Schuld, kein Fehlschnitt der Regel. Das Aufraeumen ist ein eigenes Refactoring des Zustandsmoduls und nicht Teil der ElevenLabs-Migration. PIN ANGEHOBEN 2026-08-19 (Thema A): createCall 12 -> 14 Komplexitaet (openingLine-Feld + Hash-Bedingung). Geprueft und bewusst uebernommen; das Aufraeumen bleibt das eigene Refactoring des Zustandsmoduls (s.o.). KV2-2 GEPRUEFT, KEINE Anhebung: costProfile: null, ist eine reine Zuweisung ohne Operator (Muster sipCallId) - createCall bleibt bei Komplexitaet 14. Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. PIN ANGEHOBEN 2026-08-31 (KV2-3): id-length 's' 180 -> 183 - die drei neuen Store-Operationen des Kosten-Buchs (findCostEvidence/recordCallCostEvidence/callCostEvidence) nennen ihren Zustands-Parameter 's', dieselbe Konvention wie jede bestehende state-ops-Funktion in dieser Datei. Keine weitere Kategorie bewegt sich (kein neues no-param-reassign: die Reifung mutiert 'vorhanden', eine lokale Variable aus .find(), keinen Funktionsparameter). Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`. PIN ANGEHOBEN 2026-09-06 (P2, gestaffelter EL-Rueckfrage-Halt): id-length 'c' 15 -> 17 und 's' 183 -> 187 (die drei neuen Operationen markConsultAskDelivered/ackConsult/timeOutStagedConsult sowie der extrahierte reine Leser openConsultFor nennen Call/Zustand nach derselben Konvention 'c'/'s'); id-length 'o' 0 -> 1 (der verkuerzte Reject-Parameter 'o' in answerConsult's lokaler reject-Funktion, s. openConsultFor-Refactor). Keine neue Regel-Kategorie. Gemessen mit `npx eslint src/store/state-ops.js --suppressions-location eslint-suppressions.empty.json`.",
@@ -718,16 +728,15 @@ const LEGACY_FINGERPRINT = {
     }
   },
   "src/routes/voice.js": {
-    "reason": "Echte Schuld, kein Fehlschnitt der Regel - dieselbe Klasse wie api-calls.js: diese Datei traegt die Provider-Signaturpruefung (Regel 3) und die Offenlegungs-Textpfade (Regel 2, Modulkopf nennt sie ausdruecklich das HOECHSTE EINZEL-RISIKO der server.js-Decomposition). Ein Entzerren von makeVoiceRoutes ist ein eigener G30-Split im Safety-Gate-Kernpfad, kein Nebeneffekt eines Commits. PIN ANGEHOBEN 2026-08-31 (KV2-2): makeVoiceRoutes 267 -> 269 Zeilen - je eine store.recordCostProfile(...)-Zeile in den beiden Inbound-Engine-Weichen-Zweigen (budget/realtime, Kriterium (c) aus tasks/kostenv2/spec-kv2-2.md). Unvermeidbar, solange der G30-Split aussteht: jede Weichen-Aenderung MUSS durch dieselbe Riesenfunktion. complexity/no-magic-numbers UNVERAENDERT. Gemessen mit `npx eslint src/routes/voice.js --suppressions-location eslint-suppressions.empty.json --format json`. Geprueft und bewusst uebernommen statt stillschweigend. PIN ANGEHOBEN 2026-09-07 (FW2): makeVoiceRoutes 269 -> 270 Zeilen - eine Zeile im /voice/turn-Catch ruft noteLlmBillingOutage (Guthaben-Alarm+Latch, EINE Quelle mit dem Assistant-Weg, s. src/llm-billing-outage.js) auf, VOR der unveraenderten Degradation. Unvermeidbar aus demselben Grund wie oben: die Aenderung MUSS durch dieselbe Riesenfunktion, solange der G30-Split aussteht. complexity/no-magic-numbers UNVERAENDERT. Gemessen mit demselben Befehl. Geprueft und bewusst uebernommen statt stillschweigend.",
-    "date": "2026-09-07",
+    "reason": "Echte Schuld, kein Fehlschnitt der Regel - dieselbe Klasse wie api-calls.js: diese Datei traegt die Provider-Signaturpruefung (Regel 3) und die Offenlegungs-Textpfade (Regel 2, Modulkopf nennt sie ausdruecklich das HOECHSTE EINZEL-RISIKO der server.js-Decomposition). Ein Entzerren von makeVoiceRoutes ist ein eigener G30-Split im Safety-Gate-Kernpfad, kein Nebeneffekt eines Commits. PIN ANGEHOBEN 2026-08-31 (KV2-2): makeVoiceRoutes 267 -> 269 Zeilen - je eine store.recordCostProfile(...)-Zeile in den beiden Inbound-Engine-Weichen-Zweigen (budget/realtime, Kriterium (c) aus tasks/kostenv2/spec-kv2-2.md). Unvermeidbar, solange der G30-Split aussteht: jede Weichen-Aenderung MUSS durch dieselbe Riesenfunktion. complexity/no-magic-numbers UNVERAENDERT. Gemessen mit `npx eslint src/routes/voice.js --suppressions-location eslint-suppressions.empty.json --format json`. Geprueft und bewusst uebernommen statt stillschweigend. PIN ANGEHOBEN 2026-09-07 (FW2): makeVoiceRoutes 269 -> 270 Zeilen - eine Zeile im /voice/turn-Catch ruft noteLlmBillingOutage (Guthaben-Alarm+Latch, EINE Quelle mit dem Assistant-Weg, s. src/llm-billing-outage.js) auf, VOR der unveraenderten Degradation. Unvermeidbar aus demselben Grund wie oben: die Aenderung MUSS durch dieselbe Riesenfunktion, solange der G30-Split aussteht. complexity/no-magic-numbers UNVERAENDERT. Gemessen mit demselben Befehl. Geprueft und bewusst uebernommen statt stillschweigend. PIN ANGEHOBEN 2026-09-13 (IE7): makeVoiceRoutes 274 -> 279 Zeilen - der GET /voice/tts/:token-Handler ist async geworden (der Token wird vergeben, BEVOR die Synthese fertig ist) und sein Rumpf liegt deshalb in try/catch; Express 4 faengt abgelehnte Versprechen aus async-Handlern NICHT ab, ein haengender Abruf duerfte aber nie einen Anruf toeten. Das sind die fuenf Zeilen (skipComments:true - Kommentare zaehlen nicht). Unvermeidbar aus demselben Grund wie oben: die Aenderung MUSS durch dieselbe Riesenfunktion, solange der G30-Split aussteht. complexity UNVERAENDERT; no-magic-numbers SINKT von 3 auf 2 - das 404 dieses Handlers heisst jetzt HTTP_NOT_FOUND. Gemessen mit demselben Befehl.",
+    "date": "2026-09-13",
     "findings": {
       "complexity :: Async arrow function has a complexity of 11. Maximum allowed is 10.": 1,
       "complexity :: Async arrow function has a complexity of 12. Maximum allowed is 10.": 1,
       "complexity :: Async arrow function has a complexity of 15. Maximum allowed is 10.": 1,
-      "max-lines-per-function :: Function 'makeVoiceRoutes' has too many lines (274). Maximum allowed is 100.": 1,
+      "max-lines-per-function :: Function 'makeVoiceRoutes' has too many lines (279). Maximum allowed is 100.": 1,
       "no-magic-numbers :: No magic number: 200.": 1,
-      "no-magic-numbers :: No magic number: 403.": 1,
-      "no-magic-numbers :: No magic number: 404.": 1
+      "no-magic-numbers :: No magic number: 403.": 1
     }
   },
   "src/telnyx-llm-shim.js": {
