@@ -30,6 +30,7 @@
     "spike1:setup": "node scripts/spike1-setup.mjs",
     "spike1:ws-probe": "node scripts/spike1-ws-probe.mjs",
     "convo-bench": "node scripts/convo-bench.mjs",
+    "inbound:hoerprobe": "node scripts/inbound-hoerprobe.mjs",
     "test": "NODE_ENV=test node test/testbaenke-run.mjs regression",
     "test:gates": "NODE_ENV=test node test/testbaenke-run.mjs gates",
     "test:abnahme": "NODE_ENV=test node test/testbaenke-run.mjs abnahme",

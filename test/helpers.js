@@ -1219,7 +1219,12 @@ export function postTelnyxIncoming(
 // Seedet EINE aktive Telnyx-Nummer (TELNYX_TEST_TENANT_NUMBER) am Owner-Tenant - Inbound-
 // Routing (/voice/incoming) braucht eine passende aktive Nummer im Store, sonst greift das
 // To-Routing nicht.
-export function seedWithTelnyxNumber() {
+// IP2: language optional additiv ergaenzt (byte-identisch fuer alle Bestandsaufrufe
+// ohne Argument, JSON.stringify laesst einen undefined-Wert weg). Die Inbound-Hoerprobe
+// (scripts/inbound-hoerprobe.mjs) pinnt hierueber "de", statt vom ambienten
+// WORLD_DEFAULT_LANGUAGE_ENABLED-Flag abzuhaengen (Test-Suite pinnt "true"/en, der
+// Code-Fallback ist "false"/de - zwei verschiedene Wahrheiten fuer denselben Aufrufer).
+export function seedWithTelnyxNumber({ language } = {}) {
   return seedState({
     tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas" }],
     numbers: [
@@ -1230,6 +1235,7 @@ export function seedWithTelnyxNumber() {
         provider: "telnyx",
         status: "active",
         providerNumberId: null,
+        language,
       },
     ],
   });

@@ -296,8 +296,7 @@ export async function runScenarioRepeat({
   // muss stehen, bevor der Server startet.
   const transport = await DRIVERS[driverId].create({ scenario, provider });
   const searchFake = scenario.fakeSearch
-    ? await startExaFake({ facts: scenario.searchFacts ?? DEFAULT_SEARCH_FACTS })
-    : null;
+    ? await startExaFake({ facts: scenario.searchFacts ?? DEFAULT_SEARCH_FACTS }) : null;
   const searchEnv = searchFake ? { EXA_API_BASE: searchFake.url } : {};
   const call = isInbound
     ? null
@@ -425,6 +424,10 @@ export async function runScenarioRepeat({
         judge_model: judgeModel,
         provider,
         driver: driverId,
+        // BEW-1 (PLAN-INBOUND-PARITAET IP2): Richtung des Szenarios direkt an der
+        // Zahl, die spaeter isoliert (JSON, Zusammenfassung) gelesen wird - nie mehr
+        // stillschweigend als Aussage ueber den anderen Pfad lesbar.
+        direction: scenario.direction,
         git_rev: gitRev(),
       },
       transcript,
