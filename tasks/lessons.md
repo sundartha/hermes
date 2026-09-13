@@ -1034,3 +1034,35 @@ nicht suchen, sondern die Bank fahren — sie kennt die Zugriffe, das Muster nic
 `NODE_ENV=test` setzt): 6 rot, davon 3 bekannte Parallel-Flaker und 1 echter Fund.
 **Regel:** Die Bank IMMER ueber `npm test` fahren, nie den Runner direkt. Und: ein roter
 Fall zaehlt erst, wenn er ISOLIERT rot ist (Bestandsregel, hier dreimal bestaetigt).
+
+## 2026-09-13 — Ein haengender Testlauf sieht aus wie ein haengender Agent
+
+Der IP2-Lauf brach ab mit "agent stalled on all 6 attempts (no progress for 180000ms
+each)". Die Meldung zeigt auf den Agenten. Die Ursache lag auf der Maschine.
+
+**Befund:** `uptime` meldete Load 47,58 bei 15 Kernen. `ps` zeigte einen
+`node --test`-Wurzelprozess (PID 86547), der seit **3 Stunden 17 Minuten** lief, dabei
+weiter Kind-Testprozesse spawnte (zwei davon selbst seit 3 h bzw. 2 h haengend, jeder mit
+einem eigenen `server-mit-elternwaechter.mjs`-Kind). Sein Elternprozess war
+`node test/testbaenke-run.mjs regression -- --test-concurrency=4` mit **PPID 1** — der
+Runner hatte seinen Aufrufer ueberlebt und war verwaist. Nach dem Abschiessen des Baums
+fiel die Load innerhalb von Minuten auf 9,79, und derselbe Lauf startete normal.
+
+**Warum das keine Bestandslehre doppelt:** die bekannten Notizen decken verwaiste
+*Testserver* (der Eltern-Waechter behebt die) und "pgrep ist blind in der Sandbox". Hier
+war der Waechter wirkungslos, weil nicht der Server verwaist war, sondern **der
+Testrunner selbst** — er war der Elternprozess, auf den der Waechter wartet.
+
+**Regel:** Meldet ein Workflow einen Stall, ist die ERSTE Messung `uptime`, nicht das
+Agenten-Transkript. Liegt die Load ueber der Kernzahl, ist die Frage nicht "warum haengt
+der Agent", sondern "was frisst die Maschine" — `ps -Ao pid,ppid,etime,args | grep
+"bin/node --test"` und auf ELAPSED achten. Ein Testlauf mit dreistelliger Minutenzahl ist
+immer ein Zombie; die Suite braucht rund zweieinhalb Minuten.
+
+**Zweite Regel, aus demselben Aufraeumen:** `git worktree list --porcelain` liefert Pfade
+mit Leerzeichen ("Mein Unternehmen"). Eine `for`-Schleife ueber `awk '{print $2}'`
+zerschneidet sie und entfernt still NICHTS — der Fehler verschwand zusaetzlich in einem
+`| head -1`. Richtig ist `sed -n 's/^worktree //p' | while IFS= read -r w`. Das ist
+dieselbe Klasse wie Lehre 1 vom 2026-09-12 (Listen ueber `while IFS= read -r`, nie ueber
+`$(...)` in `for`), hier aber mit einem loeschenden Befehl: es sah aus, als sei
+aufgeraeumt, waehrend elf Worktrees stehen blieben.
