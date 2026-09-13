@@ -69,12 +69,14 @@ const WAHLWEGE = Object.freeze([
   {
     weg: "Call-Control-Origination",
     muster: /\.originateViaCallControl\s*\(/,
-    erwarteteAufrufer: ["src/telnyx-origination.js"],
+    // IE6-S1 entfernt; ein Wiederauftauchen ist ein neuer Wahlweg ohne Gate-Nachweis.
+    erwarteteAufrufer: [],
   },
   {
     weg: "Call-Control-Wrapper",
     muster: /(^|[^\w.])originateAiAssistantCall\s*\(/,
-    erwarteteAufrufer: ["src/routes/api-calls.js"],
+    // IE6-S1 entfernt; ein Wiederauftauchen ist ein neuer Wahlweg ohne Gate-Nachweis.
+    erwarteteAufrufer: [],
   },
   {
     weg: "ElevenLabs-Origination",

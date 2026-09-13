@@ -37,15 +37,9 @@ const fakeVoice = {
     return { sid: `fake_${crypto.randomBytes(8).toString("hex")}` };
   },
   async endCall() {},
-  // Call-Control-Variante (P4): netzfreie Aequivalente, damit ein fakeOriginate-Testpfad,
-  // der die neuen Methoden ruft (ab P5), nicht crasht. fakeVoice bleibt vollstaendiger
-  // VoiceControl-Ersatz (G11 - keine Teil-Implementierung des Ports).
-  async originateViaCallControl() {
-    return { callControlId: `fake_cc_${crypto.randomBytes(8).toString("hex")}` };
-  },
+  // Altbestand-Hangup (hangUpAction): netzfreies Aequivalent, damit ein fakeOriginate-
+  // Testpfad, der die Methode ruft, nicht crasht.
   async endCallViaCallControl() {},
-  async startAssistant() {},
-  async speak() {},
 };
 
 // EINZIGE Provider->Port-Registrierung. Ein zweiter Provider wird HIER an einer
@@ -79,9 +73,6 @@ const ADAPTERS = Object.freeze({
   // Aufruf, NICHT zur Import-Zeit (P15: kein Lazy-Init-Singleton, config-Bindung an der
   // Kompositionsstelle). sttProfile ist die neutrale STT-Wahl und geht als PROFIL durch,
   // nicht als aufgeloester Anbieter-String: die Uebersetzung gehoert in den Adapter.
-  // Beide Telnyx-Pfade (Gather hier, Assistant in adapters/telnyx/voice.js) speisen sich
-  // aus DEMSELBEN Config-Schluessel - zwei Schluessel waeren die alte Duplizierung,
-  // nur von den Modell-Strings auf die Env-Namen verschoben.
   [PORT.VOICE_RENDERER]: {
     [PROVIDER.TELNYX]: {
       renderDirectives: (d) => telnyxRenderDirectives(d, { sttProfile: config.voice.sttProfile }),
@@ -103,13 +94,11 @@ function pick(port, provider) {
 // drei verstreuten provider===PROVIDER.TELNYX-Checks (S2-22). Fail-closed: fehlender
 // Provider ODER fehlende Capability -> false.
 export const CAPABILITY = Object.freeze({
-  AI_ASSISTANT: "aiAssistant", // Telnyx Call-Control-AI-Assistant-Pfad
   PLAY_AUDIO_TTS: "playAudioTts", // <Play>-Vorab-Synthese (ElevenLabs) statt <Say>
 });
 
 const PROVIDER_CAPABILITIES = Object.freeze({
   [PROVIDER.TELNYX]: Object.freeze({
-    [CAPABILITY.AI_ASSISTANT]: true,
     [CAPABILITY.PLAY_AUDIO_TTS]: true,
   }),
 });

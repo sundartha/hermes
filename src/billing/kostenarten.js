@@ -58,10 +58,9 @@ export const KOSTENART = Object.freeze({
   WORKOS_AUTH: "workos_auth", // #17
 });
 
-// Die 6 Kostenprofile der Engine-Weiche (4.3, Tabelle in spec-kv2-2.md).
+// Die 5 Kostenprofile der Engine-Weiche (4.3, Tabelle in spec-kv2-2.md).
 export const KOSTENPROFIL = Object.freeze({
   EL_CONVAI_SIP: "el_convai_sip",
-  TELNYX_ASSISTANT: "telnyx_assistant",
   TELNYX_BUDGET: "telnyx_budget",
   TELNYX_INBOUND_BUDGET: "telnyx_inbound_budget",
   TELNYX_INBOUND_REALTIME: "telnyx_inbound_realtime",
@@ -403,7 +402,7 @@ export const KOSTENARTEN = Object.freeze({
   },
 });
 
-// Die 6 Kostenprofile der Engine-Weiche (4.3). traeger je Profil traegt den
+// Die 5 Kostenprofile der Engine-Weiche (4.3). traeger je Profil traegt den
 // Pflicht-Einsammler (Kriterium (i)).
 export const KOSTENPROFILE = Object.freeze({
   [KOSTENPROFIL.EL_CONVAI_SIP]: {
@@ -422,10 +421,6 @@ export const KOSTENPROFILE = Object.freeze({
       [KOSTENART.ELEVENLABS_CONVAI]: { einsammler: EINSAMMLER.KV2_4 },
       [KOSTENART.TELNYX_SIP]: { einsammler: EINSAMMLER.KV2_5 },
     },
-  },
-  [KOSTENPROFIL.TELNYX_ASSISTANT]: {
-    pflichttypen: PFLICHTTYPEN_AUS_ENV,
-    traeger: { [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G } },
   },
   // Owner-Entscheidung 10 (Default, nicht ausdruecklich entschieden): api-calls.js
   // verzweigt im TeXML-Zweig NICHT auf die Engine (die Weiche faellt erst im Webhook,

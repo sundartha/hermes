@@ -18,8 +18,8 @@ import { clampAtWordBoundary } from "./utils/text.js";
 
 // Obergrenze der Ueberbrueckung in Zeichen (G25). Der Prompt verlangt EINEN kurzen Satz;
 // diese Zahl ist die Notbremse, nicht der Normalfall. Herleitung: bei der in AL-P1 an
-// echten Aufnahmen gemessenen LANGSAMSTEN Sprechrate (17,3 Zeichen/s, s. Kalibrierung in
-// src/telnyx-conversation-watchdog.js) sind 120 Zeichen ~7 s Sprechzeit - laenger darf eine
+// echten Aufnahmen gemessenen LANGSAMSTEN Sprechrate (17,3 Zeichen/s; die Dead-Air-Frist
+// eines Anbieters liegt typischerweise bei wenigen Sekunden) sind 120 Zeichen ~7 s Sprechzeit - laenger darf eine
 // Ueberbrueckung nie werden, sonst ueberbrueckt sie nicht mehr, sondern haelt auf.
 // Bewusst KEINE Env-Variable (G35): kein Betriebsfall braucht sie zur Laufzeit anders.
 export const THINKING_SIGNAL_MAX_CHARS = 120;
@@ -46,7 +46,8 @@ export function bridgeSpeechFrom(roundText) {
  *
  * @param {{ onSpeechChunk?: (text: string) => void, enabled: boolean }} deps
  *   onSpeechChunk fehlt auf dem Budget-Engine-Pfad (routes/voice.js reicht keinen durch)
- *   -> das Signal ist dort strukturell ein No-op, ganz ohne Flag.
+ *   -> das Signal ist dort strukturell ein No-op, ganz ohne Flag. Seit IE6-S1 ohne
+ *   Produktions-Abnehmer (R-1).
  * @returns {{ speakBridge(roundText: string): string, spoken(): boolean }}
  */
 export function makeThinkingSignal({ onSpeechChunk, enabled }) {

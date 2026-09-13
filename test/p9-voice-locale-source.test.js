@@ -14,7 +14,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderDirectives as renderTelnyx } from "../src/telephony/adapters/telnyx/render.js";
-import { elevenLabsVoiceName } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
 import { sttLocaleForVoiceProfile } from "../src/telephony/voice-locale.js";
 import { say, gather, VOICE_PROFILE } from "../src/telephony/directives.js";
 import { LOCALES, SUPPORTED_LANGUAGES } from "../src/i18n/locales.js";
@@ -45,28 +44,6 @@ test("opts.elevenLabs erreicht den TeXML-Renderer nicht mehr (IP3): jedes Profil
     const dirs = [say("Text", voiceProfile)];
     assert.equal(renderTelnyx(dirs, OPTS), renderTelnyx(dirs), `${voiceProfile}: opts inert`);
     assert.ok(!renderTelnyx(dirs, OPTS).includes("ElevenLabs."), `${voiceProfile}: kein ElevenLabs-Say`);
-  }
-});
-
-test("Assistant-speak (Call-Control) bleibt bewusst bei der GLOBALEN Stimme - der Renderer (TeXML/Play-TTS) loest sprachaufgeloest auf, der Assistant danach nicht (RCA-Wurzel R5)", () => {
-  // speakVoiceFields (src/telephony/adapters/telnyx/voice.js) nutzt elevenLabsVoiceName(el)
-  // OHNE voiceProfile - das ist die einzige Stelle, an der der Assistant-Pfad danach spricht
-  // (EIN global provisioniertes Voice-Setting, scripts/telnyx-assistant-provision.mjs). Fuer
-  // Der Assistant-Pfad weicht ABSICHTLICH vom sprachaufgeloesten Renderer ab, sonst
-  // spraeche der speak-Node in der Sprache des Anrufs, der folgende Assistant aber weiter
-  // in der global provisionierten (Review-Runde 2, R5-Regression). SEIT 2026-08-18 gilt das
-  // fuer ALLE DREI Profile: vorher fiel DE mit der globalen Stimme zusammen, weil es keine
-  // eigene hatte - die Uebereinstimmung war ein Nebeneffekt des Lochs, keine Zusage.
-  const globalVoice = elevenLabsVoiceName(EL);
-  for (const voiceProfile of Object.values(VOICE_PROFILE)) {
-    const rendered = renderTelnyx([say("Text", voiceProfile)], OPTS).match(
-      /<Say voice="([^"]+)"/,
-    )[1];
-    assert.notEqual(
-      globalVoice,
-      rendered,
-      `${voiceProfile}: Renderer loest sprachaufgeloest auf, Assistant-Pfad bleibt bewusst global`,
-    );
   }
 });
 

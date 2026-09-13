@@ -424,10 +424,6 @@ export function getCall(id) {
   return ops.getCall(load(), id);
 }
 
-export function getCallByControlId(callControlId) {
-  return ops.getCallByControlId(load(), callControlId);
-}
-
 // F12 (A6): Der EINE json-Prozess hat keinen divergenten Spiegel - er kennt jeden Call.
 // Re-Attach ist daher identisch zu getCall (unbekannte id -> null). Der server.js-Re-
 // Attach-Pfad bleibt unter STORE_BACKEND=json byte-identisch zum Bestand: im fail-closed
@@ -435,29 +431,11 @@ export function getCallByControlId(callControlId) {
 // logUnknown-Hangup wie zuvor (voice-unknown-call-log.test.js bleibt gruen).
 export const attachActiveCall = getCall;
 
-// KS-P1b: dieselbe Begruendung wie attachActiveCall, nur ueber die Telnyx-eigene
-// call_control_id (der Shim kennt keine callId). Der json-Prozess hat keinen divergenten
-// Spiegel -> Re-Attach ist identisch zur Spiegel-Query. Der Status-Guard sitzt im
-// Re-Attach-Kern (telephony/reattach.js), exakt wie bei attachActiveCall.
-export const attachActiveCallByControlId = getCallByControlId;
-
 export function addTranscript(callId, role, text) {
   if (ops.addTranscript(load(), callId, role, text)) save();
 }
 
 // Roh-Transkript-Purge (#7): leert das Transkript des Calls + persistiert (save()
-// GQ-H1-a: verworfene Antwort aus dem Transkript nehmen. Muster identisch zu
-// addTranscript (changed -> save).
-// LIEFERT den Befund zurueck - anders als addTranscript/purgeTranscript, die nichts
-// zurueckgeben. Der Shim verzweigt darauf (nur eine tatsaechliche Entfernung erzeugt die
-// discarded_answer-Zeile). Ohne das return meldet die Operation still undefined, die
-// Entfernung passiert - und das Messinstrument der Phase bleibt blind.
-export function dropLastAgentTranscript(callId) {
-  const entfernt = ops.dropLastAgentTranscript(load(), callId);
-  if (entfernt) save();
-  return entfernt;
-}
-
 // schreibt den Gesamt-Store). Muster identisch zu addTranscript (changed -> save).
 export function purgeTranscript(callId) {
   if (ops.purgeTranscript(load(), callId)) save();
@@ -606,17 +584,9 @@ export function recordFailureReason(callId, reason) {
   return call;
 }
 
-// AL-P1: Conversation-UUID + Anrufer-Turn-Zaehler - Wrapper-Paritaet zu pg.js. BEIDE
-// saven: die Felder liegen persistent auf Platte (migrateCallDiagnosticFields).
-export function recordTelnyxConversationId(callId, conversationId) {
-  const { call, changed } = ops.recordTelnyxConversationId(load(), callId, conversationId);
-  if (changed) save();
-  return call;
-}
-
-// EL-BL1: dasselbe fuer das ElevenLabs-Handle - Wrapper-Paritaet zu pg.js. Saved wie
-// recordTelnyxConversationId: das Feld liegt persistent auf Platte, und ohne Save waere
-// die Bindung nach einem Prozess-Neustart weg (der Webhook fiele auf 404 zurueck).
+// EL-BL1: das ElevenLabs-Handle - Wrapper-Paritaet zu pg.js. Saved, weil das Feld
+// persistent auf Platte liegt, und ohne Save waere die Bindung nach einem Prozess-
+// Neustart weg (der Webhook fiele auf 404 zurueck).
 export function recordElevenlabsConversationId(callId, conversationId) {
   const { call, changed } = ops.recordElevenlabsConversationId(load(), callId, conversationId);
   if (changed) save();

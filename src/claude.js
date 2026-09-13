@@ -701,9 +701,8 @@ export function execTool(call, name, input) {
 // dieser Zustand NICHT erreichbar, weil server.js die Greeting-/Opening-Zeile synchron
 // per addTranscript() IN /voice/incoming BZW. /voice/outbound eintraegt, BEVOR der erste
 // agentTurn-Aufruf ueberhaupt stattfindet. Erreichbar ist der Zustand ueber den zweiten
-// Aufrufer, den Telnyx-LLM-Shim (telnyx-llm-shim.js): dort spricht ein Call-Control-
-// Speak-Node die Disclosure/Greeting, OHNE sie ins Transkript zu schreiben - der erste
-// agentTurn-Aufruf trifft dort auf ein tatsaechlich leeres Transkript. Der Stiller-
+// Aufrufer, der die Eroeffnung nicht ins Transkript schreibt (bis IE6-S1 der Telnyx-Shim;
+// heute kein Produktionsaufrufer, Rest-Befund R-1). Der Stiller-
 // Folge-Turn-Marker haelt die Anthropic-messages-Kette gueltig (Abschluss mit
 // user-Turn), sobald der Agent schon gesprochen hat und der Anrufer nichts
 // Substanzielles beitrug, OHNE dem Modell erneut "beginne/begruesse" zu signalisieren
@@ -802,24 +801,24 @@ export function shouldSuppressEndCall(call) {
 export { shapeForSpeech };
 
 // AL-P6: Grund-Token eines vorzeitig beendeten Tool-Loops. Die GELD-Gruende kommen aus
-// budget-gate.js (BUDGET_AXIS - dieselben Token wie im Shim-Log); hier steht nur die
+// budget-gate.js (BUDGET_AXIS); hier steht nur die
 // ZEIT-Achse. null = der Loop lief regulaer zu Ende.
 export const TURN_STOP_DEADLINE = "deadline";
 
 // GQ-P1: der Tool-Loop wurde zugunsten einer VOLLSTAENDIGEREN Fassung derselben Aeusserung
 // abgebrochen. Eigenes Token neben der ZEIT-Achse, damit die Log-Auswertung den Riegel vom
 // Fristablauf trennt. KEINE Geld-Achse - isBudgetAxis (budget-gate.js) erkennt es nicht,
-// der Shim-Notaus bleibt damit unberuehrt.
+// der Notaus des Aufrufers bleibt damit unberuehrt.
 export const TURN_STOP_SUPERSEDED = "superseded";
 
 // Die EINE Frage vor JEDER Schleifenrunde: darf sie noch gefahren werden? Liefert den
 // maschinenlesbaren Grund oder null. Zwei Achsen mit bewusst UNTERSCHIEDLICHER Reichweite:
 //   - GELD (Regel 1) gilt ab der ERSTEN Runde. bookTokenUsage laeuft in JEDER Runde;
-//     geprueft wurde bisher nur EINMAL vor dem Turn (Shim Schritt 6) bzw. gar nicht
+//     geprueft wurde bisher nur EINMAL vor dem Turn bzw. gar nicht
 //     (/voice/turn). Ein erschoepfter Cap darf keinen einzigen Token mehr kosten.
 //   - ZEIT erst ab der ZWEITEN Runde: die erste laeuft immer, sonst koennte eine zu knapp
 //     konfigurierte Frist den Agenten stumm schalten (fail-safe Richtung Bestand). Eine
-//     solche Konfiguration meldet der Boot-Waechter (warnTurnOutlivesDeadAir).
+//     solche Konfiguration meldet der Boot-Waechter (warnTurnBudgetOverrun).
 // Nicht injizierbar (Regel 1): ein Gate, das ein Aufrufer per No-op abschalten darf, ist
 // keines. Injizierbar ist allein die REAKTION beim Aufrufer.
 function roundStopReason({ call, roundIndex, elapsedMs, deadlineMs }) {
@@ -862,8 +861,8 @@ function promptCharsOf({ system, tools, messages }) {
 
 // AL-P7: der Satz-Abnehmer DIESER Runde - oder null, wenn nicht gestreamt werden darf.
 // Drei Bedingungen, jede fail-closed:
-//   1. Es gibt ueberhaupt einen Abnehmer (nur der Shim-Pfad liefert einen; die
-//      Budget-Engine rendert ein fertiges TeXML-Dokument und kann nichts inkrementell).
+//   1. Es gibt ueberhaupt einen Abnehmer (seit IE6-S1 liefert kein Produktionsaufrufer
+//      einen; R-1, entfaellt mit IE6 Stufe 3).
 //   2. AL-P17 (E1): JEDES angebotene Werkzeug ist bekannt und STROM-SICHER
 //      (isStreamSafeTool). Bis AL-P17 stand hier die schaerfere Bedingung
 //      "ausschliesslich Seiteneffekt-Werkzeuge". Sie sperrte live in JEDEM Turn, weil
@@ -969,12 +968,11 @@ function consultTurnMarker(consultWait, turnControl) {
   return "";
 }
 
-// GQ-P1: abortSignal ist der optionale Riegel des Shims (telnyx-turn-supersede.js). Ohne
-// ihn ist dieser Turn byte-identisch zum Bestand - /voice/turn (routes/voice.js) reicht
-// keinen durch. Der Abbruch ist KOOPERATIV: gelesen wird an der Schleifengrenze und vor
-// dem Transkript-Schreiben, NICHT im Modell-Aufruf. Damit bleibt die Kosten-Buchhaltung
-// (completeRound: genau EINE Buchung je Modellrunde) unangetastet. Stumm geschaltet wird
-// der Turn nicht hier, sondern am Sprech-Draht des Shims.
+// GQ-P1: abortSignal ist der optionale kooperative Abbruch (ohne Produktionsaufrufer seit
+// IE6-S1, R-1) - /voice/turn (routes/voice.js) reicht keinen durch. Der Abbruch ist
+// KOOPERATIV: gelesen wird an der Schleifengrenze und vor dem Transkript-Schreiben, NICHT
+// im Modell-Aufruf. Damit bleibt die Kosten-Buchhaltung (completeRound: genau EINE Buchung
+// je Modellrunde) unangetastet.
 export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal } = {}) {
   // G3/G26-Fix: das Transkript-Record-Gate ist
   // RICHTUNGSLOS und byte-identisch zum fruehen Master-Stand (41ce40b:
@@ -1372,13 +1370,12 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   });
 
   // GQ-P1: der Turn wurde verdraengt - eine vollstaendigere Fassung derselben Aeusserung
-  // wird gerade beantwortet. Er hat NICHTS gesprochen (der Sprech-Draht des Shims ist im
-  // Moment der Verdraengung stumm), also darf er auch KEINE agent-Zeile ins Transkript
-  // schreiben: sie waere im naechsten Turn "bereits Gesagtes" in der Message-Kette und im
-  // Dashboard/DSGVO-Export das zweite agent-Segment auf dieselbe Aeusserung - genau der
-  // Befund, den dieser Riegel beseitigt. endCall faellt bewusst weg: die Auflege-
-  // Entscheidung trifft der Turn, der die VOLLSTAENDIGE Aeusserung beantwortet.
-  // stopReason bleibt echt - eine Geld-Achse muss den Shim-Notaus weiter ausloesen.
+  // wird gerade beantwortet. Er hat NICHTS gesprochen, also darf er auch KEINE agent-Zeile
+  // ins Transkript schreiben: sie waere im naechsten Turn "bereits Gesagtes" in der
+  // Message-Kette und im Dashboard/DSGVO-Export das zweite agent-Segment auf dieselbe
+  // Aeusserung - genau der Befund, den dieser Riegel beseitigt. endCall faellt bewusst weg:
+  // die Auflege-Entscheidung trifft der Turn, der die VOLLSTAENDIGE Aeusserung beantwortet.
+  // stopReason bleibt echt - eine Geld-Achse muss den Notaus des Aufrufers weiter ausloesen.
   if (abortSignal?.aborted)
     return {
       speech: "",
@@ -1404,8 +1401,8 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   // ist in test/l0-metrics.test.js woertlich gepinnt). EINE Quelle bleibt firedTools.
   // toolNames statt tools: es sind NAMEN - genau daran haengt die PII-Freiheit der Logzeile.
   // AL-P6: stopReason ist rein additiv (null im Normalfall). Der Aufrufer entscheidet die
-  // REAKTION: der Shim beendet ueber Call-Control, die Budget-Engine ueber den TeXML-
-  // Render. Die PRUEFUNG liegt an genau einer Stelle (oben, roundStopReason).
+  // REAKTION - die Budget-Engine ueber den TeXML-Render. Die PRUEFUNG liegt an genau einer
+  // Stelle (oben, roundStopReason).
   // AL-P7b: zwei rein additive Felder. speechStreamed loest den Aufrufer von der
   // Chunk-ZAHL (die seit der Ueberbrueckung nicht mehr "der Turn-Text ist gesprochen"
   // bedeutet); thinkingSignalSpoken ist der PII-freie Diskriminator der Live-Abnahme.
@@ -1417,7 +1414,7 @@ export async function agentTurn(call, callerText, { onSpeechChunk, abortSignal }
   // der Fehler, den AL-D2 mit speechWireOpen gerade repariert hat. Folge, ausdruecklich:
   // im heutigen Werkzeugsatz ist jede Runde mit offenem Draht armiert, also ist das Feld
   // in Live-Turns dauerhaft false. Der Live-Diskriminator DIESER Faehigkeit ist deshalb
-  // streamArmedRounds (hier) bzw. streamChunks (Shim), nicht thinkingSignalSpoken.
+  // streamArmedRounds (hier), nicht thinkingSignalSpoken.
   return {
     speech,
     speechStreamed,

@@ -8,7 +8,8 @@
 // transitiv src/config.js zieht, wuerde config.server.dataDir dauerhaft auf den Default
 // binden). Deshalb: EIN before()-Hook setzt DATA_DIR zuerst, ALLE store-gebundenen Module
 // (claude.js, i18n/locales.js, telnyx-call-control-ingest.js, telnyx-shim-harness.js)
-// werden dort dynamisch importiert. test/_outbound-harness.js ist die einzige Ausnahme:
+// werden dort dynamisch importiert (seit IE6-S1 nur noch claude.js/i18n/locales.js - der
+// Telnyx-Shim ist entfernt). test/_outbound-harness.js ist die einzige Ausnahme:
 // es spawnt einen Kindprozess (eigenes DATA_DIR ueber env), zieht in diesem Prozess kein
 // src/config.js - statischer Import oben ist unbedenklich (Muster disclosure-outbound.test.js).
 import { test, before } from "node:test";
@@ -64,8 +65,6 @@ const LANGS = ["de", "fr", "en"];
 
 let systemPrompt, openingText, disclosureSentence;
 let LOCALES, localeFor;
-let makeCallControlIngest;
-let ingestTimeoutDeps, makeHandler, fakeStore, makeCall, agentTurnSpy, validReq, fakeRes;
 
 before(async () => {
   process.env.DATA_DIR = tempDataDir(
@@ -80,9 +79,6 @@ before(async () => {
   );
   ({ systemPrompt, openingText, disclosureSentence } = await import("../src/claude.js"));
   ({ LOCALES, localeFor } = await import("../src/i18n/locales.js"));
-  ({ makeCallControlIngest } = await import("../src/telnyx-call-control-ingest.js"));
-  ({ ingestTimeoutDeps, makeHandler, fakeStore, makeCall, agentTurnSpy, validReq, fakeRes } =
-    await import("./telnyx-shim-harness.js"));
 });
 
 const ownerCall = (over = {}) =>
@@ -246,90 +242,9 @@ test("OC-P3-C2 /voice/outbound Fremd-Ziel: unveraendert (Offenlegung als Say-Pra
   assert.ok(!twiml.includes(HANGUP_TAG), `/voice/outbound darf nicht auflegen: ${twiml}`);
 });
 
-// ---------------------------------------------------------------------------
-// Block D: Telnyx-Assistant-Speak-Node (call.answered -> onAnswered)
-// ---------------------------------------------------------------------------
-
-// Minimaler Antrieb wie test/telnyx-p8-opening-contract.test.js (dort NICHT veraendert -
-// nachgebaut). ACHTUNG (gemessene Falle, s. Plan 5.3 Block D): dort seedet das Vorbild
-// OHNE Tenant -> firstName "" -> der Owner-Zweig faellt fail-closed durch. Dieser Test
-// braucht den echten, benannten Tenant (oben in before() geseedet), sonst waere D1
-// gruen-aus-dem-falschen-Grund.
-async function driveAnswered(call) {
-  const speakCalls = [];
-  const handler = makeCallControlIngest({
-    store: { getCall: (id) => (id === call.id ? call : null), markAnswered() {} },
-    voiceControl: () => ({
-      async speak(payload) {
-        speakCalls.push(payload);
-      },
-      async startAssistant() {},
-    }),
-    finishCall: async () => {},
-    openingText,
-    localeFor,
-    ...ingestTimeoutDeps(),
-  });
-  const body = { data: { event_type: "call.answered", payload: { call_control_id: "cc_1" } } };
-  await handler({ query: { callId: call.id }, body }, { sendStatus() {} });
-  return speakCalls[0];
-}
-
-const telnyxAssistantCall = (over = {}) => ({
-  id: "call_oc_p3_shim",
-  status: "active",
-  provider: "telnyx",
-  direction: OUTBOUND,
-  language: "de",
-  tenantId: BOOTSTRAP_TENANT_ID,
-  goal: "Testziel",
-  ...over,
-});
-
-test("OC-P3-D1 Telnyx-Assistant-Pfad: Owner-Ziel spricht Owner-Begruessung, keine Offenlegung", async () => {
-  const call = telnyxAssistantCall({ calleeIsOwner: true });
-  const speak = await driveAnswered(call);
-  assert.equal(speak.text, openingText(call), "Speak-Node == openingText(call) (eine Quelle wie Budget-Pfad)");
-  assert.ok(speak.text.startsWith(localeFor("de").ownerOpening(OWNER_TEST_FIRST_NAME)));
-  assert.ok(!speak.text.includes(disclosureSentence(call)));
-});
-
-test("OC-P3-D2 Telnyx-Assistant-Pfad: Fremd-Ziel byte-identisch zum Bestand (Offenlegung)", async () => {
-  const call = telnyxAssistantCall();
-  const speak = await driveAnswered(call);
-  assert.equal(speak.text, openingText(call));
-  assert.ok(speak.text.startsWith(disclosureSentence(call)));
-});
-
-// ---------------------------------------------------------------------------
-// Block F: Telnyx-Assistant-Shim-Beleg (Spec 2.3/Abnahme 8) - der Shim reicht
-// denselben Call-Datensatz an agentTurn -> systemPrompt weiter.
-// ---------------------------------------------------------------------------
-
-test("OC-P3-F1 Shim reicht denselben Call-Datensatz mit calleeIsOwner an agentTurn weiter", async () => {
-  const call = makeCall({ tenantId: BOOTSTRAP_TENANT_ID, calleeIsOwner: true, language: "de" });
-  const store = fakeStore({ call });
-  const agentTurn = agentTurnSpy();
-  const handler = makeHandler({ store, agentTurn });
-  await handler(validReq(call), fakeRes());
-  assert.equal(agentTurn.calls.length, 1);
-  const seenCall = agentTurn.calls[0].call;
-  assert.equal(seenCall, call, "agentTurn bekommt dieselbe Store-Referenz");
-  assert.equal(seenCall.calleeIsOwner, true);
-});
-
-test("OC-P3-F2 systemPrompt(<vom Shim gesehener Call>) traegt Owner-SITUATION + Rueckfallzeile", async () => {
-  const call = makeCall({ tenantId: BOOTSTRAP_TENANT_ID, calleeIsOwner: true, language: "de" });
-  const store = fakeStore({ call });
-  const agentTurn = agentTurnSpy();
-  const handler = makeHandler({ store, agentTurn });
-  await handler(validReq(call), fakeRes());
-  const seenCall = agentTurn.calls[0].call;
-  const prompt = systemPrompt(seenCall);
-  const localePrompt = LOCALES.de.prompt;
-  assert.ok(prompt.includes(localePrompt.situationOutboundOwner({ owner: OWNER_TEST_FIRST_NAME })));
-  assert.ok(prompt.includes(disclosureSentence(seenCall)));
-});
+// Block D (Telnyx-Assistant-Speak-Node) und Block F (Shim-Beleg) sind mit IE6-S1
+// entfernt - der Assistant-/Shim-Pfad existiert nicht mehr. Die Owner-Eroeffnung auf den
+// ueberlebenden Pfaden (Block A/B/C) deckt weiterhin ab.
 
 // ---------------------------------------------------------------------------
 // Block E: Umlaute/Akzente im Owner-Zweig (die Bestands-Ratsche cq-p5-prompt-redesign

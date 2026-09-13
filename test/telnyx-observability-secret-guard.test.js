@@ -60,8 +60,6 @@ const CONSOLE_CALL_START = /console\.(?:log|warn|error|info|debug)\s*\(/y;
 
 // G35: die gescannten Dateien als benannte Ziel-Tabelle (kein Wert verstreut).
 const WHOLE_FILE_SCAN_TARGETS = [
-  ["telnyx-llm-shim.js", "../src/telnyx-llm-shim.js"],
-  ["telnyx-call-control-ingest.js", "../src/telnyx-call-control-ingest.js"],
   ["telephony/adapters/telnyx/voice.js", "../src/telephony/adapters/telnyx/voice.js"],
   ["routes/voice.js", "../src/routes/voice.js"],
 ];

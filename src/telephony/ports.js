@@ -18,38 +18,6 @@
  */
 
 /**
- * @typedef {Object} CallControlOriginateParams
- *   Origination ueber Telnyx Call Control (AI-Assistant-Pfad, P4) statt TeXML. Call Control
- *   buendelt die Event-Webhooks in EINER webhook_url (kein getrenntes url/statusCallback).
- * @property {string} from         - Absender-Nummer (E.164), aktive Store-Nummer des Tenants
- * @property {string} to           - Zielnummer (E.164, bereits gegated)
- * @property {string} [webhookUrl] - Call-Control-Event-Webhook (call.answered/speak.ended/hangup, P4.5)
- * @property {string} [method]     - HTTP-Methode fuer den Webhook ("POST")
- * @property {number} [timeLimit]  - Max-Gespraechsdauer in Sek. (Defense-in-Depth; harter Timer bleibt server.js)
- *
- * Die KLINGELfrist (timeout_secs) ist bewusst KEIN Parameter: sie ist eine Provider-
- * Eigenschaft und kommt im Adapter aus der Konfiguration (config.telephony.telnyxDialTimeoutSecs),
- * damit kein Aufrufer sie versehentlich unterbietet.
- */
-
-/**
- * @typedef {Object} CallControlResult
- * @property {string} callControlId - Call-Control-ID (data.call_control_id). EIGENES Feld,
- *   NICHT sid ueberladen: Boot-Recovery (P6) adressiert den Hangup ueber diese ID-Form.
- */
-
-/**
- * @typedef {Object} StartAssistantParams
- * @property {string} callControlId    - Ziel-Call (aus originateViaCallControl)
- * @property {string} assistantId      - Telnyx-AI-Assistant-Referenz (Caller/P5/P7 liefert sie)
- * @property {string} [language]       - NEUTRALE Gespraechssprache (call.language: "de"|"fr"|"en",
- *   Werte aus src/i18n/locales.js) - KEIN Provider-String. Der Adapter mappt sie intern auf den
- *   STT-Sprach-Hint (afix-p2/R2). Fehlt der Wert, sendet der Adapter KEIN transcription-Feld ->
- *   Body byte-identisch zum Bestand. Nur der Ingest-Pfad reicht call.language durch; der
- *   Inbound-Pfad bleibt in dieser Phase BYTE-IDENTISCH (STT-Sprach-Hint dort folgt in P6).
- */
-
-/**
  * @typedef {Object} InboundRequest
  * @property {Object<string,string>} headers - Request-Header (lowercase keys, z.B. telnyx-signature-ed25519)
  * @property {Buffer} rawBody  - unveraenderter Roh-Body; fuer die Telnyx-Ed25519-Pruefung
@@ -128,28 +96,16 @@
  *   Startet einen Outbound-Call (TeXML). Heute: calls.create(...).
  * @property {(providerCallSid: string) => Promise<void>} endCall
  *   Beendet einen laufenden Call (TeXML). Heute: calls(sid).update({status:"completed"}).
- * @property {(params: CallControlOriginateParams) => Promise<CallControlResult>} [originateViaCallControl]
- *   Call-Control-Variante der Origination (AI-Assistant-Pfad, P4). Aktuell NUR Telnyx
- *   implementiert (wie NumberProvisioning) - deshalb OPTIONAL am Port. Liefert callControlId.
  * @property {(callControlId: string) => Promise<void>} [endCallViaCallControl]
- *   Call-Control-Hangup (POST /v2/calls/{id}/actions/hangup). ZUSAETZLICH zu endCall (TeXML,
- *   unveraendert). Telnyx-only.
- * @property {(params: StartAssistantParams) => Promise<void>} [startAssistant]
- *   Haengt den Telnyx-AI-Assistant an den Call-Control-Call an (ai_assistant_start). Telnyx-only.
- * @property {(params: {callControlId: string, text: string, voiceProfile: string, useAssistantVoice?: boolean}) => Promise<void>} [speak]
- *   Deterministischer Call-Control-Speak-Node (Disclosure vor ai_assistant_start, P4.5). Telnyx-only.
- *   useAssistantVoice (optional, Default false): SEMANTISCHER Wunsch "sprich mit derselben
- *   Stimme, die der AI-Assistant danach benutzt, sofern der Adapter sie kennt" - KEIN
- *   Provider-String; das Mapping auf die Provider-Payload lebt adapter-intern. Fehlt der
- *   Parameter (Inbound-Pfad), ist das Verhalten byte-identisch zum Bestand.
+ *   Call-Control-Hangup fuer persistierten Altbestand (hangUpAction). ZUSAETZLICH zu endCall
+ *   (TeXML, unveraendert). Telnyx-only.
  * @property {(params?: VoiceCostRecordPoolParams) => Promise<VoiceCostRecordPool>} [fetchCostRecordPool]
  *   Roh-Belege EINES Sweeps (Provider-CDR), gedacht fuer EINEN Aufruf je Sweep VOR der
  *   Kandidatenschleife: der Abruf ist schleifeninvariant (nur filter[record_type] +
  *   page[size] + page[number]), die Zuordnung nicht. Je Typ wird aufsteigend geblaettert,
  *   bis die letzte Seite erreicht, das Fenster verlassen oder die Seitenobergrenze
- *   getroffen ist; letzteres liefert complete:false. Telnyx-only wie
- *   originateViaCallControl; fehlt die Methode, faellt der Aufrufer auf "kein Abgleich"
- *   zurueck (konservativer Fall).
+ *   getroffen ist; letzteres liefert complete:false. Telnyx-only; fehlt die Methode,
+ *   faellt der Aufrufer auf "kein Abgleich" zurueck (konservativer Fall).
  *   Der Abruf ist gedrosselt und kann deshalb bis zur naechsten vollen Minute blockieren.
  *   WIRFT NIE. ok:false heisst "nicht gemessen" und NIEMALS "Kosten = 0".
  * @property {(pool: VoiceCostRecordPool, params: VoiceCostRecordsParams) => VoiceCostRecordsResult} [assignCostRecords]

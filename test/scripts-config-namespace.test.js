@@ -17,7 +17,6 @@ const SCRIPTS = [
   "scripts/telnyx-ws-echo.mjs",
   "scripts/telnyx-call-latency.mjs",
   "scripts/smoke-stripe-payment.mjs",
-  "scripts/telnyx-assistant-provision.mjs",
   // OUTBOUND-E4: ohne diesen Eintrag erfasst dieses Gate das neue Skript GAR NICHT und
   // bliebe gruen, ohne etwas zu pruefen (Plan-Auftrag, woertlich).
   "scripts/check-outbound-drift.mjs",
@@ -25,7 +24,8 @@ const SCRIPTS = [
   "scripts/el-nummern-registrierung.mjs",
 ];
 // Vor PA-12 bereits verschachtelte Gruppen - in PA-19 bewusst flach adressiert belassen.
-const NESTED_GROUPS = new Set(["telnyxElevenLabs", "telnyxAssistant", "elevenLabsPlayTts"]);
+// IE6-S1: telnyxAssistant ist entfernt.
+const NESTED_GROUPS = new Set(["telnyxElevenLabs", "elevenLabsPlayTts"]);
 const NAMESPACES = new Set(Object.keys(CONFIG_NAMESPACES));
 
 // Entfernt Block- und Zeilenkommentare (schuetzt "://"), damit Prosa-Erwaehnungen von

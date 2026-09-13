@@ -1,5 +1,5 @@
 // FW2: die EINE Stelle, an der ein Guthaben-Ausfall alarmiert UND vermerkt wird (G5/S2 -
-// keine zweite Kopie der Log-Zeile). Beide Aufrufwege (telnyx-llm-shim.js, routes/voice.js)
+// keine zweite Kopie der Log-Zeile). Der Aufrufweg (routes/voice.js)
 // benutzen sie.
 import { isProviderBillingError } from "./llm.js";
 import { latchBillingBlockedProvider } from "./llm/registry.js";

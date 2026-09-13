@@ -161,10 +161,10 @@ test("(e) Pool ohne text-to-speech-Records laesst recordRelayTtsCharacters unger
 
 // ---- (f) Pflicht-Typmenge ist JE PROFIL beantwortet, nicht global abgeleitet ----
 
-test("(f) pflichttypenFuerProfil: die vier Telnyx-Profile liefern DIESELBE Referenz wie der Env-Wert", () => {
+test("(f) pflichttypenFuerProfil: die drei Telnyx-Profile liefern DIESELBE Referenz wie der Env-Wert", () => {
   const env = Object.freeze(["sip-trunking", "call-control"]);
   for (const profil of [
-    KOSTENPROFIL.TELNYX_ASSISTANT, KOSTENPROFIL.TELNYX_BUDGET,
+    KOSTENPROFIL.TELNYX_BUDGET,
     KOSTENPROFIL.TELNYX_INBOUND_BUDGET, KOSTENPROFIL.TELNYX_INBOUND_REALTIME,
   ]) {
     assert.equal(pflichttypenFuerProfil(profil, env), env, `Profil ${profil} muss dieselbe Referenz liefern (Identitaet)`);
@@ -286,8 +286,8 @@ test("legacyKostenprofil: sipCallId gewinnt gegen direction", () => {
 
 test("kostenprofilFuerAnruf: gesetztes, bekanntes costProfile gewinnt gegen die Legacy-Zuordnung", () => {
   assert.equal(
-    kostenprofilFuerAnruf({ costProfile: KOSTENPROFIL.TELNYX_ASSISTANT, sipCallId: "otb_x" }),
-    KOSTENPROFIL.TELNYX_ASSISTANT,
+    kostenprofilFuerAnruf({ costProfile: KOSTENPROFIL.TELNYX_BUDGET, sipCallId: "otb_x" }),
+    KOSTENPROFIL.TELNYX_BUDGET,
   );
 });
 
@@ -305,10 +305,10 @@ test("kostenprofilFuerAnruf: fehlendes costProfile faellt auf die Legacy-Zuordnu
 
 // ---- sweepTraegerFuerProfil / sweepBelegBetrag: reine Regelwerk-Unit-Tests ----
 
-test("sweepTraegerFuerProfil: el_convai_sip -> telnyx_sip, die vier Telnyx-Profile -> telnyx_call_records, sonst null", () => {
+test("sweepTraegerFuerProfil: el_convai_sip -> telnyx_sip, die drei Telnyx-Profile -> telnyx_call_records, sonst null", () => {
   assert.equal(sweepTraegerFuerProfil(KOSTENPROFIL.EL_CONVAI_SIP), KOSTENART.TELNYX_SIP);
   for (const profil of [
-    KOSTENPROFIL.TELNYX_ASSISTANT, KOSTENPROFIL.TELNYX_BUDGET,
+    KOSTENPROFIL.TELNYX_BUDGET,
     KOSTENPROFIL.TELNYX_INBOUND_BUDGET, KOSTENPROFIL.TELNYX_INBOUND_REALTIME,
   ]) {
     assert.equal(sweepTraegerFuerProfil(profil), KOSTENART.TELNYX_CALL_RECORDS);

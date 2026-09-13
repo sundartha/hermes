@@ -7,7 +7,6 @@ import {
   placeCall,
   captureConsole,
   TELNYX_TEST_OWNER_NUMBER,
-  TELNYX_ASSISTANT_BOOT_ENV,
 } from "./helpers.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import * as ops from "../src/store/state-ops.js";
@@ -51,24 +50,9 @@ test("KV2-2-c1: EL-Zweig (api-calls.js) setzt costProfile=el_convai_sip", async 
   }
 });
 
-test("KV2-2-c2: Telnyx-Assistant-Zweig setzt costProfile=telnyx_assistant", async () => {
-  const srv = await startServer({
-    env: { FAKE_ORIGINATE: "true", TELNYX_AI_ASSISTANT_ENABLED: "true", ...TELNYX_ASSISTANT_BOOT_ENV },
-    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-  });
-  try {
-    const res = await placeCall(srv);
-    assert.equal(res.status, HTTP_OK);
-    const { callId } = await res.json();
-    const calls = srv.readStore().calls;
-    const call = callWithId(calls, callId);
-    assert.equal(call.costProfile, KOSTENPROFIL.TELNYX_ASSISTANT);
-    // Gegenprobe: der Assistant-Zweig lief wirklich (fake_cc_-Kennung), nicht TeXML.
-    assert.match(call.callControlId, /^fake_cc_/);
-  } finally {
-    await srv.stop();
-  }
-});
+// KV2-2-c2 ist mit IE6-S1 als IE6-S1-2 umgezogen (test/ie6-s1-assistant-entfernt.test.js):
+// der Telnyx-Assistant-Zweig ist entfernt, dieselbe Weiche faellt jetzt auf den TeXML-
+// Zweig zurueck - jetzt mit Rueckfall-Erwartung statt costProfile=telnyx_assistant.
 
 test("KV2-2-c3: TeXML-Zweig (beide Flags aus) setzt costProfile=telnyx_budget", async () => {
   const srv = await startServer({
@@ -152,33 +136,25 @@ test("KV2-2-c6: budget und realtime liefern ZWEI VERSCHIEDENE Inbound-Profile", 
   }
 });
 
-test("KV2-2-c7: alle fuenf Weichen-Zweige liefern ein Profil aus der Registry", async () => {
+test("KV2-2-c7: alle vier Weichen-Zweige liefern ein Profil aus der Registry", async () => {
   const elSrv = await startServer({ env: { ...EL_BOOT_ENV }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
-  const assistantSrv = await startServer({
-    env: { FAKE_ORIGINATE: "true", TELNYX_AI_ASSISTANT_ENABLED: "true", ...TELNYX_ASSISTANT_BOOT_ENV },
-    ownerNumber: TELNYX_TEST_OWNER_NUMBER,
-  });
   const texmlSrv = await startServer({ env: { FAKE_ORIGINATE: "true" }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
   const budgetHarness = await startInboundHarness({ voiceEngine: "budget", seed: inboundSeed() });
   const realtimeHarness = await startInboundHarness({ voiceEngine: "realtime", seed: inboundSeed() });
   try {
     const elRes = await placeCall(elSrv);
     const { callId: elCallId } = await elRes.json();
-    const assistantRes = await placeCall(assistantSrv);
-    const { callId: assistantCallId } = await assistantRes.json();
     const texmlRes = await placeCall(texmlSrv);
     const { callId: texmlCallId } = await texmlRes.json();
     await postIncoming(budgetHarness, "CAc7b");
     await postIncoming(realtimeHarness, "CAc7r");
 
     const elCalls = elSrv.readStore().calls;
-    const assistantCalls = assistantSrv.readStore().calls;
     const texmlCalls = texmlSrv.readStore().calls;
     const budgetCalls = budgetHarness.store.load().calls;
     const realtimeCalls = realtimeHarness.store.load().calls;
     const gefundeneProfile = [
       callWithId(elCalls, elCallId).costProfile,
-      callWithId(assistantCalls, assistantCallId).costProfile,
       callWithId(texmlCalls, texmlCallId).costProfile,
       callWithTwilioSid(budgetCalls, "CAc7b").costProfile,
       callWithTwilioSid(realtimeCalls, "CAc7r").costProfile,
@@ -188,7 +164,6 @@ test("KV2-2-c7: alle fuenf Weichen-Zweige liefern ein Profil aus der Registry", 
     }
   } finally {
     await elSrv.stop();
-    await assistantSrv.stop();
     await texmlSrv.stop();
     await budgetHarness.stop();
     await realtimeHarness.stop();

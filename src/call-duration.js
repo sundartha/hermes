@@ -5,8 +5,7 @@
 // "(maxDurationS || default) * 1000", in bridge.js mit rohem Magic-1000 (G25).
 //
 // MS_PER_SECOND kommt aus utils/timer.js (G5, Review-Blocker Runde 2): dort bereits
-// als geteilte Konstante etabliert und von telnyx-call-control-ingest.js sowie
-// telnyx-conversation-watchdog.js importiert - keine eigene Deklaration hier noetig,
+// als geteilte Konstante etabliert - keine eigene Deklaration hier noetig,
 // utils/timer.js ist blattfoermig (importfrei) und daher zyklusfrei importierbar.
 import { MS_PER_SECOND } from "./utils/timer.js";
 // KS-P3 (b): die absolute Obergrenze der Notbremse. Blatt-Modul (Datenkonstanten, kein

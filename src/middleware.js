@@ -56,7 +56,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 // (invalid_private_number / no_card). Die Antwort nennt den Grund und sonst NICHTS:
 // kein Echo des Origins, keine Liste erlaubter Herkuenfte.
 const CROSS_ORIGIN_ERROR = "cross_origin_blocked";
-// Antwortcode der Herkunftspruefung. Benannt wie im Bestand (telnyx-llm-shim.js,
+// Antwortcode der Herkunftspruefung. Benannt wie im Bestand (
 // routes/webhooks-elevenlabs.js): der nackte Zahlenwert im Handler waere ein Magic
 // Number.
 const HTTP_FORBIDDEN = 403;

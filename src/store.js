@@ -78,26 +78,12 @@ export const {
   newId,
   createCall,
   getCall,
-  // Brain-Shim-Korrelation (E1): beide Backends exportieren die Query, Fassade = EINE
-  // Quelle. Ohne diesen Re-Export waere store.getCallByControlId undefined -> der Shim
-  // wuerfe zur Laufzeit einen TypeError.
-  getCallByControlId,
   // F12 (A6): dem Prozess unbekannten, aber in der DB aktiven Call RLS-sauber nachladen
   // (Deploy-Instanzwechsel). pg = Tenant-Loop; json = getCall. OHNE diesen Re-Export waere
   // store.attachActiveCall undefined -> der /voice-Re-Attach-Pfad wuerfe zur Laufzeit einen
   // TypeError. Beide Backends exportieren die Methode -> die Fassade ist die EINE Quelle.
   attachActiveCall,
-  // KS-P1b: dieselbe Nachladung ueber die call_control_id (Assistant-Shim, E1). OHNE
-  // diesen Re-Export waere store.attachActiveCallByControlId undefined -> der Shim-Re-
-  // Attach-Pfad wuerfe zur Laufzeit einen TypeError (Muster attachActiveCall/
-  // getCallByControlId). Beide Backends exportieren die Methode.
-  attachActiveCallByControlId,
   addTranscript,
-  // GQ-H1-a: eine von Telnyx verworfene, nie gesprochene Antwort wieder aus dem Transkript
-  // nehmen. Beide Backends exportieren die Methode -> die Fassade ist die EINE Quelle;
-  // ohne diesen Re-Export waere store.dropLastAgentTranscript undefined und der Shim-Pfad
-  // wuerfe zur Laufzeit einen TypeError.
-  dropLastAgentTranscript,
   purgeTranscript,
   markAnswered,
   // KS-EL1: der Anker nachziehen (elevenlabs/outbound.js, answeredAnchorOutcome). OHNE
@@ -136,14 +122,10 @@ export const {
   // Pfad wuerfe zur Laufzeit einen TypeError.
   oeffneKostenAbgleichErneut,
   recordFailureReason,
-  // AL-P1: Conversation-UUID (Latenz-Achse) + Anrufer-Turn-Zaehler (Abbruch-Achse).
-  // OHNE diese Re-Exports waeren sie auf der Fassade undefined -> der Call-Control-Ingest
-  // bzw. agentTurn wuerfen zur Laufzeit einen TypeError.
-  recordTelnyxConversationId,
   // EL-BL1: das ElevenLabs-Handle (Bindungs-Kennung des Rueckfrage-Webhooks). OHNE
   // diesen Re-Export waere store.recordElevenlabsConversationId auf der Fassade
   // undefined -> der Schreibweg wuerfe zur Laufzeit einen TypeError (Muster
-  // recordTelnyxConversationId).
+  // recordFailureReason).
   recordElevenlabsConversationId,
   // Phase-6-Voraussetzung: der Join-Schluessel zwischen ElevenLabs- und Telefonie-Kosten.
   // OHNE diesen Re-Export waere store.recordSipCallId auf der Fassade undefined -> der
@@ -243,7 +225,7 @@ export const {
   budgetExceeded,
   reserveExceedsBudget,
   // KS-P2: Live-Verbrauchs-Gate + seine Basis. OHNE diese Re-Exports waeren sie auf der
-  // Fassade undefined -> blockingBudgetAxis (claude.js/telnyx-llm-shim.js) wuerfe zur
+  // Fassade undefined -> blockingBudgetAxis (claude.js) wuerfe zur
   // Laufzeit einen TypeError. Beide Backends exportieren sie -> die Fassade ist die EINE
   // Quelle. Muster wie reserveExceedsBudget.
   liveBudgetExceeded,

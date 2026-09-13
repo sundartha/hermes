@@ -211,7 +211,6 @@ export const BASE_ENV = {
   TELNYX_PUBLIC_KEY: "",
   TELNYX_API_BASE: "",
   TELNYX_CONNECTION_ID: "",
-  TELNYX_CALL_CONTROL_APP_ID: "",
   // OUTBOUND-E4: neutral leer, sonst leakt eine lokale .env in Spawn-Tests (Lehre
   // test-base-env-drift). Wirkungslos hier, weil OUTBOUND_DRIFT_MIN_INTERVAL_MS=0 den
   // Waechter ohnehin komplett aushaelt - Pin trotzdem, Muster TELNYX_CONNECTION_ID.
@@ -223,61 +222,9 @@ export const BASE_ENV = {
   TELNYX_SIP_TRUNK_USERNAME: "",
   TELNYX_SIP_TRUNK_PASSWORD: "",
   TELNYX_ACCOUNT_SID: "",
-  // Telnyx AI Assistant / Brain-Shim (PLAN-TELNYX-AI-ASSISTANT P1) neutral AUS
-  // (fail-closed): der Shim antwortet 404, der Live-Pfad ist byte-identisch. Ohne diese
-  // Zeile leakt eine lokale .env mit TELNYX_AI_ASSISTANT_ENABLED=true via dotenv in
-  // Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift). Der Shim-HTTP-Test setzt
-  // sie explizit auf "true".
-  TELNYX_AI_ASSISTANT_ENABLED: "false",
-  // P5: neutrale Defaults, sonst leakt eine lokale .env mit TELNYX_ASSISTANT_ID/
-  // TELNYX_SHIM_MAX_TURNS_PER_MIN via dotenv in Spawn-Tests -> Baseline-Drift (Lehre
-  // test-base-env-drift). Leere assistantId -> P4.5 onSpeakEnded skippt fail-safe.
-  TELNYX_ASSISTANT_ID: "",
-  TELNYX_SHIM_MAX_TURNS_PER_MIN: "30",
-  // stab-p9: neutrale Defaults (= config.js-Fallback), sonst leakt eine lokale .env mit
-  // TELNYX_DEAD_AIR_TIMEOUT_S/TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS via dotenv in Spawn-Tests
-  // -> Baseline-Drift (Lehre test-base-env-drift).
-  TELNYX_DEAD_AIR_TIMEOUT_S: "45",
-  TELNYX_OPENING_SPEAK_TIMEOUT_S: "45",
-  TELNYX_LOOP_GUARD_MAX_EMPTY_TURNS: "8",
-  // Shim-Auth (E2/E3) neutral leer, sonst leakt eine lokale .env via dotenv in Spawn-Tests
-  // -> Baseline-Drift (Lehre test-base-env-drift). Flag-an-Spawn-Tests brauchen das Secret
-  // fuer den Boot (TELNYX_ASSISTANT_BOOT_ENV traegt es explizit).
-  TELNYX_SHIM_SHARED_SECRET: "",
-  TELNYX_SHIM_API_KEY_REF: "",
-  // OBS-FLAG neutral AUS, sonst leakt eine lokale .env mit TELNYX_SHIM_DEBUG_SHAPE=true
-  // via dotenv in Spawn-Tests -> Baseline-Drift (Lehre test-base-env-drift).
-  TELNYX_SHIM_DEBUG_SHAPE: "false",
-  // AL-P7 neutral AUS (= config.js-Fallback), sonst leakt eine lokale .env mit
-  // TELNYX_SHIM_TOKEN_STREAMING=true in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_SHIM_TOKEN_STREAMING: "false",
-  // GQ-P1: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
-  // TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN=false in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_SHIM_SUPERSEDE_EXTENDED_TURN: "true",
-  // GQ-P18: in Spawn-Tests neutral AUS (0). Nicht der Prod-Default: sonst leakte eine
-  // lokale .env in die Spawn-Tests (Lehre test-base-env-drift), und ein Spawn-Test kann
-  // die Sperre ohnehin nicht beobachten - sie braucht zwei gleichzeitige Requests desselben
-  // Calls. Sie wird unit-nah gefahren (test/gq-p18-speech-gate.test.js, injizierte Timer).
-  TELNYX_SHIM_EXTEND_HOLD_MS: "0",
-  // GQ-P5: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
-  // TELNYX_SHIM_IGNORE_PROVIDER_NUDGE=false in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_SHIM_IGNORE_PROVIDER_NUDGE: "true",
-  // GQ-P6: Prod-Default (60) explizit gepinnt, sonst leakt eine lokale .env mit einem
-  // abweichenden TELNYX_DIAL_TIMEOUT_SECS in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_DIAL_TIMEOUT_SECS: "60",
-  // GQ-P3: Prod-Default (true) explizit gepinnt, sonst leakt eine lokale .env mit
-  // TELNYX_INBOUND_HANDOFF_ENABLED=false via dotenv in Spawn-Tests (Lehre
-  // test-base-env-drift). Wirkt ohnehin nur bei TELNYX_AI_ASSISTANT_ENABLED=true.
-  TELNYX_INBOUND_HANDOFF_ENABLED: "true",
-  // GQ-P4: neutral auf dem Code-Fallback gepinnt, sonst leakt eine lokale .env via dotenv
-  // in die Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_MAX_CONSECUTIVE_FAILED_TURNS: "3",
-  TELNYX_FAILED_TURN_FAREWELL_TEXT: "",
-  // ElevenLabs-TTS neutral aus (Gate = REF+VOICE_ID leer -> Azure-Bestand). Ohne
-  // diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
-  TELNYX_ELEVENLABS_API_KEY_REF: "",
+  // ElevenLabs-TTS neutral aus (Gate = VOICE_ID leer -> Azure-Bestand). Ohne
+  // diese Zeile leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   TELNYX_ELEVENLABS_VOICE_ID: "",
-  TELNYX_ELEVENLABS_MODEL: "",
   // Play-TTS neutral aus (Gate = ELEVENLABS_PLAY_TTS_ENABLED=false -> Azure-Bestand).
   // Ohne diese Zeilen leakt eine lokale .env in Spawn-Tests (Lehre test-base-env-drift).
   ELEVENLABS_PLAY_TTS_ENABLED: "false",
@@ -1163,27 +1110,12 @@ export function makeTelnyxSigner() {
   };
 }
 
-// P10: assertConfig verlangt bei aktivem TELNYX_AI_ASSISTANT_ENABLED-Flag zusaetzlich
-// ASSISTANT_ID/API_KEY/CONNECTION_ID (fail-closed Boot) - Flag-an-Spawn-Tests brauchen
-// die drei Werte oft NUR, damit der Server ueberhaupt startet, nicht fuer ihre
-// eigentliche Aussage. EINE Quelle (G5/S2) statt der frueher in telnyx-p5-gate-proof +
-// telnyx-p5-origination + telnyx-p8-inbound + telnyx-p9-flag-matrix + telnyx-shim-route
-// fuenffach (teils voll, teils als 2-Key-Teilsatz) kopierten Fixture.
 // GP-P6: seit assertPricedPlans (boot.js) ist eine Price-Id je Katalog-Slug Boot-Pflicht,
 // sobald PAYMENT_ENABLED=true ist. Jeder Spawn-Test mit aktivem Payment braucht sie - EINE
-// Quelle (G5/S2, Muster TELNYX_ASSISTANT_BOOT_ENV darunter). Die Werte sind Attrappen,
-// kein Test ruft Stripe.
+// Quelle (G5/S2). Die Werte sind Attrappen, kein Test ruft Stripe.
 export const PLAN_PRICE_BOOT_ENV = Object.freeze({
   STRIPE_STARTER_PRICE_ID: "price_test_starter",
   STRIPE_BUSINESS_PRICE_ID: "price_test_business",
-});
-
-export const TELNYX_ASSISTANT_BOOT_ENV = Object.freeze({
-  TELNYX_ASSISTANT_ID: "asst_x",
-  TELNYX_API_KEY: "key_x",
-  TELNYX_CONNECTION_ID: "conn_x",
-  TELNYX_CALL_CONTROL_APP_ID: "ccapp_x",
-  TELNYX_SHIM_SHARED_SECRET: "shim_secret_x",
 });
 
 // POST /api/calls (Outbound-Origination-Trigger). Liefert die rohe fetch-Response
@@ -1200,10 +1132,9 @@ export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
 // WERT ist belanglos, SKIP_TWILIO_SIGNATURE_CHECK ueberspringt die Krypto - die PRAESENZ
 // waehlt den Provider). C-P3: der frueher vorhandene telnyx:false-Zweig (Twilio-Header)
 // ist entfallen, es gibt keinen NICHT-Telnyx-Inbound-Pfad mehr.
-// callSid: das Telnyx-TeXML-Feld, das die
-// call_control_id des Inbound-Legs TRAEGT (GQ-P3, gemessen) - es gibt kein separates
-// CallControlId-Feld mehr. callSid: null laesst das Feld WEG und erzeugt damit den
-// Defektfall, gegen den der laute Rueckfall sichert. Liefert die rohe fetch-Response.
+// callSid: das CallSid des Inbound-Legs. callSid: null laesst das Feld WEG und erzeugt
+// damit den Defektfall, gegen den der laute Rueckfall sichert. Liefert die rohe
+// fetch-Response.
 export function postTelnyxIncoming(
   srv,
   { callSid = "CAtest", from = TELNYX_TEST_PEER_NUMBER, to = TELNYX_TEST_TENANT_NUMBER } = {},

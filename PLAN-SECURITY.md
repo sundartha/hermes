@@ -171,6 +171,8 @@ CLAUDE.md). Aeltere Phasen-Historie liegt in Git.
 
 ## C-TELNYX — AI-Assistant-Engine (Barge-in, Custom-LLM-Shim, Call-Control)
 
+> **ENTFERNT mit IE6-S1 (2026-09-14)**, s. Abschnitt IE6-S1.
+
 C-Telnyx (PLAN-TELNYX-AI-ASSISTANT.md, P1-P11) migriert die Live-Voice-Schicht auf den
 Telnyx AI Assistant (voll-duplex, Sprach-Barge-in). Master-Flag `TELNYX_AI_ASSISTANT_ENABLED`
 (Default AUS): der gesamte Pfad ist bis zum Owner-Cutover (P11) inaktiv, der Live-CALL-Pfad
@@ -2003,7 +2005,7 @@ Negativkontrollen liefern 401 statt eines Treffers. **Kein Befund.**
 
 **Getragene Restrisiken (benannt, nicht behoben).**
 (1) Die erwarteten Statuscodes sind eine Momentaufnahme der **deployten Konfiguration**.
-`TELNYX_AI_ASSISTANT_ENABLED` aus wuerde `/v1/chat/completions` von 403 auf 404 drehen,
+(seit IE6-S1 gegenstandslos: die Route ist entfernt)
 `PAYMENT_ENABLED` aus den Stripe-Webhook von 400 auf 404 — die Probe meldet das als
 Abweichung. Das ist gewollt (H10: die Tabelle wird bewusst nachgezogen, nie
 weggeklickt), heisst aber: eine rote Zeile ist nicht automatisch ein Loch.
@@ -4063,3 +4065,25 @@ Logquelle (die EINE Warnzeile traegt den Anlass als Token, `re-attach` oder `wac
    Rueckfall-Hebel ohne Deploy (wirksam beim naechsten Prozessstart). Die vier
    ereignisgebundenen Pruefstellen bleiben dabei unveraendert scharf — der Zustand ist
    exakt der Bestand vor dieser Phase, nicht ein Zustand ohne Decke.
+
+## IE6-S1 — Telnyx-AI-Assistant ersatzlos entfernt (2026-09-14)
+
+Der Telnyx-Custom-LLM-Shim (`/v1/chat/completions`), die Call-Control-Origination
+(`originateAiAssistantCall`), der Inbound-Handoff und der Dead-Air-Watchdog sind
+vollstaendig entfernt (kein Feature-Flip, kein Rueckweg ohne Revert).
+
+**Angriffsflaeche:** `POST /v1/chat/completions` ist nicht mehr gemountet, 404
+unabhaengig von Env-Werten. `POST /voice/call-control` ist entfernt; die
+`/voice`-Praefix-Signatur antwortet weiter 403 fail-closed. Ein Fall handler-interner
+Auth faellt weg.
+
+**Unveraendert:** Ed25519, Wiederholungs-Riegel, Tenant-Aufloesung, Kostendecke (beide
+Richtungen), Max-Dauer, Offenlegung, Outbound-Gates, `OUTBOUND_FROZEN`, `MAX_NUMBERS*`.
+
+**Altbestand:** Legs mit `callControlId` bleiben ueber `hangUpAction` beendbar; Profil
+`telnyx_assistant` bleibt unaufgeloest und damit fail-closed.
+
+**Probe:** Negativkontrolle `fehlt|POST|/v1/chat/completions|404`.
+
+**Getragen:** R-1 (Streaming-/Abbruch-Naht in `agentTurn`, entfaellt mit IE6 Stufe 3),
+R-3 (Render-Env-Werte der entfernten Schalter bleiben stehen und sind wirkungslos).

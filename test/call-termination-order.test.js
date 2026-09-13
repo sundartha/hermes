@@ -193,7 +193,6 @@ test("billThunk liest den Call bei JEDEM Aufruf des Thunks frisch (nicht einmali
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
-const ingestSrc = fs.readFileSync(path.join(ROOT, "src", "telnyx-call-control-ingest.js"), "utf8");
 // P5 (Server-Slim): terminateCappedCall wanderte nach telephony/call-lifecycle.js.
 const lifecycleSrc = fs.readFileSync(path.join(ROOT, "src", "telephony", "call-lifecycle.js"), "utf8");
 // P9 (Server-Slim): die /api/calls-Route-Gruppe wanderte nach routes/api-calls.js.
@@ -213,7 +212,7 @@ test("Quelltext: /voice/status nutzt terminateAndBillCall(bill: billThunk(...)) 
   const block = sliceBetween(
     voiceSrc,
     'router.post("/voice/status", async (req, res) => {',
-    '\n  router.post(',
+    '\n  return router;',
   );
   assert.match(block, /terminateAndBillCall\(\{/);
   assert.match(block, /hangUp:\s*null/);
@@ -252,27 +251,10 @@ test("Quelltext: place_call-catch nutzt terminateAndBillCall (die geschlossene C
   );
 });
 
-test("Quelltext: Telnyx onHangup nutzt terminateAndBillCall statt dem alten awaited finishCall-Aufruf", () => {
-  const block = sliceBetween(
-    ingestSrc,
-    "async function onHangup(call) {",
-    "async function resolveActiveCall(callId) {",
-  );
-  assert.match(ingestSrc, /from "\.\/telephony\/call-termination\.js"/, "terminateAndBillCall-Import fehlt");
-  assert.match(block, /terminateAndBillCall\(\{/);
-  assert.match(block, /hangUp:\s*null/);
-  assert.match(block, /bill:\s*billThunk\(finishCall,\s*store,\s*call\.id\)/);
-  assert.doesNotMatch(
-    block,
-    /^\s*await finishCall\(store\.getCall\(call\.id\)\);\s*$/m,
-    "der alte direkt awaitete finishCall-Aufruf darf nicht mehr da sein",
-  );
-});
-
-// G5 (Review-Blocker Runde 2): jetzt alle 5 Terminierungspfade (nicht nur die 3 aus dem
+// G5 (Review-Blocker Runde 2): jetzt alle 4 Terminierungspfade (nicht nur die 3 aus dem
 // urspruenglichen Befund) - haelt fest, dass terminateCappedCall/cancel_call NACH dem
 // Refactor denselben billThunk-Helper nutzen wie die 3 anderen Pfade (EINE Quelle, G5).
-test("Quelltext: terminateCappedCall und cancel_call nutzen ebenfalls billThunk (alle 5 Pfade EINE Quelle)", () => {
+test("Quelltext: terminateCappedCall und cancel_call nutzen ebenfalls billThunk (alle 4 Pfade EINE Quelle)", () => {
   assert.match(
     serverSrc,
     /import \{ terminateAndBillCall, hangUpAction, billThunk \} from "\.\/telephony\/call-termination\.js";/,

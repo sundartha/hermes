@@ -6,7 +6,7 @@
 // NIEMALS Teil von `npm test` (braucht Netz + echten ANTHROPIC_API_KEY, Spec §0).
 // Aufruf: node scripts/convo-bench.mjs run --scenario <id>|--all [--repeat 3]
 //         [--label ...] [--persona-model ...] [--judge-model ...] [--max-turns 10]
-//         [--provider telnyx] [--driver texml|shim] [--out data/convo-bench/<run-id>]
+//         [--provider telnyx] [--driver texml] [--out data/convo-bench/<run-id>]
 //         [--llm-provider anthropic|deepseek] [--agent-model ...]
 //         node scripts/convo-bench.mjs compare <reportDirA> <reportDirB>
 import path from "path";

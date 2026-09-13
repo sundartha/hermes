@@ -1076,7 +1076,7 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar }
 // KEINE STIMME KONFIGURIERT -> KEIN tts-ZWEIG: eine leere Plattform-Stimme wuerde als
 // voice_id: "" hinausgehen und dem Agenten seine im Dashboard gewaehlte Stimme nehmen,
 // ohne eine zu setzen. Weglassen laesst sie stehen - fail-safe, dieselbe Haltung wie
-// hasElevenLabsVoice im Telnyx-Call-Control-speak.
+
 //
 // OC-P2: DIE EINE KOMPOSITIONSSTELLE DER OWNER-EROEFFNUNG (G5/S2). Sie besteht aus der
 // Owner-Begruessung und derselben Grund-Zeile, die der Bestandsfall hinter der Offenlegung

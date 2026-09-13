@@ -1,5 +1,5 @@
 // AL-D3 Review-Fix (Runde 1, G5/S2): readBody/readJsonBody wurden aus
-// scripts/convo-bench/telnyx-fake.mjs und scripts/convo-bench/exa-fake.mjs in
+// scripts/convo-bench/exa-fake.mjs in
 // scripts/convo-bench/http-fake-helpers.mjs gezogen, um die Byte-fuer-Byte-Kopie
 // zwischen den beiden Fakes zu beenden. Dieser Test deckt die extrahierte Funktion
 // direkt ab (Verhalten: Body sammeln, JSON tolerant parsen) und faengt eine
@@ -11,7 +11,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { readBody, readJsonBody } from "../scripts/convo-bench/http-fake-helpers.mjs";
-import { startTelnyxFake, callControlEventBody } from "../scripts/convo-bench/telnyx-fake.mjs";
 import { startExaFake } from "../scripts/convo-bench/exa-fake.mjs";
 
 // Minimaler lokaler Server, der jeden eingehenden Request an die uebergebene
@@ -74,25 +73,6 @@ test("AL-D3-N3: readJsonBody faellt bei leerem oder kaputtem Body auf {} zurueck
     assert.deepEqual(captured, [{}, {}]);
   } finally {
     await srv.close();
-  }
-});
-
-test("AL-D3-N4: telnyx-fake liest Action-Bodies weiterhin ueber die geteilte Funktion", async () => {
-  const fake = await startTelnyxFake();
-  try {
-    const callControlId = "call-123";
-    await fetch(`${fake.url}/v2/calls/${callControlId}/actions/speak`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ payload: "hallo" }),
-    });
-    const hit = await fake.waitForAction({ callControlId, action: "speak" });
-    assert.deepEqual(hit.body, { payload: "hallo" });
-    // Ereignis-Huelle bleibt unveraendert (kein Scope-Drift in callControlEventBody).
-    const event = callControlEventBody({ eventType: "call.speak.ended", callControlId, status: "completed" });
-    assert.equal(event.data.event_type, "call.speak.ended");
-  } finally {
-    await fake.close();
   }
 });
 

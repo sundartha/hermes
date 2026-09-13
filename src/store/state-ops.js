@@ -474,39 +474,10 @@ export function getCall(s, id) {
   return s.calls.find((c) => c.id === id || c.twilioSid === id) || null;
 }
 
-// Korrelation ueber die Telnyx-eigene call_control_id (Brain-Shim, E1). Fail-closed:
-// leere/unbekannte ID -> null (ein Call ohne callControlId ist per Definition kein Treffer).
-export function getCallByControlId(s, callControlId) {
-  if (!callControlId) return null;
-  return s.calls.find((c) => c.callControlId === callControlId) || null;
-}
-
 export function addTranscript(s, callId, role, text) {
   const call = getCall(s, callId);
   if (!call) return false;
   call.transcript.push({ role, text, at: new Date().toISOString() });
-  return true;
-}
-
-// GQ-H1-a: Telnyx hat die zuletzt erzeugte Antwort verworfen, bevor sie gesprochen wurde
-// (seine gespiegelte Nachrichtenliste ist zwischen zwei Requests nicht gewachsen). Sie darf
-// nicht als "bereits gesagt" im Kontext des naechsten Turns, in der Zusammenfassung oder in
-// der Nachricht an den Owner stehen - ein Agent, dessen Kontext behauptet, er habe etwas
-// gesagt, verhaelt sich zwangslaeufig unsinnig.
-//
-// Entfernt NUR eine ABSCHLIESSENDE agent-Zeile. Steht dort etwas anderes (caller-Zeile,
-// leeres Transkript), passiert nichts: fail-safe-Richtung, lieber eine Zeile zu viel im
-// Transkript als eine echte, gesprochene Aeusserung geloescht. Die caller-Zeile des
-// verworfenen Turns bleibt bewusst stehen - der Anrufer HAT diese Worte gesagt (sie sind
-// ein Praefix der vollstaendigen Aeusserung), sie behauptet also nichts Falsches.
-//
-// Reine Mutation, kein IO. Liefert true, wenn etwas entfernt wurde -> der Backend-Wrapper
-// save()t nur dann.
-export function dropLastAgentTranscript(s, callId) {
-  const call = getCall(s, callId);
-  if (!call || call.transcript.length === 0) return false;
-  if (call.transcript[call.transcript.length - 1].role !== "agent") return false;
-  call.transcript.pop();
   return true;
 }
 
@@ -995,7 +966,7 @@ const recordProviderHandleOnce = (field) => (state, callId, handle) => {
   return { call, changed };
 };
 
-export const recordTelnyxConversationId = recordProviderHandleOnce("telnyxConversationId");
+// EL-BL1: set-once - eine zweite Kennung desselben Anrufs ueberschreibt die erste nicht.
 export const recordElevenlabsConversationId = recordProviderHandleOnce(
   "elevenlabsConversationId",
 );
@@ -4172,7 +4143,7 @@ export function applyCostCorrectionCents(s, tenantId,
 // seedTenantDefaultBudget ueberspringt bei 0. Ein bedingungsloser Fallback lieferte bei
 // Live-Wert 0 einen Cap von 0: budgetExceeded (>=) waere fuer JEDEN Tenant ohne Zeile
 // true - jeder Outbound blockt, der KOSTENLOSE Inbound-Pfad weist ab (routes/voice.js)
-// und der Shim legt mitten im laufenden Gespraech auf (telnyx-llm-shim.js). Das waere ein
+// und ein Aufrufer legt mitten im laufenden Gespraech auf. Das waere ein
 // Totalausfall der Telefonie. Derselbe Vergleich faengt zugleich einen fehlenden oder
 // nicht-numerischen Wert ab (undefined > 0 ist false) und landet dann ebenfalls auf dem
 // Bestandsverhalten - die Abweichung geht immer Richtung Bestand, nie Richtung 0-Cap.
@@ -4337,7 +4308,7 @@ export function liveBudgetExceeded(s, tenantId, liveCents, cfg, nowIso) {
 // x>=cap - bit-identisch zum frueheren Float-Gate.
 // Ein unbuchbarer Bucket (D7, jetzt auf BEIDEN Seiten geprueft) sperrt fail-closed mit
 // eigenem Grund usage_korrupt - im Extremfall beendet das einen LAUFENDEN Call
-// (telnyx-llm-shim) und weist kostenlosen Inbound ab (voice.js). Bei NaN-Verbrauch ist
+// und weist kostenlosen Inbound ab (voice.js). Bei NaN-Verbrauch ist
 // genau das richtig, und der eigene Grund macht es vom echten "Budget erschoepft"
 // unterscheidbar.
 export function budgetExceeded(s, tenantId, cfg, nowIso) {

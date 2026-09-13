@@ -105,8 +105,8 @@ export function buildEnv({ apiKey, deepseekApiKey, llmProvider, agentModel, scen
 // searchFacts-Angabe - haelt startExaFake({facts}) auch ohne Szenario-Deklaration lauffaehig.
 const DEFAULT_SEARCH_FACTS = Object.freeze([{ title: "Bench-Treffer", highlight: "Bench-Auszug" }]);
 
-// F1: Objekt statt drittem losem Argument - extra (treiber-eigene Seed-Felder, z.B.
-// callControlId/assistantId des Shim-Treibers) geht ans Ende von seedCall durch.
+// F1: Objekt statt drittem losem Argument - extra (treiber-eigene Seed-Felder) geht ans
+// Ende von seedCall durch.
 // AL-P0: tenantId kommt jetzt vom Aufrufer (Default BOOTSTRAP_TENANT_ID, s.
 // runScenarioRepeat) statt hart im Objekt zu stehen - Voraussetzung fuer
 // scenario.tenantId/scenario.profile (s. benchTenantsFor/assertProfileTenantIsSettable).
@@ -449,7 +449,6 @@ export async function runScenarioRepeat({
       // Persona-Call) - err.message der Anthropic-SDK-Fehlerklassen enthaelt NIE den
       // Key selbst (nur HTTP-Status + API-Fehlertyp/-message).
       persona_error: personaError,
-      shim_gates: transport.diagnostics().shim_gate_reasons ?? [],
     };
   } finally {
     // AL-D3: die Pumpe steht ZUERST (ihr laufender Fetch haengt sonst an einem bereits

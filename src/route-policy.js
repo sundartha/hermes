@@ -93,14 +93,6 @@ export const PUBLIC_ROUTES = Object.freeze([
     reason: "OAuth-Metadata (MCP-Variante) - muss ohne Login erreichbar sein.",
   },
   {
-    method: "POST",
-    path: "/v1/chat/completions",
-    reason:
-      "HANDLER-INTERNE AUTH (Runbook-Fall 2): Telnyx BYO-LLM ruft serverseitig, kann keinen " +
-      "Session-Cookie senden. Absicherung im Handler: 404 bei abgeschaltetem Assistant-Flag " +
-      "plus timing-sicherer Bearer-Vergleich (safeEqual) gegen das Shim-Secret.",
-  },
-  {
     method: "GET",
     path: "/auth/login",
     reason: "Einstieg in den OIDC-Login. Vor der Anmeldung existiert keine Identitaet.",
@@ -215,11 +207,6 @@ export const PUBLIC_ROUTES = Object.freeze([
   {
     method: "POST",
     path: "/voice/status",
-    reason: VOICE_SIGNATURE_REASON,
-  },
-  {
-    method: "POST",
-    path: "/voice/call-control",
     reason: VOICE_SIGNATURE_REASON,
   },
   {

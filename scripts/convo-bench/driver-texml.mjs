@@ -4,7 +4,7 @@
 // drivers.mjs); nur der Ort und die Rueckgabeform (turn statt parsed) haben sich
 // geaendert (Muster scripts/convo-bench/drivers.mjs, Port-Vertrag im Kopfkommentar).
 import { parseVoiceBody } from "./texml.mjs";
-import { TELNYX_DUMMY_HEADERS } from "./telnyx-fake.mjs";
+import { TELNYX_DUMMY_HEADERS } from "./bench-constants.mjs";
 import { BENCH_DEFAULT_CALLER } from "./bench-constants.mjs";
 
 export const TEXML_DRIVER_ID = "texml";
