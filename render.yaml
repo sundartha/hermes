@@ -90,8 +90,18 @@ services:
       - key: TELNYX_ELEVENLABS_MODEL
         value: "Default"
       # Play-TTS: ElevenLabs-Stimme via <Play> in der Budget-Engine (Telnyx). GETRENNT
-      # vom Relay oben. Default AUS -> Azure byte-identisch. Erst NACH gruenem
-      # Live-Smoke setzen (Plan/tasks/todo.md).
+      # vom Relay oben. Default AUS -> Azure byte-identisch.
+      # UMSTELLEN (IP4, Eigentuemer-Handlung, kein Deploy noetig - Render ist
+      # dashboard-managed, dieser Blueprint ist NICHT die Live-Wahrheit):
+      #   1. npm run inbound:hoerprobe -- --out /tmp/vorher   (erwartet: azure_say)
+      #   2. Flag im Render-Dashboard auf true, Instanz startet neu
+      #   3. Boot-Log: "Inbound-Sprechpfad: play_tts (ELEVENLABS_PLAY_TTS_ENABLED=true)"
+      #   4. npm run inbound:hoerprobe -- --out /tmp/nachher  (erwartet: play_tts + Datei)
+      #   5. echter Inbound-Testanruf: dieselbe Sprecherin wie bei einem Outbound-Anruf?
+      # Es kostet ElevenLabs-Zeichen auf einem Plattform-Konto OHNE per-Tenant-Metering.
+      # Eine spaetere sporadische Stimmaenderung ist an genau einer Log-Zeile erkennbar:
+      #   [play-tts] Kontingent erschoepft (<x>/<quota>, Zyklus <k>) -> Azure-Fallback
+      # Rueckweg: Flag zurueck auf false - sofort, ohne Deploy, byte-identisch zum Bestand.
       - key: ELEVENLABS_PLAY_TTS_ENABLED
         value: "false"
       - key: ELEVENLABS_API_KEY

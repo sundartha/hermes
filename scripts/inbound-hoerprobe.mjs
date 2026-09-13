@@ -14,35 +14,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer, seedWithTelnyxNumber, postTelnyxIncoming } from "../test/helpers.js";
 import { config } from "../src/config.js";
-
-// Drei benannte Token (Lehre workflow-join-on-model-field: nie ueber Freitext joinen).
-// telnyx_relay ist seit IP3 am echten Renderer nicht mehr erreichbar (render.js hat
-// keinen ElevenLabs-<Say>-Zweig mehr) - der Token bleibt fuer die Klassifikation der
-// TeXML-FORM bestehen, nicht fuer einen heute noch lebenden Pfad.
-export const SPRECHPFAD = Object.freeze({
-  PLAY_TTS: "play_tts",
-  AZURE_SAY: "azure_say",
-  TELNYX_RELAY: "telnyx_relay",
-});
-
-// Reihenfolge = Prioritaet: <Play> ersetzt <Say> in render.js vollstaendig, die beiden
-// <Say>-Formen unterscheiden sich nur am voice-Attribut-Praefix.
-const SPRECHPFAD_MATCHERS = Object.freeze([
-  [SPRECHPFAD.PLAY_TTS, /<Play>/],
-  [SPRECHPFAD.AZURE_SAY, /<Say voice="Azure\./],
-  [SPRECHPFAD.TELNYX_RELAY, /<Say voice="ElevenLabs\./],
-]);
-
-// Eine Funktion, zwei Konsumenten (dieses Skript + der Klassifikations-Unit-Test),
-// PLAN-INBOUND-PARITAET §5 Auflage 2. null = Grenzfall (z.B. leeres Gather ohne
-// Prompt) - am echten /voice/incoming nicht erreichbar (der Pflichtsatz erzeugt immer
-// Say/Play), vom Unit-Test trotzdem abgedeckt.
-export function classifySprechpfad(texml) {
-  for (const [token, pattern] of SPRECHPFAD_MATCHERS) {
-    if (pattern.test(texml)) return token;
-  }
-  return null;
-}
+// IP4: der Namensvorrat ist nach src/telephony/sprechpfad.js gezogen - seit IP4 liest ihn
+// auch der Boot-Banner, und der darf dieses Werkzeug (es haengt an test/helpers.js) nicht
+// importieren. Eine Quelle, drei Konsumenten.
+import { classifySprechpfad, SPRECHPFAD } from "../src/telephony/sprechpfad.js";
 
 // ElevenLabs-Play-TTS-Durchreichung fuer die ECHTE Synthese. G35: Umgebungsvariablen
 // laufen NIE direkt (process.env) durch dieses Skript, sondern ausschliesslich ueber

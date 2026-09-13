@@ -110,6 +110,10 @@ export function pinStore({
   };
 }
 
+// IP4: der Anker-Test misst gegen die Aufloesung elevenLabsVoiceIdFor(<dieser Wert>,
+// profil) - er darf den Wert nicht abschreiben (G5), sonst pinnt er die Attrappe.
+export const PIN_PLATTFORM_STIMME = "pin-plattform-stimme";
+
 export function pinConfig() {
   return {
     voice: {
@@ -128,7 +132,7 @@ export function pinConfig() {
     },
     // Die global konfigurierte Plattform-Stimme, aus der die Sprach-/Stimmwahl die
     // Stimme dieses Anrufs ableitet (src/elevenlabs/call-locale.js).
-    telnyx: { telnyxElevenLabs: { voiceId: "pin-plattform-stimme" } },
+    telnyx: { telnyxElevenLabs: { voiceId: PIN_PLATTFORM_STIMME } },
     // Muss false sein: der Fake-Schalter ueberspringt dynamicVariables(...) komplett -
     // mit ihm gaebe es kein Objekt zum Abgreifen.
     safety: { fakeOriginateElevenlabs: false },
