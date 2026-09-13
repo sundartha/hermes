@@ -7,6 +7,40 @@ Prämisse in eine Umsetzung wandern.**
 
 ---
 
+## 0. SCHRITT 1, und er braucht den Owner NICHT
+
+**Fang mit IE1 an. Das ist eine MESSUNG, kein Produktionscode — und sie ist die einzige
+Sache, die noch zwischen dem heutigen Stand und dem Ziel steht.**
+
+Eine frühere Fassung dieses Dokuments nannte „Testnummer + Test-Trunk vom Owner" als
+Blocker. **Das war falsch, am 2026-09-13 gegengeprüft:**
+
+- Bei ElevenLabs sind **vier Nummern registriert**, alle US (`+1`), alle dem Agenten
+  „Hermes" zugewiesen, keine davon trägt heute `inbound_trunk_config`. Eine heisst
+  wörtlich `Spike2 Telnyx` und stammt aus einem früheren Versuch.
+  Gemessen: `GET /v1/convai/phone-numbers` und je `GET .../{id}`.
+- Die **deutsche DID, die der Owner anruft, ist KEINE davon**. IE1 fasst sie nicht an.
+- `TELNYX_API_KEY` und `TELNYX_CONNECTION_ID` sind in `.env` gesetzt,
+  `ELEVENLABS_API_KEY` ebenfalls.
+
+**Also: eine der vier Ersatznummern nehmen, `inbound_trunk_config` dort einschalten,
+die sechs Fragen messen, danach zurückstellen.** Nichts kaufen, die produktive DID nicht
+anfassen, keine Owner-Handlung.
+
+**Danach laufen IE5 und IE6 in einem Rutsch**, je eine Lean-Workflow-Phase, ohne
+Rückfrage. Der Owner will genau das: nicht Phase für Phase gefragt werden, sondern am
+Ende ein System.
+
+**Warum die Messung nicht ans Ende darf** (die Frage hat der Owner gestellt, sie ist
+berechtigt): sie entscheidet nicht OB gebaut wird, sondern WIE. Drei Dinge hängen daran —
+über welchen Befehl die Übergabe läuft (TeXML-`<Dial><Sip>` gegen Call-Control-`dial`
+mit `custom_headers`), ob der Hangup-Griff auf das Bein danach noch wirkt, und was
+passiert, wenn die Übergabe scheitert. Der Fehlerfall ist der wichtigste: wird er
+geraten, hört ein Anrufer im schlechtesten Fall Stille. Zuerst bauen und danach messen
+heisst, den Fehlerfall zu raten.
+
+---
+
 ## 1. Was der Owner will (Entscheidung, nicht Vorschlag)
 
 **Inbound und Outbound laufen über DASSELBE System: den ElevenLabs-ConvAI-Agenten.**
@@ -54,7 +88,7 @@ Concurrency-Limit flaked die Bank, das ist Bestandsverhalten).
 
 | Phase | Was fehlt | Blockiert durch |
 |---|---|---|
-| **IE1** | Sechs Messungen am Anbieter-Vertrag (kein Produktionscode) | **Owner: Testnummer + Test-Trunk bei ElevenLabs** |
+| **IE1** | Sechs Messungen am Anbieter-Vertrag (kein Produktionscode) | **nichts** — alles da, s. Abschnitt 0 |
 | **IE5** | Der Umstieg: Inbound am EL-Agenten, hinter einem Schalter | IE1 |
 | **IE6** | Die überzähligen Gehirne LÖSCHEN | IE5 |
 
@@ -233,14 +267,16 @@ ihn ausdrücklich.
 
 ## 9. Was die nächste Sitzung tun soll
 
-1. **Den Owner um Testnummer + Test-Trunk bei ElevenLabs bitten.** Das ist der einzige
-   Blocker der ganzen Kette. Ohne die IE1-Messung darf IE5 nicht gebaut werden — ein
-   Umbau auf einer geratenen Anbieter-Eigenschaft hat dieses Projekt schon zweimal
-   verletzt.
-2. **IE1 fahren** (sechs Messungen, KEIN Produktionscode, produktive DID nicht anfassen).
-3. **IE5 bauen**, hinter einem Schalter, Schalter aus = byte-identisch.
-4. **IE6 bauen**: die überzähligen Gehirne entfernen, bis genau eines übrig ist.
-5. Erst danach ist die Kette erfüllt.
+1. **IE1 fahren, sofort und ohne Rückfrage** — sechs Messungen an einer der vier
+   Ersatznummern, KEIN Produktionscode, produktive DID nicht anfassen, Konfiguration
+   danach zurückstellen. Alles Nötige liegt bereit (Abschnitt 0).
+2. **IE5 bauen**, hinter einem Schalter, Schalter aus = byte-identisch.
+3. **IE6 bauen**: die überzähligen Gehirne entfernen, bis genau eines übrig ist.
+4. Erst danach ist die Kette erfüllt.
+
+**Schritt 2 bis 4 laufen in einem Rutsch**, je eine Lean-Workflow-Phase, ohne
+Zwischenfrage an den Owner. Er meldet sich, wenn er etwas anders will. Melde dich bei
+ihm, wenn die Messung steht und wenn Inbound am Agenten hängt — nicht dazwischen.
 
 **Arbeitsweise, verbindlich:**
 - `CLAUDE.md` und `.claude/refs/workflow.md` gelten. Nicht-triviale Phasen laufen über
