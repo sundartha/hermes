@@ -1623,6 +1623,153 @@ echter eingehender Anruf, der ankommt und geführt wird.
 
 ---
 
+## Phase IE7 - Inbound wartet nicht mehr auf die fertige Audiodatei
+
+**Owner-Entscheidung 2026-09-13: Inbound spricht `eleven_v3_conversational`, in ALLEN
+unterstützten Sprachen.** Das Modell ist eine globale Einstellung (`ELEVENLABS_MODEL`,
+`src/config.js#elevenLabsPlayTts`) und gilt damit automatisch für de/fr/en — es gibt
+keine Modellwahl je Sprache und es soll auch keine geben.
+
+**Abhängigkeiten:** keine. Sie ist die letzte Phase, die den HEUTIGEN Inbound-Weg
+hörbar verbessert, und sie überlebt die Weiche: auch nach dem Umstieg auf den Agenten
+bleibt genau ein Satz übrig, den WIR sprechen (der Pflichtsatz plus Begrüssung, vor der
+Übergabe) — dieser Satz läuft weiter durch diesen Pfad.
+
+### Der Befund, der diese Phase erzwingt (am 2026-09-13 gemessen, nicht geschätzt)
+
+Vollsynthese des echten Begrüssungstextes, kuratierte Stimme je Sprache, Modell
+`eleven_v3_conversational`, drei Messungen je Sprache:
+
+| Sprache | Zeichen | Messungen | schlechtester Fall |
+|---|---|---|---|
+| de | 235 | 3940 / 2596 / 3514 ms | 3940 ms |
+| fr | 242 | 4893 / 6370 / 4185 ms | **6370 ms** |
+| en | 208 | 3140 / 2570 / 2540 ms | 3140 ms |
+
+Das Zeitfenster ist heute `ELEVENLABS_SYNTH_TIMEOUT_MS` = 2000 ms. Das Modell passt
+also NICHT hinein, und ein Hochdrehen ist die falsche Abhilfe:
+
+1. Die Wartezeit IST die Stille des Anrufers. `/voice/incoming` synthetisiert
+   blockierend (`src/tts/directive-synth.js#synthesizeDirectiveAudio`), BEVOR es dem
+   Provider antwortet. Bei 6,4 s hört der Anrufer nach dem Abheben sechs Sekunden nichts.
+2. Bei `/voice/turn` kommt die Synthese auf das LLM-Budget OBEN DRAUF. Die Rechnung
+   steht in `src/turn-budget.js` (EINE Quelle) und der Provider kappt einen
+   unbeantworteten Webhook hart. Beides zusammen reisst die Grenze.
+
+**Dieselbe Messung mit dem Streaming-Endpunkt desselben Modells, derselbe Text,
+dieselbe Stimme:**
+
+| | erstes Audio | vollständig |
+|---|---|---|
+| `eleven_v3_conversational`, gestreamt | 391 / 351 ms | 2101 / 1761 ms |
+| `eleven_flash_v2_5`, gestreamt | 226 / 204 ms | 695 / 539 ms |
+
+Das ist der Grund, warum derselbe Modellname bei Outbound gut klingt und bei uns nicht:
+der Anbieter streamt, wir warten auf die komplette Datei. **Die Phase behebt das Warten,
+nicht das Zeitfenster.**
+
+### Ziel (deterministisch prüfbar)
+
+Bei aktivem Play-TTS rendert `/voice/incoming` seine TeXML-Antwort, OHNE auf eine
+vollständige Synthese gewartet zu haben, und der Anrufer hört den Begrüssungssatz in
+`eleven_v3_conversational`. Die Hörprobe (`npm run inbound:hoerprobe`) meldet
+weiterhin `play_tts`, nennt zusätzlich das verwendete Modell, und weist die Wartezeit
+des Webhooks getrennt von der Gesamtdauer der Synthese aus. Ein Fehler der Synthese
+führt weiterhin NIE zu Stille und NIE zu einem abgebrochenen Anruf.
+
+### Scope
+
+1. Den Sprechpfad so umbauen, dass die Webhook-Antwort nicht mehr an der vollständigen
+   Synthese hängt. Der naheliegende Weg ist, die Serve-URL sofort zu vergeben und die
+   Audiodaten erst beim Abruf durch den Provider zu liefern (`GET /voice/tts/:token`) —
+   ABER die Bauform ist Sache des Umsetzungsplans, nicht dieser Spec. Wer einen anderen
+   Weg wählt, begründet ihn am gemessenen Verhalten.
+2. `ELEVENLABS_MODEL` auf `eleven_v3_conversational` als Default; `render.yaml` und
+   `.env.example` sagen dasselbe. Die Modellwahl bleibt EIN Wert für alle Sprachen.
+3. `ELEVENLABS_SYNTH_TIMEOUT_MS` neu begründen: der Wert deckt nach dem Umbau nicht mehr
+   die Vollsynthese, sondern die Frist, innerhalb derer das ERSTE Audio kommen muss.
+   `src/turn-budget.js` ist die eine Quelle der Gesamtrechnung und wird mitgezogen —
+   inklusive seines Boot-Wächters.
+4. Die Hörprobe um Modellname und die getrennten Zeiten erweitern (Webhook-Wartezeit vs.
+   Synthese-Gesamtdauer). Ohne diese Trennung ist der Erfolg der Phase nicht messbar.
+
+### NICHT-Scope
+
+- **Keine Modellwahl je Sprache**, kein neuer Env-Schlüssel dafür. Eine Sprache, die mit
+  dem globalen Modell schlechter klingt, ist ein eigener Befund, keine Sonderregel hier.
+- Der Outbound-Weg und die Konfiguration des ElevenLabs-Agenten bleiben **unberührt**.
+  Kein `elevenlabs:push`, kein Eingriff am Agenten. Sein `tts.model_id` ist ohnehin nicht
+  je Anruf übersteuerbar (am 2026-09-13 an der Erlaubnis-Karte gemessen:
+  `model_id: false`, `voice_id: true`).
+- Keine Änderung an den gesprochenen Texten, an der Sprachauflösung oder an der
+  kuratierten Stimm-Karte.
+- Kein Vorgriff auf die Übergabe an den Agenten (IE5).
+
+### Betroffene Dateien / Nahtstellen
+
+`src/tts/directive-synth.js` (die blockierende Naht), `src/tts/synth.js` (heute
+Vollabruf), `src/tts/store.js` (Token/TTL/Einmal-Abruf), `src/routes/voice.js`
+(`GET /voice/tts/:token` und `sendVoiceXml`), `src/config.js` (Modell, Frist),
+`src/turn-budget.js` (Gesamtrechnung + Boot-Wächter), `scripts/inbound-hoerprobe.mjs`,
+`render.yaml`, `.env.example`.
+
+### Invarianten (byte-identisch bzw. unverhandelbar)
+
+- **Flag aus = Bestand byte-identisch.** `ELEVENLABS_PLAY_TTS_ENABLED=false` rendert
+  weiterhin Azure-`<Say>`.
+- **Nie Stille, nie ein toter Anruf.** Der heutige Rückfall ist fail-safe VOR dem
+  Rendern. Nach dem Umbau kann ein Fehler auch NACH dem Rendern auftreten — der Plan
+  muss sagen, was der Anrufer dann hört, und es muss ein gesprochener Satz sein.
+  Ein `<Play>`, das ins Leere läuft, ist ein Abbruchgrund für die gewählte Bauform.
+- **Der Pflichtsatz bleibt gerendert, nicht gepromptet** (Absolute Regel 2, Analogie
+  Inbound). Er ist Teil desselben Satzes und darf nicht durch den Umbau entfallen.
+- **Das Kontingent wird weiter gebucht** (`store.recordTtsCharacters`, LCT P7) und die
+  beiden Riegel (Vorab und Nach-Buchung) bleiben wirksam. Verschiebt der Umbau den
+  Zeitpunkt der Buchung, wird das benannt und getestet.
+- **Die Audio-Route bleibt abgesichert**: unratbares Token, kurze TTL, einmaliger Abruf,
+  kein Log von Token oder Bytes. Sie bleibt die dokumentierte Auth-Ausnahme und wandert
+  NICHT hinter die Signaturprüfung (INV-4).
+
+### Abnahmekriterium
+
+```
+npm test
+npm run inbound:hoerprobe -- --out /tmp/ie7        # Flag aus: azure_say, Bestand
+ELEVENLABS_PLAY_TTS_ENABLED=true npm run inbound:hoerprobe -- --out /tmp/ie7b
+```
+Erwartet im zweiten Lauf: `sprechpfad=play_tts`, Modellname
+`eleven_v3_conversational`, eine Audiodatei, und eine Webhook-Wartezeit **unter 1000 ms**
+— gemessen, nicht behauptet. Die Gesamtdauer der Synthese darf darüber liegen; genau
+diese Trennung ist der Beweis der Phase.
+
+### Testpflicht
+
+- Die Nicht-Blockierung als Test, nicht als Beobachtung: ein Fake mit künstlich langsamer
+  Synthese belegt, dass die Webhook-Antwort davon unabhängig ist.
+- Der Fehlerfall NACH dem Rendern: der Anrufer bekommt einen gesprochenen Satz, nie
+  Stille, nie einen Abbruch.
+- Flag aus: byte-identisches TeXML (Snapshot).
+- Kontingent-Buchung und beide Riegel weiterhin wirksam.
+- `src/turn-budget.js`: die neue Rechnung und ihr Boot-Wächter.
+
+### Risiko + Rückfall
+
+Der grösste Risikoposten ist der Verlust des Rückfalls: heute entscheidet sich Azure vs.
+ElevenLabs, BEVOR die Antwort rausgeht. Wer die Entscheidung nach hinten verlegt, muss
+den Rückfall dorthin mitnehmen. Rückweg der ganzen Phase ist
+`ELEVENLABS_PLAY_TTS_ENABLED=false` (sofort, ohne Deploy) und, falls das Modell die
+Ursache ist, `ELEVENLABS_MODEL=eleven_flash_v2_5` als Env-Override ohne Codeänderung.
+
+### Owner / Testanruf
+
+Owner-Entscheidung liegt vor (Modellwahl). Ein echter Inbound-Testanruf nach dem Deploy
+ist der Abschluss: derselbe Klang wie bei einem Outbound-Anruf, und kein hörbares Warten
+nach dem Abheben. **Vorbedingung, unabhängig von dieser Phase: das Guthaben beim
+LLM-Anbieter muss aufgeladen sein** — sonst endet jeder Anruf nach der Begrüssung mit
+dem Fehlersatz (am 2026-09-13 live belegt, `ALARM_LLM_BILLING`).
+
+---
+
 ## 5. Clean-Code-Auflagen dieser Kette
 
 Verbindlich ist `.claude/refs/clean-code.md`; jede Phase wird dagegen auditiert. Was in
