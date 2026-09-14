@@ -26,6 +26,7 @@
 // als Literal wiederholt (G5/G25) - test/p14-checkout-return-app-shell.test.js pinnt
 // das fuer den Altpfad ausdruecklich.
 import { APP_PATH, LEGACY_PORTAL_PATH, LOGIN_ALIAS_PATHS, APP_ALIAS_PATHS } from "./portal-paths.js";
+import { ELEVENLABS_INIT_PATH } from "./routes/webhooks-elevenlabs-init.js";
 
 // Benannte Auth-Middlewares. Der Inventar-Test erkennt sie an handler.name in der
 // Route-Handler-Kette. INVARIANTE: diese Middlewares MUESSEN benannte Funktionen
@@ -148,6 +149,20 @@ export const PUBLIC_ROUTES = Object.freeze([
       "Deckel LOOKUP_MAX_PER_CALL. Jede dieser drei Ablehnungen antwortet mit demselben " +
       "Grund (404), nur das Log unterscheidet sie. Egress-Filter sanitizeLookupQuery vor " +
       "jedem Versand.",
+  },
+  {
+    method: "POST",
+    path: ELEVENLABS_INIT_PATH,
+    reason:
+      "HANDLER-INTERNE AUTH (IEL-B6, Conversation-Initiation-Webhook): der Anbieter ruft " +
+      "serverseitig, ohne Session und ohne Signatur. Stufe 1: safeEqual des Headers " +
+      "x-hermes-init-token gegen ELEVENLABS_INIT_WEBHOOK_TOKEN; leer oder kuerzer als " +
+      "INIT_WEBHOOK_TOKEN_MIN_LENGTH -> 403 fuer JEDEN Aufruf. Der Header beweist nur das " +
+      "Anbieter-Konto, nicht die Zugehoerigkeit zu einem Anruf - Barriere ist Stufe 2: " +
+      "Zuordnung NUR ueber das 16-Byte-Bindungs-Token an einen aktiven, wartenden " +
+      "Inbound-EL-Anruf (oder die identische Wiederholung binnen " +
+      "EL_INIT_WIEDERHOLUNG_FRIST_MS), dann Schalter/Allowlist, dann set-once-Bindung. Jede " +
+      "Ablehnung 404 mit konstantem Koerper ohne Daten. Loest selbst keinen Anruf aus.",
   },
   {
     method: "GET",

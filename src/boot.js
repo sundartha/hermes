@@ -1195,6 +1195,9 @@ export async function bootServer({
   // EINE Instanz wie bei makeCallRoutes (INV-7) - server.js reicht sie im deps-Buendel
   // bereits durch, hier wird sie nur ausgepackt.
   elevenLabsOutbound,
+  // IEL-B6: Boot-Re-Arm der aeusseren Bruecken-Frist (s. unten bei rearmDeadlines). Dieselbe
+  // EINE Instanz wie an der Init-Route (INV-7).
+  inboundBridges,
 }) {
   // S1-4: json.js wirft aus load(), wenn ein korrupter Store NICHT forensisch gesichert
   // werden konnte (statt ihn still mit Defaults zu ueberschreiben). Ohne dieses explizite
@@ -1285,6 +1288,10 @@ export async function bootServer({
   // terminiert ueber denselben EINEN Terminierungspfad wie jeder andere Zombie (INV-5: kein
   // exit(1) danach).
   elevenLabsOutbound.rearmActiveConversationPolls();
+
+  // IEL-B6 (E9): vierte Achse - die aeussere Bruecken-Frist jedes WARTET-Calls, Restfrist aus
+  // answeredAt. Setzt ausschliesslich Timer (INV-5: kein exit(1) danach).
+  inboundBridges.rearmDeadlines();
 
   const httpServer = app.listen(config.server.port, () => {
     // Tatsaechlichen Port verwenden: bei PORT=0 (Tests) vergibt das OS einen freien Port

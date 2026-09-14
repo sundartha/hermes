@@ -4106,3 +4106,66 @@ ohne Engine-Sonderfall), Offenlegung (disclosureSentence), Outbound-Gates, OUTBO
 
 **Getragen:** R-S2-1 (stream_token-Spalte, Schema-Cutover eigene Entscheidung),
 R-S2-2 (Render-Env VOICE_ENGINE/OPENAI_*/REALTIME_* wirkungslos), R-S2-3 (Workflow-Vorlagen).
+
+## IEL-B6 — Init-Webhook wird von aussen erreichbar (2026-09-15)
+
+**Was sich sicherheitsrelevant geaendert hat:** ein neuer oeffentlicher Endpunkt
+`POST /webhooks/elevenlabs/init` (Conversation-Initiation-Webhook des ElevenLabs-Inbound-Wegs)
+und Frist-Timer, die einen wartenden Inbound-Anruf live umleiten oder auflegen. Beides wirkt erst,
+wenn ein Tenant ueber `ELEVENLABS_INBOUND_ENABLED` + `ELEVENLABS_INBOUND_TENANT_IDS` gepinnt ist
+und B8 den Sprechpfad umstellt; mit Schalter aus antwortet der Endpunkt jedem Aufrufer mit 403/404.
+Keine neue Env, keine neue Dependency.
+
+### 1. Das Geheimnis
+
+| Eigenschaft | Zustand |
+|---|---|
+| Vergleich | timing-sicher (`safeEqual`) des Headers `x-hermes-init-token` gegen `ELEVENLABS_INIT_WEBHOOK_TOKEN`, VOR jeder anderen Verarbeitung |
+| leeres oder zu kurzes Secret | ein konfigurierter Wert unter `INIT_WEBHOOK_TOKEN_MIN_LENGTH` gilt als leer: **403 fuer jeden Aufruf** (fail-closed) |
+| Ablage | Render-Env (`sync:false`) und Workspace-Secret im ElevenLabs-Konto, erzeugt und verteilt von `iel-geheimnisse.mjs` aus EINEM Wert; im Repo nur die `secret_id` (E14/E16), nie der Wert |
+| Replay | **NICHT kryptografisch geschuetzt** — keine Nonce, keine Signatur (Anbieter-Grenze [R1] c7). Nur binnen `EL_INIT_WIEDERHOLUNG_FRIST_MS` (Startwert 10 s, Anker `elBoundAt`), mit identischem Bindungs-Token UND identischer `conversation_id`, kommt dieselbe Antwort erneut; sonst 404 ohne Daten |
+| Rotation | nicht automatisiert. Weg: erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` (Render-Env und Workspace-Secret aus EINEM Wert), dann Deploy. Nur falls keine Secret-Aktualisierung belegt ist: neue `secret_id` + `--workspace-init-webhook --secret-id=<neu>`. Zwischenfenster = 403 -> keine Bindung -> Frist -> Budget-Rueckfall, nie Tenant-Daten |
+
+### 2. Die schadensbegrenzenden Stufen (Reihenfolge bindend, E11)
+
+1. Init-Token (403, Log `grund=token` ohne Request-Schluessel)
+2. Zuordnung, nur lesend: NUR ueber das 16-Byte-Bindungs-Token (`call.streamToken`, als SIP-Header
+   `X-Hermes-Call-Binding` bzw. `dynamic_variables.sip_hermes_call_binding`) an einen **aktiven**
+   Inbound-EL-Anruf im Zustand WARTET oder die identische Wiederholung binnen Frist; dazu `agent_id` ==
+   `ELEVENLABS_AGENT_ID` und `called_number` (falls vorhanden) normalisiert == `call.to` (404)
+3. Schalter/Allowlist `inboundElPathFor` (404)
+4. set-once-Bindung `bindInboundElConversation` (404 bei verlorener Op)
+5. Antwort: dynamische Variablen und Eroeffnung, **ohne Transkript, ohne Secret, `tenant_token ""`**
+   (der abgeleitete Werkzeug-Token wird fuer Inbound nie berechnet). Die Werkzeug-Webhooks sperren den
+   Inbound-Anruf in beiden Stellungen von `ELEVENLABS_TENANT_TOKEN_REQUIRED` (Test `iel-inbound-werkzeuge`).
+
+Jede Ablehnung ab Stufe 2 antwortet mit demselben konstanten Koerper; nur das Log unterscheidet die Gruende
+(`token`, `kein_wartender_anruf`, `agent`, `called_number`, `schalter`). Der Antwort-Builder hat genau EINEN
+Aufrufer (die Route, nach Stufe 4). Der Endpunkt loest selbst keinen Anruf aus.
+
+| Punkt | Festlegung |
+|---|---|
+| Secret-Header beweist keine Zugehoerigkeit (R-B) | Der Anbieter sendet den Header bei JEDEM Inbound-Gespraech des Workspace mit — er beweist nur "kommt von unserem Anbieter-Konto". Die Barriere ist die Token-Bindung aus Stufe 2 (Beleg E11, Test `iel-init-webhook` 3). |
+| Rate-Limit | Der Per-IP-Limiter `RATE_LIMIT_PER_MIN` liegt vor der Route (nicht unter `/voice`). Alle Gespraeche teilen Anbieter-IPs: eine Drosselung ist fail-safe (keine Bindung -> Frist -> Budget-Rueckfall). **Offen vor breiter Freischaltung.** |
+| Log | Schluesselnamen des Requests bereinigt (`[A-Za-z0-9_]`) und auf 20 gekappt, nie Werte, nie Token, nie `conversation_id` |
+
+### 3. Frist-Timer (E9)
+
+Die aeussere Frist (`EL_BRIDGE_START_DEADLINE_MS` ab `answeredAt`) und die innere
+(`EL_BINDING_AFTER_ANSWER_MS` ab dem answered-Callback, armiert ab B8) leiten einen noch aktiven, noch
+WARTENDEN Anruf auf `/voice/el-rueckfall?quelle=frist` um (volle Begruessung mit Pflichtsatz); scheitert
+das oder fehlt `redirectCall` (vor B7), wird aufgelegt. Nie Stille. Der Boot re-armiert die aeussere Frist
+(setzt nur Timer, INV-5).
+
+### 4. Restrisiken (bewusst getragen)
+
+- **Stille bei Neustart** = Neustart-Dauer plus Rest der aeusseren Frist.
+- **Frist-Startwerte unbelegt:** `EL_BRIDGE_START_DEADLINE_MS = 30000` und `EL_BINDING_AFTER_ANSWER_MS = 8000`
+  sind Vorschlaege aus Einzelmessungen ([M1] J3, [KO 3.2]), Nachzug nach Messung 8.
+- **Antwort-Waechter scheitert NACH der Bindung:** 500 ohne Daten, der Anruf bleibt GEBUNDEN ohne Frist. Ob
+  der Anbieter dann BYE schickt (Rueckfall ueber E8) oder still bleibt, ist M8 (Test `iel-init-webhook` 12).
+- **Frist-Timer wirken je Prozess** (Deploy-Ueberlappung, pg-Zustand im Speicher, Klasse E18-3): eine alte
+  Instanz kann umleiten; Folge ist ein Rueckfall, kein Datenleck.
+- **Kein Budget-Check an der Init-Route:** die Stufenfolge E11 ist bindend. `budgetExceeded` hat der Anruf
+  Sekunden vorher in `/voice/incoming` passiert, danach wirkt die Geld-Wache. Die pro-Tenant-Kostendecke
+  bleibt fuer beide Richtungen unangetastet.

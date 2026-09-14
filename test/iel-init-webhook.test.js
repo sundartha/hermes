@@ -1,0 +1,503 @@
+// ---- IEL-B6: Conversation-Initiation-Webhook (POST /webhooks/elevenlabs/init) -------------
+// Die Route wird IN-PROCESS an einem echten HTTP-Server auf Port 0 gemountet (Muster
+// test/el-consult-timeout-spur.test.js): ein Gate, das nur in einer Funktion sitzt, aber nicht
+// an der Route haengt, misst sonst gruen. Store = echte state-ops-Mutatoren, Uhr = Attrappe
+// (Wiederholungsfrist K1), Fristen = Recorder. Test 14 belegt die Verdrahtung am echten Server.
+//
+// Namen beginnen mit "IEL-B6-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import express from "express";
+
+import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
+import {
+  EL_CALL_BINDING_SIP_HEADER,
+  EL_CALL_BINDING_VARIABLE,
+  INITIATION_RESPONSE_TYPE,
+  SIP_HEADERS_FORM,
+  callBindingTokenOf,
+  inboundElLocaleOf,
+  sipHeadersFormOf,
+} from "../src/elevenlabs/inbound-initiation.js";
+import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../src/elevenlabs/inbound-path-decision.js";
+import { gespeicherteBegruessungFuer } from "../src/i18n/greeting-catalog.js";
+import { begruessungOhnePflichtsatz } from "../src/i18n/inbound-notice.js";
+import { LOCALES } from "../src/i18n/locales.js";
+import {
+  ELEVENLABS_INIT_PATH,
+  EL_INIT_WIEDERHOLUNG_FRIST_MS,
+  INIT_ANTWORT,
+  INIT_TOKEN_HEADER,
+  makeElevenLabsInitWebhookRoutes,
+} from "../src/routes/webhooks-elevenlabs-init.js";
+import * as ops from "../src/store/state-ops.js";
+import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
+import { MS_PER_SECOND } from "../src/utils/timer.js";
+import { templatePlaceholderNames } from "./helpers/el-vorlage-variablen.mjs";
+import {
+  EL_INBOUND_ACCESS_BOOT_ENV,
+  captureConsole,
+  seedCall,
+  seedState,
+  startServer,
+  storeOpsFacade,
+  waitForStoreState,
+} from "./helpers.js";
+import { INBOUND_FROM, INBOUND_TO, TRAEGER_SID, seedWartenderElCall } from "./_iel-inbound-harness.js";
+
+const HTTP_OK = 200;
+const HTTP_FORBIDDEN = 403;
+const HTTP_NOT_FOUND = 404;
+const HTTP_SERVER_ERROR = 500;
+
+const INIT_TOKEN = "i".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH);
+const ZU_KURZES_TOKEN = "i".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH - 1);
+const AGENT_ID = "agent_iel_b6";
+const OWNER_NAME = "Jonas Beispiel";
+const CONV_A = "conv_b6_a";
+const CONV_B = "conv_b6_b";
+const KEINE_KOPFZEILEN_FORM = Number.MAX_SAFE_INTEGER;
+const FALSCHES_BINDUNGS_TOKEN = "0123456789abcdef0123456789abcdef";
+const FAKE_START_MS = Date.parse("2026-09-15T10:00:00.000Z");
+const FRISCH_BEANTWORTET_S = 2;
+const ERWARTETE_VARIABLEN = 16;
+const GATE_UNAVAILABLE = "unavailable";
+const VORLAGE_DE = LOCALES.de;
+const VORLAGE_EN = LOCALES.en;
+
+// ---- Build ----------------------------------------------------------------------------------
+
+function baueConfig({ enabled = true, tenantIds = [BOOTSTRAP_TENANT_ID], initWebhookToken = INIT_TOKEN, agentId = AGENT_ID } = {}) {
+  return {
+    voice: {
+      elevenLabsInbound: {
+        enabled,
+        tenantIds,
+        sipUser: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER,
+        sipPassword: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD,
+        initWebhookToken,
+      },
+      elevenLabsOutbound: { agentId },
+    },
+    telnyx: { telnyxElevenLabs: { voiceId: "" } },
+  };
+}
+
+// Die echte Store-Fassade plus genau die Leser, die Route und Builder fragen.
+function baueInitStore(state) {
+  return {
+    ...storeOpsFacade(state),
+    bindInboundElConversation: (id, bindung) => ops.bindInboundElConversation(state, id, bindung),
+    numberRecordByE164: (e164) => ops.numberRecordByE164(state, e164),
+    tenantTimezone: (id) => ops.tenantTimezone(state, id),
+    tenantContext: (id) => ops.tenantContext(state, "", id),
+  };
+}
+
+function baueZustand({ ownerName = OWNER_NAME } = {}) {
+  const state = ops.makeDefaultState();
+  state.tenants[0].ownerName = ownerName;
+  state.numbers.push({
+    id: "num_b6",
+    e164: INBOUND_TO,
+    tenantId: BOOTSTRAP_TENANT_ID,
+    provider: "telnyx",
+    status: "active",
+    providerNumberId: null,
+  });
+  const call = seedWartenderElCall(state, { answeredVorS: FRISCH_BEANTWORTET_S });
+  return { state, call };
+}
+
+async function mitInitRoute({ state, config = baueConfig() }, run) {
+  const uhr = { nowMs: FAKE_START_MS };
+  const stelleUhr = (nowMs) => Object.assign(uhr, { nowMs });
+  const geloescht = [];
+  const store = baueInitStore(state);
+  const app = express();
+  app.use(express.json());
+  app.use(
+    makeElevenLabsInitWebhookRoutes({
+      store,
+      config,
+      bridges: { clearDeadlines: (callId) => geloescht.push(callId) },
+      now: () => uhr.nowMs,
+    }),
+  );
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${server.address().port}${ELEVENLABS_INIT_PATH}`;
+  try {
+    return await run({ url, stelleUhr, geloescht, store, config });
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+const initBody = ({ bindung, conversationId = CONV_A, agentId = AGENT_ID, extra = {} }) => ({
+  agent_id: agentId,
+  conversation_id: conversationId,
+  called_number: INBOUND_TO,
+  sip_headers: { [EL_CALL_BINDING_SIP_HEADER]: bindung },
+  ...extra,
+});
+
+async function initAnfrage(url, { token = INIT_TOKEN, body }) {
+  const headers = { "content-type": "application/json" };
+  if (token !== null) headers[INIT_TOKEN_HEADER] = token;
+  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+  return { status: res.status, text: await res.text() };
+}
+
+// Ein Fall mit frischem Zustand und frischer Route.
+async function einzelFall({ config = baueConfig(), body = null, zustand = baueZustand() } = {}) {
+  return mitInitRoute({ state: zustand.state, config }, async (route) => {
+    const antwort = await initAnfrage(route.url, { body: body ?? initBody({ bindung: zustand.call.streamToken }) });
+    return { ...antwort, ...zustand, ...route };
+  });
+}
+
+const stripNoticePraefix = (greeting, notice) => greeting.slice(`${notice} `.length);
+
+// ---- Stufe 1: Geheimnis -----------------------------------------------------------------------
+
+test("IEL-B6-1: Init-Token fehlt, leer oder falsch -> 403 mit konstantem Koerper, Store unveraendert", async () => {
+  const { state, call } = baueZustand();
+  const vorher = JSON.stringify(state);
+  await mitInitRoute({ state }, async ({ url }) => {
+    for (const token of [null, "", "x".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH)]) {
+      const antwort = await initAnfrage(url, { token, body: initBody({ bindung: call.streamToken }) });
+      assert.equal(antwort.status, HTTP_FORBIDDEN, `token=${JSON.stringify(token)}`);
+      assert.equal(antwort.text, JSON.stringify(INIT_ANTWORT.VERWEIGERT));
+    }
+  });
+  assert.equal(JSON.stringify(state), vorher);
+});
+
+test("IEL-B6-2: ein konfiguriertes Token unter der Mindestlaenge oder leer gilt als leer -> 403 fuer jeden Aufruf", async () => {
+  for (const initWebhookToken of [ZU_KURZES_TOKEN, ""]) {
+    const { state, call } = baueZustand();
+    await mitInitRoute({ state, config: baueConfig({ initWebhookToken }) }, async ({ url }) => {
+      const antwort = await initAnfrage(url, { token: initWebhookToken, body: initBody({ bindung: call.streamToken }) });
+      assert.equal(antwort.status, HTTP_FORBIDDEN, `konfiguriert laenge=${initWebhookToken.length}`);
+    });
+    assert.equal(call.elevenlabsConversationId, null);
+  }
+});
+
+// ---- Stufe 2: Zuordnung (R-B) -----------------------------------------------------------------
+
+function baueRbZustand() {
+  const zustand = baueZustand();
+  const { state } = zustand;
+  const budget = ops.createCall(state, { direction: "inbound", from: INBOUND_FROM, to: INBOUND_TO, twilioSid: TRAEGER_SID, tenantId: BOOTSTRAP_TENANT_ID });
+  ops.recordCostProfile(state, budget.id, KOSTENPROFIL.TELNYX_INBOUND_BUDGET);
+  const rueckfall = seedWartenderElCall(state, { answeredVorS: FRISCH_BEANTWORTET_S });
+  ops.markInboundElFallback(state, rueckfall.id, new Date().toISOString());
+  const beendet = seedWartenderElCall(state, { answeredVorS: FRISCH_BEANTWORTET_S });
+  ops.endCallRecord(state, beendet.id, "completed");
+  const fremdGebunden = seedWartenderElCall(state, { answeredVorS: FRISCH_BEANTWORTET_S });
+  ops.bindInboundElConversation(state, fremdGebunden.id, { conversationId: CONV_B, nowIso: new Date(FAKE_START_MS).toISOString() });
+  return { ...zustand, budget, rueckfall, beendet, fremdGebunden };
+}
+
+test("IEL-B6-3: jede Ablehnung der Zuordnung ist 404 mit byte-gleichem Koerper ohne Daten, keine Bindung", async () => {
+  const zustand = baueRbZustand();
+  const { state } = zustand;
+  const konversationenVorher = state.calls.map((eintrag) => eintrag.elevenlabsConversationId);
+  const faelle = {
+    fehlt: initBody({ bindung: undefined }),
+    leer: initBody({ bindung: "" }),
+    falsch: initBody({ bindung: FALSCHES_BINDUNGS_TOKEN }),
+    budget: initBody({ bindung: zustand.budget.streamToken }),
+    rueckfall: initBody({ bindung: zustand.rueckfall.streamToken }),
+    nichtAktiv: initBody({ bindung: zustand.beendet.streamToken }),
+    gebundenAndereId: initBody({ bindung: zustand.fremdGebunden.streamToken }),
+  };
+  await mitInitRoute({ state }, async ({ url }) => {
+    for (const [name, body] of Object.entries(faelle)) {
+      const antwort = await initAnfrage(url, { body });
+      assert.equal(antwort.status, HTTP_NOT_FOUND, name);
+      assert.equal(antwort.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF), name);
+      for (const verboten of ["dynamic_variables", "owner_name", OWNER_NAME, BOOTSTRAP_TENANT_ID])
+        assert.ok(!antwort.text.includes(verboten), `${name}: ${verboten} im Koerper`);
+    }
+  });
+  assert.deepEqual(state.calls.map((eintrag) => eintrag.elevenlabsConversationId), konversationenVorher);
+});
+
+test("IEL-B6-4: fremde oder unkonfigurierte agent_id und abweichende called_number -> 404", async () => {
+  const fremd = baueZustand();
+  const fremdeAgentId = await einzelFall({ zustand: fremd, body: initBody({ bindung: fremd.call.streamToken, agentId: "agent_fremd" }) });
+  assert.equal(fremdeAgentId.status, HTTP_NOT_FOUND);
+  assert.equal((await einzelFall({ config: baueConfig({ agentId: "" }) })).status, HTTP_NOT_FOUND);
+  const abweichend = baueZustand();
+  const andereNummer = await einzelFall({
+    zustand: abweichend,
+    body: initBody({ bindung: abweichend.call.streamToken, extra: { called_number: "+491709999999" } }),
+  });
+  assert.equal(andereNummer.status, HTTP_NOT_FOUND);
+  assert.equal(abweichend.call.elevenlabsConversationId, null);
+});
+
+test("IEL-B6-4b: called_number fehlt oder ist nur anders geschrieben -> 200", async () => {
+  const ohne = baueZustand();
+  const ohneNummer = await einzelFall({ zustand: ohne, body: initBody({ bindung: ohne.call.streamToken, extra: { called_number: undefined } }) });
+  assert.equal(ohneNummer.status, HTTP_OK);
+  const formatiert = baueZustand();
+  const mitTrennern = await einzelFall({
+    zustand: formatiert,
+    body: initBody({ bindung: formatiert.call.streamToken, extra: { called_number: "+49 170-000 0000" } }),
+  });
+  assert.equal(mitTrennern.status, HTTP_OK);
+});
+
+// ---- Stufe 3: Schalter ------------------------------------------------------------------------
+
+test("IEL-B6-5: Schalter aus oder Tenant nicht gepinnt -> 404, keine Bindung", async () => {
+  for (const config of [baueConfig({ enabled: false }), baueConfig({ tenantIds: [] })]) {
+    const ergebnis = await einzelFall({ config });
+    assert.equal(ergebnis.status, HTTP_NOT_FOUND);
+    assert.equal(ergebnis.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
+    assert.equal(ergebnis.call.elevenlabsConversationId, null);
+  }
+});
+
+// ---- Treffer ----------------------------------------------------------------------------------
+
+test("IEL-B6-6a: Treffer -> 200, Variablenmenge = Vorlage, Inbound-Leerwerte, kein Werkzeug-Token", async () => {
+  const ergebnis = await einzelFall();
+  assert.equal(ergebnis.status, HTTP_OK);
+  const antwort = JSON.parse(ergebnis.text);
+  const variablen = antwort.dynamic_variables;
+  assert.equal(antwort.type, INITIATION_RESPONSE_TYPE);
+  assert.equal(Object.keys(variablen).length, ERWARTETE_VARIABLEN);
+  assert.deepEqual(Object.keys(variablen).sort(), [...templatePlaceholderNames()].sort());
+  for (const leer of ["tenant_token", "voicemail_line", "callee", "objective", "opening_line"])
+    assert.equal(variablen[leer], "", leer);
+  assert.equal(variablen.consult_available, GATE_UNAVAILABLE);
+  assert.equal(variablen.lookup_available, GATE_UNAVAILABLE);
+  assert.ok(variablen.inbound_situation.includes(OWNER_NAME));
+  assert.ok(!variablen.inbound_situation.includes("{{"));
+});
+
+test("IEL-B6-6b: Treffer -> Eroeffnung = Begruessung ohne Pflichtsatz, Sprache und Stimme aus inboundElLocaleOf", async () => {
+  const ergebnis = await einzelFall();
+  const override = JSON.parse(ergebnis.text).conversation_config_override;
+  const begruessung = gespeicherteBegruessungFuer({ storedGreeting: DEFAULT_GREETING, language: "de", ownerName: OWNER_NAME });
+  assert.equal(override.agent.first_message, stripNoticePraefix(begruessung, VORLAGE_DE.inboundNotice));
+  assert.ok(!override.agent.first_message.startsWith(VORLAGE_DE.inboundNotice));
+  assert.equal(override.agent.language, ergebnis.call.language);
+  const locale = inboundElLocaleOf({ store: ergebnis.store, config: ergebnis.config, call: ergebnis.call });
+  assert.equal(override.tts.voice_id, locale.voiceId);
+});
+
+test("IEL-B6-6c: Treffer -> Bindung am Datensatz mit der Uhr der Route, Fristen genau einmal geloescht", async () => {
+  const ergebnis = await einzelFall();
+  assert.equal(ergebnis.call.elevenlabsConversationId, CONV_A);
+  assert.equal(ergebnis.call.elBoundAt, new Date(FAKE_START_MS).toISOString());
+  assert.deepEqual(ergebnis.geloescht, [ergebnis.call.id]);
+});
+
+// Abweichung vom Plan (Test 7 "de ohne Default-Stimme -> kein tts"): jede unterstuetzte
+// Sprache hat heute eine eigene Profil-Stimme (ELEVENLABS_VOICE_ID_BY_PROFILE), der leere
+// Zweig ist mit echten Locales nicht erreichbar. Gemessen wird deshalb die Sprachfolge.
+test("IEL-B6-7: die Stimme folgt der Anrufsprache (de und en je mit ihrer Profil-Stimme)", async () => {
+  const deutsch = await einzelFall();
+  const englischZustand = baueZustand();
+  englischZustand.call.language = "en";
+  const englisch = await einzelFall({ zustand: englischZustand });
+  const overrideDe = JSON.parse(deutsch.text).conversation_config_override;
+  const overrideEn = JSON.parse(englisch.text).conversation_config_override;
+  assert.equal(overrideEn.agent.language, VORLAGE_EN.language);
+  assert.notEqual(overrideDe.tts.voice_id, overrideEn.tts.voice_id);
+  const localeEn = inboundElLocaleOf({ store: englisch.store, config: englisch.config, call: englisch.call });
+  assert.equal(overrideEn.tts.voice_id, localeEn.voiceId);
+});
+
+test("IEL-B6-8: Bindungs-Token als Objekt (klein), als Liste oder als dynamische Variable -> 200; ohne jede Quelle 404", async () => {
+  const formen = [
+    (token) => ({ sip_headers: { [EL_CALL_BINDING_SIP_HEADER.toLowerCase()]: token } }),
+    (token) => ({ sip_headers: [{ name: EL_CALL_BINDING_SIP_HEADER, value: token }] }),
+    (token) => ({ sip_headers: undefined, dynamic_variables: { [EL_CALL_BINDING_VARIABLE]: token } }),
+  ];
+  for (const form of formen) {
+    const zustand = baueZustand();
+    const body = { ...initBody({ bindung: undefined }), ...form(zustand.call.streamToken) };
+    assert.equal((await einzelFall({ zustand, body })).status, HTTP_OK, JSON.stringify(Object.keys(body)));
+  }
+  const ohneQuelle = await einzelFall({ body: { ...initBody({ bindung: undefined }), sip_headers: undefined } });
+  assert.equal(ohneQuelle.status, HTTP_NOT_FOUND);
+});
+
+// ---- Wiederholung (K1) ------------------------------------------------------------------------
+
+async function mitGebundenemCall(run) {
+  const { state, call } = baueZustand();
+  await mitInitRoute({ state }, async (route) => {
+    const body = initBody({ bindung: call.streamToken });
+    const erste = await initAnfrage(route.url, { body });
+    assert.equal(erste.status, HTTP_OK);
+    await run({ ...route, state, call, body, erste });
+  });
+}
+
+test("IEL-B6-9a: Wiederholung knapp vor Fristende -> dieselbe Antwort, keine neue Bindung, Fristen unberuehrt", async () => {
+  await mitGebundenemCall(async ({ url, stelleUhr, geloescht, call, body, erste }) => {
+    const gebundenUm = call.elBoundAt;
+    stelleUhr(FAKE_START_MS + EL_INIT_WIEDERHOLUNG_FRIST_MS - 1);
+    const zweite = await initAnfrage(url, { body });
+    assert.equal(zweite.status, HTTP_OK);
+    assert.deepEqual(JSON.parse(zweite.text), JSON.parse(erste.text));
+    assert.equal(geloescht.length, 1);
+    assert.equal(call.elBoundAt, gebundenUm);
+  });
+});
+
+test("IEL-B6-9b: Wiederholung ab Fristende -> 404 ohne Daten", async () => {
+  await mitGebundenemCall(async ({ url, stelleUhr, body }) => {
+    stelleUhr(FAKE_START_MS + EL_INIT_WIEDERHOLUNG_FRIST_MS);
+    const spaet = await initAnfrage(url, { body });
+    assert.equal(spaet.status, HTTP_NOT_FOUND);
+    assert.equal(spaet.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
+  });
+});
+
+test("IEL-B6-9c: gleiches Token mit anderer conversation_id innerhalb der Frist -> 404, Bindung unveraendert", async () => {
+  await mitGebundenemCall(async ({ url, call }) => {
+    const andere = await initAnfrage(url, { body: initBody({ bindung: call.streamToken, conversationId: CONV_B }) });
+    assert.equal(andere.status, HTTP_NOT_FOUND);
+    assert.equal(call.elevenlabsConversationId, CONV_A);
+  });
+});
+
+test("IEL-B6-9d: anderes Token mit gleicher conversation_id innerhalb der Frist -> 404", async () => {
+  await mitGebundenemCall(async ({ url }) => {
+    const fremd = await initAnfrage(url, { body: initBody({ bindung: FALSCHES_BINDUNGS_TOKEN }) });
+    assert.equal(fremd.status, HTTP_NOT_FOUND);
+  });
+});
+
+test("IEL-B6-10: Neustart waehrend GEBUNDEN -> die Wiederholung binnen Frist liefert dieselbe Antwort ohne zweite Bindung", async () => {
+  const { state, call } = baueZustand();
+  const body = initBody({ bindung: call.streamToken });
+  const erste = await mitInitRoute({ state }, ({ url }) => initAnfrage(url, { body }));
+  const nachNeustart = JSON.parse(JSON.stringify(state));
+  await mitInitRoute({ state: nachNeustart }, async ({ url, geloescht }) => {
+    const zweite = await initAnfrage(url, { body });
+    assert.equal(zweite.status, HTTP_OK);
+    assert.deepEqual(JSON.parse(zweite.text), JSON.parse(erste.text));
+    assert.deepEqual(geloescht, []);
+  });
+  assert.equal(ops.getCall(nachNeustart, call.id).elBoundAt, call.elBoundAt);
+});
+
+// ---- Log und Fehlerpfad -----------------------------------------------------------------------
+
+test("IEL-B6-11: das Log nennt Grund, bereinigte Schluesselnamen und sip_headers-Form - nie Token, Kennung oder Namen", async () => {
+  const { state, call } = baueZustand();
+  const zeilen = await captureConsole(() =>
+    mitInitRoute({ state }, async ({ url }) => {
+      await initAnfrage(url, { token: null, body: initBody({ bindung: call.streamToken }) });
+      await initAnfrage(url, { body: { ...initBody({ bindung: FALSCHES_BINDUNGS_TOKEN }), "boeser\nschluessel": 1 } });
+      await initAnfrage(url, { body: initBody({ bindung: call.streamToken }) });
+    }),
+  );
+  const log = zeilen.join("\n");
+  assert.ok(zeilen.includes("[el-init] abgelehnt grund=token"));
+  const ablehnung = zeilen.find((zeile) => zeile.includes("grund=kein_wartender_anruf"));
+  assert.ok(ablehnung.includes("boeser_schluessel"));
+  assert.ok(ablehnung.includes(`sip_headers=${SIP_HEADERS_FORM.OBJEKT}`));
+  assert.ok(ablehnung.includes("schluessel=agent_id,boeser_schluessel,called_number,conversation_id,sip_headers"));
+  assert.ok(zeilen.includes(`[el-init] gebunden call=${call.id}`));
+  for (const geheim of [INIT_TOKEN, call.streamToken, CONV_A, OWNER_NAME, "boeser\nschluessel"])
+    assert.ok(!log.includes(geheim), `Log enthaelt ${JSON.stringify(geheim)}`);
+});
+
+test("IEL-B6-12: Antwort-Waechter scheitert nach der Bindung -> 500 ohne Daten (Restrisiko: Call bleibt GEBUNDEN)", async () => {
+  const ergebnis = await einzelFall({ zustand: baueZustand({ ownerName: "Jonas {{x}}" }) });
+  assert.equal(ergebnis.status, HTTP_SERVER_ERROR);
+  assert.equal(ergebnis.text, JSON.stringify(INIT_ANTWORT.INTERN));
+  assert.ok(!ergebnis.text.includes("dynamic_variables"));
+  assert.equal(ergebnis.call.elevenlabsConversationId, CONV_A);
+});
+
+// ---- Reine Bausteine --------------------------------------------------------------------------
+
+test("IEL-B6-13a: begruessungOhnePflichtsatz entfernt nur ein woertliches Praefix und liefert nie leer", () => {
+  const notice = VORLAGE_DE.inboundNotice;
+  assert.equal(begruessungOhnePflichtsatz({ greeting: `${notice} Hallo.`, notice }), "Hallo.");
+  assert.equal(begruessungOhnePflichtsatz({ greeting: "Freitext ohne Satz.", notice }), "Freitext ohne Satz.");
+  assert.equal(begruessungOhnePflichtsatz({ greeting: notice, notice }), notice);
+  assert.equal(begruessungOhnePflichtsatz({ greeting: `${notice}   `, notice }), `${notice}   `);
+});
+
+test("IEL-B6-13b: callBindingTokenOf und sipHeadersFormOf ueber alle Formen", () => {
+  const token = FALSCHES_BINDUNGS_TOKEN;
+  const faelle = [
+    { body: { sip_headers: { [EL_CALL_BINDING_SIP_HEADER]: token } }, form: SIP_HEADERS_FORM.OBJEKT, erwartet: token },
+    { body: { sip_headers: [{ name: EL_CALL_BINDING_SIP_HEADER.toUpperCase(), value: token }] }, form: SIP_HEADERS_FORM.LISTE, erwartet: token },
+    { body: {}, form: SIP_HEADERS_FORM.FEHLT, erwartet: "" },
+    { body: { sip_headers: KEINE_KOPFZEILEN_FORM }, form: SIP_HEADERS_FORM.UNBEKANNT, erwartet: "" },
+    { body: { sip_headers: null }, form: SIP_HEADERS_FORM.FEHLT, erwartet: "" },
+  ];
+  for (const fall of faelle) {
+    assert.equal(sipHeadersFormOf(fall.body), fall.form, JSON.stringify(fall.body));
+    assert.equal(callBindingTokenOf(fall.body), fall.erwartet, JSON.stringify(fall.body));
+  }
+});
+
+// ---- Verdrahtung am echten Server -------------------------------------------------------------
+
+const SPAWN_CALL_ID = "call_iel_b6_init";
+const SPAWN_BINDUNGS_TOKEN = "fedcba9876543210fedcba9876543210";
+const SPAWN_MAX_DAUER_S = 600;
+
+function spawnSeed() {
+  const jetzt = new Date(Date.now() - FRISCH_BEANTWORTET_S * MS_PER_SECOND).toISOString();
+  return seedState({
+    settings: { allowSummaries: false },
+    calls: [
+      seedCall({
+        id: SPAWN_CALL_ID,
+        direction: "inbound",
+        provider: "telnyx",
+        from: INBOUND_FROM,
+        to: INBOUND_TO,
+        twilioSid: TRAEGER_SID,
+        answeredAt: jetzt,
+        startedAt: jetzt,
+        maxDurationS: SPAWN_MAX_DAUER_S,
+        costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
+        streamToken: SPAWN_BINDUNGS_TOKEN,
+      }),
+    ],
+  });
+}
+
+test("IEL-B6-14: am echten Server ist die Route gemountet - ohne Init-Token 403, mit Bindungs-Token 200 und gebunden", async () => {
+  const srv = await startServer({
+    env: {
+      ELEVENLABS_INBOUND_ENABLED: "true",
+      ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID,
+      ...EL_INBOUND_ACCESS_BOOT_ENV,
+      ELEVENLABS_AGENT_ID: AGENT_ID,
+    },
+    seed: spawnSeed(),
+  });
+  try {
+    const url = `${srv.localUrl}${ELEVENLABS_INIT_PATH}`;
+    const body = initBody({ bindung: SPAWN_BINDUNGS_TOKEN });
+    const ohneToken = await initAnfrage(url, { token: null, body });
+    assert.equal(ohneToken.status, HTTP_FORBIDDEN);
+    const mitToken = await initAnfrage(url, { token: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INIT_WEBHOOK_TOKEN, body });
+    assert.equal(mitToken.status, HTTP_OK, mitToken.text);
+    const stand = await waitForStoreState(srv, (zustand) =>
+      zustand.calls.some((eintrag) => eintrag.id === SPAWN_CALL_ID && eintrag.elevenlabsConversationId === CONV_A),
+    );
+    assert.ok(stand);
+  } finally {
+    await srv.stop();
+  }
+});

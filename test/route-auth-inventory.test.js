@@ -234,6 +234,9 @@ const ROUTE_FINGERPRINT = [
   "POST /voice/status",
   "POST /voice/turn",
   "POST /webhooks/elevenlabs/consult",
+  // IEL-B6: der Conversation-Initiation-Webhook des Inbound-Wegs - handler-interne Auth
+  // (Init-Token + Bindungs-Token), Eintrag in src/route-policy.js.
+  "POST /webhooks/elevenlabs/init",
   // Thema B (2026-08-19): der Recherche-Webhook (look_up) - Bauart und Absicherung
   // wortgleich zum Consult-Webhook, Eintrag in src/route-policy.js.
   "POST /webhooks/elevenlabs/lookup",

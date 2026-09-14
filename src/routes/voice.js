@@ -26,7 +26,7 @@ import { say as sayD, hangup as hangupD } from "../telephony/directives.js";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.js";
 import { localeFor } from "../i18n/locales.js";
 import { withInboundNotice } from "../i18n/inbound-notice.js";
-import { greetingForLanguage } from "../i18n/greeting-catalog.js";
+import { gespeicherteBegruessungFuer } from "../i18n/greeting-catalog.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
 import { noteLlmBillingOutage } from "../llm-billing-outage.js";
@@ -331,11 +331,12 @@ export function makeVoiceRoutes({
       // Inbound) - und nur vorangestellt, wenn er im Greeting fehlt (kein Doppelsatz).
       // Deckt den TeXML-Gather. PROMPT-03: die gespeicherte Vorlage folgt der Anrufsprache
       // (greetingForLanguage) - der deutsche Seed-Default darf einem EN-/FR-Tenant nicht
-      // mehr vorgelesen werden. replaceAll bleibt VOR dem Pflichtsatz-Praefix: der
-      // Fehlerpfad bei greeting=null wirft unveraendert (voice-incoming-catch-path,
-      // greetingForLanguage(null, ...) gibt null zurueck).
+      // mehr vorgelesen werden. Das Einsetzen des Auftraggebers bleibt VOR dem
+      // Pflichtsatz-Praefix: der Fehlerpfad bei greeting=null wirft unveraendert
+      // (voice-incoming-catch-path, greetingForLanguage(null, ...) gibt null zurueck).
+      // IEL-B6: gespeicherteBegruessungFuer ist dieselbe Quelle wie die Init-Antwort.
       const greeting = withInboundNotice(
-        greetingForLanguage(ctx.settings.greeting, language).replaceAll("{owner}", ctx.ownerName),
+        gespeicherteBegruessungFuer({ storedGreeting: ctx.settings.greeting, language, ownerName: ctx.ownerName }),
         locale.inboundNotice,
       );
 

@@ -35,7 +35,6 @@
 // Beide Mengen muessen deckungsgleich sein: ein Name in A ohne Gegenstueck in B ist der
 // Close-1008-Fall; ein Name in B ohne Gegenstueck in A ist toter Ballast.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
@@ -43,8 +42,10 @@ import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 import { consultAllowedForCall } from "../src/consult/gate.js";
 
 import { sendeAnrufstart } from "./helpers/elevenlabs-anrufstart-attrappe.mjs";
+// Seite A (die Extraktion aus dem Vorlagentext) liegt seit IEL-B6 in einem geteilten Helfer:
+// die Init-Antwort des Inbound-Wegs wird gegen dieselbe Menge gehalten.
+import { templatePlaceholderNames } from "./helpers/el-vorlage-variablen.mjs";
 
-const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 // Zwoelf seit Thema A+B (2026-08-19): {{opening_line}} kam als elfter Name dazu - die bei
 // Auftragsannahme validierte Grund-Zeile, die {{objective}} im GESPROCHENEN Teil
 // (first_message/voicemail_message) ersetzt, waehrend {{objective}} im Prompt bleibt -
@@ -57,70 +58,12 @@ const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 // laesst sich weder je Sprache noch je Anruf uebersteuern, 2026-09-04 gemessen).
 // Fuenfzehn seit SEC-P4: tenant_token kam als fuenfzehnter Name dazu - die
 // Mandanten-Dimension des Werkzeug-Tokens. Sie steht in KEINEM Text, sondern nur im
-// Anfragekoerper der Werkzeuge; ohne die vierte Quelle unten waere sie hier unsichtbar
+// Anfragekoerper der Werkzeuge; ohne die vierte Quelle (helpers/el-vorlage-variablen.mjs) waere sie hier unsichtbar
 // gewesen und der Abgleich haette sie als toten Ballast gemeldet.
 // Sechzehn seit IEL-B3: {{inbound_situation}} kam als sechzehnter Name dazu - die
 // Prompt-Sektion fuer einen eingehenden Anruf am selben Agenten; sie geht fuer JEDEN
 // ausgehenden Anruf als leerer String hinaus (Muster callee_relation).
 const EXPECTED_VARIABLE_COUNT = 16;
-
-// ---- Seite A: {{name}} aus dem WIRKLICHEN Vorlagentext --------------------------------
-const PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
-
-function placeholderNamesIn(text) {
-  const gefunden = new Set();
-  for (const treffer of text.matchAll(PLACEHOLDER_PATTERN)) gefunden.add(treffer[1]);
-  return gefunden;
-}
-
-// DRITTE QUELLE seit DE1: der Anrufbeantworter-Text. Bis dahin las diese Seite nur
-// prompt + first_message - eine Variable, die NUR dort unten steht, war damit
-// unsichtbar, und genau das ist der Close-1008-Fall, den diese Datei faengt.
-// In Stufen gelesen statt in einer Kette (G36/Demeter, Bestandsmuster el-stimme-abnahme).
-function voicemailMessageOf(agent) {
-  const builtInTools = agent.prompt.built_in_tools;
-  const detection = builtInTools.voicemail_detection;
-  return detection.params.voicemail_message;
-}
-
-// VIERTE QUELLE seit SEC-P4: die dynamic_variable-Verweise der WERKZEUGE. Eine Variable,
-// die NUR ein Werkzeug liest, trug bisher kein {{name}} und war damit unsichtbar - dieselbe
-// Luecke, die DE1 fuer den Anrufbeantworter-Text geschlossen hat. Ausgenommen sind die
-// Anbieter-SYSTEMVARIABLEN (system__conversation_id): die fuellt der Anbieter selbst, wir
-// schicken sie nie mit, und eine Forderung nach ihr waere der umgekehrte Fehlalarm.
-const SYSTEM_VARIABLE_PREFIX = "system__";
-
-// Der Name, den EINE Parameter-Deklaration verbraucht - oder null. Eigenstaendig, weil
-// die Schleife darunter sonst ueber der Komplexitaetsgrenze steht (eslint complexity 10)
-// und weil "was ist eine verbrauchte Variable" genau eine Frage ist (G30).
-function verbrauchteVariableVon(eigenschaft) {
-  const name = eigenschaft.dynamic_variable;
-  if (typeof name !== "string" || !name) return null;
-  return name.startsWith(SYSTEM_VARIABLE_PREFIX) ? null : name;
-}
-
-function toolVariableNamesIn(tools) {
-  const gefunden = new Set();
-  for (const werkzeug of Object.values(tools ?? {})) {
-    const schema = werkzeug.tool_config?.api_schema?.request_body_schema;
-    for (const eigenschaft of Object.values(schema?.properties ?? {})) {
-      const name = verbrauchteVariableVon(eigenschaft);
-      if (name) gefunden.add(name);
-    }
-  }
-  return gefunden;
-}
-
-function templatePlaceholderNames() {
-  const vorlage = JSON.parse(readFileSync(TEMPLATE_PATH, "utf8"));
-  const agent = vorlage.agent.conversation_config.agent;
-  return new Set([
-    ...placeholderNamesIn(agent.prompt.prompt),
-    ...placeholderNamesIn(agent.first_message),
-    ...placeholderNamesIn(voicemailMessageOf(agent)),
-    ...toolVariableNamesIn(vorlage.tools),
-  ]);
-}
 
 // ---- Seite B: das ECHTE dynamic_variables-Objekt, per Attrappen-fetch abgegriffen -----
 // Store, Config, Auftrag und der Abgriff liegen in helpers/elevenlabs-anrufstart-attrappe
