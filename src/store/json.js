@@ -248,6 +248,11 @@ const CALL_FIELD_DEFAULTS = Object.freeze({
   // KV2-2: Kostenprofil (json<->pg-Parity - rowToCall liefert null). Ein Bestands-
   // store.json ohne das Feld hydriert strukturell auf null, nie auf undefined.
   costProfile: null,
+  // IEL-B4a: die drei Bruecken-Marker (json<->pg-Parity, rowToCall liefert null). Ein
+  // Bestands-store.json ohne die Felder hydriert strukturell auf null, nie auf undefined.
+  elBoundAt: null,
+  elFallbackAt: null,
+  elNachlaufStartedAt: null,
   callerTurns: 0,
   // AL-P11: Ergebnis-Karte (json<->pg-Parity, rowToCall liefert null).
   result: null,
@@ -610,6 +615,24 @@ export function recordCostProfile(callId, profil) {
   const { call, changed } = ops.recordCostProfile(load(), callId, profil);
   if (changed) save();
   return call;
+}
+
+// IEL-B4a: Save NUR bei Aenderung, Rueckgabe = volles Op-Ergebnis. Die Aufrufer (B4/B6/B8)
+// verzweigen auf changed bzw. bound. Eine Stelle fuer "speichern wenn geaendert" (G5).
+function speichereBeiAenderung(ergebnis) {
+  if (ergebnis.changed) save();
+  return ergebnis;
+}
+// IEL-B4a (E5): Wrapper-Paritaet zu pg.js. Ohne Save waere der Brueckenzustand nach einem
+// Neustart weg - genau der Fall, den E5 ausschliesst.
+export function bindInboundElConversation(callId, bindung) {
+  return speichereBeiAenderung(ops.bindInboundElConversation(load(), callId, bindung));
+}
+export function markInboundElFallback(callId, nowIso) {
+  return speichereBeiAenderung(ops.markInboundElFallback(load(), callId, nowIso));
+}
+export function markInboundElNachlaufStarted(callId, nowIso) {
+  return speichereBeiAenderung(ops.markInboundElNachlaufStarted(load(), callId, nowIso));
 }
 
 // OUTBOUND-E5: Wrapper-Paritaet zu pg.js (Muster recordSipCallId).

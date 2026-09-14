@@ -63,6 +63,12 @@ export function publicCall({
   // summarySmsSentAt/costProfile) - keine Nutzerfrage, kein Anzeige-Vertrag. Haelt
   // /api/state, die Self-Service-Antwort und die MCP-Ausgaben BYTE-IDENTISCH.
   webhookAnchors,
+  // IEL-B4a: der Brueckenzustand ist ein interner Ablauf-Riegel (Muster webhookAnchors/
+  // costProfile) - keine Nutzerfrage. Haelt /api/state, /api/calls/:id, den Art.-15-Export,
+  // die Self-Service-Antwort und die MCP-Ausgaben BYTE-IDENTISCH zum Bestand.
+  elBoundAt,
+  elFallbackAt,
+  elNachlaufStartedAt,
   ...rest
 }) {
   return rest;

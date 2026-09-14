@@ -82,6 +82,9 @@ import { resolvePeriodStartIso } from "../billing/period.js";
 // KV2-2: die Kostenprofil-Registry der Engine-Weiche. Import-frei von src/telephony/*
 // (s. Kopfkommentar kostenarten.js) - kein Zyklus in den Store-Graph.
 import { istBekanntesKostenprofil } from "../billing/kostenarten.js";
+// IEL-B4a: das EINE Zustands-Praedikat der Inbound-Bruecke. Blatt-Modul (importiert nur
+// kostenarten.js) -> kein Zyklus in den Store-Graph (Muster sip-call-id.js).
+import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 import { isKnownPlanSlug } from "../plans.js";
 // GAP-14: Wert-Guard fuer updateSettings (greeting muss den Inbound-Pflichtsatz tragen).
 // inbound-notice.js ist ein Blatt-Modul (kein Rueckimport, kein Zyklus).
@@ -410,6 +413,11 @@ export function createCall(
     // der Rueckfrage-Webhook (routes/webhooks-elevenlabs.js) einen laufenden Anruf
     // bindet. Initial null - byte-identisch zur pg-Hydrierung (rowToCall).
     elevenlabsConversationId: null,
+    // IEL-B4a (E5): der persistierte Brueckenzustand des EL-Inbound-Wegs - drei set-once
+    // ISO-Marker (bindInboundElConversation / markInboundElFallback /
+    // markInboundElNachlaufStarted). Initial null - byte-identisch zur pg-Hydrierung
+    // (rowToCall), kein json<->pg-Shape-Drift. NIE nach aussen (publicCall strippt sie).
+    elBoundAt: null, elFallbackAt: null, elNachlaufStartedAt: null,
     // PHASE-6-VORAUSSETZUNG (Fertig-Punkt 7, "die Kosten sind gemessen, aufgeschluesselt
     // nach ElevenLabs, Sprachmodell und Telefonie"): die SIP-Call-ID des ausgehenden Legs
     // (Form "otb_..."). Der EINZIGE Join zwischen unseren zwei Kostenquellen auf der
@@ -575,13 +583,14 @@ export function exportTenantData(s, tenantId) {
 // ist ein No-op (der zuerst gesetzte Marker gewinnt -> stabiler Zeitstempel, kein Doppel-
 // Schreiben). Fehlender call (null) -> changed=false, KEIN Throw (ein verspaeteter Retry
 // fuer einen unbekannten Call darf den Setter nicht crashen). Liefert { call, changed }
-// (Wrapper-Kontrakt: save NUR bei changed). BEWUSST nur fuer die drei Set-once-ISO-Marker:
-// recordFailureReason (value-gated + 3. Arg) und setCallEndedAt (status-gated, expliziter
-// Anker) haben andere Semantik und bleiben getrennt.
-function setOnceTimestamp(call, fieldName) {
+// (Wrapper-Kontrakt: save NUR bei changed). recordFailureReason (value-gated + 3. Arg) und
+// setCallEndedAt (status-gated, expliziter Anker) haben andere Semantik und bleiben
+// getrennt. atIso fehlt -> jetzt (alle Bestandsaufrufer); IEL-B4a reicht die Zeit explizit
+// herein (Fake-Uhr-faehig).
+function setOnceTimestamp(call, fieldName, atIso = new Date().toISOString()) {
   let changed = false;
   if (call && !call[fieldName]) {
-    call[fieldName] = new Date().toISOString();
+    call[fieldName] = atIso;
     changed = true;
   }
   return { call, changed };
@@ -671,6 +680,57 @@ export function markSummaryMailSent(s, callId) {
 // Voice-Minuten NICHT erneut. Wrapper saved bei changed.
 export function markBilled(s, callId) {
   return setOnceTimestamp(getCall(s, callId), "billedAt");
+}
+
+// IEL-B4a: Brueckenzustand
+//
+// Kanonische ISO-Form (genau Date#toISOString). Die pg-Spalten sind TIMESTAMPTZ: ein
+// unlesbarer Wert liesse den Flush ALLER Anrufe scheitern, eine andere lesbare Form kaeme
+// als anderer String zurueck (json<->pg-Drift). Verworfen, nicht geworfen (Muster
+// recordSipCallId): der Schreiber sieht changed/bound false.
+function istKanonischerIsoZeitpunkt(wert) {
+  if (typeof wert !== "string" || Number.isNaN(Date.parse(wert))) return false;
+  return new Date(wert).toISOString() === wert;
+}
+
+// Set-once-Marker mit EXPLIZITER Zeit: eine Fabrik fuer zwei Felder (G5, Muster
+// recordProviderHandleOnce). Liefert { call, changed } (E18: der Nachlauf-Start verzweigt
+// auf changed). Fehlender Call -> { call: null, changed: false }.
+const markOnceAt = (fieldName) => (state, callId, atIso) => {
+  const call = getCall(state, callId);
+  if (!istKanonischerIsoZeitpunkt(atIso)) return { call, changed: false };
+  return setOnceTimestamp(call, fieldName, atIso);
+};
+
+// E5/E8: der Rueckfall-Marker. Set-once, OHNE Zustands-Vorbedingung: ein Rueckfall nach
+// Bindung ist erlaubt und ergibt RUECKFALL (Rangfolge in bridgeStateOf).
+export const markInboundElFallback = markOnceAt("elFallbackAt");
+
+// E7(d)/E17/E18: Beginn des Nachlaufs = Carrier-Ende. Set-once; changed:true genau beim
+// ersten Setzen - das Start-Tor der Poll-Schleife (B4).
+export const markInboundElNachlaufStarted = markOnceAt("elNachlaufStartedAt");
+
+// E5/E11: die EINE Bindungs-Operation. Pruefen und Setzen in DERSELBEN synchronen Op
+// (Muster recordProviderHandleOnce). Die Vorbedingung ist das Praedikat selbst, nicht
+// eine zweite Formulierung davon (G5):
+//   WARTET                          -> bindet (Conversation-ID + elBoundAt), changed+bound
+//   GEBUNDEN, dieselbe ID           -> idempotent: bound true, changed false (nichts Neues)
+//   GEBUNDEN mit anderer ID, RUECKFALL, KEIN_EL_INBOUND, kein Call -> bound false
+// Ungueltige Eingabe (leere/Nicht-String-ID, nicht kanonische Zeit) -> bound false.
+// Objekt-Parameter statt vier Positionen (F1, Muster recordActualSender).
+export function bindInboundElConversation(state, callId, { conversationId, nowIso }) {
+  const call = getCall(state, callId);
+  const eingabeGueltig =
+    typeof conversationId === "string" && conversationId !== "" && istKanonischerIsoZeitpunkt(nowIso);
+  if (!eingabeGueltig) return { call, changed: false, bound: false };
+  const zustand = bridgeStateOf(call);
+  if (zustand === BRIDGE_STATE.GEBUNDEN) {
+    return { call, changed: false, bound: call.elevenlabsConversationId === conversationId };
+  }
+  if (zustand !== BRIDGE_STATE.WARTET) return { call, changed: false, bound: false };
+  call.elevenlabsConversationId = conversationId;
+  call.elBoundAt = nowIso;
+  return { call, changed: true, bound: true };
 }
 
 // SEC-P1: die Anker EINES verarbeiteten Turn-Webhooks anhaengen; aeltere fallen aus dem
@@ -932,6 +992,17 @@ export function cappedEndedAtMs(call, nowMs, defaultMaxDurationS) {
   const anchor = callStartAnchorMs(call);
   if (Number.isNaN(anchor)) return 0;
   return Math.min(nowMs, anchor + callLimitMs(call, defaultMaxDurationS));
+}
+
+// IEL-B4a (E17): Carrier-Ende eines Calls in ms - EINE Funktion fuer Buchung (Ende-Anker)
+// und Live-Term. Ohne elNachlaufStartedAt -> nowMs (Outbound/Budget byte-identisch). Mit
+// Marker -> min(nowMs, Marker): ein Call im Nachlauf waechst nicht weiter. Unlesbarer Marker
+// -> NaN (Math.min reicht es durch) - faehrt den Live-Term fail-closed wie
+// liveVoiceMinutesOf bei fehlendem Start-Anker. Rein, kein Aufrufer in B4a.
+export function carrierEndMsOf(call, nowMs) {
+  const nachlaufStartIso = call.elNachlaufStartedAt;
+  if (!nachlaufStartIso) return nowMs;
+  return Math.min(nowMs, Date.parse(nachlaufStartIso));
 }
 
 // CDF1 (Report #2 5.4): persistiert den maschinenlesbaren Fehlergrund (mapped Token) am
