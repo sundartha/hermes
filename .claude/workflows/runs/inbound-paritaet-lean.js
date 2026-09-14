@@ -52,16 +52,14 @@ const NODE_MODULES = `${REPO}/node_modules`;
 // Lauf neu gesetzt und vor dem Start noch einmal gelesen - eine stale Phase hier ist
 // ein Umbau am falschen Code.
 const A = {
-  "phaseId": "IP2",
-  "phaseTitle": "Hoerprobe: welchen Sprechpfad Inbound wirklich nimmt",
-  "branch": "phase/ip2-hoerprobe",
+  "phaseId": "IE6-S2",
+  "phaseTitle": "Die OpenAI-Realtime-Bridge (der vierte Zweig) ersatzlos entfernen",
+  "branch": "phase/ie6-s2-realtime-bridge-entfernen",
   "baseBranch": "master",
   "planDoc": "PLAN-INBOUND-PARITAET.md",
-  "specFile": "PLAN-INBOUND-PARITAET.md",
+  "specFile": "tasks/ie6-s2-spec.md",
   "maxFixRounds": 2,
-  "highStakes": false,
-  "planModel": "sonnet",
-  "planEffort": "high"
+  "highStakes": false
 };
 
 const PHASE = A.phaseId;
@@ -113,7 +111,7 @@ const CLEAN_CODE_REQ = `CLEAN-CODE (PFLICHT): Lies "${REPO}/.claude/refs/clean-c
 
 const ABS_RULES = `ABSOLUTE REGELN (unantastbar, siehe CLAUDE.md):
 - Safety-Gates NIE entfernen/aufweichen/per-Default umgehen: pro-Tenant-Kostendecke (sperrt BEIDE Richtungen, Inbound eingeschlossen), Denylist/Land-Gate/Stundenlimit, Max-Gespraechsdauer, Verifikation als Outbound-Permit, Kill-Switch OUTBOUND_FROZEN. Neue Endpunkte, die Calls/SMS/Geld ausloesen, brauchen dieselben Gates. (ALLOWED_NUMBERS ist seit dem outbound-p3-Cutover wirkungslos und wird nicht mehr gelesen - sein Fehlen ist KEIN Befund. MAX_BUDGET_EUR ist per Owner-Entscheidung E10 kein geschuetztes Gate mehr, sondern Beobachtung.)
-- Disclosure-Satz (disclosureSentence, claude.js + bridge.js) bleibt fest verdrahtet, unveraendert.
+- Disclosure-Satz (disclosureSentence, claude.js) bleibt fest verdrahtet, unveraendert. In Phase IE6-S2 wird src/bridge.js entfernt: dass seine Verwendung des Satzes mit dem Zweig verschwindet, ist KEIN Befund, solange claude.js und jeder ueberlebende Outbound-Weg unveraendert bleiben.
 - Auth fail-closed: Provider-Signaturpruefung /voice (Telnyx Ed25519; die Twilio-HMAC-Pruefung ist seit C-P3 per Owner-Entscheidung entfernt, ihr Fehlen ist KEIN Befund), Browser-Session (webAuthMw/adminMw) bzw. internalOnly, MCP-Auth - timing-sichere Vergleiche (safeEqual). Neue Endpunkte standardmaessig hinter Auth.
 - Secrets nur via env, nie loggen/in Responses oder MCP-Ausgaben leaken. Audio nie durch MCP.
 - SCOPE: NUR diese Phase. Keine ungefragten Extras. Keine neuen npm-Dependencies ohne explizite Freigabe in der Spec.`;
@@ -176,7 +174,7 @@ VORGEHEN:
 2. git checkout -b ${BRANCH} ${BASE}
 3. Implementiere EXAKT gemaess Plan. ${CLEAN_CODE_REQ}
 4. node --check auf JEDE neue/geaenderte .js-Datei.
-5. npm test (beide Backends: json-Default + pglite-in-process). Bestandstests nur bei bewusster Verhaltens-/Signatur-Aenderung anpassen (im Plan begruendet); neues Verhalten -> neuer Test.
+5. npm test -- --test-concurrency=4 (beide Backends: json-Default + pglite-in-process; OHNE Concurrency-Limit flaked die Bank auf dieser Maschine - Bestandsverhalten, kein Befund). Waehrend der Arbeit gezielte Testdateien, die volle Bank EINMAL am Ende. Bestandstests nur bei bewusster Verhaltens-/Signatur-Aenderung anpassen (im Plan begruendet); neues Verhalten -> neuer Test.
 6. Smoke (best-effort): Server auf freiem Port mit SKIP_TWILIO_SIGNATURE_CHECK=true + Dummy-Env, betroffene Route via curl; zu flaky -> smokePass=false + Grund (kein Blocker).
 7. node_modules-Symlink NICHT committen. git add (nur die betroffenen src/test/config/doc-Dateien) && git commit. headCommit = git rev-parse HEAD.
 ${ABS_RULES}
@@ -244,9 +242,9 @@ async function runReview(target, suffix) {
         `STRENGER, adversarialer Safety-/Verhaltens-Reviewer in frischem Worktree. Pruefe Phase ${PHASE} auf Branch "${target}".
 1. ln -s "${NODE_MODULES}" node_modules
 2. git checkout -b review-${String(PHASE).toLowerCase()}${suffix} ${target}
-3. npm test selbst (beide Backends) -> testsPassIndependently + Zahlen.
+3. npm test -- --test-concurrency=4 selbst (beide Backends; ohne das Limit flaked die Bank - ein nur dort roter Test ist KEIN Blocker, erst wenn er isoliert rot ist) -> testsPassIndependently + Zahlen.
 4. git diff ${BASE} ${target} gegen die absoluten Regeln pruefen.
-PRUEFE: scopeRespected (nur ${PHASE}, keine Extras, kein ungefragter npm-Dep), safetyGatesIntact, disclosureIntact (claude.js+bridge.js), authFailClosedIntact, noSecretsLeaked, behaviorAsIntended (flag-off byte-identisch, Invarianten wie in der Spec).
+PRUEFE: scopeRespected (nur ${PHASE}, keine Extras, kein ungefragter npm-Dep), safetyGatesIntact, disclosureIntact (claude.js unveraendert; bridge.js entfaellt in IE6-S2 absichtlich), authFailClosedIntact, noSecretsLeaked, behaviorAsIntended (flag-off byte-identisch, Invarianten wie in der Spec).
 ${ABS_RULES}
 approved=true NUR wenn alles erfuellt UND deine Tests gruen. Im Zweifel blockieren. Rueckgabe IST das Urteil.`,
         {
@@ -317,7 +315,7 @@ while (!gateOk(safety, cc) && round < MAX_FIX_ROUNDS) {
 ${JSON.stringify(blockers, null, 1)}
 ${CLEAN_CODE_REQ}
 ${ABS_RULES}
-4. node --check + npm test (beide Backends) gruen. node_modules NICHT committen. git add (betroffene Dateien) && git commit -m "fix(${String(PHASE).toLowerCase()}): Review-Blocker beheben (Runde ${round})". headCommit = git rev-parse HEAD.
+4. node --check + npm test -- --test-concurrency=4 (beide Backends) gruen. node_modules NICHT committen. git add (betroffene Dateien) && git commit -m "fix(${String(PHASE).toLowerCase()}): Review-Blocker beheben (Runde ${round})". headCommit = git rev-parse HEAD.
 EHRLICH: was du NICHT loesen konntest, in summary nennen.`,
     {
       label: `${PHASE}-fix-r${round}`,

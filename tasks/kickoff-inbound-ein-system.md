@@ -1,5 +1,9 @@
 # Kickoff: EIN Gesprächs-System für Inbound und Outbound
 
+> **Stand 2026-09-14: in Teilen überholt.** Was die Nacht gemessen, gebaut und korrigiert
+> hat (IE1 nicht messbar ohne Owner, IE6 Stufe 1+2 gemergt, drei falsche Aussagen unten),
+> steht in `tasks/inbound-ein-system-stand.md`. Bei Widerspruch gilt jene Datei.
+
 Geschrieben am 2026-09-13 als Übergabe an die nächste Sitzung.
 **Jede Aussage hier ist entweder am Code, am Live-Log oder an einer Anbieter-Antwort
 gemessen. Was nicht gemessen ist, steht unter „Nicht belegt" — von dort darf nichts als
