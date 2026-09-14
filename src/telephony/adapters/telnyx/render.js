@@ -144,21 +144,41 @@ function dialTimeLimitS(seconds) {
   return Math.min(DIAL_TIME_LIMIT_MAX_S, Math.max(DIAL_TIME_LIMIT_MIN_S, seconds));
 }
 
+// Pflichtfelder der Dial-Direktive (uri, username, password, callerId, statusCallbackUrl):
+// fail-closed statt stillem String(undefined) -> "undefined" im TeXML (IEL-B7-S1a). Ein
+// SIP-INVITE mit woertlich falschem Digest-Username an eine echte Gegenstelle
+// (sip.rtc.elevenlabs.io) darf nie klaglos rausgehen. Eine Pruef-Funktion fuer alle fuenf
+// Felder (G5, keine Duplizierung) statt fuenf gleichlautender Checks; der Feldname im
+// Fehlertext ist kein Wert der Direktive (username/password/callerId/uri/statusCallbackUrl
+// sind reine Schluesselnamen, keine Secrets).
+function requireDialField(directive, fieldName) {
+  const value = directive[fieldName];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Dial-Direktive: ${fieldName} fehlt oder ist kein nichtleerer String`);
+  }
+  return value;
+}
+
 // <Dial><Sip>: alle Attribute und die URI laufen durch escapeXml (attrString). Attribut-
 // Reihenfolge ist vertraglich (Snapshot test/iel-dial-render.test.js).
 function renderDialSip(directive) {
+  const uri = requireDialField(directive, "uri");
+  const username = requireDialField(directive, "username");
+  const password = requireDialField(directive, "password");
+  const callerId = requireDialField(directive, "callerId");
+  const statusCallbackUrl = requireDialField(directive, "statusCallbackUrl");
   const dial = attrString({
-    callerId: directive.callerId,
+    callerId,
     timeout: directive.timeoutS,
     timeLimit: dialTimeLimitS(directive.timeLimitS),
   });
   const sip = attrString({
-    username: directive.username,
-    password: directive.password,
-    statusCallback: directive.statusCallbackUrl,
+    username,
+    password,
+    statusCallback: statusCallbackUrl,
     statusCallbackEvent: SIP_STATUS_CALLBACK_EVENT,
   });
-  return `<Dial${dial}><Sip${sip}>${escapeXml(directive.uri)}</Sip></Dial>`;
+  return `<Dial${dial}><Sip${sip}>${escapeXml(uri)}</Sip></Dial>`;
 }
 
 // Eine Direktive in TeXML uebersetzen (eine Abstraktionsebene, G34).

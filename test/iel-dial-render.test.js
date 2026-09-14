@@ -127,6 +127,28 @@ test("IEL-B7-4: timeLimit keine Zahl -> wirft ohne Wert", () => {
   }
 });
 
+test("IEL-B7-4b: fehlendes Pflichtfeld -> wirft ohne 'undefined' im TeXML", () => {
+  for (const feld of ["uri", "username", "password", "callerId", "statusCallbackUrl"]) {
+    assert.throws(
+      () => renderDirectives([baueDialSip({ [feld]: undefined })]),
+      (err) => {
+        assert.match(err.message, new RegExp(feld));
+        assert.ok(!err.message.includes("pw-geheim"));
+        assert.ok(!err.message.includes("hermes-sip"));
+        assert.ok(!err.message.includes(DID));
+        return true;
+      },
+      `Feld ${feld} fehlt`,
+    );
+  }
+});
+
+test("IEL-B7-4c: leerer String beim Pflichtfeld -> wirft ebenso", () => {
+  for (const feld of ["uri", "username", "password", "callerId", "statusCallbackUrl"]) {
+    assert.throws(() => renderDirectives([baueDialSip({ [feld]: "" })]), new RegExp(feld), `Feld ${feld} leer`);
+  }
+});
+
 test("IEL-B7-5: Dial in der Erstantwort-Reihenfolge", () => {
   const inner = renderEinzeln([
     say("Pflicht"),
