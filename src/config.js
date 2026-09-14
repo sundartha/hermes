@@ -838,16 +838,28 @@ const rawConfig = {
   // bleibt unser (und damit der Hangup-Griff).
   // DEFAULT AUS, fail-closed wie alle Engine-Weichen.
   //
-  // STAND IE3: der Sprechpfad selbst kommt in IE5. Heute liest GENAU EIN Verbraucher
-  // diesen Wert - der Boot-Riegel (boot.js#assertLatentCostPaths ->
-  // boot-guard.js#latentCostPathFindings, Befund el_inbound_carrier_uncollected). Das ist
-  // die Reihenfolge, die der Kostenarten-Katalog verlangt: die Katalogzeile und ihr Riegel
-  // stehen, BEVOR der Weg live gehen kann - "Flag an, Kosten unsichtbar" ist damit
-  // strukturell ausgeschlossen, nicht per Disziplin.
+  // STAND IEL-B1: noch kein Sprechpfad (Weiche kommt mit IEL-B8). Leser heute: zwei
+  // Boot-Riegel (latentCostPathFindings: Kostenpfad hat Einsammler; elInboundAccessFindings:
+  // Zugang vollstaendig) und die Banner-Zeile. Die Reihenfolge, die der Kostenarten-Katalog
+  // verlangt, bleibt: die Katalogzeile und ihr Riegel stehen, BEVOR der Weg live gehen kann -
+  // "Flag an, Kosten unsichtbar" ist damit strukturell ausgeschlossen, nicht per Disziplin.
   elevenLabsInbound: {
     enabled: boolEnv("ELEVENLABS_INBOUND_ENABLED", process.env.ELEVENLABS_INBOUND_ENABLED, {
       fallback: false,
     }),
+    // IEL-B1: WELCHE Tenants den EL-Inbound-Weg ueberhaupt bekommen. LEER = NIEMAND, nie
+    // JEDER (Muster ownerSelfCallTenantIds). Einmal gesplittet/getrimmt (csvEnv), das
+    // Praedikat (elevenlabs/inbound-path-decision.js) vergleicht nur noch strikt.
+    tenantIds: csvEnv(process.env.ELEVENLABS_INBOUND_TENANT_IDS),
+    // IEL-B1: Digest-Zugang, mit dem unser <Dial><Sip> sich bei ElevenLabs anmeldet - EIN
+    // gemeinsamer Zugang fuer alle gepinnten DIDs. Passwort SECRET - nie loggen/leaken.
+    // .trim() wie bei elevenLabsToolToken: ein eingefuegtes Newline waere ein Zugang, der
+    // nie passt. Mindestlaenge und Boot-Riegel: inbound-path-decision.js / boot-guard.js.
+    sipUser: (process.env.ELEVENLABS_INBOUND_SIP_USER || "").trim(),
+    sipPassword: (process.env.ELEVENLABS_INBOUND_SIP_PASSWORD || "").trim(), // SECRET
+    // IEL-B1: geteiltes Geheimnis des Conversation-Initiation-Webhooks. SECRET - nie
+    // loggen, nie in eine Antwort. Heute liest es nur der Boot-Riegel.
+    initWebhookToken: (process.env.ELEVENLABS_INIT_WEBHOOK_TOKEN || "").trim(), // SECRET
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----

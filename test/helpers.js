@@ -14,6 +14,10 @@ import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js"
 import { makeDefaultState } from "../src/store/state-ops.js";
 import * as stateOps from "../src/store/state-ops.js";
 import { PAYMENT_METHOD_TYPE_CARD } from "../src/billing/payment-method-eligibility.js";
+import {
+  SIP_PASSWORD_MIN_LENGTH,
+  INIT_WEBHOOK_TOKEN_MIN_LENGTH,
+} from "../src/elevenlabs/inbound-path-decision.js";
 
 // ROOT exportiert (AM3): single-origin-serving.test.js bildet einen RELATIVEN
 // WEB_DIST_DIR gegen das Arbeitsverzeichnis des Spawn-Childs (= ROOT).
@@ -266,6 +270,13 @@ export const BASE_ENV = {
   // via dotenv in jeden Spawn-Test (Lehre test-base-env-drift). test/ie3-...test.js setzt
   // ihn gezielt auf "true".
   ELEVENLABS_INBOUND_ENABLED: "false",
+  // IEL-B1: neutral LEER (= niemand gepinnt, kein Zugang), sonst leakt eine lokale .env
+  // via dotenv in jeden Spawn-Test (Lehre test-base-env-drift) - bei diesen Schluesseln mit
+  // Secret-Folge. Tests mit Schalter an setzen EL_INBOUND_ACCESS_BOOT_ENV (unten).
+  ELEVENLABS_INBOUND_TENANT_IDS: "",
+  ELEVENLABS_INBOUND_SIP_USER: "",
+  ELEVENLABS_INBOUND_SIP_PASSWORD: "",
+  ELEVENLABS_INIT_WEBHOOK_TOKEN: "",
   // ---- Store-Backend + Onboarding/Provisioning ----
   // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.
@@ -1114,6 +1125,16 @@ export const PLAN_PRICE_BOOT_ENV = Object.freeze({
   STRIPE_BUSINESS_PRICE_ID: "price_test_business",
 });
 
+// IEL-B1: seit dem Boot-Riegel (boot-guard.js#elInboundAccessFindings) bootet
+// ELEVENLABS_INBOUND_ENABLED=true nur mit vollstaendigem Zugang. EINE Quelle (G5, Muster
+// PLAN_PRICE_BOOT_ENV). Attrappen in EXAKTER Mindestlaenge (Grenzfall gilt als gueltig);
+// kein Anbieter sieht sie je.
+export const EL_INBOUND_ACCESS_BOOT_ENV = Object.freeze({
+  ELEVENLABS_INBOUND_SIP_USER: "iel-test-sip-user",
+  ELEVENLABS_INBOUND_SIP_PASSWORD: "p".repeat(SIP_PASSWORD_MIN_LENGTH),
+  ELEVENLABS_INIT_WEBHOOK_TOKEN: "t".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH),
+});
+
 // POST /api/calls (Outbound-Origination-Trigger). Liefert die rohe fetch-Response
 // (Caller entscheidet, ob nur der Status oder auch der JSON-Body gebraucht wird).
 export function placeCall(srv, to = TELNYX_TEST_PEER_NUMBER) {
@@ -1142,6 +1163,14 @@ export function postTelnyxIncoming(
     headers: TELNYX_TEST_SIGNATURE_HEADERS,
     body: new URLSearchParams(body),
   });
+}
+
+// IEL-B1: die zwei server-erzeugten Zufallsanteile einer /voice/incoming-Antwort auf feste
+// Platzhalter - EINE Quelle fuer jeden Byte-Vergleich des Inbound-TeXML.
+export function normalizeIncomingTexml(texml) {
+  return texml
+    .replaceAll(/callId=call_[a-zA-Z0-9]+/g, "callId=call_X")
+    .replaceAll(/turnToken=[a-f0-9]+/g, "turnToken=X");
 }
 
 // Seedet EINE aktive Telnyx-Nummer (TELNYX_TEST_TENANT_NUMBER) am Owner-Tenant - Inbound-

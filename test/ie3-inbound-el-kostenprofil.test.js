@@ -19,7 +19,7 @@ import {
 } from "../src/billing/kostenarten.js";
 import { latentCostPathFindings, LATENT_COST_PATH_FINDING } from "../src/boot-guard.js";
 import { sweepTraegerFuerProfil } from "../src/billing/sweep-kostenbeleg.js";
-import { startServer } from "./helpers.js";
+import { startServer, EL_INBOUND_ACCESS_BOOT_ENV } from "./helpers.js";
 
 const HTTP_OK = 200;
 // Der heutige Live-Wert von COST_TRUING_REQUIRED_RECORD_TYPES, als Testeingabe fuer die
@@ -143,8 +143,10 @@ test("IE3-5 (abgeleiteter Riegel): jedes Profil mit telnyx_call_records liefert 
   }
 });
 
-test("IE3-6 (Verdrahtung, Spawn): ELEVENLABS_INBOUND_ENABLED=true bootet sauber - kein el_inbound_carrier_uncollected", async () => {
-  const srv = await startServer({ env: { ELEVENLABS_INBOUND_ENABLED: "true" } });
+test("IE3-6 (Verdrahtung, Spawn): ELEVENLABS_INBOUND_ENABLED=true mit vollstaendigem Zugang (IEL-B1) bootet sauber - kein el_inbound_carrier_uncollected", async () => {
+  // Seit IEL-B1 verweigert der Boot den Schalter ohne Zugang; die Aussage dieses Tests
+  // (Kostenpfad hat Einsammler) bleibt unveraendert.
+  const srv = await startServer({ env: { ELEVENLABS_INBOUND_ENABLED: "true", ...EL_INBOUND_ACCESS_BOOT_ENV } });
   try {
     const res = await fetch(`${srv.localUrl}/healthz`);
     assert.equal(res.status, HTTP_OK);

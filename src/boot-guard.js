@@ -10,6 +10,8 @@ import {
 } from "./store/defaults.js";
 import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
 import { usableFallbackProvider } from "./llm/provider.js";
+// IEL-B1: die EINE Definition von "Zugang des EL-Inbound-Wegs vollstaendig" (rein, config-frei).
+import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.js";
 
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
 // Blast-Radius: faengt jeden Fehler, loggt ihn laut + secret-frei (nur err.message)
@@ -830,4 +832,34 @@ export function latentCostPathFindings({
     });
   }
   return findings;
+}
+
+// IEL-B1: Schalter an, aber der Weg kann nie zustande kommen (SIP-Digest ohne Benutzer/
+// Passwort, Init-Webhook ohne tragfaehiges Geheimnis) -> FATAL. Ein Schalter, der "an"
+// meldet und still immer den Budget-Pfad faehrt, waere genau die Blindheit, die der
+// Owner-Testanruf sonst erst am Telefon entdeckt. Der Befund nennt NUR Schluesselnamen
+// und Mangel, nie einen Wert und keine Laenge (Regel 4). Alle Maengel in EINER Meldung:
+// applyBootFindings druckt nur den ersten fatalen Befund.
+export const EL_INBOUND_ACCESS_FINDING = Object.freeze({
+  INCOMPLETE: "el_inbound_access_incomplete", // FATAL (IEL-B1)
+});
+
+function zugangsMangelText(defekt) {
+  return `${defekt.envKey} ${defekt.mangel}`;
+}
+
+export function elInboundAccessFindings(inbound) {
+  if (inbound.enabled !== true) return [];
+  const defekte = inboundElAccessDefects(inbound);
+  if (defekte.length === 0) return [];
+  return [
+    {
+      code: EL_INBOUND_ACCESS_FINDING.INCOMPLETE,
+      fatal: true,
+      message:
+        "ELEVENLABS_INBOUND_ENABLED=true, aber der Zugang des EL-Inbound-Wegs ist " +
+        `unvollstaendig: ${defekte.map(zugangsMangelText).join(", ")}. Handlung: ` +
+        "ELEVENLABS_INBOUND_ENABLED=false setzen oder die Geheimnisse per Skript-Lauf neu setzen.",
+    },
+  ];
 }
