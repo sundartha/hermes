@@ -37,9 +37,10 @@ export const fehlerAntwort = (envelope) => ({ ok: false, status: envelope.httpSt
 
 // ---- Build: Datensaetze ------------------------------------------------------------------
 
-// Ein ueberbrueckter Inbound-Call (GEBUNDEN) mit echter Store-Herkunft. answeredAt stammt
-// in Produktion aus /voice/incoming (unser Telnyx-Bein), twilioSid aus req.body.CallSid.
-export function seedInboundElCall(state, { answeredVorS, nachlaufVorS = null }) {
+// IEL-B6: ein WARTENDER Inbound-EL-Call (noch nicht gebunden) mit echter Store-Herkunft.
+// answeredAt stammt in Produktion aus /voice/incoming (unser Telnyx-Bein), twilioSid aus
+// req.body.CallSid.
+export function seedWartenderElCall(state, { answeredVorS }) {
   const call = ops.createCall(state, {
     direction: "inbound",
     from: INBOUND_FROM,
@@ -50,6 +51,12 @@ export function seedInboundElCall(state, { answeredVorS, nachlaufVorS = null }) 
   call.startedAt = isoVor(answeredVorS);
   call.answeredAt = call.startedAt;
   ops.recordCostProfile(state, call.id, KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI);
+  return call;
+}
+
+// Ein ueberbrueckter Inbound-Call (GEBUNDEN) - derselbe Seed, danach gebunden.
+export function seedInboundElCall(state, { answeredVorS, nachlaufVorS = null }) {
+  const call = seedWartenderElCall(state, { answeredVorS });
   ops.bindInboundElConversation(state, call.id, { conversationId: CONV_ID, nowIso: new Date().toISOString() });
   if (nachlaufVorS !== null) ops.markInboundElNachlaufStarted(state, call.id, isoVor(nachlaufVorS));
   return call;

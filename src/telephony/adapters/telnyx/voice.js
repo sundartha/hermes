@@ -10,6 +10,8 @@
 //              -> Twilio-kompatible Call-Resource, sid = CallSid.
 //   endCall:   POST {base}/v2/texml/Accounts/{account_sid}/Calls/{call_sid}
 //              (form, Status=completed) -> beendet den Call (Twilio-kompatibel).
+//   redirectCall: POST {base}/v2/texml/Accounts/{account_sid}/Calls/{call_sid}
+//              (form, Url + Method) -> leitet den Live-Call um (Telnyx Update-Call, 2026-09-15).
 import { config } from "../../../config.js";
 import { assertTelnyxOk } from "./errors.js";
 import { parseDecimalToMicroCents, parseNonNegativeInteger } from "./cost-parse.js";
@@ -23,6 +25,10 @@ const FORM_HEADERS_TYPE = "application/x-www-form-urlencoded";
 const JSON_HEADERS_TYPE = "application/json";
 // Call-Control-Action-Slug (Teil des URL-Vertrags, benannt gegen Tippfehler; G25).
 const HANGUP_ACTION = "hangup";
+
+// TeXML-Update-Call-Werte (Teil des Formvertrags, G25).
+const TEXML_STATUS_COMPLETED = "completed";
+const REDIRECT_URL_METHOD = "POST"; // die /voice-Routen nehmen POST an
 
 // AMD-Feldnamen (GAP-21). TeXML ist Twilio-kompatibel (PascalCase-Formfelder).
 // VORBEDINGUNG der Phase: den Namen VOR dem Scharfschalten gegen einen echten Objekt-GET
@@ -279,6 +285,19 @@ async function postCallControlAction(callControlId, { action, body, op }) {
   );
   await assertTelnyxOk(res, op, ATTACH_STATUS);
   logCallControlOk(op, res.status, Boolean(callControlId));
+}
+
+// EINE Stelle (G5) fuer die TeXML-Call-Ressource: Config-Pruefung, URL, Bearer-Form-Header und
+// Fehlerform - geteilt von endCall (Status) und redirectCall (Url). form/op als Objekt (F1).
+async function updateTexmlCall(callSid, { form, op }) {
+  if (!config.telephony.telnyxApiKey) throw new Error(`Telnyx ${op}: TELNYX_API_KEY fehlt`);
+  if (!config.telephony.telnyxAccountSid)
+    throw new Error(`Telnyx ${op}: TELNYX_ACCOUNT_SID fehlt`);
+  const res = await fetch(
+    `${config.telephony.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telephony.telnyxAccountSid}/Calls/${callSid}`,
+    { method: "POST", headers: headers(), body: form },
+  );
+  await assertTelnyxOk(res, op, ATTACH_STATUS);
 }
 
 // ---- CDR/Ist-Kosten Helfer (PLAN-LIVE-COST-TRACING P1) ----
@@ -664,14 +683,21 @@ export const telnyxVoice = {
   // Konstante, daher aus config statt durch den Port-Vertrag gereicht (endCall
   // bekommt nur den CallSid).
   async endCall(callSid) {
-    if (!config.telephony.telnyxApiKey) throw new Error("Telnyx endCall: TELNYX_API_KEY fehlt");
-    if (!config.telephony.telnyxAccountSid)
-      throw new Error("Telnyx endCall: TELNYX_ACCOUNT_SID fehlt");
-    const res = await fetch(
-      `${config.telephony.telnyxApiBase}${TEXML_BASE}/Accounts/${config.telephony.telnyxAccountSid}/Calls/${callSid}`,
-      { method: "POST", headers: headers(), body: new URLSearchParams({ Status: "completed" }) },
-    );
-    await assertTelnyxOk(res, "endCall", ATTACH_STATUS);
+    await updateTexmlCall(callSid, {
+      form: new URLSearchParams({ Status: TEXML_STATUS_COMPLETED }),
+      op: "endCall",
+    });
+  },
+
+  // IEL-B7 (E9): Live-Umleitung eines laufenden TeXML-Calls (Telnyx Update-Call: Url + Method).
+  // Traegt KEIN Status-Feld - ein Status=completed wuerde auflegen statt umleiten. Leere
+  // callSid -> fail-closed ohne Netz (sonst POST auf die Collection-Ressource).
+  async redirectCall(callSid, url) {
+    if (!callSid) throw new Error("Telnyx redirectCall: callSid fehlt");
+    await updateTexmlCall(callSid, {
+      form: new URLSearchParams({ Url: url, Method: REDIRECT_URL_METHOD }),
+      op: "redirectCall",
+    });
   },
 
   // --- Call-Control-Hangup (Altbestand: Legs mit persistierter callControlId, s. hangUpAction) ---

@@ -96,6 +96,7 @@ oeffentlich|POST|/auth/logout|204|keine|ohne Sitzung wirkungslos
 oeffentlich|POST|/webhooks/stripe|400|keine|HMAC-Pruefung schlaegt fehl (PAYMENT_ENABLED aus waere 404)
 oeffentlich|POST|/webhooks/elevenlabs/consult|403|keine|Werkzeug-Token fehlt -> 403, auch bei leerem ELEVENLABS_TOOL_TOKEN
 oeffentlich|POST|/webhooks/elevenlabs/lookup|403|keine|Werkzeug-Token fehlt -> 403, gleiche Bauart wie consult (Thema B)
+oeffentlich|POST|/webhooks/elevenlabs/init|403|keine|Init-Token fehlt -> 403, auch bei leerem ELEVENLABS_INIT_WEBHOOK_TOKEN (IEL-B6)
 oeffentlich|GET|/tenant.html|302|keine|Altpfad-Umleitung auf /app
 oeffentlich|GET|/login|302|keine|AUTH-P7-Umleitung auf /auth/login
 oeffentlich|GET|/signin|302|keine|AUTH-P7-Umleitung auf /auth/login

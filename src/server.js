@@ -23,6 +23,7 @@ import { makePriceDriftWatch } from "./billing/price-drift-watch.js";
 import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
+import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.js";
 import { metrics } from "./metrics.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
@@ -241,6 +242,17 @@ const callFinish = makeCallFinish({
 // demselben Gespraech. Konstruiert NACH callFinish (linearer DAG): finishCall kommt fertig
 // gebunden herein, terminateAndBillCall/billThunk sind dieselben Bausteine wie in
 // call-lifecycle (kein zweiter, buchungsfreier Terminierungspfad, INV-9).
+//
+// IEL-B4 (E7b): Beende-Versuch des Telnyx-Elternbeins eines ueberbrueckten Inbound-Calls
+// (Nachlauf-Frist, 3x 401/404). DIESELBE Handle-Entscheidung wie Cap und cancel_call
+// (hangUpAction, eine Quelle); ohne Call oder Handle kein Versuch (fail-safe wie dort).
+// IEL-B6: benannt, weil die Frist-Wirkung der Inbound-Bruecken (inboundBridges unten)
+// dieselbe Instanz nutzt (G5).
+const endCarrierCall = (callId) => {
+  const call = store.getCall(callId);
+  const auflegen = call ? hangUpAction(voiceControl, call, call.twilioSid) : null;
+  return auflegen?.();
+};
 const elevenLabsOutbound = makeElevenLabsOutbound({
   store,
   config,
@@ -257,14 +269,8 @@ const elevenLabsOutbound = makeElevenLabsOutbound({
   // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler - hier verdrahtet statt in
   // outbound.js importiert (Begruendung an der Signatur dort, Lehre test-base-env-drift).
   metrics,
-  // IEL-B4 (E7b): Beende-Versuch des Telnyx-Elternbeins eines ueberbrueckten Inbound-Calls
-  // (Nachlauf-Frist, 3x 401/404). DIESELBE Handle-Entscheidung wie Cap und cancel_call
-  // (hangUpAction, eine Quelle); ohne Call oder Handle kein Versuch (fail-safe wie dort).
-  endCarrierCall: (callId) => {
-    const call = store.getCall(callId);
-    const auflegen = call ? hangUpAction(voiceControl, call, call.twilioSid) : null;
-    return auflegen?.();
-  },
+  // IEL-B4 (E7b): s. endCarrierCall darueber.
+  endCarrierCall,
 });
 
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper
@@ -291,6 +297,15 @@ const lifecycle = makeCallLifecycle({
   cappedEndedAtMs,
   classifyCallTime,
   blockingBudgetAxis, // KS-P1b: die EINE Geld-Achse fuer die Re-Attach-Pruefung
+});
+
+// IEL-B6 (E9): Frist-Timer der wartenden Inbound-EL-Bruecken. EINE Instanz (INV-7): die
+// Init-Route loescht, der Boot re-armiert, B8 armiert. Die Wirkung ist Live-Umleitung auf den
+// Rueckfall, sonst Auflegen ueber dasselbe endCarrierCall wie der Nachlauf - nie Stille.
+const inboundBridges = makeInboundBridges({
+  store,
+  umleiten: ({ call, rueckfallUrl }) =>
+    umleitenOderAuflegen({ voiceControl, endCarrierCall, call, url: `${config.server.publicUrl}${rueckfallUrl}` }),
 });
 
 // provisioning-orchestrator (P6): enqueue/trigger/drain(single-flight)/reconcile fuer den
@@ -399,6 +414,8 @@ const deps = {
   messaging,
   consultDelivery,
   elevenLabsOutbound,
+  // IEL-B6: die EINE Frist-Instanz der Inbound-Bruecken (Init-Route + Boot-Re-Arm).
+  inboundBridges,
   // F2-Mail: die spaet gebundene Accounts-Zelle (s. Kommentar oben) - buildApp reicht sie
   // bis wireWebLogin durch, das accountsRef.current NACH dem Bau von accounts setzt.
   accountsRef,

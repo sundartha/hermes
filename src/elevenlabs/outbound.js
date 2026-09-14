@@ -415,6 +415,12 @@ const LIST_DASH = /^-\s+/;
 // blanker Wert genau die nackte Ueberschrift ("CONSTRAINTS:"), die es zu vermeiden gilt.
 const alsText = (wert) => (typeof wert === "string" ? wert.trim() : "");
 
+// IEL-B6 (E12): EIN Auftraggeber-Ausdruck fuer beide Richtungen - der Name, sonst der
+// Fallback der Sprache des Satzes, in den er faellt.
+export function auftraggeberAusdruck(ownerName, locale) {
+  return alsText(ownerName) || locale.disclosureOwnerFallback;
+}
+
 const roleOf = (role) => (role === AGENT_ROLE ? AGENT_ROLE : CALLER_ROLE);
 
 const endStatusOf = (conversation) =>
@@ -673,7 +679,7 @@ function backgroundText({ context, briefing }) {
 // Anbieter aufloest, ist im besten Fall Muell und im schlechtesten der 1008-Abbruch (der
 // Angerufene hoert Stille, belegt im Kopfkommentar von
 // test/el-vorlage-variablen-abgleich.test.js). Benannt statt nackt im Code (G25).
-const PLACEHOLDER_OPENER = "{{";
+export const PLACEHOLDER_OPENER = "{{";
 
 // OC-P2: die Prompt-Sektion fuer den Owner-Fall - gebaut wie constraintsText/
 // backgroundText: "" oder ein fertiger Block mit fuehrendem Zeilenumbruch, NIE null, NIE
@@ -925,7 +931,9 @@ const ohneMetrikMeldung = Object.freeze({ logSenderFallback: () => {} });
 // P4a: `owner` kommt HEREIN statt hier berechnet zu werden - EIN Auftraggeber-Ausdruck
 // fuer alle drei Leser (owner_name, callee_relation, die uebersteuerte Eroeffnung) lebt
 // jetzt in startCallBody (G5); drei Rechnungen desselben Defaults waeren drei Wahrheiten.
-function dynamicVariables({
+// IEL-B6: der Inbound-Builder (inbound-initiation.js) leitet seine Schluesselmenge hieraus
+// ab (eine Quelle) - deshalb exportiert.
+export function dynamicVariables({
   call,
   owner,
   offenlegung,
@@ -1225,7 +1233,7 @@ function startCallBody({
   // EIN Auftraggeber-Ausdruck fuer alle drei Leser (owner_name, callee_relation und die
   // uebersteuerte Eroeffnung) - drei Rechnungen desselben Defaults waeren drei Wahrheiten
   // (G5). Der Default spricht die Sprache des PFLICHTSATZES, in den er eingesetzt wird.
-  const owner = alsText(ownerName) || offenlegung.disclosureOwnerFallback;
+  const owner = auftraggeberAusdruck(ownerName, offenlegung);
   return {
     agent_id: el.agentId,
     // OUTBOUND-E5 (F3): die Registrierung der DID DES ANRUFENDEN TENANTS. Der Anrufkoerper

@@ -126,7 +126,8 @@ function isPlainObject(wert) {
 // Objekt darunter (ein Array-Wert wie asr.keywords zaehlt selbst als Blatt - kein
 // Array-Pfad steht auf der Whitelist, ein Aufloesen der Eintraege braechte nichts). Ein
 // leeres Objekt traegt keinen Blatt-Pfad: nichts gesetzt, nichts zu verbieten.
-function overrideLeafPaths(wert, prefix) {
+// IEL-B6: derselbe Pfad-Waechter fuer die Init-Antwort (G5) - deshalb exportiert.
+export function overrideLeafPaths(wert, prefix) {
   if (!isPlainObject(wert)) return prefix.length ? [prefix.join(OVERRIDE_PATH_SEPARATOR)] : [];
   return Object.entries(wert).flatMap(([schluessel, kind]) =>
     overrideLeafPaths(kind, [...prefix, schluessel]),

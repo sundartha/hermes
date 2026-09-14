@@ -102,3 +102,10 @@ export function greetingForLanguage(storedGreeting, language) {
   if (templates.includes(greeting)) return greeting;
   return ALL_GREETING_TEMPLATES.includes(greeting) ? templates[0] : greeting;
 }
+
+// IEL-B6: die gespeicherte Begruessung eines Anrufs mit eingesetztem Auftraggeber - EINE
+// Quelle fuer /voice/incoming und die Init-Antwort des ElevenLabs-Inbound-Wegs. Wirft bei
+// greetingForLanguage(null, ...) unveraendert (voice-incoming-catch-path).
+export function gespeicherteBegruessungFuer({ storedGreeting, language, ownerName }) {
+  return greetingForLanguage(storedGreeting, language).replaceAll("{owner}", ownerName);
+}

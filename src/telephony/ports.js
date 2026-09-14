@@ -99,6 +99,11 @@
  * @property {(callControlId: string) => Promise<void>} [endCallViaCallControl]
  *   Call-Control-Hangup fuer persistierten Altbestand (hangUpAction). ZUSAETZLICH zu endCall
  *   (TeXML, unveraendert). Telnyx-only.
+ * @property {(providerCallSid: string, url: string) => Promise<void>} [redirectCall]
+ *   IEL-B7 (E9): leitet einen LAUFENDEN TeXML-Call live auf neue TeXML-Anweisungen um (Url,
+ *   POST). OPTIONAL wie endCallViaCallControl: fehlt die Methode, zaehlt das beim Aufrufer als
+ *   gescheiterte Umleitung (inbound-bridges.js legt dann auf - nie Stille). Wirft MIT
+ *   Status, NIE mit API-Key oder Roh-Body.
  * @property {(params?: VoiceCostRecordPoolParams) => Promise<VoiceCostRecordPool>} [fetchCostRecordPool]
  *   Roh-Belege EINES Sweeps (Provider-CDR), gedacht fuer EINEN Aufruf je Sweep VOR der
  *   Kandidatenschleife: der Abruf ist schleifeninvariant (nur filter[record_type] +

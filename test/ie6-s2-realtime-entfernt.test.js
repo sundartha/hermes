@@ -174,7 +174,8 @@ test("IE6-S2-6: Render fail-closed - unbekannte Direktive (stream) wirft, kein S
     () => renderDirectives([{ kind: "stream", url: "wss://x", params: [] }]),
     /unbekannte Direktive: stream/,
   );
-  assert.deepEqual(Object.keys(direktiven.DIRECTIVE), ["SAY", "GATHER", "HANGUP", "REDIRECT"]);
+  // IEL-B7: DIAL_SIP ist die einzige Erweiterung seit IE6-S2; STREAM bleibt draussen.
+  assert.deepEqual(Object.keys(direktiven.DIRECTIVE), ["SAY", "GATHER", "HANGUP", "REDIRECT", "DIAL_SIP"]);
   assert.ok(!("stream" in direktiven));
 });
 

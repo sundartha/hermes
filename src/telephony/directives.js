@@ -19,6 +19,7 @@ export const DIRECTIVE = Object.freeze({
   GATHER: "gather", // Sprach-Eingabe einsammeln; optionaler Prompt + Folge-Action
   HANGUP: "hangup",
   REDIRECT: "redirect",
+  DIAL_SIP: "dial_sip", // IEL-B7: Anruf an eine SIP-Gegenstelle ueberbruecken
 });
 
 // --- Builder (intentions-ausdrueckende Namen, <=3 Args via Objekt-Param) ---
@@ -59,3 +60,18 @@ export const gather = ({
 export const hangup = () => ({ kind: DIRECTIVE.HANGUP });
 
 export const redirect = (url) => ({ kind: DIRECTIVE.REDIRECT, url });
+
+// IEL-B7 (L1/E9): Bruecke an eine SIP-Gegenstelle mit Digest-Zugang. Neutral: Sekunden als
+// Zahl, die zulaessigen Grenzen des Anbieters setzt der Adapter (Renderer). statusCallbackUrl
+// empfaengt das answered-Ereignis des SIP-Beins. password ist SECRET - Direktiven werden nie
+// geloggt, nur gerendert.
+export const dialSip = ({ uri, username, password, callerId, timeoutS, timeLimitS, statusCallbackUrl }) => ({
+  kind: DIRECTIVE.DIAL_SIP,
+  uri,
+  username,
+  password,
+  callerId,
+  timeoutS,
+  timeLimitS,
+  statusCallbackUrl,
+});

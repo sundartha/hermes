@@ -22,6 +22,7 @@ import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction }
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";
+import { makeElevenLabsInitWebhookRoutes } from "./routes/webhooks-elevenlabs-init.js";
 import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeInboxRoutes } from "./routes/api-inbox.js";
@@ -406,6 +407,9 @@ export async function buildApp(deps) {
     messaging,
     // IEL-B5: die EINE EL-Instanz - /voice/status startet ueber sie den Nachlauf (INV-7).
     elevenLabsOutbound,
+    // IEL-B6: die EINE Frist-Instanz der Inbound-Bruecken (INV-7) - die Init-Route loescht ihre
+    // Fristen bei der ersten Bindung.
+    inboundBridges,
     // EL-BL4: die EINE ConsultDelivery-Instanz (INV-7). registerApiRoutes nimmt sie fuer
     // die Poll-Route direkt aus deps; DIESE Ebene braucht sie selbst, weil der
     // ElevenLabs-Rueckfrage-Webhook hier gemountet wird und auf ihren Slot-Zaehlern und
@@ -542,6 +546,12 @@ export async function buildApp(deps) {
       auditFor: durableAuditFor,
     }),
   );
+
+  // ---- IEL-B6: Conversation-Initiation-Webhook (POST /webhooks/elevenlabs/init) ----------
+  // AUTH-AUSNAHME (Regel 3, begruendet in src/route-policy.js und im Routenmodul): Geheimnis-
+  // Header, dann Zuordnung ueber das Bindungs-Token an einen wartenden Inbound-EL-Anruf. NICHT
+  // unter /voice -> der Per-IP-Limiter liegt davor.
+  app.use(makeElevenLabsInitWebhookRoutes({ store, config, bridges: inboundBridges }));
 
   // ================= REST-API (Dashboard + MCP-Tools) + MCP-Transport ==============
   // Die Mount-Sequenz selbst steht in registerApiRoutes (oben) - Position, Reihenfolge

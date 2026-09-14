@@ -22,6 +22,20 @@ import { sttAttrs } from "./stt-model.js";
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 
+// IEL-B7: Grenzen des TeXML-<Dial> (Telnyx-Doku Dial-Verb, abgerufen 2026-09-15): timeLimit
+// 60-14400 s, Default 14400. Immer gesetzt und geklemmt - weggelassen hiesse vier Stunden
+// Bruecke. Anbieter-Grenze, deshalb hier im Adapter und nicht in der neutralen Direktive.
+const DIAL_TIME_LIMIT_MIN_S = 60;
+const DIAL_TIME_LIMIT_MAX_S = 14400;
+// IEL-B7-S1a-Nachtrag: Grenzen des timeout-Attributs (Ring-Zeit bis zum Abbruch, dieselbe
+// Telnyx-Doku wie timeLimit oben): 5-600 s. Ohne Klemmung wuerde ein fehlendes timeoutS
+// wortwoertlich zu timeout="undefined" im TeXML fuehren - derselbe Fehler, den timeLimitS
+// bereits ueber dialTimeLimitS vermeidet.
+const DIAL_TIMEOUT_MIN_S = 5;
+const DIAL_TIMEOUT_MAX_S = 600;
+// Das SIP-Bein meldet nur "answered": damit startet die innere Bindungsfrist (E9-1).
+const SIP_STATUS_CALLBACK_EVENT = "answered";
+
 // Logisches Voice-Profil -> Telnyx-TeXML-Voice-NAME. Telnyx TeXML akzeptiert
 // Azure-NTTS-Voices im Format "Azure.<locale>-<VoiceId>Neural" (Telnyx-Doku, Say-Verb;
 // Owner-Wahl 2026-06-16: natuerlichere deutsche Stimme als AWS Polly Vicki-Neural).
@@ -130,6 +144,59 @@ function gatherPrompt(directive) {
   return "";
 }
 
+// Sekundenwert einer Dial-Direktive pruefen und klemmen: eine Funktion fuer timeout UND
+// timeLimit (G5, keine zwei fast identischen Checks) statt separater Pruefungen pro Feld.
+// Grenzen als Objekt (F1, <=3 Argumente) statt zwei weiterer Einzelparameter.
+// Fehlertext nennt nur den Feldnamen, nie einen Attributwert (Passwort liegt in derselben
+// Direktive).
+function clampDialSeconds(seconds, fieldName, { minS, maxS }) {
+  if (!Number.isFinite(seconds)) throw new Error(`Dial-Direktive: ${fieldName} ist keine Zahl`);
+  return Math.min(maxS, Math.max(minS, seconds));
+}
+
+// Pflichtfelder der Dial-Direktive (uri, username, password, callerId, statusCallbackUrl):
+// fail-closed statt stillem String(undefined) -> "undefined" im TeXML (IEL-B7-S1a). Ein
+// SIP-INVITE mit woertlich falschem Digest-Username an eine echte Gegenstelle
+// (sip.rtc.elevenlabs.io) darf nie klaglos rausgehen. Eine Pruef-Funktion fuer alle fuenf
+// Felder (G5, keine Duplizierung) statt fuenf gleichlautender Checks; der Feldname im
+// Fehlertext ist kein Wert der Direktive (username/password/callerId/uri/statusCallbackUrl
+// sind reine Schluesselnamen, keine Secrets).
+function requireDialField(directive, fieldName) {
+  const value = directive[fieldName];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Dial-Direktive: ${fieldName} fehlt oder ist kein nichtleerer String`);
+  }
+  return value;
+}
+
+// <Dial><Sip>: alle Attribute und die URI laufen durch escapeXml (attrString). Attribut-
+// Reihenfolge ist vertraglich (Snapshot test/iel-dial-render.test.js).
+function renderDialSip(directive) {
+  const uri = requireDialField(directive, "uri");
+  const username = requireDialField(directive, "username");
+  const password = requireDialField(directive, "password");
+  const callerId = requireDialField(directive, "callerId");
+  const statusCallbackUrl = requireDialField(directive, "statusCallbackUrl");
+  const dial = attrString({
+    callerId,
+    timeout: clampDialSeconds(directive.timeoutS, "timeoutS", {
+      minS: DIAL_TIMEOUT_MIN_S,
+      maxS: DIAL_TIMEOUT_MAX_S,
+    }),
+    timeLimit: clampDialSeconds(directive.timeLimitS, "timeLimitS", {
+      minS: DIAL_TIME_LIMIT_MIN_S,
+      maxS: DIAL_TIME_LIMIT_MAX_S,
+    }),
+  });
+  const sip = attrString({
+    username,
+    password,
+    statusCallback: statusCallbackUrl,
+    statusCallbackEvent: SIP_STATUS_CALLBACK_EVENT,
+  });
+  return `<Dial${dial}><Sip${sip}>${escapeXml(uri)}</Sip></Dial>`;
+}
+
 // Eine Direktive in TeXML uebersetzen (eine Abstraktionsebene, G34).
 function renderDirective(directive, opts) {
   switch (directive.kind) {
@@ -141,6 +208,8 @@ function renderDirective(directive, opts) {
       return `<Redirect method="POST">${escapeXml(directive.url)}</Redirect>`;
     case DIRECTIVE.HANGUP:
       return "<Hangup/>";
+    case DIRECTIVE.DIAL_SIP:
+      return renderDialSip(directive);
     default:
       throw new Error(`unbekannte Direktive: ${directive.kind}`);
   }
