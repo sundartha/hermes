@@ -356,6 +356,8 @@ export function makePgStore(runner) {
       if (changed) save();
       return call;
     },
+    // IEL-B4a: Brueckenzustand als Spread-Fabrik (Muster absenderWahrheitMutatoren).
+    ...brueckenZustandMutatoren({ requireState, save }),
     // KV2-3: Kosten-Buch. Wrapper-Paritaet zu json.js - saved nur bei changed (der
     // terminale No-Op schreibt nichts).
     recordCallCostEvidence(eingabe) {
@@ -1455,6 +1457,43 @@ function elDetektorMutatoren({ requireState, save }) {
   };
 }
 
+// IEL-B4a: die drei Bruecken-Marker als EIN benanntes Konzept (Muster absenderWahrheitFelder/
+// -Werte/-Mutatoren) - Spread statt direkter ?? in rowToCall/callRowValues haelt deren
+// gepinnte Komplexitaet (eslint-legacy-exceptions.json). TIMESTAMPTZ kommt vom Treiber als
+// Date: zurueck in DENSELBEN ISO-String, den json speichert (Muster boundAt der
+// Nummern-Zuordnung) - sonst Shape-Drift und Millisekundenverlust bei Date.parse(String(date)).
+function isoZeitpunktOderNull(wert) {
+  return wert instanceof Date ? wert.toISOString() : (wert ?? null);
+}
+function brueckenZustandFelder(zeile) {
+  return {
+    elBoundAt: isoZeitpunktOderNull(zeile.el_bound_at),
+    elFallbackAt: isoZeitpunktOderNull(zeile.el_fallback_at),
+    elNachlaufStartedAt: isoZeitpunktOderNull(zeile.el_nachlauf_started_at),
+  };
+}
+function brueckenZustandWerte(call) {
+  return [call.elBoundAt ?? null, call.elFallbackAt ?? null, call.elNachlaufStartedAt ?? null];
+}
+// Wrapper-Paritaet zu json.js; Save nur bei changed, Rueckgabe = volles Op-Ergebnis.
+function brueckenZustandMutatoren({ requireState, save }) {
+  const speichereBeiAenderung = (ergebnis) => {
+    if (ergebnis.changed) save();
+    return ergebnis;
+  };
+  return {
+    bindInboundElConversation(callId, bindung) {
+      return speichereBeiAenderung(ops.bindInboundElConversation(requireState(), callId, bindung));
+    },
+    markInboundElFallback(callId, nowIso) {
+      return speichereBeiAenderung(ops.markInboundElFallback(requireState(), callId, nowIso));
+    },
+    markInboundElNachlaufStarted(callId, nowIso) {
+      return speichereBeiAenderung(ops.markInboundElNachlaufStarted(requireState(), callId, nowIso));
+    },
+  };
+}
+
 function rowToCall(r, segmentsByCall, itemIdsByCall) {
   return {
     id: r.id,
@@ -1601,6 +1640,7 @@ function rowToCall(r, segmentsByCall, itemIdsByCall) {
     // ST3: Detektor-Zaehlfeld mit-hydrieren - ohne diese Zeile ginge es beim Restart
     // verloren UND der naechste Flush schriebe NULL zurueck (Lehre i8-design-decisions).
     ...elDetektorFelder(r),
+    ...brueckenZustandFelder(r),
   };
 }
 
@@ -2079,6 +2119,11 @@ function callRowValues(call, tenantId) {
     // Ringpuffer bei jedem Flush auf den Create-Zustand zurueck und der Neustart-Fall
     // waere ungeschuetzt. Leere Liste -> NULL (kein "[]" am Bestandsanruf).
     call.webhookAnchors?.length ? JSON.stringify(call.webhookAnchors) : null,
+    // IEL-B4a ($64-$66, ans Ende angehaengt -> keine Umnummerierung): die drei Bruecken-
+    // Marker. ALLE im ON CONFLICT DO UPDATE SET - sie entstehen NACH dem Create; fehlten
+    // sie dort, fielen sie beim naechsten Flush auf den Create-Zustand (NULL) zurueck
+    // (Lehre i8-design-decisions). Set-once-Riegel liegt in state-ops, nicht in SQL.
+    ...brueckenZustandWerte(call),
   ];
 }
 
@@ -2105,8 +2150,8 @@ async function flushCalls(client, tenantId, calls) {
           callee_confirmed_timezone_at, sip_call_id, opening_line, opening_line_sha256,
           lookup_log, summary_mail_sent_at, callee_is_owner, inbox_entry_at, inbox_seen_at,
           from_actual_e164, from_source, from_registration_source, cost_profile,
-          el_detector_counts, webhook_anchors)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63)
+          el_detector_counts, webhook_anchors, el_bound_at, el_fallback_at, el_nachlauf_started_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$60,$61,$62,$63,$64,$65,$66)
        ON CONFLICT (id) DO UPDATE SET
          twilio_sid=EXCLUDED.twilio_sid, status=EXCLUDED.status, answered_at=EXCLUDED.answered_at,
          ended_at=EXCLUDED.ended_at, summary=EXCLUDED.summary,
@@ -2137,7 +2182,9 @@ async function flushCalls(client, tenantId, calls) {
          from_registration_source=EXCLUDED.from_registration_source,
          cost_profile=EXCLUDED.cost_profile,
          el_detector_counts=EXCLUDED.el_detector_counts,
-         webhook_anchors=EXCLUDED.webhook_anchors`,
+         webhook_anchors=EXCLUDED.webhook_anchors,
+         el_bound_at=EXCLUDED.el_bound_at, el_fallback_at=EXCLUDED.el_fallback_at,
+         el_nachlauf_started_at=EXCLUDED.el_nachlauf_started_at`,
       callRowValues(c, tenantId),
     );
     await flushTranscript(client, tenantId, c);

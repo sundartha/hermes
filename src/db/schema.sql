@@ -378,7 +378,14 @@ CREATE TABLE IF NOT EXISTS call (
   -- SEC-P1: Ereignis-Anker bereits verarbeiteter /voice/turn-Webhooks (JSONB-Array,
   -- PII-frei: Zufallsmarke bzw. sha256 des signierten Umschlags, NIE Wortlaut).
   -- Additiv NULLABLE -> Bestandszeile = NULL = "keine Wiederholung bekannt".
-  webhook_anchors JSONB
+  webhook_anchors JSONB,
+  -- IEL-B4a (E5): persistierter Brueckenzustand des EL-Inbound-Wegs - drei set-once
+  -- Zeitpunkte (Bindung, Rueckfall, Nachlauf-Start). Additiv NULLABLE, KEIN Backfill: vor
+  -- IEL-B8 setzt kein Code das Profil telnyx_inbound_el_convai, NULL ist fuer jede
+  -- Bestandszeile der wahre Wert.
+  el_bound_at TIMESTAMPTZ,
+  el_fallback_at TIMESTAMPTZ,
+  el_nachlauf_started_at TIMESTAMPTZ
 );
 
 -- Forward-compat: eine bereits existierende call-Tabelle (CREATE TABLE IF NOT
@@ -530,6 +537,11 @@ ALTER TABLE call ADD COLUMN IF NOT EXISTS el_detector_counts JSONB;
 -- el_detector_counts). Idempotent; frische DB = No-op. KEIN Backfill: Bestands-Anrufe
 -- sind beendet und bekommen keinen Turn-Webhook mehr.
 ALTER TABLE call ADD COLUMN IF NOT EXISTS webhook_anchors JSONB;
+-- IEL-B4a: Brueckenzustand auf Bestands-call-Tabellen nachziehen (Muster webhook_anchors).
+-- Idempotent; frische DB = No-op. KEIN Backfill (s. CREATE-TABLE-Kommentar).
+ALTER TABLE call ADD COLUMN IF NOT EXISTS el_bound_at TIMESTAMPTZ;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS el_fallback_at TIMESTAMPTZ;
+ALTER TABLE call ADD COLUMN IF NOT EXISTS el_nachlauf_started_at TIMESTAMPTZ;
 
 -- transcript_segment: eigene Tabelle ab P3b. getCall rekonstruiert transcript[]
 -- in Reihenfolge (sortiert nach id).

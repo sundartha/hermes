@@ -136,6 +136,12 @@ export const {
   // store.recordCostProfile auf der Fassade undefined -> beide Weichen wuerfen zur
   // Laufzeit einen TypeError (Muster recordSipCallId).
   recordCostProfile,
+  // IEL-B4a (E5): Brueckenzustand des EL-Inbound-Wegs. OHNE diese Re-Exporte waeren die drei
+  // Operationen auf der Fassade undefined -> Init-Webhook (B6), Rueckfall-Route (B8) und
+  // Nachlauf-Start (B4) wuerfen zur Laufzeit einen TypeError (Muster recordCostProfile).
+  bindInboundElConversation,
+  markInboundElFallback,
+  markInboundElNachlaufStarted,
   // KV2-3: das Kosten-Buch. OHNE diese Re-Exports waeren store.recordCallCostEvidence /
   // store.callCostEvidence auf der Fassade undefined -> jeder kuenftige Einsammler
   // (KV2-4/KV2-5) wuerfe zur Laufzeit einen TypeError (Muster recordCostProfile).

@@ -59,6 +59,30 @@ Address them directly, by their first name, in the informal register their langu
 There is nobody else to consult and no message to pass on: if something is unclear, ask them directly.
 IF THE PERSON WHO ANSWERED IS NOT ${owner}: say this sentence immediately, word for word, before anything else - "${disclosure}" - and from then on run the call exactly as a normal call made on ${owner}'s behalf: third person, message-taking, no informal address. This applies whenever they say they are someone else, or it becomes clear they are, even mid-call. Never leave a person who is not ${owner} unaware that they are talking to an AI.`,
 
+  // IEL-B3 (L5): die Prompt-Sektion fuer einen EINGEHENDEN Anruf, den der ElevenLabs-Agent
+  // fuehrt. Gegenstueck zu calleeRelation direkt darueber und aus demselben Grund an
+  // derselben Stelle der Vorlage (Ende der PERSONA-Zeile, {{inbound_situation}}): sie HEBT
+  // Aussagen AUF, die weiter unten im Outbound-Prompt stehen (Anrufer-Rolle, Auftrag,
+  // Anrufgrund, Eroeffnungszeile).
+  //
+  // NICHT zu verwechseln mit situationInbound direkt darunter: jene ist die SITUATION des
+  // Budget-Systemprompts (claude.js) und nennt die Anrufernummer; diese komponiert mit der
+  // Agenten-Vorlage und nennt KEINE Nummer (Datenminimierung - der Prompt liegt beim Anbieter).
+  //
+  // owner wird SERVERSEITIG eingesetzt, nicht als {{...}} stehen gelassen: der Anbieter loest
+  // keine Platzhalter INNERHALB eines Variablenwerts auf (s. calleeRelation). Ohne fuehrenden
+  // Zeilenumbruch - den setzt der Baustein, der den Wert baut (Muster calleeRelationText).
+  //
+  // SITUATION AND TASK ist woertlich die Sektions-Ueberschrift der Vorlage; der Block hebt sie
+  // namentlich auf (gepinnt in test/iel-b3-variable.test.js). Ausgehende Anrufe senden die
+  // Variable leer (elevenlabs/outbound.js#dynamicVariables).
+  inboundSituation: ({ owner }) =>
+    `THIS CALL IS AN EXCEPTION - IT IS AN INCOMING CALL:
+Someone called ${owner}'s number, and you answered the call for ${owner}. You are not the caller, and you are not calling anyone on ${owner}'s behalf.
+Your greeting and the notice that an AI assistant is answering have already been said to the caller, word for word, before you took over. Do NOT repeat them. Pick up directly from their reply.
+Your task on this call: find out what the caller wants and take it down as a message for ${owner}. If they ask for an appointment, ask which day and time they would like and take both down as part of the message - you cannot see ${owner}'s calendar, and you do not confirm or promise any appointment.
+The section SITUATION AND TASK, and everything else in these instructions about your task, your reason for calling or the opening line of an outgoing call, does not apply to this call. Everything else still applies: how you speak, what to do when something is unclear, your boundaries, and ending the call with end_call.`,
+
   situationInbound: ({ call, owner }) =>
     `CONTEXT: Someone called ${owner}, ${owner} could not pick up, and the call was forwarded to you. Caller number: ${call.from}.
 Your task: find out what they need, resolve it directly if possible, otherwise take a message. For an appointment request, ask for the desired day and time and take both down as a message - you cannot see ${owner}'s calendar and you do not confirm any appointment.
