@@ -8,9 +8,7 @@
 //
 // CALLER-CHECK: NUR die Budget-Engine (agentTurn) wird hier markiert - im Anthropic-
 // Adapter, ausgeloest durch LlmRequest.cachePrefix an der Call-Site. systemPrompt()/
-// toolDefs() selbst bleiben unveraendert; die Realtime-Bridge konsumiert sie ueber
-// instructions()/realtimeTools() weiter ohne cache_control -> kein Regress (abgedeckt
-// durch das gruene bridge-openai-event).
+// toolDefs() selbst bleiben unveraendert.
 //
 // Rein in-process (kein Server-Spawn, kein pglite) - dieselbe Naht wie l2-calendar-
 // prefetch: ANTHROPIC_BASE_URL + DATA_DIR vor dem ersten config-Import, dann

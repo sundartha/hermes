@@ -9,7 +9,6 @@
 // via terminateAndBillCall (unveraendert, in call-termination.js). rearmActiveCallTimers
 // bleibt Boot-only; seine Aufrufposition in server.js (NACH allen exit1-Gates, VOR listen,
 // INV-5) aendert sich durch die Extraktion NICHT.
-import { VOICE_ENGINE } from "../config.js";
 import { callMaxDurationMs as computeMaxDurationMs } from "../call-duration.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 // TEIL B (Owner-Auftrag 15.08.2026): PURE (keine IO) -> direkter Import wie die drei oben,
@@ -54,9 +53,8 @@ const ACTIVE_CALL_STATUS = "active";
 
 // Gemeinsame Call-Max-Dauer in ms: armMaxDurationTimer UND der Reserve-Backstop-Timer teilen
 // dieselbe Rechnung (call-eigenes Limit vor Fallback). Die Formel selbst lebt in
-// src/call-duration.js (G5: EINE Quelle innerhalb der Telephony-Schicht, auch fuer den
-// Realtime-Cap in bridge.js; state-ops.js#callLimitMs bleibt eine bewusst getrennte zweite
-// Kopie, OQ-1); hier wird nur der Fallback gebunden.
+// src/call-duration.js (G5: EINE Quelle innerhalb der Telephony-Schicht; state-ops.js#callLimitMs
+// bleibt eine bewusst getrennte zweite Kopie, OQ-1); hier wird nur der Fallback gebunden.
 //
 // KS-P3: die Frist steht seit dieser Phase AM CALL (call.maxDurationS, beim Anlegen aus
 // dem Restguthaben abgeleitet - Outbound im compute_reserve-Gate, Inbound in
@@ -138,9 +136,8 @@ function makeBudgetAxisSeam({
   });
 
   // Boot-Re-Arm der GELD-Achse - dieselbe Frage, die rearmActiveCallTimers fuer die
-  // ZEIT-Achse stellt. Bewusst NICHT als Anhang dort: jener kehrt bei VOICE_ENGINE=realtime
-  // sofort zurueck, und die Geld-Achse ist engine-neutral - dieser Sonderfall darf nicht
-  // geerbt werden. Die Takte leben als setTimeout im Prozess, ein Deploy nimmt sie mit, und
+  // ZEIT-Achse stellt. Bewusst NICHT als Anhang dort: zwei Achsen, zwei Re-Arms, je eine
+  // Aufgabe (G30). Die Takte leben als setTimeout im Prozess, ein Deploy nimmt sie mit, und
   // arm() faellt nur am Anrufstart bzw. am Re-Attach: ohne diesen Re-Arm haette ein
   // ueberlebendes Leg nur noch den Max-Dauer-Cap (Groessenordnung 1800 s) statt des Takts.
   // Setzt AUSSCHLIESSLICH Timer (INV-5 unberuehrt). Die Zeile erscheint nur, wenn wirklich
@@ -248,7 +245,7 @@ export function makeCallLifecycle({
     setTimeout(() => void terminateCappedCall(call.id, providerCallSid, "completed"), ms);
   }
 
-  // Max-Dauer hart durchsetzen (Budget-Engine; Realtime macht das die Bridge). Duenner Wrapper
+  // Max-Dauer hart durchsetzen (Budget-Engine). Duenner Wrapper
   // um scheduleMaxDurationEnd (F10) mit dem vollen call-Limit; alle Aufrufer (/voice/incoming,
   // place_call) bleiben byte-identisch verdrahtet.
   function armMaxDurationTimer(call, providerCallSid) {
@@ -259,15 +256,12 @@ export function makeCallLifecycle({
     // vergessene Zeile waere ein ungedeckter Anruf. Der Funktionsname ist historisch - bis
     // IE2 armierte er nur die Zeit-Achse; ein Rename beruehrt vier Aufrufer und einen
     // quelltext-pruefenden Bestandstest und ist eine eigene Entscheidung.
-    // Der Realtime-Zweig von POST /api/calls armiert diesen Timer nicht (voiceEngine-Guard)
-    // und ist damit auch hier nicht gedeckt - er ist seit KV2-2 (h) beim Boot FATAL
-    // (LATENT_COST_PATH_FINDING.REALTIME_CARRIER_UNCOLLECTED) und faellt in IE6 weg.
     budgetAxis.arm(call.id);
   }
 
   // OUT-05 (F2): Reserve-Release-Backstop. Unabhaengig vom Provider-completed-Callback gibt dieser
   // Timer die Reserve nach maxDur + Grace frei (schliesst den "Originate 200, Callback verloren"-
-  // Fall). BEIDE Engines (KEIN realtime-Guard), NUR nach erfolgreichem Originate armiert. Idempotent
+  // Fall). Jeder Outbound-Pfad, NUR nach erfolgreichem Originate armiert. Idempotent
   // ueber call.reserveReleased -> ein frueherer finishCall macht den Timer zum No-op; kein Timer-
   // Handle-Tracking noetig (Stil wie armMaxDurationTimer). Liest den Call beim Feuern frisch.
   function armReserveReleaseTimer(call) {
@@ -312,13 +306,12 @@ export function makeCallLifecycle({
 
   // F10 (A6): Boot-Re-Arm der Max-Dauer-Timer. Ein Deploy/Restart toetet sonst den
   // In-Prozess-setTimeout jedes laufenden Calls -> der harte Max-Dauer-Cap (Absolute
-  // Regel 1) waere nach jedem Boot weg. NUR Budget-Engine (realtime cappt in der
-  // Bridge). Aktive Calls mit Restzeit -> Timer relativ zum ECHTEN Call-Start (nie
-  // Boot-Zeit); Zombies (Restzeit<=0, Downtime > Max-Dauer) -> sofort ueber den EINEN
-  // Terminalisierungspfad beenden (gekappt+gebucht, kein Phantom-active, K2/K3). Die
-  // Zombie-Buchung laeuft async (finishCall) und blockiert den Boot nicht.
+  // Regel 1) waere nach jedem Boot weg. Aktive Calls mit Restzeit -> Timer relativ zum
+  // ECHTEN Call-Start (nie Boot-Zeit); Zombies (Restzeit<=0, Downtime > Max-Dauer) ->
+  // sofort ueber den EINEN Terminalisierungspfad beenden (gekappt+gebucht, kein
+  // Phantom-active, K2/K3). Die Zombie-Buchung laeuft async (finishCall) und blockiert
+  // den Boot nicht.
   function rearmActiveCallTimers() {
-    if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) return;
     const nowMs = Date.now();
     let reArmed = 0;
     let terminalized = 0;

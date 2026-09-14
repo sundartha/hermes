@@ -90,7 +90,6 @@ const inventoryDeps = () => ({
     turnDirectives: noop,
     sayInCallVoice: noop,
     followupTurnDirectives: noop,
-    streamDirectives: noop,
   },
   costTruing: {},
   messaging: {},

@@ -161,11 +161,11 @@ test("(e) Pool ohne text-to-speech-Records laesst recordRelayTtsCharacters unger
 
 // ---- (f) Pflicht-Typmenge ist JE PROFIL beantwortet, nicht global abgeleitet ----
 
-test("(f) pflichttypenFuerProfil: die drei Telnyx-Profile liefern DIESELBE Referenz wie der Env-Wert", () => {
+test("(f) pflichttypenFuerProfil: die Telnyx-Env-Profile liefern DIESELBE Referenz wie der Env-Wert", () => {
   const env = Object.freeze(["sip-trunking", "call-control"]);
   for (const profil of [
     KOSTENPROFIL.TELNYX_BUDGET,
-    KOSTENPROFIL.TELNYX_INBOUND_BUDGET, KOSTENPROFIL.TELNYX_INBOUND_REALTIME,
+    KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
   ]) {
     assert.equal(pflichttypenFuerProfil(profil, env), env, `Profil ${profil} muss dieselbe Referenz liefern (Identitaet)`);
   }
@@ -305,11 +305,11 @@ test("kostenprofilFuerAnruf: fehlendes costProfile faellt auf die Legacy-Zuordnu
 
 // ---- sweepTraegerFuerProfil / sweepBelegBetrag: reine Regelwerk-Unit-Tests ----
 
-test("sweepTraegerFuerProfil: el_convai_sip -> telnyx_sip, die drei Telnyx-Profile -> telnyx_call_records, sonst null", () => {
+test("sweepTraegerFuerProfil: el_convai_sip -> telnyx_sip, die Telnyx-Profile -> telnyx_call_records, sonst null", () => {
   assert.equal(sweepTraegerFuerProfil(KOSTENPROFIL.EL_CONVAI_SIP), KOSTENART.TELNYX_SIP);
   for (const profil of [
     KOSTENPROFIL.TELNYX_BUDGET,
-    KOSTENPROFIL.TELNYX_INBOUND_BUDGET, KOSTENPROFIL.TELNYX_INBOUND_REALTIME,
+    KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
   ]) {
     assert.equal(sweepTraegerFuerProfil(profil), KOSTENART.TELNYX_CALL_RECORDS);
   }

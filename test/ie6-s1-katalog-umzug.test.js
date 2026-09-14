@@ -14,7 +14,6 @@ import { voiceAttrs } from "../src/telephony/adapters/telnyx/render.js";
 test("GAP-24 (Mechanismus, gruen) - der Inbound-Gather traegt den Sprach-Hint des Calls", async () => {
   for (const lang of ["fr", "en"]) {
     const { url, stop } = await startInboundHarness({
-      voiceEngine: "budget",
       seed: {
         numbers: [
           {

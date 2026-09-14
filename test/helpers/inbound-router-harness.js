@@ -1,23 +1,10 @@
-// KV2-2 (h): dieser Harness ist KEIN Bequemlichkeits-Seam, sondern die Folge des
-// fatalen Boot-Riegels REALTIME_CARRIER_UNCOLLECTED - unter VOICE_ENGINE=realtime bootet
-// der Dienst nicht mehr (kein app.listen, kein /voice, keine Audio-Bridge). Ein
-// Inbound-Realtime-Test ueber den echten Spawn-Server (test/helpers.js#startServer)
-// erreicht seinen Gegenstand deshalb nicht mehr - er stuerbe am Riegel, bevor der erste
-// Request ankommt. Dieser Harness mountet makeVoiceRoutes IN-PROCESS auf einer nackten
-// Express-App und ruft NIE src/boot.js auf, also greift der Riegel hier nicht.
+// In-Process-Mount von makeVoiceRoutes ohne src/boot.js: ein echter Spawn-Server
+// (test/helpers.js#startServer) bindet frueh an config.js/store/json.js-Singletons
+// (DATA_DIR beim ersten Import) - dieser Harness braucht diese Bindung nicht und
+// mountet die Route direkt auf einer nackten Express-App.
 //
 // Store: EIN In-Memory-Zustand ueber src/store/state-ops.js DIREKT (nicht json.js).
-// Grund, gemessen an dieser Datei: json.js UND src/config.js sind unversionierte,
-// prozessweite Singletons (kein Build-Step, kein DI-Container), und config.js bindet
-// sich an process.env.DATA_DIR beim ERSTEN Import - irgendeinen. Ein Testfile wie
-// test/media-token.test.js importiert `MEDIA_PATH` aus src/bridge.js, das SELBST
-// `import { config } from "./config.js"` traegt (Modulkopf) - dieser Import laeuft
-// bereits beim Laden der Testdatei, BEVOR irgendein Testkoerper oder dieser Harness
-// ueberhaupt ausgefuehrt wird. Ein "dynamischer Import nach DATA_DIR-Bindung" (Muster
-// test/store-pg-json-parity.test.js) kommt in einem SOLCHEN Testfile immer zu spaet -
-// der Singleton ist zu diesem Zeitpunkt schon an einen anderen (oder gar keinen)
-// DATA_DIR gebunden, und store/json.js haengt an genau diesem gecachten config.js.
-// state-ops.js ist dagegen IMPORT-FREI von config.js (reine In-Memory-Operationen auf
+// state-ops.js ist IMPORT-FREI von config.js (reine In-Memory-Operationen auf
 // einem uebergebenen state-Objekt, s. Modulkopf dort) - kein Singleton, kein
 // Bindungszeitpunkt, der zu spaet kommen kann. Diese Datei baut den Store deshalb direkt
 // aus state-ops.js: EIN state-Objekt je Aufruf (ops.makeDefaultState(), mit dem
@@ -26,22 +13,20 @@
 // nicht braucht (die Assertions lesen den Call direkt aus dem state-Objekt).
 //
 // Config: EIN Hand-Mock der Namespaces, die der Inbound-Pfad tatsaechlich liest
-// (voice.voiceEngine, billing.*, safety.*, server.publicUrl) -
-// aus demselben Grund wie oben: die echte config.js waere ein weiterer Singleton mit
-// genau demselben Zu-frueh-gebunden-Risiko. makeVoiceRoutes ist eine reine DI-Factory
-// (config kommt als Parameter, s. Modulkopf src/routes/voice.js) - der Anfrage-Pfad
-// bekommt NIE etwas anderes zu sehen als diesen Mock.
+// (billing.*, safety.*, server.publicUrl) - aus demselben Grund wie oben: die echte
+// config.js waere ein weiterer Singleton mit genau demselben Zu-frueh-gebunden-Risiko.
+// makeVoiceRoutes ist eine reine DI-Factory (config kommt als Parameter, s. Modulkopf
+// src/routes/voice.js) - der Anfrage-Pfad bekommt NIE etwas anderes zu sehen als diesen Mock.
 import express from "express";
 import * as ops from "../../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../../src/store/defaults.js";
 
-// Reicht fuer den Inbound-Pfad (/voice/incoming, budget UND realtime): grosszuegige
+// Reicht fuer den Inbound-Pfad (/voice/incoming): grosszuegige
 // Kosten-/Zeit-Werte, damit budgetExceeded/brakeSecondsFor niemals faelschlich greifen -
 // dieser Harness testet das KOSTENPROFIL an der Weiche, nicht die Budget-Gates (die
 // haben ihre eigenen Tests).
-function makeHarnessConfig(voiceEngine) {
+function makeHarnessConfig() {
   return {
-    voice: { voiceEngine },
     billing: {
       voiceTariffInboundCents: 6,
       defaultTenantBudgetCents: 150000,
@@ -55,7 +40,7 @@ function makeHarnessConfig(voiceEngine) {
 
 // Store-Fassade als duenne Closures ueber state-ops.js (Muster json.js/pg.js-Wrapper,
 // nur ohne Persistenz - reines In-Memory, s. Modulkopf). Nur die Methoden, die der
-// Inbound-Pfad (/voice/incoming, budget UND realtime) tatsaechlich aufruft.
+// Inbound-Pfad (/voice/incoming) tatsaechlich aufruft.
 function makeHarnessStore(state) {
   return {
     numberRecordByE164: (e164) => ops.numberRecordByE164(state, e164),
@@ -96,7 +81,7 @@ function noopDeps() {
   };
 }
 
-// startInboundHarness({voiceEngine, seed, configureState}) -> {url, store, stop}.
+// startInboundHarness({seed, configureState}) -> {url, store, stop}.
 // seed ist ein optionaler Ausschnitt des state-ops-Shapes (Muster ops.makeDefaultState())
 // - typischerweise { numbers: [...] } fuer eine aktive Nummer; er wird ÜBER
 // ops.makeDefaultState() gelegt (Object.assign, flache Top-Level-Felder), nicht gegen
@@ -106,11 +91,11 @@ function noopDeps() {
 // fuer Faelle, die eine state-ops-Mutation statt eines flachen Feld-Ueberschreibens
 // brauchen (z.B. ops.updateSettings fuer settings.language, weil settings eine
 // tenantId-gekeyte Map ist, kein flaches Top-Level-Feld).
-export async function startInboundHarness({ voiceEngine, seed = {}, configureState } = {}) {
+export async function startInboundHarness({ seed = {}, configureState } = {}) {
   const state = Object.assign(ops.makeDefaultState(), seed);
   if (configureState) configureState(state);
   const store = makeHarnessStore(state);
-  const config = makeHarnessConfig(voiceEngine);
+  const config = makeHarnessConfig();
   const { makeVoiceRoutes } = await import("../../src/routes/voice.js");
   const { makeVoiceRender } = await import("../../src/telephony/voice-render.js");
 

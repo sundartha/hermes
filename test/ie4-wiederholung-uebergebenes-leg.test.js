@@ -109,7 +109,6 @@ test("IE4-1: Inventar - jedes bekannte Kostenprofil traegt eine ausdrueckliche E
   assert.equal(TURN_LOOP_BY_COST_PROFILE[KOSTENPROFIL.TELNYX_BUDGET], true);
   assert.equal(TURN_LOOP_BY_COST_PROFILE[KOSTENPROFIL.TELNYX_INBOUND_BUDGET], true);
   assert.equal(TURN_LOOP_BY_COST_PROFILE[KOSTENPROFIL.EL_CONVAI_SIP], false);
-  assert.equal(TURN_LOOP_BY_COST_PROFILE[KOSTENPROFIL.TELNYX_INBOUND_REALTIME], false);
   assert.equal(TURN_LOOP_BY_COST_PROFILE[KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI], false);
 });
 
@@ -117,7 +116,7 @@ test("IE4-2: legRunsOurTurnLoop - Raender liefern true und werfen nie (fail-safe
   // Positiv-Kontrolle zuerst, sonst sieht "liefert nicht false" wie eine Funktion aus,
   // die nichts liefert (T5).
   assert.equal(legRunsOurTurnLoop({ costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET }), true);
-  assert.equal(legRunsOurTurnLoop({ costProfile: KOSTENPROFIL.TELNYX_INBOUND_REALTIME }), false);
+  assert.equal(legRunsOurTurnLoop({ costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI }), false);
 
   for (const call of [
     { costProfile: null },
@@ -151,7 +150,7 @@ test("IE4-3/4/5: Wiederholungs-Antwort auf /voice/incoming - pfadgerecht je Kost
           provider: "telnyx",
           status: "active",
           language: "de",
-          costProfile: KOSTENPROFIL.TELNYX_INBOUND_REALTIME,
+          costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
         }),
         seedCall({
           id: "call_ie4_unbelegt",

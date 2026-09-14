@@ -110,7 +110,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // kein neuer primitiver Key -> 15.
   // OC-P1: ownerSelfCallEnabled + ownerSelfCallTenantIds ergaenzt (Schalter + Tenant-
   // Allowlist der Offenlegungs-Ausnahme, PLAN-OWNER-CALL) -> 17.
-  voice: 19,
+  // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice entfernt (nur die Realtime-Bridge
+  // las sie) -> 16.
+  voice: 16,
   // GAP-21: machineDetection ergaenzt (1 nested Key statt zweier primitiver) -> 9.
   // GQ-P6: telnyxDialTimeoutSecs ergaenzt (Klingelfrist beim Waehlen, Telnyx-Default 30 s
   // war zu knapp fuer die langsame US-DID-Zustellung nach DE) -> 10.
@@ -187,7 +189,8 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // egal wie viele Schluessel spaeter darin liegen) ergaenzt -> 194.
 // IE6-S1: telnyxAssistant (EIN Namespace-Blatt, nicht seine 18 internen Sub-Keys) +
 // telnyxDialTimeoutSecs entfernt -> 192.
-const EXPECTED_TOTAL_KEYS = 192;
+// IE6-S2: openaiApiKey + realtimeModel + realtimeVoice entfernt -> 189.
+const EXPECTED_TOTAL_KEYS = 189;
 
 test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
   assert.deepEqual(
@@ -345,7 +348,8 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // IE6-S1: telnyxDialTimeoutSecs (primitives Blatt) entfernt -> 180. telnyxAssistant war
   // selbst ein nested Objekt (continue oben) und trug nie zu checked bei - kein
   // weiterer Abzug.
-  const EXPECTED_PRIMITIVE_LEAVES = 180;
+  // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice sind drei primitive Strings -> 177.
+  const EXPECTED_PRIMITIVE_LEAVES = 177;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

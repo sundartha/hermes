@@ -209,7 +209,7 @@ test("Wiring: rearmActiveCallTimers terminalisiert ausschliesslich ueber termina
     lifecycleSrc.indexOf(marker),
     lifecycleSrc.indexOf(marker) + SOURCE_WINDOW_REARM_TIMERS_CHARS,
   );
-  assert.match(block, /config\.voice\.voiceEngine === VOICE_ENGINE\.REALTIME\) return/);
+  assert.doesNotMatch(block, /voiceEngine/, "rearm kennt keinen Engine-Sonderfall mehr (IE6-S2)");
   assert.match(block, /terminateCappedCall\(call\.id, call\.twilioSid/);
   assert.match(block, /scheduleMaxDurationEnd\(call, call\.twilioSid/);
   assert.doesNotMatch(

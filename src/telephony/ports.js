@@ -211,33 +211,6 @@
  */
 
 /**
- * @typedef {Object} MediaFrame
- *   Neutrales Media-Stream-Frame (Port 4). KEIN Provider-Feld (kein streamSid/
- *   stream_id) im Vertrag - streamRef ist die neutrale Stream-Referenz.
- * @property {"start"|"media"|"stop"|"other"} event
- * @property {string} [streamRef]       - neutrale Stream-Referenz (Twilio: streamSid; Telnyx: stream_id)
- * @property {string} [callId]          - Call-ID aus den start-Parametern (Anti-Hijack-Lookup)
- * @property {string} [streamToken]     - stream_token aus den start-Parametern (safeEqual-Pruefung)
- * @property {string} [providerCallRef] - provider-seitige Call-Referenz (-> call.twilioSid/endCall)
- * @property {string} [payload]         - Audio-Payload (G.711 u-law base64), nur bei event=media
- */
-
-/**
- * @typedef {Object} MediaTransport
- *   Port 4 (Aufrufer: bridge.js, HEIKLE STELLE). Kapselt die provider-spezifische
- *   WS-Frame-Schicht des Realtime-Streams; die OpenAI-Seite der Bridge bleibt
- *   provider-agnostisch. Reine Funktionen (kein IO, kein State) - unit-testbar.
- * @property {(msg: object) => MediaFrame} parseMediaFrame
- *   Roh-WS-Nachricht (JSON.parse't) -> neutrales MediaFrame. Unbekannte Events -> event:"other".
- * @property {(params: {payload: string, streamRef?: string}) => object} buildMediaFrame
- *   Neutrale Audio-Payload -> Provider-WS-Objekt (KI-Audio raus). Twilio braucht streamRef, Telnyx nicht.
- * @property {(params: {streamRef?: string}) => object} clearPlayback
- *   Barge-in: Provider-WS-Objekt, das die gepufferte Wiedergabe verwirft
- *   ({event:"clear"}; Telnyx ohne stream_id - streamRef bleibt optional, weil Twilio
- *   Media Streams dort streamSid verlangt).
- */
-
-/**
  * @typedef {Object} WebhookEvents
  *   Port 5 (Webhook-Parsing, VOR den Safety-Gates - reines Parsing, keine Gate-Logik).
  *   Kapselt das provider-spezifische Auslesen von Turn-/Status-/Speak-Webhook-Bodies;

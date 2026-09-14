@@ -83,9 +83,6 @@ test("IE3-3 (fail-closed): pflichttypenFuerProfil liefert fuer das neue Profil d
 test("IE3-4 (Gegenprobe): Schalter an OHNE belegten Kostenpfad -> genau ein FATALER Befund mit Handlung", () => {
   const findings = latentCostPathFindings({
     playTtsEnabled: false,
-    realtimeEngineSelected: false,
-    realtimeMidCallBudgetCheck: false,
-    realtimeCarrierHasCollector: false,
     elInboundEnabled: true,
     elInboundCarrierHasCollector: false,
   });
@@ -99,9 +96,6 @@ test("IE3-4 (Gegenprobe): Schalter an OHNE belegten Kostenpfad -> genau ein FATA
 test("IE3-4b (Sache, nicht Schalter): Schalter an MIT Einsammler -> kein Befund", () => {
   const findings = latentCostPathFindings({
     playTtsEnabled: false,
-    realtimeEngineSelected: false,
-    realtimeMidCallBudgetCheck: false,
-    realtimeCarrierHasCollector: false,
     elInboundEnabled: true,
     elInboundCarrierHasCollector: true,
   });
@@ -111,9 +105,6 @@ test("IE3-4b (Sache, nicht Schalter): Schalter an MIT Einsammler -> kein Befund"
 test("IE3-4c: Schalter aus, kein Einsammler -> kein Befund", () => {
   const findings = latentCostPathFindings({
     playTtsEnabled: false,
-    realtimeEngineSelected: false,
-    realtimeMidCallBudgetCheck: false,
-    realtimeCarrierHasCollector: false,
     elInboundEnabled: false,
     elInboundCarrierHasCollector: false,
   });

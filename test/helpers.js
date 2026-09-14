@@ -193,10 +193,6 @@ export const BASE_ENV = {
   // test/oc-p1-owner-call-http.test.js setzt beide explizit.
   OWNER_SELF_CALL_ENABLED: "false",
   OWNER_SELF_CALL_TENANT_IDS: "",
-  VOICE_ENGINE: "budget",
-  OPENAI_API_KEY: "",
-  REALTIME_MODEL: "gpt-realtime",
-  REALTIME_VOICE: "alloy",
   // ---- Telnyx (zweiter Provider) ----
   // Nummern sind keine Env-Var mehr (s.o.). Keys/IDs neutral leer; Tests, die
   // Telnyx-Outbound brauchen, seeden eine Telnyx-Owner-Nummer via ownerNumber.

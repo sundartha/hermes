@@ -367,6 +367,4 @@ At the end, say goodbye in one sentence and then call end_call.`,
       "[You just announced an action but did not call any tool. Carry out exactly that " +
       "action now, with the tool meant for it. Do not repeat your sentence.]",
   },
-
-  realtimeSpeechStyle: "SPEAKING STYLE: natural, brisk, short sentences.",
 });

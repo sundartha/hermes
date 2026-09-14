@@ -21,7 +21,6 @@
     "scripts/smoke-stripe-payment.mjs",
     "scripts/stt-wer.mjs",
     "scripts/telnyx-call-latency.mjs",
-    "scripts/telnyx-ws-echo.mjs",
     "test/i18n-catalog-run.mjs"
   ],
   "project": ["*.{js,mjs}", "src/**/*.js", "scripts/**/*.{js,mjs}", "test/**/*.js"],

@@ -776,30 +776,22 @@ export function costTruingBookingFindings({
   return findings;
 }
 
-// KV-P7/KV2-2: VIER latente Kosten-Pfade. Die ersten zwei bleiben WARN (kein exit(1) -
-// ein Guard, der den Boot in einer Konfiguration verweigert, an die niemand gedacht hat,
-// waere ein selbst verursachter Telefonie-Totalausfall, Praezedenz warnUnpricedModels);
-// Klaerung s. tasks/kv-p7-tts-klaerung.md. Der dritte (KV2-2 (h), Owner-Entscheidung 9+13
-// vom 2026-08-30) ist FATAL - dasselbe Muster wie REQUIRED_TYPES_EMPTY: ein Dienst, der
-// den Kostenpfad seines aktiven Anrufwegs nicht kennt, darf nicht starten.
-// Der vierte (IE3) ist ebenfalls FATAL und derselbe Sachverhalt in neuer Richtung: ein
-// Anrufweg, dessen Kostenpfad keinen Einsammler hat, darf nicht scharf sein.
+// KV-P7/IE3: ZWEI latente Kosten-Pfade. PLAY_TTS_UNPRICED bleibt WARN (kein exit(1) - ein
+// Guard, der den Boot in einer Konfiguration verweigert, an die niemand gedacht hat, waere
+// ein selbst verursachter Telefonie-Totalausfall, Praezedenz warnUnpricedModels).
+// EL_INBOUND_CARRIER_UNCOLLECTED ist FATAL: ein Anrufweg, dessen Kostenpfad keinen
+// Einsammler hat, darf nicht scharf sein (Muster REQUIRED_TYPES_EMPTY).
 export const LATENT_COST_PATH_FINDING = Object.freeze({
   PLAY_TTS_UNPRICED: "play_tts_unpriced", // WARN
-  REALTIME_NO_MIDCALL_BUDGET: "realtime_no_midcall_budget", // WARN
-  REALTIME_CARRIER_UNCOLLECTED: "realtime_carrier_uncollected", // FATAL (KV2-2 (h))
   EL_INBOUND_CARRIER_UNCOLLECTED: "el_inbound_carrier_uncollected", // FATAL (IE3)
 });
 
 // Reine Entscheidung (arg-injiziert, config-frei, testbar; Muster alertChannelFindings).
-// realtimeMidCallBudgetCheck/realtimeCarrierHasCollector OHNE Default (kein "= false"):
-// ein vergessenes Argument soll einen UEBERFLUESSIGEN Befund erzeugen, nie ein stilles
-// Verstummen der Pruefung - die richtige Fehlrichtung fuer einen Sicherheits-Guard.
+// elInboundCarrierHasCollector OHNE Default (kein "= false"): ein vergessenes Argument
+// soll einen UEBERFLUESSIGEN Befund erzeugen, nie ein stilles Verstummen der Pruefung -
+// die richtige Fehlrichtung fuer einen Sicherheits-Guard.
 export function latentCostPathFindings({
   playTtsEnabled,
-  realtimeEngineSelected,
-  realtimeMidCallBudgetCheck,
-  realtimeCarrierHasCollector,
   elInboundEnabled,
   elInboundCarrierHasCollector,
 }) {
@@ -818,45 +810,12 @@ export function latentCostPathFindings({
         "Monatsgebuehr auf Anrufe umgelegt wird (Preisfrage, tasks/kv-p7-tts-klaerung.md).",
     });
   }
-  if (realtimeEngineSelected && !realtimeMidCallBudgetCheck) {
-    findings.push({
-      code: LATENT_COST_PATH_FINDING.REALTIME_NO_MIDCALL_BUDGET,
-      fatal: false,
-      message:
-        "VOICE_ENGINE=realtime, aber die Realtime-Bruecke prueft nach Gespraechsbeginn " +
-        "KEINE Geld-Achse mehr - nur einen Max-Dauer-Timer (src/bridge.js). Die " +
-        "Budget-Engine prueft blockingBudgetAxis vor JEDER Turn-Runde (src/claude.js, " +
-        "roundStopReason); ein Tenant kann seine Kostendecke im laufenden Gespraech " +
-        "ueberziehen. Handlung: VOICE_ENGINE=budget lassen, bis die Bruecke dieselbe " +
-        "Pruefung fuehrt (dann REALTIME_MID_CALL_BUDGET_CHECK in src/bridge.js auf true).",
-    });
-  }
-  // KV2-2 (h) / Owner-Entscheidung 9+13 (2026-08-30): der Schalter VOICE_ENGINE=realtime
-  // bleibt erreichbar, aber bridge.js bucht nichts (kein bookCents/trackUsage/
-  // recordUsageEvent). Solange der Traeger openai_realtime im Katalog OHNE Einsammler
-  // steht, startet der Prozess nicht - dasselbe Muster wie REQUIRED_TYPES_EMPTY: ein
-  // Dienst, der den Kostenpfad seines aktiven Anrufwegs nicht kennt, darf nicht starten.
-  // Der Riegel haengt am KOSTENPFAD, nicht am Schalternamen: traegt openai_realtime je
-  // einen Einsammler, verschwindet er von selbst.
-  // NICHT dasselbe wie REALTIME_NO_MIDCALL_BUDGET daneben: der benennt die fehlende
-  // BREMSE, dieser die fehlende BUCHUNG - zwei Sachverhalte, zwei Labels (4.8).
-  if (realtimeEngineSelected && !realtimeCarrierHasCollector) {
-    findings.push({
-      code: LATENT_COST_PATH_FINDING.REALTIME_CARRIER_UNCOLLECTED,
-      fatal: true,
-      message:
-        "VOICE_ENGINE=realtime, aber der Kostentraeger openai_realtime hat keinen " +
-        "Beleg-Einsammler (src/billing/kostenarten.js) - jede Realtime-Sitzung erzeugt " +
-        "Anbieterkosten, die in keinem Buch und auf keiner Gate-Achse landen. " +
-        "Handlung: VOICE_ENGINE=budget setzen, oder erst den Einsammler bauen.",
-    });
-  }
-  // IE3: derselbe Riegel wie REALTIME_CARRIER_UNCOLLECTED darueber, fuer den neuen
-  // Inbound-Weg (unser Bein, Gespraech beim EL-Agenten). Er haengt am KOSTENPFAD, nicht
-  // am Schalternamen: sobald das Profil telnyx_inbound_el_convai mindestens einen
-  // Pflicht-Traeger MIT Einsammler fuehrt, verschwindet er von selbst - und wenn jemand
-  // die Katalogzeile entfernt oder ihre Traeger auf nicht_belegpflichtig setzt, startet
-  // der Prozess mit scharfem Schalter nicht mehr.
+  // IE3: ein Anrufweg, dessen Kostenpfad keinen Einsammler hat, darf nicht scharf sein.
+  // Riegel fuer den neuen Inbound-Weg (unser Bein, Gespraech beim EL-Agenten). Er haengt
+  // am KOSTENPFAD, nicht am Schalternamen: sobald das Profil telnyx_inbound_el_convai
+  // mindestens einen Pflicht-Traeger MIT Einsammler fuehrt, verschwindet er von selbst -
+  // und wenn jemand die Katalogzeile entfernt oder ihre Traeger auf nicht_belegpflichtig
+  // setzt, startet der Prozess mit scharfem Schalter nicht mehr.
   if (elInboundEnabled && !elInboundCarrierHasCollector) {
     findings.push({
       code: LATENT_COST_PATH_FINDING.EL_INBOUND_CARRIER_UNCOLLECTED,

@@ -59,7 +59,7 @@ let server;
 let queue = [];
 let bodies = [];
 
-let store, ops, claude, LOCALES, inCall, question, defaults;
+let store, ops, claude, LOCALES, inCall, question, defaults, speechShape;
 
 // Ein Call, der ALLE Registrierungs-Bedingungen erfuellt: Outbound, aktiv, abgenommen.
 // Der frische Poll wird pro Test gesetzt (das ist der Gegenstand mehrerer Faelle).
@@ -109,6 +109,7 @@ before(async () => {
   claude = await import("../src/claude.js");
   inCall = await import("../src/consult/in-call.js");
   question = await import("../src/consult/question.js");
+  speechShape = await import("../src/speech-shape.js");
   ({ LOCALES } = await import("../src/i18n/locales.js"));
 });
 
@@ -212,12 +213,12 @@ test("AL-P14-7: Annahme erzeugt EINEN offenen Consult und spricht den Fueller na
 test("AL-P14-8: Fueller und Halte-Satz ueberleben shapeForSpeech unveraendert", () => {
   for (const lang of ["de", "fr", "en"]) {
     assert.equal(
-      claude.shapeForSpeech(LOCALES[lang].consultFillerSpeech),
+      speechShape.shapeForSpeech(LOCALES[lang].consultFillerSpeech),
       LOCALES[lang].consultFillerSpeech,
       `${lang}: consultFillerSpeech wird umformatiert`,
     );
     assert.equal(
-      claude.shapeForSpeech(LOCALES[lang].consultHoldSpeech),
+      speechShape.shapeForSpeech(LOCALES[lang].consultHoldSpeech),
       LOCALES[lang].consultHoldSpeech,
       `${lang}: consultHoldSpeech wird umformatiert`,
     );
@@ -292,7 +293,7 @@ test("AL-P14-11b: ein take_message derselben Runde geht NICHT verloren - die Rue
   assert.equal(store.getCall("call_alp14_8").actionItemIds.length, 1, "Nachricht verloren");
 });
 
-test("AL-P14-12: execTool kennt get_consult NICHT (der zweite Riegel, gilt auch fuer bridge.js)", () => {
+test("AL-P14-12: execTool kennt get_consult NICHT (der zweite Riegel)", () => {
   const call = store.getCall("call_alp14_12");
   assert.equal(
     claude.execTool(call, CONSULT, { question: QUESTION }),

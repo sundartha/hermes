@@ -4087,3 +4087,22 @@ Richtungen), Max-Dauer, Offenlegung, Outbound-Gates, `OUTBOUND_FROZEN`, `MAX_NUM
 
 **Getragen:** R-1 (Streaming-/Abbruch-Naht in `agentTurn`, entfaellt mit IE6 Stufe 3),
 R-3 (Render-Env-Werte der entfernten Schalter bleiben stehen und sind wirkungslos).
+
+## IE6-S2 — OpenAI-Realtime-Bridge ersatzlos entfernt (2026-09-14)
+
+Die Audio-Bridge (Media-Stream-WebSocket <-> OpenAI Realtime), die Stream-Direktive,
+der MediaTransport-Port samt Telnyx-Adapter und VOICE_ENGINE=realtime sind entfernt.
+
+**Angriffsflaeche:** kein upgrade-Handler mehr; ein WebSocket-Upgrade auf /media/telnyx
+wird nicht angenommen (kein 101, Test IE6-S2-4). Die stream_token-Pruefung entfaellt mit
+dem Endpunkt; das Feld bleibt am Call-Datensatz und wird weiter gestrippt.
+Ein Secret (OPENAI_API_KEY) wird nicht mehr gelesen.
+
+**Unveraendert:** Ed25519, Wiederholungs-Riegel, Tenant-Aufloesung, Kostendecke (beide
+Richtungen, Mid-Call-Pruefung der Budget-Engine), Max-Dauer inkl. Boot-Re-Arm (jetzt
+ohne Engine-Sonderfall), Offenlegung (disclosureSentence), Outbound-Gates, OUTBOUND_FROZEN.
+
+**Altbestand:** Profil telnyx_inbound_realtime bleibt unaufgeloest (fail-closed).
+
+**Getragen:** R-S2-1 (stream_token-Spalte, Schema-Cutover eigene Entscheidung),
+R-S2-2 (Render-Env VOICE_ENGINE/OPENAI_*/REALTIME_* wirkungslos), R-S2-3 (Workflow-Vorlagen).

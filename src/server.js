@@ -1,4 +1,4 @@
-// Voice-Gateway: Provider-Webhooks (Inbound/Outbound), Audio-Bridge (Realtime),
+// Voice-Gateway: Provider-Webhooks (Inbound/Outbound),
 // MCP ueber Streamable HTTP (/mcp), REST-API fuer Dashboard & stdio-MCP.
 // MUSS erste Importzeile bleiben (vor store.js) - globales Crash-Netz, ESM-Eval-Order (T-P0-07).
 import "./process-guards.js";
@@ -218,8 +218,8 @@ const accountsRef = { current: null };
 
 // call-finish (P4): finishCall (Settlement/Summary/SMS/Mail) + releaseReserve (Reserve-
 // Freigabe) EINMAL beim Boot verdrahtet (Naht wie metering/outboundGates, nicht im Handler;
-// INV-7). EINE Instanz: dieselbe finishCall-Referenz geht an attachMediaBridge UND - via
-// makeVoiceRoutes
+// INV-7). EINE Instanz: dieselbe finishCall-Referenz geht an makeVoiceRoutes und
+// call-lifecycle
 // (call._finished/billedAt-Guards verlangen Identitaet). metering ist oben konstruiert (P1);
 // die paymentEnabled-Gating-Bedingung bleibt im finishCall-Body (INV-9), Cents bleiben Ganzzahl.
 const callFinish = makeCallFinish({
@@ -355,7 +355,7 @@ const voiceRender = makeVoiceRender({ config });
 // ---------------- Kompositionswurzel (Server-Slim P15) ----------------
 // buildApp(deps) verdrahtet die komplette Express-App (Middleware, Wiring, Router-Mounts,
 // src/app.js); bootServer(deps) fuehrt die Boot-Sequenz aus (store.load, Retention,
-// Fail-closed-Gates, listen, Audio-Bridge, Graceful-Shutdown, src/boot.js). Beide teilen
+// Fail-closed-Gates, listen, Graceful-Shutdown, src/boot.js). Beide teilen
 // sich EIN deps-Buendel (F1: je Funktion 1 Argument). buildApp MUSS vollstaendig durchlaufen
 // (inkl. dem awaited guardedBoot-Block), BEVOR bootServer startet - store.load() wird NICHT
 // vorgezogen (Pre-Mortem 11: scheduleReleaseReconcile feuert weiterhin vor store.load, exakt

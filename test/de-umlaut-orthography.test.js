@@ -1,8 +1,8 @@
 // P1 (PLAN-CONVERSATION-QUALITY-V2): jeder deterministisch GESPROCHENE deutsche String
 // traegt korrekte Umlaute. Geprueft wird eine EXPLIZIT aufgezaehlte Feldliste (S1-S8 des
-// Plans), NICHT die Datei und NICHT "alles im Bundle": realtimeOpener.outbound
-// (Realtime-Steuertext) und summarySystem (LLM-Prompt, Output wird als JSON geparst)
-// liegen im selben Objekt, werden aber nie gesprochen und bleiben bewusst transliteriert.
+// Plans), NICHT die Datei und NICHT "alles im Bundle": summarySystem
+// (LLM-Prompt, Output wird als JSON geparst) liegt im selben Objekt, wird aber nie
+// gesprochen und bleibt bewusst transliteriert.
 // Denylist bekannter Staemme statt generischer /ue|oe|ae/-Regel: sonst schlagen legitime
 // Wortfolgen ("neue", "Poesie", "zuerst") falsch an.
 import { test } from "node:test";
@@ -69,10 +69,9 @@ test("P1-U2: Gegenprobe - jedes dieser Felder traegt echte Umlaut-Zeichen", () =
   }
 });
 
-test("P1-U3: Abgrenzung - Steuertext und LLM-Prompt bleiben transliteriert (nicht mitfixen)", () => {
-  // Scope-Grenze des Plans als Test: beide sind KEIN gesprochener Text. Wer sie
-  // "verbessert", bricht f1-i18n-locale ohne jeden hoerbaren Gewinn.
-  assert.match(LOCALES.de.realtimeOpener.outbound("DISCLOSURE"), /Gespraech/);
+test("P1-U3: Abgrenzung - der LLM-Prompt bleibt transliteriert (nicht mitfixen)", () => {
+  // Scope-Grenze des Plans als Test: kein gesprochener Text. Wer ihn "verbessert",
+  // bricht f1-i18n-locale ohne jeden hoerbaren Gewinn.
   assert.match(LOCALES.de.summarySystem(OWNER_NAME), /fuer/);
 });
 

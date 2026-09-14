@@ -19,7 +19,6 @@ export const DIRECTIVE = Object.freeze({
   GATHER: "gather", // Sprach-Eingabe einsammeln; optionaler Prompt + Folge-Action
   HANGUP: "hangup",
   REDIRECT: "redirect",
-  STREAM: "stream", // Realtime: Media-Stream an die Bridge
 });
 
 // --- Builder (intentions-ausdrueckende Namen, <=3 Args via Objekt-Param) ---
@@ -60,6 +59,3 @@ export const gather = ({
 export const hangup = () => ({ kind: DIRECTIVE.HANGUP });
 
 export const redirect = (url) => ({ kind: DIRECTIVE.REDIRECT, url });
-
-// Realtime-Media-Stream. params = [{name, value}, ...] (call_id, stream_token).
-export const stream = ({ url, params }) => ({ kind: DIRECTIVE.STREAM, url, params });

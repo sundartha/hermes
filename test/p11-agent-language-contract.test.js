@@ -45,7 +45,6 @@ const STRING_FIELDS = [
   "constraintsLabel",
   "outcomeOutbound",
   "outcomeInbound",
-  "realtimeSpeechStyle",
 ];
 // WW-P3: consultRules gehoert dazu - der Rueckfrage-Block ist Prompt-Rumpf, keine
 // Tool-Beschreibung, und eine vierte Sprache ohne ihn haette den Defekt aus Befund W2

@@ -6,8 +6,9 @@
 import { NUMBER_STATUS, GLOBAL_CAP_REASON } from "./defaults.js";
 import { findTenant, resolveCallLanguage } from "./state-ops.js";
 
-// Call-Record fuer API-Antworten: streamToken (Zugangsgeheimnis des /media-Streams)
-// und interne Flags duerfen den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
+// Call-Record fuer API-Antworten: streamToken (Altfeld des mit IE6-S2 entfernten
+// Media-Streams; Spalte bleibt, verlaesst den Server nie) und interne Flags duerfen
+// den Server nie verlassen. summarySmsSentAt (F2 P9) ist ein
 // rein interner persistierter Dedup-Marker -> wie _finished gestrippt (kein API-Leak).
 // KS-P5: die zwei Belastungs-Anker (estimatedCostSpendMonthKey/estimatedCostPeriodKey)
 // verlassen die API ebenfalls NICHT - sie gehoeren zur selben internen Abrechnungs-Achse

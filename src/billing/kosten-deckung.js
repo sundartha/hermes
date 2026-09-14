@@ -96,7 +96,7 @@ function belegIndex(zeilen) {
 }
 
 // Die Pflicht-Traeger EINES Anrufs, ueber sein (gesetztes oder legacy-abgeleitetes) Profil.
-// openai_realtime faellt bereits in pflichtTraegerFuerProfil heraus (kein Einsammler) -
+// nicht_belegpflichtig-Traeger fallen bereits in pflichtTraegerFuerProfil heraus -
 // diese Funktion muss das nicht ein zweites Mal wissen.
 const traegerVon = (call) => pflichtTraegerFuerProfil(kostenprofilFuerAnruf(call));
 

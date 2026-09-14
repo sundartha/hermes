@@ -90,7 +90,7 @@ async function postIncoming(harness, callSid) {
 }
 
 test("KV2-2-c4: Inbound-Budget-Zweig setzt costProfile=telnyx_inbound_budget", async () => {
-  const harness = await startInboundHarness({ voiceEngine: "budget", seed: inboundSeed() });
+  const harness = await startInboundHarness({ seed: inboundSeed() });
   try {
     const res = await postIncoming(harness, "CAbudget");
     assert.equal(res.status, HTTP_OK);
@@ -102,62 +102,24 @@ test("KV2-2-c4: Inbound-Budget-Zweig setzt costProfile=telnyx_inbound_budget", a
   }
 });
 
-test("KV2-2-c5: Inbound-Realtime-Zweig setzt costProfile=telnyx_inbound_realtime", async () => {
-  const harness = await startInboundHarness({ voiceEngine: "realtime", seed: inboundSeed() });
-  try {
-    const res = await postIncoming(harness, "CArealtime");
-    assert.equal(res.status, HTTP_OK);
-    const calls = harness.store.load().calls;
-    const call = callWithTwilioSid(calls, "CArealtime");
-    assert.equal(call.costProfile, KOSTENPROFIL.TELNYX_INBOUND_REALTIME);
-  } finally {
-    await harness.stop();
-  }
-});
-
-test("KV2-2-c6: budget und realtime liefern ZWEI VERSCHIEDENE Inbound-Profile", async () => {
-  const budgetHarness = await startInboundHarness({ voiceEngine: "budget", seed: inboundSeed() });
-  const realtimeHarness = await startInboundHarness({ voiceEngine: "realtime", seed: inboundSeed() });
-  try {
-    await postIncoming(budgetHarness, "CAb2");
-    await postIncoming(realtimeHarness, "CAr2");
-    const budgetCalls = budgetHarness.store.load().calls;
-    const realtimeCalls = realtimeHarness.store.load().calls;
-    const budgetProfil = callWithTwilioSid(budgetCalls, "CAb2").costProfile;
-    const realtimeProfil = callWithTwilioSid(realtimeCalls, "CAr2").costProfile;
-    assert.notEqual(
-      budgetProfil,
-      realtimeProfil,
-      "ein einziges Inbound-Profil laesst diesen Test fallen",
-    );
-  } finally {
-    await budgetHarness.stop();
-    await realtimeHarness.stop();
-  }
-});
-
-test("KV2-2-c7: alle vier Weichen-Zweige liefern ein Profil aus der Registry", async () => {
+test("KV2-2-c7: alle drei Weichen-Zweige liefern ein Profil aus der Registry", async () => {
   const elSrv = await startServer({ env: { ...EL_BOOT_ENV }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
   const texmlSrv = await startServer({ env: { FAKE_ORIGINATE: "true" }, ownerNumber: TELNYX_TEST_OWNER_NUMBER });
-  const budgetHarness = await startInboundHarness({ voiceEngine: "budget", seed: inboundSeed() });
-  const realtimeHarness = await startInboundHarness({ voiceEngine: "realtime", seed: inboundSeed() });
+  const budgetHarness = await startInboundHarness({ seed: inboundSeed() });
   try {
     const elRes = await placeCall(elSrv);
     const { callId: elCallId } = await elRes.json();
     const texmlRes = await placeCall(texmlSrv);
     const { callId: texmlCallId } = await texmlRes.json();
     await postIncoming(budgetHarness, "CAc7b");
-    await postIncoming(realtimeHarness, "CAc7r");
 
     const elCalls = elSrv.readStore().calls;
     const texmlCalls = texmlSrv.readStore().calls;
     const budgetCalls = budgetHarness.store.load().calls;
-    const realtimeCalls = realtimeHarness.store.load().calls;
     const gefundeneProfile = [
       callWithId(elCalls, elCallId).costProfile,
       callWithId(texmlCalls, texmlCallId).costProfile,
       callWithTwilioSid(budgetCalls, "CAc7b").costProfile,
-      callWithTwilioSid(realtimeCalls, "CAc7r").costProfile,
     ];
     for (const profil of gefundeneProfile) {
       assert.ok(Object.hasOwn(KOSTENPROFILE, profil), `Profil '${profil}' steht nicht in der Registry`);
@@ -166,7 +128,6 @@ test("KV2-2-c7: alle vier Weichen-Zweige liefern ein Profil aus der Registry", a
     await elSrv.stop();
     await texmlSrv.stop();
     await budgetHarness.stop();
-    await realtimeHarness.stop();
   }
 });
 

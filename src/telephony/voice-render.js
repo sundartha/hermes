@@ -1,7 +1,7 @@
 // Voice-Render-Helfer (Server-Slim P3, reine Verschiebung aus server.js). Die Factory
 // schliesst config und liest config.server.publicUrl/config.voice.sttSpeechTimeoutSec ZUR LAUFZEIT
 // (nicht zur Import-Zeit einfrieren - sonst driftet der Telnyx-Absolut-URL-Pfad). Der
-// voiceRenderer-Port, die Direktiven-Helfer, localeFor, MEDIA_PATH und DEFAULT_PROVIDER
+// voiceRenderer-Port, die Direktiven-Helfer, localeFor und PROVIDER
 // werden hier importiert (EINE Quelle je, G5). Rein: kein I/O, keine Nebeneffekte;
 // einzige Ausnahme ist die frische Turn-Marke je Gather (Zufall, kein IO, kein Zustand).
 //
@@ -9,17 +9,10 @@
 //   turnDirectives         - Sprach-Turn (Budget-Engine): Gather + Redirect-Fallback.
 //   sayInCallVoice         - gesprochener Satz im Voice-Profil des Calls (F1 P4).
 //   followupTurnDirectives - Folge-Gather mit festem STT-Endpointing (G3).
-//   streamDirectives       - Realtime-Stream-Direktive an die Bridge.
 import { voiceRenderer } from "./registry.js";
-import {
-  say as sayD,
-  gather as gatherD,
-  redirect as redirectD,
-  stream as streamD,
-} from "./directives.js";
+import { say as sayD, gather as gatherD, redirect as redirectD } from "./directives.js";
 import { localeFor } from "../i18n/locales.js";
-import { MEDIA_PATH } from "../bridge.js";
-import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
+import { PROVIDER } from "../store/defaults.js";
 import { newTurnToken, TURN_TOKEN_PARAM } from "./webhook-idempotenz.js";
 
 export function makeVoiceRender({ config }) {
@@ -63,23 +56,5 @@ export function makeVoiceRender({ config }) {
     return turnDirectives(call, text, { speechTimeoutSec: config.voice.sttSpeechTimeoutSec });
   }
 
-  // Realtime-Engine: Direktive fuer den Media-Stream an die Bridge. Der WS-Pfad ist
-  // provider-aware ueber MEDIA_PATH; ein unbekannter Pfad wird fail-closed verworfen
-  // (bridge.js). Der upgrade-Handler leitet daraus den Provider ab. stream_token authentifiziert
-  // den WebSocket (Bridge prueft beim start-Event, bridge.js).
-  function streamDirectives(call) {
-    const path = MEDIA_PATH[call.provider] || MEDIA_PATH[DEFAULT_PROVIDER];
-    const url = config.server.publicUrl.replace(/^https/, "wss") + path;
-    return [
-      streamD({
-        url,
-        params: [
-          { name: "call_id", value: call.id },
-          { name: "stream_token", value: call.streamToken },
-        ],
-      }),
-    ];
-  }
-
-  return { render, turnDirectives, sayInCallVoice, followupTurnDirectives, streamDirectives };
+  return { render, turnDirectives, sayInCallVoice, followupTurnDirectives };
 }
