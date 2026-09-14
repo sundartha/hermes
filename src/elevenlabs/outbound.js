@@ -830,11 +830,12 @@ const ohneRechercheTor = () => false;
 // in das echte data/store.json statt in sein Temp-Verzeichnis).
 const ohneMetrikMeldung = Object.freeze({ logSenderFallback: () => {} });
 
-// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die vierzehn, die die
-// Agenten-Vorlage deklariert ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}},
-// {{background}}, {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}},
-// {{consult_available}}, {{opening_line}}, {{lookup_available}}, {{callee_relation}},
-// {{voicemail_line}}) - fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt
+// Der Auftrag reist als DYNAMISCHE VARIABLE. Es sind genau die, die die Agenten-Vorlage
+// verbraucht ({{owner_name}}, {{callee}}, {{objective}}, {{constraints}}, {{background}},
+// {{mandate}}, {{owner_timezone}}, {{callee_timezone}}, {{today}}, {{consult_available}},
+// {{opening_line}}, {{lookup_available}}, {{callee_relation}}, {{voicemail_line}},
+// {{inbound_situation}}, dazu tenant_token fuer die Werkzeuge; die Namensmenge pinnt
+// test/el-vorlage-variablen-abgleich.test.js) - fehlt eine, bliebe ihr Platzhalter im Agenten-Prompt
 // unaufgeloest. Der Weg ueber eine Prompt-Uebersteuerung scheidet aus: eine nicht
 // freigeschaltete conversation_config_override wird vom Anbieter STILL ignoriert.
 //
@@ -923,6 +924,12 @@ function dynamicVariables({
     // desselben Defaults waeren zwei Wahrheiten, G5) und DIESELBE geprueft-validierte
     // Grund-Zeile wie die Eroeffnung.
     voicemail_line: voicemailText({ owner, offenlegung, openingLine }),
+    // IEL-B3 (L5): die Inbound-Sektion der Vorlage (Ende der PERSONA-Zeile). Ein
+    // ausgehender Anruf ist nie eingehend: der Wert ist hier IMMER "", und der Prompt am
+    // Anbieter rendert damit exakt den Text ohne diese Sektion (Muster callee_relation).
+    // Mitreisen MUSS sie trotzdem - ein Prompt-Platzhalter ohne Wert bliebe unaufgeloest.
+    // Den Blocktext fuer eingehende Anrufe baut der Inbound-Weg, nicht dieser Anrufstart.
+    inbound_situation: "",
     // SEC-P4: die Mandanten-Dimension des Werkzeug-Tokens. Die Werkzeug-Definition liest
     // sie ueber dynamic_variable in ihren Anfragekoerper (dieselbe Mechanik wie
     // conversation_id aus system__conversation_id); der PROMPT nennt sie NIE - kein

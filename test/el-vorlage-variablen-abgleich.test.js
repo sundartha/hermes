@@ -59,7 +59,10 @@ const TEMPLATE_PATH = "elevenlabs/agent_configs/outbound-agent.template.json";
 // Mandanten-Dimension des Werkzeug-Tokens. Sie steht in KEINEM Text, sondern nur im
 // Anfragekoerper der Werkzeuge; ohne die vierte Quelle unten waere sie hier unsichtbar
 // gewesen und der Abgleich haette sie als toten Ballast gemeldet.
-const EXPECTED_VARIABLE_COUNT = 15;
+// Sechzehn seit IEL-B3: {{inbound_situation}} kam als sechzehnter Name dazu - die
+// Prompt-Sektion fuer einen eingehenden Anruf am selben Agenten; sie geht fuer JEDEN
+// ausgehenden Anruf als leerer String hinaus (Muster callee_relation).
+const EXPECTED_VARIABLE_COUNT = 16;
 
 // ---- Seite A: {{name}} aus dem WIRKLICHEN Vorlagentext --------------------------------
 const PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
@@ -132,7 +135,7 @@ function fehlendeUndUeberzaehlige(seiteA, seiteB) {
   return { fehlend, ueberzaehlig };
 }
 
-test("EL-VORLAGE-VARIABLEN: verbrauchte Vorlagen-Variablen und gesendete dynamic_variables sind deckungsgleich (fuenfzehn Namen)", async () => {
+test("EL-VORLAGE-VARIABLEN: verbrauchte Vorlagen-Variablen und gesendete dynamic_variables sind deckungsgleich (sechzehn Namen)", async () => {
   const seiteA = templatePlaceholderNames();
   const gesendet = await sentDynamicVariables();
   const seiteB = new Set(Object.keys(gesendet));
