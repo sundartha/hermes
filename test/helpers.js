@@ -1144,6 +1144,14 @@ export function postTelnyxIncoming(
   });
 }
 
+// IEL-B1: die zwei server-erzeugten Zufallsanteile einer /voice/incoming-Antwort auf feste
+// Platzhalter - EINE Quelle fuer jeden Byte-Vergleich des Inbound-TeXML.
+export function normalizeIncomingTexml(texml) {
+  return texml
+    .replaceAll(/callId=call_[a-zA-Z0-9]+/g, "callId=call_X")
+    .replaceAll(/turnToken=[a-f0-9]+/g, "turnToken=X");
+}
+
 // Seedet EINE aktive Telnyx-Nummer (TELNYX_TEST_TENANT_NUMBER) am Owner-Tenant - Inbound-
 // Routing (/voice/incoming) braucht eine passende aktive Nummer im Store, sonst greift das
 // To-Routing nicht.
