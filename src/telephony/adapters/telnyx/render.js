@@ -27,6 +27,12 @@ const XML_DECL = '<?xml version="1.0" encoding="UTF-8"?>';
 // Bruecke. Anbieter-Grenze, deshalb hier im Adapter und nicht in der neutralen Direktive.
 const DIAL_TIME_LIMIT_MIN_S = 60;
 const DIAL_TIME_LIMIT_MAX_S = 14400;
+// IEL-B7-S1a-Nachtrag: Grenzen des timeout-Attributs (Ring-Zeit bis zum Abbruch, dieselbe
+// Telnyx-Doku wie timeLimit oben): 5-600 s. Ohne Klemmung wuerde ein fehlendes timeoutS
+// wortwoertlich zu timeout="undefined" im TeXML fuehren - derselbe Fehler, den timeLimitS
+// bereits ueber dialTimeLimitS vermeidet.
+const DIAL_TIMEOUT_MIN_S = 5;
+const DIAL_TIMEOUT_MAX_S = 600;
 // Das SIP-Bein meldet nur "answered": damit startet die innere Bindungsfrist (E9-1).
 const SIP_STATUS_CALLBACK_EVENT = "answered";
 
@@ -138,10 +144,14 @@ function gatherPrompt(directive) {
   return "";
 }
 
-// Fehlertext nennt nie einen Attributwert (Passwort liegt in derselben Direktive).
-function dialTimeLimitS(seconds) {
-  if (!Number.isFinite(seconds)) throw new Error("Dial-Direktive: timeLimitS ist keine Zahl");
-  return Math.min(DIAL_TIME_LIMIT_MAX_S, Math.max(DIAL_TIME_LIMIT_MIN_S, seconds));
+// Sekundenwert einer Dial-Direktive pruefen und klemmen: eine Funktion fuer timeout UND
+// timeLimit (G5, keine zwei fast identischen Checks) statt separater Pruefungen pro Feld.
+// Grenzen als Objekt (F1, <=3 Argumente) statt zwei weiterer Einzelparameter.
+// Fehlertext nennt nur den Feldnamen, nie einen Attributwert (Passwort liegt in derselben
+// Direktive).
+function clampDialSeconds(seconds, fieldName, { minS, maxS }) {
+  if (!Number.isFinite(seconds)) throw new Error(`Dial-Direktive: ${fieldName} ist keine Zahl`);
+  return Math.min(maxS, Math.max(minS, seconds));
 }
 
 // Pflichtfelder der Dial-Direktive (uri, username, password, callerId, statusCallbackUrl):
@@ -169,8 +179,14 @@ function renderDialSip(directive) {
   const statusCallbackUrl = requireDialField(directive, "statusCallbackUrl");
   const dial = attrString({
     callerId,
-    timeout: directive.timeoutS,
-    timeLimit: dialTimeLimitS(directive.timeLimitS),
+    timeout: clampDialSeconds(directive.timeoutS, "timeoutS", {
+      minS: DIAL_TIMEOUT_MIN_S,
+      maxS: DIAL_TIMEOUT_MAX_S,
+    }),
+    timeLimit: clampDialSeconds(directive.timeLimitS, "timeLimitS", {
+      minS: DIAL_TIME_LIMIT_MIN_S,
+      maxS: DIAL_TIME_LIMIT_MAX_S,
+    }),
   });
   const sip = attrString({
     username,

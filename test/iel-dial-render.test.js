@@ -19,6 +19,11 @@ const DIAL_TIME_LIMIT_MIN_S = 60;
 const DIAL_TIME_LIMIT_MAX_S = 14400;
 const FAR_ABOVE_DIAL_TIME_LIMIT_MAX_S = 86400;
 const DEFAULT_TIME_LIMIT_S = 1800; // liegt innerhalb der Grenzen, aendert sich also nicht
+// IEL-B7-S1a-Nachtrag: dieselben Grenzwerte wie DIAL_TIMEOUT_MIN_S/_MAX_S im Renderer
+// (render.js), hier als Testkonstanten benannt (G25).
+const DIAL_TIMEOUT_MIN_S = 5;
+const DIAL_TIMEOUT_MAX_S = 600;
+const FAR_ABOVE_DIAL_TIMEOUT_MAX_S = 3600;
 
 process.env.TELNYX_API_BASE = API_BASE;
 process.env.TELNYX_API_KEY = API_KEY;
@@ -123,6 +128,42 @@ test("IEL-B7-4: timeLimit keine Zahl -> wirft ohne Wert", () => {
         assert.ok(!err.message.includes(DID));
         return true;
       },
+    );
+  }
+});
+
+// IEL-B7-S1a-Nachtrag (Review-Blocker Runde 2): timeoutS lief bislang OHNE die Pruef-/
+// Klemm-Funktion durch attrString und erzeugte bei fehlendem Wert woertlich
+// timeout="undefined" im TeXML. Diese beiden Tests decken das ab (Muster IEL-B7-3/-4).
+test("IEL-B7-14: timeout-Grenzen, tabellengetrieben", () => {
+  const min = DIAL_TIMEOUT_MIN_S;
+  const max = DIAL_TIMEOUT_MAX_S;
+  const faelle = [
+    [1, min],
+    [min - 1, min],
+    [min, min],
+    [max, max],
+    [max + 1, max],
+    [FAR_ABOVE_DIAL_TIMEOUT_MAX_S, max],
+  ];
+  for (const [eingabe, erwartet] of faelle) {
+    const inner = renderEinzeln([baueDialSip({ timeoutS: eingabe })]);
+    assert.match(inner, new RegExp(`timeout="${erwartet}"`), `timeoutS=${eingabe}`);
+  }
+});
+
+test("IEL-B7-15: fehlendes/kaputtes timeoutS -> wirft statt timeout=\"undefined\" zu rendern", () => {
+  for (const kaputt of [undefined, NaN, "20"]) {
+    assert.throws(
+      () => renderDirectives([baueDialSip({ timeoutS: kaputt })]),
+      (err) => {
+        assert.match(err.message, /timeoutS/);
+        assert.ok(!err.message.includes("pw-geheim"));
+        assert.ok(!err.message.includes("hermes-sip"));
+        assert.ok(!err.message.includes(DID));
+        return true;
+      },
+      `timeoutS=${kaputt}`,
     );
   }
 });
