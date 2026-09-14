@@ -136,8 +136,9 @@ export function makeVoiceRoutes({
   // werden nur ihre zwei Eingaben aus dem Store gezogen. Auch INBOUND bekommt sie: seine
   // KI-Token buchen in jeder Schleifenrunde live auf dieselbe Tenant-Achse (E11-Korrektur),
   // und ohne eigene Frist liefe ein haengendes Inbound-Leg bis zur absoluten Obergrenze.
-  // callTariffCentsPerMin traegt die Richtungsregel (inbound: Satz des EIGENEN DID-Landes) -
-  // hier NICHT nachgebaut.
+  // callTariffCentsPerMin traegt die Satzregel (outbound: Leg-Satz; inbound: kalibrierter
+  // Inbound-Satz, mit Kostenprofil telnyx_inbound_el_convai der Leg-Satz wie Outbound-EL) -
+  // hier NICHT nachgebaut. Das Profil muss dafuer im Leg-Objekt stehen.
   function brakeSecondsFor(leg) {
     return emergencyBrakeSeconds({
       remainingCents: store.tenantBudgetSnapshot(leg.tenantId, config.billing).remainingCents,

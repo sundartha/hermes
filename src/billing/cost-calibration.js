@@ -393,9 +393,11 @@ export function tarifpaarEintrag({ route, stichproben, konfiguriert, minSamples,
 const INBOUND_KOSTENPROFILE = new Set([
   KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
   // IE3: das zweite Inbound-Profil - genau der Fall, den der Kommentar oben angekuendigt
-  // hat. Die LIVE-Buchung waehlt den Satz nach call.direction (metering.js), nicht nach
-  // Profil; ohne diesen Eintrag verglich der Tarif-Waechter die Vollkosten eines
-  // INBOUND-Anrufs gegen den OUTBOUND-Satz. Keine Tarifaenderung, eine Einordnung.
+  // hat. Die LIVE-Buchung (metering.js#callTariffCentsPerMin) bepreist dieses Profil seit
+  // IEL-B2 mit dem Leg-Satz; der Tarifpaar-Waechter vergleicht es hier weiterhin gegen den
+  // Inbound-Satz - offener Befund, eigene Entscheidung (Diagnose, kein Gate). Ohne diesen
+  // Eintrag verglich der Tarif-Waechter die Vollkosten eines INBOUND-Anrufs gegen den
+  // OUTBOUND-Satz. Keine Tarifaenderung, eine Einordnung.
   KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
 ]);
 
