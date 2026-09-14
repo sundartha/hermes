@@ -12,6 +12,7 @@ import {
   seedWithTelnyxNumber,
   tempDataDir,
   TELNYX_TEST_OWNER_NUMBER,
+  normalizeIncomingTexml,
 } from "./helpers.js";
 
 const HTTP_NOT_FOUND = 404;
@@ -82,11 +83,11 @@ test("IE6-S1-3: Inbound bei gesetzten Alt-Schaltern bleibt byte-identisch zu ein
     const xmlClean = await resClean.text();
     // Normalisierung: callId=call_... und turnToken=... unterscheiden sich zwischen
     // den zwei Servern (server-generiert, zufaellig).
-    const normalize = (xml) =>
-      xml
-        .replaceAll(/callId=call_[a-zA-Z0-9]+/g, "callId=call_X")
-        .replaceAll(/turnToken=[a-f0-9]+/g, "turnToken=X");
-    assert.equal(normalize(xmlAlt), normalize(xmlClean), "TeXML byte-identisch nach callId-Normalisierung");
+    assert.equal(
+      normalizeIncomingTexml(xmlAlt),
+      normalizeIncomingTexml(xmlClean),
+      "TeXML byte-identisch nach callId-Normalisierung",
+    );
 
     const altCalls = srvAlt.readStore().calls;
     const callAlt = altCalls.find((eintrag) => eintrag.twilioSid === "v3:ie6s1");

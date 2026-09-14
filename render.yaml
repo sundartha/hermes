@@ -144,6 +144,17 @@ services:
       # sind Dashboard-managed, diese Zeile allein aendert Live nichts.
       - key: ELEVENLABS_INBOUND_ENABLED
         value: "false"
+      # IEL-B1: Allowlist + Zugang des EL-Inbound-Wegs. ALLE sync: false (Muster
+      # OWNER_SELF_CALL_TENANT_IDS): kein Wert im Blueprint, Leer-Liste = NIEMAND.
+      # Werte nie von Hand - nur per Skript-Lauf der IEL-Kette mit Lesebeleg.
+      - key: ELEVENLABS_INBOUND_TENANT_IDS
+        sync: false
+      - key: ELEVENLABS_INBOUND_SIP_USER
+        sync: false
+      - key: ELEVENLABS_INBOUND_SIP_PASSWORD
+        sync: false
+      - key: ELEVENLABS_INIT_WEBHOOK_TOKEN
+        sync: false
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,

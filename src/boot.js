@@ -36,7 +36,12 @@ import {
   platformAlertSenderFindings,
   driftConfigFindings,
   llmFallbackFindings,
+  elInboundAccessFindings,
 } from "./boot-guard.js";
+import {
+  inboundElAllowlistProbeLine,
+  inboundElPinnedTenantCount,
+} from "./elevenlabs/inbound-path-decision.js";
 import { hasActiveNumber } from "./store/views.js";
 import { sendBootstrapAlertSms, resolveBootstrapAlertSender } from "./telephony/alert-sms.js";
 // IP4: der GETEILTE Sprechpfad-Namensvorrat (kein zweiter Ortsname fuer dasselbe) - rein,
@@ -466,13 +471,19 @@ function assertLatentCostPaths(config) {
   );
 }
 
+// IEL-B1: Zugang des EL-Inbound-Wegs (elInboundAccessFindings, Begruendung dort). FATAL
+// moeglich -> "assert" (N7), Umgang ueber applyBootFindings (G5).
+function assertElInboundAccess(config) {
+  applyBootFindings(elInboundAccessFindings(config.voice.elevenLabsInbound));
+}
+
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertCostTruingBooking
 // (LCT P4) das siebte, assertSttProfile (STT-A1) das achte, assertPricedModels (B4a)
-// das neunte, assertPricedPlans (GP-P6) das zehnte und assertLatentCostPaths (IE3)
-// das elfte, das noch process.exit(1)
+// das neunte, assertPricedPlans (GP-P6) das zehnte, assertLatentCostPaths (IE3) das elfte
+// und assertElInboundAccess (IEL-B1) das zwoelfte, das noch process.exit(1)
 // rufen kann - warnStaleModelPrices/warnAlertChannelUnset/warnTariffDrift/
 // warnNumberOriginDecoupled/warnMissingProvisioningConnection/
 // warnElRegistrationSipCredsMissing/warnLlmFallbackUnusable (FW2) sind reine Diagnose
@@ -561,6 +572,7 @@ function assertBootGates(config, store, durableAudit) {
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
   assertLatentCostPaths(config); // KV-P7/IE3: kann exit(1)
+  assertElInboundAccess(config); // IEL-B1: kann exit(1)
   warnElRegistrationSipCredsMissing(config); // OUTBOUND-E5, WARN
 }
 
@@ -600,6 +612,14 @@ export function inboundSprechpfadBannerLine(voice) {
     `${SPRECHPFAD.PLAY_TTS} faellt bei erschoepftem Kontingent, Synthese-Fehler oder ` +
       `Anbieter ohne Play-Audio fail-safe auf ${SPRECHPFAD.AZURE_SAY} zurueck`,
   );
+}
+
+// IEL-B1: ist der EL-Inbound-Schalter an, und wie viele Tenants sind gepinnt? Nur Zustand
+// und Anzahl - NIE eine Tenant-ID (Regel 4/PII). Unkonditional wie die Sprechpfad-Zeile:
+// eine im Aus-Zustand fehlende Zeile waere von einem Deploy ohne sie nicht unterscheidbar.
+export function inboundElBannerLine(elevenLabsInbound) {
+  const zustand = elevenLabsInbound.enabled ? "an" : "aus";
+  return `Inbound-EL: ${zustand}, ${inboundElPinnedTenantCount(elevenLabsInbound.tenantIds)} Tenants`;
 }
 
 // AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den
@@ -834,7 +854,7 @@ function publicUrlOrHint(server) {
   return server.publicUrl || "PUBLIC_URL fehlt!";
 }
 
-function logBootBanner(config, port) {
+function logBootBanner(config, port, state) {
   // GAP-36 (Deploy-Wahrheit): deployter Commit + Konfigurations-Fingerabdruck. KEINE
   // TEMP-DIAGNOSE mehr - die Zeile ist der Log-seitige Zwilling von /healthz (derselbe
   // Wert aus derselben Quelle, G5) und wird von docs/RUNBOOK-RESTORE.md gelesen.
@@ -847,6 +867,10 @@ function logBootBanner(config, port) {
     `  Voice-Engine:   ${config.voice.voiceEngine}`,
   );
   console.log(`  ${inboundSprechpfadBannerLine(config.voice)}`);
+  console.log(`  ${inboundElBannerLine(config.voice.elevenLabsInbound)}`);
+  // IEL-B1 (E13): serverseitiger Tenant-DID-Beleg ohne Prod-DB - aus dem GELADENEN Store,
+  // unabhaengig vom Schalter, nur letzte Ziffern, nie Tenant-ID.
+  console.log(`  ${inboundElAllowlistProbeLine({ state, tenantIds: config.voice.elevenLabsInbound.tenantIds })}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
   if (inCallConsult) console.log(`  ${inCallConsult}`);
   const thinkingSignal = thinkingSignalBannerLine(config.voice);
@@ -1270,7 +1294,7 @@ export async function bootServer({
     // nach listen() bekannter Wert ist keine Umgebungs-Konfiguration. Ein gesetztes
     // GATEWAY_URL bleibt vorrangig - genau wie beim frueheren ||=.
     setBoundGatewayPort(port);
-    logBootBanner(config, port);
+    logBootBanner(config, port, store.load());
     // PROV-01/F5: Crash-verwaiste Provisioning-Jobs beim Boot reconcilen. Fire-and-forget NACH
     // den Boot-Logs - blockiert weder listen noch Healthcheck; der Boot-Guard (hasActiveNumber)
     // lief bereits davor. Gated auf PROVISIONING_ENABLED, Default Observe-Only (maxAge=0).
