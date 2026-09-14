@@ -5,9 +5,8 @@
 // next_steps-Item, Beende-Versuch ueber das Traeger-Bein, Frist ab dem Nachlauf-Marker,
 // Ende-Anker = Carrier-Ende, Single-Flight ueber Register + frische Pruefung nach dem Abruf.
 //
-// Offline, kein Netz, kein Server: Anbieter-Attrappe ueber withFetch, der Store reicht an
-// die ECHTEN state-ops-Mutatoren durch (storeOpsFacade), finishCall ist die ECHTE
-// makeCallFinish-Instanz (Purge greift, Buchung wird ueber voiceMinutesOf mitgeschrieben).
+// Offline, kein Netz, kein Server: Harness in test/_iel-inbound-harness.js (Anbieter-Attrappe
+// ueber withFetch, echte state-ops-Mutatoren, echte makeCallFinish-Instanz).
 // Zeitanker relativ zu Date.now(): carrierEndMsOf = min(now, Marker) liefert fuer jedes
 // spaetere now denselben Wert - deterministisch ohne gemockte Uhr (waitUntil braucht die echte).
 //
@@ -18,40 +17,40 @@ import assert from "node:assert/strict";
 
 import { liveVoiceSpendCents, voiceMinutesOf } from "../src/billing/metering.js";
 import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
-import {
-  INBOUND_NACHLAUF_FRIST_MS,
-  PERMANENT_ERROR_STREAK_LIMIT,
-  makeElevenLabsOutbound,
-} from "../src/elevenlabs/outbound.js";
+import { INBOUND_NACHLAUF_FRIST_MS, PERMANENT_ERROR_STREAK_LIMIT } from "../src/elevenlabs/outbound.js";
 import { nachlaufPolitikFuer, pollDarfWirken } from "../src/elevenlabs/nachlauf-politik.js";
 import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-import { makeCallFinish } from "../src/telephony/call-finish.js";
-import { billThunk, terminateAndBillCall } from "../src/telephony/call-termination.js";
 import { POLL_TIMEOUT_REASON } from "../src/telephony/failure-reason.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
-import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import {
   CONVERSATION_DONE_WITH_ANALYSIS,
   CONVERSATION_IN_PROGRESS,
   ERROR_ENVELOPES,
 } from "./fixtures/elevenlabs-conversations.js";
-import { storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
+import { waitUntil, withFetch } from "./helpers.js";
+import {
+  CONV_ID,
+  FIXTURE_ZEILEN,
+  INBOUND_FROM,
+  INBOUND_TO,
+  RUHE_TAKTE,
+  WARTE,
+  baueHarness,
+  beendeSchleifen,
+  fehlerAntwort,
+  isoVor,
+  makeAnbieter,
+  mitAnbieter,
+  okAntwort,
+  ruhe,
+  seedInboundElCall,
+} from "./_iel-inbound-harness.js";
 
-const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
-const CONV_ID = "conv_iel_b4";
-const POLL_MS = 5;
-const HTTP_OK = 200;
-const WARTE_FRIST_MS = 5000;
-const WARTE = { timeoutMs: WARTE_FRIST_MS };
-const RUHE_TAKTE = 4;
 const MINDEST_TAKTE = 3;
 const SECONDS_PER_MINUTE = 60;
 const MS_PER_MINUTE = SECONDS_PER_MINUTE * MS_PER_SECOND;
 const ZWANZIG_MINUTEN_S = 1200;
-const TRAEGER_SID = "v3:inbound-leg-sid";
-const INBOUND_FROM = "+491701111111";
-const INBOUND_TO = "+491700000000";
 const NEXT_STEP_TEXT = "Rueckruf am Montag";
 const ENDE_NACH_S = 90;
 const GESPRAECH_S = 240;
@@ -73,32 +72,8 @@ const INBOUND_DONE = Object.freeze({
     data_collection_results: { next_steps: { data_collection_id: "next_steps", value: NEXT_STEP_TEXT } },
   },
 });
-const FIXTURE_ZEILEN = CONVERSATION_DONE_WITH_ANALYSIS.transcript.length;
 
-const isoVor = (sekunden) => new Date(Date.now() - sekunden * MS_PER_SECOND).toISOString();
-const ruhe = (takte) => new Promise((resolve) => setTimeout(resolve, takte * POLL_MS));
-const okAntwort = (conversation) => ({ ok: true, status: HTTP_OK, json: async () => conversation });
-const fehlerAntwort = (envelope) => ({ ok: false, status: envelope.httpStatus, json: async () => envelope.body });
-
-// ---- Build: Datensaetze ------------------------------------------------------------------
-
-// Ein ueberbrueckter Inbound-Call (GEBUNDEN) mit echter Store-Herkunft. answeredAt stammt
-// in Produktion aus /voice/incoming (unser Telnyx-Bein), twilioSid aus req.body.CallSid.
-function seedInboundElCall(state, { answeredVorS, nachlaufVorS = null }) {
-  const call = ops.createCall(state, {
-    direction: "inbound",
-    from: INBOUND_FROM,
-    to: INBOUND_TO,
-    twilioSid: TRAEGER_SID,
-    tenantId: BOOTSTRAP_TENANT_ID,
-  });
-  call.startedAt = isoVor(answeredVorS);
-  call.answeredAt = call.startedAt;
-  ops.recordCostProfile(state, call.id, KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI);
-  ops.bindInboundElConversation(state, call.id, { conversationId: CONV_ID, nowIso: new Date().toISOString() });
-  if (nachlaufVorS !== null) ops.markInboundElNachlaufStarted(state, call.id, isoVor(nachlaufVorS));
-  return call;
-}
+// ---- Build: Datensaetze (Bausteine fuer Inbound-EL in test/_iel-inbound-harness.js) -------
 
 function seedOutboundElCall(state, { answeredVorS }) {
   const call = ops.createCall(state, {
@@ -112,103 +87,6 @@ function seedOutboundElCall(state, { answeredVorS }) {
   call.startedAt = isoVor(answeredVorS);
   call.answeredAt = call.startedAt;
   return call;
-}
-
-// ---- Build: Anbieter-Attrappe ------------------------------------------------------------
-// antwort() liefert je GET die Antwort (ueberschreibbar im Lauf); offen/maxOffen zaehlen
-// gleichzeitig laufende Abrufe (Single-Flight-Beleg).
-function makeAnbieter(antwort) {
-  const anbieter = { gets: 0, deletes: 0, offen: 0, maxOffen: 0, antwort };
-  anbieter.setzeAntwort = (neueAntwort) => {
-    anbieter.antwort = neueAntwort;
-  };
-  anbieter.fetch = async (_url, init) => {
-    if (init.method === "DELETE") {
-      anbieter.deletes += 1;
-      return okAntwort({});
-    }
-    anbieter.gets += 1;
-    anbieter.offen += 1;
-    anbieter.maxOffen = Math.max(anbieter.maxOffen, anbieter.offen);
-    try {
-      return await anbieter.antwort();
-    } finally {
-      anbieter.offen -= 1;
-    }
-  };
-  return anbieter;
-}
-
-// ---- Build: Harness (echter finishCall, echter Terminierungspfad) ------------------------
-function baueStore(state, beobachtung) {
-  return {
-    ...storeOpsFacade(state),
-    // Wie die echte Fassade (json.js/pg.js): der Call, nicht das {call, changed}-Paar.
-    setCallEndedAt: (id, status, iso) => ops.setCallEndedAt(state, id, status, iso).call,
-    markInboundElNachlaufStarted: (id, iso) => ops.markInboundElNachlaufStarted(state, id, iso),
-    recordElDetectorCounts: (id) => beobachtung.detektorZaehlungen.push(id),
-    purgeTranscript: (id) => ops.purgeTranscript(state, id),
-    markBilled: (id) => ops.markBilled(state, id),
-    withStoreLock: (fn) => fn(),
-    releaseOutboundReserve: async () => {},
-    tenantContext: () => ({ settings: {} }),
-    addNotification: () => {},
-    markInboxEntry: () => {},
-  };
-}
-
-function baueHarness(state) {
-  const beobachtung = { gebucht: [], zusammenfassungen: [], detektorZaehlungen: [], traegerAuflegen: [] };
-  const store = baueStore(state, beobachtung);
-  const callFinish = makeCallFinish({
-    store,
-    config: { billing: { paymentEnabled: false }, privacy: { diagnosticRetentionDays: 0 } },
-    metering: { recordVoiceMinuteMeter() {}, reconcileVoiceBudget: (call) => beobachtung.gebucht.push(voiceMinutesOf(call)) },
-    messaging: () => ({ sendSms: async () => {} }),
-    summarizeCall: async (call) => {
-      beobachtung.zusammenfassungen.push({ summary: call.summary, rollen: call.transcript.map((zeile) => zeile.role) });
-      return null;
-    },
-    planSummarySms: () => ({ send: false }),
-    audit: () => {},
-  });
-  const el = makeElevenLabsOutbound({
-    store,
-    config: withConfigNamespaces({ elevenLabsOutbound: { ...ACCOUNT, resultPollMs: POLL_MS } }),
-    terminateAndBillCall,
-    billThunk,
-    finishCall: callFinish.finishCall,
-    endCarrierCall: (callId) => beobachtung.traegerAuflegen.push(callId),
-  });
-  return { el, ...beobachtung };
-}
-
-// Beendet noch laufende Schleifen VOR dem Ende von withFetch (sonst ginge ein spaeterer
-// Takt gegen das echte Netz): Calls terminal, laufende Abrufe abwarten, Folgetakte auslaufen.
-function beendeAktiveCalls(state) {
-  for (const call of state.calls.filter((eintrag) => eintrag.status === "active")) ops.endCallRecord(state, call.id, "completed");
-}
-
-async function beendeSchleifen(state, anbieter) {
-  beendeAktiveCalls(state);
-  await waitUntil(() => anbieter.offen === 0, WARTE);
-  await ruhe(RUHE_TAKTE);
-}
-
-// Faehrt run() mit der Attrappe als fetch. Scheitert eine Zusicherung MITTEN im Lauf, liefen
-// noch armierte Schleifen nach withFetch gegen das echte Netz weiter und der Testprozess
-// endete nie - der Fehlerpfad beendet deshalb zuerst alle aktiven Calls (ein festgehaltener
-// Abruf haelt keinen Timer, er blockiert den Prozess nicht).
-async function mitAnbieter({ state, anbieter }, run) {
-  await withFetch(anbieter.fetch, async () => {
-    try {
-      await run();
-    } catch (err) {
-      beendeAktiveCalls(state);
-      await ruhe(RUHE_TAKTE);
-      throw err;
-    }
-  });
 }
 
 // ---- 1: Politik-Tabelle ------------------------------------------------------------------

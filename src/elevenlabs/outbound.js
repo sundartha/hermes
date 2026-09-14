@@ -42,7 +42,7 @@ import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { verifiedOpeningLine } from "./opening-line.js";
 import { tenantToolToken } from "./tenant-tool-token.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 // ST3 (O3): AUDIO_TAG wohnt seit dem Move im Heuristik-Modul (EINE Quelle fuer [el-tags]
@@ -65,6 +65,11 @@ import crypto from "node:crypto";
 const PROVIDER_DONE = "done";
 const PROVIDER_FAILED = "failed";
 const FINISHED_PROVIDER_STATUS = Object.freeze([PROVIDER_DONE, PROVIDER_FAILED]);
+
+// G5: EINE Formulierung von "der Anbieter hat ein fertiges Ergebnis" fuer Poll-Takt und Beende-Pfad.
+function anbieterErgebnisFertig(conversation) {
+  return Boolean(conversation) && FINISHED_PROVIDER_STATUS.includes(conversation.status);
+}
 
 // Unsere Call-Endzustaende (store/state-ops.js) - bewusst benannt, weil "failed" auf
 // beiden Seiten vorkommt und die beiden Vokabulare nicht dasselbe sind.
@@ -223,6 +228,14 @@ function callUnderProviderCap(call) {
 // Loeschversuch (endConversation) laeuft weiterhin IN JEDEM FALL, auch wenn die Frist des
 // Ergebnisabrufs ablaeuft (fetchConversationSoft faengt den Abbruch fail-soft ab, s. dort).
 export const EL_ABORT_PROVIDER_TIMEOUT_MS = 10000;
+
+// IEL-B5 (E10): Ergebnis-Abrufe des Beende-Pfads (Cap, Geld-Wache, cancel_call) eines
+// ueberbrueckten Inbound-Calls NACH dem Auflegen des Elternbeins. STARTWERT, NICHT GEMESSEN
+// (wie INBOUND_NACHLAUF_FRIST_MS): die Verarbeitungsdauer nach Verbindungsende ist nicht
+// aufgezeichnet. Wartezeit hoechstens Versuche x EL_ABORT_PROVIDER_TIMEOUT_MS + (Versuche - 1)
+// x resultPollMs; die Leitung ist dann schon aufgelegt - das Warten verzoegert nur Buchung und
+// cancel_call-Antwort, nie die Kappung. Exportiert fuer den Test (G22).
+export const EL_TERMINATION_RESULT_ATTEMPTS = 3;
 
 // Rollen: der Anbieter kennt "agent" und "user", unser Transkript "agent" und "caller".
 // Alles, was nicht der Agent ist, ist die Gegenstelle - ein unbekannter Rollenname darf
@@ -1298,7 +1311,8 @@ function nachlaufFristAbgelaufen(call, nowMs) {
 
 // IEL-B4: der EINE Terminal-Schreiber des Conversation-Abschlusses als Thunk - Anker-
 // Lieferant UND persistEnd (zweiter Aufruf idempotent, setCallEndedAt nur aus 'active').
-function endeSchreiberFuer({ store, callId, status, politik, nowMs }) {
+// IEL-B5: auch der Terminal-Schreiber von cancel_call (routes/api-calls.js).
+export function endeSchreiberFuer({ store, callId, status, politik, nowMs }) {
   if (politik.endeAnker === ENDE_ANKER.CARRIER_ENDE)
     return () => store.setCallEndedAt(callId, status, carrierEndeIso(store.getCall(callId), nowMs));
   return () => store.endCallRecord(callId, status);
@@ -1432,12 +1446,35 @@ async function finishFromConversation({ store, terminateAndBillCall, billThunk, 
 // IEL-B4 (E7d/E18-1): Start-Tor des Nachlaufs. Der Marker wird IMMER gesetzt (set-once);
 // eine Schleife startet NUR bei changed:true UND ohne Register-Eintrag. Laeuft bereits eine
 // (Boot-Re-Arm), uebernimmt sie Frist und Ende-Anker ab dem naechsten Takt (E7f).
-// Vorbedingung GEBUNDEN prueft der Aufrufer (B5, /voice/status).
+// Vorbedingung GEBUNDEN prueft der einzige Aufrufer routes/voice.js#/voice/status.
 function startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }) {
   const { call, changed } = store.markInboundElNachlaufStarted(callId, new Date().toISOString());
-  if (!changed || laufendeInboundPolls.has(callId)) return;
+  if (!changed) return;
+  // Runbook 11: genau eine Zeile je Call (set-once-Marker), PII-frei.
+  console.log(`[el-inbound] nachlauf gestartet (call=${callId})`);
+  if (laufendeInboundPolls.has(callId)) return;
   laufendeInboundPolls.add(callId);
   void pollConversationResult(callId, call.elevenlabsConversationId);
+}
+
+// IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks (telephony/call-termination.js#
+// hangUpForCall). Laeuft NACH persistEnd und NACH dem Traeger-Hangup - der Call ist terminal,
+// eine laufende Poll-Schleife schliesst deshalb nicht mehr ab (E18-2); diese Funktion ist dann
+// der einzige Transkript-Schreiber. Kein DELETE (E7b), Beleg nachreifbar. Fail-soft:
+// fetchConversationSoft wirft nie; ohne Ergebnis bucht terminateAndBillCall ohne Transkript.
+async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs, callId }) {
+  const conversationId = store.getCall(callId)?.elevenlabsConversationId;
+  if (!conversationId) return;
+  for (let versuch = 1; versuch <= EL_TERMINATION_RESULT_ATTEMPTS; versuch += 1) {
+    const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
+    if (anbieterErgebnisFertig(conversation)) {
+      const politik = nachlaufPolitikFuer(store.getCall(callId));
+      persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
+      return;
+    }
+    if (versuch < EL_TERMINATION_RESULT_ATTEMPTS) await sleep(pollMs);
+  }
+  console.warn(`[el-inbound] Ergebnis beim Beenden nicht abrufbar (call=${callId})`);
 }
 
 // S1-1 Fix (Owner-Auftrag 15.08.2026, stiller Totalausfall): das Nachziehen des
@@ -1684,7 +1721,7 @@ export function makeElevenLabsOutbound({
     if (politik.frischPruefenNachAbruf && !pollDarfWirken(store.getCall(callId))) return;
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
       return finishOnPermanentError({ ...finishDeps, providerStatus });
-    if (!conversation || !FINISHED_PROVIDER_STATUS.includes(conversation.status)) {
+    if (!anbieterErgebnisFertig(conversation)) {
       scheduleResultPoll(callId, conversationId);
       return FOLGETAKT_GEPLANT;
     }
@@ -1839,7 +1876,10 @@ export function makeElevenLabsOutbound({
     originateCall,
     endActiveCall,
     rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),
-    // IEL-B4 (E7d): Aufrufer ab IEL-B5 (/voice/status bei GEBUNDEN).
+    // IEL-B4/B5 (E7d): Aufrufer routes/voice.js#/voice/status bei GEBUNDEN.
     startInboundNachlauf: (callId) => startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }),
+    // IEL-B5 (E10): Aufrufer telephony/call-termination.js#hangUpForCall (Cap, Geld-Wache, cancel_call).
+    awaitAndPersistInboundElResult: (callId) =>
+      awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs: settings().resultPollMs, callId }),
   };
 }

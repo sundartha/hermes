@@ -9,6 +9,12 @@ export function defaultSetTimer(fn, ms) {
   return handle;
 }
 
+// G5: geteilte Pause fuer ein awaitetes Warten zwischen zwei Abrufen. Bewusst OHNE unref -
+// das Warten muss zu Ende laufen (Beende-Pfad). Bestehende lokale sleep-Kopien sind Bestand.
+export function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Sekunden->ms (G5/G25, Review-Blocker Runde 4: frueher in zwei Modulen dupliziert -
 // beide rechneten bereits mit demselben Timer-Helfer, die Sekunden-Konstante
 // gehoert damit ins selbe geteilte Modul statt zweimal lokal definiert zu werden).

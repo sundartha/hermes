@@ -285,6 +285,8 @@ const lifecycle = makeCallLifecycle({
   // elevenLabsHangUpAction selbst ist PURE (keine IO) und deshalb ein direkter Import in
   // call-lifecycle.js, kein zweiter DI-Slot hier.
   billThunk, endActiveCall: elevenLabsOutbound.endActiveCall,
+  // IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks - dieselbe Instanz (INV-7).
+  awaitAndPersistInboundElResult: elevenLabsOutbound.awaitAndPersistInboundElResult,
   reattachActiveCallCore,
   cappedEndedAtMs,
   classifyCallTime,

@@ -35,11 +35,12 @@ import { startRejectionReason } from "../telephony/failure-reason.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { diagnosticRetentionGranted } from "../diagnostic-retention.js";
 import { ownerSelfCallGranted } from "../callee-is-owner.js";
-import { persistEndWithReason } from "../telephony/call-termination.js";
+import { hangUpForCall, persistEndWithReason } from "../telephony/call-termination.js";
 // TEIL C (Owner-Auftrag 15.08.2026, cancel_call darf nicht luegen): der Deckelwert ist
 // KEINE Magic Number - er ist in elevenlabs/outbound.js besessen (Bewachung statt
 // Korrektur der Anbieter-Vorlage, s. dortiger Kommentar).
-import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf } from "../elevenlabs/outbound.js";
+import { ELEVENLABS_PROVIDER_MAX_DURATION_S, callLocaleOf, endeSchreiberFuer } from "../elevenlabs/outbound.js";
+import { nachlaufPolitikFuer } from "../elevenlabs/nachlauf-politik.js";
 import { fetchOpeningLine } from "../elevenlabs/opening-line-llm.js";
 import { localeFor, supportedLanguageOf, SUPPORTED_LANGUAGES } from "../i18n/locales.js";
 import { fetchPrecallBriefing } from "../precall-briefing.js";
@@ -297,6 +298,8 @@ export function makeCallRoutes({
   // treffen ohnehin nie einen EL-Call).
   elevenLabsHangUpAction = elevenLabsHangUpActionNotWired,
   endActiveCall,
+  // IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks - dieselbe elevenLabsOutbound-Instanz.
+  awaitAndPersistInboundElResult,
   billThunk,
   finishCall,
   arm: { armMaxDurationTimer, armReserveReleaseTimer },
@@ -661,10 +664,15 @@ export function makeCallRoutes({
     // (awaited, provider-aware ueber call.provider - sonst endCall ueber den falschen
     // Anbieter), dann buchen (fire-and-forget).
     await terminateAndBillCall({
-      persistEnd: () => store.endCallRecord(call.id, "cancelled"),
+      // IEL-B5 (E10/E17): Ende-Anker = Carrier-Ende fuer Inbound-EL; jeder andere Call
+      // unveraendert endCallRecord (derselbe Terminal-Schreiber wie der EL-Poll, G5).
+      persistEnd: endeSchreiberFuer({
+        store, callId: call.id, status: "cancelled", politik: nachlaufPolitikFuer(call), nowMs: Date.now(),
+      }),
       // P6 (Check 5): dieselbe callControlId-/twilioSid-Auswahl wie terminateCappedCall (G5,
       // EINE Quelle) - EL-Calls fallen auf den Beende-Versuch (elHangUp, s.o.).
-      hangUp: providerHangUp ?? elHangUp,
+      // IEL-B5: GEBUNDEN -> Traeger auflegen + Ergebnis sichern, sonst unveraendert (hangUpForCall).
+      hangUp: hangUpForCall({ call, hangUp: providerHangUp ?? elHangUp, awaitAndPersistInboundElResult }),
       bill: billThunk(finishCall, store, call.id),
       onHangUpError: (e) => console.error("[cancel]", e.message),
       callId: call.id, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
