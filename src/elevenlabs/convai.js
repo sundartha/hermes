@@ -47,10 +47,9 @@ const API_KEY_HEADER = "xi-api-key";
 //     verhindert den Anruf also nicht, er kappt nur unsere Kennung: der Record wurde
 //     failed und abgerechnet, ohne conversation_id und ohne je einen Ergebnisabruf.
 // 15 s waren damit kuerzer als das blosse Klingeln. Der Wert muss die Klingelphase
-// tragen, und deren Obergrenze ist die Klingelphase (gemessen bis 40 s, s. o.) - nicht die
-// Gespraechsdauer. 120 s = diese 60 s plus Reserve, und
-// weiterhin ein Vielfaches unter der Max-Gespraechsdauer (1800 s): ein stummer Anbieter
-// kann einen Aufrufer damit nie ueber ein ganzes Gespraech haengen lassen.
+// tragen (gemessen bis 40 s, s. o.), nicht die Gespraechsdauer. 120 s liegen mit Reserve
+// darueber und weiterhin ein Vielfaches unter der Max-Gespraechsdauer (1800 s): ein
+// stummer Anbieter kann einen Aufrufer damit nie ueber ein ganzes Gespraech haengen lassen.
 //
 // Bleibt der DEFAULT fuer jeden Aufruf, der keine eigene Frist mitbringt (Anrufstart, der
 // regulaere Poll-Takt). Exportiert, damit ein kuerzerer Override (s. timeoutMs unten,

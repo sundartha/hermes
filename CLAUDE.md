@@ -59,7 +59,7 @@ Hart verboten: Magic Numbers (ausser 0/1/-1) ohne benannte Konstante, toter Code
 Gateway + Schichten (Node/ESM, kein Build-Step). Voice-Engine `budget` (turn-basiert, Gather/STT — der heute live laufende Default); die OpenAI-Realtime-Bridge ist seit IE6-S2 entfernt.
 
 - `src/server.js` — Gateway: Provider-Webhooks (`/voice/*`), REST-API (`/api/*`), MCP ueber Streamable HTTP (`/mcp`), Auth-Middleware, Onboarding-/Self-Service-Routen
-- `src/telephony/` — Provider-Abstraktion (DIP): `ports.js` (Schnittstellen), `registry.js` (Dispatch nach Provider), `directives.js`/`media-events.js`; Adapter unter `adapters/telnyx/*` (voice, render, media, messaging, numbers, signature). Neue Telefonie-/Provider-Logik laeuft ueber die Ports, NICHT direkt im Server.
+- `src/telephony/` — Provider-Abstraktion (DIP): `ports.js` (Schnittstellen), `registry.js` (Dispatch nach Provider), `directives.js`; Adapter unter `adapters/telnyx/*` (voice, render, messaging, numbers, signature). Neue Telefonie-/Provider-Logik laeuft ueber die Ports, NICHT direkt im Server.
 - `src/claude.js` — Gespraechslogik (System-Prompts, Tool-Loop, Summaries), pro-Tenant ueber `tenantContext`; enthaelt den fest verdrahteten Offenlegungssatz. Der resiliente LLM-Seam `src/llm.js` (Timeout/Retry/Circuit-Breaker, P3b-R) sitzt davor.
 - `src/mcp-tools.js` — MCP-Tool-Definitionen (sprechen mit der REST-API), `src/mcp-server.js` — stdio-Transport
 - `src/store.js` + `src/store/` — Persistenz-Fassade ueber zwei Backends: `json.js` (`data/store.json`, gitignored; loeschen = lokaler Reset) und `pg.js` (Postgres, RLS). `defaults.js`/`state-ops.js`/`views.js`/`portal.js`; Backend via `STORE_BACKEND`. Multi-Tenant: pro-Tenant settings/calendar/usage/budget.
