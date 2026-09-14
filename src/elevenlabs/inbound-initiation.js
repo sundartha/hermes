@@ -26,10 +26,11 @@ import {
   overrideLeafPaths,
 } from "./convai.js";
 import { PLACEHOLDER_OPENER, auftraggeberAusdruck, dynamicVariables } from "./outbound.js";
+import { EL_CALL_BINDING_SIP_HEADER } from "./inbound-sip-uri.js";
 
-// B7 setzt den SIP-Header am <Dial><Sip>; der Anbieter reicht ihn als sip_headers bzw. als
-// dynamische Systemvariable weiter ([M1] F-B).
-export const EL_CALL_BINDING_SIP_HEADER = "X-Hermes-Call-Binding";
+// Der Header entsteht in der SIP-Ziel-URI (inbound-sip-uri.js, EINE Quelle); der Anbieter
+// reicht ihn als sip_headers bzw. als dynamische Systemvariable weiter ([M1] F-B).
+export { EL_CALL_BINDING_SIP_HEADER };
 export const EL_CALL_BINDING_VARIABLE = "sip_hermes_call_binding";
 export const INITIATION_RESPONSE_TYPE = "conversation_initiation_client_data";
 
