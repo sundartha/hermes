@@ -283,7 +283,7 @@
   },
   "scripts/check-setup.js": {
     "id-length": {
-      "count": 19
+      "count": 16
     },
     "max-depth": {
       "count": 2
@@ -566,17 +566,6 @@
   },
   "src/boot-guard.js": {
     "id-length": {
-      "count": 2
-    }
-  },
-  "src/bridge.js": {
-    "complexity": {
-      "count": 2
-    },
-    "id-length": {
-      "count": 6
-    },
-    "max-lines-per-function": {
       "count": 2
     }
   },
@@ -927,11 +916,6 @@
     },
     "no-restricted-syntax": {
       "count": 6
-    }
-  },
-  "src/telephony/adapters/telnyx/media.js": {
-    "complexity": {
-      "count": 1
     }
   },
   "src/telephony/adapters/telnyx/numbers.js": {
@@ -1310,7 +1294,7 @@
   },
   "test/al-p10b-lookup.test.js": {
     "id-length": {
-      "count": 14
+      "count": 12
     },
     "no-magic-numbers": {
       "count": 4
@@ -1832,7 +1816,7 @@
       "count": 1
     },
     "no-magic-numbers": {
-      "count": 10
+      "count": 9
     }
   },
   "test/boot-guard.test.js": {
@@ -1867,30 +1851,6 @@
     },
     "no-magic-numbers": {
       "count": 1
-    }
-  },
-  "test/bridge-event-unit.test.js": {
-    "id-length": {
-      "count": 4
-    }
-  },
-  "test/bridge-hardening.test.js": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
-  "test/bridge-openai-event.test.js": {
-    "id-length": {
-      "count": 22
-    },
-    "no-magic-numbers": {
-      "count": 5
-    },
-    "no-param-reassign": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "test/budget-failure-reason.test.js": {
@@ -2744,11 +2704,6 @@
       "count": 1
     }
   },
-  "test/helpers/ws-openai-shim.mjs": {
-    "no-magic-numbers": {
-      "count": 1
-    }
-  },
   "test/i18n-catalog-run.test.js": {
     "no-magic-numbers": {
       "count": 1
@@ -3205,11 +3160,8 @@
     }
   },
   "test/media-token.test.js": {
-    "id-length": {
-      "count": 2
-    },
     "no-magic-numbers": {
-      "count": 7
+      "count": 2
     }
   },
   "test/metering-unit.test.js": {

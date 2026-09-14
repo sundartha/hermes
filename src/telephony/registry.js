@@ -20,7 +20,6 @@ import { renderDirectives as telnyxRenderDirectives } from "./adapters/telnyx/re
 import { verifyInboundSignature as telnyxVerify } from "./adapters/telnyx/signature.js";
 import { telnyxNumberProvisioning } from "./adapters/telnyx/numbers.js";
 import { telnyxConfigRead } from "./adapters/telnyx/config-read.js";
-import { telnyxMedia } from "./adapters/telnyx/media.js";
 import { telnyxWebhookEvents } from "./adapters/telnyx/webhook-events.js";
 import { DEFAULT_PROVIDER, PROVIDER } from "../store/defaults.js";
 import { config } from "../config.js";
@@ -51,7 +50,6 @@ const fakeVoice = {
 const PORT = Object.freeze({
   VOICE_CONTROL: "voiceControl",
   MESSAGING: "messaging",
-  MEDIA_TRANSPORT: "mediaTransport",
   WEBHOOK_EVENTS: "webhookEvents",
   NUMBER_PROVISIONING: "numberProvisioning",
   // OUTBOUND-E4: rein LESENDER Port (Drift-Waechter). Eigener Name statt eines
@@ -64,7 +62,6 @@ const PORT = Object.freeze({
 const ADAPTERS = Object.freeze({
   [PORT.VOICE_CONTROL]: { [PROVIDER.TELNYX]: telnyxVoice },
   [PORT.MESSAGING]: { [PROVIDER.TELNYX]: telnyxMessaging },
-  [PORT.MEDIA_TRANSPORT]: { [PROVIDER.TELNYX]: telnyxMedia },
   [PORT.WEBHOOK_EVENTS]: { [PROVIDER.TELNYX]: telnyxWebhookEvents },
   [PORT.NUMBER_PROVISIONING]: { [PROVIDER.TELNYX]: telnyxNumberProvisioning },
   [PORT.PROVIDER_CONFIG_READ]: { [PROVIDER.TELNYX]: telnyxConfigRead },
@@ -117,13 +114,8 @@ export const voiceControl = (provider = DEFAULT_PROVIDER) => {
 /** @returns {import("./ports.js").Messaging} */
 export const messaging = (provider = DEFAULT_PROVIDER) => pick(PORT.MESSAGING, provider);
 
-// MediaTransport (Port 4, Realtime-WS-Frame-Schicht, Aufrufer bridge.js). Provider-
-// aware wie voiceControl: Default = DEFAULT_PROVIDER (eine Quelle, G5).
-/** @returns {import("./ports.js").MediaTransport} */
-export const mediaTransport = (provider = DEFAULT_PROVIDER) => pick(PORT.MEDIA_TRANSPORT, provider);
-
 // WebhookEvents (Port 5, reines Parsing VOR den Safety-Gates). Provider-aware wie
-// mediaTransport: Default = DEFAULT_PROVIDER (eine Quelle, G5).
+// voiceControl: Default = DEFAULT_PROVIDER (eine Quelle, G5).
 // Dispatch bewusst per provider-Param (NICHT header-basiert wie inboundSignatureVerifier):
 // alle 3 Call-Sites kennen provider bereits vertrauenswuerdig aus dem Store bzw. aus
 // providerFromHeaders+erfolgreicher Signaturpruefung weiter oben im Request-Pfad -

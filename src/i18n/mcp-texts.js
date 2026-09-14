@@ -2,7 +2,7 @@
 // inklusive der Feldnamen der Berechtigungs-Zusammenfassung (P13).
 // GETRENNT von den gesprochenen Locale-Strings: diese Texte werden NIE gesprochen,
 // sondern als Chat-Text ausgeliefert - die deutschen Werte bleiben deshalb in der
-// ASCII-Transliteration des Bestands (Repo-Konvention, wie summarySystem/realtimeOpener,
+// ASCII-Transliteration des Bestands (Repo-Konvention, wie summarySystem,
 // s. Kopf von i18n/locales.js). Eingehaengt wird das Buendel in LOCALES.<lang>.mcp
 // (Muster INBOUND_NOTICES), damit localeFor() DER EINE Sprach-Resolver bleibt und
 // mcp-tools.js keinen zweiten Lookup braucht (G5).

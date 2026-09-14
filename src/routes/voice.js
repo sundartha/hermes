@@ -18,7 +18,6 @@
 // inboundSignatureVerifier, DIP) sowie der Settlement-Seam (terminateAndBillCall/
 // billThunk) und config/store/audit werden injiziert (INV-7 "eine Instanz").
 import { Router } from "express";
-import { VOICE_ENGINE } from "../config.js";
 import { normNum, DEFAULT_PROVIDER, MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 import { emergencyBrakeSeconds } from "../call-duration.js";
 import { callTariffCentsPerMin } from "../billing/metering.js";
@@ -103,8 +102,7 @@ export function makeVoiceRoutes({
   terminateAndBillCall,
   billThunk,
 }) {
-  const { render, turnDirectives, sayInCallVoice, followupTurnDirectives, streamDirectives } =
-    voiceRender;
+  const { render, turnDirectives, sayInCallVoice, followupTurnDirectives } = voiceRender;
 
   // EINE Quelle (G5) fuer die TeXML-Antwort "Directiven synthetisieren -> rendern -> als
   // text/xml senden". Provider = call.provider (bei /voice/incoming identisch zum lokalen
@@ -323,19 +321,6 @@ export function makeVoiceRoutes({
       store.markAnswered(call.id);
       lifecycle.armMaxDurationTimer(call, req.body.CallSid);
 
-      if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) {
-        // KV2-2: Realtime-Inbound traegt einen ZWEITEN Traeger (openai_realtime,
-        // Katalogzeile #14) - deshalb ein eigenes Profil und nicht ein gemeinsames
-        // "telnyx_inbound": ein Flag-Flip bliebe sonst still (4.3, 6.4).
-        store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_INBOUND_REALTIME);
-        // GAP-14: auch die Realtime-Engine darf den Pflichtsatz nicht dem Modell
-        // ueberlassen (der Opener ist eine Prompt-Anweisung). Deterministisch gerendert
-        // VOR dem Stream-Handoff; bridge.js bleibt unberuehrt (HEIKLE STELLE).
-        return res
-          .type("text/xml")
-          .send(render([sayD(locale.inboundNotice, locale.voiceProfile), ...streamDirectives(call)], provider));
-      }
-
       store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_INBOUND_BUDGET);
       const ctx = store.tenantContext(call.tenantId);
       // GAP-14: der Pflichtsatz wird GERENDERT, nie gepromptet (Regel-2-Analogie fuer
@@ -473,10 +458,6 @@ export function makeVoiceRoutes({
     ) {
       console.log(`[voice/outbound] Anrufbeantworter erkannt (callId=${call.id}) -> Hangup`);
       return res.type("text/xml").send(render([hangupD()], call.provider));
-    }
-
-    if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) {
-      return res.type("text/xml").send(render(streamDirectives(call), call.provider));
     }
 
     // Schicht 1 (P3b-R) + G2: /voice/outbound ist LLM-FREI. Der gesamte gesprochene

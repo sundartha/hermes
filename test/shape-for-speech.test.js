@@ -1,7 +1,7 @@
-// I8 (call-quality Impl-1): shapeForSpeech (claude.js) - deterministisches Text-Shaping
+// I8 (call-quality Impl-1): shapeForSpeech (speech-shape.js) - deterministisches Text-Shaping
 // der Modell-Antwort vor Fallback/addTranscript (TTS liest Markdown-Reste/Aufzaehlungs-
 // Bindestriche/Gedankenstriche sonst woertlich vor, S1-tts). Reine Unit gegen die pure,
-// exportierte Funktion (kein Netz, kein Store-Zustand noetig - der claude.js-Import
+// exportierte Funktion (kein Netz, kein Store-Zustand noetig - der Import
 // braucht nur ein DATA_DIR, wie die anderen Unit-Nahtstellen). VORSICHT-Pruefungen:
 // legitime Wort-Bindestriche ("E-Mail", "Kuendigungs-Service") duerfen NIE zerstoert
 // werden - nur " - "-Gedankenstriche mit Leerzeichen auf beiden Seiten.
@@ -16,7 +16,7 @@ before(async () => {
     seedState({ tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }] }),
   );
   await import("../src/config.js");
-  ({ shapeForSpeech } = await import("../src/claude.js"));
+  ({ shapeForSpeech } = await import("../src/speech-shape.js"));
 });
 
 // Input/Output-Paare (Spec Impl-1): jede Zeile ein Konzept.

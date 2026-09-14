@@ -5,7 +5,7 @@
 // Diese Datei haelt die ENTSCHEIDUNGEN (darf/erlaubt/bezahlt/gesaeubert), nicht die
 // Turn-Mechanik - die bleibt in claude.js, dem einzigen Ort mit Turn-Kontrolle (Muster
 // src/consult/in-call.js).
-import { config, VOICE_ENGINE } from "../config.js";
+import { config } from "../config.js";
 import * as store from "../store.js";
 import { localeFor } from "../i18n/locales.js";
 import { bookLookupSearchFee } from "../llm-usage.js";
@@ -45,23 +45,9 @@ export const LOOKUP_TIMEOUT_MS = 2500;
 //
 // Das Richtungs-Gate ist der Sicherheitskern: eine im Gespraech mit einem FREMDEN
 // Inbound-Anrufer entstandene Frage darf nie an einen Suchindex gehen.
-//
-// AL-P10b-fix: die Realtime-Engine ist ein PFLICHT-Faktor, kein Feinschliff. Ihr
-// Werkzeugsatz kommt aus toolDefs (bridge.js realtimeTools) und traegt look_up nach
-// Entscheidung E1 bewusst NIE - den systemPrompt teilt sie sich aber mit der
-// Budget-Engine. Ohne diesen Faktor rendert boundaryRules dort "kann nachschlagen",
-// waehrend im selben Zug nur end_call und take_message angeboten werden: genau die
-// Faehigkeits-Unehrlichkeit, die der GRENZEN-Block laut seinem eigenen Kopfkommentar
-// schliessen soll. Bewusst HIER und nicht als zweites Praedikat in claude.js: so
-// bleibt es EINE Quelle (G5) fuer Werkzeugsatz UND Prompt-Zeile. Die Alternative
-// (look_up der Realtime-Engine anbieten) waere neuer Scope - execTool kennt das
-// Werkzeug nicht, die Turn-Mechanik haengt am Budget-Tool-Loop.
-// Bekannte Randbedingung: voiceEngine ist heute PROZESSweit; wird die Engine je
-// pro Call entschieden, muss dieser Faktor mitwandern.
 export function lookupProviderFor(call) {
   if (config.research.lookupEnabled !== true) return null;
   if (config.tenancy.assistantContextEnabled !== true) return null;
-  if (config.voice.voiceEngine === VOICE_ENGINE.REALTIME) return null;
   if (call.direction !== "outbound") return null;
   if (call.status !== "active") return null;
   if (callLookups(call) >= LOOKUP_MAX_PER_CALL) return null;

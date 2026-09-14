@@ -130,15 +130,6 @@ function gatherPrompt(directive) {
   return "";
 }
 
-// Realtime-Media-Stream als TeXML <Connect><Stream> mit <Parameter>-Kindern.
-// Parameter-Reihenfolge ist vertraglich (Snapshot-Test).
-function renderStream(directive) {
-  const params = directive.params
-    .map((param) => `<Parameter name="${escapeXml(param.name)}" value="${escapeXml(param.value)}"/>`)
-    .join("");
-  return `<Connect><Stream url="${escapeXml(directive.url)}">${params}</Stream></Connect>`;
-}
-
 // Eine Direktive in TeXML uebersetzen (eine Abstraktionsebene, G34).
 function renderDirective(directive, opts) {
   switch (directive.kind) {
@@ -150,8 +141,6 @@ function renderDirective(directive, opts) {
       return `<Redirect method="POST">${escapeXml(directive.url)}</Redirect>`;
     case DIRECTIVE.HANGUP:
       return "<Hangup/>";
-    case DIRECTIVE.STREAM:
-      return renderStream(directive);
     default:
       throw new Error(`unbekannte Direktive: ${directive.kind}`);
   }

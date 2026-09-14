@@ -392,8 +392,7 @@ export function tarifpaarEintrag({ route, stichproben, konfiguriert, minSamples,
 // verstreuter Vergleich liefe beim ersten neuen Inbound-Profil auseinander (G5/G27).
 const INBOUND_KOSTENPROFILE = new Set([
   KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
-  KOSTENPROFIL.TELNYX_INBOUND_REALTIME,
-  // IE3: das dritte Inbound-Profil - genau der Fall, den der Kommentar oben angekuendigt
+  // IE3: das zweite Inbound-Profil - genau der Fall, den der Kommentar oben angekuendigt
   // hat. Die LIVE-Buchung waehlt den Satz nach call.direction (metering.js), nicht nach
   // Profil; ohne diesen Eintrag verglich der Tarif-Waechter die Vollkosten eines
   // INBOUND-Anrufs gegen den OUTBOUND-Satz. Keine Tarifaenderung, eine Einordnung.

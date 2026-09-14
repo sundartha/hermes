@@ -43,7 +43,7 @@ export const DEFAULT_LLM_PROVIDER_FOR_BENCH = LLM_PROVIDER.ANTHROPIC;
 const BENCH_MAX_BUDGET_EUR = "20";
 const BENCH_CALL_ID_PREFIX = "call_bench";
 // Dummy-Telnyx-Owner-Nummer NUR fuer die Bench (nie real gekauft/angerufen - Provider-
-// Credentials bleiben leer, VOICE_ENGINE=budget, kein /api/calls -> physisch kein Dial).
+// Credentials bleiben leer, kein /api/calls -> physisch kein Dial).
 const BENCH_TELNYX_OWNER = Object.freeze({ e164: "+13125557000", provider: "telnyx" });
 
 const SUMMARY_POLL_TIMEOUT_MS = 20000;
@@ -94,7 +94,6 @@ export function buildEnv({ apiKey, deepseekApiKey, llmProvider, agentModel, scen
     METRICS_ENABLED: "true",
     ASSISTANT_CONTEXT_ENABLED: scenario.assistantContextEnabled ? "true" : "false",
     MAX_BUDGET_EUR: BENCH_MAX_BUDGET_EUR,
-    VOICE_ENGINE: "budget",
     ...(scenario.env ?? {}),
     ...driverEnv,
     ...searchEnv,

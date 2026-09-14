@@ -1,6 +1,6 @@
 // P11 (PLAN-I18N Umsetzung) - deutscher Prompt-Baustein: alles, was das MODELL liest
 // (Systemprompt-Geruest, Tool-Beschreibungen, Steuer-Marker, tool_result-Texte). Wird
-// NIE gesprochen; DE bleibt deshalb ASCII-transliteriert wie realtimeOpener/summarySystem
+// NIE gesprochen; DE bleibt deshalb ASCII-transliteriert wie summarySystem
 // (Grenze aus test/de-umlaut-orthography.test.js P1-U3) - MIT AUSNAHME des Prompt-Rumpfs,
 // der seit CQ-P5 korrekte Umlaute traegt (Priming-These, test/cq-p5-prompt-redesign.test.js).
 // Reine Verschiebung (D1, byte-identisch zum vorherigen Inline-Text in src/claude.js):
@@ -463,6 +463,4 @@ Am Ende verabschiedest du dich in einem Satz und rufst danach end_call auf.`,
       "genau diese Handlung jetzt mit dem Werkzeug aus, das dafür vorgesehen ist. " +
       "Wiederhole deinen Satz nicht.]",
   },
-
-  realtimeSpeechStyle: "SPRECHWEISE: natuerlich, zuegig, kurze Saetze.",
 });

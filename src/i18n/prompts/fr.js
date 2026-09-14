@@ -325,6 +325,4 @@ Clarifie la demande, résous-la directement si possible, sinon prends un message
       "[Tu viens d'annoncer une action sans appeler d'outil. Exécute maintenant exactement " +
       "cette action, avec l'outil prévu pour cela. Ne répète pas ta phrase.]",
   },
-
-  realtimeSpeechStyle: "STYLE ORAL : naturel, dynamique, phrases courtes.",
 });

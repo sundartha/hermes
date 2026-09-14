@@ -98,7 +98,7 @@ import { isTelnyxSipCallId } from "../telephony/sip-call-id.js";
 // die das MCP-Werkzeug get_transcript nutzt. Keine zweite Feldliste (G5/S2).
 import { stripResultEvidence, resultCardView } from "../call-result.js";
 // F2-Newsletter-Recipients: timing-sicherer Token-Vergleich fuer die beiden oeffentlichen
-// Token-Scans (confirm/unsubscribe) - Muster call.streamToken-Pruefung in bridge.js.
+// Token-Scans (confirm/unsubscribe) - timing-sicher, kein === (Absolute Regel 3).
 import { safeEqual } from "../util.js";
 // AL-P12: K (=3) lebt im Prompt-Modul, weil dort auch das Zeichenbudget haengt - die
 // Query darf nicht mehr Eintraege liefern, als der Prompt je rendern kann (EINE Quelle).

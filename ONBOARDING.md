@@ -37,7 +37,6 @@ Für lokale Telefonie-Tests brauchst du einen eigenen Tunnel (ngrok) ODER du tes
 ```
 src/server.js      Gateway: Provider-Webhooks, REST-API, MCP über HTTP (/mcp), Auth, Dashboard-Hosting
 src/claude.js      Gesprächslogik (Budget-Engine): System-Prompts, Tools, Disclosure, Summary
-src/bridge.js      Realtime-Engine: Telnyx Media Streams <-> OpenAI Realtime (Barge-in, end_call)
 src/mcp-tools.js   MCP-Tool-Definitionen (place_call, get_call_status, get_transcript, ...)
 src/mcp-server.js  MCP stdio-Variante für Claude Desktop
 src/store.js       JSON-Persistenz (auf Render ephemer - reset bei jedem Deploy)
@@ -54,4 +53,3 @@ scripts/           check-setup.js (npm run check), set-public-url.js
   nur noch der Betreiber-Teil — IdP-Account (WorkOS) + scharf schalten. Anleitung:
   `PLAN-SECURITY.md` (Phase 1, OAuth). Bis dahin schützt `/mcp` die fail-closed-Default (localhost)
   bzw. `MCP_AUTH_TOKEN`.
-- Realtime-Engine testen (braucht OpenAI-Key mit Guthaben): `VOICE_ENGINE=realtime`

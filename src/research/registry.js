@@ -77,9 +77,9 @@ export const LOOKUP_MAX_PER_CALL = 2;
  * Faktoren: Richtung outbound (der Sicherheitskern - eine im Gespraech mit einem
  * FREMDEN Inbound-Anrufer entstandene Frage darf nie an einen Suchindex gehen),
  * laufender Anruf, dann die Schnittmenge Master-Schalter x Secret x Per-Tenant-Recht
- * (inCallSearchProvider oben). BEWUSST OHNE die zwei Turn-Loop-Faktoren des
- * Budget-Wegs (research/in-call.js#lookupProviderFor): voiceEngine und
- * assistantContextEnabled sind Fakten UNSERER Turn-Schleife - auf dem EL-Weg fuehrt
+ * (inCallSearchProvider oben). BEWUSST OHNE den Turn-Loop-Faktor des Budget-Wegs
+ * (research/in-call.js#lookupProviderFor): assistantContextEnabled ist ein Fakt
+ * UNSERER Turn-Schleife - auf dem EL-Weg fuehrt
  * der Agent des Anbieters das Gespraech, und der Treffer geht als Werkzeug-Antwort
  * direkt an sein Modell statt in call.context (dieselbe Abgrenzung wie beim
  * Consult-Webhook, s. dessen consultAllowed-Kommentar).

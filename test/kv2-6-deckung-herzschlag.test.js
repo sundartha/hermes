@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeCostTruing, SWEEP_TRIGGER, PROVIDER_COST_RECORD_WINDOW_MS } from "../src/billing/cost-truing.js";
 import { kostenBuchBericht, KOSTEN_BEFUND } from "../src/billing/kosten-deckung.js";
-import { KOSTENART, KOSTENPROFIL, pflichtTraegerFuerProfil } from "../src/billing/kostenarten.js";
+import { KOSTENART, KOSTENPROFIL } from "../src/billing/kostenarten.js";
 import {
   makeDefaultState, createCall, recordCallCostEvidence, usageFor, openOutageAlert, bindPlatformNumber,
 } from "../src/store/state-ops.js";
@@ -428,14 +428,6 @@ test("profil-fehlt: ein beendeter Anruf ohne Kostenprofil meldet genau einmal, f
   altAnruf.endedAt = new Date(nowMs - SIEBEN_TAGE_MIN * MINUTE_MS).toISOString();
   const altBericht = berichtFuer(altState, nowMs, billing);
   assert.equal(altBericht.befunde.some((befund) => befund.code === KOSTEN_BEFUND.PROFIL_FEHLT), false, "faellt aus dem Fenster");
-});
-
-// ---- openai_realtime hat keinen Einsammler und geht in keine Pflicht-Traegerliste ein ---
-
-test("openai_realtime: pflichtTraegerFuerProfil laesst ihn aus telnyx_inbound_realtime heraus", () => {
-  const traeger = pflichtTraegerFuerProfil(KOSTENPROFIL.TELNYX_INBOUND_REALTIME);
-  assert.ok(traeger.includes(KOSTENART.TELNYX_CALL_RECORDS));
-  assert.ok(!traeger.includes(KOSTENART.OPENAI_REALTIME));
 });
 
 // ---- PII: die Antwort traegt weder Call-ID noch Tenant-ID noch Rufnummer ---------------

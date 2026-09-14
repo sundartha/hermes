@@ -1,6 +1,6 @@
 // Telnyx-Adapter: klassifiziert Telnyx-"Speak"-Command-Events zu einem NEUTRALEN
-// Ergebnis. Symmetrisch zu media.js (parseMediaFrame): eine reine Funktion, die
-// Provider-Events auf neutrale Typen abbildet, die der Core (server.js) konsumiert.
+// Ergebnis. Eine reine Funktion, die Provider-Events auf neutrale Typen abbildet,
+// die der Core (server.js) konsumiert.
 //
 // HINTERGRUND: Das server-seitige TTS laeuft als TeXML-<Say voice="Azure...Neural">
 // (render.js) ueber Telnyx' Azure-NTTS-Backend. Dieses Backend faellt SPORADISCH aus

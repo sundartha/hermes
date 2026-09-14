@@ -82,9 +82,8 @@ const CHARS_PER_TOKEN_ESTIMATE = 4;
 // KEIN Import - B1 haengt an keinem Produktionsmodul (Spec M7-Messverfahren).
 // Von Hand nach DeepSeeks Chat-Completions-Werkzeugform uebersetzt:
 // { type: "function", function: { name, description, parameters } } - dieselbe
-// input_schema -> parameters-Abbildung, die auch realtimeTools() (src/bridge.js:78-85)
-// fuer die Realtime-API macht, hier aber in DeepSeeks (verschachtelter) Form statt
-// der flachen Realtime-Form.
+// input_schema -> parameters-Abbildung - die neutrale toolDefs-Form (parameters) in
+// DeepSeeks verschachtelter Huelle.
 // ============================================================================
 const TAKE_MESSAGE_TOOL = Object.freeze({
   type: "function",

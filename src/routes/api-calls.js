@@ -20,7 +20,6 @@
 // (Gate-Array, Timer, Terminierung, finishCall) und die request-tenant-Resolver werden
 // injiziert (EINE Quelle, INV-7).
 import { Router } from "express";
-import { VOICE_ENGINE } from "../config.js";
 import { normNum, CONSULT_ANSWER, CONSULT_ANSWER_MODE } from "../store/defaults.js";
 import { validateAssistantContext } from "./_validation.js";
 import { consultAllowedFor } from "../consult/gate.js";
@@ -490,10 +489,7 @@ export function makeCallRoutes({
         // NICHT belegt (s. convai.js#endConversation).
         armMaxDurationTimer(call, null);
       } else {
-        // Owner-Entscheidung 10 laeuft auf ihrem DEFAULT: dieser Zweig verzweigt NICHT
-        // auf die Engine (die Weiche faellt erst im Webhook /voice/outbound), also deckt
-        // telnyx_budget hier beide Engines ab. Benannte Restluecke, unerreichbar
-        // solange der Boot-Riegel (h) VOICE_ENGINE=realtime verhindert.
+        // TeXML-Outbound-Zweig: telnyx_budget (einzige Telnyx-Outbound-Engine seit IE6-S2).
         store.recordCostProfile(call.id, KOSTENPROFIL.TELNYX_BUDGET);
         const tw = await voiceControl(ctx.outboundProvider).originateCall({
           from: ctx.fromNumber,
@@ -509,7 +505,7 @@ export function makeCallRoutes({
         // Max-Dauer hart durchsetzen (Budget-Engine). Fuer den TeXML-Pfad der EINZIGE
         // verlaessliche Cap. Erst NACH erfolgreichem Originate armen (vorher gibt es
         // keinen providerCallSid).
-        if (config.voice.voiceEngine !== VOICE_ENGINE.REALTIME) armMaxDurationTimer(call, tw.sid);
+        armMaxDurationTimer(call, tw.sid);
       }
       armReserveReleaseTimer(call); // OUT-05 (F2): Reserve-Backstop, BEIDE Pfade, nach erfolgreichem Originate
       res.json({

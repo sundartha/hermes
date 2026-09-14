@@ -1,5 +1,5 @@
 // OC-P3 (PLAN-OWNER-CALL): Gleichlauf der uebrigen Outbound-Wege (Budget-Erst-Turn,
-// Budget-/Realtime-Systemprompt, Telnyx-Assistant-Shim) mit dem OC-P2-Praedikat
+// Budget-Systemprompt) mit dem OC-P2-Praedikat
 // (call.calleeIsOwner). Kein Katalog-ID-Praefix, kein ABNAHME-Praefix (Testnamen tragen
 // "OC-P3-" am Anfang, faellt nicht unter i18nCatalogPattern, package.json:8 geprueft).
 //

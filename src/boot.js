@@ -1,6 +1,6 @@
 // ---- Boot-Sequenz (Server-Slim P15) ---------------------------------------------
 // bootServer(deps) startet den fertig verdrahteten app: store.load, DSGVO-Retention,
-// Fail-closed-Boot-Gates, listen+Banner, Audio-Bridge, Provisioning-Reconcile,
+// Fail-closed-Boot-Gates, listen+Banner, Provisioning-Reconcile,
 // Graceful-Shutdown. REINE Verschiebung aus server.js (byte-identische Reihenfolge,
 // Log-Zeilen, exit-Codes). INV-5: rearmActiveCallTimers NACH allen exit1-Gates,
 // unmittelbar VOR listen; kein Gate danach ruft process.exit(1). INV-6: die
@@ -10,7 +10,6 @@ import {
   gatewayUrlForPort,
   setBoundGatewayPort,
   todayIsoDate,
-  VOICE_ENGINE,
 } from "./config.js";
 import { configFingerprint } from "./config-fingerprint.js";
 import {
@@ -46,13 +45,7 @@ import { armedInboundSprechpfad, SPRECHPFAD } from "./telephony/sprechpfad.js";
 // LCT-FIX-1: welche Belegtypen einem Call zugeordnet werden koennen, weiss der Adapter, der
 // die Belege liest - der Boot-Guard bleibt eine reine, arg-injizierte Entscheidung.
 import { ASSIGNABLE_COST_RECORD_TYPES } from "./telephony/adapters/telnyx/voice.js";
-import { attachMediaBridge, REALTIME_MID_CALL_BUDGET_CHECK } from "./bridge.js";
-import {
-  hatEinsammler,
-  pflichtTraegerFuerProfil,
-  KOSTENART,
-  KOSTENPROFIL,
-} from "./billing/kostenarten.js";
+import { pflichtTraegerFuerProfil, KOSTENPROFIL } from "./billing/kostenarten.js";
 import {
   USAGE_EVENT_KIND,
   BOOTSTRAP_TENANT_ID,
@@ -178,9 +171,7 @@ function assertSpendCapCoherence(config) {
 // das Muster).
 //
 // Geprueft werden GENAU zwei Werte, unveraendert: claudeModel und briefingModel (letzterer
-// UNABHAENGIG von precallBriefingEnabled). NICHT geprueft wird realtimeModel: der
-// Realtime-Pfad bucht keine Token (kein bookTokenUsage-Aufrufer in bridge.js) - ein
-// Abbruch dafuer waere ein Abbruch ohne Schutzwirkung.
+// UNABHAENGIG von precallBriefingEnabled).
 function assertPricedModels(config) {
   const unpriced = unpricedModels([config.llm.claudeModel, config.llm.briefingModel], config.llm.modelPricesUsd);
   if (!unpriced.length) return;
@@ -457,14 +448,9 @@ function warnElRegistrationSipCredsMissing(config) {
   );
 }
 
-// KV-P7/KV2-2/IE3: vier latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
-// boot-guard.js fuer die Begruendung je Befund). realtimeMidCallBudgetCheck kommt aus
-// GENAU EINER Quelle (REALTIME_MID_CALL_BUDGET_CHECK, src/bridge.js) - kein zweites Flag
-// hier. KV2-2 (h): der dritte Befund (REALTIME_CARRIER_UNCOLLECTED) kann jetzt FATAL sein
-// - Name deshalb "assert" statt "warn" (N7, kann den Prozess beenden), Umgang ueber
-// applyBootFindings (G5) statt eines eigenen console.warn-Loops.
-// realtimeCarrierHasCollector: EINE Quelle - die Profil-Registry (kostenarten.js), nicht
-// ein zweites Flag hier.
+// KV-P7/IE3: zwei latente Kosten-Pfade sichtbar machen (latentCostPathFindings, s.
+// boot-guard.js fuer die Begruendung je Befund). Der IE3-Befund kann FATAL sein - Name
+// deshalb "assert" statt "warn" (N7), Umgang ueber applyBootFindings (G5).
 function assertLatentCostPaths(config) {
   // IE3: EINE Quelle fuer "hat der neue Inbound-Weg einen belegten Kostenpfad" - die
   // Profil-Registry, nicht ein zweites Flag hier. Benanntes Zwischenergebnis (G19), weil
@@ -474,9 +460,6 @@ function assertLatentCostPaths(config) {
   applyBootFindings(
     latentCostPathFindings({
       playTtsEnabled: config.voice.elevenLabsPlayTts.enabled,
-      realtimeEngineSelected: config.voice.voiceEngine === VOICE_ENGINE.REALTIME,
-      realtimeMidCallBudgetCheck: REALTIME_MID_CALL_BUDGET_CHECK,
-      realtimeCarrierHasCollector: hatEinsammler(KOSTENART.OPENAI_REALTIME),
       elInboundEnabled: config.voice.elevenLabsInbound.enabled,
       elInboundCarrierHasCollector: elInboundPflichtTraeger.length > 0,
     }),
@@ -488,7 +471,7 @@ function assertLatentCostPaths(config) {
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertCostTruingBooking
 // (LCT P4) das siebte, assertSttProfile (STT-A1) das achte, assertPricedModels (B4a)
-// das neunte, assertPricedPlans (GP-P6) das zehnte und assertLatentCostPaths (KV2-2 (h))
+// das neunte, assertPricedPlans (GP-P6) das zehnte und assertLatentCostPaths (IE3)
 // das elfte, das noch process.exit(1)
 // rufen kann - warnStaleModelPrices/warnAlertChannelUnset/warnTariffDrift/
 // warnNumberOriginDecoupled/warnMissingProvisioningConnection/
@@ -498,7 +481,7 @@ function assertLatentCostPaths(config) {
 function assertBootGates(config, store, durableAudit) {
   const ok = assertConfig();
   // Fail-closed (OT-4): bei ungueltiger Safety-/Pflicht-Konfiguration wird der Dienst
-  // GAR NICHT gestartet - kein app.listen, kein /voice, kein /mcp, keine Audio-Bridge.
+  // GAR NICHT gestartet - kein app.listen, kein /voice, kein /mcp.
   // Lieber kein Dienst als ein Dienst mit lautlos abgeschaltetem Budget-/Kosten-Gate
   // (R4 Toll-Fraud). Die actionable Diagnose hat assertConfig() bereits ausgegeben.
   if (!ok) {
@@ -577,7 +560,7 @@ function assertBootGates(config, store, durableAudit) {
   warnLlmFallbackUnusable(config); // FW2, WARN
   warnNumberOriginDecoupled(config); // GAP-19, WARN
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
-  assertLatentCostPaths(config); // KV-P7/KV2-2 (h): kann exit(1)
+  assertLatentCostPaths(config); // KV-P7/IE3: kann exit(1)
   warnElRegistrationSipCredsMissing(config); // OUTBOUND-E5, WARN
 }
 
@@ -861,7 +844,7 @@ function logBootBanner(config, port) {
   console.log(`\n  Hermes Gateway laeuft auf ${gatewayUrlForPort(port)}`);
   console.log(`  Dashboard:      ${gatewayUrlForPort(port)}`);
   console.log(
-    `  Voice-Engine:   ${config.voice.voiceEngine}${config.voice.voiceEngine === VOICE_ENGINE.REALTIME && !config.voice.openaiApiKey ? "  (ACHTUNG: OPENAI_API_KEY fehlt!)" : ""}`,
+    `  Voice-Engine:   ${config.voice.voiceEngine}`,
   );
   console.log(`  ${inboundSprechpfadBannerLine(config.voice)}`);
   const inCallConsult = inCallConsultBannerLine(config.tenancy);
@@ -1315,9 +1298,6 @@ export async function bootServer({
     // Boot-Sequenz; die Mindestfrist im Waechter macht daraus hoechstens EINEN Abruf/Tag.
     void priceDriftWatch.runBootProbe().catch((err) => console.error("[price-drift] Boot-Sonde:", err.message));
   });
-
-  // Audio-Bridge (nur relevant bei VOICE_ENGINE=realtime)
-  attachMediaBridge(httpServer, callFinish.finishCall);
 
   // AL-P13: offene Consult-Polls werden VOR httpServer.close() aufgeloest. Ohne das
   // haelt ein 22-s-Poll den Drain auf, der Watchdog kappt mit exit(0) - und der

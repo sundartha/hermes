@@ -12,11 +12,6 @@
 // voiceControl/finishCall aus server.js -> offline ohne Server/Store/Netz unit-
 // testbar (Muster sms-summary.js).
 //
-// Die REALTIME-Engine (bridge.js) terminalisiert NICHT ueber diesen Weg: ihr finalize()
-// beendet den Call idempotent (closed-Guard) via store.endCallRecord + onCallEnded (in Prod
-// = callFinish.finishCall, gebucht genau einmal), NICHT ueber terminateAndBillCall. Beide
-// Wege buchen heute korrekt genau einmal - dieser Helfer ist der Budget-Engine-Pfad.
-//
 // hangUp ist optional (null/undefined), wenn (noch) kein Provider-Call-Sid existiert -
 // dann wird der Hangup-Versuch uebersprungen, persistiert+gebucht wird trotzdem.
 // Ein hangUp-Fehler ist best-effort: onHangUpError entscheidet je Aufrufer, ob/wie

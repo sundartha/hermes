@@ -235,9 +235,10 @@ export function eurToCents(eur) {
   return Math.round(eur * CENTS_PER_EUR);
 }
 
-// Voice-Engine-Namen (G25/G11): EINE Quelle statt verstreuter "budget"/"realtime"-Literale
-// in config.js, routes/voice.js, telephony/call-lifecycle.js, routes/api-calls.js, boot.js.
-export const VOICE_ENGINE = Object.freeze({ BUDGET: "budget", REALTIME: "realtime" });
+// Name der einzigen Voice-Engine (G25). Seit IE6-S2 kein Schalter mehr: die Realtime-
+// Bridge ist entfernt, VOICE_ENGINE aus der Umgebung wird nicht mehr gelesen. Der Wert
+// bleibt als benanntes Statusfeld (Boot-Banner, agent.voiceEngine, get_agent_status).
+export const VOICE_ENGINE = Object.freeze({ BUDGET: "budget" });
 
 // PA-11 (S2-trailingslash, G5): EINE Quelle fuer das 7x wiederholte Trailing-Slash-
 // Idiom. Entfernt genau EINEN abschliessenden Slash, damit `${base}/pfad` nie zu
@@ -960,11 +961,11 @@ const rawConfig = {
   // 2026-07-20: sip-trunking, call-control, speech-to-text, text-to-speech, recording,
   // inference, ai-voice-assistant - "call" existiert NICHT).
   // KV2-5: dieser Wert ist seit der Umstellung auf profil-adressierte Pflichtmengen die
-  // Pflicht-Typmenge der VIER Telnyx-Profile (telnyx_budget, telnyx_assistant,
-  // telnyx_inbound_budget, telnyx_inbound_realtime) - unveraendert wie zuvor global.
+  // Pflicht-Typmenge der ZWEI Telnyx-Profile mit Env-Marker (telnyx_budget,
+  // telnyx_inbound_budget) - unveraendert wie zuvor global.
   // Das Profil el_convai_sip liest ihn NICHT: es fuehrt seine eigene, am Anbieter gemessene
   // Menge als Literal in src/billing/kostenarten.js (KOSTENPROFILE[...].pflichttypen).
-  // Eine Aenderung hier bewegt weiterhin alle vier Telnyx-Profile gleichzeitig - bewusst
+  // Eine Aenderung hier bewegt weiterhin beide Telnyx-Profile gleichzeitig - bewusst
   // akzeptiertes Restrisiko (Spec KV2-5(f)); eine Aufteilung waere eine
   // Verhaltensaenderung an der Erstattungsbedingung.
   costTruingRequiredRecordTypes: csvEnv(process.env.COST_TRUING_REQUIRED_RECORD_TYPES),
@@ -1975,12 +1976,9 @@ const rawConfig = {
   platformAlertMailTo: process.env.PLATFORM_ALERT_MAIL_TO || "",
 
   // ---- Voice-Engine ----
-  // "budget"  = Provider-eigene STT/TTS (Telnyx TeXML) + Claude Haiku (quasi gratis, Default)
-  // "realtime"= OpenAI Realtime API (Speech-to-Speech, Barge-in, ~0,30-0,50 EUR/min)
-  voiceEngine: process.env.VOICE_ENGINE || VOICE_ENGINE.BUDGET,
-  openaiApiKey: process.env.OPENAI_API_KEY || "",
-  realtimeModel: process.env.REALTIME_MODEL || "gpt-realtime",
-  realtimeVoice: process.env.REALTIME_VOICE || "alloy",
+  // Fester Statuswert (IE6-S2), nicht konfigurierbar: ein gelesener, aber wirkungsloser
+  // Env-Wert waere eine Statusluege (G2), ein Schalter ohne zweite Stellung toter Code (G9).
+  voiceEngine: VOICE_ENGINE.BUDGET,
 
   // ---- Spracherkennung (STT) ----
   // Neutrale Wahl der Erkennungs-Engine, EINMAL fuer alle Pfade. Jeder Telefonie-Adapter
@@ -2140,7 +2138,7 @@ export const CONFIG_NAMESPACES = Object.freeze({
   mail: ["brevoApiKey", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "mailFrom", "platformAlertMailTo"],
   llm: ["anthropicApiKey", "llmProvider", "deepseekApiKey", "claudeModel", "llmRequestTimeoutMs", "llmMaxRetries", "llmBackoffMs", "llmBreakerThreshold", "llmBreakerWindowMs", "llmBreakerCooldownMs", "llmProviderFallback", "llmBillingLatchCooldownMs", "modelPricesUsd", "usdToEur", "briefingModel", "briefingTimeoutMs", "summaryTimeoutMs"],
   telnyx: ["telnyxElevenLabs"],
-  voice: ["voiceEngine", "openaiApiKey", "realtimeModel", "realtimeVoice", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
+  voice: ["voiceEngine", "elevenLabsPlayTts", "elevenLabsToolToken", "elevenLabsTenantTokenRequired", "elevenLabsOutbound", "elevenLabsInbound", "sttProfile", "sttSpeechTimeoutSec", "maxEmptyTurns", "callerSubstanceMinLen", "sendSmsSummary", "dailySmsCap", "thinkingSignalEnabled", "toolFollowUpEnabled", "ownerSelfCallEnabled", "ownerSelfCallTenantIds"],
   telephony: ["telnyxApiKey", "telnyxPublicKey", "telnyxApiBase", "telnyxConnectionId", "telnyxAccountSid", "machineDetection", "telnyxFqdnConnectionId", "telnyxOutboundVoiceProfileId", "telnyxSipTrunkUsername", "telnyxSipTrunkPassword"],
   tenancy: ["multiTenant", "mcpUiEnabled", "assistantContextEnabled", "selfServiceEnabled", "profilesSeed", "precallBriefingEnabled", "consultEnabled", "inCallConsultEnabled", "consultWaitMs", "consultOpenMs", "elConsultDeliveryMs", "elConsultAckMs", "elConsultAnswerMs"],
   server: ["port", "publicUrl", "isProduction", "deployedCommit", "dataDir", "publicDir", "webDistDir", "shutdownDrainTimeoutMs"],

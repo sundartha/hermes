@@ -655,8 +655,6 @@ services:
         value: "5"
       - key: SEND_SMS_SUMMARY
         value: "true"
-      - key: VOICE_ENGINE
-        value: budget
       # PUBLIC_URL nicht noetig: Render setzt RENDER_EXTERNAL_URL automatisch
 
   # ---- 2) Produkt-Frontend (W0, Static Site aufs CDN) ----

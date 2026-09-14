@@ -44,7 +44,6 @@ export function belegVollstaendig(measured) {
 const TELNYX_CALL_RECORDS_PROFILE = new Set([
   KOSTENPROFIL.TELNYX_BUDGET,
   KOSTENPROFIL.TELNYX_INBOUND_BUDGET,
-  KOSTENPROFIL.TELNYX_INBOUND_REALTIME,
   // IE3: der neue Inbound-Weg fuehrt telnyx_call_records mit Einsammler KV2-5g
   // (kostenarten.js). Ohne diesen Eintrag liefert sweepTraegerFuerProfil null, die Zeile
   // wird NIE geschrieben, offeneTraeger bleibt fuer immer nicht-leer - und die Registry

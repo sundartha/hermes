@@ -11,17 +11,17 @@
 // "Gespraech" als Buchstabenfolge, nicht als deutsches Wort. NICHT zurueck-
 // transliterieren. Kein Sonderfall fuer ss/sz: "ss" ist orthografisch gueltig und wird
 // korrekt gelesen, "ue/oe/ae" als Umlautersatz ist es nicht. Ausgenommen und bewusst
-// transliteriert bleiben Strings, die NIE gesprochen werden: realtimeOpener (Steuertext
-// fuer response.create) und summarySystem (LLM-Prompt, dessen Output als JSON geparst
-// wird) - siehe test/de-umlaut-orthography.test.js, das diese Grenze festhaelt.
+// transliteriert bleiben Strings, die NIE gesprochen werden: summarySystem (LLM-Prompt,
+// dessen Output als JSON geparst wird) - siehe test/de-umlaut-orthography.test.js, das
+// diese Grenze festhaelt.
 // Franzoesische Strings tragen ebenfalls die korrekten Akzente ("resume" != "résumé").
 // Die Render-Pfade sind UTF-8 (TeXML <?xml encoding="UTF-8"?>); Umlaute und
 // Akzente sind keine XML-Sonderzeichen und passieren die Escaper unveraendert.
 // P5 (PLAN-CONVERSATION-QUALITY-V2): die Prompt-Bausteine dieses Bundles (speechClause,
 // STYLE_CLAUSES_DE) tragen seit P5 ebenfalls korrekte Umlaute - sie fliessen in den von
 // claude.js zusammengesetzten Systemprompt, der nie gesprochen, aber vom Modell gelesen
-// wird (Priming-These). realtimeOpener und summarySystem bleiben ausdruecklich
-// transliteriert (siehe P1-U3 oben), sie sind kein Prompt-Baustein im P5-Sinn.
+// wird (Priming-These). summarySystem bleibt ausdruecklich transliteriert (siehe P1-U3
+// oben), es ist kein Prompt-Baustein im P5-Sinn.
 // KOMMENTARE bleiben ASCII (Repo-Konvention) - nur die Strings aendern sich.
 import { DEFAULT_LANGUAGE, DEFAULT_GREETING } from "../store/defaults.js";
 import { INBOUND_NOTICES } from "./inbound-notice.js";
@@ -42,23 +42,6 @@ import { FAILURE_REASON_TEXTS, makeStatusBody } from "./failure-reason-texts.js"
 const VOICE_PROFILE_DE = "de-female-neural";
 const VOICE_PROFILE_FR = "fr-female-neural";
 const VOICE_PROFILE_EN = "en-female-neural";
-
-// F1 Geo-Location (Phase 5) - OpenAI-Realtime-Felder (NUR VOICE_ENGINE=realtime,
-// bridge.js). EIGENER Namensraum, GETRENNT von voiceProfile (Telephonie-TTS Polly/
-// Azure) und sttLocale (BCP-47 fuer Provider-Gather): die OpenAI-Realtime-API kennt
-// eigene Voice-Namen (alloy/shimmer/...) und Whisper will einen ISO-639-Sprachcode
-// (de/fr/en), NICHT das BCP-47. Daher zwei NEUE Felder statt Wiederverwendung -
-// dieselbe eine Quelle, nur die richtigen Werte fuer den richtigen Konsumenten.
-//
-// realtimeVoice fuer DE bewusst null: die Bridge faellt dann auf config.voice.realtimeVoice
-// (Env REALTIME_VOICE, Default "alloy") zurueck -> DE byte-identisch zum Bestand und
-// Env-uebersteuerbar, statt "alloy" doppelt zu verdrahten. FR/EN tragen eine kuratierte
-// OpenAI-Voice (R10 fail-closed: unbekannte Voice lehnt der Provider ab -> Live-Smoke-
-// Gate, Produktiv-Flags bleiben aus). DE-whisperLocale bewusst null: das Bestands-
-// Verhalten war Auto-Detect (keine language); null -> Bridge laesst language weg ->
-// byte-identisch. FR/EN setzen den expliziten ISO-Code (R13, Schutz gegen Sprachmix).
-const REALTIME_VOICE_FR = "shimmer";
-const REALTIME_VOICE_EN = "alloy";
 
 // ---- Persona-Stil-Katalog (P2, PLAN-PERSONAL-ASSISTANT.md) ----
 // Kuratiertes NON-PII-Enum (Owner-Entscheidung 6.1): GENAU ZWEI IDs, kein "kurz-direkt".
@@ -152,19 +135,6 @@ export const LOCALES = Object.freeze({
     dateLocale: "de-DE", // Date#toLocaleString-Locale (claude.js fmtDate + now)
     sttLocale: "de-DE", // STT BCP-47 (Phase 3: Telnyx-Gather-Render)
     voiceProfile: VOICE_PROFILE_DE, // TTS-Voice-Profil (Phase 3: render TTS)
-    // OpenAI-Realtime (Phase 5, NUR VOICE_ENGINE=realtime). null -> Bridge nutzt
-    // config.voice.realtimeVoice bzw. laesst Whisper-language weg (DE byte-identisch).
-    realtimeVoice: null,
-    whisperLocale: null,
-    // Realtime-Opener (Steuertext fuer response.create). disclosure ist der bereits
-    // sprachabhaengige Offenlegungssatz (call-gebunden), als Pflichtsatz eingebettet.
-    // DE-Texte BYTE-IDENTISCH zum frueheren bridge.js-Inline-Opener.
-    realtimeOpener: {
-      outbound: (disclosure) =>
-        `Beginne das Gespraech JETZT. Dein erster Satz muss exakt lauten: "${disclosure}" Nenne danach kurz dein Anliegen.`,
-      inbound:
-        "Der Anrufer ist in der Leitung. Begruesse ihn jetzt entsprechend deiner Anweisungen.",
-    },
     // System-Prompt-Sprach-Teil: die Output-Sprach-Regel in Regel 1 (claude.js).
     speechClause: "Nur natürlich gesprochenes Deutsch.",
     // Persona-Stil (P2): Stil-ID -> Ton-/Anrede-Klausel, ersetzt die fixe Siez-Anweisung
@@ -316,8 +286,7 @@ export const LOCALES = Object.freeze({
     // AL-P14: hoechstens EIN Halte-Satz je Rueckfrage (danach greift der Mandats-Fallback).
     consultHoldSpeech: "Einen Moment noch, bitte. Ich bin gleich für Sie da.",
     // P11: Modell-Text (Systemprompt-Geruest, Tool-Beschreibungen, Steuer-Marker) - s.
-    // i18n/prompts/. Wird nie gesprochen. bridge.js-Suffix liegt in prompt.realtimeSpeechStyle
-    // (nicht hier doppelt).
+    // i18n/prompts/. Wird nie gesprochen.
     prompt: PROMPT_DE,
     // Nutzer-sichtbare Post-Call-Texte (Notification + Summary-SMS), NIE gesprochen (WEB-14).
     postCall: Object.freeze({
@@ -368,14 +337,6 @@ export const LOCALES = Object.freeze({
     dateLocale: "fr-FR",
     sttLocale: "fr-FR",
     voiceProfile: VOICE_PROFILE_FR,
-    // OpenAI-Realtime FR (Phase 5): kuratierte Voice + expliziter Whisper-ISO-Code.
-    realtimeVoice: REALTIME_VOICE_FR,
-    whisperLocale: "fr",
-    realtimeOpener: {
-      outbound: (disclosure) =>
-        `Commence la conversation MAINTENANT. Ta première phrase doit être exactement : "${disclosure}" Indique ensuite brièvement l'objet de ton appel.`,
-      inbound: "L'appelant est en ligne. Salue-le maintenant conformément à tes instructions.",
-    },
     speechClause: "Réponds exclusivement en français parlé et naturel.",
     styleClause: makeStyleClause(STYLE_CLAUSES_FR, NEUTRAL_ADDRESS_CLAUSE_FR),
     // Ich-Satz-Passthrough wie DE (je/j'); sonst kuratierte, natuerlichere Bruecke.
@@ -483,14 +444,6 @@ export const LOCALES = Object.freeze({
     dateLocale: "en-GB",
     sttLocale: "en-GB",
     voiceProfile: VOICE_PROFILE_EN,
-    // OpenAI-Realtime EN (Phase 5): kuratierte Voice + expliziter Whisper-ISO-Code.
-    realtimeVoice: REALTIME_VOICE_EN,
-    whisperLocale: "en",
-    realtimeOpener: {
-      outbound: (disclosure) =>
-        `Start the conversation NOW. Your first sentence must be exactly: "${disclosure}" Then briefly state the reason for your call.`,
-      inbound: "The caller is on the line. Greet them now according to your instructions.",
-    },
     speechClause: "Reply only in natural, spoken English.",
     styleClause: makeStyleClause(STYLE_CLAUSES_EN, NEUTRAL_ADDRESS_CLAUSE_EN),
     // Ich-Satz-Passthrough wie DE (I/I'm/I'd); sonst natuerlichere Bruecke.

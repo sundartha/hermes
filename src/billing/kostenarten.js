@@ -14,7 +14,7 @@
 // VERHAELTNIS ZU cost-ledger-map.js (Kopfkommentar-Pflicht dieser Phase): cost-ledger-map
 // ist die IST-BUCHUNGSLANDKARTE ("welcher Weg ist heute verdrahtet" - ledger/gate als
 // Booleans je Kostenart, sieben Zeilen). DIESE Datei ist der Kostenarten-KATALOG ("welche
-// Anbieter-Ausgabe existiert ueberhaupt" - 17 Zeilen, inklusive Arten ohne jeden
+// Anbieter-Ausgabe existiert ueberhaupt" - 16 Zeilen, inklusive Arten ohne jeden
 // Buchungsweg) plus die Profil-Registry der Engine-Weiche. Ueberlappende IDs zwischen
 // beiden Tabellen: ai_token, research_fee, sms (identischer Name, gleiche Kostenart,
 // zwei verschiedene Fragen); play_tts_characters (cost-ledger-map) entspricht
@@ -36,8 +36,9 @@
 // mit pflicht:true muessen eine dieser beiden tragen (s. pruefeKostenart).
 export const WAEHRUNG_HART = Object.freeze(["USD", "EUR"]);
 
-// Die 17 Kostenarten-IDs (Abschnitt 3.2/3.3). Numerische Reihenfolge der Kommentare
-// spiegelt die Katalog-# aus dem Plan (IDs, keine Sortierung - s. Zeilen #14/#16/#17).
+// Die 16 Kostenarten-IDs (Abschnitt 3.2/3.3). Numerische Reihenfolge der Kommentare
+// spiegelt die Katalog-# aus dem Plan (IDs, keine Sortierung - s. Zeilen #15-#17); #14
+// (openai_realtime) ist mit IE6-S2 entfallen, die Nummern bleiben Plan-IDs.
 export const KOSTENART = Object.freeze({
   ELEVENLABS_CONVAI: "elevenlabs_convai", // #1
   TELNYX_SIP: "telnyx_sip", // #2
@@ -52,18 +53,16 @@ export const KOSTENART = Object.freeze({
   NUMMERN_EINKAUF: "nummern_einkauf", // #11
   STRIPE_GEBUEHR: "stripe_gebuehr", // #12
   INFRASTRUKTUR: "infrastruktur", // #13
-  OPENAI_REALTIME: "openai_realtime", // #14
   TELNYX_INFERENCE: "telnyx_inference", // #15
   MAIL_ZUSAMMENFASSUNG: "mail_zusammenfassung", // #16
   WORKOS_AUTH: "workos_auth", // #17
 });
 
-// Die 5 Kostenprofile der Engine-Weiche (4.3, Tabelle in spec-kv2-2.md).
+// Die 4 Kostenprofile der Engine-Weiche (4.3, Tabelle in spec-kv2-2.md).
 export const KOSTENPROFIL = Object.freeze({
   EL_CONVAI_SIP: "el_convai_sip",
   TELNYX_BUDGET: "telnyx_budget",
   TELNYX_INBOUND_BUDGET: "telnyx_inbound_budget",
-  TELNYX_INBOUND_REALTIME: "telnyx_inbound_realtime",
   // IE3 (PLAN-INBOUND-PARITAET.md): unser Telnyx-Inbound-Bein, dessen Gespraech der
   // ElevenLabs-ConvAI-Agent fuehrt (Uebergabe per SIP, Kandidat K1). EIGENE Zeile und
   // NICHT el_convai_sip: dessen gemessene Pflichtmenge ist [sip-trunking], dieses Bein
@@ -73,7 +72,8 @@ export const KOSTENPROFIL = Object.freeze({
 });
 
 // Phasenkennungen, die einen Beleg-Einsammler bauen bzw. der eine ausdrueckliche
-// Nicht-Belegpflicht (Owner-Entscheidung 9, openai_realtime in telnyx_inbound_realtime).
+// Nicht-Belegpflicht (Owner-Entscheidung 9; seit IE6-S2 von keinem Profil vergeben,
+// bleibt Registry-Vokabular).
 export const EINSAMMLER = Object.freeze({
   KV2_4: "KV2-4",
   KV2_5: "KV2-5",
@@ -344,22 +344,6 @@ export const KOSTENARTEN = Object.freeze({
     pflicht: false,
     preisquelle: "Preisbildungs-Eingabe (was muss ein Abo kosten), keine Verbrauchskosten.",
   },
-  [KOSTENART.OPENAI_REALTIME]: {
-    quelle:
-      "OpenAI Realtime API, WebSocket wss://api.openai.com/v1/realtime, Modell " +
-      "config.voice.realtimeModel (Default gpt-realtime)",
-    waehrung: "USD",
-    pflicht: false,
-    preisquelle:
-      "GEMESSEN 2026-08-31, OpenAI-Modellpreisliste (developers.openai.com, Modell " +
-      "gpt-realtime): Text-Input 4 USD/1M Token, Text-Output 16 USD/1M Token, " +
-      "Audio-Input 32 USD/1M Token, Audio-Output 64 USD/1M Token. Owner-Entscheidung 9 " +
-      "(2026-08-30): NICHT verwendet, nur katalogisiert - kein Einsammler, kein " +
-      "Buchungsweg (Riegel KV2-2(h) sichert genau diese Luecke ab). Ob und in welchem " +
-      "Ereignis die Sitzung einen VERBRAUCHS-Betrag liefert (response.done, " +
-      "bridge.js:383 liest heute keinen), bleibt offener Punkt Abschnitt 9 - nur fuer " +
-      "einen kuenftigen Einsammler relevant.",
-  },
   [KOSTENART.TELNYX_INFERENCE]: {
     quelle: "Telnyx, detail_records, record_type=inference, Betrag cost",
     waehrung: "USD",
@@ -402,7 +386,7 @@ export const KOSTENARTEN = Object.freeze({
   },
 });
 
-// Die 5 Kostenprofile der Engine-Weiche (4.3). traeger je Profil traegt den
+// Die 4 Kostenprofile der Engine-Weiche (4.3). traeger je Profil traegt den
 // Pflicht-Einsammler (Kriterium (i)).
 export const KOSTENPROFILE = Object.freeze({
   [KOSTENPROFIL.EL_CONVAI_SIP]: {
@@ -422,9 +406,7 @@ export const KOSTENPROFILE = Object.freeze({
       [KOSTENART.TELNYX_SIP]: { einsammler: EINSAMMLER.KV2_5 },
     },
   },
-  // Owner-Entscheidung 10 (Default, nicht ausdruecklich entschieden): api-calls.js
-  // verzweigt im TeXML-Zweig NICHT auf die Engine (die Weiche faellt erst im Webhook,
-  // voice.js:476) - dieses Profil deckt deshalb heute BEIDE Outbound-Engines ab.
+  // api-calls.js: der TeXML-Outbound-Zweig setzt dieses Profil.
   [KOSTENPROFIL.TELNYX_BUDGET]: {
     pflichttypen: PFLICHTTYPEN_AUS_ENV,
     traeger: { [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G } },
@@ -432,19 +414,6 @@ export const KOSTENPROFILE = Object.freeze({
   [KOSTENPROFIL.TELNYX_INBOUND_BUDGET]: {
     pflichttypen: PFLICHTTYPEN_AUS_ENV,
     traeger: { [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G } },
-  },
-  // telnyx_inbound_realtime bekommt KEIN Literal: sein zusaetzlicher Traeger
-  // openai_realtime ist nicht_belegpflichtig (Owner-Entscheidung 9) und geht gar nicht in
-  // eine Pflichtmenge ein; fuer den Telnyx-Anteil gilt derselbe Env-Wert (Spec (f)).
-  [KOSTENPROFIL.TELNYX_INBOUND_REALTIME]: {
-    pflichttypen: PFLICHTTYPEN_AUS_ENV,
-    traeger: {
-      [KOSTENART.TELNYX_CALL_RECORDS]: { einsammler: EINSAMMLER.KV2_5G },
-      // Owner-Entscheidung 9 (2026-08-30): katalogisiert, kein Einsammler - der einzige
-      // heute vergebene nicht_belegpflichtig-Wert. Riegel KV2-2(h) sichert ab, dass der
-      // Schalter ohne diese Zeile nicht startet.
-      [KOSTENART.OPENAI_REALTIME]: { einsammler: EINSAMMLER.NICHT_BELEGPFLICHTIG },
-    },
   },
   // IE3: der neue Inbound-Weg (unser Bein + EL-ConvAI-Agent, K1). ZWEI Traeger, beide
   // pflicht:true im Katalog -> beide mit echtem Einsammler (Biconditional (i3)):
@@ -519,23 +488,10 @@ export function kostenprofilFuerAnruf(call) {
   return call?.costProfile == null ? legacyKostenprofil(call ?? {}) : call.costProfile;
 }
 
-// Kriterium (h)/hatEinsammler: true, wenn IRGENDEIN Profil diesen Traeger mit einem
-// Einsammler != nicht_belegpflichtig fuehrt. Reines Praedikat, vom Boot-Riegel
-// (boot-guard.js, latentCostPathFindings) gegen KOSTENART.OPENAI_REALTIME gefahren.
-export function hatEinsammler(traeger) {
-  return Object.values(KOSTENPROFILE).some((profil) => {
-    const eintrag = profil.traeger[traeger];
-    return eintrag !== undefined && eintrag.einsammler !== EINSAMMLER.NICHT_BELEGPFLICHTIG;
-  });
-}
-
-// KV2-6: die Traeger EINES Profils, fuer die es einen Einsammler gibt. Gegenstueck zu
-// hatEinsammler (dort: "fuehrt IRGENDEIN Profil diesen Traeger ein"), hier profil-lokal.
-// Die nicht_belegpflichtig-Paare fallen heraus - openai_realtime (Owner-Entscheidung 9)
-// hat keinen Einsammler und darf deshalb weder in eine Deckungsquote noch in einen
-// Herzschlag eingehen: sonst waere der Alarm fuer telnyx_inbound_realtime per
-// Konstruktion dauerhaft an, und ein Alarm, der immer an ist, ist keiner (4.4).
-// Unbekanntes Profil -> LEERE Liste (fail-closed, nie ein Trostpreis-Traeger).
+// KV2-6: die Traeger EINES Profils, fuer die es einen Einsammler gibt. Paare mit
+// nicht_belegpflichtig fallen heraus - ein Traeger ohne Einsammler darf weder in eine
+// Deckungsquote noch in einen Herzschlag eingehen, sonst waere der Alarm per
+// Konstruktion dauerhaft an (4.4). Unbekanntes Profil -> LEERE Liste (fail-closed).
 export function pflichtTraegerFuerProfil(profil) {
   // Drei eigene Anweisungen statt einer verketteten Pipeline (G36, Gesetz von Demeter) -
   // dieselbe Rechnung, aber ohne vier verschachtelte Zugriffe in EINEM Ausdruck.

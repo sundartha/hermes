@@ -58,16 +58,15 @@ test("KV2-2-a7: die Validierung lief zur BAUZEIT - der Import selbst ist der Bew
 
 // ---- Kriterium (d): 17 Zeilen, Loeschschutz -------------------------------------------
 
-// Kriterium (d): "17" ist der gepinnte Loeschschutz selbst - eine benannte Konstante,
+// Kriterium (d): "16" ist der gepinnte Loeschschutz selbst - eine benannte Konstante,
 // keine Willkuer-Zahl (G25).
-const ERWARTETE_ANZAHL_KOSTENARTEN = 17;
+const ERWARTETE_ANZAHL_KOSTENARTEN = 16;
 
-test("KV2-2-d1: der Katalog hat GENAU 17 Zeilen (Loeschschutz, kein Vollstaendigkeitsbeweis)", () => {
+test("KV2-2-d1: der Katalog hat GENAU 16 Zeilen (Loeschschutz, kein Vollstaendigkeitsbeweis)", () => {
   assert.equal(Object.keys(KOSTENARTEN).length, ERWARTETE_ANZAHL_KOSTENARTEN);
 });
 
-test("KV2-2-d2: die vier zuletzt ergaenzten Zeilen sind da", () => {
-  assert.ok(Object.hasOwn(KOSTENARTEN, KOSTENART.OPENAI_REALTIME));
+test("KV2-2-d2: die drei zuletzt ergaenzten Zeilen sind da", () => {
   assert.ok(Object.hasOwn(KOSTENARTEN, KOSTENART.TELNYX_INFERENCE));
   assert.ok(Object.hasOwn(KOSTENARTEN, KOSTENART.MAIL_ZUSAMMENFASSUNG));
   assert.ok(Object.hasOwn(KOSTENARTEN, KOSTENART.WORKOS_AUTH));

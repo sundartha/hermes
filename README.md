@@ -10,23 +10,20 @@ Claude Desktop ──MCP stdio──► src/mcp-server.js ─────┤   G
 Dashboard (Browser) ──REST──► /api/* ────────────────┘        │
                                                               │ Telnyx REST: originateCall
                                                               ▼
-Angerufenes Handy ◄──Mobilfunknetz──► Telnyx ◄──┬── Budget-Engine: <Gather>/<Say> (STT/TTS de-DE)
-                                                │        └► Claude Haiku = Gehirn + Tools
-                                                └── Realtime-Engine: Media-Streams-WS /media
-                                                         └► OpenAI Realtime (g711_ulaw 1:1,
-                                                             Barge-in, end_call-Tool)
+Angerufenes Handy ◄──Mobilfunknetz──► Telnyx ◄──── Budget-Engine: <Gather>/<Say> (STT/TTS de-DE)
+                                                         └► Claude Haiku = Gehirn + Tools
 ```
 
-**Zwei Voice-Engines, gleicher Agent** (gleiche Persona, gleiche Tools, gleiche Permissions, gleiche Summaries):
+**Budget-Engine** (die OpenAI-Realtime-Engine ist seit IE6-S2 entfernt):
 
-|                    | `VOICE_ENGINE=budget` (Default)      | `VOICE_ENGINE=realtime`             |
-| ------------------ | ------------------------------------ | ----------------------------------- |
-| Sprachverarbeitung | Telnyx TeXML STT/TTS (Azure-Stimmen, de-DE) | OpenAI Realtime, Speech-to-Speech |
-| Gesprächsgefühl    | Walkie-Talkie-Takt, 1–3 s Latenz     | natürlich, unterbrechbar (Barge-in) |
-| Kosten pro Call    | ~0,5–2 Cent Claude + Telnyx-Guthaben | zusätzlich ~0,30–0,50 €/min OpenAI  |
-| Voraussetzungen    | nur Claude-Key                       | OpenAI-Key mit Guthaben             |
+|                    | `VOICE_ENGINE=budget` (Default)      |
+| ------------------ | ------------------------------------ |
+| Sprachverarbeitung | Telnyx TeXML STT/TTS (Azure-Stimmen, de-DE) |
+| Gesprächsgefühl    | Walkie-Talkie-Takt, 1–3 s Latenz     |
+| Kosten pro Call    | ~0,5–2 Cent Claude + Telnyx-Guthaben |
+| Voraussetzungen    | nur Claude-Key                       |
 
-Audio läuft **niemals durch MCP**. Realtime nutzt G.711 μ-law 8 kHz **1:1 durchgereicht** (kein Transcoding). Call-Records liegen in `data/store.json` (bewusst ohne Datenbank).
+Audio läuft **niemals durch MCP**. Call-Records liegen in `data/store.json` (bewusst ohne Datenbank).
 
 ## C-Telnyx — AI-Assistant-Engine (Barge-in, optional)
 
@@ -53,7 +50,6 @@ NACH verifiziertem Deploy, Rollback = Flag aus).
 | -------------------------- | ------------------------------------------------------------ |
 | Telefonie (Telnyx)         | Prepaid-Guthaben: DID-Miete + Minutenpreis                   |
 | Budget-Engine komplett     | ~0,5–2 Cent Claude pro Call → 10 € ≈ **hunderte Demo-Calls** |
-| Realtime-Engine (optional) | + ~0,30–0,50 €/min vom OpenAI-Guthaben                       |
 | ngrok                      | gratis                                                       |
 
 ## Setup (~20 Minuten)
@@ -90,7 +86,7 @@ Angezeigte URL als `PUBLIC_URL` in `.env` eintragen, Server neu starten. (Free-U
 npm run check
 ```
 
-Prüft automatisch: Anthropic-Key gültig + Modell verfügbar, aktive Owner-Nummer im Store, `PUBLIC_URL` gesetzt, Land-Gate/Stundenlimit plausibel, MCP-Auth-Modus, ngrok-Tunnel zeigt auf dieses Gateway, OpenAI-Key (bei realtime), MCP-OAuth (bei `MCP_AUTH=oauth`). Erst demoen, wenn alles grün ist.
+Prüft automatisch: Anthropic-Key gültig + Modell verfügbar, aktive Owner-Nummer im Store, `PUBLIC_URL` gesetzt, Land-Gate/Stundenlimit plausibel, MCP-Auth-Modus, ngrok-Tunnel zeigt auf dieses Gateway, MCP-OAuth (bei `MCP_AUTH=oauth`). Erst demoen, wenn alles grün ist.
 
 ### 3c. Tests
 
@@ -180,8 +176,7 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calend
 ## Bekannte Stolpersteine
 
 - **ngrok Free:** URL wechselt bei jedem Start → `PUBLIC_URL` + Connector-Eintrag aktualisieren.
-- **Latenz:** Budget-Engine bleibt Turn-basiert (1–3 s); für natürliches Unterbrechen Realtime-Engine nutzen.
-- **Realtime-Engine:** braucht `OPENAI_API_KEY` mit Guthaben; Modell per `REALTIME_MODEL` (Default `gpt-realtime`, Fallback `gpt-4o-realtime-preview`).
+- **Latenz:** Budget-Engine bleibt Turn-basiert (1–3 s).
 - **Frische Demo:** `data/store.json` löschen setzt Calls/Items/Budgetzähler zurück.
 
 ## Bewusste Prototyp-Abweichungen (vs. Produkt-PRD)
@@ -193,7 +188,7 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calend
 - Spracherkennung (Budget-Engine, `<Gather input="speech">`): Telnyx nutzt `transcriptionEngine="Deepgram"` + `model="deepgram/nova-3"` (neutral gewählt über `STT_PROFILE`, im Telnyx-Renderer übersetzt). Telnyx transkribiert **ohne** `transcriptionEngine` gar nicht (das Weglassen war der Inbound-Audio-Bug: Agent hörte den Angerufenen nie). **Restrisiko:** die de-DE-Reife der Telnyx-in-house-Engine ist live noch unbestätigt; falls Deutsch schlecht erkannt wird, ist `transcriptionEngine="Google"` (akzeptiert `de-DE`) der Fallback — 1-Zeilen-Änderung im Telnyx-Renderer.
 - Datenminimierung (DSGVO): Roh-Transkripte werden nach erfolgreicher Zusammenfassung gelöscht — nur Summary + Action Items bleiben gespeichert. `get_transcript` liefert für abgeschlossene Calls kein Volltranskript mehr. Datenresidenz EU (`render.yaml` `region: frankfurt`; Region ist per Blueprint nur für frische Deploys setzbar).
 - Consult-Kanal am Call (`CONSULT_ENABLED`, Default aus): Rückfragen während der Klingelzeit laufen als **Stufe 0** über einen kurzen, vom Client gezogenen Long-Poll (`GET /api/calls/:id/consult`) — der MCP-Rückkanal (Sampling/Elicitation/MRTR/Tasks) ist in claude.ai und ChatGPT unbrauchbar. Stufe 1 (Tasks-Extension) bzw. Stufe 2 (MRTR) tauschen später **nur** `src/consult/delivery.js`; Vertrag (`src/consult/ports.js`), Zustand (`call.consults`) und Aufrufer bleiben unberührt.
-- Nachschlagen **im** Gespräch (`LOOKUP_ENABLED`, Default aus): das Werkzeug `look_up` schickt eine kurze Sachfrage an **Exa** — ein **neues Secret** (`EXA_API_KEY`) und ein **zweiter Auftragsverarbeiter**. Das durchbricht bewusst die Randbedingung im Kopf von `src/precall-briefing.js` („kein eigener Such-Client, kein zweites Secret"), die für die Vorab-Recherche (AL-P10, Anthropics serverseitiges `web_search`) weiter gilt. **Was rausgeht:** ausschließlich die vom Server gefilterte Sachfrage (`src/research/lookup-guard.js`). **Was nicht rausgeht:** die Rufnummer des Angerufenen, E-Mail-Adressen, Ziffernfolgen ab 5 Stellen und wörtliche Übernahmen aus dem Transkript. Ein Namens-Filter existiert bewusst NICHT (`call.callerName` ist seit der Identitäts-Bindung G1 hart `null`, ein Filter darauf wäre toter Code mit einer falschen Schutzbehauptung) — das Verbot, Personenbezogenes des Gegenübers nachzuschlagen, trägt hier die Tool-Description. Wirksam nur als Schnittmenge mit `ASSISTANT_CONTEXT_ENABLED`, dem Per-Tenant-Recht `allowLookup`, Outbound-Richtung, einem gesetzten Key und der Budget-Engine (unter `VOICE_ENGINE=realtime` gibt es das Werkzeug nicht — und deshalb auch die entsprechende Prompt-Zeile nicht); Treffer landen ausschließlich als `context.key_facts` im HINTERGRUND-Block. Details und die ehrliche Grenze des Filters: `PLAN-SECURITY.md`.
+- Nachschlagen **im** Gespräch (`LOOKUP_ENABLED`, Default aus): das Werkzeug `look_up` schickt eine kurze Sachfrage an **Exa** — ein **neues Secret** (`EXA_API_KEY`) und ein **zweiter Auftragsverarbeiter**. Das durchbricht bewusst die Randbedingung im Kopf von `src/precall-briefing.js` („kein eigener Such-Client, kein zweites Secret"), die für die Vorab-Recherche (AL-P10, Anthropics serverseitiges `web_search`) weiter gilt. **Was rausgeht:** ausschließlich die vom Server gefilterte Sachfrage (`src/research/lookup-guard.js`). **Was nicht rausgeht:** die Rufnummer des Angerufenen, E-Mail-Adressen, Ziffernfolgen ab 5 Stellen und wörtliche Übernahmen aus dem Transkript. Ein Namens-Filter existiert bewusst NICHT (`call.callerName` ist seit der Identitäts-Bindung G1 hart `null`, ein Filter darauf wäre toter Code mit einer falschen Schutzbehauptung) — das Verbot, Personenbezogenes des Gegenübers nachzuschlagen, trägt hier die Tool-Description. Wirksam nur als Schnittmenge mit `ASSISTANT_CONTEXT_ENABLED`, dem Per-Tenant-Recht `allowLookup`, Outbound-Richtung, einem gesetzten Key und der Budget-Engine; Treffer landen ausschließlich als `context.key_facts` im HINTERGRUND-Block. Details und die ehrliche Grenze des Filters: `PLAN-SECURITY.md`.
 - DSGVO-Betroffenenrechte (Owner-Tenant): Auskunft/Export (Art. 15/20) als read-only `GET /api/tenant-data/export` (nur fuer den lokalen In-Process-Aufrufer, `internalOnly`; Calls ohne `streamToken`); Recht auf Löschung (Art. 17) als eigenständiges Script `node scripts/erase-tenant.js <tenantId> --confirm` (irreversibel, fail-closed, bewusst kein Netz-Endpunkt). Beide treffen call-verknüpfte Daten (Calls inkl. Transkripte, Action Items, call-verknüpfte Notifications); Einstellungen/Profile/Nummer/Kalender/Budget-Zähler bleiben erhalten.
 - **Outbound-Absender ueber ElevenLabs: je Tenant-DID eine eigene Registrierung, globaler Rueckfall bleibt bestehen.** Auf dem ElevenLabs-Anrufweg bestimmt eine bei ElevenLabs registrierte SIP-Nummer (`POST /v1/convai/phone-numbers`), welche Nummer der Angerufene sieht — nicht der Anrufkoerper selbst. Jede aktive Tenant-DID bekommt beim Kauf (hinter `ELEVENLABS_NUMBER_REGISTRATION_ENABLED`, Default aus) ihre eigene Registrierung; fehlt sie (Bestands-DID vor dieser Etappe, oder ein fehlgeschlagenes Anlegen), faellt der Anrufstart **laut** (Log + Metrik + `call.fromRegistrationSource`) auf die eine globale Registrierung (`ELEVENLABS_AGENT_PHONE_NUMBER_ID`) zurueck — das bleibt so, bis jede DID registriert ist. Reparaturlauf: `npm run elevenlabs:nummern`. Details: `PLAN-SECURITY.md` Abschnitt "OUTBOUND-E5", `docs/RUNBOOK-OUTBOUND.md`.
 - **Nutzungsbasierte Weiterbelastung: gebaut, bewusst inaktiv.** Der Verbrauchs-Ledger (`usage_event`) und der Melde-Pfad an Stripe (`POST /api/billing/flush-meters`, `flushMeters`, das Feld `stripe_meter_sent`) existieren vollständig — **sie laufen aber nicht.** Es gibt **keine** nutzungsbasierte Weiterbelastung an den Kunden: der Abo-Preis ist endgültig, das Kontingent ist in Minuten definiert, und ein Überzug wird nicht nachberechnet (Owner-Entscheidung vom 2026-08-03). Der Endpunkt hat deshalb bewusst **keinen Auslöser** — kein Cron, kein Sweep-Hook, kein Timer — und wird ausschließlich manuell von einem Betreiber-Konto aufgerufen. Er ist zusätzlich durch einen Stichtag verriegelt: `BILLING_FLUSH_EPOCH` (ISO-8601 mit Zone) ist der älteste Zeitpunkt, der überhaupt gemeldet werden darf; ist die Variable **nicht gesetzt — der ausgelieferte Zustand —, wird nichts gemeldet.** Die Fail-Richtung ist „meldet nichts", niemals „meldet alles". Grund: im Ledger stehen Zeilen aus dem Vorbetrieb (u. a. Inbound-Minuten zu einem alten Worst-Case-Tarif und zwei als Monatsmiete etikettierte Einrichtungsgebühren), ohne Riegel würde ein einziger Aufruf sie alle auf einmal an echte Kunden melden. Der Ledger selbst bleibt vollständig bestehen — er ist unsere **eigene Kostenrechnung und Belegkette**, nicht nur eine Rechnungsgrundlage. Ein Mechanismus, der so aussieht, als liefe er, ist gefährlicher als keiner; deshalb steht das hier und nicht nur im Code.
@@ -202,7 +197,6 @@ Bonus-Tools für die Hermes-Demo: `list_calls`, `list_action_items`, `get_calend
 
 ```
 src/server.js      Gateway: Provider-Webhooks, REST-API, MCP ueber HTTP (/mcp), Dashboard-Hosting
-src/bridge.js      Realtime-Audio-Bridge: Telnyx Media Streams <-> OpenAI Realtime (Barge-in, end_call)
 src/claude.js      Gespraechslogik Budget-Engine + System-Prompts, Tools, Disclosure, Summary
 src/mcp-tools.js   MCP-Tool-Definitionen (gemeinsam fuer HTTP- und stdio-Transport)
 src/mcp-server.js  MCP stdio-Einstieg fuer Claude Desktop

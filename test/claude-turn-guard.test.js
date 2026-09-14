@@ -449,8 +449,8 @@ for (const { label, value, callId, recorded } of INBOUND_RECORD_GATE_CASES) {
 }
 
 // ---------- P7 (C7): shouldSuppressEndCall direkt (Plain-Object, kein Store) ----------
-// EINE Quelle fuer den Fruehauflege-Schutz, jetzt von Budget-agentTurn UND Realtime-
-// bridge.js genutzt (G27). Diese Unit prueft das Praedikat isoliert, offline, ohne
+// EINE Quelle fuer den Fruehauflege-Schutz im Budget-agentTurn (G27). Diese Unit prueft
+// das Praedikat isoliert, offline, ohne
 // Store/HTTP-Mock - Plain-Object-Calls reichen (rein, kein Nebeneffekt). Nutzt dieselbe
 // MAX_EMPTY_TURNS=2/CALLER_SUBSTANCE_MIN_LEN=2-Schwelle aus before() oben.
 

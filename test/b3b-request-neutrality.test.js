@@ -7,15 +7,13 @@
 //
 // Testnamen tragen bewusst KEINE Katalog-ID am Namensanfang (package.json
 // config.i18nCatalogPattern) - Praefix ist "B3B-<n>:".
-import { test, before } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAnthropicProvider } from "../src/llm/adapters/anthropic.js";
 import { LLM_TOOL_CHOICE, forcedTool } from "../src/llm/tool-choice.js";
-import { tempDataDir, seedState, seedCall } from "./helpers.js";
-import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 
 const SRC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src");
 const readSrc = (name) => fs.readFileSync(path.join(SRC_DIR, name), "utf8");
@@ -41,7 +39,6 @@ const emptyResp = { content: [] };
 test("B3B-1: kein Anthropic-Vokabular mehr im Fachcode - mit Positiv-Kontrolle im Adapter", () => {
   const claudeSrc = readSrc("claude.js");
   const briefingSrc = readSrc("precall-briefing.js");
-  const bridgeSrc = readSrc("bridge.js");
   const adapterSrc = readSrc(path.join("llm", "adapters", "anthropic.js"));
 
   for (const marker of ["input_schema", "cache_control", "max_tokens", "tool_choice"]) {
@@ -52,15 +49,6 @@ test("B3B-1: kein Anthropic-Vokabular mehr im Fachcode - mit Positiv-Kontrolle i
       `precall-briefing.js darf ${marker} nicht mehr enthalten`,
     );
   }
-  // bridge.js: nur tool_choice bleibt - das ist OpenAI-Realtime-Vokabular auf einem
-  // ANDEREN Draht (session.update direkt an OpenAI), nicht LlmRequest.toolChoice.
-  for (const marker of ["input_schema", "cache_control", "max_tokens"])
-    assert.equal(countOf(bridgeSrc, marker), 0, `bridge.js darf ${marker} nicht mehr enthalten`);
-  assert.equal(
-    countOf(bridgeSrc, "tool_choice"),
-    1,
-    "bridge.js behaelt genau EIN tool_choice - das OpenAI-Realtime-Feld",
-  );
 
   // POSITIV-KONTROLLE (Lehre pruefkommando-ohne-positiv-kontrolle): 0 Treffer im
   // Fachcode ist nur ein Beleg, wenn dieselben Marker irgendwo tatsaechlich existieren.
@@ -184,33 +172,4 @@ test("B3B-8: leere Werkzeugliste mit cachePrefix:true bleibt leer, kein Absturz,
   const { provider, seen } = providerReturning(emptyResp);
   await provider.complete({ model: MODEL, tools: [], messages: [], cachePrefix: true });
   assert.deepEqual(seen[0].tools, []);
-});
-
-// ---------- B3B-9: Abnahme 5 - Realtime-Pfad und Budget-Pfad, dieselbe Werkzeugform --
-
-let claude, bridge;
-
-before(async () => {
-  process.env.ANTHROPIC_API_KEY = "test-b3b-key";
-  process.env.DATA_DIR = tempDataDir(
-    seedState({
-      tenants: [{ id: BOOTSTRAP_TENANT_ID, status: "active", ownerName: "Jonas Beispiel" }],
-      calls: [seedCall({ id: "call_b3b" })],
-    }),
-  );
-  await import("../src/config.js");
-  claude = await import("../src/claude.js");
-  bridge = await import("../src/bridge.js");
-});
-
-test("B3B-9: realtimeTools liefert dieselbe parameters-Form wie toolDefs - kein input_schema mehr", () => {
-  for (const lang of ["de", "en", "fr"]) {
-    const defs = claude.toolDefs(lang);
-    const realtime = bridge.realtimeTools(lang);
-    assert.equal(realtime.length, defs.length);
-    for (let i = 0; i < defs.length; i++) {
-      assert.deepEqual(realtime[i].parameters, defs[i].parameters, `Werkzeug ${i} (${lang})`);
-      assert.ok(!("input_schema" in realtime[i]), `Werkzeug ${i} (${lang}) darf kein input_schema tragen`);
-    }
-  }
 });

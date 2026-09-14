@@ -18,7 +18,6 @@ import { config } from "../src/config.js";
 import {
   voiceControl,
   messaging,
-  mediaTransport,
   webhookEvents,
   numberProvisioning,
   voiceRenderer,
@@ -27,7 +26,6 @@ import {
 } from "../src/telephony/registry.js";
 import { PROVIDER, DEFAULT_PROVIDER, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { telnyxVoice } from "../src/telephony/adapters/telnyx/voice.js";
-import { telnyxMedia } from "../src/telephony/adapters/telnyx/media.js";
 import { renderDirectives as telnyxRenderDirectives } from "../src/telephony/adapters/telnyx/render.js";
 import { telnyxNumberProvisioning } from "../src/telephony/adapters/telnyx/numbers.js";
 import {
@@ -40,7 +38,6 @@ import { DIRECTIVE, VOICE_PROFILE } from "../src/telephony/directives.js";
 const FULL_COVERAGE = [
   ["voiceControl", voiceControl],
   ["messaging", messaging],
-  ["mediaTransport", mediaTransport],
   ["webhookEvents", webhookEvents],
   ["voiceRenderer", voiceRenderer],
 ];
@@ -49,7 +46,6 @@ const FULL_COVERAGE = [
 test("pick liefert die exakte Adapter-Instanz je Provider", () => {
   config.safety.fakeOriginate = false;
   assert.equal(voiceControl(PROVIDER.TELNYX), telnyxVoice);
-  assert.equal(mediaTransport(PROVIDER.TELNYX), telnyxMedia);
   assert.equal(numberProvisioning(PROVIDER.TELNYX), telnyxNumberProvisioning);
   // STT-A1: der Renderer ist hinter einem Lazy-Arrow registriert (config-Bindung an der
   // Kompositionsstelle, P15) - Referenz-Identitaet ist kein Kriterium mehr. Geprueft wird

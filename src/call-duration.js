@@ -1,8 +1,7 @@
 // Geteilte Max-Dauer-Rechnung (G5): das harte Max-Dauer-Limit eines Calls in Millisekunden.
-// EINE Quelle fuer beide Telephony-Aufrufer: die Budget-Engine-Timer in
-// telephony/call-lifecycle.js (armMaxDurationTimer + Reserve-Release-Backstop) UND den
-// Realtime-Cap-Timer in bridge.js - vorher zweifach die rohe Formel
-// "(maxDurationS || default) * 1000", in bridge.js mit rohem Magic-1000 (G25).
+// EINE Quelle fuer die Budget-Engine-Timer in telephony/call-lifecycle.js
+// (armMaxDurationTimer + Reserve-Release-Backstop) - vorher zweifach die rohe Formel
+// "(maxDurationS || default) * 1000" (G25).
 //
 // MS_PER_SECOND kommt aus utils/timer.js (G5, Review-Blocker Runde 2): dort bereits
 // als geteilte Konstante etabliert - keine eigene Deklaration hier noetig,

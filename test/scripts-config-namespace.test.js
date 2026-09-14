@@ -14,7 +14,6 @@ import { config, CONFIG_NAMESPACES } from "../src/config.js";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Die einzigen scripts/*.mjs, die src/config.js importieren (komment-bereinigter grep).
 const SCRIPTS = [
-  "scripts/telnyx-ws-echo.mjs",
   "scripts/telnyx-call-latency.mjs",
   "scripts/smoke-stripe-payment.mjs",
   // OUTBOUND-E4: ohne diesen Eintrag erfasst dieses Gate das neue Skript GAR NICHT und

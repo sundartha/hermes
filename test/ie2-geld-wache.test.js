@@ -27,7 +27,6 @@ import { terminateAndBillCall, hangUpAction, billThunk } from "../src/telephony/
 import { reattachActiveCall as reattachActiveCallCore } from "../src/telephony/reattach.js";
 import { blockingBudgetAxis, BUDGET_AXIS } from "../src/budget-gate.js";
 import { cappedEndedAtMs, classifyCallTime } from "../src/store/state-ops.js";
-import { VOICE_ENGINE } from "../src/config.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 
 const TAKT_MS = 15000; // derselbe Wert, den config.js ausliefert
@@ -44,7 +43,6 @@ function makeHarness({
   callId = "call_ie2",
   intervalMs = TAKT_MS,
   budgetExhausted = true,
-  voiceEngine = VOICE_ENGINE.BUDGET,
   budgetAxis = blockingBudgetAxis,
 } = {}) {
   const call = {
@@ -85,7 +83,6 @@ function makeHarness({
   const lifecycle = makeCallLifecycle({
     store,
     config: withConfigNamespaces({
-      voiceEngine,
       billing: {},
       budgetWatchdogIntervalMs: intervalMs,
     }),
@@ -192,7 +189,7 @@ test("IE2-3: Geld-Wache und Max-Dauer-Cap ergeben GENAU EINE Terminalisierung", 
   assert.equal(call.failureReason, BUDGET_FAILURE_REASON, "der Geld-Grund bleibt stehen");
 });
 
-test("IE2-4: Boot-Re-Arm armiert die Geld-Wache - und erbt den Realtime-Sonderfall der Zeit-Achse NICHT", async () => {
+test("IE2-4: Boot-Re-Arm armiert die Geld-Wache", async () => {
   const harness = makeHarness();
   const { call } = harness;
   harness.lifecycle.rearmBudgetWatchdogs();
@@ -200,14 +197,6 @@ test("IE2-4: Boot-Re-Arm armiert die Geld-Wache - und erbt den Realtime-Sonderfa
   await fireLatest(harness.budgetTimers);
   await harness.billed;
   assert.equal(call.status, "completed", "der re-armierte Takt terminalisiert wie am Anrufstart");
-
-  const realtime = makeHarness({ callId: "call_ie2_realtime", voiceEngine: VOICE_ENGINE.REALTIME });
-  realtime.lifecycle.rearmBudgetWatchdogs();
-  assert.equal(
-    realtime.budgetTimers.length,
-    1,
-    "die Geld-Achse ist engine-neutral - rearmActiveCallTimers kehrt bei realtime sofort zurueck, dieser Re-Arm nicht",
-  );
 });
 
 test("IE2-5: Takt 0 stellt nirgends einen Takt - der Rueckfall-Hebel ist byte-identisch zum Bestand", async () => {
