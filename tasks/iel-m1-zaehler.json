@@ -1,0 +1,36 @@
+{
+  "_hinweis": "Persistenter Anrufzaehler fuer scripts/iel-mess.mjs. Owner-Freigabe: hoechstens 5 Maschine-zu-Maschine-Anrufe, je <= 60 s. Das Skript erhoeht VOR jedem Senden und verweigert ab 5. Nicht von Hand zuruecksetzen; fehlt die Datei, verweigert das Skript.",
+  "ausgeloest": 5,
+  "anrufe": [
+    {
+      "nr": 1,
+      "fall": "F-A",
+      "lauf_id": "iel-mu1c1dal-8ac9a5",
+      "zeitpunkt": "2026-09-14T14:22:46.074Z"
+    },
+    {
+      "nr": 2,
+      "fall": "F-A",
+      "lauf_id": "iel-mu1c9n65-1dda49",
+      "zeitpunkt": "2026-09-14T14:29:12.116Z"
+    },
+    {
+      "nr": 3,
+      "fall": "F-A-digest",
+      "lauf_id": "iel-mu1cgohu-17da25",
+      "zeitpunkt": "2026-09-14T14:34:41.644Z"
+    },
+    {
+      "nr": 4,
+      "fall": "F-F-unbekannt",
+      "lauf_id": "iel-mu1ckurt-f937e7",
+      "zeitpunkt": "2026-09-14T14:37:54.762Z"
+    },
+    {
+      "nr": 5,
+      "fall": "F-F-abgelehnt",
+      "lauf_id": "iel-mu1cncg5-d9651c",
+      "zeitpunkt": "2026-09-14T14:39:51.366Z"
+    }
+  ]
+}

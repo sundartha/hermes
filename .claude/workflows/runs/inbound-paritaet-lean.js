@@ -44,24 +44,28 @@ const REPO =
     ? process.env.OCLAW_REPO
     : typeof process !== "undefined" && typeof process.cwd === "function"
       ? process.cwd()
-      : ".";
+      : "/Users/antonio/Mein Unternehmen/MCP/vodafone-agent";
 const NODE_MODULES = `${REPO}/node_modules`;
 
 // HART GEPINNT fuer diesen Lauf (Lead): kein args-Threading, kein Fallback auf eine
 // fremde Phase. Siehe Memory [[phase-impl-workflow-args]]. Dieser Block wird VOR JEDEM
 // Lauf neu gesetzt und vor dem Start noch einmal gelesen - eine stale Phase hier ist
 // ein Umbau am falschen Code.
-const A = {
-  "phaseId": "IE6-S2",
-  "phaseTitle": "Die OpenAI-Realtime-Bridge (der vierte Zweig) ersatzlos entfernen",
-  "branch": "phase/ie6-s2-realtime-bridge-entfernen",
-  "baseBranch": "master",
-  "planDoc": "PLAN-INBOUND-PARITAET.md",
-  "specFile": "tasks/ie6-s2-spec.md",
-  "maxFixRounds": 2,
-  "highStakes": false
+// KETTEN-LAUF: die gepinnten Phasen laufen nacheinander; Phase n baut auf dem finalBranch der
+// GEPRUEFTEN Phase n-1 auf (erste Phase auf CHAIN_BASE). Beim ersten BLOCKED endet der Lauf -
+// keine Folgephase baut auf ungeprueftem Stand. Gemergt wird NUR im Lead (git diff --stat).
+const CHAIN_BASE = "master";
+const IEL_COMMON = {
+  "planDoc": "tasks/kickoff-inbound-wie-outbound.md",
+  "specFile": "tasks/iel-spec.md",
+  "maxFixRounds": 2
 };
+const PHASES = [
+  { ...IEL_COMMON, "phaseId": "IEL-B1", "phaseTitle": "Schalter, Tenant-Allowlist, Zugangs-Env, Golden-Test", "branch": "phase/iel-b1-schalter", "highStakes": false },
+  { ...IEL_COMMON, "phaseId": "IEL-B2", "phaseTitle": "Minutensatz je Kostenprofil", "branch": "phase/iel-b2-minutensatz", "highStakes": true }
+];
 
+async function runPhase(A) {
 const PHASE = A.phaseId;
 const PHASE_TITLE = A.phaseTitle || "";
 const BRANCH = A.branch || `phase/${String(PHASE).toLowerCase()}-impl`;
@@ -104,6 +108,7 @@ const IMPL_AGENT = HIGH_STAKES
   : { model: MODEL_SONNET, effort: "medium" };
 const SAFETY_AGENT = { model: MODEL_OPUS, effort: HIGH_STAKES ? "xhigh" : "high" };
 const CLEANCODE_AGENT = { model: MODEL_SONNET, effort: "medium" };
+const SECURITY_AGENT = { model: MODEL_OPUS, effort: "high" };
 const FIX_AGENT = { model: MODEL_SONNET, effort: "medium" };
 const REPORT_AGENT = { model: MODEL_SONNET, effort: "low" };
 
@@ -111,13 +116,14 @@ const CLEAN_CODE_REQ = `CLEAN-CODE (PFLICHT): Lies "${REPO}/.claude/refs/clean-c
 
 const ABS_RULES = `ABSOLUTE REGELN (unantastbar, siehe CLAUDE.md):
 - Safety-Gates NIE entfernen/aufweichen/per-Default umgehen: pro-Tenant-Kostendecke (sperrt BEIDE Richtungen, Inbound eingeschlossen), Denylist/Land-Gate/Stundenlimit, Max-Gespraechsdauer, Verifikation als Outbound-Permit, Kill-Switch OUTBOUND_FROZEN. Neue Endpunkte, die Calls/SMS/Geld ausloesen, brauchen dieselben Gates. (ALLOWED_NUMBERS ist seit dem outbound-p3-Cutover wirkungslos und wird nicht mehr gelesen - sein Fehlen ist KEIN Befund. MAX_BUDGET_EUR ist per Owner-Entscheidung E10 kein geschuetztes Gate mehr, sondern Beobachtung.)
-- Disclosure-Satz (disclosureSentence, claude.js) bleibt fest verdrahtet, unveraendert. In Phase IE6-S2 wird src/bridge.js entfernt: dass seine Verwendung des Satzes mit dem Zweig verschwindet, ist KEIN Befund, solange claude.js und jeder ueberlebende Outbound-Weg unveraendert bleiben.
+- Disclosure-Satz (disclosureSentence, claude.js) und die Outbound-Offenlegung bleiben fest verdrahtet, unveraendert. Inbound: der Pflichtsatz wird von UNS vor jeder Uebergabe an ElevenLabs gesprochen; die sieben Sicherungen in /voice/incoming laufen unveraendert VOR der Uebergabe.
+- Kette IEL: Schalter aus (config.voice.elevenLabsInbound.enabled bzw. Tenant nicht gepinnt) = Inbound-TeXML byte-identisch zu heute. Outbound-Verhalten bleibt unveraendert. Die Budget-Engine wird NICHT geloescht oder umgebaut. Nie Stille fuer den Anrufer (jeder Fehlerpfad endet in Rueckfall).
 - Auth fail-closed: Provider-Signaturpruefung /voice (Telnyx Ed25519; die Twilio-HMAC-Pruefung ist seit C-P3 per Owner-Entscheidung entfernt, ihr Fehlen ist KEIN Befund), Browser-Session (webAuthMw/adminMw) bzw. internalOnly, MCP-Auth - timing-sichere Vergleiche (safeEqual). Neue Endpunkte standardmaessig hinter Auth.
 - Secrets nur via env, nie loggen/in Responses oder MCP-Ausgaben leaken. Audio nie durch MCP.
 - SCOPE: NUR diese Phase. Keine ungefragten Extras. Keine neuen npm-Dependencies ohne explizite Freigabe in der Spec.`;
 
 const specInstruction = SPEC_FILE
-  ? `Lies in "${REPO}/${SPEC_FILE}" den Abschnitt mit der Ueberschrift "## Phase ${PHASE} - ..." VOLLSTAENDIG (Ziel/Scope/NICHT-Scope/Betroffene Dateien/Invarianten/Abnahmekriterium/Testpflicht/Risiko) - das ist die AUTORITATIVE Definition dieser Phase und bindend. Lies zusaetzlich Abschnitt 1.2 (die belegten Wurzeln), Abschnitt 2 (Leitentscheidung) und Abschnitt 5 (Clean-Code-Auflagen) derselben Datei als Rahmen. Die Abschnitte der ANDEREN Phasen (IP*) sind NICHT dein Auftrag - lies sie nur, wenn der eigene Abschnitt ausdruecklich auf sie verweist.`
+  ? `Lies in "${REPO}/${SPEC_FILE}" den Abschnitt mit der Ueberschrift "## Phase ${PHASE} - ..." VOLLSTAENDIG (Ziel/Scope/NICHT-Scope/Betroffene Dateien/Invarianten/Abnahmekriterium/Testpflicht/Risiko) - das ist die AUTORITATIVE Definition dieser Phase und bindend. Lies zusaetzlich Abschnitt 1.2 (die belegten Wurzeln), Abschnitt 2 (Leitentscheidung) und Abschnitt 5 (Clean-Code-Auflagen) derselben Datei als Rahmen, sofern vorhanden; sonst die Abschnitte Leitentscheidungen, Datenfluss und Sicherheitsmodell. Die Abschnitte der ANDEREN Phasen sind NICHT dein Auftrag - lies sie nur, wenn der eigene Abschnitt ausdruecklich auf sie verweist.`
   : `(Keine specFile uebergeben - nutze ausschliesslich ${PLAN_DOC}.)`;
 
 // ---------- Phase 1: Plan ----------
@@ -174,7 +180,7 @@ VORGEHEN:
 2. git checkout -b ${BRANCH} ${BASE}
 3. Implementiere EXAKT gemaess Plan. ${CLEAN_CODE_REQ}
 4. node --check auf JEDE neue/geaenderte .js-Datei.
-5. npm test -- --test-concurrency=4 (beide Backends: json-Default + pglite-in-process; OHNE Concurrency-Limit flaked die Bank auf dieser Maschine - Bestandsverhalten, kein Befund). Waehrend der Arbeit gezielte Testdateien, die volle Bank EINMAL am Ende. Bestandstests nur bei bewusster Verhaltens-/Signatur-Aenderung anpassen (im Plan begruendet); neues Verhalten -> neuer Test.
+5. npm test -- --test-concurrency=4 (beide Backends: json-Default + pglite-in-process; OHNE Concurrency-Limit flaked die Bank auf dieser Maschine - Bestandsverhalten, kein Befund). Waehrend der Arbeit gezielte Testdateien, die volle Bank EINMAL am Ende. Als Beleg NUR Exit-Code und die Zeilen # pass/# fail in den Kontext holen (z.B. | grep -E "^# (pass|fail)"), nie die volle Ausgabe (workflow.md 2a). Bestandstests nur bei bewusster Verhaltens-/Signatur-Aenderung anpassen (im Plan begruendet); neues Verhalten -> neuer Test.
 6. Smoke (best-effort): Server auf freiem Port mit SKIP_TWILIO_SIGNATURE_CHECK=true + Dummy-Env, betroffene Route via curl; zu flaky -> smokePass=false + Grund (kein Blocker).
 7. node_modules-Symlink NICHT committen. git add (nur die betroffenen src/test/config/doc-Dateien) && git commit. headCommit = git rev-parse HEAD.
 ${ABS_RULES}
@@ -235,6 +241,18 @@ const CC_SCHEMA = {
   required: ["s1", "s2", "s3", "s4", "blocker", "verdict"],
 };
 
+const SECURITY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    approved: { type: "boolean" },
+    blockers: { type: "array", items: { type: "string" } },
+    concerns: { type: "array", items: { type: "string" } },
+    verdict: { type: "string" },
+  },
+  required: ["approved", "blockers", "verdict"],
+};
+
 async function runReview(target, suffix) {
   return await parallel([
     () =>
@@ -242,9 +260,9 @@ async function runReview(target, suffix) {
         `STRENGER, adversarialer Safety-/Verhaltens-Reviewer in frischem Worktree. Pruefe Phase ${PHASE} auf Branch "${target}".
 1. ln -s "${NODE_MODULES}" node_modules
 2. git checkout -b review-${String(PHASE).toLowerCase()}${suffix} ${target}
-3. npm test -- --test-concurrency=4 selbst (beide Backends; ohne das Limit flaked die Bank - ein nur dort roter Test ist KEIN Blocker, erst wenn er isoliert rot ist) -> testsPassIndependently + Zahlen.
+3. NICHT die volle Bank (workflow.md 2a: laeuft einmal im Impl und einmal beim Lead). Fuehre nur die vom Diff neu/geaendert betroffenen Testdateien aus (node --test <dateien>), als Beleg nur Exit-Code und # pass/# fail -> testsPassIndependently + Zahlen.
 4. git diff ${BASE} ${target} gegen die absoluten Regeln pruefen.
-PRUEFE: scopeRespected (nur ${PHASE}, keine Extras, kein ungefragter npm-Dep), safetyGatesIntact, disclosureIntact (claude.js unveraendert; bridge.js entfaellt in IE6-S2 absichtlich), authFailClosedIntact, noSecretsLeaked, behaviorAsIntended (flag-off byte-identisch, Invarianten wie in der Spec).
+PRUEFE: scopeRespected (nur ${PHASE}, keine Extras, kein ungefragter npm-Dep), safetyGatesIntact, disclosureIntact (claude.js und Outbound-Offenlegung unveraendert; Inbound-Pflichtsatz vor der Uebergabe), authFailClosedIntact, noSecretsLeaked, behaviorAsIntended (Schalter aus byte-identisch, Outbound unveraendert, nie Stille, Invarianten wie in der Spec).
 ${ABS_RULES}
 approved=true NUR wenn alles erfuellt UND deine Tests gruen. Im Zweifel blockieren. Rueckgabe IST das Urteil.`,
         {
@@ -270,19 +288,34 @@ blocker=true wenn s1 ODER s2 nicht leer. passNotes: was sauber ist. topTodos: 1-
           ...CLEANCODE_AGENT,
         },
       ),
+    () =>
+      agent(
+        `SECURITY-REVIEWER (adversarial, denke wie ein Angreifer). Pruefe den Diff der Phase ${PHASE} (Branch "${target}", Basis "${BASE}") per git diff ${BASE} ${target} bzw. git show ${target}:<pfad>. Lies den Abschnitt Sicherheitsmodell in "${REPO}/${SPEC_FILE}".
+PRUEFE: jede neue oder geaenderte oeffentlich erreichbare Route (Auth fail-closed, timing-sicherer Vergleich per safeEqual, Eintrag + Begruendung in src/route-policy.js, test/route-auth-inventory), Eingabevalidierung, Replay/Raten von Tokens, Tenant-Verwechslung (falscher Tenant bekommt Daten/Kosten), Datenabfluss (Owner-Name, Transkripte, Nummern) in Responses/Logs/MCP-Ausgaben, Secrets in TeXML/Logs/Fehlermeldungen, Kosten-Missbrauch (wer kann Anrufe/ElevenLabs-Minuten ohne unsere Sicherungen ausloesen), Umgehung der Gates. Jede Luecke ohne Gegenmassnahme UND Test ist ein Blocker.
+${ABS_RULES}
+Nur gesehenen Code bewerten, nichts erfinden, jeder Blocker mit Datei:Symbol. approved=true nur ohne Blocker.`,
+        {
+          label: `${PHASE}-review-security${suffix}`,
+          phase: "Review",
+          schema: SECURITY_SCHEMA,
+          isolation: "worktree",
+          ...SECURITY_AGENT,
+        },
+      ),
   ]);
 }
 
-const gateOk = (s, c) => !!(s && s.approved && c && !c.blocker);
-const blockerList = (s, c) => [
+const gateOk = (s, c, x) => !!(s && s.approved && c && !c.blocker && x && x.approved);
+const blockerList = (s, c, x) => [
   ...((s && s.blockers) || []),
   ...((c && c.s1) || []),
   ...((c && c.s2) || []),
+  ...((x && x.blockers) || []),
 ];
 
 phase("Review");
 let reviewTarget = BRANCH;
-let [safety, cc] = await runReview(reviewTarget, "");
+let [safety, cc, security] = await runReview(reviewTarget, "");
 
 // ---------- Phase 4: Self-Fix-Loop ----------
 const FIX_SCHEMA = {
@@ -302,11 +335,11 @@ const FIX_SCHEMA = {
 };
 let round = 0;
 const fixSummaries = [];
-while (!gateOk(safety, cc) && round < MAX_FIX_ROUNDS) {
+while (!gateOk(safety, cc, security) && round < MAX_FIX_ROUNDS) {
   round++;
   phase("Self-Fix");
   const fixBranch = `${BRANCH}-fix${round}`;
-  const blockers = blockerList(safety, cc);
+  const blockers = blockerList(safety, cc, security);
   const fix = await agent(
     `Du behebst die REVIEW-BLOCKER der Phase ${PHASE} in einem frischen Worktree. NUR die Blocker fixen, kein Scope-Drift.
 1. ln -s "${NODE_MODULES}" node_modules
@@ -342,10 +375,10 @@ EHRLICH: was du NICHT loesen konntest, in summary nennen.`,
     break;
   }
   reviewTarget = fixBranch;
-  [safety, cc] = await runReview(reviewTarget, `-r${round}`);
+  [safety, cc, security] = await runReview(reviewTarget, `-r${round}`);
 }
 
-const approved = gateOk(safety, cc);
+const approved = gateOk(safety, cc, security);
 
 // ---------- Phase 5: Report-Datei (Lead liest sie NICHT) ----------
 phase("Report");
@@ -362,6 +395,8 @@ ${JSON.stringify(impl, null, 1)}
 ${JSON.stringify(safety, null, 1)}
 === CLEANCODE (final) ===
 ${JSON.stringify(cc, null, 1)}
+=== SECURITY (final) ===
+${JSON.stringify(security, null, 1)}
 === FIXES ===
 ${fixSummaries.join("\n")}
 Antworte NUR mit dem geschriebenen Dateipfad.`,
@@ -387,7 +422,24 @@ return {
   ].slice(0, 40),
   fixRounds: round,
   fixSummaries,
-  remainingBlockers: approved ? [] : blockerList(safety, cc),
+  remainingBlockers: approved ? [] : blockerList(safety, cc, security).map((b) => String(b).slice(0, 240)),
   reportPath,
   summary: impl && impl.summary ? impl.summary.slice(0, 600) : "",
 };
+}
+
+if (!PHASES.length) {
+  return { gate: "BLOCKED", error: "PHASES leer - nichts gepinnt, kein Lauf" };
+}
+const stamps = [];
+let chainBase = CHAIN_BASE;
+for (const P of PHASES) {
+  const stamp = await runPhase({ ...P, baseBranch: chainBase });
+  stamps.push(stamp);
+  if (stamp.gate !== "PASS") {
+    log(`${P.phaseId} BLOCKED - Kette endet hier, Folgephasen laufen nicht`);
+    break;
+  }
+  chainBase = stamp.finalBranch;
+}
+return { chainBase: CHAIN_BASE, lastPassBranch: stamps.filter((s) => s.gate === "PASS").map((s) => s.finalBranch).pop() || null, phases: stamps };
