@@ -257,6 +257,14 @@ const elevenLabsOutbound = makeElevenLabsOutbound({
   // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler - hier verdrahtet statt in
   // outbound.js importiert (Begruendung an der Signatur dort, Lehre test-base-env-drift).
   metrics,
+  // IEL-B4 (E7b): Beende-Versuch des Telnyx-Elternbeins eines ueberbrueckten Inbound-Calls
+  // (Nachlauf-Frist, 3x 401/404). DIESELBE Handle-Entscheidung wie Cap und cancel_call
+  // (hangUpAction, eine Quelle); ohne Call oder Handle kein Versuch (fail-safe wie dort).
+  endCarrierCall: (callId) => {
+    const call = store.getCall(callId);
+    const auflegen = call ? hangUpAction(voiceControl, call, call.twilioSid) : null;
+    return auflegen?.();
+  },
 });
 
 // call-lifecycle (P5): Cap-Timer (Max-Dauer), Reserve-Release-Backstop, Re-Attach-Wrapper
