@@ -34,12 +34,15 @@
 // (GET /v1/convai/conversations/{id}, Takt ELEVENLABS_RESULT_POLL_MS) und legen Transkript
 // und Zusammenfassung an denselben Call-Record, den get_transcript ohnehin liest.
 import { LOCALES, localeFor } from "../i18n/locales.js";
-import { cappedEndedAtMs, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
+import { cappedEndedAtMs, carrierEndMsOf, classifyCallTime, FROM_SOURCE } from "../store/state-ops.js";
+import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
+import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.js";
+import { BEENDE_VERSUCH, ENDE_ANKER, FRIST_ANKER, nachlaufPolitikFuer, pollDarfWirken } from "./nachlauf-politik.js";
 import { findActiveNumber } from "../store/views.js";
 import { POLL_TIMEOUT_REASON, pollProviderErrorReason, providerErrorReason } from "../telephony/failure-reason.js";
 import { verifiedOpeningLine } from "./opening-line.js";
 import { tenantToolToken } from "./tenant-tool-token.js";
-import { MS_PER_SECOND } from "../utils/timer.js";
+import { MS_PER_SECOND, sleep } from "../utils/timer.js";
 import { callLocaleFor, providerVoicemailMessage } from "./call-locale.js";
 import { endConversation, fetchConversation, startOutboundCall, startResultOf } from "./convai.js";
 // ST3 (O3): AUDIO_TAG wohnt seit dem Move im Heuristik-Modul (EINE Quelle fuer [el-tags]
@@ -62,6 +65,11 @@ import crypto from "node:crypto";
 const PROVIDER_DONE = "done";
 const PROVIDER_FAILED = "failed";
 const FINISHED_PROVIDER_STATUS = Object.freeze([PROVIDER_DONE, PROVIDER_FAILED]);
+
+// G5: EINE Formulierung von "der Anbieter hat ein fertiges Ergebnis" fuer Poll-Takt und Beende-Pfad.
+function anbieterErgebnisFertig(conversation) {
+  return Boolean(conversation) && FINISHED_PROVIDER_STATUS.includes(conversation.status);
+}
 
 // Unsere Call-Endzustaende (store/state-ops.js) - bewusst benannt, weil "failed" auf
 // beiden Seiten vorkommt und die beiden Vokabulare nicht dasselbe sind.
@@ -165,6 +173,19 @@ const ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR = "poll_permanent_provider_error";
 // api-calls.js), damit N dort KEINE Magic Number ist.
 export const ELEVENLABS_PROVIDER_MAX_DURATION_S = 600;
 
+// IEL-B4 (E7c): wie lange der Poll eines ueberbrueckten Inbound-Calls nach dem
+// Carrier-Ende (elNachlaufStartedAt) auf das Anbieter-Ergebnis wartet. STARTWERT, NICHT
+// GEMESSEN: die Verarbeitungsdauer nach Verbindungsende ist nicht aufgezeichnet
+// (spike1-messung belegt nur den Uebergang auf "processing"). Gleich dem besessenen
+// Anbieter-Deckel, weil (1) die Frist nie gebucht wird (Ende-Anker = Carrier-Ende, E17) -
+// ein zu langer Wert kostet kein Geld, (2) ein zu kurzer Transkript, Zusammenfassung und
+// Inbox-Eintrag verliert. Obergrenze fuer den Datensatz bleibt der Max-Dauer-Cap.
+export const INBOUND_NACHLAUF_FRIST_MS = ELEVENLABS_PROVIDER_MAX_DURATION_S * MS_PER_SECOND;
+
+// E18(1): Ausgang eines Poll-Takts, der einen Folgetakt geplant hat - jeder andere Ausgang
+// traegt den Call aus dem Register laufendeInboundPolls aus.
+const FOLGETAKT_GEPLANT = Symbol("folgetakt-geplant");
+
 // S1-A (unabhaengige Durchsicht 17.08.2026): auf DIESEM Weg ist der Anbieter-Deckel eine
 // HARTE OBERGRENZE, kein Default. classifyCallTime/cappedEndedAtMs rechnen eine Ebene
 // tiefer (call.maxDurationS || defaultMaxDurationS) - der hereingereichte Deckel wirkt dort
@@ -207,6 +228,14 @@ function callUnderProviderCap(call) {
 // Loeschversuch (endConversation) laeuft weiterhin IN JEDEM FALL, auch wenn die Frist des
 // Ergebnisabrufs ablaeuft (fetchConversationSoft faengt den Abbruch fail-soft ab, s. dort).
 export const EL_ABORT_PROVIDER_TIMEOUT_MS = 10000;
+
+// IEL-B5 (E10): Ergebnis-Abrufe des Beende-Pfads (Cap, Geld-Wache, cancel_call) eines
+// ueberbrueckten Inbound-Calls NACH dem Auflegen des Elternbeins. STARTWERT, NICHT GEMESSEN
+// (wie INBOUND_NACHLAUF_FRIST_MS): die Verarbeitungsdauer nach Verbindungsende ist nicht
+// aufgezeichnet. Wartezeit hoechstens Versuche x EL_ABORT_PROVIDER_TIMEOUT_MS + (Versuche - 1)
+// x resultPollMs; die Leitung ist dann schon aufgelegt - das Warten verzoegert nur Buchung und
+// cancel_call-Antwort, nie die Kappung. Exportiert fuer den Test (G22).
+export const EL_TERMINATION_RESULT_ATTEMPTS = 3;
 
 // Rollen: der Anbieter kennt "agent" und "user", unser Transkript "agent" und "caller".
 // Alles, was nicht der Agent ist, ist die Gegenstelle - ein unbekannter Rollenname darf
@@ -296,7 +325,9 @@ export function collectedFieldsOf(conversation) {
 // TEIL 3 (die bestaetigte Zeitzone) wird NUR geschrieben, wenn tatsaechlich ein
 // bestaetigter Wert vorliegt - "nur bestaetigte Werte werden gespeichert" ist die
 // Owner-Auflage, hier am Aufruf selbst durchgesetzt statt dem Store-Mutator ueberlassen.
-function persistCollectedFields(store, callId, conversation) {
+// IEL-B4 (E6): fuer einen ueberbrueckten Inbound-Call entsteht KEIN next_steps-Item -
+// summarizeCall schreibt die Items auf dem EL-Transkript (Sprache, allowSummaries).
+function persistCollectedFields({ store, callId, conversation, politik }) {
   const collected = collectedFieldsOf(conversation);
   store.recordProviderCollectedFields(callId, collected);
   if (collected.confirmedTimezone) {
@@ -306,7 +337,7 @@ function persistCollectedFields(store, callId, conversation) {
       confirmedAt: new Date().toISOString(),
     });
   }
-  const nextStep = nextStepActionItemOf(conversation, collected);
+  const nextStep = politik.naechsteSchritteAlsAufgabe ? nextStepActionItemOf(conversation, collected) : null;
   if (nextStep) store.addActionItem(callId, nextStep.text, nextStep.type);
 }
 
@@ -392,6 +423,10 @@ const endStatusOf = (conversation) =>
 const objectiveAchievedOf = (conversation) =>
   OBJECTIVE_ACHIEVED_BY_PROVIDER[conversation.analysis?.call_successful] ??
   OBJECTIVE_ACHIEVED_UNKNOWN;
+
+// IEL-B4 (E6): leer fuer Inbound-EL -> finishCall laeuft in summarizeCall (unser LLM, Anrufsprache).
+const providerSummaryOf = (conversation, politik) =>
+  politik.anbieterZusammenfassung ? conversation.analysis?.transcript_summary || null : null;
 
 // KS-EL1 (Owner-Entscheidung, s. Modul-Kopf): WAS aus dem Buchungsanker werden soll, reine
 // Entscheidung OHNE Store-Mutation (P5/P6) - exportiert, weil sie ohne Store/Netz testbar
@@ -1018,7 +1053,9 @@ function recordAbsenderMessung(store, callId, conversation) {
 // steuert hier keine Verzweigung, es wird persistiert (deshalb kein G15/F3-Selektor). Die
 // beiden Aufrufer liefern es ausdruecklich, ohne Default: der regulaere Weg laesst den
 // Anbieter-Datensatz stehen, der Abbruchweg loescht ihn unmittelbar danach.
-function persistProviderResult({ store, callId, conversation, belegNachreifbar }) {
+// politik (IEL-B4) ist dagegen bewusst eine Verhaltensweiche (Spec E6/E7): sie entscheidet,
+// ob Anbieter-Zusammenfassung und next_steps-Item geschrieben werden (nachlauf-politik.js).
+function persistProviderResult({ store, callId, conversation, belegNachreifbar, politik }) {
   const zeilen = spokenLines(conversation);
   // VOR dem Schreiben: die Meldung gilt dem, was der Anbieter geliefert hat, und darf
   // nicht an einem spaeteren Store-Fehler haengen bleiben (s. reportAudioTags).
@@ -1029,11 +1066,11 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar }
   store.recordElDetectorCounts(callId, { elTags: audioTagMarken.length, elB1: b1Treffer.length });
   for (const zeile of zeilen) store.addTranscript(callId, roleOf(zeile.role), zeile.message);
   store.recordProviderCallResult(callId, {
-    summary: conversation.analysis?.transcript_summary || null,
+    summary: providerSummaryOf(conversation, politik),
     objectiveAchieved: objectiveAchievedOf(conversation),
   });
   // ABNAHME-D1 (TEIL 2/3): s. persistCollectedFields oben (Modul-Ebene, G30).
-  persistCollectedFields(store, callId, conversation);
+  persistCollectedFields({ store, callId, conversation, politik });
   // PHASE-6-VORAUSSETZUNG, die EINZIGE Quelle des Join-Schluessels zur Telefonie-
   // Rechnung: der "otb_"-Wert, den auch der Telnyx-Beleg unter sip_call_id fuehrt
   // (GEMESSEN an beiden Enden, test/fixtures/elevenlabs-conversations.js). Die Antwort
@@ -1244,6 +1281,49 @@ function startCallRequest(anfrage) {
   };
 }
 
+// IEL-B4 (E7a/E17): Ende-Anker eines ueberbrueckten Inbound-Calls = Carrier-Ende, gekappt
+// wie jedes Telnyx-Bein. Ohne Nachlauf-Marker liefert carrierEndMsOf nowMs (E17-Rest).
+// nowMs ist der Taktbeginn (Spec E7a woertlich carrierEndMsOf(call, nowMs)): wird der Marker
+// erst waehrend eines haengenden Abrufs gesetzt, landet der Anker um hoechstens die
+// Abrufdauer zu frueh (Unterbuchung) - nur im Neustart-Fall, der Sweep bucht nach (L7).
+function carrierEndeIso(call, nowMs) {
+  return new Date(cappedEndedAtMs(call, carrierEndMsOf(call, nowMs), MAX_CALL_DURATION_CAP_S)).toISOString();
+}
+
+// IEL-B4 (E7a): der Buchungsanker eines ueberbrueckten Inbound-Calls ist unser Telnyx-Bein
+// (answeredAt aus /voice/incoming) - er wird weder nachgezogen noch geloescht. keepAnchor
+// ohne Grund: applyAnsweredAnchor schreibt/loggt nichts, providerErrorReasonFor liefert
+// null (das Bein ist zustande gekommen).
+const TRAEGER_ANKER_BLEIBT = keepAnchor(null);
+const ankerFuerPolitik = (politik, anbieterAnker) => (politik.ankerNachziehen ? anbieterAnker : TRAEGER_ANKER_BLEIBT);
+
+// IEL-B4 (E7c): Poll-Frist je Politik. Fehlt der Nachlauf-Marker, gibt es KEINE eigene
+// Frist (E7f: Gespraech laeuft evtl. noch; Obergrenze = re-armierter Max-Dauer-Cap).
+function pollFristAbgelaufen(call, nowMs, politik) {
+  if (politik.fristAnker === FRIST_ANKER.NACHLAUF_START) return nachlaufFristAbgelaufen(call, nowMs);
+  return classifyCallTime(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired;
+}
+
+function nachlaufFristAbgelaufen(call, nowMs) {
+  if (!call.elNachlaufStartedAt) return false;
+  return nowMs - Date.parse(call.elNachlaufStartedAt) >= INBOUND_NACHLAUF_FRIST_MS;
+}
+
+// IEL-B4: der EINE Terminal-Schreiber des Conversation-Abschlusses als Thunk - Anker-
+// Lieferant UND persistEnd (zweiter Aufruf idempotent, setCallEndedAt nur aus 'active').
+// IEL-B5: auch der Terminal-Schreiber von cancel_call (routes/api-calls.js).
+export function endeSchreiberFuer({ store, callId, status, politik, nowMs }) {
+  if (politik.endeAnker === ENDE_ANKER.CARRIER_ENDE)
+    return () => store.setCallEndedAt(callId, status, carrierEndeIso(store.getCall(callId), nowMs));
+  return () => store.endCallRecord(callId, status);
+}
+
+// Ende-Anker, wenn der Poll ohne Anbieter-Ergebnis aufgibt (Frist, 3x 401/404).
+function endeOhneErgebnisIso({ call, nowMs, politik }) {
+  if (politik.endeAnker === ENDE_ANKER.CARRIER_ENDE) return carrierEndeIso(call, nowMs);
+  return new Date(cappedEndedAtMs(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S)).toISOString();
+}
+
 // Owner-Auftrag 15.08.2026 (Aufgabe 2): der Zombie-Zweig der Poll-Obergrenze (s.
 // pollConversationResult in makeElevenLabsOutbound). MODUL-EBENE statt Factory-Closure
 // (haelt makeElevenLabsOutbound unter der Zeilengrenze, G30) - alle Abhaengigkeiten reisen
@@ -1266,19 +1346,21 @@ async function finishWithoutProviderResult({
   billThunk,
   finishCall,
   endActiveCall,
+  endCarrierCall,
   callId,
   nowMs,
   failureReason,
 }) {
   const call = store.getCall(callId);
   if (!call) return;
+  const politik = nachlaufPolitikFuer(call);
   // OUTBOUND-E2: BEIDE Aufgeben-Faelle sind result-unknown, NICHT "gescheitert": der Anruf
   // kann gelaufen sein, wir haben nur kein Ergebnis abholen koennen.
   // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
   // geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel).
-  const endedAtIso = new Date(
-    cappedEndedAtMs(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S),
-  ).toISOString();
+  const endedAtIso = endeOhneErgebnisIso({ call, nowMs, politik });
+  // E7b: Inbound-EL beendet das Telnyx-Elternbein, nie per DELETE (nimmt den Datensatz mit).
+  const beenden = politik.beendeVersuch === BEENDE_VERSUCH.TRAEGER ? endCarrierCall : endActiveCall;
   await terminateAndBillCall({
     persistEnd: persistEndWithReason({
       store,
@@ -1286,7 +1368,7 @@ async function finishWithoutProviderResult({
       reason: failureReason,
       endCall: () => store.setCallEndedAt(callId, CALL_FAILED, endedAtIso),
     }),
-    hangUp: () => endActiveCall(callId),
+    hangUp: () => beenden(callId),
     bill: billThunk(finishCall, store, callId),
     callId,
   });
@@ -1306,9 +1388,93 @@ async function finishExpiredPoll(deps) {
 // vorlaeufigen Verbindungs-Stempel (answeredAt=null, S1-1-Richtung "im Zweifel GAR NICHTS")
 // und vermerkt den Grund - wir haben nie ein metadata.call_duration_secs gesehen, der
 // provisorische Stempel darf nicht als Buchungsanker stehen bleiben.
+// IEL-B4 (E7a): fuer einen ueberbrueckten Inbound-Call bleibt der Anker unseres Telnyx-Beins
+// stehen (ankerFuerPolitik) - das Bein ist zustande gekommen, nur das Ergebnis fehlt.
 async function finishOnPermanentError(deps) {
-  applyAnsweredAnchor(deps.store, deps.callId, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR));
+  const politik = nachlaufPolitikFuer(deps.store.getCall(deps.callId));
+  applyAnsweredAnchor(deps.store, deps.callId, ankerFuerPolitik(politik, clearAnchor(ANSWERED_UNCLEAR_REASON_PERMANENT_ERROR)));
   await finishWithoutProviderResult({ ...deps, failureReason: pollProviderErrorReason(deps.providerStatus) });
+}
+
+// Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
+// buchen - so sieht die Buchungskette den fertigen Stand. hangUp bleibt null: es gibt
+// kein eigenes Provider-Leg mehr aufzulegen, das Gespraech ist beim Anbieter bereits
+// beendet. MODUL-EBENE aus demselben Grund wie finishWithoutProviderResult (G30, haelt
+// makeElevenLabsOutbound unter der Zeilengrenze); die Abhaengigkeiten reisen als EIN
+// Objekt (F1).
+//
+// DER ANKER STEHT HIER, NICHT IM persistEnd-THUNK UNTEN: ohne eigenes hangUp (hangUp:
+// null) ruft terminateAndBillCall bill() synchron direkt nach persistEnd() - es gibt kein
+// Zeitfenster, in das sich ein Zwischenschritt haengen liesse. billThunk laedt den Call
+// FRISCH aus dem Store, der Anker muss also VOR dem Aufruf unten stehen. Der erste Aufruf
+// des Terminal-Schreibers (endCall) liefert zugleich endedAt fuer answeredAnchorOutcome; der
+// zweite Aufruf im persistEnd-Thunk ist idempotent (setCallEndedAt greift nur aus
+// status==='active') und bleibt aus Symmetrie zu jedem anderen Terminierungspfad stehen.
+// S2: ended kann null sein (der Store findet den Call nicht mehr) - answeredAnchorOutcome
+// faengt das selbst ab (s. dort), hier wird nur noch weitergereicht.
+//
+// Regulaeres Ende: es gibt hier keinen Loeschversuch, der Anbieter-Datensatz bleibt
+// abrufbar -> der Beleg kann in KV2-9 auf 'belegt' nachreifen.
+//
+// OUTBOUND-E2: finishCall liest call.failureReason beim Notification-Bau (telephony/
+// call-finish.js) und billThunk laedt den Call FRISCH aus dem Store - steht der Grund
+// noch nicht am Datensatz, bleibt der Nutzertext "<Ziel> (Status: failed)", also genau
+// der Zustand, den diese Etappe abstellt.
+// OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
+// geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel). Der ERSTE
+// Aufruf des Terminal-Schreibers bleibt UNANGETASTET - er ist der Anker-Lieferant fuer
+// answeredAnchorOutcome (PM-7/PM-14).
+//
+// IEL-B4 (E7a/E17): die Politik waehlt Terminal-Schreiber (Carrier-Ende statt jetzt) und
+// Anker (Traeger-Anker bleibt). Zwischen der frischen Pruefung im Poll-Takt und dem
+// Terminal-Schreiber liegt kein await (E18-2).
+async function finishFromConversation({ store, terminateAndBillCall, billThunk, finishCall, callId, nowMs, conversation }) {
+  const politik = nachlaufPolitikFuer(store.getCall(callId));
+  persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
+  const endCall = endeSchreiberFuer({ store, callId, status: endStatusOf(conversation), politik, nowMs });
+  const ended = endCall();
+  const anchor = ankerFuerPolitik(politik, answeredAnchorOutcome(ended?.endedAt, conversation));
+  applyAnsweredAnchor(store, callId, anchor);
+  await terminateAndBillCall({
+    persistEnd: persistEndWithReason({ store, callId, reason: providerErrorReasonFor(anchor, conversation), endCall }),
+    hangUp: null,
+    bill: billThunk(finishCall, store, callId),
+    callId,
+  });
+}
+
+// IEL-B4 (E7d/E18-1): Start-Tor des Nachlaufs. Der Marker wird IMMER gesetzt (set-once);
+// eine Schleife startet NUR bei changed:true UND ohne Register-Eintrag. Laeuft bereits eine
+// (Boot-Re-Arm), uebernimmt sie Frist und Ende-Anker ab dem naechsten Takt (E7f).
+// Vorbedingung GEBUNDEN prueft der einzige Aufrufer routes/voice.js#/voice/status.
+function startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }) {
+  const { call, changed } = store.markInboundElNachlaufStarted(callId, new Date().toISOString());
+  if (!changed) return;
+  // Runbook 11: genau eine Zeile je Call (set-once-Marker), PII-frei.
+  console.log(`[el-inbound] nachlauf gestartet (call=${callId})`);
+  if (laufendeInboundPolls.has(callId)) return;
+  laufendeInboundPolls.add(callId);
+  void pollConversationResult(callId, call.elevenlabsConversationId);
+}
+
+// IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks (telephony/call-termination.js#
+// hangUpForCall). Laeuft NACH persistEnd und NACH dem Traeger-Hangup - der Call ist terminal,
+// eine laufende Poll-Schleife schliesst deshalb nicht mehr ab (E18-2); diese Funktion ist dann
+// der einzige Transkript-Schreiber. Kein DELETE (E7b), Beleg nachreifbar. Fail-soft:
+// fetchConversationSoft wirft nie; ohne Ergebnis bucht terminateAndBillCall ohne Transkript.
+async function awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs, callId }) {
+  const conversationId = store.getCall(callId)?.elevenlabsConversationId;
+  if (!conversationId) return;
+  for (let versuch = 1; versuch <= EL_TERMINATION_RESULT_ATTEMPTS; versuch += 1) {
+    const { conversation } = await fetchConversationSoft(conversationId, callId, EL_ABORT_PROVIDER_TIMEOUT_MS);
+    if (anbieterErgebnisFertig(conversation)) {
+      const politik = nachlaufPolitikFuer(store.getCall(callId));
+      persistProviderResult({ store, callId, conversation, belegNachreifbar: true, politik });
+      return;
+    }
+    if (versuch < EL_TERMINATION_RESULT_ATTEMPTS) await sleep(pollMs);
+  }
+  console.warn(`[el-inbound] Ergebnis beim Beenden nicht abrufbar (call=${callId})`);
 }
 
 // S1-1 Fix (Owner-Auftrag 15.08.2026, stiller Totalausfall): das Nachziehen des
@@ -1419,11 +1585,17 @@ function permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent) 
 // Poll auszuloesen; ein laufender bekommt seine Schleife sofort zurueck (ein direkter Aufruf
 // statt scheduleResultPoll - ein Neustart darf die Ergebnis-Erkennung nicht zusaetzlich um
 // einen vollen Takt verzoegern).
-function rearmActiveConversationPolls({ store, pollConversationResult }) {
+//
+// IEL-B4 (E7f): ein Rueckfall-Call wird nie re-armiert (sein Budget-Gespraech schliesst ueber
+// /voice/status ab); jede re-armierte Inbound-EL-Schleife steht im Register (E18-1).
+function rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }) {
   const activeElCalls = store
     .load()
-    .calls.filter((call) => call.status === "active" && call.elevenlabsConversationId);
-  for (const call of activeElCalls) void pollConversationResult(call.id, call.elevenlabsConversationId);
+    .calls.filter((call) => call.elevenlabsConversationId && pollDarfWirken(call));
+  for (const call of activeElCalls) {
+    if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) laufendeInboundPolls.add(call.id);
+    void pollConversationResult(call.id, call.elevenlabsConversationId);
+  }
   if (activeElCalls.length)
     console.log(`[el-outbound] Poll-Schleife re-armiert: ${activeElCalls.length} Anrufe`);
 }
@@ -1458,48 +1630,13 @@ export function makeElevenLabsOutbound({
   // OUTBOUND-E5 (F3): der Absender-Rueckfall-Zaehler (s. ohneMetrikMeldung oben fuer die
   // Begruendung, warum er hereingereicht statt importiert wird).
   metrics = ohneMetrikMeldung,
+  // IEL-B4 (E7b): Beende-Versuch des Telnyx-Elternbeins fuer einen ueberbrueckten Inbound-Call
+  // (DI wie endActiveCall - keine Import-Kante elevenlabs -> telephony). Signatur (callId).
+  endCarrierCall,
 }) {
   // Immer frisch gelesen (nicht beim Bauen eingefroren): Tests uebersteuern die Gruppe
   // zur Laufzeit, und der Abholtakt darf nicht an einer Kopie von vor dem Boot haengen.
   const settings = () => config.voice.elevenLabsOutbound;
-
-  // Ergebnis persistieren, DANN terminalisieren, DANN den Anker nachziehen, ERST DANACH
-  // buchen - so sieht die Buchungskette den fertigen Stand. hangUp bleibt null: es gibt
-  // kein eigenes Provider-Leg mehr aufzulegen, das Gespraech ist beim Anbieter bereits
-  // beendet.
-  //
-  // DER ANKER STEHT HIER, NICHT IM persistEnd-THUNK UNTEN: ohne eigenes hangUp (hangUp:
-  // null) ruft terminateAndBillCall bill() synchron direkt nach persistEnd() - es gibt kein
-  // Zeitfenster, in das sich ein Zwischenschritt haengen liesse. billThunk laedt den Call
-  // FRISCH aus dem Store, der Anker muss also VOR dem Aufruf unten stehen. Der
-  // endCallRecord-Aufruf hier liefert zugleich endedAt fuer answeredAnchorOutcome; der
-  // zweite Aufruf im persistEnd-Thunk ist idempotent (setCallEndedAt greift nur aus
-  // status==='active') und bleibt aus Symmetrie zu jedem anderen Terminierungspfad stehen.
-  // S2: ended kann null sein (store.endCallRecord findet den Call nicht mehr) -
-  // answeredAnchorOutcome faengt das selbst ab (s. dort), hier wird nur noch weitergereicht.
-  async function finishFromConversation(callId, conversation) {
-    // Regulaeres Ende: es gibt hier keinen Loeschversuch, der Anbieter-Datensatz bleibt
-    // abrufbar -> der Beleg kann in KV2-9 auf 'belegt' nachreifen.
-    persistProviderResult({ store, callId, conversation, belegNachreifbar: true });
-    const ended = store.endCallRecord(callId, endStatusOf(conversation));
-    const anchor = answeredAnchorOutcome(ended?.endedAt, conversation);
-    applyAnsweredAnchor(store, callId, anchor);
-    // OUTBOUND-E2: finishCall liest call.failureReason beim Notification-Bau (telephony/
-    // call-finish.js) und billThunk laedt den Call FRISCH aus dem Store - steht der Grund
-    // noch nicht am Datensatz, bleibt der Nutzertext "<Ziel> (Status: failed)", also genau
-    // der Zustand, den diese Etappe abstellt.
-    // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason
-    // geschrieben, NICHT mehr als freie Anweisung davor (Reihenfolge-Riegel). Der zweite
-    // endCallRecord-Aufruf im Thunk ist idempotent (greift nur aus status==='active'); der
-    // ERSTE oben (:1275) bleibt UNANGETASTET - er ist der Anker-Lieferant fuer
-    // answeredAnchorOutcome (PM-7/PM-14).
-    await terminateAndBillCall({
-      persistEnd: persistEndWithReason({ store, callId, reason: providerErrorReasonFor(anchor, conversation), endCall: () => store.endCallRecord(callId, endStatusOf(conversation)) }),
-      hangUp: null,
-      bill: billThunk(finishCall, store, callId),
-      callId,
-    });
-  }
 
   function scheduleResultPoll(callId, conversationId) {
     setTimeout(() => void pollConversationResult(callId, conversationId), settings().resultPollMs);
@@ -1551,23 +1688,44 @@ export function makeElevenLabsOutbound({
   // jeden Poll frisch) und ein ueberlebender Zaehler einen laengst vergangenen Fehlschlag
   // in diese neue Bewertung hineintragen wuerde.
   const permanentErrorStreaks = new Map();
+  // E18-1: Prozess-Register der laufenden Inbound-EL-Schleifen (Closure-Zustand wie
+  // permanentErrorStreaks: je Fabrik-Instanz, nie modul-global). Eintrag: Start-Tor und
+  // Boot-Re-Arm; Austrag: jeder Takt-Ausgang ohne Folgetakt (hier, EINE Stelle).
+  const laufendeInboundPolls = new Set();
 
+  // IEL-B4: pollConversationResult ist der Wrapper um EINEN Takt (pollTakt) - er haelt das
+  // Register (E18-1) an genau einer Stelle aktuell, auch wenn der Takt wirft. Der Riegel
+  // pollDarfWirken (E7e) steht am Taktbeginn und fuer Inbound-EL zusaetzlich frisch nach dem
+  // Abruf (E18-2); die Frist haengt an der Politik (Anbieter-Deckel vs. Nachlauf-Marker).
   async function pollConversationResult(callId, conversationId) {
+    let ausgang;
+    try {
+      ausgang = await pollTakt(callId, conversationId);
+    } finally {
+      if (ausgang !== FOLGETAKT_GEPLANT) laufendeInboundPolls.delete(callId);
+    }
+  }
+
+  async function pollTakt(callId, conversationId) {
     const call = store.getCall(callId);
-    if (!call || call.status !== "active") return;
+    if (!pollDarfWirken(call)) return;
+    const politik = nachlaufPolitikFuer(call);
     const nowMs = Date.now();
     // G5: EIN Deps-Objekt fuer BEIDE Faelle, in denen der Poll ohne Anbieter-Ergebnis
     // aufgibt (Zeit-Obergrenze, dauerhafter Fehler) - haelt diese Funktion unter der
     // Zeilengrenze (G30).
-    const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, callId, nowMs };
-    if (classifyCallTime(callUnderProviderCap(call), nowMs, ELEVENLABS_PROVIDER_MAX_DURATION_S).expired)
-      return finishExpiredPoll(finishDeps);
+    const finishDeps = { store, terminateAndBillCall, billThunk, finishCall, endActiveCall, endCarrierCall, callId, nowMs };
+    if (pollFristAbgelaufen(call, nowMs, politik)) return finishExpiredPoll(finishDeps);
     const { conversation, permanent, providerStatus } = await fetchConversationSoft(conversationId, callId);
+    // E18-2: nach dem await frisch - danach bis setCallEndedAt kein await.
+    if (politik.frischPruefenNachAbruf && !pollDarfWirken(store.getCall(callId))) return;
     if (permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent))
       return finishOnPermanentError({ ...finishDeps, providerStatus });
-    if (!conversation || !FINISHED_PROVIDER_STATUS.includes(conversation.status))
-      return scheduleResultPoll(callId, conversationId);
-    await finishFromConversation(callId, conversation);
+    if (!anbieterErgebnisFertig(conversation)) {
+      scheduleResultPoll(callId, conversationId);
+      return FOLGETAKT_GEPLANT;
+    }
+    await finishFromConversation({ ...finishDeps, conversation });
   }
 
   // TEIL A/Owner-Auftrag 15.08.2026 (Beende-Versuch beim Anbieter): der hangUp-Thunk des
@@ -1606,8 +1764,9 @@ export function makeElevenLabsOutbound({
       // die sichere Richtung ist "reift nicht" (nachbuchen ja, erstatten nein, 4.4);
       // schlaegt das DELETE fehl, kostet uns das hoechstens eine ungenutzte Reifung, nie
       // eine unbelegte Erstattung.
-      persistProviderResult({ store, callId, conversation, belegNachreifbar: false });
-      applyAnsweredAnchor(store, callId, answeredAnchorOutcome(call.endedAt, conversation));
+      const politik = nachlaufPolitikFuer(call);
+      persistProviderResult({ store, callId, conversation, belegNachreifbar: false, politik });
+      applyAnsweredAnchor(store, callId, ankerFuerPolitik(politik, answeredAnchorOutcome(call.endedAt, conversation)));
     }
     await endConversation({
       fetchImpl: fetch,
@@ -1716,6 +1875,11 @@ export function makeElevenLabsOutbound({
   return {
     originateCall,
     endActiveCall,
-    rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult }),
+    rearmActiveConversationPolls: () => rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }),
+    // IEL-B4/B5 (E7d): Aufrufer routes/voice.js#/voice/status bei GEBUNDEN.
+    startInboundNachlauf: (callId) => startInboundNachlauf({ store, laufendeInboundPolls, pollConversationResult, callId }),
+    // IEL-B5 (E10): Aufrufer telephony/call-termination.js#hangUpForCall (Cap, Geld-Wache, cancel_call).
+    awaitAndPersistInboundElResult: (callId) =>
+      awaitAndPersistInboundElResult({ store, fetchConversationSoft, pollMs: settings().resultPollMs, callId }),
   };
 }

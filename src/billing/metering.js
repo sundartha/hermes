@@ -9,7 +9,7 @@
 // recordVoiceMinuteMeter / recordNumberMonthMeter nur im Payment-Pfad.
 import { config as defaultConfig } from "../config.js";
 import { USAGE_EVENT_KIND } from "../store/defaults.js";
-import { callStartAnchorMs, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
+import { callStartAnchorMs, carrierEndMsOf, chargeAnchorsOfUsage, numbersDueForMonthMeter } from "../store/state-ops.js";
 import { tariffCentsPerMin } from "../telephony/outbound-gates.js";
 import { MS_PER_MINUTE } from "../utils/timer.js";
 // IEL-B2: das Kostenprofil entscheidet mit ueber den Inbound-Satz (kostenarten.js ist
@@ -75,8 +75,12 @@ function billsCalibratedInboundRate(call) {
 //     unter den gebuchten Wert druecken;
 //   unlesbarer Anker      -> NaN, KEIN stilles 0. Der Riegel sitzt an der Geld-Kante
 //     (liveBudgetExceeded), wo jeder andere unbrauchbare Geldwert auch endet.
+//
+// IEL-B4 (E17): Ende = Carrier-Ende (dieselbe Funktion wie der Ende-Anker der Buchung). Ein
+// ueberbrueckter Inbound-Call im Nachlauf hat keine Leitung mehr und waechst nicht weiter in
+// die Tenant-Decke. Ohne Nachlauf-Marker = nowMs -> Outbound/Budget byte-identisch.
 function liveVoiceMinutesOf(call, nowMs) {
-  const elapsedMs = nowMs - callStartAnchorMs(call);
+  const elapsedMs = carrierEndMsOf(call, nowMs) - callStartAnchorMs(call);
   if (!Number.isFinite(elapsedMs)) return NaN;
   return Math.max(0, Math.ceil(elapsedMs / MS_PER_MINUTE));
 }

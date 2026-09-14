@@ -15,7 +15,9 @@ import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 // kein DI-Slot noetig (das Modul importiert bewusst nur Reines, s. Modul-Kopf "KEIN eigener
 // Import" fuer STATEFULES - endActiveCall (die konkrete, laufzeitgebundene Implementierung)
 // bleibt injiziert, s. makeCallLifecycle-Parameter unten).
-import { elevenLabsHangUpAction, persistEndWithReason } from "./call-termination.js";
+import { elevenLabsHangUpAction, hangUpForCall, persistEndWithReason } from "./call-termination.js";
+// IEL-B5 (E17): rein, direkter Import statt DI-Slot - jede Bestands-Konstruktion der Fabrik bleibt gueltig.
+import { carrierEndMsOf } from "../store/state-ops.js";
 // IE2: ebenfalls PURE (Zustand + Timer, alles IO injiziert) -> direkter Import wie die
 // Reinen oben, kein DI-Slot in server.js noetig.
 import { makeBudgetWatchdog } from "./budget-watchdog.js";
@@ -162,6 +164,7 @@ export function makeCallLifecycle({
   terminateAndBillCall,
   hangUpAction,
   billThunk, endActiveCall, // TEIL B: konkrete EL-Beende-Implementierung (elevenLabsOutbound.endActiveCall)
+  awaitAndPersistInboundElResult, // IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks (elevenLabsOutbound)
   reattachActiveCallCore, // reattachActiveCall aus ./reattach.js
   cappedEndedAtMs,
   classifyCallTime,
@@ -202,8 +205,9 @@ export function makeCallLifecycle({
     try {
       const call = store.getCall(callId);
       if (call?.status !== "active") return;
+      // IEL-B5 (E17): Carrier-Ende statt jetzt - im Nachlauf endet die Leitung am Marker.
       const endedAtIso = new Date(
-        cappedEndedAtMs(call, Date.now(), MAX_CALL_DURATION_CAP_S),
+        cappedEndedAtMs(call, carrierEndMsOf(call, Date.now()), MAX_CALL_DURATION_CAP_S),
       ).toISOString();
       await terminateAndBillCall({
         persistEnd: persistEndWithReason({ // G27/C2-Fix: EINE Formulierung statt Handarbeit
@@ -216,7 +220,12 @@ export function makeCallLifecycle({
         // korrekt (sie laufen alle hier durch; ihr twilioSid-Argument wird beim Altbestand ignoriert).
         // TEIL B: ein EL-Call traegt keins von beiden (elevenlabsConversationId statt) ->
         // hangUpAction liefert null, der EL-Beende-Versuch greift NUR dann (s. dort).
-        hangUp: hangUpAction(voiceControl, call, providerCallSid) ?? elevenLabsHangUpAction(endActiveCall, call),
+        // IEL-B5 (E10): GEBUNDEN -> Traeger auflegen + Ergebnis sichern (hangUpForCall).
+        hangUp: hangUpForCall({
+          call,
+          hangUp: hangUpAction(voiceControl, call, providerCallSid) ?? elevenLabsHangUpAction(endActiveCall, call),
+          awaitAndPersistInboundElResult,
+        }),
         bill: billThunk(finishCall, store, callId), // bucht genau EINMAL (billedAt, F9), gekappt
         callId, // P8: Settlement-Fehler-Log (terminateAndBillCall) mit Korrelation
       });

@@ -12,11 +12,12 @@
 // mit EINER kanonischen Heimat (normNum/DEFAULT_PROVIDER, sayD/hangupD, SPEAK_OUTCOME,
 // localeFor, callFailureReason, degradedSpeechFor, agentTurn/openingText/callerHasSpoken,
 // remainingMaxDurationMs, noSpeechEscalation, metrics, logInboundPath/INBOUND_PATH,
-// legRunsOurTurnLoop) werden direkt importiert (G5 "eine Quelle"). Laufzeit-Instanzen
-// (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall, INV-7), der
-// Provider-Dispatch-Seam (webhookEvents/providerFromHeaders/
+// legRunsOurTurnLoop, bridgeStateOf/BRIDGE_STATE) werden direkt importiert (G5 "eine
+// Quelle"). Laufzeit-Instanzen (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall,
+// INV-7), der Provider-Dispatch-Seam (webhookEvents/providerFromHeaders/
 // inboundSignatureVerifier, DIP) sowie der Settlement-Seam (terminateAndBillCall/
-// billThunk) und config/store/audit werden injiziert (INV-7 "eine Instanz").
+// billThunk), der Nachlauf-Start des EL-Inbound-Wegs (startInboundNachlauf, EINE
+// elevenLabsOutbound-Instanz) und config/store/audit werden injiziert (INV-7 "eine Instanz").
 import { Router } from "express";
 import { normNum, DEFAULT_PROVIDER, MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 import { emergencyBrakeSeconds } from "../call-duration.js";
@@ -40,6 +41,7 @@ import { persistEndWithReason } from "../telephony/call-termination.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.js";
 import { legRunsOurTurnLoop } from "../telephony/leg-turn-loop.js";
+import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -101,6 +103,7 @@ export function makeVoiceRoutes({
   inboundSignatureVerifier,
   terminateAndBillCall,
   billThunk,
+  startInboundNachlauf,
 }) {
   const { render, turnDirectives, sayInCallVoice, followupTurnDirectives } = voiceRender;
 
@@ -522,6 +525,12 @@ export function makeVoiceRoutes({
     if (callStatus === "in-progress" || callStatus === "answered")
       return void store.markAnswered(call.id);
     if (!["completed", "busy", "no-answer", "failed", "canceled"].includes(callStatus)) return;
+    // IEL-B5 (E7d/E18): ein ueberbrueckter Inbound-Call wird HIER nicht abgeschlossen - Transkript
+    // und Ergebnis liegen beim Agenten, der Nachlauf-Poll holt sie. Dieses Ereignis setzt nur das
+    // Carrier-Ende und startet hoechstens eine Schleife (Start-Tor in startInboundNachlauf). Kein
+    // Rueckfall auf den Abschluss unten, auch nicht bei wiederholter Zustellung oder bereits
+    // beendetem Call: finishCall liefe sonst vor dem Transkript (Buchung + Purge zu frueh).
+    if (bridgeStateOf(call) === BRIDGE_STATE.GEBUNDEN) return void startInboundNachlauf(call.id);
     // CDF1: maschinenlesbaren Fehlergrund aus der bereits berechneten Diagnose (PII-frei).
     // completed -> callFailureReason null -> recordFailureReason No-op (kein Save).
     // OUTBOUND-E3b (Befund C-A): der Grund wird INNERHALB von persistEndWithReason

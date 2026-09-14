@@ -297,6 +297,8 @@ export function registerApiRoutes({ app, deps, operatorAuth }) {
       // konkrete Implementierung (dieselbe elevenLabsOutbound-Instanz wie oben).
       elevenLabsHangUpAction,
       endActiveCall: elevenLabsOutbound?.endActiveCall,
+      // IEL-B5 (E10): Ergebnis-Teil des Bruecken-Beende-Thunks fuer cancel_call.
+      awaitAndPersistInboundElResult: elevenLabsOutbound?.awaitAndPersistInboundElResult,
       billThunk,
       finishCall: callFinish.finishCall,
       arm: {
@@ -402,6 +404,8 @@ export async function buildApp(deps) {
     directiveSynth,
     voiceRender,
     messaging,
+    // IEL-B5: die EINE EL-Instanz - /voice/status startet ueber sie den Nachlauf (INV-7).
+    elevenLabsOutbound,
     // EL-BL4: die EINE ConsultDelivery-Instanz (INV-7). registerApiRoutes nimmt sie fuer
     // die Poll-Route direkt aus deps; DIESE Ebene braucht sie selbst, weil der
     // ElevenLabs-Rueckfrage-Webhook hier gemountet wird und auf ihren Slot-Zaehlern und
@@ -503,6 +507,7 @@ export async function buildApp(deps) {
       inboundSignatureVerifier,
       terminateAndBillCall,
       billThunk,
+      startInboundNachlauf: elevenLabsOutbound?.startInboundNachlauf,
     }),
   );
 
