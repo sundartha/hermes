@@ -137,17 +137,14 @@ export async function startBillingSetupCheckout(plan) {
   return url;
 }
 
-// Bucht ein Abo (POST same-origin, JSON-Body { plan }). Loest beim Backend ECHTES
-// wiederkehrendes Geld aus (Recurring) -> NUR vom expliziten Subscribe-Klick. Erfolg:
-// { plan, currentPeriodEnd } + der Tenant wird aktiv. Wirft ApiError bei non-2xx; der
-// .next ("setup-checkout") steuert die gefuehrte Folge (Funnel) in lib/subscribe.js.
-export function startBillingSubscribe(plan) {
-  return apiRequest("/api/self-service/billing/subscribe", { method: "POST", body: { plan } });
-}
+// (Der Wrapper um POST /billing/subscribe ist entfallen: seit der Tarif-Klick ausnahmslos
+// ueber die gehostete Stripe-Seite laeuft, ruft das Dashboard die Sofort-Abbuchungs-Route
+// nirgends mehr auf. Die Route selbst bleibt am Gateway bestehen - ein toter Client-Wrapper
+// waere nur eine Einladung, den alten Weg versehentlich wieder zu verdrahten.)
 
 // 312k-P3: Vormerkung/Ruecknahme der Kuendigung zum Periodenende (§ 312k BGB). Beide
 // POST same-origin, KEIN Body (die Identitaet kommt aus der Session, nie aus dem Client -
-// Muster startBillingSubscribe ohne Body-Identitaet). Erfolg (auch beim idempotenten
+// die Identitaet reist nie im Body). Erfolg (auch beim idempotenten
 // Doppelklick, s. Gateway self-service-routes.js): { cancelAtPeriodEnd, currentPeriodEnd }.
 // Wirft ApiError bei non-2xx (409 no_subscription, 401 abgelaufene Session).
 export function startBillingCancel() {
