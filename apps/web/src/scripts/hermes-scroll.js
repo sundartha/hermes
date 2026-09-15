@@ -37,6 +37,13 @@ const DE = {
   starterLabel: "Starter",
   businessLabel: "Business",
   popular: "Beliebt",
+  /* Preisnotation folgt der Sprache: englisch "€4.99" (Punkt, Symbol vorn),
+   * deutsch "4,99 €" (Komma, Symbol nachgestellt). Dieselbe Regel wie
+   * lib/plans.js formatPlanPrice -- die Betraege selbst stehen im
+   * Tarif-Katalog (lib/plans.js), der Gleichlauf ist test-gepinnt
+   * (apps/web/test/pages.test.js). */
+  starterPrice: "4,99 €",
+  businessPrice: "9,99 €",
   perMonth: "/ Monat",
   starterF1: "<strong>30 Minuten</strong> Gespräche pro Monat",
   starterF2: "Nimmt jeden Anruf für dich an",

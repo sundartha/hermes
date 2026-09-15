@@ -127,7 +127,10 @@ test("planTiles: eine Kachel je Katalog-Plan mit Name, Preis, /month, Features, 
   const starterTile = tiles[0];
   const text = textOf([starterTile]);
   assert.ok(text.includes("Starter"));
-  assert.ok(text.includes("4,99 €")); // EUR-Cutover (Stripe live, 2026-07-03), deutsche Notation
+  // EUR-Cutover (Stripe live, 2026-07-03). Die NOTATION folgt der Sprache: ohne
+  // gespeicherte Wahl ist das Dashboard englisch -> "€4.99" (Punkt, Symbol vorn).
+  assert.ok(text.includes("€4.99"));
+  assert.ok(!text.includes("4,99 €"), "englische Kachel zeigt deutsche Notation");
   assert.ok(text.includes("/month"));
   for (const feature of starter.features) assert.ok(text.includes(feature), `Feature fehlt: ${feature}`);
 
@@ -136,6 +139,14 @@ test("planTiles: eine Kachel je Katalog-Plan mit Name, Preis, /month, Features, 
   assert.equal(buttons.length, 1);
   assert.equal(buttons[0].dataset.plan, "starter");
   assert.equal(buttons[0].type, "button");
+});
+
+test("planTiles: DE-Modus -> deutsche Preisnotation (Komma, Symbol nachgestellt)", () => {
+  withLang("de", () => {
+    const text = textOf([planTiles(fakeDocument)[0]]);
+    assert.ok(text.includes("4,99 €"), "DE-Kachel ohne deutsche Notation");
+    assert.ok(!text.includes("€4.99"), "DE-Kachel zeigt englische Notation");
+  });
 });
 
 test("planTiles: das featured-Plan traegt das Popular-Badge, das andere nicht", () => {
@@ -150,11 +161,17 @@ test("planTiles: das featured-Plan traegt das Popular-Badge, das andere nicht", 
 // ---- planTiles: Setup-Gebuehr-Zeile (Phase A, PLAN-VOUCHER-SETUP-FEE-GAP.md) ----------
 test("planTiles: mit fee -> jede Kachel traegt die Setup-Gebuehr-Zeile", () => {
   const fee = { amountCents: 500, currency: "eur" };
-  const tiles = planTiles(fakeDocument, fee);
-  for (const tile of tiles) {
-    assert.ok(textOf([tile]).includes("5,00 €"));
+  // Der Betrag traegt dieselbe sprachabhaengige Notation wie die Preiszeile:
+  // ohne gespeicherte Wahl englisch ("€5.00"), im DE-Modus "5,00 €".
+  for (const tile of planTiles(fakeDocument, fee)) {
+    assert.ok(textOf([tile]).includes("€5.00"));
     assert.ok(textOf([tile]).includes("one-time number setup fee"));
   }
+  withLang("de", () => {
+    for (const tile of planTiles(fakeDocument, fee)) {
+      assert.ok(textOf([tile]).includes("5,00 €"));
+    }
+  });
 });
 
 test("planTiles: ohne fee (Default) -> keine Gebuehren-Zeile (Regressions-Pin)", () => {
@@ -376,8 +393,15 @@ test("renderPlanChoice: mit fee -> Kacheln tragen die Gebuehren-Zeile", () => {
     // Object.assign(undefined)-TypeError (Altlast-Rot, nicht in cl1-b4-plan-choice-exit).
     restore: { hidden: false },
   };
-  renderPlanChoice(fakeDocument, els, { amountCents: 999, currency: "eur" });
-  assert.ok(els.tiles._k.some((t) => textOf([t]).includes("9,99 €")));
+  const fee = { amountCents: 999, currency: "eur" };
+  renderPlanChoice(fakeDocument, els, fee);
+  // Gebuehren-Zeile nutzt dieselbe Formatierung wie die Preiszeile -> englische
+  // Notation im EN-Modus, deutsche im DE-Modus.
+  assert.ok(els.tiles._k.some((t) => textOf([t]).includes("€9.99")));
+  withLang("de", () => {
+    renderPlanChoice(fakeDocument, els, fee);
+    assert.ok(els.tiles._k.some((tile) => textOf([tile]).includes("9,99 €")));
+  });
 });
 
 test("dismissPlanChoice: Pending-Banner, Kacheln+Skip weg, KEIN subscribe/setStatus", () => {
