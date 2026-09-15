@@ -4325,11 +4325,118 @@ belegt. Wird durch das M8-Messergebnis ersetzt.
 
 ### 7. Werkzeug-Schluessel und Restrisiken
 
-- `RENDER_API_KEY`: Werkzeug-Schluessel ueber `src/config.js` (`config.voice.elevenLabsInbound.renderApiKey`,
-  in `.env.example` dokumentiert, NICHT in `render.yaml` und nicht im Dienst gesetzt), voller
+- `RENDER_API_KEY`: Werkzeug-Schluessel ueber `src/config.js` (seit IEL-B10 `config.werkzeug.renderApiKey`,
+  vorher `config.voice.elevenLabsInbound.renderApiKey`; in `.env.example` dokumentiert, NICHT in `render.yaml` und nicht im Dienst gesetzt), voller
   Workspace-Zugriff bei Render; in B9 nur GET, nie ausgegeben, nie in einem Ergebnisfeld. Liegt er lokal in
   `.env`, liest dotenv ihn mit - die Render-BASIS bleibt trotzdem Konstante.
 - Custom-Domain-Liste mit 100 oder mehr Eintraegen ergibt ROT (kein Blaettern).
 - Render nicht lesbar blockiert nur das Setzen, nicht das Entfernen.
 - Dict-Ersetzung beim Anbieter ist fuer die Workspace-Settings ungemessen; abgedeckt durch die Gegenprobe
   (ROT, aber ohne automatischen Rueckbau).
+
+## IEL-B10 — Erzeugung und Verteilung der Inbound-Geheimnisse (2026-09-15)
+
+Werkzeug-Phase: kein Serververhalten aendert sich, keine Route, kein Safety-Gate, keine Offenlegung, keine
+neue Dependency. Neu ist `scripts/iel-geheimnisse.mjs` (Hilfsmodule `scripts/iel-geheimnisse-*.mjs`) mit den
+Unterbefehlen `setzen`, `beleg-init`, `allowlist-uebernehmen`, `schalter`, `stimmen-beleg`,
+`conversation-beleg`. Jeder Schreibweg ist Trockenlauf per Default (`--ausfuehren`). Die Render-Zugriffe
+von B9 und B10 laufen ueber eine gemeinsame Schicht `src/render-api.js` (B9-Verhalten unveraendert,
+Bestandstests IEL-B9 ohne Aenderung gruen).
+
+### 1. Erzeugung
+
+- CSPRNG `crypto.randomBytes`, hex-kodiert: `ELEVENLABS_INBOUND_SIP_USER` 16 Byte (32 Zeichen),
+  `ELEVENLABS_INBOUND_SIP_PASSWORD` und `ELEVENLABS_INIT_WEBHOOK_TOKEN` je 32 Byte (64 Zeichen).
+- Laengenpruefung ueber `inbound-path-decision.js#inboundElAccessDefects` (eine Quelle der Mindestlaengen mit
+  Praedikat, Boot-Riegel und Init-Route). Zu kurz = ROT ohne einen einzigen Schreibaufruf (Test IEL-B10-3).
+- Die Werte existieren nur im Speicher des Laufs; nach Prozessende sind sie unwiederbringlich (gewollt).
+
+### 2. Ablage
+
+| Ziel | Form | Grenze |
+|---|---|---|
+| Render-Env des Dienstes `HERMES_RENDER_SERVICE_ID` | `sync:false`, Einzel-Schluessel-PUT | nur die fuenf Schluessel `ELEVENLABS_INBOUND_SIP_USER`, `_SIP_PASSWORD`, `ELEVENLABS_INIT_WEBHOOK_TOKEN`, `ELEVENLABS_INBOUND_TENANT_IDS`, `ELEVENLABS_INBOUND_ENABLED` (Allowlist im Code, Wurf vor dem Senden) |
+| ElevenLabs-Workspace-Secret `hermes_init_webhook_token` | aktualisiert (PATCH, belegt) oder angelegt | im Repo/in der Ausgabe nur die `secret_id` |
+| `inbound_trunk_config.credentials` | PATCH `{credentials, allowed_numbers:[DID], allowed_addresses:["0.0.0.0/0"]}` | nur Registrierungen, deren `phone_number` exakt einer `--nummer` gleicht |
+
+Nie lokale `.env`, nie Repo, nie Agenten-Kontext. Der Render-Listen-Endpunkt (`PUT .../env-vars` ersetzt
+die GESAMTE Env) ist baulich unerreichbar: ein leerer Schluessel wirft vor jedem fetch (Test IEL-B10-5).
+
+### 3. Sichtbarkeit
+
+- **Ausgabe-Waechter:** EINE Ausgabefunktion fuer stdout und stderr. Verbotsmenge = alle erzeugten und alle
+  gelesenen Geheimnis-Werte (Render-Werte, Registrierungs-`username`, `tenant_token`,
+  `sip_hermes_call_binding`). Treffer -> Zeile verworfen, konstante Meldung, Exit != 0 (Test IEL-B10-12).
+  Gekuerzte Ausgaben prueft er UNGEKUERZT, gekuerzt wird danach (Test IEL-B10-13a).
+- Anbieter-Fehlerkoerper werden nie gelesen oder ausgegeben, auch nicht `synth.detail` der Probe-Synthese;
+  gemeldet wird nur der Status. Die Fake-Anbieter der Tests spiegeln den gesendeten Koerper im 500er, damit
+  jeder Leser sofort auffiele (Test IEL-B10-1a/b/c).
+- Der letzte `catch` gibt nur `err.providerStatus` aus, nie `err.message` (ein Parse-Fehlertext kann
+  Koerper-Schnipsel tragen).
+- `beleg-init` sendet mit `redirect:"manual"`: eine Umleitung traegt den Token-Header an keinen anderen Host.
+- Ausgabe von Rufnummern nur als Endung (`e164Endung`), von Tenant-IDs nur als Anzahl.
+
+### 4. Reihenfolge und Vorab-Riegel (`setzen`)
+
+1. Vorab-Riegel, nur GET: Inventar (E15) hart; jede `--nummer` hat genau eine Registrierung; keine
+   Registrierung mit Inbound-Zugangsdaten ausserhalb der Liste (halbe Rotation gesperrt); Secret-Suche
+   eindeutig (kein `next_cursor`, hoechstens ein Namenstreffer). ROT = 0 schreibende Aufrufe (Tests 6, 6a).
+2. Render (wirkt erst nach Deploy, deshalb zuerst) -> Workspace-Secret -> Registrierung(en).
+3. Lesebelege, nur GET; ALS LETZTES das Inventar. Danach kein Schreibaufruf (Test 6b).
+
+### 5. Rotation
+
+Rotation = erneuter Lauf `setzen --ausfuehren` + Deploy. Zwischenfenster (Anbieter schon neu, Dienst noch
+alt) ist fail-safe: Digest scheitert -> Dial endet -> Rueckfall-Route; abweichendes Init-Token -> 403 am
+Init-Webhook, kein Gespraech mit Tenant-Kontext.
+
+### 6. Teilausfall
+
+Abbruch beim ERSTEN Fehlschlag; die Ziel-Tabelle zeigt je Ziel `gesetzt: ja/nein`, Laenge und Status. Der
+Rueckweg ist ein erneuter Lauf mit frischen Werten, der alle Ziele ueberschreibt. Erkennungsweg einer
+Abweichung ohne erneuten Lauf: Rueckfall-Zeile im Render-Log ohne vorherige `[el-init]`-Zeile (SIP) bzw.
+`beleg-init`/`[el-init] grund=token` (Token).
+
+### 7. Schalter-Riegel (Runde 5, K2)
+
+`schalter --an --ausfuehren` fuehrt im selben Lauf Inventar, `beleg-init` (inkl. Ziel-Urteil aus der
+Render-API), `stimmen-beleg` und die Mindestlaengen der drei Render-Geheimnisse aus. Nur wenn alle vier GRUEN
+sind, folgt genau EIN PUT `ELEVENLABS_INBOUND_ENABLED=true` als letzter Aufruf (Test IEL-B10-10).
+`schalter --aus` schreibt bedingungslos (braucht nur `RENDER_API_KEY`). `allowlist-uebernehmen` schreibt nur
+bei genau einem Eintrag in `OWNER_SELF_CALL_TENANT_IDS` (Zerlegung `csvEnv` wie am Server, Test 9).
+
+### 8. `conversation-beleg` (E22)
+
+Ausgabe nur aus einer Weissliste abgeleiteter Felder: Kennung, Richtung, Status, Dauer, Registrierungs-
+Gleichheit, je `BELEG_VARIABLEN` vorhanden/leer/Laenge, Namen der uebrigen Variablen, erste Agent-Zeile
+(gekuerzt, ungekuerzt geprueft). `tenant_token` und `sip_hermes_call_binding` gehen VOR jeder Ausgabe in die
+Verbotsmenge. Eine Liste mit `has_more` ist ROT (unvollstaendig).
+
+### 9. Werkzeug-Schluessel `RENDER_API_KEY`
+
+- Gelesen ueber den eigenen Konfig-Namespace `config.werkzeug.renderApiKey` - EIN Leser fuer
+  `push-elevenlabs.mjs` und `iel-geheimnisse.mjs`, verdrahtet genau einmal in `standardAbhaengigkeiten()`.
+  **Abweichung von Plan L-1 (Default "direkt aus process.env"):** der Lint sperrt `process.env` ausserhalb
+  von `src/config.js` (G35, `noInlineConfig`, keine neue Unterdrueckung), und der Abnahme-Grep verbietet
+  `config.voice.elevenLabsInbound` in den Werkzeug-Modulen. Umgesetzt ist deshalb die L-1-Alternative: der
+  Schluessel liegt nicht mehr neben den Inbound-Geheimnissen, sondern im Namespace `werkzeug`. Wirkung wie
+  zuvor: `src/config.js` laedt (ausser `NODE_ENV=test`) die lokale `.env`; ein dort gesetzter Wert gilt
+  auch fuer den Werkzeug-Lauf.
+- Voller Render-Workspace-Zugriff, jetzt auch SCHREIBEND. **Restrisiko:** ein kompromittierter Arbeitsplatz
+  mit diesem Schluessel kann jede Render-Env jedes Dienstes aendern; das Werkzeug begrenzt nur sich selbst
+  (fuenf Schluessel, gepinnter Dienst, Basis-Konstante).
+- Nie in `render.yaml`, nie im Dienst gesetzt, nie ausgegeben, nie in einem Ergebnisfeld.
+
+### 10. UNBELEGT und akzeptiert
+
+- **Loest ein Render-API-PUT einen Deploy aus?** Die API-Doku (reference/update-env-var, gelesen 2026-09-15)
+  sagt es nicht. Fail-safe durch die Reihenfolge: `ELEVENLABS_INBOUND_ENABLED` bleibt bis zum eigenen,
+  letzten Einzel-PUT aus, der Boot-Riegel greift nur bei Schalter an; ein Deploy mitten in `setzen` startet
+  also einen Dienst mit Schalter aus.
+- **Vorrang Dienst-Variable vor Environment-Group:** gelesen und geschrieben wird nur auf Dienst-Ebene; eine
+  gleichnamige Variable in einer Environment-Group ist nicht betrachtet.
+- **`media_encryption` bei Dict-Ersetzung (L-2):** der PATCH sendet den Spec-Koerper ohne `media_encryption`;
+  die Anbieter-Doku nennt als Default `allowed` (M1 legte mit `disabled` an). Der Lesebeleg gibt den Wert nach
+  dem Schreiben aus (`media_encryption=<wert>`); bei Abweichung erneuter Lauf nach Entscheidung.
+- **Sortierung der Conversation-Liste:** unbelegt; es wird clientseitig nach `start_time_unix_secs`
+  sortiert, `has_more` ergibt ROT.

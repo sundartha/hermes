@@ -144,6 +144,9 @@ const EXPECTED_NAMESPACE_COUNTS = {
   // IM Gespraech, src/research/in-call.js; Anbieter-Tausch AL-P10c, Anzahl
   // unveraendert) -> 7.
   research: 7,
+  // IEL-B10: renderApiKey aus voice.elevenLabsInbound in einen eigenen Werkzeug-Namespace
+  // verschoben (nur scripts/ lesen ihn, nie der Server) -> 1.
+  werkzeug: 1,
 };
 // B5: llmProvider + deepseekApiKey ergaenzt -> 143.
 // FIX-1: summaryTimeoutMs ergaenzt -> 144.
@@ -190,9 +193,10 @@ const EXPECTED_NAMESPACE_COUNTS = {
 // IE6-S1: telnyxAssistant (EIN Namespace-Blatt, nicht seine 18 internen Sub-Keys) +
 // telnyxDialTimeoutSecs entfernt -> 192.
 // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice entfernt -> 189.
-const EXPECTED_TOTAL_KEYS = 189;
+// IEL-B10: werkzeug.renderApiKey ergaenzt (voice.elevenLabsInbound bleibt EIN Blatt) -> 190.
+const EXPECTED_TOTAL_KEYS = 190;
 
-test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkte Blaetter (183 Keys)", () => {
+test("Struktur: CONFIG_NAMESPACES hat genau die gepinnten Counts und disjunkte Blaetter", () => {
   assert.deepEqual(
     Object.keys(CONFIG_NAMESPACES).sort(),
     Object.keys(EXPECTED_NAMESPACE_COUNTS).sort(),
@@ -213,7 +217,7 @@ test("Struktur: CONFIG_NAMESPACES hat genau die 15 gepinnten Counts und disjunkt
   );
 });
 
-test("Oberflaeche: config traegt GENAU die 15 Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
+test("Oberflaeche: config traegt GENAU die gepinnten Namespaces (enumerable UND ueber 'in' erreichbar), kein flacher Key mehr", () => {
   assert.equal(new Set(Object.keys(config)).size, Object.keys(CONFIG_NAMESPACES).length);
   assert.deepEqual(Object.keys(config).sort(), Object.keys(CONFIG_NAMESPACES).sort());
   for (const namespace of Object.keys(CONFIG_NAMESPACES)) {
@@ -349,7 +353,9 @@ test("Setter-Durchschlag: ein Override ueber config.<ns>.<key> trifft fuer JEDES
   // selbst ein nested Objekt (continue oben) und trug nie zu checked bei - kein
   // weiterer Abzug.
   // IE6-S2: openaiApiKey + realtimeModel + realtimeVoice sind drei primitive Strings -> 177.
-  const EXPECTED_PRIMITIVE_LEAVES = 177;
+  // IEL-B10: werkzeug.renderApiKey ist primitiv (String); vorher lag er im nested Objekt
+  // voice.elevenLabsInbound und zaehlte nicht -> 178.
+  const EXPECTED_PRIMITIVE_LEAVES = 178;
   assert.equal(
     checked,
     EXPECTED_PRIMITIVE_LEAVES,

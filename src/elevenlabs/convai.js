@@ -1,9 +1,10 @@
 // ---- ElevenLabs Convai: der EINE HTTP-Zugang des Anrufstart-Zweigs -------------------
-// Neun Endpunkte: den Anrufstart (POST), den ziehenden Ergebnisabruf (GET), den
+// Fuenfzehn Endpunkte: den Anrufstart (POST), den ziehenden Ergebnisabruf (GET), den
 // Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026), den Nummernabruf (GET, OUTBOUND-E4/
 // Pruefung 1 des Drift-Waechters) - dazu die drei der Nummernregistrierung (Liste/Anlegen/
 // Loeschen, OUTBOUND-E5), dazu Lesen/Schreiben der Workspace-Settings (IEL-B9,
-// Init-Webhook). Rein IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie
+// Init-Webhook), dazu die sechs des Geheimnis-Werkzeugs (IEL-B10: Secret-Liste/-Anlegen/
+// -Aktualisieren, Registrierungs-PATCH, Conversation-Liste, Agent-Abruf). Rein IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie
 // src/tts/synth.js) - der Zweig laesst sich damit gegen eine Attrappe fahren, ohne dass je
 // ein echter Anruf oder eine echte Registrierung entsteht.
 //
@@ -33,6 +34,22 @@ const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";
 const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
 // IEL-B9: Workspace-Settings (conversation_initiation_client_data_webhook), [R1] GET-WS.
 const CONVAI_SETTINGS_PATH = "/v1/convai/settings";
+// IEL-B10, belegt aus elevenlabs.io/docs/api-reference (gelesen 2026-09-15):
+//   GET   /v1/convai/secrets?search=&page_size=   -> {secrets:[{type,secret_id,name,used_by}], next_cursor}
+//                                                    (page_size max 100, search = Namenspraefix)
+//   POST  /v1/convai/secrets        {type:"new", name, value}    -> {type:"stored", secret_id, name}
+//   PATCH /v1/convai/secrets/{id}   {type:"update", name, value} -> {type:"stored", secret_id, name}
+//   GET   /v1/convai/conversations?agent_id=&call_start_after_unix=&page_size=
+//         -> {conversations:[{conversation_id, direction, start_time_unix_secs, status, ...}], has_more,
+//            next_cursor}; direction ist KEIN Filterparameter (page_size max 100)
+//   GET   /v1/convai/agents/{id}    -> conversation_config.tts.{voice_id, model_id}
+//   PATCH /v1/convai/phone-numbers/{id} inbound_trunk_config{credentials, allowed_numbers,
+//         allowed_addresses, media_encryption (Doku-Default "allowed")}
+const CONVAI_SECRETS_PATH = "/v1/convai/secrets";
+const CONVERSATIONS_PATH = "/v1/convai/conversations";
+const AGENT_PATH = "/v1/convai/agents/";
+const SECRET_TYP_NEU = "new";
+const SECRET_TYP_UPDATE = "update";
 const API_KEY_HEADER = "xi-api-key";
 
 // Interner Transport-Bound, kein Operator-Knopf (Praezedenz ERROR_DETAIL_MAX_LEN in
@@ -489,5 +506,98 @@ export function patchConvaiSettings({ fetchImpl, account, body }) {
     path: CONVAI_SETTINGS_PATH,
     op: "Workspace-Settings-Schreiben",
     init: { method: "PATCH", body: JSON.stringify(body) },
+  });
+}
+
+/**
+ * IEL-B10: NUR LESEND. Workspace-Secrets, gefiltert per Namenspraefix. Die Antwort traegt nie einen
+ * Secret-Wert. Einziger Aufrufer: scripts/iel-geheimnisse-*.mjs. KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, search: string, pageSize: number}} args
+ */
+export function listConvaiSecrets({ fetchImpl, account, search, pageSize }) {
+  const query = new URLSearchParams({ search, page_size: String(pageSize) });
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: `${CONVAI_SECRETS_PATH}?${query}`,
+    op: "Secret-Liste",
+    init: { method: "GET" },
+  });
+}
+
+/**
+ * IEL-B10: SCHREIBZUGRIFF - legt ein Workspace-Secret an. Einziger Aufrufer:
+ * scripts/iel-geheimnisse-*.mjs (setzen --ausfuehren). KEIN Retry; der Fehler-RUMPF wird nie gelesen
+ * (er koennte den gesendeten Wert spiegeln).
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, name: string, value: string}} args
+ */
+export function createConvaiSecret({ fetchImpl, account, name, value }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: CONVAI_SECRETS_PATH,
+    op: "Secret-Anlegen",
+    init: { method: "POST", body: JSON.stringify({ type: SECRET_TYP_NEU, name, value }) },
+  });
+}
+
+/**
+ * IEL-B10: SCHREIBZUGRIFF - aktualisiert den Wert eines bestehenden Workspace-Secrets. Einziger
+ * Aufrufer: scripts/iel-geheimnisse-*.mjs (setzen --ausfuehren). KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, secretId: string, name: string, value: string}} args
+ */
+export function updateConvaiSecret({ fetchImpl, account, secretId, name, value }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: `${CONVAI_SECRETS_PATH}/${encodeURIComponent(secretId)}`,
+    op: "Secret-Aktualisieren",
+    init: { method: "PATCH", body: JSON.stringify({ type: SECRET_TYP_UPDATE, name, value }) },
+  });
+}
+
+/**
+ * IEL-B10: SCHREIBZUGRIFF - PATCH einer Nummernregistrierung (inbound_trunk_config). Einziger
+ * Aufrufer: scripts/iel-geheimnisse-*.mjs (setzen --ausfuehren). KEIN Retry; der Koerper traegt
+ * Zugangsdaten, der Fehler-RUMPF wird nie gelesen.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, phoneNumberId: string, body: object}} args
+ */
+export function patchPhoneNumber({ fetchImpl, account, phoneNumberId, body }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: PHONE_NUMBER_PATH + encodeURIComponent(phoneNumberId),
+    op: "Nummernregistrierung-Aendern",
+    init: { method: "PATCH", body: JSON.stringify(body) },
+  });
+}
+
+/**
+ * IEL-B10: NUR LESEND. Conversation-Liste mit den Query-Parametern des Aufrufers. Einziger
+ * Aufrufer: scripts/iel-geheimnisse-*.mjs (conversation-beleg). KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, query: Record<string, string>}} args
+ */
+export function listConversations({ fetchImpl, account, query }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: `${CONVERSATIONS_PATH}?${new URLSearchParams(query)}`,
+    op: "Gespraechsliste",
+    init: { method: "GET" },
+  });
+}
+
+/**
+ * IEL-B10: NUR LESEND. Konfiguration eines Agenten. Einziger Aufrufer:
+ * scripts/iel-geheimnisse-*.mjs (stimmen-beleg). KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, agentId: string}} args
+ */
+export function fetchAgent({ fetchImpl, account, agentId }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: AGENT_PATH + encodeURIComponent(agentId),
+    op: "Agent-Abruf",
+    init: { method: "GET" },
   });
 }

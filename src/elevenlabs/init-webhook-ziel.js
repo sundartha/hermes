@@ -11,25 +11,18 @@
 // PUBLIC_URL || RENDER_EXTERNAL_URL) muss https sein und in HERMES_GATEWAY_ORIGINS stehen, und
 // der Host der Init-Adresse muss dem Dienst als verifizierte Custom-Domain zugeordnet sein.
 //
-// DIE RENDER-BASIS IST EINE KONSTANTE, kein Env-Wert: sonst lenkte eine lokale .env den
-// RENDER_API_KEY auf einen fremden Host. RENDER_API_KEY ist ein Werkzeug-Schluessel (voller
-// Workspace-Zugriff, hier nur GET); der Aufrufer reicht ihn herein (config.js, nie render.yaml),
-// er steht nur im Authorization-Header und nie in einem Ergebnisfeld.
-//
-// RENDER-API, BELEGT aus api-docs.render.com (gelesen 2026-09-15), Basis https://api.render.com/v1:
-//   GET /services/{serviceId}                        -> serviceDetails.url (200; sonst 401/403/404/406/410/429/500/503)
-//   GET /services/{serviceId}/env-vars/{envVarKey}   -> {key, value} (200; 404 "when key not found")
-//   GET /services/{serviceId}/custom-domains?limit=  -> [{customDomain:{name, verificationStatus}, cursor}] (max 100)
-// Ein 404 beim Env-GET zaehlt NUR als "nicht gesetzt", weil der Service-GET davor 200 lieferte -
-// sonst koennte er auch "Service unbekannt" heissen.
+// RENDER-ZUGRIFF ausschliesslich ueber src/render-api.js: dort stehen die Basis als Konstante
+// (kein Env-Wert), der Transport und die Belege der Endpunkte. Hier nur GET; RENDER_API_KEY
+// (Werkzeug-Schluessel, voller Workspace-Zugriff) reicht der Aufrufer herein, er steht in keinem
+// Ergebnisfeld. Ein 404 beim Env-GET zaehlt NUR als "nicht gesetzt", weil der Service-GET davor
+// 200 lieferte - sonst koennte er auch "Service unbekannt" heissen.
 import { ELEVENLABS_INIT_PATH } from "../routes/webhooks-elevenlabs-init.js";
+import { leseRenderDienst, leseRenderEnvVar, renderAnfrage, renderDienstPfad } from "../render-api.js";
 
 export const INIT_WEBHOOK_ORIGIN = "https://app.sundartha.com";
 export const HERMES_GATEWAY_ORIGINS = Object.freeze(["https://app.sundartha.com", "https://vodafone-agent.onrender.com"]);
 export const HERMES_RENDER_SERVICE_ID = "srv-d8m0fhflk1mc73bno570";
-const RENDER_API_BASE = "https://api.render.com/v1";
 const PUBLIC_URL_ENV_SCHLUESSEL = "PUBLIC_URL";
-const RENDER_ABRUF_TIMEOUT_MS = 15000;
 // Hoechstwert der Seitengroesse laut Doku. Eine volle Seite heisst "es kann mehr geben" - ohne
 // Blaettern ist die Liste dann kein Beleg (fail-closed statt Cursor-Logik).
 const RENDER_CUSTOM_DOMAINS_LIMIT = 100;
@@ -58,14 +51,6 @@ export function initWebhookUrl() {
 
 // ---- Lesen am Dienst (nur GET, seriell, Abbruch beim ersten Nicht-OK) ------------------
 
-function renderGet({ fetchImpl, apiKey, pfad }) {
-  return fetchImpl(`${RENDER_API_BASE}${pfad}`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${apiKey}`, accept: "application/json" },
-    signal: AbortSignal.timeout(RENDER_ABRUF_TIMEOUT_MS),
-  });
-}
-
 function unlesbar(grund, status) {
   return status === undefined ? { lesbar: false, grund } : { lesbar: false, grund, status };
 }
@@ -88,25 +73,23 @@ function dienstHostsAus({ serviceUrl, domains }) {
   return [urlVon(serviceUrl)?.host, ...verifiziert].filter((host) => typeof host === "string" && host !== "");
 }
 
-async function leseServiceUrl({ fetchImpl, apiKey, dienstPfad }) {
-  const antwort = await renderGet({ fetchImpl, apiKey, pfad: dienstPfad });
-  if (antwort.status !== HTTP_OK) return { fehler: unlesbar(ZIEL_GRUND.RENDER_STATUS, antwort.status) };
-  const koerper = await antwort.json();
+async function leseServiceUrl(zugriff) {
+  const { status, koerper } = await leseRenderDienst(zugriff);
+  if (status !== HTTP_OK) return { fehler: unlesbar(ZIEL_GRUND.RENDER_STATUS, status) };
   return { wert: koerper?.serviceDetails?.url ?? null };
 }
 
 // Laeuft NUR nach einem Service-GET mit 200 - erst dadurch heisst 404 "Schluessel nicht gesetzt".
-async function lesePublicUrlEnv({ fetchImpl, apiKey, dienstPfad }) {
-  const antwort = await renderGet({ fetchImpl, apiKey, pfad: `${dienstPfad}/env-vars/${PUBLIC_URL_ENV_SCHLUESSEL}` });
-  if (antwort.status === HTTP_NOT_FOUND) return { wert: null };
-  if (antwort.status !== HTTP_OK) return { fehler: unlesbar(ZIEL_GRUND.RENDER_STATUS, antwort.status) };
-  const koerper = await antwort.json();
-  return { wert: koerper?.value ?? null };
+async function lesePublicUrlEnv(zugriff) {
+  const { status, wert } = await leseRenderEnvVar({ ...zugriff, schluessel: PUBLIC_URL_ENV_SCHLUESSEL });
+  if (status === HTTP_NOT_FOUND) return { wert: null };
+  if (status !== HTTP_OK) return { fehler: unlesbar(ZIEL_GRUND.RENDER_STATUS, status) };
+  return { wert };
 }
 
-async function leseCustomDomains({ fetchImpl, apiKey, dienstPfad }) {
-  const pfad = `${dienstPfad}/custom-domains?limit=${RENDER_CUSTOM_DOMAINS_LIMIT}`;
-  const antwort = await renderGet({ fetchImpl, apiKey, pfad });
+async function leseCustomDomains({ fetchImpl, apiKey, serviceId }) {
+  const pfad = `${renderDienstPfad(serviceId)}/custom-domains?limit=${RENDER_CUSTOM_DOMAINS_LIMIT}`;
+  const antwort = await renderAnfrage({ fetchImpl, apiKey, pfad });
   if (antwort.status !== HTTP_OK) return { fehler: unlesbar(ZIEL_GRUND.RENDER_STATUS, antwort.status) };
   const eintraege = await antwort.json();
   const vollstaendig = Array.isArray(eintraege) && eintraege.length < RENDER_CUSTOM_DOMAINS_LIMIT;
@@ -114,8 +97,7 @@ async function leseCustomDomains({ fetchImpl, apiKey, dienstPfad }) {
   return { wert: eintraege };
 }
 
-async function leseDienst({ fetchImpl, apiKey, serviceId }) {
-  const zugriff = { fetchImpl, apiKey, dienstPfad: `/services/${encodeURIComponent(serviceId)}` };
+async function leseDienst(zugriff) {
   const service = await leseServiceUrl(zugriff);
   if (service.fehler) return service.fehler;
   const publicUrl = await lesePublicUrlEnv(zugriff);

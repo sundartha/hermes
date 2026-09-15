@@ -165,7 +165,7 @@ const ENTFERNEN_FLAG = "--entfernen";
 const INIT_WEBHOOK_SCHALTER_FELD = "init_webhook_schalter";
 const FREIGABEN_FELD = "conversation_config_override_erlaubnisse";
 const AGENT_PROMPT_FREIGABEN = "agent.prompt";
-const INIT_WEBHOOK_SETTINGS_SCHLUESSEL = "conversation_initiation_client_data_webhook";
+export const INIT_WEBHOOK_SETTINGS_SCHLUESSEL = "conversation_initiation_client_data_webhook";
 const OHNE_WERT_MARKE = "-";
 
 const { apiKey, apiBase } = config.voice.elevenLabsPlayTts;
@@ -998,11 +998,11 @@ export function uebrigeSettingsVeraendert(vorher, nachher) {
   return [`GEGENPROBE ROT - Workspace-Settings veraendert: ${veraendert.sort().join(LISTEN_TRENNER)}`];
 }
 
-// RENDER_API_KEY ueber src/config.js - nie ausgegeben.
+// RENDER_API_KEY ueber src/config.js (Werkzeug-Namespace) - nie ausgegeben.
 async function zielUrteilVomDienst() {
   const dienst = await renderDienstZiel({
     fetchImpl: fetch,
-    apiKey: config.voice.elevenLabsInbound.renderApiKey,
+    apiKey: config.werkzeug.renderApiKey,
     serviceId: HERMES_RENDER_SERVICE_ID,
   });
   return zielUrteil(dienst);

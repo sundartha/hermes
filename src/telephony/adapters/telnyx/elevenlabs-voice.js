@@ -2,6 +2,8 @@
 // Wert-Duplikat (G5/S2). Konsumenten JE FUNKTION:
 //   elevenLabsVoiceIdFor -> src/elevenlabs/call-locale.js (Outbound-Anrufstart) und
 //                           src/tts/directive-synth.js (Play-TTS-Vorabsynthese)
+//   ELEVENLABS_VOICE_ID_BY_PROFILE -> scripts/iel-geheimnisse-belege.mjs#stimmenBeleg (nur lesend,
+//                           Probe-Synthese je Profil-Stimme, IEL-B10)
 // Rein: kein IO, kein config-Import (der Aufrufer reicht die Registry-Werte herein).
 import { VOICE_PROFILE } from "../../directives.js";
 
@@ -30,7 +32,7 @@ import { VOICE_PROFILE } from "../../directives.js";
 // gemessen, alte wie neue). Die einzige belastbare Probe ist eine winzige Synthese
 // (POST /v1/text-to-speech/{id}); die liefert 200 fuer genau die IDs, die die Liste
 // nicht kennt.
-const ELEVENLABS_VOICE_ID_BY_PROFILE = Object.freeze({
+export const ELEVENLABS_VOICE_ID_BY_PROFILE = Object.freeze({
   [VOICE_PROFILE.DE_FEMALE_NEURAL]: "cqPdIo76zSHFDcSZpFov",
   [VOICE_PROFILE.FR_FEMALE_NEURAL]: "WeAAwKYcS06VmXw086yZ",
   [VOICE_PROFILE.EN_FEMALE_NEURAL]: "ZSNL4hPqCnqoMPaI4jGX",
