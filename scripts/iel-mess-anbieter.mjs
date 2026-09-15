@@ -8,6 +8,7 @@
 // Schluessel stehen nur im Kopf der echten Anfrage und erscheinen in keiner Ausgabe.
 
 import { config } from "../src/config.js";
+import { registrierungsKoerper } from "../src/elevenlabs/nummern-registrierung.js";
 
 // --- Wegwerf-Objekte (Kickoff 3.8), ohne Nummer und ohne Produktionsverkehr ----------
 const TEXML_APP_ID = "3048315229369796444";
@@ -162,6 +163,15 @@ export const detailRecordsAnfrage = (recordType, seite) => ({
   pfad: `/v2/detail_records?filter%5Brecord_type%5D=${encodeURIComponent(recordType)}&page%5Bsize%5D=${TELNYX_SEITENGROESSE}&page%5Bnumber%5D=${seite}`,
 });
 
+// IEL-B11 (N2): Telnyx-Doku "calls"/"From" (abgerufen 2026-09-15) belegt Umschlag und Filter;
+// parent_call_sid/sip_hangup_cause stehen NICHT im Doku-Schema, sind aber im M1-Messbericht
+// als live beobachtete Felder dieses Endpunkts aufgefuehrt (V3).
+export const texmlAnrufeAnfrage = (absender) => ({
+  anbieter: "telnyx",
+  methode: "GET",
+  pfad: `/v2/texml/Accounts/${config.telephony.telnyxAccountSid}/Calls?From=${encodeURIComponent(absender)}&PageSize=${TELNYX_SEITENGROESSE}`,
+});
+
 // --- Anfrage-Bauer: ElevenLabs ---------------------------------------------------------
 
 const EL_NUMMERN_PFAD = "/v1/convai/phone-numbers";
@@ -182,6 +192,47 @@ export const elGespraechAnfrage = (id) => ({ anbieter: "eleven", methode: "GET",
 export const elSttAnfrage = ({ modell, audio }) => ({
   anbieter: "eleven", methode: "POST", pfad: "/v1/speech-to-text", multipart: { felder: { model_id: modell }, datei: audio },
 });
+
+// IEL-B11 (N2/N1): EL-Doku "sip_messages" - nur ueber ein Gespraech erreichbar (V2).
+export const elSipNachrichtenAnfrage = (id) => ({ anbieter: "eleven", methode: "GET", pfad: `/v1/convai/conversations/${id}/sip-messages` });
+
+// --- Wegwerf-Registrierungskoerper (setup) ---------------------------------------------
+
+// Byte-gleich zum bisherigen Inline-Koerper aus legeWegwerfAn (M1, F-F-ohne-agent).
+export function wegwerfKoerper({ el_nummer: nummer, label, anrufer_kennung: anrufer }) {
+  return { phone_number: nummer, label, provider: "sip_trunk", inbound_trunk_config: { allowed_numbers: [anrufer], media_encryption: "disabled" } };
+}
+
+// N1 (Spec E20): dieselbe Wegwerf-Nummer, aber am Agenten zugewiesen - sonst entsteht kein
+// Gespraech und keine Messung von M7/M8.
+export function wegwerfKoerperAmAgenten({ setup, agentId }) {
+  return { ...wegwerfKoerper(setup), agent_id: agentId };
+}
+
+// N2: Produktionsform einer Absender-Registrierung (gemessene Trunk-Vorlage, Import statt
+// Nachbau), OHNE inbound_trunk_config, mit Wegwerf- statt Produktions-Zugangsdaten; Label
+// ueberschrieben (teardown prueft es gegen die Wegwerf-Ablage).
+export function wegwerfKoerperNurAusgehend({ setup, agentId, zugang }) {
+  return {
+    ...registrierungsKoerper({ e164: setup.el_nummer, numberId: setup.label, agentId, sipUser: zugang.username, sipPasswort: zugang.password }),
+    label: setup.label,
+  };
+}
+
+// --- Nur-Lese-Bruecke fuer B9-Helfer (nummern-registrierung.js), IEL-B11 (N2) ------------
+// Der B9-Helfer erwartet ein fetch-artiges Signal; diese Bruecke leitet NUR GET durch den
+// Transport (Stolperdraht/Trockenlauf bleiben wirksam) und wirft bei jedem anderen Verb.
+const METHODE_LESEN = "GET";
+
+export function elLeseFetchUeber(transport) {
+  return async (adresse, init = {}) => {
+    const methode = init.method ?? METHODE_LESEN;
+    if (methode !== METHODE_LESEN) throw new Error("elLeseFetchUeber ist nur lesend");
+    const { pathname, search } = new URL(adresse);
+    const antwort = await transport.senden({ anbieter: "eleven", methode, pfad: `${pathname}${search}` });
+    return { ok: antwort.ok, status: antwort.status, json: async () => antwort.json };
+  };
+}
 
 // --- Transport: echt -------------------------------------------------------------------
 
@@ -257,12 +308,15 @@ function musterAntwort(anfrage, kontext) {
   const { methode, pfad } = anfrage;
   const regeln = [
     [() => pfad.startsWith("/v2/texml/calls/"), () => ({ data: { sid: PLATZHALTER.sid } })],
+    [() => pfad.includes("/Calls?"), () => ({ calls: [{ sid: "<kind_call_sid>", parent_call_sid: PLATZHALTER.sid, to: "<sip_ziel>", sip_hangup_cause: "<sip_hangup_cause>" }] })],
     [() => pfad.endsWith("/active_calls"), () => ({ data: [MUSTER_BEIN] })],
     [() => methode === "POST" && pfad === "/v2/calls", () => ({ data: MUSTER_BEIN })],
     [() => pfad.includes("/Calls/") && methode === "GET", () => ({ status: "in-progress" })],
     [() => pfad.startsWith("/v2/calls/") && methode === "GET", () => ({ data: { is_alive: true } })],
+    [() => methode === "GET" && pfad === EL_NUMMERN_PFAD, () => [{ phone_number_id: "<phone_number_id>" }]],
     [() => pfad.startsWith(`${EL_NUMMERN_PFAD}/`) && methode === "GET", () => musterRegistrierung(kontext)],
     [() => methode === "POST" && pfad === EL_NUMMERN_PFAD, () => ({ phone_number_id: "<phone_number_id>" })],
+    [() => pfad.endsWith("/sip-messages"), () => ({ sip_messages: [{ direction: "in", raw_message: "INVITE <request_uri> SIP/2.0" }] })],
     [() => pfad.startsWith("/v1/convai/conversations?"), () => ({ conversations: [{ conversation_id: PLATZHALTER.gespraech }] })],
     [() => pfad.startsWith("/v1/convai/conversations/"), () => musterGespraech(kontext)],
     [() => pfad.startsWith("/v2/recordings?"), () => ({ data: [{ id: "<recording_id>", call_session_id: PLATZHALTER.session, download_urls: { mp3: "<download_url>" } }] })],
@@ -275,9 +329,10 @@ function musterAntwort(anfrage, kontext) {
 function musterRegistrierung(kontext) {
   return {
     phone_number: kontext.elKennung,
+    phone_number_id: "<phone_number_id>",
     label: kontext.label ?? "<label>",
-    assigned_agent: { agent_id: PLATZHALTER.agent },
-    inbound_trunk: { allowed_numbers: [], media_encryption: "disabled" },
+    assigned_agent: { agent_id: kontext.agentId || PLATZHALTER.agent },
+    ...(kontext.ohneInbound ? {} : { inbound_trunk: { allowed_numbers: [], media_encryption: "disabled" } }),
     outbound_trunk: { address: "<address>", transport: "<transport>" },
   };
 }

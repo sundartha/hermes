@@ -1,19 +1,29 @@
 // IEL-Messwerkzeug: misst die Uebergabe Telnyx -> ElevenLabs-SIP (IE1, F-A..F-F) mit
 // Maschine-zu-Maschine-Anrufen. Kein Mensch in der Leitung, kein Tunnel, keine Nummer.
 //
+// IEL-B11: zusaetzlich die Nach-Deploy-Maschinenanrufe (N1/N2, Spec E20) in einer EIGENEN
+// Zaehler-Gruppe ("nachdeploy", hoechstens 3 Anrufe) - die M1-Gruppe ("m1", 5 Anrufe) bleibt
+// unberuehrt und byte-identisch. N3 (Live-Umleitung an die gepinnte DID) wird NICHT gebaut:
+// sie braucht Prod-DB/`.env`-Ziele, die dieser Worktree nicht hat, und wuerde einen echten
+// Produktions-Inbound (Buchung, Inbox, Benachrichtigung) ausloesen. Die Live-Umleitung bleibt
+// eine Messung am ersten realen Fehlerfall (Spec 8).
+//
 // Aufruf:  node scripts/iel-mess.mjs <fall|status|setup|teardown> [--dry-run]
+//          node scripts/iel-mess.mjs setup --nachdeploy|--nur-ausgehend [--dry-run]
 // Faelle und ihre Parameter: scripts/iel-mess.cases.json (Aenderungen NUR dort).
 //
 // Sicherungen IM Skript, nicht per Konvention:
-//   - Zaehler tasks/iel-m1-zaehler.json: nach 5 ausgeloesten Anrufen wird jeder weitere
-//     verweigert (Exit 2). Gezaehlt wird VOR dem Senden. Fehlt oder zerfaellt die Datei,
-//     wird verweigert - Loeschen setzt nichts zurueck.
-//   - Sperrdatei tasks/iel-m1-zaehler.lock: nie zwei Mess-Anrufe gleichzeitig.
+//   - Zaehler je Fall-Gruppe (Pflichtfeld "zaehler" im Fall): "m1" -> tasks/iel-m1-zaehler.json,
+//     max 5. "nachdeploy" -> tasks/iel-nachdeploy-zaehler.json, max 3, eigene Sperr- und
+//     Ergebnisdatei. Gezaehlt wird VOR dem Senden. Fehlt oder zerfaellt die Zaehlerdatei einer
+//     Gruppe, wird verweigert - Loeschen setzt nichts zurueck.
+//   - Sperrdatei je Gruppe: nie zwei Mess-Anrufe derselben Gruppe gleichzeitig.
 //   - Je Anruf <= 60 s: Anbieter-Grenzen (TeXML TimeLimit + <Dial timeLimit>, Call-Control
 //     time_limit_secs) UND aktives Auflegen per API (Wachhund, Nachfassen, unabhaengiger
-//     Notaus-Timer, SIGINT/SIGTERM).
-//   - Nur SIP-Ziele: ElevenLabs-SIP mit Spike2- oder fiktiver 555-01xx-Kennung, oder die
-//     nie antwortende TEST-NET-Adresse. Keine Telefonnummer wird je gewaehlt.
+//     Notaus-Timer, SIGINT/SIGTERM). Diese Stufen gelten fuer BEIDE Gruppen gleich.
+//   - Nur SIP-Ziele: M1 ElevenLabs-SIP mit Spike2- oder fiktiver 555-01xx-Kennung, oder die
+//     nie antwortende TEST-NET-Adresse. Nachdeploy NUR ElevenLabs-SIP mit fiktiver 555-01xx-
+//     Kennung (kein Spike2, kein TEST-NET). Keine Telefonnummer wird je gewaehlt.
 //   - --dry-run sendet nichts: fetch ist per Stolperdraht gesperrt und wird gezaehlt;
 //     Zaehler, Sperre und Ergebnisdatei werden nicht geschrieben.
 //   - Schluessel nur aus .env (src/config.js), nie in einer Ausgabe.
@@ -24,11 +34,19 @@ import { randomBytes } from "node:crypto";
 import { appendFile, access, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 
 import { config } from "../src/config.js";
+import { holeRegistrierungen, inventarSchnappschuss } from "../src/elevenlabs/nummern-registrierung.js";
 import * as anbieter from "./iel-mess-anbieter.mjs";
-import { sammleCallEvents, sammleDetailRecords, sammleElGespraeche, werteMitschnittAus } from "./iel-mess-belege.mjs";
+import {
+  sammleCallEvents,
+  sammleDetailRecords,
+  sammleElGespraeche,
+  sammleNachdeployBelege,
+  werteMitschnittAus,
+} from "./iel-mess-belege.mjs";
 
 // --- Owner-Grenzen -----------------------------------------------------------------------
 const MAX_ANRUFE = 5;
+const MAX_NACHDEPLOY_ANRUFE = 3;
 const HART_MAX_S = 60;
 // Auflege-Stufen relativ zum Laufstart. Jede Anfrage bricht nach 5 s ab (Transport), eine
 // Stufe kann sich also um hoechstens Abfrage + Takt verspaeten und bleibt unter 60 s.
@@ -65,11 +83,14 @@ const TEXML_ENDSTATUS = new Set(["completed", "canceled", "failed", "busy", "no-
 
 const PFADE = Object.freeze({
   faelle: new URL("./iel-mess.cases.json", import.meta.url),
-  zaehler: new URL("../tasks/iel-m1-zaehler.json", import.meta.url),
-  sperre: new URL("../tasks/iel-m1-zaehler.lock", import.meta.url),
-  ergebnis: new URL("../tasks/iel-m1-messung.jsonl", import.meta.url),
   wegwerf: new URL("../tasks/iel-m1-wegwerf.json", import.meta.url),
 });
+
+const TASKS = new URL("../tasks/", import.meta.url);
+
+function tasksDatei(name) {
+  return Object.freeze({ url: new URL(name, TASKS), anzeige: `tasks/${name}` });
+}
 
 const EXIT = Object.freeze({ bedienfehler: 1, verweigert: 2, laufzeitfehler: 3, trockenlaufVerletzt: 4 });
 
@@ -103,65 +124,138 @@ async function schreibeAtomar(pfad, daten) {
   await rename(zwischen, pfad);
 }
 
-async function leseZaehler() {
-  const zaehler = await leseJson(PFADE.zaehler, "Zaehlerdatei tasks/iel-m1-zaehler.json fehlt oder ist unlesbar - verweigert");
+async function leseZaehler(gruppe) {
+  const zaehler = await leseJson(gruppe.zaehler.url, `Zaehlerdatei ${gruppe.zaehler.anzeige} fehlt oder ist unlesbar - verweigert`);
   if (!Number.isInteger(zaehler.ausgeloest) || zaehler.ausgeloest < 0 || !Array.isArray(zaehler.anrufe)) {
     throw new Verweigerung("Zaehlerdatei hat keine gueltige Form - verweigert");
   }
-  if (zaehler.ausgeloest >= MAX_ANRUFE) {
-    throw new Verweigerung(`Anruf-Budget erschoepft: ${zaehler.ausgeloest}/${MAX_ANRUFE} ausgeloest`);
+  if (zaehler.ausgeloest >= gruppe.max) {
+    throw new Verweigerung(`Anruf-Budget erschoepft: ${zaehler.ausgeloest}/${gruppe.max} ausgeloest`);
   }
   return zaehler;
 }
 
 // Echt: schreibt Zaehler, Sperre, Ergebnis. Trocken: liest nur und zeigt, was geschaehe.
-function echteBuchhaltung() {
+function echteBuchhaltung(gruppe) {
   return {
     async mitSperre(handlung) {
-      const sperre = await open(PFADE.sperre, "wx").catch(() => {
-        throw new Verweigerung("Sperrdatei tasks/iel-m1-zaehler.lock existiert (laufender oder abgestuerzter Lauf) - verweigert");
+      const sperre = await open(gruppe.sperre.url, "wx").catch(() => {
+        throw new Verweigerung(`Sperrdatei ${gruppe.sperre.anzeige} existiert (laufender oder abgestuerzter Lauf) - verweigert`);
       });
       try {
         return await handlung();
       } finally {
         await sperre.close();
-        await unlink(PFADE.sperre);
+        await unlink(gruppe.sperre.url);
       }
     },
     async reserviere({ name, laufId }) {
-      const zaehler = await leseZaehler();
+      const zaehler = await leseZaehler(gruppe);
       zaehler.ausgeloest += 1;
       zaehler.anrufe.push({ nr: zaehler.ausgeloest, fall: name, lauf_id: laufId, zeitpunkt: new Date().toISOString() });
-      await schreibeAtomar(PFADE.zaehler, zaehler);
+      await schreibeAtomar(gruppe.zaehler.url, zaehler);
       return zaehler.ausgeloest;
     },
-    schreibe: (zeile) => appendFile(PFADE.ergebnis, `${JSON.stringify(zeile)}\n`),
-    merkeWegwerf: (zustand) => schreibeAtomar(PFADE.wegwerf, zustand),
-    vergissWegwerf: () => unlink(PFADE.wegwerf),
+    schreibe: (zeile) => appendFile(gruppe.ergebnis.url, `${JSON.stringify(zeile)}\n`),
   };
 }
 
-function trockeneBuchhaltung() {
+function trockeneBuchhaltung(gruppe) {
   return {
     async mitSperre(handlung) {
-      if (await existiert(PFADE.sperre)) throw new Verweigerung("Sperrdatei existiert - ein echter Lauf wuerde verweigert");
+      if (await existiert(gruppe.sperre.url)) throw new Verweigerung(`Sperrdatei ${gruppe.sperre.anzeige} existiert - ein echter Lauf wuerde verweigert`);
       return handlung();
     },
     async reserviere() {
-      const zaehler = await leseZaehler();
-      console.log(`[TROCKEN] Zaehler ${zaehler.ausgeloest}/${MAX_ANRUFE} -> echt waere es ${zaehler.ausgeloest + 1}/${MAX_ANRUFE} (nicht geschrieben)`);
+      const zaehler = await leseZaehler(gruppe);
+      console.log(`[TROCKEN] Zaehler ${zaehler.ausgeloest}/${gruppe.max} -> echt waere es ${zaehler.ausgeloest + 1}/${gruppe.max} (nicht geschrieben)`);
       return zaehler.ausgeloest + 1;
     },
     async schreibe(zeile) {
       console.log(`[TROCKEN] Ergebniszeile mit Musterwerten (nicht geschrieben):\n${JSON.stringify(zeile)}`);
     },
-    async merkeWegwerf(zustand) {
-      console.log(`[TROCKEN] wuerde tasks/iel-m1-wegwerf.json schreiben: ${JSON.stringify(zustand)}`);
-    },
-    async vergissWegwerf() {
-      console.log("[TROCKEN] wuerde tasks/iel-m1-wegwerf.json loeschen");
+  };
+}
+
+function buchhaltungFuer(gruppe) {
+  return istTrockenlauf ? trockeneBuchhaltung(gruppe) : echteBuchhaltung(gruppe);
+}
+
+// Wegwerf-Registrierung (setup/teardown): EIN gemeinsamer Zustand fuer alle Setup-Varianten
+// (M1 ohne Agent, Nachdeploy am Agenten, Nachdeploy nur-ausgehend) - es kann immer nur eine
+// geben, teardown baut sie wieder ab, bevor die naechste angelegt wird.
+function echteWegwerfAblage() {
+  return {
+    merke: (zustand) => schreibeAtomar(PFADE.wegwerf, zustand),
+    vergiss: () => unlink(PFADE.wegwerf),
+    async idFuerFall() {
+      const zustand = await leseJson(PFADE.wegwerf, "Fall braucht die Wegwerf-Registrierung: erst 'setup' (tasks/iel-m1-wegwerf.json fehlt)");
+      return zustand.phone_number_id;
     },
   };
+}
+
+function trockeneWegwerfAblage() {
+  return {
+    async merke(zustand) {
+      console.log(`[TROCKEN] wuerde tasks/iel-m1-wegwerf.json schreiben: ${JSON.stringify(zustand)}`);
+    },
+    async vergiss() {
+      console.log("[TROCKEN] wuerde tasks/iel-m1-wegwerf.json loeschen");
+    },
+    // Ohne Wegwerf-Datei verweigert ein echter Lauf, bevor die Zaehlerzeile erscheint (V5):
+    // der Trockenlauf zeigt trotzdem die Musterkennung, statt selbst zu verweigern.
+    async idFuerFall() {
+      if (await existiert(PFADE.wegwerf)) {
+        const zustand = await leseJson(PFADE.wegwerf, "tasks/iel-m1-wegwerf.json unlesbar");
+        return zustand.phone_number_id;
+      }
+      console.log("[TROCKEN] tasks/iel-m1-wegwerf.json fehlt - echt waere erst 'setup' noetig; Musterkennung <phone_number_id>");
+      return "<phone_number_id>";
+    },
+  };
+}
+
+function wegwerfAblageFuer() {
+  return istTrockenlauf ? trockeneWegwerfAblage() : echteWegwerfAblage();
+}
+
+// --- Zaehler-Gruppen -----------------------------------------------------------------------
+
+async function keineZusatzbelege() {
+  return {};
+}
+
+const ZAEHLER_GRUPPEN = Object.freeze({
+  m1: Object.freeze({
+    max: MAX_ANRUFE,
+    zaehler: tasksDatei("iel-m1-zaehler.json"),
+    sperre: tasksDatei("iel-m1-zaehler.lock"),
+    ergebnis: tasksDatei("iel-m1-messung.jsonl"),
+    artPraefix: "iel-m1",
+    pruefeZiel: (sipZiel) => pruefeSipZiel(sipZiel),
+    sammleZusatzbelege: keineZusatzbelege,
+  }),
+  nachdeploy: Object.freeze({
+    max: MAX_NACHDEPLOY_ANRUFE,
+    zaehler: tasksDatei("iel-nachdeploy-zaehler.json"),
+    sperre: tasksDatei("iel-nachdeploy-zaehler.lock"),
+    ergebnis: tasksDatei("iel-nachdeploy-messung.jsonl"),
+    artPraefix: "iel-nachdeploy",
+    pruefeZiel: (sipZiel) => pruefeFiktivesElZiel(sipZiel),
+    sammleZusatzbelege: sammleNachdeployBelege,
+  }),
+});
+
+function belegArt(gruppe, endung) {
+  return `${gruppe.artPraefix}-${endung}`;
+}
+
+function gruppeFuer(name, fall) {
+  if (!Object.hasOwn(ZAEHLER_GRUPPEN, fall.zaehler ?? "")) {
+    throw new Verweigerung(`Fall ${name} nennt keine gueltige Zaehler-Gruppe (zaehler: m1|nachdeploy) - verweigert`);
+  }
+  return ZAEHLER_GRUPPEN[fall.zaehler];
 }
 
 // --- Pruefungen vor jedem Senden -------------------------------------------------------
@@ -174,6 +268,10 @@ function pruefeSchluessel() {
   };
   const fehlend = Object.keys(vorhanden).filter((name) => !vorhanden[name]);
   if (fehlend.length > 0) throw new Bedienfehler(`Fehlt in .env: ${fehlend.join(", ")}`);
+}
+
+function pruefeAgentKennung() {
+  if (!config.voice.elevenLabsOutbound.agentId) throw new Bedienfehler("Fehlt in .env: ELEVENLABS_AGENT_ID");
 }
 
 function sipZielTeile(sipZiel) {
@@ -191,6 +289,17 @@ function pruefeSipZiel(sipZiel) {
   if (teile.host === STUMMER_SIP_HOST) return teile;
   if (teile.host !== EL_SIP_HOST) throw new Verweigerung(`SIP-Host nicht erlaubt: ${teile.host}`);
   if (!istErlaubteElKennung(teile.kennung)) throw new Verweigerung("SIP-Kennung ist weder Spike2 noch fiktiv (555-01xx) - verweigert");
+  return teile;
+}
+
+// IEL-B11 (Nachdeploy): enger als pruefeSipZiel - nur ElevenLabs-SIP mit fiktiver Kennung.
+// Weder Spike2 noch die stumme TEST-NET-Adresse sind hier erlaubte Nachdeploy-Ziele (V4).
+function pruefeFiktivesElZiel(sipZiel) {
+  const teile = sipZielTeile(sipZiel);
+  if (!teile) throw new Verweigerung(`sip_ziel hat keine SIP-URI-Form: ${anbieter.maskiereNummern(sipZiel)}`);
+  if (teile.host !== EL_SIP_HOST || !FIKTIVE_KENNUNG.test(teile.kennung)) {
+    throw new Verweigerung("Nach-Deploy-Ziel muss ElevenLabs-SIP mit fiktiver 555-01xx-Kennung sein - verweigert");
+  }
   return teile;
 }
 
@@ -215,24 +324,53 @@ function pruefeHeaderNamen(header) {
   if (falscheHeader.length > 0) throw new Verweigerung(`Header-Namen nicht erlaubt: ${falscheHeader.join(", ")}`);
 }
 
-function pruefeAnrufFall({ fall, header }) {
-  pruefeSipZiel(fall.sip_ziel);
+// Ein Fall, der eine zugewiesene Registrierung voraussetzt, braucht auch den Agenten in
+// .env - sonst waere der spaetere Vergleich blind (pruefeRegistrierungsErwartung).
+function pruefeErwartungsKonfiguration(fall) {
+  if (fall.registrierung_erwartet?.agent) pruefeAgentKennung();
+}
+
+function pruefeAnrufFall(kontext) {
+  const { fall, header, gruppe } = kontext;
+  gruppe.pruefeZiel(fall.sip_ziel);
   pruefeAnruferKennung(fall.anrufer_kennung);
   pruefeDialTimeout(fall.dial_timeout_s);
   pruefeElternAuflegenNachS(fall.eltern_auflegen_nach_s);
   pruefeHeaderNamen(header);
+  pruefeErwartungsKonfiguration(fall);
 }
 
-async function loeseRegistrierungsId(id) {
+async function loeseRegistrierungsId(kontext, id) {
   if (id !== "wegwerf") return id ?? null;
-  const zustand = await leseJson(PFADE.wegwerf, "Fall braucht die Wegwerf-Registrierung: erst 'setup' (tasks/iel-m1-wegwerf.json fehlt)");
-  return zustand.phone_number_id;
+  return kontext.wegwerf.idFuerFall();
+}
+
+// Die EINE Projektion einer Registrierung, die Faelle und Setup teilen (G5): erwarteter
+// Agent (Positiv-Kontrolle) und ob/wie Inbound konfiguriert ist.
+function registrierungsSicht({ id, daten, anruferKennung }) {
+  return {
+    id,
+    agentId: daten.assigned_agent?.agent_id ?? null,
+    eingehend_konfiguriert: Boolean(daten.inbound_trunk),
+    anrufer_in_allowed_numbers: (daten.inbound_trunk?.allowed_numbers ?? []).includes(anruferKennung),
+  };
+}
+
+function pruefeRegistrierungsErwartung(sicht, erwartet) {
+  if (!erwartet) return;
+  if (!sicht) throw new Verweigerung("Fall erwartet eine Registrierung, nennt aber keine el_registrierung_id - verweigert");
+  if (erwartet.agent && sicht.agentId !== config.voice.elevenLabsOutbound.agentId) {
+    throw new Verweigerung("Registrierung ist nicht ELEVENLABS_AGENT_ID zugewiesen - erst 'setup --nachdeploy' bzw. 'setup --nur-ausgehend' - verweigert");
+  }
+  if (sicht.eingehend_konfiguriert !== erwartet.inbound_trunk) {
+    throw new Verweigerung(`Registrierung ${sicht.eingehend_konfiguriert ? "mit" : "ohne"} inbound_trunk passt nicht zum Messaufbau - verweigert`);
+  }
 }
 
 // Liest die Registrierung VOR dem Anruf: erwarteter Agent (Positiv-Kontrolle fuer F-A) und
 // Abgleich, dass das SIP-Ziel wirklich diese Registrierung meint - sonst waere der Anruf blind.
 async function leseRegistrierung(kontext) {
-  const id = await loeseRegistrierungsId(kontext.fall.el_registrierung_id);
+  const id = await loeseRegistrierungsId(kontext, kontext.fall.el_registrierung_id);
   if (!id) return null;
   const antwort = await kontext.transport.senden(anbieter.elRegistrierungAnfrage(id));
   if (!antwort.ok) throw new Verweigerung(`Registrierung nicht lesbar (HTTP ${antwort.status})`);
@@ -241,12 +379,30 @@ async function leseRegistrierung(kontext) {
   if (daten.phone_number !== kennung || !istErlaubteElKennung(daten.phone_number)) {
     throw new Verweigerung("Registrierung und SIP-Ziel meinen verschiedene Kennungen - verweigert");
   }
-  return {
-    id,
-    agentId: daten.assigned_agent?.agent_id ?? null,
-    eingehend_konfiguriert: Boolean(daten.inbound_trunk),
-    anrufer_in_allowed_numbers: (daten.inbound_trunk?.allowed_numbers ?? []).includes(kontext.fall.anrufer_kennung),
-  };
+  const sicht = registrierungsSicht({ id, daten, anruferKennung: kontext.fall.anrufer_kennung });
+  pruefeRegistrierungsErwartung(sicht, kontext.fall.registrierung_erwartet);
+  return sicht;
+}
+
+async function pruefeRegistrierungVorAnruf(kontext) {
+  const registrierung = await leseRegistrierung(kontext);
+  Object.assign(kontext, { registrierung });
+  Object.assign(kontext.beleg, { registrierung });
+}
+
+// IEL-B11 (N2): Trunk-Inventar VOR dem Anruf, nur lesend, ueber den B9-Helfer - laeuft damit
+// ueber denselben Transport und ist trockenlauffest. Nur fuer Faelle mit n2_protokoll.
+async function merkeInventarVorAnruf(kontext) {
+  if (!kontext.fall.n2_protokoll) return;
+  try {
+    const registrierungen = await holeRegistrierungen({
+      fetchImpl: anbieter.elLeseFetchUeber(kontext.transport),
+      account: config.voice.elevenLabsOutbound,
+    });
+    Object.assign(kontext.beleg, { trunk_inventar: registrierungen.map(inventarSchnappschuss) });
+  } catch (fehler) {
+    throw new Verweigerung(`Trunk-Inventar vor dem Anruf nicht lesbar (HTTP ${fehler.providerStatus ?? "unbekannt"}) - kein Anruf`);
+  }
 }
 
 // --- Kontext ---------------------------------------------------------------------------
@@ -259,10 +415,10 @@ function maskiert(text) {
   return text ? anbieter.maskiereNummern(text) : null;
 }
 
-function neuerBeleg({ name, fall, laufId, header }) {
+function neuerBeleg({ name, fall, laufId, header, gruppe }) {
   const ziel = sipZielTeile(fall.sip_ziel);
   return {
-    art: "iel-m1-anruf",
+    art: belegArt(gruppe, "anruf"),
     fall: name,
     deckt: fall.deckt ?? [],
     lauf_id: laufId,
@@ -290,24 +446,45 @@ function neuerBeleg({ name, fall, laufId, header }) {
   };
 }
 
-function baueKontext({ name, fall, konfiguration }) {
+// Fallback-Kette fuer die Test-Kennung des Trockenlauf-Musters: SIP-Ziel > el_kennung >
+// das Setup-Feld der jeweils passenden Sektion (M1 "setup" oder "setup_nachdeploy").
+function elKennungFuer({ fall, konfiguration, setupVariante }) {
+  const setupSektion = setupVariante ? konfiguration.setup_nachdeploy : konfiguration.setup;
+  return sipZielTeile(fall.sip_ziel)?.kennung ?? fall.el_kennung ?? setupSektion?.el_nummer;
+}
+
+function trockenMusterFuer({ fall, konfiguration, setupVariante, laufId }) {
+  const erwartung = fall.registrierung_erwartet ?? setupVariante?.erwartet;
+  return {
+    elKennung: elKennungFuer({ fall, konfiguration, setupVariante }),
+    laufId,
+    registrierungId: fall.el_registrierung_id,
+    label: konfiguration.setup?.label,
+    agentId: config.voice.elevenLabsOutbound.agentId,
+    ohneInbound: erwartung?.inbound_trunk === false,
+  };
+}
+
+function baueKontext({ name, fall, konfiguration, gruppe, setupVariante }) {
   const laufId = `iel-${Date.now().toString(LAUF_ZEIT_BASIS)}-${randomBytes(LAUF_ZUFALL_BYTES).toString("hex")}`;
   const header = mitLaufId(konfiguration.gemeinsam.probe_header, laufId);
   const uhr = istTrockenlauf ? anbieter.trockeneUhr() : anbieter.echteUhr();
-  const elKennung = sipZielTeile(fall.sip_ziel)?.kennung ?? fall.el_kennung ?? konfiguration.setup?.el_nummer;
-  const muster = { elKennung, laufId, registrierungId: fall.el_registrierung_id, label: konfiguration.setup?.label };
+  const muster = trockenMusterFuer({ fall, konfiguration, setupVariante, laufId });
   return {
     name,
     fall,
     gemeinsam: konfiguration.gemeinsam,
     konfiguration,
+    gruppe,
+    setupVariante,
     laufId,
     header,
     uhr,
     transport: istTrockenlauf ? anbieter.trockenerTransport({ uhr, kontext: muster }) : anbieter.echterTransport(),
-    buchhaltung: istTrockenlauf ? trockeneBuchhaltung() : echteBuchhaltung(),
+    buchhaltung: gruppe ? buchhaltungFuer(gruppe) : null,
+    wegwerf: wegwerfAblageFuer(),
     griffe: {},
-    beleg: neuerBeleg({ name, fall, laufId, header }),
+    beleg: gruppe ? neuerBeleg({ name, fall, laufId, header, gruppe }) : null,
   };
 }
 
@@ -511,7 +688,7 @@ async function entferneDigestZugang(kontext, { id, vorher, vorherInbound }) {
   const outboundGleich = JSON.stringify(vorher.outbound_trunk) === JSON.stringify(nachher.outbound_trunk);
   Object.assign(kontext.beleg.digest, { entfernen_http: antwort.status, nachher: digestSicht(nachher), inbound_wie_vorher: inboundGleich, outbound_wie_vorher: outboundGleich });
   if (!istTrockenlauf && !(inboundGleich && outboundGleich)) {
-    console.error("ACHTUNG: Spike2-Registrierung NICHT im Ausgangszustand - von Hand pruefen (Ergebnisdatei, Feld digest)");
+    console.error("ACHTUNG: Registrierung NICHT im Ausgangszustand - von Hand pruefen (Ergebnisdatei, Feld digest)");
     process.exitCode = EXIT.laufzeitfehler;
   }
 }
@@ -531,14 +708,29 @@ async function mitDigestZugang(kontext, handlung) {
   }
 }
 
+async function sammleBelegeNachAnruf(kontext) {
+  const { hauptbein, ccId, ccLeg, ccSession } = kontext.griffe;
+  const kennungen = {
+    hauptbein: hauptbein ?? null,
+    hauptbein_quelle: kontext.griffe.hauptbeinQuelle ?? null,
+    call_control_id: ccId ?? null,
+    call_leg_id: ccLeg ?? null,
+    call_session_id: ccSession ?? null,
+  };
+  Object.assign(kontext.beleg, { kennungen });
+  await kontext.uhr.warte(EL_NACHLAUF_MS);
+  Object.assign(kontext.beleg, { elevenlabs: await sammleElGespraeche(kontext) });
+  Object.assign(kontext.beleg, { telnyx_ereignisse: await sammleCallEvents(kontext) });
+  if (kontext.fall.mitschnitt) Object.assign(kontext.beleg, { mitschnitt: await werteMitschnittAus(kontext) });
+}
+
 async function messeAnruf(kontext) {
   pruefeAnrufFall(kontext);
   pruefeSchluessel();
   // Budget zuerst: ist es erschoepft, geht nicht einmal die lesende Vorab-Anfrage hinaus.
-  await leseZaehler();
-  const registrierung = await leseRegistrierung(kontext);
-  Object.assign(kontext, { registrierung });
-  Object.assign(kontext.beleg, { registrierung });
+  await leseZaehler(kontext.gruppe);
+  await pruefeRegistrierungVorAnruf(kontext);
+  await merkeInventarVorAnruf(kontext);
   await kontext.buchhaltung.mitSperre(async () => {
     const anruf = async () => {
       const nr = await kontext.buchhaltung.reserviere(kontext);
@@ -547,23 +739,18 @@ async function messeAnruf(kontext) {
     };
     await (kontext.fall.digest ? mitDigestZugang(kontext, anruf) : anruf());
   });
-  const { hauptbein, ccId, ccLeg, ccSession } = kontext.griffe;
-  const kennungen = { hauptbein: hauptbein ?? null, hauptbein_quelle: kontext.griffe.hauptbeinQuelle ?? null, call_control_id: ccId ?? null, call_leg_id: ccLeg ?? null, call_session_id: ccSession ?? null };
-  Object.assign(kontext.beleg, { kennungen });
-  await kontext.uhr.warte(EL_NACHLAUF_MS);
-  Object.assign(kontext.beleg, { elevenlabs: await sammleElGespraeche(kontext) });
-  Object.assign(kontext.beleg, { telnyx_ereignisse: await sammleCallEvents(kontext) });
-  if (kontext.fall.mitschnitt) Object.assign(kontext.beleg, { mitschnitt: await werteMitschnittAus(kontext) });
+  await sammleBelegeNachAnruf(kontext);
+  Object.assign(kontext.beleg, await kontext.gruppe.sammleZusatzbelege(kontext));
   await kontext.buchhaltung.schreibe(kontext.beleg);
 }
 
 // --- Faelle ohne Anruf -----------------------------------------------------------------
 
-async function leseProtokollierteKennungen() {
-  if (!(await existiert(PFADE.ergebnis))) return [];
-  const inhalt = await readFile(PFADE.ergebnis, "utf8");
+async function leseProtokollierteKennungen(gruppe) {
+  if (!(await existiert(gruppe.ergebnis.url))) return [];
+  const inhalt = await readFile(gruppe.ergebnis.url, "utf8");
   const zeilen = inhalt.split("\n").filter(Boolean).map((zeile) => JSON.parse(zeile));
-  const anrufe = zeilen.filter((zeile) => zeile.art === "iel-m1-anruf" && !zeile.trockenlauf);
+  const anrufe = zeilen.filter((zeile) => zeile.art === belegArt(gruppe, "anruf") && !zeile.trockenlauf);
   return anrufe.flatMap((anruf) => [
     ...Object.values(anruf.kennungen ?? {}),
     ...(anruf.elevenlabs?.gespraeche ?? []).map((gespraech) => gespraech.conversation_id),
@@ -572,10 +759,16 @@ async function leseProtokollierteKennungen() {
 
 async function messeDetailRecords(kontext) {
   pruefeSchluessel();
-  const kennungen = await leseProtokollierteKennungen();
+  const kennungen = await leseProtokollierteKennungen(kontext.gruppe);
   const typen = kontext.gemeinsam.detail_record_typen;
   const ergebnis = await sammleDetailRecords({ transport: kontext.transport, typen, kennungen });
-  await kontext.buchhaltung.schreibe({ art: "iel-m1-detail-records", zeitpunkt: new Date().toISOString(), trockenlauf: istTrockenlauf, kennungen: kennungen.length, typen: ergebnis });
+  await kontext.buchhaltung.schreibe({
+    art: belegArt(kontext.gruppe, "detail-records"),
+    zeitpunkt: new Date().toISOString(),
+    trockenlauf: istTrockenlauf,
+    kennungen: kennungen.length,
+    typen: ergebnis,
+  });
 }
 
 const INBOUND_FELDER = Object.freeze(["allowed_addresses", "allowed_numbers", "media_encryption", "remote_domains", "attributes_to_headers"]);
@@ -603,7 +796,7 @@ async function leseRegistrierungRoh(kontext, id) {
 async function messeRegistrierungsVergleich(kontext) {
   pruefeSchluessel();
   const { transport, fall } = kontext;
-  const id = await loeseRegistrierungsId(fall.el_registrierung_id);
+  const id = await loeseRegistrierungsId(kontext, fall.el_registrierung_id);
   const vorher = await leseRegistrierungRoh(kontext, id);
   if (vorher.phone_number !== fall.el_kennung) throw new Verweigerung("Registrierung traegt nicht die erwartete el_kennung - kein PATCH");
   const vorherInbound = alsInboundKonfiguration(vorher.inbound_trunk);
@@ -611,7 +804,7 @@ async function messeRegistrierungsVergleich(kontext) {
   const nachher = await leseRegistrierungRoh(kontext, id);
   const zurueck = fall.inbound_patch ? await transport.senden(anbieter.elRegistrierungPatch(id, { inbound_trunk_config: vorherInbound })) : null;
   await kontext.buchhaltung.schreibe({
-    art: "iel-m1-registrierung",
+    art: belegArt(kontext.gruppe, "registrierung"),
     zeitpunkt: new Date().toISOString(),
     trockenlauf: istTrockenlauf,
     registrierung: id,
@@ -624,15 +817,51 @@ async function messeRegistrierungsVergleich(kontext) {
 
 // --- Wegwerf-Registrierung bei ElevenLabs (setup/teardown) -----------------------------
 
+const SETUP_VARIANTEN = Object.freeze({
+  "--nachdeploy": Object.freeze({ baueKoerper: anbieter.wegwerfKoerperAmAgenten, erwartet: Object.freeze({ agent: true, inbound_trunk: true }) }),
+  "--nur-ausgehend": Object.freeze({ baueKoerper: anbieter.wegwerfKoerperNurAusgehend, erwartet: Object.freeze({ agent: true, inbound_trunk: false }) }),
+});
+
+// Gemeinsame Anlage-Naht fuer M1 ("setup") und Nachdeploy ("setup --variante"): existiert-
+// Pruefung, fiktiv-Pruefung, POST, Wegwerf-Zustand merken. Liefert die phone_number_id.
+async function legeRegistrierungAn(kontext, { abschnitt, koerperFuer }) {
+  if (await existiert(PFADE.wegwerf)) throw new Verweigerung("tasks/iel-m1-wegwerf.json existiert - erst 'teardown'");
+  const setup = kontext.konfiguration[abschnitt];
+  if (!FIKTIVE_KENNUNG.test(setup.el_nummer)) throw new Verweigerung(`${abschnitt}.el_nummer muss eine fiktive 555-01xx-Kennung sein`);
+  const antwort = await kontext.transport.senden(anbieter.elRegistrierungAnlegen(koerperFuer(setup)));
+  if (!antwort.ok) throw new Error(`Anlegen fehlgeschlagen (HTTP ${antwort.status})`);
+  const id = antwort.json?.phone_number_id;
+  await kontext.wegwerf.merke({ phone_number_id: id, label: setup.label, angelegt: new Date().toISOString() });
+  return id;
+}
+
 async function legeWegwerfAn(kontext) {
   pruefeSchluessel();
-  if (await existiert(PFADE.wegwerf)) throw new Verweigerung("tasks/iel-m1-wegwerf.json existiert - erst 'teardown'");
-  const { el_nummer: nummer, label, anrufer_kennung: anrufer } = kontext.konfiguration.setup;
-  if (!FIKTIVE_KENNUNG.test(nummer)) throw new Verweigerung("setup.el_nummer muss eine fiktive 555-01xx-Kennung sein");
-  const koerper = { phone_number: nummer, label, provider: "sip_trunk", inbound_trunk_config: { allowed_numbers: [anrufer], media_encryption: "disabled" } };
-  const antwort = await kontext.transport.senden(anbieter.elRegistrierungAnlegen(koerper));
-  if (!antwort.ok) throw new Error(`Anlegen fehlgeschlagen (HTTP ${antwort.status})`);
-  await kontext.buchhaltung.merkeWegwerf({ phone_number_id: antwort.json?.phone_number_id, label, angelegt: new Date().toISOString() });
+  await legeRegistrierungAn(kontext, { abschnitt: "setup", koerperFuer: anbieter.wegwerfKoerper });
+}
+
+async function belegeWegwerfOderRaeumeAb(kontext, id) {
+  try {
+    const daten = await leseRegistrierungRoh(kontext, id);
+    const sicht = registrierungsSicht({ id, daten, anruferKennung: kontext.konfiguration.setup_nachdeploy.anrufer_kennung });
+    pruefeRegistrierungsErwartung(sicht, kontext.setupVariante.erwartet);
+    console.log(`Wegwerf-Registrierung belegt: Agent ja, inbound_trunk ${sicht.eingehend_konfiguriert ? "ja" : "nein"}`);
+  } catch (fehler) {
+    await raeumeWegwerfAb(kontext).catch(() => console.error("ACHTUNG: Wegwerf-Registrierung nicht abgebaut - 'teardown' erneut ausfuehren"));
+    throw fehler;
+  }
+}
+
+async function legeNachdeployWegwerfAn(kontext) {
+  pruefeSchluessel();
+  pruefeAgentKennung();
+  const { setupVariante: variante, konfiguration } = kontext;
+  const id = await legeRegistrierungAn(kontext, {
+    abschnitt: "setup_nachdeploy",
+    koerperFuer: (setup) => variante.baueKoerper({ setup, agentId: config.voice.elevenLabsOutbound.agentId, zugang: wegwerfZugangsdaten() }),
+  });
+  Object.assign(kontext, { konfiguration });
+  await belegeWegwerfOderRaeumeAb(kontext, id);
 }
 
 async function raeumeWegwerfAb(kontext) {
@@ -644,21 +873,41 @@ async function raeumeWegwerfAb(kontext) {
   }
   const antwort = await kontext.transport.senden(anbieter.elRegistrierungLoeschen(zustand.phone_number_id));
   if (!antwort.ok) throw new Error(`Loeschen fehlgeschlagen (HTTP ${antwort.status})`);
-  await kontext.buchhaltung.vergissWegwerf();
+  await kontext.wegwerf.vergiss();
 }
 
 // --- Status (offline) ------------------------------------------------------------------
 
 const STATUS_NAME_BREITE = 16;
 const STATUS_ART_BREITE = 24;
+const STATUS_ZAEHLER_BREITE = 10;
+
+async function leseZaehlerFuerStatus(zaehlerPfad) {
+  try {
+    const inhalt = await readFile(zaehlerPfad, "utf8");
+    return JSON.parse(inhalt);
+  } catch {
+    return null;
+  }
+}
+
+async function zeigeGruppenStatus(name, gruppe) {
+  const zaehler = await leseZaehlerFuerStatus(gruppe.zaehler.url);
+  const sperrePfad = gruppe.sperre.url;
+  const sperre = (await existiert(sperrePfad)) ? "GESETZT" : "frei";
+  console.log(`Zaehler ${name}: ${zaehler ? `${zaehler.ausgeloest}/${gruppe.max}` : "FEHLT (jeder Anruf wird verweigert)"}   Sperre: ${sperre}`);
+}
 
 async function zeigeStatus(kontext) {
-  const zaehler = await readFile(PFADE.zaehler, "utf8").then(JSON.parse).catch(() => null);
-  console.log(`Zaehler: ${zaehler ? `${zaehler.ausgeloest}/${MAX_ANRUFE}` : "FEHLT (jeder Anruf wird verweigert)"}`);
-  console.log(`Sperre: ${(await existiert(PFADE.sperre)) ? "GESETZT" : "frei"}   Wegwerf-Registrierung: ${(await existiert(PFADE.wegwerf)) ? "vermerkt" : "keine"}`);
+  for (const [name, gruppe] of Object.entries(ZAEHLER_GRUPPEN)) {
+    await zeigeGruppenStatus(name, gruppe);
+  }
+  console.log(`Wegwerf-Registrierung: ${(await existiert(PFADE.wegwerf)) ? "vermerkt" : "keine"}`);
   for (const [name, fall] of Object.entries(kontext.konfiguration.faelle)) {
     const anruf = Boolean(WEGE[fall.art]);
-    console.log(`  ${name.padEnd(STATUS_NAME_BREITE)} ${fall.art.padEnd(STATUS_ART_BREITE)} ${anruf ? "ANRUF" : "kein Anruf"}${fall.braucht_setup ? ", braucht setup" : ""}`);
+    console.log(
+      `  ${name.padEnd(STATUS_NAME_BREITE)} ${fall.art.padEnd(STATUS_ART_BREITE)} ${(fall.zaehler ?? "?").padEnd(STATUS_ZAEHLER_BREITE)} ${anruf ? "ANRUF" : "kein Anruf"}${fall.braucht_setup ? ", braucht setup" : ""}`,
+    );
   }
 }
 
@@ -675,17 +924,32 @@ const ARTEN = Object.freeze({
 // argv[0] = node, argv[1] = Skriptpfad - beide vor den eigentlichen Argumenten ueberspringen.
 const CLI_ARGV_OFFSET = 2;
 
+// Loest EINEN Aufruf-Eintrag auf: entweder "setup --variante" (Nachdeploy-Wegwerf-Anlage,
+// braucht genau eine bekannte Option) oder ein Unterbefehl/Fall ohne jede Option. Alles
+// andere (unbekannter Name, ueberzaehlige Optionen) ist kein gueltiger Eintrag.
+function loeseEinstieg(argumente, konfiguration) {
+  const [name, ...optionen] = argumente;
+  if (name === "setup" && optionen.length === 1 && Object.hasOwn(SETUP_VARIANTEN, optionen[0])) {
+    return { name, fall: {}, handlung: legeNachdeployWegwerfAn, gruppe: null, setupVariante: SETUP_VARIANTEN[optionen[0]] };
+  }
+  if (optionen.length > 0) return null;
+  const fall = konfiguration.faelle[name];
+  const handlung = UNTERBEFEHLE[name] ?? ARTEN[fall?.art];
+  if (!handlung) return null;
+  return { name, fall: fall ?? {}, handlung, gruppe: fall ? gruppeFuer(name, fall) : null, setupVariante: null };
+}
+
 async function hauptprogramm() {
   const argumente = process.argv.slice(CLI_ARGV_OFFSET).filter((argument) => argument !== TROCKENLAUF_SCHALTER);
   const konfiguration = JSON.parse(await readFile(PFADE.faelle, "utf8"));
-  const name = argumente[0];
-  const fall = konfiguration.faelle[name];
-  const handlung = UNTERBEFEHLE[name] ?? ARTEN[fall?.art];
-  if (argumente.length !== 1 || !handlung) {
+  const eintrag = loeseEinstieg(argumente, konfiguration);
+  if (!eintrag) {
     const erlaubt = [...Object.keys(UNTERBEFEHLE), ...Object.keys(konfiguration.faelle)].join(" | ");
-    throw new Bedienfehler(`Aufruf: node scripts/iel-mess.mjs <${erlaubt}> [${TROCKENLAUF_SCHALTER}]`);
+    throw new Bedienfehler(
+      `Aufruf: node scripts/iel-mess.mjs <${erlaubt}> [${TROCKENLAUF_SCHALTER}]  |  node scripts/iel-mess.mjs setup --nachdeploy|--nur-ausgehend [${TROCKENLAUF_SCHALTER}]`,
+    );
   }
-  await handlung(baueKontext({ name, fall: fall ?? {}, konfiguration }));
+  await eintrag.handlung(baueKontext({ ...eintrag, konfiguration }));
 }
 
 function exitCodeFuer(fehler) {

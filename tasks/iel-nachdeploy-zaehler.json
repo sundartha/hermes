@@ -1,0 +1,5 @@
+{
+  "_hinweis": "Persistenter Anrufzaehler der Nach-Deploy-Maschinenanrufe (IEL-B11, Spec E20) fuer scripts/iel-mess.mjs, Fall-Gruppe 'nachdeploy'. Owner-Freigabe 2026-09-14: hoechstens 3 Maschine-zu-Maschine-Anrufe (N1, N2, optional N3 - nicht gebaut), je <= 60 s. Das Skript erhoeht VOR jedem Senden und verweigert ab 3. tasks/iel-m1-zaehler.json wird von dieser Gruppe nie gelesen oder geschrieben. Nicht von Hand zuruecksetzen; fehlt die Datei, verweigert das Skript.",
+  "ausgeloest": 0,
+  "anrufe": []
+}
