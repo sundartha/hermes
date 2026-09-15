@@ -634,11 +634,31 @@
   color: #ffffff;
 }
 
-/* ≤480px: der Kopfbereich wrapt schon ab 768px (app-hermes.css); hier nur
-   der Umschalter selbst etwas kompakter, damit er neben Sign out passt. */
+/* ≤768px: ab hier ist der Markenblock 38px hoch (app-hermes.css) -- der
+   Anmelden-/Abmelden-Knopf stand mit 48px daneben ueberproportioniert da, oben
+   wie unten ueberstehend, und klebte am EN/DE-Umschalter (Owner-Befund
+   15.09.2026). Feste 38px Hoehe statt padding-block: so ist die Pille oben UND
+   unten exakt buendig mit Fluegel und Schriftzug. Schmaler wird sie ueber
+   kleinere Innenraender und 15px (die App-Schriftgroesse) statt 16px; der
+   groessere Flex-Abstand loest sie vom Umschalter. Rechtsbuendig bleibt sie
+   ueber das space-between des Headers -- daran wird nichts geaendert. */
+@media (max-width: 768px) {
+  .auth-island {
+    gap: 20px;
+  }
+  .auth-island .btn {
+    height: 38px;
+    padding-block: 0;
+    padding-inline: 16px;
+    font-size: 15px;
+  }
+}
+
+/* ≤480px: hier nur der Umschalter selbst etwas kompakter, damit er neben dem
+   Knopf passt -- der Abstand bleibt spuerbar groesser als die alten 12px. */
 @media (max-width: 480px) {
   .auth-island {
-    gap: 12px;
+    gap: 18px;
   }
   .lang-toggle {
     font-size: 12px;
