@@ -36,38 +36,55 @@ export const PM_TYPE_OUTCOME = Object.freeze({
   LOOKUP_FAILED: "lookup_failed", // Stripe unerreichbar/Fehler -> unveraendert (fail-closed)
 });
 
-// Ein Lauf. apply=false (Default) = reiner Trockenlauf: es wird gefragt und berichtet,
-// aber NICHTS geschrieben. Wirft NIE pro Mandant (ein unerreichbares Stripe darf den
-// Lauf nicht reissen). Liefert einen PII-freien Report: interne Mandanten-Kennung und
-// der Typ-Enum, NIE die Zahlungsmittel-Referenz und nie Kundendaten. Nebeneffekt
-// (Store-Schreibung) NUR bei apply -> N7.
+// Die EINE Lookup-und-Schreib-Regel fuer einen Mandanten (G5). Zwei Aufrufer teilen sie:
+// der Stapellauf unten (Ops, auf Kommando) und der Stunden-Sweep (provision-retry-sweep.js),
+// der einen unbekannten Typ selbst aufloest, BEVOR er ueber den Wiederanlauf entscheidet -
+// sonst haenge die Heilung des Bestands an einem Skript, das jemand ausfuehren muss.
+// Wirft NIE: ein unerreichbares Stripe darf weder den Stapellauf reissen noch den Sweep.
+// Liefert { outcome, paymentMethodType } - PII-frei (Enum + Typ-Enum, nie die Referenz).
+// Nebeneffekt (Store-Schreibung) NUR bei apply -> N7.
+export async function fillPaymentMethodType({ store, billing, tenant, apply = false, logger = console }) {
+  let paymentMethodType;
+  try {
+    paymentMethodType = await billing.retrievePaymentMethodType(tenant.stripePaymentMethodId);
+  } catch (err) {
+    // PII-/Key-frei (Regel 4): interne Kennung + Adapter-Meldung (die traegt Operation
+    // und Status, nie den Stripe-Schluessel und nie Kundendaten).
+    logger.warn(`[pm-type] Typ-Abfrage fehlgeschlagen tenant=${tenant.id}: ${err.message}`);
+    return { outcome: PM_TYPE_OUTCOME.LOOKUP_FAILED, paymentMethodType: null };
+  }
+  if (typeof paymentMethodType !== "string" || !paymentMethodType)
+    return { outcome: PM_TYPE_OUTCOME.UNKNOWN, paymentMethodType: null };
+  // NUR den Typ nachtragen: paymentMethodId unveraendert mitgeben (die Bindung selbst
+  // ist in Ordnung), customerId gar nicht (bindPaymentMethodOnTenant laesst ein
+  // fehlendes customerId unberuehrt) - hier wird EIN Feld korrigiert.
+  if (apply)
+    bindPaymentMethodOnTenant(store, tenant.id, {
+      paymentMethodId: tenant.stripePaymentMethodId,
+      paymentMethodType,
+    });
+  return { outcome: PM_TYPE_OUTCOME.FILLED, paymentMethodType };
+}
+
+// Der Stapellauf (Ops, auf Kommando). apply=false (Default) = reiner Trockenlauf: es wird
+// gefragt und berichtet, aber NICHTS geschrieben. Liefert einen PII-freien Report.
+// Bleibt bestehen, obwohl der Sweep inzwischen selbst heilt: er erlaubt den bewussten,
+// sofortigen Durchlauf ueber den ganzen Bestand (Trockenlauf zuerst), statt bis zum
+// naechsten Takt zu warten - und deckt Mandanten ab, die gar nicht auf 'failed' stehen.
 export async function reconcilePaymentMethodTypes({ store, billing, apply = false, logger = console }) {
   const candidates = tenantsForPaymentMethodTypeReconcile(store.load());
   const report = { apply, scanned: candidates.length, filled: [], unknown: [], errors: [] };
   for (const tenant of candidates) {
-    let paymentMethodType;
-    try {
-      paymentMethodType = await billing.retrievePaymentMethodType(tenant.stripePaymentMethodId);
-    } catch (err) {
-      // PII-/Key-frei (Regel 4): interne Kennung + Adapter-Meldung (die traegt Operation
-      // und Status, nie den Stripe-Schluessel und nie Kundendaten).
-      logger.warn(`[pm-type] Typ-Abfrage fehlgeschlagen tenant=${tenant.id}: ${err.message}`);
-      report.errors.push({ id: tenant.id, reason: PM_TYPE_OUTCOME.LOOKUP_FAILED });
-      continue;
-    }
-    if (typeof paymentMethodType !== "string" || !paymentMethodType) {
-      report.unknown.push({ id: tenant.id, reason: PM_TYPE_OUTCOME.UNKNOWN });
-      continue;
-    }
-    report.filled.push({ id: tenant.id, paymentMethodType });
-    // NUR den Typ nachtragen: paymentMethodId unveraendert mitgeben (die Bindung selbst
-    // ist in Ordnung), customerId gar nicht (bindPaymentMethodOnTenant laesst ein
-    // fehlendes customerId unberuehrt) - dieser Lauf korrigiert EIN Feld.
-    if (apply)
-      bindPaymentMethodOnTenant(store, tenant.id, {
-        paymentMethodId: tenant.stripePaymentMethodId,
-        paymentMethodType,
-      });
+    const { outcome, paymentMethodType } = await fillPaymentMethodType({
+      store,
+      billing,
+      tenant,
+      apply,
+      logger,
+    });
+    if (outcome === PM_TYPE_OUTCOME.LOOKUP_FAILED) report.errors.push({ id: tenant.id, reason: outcome });
+    else if (outcome === PM_TYPE_OUTCOME.UNKNOWN) report.unknown.push({ id: tenant.id, reason: outcome });
+    else report.filled.push({ id: tenant.id, paymentMethodType });
   }
   return report;
 }

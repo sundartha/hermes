@@ -21,6 +21,8 @@
 // "drift:lauf"), KEIN Befund: er wird nie geschlossen und bedeutet nie "hier ist etwas
 // kaputt" - er haelt nur fest, wann dieser Mandant zuletzt automatisch angestossen wurde.
 import * as ops from "../store/state-ops.js";
+import { NUMBER_DISPLAY_STATUS, numberStatusFor } from "../store/views.js";
+import { PM_TYPE_OUTCOME, fillPaymentMethodType } from "./payment-method-type-reconcile.js";
 import { PROVISION_RETRY_OUTCOME, retriggerFailedProvisioning } from "./provision-retry.js";
 
 const FRIST_BUCKET_PREFIX = "provision-retry:";
@@ -101,11 +103,54 @@ function meldeAusgang({ audit, tenantId, entscheidung }) {
   audit(SWEEP_EVENT, null, `tenant=${tenantId} ausgang=${entscheidung.outcome} versuche=${entscheidung.attempts}`);
 }
 
+// GP-P5-Selbstheilung: einen UNBEKANNTEN Zahlungsmittel-Typ aufloesen, BEVOR ueber den
+// Wiederanlauf entschieden wird.
+//
+// Warum das hier hingehoert und nicht in ein Skript: GP-P2 fuehrte das Typ-Feld additiv
+// ein, ohne Backfill; isHoldCapablePaymentMethodType ist fail-closed, null gilt als
+// ungeeignet. Damit war JEDER vor GP-P2 gebundene Mandant dauerhaft und lautlos vom
+// Wiederanlauf ausgeschlossen - am Produktionsbestand gemessen (2026-09-15) waren das
+// ALLE drei zahlenden Mandanten. Ein Nachtrag-Skript haette das einmal geheilt und die
+// Luecke offen gelassen: sie kehrt bei jedem kuenftigen Feld dieser Art wieder, und
+// niemand merkt es. Der Sweep fragt stattdessen selbst nach - dieselbe Haltung wie
+// stale-subscription-reconcile.js (Lehre aus CL2: nicht aus dem lokalen Zustand raten).
+//
+// Eng begrenzt, damit daraus kein Lastproblem wird:
+//   - NUR fuer Mandanten auf 'failed' - also genau dort, wo der unbekannte Typ eine
+//     Entscheidung blockiert. Kein Rundruf ueber den ganzen Bestand bei jedem Takt.
+//   - NUR, solange der Typ fehlt: nach dem ersten Erfolg ist die Frage beantwortet und
+//     der Mandant faellt aus der Bedingung. Hoechstens EINE Stripe-Abfrage je Mandant.
+//   - Ohne billing-Naht (Payment aus, Tests) ein No-op - byte-identisch zum Bestand.
+// Wirft NIE (fillPaymentMethodType faengt selbst): ein unerreichbares Stripe darf den
+// Lauf ueber die uebrigen Mandanten nicht abbrechen.
+async function heileUnbekanntenTyp({ store, billing, tenantId }) {
+  if (!billing || typeof billing.retrievePaymentMethodType !== "function") return null;
+  const state = store.load();
+  if (numberStatusFor(state, tenantId) !== NUMBER_DISPLAY_STATUS.FAILED) return null;
+  const { paymentMethodId, paymentMethodType } = ops.tenantStripe(state, tenantId);
+  if (!paymentMethodId || paymentMethodType) return null;
+  const { outcome } = await fillPaymentMethodType({
+    store,
+    billing,
+    tenant: { id: tenantId, stripePaymentMethodId: paymentMethodId },
+    apply: true,
+  });
+  if (outcome === PM_TYPE_OUTCOME.FILLED) store.save();
+  return outcome;
+}
+
 // Fail-soft wie jeder andere Sweep-Zweig: ein Fehler HIER darf den Stunden-Sweep nie
 // abbrechen. nowMs injizierbar (Muster runPaidWithoutNumberSweep). minIntervalMs <= 0
 // haelt den ZEITGESTEUERTEN Zweig komplett aus (Rollback-Hebel, Muster
 // outboundDriftMinIntervalMs); der Wiederanlauf nach Kartenwechsel bleibt unberuehrt.
-export async function runProvisionRetrySweep({ store, config, provision, audit, nowMs = Date.now() }) {
+export async function runProvisionRetrySweep({
+  store,
+  config,
+  provision,
+  audit,
+  billing = null,
+  nowMs = Date.now(),
+}) {
   try {
     const minIntervalMs = config.provisioning.provisioningRetryMinIntervalMs;
     if (minIntervalMs <= 0) return;
@@ -113,6 +158,9 @@ export async function runProvisionRetrySweep({ store, config, provision, audit, 
     const tenantIds = ops.allTenantIds(store.load());
     const ausgaenge = [];
     for (const tenantId of tenantIds) {
+      // VOR der Entscheidung: ein unbekannter Typ ist keine Aussage ueber die Eignung,
+      // sondern eine offene Frage - und die beantwortet nur der Anbieter.
+      await heileUnbekanntenTyp({ store, billing, tenantId });
       const entscheidung = await retriggerFailedProvisioning({
         store,
         provision,
@@ -136,6 +184,8 @@ export async function runProvisionRetrySweep({ store, config, provision, audit, 
 }
 
 // Fabrik (Muster makePaidWithoutNumberWatch): EINMAL beim Boot verdrahtet (INV-7).
-export function makeProvisionRetryWatch({ store, config, provision, audit }) {
-  return { runProvisionRetrySweep: () => runProvisionRetrySweep({ store, config, provision, audit }) };
+export function makeProvisionRetryWatch({ store, config, provision, audit, billing = null }) {
+  return {
+    runProvisionRetrySweep: () => runProvisionRetrySweep({ store, config, provision, audit, billing }),
+  };
 }
