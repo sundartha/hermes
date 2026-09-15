@@ -84,7 +84,10 @@ export const redirect = (url) => ({ kind: DIRECTIVE.REDIRECT, url });
 // Zahl, die zulaessigen Grenzen des Anbieters setzt der Adapter (Renderer). statusCallbackUrl
 // empfaengt das answered-Ereignis des SIP-Beins. password ist SECRET - Direktiven werden nie
 // geloggt, nur gerendert.
-export const dialSip = ({ uri, username, password, callerId, timeoutS, timeLimitS, statusCallbackUrl }) => ({
+// answerOnBridge (optional, IEX-A4): true -> der eingehende Anruf bleibt unbeantwortet, bis das
+// SIP-Bein annimmt (Freizeichen statt Stille). Nur ausdrueckliches true wirkt (Regel im Renderer);
+// weglassen -> TeXML byte-gleich zum Bestand.
+export const dialSip = ({ uri, username, password, callerId, timeoutS, timeLimitS, statusCallbackUrl, answerOnBridge }) => ({
   kind: DIRECTIVE.DIAL_SIP,
   uri,
   username,
@@ -93,4 +96,5 @@ export const dialSip = ({ uri, username, password, callerId, timeoutS, timeLimit
   timeoutS,
   timeLimitS,
   statusCallbackUrl,
+  answerOnBridge,
 });

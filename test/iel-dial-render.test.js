@@ -168,6 +168,27 @@ test("IEL-B7-15: fehlendes/kaputtes timeoutS -> wirft statt timeout=\"undefined\
   }
 });
 
+// IEX-A4: answerOnBridge als erstes Dial-Attribut, nur bei ausdruecklichem true.
+test("IEX-A4-3: answerOnBridge true -> erstes Attribut am Dial, Sip unveraendert", () => {
+  const inner = renderEinzeln([baueDialSip({ answerOnBridge: true })]);
+  assert.equal(
+    inner,
+    '<Dial answerOnBridge="true" callerId="+4930123456789" timeout="20" timeLimit="1800">' +
+      '<Sip username="hermes-sip" password="pw-geheim" statusCallback="https://agent.test/voice/el-bein?callId=call_1" statusCallbackEvent="answered">' +
+      "sip:+4930123456789@sip.rtc.elevenlabs.io:5060;transport=tcp?X-Hermes-Call-Binding=0123456789abcdef0123456789abcdef" +
+      "</Sip></Dial>",
+  );
+});
+
+test("IEX-A4-4: answerOnBridge fehlend, false oder kein Boolean -> byte-gleich zur Bestandsform", () => {
+  const bestand = renderEinzeln([baueDialSip()]); // Literal gepinnt in IEL-B7-1
+  for (const wert of [undefined, false, "true", 1, null]) {
+    const inner = renderEinzeln([baueDialSip({ answerOnBridge: wert })]);
+    assert.equal(inner, bestand, `answerOnBridge=${JSON.stringify(wert)}`);
+    assert.ok(!inner.includes("answerOnBridge"), `answerOnBridge=${JSON.stringify(wert)}`);
+  }
+});
+
 test("IEL-B7-4b: fehlendes Pflichtfeld -> wirft ohne 'undefined' im TeXML", () => {
   for (const feld of ["uri", "username", "password", "callerId", "statusCallbackUrl"]) {
     assert.throws(

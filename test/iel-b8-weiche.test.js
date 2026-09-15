@@ -1,7 +1,7 @@
 // ---- IEL-B8: Rueckfall-Routen und Inbound-Weiche des EL-Inbound-Wegs ------------------------
 // /voice/incoming entscheidet EINMAL je Anruf zwischen Budget-Pfad (Schalter aus / nicht gepinnt,
 // byte-identisch, Golden-Test) und der Uebergabe an den ElevenLabs-Agenten: <Dial><Sip> als erstes
-// Verb (IEX-A3), dann <Redirect> auf /voice/el-rueckfall?quelle=dial_ende. Die Rueckfall-Route
+// Verb (IEX-A3), mit answerOnBridge (IEX-A4), dann <Redirect> auf /voice/el-rueckfall?quelle=dial_ende. Die Rueckfall-Route
 // entscheidet nur aus dem persistierten Datensatz (Auflegen, Folge-Gather, Fehlersatz), der
 // SIP-Bein-Callback /voice/el-bein armiert die innere Frist.
 //
@@ -98,6 +98,11 @@ const EL_AN_ENV = Object.freeze({
 const XML_PRAEFIX = `<?xml version="1.0" encoding="UTF-8"?><Response>`;
 const XML_SUFFIX = "</Response>";
 
+// IEX-A4: die Dial-Eroeffnung der Uebergabe an EINER Stelle (Freizeichen, answerOnBridge).
+function dialOeffnung({ callerId, timeLimitS }) {
+  return `<Dial answerOnBridge="true" callerId="${callerId}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${timeLimitS}">`;
+}
+
 function uebergabeCall(extra = {}) {
   return { id: "call_b8", to: TELNYX_TEST_TENANT_NUMBER, streamToken: BINDUNGS_TOKEN, maxDurationS: TEST_MAX_DAUER_S, ...extra };
 }
@@ -124,7 +129,7 @@ test("IEL-B8-4: elUebergabeDirektiven - Dial/Sip als erstes Verb, Redirect dial_
   assert.equal(umleitung.url, `${PUBLIC_URL}${elRueckfallUrl({ callId: call.id, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE })}`);
 
   const erwartet =
-    `${XML_PRAEFIX}<Dial callerId="${call.to}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${TEST_MAX_DAUER_S}">` +
+    `${XML_PRAEFIX}${dialOeffnung({ callerId: call.to, timeLimitS: TEST_MAX_DAUER_S })}` +
     `<Sip username="${SIP_USER}" password="${SIP_PASSWORD}" statusCallback="${PUBLIC_URL}/voice/el-bein?callId=${call.id}" statusCallbackEvent="answered">` +
     `${dial.uri}</Sip></Dial>` +
     `<Redirect method="POST">${PUBLIC_URL}/voice/el-rueckfall?callId=${call.id}&amp;quelle=dial_ende</Redirect>${XML_SUFFIX}`;
@@ -312,7 +317,7 @@ test("IEL-B8-12: Schalter an + gepinnt - Dial/Sip als erstes Verb, Redirect dial
     const call = einzigerCall(srv);
     const texml = normalizeIncomingTexml(roh).replace(/X-Hermes-Call-Binding=[0-9a-f]{32}/, "X-Hermes-Call-Binding=<token>");
     const erwartet =
-      `${XML_PRAEFIX}<Dial callerId="${TELNYX_TEST_TENANT_NUMBER}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${call.maxDurationS}">` +
+      `${XML_PRAEFIX}${dialOeffnung({ callerId: TELNYX_TEST_TENANT_NUMBER, timeLimitS: call.maxDurationS })}` +
       `<Sip username="${SIP_USER}" password="${SIP_PASSWORD}" statusCallback="${PUBLIC_URL}/voice/el-bein?callId=call_X" statusCallbackEvent="answered">` +
       `sip:${TELNYX_TEST_TENANT_NUMBER}@sip.rtc.elevenlabs.io:5060;transport=tcp?X-Hermes-Call-Binding=<token></Sip></Dial>` +
       `<Redirect method="POST">${PUBLIC_URL}/voice/el-rueckfall?callId=call_X&amp;quelle=dial_ende</Redirect>${XML_SUFFIX}`;

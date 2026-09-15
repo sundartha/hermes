@@ -4182,8 +4182,8 @@ Sicherheitsrelevant geaendert hat sich: `/voice/incoming` hat eine Weiche. Sie g
 Schalter (`ELEVENLABS_INBOUND_ENABLED`), Tenant-Allowlist (`ELEVENLABS_INBOUND_TENANT_IDS`) und
 vollstaendiger Zugang zusammen erfuellt sind (`inboundElPathFor`), und sie laeuft NACH allen sieben
 Sicherungen des Handlers (Signatur-MW, Wiederholungs-Riegel, Nummern-Aufloesung, Kostendecke,
-Notbremse mit EL-Satz, Cap/Geld-Wache, set-once-Kostenprofil). Auf dem EL-Pfad ist `<Dial><Sip>` das
-erste Verb; den Hinweis spricht der Agent als Teil seiner vom Server gesetzten und geprueften
+Notbremse mit EL-Satz, Cap/Geld-Wache, set-once-Kostenprofil). Auf dem EL-Pfad ist
+`<Dial answerOnBridge="true"><Sip>` das erste Verb (IEX-A4: Freizeichen bis zur SIP-Annahme); den Hinweis spricht der Agent als Teil seiner vom Server gesetzten und geprueften
 Eroeffnung (IEX-A3). Dazu kommen zwei neue
 signaturpflichtige Routen (`/voice/el-rueckfall`, `/voice/el-bein`). Kein neues Env, keine neue
 Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch (Golden-Test).
@@ -4198,7 +4198,7 @@ Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch
 | Log | Nie geloggt: Direktiven und TeXML werden nicht geloggt, Renderer-Fehler nennen nur Feldnamen, Grep-Test "eine Lesestelle" (`test/iel-b8-weiche.test.js` 9), Spawn-Test "Passwort nicht im stdout" (12) |
 | Transportweg (E16) | Wert entsteht im Prozess von `iel-geheimnisse.mjs`, geht nur an Render-API, ElevenLabs-API und Registrierungs-PATCH; nie Chat, Agent, lokale `.env`, Log |
 | Mindestlaengen | `SIP_PASSWORD_MIN_LENGTH` und `INIT_WEBHOOK_TOKEN_MIN_LENGTH` (je 32) |
-| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Fehlersatz + Auflegen (IEX-A2) ([M1] J4/F-F) |
+| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Fehlersatz + Auflegen (IEX-A2) ([M1] J4/F-F); mit `answerOnBridge` ist das fuer das nie beantwortete Bein UNBELEGT (M-S3, Pflicht vor Rollout b, sonst IEX-A4b) |
 | Abweichung Render vs. Anbieter | Entsteht nur nach Teilausfall ohne erneuten Lauf; nicht lesend pruefbar. Am Anruf erkennbar: `[el-rueckfall]`-Zeile ohne `[el-init]` (E16) |
 
 ### 2. Offenlegung
@@ -4280,6 +4280,15 @@ API-Views bleibt es entfernt.
   Pflichtsatz-Zeile laeuft `finishCall` in den Zweig "Anruf fehlgeschlagen" statt in eine
   Zusammenfassung ueber nur den Hinweis. Timeout und Dauerfehler des Polls enden schon heute als
   failed.
+- **`answerOnBridge` (IEX-A4):** ob nach einem nie beantworteten, gescheiterten Dial der Fehlersatz
+  noch hoerbar ist, ist unbelegt (M-S3). Negativ: Freizeichen, dann Leitungsende ohne Satz, Abschluss
+  ueber E5 (`WARTET`) ohne Benachrichtigung. Rollout (b) mit `answerOnBridge` nur nach positivem M-S3,
+  sonst IEX-A4b (`false`).
+- **Buchungs-Vorlauf (IEX-A4):** `answeredAt` liegt vor der Traeger-Annahme. Legt der Anrufer beim
+  Freizeichen auf, bucht `voiceMinutesOf` (aufrunden) mindestens eine Minute auf die Tenant-Decke,
+  obwohl der Traeger nie annahm. Konservativ in Richtung Regel 1 (die Decke unterschaetzt nie).
+  Missbrauch kostet einen Angreifer nichts und sperrt die Decke fuer beide Richtungen: Messung M-A1,
+  Owner-Frage F2/F4.
 
 ## IEL-B9 — Anbieter-Konfiguration fuer Inbound (2026-09-15)
 
