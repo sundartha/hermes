@@ -3510,6 +3510,20 @@ export function tenantsForStaleSubscriptionReconcile(state) {
   );
 }
 
+// GP-P2-Nachtrag: Kandidaten fuer den Typ-Nachtrag der Zahlungsmethode - eine gebundene
+// Referenz OHNE gespeicherten Typ. GP-P2 hat das Feld additiv eingefuehrt und bewusst
+// keinen Backfill gefahren; jeder VOR GP-P2 gebundene Mandant traegt es deshalb als null.
+// Das ist nicht bloss eine Luecke in der Anzeige: isHoldCapablePaymentMethodType ist
+// fail-closed, null gilt als UNGEEIGNET - und damit ueberspringt der automatische
+// Wiederanlauf (resolveAutoProvisionRetry, GP-P3/GP-P4) genau die Mandanten dauerhaft,
+// die er retten soll. Ohne diesen Nachtrag bleibt ein zahlender Bestandskunde ohne
+// Nummer haengen, bis ein Mensch eingreift.
+export function tenantsForPaymentMethodTypeReconcile(state) {
+  return tenantsOf(state).filter(
+    (tenant) => tenant.stripePaymentMethodId && !tenant.stripePaymentMethodType,
+  );
+}
+
 // ---- Newsletter-Einwilligung pro Tenant (Opt-in, DSGVO Art. 7 Abs. 1) ----
 // Setzt die Newsletter-Einwilligung eines Tenants. Lebt am Tenant-RECORD (NICHT in
 // settings): sie ist eine Einwilligung der Person/des Accounts, keine Agent-Verhaltens-

@@ -30,13 +30,21 @@ import {
 import { activatePaidTenant, profileAuditDetail } from "./billing/activation.js";
 import { attemptCancellationMailConfirm } from "./billing/cancellation-mail.js";
 import { provisionAuditDetail } from "./billing/provision-outcome.js";
-import { retriggerFailedProvisioning } from "./billing/provision-retry.js";
+// GP-P5: resolveAutoProvisionRetry ist der REINE Kern desselben Moduls - dieselbe
+// Beurteilung, die den automatischen Wiederanlauf steuert, hier nur lesend fuer die
+// Anzeige (G5: keine zweite Meinung ueber denselben Zustand).
+import {
+  PROVISION_RETRY_OUTCOME,
+  resolveAutoProvisionRetry,
+  retriggerFailedProvisioning,
+} from "./billing/provision-retry.js";
 import {
   publicCall,
   activeNumberFor,
   numberStatusFor,
   upcomingCalendar,
   tenantLanguage,
+  NUMBER_DISPLAY_STATUS,
 } from "./store/views.js";
 import { tenantGeo } from "./store/state-ops.js";
 import { holdAmountForCountry } from "./telephony/provisioning-geo.js";
@@ -71,6 +79,61 @@ import { hashEmail } from "./util.js";
 // nacktes 409 als Sackgasse zu sehen. Kein Magic-String (G25); spiegelbildlich
 // SETUP_CHECKOUT_NEXT im Frontend (Contract-String ueber die Origin-Grenze, wie die error-Codes).
 const NEXT_SETUP_CHECKOUT = "setup-checkout";
+
+// ---- GP-P5: WARUM die Nummern-Einrichtung haengt --------------------------------
+// Das Dashboard zeigte bei 'failed' genau einen Satz: "Einrichtung der Nummer
+// fehlgeschlagen". Kein Grund, kein naechster Schritt - obwohl der Server den Grund seit
+// GP-P2/P3 KENNT. Fuer den Vorfall vom 11.09. war der Unterschied entscheidend: die
+// Zahlungsmethode (Typ 'link') kann strukturell keinen Hold tragen, es half also kein
+// Warten und kein erneutes Klicken, sondern ausschliesslich eine Karte. Genau das stand
+// nirgends.
+//
+// EINE Quelle (G5): der Grund kommt aus DEMSELBEN Entscheidungskern, der ueber den
+// automatischen Wiederanlauf entscheidet (resolveAutoProvisionRetry) - keine zweite,
+// driftfaehige Beurteilung derselben Lage. Der Kern ist rein und liest nur den State;
+// diese Lesekante bewegt kein Geld und stoesst nichts an.
+//
+// Die Kunden-Vokabel ist BEWUSST GROEBER als das interne Enum: sie unterscheidet nur,
+// was der Kunde unterschiedlich behandeln muss - selbst handeln (Karte), warten (laeuft
+// automatisch), oder Support. Interne Ausgaenge wie DISABLED (Not-Aus) oder ERROR nennen
+// wir ihm nicht als solche; fuer ihn zaehlt, dass von allein nichts mehr passiert.
+// Sprachneutrale Token wie ueberall in dieser Datei - die Texte liegen im Frontend
+// (apps/web/src/lib/api.js).
+const NUMBER_SETUP_REASON = Object.freeze({
+  PAYMENT_METHOD: "payment_method_unsuitable", // Kunde kann handeln: Karte hinterlegen
+  RETRY_PENDING: "retry_pending", // laeuft automatisch weiter, nichts zu tun
+  MANUAL: "manual_review", // von allein passiert nichts mehr -> Support
+});
+
+const REASON_JE_AUSGANG = Object.freeze({
+  [PROVISION_RETRY_OUTCOME.PAYMENT_METHOD_UNSUITABLE]: NUMBER_SETUP_REASON.PAYMENT_METHOD,
+  [PROVISION_RETRY_OUTCOME.RETRY]: NUMBER_SETUP_REASON.RETRY_PENDING,
+  [PROVISION_RETRY_OUTCOME.THROTTLED]: NUMBER_SETUP_REASON.RETRY_PENDING,
+});
+
+// Der Grund NUR im 'failed'-Zustand. Die Gate-Reihenfolge des Kerns beantwortet den
+// Not-Aus (DISABLED) VOR dem Zustands-Gate - ohne diese eigene Vorpruefung truege ein
+// abgeschalteter Wiederanlauf jedem Mandanten einen Grund an, auch dem mit laufender
+// Nummer. Unbekannter/kuenftiger Ausgang -> MANUAL (fail-closed: lieber "meld dich"
+// als eine Zusage, dass es von allein weitergeht).
+function numberSetupReason(state, { tenantId, numberStatus, maxAttempts }) {
+  if (numberStatus !== NUMBER_DISPLAY_STATUS.FAILED) return "";
+  const { outcome } = resolveAutoProvisionRetry(state, { tenantId, maxAttempts });
+  return REASON_JE_AUSGANG[outcome] || NUMBER_SETUP_REASON.MANUAL;
+}
+
+// Die Agent-Sicht der /state-Antwort an EINER Stelle (Muster paymentView): Nummer,
+// Besitzer, Anzeige-Status - und additiv der Grund. Ein aelterer Client ohne das Feld
+// rendert unveraendert.
+function agentView(state, { tenantId, ownerName, maxAttempts }) {
+  const numberStatus = numberStatusFor(state, tenantId);
+  return {
+    number: activeNumberFor(state, tenantId),
+    owner: ownerName,
+    numberStatus,
+    numberStatusReason: numberSetupReason(state, { tenantId, numberStatus, maxAttempts }),
+  };
+}
 
 // F2 P6: maskiert die EIGENE private Summary-Nummer fuer die Self-Service-Read-View
 // (Decision #5, H4). Zeigt NUR den Laendercode (erste 3 Zeichen) + die letzten 4 Ziffern,
@@ -390,11 +453,11 @@ export function makeSelfServiceRoutes({
       // Menge ist bereits durch MAX_NOTIFICATIONS im Store begrenzt (wie actionItems).
       notifications: data.notifications,
       calendar: upcomingCalendar(store, tenant),
-      agent: {
-        number: activeNumberFor(agentState, tenant),
-        owner: ctx.ownerName,
-        numberStatus: numberStatusFor(agentState, tenant),
-      },
+      agent: agentView(agentState, {
+        tenantId: tenant,
+        ownerName: ctx.ownerName,
+        maxAttempts: config.provisioning.provisioningRetryMaxAttempts,
+      }),
     });
   });
 

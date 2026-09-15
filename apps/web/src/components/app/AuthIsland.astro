@@ -6,7 +6,7 @@
 // nur einmal an. KEINE OIDC-/Session-Logik hier (lebt im Gateway): "Anmelden" ist
 // nur ein Link auf LOGIN_URL, "Abmelden" ein POST auf /auth/logout.
 //
-// i18n (Etappe 1): diese Insel ist auch die EINE Stelle fuer den DE/EN-
+// i18n (Etappe 1): diese Insel ist auch die EINE Stelle fuer den EN/DE-
 // Umschalter (immer sichtbar, auch ausgeloggt -- links neben Sign out, s.
 // shell.css .lang-toggle). Sie ist die einzige Insel, die auf jeder /app-Seite
 // garantiert genau einmal existiert (slot="auth"), darum lebt hier auch der
@@ -20,9 +20,9 @@ import { LOGIN_URL } from "../../lib/routes.js";
 
 <div class="auth-island">
   <span class="lang-toggle">
-    <button class="lang-toggle__opt" type="button" data-lang="de" aria-pressed="false">DE</button>
-    <span class="lang-toggle__sep" aria-hidden="true">/</span>
     <button class="lang-toggle__opt" type="button" data-lang="en" aria-pressed="true">EN</button>
+    <span class="lang-toggle__sep" aria-hidden="true">/</span>
+    <button class="lang-toggle__opt" type="button" data-lang="de" aria-pressed="false">DE</button>
   </span>
   <a id="auth-login" class="btn" href={LOGIN_URL} data-i18n="signIn">Sign in</a>
   <div id="auth-account" class="auth-account" hidden>
@@ -106,9 +106,12 @@ import { LOGIN_URL } from "../../lib/routes.js";
   }
 
   // Sprachumschalter: aria-pressed auf beiden Knoepfen mit getLang() synchron
-  // halten (Init UND nach jedem Wechsel).
+  // halten (Init UND nach jedem Wechsel). Das Markup ist Englisch (lang="en" in
+  // layouts/App.astro); steht eine gespeicherte DE-Wahl an, muss <html lang> beim
+  // Start mitgezogen werden -- setLang() tut das nur beim Klick, nicht beim Laden.
   function syncLangButtons() {
     const lang = getLang();
+    document.documentElement.lang = lang;
     for (const btn of langButtons) btn.setAttribute("aria-pressed", String(btn.dataset.lang === lang));
   }
 

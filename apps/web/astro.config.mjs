@@ -1,5 +1,35 @@
 // @ts-check
+import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
+
+// Vite haelt seinen Dep-Optimizer-Cache in genau EINEM Ordner je Projekt,
+// naemlich node_modules/.vite, und tauscht ihn zum Schluss per rename gegen
+// das fertige Unterverzeichnis deps aus. Astros Build startet fuer den
+// sync-Schritt intern einen Vite-Dev-Server und loest damit genau dieses
+// rename aus. Laufen zwei Builds gleichzeitig, gewinnt einer das rename und
+// der andere bricht bei kaltem Cache mit ENOTEMPTY ab.
+//
+// Genau das passierte in den Tests: csp, pages und links starten je einen
+// eigenen astro-Build, und node --test faehrt die Testdateien parallel.
+// Gemessen waren 6 von 25 Laeufen aus kaltem Cache rot, aus warmem Cache
+// keiner - daher die scheinbar zufaelligen Ausfaelle.
+//
+// Das CLI-Flag --outDir trennt nur die AUSGABE, nicht diesen Cache. Deshalb
+// haengt der Cache hier am outDir: wer ein eigenes Ziel baut, bekommt auch
+// einen eigenen Cache-Ordner. Dieser Hook ist der einzige Ort, an dem der
+// bereits mit den CLI-Flags verrechnete outDir sichtbar ist.
+/** @type {import("astro").AstroIntegration} */
+const viteCacheJeOutDir = {
+  name: "vite-cache-je-outdir",
+  hooks: {
+    "astro:config:setup": ({ config, updateConfig }) => {
+      const ziel = basename(fileURLToPath(config.outDir));
+      const cacheDir = new URL(`./node_modules/.vite-${ziel}/`, config.root);
+      updateConfig({ vite: { cacheDir: fileURLToPath(cacheDir) } });
+    },
+  },
+};
 
 // Reines statisches HTML fuers CDN (Render runtime: static). Kein Server,
 // kein BFF — der Gateway bleibt die einzige Auth-/Billing-/Call-Logik.
@@ -16,6 +46,7 @@ export default defineConfig({
   // die statische sitemap.xml. Repo/Render-Service heissen weiter vodafone-agent.
   site: "https://sundartha.com",
   output: "static",
+  integrations: [viteCacheJeOutDir],
   build: {
     inlineStylesheets: "never",
   },

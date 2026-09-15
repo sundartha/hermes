@@ -2,7 +2,7 @@
  * consent.js — Einwilligung fuer Cookies & lokale Speicherung (§ 25 TDDDG,
  * Art. 6 Abs. 1 lit. a DSGVO).
  *
- * Grundsatz: Notwendiges (Sprachwahl "hermes.lang", diese Entscheidung selbst,
+ * Grundsatz: Notwendiges (Sprachwahl "hermes.lang.v2", diese Entscheidung selbst,
  * Login-Sitzung im Kundenbereich) braucht keine Einwilligung (§ 25 Abs. 2 Nr. 2
  * TDDDG). Alles andere — Statistik, Marketing — laeuft erst NACH Zustimmung.
  *

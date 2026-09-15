@@ -73,10 +73,16 @@ const dashNav = [
     <button id="pending-restore" class="plan-skip" type="button" hidden data-i18n="pendingRestore">Show plans</button>
   </section>
 
-  <section id="region-error" class="card" hidden>
+  <!-- Owner-Befund 15.09.2026: der Fehlerzustand war ein ungestaltetes Rechteck ueber
+       die volle Breite -- fette Sans-Ueberschrift, Text und Knopf ohne Abstand
+       aneinandergeklebt. Jetzt eine schmale, zentrierte Zustandskarte mit Zeichen,
+       Ueberschrift in der Marken-Serif, ruhiger Erklaerzeile und echtem Knopf
+       (shell.css, Abschnitt 6). Texte/ids/Verhalten unveraendert. -->
+  <section id="region-error" class="card state-card" hidden>
+    <span class="state-card__badge" aria-hidden="true">!</span>
     <h1 data-i18n="errorTitle">Something went wrong</h1>
     <p data-i18n="errorText">The app couldn't load just now. Check your connection and try again.</p>
-    <button id="error-retry" class="btn" type="button" data-i18n="errorRetry">Try again</button>
+    <button id="error-retry" class="btn state-card__action" type="button" data-i18n="errorRetry">Try again</button>
   </section>
 
   <!-- Eingeloggte Shell: Begruessung + Nummern-Karte + Bereichs-Navigation
@@ -215,13 +221,10 @@ const dashNav = [
   pendingEls.restore.addEventListener("click", () => renderPending());
 
   // EIN delegierter Subscribe-Listener am stabilen Kachel-Container (G5, kein Binding
-  // pro Button). Nach erfolgreicher Buchung wird der Tenant aktiv -> ein Reload zieht
-  // die volle Shell (die meisten suspended-Tenants laufen aber ueber 409 no_card ->
-  // gefuehrter Stripe-Checkout -> Rueckkehr aktiviert).
-  wireSubscribe(pendingTilesEl, {
-    onSubscribed: () => window.location.reload(),
-    onMessage: showPendingMessage,
-  });
+  // pro Button). Der Klick fuehrt ausnahmslos in den gehosteten Stripe-Checkout; die
+  // Rueckkehr (/billing/return?plan=...) bucht, aktiviert und laedt die volle Shell -
+  // deshalb kein onSubscribed/Reload mehr in diesem Pfad.
+  wireSubscribe(pendingTilesEl, { onMessage: showPendingMessage });
 
   // Listener synchron registrieren, BEVOR die Auth-Insel (hinter ihrem fetch)
   // dispatcht -- so geht kein Event verloren.

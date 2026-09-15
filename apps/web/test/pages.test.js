@@ -107,6 +107,17 @@ test("Sprachen: DE-Seiten lang=de, die beiden EN-Rand-Seiten lang=en", () => {
   }
 });
 
+// Ganzzahl-Cents -> {major, minor} wie lib/plans.js formatPlanPrice. Beide
+// Preis-Tests unten leiten ihre Erwartung hieraus ab, nie aus einer Zahl im Text.
+function priceParts(amountCents) {
+  const CENTS_PER_MAJOR = 100;
+  const MINOR_DIGITS = 2;
+  return {
+    major: Math.floor(amountCents / CENTS_PER_MAJOR),
+    minor: String(amountCents % CENTS_PER_MAJOR).padStart(MINOR_DIGITS, "0"),
+  };
+}
+
 test("Pricing rendert EUR aus dem Katalog (beide Tarife)", () => {
   // BK0/AM3: Preise kommen aus lib/plans.js (Spiegel der Backend-SSoT), seit dem
   // Stripe-Live-Cutover EUR. Die Seite ist seit dem Neubau deutsch und schreibt
@@ -125,6 +136,31 @@ test("Pricing rendert EUR aus dem Katalog (beide Tarife)", () => {
       `preise: Inklusivminuten ${plan.includedMinutes} (${plan.slug}) fehlen`,
     );
     assert.ok(html.includes(plan.name), `preise: Tarifname ${plan.name} fehlt`);
+  }
+});
+
+test("Startseite: Preise in beiden Sprachen aus dem Katalog, je in der richtigen Notation", () => {
+  // Die Startseite ist seit dem Default-Wechsel englisch im Markup; Deutsch liegt
+  // als Woerterbuch in scripts/hermes-scroll.js. Beide Fassungen muessen aus
+  // DEMSELBEN Katalog stammen und die Notation ihrer Sprache tragen: englisch
+  // "€4.99" (Punkt, Symbol vorn), deutsch "4,99 €" (Komma, Symbol nachgestellt).
+  // Der Test haengt an amountCents, nicht an einer Zahl im Text - genau wie der
+  // /preise-Test darueber.
+  // Gemessen wird der PREIS-KNOTEN, nicht die ganze Seite: "4,99 €" steht
+  // legitim auch im deutschen AGB-Text im Rechtstext-Blatt.
+  const html = readDist("index.html");
+  const dict = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
+  for (const plan of PLAN_CATALOG) {
+    const { major, minor } = priceParts(plan.amountCents);
+    const key = `${plan.slug}Price`;
+    assert.ok(
+      html.includes(`data-i18n="${key}">€${major}.${minor}<`),
+      `Startseite: englischer Katalogpreis €${major}.${minor} (${plan.slug}) fehlt`,
+    );
+    assert.ok(
+      dict.includes(`${key}: "${major},${minor} €"`),
+      `DE-Woerterbuch: deutscher Katalogpreis ${major},${minor} € (${plan.slug}) fehlt`,
+    );
   }
 });
 
@@ -189,8 +225,15 @@ test("ohne PUBLIC_ANALYTICS_* steht kein Mess-Platzhalter im Output", () => {
   }
 });
 
-test("Datenschutz nennt die lokale Speicherung (hermes.lang, hermes.consent)", () => {
+test("Datenschutz nennt die lokale Speicherung (Sprachwahl, Cookie-Entscheidung)", () => {
+  // Der genannte Eintrag muss der WIRKLICH geschriebene sein: gemessen wird der
+  // Schluessel aus scripts/hermes-scroll.js, nicht ein fest getippter Name.
+  // Sonst nennt der Datenschutztext nach einer Umbenennung einen Eintrag, den
+  // es nicht mehr gibt (§ 25 TDDDG verlangt die zutreffende Angabe).
+  const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
+  const langKey = (scroll.match(/const LANG_KEY = "([^"]+)"/) || [])[1];
+  assert.ok(langKey, "LANG_KEY in hermes-scroll.js nicht gefunden");
   const html = readDist("datenschutz/index.html");
-  assert.ok(html.includes("hermes.lang"), "hermes.lang fehlt im Datenschutztext");
+  assert.ok(html.includes(langKey), `${langKey} fehlt im Datenschutztext`);
   assert.ok(html.includes("hermes.consent"), "hermes.consent fehlt im Datenschutztext");
 });

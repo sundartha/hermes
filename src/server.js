@@ -349,6 +349,10 @@ const provisionRetryWatch = makeProvisionRetryWatch({
   config,
   provision: provisioning.triggerTenantProvisioning,
   audit: durableAudit,
+  // GP-P5: rein LESENDE Naht (retrievePaymentMethodType) - der Zweig loest einen
+  // unbekannten Zahlungsmittel-Typ selbst auf, statt ihn fail-closed als "ungeeignet" zu
+  // behandeln und den Mandanten dauerhaft zu ueberspringen. Bewegt kein Geld.
+  billing: stripeBilling,
 });
 
 // Play-TTS-Seam: haelt vorab synthetisierte Agent-Audios kurz + einmalig (PII). EINMAL

@@ -65,48 +65,58 @@ import {
 <section id="newsletter-card" class="card" hidden>
   <h2 data-i18n="newsletterTitle">Newsletter</h2>
   <p class="muted" data-i18n="newsletterSubtitle">
-    Get a short summary emailed to you after every call. Optional -- you can
-    unsubscribe anytime.
+    Get a short summary emailed after every call — unsubscribe anytime.
   </p>
 
-  <div class="newsletter-toggle">
-    <input
-      type="checkbox"
-      id="newsletter-toggle"
-      class="newsletter-toggle__input"
-      aria-label="Subscribe to the newsletter"
-      data-i18n-attr="aria-label:newsletterAriaLabel"
-    />
-    <div class="newsletter-toggle__state newsletter-toggle__state--off">
-      <div class="newsletter-form">
-        <input
-          type="email"
-          id="newsletter-email"
-          class="field-input newsletter-form__field"
-          readonly
-          placeholder="you@example.com"
-          aria-label="Account email"
-          data-i18n-attr="aria-label:accountEmailAriaLabel"
-        />
-        <label for="newsletter-toggle" class="newsletter-toggle__cta" data-i18n="subscribe">Subscribe</label>
-      </div>
-      <p class="newsletter-form__hint" data-i18n="newsletterHint">Sent to your account email.</p>
-    </div>
-    <div class="newsletter-toggle__state newsletter-toggle__state--on">
-      <span class="newsletter-toggle__dot" aria-hidden="true"></span>
-      <span aria-hidden="true" data-i18n="subscribed">Subscribed</span>
-      <button type="button" id="newsletter-unsubscribe" class="newsletter-toggle__unsub" data-i18n="unsubscribe">
-        Unsubscribe
-      </button>
-    </div>
-  </div>
-  <p id="newsletter-msg" class="billing-msg" hidden></p>
-
-  <!-- F2-Newsletter-Recipients: additive Zusatzempfaenger (Double-Opt-in), NEBEN
-       dem Konto-Toggle oben. Freies E-Mail-Feld (echtes <form>, Enter-zum-
-       Absenden inklusive) + weisse Pille, darunter die Liste. -->
+  <!-- Owner-Befund 15.09.2026: Konto-Adresse und Zusatzempfaenger standen als ZWEI
+       gleich aussehende Formulare untereinander ("zweimal dasselbe, sieht komisch
+       aus"). Es ist EINE Frage -- wer bekommt die Zusammenfassung --, also EINE Liste:
+       die Konto-Adresse als erste Zeile mit dem Einwilligungs-Umschalter, die
+       Zusatzempfaenger darunter, das Hinzufuegen-Feld zuletzt. Der Mono-Hinweis
+       "Sent to your account email." faellt weg -- die Zeile zeigt die Adresse selbst.
+       Der Umschalter bleibt die reine CSS-Checkbox (kein :has(), Geschwister-Selektor):
+       Eingabe und die beiden Zustands-Spans sind darum direkte Geschwister. -->
   <div class="billing-section">
     <h3 class="billing-section__title" data-i18n="newsletterRecipientsTitle">Recipients</h3>
+
+    <!-- Owner-Befund 15.09.2026 (2. Runde zur Karte): die Konto-Zeile trug den
+         Subscribe-Knopf INNERHALB der Zeile und wurde dadurch zur dicken Blase. Sie hat
+         jetzt exakt den Aufbau des Hinzufuegen-Formulars darunter -- eine Blase in
+         Feldhoehe mit der Adresse (und im angemeldeten Zustand der Status-Pille rechts,
+         mittig zur Adresse), daneben bzw. am Handy darunter der Knopf in der Groesse
+         von "Add". Dieselbe Klasse .newsletter-form liefert genau dieses Verhalten. -->
+    <div class="newsletter-form newsletter-account">
+      <input
+        type="checkbox"
+        id="newsletter-toggle"
+        class="newsletter-toggle__input"
+        aria-label="Subscribe to the newsletter"
+        data-i18n-attr="aria-label:newsletterAriaLabel"
+      />
+      <span class="newsletter-account__field">
+        <span id="newsletter-email" class="newsletter-account__email"></span>
+        <span
+          class="billing-status-badge billing-status-badge--active newsletter-account__badge"
+          data-i18n="subscribed"
+        >
+          Subscribed
+        </span>
+      </span>
+      <span class="newsletter-toggle__state newsletter-toggle__state--off">
+        <label for="newsletter-toggle" class="newsletter-toggle__cta" data-i18n="subscribe">Subscribe</label>
+      </span>
+      <span class="newsletter-toggle__state newsletter-toggle__state--on">
+        <button type="button" id="newsletter-unsubscribe" class="newsletter-toggle__unsub" data-i18n="unsubscribe">
+          Unsubscribe
+        </button>
+      </span>
+    </div>
+    <p id="newsletter-msg" class="billing-msg" hidden></p>
+
+    <!-- F2-Newsletter-Recipients: additive Zusatzempfaenger (Double-Opt-in) unter der
+         Konto-Zeile, gleiche Zeilenoptik. -->
+    <ul id="newsletter-recipient-list" class="data-list newsletter-recipient-list" aria-live="polite"></ul>
+
     <form id="newsletter-recipient-form" class="newsletter-form">
       <input
         type="email"
@@ -122,7 +132,6 @@ import {
       </button>
     </form>
     <p id="newsletter-recipient-msg" class="billing-msg" hidden></p>
-    <ul id="newsletter-recipient-list" class="data-list newsletter-recipient-list" aria-live="polite"></ul>
   </div>
 </section>
 
@@ -139,9 +148,15 @@ import {
   } from "../../lib/subscribe.js";
   import { bindList } from "../../lib/render.js";
 
+  // EIN Beispieltext fuer beide Stellen der Karte: die Konto-Zeile, solange keine
+  // Adresse vorliegt, und das Hinzufuegen-Feld darunter. Zwei verschiedene Beispiele
+  // in derselben Liste haben sonst wie zwei verschiedene Dinge ausgesehen.
+  const EMAIL_PLACEHOLDER = "you@example.com";
+
   const cardEl = document.getElementById("newsletter-card");
   const toggleEl = document.getElementById("newsletter-toggle");
   const emailEl = document.getElementById("newsletter-email");
+  const accountRowEl = emailEl.closest(".newsletter-account");
   const unsubscribeBtn = document.getElementById("newsletter-unsubscribe");
   const msgEl = document.getElementById("newsletter-msg");
 
@@ -255,13 +270,24 @@ import {
     const { state, data } = event.detail;
     if (state === AUTH_STATE.AUTHENTICATED) {
       toggleEl.checked = newsletterConsentFrom(data);
-      // F2-Mail: readonly Prefill aus der Konto-E-Mail (kein Schreibziel, s.
-      // Modul-Kommentar oben) -- leer + Platzhalter, wenn der Server keine liefert.
-      emailEl.value = accountEmailFrom(data) ?? "";
-      // F2-Newsletter-Recipients (UX-Entscheidung, s. Kopf-Kommentar/Bericht): die
-      // Konto-Adresse erscheint NICHT als synthetische Listenzeile, sondern als
-      // Platzhalter im freien Empfaenger-Feld.
-      recipientInputEl.placeholder = accountEmailFrom(data) || "you@example.com";
+      // F2-Mail: die Konto-Adresse steht als Text in der ersten Zeile der Liste (seit
+      // 15.09.2026 kein readonly-Feld mehr, s. Markup-Kommentar). Liefert der Server
+      // keine, blieb die Blase frueher LEER und sah kaputt aus (Owner-Befund
+      // 15.09.2026). Jetzt steht dort derselbe Beispieltext wie im Feld darunter --
+      // in Platzhalterfarbe und ueber .is-placeholder markiert, damit er nie wie eine
+      // echte Adresse wirkt. Erfunden wird weiterhin nichts: es ist ein Platzhalter,
+      // kein Wert.
+      const accountEmail = accountEmailFrom(data) ?? "";
+      emailEl.textContent = accountEmail || EMAIL_PLACEHOLDER;
+      emailEl.classList.toggle("is-placeholder", !accountEmail);
+      // Die Marke liegt zusaetzlich an der ZEILE, damit die Blase im
+      // Platzhalter-Zustand exakt die Masse des Feldes darunter annehmen kann
+      // (Innenpolster + Schriftgroesse, s. panels.css) -- ohne :has().
+      accountRowEl.classList.toggle("is-placeholder", !accountEmail);
+      // Das Hinzufuegen-Feld ist fuer WEITERE Adressen: die eigene steht schon als
+      // erste Zeile darueber, also kein Platzhalter mit der eigenen Adresse mehr
+      // (das las sich wie "hier deine Konto-Adresse eintragen").
+      recipientInputEl.placeholder = EMAIL_PLACEHOLDER;
       cardEl.hidden = false;
       // Pending-Watch nach Datenlage: steht eine Bestaetigung aus -> beobachten;
       // alles bestaetigt/entfernt -> Polling beenden (s. Kommentar oben).
