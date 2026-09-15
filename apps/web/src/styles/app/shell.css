@@ -61,11 +61,24 @@
    rutscht die Karte stattdessen sauber in eine eigene Zeile, sobald es neben der
    Begruessung nicht mehr reicht -- kein :has(), kein JS, ein Regelwerk fuer
    beide Zustaende. */
+/* Owner-Befund 15.09.2026 (Runde 9): die Begruessung klebte an der "Your area"-
+   Pille (6px) und stand weit weg von der Nummernkarte (28px) -- am Handy sass
+   "Welcome" damit sichtbar nicht mittig zwischen den beiden Blasen. Der Abstand
+   nach oben waechst darum (s. .dash-head__intro), der nach unten schrumpft:
+   17,6px optisch ueber der Schrift, 18px darunter. Nebeneinander (Desktop) ist
+   der Abstand waagerecht und bleibt bei 28px -- darum getrennte Achsen.
+   `align-items: stretch` statt `center`: die Nummernkarte nimmt so die Hoehe des
+   Begruessungsblocks an: Pille und Kartenoberkante fluchten oben, Schriftgrund
+   und Kartenunterkante unten -- genau die Buendigkeit, die der Owner behalten
+   wollte, obwohl "Welcome" tiefer rutscht (die Karte zentriert ihren Inhalt in
+   der gewonnenen Hoehe, s. .agent-chip). Beim Umbruch (eigene Zeile) hat stretch
+   keine Wirkung, dort zaehlt nur noch row-gap. */
 .dash-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 28px;
+  align-items: stretch;
+  column-gap: 28px;
+  row-gap: 18px;
 }
 
 /* Owner-Befund 2: kompaktere Stapelung Eyebrow/Begruessung (kleinerer Abstand
@@ -73,7 +86,13 @@
 .dash-head__intro {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  /* Runde 9 (s. .dash-head): 6px -> 14px. Optisch sind das 17,6px zwischen der
+     Unterkante der Pille und der Oberkante der Schrift -- so viel, wie unter der
+     Begruessung bis zur Karte bleibt. */
+  gap: 14px;
+  /* Ist die Karte hoeher als der Begruessungsblock (Stoerfall), streckt stretch
+     diesen Block mit; sein Inhalt bleibt dann mittig statt nach oben zu kleben. */
+  justify-content: center;
   /* GP-P6: waechst in die freie Breite, faellt aber nie unter ~320px -- darunter
      bekommt die Nummernkarte ihre eigene Zeile (s. .dash-head). */
   flex: 1 1 320px;
@@ -240,6 +259,10 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  /* Runde 9: die Karte wird im Kopfbereich auf die Hoehe des Begruessungsblocks
+     gestreckt (s. .dash-head) -- ihr Inhalt bleibt dabei mittig statt oben zu
+     kleben. Ohne Streckung (eigene Zeile, Handy) aendert das nichts. */
+  justify-content: center;
   gap: 6px;
   margin: 0;
   min-width: 240px;
@@ -283,6 +306,10 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
+    /* Runde 9: wird die Karte auf die Hoehe des Begruessungsblocks gestreckt
+       (s. .dash-head), sollen ihre Zeilen mittig in der Karte sitzen -- sonst
+       stehen sie oben und unten klafft die gewonnene Hoehe. */
+    align-content: center;
     column-gap: clamp(18px, 1.6vw, 28px);
     row-gap: 4px;
   }
@@ -527,7 +554,16 @@
      ist die Spalte Kopfzeile + Erklaersatz). */
   .agent-chip__main {
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
+  }
+  /* Runde 9: seitliches Polster wie bei allen anderen Karten am Handy (16px,
+     app-hermes.css) statt 20px, und eine engere Punkt-Gasse -- zusammen die
+     rund 30px, die Nummer und Icon-Knopf brauchen, um auf 320px-Geraeten noch
+     in EINER Zeile zu stehen. */
+  .agent-chip {
+    --chip-dot-gap: 10px;
+    padding-left: 16px;
+    padding-right: 16px;
   }
   /* GP-P6 Runde 3 (Owner-Befund 15.09.2026): am Handy laufen die Saetze wieder als EIN
      Absatz. Auf schmaler Breite bricht jeder Satz ohnehin um; zwei erzwungene Zeilen
@@ -539,17 +575,46 @@
   .agent-chip__hint-line + .agent-chip__hint-line::before {
     content: " ";
   }
-  /* Der Aktions-Knopf ist die Hauptsache des Stoerfalls und nimmt die volle Breite.
-     Der Kopier-Knopf ist eine Nebenhandlung: Owner-Durchgang 15.09.2026 -- er steht
-     jetzt als normale Pille linksbuendig unter der Nummer, wie "Save" oder "Add" in
-     den Karten darunter, statt als zweiter breiter Balken. */
+  /* Der Aktions-Knopf ist die Hauptsache des Stoerfalls und nimmt die volle Breite. */
   .agent-chip__action {
     width: 100%;
     margin-left: 0;
   }
+  /* Runde 9 (Owner-Befund 15.09.2026): der Kopier-Knopf stand als Pille UNTER der
+     Nummer -- eine hohe Karte (136px) mit einem toten Feld unten rechts neben dem
+     Knopf. Am Handy ist er jetzt ein runder Icon-Knopf rechts, senkrecht mittig zum
+     Textblock: dieselbe Silhouette wie am Desktop (Text links, Knopf rechts), nur
+     ohne Wortlabel -- fuer das Wort ist neben einer 17-stelligen Rufnummer kein
+     Platz (gemessen: Pille 99px, verfuegbar 63px). Die Karte faellt damit von 136px
+     auf rund 82px und hat keine leere Ecke mehr.
+     Das Label bleibt im Barrierebaum stehen (aria-live meldet "Copied", der
+     Knopf traegt zusaetzlich sein aria-label) -- es wird nur unsichtbar geklemmt,
+     nicht auf display:none gesetzt, sonst faellt die Rueckmeldung stumm aus. */
   .agent-chip__copy {
-    width: auto;
-    margin-left: 0;
+    position: relative;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    margin-left: auto;
+    align-self: center;
+  }
+  .agent-chip__copy-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* Damit Punkt + Nummer + Icon-Knopf in EINE Zeile passen (und nicht wieder
+     umbrechen), skaliert die Ziffernreihe am Handy mit der Breite: 22px bleiben
+     das Maximum, 16px die Untergrenze fuer sehr schmale Geraete (320px). Der
+     Statussatz des Stoerfalls hat seine eigene Stufe (.is-status) und bleibt
+     davon unberuehrt. */
+  .agent-chip__number {
+    font-size: clamp(16px, 5.2vw, 22px);
   }
 }
 
