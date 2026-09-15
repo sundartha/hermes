@@ -34,18 +34,23 @@ import {
 } from "../src/routes/webhooks-elevenlabs-init.js";
 import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
-import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { templatePlaceholderNames } from "./helpers/el-vorlage-variablen.mjs";
 import {
   EL_INBOUND_ACCESS_BOOT_ENV,
   captureConsole,
-  seedCall,
-  seedState,
   startServer,
   storeOpsFacade,
   waitForStoreState,
 } from "./helpers.js";
-import { INBOUND_FROM, INBOUND_TO, TRAEGER_SID, seedWartenderElCall } from "./_iel-inbound-harness.js";
+import {
+  INBOUND_FROM,
+  INBOUND_TO,
+  TRAEGER_SID,
+  elInboundInitSpawnEnv,
+  initBindungsKoerper,
+  seedWartenderElCall,
+  spawnSeedWartenderElCall,
+} from "./_iel-inbound-harness.js";
 
 const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
@@ -142,10 +147,7 @@ async function mitInitRoute({ state, config = baueConfig(), storeUeberschreibung
 }
 
 const initBody = ({ bindung, conversationId = CONV_A, agentId = AGENT_ID, extra = {} }) => ({
-  agent_id: agentId,
-  conversation_id: conversationId,
-  called_number: INBOUND_TO,
-  sip_headers: { [EL_CALL_BINDING_SIP_HEADER]: bindung },
+  ...initBindungsKoerper({ bindung, agentId, conversationId }),
   ...extra,
 });
 
@@ -543,39 +545,15 @@ test("IEX-A3-9: [el-init] gebunden traegt ms_seit_annahme deterministisch, die W
 
 const SPAWN_CALL_ID = "call_iel_b6_init";
 const SPAWN_BINDUNGS_TOKEN = "fedcba9876543210fedcba9876543210";
-const SPAWN_MAX_DAUER_S = 600;
-
-function spawnSeed() {
-  const jetzt = new Date(Date.now() - FRISCH_BEANTWORTET_S * MS_PER_SECOND).toISOString();
-  return seedState({
-    settings: { allowSummaries: false },
-    calls: [
-      seedCall({
-        id: SPAWN_CALL_ID,
-        direction: "inbound",
-        provider: "telnyx",
-        from: INBOUND_FROM,
-        to: INBOUND_TO,
-        twilioSid: TRAEGER_SID,
-        answeredAt: jetzt,
-        startedAt: jetzt,
-        maxDurationS: SPAWN_MAX_DAUER_S,
-        costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
-        streamToken: SPAWN_BINDUNGS_TOKEN,
-      }),
-    ],
-  });
-}
 
 test("IEL-B6-14: am echten Server ist die Route gemountet - ohne Init-Token 403, mit Bindungs-Token 200 und gebunden", async () => {
   const srv = await startServer({
-    env: {
-      ELEVENLABS_INBOUND_ENABLED: "true",
-      ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID,
-      ...EL_INBOUND_ACCESS_BOOT_ENV,
-      ELEVENLABS_AGENT_ID: AGENT_ID,
-    },
-    seed: spawnSeed(),
+    env: elInboundInitSpawnEnv(AGENT_ID),
+    seed: spawnSeedWartenderElCall({
+      callId: SPAWN_CALL_ID,
+      bindungsToken: SPAWN_BINDUNGS_TOKEN,
+      answeredVorS: FRISCH_BEANTWORTET_S,
+    }),
   });
   try {
     const url = `${srv.localUrl}${ELEVENLABS_INIT_PATH}`;

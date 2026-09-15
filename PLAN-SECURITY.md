@@ -4128,6 +4128,9 @@ Keine neue Env, keine neue Dependency.
 
 ### 2. Die schadensbegrenzenden Stufen (Reihenfolge bindend, E11)
 
+0. Init-Token-Schranke (IEX-A7, `app.js#installGlobalMiddleware`, VOR `express.urlencoded`/`express.json`):
+   gueltiges Token -> weiter; ungueltiges -> je IP gezaehlt, 403 (Log wie Stufe 1) bzw. 429 `gedrosselt`
+   ab `INIT_FEHLVERSUCHE_PRO_MIN` - ohne Body-Parse, ohne Store-Zugriff
 1. Init-Token (403, Log `grund=token` ohne Request-Schluessel)
 2. Zuordnung, nur lesend: NUR ueber das 16-Byte-Bindungs-Token (`call.streamToken`, als SIP-Header
    `X-Hermes-Call-Binding` bzw. `dynamic_variables.sip_hermes_call_binding`) an einen **aktiven**
@@ -4151,7 +4154,8 @@ Aufrufer (die Route, nach Stufe 4). Der Endpunkt loest selbst keinen Anruf aus.
 | Punkt | Festlegung |
 |---|---|
 | Secret-Header beweist keine Zugehoerigkeit (R-B) | Der Anbieter sendet den Header bei JEDEM Inbound-Gespraech des Workspace mit — er beweist nur "kommt von unserem Anbieter-Konto". Die Barriere ist die Token-Bindung aus Stufe 2 (Beleg E11, Test `iel-init-webhook` 3). |
-| Rate-Limit | Der Per-IP-Limiter `RATE_LIMIT_PER_MIN` liegt vor der Route (nicht unter `/voice`). Alle Gespraeche teilen Anbieter-IPs: eine Drosselung ist fail-safe (keine Bindung -> Frist -> Budget-Rueckfall). **Offen vor breiter Freischaltung.** |
+| Rate-Limit (IEX-A7/E12) | Fremd-DoS-Schnitt: fremde ElevenLabs-Workspaces teilen die Egress-IPs des Anbieters; ein Zaehler ueber ALLE Anfragen einer IP (auch der globale mit `RATE_LIMIT_PER_MIN`) sperrte unsere echten Bindungen. Deshalb nimmt der globale Limiter `POST` auf exakt `ELEVENLABS_INIT_PATH` aus (`istInitWebhookAnfrage`, andere Methoden bleiben gezaehlt), und die Vor-Parser-Schranke zaehlt NUR ungueltige Tokens je `req.ip`: `INIT_FEHLVERSUCHE_PRO_MIN=30` je `RATE_WINDOW_MS`, danach 429 + `Retry-After`. Gueltiges Token wird nie gezaehlt oder gedrosselt; 404/500 nach gueltigem Token zaehlen nicht. 403/429 ohne Parse und ohne Store. Log: 429 hoechstens eine Zeile `[el-init] gedrosselt anzahl=<n>` je Fenster, ohne IP/Token; 403 weiter `grund=token` je Anfrage (Erkennungsweg §6). Stufe 1 bleibt im Handler. Test `iex-a7-init-limit` |
+| Pfadform | Der Init-Router ist `caseSensitive`+`strict`: nur die exakte Form (`initWebhookUrl()`) erreicht den Handler - dieselbe Menge, die die Schranke vergleicht. Varianten (`/init/`, Grossschreibung) fallen durch (404, globaler Limiter), ohne Handler. Test `iex-a7` 8/10 |
 | Log | Schluesselnamen des Requests bereinigt (`[A-Za-z0-9_]`) und auf 20 gekappt, nie Werte, nie Token, nie `conversation_id` |
 
 ### 3. Frist-Timer (E9)
@@ -4175,6 +4179,18 @@ das oder fehlt `redirectCall` (vor B7), wird aufgelegt. Nie Stille. Der Boot re-
 - **Kein Budget-Check an der Init-Route:** die Stufenfolge E11 ist bindend. `budgetExceeded` hat der Anruf
   Sekunden vorher in `/voice/incoming` passiert, danach wirkt die Geld-Wache. Die pro-Tenant-Kostendecke
   bleibt fuer beide Richtungen unangetastet.
+- **Init-Token geleakt (IEX-A7):** wer das Token hat, wird am Init-Pfad nicht mehr gedrosselt; vorher galt
+  noch das globale 120/min je IP. Bewusst so (E12(1)). Die Barriere bleibt das Bindungs-Token (Stufe 2);
+  jede Anfrage kostet einen Store-Scan ueber die Calls. Gegenmittel ist die Rotation per
+  `iel-geheimnisse.mjs setzen`.
+- **IPv6-Rotation (IEX-A7):** der Zaehlerschluessel ist die volle `req.ip`. Wer viele Adressen rotiert,
+  umgeht das Fehlversuch-Limit, fuellt die Zaehler-Map (Sweep alle `RATE_SWEEP_INTERVAL_MS`) und das
+  403-Log. Dieselbe Klasse wie beim globalen Limiter, dessen Map diese Anfragen jetzt nicht mehr sieht; je
+  IP entsteht weniger Log als vorher (30 statt 120 Zeilen/min). Folgeaufgabe: Schluessel auf das
+  /64-Praefix normalisieren, fuer beide Zaehler an EINER Stelle.
+- **Exakte Pfadform (IEX-A7):** sendete der Anbieter je eine andere Form als die konfigurierte URL, endete
+  jede Uebergabe im Fehlersatz. Belegt ist nur, dass die konfigurierte URL aus der Konstante stammt
+  (`test/iel-b9`) und `beleg-init` sie nutzt. Erkennungsweg: Owner-Test #2 (a5) verlangt `[el-init] gebunden`.
 
 ## IEL-B8 — SIP-Uebergabe an ElevenLabs und Rueckfall-Routen (2026-09-15)
 

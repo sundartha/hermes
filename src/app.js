@@ -8,7 +8,14 @@
 // Konstante (INV-1), gespeist an captureRawBody + wireWebLogin(stripeWebhookPath).
 import path from "path";
 import express from "express";
-import { securityHeaders, createRateLimiter, errorHandler } from "./middleware.js";
+import {
+  securityHeaders,
+  createRateLimiter,
+  errorHandler,
+  makeFixedWindowCounter,
+  RATE_WINDOW_MS,
+  RATE_SWEEP_INTERVAL_MS,
+} from "./middleware.js";
 import { registerWellKnown } from "./auth.js";
 import { PLAN_CATALOG } from "./plans.js";
 import { configFingerprint } from "./config-fingerprint.js";
@@ -22,7 +29,12 @@ import { terminateAndBillCall, hangUpAction, billThunk, elevenLabsHangUpAction }
 import { stripeBilling } from "./billing/stripe.js";
 import { makeVoiceRoutes } from "./routes/voice.js";
 import { makeElevenLabsWebhookRoutes } from "./routes/webhooks-elevenlabs.js";
-import { makeElevenLabsInitWebhookRoutes } from "./routes/webhooks-elevenlabs-init.js";
+import {
+  INIT_FEHLVERSUCHE_PRO_MIN,
+  initTokenSchranke,
+  istInitWebhookAnfrage,
+  makeElevenLabsInitWebhookRoutes,
+} from "./routes/webhooks-elevenlabs-init.js";
 import { makeConsultRaised } from "./conversation/consult-raised.js";
 import { makeReadRoutes } from "./routes/api-read.js";
 import { makeInboxRoutes } from "./routes/api-inbox.js";
@@ -91,6 +103,17 @@ function respondToParserError(err, res, next) {
 const withParserErrors = (parser) => (req, res, next) =>
   parser(req, res, (err) => respondToParserError(err, res, next));
 
+// IEX-A7/E12: eigener Fehlversuch-Zaehler der Init-Schranke - getrennt vom globalen Limiter,
+// dessen Zaehlung diese Anfragen nie sieht.
+function makeInitTokenSchranke(config) {
+  const zaehler = makeFixedWindowCounter({
+    windowMs: RATE_WINDOW_MS,
+    limit: INIT_FEHLVERSUCHE_PRO_MIN,
+    sweepMs: RATE_SWEEP_INTERVAL_MS,
+  });
+  return initTokenSchranke({ config, zaehler });
+}
+
 export function installGlobalMiddleware({ app, config }) {
   app.use(securityHeaders);
 
@@ -100,8 +123,14 @@ export function installGlobalMiddleware({ app, config }) {
   // Proxy-Weiterleitung. NICHT per isLocalSocket allein - hinter Render erscheint auch
   // externer Traffic als Loopback (-> sonst liefe das Limit fuer den ganzen Internet-
   // Traffic ins Leere). isTrustedLocalCaller verlangt zusaetzlich kein X-Forwarded-For.
+  // POST auf den Init-Webhook (IEX-A7/E12) laeuft STATT des globalen Limiters durch die
+  // Init-Token-Schranke - VOR den Parsern und VOR der Loopback-Ausnahme, damit ein
+  // ungueltiges Token nie geparst wird, egal von wo. Geteilte Anbieter-IPs: nur ungueltige
+  // Tokens zaehlen, ein gueltiges wird nie gedrosselt.
   const rateLimiter = createRateLimiter(config.safety.rateLimitPerMin);
+  const initSchranke = makeInitTokenSchranke(config);
   app.use((req, res, next) => {
+    if (istInitWebhookAnfrage(req)) return initSchranke(req, res, next);
     if (req.path.startsWith(VOICE_PATH_PREFIX) || isTrustedLocalCaller(req)) return next();
     rateLimiter(req, res, next);
   });
@@ -553,7 +582,8 @@ export async function buildApp(deps) {
   // ---- IEL-B6: Conversation-Initiation-Webhook (POST /webhooks/elevenlabs/init) ----------
   // AUTH-AUSNAHME (Regel 3, begruendet in src/route-policy.js und im Routenmodul): Geheimnis-
   // Header, dann Zuordnung ueber das Bindungs-Token an einen wartenden Inbound-EL-Anruf. NICHT
-  // unter /voice -> der Per-IP-Limiter liegt davor.
+  // unter /voice; statt des globalen Limiters haengt die Init-Token-Schranke vor den Parsern
+  // (installGlobalMiddleware, IEX-A7).
   app.use(makeElevenLabsInitWebhookRoutes({ store, config, bridges: inboundBridges }));
 
   // ================= REST-API (Dashboard + MCP-Tools) + MCP-Transport ==============
