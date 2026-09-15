@@ -35,8 +35,14 @@ function tenantIstGepinnt(tenantId, tenantIds) {
 // Export aus dem Offenlegungs-Modul wuerde zwei fachfremde Domaenen koppeln. Vorrang G13
 // vor G5 (Duplizierung), begruendet in tasks/iel-spec.md.
 
+// Eine Quelle fuer das Endungs-Format: Boot-Sondenzeile und Registrierungs-Inventar (IEL-B9)
+// muessen dieselbe Schreibweise tragen, sonst ist der E13-Abgleich Augenmass.
+export function e164Endung(e164) {
+  return `${DID_ENDUNG_PRAEFIX}${e164.slice(-DID_ENDUNG_ZIFFERN)}`;
+}
+
 function didEndung(number) {
-  return `${DID_ENDUNG_PRAEFIX}${number.e164.slice(-DID_ENDUNG_ZIFFERN)}`;
+  return e164Endung(number.e164);
 }
 
 // Die einzige Stelle, die "Zugang des EL-Inbound-Wegs vollstaendig" definiert (G5).

@@ -252,7 +252,9 @@ export function stripTrailingSlash(url) {
 // Kommaliste -> getrimmte, nicht-leere Eintraege. EINE Quelle (G5) fuer die drei
 // Listen-Envs (Laendervorwahlen, record_types, Admin-Mails); die Aufrufkette lebt damit
 // hier statt dreimal am Ort (G36, Gesetz von Demeter). Fehlende Var -> leere Liste.
-function csvEnv(raw) {
+// Exportiert fuer scripts/iel-geheimnisse-schalter.mjs (Allowlist-Uebernahme, dieselbe Zerlegung
+// wie am Server).
+export function csvEnv(raw) {
   return (raw || "")
     .split(",")
     .map((eintrag) => eintrag.trim())
@@ -861,6 +863,17 @@ const rawConfig = {
     // loggen, nie in eine Antwort. Heute liest es nur der Boot-Riegel.
     initWebhookToken: (process.env.ELEVENLABS_INIT_WEBHOOK_TOKEN || "").trim(), // SECRET
   },
+
+  // ---- Werkzeug-Schluessel (IEL-B9/B10) - KEIN Serverwert, eigener Namespace `werkzeug` ----
+  // RENDER_API_KEY: nur Werkzeuge lesen ihn - scripts/push-elevenlabs.mjs (Ziel-Urteil des
+  // Workspace-Init-Webhooks, nur GET) und scripts/iel-geheimnisse.mjs (GET + PUT auf genau fuenf
+  // benannte Render-Schluessel). Bis IEL-B10 lag er unter voice.elevenLabsInbound; dort stand er
+  // neben den Inbound-Geheimnissen, die das Geheimnis-Werkzeug nie aus der lokalen Konfiguration
+  // lesen darf (Abnahme-Grep der Spec). Eigener Namespace = EIN Leser, keine zweite process.env-Stelle
+  // ausserhalb dieser Datei (G5/G35). Voller Render-Workspace-Zugriff: SECRET, nie loggen, nie in
+  // render.yaml, nie im Dienst gesetzt. Die Render-BASIS ist bewusst KEIN Env-Wert (Konstante in
+  // src/render-api.js).
+  renderApiKey: (process.env.RENDER_API_KEY || "").trim(), // SECRET
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----
   // Master-Flag: Geld halten -> erst dann provisionieren -> capturen -> aktivieren.
@@ -2158,6 +2171,8 @@ export const CONFIG_NAMESPACES = Object.freeze({
   metrics: ["metricsEnabled"],
   privacy: ["retentionDays", "diagnosticRetentionDays", "evidenceRetentionDays"],
   research: ["researchEnabled", "researchMaxUses", "researchSearchFeeCents", "lookupEnabled", "lookupSearchFeeCents", "exaApiKey", "exaApiBase"],
+  // IEL-B10: Schluessel, die nur Werkzeuge (scripts/) lesen - nie der Server.
+  werkzeug: ["renderApiKey"],
 });
 
 // EINE Gruppen-Fabrik (G5) fuer beide Oberflaechen: jedes Blatt ist Getter+Setter auf

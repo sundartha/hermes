@@ -57,22 +57,45 @@ export function liveWerkzeuge(voicemailText = VOICEMAIL_LIVE_TEXT) {
 // ohne die die Vorlage nichts pruefen bzw. nichts zusammenfuehren koennte. Alles
 // andere fehlt und weicht deshalb ab; das ist fuer die gemessenen Aussagen ohne
 // Belang und der einzige Weg, den echten Live-Stand nicht ins Repo zu kopieren.
+// IEL-B9: der Init-Webhook-Schalter steht hier schon auf dem SOLL-Wert. Weicht er ab,
+// traegt ein Lauf ohne --felder ihn im Koerper, und die Freigaben-Wache (Riegel 8) bricht
+// den Lauf ab - diesen Fall misst test/iel-b9-cutover-skripte.test.js eigens. Die Suiten
+// dieser Attrappe messen andere Riegel und sollen nicht an Riegel 8 enden.
 export const LIVE_MIT_DATENSCHUTZ = {
   conversation_config: {
     language_presets: {},
     agent: { prompt: { built_in_tools: liveWerkzeuge() } },
   },
-  platform_settings: { privacy: { retention_days: -1, record_voice: true } },
+  platform_settings: {
+    privacy: { retention_days: -1, record_voice: true },
+    overrides: { enable_conversation_initiation_client_data_from_webhook: true },
+  },
 };
 
-// Antwortet auf JEDEN Aufruf mit dem gestellten Agenten. Nur ok und text()
-// werden vom Kommando gelesen; mehr vorzugaukeln wuerde nur verdecken, was
-// wirklich gebraucht wird.
-function fetchAttrappe(koerper) {
+const HTTP_OK_MIN = 200;
+const HTTP_OK_MAX = 299;
+const HTTP_OK = 200;
+
+// Beantwortet JEDEN Aufruf ueber antworte(aufruf) -> {status, koerper} und schreibt
+// Adresse, Methode, Koerper und Kopf mit. ok/status/text()/json() genuegen beiden
+// Lesewegen des Kommandos (holeLiveAgenten liest text(), convai.js liest json()).
+function fetchRouter(antworte) {
   const aufrufe = [];
   const stellvertreter = async (adresse, optionen = {}) => {
-    aufrufe.push({ adresse: String(adresse), methode: optionen.method || METHODE_GET });
-    return { ok: true, text: async () => JSON.stringify(koerper) };
+    const aufruf = {
+      adresse: String(adresse),
+      methode: optionen.method || METHODE_GET,
+      koerper: optionen.body ?? null,
+      kopf: optionen.headers ?? {},
+    };
+    aufrufe.push(aufruf);
+    const { status, koerper } = antworte(aufruf);
+    return {
+      ok: status >= HTTP_OK_MIN && status <= HTTP_OK_MAX,
+      status,
+      text: async () => JSON.stringify(koerper),
+      json: async () => structuredClone(koerper),
+    };
   };
   return { aufrufe, stellvertreter };
 }
@@ -82,7 +105,13 @@ function fetchAttrappe(koerper) {
 // hier uebernaehme, verschoebe die Ladereihenfolge in eine Datei, in der sie
 // niemand vermutet.
 export async function laufeMitAttrappe({ runCli, argumente, live = LIVE_MIT_DATENSCHUTZ }) {
-  const { aufrufe, stellvertreter } = fetchAttrappe(live);
+  return laufeMitRouter({ runCli, argumente, antworte: () => ({ status: HTTP_OK, koerper: live }) });
+}
+
+// Wie laufeMitAttrappe, aber die Antwort haengt am Aufruf (IEL-B9: Render und ElevenLabs,
+// Vorher- und Nachher-Stand im selben Lauf).
+export async function laufeMitRouter({ runCli, argumente, antworte }) {
+  const { aufrufe, stellvertreter } = fetchRouter(antworte);
   const echtesFetch = globalThis.fetch;
   const echtesLog = console.log;
   const echtesError = console.error;
