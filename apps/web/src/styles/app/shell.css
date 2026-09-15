@@ -575,9 +575,12 @@
   .agent-chip__hint-line + .agent-chip__hint-line::before {
     content: " ";
   }
-  /* Der Aktions-Knopf ist die Hauptsache des Stoerfalls und nimmt die volle Breite. */
+  /* Der Aktions-Knopf ist die Hauptsache des Stoerfalls und nimmt die volle Breite.
+     Hoehe wie alle anderen Knoepfe am Handy (44px, s. panels.css Abschnitt 9). */
   .agent-chip__action {
     width: 100%;
+    min-height: 44px;
+    padding-block: 0;
     margin-left: 0;
   }
   /* Runde 9 (Owner-Befund 15.09.2026): der Kopier-Knopf stand als Pille UNTER der

@@ -876,3 +876,35 @@
 .switch-slider::before {
   top: calc((var(--space-6) - var(--space-5)) / 2);
 }
+
+/* --------------------------------------- 9. Knopfmasse am Handy ----------- */
+
+/* Owner-Befund 15.09.2026: "alle Buttons sollen so gross sein wie der Add-Knopf".
+   Gemessen bei 390px waren es vier verschiedene Groessen: "Add" 126x43,
+   "Subscribe" 126x46,5 (es ist ein <label> und erbt die 1.5-Zeilenhoehe des
+   Fliesstexts, waehrend ein <button> auf line-height:normal steht),
+   "Save number" 133,2x43 (Text breiter als die Mindestbreite plus 20px Polster)
+   und die Geisterknoepfe "Remove"/"Add a different card" 41px hoch ganz ohne
+   Mindestbreite.
+   Eine Grundflaeche fuer alle: 44px hoch (feste Zeilenhoehe statt geerbter,
+   Polster nur noch waagerecht), mindestens 126px breit. Schmalere
+   Beschriftungen fuellen die 126px, laengere wachsen weiter mit -- "Add a
+   different card" bleibt breit, das ist gewollt. Farbe, Rand und
+   Schriftgewicht bleiben je Variante unveraendert, nur die Masse sind
+   vereinheitlicht (Owner: "die Farben kannst du lassen"). */
+@media (max-width: 559px) {
+  .card .btn,
+  .newsletter-toggle__cta,
+  .newsletter-toggle__unsub,
+  .payment-card__action,
+  .private-number-form__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 126px;
+    min-height: 44px;
+    padding-block: 0;
+    padding-inline: 16px;
+    line-height: 1.2;
+  }
+}
