@@ -130,6 +130,22 @@
   color: #ffffff;
 }
 
+/* Owner-Entscheid 15.09.2026: der Klammerzusatz der Auto-Kachel ("(by number)" /
+   "(nach Nummer)") steht ab 620px wieder da -- er fuellt die sonst leere Zeile und
+   sagt, wonach "automatisch" entscheidet. Am Handy bleibt er weg: dort hat die Kachel
+   neben dem Kuerzel AUTO keinen Platz und die Zeile brach um. Gedaempft, damit das
+   eigentliche Wort die Kachel traegt. */
+.lang-tile__qualifier {
+  margin-left: 6px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 619px) {
+  .lang-tile__qualifier {
+    display: none;
+  }
+}
+
 /* Sprachcode rechts in Mono (Spec §9). */
 .lang-tile__code {
   position: relative;

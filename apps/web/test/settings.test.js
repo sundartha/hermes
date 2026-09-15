@@ -360,7 +360,7 @@ test("savePrivateNumber('') sendet {privateNumber:''} (Loeschen)", async () => {
 // ---- Dashboard-i18n Etappe 2: DE-Modus (Sprachkacheln + Permission-Toggles) ---
 test("DE-Modus: settingsLanguageLabel deckt genau die SETTINGS_LANGUAGES-Werte deutsch ab", () => {
   withLang("de", () => {
-    assert.equal(settingsLanguageLabel(""), "Automatisch (nach Nummer)");
+    assert.equal(settingsLanguageLabel(""), "Automatisch");
     assert.equal(settingsLanguageLabel("de"), "Deutsch");
     assert.equal(settingsLanguageLabel("fr"), "Französisch");
     assert.equal(settingsLanguageLabel("en"), "Englisch");

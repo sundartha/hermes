@@ -92,7 +92,12 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
               <span class="lang-tile__ring" aria-hidden="true">
                 <span class="lang-tile__dot" aria-hidden="true" />
               </span>
-              <span class="lang-tile__label" data-lang-value={value}>{label}</span>
+              <span class="lang-tile__label">
+                <span data-lang-value={value}>{label}</span>
+                {value === "" && (
+                  <span class="lang-tile__qualifier" data-lang-qualifier={value}>(by number)</span>
+                )}
+              </span>
               <span class="lang-tile__code" aria-hidden="true">{value ? value.toUpperCase() : "AUTO"}</span>
             </label>
           ))
@@ -167,6 +172,7 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
     settingsFrom,
     settingsOutcome,
     settingsLanguageLabel,
+    settingsLanguageQualifier,
   } from "../../lib/api.js";
   import { t } from "../../lib/i18n.js";
 
@@ -217,6 +223,11 @@ import { SETTINGS_LANGUAGES } from "../../lib/api.js";
   function syncSettingsLabels() {
     for (const node of formEl.querySelectorAll("[data-lang-value]")) {
       node.textContent = settingsLanguageLabel(node.dataset.langValue);
+    }
+    // Der Klammerzusatz der Auto-Kachel ist ein eigener Knoten (nur ab 620px sichtbar,
+    // panels.css) und braucht darum seinen eigenen Durchlauf.
+    for (const node of formEl.querySelectorAll("[data-lang-qualifier]")) {
+      node.textContent = settingsLanguageQualifier(node.dataset.langQualifier);
     }
   }
 

@@ -229,7 +229,11 @@ const NUMBER_TEXT_NO_NUMBER_DE = "Noch keine Nummer zugewiesen";
 const NUMBER_TEXT_SETTING_UP = "Setting up your number…";
 const NUMBER_TEXT_SETTING_UP_DE = "Deine Nummer wird eingerichtet…";
 const NUMBER_TEXT_SETUP_FAILED = "Number setup failed";
-const NUMBER_TEXT_SETUP_FAILED_DE = "Einrichtung der Nummer fehlgeschlagen";
+// Owner-Entscheid 15.09.2026: "Einrichtung der Nummer fehlgeschlagen" war mit 37
+// Zeichen der laengste Statussatz und brach in der mittleren Fassung neben dem Knopf
+// auf drei Zeilen um -- die Karte wurde dadurch hoeher als dieselbe Karte mit einer
+// Nummer. "der Nummer" steht ohnehin als Label ("DEINE NUMMER") direkt darueber.
+const NUMBER_TEXT_SETUP_FAILED_DE = "Einrichtung fehlgeschlagen";
 const NUMBER_TEXT_SETUP_BLOCKED = "Number setup delayed — capacity limit reached";
 const NUMBER_TEXT_SETUP_BLOCKED_DE = "Einrichtung verzögert — Kapazitätsgrenze erreicht";
 
@@ -246,8 +250,12 @@ export function numberPlaceholderText(data) {
   return tPair(NUMBER_TEXT_NO_NUMBER, NUMBER_TEXT_NO_NUMBER_DE);
 }
 
-const NUMBER_ACTION_FIX_PAYMENT = "Update payment method";
-const NUMBER_ACTION_FIX_PAYMENT_DE = "Zahlungsmittel aktualisieren";
+// GP-P6 Runde 3 (Owner-Befund 15.09.2026): das Label sagt nur noch "Update" -- WAS
+// aktualisiert wird, traegt das Kartensymbol im Knopf (AgentChip.astro, dasselbe
+// Symbol wie in der Billing-Insel). "Update payment method" war auf schmalen Breiten
+// der breiteste Block der Karte und hat den Knopf fett und klobig wirken lassen.
+const NUMBER_ACTION_FIX_PAYMENT = "Update";
+const NUMBER_ACTION_FIX_PAYMENT_DE = "Aktualisieren";
 
 // GP-P5: der Grund, den der Server seit dieser Etappe mitliefert (agent.numberStatusReason,
 // self-service-routes.js). Contract-Grenze (R5): die EINE Stelle, an der das Frontend
@@ -293,10 +301,14 @@ export function numberPlaceholderAction(data) {
 // handeln, warten, oder sich melden. Ohne ihn stand im Dashboard nur "Einrichtung der
 // Nummer fehlgeschlagen", und der Kunde konnte nicht wissen, dass bei ihm ausschliesslich
 // eine Karte hilft. "" = kein Satz (kein failed-Zustand oder aelterer Server ohne Grund).
+// Owner-Befund 15.09.2026: der deutsche Satz war "sehr, sehr lang" und lief am Handy
+// ueber vier Zeilen. Beide Sprachen tragen jetzt denselben, knappen Bau -- Ursache,
+// dann was zu tun ist und wo, dann die Entwarnung. Das "wo" (Abrechnung/Billing) ist
+// neu und traegt die Aufgabe des Knopfes, der am Handy entfaellt.
 const NUMBER_HINT_PAYMENT =
-  "Your payment method can't cover the one-time setup fee. Add a card - setup restarts automatically.";
+  "Your card doesn't cover the setup fee. Add a new one under Billing - setup then continues.";
 const NUMBER_HINT_PAYMENT_DE =
-  "Dein Zahlungsmittel kann die einmalige Einrichtungsgebühr nicht tragen. Hinterlege eine Karte — die Einrichtung startet dann automatisch neu.";
+  "Deine Karte deckt die Einrichtungsgebühr nicht. Neue Karte unter Abrechnung — dann geht es weiter.";
 const NUMBER_HINT_RETRY = "We're automatically trying again - no action needed.";
 const NUMBER_HINT_RETRY_DE = "Wir versuchen es automatisch erneut — du musst nichts tun.";
 const NUMBER_HINT_MANUAL = "We couldn't set up your number. Please get in touch and we'll sort it out.";
@@ -541,13 +553,16 @@ export const SETTINGS_FREE_FIELDS = Object.freeze(["agentName", "language", "age
 // SELF_SERVICE_RESTRICT_ONLY_FIELDS in src/self-service.js.
 export const SETTINGS_RESTRICT_ONLY_FIELDS = Object.freeze(["allowPersonalData", "allowBankData"]);
 
-// Sprach-Optionen des language-Dropdowns. "" = "Automatic (by number)" (das
+// Sprach-Optionen des language-Dropdowns. "" = "Automatic" (das
 // Override leeren); die uebrigen Codes spiegeln SUPPORTED_LANGUAGES
 // (src/i18n/locales.js = Object.keys(LOCALES)). Hier zentralisiert + drift-
 // getestet, damit eine 4. Backend-Sprache nicht still im Dropdown fehlt (G22).
 // Der Server validiert language ohnehin fail-closed gegen SUPPORTED_LANGUAGES.
 export const SETTINGS_LANGUAGES = Object.freeze([
-  { value: "", label: "Automatic (by number)" },
+  // Owner-Entscheid 15.09.2026: nur noch "Automatic" -- der Klammerzusatz "(by number)"
+  // stand in der Kachel neben dem Kuerzel AUTO und hat die Zeile am Handy umbrechen
+  // lassen. Was "automatisch" heisst, erklaert der Satz ueber den Kacheln.
+  { value: "", label: "Automatic" },
   { value: "de", label: "German" },
   { value: "fr", label: "French" },
   { value: "en", label: "English" },
@@ -560,7 +575,7 @@ export const SETTINGS_LANGUAGES = Object.freeze([
 // auf jedem AUTH_EVENT inkl. des vom Sprachumschalter re-dispatchten), um die
 // sichtbare Beschriftung auf die aktuelle Sprache zu bringen.
 export const SETTINGS_LANGUAGE_LABELS_DE = Object.freeze({
-  "": "Automatisch (nach Nummer)",
+  "": "Automatisch",
   de: "Deutsch",
   fr: "Französisch",
   en: "Englisch",
@@ -575,6 +590,19 @@ export const SETTINGS_LANGUAGE_LABELS_EN = Object.freeze(
 // Sprachbewusste Kachel-Beschriftung. Unbekannter Wert -> der rohe Wert (nie leer).
 export function settingsLanguageLabel(value) {
   return tDyn({ en: SETTINGS_LANGUAGE_LABELS_EN, de: SETTINGS_LANGUAGE_LABELS_DE }, value) || value;
+}
+
+// Owner-Entscheid 15.09.2026: der Zusatz "(by number)" steht ab 620px wieder in der
+// Auto-Kachel -- dort ist Platz, und die Zeile wirkt ohne ihn leer. Am Handy blendet
+// panels.css ihn aus. Er ist darum ein EIGENER String neben dem Label und nicht Teil
+// von ihm: nur CSS kann entscheiden, ob die Breite reicht, und ein halber Textknoten
+// laesst sich nicht ausblenden. Kachel ohne Zusatz -> "" (kein leerer Klammerrest).
+const SETTINGS_LANGUAGE_QUALIFIERS_EN = Object.freeze({ "": "(by number)" });
+const SETTINGS_LANGUAGE_QUALIFIERS_DE = Object.freeze({ "": "(nach Nummer)" });
+export function settingsLanguageQualifier(value) {
+  return (
+    tDyn({ en: SETTINGS_LANGUAGE_QUALIFIERS_EN, de: SETTINGS_LANGUAGE_QUALIFIERS_DE }, value) || ""
+  );
 }
 
 // Die Permission-Toggles der UI (Reihenfolge + Beschriftung). Es sind GENAU die
