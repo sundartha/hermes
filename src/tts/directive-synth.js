@@ -54,7 +54,11 @@ export function makeDirectiveSynth({ config, ttsStore, store, onQuotaWarning }) 
     // diese Stelle hier die letzte - deshalb liegt der Katalog-Messpunkt VOICE-12 seit
     // IP3 an ihr (test/directive-synth.test.js). elevenLabsVoiceIdFor bleibt die EINE
     // Aufloesungsquelle, geteilt mit dem Outbound-Anrufstart (G5).
-    const voiceId = elevenLabsVoiceIdFor(cfg.voiceId, d.voiceProfile);
+    // IEL-B7a (E19): eine an der Direktive gesetzte Stimme gewinnt (EL-Inbound: Pflichtsatz
+    // in der Stimme des Agenten). Ohne Feld - jeder heutige Aufrufer - bleibt die Aufloesung
+    // oben byte-identisch; ein leerer String zaehlt als nicht gesetzt. Riegel, Buchung und
+    // Azure-Rueckfall laufen unveraendert durch synthToServeUrl.
+    const voiceId = d.voiceId || elevenLabsVoiceIdFor(cfg.voiceId, d.voiceProfile);
     const url = await synthToServeUrl(text, { ...cfg, voiceId });
     if (!url) return d; // fail-safe -> Azure-<Say>
     return d.kind === DIRECTIVE.GATHER ? { ...d, promptAudioUrl: url } : { ...d, audioUrl: url };
