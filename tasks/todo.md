@@ -34,5 +34,27 @@ an den Owner, keine Ersatzarbeit.
       Pruefung: Gate PASS, Lead `git diff --stat`, Merge, volle Suite einmal `# fail 0`.
 - [ ] IEL-D Push upstream + Deploy + Schalter nur fuer den Owner-Tenant an
       Pruefung: Boot-Banner/Render-Log zeigt Commit und Schalter.
-- [ ] IEL-T Owner-Testanruf (Owner) — Pruefung: Render-Log + ElevenLabs-Conversation + Owner-Urteil
+- [x] IEL-T Owner-Testanruf inbound + Outbound-Kontrolle 2026-09-15 bestanden, verifiziert (Protokoll).
+
+## Folgekette IEX: Ein-Satz-Eroeffnung, Fehlersatz, Rollout, Budget-Engine loeschen
+
+Owner-Entscheidungen 2026-09-15 (Chat, AskUserQuestion):
+1. Eroeffnung wie Outbound: EIN fester Satz des Agenten ("KI-Assistent von <Name>" + KI-Hinweis +
+   "Wie kann ich weiterhelfen?"), KEIN separater Pflichtsatz davor (ersetzt Kickoff 5.4 fuer Inbound).
+2. Hinweis wahrheitsgemaess wie heute (KI + Aufzeichnung/Transkription; record_voice bleibt an).
+3. Uebergabe scheitert: fester Satz ("KI-Assistent von <Name>, technischer Fehler, bitte spaeter erneut
+   anrufen") und auflegen, OHNE Owner-Benachrichtigung. Budget-Engine ist dann kein Rueckfall mehr.
+4. Inbound-Minutensatz fuer ALLE Tenants = Outbound-Satz (O10 entschieden).
+Reihenfolge: Eroeffnung/Fehlersatz bauen -> Owner-Test -> Kosten-Join-Befund + Rollout alle Tenants
+-> Budget-Engine in kleinen Phasen loeschen.
+
+Owner-Entscheidungen 2026-09-15, zweite Runde: record_voice AUS (kein Code liest EL-Audio; retention
+bleibt), Hinweis-Text unveraendert; Texte Eroeffnung/Fehlersatz de/en/fr freigegeben (Wortlaut in
+tasks/iex-spec-a.md O1/O3); ohne Namen neutrale Form; Nummer ohne EL-Registrierung -> Fehlersatz,
+auflegen, Anruf-Datensatz + Log, keine Benachrichtigung.
+
+- [x] IEX-R Recherche -> tasks/iex-r1-eroeffnung.md, tasks/iex-r2-loeschung-rollout.md
+- [ ] IEX-S Spec Teil A (Eroeffnung/Fehlersatz/Aufzeichnung/Kosten-Join/Tarif/Rollout) + Review laeuft;
+      Spec Teil B (Loeschung D1-D6) erst nach Teil A live
+- [ ] IEX-B Bau, Deploy Owner-Tenant, Owner-Test, Rollout, Loeschung
 - [ ] IEL-X Budget-Engine entfernen — NICHT vor IEL-T.
