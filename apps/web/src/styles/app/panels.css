@@ -688,9 +688,13 @@
     width: 100%;
     text-align: center;
   }
+  /* Owner-Durchgang 15.09.2026: gestapelt zog die weisse Pille ueber die ganze Breite
+     und legte zwei fette weisse Balken in eine Karte. Sie behaelt ihre Form (126px
+     Mindestbreite) und steht linksbuendig unter dem Feld -- wie "Save"/"Save number"
+     in den Einstellungen. */
   .newsletter-form {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
   }
   /* Owner-Befund 15.09.2026: am Handy war das Feld nur noch ein Strich. Ursache:
      `flex: 1` an .newsletter-form__field wirkt in der gestapelten Spalte auf die HOEHE
@@ -702,6 +706,20 @@
   }
   .newsletter-toggle__cta {
     text-align: center;
+  }
+  /* Owner-Durchgang 15.09.2026: in der schmalen Zeile blieb fuer die E-Mail nur rund
+     140px, "team@sundartha.com" brach also mit Auslassungspunkten ab, obwohl die Zeile
+     Platz hat. Die Adresse ist der Inhalt der Zeile: sie bekommt die erste Zeile ganz,
+     Status-Pille und Kreuz ruecken darunter. */
+  .newsletter-recipient__main {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .newsletter-recipient__email {
+    flex: 1 1 100%;
+  }
+  .newsletter-recipient__remove {
+    margin-left: auto;
   }
 }
 
@@ -748,6 +766,21 @@
 .field-label,
 .dash-head__eyebrow {
   font-weight: 400;
+}
+
+/* 6. Gefuellte Knoepfe in den Karten hatten keine Mindestbreite: "Save" stand als
+   winzige Pille neben "Save number" und den 126px-Pillen des Newsletters. Gleiche
+   Grundflaeche fuer alle -- laengere Beschriftungen wachsen weiterhin mit. */
+.card .btn {
+  min-width: 126px;
+}
+
+/* 7. Der Leer-Hinweis der Empfaengerliste stand mittig unter einem linksbuendigen
+   Formular (geerbt von .data-empty, das fuer die grosse leere Anruf-Karte gedacht ist)
+   -- in einer Listenzeile unter einem Feld gehoert er nach links. */
+.newsletter-recipient-list .data-empty {
+  padding: 0;
+  text-align: left;
 }
 
 /* ------------------------------------------- 8. Toggle-Schalter zentrieren */

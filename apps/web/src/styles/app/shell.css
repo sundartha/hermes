@@ -539,9 +539,16 @@
   .agent-chip__hint-line + .agent-chip__hint-line::before {
     content: " ";
   }
-  .agent-chip__copy,
+  /* Der Aktions-Knopf ist die Hauptsache des Stoerfalls und nimmt die volle Breite.
+     Der Kopier-Knopf ist eine Nebenhandlung: Owner-Durchgang 15.09.2026 -- er steht
+     jetzt als normale Pille linksbuendig unter der Nummer, wie "Save" oder "Add" in
+     den Karten darunter, statt als zweiter breiter Balken. */
   .agent-chip__action {
     width: 100%;
+    margin-left: 0;
+  }
+  .agent-chip__copy {
+    width: auto;
     margin-left: 0;
   }
 }
