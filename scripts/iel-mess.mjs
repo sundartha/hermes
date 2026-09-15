@@ -688,8 +688,6 @@ async function entferneDigestZugang(kontext, { id, vorher, vorherInbound }) {
   const outboundGleich = JSON.stringify(vorher.outbound_trunk) === JSON.stringify(nachher.outbound_trunk);
   Object.assign(kontext.beleg.digest, { entfernen_http: antwort.status, nachher: digestSicht(nachher), inbound_wie_vorher: inboundGleich, outbound_wie_vorher: outboundGleich });
   if (!istTrockenlauf && !(inboundGleich && outboundGleich)) {
-    // C2-Korrektur (IEL-B11): dieser Pfad laeuft jetzt auch fuer die Nachdeploy-Wegwerf-
-    // Registrierung, nicht mehr nur fuer Spike2 - der Text nennt keine bestimmte Nummer mehr.
     console.error("ACHTUNG: Registrierung NICHT im Ausgangszustand - von Hand pruefen (Ergebnisdatei, Feld digest)");
     process.exitCode = EXIT.laufzeitfehler;
   }

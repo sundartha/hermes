@@ -128,7 +128,7 @@
     "N1-m7-m8": {
       "art": "texml-bruecke",
       "zaehler": "nachdeploy",
-      "digest": false,
+      "digest": true,
       "braucht_setup": true,
       "deckt": ["M7", "M8"],
       "misst": "'setup --nachdeploy' legt die Wegwerf-Registrierung AM AGENTEN an (Spec E20/S8): entsteht ein Gespraech, kommt der Init-Webhook-Aufruf an (M7), reagiert er bei ausgeschaltetem Schalter mit 404 statt 200 (M8)",

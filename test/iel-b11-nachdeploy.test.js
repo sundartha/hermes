@@ -25,6 +25,7 @@ import {
   sammleElGespraeche,
   sipNachrichtenBeleg,
 } from "../scripts/iel-mess-belege.mjs";
+import { texmlAnrufAnfrage } from "../scripts/iel-mess-anbieter.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SPAWN_TIMEOUT_MS = 15000;
@@ -371,6 +372,64 @@ describe("IEL-B11 Echt-Modus: setup --nur-ausgehend", () => {
     assert.equal(ergebnis.status, 0, `${ergebnis.stdout}\n${ergebnis.stderr}`);
     assert.ok(fs.existsSync(path.join(dir, "tasks", "iel-m1-wegwerf.json")));
     assert.match(ergebnis.stdout, /inbound_trunk nein/);
+  });
+});
+
+describe("IEL-B11 N1 nutzt den Digest-Weg (Review-Fix)", () => {
+  it("N1-m7-m8 ist in scripts/iel-mess.cases.json auf digest:true gestellt (Spec E20/M7)", () => {
+    const konfiguration = JSON.parse(fs.readFileSync(path.join(ROOT, "scripts", "iel-mess.cases.json"), "utf8"));
+    assert.equal(konfiguration.faelle["N1-m7-m8"].digest, true);
+  });
+
+  it("texmlAnrufAnfrage traegt fuer den N1-Fall <Sip username password>, wenn Wegwerf-Zugangsdaten vorliegen", () => {
+    const konfiguration = JSON.parse(fs.readFileSync(path.join(ROOT, "scripts", "iel-mess.cases.json"), "utf8"));
+    const fall = konfiguration.faelle["N1-m7-m8"];
+    const geheim = { username: "ielm1testbenutzer", password: "ielm1testpasswort" };
+    const anfrage = texmlAnrufAnfrage({ fall, gemeinsam: konfiguration.gemeinsam, header: konfiguration.gemeinsam.probe_header, laufId: "iel-test-lauf", geheim });
+    assert.match(anfrage.form.Texml, /<Sip username="ielm1testbenutzer" password="ielm1testpasswort">/);
+    // Gegenprobe im selben Anruf (M3-Form): ein zweiter Dial ohne Zugangsdaten.
+    assert.match(anfrage.form.Texml, /<Sip>sip:/);
+  });
+
+  it("N1-m7-m8 setzt Wegwerf-Digest per PATCH VOR jeder Zaehler-Reservierung und jedem TeXML-POST; misslingt die Verifikation, wird verweigert", () => {
+    const wegwerf = { phone_number_id: "pn_test", label: "IEL Nach-Deploy Wegwerf am Agenten" };
+    const dir = bauMessBaum({ wegwerf });
+    const protokollPfad = protokollPfadIn(dir);
+    const nachdeployZaehlerPfad = path.join(dir, "tasks", "iel-nachdeploy-zaehler.json");
+    const zaehlerVorher = fs.readFileSync(nachdeployZaehlerPfad, "utf8");
+    const registrierungsAntwort = {
+      phone_number: "+12025550176",
+      label: "IEL Nach-Deploy Wegwerf am Agenten",
+      assigned_agent: { agent_id: "agent_b11_test" },
+      inbound_trunk: { allowed_numbers: [] },
+    };
+    const szenario = {
+      routen: [
+        { methode: "GET", muster: "^/v1/convai/phone-numbers/pn_test$", status: HTTP_OK, koerper: registrierungsAntwort },
+        { methode: "PATCH", muster: "^/v1/convai/phone-numbers/pn_test$", status: HTTP_OK, koerper: {} },
+      ],
+    };
+    const ergebnis = spawnEcht(dir, ["N1-m7-m8"], { szenario, protokollPfad });
+    assert.equal(ergebnis.status, EXIT_VERWEIGERT, `${ergebnis.stdout}\n${ergebnis.stderr}`);
+    assert.match(ergebnis.stderr, /Zugangsdaten nicht wirksam gesetzt/);
+
+    const protokoll = leseProtokoll(protokollPfad);
+    assert.ok(!enthaeltPfadTeil(protokoll, "/v2/texml/calls/"), "kein TeXML-POST, da die Verifikation vor dem Anruf scheitert");
+
+    const patchAufrufe = protokoll.filter((aufruf) => aufruf.methode === "PATCH");
+    assert.ok(patchAufrufe.length >= 1, "kein PATCH protokolliert - N1 haette den Digest-Weg genommen");
+    const [ersterPatch] = patchAufrufe;
+    const credentials = ersterPatch.koerper?.inbound_trunk_config?.credentials;
+    assert.ok(credentials?.username && credentials.username.length > 0, "PATCH ohne Benutzername - kein echter Digest-Zugang gesetzt");
+    assert.ok(credentials?.password && credentials.password.length > 0, "PATCH ohne Passwort - kein echter Digest-Zugang gesetzt");
+
+    // Reihenfolge: Registrierung lesen (x2) -> PATCH setzen -> Registrierung erneut lesen (schlaegt
+    // fehl) -> im finally PATCH entfernen -> Registrierung ein letztes Mal lesen. Kein Aufruf
+    // davon ist eine Zaehler-Reservierung oder ein TeXML-POST.
+    assert.deepEqual(methodenVon(protokoll), ["GET", "GET", "PATCH", "GET", "PATCH", "GET"]);
+
+    const zaehlerNachher = fs.readFileSync(nachdeployZaehlerPfad, "utf8");
+    assert.equal(zaehlerNachher, zaehlerVorher, "Zaehler-Datei haette sich ohne Reservierung nicht aendern duerfen");
   });
 });
 
