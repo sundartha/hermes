@@ -37,9 +37,13 @@
 
 /* .app-main (app-hermes.css) saettigte bei ~1333px Breite / ~1000px Hoehe --
    Basiswerte (1320px / 3.4vh / 3vw) unveraendert, nur die Kappen wachsen. */
+/* Runde 13 (Owner-Befund 15.09.2026): das obere Polster gibt ein Stueck ab, damit
+   der Inhalt naeher am Markenblock steht (Basiswert und Kappe gleich weit
+   gesenkt: 22/3.4vh/44 -> 18/2.6vh/34, dieselbe Senkung wie in app-hermes.css).
+   Die zweite Haelfte des Abstands kommt aus der Unterkante des Kopfes. */
 .app-main {
   max-width: clamp(1320px, 75vw, 1440px);
-  padding: clamp(22px, 3.4vh, 44px) clamp(20px, 3vw, 56px) 56px;
+  padding: clamp(18px, 2.6vh, 34px) clamp(20px, 3vw, 56px) 56px;
 }
 
 /* Kartenpolster global (.card, app-hermes.css) -- wirkt einheitlich auf alle
