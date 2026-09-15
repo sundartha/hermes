@@ -432,10 +432,12 @@
    Nummer), damit es im Dashboard nur eine Feldhoehe gibt; spaeterer Import gewinnt
    gegen app-hermes.css. */
 .field-input {
-  height: 58px;
-  border-radius: 14px;
-  padding: 0 18px;
-  font-size: 16px;
+  /* 58px war der ersten Korrektur zu viel ("ein bisschen zu fett", Owner 15.09.2026):
+     52px -- noch spuerbar groesser als der Bestand (50px), aber keine Wuchtleiste. */
+  height: 52px;
+  border-radius: 13px;
+  padding: 0 17px;
+  font-size: 15.5px;
 }
 
 .newsletter-form {
@@ -469,14 +471,15 @@
 .newsletter-toggle__cta {
   flex-shrink: 0;
   /* Owner-Befund 15.09.2026: die Pille war 37px hoch neben einem 50px-Feld und der
-     "Add"-Knopf nur 70px breit. Jetzt exakt so hoch wie das Feld daneben (58px) und
-     mit einer Mindestbreite, damit auch ein kurzes Label eine echte Flaeche hat. */
+     "Add"-Knopf nur 70px breit. Jetzt exakt so hoch wie das Feld daneben (52px, nach
+     der Nachkorrektur "ein bisschen zu fett") und mit einer Mindestbreite, damit auch
+     ein kurzes Label eine echte Flaeche hat. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 58px;
-  min-width: 132px;
-  padding: 0 30px;
+  height: 52px;
+  min-width: 126px;
+  padding: 0 28px;
   /* border:0 (Owner-Feedback 2026-08-14): die Klasse sass urspruenglich auf
      einem <label> (rahmenlos); der Empfaenger-"Add" ist ein echter <button>
      und bekam ohne diese Zeile den Browser-Default-Rahmen (graue Umrandung).
