@@ -229,6 +229,10 @@ const ROUTE_FINGERPRINT = [
   "POST /api/self-service/settings",
   "POST /auth/logout",
   "POST /mcp",
+  // IEL-B8: Rueckfall-Route und SIP-Bein-Callback des EL-Inbound-Wegs - unter der /voice-Signatur-MW,
+  // Eintrag in src/route-policy.js mit VOICE_SIGNATURE_REASON.
+  "POST /voice/el-bein",
+  "POST /voice/el-rueckfall",
   "POST /voice/incoming",
   "POST /voice/outbound",
   "POST /voice/status",

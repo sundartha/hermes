@@ -7,6 +7,9 @@
 // Die Sprach-Zuordnung (language -> Satz) macht deshalb NICHT dieses Modul, sondern
 // das Locale-Bundle (locales.js: inboundNotice), damit der Sprach-Fallback genau EINMAL
 // lebt (localeFor) und dem spaeteren Weltdefault-Flip (P10) automatisch folgt.
+// Einziger Import: das Quellen-Enum EL_RUECKFALL_QUELLE aus elevenlabs/inbound-bridges.js -
+// zyklusfrei, denn jenes Modul importiert weder store/defaults.js noch i18n/locales.js.
+import { EL_RUECKFALL_QUELLE } from "../elevenlabs/inbound-bridges.js";
 
 export const INBOUND_NOTICES = Object.freeze({
   de: "Hinweis: Sie sprechen mit einer KI, das Gespräch wird transkribiert und zusammengefasst.",
@@ -40,4 +43,12 @@ export function begruessungOhnePflichtsatz({ greeting, notice }) {
   const praefix = `${notice} `;
   const rest = greeting.startsWith(praefix) ? greeting.slice(praefix.length).trim() : "";
   return rest || greeting;
+}
+
+// IEL-B8 (E8/R-C): die Begruessung im Rueckfall. VOREINSTELLUNG IST DIE OFFENLEGUNG: nur der
+// exakte Wert dial_ende laesst den Pflichtsatz weg (vor dem Dial bereits gesprochen, E1); jeder
+// andere Wert - frist, fehlend, unbekannt, kein String - spricht die volle Begruessung.
+export function rueckfallBegruessung({ greeting, notice, quelle }) {
+  if (quelle === EL_RUECKFALL_QUELLE.DIAL_ENDE) return begruessungOhnePflichtsatz({ greeting, notice });
+  return withInboundNotice(greeting, notice);
 }

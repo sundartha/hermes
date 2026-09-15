@@ -113,6 +113,8 @@ oeffentlich|POST|/voice/incoming|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/turn|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/outbound|403|keine|Provider-Signatur fail-closed
 oeffentlich|POST|/voice/status|403|keine|Provider-Signatur fail-closed
+oeffentlich|POST|/voice/el-rueckfall|403|keine|Provider-Signatur fail-closed
+oeffentlich|POST|/voice/el-bein|403|keine|Provider-Signatur fail-closed
 oeffentlich|GET|/mcp|405|keine|Transport ist POST-only
 oeffentlich|DELETE|/mcp|405|keine|Transport ist POST-only
 sitzung|POST|/mcp|401|mcpauth|mcpAuth fail-closed (Bearer-Challenge, keine Basic-)
