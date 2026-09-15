@@ -1603,7 +1603,7 @@ function permanentErrorStreakExceeded(permanentErrorStreaks, callId, permanent) 
 // statt scheduleResultPoll - ein Neustart darf die Ergebnis-Erkennung nicht zusaetzlich um
 // einen vollen Takt verzoegern).
 //
-// IEL-B4 (E7f): ein Rueckfall-Call wird nie re-armiert (sein Budget-Gespraech schliesst ueber
+// IEL-B4 (E7f): ein Rueckfall-Call wird nie re-armiert (er schliesst nach dem Fehlersatz ueber
 // /voice/status ab); jede re-armierte Inbound-EL-Schleife steht im Register (E18-1).
 function rearmActiveConversationPolls({ store, pollConversationResult, laufendeInboundPolls }) {
   const activeElCalls = store

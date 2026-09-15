@@ -13,7 +13,7 @@
 // localeFor, callFailureReason, degradedSpeechFor, agentTurn/openingText/callerHasSpoken,
 // remainingMaxDurationMs, noSpeechEscalation, metrics, logInboundPath/INBOUND_PATH,
 // legRunsOurTurnLoop, bridgeStateOf/BRIDGE_STATE, inboundElPathFor, inboundElLocaleOf,
-// rueckfallBegruessung, inbound-rueckfall) werden direkt importiert (G5 "eine
+// inbound-rueckfall, inbound-uebergabe-gescheitert) werden direkt importiert (G5 "eine
 // Quelle"). Laufzeit-Instanzen (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall,
 // INV-7), der Provider-Dispatch-Seam (webhookEvents/providerFromHeaders/
 // inboundSignatureVerifier, DIP) sowie der Settlement-Seam (terminateAndBillCall/
@@ -27,7 +27,7 @@ import { callTariffCentsPerMin } from "../billing/metering.js";
 import { say as sayD, hangup as hangupD } from "../telephony/directives.js";
 import { SPEAK_OUTCOME } from "../telephony/adapters/telnyx/speak-events.js";
 import { localeFor } from "../i18n/locales.js";
-import { withInboundNotice, rueckfallBegruessung } from "../i18n/inbound-notice.js";
+import { withInboundNotice } from "../i18n/inbound-notice.js";
 import { gespeicherteBegruessungFuer } from "../i18n/greeting-catalog.js";
 import { callFailureReason } from "../telephony/failure-reason.js";
 import { degradedSpeechFor } from "../llm.js";
@@ -50,10 +50,13 @@ import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.js";
 import {
   EL_BEIN_PFAD,
   RUECKFALL_ENTSCHEIDUNG,
+  elFehlersatzDirektiven,
   elUebergabeDirektiven,
+  msSeitBindung,
   rueckfallEntscheidungFuer,
   rueckfallQuelleFuerLog,
 } from "../elevenlabs/inbound-rueckfall.js";
+import { INBOUND_EL_GRUND, vermerkeUebergabeGescheitert } from "../elevenlabs/inbound-uebergabe-gescheitert.js";
 
 // normNum (E.164-Normalisierung) lebt zentral in store/defaults.js (EINE Quelle,
 // geteilt mit Seed + Profil-Allowlist) und wird oben importiert.
@@ -107,9 +110,9 @@ const ANGENOMMEN_STATUS = Object.freeze(["in-progress", "answered"]);
 const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
 const EL_BEIN_LOG_PREFIX = "[el-bein]";
 
-// PROMPT-03/IEL-B6: die gespeicherte Vorlage in der Anrufsprache (EINE Quelle fuer Erstanruf und
-// Rueckfall). Das Einsetzen des Auftraggebers bleibt VOR dem Pflichtsatz-Praefix: der Fehlerpfad
-// bei greeting=null wirft unveraendert (voice-incoming-catch-path, greetingForLanguage(null, ...)
+// PROMPT-03/IEL-B6: die gespeicherte Vorlage in der Anrufsprache (Budget-Erstanruf). Das
+// Einsetzen des Auftraggebers bleibt VOR dem Pflichtsatz-Praefix: der Fehlerpfad bei
+// greeting=null wirft unveraendert (voice-incoming-catch-path, greetingForLanguage(null, ...)
 // gibt null zurueck). gespeicherteBegruessungFuer ist dieselbe Quelle wie die Init-Antwort.
 function gespeicherteBegruessungDes({ call, store }) {
   const ctx = store.tenantContext(call.tenantId);
@@ -161,9 +164,9 @@ function inboundPfadFuer({ config, tenantId }) {
   return inboundElPathFor({ config, tenantId }) ? INBOUND_PFAD.ELEVENLABS : INBOUND_PFAD.BUDGET;
 }
 
-// S1-1: technischer Abbruch mit Ansage - EINE Quelle fuer den catch von /voice/incoming und
-// /voice/el-rueckfall. Gracefuler Fehler-TeXML-Fallback statt haengendem Call (spiegelt
-// /voice/turn, Runde 2 S-A: sichtbar statt still). Kein LLM-Aufruf im Greeting-Pfad -> immer
+// S1-1: technischer Abbruch mit Ansage - der catch von /voice/incoming (der Rueckfall-catch
+// spricht seit IEX-A2 den Fehlersatz). Gracefuler Fehler-TeXML-Fallback statt haengendem Call
+// (spiegelt /voice/turn, Runde 2 S-A: sichtbar statt still). Kein LLM-Aufruf im Greeting-Pfad -> immer
 // turnErrorSpeech (kein llmDegradedSpeech-Fall wie bei /voice/turn). Vor der Call-Erzeugung gibt
 // es noch kein call.provider fuer synthesizeDirectiveAudio (der Guard dort wuerde selbst werfen)
 // -> reines Azure-<Say> wie der Unrouted-Pfad; localeFor(undefined) faellt fail-safe zurueck.
@@ -185,31 +188,69 @@ function sendAuflegen({ res, call }, { render }) {
   res.type("text/xml").send(render([hangupD()], call?.provider));
 }
 
-// Mikro offen, keine Begruessung, keine Modellrunde (Anbieter-Wiederholung eines Rueckfalls, Budget-Bein).
+// Mikro offen, keine Begruessung, keine Modellrunde (Budget-Bein, [IEL] 3.3).
 function sendFolgeGather({ res, call }, { render, followupTurnDirectives }) {
   res.type("text/xml").send(render(followupTurnDirectives(call, ""), call.provider));
 }
 
-// E8: Rueckfall auf den Budget-Pfad. Nebeneffekte (N7): Marker set-once, Fristen weg, Transkript.
-async function starteRueckfall({ res, call, quelle, nowMs }, { store, inboundBridges, sendVoiceXml, turnDirectives }) {
-  store.markInboundElFallback(call.id, new Date(nowMs).toISOString());
-  inboundBridges.clearDeadlines(call.id);
-  const begruessung = rueckfallBegruessung({
-    greeting: gespeicherteBegruessungDes({ call, store }),
-    notice: localeFor(call.language).inboundNotice,
-    quelle,
-  });
-  store.addTranscript(call.id, "agent", begruessung);
-  await sendVoiceXml(res, call, turnDirectives(call, begruessung));
+// E1/E2: Sprache und Stimme aus derselben Aufloesung wie die Init-Antwort (tts.voice_id),
+// Name des Tenants aus tenantContext.
+function fehlersatzFuer({ call }, { store, config }) {
+  const aufloesung = inboundElLocaleOf({ store, config, call });
+  const bundle = localeFor(aufloesung.language);
+  return {
+    text: bundle.inboundFehlersatz(store.tenantContext(call.tenantId).ownerName),
+    voiceProfile: bundle.voiceProfile,
+    voiceId: aufloesung.voiceId,
+  };
+}
+
+// IEX-A2 (O3/E4): gescheiterte Uebergabe. Nebeneffekte (N7): Marker, Fehlergrund, Fristen weg,
+// Antwort. Vermerk VOR der Synthese: ein Synthese-Wurf laesst den Marker stehen. Kein Transkript.
+async function sprecheFehlersatz({ res, call, nowMs }, deps) {
+  vermerkeUebergabeGescheitert({ callId: call.id, grund: INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, nowMs }, deps);
+  await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(fehlersatzFuer({ call }, deps)));
 }
 
 const RUECKFALL_ANTWORT = Object.freeze({
   [RUECKFALL_ENTSCHEIDUNG.AUFLEGEN]: sendAuflegen,
   [RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER]: sendFolgeGather,
-  [RUECKFALL_ENTSCHEIDUNG.RUECKFALL_STARTEN]: starteRueckfall,
+  [RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ]: sprecheFehlersatz,
 });
 
-// E8 (Nebeneffekte je Entscheidung s.o.). Rumpf komplett in try/catch (Express 4, Muster S1-1).
+// E4-catch (D5): Marker nur, wo auch der Normalweg ihn setzt - ein laenger gebundenes Gespraech
+// behaelt seinen Nachlauf, ein Budget-Call seine Benachrichtigung. Best-effort: ein zweiter
+// Wurf verhindert den Satz nie.
+function vermerkeNachFehlerBestEffort({ call, nowMs }, deps) {
+  if (rueckfallEntscheidungFuer({ call, nowMs }) !== RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ) return;
+  try {
+    vermerkeUebergabeGescheitert({ callId: call.id, grund: INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT, nowMs }, deps);
+  } catch (err) {
+    console.error(EL_RUECKFALL_LOG_PREFIX, "vermerk:", err.message);
+  }
+}
+
+// Name nur bei bekanntem, lesbarem Tenant; sonst "" -> O4-Form. Wirft nie.
+function ownerNameBestEffort({ call }, { store }) {
+  if (!call) return "";
+  try {
+    return store.tenantContext(call.tenantId).ownerName;
+  } catch {
+    return "";
+  }
+}
+
+// E4-catch: ohne Synthese und ohne Sprach-/Stimmaufloesung (beides kann der Wurf gewesen sein) -
+// Azure-<Say> wie der Unrouted-Pfad, damit der catch nicht an derselben Stelle erneut wirft.
+function sendFehlersatzOhneAufloesung({ res, call }, deps) {
+  const bundle = localeFor(call?.language);
+  const satz = sayD(bundle.inboundFehlersatz(ownerNameBestEffort({ call }, deps)), bundle.voiceProfile);
+  res.type("text/xml").send(deps.render([satz, hangupD()], call?.provider ?? DEFAULT_PROVIDER));
+}
+
+// E4 (Nebeneffekte je Entscheidung s.o.). Rumpf komplett in try/catch (Express 4, Muster S1-1).
+// quelle wirkt nur noch im Log; ms_seit_bindung ist die Kalibrierzeile fuer A3 (Spec M-A3) - der
+// Schluessel bleibt snake_case (G11-Ausnahme), weil das Runbook genau diesen Text liest.
 async function antworteAufElRueckfall(req, res, deps) {
   let call = null;
   try {
@@ -218,12 +259,18 @@ async function antworteAufElRueckfall(req, res, deps) {
     const entscheidung = rueckfallEntscheidungFuer({ call, nowMs });
     console.log(
       EL_RUECKFALL_LOG_PREFIX,
-      JSON.stringify({ callId: call?.id ?? null, quelle: rueckfallQuelleFuerLog(req.query.quelle), entscheidung }),
+      JSON.stringify({
+        callId: call?.id ?? null,
+        quelle: rueckfallQuelleFuerLog(req.query.quelle),
+        entscheidung,
+        ms_seit_bindung: msSeitBindung(call, nowMs),
+      }),
     );
-    await RUECKFALL_ANTWORT[entscheidung]({ res, call, quelle: req.query.quelle, nowMs }, deps);
+    await RUECKFALL_ANTWORT[entscheidung]({ res, call, nowMs }, deps);
   } catch (err) {
     console.error(EL_RUECKFALL_LOG_PREFIX, err.message);
-    await sendTechnischesEnde({ res, call, provider: call?.provider ?? DEFAULT_PROVIDER }, deps);
+    vermerkeNachFehlerBestEffort({ call, nowMs: Date.now() }, deps);
+    sendFehlersatzOhneAufloesung({ res, call }, deps);
   }
 }
 
@@ -620,7 +667,7 @@ export function makeVoiceRoutes({
   // ---------------- IEL-B8: Rueckfall und SIP-Bein des EL-Inbound-Wegs ----------------
   // Unter der /voice-Signatur-MW (Ed25519 fail-closed), KEINE Auth-Ausnahme; Eintraege in
   // src/route-policy.js mit VOICE_SIGNATURE_REASON. Idempotenz-Anker PRO ROUTE hinter der MW.
-  // quelle wirkt nur in Richtung MEHR Offenlegung (E8).
+  // quelle wirkt nur im Log (IEX-A2 E4).
   router.post(EL_RUECKFALL_PFAD, idempotenz.forElRueckfall, (req, res) => antworteAufElRueckfall(req, res, voiceDeps));
   router.post(EL_BEIN_PFAD, idempotenz.forElBein, (req, res) => vermerkeElBein(req, res, voiceDeps));
 

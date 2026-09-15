@@ -2,10 +2,10 @@
 // /voice/incoming entscheidet EINMAL je Anruf zwischen Budget-Pfad (Schalter aus / nicht gepinnt,
 // byte-identisch, Golden-Test) und der Uebergabe an den ElevenLabs-Agenten: Pflichtsatz von UNS,
 // dann <Dial><Sip>, dann <Redirect> auf /voice/el-rueckfall?quelle=dial_ende. Die Rueckfall-Route
-// entscheidet nur aus dem persistierten Datensatz (Auflegen, Folge-Gather, Rueckfall), der
+// entscheidet nur aus dem persistierten Datensatz (Auflegen, Folge-Gather, Fehlersatz), der
 // SIP-Bein-Callback /voice/el-bein armiert die innere Frist.
 //
-// A (1-10) rein, B (11) In-Process an einem echten HTTP-Server, C (12-22) Kindprozess.
+// A (4-10) rein (1-3 seit IEX-A2 entfallen, die Nummern bleiben - PLAN-SECURITY zitiert sie), B (11) In-Process an einem echten HTTP-Server, C (12-22) Kindprozess.
 // Namen beginnen mit "IEL-B8-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -28,18 +28,16 @@ import {
   EL_MIN_CONVERSATION_MS,
   RUECKFALL_ENTSCHEIDUNG,
   elUebergabeDirektiven,
-  rueckfallEntscheidungFuer,
 } from "../src/elevenlabs/inbound-rueckfall.js";
-import { gespeicherteBegruessungFuer } from "../src/i18n/greeting-catalog.js";
-import { rueckfallBegruessung, withInboundNotice } from "../src/i18n/inbound-notice.js";
+import { INBOUND_EL_GRUND } from "../src/elevenlabs/inbound-uebergabe-gescheitert.js";
 import { LOCALES } from "../src/i18n/locales.js";
 import { makeVoiceRoutes } from "../src/routes/voice.js";
 import { ELEVENLABS_INIT_PATH, INIT_TOKEN_HEADER } from "../src/routes/webhooks-elevenlabs-init.js";
 import * as ops from "../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING, MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID, MAX_CALL_DURATION_CAP_S } from "../src/store/defaults.js";
 import { telnyxWebhookEvents } from "../src/telephony/adapters/telnyx/webhook-events.js";
 import { renderDirectives } from "../src/telephony/adapters/telnyx/render.js";
-import { DIRECTIVE, say } from "../src/telephony/directives.js";
+import { DIRECTIVE, hangup, say } from "../src/telephony/directives.js";
 import { INBOUND_PATH, logInboundPath } from "../src/telephony/inbound-path.js";
 import { billThunk, terminateAndBillCall } from "../src/telephony/call-termination.js";
 import { elBeinAnchors, elRueckfallAnchors } from "../src/telephony/webhook-idempotenz.js";
@@ -70,7 +68,6 @@ const HTTP_SERVER_ERROR = 500;
 const EL_INBOUND = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
 const NOTICE = LOCALES.de.inboundNotice;
 const PUBLIC_URL = "https://agent.test";
-const FAKE_NOW_MS = Date.parse("2026-09-15T10:00:00.000Z");
 const AGENT_STIMME = "v_agent";
 const BINDUNGS_TOKEN = "0123456789abcdef0123456789abcdef";
 const TEST_MAX_DAUER_S = 900;
@@ -100,10 +97,6 @@ const EL_AN_ENV = Object.freeze({
 
 // ---- Build: reine Bausteine -------------------------------------------------------------------
 
-const isoAt = (ms) => new Date(ms).toISOString();
-const elCall = (extra = {}) => ({ status: "active", costProfile: EL_INBOUND, elFallbackAt: null, elevenlabsConversationId: null, elBoundAt: null, ...extra });
-const gebundenerCall = (boundMs, extra = {}) => elCall({ elevenlabsConversationId: CONV_ID, elBoundAt: isoAt(boundMs), ...extra });
-
 const XML_PRAEFIX = `<?xml version="1.0" encoding="UTF-8"?><Response>`;
 const XML_SUFFIX = "</Response>";
 const innerXml = (xml) => xml.slice(XML_PRAEFIX.length, xml.length - XML_SUFFIX.length);
@@ -121,45 +114,7 @@ function uebergabe({ call = uebergabeCall(), voiceId = AGENT_STIMME } = {}) {
   });
 }
 
-const katalogBegruessung = () => gespeicherteBegruessungFuer({ storedGreeting: DEFAULT_GREETING, language: "de", ownerName: OWNER_NAME });
-
 // ---- A: reine Unit-Tests ----------------------------------------------------------------------
-
-test("IEL-B8-1: rueckfallEntscheidungFuer - Aktiv-Status, Brueckenzustand und Gespraechsdauer entscheiden", () => {
-  const { AUFLEGEN, FOLGE_GATHER, RUECKFALL_STARTEN } = RUECKFALL_ENTSCHEIDUNG;
-  const faelle = [
-    ["kein Call", null, AUFLEGEN],
-    ["beendet WARTET", elCall({ status: "completed" }), AUFLEGEN],
-    ["beendet GEBUNDEN", gebundenerCall(FAKE_NOW_MS, { status: "completed" }), AUFLEGEN],
-    ["Budget-Call", { status: "active", costProfile: KOSTENPROFIL.TELNYX_INBOUND_BUDGET }, FOLGE_GATHER],
-    ["Call ohne Profil", { status: "active", costProfile: null }, FOLGE_GATHER],
-    ["RUECKFALL", elCall({ elFallbackAt: isoAt(FAKE_NOW_MS) }), FOLGE_GATHER],
-    ["GEBUNDEN genau an der Grenze", gebundenerCall(FAKE_NOW_MS - EL_MIN_CONVERSATION_MS), AUFLEGEN],
-    ["GEBUNDEN knapp unter der Grenze", gebundenerCall(FAKE_NOW_MS - EL_MIN_CONVERSATION_MS + 1), RUECKFALL_STARTEN],
-    ["WARTET", elCall(), RUECKFALL_STARTEN],
-    ["GEBUNDEN mit unlesbarem elBoundAt", elCall({ elevenlabsConversationId: CONV_ID, elBoundAt: "kaputt" }), RUECKFALL_STARTEN],
-  ];
-  for (const [name, call, erwartet] of faelle) assert.equal(rueckfallEntscheidungFuer({ call, nowMs: FAKE_NOW_MS }), erwartet, name);
-});
-
-test("IEL-B8-2: rueckfallBegruessung mit Katalog-Begruessung - nur exakt dial_ende laesst den Pflichtsatz weg", () => {
-  const greeting = katalogBegruessung();
-  const voll = withInboundNotice(greeting, NOTICE);
-  const ohne = rueckfallBegruessung({ greeting, notice: NOTICE, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE });
-  assert.ok(!ohne.startsWith(NOTICE));
-  assert.equal(ohne, voll.slice(`${NOTICE} `.length));
-  for (const quelle of [EL_RUECKFALL_QUELLE.FRIST, undefined, "", "DIAL_ENDE", [EL_RUECKFALL_QUELLE.DIAL_ENDE], "x"]) {
-    const begruessung = rueckfallBegruessung({ greeting, notice: NOTICE, quelle });
-    assert.ok(begruessung.startsWith(NOTICE), JSON.stringify(quelle));
-    assert.equal(begruessung, voll, JSON.stringify(quelle));
-  }
-});
-
-test("IEL-B8-3: rueckfallBegruessung mit Freitext ohne Pflichtsatz - dial_ende die ganze Begruessung, frist mit Pflichtsatz", () => {
-  const greeting = "Guten Tag, Praxis Muster, was kann ich tun?";
-  assert.equal(rueckfallBegruessung({ greeting, notice: NOTICE, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE }), greeting);
-  assert.equal(rueckfallBegruessung({ greeting, notice: NOTICE, quelle: EL_RUECKFALL_QUELLE.FRIST }), `${NOTICE} ${greeting}`);
-});
 
 test("IEL-B8-4: elUebergabeDirektiven - Pflichtsatz in Agentenstimme, Dial/Sip, Redirect dial_ende; so gerendert", () => {
   const call = uebergabeCall();
@@ -472,13 +427,6 @@ test("IEL-B8-15: beide Routen liegen hinter der Ed25519-Signaturpruefung - unsig
   });
 });
 
-// Das erste gesprochene Verb im Gather (ohne Play-TTS ein <Say>), XML-Entitaeten aufgeloest.
-const XML_ENTITAETEN = Object.freeze({ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" });
-function erstesVerbImGather(xml) {
-  const treffer = xml.match(/<Gather[^>]*><Say[^>]*>([^<]*)<\/Say>/);
-  return treffer ? treffer[1].replace(/&(amp|lt|gt|quot|apos);/g, (entitaet) => XML_ENTITAETEN[entitaet]) : null;
-}
-
 const MATRIX_IDS = Object.freeze({
   wartetDialEnde: "call_b8_a",
   wartetFrist: "call_b8_b",
@@ -518,83 +466,90 @@ function matrixSeed() {
 const storeCall = (srv, id) => callsOf(srv).find((call) => call.id === id);
 
 // logCallId: ein nicht aktiver Call wird nicht re-attacht - die Zeile traegt dann callId null.
+// Liefert Antworttext und ms_seit_bindung der passenden [el-rueckfall]-Zeile.
+const EL_RUECKFALL_LOG_JSON = "[el-rueckfall] {";
+const rueckfallLogEintrag = (zeile) => JSON.parse(zeile.slice(EL_RUECKFALL_LOG_JSON.length - EINMAL));
+function rueckfallLogEintraege(srv) {
+  const zeilen = srv.stdout.split("\n");
+  return zeilen.filter((zeile) => zeile.startsWith(EL_RUECKFALL_LOG_JSON)).map(rueckfallLogEintrag);
+}
+
 async function rueckfallMitLog(srv, { callId, quelle, entscheidung, logCallId = callId }) {
   const text = await postRueckfall(srv, { callId, quelle });
   const logQuelle = Object.values(EL_RUECKFALL_QUELLE).includes(quelle) ? quelle : "unbekannt";
-  const zeile = `[el-rueckfall] ${JSON.stringify({ callId: logCallId, quelle: logQuelle, entscheidung })}`;
-  await waitUntil(() => srv.stdout.includes(zeile), SPAWN_WARTE);
-  return text;
+  const passt = (eintrag) => eintrag.callId === logCallId && eintrag.quelle === logQuelle && eintrag.entscheidung === entscheidung;
+  await waitUntil(() => rueckfallLogEintraege(srv).some(passt), SPAWN_WARTE);
+  const eintrag = rueckfallLogEintraege(srv).findLast(passt);
+  return { text, msSeitBindung: eintrag.ms_seit_bindung };
 }
 
-// Rueckfall gestartet: Gather mit Begruessung, Marker gesetzt, die Begruessung als neue Agent-Zeile.
-async function pruefeRueckfallGestartet(srv, { callId, quelle }) {
-  const text = await rueckfallMitLog(srv, { callId, quelle, entscheidung: RUECKFALL_ENTSCHEIDUNG.RUECKFALL_STARTEN });
-  const verb = erstesVerbImGather(text);
-  assert.ok(verb, text);
+// Ohne Play-TTS rendert der Server den Fehlersatz als <Say>; der Seed-Tenant heisst OWNER_NAME.
+const fehlersatzTexml = () => renderDirectives([say(LOCALES.de.inboundFehlersatz(OWNER_NAME), LOCALES.de.voiceProfile), hangup()]);
+
+// Fehlersatz: Antwort Say + Hangup, Marker und Grund gesetzt, KEINE neue Transkriptzeile.
+async function pruefeFehlersatz(srv, { callId, quelle }) {
+  const zeilenVorher = storeCall(srv, callId).transcript.length;
+  const ergebnis = await rueckfallMitLog(srv, { callId, quelle, entscheidung: RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ });
+  assert.equal(ergebnis.text, fehlersatzTexml());
   await waitUntil(() => Boolean(storeCall(srv, callId).elFallbackAt), SPAWN_WARTE);
-  await waitUntil(() => storeCall(srv, callId).transcript.some((zeile) => zeile.text === verb), SPAWN_WARTE);
-  return { text, verb };
-}
-
-async function pruefeMitPflichtsatz(srv, { callId, quelle }) {
-  const { verb } = await pruefeRueckfallGestartet(srv, { callId, quelle });
-  assert.ok(verb.startsWith(NOTICE), verb);
-  return verb;
-}
-
-async function pruefeOhnePflichtsatz(srv, { callId }) {
-  const ergebnis = await pruefeRueckfallGestartet(srv, { callId, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE });
-  assert.ok(!ergebnis.verb.startsWith(NOTICE), ergebnis.verb);
+  const call = storeCall(srv, callId);
+  assert.equal(call.failureReason, INBOUND_EL_GRUND.EL_UEBERGABE_GESCHEITERT);
+  assert.equal(call.transcript.length, zeilenVorher);
   return ergebnis;
 }
 
+// Die A3-Kalibrierzeile: nie gebunden -> null, jung gebunden -> Zahl unter der Mindestdauer.
+const istJungGebunden = (ms) => typeof ms === "number" && ms >= 0 && ms < EL_MIN_CONVERSATION_MS;
+
 const istFolgeGather = (text) => text.includes("<Gather") && !text.includes("<Say") && !text.includes("<Play") && !text.includes("<Hangup");
 
-test("IEL-B8-16: /voice/el-rueckfall - Entscheidungsmatrix am echten Server", async (ctx) => {
+test("IEL-B8-16: /voice/el-rueckfall - Entscheidungsmatrix am echten Server (Fehlersatz)", async (ctx) => {
   const attrappe = await starteAnbieterAttrappe();
   const env = { ELEVENLABS_API_BASE: attrappe.url, ELEVENLABS_API_KEY: "test-key" };
   const ids = MATRIX_IDS;
   try {
     await mitServer({ env, seed: matrixSeed() }, async (srv) => {
       const erste = {};
-      await ctx.test("IEL-B8-16a: WARTET + dial_ende -> Rest ohne Pflichtsatz, Marker, Transkriptzeile", async () => {
-        Object.assign(erste, await pruefeOhnePflichtsatz(srv, { callId: ids.wartetDialEnde }));
+      await ctx.test("IEL-B8-16a: WARTET + dial_ende -> Fehlersatz + Hangup, Marker, Grund, keine Transkriptzeile", async () => {
+        const { text, msSeitBindung } = await pruefeFehlersatz(srv, { callId: ids.wartetDialEnde, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE });
+        assert.equal(msSeitBindung, null);
+        erste.text = text;
       });
-      await ctx.test("IEL-B8-16b: WARTET + frist -> Pflichtsatz, dann dieselbe Begruessung", async () => {
-        const verb = await pruefeMitPflichtsatz(srv, { callId: ids.wartetFrist, quelle: EL_RUECKFALL_QUELLE.FRIST });
-        assert.equal(verb, `${NOTICE} ${erste.verb}`);
+      await ctx.test("IEL-B8-16b: WARTET + frist -> Fehlersatz", async () => {
+        await pruefeFehlersatz(srv, { callId: ids.wartetFrist, quelle: EL_RUECKFALL_QUELLE.FRIST });
       });
-      await ctx.test("IEL-B8-16c: WARTET ohne quelle bzw. mit quelle=bogus -> Pflichtsatz", async () => {
-        await pruefeMitPflichtsatz(srv, { callId: ids.wartetOhneQuelle, quelle: undefined });
-        await pruefeMitPflichtsatz(srv, { callId: ids.wartetBogus, quelle: "bogus" });
+      await ctx.test("IEL-B8-16c: WARTET ohne quelle bzw. mit quelle=bogus -> Fehlersatz", async () => {
+        await pruefeFehlersatz(srv, { callId: ids.wartetOhneQuelle, quelle: undefined });
+        await pruefeFehlersatz(srv, { callId: ids.wartetBogus, quelle: "bogus" });
       });
-      await ctx.test("IEL-B8-16d: GEBUNDEN jung + frist -> Pflichtsatz, Marker", async () => {
-        await pruefeMitPflichtsatz(srv, { callId: ids.jungFrist, quelle: EL_RUECKFALL_QUELLE.FRIST });
+      await ctx.test("IEL-B8-16d: GEBUNDEN jung + frist -> Fehlersatz, Marker", async () => {
+        const { msSeitBindung } = await pruefeFehlersatz(srv, { callId: ids.jungFrist, quelle: EL_RUECKFALL_QUELLE.FRIST });
+        assert.ok(istJungGebunden(msSeitBindung), String(msSeitBindung));
       });
-      await ctx.test("IEL-B8-16e: GEBUNDEN jung + dial_ende -> Rest ohne Pflichtsatz, Marker", async () => {
-        const { verb } = await pruefeOhnePflichtsatz(srv, { callId: ids.jungDialEnde });
-        assert.equal(verb, erste.verb);
+      await ctx.test("IEL-B8-16e: GEBUNDEN jung + dial_ende -> Fehlersatz, Marker", async () => {
+        const { msSeitBindung } = await pruefeFehlersatz(srv, { callId: ids.jungDialEnde, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE });
+        assert.ok(istJungGebunden(msSeitBindung), String(msSeitBindung));
       });
       await ctx.test("IEL-B8-16f: GEBUNDEN alt + dial_ende -> genau Hangup, kein Marker", async () => {
-        const text = await rueckfallMitLog(srv, { callId: ids.altDialEnde, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE, entscheidung: RUECKFALL_ENTSCHEIDUNG.AUFLEGEN });
+        const { text } = await rueckfallMitLog(srv, { callId: ids.altDialEnde, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE, entscheidung: RUECKFALL_ENTSCHEIDUNG.AUFLEGEN });
         assert.equal(text, HANGUP_XML);
         assert.equal(storeCall(srv, ids.altDialEnde).elFallbackAt, null);
       });
-      await ctx.test("IEL-B8-16g: laufender Rueckfall erneut mit frist -> Folge-Gather, keine weitere Transkriptzeile", async () => {
+      await ctx.test("IEL-B8-16g: laufender Rueckfall erneut mit frist -> genau Hangup, keine Transkriptzeile", async () => {
         const zeilenVorher = storeCall(srv, ids.wartetDialEnde).transcript.length;
-        const text = await rueckfallMitLog(srv, { callId: ids.wartetDialEnde, quelle: EL_RUECKFALL_QUELLE.FRIST, entscheidung: RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER });
-        assert.ok(istFolgeGather(text), text);
+        const { text } = await rueckfallMitLog(srv, { callId: ids.wartetDialEnde, quelle: EL_RUECKFALL_QUELLE.FRIST, entscheidung: RUECKFALL_ENTSCHEIDUNG.AUFLEGEN });
+        assert.equal(text, HANGUP_XML);
         assert.equal(storeCall(srv, ids.wartetDialEnde).transcript.length, zeilenVorher);
       });
       await ctx.test("IEL-B8-16h: identische Wiederholung von (a) -> byte-identische Antwort", async () => {
         assert.equal(await postRueckfall(srv, { callId: ids.wartetDialEnde, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE }), erste.text);
       });
       await ctx.test("IEL-B8-16i: Budget-Call -> Folge-Gather, kein Hangup", async () => {
-        const text = await rueckfallMitLog(srv, { callId: ids.budget, quelle: EL_RUECKFALL_QUELLE.FRIST, entscheidung: RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER });
+        const { text } = await rueckfallMitLog(srv, { callId: ids.budget, quelle: EL_RUECKFALL_QUELLE.FRIST, entscheidung: RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER });
         assert.ok(istFolgeGather(text), text);
       });
       await ctx.test("IEL-B8-16j: beendeter Call -> Hangup", async () => {
-        const text = await rueckfallMitLog(srv, { callId: ids.beendet, quelle: EL_RUECKFALL_QUELLE.FRIST, entscheidung: RUECKFALL_ENTSCHEIDUNG.AUFLEGEN, logCallId: null });
+        const { text } = await rueckfallMitLog(srv, { callId: ids.beendet, quelle: EL_RUECKFALL_QUELLE.FRIST, entscheidung: RUECKFALL_ENTSCHEIDUNG.AUFLEGEN, logCallId: null });
         assert.equal(text, HANGUP_XML);
       });
     });
@@ -729,20 +684,20 @@ async function bindeUndFalleZurueck(srv) {
   await waitForStoreState(srv, (zustand) => Boolean(zustand.calls[0].elFallbackAt), SPAWN_FRIST_MS);
 }
 
-test("IEL-B8-21: Neustart waehrend RUECKFALL - kein Ergebnisabruf, Budget-Turn laeuft, Abschluss genau einmal", async () => {
-  await mitAttrappen({ modellText: "Gern, worum geht es?" }, async ({ env, attrappe }) => {
+test("IEL-B8-21: Neustart waehrend RUECKFALL - erneute Rueckfall-Zustellung legt auf, kein Ergebnisabruf, Abschluss genau einmal ohne Zusammenfassung und ohne Notification", async () => {
+  await mitAttrappen({ modellText: MODELL_ZUSAMMENFASSUNG }, async ({ env, attrappe, modell }) => {
     await mitNeustart({ env, vorbereiten: bindeUndFalleZurueck }, async (srv) => {
       const { id } = einzigerCall(srv);
       await new Promise((resolve) => setTimeout(resolve, RUHE_NACH_BOOT_MS));
       assert.equal(attrappe.gets().length, 0, "der Boot re-armiert fuer einen Rueckfall keinen Ergebnisabruf");
 
-      const turn = await postVoice(srv, { pfad: `/voice/turn?callId=${id}`, body: { SpeechResult: "Ich moechte einen Termin." } });
-      assert.equal(turn.status, HTTP_OK);
-      assert.ok((await turn.text()).includes("<Gather"));
+      assert.equal(await postRueckfall(srv, { callId: id, quelle: EL_RUECKFALL_QUELLE.FRIST }), HANGUP_XML);
 
       await postStatus(srv, id);
       const { calls } = await waitForStoreState(srv, (zustand) => Boolean(zustand.calls[0].billedAt), SPAWN_FRIST_MS);
       assert.equal(attrappe.gets().length, 0);
+      assert.equal(modell.bodies.length, 0, "keine Zusammenfassung fuer eine gescheiterte Uebergabe");
+      assert.equal(srv.readStore().notifications.length, 0, "keine Notification fuer eine gescheiterte Uebergabe");
       await postStatus(srv, id);
       await waitUntil(() => zeilenMit(srv, "[voice/status]") >= ZWEIMAL, SPAWN_WARTE);
       assert.equal(einzigerCall(srv).billedAt, calls[0].billedAt);

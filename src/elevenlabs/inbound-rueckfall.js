@@ -4,7 +4,7 @@
 import { BRIDGE_STATE, bridgeStateOf } from "./inbound-bridge-state.js";
 import { EL_RUECKFALL_QUELLE, elRueckfallUrl } from "./inbound-bridges.js";
 import { elSipUri } from "./inbound-sip-uri.js";
-import { dialSip, redirect, sayWithVoiceId } from "../telephony/directives.js";
+import { dialSip, hangup, redirect, sayWithVoiceId } from "../telephony/directives.js";
 import { callMaxDurationMs } from "../call-duration.js";
 import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
@@ -12,8 +12,8 @@ import { MS_PER_SECOND } from "../utils/timer.js";
 // STARTWERTE, NICHT GEMESSEN (Spec 8 zieht nach), Muster inbound-bridges.js:
 //   EL_DIAL_RING_TIMEOUT_S: INVITE -> 407 -> 200 OK gemessen unter 1 s ([M1] F-A/J3). Synthese
 //     des Pflichtsatzes (bis 3,3 s, [KO 3.2]) + Wiedergabe (etwa 6 s) + dieser Wert bleiben unter
-//     EL_BRIDGE_START_DEADLINE_MS: ein nie beantwortetes Bein endet ueber dial_ende (Rest ohne
-//     Doppelansage), bevor die Frist greift. Der Test pinnt die Ordnung.
+//     EL_BRIDGE_START_DEADLINE_MS: ein nie beantwortetes Bein endet ueber dial_ende im
+//     Fehlersatz, bevor die Frist greift. Der Test pinnt die Ordnung.
 //   EL_MIN_CONVERSATION_MS: der Anbieter bricht ein Gespraech mit fehlender Variable etwa 1,7 s
 //     nach der Annahme ab (1008, [M1] J3); eine echte Eroeffnung dauert laenger.
 export const EL_DIAL_RING_TIMEOUT_S = 10;
@@ -22,14 +22,13 @@ export const EL_MIN_CONVERSATION_MS = 5000;
 // EINE Quelle fuer Pfad und URL des SIP-Bein-Callbacks (Schreiber: Dial-Direktive, Leser: Route).
 export const EL_BEIN_PFAD = "/voice/el-bein";
 
+// IEX-A2 (O3/E4): Budget ist kein Rueckfall mehr - eine gescheiterte Uebergabe spricht den Fehlersatz.
 export const RUECKFALL_ENTSCHEIDUNG = Object.freeze({
   AUFLEGEN: "auflegen",
   FOLGE_GATHER: "folge_gather",
-  RUECKFALL_STARTEN: "rueckfall_starten",
+  FEHLERSATZ: "fehlersatz",
 });
 
-// Budget-Bein (3.3: kein neuer Abbruchweg) und bereits laufender Rueckfall (Anbieter-Wiederholung).
-const FOLGE_GATHER_ZUSTAENDE = Object.freeze([BRIDGE_STATE.KEIN_EL_INBOUND, BRIDGE_STATE.RUECKFALL]);
 const BEKANNTE_QUELLEN = Object.freeze(Object.values(EL_RUECKFALL_QUELLE));
 const QUELLE_UNBEKANNT = "unbekannt";
 
@@ -38,19 +37,33 @@ export function elBeinUrl(callId) {
   return `${EL_BEIN_PFAD}?${new URLSearchParams({ callId })}`;
 }
 
-// Ein unlesbares elBoundAt ergibt NaN -> false -> Rueckfall (Budget-Gespraech statt Auflegen, nie Stille).
-function gespraechLiefLangGenug(call, nowMs) {
-  return nowMs - Date.parse(call.elBoundAt) >= EL_MIN_CONVERSATION_MS;
+// A3-Kalibrierung ([el-rueckfall] ms_seit_bindung): Millisekunden seit der Bindung; null ohne
+// lesbares elBoundAt (nie gebunden oder unlesbar). EINE Quelle fuer Log und Entscheidung (G5).
+export function msSeitBindung(call, nowMs) {
+  const gebundenMs = Date.parse(call?.elBoundAt);
+  return Number.isNaN(gebundenMs) ? null : nowMs - gebundenMs;
 }
 
-// E8: Entscheidung ausschliesslich ueber Aktiv-Status + bridgeStateOf + elBoundAt.
+// Ohne lesbare Bindung nie "lang genug" -> Fehlersatz statt stillem Auflegen.
+function gespraechLiefLangGenug(call, nowMs) {
+  const dauerMs = msSeitBindung(call, nowMs);
+  return dauerMs !== null && dauerMs >= EL_MIN_CONVERSATION_MS;
+}
+
+// RUECKFALL: der Fehlersatz ist bereits gesprochen (Anbieter-Wiederholung). GEBUNDEN alt: ein
+// Gespraech hat stattgefunden (A3-Heuristik), der Nachlauf bleibt.
+function nurNochAuflegen({ zustand, call, nowMs }) {
+  if (zustand === BRIDGE_STATE.RUECKFALL) return true;
+  return zustand === BRIDGE_STATE.GEBUNDEN && gespraechLiefLangGenug(call, nowMs);
+}
+
+// E4: Entscheidung ausschliesslich ueber Aktiv-Status + bridgeStateOf + elBoundAt.
 export function rueckfallEntscheidungFuer({ call, nowMs }) {
   if (call?.status !== "active") return RUECKFALL_ENTSCHEIDUNG.AUFLEGEN;
   const zustand = bridgeStateOf(call);
-  if (FOLGE_GATHER_ZUSTAENDE.includes(zustand)) return RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER;
-  if (zustand === BRIDGE_STATE.GEBUNDEN && gespraechLiefLangGenug(call, nowMs))
-    return RUECKFALL_ENTSCHEIDUNG.AUFLEGEN;
-  return RUECKFALL_ENTSCHEIDUNG.RUECKFALL_STARTEN; // WARTET oder GEBUNDEN jung
+  if (zustand === BRIDGE_STATE.KEIN_EL_INBOUND) return RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER;
+  if (nurNochAuflegen({ zustand, call, nowMs })) return RUECKFALL_ENTSCHEIDUNG.AUFLEGEN;
+  return RUECKFALL_ENTSCHEIDUNG.FEHLERSATZ; // WARTET oder GEBUNDEN jung
 }
 
 // Log-sicher: nur Enum-Werte, nie der rohe Query-Wert (Log-Injection).
@@ -75,4 +88,10 @@ export function elUebergabeDirektiven({ call, pflichtsatz, zugang, publicUrl }) 
     }),
     redirect(`${publicUrl}${elRueckfallUrl({ callId: call.id, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE })}`),
   ];
+}
+
+// IEX-A2 (O3): fester Fehlersatz in der Stimme des Agenten (E19), danach aufgelegt - kein
+// Gather, kein Budget-Gespraech. fehlersatz = { text, voiceProfile, voiceId }.
+export function elFehlersatzDirektiven(fehlersatz) {
+  return [sayWithVoiceId(fehlersatz), hangup()];
 }
