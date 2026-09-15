@@ -515,6 +515,16 @@
     flex-wrap: wrap;
     gap: 12px;
   }
+  /* GP-P6 Runde 3 (Owner-Befund 15.09.2026): am Handy laufen die Saetze wieder als EIN
+     Absatz. Auf schmaler Breite bricht jeder Satz ohnehin um; zwei erzwungene Zeilen
+     oben drauf haben die Karte aufgeblaeht ("zu viele Umbrueche"). Am Desktop bleibt es
+     bei einer Zeile je Satz -- dort ist genug Breite, dass keine zusaetzlich umbricht. */
+  .agent-chip__hint-line {
+    display: inline;
+  }
+  .agent-chip__hint-line + .agent-chip__hint-line::before {
+    content: " ";
+  }
   .agent-chip__copy,
   .agent-chip__action {
     width: 100%;
@@ -612,4 +622,76 @@
   .lang-toggle {
     font-size: 12px;
   }
+}
+
+/* ------------------------------------------------ 6. Zustandskarten ------ */
+
+/* Owner-Befund 15.09.2026 zum Fehlerzustand (#region-error): "sieht vom Design her
+   richtig kacke aus". Er war ungestaltet -- eine .card ueber die volle Inhaltsbreite,
+   darin eine fette Sans-Ueberschrift (30px/700), eine Textzeile und ein Knopf, alle
+   drei ohne jeden Abstand uebereinander. Ein Zustand, der die ganze App ersetzt, ist
+   kein Panel: schmale, mittige Karte, ein Zeichen als Anker, Ueberschrift in der
+   Marken-Serif wie alle anderen Ueberschriften, ruhige Erklaerzeile auf der `.muted`-
+   Stufe, Knopf mit Luft darueber. */
+.state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 560px;
+  margin: clamp(24px, 6vh, 64px) auto;
+  padding: clamp(32px, 4vw, 48px) clamp(24px, 3vw, 40px);
+  text-align: center;
+}
+
+/* Bernstein wie der Punkt der Nummernkarte im Stoerfall (shell.css
+   .live-dot--alert) -- kein neuer Farbwert, gleiche Bedeutung: loesbar, kein Ausfall. */
+.state-card__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(240, 179, 102, 0.45);
+  border-radius: 999px;
+  background: rgba(240, 179, 102, 0.12);
+  color: #f0b366;
+  font-family: var(--font-heading);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.state-card h1 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--weight-normal);
+  font-size: clamp(24px, 2.2vw, 34px);
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.state-card p {
+  margin: 0;
+  max-width: 44ch;
+  color: rgba(255, 255, 255, 0.62);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.state-card__action {
+  margin-top: 6px;
+  min-width: 160px;
+  padding: 14px 30px;
+  font-size: 15px;
+}
+
+/* Gleiche Ueberschriften-Schrift auch im Wartezustand -- die Karte daneben bleibt
+   sonst unangetastet (sie traegt die Tarif-Kacheln). */
+#region-pending h1 {
+  font-family: var(--font-heading);
+  font-weight: var(--weight-normal);
+  font-size: clamp(24px, 2.2vw, 34px);
+  line-height: 1.15;
+  letter-spacing: 0;
 }

@@ -426,10 +426,22 @@
   display: none;
 }
 
+/* Owner-Befund 15.09.2026: die Eingabefelder und die Pillen daneben wirkten gequetscht
+   -- 50px Feld neben einer 37px hohen Pille, dazu ein sehr schmaler "Add"-Knopf. Die
+   Feldgroesse steht hier fuer ALLE App-Formulare (Newsletter, Empfaenger, eigene
+   Nummer), damit es im Dashboard nur eine Feldhoehe gibt; spaeterer Import gewinnt
+   gegen app-hermes.css. */
+.field-input {
+  height: 58px;
+  border-radius: 14px;
+  padding: 0 18px;
+  font-size: 16px;
+}
+
 .newsletter-form {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 /* .field-input liefert schon das eingelassene Feld (Spec §2, app-hermes.css);
@@ -456,7 +468,15 @@
 
 .newsletter-toggle__cta {
   flex-shrink: 0;
-  padding: 10px 22px;
+  /* Owner-Befund 15.09.2026: die Pille war 37px hoch neben einem 50px-Feld und der
+     "Add"-Knopf nur 70px breit. Jetzt exakt so hoch wie das Feld daneben (58px) und
+     mit einer Mindestbreite, damit auch ein kurzes Label eine echte Flaeche hat. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 58px;
+  min-width: 132px;
+  padding: 0 30px;
   /* border:0 (Owner-Feedback 2026-08-14): die Klasse sass urspruenglich auf
      einem <label> (rahmenlos); der Empfaenger-"Add" ist ein echter <button>
      und bekam ohne diese Zeile den Browser-Default-Rahmen (graue Umrandung).
@@ -466,7 +486,7 @@
   background: #ffffff;
   color: #10305a;
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -663,6 +683,14 @@
   .newsletter-form {
     flex-direction: column;
     align-items: stretch;
+  }
+  /* Owner-Befund 15.09.2026: am Handy war das Feld nur noch ein Strich. Ursache:
+     `flex: 1` an .newsletter-form__field wirkt in der gestapelten Spalte auf die HOEHE
+     (Hauptachse) -- mit flex-basis 0 und ohne freien Platz schrumpft das Feld auf seine
+     Mindesthoehe. Gestapelt braucht es kein flex, nur volle Breite. */
+  .newsletter-form__field {
+    flex: none;
+    width: 100%;
   }
   .newsletter-toggle__cta {
     text-align: center;
