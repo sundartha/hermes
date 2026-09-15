@@ -1,7 +1,9 @@
 // Neutrale Call-Direktiven (provider-unabhaengig). Der Core (server.js) baut eine
 // Liste solcher Direktiven; der Adapter (renderDirectives) uebersetzt sie in
 // TwiML/TeXML. Voice-Namen (Polly...) verlassen den Core nie - hier steht nur
-// der LOGISCHE Profilname.
+// der LOGISCHE Profilname. Einzige Ausnahme: das optionale Feld voiceId (IEL-B7a/E19),
+// eine rohe ElevenLabs-Stimm-ID fuer die Play-TTS-Vorabsynthese. Der Renderer liest es
+// nicht; ohne Feld hat jede Direktive exakt die Bestandsform.
 
 // Logische Voice-Profile. Der Adapter mappt sie auf provider-spezifische
 // Voice-Bezeichner. Werte sind deckungsgleich mit src/i18n/locales.js
@@ -35,6 +37,20 @@ export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL, audioUr
   audioUrl,
 });
 
+// IEL-B7a (E19): voiceId entsteht NUR mit nichtleerem String. Leer oder fehlend -> kein
+// Feld, die Direktive behaelt ihre Bestandsform (deepStrictEqual-gleich, B8: "bei leerem
+// Wert kein Feld"). Eine Quelle fuer say und gather (G5).
+const voiceIdField = (voiceId) => (typeof voiceId === "string" && voiceId.length > 0 ? { voiceId } : {});
+
+// IEL-B7a (E19): gesprochener Satz in einer ausdruecklich gewaehlten ElevenLabs-Stimme
+// (EL-Inbound: Pflichtsatz in der Stimme, die der Agent danach spricht). Objekt-Parameter
+// statt eines 4. Positionsarguments an say (F1). voiceProfile bleibt fuer den Azure-Rueckfall
+// und die Sprach-Pflicht-Logik von say (undefined -> say-Default).
+export const sayWithVoiceId = ({ text, voiceProfile, voiceId }) => ({
+  ...say(text, voiceProfile),
+  ...voiceIdField(voiceId),
+});
+
 // Sprach-Turn: optionaler Prompt (say im Gather) + Action-URL fuers Ergebnis.
 // promptText leer -> Gather ohne inneren Say (Bestandsverhalten gatherTurn).
 // speechTimeoutSec (optional, Sekunden): festes STT-Endpointing statt provider-Default
@@ -42,12 +58,14 @@ export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL, audioUr
 // Weglassen -> Renderer bleibt byte-identisch beim "auto"-Bestand.
 // promptAudioUrl (optional): wie audioUrl bei say, aber fuer den inneren Gather-Prompt
 // (<Play> statt innerem <Say>). Weglassen -> byte-identisch (Muster speechTimeoutSec).
+// voiceId (optional, IEL-B7a/E19): wie bei sayWithVoiceId; weglassen oder "" -> byte-identisch.
 export const gather = ({
   promptText,
   action,
   voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL,
   speechTimeoutSec,
   promptAudioUrl,
+  voiceId,
 }) => ({
   kind: DIRECTIVE.GATHER,
   promptText,
@@ -55,6 +73,7 @@ export const gather = ({
   voiceProfile,
   speechTimeoutSec,
   promptAudioUrl,
+  ...voiceIdField(voiceId),
 });
 
 export const hangup = () => ({ kind: DIRECTIVE.HANGUP });

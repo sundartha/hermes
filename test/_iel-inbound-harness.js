@@ -6,6 +6,9 @@
 // Offline, kein Netz, kein Server: Anbieter-Attrappe ueber withFetch, der Store reicht an
 // die ECHTEN state-ops-Mutatoren durch (storeOpsFacade), finishCall ist die ECHTE
 // makeCallFinish-Instanz (Purge greift, Buchung wird ueber voiceMinutesOf mitgeschrieben).
+// IEL-B8: dazu die Anbieter-Attrappe als HTTP-Server fuer Kindprozess-Tests (aus
+// test/iel-b5-status-ende.test.js hierher verschoben, damit B5 und B8 dieselbe nutzen).
+import http from "node:http";
 import { voiceMinutesOf } from "../src/billing/metering.js";
 import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
@@ -15,7 +18,7 @@ import { makeCallFinish } from "../src/telephony/call-finish.js";
 import { billThunk, terminateAndBillCall } from "../src/telephony/call-termination.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
-import { CONVERSATION_DONE_WITH_ANALYSIS } from "./fixtures/elevenlabs-conversations.js";
+import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "./fixtures/elevenlabs-conversations.js";
 import { storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
 
 export const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
@@ -161,4 +164,43 @@ export async function mitAnbieter({ state, anbieter }, run) {
       throw err;
     }
   });
+}
+
+// ---- Build: Anbieter-Attrappe als HTTP-Server (Kindprozess-Tests) --------------------------
+// Conversation-Abrufe (GET) liefern attrappe.antwort, DELETE ein leeres Objekt. IEL-B8: die
+// Play-TTS-Vorabsynthese (POST|GET /v1/text-to-speech/<voice>/stream) bekommt mp3-Bytes mit
+// nichtleerem erstem Paket (Vertrag src/tts/synth.js: ein leerer erster Chunk ist ein Fehlschlag);
+// die angefragten Stimm-IDs haelt attrappe.ttsStimmen in Aufruf-Reihenfolge fest.
+const TTS_PFAD = /^\/v1\/text-to-speech\/([^/?]+)\/stream/;
+const TTS_BYTES = Buffer.from("ID3-attrappe");
+
+function beantworteTts(attrappe, { req, res, treffer }) {
+  attrappe.ttsStimmen.push(decodeURIComponent(treffer[1]));
+  req.resume();
+  res.writeHead(HTTP_OK, { "content-type": "audio/mpeg" });
+  res.end(TTS_BYTES);
+}
+
+function beantworteConversation(attrappe, { req, res }) {
+  attrappe.anfragen.push({ method: req.method, url: req.url, atMs: Date.now() });
+  res.writeHead(HTTP_OK, { "content-type": "application/json" });
+  res.end(JSON.stringify(req.method === "DELETE" ? {} : attrappe.antwort));
+}
+
+export async function starteAnbieterAttrappe() {
+  const attrappe = { anfragen: [], ttsStimmen: [], antwort: CONVERSATION_IN_PROGRESS };
+  attrappe.setzeAntwort = (conversation) => {
+    attrappe.antwort = conversation;
+  };
+  const server = http.createServer((req, res) => {
+    const treffer = req.url.match(TTS_PFAD);
+    if (treffer) return beantworteTts(attrappe, { req, res, treffer });
+    return beantworteConversation(attrappe, { req, res });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  attrappe.url = `http://127.0.0.1:${server.address().port}`;
+  attrappe.gets = () => attrappe.anfragen.filter((anfrage) => anfrage.method === "GET" && anfrage.url.includes(CONV_ID));
+  attrappe.deletes = () => attrappe.anfragen.filter((anfrage) => anfrage.method === "DELETE");
+  attrappe.close = () => new Promise((resolve) => server.close(resolve));
+  return attrappe;
 }

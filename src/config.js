@@ -838,7 +838,7 @@ const rawConfig = {
   // bleibt unser (und damit der Hangup-Griff).
   // DEFAULT AUS, fail-closed wie alle Engine-Weichen.
   //
-  // STAND IEL-B1: noch kein Sprechpfad (Weiche kommt mit IEL-B8). Leser heute: zwei
+  // STAND IEL-B8: Sprechpfad-Weiche in /voice/incoming (inboundElPathFor). Weitere Leser: zwei
   // Boot-Riegel (latentCostPathFindings: Kostenpfad hat Einsammler; elInboundAccessFindings:
   // Zugang vollstaendig) und die Banner-Zeile. Die Reihenfolge, die der Kostenarten-Katalog
   // verlangt, bleibt: die Katalogzeile und ihr Riegel stehen, BEVOR der Weg live gehen kann -

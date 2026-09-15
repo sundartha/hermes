@@ -4169,3 +4169,83 @@ das oder fehlt `redirectCall` (vor B7), wird aufgelegt. Nie Stille. Der Boot re-
 - **Kein Budget-Check an der Init-Route:** die Stufenfolge E11 ist bindend. `budgetExceeded` hat der Anruf
   Sekunden vorher in `/voice/incoming` passiert, danach wirkt die Geld-Wache. Die pro-Tenant-Kostendecke
   bleibt fuer beide Richtungen unangetastet.
+
+## IEL-B8 — SIP-Uebergabe an ElevenLabs und Rueckfall-Routen (2026-09-15)
+
+Sicherheitsrelevant geaendert hat sich: `/voice/incoming` hat eine Weiche. Sie greift nur, wenn
+Schalter (`ELEVENLABS_INBOUND_ENABLED`), Tenant-Allowlist (`ELEVENLABS_INBOUND_TENANT_IDS`) und
+vollstaendiger Zugang zusammen erfuellt sind (`inboundElPathFor`), und sie laeuft NACH allen sieben
+Sicherungen des Handlers (Signatur-MW, Wiederholungs-Riegel, Nummern-Aufloesung, Kostendecke,
+Notbremse mit EL-Satz, Cap/Geld-Wache, set-once-Kostenprofil). Auf dem EL-Pfad spricht UNSER Server
+den Pflichtsatz, bevor `<Dial><Sip>` an den Agenten uebergibt. Dazu kommen zwei neue
+signaturpflichtige Routen (`/voice/el-rueckfall`, `/voice/el-bein`). Kein neues Env, keine neue
+Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch (Golden-Test).
+
+### 1. SIP-Zugang
+
+| Eigenschaft | Zustand |
+|---|---|
+| Umfang | EIN gemeinsamer Zugang fuer alle gepinnten DIDs |
+| Klartext | Klartext im TeXML bei Telnyx (`<Sip username password>`) |
+| Ablage | Render-Env `sync:false` und `inbound_trunk_config.credentials` beim Anbieter |
+| Log | Nie geloggt: Direktiven und TeXML werden nicht geloggt, Renderer-Fehler nennen nur Feldnamen, Grep-Test "eine Lesestelle" (`test/iel-b8-weiche.test.js` 9), Spawn-Test "Passwort nicht im stdout" (12) |
+| Transportweg (E16) | Wert entsteht im Prozess von `iel-geheimnisse.mjs`, geht nur an Render-API, ElevenLabs-API und Registrierungs-PATCH; nie Chat, Agent, lokale `.env`, Log |
+| Mindestlaengen | `SIP_PASSWORD_MIN_LENGTH` und `INIT_WEBHOOK_TOKEN_MIN_LENGTH` (je 32) |
+| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Budget-Rueckfall ([M1] J4/F-F) |
+| Abweichung Render vs. Anbieter | Entsteht nur nach Teilausfall ohne erneuten Lauf; nicht lesend pruefbar. Am Anruf erkennbar: `[el-rueckfall]`-Zeile ohne `[el-init]` (E16) |
+
+### 2. Offenlegung
+
+- Erstanruf: `locale.inboundNotice` ist das erste gesprochene Verb, in der Stimme, die die
+  Init-Antwort als `tts.voice_id` sendet (E19, Test 18).
+- Rueckfall: Standard ist die volle Begruessung mit Pflichtsatz. Nur `quelle=dial_ende` (exakter
+  Vergleich gegen `EL_RUECKFALL_QUELLE.DIAL_ENDE`) spricht den Rest ohne Pflichtsatz - der
+  Pflichtsatz lief dann bereits vor dem Dial.
+- Der Parameter ist nur signiert erreichbar (Ed25519) und wirkt nur in Richtung MEHR Offenlegung (E8):
+  jeder andere Wert (fehlend, unbekannt, Array, andere Schreibweise) ergibt die volle Begruessung.
+
+### 3. Bindungs-Token
+
+`streamToken` ist kein Geheimnis. Es bindet nur waehrend `WARTET`, danach nur fuer die idempotente
+Wiederholung derselben `conversation_id` binnen `EL_INIT_WIEDERHOLUNG_FRIST_MS` (E11/K1). In
+API-Views bleibt es entfernt.
+
+### 4. Neue Routen `/voice/el-rueckfall`, `/voice/el-bein`
+
+- Liegen unter `router.use("/voice")` (Ed25519 fail-closed), keine Auth-Ausnahme, je ein
+  `route-policy.js`-Eintrag mit `VOICE_SIGNATURE_REASON` (Inventar- und Probe-Tabelle nachgezogen).
+- Idempotenz-Anker (`rk:`/`eb:` + callId + Unterscheider, dazu der Umschlag-Fingerabdruck) OHNE
+  Neustart-Schicht: die Ersatzantwort waere fuer ein uebergebenes Bein ein leeres Dokument, im
+  Rueckfall also Stille. Nach einem Neustart entscheidet der Handler aus der Persistenz neu.
+- Entscheidung nur aus Aktiv-Status, `bridgeStateOf` und `elBoundAt`, nie aus Prozessspeicher.
+- Budget-Call: Folge-Gather, kein neuer Abbruchweg.
+- Die Routen loesen keinen Anruf aus; `/voice/el-bein` armiert nur eine Frist. Fehler in
+  `/voice/el-rueckfall` enden in `turnErrorSpeech` + Hangup, ein unbekannter/beendeter Call in Hangup.
+
+### 5. Reihenfolge der schadensbegrenzenden Stufen
+
+1. sieben Sicherungen in `/voice/incoming`
+2. Pflichtsatz von uns
+3. Digest und `allowed_numbers` (Absender-Filter) als Zusatz
+4. Token-Bindung am Init-Webhook als Barriere
+5. Fristen (innere und aeussere) mit Live-Umleitung
+6. Rueckfall (Budget) bzw. Auflegen, nie Stille
+
+### 6. Restrisiken (bewusst getragen)
+
+- Stille bei Prozess-Neustart = Neustart-Dauer + Rest der aeusseren Frist (3.2).
+- Keine Erstattung auf `TELNYX_INBOUND_EL_CONVAI`, bis `pflichttypen` gemessen ist (L7).
+- Ein Rueckfall-Call behaelt den EL-Satz und verliert eine Anbieter-Wiederholung eines Turns (leeres
+  Dokument, §5).
+- EL-Kosten eines nach der Bindung abgebrochenen Kurzgespraechs (< `EL_MIN_CONVERSATION_MS`) werden
+  nicht aus der Conversation belegt, weil der Rueckfall-Riegel (E7e) diesen Abschluss verhindert.
+- Ende-Anker `jetzt` statt Carrier-Ende, wenn eine nach Neustart re-armierte Schleife vor
+  `/voice/status` abschliesst (E17 Rest).
+- Single-Flight und Abschluss-Riegel wirken je Prozess: zwei Instanzen waehrend einer
+  Deploy-Ueberlappung koennen ein Transkript nach dem Purge erneut schreiben (E18-3, Bestand wie
+  Outbound-EL-Re-Arm).
+- Startwerte `EL_DIAL_RING_TIMEOUT_S = 10` und `EL_MIN_CONVERSATION_MS = 5000` sind unbelegt
+  (Nachzug nach Messung 8).
+- Ein Idempotenz-Anker wirkt je Prozess.
+- Die `[el-rueckfall]`-Zeile eines nicht mehr aktiven Calls traegt `callId: null` (der Call wird nicht
+  re-attacht); die Korrelation laeuft dann nur ueber Zeitpunkt und `[voice/status]`.

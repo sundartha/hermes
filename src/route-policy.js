@@ -225,6 +225,16 @@ export const PUBLIC_ROUTES = Object.freeze([
     reason: VOICE_SIGNATURE_REASON,
   },
   {
+    method: "POST",
+    path: "/voice/el-rueckfall",
+    reason: VOICE_SIGNATURE_REASON,
+  },
+  {
+    method: "POST",
+    path: "/voice/el-bein",
+    reason: VOICE_SIGNATURE_REASON,
+  },
+  {
     method: "GET",
     path: "/mcp",
     reason: MCP_METHOD_NOT_ALLOWED_REASON,

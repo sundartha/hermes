@@ -4,8 +4,8 @@
 // src/callee-is-owner.js). Dies ist die einzige Quelle der beiden Mindestlaengen
 // (Praedikat, Boot-Riegel, spaeter Init-Route B6 und Geheimnis-Skript B10).
 //
-// Der Pfad-Verbraucher (der eigentliche Sprechpfad-Wechsel an /voice/incoming) kommt erst
-// ab IEL-B8. In B1 lesen inboundElPathFor nur der Boot-Riegel, der Boot-Banner und Tests.
+// Leser: /voice/incoming (Sprechpfad-Weiche, IEL-B8), Init-Route (IEL-B6), Boot-Riegel,
+// Boot-Banner, Tests.
 
 import { NUMBER_STATUS } from "../store/defaults.js";
 

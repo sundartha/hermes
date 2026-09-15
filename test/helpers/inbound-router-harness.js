@@ -35,6 +35,9 @@ function makeHarnessConfig() {
     },
     safety: { capFarewellLeadMs: 0, skipTwilioSignatureCheck: true },
     server: { publicUrl: "https://agent.test" },
+    // IEL-B8: /voice/incoming fragt die Sprechpfad-Weiche (inboundElPathFor) - Schalter aus wie
+    // der Produktions-Default, der Harness bleibt auf dem Budget-Pfad.
+    voice: { elevenLabsInbound: { enabled: false } },
   };
 }
 

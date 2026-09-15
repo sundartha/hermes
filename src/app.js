@@ -408,7 +408,7 @@ export async function buildApp(deps) {
     // IEL-B5: die EINE EL-Instanz - /voice/status startet ueber sie den Nachlauf (INV-7).
     elevenLabsOutbound,
     // IEL-B6: die EINE Frist-Instanz der Inbound-Bruecken (INV-7) - die Init-Route loescht ihre
-    // Fristen bei der ersten Bindung.
+    // Fristen bei der ersten Bindung. B8: auch die Voice-Routen.
     inboundBridges,
     // EL-BL4: die EINE ConsultDelivery-Instanz (INV-7). registerApiRoutes nimmt sie fuer
     // die Poll-Route direkt aus deps; DIESE Ebene braucht sie selbst, weil der
@@ -512,6 +512,9 @@ export async function buildApp(deps) {
       terminateAndBillCall,
       billThunk,
       startInboundNachlauf: elevenLabsOutbound?.startInboundNachlauf,
+      // IEL-B8: die EINE Frist-Instanz (INV-7) - /voice/incoming armiert, /voice/el-rueckfall loescht,
+      // /voice/el-bein armiert die innere Frist.
+      inboundBridges,
     }),
   );
 

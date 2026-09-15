@@ -124,7 +124,7 @@ test("IE6-S1-5: das Boot-Banner enthaelt keine entfernten Assistant-Zeilen mehr"
   }
 });
 
-test("IE6-S1-6: logInboundPath schreibt genau eine byte-gleiche Zeile; INBOUND_PATH hat genau einen Token", async () => {
+test("IE6-S1-6: logInboundPath schreibt genau eine byte-gleiche Zeile; INBOUND_PATH hat genau die Tokens BUDGET und ELEVENLABS (IEL-B8)", async () => {
   const { logInboundPath, INBOUND_PATH } = await import("../src/telephony/inbound-path.js");
   const original = console.log;
   const lines = [];
@@ -135,7 +135,8 @@ test("IE6-S1-6: logInboundPath schreibt genau eine byte-gleiche Zeile; INBOUND_P
     console.log = original;
   }
   assert.deepEqual(lines, ['[inbound-path] inbound_path {"callId":"call_a","path":"budget"}']);
-  assert.deepEqual(Object.keys(INBOUND_PATH), ["BUDGET"]);
+  // IEL-B8 ergaenzt den Uebergabe-Pfad, wie inbound-path.js es vorsieht; der geloeschte Assistant-Token bleibt weg.
+  assert.deepEqual(Object.keys(INBOUND_PATH), ["BUDGET", "ELEVENLABS"]);
 });
 
 test("IE6-S1-7: eine Altzeile mit costProfile='telnyx_assistant' bleibt fail-closed unaufgeloest", async () => {

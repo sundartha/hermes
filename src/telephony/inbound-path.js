@@ -5,13 +5,14 @@
 // Konsumenten JE FUNKTION:
 //   INBOUND_PATH     -> src/routes/voice.js (/voice/incoming)
 //   logInboundPath   -> src/routes/voice.js (/voice/incoming)
-// Seit IE6-S1 gibt es genau EINEN Pfad. Ein kuenftiger Uebergabe-Pfad (IE5) ergaenzt
-// HIER einen Token - nie eine zweite Logzeile fuer denselben Sachverhalt (PLAN 5.4).
+// Seit IEL-B8 zwei Pfade: budget und elevenlabs (Uebergabe an den ElevenLabs-Agenten);
+// weiter genau EINE Zeile je Leg - nie eine zweite Logzeile fuer denselben Sachverhalt (PLAN 5.4).
 // Rein: kein IO ausser der einen Logzeile, kein config-Import.
 const INBOUND_PATH_LOG_PREFIX = "[inbound-path]";
 
 export const INBOUND_PATH = Object.freeze({
   BUDGET: "budget",
+  ELEVENLABS: "elevenlabs",
 });
 
 // Nebeneffekt im Namen (N7): schreibt die eine Sonden-Zeile.

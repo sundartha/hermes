@@ -1,5 +1,7 @@
 // SEC-P1: Wiederholungs-Riegel der zwei ungeschuetzten Voice-Webhooks
-// (/voice/incoming, /voice/turn). Zwei Schichten, beide notwendig:
+// (/voice/incoming, /voice/turn) plus die zwei Webhooks des EL-Inbound-Wegs
+// (/voice/el-rueckfall, /voice/el-bein, IEL-B8 - diese nur mit Schicht 1, Begruendung in
+// makeWebhookIdempotenz). Zwei Schichten, beide notwendig:
 //   1. Prozess-Cache: liefert die ERSTE Antwort byte-identisch nochmal aus und
 //      serialisiert eine Wiederholung, die eintrifft, waehrend die erste noch laeuft.
 //   2. Persistierter Anker am Anruf-Datensatz: ueberlebt den Neustart (Vorbild
@@ -66,6 +68,20 @@ export function turnAnchors(req) {
   if (envelope) anchors.push(envelope);
   return anchors;
 }
+
+// IEL-B8: Ereignis-Anker = Praefix + callId + Unterscheider der Route (Herkunft des Rueckfalls bzw.
+// Bein-Status). Ein Rueckfall-Dokument hat je Herkunft genau EIN Ereignis (Dial endet einmal,
+// Fristen raeumen sich gegenseitig ab), ein SIP-Bein meldet answered einmal. Dazu der
+// Umschlag-Fingerabdruck (faengt die byte-identische Wiederholung auch mit manipulierter Query).
+const ankerTeil = (wert) => (typeof wert === "string" ? wert : "");
+function queryEreignisAnker(req, { praefix, unterscheider }) {
+  const callId = ankerTeil(req.query?.callId);
+  const anchors = callId ? [`${praefix}:${callId}:${ankerTeil(unterscheider)}`] : [];
+  const envelope = envelopeAnchor(req);
+  return envelope ? [...anchors, envelope] : anchors;
+}
+export const elRueckfallAnchors = (req) => queryEreignisAnker(req, { praefix: "rk", unterscheider: req.query?.quelle });
+export const elBeinAnchors = (req) => queryEreignisAnker(req, { praefix: "eb", unterscheider: req.body?.CallStatus });
 
 // Aufgeschobenes Versprechen auf die Antwort der ERSTEN Zustellung. Ein zweiter resolve
 // ist ein No-op (Promise-Semantik) - deshalb duerfen Antwort-Abfang und close-Handler
@@ -148,7 +164,7 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
     res.on("close", () => deferred.settle(null));
   }
 
-  // Der gemeinsame Ablauf beider Routen (G5) - sie unterscheiden sich NUR in der
+  // Der gemeinsame Ablauf aller Routen (G5) - sie unterscheiden sich NUR in der
   // Anker-Ableitung, der Neustart-Lesung und dem Schreibweg.
   function makeGuard({ anchorsOf, seenBefore, remember }) {
     return async function webhookIdempotenzGuard(req, res, next) {
@@ -187,5 +203,12 @@ export function makeWebhookIdempotenz({ store, keepAliveXml }) {
     remember: (req, anchors) => store.recordWebhookAnchors(req.query?.callId || "", anchors),
   });
 
-  return { forIncoming, forTurn };
+  // IEL-B8: KEINE Neustart-Schicht. Beide Handler entscheiden ausschliesslich aus dem persistierten
+  // Brueckenzustand (E5/E8). keepAliveXml waere fuer ein uebergebenes Bein ein LEERES Dokument -
+  // im Rueckfall also Stille. Der Prozess-Cache liefert die erste Antwort byte-identisch nochmal.
+  const ohneNeustartSchicht = { seenBefore: () => null, remember: () => {} };
+  const forElRueckfall = makeGuard({ anchorsOf: elRueckfallAnchors, ...ohneNeustartSchicht });
+  const forElBein = makeGuard({ anchorsOf: elBeinAnchors, ...ohneNeustartSchicht });
+
+  return { forIncoming, forTurn, forElRueckfall, forElBein };
 }

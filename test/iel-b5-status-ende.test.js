@@ -12,7 +12,6 @@
 // laeuft also in npm test.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import express from "express";
 
 import { voiceMinutesOf } from "../src/billing/metering.js";
@@ -39,7 +38,6 @@ import { captureConsole, seedCall, seedState, startServer, waitForLog, waitForSt
 import {
   CONV_ID,
   FIXTURE_ZEILEN,
-  HTTP_OK,
   INBOUND_FROM,
   INBOUND_TO,
   RUHE_TAKTE,
@@ -52,6 +50,7 @@ import {
   okAntwort,
   ruhe,
   seedInboundElCall,
+  starteAnbieterAttrappe,
 } from "./_iel-inbound-harness.js";
 
 // Die lokalen Routen-Aufrufe gehen am echten fetch vorbei an der Anbieter-Attrappe, die
@@ -651,24 +650,6 @@ const WEITERE_TAKTE = 2;
 const FRISCH_BEANTWORTET_S = 5;
 const KURZE_FRIST_S = 3600;
 const EXPECTED_SIP_CALL_ID = CONVERSATION_DONE_WITH_ANALYSIS.metadata.phone_call.call_id;
-
-async function starteAnbieterAttrappe() {
-  const attrappe = { anfragen: [], antwort: CONVERSATION_IN_PROGRESS };
-  attrappe.setzeAntwort = (conversation) => {
-    attrappe.antwort = conversation;
-  };
-  const server = http.createServer((req, res) => {
-    attrappe.anfragen.push({ method: req.method, url: req.url, atMs: Date.now() });
-    res.writeHead(HTTP_OK, { "content-type": "application/json" });
-    res.end(JSON.stringify(req.method === "DELETE" ? {} : attrappe.antwort));
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  attrappe.url = `http://127.0.0.1:${server.address().port}`;
-  attrappe.gets = () => attrappe.anfragen.filter((anfrage) => anfrage.method === "GET" && anfrage.url.includes(CONV_ID));
-  attrappe.deletes = () => attrappe.anfragen.filter((anfrage) => anfrage.method === "DELETE");
-  attrappe.close = () => new Promise((resolve) => server.close(resolve));
-  return attrappe;
-}
 
 function gebundenerSeed({ answeredVorS = FRISCH_BEANTWORTET_S, maxDurationS = KURZE_FRIST_S, extra = {} } = {}) {
   const answeredAt = isoVor(answeredVorS);
