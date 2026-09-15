@@ -1,9 +1,14 @@
-// IEL-B10: Unterbefehl `setzen --nummer=<E.164>... [--ausfuehren]` (Spec E16 a-f).
+// IEL-B10/IEX-A11: Unterbefehl `setzen --nummer=<E.164>... --registrierung=<phnum_...>... [--ausfuehren]`
+// (Spec IEL E16 a-f, IEX-A E14). Beide Auswahlwege duerfen gemischt werden.
 //
 // ABLAUF, bindend:
-//   1. Vorab-Riegel (nur GET): Inventar hart, jede --nummer hat GENAU eine Registrierung, keine
-//      Registrierung mit Inbound-Zugangsdaten steht ausserhalb der --nummer-Liste (halbe Rotation
-//      liesse sie mit altem Zugang zurueck), Workspace-Secret eindeutig. KEIN Render-Aufruf.
+//   1. Vorab-Riegel (nur GET): Inventar hart; jede --nummer hat GENAU eine Registrierung, jede
+//      --registrierung steht im Inventar; dieselbe Registrierung ueber beide Wege zaehlt einmal; jedes
+//      Ziel ist ein zulaessiges Schreibziel (EINE Definition mit der Sweep-Reparatur E16:
+//      inbound-trunk-beleg.js#reparaturHindernis); keine Registrierung mit Inbound-Zugangsdaten steht
+//      ausserhalb der Ziele (halbe Rotation liesse sie mit altem Zugang zurueck); Workspace-Secret
+//      eindeutig. KEIN Render-Aufruf. Die Nummer einer Registrierung bleibt im Speicher, ausgegeben
+//      werden nur Kennung und Endung.
 //   2. Erzeugen im Speicher (CSPRNG), jeder Wert sofort in die Verbotsmenge des Ausgabe-Waechters,
 //      Laengen gegen die Mindestlaengen aus inbound-path-decision.js (eine Quelle mit Praedikat,
 //      Boot-Riegel und Init-Route).
@@ -28,6 +33,7 @@ import {
   updateConvaiSecret,
 } from "../src/elevenlabs/convai.js";
 import { e164Endung, inboundElAccessDefects } from "../src/elevenlabs/inbound-path-decision.js";
+import { TRUNK_BELEG, reparaturHindernis } from "../src/elevenlabs/inbound-trunk-beleg.js";
 import {
   holeRegistrierungen,
   inboundTrunkKoerper,
@@ -57,7 +63,8 @@ const OHNE_WERT = "-";
 
 export async function laufeSetzen({ argumente, abh }) {
   const { waechter } = abh;
-  const vorab = await vorabRiegel({ abh, nummern: argumente.nummern });
+  const auswahl = { nummern: argumente.nummern, kennungen: argumente.registrierungsKennungen };
+  const vorab = await vorabRiegel({ abh, auswahl });
   const erzeugt = erzeugeGeheimnisse(abh);
   const befunde = [...vorab.befunde, ...erzeugt.befunde];
   if (befunde.length > 0) {
@@ -91,37 +98,68 @@ async function verteileUndBelege({ abh, schritte, geheimnisse, vorher }) {
 
 // ---- 1. Vorab-Riegel (nur GET) ------------------------------------------------------------
 
-// Liefert {befunde[], vorher:{registrierungen, zuordnung: Map(nummer -> Registrierung), secret|null}}.
-export async function vorabRiegel({ abh, nummern }) {
+// Liefert {befunde[], vorher:{registrierungen, ziele: Map(phone_number_id -> Registrierung), secret|null}}.
+export async function vorabRiegel({ abh, auswahl }) {
   const registrierungen = await holeRegistrierungen({ fetchImpl: abh.fetchImpl, account: abh.elKonto });
   const inventar = inventarUrteil(registrierungen);
-  const { zuordnung, befunde: zuordnungsBefunde } = ordneNummernZu({ registrierungen, nummern });
+  const { ziele, befunde: zielBefunde } = ordneZieleZu({ registrierungen, auswahl, agentId: abh.elKonto.agentId });
   const secretSuche = await sucheWorkspaceSecret(abh);
   const befunde = [
     ...inventar.offen.map((registrierung) => `INVENTAR ROT - Registrierung ${registrierung.phone_number_id} traegt einen Inbound-Trunk ohne Zugangsdaten`),
-    ...zuordnungsBefunde,
-    ...fremdeZugaenge({ inventar, nummern }),
+    ...zielBefunde,
+    ...fremdeZugaenge({ inventar, ziele }),
     ...secretSuche.befunde,
   ];
-  return { befunde, vorher: { registrierungen, zuordnung, secret: secretSuche.secret } };
+  return { befunde, vorher: { registrierungen, ziele, secret: secretSuche.secret } };
 }
 
-function ordneNummernZu({ registrierungen, nummern }) {
-  const zuordnung = new Map();
-  const befunde = [];
-  for (const nummer of nummern) {
-    const treffer = registrierungenMitNummer(registrierungen, nummer);
-    if (treffer.length === 1) zuordnung.set(nummer, treffer[0]);
-    else befunde.push(`Nummer ${e164Endung(nummer)}: ${treffer.length} Registrierungen (erwartet genau eine)`);
-  }
-  return { zuordnung, befunde };
+// Rein. Ziele je phone_number_id: dieselbe Registrierung ueber --nummer UND --registrierung zaehlt einmal.
+function ordneZieleZu({ registrierungen, auswahl, agentId }) {
+  const aufloesungen = [
+    ...auswahl.nummern.map((nummer) => zielNachNummer(registrierungen, nummer)),
+    ...auswahl.kennungen.map((kennung, index) => zielNachKennung({ registrierungen, kennung, position: index + 1 })),
+  ];
+  const ziele = new Map(
+    aufloesungen
+      .filter((aufloesung) => aufloesung.registrierung)
+      .map(({ registrierung }) => [registrierung.phone_number_id, registrierung]),
+  );
+  const schreibzielBefunde = [...ziele.values()].map((registrierung) => schreibzielBefund({ registrierung, agentId }));
+  const befunde = [...aufloesungen.map((aufloesung) => aufloesung.befund), ...schreibzielBefunde].filter(Boolean);
+  return { ziele, befunde };
 }
 
-// Eine Registrierung MIT Inbound-Zugangsdaten ausserhalb der Liste behielte den alten Zugang.
-function fremdeZugaenge({ inventar, nummern }) {
+function zielNachNummer(registrierungen, nummer) {
+  const treffer = registrierungenMitNummer(registrierungen, nummer);
+  if (treffer.length === 1) return { registrierung: treffer[0] };
+  return { befund: `Nummer ${e164Endung(nummer)}: ${treffer.length} Registrierungen (erwartet genau eine)` };
+}
+
+// Exakter Kennungs-Abgleich. Eine unbekannte Eingabe wird nie zurueckgegeben (sie koennte eine volle
+// Nummer sein), nur ihre Position.
+function zielNachKennung({ registrierungen, kennung, position }) {
+  const registrierung = registrierungen.find((eintrag) => eintrag.phone_number_id === kennung);
+  return registrierung ? { registrierung } : { befund: `--registrierung #${position}: nicht im Inventar` };
+}
+
+// E14 == E16: EINE Definition "diese Registrierung darf unseren Inbound-Trunk tragen" (eigener Agent,
+// eigene phone_number, outbound_trunk vorhanden). Gegen den neu erzeugten Zugang ist jede bestehende
+// Registrierung eine Abweichung, und gelesen ist sie (Inventar-GET) - also nie UNBEKANNT.
+function schreibzielBefund({ registrierung, agentId }) {
+  const hindernis = reparaturHindernis({
+    abruf: { beleg: TRUNK_BELEG.ABWEICHUNG, registrierung },
+    number: { e164: registrierung.phone_number },
+    agentId,
+  });
+  return hindernis ? `Registrierung ${registrierung.phone_number_id}: kein Schreibziel (${hindernis})` : null;
+}
+
+// Eine Registrierung MIT Inbound-Zugangsdaten ausserhalb der Ziele behielte den alten Zugang. Abgleich ueber
+// die Kennung: beide Auswahlwege muenden in dieselbe Ziel-Map.
+function fremdeZugaenge({ inventar, ziele }) {
   return inventar.mitZugang
-    .filter((registrierung) => !nummern.includes(registrierung.phone_number))
-    .map((registrierung) => `Registrierung ${registrierung.phone_number_id} traegt Inbound-Zugangsdaten und steht nicht in der Nummern-Liste (halbe Rotation)`);
+    .filter((registrierung) => !ziele.has(registrierung.phone_number_id))
+    .map((registrierung) => `Registrierung ${registrierung.phone_number_id} traegt Inbound-Zugangsdaten und steht nicht in der Ziel-Liste (halbe Rotation)`);
 }
 
 // Die Liste traegt nie Secret-Werte, nur Kennung und Name.
@@ -175,7 +213,7 @@ function verteilSchritte({ abh, geheimnisse, vorher }) {
       ausfuehren: () => schreibeDienstEnv(abh, { schluessel, wert: geheimnisse[feld] }),
     })),
     secretSchritt({ abh, wert: geheimnisse.initWebhookToken, vorhanden: vorher.secret }),
-    ...[...vorher.zuordnung].map(([nummer, registrierung]) => registrierungsSchritt({ abh, geheimnisse, nummer, registrierung })),
+    ...[...vorher.ziele.values()].map((registrierung) => registrierungsSchritt({ abh, geheimnisse, registrierung })),
   ];
 }
 
@@ -194,7 +232,8 @@ function secretSchritt({ abh, wert, vorhanden }) {
   };
 }
 
-function registrierungsSchritt({ abh, geheimnisse, nummer, registrierung }) {
+function registrierungsSchritt({ abh, geheimnisse, registrierung }) {
+  const nummer = registrierung.phone_number;
   return {
     ziel: `Registrierung ${registrierung.phone_number_id} (${e164Endung(nummer)})`,
     laenge: geheimnisse.sipPassword.length,
@@ -237,7 +276,7 @@ async function lesebelege({ abh, geheimnisse, secretId, vorher }) {
     await renderBelegGruen({ abh, geheimnisse }),
     await secretBelegGruen({ abh, secretId }),
     await webhookBelegGruen({ abh, secretId }),
-    await registrierungsBelegeGruen({ abh, geheimnisse, zuordnung: vorher.zuordnung }),
+    await registrierungsBelegeGruen({ abh, geheimnisse, ziele: vorher.ziele }),
   ];
   // ALS LETZTES (E16 c, Runde 5 B1): nach dieser Pruefung folgt kein Schreibaufruf mehr.
   const inventarGruen = await abschliessendesInventarGruen(abh);
@@ -289,16 +328,17 @@ export function webhookSecretKonflikt({ settings, secretId }) {
   return [];
 }
 
-async function registrierungsBelegeGruen({ abh, geheimnisse, zuordnung }) {
+async function registrierungsBelegeGruen({ abh, geheimnisse, ziele }) {
   let gruen = true;
-  for (const [nummer, vorher] of zuordnung) {
+  for (const vorher of ziele.values()) {
     const nachher = await fetchPhoneNumber({ fetchImpl: abh.fetchImpl, account: abh.elKonto, phoneNumberId: vorher.phone_number_id });
-    gruen = meldeRegistrierungsBeleg({ abh, geheimnisse, nummer, vorher, nachher }) && gruen;
+    gruen = meldeRegistrierungsBeleg({ abh, geheimnisse, vorher, nachher }) && gruen;
   }
   return gruen;
 }
 
-function meldeRegistrierungsBeleg({ abh, geheimnisse, nummer, vorher, nachher }) {
+function meldeRegistrierungsBeleg({ abh, geheimnisse, vorher, nachher }) {
+  const nummer = vorher.phone_number;
   const trunk = nachher?.inbound_trunk ?? {};
   abh.waechter.verbiete(trunk.username);
   const pruefung = {

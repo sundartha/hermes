@@ -2,7 +2,7 @@
 // (HERMES_RENDER_SERVICE_ID, eine Quelle mit dem Ziel-Urteil, E21) und ausschliesslich
 // Einzel-Schluessel-Endpunkte (src/render-api.js).
 //
-// SCHREIBBAR sind genau fuenf Schluessel (Spec B10 NICHT-Scope). Die Allowlist steht im Code und
+// SCHREIBBAR sind genau sechs Schluessel (Spec B10 NICHT-Scope; IEX-A11: der Scope-Schluessel). Die Allowlist steht im Code und
 // wird vor jedem PUT geprueft: ein Aufrufer, der einen anderen Schluessel schreiben will, wirft,
 // bevor irgendetwas gesendet wird.
 import { HERMES_RENDER_SERVICE_ID } from "../src/elevenlabs/init-webhook-ziel.js";
@@ -14,6 +14,7 @@ export const RENDER_SCHLUESSEL = Object.freeze({
   INIT_TOKEN: "ELEVENLABS_INIT_WEBHOOK_TOKEN",
   TENANT_IDS: "ELEVENLABS_INBOUND_TENANT_IDS",
   ENABLED: "ELEVENLABS_INBOUND_ENABLED",
+  SCOPE: "ELEVENLABS_INBOUND_SCOPE",
   OWNER_TENANT_IDS: "OWNER_SELF_CALL_TENANT_IDS",
   TELNYX_VOICE: "TELNYX_ELEVENLABS_VOICE_ID",
   PLAY_VOICE: "ELEVENLABS_VOICE_ID",
@@ -25,6 +26,7 @@ const SCHREIBBARE_SCHLUESSEL = Object.freeze([
   RENDER_SCHLUESSEL.INIT_TOKEN,
   RENDER_SCHLUESSEL.TENANT_IDS,
   RENDER_SCHLUESSEL.ENABLED,
+  RENDER_SCHLUESSEL.SCOPE,
 ]);
 // Die drei Inbound-Geheimnisse: Render-Schluessel -> Feldname in der Form von
 // inbound-path-decision.js#inboundElAccessDefects. EINE Zuordnung fuer Verteilen, Lesebeleg und
