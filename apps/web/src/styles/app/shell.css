@@ -744,6 +744,23 @@
 @media (max-width: 768px) {
   .auth-island {
     gap: 20px;
+    /* Reicht die Zeile doch einmal nicht (sehr schmale Geraete, lange
+       Uebersetzung), bricht die Insel um -- dann steht sie rechts statt links:
+       ein allein stehendes Kind einer umgebrochenen Zeile ignoriert
+       space-between, dieses margin nicht. */
+    margin-left: auto;
+  }
+  /* Owner-Befund 15.09.2026 (Handy, eingeloggt): "Signed in as Jonas Kroh" schob
+     Umschalter und Abmelden-Knopf in eine ZWEITE Kopfzeile, die Ecke oben rechts
+     blieb leer. Der Satz sagt am Handy ohnehin nichts Neues -- zwei Zeilen
+     darunter steht "Welcome, Jonas Kroh". Er entfaellt hier also ganz; damit
+     passen Marke, EN/DE und Knopf wieder in EINE Zeile, genau wie ausgeloggt.
+     Am Desktop bleibt er stehen (dort ist Platz und es gibt keine Begruessung
+     ueber dem Knopf). display:none statt Textaenderung: das Wiring, die
+     Uebersetzung und der Barrierebaum bleiben unangetastet -- der Kontoname
+     steht weiterhin in der Begruessung. */
+  .auth-who {
+    display: none;
   }
   .auth-island .btn {
     height: 38px;
