@@ -1000,7 +1000,7 @@ test("newsletterRecipientRows: leere Liste -> EINE data-empty-Zeile, kein leeres
   const rows = newsletterRecipientRows(fakeDocument, {});
   assert.equal(rows.length, 1);
   assert.ok(rows[0].hasClass("data-empty"));
-  assert.ok(textOf(rows).includes("No additional recipients"));
+  assert.ok(textOf(rows).includes("No one else yet"));
 });
 
 test("newsletterRecipientRows: eine Zeile je Empfaenger mit Status-Pille; Pending traegt den Mono-Hinweis, Confirmed nicht", () => {
@@ -1237,7 +1237,7 @@ test("DE-Modus: newsletterRecipientStatusLabel + newsletterRecipientRows sind de
     assert.equal(newsletterRecipientStatusLabel("pending"), "Ausstehend");
     assert.equal(newsletterRecipientStatusLabel("confirmed"), "Bestätigt");
     const rows = newsletterRecipientRows(fakeDocument, {});
-    assert.ok(textOf(rows).includes("Noch keine weiteren"));
+    assert.ok(textOf(rows).includes("Sonst noch niemand"));
     const withData = newsletterRecipientRows(fakeDocument, {
       newsletterRecipients: [{ email: "a@b.test", status: "pending", createdAt: "x" }],
     });

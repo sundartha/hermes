@@ -431,6 +431,24 @@
   color: #ffffff;
 }
 
+/* Einleitungssatz einer Karte (die .muted-Zeile direkt unter der Ueberschrift):
+   `text-wrap: pretty` verhindert die Hurenkinder, die dem Owner am Handy
+   aufgefallen sind -- "unsubscribe anytime." stand allein in einer dritten Zeile,
+   waehrend oben Platz frei war. Der Browser verteilt die Woerter dann so, dass
+   keine Restzeile mit ein, zwei Woertern uebrig bleibt; ohne Unterstuetzung
+   bricht es wie bisher. */
+.card > h2 + .muted {
+  text-wrap: pretty;
+}
+
+/* Liegt (noch) keine Konto-Adresse vor, steht in der Blase der Beispieltext des
+   Feldes darunter -- in exakt dessen Platzhalterfarbe (app-hermes.css
+   .field-input::placeholder), damit er als Beispiel und nicht als echte Adresse
+   gelesen wird. Owner-Befund 15.09.2026: leer sah die Blase kaputt aus. */
+.newsletter-account__email.is-placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
 /* Die Status-Pille der Konto-Zeile gehoert zum angemeldeten Zustand -- sie haengt
    deshalb an derselben Checkbox wie die beiden Knopf-Zustaende daneben. */
 .newsletter-account__badge {

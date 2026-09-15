@@ -769,8 +769,13 @@ export function newsletterRecipientBadgeClass(status) {
   return status === "confirmed" ? "active" : "cancelled";
 }
 
-const RECIPIENT_EMPTY = "No additional recipients yet.";
-const RECIPIENT_EMPTY_DE = "Noch keine weiteren Empfänger.";
+// Owner-Frage 15.09.2026 ("was ist der Unterschied zwischen Recipients und
+// Additional Recipients?"): keiner -- die Karte hat EINE Liste, die Konto-Adresse
+// ist die erste Zeile darin. Die Leermeldung sprach trotzdem von "additional
+// recipients" und erfand damit eine zweite Kategorie. Sie sagt jetzt schlicht,
+// dass sonst noch niemand drinsteht.
+const RECIPIENT_EMPTY = "No one else yet.";
+const RECIPIENT_EMPTY_DE = "Sonst noch niemand.";
 const RECIPIENT_REMOVE_LABEL = "Remove recipient";
 const RECIPIENT_REMOVE_LABEL_DE = "Empfänger entfernen";
 const RECIPIENT_PENDING_HINT = "Confirmation email sent";

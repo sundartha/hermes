@@ -206,8 +206,7 @@ export const STRINGS = {
 
     // NewsletterIsland
     newsletterTitle: "Newsletter",
-    newsletterSubtitle:
-      "Get a short summary emailed to you after every call. Optional -- you can unsubscribe anytime.",
+    newsletterSubtitle: "Get a short summary emailed after every call — unsubscribe anytime.",
     newsletterAriaLabel: "Subscribe to the newsletter",
     accountEmailAriaLabel: "Account email",
     subscribe: "Subscribe",
@@ -300,7 +299,7 @@ export const STRINGS = {
     // NewsletterIsland
     newsletterTitle: "Newsletter",
     newsletterSubtitle:
-      "Erhalte nach jedem Anruf eine kurze Zusammenfassung per E-Mail. Optional - du kannst dich jederzeit abmelden.",
+      "Erhalte nach jedem Anruf eine kurze Zusammenfassung per E-Mail — jederzeit abbestellbar.",
     newsletterAriaLabel: "Newsletter abonnieren",
     accountEmailAriaLabel: "Konto-E-Mail",
     subscribe: "Anmelden",

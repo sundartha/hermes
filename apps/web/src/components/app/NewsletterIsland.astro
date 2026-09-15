@@ -65,8 +65,7 @@ import {
 <section id="newsletter-card" class="card" hidden>
   <h2 data-i18n="newsletterTitle">Newsletter</h2>
   <p class="muted" data-i18n="newsletterSubtitle">
-    Get a short summary emailed to you after every call. Optional -- you can
-    unsubscribe anytime.
+    Get a short summary emailed after every call — unsubscribe anytime.
   </p>
 
   <!-- Owner-Befund 15.09.2026: Konto-Adresse und Zusatzempfaenger standen als ZWEI
@@ -148,6 +147,11 @@ import {
     hasPendingNewsletterRecipient,
   } from "../../lib/subscribe.js";
   import { bindList } from "../../lib/render.js";
+
+  // EIN Beispieltext fuer beide Stellen der Karte: die Konto-Zeile, solange keine
+  // Adresse vorliegt, und das Hinzufuegen-Feld darunter. Zwei verschiedene Beispiele
+  // in derselben Liste haben sonst wie zwei verschiedene Dinge ausgesehen.
+  const EMAIL_PLACEHOLDER = "you@example.com";
 
   const cardEl = document.getElementById("newsletter-card");
   const toggleEl = document.getElementById("newsletter-toggle");
@@ -266,13 +270,19 @@ import {
     if (state === AUTH_STATE.AUTHENTICATED) {
       toggleEl.checked = newsletterConsentFrom(data);
       // F2-Mail: die Konto-Adresse steht als Text in der ersten Zeile der Liste (seit
-      // 15.09.2026 kein readonly-Feld mehr, s. Markup-Kommentar) -- leer, wenn der
-      // Server keine liefert; nie eine erfundene Adresse.
-      emailEl.textContent = accountEmailFrom(data) ?? "";
+      // 15.09.2026 kein readonly-Feld mehr, s. Markup-Kommentar). Liefert der Server
+      // keine, blieb die Blase frueher LEER und sah kaputt aus (Owner-Befund
+      // 15.09.2026). Jetzt steht dort derselbe Beispieltext wie im Feld darunter --
+      // in Platzhalterfarbe und ueber .is-placeholder markiert, damit er nie wie eine
+      // echte Adresse wirkt. Erfunden wird weiterhin nichts: es ist ein Platzhalter,
+      // kein Wert.
+      const accountEmail = accountEmailFrom(data) ?? "";
+      emailEl.textContent = accountEmail || EMAIL_PLACEHOLDER;
+      emailEl.classList.toggle("is-placeholder", !accountEmail);
       // Das Hinzufuegen-Feld ist fuer WEITERE Adressen: die eigene steht schon als
       // erste Zeile darueber, also kein Platzhalter mit der eigenen Adresse mehr
       // (das las sich wie "hier deine Konto-Adresse eintragen").
-      recipientInputEl.placeholder = "you@example.com";
+      recipientInputEl.placeholder = EMAIL_PLACEHOLDER;
       cardEl.hidden = false;
       // Pending-Watch nach Datenlage: steht eine Bestaetigung aus -> beobachten;
       // alles bestaetigt/entfernt -> Polling beenden (s. Kommentar oben).
