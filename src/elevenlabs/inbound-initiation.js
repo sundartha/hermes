@@ -15,9 +15,13 @@
 // WAECHTER (fail-closed): die Antwort wird VOR dem Senden geprueft und der Bau wirft, statt
 // einen unsicheren Wert still durchzulassen - ein unaufgeloestes Platzhalter-Paar im Wert
 // ist beim Anbieter im schlimmsten Fall der 1008-Abbruch (Stille).
+//
+// EROEFFNUNG (IEX-A3, O1/E1/E2): first_message = bundle.inboundEroeffnung(ownerName) - Sprache
+// aus inboundElLocaleOf (dieselbe Aufloesung wie agent.language und tts.voice_id), Name aus
+// tenantContext. Kein serverseitiger Pflichtsatz davor: der Hinweis steckt in diesem Satz.
+// RIEGEL (E3) zweimal: vor der Bindung (Route, Stufe 3b) und am fertigen Koerper im Waechter.
 import { localeFor, LOCALES } from "../i18n/locales.js";
-import { gespeicherteBegruessungFuer } from "../i18n/greeting-catalog.js";
-import { begruessungOhnePflichtsatz } from "../i18n/inbound-notice.js";
+import { inboundEroeffnungDefekte } from "../i18n/inbound-opening.js";
 import { callLocaleFor } from "./call-locale.js";
 import { callTimeContext } from "./time-context.js";
 import {
@@ -92,8 +96,8 @@ export function callBindingTokenOf(body) {
   return tokenAusKopfzeilen(body) || alsToken(body?.dynamic_variables?.[EL_CALL_BINDING_VARIABLE]);
 }
 
-// E12/E19: EINE Aufloesung von Sprache und Stimme - fuer die Init-Antwort jetzt und fuer die
-// Stimme des Pflichtsatzes in B8.
+// E12/E19: EINE Aufloesung von Sprache und Stimme - fuer die Init-Antwort und fuer die Stimme
+// des Fehlersatzes (routes/voice.js).
 export function inboundElLocaleOf({ store, config, call }) {
   return callLocaleFor(store.load(), {
     tenantId: call.tenantId,
@@ -127,18 +131,22 @@ function inboundDynamicVariables({ owner, bundle, time }) {
   };
 }
 
-function inboundOverride({ call, locale, bundle, ctx }) {
-  const begruessung = gespeicherteBegruessungFuer({
-    storedGreeting: ctx.settings.greeting,
-    language: call.language,
-    ownerName: ctx.ownerName,
-  });
+// E1/E2: EINE Quelle fuer Text, Sprache und Name - Riegel (Route) und Builder lesen dasselbe (G5).
+function inboundEroeffnungFuer({ store, config, call }) {
+  const locale = inboundElLocaleOf({ store, config, call });
+  const bundle = localeFor(locale.language);
+  const { ownerName } = store.tenantContext(call.tenantId);
+  return { text: bundle.inboundEroeffnung(ownerName), locale, bundle, ownerName };
+}
+
+// IEX-A3 Stufe 3b der Init-Route: Defekt-Namen der Eroeffnung dieses Anrufs, VOR der Bindung.
+export function inboundEroeffnungsDefekteFuer({ store, config, call }) {
+  return inboundEroeffnungDefekte(inboundEroeffnungFuer({ store, config, call }));
+}
+
+function inboundOverride({ text, locale }) {
   return {
-    agent: {
-      // E1: der Pflichtsatz ist vor der Uebergabe bereits gesprochen.
-      first_message: begruessungOhnePflichtsatz({ greeting: begruessung, notice: bundle.inboundNotice }),
-      language: locale.language,
-    },
+    agent: { first_message: text, language: locale.language },
     // Leere Stimme -> kein tts-Zweig; die Stimme am Agenten bleibt stehen (wie Outbound).
     ...(locale.voiceId ? { tts: { voice_id: locale.voiceId } } : {}),
   };
@@ -164,27 +172,35 @@ function unsichereOverridePfade(override) {
   return [...verboten, ...unsicher, ...ohneEroeffnung];
 }
 
+const EROEFFNUNG_BEFUND_PRAEFIX = "eroeffnung.";
+
+// E3 am TATSAECHLICH gesendeten first_message, nicht an einer Neuberechnung.
+function eroeffnungsDefekteDer(antwort, { bundle, ownerName }) {
+  const text = wertAmPfad(antwort.conversation_config_override, FIRST_MESSAGE_PFAD);
+  return inboundEroeffnungDefekte({ text, bundle, ownerName }).map((defekt) => `${EROEFFNUNG_BEFUND_PRAEFIX}${defekt}`);
+}
+
 // Fehlertext nennt nur Namen und Pfade, nie Werte (Regel 4).
-function assertAntwortSicher(antwort, callId) {
+function assertAntwortSicher(antwort, { callId, bundle, ownerName }) {
   const befunde = [
     ...unsichereVariablen(antwort.dynamic_variables),
     ...unsichereOverridePfade(antwort.conversation_config_override),
+    ...eroeffnungsDefekteDer(antwort, { bundle, ownerName }),
   ];
   if (befunde.length === 0) return;
   throw new Error(`Init-Antwort abgebrochen (call=${callId}): unsichere Felder ${[...new Set(befunde)].join(", ")}`);
 }
 
 export function buildInitiationResponse({ store, config, call }) {
-  const locale = inboundElLocaleOf({ store, config, call });
-  const bundle = localeFor(locale.language);
-  const ctx = store.tenantContext(call.tenantId);
-  const owner = auftraggeberAusdruck(ctx.ownerName, bundle);
+  const eroeffnung = inboundEroeffnungFuer({ store, config, call });
+  const { bundle, ownerName } = eroeffnung;
+  const owner = auftraggeberAusdruck(ownerName, bundle);
   const time = callTimeContext({ tenantTimezone: store.tenantTimezone(call.tenantId), callee: OHNE_GEGENSTELLE });
   const antwort = {
     type: INITIATION_RESPONSE_TYPE,
     dynamic_variables: inboundDynamicVariables({ owner, bundle, time }),
-    conversation_config_override: inboundOverride({ call, locale, bundle, ctx }),
+    conversation_config_override: inboundOverride(eroeffnung),
   };
-  assertAntwortSicher(antwort, call.id);
+  assertAntwortSicher(antwort, { callId: call.id, bundle, ownerName });
   return antwort;
 }

@@ -1,11 +1,11 @@
 // ---- IEL-B8: Rueckfall-Routen und Inbound-Weiche des EL-Inbound-Wegs ------------------------
 // /voice/incoming entscheidet EINMAL je Anruf zwischen Budget-Pfad (Schalter aus / nicht gepinnt,
-// byte-identisch, Golden-Test) und der Uebergabe an den ElevenLabs-Agenten: Pflichtsatz von UNS,
-// dann <Dial><Sip>, dann <Redirect> auf /voice/el-rueckfall?quelle=dial_ende. Die Rueckfall-Route
+// byte-identisch, Golden-Test) und der Uebergabe an den ElevenLabs-Agenten: <Dial><Sip> als erstes
+// Verb (IEX-A3), dann <Redirect> auf /voice/el-rueckfall?quelle=dial_ende. Die Rueckfall-Route
 // entscheidet nur aus dem persistierten Datensatz (Auflegen, Folge-Gather, Fehlersatz), der
 // SIP-Bein-Callback /voice/el-bein armiert die innere Frist.
 //
-// A (4-10) rein (1-3 seit IEX-A2 entfallen, die Nummern bleiben - PLAN-SECURITY zitiert sie), B (11) In-Process an einem echten HTTP-Server, C (12-22) Kindprozess.
+// A (4-10) rein (1-3 (IEX-A2) und 5 (IEX-A3) entfallen, die Nummern bleiben - PLAN-SECURITY zitiert sie), B (11) In-Process an einem echten HTTP-Server, C (12-22) Kindprozess.
 // Namen beginnen mit "IEL-B8-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -66,9 +66,7 @@ const HTTP_OK = 200;
 const HTTP_FORBIDDEN = 403;
 const HTTP_SERVER_ERROR = 500;
 const EL_INBOUND = KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI;
-const NOTICE = LOCALES.de.inboundNotice;
 const PUBLIC_URL = "https://agent.test";
-const AGENT_STIMME = "v_agent";
 const BINDUNGS_TOKEN = "0123456789abcdef0123456789abcdef";
 const TEST_MAX_DAUER_S = 900;
 const SIP_USER = EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER;
@@ -99,16 +97,14 @@ const EL_AN_ENV = Object.freeze({
 
 const XML_PRAEFIX = `<?xml version="1.0" encoding="UTF-8"?><Response>`;
 const XML_SUFFIX = "</Response>";
-const innerXml = (xml) => xml.slice(XML_PRAEFIX.length, xml.length - XML_SUFFIX.length);
 
 function uebergabeCall(extra = {}) {
   return { id: "call_b8", to: TELNYX_TEST_TENANT_NUMBER, streamToken: BINDUNGS_TOKEN, maxDurationS: TEST_MAX_DAUER_S, ...extra };
 }
 
-function uebergabe({ call = uebergabeCall(), voiceId = AGENT_STIMME } = {}) {
+function uebergabe({ call = uebergabeCall() } = {}) {
   return elUebergabeDirektiven({
     call,
-    pflichtsatz: { text: NOTICE, voiceProfile: LOCALES.de.voiceProfile, voiceId },
     zugang: { username: SIP_USER, password: SIP_PASSWORD },
     publicUrl: PUBLIC_URL,
   });
@@ -116,37 +112,28 @@ function uebergabe({ call = uebergabeCall(), voiceId = AGENT_STIMME } = {}) {
 
 // ---- A: reine Unit-Tests ----------------------------------------------------------------------
 
-test("IEL-B8-4: elUebergabeDirektiven - Pflichtsatz in Agentenstimme, Dial/Sip, Redirect dial_ende; so gerendert", () => {
+test("IEL-B8-4: elUebergabeDirektiven - Dial/Sip als erstes Verb, Redirect dial_ende; so gerendert", () => {
   const call = uebergabeCall();
   const directives = uebergabe({ call });
-  const [pflichtsatz, dial, umleitung] = directives;
-  assert.deepEqual(directives.map((directive) => directive.kind), [DIRECTIVE.SAY, DIRECTIVE.DIAL_SIP, DIRECTIVE.REDIRECT]);
-  assert.equal(pflichtsatz.text, NOTICE);
-  assert.equal(pflichtsatz.voiceId, AGENT_STIMME);
+  const [dial, umleitung] = directives;
+  assert.deepEqual(directives.map((directive) => directive.kind), [DIRECTIVE.DIAL_SIP, DIRECTIVE.REDIRECT]);
   assert.equal(dial.callerId, call.to);
   assert.equal(dial.uri, `sip:${call.to}@sip.rtc.elevenlabs.io:5060;transport=tcp?${EL_CALL_BINDING_SIP_HEADER}=${BINDUNGS_TOKEN}`);
   assert.equal(dial.timeoutS, EL_DIAL_RING_TIMEOUT_S);
   assert.equal(dial.statusCallbackUrl, `${PUBLIC_URL}/voice/el-bein?callId=${call.id}`);
   assert.equal(umleitung.url, `${PUBLIC_URL}${elRueckfallUrl({ callId: call.id, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE })}`);
 
-  const sayXml = innerXml(renderDirectives([say(NOTICE, LOCALES.de.voiceProfile)]));
   const erwartet =
-    `${XML_PRAEFIX}${sayXml}` +
-    `<Dial callerId="${call.to}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${TEST_MAX_DAUER_S}">` +
+    `${XML_PRAEFIX}<Dial callerId="${call.to}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${TEST_MAX_DAUER_S}">` +
     `<Sip username="${SIP_USER}" password="${SIP_PASSWORD}" statusCallback="${PUBLIC_URL}/voice/el-bein?callId=${call.id}" statusCallbackEvent="answered">` +
     `${dial.uri}</Sip></Dial>` +
     `<Redirect method="POST">${PUBLIC_URL}/voice/el-rueckfall?callId=${call.id}&amp;quelle=dial_ende</Redirect>${XML_SUFFIX}`;
   assert.equal(renderDirectives(directives), erwartet);
 });
 
-test('IEL-B8-5: voiceId "" -> die Pflichtsatz-Direktive traegt kein voiceId-Feld', () => {
-  const [pflichtsatz] = uebergabe({ voiceId: "" });
-  assert.equal(Object.hasOwn(pflichtsatz, "voiceId"), false);
-});
-
 test("IEL-B8-6: timeLimitS folgt maxDurationS des Calls, ohne Wert der absoluten Obergrenze", () => {
-  assert.equal(uebergabe()[1].timeLimitS, TEST_MAX_DAUER_S);
-  assert.equal(uebergabe({ call: uebergabeCall({ maxDurationS: null }) })[1].timeLimitS, MAX_CALL_DURATION_CAP_S);
+  assert.equal(uebergabe()[0].timeLimitS, TEST_MAX_DAUER_S);
+  assert.equal(uebergabe({ call: uebergabeCall({ maxDurationS: null }) })[0].timeLimitS, MAX_CALL_DURATION_CAP_S);
 });
 
 test("IEL-B8-7: Klingelfrist und innere Frist enden vor der aeusseren Frist", () => {
@@ -176,6 +163,13 @@ test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.js genau EINE Lesestelle,
   const dateien = Object.fromEntries(vorkommen);
   assert.deepEqual(Object.keys(dateien).sort(), ["src/config.js", "src/elevenlabs/inbound-path-decision.js", "src/routes/voice.js"]);
   assert.equal(dateien["src/routes/voice.js"], EINMAL);
+});
+
+test("IEX-A3-10: first_message hat genau einen Schreiber je Richtung - Inbound-Builder und Outbound-Anrufstart", () => {
+  const schreiber = quelltexteUnter("src")
+    .map(([datei, inhalt]) => [datei, inhalt.split("first_message:").length - EINMAL])
+    .filter(([, anzahl]) => anzahl > 0);
+  assert.deepEqual(Object.fromEntries(schreiber), { "src/elevenlabs/inbound-initiation.js": EINMAL, "src/elevenlabs/outbound.js": EINMAL });
 });
 
 test("IEL-B8-10: Idempotenz-Anker der zwei Routen - callId plus Unterscheider, sonst nichts", () => {
@@ -312,21 +306,19 @@ async function postRueckfall(srv, { callId, quelle }) {
   return res.text();
 }
 
-test("IEL-B8-12: Schalter an + gepinnt - Pflichtsatz, Dial/Sip, Redirect dial_ende; Sonde, Profil, Transkript, kein Passwort im Log", async () => {
+test("IEL-B8-12: Schalter an + gepinnt - Dial/Sip als erstes Verb, Redirect dial_ende; Sonde, Profil, kein Transkript, kein Passwort im Log", async () => {
   await mitServer({ env: EL_AN_ENV, seed: seedWithTelnyxNumber({ language: "de" }) }, async (srv) => {
     const roh = await incomingText(srv);
     const call = einzigerCall(srv);
     const texml = normalizeIncomingTexml(roh).replace(/X-Hermes-Call-Binding=[0-9a-f]{32}/, "X-Hermes-Call-Binding=<token>");
-    const sayXml = innerXml(renderDirectives([say(NOTICE, LOCALES.de.voiceProfile)]));
     const erwartet =
-      `${XML_PRAEFIX}${sayXml}` +
-      `<Dial callerId="${TELNYX_TEST_TENANT_NUMBER}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${call.maxDurationS}">` +
+      `${XML_PRAEFIX}<Dial callerId="${TELNYX_TEST_TENANT_NUMBER}" timeout="${EL_DIAL_RING_TIMEOUT_S}" timeLimit="${call.maxDurationS}">` +
       `<Sip username="${SIP_USER}" password="${SIP_PASSWORD}" statusCallback="${PUBLIC_URL}/voice/el-bein?callId=call_X" statusCallbackEvent="answered">` +
       `sip:${TELNYX_TEST_TENANT_NUMBER}@sip.rtc.elevenlabs.io:5060;transport=tcp?X-Hermes-Call-Binding=<token></Sip></Dial>` +
       `<Redirect method="POST">${PUBLIC_URL}/voice/el-rueckfall?callId=call_X&amp;quelle=dial_ende</Redirect>${XML_SUFFIX}`;
     assert.equal(texml, erwartet);
-    assert.ok(roh.startsWith(`${XML_PRAEFIX}<Say`), "erstes Verb ist der Pflichtsatz");
-    assert.ok(!roh.includes("<Gather"));
+    assert.ok(roh.startsWith(`${XML_PRAEFIX}<Dial`), "erstes Verb ist der Dial");
+    for (const sprechVerb of ["<Say", "<Play", "<Gather"]) assert.ok(!roh.includes(sprechVerb), sprechVerb);
     assert.equal(bindungsTokenAus(roh), call.streamToken);
 
     await waitForLog(srv, /"path":"elevenlabs"/);
@@ -334,8 +326,7 @@ test("IEL-B8-12: Schalter an + gepinnt - Pflichtsatz, Dial/Sip, Redirect dial_en
     assert.equal(zeilenMit(srv, '"path":"budget"'), 0);
     assert.ok(!srv.stdout.includes(SIP_PASSWORD), "das SIP-Passwort steht nie im Log");
     assert.equal(call.costProfile, EL_INBOUND);
-    assert.equal(call.transcript[0].role, "agent");
-    assert.equal(call.transcript[0].text, NOTICE);
+    assert.equal(call.transcript.length, 0);
     assert.equal(call.elFallbackAt, null);
   });
 });
@@ -591,15 +582,22 @@ async function bindeUeberInit(srv) {
   return init.json();
 }
 
-test("IEL-B8-18: E19 - der Pflichtsatz wird in derselben Stimme synthetisiert, die die Init-Antwort als tts.voice_id sendet", async () => {
+const ZWEITER_CALL_SID = "CAielb8zwei";
+
+test("IEL-B8-18: E19 - die Erstantwort synthetisiert nichts; der Fehlersatz spricht in der Stimme, die die Init-Antwort als tts.voice_id sendet", async () => {
   const attrappe = await starteAnbieterAttrappe();
   const env = { ...EL_AN_ENV, ELEVENLABS_PLAY_TTS_ENABLED: "true", ELEVENLABS_API_KEY: "test", ELEVENLABS_API_BASE: attrappe.url, ELEVENLABS_AGENT_ID: AGENT_ID };
   try {
     await mitServer({ env, seed: seedWithTelnyxNumber({ language: "de" }) }, async (srv) => {
       const antwort = await bindeUeberInit(srv);
-      const [pflichtsatzStimme] = attrappe.ttsStimmen;
-      assert.ok(pflichtsatzStimme, "die Erstantwort hat den Pflichtsatz synthetisiert");
-      assert.equal(antwort.conversation_config_override.tts.voice_id, pflichtsatzStimme);
+      assert.deepEqual(attrappe.ttsStimmen, []);
+
+      await incomingText(srv, { callSid: ZWEITER_CALL_SID });
+      const wartend = callsOf(srv).find((call) => call.elevenlabsConversationId === null);
+      await postRueckfall(srv, { callId: wartend.id, quelle: EL_RUECKFALL_QUELLE.DIAL_ENDE });
+      // Die Synthese des Fehlersatzes ist zugleich die Positiv-Kontrolle: Play-TTS ist aktiv.
+      assert.equal(attrappe.ttsStimmen.length, EINMAL);
+      assert.equal(attrappe.ttsStimmen[0], antwort.conversation_config_override.tts.voice_id);
     });
   } finally {
     await attrappe.close();
@@ -638,7 +636,11 @@ async function mitAttrappen({ modellText, conversation }, run) {
 const postStatus = (srv, callId) => postVoice(srv, { pfad: `/voice/status?callId=${callId}`, body: { CallStatus: "completed" } });
 const MODELL_ZUSAMMENFASSUNG = JSON.stringify({ summary: "B8 ok", actionItems: ["Rueckruf"] });
 
-test("IEL-B8-19: Ende-zu-Ende - Uebergabe, Bindung, Carrier-Ende, Nachlauf, Zusammenfassung ueber Pflichtsatz und Anrufer-Zeilen", async () => {
+// ASCII-Teilstring des Inbound-Hinweises: eine JSON-Umlautkodierung kann die Negativ-Pruefung so
+// nicht leer bestehen lassen.
+const HINWEIS_TEILSTRING = "Sie sprechen mit einer KI";
+
+test("IEL-B8-19: Ende-zu-Ende - Uebergabe, Bindung, Carrier-Ende, Nachlauf, Zusammenfassung ueber die Anbieter-Zeilen, ohne serverseitige Hinweis-Zeile", async () => {
   await mitAttrappen({ modellText: MODELL_ZUSAMMENFASSUNG, conversation: CONVERSATION_DONE_WITH_ANALYSIS }, async ({ env, modell }) => {
     await mitServer({ env, seed: seedWithTelnyxNumber({ language: "de" }) }, async (srv) => {
       await bindeUeberInit(srv);
@@ -650,10 +652,11 @@ test("IEL-B8-19: Ende-zu-Ende - Uebergabe, Bindung, Carrier-Ende, Nachlauf, Zusa
       const fertig = ([eintrag]) => Boolean(eintrag.billedAt && eintrag.summary && eintrag.inboxEntryAt);
       const [call] = (await waitForStoreState(srv, (zustand) => fertig(zustand.calls), SPAWN_FRIST_MS)).calls;
 
-      const zusammenfassungsAnfrage = modell.bodies.find((body) => body.includes(NOTICE));
-      assert.ok(zusammenfassungsAnfrage, "die Zusammenfassung sieht die Pflichtsatz-Zeile");
-      const anruferZeilen = CONVERSATION_DONE_WITH_ANALYSIS.transcript.filter((zeile) => zeile.role === "user");
-      for (const zeile of anruferZeilen) assert.ok(zusammenfassungsAnfrage.includes(zeile.message), zeile.message);
+      const anbieterZeilen = CONVERSATION_DONE_WITH_ANALYSIS.transcript;
+      const zusammenfassungsAnfrage = modell.bodies.find((body) => body.includes(anbieterZeilen[0].message));
+      assert.ok(zusammenfassungsAnfrage, "die Zusammenfassung sieht die erste Anbieter-Zeile");
+      for (const zeile of anbieterZeilen) assert.ok(zusammenfassungsAnfrage.includes(zeile.message), zeile.message);
+      assert.ok(!zusammenfassungsAnfrage.includes(HINWEIS_TEILSTRING), "keine serverseitige Hinweis-Zeile");
       assert.equal(call.summary, "B8 ok");
       assert.ok(call.inboxEntryAt);
       assert.equal(zeilenMit(srv, "[el-inbound] nachlauf gestartet"), EINMAL);

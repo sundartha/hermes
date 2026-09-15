@@ -31,13 +31,3 @@ export function hasInboundNotice(text) {
 export function withInboundNotice(text, notice) {
   return hasInboundNotice(text) ? text : `${notice} ${text}`;
 }
-
-// IEL-B6 (E1): die Begruessung OHNE fuehrenden Pflichtsatz - der Pflichtsatz ist dann
-// bereits gesprochen. Nur ein woertliches Praefix "notice " wird entfernt; Freitext, ein
-// Satz ohne Rest oder nur Leerraum dahinter ergeben die GANZE Begruessung (nie leer, eine
-// Wiederholung ist akzeptiert).
-export function begruessungOhnePflichtsatz({ greeting, notice }) {
-  const praefix = `${notice} `;
-  const rest = greeting.startsWith(praefix) ? greeting.slice(praefix.length).trim() : "";
-  return rest || greeting;
-}

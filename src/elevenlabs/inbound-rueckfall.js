@@ -10,8 +10,8 @@ import { MAX_CALL_DURATION_CAP_S } from "../store/defaults.js";
 import { MS_PER_SECOND } from "../utils/timer.js";
 
 // STARTWERTE, NICHT GEMESSEN (Spec 8 zieht nach), Muster inbound-bridges.js:
-//   EL_DIAL_RING_TIMEOUT_S: INVITE -> 407 -> 200 OK gemessen unter 1 s ([M1] F-A/J3). Synthese
-//     des Pflichtsatzes (bis 3,3 s, [KO 3.2]) + Wiedergabe (etwa 6 s) + dieser Wert bleiben unter
+//   EL_DIAL_RING_TIMEOUT_S: INVITE -> 407 -> 200 OK gemessen unter 1 s ([M1] F-A/J3); seit
+//     IEX-A3 liegt kein eigener Satz mehr vor dem Dial. Der Wert bleibt unter
 //     EL_BRIDGE_START_DEADLINE_MS: ein nie beantwortetes Bein endet ueber dial_ende im
 //     Fehlersatz, bevor die Frist greift. Der Test pinnt die Ordnung.
 //   EL_MIN_CONVERSATION_MS: der Anbieter bricht ein Gespraech mit fehlender Variable etwa 1,7 s
@@ -37,11 +37,21 @@ export function elBeinUrl(callId) {
   return `${EL_BEIN_PFAD}?${new URLSearchParams({ callId })}`;
 }
 
-// A3-Kalibrierung ([el-rueckfall] ms_seit_bindung): Millisekunden seit der Bindung; null ohne
-// lesbares elBoundAt (nie gebunden oder unlesbar). EINE Quelle fuer Log und Entscheidung (G5).
+// Millisekunden seit einem persistierten ISO-Zeitpunkt; null, wenn er fehlt oder unlesbar ist.
+function msSeitIso(iso, nowMs) {
+  const zeitpunktMs = Date.parse(iso);
+  return Number.isNaN(zeitpunktMs) ? null : nowMs - zeitpunktMs;
+}
+
+// A3-Kalibrierung ([el-rueckfall] ms_seit_bindung): null ohne lesbares elBoundAt (nie gebunden
+// oder unlesbar). EINE Quelle fuer Log und Entscheidung (G5).
 export function msSeitBindung(call, nowMs) {
-  const gebundenMs = Date.parse(call?.elBoundAt);
-  return Number.isNaN(gebundenMs) ? null : nowMs - gebundenMs;
+  return msSeitIso(call?.elBoundAt, nowMs);
+}
+
+// IEX-A3 ([el-init] gebunden ms_seit_annahme): Anker ist answeredAt aus /voice/incoming.
+export function msSeitAnnahme(call, nowMs) {
+  return msSeitIso(call?.answeredAt, nowMs);
 }
 
 // Ohne lesbare Bindung nie "lang genug" -> Fehlersatz statt stillem Auflegen.
@@ -71,11 +81,11 @@ export function rueckfallQuelleFuerLog(quelle) {
   return BEKANNTE_QUELLEN.includes(quelle) ? quelle : QUELLE_UNBEKANNT;
 }
 
-// 3.1 Schritt 5: Pflichtsatz (Agentenstimme, E19) -> Dial/Sip -> Redirect(dial_ende).
+// IEX-A3 (3.1 Schritt 3): Dial/Sip als ERSTES Verb -> Redirect(dial_ende). Kein eigener Satz davor:
+// den Hinweis spricht der Agent in seiner Eroeffnung (Riegel an der Init-Route).
 // zugang.password ist SECRET: das Ergebnis wird nur gerendert, nie geloggt.
-export function elUebergabeDirektiven({ call, pflichtsatz, zugang, publicUrl }) {
+export function elUebergabeDirektiven({ call, zugang, publicUrl }) {
   return [
-    sayWithVoiceId(pflichtsatz),
     dialSip({
       uri: elSipUri({ did: call.to, token: call.streamToken }),
       username: zugang.username,

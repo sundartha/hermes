@@ -4134,13 +4134,18 @@ Keine neue Env, keine neue Dependency.
    Inbound-EL-Anruf im Zustand WARTET oder die identische Wiederholung binnen Frist; dazu `agent_id` ==
    `ELEVENLABS_AGENT_ID` und `called_number` (falls vorhanden) normalisiert == `call.to` (404)
 3. Schalter/Allowlist `inboundElPathFor` (404)
+3b. Eroeffnungs-Riegel `inboundEroeffnungsDefekteFuer` (IEX-A3/E3), VOR der Bindung: Namenssatz am
+   Anfang, `inboundNotice` woertlich, `hasInboundNotice`, kein `{{` (404, Log `grund=eroeffnung`, keine
+   Bindung -> Anbieter bricht ab -> Fehlersatz)
 4. set-once-Bindung `bindInboundElConversation` (404 bei verlorener Op)
-5. Antwort: dynamische Variablen und Eroeffnung, **ohne Transkript, ohne Secret, `tenant_token ""`**
+5. Antwort: dynamische Variablen und `first_message = inboundEroeffnung(ownerName)` (Namenssatz mit
+   KI-Kennzeichnung + unveraenderter Hinweis + Frage), derselbe Riegel erneut am fertigen Koerper im
+   Waechter; **ohne Transkript, ohne Secret, `tenant_token ""`**
    (der abgeleitete Werkzeug-Token wird fuer Inbound nie berechnet). Die Werkzeug-Webhooks sperren den
    Inbound-Anruf in beiden Stellungen von `ELEVENLABS_TENANT_TOKEN_REQUIRED` (Test `iel-inbound-werkzeuge`).
 
 Jede Ablehnung ab Stufe 2 antwortet mit demselben konstanten Koerper; nur das Log unterscheidet die Gruende
-(`token`, `kein_wartender_anruf`, `agent`, `called_number`, `schalter`). Der Antwort-Builder hat genau EINEN
+(`token`, `kein_wartender_anruf`, `agent`, `called_number`, `schalter`, `eroeffnung`). Der Antwort-Builder hat genau EINEN
 Aufrufer (die Route, nach Stufe 4). Der Endpunkt loest selbst keinen Anruf aus.
 
 | Punkt | Festlegung |
@@ -4162,7 +4167,8 @@ das oder fehlt `redirectCall` (vor B7), wird aufgelegt. Nie Stille. Der Boot re-
 - **Stille bei Neustart** = Neustart-Dauer plus Rest der aeusseren Frist.
 - **Frist-Startwerte unbelegt:** `EL_BRIDGE_START_DEADLINE_MS = 30000` und `EL_BINDING_AFTER_ANSWER_MS = 8000`
   sind Vorschlaege aus Einzelmessungen ([M1] J3, [KO 3.2]), Nachzug nach Messung 8.
-- **Antwort-Waechter scheitert NACH der Bindung:** 500 ohne Daten, der Anruf bleibt GEBUNDEN ohne Frist. Ob
+- **Builder wirft NACH der Bindung** (der Eroeffnungs-Riegel laeuft vorher, danach koennen noch
+  Store-Leser/Zeitkontext werfen): 500 ohne Daten, der Anruf bleibt GEBUNDEN ohne Frist. Ob
   der Anbieter dann BYE schickt (Rueckfall ueber E8) oder still bleibt, ist M8 (Test `iel-init-webhook` 12).
 - **Frist-Timer wirken je Prozess** (Deploy-Ueberlappung, pg-Zustand im Speicher, Klasse E18-3): eine alte
   Instanz kann umleiten; Folge ist ein Rueckfall, kein Datenleck.
@@ -4176,8 +4182,9 @@ Sicherheitsrelevant geaendert hat sich: `/voice/incoming` hat eine Weiche. Sie g
 Schalter (`ELEVENLABS_INBOUND_ENABLED`), Tenant-Allowlist (`ELEVENLABS_INBOUND_TENANT_IDS`) und
 vollstaendiger Zugang zusammen erfuellt sind (`inboundElPathFor`), und sie laeuft NACH allen sieben
 Sicherungen des Handlers (Signatur-MW, Wiederholungs-Riegel, Nummern-Aufloesung, Kostendecke,
-Notbremse mit EL-Satz, Cap/Geld-Wache, set-once-Kostenprofil). Auf dem EL-Pfad spricht UNSER Server
-den Pflichtsatz, bevor `<Dial><Sip>` an den Agenten uebergibt. Dazu kommen zwei neue
+Notbremse mit EL-Satz, Cap/Geld-Wache, set-once-Kostenprofil). Auf dem EL-Pfad ist `<Dial><Sip>` das
+erste Verb; den Hinweis spricht der Agent als Teil seiner vom Server gesetzten und geprueften
+Eroeffnung (IEX-A3). Dazu kommen zwei neue
 signaturpflichtige Routen (`/voice/el-rueckfall`, `/voice/el-bein`). Kein neues Env, keine neue
 Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch (Golden-Test).
 
@@ -4196,8 +4203,12 @@ Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch
 
 ### 2. Offenlegung
 
-- Erstanruf: `locale.inboundNotice` ist das erste gesprochene Verb, in der Stimme, die die
-  Init-Antwort als `tts.voice_id` sendet (E19, Test 18).
+- Erstanruf (IEX-A3, O1/A2): kein eigenes Sprech-Verb vor dem Dial. `first_message =
+  inboundEroeffnung(ownerName)`, Hinweis-Text unveraendert aus `INBOUND_NOTICES`, der Namenssatz
+  traegt die KI-Kennzeichnung auch ohne Namen (O4). Riegel E3 fail-closed vor der Bindung und im
+  Builder. Die Stimme aus E19 gilt nur noch fuer den Fehlersatz (Test 18). Ob die
+  Unterbrechungssperre auch fuer den Override wirkt, ist UNBELEGT: Messung M-U1 am Owner-Test #2,
+  ROT = Notaus.
 - Gescheiterte Übergabe (IEX-A2, O3): fester Fehlersatz `inboundFehlersatz(ownerName)` in der
   Agentenstimme (E1), danach `<Hangup/>`. Kein Budget-Gespräch, also kein zweites
   Transkriptions-Gespräch. Der Namenssatz trägt die KI-Kennzeichnung auch ohne Namen (O4).
@@ -4226,9 +4237,9 @@ API-Views bleibt es entfernt.
 ### 5. Reihenfolge der schadensbegrenzenden Stufen
 
 1. sieben Sicherungen in `/voice/incoming`
-2. Pflichtsatz von uns
-3. Digest und `allowed_numbers` (Absender-Filter) als Zusatz
-4. Token-Bindung am Init-Webhook als Barriere
+2. Digest und `allowed_numbers` (Absender-Filter) als Zusatz
+3. Token-Bindung am Init-Webhook als Barriere
+4. Eroeffnungs-Riegel vor der Bindung (kein Gespraech ohne Hinweis-Baustein, IEX-A3)
 5. Fristen (innere und aeussere) mit Live-Umleitung
 6. Fehlersatz bzw. Auflegen, nie Stille (IEX-A2)
 
@@ -4259,6 +4270,16 @@ API-Views bleibt es entfernt.
 - Ein Idempotenz-Anker wirkt je Prozess.
 - Die `[el-rueckfall]`-Zeile eines nicht mehr aktiven Calls traegt `callId: null` (der Call wird nicht
   re-attacht); die Korrelation laeuft dann nur ueber Zeitpunkt und `[voice/status]`.
+- **M-U1 offen (IEX-A3):** der Hinweis ist ab IEX-A3 moeglicherweise abschneidbar, bis M-U1 belegt
+  ist; das Fenster zwischen Deploy und Owner-Test #2 wird bewusst getragen (Runbook a5 unmittelbar
+  nach a2/a3).
+- **`ownerName` ist nicht laengenbegrenzt** und steht vor dem Hinweis. Er kommt aus der eigenen
+  IdP-Identitaet; der Riegel sichert, dass Kennzeichnung und Hinweis woertlich folgen. Eine
+  Obergrenze ist eine eigene Entscheidung fuer beide Richtungen.
+- **Gebundener Anruf mit leerem Anbieter-Transkript und Status completed:** ohne serverseitige
+  Pflichtsatz-Zeile laeuft `finishCall` in den Zweig "Anruf fehlgeschlagen" statt in eine
+  Zusammenfassung ueber nur den Hinweis. Timeout und Dauerfehler des Polls enden schon heute als
+  failed.
 
 ## IEL-B9 — Anbieter-Konfiguration fuer Inbound (2026-09-15)
 

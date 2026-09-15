@@ -43,7 +43,7 @@ export const say = (text, voiceProfile = VOICE_PROFILE.DE_FEMALE_NEURAL, audioUr
 const voiceIdField = (voiceId) => (typeof voiceId === "string" && voiceId.length > 0 ? { voiceId } : {});
 
 // IEL-B7a (E19): gesprochener Satz in einer ausdruecklich gewaehlten ElevenLabs-Stimme
-// (EL-Inbound: Pflichtsatz in der Stimme, die der Agent danach spricht). Objekt-Parameter
+// (EL-Inbound: Fehlersatz in der Stimme des Agenten). Objekt-Parameter
 // statt eines 4. Positionsarguments an say (F1). voiceProfile bleibt fuer den Azure-Rueckfall
 // und die Sprach-Pflicht-Logik von say (undefined -> say-Default).
 export const sayWithVoiceId = ({ text, voiceProfile, voiceId }) => ({

@@ -835,8 +835,8 @@ const rawConfig = {
 
   // ---- ElevenLabs-Inbound (Kandidat K1, PLAN-INBOUND-PARITAET.md) ----
   // Der Gegenpart zu elevenLabsOutbound in der EINGEHENDEN Richtung: unser Webhook nimmt
-  // an, laeuft durch alle sieben Sicherungen, rendert den Pflichtsatz - und uebergibt das
-  // Bein DANACH per SIP an denselben Agenten. Der PROVIDER bleibt telnyx, das Carrier-Bein
+  // an, laeuft durch alle sieben Sicherungen und uebergibt das Bein DANACH per SIP an denselben
+  // Agenten, der den Hinweis in seiner Eroeffnung spricht (IEX-A3). Der PROVIDER bleibt telnyx, das Carrier-Bein
   // bleibt unser (und damit der Hangup-Griff).
   // DEFAULT AUS, fail-closed wie alle Engine-Weichen.
   //
