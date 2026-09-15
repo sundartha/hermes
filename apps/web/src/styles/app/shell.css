@@ -249,6 +249,18 @@
   font-size: clamp(22px, 1.83vw, 30px);
 }
 
+/* GP-P5: der erklaerende Satz unter Nummer und Aktion. Ruhige Nebenangabe (Sans,
+   gedaempft) - er erscheint nur im failed-Zustand und soll den Chip im Kopf nicht in
+   die Breite treiben, deshalb die Zeilenbreite begrenzt. */
+.agent-chip__hint {
+  margin-top: 6px;
+  max-width: 42ch;
+  color: var(--color-muted);
+  font-family: var(--font-sans);
+  font-size: clamp(12px, 0.85vw, 14px);
+  line-height: 1.45;
+}
+
 /* GP-P3: der Aktions-Knopf (failed-Nummer) teilt die Optik des Kopier-Knopfs -
    angehaengter Selektor statt einer zweiten, driftenden Deklaration (S2). */
 .agent-chip__copy,

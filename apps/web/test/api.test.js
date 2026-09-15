@@ -17,6 +17,7 @@ import {
   NUMBER_POLL_MAX_ATTEMPTS,
   NUMBER_STATUS,
   numberPlaceholderAction,
+  numberPlaceholderHint,
   numberPlaceholderText,
   numberSetupFeeFrom,
   shouldPollNumberStatus,
@@ -187,9 +188,10 @@ test("loadAuthState -> ERROR bei 5xx und bei Netzwerkfehler", async () => {
 // fehlendes data/agent und leere Felder duerfen nie undefined durchlassen, sonst
 // stuende "undefined" in der App-Shell. Voll befuellt: Werte unveraendert durch.
 test("agentInfo liefert leere Strings bei fehlendem data oder agent", () => {
-  assert.deepEqual(agentInfo(undefined), { number: "", owner: "", numberStatus: "" });
-  assert.deepEqual(agentInfo(null), { number: "", owner: "", numberStatus: "" });
-  assert.deepEqual(agentInfo({}), { number: "", owner: "", numberStatus: "" });
+  const leer = { number: "", owner: "", numberStatus: "", numberStatusReason: "" };
+  assert.deepEqual(agentInfo(undefined), leer);
+  assert.deepEqual(agentInfo(null), leer);
+  assert.deepEqual(agentInfo({}), leer);
 });
 
 test("agentInfo faengt leere/null-Felder als leere Strings ab", () => {
@@ -197,9 +199,12 @@ test("agentInfo faengt leere/null-Felder als leere Strings ab", () => {
     number: "",
     owner: "",
     numberStatus: "",
+    numberStatusReason: "",
   });
 });
 
+// GP-P5: numberStatusReason ist ADDITIV. Ein Server ohne das Feld (aelterer Stand) darf
+// die Grenze nicht auf undefined laufen lassen - dann stuende "undefined" im Dashboard.
 test("agentInfo reicht befuellte Felder unveraendert durch (inkl. numberStatus)", () => {
   assert.deepEqual(
     agentInfo({ agent: { number: "+49123", owner: "Alex", numberStatus: "active" } }),
@@ -207,6 +212,18 @@ test("agentInfo reicht befuellte Felder unveraendert durch (inkl. numberStatus)"
       number: "+49123",
       owner: "Alex",
       numberStatus: "active",
+      numberStatusReason: "",
+    },
+  );
+  assert.deepEqual(
+    agentInfo({
+      agent: { number: "", owner: "Alex", numberStatus: "failed", numberStatusReason: "manual_review" },
+    }),
+    {
+      number: "",
+      owner: "Alex",
+      numberStatus: "failed",
+      numberStatusReason: "manual_review",
     },
   );
 });
@@ -310,6 +327,41 @@ test("GP-P3: numberPlaceholderAction - failed traegt die Aktion auf die Karten-R
   for (const numberStatus of ["active", "provisioning", "requested", "blocked", "none"])
     assert.equal(numberPlaceholderAction({ agent: { numberStatus } }), null, numberStatus);
   assert.equal(numberPlaceholderAction(undefined), null); // fail-closed
+});
+
+// GP-P5: die Aktion erscheint nur noch, wenn der Server die Zahlungsmethode auch
+// tatsaechlich als Ursache nennt. Ohne diese Schaerfung stuende "Zahlungsmittel
+// aktualisieren" auch dort, wo ein Kartenwechsel nichts bewirkt - im Wartefall ein
+// Fehlalarm, nach erschoepften Versuchen eine LEERE Zusage (der Wechsel stoesst dann
+// nichts mehr an, s. resolveAutoProvisionRetry).
+test("GP-P5: numberPlaceholderAction folgt dem Grund - Karte nur bei payment_method_unsuitable", () => {
+  const mitGrund = (numberStatusReason) =>
+    numberPlaceholderAction({ agent: { numberStatus: "failed", numberStatusReason } });
+  assert.ok(mitGrund("payment_method_unsuitable"), "Karte hilft -> Aktion");
+  assert.equal(mitGrund("retry_pending"), null, "laeuft automatisch -> keine Aktion");
+  assert.equal(mitGrund("manual_review"), null, "Deckel erreicht -> Aktion waere leere Zusage");
+  // Aelterer Server ohne das Feld: Bestandsverhalten, sonst verloere ein Kunde waehrend
+  // eines Deploys den einzigen Knopf, der ihm hilft.
+  assert.ok(numberPlaceholderAction({ agent: { numberStatus: "failed" } }));
+});
+
+// GP-P5: der erklaerende Satz. Jeder der drei Gruende verlangt vom Kunden etwas anderes -
+// die Saetze muessen sich deshalb unterscheiden, und ohne Grund darf keiner erscheinen.
+test("GP-P5: numberPlaceholderHint - je Grund ein eigener Satz, sonst leer", () => {
+  const satz = (numberStatusReason) =>
+    numberPlaceholderHint({ agent: { numberStatus: "failed", numberStatusReason } });
+  const saetze = ["payment_method_unsuitable", "retry_pending", "manual_review"].map(satz);
+  for (const text of saetze) assert.notEqual(text, "");
+  assert.equal(new Set(saetze).size, saetze.length, "die drei Saetze muessen verschieden sein");
+
+  // Der Karten-Satz muss die Karte auch WIRKLICH nennen - sonst erklaert er nichts.
+  withLang("de", () => {
+    assert.match(satz("payment_method_unsuitable"), /Karte/);
+  });
+
+  assert.equal(numberPlaceholderHint({ agent: { numberStatus: "failed" } }), "");
+  assert.equal(numberPlaceholderHint({ agent: { numberStatus: "active" } }), "");
+  assert.equal(numberPlaceholderHint(undefined), "");
 });
 
 // Drift-Guard (G22): der Frontend-Spiegel muss exakt dem Backend-Enum entsprechen --

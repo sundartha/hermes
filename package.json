@@ -25,6 +25,7 @@
     "outbound:drift": "node scripts/check-outbound-drift.mjs",
     "reconcile:stale-subs": "node scripts/reconcile-stale-subscriptions.js",
     "reconcile:orphan-accounts": "node scripts/reconcile-orphan-accounts.js",
+    "reconcile:pm-types": "node scripts/reconcile-payment-method-types.js",
     "elevenlabs:nummern": "node scripts/el-nummern-registrierung.mjs",
     "spike1:consult-echo": "node scripts/spike1-consult-echo.mjs",
     "spike1:setup": "node scripts/spike1-setup.mjs",

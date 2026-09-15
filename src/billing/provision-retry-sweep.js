@@ -38,6 +38,14 @@ const ZAEHLER_JE_AUSGANG = Object.freeze({
   [PROVISION_RETRY_OUTCOME.RETRY]: "angestossen",
   [PROVISION_RETRY_OUTCOME.THROTTLED]: "gedrosselt",
   [PROVISION_RETRY_OUTCOME.ATTEMPTS_EXHAUSTED]: "erschoepft",
+  // GP-P2-Nachtrag: dieser Ausgang ist KEIN Rauschen. Er liegt HINTER dem 'failed'-Gate
+  // und hinter dem Abo-/KYC-Gate - wer ihn erreicht, ist ein ZAHLENDER Mandant ohne
+  // Nummer, dessen Zahlungsmethode keinen Hold traegt. Der Wiederanlauf wird ihn nie
+  // anstossen, und zwar dauerhaft: es gibt keinen Versuchszaehler, der irgendwann
+  // ueberlaeuft und den Handbetrieb meldet. Ohne diese Zahl bleibt genau die Population
+  // unsichtbar, fuer die der Sweep gebaut wurde - belegt am 15.09.2026, als der Mandant
+  // aus dem Vorfall vom 11.09. seit dem Deploy in JEDEM Lauf lautlos abgewiesen wurde.
+  [PROVISION_RETRY_OUTCOME.PAYMENT_METHOD_UNSUITABLE]: "ungeeignet",
 });
 
 // Nur diese beiden Ausgaenge bekommen eine durable Audit-Zeile: ein echter Kaufanstoss und
@@ -78,7 +86,7 @@ async function beanspruche({ store, tenantId, nowMs, minIntervalMs }) {
 // REIN: verdichtet die Ausgaenge eines Laufs zur Umfangs-Zeile. Eigener lokaler Zaehler
 // statt einer Mutation von aussen - die Schleife sammelt nur, verdichtet wird einmal.
 function zaehleAusgaenge(ausgaenge) {
-  const zaehler = { angestossen: 0, gedrosselt: 0, erschoepft: 0 };
+  const zaehler = { angestossen: 0, gedrosselt: 0, erschoepft: 0, ungeeignet: 0 };
   for (const outcome of ausgaenge) {
     const name = ZAEHLER_JE_AUSGANG[outcome];
     if (name) zaehler[name] += 1;
@@ -119,7 +127,8 @@ export async function runProvisionRetrySweep({ store, config, provision, audit, 
     // Umfangs-Zeile IMMER (Lehre pruefkommando-ohne-positiv-kontrolle): ein Zweig, der
     // nichts anstoesst, muss von einem, der gar nicht laeuft, unterscheidbar bleiben.
     console.log(
-      `${LOG_PREFIX} geprueft=${tenantIds.length} angestossen=${zaehler.angestossen} gedrosselt=${zaehler.gedrosselt} erschoepft=${zaehler.erschoepft}`,
+      `${LOG_PREFIX} geprueft=${tenantIds.length} angestossen=${zaehler.angestossen} ` +
+        `gedrosselt=${zaehler.gedrosselt} erschoepft=${zaehler.erschoepft} ungeeignet=${zaehler.ungeeignet}`,
     );
   } catch (err) {
     console.error(LOG_PREFIX, err.message);

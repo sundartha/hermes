@@ -184,6 +184,9 @@ export function agentInfo(data) {
     number: agent.number || "",
     owner: agent.owner || "",
     numberStatus: agent.numberStatus || "",
+    // GP-P5, additiv: fehlt das Feld (aelterer Server), bleibt es "" - die Leser unten
+    // fallen dann auf ihr Bestandsverhalten zurueck.
+    numberStatusReason: agent.numberStatusReason || "",
   };
 }
 
@@ -246,20 +249,67 @@ export function numberPlaceholderText(data) {
 const NUMBER_ACTION_FIX_PAYMENT = "Update payment method";
 const NUMBER_ACTION_FIX_PAYMENT_DE = "Zahlungsmittel aktualisieren";
 
-// GP-P3: der failed-Platzhalter bekommt eine ECHTE Aktion statt eines passiven Satzes -
-// die haeufigste Ursache eines gescheiterten Nummern-Setups ist eine Zahlungsmethode,
-// die keinen Hold traegt (Vorfall 11.09.2026), und dagegen hilft genau ein Kartenwechsel.
-// Nach dem erfolgreichen Wechsel stoesst der Server das Provisioning selbst wieder an
-// (self-service-routes.js, billing/return) - dieser Knopf braucht KEINEN neuen Endpunkt.
-// Rein (kein DOM, kein fetch) -> mit node:test unit-testbar. Alle uebrigen Status tragen
-// KEINE Aktion (null): dort hilft ein Kartenwechsel nicht.
+// GP-P5: der Grund, den der Server seit dieser Etappe mitliefert (agent.numberStatusReason,
+// self-service-routes.js). Contract-Grenze (R5): die EINE Stelle, an der das Frontend
+// diese Form annimmt. Fehlt das Feld (aelterer Server), bleibt es leer - jede
+// Verwendungsstelle unten faellt dann auf ihr neutrales Verhalten zurueck.
+export const NUMBER_REASON = Object.freeze({
+  PAYMENT_METHOD: "payment_method_unsuitable",
+  RETRY_PENDING: "retry_pending",
+  MANUAL: "manual_review",
+});
+export function numberStatusReason(data) {
+  const reason = agentInfo(data).numberStatusReason;
+  return typeof reason === "string" ? reason : "";
+}
+
+// GP-P3/GP-P5: der failed-Platzhalter bekommt eine ECHTE Aktion statt eines passiven
+// Satzes - die Ursache des Vorfalls vom 11.09.2026 war eine Zahlungsmethode, die keinen
+// Hold traegt, und dagegen hilft genau ein Kartenwechsel. Nach dem erfolgreichen Wechsel
+// stoesst der Server das Provisioning selbst wieder an (self-service-routes.js,
+// billing/return) - dieser Knopf braucht KEINEN neuen Endpunkt.
+//
+// GP-P5 schaerft die Bedingung: die Aktion erscheint NUR, wenn der Server die
+// Zahlungsmethode auch tatsaechlich als Ursache nennt. Vorher truege sie jeder
+// failed-Zustand - auch der, in dem gerade automatisch weiterprobiert wird (dann waere
+// sie ein Fehlalarm) und der, in dem die Versuche erschoepft sind (dann waere sie eine
+// LEERE Zusage: ein Kartenwechsel stoesst nach dem Deckel nichts mehr an, s.
+// resolveAutoProvisionRetry - nur der Handbetrieb hilft noch).
+// Kein Grund vom Server (aelterer Stand) -> Bestandsverhalten: Aktion bei failed zeigen.
+// Rein (kein DOM, kein fetch) -> mit node:test unit-testbar.
 export function numberPlaceholderAction(data) {
   const { numberStatus } = agentInfo(data);
   if (numberStatus !== NUMBER_STATUS.FAILED) return null;
+  const reason = numberStatusReason(data);
+  if (reason && reason !== NUMBER_REASON.PAYMENT_METHOD) return null;
   return {
     label: tPair(NUMBER_ACTION_FIX_PAYMENT, NUMBER_ACTION_FIX_PAYMENT_DE),
     href: BILLING_SETUP_CHECKOUT_PATH,
   };
+}
+
+// GP-P5: der erklaerende Satz zum failed-Zustand. Er sagt, WARUM es haengt und was als
+// Naechstes passiert - die drei Faelle verlangen vom Kunden Unterschiedliches: selbst
+// handeln, warten, oder sich melden. Ohne ihn stand im Dashboard nur "Einrichtung der
+// Nummer fehlgeschlagen", und der Kunde konnte nicht wissen, dass bei ihm ausschliesslich
+// eine Karte hilft. "" = kein Satz (kein failed-Zustand oder aelterer Server ohne Grund).
+const NUMBER_HINT_PAYMENT =
+  "Your payment method can't cover the one-time setup fee. Add a card - setup restarts automatically.";
+const NUMBER_HINT_PAYMENT_DE =
+  "Dein Zahlungsmittel kann die einmalige Einrichtungsgebühr nicht tragen. Hinterlege eine Karte — die Einrichtung startet dann automatisch neu.";
+const NUMBER_HINT_RETRY = "We're automatically trying again - no action needed.";
+const NUMBER_HINT_RETRY_DE = "Wir versuchen es automatisch erneut — du musst nichts tun.";
+const NUMBER_HINT_MANUAL = "We couldn't set up your number. Please get in touch and we'll sort it out.";
+const NUMBER_HINT_MANUAL_DE =
+  "Wir konnten deine Nummer nicht einrichten. Melde dich bei uns, wir bringen das in Ordnung.";
+const NUMBER_HINTS = Object.freeze({
+  [NUMBER_REASON.PAYMENT_METHOD]: () => tPair(NUMBER_HINT_PAYMENT, NUMBER_HINT_PAYMENT_DE),
+  [NUMBER_REASON.RETRY_PENDING]: () => tPair(NUMBER_HINT_RETRY, NUMBER_HINT_RETRY_DE),
+  [NUMBER_REASON.MANUAL]: () => tPair(NUMBER_HINT_MANUAL, NUMBER_HINT_MANUAL_DE),
+});
+export function numberPlaceholderHint(data) {
+  const hint = NUMBER_HINTS[numberStatusReason(data)];
+  return hint ? hint() : "";
 }
 
 // Liest den Karten-Status aus der state-Antwort -- die EINE Stelle, an der das
