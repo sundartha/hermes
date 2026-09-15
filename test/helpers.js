@@ -277,6 +277,8 @@ export const BASE_ENV = {
   ELEVENLABS_INBOUND_SIP_USER: "",
   ELEVENLABS_INBOUND_SIP_PASSWORD: "",
   ELEVENLABS_INIT_WEBHOOK_TOKEN: "",
+  // IEL-B9: Werkzeug-Schluessel neutral leer (Lehre test-base-env-drift).
+  RENDER_API_KEY: "",
   // ---- Store-Backend + Onboarding/Provisioning ----
   // Neutral + fail-closed: json-Store, kein echter Nummern-Kauf. Tests, die das
   // brauchen (pg, Cap, echtes Provisioning), setzen es explizit per env-Override.

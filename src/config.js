@@ -860,6 +860,11 @@ const rawConfig = {
     // IEL-B1: geteiltes Geheimnis des Conversation-Initiation-Webhooks. SECRET - nie
     // loggen, nie in eine Antwort. Heute liest es nur der Boot-Riegel.
     initWebhookToken: (process.env.ELEVENLABS_INIT_WEBHOOK_TOKEN || "").trim(), // SECRET
+    // IEL-B9: WERKZEUG-Schluessel, kein Serverwert - nur scripts/push-elevenlabs.mjs liest ihn
+    // (Ziel-Urteil des Workspace-Init-Webhooks, nur GET an die Render-API). Voller
+    // Render-Workspace-Zugriff: SECRET, nie loggen, nie in render.yaml. Die Render-BASIS ist
+    // bewusst KEIN Env-Wert (Konstante in src/elevenlabs/init-webhook-ziel.js).
+    renderApiKey: (process.env.RENDER_API_KEY || "").trim(), // SECRET
   },
 
   // ---- Payment/Billing (Stripe Hold/Capture, P6b1; alle optional) ----

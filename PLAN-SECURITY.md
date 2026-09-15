@@ -4249,3 +4249,87 @@ API-Views bleibt es entfernt.
 - Ein Idempotenz-Anker wirkt je Prozess.
 - Die `[el-rueckfall]`-Zeile eines nicht mehr aktiven Calls traegt `callId: null` (der Call wird nicht
   re-attacht); die Korrelation laeuft dann nur ueber Zeitpunkt und `[voice/status]`.
+
+## IEL-B9 — Anbieter-Konfiguration fuer Inbound (2026-09-15)
+
+Werkzeug-Phase: kein Serververhalten aendert sich, keine Route, kein Safety-Gate, keine Offenlegung, keine
+neue Dependency. Neu sind drei Schreibwege beim Anbieter (Workspace-Init-Webhook, Agent-Schalter,
+Loeschen einer offenen Registrierung) und ein lesendes Inventar. Wirksam werden sie erst ueber die
+Runbook-Schritte 0/5/6/8 - jeder Schreibweg ist Trockenlauf per Default.
+
+### 1. Workspace-weiter Init-Webhook
+
+Der Webhook gilt fuer JEDEN Agenten des Workspace, der den Schalter traegt ([R1] c3). Geschrieben wird er
+nur mit `npm run elevenlabs:push -- --workspace-init-webhook --secret-id=<id> --ausfuehren`.
+
+| Eigenschaft | Zustand |
+|---|---|
+| Ziel | `init-webhook-ziel.js#initWebhookUrl` - Repo-Konstante, nie `PUBLIC_URL` der lokalen Konfiguration (Quelltext-Pin, Test 24; Kindprozess mit Tunnel-`PUBLIC_URL`, Test 11) |
+| Ziel-Urteil | Render-API fuer `HERMES_RENDER_SERVICE_ID`, nur GET: wirksamer Origin (`PUBLIC_URL` \|\| Service-URL) ist https und in `HERMES_GATEWAY_ORIGINS`, der Init-Host ist dem Dienst als VERIFIZIERTE Custom-Domain zugeordnet. ROT = 0 Aufrufe an ElevenLabs |
+| Render-Basis | Konstante im Code, kein Env-Wert - eine lokale `.env` kann den Schluessel nicht auf einen fremden Host lenken |
+| Header | `x-hermes-init-token` nur als Workspace-Secret-Verweis `{secret_id}`; der Lesebeleg nach dem Schreiben ist ROT, sobald irgendein Header-Wert ein String ist (gemeldet wird nur der Name) |
+| `secret_id` | steht im Repo nur als Runbook-Eintrag nach dem Anlegen; das Skript liest keinen Geheimnis-Wert |
+| Gegenprobe (P5) | ob der PATCH andere Workspace-Settings ersetzt, ist ungemessen: alle uebrigen Top-Level-Schluessel werden vorher/nachher tief verglichen, Abweichung = ROT (nur Namen) |
+| Entfernen (P4) | `--entfernen` laeuft ohne Ziel-Urteil - er schreibt weder Adresse noch Secret, und der Rueckweg haengt nicht an Render |
+
+### 2. Agent-Schalter und Freigaben
+
+Besitz-Feld `init_webhook_schalter` (`platform_settings.overrides.enable_conversation_initiation_client_data_from_webhook`,
+SOLL true, ohne `ausgenommen`). Freigaben-Wache (Riegel 8 in `push-elevenlabs.mjs`), aktiv sobald der
+fertige Koerper den Schalter traegt, auch im Trockenlauf:
+
+- Schalter nur ausdruecklich (`--felder=init_webhook_schalter`); ein Lauf ohne Nennung ist ROT ohne PATCH (P2).
+- Minimal-Body: unter `platform_settings.overrides` nur der Schalter, sonst ROT.
+- Schnappschuss der Freigaben-Karte vorher; ROT ohne PATCH bei unlesbarer Karte oder schon offener
+  `agent.prompt.*`-Freigabe (sonst koennte jeder Anrufstart den Systemprompt uebersteuern).
+- Nachher Tiefvergleich der Karte; Abweichung = ROT mit Rueckweg: `--felder=conversation_config_override_erlaubnisse --ausfuehren`,
+  danach Schalter false (Vorlage lokal auf false + `--felder=init_webhook_schalter --ausfuehren`).
+
+### 3. Inventar-Regel E15 und Entfernung Spike2
+
+- `npm run elevenlabs:nummern -- --trunk-inventar` liest alle Registrierungen (Liste + Einzel-GET). ROT bei
+  `inbound_trunk` ohne `has_auth_credentials === true`. Ausgabe nur Kennung, Label, Nummern-Endung und
+  ja/nein-Felder - nie Nutzername, volle Nummer oder `allowed_addresses`.
+- `phnum_1101m00pjrg7e1js7aaxwp8hdw38` (Spike2) wird als Runbook-Schritt 0 geloescht.
+- `--registrierung-loeschen --id=<phnum_...>` nur fuer die Klasse offen, sonst VERWEIGERT; ohne
+  `--ja-wirklich` Trockenlauf. Erfolg ist der Lesebeleg (id nicht mehr gelistet UND Inventar gruen), nicht
+  der HTTP-Status des DELETE.
+- Kein Modus schreibt `credentials:null` oder `allowed_numbers:[]` - ein Leerwert ist gemessen der OFFENE
+  Zustand ([M1] J4). Rueckweg ist Schalter, Webhook oder `ELEVENLABS_INBOUND_ENABLED`.
+- Beide Modi laufen ohne Store (E13), belegt per Import-Spion mit Positiv-Kontrolle (Test 23).
+
+### 4. Barriere vs. Zusatz
+
+| Stufe | Rolle | Beleg |
+|---|---|---|
+| Token-Bindung am Init-Webhook | Barriere (E11) | IEL-B6 |
+| Digest am Inbound-Trunk | Zusatz - gemessen nur fuer angerufene Registrierung == Trunk | [M1] J4 |
+| `allowed_numbers` | Zusatz - faelschbarer Absender-Filter | [M1] J6 |
+
+### 5. UNBELEGT: Registrierung ohne `inbound_trunk` lehnt INVITE ab
+
+Risiko: erreichbar fuer jeden, falls Registrierungen ohne Inbound-Konfiguration INVITEs annehmen
+(ungemessen); die Barriere ist dann das Bindungs-Token im Init-Webhook: ohne gueltige Bindung startet kein
+Gespraech mit Tenant-Kontext und kein Tenant-Wert verlaesst den Server.
+
+Ersetzungsregel: dieser Eintrag wird NUR durch ein diskriminierendes N2-Ergebnis ersetzt (Annahme, SIP
+200). Eine Ablehnung (404/407/487/sonstiger Status) ergaenzt nur "in Konfiguration <Trunk-Inventar> mit
+Status X abgelehnt, From/Request-URI, Datum - nicht diskriminierend"; der Eintrag bleibt UNBELEGT.
+
+### 6. M8 offen: Kostenfall fremder INVITE mit 404 am Webhook
+
+Bewusst akzeptiertes Risiko: Anbieter-Dauer und -Kosten eines fremden INVITE, den unser Init-Webhook mit
+404 beantwortet, sind ungemessen und liegen ausserhalb jeder Tenant-Decke (`max_duration_seconds=600`).
+Reichweite: jeder, der die Kennung einer Registrierung am Agenten kennt, solange N2 nicht das Gegenteil
+belegt. Wird durch das M8-Messergebnis ersetzt.
+
+### 7. Werkzeug-Schluessel und Restrisiken
+
+- `RENDER_API_KEY`: Werkzeug-Schluessel ueber `src/config.js` (`config.voice.elevenLabsInbound.renderApiKey`,
+  in `.env.example` dokumentiert, NICHT in `render.yaml` und nicht im Dienst gesetzt), voller
+  Workspace-Zugriff bei Render; in B9 nur GET, nie ausgegeben, nie in einem Ergebnisfeld. Liegt er lokal in
+  `.env`, liest dotenv ihn mit - die Render-BASIS bleibt trotzdem Konstante.
+- Custom-Domain-Liste mit 100 oder mehr Eintraegen ergibt ROT (kein Blaettern).
+- Render nicht lesbar blockiert nur das Setzen, nicht das Entfernen.
+- Dict-Ersetzung beim Anbieter ist fuer die Workspace-Settings ungemessen; abgedeckt durch die Gegenprobe
+  (ROT, aber ohne automatischen Rueckbau).

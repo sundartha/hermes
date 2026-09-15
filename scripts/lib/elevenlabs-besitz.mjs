@@ -784,6 +784,15 @@ export function besesseneFeldNamen(vorlage) {
   return eintraege.map((eintrag) => eintrag?.feld).filter((feld) => typeof feld === "string");
 }
 
+// Die Live-Pfade EINES besessenen Feldes, wie die Vorlage sie erklaert; leer, wenn es das Feld
+// nicht gibt. Steht hier aus demselben Grund wie besesseneFeldNamen: kein zweiter Ort soll den
+// Aufbau der Besitz-Erklaerung kennen.
+export function livePfadeVon(vorlage, feld) {
+  const eintraege = vorlage?.[BESITZ_SCHLUESSEL]?.[FELDER_SCHLUESSEL];
+  const eintrag = Array.isArray(eintraege) ? eintraege.find((kandidat) => kandidat?.feld === feld) : undefined;
+  return Array.isArray(eintrag?.live) ? eintrag.live : [];
+}
+
 // Was die Vorlage ausdruecklich NICHT besitzt - wird mitgemeldet, damit die
 // Grenze des Vergleichs sichtbar bleibt und niemand ein stilles "gruen" fuer
 // "alles geprueft" haelt.

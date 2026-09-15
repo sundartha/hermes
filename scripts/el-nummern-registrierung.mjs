@@ -11,7 +11,21 @@
 // zusaetzlich --ja-wirklich - eine vergessene, zu weit gefasste --anlegen-Ausfuehrung darf
 // nicht versehentlich N Registrierungen anlegen.
 //
+// IEL-B9: zwei weitere Modi fuer den Inbound-Cutover (Runbook Schritt 0, Spec E13/E15):
+//   --trunk-inventar            NUR-LESEND: jede Registrierung beim Anbieter (Liste + Einzel-GET)
+//                               mit Klasse; ROT bei einem Inbound-Trunk ohne Zugangsdaten.
+//   --registrierung-loeschen --id=<phnum_...> [--ja-wirklich]
+//                               loescht NUR eine offene Registrierung; ohne --ja-wirklich
+//                               Trockenlauf. Erfolg ist der Lesebeleg danach, nicht der
+//                               HTTP-Status des DELETE.
+// Beide dispatchen VOR dem dynamischen Store-Import und brauchen weder STORE_BACKEND noch
+// DATABASE_URL (E13). KEIN Modus schreibt Zugangsdaten eines Inbound-Trunks - der einzige
+// Schreibweg dafuer ist iel-geheimnisse.mjs (E16). Ein Rueckbau per Leerwert ist gemessen der
+// OFFENE Zustand ([M1] J4) und deshalb bewusst nicht gebaut.
+//
 // Aufruf: npm run elevenlabs:nummern [-- --pruefen|--anlegen [--ja-wirklich] [--nur=<numberId>]]
+//         npm run elevenlabs:nummern -- --trunk-inventar
+//         npm run elevenlabs:nummern -- --registrierung-loeschen --id=<phnum_...> [--ja-wirklich]
 //
 // BETRIEBLICHE VORAUSSETZUNG (docs/RUNBOOK-OUTBOUND.md): STORE_BACKEND=pg + DATABASE_URL +
 // IP in der Prod-DB-Allowlist (Lehre prod-db-ip-allowlist: "SSL connection closed
@@ -20,8 +34,16 @@
 // erst nach einem (moeglicherweise scheiternden) DB-Verbindungsaufbau auffallen.
 import { config } from "../src/config.js";
 import { PROVIDER, NUMBER_STATUS } from "../src/store/defaults.js";
-import { makeElSipRegistrar, fehlendeZugangsdaten } from "../src/elevenlabs/nummern-registrierung.js";
-import { listPhoneNumbers } from "../src/elevenlabs/convai.js";
+import {
+  REGISTRIERUNG_KLASSE,
+  fehlendeZugangsdaten,
+  holeRegistrierungen,
+  inventarSchnappschuss,
+  inventarUrteil,
+  makeElSipRegistrar,
+  registrierungsKlasse,
+} from "../src/elevenlabs/nummern-registrierung.js";
+import { deletePhoneNumber, fetchPhoneNumber, listPhoneNumbers } from "../src/elevenlabs/convai.js";
 import { attachNumberRegistration } from "../src/store/state-ops.js";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,14 +58,52 @@ function schluesselFehlt() {
   return null;
 }
 
+const SCHALTER = Object.freeze({
+  PRUEFEN: "--pruefen",
+  ANLEGEN: "--anlegen",
+  JA_WIRKLICH: "--ja-wirklich",
+  NUR: "--nur=",
+  TRUNK_INVENTAR: "--trunk-inventar",
+  REGISTRIERUNG_LOESCHEN: "--registrierung-loeschen",
+  ID: "--id=",
+});
+const WERT_SCHALTER = Object.freeze([SCHALTER.NUR, SCHALTER.ID]);
+const FLAG_SCHALTER = Object.freeze(
+  Object.values(SCHALTER).filter((schalter) => !WERT_SCHALTER.includes(schalter)),
+);
+const REGISTRIERUNGS_ID_MUSTER = /^phnum_[a-z0-9]+$/;
+// Nur fuer die Trockenlauf-Zeile: der wirkliche Pfad entsteht in convai.js#deletePhoneNumber.
+const ANBIETER_NUMMER_PFAD = "/v1/convai/phone-numbers/";
+const LISTEN_TRENNER = ", ";
+
+function wertVon(argv, schalter) {
+  return argv.find((arg) => arg.startsWith(schalter))?.slice(schalter.length) || null;
+}
+
 // Reine Argv-Auswertung (F1): --anlegen schaltet den Schreibmodus, --pruefen ist der
 // Default (auch ohne Flag). --nur pinnt den Pilot-Modus auf EINE Nummer.
 function modusAusArgv(argv) {
   return {
-    anlegen: argv.includes("--anlegen"),
-    jaWirklich: argv.includes("--ja-wirklich"),
-    nur: argv.find((arg) => arg.startsWith("--nur="))?.slice("--nur=".length) || null,
+    anlegen: argv.includes(SCHALTER.ANLEGEN),
+    jaWirklich: argv.includes(SCHALTER.JA_WIRKLICH),
+    nur: wertVon(argv, SCHALTER.NUR),
+    trunkInventar: argv.includes(SCHALTER.TRUNK_INVENTAR),
+    registrierungLoeschen: argv.includes(SCHALTER.REGISTRIERUNG_LOESCHEN),
+    id: wertVon(argv, SCHALTER.ID),
   };
+}
+
+// Rein. Ein unverstandenes Argument bricht ab, statt still uebergangen zu werden: wer
+// "--inbound-trunk" tippt, meint etwas, das dieses Skript nicht tut.
+function unbekannteArgumente(argv) {
+  return argv.filter(
+    (arg) => !FLAG_SCHALTER.includes(arg) && !WERT_SCHALTER.some((schalter) => arg.startsWith(schalter)),
+  );
+}
+
+// Rein. Mehr als ein Hauptmodus ist ein Widerspruch, kein Vorrang.
+function modusKonflikt(modus) {
+  return [modus.anlegen, modus.trunkInventar, modus.registrierungLoeschen].filter(Boolean).length > 1;
 }
 
 function aktiveTelnyxNummern(state, nurNumberId) {
@@ -141,13 +201,137 @@ export async function anlegen({ state, saveState, el, sipUser, sipPasswort, nurN
   return fehlgeschlagen === 0 ? 0 : 1;
 }
 
+// ---- IEL-B9: Inventar und Loeschen (ohne Store) ------------------------------------------
+
+const KLASSEN_TEXT = Object.freeze({
+  [REGISTRIERUNG_KLASSE.OFFEN]: "ROT (Inbound-Trunk ohne Zugangsdaten)",
+  [REGISTRIERUNG_KLASSE.MIT_ZUGANG]: "Inbound mit Zugangsdaten",
+  [REGISTRIERUNG_KLASSE.OHNE_INBOUND]: "ohne Inbound-Konfiguration (Annahme 'lehnt INVITE ab' UNBELEGT)",
+});
+const URTEIL_TEXT = Object.freeze({ GRUEN: "GRUEN", ROT: "ROT" });
+
+function jaNein(wert) {
+  return wert ? "ja" : "nein";
+}
+
+// Gruen nach stdout, rot nach stderr - EINE Stelle fuer diese Weiche.
+function meldeNachUrteil(gruen, zeile) {
+  if (gruen) console.log(zeile);
+  else console.error(zeile);
+}
+
+function urteilText(gruen) {
+  return gruen ? URTEIL_TEXT.GRUEN : URTEIL_TEXT.ROT;
+}
+
+// Eine Zeile je Registrierung, ausschliesslich aus der PII-armen Projektion
+// (nummern-registrierung.js#inventarSchnappschuss).
+function meldeInventarZeile(schnappschuss) {
+  const zeile =
+    `${LOG_PREFIX} registrierung=${schnappschuss.id} label=${JSON.stringify(schnappschuss.label)} ` +
+    `nummer=${schnappschuss.endung} inbound_trunk=${jaNein(schnappschuss.inboundTrunk)} ` +
+    `zugangsdaten=${jaNein(schnappschuss.zugangsdaten)} ` +
+    `allowed_numbers=[${schnappschuss.allowedNumbersEndungen.join(LISTEN_TRENNER)}] ` +
+    `outbound_trunk=${jaNein(schnappschuss.outboundTrunk)} -> ${KLASSEN_TEXT[schnappschuss.klasse]}`;
+  meldeNachUrteil(schnappschuss.klasse !== REGISTRIERUNG_KLASSE.OFFEN, zeile);
+}
+
+// --trunk-inventar: NUR-LESEND. Exit 0 nur, wenn keine Registrierung offen ist.
+export async function trunkInventar({ el, fetchImpl = fetch }) {
+  const registrierungen = await holeRegistrierungen({ fetchImpl, account: el });
+  registrierungen.map(inventarSchnappschuss).forEach(meldeInventarZeile);
+  const urteil = inventarUrteil(registrierungen);
+  meldeNachUrteil(
+    urteil.gruen,
+    `${LOG_PREFIX} INVENTAR ${urteilText(urteil.gruen)} - ${registrierungen.length} Registrierungen, ` +
+      `${urteil.offen.length} offen, ${urteil.mitZugang.length} mit Zugangsdaten, ` +
+      `${urteil.ohneInbound.length} ohne Inbound-Konfiguration (Annahme unbelegt, kein Schutzbeleg)`,
+  );
+  return urteil.gruen ? 0 : 1;
+}
+
+// null heisst "nicht lesbar" - der Grund steht dann schon im Log (nur Status, nie Rumpf).
+async function leseRegistrierung({ el, id, fetchImpl }) {
+  try {
+    return await fetchPhoneNumber({ fetchImpl, account: el, phoneNumberId: id });
+  } catch (err) {
+    console.error(`${LOG_PREFIX} registrierung=${id} nicht lesbar (HTTP ${err.providerStatus ?? "unbekannt"})`);
+    return null;
+  }
+}
+
+// Der Beleg nach dem DELETE: die id ist nicht mehr gelistet UND das Inventar ist gruen.
+async function loeschBeleg({ el, id, fetchImpl }) {
+  const registrierungen = await holeRegistrierungen({ fetchImpl, account: el });
+  const nochGelistet = registrierungen.some((registrierung) => registrierung.phone_number_id === id);
+  const urteil = inventarUrteil(registrierungen);
+  const erfolg = !nochGelistet && urteil.gruen;
+  meldeNachUrteil(
+    erfolg,
+    `${LOG_PREFIX} LOESCH-BELEG ${urteilText(erfolg)} - id gelistet: ${jaNein(nochGelistet)}, ` +
+      `Inventar: ${urteilText(urteil.gruen)}`,
+  );
+  return erfolg ? 0 : 1;
+}
+
+// --registrierung-loeschen: loescht NUR Klasse OFFEN. Erfolg = anschliessendes Inventar GRUEN
+// UND id nicht mehr gelistet - NICHT der HTTP-Status (deletePhoneNumber ist fail-soft).
+export async function registrierungLoeschen({ el, id, jaWirklich, fetchImpl = fetch }) {
+  const registrierung = await leseRegistrierung({ el, id, fetchImpl });
+  if (!registrierung) return 1;
+  const klasse = registrierungsKlasse(registrierung);
+  if (klasse !== REGISTRIERUNG_KLASSE.OFFEN) {
+    console.error(
+      `${LOG_PREFIX} registrierung=${id} VERWEIGERT: nur offene Inbound-Trunks ohne Zugangsdaten (Klasse ${klasse})`,
+    );
+    return 1;
+  }
+  if (!jaWirklich) {
+    console.log(
+      `${LOG_PREFIX} TROCKENLAUF - wuerde DELETE ${ANBIETER_NUMMER_PFAD}${id} senden; nichts gesendet. Zum Loeschen: ${SCHALTER.JA_WIRKLICH}`,
+    );
+    return 0;
+  }
+  const { status } = await deletePhoneNumber({ fetchImpl, account: el, phoneNumberId: id });
+  console.log(`${LOG_PREFIX} registrierung=${id} DELETE gesendet, HTTP ${status ?? "unbekannt"} (nicht entscheidend)`);
+  return await loeschBeleg({ el, id, fetchImpl });
+}
+
+function argumentFehler(meldung) {
+  console.error(`${LOG_PREFIX} Fehler (fail-closed): ${meldung}`);
+  return 1;
+}
+
+// Eine kaputte oder fehlende Kennung endet VOR jedem Netzzugriff.
+function laufeLoeschModus(modus) {
+  if (!modus.id || !REGISTRIERUNGS_ID_MUSTER.test(modus.id)) {
+    return argumentFehler(`${SCHALTER.REGISTRIERUNG_LOESCHEN} verlangt ${SCHALTER.ID}<phnum_...>.`);
+  }
+  return registrierungLoeschen({ el: config.voice.elevenLabsOutbound, id: modus.id, jaWirklich: modus.jaWirklich });
+}
+
+// Die IEL-B9-Modi dispatchen VOR laufeStoreModus - sie laden den Store nie (E13).
 async function runCli(argv) {
   const grundKey = schluesselFehlt();
   if (grundKey) {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): ${grundKey} Ungelesen wird nichts als gruen gemeldet.`);
     return 1;
   }
+  const unbekannt = unbekannteArgumente(argv);
+  if (unbekannt.length > 0) return argumentFehler(`unbekannte Argumente ${unbekannt.join(LISTEN_TRENNER)}.`);
   const modus = modusAusArgv(argv);
+  if (modusKonflikt(modus)) {
+    return argumentFehler(
+      `${SCHALTER.ANLEGEN}, ${SCHALTER.TRUNK_INVENTAR} und ${SCHALTER.REGISTRIERUNG_LOESCHEN} schliessen sich aus.`,
+    );
+  }
+  if (modus.trunkInventar) return trunkInventar({ el: config.voice.elevenLabsOutbound });
+  if (modus.registrierungLoeschen) return laufeLoeschModus(modus);
+  return laufeStoreModus(modus);
+}
+
+// Die Bestandsmodi --pruefen/--anlegen: unveraendert, nur aus runCli herausgezogen.
+async function laufeStoreModus(modus) {
   if (modus.anlegen && !modus.jaWirklich) {
     console.error(`${LOG_PREFIX} Fehler (fail-closed): --anlegen verlangt zusaetzlich --ja-wirklich.`);
     return 1;

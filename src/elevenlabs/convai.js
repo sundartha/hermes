@@ -1,8 +1,9 @@
 // ---- ElevenLabs Convai: der EINE HTTP-Zugang des Anrufstart-Zweigs -------------------
-// Sieben Endpunkte: den Anrufstart (POST), den ziehenden Ergebnisabruf (GET), den
+// Neun Endpunkte: den Anrufstart (POST), den ziehenden Ergebnisabruf (GET), den
 // Beende-Versuch (DELETE, Owner-Auftrag 15.08.2026), den Nummernabruf (GET, OUTBOUND-E4/
 // Pruefung 1 des Drift-Waechters) - dazu die drei der Nummernregistrierung (Liste/Anlegen/
-// Loeschen, OUTBOUND-E5). Rein IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie
+// Loeschen, OUTBOUND-E5), dazu Lesen/Schreiben der Workspace-Settings (IEL-B9,
+// Init-Webhook). Rein IO-injiziert (fetchImpl kommt vom Aufrufer, DIP wie
 // src/tts/synth.js) - der Zweig laesst sich damit gegen eine Attrappe fahren, ohne dass je
 // ein echter Anruf oder eine echte Registrierung entsteht.
 //
@@ -30,6 +31,8 @@ const PHONE_NUMBER_PATH = "/v1/convai/phone-numbers/";
 // Einzelpfad-Suffix) - anders als PHONE_NUMBER_PATH oben, das einen EINZELNEN
 // Nummer-Datensatz adressiert (Loeschen bleibt auf PHONE_NUMBER_PATH + id).
 const PHONE_NUMBERS_PATH = "/v1/convai/phone-numbers";
+// IEL-B9: Workspace-Settings (conversation_initiation_client_data_webhook), [R1] GET-WS.
+const CONVAI_SETTINGS_PATH = "/v1/convai/settings";
 const API_KEY_HEADER = "xi-api-key";
 
 // Interner Transport-Bound, kein Operator-Knopf (Praezedenz ERROR_DETAIL_MAX_LEN in
@@ -454,5 +457,37 @@ export function deletePhoneNumber({ fetchImpl, account, phoneNumberId, timeoutMs
     account,
     path: PHONE_NUMBER_PATH + encodeURIComponent(phoneNumberId),
     timeoutMs,
+  });
+}
+
+/**
+ * IEL-B9: NUR LESEND. Workspace-Settings des Kontos (Init-Webhook, [R1] GET-WS). Wirft mit
+ * err.providerStatus (assertConvaiOk), der Fehler-RUMPF wird nie gelesen. KEIN Retry.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, timeoutMs?: number}} args
+ */
+export function fetchConvaiSettings({ fetchImpl, account, timeoutMs = REQUEST_TIMEOUT_MS }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: CONVAI_SETTINGS_PATH,
+    op: "Workspace-Settings-Abruf",
+    init: { method: "GET" },
+    timeoutMs,
+  });
+}
+
+/**
+ * IEL-B9: SCHREIBZUGRIFF - PATCH der Workspace-Settings. Einziger Aufrufer:
+ * scripts/push-elevenlabs.mjs --workspace-init-webhook --ausfuehren. KEIN Retry: ob der PATCH
+ * andere Settings beruehrt, ist ungemessen - die Gegenprobe macht der Aufrufer.
+ * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, body: object}} args
+ */
+export function patchConvaiSettings({ fetchImpl, account, body }) {
+  return convaiFetch({
+    fetchImpl,
+    account,
+    path: CONVAI_SETTINGS_PATH,
+    op: "Workspace-Settings-Schreiben",
+    init: { method: "PATCH", body: JSON.stringify(body) },
   });
 }
