@@ -19,7 +19,7 @@ import { RENDER_API_BASE, schreibeRenderEnvVar } from "../src/render-api.js";
 import { ELEVENLABS_VOICE_ID_BY_PROFILE } from "../src/telephony/adapters/telnyx/elevenlabs-voice.js";
 import { makeAusgabeWaechter } from "../scripts/iel-geheimnisse-ausgabe.mjs";
 import { stimmenUrteil } from "../scripts/iel-geheimnisse-belege.mjs";
-import { ERSTE_ZEILE_MAX_ZEICHEN, variablenBeleg } from "../scripts/iel-geheimnisse-conversation.mjs";
+import { ERSTE_ZEILE_MAX_ZEICHEN, ersterAgentEintragUnterbrochen, variablenBeleg } from "../scripts/iel-geheimnisse-conversation.mjs";
 import { schreibeDienstEnv } from "../scripts/iel-geheimnisse-render.mjs";
 import {
   GEHEIMNIS_ZUFALLS_BYTES,
@@ -111,7 +111,7 @@ function renderEnvGruen() {
   };
 }
 
-function conversationDetail({ agentZeile = "Guten Tag, hier ist Hermes.", phoneNumberId = REG_DID.phone_number_id } = {}) {
+function conversationDetail({ agentZeile = "Guten Tag, hier ist Hermes.", phoneNumberId = REG_DID.phone_number_id, agentUnterbrochen } = {}) {
   return {
     conversation_id: "conv_neu",
     status: "done",
@@ -121,7 +121,7 @@ function conversationDetail({ agentZeile = "Guten Tag, hier ist Hermes.", phoneN
     },
     transcript: [
       { role: "user", message: "hallo" },
-      { role: "agent", message: agentZeile },
+      { role: "agent", message: agentZeile, interrupted: agentUnterbrochen },
     ],
   };
 }
@@ -709,6 +709,37 @@ describe("IEL-B10 conversation-beleg", () => {
     assert.equal(gekuerzt.code, 0, gekuerzt.ausgabe);
     assert.ok(gekuerzt.ausgabe.includes(`erste Agent-Zeile: ${kontrolle.slice(0, ERSTE_ZEILE_MAX_ZEICHEN)}\n`));
     assert.ok(!gekuerzt.ausgabe.includes("ueberhang"));
+  });
+
+  it("IEX-A6-1: conversation-beleg meldet erste Agent-Zeile unterbrochen ja/nein/fehlt", async () => {
+    const faelle = [
+      { conversation: conversationDetail({ agentUnterbrochen: true }), erwartet: "ja" },
+      { conversation: conversationDetail({ agentUnterbrochen: false }), erwartet: "nein" },
+      { conversation: conversationDetail(), erwartet: "fehlt" },
+      { conversation: { ...conversationDetail(), transcript: [] }, erwartet: "fehlt" },
+    ];
+    for (const { conversation, erwartet } of faelle) {
+      const { code, ausgabe } = await laufe(ARG_CONVERSATION, { conversation });
+      assert.equal(code, 0, ausgabe);
+      assert.ok(ausgabe.includes(`erste Agent-Zeile unterbrochen: ${erwartet}\n`), ausgabe);
+    }
+  });
+
+  it("IEX-A6-2: Unterbrechung kommt aus dem ERSTEN Agent-Eintrag; alles Nicht-Boolesche ist fehlt, nie nein", () => {
+    const agent = (felder) => ({ role: "agent", message: "x", ...felder });
+    const tabelle = [
+      { transcript: undefined, erwartet: "fehlt" },
+      { transcript: [{ role: "user", message: "hallo", interrupted: true }], erwartet: "fehlt" },
+      { transcript: [{ role: "user", interrupted: true }, agent({ interrupted: false })], erwartet: "nein" },
+      { transcript: [agent({ interrupted: false }), agent({ interrupted: true })], erwartet: "nein" },
+      { transcript: [agent({ message: null, interrupted: true }), agent({ interrupted: false })], erwartet: "ja" },
+      { transcript: [agent({ interrupted: "true" })], erwartet: "fehlt" },
+      { transcript: [agent({ interrupted: null })], erwartet: "fehlt" },
+      { transcript: [agent({ interrupted: 0 })], erwartet: "fehlt" },
+    ];
+    for (const { transcript, erwartet } of tabelle) {
+      assert.equal(ersterAgentEintragUnterbrochen(transcript), erwartet, JSON.stringify(transcript));
+    }
   });
 });
 
