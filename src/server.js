@@ -25,6 +25,7 @@ import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.js";
 import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.js";
+import { inboundTrunkSchreiberWennErlaubt } from "./elevenlabs/nummern-registrierung.js";
 import { metrics } from "./metrics.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
@@ -191,7 +192,9 @@ const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, tel
 // IEX-A8 (E8/E11): Registrierungs-Beleg-Sweep, EIN Lauf nach listen (boot.js). elRead ist dieselbe Instanz wie
 // beim Drift-Waechter (EIN EL-Nummern-GET, makeElConfigRead, G5/INV-7). Liest nur beim Anbieter; schreibt nur
 // die zwei Beleg-Felder am eigenen Datensatz.
-const inboundTrunkSweep = makeTrunkSweep({ store, config, elRead });
+// IEX-A10 (E16): Reparatur-Hook nur bei offenem Schreib-Gate (inkl. Scope registrierte_dids); sonst
+// undefined = nur Lesebeleg wie IEX-A8.
+const inboundTrunkSweep = makeTrunkSweep({ store, config, elRead, reparatur: inboundTrunkSchreiberWennErlaubt(config) });
 
 // GP-P0: ACHTER, unabhaengiger Sweep-Zweig (Muster outageWatch/driftWatch, INV-7).
 // durableAudit statt audit: der Befund muss die Log-Rotation ueberleben - genau das war

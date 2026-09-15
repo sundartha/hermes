@@ -433,7 +433,7 @@ test("IEX-A8-10: Ergebniszeile - 0 aktiv", async () => {
   const { logger, laeuft } = lauf({ store: fakeStore([]), elRead: fakeElRead({}) });
   await laeuft;
   assert.deepEqual(logger.zeilen, [
-    { stufe: "log", zeile: "[el-trunk] sweep fertig scope=allowlist aktiv=0 belegt=0 abweichung=0 unbekannt=0 ohne_registrierung=0" },
+    { stufe: "log", zeile: "[el-trunk] sweep fertig scope=allowlist aktiv=0 belegt=0 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0" },
   ]);
 });
 
@@ -442,7 +442,7 @@ test("IEX-A8-10: Ergebniszeile - 1 belegt ohne Endungsteil", async () => {
   const elRead = fakeElRead({ [eine.providerAgentPhoneNumberId]: () => passendeRegistrierung(eine.e164) });
   const { logger, laeuft } = lauf({ store: fakeStore([eine]), elRead });
   await laeuft;
-  assert.equal(logger.text(), "[el-trunk] sweep fertig scope=allowlist aktiv=1 belegt=1 abweichung=0 unbekannt=0 ohne_registrierung=0");
+  assert.equal(logger.text(), "[el-trunk] sweep fertig scope=allowlist aktiv=1 belegt=1 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0");
 });
 
 // Mischfall: belegt; abweichung per 200-Mismatch; abweichung per 404; unbekannt per 500;
@@ -473,7 +473,7 @@ test("IEX-A8-10: Ergebniszeile - n gemischt, Endungen sortiert", async () => {
   await laeuft;
   assert.equal(
     logger.text(),
-    "[el-trunk] sweep fertig scope=allowlist aktiv=6 belegt=1 abweichung=2 unbekannt=2 ohne_registrierung=1 " +
+    "[el-trunk] sweep fertig scope=allowlist aktiv=6 belegt=1 repariert=0 abweichung=2 unbekannt=2 ohne_registrierung=1 " +
       "ohne_beleg_endungen=…0002,…0003,…0004,…0005,…0006",
   );
 });
@@ -489,7 +489,7 @@ test("IEX-A8-10: Ergebniszeile - Kappung auf SONDE_MAX_ENDUNGEN plus Rest", asyn
   const sichtbar = numbers.slice(0, beleg.SONDE_MAX_ENDUNGEN).map((eintrag) => pfad.e164Endung(eintrag.e164));
   assert.equal(
     logger.text(),
-    `[el-trunk] sweep fertig scope=allowlist aktiv=${anzahl} belegt=0 abweichung=0 unbekannt=0 ohne_registrierung=${anzahl} ` +
+    `[el-trunk] sweep fertig scope=allowlist aktiv=${anzahl} belegt=0 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=${anzahl} ` +
       `ohne_beleg_endungen=${sichtbar.join(",")},+${KAPPUNG_UEBERHANG}`,
   );
   assert.ok(logger.text().includes("…0110,+2"), "Positiv-Kontrolle: zehnte Endung ist …0110");
@@ -524,7 +524,7 @@ test("IEX-A8-11: BELEGT setzt, ABWEICHUNG loescht, UNBEKANNT laesst stehen, nich
   assert.equal(unbekannt.elInboundTrunkBelegtAt, T1_ISO);
   assert.equal(unbekannt.elInboundTrunkZugangFp, fpAlt);
   assert.deepEqual([...elRead.abrufe].sort(), ["phnum_a8_1", "phnum_a8_2", "phnum_a8_3"]);
-  assert.match(logger.text(), / aktiv=4 belegt=1 abweichung=1 unbekannt=1 ohne_registrierung=1 /);
+  assert.match(logger.text(), / aktiv=4 belegt=1 repariert=0 abweichung=1 unbekannt=1 ohne_registrierung=1 /);
 });
 
 // --- 12: Zeitpunkt der Ergebniszeile ----------------------------------------------------
@@ -680,7 +680,10 @@ test("IEX-A8-17: Beleg-Felder stehen nur in Store, Schema, Beleg-Modul und Weich
 test("IEX-A8-18: server.js baut den Sweep und reicht ihn durch, boot.js ruft ihn nach logBootBanner", () => {
   const serverSrc = fs.readFileSync(path.join(ROOT, "src", "server.js"), "utf8");
   const bootSrc = fs.readFileSync(path.join(ROOT, "src", "boot.js"), "utf8");
-  assert.match(serverSrc, /const inboundTrunkSweep = makeTrunkSweep\(\{ store, config, elRead \}\)/);
+  assert.match(
+    serverSrc,
+    /const inboundTrunkSweep = makeTrunkSweep\(\{ store, config, elRead, reparatur: inboundTrunkSchreiberWennErlaubt\(config\) \}\)/,
+  );
   const depsStart = serverSrc.indexOf("const deps = {");
   assert.notEqual(depsStart, -1, "deps-Buendel nicht gefunden");
   const depsBlock = serverSrc.slice(depsStart, serverSrc.indexOf("};", depsStart));
@@ -760,7 +763,7 @@ test("IEX-A8-19: Spawn E2E - Dienst laeuft waehrend des GET, Ergebniszeile und B
     fakeEl.freigeben();
     await waitForLog(
       srv,
-      /\[el-trunk\] sweep fertig scope=allowlist aktiv=1 belegt=1 abweichung=0 unbekannt=0 ohne_registrierung=0/,
+      /\[el-trunk\] sweep fertig scope=allowlist aktiv=1 belegt=1 repariert=0 abweichung=0 unbekannt=0 ohne_registrierung=0/,
       E2E_TIMEOUT_MS,
     );
     const gespeichert = srv.readStore().numbers.find((eintrag) => eintrag.id === "num_telnyx");

@@ -165,13 +165,19 @@ function quelltexteUnter(verzeichnis) {
   });
 }
 
-test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.js genau EINE Lesestelle, sonst nur config und Praedikat", () => {
+test("IEL-B8-9: der SIP-Zugang hat in src/routes/voice.js und im Inbound-Trunk-Schreiber je genau EINE Lesestelle, sonst nur config und Praedikat", () => {
   const vorkommen = quelltexteUnter("src")
     .map(([datei, inhalt]) => [datei, inhalt.split("sipPassword").length - EINMAL])
     .filter(([, anzahl]) => anzahl > 0);
   const dateien = Object.fromEntries(vorkommen);
-  assert.deepEqual(Object.keys(dateien).sort(), ["src/config.js", "src/elevenlabs/inbound-path-decision.js", "src/routes/voice.js"]);
+  assert.deepEqual(Object.keys(dateien).sort(), [
+    "src/config.js",
+    "src/elevenlabs/inbound-path-decision.js",
+    "src/elevenlabs/nummern-registrierung.js",
+    "src/routes/voice.js",
+  ]);
   assert.equal(dateien["src/routes/voice.js"], EINMAL);
+  assert.equal(dateien["src/elevenlabs/nummern-registrierung.js"], EINMAL);
 });
 
 test("IEX-A3-10: first_message hat genau einen Schreiber je Richtung - Inbound-Builder und Outbound-Anrufstart", () => {
@@ -846,7 +852,7 @@ test("IEX-A9-14: Beleg mit laufendem Fingerabdruck -> Uebergabe; Beleg eines rot
   await mitServer({ env, seed: rotationsSeed() }, async (srv) => {
     await waitForLog(
       srv,
-      /\[el-trunk\] sweep fertig scope=registrierte_dids aktiv=2 belegt=0 abweichung=0 unbekannt=2 ohne_registrierung=0/,
+      /\[el-trunk\] sweep fertig scope=registrierte_dids aktiv=2 belegt=0 repariert=0 abweichung=0 unbekannt=2 ohne_registrierung=0/,
       SPAWN_FRIST_MS,
     );
 

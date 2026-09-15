@@ -61,6 +61,7 @@ import {
   activateNumber,
   attachNumberPaymentIntent,
   attachNumberRegistration,
+  markNumberElInboundTrunkBelegt,
   failNumber,
   releaseNumber,
   findNumber,
@@ -73,6 +74,7 @@ import {
   monthlyCostCentsForProviderPrice,
 } from "./telephony/provisioning-geo.js";
 import { isHoldCapablePaymentMethodType } from "./billing/payment-method-eligibility.js";
+import { TRUNK_BELEG } from "./elevenlabs/inbound-trunk-beleg.js";
 
 // R5 (Phase P7): statt limit:1 mehrere Kandidaten holen und den ersten verfuegbaren
 // waehlen. Eine einzelne Treffer-Anfrage scheitert haeufiger an einer zwischenzeitlich
@@ -91,7 +93,7 @@ export async function provisionNumber(
   deps,
   { numberId, countryCode, connectionId, type, holdAmountCents, currency },
 ) {
-  const { provisioner, billing, sipRegistrar, logger = console } = deps;
+  const { provisioner, billing, sipRegistrar, inboundTrunkSchreiber, logger = console } = deps;
   const number = findNumber(state, numberId);
   if (!number) throw new Error(`provisionNumber: Nummer ${numberId} nicht gefunden`);
 
@@ -183,6 +185,9 @@ export async function provisionNumber(
   // wuerde eine bezahlte, funktionierende Nummer auf 'failed' zurueckrollen - genau die
   // Kaskade, die es nicht geben darf.
   await registriereNummerFailSoft(state, activatedNumber, { sipRegistrar, logger });
+  // IEX-A10 (E13): Inbound-Trunk DIESER DID. Optionale Dependency (Gate zu, u. a. Scope allowlist ->
+  // nicht injiziert -> No-op, Bestand byte-identisch). Fehlertolerant wie die Registrierung.
+  await schreibeInboundTrunkFailSoft(state, activatedNumber, { inboundTrunkSchreiber, logger });
   return activatedNumber;
 }
 
@@ -202,6 +207,27 @@ async function registriereNummerFailSoft(state, number, { sipRegistrar, logger =
   } catch (err) {
     logger.warn(
       `[el-registrierung] FEHLGESCHLAGEN number=${number.id}: ${err.message} - DID bleibt nutzbar, Registrierung nachholbar`,
+    );
+  }
+}
+
+// Schreibt beim Anbieter den Inbound-Trunk und setzt NUR bei Lesebeleg BELEGT die Beleg-Felder am
+// state (der Aufrufer persistiert). Kein Wurf nach aussen: eine bezahlte, aktive DID darf daran nie
+// scheitern. Ohne Beleg hoert die DID unter registrierte_dids den Fehlersatz, bis der naechste
+// Boot-Sweep sie repariert (E15(i)/E16). Log nur nummer_id + Beleg-Token, nie Fehlertext.
+async function schreibeInboundTrunkFailSoft(state, number, { inboundTrunkSchreiber, logger = console }) {
+  if (!inboundTrunkSchreiber || !number.providerAgentPhoneNumberId) return;
+  try {
+    const beleg = await inboundTrunkSchreiber.ensureInboundTrunk(number);
+    if (beleg === TRUNK_BELEG.BELEGT)
+      markNumberElInboundTrunkBelegt(state, number.id, {
+        nowIso: new Date().toISOString(),
+        zugangFp: inboundTrunkSchreiber.zugangFp,
+      });
+    logger.log(`[el-trunk] onboarding nummer_id=${number.id} beleg=${beleg}`);
+  } catch {
+    logger.warn(
+      `[el-trunk] onboarding FEHLGESCHLAGEN nummer_id=${number.id} - DID bleibt nutzbar, Boot-Sweep prueft erneut`,
     );
   }
 }
