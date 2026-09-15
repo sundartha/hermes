@@ -11,8 +11,10 @@ import {
   detailRecordsAnfrage,
   elGespraechAnfrage,
   elGespraecheAnfrage,
+  elSipNachrichtenAnfrage,
   elSttAnfrage,
   maskiereNummern,
+  texmlAnrufeAnfrage,
 } from "./iel-mess-anbieter.mjs";
 
 const MS_JE_S = 1000;
@@ -31,6 +33,7 @@ const BELEG_FELDER = Object.freeze([
   "record_type", "direction", "status", "connection_id", "started_at", "start_time",
   "finished_at", "end_time", "call_sec", "billed_sec", "cost", "currency",
 ]);
+const ZUORDNUNG = Object.freeze({ PROBE: "probe", REGISTRIERUNG: "registrierung", ZEITFENSTER: "zeitfenster" });
 
 function kuerze(text, maxZeichen) {
   return text == null ? null : maskiereNummern(text).slice(0, maxZeichen);
@@ -45,10 +48,10 @@ function normalisiere(text) {
 // Zuordnung von stark nach schwach. Nur "probe" und "registrierung" gelten als unser
 // Anruf; ein Treffer nur ueber das Zeitfenster kann fremder Verkehr desselben Agenten sein.
 function bestimmeZuordnung(gespraech, { probeVariable, registrierungId }) {
-  if (probeVariable) return "probe";
+  if (probeVariable) return ZUORDNUNG.PROBE;
   const telefonat = gespraech.metadata?.phone_call ?? {};
-  if (registrierungId && telefonat.phone_number_id === registrierungId) return "registrierung";
-  return "zeitfenster";
+  if (registrierungId && telefonat.phone_number_id === registrierungId) return ZUORDNUNG.REGISTRIERUNG;
+  return ZUORDNUNG.ZEITFENSTER;
 }
 
 function ersteAgentNachricht(transkript) {
@@ -78,7 +81,7 @@ function ermittleZuordnungskontext(gespraech, kontext) {
   const variablen = gespraech.conversation_initiation_client_data?.dynamic_variables ?? {};
   const probeVariable = Object.keys(variablen).find((name) => traegtLaufId(variablen[name], kontext.laufId)) ?? null;
   const zuordnung = bestimmeZuordnung(gespraech, { probeVariable, registrierungId: kontext.registrierung?.id });
-  return { variablen, probeVariable, zuordnung, unserAnruf: zuordnung !== "zeitfenster" };
+  return { variablen, probeVariable, zuordnung, unserAnruf: zuordnung !== ZUORDNUNG.ZEITFENSTER };
 }
 
 function baueMetadatenFelder(gespraech) {
@@ -225,4 +228,85 @@ export async function sammleDetailRecords({ transport, typen, kennungen }) {
   const ergebnis = {};
   for (const typ of typen) ergebnis[typ] = await durchsucheTyp({ transport, typ, kennungen: brauchbar });
   return ergebnis;
+}
+
+// --- IEL-B11: Nach-Deploy-Belege (N1/N2) ------------------------------------------------
+//
+// N2 kann keinen INVITE ueber ein Gespraech nachweisen (die Ablehnung erzeugt keins) - das
+// Diskriminierungs-Urteil kommt deshalb NICHT aus sip-messages, sondern aus dem Kindbein
+// der TeXML-Anrufliste (V2/V3).
+
+const SIP_OK = 200;
+const SIP_STATUS_FORM = /^[1-6]\d{2}$/;
+const SIP_ANTWORT_ZEILE = /^SIP\/2\.0 (\d{3})\b/;
+const INVITE_ZEILE = /^INVITE (\S+) SIP\/2\.0/;
+
+export const N2_URTEIL = Object.freeze({ ANNAHME_DISKRIMINIEREND: "ANNAHME_DISKRIMINIEREND", NICHT_DISKRIMINIEREND: "NICHT_DISKRIMINIEREND" });
+
+function kuerzeNummer(text) {
+  return maskiereNummern(text);
+}
+
+// Spec 8 R-B: der Trunk der gepinnten DID lehnt einen fremden INVITE selbst ab (J4/J6, Trunk-Wahl
+// J5) - nur eine 200-Annahme unterscheidet das Verhalten.
+export function n2Urteil({ sipStatus }) {
+  return sipStatus === SIP_OK ? N2_URTEIL.ANNAHME_DISKRIMINIEREND : N2_URTEIL.NICHT_DISKRIMINIEREND;
+}
+
+export function sipStatusAus(wert) {
+  return SIP_STATUS_FORM.test(String(wert ?? "")) ? Number(wert) : null;
+}
+
+// NUR Kindbeine (parent_call_sid === hauptbein): das Elternbein wird von unserer Wegwerf-
+// Call-Control-App angenommen und traegt selbst 200 (V3, Anruf 1 vom 2026-09-14).
+export function kindbeinStatus({ calls, hauptbein }) {
+  const kinder = hauptbein ? (calls ?? []).filter((anruf) => anruf.parent_call_sid === hauptbein) : [];
+  return { kind_beine: kinder.length, sip_status: kinder.length === 1 ? sipStatusAus(kinder[0].sip_hangup_cause) : null };
+}
+
+// Nur die ERSTE Zeile jeder Roh-Nachricht: Kopfzeilen (Proxy-Authorization, From/To) tragen
+// womoeglich Geheimnisse oder PII und verlassen diese Funktion nie.
+export function sipNachrichtenBeleg(nachrichten) {
+  let requestUri = null;
+  const codes = [];
+  for (const nachricht of nachrichten ?? []) {
+    const rohtext = String(nachricht?.raw_message ?? "");
+    const ersteZeile = rohtext.split("\n")[0].trim();
+    const invite = INVITE_ZEILE.exec(ersteZeile);
+    if (invite && !requestUri) requestUri = maskiereNummern(invite[1].split("?")[0]);
+    const antwort = SIP_ANTWORT_ZEILE.exec(ersteZeile);
+    if (antwort) codes.push(Number(antwort[1]));
+  }
+  return { request_uri: requestUri, antwort_codes: [...new Set(codes)] };
+}
+
+export async function sammleTexmlKindbein(kontext) {
+  const hauptbein = kontext.griffe.hauptbein;
+  if (!hauptbein) return { http: null, kind_beine: 0, sip_status: null };
+  const antwort = await kontext.transport.senden(texmlAnrufeAnfrage(kontext.fall.anrufer_kennung));
+  return { http: antwort.status, ...kindbeinStatus({ calls: antwort.json?.calls, hauptbein }) };
+}
+
+export async function sammleSipNachrichten(kontext) {
+  const elevenlabsBeleg = kontext.beleg.elevenlabs;
+  const gespraeche = (elevenlabsBeleg?.gespraeche ?? []).filter((gespraech) => gespraech.zuordnung !== ZUORDNUNG.ZEITFENSTER);
+  const ergebnis = [];
+  for (const gespraech of gespraeche) {
+    const antwort = await kontext.transport.senden(elSipNachrichtenAnfrage(gespraech.conversation_id));
+    ergebnis.push({ conversation_id: gespraech.conversation_id, http: antwort.status, ...sipNachrichtenBeleg(antwort.json?.sip_messages) });
+  }
+  return ergebnis;
+}
+
+export async function sammleNachdeployBelege(kontext) {
+  const kindbein = await sammleTexmlKindbein(kontext);
+  const sipNachrichten = await sammleSipNachrichten(kontext);
+  return {
+    from: kuerzeNummer(kontext.fall.anrufer_kennung),
+    request_uri: { gesendet: kuerzeNummer(kontext.fall.sip_ziel), empfangen: sipNachrichten.find((beleg) => beleg.request_uri)?.request_uri ?? null },
+    sip_status: kindbein.sip_status,
+    texml_kindbein: kindbein,
+    sip_nachrichten: sipNachrichten,
+    ...(kontext.fall.n2_protokoll ? { n2_urteil: n2Urteil({ sipStatus: kindbein.sip_status }) } : {}),
+  };
 }

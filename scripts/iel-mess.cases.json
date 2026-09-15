@@ -1,5 +1,5 @@
 {
-  "_hinweis": "Messfaelle fuer scripts/iel-mess.mjs (IE1 F-A..F-F, Maschine-zu-Maschine). Werte hier aendern, NICHT die Befehlszeile. Grenzen (5 Anrufe, 60 s, erlaubte SIP-Ziele, Wegwerf-Subdomain) stehen im Skript und sind hier nicht uebersteuerbar. {{lauf_id}} wird je Anruf durch eine frische Kennung ersetzt.",
+  "_hinweis": "Messfaelle fuer scripts/iel-mess.mjs (IE1 F-A..F-F, IEL-B11 N1/N2/N-D, Maschine-zu-Maschine). Werte hier aendern, NICHT die Befehlszeile. Grenzen (5 bzw. 3 Anrufe je Zaehler-Gruppe, 60 s, erlaubte SIP-Ziele, Wegwerf-Subdomain) stehen im Skript und sind hier nicht uebersteuerbar. {{lauf_id}} wird je Anruf durch eine frische Kennung ersetzt.",
   "gemeinsam": {
     "say_stimme": { "voice": "Azure.de-DE-KatjaNeural", "language": "de-DE" },
     "pflichtsatz": "Hier spricht die Hermes Messung. Kontrollwort Leuchtturm.",
@@ -13,6 +13,7 @@
   "faelle": {
     "F-A": {
       "art": "texml-bruecke",
+      "zaehler": "m1",
       "deckt": ["F-A", "F-B (TeXML-Sip-Header)", "F-C (Wachhund-Auflegen waehrend der Bruecke)", "F-D (Nachlese)"],
       "misst": "INVITE per TeXML <Dial><Sip> an die Spike2-Registrierung erreicht deren Agenten (Positiv-Kontrolle); kommt der X-Header als Variable an",
       "sip_ziel": "sip:+15739090177@sip.rtc.elevenlabs.io:5060;transport=tcp",
@@ -24,6 +25,7 @@
     },
     "F-A-digest": {
       "art": "texml-bruecke",
+      "zaehler": "m1",
       "digest": true,
       "deckt": ["M3 (TeXML <Sip username password> gegen EL-Digest)", "Gegenprobe ohne Zugangsdaten im selben Anruf"],
       "misst": "Wegwerf-Zugangsdaten zur Laufzeit in inbound_trunk_config.credentials der Spike2-Registrierung; Dial 1 MIT, Dial 2 OHNE Zugangsdaten; danach Zugangsdaten entfernt und Ausgangszustand per GET belegt",
@@ -36,6 +38,7 @@
     },
     "F-B-cc": {
       "art": "cc-direkt",
+      "zaehler": "m1",
       "deckt": ["F-B (Call-Control custom_headers)", "F-A"],
       "misst": "Call-Control-dial mit custom_headers direkt an die Spike2-Registrierung; kommt der Header als Variable an",
       "sip_ziel": "sip:+15739090177@sip.rtc.elevenlabs.io:5060;transport=tcp",
@@ -47,6 +50,7 @@
     },
     "F-C": {
       "art": "texml-bruecke",
+      "zaehler": "m1",
       "deckt": ["F-C (Hangup des Elternbeins per API waehrend der Bruecke)"],
       "misst": "Status=completed am TeXML-Elternbein nach 20 s; endet das EL-Gespraech mit",
       "voraussetzung": "nur aussagekraeftig, wenn F-A zeigt, dass der Agent die Bruecke laenger als 20 s haelt (kein sofortiges 1008)",
@@ -59,6 +63,7 @@
     },
     "F-F-unbekannt": {
       "art": "texml-bruecke",
+      "zaehler": "m1",
       "deckt": ["F-F (Kennung ohne Registrierung)"],
       "misst": "Dial an eine unbekannte Kennung; laeuft TeXML nach dem gescheiterten Dial weiter und hoert der Anrufer den Rueckfallsatz",
       "sip_ziel": "sip:+12025550199@sip.rtc.elevenlabs.io:5060;transport=tcp",
@@ -70,6 +75,7 @@
     },
     "F-F-abgelehnt": {
       "art": "texml-bruecke",
+      "zaehler": "m1",
       "deckt": ["F-F (INVITE abgelehnt: Absender nicht in allowed_numbers)"],
       "misst": "Dial an die Spike2-Registrierung mit fremder Absenderkennung; Ablehnung und Rueckfallsatz",
       "sip_ziel": "sip:+15739090177@sip.rtc.elevenlabs.io:5060;transport=tcp",
@@ -81,6 +87,7 @@
     },
     "F-F-stumm": {
       "art": "texml-bruecke",
+      "zaehler": "m1",
       "deckt": ["F-F (Gegenstelle antwortet nicht)"],
       "misst": "Dial an eine TEST-NET-Adresse, die nie antwortet; Dial-Timeout und Rueckfallsatz",
       "sip_ziel": "sip:iel-probe@192.0.2.1:5060",
@@ -92,6 +99,7 @@
     },
     "F-F-ohne-agent": {
       "art": "texml-bruecke",
+      "zaehler": "m1",
       "deckt": ["F-F (Registrierung ohne zugewiesenen Agenten)"],
       "misst": "Dial an die Wegwerf-Registrierung aus 'setup' (kein Agent); Fehlerbild und Rueckfallsatz",
       "braucht_setup": true,
@@ -104,22 +112,67 @@
     },
     "F-D": {
       "art": "detail-records",
+      "zaehler": "m1",
       "deckt": ["F-D"],
       "misst": "Telnyx detail_records zu allen bisher protokollierten Mess-Anrufen: welche record_types, wie viele Beine, Kosten. Kein Anruf. Fruehestens einige Minuten nach dem Anruf sinnvoll."
     },
     "F-E": {
       "art": "registrierung-vergleich",
+      "zaehler": "m1",
       "deckt": ["F-E"],
       "misst": "GET -> PATCH inbound_trunk_config (Werte unveraendert zurueckgeschrieben) -> GET: bleibt die outbound_trunk-Projektion gleich. Danach Rueckschreiben des Vorher-Stands. Kein Anruf, aber ein SCHREIBZUGRIFF am Anbieter.",
       "el_registrierung_id": "phnum_1101m00pjrg7e1js7aaxwp8hdw38",
       "el_kennung": "+15739090177",
       "inbound_patch": null
+    },
+    "N1-m7-m8": {
+      "art": "texml-bruecke",
+      "zaehler": "nachdeploy",
+      "digest": false,
+      "braucht_setup": true,
+      "deckt": ["M7", "M8"],
+      "misst": "'setup --nachdeploy' legt die Wegwerf-Registrierung AM AGENTEN an (Spec E20/S8): entsteht ein Gespraech, kommt der Init-Webhook-Aufruf an (M7), reagiert er bei ausgeschaltetem Schalter mit 404 statt 200 (M8)",
+      "sip_ziel": "sip:+12025550176@sip.rtc.elevenlabs.io:5060;transport=tcp",
+      "el_registrierung_id": "wegwerf",
+      "registrierung_erwartet": { "agent": true, "inbound_trunk": true },
+      "anrufer_kennung": "+15739090177",
+      "dial_timeout_s": 10,
+      "eltern_auflegen_nach_s": null,
+      "mitschnitt": true
+    },
+    "N2-ohne-inbound": {
+      "art": "texml-bruecke",
+      "zaehler": "nachdeploy",
+      "digest": false,
+      "braucht_setup": true,
+      "n2_protokoll": true,
+      "deckt": ["N2"],
+      "misst": "'setup --nur-ausgehend' legt die Wegwerf-Registrierung OHNE inbound_trunk an (Produktionsform einer Absender-Registrierung): nur eine 200-Annahme des Kindbeins waere diskriminierend (V3, n2Urteil)",
+      "sip_ziel": "sip:+12025550176@sip.rtc.elevenlabs.io:5060;transport=tcp",
+      "el_registrierung_id": "wegwerf",
+      "registrierung_erwartet": { "agent": true, "inbound_trunk": false },
+      "anrufer_kennung": "+15739090177",
+      "dial_timeout_s": 10,
+      "eltern_auflegen_nach_s": null,
+      "mitschnitt": true
+    },
+    "N-D": {
+      "art": "detail-records",
+      "zaehler": "nachdeploy",
+      "deckt": ["N1-m7-m8", "N2-ohne-inbound"],
+      "misst": "Telnyx detail_records zu N1/N2, kein Anruf"
     }
   },
   "setup": {
     "misst_fuer": ["F-F-ohne-agent"],
     "el_nummer": "+12025550177",
     "label": "IEL Messung ohne Agent (Wegwerf)",
+    "anrufer_kennung": "+15739090177"
+  },
+  "setup_nachdeploy": {
+    "misst_fuer": ["N1-m7-m8", "N2-ohne-inbound"],
+    "el_nummer": "+12025550176",
+    "label": "IEL Nach-Deploy Wegwerf am Agenten",
     "anrufer_kennung": "+15739090177"
   }
 }
