@@ -82,11 +82,14 @@ const ERWARTET = Object.freeze({
 });
 const ERWARTETE_WERTE = Object.values(ERWARTET);
 
+const AGENT_ID = "agent_test";
+const OUTBOUND_TRUNK = Object.freeze({ address: "sip.telnyx.com", username: "out-user" });
 const REG_DID = Object.freeze({
   phone_number_id: "phnum_did",
   phone_number: DID,
   label: "hermes-n1",
-  outbound_trunk: { address: "sip.telnyx.com", username: "out-user" },
+  assigned_agent: { agent_id: AGENT_ID },
+  outbound_trunk: OUTBOUND_TRUNK,
 });
 const REG_OFFEN = Object.freeze({
   phone_number_id: "phnum_offen",
@@ -295,7 +298,7 @@ async function laufe(argv, szenarioFelder = {}, abhFelder = {}) {
     stdout: kanal,
     stderr: kanal,
     renderApiKey: RENDER_SCHLUESSEL_TEST,
-    elKonto: { apiKey: "el-test", apiBase: EL_BASIS, agentId: "agent_test" },
+    elKonto: { apiKey: "el-test", apiBase: EL_BASIS, agentId: AGENT_ID },
     ttsAusgabeformat: "mp3_44100_128",
     ...abhFelder,
   };
@@ -332,6 +335,7 @@ function zielZeile(ausgabe, ziel) {
 
 const ARG_SETZEN = Object.freeze(["setzen", `--nummer=${DID}`]);
 const ARG_SETZEN_AUSFUEHREN = Object.freeze([...ARG_SETZEN, "--ausfuehren"]);
+const ARG_REG = `--registrierung=${REG_DID.phone_number_id}`;
 const RENDER_ZIELE = Object.freeze([
   "Render ELEVENLABS_INBOUND_SIP_USER",
   "Render ELEVENLABS_INBOUND_SIP_PASSWORD",
@@ -480,6 +484,9 @@ describe("IEL-B10 Render-Listen-Endpunkt", () => {
       [["schalter", "--an", "--ausfuehren"]],
       [["schalter", "--aus", "--ausfuehren"]],
       [["stimmen-beleg"]],
+      [["scope", "--registrierte-dids", "--ausfuehren"]],
+      [["scope", "--allowlist", "--ausfuehren"]],
+      [["setzen", ARG_REG, "--ausfuehren"]],
     ];
     for (const [argv] of laeufe) {
       const { code, ausgabe, aufrufe } = await laufe(argv);
@@ -604,6 +611,184 @@ describe("IEL-B10 allowlist-uebernehmen und schalter", () => {
     const aus = await laufe(["schalter", "--aus", "--ausfuehren"], allesRot);
     assert.equal(aus.code, 0, aus.ausgabe);
     assert.deepEqual(konfigSchreibAufrufe(aus.aufrufe).map((aufruf) => JSON.parse(aufruf.koerper)), [{ value: "false" }]);
+  });
+});
+
+// ---- IEX-A11: setzen per Registrierung und scope --------------------------------------------------
+
+const DID_ZWEI = "+4930123450002";
+const REG_ZWEI_MIT_ZUGANG = Object.freeze({
+  phone_number_id: "phnum_zwei",
+  phone_number: DID_ZWEI,
+  assigned_agent: { agent_id: AGENT_ID },
+  outbound_trunk: OUTBOUND_TRUNK,
+  inbound_trunk: { has_auth_credentials: true, username: "alter-user", allowed_numbers: [DID_ZWEI] },
+});
+// 3 Render-Geheimnisse + Workspace-Secret + 1 Registrierung.
+const REIHENFOLGE_SCHRITTE_EINE_REGISTRIERUNG = 5;
+const SCOPE_ENV = "ELEVENLABS_INBOUND_SCOPE";
+const ARG_SCOPE_DIDS_AUSFUEHREN = Object.freeze(["scope", "--registrierte-dids", "--ausfuehren"]);
+const FREMDER_AGENT = Object.freeze({ agent_id: "agent_fremd" });
+
+function ohneFeld(objekt, feld) {
+  return Object.fromEntries(Object.entries(objekt).filter(([schluessel]) => schluessel !== feld));
+}
+
+function registrierungsPatches(aufrufe) {
+  return schreibendeAufrufe(aufrufe).filter((aufruf) => aufruf.adresse.startsWith(`${EL_BASIS}${PHONE_NUMBERS}/`));
+}
+
+function zeilenMit(ausgabe, muster) {
+  return ausgabe.split("\n").filter((zeile) => muster.test(zeile));
+}
+
+describe("IEX-A11 setzen per Registrierung", () => {
+  it("IEX-A11-1: --registrierung als Ziel - PATCH mit der Nummer aus dem Inventar, Ausgabe nur Kennung und Endung", async () => {
+    const { code, ausgabe, aufrufe } = await laufe(["setzen", ARG_REG, "--ausfuehren"]);
+    assert.equal(code, 0, ausgabe);
+    assert.deepEqual(
+      schreibendeAufrufe(aufrufe).map((aufruf) => [aufruf.methode, aufruf.adresse.replace(RENDER_API_BASE, "R").replace(EL_BASIS, "E")]),
+      [
+        ["PUT", `R/services/${HERMES_RENDER_SERVICE_ID}/env-vars/ELEVENLABS_INBOUND_SIP_USER`],
+        ["PUT", `R/services/${HERMES_RENDER_SERVICE_ID}/env-vars/ELEVENLABS_INBOUND_SIP_PASSWORD`],
+        ["PUT", `R/services/${HERMES_RENDER_SERVICE_ID}/env-vars/ELEVENLABS_INIT_WEBHOOK_TOKEN`],
+        ["POST", `E${SECRETS}`],
+        ["PATCH", `E${PHONE_NUMBERS}/${REG_DID.phone_number_id}`],
+      ],
+    );
+    const [patch] = registrierungsPatches(aufrufe);
+    assert.deepEqual(JSON.parse(patch.koerper), trunkKoerper({ geheimnisse: ERWARTET, nummer: DID }));
+    assert.ok(!ausgabe.includes(DID), ausgabe);
+    assert.match(ausgabe, /BELEG Registrierung phnum_did \(…6788\): has_auth_credentials ja/);
+    assertEnthaeltKeinen(ausgabe, ERWARTETE_WERTE);
+  });
+
+  it("IEX-A11-2: kein Schreibziel (fremder Agent, ohne Agent, ohne outbound_trunk, unbekannt) -> 0 schreibende Aufrufe", async () => {
+    const argv = ["setzen", ARG_REG, "--ausfuehren"];
+    const faelle = [
+      { argv, felder: { registrierungen: [{ ...REG_DID, assigned_agent: FREMDER_AGENT }] }, befund: /kein Schreibziel \(fremde_registrierung\)/ },
+      { argv, felder: { registrierungen: [ohneFeld(REG_DID, "assigned_agent")] }, befund: /kein Schreibziel \(fremde_registrierung\)/ },
+      { argv, felder: { registrierungen: [ohneFeld(REG_DID, "outbound_trunk")] }, befund: /kein Schreibziel \(ohne_outbound_trunk\)/ },
+      { argv: ["setzen", "--registrierung=phnum_unbekannt", "--ausfuehren"], felder: {}, befund: /--registrierung #1: nicht im Inventar/ },
+    ];
+    for (const fall of faelle) {
+      const { code, ausgabe, aufrufe } = await laufe(fall.argv, fall.felder);
+      assert.equal(code, 1, ausgabe);
+      assert.match(ausgabe, fall.befund);
+      assert.match(ausgabe, /SETZEN ROT - Vorab-Riegel/);
+      assert.deepEqual(schreibendeAufrufe(aufrufe), [], ausgabe);
+      assert.ok(!ausgabe.includes("phnum_unbekannt"), ausgabe);
+    }
+  });
+
+  it("IEX-A11-3: dieselbe Registrierung ueber --nummer und --registrierung zaehlt einmal", async () => {
+    const { code, ausgabe, aufrufe } = await laufe(["setzen", `--nummer=${DID}`, ARG_REG, "--ausfuehren"]);
+    assert.equal(code, 0, ausgabe);
+    assert.equal(registrierungsPatches(aufrufe).length, 1);
+    assert.equal(zeilenMit(ausgabe, /REIHENFOLGE \d+:/).length, REIHENFOLGE_SCHRITTE_EINE_REGISTRIERUNG);
+    assert.equal(zeilenMit(ausgabe, /BELEG Registrierung /).length, 1);
+  });
+
+  it("IEX-A11-4: halbe Rotation wird ueber die Kennung geprueft; beide Kennungen -> beide gepatcht", async () => {
+    const felder = { registrierungen: [REG_DID, REG_ZWEI_MIT_ZUGANG] };
+    const halb = await laufe(["setzen", ARG_REG, "--ausfuehren"], felder);
+    assert.equal(halb.code, 1, halb.ausgabe);
+    assert.match(halb.ausgabe, /phnum_zwei .*halbe Rotation/);
+    assert.deepEqual(schreibendeAufrufe(halb.aufrufe), []);
+
+    const beide = await laufe(["setzen", ARG_REG, "--registrierung=phnum_zwei", "--ausfuehren"], felder);
+    assert.equal(beide.code, 0, beide.ausgabe);
+    const patches = registrierungsPatches(beide.aufrufe);
+    assert.deepEqual(
+      patches.map((aufruf) => aufruf.adresse),
+      [`${EL_BASIS}${PHONE_NUMBERS}/phnum_did`, `${EL_BASIS}${PHONE_NUMBERS}/phnum_zwei`],
+    );
+    const erlaubt = patches.map((aufruf) => JSON.parse(aufruf.koerper).inbound_trunk_config.allowed_numbers);
+    assert.deepEqual(erlaubt, [[DID], [DID_ZWEI]]);
+  });
+
+  it("IEX-A11-5: der Schreibziel-Riegel gilt auch fuer --nummer; ohne ELEVENLABS_AGENT_ID kein Aufruf", async () => {
+    const fremd = await laufe(ARG_SETZEN_AUSFUEHREN, { registrierungen: [{ ...REG_DID, assigned_agent: FREMDER_AGENT }] });
+    assert.equal(fremd.code, 1, fremd.ausgabe);
+    assert.match(fremd.ausgabe, /kein Schreibziel \(fremde_registrierung\)/);
+    assert.deepEqual(schreibendeAufrufe(fremd.aufrufe), []);
+
+    const ohneAgent = await laufe(ARG_SETZEN_AUSFUEHREN, {}, { elKonto: { apiKey: "el-test", apiBase: EL_BASIS, agentId: "" } });
+    assert.equal(ohneAgent.code, 1, ohneAgent.ausgabe);
+    assert.match(ohneAgent.ausgabe, /ELEVENLABS_AGENT_ID fehlt/);
+    assert.equal(ohneAgent.aufrufe.length, 0);
+  });
+});
+
+describe("IEX-A11 scope und Argumente", () => {
+  it("IEX-A11-6: scope --registrierte-dids schreibt nur nach GRUENEM Inventar und beleg-init", async () => {
+    const rot = {
+      inventar: { registrierungen: [REG_DID, REG_OFFEN] },
+      belegInit: { initStatus: { ohneToken: HTTP_NOT_FOUND, mitToken: HTTP_NOT_FOUND } },
+      zielUrteil: { renderEnv: { ...renderEnvGruen(), PUBLIC_URL: TUNNEL } },
+    };
+    for (const [fall, felder] of Object.entries(rot)) {
+      const { code, ausgabe, aufrufe } = await laufe(ARG_SCOPE_DIDS_AUSFUEHREN, felder);
+      assert.equal(code, 1, `${fall}\n${ausgabe}`);
+      assert.deepEqual(konfigSchreibAufrufe(aufrufe), [], fall);
+      assert.match(ausgabe, /SCOPE ROT - ELEVENLABS_INBOUND_SCOPE unveraendert/, fall);
+    }
+
+    const trocken = await laufe(["scope", "--registrierte-dids"]);
+    assert.equal(trocken.code, 0, trocken.ausgabe);
+    assert.deepEqual(konfigSchreibAufrufe(trocken.aufrufe), []);
+    assert.match(trocken.ausgabe, /TROCKENLAUF - wuerde ELEVENLABS_INBOUND_SCOPE=registrierte_dids setzen/);
+
+    const gruen = await laufe(ARG_SCOPE_DIDS_AUSFUEHREN);
+    assert.equal(gruen.code, 0, gruen.ausgabe);
+    const [put, ...mehr] = konfigSchreibAufrufe(gruen.aufrufe);
+    assert.deepEqual(mehr, []);
+    assert.equal(put.adresse, `${RENDER_DIENST}/env-vars/${SCOPE_ENV}`);
+    assert.deepEqual(JSON.parse(put.koerper), { value: "registrierte_dids" });
+    assert.equal(gruen.zustand.env.get(SCOPE_ENV), "registrierte_dids");
+    assert.ok(!gruen.ausgabe.includes(LESE_TOKEN), gruen.ausgabe);
+  });
+
+  it("IEX-A11-7: scope --allowlist schreibt bedingungslos und braucht nur RENDER_API_KEY", async () => {
+    const allesRot = {
+      registrierungen: [REG_DID, REG_OFFEN],
+      renderEnv: { ...renderEnvGruen(), PUBLIC_URL: TUNNEL },
+      initStatus: { ohneToken: HTTP_NOT_FOUND, mitToken: HTTP_NOT_FOUND },
+    };
+    const ohneElKonto = { elKonto: { apiKey: "", apiBase: EL_BASIS, agentId: "" } };
+    const { code, ausgabe, aufrufe } = await laufe(["scope", "--allowlist", "--ausfuehren"], allesRot, ohneElKonto);
+    assert.equal(code, 0, ausgabe);
+    assert.deepEqual(
+      konfigSchreibAufrufe(aufrufe).map((aufruf) => [aufruf.adresse, JSON.parse(aufruf.koerper)]),
+      [[`${RENDER_DIENST}/env-vars/${SCOPE_ENV}`, { value: "allowlist" }]],
+    );
+    assert.deepEqual(aufrufeAn(aufrufe, EL_BASIS), []);
+    assert.deepEqual(aufrufeAn(aufrufe, initWebhookUrl()), []);
+
+    const trocken = await laufe(["scope", "--allowlist"], allesRot, ohneElKonto);
+    assert.equal(trocken.code, 0, trocken.ausgabe);
+    assert.deepEqual(schreibendeAufrufe(trocken.aufrufe), []);
+  });
+
+  it("IEX-A11-8: kaputte scope-/setzen-Argumente und fehlender EL-Schluessel brechen vor jedem fetch ab", async () => {
+    const faelle = [
+      ["scope"],
+      ["scope", "--registrierte-dids", "--allowlist"],
+      ["scope", "--registrierte-dids", `--nummer=${DID}`],
+      ["setzen", ARG_REG, ARG_REG],
+      ["schalter", "--an", "--registrierte-dids"],
+    ];
+    for (const argv of faelle) {
+      const { code, aufrufe } = await laufe(argv);
+      assert.equal(code, 1, argv.join(" "));
+      assert.equal(aufrufe.length, 0, argv.join(" "));
+      assert.ok(leseArgumente(argv).fehler, argv.join(" "));
+    }
+    const ohneElKey = await laufe(["scope", "--registrierte-dids"], {}, { elKonto: { apiKey: "", apiBase: EL_BASIS, agentId: AGENT_ID } });
+    assert.equal(ohneElKey.code, 1, ohneElKey.ausgabe);
+    assert.match(ohneElKey.ausgabe, /ELEVENLABS_API_KEY fehlt/);
+    assert.equal(ohneElKey.aufrufe.length, 0);
+    assert.deepEqual(leseArgumente(["setzen", ARG_REG, "--registrierung=phnum_zwei"]).registrierungsKennungen, ["phnum_did", "phnum_zwei"]);
   });
 });
 
@@ -791,9 +976,15 @@ function sammleKind({ nodeArgs, env }) {
 }
 
 const STUB_NUMMER = "+490000000000";
+const STUB_AGENT = "agent_stub";
 
 function stubAntwort(url) {
-  const registrierung = { phone_number_id: "phnum_stub", phone_number: STUB_NUMMER };
+  const registrierung = {
+    phone_number_id: "phnum_stub",
+    phone_number: STUB_NUMMER,
+    assigned_agent: { agent_id: STUB_AGENT },
+    outbound_trunk: { address: "sip.telnyx.com" },
+  };
   if (url === PHONE_NUMBERS) return { status: HTTP_OK, koerper: [registrierung] };
   if (url === `${PHONE_NUMBERS}/phnum_stub`) return { status: HTTP_OK, koerper: registrierung };
   if (url.startsWith(`${SECRETS}?`)) return { status: HTTP_OK, koerper: { secrets: [] } };
@@ -834,6 +1025,7 @@ describe("IEL-B10 ohne Store und Quelltext-Pins", () => {
           DATABASE_URL: "postgres://127.0.0.1:1/unerreichbar",
           ELEVENLABS_API_KEY: "stub",
           ELEVENLABS_API_BASE: basis,
+          ELEVENLABS_AGENT_ID: STUB_AGENT,
           RENDER_API_KEY: "dummy",
         },
       });

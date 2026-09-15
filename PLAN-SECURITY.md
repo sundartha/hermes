@@ -4431,9 +4431,9 @@ Bestandstests IEL-B9 ohne Aenderung gruen).
 
 | Ziel | Form | Grenze |
 |---|---|---|
-| Render-Env des Dienstes `HERMES_RENDER_SERVICE_ID` | `sync:false`, Einzel-Schluessel-PUT | nur die fuenf Schluessel `ELEVENLABS_INBOUND_SIP_USER`, `_SIP_PASSWORD`, `ELEVENLABS_INIT_WEBHOOK_TOKEN`, `ELEVENLABS_INBOUND_TENANT_IDS`, `ELEVENLABS_INBOUND_ENABLED` (Allowlist im Code, Wurf vor dem Senden) |
+| Render-Env des Dienstes `HERMES_RENDER_SERVICE_ID` | `sync:false`, Einzel-Schluessel-PUT | nur die sechs Schluessel `ELEVENLABS_INBOUND_SIP_USER`, `_SIP_PASSWORD`, `ELEVENLABS_INIT_WEBHOOK_TOKEN`, `ELEVENLABS_INBOUND_TENANT_IDS`, `ELEVENLABS_INBOUND_ENABLED`, `ELEVENLABS_INBOUND_SCOPE` (seit IEX-A11) (Allowlist im Code, Wurf vor dem Senden) |
 | ElevenLabs-Workspace-Secret `hermes_init_webhook_token` | aktualisiert (PATCH, belegt) oder angelegt | im Repo/in der Ausgabe nur die `secret_id` |
-| `inbound_trunk_config.credentials` | PATCH `{credentials, allowed_numbers:[DID], allowed_addresses:["0.0.0.0/0"]}` | nur Registrierungen, deren `phone_number` exakt einer `--nummer` gleicht |
+| `inbound_trunk_config.credentials` | PATCH `{credentials, allowed_numbers:[DID], allowed_addresses:["0.0.0.0/0"]}` | nur Registrierungen, deren `phone_number` exakt einer `--nummer` gleicht oder deren `phone_number_id` einer `--registrierung` gleicht, jeweils mit eigenem Agenten und `outbound_trunk` (seit IEX-A11) |
 
 Nie lokale `.env`, nie Repo, nie Agenten-Kontext. Der Render-Listen-Endpunkt (`PUT .../env-vars` ersetzt
 die GESAMTE Env) ist baulich unerreichbar: ein leerer Schluessel wirft vor jedem fetch (Test IEL-B10-5).
@@ -4503,7 +4503,7 @@ Verbotsmenge. Eine Liste mit `has_more` ist ROT (unvollstaendig).
   auch fuer den Werkzeug-Lauf.
 - Voller Render-Workspace-Zugriff, jetzt auch SCHREIBEND. **Restrisiko:** ein kompromittierter Arbeitsplatz
   mit diesem Schluessel kann jede Render-Env jedes Dienstes aendern; das Werkzeug begrenzt nur sich selbst
-  (fuenf Schluessel, gepinnter Dienst, Basis-Konstante).
+  (sechs Schluessel, gepinnter Dienst, Basis-Konstante).
 - Nie in `render.yaml`, nie im Dienst gesetzt, nie ausgegeben, nie in einem Ergebnisfeld.
 
 ### 10. UNBELEGT und akzeptiert
@@ -4649,3 +4649,32 @@ die Aktivierung einer bezahlten DID wird nie blockiert (IEX-A10-8).
   `ELEVENLABS_INBOUND_SIP_USER` gegen dasselbe EL-Konto und dieselbe DB (etwa lokal mit kopierter
   Prod-Umgebung) wuerde beim Boot die Belegungen "reparieren". Bedingung dafuer sind alle Gate-Flags
   inklusive `PROVISIONING_ENABLED`. Regel: Prod-Env nie lokal; der naechste Prod-Boot konvergiert zurueck.
+
+## IEX-A11 — Rollout-Werkzeug: setzen per Registrierung, Scope-Unterbefehl (2026-09-15)
+
+Werkzeug-Phase: kein Serververhalten, keine Route, kein Safety-Gate, keine Offenlegung, keine Dependency.
+
+### 1. `setzen --registrierung=<phnum_...>`
+
+- Zusaetzlich zu `--nummer`, mischbar; Ziele je `phone_number_id`, dieselbe Registrierung zaehlt einmal.
+- Die Nummer stammt aus dem gelesenen Inventar und bleibt im Speicher; Ausgabe nur Kennung + Endung. Eine
+  unbekannte Kennung wird nur mit ihrer Position gemeldet (die Eingabe koennte eine volle Nummer sein).
+- **Schreibziel-Riegel fuer JEDES Ziel** (auch `--nummer`): eigener Agent (`assigned_agent.agent_id`),
+  `phone_number` gesetzt, `outbound_trunk` vorhanden. EINE Definition mit der Sweep-Reparatur E16
+  (`inbound-trunk-beleg.js#reparaturHindernis`). ROT = 0 schreibende Aufrufe. `setzen` verlangt deshalb
+  zusaetzlich `ELEVENLABS_AGENT_ID` (fehlt er: fail-closed vor jedem fetch).
+- Halbe Rotation wird ueber die Kennung gegen die Ziel-Liste geprueft.
+- **Grenze:** das Werkzeug kennt die aktiven DIDs nicht (kein Store). Registrierungen OHNE Zugangsdaten
+  ausserhalb der Liste erkennt es nicht; das decken Runbook b2 (Inventar) und b4 (E11 `ohne_beleg_endungen`).
+- Rotation weiterhin ausschliesslich ueber `setzen` (s. IEX-A9 §4).
+
+### 2. `scope --registrierte-dids|--allowlist`
+
+- Einzel-Schluessel-PUT auf `ELEVENLABS_INBOUND_SCOPE` (Werte aus `inbound-scope.js`), Trockenlauf Default,
+  Ruecklesen nach dem PUT, wirkt erst nach Deploy.
+- `--registrierte-dids` nur, wenn Inventar UND `beleg-init` im selben Lauf GRUEN sind; sonst 0
+  Konfigurations-Schreibaufrufe. `--allowlist` bedingungslos (nur `RENDER_API_KEY`).
+- **Prueft NICHT:** Beleg-Zahlen je DID (E11-Ergebniszeile, nur im Render-Log), F3/F4. Beides bleibt
+  Pflicht-Vorbedingung bzw. Lesebeleg in Runbook (b).
+
+Tests: `test/iel-b10-geheimnisse.test.js` IEX-A11-1..8.

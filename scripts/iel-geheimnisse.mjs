@@ -2,7 +2,8 @@
 // IEL-B10: das Geheimnis-Werkzeug des ElevenLabs-Inbound-Wegs (Spec E16, E19, E21, E22).
 //
 // Unterbefehle:
-//   setzen --nummer=<E.164> [--nummer=...] [--ausfuehren]
+//   setzen --nummer=<E.164>... --registrierung=<phnum_...>... [--ausfuehren]
+//                         (mindestens ein Ziel; beide Wege mischbar, dieselbe Registrierung zaehlt einmal)
 //                         erzeugt SIP-User, SIP-Passwort und Init-Token im Prozess und verteilt sie im
 //                         selben Lauf: Render-Env -> Workspace-Secret -> inbound_trunk_config.
 //   beleg-init            Ziel-Urteil (Render-API), dann zwei POSTs an den Init-Webhook (403/404).
@@ -11,6 +12,9 @@
 //   schalter --an|--aus [--ausfuehren]
 //                         ELEVENLABS_INBOUND_ENABLED; --an nur mit Inventar, beleg-init, stimmen-beleg und
 //                         Mindestlaengen GRUEN im selben Lauf, --aus bedingungslos.
+//   scope --registrierte-dids|--allowlist [--ausfuehren]
+//                         ELEVENLABS_INBOUND_SCOPE; --registrierte-dids nur mit Inventar und beleg-init GRUEN
+//                         im selben Lauf, --allowlist bedingungslos.
 //   stimmen-beleg         Stimm-Gleichheit Pflichtsatz/Agent (nur lesend + Probe-Synthesen).
 //   conversation-beleg --richtung=inbound|outbound --seit=<ISO> [--nummer=<E.164>]
 //                         abgeleitete Felder der neuesten Conversation, nie ein Variablen-Wert.
@@ -24,7 +28,7 @@
 //     im Prozess, Ziele sind Repo-Konstanten (gepinnter Render-Dienst, initWebhookUrl), das Ziel-Urteil
 //     liest den Dienst ueber die Render-API.
 //   - Der Render-Listen-Endpunkt (PUT .../env-vars ersetzt die GESAMTE Env) ist baulich unerreichbar,
-//     geschrieben werden genau fuenf benannte Schluessel (src/render-api.js, iel-geheimnisse-render.mjs).
+//     geschrieben werden genau sechs benannte Schluessel (src/render-api.js, iel-geheimnisse-render.mjs).
 //
 // RENDER_API_KEY ist Werkzeug-, nicht Dienst-Konfiguration: gelesen ueber den eigenen Namespace
 // config.werkzeug (EIN Leser mit push-elevenlabs.mjs; process.env ausserhalb von src/config.js ist per
@@ -40,7 +44,7 @@ import { config } from "../src/config.js";
 import { EXIT, LOG_PREFIX, makeAusgabeWaechter } from "./iel-geheimnisse-ausgabe.mjs";
 import { laufeBelegInit, laufeStimmenBeleg } from "./iel-geheimnisse-belege.mjs";
 import { RICHTUNGEN, laufeConversationBeleg } from "./iel-geheimnisse-conversation.mjs";
-import { laufeAllowlistUebernehmen, laufeSchalter } from "./iel-geheimnisse-schalter.mjs";
+import { laufeAllowlistUebernehmen, laufeSchalter, laufeScope } from "./iel-geheimnisse-schalter.mjs";
 import { laufeSetzen } from "./iel-geheimnisse-setzen.mjs";
 
 const UNTERBEFEHL = Object.freeze({
@@ -48,6 +52,7 @@ const UNTERBEFEHL = Object.freeze({
   BELEG_INIT: "beleg-init",
   ALLOWLIST: "allowlist-uebernehmen",
   SCHALTER: "schalter",
+  SCOPE: "scope",
   STIMMEN: "stimmen-beleg",
   CONVERSATION: "conversation-beleg",
 });
@@ -56,10 +61,13 @@ const SCHALTER_ARG = Object.freeze({
   AN: "--an",
   AUS: "--aus",
   NUMMER: "--nummer=",
+  REGISTRIERUNG: "--registrierung=",
+  REGISTRIERTE_DIDS: "--registrierte-dids",
+  SCOPE_ALLOWLIST: "--allowlist",
   RICHTUNG: "--richtung=",
   SEIT: "--seit=",
 });
-const WERT_SCHALTER = Object.freeze([SCHALTER_ARG.NUMMER, SCHALTER_ARG.RICHTUNG, SCHALTER_ARG.SEIT]);
+const WERT_SCHALTER = Object.freeze([SCHALTER_ARG.NUMMER, SCHALTER_ARG.REGISTRIERUNG, SCHALTER_ARG.RICHTUNG, SCHALTER_ARG.SEIT]);
 const SCHLUESSEL = Object.freeze({ RENDER: "RENDER_API_KEY", EL: "ELEVENLABS_API_KEY", AGENT: "ELEVENLABS_AGENT_ID" });
 const CLI_ARGS_OFFSET = 2;
 const WERT_TRENNER = "=";
@@ -69,9 +77,10 @@ const LISTEN_TRENNER = ", ";
 // Schluessel, Widerspruchs-Pruefung, Lauf.
 const BEFEHLE = Object.freeze({
   [UNTERBEFEHL.SETZEN]: {
-    erlaubt: [SCHALTER_ARG.AUSFUEHREN, SCHALTER_ARG.NUMMER],
-    schluessel: () => [SCHLUESSEL.RENDER, SCHLUESSEL.EL],
-    widerspruch: (argumente) => (argumente.nummern.length === 0 ? `setzen verlangt mindestens ein ${SCHALTER_ARG.NUMMER}<E.164>` : null),
+    erlaubt: [SCHALTER_ARG.AUSFUEHREN, SCHALTER_ARG.NUMMER, SCHALTER_ARG.REGISTRIERUNG],
+    // AGENT: der Schreibziel-Riegel vergleicht jede Registrierung mit dem eigenen Agenten (E14).
+    schluessel: () => [SCHLUESSEL.RENDER, SCHLUESSEL.EL, SCHLUESSEL.AGENT],
+    widerspruch: setzenWiderspruch,
     laufe: laufeSetzen,
   },
   [UNTERBEFEHL.BELEG_INIT]: {
@@ -93,6 +102,16 @@ const BEFEHLE = Object.freeze({
     widerspruch: (argumente) => (argumente.an === argumente.aus ? `schalter verlangt genau eins: ${SCHALTER_ARG.AN} oder ${SCHALTER_ARG.AUS}` : null),
     laufe: laufeSchalter,
   },
+  [UNTERBEFEHL.SCOPE]: {
+    erlaubt: [SCHALTER_ARG.REGISTRIERTE_DIDS, SCHALTER_ARG.SCOPE_ALLOWLIST, SCHALTER_ARG.AUSFUEHREN],
+    // --allowlist braucht nur Render: der Rueckweg haengt an nichts.
+    schluessel: (argumente) => (argumente.registrierteDids ? [SCHLUESSEL.RENDER, SCHLUESSEL.EL] : [SCHLUESSEL.RENDER]),
+    widerspruch: (argumente) =>
+      argumente.registrierteDids === argumente.allowlist
+        ? `scope verlangt genau eins: ${SCHALTER_ARG.REGISTRIERTE_DIDS} oder ${SCHALTER_ARG.SCOPE_ALLOWLIST}`
+        : null,
+    laufe: laufeScope,
+  },
   [UNTERBEFEHL.STIMMEN]: {
     erlaubt: [],
     schluessel: () => [SCHLUESSEL.RENDER, SCHLUESSEL.EL, SCHLUESSEL.AGENT],
@@ -108,6 +127,12 @@ const BEFEHLE = Object.freeze({
 });
 
 // ---- Argumente (rein) ------------------------------------------------------------------------
+
+function setzenWiderspruch(argumente) {
+  const zielAnzahl = argumente.nummern.length + argumente.registrierungsKennungen.length;
+  if (zielAnzahl > 0) return null;
+  return `setzen verlangt mindestens ein ${SCHALTER_ARG.NUMMER}<E.164> oder ${SCHALTER_ARG.REGISTRIERUNG}<phnum_...>`;
+}
 
 function conversationWiderspruch(argumente) {
   if (!RICHTUNGEN.includes(argumente.richtung)) return `conversation-beleg verlangt genau ein ${SCHALTER_ARG.RICHTUNG}${RICHTUNGEN.join("|")}`;
@@ -134,7 +159,7 @@ function einzigerWert(args, schalter) {
   return werte.length === 1 ? werte[0] : null;
 }
 
-// Rein: {unterbefehl, ausfuehren, an, aus, nummern[], richtung, seitMs} | {fehler}.
+// Rein: {unterbefehl, ausfuehren, an, aus, registrierteDids, allowlist, nummern[], registrierungsKennungen[], richtung, seitMs} | {fehler}.
 export function leseArgumente(argv) {
   const [unterbefehl = "", ...args] = argv;
   const befehl = Object.hasOwn(BEFEHLE, unterbefehl) ? BEFEHLE[unterbefehl] : null;
@@ -148,7 +173,10 @@ export function leseArgumente(argv) {
     ausfuehren: args.includes(SCHALTER_ARG.AUSFUEHREN),
     an: args.includes(SCHALTER_ARG.AN),
     aus: args.includes(SCHALTER_ARG.AUS),
+    registrierteDids: args.includes(SCHALTER_ARG.REGISTRIERTE_DIDS),
+    allowlist: args.includes(SCHALTER_ARG.SCOPE_ALLOWLIST),
     nummern: werteVon(args, SCHALTER_ARG.NUMMER),
+    registrierungsKennungen: werteVon(args, SCHALTER_ARG.REGISTRIERUNG),
     richtung: einzigerWert(args, SCHALTER_ARG.RICHTUNG),
     seitMs: Date.parse(einzigerWert(args, SCHALTER_ARG.SEIT) ?? ""),
   };
