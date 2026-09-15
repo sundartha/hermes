@@ -649,7 +649,6 @@ const MINDEST_ABSTAND_ANTEIL = 0.9;
 const WEITERE_TAKTE = 2;
 const FRISCH_BEANTWORTET_S = 5;
 const KURZE_FRIST_S = 3600;
-const EXPECTED_SIP_CALL_ID = CONVERSATION_DONE_WITH_ANALYSIS.metadata.phone_call.call_id;
 
 function gebundenerSeed({ answeredVorS = FRISCH_BEANTWORTET_S, maxDurationS = KURZE_FRIST_S, extra = {} } = {}) {
   const answeredAt = isoVor(answeredVorS);
@@ -753,7 +752,8 @@ test("IEL-B5-19: Verdrahtung Cap (server.js) - Zombie beim Boot holt das Ergebni
     assert.ok(attrappe.gets().length >= EINMAL);
     assert.equal(attrappe.deletes().length, 0);
     assert.equal(call.status, "failed");
-    assert.equal(call.sipCallId, EXPECTED_SIP_CALL_ID, "persistProviderResult lief im Beende-Pfad");
+    assert.notEqual(call.elDetectorCounts, null, "persistProviderResult lief im Beende-Pfad");
+    assert.equal(call.sipCallId, null, "IEX-A1: telnyx_inbound_el_convai fuehrt keinen telnyx_sip-Join-Schluessel");
   });
 });
 

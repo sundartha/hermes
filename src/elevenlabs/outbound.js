@@ -54,7 +54,7 @@ import { callTimeContext } from "./time-context.js";
 import { persistEndWithReason } from "../telephony/call-termination.js";
 // KV2-4: die Belegzeilen dieses Gespraechs (Regelwerk und Geldpruefung liegen daneben,
 // nicht hier - s. kosten-beleg.js).
-import { recordElevenLabsKostenBelege } from "./kosten-beleg.js";
+import { anrufFuehrtTelnyxSip, recordElevenLabsKostenBelege } from "./kosten-beleg.js";
 // OUTBOUND-E5 (F3): die reine Registrierungs-Auswahl - kein Netz, kein Store (s. dort).
 import { waehleAbsenderRegistrierung, ABSENDER_QUELLE } from "../telephony/absender-registrierung.js";
 import crypto from "node:crypto";
@@ -1095,17 +1095,26 @@ function persistProviderResult({ store, callId, conversation, belegNachreifbar, 
   // Anrufs sind ihm nicht mehr zuzuordnen. Ein FALSCHER Schluessel waere schlechter: er
   // jointet ebenfalls nicht, sperrt aber zusaetzlich (set-once) die richtige Quelle aus
   // und behauptet dabei eine Zuordnung, die es nicht gibt.
-  store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
+  //
+  // IEX-A1: nur fuer Profile mit telnyx_sip-Traeger (Katalog,
+  // kosten-beleg.js#anrufFuehrtTelnyxSip). Der Inbound-EL-Weg (Telnyx-Dial) liefert als
+  // call_id eine UUID ohne Telnyx-Beleg; sein Leg-Schluessel ist twilioSid +
+  // telnyx_session_id (billing/call-leg-ref.js). Der Waechter in
+  // state-ops.js#recordSipCallId bleibt unveraendert und meldet eine Fremdform auf Profilen
+  // mit telnyx_sip weiter laut.
+  const fuehrtTelnyxSip = anrufFuehrtTelnyxSip(store.getCall(callId));
+  if (fuehrtTelnyxSip) store.recordSipCallId(callId, conversation.metadata?.phone_call?.call_id);
   // OUTBOUND-E5 (F3): die vom Anbieter gemeldete Absendernummer - AUCH im abgelehnten Fall
   // befuellt (Befund 27.08.). Formpruefung sitzt im Store-Mutator (recordActualSender).
   recordAbsenderMessung(store, callId, conversation);
-  // KV2-4: der EL-Beleg (vorlaeufig) plus die erwartete telnyx_sip-Zeile. HIER, weil beide
-  // Aufrufer von persistProviderResult damit bedient sind - das regulaere Ende und der
-  // Abbruch -, und ALS LETZTER SCHRITT, weil dieser Schreibweg rein additiv ist und keinen
-  // der Anbieter-Wahrheits-Schreiber oben beeinflussen darf. Kein Netz-IO: die Antwort
+  // KV2-4: der EL-Beleg (vorlaeufig) plus, nur bei Profil mit telnyx_sip (IEX-A1), die
+  // erwartete telnyx_sip-Zeile. HIER, weil beide Aufrufer von persistProviderResult damit
+  // bedient sind - das regulaere Ende und der Abbruch -, und ALS LETZTER SCHRITT, weil
+  // dieser Schreibweg rein additiv ist und keinen der Anbieter-Wahrheits-Schreiber oben
+  // beeinflussen darf. Kein Netz-IO: die Antwort
   // liegt bereits vollstaendig im Speicher. Fail-soft (s. dort) - dieses Buch hat noch
   // keinen Leser und darf den Geld-/Terminierungspfad nie anhalten.
-  recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar });
+  recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip: fuehrtTelnyxSip });
 }
 
 // Die EINZIGEN zwei Dinge, die pro Anruf am Agenten des Anbieters gesetzt werden duerfen
