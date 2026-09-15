@@ -82,8 +82,13 @@ import {
     <p id="sub-quota" class="quota-line muted"></p>
   </div>
 
-  <!-- 4. Tarifwechsel: die Plan-Kacheln, NUR ohne aktives Abo (s. Kopf-Kommentar). -->
-  <div class="billing-section">
+  <!-- 4. Tarifwechsel: die Plan-Kacheln, NUR ohne aktives Abo (s. Kopf-Kommentar).
+       Owner-Befund 15.09.2026: der Abschnitt trug mit aktivem Abo zwar nur versteckte
+       Kinder, aber weiterhin seinen eigenen 28px-Abstand -- zusammen mit dem Abstand des
+       Kuendigungsblocks darunter war das die grosse Luecke zwischen Zahlungsmittel und
+       "Cancel contracts". Der Wrapper bekommt darum eine id und wird mitversteckt
+       (Muster von #billing-quota-section direkt darueber). -->
+  <div id="billing-plans-section" class="billing-section">
     <h3 id="sub-tiles-title" class="billing-section__title" hidden data-i18n="choosePlan">Choose your plan</h3>
     <div id="sub-tiles" class="plans" hidden></div>
     <p id="sub-msg" class="billing-msg" hidden></p>
@@ -166,6 +171,7 @@ import {
   const quotaBarEl = document.getElementById("quota-bar");
   const quotaBarFillEl = document.getElementById("quota-bar-fill");
   const subQuotaEl = document.getElementById("sub-quota");
+  const plansSectionEl = document.getElementById("billing-plans-section");
   const subTilesTitleEl = document.getElementById("sub-tiles-title");
   const subTilesEl = document.getElementById("sub-tiles");
   const subMsgEl = document.getElementById("sub-msg");
@@ -194,7 +200,12 @@ import {
     el.hidden = !text;
   }
   const showBillingMsg = (text, ok) => showMessage(msgEl, text, ok);
-  const showSubMsg = (text, ok) => showMessage(subMsgEl, text, ok);
+  // Die Tarif-Meldung sitzt IM Tarif-Umschlag, und der ist mit aktivem Abo versteckt
+  // (s. renderPlanTiles): eine Meldung holt ihn darum sichtbar zurueck.
+  const showSubMsg = (text, ok) => {
+    showMessage(subMsgEl, text, ok);
+    if (text) plansSectionEl.hidden = false;
+  };
   const showCancelMsg = (text, ok) => showMessage(cancelMsgEl, text, ok);
 
   // 1. Status-Zeile: Badge + Serif-Hauptwert + Mono-Nebenangabe (billingStatusKind/
@@ -233,9 +244,13 @@ import {
   }
 
   // 4. Tarifwechsel: Kacheln aus dem Build-Spiegel, NUR ohne aktives Abo (Kopf-
-  // Kommentar). Der Umschlag bleibt sichtbar (Trennlinie), Titel/Kacheln togglen.
+  // Kommentar). Owner-Befund 15.09.2026: der Umschlag blieb sichtbar und trug mit
+  // aktivem Abo einen leeren 28px-Abstand mitten in die Karte -- er wird jetzt
+  // mitversteckt (wie #billing-quota-section). Eine Meldung in #sub-msg haelt ihn
+  // sichtbar, sonst verschwaende sie mit dem Umschlag.
   function renderPlanTiles(data, sub) {
     const showTiles = !sub.planSlug;
+    plansSectionEl.hidden = !showTiles && subMsgEl.hidden;
     subTilesTitleEl.hidden = !showTiles;
     subTilesEl.hidden = !showTiles;
     subTilesEl.replaceChildren(...(showTiles ? planTiles(document, numberSetupFeeFrom(data)) : []));

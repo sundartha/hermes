@@ -321,6 +321,16 @@
   padding-left: var(--chip-axis);
 }
 
+/* Owner-Audit 15.09.2026: das Kartenlabel war als einziges Mono-Kleinlabel im
+   Dashboard 10px/600 mit 0.18em -- alle anderen (.billing-section__title,
+   .field-label) stehen auf 10.5px/400 mit 0.14em. Gleiche Ebene, gleiche Stufe. */
+.agent-chip__label {
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 /* Feedback-Runde 2 (Befund 1): die Nummern-Zeile -- NUR Punkt + Nummer, NICHT
    das Label. align-items:center zentriert den Punkt darum ausschliesslich zur
    Nummer (Ziffernhoehe), das Label darueber zieht ihn nicht mehr nach oben
@@ -404,7 +414,11 @@
   background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
   font-family: var(--font-sans);
-  font-size: clamp(14px, 1vw, 16px);
+  /* Owner-Audit 15.09.2026: beide Knoepfe der Nummernkarte laufen auf der
+     Geister-Knopf-Stufe des Dashboards (15px/500, wie "Add a different card" und
+     "Remove") statt auf einer eigenen 14-16px-Kappe. */
+  font-size: 15px;
+  font-weight: 500;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }

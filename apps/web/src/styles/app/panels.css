@@ -312,7 +312,10 @@
    in irgendeinem Stylesheet -- der Knopf fiel auf Browser-Default zurueck
    (weisser Kasten, schwarzer Text). Reiner Text-Look, kein Knopf-Rahmen. */
 .cancel-link {
-  margin-top: 22px;
+  /* Owner-Befund 15.09.2026: 22px OBEN DRAUF auf die 28px des umgebenden
+     .billing-section ergaben eine 50px-Luecke ueber "Cancel contracts". Der Takt
+     kommt vom Abschnitt, der Knopf bringt keinen zweiten mit. */
+  margin-top: 0;
   padding: 0;
   border: 0;
   background: none;
@@ -354,7 +357,9 @@
 /* ---------------------------------------------------------- 5. Billing: Fussnote */
 
 .billing-footnote {
-  margin-top: 30px;
+  /* Auf dem Abschnitts-Takt (28px) statt eines eigenen 30px-Werts -- Owner-Befund
+     15.09.2026 zur Luecke ueber der Stripe-Zeile. */
+  margin-top: 28px;
   font-family: var(--app-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
@@ -698,6 +703,51 @@
   .newsletter-toggle__cta {
     text-align: center;
   }
+}
+
+/* --------------------------------- 8b. Takt und Schriftstufen (Owner-Audit) */
+
+/* Owner-Auftrag 15.09.2026: einmal komplett durch Handy und Desktop gehen und pruefen,
+   ob Abstaende und Schriften einheitlich sind. Gemessen ueber alle Karten: Kartenpolster
+   (clamp 20-42px), Abschnitts-Takt (.billing-section 28px), Serif-Ueberschriften,
+   Sans 15px fuer Fliesstext und Mono-Kleinlabels stimmten bereits. Diese Ausreisser
+   nicht -- sie stehen hier gebuendelt statt verstreut in den Einzelregeln. */
+
+/* 1. Einleitung -> erster Block: Billing und Newsletter 18px, Einstellungen 16px. */
+#settings-form {
+  margin-top: 18px;
+}
+
+/* 2. Knopfschriften liefen auf vier Stufen auseinander (16/600, 15/600, 14/500,
+   16/400). Es bleiben zwei: gefuellt 15/600, geisterhaft 15/500. */
+.card .btn,
+.newsletter-toggle__cta {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.payment-card__action,
+.private-number-form__remove {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* 3. Der Kuendigungs-Link ist Fliesstext, kein Knopf -- also die Fliesstextstufe. */
+.cancel-link {
+  font-size: 15px;
+}
+
+/* 4. Das Entfernen-Kreuz hatte KEINE Schriftfamilie und fiel damit als einziges
+   Element im Dashboard auf Arial zurueck. */
+.newsletter-recipient__remove {
+  font-family: var(--font-sans);
+}
+
+/* 5. Mono-Kleinlabels standen teils auf 400 (.billing-section__title), teils auf 600
+   (.field-label, .dash-head__eyebrow). Eine Ebene, ein Gewicht. */
+.field-label,
+.dash-head__eyebrow {
+  font-weight: 400;
 }
 
 /* ------------------------------------------- 8. Toggle-Schalter zentrieren */
