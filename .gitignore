@@ -37,3 +37,7 @@ _update-notifier-last-checked
 scratchpad_*.json
 # Build-Artefakte aus Test-Builds
 apps/web/dist-clean-test/
+
+# Auch Symlinks auf geteilte node_modules (das Muster "node_modules/" oben trifft
+# nur Verzeichnisse -- ein Symlink desselben Namens rutschte darum in einen Commit).
+node_modules
