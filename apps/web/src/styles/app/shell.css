@@ -264,7 +264,46 @@
    Karte waere beim Wechsel auf eine aktive Nummer von dort wieder weggesprungen. Der
    Stoerfall darf nur etwas BREITER werden als der Normalfall, nicht anders platziert. */
 .agent-chip--notice {
-  max-width: min(100%, 760px);
+  /* Gemessen: der laengere deutsche Erklaersatz braucht rund 530px Textspalte, damit er
+     nicht ein zweites Mal umbricht; mit Polster, Punkt-Gasse, Spalte und Knopf ergibt das
+     diesen Deckel. Reicht der Platz neben der Begruessung nicht, rutscht die Karte von
+     selbst in die eigene Zeile (sie schrumpft nicht, s. .dash-head). */
+  max-width: min(100%, 920px);
+}
+
+/* GP-P6 Runde 2 (Owner-Befund 15.09.2026: "Desktop sieht noch komisch aus"): ab 560px
+   ist die Karte ein Raster aus Textspalte und Knopfspalte, KEIN Zeilenstapel. Der Knopf
+   sitzt senkrecht mittig zum GANZEN Textblock statt oben rechts, und der Erklaersatz
+   endet an der Knopfspalte, statt unter dem Knopf durchzulaufen -- das war der schiefe
+   Eindruck. Am Handy bleibt alles wie gehabt (Stapel, Knopf ueber volle Breite), weil
+   der Owner die Handy-Fassung ausdruecklich behalten will. `display:contents` an
+   .agent-chip__main hebt nur die Zwischenschachtel auf; die Kinder werden Rasterzellen. */
+@media (min-width: 560px) {
+  .agent-chip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: clamp(18px, 1.6vw, 28px);
+    row-gap: 4px;
+  }
+  .agent-chip__main {
+    display: contents;
+  }
+  .agent-chip__body,
+  .agent-chip__hint {
+    grid-column: 1;
+  }
+  .agent-chip__action,
+  .agent-chip__copy {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+  }
+  /* Im Stoerfall spannt der Knopf ueber Status- UND Hinweiszeile und steht damit mittig
+     zum gesamten Block. */
+  .agent-chip--notice .agent-chip__action {
+    grid-row: 1 / span 2;
+  }
 }
 
 /* Label ueber Nummer bleibt linksbuendig -- der Block traegt jetzt BEIDES:
@@ -308,11 +347,19 @@
    die Ziffern-Optik: Sans statt Mono, ruhige Groesse statt 22-30px. Genau diese
    Ziffernzeile hat die Karte im Stoerfall hoch und die Zeile eng gemacht. Die
    Klasse setzt AgentChip.astro, sobald data.number fehlt. */
+/* GP-P6 Runde 2 (Owner-Befund 15.09.2026, Schrift-Vereinheitlichung): der Statussatz
+   traegt exakt die Schrift der Abschnitts-Ueberschriften im Dashboard ("My agent
+   settings", `.app-main h2`) -- gleiche Familie, gleiche Kappe. Er IST die Ueberschrift
+   dieser Karte; Mono ist fuer Ziffern und Kleinlabels reserviert. */
 .agent-chip__number.is-status {
-  font-family: var(--font-sans);
-  font-size: clamp(16px, 1.15vw, 19px);
-  font-weight: 500;
-  line-height: 1.3;
+  font-family: var(--font-heading);
+  font-weight: var(--weight-normal);
+  /* Eine Stufe unter `.app-main h2` (clamp(20px, 2vw, 36px)): die Karte im Seitenkopf
+     ist kleiner als ein Panel, und der laengere deutsche Satz ("Einrichtung der Nummer
+     fehlgeschlagen") bricht auf der h2-Stufe zweizeilig um. */
+  font-size: clamp(19px, 1.4vw, 24px);
+  line-height: 1.25;
+  letter-spacing: 0;
 }
 
 /* GP-P5: der erklaerende Satz unter Nummer und Aktion. Ruhige Nebenangabe (Sans,
@@ -322,13 +369,23 @@
    42ch neben dem Knopf ergaben vier Zeilen (Deutsch) und genau die Hoehe, die der Owner
    beanstandet hat. Die Kappe ist nur noch eine Lesbarkeitsgrenze; schmalere Fenster
    brechen den Satz weiterhin von selbst um. */
+/* GP-P6 Runde 2 (Schrift-Vereinheitlichung): identisch zu `.muted` im Dashboard
+   ("Takes effect on the next call.") -- Space Grotesk 15px/1.5, gedaempftes Weiss.
+   Vorher 12-14px, also eine eigene, nirgends sonst verwendete Stufe. */
 .agent-chip__hint {
   margin-top: 0;
   max-width: 82ch;
-  color: var(--color-muted);
+  color: rgba(255, 255, 255, 0.62);
   font-family: var(--font-sans);
-  font-size: clamp(12px, 0.85vw, 14px);
-  line-height: 1.45;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* GP-P6 Runde 2 (Owner-Befund): jeder Satz beginnt in einer eigenen Zeile. Vorher lief
+   der Text als ein Block durch und brach mitten im zweiten Satz um ("... Add a card -
+   setup / restarts automatically."), was wie ein Fehler aussah. */
+.agent-chip__hint-line {
+  display: block;
 }
 
 /* GP-P3: der Aktions-Knopf (failed-Nummer) teilt die Optik des Kopier-Knopfs -

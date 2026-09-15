@@ -105,6 +105,23 @@
 
   let copyResetTimer = null;
 
+  // GP-P6 Runde 2 (Owner-Befund 15.09.2026): jeder Satz des Hinweises beginnt in einer
+  // eigenen Zeile. Als ein Textblock lief der Satz durch und brach mitten im zweiten
+  // Satz um ("... Add a card - setup / restarts automatically."), was wie ein Fehler
+  // aussah. Aufbau ueber echte Knoten + textContent (KEIN innerHTML, CSP/XSS-Leitplanke
+  // dieser Datei). Getrennt wird nach einem Punkt mit folgendem Leerzeichen; traegt der
+  // Text keinen, bleibt es genau eine Zeile.
+  function renderHint(text) {
+    hintEl.textContent = "";
+    if (!text) return;
+    for (const sentence of text.split(/(?<=\.)\s+/)) {
+      const line = document.createElement("span");
+      line.className = "agent-chip__hint-line";
+      line.textContent = sentence;
+      hintEl.appendChild(line);
+    }
+  }
+
   function showChip(data) {
     const { number } = agentInfo(data);
     // Aktive Nummer -> ihre e164; sonst ein statusabhaengiger Platzhalter (Fix C: jetzt
@@ -128,7 +145,7 @@
     // GP-P5: der erklaerende Satz. Er steht NEBEN dem Knopf, nicht statt seiner - im
     // Wartefall und im Support-Fall gibt es keinen Knopf, aber sehr wohl etwas zu sagen.
     const hint = numberPlaceholderHint(data);
-    hintEl.textContent = hint;
+    renderHint(hint);
     hintEl.hidden = !hint;
     // GP-P6: nur DIESER Zustand (Statussatz + Erklaersatz + Knopf) braucht Breite. Die
     // Klasse gibt der Karte im Seitenkopf eine eigene, volle Zeile (shell.css
@@ -145,7 +162,7 @@
     actionEl.hidden = true;
     actionEl.textContent = "";
     hintEl.hidden = true;
-    hintEl.textContent = "";
+    renderHint("");
     copyBtn.hidden = false; // Grundzustand, damit der naechste Login ihn wieder sieht
     numberEl.classList.remove(STATUS_CLASS);
     chipEl.classList.remove(NOTICE_CLASS);
