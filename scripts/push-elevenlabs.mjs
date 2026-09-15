@@ -8,10 +8,12 @@
 //
 // DIE ACHT RIEGEL, in der Reihenfolge ihrer Wichtigkeit:
 //
-// 1. GESPERRTE FELDER. retention_days und record_voice werden NIE geschrieben,
-//    in KEINE Richtung - weder als genanntes Feld (Abbruch vor jedem
-//    Netzzugriff) noch als blinder Passagier im fertigen Patch-Koerper
-//    (Abbruch vor dem PATCH). Begruendung an GESPERRTE_FELDER.
+// 1. GESPERRTE FELDER. retention_days wird NIE geschrieben, in KEINE Richtung -
+//    weder als genanntes Feld (Abbruch vor jedem Netzzugriff) noch als blinder
+//    Passagier im fertigen Patch-Koerper (Abbruch vor dem PATCH). record_voice
+//    ist nennbar, aber NUR in Richtung false: jeder andere Wert im fertigen
+//    Koerper bricht vor dem PATCH ab. Begruendung an GESPERRTE_FELDER und
+//    RECORD_VOICE_ERLAUBT.
 // 2. KEIN BLINDER PASSAGIER. Jeder Blatt-Pfad des fertigen Koerpers muss unter
 //    einem Pfad liegen, den der Lauf ausdruecklich zum Schreiben gewaehlt hat.
 //    Geprueft wird der KOERPER, nicht die Absicht, die ihn gebaut hat - sonst
@@ -30,8 +32,8 @@
 // 5. NUR DIE BENANNTEN FELDER. Mit --felder=<feld,feld> wird genau gesagt, was
 //    geschrieben werden darf; jedes andere besessene Feld bleibt unberuehrt,
 //    auch wenn es abweicht. Das ist die Grundfunktion und keine Erweiterung:
-//    "abweichend" heisst nicht "soll geaendert werden". Die Aufbewahrungs-Felder
-//    etwa stehen am Live-Agenten bewusst anders als in der Vorlage - ein Push,
+//    "abweichend" heisst nicht "soll geaendert werden". Die Aufbewahrung
+//    (retention_days) etwa steht am Live-Agenten bewusst anders als in der Vorlage - ein Push,
 //    der sie als Nebenwirkung mitnimmt, dreht eine Entscheidung um, die niemand
 //    zur Abstimmung gestellt hat. Ein unbekannter Feldname bricht ab: eine
 //    Auswahl, die Tippfehler verschluckt, schuetzt nicht.
@@ -432,7 +434,8 @@ export function mitSchreibwerten({ schreibbar, vorlage, live }) {
 // Der Patch-Koerper entsteht AUSSCHLIESSLICH aus den besessenen Live-Pfaden der
 // abweichenden Felder. Es gibt keinen Zweig, der eine ganze Konfiguration
 // uebernimmt - was hier nicht als Pfad steht, kann nicht gesendet werden.
-function bauePatchKoerper(schreibbar) {
+// Exportiert fuer den Test, der eine im Speicher veraenderte Vorlage durch dieselben reinen Schritte schickt (ladeVorlage hat keine Naht).
+export function bauePatchKoerper(schreibbar) {
   const koerper = {};
   for (const abweichung of schreibbar) {
     setzeAnPfad(koerper, zielPfad(abweichung), abweichung.schreibWert);
@@ -456,26 +459,40 @@ function simuliereSchreiben({ live, schreibbar }) {
 
 // --- Riegel am fertigen Koerper (Riegel 1 und 2) ---
 
-// DIE SPERRLISTE. Diese zwei Felder schreibt dieses Werkzeug NIE - unabhaengig
+// DIE SPERRLISTE. Dieses Feld schreibt dieses Werkzeug NIE - unabhaengig
 // davon, in welche Richtung der Wert ginge.
 //
-// WARUM GENAU DIESE ZWEI: sie tragen die Eigentuemer-Entscheidung vom
-// 2026-08-15 - Aufbewahrung (retention_days) und Mitschnitt (record_voice)
-// bleiben vorerst AN, solange an echten Anrufen gemessen wird; VOR DEM ERSTEN
-// FREMDKUNDEN wird auf G7 zurueckgedreht. Beides sind keine
-// Konfigurationsfragen, sondern Aussagen darueber, was mit den Gespraechen
-// echter Menschen geschieht. Reist so ein Feld versehentlich mit, ist der
-// Schaden nicht "falscher Wert", sondern ein Rechtsproblem - und ein
-// versehentliches ABschalten waere genauso falsch wie ein versehentliches
-// Anschalten, deshalb sperrt die Liste beide Richtungen.
+// WARUM retention_days: die Aufbewahrung traegt die Eigentuemer-Entscheidung vom
+// 2026-08-15 - sie bleibt vorerst AN, solange an echten Anrufen gemessen wird;
+// VOR DEM ERSTEN FREMDKUNDEN wird auf G7 zurueckgedreht. Das ist keine
+// Konfigurationsfrage, sondern eine Aussage darueber, was mit den Gespraechen
+// echter Menschen geschieht, und an ihr haengen die Transkripte. Reist das Feld
+// versehentlich mit, ist der Schaden nicht "falscher Wert", sondern ein
+// Rechtsproblem oder verlorene Transkripte - ein versehentliches Kuerzen waere
+// genauso falsch wie ein Verlaengern, deshalb sperrt die Liste beide Richtungen.
 //
 // WARUM ZUSAETZLICH ZUR AUSNAHME IN DER VORLAGE: die Ausnahme ("ausgenommen",
 // Riegel 5) ist ein Riegel gegen Unachtsamkeit und laesst sich durch Nennung
 // uebersteuern - sie schuetzt gegen den unbedachten Lauf, nicht gegen den
 // falschen Tastendruck und nicht gegen einen kuenftigen Umbau, der den Koerper
-// anders baut. Diese Liste laesst sich nicht uebersteuern; das Zurueckdrehen
-// auf G7 geschieht bewusst ausserhalb dieses Werkzeugs und damit von Hand.
-const GESPERRTE_FELDER = ["retention_days", "record_voice"];
+// anders baut. Diese Liste laesst sich nicht uebersteuern; das Zurueckdrehen der
+// Aufbewahrung auf G7 geschieht bewusst ausserhalb dieses Werkzeugs.
+const GESPERRTE_FELDER = ["retention_days"];
+
+// DIE RICHTUNGS-AUSNAHME. record_voice (Audio-Mitschnitt) stand bis 2026-09-15
+// ebenfalls auf der Sperrliste. Owner-Entscheidung O2 vom 2026-09-15: der
+// Mitschnitt geht am Agenten aus. Geoeffnet wird GENAU diese eine Richtung:
+// record_voice ist in --felder nennbar, und Riegel 1c (falscheRichtungStellen)
+// bricht vor dem PATCH ab, sobald der fertige Koerper dort irgendeinen anderen
+// Wert als false traegt. Das Wieder-Einschalten bleibt mit diesem Werkzeug
+// unmoeglich. feld ist zugleich Besitz-Name und Blatt-Schluessel im Koerper -
+// dieselbe Gleichsetzung wie bei GESPERRTE_FELDER.
+const RECORD_VOICE_ERLAUBT = Object.freeze({
+  feld: "record_voice",
+  wert: false,
+  seit: "2026-09-15",
+  grund: "Owner-Entscheidung O2 - Audio-Mitschnitt am Agenten aus, das Wieder-Einschalten bleibt gesperrt",
+});
 
 function istZweig(wert) {
   return wert !== null && typeof wert === "object" && !Array.isArray(wert);
@@ -507,6 +524,9 @@ function gesperrteInAuswahl(auswahl) {
 // worden zu sein. Sieht anders als blattPfade auch in Listen hinein: ein
 // Riegel, der eine Ablageform auslaesst, ist keiner - und welche Form der
 // Anbieter morgen erwartet, entscheidet nicht dieses Werkzeug.
+//
+// trifft(schluessel, wert) entscheidet je Stelle; den Wert braucht nur die
+// Richtungs-Ausnahme (Riegel 1c), die Sperrliste sieht allein den Namen.
 function stellenMitSchluessel(wert, praefix, trifft) {
   if (wert === null || typeof wert !== "object") return [];
   const eintraege = Array.isArray(wert)
@@ -514,13 +534,24 @@ function stellenMitSchluessel(wert, praefix, trifft) {
     : Object.entries(wert);
   return eintraege.flatMap(([schluessel, kind]) => {
     const pfad = praefix === "" ? schluessel : `${praefix}${PFAD_TRENNER}${schluessel}`;
-    const treffer = trifft(schluessel) ? [pfad] : [];
+    const treffer = trifft(schluessel, kind) ? [pfad] : [];
     return [...treffer, ...stellenMitSchluessel(kind, pfad, trifft)];
   });
 }
 
 function gesperrteStellen(koerper) {
   return stellenMitSchluessel(koerper, "", (schluessel) => GESPERRTE_FELDER.includes(schluessel));
+}
+
+// RIEGEL 1c: record_voice mit einem anderen Wert als dem erlaubten, irgendwo im
+// fertigen Koerper - Listen eingeschlossen, wie bei 1b. Strikt ungleich: null,
+// "false" oder 0 sind nicht false und brechen ab (fail-closed).
+function falscheRichtungStellen(koerper) {
+  return stellenMitSchluessel(
+    koerper,
+    "",
+    (schluessel, wert) => schluessel === RECORD_VOICE_ERLAUBT.feld && wert !== RECORD_VOICE_ERLAUBT.wert,
+  );
 }
 
 // RIEGEL 2b: Entwickler-Doku, die mitreist. Diese Vorlage erklaert sich selbst
@@ -576,6 +607,13 @@ export function koerperVerstoesse({ koerper, abweichungen, auswahl }) {
   if (doku.length > 0) {
     befunde.push(
       `ENTWICKLER-DOKU IM KOERPER - diese Schluessel erklaeren die Vorlage und gehoeren nicht zum Anbieter-Schema: ${doku.join(LISTEN_TRENNER)}. Der Hinweis gehoert eine Ebene hoeher, wo der Vergleich ihn ohnehin auslaesst.`,
+    );
+  }
+  const falscheRichtung = falscheRichtungStellen(koerper);
+  if (falscheRichtung.length > 0) {
+    const { feld, wert, seit, grund } = RECORD_VOICE_ERLAUBT;
+    befunde.push(
+      `RICHTUNG GESPERRT - ${feld} wird nur als ${wert} geschrieben (seit ${seit}: ${grund}); der Patch-Koerper traegt dort einen anderen Wert an: ${falscheRichtung.join(LISTEN_TRENNER)}.`,
     );
   }
   const fremd = blindePassagiere({ koerper, erlaubt: erlaubtePfade({ abweichungen, auswahl }) });
@@ -878,7 +916,7 @@ async function laufeAgentenPush({ agentId, ausfuehren, auswahl }) {
   if (gesperrt.length > 0) {
     return brichAb(
       [],
-      `${FELDER_FLAG} nennt gesperrte Felder: ${gesperrt.join(LISTEN_TRENNER)}. Diese Felder schreibt dieses Werkzeug nie, in keine Richtung - Aufbewahrung und Mitschnitt sind eine Datenschutz-Entscheidung und keine Konfiguration (s. GESPERRTE_FELDER). NICHTS gesendet.`,
+      `${FELDER_FLAG} nennt gesperrte Felder: ${gesperrt.join(LISTEN_TRENNER)}. Diese Felder schreibt dieses Werkzeug nie, in keine Richtung - die Aufbewahrung ist eine Datenschutz-Entscheidung und keine Konfiguration (s. GESPERRTE_FELDER). NICHTS gesendet.`,
     );
   }
 

@@ -52,8 +52,8 @@ export function liveWerkzeuge(voicemailText = VOICEMAIL_LIVE_TEXT) {
 }
 
 // Der gestellte Live-Agent: bewusst winzig. Er fuehrt genau die beiden
-// Datenschutz-Felder mit ihren heutigen Live-Werten (Aufbewahrung an,
-// Mitschnitt an - die bewusste Abweichung von der Vorlage) und die Sammlungen,
+// Datenschutz-Felder mit ihren heutigen Live-Werten (Aufbewahrung an - die bewusste, ausgenommene Abweichung von der Vorlage;
+// Mitschnitt an - der Stand vor dem Push von record_voice=false, Owner-Entscheidung O2) und die Sammlungen,
 // ohne die die Vorlage nichts pruefen bzw. nichts zusammenfuehren koennte. Alles
 // andere fehlt und weicht deshalb ab; das ist fuer die gemessenen Aussagen ohne
 // Belang und der einzige Weg, den echten Live-Stand nicht ins Repo zu kopieren.

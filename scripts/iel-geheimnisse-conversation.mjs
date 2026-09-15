@@ -4,7 +4,8 @@
 // tenant_token ist eine HMAC-Ableitung eines Plattform-Geheimnisses, sip_hermes_call_binding traegt
 // das Bindungs-Token - beide sind Credentials. Ausgegeben werden deshalb nur abgeleitete Felder:
 // Kennung, Richtung, Status, Dauer, Registrierungs-Gleichheit, je Beleg-Variable vorhanden/leer/Laenge,
-// die NAMEN der uebrigen Variablen und die erste Agent-Zeile (gekuerzt).
+// die NAMEN der uebrigen Variablen, die erste Agent-Zeile (gekuerzt) und ob der erste Agent-Eintrag
+// unterbrochen wurde (ja/nein/fehlt, IEX-A6 - Messung M-U1 ohne Rohlesen).
 //
 // REIHENFOLGE BINDEND: ZUERST kommen die geheimen Werte in die Verbotsmenge, DANN wird irgendetwas
 // ausgegeben. Die erste Agent-Zeile prueft der Waechter UNGEKUERZT und kuerzt erst danach (K3).
@@ -28,6 +29,7 @@ const MS_JE_S = 1000;
 const AGENT_ROLLE = "agent";
 const LISTEN_TRENNER = ", ";
 const OHNE_WERT = "-";
+const UNTERBRECHUNG_FEHLT = "fehlt";
 
 export async function laufeConversationBeleg({ argumente, abh }) {
   const { waechter } = abh;
@@ -95,8 +97,24 @@ export function variablenBeleg(dynamicVariables) {
 
 // Rein: die erste Agent-Zeile mit Text, sonst null.
 export function ersteAgentZeile(transcript) {
-  const zeilen = Array.isArray(transcript) ? transcript : [];
-  return zeilen.find((zeile) => zeile?.role === AGENT_ROLLE && zeile.message)?.message ?? null;
+  return transcriptZeilen(transcript).find((zeile) => istAgentEintrag(zeile) && zeile.message)?.message ?? null;
+}
+
+// Rein (IEX-A6, M-U1): "ja" nur bei interrupted === true, "nein" nur bei === false, sonst "fehlt".
+// Bewusst der ERSTE Agent-Eintrag, auch ohne Text: eine Eroeffnung, die vor dem ersten Wort abgeschnitten
+// wurde, meldete sonst den Zustand eines spaeteren Zugs. "fehlt" ist kein "nein" - eine unbelegte
+// Unterbrechungssperre ist nicht ausgeschlossen (fail-closed).
+export function ersterAgentEintragUnterbrochen(transcript) {
+  const unterbrochen = transcriptZeilen(transcript).find(istAgentEintrag)?.interrupted;
+  return typeof unterbrochen === "boolean" ? jaNein(unterbrochen) : UNTERBRECHUNG_FEHLT;
+}
+
+function transcriptZeilen(transcript) {
+  return Array.isArray(transcript) ? transcript : [];
+}
+
+function istAgentEintrag(zeile) {
+  return zeile?.role === AGENT_ROLLE;
 }
 
 function meldeBeleg({ abh, conversation, registrierungId }) {
@@ -106,6 +124,7 @@ function meldeBeleg({ abh, conversation, registrierungId }) {
   meldeKopf({ waechter: abh.waechter, conversation, registrierungId });
   meldeVariablen(abh.waechter, variablen);
   meldeErsteAgentZeile(abh.waechter, conversation?.transcript);
+  meldeUnterbrechung(abh.waechter, conversation?.transcript);
 }
 
 function oderStrich(wert) {
@@ -140,4 +159,9 @@ function meldeErsteAgentZeile(waechter, transcript) {
   const zeile = ersteAgentZeile(transcript);
   if (zeile === null) waechter.info(`erste Agent-Zeile: ${OHNE_WERT}`);
   else waechter.infoGekuerzt({ kopf: "erste Agent-Zeile: ", text: zeile, maxZeichen: ERSTE_ZEILE_MAX_ZEICHEN });
+}
+
+// Traegt nur ja/nein/fehlt, nie Gespraechsinhalt; laeuft trotzdem durch den Waechter wie jede Zeile.
+function meldeUnterbrechung(waechter, transcript) {
+  waechter.info(`erste Agent-Zeile unterbrochen: ${ersterAgentEintragUnterbrochen(transcript)}`);
 }

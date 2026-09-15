@@ -9,7 +9,7 @@
 // schreibt nie") standen bisher nur als Kommentar da. Ein Riegel, den niemand
 // misst, ist eine Behauptung - und dieser hier haelt eine
 // Eigentuemer-Entscheidung fest, die genau ein unbedachter Lauf umdrehen wuerde
-// (Aufbewahrung und Mitschnitt stehen live bewusst anders als in der Vorlage).
+// (die Aufbewahrung steht live bewusst anders als in der Vorlage).
 //
 // KEIN NETZ, KEINE ECHTE API: der Vergleichs-Kern ist ohnehin reine Rechnung,
 // und die Faelle am ganzen Ablauf laufen gegen die gestellte fetch-Attrappe aus
@@ -62,7 +62,7 @@ const LIVE_ATTRAPPE = {
   sammlung: {},
 };
 
-const AUFBEWAHRUNGS_FELDER = ["record_voice", "retention_days"];
+const AUSGENOMMENE_VORLAGEN_FELDER = ["retention_days"];
 
 // Beide Felder weichen ab; der einzige Unterschied zwischen ihnen ist die
 // Ausnahme. Ohne diese Gleichheit koennte ein gruener Fall auch an etwas
@@ -108,7 +108,7 @@ function laufeMitAttrappe(argumente) {
 }
 
 describe("Besitz-Erklaerung: die Ausnahme als geprueftes Datenfeld", () => {
-  it("die echte Vorlage nimmt genau die zwei Aufbewahrungs-Felder aus, jeweils mit Grund und Datum", () => {
+  it("IEX-A5-6: die echte Vorlage nimmt nur noch retention_days aus (record_voice seit Owner O2 nicht mehr), mit Grund und Datum", () => {
     const befund = vergleicheBesitz({ vorlage: ladeVorlage(), live: LIVE_MIT_DATENSCHUTZ });
     assert.deepEqual(
       befund.fehler,
@@ -116,7 +116,7 @@ describe("Besitz-Erklaerung: die Ausnahme als geprueftes Datenfeld", () => {
       "die Besitz-Erklaerung der echten Vorlage traegt nicht - dann prueft nichts davon etwas",
     );
     const ausgenommen = befund.abweichungen.filter((abweichung) => abweichung.ausgenommen);
-    assert.deepEqual(namen(ausgenommen), AUFBEWAHRUNGS_FELDER);
+    assert.deepEqual(namen(ausgenommen), AUSGENOMMENE_VORLAGEN_FELDER);
     for (const abweichung of ausgenommen) {
       const { grund, seit } = abweichung.ausgenommen;
       assert.ok(grund.length > 0, `${abweichung.feld}: Ausnahme ohne Grund`);
@@ -201,7 +201,7 @@ describe("Push-Kommando: fail-closed vor dem Netz, Trockenlauf schreibt nie", ()
     assert.match(lauf.ausgabe, /gibtesnichtimbesitz/);
   });
 
-  it("Trockenlauf ohne Feldauswahl: nur gelesen, und die zwei Aufbewahrungs-Felder als AUSGENOMMEN gemeldet", async () => {
+  it("IEX-A5-7: Trockenlauf ohne Feldauswahl: nur gelesen, retention_days AUSGENOMMEN, record_voice Schreib-Kandidat in Richtung false", async () => {
     const lauf = await laufeMitAttrappe([]);
     assert.equal(lauf.code, 0);
     assert.equal(lauf.aufrufe.length, EIN_AUFRUF, "genau ein Aufruf, und der liest");
@@ -211,18 +211,18 @@ describe("Push-Kommando: fail-closed vor dem Netz, Trockenlauf schreibt nie", ()
       "der Trockenlauf hat geschrieben",
     );
     assert.match(lauf.ausgabe, /AUSGENOMMEN retention_days/);
-    assert.match(lauf.ausgabe, /AUSGENOMMEN record_voice/);
     assert.match(lauf.ausgabe, /ausgenommen seit \d{4}-\d{2}-\d{2}:/);
+    assert.match(lauf.ausgabe, /WUERDE SCHREIBEN record_voice /);
+    assert.doesNotMatch(lauf.ausgabe, /AUSGENOMMEN record_voice/);
     assert.doesNotMatch(lauf.ausgabe, /WUERDE SCHREIBEN retention_days/);
-    assert.doesNotMatch(lauf.ausgabe, /WUERDE SCHREIBEN record_voice/);
+    assert.doesNotMatch(lauf.ausgabe, /Abbruch/);
   });
 
   // Die Uebersteuerung durch Nennung gilt weiter fuer ausgenommene Felder im
-  // Allgemeinen - fuer die beiden Aufbewahrungs-Felder aber NICHT MEHR: sie
-  // stehen seit dem 2026-08-17 auf der Sperrliste des Kommandos und sind gar
-  // nicht mehr nennbar. Der Fall steht hier, weil er frueher das Gegenteil
-  // behauptete; gemessen wird die Sperrliste in
-  // test/elevenlabs-push-sperrliste.test.js.
+  // Allgemeinen - fuer retention_days aber NICHT MEHR (Sperrliste seit 2026-08-17;
+  // record_voice ist seit 2026-09-15 nennbar, aber nur in Richtung false). Der
+  // Fall steht hier, weil er frueher das Gegenteil behauptete; gemessen wird die
+  // Sperrliste in test/elevenlabs-push-sperrliste.test.js.
   it("ein gesperrtes Feld laesst sich auch durch Nennung nicht mehr uebersteuern", async () => {
     const lauf = await laufeMitAttrappe(["--felder=retention_days"]);
     assert.equal(lauf.code, 1);

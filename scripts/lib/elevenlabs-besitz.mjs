@@ -82,8 +82,8 @@ export const AUSNAHME_UEBERFAELLIG_MARKE = "AUSNAHME UEBERFAELLIG";
 // Hoechstalter einer Ausnahme in Tagen. WARUM UEBERHAUPT EINE FRIST: die Vorlage
 // sagt ausdruecklich "vorerst" und "eine Ausnahme ist kein Dauerzustand" - ohne
 // gemessenes Hoechstalter ist das eine Absichtserklaerung, die nichts durchsetzt.
-// Die zwei heute ausgenommenen Felder sind Aufbewahrung und Mitschnitt fremder
-// Gespraeche; beide stehen live AN und sollen laut Eigentuemer-Entscheidung vor
+// Das heute ausgenommene Feld ist die Aufbewahrung fremder Gespraeche
+// (retention_days); sie steht live AN und soll laut Eigentuemer-Entscheidung vor
 // dem ersten Fremdkunden zurueckgedreht werden.
 // WARUM 90 TAGE: ein Quartal ist lang genug, dass eine laufende Messphase nicht
 // woechentlich unterbrochen wird, und kurz genug, dass aus "vorerst" nicht
