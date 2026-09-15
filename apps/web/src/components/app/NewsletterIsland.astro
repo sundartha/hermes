@@ -156,6 +156,7 @@ import {
   const cardEl = document.getElementById("newsletter-card");
   const toggleEl = document.getElementById("newsletter-toggle");
   const emailEl = document.getElementById("newsletter-email");
+  const accountRowEl = emailEl.closest(".newsletter-account");
   const unsubscribeBtn = document.getElementById("newsletter-unsubscribe");
   const msgEl = document.getElementById("newsletter-msg");
 
@@ -279,6 +280,10 @@ import {
       const accountEmail = accountEmailFrom(data) ?? "";
       emailEl.textContent = accountEmail || EMAIL_PLACEHOLDER;
       emailEl.classList.toggle("is-placeholder", !accountEmail);
+      // Die Marke liegt zusaetzlich an der ZEILE, damit die Blase im
+      // Platzhalter-Zustand exakt die Masse des Feldes darunter annehmen kann
+      // (Innenpolster + Schriftgroesse, s. panels.css) -- ohne :has().
+      accountRowEl.classList.toggle("is-placeholder", !accountEmail);
       // Das Hinzufuegen-Feld ist fuer WEITERE Adressen: die eigene steht schon als
       // erste Zeile darueber, also kein Platzhalter mit der eigenen Adresse mehr
       // (das las sich wie "hier deine Konto-Adresse eintragen").

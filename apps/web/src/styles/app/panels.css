@@ -462,6 +462,24 @@
   color: rgba(255, 255, 255, 0.4);
 }
 
+/* Im Platzhalter-Zustand soll die Zeile AUSSEHEN wie das Feld darunter, nicht
+   nur denselben Text tragen (Owner 15.09.2026). Darum hier die zwei Masse, die
+   sich sonst unterscheiden: die Adressschrift schrumpft am Handy auf 14px, damit
+   Adresse UND Status-Pille nebeneinander passen -- ohne Adresse gibt es keine
+   Pille, also gilt die Feldschrift (15,5px); und das Innenpolster der Blase geht
+   am Handy aus demselben Grund auf 13px zurueck, hier bleibt es bei den 17px des
+   Feldes. Ergebnis: beide Zeilen starten auf demselben Pixel, in derselben
+   Groesse und Farbe. Die Marke sitzt an der ZEILE (JS), weil eine Blase ihr Kind
+   sonst nicht abfragen koennte (kein :has() im Projekt). */
+.newsletter-account.is-placeholder .newsletter-account__field {
+  padding-left: 17px;
+  padding-right: 17px;
+}
+
+.newsletter-account.is-placeholder .newsletter-account__email {
+  font-size: 15.5px;
+}
+
 /* Die Status-Pille der Konto-Zeile gehoert zum angemeldeten Zustand -- sie haengt
    deshalb an derselben Checkbox wie die beiden Knopf-Zustaende daneben. */
 .newsletter-account__badge {
