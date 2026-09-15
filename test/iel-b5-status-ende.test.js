@@ -752,7 +752,7 @@ test("IEL-B5-19: Verdrahtung Cap (server.js) - Zombie beim Boot holt das Ergebni
     assert.ok(attrappe.gets().length >= EINMAL);
     assert.equal(attrappe.deletes().length, 0);
     assert.equal(call.status, "failed");
-    assert.notEqual(call.elDetectorCounts, null, "persistProviderResult lief im Beende-Pfad");
+    assert.deepEqual(call.elDetectorCounts, { elTags: 0, elB1: 0 }, "persistProviderResult lief im Beende-Pfad");
     assert.equal(call.sipCallId, null, "IEX-A1: telnyx_inbound_el_convai fuehrt keinen telnyx_sip-Join-Schluessel");
   });
 });
