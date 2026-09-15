@@ -23,39 +23,50 @@
      so zentriert er sich nur zur Nummer, das Label darueber zieht ihn nicht
      mehr nach oben. -->
 <div id="agent-chip" class="agent-chip card" hidden>
-  <span class="agent-chip__body">
-    <span class="agent-chip__label" data-i18n="yourNumber">Your number</span>
-    <span class="agent-chip__row">
-      <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
-      <span id="agent-number" class="agent-chip__number"></span>
+  <!-- GP-P6: obere Zeile = Text links, Knopf rechts. Der Erklaersatz haengt DARUNTER
+       ueber die volle Kartenbreite (statt neben dem Knopf in einer schmalen Spalte zu
+       stehen) -- sonst frisst der Knopf die halbe Zeilenbreite und der Satz laeuft auf
+       vier Zeilen, gerade auf Deutsch. -->
+  <span class="agent-chip__main">
+    <span class="agent-chip__body">
+      <span class="agent-chip__label" data-i18n="yourNumber">Your number</span>
+      <span class="agent-chip__row">
+        <span id="agent-dot" class="live-dot live-dot--off" aria-hidden="true"></span>
+        <span id="agent-number" class="agent-chip__number"></span>
+      </span>
     </span>
     <!-- GP-P3: Aktion zum gescheiterten Nummern-Setup (Kartenwechsel). Label wird
-         ausschliesslich per textContent gesetzt (XSS), Sichtbarkeit per .hidden. -->
+         ausschliesslich per textContent gesetzt (XSS), Sichtbarkeit per .hidden.
+         GP-P6 (Owner-Befund 15.09.2026): der Knopf steht jetzt RECHTS neben dem
+         Textblock -- genau da, wo im Normalfall der Kopier-Knopf sitzt -- statt als
+         vierte Zeile unter der Nummer. Die Karte waechst dadurch in die Breite statt
+         in die Hoehe, und beide Zustaende teilen dieselbe Silhouette. -->
     <button id="agent-number-action" class="agent-chip__action" type="button" hidden></button>
-    <!-- GP-P5: WARUM es haengt und was als Naechstes passiert. Der Knopf allein sagt dem
-         Kunden nicht, ob er handeln muss, warten kann oder sich melden soll. Text per
-         textContent (XSS), Sichtbarkeit per .hidden; aria-live, weil der Satz nach einem
-         Zustandswechsel ohne Reload erscheint. -->
-    <span id="agent-number-hint" class="agent-chip__hint" hidden aria-live="polite"></span>
-  </span>
-  <button
-    id="agent-copy"
-    class="agent-chip__copy"
-    type="button"
-    aria-label="Copy phone number"
-    data-i18n-attr="aria-label:copyAriaLabel"
-  >
-    <svg
-      class="agent-chip__copy-icon"
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      focusable="false"
+    <button
+      id="agent-copy"
+      class="agent-chip__copy"
+      type="button"
+      aria-label="Copy phone number"
+      data-i18n-attr="aria-label:copyAriaLabel"
     >
-      <rect x="2" y="2" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
-      <rect x="5.5" y="5.5" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
-    </svg>
-    <span id="agent-copy-label" class="agent-chip__copy-label" data-i18n="copy" aria-live="polite">Copy</span>
-  </button>
+      <svg
+        class="agent-chip__copy-icon"
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <rect x="2" y="2" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+        <rect x="5.5" y="5.5" width="9" height="9" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+      </svg>
+      <span id="agent-copy-label" class="agent-chip__copy-label" data-i18n="copy" aria-live="polite">Copy</span>
+    </button>
+  </span>
+  <!-- GP-P5: WARUM es haengt und was als Naechstes passiert. Der Knopf allein sagt dem
+       Kunden nicht, ob er handeln muss, warten kann oder sich melden soll. Text per
+       textContent (XSS), Sichtbarkeit per .hidden; aria-live, weil der Satz nach einem
+       Zustandswechsel ohne Reload erscheint.
+       GP-P6: steht als eigene Zeile UNTER der Kopfzeile und nutzt die volle Kartenbreite. -->
+  <span id="agent-number-hint" class="agent-chip__hint" hidden aria-live="polite"></span>
 </div>
 
 <script>
@@ -72,6 +83,15 @@
   import { t } from "../../lib/i18n.js";
 
   const DOT_OFF_CLASS = "live-dot--off";
+  // GP-P6: bernsteinfarbener Punkt, solange das Setup haengt. Die Dringlichkeit traegt
+  // jetzt die Farbe -- vorher trug sie die Schriftgroesse des Statussatzes (22-30px
+  // Mono), und genau die hat die Karte in die Hoehe getrieben.
+  const DOT_ALERT_CLASS = "live-dot--alert";
+  // GP-P6: ein Statussatz ist keine Rufnummer. Ohne diese Klasse steht "Number setup
+  // failed" in der Ziffernzeile (shell.css .agent-chip__number.is-status).
+  const STATUS_CLASS = "is-status";
+  // GP-P6: Breitenzustand der Karte (eigene Zeile im Seitenkopf), s. showChip.
+  const NOTICE_CLASS = "agent-chip--notice";
   const COPIED_CLASS = "is-copied";
   const COPIED_LABEL_MS = 1800;
 
@@ -91,6 +111,8 @@
     // inkl. failed/blocked statt beide auf "No number assigned yet" zu buendeln). Tenant-
     // Werte weiter ausschliesslich via textContent (XSS).
     numberEl.textContent = number || numberPlaceholderText(data);
+    // GP-P6: Ziffernzeile nur fuer echte Ziffern; jeder Platzhalter ist ein Satz.
+    numberEl.classList.toggle(STATUS_CLASS, !number);
     dotEl.classList.toggle(DOT_OFF_CLASS, !isAgentLive(data));
     // GP-P5: Kopieren ergibt nur Sinn, wenn es eine echte Nummer gibt. Der Knopf stand
     // bisher auch neben "Einrichtung der Nummer fehlgeschlagen" und kopierte damit den
@@ -101,11 +123,19 @@
     const action = numberPlaceholderAction(data);
     actionEl.hidden = !action;
     if (action) actionEl.textContent = action.label;
+    // GP-P6: genau dieser Zustand (failed) faerbt den Punkt bernstein.
+    dotEl.classList.toggle(DOT_ALERT_CLASS, !!action);
     // GP-P5: der erklaerende Satz. Er steht NEBEN dem Knopf, nicht statt seiner - im
     // Wartefall und im Support-Fall gibt es keinen Knopf, aber sehr wohl etwas zu sagen.
     const hint = numberPlaceholderHint(data);
     hintEl.textContent = hint;
     hintEl.hidden = !hint;
+    // GP-P6: nur DIESER Zustand (Statussatz + Erklaersatz + Knopf) braucht Breite. Die
+    // Klasse gibt der Karte im Seitenkopf eine eigene, volle Zeile (shell.css
+    // .agent-chip--notice) -- sonst quetscht sie die Begruessung daneben zusammen und
+    // der Erklaersatz bricht auf drei Zeilen um. Ohne Hinweis bleibt alles wie gehabt:
+    // kompakte Karte rechts neben der Begruessung.
+    chipEl.classList.toggle(NOTICE_CLASS, !!hint);
     chipEl.hidden = false;
   }
 
@@ -117,6 +147,9 @@
     hintEl.hidden = true;
     hintEl.textContent = "";
     copyBtn.hidden = false; // Grundzustand, damit der naechste Login ihn wieder sieht
+    numberEl.classList.remove(STATUS_CLASS);
+    chipEl.classList.remove(NOTICE_CLASS);
+    dotEl.classList.remove(DOT_ALERT_CLASS);
     dotEl.classList.add(DOT_OFF_CLASS);
     chipEl.hidden = true;
   }

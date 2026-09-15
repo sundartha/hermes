@@ -53,9 +53,17 @@
 
 /* .dash-head war bisher ungestylt (reiner Container). Jetzt: Text links,
    Nummernkarte (AgentChip) rechts. */
+/* GP-P6 (Owner-Befund 15.09.2026): Flex mit Umbruch statt `grid 1fr auto`. Die
+   Nummernkarte ist im Stoerfall (Statussatz + Erklaersatz + Knopf) deutlich
+   breiter als im Normalfall; in der Grid-Fassung nahm die auto-Spalte sich ihre
+   max-content-Breite und die Begruessung links wurde bis auf 0 gequetscht. Mit
+   `flex: 0 0 auto` an der Karte und einer Mindestbreite an der Begruessung
+   rutscht die Karte stattdessen sauber in eine eigene Zeile, sobald es neben der
+   Begruessung nicht mehr reicht -- kein :has(), kein JS, ein Regelwerk fuer
+   beide Zustaende. */
 .dash-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 28px;
 }
@@ -66,6 +74,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* GP-P6: waechst in die freie Breite, faellt aber nie unter ~320px -- darunter
+     bekommt die Nummernkarte ihre eigene Zeile (s. .dash-head). */
+  flex: 1 1 320px;
   min-width: 0;
 }
 
@@ -213,19 +224,62 @@
    der bis 24px wachsenden Kappe) -- Inhalt und Kartenrand fallen enger
    zusammen, der Punkt wirkt dadurch naeher an der Nummernmitte. Horizontales
    Polster bleibt unveraendert (kein Befund dazu). */
+/* GP-P6 (Owner-Befund 15.09.2026): EINE Textachse fuer alles im Block. Der
+   Radiopunkt haengt als einziges Element in der Gasse davor; Label, Nummer bzw.
+   Statuszeile und Erklaersatz fluchten darum exakt uebereinander. Vorher standen
+   Label und Erklaersatz am Punkt, die Nummernzeile aber um Punkt+Spalte
+   eingerueckt -- bei einer Ziffernreihe faellt das kaum auf, bei einem Satz wie
+   "Number setup failed" liest es sich als Versatz. */
 .agent-chip {
+  --chip-dot: 10px;
+  --chip-dot-gap: 12px;
+  --chip-axis: calc(var(--chip-dot) + var(--chip-dot-gap));
+  /* GP-P6: die Karte ist jetzt zweizeilig -- oben .agent-chip__main (Text + Knopf),
+     darunter der Erklaersatz ueber die volle Breite. Solange kein Hinweis da ist
+     (Normalfall), ist die zweite Zeile [hidden] und die Karte sieht aus wie zuvor. */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0;
+  min-width: 240px;
+  /* GP-P6: nimmt im Stoerfall die Breite, die der Erklaersatz braucht, bleibt aber
+     im Kopfbereich (s. .dash-head) und rutscht notfalls in die eigene Zeile. */
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 16px clamp(20px, 1.6vw, 28px);
+}
+
+/* Die Kopfzeile der Karte: Textblock links, Knopf rechts (margin-left:auto). */
+.agent-chip__main {
   display: flex;
   align-items: center;
   gap: 18px;
-  margin: 0;
-  min-width: 240px;
-  padding: 16px clamp(20px, 1.6vw, 28px);
+  min-width: 0;
+}
+
+/* GP-P6 (Owner-Entscheidung 15.09.2026): die Karte bleibt in BEIDEN Zustaenden das
+   kompakte, abgerundete Viereck rechts neben der Begruessung. Eine Zwischenfassung gab
+   dem Stoerfall eine eigene, volle Kopfzeile -- das riss zu viel Weissraum auf, und die
+   Karte waere beim Wechsel auf eine aktive Nummer von dort wieder weggesprungen. Der
+   Stoerfall darf nur etwas BREITER werden als der Normalfall, nicht anders platziert. */
+.agent-chip--notice {
+  max-width: min(100%, 760px);
 }
 
 /* Label ueber Nummer bleibt linksbuendig -- der Block traegt jetzt BEIDES:
    das Mono-Label (oben) und die Nummern-Zeile (unten, s. .agent-chip__row). */
 .agent-chip__body {
   align-items: flex-start;
+  min-width: 0;
+}
+
+/* GP-P6: Label und Erklaersatz auf dieselbe Achse wie Nummer/Statuszeile ruecken
+   (der Punkt haengt links davor). EINE Deklaration statt zweier Einzelwerte, damit
+   die Achse nicht auseinanderlaeuft. */
+.agent-chip__label,
+.agent-chip__hint {
+  padding-left: var(--chip-axis);
 }
 
 /* Feedback-Runde 2 (Befund 1): die Nummern-Zeile -- NUR Punkt + Nummer, NICHT
@@ -235,7 +289,7 @@
 .agent-chip__row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--chip-dot-gap);
   min-width: 0;
 }
 
@@ -249,12 +303,28 @@
   font-size: clamp(22px, 1.83vw, 30px);
 }
 
+/* GP-P6 (Owner-Befund 15.09.2026): steht KEINE Nummer da, sondern ein Satz
+   ("Number setup failed", "Setting up your number…"), dann traegt er auch nicht
+   die Ziffern-Optik: Sans statt Mono, ruhige Groesse statt 22-30px. Genau diese
+   Ziffernzeile hat die Karte im Stoerfall hoch und die Zeile eng gemacht. Die
+   Klasse setzt AgentChip.astro, sobald data.number fehlt. */
+.agent-chip__number.is-status {
+  font-family: var(--font-sans);
+  font-size: clamp(16px, 1.15vw, 19px);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
 /* GP-P5: der erklaerende Satz unter Nummer und Aktion. Ruhige Nebenangabe (Sans,
    gedaempft) - er erscheint nur im failed-Zustand und soll den Chip im Kopf nicht in
    die Breite treiben, deshalb die Zeilenbreite begrenzt. */
+/* GP-P6: der Satz steht jetzt in der zweiten Kartenzeile und hat die volle Breite --
+   42ch neben dem Knopf ergaben vier Zeilen (Deutsch) und genau die Hoehe, die der Owner
+   beanstandet hat. Die Kappe ist nur noch eine Lesbarkeitsgrenze; schmalere Fenster
+   brechen den Satz weiterhin von selbst um. */
 .agent-chip__hint {
-  margin-top: 6px;
-  max-width: 42ch;
+  margin-top: 0;
+  max-width: 82ch;
   color: var(--color-muted);
   font-family: var(--font-sans);
   font-size: clamp(12px, 0.85vw, 14px);
@@ -301,11 +371,12 @@
   animation: agent-copy-pop 0.18s var(--motion-ease);
 }
 
-/* Der margin-left:auto der gemeinsamen Regel schiebt den Kopier-Knopf nach
-   rechts; der Aktions-Knopf sitzt dagegen direkt unter der Nummer. */
-.agent-chip__action {
-  margin-left: 0;
-}
+/* GP-P6 (Owner-Befund 15.09.2026): der Aktions-Knopf sass frueher als vierte Zeile
+   UNTER der Nummer (margin-left:0) -- zusammen mit dem Statussatz in Ziffernoptik
+   ergab das eine auffallend hohe, links unbuendige Karte. Jetzt gilt fuer ihn das
+   gleiche margin-left:auto wie fuer den Kopier-Knopf: rechts, senkrecht mittig,
+   auf der Hoehe des Textblocks. Beide Knoepfe schliessen sich gegenseitig aus
+   (Kopieren nur mit Nummer, Aktion nur ohne), sie kollidieren also nie. */
 
 @keyframes agent-copy-pop {
   0% {
@@ -334,13 +405,22 @@
    hier nur Groesse + Farbe + Puls-Keyframes ergaenzt. Gruenton identisch zur
    "Copied"-Rueckmeldung (rgba(127, 224, 176, …), s.o.) -- kein neuer Hex-Wert. */
 .agent-chip__row .live-dot {
-  width: 10px;
-  height: 10px;
+  width: var(--chip-dot);
+  height: var(--chip-dot);
 }
 
 .live-dot:not(.live-dot--off) {
   background: #7fe0b0;
   animation: agent-dot-pulse 2s ease-in-out infinite;
+}
+
+/* GP-P6 (Owner-Befund 15.09.2026): haengt das Setup, faerbt sich der Punkt bernstein
+   statt grau. Vorher trug allein die Schriftgroesse des Statussatzes die Dringlichkeit;
+   die ist jetzt klein, also uebernimmt das die Farbe. Zwei Klassen liegen gleichzeitig
+   am Element (--off + --alert), darum hier die hoehere Spezifitaet statt Reihenfolge.
+   Bernstein statt Rot: es ist ein loesbarer Zwischenstand, kein Ausfall. */
+.live-dot.live-dot--alert {
+  background: #f0b366;
 }
 
 @keyframes agent-dot-pulse {
@@ -359,10 +439,11 @@
    Breakpoint, unabhaengig vom Nav-Umbruch bei 980px (Spec §6) -- beide sind
    im Entwurf getrennt benannt. */
 @media (max-width: 900px) {
-  .dash-head {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  /* GP-P6: .dash-head ist jetzt Flex mit Umbruch -- die Karte bekommt hier ihre
+     eigene Zeile ueber die volle Breite (flex-basis 100% statt der frueheren
+     Grid-Einspaltigkeit). */
   .agent-chip {
+    flex: 1 1 100%;
     width: 100%;
     min-width: 0;
   }
@@ -371,8 +452,11 @@
 /* Befund 2 (Fix-Runde): unter 560px darf der Kopier-Knopf umbrechen -- dann
    aber volle Breite unter der Nummer, nicht nur so schmal wie sein Label. */
 @media (max-width: 559px) {
-  .agent-chip {
+  /* GP-P6: der Umbruch gehoert jetzt an die Kopfzeile der Karte (.agent-chip selbst
+     ist die Spalte Kopfzeile + Erklaersatz). */
+  .agent-chip__main {
     flex-wrap: wrap;
+    gap: 12px;
   }
   .agent-chip__copy,
   .agent-chip__action {
