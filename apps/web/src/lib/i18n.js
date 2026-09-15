@@ -8,11 +8,14 @@
 // dashboard-i18n-surface). [data-i18n]/[data-i18n-attr] markieren, was zur
 // Laufzeit ersetzt wird.
 //
-// WICHTIG: derselbe localStorage-Key wie die Website (hermes.lang) -- wer dort
-// DE waehlt, bekommt hier ebenfalls DE. Ohne gespeicherte Wahl gilt beidseitig
-// Englisch (Default-Wechsel 2026-09-10, s. scripts/hermes-scroll.js).
+// WICHTIG: derselbe localStorage-Key wie die Website -- wer dort DE waehlt,
+// bekommt hier ebenfalls DE. Ohne gespeicherte Wahl gilt beidseitig Englisch.
+// Der Schluessel traegt seit dem Default-Wechsel eine Version: Wahlen aus der
+// Zeit, als Deutsch der Default war, sollen Englisch nicht aushebeln. Das
+// Aufraeumen des alten Eintrags macht die Website (scripts/hermes-scroll.js) --
+// beide Oberflaechen teilen denselben Origin-Speicher, einmal reicht.
 
-const LANG_KEY = "hermes.lang";
+const LANG_KEY = "hermes.lang.v2";
 const SUPPORTED_LANGS = new Set(["de", "en"]);
 
 // Event, ueber das setLang() eine Sprachaenderung meldet. Lauscher: AuthIsland

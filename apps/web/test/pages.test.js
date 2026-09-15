@@ -225,8 +225,15 @@ test("ohne PUBLIC_ANALYTICS_* steht kein Mess-Platzhalter im Output", () => {
   }
 });
 
-test("Datenschutz nennt die lokale Speicherung (hermes.lang, hermes.consent)", () => {
+test("Datenschutz nennt die lokale Speicherung (Sprachwahl, Cookie-Entscheidung)", () => {
+  // Der genannte Eintrag muss der WIRKLICH geschriebene sein: gemessen wird der
+  // Schluessel aus scripts/hermes-scroll.js, nicht ein fest getippter Name.
+  // Sonst nennt der Datenschutztext nach einer Umbenennung einen Eintrag, den
+  // es nicht mehr gibt (§ 25 TDDDG verlangt die zutreffende Angabe).
+  const scroll = readFileSync(join(WEB_ROOT, "src/scripts/hermes-scroll.js"), "utf8");
+  const langKey = (scroll.match(/const LANG_KEY = "([^"]+)"/) || [])[1];
+  assert.ok(langKey, "LANG_KEY in hermes-scroll.js nicht gefunden");
   const html = readDist("datenschutz/index.html");
-  assert.ok(html.includes("hermes.lang"), "hermes.lang fehlt im Datenschutztext");
+  assert.ok(html.includes(langKey), `${langKey} fehlt im Datenschutztext`);
   assert.ok(html.includes("hermes.consent"), "hermes.consent fehlt im Datenschutztext");
 });

@@ -11,7 +11,7 @@ das notwendige Sitzungs-Cookie.
   Banner auf der Startseite und allen `Hermes.astro`-Seiten. Entscheidung in
   `localStorage["hermes.consent"]` = `{version, ts, necessary, statistics, marketing}`.
   Ohne Eintrag erscheint der Banner; "Cookie-Einstellungen" im Fussband oeffnet ihn erneut.
-- Notwendig (ohne Einwilligung, § 25 Abs. 2 Nr. 2 TDDDG): `hermes.lang`
+- Notwendig (ohne Einwilligung, § 25 Abs. 2 Nr. 2 TDDDG): `hermes.lang.v2`
   (Sprachwahl), `hermes.consent` (die Entscheidung selbst), Sitzungs-Cookie im Kundenbereich.
 - Statistik / Marketing: heute KEIN Dienst aktiv. Der Banner ist die Vorsorge,
   damit ein spaeterer Dienst nicht ohne Einwilligung startet.

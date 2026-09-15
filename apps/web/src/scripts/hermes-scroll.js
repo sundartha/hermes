@@ -136,7 +136,14 @@ const DE = {
   copiedLabel: "Kopiert",
 };
 
-const LANG_KEY = "hermes.lang";
+/* Der Schluessel traegt seit dem Default-Wechsel eine Version. Grund: unter dem
+ * alten Schluessel "hermes.lang" liegen Wahlen aus der Zeit, als Deutsch der
+ * Default war - die wuerden Englisch fuer jeden Rueckkehrer aushebeln. Ab v2
+ * zaehlt nur, was jemand NACH dem Wechsel bewusst gewaehlt hat; der alte
+ * Eintrag wird beim ersten Besuch entfernt (s. init), damit nichts
+ * Verwaistes zurueckbleibt, das der Datenschutztext nicht mehr beschreibt. */
+const LANG_KEY = "hermes.lang.v2";
+const LEGACY_LANG_KEY = "hermes.lang";
 const en = new Map();
 let lang = "en";
 
@@ -546,6 +553,7 @@ function init() {
   wireKeyboard();
 
   try {
+    localStorage.removeItem(LEGACY_LANG_KEY);
     const saved = localStorage.getItem(LANG_KEY);
     if (saved === "de") applyLang("de");
   } catch {
