@@ -4316,12 +4316,21 @@ Ersetzungsregel: dieser Eintrag wird NUR durch ein diskriminierendes N2-Ergebnis
 200). Eine Ablehnung (404/407/487/sonstiger Status) ergaenzt nur "in Konfiguration <Trunk-Inventar> mit
 Status X abgelehnt, From/Request-URI, Datum - nicht diskriminierend"; der Eintrag bleibt UNBELEGT.
 
-### 6. M8 offen: Kostenfall fremder INVITE mit 404 am Webhook
+N2 gemessen 2026-09-15 ~07:03 UTC (`tasks/iel-nachdeploy-messung.jsonl` nr 2): Trunk-Inventar 3 Produktions-
+Registrierungen (…1188 mit Zugang, …4874/…8341 ohne Inbound) + Wegwerf …0176 nur mit `outbound_trunk_config`;
+From …0177, Request-URI `sip:…0176@sip.rtc.elevenlabs.io:5060;transport=tcp`, ohne Digest. Ergebnis: KEIN
+ElevenLabs-Gespraech, TeXML lief in den Rueckfallsatz (im Mitschnitt gehoert); SIP-Status des Kindbeins nicht
+erfasst - nicht diskriminierend. Der Eintrag bleibt UNBELEGT.
 
-Bewusst akzeptiertes Risiko: Anbieter-Dauer und -Kosten eines fremden INVITE, den unser Init-Webhook mit
-404 beantwortet, sind ungemessen und liegen ausserhalb jeder Tenant-Decke (`max_duration_seconds=600`).
-Reichweite: jeder, der die Kennung einer Registrierung am Agenten kennt, solange N2 nicht das Gegenteil
-belegt. Wird durch das M8-Messergebnis ersetzt.
+### 6. M8 gemessen: Kostenfall fremder INVITE, Init-Webhook lehnt ab
+
+Gemessen 2026-09-15 ~07:00 UTC (N1, `tasks/iel-nachdeploy-messung.jsonl` nr 1): INVITE MIT gueltigem Digest an
+eine Wegwerf-Registrierung am Agenten, Inbound-Schalter aus. ElevenLabs ruft den Init-Webhook (Render-Log
+`[el-init] abgelehnt grund=kein_wartender_anruf schluessel=agent_id,call_id,call_sid,called_number,caller_id,
+conversation_id,sip_headers sip_headers=objekt`, = M7), startet das Gespraech trotzdem und beendet es nach
+1 s mit `failed` ("Missing required dynamic variables in first message: owner_name, opening_line"); SIP
+100/407/180/200. Kostenfall damit: rund 1 s Anbieter-Dauer je fremdem INVITE, und nur fuer jemanden mit
+gueltigem Digest (ohne Digest gemessen abgelehnt, [M1] J4). Bewusst akzeptiert.
 
 ### 7. Werkzeug-Schluessel und Restrisiken
 

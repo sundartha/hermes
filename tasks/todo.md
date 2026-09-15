@@ -25,9 +25,11 @@ an den Owner, keine Ersatzarbeit.
 - [x] IEL-M1 Messung -> `tasks/iel-m1-messung.md`, Zaehler 5/5 (Anruf 1 Messaufbau-Fehler).
       Belegt: Dial/Sip erreicht Agent, Digest 407 ok, X-Header -> sip_*, Elternbein-Hangup beendet
       Bruecke, F-E ohne Nebenwirkung, allowed_numbers filtert Anrufer; unbekannte Kennung = Stille.
-- [ ] IEL-S Spec + Review (Security/Regeln opus, Clean-Code sonnet) -> `tasks/iel-spec.md`
-      Runde 1-2: 3 Rest-Blocker; Lead-Entscheidungen R-A..R-F (Secrets per Skript, Pflichtsatz bei
-      Frist, gleiche Stimme, Owner nur Testanruf) -> Runde 3 laeuft.
+- [x] IEL-S Spec + Review (Security/Regeln opus, Clean-Code sonnet) -> `tasks/iel-spec.md` (5 Runden)
+- [x] IEL-B1..B11 (13 Phasen) je Gate PASS, gemergt bis 9917db7; volle Bank 5838/5838 (concurrency 3).
+- [x] IEL-D Cutover Schritte 0-10 (Protokoll `tasks/iel-cutover-protokoll.md`): live dep-dakes3h5efls73dp68p0,
+      Banner "Inbound-EL: an, 1 Tenants" (…1188), beleg-init GRUEN; Prompt/Webhook/Agent-Schalter gesetzt;
+      N1 (M7/M8) + N2 gemessen, Zaehler nachdeploy 2/3, Eintraege in PLAN-SECURITY.md (noch nicht committet).
 - [ ] IEL-B* Bau je Phase per Workflow (Plan -> Impl -> Safety + Clean-Code + Security -> Self-Fix)
       Pruefung: Gate PASS, Lead `git diff --stat`, Merge, volle Suite einmal `# fail 0`.
 - [ ] IEL-D Push upstream + Deploy + Schalter nur fuer den Owner-Tenant an

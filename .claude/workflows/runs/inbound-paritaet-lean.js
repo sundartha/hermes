@@ -61,8 +61,7 @@ const IEL_COMMON = {
   "maxFixRounds": 2
 };
 const PHASES = [
-  { ...IEL_COMMON, "phaseId": "IEL-B1", "phaseTitle": "Schalter, Tenant-Allowlist, Zugangs-Env, Golden-Test", "branch": "phase/iel-b1-schalter", "highStakes": false },
-  { ...IEL_COMMON, "phaseId": "IEL-B2", "phaseTitle": "Minutensatz je Kostenprofil", "branch": "phase/iel-b2-minutensatz", "highStakes": true }
+  { ...IEL_COMMON, "phaseId": "IEL-B11", "phaseTitle": "Nach-Deploy-Messwerkzeug", "branch": "phase/iel-b11-nachdeploy-messung", "highStakes": false }
 ];
 
 async function runPhase(A) {
