@@ -394,10 +394,31 @@
   color: rgba(255, 255, 255, 0.46);
 }
 
-.newsletter-toggle {
+/* Konto-Zeile der Empfaengerliste (Owner-Befund 15.09.2026, s. NewsletterIsland.astro):
+   dieselbe Zeilenoptik wie ein Zusatzempfaenger, nur mit dem Einwilligungs-Umschalter
+   statt des Entfernen-Kreuzes. Sie traegt `position: relative`, weil die versteckte
+   Checkbox absolut in ihr liegt. */
+.newsletter-account {
   position: relative;
-  display: block;
-  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 8px 14px;
+  background: rgba(8, 22, 46, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+.newsletter-account__email {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: #ffffff;
 }
 
 .newsletter-toggle__input {
@@ -419,12 +440,13 @@
   display: none;
 }
 
-/* Zustand "nicht angemeldet" (Spec §11): eingelassenes E-Mail-Feld (readonly,
-   Konto-Adresse) + weisse Subscribe-Pille nebeneinander, Mono-Hinweis darunter. */
+/* Zustand "nicht angemeldet": nur noch die weisse Subscribe-Pille am Ende der
+   Konto-Zeile (das readonly-Feld und der Mono-Hinweis darunter sind mit dem
+   Listen-Umbau vom 15.09.2026 entfallen). */
 .newsletter-toggle__state--off {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
 }
 
 .newsletter-toggle__input:checked ~ .newsletter-toggle__state--off {
@@ -475,16 +497,14 @@
 
 .newsletter-toggle__cta {
   flex-shrink: 0;
-  /* Owner-Befund 15.09.2026: die Pille war 37px hoch neben einem 50px-Feld und der
-     "Add"-Knopf nur 70px breit. Jetzt exakt so hoch wie das Feld daneben (52px, nach
-     der Nachkorrektur "ein bisschen zu fett") und mit einer Mindestbreite, damit auch
-     ein kurzes Label eine echte Flaeche hat. */
+  /* Owner-Befund 15.09.2026, zuletzt "die Knoepfe sind viel zu fett -- so gross wie
+     bei Save number": exakt die Masse von `.btn` (12px 20px, 15/600, min-width 126)
+     statt einer eigenen, hoeheren Pille. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 52px;
   min-width: 126px;
-  padding: 0 28px;
+  padding: 12px 20px;
   /* border:0 (Owner-Feedback 2026-08-14): die Klasse sass urspruenglich auf
      einem <label> (rahmenlos); der Empfaenger-"Add" ist ein echter <button>
      und bekam ohne diese Zeile den Browser-Default-Rahmen (graue Umrandung).
@@ -512,27 +532,9 @@
   display: flex;
 }
 
-.newsletter-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  background: rgba(127, 224, 176, 0.12);
-  border: 1px solid rgba(127, 224, 176, 0.4);
-  color: #7fe0b0;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.newsletter-toggle__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #7fe0b0;
-  flex-shrink: 0;
-}
+/* .newsletter-status-pill und .newsletter-toggle__dot sind mit dem Listen-Umbau vom
+   15.09.2026 entfallen: den angemeldeten Zustand zeigt jetzt dieselbe Status-Pille wie
+   in Billing und in der Empfaengerliste (.billing-status-badge--active). */
 
 .newsletter-toggle__unsub {
   padding: 8px 16px;
@@ -711,12 +713,23 @@
      140px, "team@sundartha.com" brach also mit Auslassungspunkten ab, obwohl die Zeile
      Platz hat. Die Adresse ist der Inhalt der Zeile: sie bekommt die erste Zeile ganz,
      Status-Pille und Kreuz ruecken darunter. */
-  .newsletter-recipient__main {
+  .newsletter-recipient__main,
+  .newsletter-account {
     flex-wrap: wrap;
     row-gap: 8px;
   }
-  .newsletter-recipient__email {
+  .newsletter-recipient__email,
+  .newsletter-account__email {
     flex: 1 1 100%;
+  }
+  /* Die Konto-Zeile bringt im angemeldeten Zustand Pille UND Geisterknopf mit. Der
+     Zustandsblock nimmt darum die zweite Zeile ganz: Pille links, Knopf rechts --
+     dasselbe Muster wie Status-Pille und Kreuz in den Empfaengerzeilen. Im
+     abgemeldeten Zustand steht dort nur die Subscribe-Pille, und die bleibt links. */
+  .newsletter-toggle__state {
+    flex: 1 1 100%;
+    margin-left: 0;
+    justify-content: space-between;
   }
   .newsletter-recipient__remove {
     margin-left: auto;
@@ -781,6 +794,17 @@
 .newsletter-recipient-list .data-empty {
   padding: 0;
   text-align: left;
+}
+
+/* 8. Das Hinzufuegen-Feld steht seit dem Listen-Umbau UNTER der Liste und braucht
+   denselben Zeilenabstand wie die Zeilen darueber. Der Geisterknopf "Unsubscribe"
+   laeuft auf der Geisterknopf-Stufe (15/500) statt auf eigenen 13px. */
+.newsletter-recipient-list + .newsletter-form {
+  margin-top: 14px;
+}
+
+.newsletter-toggle__unsub {
+  font-size: 15px;
 }
 
 /* ------------------------------------------- 8. Toggle-Schalter zentrieren */
