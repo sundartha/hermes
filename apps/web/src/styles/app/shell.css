@@ -33,6 +33,11 @@
   --dash-rhythm: clamp(16px, 1.3vw, 24px);
   /* Nav-Spaltenbreite, geteilt zwischen .dash-layout und .dash-nav (Abschnitt 2). */
   --dash-nav-w: clamp(200px, 12vw, 240px);
+  /* Die EINE waagerechte Geometrie der App: Kopfzeile und Inhalt teilen sich
+     Deckelung und Polster, sonst fluchtet der Inhalt nicht mit Logo und
+     Anmelden-Knopf (Owner-Ankerpunkte, s. .app-header weiter unten). */
+  --app-measure: 1760px;
+  --app-gutter: clamp(20px, 3.4vw, 44px);
 }
 
 /* .app-main (app-hermes.css) saettigte bei ~1333px Breite / ~1000px Hoehe --
@@ -41,9 +46,31 @@
    der Inhalt naeher am Markenblock steht (Basiswert und Kappe gleich weit
    gesenkt: 22/3.4vh/44 -> 18/2.6vh/34, dieselbe Senkung wie in app-hermes.css).
    Die zweite Haelfte des Abstands kommt aus der Unterkante des Kopfes. */
+/* Runde 14, zweiter Durchgang (Owner): RECHTS bleibt der Inhalt am Anmelden-
+   Knopf (--app-gutter, dieselbe Kante wie die Kopfzeile), LINKS steht er wieder
+   auf dem alten, eingerueckten Mass -- "das fand ich besser". Die linke Einrueckung
+   ist darum die frueher wirksame Rechnung: der halbe Rest zur alten 1320px-Spalte
+   plus das alte 3vw-Polster. Unter 1320px Breite faellt der erste Summand auf 0
+   und es bleibt exakt das alte Polster; das Handy (≤768px, app-hermes.css) ist
+   davon ohnehin nicht betroffen. Der Inhalt gewinnt also nur nach RECHTS dazu --
+   dort, wo der Owner den Leerraum weghaben wollte. */
 .app-main {
-  max-width: clamp(1320px, 75vw, 1440px);
-  padding: clamp(18px, 2.6vh, 34px) clamp(20px, 3vw, 56px) 56px;
+  max-width: var(--app-measure);
+  padding: clamp(18px, 2.6vh, 34px) var(--app-gutter) 56px
+    calc(max(0px, (100% - 1320px) / 2) + clamp(20px, 3vw, 56px));
+}
+
+/* Owner-Befund 15.09.2026: "Sign in ist mein Ankerpunkt rechts" -- die Karten
+   endeten aber 51,7px weiter innen als der Knopf (Kopf: volle Breite mit 44px
+   Polster; Inhalt: auf 1320px gedeckelt, zentriert, eigenes 3vw-Polster).
+   Kopfzeile und Inhalt teilen sich darum jetzt Deckelung und RECHTES Polster
+   (--app-measure / --app-gutter, Abschnitt 0), womit die Nummernkarte und jede
+   Karte darunter exakt unter dem Anmelden-Knopf enden -- auf jeder Breite. Die
+   linke Kante blieb auf Owner-Wunsch, wo sie war (s. .app-main oben). */
+.app-header {
+  max-width: var(--app-measure);
+  margin-inline: auto;
+  padding-inline: var(--app-gutter);
 }
 
 /* Kartenpolster global (.card, app-hermes.css) -- wirkt einheitlich auf alle
