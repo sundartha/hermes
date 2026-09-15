@@ -78,7 +78,7 @@ function subscribeMessage(key) {
 // Preis-Zeile: formatierter Preis + " /month" als eigener Span. Beide ueber el()/
 // textContent (Preis aus dem Ganzzahl-Cents-Katalog, formatPlanPrice).
 function priceLine(doc, plan) {
-  const line = el(doc, "div", "plan-price", formatPlanPrice(plan.amountCents, plan.currency));
+  const line = el(doc, "div", "plan-price", formatPlanPrice(plan.amountCents, plan.currency, getLang()));
   line.append(el(doc, "span", "plan-per", tPair(PRICE_CADENCE, PRICE_CADENCE_DE)));
   return line;
 }
@@ -95,7 +95,7 @@ function featureList(doc, features) {
 // identisch zum Bestand). Wiederverwendet formatPlanPrice (G5, EINE Preis-Formatierung).
 function feeLine(doc, fee) {
   if (!fee) return null;
-  const price = formatPlanPrice(fee.amountCents, fee.currency);
+  const price = formatPlanPrice(fee.amountCents, fee.currency, getLang());
   const suffix = tPair(FEE_NOTICE_SUFFIX, FEE_NOTICE_SUFFIX_DE);
   return el(doc, "div", "plan-fee", `${FEE_NOTICE_PREFIX}${price}${suffix}`);
 }
