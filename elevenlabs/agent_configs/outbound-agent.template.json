@@ -325,11 +325,7 @@
         "live": [
           "platform_settings.privacy.record_voice"
         ],
-        "ausgenommen": {
-          "grund": "Zweite Haelfte derselben Eigentuemer-Entscheidung vom 2026-08-15 wie bei retention_days daneben: der Mitschnitt bleibt vorerst AN (live true), solange an echten Anrufen gemessen wird - eine aufbewahrte Frist ohne Audio beantwortet die Fragen nicht, um die es beim Messen geht (was hat der Agent wirklich gesagt, wo hat er zu frueh gesprochen). Die Vorlage bleibt bei false. VOR DEM ERSTEN FREMDKUNDEN wird zwingend auf G7 zurueckgedreht, zusammen mit retention_days.",
-          "seit": "2026-08-15"
-        },
-        "_hinweis": "Der Audio-Mitschnitt der Gespraeche. SOLL false, dieselbe Eigentuemer-Entscheidung G7. BEWACHT, weil der ANBIETER-DEFAULT hier true ist - Mitschnitt AN (belegt unter _quellenbeleg_felder aus der audio-saving-Doku, wiederholt an _record_voice_hinweis). Ein Wert, der bewusst vom Standard abweicht, ist genau der, den ein Dashboard-Flip lautlos auf den Standard zurueckstellt; ohne Besitz waere das nie verglichen worden. Zweite Haelfte derselben Zusage wie retention_days daneben - eine geloeschte Frist nuetzt nichts, wenn parallel weiter Stimme mitgeschnitten wird. Vorlagen-Wert bleibt false, eine Live-Abweichung ist ein Befund fuer den Eigentuemer."
+        "_hinweis": "Der Audio-Mitschnitt der Gespraeche. SOLL false, dieselbe Eigentuemer-Entscheidung G7. BEWACHT, weil der ANBIETER-DEFAULT hier true ist - Mitschnitt AN (belegt unter _quellenbeleg_felder aus der audio-saving-Doku, wiederholt an _record_voice_hinweis). Ein Wert, der bewusst vom Standard abweicht, ist genau der, den ein Dashboard-Flip lautlos auf den Standard zurueckstellt; ohne Besitz waere das nie verglichen worden. Zweite Haelfte derselben Zusage wie retention_days daneben - eine geloeschte Frist nuetzt nichts, wenn parallel weiter Stimme mitgeschnitten wird. Vorlagen-Wert bleibt false, eine Live-Abweichung ist ein Befund fuer den Eigentuemer. SEIT 2026-09-15 NICHT MEHR AUSGENOMMEN (Owner-Entscheidung O2): SOLL false ist jetzt Push-Absicht. Das Push-Kommando schreibt dieses Feld ausschliesslich in Richtung false (scripts/push-elevenlabs.mjs#RECORD_VOICE_ERLAUBT); jeder andere Wert im Patch-Koerper bricht vor dem PATCH ab. Bis zum Push meldet der Drift-Lauf die Abweichung blockierend - gewollt, nicht erneut ausnehmen."
       },
       {
         "feld": "delete_transcript_and_pii",

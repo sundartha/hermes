@@ -35,8 +35,10 @@
 //   - conversation_config_override_erlaubnisse traegt zwei PUSH-ABSICHTEN
 //     (tts.voice_id SOLL true, conversation.text_only SOLL false) - der echte
 //     Agent fuehrt beide bis zum naechsten Push andersherum;
-//   - retention_days (SOLL 0) und record_voice (SOLL false) sind in der Vorlage
-//     mit Grund und Datum "ausgenommen" - der echte Agent fuehrt -1 bzw. true.
+//   - retention_days (SOLL 0) ist in der Vorlage mit Grund und Datum
+//     "ausgenommen" - der echte Agent fuehrt -1;
+//   - record_voice (SOLL false) ist seit 2026-09-15 Push-Absicht (Owner O2) -
+//     der echte Agent fuehrt bis zum Push true.
 // Der echte Live-Stand gehoert deshalb NICHT in eine Testdatei: er aendert sich
 // beim naechsten Push, und ein Test, der ihn abschreibt, misst danach
 // Vergangenheit statt den Waechter.

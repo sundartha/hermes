@@ -4383,6 +4383,17 @@ gueltigem Digest (ohne Digest gemessen abgelehnt, [M1] J4). Bewusst akzeptiert.
 - Dict-Ersetzung beim Anbieter ist fuer die Workspace-Settings ungemessen; abgedeckt durch die Gegenprobe
   (ROT, aber ohne automatischen Rueckbau).
 
+### 8. Mitschnitt-Sperre gerichtet geoeffnet (IEX-A5, Owner-Entscheidung O2, 2026-09-15)
+
+`record_voice` steht nicht mehr auf der Sperrliste von `push-elevenlabs.mjs`. Geoeffnet ist nur die
+Richtung `false` (`RECORD_VOICE_ERLAUBT`): nennbar in `--felder`; Riegel 1c bricht vor dem PATCH ab,
+sobald der fertige Koerper `record_voice` mit irgendeinem anderen Wert traegt (auch `null`, `"false"`,
+`0`, auch in Listen). `retention_days` bleibt in beiden Richtungen hart gesperrt, auch in kombinierter
+Nennung. Die Vorlage nimmt `record_voice` nicht mehr aus; bis zum Push (Runbook a4) meldet der
+Drift-Lauf die Abweichung blockierend. Der historische Satz unter EL-P5 §5 ("beide gesperrt") ist
+damit fuer `record_voice` ueberholt. Nicht Teil dieser Aenderung: der Push selbst und die Messung,
+dass Transkript und Zusammenfassung trotz `record_voice=false` ankommen (M-O2, Runbook a5).
+
 ## IEL-B10 — Erzeugung und Verteilung der Inbound-Geheimnisse (2026-09-15)
 
 Werkzeug-Phase: kein Serververhalten aendert sich, keine Route, kein Safety-Gate, keine Offenlegung, keine

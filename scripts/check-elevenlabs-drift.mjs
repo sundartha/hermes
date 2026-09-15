@@ -99,8 +99,8 @@ function istUnvollstaendig({ geprueft, felderSoll, regelnAngewandt, regelnSoll }
 // und deshalb dauerhaft rot liesse, waehrend die ueberfaellige zwei Ausgaenge
 // hat, die beide Minuten kosten (Feld zurueckdrehen ODER Ausnahme mit neuem
 // Datum und Grund erneuern) und damit rot bis zu einer Entscheidung ist statt
-// Dauerrot. Was hier verfaellt, sind Aufbewahrung und Mitschnitt fremder
-// Gespraeche.
+// Dauerrot. Was hier verfaellt, sind Entscheidungen ueber die Gespraeche
+// fremder Menschen (heute: die Aufbewahrung).
 //
 // Eine NICHT PRUEFBARE Stelle blockiert ebenfalls und ist ausdruecklich NICHT
 // dasselbe wie eine ausgenommene Abweichung: ausgenommen heisst "gemessen und
