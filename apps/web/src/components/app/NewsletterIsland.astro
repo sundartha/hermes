@@ -80,7 +80,13 @@ import {
   <div class="billing-section">
     <h3 class="billing-section__title" data-i18n="newsletterRecipientsTitle">Recipients</h3>
 
-    <div class="newsletter-account">
+    <!-- Owner-Befund 15.09.2026 (2. Runde zur Karte): die Konto-Zeile trug den
+         Subscribe-Knopf INNERHALB der Zeile und wurde dadurch zur dicken Blase. Sie hat
+         jetzt exakt den Aufbau des Hinzufuegen-Formulars darunter -- eine Blase in
+         Feldhoehe mit der Adresse (und im angemeldeten Zustand der Status-Pille rechts,
+         mittig zur Adresse), daneben bzw. am Handy darunter der Knopf in der Groesse
+         von "Add". Dieselbe Klasse .newsletter-form liefert genau dieses Verhalten. -->
+    <div class="newsletter-form newsletter-account">
       <input
         type="checkbox"
         id="newsletter-toggle"
@@ -88,12 +94,19 @@ import {
         aria-label="Subscribe to the newsletter"
         data-i18n-attr="aria-label:newsletterAriaLabel"
       />
-      <span id="newsletter-email" class="newsletter-account__email"></span>
+      <span class="newsletter-account__field">
+        <span id="newsletter-email" class="newsletter-account__email"></span>
+        <span
+          class="billing-status-badge billing-status-badge--active newsletter-account__badge"
+          data-i18n="subscribed"
+        >
+          Subscribed
+        </span>
+      </span>
       <span class="newsletter-toggle__state newsletter-toggle__state--off">
         <label for="newsletter-toggle" class="newsletter-toggle__cta" data-i18n="subscribe">Subscribe</label>
       </span>
       <span class="newsletter-toggle__state newsletter-toggle__state--on">
-        <span class="billing-status-badge billing-status-badge--active" data-i18n="subscribed">Subscribed</span>
         <button type="button" id="newsletter-unsubscribe" class="newsletter-toggle__unsub" data-i18n="unsubscribe">
           Unsubscribe
         </button>

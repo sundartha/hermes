@@ -394,31 +394,51 @@
   color: rgba(255, 255, 255, 0.46);
 }
 
-/* Konto-Zeile der Empfaengerliste (Owner-Befund 15.09.2026, s. NewsletterIsland.astro):
-   dieselbe Zeilenoptik wie ein Zusatzempfaenger, nur mit dem Einwilligungs-Umschalter
-   statt des Entfernen-Kreuzes. Sie traegt `position: relative`, weil die versteckte
-   Checkbox absolut in ihr liegt. */
+/* Konto-Zeile der Empfaengerliste (Owner-Befund 15.09.2026, s. NewsletterIsland.astro).
+   Das Layout kommt aus .newsletter-form (Blase + Knopf daneben, am Handy gestapelt);
+   hier nur die Position fuer die absolut liegende Checkbox und der Abstand nach oben. */
 .newsletter-account {
   position: relative;
+  margin-top: 14px;
+}
+
+/* Die Blase: exakt die Masse eines Eingabefelds (.field-input, 52px/Radius 13), damit
+   Konto-Zeile, Empfaengerzeilen und das Hinzufuegen-Feld dieselbe Dicke haben --
+   Owner-Vorgabe "von der Bubble dieselbe Dicke nehmen". */
+.newsletter-account__field,
+.newsletter-recipient__main {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 14px;
-  padding: 8px 14px;
-  background: rgba(8, 22, 46, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px 17px;
+  background: rgba(4, 14, 32, 0.66);
+  border: 1px solid var(--color-field-border);
+  border-radius: 13px;
 }
 
-.newsletter-account__email {
+.newsletter-account__email,
+.newsletter-recipient__email {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 15px;
   color: #ffffff;
+}
+
+/* Die Status-Pille der Konto-Zeile gehoert zum angemeldeten Zustand -- sie haengt
+   deshalb an derselben Checkbox wie die beiden Knopf-Zustaende daneben. */
+.newsletter-account__badge {
+  display: none;
+}
+
+.newsletter-toggle__input:checked ~ .newsletter-account__field .newsletter-account__badge {
+  display: inline-flex;
 }
 
 .newsletter-toggle__input {
@@ -578,37 +598,32 @@
   gap: 10px;
 }
 
+/* Owner-Befund 15.09.2026: die Status-Pille stand unter der Adresse und das Kreuz
+   daneben -- die Zeile wurde dadurch hoch und unruhig. Jetzt traegt die Zeile selbst
+   keine Blase mehr: die Blase ist .newsletter-recipient__main (Adresse links,
+   Status-Pille rechts, mittig zur Adresse), das Kreuz sitzt AUSSERHALB rechts daneben,
+   und der Wartehinweis steht unter der Blase. */
 .newsletter-recipient {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 12px 14px;
-  background: rgba(8, 22, 46, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-}
-
-.newsletter-recipient__main {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.newsletter-recipient__email {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  color: #ffffff;
+  /* Die freigehaltene Spalte rechts ist so breit wie die Knopfspalte der Zeilen darueber
+     und darunter (14px Abstand + 126px Knopf): damit enden ALLE Blasen der Karte an
+     derselben Kante und das Kreuz steht buendig unter dem rechten Knopfrand. */
+  padding-right: 140px;
 }
 
 /* Ghost-Kreis: kleinere Geschwister-Optik von .call-modal__close (calls.css) --
    gleiche Materialsprache (transparenter Kreis, weisser Rand), passend zur
    kompakteren Listenzeile statt des Modal-Kopfs. */
 .newsletter-recipient__remove {
+  /* Sitzt ausserhalb der Blase, senkrecht mittig zu ihr (52px hoch -> 26px). Absolut
+     positioniert, damit die Wartezeile darunter die Lage nicht verschiebt. */
+  position: absolute;
+  top: 26px;
+  right: 0;
+  transform: translateY(-50%);
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -697,42 +712,53 @@
   .newsletter-form {
     flex-direction: column;
     align-items: flex-start;
+    /* Dieselbe rechte Spalte wie bei den Empfaengerzeilen (Kreuz), damit ALLE Blasen der
+       Karte auch am Handy exakt gleich breit sind. */
+    padding-right: 38px;
   }
   /* Owner-Befund 15.09.2026: am Handy war das Feld nur noch ein Strich. Ursache:
      `flex: 1` an .newsletter-form__field wirkt in der gestapelten Spalte auf die HOEHE
      (Hauptachse) -- mit flex-basis 0 und ohne freien Platz schrumpft das Feld auf seine
-     Mindesthoehe. Gestapelt braucht es kein flex, nur volle Breite. */
-  .newsletter-form__field {
+     Mindesthoehe. Gestapelt braucht es kein flex, nur volle Breite. Gilt genauso fuer
+     die Blase der Konto-Zeile, die im selben Formular-Layout sitzt. */
+  .newsletter-form__field,
+  .newsletter-account__field {
     flex: none;
     width: 100%;
   }
   .newsletter-toggle__cta {
     text-align: center;
   }
-  /* Owner-Durchgang 15.09.2026: in der schmalen Zeile blieb fuer die E-Mail nur rund
-     140px, "team@sundartha.com" brach also mit Auslassungspunkten ab, obwohl die Zeile
-     Platz hat. Die Adresse ist der Inhalt der Zeile: sie bekommt die erste Zeile ganz,
-     Status-Pille und Kreuz ruecken darunter. */
-  .newsletter-recipient__main,
-  .newsletter-account {
-    flex-wrap: wrap;
-    row-gap: 8px;
+  /* Gestapelt steht kein Knopf mehr neben den Blasen -- die Empfaengerzeile haelt dann
+     nur noch die Breite ihres Kreuzes frei. */
+  .newsletter-recipient {
+    padding-right: 38px;
   }
-  .newsletter-recipient__email,
-  .newsletter-account__email {
-    flex: 1 1 100%;
+}
+
+/* Am Telefon (≤480px) bleiben in der Blase rund 236px: Adresse UND Status-Pille passen
+   dort nur nebeneinander, wenn beide etwas kleiner werden. Gemessen: Adresse braucht
+   162px bei 15px Schrift, die Pille 89px -- mit 14px Adresse, kleinerer Pille und
+   schmalerem Innenpolster sind es 231px, die Adresse bricht also nicht mehr ab. */
+@media (max-width: 480px) {
+  .newsletter-account__field,
+  .newsletter-recipient__main {
+    gap: 10px;
+    padding-left: 13px;
+    padding-right: 13px;
   }
-  /* Die Konto-Zeile bringt im angemeldeten Zustand Pille UND Geisterknopf mit. Der
-     Zustandsblock nimmt darum die zweite Zeile ganz: Pille links, Knopf rechts --
-     dasselbe Muster wie Status-Pille und Kreuz in den Empfaengerzeilen. Im
-     abgemeldeten Zustand steht dort nur die Subscribe-Pille, und die bleibt links. */
-  .newsletter-toggle__state {
-    flex: 1 1 100%;
-    margin-left: 0;
-    justify-content: space-between;
+  .newsletter-account__email,
+  .newsletter-recipient__email {
+    font-size: 14px;
   }
-  .newsletter-recipient__remove {
-    margin-left: auto;
+  .newsletter-account__badge,
+  .newsletter-recipient__main .billing-status-badge {
+    padding: 4px 8px;
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+  }
+  .newsletter-recipient .newsletter-form__hint {
+    padding-left: 13px;
   }
 }
 
@@ -805,6 +831,12 @@
 
 .newsletter-toggle__unsub {
   font-size: 15px;
+}
+
+/* 9. Der Wartehinweis einer pending-Zeile steht unter der Blase und fluchtet mit dem
+   Text darin (gleiches Innenpolster, 17px). */
+.newsletter-recipient .newsletter-form__hint {
+  padding-left: 17px;
 }
 
 /* ------------------------------------------- 8. Toggle-Schalter zentrieren */
