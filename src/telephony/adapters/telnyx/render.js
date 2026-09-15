@@ -169,6 +169,13 @@ function requireDialField(directive, fieldName) {
   return value;
 }
 
+// IEX-A4 (A1): answerOnBridge nur bei ausdruecklichem true. Fehlend, false oder ein anderer Typ
+// rendern nichts (Anbieter-Default false, Bestandsform) - das ist die belegte Richtung: ein
+// beantwortetes Bein spricht nach gescheitertem Dial den Fehlersatz. Erstes Attribut am <Dial>.
+function answerOnBridgeAttr(directive) {
+  return directive.answerOnBridge === true ? { answerOnBridge: "true" } : {};
+}
+
 // <Dial><Sip>: alle Attribute und die URI laufen durch escapeXml (attrString). Attribut-
 // Reihenfolge ist vertraglich (Snapshot test/iel-dial-render.test.js).
 function renderDialSip(directive) {
@@ -178,6 +185,7 @@ function renderDialSip(directive) {
   const callerId = requireDialField(directive, "callerId");
   const statusCallbackUrl = requireDialField(directive, "statusCallbackUrl");
   const dial = attrString({
+    ...answerOnBridgeAttr(directive),
     callerId,
     timeout: clampDialSeconds(directive.timeoutS, "timeoutS", {
       minS: DIAL_TIMEOUT_MIN_S,
