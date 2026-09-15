@@ -557,8 +557,9 @@ export function updateConvaiSecret({ fetchImpl, account, secretId, name, value }
 }
 
 /**
- * IEL-B10: SCHREIBZUGRIFF - PATCH einer Nummernregistrierung (inbound_trunk_config). Einziger
- * Aufrufer: scripts/iel-geheimnisse-*.mjs (setzen --ausfuehren). KEIN Retry; der Koerper traegt
+ * IEL-B10: SCHREIBZUGRIFF - PATCH einer Nummernregistrierung (inbound_trunk_config). Aufrufer:
+ * scripts/iel-geheimnisse-*.mjs (setzen --ausfuehren) und nummern-registrierung.js#makeInboundTrunkSchreiber
+ * (IEX-A10). KEIN Retry; der Koerper traegt
  * Zugangsdaten, der Fehler-RUMPF wird nie gelesen.
  * @param {{fetchImpl: Function, account: {apiKey: string, apiBase: string}, phoneNumberId: string, body: object}} args
  */

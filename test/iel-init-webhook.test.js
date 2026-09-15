@@ -22,7 +22,8 @@ import {
   inboundElLocaleOf,
   sipHeadersFormOf,
 } from "../src/elevenlabs/inbound-initiation.js";
-import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../src/elevenlabs/inbound-path-decision.js";
+import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, zugangsFingerabdruck } from "../src/elevenlabs/inbound-path-decision.js";
+import { INBOUND_EL_SCOPE } from "../src/elevenlabs/inbound-scope.js";
 import { hasInboundNotice } from "../src/i18n/inbound-notice.js";
 import { LOCALES, localeFor } from "../src/i18n/locales.js";
 import {
@@ -78,12 +79,19 @@ const VORLAGE_EN = LOCALES.en;
 
 // ---- Build ----------------------------------------------------------------------------------
 
-function baueConfig({ enabled = true, tenantIds = [BOOTSTRAP_TENANT_ID], initWebhookToken = INIT_TOKEN, agentId = AGENT_ID } = {}) {
+function baueConfig({
+  enabled = true,
+  tenantIds = [BOOTSTRAP_TENANT_ID],
+  initWebhookToken = INIT_TOKEN,
+  agentId = AGENT_ID,
+  scope = INBOUND_EL_SCOPE.ALLOWLIST,
+} = {}) {
   return {
     voice: {
       elevenLabsInbound: {
         enabled,
         tenantIds,
+        scope,
         sipUser: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER,
         sipPassword: EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_PASSWORD,
         initWebhookToken,
@@ -539,6 +547,60 @@ test("IEX-A3-9: [el-init] gebunden traegt ms_seit_annahme deterministisch, die W
   );
   assert.ok(zeilen.includes(`[el-init] gebunden call=${call.id} ms_seit_annahme=${ANNAHME_VOR_MS}`), alsLog(zeilen));
   assert.ok(zeilen.includes(`[el-init] wiederholung call=${call.id}`), alsLog(zeilen));
+});
+
+// ---- IEX-A9: Stufe 3 unter Scope registrierte_dids -------------------------------------------
+
+const REGISTRIERT_CONFIG = baueConfig({ scope: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS });
+const BELEG_ZEITPUNKT = "2026-09-15T08:00:00.000Z";
+
+function angerufeneNummer({ state, call }) {
+  return state.numbers.find((eintrag) => eintrag.e164 === call.to);
+}
+
+// Die angerufene DID bekommt einen Beleg mit dem Fingerabdruck des laufenden Zugangs.
+function mitBeleg(zustand) {
+  const nummer = angerufeneNummer(zustand);
+  nummer.elInboundTrunkBelegtAt = BELEG_ZEITPUNKT;
+  nummer.elInboundTrunkZugangFp = zugangsFingerabdruck(EL_INBOUND_ACCESS_BOOT_ENV.ELEVENLABS_INBOUND_SIP_USER);
+  return zustand;
+}
+
+async function belegFall(zustand) {
+  const spion = bindungsSpion(zustand.state);
+  let ergebnis = null;
+  const zeilen = await captureConsole(async () => {
+    ergebnis = await einzelFall({ config: REGISTRIERT_CONFIG, zustand, storeUeberschreibung: spion.storeUeberschreibung });
+  });
+  return { ergebnis, zeilen, gebunden: spion.gebunden };
+}
+
+function assertSchalterAblehnung({ ergebnis, zeilen, gebunden }, zustand) {
+  assert.equal(ergebnis.status, HTTP_NOT_FOUND);
+  assert.equal(ergebnis.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
+  const ablehnung = zeilen.find((zeile) => zeile.includes("grund=schalter"));
+  assert.ok(ablehnung, alsLog(zeilen));
+  assert.ok(ablehnung.includes(`call=${zustand.call.id}`));
+  assert.deepEqual(gebunden, []);
+  assert.equal(zustand.call.elevenlabsConversationId, null);
+}
+
+test("IEX-A9-10a: registrierte_dids, angerufene DID ohne Beleg -> Stufe 3 lehnt ab (404, grund=schalter, keine Bindung)", async () => {
+  const zustand = baueZustand();
+  assertSchalterAblehnung(await belegFall(zustand), zustand);
+});
+
+test("IEX-A9-10b: registrierte_dids, Beleg mit laufendem Fingerabdruck -> 200, genau eine Bindung (Positiv-Kontrolle)", async () => {
+  const zustand = mitBeleg(baueZustand());
+  const { ergebnis, gebunden } = await belegFall(zustand);
+  assert.equal(ergebnis.status, HTTP_OK);
+  assert.deepEqual(gebunden, [zustand.call.id]);
+});
+
+test("IEX-A9-10c: registrierte_dids, Beleg seit dem Anrufeingang weggefallen -> 404 grund=schalter", async () => {
+  const zustand = mitBeleg(baueZustand());
+  angerufeneNummer(zustand).elInboundTrunkBelegtAt = null;
+  assertSchalterAblehnung(await belegFall(zustand), zustand);
 });
 
 // ---- Verdrahtung am echten Server -------------------------------------------------------------

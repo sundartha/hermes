@@ -30,6 +30,7 @@ import {
 import { e164Endung, inboundElAccessDefects } from "../src/elevenlabs/inbound-path-decision.js";
 import {
   holeRegistrierungen,
+  inboundTrunkKoerper,
   inventarUrteil,
   registrierungenMitNummer,
 } from "../src/elevenlabs/nummern-registrierung.js";
@@ -49,8 +50,6 @@ import { INIT_WEBHOOK_SETTINGS_SCHLUESSEL } from "./push-elevenlabs.mjs";
 export const GEHEIMNIS_ZUFALLS_BYTES = 32;
 export const SIP_USER_ZUFALLS_BYTES = 16;
 export const WORKSPACE_SECRET_NAME = "hermes_init_webhook_token";
-// Spec E16 b(3), gemessen [M1]: der Trunk nimmt von jeder Adresse an, Barriere ist Digest + Token.
-const ALLE_ADRESSEN = "0.0.0.0/0";
 // Doku: page_size hoechstens 100. Eine Liste mit next_cursor ist kein eindeutiger Beleg.
 const SECRET_SEITE = 100;
 const HEX = "hex";
@@ -161,16 +160,10 @@ export function erzeugeGeheimnisse(abh) {
 
 // ---- 3./4. Verteilen --------------------------------------------------------------------------
 
-// Rein: exakt der Spec-Koerper (E16 b(3)). media_encryption bleibt bewusst ungesendet (L-2);
-// der Lesebeleg zeigt den Wert danach.
+// Adapter auf die EINE Koerperform (src/elevenlabs/nummern-registrierung.js#inboundTrunkKoerper, IEX-A10);
+// der Lesebeleg zeigt media_encryption danach.
 export function trunkKoerper({ geheimnisse, nummer }) {
-  return {
-    inbound_trunk_config: {
-      credentials: { username: geheimnisse.sipUser, password: geheimnisse.sipPassword },
-      allowed_numbers: [nummer],
-      allowed_addresses: [ALLE_ADRESSEN],
-    },
-  };
+  return inboundTrunkKoerper({ benutzer: geheimnisse.sipUser, passwort: geheimnisse.sipPassword, e164: nummer });
 }
 
 // Die Reihenfolge ist die Reihenfolge dieser Liste: Render -> Secret -> Registrierungen.

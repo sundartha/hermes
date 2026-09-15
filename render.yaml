@@ -155,6 +155,11 @@ services:
         sync: false
       - key: ELEVENLABS_INIT_WEBHOOK_TOKEN
         sync: false
+      # IEX-A9: Wirkungsbereich des EL-Inbound-Wegs (allowlist|registrierte_dids). Kein Geheimnis, daher
+      # value statt sync:false. Default allowlist = heutiges Verhalten; eine Blueprint-Synchronisierung
+      # faellt damit in die sichere Richtung zurueck. Live ist Dashboard-managed.
+      - key: ELEVENLABS_INBOUND_SCOPE
+        value: "allowlist"
       # ---- Bootstrap (Owner-Removal P2b, GAP-38: vom In-Prozess-Boot gelesen) ----
       # Erste Tenant-Absendernummer als E.164 (MUSS eine echte Provider-DID sein,
       # NICHT die Privatnummer - sonst Outbound-403). Secret-frei, aber sync:false,

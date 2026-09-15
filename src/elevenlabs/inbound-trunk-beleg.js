@@ -7,51 +7,62 @@
 // ueber die Store-Operationen) und als EINE Ergebniszeile im Log, geschrieben NACH dem
 // letzten GET. Diese Felder erscheinen in keiner API-, MCP- oder Export-Ausgabe.
 //
-// Aufbau: reiner Teil (Fingerabdruck, Beleg-Urteil, Hindernis, Ergebniszeile) plus die
-// Sweep-Fabrik makeTrunkSweep mit injiziertem IO (store, elRead, logger, jetzt).
+// Aufbau: reiner Teil (Beleg-Urteil, Hindernis, Ergebniszeile; der Zugangs-Fingerabdruck lebt
+// neben der Zugangs-Definition in inbound-path-decision.js) plus die Sweep-Fabrik makeTrunkSweep
+// mit injiziertem IO (store, elRead, reparatur, logger, jetzt).
 //
 // Grenzen, bewusst:
-// - Kein Schreiben beim Anbieter. Eine Reparatur ist A10-Scope; die Naht dafuer ist
-//   pruefeNummer in der Fabrik.
+// - Schreiben beim Anbieter nur ueber den injizierten Hook `reparatur` (IEX-A10/E16, gebaut von
+//   inboundTrunkSchreiberWennErlaubt); ohne Hook nur Lesebeleg.
 // - UNBEKANNT (401/403/429/5xx/Netz/Timeout) loescht NIE einen vorhandenen Beleg; nur eine
 //   belegte ABWEICHUNG (inklusive 404) loescht.
 // - Der Fingerabdruck deckt NUR sipUser ab: eine reine Passwort-Aenderung ist daran nicht
 //   erkennbar. Eine Zugangs-Rotation laeuft deshalb ausschliesslich ueber
 //   scripts/iel-geheimnisse.mjs setzen (Review-Concern E8/E9).
 // - Das Log nennt nie eine volle Nummer, den SIP-Benutzer, den Fingerabdruck oder eine
-//   Registrierungs-ID - nur Zaehler und DID-Endungen.
+//   Registrierungs-ID - nur Zaehler, DID-Endungen und in Reparaturzeilen die interne nummer_id.
 
-import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { NUMBER_STATUS } from "../store/defaults.js";
-import { e164Endung, inboundElAccessDefects, istNichtLeererString } from "./inbound-path-decision.js";
+import {
+  e164Endung,
+  inboundElAccessDefects,
+  istNichtLeererString,
+  zugangsFingerabdruck,
+} from "./inbound-path-decision.js";
 
-export const ZUGANG_FP_HEX_ZEICHEN = 16;
 // Begrenzte Parallelitaet der Boot-GETs (E8): schont das Anbieter-Rate-Limit, kein Env-Knopf.
 export const SWEEP_PARALLEL = 4;
 // Hoechstzahl Endungen in der Ergebniszeile; der Rest erscheint als ",+<n>" (b2 braucht die Vollstaendigkeit).
 export const SONDE_MAX_ENDUNGEN = 10;
 const HTTP_NOT_FOUND = 404; // Repo-Konvention: modul-lokal (voice.js, outbound-config-probe.js)
 const LOG_PRAEFIX = "[el-trunk]";
-const FP_ALGORITHMUS = "sha256";
-const FP_KODIERUNG = "hex";
 
 export const TRUNK_BELEG = Object.freeze({ BELEGT: "belegt", ABWEICHUNG: "abweichung", UNBEKANNT: "unbekannt" });
-// Werte == Schluessel der Ergebniszeile, Reihenfolge == Zeilenreihenfolge (EINE Quelle, G5/G23)
+// Ergebnis je Nummer; die Zeilenreihenfolge steht in ERGEBNISZEILE_SCHLUESSEL
 export const SWEEP_ERGEBNIS = Object.freeze({ ...TRUNK_BELEG, OHNE_REGISTRIERUNG: "ohne_registrierung" });
+// IEX-A10 (E11): Zahl der in diesem Lauf per Reparatur belegten Nummern - in belegt enthalten.
+const SWEEP_REPARIERT = "repariert";
+// Schluessel und Reihenfolge der Ergebniszeile - EINE Quelle fuer Zaehler-Anlage und Zeile (G5).
+const ERGEBNISZEILE_SCHLUESSEL = Object.freeze([
+  SWEEP_ERGEBNIS.BELEGT,
+  SWEEP_REPARIERT,
+  SWEEP_ERGEBNIS.ABWEICHUNG,
+  SWEEP_ERGEBNIS.UNBEKANNT,
+  SWEEP_ERGEBNIS.OHNE_REGISTRIERUNG,
+]);
 export const SWEEP_HINDERNIS = Object.freeze({
   SCHALTER_AUS: "schalter_aus",
   ZUGANG_UNVOLLSTAENDIG: "zugang_unvollstaendig",
   EL_KONTO_UNVOLLSTAENDIG: "el_konto_unvollstaendig",
 });
-
-// 16 Hex von SHA-256 ueber den SIP-Benutzer - nie das Passwort. Leer/kein String -> null
-// (fail-closed: ohne Zugang gibt es keinen Fingerabdruck, also auch keinen Beleg).
-export function zugangsFingerabdruck(sipUser) {
-  if (!istNichtLeererString(sipUser)) return null;
-  const hash = createHash(FP_ALGORITHMUS).update(sipUser);
-  return hash.digest(FP_KODIERUNG).slice(0, ZUGANG_FP_HEX_ZEICHEN);
-}
+// E16: warum eine nicht belegte Nummer NICHT repariert wird (Log-Token, kein Wert).
+export const REPARATUR_HINDERNIS = Object.freeze({
+  UNBEKANNT: "unbekannt",
+  NICHT_GEFUNDEN: "nicht_gefunden",
+  FREMDE_REGISTRIERUNG: "fremde_registrierung",
+  OHNE_OUTBOUND_TRUNK: "ohne_outbound_trunk",
+});
 
 // G3: undefined === undefined darf nie als Uebereinstimmung gelten.
 function gleichUndGesetzt(wert, soll) {
@@ -90,6 +101,30 @@ export function belegAusAbruffehler(fehler) {
   return fehler?.providerStatus === HTTP_NOT_FOUND ? TRUNK_BELEG.ABWEICHUNG : TRUNK_BELEG.UNBEKANNT;
 }
 
+// Liest EINE Registrierung und urteilt (E8). Abruffehler werfen nie (404 -> ABWEICHUNG, sonst
+// UNBEKANNT); registrierung ist null, wenn nichts gelesen wurde. Geteilt von Sweep und
+// Inbound-Trunk-Schreiber.
+export async function leseTrunkBeleg({ lies, number, soll }) {
+  let registrierung;
+  try {
+    registrierung = await lies(number.providerAgentPhoneNumberId);
+  } catch (fehler) {
+    return { beleg: belegAusAbruffehler(fehler), registrierung: null };
+  }
+  // ausserhalb des try: ein Defekt im Beleg ist ein Wurf (-> sweep fehler), nie still UNBEKANNT
+  return { beleg: belegeInboundTrunk({ number, registrierung, ...soll }), registrierung };
+}
+
+// Rein, fuer ein Ergebnis != BELEGT. null = reparierbar (E16): gelesen, eigener Agent, eigene DID,
+// outbound_trunk vorhanden - die Abweichung liegt dann nur im Inbound-Trunk.
+export function reparaturHindernis({ abruf, number, agentId }) {
+  if (abruf.beleg === TRUNK_BELEG.UNBEKANNT) return REPARATUR_HINDERNIS.UNBEKANNT;
+  if (!abruf.registrierung) return REPARATUR_HINDERNIS.NICHT_GEFUNDEN;
+  if (!registrierungGehoertAgentUndDid(abruf.registrierung, { agentId, e164: number.e164 }))
+    return REPARATUR_HINDERNIS.FREMDE_REGISTRIERUNG;
+  return abruf.registrierung.outbound_trunk ? null : REPARATUR_HINDERNIS.OHNE_OUTBOUND_TRUNK;
+}
+
 // Aufruf mit config.voice. Sicherheitsrelevant: ein leerer agentId machte sonst jede
 // Registrierung zur ABWEICHUNG und loeschte damit alle Belege.
 export function trunkSweepHindernis({ elevenLabsInbound, elevenLabsOutbound }) {
@@ -101,8 +136,11 @@ export function trunkSweepHindernis({ elevenLabsInbound, elevenLabsOutbound }) {
 }
 
 function zaehleSweepErgebnisse(ergebnisse) {
-  const zaehler = Object.fromEntries(Object.values(SWEEP_ERGEBNIS).map((schluessel) => [schluessel, 0]));
-  for (const { ergebnis } of ergebnisse) zaehler[ergebnis] += 1;
+  const zaehler = Object.fromEntries(ERGEBNISZEILE_SCHLUESSEL.map((schluessel) => [schluessel, 0]));
+  for (const { ergebnis, repariert } of ergebnisse) {
+    zaehler[ergebnis] += 1;
+    if (repariert) zaehler[SWEEP_REPARIERT] += 1;
+  }
   const ohneBelegEndungen = ergebnisse
     .filter(({ ergebnis }) => ergebnis !== TRUNK_BELEG.BELEGT)
     .map(({ endung }) => endung);
@@ -118,13 +156,12 @@ function endungenTeil(endungen) {
   return ` ohne_beleg_endungen=${sichtbar.join(",")}${restTeil}`;
 }
 
-// ergebnisse = [{ endung, ergebnis }] -> die EINE Ergebniszeile des Sweeps.
-export function trunkSweepErgebnisZeile(ergebnisse) {
+// ergebnisse = [{ endung, ergebnis, repariert? }] -> die EINE Ergebniszeile des Sweeps. scope ist ein vom Boot-Befund
+// gepruefter Enum-Wert (E11: Runbook b4/b5 lesen Scope und Zaehler aus derselben Zeile).
+export function trunkSweepErgebnisZeile({ scope, ergebnisse }) {
   const { aktiv, zaehler, ohneBelegEndungen } = zaehleSweepErgebnisse(ergebnisse);
-  const zaehlerTeil = Object.values(SWEEP_ERGEBNIS)
-    .map((schluessel) => `${schluessel}=${zaehler[schluessel]}`)
-    .join(" ");
-  return `${LOG_PRAEFIX} sweep fertig aktiv=${aktiv} ${zaehlerTeil}${endungenTeil(ohneBelegEndungen)}`;
+  const zaehlerTeil = ERGEBNISZEILE_SCHLUESSEL.map((schluessel) => `${schluessel}=${zaehler[schluessel]}`).join(" ");
+  return `${LOG_PRAEFIX} sweep fertig scope=${scope} aktiv=${aktiv} ${zaehlerTeil}${endungenTeil(ohneBelegEndungen)}`;
 }
 
 function mitEndung(number, ergebnis) {
@@ -148,25 +185,33 @@ async function mitBegrenzterParallelitaet(eintraege, grenze, arbeit) {
   return ergebnisse;
 }
 
-export function makeTrunkSweep({ store, config, elRead, logger = console, jetzt = () => new Date() }) {
-  // Einzelpruefung als eigene Funktion = die Naht, an der A10 die Reparatur ergaenzt (D4).
-  async function pruefeNummer(number, zugangFp) {
-    if (!number.providerAgentPhoneNumberId) return mitEndung(number, SWEEP_ERGEBNIS.OHNE_REGISTRIERUNG);
-    const beleg = await holeBeleg(number);
-    wendeBelegAn(number, { beleg, zugangFp });
-    return mitEndung(number, beleg);
+// reparatur (optional, IEX-A10/E16): { ensureInboundTrunk(number) -> TRUNK_BELEG }; fehlt er, bleibt der
+// Sweep ein reiner Lesebeleg (IEX-A8).
+export function makeTrunkSweep({ store, config, elRead, reparatur, logger = console, jetzt = () => new Date() }) {
+  function sollZugang() {
+    return { sipUser: config.voice.elevenLabsInbound.sipUser, agentId: config.voice.elevenLabsOutbound.agentId };
   }
 
-  async function holeBeleg(number) {
-    let registrierung;
-    try {
-      registrierung = await elRead.fetchPhoneNumber(number.providerAgentPhoneNumberId);
-    } catch (fehler) {
-      return belegAusAbruffehler(fehler);
+  async function pruefeNummer(number, zugangFp) {
+    if (!number.providerAgentPhoneNumberId) return mitEndung(number, SWEEP_ERGEBNIS.OHNE_REGISTRIERUNG);
+    const lies = (phoneNumberId) => elRead.fetchPhoneNumber(phoneNumberId);
+    const abruf = await leseTrunkBeleg({ lies, number, soll: sollZugang() });
+    // fail-closed: eine belegte ABWEICHUNG loescht den Beleg VOR einem Schreibversuch
+    wendeBelegAn(number, { beleg: abruf.beleg, zugangFp });
+    if (abruf.beleg === TRUNK_BELEG.BELEGT || !reparatur) return mitEndung(number, abruf.beleg);
+    return repariereEinmal(number, { abruf, zugangFp });
+  }
+
+  // E16: hoechstens EIN Schreibversuch je Nummer je Lauf (pruefeNummer laeuft je Nummer genau einmal).
+  async function repariereEinmal(number, { abruf, zugangFp }) {
+    const hindernis = reparaturHindernis({ abruf, number, agentId: config.voice.elevenLabsOutbound.agentId });
+    if (hindernis) {
+      logger.log(`${LOG_PRAEFIX} nicht_repariert nummer_id=${number.id} grund=${hindernis}`);
+      return mitEndung(number, abruf.beleg);
     }
-    // ausserhalb des try: ein Defekt im Beleg ist ein Wurf (-> sweep fehler), nie still UNBEKANNT
-    const { sipUser } = config.voice.elevenLabsInbound;
-    return belegeInboundTrunk({ number, registrierung, sipUser, agentId: config.voice.elevenLabsOutbound.agentId });
+    const beleg = await reparatur.ensureInboundTrunk(number);
+    wendeBelegAn(number, { beleg, zugangFp });
+    return { ...mitEndung(number, beleg), repariert: beleg === TRUNK_BELEG.BELEGT };
   }
 
   function wendeBelegAn(number, { beleg, zugangFp }) {
@@ -187,7 +232,7 @@ export function makeTrunkSweep({ store, config, elRead, logger = console, jetzt 
     const ergebnisse = await mitBegrenzterParallelitaet(aktive, SWEEP_PARALLEL, (nummer) =>
       pruefeNummer(nummer, zugangFp),
     );
-    logger.log(trunkSweepErgebnisZeile(ergebnisse));
+    logger.log(trunkSweepErgebnisZeile({ scope: config.voice.elevenLabsInbound.scope, ergebnisse }));
   }
 
   // fail-soft, rejectet nie; das Log nennt keinen Fehlertext (er koennte Werte tragen).
