@@ -15,9 +15,9 @@ import { defaultSetTimer } from "../utils/timer.js";
 // STARTWERTE, NICHT GEMESSEN (Spec 8 zieht nach). Begruendung der Groessenordnung:
 //   EL_BINDING_AFTER_ANSWER_MS: der Anbieter entscheidet gemessen etwa 1,7 s nach dem
 //     200 OK des SIP-Beins ([M1] J3); 8 s lassen Reserve fuer einen langsamen Init-Webhook.
-//   EL_BRIDGE_START_DEADLINE_MS: Synthese des Pflichtsatzes bis 3,3 s [KO 3.2] plus seine
-//     Wiedergabe etwa 6 s plus INVITE/407/200 unter 1 s [M1] plus die innere Frist plus
-//     Reserve. Die aeussere Frist muss die innere immer uebersteigen.
+//   EL_BRIDGE_START_DEADLINE_MS: vor dem Dial liegt seit IEX-A3 kein eigener Satz mehr (bis
+//     dahin 3,3 s Synthese + etwa 6 s Wiedergabe); INVITE/407/200 unter 1 s [M1] plus die
+//     innere Frist plus Reserve. Die aeussere Frist muss die innere immer uebersteigen.
 export const EL_BRIDGE_START_DEADLINE_MS = 30000;
 export const EL_BINDING_AFTER_ANSWER_MS = 8000;
 

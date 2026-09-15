@@ -126,8 +126,8 @@ function makeDisclosure(satz, ownerFallback) {
   };
 }
 
-// IEX-A2 (O3/O4): der Namenssatz, mit dem der Inbound-Fehlersatz (und ab IEX-A3 die Eroeffnung)
-// beginnt. Traegt die KI-Kennzeichnung selbst ("KI"/"AI"/"IA") - auch ohne Namen. Kein
+// IEX-A2/IEX-A3 (O3/O4): der Namenssatz, mit dem Inbound-Eroeffnung UND Inbound-Fehlersatz
+// beginnen. Traegt die KI-Kennzeichnung selbst ("KI"/"AI"/"IA") - auch ohne Namen. Kein
 // disclosureOwnerFallback: "von meinem Auftraggeber" passt grammatisch nicht (O4). Als eigene
 // Konstanten, nicht aus Katalog-Strings geschnitten. Gesprochene DE-Strings: echte Umlaute.
 // Die Namens-Bereinigung spiegelt makeDisclosure bewusst, statt sie zu teilen: A6 laesst den
@@ -143,17 +143,38 @@ const INBOUND_FEHLERTEIL = Object.freeze({
   fr: "Une erreur technique est survenue, veuillez rappeler plus tard.",
 });
 
-function makeInboundNameSatz({ mitName, ohneName }) {
+// IEX-A3 (O1): die Frage am Ende der Eroeffnung, Satzzeichen wie greetingVariants[1] (der Test
+// pinnt das Ende). Eigene Konstante, nicht aus dem Katalog-String geschnitten. Kein Bundle-Feld:
+// ausserhalb dieser Datei liest sie niemand (GAP-31).
+const INBOUND_FRAGE = Object.freeze({
+  de: "Wie kann ich Ihnen weiterhelfen?",
+  en: "How can I help you?",
+  fr: "Comment puis-je vous aider ?",
+});
+
+function makeInboundNameSatz(sprache) {
+  const { mitName, ohneName } = INBOUND_NAME_SATZ_TEXTE[sprache];
   return (ownerName) => {
     const name = typeof ownerName === "string" ? ownerName.trim() : "";
     return name ? mitName(name) : ohneName;
   };
 }
 
+// Namenssatz + fester Rest - EINE Zusammensetzung fuer Eroeffnung und Fehlersatz (G5).
+function makeNachNameSatz(sprache, rest) {
+  const nameSatz = makeInboundNameSatz(sprache);
+  return (ownerName) => `${nameSatz(ownerName)} ${rest}`;
+}
+
+// O1: Namenssatz + unveraenderter Inbound-Hinweis + Frage. Gesprochen vom Agenten als
+// first_message; i18n/inbound-opening.js prueft sie vor jedem Gespraech (E3).
+function makeInboundEroeffnung(sprache) {
+  return makeNachNameSatz(sprache, `${INBOUND_NOTICES[sprache]} ${INBOUND_FRAGE[sprache]}`);
+}
+
 // O3: Namenssatz + Fehlerteil. Der Anrufer hoert ihn vor dem Auflegen, es folgt kein Gespraech.
 function makeInboundFehlersatz(sprache) {
-  const nameSatz = makeInboundNameSatz(INBOUND_NAME_SATZ_TEXTE[sprache]);
-  return (ownerName) => `${nameSatz(ownerName)} ${INBOUND_FEHLERTEIL[sprache]}`;
+  return makeNachNameSatz(sprache, INBOUND_FEHLERTEIL[sprache]);
 }
 
 // Pro Sprache: alle sprachabhaengigen Bausteine. Funktionen dort, wo ein Name/Anliegen
@@ -284,6 +305,10 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7): fest verdrahtet, durch kein Setting abschaltbar.
     // GETRENNT von disclosure() (Outbound, Regel 2) - beide Achsen bleiben unabhaengig.
     inboundNotice: INBOUND_NOTICES.de,
+    // IEX-A3 (O4/E3): der Namenssatz allein - Anfang von Eroeffnung und Fehlersatz, Lesestelle des Riegels.
+    inboundNameSatz: makeInboundNameSatz("de"),
+    // IEX-A3 (O1): die feste Eroeffnung des Agenten bei einem eingehenden Anruf (first_message).
+    inboundEroeffnung: makeInboundEroeffnung("de"),
     // IEX-A2 (O3): der feste Fehlersatz einer gescheiterten Uebergabe an den EL-Agenten.
     inboundFehlersatz: makeInboundFehlersatz("de"),
     // MCP-Textkanal (P12): Rollen-Praefixe + Fehlertexte der MCP-Tool-Schicht. Aus
@@ -418,6 +443,10 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
     // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
     inboundNotice: INBOUND_NOTICES.fr,
+    // IEX-A3 (O4/E3): der Namenssatz allein - Anfang von Eroeffnung und Fehlersatz, Lesestelle des Riegels.
+    inboundNameSatz: makeInboundNameSatz("fr"),
+    // IEX-A3 (O1): die feste Eroeffnung des Agenten bei einem eingehenden Anruf (first_message).
+    inboundEroeffnung: makeInboundEroeffnung("fr"),
     // IEX-A2 (O3): der feste Fehlersatz einer gescheiterten Uebergabe an den EL-Agenten.
     inboundFehlersatz: makeInboundFehlersatz("fr"),
     // MCP-Textkanal (P12), s. DE.
@@ -527,6 +556,10 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
     // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
     inboundNotice: INBOUND_NOTICES.en,
+    // IEX-A3 (O4/E3): der Namenssatz allein - Anfang von Eroeffnung und Fehlersatz, Lesestelle des Riegels.
+    inboundNameSatz: makeInboundNameSatz("en"),
+    // IEX-A3 (O1): die feste Eroeffnung des Agenten bei einem eingehenden Anruf (first_message).
+    inboundEroeffnung: makeInboundEroeffnung("en"),
     // IEX-A2 (O3): der feste Fehlersatz einer gescheiterten Uebergabe an den EL-Agenten.
     inboundFehlersatz: makeInboundFehlersatz("en"),
     // MCP-Textkanal (P12), s. DE.

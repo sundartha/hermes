@@ -56,6 +56,9 @@ const SPOKEN_DE_FIELDS = [
   // ueber beide Felder abgedeckt.
   ["S17 inboundFehlersatz (mit Name)", LOCALES.de.inboundFehlersatz(OWNER_NAME)],
   ["S18 inboundFehlersatz (ohne Name, O4)", LOCALES.de.inboundFehlersatz("")],
+  // IEX-A3 (O1/O4): die Eroeffnung des Agenten bei einem eingehenden Anruf - mit und ohne Namen.
+  ["S19 inboundEroeffnung (mit Name)", LOCALES.de.inboundEroeffnung(OWNER_NAME)],
+  ["S20 inboundEroeffnung (ohne Name, O4)", LOCALES.de.inboundEroeffnung("")],
 ];
 
 test("P1-U1: gesprochene DE-Strings (S1-S7) tragen keine ASCII-Transliteration mehr", () => {

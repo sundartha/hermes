@@ -18,9 +18,10 @@
 // oder die identische Wiederholung derselben Bindung binnen EL_INIT_WIEDERHOLUNG_FRIST_MS.
 //
 // REIHENFOLGE DER STUFEN ist bindend (E11): Geheimnis (403) -> Zuordnung, nur lesend (404) ->
-// Schalter/Allowlist (404) -> set-once-Bindung (404 bei verlorener Op) -> Antwort. Jede
-// Ablehnung nach Stufe 1 antwortet mit DEMSELBEN konstanten Koerper ohne Daten; nur das Log
-// unterscheidet die Gruende (Muster EL-P6). Der Antwort-Builder hat genau EINEN Aufrufer:
+// Schalter/Allowlist (404) -> Eroeffnungs-Riegel (404, IEX-A3) -> set-once-Bindung (404 bei
+// verlorener Op) -> Antwort. Jede Ablehnung nach Stufe 1 antwortet mit DEMSELBEN konstanten
+// Koerper ohne Daten; nur das Log unterscheidet die Gruende (Muster EL-P6). Der Antwort-Builder
+// hat genau EINEN Aufrufer:
 // diesen Handler, nach der Bindung. Die Route loest selbst keinen Anruf aus.
 import { Router } from "express";
 import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
@@ -28,8 +29,10 @@ import { INIT_WEBHOOK_TOKEN_MIN_LENGTH, inboundElPathFor } from "../elevenlabs/i
 import {
   buildInitiationResponse,
   callBindingTokenOf,
+  inboundEroeffnungsDefekteFuer,
   sipHeadersFormOf,
 } from "../elevenlabs/inbound-initiation.js";
+import { msSeitAnnahme } from "../elevenlabs/inbound-rueckfall.js";
 import { normNum } from "../store/defaults.js";
 import { safeEqual } from "../util.js";
 
@@ -53,6 +56,7 @@ export const INIT_GRUND = Object.freeze({
   AGENT: "agent",
   CALLED_NUMBER: "called_number",
   SCHALTER: "schalter",
+  EROEFFNUNG: "eroeffnung",
 });
 
 const INIT_LOG_TAG = "el-init";
@@ -144,6 +148,16 @@ function zuordnungFuer({ store, config, body, nowMs }) {
   return { grund: null, call };
 }
 
+// Stufe 3b (IEX-A3/E3): ohne gueltigen Hinweis-Baustein keine Bindung und kein Gespraech. Der
+// Anbieter bricht ab -> dial_ende -> Fehlersatz (IEX-A2).
+const eroeffnungSicher = ({ store, config, call }) => inboundEroeffnungsDefekteFuer({ store, config, call }).length === 0;
+
+// ms_seit_annahme: Kalibrierzeile ([CP] Befund 2); snake_case wie ms_seit_bindung (Runbook liest den Text).
+function bindungsLogZeile({ bindung, call, nowMs }) {
+  if (!bindung.changed) return `[${INIT_LOG_TAG}] wiederholung call=${call.id}`;
+  return `[${INIT_LOG_TAG}] gebunden call=${call.id} ms_seit_annahme=${msSeitAnnahme(call, nowMs)}`;
+}
+
 async function handleInit({ req, res, deps }) {
   const { store, config, bridges, now } = deps;
   // 1) Geheimnis - vor jedem Store-Zugriff.
@@ -160,6 +174,10 @@ async function handleInit({ req, res, deps }) {
   if (!inboundElPathFor({ config, tenantId: call.tenantId }))
     return keinAnruf({ res, body, grund: INIT_GRUND.SCHALTER, callId: call.id });
 
+  // 3b) Eroeffnungs-Riegel - VOR der Bindung.
+  if (!eroeffnungSicher({ store, config, call }))
+    return keinAnruf({ res, body, grund: INIT_GRUND.EROEFFNUNG, callId: call.id });
+
   // 4) Set-once-Bindung. Eine verlorene Op (paralleler Init) ergibt bound=false.
   const bindung = store.bindInboundElConversation(call.id, {
     conversationId: body.conversation_id,
@@ -169,7 +187,7 @@ async function handleInit({ req, res, deps }) {
 
   // 5) Nur die ERSTE Bindung loescht die Fristen; eine Wiederholung laesst sie unberuehrt (K1).
   if (bindung.changed) bridges.clearDeadlines(call.id);
-  console.log(`[${INIT_LOG_TAG}] ${bindung.changed ? "gebunden" : "wiederholung"} call=${call.id}`);
+  console.log(bindungsLogZeile({ bindung, call, nowMs }));
 
   // 6) Die Antwort - der EINZIGE Aufrufer des Builders.
   return res.json(buildInitiationResponse({ store, config, call: bindung.call }));

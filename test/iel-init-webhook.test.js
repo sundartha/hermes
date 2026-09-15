@@ -4,7 +4,8 @@
 // an der Route haengt, misst sonst gruen. Store = echte state-ops-Mutatoren, Uhr = Attrappe
 // (Wiederholungsfrist K1), Fristen = Recorder. Test 14 belegt die Verdrahtung am echten Server.
 //
-// Namen beginnen mit "IEL-B6-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
+// Namen beginnen mit "IEL-B6-<n>: " bzw. "IEX-A3-<n>: " (Eroeffnungs-Riegel) - trifft weder
+// i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -16,14 +17,14 @@ import {
   EL_CALL_BINDING_VARIABLE,
   INITIATION_RESPONSE_TYPE,
   SIP_HEADERS_FORM,
+  buildInitiationResponse,
   callBindingTokenOf,
   inboundElLocaleOf,
   sipHeadersFormOf,
 } from "../src/elevenlabs/inbound-initiation.js";
 import { INIT_WEBHOOK_TOKEN_MIN_LENGTH } from "../src/elevenlabs/inbound-path-decision.js";
-import { gespeicherteBegruessungFuer } from "../src/i18n/greeting-catalog.js";
-import { begruessungOhnePflichtsatz } from "../src/i18n/inbound-notice.js";
-import { LOCALES } from "../src/i18n/locales.js";
+import { hasInboundNotice } from "../src/i18n/inbound-notice.js";
+import { LOCALES, localeFor } from "../src/i18n/locales.js";
 import {
   ELEVENLABS_INIT_PATH,
   EL_INIT_WIEDERHOLUNG_FRIST_MS,
@@ -32,7 +33,7 @@ import {
   makeElevenLabsInitWebhookRoutes,
 } from "../src/routes/webhooks-elevenlabs-init.js";
 import * as ops from "../src/store/state-ops.js";
-import { BOOTSTRAP_TENANT_ID, DEFAULT_GREETING } from "../src/store/defaults.js";
+import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { templatePlaceholderNames } from "./helpers/el-vorlage-variablen.mjs";
 import {
@@ -55,6 +56,10 @@ const INIT_TOKEN = "i".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH);
 const ZU_KURZES_TOKEN = "i".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH - 1);
 const AGENT_ID = "agent_iel_b6";
 const OWNER_NAME = "Jonas Beispiel";
+// Die Platzhalter-Syntax des Anbieters im Namen - der echte Datendefekt (d) der Eroeffnung.
+const PLATZHALTER_NAME = "Jonas {{x}}";
+const NAMENS_TEIL = "Jonas";
+const ANNAHME_VOR_MS = 1500;
 const CONV_A = "conv_b6_a";
 const CONV_B = "conv_b6_b";
 const KEINE_KOPFZEILEN_FORM = Number.MAX_SAFE_INTEGER;
@@ -110,11 +115,12 @@ function baueZustand({ ownerName = OWNER_NAME } = {}) {
   return { state, call };
 }
 
-async function mitInitRoute({ state, config = baueConfig() }, run) {
+// storeUeberschreibung ersetzt einzelne Leser/Mutatoren (Spion, werfender Leser).
+async function mitInitRoute({ state, config = baueConfig(), storeUeberschreibung = {} }, run) {
   const uhr = { nowMs: FAKE_START_MS };
   const stelleUhr = (nowMs) => Object.assign(uhr, { nowMs });
   const geloescht = [];
-  const store = baueInitStore(state);
+  const store = { ...baueInitStore(state), ...storeUeberschreibung };
   const app = express();
   app.use(express.json());
   app.use(
@@ -151,14 +157,12 @@ async function initAnfrage(url, { token = INIT_TOKEN, body }) {
 }
 
 // Ein Fall mit frischem Zustand und frischer Route.
-async function einzelFall({ config = baueConfig(), body = null, zustand = baueZustand() } = {}) {
-  return mitInitRoute({ state: zustand.state, config }, async (route) => {
+async function einzelFall({ config = baueConfig(), body = null, zustand = baueZustand(), storeUeberschreibung = {} } = {}) {
+  return mitInitRoute({ state: zustand.state, config, storeUeberschreibung }, async (route) => {
     const antwort = await initAnfrage(route.url, { body: body ?? initBody({ bindung: zustand.call.streamToken }) });
     return { ...antwort, ...zustand, ...route };
   });
 }
-
-const stripNoticePraefix = (greeting, notice) => greeting.slice(`${notice} `.length);
 
 // ---- Stufe 1: Geheimnis -----------------------------------------------------------------------
 
@@ -282,15 +286,15 @@ test("IEL-B6-6a: Treffer -> 200, Variablenmenge = Vorlage, Inbound-Leerwerte, ke
   assert.ok(!variablen.inbound_situation.includes("{{"));
 });
 
-test("IEL-B6-6b: Treffer -> Eroeffnung = Begruessung ohne Pflichtsatz, Sprache und Stimme aus inboundElLocaleOf", async () => {
+test("IEL-B6-6b: Treffer -> first_message = inboundEroeffnung(ownerName) der aufgeloesten Sprache, Sprache und Stimme aus inboundElLocaleOf", async () => {
   const ergebnis = await einzelFall();
   const override = JSON.parse(ergebnis.text).conversation_config_override;
-  const begruessung = gespeicherteBegruessungFuer({ storedGreeting: DEFAULT_GREETING, language: "de", ownerName: OWNER_NAME });
-  assert.equal(override.agent.first_message, stripNoticePraefix(begruessung, VORLAGE_DE.inboundNotice));
-  assert.ok(!override.agent.first_message.startsWith(VORLAGE_DE.inboundNotice));
-  assert.equal(override.agent.language, ergebnis.call.language);
   const locale = inboundElLocaleOf({ store: ergebnis.store, config: ergebnis.config, call: ergebnis.call });
+  assert.equal(override.agent.first_message, VORLAGE_DE.inboundEroeffnung(OWNER_NAME));
+  assert.equal(override.agent.language, locale.language);
+  assert.equal(locale.language, VORLAGE_DE.language);
   assert.equal(override.tts.voice_id, locale.voiceId);
+  assert.equal(hasInboundNotice(override.agent.first_message), true);
 });
 
 test("IEL-B6-6c: Treffer -> Bindung am Datensatz mit der Uhr der Route, Fristen genau einmal geloescht", async () => {
@@ -410,13 +414,21 @@ test("IEL-B6-11: das Log nennt Grund, bereinigte Schluesselnamen und sip_headers
   assert.ok(ablehnung.includes("boeser_schluessel"));
   assert.ok(ablehnung.includes(`sip_headers=${SIP_HEADERS_FORM.OBJEKT}`));
   assert.ok(ablehnung.includes("schluessel=agent_id,boeser_schluessel,called_number,conversation_id,sip_headers"));
-  assert.ok(zeilen.includes(`[el-init] gebunden call=${call.id}`));
+  assert.ok(zeilen.some((zeile) => zeile.startsWith(`[el-init] gebunden call=${call.id} ms_seit_annahme=`)));
   for (const geheim of [INIT_TOKEN, call.streamToken, CONV_A, OWNER_NAME, "boeser\nschluessel"])
     assert.ok(!log.includes(geheim), `Log enthaelt ${JSON.stringify(geheim)}`);
 });
 
-test("IEL-B6-12: Antwort-Waechter scheitert nach der Bindung -> 500 ohne Daten (Restrisiko: Call bleibt GEBUNDEN)", async () => {
-  const ergebnis = await einzelFall({ zustand: baueZustand({ ownerName: "Jonas {{x}}" }) });
+// Der Eroeffnungs-Riegel laeuft VOR der Bindung (IEX-A3-5); danach koennen noch Store-Leser und
+// Zeitkontext werfen - belegt am werfenden tenantTimezone.
+test("IEL-B6-12: Builder wirft nach der Bindung -> 500 ohne Daten (Restrisiko: Call bleibt GEBUNDEN)", async () => {
+  const ergebnis = await einzelFall({
+    storeUeberschreibung: {
+      tenantTimezone: () => {
+        throw new Error("zeitzone nicht lesbar");
+      },
+    },
+  });
   assert.equal(ergebnis.status, HTTP_SERVER_ERROR);
   assert.equal(ergebnis.text, JSON.stringify(INIT_ANTWORT.INTERN));
   assert.ok(!ergebnis.text.includes("dynamic_variables"));
@@ -424,14 +436,6 @@ test("IEL-B6-12: Antwort-Waechter scheitert nach der Bindung -> 500 ohne Daten (
 });
 
 // ---- Reine Bausteine --------------------------------------------------------------------------
-
-test("IEL-B6-13a: begruessungOhnePflichtsatz entfernt nur ein woertliches Praefix und liefert nie leer", () => {
-  const notice = VORLAGE_DE.inboundNotice;
-  assert.equal(begruessungOhnePflichtsatz({ greeting: `${notice} Hallo.`, notice }), "Hallo.");
-  assert.equal(begruessungOhnePflichtsatz({ greeting: "Freitext ohne Satz.", notice }), "Freitext ohne Satz.");
-  assert.equal(begruessungOhnePflichtsatz({ greeting: notice, notice }), notice);
-  assert.equal(begruessungOhnePflichtsatz({ greeting: `${notice}   `, notice }), `${notice}   `);
-});
 
 test("IEL-B6-13b: callBindingTokenOf und sipHeadersFormOf ueber alle Formen", () => {
   const token = FALSCHES_BINDUNGS_TOKEN;
@@ -446,6 +450,93 @@ test("IEL-B6-13b: callBindingTokenOf und sipHeadersFormOf ueber alle Formen", ()
     assert.equal(sipHeadersFormOf(fall.body), fall.form, JSON.stringify(fall.body));
     assert.equal(callBindingTokenOf(fall.body), fall.erwartet, JSON.stringify(fall.body));
   }
+});
+
+// ---- IEX-A3: Eroeffnungs-Riegel an der Route und im Builder ----------------------------------
+
+// Spion auf die set-once-Bindung: zaehlt jeden Versuch, bindet danach echt.
+function bindungsSpion(state) {
+  const gebunden = [];
+  const storeUeberschreibung = {
+    bindInboundElConversation: (id, bindung) => {
+      gebunden.push(id);
+      return ops.bindInboundElConversation(state, id, bindung);
+    },
+  };
+  return { gebunden, storeUeberschreibung };
+}
+
+const alsLog = (zeilen) => zeilen.join("\n");
+const agentDerAntwort = (ergebnis) => JSON.parse(ergebnis.text).conversation_config_override.agent;
+
+test("IEX-A3-5: Eroeffnung mit Platzhalter -> Stufe 3b lehnt VOR der Bindung ab (404, keine Bindung, keine Fristen, Log ohne Namen)", async () => {
+  const zustand = baueZustand({ ownerName: PLATZHALTER_NAME });
+  const { gebunden, storeUeberschreibung } = bindungsSpion(zustand.state);
+  let ergebnis = null;
+  const zeilen = await captureConsole(async () => {
+    ergebnis = await einzelFall({ zustand, storeUeberschreibung });
+  });
+  assert.equal(ergebnis.status, HTTP_NOT_FOUND);
+  assert.equal(ergebnis.text, JSON.stringify(INIT_ANTWORT.KEIN_ANRUF));
+  assert.deepEqual(gebunden, []);
+  assert.deepEqual(ergebnis.geloescht, []);
+  assert.equal(zustand.call.elevenlabsConversationId, null);
+  const ablehnung = zeilen.find((zeile) => zeile.includes("grund=eroeffnung"));
+  assert.ok(ablehnung, alsLog(zeilen));
+  assert.ok(ablehnung.includes(`call=${zustand.call.id}`));
+  assert.ok(!alsLog(zeilen).includes(NAMENS_TEIL));
+});
+
+test("IEX-A3-6: Positiv-Kontrolle (sauberer Name bindet genau einmal) und Stufenfolge (Schalter vor Riegel)", async () => {
+  const sauber = baueZustand();
+  const spion = bindungsSpion(sauber.state);
+  const treffer = await einzelFall({ zustand: sauber, storeUeberschreibung: spion.storeUeberschreibung });
+  assert.equal(treffer.status, HTTP_OK);
+  assert.deepEqual(spion.gebunden, [sauber.call.id]);
+
+  const zeilen = await captureConsole(() =>
+    einzelFall({ config: baueConfig({ enabled: false }), zustand: baueZustand({ ownerName: PLATZHALTER_NAME }) }),
+  );
+  assert.ok(zeilen.some((zeile) => zeile.includes("grund=schalter")), alsLog(zeilen));
+  assert.ok(!zeilen.some((zeile) => zeile.includes("grund=eroeffnung")));
+});
+
+test("IEX-A3-7: der Builder riegelt den fertigen Koerper erneut - der Wurf nennt eroeffnung.platzhalter, nie den Namen", () => {
+  const { state, call } = baueZustand({ ownerName: PLATZHALTER_NAME });
+  assert.throws(
+    () => buildInitiationResponse({ store: baueInitStore(state), config: baueConfig(), call }),
+    (err) => err.message.includes("eroeffnung.platzhalter") && !err.message.includes(NAMENS_TEIL),
+  );
+});
+
+test("IEX-A3-8: eine Sprachquelle fuer Text, agent.language und Aufloesung; ohne Namen die O4-Form", async () => {
+  const unbekannt = baueZustand();
+  unbekannt.call.language = "xx";
+  const ergebnis = await einzelFall({ zustand: unbekannt });
+  const agent = agentDerAntwort(ergebnis);
+  const locale = inboundElLocaleOf({ store: ergebnis.store, config: ergebnis.config, call: ergebnis.call });
+  assert.equal(agent.language, localeFor(agent.language).language);
+  assert.equal(agent.language, locale.language);
+  assert.equal(agent.first_message, localeFor(agent.language).inboundEroeffnung(OWNER_NAME));
+
+  const ohneName = await einzelFall({ zustand: baueZustand({ ownerName: "" }) });
+  const eroeffnung = agentDerAntwort(ohneName).first_message;
+  assert.equal(eroeffnung, VORLAGE_DE.inboundEroeffnung(""));
+  assert.ok(eroeffnung.startsWith("Hier ist ein KI-Assistent."));
+});
+
+test("IEX-A3-9: [el-init] gebunden traegt ms_seit_annahme deterministisch, die Wiederholung nicht", async () => {
+  const { state, call } = baueZustand();
+  call.answeredAt = new Date(FAKE_START_MS - ANNAHME_VOR_MS).toISOString();
+  const body = initBody({ bindung: call.streamToken });
+  const zeilen = await captureConsole(() =>
+    mitInitRoute({ state }, async ({ url }) => {
+      assert.equal((await initAnfrage(url, { body })).status, HTTP_OK);
+      assert.equal((await initAnfrage(url, { body })).status, HTTP_OK);
+    }),
+  );
+  assert.ok(zeilen.includes(`[el-init] gebunden call=${call.id} ms_seit_annahme=${ANNAHME_VOR_MS}`), alsLog(zeilen));
+  assert.ok(zeilen.includes(`[el-init] wiederholung call=${call.id}`), alsLog(zeilen));
 });
 
 // ---- Verdrahtung am echten Server -------------------------------------------------------------

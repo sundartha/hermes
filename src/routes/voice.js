@@ -113,7 +113,7 @@ const EL_BEIN_LOG_PREFIX = "[el-bein]";
 // PROMPT-03/IEL-B6: die gespeicherte Vorlage in der Anrufsprache (Budget-Erstanruf). Das
 // Einsetzen des Auftraggebers bleibt VOR dem Pflichtsatz-Praefix: der Fehlerpfad bei
 // greeting=null wirft unveraendert (voice-incoming-catch-path, greetingForLanguage(null, ...)
-// gibt null zurueck). gespeicherteBegruessungFuer ist dieselbe Quelle wie die Init-Antwort.
+// gibt null zurueck).
 function gespeicherteBegruessungDes({ call, store }) {
   const ctx = store.tenantContext(call.tenantId);
   return gespeicherteBegruessungFuer({ storedGreeting: ctx.settings.greeting, language: call.language, ownerName: ctx.ownerName });
@@ -130,11 +130,12 @@ async function sendBudgetBegruessung({ res, call, locale }, { store, sendVoiceXm
   await sendVoiceXml(res, call, turnDirectives(call, greeting));
 }
 
-// IEL-B8 (3.1 Schritte 3-5): Pflichtsatz von UNS, dann Uebergabe an den Agenten. Nebeneffekte (N7):
-// Sonde, Transkript, Frist-Timer, Antwort. Der SIP-Zugang wird NUR hier gelesen (Grep-Test).
-async function sendElUebergabe({ res, call, locale }, { store, config, inboundBridges, sendVoiceXml }) {
+// IEX-A3 (3.1 Schritt 3): Uebergabe an den Agenten OHNE eigenen Satz - den KI-/Transkriptionshinweis
+// spricht der Agent als Teil seiner Eroeffnung (first_message, Riegel E3 an der Init-Route).
+// Nebeneffekte (N7): Sonde, Frist-Timer, Antwort. Kein Transkript: die erste Agent-Zeile kommt im
+// Nachlauf aus dem Anbieter-Transkript. Der SIP-Zugang wird NUR hier gelesen (Grep-Test).
+async function sendElUebergabe({ res, call }, { config, inboundBridges, sendVoiceXml }) {
   logInboundPath({ callId: call.id, path: INBOUND_PATH.ELEVENLABS });
-  store.addTranscript(call.id, "agent", locale.inboundNotice);
   inboundBridges.armDeadlines(call.id); // E9-2, Anker answeredAt - vor dem Senden: nie Stille
   const zugang = config.voice.elevenLabsInbound;
   await sendVoiceXml(
@@ -142,12 +143,6 @@ async function sendElUebergabe({ res, call, locale }, { store, config, inboundBr
     call,
     elUebergabeDirektiven({
       call,
-      // E19: dieselbe Aufloesung wie tts.voice_id der Init-Antwort.
-      pflichtsatz: {
-        text: locale.inboundNotice,
-        voiceProfile: locale.voiceProfile,
-        voiceId: inboundElLocaleOf({ store, config, call }).voiceId,
-      },
       zugang: { username: zugang.sipUser, password: zugang.sipPassword },
       publicUrl: config.server.publicUrl,
     }),
@@ -522,7 +517,7 @@ export function makeVoiceRoutes({
       // IEL-B8 (E2/L2): die Weiche - EINMAL je Anruf, NACH Signatur-MW, forIncoming,
       // numberRecordByE164 und budgetExceeded. Das Profil steht im Leg, BEVOR die Notbremse rechnet
       // (E3); danach Cap + Geld-Wache (armMaxDurationTimer) und das set-once-Profil - erst DANN
-      // spricht der Pfad. Schalter aus / nicht gepinnt -> Budget, byte-identisch (Golden).
+      // antwortet der Pfad. Schalter aus / nicht gepinnt -> Budget, byte-identisch (Golden).
       const pfad = inboundPfadFuer({ config, tenantId });
       const inboundLeg = {
         direction: "inbound",
