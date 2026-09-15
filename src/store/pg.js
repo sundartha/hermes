@@ -358,6 +358,8 @@ export function makePgStore(runner) {
     },
     // IEL-B4a: Brueckenzustand als Spread-Fabrik (Muster absenderWahrheitMutatoren).
     ...brueckenZustandMutatoren({ requireState, save }),
+    // IEX-A8: Registrierungs-Beleg als Spread-Fabrik (haelt den Zeilen-Pin, s. o.).
+    ...inboundTrunkBelegMutatoren({ requireState, save }),
     // KV2-3: Kosten-Buch. Wrapper-Paritaet zu json.js - saved nur bei changed (der
     // terminale No-Op schreibt nichts).
     recordCallCostEvidence(eingabe) {
@@ -1242,7 +1244,7 @@ async function hydrateTenantInto(client, state, tenantId) {
   ).rows;
   const numberRows = (
     await client.query(
-      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id FROM number WHERE tenant_id = $1`,
+      `SELECT id, e164, tenant_id, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp FROM number WHERE tenant_id = $1`,
       [tenantId],
     )
   ).rows;
@@ -1475,12 +1477,27 @@ function brueckenZustandFelder(zeile) {
 function brueckenZustandWerte(call) {
   return [call.elBoundAt ?? null, call.elFallbackAt ?? null, call.elNachlaufStartedAt ?? null];
 }
-// Wrapper-Paritaet zu json.js; Save nur bei changed, Rueckgabe = volles Op-Ergebnis.
-function brueckenZustandMutatoren({ requireState, save }) {
-  const speichereBeiAenderung = (ergebnis) => {
+// IEX-A8: Registrierungs-Beleg als EIN benanntes Konzept (Muster brueckenZustandFelder/-Werte). NULL -> Felder
+// ABWESEND (Form wie json, haelt den Golden-Master T-PA6-1). TIMESTAMPTZ -> derselbe ISO-String wie json.
+function inboundTrunkBelegFelder(zeile) {
+  const belegtAt = isoZeitpunktOderNull(zeile.el_inbound_trunk_belegt_at);
+  if (belegtAt === null) return {};
+  return { elInboundTrunkBelegtAt: belegtAt, elInboundTrunkZugangFp: zeile.el_inbound_trunk_zugang_fp ?? null };
+}
+function inboundTrunkBelegWerte(nummer) {
+  return [nummer.elInboundTrunkBelegtAt ?? null, nummer.elInboundTrunkZugangFp ?? null];
+}
+// Save NUR bei changed, Rueckgabe = volles Op-Ergebnis - geteilt von brueckenZustandMutatoren und
+// inboundTrunkBelegMutatoren (G5), Wrapper-Paritaet zu json.js#speichereBeiAenderung.
+function mitSpeichernBeiAenderung(save) {
+  return (ergebnis) => {
     if (ergebnis.changed) save();
     return ergebnis;
   };
+}
+// Wrapper-Paritaet zu json.js; Save nur bei changed, Rueckgabe = volles Op-Ergebnis.
+function brueckenZustandMutatoren({ requireState, save }) {
+  const speichereBeiAenderung = mitSpeichernBeiAenderung(save);
   return {
     bindInboundElConversation(callId, bindung) {
       return speichereBeiAenderung(ops.bindInboundElConversation(requireState(), callId, bindung));
@@ -1490,6 +1507,18 @@ function brueckenZustandMutatoren({ requireState, save }) {
     },
     markInboundElNachlaufStarted(callId, nowIso) {
       return speichereBeiAenderung(ops.markInboundElNachlaufStarted(requireState(), callId, nowIso));
+    },
+  };
+}
+// IEX-A8: Spread-Fabrik (Muster brueckenZustandMutatoren) - haelt makePgStores Zeilen-Pin auf +1.
+function inboundTrunkBelegMutatoren({ requireState, save }) {
+  const speichereBeiAenderung = mitSpeichernBeiAenderung(save);
+  return {
+    markNumberElInboundTrunkBelegt(numberId, beleg) {
+      return speichereBeiAenderung(ops.markNumberElInboundTrunkBelegt(requireState(), numberId, beleg));
+    },
+    clearNumberElInboundTrunkBeleg(numberId) {
+      return speichereBeiAenderung(ops.clearNumberElInboundTrunkBeleg(requireState(), numberId));
     },
   };
 }
@@ -2441,6 +2470,7 @@ function rowToNumber(r) {
     language: r.language ?? null,
     // OUTBOUND-E5: Bestands-Nummer ohne Registrierung -> null (kein undefined-Drift).
     providerAgentPhoneNumberId: r.provider_agent_phone_number_id ?? null,
+    ...inboundTrunkBelegFelder(r),
     ...(r.monthly_cost_cents === null || r.monthly_cost_cents === undefined
       ? {} : { monthlyCostCents: r.monthly_cost_cents }),
   };
@@ -2454,15 +2484,17 @@ async function flushNumbers(client, tenantId, numbers) {
     rows: numbers,
     insertRow: (n) =>
       client.query(
-        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        `INSERT INTO number (id, tenant_id, e164, provider, status, provider_number_id, payment_intent_id, country, language, monthly_cost_cents, provider_agent_phone_number_id, el_inbound_trunk_belegt_at, el_inbound_trunk_zugang_fp)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT (id) DO UPDATE SET
            e164=EXCLUDED.e164, provider=EXCLUDED.provider,
            status=EXCLUDED.status, provider_number_id=EXCLUDED.provider_number_id,
            payment_intent_id=EXCLUDED.payment_intent_id,
            country=EXCLUDED.country, language=EXCLUDED.language,
            monthly_cost_cents=EXCLUDED.monthly_cost_cents,
-           provider_agent_phone_number_id=EXCLUDED.provider_agent_phone_number_id`,
+           provider_agent_phone_number_id=EXCLUDED.provider_agent_phone_number_id,
+           el_inbound_trunk_belegt_at=EXCLUDED.el_inbound_trunk_belegt_at,
+           el_inbound_trunk_zugang_fp=EXCLUDED.el_inbound_trunk_zugang_fp`,
         [
           n.id,
           tenantId,
@@ -2475,6 +2507,7 @@ async function flushNumbers(client, tenantId, numbers) {
           n.language ?? null,
           n.monthlyCostCents ?? null,
           n.providerAgentPhoneNumberId ?? null,
+          ...inboundTrunkBelegWerte(n),
         ],
       ),
   });
