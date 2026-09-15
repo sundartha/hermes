@@ -3037,6 +3037,36 @@ export function attachNumberRegistration(state, numberId, providerAgentPhoneNumb
   return number;
 }
 
+// IEX-A8 (E8): "kein Beleg" = beide Felder ABWESEND (Muster privateNumber: entfernen statt null) -
+// json und pg (rowToNumber) tragen damit dieselbe Form. EINE Liste der Feldnamen fuer Loeschen UND Freigabe (G5).
+const INBOUND_TRUNK_BELEG_FELDER = Object.freeze(["elInboundTrunkBelegtAt", "elInboundTrunkZugangFp"]);
+
+function hatInboundTrunkBeleg(number) {
+  return INBOUND_TRUNK_BELEG_FELDER.some((feld) => number[feld] !== undefined && number[feld] !== null);
+}
+
+// IEX-A8 (E8): setzt BEIDE Felder nach einem Lesebeleg. Nur fuer eine AKTIVE Nummer (Rennen Sweep-GET vs.
+// Freigabe: eine freigegebene Zeile bekommt nie wieder einen Beleg). Set-once je Zugang: gleicher Fingerabdruck
+// schon belegt -> changed=false (kein Flush je Boot je Nummer). Unbekannte/nicht aktive Nummer -> changed=false,
+// kein Wurf (Sweep ist fail-soft). Fehlende Eingaben = Programmierfehler -> Wurf mit Kontext (P8).
+export function markNumberElInboundTrunkBelegt(state, numberId, { nowIso, zugangFp }) {
+  if (!nowIso || !zugangFp) throw new Error("markNumberElInboundTrunkBelegt: nowIso und zugangFp sind Pflicht");
+  const number = findNumber(state, numberId);
+  if (number?.status !== NUMBER_STATUS.ACTIVE) return { number, changed: false };
+  if (number.elInboundTrunkZugangFp === zugangFp && number.elInboundTrunkBelegtAt) return { number, changed: false };
+  number.elInboundTrunkBelegtAt = nowIso;
+  number.elInboundTrunkZugangFp = zugangFp;
+  return { number, changed: true };
+}
+
+// IEX-A8 (E8): NUR bei belegter ABWEICHUNG (der Aufrufer entscheidet, nie bei UNBEKANNT).
+export function clearNumberElInboundTrunkBeleg(state, numberId) {
+  const number = findNumber(state, numberId);
+  if (!number || !hatInboundTrunkBeleg(number)) return { number, changed: false };
+  for (const feld of INBOUND_TRUNK_BELEG_FELDER) delete number[feld];
+  return { number, changed: true };
+}
+
 // provisioning -> capturing: Geld-Einzug laeuft (Stripe capture). NUR im Payment-
 // Pfad (provisionNumber mit deps.billing). activateNumber deckt capturing -> active ab.
 export function beginCapturing(s, numberId) {
@@ -3088,6 +3118,9 @@ export function releaseNumber(s, numberId) {
   // laeuft im Freigabe-Kern (release-reconcile.js) VOR dieser Mutation; hier faellt nur die
   // Kennung, damit keine Zeile auf eine geloeschte Registrierung zeigt.
   number.providerAgentPhoneNumberId = null;
+  // IEX-A8 (E8): der Registrierungs-Beleg haengt an der Registrierung und geht mit ihr - keine freigegebene Zeile
+  // traegt einen Beleg (Wiederkauf derselben DID beginnt ohne Beleg).
+  for (const feld of INBOUND_TRUNK_BELEG_FELDER) delete number[feld];
   const asg = s.numberAssignments.find((a) => a.numberId === numberId && !a.releasedAt);
   if (asg) asg.releasedAt = new Date().toISOString();
   return number;

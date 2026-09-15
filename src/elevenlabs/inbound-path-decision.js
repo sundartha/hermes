@@ -17,7 +17,9 @@ const KEINE_AKTIVE_DID = "keine aktive DID";
 
 export const ZUGANG_MANGEL = Object.freeze({ FEHLT: "fehlt", ZU_KURZ: "zu kurz" });
 
-function istNichtLeererString(wert) {
+// Exportiert fuer den Registrierungs-Beleg (inbound-trunk-beleg.js, IEX-A8): dieselbe
+// Leer-Definition wie Praedikat und Boot-Riegel (G5), keine dritte Kopie.
+export function istNichtLeererString(wert) {
   return typeof wert === "string" && wert !== "";
 }
 

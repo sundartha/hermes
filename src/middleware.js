@@ -104,12 +104,14 @@ export function createSameOriginGuard({ enforce }) {
   };
 }
 
-const RATE_WINDOW_MS = 60_000;
-const RATE_SWEEP_INTERVAL_MS = 5 * 60_000;
+// Exportiert: app.js baut den Fehlversuch-Zaehler der Init-Schranke (IEX-A7) mit demselben
+// Fenster, und die Schranke fasst ihre Drossel-Zeile je Fenster zusammen - eine Quelle (G5).
+export const RATE_WINDOW_MS = 60_000;
+export const RATE_SWEEP_INTERVAL_MS = 5 * 60_000;
 
 // Generischer Fixed-Window-Zaehler pro Schluessel (G5): EINE Quelle fuer den Per-IP-
-// Rate-Limiter (unten) UND den per-callId-Turn-Limiter im Telnyx-Shim (P5). windowMs/
-// limit/sweepMs als EIN Optionsobjekt (F1). Liefert eine hit(key)-Funktion, die den
+// Rate-Limiter (unten) UND den Fehlversuch-Zaehler der Init-Token-Schranke (app.js, IEX-A7).
+// windowMs/limit/sweepMs als EIN Optionsobjekt (F1). Liefert eine hit(key)-Funktion, die den
 // Zaehler fuer key erhoeht und {allowed, retryAfterS} zurueckgibt - reine Query+Zaehl-
 // Logik, kein HTTP-Wissen (der Express-Adapter bleibt beim Aufrufer).
 export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
@@ -137,6 +139,19 @@ export function makeFixedWindowCounter({ windowMs, limit, sweepMs }) {
   };
 }
 
+const RATE_LIMIT_BODY = Object.freeze({ error: "Zu viele Anfragen. Bitte spaeter erneut versuchen." });
+
+// Die EINE Drossel-Antwort (G5): globaler Limiter und Init-Token-Schranke (IEX-A7) - nur der
+// konstante Koerper unterscheidet sich. Die 429 bleibt hier bewusst als Literal stehen: sie
+// ist ein in eslint-suppressions.json eingefrorener Bestandsbefund dieser Datei, und das
+// Commit-Gate (scripts/check-staged-suppressions.js) laesst eine Aenderung nur durch, wenn
+// sich die Befundmenge nicht bewegt - die Datei ganz zu raeumen verlangt einen eigenen Umbau
+// von errorHandler (max-params, von Express' Vier-Parameter-Erkennung erzwungen).
+export function respondTooManyRequests(res, { retryAfterS, body }) {
+  res.set("Retry-After", String(retryAfterS));
+  return res.status(429).json(body);
+}
+
 // Fixed-Window-Rate-Limiter pro Client-IP. Die Ausnahmen (localhost-Socket,
 // /voice mit eigener Provider-Signaturpruefung) entscheidet der Aufrufer in server.js.
 export function createRateLimiter(limitPerMin) {
@@ -148,10 +163,7 @@ export function createRateLimiter(limitPerMin) {
 
   return (req, res, next) => {
     const { allowed, retryAfterS } = rateHit(req.ip);
-    if (!allowed) {
-      res.set("Retry-After", String(retryAfterS));
-      return res.status(429).json({ error: "Zu viele Anfragen. Bitte spaeter erneut versuchen." });
-    }
+    if (!allowed) return respondTooManyRequests(res, { retryAfterS, body: RATE_LIMIT_BODY });
     next();
   };
 }

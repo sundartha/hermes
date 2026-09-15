@@ -142,6 +142,12 @@ export const {
   bindInboundElConversation,
   markInboundElFallback,
   markInboundElNachlaufStarted,
+  // IEX-A8 (E8): Registrierungs-Beleg am Nummern-Datensatz. OHNE diese Re-Exporte waeren sie auf der Fassade
+  // undefined -> der Boot-Sweep (elevenlabs/inbound-trunk-beleg.js) wuerfe zur Laufzeit einen TypeError, den
+  // runBootSweep als "sweep fehler" schluckt - die Ergebniszeile fehlte dann bei JEDEM Boot (Muster
+  // markInboundElFallback).
+  markNumberElInboundTrunkBelegt,
+  clearNumberElInboundTrunkBeleg,
   // KV2-3: das Kosten-Buch. OHNE diese Re-Exports waeren store.recordCallCostEvidence /
   // store.callCostEvidence auf der Fassade undefined -> jeder kuenftige Einsammler
   // (KV2-4/KV2-5) wuerfe zur Laufzeit einen TypeError (Muster recordCostProfile).

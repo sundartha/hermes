@@ -24,6 +24,7 @@ import { makeProvisionRetryWatch } from "./billing/provision-retry-sweep.js";
 import { makeElConfigRead } from "./telephony/outbound-config-soll.js";
 import { makeElevenLabsOutbound } from "./elevenlabs/outbound.js";
 import { makeInboundBridges, umleitenOderAuflegen } from "./elevenlabs/inbound-bridges.js";
+import { makeTrunkSweep } from "./elevenlabs/inbound-trunk-beleg.js";
 import { metrics } from "./metrics.js";
 import { selectMailer } from "./wiring/web-login.js";
 import { makeOutboundGates } from "./telephony/outbound-gates.js";
@@ -187,6 +188,10 @@ const outageWatch = makeOutageWatch({ store, config, audit, messaging, mailer })
 // stand dieselbe Closure wortgleich auch in scripts/check-outbound-drift.mjs.
 const elRead = makeElConfigRead(config);
 const driftWatch = makeDriftWatch({ store, config, audit, messaging, mailer, telnyxRead, elRead });
+// IEX-A8 (E8/E11): Registrierungs-Beleg-Sweep, EIN Lauf nach listen (boot.js). elRead ist dieselbe Instanz wie
+// beim Drift-Waechter (EIN EL-Nummern-GET, makeElConfigRead, G5/INV-7). Liest nur beim Anbieter; schreibt nur
+// die zwei Beleg-Felder am eigenen Datensatz.
+const inboundTrunkSweep = makeTrunkSweep({ store, config, elRead });
 
 // GP-P0: ACHTER, unabhaengiger Sweep-Zweig (Muster outageWatch/driftWatch, INV-7).
 // durableAudit statt audit: der Befund muss die Log-Rotation ueberleben - genau das war
@@ -416,6 +421,8 @@ const deps = {
   elevenLabsOutbound,
   // IEL-B6: die EINE Frist-Instanz der Inbound-Bruecken (Init-Route + Boot-Re-Arm).
   inboundBridges,
+  // IEX-A8: Boot-Lauf des Registrierungs-Beleg-Sweeps (bootServer, listen-Callback).
+  inboundTrunkSweep,
   // F2-Mail: die spaet gebundene Accounts-Zelle (s. Kommentar oben) - buildApp reicht sie
   // bis wireWebLogin durch, das accountsRef.current NACH dem Bau von accounts setzt.
   accountsRef,

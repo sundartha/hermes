@@ -634,6 +634,14 @@ export function markInboundElFallback(callId, nowIso) {
 export function markInboundElNachlaufStarted(callId, nowIso) {
   return speichereBeiAenderung(ops.markInboundElNachlaufStarted(load(), callId, nowIso));
 }
+// IEX-A8 (E8): Registrierungs-Beleg - Wrapper-Paritaet zu pg.js (Muster markInboundElFallback: Save NUR bei
+// Aenderung, Rueckgabe = volles Op-Ergebnis). Ohne Save waere der Beleg nach einem Neustart weg.
+export function markNumberElInboundTrunkBelegt(numberId, beleg) {
+  return speichereBeiAenderung(ops.markNumberElInboundTrunkBelegt(load(), numberId, beleg));
+}
+export function clearNumberElInboundTrunkBeleg(numberId) {
+  return speichereBeiAenderung(ops.clearNumberElInboundTrunkBeleg(load(), numberId));
+}
 
 // OUTBOUND-E5: Wrapper-Paritaet zu pg.js (Muster recordSipCallId).
 export function recordFromRegistrationSource(callId, quelle) {

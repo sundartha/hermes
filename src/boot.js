@@ -1198,6 +1198,8 @@ export async function bootServer({
   // IEL-B6: Boot-Re-Arm der aeusseren Bruecken-Frist (s. unten bei rearmDeadlines). Dieselbe
   // EINE Instanz wie an der Init-Route (INV-7).
   inboundBridges,
+  // IEX-A8 (E8/E11): Registrierungs-Beleg-Sweep. Dieselbe EINE Instanz (INV-7), server.js reicht sie durch.
+  inboundTrunkSweep,
 }) {
   // S1-4: json.js wirft aus load(), wenn ein korrupter Store NICHT forensisch gesichert
   // werden konnte (statt ihn still mit Defaults zu ueberschreiben). Ohne dieses explizite
@@ -1302,6 +1304,11 @@ export async function bootServer({
     // GATEWAY_URL bleibt vorrangig - genau wie beim frueheren ||=.
     setBoundGatewayPort(port);
     logBootBanner(config, port, store.load());
+    // IEX-A8 (E11): Beleg-Zahlen stehen AUSSCHLIESSLICH in der Zeile, die der Sweep NACH seinem letzten GET
+    // schreibt - die Vor-listen-Sonde (inboundElAllowlistProbeLine) zeigt nur den DB-Stand davor und nennt keine.
+    // Fire-and-forget NACH den Boot-Logs (Muster driftWatch.runBootProbe): Anbieter-IO blockiert weder listen noch
+    // Healthcheck; runBootSweep rejectet nie. Setzt keine Timer und ruft kein exit - INV-5 unberuehrt.
+    void inboundTrunkSweep.runBootSweep();
     // PROV-01/F5: Crash-verwaiste Provisioning-Jobs beim Boot reconcilen. Fire-and-forget NACH
     // den Boot-Logs - blockiert weder listen noch Healthcheck; der Boot-Guard (hasActiveNumber)
     // lief bereits davor. Gated auf PROVISIONING_ENABLED, Default Observe-Only (maxAge=0).

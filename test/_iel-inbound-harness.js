@@ -11,6 +11,7 @@
 import http from "node:http";
 import { voiceMinutesOf } from "../src/billing/metering.js";
 import { KOSTENPROFIL } from "../src/billing/kostenarten.js";
+import { EL_CALL_BINDING_SIP_HEADER } from "../src/elevenlabs/inbound-sip-uri.js";
 import { makeElevenLabsOutbound } from "../src/elevenlabs/outbound.js";
 import * as ops from "../src/store/state-ops.js";
 import { BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -19,7 +20,7 @@ import { billThunk, terminateAndBillCall } from "../src/telephony/call-terminati
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 import { withConfigNamespaces } from "./config-namespaces-helper.js";
 import { CONVERSATION_DONE_WITH_ANALYSIS, CONVERSATION_IN_PROGRESS } from "./fixtures/elevenlabs-conversations.js";
-import { storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
+import { EL_INBOUND_ACCESS_BOOT_ENV, seedCall, seedState, storeOpsFacade, waitUntil, withFetch } from "./helpers.js";
 
 export const ACCOUNT = { apiKey: "test-key", apiBase: "https://el.test" };
 export const CONV_ID = "conv_iel_b4";
@@ -64,6 +65,45 @@ export function seedInboundElCall(state, { answeredVorS, nachlaufVorS = null }) 
   if (nachlaufVorS !== null) ops.markInboundElNachlaufStarted(state, call.id, isoVor(nachlaufVorS));
   return call;
 }
+
+// IEL-B6/IEX-A7: Kindprozess-Tests der Init-Route teilen Seed, Env und Anfrage-Koerper.
+const SPAWN_MAX_DAUER_S = 600;
+
+export function spawnSeedWartenderElCall({ callId, bindungsToken, answeredVorS }) {
+  const beantwortetAt = isoVor(answeredVorS);
+  return seedState({
+    settings: { allowSummaries: false },
+    calls: [
+      seedCall({
+        id: callId,
+        direction: "inbound",
+        provider: "telnyx",
+        from: INBOUND_FROM,
+        to: INBOUND_TO,
+        twilioSid: TRAEGER_SID,
+        answeredAt: beantwortetAt,
+        startedAt: beantwortetAt,
+        maxDurationS: SPAWN_MAX_DAUER_S,
+        costProfile: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI,
+        streamToken: bindungsToken,
+      }),
+    ],
+  });
+}
+
+export const elInboundInitSpawnEnv = (agentId) => ({
+  ELEVENLABS_INBOUND_ENABLED: "true",
+  ELEVENLABS_INBOUND_TENANT_IDS: BOOTSTRAP_TENANT_ID,
+  ...EL_INBOUND_ACCESS_BOOT_ENV,
+  ELEVENLABS_AGENT_ID: agentId,
+});
+
+export const initBindungsKoerper = ({ bindung, agentId, conversationId }) => ({
+  agent_id: agentId,
+  conversation_id: conversationId,
+  called_number: INBOUND_TO,
+  sip_headers: { [EL_CALL_BINDING_SIP_HEADER]: bindung },
+});
 
 // ---- Build: Anbieter-Attrappe ------------------------------------------------------------
 // antwort() liefert je GET die Antwort (ueberschreibbar im Lauf); offen/maxOffen zaehlen

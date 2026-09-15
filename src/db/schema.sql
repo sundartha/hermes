@@ -715,7 +715,10 @@ CREATE TABLE IF NOT EXISTS number (
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- OUTBOUND-E5 (F3): die ElevenLabs-Nummernregistrierung dieser DID, s. ALTER-Kommentar
   -- weiter unten. Additiv NULLABLE.
-  provider_agent_phone_number_id TEXT
+  provider_agent_phone_number_id TEXT,
+  -- IEX-A8 (E8): Registrierungs-Beleg des EL-Inbound-Trunks, s. ALTER-Kommentar unten. Additiv NULLABLE.
+  el_inbound_trunk_belegt_at TIMESTAMPTZ,
+  el_inbound_trunk_zugang_fp TEXT
 );
 -- Forward-compat fuer eine bestehende number-Tabelle (idempotent). Bestehende
 -- (geseedete) Nummern sind in Benutzung -> Default 'active'. e164 von NOT NULL auf
@@ -747,6 +750,13 @@ ALTER TABLE number ADD COLUMN IF NOT EXISTS monthly_cost_cents INTEGER;
 -- RLS: number traegt bereits ENABLE/FORCE ROW LEVEL SECURITY + Policy tenant_isolation
 -- (schema.sql:901-902) - eine additive Spalte erbt sie, es entsteht KEINE neue Policy.
 ALTER TABLE number ADD COLUMN IF NOT EXISTS provider_agent_phone_number_id TEXT;
+-- IEX-A8 (E8): Lesebeleg des Boot-Sweeps, dass die EL-Registrierung DIESER DID einen Inbound-Trunk mit dem
+-- laufenden Digest-Zugang traegt (belegt_at = erster Beleg mit diesem Zugang), plus Fingerabdruck dieses Zugangs
+-- (16 Hex von SHA-256 ueber den SIP-Benutzer, nie das Passwort). NULL = kein Beleg. Kein Backfill: der Sweep belegt
+-- den Bestand beim naechsten Boot. RLS: number traegt bereits ENABLE/FORCE RLS + tenant_isolation - die
+-- additiven Spalten erben sie, KEINE neue Policy.
+ALTER TABLE number ADD COLUMN IF NOT EXISTS el_inbound_trunk_belegt_at TIMESTAMPTZ;
+ALTER TABLE number ADD COLUMN IF NOT EXISTS el_inbound_trunk_zugang_fp TEXT;
 
 -- number_assignment: Historie Nummer<->Tenant (Recycling-Hygiene). assigned_at bei
 -- Aktivierung, released_at bei Freigabe. Eine frisch freigegebene Nummer wird nicht
