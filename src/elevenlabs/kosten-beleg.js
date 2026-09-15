@@ -1,11 +1,12 @@
 // KV2-4 (tasks/kostenv2/spec-kv2-4.md): der ElevenLabs-Beleg, synchron und vorlaeufig.
 // REIN + EIN Schreibaufruf: entscheidet aus der Anbieter-Antwort, ob ein Beleg entsteht,
-// und legt ihn samt der erwarteten telnyx_sip-Zeile ins Kosten-Buch. Kein Netz-IO - die
-// Antwort liegt in persistProviderResult bereits vollstaendig im Speicher.
+// und legt ihn samt der erwarteten telnyx_sip-Zeile (nur wenn das Profil diesen Traeger
+// fuehrt, IEX-A1) ins Kosten-Buch. Kein Netz-IO - die Antwort liegt in
+// persistProviderResult bereits vollstaendig im Speicher.
 
 import { REIFE } from "../store/defaults.js";
 import { isBelegRef } from "../store/cost-evidence.js";
-import { KOSTENART, KOSTENARTEN } from "../billing/kostenarten.js";
+import { KOSTENART, KOSTENARTEN, kostenprofilFuerAnruf, pflichtTraegerFuerProfil } from "../billing/kostenarten.js";
 // AKZEPTIERTE SCHULD (SCOPE, s. Phasenbericht KV2-4): parseDecimalToMicroCents ist
 // fachlich ein generischer Dezimalgeld-Parser (rechnet aus CENTS_PER_EUR *
 // MICRO_CENTS_PER_CENT, kein Telnyx-Spezifikum), liegt aber unter adapters/telnyx. Ein
@@ -23,6 +24,18 @@ export const EL_BELEG_ABLEHNUNG = Object.freeze({
   NULL_DAUER_UNKLAR: "cost_fiat_null_bei_unbrauchbarer_dauer",
   UNKONVERTIERBAR: "cost_fiat_nicht_in_mikro_cents_ueberfuehrbar",
 });
+
+// IEX-A1 (Lead-Entscheidung A4): fuehrt dieser Anruf laut Katalog einen telnyx_sip-Traeger?
+// Katalog als EINE Quelle fuer Join-Schluessel (outbound.js#persistProviderResult) UND
+// die erwartete telnyx_sip-Zeile unten. REIN (P6), kein Store, kein Log.
+// Ein Anruf OHNE gesetztes costProfile behaelt das Bestandsverhalten: die Legacy-Zuordnung
+// (kostenarten.js#legacyKostenprofil) liest sipCallId - also genau das Feld, das hier erst
+// geschrieben wird - und ergaebe vor dem Join immer ein Budget-Profil (B6-Falle).
+export function anrufFuehrtTelnyxSip(call) {
+  const profilFehlt = call?.costProfile == null;
+  if (profilFehlt) return true;
+  return pflichtTraegerFuerProfil(kostenprofilFuerAnruf(call)).includes(KOSTENART.TELNYX_SIP);
+}
 
 // Ist wert eine nicht-negative Ganzzahl? Reines Praedikat, Baustein der 0-Faelle unten -
 // call_duration_secs kann als Anbieter-Feld jeden Typ tragen, nicht nur eine Zahl.
@@ -60,7 +73,7 @@ export function elBelegBetrag(metadata) {
 
 // Schreibt die erwartete telnyx_sip-Zeile - UNABHAENGIG vom EL-Betrag: "wir erwarten
 // einen SIP-Beleg" ist eine Aussage ueber das Profil el_convai_sip, nicht ueber
-// ElevenLabs' Kostenfeld.
+// ElevenLabs' Kostenfeld. Nur fuer Profile mit telnyx_sip-Traeger (anrufFuehrtTelnyxSip).
 function recordTelnyxSipErwartet(store, callId) {
   store.recordCallCostEvidence({ callId, traeger: KOSTENART.TELNYX_SIP, reife: REIFE.ERWARTET });
 }
@@ -91,9 +104,14 @@ function recordElBeleg({ store, callId, conversation, mikroCents, belegNachreifb
 // Schreibt die Belegzeilen EINES EL-Gespraechs. Ein Argument (F1). belegNachreifbar ist
 // ein DATENFELD der Zeile, keine Verhaltensweiche (kein G15/F3-Selektor): es steuert
 // keine if-Verzweigung, es wird persistiert.
-export function recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar }) {
+// erwarteTelnyxSip (IEX-A1) steuert dagegen bewusst EINE Verzweigung. Es ist eine Tatsache
+// ueber den Anruf aus dem Katalog (anrufFuehrtTelnyxSip), die der einzige Aufrufer schon
+// fuer den Join-Schluessel braucht. Zwei Funktionen (F3-Fix) haetten den fail-soft-Rahmen
+// verdoppelt (G5) oder die Platzhalterzeile aus ihm herausgezogen (KV2-4-Vertrag: nichts
+// darf terminateAndBillCall anhalten). Kein Default: jeder Aufrufer entscheidet ausdruecklich.
+export function recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar, erwarteTelnyxSip }) {
   try {
-    recordTelnyxSipErwartet(store, callId);
+    if (erwarteTelnyxSip) recordTelnyxSipErwartet(store, callId);
     const ergebnis = elBelegBetrag(conversation?.metadata);
     if ("ablehnung" in ergebnis) {
       console.warn(`[el-kosten-beleg] kein EL-Beleg (call=${callId}): grund=${ergebnis.ablehnung}`);

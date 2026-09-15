@@ -126,6 +126,36 @@ function makeDisclosure(satz, ownerFallback) {
   };
 }
 
+// IEX-A2 (O3/O4): der Namenssatz, mit dem der Inbound-Fehlersatz (und ab IEX-A3 die Eroeffnung)
+// beginnt. Traegt die KI-Kennzeichnung selbst ("KI"/"AI"/"IA") - auch ohne Namen. Kein
+// disclosureOwnerFallback: "von meinem Auftraggeber" passt grammatisch nicht (O4). Als eigene
+// Konstanten, nicht aus Katalog-Strings geschnitten. Gesprochene DE-Strings: echte Umlaute.
+// Die Namens-Bereinigung spiegelt makeDisclosure bewusst, statt sie zu teilen: A6 laesst den
+// Offenlegungs-Code byte-unberuehrt.
+const INBOUND_NAME_SATZ_TEXTE = Object.freeze({
+  de: Object.freeze({ mitName: (name) => `Hier ist der KI-Assistent von ${name}.`, ohneName: "Hier ist ein KI-Assistent." }),
+  en: Object.freeze({ mitName: (name) => `This is ${name}'s AI assistant.`, ohneName: "This is an AI assistant." }),
+  fr: Object.freeze({ mitName: (name) => `Ici l'assistant IA de ${name}.`, ohneName: "Ici un assistant IA." }),
+});
+const INBOUND_FEHLERTEIL = Object.freeze({
+  de: "Es ist ein technischer Fehler aufgetreten, bitte rufen Sie später noch einmal an.",
+  en: "A technical error has occurred, please call again later.",
+  fr: "Une erreur technique est survenue, veuillez rappeler plus tard.",
+});
+
+function makeInboundNameSatz({ mitName, ohneName }) {
+  return (ownerName) => {
+    const name = typeof ownerName === "string" ? ownerName.trim() : "";
+    return name ? mitName(name) : ohneName;
+  };
+}
+
+// O3: Namenssatz + Fehlerteil. Der Anrufer hoert ihn vor dem Auflegen, es folgt kein Gespraech.
+function makeInboundFehlersatz(sprache) {
+  const nameSatz = makeInboundNameSatz(INBOUND_NAME_SATZ_TEXTE[sprache]);
+  return (ownerName) => `${nameSatz(ownerName)} ${INBOUND_FEHLERTEIL[sprache]}`;
+}
+
 // Pro Sprache: alle sprachabhaengigen Bausteine. Funktionen dort, wo ein Name/Anliegen
 // interpoliert wird (disclosure/bridgePhrase/summarySystem) - der Aufrufer reicht die
 // gebundene Identitaet bzw. das Anliegen herein (keine Identitaets-Logik im Bundle).
@@ -254,6 +284,8 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7): fest verdrahtet, durch kein Setting abschaltbar.
     // GETRENNT von disclosure() (Outbound, Regel 2) - beide Achsen bleiben unabhaengig.
     inboundNotice: INBOUND_NOTICES.de,
+    // IEX-A2 (O3): der feste Fehlersatz einer gescheiterten Uebergabe an den EL-Agenten.
+    inboundFehlersatz: makeInboundFehlersatz("de"),
     // MCP-Textkanal (P12): Rollen-Praefixe + Fehlertexte der MCP-Tool-Schicht. Aus
     // i18n/mcp-texts.js, weil sie NIE gesprochen werden (DE bleibt transliteriert,
     // s. dort) - eingehaengt, damit localeFor() der EINE Resolver bleibt (G5).
@@ -386,6 +418,8 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
     // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
     inboundNotice: INBOUND_NOTICES.fr,
+    // IEX-A2 (O3): der feste Fehlersatz einer gescheiterten Uebergabe an den EL-Agenten.
+    inboundFehlersatz: makeInboundFehlersatz("fr"),
     // MCP-Textkanal (P12), s. DE.
     mcp: MCP_TEXTS.fr,
     // Outbound-Gate-Ablehnungstexte (P15/T2), s. DE.
@@ -493,6 +527,8 @@ export const LOCALES = Object.freeze({
     // Inbound-Pflichtsatz (GAP-14/O7), s. DE. Kuratierte Zusatz-Vorlagen (WEB-04): der
     // Pflichtsatz wird beim Katalogbau vorangestellt (G5, s. self-service.js buildTemplates).
     inboundNotice: INBOUND_NOTICES.en,
+    // IEX-A2 (O3): der feste Fehlersatz einer gescheiterten Uebergabe an den EL-Agenten.
+    inboundFehlersatz: makeInboundFehlersatz("en"),
     // MCP-Textkanal (P12), s. DE.
     mcp: MCP_TEXTS.en,
     // Outbound-Gate-Ablehnungstexte (P15/T2), s. DE.

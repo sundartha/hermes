@@ -24,12 +24,27 @@ import { localeFor } from "../i18n/locales.js";
 import { planSummaryMail } from "../mail-summary.js";
 import { planNotPlacedMail } from "../mail-not-placed.js";
 import { reportSystematicOutage } from "./outage-report.js";
+import { BRIDGE_STATE, bridgeStateOf, uebergabeGescheitert } from "../elevenlabs/inbound-bridge-state.js";
 // F2-Newsletter-Recipients: EINE Quelle fuer den Abmelde-Link-URL-Bau (G5), geteilt mit
 // self-service-routes.js (Bestaetigungs-Mail-Link nutzt das Confirm-Pendant dort).
 import { newsletterUnsubscribeUrl } from "../newsletter-recipients.js";
 
 // Provider-SMS-Segmentgrenze (Zusammenfassungs-SMS wird hierauf gekuerzt).
 const SMS_BODY_MAX_CHARS = 1500;
+
+// IEX-A2 (E5): EINE Logzeile je gescheiterter EL-Uebergabe (Betreiber-Sicht, Spec 9 F3). PII-frei:
+// callId ist server-generiert, failureReason ist ein gefiltertes Token.
+const EL_UEBERGABE_LOG_PREFIX = "[el-uebergabe]";
+const GRUND_KEINER = "keiner";
+const GESCHEITERT_ZUSTAND_FUER_LOG = Object.freeze({
+  [BRIDGE_STATE.WARTET]: "wartet",
+  [BRIDGE_STATE.RUECKFALL]: "rueckfall",
+  [BRIDGE_STATE.KEIN_EL_INBOUND]: "abgewiesen", // Marker am Budget-Profil (O5, ab IEX-A9)
+});
+function logGescheiterteUebergabe(call) {
+  const zustand = GESCHEITERT_ZUSTAND_FUER_LOG[bridgeStateOf(call)];
+  console.log(`${EL_UEBERGABE_LOG_PREFIX} gescheitert call=${call.id} grund=${call.failureReason || GRUND_KEINER} zustand=${zustand}`);
+}
 
 // Die Action Items, die zu DIESEM Anruf bereits im Store stehen - als blosse Texte, in
 // derselben Form, die summarizeCall auf dem Bestandsweg liefert (die Zusammenfassungs-SMS
@@ -266,6 +281,11 @@ export function makeCallFinish({
     await releaseReserve(call); // OUT-05 (F2): Worst-Case-Reserve abbauen; Ist-Minuten bleiben in costCents
     store.save();
 
+    // IEX-A2 (E5/O3): gescheiterte Uebergabe an den EL-Agenten -> keine Notification, keine
+    // Nutzer-/Betreiber-Mail, kein summarizeCall, keine SMS, kein Inbox-Eintrag. Die Buchung oben
+    // ist gelaufen (Traeger-Minuten sind real, Tenant-Decke sieht sie - Regel 1).
+    if (uebergabeGescheitert(call)) return void logGescheiterteUebergabe(call);
+
     if (call.status !== "completed" || !call.transcript.length) {
       const target = call.direction === "outbound" ? call.to : call.from;
       // GQ-P15 (F4): die EINZIGE passive Nachricht nennt jetzt auch den GRUND, wenn einer
@@ -379,16 +399,7 @@ export function makeCallFinish({
       // Kanaele - SMS und Mail). Der eigentliche Mail-Bau + Versand steht in
       // sendSummaryMails (Modul-Top, reine Verschiebung fuer die Funktionslaenge).
       await sendSummaryMails({
-        store,
-        config,
-        call,
-        mailer,
-        accounts: accountsRef.current,
-        audit,
-        t,
-        who,
-        result,
-        aiCount,
+        store, config, call, mailer, accounts: accountsRef.current, audit, t, who, result, aiCount,
       });
     } catch (err) {
       console.error("[summary]", err.message);

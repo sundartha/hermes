@@ -89,6 +89,7 @@ test("KV2-4 (a): genau eine vorlaeufig-Zeile mit exaktem Mikro-Cent-Integer", ()
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: true,
+    erwarteTelnyxSip: true,
   });
   const zeile = elZeile(state, callId);
   assert.ok(zeile, "die EL-Zeile muss existieren");
@@ -106,6 +107,7 @@ test("KV2-4 (a): die Preisaufschluesselung landet im detail, nicht als eigene Bu
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: true,
+    erwarteTelnyxSip: true,
   });
   const zeilen = callCostEvidence(state, callId);
   assert.equal(zeilen.length, ZWEI_ZEILEN, "genau elevenlabs_convai + telnyx_sip, keine dritte");
@@ -125,6 +127,7 @@ test("KV2-4 (a): die telnyx_sip-Zeile entsteht als erwartet und ohne Betrag", ()
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: true,
+    erwarteTelnyxSip: true,
   });
   const zeile = sipZeile(state, callId);
   assert.ok(zeile, "die telnyx_sip-Zeile muss existieren");
@@ -136,7 +139,7 @@ test("KV2-4 (b): fehlendes cost_fiat erzeugt KEINE EL-Zeile, telnyx_sip bleibt",
   const { state, store, callId } = seedCall();
   const conversation = { conversation_id: "conv_ohne_kosten", metadata: {} };
   const zeilen = mitLautemWarn(() =>
-    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true }),
+    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true, erwarteTelnyxSip: true }),
   );
   assert.equal(elZeile(state, callId), undefined, "keine EL-Zeile");
   assert.ok(sipZeile(state, callId), "telnyx_sip bleibt bestehen");
@@ -148,7 +151,7 @@ test("KV2-4 (b): nicht-numerisches cost_fiat erzeugt KEINE EL-Zeile", () => {
   const { state, store, callId } = seedCall();
   const conversation = { conversation_id: "conv_nan", metadata: metadata("0.05", DAUER_SEKUNDEN_BELIEBIG) };
   const zeilen = mitLautemWarn(() =>
-    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true }),
+    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true, erwarteTelnyxSip: true }),
   );
   assert.equal(elZeile(state, callId), undefined);
   assert.ok(sipZeile(state, callId));
@@ -162,7 +165,7 @@ test("KV2-4 (b): negatives cost_fiat erzeugt KEINE EL-Zeile", () => {
     metadata: metadata(NEGATIVER_TESTBETRAG_USD, DAUER_SEKUNDEN_BELIEBIG),
   };
   const zeilen = mitLautemWarn(() =>
-    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true }),
+    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true, erwarteTelnyxSip: true }),
   );
   assert.equal(elZeile(state, callId), undefined);
   assert.ok(sipZeile(state, callId));
@@ -173,7 +176,7 @@ test("KV2-4 (b): 0 bei call_duration_secs > 0 erzeugt KEINE EL-Zeile", () => {
   const { state, store, callId } = seedCall();
   const conversation = { conversation_id: "conv_null_dauer", metadata: metadata(0, DAUER_SEKUNDEN_KURZ) };
   const zeilen = mitLautemWarn(() =>
-    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true }),
+    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true, erwarteTelnyxSip: true }),
   );
   assert.equal(elZeile(state, callId), undefined);
   assert.ok(sipZeile(state, callId));
@@ -184,7 +187,7 @@ test("KV2-4 (b): 0 bei call_duration_secs === 0 erzeugt eine gueltige Zeile mit 
   const { state, store, callId } = seedCall();
   const conversation = { conversation_id: "conv_beide_null", metadata: metadata(0, 0) };
   const zeilen = mitLautemWarn(() =>
-    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true }),
+    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true, erwarteTelnyxSip: true }),
   );
   const zeile = elZeile(state, callId);
   assert.ok(zeile, "eine Zeile mit Betrag 0 ist gueltig");
@@ -197,7 +200,7 @@ test("KV2-4 (b): 0 bei unbrauchbarer Dauer ist fail-closed", () => {
   const { state, store, callId } = seedCall();
   const conversation = { conversation_id: "conv_dauer_unklar", metadata: metadata(0, "unbekannt") };
   const zeilen = mitLautemWarn(() =>
-    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true }),
+    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true, erwarteTelnyxSip: true }),
   );
   assert.equal(elZeile(state, callId), undefined);
   assert.ok(zeilen[0].includes(EL_BELEG_ABLEHNUNG.NULL_DAUER_UNKLAR));
@@ -210,12 +213,14 @@ test("KV2-4 (d): zweiter Aufruf mit derselben callId legt keine zweite Zeile an"
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: true,
+    erwarteTelnyxSip: true,
   });
   recordElevenLabsKostenBelege({
     store,
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: true,
+    erwarteTelnyxSip: true,
   });
   const zeilen = callCostEvidence(state, callId);
   assert.equal(zeilen.length, ZWEI_ZEILEN, "weiterhin genau zwei Zeilen");
@@ -229,6 +234,7 @@ test("KV2-4 (c): nachreifbar ist eine Einbahnstrasse", () => {
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: false,
+    erwarteTelnyxSip: true,
   });
   assert.equal(elZeile(state, callId).nachreifbar, false);
   recordElevenLabsKostenBelege({
@@ -236,6 +242,7 @@ test("KV2-4 (c): nachreifbar ist eine Einbahnstrasse", () => {
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: true,
+    erwarteTelnyxSip: true,
   });
   assert.equal(elZeile(state, callId).nachreifbar, false, "false bleibt false");
 });
@@ -247,6 +254,7 @@ test("KV2-4 (c): true -> false schlaegt durch", () => {
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: true,
+    erwarteTelnyxSip: true,
   });
   assert.equal(elZeile(state, callId).nachreifbar, true);
   recordElevenLabsKostenBelege({
@@ -254,6 +262,7 @@ test("KV2-4 (c): true -> false schlaegt durch", () => {
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: false,
+    erwarteTelnyxSip: true,
   });
   assert.equal(elZeile(state, callId).nachreifbar, false);
 });
@@ -265,6 +274,7 @@ test("KV2-4 (c): die telnyx_sip-Zeile bleibt auch auf dem Abbruchweg nachreifbar
     callId,
     conversation: CONVERSATION_DONE_MIT_KOSTEN,
     belegNachreifbar: false,
+    erwarteTelnyxSip: true,
   });
   assert.equal(sipZeile(state, callId).nachreifbar, true, "der Riegel gilt NUR dem EL-Beleg");
 });
@@ -277,7 +287,7 @@ test("KV2-4 (b/PII): eine abgelehnte Antwort schreibt nichts, was ein Transkript
     transcript: [{ role: "user", message: "Jonas Beispiel, +49 151 2345678" }],
   };
   const zeilen = mitLautemWarn(() =>
-    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true }),
+    recordElevenLabsKostenBelege({ store, callId, conversation, belegNachreifbar: true, erwarteTelnyxSip: true }),
   );
   assert.equal(zeilen.length, 1);
   assert.ok(!zeilen[0].includes("Jonas Beispiel"));

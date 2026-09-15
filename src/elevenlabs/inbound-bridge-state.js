@@ -22,3 +22,11 @@ export function bridgeStateOf(call) {
   if (call.elevenlabsConversationId) return BRIDGE_STATE.GEBUNDEN;
   return BRIDGE_STATE.WARTET;
 }
+
+// IEX-A2 (E5/O3): die Uebergabe an den Agenten ist gescheitert - Marker gesetzt (Fehlersatz bzw.
+// Abweisung) ODER ein EL-Bein endete nie gebunden (WARTET: Dial ohne <Redirect>, gescheiterte
+// Umleitung, Auflegen beim Freizeichen - mit persistierten Feldern nicht trennbar, Spec 9 F4).
+// GEBUNDEN ohne Marker: ein Gespraech fand statt. Budget ohne Marker: unveraendert.
+export function uebergabeGescheitert(call) {
+  return Boolean(call?.elFallbackAt) || bridgeStateOf(call) === BRIDGE_STATE.WARTET;
+}

@@ -3,7 +3,7 @@
 // (EL_BINDING_AFTER_ANSWER_MS, armiert ab B8), die aeussere deckt den Fall, dass dieser
 // Callback nie kommt (EL_BRIDGE_START_DEADLINE_MS ab answeredAt). Laeuft eine Frist ab,
 // wird der Call FRISCH gelesen: nur ein noch aktiver, noch WARTENDER Call wird live auf den
-// Rueckfall umgeleitet (quelle=frist, volle Begruessung mit Pflichtsatz). Nie Stille: scheitert
+// Rueckfall-Route umgeleitet (quelle=frist, dort Fehlersatz + Auflegen). Nie Stille: scheitert
 // die Umleitung, wird aufgelegt.
 //
 // Nur Timer, kein Store-Schreibzugriff, kein config-Import: der Umleitungs-Callback und der

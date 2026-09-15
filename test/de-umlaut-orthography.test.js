@@ -51,6 +51,11 @@ const SPOKEN_DE_FIELDS = [
   // (und damit auch jede kuenftige) - eine Iteration statt einer gepflegten Liste.
   ["S15 greetingDefault (gesprochen)", greetingTemplatesFor("de")[0]],
   ["S16.0 greetingVariants[0] (gesprochen)", greetingTemplatesFor("de")[1]],
+  // IEX-A2 (O3/O4): der Fehlersatz einer gescheiterten EL-Uebergabe - mit Namen und in der
+  // namenlosen Form. Der Namenssatz allein traegt keinen Umlaut (U2 waere falsch rot) und ist
+  // ueber beide Felder abgedeckt.
+  ["S17 inboundFehlersatz (mit Name)", LOCALES.de.inboundFehlersatz(OWNER_NAME)],
+  ["S18 inboundFehlersatz (ohne Name, O4)", LOCALES.de.inboundFehlersatz("")],
 ];
 
 test("P1-U1: gesprochene DE-Strings (S1-S7) tragen keine ASCII-Transliteration mehr", () => {

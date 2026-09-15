@@ -4191,18 +4191,17 @@ Dependency. Schalter aus oder Tenant nicht gepinnt: Inbound-TeXML byte-identisch
 | Log | Nie geloggt: Direktiven und TeXML werden nicht geloggt, Renderer-Fehler nennen nur Feldnamen, Grep-Test "eine Lesestelle" (`test/iel-b8-weiche.test.js` 9), Spawn-Test "Passwort nicht im stdout" (12) |
 | Transportweg (E16) | Wert entsteht im Prozess von `iel-geheimnisse.mjs`, geht nur an Render-API, ElevenLabs-API und Registrierungs-PATCH; nie Chat, Agent, lokale `.env`, Log |
 | Mindestlaengen | `SIP_PASSWORD_MIN_LENGTH` und `INIT_WEBHOOK_TOKEN_MIN_LENGTH` (je 32) |
-| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Budget-Rueckfall ([M1] J4/F-F) |
+| Rotation | Nicht automatisiert. Erneuter Lauf `iel-geheimnisse.mjs setzen --ausfuehren` mit ALLEN gepinnten DIDs, dann Deploy. Im Zwischenfenster scheitert Digest -> 487 -> `<Redirect>` -> Fehlersatz + Auflegen (IEX-A2) ([M1] J4/F-F) |
 | Abweichung Render vs. Anbieter | Entsteht nur nach Teilausfall ohne erneuten Lauf; nicht lesend pruefbar. Am Anruf erkennbar: `[el-rueckfall]`-Zeile ohne `[el-init]` (E16) |
 
 ### 2. Offenlegung
 
 - Erstanruf: `locale.inboundNotice` ist das erste gesprochene Verb, in der Stimme, die die
   Init-Antwort als `tts.voice_id` sendet (E19, Test 18).
-- Rueckfall: Standard ist die volle Begruessung mit Pflichtsatz. Nur `quelle=dial_ende` (exakter
-  Vergleich gegen `EL_RUECKFALL_QUELLE.DIAL_ENDE`) spricht den Rest ohne Pflichtsatz - der
-  Pflichtsatz lief dann bereits vor dem Dial.
-- Der Parameter ist nur signiert erreichbar (Ed25519) und wirkt nur in Richtung MEHR Offenlegung (E8):
-  jeder andere Wert (fehlend, unbekannt, Array, andere Schreibweise) ergibt die volle Begruessung.
+- Gescheiterte Übergabe (IEX-A2, O3): fester Fehlersatz `inboundFehlersatz(ownerName)` in der
+  Agentenstimme (E1), danach `<Hangup/>`. Kein Budget-Gespräch, also kein zweites
+  Transkriptions-Gespräch. Der Namenssatz trägt die KI-Kennzeichnung auch ohne Namen (O4).
+  `quelle` wirkt nur im Log.
 
 ### 3. Bindungs-Token
 
@@ -4220,7 +4219,9 @@ API-Views bleibt es entfernt.
 - Entscheidung nur aus Aktiv-Status, `bridgeStateOf` und `elBoundAt`, nie aus Prozessspeicher.
 - Budget-Call: Folge-Gather, kein neuer Abbruchweg.
 - Die Routen loesen keinen Anruf aus; `/voice/el-bein` armiert nur eine Frist. Fehler in
-  `/voice/el-rueckfall` enden in `turnErrorSpeech` + Hangup, ein unbekannter/beendeter Call in Hangup.
+  `/voice/el-rueckfall` enden im Fehlersatz (ohne Synthese, Name nur bei bekanntem Call) + Hangup;
+  der Marker wird im catch nur gesetzt, wo die Entscheidung FEHLERSATZ lautet (D5). Ein
+  unbekannter/beendeter Call endet in Hangup.
 
 ### 5. Reihenfolge der schadensbegrenzenden Stufen
 
@@ -4229,14 +4230,23 @@ API-Views bleibt es entfernt.
 3. Digest und `allowed_numbers` (Absender-Filter) als Zusatz
 4. Token-Bindung am Init-Webhook als Barriere
 5. Fristen (innere und aeussere) mit Live-Umleitung
-6. Rueckfall (Budget) bzw. Auflegen, nie Stille
+6. Fehlersatz bzw. Auflegen, nie Stille (IEX-A2)
 
 ### 6. Restrisiken (bewusst getragen)
 
 - Stille bei Prozess-Neustart = Neustart-Dauer + Rest der aeusseren Frist (3.2).
 - Keine Erstattung auf `TELNYX_INBOUND_EL_CONVAI`, bis `pflichttypen` gemessen ist (L7).
-- Ein Rueckfall-Call behaelt den EL-Satz und verliert eine Anbieter-Wiederholung eines Turns (leeres
-  Dokument, §5).
+- Keine Benachrichtigung für gescheiterte Übergaben (E5): Marker ODER nie gebunden (`WARTET`).
+  Darunter fallen auch Auflegen beim Freizeichen, `cancel_call`, Cap und Geld-Wache vor der
+  Bindung (Owner-Frage F4, Default nein). Sichtbar bleiben der Call in `list_calls` und die
+  Logzeile `[el-uebergabe] gescheitert`. Einen Betreiber-Alarm gibt es nicht (F3).
+- Die Grund-Kennung `el_uebergabe_gescheitert` hat keinen Nutzertext; Widget und MCP zeigen den
+  Sammeltext.
+- Die Grund-Schreibung liegt bewusst in `elevenlabs/inbound-uebergabe-gescheitert.js`, nicht in
+  `routes/voice.js` (Riegel R4b). Das ist keine End-Naht; das Ende läuft über
+  `persistEndWithReason`, die Reihenfolge prüft IEX-A2-10.
+- Bei `GEBUNDEN` unter `EL_MIN_CONVERSATION_MS` endet auch ein echtes Kurzgespräch im Fehlersatz,
+  ohne Nachricht (A3-Heuristik, Messung M-A3).
 - EL-Kosten eines nach der Bindung abgebrochenen Kurzgespraechs (< `EL_MIN_CONVERSATION_MS`) werden
   nicht aus der Conversation belegt, weil der Rueckfall-Riegel (E7e) diesen Abschluss verhindert.
 - Ende-Anker `jetzt` statt Carrier-Ende, wenn eine nach Neustart re-armierte Schleife vor
