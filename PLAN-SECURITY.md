@@ -4136,7 +4136,7 @@ Keine neue Env, keine neue Dependency.
    `X-Hermes-Call-Binding` bzw. `dynamic_variables.sip_hermes_call_binding`) an einen **aktiven**
    Inbound-EL-Anruf im Zustand WARTET oder die identische Wiederholung binnen Frist; dazu `agent_id` ==
    `ELEVENLABS_AGENT_ID` und `called_number` (falls vorhanden) normalisiert == `call.to` (404)
-3. Schalter/Allowlist `inboundElPathFor` (404)
+3. Schalter/Scope/Beleg `inboundElPathFor` (404, IEX-A9): unter `registrierte_dids` bindet nur ein Anruf, dessen angerufene DID einen Beleg mit dem Fingerabdruck des laufenden Zugangs traegt
 3b. Eroeffnungs-Riegel `inboundEroeffnungsDefekteFuer` (IEX-A3/E3), VOR der Bindung: Namenssatz am
    Anfang, `inboundNotice` woertlich, `hasInboundNotice`, kein `{{` (404, Log `grund=eroeffnung`, keine
    Bindung -> Anbieter bricht ab -> Fehlersatz)
@@ -4516,3 +4516,67 @@ Verbotsmenge. Eine Liste mit `has_more` ist ROT (unvollstaendig).
   dem Schreiben aus (`media_encryption=<wert>`); bei Abweichung erneuter Lauf nach Entscheidung.
 - **Sortierung der Conversation-Liste:** unbelegt; es wird clientseitig nach `start_time_unix_secs`
   sortiert, `has_more` ergibt ROT.
+
+## IEX-A9 — Scope-Schalter und Abweisung ohne Registrierungs-Beleg (2026-09-15)
+
+### 1. Scope
+
+- Enum `allowlist|registrierte_dids` (`src/elevenlabs/inbound-scope.js`), Env `ELEVENLABS_INBOUND_SCOPE`,
+  Default `allowlist` (= Verhalten vor IEX-A9), kein Wildcard-Mitglied.
+- Ein unbekannter Wert ist ein FATALER Boot-Befund (`elInboundScopeFindings`, `el_inbound_scope_unknown`),
+  unabhaengig vom Schalter: ein Tippfehler faellt beim Deploy auf, nicht erst beim Einschalten. Die Meldung
+  nennt nie den eingegebenen Wert (Log-Injection), nur Schluessel und gueltige Werte.
+- Die Weiche selbst ist strikt: ein unbekannter Scope ergibt `budget` (in Produktion unerreichbar, der Boot
+  bricht vorher ab). Test: `test/iex-a9-scope.test.js`.
+
+### 2. Entscheidung
+
+| Zustand | Ergebnis |
+|---|---|
+| Schalter aus oder Zugang unvollstaendig | `budget` |
+| `allowlist`, Tenant gepinnt | `elevenlabs` |
+| `allowlist`, Tenant nicht gepinnt | `budget` |
+| `registrierte_dids`, Beleg (`elInboundTrunkBelegtAt`) UND Fingerabdruck == laufender `sipUser` | `elevenlabs` |
+| `registrierte_dids`, sonst (kein Beleg, alter Fingerabdruck, keine Nummer) | `abgewiesen` |
+
+Unter `registrierte_dids` wirkt die Tenant-Liste nicht. Die Weiche (`inboundPfadEntscheidung`) laeuft einmal
+je Anruf in `/voice/incoming` NACH allen sieben Sicherungen (davor u. a. Signatur-MW, `forIncoming`,
+`numberRecordByE164`, `resolveCallLanguage`, `budgetExceeded`) und erneut in Init-Webhook Stufe 3 (`inboundElPathFor`): ein seit dem Anrufeingang
+weggefallener Beleg bindet nicht.
+
+### 3. Abweisung (O5)
+
+- Ablauf: Call mit dem Kurzbein-Profil `telnyx_inbound_budget` (E10), Notbremse aus der Tenant-Decke, Cap
+  und Geld-Wache wie jeder Inbound-Pfad; Marker (`elFallbackAt`) und Grund `ohne_el_registrierung` VOR der
+  Synthese; Sonde `"path":"abgewiesen"`; Logzeile `[inbound] abgewiesen grund=ohne_el_registrierung call=<id>`
+  ohne Nummer; fester Fehlersatz in der Agentenstimme; Auflegen.
+- Kein Dial, keine Frist, kein Transkript. Abschluss ueber den E5-Zweig von `finishCall`: gebucht, genau eine
+  Zeile `[el-uebergabe] gescheitert ... zustand=abgewiesen`, keine Notification, SMS, Mail oder Zusammenfassung.
+- Wiederholte Zustellung von `/voice/incoming` nach einem Neustart (`inboundAbgewiesen`): Fehlersatz ohne
+  Synthese plus Auflegen, NIE ein Gather (sonst Budget-Gespraech ohne Hinweis).
+
+### 4. Beleg an den Zugang gebunden (Review-Concern E8/E9)
+
+Der Fingerabdruck deckt nur `sipUser` ab. Eine reine Passwort-Aenderung (manuell in Render statt ueber
+`iel-geheimnisse.mjs setzen`) laesst die Belege wirksam; dann scheitert der Digest beim Anbieter, und das
+Hoerbild haengt an M-S3. **Rotation ausschliesslich ueber `scripts/iel-geheimnisse.mjs setzen`.**
+
+### 5. Kosten
+
+Eine abgewiesene DID bucht mindestens eine Minute auf die Tenant-Decke (`Math.ceil`, Start-Anker bei
+Eingang). Teil der Owner-Frage F2; Default: buchen.
+
+### 6. Restrisiken (bewusst getragen)
+
+- **(a) DID ohne Beleg bis zum naechsten Boot-Sweep.** Ohne periodischen Sweep und bei `autoDeploy=no`
+  hoert eine solche DID den Fehlersatz unter Umstaenden tagelang. Fehlt die EL-Registrierung ganz, repariert
+  kein Sweep, nur ein Skript-Lauf. Nach O3/O5 wird niemand benachrichtigt. **Vorbedingung vor dem
+  Scope-Flip:** F3 (Betreiber-Alarm) als Rollout-Vorbedingung (Review-Concern E15(i)).
+- **(b) Skala des Boot-Sweeps.** N GETs je Boot (mit A10 bis zu N PATCHes). Anbieter-Rate-Limits ergeben
+  `unbekannt>0` und blockieren a3/b4/b5. **Folgeaufgabe:** periodischer oder inkrementeller Sweep
+  (Review-Concern E11/E16).
+- **(c) Rennen Freigabe/Wiederaktivierung waehrend eines laufenden Boot-GETs** (A8-Report). Der Beleg prueft
+  `phone_number` und `allowed_numbers` gegen dieselbe DID, der Tenant kommt nur aus der DID. Schlimmster Fall:
+  ein Dial auf eine inzwischen geloeschte Registrierung, also Fehlersatz; kein fremder Tenant, kein Datenleck.
+- **(d) Gepinnter Owner ohne Beleg ist unter `registrierte_dids` ebenfalls abgewiesen.** Gewollt; das Runbook
+  belegt in b3/b4, bevor b5 den Scope umstellt.

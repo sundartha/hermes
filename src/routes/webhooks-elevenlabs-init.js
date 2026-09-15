@@ -27,7 +27,7 @@
 //
 // REIHENFOLGE DER STUFEN ist bindend (E11): (davor, in app.js: Init-Token-Schranke 403/429 ohne
 // Parse) Geheimnis (403) -> Zuordnung, nur lesend (404) ->
-// Schalter/Allowlist (404) -> Eroeffnungs-Riegel (404, IEX-A3) -> set-once-Bindung (404 bei
+// Schalter/Scope/Beleg (404, IEX-A9) -> Eroeffnungs-Riegel (404, IEX-A3) -> set-once-Bindung (404 bei
 // verlorener Op) -> Antwort. Jede Ablehnung nach Stufe 1 antwortet mit DEMSELBEN konstanten
 // Koerper ohne Daten; nur das Log unterscheidet die Gruende (Muster EL-P6). Der Antwort-Builder
 // hat genau EINEN Aufrufer:
@@ -205,6 +205,11 @@ function zuordnungFuer({ store, config, body, nowMs }) {
   return { grund: null, call };
 }
 
+// Stufe 3 (IEX-A9/E9): dieselbe Weiche wie /voice/incoming - Schalter, Scope und unter registrierte_dids
+// der Beleg der angerufenen DID. Ein Beleg, der seit dem Anrufeingang weggefallen ist, bindet nicht.
+const elWegFuer = ({ store, config, call }) =>
+  inboundElPathFor({ config, tenantId: call.tenantId, numberRecord: store.numberRecordByE164(call.to) });
+
 // Stufe 3b (IEX-A3/E3): ohne gueltigen Hinweis-Baustein keine Bindung und kein Gespraech. Der
 // Anbieter bricht ab -> dial_ende -> Fehlersatz (IEX-A2).
 const eroeffnungSicher = ({ store, config, call }) => inboundEroeffnungsDefekteFuer({ store, config, call }).length === 0;
@@ -227,8 +232,8 @@ async function handleInit({ req, res, deps }) {
   if (zuordnung.grund) return keinAnruf({ res, body, grund: zuordnung.grund, callId: zuordnung.call?.id });
   const call = zuordnung.call;
 
-  // 3) Schalter und Allowlist - dieselbe Weiche wie der Sprechpfad.
-  if (!inboundElPathFor({ config, tenantId: call.tenantId }))
+  // 3) Schalter, Scope und Beleg - dieselbe Weiche wie der Sprechpfad.
+  if (!elWegFuer({ store, config, call }))
     return keinAnruf({ res, body, grund: INIT_GRUND.SCHALTER, callId: call.id });
 
   // 3b) Eroeffnungs-Riegel - VOR der Bindung.

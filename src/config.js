@@ -11,6 +11,8 @@ import { alertChannelFindings, alertChannelInputs } from "./boot-guard.js";
 // oben) - kein Zyklus, keine zweite Routen-Liste hier.
 import { KOSTENPROFIL } from "./billing/kostenarten.js";
 import { DEFAULT_STT_PROFILE } from "./telephony/stt-profile.js";
+// IEX-A9: Blatt-Modul ohne Imports (kein Zyklus).
+import { DEFAULT_INBOUND_EL_SCOPE } from "./elevenlabs/inbound-scope.js";
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDER, LLM_PROVIDER_VALUES } from "./llm/provider.js";
 // G5: die Minute lebt in utils/timer.js (import-freies Blatt, kein Zyklus) - dieselbe
 // Zahl, gegen die Abrechnung und Consult-Fristen rechnen. Stunde/Tag leiten hier ab.
@@ -840,9 +842,9 @@ const rawConfig = {
   // bleibt unser (und damit der Hangup-Griff).
   // DEFAULT AUS, fail-closed wie alle Engine-Weichen.
   //
-  // STAND IEL-B8: Sprechpfad-Weiche in /voice/incoming (inboundElPathFor). Weitere Leser: zwei
+  // STAND IEX-A9: dreiwertige Sprechpfad-Weiche in /voice/incoming (inboundPfadEntscheidung). Weitere Leser: drei
   // Boot-Riegel (latentCostPathFindings: Kostenpfad hat Einsammler; elInboundAccessFindings:
-  // Zugang vollstaendig) und die Banner-Zeile. Die Reihenfolge, die der Kostenarten-Katalog
+  // Zugang vollstaendig; elInboundScopeFindings: Scope bekannt) und die Banner-Zeile. Die Reihenfolge, die der Kostenarten-Katalog
   // verlangt, bleibt: die Katalogzeile und ihr Riegel stehen, BEVOR der Weg live gehen kann -
   // "Flag an, Kosten unsichtbar" ist damit strukturell ausgeschlossen, nicht per Disziplin.
   elevenLabsInbound: {
@@ -853,6 +855,11 @@ const rawConfig = {
     // JEDER (Muster ownerSelfCallTenantIds). Einmal gesplittet/getrimmt (csvEnv), das
     // Praedikat (elevenlabs/inbound-path-decision.js) vergleicht nur noch strikt.
     tenantIds: csvEnv(process.env.ELEVENLABS_INBOUND_TENANT_IDS),
+    // IEX-A9 (E9): WIRKUNGSBEREICH des Wegs - allowlist (nur tenantIds, Default = heutiges Verhalten) oder
+    // registrierte_dids (jede aktive DID mit gueltigem Registrierungs-Beleg; Tenant-Liste ohne Wirkung; ohne
+    // Beleg Fehlersatz + Auflegen). Kein Wildcard. Getrimmt wie sttProfile; ein unbekannter Wert bricht den
+    // BOOT ab (boot-guard elInboundScopeFindings), nicht erst den Anruf.
+    scope: (process.env.ELEVENLABS_INBOUND_SCOPE || DEFAULT_INBOUND_EL_SCOPE).trim(),
     // IEL-B1: Digest-Zugang, mit dem unser <Dial><Sip> sich bei ElevenLabs anmeldet - EIN
     // gemeinsamer Zugang fuer alle gepinnten DIDs. Passwort SECRET - nie loggen/leaken.
     // .trim() wie bei elevenLabsToolToken: ein eingefuegtes Newline waere ein Zugang, der

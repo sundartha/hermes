@@ -12,6 +12,7 @@ import { STT_PROFILE, isSttProfile } from "./telephony/stt-profile.js";
 import { usableFallbackProvider } from "./llm/provider.js";
 // IEL-B1: die EINE Definition von "Zugang des EL-Inbound-Wegs vollstaendig" (rein, config-frei).
 import { inboundElAccessDefects } from "./elevenlabs/inbound-path-decision.js";
+import { DEFAULT_INBOUND_EL_SCOPE, INBOUND_EL_SCOPE, isInboundElScope } from "./elevenlabs/inbound-scope.js";
 
 // Boot-Entkopplung (OT-1, AC5). Fuehrt einen Boot-Teilschritt aus und kappt seinen
 // Blast-Radius: faengt jeden Fehler, loggt ihn laut + secret-frei (nur err.message)
@@ -860,6 +861,26 @@ export function elInboundAccessFindings(inbound) {
         "ELEVENLABS_INBOUND_ENABLED=true, aber der Zugang des EL-Inbound-Wegs ist " +
         `unvollstaendig: ${defekte.map(zugangsMangelText).join(", ")}. Handlung: ` +
         "ELEVENLABS_INBOUND_ENABLED=false setzen oder die Geheimnisse per Skript-Lauf neu setzen.",
+    },
+  ];
+}
+
+// IEX-A9 (E9/A5): unbekannter ELEVENLABS_INBOUND_SCOPE -> FATAL, unabhaengig vom Schalter (Muster
+// sttProfileFindings): ein Tippfehler faellt beim Deploy auf, nicht erst beim Einschalten. Die Meldung
+// nennt NIE den eingegebenen Wert (Log-Injection), nur Schluessel und gueltige Werte.
+export const EL_INBOUND_SCOPE_FINDING = Object.freeze({
+  UNKNOWN: "el_inbound_scope_unknown", // FATAL (IEX-A9)
+});
+
+export function elInboundScopeFindings(scope) {
+  if (isInboundElScope(scope)) return [];
+  return [
+    {
+      code: EL_INBOUND_SCOPE_FINDING.UNKNOWN,
+      fatal: true,
+      message:
+        `ELEVENLABS_INBOUND_SCOPE ist unbekannt. Gueltig: ${Object.values(INBOUND_EL_SCOPE).join("|")}. ` +
+        `Handlung: Wert korrigieren oder leeren (Default ${DEFAULT_INBOUND_EL_SCOPE}).`,
     },
   ];
 }

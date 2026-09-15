@@ -12,7 +12,7 @@
 // mit EINER kanonischen Heimat (normNum/DEFAULT_PROVIDER, sayD/hangupD, SPEAK_OUTCOME,
 // localeFor, callFailureReason, degradedSpeechFor, agentTurn/openingText/callerHasSpoken,
 // remainingMaxDurationMs, noSpeechEscalation, metrics, logInboundPath/INBOUND_PATH,
-// legRunsOurTurnLoop, bridgeStateOf/BRIDGE_STATE, inboundElPathFor, inboundElLocaleOf,
+// legRunsOurTurnLoop, bridgeStateOf/BRIDGE_STATE, inboundPfadEntscheidung/inboundAbgewiesen, inboundElLocaleOf,
 // inbound-rueckfall, inbound-uebergabe-gescheitert) werden direkt importiert (G5 "eine
 // Quelle"). Laufzeit-Instanzen (voiceRender/directiveSynth/ttsStore/lifecycle/finishCall,
 // INV-7), der Provider-Dispatch-Seam (webhookEvents/providerFromHeaders/
@@ -43,8 +43,8 @@ import { persistEndWithReason } from "../telephony/call-termination.js";
 import { KOSTENPROFIL } from "../billing/kostenarten.js";
 import { makeWebhookIdempotenz } from "../telephony/webhook-idempotenz.js";
 import { legRunsOurTurnLoop } from "../telephony/leg-turn-loop.js";
-import { BRIDGE_STATE, bridgeStateOf } from "../elevenlabs/inbound-bridge-state.js";
-import { inboundElPathFor } from "../elevenlabs/inbound-path-decision.js";
+import { BRIDGE_STATE, bridgeStateOf, inboundAbgewiesen } from "../elevenlabs/inbound-bridge-state.js";
+import { inboundPfadEntscheidung } from "../elevenlabs/inbound-path-decision.js";
 import { inboundElLocaleOf } from "../elevenlabs/inbound-initiation.js";
 import { EL_RUECKFALL_PFAD } from "../elevenlabs/inbound-bridges.js";
 import {
@@ -89,11 +89,14 @@ const RUNNING_DOCUMENT_UNTOUCHED = [];
 // MODUL-EBENE statt im Abschluss von makeVoiceRoutes (Praezedenz
 // recordStartRejectionReason in api-calls.js): die Entscheidung braucht keinen
 // Server-Zustand, nur die Direktiven-Fabrik - und makeVoiceRoutes traegt bereits zu viel.
-function repeatDeliveryXml(call, { render, followupTurnDirectives }) {
+// IEX-A9 (D6): ein abgewiesener Anruf bekommt nie einen Gather - er wuerde sonst nach einem Neustart
+// ein Budget-Gespraech ohne Hinweis fuehren (O5). Ohne Synthese: die Antwort ist synchron.
+function repeatDeliveryXml(call, deps) {
+  if (inboundAbgewiesen(call)) return fehlersatzOhneAufloesungXml({ call }, deps);
   const directives = legRunsOurTurnLoop(call)
-    ? followupTurnDirectives(call, "")
+    ? deps.followupTurnDirectives(call, "")
     : RUNNING_DOCUMENT_UNTOUCHED;
-  return render(directives, call.provider);
+  return deps.render(directives, call.provider);
 }
 
 // FW2: EIN Kanalname fuer die Diagnose-Zeilen dieses Webhooks (G25).
@@ -109,6 +112,7 @@ const HTTP_OK = 200;
 const ANGENOMMEN_STATUS = Object.freeze(["in-progress", "answered"]);
 const EL_RUECKFALL_LOG_PREFIX = "[el-rueckfall]";
 const EL_BEIN_LOG_PREFIX = "[el-bein]";
+const INBOUND_LOG_PREFIX = "[inbound]";
 
 // PROMPT-03/IEL-B6: die gespeicherte Vorlage in der Anrufsprache (Budget-Erstanruf). Das
 // Einsetzen des Auftraggebers bleibt VOR dem Pflichtsatz-Praefix: der Fehlerpfad bei
@@ -151,12 +155,15 @@ async function sendElUebergabe({ res, call }, { config, inboundBridges, sendVoic
 
 // E2/G23: die Weiche als EIN Objekt je Pfad - der Handler verzweigt nicht (keine neue Komplexitaet
 // im gepinnten Handler). Funktionsdeklarationen sind gehoisted.
+// IEX-A9 (E9/E10): indiziert ueber die Pfad-Tokens der Weiche (EIN Vokabular). ABGEWIESEN traegt das
+// Kurzbein-Profil: einziger Traeger telnyx_call_records = Wirklichkeit des Beins ohne Uebergabe.
 const INBOUND_PFAD = Object.freeze({
-  BUDGET: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, antworte: sendBudgetBegruessung }),
-  ELEVENLABS: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI, antworte: sendElUebergabe }),
+  [INBOUND_PATH.BUDGET]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, antworte: sendBudgetBegruessung }),
+  [INBOUND_PATH.ELEVENLABS]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_EL_CONVAI, antworte: sendElUebergabe }),
+  [INBOUND_PATH.ABGEWIESEN]: Object.freeze({ kostenprofil: KOSTENPROFIL.TELNYX_INBOUND_BUDGET, antworte: sendAbweisung }),
 });
-function inboundPfadFuer({ config, tenantId }) {
-  return inboundElPathFor({ config, tenantId }) ? INBOUND_PFAD.ELEVENLABS : INBOUND_PFAD.BUDGET;
+function inboundPfadFuer({ config, tenantId, numberRecord }) {
+  return INBOUND_PFAD[inboundPfadEntscheidung({ config, tenantId, numberRecord })];
 }
 
 // S1-1: technischer Abbruch mit Ansage - der catch von /voice/incoming (der Rueckfall-catch
@@ -207,6 +214,18 @@ async function sprecheFehlersatz({ res, call, nowMs }, deps) {
   await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(fehlersatzFuer({ call }, deps)));
 }
 
+// IEX-A9 (O5/3.3): Scope registrierte_dids, DID ohne gueltigen Registrierungs-Beleg. Nebeneffekte (N7):
+// Sonde, Marker + Grund (Vermerk VOR der Synthese - ein Synthese-Wurf laesst den Marker stehen, der
+// Abschluss benachrichtigt dann trotzdem nicht), Logzeile ohne Nummer, Antwort. Kein Dial, keine Frist,
+// kein Transkript. Kostenprofil Kurzbein (E10, INBOUND_PFAD).
+async function sendAbweisung({ res, call }, deps) {
+  logInboundPath({ callId: call.id, path: INBOUND_PATH.ABGEWIESEN });
+  const grund = INBOUND_EL_GRUND.EL_OHNE_REGISTRIERUNG;
+  vermerkeUebergabeGescheitert({ callId: call.id, grund, nowMs: Date.now() }, deps);
+  console.log(`${INBOUND_LOG_PREFIX} ${INBOUND_PATH.ABGEWIESEN} grund=${grund} call=${call.id}`);
+  await deps.sendVoiceXml(res, call, elFehlersatzDirektiven(fehlersatzFuer({ call }, deps)));
+}
+
 const RUECKFALL_ANTWORT = Object.freeze({
   [RUECKFALL_ENTSCHEIDUNG.AUFLEGEN]: sendAuflegen,
   [RUECKFALL_ENTSCHEIDUNG.FOLGE_GATHER]: sendFolgeGather,
@@ -236,11 +255,16 @@ function ownerNameBestEffort({ call }, { store }) {
 }
 
 // E4-catch: ohne Synthese und ohne Sprach-/Stimmaufloesung (beides kann der Wurf gewesen sein) -
-// Azure-<Say> wie der Unrouted-Pfad, damit der catch nicht an derselben Stelle erneut wirft.
-function sendFehlersatzOhneAufloesung({ res, call }, deps) {
+// Azure-<Say> wie der Unrouted-Pfad, damit der catch nicht an derselben Stelle erneut wirft. Dieselbe
+// XML-Quelle bedient die Wiederholungs-Antwort abgewiesener Anrufe (D6).
+function fehlersatzOhneAufloesungXml({ call }, deps) {
   const bundle = localeFor(call?.language);
   const satz = sayD(bundle.inboundFehlersatz(ownerNameBestEffort({ call }, deps)), bundle.voiceProfile);
-  res.type("text/xml").send(deps.render([satz, hangupD()], call?.provider ?? DEFAULT_PROVIDER));
+  return deps.render([satz, hangupD()], call?.provider ?? DEFAULT_PROVIDER);
+}
+
+function sendFehlersatzOhneAufloesung({ res, call }, deps) {
+  res.type("text/xml").send(fehlersatzOhneAufloesungXml({ call }, deps));
 }
 
 // E4 (Nebeneffekte je Entscheidung s.o.). Rumpf komplett in try/catch (Express 4, Muster S1-1).
@@ -390,7 +414,7 @@ export function makeVoiceRoutes({
   // Fehlerstatus) sind unberuehrt; KEIN Gate wird hier beruehrt (Regel 1).
   const idempotenz = makeWebhookIdempotenz({
     store,
-    keepAliveXml: (call) => repeatDeliveryXml(call, { render, followupTurnDirectives }),
+    keepAliveXml: (call) => repeatDeliveryXml(call, voiceDeps),
   });
 
   // ---- INV-4 (Pflicht-Kommentar, safety-tragend): TTS-Route ZUERST, DANN Sig-MW, DANN die
@@ -517,8 +541,9 @@ export function makeVoiceRoutes({
       // IEL-B8 (E2/L2): die Weiche - EINMAL je Anruf, NACH Signatur-MW, forIncoming,
       // numberRecordByE164 und budgetExceeded. Das Profil steht im Leg, BEVOR die Notbremse rechnet
       // (E3); danach Cap + Geld-Wache (armMaxDurationTimer) und das set-once-Profil - erst DANN
-      // antwortet der Pfad. Schalter aus / nicht gepinnt -> Budget, byte-identisch (Golden).
-      const pfad = inboundPfadFuer({ config, tenantId });
+      // antwortet der Pfad. Schalter aus / Scope allowlist + nicht gepinnt -> Budget, byte-identisch (Golden);
+      // Scope registrierte_dids ohne gueltigen Beleg der angerufenen DID -> Abweisung (IEX-A9, O5).
+      const pfad = inboundPfadFuer({ config, tenantId, numberRecord });
       const inboundLeg = {
         direction: "inbound",
         from: req.body.From || "unbekannt",

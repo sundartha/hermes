@@ -30,3 +30,10 @@ export function bridgeStateOf(call) {
 export function uebergabeGescheitert(call) {
   return Boolean(call?.elFallbackAt) || bridgeStateOf(call) === BRIDGE_STATE.WARTET;
 }
+
+// IEX-A9 (O5/E10): abgewiesener Inbound-Anruf - Inbound-Budget-Kostenprofil (Kurzbein) MIT Marker. Nur
+// die Abweisung setzt einen Marker ausserhalb des EL-Profils; ein anderes Profil (Outbound) gilt nie als
+// abgewiesen. Leser: Wiederholungs-Antwort (routes/voice.js).
+export function inboundAbgewiesen(call) {
+  return call?.costProfile === KOSTENPROFIL.TELNYX_INBOUND_BUDGET && Boolean(call.elFallbackAt);
+}

@@ -6,7 +6,9 @@
 // SIP-Bein-Callback /voice/el-bein armiert die innere Frist.
 //
 // A (4-10) rein (1-3 (IEX-A2) und 5 (IEX-A3) entfallen, die Nummern bleiben - PLAN-SECURITY zitiert sie), B (11) In-Process an einem echten HTTP-Server, C (12-22) Kindprozess.
-// Namen beginnen mit "IEL-B8-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
+// D (IEX-A9-11..16) Kindprozess: Scope registrierte_dids - Abweisung ohne Beleg, Abschluss, Kostendecke,
+// Beleg/Rotation, Wiederholung nach Neustart, Default-Stand.
+// Namen beginnen mit "IEL-B8-<n>: " bzw. "IEX-A9-<n>: " - trifft weder i18nCatalogPattern noch abnahmePattern.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -29,6 +31,8 @@ import {
   RUECKFALL_ENTSCHEIDUNG,
   elUebergabeDirektiven,
 } from "../src/elevenlabs/inbound-rueckfall.js";
+import { zugangsFingerabdruck } from "../src/elevenlabs/inbound-path-decision.js";
+import { INBOUND_EL_SCOPE } from "../src/elevenlabs/inbound-scope.js";
 import { INBOUND_EL_GRUND } from "../src/elevenlabs/inbound-uebergabe-gescheitert.js";
 import { LOCALES } from "../src/i18n/locales.js";
 import { makeVoiceRoutes } from "../src/routes/voice.js";
@@ -747,4 +751,135 @@ test("IEL-B8-22: Neustart waehrend WARTET, abgelaufene Frist - Umleitung scheite
   } finally {
     await telnyx.close();
   }
+});
+
+// ---- D: IEX-A9 Scope registrierte_dids --------------------------------------------------------
+
+// EL-Inbound an, Scope registrierte_dids (die Tenant-Liste wirkt dort nicht).
+const EL_REGISTRIERT_ENV = Object.freeze({ ...EL_AN_ENV, ELEVENLABS_INBOUND_SCOPE: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS });
+const EL_ALLOWLIST_ENV = Object.freeze({ ...EL_AN_ENV, ELEVENLABS_INBOUND_SCOPE: INBOUND_EL_SCOPE.ALLOWLIST });
+const ABGEWIESEN_SONDE = '"path":"abgewiesen"';
+const abweisungsZeile = (callId) => `[inbound] abgewiesen grund=${INBOUND_EL_GRUND.EL_OHNE_REGISTRIERUNG} call=${callId}`;
+const BELEG_ZEITPUNKT = "2026-09-15T08:00:00.000Z";
+const ALTER_SIP_USER = "iex-a9-alter-benutzer";
+const ZWEITE_DID = "+4915255550001";
+const TOTER_ANBIETER = "http://127.0.0.1:1";
+const GOLDEN_FIXTURE = path.join("test", "fixtures", "iel-incoming-budget-golden.xml");
+const GOLDEN_CALL_SID = "CAielgolden";
+const NICHT_GEPINNT = "tenant_iex_a9_nicht_gepinnt";
+
+const istAbweisungsAntwort = (texml) =>
+  texml === fehlersatzTexml() && !["<Dial", "<Gather", "<Redirect"].some((verb) => texml.includes(verb));
+
+async function abgewiesenerCall(srv) {
+  const zustand = await waitForStoreState(srv, (stand) => Boolean(stand.calls[0]?.elFallbackAt), SPAWN_FRIST_MS);
+  return zustand.calls[0];
+}
+
+test("IEX-A9-11: registrierte_dids, DID ohne Beleg - Fehlersatz + Auflegen, Kurzbein-Profil, Marker, Grund, Sonde, keine Nummer im Log", async () => {
+  await mitServer({ env: EL_REGISTRIERT_ENV, seed: seedWithTelnyxNumber({ language: "de" }) }, async (srv) => {
+    const texml = await incomingText(srv);
+    assert.ok(istAbweisungsAntwort(texml), texml);
+
+    const call = await abgewiesenerCall(srv);
+    assert.equal(call.costProfile, KOSTENPROFIL.TELNYX_INBOUND_BUDGET);
+    assert.equal(call.failureReason, INBOUND_EL_GRUND.EL_OHNE_REGISTRIERUNG);
+    assert.equal(call.transcript.length, 0);
+    assert.ok(call.maxDurationS > 0);
+
+    await waitForLog(srv, /\[inbound\] abgewiesen/);
+    assert.equal(zeilenMit(srv, ABGEWIESEN_SONDE), EINMAL);
+    assert.equal(zeilenMit(srv, '"path":"budget"'), 0);
+    assert.equal(zeilenMit(srv, '"path":"elevenlabs"'), 0);
+    assert.equal(zeilenMit(srv, abweisungsZeile(call.id)), EINMAL);
+    assert.ok(!srv.stdout.includes(TELNYX_TEST_TENANT_NUMBER), "keine volle Nummer im Log");
+  });
+});
+
+test("IEX-A9-12: Abschluss eines abgewiesenen Anrufs - gebucht genau einmal, zustand=abgewiesen, keine Notification, keine Zusammenfassung", async () => {
+  await mitServer({ env: EL_REGISTRIERT_ENV, seed: seedWithTelnyxNumber({ language: "de" }) }, async (srv) => {
+    await incomingText(srv);
+    const { id } = await abgewiesenerCall(srv);
+    await postStatus(srv, id);
+    const { calls, notifications } = await waitForStoreState(srv, (stand) => Boolean(stand.calls[0].billedAt), SPAWN_FRIST_MS);
+    const [call] = calls;
+    assert.equal(notifications.length, 0);
+    assert.ok(!call.summary);
+    await waitForLog(srv, /\[el-uebergabe\] gescheitert/);
+    const abschlussZeile = `[el-uebergabe] gescheitert call=${id} grund=${INBOUND_EL_GRUND.EL_OHNE_REGISTRIERUNG} zustand=abgewiesen`;
+    assert.equal(zeilenMit(srv, abschlussZeile), EINMAL);
+
+    await postStatus(srv, id);
+    await waitUntil(() => zeilenMit(srv, "[voice/status]") >= ZWEIMAL, SPAWN_WARTE);
+    assert.equal(einzigerCall(srv).billedAt, call.billedAt);
+  });
+});
+
+test("IEX-A9-13: registrierte_dids, Tenant-Decke erschoepft - die Kostendecke greift VOR der Abweisung", async () => {
+  await mitServer({ env: EL_REGISTRIERT_ENV, seed: erschoepfterSeed() }, async (srv) => {
+    const texml = await incomingText(srv);
+    assert.ok(texml.includes(LOCALES.de.budgetExhaustedHangup), texml);
+    assert.ok(!texml.includes(LOCALES.de.inboundFehlersatz(OWNER_NAME)));
+    assert.equal(callsOf(srv).length, 0);
+    assert.equal(zeilenMit(srv, ABGEWIESEN_SONDE), 0);
+  });
+});
+
+// Nummer mit Registrierungs-Beleg; fp = Fingerabdruck des Zugangs, fuer den der Beleg ausgestellt wurde.
+function belegteNummer(nummer, { fp, registrierungsId }) {
+  return { ...nummer, elInboundTrunkBelegtAt: BELEG_ZEITPUNKT, elInboundTrunkZugangFp: fp, providerAgentPhoneNumberId: registrierungsId };
+}
+
+function rotationsSeed() {
+  const seed = seedWithTelnyxNumber({ language: "de" });
+  const [vorlage] = seed.numbers;
+  const zweiteNummer = { ...vorlage, id: "num_iex_a9_b", e164: ZWEITE_DID };
+  seed.numbers = [
+    belegteNummer(vorlage, { fp: zugangsFingerabdruck(SIP_USER), registrierungsId: "phnum_iex_a9_a" }),
+    belegteNummer(zweiteNummer, { fp: zugangsFingerabdruck(ALTER_SIP_USER), registrierungsId: "phnum_iex_a9_b" }),
+  ];
+  return seed;
+}
+
+test("IEX-A9-14: Beleg mit laufendem Fingerabdruck -> Uebergabe; Beleg eines rotierten Zugangs -> Abweisung (Anbieter nicht erreichbar)", async () => {
+  const env = { ...EL_REGISTRIERT_ENV, ELEVENLABS_API_KEY: "test", ELEVENLABS_AGENT_ID: AGENT_ID, ELEVENLABS_API_BASE: TOTER_ANBIETER };
+  await mitServer({ env, seed: rotationsSeed() }, async (srv) => {
+    await waitForLog(
+      srv,
+      /\[el-trunk\] sweep fertig scope=registrierte_dids aktiv=2 belegt=0 abweichung=0 unbekannt=2 ohne_registrierung=0/,
+      SPAWN_FRIST_MS,
+    );
+
+    const belegt = await incomingText(srv);
+    assert.ok(belegt.startsWith(`${XML_PRAEFIX}<Dial`), belegt);
+    await waitForLog(srv, /"path":"elevenlabs"/);
+    assert.equal(zeilenMit(srv, '"path":"elevenlabs"'), EINMAL);
+
+    const rotiert = await incomingText(srv, { callSid: "CAiexa9rotation", to: ZWEITE_DID });
+    assert.ok(istAbweisungsAntwort(rotiert), rotiert);
+
+    const nummerB = srv.readStore().numbers.find((nummer) => nummer.e164 === ZWEITE_DID);
+    assert.equal(nummerB.elInboundTrunkZugangFp, zugangsFingerabdruck(ALTER_SIP_USER), "UNBEKANNT loescht nie");
+  });
+});
+
+test("IEX-A9-15: D6 - Wiederholung von /voice/incoming nach Neustart bekommt fuer einen abgewiesenen Anruf den Fehlersatz, nie einen Gather", async () => {
+  await mitNeustart({ env: EL_REGISTRIERT_ENV, vorbereiten: (srv) => incomingText(srv) }, async (srv) => {
+    const texml = await incomingText(srv);
+    assert.ok(istAbweisungsAntwort(texml), texml);
+    assert.equal(callsOf(srv).length, EINMAL);
+    assert.equal(zeilenMit(srv, "[inbound-path]"), 0);
+  });
+});
+
+test("IEX-A9-16: Scope allowlist explizit - gepinnt Uebergabe wie IEL-B8-12, nicht gepinnt byte-gleich zum Golden Master", async () => {
+  const seed = seedWithTelnyxNumber({ language: "de" });
+  await mitServer({ env: EL_ALLOWLIST_ENV, seed }, async (srv) => {
+    const texml = await incomingText(srv);
+    assert.ok(texml.startsWith(`${XML_PRAEFIX}<Dial`), texml);
+  });
+  await mitServer({ env: { ...EL_ALLOWLIST_ENV, ELEVENLABS_INBOUND_TENANT_IDS: NICHT_GEPINNT }, seed }, async (srv) => {
+    const texml = normalizeIncomingTexml(await incomingText(srv, { callSid: GOLDEN_CALL_SID }));
+    assert.equal(`${texml}\n`, fs.readFileSync(GOLDEN_FIXTURE, "utf8"));
+  });
 });

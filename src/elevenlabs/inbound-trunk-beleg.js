@@ -7,8 +7,9 @@
 // ueber die Store-Operationen) und als EINE Ergebniszeile im Log, geschrieben NACH dem
 // letzten GET. Diese Felder erscheinen in keiner API-, MCP- oder Export-Ausgabe.
 //
-// Aufbau: reiner Teil (Fingerabdruck, Beleg-Urteil, Hindernis, Ergebniszeile) plus die
-// Sweep-Fabrik makeTrunkSweep mit injiziertem IO (store, elRead, logger, jetzt).
+// Aufbau: reiner Teil (Beleg-Urteil, Hindernis, Ergebniszeile; der Zugangs-Fingerabdruck lebt
+// neben der Zugangs-Definition in inbound-path-decision.js) plus die Sweep-Fabrik makeTrunkSweep
+// mit injiziertem IO (store, elRead, logger, jetzt).
 //
 // Grenzen, bewusst:
 // - Kein Schreiben beim Anbieter. Eine Reparatur ist A10-Scope; die Naht dafuer ist
@@ -21,20 +22,21 @@
 // - Das Log nennt nie eine volle Nummer, den SIP-Benutzer, den Fingerabdruck oder eine
 //   Registrierungs-ID - nur Zaehler und DID-Endungen.
 
-import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { NUMBER_STATUS } from "../store/defaults.js";
-import { e164Endung, inboundElAccessDefects, istNichtLeererString } from "./inbound-path-decision.js";
+import {
+  e164Endung,
+  inboundElAccessDefects,
+  istNichtLeererString,
+  zugangsFingerabdruck,
+} from "./inbound-path-decision.js";
 
-export const ZUGANG_FP_HEX_ZEICHEN = 16;
 // Begrenzte Parallelitaet der Boot-GETs (E8): schont das Anbieter-Rate-Limit, kein Env-Knopf.
 export const SWEEP_PARALLEL = 4;
 // Hoechstzahl Endungen in der Ergebniszeile; der Rest erscheint als ",+<n>" (b2 braucht die Vollstaendigkeit).
 export const SONDE_MAX_ENDUNGEN = 10;
 const HTTP_NOT_FOUND = 404; // Repo-Konvention: modul-lokal (voice.js, outbound-config-probe.js)
 const LOG_PRAEFIX = "[el-trunk]";
-const FP_ALGORITHMUS = "sha256";
-const FP_KODIERUNG = "hex";
 
 export const TRUNK_BELEG = Object.freeze({ BELEGT: "belegt", ABWEICHUNG: "abweichung", UNBEKANNT: "unbekannt" });
 // Werte == Schluessel der Ergebniszeile, Reihenfolge == Zeilenreihenfolge (EINE Quelle, G5/G23)
@@ -44,14 +46,6 @@ export const SWEEP_HINDERNIS = Object.freeze({
   ZUGANG_UNVOLLSTAENDIG: "zugang_unvollstaendig",
   EL_KONTO_UNVOLLSTAENDIG: "el_konto_unvollstaendig",
 });
-
-// 16 Hex von SHA-256 ueber den SIP-Benutzer - nie das Passwort. Leer/kein String -> null
-// (fail-closed: ohne Zugang gibt es keinen Fingerabdruck, also auch keinen Beleg).
-export function zugangsFingerabdruck(sipUser) {
-  if (!istNichtLeererString(sipUser)) return null;
-  const hash = createHash(FP_ALGORITHMUS).update(sipUser);
-  return hash.digest(FP_KODIERUNG).slice(0, ZUGANG_FP_HEX_ZEICHEN);
-}
 
 // G3: undefined === undefined darf nie als Uebereinstimmung gelten.
 function gleichUndGesetzt(wert, soll) {
@@ -118,13 +112,14 @@ function endungenTeil(endungen) {
   return ` ohne_beleg_endungen=${sichtbar.join(",")}${restTeil}`;
 }
 
-// ergebnisse = [{ endung, ergebnis }] -> die EINE Ergebniszeile des Sweeps.
-export function trunkSweepErgebnisZeile(ergebnisse) {
+// ergebnisse = [{ endung, ergebnis }] -> die EINE Ergebniszeile des Sweeps. scope ist ein vom Boot-Befund
+// gepruefter Enum-Wert (E11: Runbook b4/b5 lesen Scope und Zaehler aus derselben Zeile).
+export function trunkSweepErgebnisZeile({ scope, ergebnisse }) {
   const { aktiv, zaehler, ohneBelegEndungen } = zaehleSweepErgebnisse(ergebnisse);
   const zaehlerTeil = Object.values(SWEEP_ERGEBNIS)
     .map((schluessel) => `${schluessel}=${zaehler[schluessel]}`)
     .join(" ");
-  return `${LOG_PRAEFIX} sweep fertig aktiv=${aktiv} ${zaehlerTeil}${endungenTeil(ohneBelegEndungen)}`;
+  return `${LOG_PRAEFIX} sweep fertig scope=${scope} aktiv=${aktiv} ${zaehlerTeil}${endungenTeil(ohneBelegEndungen)}`;
 }
 
 function mitEndung(number, ergebnis) {
@@ -187,7 +182,7 @@ export function makeTrunkSweep({ store, config, elRead, logger = console, jetzt 
     const ergebnisse = await mitBegrenzterParallelitaet(aktive, SWEEP_PARALLEL, (nummer) =>
       pruefeNummer(nummer, zugangFp),
     );
-    logger.log(trunkSweepErgebnisZeile(ergebnisse));
+    logger.log(trunkSweepErgebnisZeile({ scope: config.voice.elevenLabsInbound.scope, ergebnisse }));
   }
 
   // fail-soft, rejectet nie; das Log nennt keinen Fehlertext (er koennte Werte tragen).

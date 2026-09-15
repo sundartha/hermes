@@ -17,6 +17,7 @@ import {
   INIT_WEBHOOK_TOKEN_MIN_LENGTH,
   ZUGANG_MANGEL,
 } from "../src/elevenlabs/inbound-path-decision.js";
+import { INBOUND_EL_SCOPE } from "../src/elevenlabs/inbound-scope.js";
 import { EL_INBOUND_ACCESS_FINDING } from "../src/boot-guard.js";
 import { inboundElBannerLine } from "../src/boot.js";
 import { NUMBER_STATUS, BOOTSTRAP_TENANT_ID } from "../src/store/defaults.js";
@@ -45,6 +46,7 @@ function inboundConfig(overrides = {}) {
       elevenLabsInbound: {
         enabled: true,
         tenantIds: [GEPINNT],
+        scope: INBOUND_EL_SCOPE.ALLOWLIST,
         sipUser: "u",
         sipPassword: "p".repeat(SIP_PASSWORD_MIN_LENGTH),
         initWebhookToken: "t".repeat(INIT_WEBHOOK_TOKEN_MIN_LENGTH),
@@ -174,6 +176,7 @@ function readBuiltInboundConfig(overrides = {}) {
     "import(\"./src/config.js\").then(({ config }) => " +
     "process.stdout.write(JSON.stringify({ " +
     "tenantIds: config.voice.elevenLabsInbound.tenantIds, " +
+    "scope: config.voice.elevenLabsInbound.scope, " +
     "sipUserLength: config.voice.elevenLabsInbound.sipUser.length, " +
     "sipPasswordLength: config.voice.elevenLabsInbound.sipPassword.length, " +
     "initWebhookTokenLength: config.voice.elevenLabsInbound.initWebhookToken.length })));";
@@ -200,6 +203,15 @@ test("IEL-B1-7b: Kommaliste wird gesplittet/getrimmt, Passwort mit Whitespace/Ne
   });
   assert.deepEqual(built.tenantIds, ["t_a", "t_b"]);
   assert.equal(built.sipPasswordLength, SIP_PASSWORD_MIN_LENGTH);
+});
+
+test("IEX-A9-8: Scope-Parsing - Default allowlist, getrimmt, unbekannter Wert bleibt (Pruefung im Boot)", () => {
+  assert.equal(readBuiltInboundConfig().scope, INBOUND_EL_SCOPE.ALLOWLIST);
+  assert.equal(
+    readBuiltInboundConfig({ ELEVENLABS_INBOUND_SCOPE: " registrierte_dids \n" }).scope,
+    INBOUND_EL_SCOPE.REGISTRIERTE_DIDS,
+  );
+  assert.equal(readBuiltInboundConfig({ ELEVENLABS_INBOUND_SCOPE: "alle" }).scope, "alle");
 });
 
 // ---- Env-Kohaerenz (Dateilesen, kein Konfig-Import) --------------------------------
@@ -236,6 +248,20 @@ test("IEL-B1-8: alle vier Schluessel stehen kohaerent in config.js, .env.example
     );
     assert.equal(BASE_ENV[key], "", `${key} fehlt oder ist nicht leer in test/helpers.js#BASE_ENV`);
   }
+});
+
+test("IEX-A9-9: ELEVENLABS_INBOUND_SCOPE steht kohaerent in config.js, .env.example, render.yaml, BASE_ENV", () => {
+  const configJs = readRepoFile("src/config.js");
+  const envExample = readRepoFile(".env.example");
+  const renderYaml = readRepoFile("render.yaml");
+
+  // Positiv-Kontrolle (Muster IEL-B1-8): ein bekannt vorhandener Schluessel mit Enum-Default.
+  assert.ok(configJs.includes("process.env.STT_PROFILE"));
+
+  assert.ok(configJs.includes("process.env.ELEVENLABS_INBOUND_SCOPE"));
+  assert.match(envExample, /^ELEVENLABS_INBOUND_SCOPE=allowlist\s*$/m);
+  assert.match(renderYaml, /key:\s*ELEVENLABS_INBOUND_SCOPE\s*\n\s*value:\s*"allowlist"/);
+  assert.equal(BASE_ENV.ELEVENLABS_INBOUND_SCOPE, "");
 });
 
 // ---- Sondenzeile (rein) -------------------------------------------------------------
@@ -288,10 +314,17 @@ test("IEL-B1-13: doppelter Allowlist-Eintrag zaehlt einmal", () => {
 });
 
 // ---- Banner (rein) -------------------------------------------------------------------
-test("IEL-B1-14: Banner-Zeile - aus/an, Anzahl, nie eine Tenant-ID", () => {
-  assert.equal(inboundElBannerLine({ enabled: false, tenantIds: [] }), "Inbound-EL: aus, 0 Tenants");
-  const zeileAn = inboundElBannerLine({ enabled: true, tenantIds: [GEPINNT, FREMD] });
-  assert.equal(zeileAn, "Inbound-EL: an, 2 Tenants");
+test("IEL-B1-14: Banner-Zeile - aus/an, Anzahl, Scope (IEX-A9), nie eine Tenant-ID", () => {
+  assert.equal(
+    inboundElBannerLine({ enabled: false, tenantIds: [], scope: INBOUND_EL_SCOPE.ALLOWLIST }),
+    "Inbound-EL: aus, 0 Tenants, scope=allowlist",
+  );
+  const zeileAn = inboundElBannerLine({
+    enabled: true,
+    tenantIds: [GEPINNT, FREMD],
+    scope: INBOUND_EL_SCOPE.REGISTRIERTE_DIDS,
+  });
+  assert.equal(zeileAn, "Inbound-EL: an, 2 Tenants, scope=registrierte_dids");
   assert.ok(!zeileAn.includes(GEPINNT));
 });
 

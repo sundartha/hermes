@@ -274,6 +274,9 @@ export const BASE_ENV = {
   // via dotenv in jeden Spawn-Test (Lehre test-base-env-drift) - bei diesen Schluesseln mit
   // Secret-Folge. Tests mit Schalter an setzen EL_INBOUND_ACCESS_BOOT_ENV (unten).
   ELEVENLABS_INBOUND_TENANT_IDS: "",
+  // IEX-A9: neutral LEER (= Default allowlist in config.js), sonst leakt eine lokale .env mit
+  // registrierte_dids in jeden Spawn-Test (Lehre test-base-env-drift). Der Golden-Test faehrt so den Default.
+  ELEVENLABS_INBOUND_SCOPE: "",
   ELEVENLABS_INBOUND_SIP_USER: "",
   ELEVENLABS_INBOUND_SIP_PASSWORD: "",
   ELEVENLABS_INIT_WEBHOOK_TOKEN: "",

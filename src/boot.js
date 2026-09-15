@@ -37,6 +37,7 @@ import {
   driftConfigFindings,
   llmFallbackFindings,
   elInboundAccessFindings,
+  elInboundScopeFindings,
 } from "./boot-guard.js";
 import {
   inboundElAllowlistProbeLine,
@@ -477,13 +478,18 @@ function assertElInboundAccess(config) {
   applyBootFindings(elInboundAccessFindings(config.voice.elevenLabsInbound));
 }
 
+// IEX-A9: Scope des EL-Inbound-Wegs (elInboundScopeFindings, Begruendung dort). FATAL moeglich -> "assert".
+function assertElInboundScope(config) {
+  applyBootFindings(elInboundScopeFindings(config.voice.elevenLabsInbound.scope));
+}
+
 // Alle fail-closed Boot-Gates gebuendelt (macht INV-5 "rearm NACH allen exit1-Gates"
 // strukturell sichtbar - kein Code danach kann ein Gate vergessen). Die vier
 // Bestands-Gates unten pruefen zuerst; assertSpendCapCoherence (P3, Klausel B) ist
 // das fuenfte, assertProviderRateInBand (LCT P4) das sechste, assertCostTruingBooking
 // (LCT P4) das siebte, assertSttProfile (STT-A1) das achte, assertPricedModels (B4a)
-// das neunte, assertPricedPlans (GP-P6) das zehnte, assertLatentCostPaths (IE3) das elfte
-// und assertElInboundAccess (IEL-B1) das zwoelfte, das noch process.exit(1)
+// das neunte, assertPricedPlans (GP-P6) das zehnte, assertLatentCostPaths (IE3) das elfte,
+// assertElInboundAccess (IEL-B1) das zwoelfte und assertElInboundScope (IEX-A9) das dreizehnte, das noch process.exit(1)
 // rufen kann - warnStaleModelPrices/warnAlertChannelUnset/warnTariffDrift/
 // warnNumberOriginDecoupled/warnMissingProvisioningConnection/
 // warnElRegistrationSipCredsMissing/warnLlmFallbackUnusable (FW2) sind reine Diagnose
@@ -573,6 +579,7 @@ function assertBootGates(config, store, durableAudit) {
   warnMissingProvisioningConnection(config); // Nummern-Lebenszyklus, WARN
   assertLatentCostPaths(config); // KV-P7/IE3: kann exit(1)
   assertElInboundAccess(config); // IEL-B1: kann exit(1)
+  assertElInboundScope(config); // IEX-A9: kann exit(1)
   warnElRegistrationSipCredsMissing(config); // OUTBOUND-E5, WARN
 }
 
@@ -617,9 +624,11 @@ export function inboundSprechpfadBannerLine(voice) {
 // IEL-B1: ist der EL-Inbound-Schalter an, und wie viele Tenants sind gepinnt? Nur Zustand
 // und Anzahl - NIE eine Tenant-ID (Regel 4/PII). Unkonditional wie die Sprechpfad-Zeile:
 // eine im Aus-Zustand fehlende Zeile waere von einem Deploy ohne sie nicht unterscheidbar.
+// IEX-A9 (E11): plus scope=<s> - der Wert ist zu diesem Zeitpunkt vom Boot-Befund geprueft (Enum, nie
+// Freitext).
 export function inboundElBannerLine(elevenLabsInbound) {
   const zustand = elevenLabsInbound.enabled ? "an" : "aus";
-  return `Inbound-EL: ${zustand}, ${inboundElPinnedTenantCount(elevenLabsInbound.tenantIds)} Tenants`;
+  return `Inbound-EL: ${zustand}, ${inboundElPinnedTenantCount(elevenLabsInbound.tenantIds)} Tenants, scope=${elevenLabsInbound.scope}`;
 }
 
 // AL-P14: der In-Call-Consult exportiert Inhalte aus einem LAUFENDEN Gespraech an den

@@ -98,6 +98,7 @@ function sweepConfig({ enabled = true, sipUser = SIP_USER, sipPassword, apiKey =
       elevenLabsInbound: {
         enabled,
         tenantIds: ["tenant_a8"],
+        scope: "allowlist",
         sipUser,
         sipPassword: sipPassword ?? "p".repeat(pfad.SIP_PASSWORD_MIN_LENGTH),
         initWebhookToken: "t".repeat(pfad.INIT_WEBHOOK_TOKEN_MIN_LENGTH),
@@ -164,17 +165,17 @@ function lauf({ store, elRead, config: sweepKonfig = sweepConfig(), logger = fak
 // --- 1: Fingerabdruck ---------------------------------------------------------------
 
 test("IEX-A8-1: Fingerabdruck ist deterministisch, 16 Hex von sha256(sipUser), leer/kein String -> null", () => {
-  const fp = beleg.zugangsFingerabdruck(SIP_USER);
-  assert.equal(beleg.ZUGANG_FP_HEX_ZEICHEN, ERWARTETE_FP_LAENGE);
-  assert.equal(beleg.zugangsFingerabdruck(SIP_USER), fp);
+  const fp = pfad.zugangsFingerabdruck(SIP_USER);
+  assert.equal(pfad.ZUGANG_FP_HEX_ZEICHEN, ERWARTETE_FP_LAENGE);
+  assert.equal(pfad.zugangsFingerabdruck(SIP_USER), fp);
   assert.match(fp, FP_MUSTER);
   assert.equal(fp, sha256Hex16(SIP_USER));
-  assert.notEqual(beleg.zugangsFingerabdruck(SIP_USER_ANDERS), fp);
+  assert.notEqual(pfad.zugangsFingerabdruck(SIP_USER_ANDERS), fp);
   assert.notEqual(fp, SIP_USER);
-  assert.notEqual(beleg.zugangsFingerabdruck(HEX_SIP_USER), HEX_SIP_USER);
-  assert.equal(beleg.zugangsFingerabdruck(""), null);
-  assert.equal(beleg.zugangsFingerabdruck(undefined), null);
-  assert.equal(beleg.zugangsFingerabdruck(ZAHL_STATT_STRING), null);
+  assert.notEqual(pfad.zugangsFingerabdruck(HEX_SIP_USER), HEX_SIP_USER);
+  assert.equal(pfad.zugangsFingerabdruck(""), null);
+  assert.equal(pfad.zugangsFingerabdruck(undefined), null);
+  assert.equal(pfad.zugangsFingerabdruck(ZAHL_STATT_STRING), null);
 });
 
 // --- 2: Beleg-Urteil ------------------------------------------------------------------
@@ -432,7 +433,7 @@ test("IEX-A8-10: Ergebniszeile - 0 aktiv", async () => {
   const { logger, laeuft } = lauf({ store: fakeStore([]), elRead: fakeElRead({}) });
   await laeuft;
   assert.deepEqual(logger.zeilen, [
-    { stufe: "log", zeile: "[el-trunk] sweep fertig aktiv=0 belegt=0 abweichung=0 unbekannt=0 ohne_registrierung=0" },
+    { stufe: "log", zeile: "[el-trunk] sweep fertig scope=allowlist aktiv=0 belegt=0 abweichung=0 unbekannt=0 ohne_registrierung=0" },
   ]);
 });
 
@@ -441,7 +442,7 @@ test("IEX-A8-10: Ergebniszeile - 1 belegt ohne Endungsteil", async () => {
   const elRead = fakeElRead({ [eine.providerAgentPhoneNumberId]: () => passendeRegistrierung(eine.e164) });
   const { logger, laeuft } = lauf({ store: fakeStore([eine]), elRead });
   await laeuft;
-  assert.equal(logger.text(), "[el-trunk] sweep fertig aktiv=1 belegt=1 abweichung=0 unbekannt=0 ohne_registrierung=0");
+  assert.equal(logger.text(), "[el-trunk] sweep fertig scope=allowlist aktiv=1 belegt=1 abweichung=0 unbekannt=0 ohne_registrierung=0");
 });
 
 // Mischfall: belegt; abweichung per 200-Mismatch; abweichung per 404; unbekannt per 500;
@@ -472,7 +473,7 @@ test("IEX-A8-10: Ergebniszeile - n gemischt, Endungen sortiert", async () => {
   await laeuft;
   assert.equal(
     logger.text(),
-    "[el-trunk] sweep fertig aktiv=6 belegt=1 abweichung=2 unbekannt=2 ohne_registrierung=1 " +
+    "[el-trunk] sweep fertig scope=allowlist aktiv=6 belegt=1 abweichung=2 unbekannt=2 ohne_registrierung=1 " +
       "ohne_beleg_endungen=…0002,…0003,…0004,…0005,…0006",
   );
 });
@@ -488,7 +489,7 @@ test("IEX-A8-10: Ergebniszeile - Kappung auf SONDE_MAX_ENDUNGEN plus Rest", asyn
   const sichtbar = numbers.slice(0, beleg.SONDE_MAX_ENDUNGEN).map((eintrag) => pfad.e164Endung(eintrag.e164));
   assert.equal(
     logger.text(),
-    `[el-trunk] sweep fertig aktiv=${anzahl} belegt=0 abweichung=0 unbekannt=0 ohne_registrierung=${anzahl} ` +
+    `[el-trunk] sweep fertig scope=allowlist aktiv=${anzahl} belegt=0 abweichung=0 unbekannt=0 ohne_registrierung=${anzahl} ` +
       `ohne_beleg_endungen=${sichtbar.join(",")},+${KAPPUNG_UEBERHANG}`,
   );
   assert.ok(logger.text().includes("…0110,+2"), "Positiv-Kontrolle: zehnte Endung ist …0110");
@@ -517,7 +518,7 @@ test("IEX-A8-11: BELEGT setzt, ABWEICHUNG loescht, UNBEKANNT laesst stehen, nich
 
   const [belegt, abweichung, unbekannt] = store.state.numbers;
   assert.equal(belegt.elInboundTrunkBelegtAt, T0_ISO);
-  assert.equal(belegt.elInboundTrunkZugangFp, beleg.zugangsFingerabdruck(SIP_USER));
+  assert.equal(belegt.elInboundTrunkZugangFp, pfad.zugangsFingerabdruck(SIP_USER));
   assert.equal("elInboundTrunkBelegtAt" in abweichung, false);
   assert.equal("elInboundTrunkZugangFp" in abweichung, false);
   assert.equal(unbekannt.elInboundTrunkBelegtAt, T1_ISO);
@@ -623,7 +624,7 @@ test("IEX-A8-15: Log-Hygiene ueber einen Voll-Lauf - kein sipUser, kein Fingerab
   const text = logger.text();
   assert.ok(text.includes("sweep fertig"), "Positiv-Kontrolle: der Lauf hat geloggt");
   assert.equal(text.includes(SIP_USER), false);
-  assert.equal(text.includes(beleg.zugangsFingerabdruck(SIP_USER)), false);
+  assert.equal(text.includes(pfad.zugangsFingerabdruck(SIP_USER)), false);
   for (const eintrag of numbers) assert.equal(text.includes(eintrag.e164), false, "keine volle e164");
   assert.equal(text.includes("phnum_"), false);
   assert.equal(text.includes("num_"), false);
@@ -645,7 +646,13 @@ test("IEX-A8-16: inboundElAllowlistProbeLine ist mit und ohne Beleg-Felder byte-
 // --- 17: kein Leck ----------------------------------------------------------------------
 
 const LECK_MUSTER = /elInboundTrunkZugangFp|el_inbound_trunk_zugang_fp|elInboundTrunkBelegtAt/;
-const ERLAUBTE_DATEIEN = ["store/state-ops.js", "store/pg.js", "db/schema.sql", "elevenlabs/inbound-trunk-beleg.js"];
+const ERLAUBTE_DATEIEN = [
+  "store/state-ops.js",
+  "store/pg.js",
+  "db/schema.sql",
+  "elevenlabs/inbound-trunk-beleg.js",
+  "elevenlabs/inbound-path-decision.js",
+];
 
 function posixRelativ(basis, datei) {
   const relativ = path.relative(basis, datei);
@@ -659,7 +666,7 @@ function alleDateien(verzeichnis) {
   });
 }
 
-test("IEX-A8-17: Beleg-Felder stehen nur in Store, Schema und Beleg-Modul (mit Positiv-Kontrolle)", () => {
+test("IEX-A8-17: Beleg-Felder stehen nur in Store, Schema, Beleg-Modul und Weiche (Leser, IEX-A9) (mit Positiv-Kontrolle)", () => {
   const srcVerzeichnis = path.join(ROOT, "src");
   const treffer = alleDateien(srcVerzeichnis)
     .filter((datei) => LECK_MUSTER.test(fs.readFileSync(datei, "utf8")))
@@ -753,11 +760,11 @@ test("IEX-A8-19: Spawn E2E - Dienst laeuft waehrend des GET, Ergebniszeile und B
     fakeEl.freigeben();
     await waitForLog(
       srv,
-      /\[el-trunk\] sweep fertig aktiv=1 belegt=1 abweichung=0 unbekannt=0 ohne_registrierung=0/,
+      /\[el-trunk\] sweep fertig scope=allowlist aktiv=1 belegt=1 abweichung=0 unbekannt=0 ohne_registrierung=0/,
       E2E_TIMEOUT_MS,
     );
     const gespeichert = srv.readStore().numbers.find((eintrag) => eintrag.id === "num_telnyx");
-    const fp = beleg.zugangsFingerabdruck(sipUser);
+    const fp = pfad.zugangsFingerabdruck(sipUser);
     assert.equal(gespeichert.elInboundTrunkZugangFp, fp);
     assert.equal(srv.stdout.includes(sipUser), false);
     assert.equal(srv.stdout.includes(fp), false);
