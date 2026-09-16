@@ -4,19 +4,15 @@
 // scripts/iel-mess-stolperdraht.mjs); Echt-Modus-Faelle laden test/_iel-b11-fetch-attrappe.mjs
 // per --import und laufen gegen einen Router aus dem Speicher.
 //
-// ISOLATION: jeder Kindprozess-Fall bekommt einen eigenen temporaeren Messbaum (mkdtemp) mit
-// Kopien der scripts/iel-mess*-Dateien, einem Symlink auf src/ und node_modules/, und eigenen
-// tasks/-Zaehlerdateien. PFADE/tasksDatei in scripts/iel-mess.mjs haengen an import.meta.url
-// und zeigen deshalb in den Temp-Baum - die echten tasks/-Dateien werden nie beruehrt (Test 3
-// belegt das per Hash).
+// ISOLATION: der Messbaum-Helfer test/_iel-messbaum.mjs baut je Fall einen eigenen
+// temporaeren Baum (mkdtemp) mit Kopien der scripts/iel-mess*-Dateien, Symlinks auf src/ und
+// node_modules/ und eigenen tasks/-Zaehlerdateien - die echten tasks/-Dateien werden nie
+// beruehrt (Test 3 belegt das per Hash).
 import { strict as assert } from "node:assert";
-import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import {
   N2_URTEIL,
@@ -26,9 +22,22 @@ import {
   sipNachrichtenBeleg,
 } from "../scripts/iel-mess-belege.mjs";
 import { texmlAnrufAnfrage } from "../scripts/iel-mess-anbieter.mjs";
+import {
+  bauMessBaum,
+  ergebniszeileMitArt,
+  faellePfadIn,
+  ielMessDateiNamen,
+  jsonZeilenAus,
+  leseProtokoll,
+  m1ZaehlerHash,
+  protokollPfadIn,
+  setzeZusatzFall,
+  spawnDry,
+  spawnEcht,
+  trockenAufrufe,
+} from "./_iel-messbaum.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SPAWN_TIMEOUT_MS = 15000;
 const HTTP_OK = 200;
 const HTTP_SERVER_FEHLER = 500;
 const EXIT_VERWEIGERT = 2;
@@ -50,111 +59,8 @@ const NICHT_DISKRIMINIERENDE_CODES = Object.freeze([
   null,
   undefined,
 ]);
-const ATTRAPPE_MODUL = pathToFileURL(path.join(ROOT, "test", "_iel-b11-fetch-attrappe.mjs")).href;
 
-const BASIS_ENV = Object.freeze({
-  PATH: process.env.PATH,
-  NODE_ENV: "test",
-  TELNYX_API_KEY: "test-telnyx-schluessel",
-  TELNYX_ACCOUNT_SID: "test-account-sid",
-  TELNYX_API_BASE: "http://telnyx.test",
-  ELEVENLABS_API_KEY: "test-el-schluessel",
-  ELEVENLABS_AGENT_ID: "agent_b11_test",
-  ELEVENLABS_API_BASE: "http://el.test",
-});
-
-// --- Messbaum-Helfer ---------------------------------------------------------------------
-
-function ielMessDateiNamen() {
-  const scriptsInhalt = fs.readdirSync(path.join(ROOT, "scripts"));
-  const treffer = scriptsInhalt.filter((name) => name.startsWith("iel-mess"));
-  return treffer.sort();
-}
-
-function bauMessBaum(optionen = {}) {
-  const { m1Zaehler, nachdeployZaehler = { ausgeloest: 0, anrufe: [] }, wegwerf } = optionen;
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "iel-b11-"));
-  const scriptsDir = path.join(dir, "scripts");
-  const tasksDir = path.join(dir, "tasks");
-  fs.mkdirSync(scriptsDir);
-  fs.mkdirSync(tasksDir);
-  for (const datei of ielMessDateiNamen()) {
-    fs.copyFileSync(path.join(ROOT, "scripts", datei), path.join(scriptsDir, datei));
-  }
-  fs.symlinkSync(path.join(ROOT, "src"), path.join(dir, "src"), "dir");
-  fs.symlinkSync(path.join(ROOT, "node_modules"), path.join(dir, "node_modules"), "dir");
-  const m1Pfad = path.join(ROOT, "tasks", "iel-m1-zaehler.json");
-  const m1Inhalt = m1Zaehler ?? JSON.parse(fs.readFileSync(m1Pfad, "utf8"));
-  fs.writeFileSync(path.join(tasksDir, "iel-m1-zaehler.json"), JSON.stringify(m1Inhalt));
-  fs.writeFileSync(path.join(tasksDir, "iel-nachdeploy-zaehler.json"), JSON.stringify(nachdeployZaehler));
-  if (wegwerf) fs.writeFileSync(path.join(tasksDir, "iel-m1-wegwerf.json"), JSON.stringify(wegwerf));
-  return dir;
-}
-
-function m1ZaehlerHash(dir) {
-  const inhalt = fs.readFileSync(path.join(dir, "tasks", "iel-m1-zaehler.json"));
-  return createHash("sha256").update(inhalt).digest("hex");
-}
-
-function faellePfadIn(dir) {
-  return path.join(dir, "scripts", "iel-mess.cases.json");
-}
-
-function setzeZusatzFall(dir, name, fall) {
-  const pfad = faellePfadIn(dir);
-  const konfiguration = JSON.parse(fs.readFileSync(pfad, "utf8"));
-  konfiguration.faelle[name] = fall;
-  fs.writeFileSync(pfad, JSON.stringify(konfiguration));
-}
-
-function spawnDry(dir, args) {
-  const skriptPfad = path.join(dir, "scripts", "iel-mess.mjs");
-  return spawnSync(process.execPath, [skriptPfad, ...args, "--dry-run"], {
-    cwd: dir,
-    env: BASIS_ENV,
-    encoding: "utf8",
-    timeout: SPAWN_TIMEOUT_MS,
-  });
-}
-
-function spawnEcht(dir, args, kontext) {
-  const { szenario, protokollPfad } = kontext;
-  const env = { ...BASIS_ENV, IEL_B11_ATTRAPPE: JSON.stringify(szenario), IEL_B11_PROTOKOLL: protokollPfad };
-  const skriptPfad = path.join(dir, "scripts", "iel-mess.mjs");
-  return spawnSync(process.execPath, ["--import", ATTRAPPE_MODUL, skriptPfad, ...args], {
-    cwd: dir,
-    env,
-    encoding: "utf8",
-    timeout: SPAWN_TIMEOUT_MS,
-  });
-}
-
-function leseProtokoll(protokollPfad) {
-  const inhalt = fs.readFileSync(protokollPfad, "utf8");
-  return JSON.parse(inhalt);
-}
-
-function jsonZeilenAus(stdout) {
-  const zeilen = stdout.split("\n");
-  const jsonZeilen = zeilen.filter((zeile) => zeile.startsWith("{"));
-  return jsonZeilen.map((zeile) => JSON.parse(zeile));
-}
-
-function ergebniszeileMitArt(stdout, art) {
-  const objekte = jsonZeilenAus(stdout);
-  return objekte.find((objekt) => objekt.art === art);
-}
-
-function trockenAufrufe(stdout) {
-  const zeilen = stdout.split("\n");
-  const zeile = zeilen.find((einzelne) => einzelne.includes("fetch-Aufrufe in diesem Lauf:"));
-  const treffer = zeile?.match(/(\d+)\s*$/);
-  return Number(treffer?.[1] ?? NaN);
-}
-
-function protokollPfadIn(dir) {
-  return path.join(dir, "protokoll.json");
-}
+// --- Protokoll-Helfer (nur hier gebraucht) -------------------------------------------------
 
 function methodenVon(protokoll) {
   return protokoll.map((aufruf) => aufruf.methode);
