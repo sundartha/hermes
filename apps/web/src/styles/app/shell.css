@@ -1246,6 +1246,19 @@
   font-size: 15px;
 }
 
+/* Owner-Befund 16.09.2026, Nachsuche zur Nummernkarte ("guck mal, ob das Problem noch
+   woanders ist"): dieselbe Ursache im Wartezustand. Die Kachelflaeche ist ohne Tarife
+   0px hoch -- ihr eigener Abstand nach oben (16px) bleibt aber stehen und laesst unten
+   im Kasten ein totes Feld (gemessen 152px Kasten, Inhalt endet 16px vor der
+   Unterkante). Bekanntes Muster: derselbe Fall stand in der Billing-Karte, wo der
+   Tarif-Umschlag mit aktivem Abo sichtbar blieb, obwohl alle Kinder versteckt waren
+   (Audit-Runde 15.09.2026, dort ueber ein hidden-Toggle geloest). Hier reicht `:empty`:
+   der Behaelter traegt im Markup keine Leerzeichen und wird per replaceChildren
+   geleert, ist also wirklich leer, wenn keine Kachel gerendert wurde. */
+#pending-tiles:empty {
+  display: none;
+}
+
 /* Gleiche Ueberschriften-Schrift auch im Wartezustand -- die Karte daneben bleibt
    sonst unangetastet (sie traegt die Tarif-Kacheln). */
 #region-pending h1 {
