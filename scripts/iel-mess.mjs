@@ -303,10 +303,34 @@ function belegArt(gruppe, endung) {
   return `${gruppe.artPraefix}-${endung}`;
 }
 
+// IEP-P1 Review-Fix: "art" (bestimmt den gewaehlten Weg in WEGE) und "zaehler" (bestimmt die
+// gepruefte Riegel-Gruppe) sind zwei freie Felder in scripts/iel-mess.cases.json - ohne diese
+// Bindung koennte ein Fall mit art "texml-ohrzeuge" (waehlt eine echte Nummer) unter einem
+// fremden Zaehler laufen (schwaechere SIP-Riegel statt der vier Ohrzeugen-Riegel) oder
+// umgekehrt ein SIP-Fall unter dem Zaehler "ohrzeuge" (die Ohrzeugen-Riegel pruefen dann ein
+// Ziel, das gar nicht gewaehlt wird). Deshalb: exakt symmetrische Paarung, plus das Feld
+// "ziel_e164" (die einzige Nummer, die ueberhaupt gewaehlt wird) ausserhalb dieser Gruppe verboten.
+const OHRZEUGE_ART = "texml-ohrzeuge";
+const OHRZEUGE_ZAEHLER = "ohrzeuge";
+
+function pruefeArtZaehlerPaarung(fall) {
+  const artIstOhrzeuge = fall.art === OHRZEUGE_ART;
+  const zaehlerIstOhrzeuge = fall.zaehler === OHRZEUGE_ZAEHLER;
+  if (artIstOhrzeuge !== zaehlerIstOhrzeuge) {
+    throw new Verweigerung(
+      `Fall-Art "${fall.art}" und Zaehler-Gruppe "${fall.zaehler}" sind unvereinbar - "${OHRZEUGE_ART}" gehoert ausschliesslich zu Zaehler "${OHRZEUGE_ZAEHLER}" und umgekehrt - verweigert`,
+    );
+  }
+  if (!zaehlerIstOhrzeuge && fall.ziel_e164 !== undefined) {
+    throw new Verweigerung(`Feld ziel_e164 ist nur in der Zaehler-Gruppe "${OHRZEUGE_ZAEHLER}" erlaubt - verweigert`);
+  }
+}
+
 function gruppeFuer(name, fall) {
   if (!Object.hasOwn(ZAEHLER_GRUPPEN, fall.zaehler ?? "")) {
     throw new Verweigerung(`Fall ${name} nennt keine gueltige Zaehler-Gruppe (zaehler: ${Object.keys(ZAEHLER_GRUPPEN).join("|")}) - verweigert`);
   }
+  pruefeArtZaehlerPaarung(fall);
   return ZAEHLER_GRUPPEN[fall.zaehler];
 }
 

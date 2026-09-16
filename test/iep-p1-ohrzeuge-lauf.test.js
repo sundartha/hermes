@@ -20,6 +20,7 @@ import {
   faellePfadIn,
   leseProtokoll,
   protokollPfadIn,
+  setzeZusatzFall,
   spawnDry,
   spawnEcht,
   trockenAufrufe,
@@ -30,6 +31,8 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const EXIT_VERWEIGERT = 2;
 const HTTP_OK = 200;
 const FALL = "OZ-vorher";
+const OHRZEUGE_ART = "texml-ohrzeuge";
+const OHRZEUGE_ZAEHLER = "ohrzeuge";
 const BELEG_ART = "iel-ohrzeuge-anruf";
 const PIN = "+18643028341";
 const ABSENDER = "+15739090177";
@@ -215,6 +218,69 @@ describe("IEP-P1 Golden: das Mess-TeXML traegt genau ein Verb", () => {
     assert.match(anfrage.form.Texml, new RegExp(`<Dial callerId="\\${ABSENDER}"`));
     assert.match(anfrage.form.Texml, new RegExp(`<Number>\\${PIN}</Number>`));
     assert.equal(anfrage.form.From, ABSENDER);
+  });
+});
+
+describe("IEP-P1 Review-Fix: art und zaehler sind eine feste Paarung", () => {
+  const FEHLPAARUNG_A = "OZ-fehlgepaart-m1";
+  const FEHLPAARUNG_B = "OZ-fehlgepaart-bruecke";
+
+  // REGEL 1 verletzt (s. Review): art "texml-ohrzeuge" waehlt ziel_e164, wuerde aber unter
+  // der m1-Gruppe NUR gegen sip_ziel geprueft - also ganz ohne Ziel-Pin, Denylist,
+  // OUTBOUND_FROZEN, Absender-Riegel, Vorlauf-/Eigentumsbeleg und Kostendecke.
+  it("art texml-ohrzeuge unter zaehler m1 verweigert VOR jedem Netzzugriff, trotz OUTBOUND_FROZEN=true", () => {
+    const dir = bauMessBaum();
+    setzeZusatzFall(dir, FEHLPAARUNG_A, {
+      art: OHRZEUGE_ART,
+      zaehler: "m1",
+      sip_ziel: "sip:+15739090177@sip.rtc.elevenlabs.io:5060;transport=tcp",
+      ziel_e164: "+491701234567",
+      anrufer_kennung: "+15739090177",
+      dial_timeout_s: 20,
+    });
+    const ergebnis = spawnDry(dir, [FEHLPAARUNG_A], { OUTBOUND_FROZEN: "true" });
+    assert.equal(ergebnis.status, EXIT_VERWEIGERT, `${ergebnis.stdout}\n${ergebnis.stderr}`);
+    assert.match(ergebnis.stderr, /unvereinbar/);
+    assert.equal(trockenAufrufe(ergebnis.stdout), 0);
+  });
+
+  // Gegenrichtung: zaehler "ohrzeuge" (die vier engen Riegel) unter einer anderen art wuerde
+  // WEGE["texml-bruecke"] ein BELIEBIGES sip_ziel waehlen lassen, ohne dass pruefeSipZiel/
+  // pruefeFiktivesElZiel je laufen - die Ohrzeugen-Riegel pruefen ein Ziel, das gar nicht
+  // gewaehlt wird.
+  it("zaehler ohrzeuge unter einer anderen art verweigert, kein TeXML-POST im Protokoll", () => {
+    const dir = bauMessBaum();
+    setzeZusatzFall(dir, FEHLPAARUNG_B, {
+      art: "texml-bruecke",
+      zaehler: OHRZEUGE_ZAEHLER,
+      sip_ziel: "sip:beliebig@fremder-host.example:5060",
+      anrufer_kennung: "+15739090177",
+      dial_timeout_s: 20,
+    });
+    const protokollPfad = protokollPfadIn(dir);
+    const ergebnis = spawnEcht(dir, [FEHLPAARUNG_B], { szenario: { routen: [] }, protokollPfad });
+    assert.equal(ergebnis.status, EXIT_VERWEIGERT, `${ergebnis.stdout}\n${ergebnis.stderr}`);
+    assert.match(ergebnis.stderr, /unvereinbar/);
+    if (fs.existsSync(protokollPfad)) {
+      const protokoll = leseProtokoll(protokollPfad);
+      assert.ok(!protokoll.some((aufruf) => aufruf.pfad.includes("/v2/texml/calls/")));
+    }
+  });
+
+  it("das Feld ziel_e164 ausserhalb der Ohrzeugen-Gruppe verweigert eigenstaendig", () => {
+    const dir = bauMessBaum();
+    setzeZusatzFall(dir, "OZ-ziel-e164-fremd", {
+      art: "texml-bruecke",
+      zaehler: "m1",
+      sip_ziel: "sip:+15739090177@sip.rtc.elevenlabs.io:5060;transport=tcp",
+      ziel_e164: "+491701234567",
+      anrufer_kennung: "+15739090177",
+      dial_timeout_s: 20,
+    });
+    const ergebnis = spawnDry(dir, ["OZ-ziel-e164-fremd"]);
+    assert.equal(ergebnis.status, EXIT_VERWEIGERT, `${ergebnis.stdout}\n${ergebnis.stderr}`);
+    assert.match(ergebnis.stderr, /Feld ziel_e164 ist nur in der Zaehler-Gruppe/);
+    assert.equal(trockenAufrufe(ergebnis.stdout), 0);
   });
 });
 
