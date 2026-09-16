@@ -328,6 +328,13 @@
   --chip-dot: 10px;
   --chip-dot-gap: 12px;
   --chip-axis: calc(var(--chip-dot) + var(--chip-dot-gap));
+  /* Die Ziffernstufe als eigener Wert, weil ZWEI Regeln sie brauchen: die Nummer selbst
+     (unten) und die Mindesthoehe ihrer Zeile im Block ab 981px. Ohne gemeinsame Quelle
+     laufen die beiden auseinander, sobald jemand die Ziffern anfasst. 1.5 ist die
+     Zeilenhoehe des Dashboard-Fliesstexts, die die Ziffernzeile erbt (gemessen:
+     26,35px Schrift -> 39,5px Zeile). */
+  --chip-number-size: clamp(22px, 1.83vw, 30px);
+  --chip-number-line: calc(var(--chip-number-size) * 1.5);
   /* GP-P6: die Karte ist jetzt zweizeilig -- oben .agent-chip__main (Text + Knopf),
      darunter der Erklaersatz ueber die volle Breite. Solange kein Hinweis da ist
      (Normalfall), ist die zweite Zeile [hidden] und die Karte sieht aus wie zuvor. */
@@ -397,12 +404,20 @@
     align-items: center;
     /* Owner-Befund 15.09.2026: "Deine Nummer" stand im Nummern-Zustand tiefer als im
        Stoerfall -- beide Karten zentrierten ihren Inhalt senkrecht, und der Inhalt ist
-       unterschiedlich hoch (zwei bzw. drei Zeilen). Der Inhalt steht darum jetzt oben:
+       unterschiedlich hoch (zwei bzw. drei Zeilen). Der Inhalt stand darum oben:
        das Label sitzt in BEIDEN Zustaenden genau ein Kartenpolster unter der Oberkante,
-       und die Oberkante flieht wiederum mit der "Dein Bereich"-Pille. Die feste
-       Mindesthoehe ist damit ueberfluessig geworden (sie wuerde die Karte im
-       Nummern-Zustand nur wieder unten leer laufen lassen). */
-    align-content: start;
+       und die Oberkante flieht wiederum mit der "Dein Bereich"-Pille.
+       Owner-Befund 16.09.2026 -- der Preis dafuer: die Karte ist im Kopfbereich auf die
+       Hoehe des Begruessungsblocks GESTRECKT (align-items:stretch an .dash-head, Runde 9),
+       ihr Inhalt ist aber kuerzer. Mit `start` fiel der gesamte Ueberschuss nach unten:
+       ohne Nummer 17px ueber dem Label und 40,7px unter dem Satz -- "oben so eng, unten so
+       viel Platz". Gegenmassnahme in zwei Teilen, damit BEIDE Befunde erledigt sind:
+       (1) der Inhalt steht wieder mittig, (2) die Nummernzeile behaelt ihre Hoehe auch
+       dann, wenn statt Ziffern ein Satz darin steht (s. .agent-chip__row unten) -- damit
+       ist der Inhalt in beiden Zustaenden GLEICH hoch und das Label rutscht beim Wechsel
+       nicht mehr. Der Stoerfall bleibt davon unberuehrt: dort ist die Karte hoeher als
+       der Begruessungsblock, streckt also nichts und sitzt schon mittig. */
+    align-content: center;
     column-gap: clamp(18px, 1.6vw, 28px);
     row-gap: 4px;
   }
@@ -419,6 +434,19 @@
      Versatz, den der Owner gesehen hat. */
   .agent-chip__body {
     align-self: start;
+  }
+  /* Teil (2) zum Befund oben: die Zeile behaelt die Hoehe einer Ziffernreihe, auch wenn
+     statt Ziffern der kuerzere Statussatz darin steht (20,2 gegen 26,4px Schrift = 25,2
+     gegen 39,5px Zeile). Ohne das waere der Inhalt der Karte je nach Zustand
+     unterschiedlich hoch und das mittig gesetzte Label saesse mal 21,7px, mal 28,8px
+     unter der Oberkante -- genau der Versatz, den der Owner am 15.09. beanstandet hat.
+     Der Satz selbst bleibt unveraendert, er bekommt nur Luft um sich; die Zeile ist ein
+     Flex-Container mit align-items:center, Punkt und Text stehen darin weiter mittig.
+     NICHT im Stoerfall (--notice): dort traegt die Karte zusaetzlich den Erklaersatz,
+     ist dadurch hoeher als der Begruessungsblock und bestimmt ihre Hoehe selbst -- 14px
+     mehr waeren dort reine Karteninflation. */
+  .agent-chip:not(.agent-chip--notice) .agent-chip__row {
+    min-height: var(--chip-number-line);
   }
   .agent-chip__action,
   .agent-chip__copy {
@@ -591,7 +619,8 @@
    Screens mit (Abschnitt 0-Prinzip: unter ~1200px identisch zu vorher). */
 .agent-chip__number {
   font-family: var(--app-mono);
-  font-size: clamp(22px, 1.83vw, 30px);
+  /* Wert steht oben an .agent-chip (die Mindesthoehe der Zeile rechnet mit ihm). */
+  font-size: var(--chip-number-size);
 }
 
 /* GP-P6 (Owner-Befund 15.09.2026): steht KEINE Nummer da, sondern ein Satz
@@ -870,8 +899,10 @@
      das Maximum, 16px die Untergrenze fuer sehr schmale Geraete (320px). Der
      Statussatz des Stoerfalls hat seine eigene Stufe (.is-status) und bleibt
      davon unberuehrt. */
-  .agent-chip__number {
-    font-size: clamp(16px, 5.2vw, 22px);
+  /* Gesetzt wird die gemeinsame Groesse an der Karte, nicht die Schriftgroesse an der
+     Nummer: die Mindesthoehe der Zeile rechnet mit demselben Wert (s. .agent-chip). */
+  .agent-chip {
+    --chip-number-size: clamp(16px, 5.2vw, 22px);
   }
   /* Owner-Befund: der Erklaersatz war am Handy "schon sehr gross". Eine Stufe
      unter dem Fliesstext, wie die Fussnoten in den Karten darunter. */
@@ -934,9 +965,11 @@
   .agent-chip {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    /* Wie am Desktop: der Inhalt steht oben, damit "Deine Nummer" in beiden Zustaenden
-       auf derselben Hoehe sitzt (Owner-Befund 15.09.2026). */
-    align-content: start;
+    /* Wie am Desktop: der Inhalt stand oben, damit "Deine Nummer" in beiden Zustaenden
+       auf derselben Hoehe sitzt (Owner-Befund 15.09.2026). Seit dem Owner-Befund vom
+       16.09.2026 steht er mittig -- dieselbe Begruendung und dasselbe Gegenstueck
+       (gleiche Zeilenhoehe fuer Ziffern und Statussatz) wie im Block ab 981px. */
+    align-content: center;
     column-gap: 12px;
     row-gap: 4px;
     /* Owner-Befund 15.09.2026: keine Mindesthoehe mehr. Die Karte ist so hoch wie ihr
@@ -993,9 +1026,17 @@
     grid-row: 2;
   }
   /* Neben dem 44px-Kopierknopf bleibt in dieser Breite weniger Platz als am Handy:
-     die Ziffernreihe skaliert darum mit (volle 22px erst ab ~760px). */
-  .agent-chip__number {
-    font-size: clamp(16px, 2.9vw, 22px);
+     die Ziffernreihe skaliert darum mit (volle 22px erst ab ~760px). Der Wert steht an
+     der Karte, weil die Mindesthoehe der Zeile mit ihm rechnet (s. .agent-chip). */
+  .agent-chip {
+    --chip-number-size: clamp(16px, 2.9vw, 22px);
+  }
+  /* Wie am Desktop (Owner-Befund 16.09.2026): die Zeile behaelt die Hoehe einer
+     Ziffernreihe, auch wenn statt Ziffern der kuerzere Statussatz darin steht. Sonst
+     faellt der Ueberschuss der gestreckten Karte komplett nach unten -- gemessen bei
+     980px: 15px ueber dem Label, 27,2px unter dem Satz. */
+  .agent-chip:not(.agent-chip--notice) .agent-chip__row {
+    min-height: var(--chip-number-line);
   }
   /* Der Statussatz teilt sich die Zeile mit dem Knopf und skaliert darum ebenfalls
      mit der Breite -- gemessen bleibt er so in beiden Sprachen einzeilig. */
