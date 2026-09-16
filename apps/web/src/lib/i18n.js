@@ -162,6 +162,10 @@ export const STRINGS = {
     // CallsIsland
     callsTitle: "Calls",
     viewDetails: "View details",
+    // Aufklapper der Anrufliste (Owner-Wunsch 16.09.2026): die Karte zeigt drei
+    // Anrufe, aufgeklappt sechs plus Scrollen. Beschriftung wechselt zur Laufzeit.
+    showMore: "Show more",
+    showLess: "Show less",
     transcript: "Transcript",
     modalClose: "Close",
 
@@ -254,6 +258,8 @@ export const STRINGS = {
     // CallsIsland
     callsTitle: "Anrufe",
     viewDetails: "Details ansehen",
+    showMore: "Mehr anzeigen",
+    showLess: "Weniger anzeigen",
     transcript: "Gesprächsverlauf",
     modalClose: "Schließen",
 

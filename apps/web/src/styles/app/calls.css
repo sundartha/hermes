@@ -27,8 +27,63 @@
   color: rgba(255, 255, 255, 0.46);
 }
 
+/* Aufklapper an der Stelle des Hinweises (Owner-Wunsch 16.09.2026). Er traegt exakt
+   dieselbe Schriftstufe wie der Hinweis, den er ersetzt -- die Kopfzeile bekommt also
+   keine neue Ebene, nur eine andere Auskunft. Nur die Farbe ist die des Fliesstexts
+   statt der gedaempften: der Knopf ist anklickbar, der Hinweis war es nie. */
+.calls-head__toggle {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--app-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.calls-head__toggle:hover {
+  color: #ffffff;
+}
+
+.calls-head__toggle:focus-visible {
+  outline: 2px solid #8fb6e3;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 .calls-list {
   margin-top: 14px;
+}
+
+/* Aufgeklappt mit mehr als sechs Anrufen: die Liste wird selbst zum Scrollfeld statt
+   die Karte weiter wachsen zu lassen. Die Hoehe kommt als --calls-max aus der Insel
+   (Oberkante der siebten Zeile, gemessen an den echten Zeilen -- eine zweizeilige
+   Zusammenfassung macht Zeilen unterschiedlich hoch).
+   Owner: "ohne dass man rechts diesen Scroll-Button sieht" -- die Leiste ist darum in
+   allen drei Ausspielungen ausgeblendet (Firefox, alte Edge, WebKit/Blink). Damit
+   trotzdem zu sehen ist, dass es weitergeht, blendet die Liste ihre letzte Zeile nach
+   unten weich aus; am Ende der Liste faellt das weg (is-at-end, JS am scroll-Ereignis),
+   sonst bliebe die letzte Zeile dauerhaft blass. */
+.calls-list.is-scroll {
+  max-height: var(--calls-max, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent);
+}
+
+.calls-list.is-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.calls-list.is-scroll.is-at-end {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 /* ------------------------------------------------------ 2. Anrufzeile --- */
@@ -44,7 +99,10 @@
   transition: none;
 }
 
-#calls-list .call-row:last-child {
+#calls-list .call-row:last-child,
+/* Zugeklappt ist die dritte Zeile die unterste sichtbare -- die Insel markiert sie
+   (s. CallsIsland.astro), weil :last-child dann auf eine ausgeblendete Zeile zeigt. */
+#calls-list .call-row.is-collapse-edge {
   border-bottom: 0;
 }
 

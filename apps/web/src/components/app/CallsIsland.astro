@@ -19,7 +19,20 @@
 <section class="card">
   <div class="calls-head">
     <h2 data-i18n="callsTitle">Calls</h2>
-    <span class="calls-head__hint" data-i18n="viewDetails">View details</span>
+    <!-- Owner-Wunsch 16.09.2026: die Karte zeigt nur noch die letzten drei Anrufe; an der
+         Stelle des Hinweises steht dann der Aufklapper. Beides teilt sich denselben Platz,
+         weil immer nur eines davon etwas zu sagen hat: bei hoechstens drei Anrufen gibt es
+         nichts aufzuklappen (dann bleibt der Hinweis, dass eine Zeile das Gespraech
+         oeffnet), ab vier Anrufen ist der Aufklapper die wichtigere Auskunft. -->
+    <span id="calls-hint" class="calls-head__hint" data-i18n="viewDetails">View details</span>
+    <button
+      id="calls-toggle"
+      class="calls-head__toggle"
+      type="button"
+      aria-controls="calls-list"
+      aria-expanded="false"
+      hidden
+    ></button>
   </div>
   <ul id="calls-list" class="data-list calls-list" aria-live="polite"></ul>
 </section>
@@ -59,6 +72,12 @@
 
 <script>
   import { bindList, callRows, fillCallModal } from "../../lib/render.js";
+  // Fuer den Aufklapper unten: AUTH_EVENT ist dasselbe Ereignis, auf das bindList
+  // hoert (ein state-Fetch, s.u.); t() liefert die Beschriftung in der gewaehlten
+  // Sprache -- sie wechselt zur Laufzeit und kann darum nicht als data-i18n im
+  // Markup stehen.
+  import { AUTH_EVENT } from "../../lib/api.js";
+  import { t } from "../../lib/i18n.js";
 
   const modalEl = document.getElementById("call-modal");
   const modalCardEl = document.getElementById("call-modal-card");
@@ -133,4 +152,86 @@
   // Auth-Verlust (kein stale Tenant-Datenleck) -- gemeinsame Verdrahtung (G5).
   // Ein Klick auf eine Zeile oeffnet das eine Detail-Fenster (openModal).
   bindList(document, "calls-list", (doc, data) => callRows(doc, data, openModal));
+
+  // ---- Aufklappen der Anrufliste (Owner-Wunsch 16.09.2026) -------------------
+  // "Wenn man ganz viele Calls hat, sieht man die ganzen Calls" -- die Karte wuchs
+  // unbegrenzt mit der Liste und schob alles darunter nach unten. Zugeklappt stehen
+  // darum nur noch die drei juengsten Anrufe da; aufgeklappt sind sechs zu sehen und
+  // der Rest kommt per Scrollen INNERHALB der Liste, ohne sichtbare Scrollleiste
+  // (Owner: "ohne dass man rechts diesen Scroll-Button sieht").
+  //
+  // Die Liste selbst wird weiterhin KOMPLETT gerendert (bindList/callRows bleiben
+  // unangetastet) -- hier wird nur ein- und ausgeblendet. Damit bleibt der DOM-Bau
+  // an der einen getesteten Stelle in render.js, und der Zustand ueberlebt jedes
+  // Neu-Rendern: dieser Listener haengt NACH dem von bindList am selben Ereignis
+  // und laeuft darum immer auf der frisch gebauten Liste.
+  const COLLAPSED_ROWS = 3;
+  const OPEN_ROWS = 6;
+  const SCROLL_CLASS = "is-scroll";
+  const AT_END_CLASS = "is-at-end";
+  const SCROLL_END_TOLERANCE = 1;
+
+  const listEl = document.getElementById("calls-list");
+  const hintEl = document.getElementById("calls-hint");
+  const toggleEl = document.getElementById("calls-toggle");
+  let callsExpanded = false;
+
+  // Nur echte Anrufzeilen zaehlen -- die Leermeldung ist ein <li class="data-empty">.
+  function callRowNodes() {
+    return [...listEl.children].filter((node) => node.classList.contains("call-row"));
+  }
+
+  // Der weiche Rand am unteren Ende sagt, dass da noch etwas kommt (die Leiste ist ja
+  // ausgeblendet). Am Ende der Liste hat er nichts mehr anzukuendigen und faellt weg,
+  // sonst saehe die letzte Zeile dauerhaft ausgeblichen aus.
+  function updateScrollFade() {
+    if (!listEl.classList.contains(SCROLL_CLASS)) return;
+    const atEnd = listEl.scrollTop + listEl.clientHeight >= listEl.scrollHeight - SCROLL_END_TOLERANCE;
+    listEl.classList.toggle(AT_END_CLASS, atEnd);
+  }
+
+  function applyCallsCollapse() {
+    const rows = callRowNodes();
+    const hasMore = rows.length > COLLAPSED_ROWS;
+    if (!hasMore) callsExpanded = false;
+    toggleEl.hidden = !hasMore;
+    hintEl.hidden = hasMore;
+    toggleEl.textContent = callsExpanded ? t("showLess") : t("showMore");
+    toggleEl.setAttribute("aria-expanded", String(callsExpanded));
+    for (const [index, row] of rows.entries()) {
+      row.hidden = !callsExpanded && index >= COLLAPSED_ROWS;
+      // Die unterste SICHTBARE Zeile traegt keine Trennlinie -- sonst haengt zugeklappt
+      // ein Strich unter der dritten Zeile, unter dem nichts mehr kommt. Die Regel dafuer
+      // ist sonst :last-child, und das ist im zugeklappten Zustand die falsche Zeile.
+      // Per Klasse statt :has() (im Projekt nicht verwendet).
+      row.classList.toggle("is-collapse-edge", !callsExpanded && index === COLLAPSED_ROWS - 1);
+    }
+    const scrolls = callsExpanded && rows.length > OPEN_ROWS;
+    listEl.classList.toggle(SCROLL_CLASS, scrolls);
+    if (scrolls) {
+      // Geschnitten wird exakt an der Oberkante der siebten Zeile, gemessen von der
+      // ersten -- eine feste Pixelhoehe waere falsch, weil eine Zeile mit langer
+      // Zusammenfassung zweizeilig wird. Gemessen wird erst, nachdem die Zeilen oben
+      // sichtbar geschaltet sind (der Lesezugriff erzwingt den Umbruch).
+      const cut = rows[OPEN_ROWS].offsetTop - rows[0].offsetTop;
+      listEl.style.setProperty("--calls-max", `${Math.round(cut)}px`);
+    } else {
+      listEl.style.removeProperty("--calls-max");
+      listEl.classList.remove(AT_END_CLASS);
+    }
+    updateScrollFade();
+  }
+
+  toggleEl.addEventListener("click", () => {
+    callsExpanded = !callsExpanded;
+    if (!callsExpanded) listEl.scrollTop = 0;
+    applyCallsCollapse();
+  });
+
+  listEl.addEventListener("scroll", updateScrollFade, { passive: true });
+
+  // Nach jedem Render (auch nach einem Sprachwechsel -- der re-dispatcht denselben
+  // AUTH_EVENT) den Zustand neu anlegen; die Beschriftung des Knopfes kommt dabei
+  // frisch aus dem Woerterbuch.
+  document.addEventListener(AUTH_EVENT, applyCallsCollapse);
 </script>
