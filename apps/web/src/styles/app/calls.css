@@ -142,7 +142,11 @@
 .call-modal__contact .status-badge {
   padding: 5px 11px;
   border: 1px solid;
-  border-radius: 999px;
+  /* Owner-Vorgabe 16.09.2026 (am Newsletter gestellt, s. panels.css
+     .billing-status-badge): Status-Pillen sind abgerundete Vierecke, keine
+     Kapseln. Dieselbe Pille in einer zweiten Karte -- gleiche Rundung, sonst
+     haette das Dashboard zwei Pillenformen. */
+  border-radius: 6px;
   font-family: var(--app-mono);
   font-size: 10px;
   font-weight: 400;

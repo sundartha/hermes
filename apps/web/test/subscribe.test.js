@@ -112,7 +112,14 @@ class FakeElement {
   }
 }
 
-const fakeDocument = { createElement: (tag) => new FakeElement(tag) };
+// createElementNS additiv: das Entfernen-Kreuz ist seit dem 16.09.2026 ein
+// gezeichnetes SVG statt des Schriftzeichens "×" (s. subscribe.js removeCross).
+// Der Fake unterscheidet keine Namensraeume -- fuer die Tests zaehlt nur, dass
+// ein Knoten mit diesem Tag entsteht.
+const fakeDocument = {
+  createElement: (tag) => new FakeElement(tag),
+  createElementNS: (_ns, tag) => new FakeElement(tag),
+};
 
 function textOf(nodes) {
   return nodes.map((n) => n.allText()).join("");

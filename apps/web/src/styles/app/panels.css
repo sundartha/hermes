@@ -209,7 +209,14 @@
   flex-shrink: 0;
   padding: 5px 11px;
   border: 1px solid;
-  border-radius: 999px;
+  /* Owner-Vorgabe 16.09.2026: "die sollen in der Form sein wie die blaue Box --
+     ein abgerundetes Viereck, damit das harmonisch aussieht." Die Pille (999px)
+     stand als Kapsel in einer Blase mit Radius 13 auf 52 px Hoehe. Derselbe
+     Rundungsanteil, auf die Hoehe der Pille gerechnet: 13/52 = 0,25, die Pille
+     ist rund 25 px hoch -> 6 px. Keine gegriffene Zahl, sondern die Rundung der
+     Blase im kleinen Massstab. Gilt fuer BEIDE Orte derselben Pille (Newsletter-
+     Zeilen und Billing-Kopf), sonst haette die Karte zwei Pillenformen. */
+  border-radius: 6px;
   font-family: var(--app-mono);
   font-size: 10px;
   font-weight: 400;
@@ -679,9 +686,22 @@
   padding-right: 140px;
 }
 
-/* Ghost-Kreis: kleinere Geschwister-Optik von .call-modal__close (calls.css) --
-   gleiche Materialsprache (transparenter Kreis, weisser Rand), passend zur
-   kompakteren Listenzeile statt des Modal-Kopfs. */
+/* Owner-Befund 16.09.2026 ("fuer diesen Delete-Button nochmal was einfallen lassen,
+   so sieht das komisch aus"): der Knopf war ein 26-px-Kreis mit Haarlinie, der in
+   einer 140 px breiten Knopfspalte allein in der Luft hing -- zu klein fuer die
+   Spalte, zu rund fuer die eckigen Blasen daneben, und als einziges Element der
+   Karte ohne Flaeche. Jetzt eine Kachel in der Sprache der Zeile:
+   - dieselbe Rundung wie die Blase (13px), also ein abgerundetes Viereck statt
+     eines Kreises -- dieselbe Vorgabe, die auch die Status-Pillen bekommen haben,
+   - 44 px im Quadrat: die Hoehe der Knoepfe in den Zeilen darueber und darunter
+     ("Unsubscribe"/"Add", 43-46 px) und zugleich das uebliche Mindestmass fuer
+     eine Tippflaeche -- der Knopf steht damit in derselben optischen Bank,
+   - eine leise Flaeche (0.06) wie beim Geisterknopf der eigenen Nummer, damit die
+     Kachel nicht als blosse Haarlinie im Leerraum steht,
+   - das Kreuz etwas gedaempft (0.7): eine loeschende Handlung soll nicht lauter
+     sein als "Unsubscribe" daneben; beim Ueberfahren wird es weiss.
+   Position unveraendert: rechtsbuendig unter dem rechten Rand der Knopfspalte
+   (Fluchten-Entscheidung vom 15.09.2026), senkrecht mittig zur 52-px-Blase. */
 .newsletter-recipient__remove {
   /* Sitzt ausserhalb der Blase, senkrecht mittig zu ihr (52px hoch -> 26px). Absolut
      positioniert, damit die Wartezeile darunter die Lage nicht verschiebt. */
@@ -692,22 +712,27 @@
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
-  background: transparent;
-  color: #ffffff;
-  font-size: 15px;
-  line-height: 1;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* Gleiche Groesse wie im Anruf-Fenster (.call-modal__close svg, calls.css). */
+.newsletter-recipient__remove svg {
+  width: 16px;
+  height: 16px;
 }
 
 .newsletter-recipient__remove:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
 }
 
 .newsletter-recipient__remove:focus-visible {
@@ -799,6 +824,27 @@
   .newsletter-recipient {
     padding-right: 38px;
   }
+  /* Am Handy bleibt die Kachel klein: die Spalte rechts ist hier nur 38 px breit
+     (26 px Knopf + 12 px Abstand), und jeder Pixel mehr fehlt der Adresse in der
+     Blase -- im Block <=480px sind dort gemessen nur rund 5 px Spielraum. Also
+     dieselbe Grundflaeche wie bisher, nur die neue Form (abgerundetes Viereck
+     statt Kreis, Rundung proportional zur 44-px-Kachel: 13/44 = 0,3 -> 8 px).
+     Die TIPPFLAECHE waechst trotzdem auf 44 px: ein unsichtbares ::after
+     vergroessert sie um 9 px nach allen Seiten, ohne das Layout zu bewegen. */
+  .newsletter-recipient__remove {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+  }
+  .newsletter-recipient__remove svg {
+    width: 13px;
+    height: 13px;
+  }
+  .newsletter-recipient__remove::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
 }
 
 /* Am Telefon (≤480px) bleiben in der Blase rund 236px: Adresse UND Status-Pille passen
@@ -860,10 +906,9 @@
 }
 
 /* 4. Das Entfernen-Kreuz hatte KEINE Schriftfamilie und fiel damit als einziges
-   Element im Dashboard auf Arial zurueck. */
-.newsletter-recipient__remove {
-  font-family: var(--font-sans);
-}
+   Element im Dashboard auf Arial zurueck. Seit dem 16.09.2026 ist es ueberhaupt
+   kein Schriftzeichen mehr, sondern ein gezeichnetes SVG (s. Abschnitt 6b) --
+   die Regel hat damit keinen Gegenstand mehr und entfaellt. */
 
 /* 5. Mono-Kleinlabels standen teils auf 400 (.billing-section__title), teils auf 600
    (.field-label, .dash-head__eyebrow). Eine Ebene, ein Gewicht. */

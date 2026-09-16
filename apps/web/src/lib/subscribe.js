@@ -782,6 +782,44 @@ const RECIPIENT_PENDING_HINT = "Confirmation email sent";
 const RECIPIENT_PENDING_HINT_DE = "Bestätigungs-E-Mail gesendet";
 const RECIPIENT_STATUS_PENDING = "pending";
 
+// Owner-Befund 16.09.2026 ("das Kreuz ist nicht mittig"): das Kreuz war das
+// Schriftzeichen "×" (U+00D7). Ein Glyph sitzt nie exakt in der Mitte seiner
+// Zeilenbox -- er haengt an der Grundlinie, und das Malkreuz liegt auf der
+// Mathematik-Achse darueber; zentriert wird aber die Box. Gemessen im
+// Screenshot: rund 2 px zu tief. Zwei gezeichnete Linien in einem quadratischen
+// viewBox haben das Problem nicht. Exakt dieselbe Zeichnung wie der
+// Schliessen-Knopf des Anruf-Fensters (CallsIsland.astro) -- damit es EIN Kreuz
+// im Dashboard gibt und nicht zwei verschiedene.
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// Attribute als Paar-Liste, nicht als Objekt: ein Objektschluessel "d" (das
+// Pfad-Attribut eines <path>) faellt sonst unter die id-length-Regel und waere ein
+// NEUER Lint-Befund in dieser Bestandsdatei -- das Aufraeum-Gate des pre-commit-
+// Hooks laesst eine Aenderung hier nur durch, solange sich die Befundmenge nicht
+// bewegt (scripts/check-staged-suppressions.js, Stufe 2).
+function svgEl(doc, tag, attrs) {
+  const node = doc.createElementNS(SVG_NS, tag);
+  for (const [name, value] of attrs) node.setAttribute(name, value);
+  return node;
+}
+
+function removeCross(doc) {
+  const svg = svgEl(doc, "svg", [
+    ["viewBox", "0 0 16 16"],
+    ["aria-hidden", "true"],
+    ["focusable", "false"],
+  ]);
+  svg.append(
+    svgEl(doc, "path", [
+      ["d", "M4 4 L12 12 M12 4 L4 12"],
+      ["stroke", "currentColor"],
+      ["stroke-width", "1.5"],
+      ["stroke-linecap", "round"],
+    ]),
+  );
+  return svg;
+}
+
 // Eine Empfaenger-Zeile: Adresse (Sans) + Status-Pille + Ghost-Kreuz zum
 // Entfernen; eine pending-Zeile traegt zusaetzlich den Mono-Hinweis (Auftrag).
 // onRemove(email, button) wird bei jedem Zeilen-eigenen Button-Klick gerufen --
@@ -799,9 +837,10 @@ function recipientRow(doc, recipient, onRemove) {
       newsletterRecipientStatusLabel(recipient.status),
     ),
   );
-  const removeBtn = el(doc, "button", "newsletter-recipient__remove", "×");
+  const removeBtn = el(doc, "button", "newsletter-recipient__remove");
   removeBtn.type = "button";
   removeBtn.setAttribute("aria-label", tPair(RECIPIENT_REMOVE_LABEL, RECIPIENT_REMOVE_LABEL_DE));
+  removeBtn.append(removeCross(doc));
   removeBtn.addEventListener("click", () => onRemove(recipient.email, removeBtn));
   main.append(removeBtn);
   li.append(main);
