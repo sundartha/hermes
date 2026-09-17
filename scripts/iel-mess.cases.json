@@ -167,8 +167,8 @@
       "zaehler": "ohrzeuge",
       "deckt": ["IEP-P1 (f) Vorher-Lauf", "M-S2 erstmals beziffert"],
       "misst": "Anruf auf die eigene gepinnte DID mit dual-kanaligem Mitschnitt: was hoert ein Anrufer ab der Klingelphase, sieben Kennzahlen",
-      "ziel_e164": null,
-      "anrufer_kennung": "+15739090177",
+      "ziel_e164": "+17067101188",
+      "anrufer_kennung": "+15804504874",
       "dial_timeout_s": 20,
       "sprechspur_nach_s": 12,
       "eltern_auflegen_nach_s": null,
@@ -176,7 +176,7 @@
     }
   },
   "ohrzeuge": {
-    "_hinweis": "IEP-P1. ziel_e164 des Falls OZ-vorher muss ZUSAETZLICH mit dem gepinnten OHRZEUGE_ZIEL_PIN in scripts/iel-mess.mjs uebereinstimmen; leerer Pin oder ziel_e164 null = jeder Lauf verweigert. sprechspur_sha256 wird von 'node scripts/iel-mess.mjs sprechspur' gedruckt und danach hier gepinnt.",
+    "_hinweis": "IEP-P1/P1b. ziel_e164 des Falls OZ-vorher ist die belegte DID des Mess-Tenants und muss ZUSAETZLICH mit dem gepinnten OHRZEUGE_ZIEL_PIN in scripts/iel-mess.mjs uebereinstimmen; leerer Pin oder abweichendes ziel_e164 = jeder Lauf verweigert. anrufer_kennung muss eine aktive DID desselben Telnyx-Kontos sein (Kontotreffer-Riegel), nie die Ziel-DID (Selbstanruf) und nie eine Nummer, die als private_number eines Tenants steht - sonst verfaelscht der Messanruf die spaetere Owner-Erkennung. sprechspur_sha256 wird von 'node scripts/iel-mess.mjs sprechspur' gedruckt und danach hier gepinnt.",
     "sprechspur_text": "Guten Tag, hier ist Frau Berger. Ich wollte fragen, ob Herr Fotiadis morgen Vormittag erreichbar ist. Danke, dann versuche ich es spaeter noch einmal.",
     "sprechspur_sha256": null
   },

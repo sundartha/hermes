@@ -89,11 +89,19 @@ export function faellePfadIn(dir) {
   return path.join(dir, "scripts", "iel-mess.cases.json");
 }
 
-export function setzeZusatzFall(dir, name, fall) {
+// Die EINE Stelle, die die Fall-Datei einer Messbaum-Kopie umschreibt (G5). Die Aenderung
+// LIEFERT die neue Konfiguration - das gelesene Objekt wird nie mutiert.
+export function aendereKonfigurationIn(dir, aenderung) {
   const pfad = faellePfadIn(dir);
   const konfiguration = JSON.parse(fs.readFileSync(pfad, "utf8"));
-  konfiguration.faelle[name] = fall;
-  fs.writeFileSync(pfad, JSON.stringify(konfiguration));
+  fs.writeFileSync(pfad, JSON.stringify(aenderung(konfiguration)));
+}
+
+export function setzeZusatzFall(dir, name, fall) {
+  aendereKonfigurationIn(dir, (konfiguration) => ({
+    ...konfiguration,
+    faelle: { ...konfiguration.faelle, [name]: fall },
+  }));
 }
 
 export function spawnDry(dir, args, zusatzEnv = {}) {
