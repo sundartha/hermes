@@ -1,12 +1,31 @@
 #!/usr/bin/env node
-// IEP-P2 (Owner-Entscheidung 10): Rezept des Begruessungslauts, der die Luecke zwischen der
+// IEP-P2b (Owner-Befund 2026-09-17): Rezept des Begruessungslauts, der die Luecke zwischen der
 // Sofortannahme des eingehenden Beins und der ersten Agentensilbe besetzt.
 //
-// Der Laut ist KEIN <Say>: in Owner-Test #1 lagen zwischen playback_start und playback_started
-// rund 1,0 s Stille, weil im Anrufmoment synthetisiert wurde. Er ist auch kein Freiton: das
-// US-Freizeichen ist ein DOPPELTON aus 440 und 480 Hz in fester Kadenz - hier steht ein
-// einmaliger steigender Zweiklang mit Ausklang, danach Stille. Und er ist keine Sprache: der
-// erste gesprochene Satz bleibt die freigegebene Agenten-Eroeffnung (Owner-Entscheidung 1/9).
+// Die erste Fassung (IEP-P2) war ein Sinus-Zweiklang bei -11 dBFS. Der Owner hat sie am
+// Live-Stand abgelehnt: hoch, piepsig, tut in den Ohren weh. Gemessen ist das kein Ton
+// "oberhalb 1 kHz" (beide Toene lagen darunter), sondern die Kombination aus Pegel,
+// Tonalitaet und Flankensteilheit - genau die drei Groessen, die test/iep-p2-begruessungslaut.js
+// jetzt als Schranke pinnt.
+//
+// SOLL: Raumruhe, die nicht auffaellt - "als ob jemand abheben wuerde". Also kein Ton,
+// sondern bandbegrenztes Komfortrauschen mit EINEM weichen Abhebe-Impuls.
+//
+// Vier Bauentscheidungen, jede mit Grund:
+//   (a) Bandpass 300..750 Hz statt reinem Tiefpass. Ein reiner Tiefpass legt zwei Drittel der
+//       Energie unter 300 Hz - unter die Uebertragungsgrenze eines Telefonhoerers. Der Pegel
+//       waere nominell eingehalten und der Laut trotzdem unhoerbar.
+//   (b) Durchgehendes Bett statt "kurz + Nachlauf-Stille". Der Nachlauf der ersten Fassung war
+//       reiner Kadenz-Schutz: Telnyx wiederholt die audioUrl. Ein durchgehendes Bett hat gar
+//       keine Kadenz. Die Dateilaenge haelt nur noch den Abhebe-Impuls aus dem Annahmefenster.
+//   (c) Nahtlose Schleife durch eine Aufwaerm-Runde: jede Filterstufe laeuft ZWEIMAL ueber
+//       dasselbe Rausch-Array, behalten wird die zweite. Bei periodischem Eingang ist der
+//       eingeschwungene Ausgang exakt periodisch - der Schleifenpunkt ist keine Unstetigkeit.
+//   (d) Der weiche Einsatz sitzt im Impuls, nicht in einer Bett-Einblendung. Eine Einblendung
+//       waere eine Pegel-Delle genau am Schleifenpunkt.
+//
+// Der Laut bleibt sprachlos: der erste gesprochene Satz ist die freigegebene Agenten-Eroeffnung
+// (Owner-Entscheidung 1/9).
 //
 // Warum ein Rezept statt einer blossen Binaerdatei: der Laut bliebe sonst ein Blindgaenger, den
 // niemand mehr reproduzieren koennte. test/iep-p2-begruessungslaut.test.js regeneriert ihn und
@@ -20,23 +39,33 @@ import { fileURLToPath } from "node:url";
 import { EL_BEGRUESSUNGSLAUT_PFAD } from "../src/elevenlabs/inbound-rueckfall.js";
 import { MS_PER_SECOND } from "../src/utils/timer.js";
 
-// Jede Zahl traegt einen Namen (G25). Die Frequenzen sind ausdruecklich disjunkt zu {440, 480}.
+// Jede Zahl traegt einen Namen (G25). Die Pegel sind Spitzenpegel als Bruchteil der
+// Vollaussteuerung: 0.0060 = -44.4 dBFS (Bett), Gesamtspitze mit Impuls -39.9 dBFS.
 export const BEGRUESSUNGSLAUT_REZEPT = Object.freeze({
   abtastrateHz: 8000, // Telefonie-Rate: keine Transcodierung, kein Qualitaetsverlust
   kanaele: 1,
   bitTiefe: 16,
-  spitzenpegel: 0.28, // rund -11 dBFS: hoerbar, leiser als Sprache
-  toene: Object.freeze([
-    Object.freeze({ hz: 587.33, dauerMs: 190, einblendeMs: 12, ausblendeMs: 40 }), // D5
-    Object.freeze({ hz: 880.0, dauerMs: 510, einblendeMs: 12, ausblendeMs: 510 }), // A5, klingt aus
-  ]),
-  // Nachlauf-Stille: Telnyx spielt einen Ringback WIEDERHOLT. Ohne diesen Nachlauf waere die
-  // Wiederholperiode 0,7 s - also genau die Kadenz, die der Auftrag verbietet. Mit ihm liegt die
-  // erste Wiederholung bei 2,5 s, weit hinter der EL-Annahme (0,7-0,9 s): im Regelfall hoert der
-  // Anrufer den Laut GENAU EINMAL.
-  nachlaufStilleMs: 1800,
+  dauerMs: 6000, // haelt den Abhebe-Impuls aus dem EL-Annahmefenster (0,7-0,9 s) heraus
+  // Komfortrauschen: die Raumruhe, die das Fenster traegt. Deterministischer Seed - derselbe
+  // Laut bei jedem Rendern (Bestandstest IEP-P2-A1 vergleicht byte-genau).
+  bett: Object.freeze({
+    seed: 0x1ed2b2,
+    tiefpassHz: 750,
+    tiefpassStufen: 5, // 5 Einpol-Stufen ~ 30 dB/Oktave: oberhalb 1 kHz bleibt nichts Hoerbares
+    hochpassHz: 300,
+    hochpassStufen: 2, // haelt die Energie im Band, das ein Telefonhoerer ueberhaupt uebertraegt
+    spitzenpegel: 0.006,
+  }),
+  // "Als ob jemand abheben wuerde": ein einzelner, dumpfer, weich ein- und ausgeblendeter
+  // Stoss zu Beginn. Duempfer als das Bett (260 Hz) und nur rund 4,5 dB darueber.
+  impuls: Object.freeze({
+    seed: 0x7f4c19,
+    dauerMs: 120,
+    tiefpassHz: 260,
+    tiefpassStufen: 4,
+    spitzenpegel: 0.01,
+  }),
 });
-// Hoerbare Laenge 700 ms ("kurz"), Dateilaenge 2500 ms.
 
 // Kanonisches RIFF/WAVE mit PCM-Rahmen - kein ffmpeg, keine neue Dependency.
 const BITS_PRO_BYTE = 8;
@@ -47,9 +76,22 @@ const RIFF_GROESSE_VORLAUF_BYTES = 8; // "RIFF" und sein Groessenfeld zaehlen ni
 const UINT16_BYTES = 2;
 const UINT32_BYTES = 4;
 const INT16_MAX = 32767;
+const INT16_MIN = -32768;
 const HALBKREISE_PRO_VOLLKREIS = 2;
 const VOLLER_KREIS_RAD = HALBKREISE_PRO_VOLLKREIS * Math.PI;
 const BYTES_PRO_RAHMEN = (BEGRUESSUNGSLAUT_REZEPT.bitTiefe / BITS_PRO_BYTE) * BEGRUESSUNGSLAUT_REZEPT.kanaele;
+
+// xorshift32: deterministischer Zufall ohne Dependency. Integer-Operationen, damit dasselbe
+// Rezept auf jeder Maschine dieselben Bytes ergibt.
+const XORSHIFT_LINKS_A = 13;
+const XORSHIFT_RECHTS = 17;
+const XORSHIFT_LINKS_B = 5;
+const UINT32_MAX = 0xffffffff;
+const SPANNE_MITTE = 2; // [0,1) -> [-1,1)
+
+// Aufwaerm-Runden fuer die nahtlose Schleife (c): die erste Runde fuellt den Filterzustand,
+// die zweite wird behalten.
+const AUFWAERM_RUNDEN = 2;
 
 const REPO_WURZEL = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -62,33 +104,110 @@ function rahmenAnzahl(dauerMs) {
   return Math.round((dauerMs * BEGRUESSUNGSLAUT_REZEPT.abtastrateHz) / MS_PER_SECOND);
 }
 
-// Linearer Huellkurven-Faktor: Einblende am Anfang, Ausblende am Ende des Tons. Ohne sie knackt
-// jeder Sprung im Telefonkanal hoerbar.
-function huellkurve({ rahmen, gesamtRahmen, einblendeRahmen, ausblendeRahmen }) {
-  const einblende = einblendeRahmen > 0 ? Math.min(1, rahmen / einblendeRahmen) : 1;
-  const ausblende = ausblendeRahmen > 0 ? Math.min(1, (gesamtRahmen - rahmen) / ausblendeRahmen) : 1;
-  return Math.min(einblende, ausblende);
+/** Deterministischer Rausch-Ring fester Laenge in [-1, 1). Rein: gleicher Seed -> gleiche Werte. */
+function rauschRing(seed, rahmen) {
+  let zustand = seed >>> 0 || 1;
+  const naechsterWert = () => {
+    zustand ^= zustand << XORSHIFT_LINKS_A;
+    zustand ^= zustand >>> XORSHIFT_RECHTS;
+    zustand ^= zustand << XORSHIFT_LINKS_B;
+    zustand >>>= 0;
+    return zustand;
+  };
+  return Array.from({ length: rahmen }, () => (naechsterWert() / UINT32_MAX) * SPANNE_MITTE - 1);
 }
 
-// Int16-Rahmen eines einzelnen Tons (Sinus mal Huellkurve mal Spitzenpegel).
-function tonRahmen(ton) {
-  const gesamtRahmen = rahmenAnzahl(ton.dauerMs);
-  const einblendeRahmen = rahmenAnzahl(ton.einblendeMs);
-  const ausblendeRahmen = rahmenAnzahl(ton.ausblendeMs);
-  const werte = [];
-  for (let rahmen = 0; rahmen < gesamtRahmen; rahmen += 1) {
-    const schwingung = Math.sin((VOLLER_KREIS_RAD * ton.hz * rahmen) / BEGRUESSUNGSLAUT_REZEPT.abtastrateHz);
-    const pegel =
-      BEGRUESSUNGSLAUT_REZEPT.spitzenpegel *
-      huellkurve({ rahmen, gesamtRahmen, einblendeRahmen, ausblendeRahmen }) *
-      schwingung;
-    werte.push(Math.round(pegel * INT16_MAX));
+// Einpol-Tiefpass: y += a*(x-y). Jeder Aufruf liefert eine FRISCHE Stufe mit eigenem Zustand -
+// so kann eine Kaskade aus mehreren gleichartigen Stufen bestehen (bett.tiefpassStufen).
+function tiefpassStufe(grenzHz, abtastrateHz) {
+  const alpha = 1 - Math.exp((-VOLLER_KREIS_RAD * grenzHz) / abtastrateHz);
+  let zustand = 0;
+  return (eingabe) => {
+    zustand += alpha * (eingabe - zustand);
+    return zustand;
+  };
+}
+
+// Einpol-Hochpass: y = a*(y + x - xPrev).
+function hochpassStufe(grenzHz, abtastrateHz) {
+  const zeitKonstante = 1 / (VOLLER_KREIS_RAD * grenzHz);
+  const abtastSchritt = 1 / abtastrateHz;
+  const alpha = zeitKonstante / (zeitKonstante + abtastSchritt);
+  let zustand = 0;
+  let vorherigeEingabe = 0;
+  return (eingabe) => {
+    zustand = alpha * (zustand + eingabe - vorherigeEingabe);
+    vorherigeEingabe = eingabe;
+    return zustand;
+  };
+}
+
+// Filterkaskade ueber einen RING: zwei Runden je Stufenkette, behalten wird die zweite. Die
+// erste Runde waermt den Zustand, damit der Ausgang exakt periodisch ist (nahtlose Schleife).
+function kaskadeUeberRing({ werte, stufen, stufeBauen }) {
+  const kette = Array.from({ length: stufen }, stufeBauen);
+  const durchKetteSchicken = (wert) => kette.reduce((zwischenwert, stufe) => stufe(zwischenwert), wert);
+  let ausgabe = werte;
+  for (let runde = 0; runde < AUFWAERM_RUNDEN; runde += 1) {
+    ausgabe = werte.map(durchKetteSchicken);
   }
-  return werte;
+  return ausgabe;
 }
 
-function stilleRahmen(dauerMs) {
-  return new Array(rahmenAnzahl(dauerMs)).fill(0);
+// Skaliert auf einen Spitzenpegel. Macht den Rezept-Wert "spitzenpegel" woertlich wahr - der
+// Test prueft genau ihn am fertigen WAV.
+function aufSpitzenpegel(werte, spitzenpegel) {
+  const spitze = werte.reduce((groesster, wert) => Math.max(groesster, Math.abs(wert)), 0) || 1;
+  return werte.map((wert) => (wert / spitze) * spitzenpegel);
+}
+
+// Raised-Cosine-Huelle: weicher Ein- UND Ausklang ohne Knick, ein einzelner Hoecker ueber die
+// gesamte Dauer. DIE Stelle, an der "kein harter Einsatz" entsteht.
+function raisedCosineHuelle(index, gesamtRahmen) {
+  return (1 - Math.cos((VOLLER_KREIS_RAD * index) / (gesamtRahmen - 1))) / HALBKREISE_PRO_VOLLKREIS;
+}
+
+/** Das durchgehende Rauschbett, nahtlos schleifenfaehig (a, c). */
+function bettRahmen() {
+  const { seed, tiefpassHz, tiefpassStufen, hochpassHz, hochpassStufen, spitzenpegel } = BEGRUESSUNGSLAUT_REZEPT.bett;
+  const rahmen = rahmenAnzahl(BEGRUESSUNGSLAUT_REZEPT.dauerMs);
+  const roh = rauschRing(seed, rahmen);
+  const tiefpassGefiltert = kaskadeUeberRing({
+    werte: roh,
+    stufen: tiefpassStufen,
+    stufeBauen: () => tiefpassStufe(tiefpassHz, BEGRUESSUNGSLAUT_REZEPT.abtastrateHz),
+  });
+  const bandpassGefiltert = kaskadeUeberRing({
+    werte: tiefpassGefiltert,
+    stufen: hochpassStufen,
+    stufeBauen: () => hochpassStufe(hochpassHz, BEGRUESSUNGSLAUT_REZEPT.abtastrateHz),
+  });
+  return aufSpitzenpegel(bandpassGefiltert, spitzenpegel);
+}
+
+/** Der einmalige Abhebe-Impuls, dumpf und beidseitig weich (d). */
+function impulsRahmen() {
+  const { seed, dauerMs, tiefpassHz, tiefpassStufen, spitzenpegel } = BEGRUESSUNGSLAUT_REZEPT.impuls;
+  const rahmen = rahmenAnzahl(dauerMs);
+  const roh = rauschRing(seed, rahmen);
+  const gefiltert = kaskadeUeberRing({
+    werte: roh,
+    stufen: tiefpassStufen,
+    stufeBauen: () => tiefpassStufe(tiefpassHz, BEGRUESSUNGSLAUT_REZEPT.abtastrateHz),
+  });
+  const skaliert = aufSpitzenpegel(gefiltert, spitzenpegel);
+  return skaliert.map((wert, index) => wert * raisedCosineHuelle(index, rahmen));
+}
+
+// Int16-Spur: Impuls additiv auf den Anfang des Betts, dann geklemmt.
+function spurRahmen() {
+  const bett = bettRahmen();
+  const impuls = impulsRahmen();
+  return bett.map((wert, index) => {
+    const kombiniert = wert + (impuls[index] ?? 0);
+    const skaliert = Math.round(kombiniert * INT16_MAX);
+    return Math.max(INT16_MIN, Math.min(INT16_MAX, skaliert));
+  });
 }
 
 // Kanonischer RIFF/WAVE-Kopf, sequenziell geschrieben - so steht keine nackte Byte-Position im
@@ -130,11 +249,7 @@ function pcmDaten(rahmen) {
 
 // Rein: gleiches Rezept -> gleiche Bytes, kein IO.
 export function rendereBegruessungslautWav() {
-  const rahmen = [
-    ...BEGRUESSUNGSLAUT_REZEPT.toene.flatMap(tonRahmen),
-    ...stilleRahmen(BEGRUESSUNGSLAUT_REZEPT.nachlaufStilleMs),
-  ];
-  const daten = pcmDaten(rahmen);
+  const daten = pcmDaten(spurRahmen());
   return Buffer.concat([wavKopf(daten.length), daten]);
 }
 

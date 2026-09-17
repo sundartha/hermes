@@ -865,8 +865,9 @@ const rawConfig = {
     // Beleg Fehlersatz + Auflegen). Kein Wildcard. Getrimmt wie sttProfile; ein unbekannter Wert bricht den
     // BOOT ab (boot-guard elInboundScopeFindings), nicht erst den Anruf.
     scope: (process.env.ELEVENLABS_INBOUND_SCOPE || DEFAULT_INBOUND_EL_SCOPE).trim(),
-    // IEP-P2 (Owner-Entscheidung 10): kurzer, vorab gerenderter Begruessungslaut waehrend der
-    // Dial-Wartezeit statt des Telnyx-US-Freitons. DEFAULT AN - anders als sonst bei neuen
+    // IEP-P2 (Owner-Entscheidung 10): durchgehender, vorab gerenderter Begruessungslaut
+    // (Komfortrauschen, IEP-P2b) waehrend der Dial-Wartezeit statt des Telnyx-US-Freitons.
+    // DEFAULT AN - anders als sonst bei neuen
     // Schaltern, und das ist Absicht: der Aus-Zustand ist die Sofortannahme OHNE Fuellung, und
     // genau die ist hoerbar schlechter als heute (Stille statt Freiton). Der Schalter ist der
     // einzeln revertierbare Rueckweg der FUELLUNG; der Rueckweg der SOFORTANNAHME ist

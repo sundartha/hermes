@@ -265,17 +265,24 @@ function periodogramm(block) {
   return spektrum;
 }
 
+// Ueber alle vollen Bloecke summiertes Periodogramm. Geteilt von bandAnteil und spitzenBin
+// (G5) - es gibt genau EINE FFT in diesem Repo.
+function summiertesSpektrum(proben) {
+  const spektrum = new Float64Array(SPEKTRUM_BINS);
+  for (let ab = 0; ab + FFT_BLOCK <= proben.length; ab += FFT_BLOCK) {
+    const blockSpektrum = periodogramm(proben.subarray(ab, ab + FFT_BLOCK));
+    for (let bin = 0; bin < SPEKTRUM_BINS; bin += 1) spektrum[bin] += blockSpektrum[bin];
+  }
+  return spektrum;
+}
+
 /**
  * Energieanteil oberhalb grenzHz am Gesamtspektrum. null, wenn die Abtastrate oberhalb
  * grenzHz gar kein Band mehr traegt oder zu wenig Audio fuer einen Block vorliegt.
  */
 export function bandAnteil({ proben, abtastrate, grenzHz }) {
   if (abtastrate / NYQUIST_TEILER <= grenzHz || proben.length < FFT_BLOCK) return null;
-  const spektrum = new Float64Array(SPEKTRUM_BINS);
-  for (let ab = 0; ab + FFT_BLOCK <= proben.length; ab += FFT_BLOCK) {
-    const blockSpektrum = periodogramm(proben.subarray(ab, ab + FFT_BLOCK));
-    for (let bin = 0; bin < SPEKTRUM_BINS; bin += 1) spektrum[bin] += blockSpektrum[bin];
-  }
+  const spektrum = summiertesSpektrum(proben);
   const grenzBin = Math.ceil((grenzHz * FFT_BLOCK) / abtastrate);
   let oben = 0;
   let gesamt = 0;
@@ -284,4 +291,26 @@ export function bandAnteil({ proben, abtastrate, grenzHz }) {
     if (bin >= grenzBin) oben += spektrum[bin];
   }
   return gesamt > 0 ? oben / gesamt : null;
+}
+
+/**
+ * Staerkster Spektralanteil: { hz, anteil }. `anteil` ist seine Energie gegen die
+ * Gesamtenergie - die Messform von "ist das ein Ton oder ein Rauschen". Ein reiner Sinus
+ * buendelt fast alles in einem Bin, breitbandiges Rauschen verteilt es.
+ * null, wenn zu wenig Audio fuer einen Block vorliegt oder das Signal stumm ist.
+ */
+export function spitzenBin({ proben, abtastrate }) {
+  if (proben.length < FFT_BLOCK) return null;
+  const spektrum = summiertesSpektrum(proben);
+  let gesamt = 0;
+  let groesster = 0;
+  let groessterBin = 0;
+  for (let bin = 0; bin < SPEKTRUM_BINS; bin += 1) {
+    gesamt += spektrum[bin];
+    if (spektrum[bin] > groesster) {
+      groesster = spektrum[bin];
+      groessterBin = bin;
+    }
+  }
+  return gesamt > 0 ? { hz: (groessterBin * abtastrate) / FFT_BLOCK, anteil: groesster / gesamt } : null;
 }
