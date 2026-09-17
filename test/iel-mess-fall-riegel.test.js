@@ -1,10 +1,9 @@
 // Fail-closed-Riegel der Fall-Definition (scripts/iel-mess.cases.json -> scripts/iel-mess.mjs).
 //
-// Der bleibende Wert der entfernten Messmaschine (IEP-A): die Ohrzeugen-Gruppe war der EINZIGE
-// Weg, auf dem dieses Werkzeug je eine echte Telefonnummer waehlte (Feld "ziel_e164", art
-// "texml-ohrzeuge", Zaehler "ohrzeuge"). Nach ihrer Entfernung darf eine blosse Aenderung an der
-// Fall-Datei diesen Weg nicht wieder oeffnen, und kein unbekannter Wert darf still als undefined
-// durchfallen. KEIN NETZ: alles laeuft mit --dry-run (fetch per Stolperdraht gesperrt).
+// Dieses Werkzeug waehlt ausschliesslich SIP-Ziele, nie eine echte Telefonnummer (Feld
+// "ziel_e164" ist verboten). Eine blosse Aenderung an der Fall-Datei darf diesen Weg nicht
+// oeffnen, und kein unbekannter Wert (art/zaehler) darf still als undefined durchfallen.
+// KEIN NETZ: alles laeuft mit --dry-run (fetch per Stolperdraht gesperrt).
 
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
@@ -45,8 +44,8 @@ describe("IEL-Messwerkzeug: die Fall-Definition ist fail-closed", () => {
     }
   });
 
-  it("eine unbekannte art verweigert mit Grund - auch die entfernte texml-ohrzeuge", () => {
-    for (const art of ["texml-ohrzeuge", "texml-erfunden", "toString", undefined]) {
+  it("eine unbekannte art verweigert mit Grund", () => {
+    for (const art of ["texml-erfunden", "toString", undefined]) {
       const ergebnis = laufMitAbgewandeltemFall("F-A", (fall) => {
         const { art: _bisherigeArt, ...rest } = fall;
         return art === undefined ? rest : { ...rest, art };
@@ -57,8 +56,8 @@ describe("IEL-Messwerkzeug: die Fall-Definition ist fail-closed", () => {
     }
   });
 
-  it("eine unbekannte Zaehler-Gruppe verweigert mit Grund - auch die entfernte ohrzeuge", () => {
-    for (const zaehler of ["ohrzeuge", "x", "toString", undefined]) {
+  it("eine unbekannte Zaehler-Gruppe verweigert mit Grund", () => {
+    for (const zaehler of ["x", "toString", undefined]) {
       const ergebnis = laufMitAbgewandeltemFall("F-A", (fall) => {
         const { zaehler: _bisherigerZaehler, ...rest } = fall;
         return zaehler === undefined ? rest : { ...rest, zaehler };

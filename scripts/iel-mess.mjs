@@ -224,8 +224,6 @@ async function keineZusatzbelege() {
   return {};
 }
 
-async function keineZusatzpruefung() {}
-
 const ZAEHLER_GRUPPEN = Object.freeze({
   m1: Object.freeze({
     max: MAX_ANRUFE,
@@ -234,7 +232,6 @@ const ZAEHLER_GRUPPEN = Object.freeze({
     ergebnis: tasksDatei("iel-m1-messung.jsonl"),
     artPraefix: "iel-m1",
     pruefeZiel: (fall) => pruefeSipZiel(fall.sip_ziel),
-    pruefeVorAnruf: keineZusatzpruefung,
     mitschnittFormat: MITSCHNITT_MP3,
     werteMitschnitt: werteMitschnittAus,
     sammleZusatzbelege: keineZusatzbelege,
@@ -246,7 +243,6 @@ const ZAEHLER_GRUPPEN = Object.freeze({
     ergebnis: tasksDatei("iel-nachdeploy-messung.jsonl"),
     artPraefix: "iel-nachdeploy",
     pruefeZiel: (fall) => pruefeFiktivesElZiel(fall.sip_ziel),
-    pruefeVorAnruf: keineZusatzpruefung,
     mitschnittFormat: MITSCHNITT_MP3,
     werteMitschnitt: werteMitschnittAus,
     sammleZusatzbelege: sammleNachdeployBelege,
@@ -935,8 +931,8 @@ const CLI_ARGV_OFFSET = 2;
 
 // Die drei Felder, mit denen eine blosse Aenderung an scripts/iel-mess.cases.json den Lauf
 // umlenken koennte - jedes fail-closed, keines faellt still als undefined durch.
-// "ziel_e164" (eine echte Telefonnummer statt eines SIP-Ziels) gab es nur fuer die entfernte
-// Ohrzeugen-Gruppe; seitdem waehlt dieses Werkzeug ausschliesslich SIP-Ziele.
+// "ziel_e164" (eine echte Telefonnummer statt eines SIP-Ziels) ist verboten: dieses Werkzeug
+// waehlt ausschliesslich SIP-Ziele, nie eine Telefonnummer.
 function pruefeFallDefinition(name, fall) {
   if (fall.ziel_e164 !== undefined) {
     throw new Verweigerung(`Fall ${name} traegt das Feld ziel_e164 - dieses Werkzeug waehlt ausschliesslich SIP-Ziele, nie eine Telefonnummer - verweigert`);
